@@ -44,8 +44,41 @@ App.core.C = {
   TOMORROW_PREVIEW_HOUR: 18,    // 几点以后预告明天
   NARROW_NAV_PX: 380,           // 窄于这个宽度时导航只显示当前页文字
 
+  // 提醒（v3，需求澄清 #1–#5、#28–#30）
+  REMIND_EVENT_DEFAULT_MIN: 15,       // 有时间的日程默认提前 15 分钟
+  REMIND_EVENT_OPTIONS: [null, 0, 15, 30, 60, 1440],   // 不提醒 / 准时 / 15 / 30 / 1 小时 / 1 天
+  REMIND_DAY_MORNING_MIN: 9 * 60,     // 待办、全天日程“当天”提醒在 9:00
+  REMIND_ALLDAY_PREV_MIN: 20 * 60,    // 全天日程“前一天”提醒在 20:00
+  REMIND_TODO_PREV_MIN: 9 * 60,       // 待办“前一天”提醒在 9:00
+  REMIND_STALE_MS: 60 * 60000,        // 提醒时刻过去 60 分钟以上就不再发（#30）
+  PUSH_LEAD_MS: 15 * 60000,           // 定时推送宁可提前 15 分钟（#5）
+  SNOOZE_MS: 10 * 60000,              // “10 分钟后”
+
+  // 最近删除（v3，ADR-006）
+  TRASH_KEEP_DAYS: 30,                // 软删除 30 天后彻底清理
+
+  // 运行日志（v3，ADR-010）
+  LOG_MAX_ENTRIES: 500,               // 每台设备每天一条文档，最多 500 条
+  LOG_KEEP_DAYS: 90,                  // 保留 90 天
+  LOG_FLUSH_MS: 30000,                // 每 30 秒写一次（切到后台时立即写）
+
+  // 主题、日程页、待办页（v3 T7、T9、T5、T10，程序员 1）
+  THEMES: ["system", "light", "dark"],   // pv-theme 的合法值（ADR-008）
+  SKINS: ["bento"],                    // pv-skin 的合法值；v3 只有一套
+  THEME_OPEN_MS: 180,                  // 主题选择器弹出：缩放 .92→1 + 淡入（采纳结论 动效补充）
+  THEME_HOLD_MS: 300,                  // 选完停 300ms 再收起
+  THEME_CLOSE_MS: 150,                 // 收起
+  THEME_FADE_MS: 200,                  // 切换时颜色过渡（需求澄清 #32）
+  SEARCH_MAX: 100,                     // 搜索最多列多少条
+  LOG_VIEW_DAYS: 7,                    // “运行记录”显示最近几天
+  LOG_VIEW_MAX: 200,                   // “运行记录”最多列多少条
+  DAY_MS: 86400000,
+  TOAST_FLIP_MS: 180,                  // 提示条让位的 FLIP 平移（UI-4⑤，D03）
+  TL_MAX_LANES: 3,                     // 时间轴同一时段最多并排 3 列，其余折叠成“+N”（D08）
+
   // 时钟、写入与连接
-  CLOCK_TICK_MS: 60000,         // 每分钟刷新一次时间轴和倒计时
+  CLOCK_TICK_MS: 60000,        // 每分钟刷新一次时间轴和倒计时
+  CLOCK_ALIGN_MS: 200,          // tick 安排在整分钟后 200 毫秒（要求 1 秒内）
   WRITE_TIMEOUT_MS: 10000,      // 写入超过 10 秒没回应算失败
   RECONNECT_MS: [3000, 10000, 30000, 60000],   // 断线后第 1、2、3、4+ 次重连的等待
 };

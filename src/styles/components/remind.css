@@ -1,0 +1,67 @@
+/* 组件：提醒（v3 T6）。情况 A：“下一件事”卡片的提醒状态 .next.reminding；情况 B：抬头下方的反色卡片 .remind-inv。
+   动效参数来自界面预审采纳结论（UI-4）：入场下移 12px 加淡入 240ms，铃铛摆一次 400ms；减少动效时只留 ≤120ms 的淡入。
+   依赖：tokens.css（--inv、--on-inv、--yellow、--on-yellow、--on-p、--r-panel）、next-card.css。 */
+.remind-slot:empty{display:none}
+.bell-row{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;flex-wrap:wrap}
+.bell-ico{display:inline-grid;place-items:center;width:16px;height:16px}
+.bell-ico svg{width:16px;height:16px}
+.offline-tag{font-size:12px;font-weight:500;border-radius:999px;padding:0 8px;background:var(--panel-2);color:var(--ink)}
+.more-n{margin-left:auto;font-size:12px;font-weight:700}
+.r-acts{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
+.r-acts button{border:0;border-radius:999px;min-height:44px;padding:0 18px;font-weight:600;font-size:15px;cursor:pointer}
+
+/* 情况 A：下一件事卡片进入提醒状态 */
+.next.reminding{cursor:pointer}
+.next.reminding .r-acts .ok{background:var(--on-p);color:var(--p1)}
+.next.reminding .r-acts .later{background:transparent;color:var(--on-p);box-shadow:inset 0 0 0 1.5px currentColor}
+.next[role=button]{cursor:pointer}
+.next[role=button]:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+
+/* 情况 B：反色提醒卡片 */
+.remind-inv{background:var(--inv);color:var(--on-inv);border-radius:var(--r-panel);padding:16px 18px;display:flex;flex-direction:column;gap:4px}
+.remind-inv .rt{font-size:18px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+.remind-inv .rm{font-size:14px;color:var(--on-inv)}
+.remind-inv .r-acts .ok{background:var(--yellow);color:var(--on-yellow)}
+.remind-inv .r-acts .later{background:transparent;color:var(--on-inv);box-shadow:inset 0 0 0 1.5px currentColor}
+.remind-inv .offline-tag{background:var(--on-inv);color:var(--inv)}
+
+/* 情况 A：标题按钮、读屏专用文字、铃铛行和按钮的高度展开（grid 0fr → 1fr） */
+.tt-btn{border:0;background:none;padding:0;color:inherit;font:inherit;font-size:20px;font-weight:700;line-height:1.35;text-align:left;cursor:pointer;overflow-wrap:anywhere}
+.tt-btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.rem-extra{display:grid;grid-template-rows:1fr}
+.rem-extra > div{min-height:0;overflow:hidden}
+
+/* 入场与铃铛（只在新出现时播放一次） */
+@media (prefers-reduced-motion:no-preference){
+  .remind-inv.enter{animation:remind-in .24s cubic-bezier(.22,1,.36,1)}
+  .next.reminding.enter .rem-extra{animation:rem-grow .24s cubic-bezier(.22,1,.36,1)}
+  .remind-inv.swap{animation:remind-fade .16s linear}
+  .next.reminding.leaving .rem-extra{animation:rem-shrink .2s cubic-bezier(.4,0,.2,1) forwards}
+  /* 反色卡片收起：高度、内边距、透明度一起过渡（UI-4①） */
+  .remind-inv.collapsing{max-height:0!important;padding-top:0;padding-bottom:0;opacity:0;overflow:hidden;transition:max-height .2s cubic-bezier(.4,0,.2,1),padding .2s cubic-bezier(.4,0,.2,1),opacity .2s}
+  /* 已在别处确认：停 0.6 秒后淡出 0.2 秒（共 0.8 秒，UI-4②） */
+  .remind-inv.confirmed{max-height:240px;overflow:hidden;animation:remind-confirm .8s linear forwards}
+  .next.reminding.confirmed .rem-extra{animation:rem-shrink .2s .6s cubic-bezier(.4,0,.2,1) forwards}
+  .enter .bell-ico{animation:bell-swing .4s ease-in-out 1;transform-origin:50% 10%}
+}
+@media (prefers-reduced-motion:reduce){
+  /* 全局 base.css 在减少动效时禁用所有动画，这里用 !important 保留 ≤120ms 的淡入（UI-4 复查） */
+  .remind-inv.enter,.remind-inv.swap,.next.reminding.enter .rem-extra{animation:remind-fade .12s linear!important}
+}
+@keyframes rem-grow{from{grid-template-rows:0fr;opacity:0}to{grid-template-rows:1fr;opacity:1}}
+@keyframes rem-shrink{from{grid-template-rows:1fr;opacity:1}to{grid-template-rows:0fr;opacity:0}}
+@keyframes remind-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-8px)}}
+/* 已在别处确认：停 0.6 秒，最后 0.2 秒淡出并收起高度（UI-4 复查） */
+@keyframes remind-confirm{0%,75%{opacity:1;max-height:240px;animation-timing-function:cubic-bezier(.4,0,.2,1)}100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0}}
+@keyframes remind-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+@keyframes remind-fade{from{opacity:0}to{opacity:1}}
+@keyframes bell-swing{0%,100%{transform:rotate(0)}25%{transform:rotate(8deg)}75%{transform:rotate(-8deg)}}
+
+/* 其他页的提醒胶囊（UI-1②、UI-2②）：高 56px 黑色胶囊，点了回到今天页 */
+.remind-pill{display:flex;align-items:center;gap:8px;width:100%;min-height:56px;border:0;border-radius:999px;padding:0 20px;background:var(--inv);color:var(--on-inv);font-size:15px;font-weight:600;text-align:left;cursor:pointer}
+.remind-pill[hidden]{display:none}
+.remind-pill .pill-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.remind-pill .pill-go{font-size:18px}
+.remind-pill:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+@media (min-width:960px){.remind-pill{display:none}}

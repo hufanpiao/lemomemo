@@ -38,6 +38,14 @@ App.platform.storage["claude-db"] = function createClaudeDb(){
     add: (coll, id, data) => guard(() => ref(coll, id).set(data)),
     update: (coll, id, patch) => guard(() => db.collection(coll).doc(id).update(patch)),
     remove: (coll, id) => guard(() => db.collection(coll).doc(id).delete()),
+    async get(coll, id){
+      try { const s = await db.collection(coll).doc(id).get(); return s.exists ? Object.assign({}, s.data(), {id:s.id || id}) : null; }
+      catch(e){ throw toStoreError(e); }
+    },
+    async list(coll){
+      try { const s = await db.collection(coll).get(); return s.docs.map(d => Object.assign({}, d.data(), {id:d.id})); }
+      catch(e){ throw toStoreError(e); }
+    },
     // 平台没有批量写入接口：不提供 batch，由 data/store.js 逐条写
   };
 };

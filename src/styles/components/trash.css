@@ -1,0 +1,27 @@
+/* 组件：待办面板底部的“最近删除”（默认折叠成一行 panel-2 色块，不加分隔线，采纳结论 #9）、“运行记录”（只读）、
+   “导出备份（JSON）”按钮（面板底部，无下划线，#18）。依赖：tokens.css、skins/*.css、todo.css（.leaving 动画）。 */
+.trash{border:0;width:100%;border-radius:14px;background:var(--panel-2);min-height:48px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;color:var(--muted);text-align:left}
+.trash b{color:var(--ink);font-weight:500}
+.trash .chev{transition:transform .2s cubic-bezier(.22,1,.36,1);flex:none}
+.trash[aria-expanded=true] .chev{transform:rotate(90deg)}
+.trash-list,.log-list{display:flex;flex-direction:column;gap:6px;margin-top:-8px}
+.trash-list[hidden],.log-list[hidden]{display:none}
+.trash-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;border-radius:14px;background:var(--panel-2);padding:6px 6px 6px 14px}
+.trash-row.leaving{animation:leave .16s cubic-bezier(.4,0,.2,1) forwards}   /* 从最近删除恢复：淡出 160ms（UI-4） */
+.tr-b{display:flex;flex-direction:column;min-width:0}
+.tr-t{overflow-wrap:anywhere;line-height:1.4}
+.tr-m{font-size:12px;color:var(--muted)}
+.restore{border:0;border-radius:999px;background:var(--ink);color:var(--panel);min-height:44px;padding:0 16px;font-size:14px;font-weight:500}
+.restore:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
+.trash-off,.log-note{margin:0;font-size:12px;color:var(--muted);padding:2px 4px}
+.log-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;max-height:320px;overflow-y:auto;border-radius:14px;background:var(--panel-2)}
+.log-row{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:baseline;padding:8px 14px;font-size:13px;border-top:1px solid var(--line)}
+.log-row:first-child{border-top:0}
+.log-row .lg-t,.log-row .lg-i{font-family:var(--f-num);font-variant-numeric:tabular-nums;color:var(--muted)}
+.log-row .lg-a{font-weight:500}
+.log-row .lg-c{color:var(--muted)}
+.log-row.run .lg-a{color:var(--red-ink)}
+.export{align-self:center;margin-top:-4px;margin-bottom:0;border:0;background:none;color:var(--muted);font-size:13px;min-height:44px;padding:0 12px}
+.export:disabled{opacity:.7}
+.export-note{margin:-14px 0 0;text-align:center;font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){.trash-row.leaving{animation:fade-out .12s linear forwards!important}.trash .chev{transition:none!important}}

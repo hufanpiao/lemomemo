@@ -1,10 +1,13 @@
-# 构建脚本：先跑架构检查（build/check_arch.py，不通过就停止），再读取 build/manifest.json，把 CSS、JS 按顺序内联进 src/index.html。
+# 构建脚本：先跑架构检查（build/check_arch.py）和 JS 语法检查（build/check_js.py，每个页面写出前也查一遍），不通过就停止；再读取 build/manifest.json，把 CSS、JS 按顺序内联进 src/index.html。
 #   --target claude（默认）：生成发布用单文件 dist/planner.html，以及两个本地测试页
 #       dist/test.html         模拟存储适配器 mock-db（tests/mock/mock-db.js），不需要 claude.ai
 #       dist/test-claude.html  与发布版同一份页面 + window.claude 桩（tests/mock/claude-stub.js），验证 claude-db 适配器
-#       两个测试页的示例数据都来自 tests/mock/sample-data.js
+#       两个测试页的示例数据都来自 tests/mock/sample-data.js；顶部有“测试页面”提示条（tests/harness/banner.html）
+#   --target staging：预发布版 dist/staging.html（本地预览用，带骨架）和 dist/staging.publish.html（发布到 claude.ai 用，
+#                     不带骨架），和正式版一样接真实数据库，顶部提示“预发布测试版：不是你的正式数据”
 #   --target web：独立服务器 / PWA 版，预留，尚未实现。
-# 依赖：Python 3.8+ 标准库、build/check_arch.py。用法：python build/build.py [--target claude|web]
+#   发布用的 dist/planner.html 里不能出现任何环境提示文案，构建时会检查。
+# 依赖：Python 3.8+ 标准库、build/check_arch.py、build/check_js.py（需要 Node.js）。用法：python build/build.py [--target claude|staging|web]
 import argparse
 import json
 import pathlib
@@ -13,6 +16,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import check_arch  # noqa: E402  同目录的架构检查
+import check_js  # noqa: E402  同目录的 JS 语法检查（node --check）
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
@@ -65,14 +69,50 @@ def page(m, build_cfg, extra_before_entry=()):
     return tpl.replace("<!-- @scripts -->", js_bundle(m, build_cfg, extra_before_entry))
 
 
-def harness(m, app_html, stub_files):
-    """测试页：骨架 + 页面脚本之前的一段 <script>（示例数据、可选的 window.claude 桩）+ 页面。"""
+# 环境提示条：文案 → (底色, 字色)。发布版不能出现这里的任何一句
+BANNERS = {
+    "test": ("测试页面：这里用的是模拟数据，刷新就会还原，不会保存到云端", "#f1df4a", "#121316"),
+    "staging": ("预发布测试版：不是你的正式数据", "#3a6cf4", "#ffffff"),
+}
+
+
+def banner(kind):
+    text, bg, fg = BANNERS[kind]
+    html = strip_lead_comment(read("tests/harness/banner.html")).strip()
+    return html.replace("{{文案}}", text).replace("{{底色}}", bg).replace("{{字色}}", fg)
+
+
+def harness(m, app_html, stub_files, kind="test"):
+    """测试页 / 预发布页：骨架（带 charset、viewport）+ 环境提示条 + 页面脚本之前的一段 <script>（示例数据、可选的
+    window.claude 桩；预发布页没有）+ 页面。"""
     sk = strip_lead_comment(read(m["tests"]["skeleton"])).rstrip("\n")
-    stub = "<script>\n" + "\n".join(read(p).rstrip("\n") for p in stub_files) + "\n</script>\n"
-    return sk.replace("<!-- @stub -->", stub).replace("<!-- @app -->", app_html) + "\n"
+    stub = "<script>\n" + "\n".join(read(p).rstrip("\n") for p in stub_files) + "\n</script>\n" if stub_files else ""
+    for mark in ("<!-- @banner -->", "<!-- @stub -->", "<!-- @app -->"):
+        if sk.count(mark) != 1:
+            fail("测试页骨架 %s 里 %s 必须恰好出现一次" % (m["tests"]["skeleton"], mark))
+    return sk.replace("<!-- @banner -->", banner(kind)).replace("<!-- @stub -->", stub).replace("<!-- @app -->", app_html) + "\n"
+
+
+def check_charset(name, html):
+    """测试页和预发布页是直接用浏览器打开的，必须自带 UTF-8 编码声明（否则中文乱码、韩文正则可能报错）。"""
+    if not re.search(r'<meta charset="utf-8">', html[:1024], re.I):
+        fail("%s 开头 1024 字节内没有 <meta charset=\"utf-8\">" % name)
+
+
+def check_no_banner(name, html):
+    """发布版里不能混进环境提示文案。"""
+    for text, _, _ in BANNERS.values():
+        if text in html:
+            fail("%s 里出现了环境提示“%s”，发布版不能带测试提示" % (name, text))
 
 
 def write(name, text):
+    """写出产物；.html 先检查里面每段内联脚本的语法（node --check），不过就构建失败、不写文件。"""
+    if name.endswith(".html"):
+        errs = check_js.check_html("dist/" + name, text)
+        if errs:
+            check_js.report(errs)
+            fail("dist/%s 里的脚本有语法错误（行号按拼好的页面算），没有写出" % name)
     DIST.mkdir(exist_ok=True)
     (DIST / name).write_text(text, encoding="utf-8", newline="\n")
     print("  写出 dist/%s（%d 字节）" % (name, len(text.encode("utf-8"))))
@@ -80,11 +120,28 @@ def write(name, text):
 
 def build_claude(m):
     prod = page(m, {"target": "claude", "storage": "claude-db"})
+    check_no_banner("dist/planner.html", prod)
     write("planner.html", prod)
-    mock = page(m, {"target": "test", "storage": "mock-db"}, [m["tests"]["mockAdapter"]])
     t = m["tests"]
-    write("test.html", harness(m, mock, [t["sampleData"]]))
-    write("test-claude.html", harness(m, prod, [t["sampleData"], t["claudeStub"]]))
+    mock = page(m, {"target": "test", "storage": "mock-db", "download": "mock"}, [t["mockAdapter"], t["mockDownload"]])
+    for name, html in (("test.html", harness(m, mock, [t["sampleData"]])),
+                       ("test-claude.html", harness(m, prod, [t["sampleData"], t["claudeStub"]]))):
+        check_charset("dist/" + name, html)
+        write(name, html)
+
+
+def build_staging(m):
+    """预发布版：和正式版同一份页面、接真实数据库；套上测试骨架（带 charset，本地预览不乱码），顶部是“预发布测试版”提示条。"""
+    app = page(m, {"target": "staging", "storage": "claude-db"})
+    app = app.replace("<title>日程与待办</title>", "<title>日程与待办 预发布</title>", 1)   # 和正式版区分开，作品列表里不会认错
+    html = harness(m, app, [], "staging")
+    check_charset("dist/staging.html", html)
+    write("staging.html", html)
+    # 发布到 claude.ai 用的版本：和 planner.html 一样只有页面内容（平台会自己套骨架），提示条放在末尾（固定定位，位置不影响显示）
+    write("staging.publish.html", app.rstrip("\n") + "\n" + banner("staging") + "\n")
+    prod = ROOT / "dist/planner.html"
+    if prod.is_file():
+        check_no_banner("dist/planner.html", prod.read_text(encoding="utf-8"))
 
 
 def build_web(m):
@@ -101,8 +158,8 @@ def main():
     if hasattr(sys.stdout, "reconfigure"):   # Windows 下管道输出默认是 GBK，统一成 UTF-8
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="日程与待办 构建脚本")
-    ap.add_argument("--target", choices=["claude", "web"], default="claude",
-                    help="claude：单文件发布版（默认）；web：独立服务器 PWA 版（预留）")
+    ap.add_argument("--target", choices=["claude", "staging", "web"], default="claude",
+                    help="claude：单文件发布版和测试页（默认）；staging：预发布版 dist/staging.html；web：独立服务器 PWA 版（预留）")
     args = ap.parse_args()
     try:
         m = json.loads(read("build/manifest.json"))
@@ -114,8 +171,16 @@ def main():
     print("架构检查")
     if check_arch.run() != 0:
         fail("架构检查没通过，先按上面的提示修改（规则见 docs/10-架构/架构约定.md）")
+    print("JS 语法检查")
+    if check_js.run_sources() != 0:
+        fail("有源码文件语法错误，先按上面的“文件:行号”修改")
     if args.target == "web":
         sys.exit(build_web(m))
+    if args.target == "staging":
+        print("构建 --target staging")
+        build_staging(m)
+        print("完成")
+        return
     print("构建 --target claude")
     build_claude(m)
     print("完成")

@@ -9,25 +9,28 @@ App.platform.storage["mock-db"] = function createMockDb(opts){
   opts = opts || {};
   const data = opts.seed || globalThis.plannerSampleData(Date.now());
   const delay = opts.delay == null ? 120 : opts.delay;
-  const subs = {events:[], todos:[]};
-  const snap = c => ({items:Object.entries(data[c]).map(([id,v]) => Object.assign({}, v, {id})), changes:() => []});
-  const emit = c => setTimeout(() => subs[c].forEach(f => f(snap(c))), delay);
+  const subs = {events:[], todos:[], logs:[]};
+  const bag = c => data[c] || (data[c] = {});
+  const snap = c => ({items:Object.entries(bag(c)).map(([id,v]) => Object.assign({}, v, {id})), changes:() => []});
+  const emit = c => setTimeout(() => (subs[c] || []).forEach(f => f(snap(c))), delay);
   const check = (op, c, id) => {
     if (opts.hang) return new Promise(() => {});
     const code = opts.fail && opts.fail(op, c, id);
     return code ? Promise.reject(App.platform.storeError(code)) : null;
   };
   const apply = (op, c, id, v) => {
-    if (op === "add") data[c][id] = v;
-    else if (op === "update"){ if (!data[c][id]) throw App.platform.storeError("not_found"); Object.assign(data[c][id], v); }
-    else if (op === "remove") delete data[c][id];
+    if (op === "add") bag(c)[id] = v;
+    else if (op === "update"){ if (!bag(c)[id]) throw App.platform.storeError("not_found"); Object.assign(bag(c)[id], v); }
+    else if (op === "remove") delete bag(c)[id];
   };
   const write = async (op, c, id, v) => { const bad = check(op, c, id); if (bad) return bad; apply(op, c, id, v); emit(c); };
   let n = 0;
   return {
     data,
     async connect(){ return true; },
-    subscribe(c, onData){ subs[c].push(onData); emit(c); return () => { subs[c] = subs[c].filter(f => f !== onData); }; },
+    async get(c, id){ const v = bag(c)[id]; return v ? Object.assign({}, v, {id}) : null; },
+    async list(c){ return snap(c).items; },
+    subscribe(c, onData){ (subs[c] = subs[c] || []).push(onData); emit(c); return () => { subs[c] = subs[c].filter(f => f !== onData); }; },
     newId(){ return "m"+(++n); },
     add: (c, id, v) => write("add", c, id, v),
     update: (c, id, v) => write("update", c, id, v),

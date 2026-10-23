@@ -31,8 +31,12 @@ def registered_paths():
 def actual_paths():
     out = set()
     for p in ROOT.rglob("*"):
+        rel = p.relative_to(ROOT).as_posix()
+        # data/backups/ 里是真实数据（不进 git、不登记），只登记它的 README
+        if rel.startswith("data/backups/") and rel != "data/backups/README.md":
+            continue
         if p.is_file() and not (set(p.relative_to(ROOT).parts) & SKIP_DIRS):
-            out.add(p.relative_to(ROOT).as_posix())
+            out.add(rel)
     return out
 
 

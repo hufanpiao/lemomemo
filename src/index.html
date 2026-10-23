@@ -10,13 +10,21 @@
 <div class="app">
   <header class="top">
     <h1><span class="md" id="hd-md">--</span><span class="sub" id="hd-sub"></span></h1>
+    <button class="theme-btn" type="button" id="theme-btn" aria-haspopup="true" aria-expanded="false" aria-controls="theme-pick" aria-label="外观：跟随系统"></button>
+    <div class="theme-pick" id="theme-pick" role="radiogroup" aria-label="外观" hidden>
+      <button type="button" role="radio" data-mode="system" aria-checked="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>跟随系统</button>
+      <button type="button" role="radio" data-mode="light" aria-checked="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></svg>浅色</button>
+      <button type="button" role="radio" data-mode="dark" aria-checked="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>深色</button>
+    </div>
     <div class="top-chips" id="hd-chips"></div>
   </header>
   <div id="notice" hidden class="notice"></div>
+  <button id="remind-pill" class="remind-pill" type="button" hidden></button>
 
   <div class="grid">
     <!-- 今天 -->
     <div class="view" id="v-today" data-view="today">
+      <div id="remind" class="remind-slot" aria-live="polite"></div>
       <div id="next"></div>
       <div id="late"></div>
       <section class="panel" aria-labelledby="h-tl">
@@ -38,13 +46,17 @@
     <div class="view" id="v-sched" data-view="sched">
       <section class="panel" aria-labelledby="h-wk">
         <div class="ph">
-          <h2 id="h-wk"><span id="wk-title"></span></h2>
+          <div class="wk-head">
+            <h2 id="h-wk"><button type="button" class="wk-title" id="wk-title"></button></h2>
+            <button class="back-today off" type="button" id="wk-today" disabled aria-hidden="true" tabindex="-1">回到今天</button>
+          </div>
           <div style="display:flex;gap:6px">
             <button class="round" type="button" id="wk-prev" aria-label="上一周"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
             <button class="round" type="button" id="wk-next" aria-label="下一周"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
           </div>
         </div>
         <div class="week" id="week"></div>
+        <div class="filters" id="sched-filters" role="group" aria-label="按项目筛选"></div>
         <div class="evlist" id="day-list"></div>
       </section>
       <section class="panel" aria-labelledby="h-up">
@@ -57,10 +69,20 @@
     <div class="view" id="v-todo" data-view="todo">
       <section class="panel" aria-labelledby="h-td">
         <div class="ph"><h2 id="h-td">待办</h2><span class="meta" id="td-meta"></span></div>
-        <div class="filters" id="filters"></div>
-        <ul class="todos" id="todos"></ul>
-        <button class="linkbtn" type="button" id="done-toggle" hidden></button>
-        <ul class="todos" id="done-list" hidden></ul>
+        <input class="search" id="search" type="search" enterkeyhint="search" autocomplete="off" placeholder="搜索标题、备注、原话" aria-label="搜索标题、备注、原话">
+        <div class="search-res" id="search-res" hidden></div>
+        <div class="td-main" id="td-main">
+          <div class="filters" id="filters" role="group" aria-label="按项目筛选"></div>
+          <ul class="todos" id="todos"></ul>
+          <button class="linkbtn" type="button" id="done-toggle" hidden></button>
+          <ul class="todos" id="done-list" hidden></ul>
+        </div>
+        <button class="trash" type="button" id="trash-toggle" hidden aria-expanded="false" aria-controls="trash-list"></button>
+        <div class="trash-list" id="trash-list" hidden></div>
+        <button class="trash" type="button" id="log-toggle" aria-expanded="false" aria-controls="log-list"><span><b>运行记录</b>  最近 7 天，只读</span><span class="chev" aria-hidden="true">›</span></button>
+        <div class="log-list" id="log-list" hidden></div>
+        <button class="export" type="button" id="export" aria-describedby="export-note">导出备份（JSON）</button>
+        <p class="export-note" id="export-note">文件里包含最近删除的条目</p>
       </section>
     </div>
   </div>
@@ -80,35 +102,46 @@
 <div class="netbar" id="netbar" hidden>网络断开了，恢复后会自动同步</div>
 
 <div class="scrim" id="scrim" hidden></div>
-<form class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-title" hidden>
+<form class="sheet" id="sheet" novalidate role="dialog" aria-modal="true" aria-labelledby="sh-title" hidden>
   <div class="grab"></div>
-  <h3 id="sh-title">新建</h3>
-  <div id="q-wrap">
-    <input class="q" id="q" type="text" autocomplete="off" placeholder="例如：明天下午3点和 NEOX 对片" aria-label="用一句话描述">
-    <p class="hint">写清时间就记成日程，没写时间就记成待办。下面可以再改。</p>
+  <h3 id="sh-title">记一件事</h3>
+  <div id="q-wrap" class="q-row">
+    <input class="q" id="q" type="text" maxlength="300" autocomplete="off" enterkeyhint="done" aria-label="用一句话描述要记的事" placeholder="写一句话，例如：明天下午3点和 NEOX 对片">
+    <button class="q-add" type="submit" id="q-add">加入</button>
   </div>
-  <div class="seg" id="seg" role="group" aria-label="类型">
-    <button type="button" data-k="event" aria-pressed="false">日程</button>
-    <button type="button" data-k="todo" aria-pressed="true">待办</button>
+  <div class="recog" id="recog" aria-live="polite"></div>
+  <button class="details-toggle" type="button" id="details-toggle" aria-expanded="false" aria-controls="details"><span>改细节：类型、日期、时间、提醒、备注</span><span aria-hidden="true">›</span></button>
+  <div id="details" class="details" hidden>
+    <div class="seg" id="seg" role="group" aria-label="类型">
+      <button type="button" data-k="event" aria-pressed="false">日程</button>
+      <button type="button" data-k="todo" aria-pressed="true">待办</button>
+    </div>
+    <div class="fields"><label class="wide">标题<input id="f-title" type="text" maxlength="160" required></label></div>
+    <div class="row-l" id="date-chips-lab">截止</div>
+    <div class="scroller" id="date-chips" role="group" aria-label="快捷日期"></div>
+    <div class="fields">
+      <label><span id="f-date-lab">截止日期</span><input id="f-date" type="date"></label>
+      <label class="ev-only">时间<input id="f-time" type="time"></label>
+      <label class="ev-only">时长<select id="f-dur">
+        <option value="30">30 分钟</option><option value="60" selected>1 小时</option><option value="90">1.5 小时</option>
+        <option value="120">2 小时</option><option value="180">3 小时</option><option value="240">半天</option></select></label>
+      <label class="td-only chk"><input id="f-imp" type="checkbox">重要</label>
+    </div>
+    <button type="button" class="opt ev-only" id="push-1h" hidden>推后 1 小时</button>
+    <div class="row-l" id="remind-lab">提醒</div>
+    <div class="scroller" id="remind-chips" role="radiogroup" aria-label="提醒"></div>
+    <div class="fields">
+      <label class="wide">项目<input id="f-proj" type="text" maxlength="40" placeholder="可不填" list="proj-list"></label>
+      <div class="projs wide" id="proj-chips"></div>
+      <label class="wide"><span id="f-note-lab">备注</span><input id="f-note" type="text" maxlength="200" placeholder="可不填"></label>
+    </div>
+    <div class="raw" id="raw" hidden></div>
   </div>
-  <div class="fields">
-    <label class="wide">标题<input id="f-title" type="text" maxlength="160" required></label>
-    <label><span id="f-date-lab">截止日期</span><input id="f-date" type="date"></label>
-    <label class="ev-only">时间<input id="f-time" type="time"></label>
-    <label class="ev-only">时长<select id="f-dur">
-      <option value="30">30 分钟</option><option value="60" selected>1 小时</option><option value="90">1.5 小时</option>
-      <option value="120">2 小时</option><option value="180">3 小时</option><option value="240">半天</option></select></label>
-    <label class="td-only chk" style="align-self:end;padding-bottom:10px"><input id="f-imp" type="checkbox">重要</label>
-    <label class="wide">项目<input id="f-proj" type="text" maxlength="40" placeholder="可不填" list="proj-list"></label>
-    <div class="projs wide" id="proj-chips"></div>
-    <label class="wide ev-only">地点或备注<input id="f-note" type="text" maxlength="200" placeholder="可不填"></label>
-  </div>
-  <div class="raw" id="raw" hidden></div>
-  <div class="acts">
-    <button class="save" type="submit" id="save">加入</button>
+  <div class="acts" id="acts" hidden>
+    <button class="save" type="submit" id="save">保存修改</button>
     <button class="ghost" type="button" id="cancel">取消</button>
-    <button class="danger" type="button" id="del" hidden>删除</button>
   </div>
+  <button class="del-row" type="button" id="del" hidden>删除</button>
 </form>
 <datalist id="proj-list"></datalist>
 
