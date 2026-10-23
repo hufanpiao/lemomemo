@@ -3,7 +3,8 @@
 #       dist/test.html         模拟存储适配器 mock-db（tests/mock/mock-db.js），不需要 claude.ai
 #       dist/test-claude.html  与发布版同一份页面 + window.claude 桩（tests/mock/claude-stub.js），验证 claude-db 适配器
 #       两个测试页的示例数据都来自 tests/mock/sample-data.js；顶部有“测试页面”提示条（tests/harness/banner.html）
-#   --target staging：预发布版 dist/staging.html，和正式版一样接真实数据库，顶部提示“预发布测试版：不是你的正式数据”
+#   --target staging：预发布版 dist/staging.html（本地预览用，带骨架）和 dist/staging.publish.html（发布到 claude.ai 用，
+#                     不带骨架），和正式版一样接真实数据库，顶部提示“预发布测试版：不是你的正式数据”
 #   --target web：独立服务器 / PWA 版，预留，尚未实现。
 #   发布用的 dist/planner.html 里不能出现任何环境提示文案，构建时会检查。
 # 依赖：Python 3.8+ 标准库、build/check_arch.py、build/check_js.py（需要 Node.js）。用法：python build/build.py [--target claude|staging|web]
@@ -131,9 +132,13 @@ def build_claude(m):
 
 def build_staging(m):
     """预发布版：和正式版同一份页面、接真实数据库；套上测试骨架（带 charset，本地预览不乱码），顶部是“预发布测试版”提示条。"""
-    html = harness(m, page(m, {"target": "staging", "storage": "claude-db"}), [], "staging")
+    app = page(m, {"target": "staging", "storage": "claude-db"})
+    app = app.replace("<title>日程与待办</title>", "<title>日程与待办 预发布</title>", 1)   # 和正式版区分开，作品列表里不会认错
+    html = harness(m, app, [], "staging")
     check_charset("dist/staging.html", html)
     write("staging.html", html)
+    # 发布到 claude.ai 用的版本：和 planner.html 一样只有页面内容（平台会自己套骨架），提示条放在末尾（固定定位，位置不影响显示）
+    write("staging.publish.html", app.rstrip("\n") + "\n" + banner("staging") + "\n")
     prod = ROOT / "dist/planner.html"
     if prod.is_file():
         check_no_banner("dist/planner.html", prod.read_text(encoding="utf-8"))
