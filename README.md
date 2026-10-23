@@ -51,7 +51,8 @@ python build/build.py --target web     # 预留：独立服务器版（PWA），
 ## 测试
 
 ```bash
-node tests/unit/parse-quick.test.mjs   # 一句话解析的单元测试
+node tests/run-all.mjs                 # 全部单元测试（解析、日期、排序、整理、写入、适配器契约）
+node tests/unit/parse-quick.test.mjs   # 只跑一句话解析
 ```
 
 页面级测试：打开 `dist/test.html`（接 `tests/mock/mock-db.js` 模拟数据库），用 `D:\claude code\.claude\launch.json` 里的 `planner-test` 预览（端口 8770）。详见 `tests/README.md` 和 [测试记录](docs/06-测试/测试记录.md)。

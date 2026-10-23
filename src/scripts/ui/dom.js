@@ -1,7 +1,7 @@
-// DOM 小工具：$(id) 取元素、h() 一次建好带属性和子节点的元素、对勾图标、骨架和空状态框。
-// 只在函数被调用时才访问 document，加载本文件本身不需要页面。
-// 依赖：无。
-App.core = App.core || {};
+// 职责：界面用的 DOM 小工具：$(id) 取元素、h() 一次建好带属性和子节点的元素（子节点文字一律当纯文本插入，
+//       html 属性只允许传常量图标）、对勾图标、骨架和空状态框。
+// 依赖：无
+App.ui = App.ui || {};
 
 const $ = id => document.getElementById(id);
 const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
@@ -18,4 +18,4 @@ function h(tag, attrs, ...kids){
 function skeleton(n){ return Array.from({length:n}, () => h("div",{class:"sk"})); }
 function emptyBox(title, text){ return h("div",{class:"empty"}, h("strong",null,title), text); }
 
-App.core.dom = {$, h, ICON_CHECK, skeleton, emptyBox};
+App.ui.dom = {$, h, ICON_CHECK, skeleton, emptyBox};

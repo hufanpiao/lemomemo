@@ -1,13 +1,16 @@
-// 平台能力入口：所有依赖运行环境（claude.ai / 以后的独立服务器 PWA）的能力都注册在 App.platform 下，
-// UI 代码不直接调用 window.claude 等平台接口。目前只有 storage（存储适配器）。
-// 依赖：无。
+// 职责：平台能力入口。所有依赖运行环境（claude.ai / 以后的独立服务器 PWA / 浏览器本身）的能力都注册在 App.platform 下：
+//       storage（存储适配器工厂）、env（时间与前台事件）、prefs（本机偏好）、notify（提示音与推送）。
+//       storeError() 生成带中性错误码的错误对象，供各存储适配器使用。
+// 依赖：无
 App.platform = App.platform || {};
-App.platform.storage = App.platform.storage || {};   // 存储适配器工厂：{"claude-db": fn, "mock-db": fn, ...}
+App.platform.storage = App.platform.storage || {};   // {"claude-db": 工厂函数, "mock-db": 工厂函数, 以后 "rest": ...}
 
-/*
- * 以后计划加的平台能力（这次不实现，只约定位置和形状）：
- *   App.platform.download = { saveFile(name, blob) }
- *     claude.ai：走发布平台提供的文件下载能力；独立服务器：<a download> + URL.createObjectURL。
- *   App.platform.notify = { requestPermission(), schedule({id, at, title, body}), cancel(id) }
- *     claude.ai：平台提醒能力（若有）；独立服务器：Service Worker + Web Push（需后端推送服务）。
- */
+// 中性错误码：forbidden 没有写权限 / not_found 记录不存在 / quota 存储已满 / network 网络或未知错误 /
+//             unauthenticated 未登录；write 层另外会产生 timeout（超时）。
+const CODES = ["forbidden", "not_found", "quota", "network", "unauthenticated", "timeout"];
+App.platform.storeError = function storeError(code, cause){
+  const e = new Error("存储错误：" + code);
+  e.code = CODES.includes(code) ? code : "network";
+  e.cause = cause;
+  return e;
+};

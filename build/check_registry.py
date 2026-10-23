@@ -37,6 +37,7 @@ def actual_paths():
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")
     reg, act = registered_paths(), actual_paths()
     missing = sorted(act - reg)
     stale = sorted(reg - act)

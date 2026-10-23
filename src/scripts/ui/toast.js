@@ -1,19 +1,29 @@
-// 底部提示条：show(文案, 按钮字, 按钮动作, 显示毫秒)，默认 3 秒后自动消失；按钮用于撤销 / 重试 / 刷新。
-// 依赖：core/dom.js。
+// 职责：底部提示条队列：show(文案, 按钮字, 按钮动作, 显示毫秒) 新增一条，可叠放，最多 TOAST_MAX 条（超出时最早的先走），
+//       每条有自己的计时器；带按钮的“撤销”类提示由调用方传 TOAST_UNDO_MS。点按钮执行动作并收起这一条。
+// 依赖：core/const.js、ui/dom.js
 App.ui = App.ui || {};
 
-const {$} = App.core.dom;
-let toastTimer = null, toastAction = null;
+const C = App.core.C;
+const {$, h} = App.ui.dom;
+const live = [];   // 当前显示中的提示：{el, timer}
 
+function dismiss(t){
+  const i = live.indexOf(t); if (i < 0) return;
+  live.splice(i, 1);
+  clearTimeout(t.timer);
+  t.el.classList.remove("on");
+  setTimeout(() => t.el.remove(), C.TOAST_LEAVE_MS);
+}
 function show(msg, btnText, action, ms){
-  $("toast-msg").textContent = msg;
-  const b = $("toast-btn"); b.hidden = !btnText; b.textContent = btnText || "";
-  toastAction = action || null;
-  $("toast").classList.add("on");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => $("toast").classList.remove("on"), ms || 3000);
-}
-function init(){
-  $("toast-btn").onclick = () => { const a = toastAction; toastAction = null; $("toast").classList.remove("on"); if (a) a(); };
+  while (live.length >= C.TOAST_MAX) dismiss(live[0]);
+  const t = {el:null, timer:null};
+  const btn = btnText ? h("button",{type:"button",onclick:() => { dismiss(t); if (action) action(); }}, btnText) : null;
+  t.el = h("div",{class:"toast"}, h("span",null,msg), btn);
+  $("toasts").append(t.el);
+  live.push(t);
+  requestAnimationFrame(() => t.el.classList.add("on"));
+  t.timer = setTimeout(() => dismiss(t), ms || C.TOAST_MS);
+  return t;
 }
 
-App.ui.toast = {show, init};
+App.ui.toast = {show, dismiss};
