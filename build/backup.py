@@ -20,7 +20,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BACKUP_ROOT = ROOT.parent / "待办APP-备份" / "源码"
 ARTIFACT_URL = "https://claude.ai/artifact/MVXvnr3rFUxgFKZesXWGVT"
-COLLECTIONS = ("events", "todos")
+COLLECTIONS = ("events", "todos", "logs")
 
 
 def git(*args):
@@ -78,7 +78,7 @@ def main():
         "说明": "条数为 0 表示导出时该集合为空。恢复方法见 data/backups/README.md。",
     }
     (data_dir / "清单.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"数据已备份：{data_dir.relative_to(ROOT)}  日程 {counts['events']} 条、待办 {counts['todos']} 条")
+    print(f"数据已备份：{data_dir.relative_to(ROOT)}  日程 {counts['events']} 条、待办 {counts['todos']} 条、日志 {counts['logs']} 份")
     print("完成。请在 docs/08-发布/发布记录.md 的“备份记录”里记一笔。")
 
 
