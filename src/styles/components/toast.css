@@ -1,0 +1,7 @@
+/* 组件：底部提示条（带撤销/重试按钮）与顶部断网红条。
+   依赖：tokens.css。 */
+/* 提示条 */
+.toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translate(-50%,8px);opacity:0;background:var(--dock);color:var(--dock-ink);border-radius:999px;padding:6px 6px 6px 18px;display:flex;align-items:center;gap:12px;font-size:14px;transition:opacity .2s ease-out,transform .2s ease-out;pointer-events:none;max-width:calc(100% - 32px);z-index:30;border:1px solid var(--line)}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);padding:6px 14px;font-weight:700;min-height:36px}
+.netbar{position:fixed;top:0;left:0;right:0;z-index:40;background:var(--red);color:#fff;font-size:14px;text-align:center;padding:calc(4px + env(safe-area-inset-top,0px)) 16px 4px}

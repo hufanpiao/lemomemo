@@ -1,0 +1,4 @@
+/* 组件：数据未连接时的提示面板。
+   依赖：tokens.css。 */
+.notice{background:var(--panel);border-radius:var(--r-panel);padding:18px;color:var(--muted)}
+.notice strong{color:var(--ink)}

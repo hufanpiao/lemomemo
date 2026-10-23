@@ -1,0 +1,908 @@
+<title>日程与待办</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap">
+<style>
+/* 布局：便当格面板 + 马卡龙色块条目；手机上分“今天/日程/待办”三页，底部浮动导航加黄色＋；≥960px 三栏同时显示 */
+:root{
+  --bg:#e6e7ea; --panel:#ffffff; --panel-2:#f2f3f5; --ink:#121316; --muted:#6a6e76; --line:#e3e4e8;
+  --dock:#121316; --dock-ink:#f3f3f4; --pill-on:#ffffff; --pill-on-ink:#121316;
+  --yellow:#f1df4a; --on-yellow:#121316; --red:#e2372b; --red-soft:#fbe2df; --focus:#3a6cf4;
+  --p1:#f3e27a; --p2:#bca8f6; --p3:#f5a5c8; --p4:#95dfa8; --p5:#95d4f2; --p6:#f6a78c; --p7:#d6d7dc; --on-p:#141414;
+  --shadow:0 18px 40px -18px rgba(18,19,22,.35);
+  --f-num:"Manrope","Noto Sans SC",system-ui,sans-serif;
+  --f-body:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --r-panel:26px; --r-block:16px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c0d0f; --panel:#17181b; --panel-2:#212226; --ink:#f1f1f3; --muted:#8d919a; --line:#2a2b30;
+  --dock:#202125; --dock-ink:#f1f1f3; --pill-on:#f1f1f3; --pill-on-ink:#121316;
+  --red:#ff5a4d; --red-soft:#3a1a17; --focus:#8fb0ff;
+  --p1:#e8d56c; --p2:#ad98ee; --p3:#ea93ba; --p4:#86d29a; --p5:#86c6e6; --p6:#ec977c; --p7:#b9bac0;
+  --shadow:0 18px 40px -18px rgba(0,0,0,.8); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c0d0f; --panel:#17181b; --panel-2:#212226; --ink:#f1f1f3; --muted:#8d919a; --line:#2a2b30;
+  --dock:#202125; --dock-ink:#f1f1f3; --pill-on:#f1f1f3; --pill-on-ink:#121316;
+  --red:#ff5a4d; --red-soft:#3a1a17; --focus:#8fb0ff;
+  --p1:#e8d56c; --p2:#ad98ee; --p3:#ea93ba; --p4:#86d29a; --p5:#86c6e6; --p6:#ec977c; --p7:#b9bac0;
+  --shadow:0 18px 40px -18px rgba(0,0,0,.8); color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:20px calc(120px + env(safe-area-inset-bottom,0px))}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:8px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.app{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+
+/* 抬头 */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:4px 4px 0}
+.top h1{margin:0;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-weight:500}
+.top .md{font-family:var(--f-num);font-weight:800;font-size:clamp(34px,8vw,44px);line-height:1;letter-spacing:-.02em}
+.top .md small{font-family:var(--f-body);font-weight:700;font-size:.62em;margin-left:2px}
+.top .sub{font-size:16px;color:var(--muted)}
+.top-chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 12px;font-size:14px;background:var(--panel);border:0}
+.chip.late{background:var(--red);color:#fff;font-weight:500}
+.chip b{font-family:var(--f-num);font-weight:700}
+
+/* 网格 */
+.grid{display:grid;grid-template-columns:1fr;gap:16px}
+.view{display:none;flex-direction:column;gap:16px;min-width:0}
+.view.on{display:flex}
+@media (min-width:960px){
+  .grid{grid-template-columns:1.1fr 1fr 1fr;align-items:start}
+  .view{display:flex}
+  .nav{display:none!important}
+}
+.panel{background:var(--panel);border-radius:var(--r-panel);padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ph h2{margin:0;font-size:20px;font-weight:700;line-height:1.3}
+.ph .meta{font-size:14px;color:var(--muted)}
+.linkbtn{background:none;border:0;padding:4px 0;color:var(--muted);font-size:14px;text-decoration:underline;text-underline-offset:3px}
+.round{width:36px;height:36px;border-radius:50%;border:0;background:var(--panel-2);display:grid;place-items:center;flex:none}
+.round svg{width:18px;height:18px}
+
+/* 下一件事 */
+.next{border-radius:var(--r-panel);padding:20px;color:var(--on-p);display:flex;flex-direction:column;gap:6px;position:relative;min-height:168px}
+.next .lbl{font-size:14px;font-weight:500;opacity:.75}
+.next .big{font-family:var(--f-num);font-weight:800;font-size:56px;line-height:1;letter-spacing:-.03em}
+.next .cd{font-size:16px;font-weight:500}
+.next .tt{font-size:20px;font-weight:700;line-height:1.35;overflow-wrap:anywhere;padding-right:56px}
+.next .proj{font-size:14px;opacity:.75}
+.next .act{position:absolute;right:16px;bottom:16px;width:48px;height:48px;border-radius:50%;border:0;background:var(--on-p);color:#fff;display:grid;place-items:center}
+.next .act svg{width:22px;height:22px}
+.next.empty{background:var(--panel);color:var(--ink)}
+.next.empty .big{font-size:40px}
+
+/* 没赶上 */
+.late-panel{background:var(--red-soft)}
+.late-panel .ph h2{color:var(--red)}
+.late-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid color-mix(in srgb,var(--red) 18%,transparent)}
+.late-row:first-of-type{border-top:0}
+.late-row .t{overflow-wrap:anywhere;min-width:0}
+.late-row .t small{display:block;font-size:12px;color:var(--red)}
+.mini{display:flex;gap:6px}
+.mini button{border:0;border-radius:999px;padding:6px 12px;font-size:14px;background:var(--panel);min-height:36px}
+.btn-dark{border:0;border-radius:999px;padding:10px 18px;background:var(--ink);color:var(--panel);font-weight:500;min-height:44px}
+
+/* 时间轴（今天） */
+.tl{position:relative;display:grid;grid-template-columns:44px 1fr;}
+.tl .hours{position:relative}
+.tl .hours span{position:absolute;left:0;font-family:var(--f-num);font-size:12px;color:var(--muted);transform:translateY(-50%)}
+.tl .lane{position:relative;border-left:1px solid var(--line)}
+.tl .lane i{position:absolute;left:0;right:0;border-top:1px dashed var(--line)}
+.blk{position:absolute;border-radius:12px;padding:6px 10px;color:var(--on-p);overflow:hidden;border:0;text-align:left;display:flex;flex-direction:column;gap:0;line-height:1.3}
+.blk .bt{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.blk .bm{font-size:12px;opacity:.75;font-family:var(--f-num);white-space:nowrap}
+.blk.past{filter:saturate(.35);opacity:.7}
+.now{position:absolute;left:-6px;right:0;height:0;border-top:2px solid var(--red);z-index:3;pointer-events:none}
+.now::before{content:"";position:absolute;left:-1px;top:-6px;width:10px;height:10px;border-radius:50%;background:var(--red)}
+.now span{position:absolute;right:0;top:-12px;background:var(--red);color:#fff;font-family:var(--f-num);font-weight:700;font-size:12px;padding:1px 8px;border-radius:999px}
+.allday{display:flex;flex-wrap:wrap;gap:6px}
+.allday .ad{border:0;border-radius:999px;padding:4px 12px;font-size:14px;color:var(--on-p);font-weight:500}
+
+/* 日期条 */
+.week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.day{border:0;background:none;border-radius:16px;padding:6px 0 8px;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:64px}
+.day .w{font-size:12px;color:var(--muted)}
+.day .n{font-family:var(--f-num);font-weight:700;font-size:16px;width:34px;height:34px;display:grid;place-items:center;border-radius:50%}
+.day.today .n{box-shadow:inset 0 0 0 2px var(--ink)}
+.day.sel .n{background:var(--ink);color:var(--panel)}
+.day .dots{display:flex;gap:3px;height:6px}
+.day .dots b{width:6px;height:6px;border-radius:50%}
+.day:hover .n{background:var(--panel-2)}
+.day.sel:hover .n{background:var(--ink)}
+
+/* 日程色块 */
+.evlist{display:flex;flex-direction:column;gap:8px}
+.dhead{font-size:14px;color:var(--muted);font-weight:500;padding:6px 2px 0}
+.dhead.is-today{color:var(--ink);font-weight:700}
+.ev{border:0;border-radius:var(--r-block);padding:12px 14px;color:var(--on-p);display:grid;grid-template-columns:auto 1fr;gap:4px 12px;text-align:left;width:100%}
+.ev .et{font-family:var(--f-num);font-weight:800;font-size:16px;line-height:1.4}
+.ev .et small{display:block;font-weight:600;font-size:12px;opacity:.7}
+.ev .eb{min-width:0}
+.ev .en{font-weight:700;line-height:1.4;overflow-wrap:anywhere}
+.ev .ex{font-size:14px;opacity:.78;overflow-wrap:anywhere}
+
+/* 待办 */
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.f{border:0;border-radius:999px;padding:6px 14px;font-size:14px;background:var(--panel-2);min-height:36px;display:inline-flex;align-items:center;gap:6px}
+.f .sw{width:10px;height:10px;border-radius:50%}
+.f[aria-pressed=true]{background:var(--ink);color:var(--panel)}
+.todos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.td{display:grid;grid-template-columns:44px 1fr;align-items:start;border-top:1px solid var(--line);position:relative}
+.td:first-child{border-top:0}
+.ck{width:44px;height:48px;border:0;background:none;display:grid;place-items:center;padding:0}
+.ck span{width:24px;height:24px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--muted);display:grid;place-items:center;transition:transform .16s cubic-bezier(.34,1.4,.64,1),background .16s}
+.ck svg{width:14px;height:14px;opacity:0;color:var(--panel)}
+.td.done .ck span{background:var(--ink);box-shadow:none}
+.td.done .ck svg{opacity:1}
+.ck:active span{transform:scale(.9)}
+.tb{border:0;background:none;text-align:left;padding:12px 4px 12px 0;min-width:0;display:flex;flex-direction:column;gap:4px;width:100%}
+.tb .tt{line-height:1.45;overflow-wrap:anywhere;background-image:linear-gradient(var(--muted),var(--muted));background-repeat:no-repeat;background-position:0 55%;background-size:0 1.5px;transition:background-size .28s cubic-bezier(.22,1,.36,1),color .2s}
+.td.done .tb .tt{background-size:100% 1.5px;color:var(--muted)}
+.td.imp .tb .tt{font-weight:700}
+.td.imp .tb .tt::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ink);margin-right:8px;vertical-align:2px}
+.td.done.imp .tb .tt::before{background:var(--muted)}
+.tags{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted);align-items:center}
+.tag{display:inline-flex;align-items:center;gap:5px}
+.tag .sw{width:8px;height:8px;border-radius:50%}
+.tag.due-today{color:var(--ink);font-weight:500}
+.tag.over{color:var(--red);font-weight:500}
+.tag.ai{border-radius:999px;padding:0 8px;background:var(--panel-2);color:var(--muted)}
+.td.leaving{animation:leave .24s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes leave{to{opacity:0;transform:translateY(-4px)}}
+.fresh{animation:fresh 2.2s ease-out}
+@keyframes fresh{0%,70%{box-shadow:inset 3px 0 0 var(--ink),0 0 0 3px color-mix(in srgb,var(--yellow) 70%,transparent)}100%{box-shadow:none}}
+.donefold{display:flex;flex-direction:column;gap:0}
+
+/* 空状态与骨架 */
+.empty{border-radius:var(--r-block);background:var(--panel-2);padding:18px;color:var(--muted);font-size:14px}
+.empty strong{display:block;color:var(--ink);font-size:16px;font-weight:700;margin-bottom:2px}
+.sk{height:56px;border-radius:var(--r-block);background:var(--panel-2)}
+@media (prefers-reduced-motion:no-preference){.sk{animation:pulse 1.2s ease-in-out infinite alternate}}
+@keyframes pulse{to{opacity:.45}}
+
+/* 底部浮动导航 */
+.dock{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:10px;pointer-events:none;
+  padding:0 max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.dock > *{pointer-events:auto}
+.nav{position:relative;display:flex;background:var(--dock);border-radius:999px;padding:5px;box-shadow:var(--shadow)}
+.nav button{position:relative;z-index:1;border:0;background:none;color:var(--dock-ink);border-radius:999px;padding:0 18px;height:46px;font-size:15px;font-weight:500;display:flex;align-items:center;gap:6px;transition:color .25s}
+.nav button[aria-current=page]{color:var(--pill-on-ink)}
+.nav button svg{width:18px;height:18px;flex:none}
+.nav .ind{position:absolute;top:5px;height:46px;border-radius:999px;background:var(--pill-on);transition:left .38s cubic-bezier(.34,1.3,.64,1),width .38s cubic-bezier(.34,1.3,.64,1)}
+.nav .lab{overflow:hidden;white-space:nowrap}
+.plus{width:56px;height:56px;border-radius:50%;border:0;background:var(--yellow);color:var(--on-yellow);display:grid;place-items:center;box-shadow:var(--shadow);flex:none}
+.plus svg{width:26px;height:26px}
+@media (min-width:960px){.dock{justify-content:flex-end}}
+
+/* 提示条 */
+.toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translate(-50%,8px);opacity:0;background:var(--dock);color:var(--dock-ink);border-radius:999px;padding:6px 6px 6px 18px;display:flex;align-items:center;gap:12px;font-size:14px;transition:opacity .2s ease-out,transform .2s ease-out;pointer-events:none;max-width:calc(100% - 32px);z-index:30;border:1px solid var(--line)}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);padding:6px 14px;font-weight:700;min-height:36px}
+.netbar{position:fixed;top:0;left:0;right:0;z-index:40;background:var(--red);color:#fff;font-size:14px;text-align:center;padding:calc(4px + env(safe-area-inset-top,0px)) 16px 4px}
+
+/* 底部弹出层 */
+.scrim{position:fixed;inset:0;background:rgba(10,10,12,.45);z-index:50;opacity:0;transition:opacity .2s}
+.scrim.on{opacity:1}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:51;background:var(--panel);border-radius:28px 28px 0 0;max-height:92%;overflow-y:auto;
+  padding:10px max(18px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));
+  transform:translateY(100%);transition:transform .34s cubic-bezier(.22,1,.36,1);display:flex;flex-direction:column;gap:14px}
+.sheet.on{transform:none}
+@media (min-width:720px){.sheet{left:50%;right:auto;width:560px;bottom:24px;border-radius:28px;transform:translate(-50%,calc(100% + 40px))}.sheet.on{transform:translate(-50%,0)}}
+.grab{width:40px;height:5px;border-radius:9px;background:var(--line);margin:0 auto}
+.sheet h3{margin:0;font-size:20px}
+.q{width:100%;border:0;border-radius:18px;background:var(--panel-2);padding:14px 16px;font-size:18px;min-height:56px}
+.hint{font-size:12px;color:var(--muted);margin-top:-6px}
+.seg{display:inline-flex;background:var(--panel-2);border-radius:999px;padding:4px;align-self:flex-start}
+.seg button{border:0;background:none;border-radius:999px;padding:6px 18px;font-size:14px;min-height:36px}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--panel);font-weight:500}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fields label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);min-width:0}
+.fields .wide{grid-column:1/-1}
+.fields input,.fields select{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:10px 12px;font-size:16px;color:var(--ink);min-width:0;width:100%;min-height:44px}
+.projs{display:flex;gap:6px;flex-wrap:wrap}
+.chk{display:flex;align-items:center;gap:8px;font-size:16px;color:var(--ink);flex-direction:row!important}
+.chk input{width:20px;height:20px;min-height:0;accent-color:var(--ink)}
+.acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.save{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);font-weight:700;padding:12px 26px;min-height:48px;font-size:16px}
+.save:disabled{opacity:.5}
+.ghost{border:0;background:none;color:var(--muted);padding:12px 8px;min-height:48px}
+.danger{border:0;background:none;color:var(--red);padding:12px 8px;min-height:48px;margin-left:auto}
+.raw{font-size:12px;color:var(--muted);background:var(--panel-2);border-radius:12px;padding:8px 12px}
+.notice{background:var(--panel);border-radius:var(--r-panel);padding:18px;color:var(--muted)}
+.notice strong{color:var(--ink)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1><span class="md" id="hd-md">--</span><span class="sub" id="hd-sub"></span></h1>
+    <div class="top-chips" id="hd-chips"></div>
+  </header>
+  <div id="notice" hidden class="notice"></div>
+
+  <div class="grid">
+    <!-- 今天 -->
+    <div class="view" id="v-today" data-view="today">
+      <div id="next"></div>
+      <div id="late"></div>
+      <section class="panel" aria-labelledby="h-tl">
+        <div class="ph"><h2 id="h-tl">今天的时间轴</h2><span class="meta" id="tl-meta"></span></div>
+        <div class="allday" id="tl-allday"></div>
+        <div class="tl" id="tl"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-tt">
+        <div class="ph"><h2 id="h-tt">今天要做</h2><button class="linkbtn nav-only" type="button" data-go="todo">全部待办</button></div>
+        <ul class="todos" id="today-todos"></ul>
+      </section>
+      <section class="panel" id="tomorrow" hidden aria-labelledby="h-tm">
+        <div class="ph"><h2 id="h-tm">明天</h2><span class="meta" id="tm-meta"></span></div>
+        <div class="evlist" id="tm-list"></div>
+      </section>
+    </div>
+
+    <!-- 日程 -->
+    <div class="view" id="v-sched" data-view="sched">
+      <section class="panel" aria-labelledby="h-wk">
+        <div class="ph">
+          <h2 id="h-wk"><span id="wk-title"></span></h2>
+          <div style="display:flex;gap:6px">
+            <button class="round" type="button" id="wk-prev" aria-label="上一周"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+            <button class="round" type="button" id="wk-next" aria-label="下一周"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
+          </div>
+        </div>
+        <div class="week" id="week"></div>
+        <div class="evlist" id="day-list"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-up">
+        <div class="ph"><h2 id="h-up">接下来</h2><span class="meta" id="up-meta"></span></div>
+        <div class="evlist" id="up-list"></div>
+      </section>
+    </div>
+
+    <!-- 待办 -->
+    <div class="view" id="v-todo" data-view="todo">
+      <section class="panel" aria-labelledby="h-td">
+        <div class="ph"><h2 id="h-td">待办</h2><span class="meta" id="td-meta"></span></div>
+        <div class="filters" id="filters"></div>
+        <ul class="todos" id="todos"></ul>
+        <button class="linkbtn" type="button" id="done-toggle" hidden></button>
+        <ul class="todos" id="done-list" hidden></ul>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div class="dock">
+  <nav class="nav" id="nav" aria-label="切换页面">
+    <span class="ind" id="ind"></span>
+    <button type="button" data-go="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span class="lab">今天</span></button>
+    <button type="button" data-go="sched"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></svg><span class="lab">日程</span></button>
+    <button type="button" data-go="todo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 7h11M9 12h11M9 17h11"/><path d="M4 7l1 1 2-2M4 12l1 1 2-2M4 17l1 1 2-2"/></svg><span class="lab">待办</span></button>
+  </nav>
+  <button class="plus" type="button" id="plus" aria-label="新建日程或待办"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+</div>
+
+<div class="toast" id="toast" role="status"><span id="toast-msg"></span><button type="button" id="toast-btn">撤销</button></div>
+<div class="netbar" id="netbar" hidden>网络断开了，恢复后会自动同步</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<form class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-title" hidden>
+  <div class="grab"></div>
+  <h3 id="sh-title">新建</h3>
+  <div id="q-wrap">
+    <input class="q" id="q" type="text" autocomplete="off" placeholder="例如：明天下午3点和 NEOX 对片" aria-label="用一句话描述">
+    <p class="hint">写清时间就记成日程，没写时间就记成待办。下面可以再改。</p>
+  </div>
+  <div class="seg" id="seg" role="group" aria-label="类型">
+    <button type="button" data-k="event" aria-pressed="false">日程</button>
+    <button type="button" data-k="todo" aria-pressed="true">待办</button>
+  </div>
+  <div class="fields">
+    <label class="wide">标题<input id="f-title" type="text" maxlength="160" required></label>
+    <label><span id="f-date-lab">截止日期</span><input id="f-date" type="date"></label>
+    <label class="ev-only">时间<input id="f-time" type="time"></label>
+    <label class="ev-only">时长<select id="f-dur">
+      <option value="30">30 分钟</option><option value="60" selected>1 小时</option><option value="90">1.5 小时</option>
+      <option value="120">2 小时</option><option value="180">3 小时</option><option value="240">半天</option></select></label>
+    <label class="td-only chk" style="align-self:end;padding-bottom:10px"><input id="f-imp" type="checkbox">重要</label>
+    <label class="wide">项目<input id="f-proj" type="text" maxlength="40" placeholder="可不填" list="proj-list"></label>
+    <div class="projs wide" id="proj-chips"></div>
+    <label class="wide ev-only">地点或备注<input id="f-note" type="text" maxlength="200" placeholder="可不填"></label>
+  </div>
+  <div class="raw" id="raw" hidden></div>
+  <div class="acts">
+    <button class="save" type="submit" id="save">加入</button>
+    <button class="ghost" type="button" id="cancel">取消</button>
+    <button class="danger" type="button" id="del" hidden>删除</button>
+  </div>
+</form>
+<datalist id="proj-list"></datalist>
+
+<script>
+(function(){
+  const WK = ["周日","周一","周二","周三","周四","周五","周六"];
+  const CN = {"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"日":0,"天":0};
+  const KNOWN = {"SignPlex":"--p5","NEOX":"--p1","SOIL STUDIO":"--p4"};
+  const PAL = ["--p2","--p3","--p6","--p5","--p1","--p4"];
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2,"0");
+  const ymd = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+  const parse = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y,m-1,d); };
+  const today = () => ymd(new Date());
+  const addDays = (s,n) => { const d = parse(s); d.setDate(d.getDate()+n); return ymd(d); };
+  const dayDiff = (a,b) => Math.round((parse(a)-parse(b))/86400000);
+  const hm2m = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+  const m2hm = m => pad(Math.floor(m/60)%24)+":"+pad(m%60);
+  const nowMin = () => { const n = new Date(); return n.getHours()*60+n.getMinutes(); };
+  const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  function h(tag, attrs, ...kids){
+    const el = document.createElement(tag);
+    for (const k in (attrs||{})){
+      const v = attrs[k]; if (v == null || v === false) continue;
+      if (k === "class") el.className = v; else if (k === "style") el.setAttribute("style", v);
+      else if (k.startsWith("on")) el[k] = v; else if (k === "html") el.innerHTML = v; else el.setAttribute(k, v === true ? "" : v);
+    }
+    for (const c of kids.flat()){ if (c == null || c === false) continue; el.append(c.nodeType ? c : String(c)); }
+    return el;
+  }
+  function projVar(p){
+    if (!p) return "--p7";
+    for (const k in KNOWN) if (k.toLowerCase() === p.toLowerCase()) return KNOWN[k];
+    let x = 0; for (const c of p) x = (x*31 + c.charCodeAt(0)) >>> 0;
+    return PAL[x % PAL.length];
+  }
+  const projColor = p => "var(" + projVar(p) + ")";
+  const md = s => { const d = parse(s); return (d.getMonth()+1)+"月"+d.getDate()+"日"; };
+  function relDay(s){
+    const n = dayDiff(s, today());
+    const w = WK[parse(s).getDay()];
+    if (n === 0) return "今天 "+w; if (n === 1) return "明天 "+w; if (n === 2) return "后天 "+w;
+    if (n === -1) return "昨天 "+w;
+    return md(s)+" "+w;
+  }
+
+  // 状态
+  let db = null, events = [], todos = [];
+  const loaded = {ev:false, td:false};
+  const pendingDel = new Map();   // id -> {coll, timer}
+  const localIds = new Set(), fresh = new Set();
+  let holdUntil = 0, holdTimer = null;
+  let view = "today"; try { view = localStorage.getItem("pv-view") || "today"; } catch(e){}
+  let selDay = today(), weekStart = mondayOf(today()), projFilter = null, showDone = false;
+  function mondayOf(s){ const d = parse(s); return addDays(s, -((d.getDay()+6)%7)); }
+
+  const visEv = () => events.filter(e => !pendingDel.has(e.id));
+  const visTd = () => todos.filter(t => !pendingDel.has(t.id));
+  const projects = () => {
+    const set = new Set(Object.keys(KNOWN));
+    for (const x of events.concat(todos)) if (x.project) set.add(x.project);
+    return [...set];
+  };
+
+  // 渲染调度：勾选动画期间暂缓重绘
+  function render(){
+    const wait = holdUntil - Date.now();
+    if (wait > 0){ clearTimeout(holdTimer); holdTimer = setTimeout(render, wait + 10); return; }
+    renderHead(); renderToday(); renderSched(); renderTodos();
+  }
+
+  function renderHead(){
+    const t = today(), d = parse(t);
+    $("hd-md").innerHTML = ""; $("hd-md").append((d.getMonth()+1)+"", h("small",null,"月"), d.getDate()+"", h("small",null,"日"));
+    $("hd-sub").textContent = WK[d.getDay()] + "  " + d.getFullYear() + "年";
+    const chips = $("hd-chips"); chips.textContent = "";
+    const doneToday = visTd().filter(x => x.done && x.doneAt && ymd(new Date(x.doneAt)) === t).length;
+    const late = visTd().filter(x => !x.done && x.due && x.due < t).length;
+    if (doneToday) chips.append(h("span",{class:"chip"},"今天完成 ",h("b",null,doneToday)," 件"));
+    if (late) chips.append(h("button",{class:"chip late",type:"button",onclick:()=>{ go("today"); $("late").scrollIntoView({behavior:"smooth",block:"center"}); }},h("b",null,late)," 件没赶上"));
+  }
+
+  function skeleton(n){ return Array.from({length:n}, () => h("div",{class:"sk"})); }
+  function emptyBox(title, text){ return h("div",{class:"empty"}, h("strong",null,title), text); }
+  const ready = () => loaded.ev && loaded.td;
+
+  // —— 今天 ——
+  function nextThing(){
+    const t = today(), nm = nowMin();
+    const evs = visEv().filter(e => e.date === t && e.time).sort((a,b) => a.time.localeCompare(b.time));
+    for (const e of evs){
+      const s = hm2m(e.time), end = s + (Number(e.durationMin)||60);
+      if (end > nm) return {kind:"event", item:e, start:s, end};
+    }
+    const open = visTd().filter(x => !x.done);
+    open.sort((a,b) => (b.important?1:0)-(a.important?1:0) || (a.due||"9999").localeCompare(b.due||"9999") || (a.createdAt||0)-(b.createdAt||0));
+    return open[0] ? {kind:"todo", item:open[0]} : null;
+  }
+  function renderToday(){
+    const box = $("next"); box.textContent = "";
+    if (!ready()){ box.append(h("div",{class:"next empty"}, ...skeleton(2))); }
+    else {
+      const n = nextThing(), nm = nowMin();
+      if (!n){
+        box.append(h("div",{class:"next empty"}, h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},"空闲"),
+          h("span",{class:"cd"},"今天没有别的安排了。点右下角的＋记一件新的事。")));
+      } else if (n.kind === "event"){
+        const e = n.item, mins = n.start - nm;
+        const cd = mins > 0 ? (mins >= 60 ? Math.floor(mins/60)+" 小时 "+(mins%60 ? mins%60+" 分钟" : "")+"后开始" : mins+" 分钟后开始") : "进行中，"+m2hm(n.end)+" 结束";
+        box.append(h("button",{class:"next",type:"button",style:"background:"+projColor(e.project)+";border:0;text-align:left;width:100%",onclick:()=>openSheet("event",e)},
+          h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},e.time), h("span",{class:"cd"},cd),
+          h("span",{class:"tt"},e.title), e.project || e.note ? h("span",{class:"proj"},[e.project,e.note].filter(Boolean).join("  ")) : null));
+      } else {
+        const x = n.item;
+        const card = h("div",{class:"next",style:"background:"+projColor(x.project)},
+          h("span",{class:"lbl"},"下一件事"), h("span",{class:"big",style:"font-size:40px"}, x.due ? dueText(x.due).replace("截止","") : "待办"),
+          h("span",{class:"tt"},x.title), x.project ? h("span",{class:"proj"},x.project) : null,
+          h("button",{class:"act",type:"button","aria-label":"完成："+x.title,html:ICON_CHECK,onclick:()=>toggleDone(x,true,null)}));
+        card.querySelector(".tt").onclick = () => openSheet("todo", x);
+        box.append(card);
+      }
+    }
+    // 没赶上
+    const lb = $("late"); lb.textContent = "";
+    const t = today();
+    const late = visTd().filter(x => !x.done && x.due && x.due < t).sort((a,b) => a.due.localeCompare(b.due));
+    if (late.length){
+      const p = h("section",{class:"panel late-panel","aria-labelledby":"h-late"},
+        h("div",{class:"ph"}, h("h2",{id:"h-late"},late.length+" 件没赶上"),
+          late.length > 1 ? h("button",{class:"btn-dark",type:"button",onclick:()=>moveAll(late)},"全部改到今天") : null));
+      for (const x of late){
+        p.append(h("div",{class:"late-row"},
+          h("div",{class:"t"}, x.title, h("small",null,"原定 "+md(x.due)+"，晚了 "+(-dayDiff(x.due,t))+" 天")),
+          h("div",{class:"mini"},
+            h("button",{type:"button",onclick:()=>reschedule(x,t)},"今天"),
+            h("button",{type:"button",onclick:()=>reschedule(x,addDays(t,1))},"明天"))));
+      }
+      lb.append(p);
+    }
+    renderTimeline();
+    // 今天要做
+    const ul = $("today-todos"); ul.textContent = "";
+    if (!ready()){ ul.append(...skeleton(2)); }
+    else {
+      const soon = addDays(t,2);
+      const list = visTd().filter(x => (!x.done && (!x.due || x.due >= t) && ((x.due && x.due <= soon) || x.important)) ||
+        (x.done && x.doneAt && ymd(new Date(x.doneAt)) === t && (x.important || (x.due && x.due <= soon))));
+      sortTodos(list);
+      if (!list.length){
+        const anyOpen = visTd().some(x => !x.done);
+        ul.append(h("li",null, emptyBox(anyOpen ? "最近两天没有到期的事" : "没有待办", anyOpen ? "其他待办在“全部待办”里。" : "点右下角的＋，写一句话就能记下。")));
+      } else list.forEach(x => ul.append(todoRow(x)));
+    }
+    // 晚上预告明天
+    const tm = $("tomorrow");
+    const showTm = new Date().getHours() >= 18;
+    tm.hidden = !showTm || !ready();
+    if (showTm && ready()){
+      const tmr = addDays(t,1);
+      const evs = visEv().filter(e => e.date === tmr).sort(byTime);
+      $("tm-meta").textContent = relDay(tmr);
+      const l = $("tm-list"); l.textContent = "";
+      if (!evs.length) l.append(emptyBox("明天还没有安排", "可以早点休息。"));
+      else evs.forEach(e => l.append(evBlock(e)));
+    }
+  }
+  const byTime = (a,b) => (a.date+(a.time||"00:00")).localeCompare(b.date+(b.time||"00:00"));
+
+  function renderTimeline(){
+    const t = today(), tl = $("tl"), ad = $("tl-allday");
+    tl.textContent = ""; ad.textContent = "";
+    const evs = visEv().filter(e => e.date === t);
+    const timed = evs.filter(e => e.time).sort(byTime);
+    evs.filter(e => !e.time).forEach(e => ad.append(h("button",{class:"ad",type:"button",style:"background:"+projColor(e.project),onclick:()=>openSheet("event",e)},"全天  "+e.title)));
+    $("tl-meta").textContent = timed.length ? timed.length+" 项" : "";
+    const nm = nowMin();
+    // 只显示“现在前后 + 有安排的时段”，避免大段空白
+    let sH = Math.max(0, Math.floor(nm/60) - 1), eH = Math.min(24, Math.floor(nm/60) + 3);
+    for (const e of timed){ const s = hm2m(e.time), en = s+(Number(e.durationMin)||60); sH = Math.min(sH, Math.floor(s/60)); eH = Math.max(eH, Math.ceil(en/60)); }
+    eH = Math.min(24, eH); if (eH - sH < 4) sH = Math.max(0, eH - 4);
+    const PX = 52, H = (eH - sH) * PX;
+    const hours = h("div",{class:"hours",style:"height:"+H+"px"}), lane = h("div",{class:"lane",style:"height:"+H+"px"});
+    for (let i = sH; i <= eH; i++){
+      const y = (i - sH) * PX;
+      if (i < eH || i === eH) hours.append(h("span",{style:"top:"+Math.min(H-6,Math.max(6,y))+"px"},pad(i)+":00"));
+      lane.append(h("i",{style:"top:"+y+"px"}));
+    }
+    // 重叠分列
+    const items = timed.map(e => ({e, s:hm2m(e.time), en:hm2m(e.time)+(Number(e.durationMin)||60)}));
+    let cluster = [], cEnd = -1;
+    const flush = () => {
+      const lanes = [];
+      for (const it of cluster){ let k = lanes.findIndex(end => end <= it.s); if (k < 0){ k = lanes.length; lanes.push(0); } lanes[k] = it.en; it.k = k; }
+      for (const it of cluster) it.n = lanes.length;
+      cluster = []; cEnd = -1;
+    };
+    for (const it of items){ if (it.s >= cEnd && cluster.length) flush(); cluster.push(it); cEnd = Math.max(cEnd, it.en); }
+    if (cluster.length) flush();
+    for (const it of items){
+      const top = (it.s - sH*60)/60*PX, ht = Math.max(30, (it.en-it.s)/60*PX - 4);
+      const w = 100/it.n;
+      const b = h("button",{class:"blk"+(it.en <= nm ? " past":""),type:"button",
+        style:"top:"+(top+2)+"px;height:"+ht+"px;left:calc("+(w*it.k)+"% + 6px);width:calc("+w+"% - 8px);background:"+projColor(it.e.project),
+        onclick:()=>openSheet("event",it.e)},
+        h("span",{class:"bt"},it.e.title), ht > 40 ? h("span",{class:"bm"},it.e.time+"–"+m2hm(it.en)+(it.e.project?"  "+it.e.project:"")) : null);
+      if (fresh.has(it.e.id)) b.classList.add("fresh");
+      lane.append(b);
+    }
+    if (nm >= sH*60 && nm <= eH*60){
+      lane.append(h("div",{class:"now",style:"top:"+((nm - sH*60)/60*PX)+"px"}, h("span",null,m2hm(nm))));
+    }
+    tl.append(hours, lane);
+    if (!timed.length && !evs.length && ready()){
+      lane.append(h("div",{style:"position:absolute;left:12px;right:8px;top:8px;color:var(--muted);font-size:14px"},"今天没有定了时间的安排。"));
+    }
+  }
+
+  // —— 日程 ——
+  function evBlock(e){
+    const end = e.time ? m2hm(hm2m(e.time)+(Number(e.durationMin)||60)) : "";
+    const b = h("button",{class:"ev",type:"button",style:"background:"+projColor(e.project),onclick:()=>openSheet("event",e)},
+      h("span",{class:"et"}, e.time || "全天", end ? h("small",null,"至 "+end) : null),
+      h("span",{class:"eb"}, h("span",{class:"en"},e.title),
+        (e.project || e.note || e.source === "chat") ? h("span",{class:"ex",style:"display:block"},[e.project, e.note, e.source === "chat" ? "Claude 代记" : ""].filter(Boolean).join("  ")) : null));
+    if (fresh.has(e.id)) b.classList.add("fresh");
+    return b;
+  }
+  function renderSched(){
+    const t = today();
+    const d0 = parse(weekStart);
+    const d6 = parse(addDays(weekStart,6));
+    $("wk-title").textContent = (d0.getMonth()+1)+"月" + (weekStart === mondayOf(t) ? " 本周" : (d0.getDate()+"日–"+(d6.getMonth()+1)+"月"+d6.getDate()+"日"));
+    const wk = $("week"); wk.textContent = "";
+    const byDay = {};
+    for (const e of visEv()) (byDay[e.date] = byDay[e.date] || []).push(e);
+    for (let i = 0; i < 7; i++){
+      const k = addDays(weekStart, i), d = parse(k);
+      const dots = h("span",{class:"dots"});
+      (byDay[k] || []).slice(0,3).forEach(e => dots.append(h("b",{style:"background:"+projColor(e.project)})));
+      wk.append(h("button",{type:"button",class:"day"+(k===t?" today":"")+(k===selDay?" sel":""),"aria-label":relDay(k)+((byDay[k]||[]).length?"，"+byDay[k].length+" 项":""),"aria-pressed":k===selDay?"true":"false",
+        onclick:()=>{ selDay = k; renderSched(); }},
+        h("span",{class:"w"},WK[d.getDay()].slice(1)), h("span",{class:"n"},d.getDate()), dots));
+    }
+    const dl = $("day-list"); dl.textContent = "";
+    dl.append(h("div",{class:"dhead"+(selDay===t?" is-today":"")}, relDay(selDay)));
+    if (!ready()) dl.append(...skeleton(2));
+    else {
+      const list = (byDay[selDay] || []).slice().sort(byTime);
+      if (!list.length) dl.append(emptyBox("这一天还没有安排", h("button",{class:"linkbtn",type:"button",style:"display:block;margin-top:4px",onclick:()=>openSheet("event",null,selDay)},"给这天记一件事")));
+      else list.forEach(e => dl.append(evBlock(e)));
+    }
+    const up = $("up-list"); up.textContent = "";
+    if (!ready()){ up.append(...skeleton(2)); return; }
+    const after = visEv().filter(e => e.date > (selDay > t ? selDay : t) && e.date !== selDay).sort(byTime).slice(0, 30);
+    $("up-meta").textContent = after.length ? after.length+" 项" : "";
+    if (!after.length){ up.append(emptyBox("后面还没有安排", "以后的日程会按日期排在这里。")); return; }
+    let cur = null;
+    for (const e of after){
+      if (e.date !== cur){ cur = e.date; up.append(h("div",{class:"dhead"}, relDay(cur))); }
+      up.append(evBlock(e));
+    }
+  }
+
+  // —— 待办 ——
+  function dueText(due){
+    const n = dayDiff(due, today());
+    if (n < 0) return "晚了 "+(-n)+" 天";
+    if (n === 0) return "今天截止"; if (n === 1) return "明天截止";
+    if (n <= 7) return "还剩 "+n+" 天";
+    return md(due)+" 截止";
+  }
+  function sortTodos(list){
+    list.sort((a,b) => {
+      if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+      if (a.done) return (b.doneAt||0)-(a.doneAt||0);
+      if (!!a.important !== !!b.important) return a.important ? -1 : 1;
+      const x = a.due || "9999", y = b.due || "9999";
+      return x === y ? (a.createdAt||0)-(b.createdAt||0) : x.localeCompare(y);
+    });
+    return list;
+  }
+  function todoRow(x){
+    const t = today();
+    const li = h("li",{class:"td"+(x.done?" done":"")+(x.important?" imp":"")+(fresh.has(x.id)?" fresh":""),"data-id":x.id});
+    const ck = h("button",{class:"ck",type:"button","aria-pressed":x.done?"true":"false","aria-label":(x.done?"标为未完成：":"完成：")+x.title}, h("span",{html:ICON_CHECK}));
+    ck.onclick = () => toggleDone(x, !x.done, li);
+    const tags = h("span",{class:"tags"});
+    if (x.project) tags.append(h("span",{class:"tag"}, h("span",{class:"sw",style:"background:"+projColor(x.project)}), x.project));
+    if (x.due && !x.done){
+      const n = dayDiff(x.due, t);
+      tags.append(h("span",{class:"tag"+(n<0?" over":n===0?" due-today":"")}, dueText(x.due)));
+    }
+    if (x.source === "chat") tags.append(h("span",{class:"tag ai"},"Claude 代记"));
+    const body = h("button",{class:"tb",type:"button",onclick:()=>openSheet("todo",x)}, h("span",{class:"tt"},x.title), tags.childNodes.length ? tags : null);
+    li.append(ck, body);
+    return li;
+  }
+  function renderTodos(){
+    const f = $("filters"); f.textContent = "";
+    const open = visTd().filter(x => !x.done);
+    const ps = [...new Set(visTd().map(x => x.project).filter(Boolean))];
+    if (projFilter && !ps.includes(projFilter)) projFilter = null;
+    if (ps.length){
+      f.append(h("button",{class:"f",type:"button","aria-pressed":!projFilter?"true":"false",onclick:()=>{projFilter=null;renderTodos();}},"全部"));
+      ps.forEach(p => f.append(h("button",{class:"f",type:"button","aria-pressed":projFilter===p?"true":"false",onclick:()=>{projFilter=p;renderTodos();}},
+        h("span",{class:"sw",style:"background:"+projColor(p)}), p)));
+    }
+    f.hidden = !ps.length;
+    const ul = $("todos"); ul.textContent = "";
+    const t = today();
+    const inScope = x => !projFilter || x.project === projFilter;
+    const list = sortTodos(visTd().filter(x => inScope(x) && (!x.done || (x.doneAt && ymd(new Date(x.doneAt)) === t))));
+    $("td-meta").textContent = open.filter(inScope).length ? open.filter(inScope).length+" 件未完成" : "";
+    if (!ready()) ul.append(...skeleton(3));
+    else if (!list.length){
+      const doneAll = visTd().some(x => x.done && inScope(x));
+      ul.append(h("li",null, doneAll ? emptyBox("全部做完了", "新的待办点右下角的＋添加。") : emptyBox("没有待办", "点右下角的＋，写一句话，比如“周五前交 NEOX 横版”。")));
+    } else list.forEach(x => ul.append(todoRow(x)));
+    const old = sortTodos(visTd().filter(x => inScope(x) && x.done && !(x.doneAt && ymd(new Date(x.doneAt)) === t)));
+    const tg = $("done-toggle"), dlist = $("done-list");
+    tg.hidden = !old.length;
+    tg.textContent = showDone ? "收起已完成" : "已完成 "+old.length+" 件";
+    dlist.hidden = !showDone || !old.length; dlist.textContent = "";
+    if (showDone) old.slice(0,100).forEach(x => dlist.append(todoRow(x)));
+  }
+  $("done-toggle").onclick = () => { showDone = !showDone; renderTodos(); };
+
+  // —— 写入 ——
+  let toastTimer = null, toastAction = null;
+  function toast(msg, btnText, action, ms){
+    $("toast-msg").textContent = msg;
+    const b = $("toast-btn"); b.hidden = !btnText; b.textContent = btnText || "";
+    toastAction = action || null;
+    $("toast").classList.add("on");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => $("toast").classList.remove("on"), ms || 3000);
+  }
+  $("toast-btn").onclick = () => { const a = toastAction; toastAction = null; $("toast").classList.remove("on"); if (a) a(); };
+  function errMsg(e){ return e && e.code === "invalid_argument" ? "你没有修改权限，只能查看。" : e && e.code === "quota_exceeded" ? "存储已满，删掉一些旧条目再试。" : "没保存上，检查网络后再试。"; }
+  async function write(fn, onFail){
+    try { await fn(); return true; }
+    catch(e){ if (onFail) onFail(); toast(errMsg(e), "重试", () => write(fn, onFail), 6000); render(); return false; }
+  }
+  function toggleDone(x, done, li){
+    const prev = {done:x.done, doneAt:x.doneAt};
+    x.done = done; x.doneAt = done ? Date.now() : 0;
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (li){
+      li.classList.toggle("done", done);
+      holdUntil = Date.now() + (done ? (reduce ? 800 : 960) : 0);
+    }
+    if (!li) render(); else setTimeout(render, done ? (reduce ? 800 : 960) : 0);
+    write(() => db.collection("todos").doc(x.id).update({done, doneAt:x.doneAt, updatedAt:Date.now()}), () => { x.done = prev.done; x.doneAt = prev.doneAt; holdUntil = 0; });
+    if (done) {
+      const n = visTd().filter(y => y.done && y.doneAt && ymd(new Date(y.doneAt)) === today()).length;
+      toast("完成了，今天第 "+n+" 件", "撤销", () => toggleDone(x, false, null), 3500);
+    }
+  }
+  function reschedule(x, d){
+    const prev = x.due; x.due = d; render();
+    write(() => db.collection("todos").doc(x.id).update({due:d, updatedAt:Date.now()}), () => { x.due = prev; });
+    toast("已改到"+(d === today() ? "今天" : "明天"));
+  }
+  async function moveAll(list){
+    const t = today(), prev = list.map(x => [x, x.due]);
+    list.forEach(x => x.due = t); render();
+    for (const [x] of prev) await write(() => db.collection("todos").doc(x.id).update({due:t, updatedAt:Date.now()}), () => { x.due = prev.find(p => p[0]===x)[1]; });
+    toast(list.length+" 件已改到今天");
+  }
+  function scheduleDelete(coll, item){
+    const timer = setTimeout(() => commitDelete(item.id), 5000);
+    pendingDel.set(item.id, {coll, timer});
+    render();
+    toast("已删除“"+(item.title.length > 12 ? item.title.slice(0,12)+"…" : item.title)+"”", "撤销", () => {
+      const p = pendingDel.get(item.id); if (p){ clearTimeout(p.timer); pendingDel.delete(item.id); render(); }
+    }, 5000);
+  }
+  function commitDelete(id){
+    const p = pendingDel.get(id); if (!p) return;
+    clearTimeout(p.timer);
+    write(() => db.collection(p.coll).doc(id).delete().then(() => pendingDel.delete(id)), () => { pendingDel.delete(id); });
+  }
+  function flushDeletes(){ for (const id of [...pendingDel.keys()]) commitDelete(id); }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushDeletes(); });
+  window.addEventListener("pagehide", flushDeletes);
+
+  // —— 一句话解析 ——
+  function parseQuick(s){
+    // 中文数字转阿拉伯数字（只处理紧跟“点/月/日/号/分”的，避免误伤“周三”）
+    const cnNum = w => {
+      const D = {"零":0,"一":1,"二":2,"两":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9};
+      if (w === "十") return 10;
+      if (w.includes("十")){ const [a,b] = w.split("十"); return (a ? D[a] : 1)*10 + (b ? D[b] : 0); }
+      return D[w];
+    };
+    s = s.replace(/[零一二两三四五六七八九十]{1,3}(?=[点月日号分])/g, w => { const n = cnNum(w); return n == null ? w : String(n); });
+    let text = " " + s + " ", date = "", time = "", important = false, project = "";
+    const t = today(), take = re => { const m = text.match(re); if (m) text = text.replace(m[0], " "); return m; };
+    let m;
+    if ((m = take(/(大后天|后天|明天|明早|明晚|今天|今晚|今早)/))){
+      const w = m[1]; date = addDays(t, w === "大后天" ? 3 : w === "后天" ? 2 : w.startsWith("明") ? 1 : 0);
+      if (w === "明晚" || w === "今晚") text = " 晚上" + text;
+      if (w === "明早" || w === "今早") text = " 早上" + text;
+    }
+    else if ((m = take(/(下下|下|这|本)?(?:个)?(?:周|星期|礼拜)([一二三四五六日天1-7])/))){
+      let wd = CN[m[2]] != null ? CN[m[2]] : Number(m[2]) % 7;
+      const cur = parse(t).getDay();
+      const mon = mondayOf(t);
+      const idx = (wd + 6) % 7;
+      if (m[1] === "下") date = addDays(mon, 7 + idx);
+      else if (m[1] === "下下") date = addDays(mon, 14 + idx);
+      else if (m[1] === "这" || m[1] === "本") date = addDays(mon, idx);
+      else { let diff = (wd - cur + 7) % 7; date = addDays(t, diff); }
+    }
+    else if ((m = take(/(?:(\d{4})[年\/.-])?(\d{1,2})[月\/.-](\d{1,2})[日号]?/))){
+      const y = m[1] ? Number(m[1]) : parse(t).getFullYear();
+      let d = new Date(y, Number(m[2])-1, Number(m[3]));
+      if (!m[1] && ymd(d) < t) d = new Date(y+1, Number(m[2])-1, Number(m[3]));
+      if (!isNaN(d)) date = ymd(d);
+    }
+    else if ((m = take(/(\d{1,2})[日号]/))){
+      const n = parse(t); let d = new Date(n.getFullYear(), n.getMonth(), Number(m[1]));
+      if (ymd(d) < t) d = new Date(n.getFullYear(), n.getMonth()+1, Number(m[1]));
+      date = ymd(d);
+    }
+    if ((m = take(/(凌晨|早上|上午|中午|下午|傍晚|晚上)?\s*(\d{1,2})(?:[:：](\d{2})|点(?:钟)?(半|一刻|三刻|(\d{1,2})分?)?)/))){
+      let hh = Number(m[2]), mm = m[3] ? Number(m[3]) : m[4] === "半" ? 30 : m[4] === "一刻" ? 15 : m[4] === "三刻" ? 45 : m[5] ? Number(m[5]) : 0;
+      const p = m[1] || "";
+      if ((p === "下午" || p === "傍晚" || p === "晚上") && hh < 12) hh += 12;
+      if (p === "中午" && hh < 6) hh += 12;
+      if (hh <= 23 && mm <= 59){ time = pad(hh)+":"+pad(mm); if (!date) date = t; }
+    }
+    take(/(凌晨|早上|上午|中午|下午|傍晚|晚上)/);
+    if (take(/(重要|紧急|[!！]+)/)) important = true;
+    for (const p of projects().sort((a,b) => b.length - a.length)){
+      const i = text.toLowerCase().indexOf(p.toLowerCase());
+      if (i >= 0){ project = p; break; }
+    }
+    let title = text.replace(/\s+/g," ").trim().replace(/^(之前|以前|前)\s*/,"").replace(/^(在|要|得|记得|提醒我|帮我记一下|记一下)\s*/,"").replace(/^[，,。、\s]+|[，,。、\s]+$/g,"");
+    if (!title) title = s.trim();
+    return {title, date, time, important, project, kind: time ? "event" : "todo"};
+  }
+
+  // —— 弹出层 ——
+  let sheetKind = "todo", editing = null, lastFocus = null;
+  function setKind(k){
+    sheetKind = k;
+    document.querySelectorAll("#seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.k === k ? "true" : "false"));
+    document.querySelectorAll(".ev-only").forEach(el => el.hidden = k !== "event");
+    document.querySelectorAll(".td-only").forEach(el => el.hidden = k !== "todo");
+    $("f-date-lab").textContent = k === "event" ? "日期" : "截止日期";
+    $("f-date").required = k === "event";
+  }
+  document.querySelectorAll("#seg button").forEach(b => b.onclick = () => { setKind(b.dataset.k); if (b.dataset.k === "event" && !$("f-date").value) $("f-date").value = selDay || today(); });
+  function fillProjChips(){
+    const c = $("proj-chips"); c.textContent = "";
+    const dl = $("proj-list"); dl.textContent = "";
+    projects().forEach(p => {
+      dl.append(h("option",{value:p}));
+      c.append(h("button",{class:"f",type:"button","aria-pressed":$("f-proj").value===p?"true":"false",onclick:()=>{ $("f-proj").value = $("f-proj").value === p ? "" : p; fillProjChips(); }},
+        h("span",{class:"sw",style:"background:"+projColor(p)}), p));
+    });
+  }
+  $("f-proj").oninput = fillProjChips;
+  function openSheet(kind, item, presetDate){
+    if (!db){ toast("数据未连接，暂时不能编辑"); return; }
+    lastFocus = document.activeElement;
+    editing = item || null;
+    $("sh-title").textContent = item ? (kind === "event" ? "编辑日程" : "编辑待办") : "新建";
+    $("q-wrap").hidden = !!item; $("seg").hidden = !!item;
+    $("q").value = "";
+    $("f-title").value = item ? item.title : "";
+    $("f-date").value = item ? (kind === "event" ? item.date : (item.due || "")) : (presetDate || "");
+    $("f-time").value = item && item.time || "";
+    $("f-dur").value = String(item && item.durationMin || 60);
+    if (![...$("f-dur").options].some(o => o.value === $("f-dur").value)) $("f-dur").value = "60";
+    $("f-note").value = item && item.note || "";
+    $("f-imp").checked = !!(item && item.important);
+    $("f-proj").value = item && item.project || "";
+    $("raw").hidden = !(item && item.rawText);
+    $("raw").textContent = item && item.rawText ? "原话：" + item.rawText : "";
+    $("del").hidden = !item;
+    $("save").textContent = item ? "保存修改" : "加入";
+    setKind(kind || (presetDate ? "event" : "todo"));
+    fillProjChips();
+    $("scrim").hidden = false; $("sheet").hidden = false;
+    requestAnimationFrame(() => { $("scrim").classList.add("on"); $("sheet").classList.add("on"); (item ? $("f-title") : $("q")).focus(); });
+  }
+  function closeSheet(){
+    $("scrim").classList.remove("on"); $("sheet").classList.remove("on");
+    setTimeout(() => { $("scrim").hidden = true; $("sheet").hidden = true; }, 340);
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  $("q").oninput = () => {
+    const p = parseQuick($("q").value);
+    if (!$("q").value.trim()) return;
+    setKind(p.kind);
+    $("f-title").value = p.title; $("f-date").value = p.date; $("f-time").value = p.time;
+    $("f-imp").checked = p.important; $("f-proj").value = p.project; fillProjChips();
+  };
+  $("q").onkeydown = e => { if (e.key === "Enter"){ e.preventDefault(); $("sheet").requestSubmit(); } };
+  $("cancel").onclick = closeSheet; $("scrim").onclick = closeSheet;
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
+  $("del").onclick = () => { const it = editing, k = sheetKind; closeSheet(); if (it) scheduleDelete(k === "event" ? "events" : "todos", it); };
+  $("sheet").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const title = $("f-title").value.trim(); if (!title){ $("f-title").focus(); return; }
+    const now = Date.now(), proj = $("f-proj").value.trim(), raw = $("q").value.trim();
+    let coll, data;
+    if (sheetKind === "event"){
+      const date = $("f-date").value; if (!date){ $("f-date").focus(); return; }
+      coll = "events";
+      data = {title, date, time:$("f-time").value || "", durationMin:Number($("f-dur").value)||60, project:proj, note:$("f-note").value.trim(), updatedAt:now};
+    } else {
+      coll = "todos";
+      data = {title, due:$("f-date").value || "", important:$("f-imp").checked, project:proj, updatedAt:now};
+    }
+    $("save").disabled = true; $("save").textContent = "保存中…";
+    let ok;
+    if (editing){
+      const id = editing.id;
+      ok = await write(() => db.collection(coll).doc(id).update(data));
+    } else {
+      Object.assign(data, {createdAt:now, source:"page", rawText:raw});
+      if (coll === "todos") Object.assign(data, {done:false, doneAt:0});
+      const ref = db.collection(coll).doc();
+      localIds.add(ref.id);
+      ok = await write(() => ref.set(data));
+      if (ok && coll === "events"){ selDay = data.date; weekStart = mondayOf(data.date); }
+    }
+    $("save").disabled = false; $("save").textContent = editing ? "保存修改" : "加入";
+    if (ok){ closeSheet(); toast(editing ? "已保存" : (coll === "events" ? "已记下日程，"+relDay(data.date) : "已加入待办")); }
+  });
+  $("plus").onclick = () => openSheet(null, null, view === "sched" ? selDay : null);
+
+  // —— 导航 ——
+  function placeInd(){
+    const b = document.querySelector('#nav button[data-go="'+view+'"]'); if (!b) return;
+    $("ind").style.left = b.offsetLeft+"px"; $("ind").style.width = b.offsetWidth+"px";
+  }
+  function go(v){
+    view = v; try { localStorage.setItem("pv-view", v); } catch(e){}
+    document.querySelectorAll(".view").forEach(el => el.classList.toggle("on", el.dataset.view === v));
+    document.querySelectorAll("#nav button").forEach(b => {
+      const on = b.dataset.go === v;
+      b.setAttribute("aria-current", on ? "page" : "false");
+      b.querySelector(".lab").hidden = !on && innerWidth < 380;
+    });
+    requestAnimationFrame(placeInd);
+    window.scrollTo({top:0});
+  }
+  document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => go(b.dataset.go)));
+  addEventListener("resize", () => { go(view); });
+  $("wk-prev").onclick = () => { weekStart = addDays(weekStart,-7); selDay = weekStart; renderSched(); };
+  $("wk-next").onclick = () => { weekStart = addDays(weekStart,7); selDay = weekStart; renderSched(); };
+
+  // 网络
+  const net = () => { $("netbar").hidden = navigator.onLine !== false; };
+  addEventListener("online", net); addEventListener("offline", net); net();
+
+  go(view); render();
+
+  // —— 数据 ——
+  (async () => {
+    db = window.claude && window.claude.use ? await window.claude.use("db") : null;
+    if (!db){
+      const n = $("notice"); n.hidden = false; n.textContent = "";
+      n.append(h("strong",null,"数据没有连上。"), " 请在 claude.ai 登录同一个账号后再打开这个页面。");
+      loaded.ev = loaded.td = true; render(); return;
+    }
+    const lost = () => toast("和云端的连接断了，刷新页面即可恢复", "刷新", () => location.reload(), 60000);
+    const mark = (snap, key) => {
+      if (loaded[key]){
+        for (const c of snap.docChanges()){
+          if (c.type === "added" && !localIds.has(c.doc.id)){ fresh.add(c.doc.id); setTimeout(() => fresh.delete(c.doc.id), 2400); }
+        }
+      }
+    };
+    db.collection("events").onSnapshot(s => { mark(s,"ev"); events = s.docs.map(d => Object.assign({id:d.id}, d.data())); loaded.ev = true; render(); }, lost);
+    db.collection("todos").onSnapshot(s => { mark(s,"td"); todos = s.docs.map(d => Object.assign({id:d.id}, d.data())); loaded.td = true; render(); }, lost);
+  })();
+
+  // 每分钟刷新时间轴与倒计时
+  setInterval(() => { if ($("sheet").hidden) render(); }, 60000);
+})();
+</script>

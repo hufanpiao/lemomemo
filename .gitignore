@@ -1,0 +1,20 @@
+# 日程与待办 —— Git 忽略规则
+# dist/ 是发布产物，保留在仓库里（发布要用 dist/planner.html），不忽略。
+
+# Python / Node 缓存
+__pycache__/
+*.pyc
+node_modules/
+
+# 系统与编辑器文件
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+
+# 临时文件与日志
+*.log
+*.tmp
+tmp/

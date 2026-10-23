@@ -1,0 +1,25 @@
+/* 设计变量：颜色、字体、圆角、阴影；浅色为默认，深色有两套写法
+   （跟随系统 prefers-color-scheme，以及 data-theme="dark" 强制深色）。
+   依赖：无。必须最先拼接。 */
+:root{
+  --bg:#e6e7ea; --panel:#ffffff; --panel-2:#f2f3f5; --ink:#121316; --muted:#6a6e76; --line:#e3e4e8;
+  --dock:#121316; --dock-ink:#f3f3f4; --pill-on:#ffffff; --pill-on-ink:#121316;
+  --yellow:#f1df4a; --on-yellow:#121316; --red:#e2372b; --red-soft:#fbe2df; --focus:#3a6cf4;
+  --p1:#f3e27a; --p2:#bca8f6; --p3:#f5a5c8; --p4:#95dfa8; --p5:#95d4f2; --p6:#f6a78c; --p7:#d6d7dc; --on-p:#141414;
+  --shadow:0 18px 40px -18px rgba(18,19,22,.35);
+  --f-num:"Manrope","Noto Sans SC",system-ui,sans-serif;
+  --f-body:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --r-panel:26px; --r-block:16px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c0d0f; --panel:#17181b; --panel-2:#212226; --ink:#f1f1f3; --muted:#8d919a; --line:#2a2b30;
+  --dock:#202125; --dock-ink:#f1f1f3; --pill-on:#f1f1f3; --pill-on-ink:#121316;
+  --red:#ff5a4d; --red-soft:#3a1a17; --focus:#8fb0ff;
+  --p1:#e8d56c; --p2:#ad98ee; --p3:#ea93ba; --p4:#86d29a; --p5:#86c6e6; --p6:#ec977c; --p7:#b9bac0;
+  --shadow:0 18px 40px -18px rgba(0,0,0,.8); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c0d0f; --panel:#17181b; --panel-2:#212226; --ink:#f1f1f3; --muted:#8d919a; --line:#2a2b30;
+  --dock:#202125; --dock-ink:#f1f1f3; --pill-on:#f1f1f3; --pill-on-ink:#121316;
+  --red:#ff5a4d; --red-soft:#3a1a17; --focus:#8fb0ff;
+  --p1:#e8d56c; --p2:#ad98ee; --p3:#ea93ba; --p4:#86d29a; --p5:#86c6e6; --p6:#ec977c; --p7:#b9bac0;
+  --shadow:0 18px 40px -18px rgba(0,0,0,.8); color-scheme:dark}

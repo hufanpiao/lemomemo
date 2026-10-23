@@ -1,0 +1,49 @@
+{
+  "_说明": "拼接顺序清单：styles 按顺序拼进一个 <style>；scripts 按顺序各包一层函数作用域后拼进一个 IIFE，entry 永远最后。测试页会把 tests.mockAdapter 插在 entry 之前。",
+  "template": "src/index.html",
+  "styles": [
+    "src/styles/tokens.css",
+    "src/styles/base.css",
+    "src/styles/layout.css",
+    "src/styles/components/header.css",
+    "src/styles/components/panel.css",
+    "src/styles/components/next-card.css",
+    "src/styles/components/late.css",
+    "src/styles/components/timeline.css",
+    "src/styles/components/week.css",
+    "src/styles/components/event.css",
+    "src/styles/components/todo.css",
+    "src/styles/components/empty.css",
+    "src/styles/components/toast.css",
+    "src/styles/components/sheet.css",
+    "src/styles/components/notice.css"
+  ],
+  "scripts": [
+    "src/scripts/core/date.js",
+    "src/scripts/core/dom.js",
+    "src/scripts/logic/projects.js",
+    "src/scripts/logic/parse-quick.js",
+    "src/scripts/logic/sort.js",
+    "src/scripts/logic/format.js",
+    "src/scripts/platform/index.js",
+    "src/scripts/platform/claude-db.js",
+    "src/scripts/data/store.js",
+    "src/scripts/data/state.js",
+    "src/scripts/data/fields.js",
+    "src/scripts/data/write.js",
+    "src/scripts/data/subscribe.js",
+    "src/scripts/ui/toast.js",
+    "src/scripts/ui/render.js",
+    "src/scripts/ui/today.js",
+    "src/scripts/ui/schedule.js",
+    "src/scripts/ui/todos.js",
+    "src/scripts/ui/sheet.js",
+    "src/scripts/ui/nav.js"
+  ],
+  "entry": "src/scripts/app.js",
+  "tests": {
+    "skeleton": "tests/harness/skeleton.html",
+    "mockAdapter": "tests/mock/mock-db.js",
+    "claudeStub": "tests/mock/claude-stub.js"
+  }
+}

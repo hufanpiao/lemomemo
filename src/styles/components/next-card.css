@@ -1,0 +1,13 @@
+/* 组件：“下一件事”大卡片（含空闲状态）。
+   依赖：tokens.css。 */
+/* 下一件事 */
+.next{border-radius:var(--r-panel);padding:20px;color:var(--on-p);display:flex;flex-direction:column;gap:6px;position:relative;min-height:168px}
+.next .lbl{font-size:14px;font-weight:500;opacity:.75}
+.next .big{font-family:var(--f-num);font-weight:800;font-size:56px;line-height:1;letter-spacing:-.03em}
+.next .cd{font-size:16px;font-weight:500}
+.next .tt{font-size:20px;font-weight:700;line-height:1.35;overflow-wrap:anywhere;padding-right:56px}
+.next .proj{font-size:14px;opacity:.75}
+.next .act{position:absolute;right:16px;bottom:16px;width:48px;height:48px;border-radius:50%;border:0;background:var(--on-p);color:#fff;display:grid;place-items:center}
+.next .act svg{width:22px;height:22px}
+.next.empty{background:var(--panel);color:var(--ink)}
+.next.empty .big{font-size:40px}

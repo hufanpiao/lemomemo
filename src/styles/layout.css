@@ -1,0 +1,26 @@
+/* 页面骨架：.app 容器、三视图网格（手机单页切换，≥960px 三栏并排）、底部浮动导航与黄色＋。
+   原注释：便当格面板 + 马卡龙色块条目；手机上分“今天/日程/待办”三页，底部浮动导航加黄色＋；≥960px 三栏同时显示
+   依赖：tokens.css、base.css。 */
+.app{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+/* 网格 */
+.grid{display:grid;grid-template-columns:1fr;gap:16px}
+.view{display:none;flex-direction:column;gap:16px;min-width:0}
+.view.on{display:flex}
+@media (min-width:960px){
+  .grid{grid-template-columns:1.1fr 1fr 1fr;align-items:start}
+  .view{display:flex}
+  .nav{display:none!important}
+}
+/* 底部浮动导航 */
+.dock{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:10px;pointer-events:none;
+  padding:0 max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.dock > *{pointer-events:auto}
+.nav{position:relative;display:flex;background:var(--dock);border-radius:999px;padding:5px;box-shadow:var(--shadow)}
+.nav button{position:relative;z-index:1;border:0;background:none;color:var(--dock-ink);border-radius:999px;padding:0 18px;height:46px;font-size:15px;font-weight:500;display:flex;align-items:center;gap:6px;transition:color .25s}
+.nav button[aria-current=page]{color:var(--pill-on-ink)}
+.nav button svg{width:18px;height:18px;flex:none}
+.nav .ind{position:absolute;top:5px;height:46px;border-radius:999px;background:var(--pill-on);transition:left .38s cubic-bezier(.34,1.3,.64,1),width .38s cubic-bezier(.34,1.3,.64,1)}
+.nav .lab{overflow:hidden;white-space:nowrap}
+.plus{width:56px;height:56px;border-radius:50%;border:0;background:var(--yellow);color:var(--on-yellow);display:grid;place-items:center;box-shadow:var(--shadow);flex:none}
+.plus svg{width:26px;height:26px}
+@media (min-width:960px){.dock{justify-content:flex-end}}
