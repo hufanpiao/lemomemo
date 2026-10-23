@@ -1,6 +1,6 @@
 // 职责：启动入口：选定存储适配器（全项目唯一一处配置）、创建统一时钟、绑定各模块事件、首屏渲染、连接数据、启动时钟。
 //       App.BUILD 由 build.py 在包头写入：发布版为 {storage:"claude-db"}，测试页为 {storage:"mock-db"}。
-// 依赖：core/clock.js、platform/index.js、platform/env.js、platform/claude-db.js、data/store.js、data/subscribe.js、
+// 依赖：core/clock.js、platform/index.js、platform/env.js、platform/claude-db.js、data/store.js、data/write.js、data/subscribe.js、
 //       ui/view-state.js、ui/render.js、ui/today.js、ui/schedule.js、ui/todos.js、ui/sheet.js、ui/nav.js、ui/remind.js、ui/theme.js
 
 // —— 存储适配器配置 ——
@@ -11,6 +11,7 @@ App.data.store.use(App.platform.storage[STORAGE]());
 
 // —— 统一时钟（全页面只有这一个“现在”）——
 App.clock = App.core.clock.create(App.platform.env);
+App.data.write.init(App.clock);
 App.ui.viewState.init(App.clock.today());
 
 // —— 事件绑定 ——

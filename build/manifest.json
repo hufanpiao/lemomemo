@@ -44,6 +44,8 @@
     "src/scripts/ui/view-state.js",
     "src/scripts/ui/toast.js",
     "src/scripts/ui/render.js",
+    "src/scripts/ui/today-late.js",
+    "src/scripts/ui/today-timeline.js",
     "src/scripts/ui/today.js",
     "src/scripts/ui/schedule.js",
     "src/scripts/ui/todos.js",

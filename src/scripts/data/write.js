@@ -2,14 +2,16 @@
 //       softDelete 软删除（写 deletedAt）、restore 恢复（清空 deletedAt）。先改本地、发 "change"，再写存储；
 //       写入 10 秒没回应或失败就回滚本地，发 "error" {code, retry}，retry 会把整个操作重做一遍。
 //       以后的 remindAt 计算也在这里统一接入（logic/remind.js）。不碰界面，提示文案由界面根据事件决定。
+//       时钟由 init(clock) 注入（app.js 传入统一时钟，测试传入假时钟），本文件不读全局时钟。
 // 依赖：core/const.js、platform/index.js、data/bus.js、data/store.js、data/state.js、data/fields.js
-// 运行时调用：core/clock.js 的时钟实例 App.clock（由 app.js 创建）
 App.data = App.data || {};
 
 const C = App.core.C;
 const emit = App.data.emit, store = App.data.store, S = App.data.state, F = App.data.fields;
-const now = () => App.clock.now();
-const today = () => App.clock.today();
+let clock = null;   // {now(), today()}，由 init 注入
+function init(c){ clock = c; }
+const now = () => clock.now();
+const today = () => clock.today();
 const collOf = kind => kind === "event" ? "events" : "todos";
 // 快照会整体替换数组；按 id 找到当前那份对象，避免改到旧对象
 const live = (coll, x) => S[coll].find(y => y.id === x.id) || x;
@@ -83,4 +85,4 @@ function restore(coll, item){
   return run(() => store.update(coll, x.id, {deletedAt:null, updatedAt:now()}), () => { x.deletedAt = prev; }, () => restore(coll, x));
 }
 
-App.data.write = {saveItem, toggleDone, reschedule, moveAll, softDelete, restore, collOf};
+App.data.write = {init, saveItem, toggleDone, reschedule, moveAll, softDelete, restore, collOf};

@@ -1,5 +1,6 @@
 # 职责：架构检查。按 docs/10-架构/架构约定.md 检查 src/ 有没有走样：分层越界、文件头缺失、依赖顺序与 manifest 矛盾、
-#       用了别的模块却没在文件头声明、src/ 下有文件没写进 manifest、单文件过长。不通过时给出中文原因和“文件:行号”。
+#       加载时就用的模块写成了“运行时调用”、用了别的模块却没在文件头声明、src/ 下有文件没写进 manifest、单文件过长、
+#       组件 CSS 写死颜色。不通过时给出中文原因和“文件:行号”。
 #   用法：python build/check_arch.py              检查当前源码（build.py 默认先跑它）
 #         python build/check_arch.py --self-test  用 tests/arch-fixtures/ 里故意违规的示例证明每条规则真能拦住
 # 依赖：Python 3.8+ 标准库
@@ -10,6 +11,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = "src/scripts/"
+COMPONENT_CSS = "src/styles/components/"
 MAX_LINES = 250
 LAYERS = ["core", "logic", "platform", "data", "ui", "app"]
 # 每层允许依赖的层（含本层）。app.js 是入口，可以依赖任何层。
@@ -23,40 +25,55 @@ ALLOWED = {
 }
 RULES = {
     "A1": "logic/ 和 core/ 必须是纯的，不能碰页面、浏览器、系统时间或别的层",
-    "A2": "data/ 不能碰界面（DOM、App.ui、classList、matchMedia、innerHTML）",
-    "A3": "只有 platform/ 能使用 window.claude 和 localStorage",
-    "A4": "ui/ 不能直接调用存储（store.），写入要走 data/write.js",
+    "A2": "data/ 不能碰界面和浏览器（DOM、window、location、navigator、App.ui、classList、matchMedia、innerHTML），时钟用 init 注入",
+    "A3": "只有 platform/ 能使用 claude 平台接口（window.claude / globalThis.claude）和浏览器存储（localStorage、sessionStorage、indexedDB）",
+    "A4": "ui/ 不能直接调用存储（store.、App.data.store），写入要走 data/write.js",
     "A5": "platform/ 不能反过来依赖 data/ 或 ui/",
     "A6": "文件头缺少“职责：”或“依赖：”注释",
-    "A7": "文件头“依赖：”里的文件在 manifest 中排在本文件后面（或不在 manifest 里）",
+    "A7": "加载时就要用的文件必须写在“依赖：”里，并且在 manifest 中排在本文件前面",
     "A8": "依赖方向错误：文件头声明了不允许依赖的层",
     "A9": "用到了别的模块，但文件头的“依赖：”或“运行时调用：”里没写",
     "A10": "src/ 下的文件没写进 build/manifest.json，或 manifest 里的文件不存在",
     "W1": "单个 JS 文件超过 %d 行，应该拆分（警告）" % MAX_LINES,
+    "W2": "组件 CSS 里写死了颜色，应改用 tokens 里的变量（警告；ADR-008，T7 改完后升级为错误）",
 }
-# (规则, 适用层, 正则, 说明)
+# (规则, 适用层, 正则, 说明)。匹配对象是“去掉注释、清空字符串内容、把 x["y"] 改写成 x.y”之后的代码。
+PURE = {"core", "logic"}
+NOT_PLATFORM = {"core", "logic", "data", "ui", "app"}
+GLOBAL_OBJ = r"(?:window|globalThis|self|top|parent|frames)"
 PATTERNS = [
-    ("A1", {"core", "logic"}, r"\bdocument\b", "document"),
-    ("A1", {"core", "logic"}, r"\bwindow\b", "window"),
-    ("A1", {"core", "logic"}, r"\blocalStorage\b", "localStorage"),
-    ("A1", {"core", "logic"}, r"\bDate\.now\s*\(", "Date.now()"),
-    ("A1", {"core", "logic"}, r"\bnew\s+Date\s*\(\s*\)", "不带参数的 new Date()"),
-    ("A1", {"core", "logic"}, r"\bApp\.ui\b", "App.ui"),
-    ("A1", {"core", "logic"}, r"\bApp\.data\b", "App.data"),
-    ("A1", {"core", "logic"}, r"\bApp\.platform\b", "App.platform"),
-    ("A1", {"core", "logic"}, r"\bApp\.clock\b", "App.clock（时间请由参数传入）"),
+    ("A1", PURE, r"\bdocument\b", "document"),
+    ("A1", PURE, r"\bwindow\b", "window"),
+    ("A1", PURE, r"\bglobalThis\b", "globalThis"),
+    ("A1", PURE, r"\b(?:localStorage|sessionStorage|indexedDB)\b", "浏览器存储"),
+    ("A1", PURE, r"\bnavigator\b", "navigator"),
+    ("A1", PURE, r"\blocation\b", "location"),
+    ("A1", PURE, r"\bDate\.now\b", "Date.now"),
+    ("A1", PURE, r"\bperformance\b", "performance（performance.now 等）"),
+    ("A1", PURE, r"\bnew\s+Date\s*\(\s*\)", "不带参数的 new Date()"),
+    ("A1", PURE, r"\bnew\s+Date\b(?!\s*\()", "不带括号的 new Date"),
+    ("A1", PURE, r"DATE_CALL", "Date()（返回当前时间的字符串）"),
+    ("A1", PURE, r"\bApp\.ui\b", "App.ui"),
+    ("A1", PURE, r"\bApp\.data\b", "App.data"),
+    ("A1", PURE, r"\bApp\.platform\b", "App.platform"),
+    ("A1", PURE, r"\bApp\.clock\b", "App.clock（时间请由参数传入）"),
     ("A2", {"data"}, r"\bdocument\b", "document"),
+    ("A2", {"data"}, r"\bwindow\b", "window"),
+    ("A2", {"data"}, r"\blocation\b", "location"),
+    ("A2", {"data"}, r"\bnavigator\b", "navigator"),
     ("A2", {"data"}, r"\bApp\.ui\b", "App.ui"),
     ("A2", {"data"}, r"\bclassList\b", "classList"),
     ("A2", {"data"}, r"\bmatchMedia\b", "matchMedia"),
     ("A2", {"data"}, r"\binnerHTML\b", "innerHTML"),
-    ("A3", {"core", "logic", "data", "ui", "app"}, r"\bwindow\.claude\b", "window.claude"),
-    ("A3", {"core", "logic", "data", "ui", "app"}, r"\blocalStorage\b", "localStorage"),
-    ("A4", {"ui"}, r"(?<![\w$])store\s*\.", "store."),
+    ("A2", {"data"}, r"\bApp\.clock\b", "App.clock（请用 init(clock) 注入）"),
+    ("A3", NOT_PLATFORM, r"\b" + GLOBAL_OBJ + r"\s*\.\s*claude\b", "claude 平台接口"),
+    ("A3", NOT_PLATFORM, r"\b(?:localStorage|sessionStorage|indexedDB)\b", "浏览器存储"),
+    ("A4", {"ui"}, r"(?<![\w$.])store\s*\.", "store."),
     ("A4", {"ui"}, r"\bApp\.data\.store\b", "App.data.store"),
     ("A5", {"platform"}, r"\bApp\.(?:data|ui)\b", "App.data / App.ui"),
 ]
 SPECIAL_PROVIDERS = {"App.clock": "src/scripts/app.js", "App.BUILD": "build/build.py"}
+COLOR_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\s*\(")
 
 
 def layer_of(path):
@@ -67,8 +84,9 @@ def layer_of(path):
     return "app" if rel == "app.js" else None
 
 
-def strip_comments(src):
-    """去掉 JS 注释（换成空格、保留换行，行号不变）；字符串、模板字符串、正则字面量原样保留。"""
+def scan_js(src, blank_strings):
+    """去掉 JS 注释（换成空格、保留换行，行号不变）；blank_strings 为真时把字符串、模板字符串的内容也换成空格
+    （引号保留）。正则字面量原样保留。"""
     out, i, n = [], 0, len(src)
     prev = ""   # 上一个非空白的有效字符，用来判断 / 是除号还是正则开头
     while i < n:
@@ -86,7 +104,9 @@ def strip_comments(src):
             j = i + 1
             while j < n and src[j] != c:
                 j += 2 if src[j] == "\\" else 1
-            out.append(src[i:j + 1]); i = j + 1; prev = c; continue
+            body = src[i + 1:j]
+            out.append(c + (re.sub(r"[^\n]", " ", body) if blank_strings else body) + (src[j] if j < n else ""))
+            i = j + 1; prev = c; continue
         if c == "/" and (prev == "" or prev in "(,=:[!&|?{};+-*%<>~^"):
             j, in_class = i + 1, False
             while j < n and src[j] != "\n":
@@ -107,8 +127,53 @@ def strip_comments(src):
     return "".join(out)
 
 
+def strip_comments(src):
+    return scan_js(src, False)
+
+
+def code_for_rules(src):
+    """规则匹配用的代码：去注释 → 把 x["y"] / x['y'] 改写成 x.y（防止用方括号绕过）→ 清空其余字符串内容（防止误报）。"""
+    code = strip_comments(src)
+    code = re.sub(r"\[\s*([\"'`])([A-Za-z_$][\w$]*)\1\s*\]", lambda m: "." + m.group(2) + " " * (len(m.group(0)) - len(m.group(2)) - 1), code)
+    return scan_js(code, True)
+
+
+def runtime_mask(code):
+    """逐字符标出“只在函数里执行”的位置（True）；其余是文件加载时就会执行的代码。
+    规则：前面紧挨着 ) 或 => 的 { 是函数体；=> 后面不带 { 的表达式体一直到同层的 , ; 换行或右括号为止。"""
+    mask = [False] * len(code)
+    stack = []   # 每层括号：(右括号, 是否函数体)
+    arrow = []   # 表达式体的箭头函数：记录开始时的括号层数
+    prev = ""
+    i, n = 0, len(code)
+    pairs = {"{": "}", "(": ")", "[": "]"}
+    while i < n:
+        c = code[i]
+        if arrow and len(stack) == arrow[-1] and (c in ",;\n" or c in ")]}"):
+            arrow.pop()
+            continue
+        if c == "=" and i + 1 < n and code[i + 1] == ">":
+            j = i + 2
+            while j < n and code[j] in " \t":
+                j += 1
+            mask[i] = mask[i + 1] = any(f for _, f in stack) or bool(arrow)
+            if j < n and code[j] != "{":
+                arrow.append(len(stack))
+            prev = ">"; i += 2; continue
+        if c in pairs:
+            fn = c == "{" and prev in (")", ">")
+            stack.append((pairs[c], fn))
+        elif c in ")]}" and stack:
+            stack.pop()
+        mask[i] = any(f for _, f in stack) or bool(arrow)
+        if not c.isspace():
+            prev = c
+        i += 1
+    return mask
+
+
 def header(src):
-    """读文件头注释：返回 (有职责, 依赖列表, 运行时调用列表, 依赖所在行号)。"""
+    """读文件头注释：返回 (有职责, 有依赖, 依赖列表, 运行时调用列表, 依赖所在行号)。"""
     lines = src.splitlines()
     head = []
     for ln in lines[:12]:
@@ -116,7 +181,6 @@ def header(src):
             break
         head.append(ln)
     text = "\n".join(head)
-    has_duty = "职责：" in text
     blocks, cur, dep_line = {"依赖": "", "运行时调用": ""}, None, 0
     for k, ln in enumerate(head, 1):
         body = ln.lstrip("/# ").strip()
@@ -130,7 +194,7 @@ def header(src):
         elif cur in blocks:
             blocks[cur] += " " + body
     parse = lambda s: re.findall(r"(?:core|logic|platform|data|ui)/[\w-]+\.js|App\.clock", s)
-    return has_duty, ("依赖：" in text), parse(blocks["依赖"]), parse(blocks["运行时调用"]), dep_line
+    return ("职责：" in text), ("依赖：" in text), parse(blocks["依赖"]), parse(blocks["运行时调用"]), dep_line
 
 
 def providers(files):
@@ -142,8 +206,29 @@ def providers(files):
     return prov
 
 
-def check(manifest, files, all_src_files):
-    """manifest：dict；files：{路径: 源码}（manifest 里的 JS）；all_src_files：src/ 下全部 .js/.css 路径。返回 (错误, 警告)。"""
+def find_pattern(pat, line):
+    if pat == "DATE_CALL":   # Date(…) 但不是 new Date(…)、x.Date(…)
+        for m in re.finditer(r"(?<![\w$.])Date\s*\(", line):
+            if not re.search(r"\bnew\s*$", line[:m.start()]):
+                return True
+        return False
+    return re.search(pat, line) is not None
+
+
+def check_css(path, css, warns):
+    """组件 CSS 里写死的颜色（只看声明的值，不看选择器）。"""
+    text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), css, flags=re.S)
+    for m in re.finditer(r"([\w-]+)\s*:\s*([^;{}]+)", text):
+        if m.group(1).startswith("--"):
+            continue   # 自定义属性（变量定义）不管
+        for c in COLOR_RE.finditer(m.group(2)):
+            line = text.count("\n", 0, m.start(2) + c.start()) + 1
+            warns.append(("W2", path, line, "%s: 里写死了颜色 %s" % (m.group(1), m.group(2).strip()[:60])))
+
+
+def check(manifest, files, all_src_files, css_files=None):
+    """manifest：dict；files：{路径: 源码}（manifest 里的 JS）；all_src_files：src/ 下全部文件路径；
+    css_files：{路径: 内容}（组件 CSS）。返回 (错误, 警告)。"""
     errors, warns = [], []
     err = lambda rule, path, line, msg: errors.append((rule, path, line, msg))
     order = list(manifest["scripts"]) + [manifest["entry"]]
@@ -154,6 +239,9 @@ def check(manifest, files, all_src_files):
     for p in sorted(listed):
         if p not in all_src_files and p not in files:
             err("A10", "build/manifest.json", 0, "manifest 里的 %s 不存在" % p)
+    for p, css in sorted((css_files or {}).items()):
+        if p.startswith(COMPONENT_CSS):
+            check_css(p, css, warns)
     prov = providers(files)
     short = lambda p: p[len(SCRIPTS):] if p.startswith(SCRIPTS) else p
     pos = {short(p): i for i, p in enumerate(order)}
@@ -161,7 +249,7 @@ def check(manifest, files, all_src_files):
         if path not in files:
             continue
         src, lay = files[path], layer_of(path)
-        code = strip_comments(src)
+        code = code_for_rules(src)
         lines = code.splitlines()
         if len(src.splitlines()) > MAX_LINES:
             warns.append(("W1", path, 0, "共 %d 行，超过 %d 行，建议拆分" % (len(src.splitlines()), MAX_LINES)))
@@ -172,8 +260,8 @@ def check(manifest, files, all_src_files):
             if lay not in layers:
                 continue
             for no, ln in enumerate(lines, 1):
-                if re.search(pat, ln):
-                    err(rule, path, no, "%s 里不能出现 %s：%s" % (lay + "/" if lay != "app" else "app.js", what, ln.strip()[:80]))
+                if find_pattern(pat, ln):
+                    err(rule, path, no, "%s 里不能出现 %s：%s" % (lay + "/" if lay != "app" else "app.js", what, src.splitlines()[no - 1].strip()[:80]))
         me = short(path)
         for d in deps + runtime:
             if d == "App.clock":
@@ -189,14 +277,24 @@ def check(manifest, files, all_src_files):
             elif pos[d] >= pos[me]:
                 err("A7", path, dep_line, "依赖的 %s 排在本文件后面，加载时会拿不到；请调整 manifest 顺序" % d)
         declared = set(deps) | set(runtime)
+        mask = runtime_mask(code)
+        offsets = [0]
+        for ln in lines:
+            offsets.append(offsets[-1] + len(ln) + 1)
+        reported_load = set()
         for no, ln in enumerate(lines, 1):
             for m in re.finditer(r"\bApp\.(\w+)(?:\.(\w+))?", ln):
                 name = "App.%s.%s" % (m.group(1), m.group(2)) if m.group(2) else "App." + m.group(1)
                 src_file = prov.get(name)
-                if not src_file or src_file == path or src_file.startswith("build/"):
+                if not src_file or src_file == path or src_file.startswith("build/") or src_file.startswith("tests/"):
                     continue
                 want = "App.clock" if name == "App.clock" else short(src_file)
-                if want not in declared and not src_file.startswith("tests/"):
+                at = offsets[no - 1] + m.start()
+                load_time = at < len(mask) and not mask[at]
+                if load_time and want != "App.clock" and want not in deps and want in runtime and want not in reported_load:
+                    err("A7", path, no, "加载时就用到了 %s（%s），但它写在“运行时调用：”里；请移到“依赖：”并保证 manifest 顺序" % (name, want))
+                    reported_load.add(want)
+                if want not in declared:
                     err("A9", path, no, "用到了 %s（在 %s），文件头没声明" % (name, want))
                     declared.add(want)   # 每个文件每个模块只报一次
     return errors, warns
@@ -205,24 +303,27 @@ def check(manifest, files, all_src_files):
 def load_real():
     m = json.loads((ROOT / "build/manifest.json").read_text(encoding="utf-8-sig"))
     all_src = {p.relative_to(ROOT).as_posix() for p in (ROOT / "src").rglob("*") if p.is_file()}
-    files = {}
+    files, css = {}, {}
     for p in list(m["scripts"]) + [m["entry"]]:
         f = ROOT / p
         if f.exists():
             files[p] = f.read_text(encoding="utf-8-sig")
-    return m, files, all_src
+    for p in all_src:
+        if p.startswith(COMPONENT_CSS) and p.endswith(".css"):
+            css[p] = (ROOT / p).read_text(encoding="utf-8-sig")
+    return m, files, all_src, css
 
 
 def report(errors, warns):
     for rule, path, line, msg in errors:
         print("  错误 [%s] %s%s  %s" % (rule, path, ":%d" % line if line else "", msg))
     for rule, path, line, msg in warns:
-        print("  警告 [%s] %s  %s" % (rule, path, msg))
+        print("  警告 [%s] %s%s  %s" % (rule, path, ":%d" % line if line else "", msg))
 
 
 def run():
-    m, files, all_src = load_real()
-    errors, warns = check(m, files, all_src)
+    m, files, all_src, css = load_real()
+    errors, warns = check(m, files, all_src, css)
     report(errors, warns)
     if errors:
         rules = sorted({e[0] for e in errors}, key=lambda r: int(r[1:]))
@@ -235,38 +336,43 @@ def run():
 
 
 def self_test():
-    """每个示例文件头写着 @fixture 路径=… 期望=…；把它当作那个路径的源码加入检查，期望的规则必须报出来。"""
-    m, files, all_src = load_real()
-    base_err, _ = check(m, files, all_src)
+    """每个示例文件头写着 @fixture 路径=… 期望=…；把它当作那个路径的源码加入检查，期望的规则必须报出来。
+    期望=无 表示这段代码是合规的，不能报任何规则（用来防误报）。"""
+    m, files, all_src, css = load_real()
+    base_err, base_warn = check(m, files, all_src, css)
     ok = not base_err
     print("当前源码：%s" % ("无错误" if ok else "有 %d 处错误（自检要求当前源码先通过）" % len(base_err)))
-    fixtures = sorted((ROOT / "tests/arch-fixtures").glob("*.js"))
+    fixtures = sorted(list((ROOT / "tests/arch-fixtures").glob("*.js")) + list((ROOT / "tests/arch-fixtures").glob("*.css")))
     for fx in fixtures:
         src = fx.read_text(encoding="utf-8-sig")
-        meta = dict(re.findall(r"(\S+?)=(\S+)", re.search(r"@fixture(.*)", src).group(1)))
+        meta = dict(re.findall(r"(\S+?)=(\S+)", re.search(r"@fixture(.*)", src).group(1).replace("*/", "")))
         path, expect = meta["路径"], meta["期望"]
         mm = json.loads(json.dumps(m))
-        fs, srcs = dict(files), set(all_src) | {path}
-        fs[path] = src
-        if meta.get("登记") != "否":
-            if meta.get("位置") == "开头":
-                mm["scripts"].insert(0, path)
-            else:
-                mm["scripts"].append(path)
-        errors, warns = check(mm, fs, srcs)
+        fs, srcs, cs = dict(files), set(all_src) | {path}, dict(css)
+        if path.endswith(".css"):
+            cs[path] = src
+            mm["styles"].append(path)
+        else:
+            fs[path] = src
+            if meta.get("登记") != "否":
+                if meta.get("位置") == "开头":
+                    mm["scripts"].insert(0, path)
+                else:
+                    mm["scripts"].append(path)
+        errors, warns = check(mm, fs, srcs, cs)
         got = {e[0] for e in errors + warns if e[1] in (path, "build/manifest.json")}
-        hit = expect in got
+        hit = (not got) if expect == "无" else (expect in got)
         ok &= hit
-        print("  %s  %-34s 期望 %-4s 实际 %s" % ("拦住" if hit else "漏掉", fx.name, expect, "、".join(sorted(got)) or "无"))
+        print("  %s  %-36s 期望 %-4s 实际 %s" % ("通过" if hit else "失败", fx.name, expect, "、".join(sorted(got)) or "无"))
     # W1：临时生成一个超长文件
     path = SCRIPTS + "logic/too-long.js"
     long_src = "// 职责：自检用的超长文件\n// 依赖：无\n" + "const x = 1;\n" * (MAX_LINES + 5)
     mm = json.loads(json.dumps(m)); mm["scripts"].append(path)
     fs = dict(files); fs[path] = long_src
-    _, warns = check(mm, fs, set(all_src) | {path})
+    _, warns = check(mm, fs, set(all_src) | {path}, css)
     hit = any(w[0] == "W1" and w[1] == path for w in warns)
     ok &= hit
-    print("  %s  %-34s 期望 %-4s" % ("拦住" if hit else "漏掉", "（生成的 %d 行文件）" % (MAX_LINES + 7), "W1"))
+    print("  %s  %-36s 期望 %-4s" % ("通过" if hit else "失败", "（生成的 %d 行文件）" % (MAX_LINES + 7), "W1"))
     print("自检%s：%d 个示例" % ("通过" if ok else "失败", len(fixtures) + 1))
     return 0 if ok else 1
 

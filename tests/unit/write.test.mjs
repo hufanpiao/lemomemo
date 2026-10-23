@@ -19,18 +19,19 @@ const SEED = () => ({
   },
 });
 
-// 建一套独立的 App：mock-db 适配器 + 假时钟；返回 {App, db, events}
+// 建一套独立的 App：mock-db 适配器 + 注入的假时钟；返回 {App, db, events, clock}
 async function setup(opts = {}) {
   const ctx = loadApp(FILES);
   const App = ctx.App;
-  App.clock = fakeClock(ctx, 2026, 10, 23, 12, 0);
+  const clock = fakeClock(ctx, 2026, 10, 23, 12, 0);
+  App.data.write.init(clock);   // 不设全局 App.clock，证明写入层只用注入的时钟
   const db = App.platform.storage["mock-db"](Object.assign({ seed: SEED(), delay: 0 }, opts));
   App.data.store.use(db);
   const events = [];
   for (const t of ["change", "error", "notice"]) App.data.on(t, p => events.push([t, p]));
   await App.data.subscribe.start();
   await sleep(5);
-  return { App, db, events };
+  return { App, db, events, clock };
 }
 const byId = (App, id) => App.data.state.todos.find(x => x.id === id);
 
@@ -41,11 +42,11 @@ test("订阅：快照经 normalize 整理（类型、补零、id 以文档 id �
   assert.equal(App.data.ready(), true);
 });
 test("软删除：本地立刻隐藏，存储里写 deletedAt；撤销后恢复并清空 deletedAt", async () => {
-  const { App, db } = await setup();
+  const { App, db, clock } = await setup();
   const w = App.data.write;
   assert.equal(await w.softDelete("todos", byId(App, "t1")), true);
   assert.equal(App.data.visTd().some(x => x.id === "t1"), false);
-  assert.equal(db.data.todos.t1.deletedAt, App.clock.now());
+  assert.equal(db.data.todos.t1.deletedAt, clock.now());
   await sleep(5);   // 快照回来后仍然隐藏
   assert.equal(App.data.visTd().some(x => x.id === "t1"), false);
   assert.equal(App.data.state.todos.some(x => x.id === "t1"), true, "软删除不会真的删掉");
@@ -106,17 +107,17 @@ test("store.batch：适配器没有 batch 时逐条写", async () => {
   assert.deepEqual(plain(calls), ["t1", "t2"]);
 });
 test("saveItem 新建：字段与 v2 一致，id 记入 localIds；编辑只用 update", async () => {
-  const { App, db } = await setup();
+  const { App, db, clock } = await setup();
   const r = await App.data.write.saveItem("todo", null, { title: "买硬盘", date: "", important: false, project: "", raw: "买硬盘" });
   assert.equal(r.ok, true); assert.equal(App.data.state.localIds.has(r.id), true);
-  assert.deepEqual(plain(db.data.todos[r.id]), { title: "买硬盘", due: "", important: false, project: "", updatedAt: App.clock.now(),
-    createdAt: App.clock.now(), source: "page", rawText: "买硬盘", done: false, doneAt: 0 });
+  assert.deepEqual(plain(db.data.todos[r.id]), { title: "买硬盘", due: "", important: false, project: "", updatedAt: clock.now(),
+    createdAt: clock.now(), source: "page", rawText: "买硬盘", done: false, doneAt: 0 });
   const e = await App.data.write.saveItem("event", App.data.state.events[0], { title: "对片2", date: "2026-10-24", time: "", dur: "90", project: "NEOX", note: "" });
   assert.equal(e.ok, true); assert.equal(db.data.events.e1.title, "对片2"); assert.equal(db.data.events.e1.durationMin, 90);
 });
 test("连接不上：发 notice unavailable（带平台提示），并标记加载完成", async () => {
   const ctx = loadApp(FILES);
-  ctx.App.clock = fakeClock(ctx, 2026, 10, 23);
+  ctx.App.data.write.init(fakeClock(ctx, 2026, 10, 23));
   ctx.App.data.store.use({ connect: async () => false, unavailableHint: () => ({ title: "T", text: "X" }) });
   const got = [];
   ctx.App.data.on("notice", n => got.push(plain(n)));
@@ -124,9 +125,9 @@ test("连接不上：发 notice unavailable（带平台提示），并标记加�
   assert.deepEqual(got, [{ type: "unavailable", hint: { title: "T", text: "X" } }]);
   assert.equal(ctx.App.data.ready(), true);
 });
-test("订阅断线：只提示一次 lost，并自动重新订阅", async () => {
+test("订阅断线：两个集合一起断只提示一次 lost，自动重新订阅，全部恢复后提示一次 reconnected", async () => {
   const ctx = loadApp(FILES);
-  ctx.App.clock = fakeClock(ctx, 2026, 10, 23);
+  ctx.App.data.write.init(fakeClock(ctx, 2026, 10, 23));
   ctx.App.core.C.RECONNECT_MS = [5];
   let subs = 0;
   ctx.App.data.store.use({
@@ -138,7 +139,7 @@ test("订阅断线：只提示一次 lost，并自动重新订阅", async () => 
   await ctx.App.data.subscribe.start();
   await sleep(80);
   assert.ok(subs >= 5, "应已重新订阅，实际 " + subs + " 次");
-  assert.deepEqual(plain(got), ["lost", "lost", "reconnected", "reconnected"]);   // events、todos 各一次
+  assert.deepEqual(plain(got), ["lost", "reconnected"]);
 });
 
 await done("write / subscribe 单元测试（mock-db 适配器）");

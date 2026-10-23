@@ -1,4 +1,4 @@
-// 职责：渲染调度与数据事件的接线：订阅 data 层的 change / error / notice，决定重绘和提示；
+// 职责：渲染调度与数据事件的接线：订阅 data 层的 change / error / notice（连不上、断线自动重连中、已重新连上），决定重绘和提示；
 //       render() 依次重绘抬头、今天、日程、待办（勾选动画期间暂缓）；抬头显示月日、星期年份和“今天完成 / 没赶上”胶囊。
 // 依赖：core/const.js、core/date.js、logic/items.js、data/bus.js、data/state.js、ui/dom.js、ui/view-state.js、ui/toast.js
 // 运行时调用：ui/today.js、ui/schedule.js、ui/todos.js、ui/nav.js、App.clock
@@ -38,9 +38,16 @@ function showNoData(hint){
 function init(){
   App.data.on("change", render);
   App.data.on("error", e => { V.holdUntil = 0; toast.show(errText(e.code), "重试", e.retry, C.TOAST_RETRY_MS); });
+  let lostToast = null;   // 断线提示：重新连上时收起
   App.data.on("notice", n => {
     if (n.type === "unavailable") showNoData(n.hint);
-    else if (n.type === "lost") toast.show("和云端的连接断了，刷新页面即可恢复", "刷新", () => location.reload(), C.TOAST_LOST_MS);
+    else if (n.type === "lost"){
+      if (lostToast) toast.dismiss(lostToast);
+      lostToast = toast.show("和云端的连接断了，正在自动重连…", null, null, C.TOAST_LOST_MS);
+    } else if (n.type === "reconnected"){
+      if (lostToast){ toast.dismiss(lostToast); lostToast = null; }
+      toast.show("已重新连上");
+    }
   });
 }
 

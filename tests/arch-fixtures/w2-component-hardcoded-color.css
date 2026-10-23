@@ -1,0 +1,4 @@
+/* @fixture 路径=src/styles/components/bad-color.css 期望=W2 */
+/* 故意违规示例：组件 CSS 里写死颜色（应该用 tokens 里的变量，见 ADR-008） */
+.bad-chip{background:#ff3b30;color:rgb(255,255,255)}
+.bad-scrim{background:hsla(0,0%,0%,.4)}
