@@ -55,6 +55,7 @@ function showNoData(hint){
 }
 
 function init(){
+  render.ready = true;   // 初始化之前 nav 切页不触发重绘
   App.data.on("change", render);
   // D10：带“重试”的失败提示不自动消失（时长传 0）；条目已在别处删除时没有可重试的，普通提示即可
   App.data.on("error", e => {
