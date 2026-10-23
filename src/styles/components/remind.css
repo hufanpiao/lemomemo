@@ -41,16 +41,19 @@
   /* 反色卡片收起：高度、内边距、透明度一起过渡（UI-4①） */
   .remind-inv.collapsing{max-height:0!important;padding-top:0;padding-bottom:0;opacity:0;overflow:hidden;transition:max-height .2s cubic-bezier(.4,0,.2,1),padding .2s cubic-bezier(.4,0,.2,1),opacity .2s}
   /* 已在别处确认：停 0.6 秒后淡出 0.2 秒（共 0.8 秒，UI-4②） */
-  .remind-inv.confirmed,.next.reminding.confirmed .rem-extra{animation:remind-fadeout .2s .6s forwards}
+  .remind-inv.confirmed{max-height:240px;overflow:hidden;animation:remind-confirm .8s linear forwards}
+  .next.reminding.confirmed .rem-extra{animation:rem-shrink .2s .6s cubic-bezier(.4,0,.2,1) forwards}
   .enter .bell-ico{animation:bell-swing .4s ease-in-out 1;transform-origin:50% 10%}
 }
 @media (prefers-reduced-motion:reduce){
-  .remind-inv.enter,.remind-inv.swap,.next.reminding.enter .rem-extra{animation:remind-fade .12s linear}
+  /* 全局 base.css 在减少动效时禁用所有动画，这里用 !important 保留 ≤120ms 的淡入（UI-4 复查） */
+  .remind-inv.enter,.remind-inv.swap,.next.reminding.enter .rem-extra{animation:remind-fade .12s linear!important}
 }
 @keyframes rem-grow{from{grid-template-rows:0fr;opacity:0}to{grid-template-rows:1fr;opacity:1}}
 @keyframes rem-shrink{from{grid-template-rows:1fr;opacity:1}to{grid-template-rows:0fr;opacity:0}}
 @keyframes remind-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-8px)}}
-@keyframes remind-fadeout{to{opacity:0}}
+/* 已在别处确认：停 0.6 秒，最后 0.2 秒淡出并收起高度（UI-4 复查） */
+@keyframes remind-confirm{0%,75%{opacity:1;max-height:240px}100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0}}
 @keyframes remind-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
 @keyframes remind-fade{from{opacity:0}to{opacity:1}}
 @keyframes bell-swing{0%,100%{transform:rotate(0)}25%{transform:rotate(8deg)}75%{transform:rotate(-8deg)}}

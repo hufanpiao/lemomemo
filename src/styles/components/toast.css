@@ -12,3 +12,7 @@
 .netbar{position:fixed;top:0;left:0;right:0;z-index:40;background:var(--late-bg);color:var(--on-red);font-size:14px;text-align:center;padding:calc(4px + env(safe-area-inset-top,0px)) 16px 4px}
 /* 减少动效：只淡入淡出 ≤120ms，不位移（UI 复查 #14） */
 @media (prefers-reduced-motion:reduce){.toast,.toast.on{transform:none!important;transition:opacity .12s linear!important}}
+
+/* 同组提示原地替换时轻闪一次：只变透明度，不位移；减少动效时也保留（≤120ms） */
+.toast.bump{animation:toast-bump .12s linear!important}
+@keyframes toast-bump{from{opacity:.55}to{opacity:1}}

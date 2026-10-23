@@ -47,6 +47,7 @@ function show(msg, btnText, action, ms, opts){
     same.kind = kind;
     fill(same, msg, btnText, action, sticky, false);
     arm(same, ms);
+    same.el.classList.remove("bump"); void same.el.offsetWidth; same.el.classList.add("bump");   // 文字换了，轻闪一下提示（UI-4 复查）
     return same;
   }
   const t = {el:h("div",{class:"toast"}), timer:null, kind, group:o.group || ""};

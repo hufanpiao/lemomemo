@@ -68,6 +68,14 @@ async function main(){
     if (!target) throw new Error("Edge 没有启动");
     const c = await cdp(target.webSocketDebuggerUrl);
     await c.send("Page.enable"); await c.send("Runtime.enable");
+    // 页面里的“现在”固定在当天 14:15，截图结果不随真实时间变化（UI-1 复查：夜里截图时提醒会过期或跨天）
+    const fake = new Date(); fake.setHours(14, 15, 0, 0);
+    const OFFSET = fake.getTime() - Date.now();
+    await c.send("Page.addScriptToEvaluateOnNewDocument", {source: `(() => {
+      const O = ${OFFSET}, R = Date;
+      class D extends R { constructor(...a){ a.length ? super(...a) : super(R.now() + O); } static now(){ return R.now() + O; } }
+      globalThis.Date = D;
+    })();`});
     let errors = 0;
     for (const [vpName, w, hgt, mobile] of VIEWPORTS){
       for (const theme of THEMES){
