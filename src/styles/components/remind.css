@@ -53,7 +53,7 @@
 @keyframes rem-shrink{from{grid-template-rows:1fr;opacity:1}to{grid-template-rows:0fr;opacity:0}}
 @keyframes remind-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-8px)}}
 /* 已在别处确认：停 0.6 秒，最后 0.2 秒淡出并收起高度（UI-4 复查） */
-@keyframes remind-confirm{0%,75%{opacity:1;max-height:240px}100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0}}
+@keyframes remind-confirm{0%,75%{opacity:1;max-height:240px;animation-timing-function:cubic-bezier(.4,0,.2,1)}100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0}}
 @keyframes remind-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
 @keyframes remind-fade{from{opacity:0}to{opacity:1}}
 @keyframes bell-swing{0%,100%{transform:rotate(0)}25%{transform:rotate(8deg)}75%{transform:rotate(-8deg)}}

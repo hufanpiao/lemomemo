@@ -154,4 +154,4 @@ function init(){
   App.clock.on("tick", () => { if (!App.ui.sheet.isClosed()){ update(); renderCard(null); } });
 }
 
-App.ui.remind = {init, update, forItem, decorateNext, renderCard, todayVisible, ICON_BELL};
+App.ui.remind = {init, update, forItem, decorateNext, renderCard, renderPill, todayVisible, ICON_BELL};

@@ -39,6 +39,7 @@ const SCENES = [
   ["04-编辑-细节展开", ``, `document.querySelector("[data-go=sched]").click(); await wait(300); document.querySelector("#v-sched .ev").click(); await wait(500);`],
   ["05-日程页", ``, `document.querySelector("[data-go=sched]").click(); await wait(400); scrollTo(0,0);`],
   ["05b-日程页-翻到下周", ``, `document.querySelector("[data-go=sched]").click(); await wait(300); $("wk-next").click(); await wait(400); scrollTo(0,0);`],
+  ["05c-日程页-提醒胶囊", ``, `await add(4, "SignPlex 客户反馈会"); clearToasts(); document.querySelector("[data-go=sched]").click(); await wait(400); scrollTo(0,0);`],
   ["06-待办页-最近删除展开", ``, `document.querySelector("[data-go=todo]").click(); await wait(300); const tb=[...document.querySelectorAll("#todos .tb")].pop(); tb.click(); await wait(400); $("del").click(); await wait(600); clearToasts(); const tr=document.querySelector(".trash, #trash-toggle, [aria-controls*=trash]"); if (tr) tr.click(); await wait(400); const tl=document.getElementById("trash-list"); if (tl) tl.scrollIntoView({block:"center"});`],
   ["07-提示条叠放", ``, `document.querySelector("[data-go=todo]").click(); await wait(300); for (let i=0;i<3;i++){ const ck=document.querySelector("#todos .td:not(.done) .ck"); if (ck) ck.click(); await wait(1200); } await wait(200);`],
 ];

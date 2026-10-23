@@ -420,7 +420,7 @@ button{cursor:pointer}
 @keyframes rem-shrink{from{grid-template-rows:1fr;opacity:1}to{grid-template-rows:0fr;opacity:0}}
 @keyframes remind-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-8px)}}
 /* 已在别处确认：停 0.6 秒，最后 0.2 秒淡出并收起高度（UI-4 复查） */
-@keyframes remind-confirm{0%,75%{opacity:1;max-height:240px}100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0}}
+@keyframes remind-confirm{0%,75%{opacity:1;max-height:240px;animation-timing-function:cubic-bezier(.4,0,.2,1)}100%{opacity:0;max-height:0;padding-top:0;padding-bottom:0}}
 @keyframes remind-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
 @keyframes remind-fade{from{opacity:0}to{opacity:1}}
 @keyframes bell-swing{0%,100%{transform:rotate(0)}25%{transform:rotate(8deg)}75%{transform:rotate(-8deg)}}
@@ -3156,6 +3156,7 @@ App.ui.sheet = {open: openSheet, close: closeSheet, isClosed, init, openDetails}
 // 职责：底部导航与网络提示：go() 切换今天 / 日程 / 待办三页并回到页顶（记住上次的页、移动白色指示块、窄屏只显示当前页文字）；
 //       窗口尺寸变化时只重排导航、不滚动（修 v2“resize 跳回顶部”）；断网时顶部显示红条。
 // 依赖：core/const.js、platform/prefs.js、ui/dom.js、ui/view-state.js
+// 运行时调用：ui/remind.js
 App.ui = App.ui || {};
 
 const C = App.core.C;
@@ -3179,6 +3180,7 @@ function applyView(v){
     lab.hidden = !on && innerWidth < C.NARROW_NAV_PX;
   });
   requestAnimationFrame(placeInd);
+  if (App.ui.remind) App.ui.remind.renderPill();   // 切页不重绘，提醒胶囊要跟着当前页刷新（UI-1 复查）
 }
 function go(v){ applyView(v); window.scrollTo({top:0}); }
 const net = () => { $("netbar").hidden = navigator.onLine !== false; };
@@ -3350,7 +3352,7 @@ function init(){
   App.clock.on("tick", () => { if (!App.ui.sheet.isClosed()){ update(); renderCard(null); } });
 }
 
-App.ui.remind = {init, update, forItem, decorateNext, renderCard, todayVisible, ICON_BELL};
+App.ui.remind = {init, update, forItem, decorateNext, renderCard, renderPill, todayVisible, ICON_BELL};
 })();
 // ==== src/scripts/ui/theme.js ====
 (function(){
