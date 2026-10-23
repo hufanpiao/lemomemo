@@ -1,7 +1,10 @@
 // 职责：测试用示例数据（mock-db 适配器和 window.claude 桩共用这一份）：plannerSampleData(nowMs) 按“现在”生成
 //       今天、明天、三天后的日程和一组待办（含过期、今天截止、已完成、Claude 代记的条目）。
+//       地址带 ?empty 时返回空数据。
 // 依赖：无。在测试页里作为单独的 <script> 放在页面脚本之前；Node 测试里用 vm 加载。
 globalThis.plannerSampleData = function plannerSampleData(nowMs){
+  // 测试页地址带 ?empty 时从空数据开始（截图工具用来拍“下一件事”进入提醒状态等场景）
+  if (globalThis.location && /(^|[?&])empty(&|$)/.test(location.search)) return {events:{}, todos:{}};
   const pad=n=>String(n).padStart(2,"0"); const d=new Date(nowMs); const ymd=x=>x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate());
   const off=n=>{const x=new Date(d);x.setDate(x.getDate()+n);return ymd(x)}; const H=d.getHours();
   return {

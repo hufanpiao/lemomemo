@@ -3,7 +3,7 @@
    切换时 <html class="theme-anim"> 让颜色过渡 200ms（与 core/const.js 的 THEME_* 一致）。依赖：tokens.css、skins/*.css、header.css。 */
 .theme-btn{width:44px;height:44px;border-radius:50%;border:0;background:var(--panel);color:var(--ink);display:grid;place-items:center;flex:none;padding:0}
 .theme-btn svg{width:20px;height:20px}
-.theme-pick{position:absolute;right:4px;top:52px;z-index:20;display:flex;background:var(--dock);border-radius:999px;padding:4px;
+.theme-pick{position:absolute;right:4px;top:calc(100% + 8px);z-index:20;display:flex;background:var(--dock);border-radius:999px;padding:4px;
   box-shadow:var(--shadow),0 0 0 1px var(--line);transform-origin:calc(100% - 22px) 0;
   opacity:0;transform:scale(.92);transition:opacity .15s cubic-bezier(.4,0,.2,1),transform .15s cubic-bezier(.4,0,.2,1)}
 .theme-pick.on{opacity:1;transform:none;transition-duration:.18s;transition-timing-function:cubic-bezier(.22,1,.36,1)}

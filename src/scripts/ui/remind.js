@@ -4,7 +4,7 @@
 //       情况 B：其余的在抬头下方显示一张反色提醒卡片，只显示最早的一条，右上角标“+N”。
 //       “知道了”写 notifiedFor，“10 分钟后”写 snoozeAt（data/write.js）；别的设备确认后这里自动收起，并提示“已在别处确认”。
 // 依赖：core/date.js、logic/remind.js、logic/format.js、data/state.js、ui/dom.js、ui/view-state.js、ui/toast.js
-// 运行时调用：data/write.js、platform/notify.js、data/log.js、ui/render.js、ui/sheet.js、App.clock
+// 运行时调用：data/write.js、platform/notify.js、data/log.js、ui/render.js、ui/sheet.js、ui/nav.js、App.clock
 App.ui = App.ui || {};
 
 const R = App.logic.remind;
@@ -41,11 +41,7 @@ function update(){
     if (keys.has(k) || handledHere.has(k)) continue;
     const [kind, id, at] = k.split(":");
     const item = (kind === "event" ? visEv() : visTd()).find(x => x.id === id);
-    if (item && String(item.notifiedFor) === at){
-      const slot = $("remind");
-      if (slot && slot.dataset.key === k) elsewhere = {key:k, until: now + ELSEWHERE_MS};
-      else toast.show("已在别处确认");
-    }
+    if (item && String(item.notifiedFor) === at) elsewhere = {key:k, kind, id, item, until: now + ELSEWHERE_MS};
   }
   current = next;
   fresh.forEach(d => shown.add(keyOf(d)));
@@ -77,7 +73,10 @@ function leave(btn, then){
   const card = btn.closest(".remind-inv, .next.reminding");
   const reduce = globalThis.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (!card || reduce){ then(); return; }
-  card.classList.add("leaving");
+  if (card.classList.contains("remind-inv")){
+    card.style.maxHeight = card.offsetHeight + "px"; void card.offsetHeight;
+    card.classList.add("collapsing");
+  } else card.classList.add("leaving");
   setTimeout(then, LEAVE_MS);
 }
 function ack(d){ handledHere.add(keyOf(d)); App.data.write.ackReminder(d.kind, d.item, d.at); }
@@ -88,7 +87,10 @@ const bellRow = (text, extra) => h("span",{class:"bell-row"}, h("span",{class:"b
 
 // 下一件事卡片进入提醒状态时要插的部分（由 ui/today.js 调用）。
 // 铃铛行和按钮包在 .rem-extra 里，新出现时高度从 0 展开 240ms（UI-4）；只有新出现时才设 role=alert，避免每分钟重绘时读屏反复朗读
+const elsewhereActive = () => elsewhere && App.clock.now() < elsewhere.until;
 function decorateNext(kind, item){
+  if (elsewhereActive() && elsewhere.kind === kind && elsewhere.id === item.id)
+    return {bell: bellRow("已在别处确认"), acts: null, isNew: false, announce: "", confirmed: true};
   const r = forItem(kind, item);
   if (!r) return null;
   const d = {kind, item, at: r.at};
@@ -101,17 +103,18 @@ function decorateNext(kind, item){
   };
 }
 
-// 情况 B：反色卡片。exclude：已经由下一件事卡片显示的那一条（{kind, id}）
+// 情况 B：反色卡片（放在今天页里，“下一件事”上面，UI-1①）。exclude：已经由下一件事卡片显示的那一条（{kind, id}）。
+// 今天页看不见时（手机上在日程页、待办页），改成抬头下方一条 56px 的提醒胶囊，点了回到今天页（UI-1②、UI-2②）。
 function renderCard(exclude){
+  renderPill();
   const slot = $("remind"); if (!slot) return;
   const now = App.clock.now();
-  if (elsewhere && now < elsewhere.until){
+  if (elsewhereActive() && !(exclude && exclude.kind === elsewhere.kind && exclude.id === elsewhere.id) && slot.dataset.key === elsewhere.key){
     slot.textContent = "";
     slot.append(h("div",{class:"remind-inv confirmed"}, bellRow("已在别处确认")));
     setTimeout(() => App.ui.render(), elsewhere.until - now + 20);
     return;
   }
-  elsewhere = null;
   const list = current.filter(d => !(exclude && d.kind === exclude.kind && d.item.id === exclude.id));
   const prevKey = slot.dataset.key || "";
   if (!list.length){ slot.textContent = ""; slot.dataset.key = ""; return; }
@@ -127,6 +130,19 @@ function renderCard(exclude){
   slot.textContent = "";
   slot.dataset.key = key;
   slot.append(card);
+}
+function renderPill(){
+  const pill = $("remind-pill"); if (!pill) return;
+  const show = current.length > 0 && !todayVisible();
+  pill.hidden = !show;
+  if (!show) return;
+  const d = current[0];
+  pill.textContent = "";
+  pill.append(h("span",{class:"bell-ico", html:ICON_BELL}),
+    h("span",{class:"pill-t"}, (current.length > 1 ? current.length + " 条提醒：" : "提醒：") + d.item.title),
+    h("span",{class:"pill-go","aria-hidden":"true"},"›"));
+  pill.setAttribute("aria-label", current.length + " 条提醒，最早的是“" + d.item.title + "”，点按回到今天页查看");
+  pill.onclick = () => App.ui.nav.go("today");
 }
 
 // 今天页看得见吗（手机上在今天页，或者电脑上三栏同时显示）

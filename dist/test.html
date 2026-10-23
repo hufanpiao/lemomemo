@@ -1,8 +1,11 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><div class="pv-env-banner" role="note" style="position:fixed;top:0;left:0;right:0;z-index:39;pointer-events:none;padding:calc(1px + env(safe-area-inset-top,0px)) 8px 1px;background:#f1df4a;color:#121316;font:600 11px/18px system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;text-align:center;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.94">测试页面：这里用的是模拟数据，刷新就会还原，不会保存到云端</div><script>
 // 职责：测试用示例数据（mock-db 适配器和 window.claude 桩共用这一份）：plannerSampleData(nowMs) 按“现在”生成
 //       今天、明天、三天后的日程和一组待办（含过期、今天截止、已完成、Claude 代记的条目）。
+//       地址带 ?empty 时返回空数据。
 // 依赖：无。在测试页里作为单独的 <script> 放在页面脚本之前；Node 测试里用 vm 加载。
 globalThis.plannerSampleData = function plannerSampleData(nowMs){
+  // 测试页地址带 ?empty 时从空数据开始（截图工具用来拍“下一件事”进入提醒状态等场景）
+  if (globalThis.location && /(^|[?&])empty(&|$)/.test(location.search)) return {events:{}, todos:{}};
   const pad=n=>String(n).padStart(2,"0"); const d=new Date(nowMs); const ymd=x=>x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate());
   const off=n=>{const x=new Date(d);x.setDate(x.getDate()+n);return ymd(x)}; const H=d.getHours();
   return {
@@ -192,8 +195,10 @@ button{cursor:pointer}
 .day.sel:hover .n{background:var(--ink)}
 .day .dots .dl{display:block;width:8px;height:2px;border-radius:1px;background:var(--ink)}
 .wk-title{border:0;background:none;padding:0;font:inherit;color:inherit;min-height:44px;text-align:left}
-.back-today{align-self:center;border:0;border-radius:999px;min-height:44px;padding:0 18px;font-size:14px;background:var(--ink);color:var(--panel);font-weight:500}
-.back-today[hidden]{display:none}
+.back-today{border:0;border-radius:999px;min-height:44px;padding:0 18px;font-size:14px;background:var(--ink);color:var(--panel);font-weight:500}
+.back-today.off{visibility:hidden}   /* 不在其他周时只隐藏、保留位置，标题行高度固定，列表不跳（UI 复查 #11） */
+/* “回到今天”放在周标题右边、离左右箭头远一点；不再单独占一行（避免周条下方出现大块空白） */
+.wk-head{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap}
 /* 组件：日程色块列表与日期小标题；色块上的铃铛标签；日程页的截止行（圆形勾选框，可直接勾掉）。
    色块上的说明字用实色 --on-p-2（不用半透明），保证对比度 ≥ 4.5:1（采纳结论 #21）。
    依赖：tokens.css。 */
@@ -218,7 +223,9 @@ button{cursor:pointer}
 /* 组件：待办列表（项目筛选胶囊、圆形勾选、划线动画、标签、离开与新到达动画）。
    .f 胶囊也被弹出层的项目选择复用。依赖：tokens.css。 */
 /* 待办 */
-.filters{display:flex;gap:6px;flex-wrap:wrap}
+.filters{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-18px;padding-inline:18px;scroll-padding-inline:18px}   /* 单行横向滑动（UI 复查 #4） */
+.filters::-webkit-scrollbar{display:none}
+.filters .f{flex:none;white-space:nowrap}
 .f{border:0;border-radius:999px;padding:6px 14px;font-size:14px;background:var(--panel-2);min-height:44px;display:inline-flex;align-items:center;gap:6px}
 .f .sw{width:10px;height:10px;border-radius:50%}
 .f[aria-pressed=true]{background:var(--ink);color:var(--panel)}
@@ -251,6 +258,9 @@ button{cursor:pointer}
 .tag.bell{gap:3px}
 .tag.note{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .deadline.leaving{animation:leave .24s cubic-bezier(.4,0,.2,1) forwards}
+/* 减少动效：离开只做 ≤120ms 的淡出，不位移（UI 复查 #14） */
+@media (prefers-reduced-motion:reduce){.td.leaving,.deadline.leaving{animation:fade-out .12s linear forwards!important}}
+@keyframes fade-out{to{opacity:0}}
 /* 组件：空状态提示框与加载骨架。
    依赖：tokens.css。 */
 /* 空状态与骨架 */
@@ -262,8 +272,8 @@ button{cursor:pointer}
 /* 组件：底部提示条（左对齐、宽度统一，可叠放最多 3 条，新的在下面；撤销 / 重试 / 关闭按钮都 ≥ 44px）与顶部断网红条。
    淡出时长 .2s 与 core/const.js 的 TOAST_LEAVE_MS 一致。依赖：tokens.css。 */
 /* 提示条 */
-.toasts{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;flex-direction:column;align-items:stretch;gap:8px;width:min(420px,calc(100% - 32px));z-index:30;pointer-events:none}
-.toast{transform:translateY(8px);opacity:0;background:var(--dock);color:var(--dock-ink);border-radius:24px;padding:4px 4px 4px 18px;min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;transition:opacity .2s ease-out,transform .2s ease-out;pointer-events:none;border:1px solid var(--line);text-align:left}
+.toasts{position:fixed;left:50%;bottom:calc(104px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;flex-direction:column;align-items:stretch;gap:8px;width:min(420px,calc(100% - 32px));z-index:30;pointer-events:none}
+.toast{transform:translateY(8px);opacity:0;background:var(--dock);color:var(--dock-ink);border-radius:24px;padding:1px 1px 1px 18px;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;transition:opacity .2s ease-out,transform .2s ease-out;pointer-events:none;border:1px solid var(--line);text-align:left}
 .toast.on{opacity:1;transform:none;pointer-events:auto}
 .toast .tm{display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere;padding:6px 0}
 .toast .tm small{font-size:12px;color:var(--dock-ink);opacity:.85}
@@ -271,6 +281,8 @@ button{cursor:pointer}
 .toast button{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);padding:0 18px;font-weight:700;min-height:44px;min-width:44px}
 .toast .tb-x{background:transparent;color:var(--dock-ink);padding:0;width:44px;font-size:20px;font-weight:500}
 .netbar{position:fixed;top:0;left:0;right:0;z-index:40;background:var(--late-bg);color:var(--on-red);font-size:14px;text-align:center;padding:calc(4px + env(safe-area-inset-top,0px)) 16px 4px}
+/* 减少动效：只淡入淡出 ≤120ms，不位移（UI 复查 #14） */
+@media (prefers-reduced-motion:reduce){.toast,.toast.on{transform:none!important;transition:opacity .12s linear!important}}
 /* 组件：新建/编辑底部弹出层（遮罩、一句话输入框、类型切换、表单字段、操作按钮）。
    依赖：tokens.css、todo.css（.f 胶囊）。 */
 /* 底部弹出层 */
@@ -307,13 +319,15 @@ button{cursor:pointer}
 .q-row .q{min-height:52px}
 .q-add{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);font-weight:700;min-height:52px;padding:0 20px;font-size:16px}
 .q-add:disabled{opacity:.5}
-.recog{display:flex;flex-wrap:wrap;gap:6px;min-height:94px;align-content:flex-start}
+.recog{display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start}
+/* 窄屏会折成两行，预留两行高度避免跳动；宽屏一行放得下，不预留（UI-1⑦） */
+@media (max-width:719px){.recog{min-height:94px}}
 .recog[hidden]{display:none}
 .recog .v{border:0;border-radius:999px;background:var(--panel-2);color:var(--ink);min-height:44px;padding:0 14px;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .recog .v.lock{box-shadow:inset 0 0 0 2px var(--ink)}
 .recog .lock-ico{display:inline-grid;width:12px;height:12px}
 .recog .lock-ico svg{width:12px;height:12px}
-@media (prefers-reduced-motion:no-preference){.recog .v{animation:recog-in .12s linear}}
+@media (prefers-reduced-motion:no-preference){.recog .v.changed{animation:recog-in .12s linear}}
 @keyframes recog-in{from{opacity:.4}to{opacity:1}}
 .details-toggle{border:0;background:var(--panel-2);border-radius:14px;min-height:48px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--ink);width:100%;cursor:pointer}
 .details{display:flex;flex-direction:column;gap:14px}
@@ -331,6 +345,18 @@ button{cursor:pointer}
 /* D01：占位文字也要 ≥ 4.5:1（它就是听写提示），用 --muted 代替浏览器默认灰 */
 .q::placeholder,.fields input::placeholder{color:var(--muted);opacity:1}
 .scroller[hidden],.row-l[hidden]{display:none}
+
+/* UI-1⑥：编辑表里项目胶囊的选中态和其他选项一致，用墨色描边；“推后 1 小时”是动作，加箭头区分 */
+.sheet .projs .f[aria-pressed=true]{background:var(--panel);color:var(--ink);font-weight:700;box-shadow:inset 0 0 0 2px var(--ink)}
+#push-1h::before{content:"→ ";font-weight:700}
+#push-1h{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line)}
+/* UI-4③：减少动效时弹出层不滑动，只淡入淡出 120ms */
+@media (prefers-reduced-motion:reduce){
+  .sheet,.sheet.on{transform:none!important;transition:opacity .12s linear!important}
+  .sheet:not(.on){opacity:0}
+  @media (min-width:720px){.sheet,.sheet.on{transform:translate(-50%,0)!important}}
+}
+#save[hidden]{display:none}
 /* 组件：数据未连接时的提示面板。
    依赖：tokens.css。 */
 .notice{background:var(--panel);border-radius:var(--r-panel);padding:18px;color:var(--muted)}
@@ -374,8 +400,11 @@ button{cursor:pointer}
   .remind-inv.enter{animation:remind-in .24s cubic-bezier(.22,1,.36,1)}
   .next.reminding.enter .rem-extra{animation:rem-grow .24s cubic-bezier(.22,1,.36,1)}
   .remind-inv.swap{animation:remind-fade .16s linear}
-  .remind-inv.leaving,.next.reminding.leaving .rem-extra{animation:rem-shrink .2s cubic-bezier(.4,0,.2,1) forwards}
-  .remind-inv.leaving{animation:remind-out .2s cubic-bezier(.4,0,.2,1) forwards}
+  .next.reminding.leaving .rem-extra{animation:rem-shrink .2s cubic-bezier(.4,0,.2,1) forwards}
+  /* 反色卡片收起：高度、内边距、透明度一起过渡（UI-4①） */
+  .remind-inv.collapsing{max-height:0!important;padding-top:0;padding-bottom:0;opacity:0;overflow:hidden;transition:max-height .2s cubic-bezier(.4,0,.2,1),padding .2s cubic-bezier(.4,0,.2,1),opacity .2s}
+  /* 已在别处确认：停 0.6 秒后淡出 0.2 秒（共 0.8 秒，UI-4②） */
+  .remind-inv.confirmed,.next.reminding.confirmed .rem-extra{animation:remind-fadeout .2s .6s forwards}
   .enter .bell-ico{animation:bell-swing .4s ease-in-out 1;transform-origin:50% 10%}
 }
 @media (prefers-reduced-motion:reduce){
@@ -384,16 +413,24 @@ button{cursor:pointer}
 @keyframes rem-grow{from{grid-template-rows:0fr;opacity:0}to{grid-template-rows:1fr;opacity:1}}
 @keyframes rem-shrink{from{grid-template-rows:1fr;opacity:1}to{grid-template-rows:0fr;opacity:0}}
 @keyframes remind-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-8px)}}
-.remind-inv.confirmed{opacity:.9}
+@keyframes remind-fadeout{to{opacity:0}}
 @keyframes remind-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
 @keyframes remind-fade{from{opacity:0}to{opacity:1}}
 @keyframes bell-swing{0%,100%{transform:rotate(0)}25%{transform:rotate(8deg)}75%{transform:rotate(-8deg)}}
+
+/* 其他页的提醒胶囊（UI-1②、UI-2②）：高 56px 黑色胶囊，点了回到今天页 */
+.remind-pill{display:flex;align-items:center;gap:8px;width:100%;min-height:56px;border:0;border-radius:999px;padding:0 20px;background:var(--inv);color:var(--on-inv);font-size:15px;font-weight:600;text-align:left;cursor:pointer}
+.remind-pill[hidden]{display:none}
+.remind-pill .pill-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.remind-pill .pill-go{font-size:18px}
+.remind-pill:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+@media (min-width:960px){.remind-pill{display:none}}
 /* 组件：主题按钮与选择器（ADR-008、采纳结论 #2 #19）。按钮 44px 固定在抬头右上角；选择器是黑色胶囊三选一，
    浮层盖在内容上（不推挤内容），1px 描边；弹出：缩放 .92→1 加淡入 180ms，收起 150ms；减少动效时只留透明度。
    切换时 <html class="theme-anim"> 让颜色过渡 200ms（与 core/const.js 的 THEME_* 一致）。依赖：tokens.css、skins/*.css、header.css。 */
 .theme-btn{width:44px;height:44px;border-radius:50%;border:0;background:var(--panel);color:var(--ink);display:grid;place-items:center;flex:none;padding:0}
 .theme-btn svg{width:20px;height:20px}
-.theme-pick{position:absolute;right:4px;top:52px;z-index:20;display:flex;background:var(--dock);border-radius:999px;padding:4px;
+.theme-pick{position:absolute;right:4px;top:calc(100% + 8px);z-index:20;display:flex;background:var(--dock);border-radius:999px;padding:4px;
   box-shadow:var(--shadow),0 0 0 1px var(--line);transform-origin:calc(100% - 22px) 0;
   opacity:0;transform:scale(.92);transition:opacity .15s cubic-bezier(.4,0,.2,1),transform .15s cubic-bezier(.4,0,.2,1)}
 .theme-pick.on{opacity:1;transform:none;transition-duration:.18s;transition-timing-function:cubic-bezier(.22,1,.36,1)}
@@ -443,6 +480,7 @@ mark{background:var(--yellow);color:var(--on-yellow);border-radius:3px;padding:0
 .export{align-self:center;margin-top:-4px;margin-bottom:0;border:0;background:none;color:var(--muted);font-size:13px;min-height:44px;padding:0 12px}
 .export:disabled{opacity:.7}
 .export-note{margin:-14px 0 0;text-align:center;font-size:12px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){.trash-row.leaving{animation:fade-out .12s linear forwards!important}.trash .chev{transition:none!important}}
 </style>
 
 <div class="app">
@@ -457,11 +495,12 @@ mark{background:var(--yellow);color:var(--on-yellow);border-radius:3px;padding:0
     <div class="top-chips" id="hd-chips"></div>
   </header>
   <div id="notice" hidden class="notice"></div>
-  <div id="remind" class="remind-slot" aria-live="polite"></div>
+  <button id="remind-pill" class="remind-pill" type="button" hidden></button>
 
   <div class="grid">
     <!-- 今天 -->
     <div class="view" id="v-today" data-view="today">
+      <div id="remind" class="remind-slot" aria-live="polite"></div>
       <div id="next"></div>
       <div id="late"></div>
       <section class="panel" aria-labelledby="h-tl">
@@ -483,14 +522,16 @@ mark{background:var(--yellow);color:var(--on-yellow);border-radius:3px;padding:0
     <div class="view" id="v-sched" data-view="sched">
       <section class="panel" aria-labelledby="h-wk">
         <div class="ph">
-          <h2 id="h-wk"><button type="button" class="wk-title" id="wk-title"></button></h2>
+          <div class="wk-head">
+            <h2 id="h-wk"><button type="button" class="wk-title" id="wk-title"></button></h2>
+            <button class="back-today off" type="button" id="wk-today" disabled aria-hidden="true" tabindex="-1">回到今天</button>
+          </div>
           <div style="display:flex;gap:6px">
             <button class="round" type="button" id="wk-prev" aria-label="上一周"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
             <button class="round" type="button" id="wk-next" aria-label="下一周"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
           </div>
         </div>
         <div class="week" id="week"></div>
-        <button class="back-today" type="button" id="wk-today" hidden>回到今天</button>
         <div class="filters" id="sched-filters" role="group" aria-label="按项目筛选"></div>
         <div class="evlist" id="day-list"></div>
       </section>
@@ -2172,7 +2213,7 @@ App.ui.viewState = {init, onDayChange};
 // 职责：底部提示条队列（采纳结论 #11、UI-4⑤）：show(文案, 按钮字, 按钮动作, 显示毫秒, 选项) 新增一条并返回句柄，dismiss(句柄) 收起。
 //       左对齐、宽度统一，最多叠 TOAST_MAX 条，每条单独计时；ms 传 0 表示不自动消失（带“重试”的失败提示），这时多一个 44px 的关闭按钮。
 //       第 4 条进来时最旧的让位；被挤掉的是删除提示（选项 kind:"delete"，或文案以“已删除”开头）时，新提示里写明“更早删除的在最近删除里”。
-//       位置变化用 FLIP 平移 180ms（减少动效时不做位移）。
+//       位置变化用 FLIP 平移 180ms（减少动效时不做位移）。传 opts.group 时同一组只保留一条（UI 复查 #3）。
 // 依赖：core/const.js、ui/dom.js
 App.ui = App.ui || {};
 
@@ -2200,22 +2241,34 @@ function dismiss(t){
   t.el.classList.remove("on");
   setTimeout(() => flip(() => t.el.remove()), C.TOAST_LEAVE_MS);
 }
-// opts：{kind:"delete"} 标明是删除提示
-function show(msg, btnText, action, ms, opts){
-  const o = opts || {};
-  const t = {el:null, timer:null, kind: o.kind || (/^已删除/.test(msg) ? "delete" : "")};
-  let pushedOutDelete = false;
-  while (live.length >= C.TOAST_MAX){ if (live[0].kind === "delete") pushedOutDelete = true; dismiss(live[0]); }
-  const sticky = ms === 0;
+// 填好一条提示的内容（文案、按钮、可选的“更早删除的在最近删除里”）
+function fill(t, msg, btnText, action, sticky, note){
   const btn = btnText ? h("button",{type:"button",class:"tb-act",onclick:() => { dismiss(t); if (action) action(); }}, btnText) : null;
   const close = sticky ? h("button",{type:"button",class:"tb-x","aria-label":"关闭提示",onclick:() => dismiss(t)}, "×") : null;
-  t.el = h("div",{class:"toast" + (sticky ? " sticky" : "")},
-    h("span",{class:"tm"}, msg, pushedOutDelete ? h("small",null,"更早删除的在“最近删除”里") : null),
-    h("span",{class:"tbs"}, btn, close));
+  t.el.className = "toast" + (sticky ? " sticky" : "") + (t.el.classList.contains("on") ? " on" : "");
+  t.el.textContent = "";
+  t.el.append(h("span",{class:"tm"}, msg, note ? h("small",null,"更早删除的在“最近删除”里") : null), h("span",{class:"tbs"}, btn, close));
+}
+function arm(t, ms){ clearTimeout(t.timer); t.timer = ms === 0 ? null : setTimeout(() => dismiss(t), ms || C.TOAST_MS); }
+// opts：{kind:"delete"} 标明是删除提示；{group:"done"} 同一组只留一条：新提示原地替换旧的那一条（文字、按钮、计时都换新）
+function show(msg, btnText, action, ms, opts){
+  const o = opts || {}, sticky = ms === 0;
+  const kind = o.kind || (/^已删除/.test(msg) ? "delete" : "");
+  const same = o.group ? live.find(x => x.group === o.group) : null;
+  if (same){
+    same.kind = kind;
+    fill(same, msg, btnText, action, sticky, false);
+    arm(same, ms);
+    return same;
+  }
+  const t = {el:h("div",{class:"toast"}), timer:null, kind, group:o.group || ""};
+  let pushedOutDelete = false;
+  while (live.length >= C.TOAST_MAX){ if (live[0].kind === "delete") pushedOutDelete = true; dismiss(live[0]); }
+  fill(t, msg, btnText, action, sticky, pushedOutDelete);
   flip(() => $("toasts").append(t.el));
   live.push(t);
   requestAnimationFrame(() => t.el.classList.add("on"));
-  if (!sticky) t.timer = setTimeout(() => dismiss(t), ms || C.TOAST_MS);
+  arm(t, ms);
   return t;
 }
 
@@ -2538,7 +2591,7 @@ function renderNext(t, nm){
   }
   if (rem){
     // 提醒状态：卡片本身不当按钮用（按钮不能嵌在按钮里，D18），改成标题可点；新出现时用隐藏文字播报一次
-    card.classList.add("reminding"); if (rem.isNew) card.classList.add("enter");
+    card.classList.add("reminding"); if (rem.isNew) card.classList.add("enter"); if (rem.confirmed) card.classList.add("confirmed");
     const tt = card.querySelector(".tt");
     const open = h("button",{type:"button",class:"tt tt-btn","aria-label":(kind === "event" ? "编辑日程：" : "编辑待办：") + x.title,onclick:()=>openSheet(kind, x)}, x.title);
     tt.replaceWith(open);
@@ -2645,7 +2698,9 @@ function renderWeek(t, g){
   const title = weekTitle(t), away = V.weekStart !== mondayOf(t);
   $("wk-title").textContent = title;
   $("wk-title").setAttribute("aria-label", title + (away ? "，点按回到今天" : ""));
-  $("wk-today").hidden = !away;
+  // 不在本周时才显示；不显示时只隐藏、保留位置，列表不跳动（UI 复查 #11）
+  const bt = $("wk-today");
+  bt.classList.toggle("off", !away); bt.disabled = !away; bt.setAttribute("aria-hidden", away ? "false" : "true"); bt.tabIndex = away ? 0 : -1;
   const wk = $("week"); wk.textContent = "";
   for (let i = 0; i < 7; i++){
     const k = addDays(V.weekStart, i), d = parse(k), evs = g.ev[k] || [], dls = g.dl[k] || [];
@@ -2726,7 +2781,7 @@ function toggle(x, done){
   if (done){
     const t = App.clock.today();
     const n = visTd().filter(y => isDoneOn(y, t)).length;
-    const tt = toast.show("完成了，今天第 "+n+" 件", "撤销", () => toggle(x, false), C.TOAST_UNDO_MS);
+    const tt = toast.show("完成了，今天第 "+n+" 件", "撤销", () => toggle(x, false), C.TOAST_UNDO_MS, {group:"done"});   // 连续勾选只留一条，撤销最近那件
     Promise.resolve(p).then(ok => { if (ok === false) toast.dismiss(tt); });
   }
   return p;
@@ -2848,8 +2903,10 @@ function renderDateChips(){
   const box = $("date-chips"); box.textContent = "";
   const cur = $("f-date").value;
   box.append(h("button",{type:"button",class:"opt",onclick:() => { const el = $("f-date"); el.focus(); try { el.showPicker && el.showPicker(); } catch(e){} }},"选日期…"));
+  let picked = false;   // 同一天对应多个胶囊（比如今天周五时“明天”和“周六”）只高亮第一个（UI-2③）
   for (const [label, val] of dateChoices()){
-    box.append(h("button",{type:"button",class:"opt","aria-pressed": cur === val ? "true" : "false",
+    const on = !picked && cur === val; if (on) picked = true;
+    box.append(h("button",{type:"button",class:"opt","aria-pressed": on ? "true" : "false",
       onclick:() => { $("f-date").value = val; F.locks.add("date"); refresh(); }}, label));
   }
 }
@@ -2870,9 +2927,12 @@ function renderRemind(){
 }
 
 // —— 识别结果胶囊：每项是按钮，点了展开对应字段；锁住的加锁形图标 ——
+let lastChips = {};   // 上一次每个字段胶囊的文字：只给变了的那一个加闪烁（UI-4④）
 function chip(field, text, focusId){
   const locked = F.locks.has(field);
-  return h("button",{type:"button",class:"v" + (locked ? " lock" : ""),
+  const changed = lastChips[field] !== undefined && lastChips[field] !== text;
+  lastChips[field] = text;
+  return h("button",{type:"button",class:"v" + (locked ? " lock" : "") + (changed ? " changed" : ""),
     "aria-label": text + (locked ? "，已手动修改，不会被识别结果覆盖" : "，点按修改"),
     onclick:() => { App.ui.sheet.openDetails(); const el = $(focusId); if (el) el.focus(); }},
     locked ? h("span",{class:"lock-ico", html:ICON_LOCK}) : null, text);
@@ -2923,7 +2983,7 @@ function flushParse(){ if (debounce){ clearTimeout(debounce); debounce = null; a
 
 // 打开弹出层时重置。kind 为 null 表示新建时让识别结果决定
 function reset(kind, item, presetDate){
-  F.editing = item || null; F.origKind = item ? kind : null; F.locks = new Set(); F.remind = undefined;
+  F.editing = item || null; F.origKind = item ? kind : null; F.locks = new Set(); F.remind = undefined; lastChips = {};
   clearTimeout(debounce); debounce = null;
   $("q").value = "";
   $("f-title").value = item ? item.title : "";
@@ -2989,6 +3049,15 @@ function openDetails(){
   $("details").hidden = false; $("details-toggle").hidden = true;
   $("details-toggle").setAttribute("aria-expanded", "true");
   $("acts").hidden = false;
+  $("save").hidden = !F.editing;   // 新建时输入框右侧已有“加入”，下面不再放第二个（UI-2④）
+}
+// 键盘弹起时（iPhone 上可视区域变矮），把弹出层抬到键盘上方，识别结果和“加入”都看得到（UI-2①，需实机确认）
+function fitKeyboard(){
+  const vv = globalThis.visualViewport, sh = $("sheet");
+  if (!vv || !sh || sh.hidden) return;
+  const covered = Math.max(0, innerHeight - vv.height - vv.offsetTop);
+  sh.style.bottom = covered ? covered + "px" : "";
+  sh.style.maxHeight = covered ? (vv.height - 12) + "px" : "";
 }
 function openSheet(kind, item, presetDate){
   if (!App.data.isConnected()){ toast.show("数据未连接，暂时不能编辑"); return; }
@@ -3001,6 +3070,7 @@ function openSheet(kind, item, presetDate){
   $("details-toggle").setAttribute("aria-expanded", editingMode ? "true" : "false");
   $("acts").hidden = !editingMode;
   $("save").textContent = editingMode ? "保存修改" : "加入";
+  $("save").hidden = false;
   $("del").hidden = !editingMode;
   $("del").textContent = kind === "event" ? "删除这条日程" : "删除这条待办";
   $("scrim").hidden = false; $("sheet").hidden = false;
@@ -3036,13 +3106,13 @@ async function onSubmit(ev){
   if (r.coll === "events" && !editing){ V.selDay = r.data.date; V.weekStart = mondayOf(r.data.date); }
   closeSheet();
   if (converting) toast.show(r.coll === "events" ? "已改成日程" : "已改成待办");
-  else if (editing) toast.show("已保存");
-  else if (r.coll === "events") toast.show("已记下日程，" + relDay(r.data.date, App.clock.today()));
+  else if (editing) toast.show("已保存", null, null, C.TOAST_MS, {group:"saved"});
+  else if (r.coll === "events") toast.show("已记下日程，" + relDay(r.data.date, App.clock.today()), null, null, C.TOAST_MS, {group:"saved"});
   else if (V.projFilter && v.project !== V.projFilter)   // D16：当前筛选下看不到新条目，说明并给出清除筛选
     toast.show("已加入待办（当前只显示“" + V.projFilter + "”）", "显示全部", () => { V.projFilter = null; App.ui.render(); });
   else if (!v.date && V.view === "today" && !isDesktop())   // PM-A⑥；D14：跳过去后新条目短暂高亮
     toast.show("已加入待办", "查看", () => { V.flash.add(r.id); setTimeout(() => { V.flash.delete(r.id); App.ui.render(); }, C.FRESH_MS); App.ui.nav.go("todo"); App.ui.render(); });
-  else toast.show("已加入待办");
+  else toast.show("已加入待办", null, null, C.TOAST_MS, {group:"saved"});
 }
 function onDelete(){
   const it = F.editing, coll = write.collOf(F.origKind || F.kind);
@@ -3062,6 +3132,7 @@ function trapFocus(e){
 }
 function init(){
   SF.init();
+  if (globalThis.visualViewport){ visualViewport.addEventListener("resize", fitKeyboard); visualViewport.addEventListener("scroll", fitKeyboard); }
   $("details-toggle").onclick = openDetails;
   $("cancel").onclick = closeSheet; $("scrim").onclick = closeSheet;
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); trapFocus(e); });
@@ -3121,7 +3192,7 @@ App.ui.nav = {go, applyView, placeInd, init, initNet};
 //       情况 B：其余的在抬头下方显示一张反色提醒卡片，只显示最早的一条，右上角标“+N”。
 //       “知道了”写 notifiedFor，“10 分钟后”写 snoozeAt（data/write.js）；别的设备确认后这里自动收起，并提示“已在别处确认”。
 // 依赖：core/date.js、logic/remind.js、logic/format.js、data/state.js、ui/dom.js、ui/view-state.js、ui/toast.js
-// 运行时调用：data/write.js、platform/notify.js、data/log.js、ui/render.js、ui/sheet.js、App.clock
+// 运行时调用：data/write.js、platform/notify.js、data/log.js、ui/render.js、ui/sheet.js、ui/nav.js、App.clock
 App.ui = App.ui || {};
 
 const R = App.logic.remind;
@@ -3158,11 +3229,7 @@ function update(){
     if (keys.has(k) || handledHere.has(k)) continue;
     const [kind, id, at] = k.split(":");
     const item = (kind === "event" ? visEv() : visTd()).find(x => x.id === id);
-    if (item && String(item.notifiedFor) === at){
-      const slot = $("remind");
-      if (slot && slot.dataset.key === k) elsewhere = {key:k, until: now + ELSEWHERE_MS};
-      else toast.show("已在别处确认");
-    }
+    if (item && String(item.notifiedFor) === at) elsewhere = {key:k, kind, id, item, until: now + ELSEWHERE_MS};
   }
   current = next;
   fresh.forEach(d => shown.add(keyOf(d)));
@@ -3194,7 +3261,10 @@ function leave(btn, then){
   const card = btn.closest(".remind-inv, .next.reminding");
   const reduce = globalThis.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (!card || reduce){ then(); return; }
-  card.classList.add("leaving");
+  if (card.classList.contains("remind-inv")){
+    card.style.maxHeight = card.offsetHeight + "px"; void card.offsetHeight;
+    card.classList.add("collapsing");
+  } else card.classList.add("leaving");
   setTimeout(then, LEAVE_MS);
 }
 function ack(d){ handledHere.add(keyOf(d)); App.data.write.ackReminder(d.kind, d.item, d.at); }
@@ -3205,7 +3275,10 @@ const bellRow = (text, extra) => h("span",{class:"bell-row"}, h("span",{class:"b
 
 // 下一件事卡片进入提醒状态时要插的部分（由 ui/today.js 调用）。
 // 铃铛行和按钮包在 .rem-extra 里，新出现时高度从 0 展开 240ms（UI-4）；只有新出现时才设 role=alert，避免每分钟重绘时读屏反复朗读
+const elsewhereActive = () => elsewhere && App.clock.now() < elsewhere.until;
 function decorateNext(kind, item){
+  if (elsewhereActive() && elsewhere.kind === kind && elsewhere.id === item.id)
+    return {bell: bellRow("已在别处确认"), acts: null, isNew: false, announce: "", confirmed: true};
   const r = forItem(kind, item);
   if (!r) return null;
   const d = {kind, item, at: r.at};
@@ -3218,17 +3291,18 @@ function decorateNext(kind, item){
   };
 }
 
-// 情况 B：反色卡片。exclude：已经由下一件事卡片显示的那一条（{kind, id}）
+// 情况 B：反色卡片（放在今天页里，“下一件事”上面，UI-1①）。exclude：已经由下一件事卡片显示的那一条（{kind, id}）。
+// 今天页看不见时（手机上在日程页、待办页），改成抬头下方一条 56px 的提醒胶囊，点了回到今天页（UI-1②、UI-2②）。
 function renderCard(exclude){
+  renderPill();
   const slot = $("remind"); if (!slot) return;
   const now = App.clock.now();
-  if (elsewhere && now < elsewhere.until){
+  if (elsewhereActive() && !(exclude && exclude.kind === elsewhere.kind && exclude.id === elsewhere.id) && slot.dataset.key === elsewhere.key){
     slot.textContent = "";
     slot.append(h("div",{class:"remind-inv confirmed"}, bellRow("已在别处确认")));
     setTimeout(() => App.ui.render(), elsewhere.until - now + 20);
     return;
   }
-  elsewhere = null;
   const list = current.filter(d => !(exclude && d.kind === exclude.kind && d.item.id === exclude.id));
   const prevKey = slot.dataset.key || "";
   if (!list.length){ slot.textContent = ""; slot.dataset.key = ""; return; }
@@ -3244,6 +3318,19 @@ function renderCard(exclude){
   slot.textContent = "";
   slot.dataset.key = key;
   slot.append(card);
+}
+function renderPill(){
+  const pill = $("remind-pill"); if (!pill) return;
+  const show = current.length > 0 && !todayVisible();
+  pill.hidden = !show;
+  if (!show) return;
+  const d = current[0];
+  pill.textContent = "";
+  pill.append(h("span",{class:"bell-ico", html:ICON_BELL}),
+    h("span",{class:"pill-t"}, (current.length > 1 ? current.length + " 条提醒：" : "提醒：") + d.item.title),
+    h("span",{class:"pill-go","aria-hidden":"true"},"›"));
+  pill.setAttribute("aria-label", current.length + " 条提醒，最早的是“" + d.item.title + "”，点按回到今天页查看");
+  pill.onclick = () => App.ui.nav.go("today");
 }
 
 // 今天页看得见吗（手机上在今天页，或者电脑上三栏同时显示）

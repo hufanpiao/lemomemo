@@ -19,11 +19,12 @@
     <div class="top-chips" id="hd-chips"></div>
   </header>
   <div id="notice" hidden class="notice"></div>
-  <div id="remind" class="remind-slot" aria-live="polite"></div>
+  <button id="remind-pill" class="remind-pill" type="button" hidden></button>
 
   <div class="grid">
     <!-- 今天 -->
     <div class="view" id="v-today" data-view="today">
+      <div id="remind" class="remind-slot" aria-live="polite"></div>
       <div id="next"></div>
       <div id="late"></div>
       <section class="panel" aria-labelledby="h-tl">
@@ -45,14 +46,16 @@
     <div class="view" id="v-sched" data-view="sched">
       <section class="panel" aria-labelledby="h-wk">
         <div class="ph">
-          <h2 id="h-wk"><button type="button" class="wk-title" id="wk-title"></button></h2>
+          <div class="wk-head">
+            <h2 id="h-wk"><button type="button" class="wk-title" id="wk-title"></button></h2>
+            <button class="back-today off" type="button" id="wk-today" disabled aria-hidden="true" tabindex="-1">回到今天</button>
+          </div>
           <div style="display:flex;gap:6px">
             <button class="round" type="button" id="wk-prev" aria-label="上一周"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
             <button class="round" type="button" id="wk-next" aria-label="下一周"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
           </div>
         </div>
         <div class="week" id="week"></div>
-        <button class="back-today" type="button" id="wk-today" hidden>回到今天</button>
         <div class="filters" id="sched-filters" role="group" aria-label="按项目筛选"></div>
         <div class="evlist" id="day-list"></div>
       </section>

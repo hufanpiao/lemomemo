@@ -54,8 +54,10 @@ function renderDateChips(){
   const box = $("date-chips"); box.textContent = "";
   const cur = $("f-date").value;
   box.append(h("button",{type:"button",class:"opt",onclick:() => { const el = $("f-date"); el.focus(); try { el.showPicker && el.showPicker(); } catch(e){} }},"选日期…"));
+  let picked = false;   // 同一天对应多个胶囊（比如今天周五时“明天”和“周六”）只高亮第一个（UI-2③）
   for (const [label, val] of dateChoices()){
-    box.append(h("button",{type:"button",class:"opt","aria-pressed": cur === val ? "true" : "false",
+    const on = !picked && cur === val; if (on) picked = true;
+    box.append(h("button",{type:"button",class:"opt","aria-pressed": on ? "true" : "false",
       onclick:() => { $("f-date").value = val; F.locks.add("date"); refresh(); }}, label));
   }
 }
@@ -76,9 +78,12 @@ function renderRemind(){
 }
 
 // —— 识别结果胶囊：每项是按钮，点了展开对应字段；锁住的加锁形图标 ——
+let lastChips = {};   // 上一次每个字段胶囊的文字：只给变了的那一个加闪烁（UI-4④）
 function chip(field, text, focusId){
   const locked = F.locks.has(field);
-  return h("button",{type:"button",class:"v" + (locked ? " lock" : ""),
+  const changed = lastChips[field] !== undefined && lastChips[field] !== text;
+  lastChips[field] = text;
+  return h("button",{type:"button",class:"v" + (locked ? " lock" : "") + (changed ? " changed" : ""),
     "aria-label": text + (locked ? "，已手动修改，不会被识别结果覆盖" : "，点按修改"),
     onclick:() => { App.ui.sheet.openDetails(); const el = $(focusId); if (el) el.focus(); }},
     locked ? h("span",{class:"lock-ico", html:ICON_LOCK}) : null, text);
@@ -129,7 +134,7 @@ function flushParse(){ if (debounce){ clearTimeout(debounce); debounce = null; a
 
 // 打开弹出层时重置。kind 为 null 表示新建时让识别结果决定
 function reset(kind, item, presetDate){
-  F.editing = item || null; F.origKind = item ? kind : null; F.locks = new Set(); F.remind = undefined;
+  F.editing = item || null; F.origKind = item ? kind : null; F.locks = new Set(); F.remind = undefined; lastChips = {};
   clearTimeout(debounce); debounce = null;
   $("q").value = "";
   $("f-title").value = item ? item.title : "";

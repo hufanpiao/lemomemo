@@ -19,6 +19,15 @@ function openDetails(){
   $("details").hidden = false; $("details-toggle").hidden = true;
   $("details-toggle").setAttribute("aria-expanded", "true");
   $("acts").hidden = false;
+  $("save").hidden = !F.editing;   // 新建时输入框右侧已有“加入”，下面不再放第二个（UI-2④）
+}
+// 键盘弹起时（iPhone 上可视区域变矮），把弹出层抬到键盘上方，识别结果和“加入”都看得到（UI-2①，需实机确认）
+function fitKeyboard(){
+  const vv = globalThis.visualViewport, sh = $("sheet");
+  if (!vv || !sh || sh.hidden) return;
+  const covered = Math.max(0, innerHeight - vv.height - vv.offsetTop);
+  sh.style.bottom = covered ? covered + "px" : "";
+  sh.style.maxHeight = covered ? (vv.height - 12) + "px" : "";
 }
 function openSheet(kind, item, presetDate){
   if (!App.data.isConnected()){ toast.show("数据未连接，暂时不能编辑"); return; }
@@ -31,6 +40,7 @@ function openSheet(kind, item, presetDate){
   $("details-toggle").setAttribute("aria-expanded", editingMode ? "true" : "false");
   $("acts").hidden = !editingMode;
   $("save").textContent = editingMode ? "保存修改" : "加入";
+  $("save").hidden = false;
   $("del").hidden = !editingMode;
   $("del").textContent = kind === "event" ? "删除这条日程" : "删除这条待办";
   $("scrim").hidden = false; $("sheet").hidden = false;
@@ -66,13 +76,13 @@ async function onSubmit(ev){
   if (r.coll === "events" && !editing){ V.selDay = r.data.date; V.weekStart = mondayOf(r.data.date); }
   closeSheet();
   if (converting) toast.show(r.coll === "events" ? "已改成日程" : "已改成待办");
-  else if (editing) toast.show("已保存");
-  else if (r.coll === "events") toast.show("已记下日程，" + relDay(r.data.date, App.clock.today()));
+  else if (editing) toast.show("已保存", null, null, C.TOAST_MS, {group:"saved"});
+  else if (r.coll === "events") toast.show("已记下日程，" + relDay(r.data.date, App.clock.today()), null, null, C.TOAST_MS, {group:"saved"});
   else if (V.projFilter && v.project !== V.projFilter)   // D16：当前筛选下看不到新条目，说明并给出清除筛选
     toast.show("已加入待办（当前只显示“" + V.projFilter + "”）", "显示全部", () => { V.projFilter = null; App.ui.render(); });
   else if (!v.date && V.view === "today" && !isDesktop())   // PM-A⑥；D14：跳过去后新条目短暂高亮
     toast.show("已加入待办", "查看", () => { V.flash.add(r.id); setTimeout(() => { V.flash.delete(r.id); App.ui.render(); }, C.FRESH_MS); App.ui.nav.go("todo"); App.ui.render(); });
-  else toast.show("已加入待办");
+  else toast.show("已加入待办", null, null, C.TOAST_MS, {group:"saved"});
 }
 function onDelete(){
   const it = F.editing, coll = write.collOf(F.origKind || F.kind);
@@ -92,6 +102,7 @@ function trapFocus(e){
 }
 function init(){
   SF.init();
+  if (globalThis.visualViewport){ visualViewport.addEventListener("resize", fitKeyboard); visualViewport.addEventListener("scroll", fitKeyboard); }
   $("details-toggle").onclick = openDetails;
   $("cancel").onclick = closeSheet; $("scrim").onclick = closeSheet;
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); trapFocus(e); });

@@ -1,7 +1,9 @@
 /* 组件：待办列表（项目筛选胶囊、圆形勾选、划线动画、标签、离开与新到达动画）。
    .f 胶囊也被弹出层的项目选择复用。依赖：tokens.css。 */
 /* 待办 */
-.filters{display:flex;gap:6px;flex-wrap:wrap}
+.filters{display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-18px;padding-inline:18px;scroll-padding-inline:18px}   /* 单行横向滑动（UI 复查 #4） */
+.filters::-webkit-scrollbar{display:none}
+.filters .f{flex:none;white-space:nowrap}
 .f{border:0;border-radius:999px;padding:6px 14px;font-size:14px;background:var(--panel-2);min-height:44px;display:inline-flex;align-items:center;gap:6px}
 .f .sw{width:10px;height:10px;border-radius:50%}
 .f[aria-pressed=true]{background:var(--ink);color:var(--panel)}
@@ -34,3 +36,6 @@
 .tag.bell{gap:3px}
 .tag.note{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .deadline.leaving{animation:leave .24s cubic-bezier(.4,0,.2,1) forwards}
+/* 减少动效：离开只做 ≤120ms 的淡出，不位移（UI 复查 #14） */
+@media (prefers-reduced-motion:reduce){.td.leaving,.deadline.leaving{animation:fade-out .12s linear forwards!important}}
+@keyframes fade-out{to{opacity:0}}

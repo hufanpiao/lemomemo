@@ -30,13 +30,17 @@ const PREP = `
   window.clearToasts = () => document.querySelectorAll("#toasts .toast").forEach(t => t.remove());
 `;
 const SCENES = [
-  ["01-今天-两种提醒", `await add(4, "SignPlex 客户反馈会"); await add(9, "交 NEOX 竖版"); clearToasts(); scrollTo(0,0);`],
-  ["02-主题选择器", `document.querySelector(".theme-btn, #theme-btn, [aria-haspopup]").click(); await wait(400);`],
-  ["03-新建-韩文识别", `$("plus").click(); await wait(400); $("q").value = "내일 오후 3시 NEOX 미팅 30분 전 알림"; $("q").dispatchEvent(new Event("input")); await wait(500);`],
-  ["04-编辑-细节展开", `document.querySelector("[data-go=sched]").click(); await wait(300); document.querySelector("#v-sched .ev").click(); await wait(500);`],
-  ["05-日程页", `document.querySelector("[data-go=sched]").click(); await wait(400); scrollTo(0,0);`],
-  ["06-待办页-最近删除展开", `document.querySelector("[data-go=todo]").click(); await wait(300); const tb=[...document.querySelectorAll("#todos .tb")].pop(); tb.click(); await wait(400); $("del").click(); await wait(600); clearToasts(); const tr=document.querySelector(".trash, #trash-toggle, [aria-controls*=trash]"); if (tr) tr.click(); await wait(400); scrollTo(0,0);`],
-  ["07-提示条叠放", `document.querySelector("[data-go=todo]").click(); await wait(300); for (let i=0;i<3;i++){ const ck=document.querySelector("#todos .td:not(.done) .ck"); if (ck) ck.click(); await wait(1200); } await wait(200);`],
+  ["00-今天-下一件事提醒状态", `?empty`, `await add(4, "SignPlex 客户反馈会"); await add(9, "交 NEOX 竖版"); clearToasts(); scrollTo(0,0);`],
+  ["00b-新建-锁定字段", `?empty`, `$("plus").click(); await wait(400); $("q").value = "明天下午3点 NEOX 对片"; $("q").dispatchEvent(new Event("input")); await wait(400); $("f-time").value = "16:00"; $("f-time").dispatchEvent(new Event("change")); $("details").hidden = true; await wait(300);`],
+
+  ["01-今天-两种提醒", ``, `await add(4, "SignPlex 客户反馈会"); await add(9, "交 NEOX 竖版"); clearToasts(); scrollTo(0,0);`],
+  ["02-主题选择器", ``, `document.querySelector(".theme-btn, #theme-btn, [aria-haspopup]").click(); await wait(400);`],
+  ["03-新建-韩文识别", ``, `$("plus").click(); await wait(400); $("q").value = "내일 오후 3시 NEOX 미팅 30분 전 알림"; $("q").dispatchEvent(new Event("input")); await wait(500);`],
+  ["04-编辑-细节展开", ``, `document.querySelector("[data-go=sched]").click(); await wait(300); document.querySelector("#v-sched .ev").click(); await wait(500);`],
+  ["05-日程页", ``, `document.querySelector("[data-go=sched]").click(); await wait(400); scrollTo(0,0);`],
+  ["05b-日程页-翻到下周", ``, `document.querySelector("[data-go=sched]").click(); await wait(300); $("wk-next").click(); await wait(400); scrollTo(0,0);`],
+  ["06-待办页-最近删除展开", ``, `document.querySelector("[data-go=todo]").click(); await wait(300); const tb=[...document.querySelectorAll("#todos .tb")].pop(); tb.click(); await wait(400); $("del").click(); await wait(600); clearToasts(); const tr=document.querySelector(".trash, #trash-toggle, [aria-controls*=trash]"); if (tr) tr.click(); await wait(400); const tl=document.getElementById("trash-list"); if (tl) tl.scrollIntoView({block:"center"});`],
+  ["07-提示条叠放", ``, `document.querySelector("[data-go=todo]").click(); await wait(300); for (let i=0;i<3;i++){ const ck=document.querySelector("#todos .td:not(.done) .ck"); if (ck) ck.click(); await wait(1200); } await wait(200);`],
 ];
 const VIEWPORTS = [["手机", 390, 844, true], ["电脑", 1280, 860, false]];
 const THEMES = ["light", "dark"];
@@ -67,14 +71,14 @@ async function main(){
     let errors = 0;
     for (const [vpName, w, hgt, mobile] of VIEWPORTS){
       for (const theme of THEMES){
-        const scenes = mobile ? SCENES : SCENES.filter(s => ["01-今天-两种提醒", "03-新建-韩文识别"].includes(s[0]));
-        for (const [name, script] of scenes){
+        const scenes = mobile ? SCENES : SCENES.filter(s => ["00-今天-下一件事提醒状态", "01-今天-两种提醒", "03-新建-韩文识别"].includes(s[0]));
+        for (const [name, hash, script] of scenes){
           await c.send("Emulation.setDeviceMetricsOverride", {width: w, height: hgt, deviceScaleFactor: 2, mobile});
           await c.send("Emulation.setEmulatedMedia", {features: [{name: "prefers-color-scheme", value: theme}]});
           // 每个场景独立：先清空本机偏好（上次打开的页、主题等），再重新打开
           await c.send("Page.navigate", {url: URL}); await sleep(600);
           await c.send("Runtime.evaluate", {expression: "try { localStorage.clear(); } catch(e) {}"});
-          await c.send("Page.navigate", {url: URL}); await sleep(2200);
+          await c.send("Page.navigate", {url: URL + hash}); await sleep(2200);
           const r = await c.send("Runtime.evaluate", {expression: `(async () => { ${PREP} ${script} return "ok"; })()`, awaitPromise: true});
           if (r.result && r.result.exceptionDetails){ errors++; console.log("场景出错：", name, r.result.exceptionDetails.exception && r.result.exceptionDetails.exception.description); }
           const shot = await c.send("Page.captureScreenshot", {format: "png", captureBeyondViewport: false});

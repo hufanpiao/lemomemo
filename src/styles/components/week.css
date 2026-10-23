@@ -15,5 +15,7 @@
 .day.sel:hover .n{background:var(--ink)}
 .day .dots .dl{display:block;width:8px;height:2px;border-radius:1px;background:var(--ink)}
 .wk-title{border:0;background:none;padding:0;font:inherit;color:inherit;min-height:44px;text-align:left}
-.back-today{align-self:center;border:0;border-radius:999px;min-height:44px;padding:0 18px;font-size:14px;background:var(--ink);color:var(--panel);font-weight:500}
-.back-today[hidden]{display:none}
+.back-today{border:0;border-radius:999px;min-height:44px;padding:0 18px;font-size:14px;background:var(--ink);color:var(--panel);font-weight:500}
+.back-today.off{visibility:hidden}   /* 不在其他周时只隐藏、保留位置，标题行高度固定，列表不跳（UI 复查 #11） */
+/* “回到今天”放在周标题右边、离左右箭头远一点；不再单独占一行（避免周条下方出现大块空白） */
+.wk-head{display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap}

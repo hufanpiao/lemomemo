@@ -57,7 +57,7 @@ function renderNext(t, nm){
   }
   if (rem){
     // 提醒状态：卡片本身不当按钮用（按钮不能嵌在按钮里，D18），改成标题可点；新出现时用隐藏文字播报一次
-    card.classList.add("reminding"); if (rem.isNew) card.classList.add("enter");
+    card.classList.add("reminding"); if (rem.isNew) card.classList.add("enter"); if (rem.confirmed) card.classList.add("confirmed");
     const tt = card.querySelector(".tt");
     const open = h("button",{type:"button",class:"tt tt-btn","aria-label":(kind === "event" ? "编辑日程：" : "编辑待办：") + x.title,onclick:()=>openSheet(kind, x)}, x.title);
     tt.replaceWith(open);

@@ -34,13 +34,15 @@
 .q-row .q{min-height:52px}
 .q-add{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);font-weight:700;min-height:52px;padding:0 20px;font-size:16px}
 .q-add:disabled{opacity:.5}
-.recog{display:flex;flex-wrap:wrap;gap:6px;min-height:94px;align-content:flex-start}
+.recog{display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start}
+/* 窄屏会折成两行，预留两行高度避免跳动；宽屏一行放得下，不预留（UI-1⑦） */
+@media (max-width:719px){.recog{min-height:94px}}
 .recog[hidden]{display:none}
 .recog .v{border:0;border-radius:999px;background:var(--panel-2);color:var(--ink);min-height:44px;padding:0 14px;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .recog .v.lock{box-shadow:inset 0 0 0 2px var(--ink)}
 .recog .lock-ico{display:inline-grid;width:12px;height:12px}
 .recog .lock-ico svg{width:12px;height:12px}
-@media (prefers-reduced-motion:no-preference){.recog .v{animation:recog-in .12s linear}}
+@media (prefers-reduced-motion:no-preference){.recog .v.changed{animation:recog-in .12s linear}}
 @keyframes recog-in{from{opacity:.4}to{opacity:1}}
 .details-toggle{border:0;background:var(--panel-2);border-radius:14px;min-height:48px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--ink);width:100%;cursor:pointer}
 .details{display:flex;flex-direction:column;gap:14px}
@@ -58,3 +60,15 @@
 /* D01：占位文字也要 ≥ 4.5:1（它就是听写提示），用 --muted 代替浏览器默认灰 */
 .q::placeholder,.fields input::placeholder{color:var(--muted);opacity:1}
 .scroller[hidden],.row-l[hidden]{display:none}
+
+/* UI-1⑥：编辑表里项目胶囊的选中态和其他选项一致，用墨色描边；“推后 1 小时”是动作，加箭头区分 */
+.sheet .projs .f[aria-pressed=true]{background:var(--panel);color:var(--ink);font-weight:700;box-shadow:inset 0 0 0 2px var(--ink)}
+#push-1h::before{content:"→ ";font-weight:700}
+#push-1h{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line)}
+/* UI-4③：减少动效时弹出层不滑动，只淡入淡出 120ms */
+@media (prefers-reduced-motion:reduce){
+  .sheet,.sheet.on{transform:none!important;transition:opacity .12s linear!important}
+  .sheet:not(.on){opacity:0}
+  @media (min-width:720px){.sheet,.sheet.on{transform:translate(-50%,0)!important}}
+}
+#save[hidden]{display:none}

@@ -54,7 +54,9 @@ function renderWeek(t, g){
   const title = weekTitle(t), away = V.weekStart !== mondayOf(t);
   $("wk-title").textContent = title;
   $("wk-title").setAttribute("aria-label", title + (away ? "，点按回到今天" : ""));
-  $("wk-today").hidden = !away;
+  // 不在本周时才显示；不显示时只隐藏、保留位置，列表不跳动（UI 复查 #11）
+  const bt = $("wk-today");
+  bt.classList.toggle("off", !away); bt.disabled = !away; bt.setAttribute("aria-hidden", away ? "false" : "true"); bt.tabIndex = away ? 0 : -1;
   const wk = $("week"); wk.textContent = "";
   for (let i = 0; i < 7; i++){
     const k = addDays(V.weekStart, i), d = parse(k), evs = g.ev[k] || [], dls = g.dl[k] || [];

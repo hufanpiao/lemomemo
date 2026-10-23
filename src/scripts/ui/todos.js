@@ -24,7 +24,7 @@ function toggle(x, done){
   if (done){
     const t = App.clock.today();
     const n = visTd().filter(y => isDoneOn(y, t)).length;
-    const tt = toast.show("完成了，今天第 "+n+" 件", "撤销", () => toggle(x, false), C.TOAST_UNDO_MS);
+    const tt = toast.show("完成了，今天第 "+n+" 件", "撤销", () => toggle(x, false), C.TOAST_UNDO_MS, {group:"done"});   // 连续勾选只留一条，撤销最近那件
     Promise.resolve(p).then(ok => { if (ok === false) toast.dismiss(tt); });
   }
   return p;
