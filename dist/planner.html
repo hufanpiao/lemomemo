@@ -14,6 +14,7 @@
 /* 皮肤 bento（便当格 + 马卡龙，v3 唯一的皮肤）：只定义颜色变量，浅色、深色各一组（ADR-008）。
    维度：data-skin="bento"（皮肤）× data-theme="light"|"dark"|不设（深浅色，不设时跟随系统）。
    深色写了两遍：一遍给“跟随系统且系统为深色”，一遍给“手动选深色”，两组必须保持一致。
+   深色选择器都限定 data-skin="bento"（还没设 data-skin 时按 bento 处理），加别的皮肤不会串色（第五轮代码复审）。
    新增变量：--inv/--on-inv 反色卡片；--late-bg “没赶上”胶囊等红底白字；--red-ink 红色文字；--on-red 红底上的字；
    --on-dark 墨黑按钮上的字；--on-p-2 马卡龙色块上的说明字（实色，不用半透明）；--scrim 弹出层遮罩。
    依赖：tokens.css。 */
@@ -26,14 +27,14 @@
   --scrim:rgba(10,10,12,.45);
   --shadow:0 18px 40px -18px rgba(18,19,22,.35);
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]),:root[data-skin="bento"]:not([data-theme="light"]){
+@media (prefers-color-scheme: dark){:root:not([data-skin]):not([data-theme="light"]),:root[data-skin="bento"]:not([data-theme="light"]){
   --bg:#0c0d0f; --panel:#17181b; --panel-2:#212226; --ink:#f1f1f3; --muted:#9a9ea7; --line:#2a2b30;
   --dock:#202125; --dock-ink:#f1f1f3; --pill-on:#f1f1f3; --pill-on-ink:#121316;
   --yellow:#e6c84a; --red:#ff5a4d; --red-soft:#3a1a17; --focus:#8fb0ff;
   --p1:#e2c85c; --p2:#ad98ee; --p3:#ea93ba; --p4:#86d29a; --p5:#86c6e6; --p6:#ec977c; --p7:#b9bac0;
   --inv:#f1f1f3; --on-inv:#121316; --late-bg:#b8342a; --red-ink:#ff9a90;
   --shadow:0 18px 40px -18px rgba(0,0,0,.8); color-scheme:dark}}
-:root[data-theme="dark"],:root[data-skin="bento"][data-theme="dark"]{
+:root:not([data-skin])[data-theme="dark"],:root[data-skin="bento"][data-theme="dark"]{
   --bg:#0c0d0f; --panel:#17181b; --panel-2:#212226; --ink:#f1f1f3; --muted:#9a9ea7; --line:#2a2b30;
   --dock:#202125; --dock-ink:#f1f1f3; --pill-on:#f1f1f3; --pill-on-ink:#121316;
   --yellow:#e6c84a; --red:#ff5a4d; --red-soft:#3a1a17; --focus:#8fb0ff;
@@ -78,6 +79,8 @@ button{cursor:pointer}
 .plus{width:56px;height:56px;border-radius:50%;border:0;background:var(--yellow);color:var(--on-yellow);display:grid;place-items:center;box-shadow:var(--shadow);flex:none}
 .plus svg{width:26px;height:26px}
 @media (min-width:960px){.dock{justify-content:flex-end}}
+/* 电脑宽度三栏同时显示，“全部待办”这类切页链接没有用（D15、PM-A⑩） */
+@media (min-width:960px){.nav-only{display:none!important}}
 /* 组件：页面抬头（大号月日、星期年份、右上角主题按钮；“没赶上 / 今天完成”小胶囊在日期下面）。抬头不换行（采纳结论 #2）。
    依赖：tokens.css。 */
 /* 抬头 */
@@ -90,7 +93,7 @@ button{cursor:pointer}
 .top .sub{font-size:16px;color:var(--muted)}
 .top-chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 12px;font-size:14px;background:var(--panel);border:0}
-.chip.late{background:var(--late-bg);color:var(--on-red);font-weight:500}
+.chip.late{background:var(--late-bg);color:var(--on-red);font-weight:500;min-height:44px;padding:0 16px}
 .chip b{font-family:var(--f-num);font-weight:700}
 /* 组件：通用面板 .panel、面板标题行 .ph、文字链接按钮、圆形图标按钮。
    依赖：tokens.css。 */
@@ -98,7 +101,7 @@ button{cursor:pointer}
 .ph{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .ph h2{margin:0;font-size:20px;font-weight:700;line-height:1.3}
 .ph .meta{font-size:14px;color:var(--muted)}
-.linkbtn{background:none;border:0;padding:4px 0;color:var(--muted);font-size:14px;text-decoration:underline;text-underline-offset:3px}
+.linkbtn{background:none;border:0;padding:0 4px;min-height:44px;min-width:44px;display:inline-flex;align-items:center;color:var(--muted);font-size:14px;text-decoration:underline;text-underline-offset:3px}
 .round{width:44px;height:44px;border-radius:50%;border:0;background:var(--panel-2);display:grid;place-items:center;flex:none}
 .round svg{width:18px;height:18px}
 /* 组件：“下一件事”大卡片（含空闲状态）。
@@ -124,9 +127,9 @@ button{cursor:pointer}
 .late-row .t{overflow-wrap:anywhere;min-width:0}
 .late-row .t small{display:block;font-size:12px;color:var(--red-ink)}
 .mini{display:flex;gap:6px}
-.mini button{border:0;border-radius:999px;padding:6px 12px;font-size:14px;background:var(--panel);min-height:36px}
+.mini button{border:0;border-radius:999px;padding:6px 14px;font-size:14px;background:var(--panel);min-height:44px;min-width:52px}
 .btn-dark{border:0;border-radius:999px;padding:10px 18px;background:var(--ink);color:var(--panel);font-weight:500;min-height:44px}
-/* 组件：今天的时间轴（小时刻度、色块、现在红线、全天胶囊）。
+/* 组件：今天的时间轴（小时刻度、色块、现在红线、全天胶囊、跨夜“到次日”、折叠的“+N”）。
    依赖：tokens.css。 */
 /* 时间轴（今天） */
 .tl{position:relative;display:grid;grid-template-columns:44px 1fr;}
@@ -143,12 +146,20 @@ button{cursor:pointer}
 .now span{position:absolute;right:0;top:-12px;background:var(--late-bg);color:var(--on-red);font-family:var(--f-num);font-weight:700;font-size:12px;padding:1px 8px;border-radius:999px}
 .allday{display:flex;flex-wrap:wrap;gap:6px}
 .allday .ad{border:0;border-radius:999px;padding:4px 12px;font-size:14px;color:var(--on-p);font-weight:500}
-/* 组件：日程页的一周日期条（今天描边、选中实心；彩色小圆点＝有日程，墨色短横线 8×2px＝有待办截止，采纳结论 #7）、
+/* 跨夜：裁到 24:00，下边做成直角并标“到次日”（D07） */
+.blk.overnight{border-bottom-left-radius:0;border-bottom-right-radius:0}
+.blk .nd{position:absolute;right:4px;bottom:4px;font-size:12px;font-weight:600;line-height:16px;padding:0 6px;border-radius:999px;background:var(--panel);color:var(--ink)}
+/* 同一时段超过 3 件时折叠成“+N”（D08） */
+.blk.more{background:var(--panel-2);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line);align-items:center;justify-content:center;text-align:center}
+.blk.more .bt{font-family:var(--f-num);font-size:16px}
+.blk.more .bm{color:var(--muted)}
+/* 组件：日程页的一周日期条（每天 ≥ 44px 宽，不够时可横滑，D02）（今天描边、选中实心；彩色小圆点＝有日程，墨色短横线 8×2px＝有待办截止，采纳结论 #7）、
    可点的周标题、周条下方居中的“回到今天”（#8）。
    依赖：tokens.css。 */
 /* 日期条 */
-.week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-.day{border:0;background:none;border-radius:16px;padding:6px 0 8px;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:64px}
+.week{display:grid;grid-template-columns:repeat(7,minmax(44px,1fr));gap:0;margin-inline:-8px;overflow-x:auto;scrollbar-width:none}
+.week::-webkit-scrollbar{display:none}
+.day{border:0;background:none;border-radius:16px;padding:6px 0 8px;min-width:44px;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:64px}
 .day .w{font-size:12px;color:var(--muted)}
 .day .n{font-family:var(--f-num);font-weight:700;font-size:16px;width:34px;height:34px;display:grid;place-items:center;border-radius:50%}
 .day.today .n{box-shadow:inset 0 0 0 2px var(--ink)}
@@ -226,13 +237,17 @@ button{cursor:pointer}
 .sk{height:56px;border-radius:var(--r-block);background:var(--panel-2)}
 @media (prefers-reduced-motion:no-preference){.sk{animation:pulse 1.2s ease-in-out infinite alternate}}
 @keyframes pulse{to{opacity:.45}}
-/* 组件：底部提示条（可叠放，最多 3 条，新的在下面；带撤销 / 重试按钮）与顶部断网红条。
+/* 组件：底部提示条（左对齐、宽度统一，可叠放最多 3 条，新的在下面；撤销 / 重试 / 关闭按钮都 ≥ 44px）与顶部断网红条。
    淡出时长 .2s 与 core/const.js 的 TOAST_LEAVE_MS 一致。依赖：tokens.css。 */
 /* 提示条 */
-.toasts{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;width:max-content;max-width:calc(100% - 32px);z-index:30;pointer-events:none}
-.toast{transform:translateY(8px);opacity:0;background:var(--dock);color:var(--dock-ink);border-radius:999px;padding:6px 6px 6px 18px;display:flex;align-items:center;gap:12px;font-size:14px;transition:opacity .2s ease-out,transform .2s ease-out;pointer-events:none;max-width:100%;border:1px solid var(--line)}
+.toasts{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;flex-direction:column;align-items:stretch;gap:8px;width:min(420px,calc(100% - 32px));z-index:30;pointer-events:none}
+.toast{transform:translateY(8px);opacity:0;background:var(--dock);color:var(--dock-ink);border-radius:24px;padding:4px 4px 4px 18px;min-height:52px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;transition:opacity .2s ease-out,transform .2s ease-out;pointer-events:none;border:1px solid var(--line);text-align:left}
 .toast.on{opacity:1;transform:none;pointer-events:auto}
-.toast button{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);padding:6px 14px;font-weight:700;min-height:36px}
+.toast .tm{display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere;padding:6px 0}
+.toast .tm small{font-size:12px;color:var(--dock-ink);opacity:.85}
+.toast .tbs{display:flex;gap:4px;flex:none}
+.toast button{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);padding:0 18px;font-weight:700;min-height:44px;min-width:44px}
+.toast .tb-x{background:transparent;color:var(--dock-ink);padding:0;width:44px;font-size:20px;font-weight:500}
 .netbar{position:fixed;top:0;left:0;right:0;z-index:40;background:var(--late-bg);color:var(--on-red);font-size:14px;text-align:center;padding:calc(4px + env(safe-area-inset-top,0px)) 16px 4px}
 /* 组件：新建/编辑底部弹出层（遮罩、一句话输入框、类型切换、表单字段、操作按钮）。
    依赖：tokens.css、todo.css（.f 胶囊）。 */
@@ -290,6 +305,10 @@ button{cursor:pointer}
 .sheet .seg button{min-height:44px}
 .del-row{margin-top:24px;border:0;border-radius:14px;min-height:48px;width:100%;background:var(--red-soft);color:var(--red-ink);font-weight:600;font-size:15px;cursor:pointer}
 .del-row[hidden],.acts[hidden],.q-row[hidden],.details-toggle[hidden]{display:none}
+
+/* D01：占位文字也要 ≥ 4.5:1（它就是听写提示），用 --muted 代替浏览器默认灰 */
+.q::placeholder,.fields input::placeholder{color:var(--muted);opacity:1}
+.scroller[hidden],.row-l[hidden]{display:none}
 /* 组件：数据未连接时的提示面板。
    依赖：tokens.css。 */
 .notice{background:var(--panel);border-radius:var(--r-panel);padding:18px;color:var(--muted)}
@@ -321,14 +340,29 @@ button{cursor:pointer}
 .remind-inv .r-acts .later{background:transparent;color:var(--on-inv);box-shadow:inset 0 0 0 1.5px currentColor}
 .remind-inv .offline-tag{background:var(--on-inv);color:var(--inv)}
 
+/* 情况 A：标题按钮、读屏专用文字、铃铛行和按钮的高度展开（grid 0fr → 1fr） */
+.tt-btn{border:0;background:none;padding:0;color:inherit;font:inherit;font-size:20px;font-weight:700;line-height:1.35;text-align:left;cursor:pointer;overflow-wrap:anywhere}
+.tt-btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.rem-extra{display:grid;grid-template-rows:1fr}
+.rem-extra > div{min-height:0;overflow:hidden}
+
 /* 入场与铃铛（只在新出现时播放一次） */
 @media (prefers-reduced-motion:no-preference){
-  .remind-inv.enter,.next.reminding.enter{animation:remind-in .24s cubic-bezier(.22,1,.36,1)}
+  .remind-inv.enter{animation:remind-in .24s cubic-bezier(.22,1,.36,1)}
+  .next.reminding.enter .rem-extra{animation:rem-grow .24s cubic-bezier(.22,1,.36,1)}
+  .remind-inv.swap{animation:remind-fade .16s linear}
+  .remind-inv.leaving,.next.reminding.leaving .rem-extra{animation:rem-shrink .2s cubic-bezier(.4,0,.2,1) forwards}
+  .remind-inv.leaving{animation:remind-out .2s cubic-bezier(.4,0,.2,1) forwards}
   .enter .bell-ico{animation:bell-swing .4s ease-in-out 1;transform-origin:50% 10%}
 }
 @media (prefers-reduced-motion:reduce){
-  .remind-inv.enter,.next.reminding.enter{animation:remind-fade .12s linear}
+  .remind-inv.enter,.remind-inv.swap,.next.reminding.enter .rem-extra{animation:remind-fade .12s linear}
 }
+@keyframes rem-grow{from{grid-template-rows:0fr;opacity:0}to{grid-template-rows:1fr;opacity:1}}
+@keyframes rem-shrink{from{grid-template-rows:1fr;opacity:1}to{grid-template-rows:0fr;opacity:0}}
+@keyframes remind-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-8px)}}
+.remind-inv.confirmed{opacity:.9}
 @keyframes remind-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
 @keyframes remind-fade{from{opacity:0}to{opacity:1}}
 @keyframes bell-swing{0%,100%{transform:rotate(0)}25%{transform:rotate(8deg)}75%{transform:rotate(-8deg)}}
@@ -384,8 +418,9 @@ mark{background:var(--yellow);color:var(--on-yellow);border-radius:3px;padding:0
 .log-row .lg-a{font-weight:500}
 .log-row .lg-c{color:var(--muted)}
 .log-row.run .lg-a{color:var(--red-ink)}
-.export{align-self:center;margin-top:-4px;border:0;background:none;color:var(--muted);font-size:13px;min-height:44px;padding:0 12px}
+.export{align-self:center;margin-top:-4px;margin-bottom:0;border:0;background:none;color:var(--muted);font-size:13px;min-height:44px;padding:0 12px}
 .export:disabled{opacity:.7}
+.export-note{margin:-14px 0 0;text-align:center;font-size:12px;color:var(--muted)}
 </style>
 
 <div class="app">
@@ -459,7 +494,8 @@ mark{background:var(--yellow);color:var(--on-yellow);border-radius:3px;padding:0
         <div class="trash-list" id="trash-list" hidden></div>
         <button class="trash" type="button" id="log-toggle" aria-expanded="false" aria-controls="log-list"><span><b>运行记录</b>  最近 7 天，只读</span><span class="chev" aria-hidden="true">›</span></button>
         <div class="log-list" id="log-list" hidden></div>
-        <button class="export" type="button" id="export">导出备份（JSON）</button>
+        <button class="export" type="button" id="export" aria-describedby="export-note">导出备份（JSON）</button>
+        <p class="export-note" id="export-note">文件里包含最近删除的条目</p>
       </section>
     </div>
   </div>
@@ -483,7 +519,7 @@ mark{background:var(--yellow);color:var(--on-yellow);border-radius:3px;padding:0
   <div class="grab"></div>
   <h3 id="sh-title">记一件事</h3>
   <div id="q-wrap" class="q-row">
-    <input class="q" id="q" type="text" autocomplete="off" enterkeyhint="done" aria-label="用一句话描述要记的事" placeholder="写一句话，例如：明天下午3点和 NEOX 对片">
+    <input class="q" id="q" type="text" maxlength="300" autocomplete="off" enterkeyhint="done" aria-label="用一句话描述要记的事" placeholder="写一句话，例如：明天下午3点和 NEOX 对片">
     <button class="q-add" type="submit" id="q-add">加入</button>
   </div>
   <div class="recog" id="recog" aria-live="polite"></div>
@@ -505,7 +541,7 @@ mark{background:var(--yellow);color:var(--on-yellow);border-radius:3px;padding:0
       <label class="td-only chk"><input id="f-imp" type="checkbox">重要</label>
     </div>
     <button type="button" class="opt ev-only" id="push-1h" hidden>推后 1 小时</button>
-    <div class="row-l">提醒</div>
+    <div class="row-l" id="remind-lab">提醒</div>
     <div class="scroller" id="remind-chips" role="radiogroup" aria-label="提醒"></div>
     <div class="fields">
       <label class="wide">项目<input id="f-proj" type="text" maxlength="40" placeholder="可不填" list="proj-list"></label>
@@ -603,6 +639,8 @@ App.core.C = {
   LOG_VIEW_DAYS: 7,                    // “运行记录”显示最近几天
   LOG_VIEW_MAX: 200,                   // “运行记录”最多列多少条
   DAY_MS: 86400000,
+  TOAST_FLIP_MS: 180,                  // 提示条让位的 FLIP 平移（UI-4⑤，D03）
+  TL_MAX_LANES: 3,                     // 时间轴同一时段最多并排 3 列，其余折叠成“+N”（D08）
 
   // 时钟、写入与连接
   CLOCK_TICK_MS: 60000,        // 每分钟刷新一次时间轴和倒计时
@@ -832,9 +870,11 @@ function take(st, re){ const m = st.text.match(re); if (m) st.text = st.text.rep
 // 把已经找到的那段文字（字符串）从 st.text 里取走
 function cut(st, str){ st.text = st.text.replace(str, " "); }
 
-function prepare(s){ return koNative(digitize(protectWeekdays(toHalfWidth(s)))); }
+// 一句话最多 300 字（安全复审：超长输入会让几条正则变慢）；连续空白先合并成一个
+const QUICK_MAX = 300;
+function prepare(s){ s = String(s).slice(0, QUICK_MAX).replace(/\s+/g, " "); return koNative(digitize(protectWeekdays(toHalfWidth(s)))); }
 
-App.logic.parseText = {cnNum, toHalfWidth, protectWeekdays, digitize, koNative, take, cut, prepare};
+App.logic.parseText = {cnNum, toHalfWidth, protectWeekdays, digitize, koNative, take, cut, prepare, QUICK_MAX};
 })();
 // ==== src/scripts/logic/parse-date-zh.js ====
 (function(){
@@ -1358,7 +1398,9 @@ if (typeof addEventListener === "function"){
 // 两声短音：880Hz 再 660Hz，各 120 毫秒，柔和起落，避免爆音
 function chime(){
   // 用户还没点过页面时浏览器会拦截震动，所以只在解锁之后震
-  try { if (audio && globalThis.navigator && navigator.vibrate) navigator.vibrate([60, 40, 60]); } catch(e){}
+  const ua = globalThis.navigator && navigator.userActivation;
+  const active = ua ? ua.hasBeenActive : !!audio;
+  try { if (active && navigator.vibrate) navigator.vibrate([60, 40, 60]); } catch(e){}   // D17：没点过页面时不调用
   if (!audio || audio.state !== "running") return false;
   const t0 = audio.currentTime;
   [[880, 0], [660, 0.16]].forEach(([f, at]) => {
@@ -1616,7 +1658,7 @@ const duration = v => { const n = num(v, 0); return n > 0 ? n : C.DEFAULT_DURATI
 
 function common(raw){
   return {
-    title: str(raw.title, C.TITLE_MAX), project: str(raw.project, C.PROJECT_MAX),
+    title: str(raw.title, C.TITLE_MAX).trim() || "（无标题）", project: str(raw.project, C.PROJECT_MAX),
     source: str(raw.source), rawText: str(raw.rawText, C.RAW_MAX),
     createdAt: num(raw.createdAt, 0), updatedAt: num(raw.updatedAt, 0), deletedAt: deletedAt(raw.deletedAt),
   };
@@ -1664,16 +1706,16 @@ function remindPatch(kind, hasTime, remind){
 // v：{title, date, time, dur, project, note, remind}
 function eventFields(v, now){
   const time = v.time || "";
-  return Object.assign({title:v.title, date:v.date, time, durationMin:Number(v.dur)||C.DEFAULT_DURATION_MIN,
+  return Object.assign({title:String(v.title).slice(0, C.TITLE_MAX), date:v.date, time, durationMin:Number(v.dur)||C.DEFAULT_DURATION_MIN,
     project:v.project, note:v.note || ""}, remindPatch("event", !!time, v.remind), {updatedAt:now});
 }
 // v：{title, date, important, project, note, remind}
 function todoFields(v, now){
-  return Object.assign({title:v.title, due:v.date || "", important:!!v.important, project:v.project, note:v.note || ""},
+  return Object.assign({title:String(v.title).slice(0, C.TITLE_MAX), due:v.date || "", important:!!v.important, project:v.project, note:v.note || ""},
     remindPatch("todo", false, v.remind), {updatedAt:now});
 }
 function asNew(data, coll, now, raw){
-  Object.assign(data, {createdAt:now, source:"page", rawText:raw});
+  Object.assign(data, {createdAt:now, source:"page", rawText:String(raw || "").slice(0, C.RAW_MAX)});
   if (coll === "todos") Object.assign(data, {done:false, doneAt:0});
   return data;
 }
@@ -1857,10 +1899,21 @@ async function saveItem(kind, item, v){
   return {ok, coll, id, data};
 }
 // 编辑时切换类型：新建另一类，旧的软删除（可以在“最近删除”里找回）。返回 {ok, coll, id}
+// 新建和软删除放在同一个 batch 里一次写完，避免中途失败留下两条一样的（代码复审建议）
 async function convert(fromKind, item, v){
-  const res = await saveItem(fromKind === "event" ? "todo" : "event", null, Object.assign({}, v, {raw: item.rawText || ""}));
-  if (res.ok) await softDelete(collOf(fromKind), item);
-  return res;
+  const toKind = fromKind === "event" ? "todo" : "event", coll = collOf(toKind), oldColl = collOf(fromKind), t = now();
+  const data = F.asNew(toKind === "event" ? F.eventFields(v, t) : F.todoFields(v, t), coll, t, item.rawText || "");
+  data.remindAt = remindAtOf(toKind, data);
+  const id = store.newId(coll);
+  S.localIds.add(id);
+  const old = live(oldColl, item), prev = old.deletedAt;
+  old.deletedAt = t;
+  emit("change");
+  const ok = await run(() => store.batch([
+    {op:"add", coll, id, data},
+    {op:"update", coll:oldColl, id:old.id, data:{deletedAt:t, remindAt:null, updatedAt:t}},
+  ]).then(() => { log.op("create", coll, id); log.op("delete", oldColl, old.id); }), () => { old.deletedAt = prev; });
+  return {ok, coll, id, data};
 }
 function toggleDone(x, done){
   x = live("todos", x);
@@ -2094,31 +2147,53 @@ App.ui.viewState = {init, onDayChange};
 })();
 // ==== src/scripts/ui/toast.js ====
 (function(){
-// 职责：底部提示条队列：show(文案, 按钮字, 按钮动作, 显示毫秒) 新增一条，可叠放，最多 TOAST_MAX 条（超出时最早的先走），
-//       每条有自己的计时器；带按钮的“撤销”类提示由调用方传 TOAST_UNDO_MS。点按钮执行动作并收起这一条。
+// 职责：底部提示条队列（采纳结论 #11、UI-4⑤）：show(文案, 按钮字, 按钮动作, 显示毫秒, 选项) 新增一条并返回句柄，dismiss(句柄) 收起。
+//       左对齐、宽度统一，最多叠 TOAST_MAX 条，每条单独计时；ms 传 0 表示不自动消失（带“重试”的失败提示），这时多一个 44px 的关闭按钮。
+//       第 4 条进来时最旧的让位；被挤掉的是删除提示（选项 kind:"delete"，或文案以“已删除”开头）时，新提示里写明“更早删除的在最近删除里”。
+//       位置变化用 FLIP 平移 180ms（减少动效时不做位移）。
 // 依赖：core/const.js、ui/dom.js
 App.ui = App.ui || {};
 
 const C = App.core.C;
 const {$, h} = App.ui.dom;
-const live = [];   // 当前显示中的提示：{el, timer}
+const live = [];   // 当前显示中的提示：{el, timer, kind}
+const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+// 先记下各条的位置，改完 DOM 后把位移“倒放”回去（FLIP）
+function flip(mutate){
+  const els = [...$("toasts").children];
+  const before = new Map(els.map(el => [el, el.getBoundingClientRect().top]));
+  mutate();
+  if (reduced()) return;
+  for (const [el, top] of before){
+    if (!el.isConnected || !el.animate) continue;
+    const dy = top - el.getBoundingClientRect().top;
+    if (Math.abs(dy) > 0.5) el.animate([{translate:"0 " + dy + "px"}, {translate:"0 0"}], {duration:C.TOAST_FLIP_MS, easing:"cubic-bezier(.22,1,.36,1)"});
+  }
+}
 function dismiss(t){
   const i = live.indexOf(t); if (i < 0) return;
   live.splice(i, 1);
   clearTimeout(t.timer);
   t.el.classList.remove("on");
-  setTimeout(() => t.el.remove(), C.TOAST_LEAVE_MS);
+  setTimeout(() => flip(() => t.el.remove()), C.TOAST_LEAVE_MS);
 }
-function show(msg, btnText, action, ms){
-  while (live.length >= C.TOAST_MAX) dismiss(live[0]);
-  const t = {el:null, timer:null};
-  const btn = btnText ? h("button",{type:"button",onclick:() => { dismiss(t); if (action) action(); }}, btnText) : null;
-  t.el = h("div",{class:"toast"}, h("span",null,msg), btn);
-  $("toasts").append(t.el);
+// opts：{kind:"delete"} 标明是删除提示
+function show(msg, btnText, action, ms, opts){
+  const o = opts || {};
+  const t = {el:null, timer:null, kind: o.kind || (/^已删除/.test(msg) ? "delete" : "")};
+  let pushedOutDelete = false;
+  while (live.length >= C.TOAST_MAX){ if (live[0].kind === "delete") pushedOutDelete = true; dismiss(live[0]); }
+  const sticky = ms === 0;
+  const btn = btnText ? h("button",{type:"button",class:"tb-act",onclick:() => { dismiss(t); if (action) action(); }}, btnText) : null;
+  const close = sticky ? h("button",{type:"button",class:"tb-x","aria-label":"关闭提示",onclick:() => dismiss(t)}, "×") : null;
+  t.el = h("div",{class:"toast" + (sticky ? " sticky" : "")},
+    h("span",{class:"tm"}, msg, pushedOutDelete ? h("small",null,"更早删除的在“最近删除”里") : null),
+    h("span",{class:"tbs"}, btn, close));
+  flip(() => $("toasts").append(t.el));
   live.push(t);
   requestAnimationFrame(() => t.el.classList.add("on"));
-  t.timer = setTimeout(() => dismiss(t), ms || C.TOAST_MS);
+  if (!sticky) t.timer = setTimeout(() => dismiss(t), ms || C.TOAST_MS);
   return t;
 }
 
@@ -2179,7 +2254,8 @@ const {isDoneOn, isLate} = App.logic.items;
 const {$, h} = App.ui.dom;
 const V = App.ui.view, toast = App.ui.toast, visTd = App.data.visTd;
 
-const ERR_TEXT = {forbidden:"你没有修改权限，只能查看。", quota:"存储已满，删掉一些旧条目再试。"};
+const ERR_TEXT = {forbidden:"你没有修改权限，只能查看。", quota:"存储已满，删掉一些旧条目再试。",
+  not_found:"没保存上：这条可能已经在别的设备上删除了。", timeout:"没保存上：网络太慢，检查网络后再试。"};
 const errText = code => ERR_TEXT[code] || "没保存上，检查网络后再试。";
 
 // 重绘会重建列表，焦点会丢到 body；重绘前记下焦点在哪个元素上，重绘后找回同一个位置（PM-C⑦、TC-A11Y）
@@ -2224,7 +2300,12 @@ function showNoData(hint){
 
 function init(){
   App.data.on("change", render);
-  App.data.on("error", e => { V.holdUntil = 0; toast.show(errText(e.code), "重试", e.retry, C.TOAST_RETRY_MS); });
+  // D10：带“重试”的失败提示不自动消失（时长传 0）；条目已在别处删除时没有可重试的，普通提示即可
+  App.data.on("error", e => {
+    V.holdUntil = 0;
+    const gone = e.code === "not_found";
+    toast.show(errText(e.code), gone ? null : "重试", gone ? null : e.retry, gone ? C.TOAST_MS : 0);
+  });
   let lostToast = null;   // 断线提示：重新连上时收起
   App.data.on("notice", n => {
     if (n.type === "unavailable") showNoData(n.hint);
@@ -2256,13 +2337,14 @@ const visTd = App.data.visTd, write = App.data.write;
 const {$, h} = App.ui.dom;
 const toast = App.ui.toast;
 
+// 写入失败时收起成功提示，只留失败提示（测试报告 2.1）
 function reschedule(x, d, t){
-  write.reschedule(x, d);
-  toast.show("已改到"+(d === t ? "今天" : "明天"));
+  const tt = toast.show("已改到"+(d === t ? "今天" : "明天"));
+  Promise.resolve(write.reschedule(x, d)).then(ok => { if (ok === false) toast.dismiss(tt); });
 }
 async function moveAll(list){
-  await write.moveAll(list);
-  toast.show(list.length+" 件已改到今天");
+  const ok = await write.moveAll(list);
+  if (ok !== false) toast.show(list.length+" 件已改到今天");
 }
 function renderLate(t){
   const lb = $("late"); lb.textContent = "";
@@ -2286,27 +2368,31 @@ App.ui.todayLate = {render: renderLate};
 // ==== src/scripts/ui/today-timeline.js ====
 (function(){
 // 职责：今天视图里的时间轴：只显示“现在前后 + 有安排的时段”，重叠的日程分列并排，全天日程放上方胶囊，红线标出现在。
-// 依赖：core/const.js、core/date.js、logic/items.js、logic/projects.js、logic/sort.js、data/state.js、ui/dom.js
-// 运行时调用：ui/sheet.js
+//       跨夜的日程裁到 24:00，标“到次日”，时间写成“23:00–次日 01:00”（D07）；同一时段最多并排 3 列，
+//       其余折叠成一个“+N”块，点了打开日程页的这一天（D08）。
+// 依赖：core/const.js、core/date.js、logic/items.js、logic/projects.js、logic/sort.js、data/state.js、ui/dom.js、ui/view-state.js
+// 运行时调用：ui/sheet.js、ui/nav.js、ui/render.js
 App.ui = App.ui || {};
 
 const C = App.core.C;
-const {pad, m2hm} = App.core.date;
+const {pad, m2hm, mondayOf} = App.core.date;
 const {startMin, endMin} = App.logic.items;
 const {projColor} = App.logic.projects;
 const {byTime} = App.logic.sort;
 const S = App.data.state, visEv = App.data.visEv, ready = App.data.ready;
 const {$, h} = App.ui.dom;
+const V = App.ui.view;
+const DAY_END = 24 * 60;
 const openSheet = (...a) => App.ui.sheet.open(...a);
 
-// 把同时段重叠的日程分到并排的几列：给每项写上 k（第几列）和 n（这一簇共几列）
+// 把同时段重叠的日程分到并排的几列：给每项写上 k（第几列）、n（这一簇共几列）、c（第几簇）
 function layoutLanes(items){
-  let cluster = [], cEnd = -1;
+  let cluster = [], cEnd = -1, ci = 0;
   const flush = () => {
     const lanes = [];
     for (const it of cluster){ let k = lanes.findIndex(end => end <= it.s); if (k < 0){ k = lanes.length; lanes.push(0); } lanes[k] = it.en; it.k = k; }
-    for (const it of cluster) it.n = lanes.length;
-    cluster = []; cEnd = -1;
+    for (const it of cluster){ it.n = lanes.length; it.c = ci; }
+    cluster = []; cEnd = -1; ci++;
   };
   for (const it of items){ if (it.s >= cEnd && cluster.length) flush(); cluster.push(it); cEnd = Math.max(cEnd, it.en); }
   if (cluster.length) flush();
@@ -2330,16 +2416,33 @@ function renderTimeline(t, nm){
     hours.append(h("span",{style:"top:"+Math.min(H-6,Math.max(6,y))+"px"},pad(i)+":00"));
     lane.append(h("i",{style:"top:"+y+"px"}));
   }
-  const items = layoutLanes(timed.map(e => ({e, s:startMin(e), en:endMin(e)})));
+  // ce：裁到 24:00 的结束时刻，用来排版和定高度；en 保留真实结束时刻，用来写文字
+  const items = layoutLanes(timed.map(e => ({e, s:startMin(e), en:endMin(e), ce:Math.min(endMin(e), DAY_END)})).map(it => Object.assign(it, {en0:it.en, en:it.ce})));
+  const place = (s, ce, k, n) => {
+    const top = (s - sH*60)/60*PX, ht = Math.min(Math.max(C.TL_BLOCK_MIN_PX, (ce-s)/60*PX - 4), H - top - 2), w = 100/n;
+    return {ht, style:"top:"+(top+2)+"px;height:"+ht+"px;left:calc("+(w*k)+"% + 6px);width:calc("+w+"% - 8px);"};
+  };
+  const MAX = C.TL_MAX_LANES, more = {};
   for (const it of items){
-    const top = (it.s - sH*60)/60*PX, ht = Math.max(C.TL_BLOCK_MIN_PX, (it.en-it.s)/60*PX - 4);
-    const w = 100/it.n;
-    const b = h("button",{class:"blk"+(it.en <= nm ? " past":""),type:"button",
-      style:"top:"+(top+2)+"px;height:"+ht+"px;left:calc("+(w*it.k)+"% + 6px);width:calc("+w+"% - 8px);background:"+projColor(it.e.project),
+    if (it.n > MAX && it.k >= MAX - 1){ (more[it.c] = more[it.c] || []).push(it); continue; }
+    const n = Math.min(it.n, MAX), {ht, style} = place(it.s, it.ce, it.k, n);
+    const overnight = it.en0 > DAY_END;
+    const when = it.e.time + "–" + (overnight ? "次日 " : "") + m2hm(it.en0);
+    const b = h("button",{class:"blk"+(it.ce <= nm ? " past":"")+(overnight ? " overnight" : ""),type:"button",
+      style:style+"background:"+projColor(it.e.project),"aria-label":it.e.title+"，"+when+(overnight?"，到次日":""),
       onclick:()=>openSheet("event",it.e)},
-      h("span",{class:"bt"},it.e.title), ht > C.TL_META_MIN_PX ? h("span",{class:"bm"},it.e.time+"–"+m2hm(it.en)+(it.e.project?"  "+it.e.project:"")) : null);
+      h("span",{class:"bt"},it.e.title), ht > C.TL_META_MIN_PX ? h("span",{class:"bm"},when+(it.e.project?"  "+it.e.project:"")) : null,
+      overnight ? h("span",{class:"nd","aria-hidden":"true"},"到次日") : null);
     if (S.fresh.has(it.e.id)) b.classList.add("fresh");
     lane.append(b);
+  }
+  // 折叠的“+N”：占第 3 列，从这些日程最早的开始画到最晚的结束；点了打开日程页的今天
+  for (const list of Object.values(more)){
+    const s0 = Math.min(...list.map(x => x.s)), e0 = Math.max(...list.map(x => x.ce));
+    const {style} = place(s0, e0, MAX - 1, MAX);
+    lane.append(h("button",{class:"blk more",type:"button",style,"aria-label":"同一时段还有 "+list.length+" 项，打开日程页查看",
+      onclick:()=>{ V.selDay = t; V.weekStart = mondayOf(t); App.ui.nav.go("sched"); App.ui.render(); }},
+      h("span",{class:"bt"},"+"+list.length), h("span",{class:"bm"},"查看全部")));
   }
   if (nm >= sH*60 && nm <= eH*60){
     lane.append(h("div",{class:"now",style:"top:"+((nm - sH*60)/60*PX)+"px"}, h("span",null,m2hm(nm))));
@@ -2400,19 +2503,26 @@ function renderNext(t, nm){
   let card;
   if (kind === "event"){
     card = h("div",{class:"next",style:"background:"+projColor(x.project)},
-      rem ? rem.bell : h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},x.time),
+      rem ? h("div",{class:"rem-extra"}, h("div",null, rem.bell)) : h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},x.time),
       rem ? null : h("span",{class:"cd"},startsText(n.start - nm, n.end)),
       h("span",{class:"tt"},x.title), x.project || x.note ? h("span",{class:"proj"},[x.project,x.note].filter(Boolean).join("  ")) : null,
-      rem ? rem.acts : null);
+      rem ? h("div",{class:"rem-extra"}, h("div",null, rem.acts)) : null);
   } else {
     card = h("div",{class:"next",style:"background:"+projColor(x.project)},
-      rem ? rem.bell : h("span",{class:"lbl"},"下一件事"),
+      rem ? h("div",{class:"rem-extra"}, h("div",null, rem.bell)) : h("span",{class:"lbl"},"下一件事"),
       h("span",{class:"big",style:"font-size:40px"}, x.due ? dueText(x.due, t).replace("截止","") : (x.important ? "重要" : "待办")),
       h("span",{class:"tt"},x.title), x.project ? h("span",{class:"proj"},x.project) : null,
-      rem ? rem.acts : h("button",{class:"act",type:"button","aria-label":"完成："+x.title,html:ICON_CHECK,onclick:ev=>{ ev.stopPropagation(); App.ui.todos.toggle(x,true); }}));
+      rem ? h("div",{class:"rem-extra"}, h("div",null, rem.acts)) : h("button",{class:"act",type:"button","aria-label":"完成："+x.title,html:ICON_CHECK,onclick:ev=>{ ev.stopPropagation(); App.ui.todos.toggle(x,true); }}));
   }
-  if (rem){ card.classList.add("reminding"); card.setAttribute("role", "alert"); if (rem.isNew) card.classList.add("enter"); }
-  box.append(cardOpen(card, kind, x));
+  if (rem){
+    // 提醒状态：卡片本身不当按钮用（按钮不能嵌在按钮里，D18），改成标题可点；新出现时用隐藏文字播报一次
+    card.classList.add("reminding"); if (rem.isNew) card.classList.add("enter");
+    const tt = card.querySelector(".tt");
+    const open = h("button",{type:"button",class:"tt tt-btn","aria-label":(kind === "event" ? "编辑日程：" : "编辑待办：") + x.title,onclick:()=>openSheet(kind, x)}, x.title);
+    tt.replaceWith(open);
+    if (rem.announce) card.append(h("span",{class:"sr-only",role:"alert"}, rem.announce));
+    box.append(card);
+  } else box.append(cardOpen(card, kind, x));
   return rem ? {kind, id:x.id} : null;
 }
 
@@ -2588,13 +2698,16 @@ const V = App.ui.view, toast = App.ui.toast, filter = App.ui.filter;
 const {dayDiff} = App.core.date;
 const openSheet = (...a) => App.ui.sheet.open(...a);
 
+// 写入失败（断网、超时）时把刚弹出的成功提示收起，只留失败提示（测试报告 2.1）
 function toggle(x, done){
-  write.toggleDone(x, done);
+  const p = write.toggleDone(x, done);
   if (done){
     const t = App.clock.today();
     const n = visTd().filter(y => isDoneOn(y, t)).length;
-    toast.show("完成了，今天第 "+n+" 件", "撤销", () => toggle(x, false), C.TOAST_UNDO_MS);
+    const tt = toast.show("完成了，今天第 "+n+" 件", "撤销", () => toggle(x, false), C.TOAST_UNDO_MS);
+    Promise.resolve(p).then(ok => { if (ok === false) toast.dismiss(tt); });
   }
+  return p;
 }
 // 列表里勾选：先让这一行（待办行或日程页截止行）播完划线动画（holdUntil 期间暂缓重绘），再重排
 function toggleInList(x, li){
@@ -2642,6 +2755,8 @@ function renderTodos(){
   const tg = $("done-toggle"), dlist = $("done-list");
   tg.hidden = !old.length;
   tg.textContent = V.showDone ? "收起已完成" : "已完成 "+old.length+" 件";
+  tg.setAttribute("aria-expanded", V.showDone && old.length ? "true" : "false");
+  tg.setAttribute("aria-controls", "done-list");
   dlist.hidden = !V.showDone || !old.length; dlist.textContent = "";
   if (V.showDone) old.slice(0, C.OLD_DONE_MAX).forEach(x => dlist.append(todoRow(x)));
   App.ui.search.render();
@@ -2658,14 +2773,15 @@ App.ui.todos = {render: renderTodos, row: todoRow, toggle, toggleInList, init};
 // 职责：弹出层的表单状态（v3 T8，界面依据草图第 3 版 ②③、采纳结论 #3–#6 #16 #17、需求澄清 #22 #33 #37）：
 //       类型切换、快捷日期胶囊、提醒选项胶囊、识别结果胶囊（每项是按钮，点了展开对应字段；手动改过的加锁、不再被覆盖）、
 //       一句话识别停顿 250ms 后才填表。读表单交给 ui/sheet.js 保存。
-// 依赖：core/date.js、logic/remind.js、logic/format.js、logic/projects.js、logic/parse-quick.js、data/state.js、ui/dom.js、ui/view-state.js
+// 依赖：core/const.js、core/date.js、logic/remind.js、logic/format.js、logic/projects.js、logic/parse-quick.js、data/state.js、ui/dom.js、ui/view-state.js
 // 运行时调用：ui/sheet.js、App.clock
 App.ui = App.ui || {};
 
 const R = App.logic.remind;
 const {relDay} = App.logic.format;
 const {projColor} = App.logic.projects;
-const {addDays, mondayOf, parse} = App.core.date;
+const {addDays, mondayOf, parse, m2hm} = App.core.date;
+const C = App.core.C;
 const {$, h} = App.ui.dom;
 const V = App.ui.view;
 const RECOG_DEBOUNCE_MS = 250;
@@ -2693,7 +2809,7 @@ function setKind(k){
 // 表单当前内容，按条目的样子组装（给提醒规则算默认值、标签用）
 function draft(){
   const d = {date:$("f-date").value, time: F.kind === "event" ? $("f-time").value : "", due:$("f-date").value,
-    important:$("f-imp").checked, done:false, deletedAt:null, durationMin:Number($("f-dur").value) || 60};
+    important:$("f-imp").checked, done:false, deletedAt:null, durationMin:Number($("f-dur").value) || C.DEFAULT_DURATION_MIN};
   if (F.remind !== undefined){ if (hasTime()) d.remindMin = F.remind; else d.remindDays = F.remind; }
   else if (F.editing){ d.remindMin = F.editing.remindMin; d.remindDays = F.editing.remindDays; }
   return d;
@@ -2722,6 +2838,8 @@ function renderRemind(){
   const opts = R.options(F.kind, hasTime());
   if (F.remind !== undefined && !opts.some(o => o.value === F.remind)) F.remind = undefined;   // 换了类型，原选项不适用
   const noDate = !$("f-date").value;
+  const hideRow = noDate && F.kind === "todo";
+  box.hidden = hideRow; $("remind-lab").hidden = hideRow;
   const cur = noDate && F.kind === "todo" ? null : (F.remind !== undefined ? F.remind : R.currentValue(draft(), F.kind));
   for (const o of opts){
     box.append(h("button",{type:"button",class:"opt",role:"radio","aria-checked": o.value === cur ? "true" : "false", disabled: noDate && F.kind === "todo" ? true : null,
@@ -2789,7 +2907,7 @@ function reset(kind, item, presetDate){
   $("f-title").value = item ? item.title : "";
   $("f-date").value = item ? (kind === "event" ? item.date : (item.due || "")) : (presetDate || "");
   $("f-time").value = item && item.time || "";
-  const dur = String(item && item.durationMin || 60), sel = $("f-dur");
+  const dur = String(item && item.durationMin || C.DEFAULT_DURATION_MIN), sel = $("f-dur");
   if (![...sel.options].some(o => o.value === dur)) sel.append(h("option",{value:dur}, dur + " 分钟"));   // 不在选项里的时长也保留（PM-C②）
   sel.value = dur;
   $("f-note").value = item && item.note || "";
@@ -2811,8 +2929,8 @@ function readForm(){
 function pushHour(){
   const t = $("f-time").value; if (!t) return;
   const [hh, mm] = t.split(":").map(Number); let m = hh * 60 + mm + 60, d = $("f-date").value;
-  if (m >= 1440){ m -= 1440; d = addDays(d, 1); }
-  $("f-time").value = String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+  if (m >= 24 * 60){ m -= 24 * 60; d = addDays(d, 1); }
+  $("f-time").value = m2hm(m);
   $("f-date").value = d; refresh();
 }
 function init(){
@@ -2833,7 +2951,7 @@ App.ui.sheetForm = {state: F, init, reset, readForm, refresh, setKind};
 //       保存、类型互转、删除都交给 data/write.js；删除后提示“已删除 1 项”加“撤销”（不显示标题，#17）。
 //       弹出层打开时焦点困在里面（Tab 循环），Esc 或点遮罩关闭，焦点回到打开它的按钮。表单状态在 ui/sheet-form.js。
 // 依赖：core/const.js、core/date.js、logic/format.js、data/state.js、data/write.js、ui/dom.js、ui/view-state.js、ui/toast.js、ui/sheet-form.js
-// 运行时调用：ui/nav.js、App.clock
+// 运行时调用：ui/nav.js、ui/render.js、App.clock
 App.ui = App.ui || {};
 
 const C = App.core.C;
@@ -2881,7 +2999,12 @@ function setBusy(busy){
 async function onSubmit(ev){
   ev.preventDefault();
   const v = SF.readForm();
-  if (!v.title){ openDetails(); $("f-title").focus(); return; }
+  if (!v.title){
+    // D12：新建时标题藏在折叠的细节里，浏览器的必填提示看不到，所以自己提示
+    if (!F.editing){ toast.show("先写一句话再加入"); $("q").focus(); }
+    else $("f-title").focus();
+    return;
+  }
   if (F.kind === "event" && !v.date){ openDetails(); $("f-date").focus(); return; }
   setBusy(true);
   const editing = F.editing, converting = editing && F.kind !== F.origKind;
@@ -2893,15 +3016,18 @@ async function onSubmit(ev){
   if (converting) toast.show(r.coll === "events" ? "已改成日程" : "已改成待办");
   else if (editing) toast.show("已保存");
   else if (r.coll === "events") toast.show("已记下日程，" + relDay(r.data.date, App.clock.today()));
-  else if (!v.date && V.view === "today" && !isDesktop()) toast.show("已加入待办", "查看", () => App.ui.nav.go("todo"));   // PM-A⑥
+  else if (V.projFilter && v.project !== V.projFilter)   // D16：当前筛选下看不到新条目，说明并给出清除筛选
+    toast.show("已加入待办（当前只显示“" + V.projFilter + "”）", "显示全部", () => { V.projFilter = null; App.ui.render(); });
+  else if (!v.date && V.view === "today" && !isDesktop())   // PM-A⑥；D14：跳过去后新条目短暂高亮
+    toast.show("已加入待办", "查看", () => { V.flash.add(r.id); setTimeout(() => { V.flash.delete(r.id); App.ui.render(); }, C.FRESH_MS); App.ui.nav.go("todo"); App.ui.render(); });
   else toast.show("已加入待办");
 }
 function onDelete(){
   const it = F.editing, coll = write.collOf(F.origKind || F.kind);
   closeSheet();
   if (!it) return;
-  write.softDelete(coll, it);
-  toast.show("已删除 1 项", "撤销", () => write.restore(coll, it), C.TOAST_UNDO_MS);
+  const t = toast.show("已删除 1 项", "撤销", () => write.restore(coll, it), C.TOAST_UNDO_MS);
+  write.softDelete(coll, it).then(ok => { if (!ok) toast.dismiss(t); });   // 删除没写进去时，收起“已删除”，只留失败提示
 }
 // 焦点困在弹出层里：Tab / Shift+Tab 循环
 function trapFocus(e){
@@ -2973,7 +3099,7 @@ App.ui.nav = {go, applyView, placeInd, init, initNet};
 //       情况 B：其余的在抬头下方显示一张反色提醒卡片，只显示最早的一条，右上角标“+N”。
 //       “知道了”写 notifiedFor，“10 分钟后”写 snoozeAt（data/write.js）；别的设备确认后这里自动收起，并提示“已在别处确认”。
 // 依赖：core/date.js、logic/remind.js、logic/format.js、data/state.js、ui/dom.js、ui/view-state.js、ui/toast.js
-// 运行时调用：data/write.js、platform/notify.js、data/log.js、ui/render.js、App.clock
+// 运行时调用：data/write.js、platform/notify.js、data/log.js、ui/render.js、ui/sheet.js、App.clock
 App.ui = App.ui || {};
 
 const R = App.logic.remind;
@@ -2989,7 +3115,9 @@ const keyOf = d => d.kind + ":" + d.item.id + ":" + d.at;
 let current = [];              // 现在该提醒的：[{kind, item, at}]
 let shown = new Set();         // 本次打开页面后已经出过的（响过铃、做过入场动画）
 const handledHere = new Set(); // 在本机点过“知道了 / 10 分钟后”的
-let entering = new Set();      // 这一轮新出现的（做入场动画）
+let entering = new Set();      // 这一轮新出现的（做入场动画、读屏播报一次）
+let elsewhere = null;          // 刚被别的设备确认的那一条：{key, until}，在卡片里停 0.8 秒（UI-4）
+const LEAVE_MS = 200, ELSEWHERE_MS = 800;
 
 // 每次重绘前调用：重新计算，处理新出现的和被别处确认的
 function update(){
@@ -3003,11 +3131,15 @@ function update(){
     App.platform.notify.chime();
     fresh.forEach(d => App.data.log.run("remind_shown", null, {coll: d.kind === "event" ? "events" : "todos", id: d.item.id}));
   }
+  // 别的设备点了“知道了”：notifiedFor 正好等于这条提醒的时刻才算（代码复审应修 1；本机勾完成、改期不算）
   for (const k of shown){
-    if (!keys.has(k) && !handledHere.has(k)){
-      const [kind, id] = k.split(":");
-      const item = (kind === "event" ? visEv() : visTd()).find(x => x.id === id);
-      if (item && item.notifiedFor) toast.show("已在别处确认");
+    if (keys.has(k) || handledHere.has(k)) continue;
+    const [kind, id, at] = k.split(":");
+    const item = (kind === "event" ? visEv() : visTd()).find(x => x.id === id);
+    if (item && String(item.notifiedFor) === at){
+      const slot = $("remind");
+      if (slot && slot.dataset.key === k) elsewhere = {key:k, until: now + ELSEWHERE_MS};
+      else toast.show("已在别处确认");
     }
   }
   current = next;
@@ -3030,44 +3162,65 @@ function headline(d){
   }
   return dueText(x.due, t);
 }
-function actions(d, cls){
-  return h("div",{class:"r-acts " + (cls || "")},
-    h("button",{type:"button",class:"ok",onclick: ev => { ev.stopPropagation(); ack(d); }},"知道了"),
-    h("button",{type:"button",class:"later",onclick: ev => { ev.stopPropagation(); snooze(d); }},"10 分钟后"));
+function actions(d){
+  return h("div",{class:"r-acts"},
+    h("button",{type:"button",class:"ok",onclick: ev => { ev.stopPropagation(); leave(ev.target, () => ack(d)); }},"知道了"),
+    h("button",{type:"button",class:"later",onclick: ev => { ev.stopPropagation(); leave(ev.target, () => snooze(d)); }},"10 分钟后"));
+}
+// 点按钮后先收起 200ms 再写入（写入会触发重绘，卡片就没了）；减少动效时直接写
+function leave(btn, then){
+  const card = btn.closest(".remind-inv, .next.reminding");
+  const reduce = globalThis.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!card || reduce){ then(); return; }
+  card.classList.add("leaving");
+  setTimeout(then, LEAVE_MS);
 }
 function ack(d){ handledHere.add(keyOf(d)); App.data.write.ackReminder(d.kind, d.item, d.at); }
 function snooze(d){ handledHere.add(keyOf(d)); App.data.write.snoozeReminder(d.kind, d.item, d.at); toast.show("10 分钟后再提醒"); }
 const offline = () => globalThis.navigator && navigator.onLine === false;
+const bellRow = (text, extra) => h("span",{class:"bell-row"}, h("span",{class:"bell-ico", html:ICON_BELL}), text,
+  offline() ? h("span",{class:"offline-tag"},"离线，提醒可能延迟") : null, extra || null);
 
-// 下一件事卡片进入提醒状态时要插的两部分（由 ui/today.js 调用）
+// 下一件事卡片进入提醒状态时要插的部分（由 ui/today.js 调用）。
+// 铃铛行和按钮包在 .rem-extra 里，新出现时高度从 0 展开 240ms（UI-4）；只有新出现时才设 role=alert，避免每分钟重绘时读屏反复朗读
 function decorateNext(kind, item){
   const r = forItem(kind, item);
   if (!r) return null;
   const d = {kind, item, at: r.at};
+  const isNew = entering.has(keyOf(d));
   return {
-    bell: h("span",{class:"bell-row"}, h("span",{class:"bell-ico", html:ICON_BELL}), "提醒：" + headline(d), offline() ? h("span",{class:"offline-tag"},"离线，提醒可能延迟") : null),
+    bell: bellRow("提醒：" + headline(d)),
     acts: actions(d),
-    isNew: entering.has(keyOf(d)),
+    isNew,
+    announce: isNew ? "提醒：" + item.title + "，" + headline(d) : "",
   };
 }
 
 // 情况 B：反色卡片。exclude：已经由下一件事卡片显示的那一条（{kind, id}）
 function renderCard(exclude){
   const slot = $("remind"); if (!slot) return;
+  const now = App.clock.now();
+  if (elsewhere && now < elsewhere.until){
+    slot.textContent = "";
+    slot.append(h("div",{class:"remind-inv confirmed"}, bellRow("已在别处确认")));
+    setTimeout(() => App.ui.render(), elsewhere.until - now + 20);
+    return;
+  }
+  elsewhere = null;
   const list = current.filter(d => !(exclude && d.kind === exclude.kind && d.item.id === exclude.id));
-  slot.textContent = "";
-  if (!list.length) return;
-  const d = list[0], x = d.item;
+  const prevKey = slot.dataset.key || "";
+  if (!list.length){ slot.textContent = ""; slot.dataset.key = ""; return; }
+  const d = list[0], x = d.item, key = keyOf(d);
   const meta = [x.project, d.kind === "event" ? "日程" : "待办"].filter(Boolean).join("  ");
-  const card = h("div",{class:"remind-inv", role:"alert"},
-    h("span",{class:"bell-row"}, h("span",{class:"bell-ico", html:ICON_BELL}), headline(d),
-      offline() ? h("span",{class:"offline-tag"},"离线，提醒可能延迟") : null,
-      list.length > 1 ? h("span",{class:"more-n", "aria-label":"还有 " + (list.length - 1) + " 条提醒"},"+" + (list.length - 1)) : null),
-    h("span",{class:"rt"}, x.title),
-    meta ? h("span",{class:"rm"}, meta) : null,
-    actions(d));
-  if (entering.has(keyOf(d)) || slot.dataset.key !== keyOf(d)) card.classList.add("enter");
-  slot.dataset.key = keyOf(d);
+  const more = list.length > 1 ? h("span",{class:"more-n", "aria-label":"还有 " + (list.length - 1) + " 条提醒"},"+" + (list.length - 1)) : null;
+  const isNew = entering.has(key);
+  const card = h("div",{class:"remind-inv", role: isNew ? "alert" : null},
+    bellRow(headline(d), more), h("span",{class:"rt"}, x.title), meta ? h("span",{class:"rm"}, meta) : null, actions(d));
+  // 同一条：不播动画、不重新播报；换成下一条（+N 切换）：原位淡入 160ms；全新出现：下移淡入 240ms
+  if (prevKey && prevKey !== key) card.classList.add("swap");
+  else if (isNew) card.classList.add("enter");
+  slot.textContent = "";
+  slot.dataset.key = key;
   slot.append(card);
 }
 
@@ -3076,6 +3229,8 @@ const todayVisible = () => V.view === "today" || (globalThis.matchMedia && match
 
 function init(){
   App.clock.on("wake", () => App.ui.render());
+  // 弹出层开着时 app.js 不重绘，提醒照样要检查（代码复审应修 2）：这时只更新抬头下方的提醒卡片
+  App.clock.on("tick", () => { if (!App.ui.sheet.isClosed()){ update(); renderCard(null); } });
 }
 
 App.ui.remind = {init, update, forItem, decorateNext, renderCard, todayVisible, ICON_BELL};

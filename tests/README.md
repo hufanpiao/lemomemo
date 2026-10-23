@@ -35,6 +35,14 @@ python build/check_arch.py --self-test
 
 `arch-fixtures/` 里每个文件都是一段**故意违规**的示例。文件头的 `@fixture 路径=… 期望=…` 说明它冒充哪个源码文件、应该被哪条规则拦住。自检时把它逐个加进检查，期望的规则必须报出来；W1（超过 250 行）由自检临时生成。规则说明见 `docs/10-架构/架构约定.md`。
 
+## 2b. JS 语法检查自检
+
+```
+python build/check_js.py --self-test
+```
+
+`syntax-fixtures/` 里是故意写错语法的示例（文件头写着“期望行=N”），检查必须在第 N 行拦住。`python build/build.py` 构建前会对全部源码跑 `node --check`，每个页面写出前再对页面里的每段脚本跑一遍，不过就构建失败。
+
 ## 3. 浏览器测试页
 
 先构建：`python build/build.py`。构建会先跑架构检查，然后生成：

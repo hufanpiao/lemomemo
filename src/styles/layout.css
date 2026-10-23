@@ -24,3 +24,5 @@
 .plus{width:56px;height:56px;border-radius:50%;border:0;background:var(--yellow);color:var(--on-yellow);display:grid;place-items:center;box-shadow:var(--shadow);flex:none}
 .plus svg{width:26px;height:26px}
 @media (min-width:960px){.dock{justify-content:flex-end}}
+/* 电脑宽度三栏同时显示，“全部待办”这类切页链接没有用（D15、PM-A⑩） */
+@media (min-width:960px){.nav-only{display:none!important}}

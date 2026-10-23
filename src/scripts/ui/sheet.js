@@ -3,7 +3,7 @@
 //       保存、类型互转、删除都交给 data/write.js；删除后提示“已删除 1 项”加“撤销”（不显示标题，#17）。
 //       弹出层打开时焦点困在里面（Tab 循环），Esc 或点遮罩关闭，焦点回到打开它的按钮。表单状态在 ui/sheet-form.js。
 // 依赖：core/const.js、core/date.js、logic/format.js、data/state.js、data/write.js、ui/dom.js、ui/view-state.js、ui/toast.js、ui/sheet-form.js
-// 运行时调用：ui/nav.js、App.clock
+// 运行时调用：ui/nav.js、ui/render.js、App.clock
 App.ui = App.ui || {};
 
 const C = App.core.C;
@@ -51,7 +51,12 @@ function setBusy(busy){
 async function onSubmit(ev){
   ev.preventDefault();
   const v = SF.readForm();
-  if (!v.title){ openDetails(); $("f-title").focus(); return; }
+  if (!v.title){
+    // D12：新建时标题藏在折叠的细节里，浏览器的必填提示看不到，所以自己提示
+    if (!F.editing){ toast.show("先写一句话再加入"); $("q").focus(); }
+    else $("f-title").focus();
+    return;
+  }
   if (F.kind === "event" && !v.date){ openDetails(); $("f-date").focus(); return; }
   setBusy(true);
   const editing = F.editing, converting = editing && F.kind !== F.origKind;
@@ -63,15 +68,18 @@ async function onSubmit(ev){
   if (converting) toast.show(r.coll === "events" ? "已改成日程" : "已改成待办");
   else if (editing) toast.show("已保存");
   else if (r.coll === "events") toast.show("已记下日程，" + relDay(r.data.date, App.clock.today()));
-  else if (!v.date && V.view === "today" && !isDesktop()) toast.show("已加入待办", "查看", () => App.ui.nav.go("todo"));   // PM-A⑥
+  else if (V.projFilter && v.project !== V.projFilter)   // D16：当前筛选下看不到新条目，说明并给出清除筛选
+    toast.show("已加入待办（当前只显示“" + V.projFilter + "”）", "显示全部", () => { V.projFilter = null; App.ui.render(); });
+  else if (!v.date && V.view === "today" && !isDesktop())   // PM-A⑥；D14：跳过去后新条目短暂高亮
+    toast.show("已加入待办", "查看", () => { V.flash.add(r.id); setTimeout(() => { V.flash.delete(r.id); App.ui.render(); }, C.FRESH_MS); App.ui.nav.go("todo"); App.ui.render(); });
   else toast.show("已加入待办");
 }
 function onDelete(){
   const it = F.editing, coll = write.collOf(F.origKind || F.kind);
   closeSheet();
   if (!it) return;
-  write.softDelete(coll, it);
-  toast.show("已删除 1 项", "撤销", () => write.restore(coll, it), C.TOAST_UNDO_MS);
+  const t = toast.show("已删除 1 项", "撤销", () => write.restore(coll, it), C.TOAST_UNDO_MS);
+  write.softDelete(coll, it).then(ok => { if (!ok) toast.dismiss(t); });   // 删除没写进去时，收起“已删除”，只留失败提示
 }
 // 焦点困在弹出层里：Tab / Shift+Tab 循环
 function trapFocus(e){

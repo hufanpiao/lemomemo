@@ -22,7 +22,9 @@ if (typeof addEventListener === "function"){
 // 两声短音：880Hz 再 660Hz，各 120 毫秒，柔和起落，避免爆音
 function chime(){
   // 用户还没点过页面时浏览器会拦截震动，所以只在解锁之后震
-  try { if (audio && globalThis.navigator && navigator.vibrate) navigator.vibrate([60, 40, 60]); } catch(e){}
+  const ua = globalThis.navigator && navigator.userActivation;
+  const active = ua ? ua.hasBeenActive : !!audio;
+  try { if (active && navigator.vibrate) navigator.vibrate([60, 40, 60]); } catch(e){}   // D17：没点过页面时不调用
   if (!audio || audio.state !== "running") return false;
   const t0 = audio.currentTime;
   [[880, 0], [660, 0.16]].forEach(([f, at]) => {

@@ -10,7 +10,8 @@ const {isDoneOn, isLate} = App.logic.items;
 const {$, h} = App.ui.dom;
 const V = App.ui.view, toast = App.ui.toast, visTd = App.data.visTd;
 
-const ERR_TEXT = {forbidden:"你没有修改权限，只能查看。", quota:"存储已满，删掉一些旧条目再试。"};
+const ERR_TEXT = {forbidden:"你没有修改权限，只能查看。", quota:"存储已满，删掉一些旧条目再试。",
+  not_found:"没保存上：这条可能已经在别的设备上删除了。", timeout:"没保存上：网络太慢，检查网络后再试。"};
 const errText = code => ERR_TEXT[code] || "没保存上，检查网络后再试。";
 
 // 重绘会重建列表，焦点会丢到 body；重绘前记下焦点在哪个元素上，重绘后找回同一个位置（PM-C⑦、TC-A11Y）
@@ -55,7 +56,12 @@ function showNoData(hint){
 
 function init(){
   App.data.on("change", render);
-  App.data.on("error", e => { V.holdUntil = 0; toast.show(errText(e.code), "重试", e.retry, C.TOAST_RETRY_MS); });
+  // D10：带“重试”的失败提示不自动消失（时长传 0）；条目已在别处删除时没有可重试的，普通提示即可
+  App.data.on("error", e => {
+    V.holdUntil = 0;
+    const gone = e.code === "not_found";
+    toast.show(errText(e.code), gone ? null : "重试", gone ? null : e.retry, gone ? C.TOAST_MS : 0);
+  });
   let lostToast = null;   // 断线提示：重新连上时收起
   App.data.on("notice", n => {
     if (n.type === "unavailable") showNoData(n.hint);

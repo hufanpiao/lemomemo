@@ -1,4 +1,4 @@
-/* 组件：今天的时间轴（小时刻度、色块、现在红线、全天胶囊）。
+/* 组件：今天的时间轴（小时刻度、色块、现在红线、全天胶囊、跨夜“到次日”、折叠的“+N”）。
    依赖：tokens.css。 */
 /* 时间轴（今天） */
 .tl{position:relative;display:grid;grid-template-columns:44px 1fr;}
@@ -15,3 +15,10 @@
 .now span{position:absolute;right:0;top:-12px;background:var(--late-bg);color:var(--on-red);font-family:var(--f-num);font-weight:700;font-size:12px;padding:1px 8px;border-radius:999px}
 .allday{display:flex;flex-wrap:wrap;gap:6px}
 .allday .ad{border:0;border-radius:999px;padding:4px 12px;font-size:14px;color:var(--on-p);font-weight:500}
+/* 跨夜：裁到 24:00，下边做成直角并标“到次日”（D07） */
+.blk.overnight{border-bottom-left-radius:0;border-bottom-right-radius:0}
+.blk .nd{position:absolute;right:4px;bottom:4px;font-size:12px;font-weight:600;line-height:16px;padding:0 6px;border-radius:999px;background:var(--panel);color:var(--ink)}
+/* 同一时段超过 3 件时折叠成“+N”（D08） */
+.blk.more{background:var(--panel-2);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line);align-items:center;justify-content:center;text-align:center}
+.blk.more .bt{font-family:var(--f-num);font-size:16px}
+.blk.more .bm{color:var(--muted)}

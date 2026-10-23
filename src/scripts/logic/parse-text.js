@@ -33,6 +33,8 @@ function take(st, re){ const m = st.text.match(re); if (m) st.text = st.text.rep
 // 把已经找到的那段文字（字符串）从 st.text 里取走
 function cut(st, str){ st.text = st.text.replace(str, " "); }
 
-function prepare(s){ return koNative(digitize(protectWeekdays(toHalfWidth(s)))); }
+// 一句话最多 300 字（安全复审：超长输入会让几条正则变慢）；连续空白先合并成一个
+const QUICK_MAX = 300;
+function prepare(s){ s = String(s).slice(0, QUICK_MAX).replace(/\s+/g, " "); return koNative(digitize(protectWeekdays(toHalfWidth(s)))); }
 
-App.logic.parseText = {cnNum, toHalfWidth, protectWeekdays, digitize, koNative, take, cut, prepare};
+App.logic.parseText = {cnNum, toHalfWidth, protectWeekdays, digitize, koNative, take, cut, prepare, QUICK_MAX};

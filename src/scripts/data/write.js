@@ -65,10 +65,21 @@ async function saveItem(kind, item, v){
   return {ok, coll, id, data};
 }
 // 编辑时切换类型：新建另一类，旧的软删除（可以在“最近删除”里找回）。返回 {ok, coll, id}
+// 新建和软删除放在同一个 batch 里一次写完，避免中途失败留下两条一样的（代码复审建议）
 async function convert(fromKind, item, v){
-  const res = await saveItem(fromKind === "event" ? "todo" : "event", null, Object.assign({}, v, {raw: item.rawText || ""}));
-  if (res.ok) await softDelete(collOf(fromKind), item);
-  return res;
+  const toKind = fromKind === "event" ? "todo" : "event", coll = collOf(toKind), oldColl = collOf(fromKind), t = now();
+  const data = F.asNew(toKind === "event" ? F.eventFields(v, t) : F.todoFields(v, t), coll, t, item.rawText || "");
+  data.remindAt = remindAtOf(toKind, data);
+  const id = store.newId(coll);
+  S.localIds.add(id);
+  const old = live(oldColl, item), prev = old.deletedAt;
+  old.deletedAt = t;
+  emit("change");
+  const ok = await run(() => store.batch([
+    {op:"add", coll, id, data},
+    {op:"update", coll:oldColl, id:old.id, data:{deletedAt:t, remindAt:null, updatedAt:t}},
+  ]).then(() => { log.op("create", coll, id); log.op("delete", oldColl, old.id); }), () => { old.deletedAt = prev; });
+  return {ok, coll, id, data};
 }
 function toggleDone(x, done){
   x = live("todos", x);

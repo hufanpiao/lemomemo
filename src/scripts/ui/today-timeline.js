@@ -1,25 +1,29 @@
 // 职责：今天视图里的时间轴：只显示“现在前后 + 有安排的时段”，重叠的日程分列并排，全天日程放上方胶囊，红线标出现在。
-// 依赖：core/const.js、core/date.js、logic/items.js、logic/projects.js、logic/sort.js、data/state.js、ui/dom.js
-// 运行时调用：ui/sheet.js
+//       跨夜的日程裁到 24:00，标“到次日”，时间写成“23:00–次日 01:00”（D07）；同一时段最多并排 3 列，
+//       其余折叠成一个“+N”块，点了打开日程页的这一天（D08）。
+// 依赖：core/const.js、core/date.js、logic/items.js、logic/projects.js、logic/sort.js、data/state.js、ui/dom.js、ui/view-state.js
+// 运行时调用：ui/sheet.js、ui/nav.js、ui/render.js
 App.ui = App.ui || {};
 
 const C = App.core.C;
-const {pad, m2hm} = App.core.date;
+const {pad, m2hm, mondayOf} = App.core.date;
 const {startMin, endMin} = App.logic.items;
 const {projColor} = App.logic.projects;
 const {byTime} = App.logic.sort;
 const S = App.data.state, visEv = App.data.visEv, ready = App.data.ready;
 const {$, h} = App.ui.dom;
+const V = App.ui.view;
+const DAY_END = 24 * 60;
 const openSheet = (...a) => App.ui.sheet.open(...a);
 
-// 把同时段重叠的日程分到并排的几列：给每项写上 k（第几列）和 n（这一簇共几列）
+// 把同时段重叠的日程分到并排的几列：给每项写上 k（第几列）、n（这一簇共几列）、c（第几簇）
 function layoutLanes(items){
-  let cluster = [], cEnd = -1;
+  let cluster = [], cEnd = -1, ci = 0;
   const flush = () => {
     const lanes = [];
     for (const it of cluster){ let k = lanes.findIndex(end => end <= it.s); if (k < 0){ k = lanes.length; lanes.push(0); } lanes[k] = it.en; it.k = k; }
-    for (const it of cluster) it.n = lanes.length;
-    cluster = []; cEnd = -1;
+    for (const it of cluster){ it.n = lanes.length; it.c = ci; }
+    cluster = []; cEnd = -1; ci++;
   };
   for (const it of items){ if (it.s >= cEnd && cluster.length) flush(); cluster.push(it); cEnd = Math.max(cEnd, it.en); }
   if (cluster.length) flush();
@@ -43,16 +47,33 @@ function renderTimeline(t, nm){
     hours.append(h("span",{style:"top:"+Math.min(H-6,Math.max(6,y))+"px"},pad(i)+":00"));
     lane.append(h("i",{style:"top:"+y+"px"}));
   }
-  const items = layoutLanes(timed.map(e => ({e, s:startMin(e), en:endMin(e)})));
+  // ce：裁到 24:00 的结束时刻，用来排版和定高度；en 保留真实结束时刻，用来写文字
+  const items = layoutLanes(timed.map(e => ({e, s:startMin(e), en:endMin(e), ce:Math.min(endMin(e), DAY_END)})).map(it => Object.assign(it, {en0:it.en, en:it.ce})));
+  const place = (s, ce, k, n) => {
+    const top = (s - sH*60)/60*PX, ht = Math.min(Math.max(C.TL_BLOCK_MIN_PX, (ce-s)/60*PX - 4), H - top - 2), w = 100/n;
+    return {ht, style:"top:"+(top+2)+"px;height:"+ht+"px;left:calc("+(w*k)+"% + 6px);width:calc("+w+"% - 8px);"};
+  };
+  const MAX = C.TL_MAX_LANES, more = {};
   for (const it of items){
-    const top = (it.s - sH*60)/60*PX, ht = Math.max(C.TL_BLOCK_MIN_PX, (it.en-it.s)/60*PX - 4);
-    const w = 100/it.n;
-    const b = h("button",{class:"blk"+(it.en <= nm ? " past":""),type:"button",
-      style:"top:"+(top+2)+"px;height:"+ht+"px;left:calc("+(w*it.k)+"% + 6px);width:calc("+w+"% - 8px);background:"+projColor(it.e.project),
+    if (it.n > MAX && it.k >= MAX - 1){ (more[it.c] = more[it.c] || []).push(it); continue; }
+    const n = Math.min(it.n, MAX), {ht, style} = place(it.s, it.ce, it.k, n);
+    const overnight = it.en0 > DAY_END;
+    const when = it.e.time + "–" + (overnight ? "次日 " : "") + m2hm(it.en0);
+    const b = h("button",{class:"blk"+(it.ce <= nm ? " past":"")+(overnight ? " overnight" : ""),type:"button",
+      style:style+"background:"+projColor(it.e.project),"aria-label":it.e.title+"，"+when+(overnight?"，到次日":""),
       onclick:()=>openSheet("event",it.e)},
-      h("span",{class:"bt"},it.e.title), ht > C.TL_META_MIN_PX ? h("span",{class:"bm"},it.e.time+"–"+m2hm(it.en)+(it.e.project?"  "+it.e.project:"")) : null);
+      h("span",{class:"bt"},it.e.title), ht > C.TL_META_MIN_PX ? h("span",{class:"bm"},when+(it.e.project?"  "+it.e.project:"")) : null,
+      overnight ? h("span",{class:"nd","aria-hidden":"true"},"到次日") : null);
     if (S.fresh.has(it.e.id)) b.classList.add("fresh");
     lane.append(b);
+  }
+  // 折叠的“+N”：占第 3 列，从这些日程最早的开始画到最晚的结束；点了打开日程页的今天
+  for (const list of Object.values(more)){
+    const s0 = Math.min(...list.map(x => x.s)), e0 = Math.max(...list.map(x => x.ce));
+    const {style} = place(s0, e0, MAX - 1, MAX);
+    lane.append(h("button",{class:"blk more",type:"button",style,"aria-label":"同一时段还有 "+list.length+" 项，打开日程页查看",
+      onclick:()=>{ V.selDay = t; V.weekStart = mondayOf(t); App.ui.nav.go("sched"); App.ui.render(); }},
+      h("span",{class:"bt"},"+"+list.length), h("span",{class:"bm"},"查看全部")));
   }
   if (nm >= sH*60 && nm <= eH*60){
     lane.append(h("div",{class:"now",style:"top:"+((nm - sH*60)/60*PX)+"px"}, h("span",null,m2hm(nm))));

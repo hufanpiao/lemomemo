@@ -73,6 +73,8 @@ App.core.C = {
   LOG_VIEW_DAYS: 7,                    // “运行记录”显示最近几天
   LOG_VIEW_MAX: 200,                   // “运行记录”最多列多少条
   DAY_MS: 86400000,
+  TOAST_FLIP_MS: 180,                  // 提示条让位的 FLIP 平移（UI-4⑤，D03）
+  TL_MAX_LANES: 3,                     // 时间轴同一时段最多并排 3 列，其余折叠成“+N”（D08）
 
   // 时钟、写入与连接
   CLOCK_TICK_MS: 60000,        // 每分钟刷新一次时间轴和倒计时

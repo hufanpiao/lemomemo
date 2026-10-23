@@ -10,5 +10,5 @@
 .top .sub{font-size:16px;color:var(--muted)}
 .top-chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 12px;font-size:14px;background:var(--panel);border:0}
-.chip.late{background:var(--late-bg);color:var(--on-red);font-weight:500}
+.chip.late{background:var(--late-bg);color:var(--on-red);font-weight:500;min-height:44px;padding:0 16px}
 .chip b{font-family:var(--f-num);font-weight:700}

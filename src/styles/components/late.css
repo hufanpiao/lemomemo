@@ -8,5 +8,5 @@
 .late-row .t{overflow-wrap:anywhere;min-width:0}
 .late-row .t small{display:block;font-size:12px;color:var(--red-ink)}
 .mini{display:flex;gap:6px}
-.mini button{border:0;border-radius:999px;padding:6px 12px;font-size:14px;background:var(--panel);min-height:36px}
+.mini button{border:0;border-radius:999px;padding:6px 14px;font-size:14px;background:var(--panel);min-height:44px;min-width:52px}
 .btn-dark{border:0;border-radius:999px;padding:10px 18px;background:var(--ink);color:var(--panel);font-weight:500;min-height:44px}

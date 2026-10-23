@@ -51,7 +51,7 @@ const duration = v => { const n = num(v, 0); return n > 0 ? n : C.DEFAULT_DURATI
 
 function common(raw){
   return {
-    title: str(raw.title, C.TITLE_MAX), project: str(raw.project, C.PROJECT_MAX),
+    title: str(raw.title, C.TITLE_MAX).trim() || "（无标题）", project: str(raw.project, C.PROJECT_MAX),
     source: str(raw.source), rawText: str(raw.rawText, C.RAW_MAX),
     createdAt: num(raw.createdAt, 0), updatedAt: num(raw.updatedAt, 0), deletedAt: deletedAt(raw.deletedAt),
   };

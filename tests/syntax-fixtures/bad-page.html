@@ -1,0 +1,12 @@
+<!-- 故意写错语法的页面示例（期望行=10）：第一段脚本合法，第二段脚本里（HTML 第 10 行）少了右括号。
+     职责：证明 build/check_js.py 会检查页面里每段内联脚本，并按 HTML 里的行号报错（python build/check_js.py --self-test）。
+     依赖：无。本文件不在 manifest 里，不会进构建。 -->
+<!doctype html><html><head><meta charset="utf-8"></head><body>
+<script>
+const ok = 1;
+</script>
+<script>
+const a = [1, 2, 3];
+console.log(a.map(x => x * 2);
+</script>
+</body></html>

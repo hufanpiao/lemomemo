@@ -9,13 +9,14 @@ const visTd = App.data.visTd, write = App.data.write;
 const {$, h} = App.ui.dom;
 const toast = App.ui.toast;
 
+// 写入失败时收起成功提示，只留失败提示（测试报告 2.1）
 function reschedule(x, d, t){
-  write.reschedule(x, d);
-  toast.show("已改到"+(d === t ? "今天" : "明天"));
+  const tt = toast.show("已改到"+(d === t ? "今天" : "明天"));
+  Promise.resolve(write.reschedule(x, d)).then(ok => { if (ok === false) toast.dismiss(tt); });
 }
 async function moveAll(list){
-  await write.moveAll(list);
-  toast.show(list.length+" 件已改到今天");
+  const ok = await write.moveAll(list);
+  if (ok !== false) toast.show(list.length+" 件已改到今天");
 }
 function renderLate(t){
   const lb = $("late"); lb.textContent = "";

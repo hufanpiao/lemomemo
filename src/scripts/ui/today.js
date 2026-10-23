@@ -44,19 +44,26 @@ function renderNext(t, nm){
   let card;
   if (kind === "event"){
     card = h("div",{class:"next",style:"background:"+projColor(x.project)},
-      rem ? rem.bell : h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},x.time),
+      rem ? h("div",{class:"rem-extra"}, h("div",null, rem.bell)) : h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},x.time),
       rem ? null : h("span",{class:"cd"},startsText(n.start - nm, n.end)),
       h("span",{class:"tt"},x.title), x.project || x.note ? h("span",{class:"proj"},[x.project,x.note].filter(Boolean).join("  ")) : null,
-      rem ? rem.acts : null);
+      rem ? h("div",{class:"rem-extra"}, h("div",null, rem.acts)) : null);
   } else {
     card = h("div",{class:"next",style:"background:"+projColor(x.project)},
-      rem ? rem.bell : h("span",{class:"lbl"},"下一件事"),
+      rem ? h("div",{class:"rem-extra"}, h("div",null, rem.bell)) : h("span",{class:"lbl"},"下一件事"),
       h("span",{class:"big",style:"font-size:40px"}, x.due ? dueText(x.due, t).replace("截止","") : (x.important ? "重要" : "待办")),
       h("span",{class:"tt"},x.title), x.project ? h("span",{class:"proj"},x.project) : null,
-      rem ? rem.acts : h("button",{class:"act",type:"button","aria-label":"完成："+x.title,html:ICON_CHECK,onclick:ev=>{ ev.stopPropagation(); App.ui.todos.toggle(x,true); }}));
+      rem ? h("div",{class:"rem-extra"}, h("div",null, rem.acts)) : h("button",{class:"act",type:"button","aria-label":"完成："+x.title,html:ICON_CHECK,onclick:ev=>{ ev.stopPropagation(); App.ui.todos.toggle(x,true); }}));
   }
-  if (rem){ card.classList.add("reminding"); card.setAttribute("role", "alert"); if (rem.isNew) card.classList.add("enter"); }
-  box.append(cardOpen(card, kind, x));
+  if (rem){
+    // 提醒状态：卡片本身不当按钮用（按钮不能嵌在按钮里，D18），改成标题可点；新出现时用隐藏文字播报一次
+    card.classList.add("reminding"); if (rem.isNew) card.classList.add("enter");
+    const tt = card.querySelector(".tt");
+    const open = h("button",{type:"button",class:"tt tt-btn","aria-label":(kind === "event" ? "编辑日程：" : "编辑待办：") + x.title,onclick:()=>openSheet(kind, x)}, x.title);
+    tt.replaceWith(open);
+    if (rem.announce) card.append(h("span",{class:"sr-only",role:"alert"}, rem.announce));
+    box.append(card);
+  } else box.append(cardOpen(card, kind, x));
   return rem ? {kind, id:x.id} : null;
 }
 

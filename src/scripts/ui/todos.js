@@ -18,13 +18,16 @@ const V = App.ui.view, toast = App.ui.toast, filter = App.ui.filter;
 const {dayDiff} = App.core.date;
 const openSheet = (...a) => App.ui.sheet.open(...a);
 
+// 写入失败（断网、超时）时把刚弹出的成功提示收起，只留失败提示（测试报告 2.1）
 function toggle(x, done){
-  write.toggleDone(x, done);
+  const p = write.toggleDone(x, done);
   if (done){
     const t = App.clock.today();
     const n = visTd().filter(y => isDoneOn(y, t)).length;
-    toast.show("完成了，今天第 "+n+" 件", "撤销", () => toggle(x, false), C.TOAST_UNDO_MS);
+    const tt = toast.show("完成了，今天第 "+n+" 件", "撤销", () => toggle(x, false), C.TOAST_UNDO_MS);
+    Promise.resolve(p).then(ok => { if (ok === false) toast.dismiss(tt); });
   }
+  return p;
 }
 // 列表里勾选：先让这一行（待办行或日程页截止行）播完划线动画（holdUntil 期间暂缓重绘），再重排
 function toggleInList(x, li){
@@ -72,6 +75,8 @@ function renderTodos(){
   const tg = $("done-toggle"), dlist = $("done-list");
   tg.hidden = !old.length;
   tg.textContent = V.showDone ? "收起已完成" : "已完成 "+old.length+" 件";
+  tg.setAttribute("aria-expanded", V.showDone && old.length ? "true" : "false");
+  tg.setAttribute("aria-controls", "done-list");
   dlist.hidden = !V.showDone || !old.length; dlist.textContent = "";
   if (V.showDone) old.slice(0, C.OLD_DONE_MAX).forEach(x => dlist.append(todoRow(x)));
   App.ui.search.render();

@@ -231,4 +231,20 @@ test("v3 运行日志：清理 90 天前的日志文档（所有设备）", asyn
   assert.deepEqual(Object.keys(db.data.logs), ["2026-08-01_dev"]);
 });
 
+test("v3 类型互转一次写完：写入失败时不会留下两条（代码复审建议）", async () => {
+  const { App, db } = await setup({ fail: (op, coll) => (op === "add" && coll === "events" ? "network" : null) });
+  const before = Object.keys(db.data.events).length;
+  const r = await App.data.write.convert("todo", byId(App, "t2"), { title: "导出", date: "2026-10-22", time: "15:00", dur: "60", project: "", note: "" });
+  assert.equal(r.ok, false);
+  assert.equal(Object.keys(db.data.events).length, before, "没有多出日程");
+  assert.equal(db.data.todos.t2.deletedAt == null, true, "旧待办没有被删");
+  assert.equal(byId(App, "t2").deletedAt == null, true, "本地也回滚了");
+});
+test("D13 写入时截断：标题 160 字、原话 1000 字", async () => {
+  const { App, db } = await setup();
+  const long = "长".repeat(1200);
+  const r = await App.data.write.saveItem("todo", null, { title: long, date: "", important: false, project: "", raw: long });
+  assert.equal(db.data.todos[r.id].title.length, 160); assert.equal(db.data.todos[r.id].rawText.length, 1000);
+});
+
 await done("write / subscribe 单元测试（mock-db 适配器）");

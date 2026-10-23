@@ -1,4 +1,4 @@
-# 构建脚本：先跑架构检查（build/check_arch.py，不通过就停止），再读取 build/manifest.json，把 CSS、JS 按顺序内联进 src/index.html。
+# 构建脚本：先跑架构检查（build/check_arch.py）和 JS 语法检查（build/check_js.py，每个页面写出前也查一遍），不通过就停止；再读取 build/manifest.json，把 CSS、JS 按顺序内联进 src/index.html。
 #   --target claude（默认）：生成发布用单文件 dist/planner.html，以及两个本地测试页
 #       dist/test.html         模拟存储适配器 mock-db（tests/mock/mock-db.js），不需要 claude.ai
 #       dist/test-claude.html  与发布版同一份页面 + window.claude 桩（tests/mock/claude-stub.js），验证 claude-db 适配器
@@ -6,7 +6,7 @@
 #   --target staging：预发布版 dist/staging.html，和正式版一样接真实数据库，顶部提示“预发布测试版：不是你的正式数据”
 #   --target web：独立服务器 / PWA 版，预留，尚未实现。
 #   发布用的 dist/planner.html 里不能出现任何环境提示文案，构建时会检查。
-# 依赖：Python 3.8+ 标准库、build/check_arch.py。用法：python build/build.py [--target claude|staging|web]
+# 依赖：Python 3.8+ 标准库、build/check_arch.py、build/check_js.py（需要 Node.js）。用法：python build/build.py [--target claude|staging|web]
 import argparse
 import json
 import pathlib
@@ -15,6 +15,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import check_arch  # noqa: E402  同目录的架构检查
+import check_js  # noqa: E402  同目录的 JS 语法检查（node --check）
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
@@ -105,6 +106,12 @@ def check_no_banner(name, html):
 
 
 def write(name, text):
+    """写出产物；.html 先检查里面每段内联脚本的语法（node --check），不过就构建失败、不写文件。"""
+    if name.endswith(".html"):
+        errs = check_js.check_html("dist/" + name, text)
+        if errs:
+            check_js.report(errs)
+            fail("dist/%s 里的脚本有语法错误（行号按拼好的页面算），没有写出" % name)
     DIST.mkdir(exist_ok=True)
     (DIST / name).write_text(text, encoding="utf-8", newline="\n")
     print("  写出 dist/%s（%d 字节）" % (name, len(text.encode("utf-8"))))
@@ -159,6 +166,9 @@ def main():
     print("架构检查")
     if check_arch.run() != 0:
         fail("架构检查没通过，先按上面的提示修改（规则见 docs/10-架构/架构约定.md）")
+    print("JS 语法检查")
+    if check_js.run_sources() != 0:
+        fail("有源码文件语法错误，先按上面的“文件:行号”修改")
     if args.target == "web":
         sys.exit(build_web(m))
     if args.target == "staging":

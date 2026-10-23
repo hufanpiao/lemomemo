@@ -15,16 +15,16 @@ function remindPatch(kind, hasTime, remind){
 // v：{title, date, time, dur, project, note, remind}
 function eventFields(v, now){
   const time = v.time || "";
-  return Object.assign({title:v.title, date:v.date, time, durationMin:Number(v.dur)||C.DEFAULT_DURATION_MIN,
+  return Object.assign({title:String(v.title).slice(0, C.TITLE_MAX), date:v.date, time, durationMin:Number(v.dur)||C.DEFAULT_DURATION_MIN,
     project:v.project, note:v.note || ""}, remindPatch("event", !!time, v.remind), {updatedAt:now});
 }
 // v：{title, date, important, project, note, remind}
 function todoFields(v, now){
-  return Object.assign({title:v.title, due:v.date || "", important:!!v.important, project:v.project, note:v.note || ""},
+  return Object.assign({title:String(v.title).slice(0, C.TITLE_MAX), due:v.date || "", important:!!v.important, project:v.project, note:v.note || ""},
     remindPatch("todo", false, v.remind), {updatedAt:now});
 }
 function asNew(data, coll, now, raw){
-  Object.assign(data, {createdAt:now, source:"page", rawText:raw});
+  Object.assign(data, {createdAt:now, source:"page", rawText:String(raw || "").slice(0, C.RAW_MAX)});
   if (coll === "todos") Object.assign(data, {done:false, doneAt:0});
   return data;
 }

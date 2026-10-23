@@ -25,14 +25,29 @@
 .remind-inv .r-acts .later{background:transparent;color:var(--on-inv);box-shadow:inset 0 0 0 1.5px currentColor}
 .remind-inv .offline-tag{background:var(--on-inv);color:var(--inv)}
 
+/* 情况 A：标题按钮、读屏专用文字、铃铛行和按钮的高度展开（grid 0fr → 1fr） */
+.tt-btn{border:0;background:none;padding:0;color:inherit;font:inherit;font-size:20px;font-weight:700;line-height:1.35;text-align:left;cursor:pointer;overflow-wrap:anywhere}
+.tt-btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.rem-extra{display:grid;grid-template-rows:1fr}
+.rem-extra > div{min-height:0;overflow:hidden}
+
 /* 入场与铃铛（只在新出现时播放一次） */
 @media (prefers-reduced-motion:no-preference){
-  .remind-inv.enter,.next.reminding.enter{animation:remind-in .24s cubic-bezier(.22,1,.36,1)}
+  .remind-inv.enter{animation:remind-in .24s cubic-bezier(.22,1,.36,1)}
+  .next.reminding.enter .rem-extra{animation:rem-grow .24s cubic-bezier(.22,1,.36,1)}
+  .remind-inv.swap{animation:remind-fade .16s linear}
+  .remind-inv.leaving,.next.reminding.leaving .rem-extra{animation:rem-shrink .2s cubic-bezier(.4,0,.2,1) forwards}
+  .remind-inv.leaving{animation:remind-out .2s cubic-bezier(.4,0,.2,1) forwards}
   .enter .bell-ico{animation:bell-swing .4s ease-in-out 1;transform-origin:50% 10%}
 }
 @media (prefers-reduced-motion:reduce){
-  .remind-inv.enter,.next.reminding.enter{animation:remind-fade .12s linear}
+  .remind-inv.enter,.remind-inv.swap,.next.reminding.enter .rem-extra{animation:remind-fade .12s linear}
 }
+@keyframes rem-grow{from{grid-template-rows:0fr;opacity:0}to{grid-template-rows:1fr;opacity:1}}
+@keyframes rem-shrink{from{grid-template-rows:1fr;opacity:1}to{grid-template-rows:0fr;opacity:0}}
+@keyframes remind-out{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-8px)}}
+.remind-inv.confirmed{opacity:.9}
 @keyframes remind-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
 @keyframes remind-fade{from{opacity:0}to{opacity:1}}
 @keyframes bell-swing{0%,100%{transform:rotate(0)}25%{transform:rotate(8deg)}75%{transform:rotate(-8deg)}}

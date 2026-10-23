@@ -1,14 +1,15 @@
 // 职责：弹出层的表单状态（v3 T8，界面依据草图第 3 版 ②③、采纳结论 #3–#6 #16 #17、需求澄清 #22 #33 #37）：
 //       类型切换、快捷日期胶囊、提醒选项胶囊、识别结果胶囊（每项是按钮，点了展开对应字段；手动改过的加锁、不再被覆盖）、
 //       一句话识别停顿 250ms 后才填表。读表单交给 ui/sheet.js 保存。
-// 依赖：core/date.js、logic/remind.js、logic/format.js、logic/projects.js、logic/parse-quick.js、data/state.js、ui/dom.js、ui/view-state.js
+// 依赖：core/const.js、core/date.js、logic/remind.js、logic/format.js、logic/projects.js、logic/parse-quick.js、data/state.js、ui/dom.js、ui/view-state.js
 // 运行时调用：ui/sheet.js、App.clock
 App.ui = App.ui || {};
 
 const R = App.logic.remind;
 const {relDay} = App.logic.format;
 const {projColor} = App.logic.projects;
-const {addDays, mondayOf, parse} = App.core.date;
+const {addDays, mondayOf, parse, m2hm} = App.core.date;
+const C = App.core.C;
 const {$, h} = App.ui.dom;
 const V = App.ui.view;
 const RECOG_DEBOUNCE_MS = 250;
@@ -36,7 +37,7 @@ function setKind(k){
 // 表单当前内容，按条目的样子组装（给提醒规则算默认值、标签用）
 function draft(){
   const d = {date:$("f-date").value, time: F.kind === "event" ? $("f-time").value : "", due:$("f-date").value,
-    important:$("f-imp").checked, done:false, deletedAt:null, durationMin:Number($("f-dur").value) || 60};
+    important:$("f-imp").checked, done:false, deletedAt:null, durationMin:Number($("f-dur").value) || C.DEFAULT_DURATION_MIN};
   if (F.remind !== undefined){ if (hasTime()) d.remindMin = F.remind; else d.remindDays = F.remind; }
   else if (F.editing){ d.remindMin = F.editing.remindMin; d.remindDays = F.editing.remindDays; }
   return d;
@@ -65,6 +66,8 @@ function renderRemind(){
   const opts = R.options(F.kind, hasTime());
   if (F.remind !== undefined && !opts.some(o => o.value === F.remind)) F.remind = undefined;   // 换了类型，原选项不适用
   const noDate = !$("f-date").value;
+  const hideRow = noDate && F.kind === "todo";
+  box.hidden = hideRow; $("remind-lab").hidden = hideRow;
   const cur = noDate && F.kind === "todo" ? null : (F.remind !== undefined ? F.remind : R.currentValue(draft(), F.kind));
   for (const o of opts){
     box.append(h("button",{type:"button",class:"opt",role:"radio","aria-checked": o.value === cur ? "true" : "false", disabled: noDate && F.kind === "todo" ? true : null,
@@ -132,7 +135,7 @@ function reset(kind, item, presetDate){
   $("f-title").value = item ? item.title : "";
   $("f-date").value = item ? (kind === "event" ? item.date : (item.due || "")) : (presetDate || "");
   $("f-time").value = item && item.time || "";
-  const dur = String(item && item.durationMin || 60), sel = $("f-dur");
+  const dur = String(item && item.durationMin || C.DEFAULT_DURATION_MIN), sel = $("f-dur");
   if (![...sel.options].some(o => o.value === dur)) sel.append(h("option",{value:dur}, dur + " 分钟"));   // 不在选项里的时长也保留（PM-C②）
   sel.value = dur;
   $("f-note").value = item && item.note || "";
@@ -154,8 +157,8 @@ function readForm(){
 function pushHour(){
   const t = $("f-time").value; if (!t) return;
   const [hh, mm] = t.split(":").map(Number); let m = hh * 60 + mm + 60, d = $("f-date").value;
-  if (m >= 1440){ m -= 1440; d = addDays(d, 1); }
-  $("f-time").value = String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+  if (m >= 24 * 60){ m -= 24 * 60; d = addDays(d, 1); }
+  $("f-time").value = m2hm(m);
   $("f-date").value = d; refresh();
 }
 function init(){

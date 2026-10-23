@@ -78,7 +78,8 @@
         <div class="trash-list" id="trash-list" hidden></div>
         <button class="trash" type="button" id="log-toggle" aria-expanded="false" aria-controls="log-list"><span><b>运行记录</b>  最近 7 天，只读</span><span class="chev" aria-hidden="true">›</span></button>
         <div class="log-list" id="log-list" hidden></div>
-        <button class="export" type="button" id="export">导出备份（JSON）</button>
+        <button class="export" type="button" id="export" aria-describedby="export-note">导出备份（JSON）</button>
+        <p class="export-note" id="export-note">文件里包含最近删除的条目</p>
       </section>
     </div>
   </div>
@@ -102,7 +103,7 @@
   <div class="grab"></div>
   <h3 id="sh-title">记一件事</h3>
   <div id="q-wrap" class="q-row">
-    <input class="q" id="q" type="text" autocomplete="off" enterkeyhint="done" aria-label="用一句话描述要记的事" placeholder="写一句话，例如：明天下午3点和 NEOX 对片">
+    <input class="q" id="q" type="text" maxlength="300" autocomplete="off" enterkeyhint="done" aria-label="用一句话描述要记的事" placeholder="写一句话，例如：明天下午3点和 NEOX 对片">
     <button class="q-add" type="submit" id="q-add">加入</button>
   </div>
   <div class="recog" id="recog" aria-live="polite"></div>
@@ -124,7 +125,7 @@
       <label class="td-only chk"><input id="f-imp" type="checkbox">重要</label>
     </div>
     <button type="button" class="opt ev-only" id="push-1h" hidden>推后 1 小时</button>
-    <div class="row-l">提醒</div>
+    <div class="row-l" id="remind-lab">提醒</div>
     <div class="scroller" id="remind-chips" role="radiogroup" aria-label="提醒"></div>
     <div class="fields">
       <label class="wide">项目<input id="f-proj" type="text" maxlength="40" placeholder="可不填" list="proj-list"></label>
