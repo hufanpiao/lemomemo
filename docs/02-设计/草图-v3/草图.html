@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<!-- v3 界面草图（静态，只用于 UI 预审，不参与构建）。
+<!-- v3 界面草图 · 第 2 版（静态，只用于 UI 预审，不参与构建）。
+     第 2 版按 docs/03-评审/第四轮-界面预审/采纳结论.md 修改；第 1 版见 git 历史和“第1版-*.jpg”。
      直接引用 src/styles 里的正式样式，新元素的样式写在下面的 <style> 里，预审通过后拆进 src/styles/components/。
-     用 planner-test 预览：http://localhost:8770/docs/02-设计/草图-v3/草图.html ；加 ?dark 看深色。 -->
-<title>v3 界面草图</title>
+     预览：http://localhost:8770/docs/02-设计/草图-v3/草图.html ；加 ?dark 看深色。 -->
+<title>v3 界面草图 第2版</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap">
 <link rel="stylesheet" href="../../../src/styles/tokens.css">
 <link rel="stylesheet" href="../../../src/styles/base.css">
@@ -20,125 +21,152 @@
 <link rel="stylesheet" href="../../../src/styles/components/toast.css">
 <link rel="stylesheet" href="../../../src/styles/components/sheet.css">
 <style>
+  /* —— 提案的设计变量调整（#10）：深色下黄色降低约 10% 亮度；反色卡片用的两个新变量 —— */
+  :root{--inv:#121316; --on-inv:#f3f3f4}
+  :root[data-theme="dark"]{--yellow:#d8c843; --p1:#d3c260; --inv:#f1f1f3; --on-inv:#121316}
+
   /* —— 草图排版：每屏一个 375px 宽的手机框 —— */
   body{padding:24px!important}
   .board{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
   .frame{width:375px;flex:none;background:var(--bg);border-radius:36px;padding:18px 16px 24px;box-shadow:0 0 0 1px var(--line);position:relative;display:flex;flex-direction:column;gap:14px}
-  .cap{font-size:12px;color:var(--muted);width:375px;margin:0 0 8px}
+  .cap{font-size:12px;color:var(--muted);width:375px;margin:0 0 8px;line-height:1.6}
   .cap b{color:var(--ink);font-size:14px;display:block}
   .frame .sheet{position:relative;transform:none!important;left:auto;right:auto;bottom:auto;width:auto;max-height:none;border-radius:28px;box-shadow:var(--shadow)}
-  .frame .toasts{position:static;transform:none;display:flex;flex-direction:column;gap:6px;align-items:center}
-  .frame .toast{position:static;opacity:1;transform:none;pointer-events:auto}
+  .frame .toasts{position:static;transform:none;display:flex;flex-direction:column;gap:6px;align-items:stretch}
+  .frame .toast{position:static;opacity:1;transform:none;pointer-events:auto;justify-content:space-between;max-width:none}
+  .kb{height:290px;border-radius:0 0 28px 28px;background:repeating-linear-gradient(0deg,var(--panel-2) 0 52px,var(--line) 52px 54px);display:grid;place-items:center;color:var(--muted);font-size:13px}
 
-  /* —— 新元素（提案） —— */
-  /* 主题按钮：抬头右上角，图标表示当前状态 */
-  .theme-btn{width:40px;height:40px;border-radius:50%;border:0;background:var(--panel);display:grid;place-items:center;flex:none}
+  /* —— #2 抬头：不换行，主题按钮固定在右上角；点开后是黑色胶囊三选一 —— */
+  .top.v3{display:grid;grid-template-columns:1fr auto;align-items:start;gap:6px 12px}
+  .top.v3 .top-chips{grid-column:1/-1}
+  .theme-btn{width:44px;height:44px;border-radius:50%;border:0;background:var(--panel);display:grid;place-items:center}
   .theme-btn svg{width:20px;height:20px}
-  .top-r{display:flex;gap:8px;align-items:center}
-  .theme-pop{display:flex;gap:4px;background:var(--panel);border-radius:999px;padding:4px;font-size:13px}
-  .theme-pop span{padding:6px 12px;border-radius:999px}
-  .theme-pop .on{background:var(--ink);color:var(--panel)}
+  .theme-pick{display:flex;background:var(--dock);border-radius:999px;padding:4px;box-shadow:var(--shadow);align-self:flex-end}
+  .theme-pick button{border:0;background:none;color:var(--dock-ink);border-radius:999px;min-height:44px;padding:0 14px;display:flex;align-items:center;gap:6px;font-size:14px}
+  .theme-pick button svg{width:16px;height:16px}
+  .theme-pick button[aria-checked=true]{background:var(--pill-on);color:var(--pill-on-ink);font-weight:600}
 
-  /* 提醒卡片：今天页最上方，黄色，压在“下一件事”上面 */
-  .remind-card{background:var(--yellow);color:var(--on-yellow);border-radius:var(--r-panel);padding:16px 18px;display:flex;flex-direction:column;gap:8px}
-  .remind-card .rl{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
-  .remind-card .rl svg{width:16px;height:16px}
-  .remind-card .rt{font-size:18px;font-weight:700;line-height:1.35}
-  .remind-card .rm{font-size:14px;opacity:.75}
-  .remind-card .ra{display:flex;gap:8px;margin-top:4px}
-  .remind-card .ra button{border:0;border-radius:999px;min-height:40px;padding:0 16px;font-weight:600}
-  .remind-card .ok{background:var(--on-yellow);color:var(--yellow)}
-  .remind-card .later{background:rgba(0,0,0,.08);color:var(--on-yellow)}
+  /* —— #1 提醒：A 下一件事卡片进入提醒状态；B 别的事用反色卡片 —— */
+  .bell-row{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600}
+  .bell-row svg{width:16px;height:16px}
+  .r-acts{display:flex;gap:8px;margin-top:6px}
+  .r-acts button{border:0;border-radius:999px;min-height:44px;padding:0 18px;font-weight:600;font-size:15px}
+  .next .r-acts .ok{background:var(--on-p);color:var(--p1)}
+  .next .r-acts .later{background:rgba(0,0,0,.1);color:var(--on-p)}
+  .remind-inv{background:var(--inv);color:var(--on-inv);border-radius:var(--r-panel);padding:16px 18px;display:flex;flex-direction:column;gap:4px}
+  .remind-inv .rt{font-size:18px;font-weight:700;line-height:1.35}
+  .remind-inv .rm{font-size:14px;opacity:.75}
+  .remind-inv .r-acts .ok{background:var(--yellow);color:var(--on-yellow)}
+  .remind-inv .r-acts .later{background:transparent;color:var(--on-inv);box-shadow:inset 0 0 0 1.5px currentColor}
+  .more-n{margin-left:auto;font-size:12px;font-weight:600;opacity:.7}
 
-  /* 弹出层：识别结果、听写提示、快捷改期、提醒选项 */
-  .recog{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px}
-  .recog .k{color:var(--muted)}
-  .recog .v{background:var(--panel-2);border-radius:8px;padding:2px 8px;font-weight:500}
-  .dict{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
-  .dict svg{width:14px;height:14px;flex:none}
-  .row-l{font-size:12px;color:var(--muted);margin-bottom:-6px}
-  .chips{display:flex;gap:6px;flex-wrap:wrap}
-  .chip-o{border:0;border-radius:999px;min-height:36px;padding:0 14px;font-size:14px;background:var(--panel-2);color:var(--ink)}
-  .chip-o[aria-pressed=true]{background:var(--ink);color:var(--panel)}
-  .bell{display:inline-flex;align-items:center;gap:4px}
-  .bell svg{width:12px;height:12px}
+  /* —— #3 新建：输入框右侧“加入”；识别结果胶囊就是确认；细节默认折叠 —— */
+  .q-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+  .q-row .q{min-height:52px}
+  .q-add{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);font-weight:700;min-height:52px;padding:0 20px;font-size:16px}
+  .recog{display:flex;flex-wrap:wrap;gap:6px}
+  .recog .v{border-radius:999px;background:var(--panel-2);padding:4px 12px;font-size:14px;font-weight:500}
+  .recog .v.lock{box-shadow:inset 0 0 0 1.5px var(--ink)}
+  .recog .v.lock::after{content:" 已改";font-size:11px;color:var(--muted)}
+  .details{border:0;background:var(--panel-2);border-radius:14px;min-height:48px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--ink);width:100%}
 
-  /* 日程页：截止日标记、回到今天、筛选 */
-  .day .dl{width:6px;height:6px;border-radius:1px;background:var(--red)}
-  .back-today{border:0;border-radius:999px;min-height:36px;padding:0 12px;font-size:13px;background:var(--ink);color:var(--panel)}
-  .deadline{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;border-radius:var(--r-block);padding:10px 14px;background:var(--panel-2);font-size:14px}
-  .deadline .dk{font-size:12px;font-weight:700;color:var(--red)}
+  /* —— #5 #6 选项胶囊：单行横向滑动，选中黄底黑字，高 44 —— */
+  .row-l{font-size:12px;color:var(--muted);margin-bottom:-8px}
+  .scroller{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -18px;padding:0 18px}
+  .scroller::-webkit-scrollbar{display:none}
+  .opt{flex:none;border:0;border-radius:999px;min-height:44px;padding:0 16px;font-size:14px;background:var(--panel-2);color:var(--ink)}
+  .opt[aria-pressed=true]{background:var(--yellow);color:var(--on-yellow);font-weight:600}
+  .sheet .seg button{min-height:44px}
 
-  /* 待办页：搜索、最近删除、导出 */
-  .search{width:100%;border:0;border-radius:14px;background:var(--panel-2);padding:10px 14px 10px 38px;font-size:15px;min-height:44px;
+  /* —— #4 编辑：删除单独放在最底部 —— */
+  .del-row{margin-top:24px;border:0;border-radius:14px;min-height:48px;width:100%;background:var(--red-soft);color:var(--red);font-weight:600;font-size:15px}
+
+  /* —— #7 #8 日程页：墨色短横线表示截止；回到今天在周条下方居中；筛选在周条下 —— */
+  .ph h2 button{border:0;background:none;padding:0;font:inherit;color:inherit}
+  .day .dl{width:8px;height:2px;border-radius:1px;background:var(--ink);align-self:center}
+  .day .dots{align-items:center}
+  .back-today{align-self:center;border:0;border-radius:999px;min-height:44px;padding:0 18px;font-size:14px;background:var(--ink);color:var(--panel);font-weight:500}
+  .deadline{display:grid;grid-template-columns:44px 1fr auto;align-items:center;border-radius:var(--r-block);background:var(--panel-2);padding-right:14px;font-size:15px}
+  .deadline .dk{font-size:12px;color:var(--muted)}
+
+  /* —— #9 待办页：搜索；最近删除折叠成一行色块；导出在最底部 —— */
+  .search{width:100%;border:0;border-radius:14px;background:var(--panel-2);padding:10px 14px 10px 40px;font-size:16px;min-height:44px;color:var(--ink);
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236a6e76' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6'/%3E%3Cpath d='M20 20l-4.5-4.5'/%3E%3C/svg%3E");
     background-repeat:no-repeat;background-position:12px 50%;background-size:18px}
-  .fold{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
-  .fold h4{margin:0;font-size:14px;color:var(--muted);font-weight:500;display:flex;justify-content:space-between}
-  .trash-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;font-size:14px;color:var(--muted)}
-  .trash-row small{display:block;font-size:12px}
-  .trash-row button{border:0;border-radius:999px;min-height:36px;padding:0 14px;background:var(--panel-2);color:var(--ink);font-size:13px}
-  .export{align-self:flex-start;border:0;background:none;color:var(--muted);text-decoration:underline;text-underline-offset:3px;font-size:13px;padding:6px 0}
+  .trash{border:0;width:100%;border-radius:14px;background:var(--panel-2);min-height:48px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--muted)}
+  .trash b{color:var(--ink);font-weight:500}
+  .export{align-self:center;border:0;background:none;color:var(--muted);font-size:13px;min-height:44px;padding:0 8px}
+  .bell{display:inline-flex;align-items:center;gap:3px}
+  .bell svg{width:11px;height:11px}
 </style>
 </head>
 <body>
 <script>if (location.search.includes("dark")) document.documentElement.setAttribute("data-theme","dark");</script>
 <div class="board">
 
-<!-- ① 今天页：主题按钮 + 提醒卡片 -->
+<!-- ①A 被提醒的是下一件事：下一件事卡片进入提醒状态 -->
 <div>
-  <p class="cap"><b>① 今天页：主题按钮、提醒卡片</b>主题按钮放在抬头右上角，点一下依次切换：跟随系统、浅色、深色。图标随状态变化，切换时浮出一行小字说明当前状态，2 秒后消失。到了提醒时间，提醒卡片会出现在最上面，压在“下一件事”上面，同时响一声提示音。</p>
+  <p class="cap"><b>①A 提醒的正好是“下一件事”</b>不另加卡片，直接让“下一件事”卡片进入提醒状态：多一行铃铛，下面两个按钮。主题按钮固定在右上角；“没赶上”挪到日期下面。</p>
   <div class="frame">
-    <header class="top">
+    <header class="top v3">
       <h1><span class="md">10<small>月</small>23<small>日</small></span><span class="sub">周五  2026年</span></h1>
-      <div class="top-r">
-        <span class="chip late"><b>1</b> 件没赶上</span>
-        <button class="theme-btn" aria-label="外观：跟随系统，点按切换"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg></button>
-      </div>
+      <button class="theme-btn" aria-label="外观：跟随系统" aria-haspopup="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg></button>
+      <div class="top-chips"><span class="chip late"><b>1</b> 件没赶上</span><span class="chip">今天完成 <b>2</b> 件</span></div>
     </header>
-    <div class="theme-pop" style="align-self:flex-end"><span class="on">跟随系统</span><span>浅色</span><span>深色</span></div>
-    <div class="remind-card" role="alert">
-      <span class="rl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>15 分钟后开始</span>
-      <span class="rt">SignPlex 客户反馈会</span>
-      <span class="rm">14:30–15:30  SignPlex</span>
-      <div class="ra"><button class="ok">知道了</button><button class="later">10 分钟后再提醒</button></div>
+    <div class="next" style="background:var(--p1)" role="alert">
+      <span class="bell-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>提醒：15 分钟后开始</span>
+      <span class="big">14:30</span>
+      <span class="tt">SignPlex 客户反馈会</span>
+      <span class="proj">SignPlex  会议室 B</span>
+      <div class="r-acts"><button class="ok">知道了</button><button class="later">10 分钟后</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ①B 被提醒的是别的事：反色卡片；主题选择器展开状态 -->
+<div>
+  <p class="cap"><b>①B 提醒的是别的事；主题选择器展开</b>提醒卡片用反色：浅色模式下墨黑底，深色模式下白底，按钮用黄色。同时有多条提醒时只显示最早的一条，右上角标“+N”。点主题按钮会弹出黑色胶囊，三选一，选完自动收起。</p>
+  <div class="frame">
+    <header class="top v3">
+      <h1><span class="md">10<small>月</small>23<small>日</small></span><span class="sub">周五  2026年</span></h1>
+      <button class="theme-btn" aria-label="外观：跟随系统" aria-expanded="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg></button>
+    </header>
+    <div class="theme-pick" role="radiogroup" aria-label="外观">
+      <button role="radio" aria-checked="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>跟随系统</button>
+      <button role="radio" aria-checked="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></svg>浅色</button>
+      <button role="radio" aria-checked="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>深色</button>
+    </div>
+    <div class="remind-inv" role="alert">
+      <span class="bell-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>今天截止<span class="more-n">+1</span></span>
+      <span class="rt">交 NEOX 竖版 4K</span>
+      <span class="rm">NEOX  待办</span>
+      <div class="r-acts"><button class="ok">知道了</button><button class="later">10 分钟后</button></div>
     </div>
     <div class="next" style="background:var(--p1)">
-      <span class="lbl">下一件事</span><span class="big">14:30</span><span class="cd">15 分钟后开始</span>
-      <span class="tt">SignPlex 客户反馈会</span>
+      <span class="lbl">下一件事</span><span class="big">17:00</span><span class="cd">2 小时后开始</span>
+      <span class="tt">SOIL STUDIO 现场踩点</span>
     </div>
   </div>
 </div>
 
-<!-- ② 新建弹出层：一句话 + 识别结果 + 听写提示 + 提醒选项 -->
+<!-- ② 新建：键盘弹起时的样子 -->
 <div>
-  <p class="cap"><b>② 新建：一句话识别、听写、提醒</b>输入框下面实时显示识别结果，手动改过的项不会再被覆盖。“提醒”这一行按类型给不同的选项，默认已经选好，平时不用动。</p>
-  <div class="frame">
-    <form class="sheet" onsubmit="return false">
+  <p class="cap"><b>② 新建（键盘弹起时）</b>“加入”放在输入框右侧，键盘弹起也不会被挡住。识别结果就是确认；类型、日期、时间、提醒等细节收进“改细节”，默认折叠。听写提示只在输入框为空时作为占位文字显示。手动改过的项会描边，并标“已改”。</p>
+  <div class="frame" style="padding-bottom:0">
+    <form class="sheet" onsubmit="return false" style="border-radius:28px 28px 0 0">
       <div class="grab"></div>
       <h3>记一件事</h3>
-      <input class="q" value="내일 오후 3시 NEOX 미팅 30분 전 알림" aria-label="用一句话描述">
-      <div class="dict"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>点键盘上的麦克风就能说话，中文、韩文都可以</div>
-      <div class="recog"><span class="k">识别为</span><span class="v">日程</span><span class="v">10月24日 周六</span><span class="v">15:00</span><span class="v">NEOX</span><span class="v">提前 30 分钟提醒</span></div>
-      <div class="seg"><button type="button" aria-pressed="true">日程</button><button type="button" aria-pressed="false">待办</button></div>
-      <div class="fields">
-        <label class="wide">标题<input value="NEOX 미팅"></label>
-        <label>日期<input type="date" value="2026-10-24"></label>
-        <label>时间<input type="time" value="15:00"></label>
-      </div>
-      <div class="row-l">提醒</div>
-      <div class="chips">
-        <button class="chip-o" type="button">不提醒</button><button class="chip-o" type="button">准时</button><button class="chip-o" type="button">15 分</button>
-        <button class="chip-o" type="button" aria-pressed="true">30 分</button><button class="chip-o" type="button">1 小时</button><button class="chip-o" type="button">1 天</button>
-      </div>
-      <div class="acts"><button class="save" type="button">加入</button><button class="ghost" type="button">取消</button></div>
+      <div class="q-row"><input class="q" value="내일 오후 3시 NEOX 미팅 30분 전 알림" aria-label="用一句话描述" placeholder="说或写一句话，例如：明天下午3点和 NEOX 对片（点键盘上的麦克风可以说中文或韩文）"><button class="q-add" type="button">加入</button></div>
+      <div class="recog" aria-live="polite"><span class="v">日程</span><span class="v">明天 10月24日 周六</span><span class="v">15:00</span><span class="v">NEOX</span><span class="v lock">提前 30 分钟提醒</span></div>
+      <button class="details" type="button"><span>改细节：类型、日期、时间、提醒、备注</span><span>›</span></button>
     </form>
+    <div class="kb">键盘（约占屏幕一半）</div>
   </div>
 </div>
 
-<!-- ③ 编辑待办：类型可切换、快捷改期、提醒、备注、删除 -->
+<!-- ③ 编辑：细节展开；删除单独在最底部 -->
 <div>
-  <p class="cap"><b>③ 编辑：快捷改期、类型切换、删除</b>编辑时也能在日程和待办之间切换。日期上方放一排快捷改期；日程会多一个“推后 1 小时”。删除后可以撤销，也能去“最近删除”里恢复。</p>
+  <p class="cap"><b>③ 编辑（细节展开）</b>选项胶囊排成一行，可以横向滑动，选中的是黄底黑字，和上面的“日程 / 待办”切换区分开。所有可点区域都至少 44px 高。删除单独放在最底部，占满一整行，和保存之间隔开 24px。</p>
   <div class="frame">
     <form class="sheet" onsubmit="return false">
       <div class="grab"></div>
@@ -146,27 +174,23 @@
       <div class="seg"><button type="button" aria-pressed="false">日程</button><button type="button" aria-pressed="true">待办</button></div>
       <div class="fields"><label class="wide">标题<input value="交 SignPlex 韩文版成片"></label></div>
       <div class="row-l">截止</div>
-      <div class="chips">
-        <button class="chip-o" type="button">今天</button><button class="chip-o" type="button" aria-pressed="true">明天</button><button class="chip-o" type="button">周六</button>
-        <button class="chip-o" type="button">下周一</button><button class="chip-o" type="button">不设</button>
-      </div>
-      <div class="fields"><label>截止日期<input type="date" value="2026-10-24"></label><label class="chk" style="align-self:end;padding-bottom:10px"><input type="checkbox" checked>重要</label></div>
+      <div class="scroller"><button class="opt" type="button">今天</button><button class="opt" type="button" aria-pressed="true">明天</button><button class="opt" type="button">周六</button><button class="opt" type="button">下周一</button><button class="opt" type="button">不设</button><button class="opt" type="button">选日期…</button></div>
       <div class="row-l">提醒</div>
-      <div class="chips"><button class="chip-o" type="button">不提醒</button><button class="chip-o" type="button">当天 9:00</button><button class="chip-o" type="button" aria-pressed="true">前一天 9:00</button></div>
-      <div class="fields"><label class="wide">备注<input value="客户要求加韩文字幕" ></label></div>
+      <div class="scroller"><button class="opt" type="button">不提醒</button><button class="opt" type="button">当天 9:00</button><button class="opt" type="button" aria-pressed="true">前一天 9:00</button></div>
+      <div class="fields"><label class="chk"><input type="checkbox" checked>重要</label><label class="wide">备注<input value="客户要求加韩文字幕"></label></div>
       <div class="raw">原话：周五前交 SignPlex 韩文版 重要</div>
-      <div class="acts"><button class="save" type="button">保存修改</button><button class="ghost" type="button">取消</button><button class="danger" type="button">删除</button></div>
+      <div class="acts"><button class="save" type="button">保存修改</button><button class="ghost" type="button">取消</button></div>
+      <button class="del-row" type="button">删除这条待办</button>
     </form>
   </div>
 </div>
 
-<!-- ④ 日程页：截止日、回到今天、项目筛选 -->
+<!-- ④ 日程页 -->
 <div>
-  <p class="cap"><b>④ 日程页：截止日、回到今天、筛选</b>周条上，圆点表示当天有日程，红色小方块表示当天有待办截止。翻到别的周时，右上角会出现“回到今天”。项目筛选在日程页和待办页之间共用。</p>
+  <p class="cap"><b>④ 日程页</b>周条紧贴标题。圆点表示当天有日程，墨色短横线表示当天有待办截止。翻到别的周时，周条下方居中出现“回到今天”，点标题也能回到今天。项目筛选放在周条下面；截止行可以直接勾掉。</p>
   <div class="frame">
     <section class="panel">
-      <div class="ph"><h2>11月 第1周</h2><div style="display:flex;gap:6px"><button class="back-today">回到今天</button><button class="round" aria-label="上一周">‹</button><button class="round" aria-label="下一周">›</button></div></div>
-      <div class="filters"><button class="f" aria-pressed="true">全部</button><button class="f" aria-pressed="false"><span class="sw" style="background:var(--p5)"></span>SignPlex</button><button class="f" aria-pressed="false"><span class="sw" style="background:var(--p1)"></span>NEOX</button></div>
+      <div class="ph"><h2><button type="button" aria-label="11月第1周，点按回到今天">11月 第1周</button></h2><div style="display:flex;gap:6px"><button class="round" style="width:44px;height:44px" aria-label="上一周">‹</button><button class="round" style="width:44px;height:44px" aria-label="下一周">›</button></div></div>
       <div class="week">
         <button class="day"><span class="w">一</span><span class="n">2</span><span class="dots"></span></button>
         <button class="day sel"><span class="w">二</span><span class="n">3</span><span class="dots"><b style="background:var(--p1)"></b><i class="dl"></i></span></button>
@@ -176,40 +200,38 @@
         <button class="day"><span class="w">六</span><span class="n">7</span><span class="dots"></span></button>
         <button class="day"><span class="w">日</span><span class="n">8</span><span class="dots"></span></button>
       </div>
+      <button class="back-today" type="button">回到今天</button>
+      <div class="filters"><button class="f" aria-pressed="true" style="min-height:44px">全部</button><button class="f" aria-pressed="false" style="min-height:44px"><span class="sw" style="background:var(--p5)"></span>SignPlex</button><button class="f" aria-pressed="false" style="min-height:44px"><span class="sw" style="background:var(--p1)"></span>NEOX</button></div>
       <div class="evlist">
         <div class="dhead">11月3日 周二</div>
-        <button class="ev" style="background:var(--p1)"><span class="et">15:00<small>至 16:00</small></span><span class="eb"><span class="en">报价沟通</span><span class="ex" style="display:block">NEOX  <span class="bell">提前 15 分</span></span></span></button>
-        <div class="deadline"><span class="dk">截止</span><span>交 NEOX 竖版 4K</span></div>
+        <button class="ev" style="background:var(--p1)"><span class="et">15:00<small>至 16:00</small></span><span class="eb"><span class="en">报价沟通</span><span class="ex" style="display:block">NEOX  <span class="bell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/></svg>提前 15 分</span></span></span></button>
+        <div class="deadline"><button class="ck" aria-label="完成：交 NEOX 竖版 4K"><span></span></button><span>交 NEOX 竖版 4K</span><span class="dk">截止</span></div>
       </div>
     </section>
   </div>
 </div>
 
-<!-- ⑤ 待办页：搜索、提醒标签、最近删除、导出 -->
+<!-- ⑤ 待办页 -->
 <div>
-  <p class="cap"><b>⑤ 待办页：搜索、最近删除、导出</b>搜索框放在最上面，标题、备注、原话都能搜，范围包括已完成的事和过去的日程。“最近删除”折叠在列表底部，30 天后自动清理。导出备份放在最下面，用小字链接。</p>
+  <p class="cap"><b>⑤ 待办页</b>搜索框放在最上面。“最近删除”默认折叠成一行色块，不加分隔线。“导出备份”放在页面最底部，不加下划线。</p>
   <div class="frame">
     <section class="panel">
       <div class="ph"><h2>待办</h2><span class="meta">4 件未完成</span></div>
       <input class="search" placeholder="搜索标题、备注、原话" aria-label="搜索">
       <ul class="todos">
-        <li class="td imp"><button class="ck"><span></span></button><button class="tb"><span class="tt">交 SignPlex 韩文版成片</span><span class="tags"><span class="tag"><span class="sw" style="background:var(--p5)"></span>SignPlex</span><span class="tag due-today">明天截止</span><span class="tag bell">前一天 9:00 提醒</span></span></button></li>
+        <li class="td imp"><button class="ck"><span></span></button><button class="tb"><span class="tt">交 SignPlex 韩文版成片</span><span class="tags"><span class="tag"><span class="sw" style="background:var(--p5)"></span>SignPlex</span><span class="tag due-today">明天截止</span><span class="tag bell"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/></svg>前一天 9:00</span></span></button></li>
         <li class="td"><button class="ck"><span></span></button><button class="tb"><span class="tt">挑 4 首配乐候选</span><span class="tags"><span class="tag"><span class="sw" style="background:var(--p4)"></span>SOIL STUDIO</span><span class="tag">还剩 5 天</span><span class="tag ai">Claude 代记</span></span></button></li>
         <li class="td"><button class="ck"><span></span></button><button class="tb"><span class="tt">整理素材盘</span></button></li>
       </ul>
-      <div class="fold">
-        <h4><span>最近删除 2 件</span><span>30 天后自动清理</span></h4>
-        <div class="trash-row"><span>买硬盘<small>2 天前删除</small></span><button>恢复</button></div>
-        <div class="trash-row"><span>体检<small>今天删除</small></span><button>恢复</button></div>
-      </div>
-      <button class="export">导出备份（JSON）</button>
+      <button class="trash" type="button"><span><b>最近删除 2 件</b>  30 天后自动清理</span><span>›</span></button>
     </section>
+    <button class="export" type="button">导出备份（JSON）</button>
   </div>
 </div>
 
-<!-- ⑥ 提示条叠放 -->
+<!-- ⑥ 提示条 -->
 <div>
-  <p class="cap"><b>⑥ 提示条叠放</b>提示条最多叠 3 条，每条单独计时；带“撤销”的保留 8 秒。删除提示不显示标题，避免录屏或旁人看到内容。</p>
+  <p class="cap"><b>⑥ 提示条叠放</b>提示条左对齐、宽度统一，最多叠 3 条，每条单独计时。删除提示不显示标题。第 4 条进来时最旧的一条淡出；删除提示被挤掉时，在“最近删除”里还能找回。</p>
   <div class="frame">
     <div class="toasts">
       <div class="toast on"><span>已删除 1 项</span><button>撤销</button></div>
