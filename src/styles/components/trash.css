@@ -7,7 +7,7 @@
 .trash-list,.log-list{display:flex;flex-direction:column;gap:6px;margin-top:-8px}
 .trash-list[hidden],.log-list[hidden]{display:none}
 .trash-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;border-radius:14px;background:var(--panel-2);padding:6px 6px 6px 14px}
-.trash-row.leaving{animation:leave .24s cubic-bezier(.4,0,.2,1) forwards}
+.trash-row.leaving{animation:leave .16s cubic-bezier(.4,0,.2,1) forwards}   /* 从最近删除恢复：淡出 160ms（UI-4） */
 .tr-b{display:flex;flex-direction:column;min-width:0}
 .tr-t{overflow-wrap:anywhere;line-height:1.4}
 .tr-m{font-size:12px;color:var(--muted)}

@@ -23,7 +23,7 @@ function restore(r, row){
     V.flash.add(id);
     setTimeout(() => { V.flash.delete(id); }, C.FRESH_MS);
     write.restore(r.coll, r.item);
-  }, 240);   // 与 todo.css 的 .leaving 动画 .24s 一致
+  }, 160);   // 与 trash.css 的 .trash-row.leaving 动画 .16s 一致（UI-4）
 }
 function render(){
   const btn = $("trash-toggle"), list = $("trash-list"), items = archive.trash();

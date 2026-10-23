@@ -404,7 +404,7 @@ mark{background:var(--yellow);color:var(--on-yellow);border-radius:3px;padding:0
 .trash-list,.log-list{display:flex;flex-direction:column;gap:6px;margin-top:-8px}
 .trash-list[hidden],.log-list[hidden]{display:none}
 .trash-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;border-radius:14px;background:var(--panel-2);padding:6px 6px 6px 14px}
-.trash-row.leaving{animation:leave .24s cubic-bezier(.4,0,.2,1) forwards}
+.trash-row.leaving{animation:leave .16s cubic-bezier(.4,0,.2,1) forwards}   /* 从最近删除恢复：淡出 160ms（UI-4） */
 .tr-b{display:flex;flex-direction:column;min-width:0}
 .tr-t{overflow-wrap:anywhere;line-height:1.4}
 .tr-m{font-size:12px;color:var(--muted)}
@@ -515,7 +515,7 @@ mark{background:var(--yellow);color:var(--on-yellow);border-radius:3px;padding:0
 <div class="netbar" id="netbar" hidden>网络断开了，恢复后会自动同步</div>
 
 <div class="scrim" id="scrim" hidden></div>
-<form class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-title" hidden>
+<form class="sheet" id="sheet" novalidate role="dialog" aria-modal="true" aria-labelledby="sh-title" hidden>
   <div class="grab"></div>
   <h3 id="sh-title">记一件事</h3>
   <div id="q-wrap" class="q-row">
@@ -3389,7 +3389,7 @@ function restore(r, row){
     V.flash.add(id);
     setTimeout(() => { V.flash.delete(id); }, C.FRESH_MS);
     write.restore(r.coll, r.item);
-  }, 240);   // 与 todo.css 的 .leaving 动画 .24s 一致
+  }, 160);   // 与 trash.css 的 .trash-row.leaving 动画 .16s 一致（UI-4）
 }
 function render(){
   const btn = $("trash-toggle"), list = $("trash-list"), items = archive.trash();
