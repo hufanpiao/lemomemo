@@ -1,28 +1,44 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><script>
-// 模拟 window.claude（v2 时代的 测试/mock.js 原样迁来）：提供 claude.use("db") 的集合 / 文档接口和一组示例数据，
-// 用来在本地验证 platform/claude-db.js 适配器。由 build.py 拼进 dist/test-claude.html（放在页面脚本之前，单独一个 <script>）。
-// 依赖：无。
-(function(){
-  const pad=n=>String(n).padStart(2,"0"); const d=new Date(); const ymd=x=>x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate());
+// 职责：测试用示例数据（mock-db 适配器和 window.claude 桩共用这一份）：plannerSampleData(nowMs) 按“现在”生成
+//       今天、明天、三天后的日程和一组待办（含过期、今天截止、已完成、Claude 代记的条目）。
+// 依赖：无。在测试页里作为单独的 <script> 放在页面脚本之前；Node 测试里用 vm 加载。
+globalThis.plannerSampleData = function plannerSampleData(nowMs){
+  const pad=n=>String(n).padStart(2,"0"); const d=new Date(nowMs); const ymd=x=>x.getFullYear()+"-"+pad(x.getMonth()+1)+"-"+pad(x.getDate());
   const off=n=>{const x=new Date(d);x.setDate(x.getDate()+n);return ymd(x)}; const H=d.getHours();
-  const store={events:{
-    e1:{title:"NEOX 横版对片",date:off(0),time:pad(Math.max(8,H-1))+":00",durationMin:90,project:"NEOX",note:"腾讯会议"},
-    e2:{title:"SignPlex 客户反馈会",date:off(0),time:pad(Math.min(22,H+1))+":30",durationMin:60,project:"SignPlex",source:"chat"},
-    e3:{title:"SOIL STUDIO 现场踩点",date:off(1),time:"10:00",durationMin:180,project:"SOIL STUDIO",note:"望京"},
-    e4:{title:"体检",date:off(3),time:"",project:""}},
-   todos:{
-    t1:{title:"交 SignPlex 韩文版成片",done:false,due:off(-2),important:true,project:"SignPlex",createdAt:1},
-    t2:{title:"NEOX 竖版 4K 导出",done:false,due:off(0),important:false,project:"NEOX",createdAt:2},
-    t3:{title:"挑 4 首配乐候选",done:false,due:off(5),important:false,project:"SOIL STUDIO",createdAt:3,source:"chat"},
-    t4:{title:"整理素材盘",done:false,due:"",important:false,project:"",createdAt:4},
-    t5:{title:"回复报价邮件",done:true,doneAt:Date.now()-3600e3,due:off(0),important:true,project:"",createdAt:5}}};
-  const subs={events:[],todos:[]};
-  const snap=c=>({docs:Object.entries(store[c]).map(([id,v])=>({id,exists:true,data:()=>v})),docChanges:()=>[]});
-  const emit=c=>setTimeout(()=>subs[c].forEach(f=>f(snap(c))),120);
-  let n=0;
-  const coll=c=>({onSnapshot(f){subs[c].push(f);emit(c);return()=>{}},
-    doc(id){id=id||("m"+(++n));return{id,async set(v){store[c][id]=v;emit(c)},async update(v){Object.assign(store[c][id],v);emit(c)},async delete(){delete store[c][id];emit(c)}}}});
-  window.claude={use:async()=>({collection:coll})};
+  return {
+    events:{
+      e1:{title:"NEOX 横版对片",date:off(0),time:pad(Math.max(8,H-1))+":00",durationMin:90,project:"NEOX",note:"腾讯会议"},
+      e2:{title:"SignPlex 客户反馈会",date:off(0),time:pad(Math.min(22,H+1))+":30",durationMin:60,project:"SignPlex",source:"chat"},
+      e3:{title:"SOIL STUDIO 现场踩点",date:off(1),time:"10:00",durationMin:180,project:"SOIL STUDIO",note:"望京"},
+      e4:{title:"体检",date:off(3),time:"",project:""}},
+    todos:{
+      t1:{title:"交 SignPlex 韩文版成片",done:false,due:off(-2),important:true,project:"SignPlex",createdAt:1},
+      t2:{title:"NEOX 竖版 4K 导出",done:false,due:off(0),important:false,project:"NEOX",createdAt:2},
+      t3:{title:"挑 4 首配乐候选",done:false,due:off(5),important:false,project:"SOIL STUDIO",createdAt:3,source:"chat"},
+      t4:{title:"整理素材盘",done:false,due:"",important:false,project:"",createdAt:4},
+      t5:{title:"回复报价邮件",done:true,doneAt:nowMs-3600e3,due:off(0),important:true,project:"",createdAt:5}},
+  };
+};
+// 职责：模拟 window.claude：提供 claude.use("db") 的集合 / 文档接口（与 claude.ai 数据库同形），用来在本地验证
+//       platform/claude-db.js 适配器。数据默认取 plannerSampleData(现在)；测试可预先设置
+//       globalThis.plannerStubSeed（自定义数据）、globalThis.plannerStubFail = "invalid_argument" 等（让写入失败）。
+// 依赖：tests/mock/sample-data.js（未设置 plannerStubSeed 时）。build.py 把两者一起放进 dist/test-claude.html 的桩脚本。
+(function(){
+  const g = globalThis;
+  const store = g.plannerStubSeed || g.plannerSampleData(Date.now());
+  const subs = {events:[], todos:[]};
+  const snap = c => ({docs:Object.entries(store[c]).map(([id,v])=>({id,exists:true,data:()=>v})),docChanges:()=>[]});
+  const emit = c => setTimeout(() => subs[c].forEach(f => f(snap(c))), g.plannerStubDelay == null ? 120 : g.plannerStubDelay);
+  const failIf = async () => { if (g.plannerStubFail){ const e = new Error("stub"); e.code = g.plannerStubFail; throw e; } };
+  let n = 0;
+  const coll = c => ({
+    onSnapshot(f){ subs[c].push(f); emit(c); return () => { subs[c] = subs[c].filter(x => x !== f); }; },
+    doc(id){ id = id || ("m"+(++n)); return {id,
+      async set(v){ await failIf(); store[c][id] = v; emit(c); },
+      async update(v){ await failIf(); Object.assign(store[c][id], v); emit(c); },
+      async delete(){ await failIf(); delete store[c][id]; emit(c); }}; }});
+  g.window = g.window || g;
+  g.window.claude = {use: async () => ({collection:coll})};
 })();
 </script>
 <title>日程与待办</title>
@@ -221,11 +237,12 @@ button{cursor:pointer}
 .sk{height:56px;border-radius:var(--r-block);background:var(--panel-2)}
 @media (prefers-reduced-motion:no-preference){.sk{animation:pulse 1.2s ease-in-out infinite alternate}}
 @keyframes pulse{to{opacity:.45}}
-/* 组件：底部提示条（带撤销/重试按钮）与顶部断网红条。
-   依赖：tokens.css。 */
+/* 组件：底部提示条（可叠放，最多 3 条，新的在下面；带撤销 / 重试按钮）与顶部断网红条。
+   淡出时长 .2s 与 core/const.js 的 TOAST_LEAVE_MS 一致。依赖：tokens.css。 */
 /* 提示条 */
-.toast{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translate(-50%,8px);opacity:0;background:var(--dock);color:var(--dock-ink);border-radius:999px;padding:6px 6px 6px 18px;display:flex;align-items:center;gap:12px;font-size:14px;transition:opacity .2s ease-out,transform .2s ease-out;pointer-events:none;max-width:calc(100% - 32px);z-index:30;border:1px solid var(--line)}
-.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toasts{position:fixed;left:50%;bottom:calc(92px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;width:max-content;max-width:calc(100% - 32px);z-index:30;pointer-events:none}
+.toast{transform:translateY(8px);opacity:0;background:var(--dock);color:var(--dock-ink);border-radius:999px;padding:6px 6px 6px 18px;display:flex;align-items:center;gap:12px;font-size:14px;transition:opacity .2s ease-out,transform .2s ease-out;pointer-events:none;max-width:100%;border:1px solid var(--line)}
+.toast.on{opacity:1;transform:none;pointer-events:auto}
 .toast button{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);padding:6px 14px;font-weight:700;min-height:36px}
 .netbar{position:fixed;top:0;left:0;right:0;z-index:40;background:var(--red);color:#fff;font-size:14px;text-align:center;padding:calc(4px + env(safe-area-inset-top,0px)) 16px 4px}
 /* 组件：新建/编辑底部弹出层（遮罩、一句话输入框、类型切换、表单字段、操作按钮）。
@@ -333,7 +350,7 @@ button{cursor:pointer}
   <button class="plus" type="button" id="plus" aria-label="新建日程或待办"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 </div>
 
-<div class="toast" id="toast" role="status"><span id="toast-msg"></span><button type="button" id="toast-btn">撤销</button></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <div class="netbar" id="netbar" hidden>网络断开了，恢复后会自动同步</div>
 
 <div class="scrim" id="scrim" hidden></div>
@@ -373,57 +390,146 @@ button{cursor:pointer}
 (function(){
 const App = {};
 App.BUILD = {"target": "claude", "storage": "claude-db"};
+// ==== src/scripts/core/const.js ====
+(function(){
+// 职责：全项目共用的常量（默认值、长度上限、动画时长、提示条时长、时钟间隔等），避免魔法数字散落在各处。
+//       改动画时长时要同步检查对应的 CSS（注释里写了是哪一条）。
+// 依赖：无
+App.core = App.core || {};
+
+App.core.C = {
+  // 数据默认值与上限
+  DEFAULT_DURATION_MIN: 60,     // 日程没写时长时按 1 小时
+  NO_DUE: "9999",               // 排序时“没有截止日”排在最后
+  TITLE_MAX: 160,               // 与 index.html 标题输入框 maxlength 一致
+  PROJECT_MAX: 40,              // 与项目输入框 maxlength 一致
+  NOTE_MAX: 200,                // 与备注输入框 maxlength 一致
+  RAW_MAX: 1000,                // 原话最多保留的字数
+
+  // 动画（毫秒）
+  DONE_ANIM_MS: 960,            // 勾选后停顿再重排：todo.css .tb .tt 划线 .28s + 停留
+  DONE_ANIM_REDUCED_MS: 800,    // 系统开了“减少动态效果”时的停顿
+  SHEET_ANIM_MS: 340,           // 弹出层收起：sheet.css .sheet transition .34s
+  FRESH_MS: 2400,               // 别处新加的条目高亮：todo.css @keyframes fresh 2.2s + 余量
+  TOAST_LEAVE_MS: 200,          // 提示条淡出：toast.css .toast transition .2s
+
+  // 提示条
+  TOAST_MS: 3000,               // 普通提示
+  TOAST_UNDO_MS: 8000,          // 带“撤销”的提示
+  TOAST_RETRY_MS: 6000,         // 保存失败、带“重试”的提示
+  TOAST_LOST_MS: 60000,         // 连接中断、带“刷新”的提示
+  TOAST_MAX: 3,                 // 最多同时叠放几条
+  DELETE_TITLE_CHARS: 12,       // 删除提示里显示标题的前几个字
+
+  // 时间轴
+  TL_PX_PER_HOUR: 52,
+  TL_HOURS_BEFORE: 1,           // 现在之前至少显示 1 小时
+  TL_HOURS_AFTER: 3,            // 现在之后至少显示 3 小时
+  TL_MIN_HOURS: 4,              // 至少显示 4 小时
+  TL_BLOCK_MIN_PX: 30,          // 色块最小高度
+  TL_META_MIN_PX: 40,           // 色块高于这个才显示时间行
+
+  // 列表
+  SOON_DAYS: 2,                 // “今天要做”包含两天内到期的
+  DUE_COUNTDOWN_DAYS: 7,        // 7 天内显示“还剩 N 天”
+  UPCOMING_MAX: 30,             // “接下来”最多列多少项
+  OLD_DONE_MAX: 100,            // 折叠的已完成最多显示多少项
+  WEEK_DOTS_MAX: 3,             // 日期条每天最多几个小圆点
+  TOMORROW_PREVIEW_HOUR: 18,    // 几点以后预告明天
+  NARROW_NAV_PX: 380,           // 窄于这个宽度时导航只显示当前页文字
+
+  // 时钟、写入与连接
+  CLOCK_TICK_MS: 60000,         // 每分钟刷新一次时间轴和倒计时
+  WRITE_TIMEOUT_MS: 10000,      // 写入超过 10 秒没回应算失败
+  RECONNECT_MS: [3000, 10000, 30000, 60000],   // 断线后第 1、2、3、4+ 次重连的等待
+};
+})();
 // ==== src/scripts/core/date.js ====
 (function(){
-// 日期与时间工具：以 "YYYY-MM-DD" 字符串表示日期，提供解析、加减天数、相差天数、
-// "HH:MM" 与分钟互转、本周一、“10月23日”格式。today()/nowMin() 读当前时间。
-// 依赖：无。不碰 document / window，可在 Node 中直接加载（构建时每个文件各包一层函数作用域）。
+// 职责：日期与时间纯函数。日期用 "YYYY-MM-DD" 字符串，时间用 "HH:MM"；解析、加减天数、相差天数、
+//       分钟互转、本周一、“10月23日”格式；todayOf/minOfDay/hourOf 把毫秒时间戳换成当天日期和分钟。
+//       “现在”一律由调用方传入（来自 core/clock.js），本文件不读系统时间。
+// 依赖：无
 App.core = App.core || {};
 
 const WK = ["周日","周一","周二","周三","周四","周五","周六"];
 const pad = n => String(n).padStart(2,"0");
 const ymd = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
 const parse = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y,m-1,d); };
-const today = () => ymd(new Date());
 const addDays = (s,n) => { const d = parse(s); d.setDate(d.getDate()+n); return ymd(d); };
 const dayDiff = (a,b) => Math.round((parse(a)-parse(b))/86400000);
 const hm2m = t => { const [h,m] = t.split(":").map(Number); return h*60+m; };
 const m2hm = m => pad(Math.floor(m/60)%24)+":"+pad(m%60);
-const nowMin = () => { const n = new Date(); return n.getHours()*60+n.getMinutes(); };
 function mondayOf(s){ const d = parse(s); return addDays(s, -((d.getDay()+6)%7)); }
 const md = s => { const d = parse(s); return (d.getMonth()+1)+"月"+d.getDate()+"日"; };
+const todayOf = ms => ymd(new Date(ms));
+const minOfDay = ms => { const n = new Date(ms); return n.getHours()*60+n.getMinutes(); };
+const hourOf = ms => new Date(ms).getHours();
 
-App.core.date = {WK, pad, ymd, parse, today, addDays, dayDiff, hm2m, m2hm, nowMin, mondayOf, md};
+App.core.date = {WK, pad, ymd, parse, addDays, dayDiff, hm2m, m2hm, mondayOf, md, todayOf, minOfDay, hourOf};
 })();
-// ==== src/scripts/core/dom.js ====
+// ==== src/scripts/core/clock.js ====
 (function(){
-// DOM 小工具：$(id) 取元素、h() 一次建好带属性和子节点的元素、对勾图标、骨架和空状态框。
-// 只在函数被调用时才访问 document，加载本文件本身不需要页面。
-// 依赖：无。
+// 职责：统一时钟。create(env) 返回时钟：now()/today()/nowMin()/hour() 读当前时间；
+//       start() 后每分钟发 "tick"，页面切回前台发 "wake"，日期变了（跨过零点）先发 "daychange" {prev, day}。
+//       时间来源和定时器由 env 注入（正式运行用 platform/env.js，测试用假时钟），本文件不直接读系统时间。
+// 依赖：core/const.js、core/date.js
 App.core = App.core || {};
 
-const $ = id => document.getElementById(id);
-const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
-function h(tag, attrs, ...kids){
-  const el = document.createElement(tag);
-  for (const k in (attrs||{})){
-    const v = attrs[k]; if (v == null || v === false) continue;
-    if (k === "class") el.className = v; else if (k === "style") el.setAttribute("style", v);
-    else if (k.startsWith("on")) el[k] = v; else if (k === "html") el.innerHTML = v; else el.setAttribute(k, v === true ? "" : v);
-  }
-  for (const c of kids.flat()){ if (c == null || c === false) continue; el.append(c.nodeType ? c : String(c)); }
-  return el;
-}
-function skeleton(n){ return Array.from({length:n}, () => h("div",{class:"sk"})); }
-function emptyBox(title, text){ return h("div",{class:"empty"}, h("strong",null,title), text); }
+const C = App.core.C;
+const {todayOf, minOfDay, hourOf} = App.core.date;
 
-App.core.dom = {$, h, ICON_CHECK, skeleton, emptyBox};
+function create(env){
+  const subs = {tick:[], wake:[], daychange:[]};
+  const emit = (type, payload) => subs[type].slice().forEach(fn => fn(payload));
+  let day = todayOf(env.now());
+  const checkDay = () => {
+    const d = todayOf(env.now());
+    if (d !== day){ const prev = day; day = d; emit("daychange", {prev, day:d}); }
+  };
+  return {
+    now: () => env.now(),
+    today: () => todayOf(env.now()),
+    nowMin: () => minOfDay(env.now()),
+    hour: () => hourOf(env.now()),
+    on(type, fn){ subs[type].push(fn); },
+    start(){
+      env.every(C.CLOCK_TICK_MS, () => { checkDay(); emit("tick"); });
+      env.onVisible(() => { checkDay(); emit("wake"); });
+    },
+    checkDay,
+  };
+}
+
+App.core.clock = {create};
+})();
+// ==== src/scripts/logic/items.js ====
+(function(){
+// 职责：条目的通用判断（纯函数）：日程时长与起止分钟、待办是否“今天完成”、是否过期没做、条目是否已软删除。
+//       各处重复的判断都从这里取，改规则只改一处。
+// 依赖：core/const.js、core/date.js
+App.logic = App.logic || {};
+
+const C = App.core.C;
+const {ymd, hm2m} = App.core.date;
+
+const durationOf = e => Number(e.durationMin) || C.DEFAULT_DURATION_MIN;
+const startMin = e => hm2m(e.time);
+const endMin = e => hm2m(e.time) + durationOf(e);
+// 已完成且完成时间落在 t 那天
+const isDoneOn = (x, t) => !!(x.done && x.doneAt && ymd(new Date(x.doneAt)) === t);
+// 没完成、有截止日且截止日早于 t
+const isLate = (x, t) => !!(!x.done && x.due && x.due < t);
+// 没有被软删除（deletedAt 为空）
+const isLive = x => !x.deletedAt;
+
+App.logic.items = {durationOf, startMin, endMin, isDoneOn, isLate, isLive};
 })();
 // ==== src/scripts/logic/projects.js ====
 (function(){
-// 项目颜色与项目列表：已知项目用固定马卡龙色，其他项目按名字哈希取色；
-// projectList() 汇总已知项目和数据里出现过的项目（保持出现顺序）。纯函数。
-// 依赖：无。
+// 职责：项目颜色与项目列表（纯函数）：已知项目用固定马卡龙色，其他项目按名字哈希取色；
+//       projectList() 汇总已知项目和传入条目里出现过的项目（保持出现顺序；调用方传入的应是未删除的条目）。
+// 依赖：无
 App.logic = App.logic || {};
 
 const KNOWN = {"SignPlex":"--p5","NEOX":"--p1","SOIL STUDIO":"--p4"};
@@ -443,82 +549,48 @@ function projectList(events, todos){
 
 App.logic.projects = {KNOWN, PAL, projVar, projColor, projectList};
 })();
-// ==== src/scripts/logic/parse-quick.js ====
+// ==== src/scripts/logic/format.js ====
 (function(){
-// 一句话解析 parseQuick(s, t, projectNames)：从“下周三下午两点半和 NEOX 对片”里取出
-// 日期、时间、是否重要、项目和标题；有时间就判为日程，否则为待办。纯函数：
-// “今天”由参数 t（"YYYY-MM-DD"）传入，项目名单由 projectNames 传入。依赖：core/date.js。
+// 职责：界面文案的纯函数：relDay()“今天 周五 / 明天 周六 / 10月30日 周五”，dueText()“晚了 2 天 / 今天截止 / 还剩 3 天”，
+//       startsText()“1 小时 20 分钟后开始 / 进行中，19:30 结束”。“今天”由参数 t 传入。
+// 依赖：core/const.js、core/date.js
 App.logic = App.logic || {};
 
-const {pad, ymd, parse, addDays, mondayOf} = App.core.date;
-const CN = {"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"日":0,"天":0};
+const C = App.core.C;
+const {WK, parse, dayDiff, md, m2hm} = App.core.date;
 
-function parseQuick(s, t, projectNames){
-  // 中文数字转阿拉伯数字（只处理紧跟“点/月/日/号/分”的，避免误伤“周三”）
-  const cnNum = w => {
-    const D = {"零":0,"一":1,"二":2,"两":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9};
-    if (w === "十") return 10;
-    if (w.includes("十")){ const [a,b] = w.split("十"); return (a ? D[a] : 1)*10 + (b ? D[b] : 0); }
-    return D[w];
-  };
-  s = s.replace(/[零一二两三四五六七八九十]{1,3}(?=[点月日号分])/g, w => { const n = cnNum(w); return n == null ? w : String(n); });
-  let text = " " + s + " ", date = "", time = "", important = false, project = "";
-  const take = re => { const m = text.match(re); if (m) text = text.replace(m[0], " "); return m; };
-  let m;
-  if ((m = take(/(大后天|后天|明天|明早|明晚|今天|今晚|今早)/))){
-    const w = m[1]; date = addDays(t, w === "大后天" ? 3 : w === "后天" ? 2 : w.startsWith("明") ? 1 : 0);
-    if (w === "明晚" || w === "今晚") text = " 晚上" + text;
-    if (w === "明早" || w === "今早") text = " 早上" + text;
-  }
-  else if ((m = take(/(下下|下|这|本)?(?:个)?(?:周|星期|礼拜)([一二三四五六日天1-7])/))){
-    let wd = CN[m[2]] != null ? CN[m[2]] : Number(m[2]) % 7;
-    const cur = parse(t).getDay();
-    const mon = mondayOf(t);
-    const idx = (wd + 6) % 7;
-    if (m[1] === "下") date = addDays(mon, 7 + idx);
-    else if (m[1] === "下下") date = addDays(mon, 14 + idx);
-    else if (m[1] === "这" || m[1] === "本") date = addDays(mon, idx);
-    else { let diff = (wd - cur + 7) % 7; date = addDays(t, diff); }
-  }
-  else if ((m = take(/(?:(\d{4})[年\/.-])?(\d{1,2})[月\/.-](\d{1,2})[日号]?/))){
-    const y = m[1] ? Number(m[1]) : parse(t).getFullYear();
-    let d = new Date(y, Number(m[2])-1, Number(m[3]));
-    if (!m[1] && ymd(d) < t) d = new Date(y+1, Number(m[2])-1, Number(m[3]));
-    if (!isNaN(d)) date = ymd(d);
-  }
-  else if ((m = take(/(\d{1,2})[日号]/))){
-    const n = parse(t); let d = new Date(n.getFullYear(), n.getMonth(), Number(m[1]));
-    if (ymd(d) < t) d = new Date(n.getFullYear(), n.getMonth()+1, Number(m[1]));
-    date = ymd(d);
-  }
-  if ((m = take(/(凌晨|早上|上午|中午|下午|傍晚|晚上)?\s*(\d{1,2})(?:[:：](\d{2})|点(?:钟)?(半|一刻|三刻|(\d{1,2})分?)?)/))){
-    let hh = Number(m[2]), mm = m[3] ? Number(m[3]) : m[4] === "半" ? 30 : m[4] === "一刻" ? 15 : m[4] === "三刻" ? 45 : m[5] ? Number(m[5]) : 0;
-    const p = m[1] || "";
-    if ((p === "下午" || p === "傍晚" || p === "晚上") && hh < 12) hh += 12;
-    if (p === "中午" && hh < 6) hh += 12;
-    if (hh <= 23 && mm <= 59){ time = pad(hh)+":"+pad(mm); if (!date) date = t; }
-  }
-  take(/(凌晨|早上|上午|中午|下午|傍晚|晚上)/);
-  if (take(/(重要|紧急|[!！]+)/)) important = true;
-  for (const p of projectNames.slice().sort((a,b) => b.length - a.length)){
-    const i = text.toLowerCase().indexOf(p.toLowerCase());
-    if (i >= 0){ project = p; break; }
-  }
-  let title = text.replace(/\s+/g," ").trim().replace(/^(之前|以前|前)\s*/,"").replace(/^(在|要|得|记得|提醒我|帮我记一下|记一下)\s*/,"").replace(/^[，,。、\s]+|[，,。、\s]+$/g,"");
-  if (!title) title = s.trim();
-  return {title, date, time, important, project, kind: time ? "event" : "todo"};
+function relDay(s, t){
+  const n = dayDiff(s, t);
+  const w = WK[parse(s).getDay()];
+  if (n === 0) return "今天 "+w; if (n === 1) return "明天 "+w; if (n === 2) return "后天 "+w;
+  if (n === -1) return "昨天 "+w;
+  return md(s)+" "+w;
+}
+function dueText(due, t){
+  const n = dayDiff(due, t);
+  if (n < 0) return "晚了 "+(-n)+" 天";
+  if (n === 0) return "今天截止"; if (n === 1) return "明天截止";
+  if (n <= C.DUE_COUNTDOWN_DAYS) return "还剩 "+n+" 天";
+  return md(due)+" 截止";
+}
+// mins：离开始还有几分钟（≤0 表示已开始）；end：结束时刻（当天分钟数）
+function startsText(mins, end){
+  if (mins <= 0) return "进行中，"+m2hm(end)+" 结束";
+  if (mins < 60) return mins+" 分钟后开始";
+  return Math.floor(mins/60)+" 小时 "+(mins%60 ? mins%60+" 分钟" : "")+"后开始";
 }
 
-App.logic.parseQuick = parseQuick;
+App.logic.format = {relDay, dueText, startsText};
 })();
 // ==== src/scripts/logic/sort.js ====
 (function(){
-// 排序与挑选：日程按日期+时间排序、待办排序（未完成在前、重要在前、截止早的在前），
-// 以及“下一件事”的挑选规则 pickNext()。纯函数，“今天”和“现在几分”由参数传入。
-// 依赖：core/date.js。
+// 职责：排序与挑选（纯函数）：日程按日期+时间排序、待办排序（未完成在前、重要在前、截止早的在前），
+//       pickNext() 挑“下一件事”：今天还没结束的第一个定时日程，没有就取最该做的未完成待办。
+// 依赖：core/const.js、logic/items.js
 App.logic = App.logic || {};
 
-const {hm2m} = App.core.date;
+const C = App.core.C;
+const {startMin, endMin} = App.logic.items;
 
 const byTime = (a,b) => (a.date+(a.time||"00:00")).localeCompare(b.date+(b.time||"00:00"));
 function sortTodos(list){
@@ -526,106 +598,301 @@ function sortTodos(list){
     if (!!a.done !== !!b.done) return a.done ? 1 : -1;
     if (a.done) return (b.doneAt||0)-(a.doneAt||0);
     if (!!a.important !== !!b.important) return a.important ? -1 : 1;
-    const x = a.due || "9999", y = b.due || "9999";
+    const x = a.due || C.NO_DUE, y = b.due || C.NO_DUE;
     return x === y ? (a.createdAt||0)-(b.createdAt||0) : x.localeCompare(y);
   });
   return list;
 }
-// 今天还没结束的第一个定时日程；没有就取最该做的未完成待办
+// events/todos：可见条目；t：今天 "YYYY-MM-DD"；nm：现在是当天第几分钟
 function pickNext(events, todos, t, nm){
   const evs = events.filter(e => e.date === t && e.time).sort((a,b) => a.time.localeCompare(b.time));
   for (const e of evs){
-    const s = hm2m(e.time), end = s + (Number(e.durationMin)||60);
+    const s = startMin(e), end = endMin(e);
     if (end > nm) return {kind:"event", item:e, start:s, end};
   }
   const open = todos.filter(x => !x.done);
-  open.sort((a,b) => (b.important?1:0)-(a.important?1:0) || (a.due||"9999").localeCompare(b.due||"9999") || (a.createdAt||0)-(b.createdAt||0));
+  open.sort((a,b) => (b.important?1:0)-(a.important?1:0) || (a.due||C.NO_DUE).localeCompare(b.due||C.NO_DUE) || (a.createdAt||0)-(b.createdAt||0));
   return open[0] ? {kind:"todo", item:open[0]} : null;
 }
 
 App.logic.sort = {byTime, sortTodos, pickNext};
 })();
-// ==== src/scripts/logic/format.js ====
+// ==== src/scripts/logic/parse-quick.js ====
 (function(){
-// 相对日期文案：relDay()“今天 周五 / 明天 周六 / 10月30日 周五”，dueText()“晚了 2 天 / 今天截止 / 还剩 3 天”。
-// 以当前日期 today() 为基准。不碰 document / window。
-// 依赖：core/date.js。
+// 职责：一句话解析 parseQuick(s, t, projectNames)（纯函数）：从“下周三下午两点半和 NEOX 对片”里取出日期、时间、
+//       是否重要、项目和标题；有时间就判为日程，否则为待办。“今天”由 t（"YYYY-MM-DD"）传入。
+//       分四步：中文数字 → 日期 → 时间 → 标记（重要）→ 项目 → 标题；每步从剩余文字里“取走”识别到的部分。
+// 依赖：core/date.js
 App.logic = App.logic || {};
 
-const {WK, parse, today, dayDiff, md} = App.core.date;
+const {pad, ymd, parse, addDays, mondayOf} = App.core.date;
+const CN_WEEKDAY = {"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"日":0,"天":0};
+const CN_DIGIT = {"零":0,"一":1,"二":2,"两":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9};
 
-function relDay(s){
-  const n = dayDiff(s, today());
-  const w = WK[parse(s).getDay()];
-  if (n === 0) return "今天 "+w; if (n === 1) return "明天 "+w; if (n === 2) return "后天 "+w;
-  if (n === -1) return "昨天 "+w;
-  return md(s)+" "+w;
+// 第 0 步：中文数字转阿拉伯数字（只处理紧跟“点/月/日/号/分”的，避免误伤“周三”）
+function cnNum(w){
+  if (w === "十") return 10;
+  if (w.includes("十")){ const [a,b] = w.split("十"); return (a ? CN_DIGIT[a] : 1)*10 + (b ? CN_DIGIT[b] : 0); }
+  return CN_DIGIT[w];
 }
-function dueText(due){
-  const n = dayDiff(due, today());
-  if (n < 0) return "晚了 "+(-n)+" 天";
-  if (n === 0) return "今天截止"; if (n === 1) return "明天截止";
-  if (n <= 7) return "还剩 "+n+" 天";
-  return md(due)+" 截止";
+const digitize = s => s.replace(/[零一二两三四五六七八九十]{1,3}(?=[点月日号分])/g, w => { const n = cnNum(w); return n == null ? w : String(n); });
+
+// 在剩余文字 st.text 里找 re，找到就把那一段换成空格，返回匹配结果
+function take(st, re){ const m = st.text.match(re); if (m) st.text = st.text.replace(m[0], " "); return m; }
+
+// 第 1 步：日期（今天/明天…、周几、几月几日、几号），返回 "YYYY-MM-DD" 或 ""
+function takeDate(st, t){
+  let m;
+  if ((m = take(st, /(大后天|后天|明天|明早|明晚|今天|今晚|今早)/))){
+    const w = m[1];
+    if (w === "明晚" || w === "今晚") st.text = " 晚上" + st.text;
+    if (w === "明早" || w === "今早") st.text = " 早上" + st.text;
+    return addDays(t, w === "大后天" ? 3 : w === "后天" ? 2 : w.startsWith("明") ? 1 : 0);
+  }
+  if ((m = take(st, /(下下|下|这|本)?(?:个)?(?:周|星期|礼拜)([一二三四五六日天1-7])/))){
+    const wd = CN_WEEKDAY[m[2]] != null ? CN_WEEKDAY[m[2]] : Number(m[2]) % 7;
+    const mon = mondayOf(t), idx = (wd + 6) % 7;
+    if (m[1] === "下") return addDays(mon, 7 + idx);
+    if (m[1] === "下下") return addDays(mon, 14 + idx);
+    if (m[1] === "这" || m[1] === "本") return addDays(mon, idx);
+    return addDays(t, (wd - parse(t).getDay() + 7) % 7);
+  }
+  if ((m = take(st, /(?:(\d{4})[年\/.-])?(\d{1,2})[月\/.-](\d{1,2})[日号]?/))){
+    const y = m[1] ? Number(m[1]) : parse(t).getFullYear();
+    let d = new Date(y, Number(m[2])-1, Number(m[3]));
+    if (!m[1] && ymd(d) < t) d = new Date(y+1, Number(m[2])-1, Number(m[3]));
+    return isNaN(d) ? "" : ymd(d);
+  }
+  if ((m = take(st, /(\d{1,2})[日号]/))){
+    const n = parse(t); let d = new Date(n.getFullYear(), n.getMonth(), Number(m[1]));
+    if (ymd(d) < t) d = new Date(n.getFullYear(), n.getMonth()+1, Number(m[1]));
+    return ymd(d);
+  }
+  return "";
 }
 
-App.logic.format = {relDay, dueText};
+// 第 2 步：时间（上午/下午 + 几点几分 / 8:30），返回 "HH:MM" 或 ""；最后把单独剩下的“上午/晚上”等也取走
+function takeTime(st){
+  let time = "";
+  const m = take(st, /(凌晨|早上|上午|中午|下午|傍晚|晚上)?\s*(\d{1,2})(?:[:：](\d{2})|点(?:钟)?(半|一刻|三刻|(\d{1,2})分?)?)/);
+  if (m){
+    let hh = Number(m[2]);
+    const mm = m[3] ? Number(m[3]) : m[4] === "半" ? 30 : m[4] === "一刻" ? 15 : m[4] === "三刻" ? 45 : m[5] ? Number(m[5]) : 0;
+    const p = m[1] || "";
+    if ((p === "下午" || p === "傍晚" || p === "晚上") && hh < 12) hh += 12;
+    if (p === "中午" && hh < 6) hh += 12;
+    if (hh <= 23 && mm <= 59) time = pad(hh)+":"+pad(mm);
+  }
+  take(st, /(凌晨|早上|上午|中午|下午|傍晚|晚上)/);
+  return time;
+}
+
+// 第 3 步：标记（重要 / 紧急 / 感叹号）
+const takeImportant = st => !!take(st, /(重要|紧急|[!！]+)/);
+
+// 第 4 步：项目（名字长的优先，不分大小写）
+function findProject(text, names){
+  const low = text.toLowerCase();
+  for (const p of names.slice().sort((a,b) => b.length - a.length)) if (low.indexOf(p.toLowerCase()) >= 0) return p;
+  return "";
+}
+
+// 第 5 步：标题（去掉多余空白、开头的“前/之前”“记得/提醒我”等、首尾标点）
+function cleanTitle(text, original){
+  const title = text.replace(/\s+/g," ").trim().replace(/^(之前|以前|前)\s*/,"").replace(/^(在|要|得|记得|提醒我|帮我记一下|记一下)\s*/,"").replace(/^[，,。、\s]+|[，,。、\s]+$/g,"");
+  return title || original.trim();
+}
+
+function parseQuick(s, t, projectNames){
+  s = digitize(s);
+  const st = {text: " " + s + " "};
+  let date = takeDate(st, t);
+  const time = takeTime(st);
+  if (time && !date) date = t;
+  const important = takeImportant(st);
+  const project = findProject(st.text, projectNames);
+  const title = cleanTitle(st.text, s);
+  return {title, date, time, important, project, kind: time ? "event" : "todo"};
+}
+
+App.logic.parseQuick = parseQuick;
+App.logic.parseQuickSteps = {digitize, takeDate, takeTime, takeImportant, findProject, cleanTitle};
+})();
+// ==== src/scripts/logic/remind.js ====
+(function(){
+// 职责：【v3 预留，尚未实现】提醒时刻计算（纯函数）。保存条目时由 data/write.js 调用，结果写进 remindAt。
+//       字段含义见 docs/05-数据字典/数据字典.md 与 docs/02-设计/修改清单-v3.md。
+// 依赖：core/const.js、core/date.js
+App.logic = App.logic || {};
+
+/*
+ * computeRemindAt(item, kind, now) → number | null
+ *   item：整理过的条目（data/normalize.js 的输出）
+ *   kind："event" | "todo"
+ *   now ：当前毫秒时间戳（由调用方传入，本函数不读系统时间）
+ *   返回：提醒时刻（毫秒）；不需要提醒、已完成、已删除或时刻已过时返回 null。
+ *
+ * 规则（v3 修改清单）：
+ *   有时间的日程：remindMin = null 不提醒 / 0 准时 / 15 / 30 / 60 / 1440（提前 1 天）；默认 15。
+ *                 remindAt = date + time 的时刻 − remindMin 分钟。
+ *   全天日程：    remindDays = null 不提醒 / 0 当天 9:00 / 1 前一天 20:00。
+ *   待办（有 due）：remindDays = null 不提醒 / 0 当天 9:00 / 1 前一天 9:00；默认 0，important 时默认 1。
+ *                 done 为 true 时返回 null。
+ *   任何条目：    deletedAt 有值时返回 null。
+ *   snoozeAt（稍后再提醒）和 notifiedFor（已提醒去重）不在这里处理，由 ui/remind.js 和 data/write.js 负责。
+ */
+function computeRemindAt(item, kind, now){
+  return null;   // v3 实现
+}
+
+App.logic.remind = {computeRemindAt};
 })();
 // ==== src/scripts/platform/index.js ====
 (function(){
-// 平台能力入口：所有依赖运行环境（claude.ai / 以后的独立服务器 PWA）的能力都注册在 App.platform 下，
-// UI 代码不直接调用 window.claude 等平台接口。目前只有 storage（存储适配器）。
-// 依赖：无。
+// 职责：平台能力入口。所有依赖运行环境（claude.ai / 以后的独立服务器 PWA / 浏览器本身）的能力都注册在 App.platform 下：
+//       storage（存储适配器工厂）、env（时间与前台事件）、prefs（本机偏好）、notify（提示音与推送）。
+//       storeError() 生成带中性错误码的错误对象，供各存储适配器使用。
+// 依赖：无
 App.platform = App.platform || {};
-App.platform.storage = App.platform.storage || {};   // 存储适配器工厂：{"claude-db": fn, "mock-db": fn, ...}
+App.platform.storage = App.platform.storage || {};   // {"claude-db": 工厂函数, "mock-db": 工厂函数, 以后 "rest": ...}
+
+// 中性错误码：forbidden 没有写权限 / not_found 记录不存在 / quota 存储已满 / network 网络或未知错误 /
+//             unauthenticated 未登录；write 层另外会产生 timeout（超时）。
+const CODES = ["forbidden", "not_found", "quota", "network", "unauthenticated", "timeout"];
+App.platform.storeError = function storeError(code, cause){
+  const e = new Error("存储错误：" + code);
+  e.code = CODES.includes(code) ? code : "network";
+  e.cause = cause;
+  return e;
+};
+})();
+// ==== src/scripts/platform/env.js ====
+(function(){
+// 职责：运行环境的时间来源与定时器，注入给 core/clock.js：now() 当前毫秒、every(ms, fn) 定时、
+//       onVisible(fn) 页面切回前台。测试里用假的 env 替换，就能固定“现在”。
+// 依赖：platform/index.js
+App.platform = App.platform || {};
+
+App.platform.env = {
+  now: () => Date.now(),
+  every: (ms, fn) => setInterval(fn, ms),
+  onVisible(fn){
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") fn(); });
+  },
+};
+})();
+// ==== src/scripts/platform/prefs.js ====
+(function(){
+// 职责：本机偏好（localStorage）的唯一入口：get(键, 默认值)、set(键, 值)。读写失败（隐私模式、被禁用）时静默用默认值。
+//       全部键名集中登记在 KEYS 里，新加偏好先在这里登记，并同步 docs/05-数据字典/数据字典.md 的“本机存储”。
+// 依赖：platform/index.js
+App.platform = App.platform || {};
+
+const KEYS = {
+  view: "pv-view",     // 上次打开的视图：today / sched / todo（v2 起）
+  theme: "pv-theme",   // 【v3 预留】主题：system / light / dark
+};
+function get(key, fallback){
+  try { const v = localStorage.getItem(key); return v == null || v === "" ? fallback : v; }
+  catch(e){ return fallback; }
+}
+function set(key, value){
+  try { localStorage.setItem(key, value); } catch(e){}
+}
+
+App.platform.prefs = {KEYS, get, set};
+})();
+// ==== src/scripts/platform/notify.js ====
+(function(){
+// 职责：【v3 预留，尚未实现】提示音与推送的平台接口。ui/remind.js 只调用这里，不直接碰浏览器通知或 claude.ai 能力。
+// 依赖：platform/index.js
+App.platform = App.platform || {};
 
 /*
- * 以后计划加的平台能力（这次不实现，只约定位置和形状）：
- *   App.platform.download = { saveFile(name, blob) }
- *     claude.ai：走发布平台提供的文件下载能力；独立服务器：<a download> + URL.createObjectURL。
- *   App.platform.notify = { requestPermission(), schedule({id, at, title, body}), cancel(id) }
- *     claude.ai：平台提醒能力（若有）；独立服务器：Service Worker + Web Push（需后端推送服务）。
+ * chime(): boolean
+ *   页面开着时到点响一声提示音（Web Audio 合成，不加载外部文件）。浏览器不允许自动播放时返回 false。
+ * pushSupported(): boolean
+ *   当前平台能否在页面关闭时推送。claude.ai 版：false（改由 Claude 定时任务推送，见 ADR-005）；
+ *   独立服务器 PWA 版：Service Worker + Web Push 可用时为 true。
+ * requestPermission(): Promise<"granted" | "denied" | "unsupported">
+ * push({title, body, at}): Promise<boolean>
+ *   推送文字要脱敏：只写“10:00 1 项日程（NEOX）”这类时间加项目简称，不带完整标题、备注和地点（安全审查）。
  */
+App.platform.notify = {
+  chime: () => false,
+  pushSupported: () => false,
+  requestPermission: async () => "unsupported",
+  push: async () => false,
+};
 })();
 // ==== src/scripts/platform/claude-db.js ====
 (function(){
-// claude.ai 存储适配器：把 window.claude.use("db") 的集合 / 文档接口包装成 data/store.js 定义的统一接口。
-// 这是全项目唯一直接访问 window.claude 的地方；以后的下载、提醒推送等平台能力也放在 platform/ 下。
-// 依赖：无（注册到 App.platform.storage["claude-db"]，由 app.js 选用）。
+// 职责：claude.ai 存储适配器：把 window.claude.use("db") 的集合 / 文档接口包装成 data/store.js 定义的统一接口；
+//       把平台错误码映射成中性错误码；记录 id 一律以文档 id 为准（数据里的 id 字段不能覆盖它）。
+//       连不上时的提示文案也由这里提供。全项目只有本文件访问 window.claude。
+// 依赖：platform/index.js
 App.platform = App.platform || {};
-App.platform.storage = App.platform.storage || {};
+
+const storeError = App.platform.storeError;
+const CODE_MAP = {
+  invalid_argument: "forbidden", permission_denied: "forbidden", forbidden: "forbidden",
+  not_found: "not_found",
+  quota_exceeded: "quota", resource_exhausted: "quota",
+  unauthenticated: "unauthenticated",
+};
+const toStoreError = e => storeError(CODE_MAP[e && e.code] || "network", e);
 
 App.platform.storage["claude-db"] = function createClaudeDb(){
   let db = null;
   const refs = new Map();   // newId 生成的文档引用，add 时沿用同一个引用
-  const doc = (coll, id) => {
+  const ref = (coll, id) => {
     const key = coll + "/" + id, r = refs.get(key);
     if (r){ refs.delete(key); return r; }
     return db.collection(coll).doc(id);
   };
+  const guard = async fn => { try { await fn(); } catch(e){ throw toStoreError(e); } };
   return {
     async connect(){
       db = window.claude && window.claude.use ? await window.claude.use("db") : null;
       return !!db;
     },
+    unavailableHint: () => ({title:"数据没有连上。", text:" 请在 claude.ai 登录同一个账号后再打开这个页面。"}),
     subscribe(coll, onData, onError){
       return db.collection(coll).onSnapshot(s => onData({
-        items: s.docs.map(d => Object.assign({id:d.id}, d.data())),
+        items: s.docs.map(d => Object.assign({}, d.data(), {id:d.id})),
         changes: () => s.docChanges().map(c => ({type:c.type, id:c.doc.id})),
-      }), onError);
+      }), e => onError(toStoreError(e)));
     },
     newId(coll){ const r = db.collection(coll).doc(); refs.set(coll + "/" + r.id, r); return r.id; },
-    add: (coll, id, data) => doc(coll, id).set(data),
-    update: (coll, id, patch) => db.collection(coll).doc(id).update(patch),
-    remove: (coll, id) => db.collection(coll).doc(id).delete(),
+    add: (coll, id, data) => guard(() => ref(coll, id).set(data)),
+    update: (coll, id, patch) => guard(() => db.collection(coll).doc(id).update(patch)),
+    remove: (coll, id) => guard(() => db.collection(coll).doc(id).delete()),
+    // 平台没有批量写入接口：不提供 batch，由 data/store.js 逐条写
   };
+};
+})();
+// ==== src/scripts/data/bus.js ====
+(function(){
+// 职责：数据层的事件总线。data 层只发事件，不碰界面；界面用 App.data.on() 订阅后自己决定重绘或提示。
+//       事件："change"（数据或加载状态变了，该重绘）、"error" {code, retry}（写入失败，已回滚）、
+//             "notice" {type:"unavailable", hint} | {type:"lost"} | {type:"reconnected"}（连接状态）。
+// 依赖：无
+App.data = App.data || {};
+
+const subs = {};
+App.data.on = function on(type, fn){
+  (subs[type] = subs[type] || []).push(fn);
+  return () => { subs[type] = subs[type].filter(f => f !== fn); };
+};
+App.data.emit = function emit(type, payload){
+  (subs[type] || []).slice().forEach(fn => fn(payload));
 };
 })();
 // ==== src/scripts/data/store.js ====
 (function(){
-// 统一存储接口（适配器模式）：页面和 UI 只调用 App.data.store，不直接碰 window.claude 或任何后端。
-// 具体实现放在 platform/（claude-db）或 tests/mock/（mock-db），由 app.js 一处配置选用。
-// 依赖：无（适配器在启动时通过 use() 注入）。
+// 职责：统一存储接口（适配器模式）。页面只通过 data/ 层用它，界面代码不直接调用；具体实现放在 platform/（claude-db）
+//       或 tests/mock/（mock-db），由 app.js 一处配置选用。适配器没有 batch 时由这里逐条写。
+// 依赖：无（适配器在启动时通过 use() 注入）
 App.data = App.data || {};
 
 /*
@@ -633,87 +900,133 @@ App.data = App.data || {};
  *
  *   connect(): Promise<boolean>
  *     连接存储。能用返回 true；当前环境没有这个存储（例如不在 claude.ai 里打开）返回 false。
+ *   unavailableHint(): {title, text}   （可选）
+ *     connect 返回 false 时页面上显示的提示，例如 {title:"数据没有连上。", text:" 请在 claude.ai 登录……"}。
  *
  *   subscribe(collection, onData, onError): () => void
  *     collection：集合名，目前只有 "events"（日程）和 "todos"（待办）。
  *     onData(snapshot)：每次集合有变化都调用一次，首次订阅也要调用一次（全量）。
- *       snapshot.items    —— 数组，集合里全部记录，每条是 {id, ...字段}
+ *       snapshot.items     —— 数组，集合里全部记录（含已软删除的），每条是 {...字段, id}；id 必须是文档 id，
+ *                             记录数据里自带的 id 字段不能覆盖它
  *       snapshot.changes() —— 返回本次变化 [{type:"added"|"modified"|"removed", id}]，首次可为空数组
- *     onError(err)：连接中断等错误。
+ *     onError(err)：连接中断等错误，err.code 为中性错误码。调用后这个订阅视为失效，data 层会重新订阅。
  *     返回值：取消订阅的函数。
  *
  *   newId(collection): string
  *     同步生成一个新记录的 id（写入前就要知道 id，用来识别“自己刚加的”记录，不做高亮）。
  *
  *   add(collection, id, data): Promise<void>      用 newId 得到的 id 新建一条记录
- *   update(collection, id, patch): Promise<void>  合并更新部分字段
- *   remove(collection, id): Promise<void>         删除一条记录
- *     三个写入方法失败时 reject，错误对象可带 code：
- *       "invalid_argument" —— 没有写权限；"quota_exceeded" —— 存储已满；其他视为网络问题。
+ *   update(collection, id, patch): Promise<void>  合并更新部分字段（值为 null 表示清空该字段）
+ *   remove(collection, id): Promise<void>         彻底删除一条记录（页面上的“删除”是软删除，用 update 写 deletedAt）
+ *   batch(ops): Promise<void>                     （可选）一次写多条，ops = [{op:"add"|"update"|"remove", coll, id, data}]
+ *     写入失败时 reject，错误对象带中性错误码 code（用 App.platform.storeError 生成）：
+ *       forbidden 没有写权限 / not_found 记录不存在 / quota 存储已满 / network 网络或未知 / unauthenticated 未登录
  *
  * 以后要加的 REST / 自建服务器适配器（这次不实现），建议对应关系：
- *   connect   → GET /api/me 校验登录（未登录返回 false 或跳转登录）
+ *   connect   → GET /api/me 校验登录（未登录返回 false，unavailableHint 提示去登录）
  *   subscribe → 先 GET /api/{collection} 拉全量，再用 WebSocket / SSE（或定时轮询）收增量，
  *               每次变化把本地缓存整理成 {items, changes()} 回调；断线时调用 onError
  *   newId     → 客户端生成（crypto.randomUUID()），服务器接受客户端 id
- *   add       → PUT  /api/{collection}/{id}   body: data
- *   update    → PATCH /api/{collection}/{id}  body: patch
+ *   add       → PUT    /api/{collection}/{id}   body: data
+ *   update    → PATCH  /api/{collection}/{id}   body: patch
  *   remove    → DELETE /api/{collection}/{id}
- *   HTTP 403 映射为 code "invalid_argument"，507/413 映射为 "quota_exceeded"。
+ *   batch     → POST   /api/batch               body: ops（服务器端用事务）
+ *   HTTP 401 → unauthenticated，403 → forbidden，404 → not_found，413/507 → quota，其他 → network。
  *   离线时可先写入 IndexedDB 队列，恢复网络后补发（配合 Service Worker）。
  */
 
 let adapter = null;
 const store = {
   connected: false,
-  use(a){ adapter = a; },
+  use(a){ adapter = a; store.connected = false; },
   async connect(){ store.connected = !!(adapter && await adapter.connect()); return store.connected; },
+  unavailableHint: () => adapter && adapter.unavailableHint ? adapter.unavailableHint() : {title:"数据没有连上。", text:""},
   subscribe: (coll, onData, onError) => adapter.subscribe(coll, onData, onError),
   newId: coll => adapter.newId(coll),
   add: (coll, id, data) => adapter.add(coll, id, data),
   update: (coll, id, patch) => adapter.update(coll, id, patch),
   remove: (coll, id) => adapter.remove(coll, id),
+  async batch(ops){
+    if (adapter.batch) return adapter.batch(ops);
+    for (const o of ops) await store[o.op](o.coll, o.id, o.data);
+  },
 };
 
 App.data.store = store;
 })();
-// ==== src/scripts/data/state.js ====
+// ==== src/scripts/data/normalize.js ====
 (function(){
-// 页面运行时状态：日程/待办数据、加载标记、待删除队列、新到达高亮、勾选动画暂缓时间，
-// 以及当前视图、选中日期、本周起点、项目筛选等界面状态（视图记在 localStorage）。
-// 依赖：core/date.js、logic/projects.js。
+// 职责：快照进来先整理字段，再进状态：强制类型（字符串、数字、布尔）、日期和时间补零（"2026-1-5" → "2026-01-05"、
+//       "9:5" → "09:05"，认不出就置空）、限制长度、deletedAt 统一为毫秒数或 null；id 一律用文档 id。
+//       Claude 写入的不规范数据不会让页面出错。未知字段原样保留。纯函数。
+// 依赖：core/const.js、core/date.js
 App.data = App.data || {};
 
-const {today, mondayOf} = App.core.date;
-const {projectList} = App.logic.projects;
+const C = App.core.C;
+const {pad} = App.core.date;
 
-const S = {
-  events: [], todos: [],
-  loaded: {ev:false, td:false},
-  pendingDel: new Map(),   // id -> {coll, timer}
-  localIds: new Set(), fresh: new Set(),
-  holdUntil: 0, holdTimer: null,
-  view: "today",
-  selDay: today(), weekStart: mondayOf(today()), projFilter: null, showDone: false,
+const str = (v, max) => {
+  const s = typeof v === "string" ? v : typeof v === "number" && isFinite(v) ? String(v) : "";
+  return max ? s.slice(0, max) : s;
 };
-try { S.view = localStorage.getItem("pv-view") || "today"; } catch(e){}
+const num = (v, dflt) => { const n = Number(v); return v !== null && v !== "" && isFinite(n) ? n : dflt; };
+const bool = v => v === true || v === "true" || v === 1;
+function date(v){
+  const m = typeof v === "string" && v.trim().match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})$/);
+  if (!m) return "";
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= 31 ? y+"-"+pad(mo)+"-"+pad(d) : "";
+}
+function time(v){
+  const m = typeof v === "string" && v.trim().match(/^(\d{1,2})[:：](\d{1,2})$/);
+  if (!m) return "";
+  const h = Number(m[1]), mi = Number(m[2]);
+  return h <= 23 && mi <= 59 ? pad(h)+":"+pad(mi) : "";
+}
+const deletedAt = v => { const n = num(v, 0); return n > 0 ? n : null; };
+const duration = v => { const n = num(v, 0); return n > 0 ? n : C.DEFAULT_DURATION_MIN; };
 
-App.data.state = S;
-App.data.visEv = () => S.events.filter(e => !S.pendingDel.has(e.id));
-App.data.visTd = () => S.todos.filter(t => !S.pendingDel.has(t.id));
-App.data.projects = () => projectList(S.events, S.todos);
-App.data.ready = () => S.loaded.ev && S.loaded.td;
+function common(raw){
+  return {
+    title: str(raw.title, C.TITLE_MAX), project: str(raw.project, C.PROJECT_MAX),
+    source: str(raw.source), rawText: str(raw.rawText, C.RAW_MAX),
+    createdAt: num(raw.createdAt, 0), updatedAt: num(raw.updatedAt, 0), deletedAt: deletedAt(raw.deletedAt),
+  };
+}
+function normalizeEvent(raw, id){
+  raw = raw || {};
+  return Object.assign({}, raw, common(raw), {
+    date: date(raw.date), time: time(raw.time), durationMin: duration(raw.durationMin), note: str(raw.note, C.NOTE_MAX),
+  }, {id: String(id)});
+}
+function normalizeTodo(raw, id){
+  raw = raw || {};
+  const out = Object.assign({}, raw, common(raw), {
+    done: bool(raw.done), doneAt: num(raw.doneAt, 0), due: date(raw.due), important: bool(raw.important),
+  });
+  if ("note" in raw) out.note = str(raw.note, C.NOTE_MAX);
+  out.id = String(id);
+  return out;
+}
+// coll："events" | "todos"；raw 为适配器给的记录（其中 id 已是文档 id）
+const normalizeItem = (coll, raw) => coll === "events" ? normalizeEvent(raw, raw.id) : normalizeTodo(raw, raw.id);
+
+App.data.normalize = {normalizeEvent, normalizeTodo, normalizeItem, date, time};
 })();
 // ==== src/scripts/data/fields.js ====
 (function(){
-// 字段整理：把弹出层表单的值整理成要写入存储的日程 / 待办记录（字段和顺序与 v2 一致），
-// 新建时补上 createdAt、source、rawText 和待办的 done/doneAt。纯函数。
-// 依赖：无。
+// 职责：把弹出层表单的值整理成要写入存储的日程 / 待办记录（字段和顺序与 v2 一致），
+//       新建时补上 createdAt、source、rawText 和待办的 done/doneAt。纯函数，只被 data/write.js 使用。
+// 依赖：core/const.js
 App.data = App.data || {};
 
+const C = App.core.C;
+
+// v：{title, date, time, dur, project, note}
 function eventFields(v, now){
-  return {title:v.title, date:v.date, time:v.time || "", durationMin:Number(v.dur)||60, project:v.project, note:v.note, updatedAt:now};
+  return {title:v.title, date:v.date, time:v.time || "", durationMin:Number(v.dur)||C.DEFAULT_DURATION_MIN, project:v.project, note:v.note, updatedAt:now};
 }
+// v：{title, date, important, project}
 function todoFields(v, now){
   return {title:v.title, due:v.date || "", important:v.important, project:v.project, updatedAt:now};
 }
@@ -725,268 +1038,402 @@ function asNew(data, coll, now, raw){
 
 App.data.fields = {eventFields, todoFields, asNew};
 })();
-// ==== src/scripts/data/write.js ====
+// ==== src/scripts/data/state.js ====
 (function(){
-// 写入操作：勾选完成/撤销、改期、全部改到今天、延迟 5 秒的可撤销删除；先改本地再写存储，失败回滚并提示重试。
-// 页面隐藏或关闭时立即提交待删除项。
-// 依赖：core/date.js、data/store.js、data/state.js；调用时用到 ui/toast.js、ui/render.js。
+// 职责：数据状态：整理过的日程 / 待办、加载标记、自己刚加的 id、别处新加的 id（高亮用）；
+//       visEv/visTd 只返回没被软删除的条目，projects() 汇总项目名单，ready()/isConnected() 给界面判断加载和连接。
+//       界面状态（当前页、选中日期等）不在这里，在 ui/view-state.js。
+// 依赖：logic/items.js、logic/projects.js、data/store.js
 App.data = App.data || {};
 
-const {ymd, today, addDays} = App.core.date;
-const store = App.data.store, S = App.data.state;
-const toast = (...a) => App.ui.toast.show(...a);
-const render = () => App.ui.render();
+const {isLive} = App.logic.items;
+const {projectList} = App.logic.projects;
+const store = App.data.store;
 
-function errMsg(e){ return e && e.code === "invalid_argument" ? "你没有修改权限，只能查看。" : e && e.code === "quota_exceeded" ? "存储已满，删掉一些旧条目再试。" : "没保存上，检查网络后再试。"; }
-async function write(fn, onFail){
-  try { await fn(); return true; }
-  catch(e){ if (onFail) onFail(); toast(errMsg(e), "重试", () => write(fn, onFail), 6000); render(); return false; }
+const S = {
+  events: [], todos: [],
+  loaded: {ev:false, td:false},
+  localIds: new Set(),   // 本页刚新建的 id：快照里看到它们不做“新到达”高亮
+  fresh: new Set(),      // 别处（例如 Claude 在聊天里）刚加的 id：短暂高亮
+};
+
+App.data.state = S;
+App.data.visEv = () => S.events.filter(isLive);
+App.data.visTd = () => S.todos.filter(isLive);
+App.data.projects = () => projectList(App.data.visEv(), App.data.visTd());
+App.data.ready = () => S.loaded.ev && S.loaded.td;
+App.data.isConnected = () => store.connected;
+})();
+// ==== src/scripts/data/write.js ====
+(function(){
+// 职责：全部写入的唯一入口：saveItem 新建 / 编辑、toggleDone 勾选、reschedule 改期、moveAll 全部改到今天、
+//       softDelete 软删除（写 deletedAt）、restore 恢复（清空 deletedAt）。先改本地、发 "change"，再写存储；
+//       写入 10 秒没回应或失败就回滚本地，发 "error" {code, retry}，retry 会把整个操作重做一遍。
+//       以后的 remindAt 计算也在这里统一接入（logic/remind.js）。不碰界面，提示文案由界面根据事件决定。
+// 依赖：core/const.js、platform/index.js、data/bus.js、data/store.js、data/state.js、data/fields.js
+// 运行时调用：core/clock.js 的时钟实例 App.clock（由 app.js 创建）
+App.data = App.data || {};
+
+const C = App.core.C;
+const emit = App.data.emit, store = App.data.store, S = App.data.state, F = App.data.fields;
+const now = () => App.clock.now();
+const today = () => App.clock.today();
+const collOf = kind => kind === "event" ? "events" : "todos";
+// 快照会整体替换数组；按 id 找到当前那份对象，避免改到旧对象
+const live = (coll, x) => S[coll].find(y => y.id === x.id) || x;
+
+function withTimeout(p, ms){
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(App.platform.storeError("timeout")), ms);
+    Promise.resolve(p).then(v => { clearTimeout(timer); resolve(v); }, e => { clearTimeout(timer); reject(e); });
+  });
 }
-function toggleDone(x, done, li){
+// op：执行存储写入并返回 Promise；rollback：失败时恢复本地；redo：“重试”时重做整个操作（缺省只重写存储）
+async function run(op, rollback, redo){
+  try { await withTimeout(op(), C.WRITE_TIMEOUT_MS); return true; }
+  catch(e){
+    if (rollback) rollback();
+    emit("error", {code: (e && e.code) || "network", retry: redo || (() => run(op, rollback, redo))});
+    emit("change");
+    return false;
+  }
+}
+
+// kind："event" | "todo"；item：要编辑的条目，新建时为 null；
+// v：表单值 {title, date, time, dur, project, note, important, raw}。返回 {ok, coll, id, data}
+async function saveItem(kind, item, v){
+  const coll = collOf(kind), t = now();
+  const data = kind === "event" ? F.eventFields(v, t) : F.todoFields(v, t);
+  if (item){
+    const id = item.id;
+    return {ok: await run(() => store.update(coll, id, data)), coll, id, data};
+  }
+  F.asNew(data, coll, t, v.raw || "");
+  const id = store.newId(coll);
+  S.localIds.add(id);
+  return {ok: await run(() => store.add(coll, id, data)), coll, id, data};
+}
+function toggleDone(x, done){
+  x = live("todos", x);
   const prev = {done:x.done, doneAt:x.doneAt};
-  x.done = done; x.doneAt = done ? Date.now() : 0;
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (li){
-    li.classList.toggle("done", done);
-    S.holdUntil = Date.now() + (done ? (reduce ? 800 : 960) : 0);
-  }
-  if (!li) render(); else setTimeout(render, done ? (reduce ? 800 : 960) : 0);
-  write(() => store.update("todos", x.id, {done, doneAt:x.doneAt, updatedAt:Date.now()}), () => { x.done = prev.done; x.doneAt = prev.doneAt; S.holdUntil = 0; });
-  if (done) {
-    const n = App.data.visTd().filter(y => y.done && y.doneAt && ymd(new Date(y.doneAt)) === today()).length;
-    toast("完成了，今天第 "+n+" 件", "撤销", () => toggleDone(x, false, null), 3500);
-  }
+  x.done = done; x.doneAt = done ? now() : 0;
+  emit("change");
+  return run(() => store.update("todos", x.id, {done, doneAt:x.doneAt, updatedAt:now()}),
+    () => { x.done = prev.done; x.doneAt = prev.doneAt; }, () => toggleDone(x, done));
 }
 function reschedule(x, d){
-  const prev = x.due; x.due = d; render();
-  write(() => store.update("todos", x.id, {due:d, updatedAt:Date.now()}), () => { x.due = prev; });
-  toast("已改到"+(d === today() ? "今天" : "明天"));
+  x = live("todos", x);
+  const prev = x.due; x.due = d;
+  emit("change");
+  return run(() => store.update("todos", x.id, {due:d, updatedAt:now()}), () => { x.due = prev; }, () => reschedule(x, d));
 }
-async function moveAll(list){
-  const t = today(), prev = list.map(x => [x, x.due]);
-  list.forEach(x => x.due = t); render();
-  for (const [x] of prev) await write(() => store.update("todos", x.id, {due:t, updatedAt:Date.now()}), () => { x.due = prev.find(p => p[0]===x)[1]; });
-  toast(list.length+" 件已改到今天");
+function moveAll(list){
+  const t = today();
+  list = list.map(x => live("todos", x));
+  const prev = list.map(x => x.due);
+  list.forEach(x => x.due = t);
+  emit("change");
+  const ts = now();
+  return run(() => store.batch(list.map(x => ({op:"update", coll:"todos", id:x.id, data:{due:t, updatedAt:ts}}))),
+    () => list.forEach((x, i) => x.due = prev[i]), () => moveAll(list));
 }
-function scheduleDelete(coll, item){
-  const timer = setTimeout(() => commitDelete(item.id), 5000);
-  S.pendingDel.set(item.id, {coll, timer});
-  render();
-  toast("已删除“"+(item.title.length > 12 ? item.title.slice(0,12)+"…" : item.title)+"”", "撤销", () => {
-    const p = S.pendingDel.get(item.id); if (p){ clearTimeout(p.timer); S.pendingDel.delete(item.id); render(); }
-  }, 5000);
+// coll："events" | "todos"
+function softDelete(coll, item){
+  const x = live(coll, item), prev = x.deletedAt;
+  x.deletedAt = now();
+  emit("change");
+  return run(() => store.update(coll, x.id, {deletedAt:x.deletedAt, updatedAt:now()}), () => { x.deletedAt = prev; }, () => softDelete(coll, x));
 }
-function commitDelete(id){
-  const p = S.pendingDel.get(id); if (!p) return;
-  clearTimeout(p.timer);
-  write(() => store.remove(p.coll, id).then(() => S.pendingDel.delete(id)), () => { S.pendingDel.delete(id); });
-}
-function flushDeletes(){ for (const id of [...S.pendingDel.keys()]) commitDelete(id); }
-function init(){
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushDeletes(); });
-  window.addEventListener("pagehide", flushDeletes);
+function restore(coll, item){
+  const x = live(coll, item), prev = x.deletedAt;
+  x.deletedAt = null;
+  emit("change");
+  return run(() => store.update(coll, x.id, {deletedAt:null, updatedAt:now()}), () => { x.deletedAt = prev; }, () => restore(coll, x));
 }
 
-App.data.write = {write, toggleDone, reschedule, moveAll, scheduleDelete, commitDelete, flushDeletes, init};
+App.data.write = {saveItem, toggleDone, reschedule, moveAll, softDelete, restore, collOf};
 })();
 // ==== src/scripts/data/subscribe.js ====
 (function(){
-// 订阅：连接存储后订阅 events / todos 两个集合，收到快照就更新状态并重绘；
-// 别处新加的记录短暂高亮（自己刚加的不高亮）；连不上时显示提示；断线时提示刷新。
-// 依赖：data/store.js、data/state.js；调用时用到 ui/render.js、ui/toast.js。
+// 职责：连接存储并订阅 events / todos 两个集合：快照先经 normalize 整理再进状态，发 "change"；
+//       别处新加的记录记入 fresh 短暂高亮（自己刚加的不算）；连不上发 "notice" unavailable；
+//       订阅出错时发一次 "notice" lost，并按 RECONNECT_MS 逐步拉长间隔自动重新订阅，恢复后发 reconnected。
+// 依赖：core/const.js、data/bus.js、data/store.js、data/state.js、data/normalize.js
 App.data = App.data || {};
 
-const store = App.data.store, S = App.data.state;
+const C = App.core.C;
+const emit = App.data.emit, store = App.data.store, S = App.data.state;
+const {normalizeItem} = App.data.normalize;
+const KEY = {events:"ev", todos:"td"};
+const unsubs = {}, fails = {events:0, todos:0};
 
+function markFresh(snap, key){
+  if (!S.loaded[key]) return;
+  for (const c of snap.changes()){
+    if (c.type === "added" && !S.localIds.has(c.id)){ S.fresh.add(c.id); setTimeout(() => S.fresh.delete(c.id), C.FRESH_MS); }
+  }
+}
+function watch(coll){
+  const key = KEY[coll];
+  if (unsubs[coll]){ try { unsubs[coll](); } catch(e){} }
+  unsubs[coll] = store.subscribe(coll, snap => {
+    if (fails[coll]){ fails[coll] = 0; emit("notice", {type:"reconnected"}); }
+    markFresh(snap, key);
+    S[coll] = snap.items.map(r => normalizeItem(coll, r));
+    S.loaded[key] = true;
+    emit("change");
+  }, () => {
+    if (!fails[coll]) emit("notice", {type:"lost"});
+    const wait = C.RECONNECT_MS[Math.min(fails[coll], C.RECONNECT_MS.length - 1)];
+    fails[coll]++;
+    setTimeout(() => watch(coll), wait);
+  });
+}
 async function start(){
   const ok = await store.connect();
   if (!ok){
-    App.ui.render.showNoData();
-    S.loaded.ev = S.loaded.td = true; App.ui.render(); return;
+    emit("notice", {type:"unavailable", hint: store.unavailableHint()});
+    S.loaded.ev = S.loaded.td = true; emit("change"); return;
   }
-  const lost = () => App.ui.toast.show("和云端的连接断了，刷新页面即可恢复", "刷新", () => location.reload(), 60000);
-  const mark = (snap, key) => {
-    if (S.loaded[key]){
-      for (const c of snap.changes()){
-        if (c.type === "added" && !S.localIds.has(c.id)){ S.fresh.add(c.id); setTimeout(() => S.fresh.delete(c.id), 2400); }
-      }
-    }
-  };
-  store.subscribe("events", s => { mark(s,"ev"); S.events = s.items; S.loaded.ev = true; App.ui.render(); }, lost);
-  store.subscribe("todos", s => { mark(s,"td"); S.todos = s.items; S.loaded.td = true; App.ui.render(); }, lost);
+  watch("events"); watch("todos");
+}
+function stop(){ for (const c in unsubs){ try { unsubs[c](); } catch(e){} delete unsubs[c]; } }
+
+App.data.subscribe = {start, stop};
+})();
+// ==== src/scripts/ui/dom.js ====
+(function(){
+// 职责：界面用的 DOM 小工具：$(id) 取元素、h() 一次建好带属性和子节点的元素（子节点文字一律当纯文本插入，
+//       html 属性只允许传常量图标）、对勾图标、骨架和空状态框。
+// 依赖：无
+App.ui = App.ui || {};
+
+const $ = id => document.getElementById(id);
+const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+function h(tag, attrs, ...kids){
+  const el = document.createElement(tag);
+  for (const k in (attrs||{})){
+    const v = attrs[k]; if (v == null || v === false) continue;
+    if (k === "class") el.className = v; else if (k === "style") el.setAttribute("style", v);
+    else if (k.startsWith("on")) el[k] = v; else if (k === "html") el.innerHTML = v; else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()){ if (c == null || c === false) continue; el.append(c.nodeType ? c : String(c)); }
+  return el;
+}
+function skeleton(n){ return Array.from({length:n}, () => h("div",{class:"sk"})); }
+function emptyBox(title, text){ return h("div",{class:"empty"}, h("strong",null,title), text); }
+
+App.ui.dom = {$, h, ICON_CHECK, skeleton, emptyBox};
+})();
+// ==== src/scripts/ui/view-state.js ====
+(function(){
+// 职责：界面状态：当前页（记在本机偏好）、日程页选中的日期与本周起点、待办的项目筛选、是否展开已完成、
+//       勾选动画的停顿时刻 holdUntil。跨天时 onDayChange() 把停在“旧的今天”的选中日期和本周挪到新的今天。
+// 依赖：core/date.js、platform/prefs.js
+App.ui = App.ui || {};
+
+const {mondayOf} = App.core.date;
+const prefs = App.platform.prefs;
+
+const V = {
+  view: "today", selDay: "", weekStart: "", projFilter: null, showDone: false,
+  holdUntil: 0, holdTimer: null,
+};
+function init(t){
+  V.view = prefs.get(prefs.KEYS.view, "today");
+  V.selDay = t; V.weekStart = mondayOf(t);
+}
+function onDayChange(prev, day){
+  if (V.selDay === prev) V.selDay = day;
+  if (V.weekStart === mondayOf(prev)) V.weekStart = mondayOf(day);
 }
 
-App.data.subscribe = {start};
+App.ui.view = V;
+App.ui.viewState = {init, onDayChange};
 })();
 // ==== src/scripts/ui/toast.js ====
 (function(){
-// 底部提示条：show(文案, 按钮字, 按钮动作, 显示毫秒)，默认 3 秒后自动消失；按钮用于撤销 / 重试 / 刷新。
-// 依赖：core/dom.js。
+// 职责：底部提示条队列：show(文案, 按钮字, 按钮动作, 显示毫秒) 新增一条，可叠放，最多 TOAST_MAX 条（超出时最早的先走），
+//       每条有自己的计时器；带按钮的“撤销”类提示由调用方传 TOAST_UNDO_MS。点按钮执行动作并收起这一条。
+// 依赖：core/const.js、ui/dom.js
 App.ui = App.ui || {};
 
-const {$} = App.core.dom;
-let toastTimer = null, toastAction = null;
+const C = App.core.C;
+const {$, h} = App.ui.dom;
+const live = [];   // 当前显示中的提示：{el, timer}
 
+function dismiss(t){
+  const i = live.indexOf(t); if (i < 0) return;
+  live.splice(i, 1);
+  clearTimeout(t.timer);
+  t.el.classList.remove("on");
+  setTimeout(() => t.el.remove(), C.TOAST_LEAVE_MS);
+}
 function show(msg, btnText, action, ms){
-  $("toast-msg").textContent = msg;
-  const b = $("toast-btn"); b.hidden = !btnText; b.textContent = btnText || "";
-  toastAction = action || null;
-  $("toast").classList.add("on");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => $("toast").classList.remove("on"), ms || 3000);
-}
-function init(){
-  $("toast-btn").onclick = () => { const a = toastAction; toastAction = null; $("toast").classList.remove("on"); if (a) a(); };
+  while (live.length >= C.TOAST_MAX) dismiss(live[0]);
+  const t = {el:null, timer:null};
+  const btn = btnText ? h("button",{type:"button",onclick:() => { dismiss(t); if (action) action(); }}, btnText) : null;
+  t.el = h("div",{class:"toast"}, h("span",null,msg), btn);
+  $("toasts").append(t.el);
+  live.push(t);
+  requestAnimationFrame(() => t.el.classList.add("on"));
+  t.timer = setTimeout(() => dismiss(t), ms || C.TOAST_MS);
+  return t;
 }
 
-App.ui.toast = {show, init};
+App.ui.toast = {show, dismiss};
 })();
 // ==== src/scripts/ui/render.js ====
 (function(){
-// 渲染调度与抬头：render() 依次重绘抬头、今天、日程、待办（勾选动画期间暂缓）；
-// 抬头显示月日、星期年份和“今天完成 / 没赶上”胶囊；showNoData() 显示数据未连接提示。
-// 依赖：core/date.js、core/dom.js、data/state.js；调用时用到 ui/today、schedule、todos、nav。
+// 职责：渲染调度与数据事件的接线：订阅 data 层的 change / error / notice，决定重绘和提示；
+//       render() 依次重绘抬头、今天、日程、待办（勾选动画期间暂缓）；抬头显示月日、星期年份和“今天完成 / 没赶上”胶囊。
+// 依赖：core/const.js、core/date.js、logic/items.js、data/bus.js、data/state.js、ui/dom.js、ui/view-state.js、ui/toast.js
+// 运行时调用：ui/today.js、ui/schedule.js、ui/todos.js、ui/nav.js、App.clock
 App.ui = App.ui || {};
 
-const {WK, ymd, parse, today} = App.core.date;
-const {$, h} = App.core.dom;
-const S = App.data.state, visTd = App.data.visTd;
+const C = App.core.C;
+const {WK, parse} = App.core.date;
+const {isDoneOn, isLate} = App.logic.items;
+const {$, h} = App.ui.dom;
+const V = App.ui.view, toast = App.ui.toast, visTd = App.data.visTd;
+
+const ERR_TEXT = {forbidden:"你没有修改权限，只能查看。", quota:"存储已满，删掉一些旧条目再试。"};
+const errText = code => ERR_TEXT[code] || "没保存上，检查网络后再试。";
 
 function render(){
-  const wait = S.holdUntil - Date.now();
-  if (wait > 0){ clearTimeout(S.holdTimer); S.holdTimer = setTimeout(render, wait + 10); return; }
+  const wait = V.holdUntil - App.clock.now();
+  if (wait > 0){ clearTimeout(V.holdTimer); V.holdTimer = setTimeout(render, wait + 10); return; }
   renderHead(); App.ui.today.render(); App.ui.schedule.render(); App.ui.todos.render();
 }
 
 function renderHead(){
-  const t = today(), d = parse(t);
+  const t = App.clock.today(), d = parse(t);
   $("hd-md").innerHTML = ""; $("hd-md").append((d.getMonth()+1)+"", h("small",null,"月"), d.getDate()+"", h("small",null,"日"));
   $("hd-sub").textContent = WK[d.getDay()] + "  " + d.getFullYear() + "年";
   const chips = $("hd-chips"); chips.textContent = "";
-  const doneToday = visTd().filter(x => x.done && x.doneAt && ymd(new Date(x.doneAt)) === t).length;
-  const late = visTd().filter(x => !x.done && x.due && x.due < t).length;
+  const doneToday = visTd().filter(x => isDoneOn(x, t)).length;
+  const late = visTd().filter(x => isLate(x, t)).length;
   if (doneToday) chips.append(h("span",{class:"chip"},"今天完成 ",h("b",null,doneToday)," 件"));
   if (late) chips.append(h("button",{class:"chip late",type:"button",onclick:()=>{ App.ui.nav.go("today"); $("late").scrollIntoView({behavior:"smooth",block:"center"}); }},h("b",null,late)," 件没赶上"));
 }
 
-function showNoData(){
+function showNoData(hint){
   const n = $("notice"); n.hidden = false; n.textContent = "";
-  n.append(h("strong",null,"数据没有连上。"), " 请在 claude.ai 登录同一个账号后再打开这个页面。");
+  n.append(h("strong",null,hint.title), hint.text);
+}
+
+function init(){
+  App.data.on("change", render);
+  App.data.on("error", e => { V.holdUntil = 0; toast.show(errText(e.code), "重试", e.retry, C.TOAST_RETRY_MS); });
+  App.data.on("notice", n => {
+    if (n.type === "unavailable") showNoData(n.hint);
+    else if (n.type === "lost") toast.show("和云端的连接断了，刷新页面即可恢复", "刷新", () => location.reload(), C.TOAST_LOST_MS);
+  });
 }
 
 render.head = renderHead;
-render.showNoData = showNoData;
+render.init = init;
+render.errText = errText;
 App.ui.render = render;
 })();
 // ==== src/scripts/ui/today.js ====
 (function(){
-// “今天”视图：下一件事大卡片、没赶上面板、今天的时间轴（重叠分列、现在红线）、今天要做、晚上 6 点后预告明天。
-// 依赖：core/date.js、core/dom.js、logic/projects.js、logic/sort.js、logic/format.js、data/state.js、data/write.js；
-//       调用时用到 ui/sheet.js、ui/todos.js、ui/schedule.js。
+// 职责：“今天”视图：下一件事大卡片、没赶上面板、今天的时间轴（重叠分列、现在红线）、今天要做、晚上预告明天。
+// 依赖：core/const.js、core/date.js、logic/items.js、logic/projects.js、logic/sort.js、logic/format.js、
+//       data/state.js、data/write.js、ui/dom.js、ui/toast.js
+// 运行时调用：ui/sheet.js、ui/todos.js、ui/schedule.js、App.clock
 App.ui = App.ui || {};
 
-const {pad, ymd, today, addDays, dayDiff, hm2m, m2hm, nowMin, md} = App.core.date;
-const {$, h, ICON_CHECK, skeleton, emptyBox} = App.core.dom;
+const C = App.core.C;
+const {pad, addDays, dayDiff, m2hm, md} = App.core.date;
+const {startMin, endMin, isDoneOn, isLate} = App.logic.items;
 const {projColor} = App.logic.projects;
 const {byTime, sortTodos, pickNext} = App.logic.sort;
-const {relDay, dueText} = App.logic.format;
+const {relDay, dueText, startsText} = App.logic.format;
 const S = App.data.state, visEv = App.data.visEv, visTd = App.data.visTd, ready = App.data.ready;
-const {toggleDone, reschedule, moveAll} = App.data.write;
+const write = App.data.write;
+const {$, h, ICON_CHECK, skeleton, emptyBox} = App.ui.dom;
+const toast = (...a) => App.ui.toast.show(...a);
 const openSheet = (...a) => App.ui.sheet.open(...a);
 const todoRow = x => App.ui.todos.row(x);
 const evBlock = e => App.ui.schedule.evBlock(e);
 
-const nextThing = () => pickNext(visEv(), visTd(), today(), nowMin());
-
-function renderToday(){
+function renderNext(t, nm){
   const box = $("next"); box.textContent = "";
-  if (!ready()){ box.append(h("div",{class:"next empty"}, ...skeleton(2))); }
-  else {
-    const n = nextThing(), nm = nowMin();
-    if (!n){
-      box.append(h("div",{class:"next empty"}, h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},"空闲"),
-        h("span",{class:"cd"},"今天没有别的安排了。点右下角的＋记一件新的事。")));
-    } else if (n.kind === "event"){
-      const e = n.item, mins = n.start - nm;
-      const cd = mins > 0 ? (mins >= 60 ? Math.floor(mins/60)+" 小时 "+(mins%60 ? mins%60+" 分钟" : "")+"后开始" : mins+" 分钟后开始") : "进行中，"+m2hm(n.end)+" 结束";
-      box.append(h("button",{class:"next",type:"button",style:"background:"+projColor(e.project)+";border:0;text-align:left;width:100%",onclick:()=>openSheet("event",e)},
-        h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},e.time), h("span",{class:"cd"},cd),
-        h("span",{class:"tt"},e.title), e.project || e.note ? h("span",{class:"proj"},[e.project,e.note].filter(Boolean).join("  ")) : null));
-    } else {
-      const x = n.item;
-      const card = h("div",{class:"next",style:"background:"+projColor(x.project)},
-        h("span",{class:"lbl"},"下一件事"), h("span",{class:"big",style:"font-size:40px"}, x.due ? dueText(x.due).replace("截止","") : "待办"),
-        h("span",{class:"tt"},x.title), x.project ? h("span",{class:"proj"},x.project) : null,
-        h("button",{class:"act",type:"button","aria-label":"完成："+x.title,html:ICON_CHECK,onclick:()=>toggleDone(x,true,null)}));
-      card.querySelector(".tt").onclick = () => openSheet("todo", x);
-      box.append(card);
-    }
-  }
-  // 没赶上
-  const lb = $("late"); lb.textContent = "";
-  const t = today();
-  const late = visTd().filter(x => !x.done && x.due && x.due < t).sort((a,b) => a.due.localeCompare(b.due));
-  if (late.length){
-    const p = h("section",{class:"panel late-panel","aria-labelledby":"h-late"},
-      h("div",{class:"ph"}, h("h2",{id:"h-late"},late.length+" 件没赶上"),
-        late.length > 1 ? h("button",{class:"btn-dark",type:"button",onclick:()=>moveAll(late)},"全部改到今天") : null));
-    for (const x of late){
-      p.append(h("div",{class:"late-row"},
-        h("div",{class:"t"}, x.title, h("small",null,"原定 "+md(x.due)+"，晚了 "+(-dayDiff(x.due,t))+" 天")),
-        h("div",{class:"mini"},
-          h("button",{type:"button",onclick:()=>reschedule(x,t)},"今天"),
-          h("button",{type:"button",onclick:()=>reschedule(x,addDays(t,1))},"明天"))));
-    }
-    lb.append(p);
-  }
-  renderTimeline();
-  // 今天要做
-  const ul = $("today-todos"); ul.textContent = "";
-  if (!ready()){ ul.append(...skeleton(2)); }
-  else {
-    const soon = addDays(t,2);
-    const list = visTd().filter(x => (!x.done && (!x.due || x.due >= t) && ((x.due && x.due <= soon) || x.important)) ||
-      (x.done && x.doneAt && ymd(new Date(x.doneAt)) === t && (x.important || (x.due && x.due <= soon))));
-    sortTodos(list);
-    if (!list.length){
-      const anyOpen = visTd().some(x => !x.done);
-      ul.append(h("li",null, emptyBox(anyOpen ? "最近两天没有到期的事" : "没有待办", anyOpen ? "其他待办在“全部待办”里。" : "点右下角的＋，写一句话就能记下。")));
-    } else list.forEach(x => ul.append(todoRow(x)));
-  }
-  // 晚上预告明天
-  const tm = $("tomorrow");
-  const showTm = new Date().getHours() >= 18;
-  tm.hidden = !showTm || !ready();
-  if (showTm && ready()){
-    const tmr = addDays(t,1);
-    const evs = visEv().filter(e => e.date === tmr).sort(byTime);
-    $("tm-meta").textContent = relDay(tmr);
-    const l = $("tm-list"); l.textContent = "";
-    if (!evs.length) l.append(emptyBox("明天还没有安排", "可以早点休息。"));
-    else evs.forEach(e => l.append(evBlock(e)));
+  if (!ready()){ box.append(h("div",{class:"next empty"}, ...skeleton(2))); return; }
+  const n = pickNext(visEv(), visTd(), t, nm);
+  if (!n){
+    box.append(h("div",{class:"next empty"}, h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},"空闲"),
+      h("span",{class:"cd"},"今天没有别的安排了。点右下角的＋记一件新的事。")));
+  } else if (n.kind === "event"){
+    const e = n.item;
+    box.append(h("button",{class:"next",type:"button",style:"background:"+projColor(e.project)+";border:0;text-align:left;width:100%",onclick:()=>openSheet("event",e)},
+      h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},e.time), h("span",{class:"cd"},startsText(n.start - nm, n.end)),
+      h("span",{class:"tt"},e.title), e.project || e.note ? h("span",{class:"proj"},[e.project,e.note].filter(Boolean).join("  ")) : null));
+  } else {
+    const x = n.item;
+    const card = h("div",{class:"next",style:"background:"+projColor(x.project)},
+      h("span",{class:"lbl"},"下一件事"), h("span",{class:"big",style:"font-size:40px"}, x.due ? dueText(x.due, t).replace("截止","") : "待办"),
+      h("span",{class:"tt"},x.title), x.project ? h("span",{class:"proj"},x.project) : null,
+      h("button",{class:"act",type:"button","aria-label":"完成："+x.title,html:ICON_CHECK,onclick:()=>App.ui.todos.toggle(x,true)}));
+    card.querySelector(".tt").onclick = () => openSheet("todo", x);
+    box.append(card);
   }
 }
 
-function renderTimeline(){
-  const t = today(), tl = $("tl"), ad = $("tl-allday");
-  tl.textContent = ""; ad.textContent = "";
-  const evs = visEv().filter(e => e.date === t);
-  const timed = evs.filter(e => e.time).sort(byTime);
-  evs.filter(e => !e.time).forEach(e => ad.append(h("button",{class:"ad",type:"button",style:"background:"+projColor(e.project),onclick:()=>openSheet("event",e)},"全天  "+e.title)));
-  $("tl-meta").textContent = timed.length ? timed.length+" 项" : "";
-  const nm = nowMin();
-  // 只显示“现在前后 + 有安排的时段”，避免大段空白
-  let sH = Math.max(0, Math.floor(nm/60) - 1), eH = Math.min(24, Math.floor(nm/60) + 3);
-  for (const e of timed){ const s = hm2m(e.time), en = s+(Number(e.durationMin)||60); sH = Math.min(sH, Math.floor(s/60)); eH = Math.max(eH, Math.ceil(en/60)); }
-  eH = Math.min(24, eH); if (eH - sH < 4) sH = Math.max(0, eH - 4);
-  const PX = 52, H = (eH - sH) * PX;
-  const hours = h("div",{class:"hours",style:"height:"+H+"px"}), lane = h("div",{class:"lane",style:"height:"+H+"px"});
-  for (let i = sH; i <= eH; i++){
-    const y = (i - sH) * PX;
-    if (i < eH || i === eH) hours.append(h("span",{style:"top:"+Math.min(H-6,Math.max(6,y))+"px"},pad(i)+":00"));
-    lane.append(h("i",{style:"top:"+y+"px"}));
+function reschedule(x, d, t){
+  write.reschedule(x, d);
+  toast("已改到"+(d === t ? "今天" : "明天"));
+}
+async function moveAll(list){
+  await write.moveAll(list);
+  toast(list.length+" 件已改到今天");
+}
+function renderLate(t){
+  const lb = $("late"); lb.textContent = "";
+  const late = visTd().filter(x => isLate(x, t)).sort((a,b) => a.due.localeCompare(b.due));
+  if (!late.length) return;
+  const p = h("section",{class:"panel late-panel","aria-labelledby":"h-late"},
+    h("div",{class:"ph"}, h("h2",{id:"h-late"},late.length+" 件没赶上"),
+      late.length > 1 ? h("button",{class:"btn-dark",type:"button",onclick:()=>moveAll(late)},"全部改到今天") : null));
+  for (const x of late){
+    p.append(h("div",{class:"late-row"},
+      h("div",{class:"t"}, x.title, h("small",null,"原定 "+md(x.due)+"，晚了 "+(-dayDiff(x.due,t))+" 天")),
+      h("div",{class:"mini"},
+        h("button",{type:"button",onclick:()=>reschedule(x,t,t)},"今天"),
+        h("button",{type:"button",onclick:()=>reschedule(x,addDays(t,1),t)},"明天"))));
   }
-  // 重叠分列
-  const items = timed.map(e => ({e, s:hm2m(e.time), en:hm2m(e.time)+(Number(e.durationMin)||60)}));
+  lb.append(p);
+}
+
+function renderTodayTodos(t){
+  const ul = $("today-todos"); ul.textContent = "";
+  if (!ready()){ ul.append(...skeleton(2)); return; }
+  const soon = addDays(t, C.SOON_DAYS);
+  const list = visTd().filter(x => (!x.done && (!x.due || x.due >= t) && ((x.due && x.due <= soon) || x.important)) ||
+    (isDoneOn(x, t) && (x.important || (x.due && x.due <= soon))));
+  sortTodos(list);
+  if (!list.length){
+    const anyOpen = visTd().some(x => !x.done);
+    ul.append(h("li",null, emptyBox(anyOpen ? "最近两天没有到期的事" : "没有待办", anyOpen ? "其他待办在“全部待办”里。" : "点右下角的＋，写一句话就能记下。")));
+  } else list.forEach(x => ul.append(todoRow(x)));
+}
+
+function renderTomorrow(t){
+  const tm = $("tomorrow");
+  const showTm = App.clock.hour() >= C.TOMORROW_PREVIEW_HOUR;
+  tm.hidden = !showTm || !ready();
+  if (!showTm || !ready()) return;
+  const tmr = addDays(t,1);
+  const evs = visEv().filter(e => e.date === tmr).sort(byTime);
+  $("tm-meta").textContent = relDay(tmr, t);
+  const l = $("tm-list"); l.textContent = "";
+  if (!evs.length) l.append(emptyBox("明天还没有安排", "可以早点休息。"));
+  else evs.forEach(e => l.append(evBlock(e)));
+}
+
+// 把同时段重叠的日程分到并排的几列：给每项写上 k（第几列）和 n（这一簇共几列）
+function layoutLanes(items){
   let cluster = [], cEnd = -1;
   const flush = () => {
     const lanes = [];
@@ -996,13 +1443,34 @@ function renderTimeline(){
   };
   for (const it of items){ if (it.s >= cEnd && cluster.length) flush(); cluster.push(it); cEnd = Math.max(cEnd, it.en); }
   if (cluster.length) flush();
+  return items;
+}
+function renderTimeline(t, nm){
+  const tl = $("tl"), ad = $("tl-allday");
+  tl.textContent = ""; ad.textContent = "";
+  const evs = visEv().filter(e => e.date === t);
+  const timed = evs.filter(e => e.time).sort(byTime);
+  evs.filter(e => !e.time).forEach(e => ad.append(h("button",{class:"ad",type:"button",style:"background:"+projColor(e.project),onclick:()=>openSheet("event",e)},"全天  "+e.title)));
+  $("tl-meta").textContent = timed.length ? timed.length+" 项" : "";
+  // 只显示“现在前后 + 有安排的时段”，避免大段空白
+  let sH = Math.max(0, Math.floor(nm/60) - C.TL_HOURS_BEFORE), eH = Math.min(24, Math.floor(nm/60) + C.TL_HOURS_AFTER);
+  for (const e of timed){ sH = Math.min(sH, Math.floor(startMin(e)/60)); eH = Math.max(eH, Math.ceil(endMin(e)/60)); }
+  eH = Math.min(24, eH); if (eH - sH < C.TL_MIN_HOURS) sH = Math.max(0, eH - C.TL_MIN_HOURS);
+  const PX = C.TL_PX_PER_HOUR, H = (eH - sH) * PX;
+  const hours = h("div",{class:"hours",style:"height:"+H+"px"}), lane = h("div",{class:"lane",style:"height:"+H+"px"});
+  for (let i = sH; i <= eH; i++){
+    const y = (i - sH) * PX;
+    hours.append(h("span",{style:"top:"+Math.min(H-6,Math.max(6,y))+"px"},pad(i)+":00"));
+    lane.append(h("i",{style:"top:"+y+"px"}));
+  }
+  const items = layoutLanes(timed.map(e => ({e, s:startMin(e), en:endMin(e)})));
   for (const it of items){
-    const top = (it.s - sH*60)/60*PX, ht = Math.max(30, (it.en-it.s)/60*PX - 4);
+    const top = (it.s - sH*60)/60*PX, ht = Math.max(C.TL_BLOCK_MIN_PX, (it.en-it.s)/60*PX - 4);
     const w = 100/it.n;
     const b = h("button",{class:"blk"+(it.en <= nm ? " past":""),type:"button",
       style:"top:"+(top+2)+"px;height:"+ht+"px;left:calc("+(w*it.k)+"% + 6px);width:calc("+w+"% - 8px);background:"+projColor(it.e.project),
       onclick:()=>openSheet("event",it.e)},
-      h("span",{class:"bt"},it.e.title), ht > 40 ? h("span",{class:"bm"},it.e.time+"–"+m2hm(it.en)+(it.e.project?"  "+it.e.project:"")) : null);
+      h("span",{class:"bt"},it.e.title), ht > C.TL_META_MIN_PX ? h("span",{class:"bm"},it.e.time+"–"+m2hm(it.en)+(it.e.project?"  "+it.e.project:"")) : null);
     if (S.fresh.has(it.e.id)) b.classList.add("fresh");
     lane.append(b);
   }
@@ -1015,25 +1483,39 @@ function renderTimeline(){
   }
 }
 
-App.ui.today = {render: renderToday, renderTimeline};
+function renderToday(){
+  const t = App.clock.today(), nm = App.clock.nowMin();
+  renderNext(t, nm);
+  renderLate(t);
+  renderTimeline(t, nm);
+  renderTodayTodos(t);
+  renderTomorrow(t);
+}
+
+App.ui.today = {render: renderToday};
 })();
 // ==== src/scripts/ui/schedule.js ====
 (function(){
-// “日程”视图：一周日期条（上一周 / 下一周）、选中那天的日程、“接下来”按日期分组的日程；evBlock() 也供今天视图预告明天用。
-// 依赖：core/date.js、core/dom.js、logic/projects.js、logic/sort.js、logic/format.js、data/state.js；
-//       调用时用到 ui/sheet.js。
+// 职责：“日程”视图：一周日期条（上一周 / 下一周）、选中那天的日程、“接下来”按日期分组的日程；
+//       evBlock() 生成一个日程色块，今天视图预告明天时也用。
+// 依赖：core/const.js、core/date.js、logic/items.js、logic/projects.js、logic/sort.js、logic/format.js、
+//       data/state.js、ui/dom.js、ui/view-state.js
+// 运行时调用：ui/sheet.js、App.clock
 App.ui = App.ui || {};
 
-const {WK, parse, today, addDays, hm2m, m2hm, mondayOf} = App.core.date;
-const {$, h, skeleton, emptyBox} = App.core.dom;
+const C = App.core.C;
+const {WK, parse, addDays, m2hm, mondayOf} = App.core.date;
+const {endMin} = App.logic.items;
 const {projColor} = App.logic.projects;
 const {byTime} = App.logic.sort;
 const {relDay} = App.logic.format;
 const S = App.data.state, visEv = App.data.visEv, ready = App.data.ready;
+const {$, h, skeleton, emptyBox} = App.ui.dom;
+const V = App.ui.view;
 const openSheet = (...a) => App.ui.sheet.open(...a);
 
 function evBlock(e){
-  const end = e.time ? m2hm(hm2m(e.time)+(Number(e.durationMin)||60)) : "";
+  const end = e.time ? m2hm(endMin(e)) : "";
   const b = h("button",{class:"ev",type:"button",style:"background:"+projColor(e.project),onclick:()=>openSheet("event",e)},
     h("span",{class:"et"}, e.time || "全天", end ? h("small",null,"至 "+end) : null),
     h("span",{class:"eb"}, h("span",{class:"en"},e.title),
@@ -1041,129 +1523,164 @@ function evBlock(e){
   if (S.fresh.has(e.id)) b.classList.add("fresh");
   return b;
 }
-function renderSched(){
-  const t = today();
-  const d0 = parse(S.weekStart);
-  const d6 = parse(addDays(S.weekStart,6));
-  $("wk-title").textContent = (d0.getMonth()+1)+"月" + (S.weekStart === mondayOf(t) ? " 本周" : (d0.getDate()+"日–"+(d6.getMonth()+1)+"月"+d6.getDate()+"日"));
-  const wk = $("week"); wk.textContent = "";
+function groupByDay(){
   const byDay = {};
   for (const e of visEv()) (byDay[e.date] = byDay[e.date] || []).push(e);
+  return byDay;
+}
+function renderWeek(t, byDay){
+  const d0 = parse(V.weekStart), d6 = parse(addDays(V.weekStart,6));
+  $("wk-title").textContent = (d0.getMonth()+1)+"月" + (V.weekStart === mondayOf(t) ? " 本周" : (d0.getDate()+"日–"+(d6.getMonth()+1)+"月"+d6.getDate()+"日"));
+  const wk = $("week"); wk.textContent = "";
   for (let i = 0; i < 7; i++){
-    const k = addDays(S.weekStart, i), d = parse(k);
+    const k = addDays(V.weekStart, i), d = parse(k);
     const dots = h("span",{class:"dots"});
-    (byDay[k] || []).slice(0,3).forEach(e => dots.append(h("b",{style:"background:"+projColor(e.project)})));
-    wk.append(h("button",{type:"button",class:"day"+(k===t?" today":"")+(k===S.selDay?" sel":""),"aria-label":relDay(k)+((byDay[k]||[]).length?"，"+byDay[k].length+" 项":""),"aria-pressed":k===S.selDay?"true":"false",
-      onclick:()=>{ S.selDay = k; renderSched(); }},
+    (byDay[k] || []).slice(0, C.WEEK_DOTS_MAX).forEach(e => dots.append(h("b",{style:"background:"+projColor(e.project)})));
+    wk.append(h("button",{type:"button",class:"day"+(k===t?" today":"")+(k===V.selDay?" sel":""),"aria-label":relDay(k, t)+((byDay[k]||[]).length?"，"+byDay[k].length+" 项":""),"aria-pressed":k===V.selDay?"true":"false",
+      onclick:()=>{ V.selDay = k; renderSched(); }},
       h("span",{class:"w"},WK[d.getDay()].slice(1)), h("span",{class:"n"},d.getDate()), dots));
   }
+}
+function renderDay(t, byDay){
   const dl = $("day-list"); dl.textContent = "";
-  dl.append(h("div",{class:"dhead"+(S.selDay===t?" is-today":"")}, relDay(S.selDay)));
-  if (!ready()) dl.append(...skeleton(2));
-  else {
-    const list = (byDay[S.selDay] || []).slice().sort(byTime);
-    if (!list.length) dl.append(emptyBox("这一天还没有安排", h("button",{class:"linkbtn",type:"button",style:"display:block;margin-top:4px",onclick:()=>openSheet("event",null,S.selDay)},"给这天记一件事")));
-    else list.forEach(e => dl.append(evBlock(e)));
-  }
+  dl.append(h("div",{class:"dhead"+(V.selDay===t?" is-today":"")}, relDay(V.selDay, t)));
+  if (!ready()){ dl.append(...skeleton(2)); return; }
+  const list = (byDay[V.selDay] || []).slice().sort(byTime);
+  if (!list.length) dl.append(emptyBox("这一天还没有安排", h("button",{class:"linkbtn",type:"button",style:"display:block;margin-top:4px",onclick:()=>openSheet("event",null,V.selDay)},"给这天记一件事")));
+  else list.forEach(e => dl.append(evBlock(e)));
+}
+function renderUpcoming(t){
   const up = $("up-list"); up.textContent = "";
   if (!ready()){ up.append(...skeleton(2)); return; }
-  const after = visEv().filter(e => e.date > (S.selDay > t ? S.selDay : t) && e.date !== S.selDay).sort(byTime).slice(0, 30);
+  const after = visEv().filter(e => e.date > (V.selDay > t ? V.selDay : t) && e.date !== V.selDay).sort(byTime).slice(0, C.UPCOMING_MAX);
   $("up-meta").textContent = after.length ? after.length+" 项" : "";
   if (!after.length){ up.append(emptyBox("后面还没有安排", "以后的日程会按日期排在这里。")); return; }
   let cur = null;
   for (const e of after){
-    if (e.date !== cur){ cur = e.date; up.append(h("div",{class:"dhead"}, relDay(cur))); }
+    if (e.date !== cur){ cur = e.date; up.append(h("div",{class:"dhead"}, relDay(cur, t))); }
     up.append(evBlock(e));
   }
 }
+function renderSched(){
+  const t = App.clock.today(), byDay = groupByDay();
+  renderWeek(t, byDay);
+  renderDay(t, byDay);
+  renderUpcoming(t);
+}
 function init(){
-  $("wk-prev").onclick = () => { S.weekStart = addDays(S.weekStart,-7); S.selDay = S.weekStart; renderSched(); };
-  $("wk-next").onclick = () => { S.weekStart = addDays(S.weekStart,7); S.selDay = S.weekStart; renderSched(); };
+  $("wk-prev").onclick = () => { V.weekStart = addDays(V.weekStart,-7); V.selDay = V.weekStart; renderSched(); };
+  $("wk-next").onclick = () => { V.weekStart = addDays(V.weekStart,7); V.selDay = V.weekStart; renderSched(); };
 }
 
 App.ui.schedule = {render: renderSched, evBlock, init};
 })();
 // ==== src/scripts/ui/todos.js ====
 (function(){
-// “待办”视图：项目筛选胶囊、未完成 + 今天完成的列表、折叠的更早已完成；row() 生成一行待办（勾选、标签），今天视图也复用。
-// 依赖：core/date.js、core/dom.js、logic/projects.js、logic/sort.js、logic/format.js、data/state.js、data/write.js；
-//       调用时用到 ui/sheet.js。
+// 职责：“待办”视图：项目筛选胶囊、未完成 + 今天完成的列表、折叠的更早已完成；row() 生成一行待办（勾选、标签），
+//       toggle() 是勾选的统一入口（今天视图的大卡片也用）：写入后提示“今天第 N 件”并可撤销；列表里勾选时先播完划线动画再重排。
+// 依赖：core/const.js、core/date.js、logic/items.js、logic/projects.js、logic/sort.js、logic/format.js、
+//       data/state.js、data/write.js、ui/dom.js、ui/view-state.js、ui/toast.js
+// 运行时调用：ui/sheet.js、App.clock
 App.ui = App.ui || {};
 
-const {ymd, today, dayDiff} = App.core.date;
-const {$, h, ICON_CHECK, skeleton, emptyBox} = App.core.dom;
+const C = App.core.C;
+const {isDoneOn} = App.logic.items;
 const {projColor} = App.logic.projects;
 const {sortTodos} = App.logic.sort;
 const {dueText} = App.logic.format;
-const S = App.data.state, visTd = App.data.visTd, ready = App.data.ready;
-const {toggleDone} = App.data.write;
+const S = App.data.state, visTd = App.data.visTd, ready = App.data.ready, write = App.data.write;
+const {$, h, ICON_CHECK, skeleton, emptyBox} = App.ui.dom;
+const V = App.ui.view, toast = App.ui.toast;
+const {dayDiff} = App.core.date;
 const openSheet = (...a) => App.ui.sheet.open(...a);
 
+function toggle(x, done){
+  write.toggleDone(x, done);
+  if (done){
+    const t = App.clock.today();
+    const n = visTd().filter(y => isDoneOn(y, t)).length;
+    toast.show("完成了，今天第 "+n+" 件", "撤销", () => toggle(x, false), C.TOAST_UNDO_MS);
+  }
+}
+// 列表里勾选：先让这一行播完划线动画（holdUntil 期间暂缓重绘），再重排
+function toggleInList(x, li){
+  const done = !x.done;
+  li.classList.toggle("done", done);
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  V.holdUntil = App.clock.now() + (done ? (reduce ? C.DONE_ANIM_REDUCED_MS : C.DONE_ANIM_MS) : 0);
+  toggle(x, done);
+}
+
 function todoRow(x){
-  const t = today();
+  const t = App.clock.today();
   const li = h("li",{class:"td"+(x.done?" done":"")+(x.important?" imp":"")+(S.fresh.has(x.id)?" fresh":""),"data-id":x.id});
   const ck = h("button",{class:"ck",type:"button","aria-pressed":x.done?"true":"false","aria-label":(x.done?"标为未完成：":"完成：")+x.title}, h("span",{html:ICON_CHECK}));
-  ck.onclick = () => toggleDone(x, !x.done, li);
+  ck.onclick = () => toggleInList(x, li);
   const tags = h("span",{class:"tags"});
   if (x.project) tags.append(h("span",{class:"tag"}, h("span",{class:"sw",style:"background:"+projColor(x.project)}), x.project));
   if (x.due && !x.done){
     const n = dayDiff(x.due, t);
-    tags.append(h("span",{class:"tag"+(n<0?" over":n===0?" due-today":"")}, dueText(x.due)));
+    tags.append(h("span",{class:"tag"+(n<0?" over":n===0?" due-today":"")}, dueText(x.due, t)));
   }
   if (x.source === "chat") tags.append(h("span",{class:"tag ai"},"Claude 代记"));
   const body = h("button",{class:"tb",type:"button",onclick:()=>openSheet("todo",x)}, h("span",{class:"tt"},x.title), tags.childNodes.length ? tags : null);
   li.append(ck, body);
   return li;
 }
-function renderTodos(){
+function renderFilters(){
   const f = $("filters"); f.textContent = "";
-  const open = visTd().filter(x => !x.done);
   const ps = [...new Set(visTd().map(x => x.project).filter(Boolean))];
-  if (S.projFilter && !ps.includes(S.projFilter)) S.projFilter = null;
+  if (V.projFilter && !ps.includes(V.projFilter)) V.projFilter = null;
   if (ps.length){
-    f.append(h("button",{class:"f",type:"button","aria-pressed":!S.projFilter?"true":"false",onclick:()=>{S.projFilter=null;renderTodos();}},"全部"));
-    ps.forEach(p => f.append(h("button",{class:"f",type:"button","aria-pressed":S.projFilter===p?"true":"false",onclick:()=>{S.projFilter=p;renderTodos();}},
+    f.append(h("button",{class:"f",type:"button","aria-pressed":!V.projFilter?"true":"false",onclick:()=>{V.projFilter=null;renderTodos();}},"全部"));
+    ps.forEach(p => f.append(h("button",{class:"f",type:"button","aria-pressed":V.projFilter===p?"true":"false",onclick:()=>{V.projFilter=p;renderTodos();}},
       h("span",{class:"sw",style:"background:"+projColor(p)}), p)));
   }
   f.hidden = !ps.length;
+}
+function renderTodos(){
+  renderFilters();
   const ul = $("todos"); ul.textContent = "";
-  const t = today();
-  const inScope = x => !S.projFilter || x.project === S.projFilter;
-  const list = sortTodos(visTd().filter(x => inScope(x) && (!x.done || (x.doneAt && ymd(new Date(x.doneAt)) === t))));
-  $("td-meta").textContent = open.filter(inScope).length ? open.filter(inScope).length+" 件未完成" : "";
+  const t = App.clock.today();
+  const inScope = x => !V.projFilter || x.project === V.projFilter;
+  const open = visTd().filter(x => !x.done && inScope(x));
+  const list = sortTodos(visTd().filter(x => inScope(x) && (!x.done || isDoneOn(x, t))));
+  $("td-meta").textContent = open.length ? open.length+" 件未完成" : "";
   if (!ready()) ul.append(...skeleton(3));
   else if (!list.length){
     const doneAll = visTd().some(x => x.done && inScope(x));
     ul.append(h("li",null, doneAll ? emptyBox("全部做完了", "新的待办点右下角的＋添加。") : emptyBox("没有待办", "点右下角的＋，写一句话，比如“周五前交 NEOX 横版”。")));
   } else list.forEach(x => ul.append(todoRow(x)));
-  const old = sortTodos(visTd().filter(x => inScope(x) && x.done && !(x.doneAt && ymd(new Date(x.doneAt)) === t)));
+  const old = sortTodos(visTd().filter(x => inScope(x) && x.done && !isDoneOn(x, t)));
   const tg = $("done-toggle"), dlist = $("done-list");
   tg.hidden = !old.length;
-  tg.textContent = S.showDone ? "收起已完成" : "已完成 "+old.length+" 件";
-  dlist.hidden = !S.showDone || !old.length; dlist.textContent = "";
-  if (S.showDone) old.slice(0,100).forEach(x => dlist.append(todoRow(x)));
+  tg.textContent = V.showDone ? "收起已完成" : "已完成 "+old.length+" 件";
+  dlist.hidden = !V.showDone || !old.length; dlist.textContent = "";
+  if (V.showDone) old.slice(0, C.OLD_DONE_MAX).forEach(x => dlist.append(todoRow(x)));
 }
 function init(){
-  $("done-toggle").onclick = () => { S.showDone = !S.showDone; renderTodos(); };
+  $("done-toggle").onclick = () => { V.showDone = !V.showDone; renderTodos(); };
 }
 
-App.ui.todos = {render: renderTodos, row: todoRow, init};
+App.ui.todos = {render: renderTodos, row: todoRow, toggle, init};
 })();
 // ==== src/scripts/ui/sheet.js ====
 (function(){
-// 新建 / 编辑弹出层：一句话输入实时解析填表、日程 / 待办切换、项目胶囊、保存、取消、删除（可撤销）。
-// 依赖：core/date.js、core/dom.js、logic/projects.js、logic/parse-quick.js、logic/format.js、
-//       data/store.js、data/state.js、data/fields.js、data/write.js、ui/toast.js。
+// 职责：新建 / 编辑弹出层：一句话输入实时解析填表、日程 / 待办切换、项目胶囊；保存、删除都交给 data/write.js，
+//       本文件只负责读表单、开关弹出层和提示（删除后“已删除 + 撤销”，撤销即恢复）。
+// 依赖：core/const.js、core/date.js、logic/projects.js、logic/parse-quick.js、logic/format.js、
+//       data/state.js、data/write.js、ui/dom.js、ui/view-state.js、ui/toast.js
+// 运行时调用：App.clock
 App.ui = App.ui || {};
 
-const {today, mondayOf} = App.core.date;
-const {$, h} = App.core.dom;
+const C = App.core.C;
+const {mondayOf} = App.core.date;
 const {projColor} = App.logic.projects;
 const {relDay} = App.logic.format;
-const store = App.data.store, S = App.data.state, fields = App.data.fields;
-const {write, scheduleDelete} = App.data.write;
-const toast = (...a) => App.ui.toast.show(...a);
-const parseQuick = s => App.logic.parseQuick(s, today(), App.data.projects());
+const write = App.data.write;
+const {$, h} = App.ui.dom;
+const V = App.ui.view, toast = App.ui.toast;
+const parseQuick = s => App.logic.parseQuick(s, App.clock.today(), App.data.projects());
 
 let sheetKind = "todo", editing = null, lastFocus = null;
 function setKind(k){
@@ -1184,7 +1701,7 @@ function fillProjChips(){
   });
 }
 function openSheet(kind, item, presetDate){
-  if (!store.connected){ toast("数据未连接，暂时不能编辑"); return; }
+  if (!App.data.isConnected()){ toast.show("数据未连接，暂时不能编辑"); return; }
   lastFocus = document.activeElement;
   editing = item || null;
   $("sh-title").textContent = item ? (kind === "event" ? "编辑日程" : "编辑待办") : "新建";
@@ -1193,8 +1710,8 @@ function openSheet(kind, item, presetDate){
   $("f-title").value = item ? item.title : "";
   $("f-date").value = item ? (kind === "event" ? item.date : (item.due || "")) : (presetDate || "");
   $("f-time").value = item && item.time || "";
-  $("f-dur").value = String(item && item.durationMin || 60);
-  if (![...$("f-dur").options].some(o => o.value === $("f-dur").value)) $("f-dur").value = "60";
+  $("f-dur").value = String(item && item.durationMin || C.DEFAULT_DURATION_MIN);
+  if (![...$("f-dur").options].some(o => o.value === $("f-dur").value)) $("f-dur").value = String(C.DEFAULT_DURATION_MIN);
   $("f-note").value = item && item.note || "";
   $("f-imp").checked = !!(item && item.important);
   $("f-proj").value = item && item.project || "";
@@ -1209,39 +1726,36 @@ function openSheet(kind, item, presetDate){
 }
 function closeSheet(){
   $("scrim").classList.remove("on"); $("sheet").classList.remove("on");
-  setTimeout(() => { $("scrim").hidden = true; $("sheet").hidden = true; }, 340);
+  setTimeout(() => { $("scrim").hidden = true; $("sheet").hidden = true; }, C.SHEET_ANIM_MS);
   if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+const isClosed = () => $("sheet").hidden;
+
+function readForm(){
+  return {title:$("f-title").value.trim(), date:$("f-date").value, time:$("f-time").value, dur:$("f-dur").value,
+    project:$("f-proj").value.trim(), note:$("f-note").value.trim(), important:$("f-imp").checked, raw:$("q").value.trim()};
 }
 async function onSubmit(ev){
   ev.preventDefault();
-  const title = $("f-title").value.trim(); if (!title){ $("f-title").focus(); return; }
-  const now = Date.now(), proj = $("f-proj").value.trim(), raw = $("q").value.trim();
-  let coll, data;
-  if (sheetKind === "event"){
-    const date = $("f-date").value; if (!date){ $("f-date").focus(); return; }
-    coll = "events";
-    data = fields.eventFields({title, date, time:$("f-time").value, dur:$("f-dur").value, project:proj, note:$("f-note").value.trim()}, now);
-  } else {
-    coll = "todos";
-    data = fields.todoFields({title, date:$("f-date").value, important:$("f-imp").checked, project:proj}, now);
-  }
+  const v = readForm();
+  if (!v.title){ $("f-title").focus(); return; }
+  if (sheetKind === "event" && !v.date){ $("f-date").focus(); return; }
   $("save").disabled = true; $("save").textContent = "保存中…";
-  let ok;
-  if (editing){
-    const id = editing.id;
-    ok = await write(() => store.update(coll, id, data));
-  } else {
-    fields.asNew(data, coll, now, raw);
-    const id = store.newId(coll);
-    S.localIds.add(id);
-    ok = await write(() => store.add(coll, id, data));
-    if (ok && coll === "events"){ S.selDay = data.date; S.weekStart = mondayOf(data.date); }
-  }
+  const r = await write.saveItem(sheetKind, editing, v);
+  if (r.ok && !editing && r.coll === "events"){ V.selDay = r.data.date; V.weekStart = mondayOf(r.data.date); }
   $("save").disabled = false; $("save").textContent = editing ? "保存修改" : "加入";
-  if (ok){ closeSheet(); toast(editing ? "已保存" : (coll === "events" ? "已记下日程，"+relDay(data.date) : "已加入待办")); }
+  if (r.ok){ closeSheet(); toast.show(editing ? "已保存" : (r.coll === "events" ? "已记下日程，"+relDay(r.data.date, App.clock.today()) : "已加入待办")); }
+}
+function onDelete(){
+  const it = editing, coll = write.collOf(sheetKind);
+  closeSheet();
+  if (!it) return;
+  write.softDelete(coll, it);
+  const title = it.title.length > C.DELETE_TITLE_CHARS ? it.title.slice(0, C.DELETE_TITLE_CHARS)+"…" : it.title;
+  toast.show("已删除“"+title+"”", "撤销", () => write.restore(coll, it), C.TOAST_UNDO_MS);
 }
 function init(){
-  document.querySelectorAll("#seg button").forEach(b => b.onclick = () => { setKind(b.dataset.k); if (b.dataset.k === "event" && !$("f-date").value) $("f-date").value = S.selDay || today(); });
+  document.querySelectorAll("#seg button").forEach(b => b.onclick = () => { setKind(b.dataset.k); if (b.dataset.k === "event" && !$("f-date").value) $("f-date").value = V.selDay || App.clock.today(); });
   $("f-proj").oninput = fillProjChips;
   $("q").oninput = () => {
     const p = parseQuick($("q").value);
@@ -1253,54 +1767,96 @@ function init(){
   $("q").onkeydown = e => { if (e.key === "Enter"){ e.preventDefault(); $("sheet").requestSubmit(); } };
   $("cancel").onclick = closeSheet; $("scrim").onclick = closeSheet;
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
-  $("del").onclick = () => { const it = editing, k = sheetKind; closeSheet(); if (it) scheduleDelete(k === "event" ? "events" : "todos", it); };
+  $("del").onclick = onDelete;
   $("sheet").addEventListener("submit", onSubmit);
-  $("plus").onclick = () => openSheet(null, null, S.view === "sched" ? S.selDay : null);
+  $("plus").onclick = () => openSheet(null, null, V.view === "sched" ? V.selDay : null);
 }
 
-App.ui.sheet = {open: openSheet, close: closeSheet, init};
+App.ui.sheet = {open: openSheet, close: closeSheet, isClosed, init};
 })();
 // ==== src/scripts/ui/nav.js ====
 (function(){
-// 底部导航与网络提示：go() 切换今天 / 日程 / 待办三页（记住上次的页、移动白色指示块、窄屏只显示当前页文字），
-// 断网时顶部显示红条。
-// 依赖：core/dom.js、data/state.js。
+// 职责：底部导航与网络提示：go() 切换今天 / 日程 / 待办三页并回到页顶（记住上次的页、移动白色指示块、窄屏只显示当前页文字）；
+//       窗口尺寸变化时只重排导航、不滚动（修 v2“resize 跳回顶部”）；断网时顶部显示红条。
+// 依赖：core/const.js、platform/prefs.js、ui/dom.js、ui/view-state.js
 App.ui = App.ui || {};
 
-const {$} = App.core.dom;
-const S = App.data.state;
+const C = App.core.C;
+const prefs = App.platform.prefs;
+const {$} = App.ui.dom;
+const V = App.ui.view;
 
 function placeInd(){
-  const b = document.querySelector('#nav button[data-go="'+S.view+'"]'); if (!b) return;
+  const b = document.querySelector('#nav button[data-go="'+V.view+'"]'); if (!b) return;
   $("ind").style.left = b.offsetLeft+"px"; $("ind").style.width = b.offsetWidth+"px";
 }
-function go(v){
-  S.view = v; try { localStorage.setItem("pv-view", v); } catch(e){}
+// 显示 v 这一页（不滚动）
+function applyView(v){
+  V.view = v; prefs.set(prefs.KEYS.view, v);
   document.querySelectorAll(".view").forEach(el => el.classList.toggle("on", el.dataset.view === v));
   document.querySelectorAll("#nav button").forEach(b => {
     const on = b.dataset.go === v;
     b.setAttribute("aria-current", on ? "page" : "false");
-    b.querySelector(".lab").hidden = !on && innerWidth < 380;
+    b.querySelector(".lab").hidden = !on && innerWidth < C.NARROW_NAV_PX;
   });
   requestAnimationFrame(placeInd);
-  window.scrollTo({top:0});
 }
+function go(v){ applyView(v); window.scrollTo({top:0}); }
 const net = () => { $("netbar").hidden = navigator.onLine !== false; };
 function init(){
   document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => go(b.dataset.go)));
-  addEventListener("resize", () => { go(S.view); });
+  addEventListener("resize", () => applyView(V.view));
 }
 function initNet(){
   addEventListener("online", net); addEventListener("offline", net); net();
 }
 
-App.ui.nav = {go, placeInd, init, initNet};
+App.ui.nav = {go, applyView, placeInd, init, initNet};
+})();
+// ==== src/scripts/ui/remind.js ====
+(function(){
+// 职责：【v3 预留，尚未实现】页面开着时的提醒：每次时钟 tick 检查到点的条目，在顶部弹提醒卡片
+//       （“知道了” / “10 分钟后再提醒”），并调用 platform/notify.js 响提示音。
+// 依赖：platform/notify.js、ui/dom.js
+// 运行时调用：data/write.js（写 notifiedFor / snoozeAt）、logic/remind.js、App.clock
+App.ui = App.ui || {};
+
+/*
+ * 计划接口：
+ *   init()          在 app.js 里调用；订阅 App.clock 的 "tick" 和 "wake"
+ *   check(now)      找出 remindAt（或 snoozeAt）≤ now 且 notifiedFor ≠ remindAt 的条目，逐个弹卡片
+ *   卡片按钮：“知道了” → data/write.js 写 notifiedFor = remindAt；
+ *             “10 分钟后再提醒” → 写 snoozeAt = now + 10 分钟
+ *   提醒卡片的文案可以带完整标题（只在本机屏幕上显示）；推送文字要脱敏，见 platform/notify.js。
+ */
+App.ui.remind = {
+  init(){},   // v3 实现
+};
+})();
+// ==== src/scripts/ui/theme.js ====
+(function(){
+// 职责：【v3 预留，尚未实现】深色 / 浅色切换：抬头右上角的圆形按钮，在“跟随系统 → 浅色 → 深色”之间切换，
+//       选择存在本机偏好 pv-theme；通过给 <html> 设 data-theme="light"|"dark"（跟随系统时去掉）生效，
+//       tokens.css 已经支持这两种写法。
+// 依赖：platform/prefs.js
+App.ui = App.ui || {};
+
+/*
+ * 计划接口：
+ *   init()        启动时读 prefs.get(prefs.KEYS.theme, "system") 并应用；绑定按钮
+ *   cycle()       system → light → dark → system，保存并应用
+ *   apply(mode)   mode = "system" | "light" | "dark"
+ */
+App.ui.theme = {
+  init(){},   // v3 实现
+};
 })();
 // ==== src/scripts/app.js ====
 (function(){
-// 启动入口：选定存储适配器（全项目唯一一处配置）、绑定各模块事件、首屏渲染、连接数据、每分钟刷新。
-// 依赖：platform/*、data/*、ui/*（build/manifest.json 保证它最后拼接）。
-// App.BUILD 由 build.py 在包头写入：发布版为 {storage:"claude-db"}，测试页为 {storage:"mock-db"}。
+// 职责：启动入口：选定存储适配器（全项目唯一一处配置）、创建统一时钟、绑定各模块事件、首屏渲染、连接数据、启动时钟。
+//       App.BUILD 由 build.py 在包头写入：发布版为 {storage:"claude-db"}，测试页为 {storage:"mock-db"}。
+// 依赖：core/clock.js、platform/index.js、platform/env.js、platform/claude-db.js、data/store.js、data/subscribe.js、
+//       ui/view-state.js、ui/render.js、ui/today.js、ui/schedule.js、ui/todos.js、ui/sheet.js、ui/nav.js、ui/remind.js、ui/theme.js
 
 // —— 存储适配器配置 ——
 // 可选值：App.platform.storage 里注册过的名字。"claude-db"（claude.ai）、"mock-db"（测试页）；
@@ -1308,21 +1864,27 @@ App.ui.nav = {go, placeInd, init, initNet};
 const STORAGE = (App.BUILD && App.BUILD.storage) || "claude-db";
 App.data.store.use(App.platform.storage[STORAGE]());
 
-// 事件绑定（顺序与 v2 一致）
+// —— 统一时钟（全页面只有这一个“现在”）——
+App.clock = App.core.clock.create(App.platform.env);
+App.ui.viewState.init(App.clock.today());
+
+// —— 事件绑定 ——
+App.ui.render.init();          // 数据事件 → 重绘 / 提示
 App.ui.todos.init();
-App.ui.toast.init();
-App.data.write.init();
 App.ui.sheet.init();
 App.ui.nav.init();
 App.ui.schedule.init();
 App.ui.nav.initNet();
+App.ui.theme.init();           // v3 预留
+App.ui.remind.init();          // v3 预留
 
-App.ui.nav.go(App.data.state.view); App.ui.render();
+App.clock.on("daychange", ({prev, day}) => { App.ui.viewState.onDayChange(prev, day); App.ui.render(); });
+App.clock.on("tick", () => { if (App.ui.sheet.isClosed()) App.ui.render(); });
 
+// —— 首屏与数据 ——
+App.ui.nav.go(App.ui.view.view); App.ui.render();
 App.data.subscribe.start();
-
-// 每分钟刷新时间轴与倒计时
-setInterval(() => { if (App.core.dom.$("sheet").hidden) App.ui.render(); }, 60000);
+App.clock.start();
 })();
 })();
 </script>

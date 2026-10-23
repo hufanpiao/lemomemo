@@ -1,16 +1,18 @@
-// 新建 / 编辑弹出层：一句话输入实时解析填表、日程 / 待办切换、项目胶囊、保存、取消、删除（可撤销）。
-// 依赖：core/date.js、core/dom.js、logic/projects.js、logic/parse-quick.js、logic/format.js、
-//       data/store.js、data/state.js、data/fields.js、data/write.js、ui/toast.js。
+// 职责：新建 / 编辑弹出层：一句话输入实时解析填表、日程 / 待办切换、项目胶囊；保存、删除都交给 data/write.js，
+//       本文件只负责读表单、开关弹出层和提示（删除后“已删除 + 撤销”，撤销即恢复）。
+// 依赖：core/const.js、core/date.js、logic/projects.js、logic/parse-quick.js、logic/format.js、
+//       data/state.js、data/write.js、ui/dom.js、ui/view-state.js、ui/toast.js
+// 运行时调用：App.clock
 App.ui = App.ui || {};
 
-const {today, mondayOf} = App.core.date;
-const {$, h} = App.core.dom;
+const C = App.core.C;
+const {mondayOf} = App.core.date;
 const {projColor} = App.logic.projects;
 const {relDay} = App.logic.format;
-const store = App.data.store, S = App.data.state, fields = App.data.fields;
-const {write, scheduleDelete} = App.data.write;
-const toast = (...a) => App.ui.toast.show(...a);
-const parseQuick = s => App.logic.parseQuick(s, today(), App.data.projects());
+const write = App.data.write;
+const {$, h} = App.ui.dom;
+const V = App.ui.view, toast = App.ui.toast;
+const parseQuick = s => App.logic.parseQuick(s, App.clock.today(), App.data.projects());
 
 let sheetKind = "todo", editing = null, lastFocus = null;
 function setKind(k){
@@ -31,7 +33,7 @@ function fillProjChips(){
   });
 }
 function openSheet(kind, item, presetDate){
-  if (!store.connected){ toast("数据未连接，暂时不能编辑"); return; }
+  if (!App.data.isConnected()){ toast.show("数据未连接，暂时不能编辑"); return; }
   lastFocus = document.activeElement;
   editing = item || null;
   $("sh-title").textContent = item ? (kind === "event" ? "编辑日程" : "编辑待办") : "新建";
@@ -40,8 +42,8 @@ function openSheet(kind, item, presetDate){
   $("f-title").value = item ? item.title : "";
   $("f-date").value = item ? (kind === "event" ? item.date : (item.due || "")) : (presetDate || "");
   $("f-time").value = item && item.time || "";
-  $("f-dur").value = String(item && item.durationMin || 60);
-  if (![...$("f-dur").options].some(o => o.value === $("f-dur").value)) $("f-dur").value = "60";
+  $("f-dur").value = String(item && item.durationMin || C.DEFAULT_DURATION_MIN);
+  if (![...$("f-dur").options].some(o => o.value === $("f-dur").value)) $("f-dur").value = String(C.DEFAULT_DURATION_MIN);
   $("f-note").value = item && item.note || "";
   $("f-imp").checked = !!(item && item.important);
   $("f-proj").value = item && item.project || "";
@@ -56,39 +58,36 @@ function openSheet(kind, item, presetDate){
 }
 function closeSheet(){
   $("scrim").classList.remove("on"); $("sheet").classList.remove("on");
-  setTimeout(() => { $("scrim").hidden = true; $("sheet").hidden = true; }, 340);
+  setTimeout(() => { $("scrim").hidden = true; $("sheet").hidden = true; }, C.SHEET_ANIM_MS);
   if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+const isClosed = () => $("sheet").hidden;
+
+function readForm(){
+  return {title:$("f-title").value.trim(), date:$("f-date").value, time:$("f-time").value, dur:$("f-dur").value,
+    project:$("f-proj").value.trim(), note:$("f-note").value.trim(), important:$("f-imp").checked, raw:$("q").value.trim()};
 }
 async function onSubmit(ev){
   ev.preventDefault();
-  const title = $("f-title").value.trim(); if (!title){ $("f-title").focus(); return; }
-  const now = Date.now(), proj = $("f-proj").value.trim(), raw = $("q").value.trim();
-  let coll, data;
-  if (sheetKind === "event"){
-    const date = $("f-date").value; if (!date){ $("f-date").focus(); return; }
-    coll = "events";
-    data = fields.eventFields({title, date, time:$("f-time").value, dur:$("f-dur").value, project:proj, note:$("f-note").value.trim()}, now);
-  } else {
-    coll = "todos";
-    data = fields.todoFields({title, date:$("f-date").value, important:$("f-imp").checked, project:proj}, now);
-  }
+  const v = readForm();
+  if (!v.title){ $("f-title").focus(); return; }
+  if (sheetKind === "event" && !v.date){ $("f-date").focus(); return; }
   $("save").disabled = true; $("save").textContent = "保存中…";
-  let ok;
-  if (editing){
-    const id = editing.id;
-    ok = await write(() => store.update(coll, id, data));
-  } else {
-    fields.asNew(data, coll, now, raw);
-    const id = store.newId(coll);
-    S.localIds.add(id);
-    ok = await write(() => store.add(coll, id, data));
-    if (ok && coll === "events"){ S.selDay = data.date; S.weekStart = mondayOf(data.date); }
-  }
+  const r = await write.saveItem(sheetKind, editing, v);
+  if (r.ok && !editing && r.coll === "events"){ V.selDay = r.data.date; V.weekStart = mondayOf(r.data.date); }
   $("save").disabled = false; $("save").textContent = editing ? "保存修改" : "加入";
-  if (ok){ closeSheet(); toast(editing ? "已保存" : (coll === "events" ? "已记下日程，"+relDay(data.date) : "已加入待办")); }
+  if (r.ok){ closeSheet(); toast.show(editing ? "已保存" : (r.coll === "events" ? "已记下日程，"+relDay(r.data.date, App.clock.today()) : "已加入待办")); }
+}
+function onDelete(){
+  const it = editing, coll = write.collOf(sheetKind);
+  closeSheet();
+  if (!it) return;
+  write.softDelete(coll, it);
+  const title = it.title.length > C.DELETE_TITLE_CHARS ? it.title.slice(0, C.DELETE_TITLE_CHARS)+"…" : it.title;
+  toast.show("已删除“"+title+"”", "撤销", () => write.restore(coll, it), C.TOAST_UNDO_MS);
 }
 function init(){
-  document.querySelectorAll("#seg button").forEach(b => b.onclick = () => { setKind(b.dataset.k); if (b.dataset.k === "event" && !$("f-date").value) $("f-date").value = S.selDay || today(); });
+  document.querySelectorAll("#seg button").forEach(b => b.onclick = () => { setKind(b.dataset.k); if (b.dataset.k === "event" && !$("f-date").value) $("f-date").value = V.selDay || App.clock.today(); });
   $("f-proj").oninput = fillProjChips;
   $("q").oninput = () => {
     const p = parseQuick($("q").value);
@@ -100,9 +99,9 @@ function init(){
   $("q").onkeydown = e => { if (e.key === "Enter"){ e.preventDefault(); $("sheet").requestSubmit(); } };
   $("cancel").onclick = closeSheet; $("scrim").onclick = closeSheet;
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
-  $("del").onclick = () => { const it = editing, k = sheetKind; closeSheet(); if (it) scheduleDelete(k === "event" ? "events" : "todos", it); };
+  $("del").onclick = onDelete;
   $("sheet").addEventListener("submit", onSubmit);
-  $("plus").onclick = () => openSheet(null, null, S.view === "sched" ? S.selDay : null);
+  $("plus").onclick = () => openSheet(null, null, V.view === "sched" ? V.selDay : null);
 }
 
-App.ui.sheet = {open: openSheet, close: closeSheet, init};
+App.ui.sheet = {open: openSheet, close: closeSheet, isClosed, init};

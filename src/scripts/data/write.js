@@ -1,61 +1,86 @@
-// 写入操作：勾选完成/撤销、改期、全部改到今天、延迟 5 秒的可撤销删除；先改本地再写存储，失败回滚并提示重试。
-// 页面隐藏或关闭时立即提交待删除项。
-// 依赖：core/date.js、data/store.js、data/state.js；调用时用到 ui/toast.js、ui/render.js。
+// 职责：全部写入的唯一入口：saveItem 新建 / 编辑、toggleDone 勾选、reschedule 改期、moveAll 全部改到今天、
+//       softDelete 软删除（写 deletedAt）、restore 恢复（清空 deletedAt）。先改本地、发 "change"，再写存储；
+//       写入 10 秒没回应或失败就回滚本地，发 "error" {code, retry}，retry 会把整个操作重做一遍。
+//       以后的 remindAt 计算也在这里统一接入（logic/remind.js）。不碰界面，提示文案由界面根据事件决定。
+// 依赖：core/const.js、platform/index.js、data/bus.js、data/store.js、data/state.js、data/fields.js
+// 运行时调用：core/clock.js 的时钟实例 App.clock（由 app.js 创建）
 App.data = App.data || {};
 
-const {ymd, today, addDays} = App.core.date;
-const store = App.data.store, S = App.data.state;
-const toast = (...a) => App.ui.toast.show(...a);
-const render = () => App.ui.render();
+const C = App.core.C;
+const emit = App.data.emit, store = App.data.store, S = App.data.state, F = App.data.fields;
+const now = () => App.clock.now();
+const today = () => App.clock.today();
+const collOf = kind => kind === "event" ? "events" : "todos";
+// 快照会整体替换数组；按 id 找到当前那份对象，避免改到旧对象
+const live = (coll, x) => S[coll].find(y => y.id === x.id) || x;
 
-function errMsg(e){ return e && e.code === "invalid_argument" ? "你没有修改权限，只能查看。" : e && e.code === "quota_exceeded" ? "存储已满，删掉一些旧条目再试。" : "没保存上，检查网络后再试。"; }
-async function write(fn, onFail){
-  try { await fn(); return true; }
-  catch(e){ if (onFail) onFail(); toast(errMsg(e), "重试", () => write(fn, onFail), 6000); render(); return false; }
+function withTimeout(p, ms){
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(App.platform.storeError("timeout")), ms);
+    Promise.resolve(p).then(v => { clearTimeout(timer); resolve(v); }, e => { clearTimeout(timer); reject(e); });
+  });
 }
-function toggleDone(x, done, li){
+// op：执行存储写入并返回 Promise；rollback：失败时恢复本地；redo：“重试”时重做整个操作（缺省只重写存储）
+async function run(op, rollback, redo){
+  try { await withTimeout(op(), C.WRITE_TIMEOUT_MS); return true; }
+  catch(e){
+    if (rollback) rollback();
+    emit("error", {code: (e && e.code) || "network", retry: redo || (() => run(op, rollback, redo))});
+    emit("change");
+    return false;
+  }
+}
+
+// kind："event" | "todo"；item：要编辑的条目，新建时为 null；
+// v：表单值 {title, date, time, dur, project, note, important, raw}。返回 {ok, coll, id, data}
+async function saveItem(kind, item, v){
+  const coll = collOf(kind), t = now();
+  const data = kind === "event" ? F.eventFields(v, t) : F.todoFields(v, t);
+  if (item){
+    const id = item.id;
+    return {ok: await run(() => store.update(coll, id, data)), coll, id, data};
+  }
+  F.asNew(data, coll, t, v.raw || "");
+  const id = store.newId(coll);
+  S.localIds.add(id);
+  return {ok: await run(() => store.add(coll, id, data)), coll, id, data};
+}
+function toggleDone(x, done){
+  x = live("todos", x);
   const prev = {done:x.done, doneAt:x.doneAt};
-  x.done = done; x.doneAt = done ? Date.now() : 0;
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (li){
-    li.classList.toggle("done", done);
-    S.holdUntil = Date.now() + (done ? (reduce ? 800 : 960) : 0);
-  }
-  if (!li) render(); else setTimeout(render, done ? (reduce ? 800 : 960) : 0);
-  write(() => store.update("todos", x.id, {done, doneAt:x.doneAt, updatedAt:Date.now()}), () => { x.done = prev.done; x.doneAt = prev.doneAt; S.holdUntil = 0; });
-  if (done) {
-    const n = App.data.visTd().filter(y => y.done && y.doneAt && ymd(new Date(y.doneAt)) === today()).length;
-    toast("完成了，今天第 "+n+" 件", "撤销", () => toggleDone(x, false, null), 3500);
-  }
+  x.done = done; x.doneAt = done ? now() : 0;
+  emit("change");
+  return run(() => store.update("todos", x.id, {done, doneAt:x.doneAt, updatedAt:now()}),
+    () => { x.done = prev.done; x.doneAt = prev.doneAt; }, () => toggleDone(x, done));
 }
 function reschedule(x, d){
-  const prev = x.due; x.due = d; render();
-  write(() => store.update("todos", x.id, {due:d, updatedAt:Date.now()}), () => { x.due = prev; });
-  toast("已改到"+(d === today() ? "今天" : "明天"));
+  x = live("todos", x);
+  const prev = x.due; x.due = d;
+  emit("change");
+  return run(() => store.update("todos", x.id, {due:d, updatedAt:now()}), () => { x.due = prev; }, () => reschedule(x, d));
 }
-async function moveAll(list){
-  const t = today(), prev = list.map(x => [x, x.due]);
-  list.forEach(x => x.due = t); render();
-  for (const [x] of prev) await write(() => store.update("todos", x.id, {due:t, updatedAt:Date.now()}), () => { x.due = prev.find(p => p[0]===x)[1]; });
-  toast(list.length+" 件已改到今天");
+function moveAll(list){
+  const t = today();
+  list = list.map(x => live("todos", x));
+  const prev = list.map(x => x.due);
+  list.forEach(x => x.due = t);
+  emit("change");
+  const ts = now();
+  return run(() => store.batch(list.map(x => ({op:"update", coll:"todos", id:x.id, data:{due:t, updatedAt:ts}}))),
+    () => list.forEach((x, i) => x.due = prev[i]), () => moveAll(list));
 }
-function scheduleDelete(coll, item){
-  const timer = setTimeout(() => commitDelete(item.id), 5000);
-  S.pendingDel.set(item.id, {coll, timer});
-  render();
-  toast("已删除“"+(item.title.length > 12 ? item.title.slice(0,12)+"…" : item.title)+"”", "撤销", () => {
-    const p = S.pendingDel.get(item.id); if (p){ clearTimeout(p.timer); S.pendingDel.delete(item.id); render(); }
-  }, 5000);
+// coll："events" | "todos"
+function softDelete(coll, item){
+  const x = live(coll, item), prev = x.deletedAt;
+  x.deletedAt = now();
+  emit("change");
+  return run(() => store.update(coll, x.id, {deletedAt:x.deletedAt, updatedAt:now()}), () => { x.deletedAt = prev; }, () => softDelete(coll, x));
 }
-function commitDelete(id){
-  const p = S.pendingDel.get(id); if (!p) return;
-  clearTimeout(p.timer);
-  write(() => store.remove(p.coll, id).then(() => S.pendingDel.delete(id)), () => { S.pendingDel.delete(id); });
-}
-function flushDeletes(){ for (const id of [...S.pendingDel.keys()]) commitDelete(id); }
-function init(){
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushDeletes(); });
-  window.addEventListener("pagehide", flushDeletes);
+function restore(coll, item){
+  const x = live(coll, item), prev = x.deletedAt;
+  x.deletedAt = null;
+  emit("change");
+  return run(() => store.update(coll, x.id, {deletedAt:null, updatedAt:now()}), () => { x.deletedAt = prev; }, () => restore(coll, x));
 }
 
-App.data.write = {write, toggleDone, reschedule, moveAll, scheduleDelete, commitDelete, flushDeletes, init};
+App.data.write = {saveItem, toggleDone, reschedule, moveAll, softDelete, restore, collOf};
