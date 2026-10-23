@@ -1,0 +1,1536 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4.0.0 线框 丙</title>
+<style>
+:root{
+  --ink:#000; --paper:#fff; --g0:#f6f6f6; --g1:#ededed; --g2:#dedede; --g3:#c4c4c4; --g4:#6b6b6b; --g5:#404040;
+  --bg:#d9d9d9;
+  --f: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", system-ui, sans-serif;
+  --fk: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:15px;line-height:1.5;font-variant-numeric:tabular-nums}
+:lang(ko){font-family:var(--fk);word-break:keep-all}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none;vertical-align:middle}
+p{margin:0}
+h1,h2,h3,h4{margin:0;font-weight:600}
+
+/* ---------- 文档外壳 ---------- */
+.doc{max-width:1200px;margin:0 auto;padding:28px 16px 80px}
+.top{position:sticky;top:0;z-index:20;background:rgba(217,217,217,.92);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--g3)}
+.top-in{max-width:1200px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.top-in h1{font-size:17px;flex:1;min-width:180px}
+.seg{display:inline-flex;background:var(--paper);border-radius:999px;padding:3px;border:1px solid var(--g3)}
+.seg button{padding:6px 14px;border-radius:999px;font-size:14px;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.intro{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:8px 0 40px}
+.intro section{background:var(--paper);border-radius:18px;padding:20px 22px}
+.intro h2{font-size:16px;margin-bottom:10px}
+.intro p,.intro li{font-size:14px;line-height:1.65;color:var(--g5)}
+.intro p+p{margin-top:8px}
+.intro ol,.intro ul{margin:0;padding-left:18px}
+.intro li+li{margin-top:6px}
+.intro b{color:var(--ink);font-weight:600}
+.legend{font-size:13px;color:var(--g5);margin:-24px 0 32px}
+
+.shot{display:grid;grid-template-columns:240px minmax(0,1fr);gap:24px;padding:28px 0;border-top:1px solid var(--g3)}
+.cap h3{font-size:19px;line-height:1.3;margin-bottom:8px}
+.cap h3 small{display:block;font-size:13px;font-weight:400;color:var(--g4);margin-bottom:2px}
+.cap p{font-size:14px;line-height:1.65;color:var(--g5)}
+.cap p+p{margin-top:8px}
+.frames{display:flex;flex-wrap:wrap;gap:36px 24px;align-items:flex-start;min-width:0}
+.fit{position:relative;flex:none}
+.fit>.frame{position:absolute;left:0;top:0;transform-origin:0 0}
+.flabel{position:absolute;left:0;bottom:-22px;font-size:12px;color:var(--g4);white-space:nowrap}
+body.m-desk .set-phone, body.m-phone .set-desk{display:none}
+body.m-desk .shot{grid-template-columns:1fr;gap:14px}
+body.m-desk .cap{max-width:760px}
+body.m-desk .frames{flex-direction:column;gap:40px}
+
+@media (max-width:860px){
+  .intro{grid-template-columns:1fr}
+  .shot{grid-template-columns:1fr;gap:14px}
+}
+
+/* ---------- 手机 ---------- */
+.ph{position:relative;width:390px;min-height:844px;background:var(--paper);border-radius:46px;overflow:hidden;box-shadow:0 0 0 8px var(--ink)}
+.sb{height:50px;display:flex;align-items:center;justify-content:space-between;padding:0 30px 0 34px;font-size:15px;font-weight:600;position:relative}
+.sb .isl{position:absolute;left:50%;top:11px;width:120px;height:34px;margin-left:-60px;background:var(--ink);border-radius:20px}
+.sb .bat{display:flex;gap:6px;align-items:center}
+.sb .bat i{display:block;width:24px;height:12px;border:1.5px solid var(--ink);border-radius:4px;position:relative}
+.sb .bat i:after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:14px;background:var(--ink);border-radius:1px}
+.sb .bars{display:flex;gap:2px;align-items:flex-end;height:12px}
+.sb .bars b{display:block;width:3px;background:var(--ink);border-radius:1px}
+.pc{padding:6px 20px 140px}
+.pc.tight{padding-bottom:40px}
+.hd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:4px 0 18px}
+.hd .d1{font-size:28px;font-weight:700;line-height:1.15;letter-spacing:-.01em}
+.hd .d2{font-size:14px;color:var(--g4);margin-top:4px}
+.ib{width:44px;height:44px;border-radius:50%;background:var(--g1);display:inline-flex;align-items:center;justify-content:center}
+.ibs{display:flex;gap:8px}
+.ttl{font-size:28px;font-weight:700;line-height:1.2}
+
+.nav{position:absolute;left:0;right:0;bottom:0;height:104px;padding:12px 16px 0;display:flex;gap:10px;align-items:flex-start;pointer-events:none;background:linear-gradient(rgba(255,255,255,0),rgba(255,255,255,.96) 34%)}
+.nav .bar{flex:1;height:62px;border-radius:31px;background:rgba(236,236,236,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--g3);display:flex;align-items:center;padding:4px;gap:2px;pointer-events:auto}
+.nav .t{flex:1;height:52px;border-radius:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font-size:12px;color:var(--g5);position:relative;white-space:nowrap}
+.nav .t svg{width:21px;height:21px}
+.nav .t.on{background:var(--ink);color:var(--paper)}
+.nav .t .bdg{position:absolute;top:1px;right:3px;background:var(--ink);color:var(--paper);font-size:11px;border-radius:9px;padding:0 5px;line-height:17px;box-shadow:0 0 0 2px var(--paper)}
+.nav .plus{width:62px;height:62px;border-radius:50%;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;pointer-events:auto;flex:none}
+.nav .plus svg{width:28px;height:28px;stroke-width:2.2}
+.home{position:absolute;bottom:8px;left:50%;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--ink)}
+
+/* ---------- 通用部件 ---------- */
+.say{font-size:25px;line-height:1.36;font-weight:650;letter-spacing:-.01em}
+.say2{font-size:17px;line-height:1.55;color:var(--g5);margin-top:10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:44px;padding:0 18px;border-radius:22px;background:var(--ink);color:var(--paper);font-size:15px;font-weight:600;white-space:nowrap}
+.btn.g{background:var(--g1);color:var(--ink)}
+.btn.o{background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.btn.s{height:36px;padding:0 14px;font-size:14px}
+.btn.w{width:100%}
+.row{display:flex;align-items:center;gap:10px}
+.row.wrap{flex-wrap:wrap}
+.mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mt20{margin-top:20px}.mt24{margin-top:24px}.mt32{margin-top:32px}
+.muted{color:var(--g4)}
+.sm{font-size:13px}.xs{font-size:12px}
+.sec{display:flex;justify-content:space-between;align-items:baseline;margin:26px 0 8px;font-size:15px;font-weight:600}
+.sec span{font-weight:400;color:var(--g4);font-size:13px}
+.chip{display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 13px;border-radius:17px;background:var(--g1);font-size:14px;white-space:nowrap}
+.chip{position:relative}.chip:after{content:"";position:absolute;left:0;right:0;top:-5px;bottom:-5px}
+.chip.on{background:var(--ink);color:var(--paper)}
+.chip svg{width:15px;height:15px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.tag{display:inline-block;font-size:12px;line-height:20px;padding:0 7px;border-radius:6px;background:var(--g1);color:var(--g5);white-space:nowrap}
+.tag.k{background:var(--ink);color:var(--paper)}
+.tag.o{background:none;box-shadow:inset 0 0 0 1px var(--g3)}
+.end{text-align:center;color:var(--g4);font-size:13px;padding:22px 0 0}
+.card{background:var(--g0);border-radius:20px;padding:16px}
+.field{display:flex;align-items:center;gap:10px;min-height:50px;padding:0 16px;border-radius:14px;background:var(--g1);font-size:16px;color:var(--g4)}
+.field.f{color:var(--ink)}
+.field.line{background:var(--paper);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.lbl{font-size:13px;color:var(--g4);margin:16px 0 6px}
+.list{border-radius:18px;background:var(--g0);overflow:hidden}
+.li{display:flex;align-items:center;gap:12px;min-height:54px;padding:10px 16px}
+.li+.li{box-shadow:0 -1px 0 var(--g2)}
+.li .grow{flex:1;min-width:0}
+.li .v{color:var(--g4);font-size:14px;text-align:right}
+.tog{width:46px;height:28px;border-radius:14px;background:var(--g3);position:relative;flex:none}
+.tog:after{content:"";position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:var(--paper)}
+.tog.on{background:var(--ink)}
+.tog.on:after{left:21px}
+.ck{width:26px;height:26px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--g4);flex:none;display:flex;align-items:center;justify-content:center}
+.ck.done{background:var(--ink);box-shadow:none;color:var(--paper)}
+.ck.done svg{width:15px;height:15px;stroke-width:2.6}
+.img{background:repeating-linear-gradient(135deg,var(--g2) 0 8px,var(--g1) 8px 16px);border-radius:12px;display:flex;align-items:flex-end;padding:8px;font-size:12px;color:var(--g5)}
+
+/* 今天：时间线 */
+.tl{position:relative;margin-top:22px}
+.tl .r{display:grid;grid-template-columns:54px 1fr;gap:10px;padding:9px 0;align-items:start}
+.tl .r .tm{font-size:15px;font-weight:600;padding-top:1px}
+.tl .r .tm small{display:block;font-weight:400;font-size:12px;color:var(--g4)}
+.tl .r .tt{font-size:16px;font-weight:600;line-height:1.35}
+.tl .r .ds{font-size:13px;color:var(--g4);margin-top:2px}
+.tl .past{display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--g4);padding:10px 14px;border-radius:12px;background:var(--g0)}
+.tl .cur{background:var(--ink);color:var(--paper);border-radius:18px;padding:14px 14px 14px 0;margin:6px 0}
+.tl .cur .tm{padding-left:14px}
+.tl .cur .ds,.tl .cur .tm small{color:var(--g3)}
+.prog{height:4px;border-radius:2px;background:var(--g5);margin-top:10px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--paper)}
+.nowl{display:flex;align-items:center;gap:8px;margin:2px 0;font-size:12px;font-weight:700}
+.nowl:after{content:"";flex:1;height:2px;background:var(--ink)}
+.gapr{margin-left:64px;padding:8px 12px;border-radius:12px;box-shadow:inset 0 0 0 1.5px var(--g3);font-size:13px;color:var(--g5);background:repeating-linear-gradient(135deg,transparent 0 6px,var(--g0) 6px 12px)}
+.td{display:flex;gap:12px;align-items:flex-start;padding:11px 0}
+.td+.td{box-shadow:0 -1px 0 var(--g1)}
+.td .grow{flex:1;min-width:0}
+.td .tt{font-size:16px;line-height:1.4}
+.td .ds{font-size:13px;color:var(--g4);margin-top:2px}
+.td.over .ds{color:var(--ink);font-weight:600}
+.anni{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:18px;background:var(--g0)}
+.anni .n{font-size:26px;font-weight:700;line-height:1;min-width:44px;text-align:center}
+.anni .n small{display:block;font-size:12px;font-weight:400;color:var(--g4);margin-top:4px}
+
+/* 周泳道 */
+.wk{margin-top:6px}
+.wk .lane{display:grid;grid-template-columns:44px 1fr;gap:8px;align-items:center;height:40px}
+.wk .lane .dn{font-size:13px;line-height:1.15;text-align:center}
+.wk .lane .dn b{display:block;font-size:16px}
+.wk .lane.on .dn b{background:var(--ink);color:var(--paper);border-radius:8px}
+.wk .tr{position:relative;height:24px;border-radius:6px;background:var(--g0)}
+.wk .tr i{position:absolute;top:3px;bottom:3px;border-radius:4px;background:var(--g4)}
+.wk .tr i.k{background:var(--ink)}
+.wk .tr i.o{background:none;box-shadow:inset 0 0 0 1.5px var(--g5)}
+.wk .tr .nw{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink)}
+.wk .tr .bd{position:absolute;right:4px;top:4px;width:16px;height:16px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--ink)}
+.wk .axis{display:grid;grid-template-columns:44px 1fr;gap:8px;font-size:11px;color:var(--g4)}
+.wk .axis div{display:flex;justify-content:space-between}
+
+/* 月历（手机） */
+.mh{display:flex;align-items:center;justify-content:space-between;margin:6px 0 10px}
+.mh .m{font-size:22px;font-weight:700}
+.mg{display:grid;grid-template-columns:repeat(7,1fr);gap:0}
+.mg .w{font-size:12px;color:var(--g4);text-align:center;padding:4px 0 6px}
+.mg .c{height:70px;padding:5px 2px 0;text-align:center;position:relative;border-top:1px solid var(--g1)}
+.mg .c .dt{font-size:16px;font-weight:600;line-height:24px;width:28px;height:24px;margin:0 auto;border-radius:8px}
+.mg .c .lu{font-size:10px;color:var(--g4);line-height:14px;white-space:nowrap;overflow:hidden}
+.mg .c .lu.fx{color:var(--ink);font-weight:700}
+.mg .c.out .dt,.mg .c.out .lu{color:var(--g3)}
+.mg .c.sel .dt{background:var(--ink);color:var(--paper)}
+.mg .c.td .dt{box-shadow:inset 0 0 0 1.5px var(--ink)}
+.mg .c .ev{display:flex;gap:2px;justify-content:center;margin-top:4px;height:4px}
+.mg .c .ev i{display:block;width:8px;height:4px;border-radius:2px;background:var(--g5)}
+.mg .c .ev i.bd{width:4px;border-radius:50%;background:none;box-shadow:inset 0 0 0 1.5px var(--ink)}
+.mg .c .xu{position:absolute;bottom:4px;right:3px;font-size:9px;line-height:12px;padding:0 2px;border-radius:3px;background:var(--ink);color:var(--paper)}
+.mg .c .xu.kr{background:none;color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+
+
+/* 底部弹层、提示条 */
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.38)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-radius:28px 28px 0 0;padding:10px 20px 34px}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--g3);margin:0 auto 14px}
+.glass{background:rgba(250,250,250,.72);backdrop-filter:blur(22px) saturate(1.2);-webkit-backdrop-filter:blur(22px) saturate(1.2)}
+.toast{position:absolute;left:16px;right:16px;bottom:112px;border-radius:22px;background:var(--ink);color:var(--paper);padding:14px 16px}
+.toast .ta{display:flex;gap:16px;font-weight:600;font-size:15px}
+.toast .ta button{color:var(--paper);text-decoration:underline;text-underline-offset:3px}
+.toast .rw{display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px}
+.toast .rw+.rw{box-shadow:0 -1px 0 var(--g5)}
+.toast .rw .grow{flex:1;min-width:0}
+.toast .rw .k{font-size:12px;color:var(--g3)}
+.kbd{position:absolute;left:0;right:0;bottom:0;height:290px;background:var(--g2);padding:8px 4px 0}
+.kbd .kr{display:flex;gap:6px;justify-content:center;margin-bottom:10px}
+.kbd .kr i{display:block;width:32px;height:42px;border-radius:6px;background:var(--paper)}
+.kbd .kr i.w{width:180px}.kbd .kr i.m{width:44px;background:var(--g3)}
+
+/* 锁屏 */
+.lock{background:linear-gradient(170deg,#9a9a9a,#5c5c5c 60%,#3d3d3d);color:var(--paper)}
+.lock .sb{color:var(--paper)}
+.lock .sb .bat i{border-color:var(--paper)}.lock .sb .bat i:after,.lock .sb .bars b{background:var(--paper)}
+.lock .sb .isl{background:#000}
+.lk-t{text-align:center;margin-top:30px}
+.lk-t .d{font-size:18px;font-weight:600}
+.lk-t .h{font-size:92px;font-weight:700;line-height:1;letter-spacing:-.02em}
+.noti{margin:0 12px;border-radius:24px;padding:12px 14px;background:rgba(245,245,245,.78);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);color:var(--ink);display:flex;gap:10px}
+.noti+.noti{margin-top:8px}
+.noti .ap{width:38px;height:38px;border-radius:10px;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;flex:none}
+.noti .grow{flex:1;min-width:0}
+.noti .h1{display:flex;justify-content:space-between;font-size:13px;color:var(--g5)}
+.noti .t1{font-size:15px;font-weight:600;line-height:1.35}
+.noti .b1{font-size:14px;line-height:1.4}
+
+/* 录音 */
+.rec{position:absolute;inset:0;display:flex;flex-direction:column}
+.wave{display:flex;align-items:center;gap:3px;height:40px}
+.wave i{display:block;width:3px;border-radius:2px;background:var(--ink)}
+.seg-l{border-radius:16px;padding:12px 14px;background:var(--paper);box-shadow:0 1px 0 var(--g2)}
+.seg-l+.seg-l{margin-top:8px}
+.seg-l .q{font-size:17px;line-height:1.45}
+.seg-l .a{font-size:13px;color:var(--g4);margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.seg-l.live .q:after{content:"";display:inline-block;width:2px;height:18px;background:var(--ink);vertical-align:-3px;margin-left:2px}
+
+/* 键盘式密码 */
+.pin{display:flex;gap:14px;justify-content:center;margin:22px 0 8px}
+.pin i{width:16px;height:16px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--ink)}
+.pin i.f{background:var(--ink)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 22px;padding:0 34px;margin-top:24px}
+.pad b{height:64px;border-radius:50%;width:64px;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:500;background:var(--g1)}
+.pad b.n{background:none;font-size:15px}
+
+/* ---------- 电脑 ---------- */
+.dk{position:relative;width:1280px;height:800px;background:var(--paper);border-radius:10px;overflow:hidden;box-shadow:0 0 0 1px var(--g3),0 10px 30px rgba(0,0,0,.12);display:grid;grid-template-columns:216px 1fr;grid-template-rows:34px 1fr}
+.dk.tall{height:auto;min-height:800px}
+.dtb{grid-column:1/3;display:flex;align-items:center;justify-content:space-between;padding-left:14px;font-size:12px;color:var(--g5);background:var(--g0);border-bottom:1px solid var(--g1)}
+.dtb .wc{display:flex}
+.dtb .wc i{width:46px;height:34px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:14px}
+.rail{background:var(--g0);padding:14px 12px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--g1)}
+.rail .who{display:flex;align-items:center;gap:10px;padding:6px 8px 16px}
+.rail .av{width:32px;height:32px;border-radius:50%;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600}
+.rail .ri{display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:12px;font-size:15px;color:var(--g5)}
+.rail .ri.on{background:var(--ink);color:var(--paper)}
+.rail .ri .k{margin-left:auto;font-size:12px;color:var(--g4)}
+.rail .ri.on .k{color:var(--g3)}
+.rail .sp{flex:1}
+.rail .cnt{margin-left:auto;font-size:12px}
+.dmain{position:relative;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.dk.tall .dmain{overflow:visible}
+.cap-bar{display:flex;align-items:center;gap:12px;margin:16px 24px 0;height:52px;padding:0 8px 0 18px;border-radius:26px;background:var(--g1);font-size:15px;color:var(--g4)}
+.cap-bar .grow{flex:1}
+.cap-bar .kb{font-size:12px;padding:2px 7px;border-radius:6px;box-shadow:inset 0 0 0 1px var(--g3);color:var(--g5);white-space:nowrap}
+.cap-bar .mic{width:40px;height:40px;border-radius:50%;background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center}
+.dbody{flex:1;display:grid;gap:20px;padding:20px 24px 24px;min-height:0}
+.pane{background:var(--g0);border-radius:20px;padding:20px;min-width:0;overflow:hidden}
+.pane.w{background:var(--paper);box-shadow:inset 0 0 0 1px var(--g1)}
+.ph-h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.ph-h h4{font-size:17px}
+.dtoast{position:absolute;right:24px;bottom:24px;width:360px;border-radius:12px;background:#f3f3f3;box-shadow:0 8px 28px rgba(0,0,0,.25),0 0 0 1px var(--g3);padding:14px 16px;color:var(--ink)}
+
+/* 电脑周网格 */
+.wg{display:grid;grid-template-columns:52px repeat(7,1fr);position:relative}
+.wg .hh{font-size:13px;text-align:center;padding:4px 0 10px;line-height:1.3}
+.wg .hh b{display:block;font-size:20px}
+.wg .hh small{display:block;font-size:11px;color:var(--g4)}
+.wg .hh.on b{background:var(--ink);color:var(--paper);border-radius:10px;width:40px;margin:0 auto}
+.wg .tc{font-size:11px;color:var(--g4);text-align:right;padding-right:8px;height:48px;transform:translateY(-7px)}
+.wg .cell{height:48px;border-top:1px solid var(--g1);border-left:1px solid var(--g1)}
+.wev{position:absolute;border-radius:8px;padding:4px 7px;font-size:12px;line-height:1.3;background:var(--g2);overflow:hidden}
+.wev b{display:block;font-size:13px}
+.wev.k{background:var(--ink);color:var(--paper)}
+.wev.o{background:var(--paper);box-shadow:inset 0 0 0 1.5px var(--g5)}
+
+/* 电脑月网格 */
+.dmg{display:grid;grid-template-columns:repeat(7,1fr);border-left:1px solid var(--g1);border-top:1px solid var(--g1)}
+.dmg .w{font-size:12px;color:var(--g4);padding:6px 8px;border-right:1px solid var(--g1);border-bottom:1px solid var(--g1)}
+.dmg .c{min-height:118px;padding:6px 8px 8px;border-right:1px solid var(--g1);border-bottom:1px solid var(--g1);position:relative}
+.dmg .c .hrow{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.dmg .c .dt{font-size:16px;font-weight:600}
+.dmg .c .lu{font-size:11px;color:var(--g4);white-space:nowrap}
+.dmg .c .lu.fx{color:var(--ink);font-weight:600}
+.dmg .c .xu{margin-left:auto;font-size:10px;line-height:14px;padding:0 3px;border-radius:3px;background:var(--ink);color:var(--paper);white-space:nowrap}
+.dmg .c .xu.kr{background:none;color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.dmg .c .e{font-size:12px;line-height:17px;margin-top:3px;padding:1px 5px;border-radius:4px;background:var(--g1)}
+.dmg .c .e.k{background:var(--ink);color:var(--paper)}
+.dmg .c .e.b{background:none;box-shadow:inset 0 0 0 1px var(--ink)}
+.dmg .c.out{background:var(--g0)}
+.dmg .c.out .dt,.dmg .c.out .lu{color:var(--g3)}
+.dmg .c.sel{box-shadow:inset 0 0 0 2px var(--ink)}
+.dmg .c.tdy .dt{background:var(--ink);color:var(--paper);border-radius:6px;padding:0 6px}
+
+.hl{background:var(--g2);box-shadow:0 2px 0 var(--ink);padding:0 1px}
+.kbtn{font-size:12px;padding:2px 7px;border-radius:6px;box-shadow:inset 0 0 0 1px var(--g3);color:var(--g5);white-space:nowrap}
+.modal{position:absolute;background:var(--paper);border-radius:22px;box-shadow:0 24px 60px rgba(0,0,0,.3);padding:24px}
+.wheel{display:grid;gap:6px;border-radius:16px;background:var(--g0);padding:8px;position:relative}
+.wheel .col{text-align:center;font-size:15px;line-height:34px;color:var(--g4)}
+.wheel .col .on{color:var(--ink);font-weight:700;background:var(--paper);border-radius:10px;box-shadow:0 1px 0 var(--g2)}
+.bar-u{height:8px;border-radius:4px;background:var(--g2);overflow:hidden}
+.bar-u i{display:block;height:100%;background:var(--ink)}
+</style>
+</head>
+<body class="m-phone">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-today" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></symbol>
+  <symbol id="i-todo" viewBox="0 0 24 24"><path d="M5 7l1.6 1.6L9.5 5.6M5 15l1.6 1.6 2.9-3M13 7.5h6M13 15.5h6"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 4h9l3 3v13H6z"/><path d="M9 10h6M9 14h6M9 18h3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5"/></symbol>
+  <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 016.8-1.2"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M6 11.5a6 6 0 0012 0M12 17.5V21"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6.5 16.5V11a5.5 5.5 0 0111 0v5.5l1.5 1.5H5z"/><path d="M10 20.5h4"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17l4.5-4 3 2.5 3-3L20 16"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="i-cake" viewBox="0 0 24 24"><path d="M5 20v-7h14v7zM5 16c2 0 2-1.5 3.5-1.5S10 16 12 16s2-1.5 3.5-1.5S17 16 19 16M12 13V9.5M12 7a1.2 1.2 0 01-1-1.8L12 3.5l1 1.7A1.2 1.2 0 0112 7z"/></symbol>
+  <symbol id="i-face" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 012-2h2M16 4h2a2 2 0 012 2v2M20 16v2a2 2 0 01-2 2h-2M8 20H6a2 2 0 01-2-2v-2"/><path d="M9 9.5v1M15 9.5v1M12 9.5v3.5h-1M9.5 15.5a3.5 3.5 0 005 0"/></symbol>
+  <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M3.5 9a12 12 0 0117 0M6.5 12.5a8 8 0 0111 0M9.5 16a3.6 3.6 0 015 0"/><circle cx="12" cy="19" r=".8"/><path d="M4 4l16 16"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M5 9h13l-3.5-3.5M19 15H6l3.5 3.5"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 7h11M9 12h11M9 17h11M4.5 7h.01M4.5 12h.01M4.5 17h.01"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18" cy="12" r="1"/></symbol>
+</svg>
+
+<header class="top"><div class="top-in">
+  <h1>日程与待办 4.0.0 布局线框　丙</h1>
+  <div class="seg" role="group" aria-label="切换画面尺寸">
+    <button type="button" data-mode="phone" aria-pressed="true">手机 390</button>
+    <button type="button" data-mode="desk" aria-pressed="false">电脑 1280</button>
+  </div>
+</div></header>
+
+<main class="doc">
+<div class="intro">
+  <section>
+    <h2>核心思路</h2>
+    <p><b>今天页不放卡片，先说一句话。</b>页面顶部是一句按规则拼出来的话（不调 AI，不花额度）：正在做什么、几点结束、之后空多久、空档里先做哪件待办。</p>
+    <p><b>时间线以“现在”为界。</b>已经过去的折成一行，现在线以下才展开，人一打开就站在“现在”这个位置上。</p>
+    <p><b>说话时就看到拆分结果。</b>按住“＋”说话，屏幕上一边出字一边分好条，标出“日程 / 待办 / 随手记”；松手就照屏幕上的样子保存，提示条写明每条放进了哪里。</p>
+    <p><b>电脑端常驻“记一笔”输入栏和第三栏详情。</b>宽屏不放大手机界面，而是同时看列表和内容。</p>
+  </section>
+  <section>
+    <h2>design-critique 自评与修改</h2>
+    <p>初稿画完后用无头 Edge 截了 1280 和 375 两种宽度，按“第一眼、可用性、层级、一致性、无障碍”逐屏过了一遍，再用脚本查截断、遮挡和横向溢出。改了这些：</p>
+    <ul>
+      <li><b>可用性</b>：电脑月历右侧原来有一栏当天清单，挤得格子只剩 99 px，活动标题全被省略号截断。去掉这一栏，改成点某天弹出清单，标题允许换两行。</li>
+      <li><b>层级</b>：电脑周视图把“截止”和“生日”画成 8:00 的假日程，半小时的日程字被切掉一半。加了一行“全天”放截止和纪念日，时间格加高，1.5 小时以上才显示地点。</li>
+      <li><b>第一眼</b>：录音页的识别文字原来在屏幕顶部，离手指和声音条很远，中间空一大块。改成从声音条往上堆，眼睛不用离开手指附近。</li>
+      <li><b>一致性</b>：黑色实底原来同时表示“进行中”“选中的随手记”“当前页”和主按钮，选中的随手记和进行中的日程长得一样。现在黑底只留给“现在”、当前页和主按钮，选中改成黑框。</li>
+      <li><b>信息重复</b>：手机月历的节假日同时用了下划线、加粗名称和“休”角标三种标记，而且角标压在日期数字上。去掉下划线，角标移到格子右下角。</li>
+      <li><b>无障碍</b>：灰字不浅于 #6b6b6b（白底对比度 5.3:1）；按钮、标签页不小于 44 px；筛选标签看起来 34 px，点击区上下各扩 5 px；韩文用 keep-all，不在词中间断行。</li>
+      <li><b>没改的</b>：“＋”和当前页标签都是黑色，并排时有点抢。保留，因为“＋”是这一版最重要的入口；交给皮肤上色时再区分。</li>
+    </ul>
+  </section>
+  <section>
+    <h2>需要产品负责人选的地方</h2>
+    <ol>
+      <li><b>今天页顶部：一句话，还是卡片？</b>推荐一句话。读起来最快，韩文也能自然换行。</li>
+      <li><b>手机周视图：7 条横向泳道，还是 7 列时间格？</b>推荐泳道。竖屏上一眼看到哪天满、哪天空；电脑上用 7 列时间格。</li>
+      <li><b>月历格子里的农历：每天都显示，还是只显示初一、节日和节气？</b>推荐每天都显示，设置里可以关掉。</li>
+      <li><b>闰月生日：在没有闰月的年份按哪天过？</b>推荐按同月同日过，每条可以单独改。</li>
+      <li><b>说话时的拆分预览：边说边拆，还是松手后才拆？</b>推荐边说边用本地规则粗拆，松手后再调一次 AI 精拆，每条录音只花一次额度。</li>
+      <li><b>手机和电脑同时在线时，提醒在哪里响？</b>推荐两边都响，一边点了“知道了”，另一边的提醒自动消失。</li>
+    </ol>
+  </section>
+</div>
+<p class="legend">示例时间：2026年10月24日（周六）14:17，人在首尔。灰度线框只表达布局和层级，颜色、圆角留给皮肤。节假日数据是示例，正式版以每年官方公布为准。</p>
+
+<!-- =============== 1 今天 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 1</small>今天</h3>
+    <p>顶部一句话按这个顺序取：正在进行的事，10 分钟内开始的事，否则说空档，再挑一件待办（先挑没赶上的，再挑今天截止的）。</p>
+    <p>点“换一件”换下一件候选；过去的日程折成一行，点开才显示。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="today">
+      <div class="pc">
+        <div class="hd"><div><div class="d1">10月24日 周六</div><div class="d2">农历九月十五　明天是妈妈生日</div></div>
+          <div class="ibs"><button class="ib" aria-label="搜索"><svg class="i"><use href="#i-search"/></svg></button><button class="ib" aria-label="设置"><svg class="i"><use href="#i-gear"/></svg></button></div></div>
+        <p class="say">正在开 NEOX 横版对片，14:30 结束。</p>
+        <p class="say2">之后空 30 分钟，先把没赶上的“交 SignPlex 韩文版成片”补上？</p>
+        <div class="row mt16"><button class="btn">先做这件</button><button class="btn g">换一件</button></div>
+        <div class="tl">
+          <div class="past"><span>上午过去了 2 件</span><span>展开</span></div>
+          <div class="r cur"><div class="tm">13:00<small>14:30</small></div><div><div class="tt">NEOX 横版对片</div><div class="ds">腾讯会议，还剩 13 分钟</div><div class="prog"><i style="width:86%"></i></div></div></div>
+          <div class="nowl">现在 14:17</div>
+          <div class="gapr">14:30 到 15:00 空 30 分钟</div>
+          <div class="r"><div class="tm">15:00<small>16:00</small></div><div><div class="tt">SignPlex 客户反馈会</div><div class="ds">Zoom　14:50 提醒</div></div></div>
+          <div class="r"><div class="tm">18:30<small>20:30</small></div><div><div class="tt">和 민지 吃晚饭</div><div class="ds">延南洞　18:00 提醒</div></div></div>
+        </div>
+        <div class="sec">今天要做 <span>3 件</span></div>
+        <div class="td over"><div class="ck"></div><div class="grow"><div class="tt">交 SignPlex 韩文版成片</div><div class="ds">没赶上，原定 10月22日</div></div></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">回复 SignPlex 报价邮件</div><div class="ds">今天截止</div></div></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">NEOX 竖版 4K 导出</div><div class="ds">今天</div></div></div>
+        <div class="sec">纪念日</div>
+        <div class="anni"><div class="n">1<small>天后</small></div><div><div class="tt" style="font-size:16px;font-weight:600">妈妈生日，62 周岁</div><div class="ds sm muted">阴历九月十六，明天 9:00 提醒</div></div></div>
+        <div class="end">今天就这些。已完成 1 件，点这里查看</div>
+      </div>
+    </div></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="today">
+      <div class="dbody" style="grid-template-columns:1.25fr 1fr">
+        <div class="pane w" style="padding:28px 32px">
+          <div class="row" style="justify-content:space-between"><div><div style="font-size:30px;font-weight:700;line-height:1.1">10月24日 周六</div><div class="muted mt8">农历九月十五　首尔</div></div><span class="kbtn">时间线随“现在”滚动</span></div>
+          <p class="say mt24" style="font-size:28px">正在开 NEOX 横版对片，14:30 结束。</p>
+          <p class="say2">之后空 30 分钟，先把没赶上的“交 SignPlex 韩文版成片”补上？</p>
+          <div class="row mt16"><button class="btn">先做这件</button><button class="btn g">换一件</button></div>
+          <div class="tl" style="max-width:560px">
+            <div class="past"><span>上午过去了 2 件：NEOX 晨会、取干洗衣服</span><span>展开</span></div>
+            <div class="r cur"><div class="tm">13:00<small>14:30</small></div><div><div class="tt">NEOX 横版对片</div><div class="ds">腾讯会议，还剩 13 分钟</div><div class="prog"><i style="width:86%"></i></div></div></div>
+            <div class="nowl">现在 14:17</div>
+            <div class="gapr">14:30 到 15:00 空 30 分钟</div>
+            <div class="r"><div class="tm">15:00<small>16:00</small></div><div><div class="tt">SignPlex 客户反馈会</div><div class="ds">Zoom　14:50 提醒</div></div></div>
+            <div class="r"><div class="tm">18:30<small>20:30</small></div><div><div class="tt">和 민지 吃晚饭</div><div class="ds">延南洞　18:00 提醒</div></div></div>
+          </div>
+        </div>
+        <div style="display:grid;gap:20px;grid-template-rows:auto auto 1fr;min-height:0">
+          <div class="pane"><div class="ph-h"><h4>今天要做</h4><span class="muted sm">3 件，已完成 1 件</span></div>
+            <div class="td over"><div class="ck"></div><div class="grow"><div class="tt">交 SignPlex 韩文版成片</div><div class="ds">没赶上，原定 10月22日</div></div></div>
+            <div class="td"><div class="ck"></div><div class="grow"><div class="tt">回复 SignPlex 报价邮件</div><div class="ds">今天截止</div></div></div>
+            <div class="td"><div class="ck"></div><div class="grow"><div class="tt">NEOX 竖版 4K 导出</div><div class="ds">今天</div></div></div>
+          </div>
+          <div class="anni" style="background:var(--g0)"><div class="n">1<small>天后</small></div><div><div style="font-size:16px;font-weight:600">妈妈生日，62 周岁</div><div class="sm muted">阴历九月十六，明天 9:00 提醒</div></div></div>
+          <div class="pane"><div class="ph-h"><h4>刚记的随手记</h4><span class="muted sm">全部 128 条</span></div>
+            <div class="td"><div class="grow"><div class="tt">SignPlex 片尾的 logo 停留再长半秒</div><div class="ds">工作想法　13:42</div></div></div>
+            <div class="td"><div class="grow"><div class="tt">망원동 那家面包店周一休息</div><div class="ds">首尔生活　昨天</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 2 提醒响起时 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 2</small>提醒响起时</h3>
+    <p>推送直接写标题。iPhone 主屏幕版的网页推送不带按钮，所以点开推送会进入应用内的提醒页，在这里点“知道了”或“10 分钟后”。</p>
+    <p>同一时间有多条提醒就叠在一起，生日提醒写名字和周岁。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph lock" data-tab="none">
+      <div class="lk-t"><div class="d">10月24日 星期六</div><div class="h">14:50</div></div>
+      <div style="margin-top:250px">
+        <div class="noti"><div class="ap"><svg class="i"><use href="#i-bell"/></svg></div><div class="grow"><div class="h1"><span>日程与待办</span><span>现在</span></div><div class="t1">15:00 SignPlex 客户反馈会</div><div class="b1">10 分钟后开始，Zoom</div></div></div>
+        <div class="noti"><div class="ap"><svg class="i"><use href="#i-cake"/></svg></div><div class="grow"><div class="h1"><span>日程与待办</span><span>9:00</span></div><div class="t1">明天是妈妈生日</div><div class="b1">阴历九月十六，62 周岁</div></div></div>
+      </div>
+      <div class="home" style="background:#fff"></div>
+    </div><span class="flabel">锁屏推送</span></div></div>
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="none">
+      <div class="pc tight" style="padding-top:20px">
+        <div class="row" style="justify-content:space-between"><span class="tag k">提醒</span><span class="muted sm">还有 1 条</span></div>
+        <div style="font-size:88px;font-weight:700;line-height:1;margin-top:34px;letter-spacing:-.02em">15:00</div>
+        <div style="font-size:26px;font-weight:650;line-height:1.3;margin-top:14px">SignPlex 客户反馈会</div>
+        <div class="say2" style="margin-top:6px">10 分钟后开始，到 16:00。Zoom 链接在备注里。</div>
+        <div class="card mt24"><div class="sm muted">备注</div><div class="mt8" style="font-size:15px">带上韩文版第 3 稿，问清楚片尾 logo 要不要换。</div></div>
+        <div style="margin-top:150px;display:grid;gap:10px">
+          <button class="btn w" style="height:56px;font-size:17px">知道了</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><button class="btn g" style="height:52px">10 分钟后</button><button class="btn g" style="height:52px">开始时再提醒</button></div>
+        </div>
+        <div class="card mt20 row" style="padding:12px 14px"><svg class="i"><use href="#i-cake"/></svg><div class="grow" style="flex:1;font-size:14px">明天是妈妈生日，62 周岁</div><span class="sm" style="font-weight:600">下一条</span></div>
+      </div>
+    </div><span class="flabel">点开推送后：应用内提醒页</span></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="today">
+      <div class="cap-bar"><span class="grow">记一笔：直接打字，回车保存</span><span class="kb">Ctrl+Shift+空格</span><span class="mic"><svg class="i"><use href="#i-mic"/></svg></span></div>
+      <div class="dbody" style="grid-template-columns:1.25fr 1fr">
+        <div class="pane w" style="padding:28px 32px">
+          <div style="font-size:30px;font-weight:700">10月24日 周六</div>
+          <div class="card mt24" style="background:var(--ink);color:var(--paper);padding:22px 24px;border-radius:22px">
+            <div class="row" style="justify-content:space-between"><span class="sm" style="color:var(--g3)">提醒，10 分钟后开始</span><span class="sm" style="color:var(--g3)">14:50</span></div>
+            <div style="font-size:44px;font-weight:700;line-height:1.05;margin-top:10px">15:00</div>
+            <div style="font-size:22px;font-weight:650;margin-top:6px">SignPlex 客户反馈会</div>
+            <div class="row mt16"><button class="btn" style="background:var(--paper);color:var(--ink)">知道了</button><button class="btn" style="background:var(--g5)">10 分钟后</button></div>
+          </div>
+          <p class="say2 mt24">提醒响起时，今天页顶部的一句话换成这张提醒；点“知道了”后恢复。</p>
+        </div>
+        <div class="pane"><div class="ph-h"><h4>今天要做</h4><span class="muted sm">3 件</span></div>
+          <div class="td over"><div class="ck"></div><div class="grow"><div class="tt">交 SignPlex 韩文版成片</div><div class="ds">没赶上，原定 10月22日</div></div></div>
+          <div class="td"><div class="ck"></div><div class="grow"><div class="tt">回复 SignPlex 报价邮件</div><div class="ds">今天截止</div></div></div>
+        </div>
+      </div>
+      <div class="dtoast">
+        <div class="row xs muted"><svg class="i" style="width:16px;height:16px"><use href="#i-bell"/></svg>日程与待办<span style="margin-left:auto">现在</span></div>
+        <div style="font-weight:600;margin-top:6px">15:00 SignPlex 客户反馈会</div>
+        <div class="sm">10 分钟后开始，Zoom</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px"><button class="btn g s" style="border-radius:6px">知道了</button><button class="btn g s" style="border-radius:6px">10 分钟后</button></div>
+      </div>
+    </div><span class="flabel">Windows 通知自带按钮；应用开着时页面内也同步显示</span></div></div>
+  </div>
+</section>
+
+<!-- =============== 3 日历：周 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 3</small>日历：周</h3>
+    <p>手机上一周是 7 条横向泳道，横轴从 8 点到 22 点，一眼看出哪天满、哪天空。点某一天，下方列出当天的日程。</p>
+    <p>左右滑动换周；顶部切换周、月、纪念日。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="cal">
+      <div class="pc">
+        <div class="hd"><div class="ttl">日历</div><div class="ibs"><button class="ib" aria-label="搜索"><svg class="i"><use href="#i-search"/></svg></button><button class="ib" aria-label="设置"><svg class="i"><use href="#i-gear"/></svg></button></div></div>
+        <div class="seg" style="width:100%;display:flex"><button style="flex:1" aria-pressed="true">周</button><button style="flex:1" aria-pressed="false">月</button><button style="flex:1" aria-pressed="false">纪念日</button></div>
+        <div class="mh mt16"><div class="m" style="font-size:18px">10月19日 到 25日</div><div class="ibs"><button class="ib" aria-label="上一周"><svg class="i"><use href="#i-back"/></svg></button><button class="ib" aria-label="下一周"><svg class="i"><use href="#i-next"/></svg></button></div></div>
+        <div class="wk">
+          <div class="axis"><span></span><div><span>8</span><span>11</span><span>14</span><span>17</span><span>20</span><span>22</span></div></div>
+          <div class="lane"><div class="dn">一<b>19</b></div><div class="tr"><i style="left:14%;width:7%"></i><i style="left:43%;width:14%"></i></div></div>
+          <div class="lane"><div class="dn">二<b>20</b></div><div class="tr"><i style="left:21%;width:7%"></i></div></div>
+          <div class="lane"><div class="dn">三<b>21</b></div><div class="tr"><i style="left:36%;width:36%"></i></div></div>
+          <div class="lane"><div class="dn">四<b>22</b></div><div class="tr"><i class="o" style="left:2%;width:5%"></i><i style="left:79%;width:14%"></i></div></div>
+          <div class="lane"><div class="dn">五<b>23</b></div><div class="tr"><i style="left:14%;width:14%"></i></div></div>
+          <div class="lane on"><div class="dn">六<b>24</b></div><div class="tr"><i style="left:11%;width:4%"></i><i class="k" style="left:36%;width:11%"></i><i class="k" style="left:50%;width:7%"></i><i style="left:75%;width:14%"></i><span class="nw" style="left:44.9%"></span></div></div>
+          <div class="lane"><div class="dn">日<b>25</b></div><div class="tr"><i style="left:29%;width:14%"></i><span class="bd" title="生日"></span></div></div>
+        </div>
+        <p class="xs muted mt8">深色是选中那天的日程，空心是截止的待办，圆圈是纪念日，竖线是现在。</p>
+        <div class="sec">10月24日 周六　农历九月十五 <span>4 项</span></div>
+        <div class="tl" style="margin-top:4px">
+          <div class="r"><div class="tm muted">09:30<small>10:00</small></div><div><div class="tt muted">NEOX 晨会</div></div></div>
+          <div class="r cur"><div class="tm">13:00<small>14:30</small></div><div><div class="tt">NEOX 横版对片</div><div class="ds">进行中</div></div></div>
+          <div class="r"><div class="tm">15:00<small>16:00</small></div><div><div class="tt">SignPlex 客户反馈会</div><div class="ds">Zoom</div></div></div>
+          <div class="r"><div class="tm">18:30<small>20:30</small></div><div><div class="tt">和 민지 吃晚饭</div><div class="ds">延南洞</div></div></div>
+        </div>
+      </div>
+    </div></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk tall" data-nav="cal">
+      <div class="cap-bar"><span class="grow">记一笔：直接打字，回车保存</span><span class="kb">Ctrl+Shift+空格</span><span class="mic"><svg class="i"><use href="#i-mic"/></svg></span></div>
+      <div class="dbody" style="grid-template-columns:1fr 300px">
+        <div class="pane w" style="padding:16px 18px">
+          <div class="row" style="justify-content:space-between;margin-bottom:8px"><div class="row"><div style="font-size:20px;font-weight:700">10月19日 到 25日</div><button class="ib" aria-label="上一周" style="width:36px;height:36px"><svg class="i"><use href="#i-back"/></svg></button><button class="ib" aria-label="下一周" style="width:36px;height:36px"><svg class="i"><use href="#i-next"/></svg></button></div>
+            <div class="seg"><button aria-pressed="false">日</button><button aria-pressed="true">周</button><button aria-pressed="false">月</button><button aria-pressed="false">纪念日</button></div></div>
+          <div class="wg" id="dwg">
+            <div></div>
+            <div class="hh">一<b>19</b><small>初十</small></div><div class="hh">二<b>20</b><small>十一</small></div><div class="hh">三<b>21</b><small>十二</small></div><div class="hh">四<b>22</b><small>十三</small></div><div class="hh">五<b>23</b><small>霜降</small></div><div class="hh on">六<b>24</b><small>十五</small></div><div class="hh">日<b>25</b><small>十六</small></div>
+          </div>
+        </div>
+        <div class="pane"><div class="ph-h"><h4>选中：SignPlex 客户反馈会</h4></div>
+          <div class="sm muted">10月24日 周六　15:00 到 16:00</div>
+          <div class="lbl">地点</div><div style="font-size:15px">Zoom</div>
+          <div class="lbl">提醒</div><div style="font-size:15px">提前 10 分钟</div>
+          <div class="lbl">备注</div><div style="font-size:15px">带上韩文版第 3 稿，问清楚片尾 logo 要不要换。</div>
+          <div class="lbl">原话</div><div class="sm muted">“周六下午三点 SignPlex 客户反馈会，提前十分钟提醒我”</div>
+          <div class="row mt20"><button class="btn s">编辑</button><button class="btn g s">删除</button></div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 4 日历：月 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 4</small>日历：月</h3>
+    <p>手机格子里只放日期、农历和最多 3 根色条，不放标题；节日和节气代替农历文字，加粗显示。</p>
+    <p>角标“休”：实心是中国放假，空心是韩国放假。点某天，下方显示当天清单；上滑清单，月历收成一周。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="cal">
+      <div class="pc">
+        <div class="hd"><div class="ttl">日历</div><div class="ibs"><button class="ib" aria-label="搜索"><svg class="i"><use href="#i-search"/></svg></button><button class="ib" aria-label="设置"><svg class="i"><use href="#i-gear"/></svg></button></div></div>
+        <div class="seg" style="width:100%;display:flex"><button style="flex:1" aria-pressed="false">周</button><button style="flex:1" aria-pressed="true">月</button><button style="flex:1" aria-pressed="false">纪念日</button></div>
+        <div class="mh mt16"><div class="m">2026年10月</div><div class="ibs"><button class="ib" aria-label="上个月"><svg class="i"><use href="#i-back"/></svg></button><button class="ib" aria-label="下个月"><svg class="i"><use href="#i-next"/></svg></button></div></div>
+        <div class="mg" id="pmg"></div>
+        <div class="row xs muted mt8 wrap" style="gap:12px"><span><span class="tag k" style="font-size:10px;line-height:14px;padding:0 3px">休</span> 中国放假</span><span><span class="tag o" style="font-size:10px;line-height:14px;padding:0 3px;box-shadow:inset 0 0 0 1px #000;color:#000">休</span> 韩国放假</span><span>色条：日程　圆圈：纪念日</span></div>
+        <div class="sec">10月24日 周六　农历九月十五 <span>4 项</span></div>
+        <div class="td"><div class="tm" style="width:48px;font-weight:600">13:00</div><div class="grow"><div class="tt">NEOX 横版对片</div></div></div>
+        <div class="td"><div class="tm" style="width:48px;font-weight:600">15:00</div><div class="grow"><div class="tt">SignPlex 客户反馈会</div></div></div>
+        <div class="td"><div class="tm" style="width:48px;font-weight:600">18:30</div><div class="grow"><div class="tt">和 민지 吃晚饭</div></div></div>
+      </div>
+    </div></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk tall" data-nav="cal">
+      <div class="dbody" style="grid-template-columns:1fr;padding-top:16px">
+        <div style="min-width:0;position:relative">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px"><div class="row"><div style="font-size:22px;font-weight:700">2026年10月</div><button class="ib" aria-label="上个月" style="width:36px;height:36px"><svg class="i"><use href="#i-back"/></svg></button><button class="ib" aria-label="下个月" style="width:36px;height:36px"><svg class="i"><use href="#i-next"/></svg></button></div>
+            <div class="row"><span class="kbtn">农历、中国节假日、韩国节假日可在设置里分别关掉</span><div class="seg"><button aria-pressed="false">日</button><button aria-pressed="false">周</button><button aria-pressed="true">月</button><button aria-pressed="false">纪念日</button></div></div></div>
+          <div class="dmg" id="dmg"></div>
+          <div class="modal" style="right:-8px;top:300px;width:300px;padding:18px 20px">
+            <div class="row" style="justify-content:space-between"><b>10月24日 周六</b><span class="xs muted">农历九月十五</span></div>
+            <div class="td mt8"><div style="width:48px;font-weight:600">09:30</div><div class="grow"><div class="tt muted">NEOX 晨会</div></div></div>
+            <div class="td"><div style="width:48px;font-weight:600">13:00</div><div class="grow"><div class="tt">NEOX 横版对片</div></div></div>
+            <div class="td"><div style="width:48px;font-weight:600">15:00</div><div class="grow"><div class="tt">SignPlex 客户反馈会</div></div></div>
+            <div class="td"><div style="width:48px;font-weight:600">18:30</div><div class="grow"><div class="tt">和 민지 吃晚饭</div></div></div>
+            <div class="td"><div class="ck"></div><div class="grow"><div class="tt">回复 SignPlex 报价邮件</div><div class="ds">截止</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div><span class="flabel">点某一天弹出当天清单；双击空白处新建，拖动日程改日期</span></div></div>
+  </div>
+</section>
+
+<!-- =============== 5 纪念日列表 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 5</small>纪念日列表</h3>
+    <p>生日、纪念日、倒数日放在一起，按“还有几天”排序。数字最大的那一列就是天数。</p>
+    <p>生日填了出生年份才显示周岁；已经过去的倒数日放在最下面，显示“已过几天”。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="cal">
+      <div class="pc">
+        <div class="hd"><div class="ttl">日历</div><div class="ibs"><button class="ib" aria-label="搜索"><svg class="i"><use href="#i-search"/></svg></button><button class="ib" aria-label="设置"><svg class="i"><use href="#i-gear"/></svg></button></div></div>
+        <div class="seg" style="width:100%;display:flex"><button style="flex:1" aria-pressed="false">周</button><button style="flex:1" aria-pressed="false">月</button><button style="flex:1" aria-pressed="true">纪念日</button></div>
+        <div class="chips mt16"><span class="chip on">全部 6</span><span class="chip">生日 3</span><span class="chip">纪念日 1</span><span class="chip">倒数日 2</span></div>
+        <div style="display:grid;gap:10px;margin-top:16px">
+          <div class="anni"><div class="n">1<small>天后</small></div><div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:600">妈妈生日</div><div class="sm muted">阴历九月十六，62 周岁</div></div><span class="tag">生日</span></div>
+          <div class="anni"><div class="n">12<small>天后</small></div><div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:600">结婚纪念日</div><div class="sm muted">11月5日，第 8 年</div></div><span class="tag">纪念日</span></div>
+          <div class="anni"><div class="n">37<small>天后</small></div><div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:600">SignPlex 正式上线</div><div class="sm muted">11月30日 周一</div></div><span class="tag">倒数日</span></div>
+          <div class="anni"><div class="n">58<small>天后</small></div><div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:600">민지 生日</div><div class="sm muted">12月21日，不显示岁数</div></div><span class="tag">生日</span></div>
+          <div class="anni"><div class="n">260<small>天后</small></div><div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:600">지호 生日</div><div class="sm muted">阴历闰六月初八，2 周岁</div></div><span class="tag">生日</span></div>
+        </div>
+        <div class="sec">已经过去</div>
+        <div class="anni" style="background:none;box-shadow:inset 0 0 0 1px var(--g2)"><div class="n muted" style="font-size:20px">46<small>天前</small></div><div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:600">NEOX 第一支片交付</div><div class="sm muted">9月8日</div></div><span class="tag">倒数日</span></div>
+      </div>
+    </div></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="cal">
+      <div class="dbody" style="grid-template-columns:1fr 380px;padding-top:16px">
+        <div class="pane w">
+          <div class="row" style="justify-content:space-between"><div style="font-size:22px;font-weight:700">纪念日</div><div class="row"><div class="chips"><span class="chip on">全部 6</span><span class="chip">生日 3</span><span class="chip">纪念日 1</span><span class="chip">倒数日 2</span></div><button class="btn s"><svg class="i"><use href="#i-plus"/></svg>新建</button></div></div>
+          <div style="display:grid;grid-template-columns:110px 1fr 160px 90px;gap:0;margin-top:16px;font-size:15px" id="danni"></div>
+        </div>
+        <div class="pane"><div class="ph-h"><h4>妈妈生日</h4><span class="tag">生日</span></div>
+          <div style="font-size:56px;font-weight:700;line-height:1">1<span style="font-size:18px;font-weight:500"> 天后</span></div>
+          <div class="list mt20" style="background:var(--paper)">
+            <div class="li"><div class="grow">日期</div><div class="v">阴历九月十六</div></div>
+            <div class="li"><div class="grow">今年对应</div><div class="v">10月25日 周日</div></div>
+            <div class="li"><div class="grow">出生年份</div><div class="v">1964 年，62 周岁</div></div>
+            <div class="li"><div class="grow">提醒</div><div class="v">提前 7 天、前一天，9:00</div></div>
+          </div>
+          <div class="row mt20"><button class="btn s">编辑</button><button class="btn g s">删除</button></div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 6 新建纪念日 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 6</small>新建纪念日（阴历、闰月）</h3>
+    <p>先选类型，再选阳历或阴历。阴历的月份滚轮里，只有当年真有闰月时才出现“闰六月”这一项。</p>
+    <p>闰月生日在没有闰月的年份按同月同日过，这一点可以单独改。不填出生年份就不显示岁数。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="none">
+      <div class="dim"></div>
+      <div class="sheet" style="top:58px">
+        <div class="grab"></div>
+        <div class="row" style="justify-content:space-between"><button class="sm" style="min-height:44px">取消</button><b style="font-size:17px">新建纪念日</b><button class="sm" style="font-weight:700;min-height:44px">保存</button></div>
+        <div class="seg mt12" style="width:100%;display:flex"><button style="flex:1" aria-pressed="true">生日</button><button style="flex:1" aria-pressed="false">纪念日</button><button style="flex:1" aria-pressed="false">倒数日</button></div>
+        <div class="lbl">名字</div><div class="field f line">지호 生日</div>
+        <div class="lbl">日期</div>
+        <div class="seg" style="display:flex;width:100%"><button style="flex:1" aria-pressed="false">阳历</button><button style="flex:1" aria-pressed="true">阴历</button></div>
+        <div class="wheel mt12" style="grid-template-columns:1.1fr 1fr 1fr">
+          <div class="col"><div>2024</div><div class="on">2025</div><div>2026</div></div>
+          <div class="col"><div>六月</div><div class="on">闰六月</div><div>七月</div></div>
+          <div class="col"><div>初七</div><div class="on">初八</div><div>初九</div></div>
+        </div>
+        <div class="li" style="padding:12px 4px"><div class="grow" style="font-size:15px">不知道出生年份</div><div class="tog"></div></div>
+        <div class="card" style="padding:12px 14px;font-size:14px;line-height:1.6">2025 年阴历闰六月初八，到明年满 2 周岁。<br>明年没有闰六月，按阴历六月初八过。<span style="text-decoration:underline">改成七月初八</span></div>
+        <div class="lbl">提醒</div>
+        <div class="list">
+          <div class="li"><div class="grow">提前 7 天</div><div class="tog on"></div></div>
+          <div class="li"><div class="grow">前一天</div><div class="tog on"></div></div>
+          <div class="li"><div class="grow">提醒时间</div><div class="v">早上 9:00</div></div>
+        </div>
+      </div>
+    </div></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="cal">
+      <div class="dbody" style="grid-template-columns:1fr;padding-top:16px"><div class="pane" style="opacity:.5"></div></div>
+      <div class="dim" style="background:rgba(0,0,0,.28)"></div>
+      <div class="modal" style="left:50%;top:40px;width:560px;margin-left:-280px">
+        <div class="row" style="justify-content:space-between"><b style="font-size:20px">新建纪念日</b><button class="ib" aria-label="关闭" style="width:36px;height:36px"><svg class="i"><use href="#i-x"/></svg></button></div>
+        <div class="seg mt16"><button aria-pressed="true">生日</button><button aria-pressed="false">纪念日</button><button aria-pressed="false">倒数日</button></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div><div class="lbl">名字</div><div class="field f line">지호 生日</div></div>
+          <div><div class="lbl">历法</div><div class="seg" style="display:flex"><button style="flex:1" aria-pressed="false">阳历</button><button style="flex:1" aria-pressed="true">阴历</button></div></div>
+        </div>
+        <div class="lbl">阴历日期</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div class="field f">2025 年</div><div class="field f">闰六月</div><div class="field f">初八</div>
+        </div>
+        <div class="card mt12" style="padding:12px 14px;font-size:14px">2025 年阴历闰六月初八，到明年满 2 周岁。明年没有闰六月，按阴历六月初八过。<span style="text-decoration:underline">改成七月初八</span></div>
+        <div class="lbl">提醒</div>
+        <div class="row wrap"><span class="chip on">提前 7 天</span><span class="chip on">前一天</span><span class="chip">当天</span><span class="chip">早上 9:00</span></div>
+        <div class="row mt24" style="justify-content:flex-end"><button class="btn g">取消</button><button class="btn">保存</button></div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 7 待办 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 7</small>待办</h3>
+    <p>按“没赶上、今天、明天、以后、没定时间”分组。左滑一行改到明天，右滑完成。</p>
+    <p>已完成的折叠在最下面，点开也能编辑；最近删除保留 30 天。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="todo">
+      <div class="pc">
+        <div class="hd"><div class="ttl">待办</div><div class="ibs"><button class="ib" aria-label="搜索"><svg class="i"><use href="#i-search"/></svg></button><button class="ib" aria-label="设置"><svg class="i"><use href="#i-gear"/></svg></button></div></div>
+        <div class="chips"><span class="chip on">全部 9</span><span class="chip">NEOX 3</span><span class="chip">SignPlex 4</span><span class="chip">个人 2</span></div>
+        <div class="sec">没赶上 <span>1</span></div>
+        <div class="td over"><div class="ck"></div><div class="grow"><div class="tt">交 SignPlex 韩文版成片</div><div class="ds">原定 10月22日，晚了 2 天</div></div><button class="btn g s">改到今天</button></div>
+        <div class="sec">今天 <span>2</span></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">回复 SignPlex 报价邮件</div><div class="ds">SignPlex　18:00 提醒</div></div></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">NEOX 竖版 4K 导出</div><div class="ds">NEOX</div></div></div>
+        <div class="sec">明天 <span>1</span></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">给妈妈打电话，订好蛋糕</div><div class="ds">个人　9:00 提醒</div></div></div>
+        <div class="sec">以后 <span>2</span></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">NEOX 年终片分镜</div><div class="ds">NEOX　10月30日</div></div></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">SignPlex 发布会彩排</div><div class="ds">SignPlex　11月27日</div></div></div>
+        <div class="sec">没定时间 <span>2</span></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">买牛奶和鸡蛋</div><div class="ds">个人</div></div></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">整理素材盘</div><div class="ds">NEOX</div></div></div>
+        <div class="list mt20"><div class="li"><div class="grow">已完成 12 件</div><div class="v">展开</div></div><div class="li"><div class="grow">最近删除 3 件</div><div class="v">30 天内可找回</div></div></div>
+      </div>
+    </div></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="todo">
+      <div class="cap-bar"><span class="grow">记一笔：直接打字，回车保存</span><span class="kb">Ctrl+Shift+空格</span><span class="mic"><svg class="i"><use href="#i-mic"/></svg></span></div>
+      <div class="dbody" style="grid-template-columns:1fr 380px">
+        <div class="pane w">
+          <div class="row" style="justify-content:space-between"><div style="font-size:22px;font-weight:700">待办</div><div class="chips"><span class="chip on">全部 9</span><span class="chip">NEOX 3</span><span class="chip">SignPlex 4</span><span class="chip">个人 2</span></div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 32px">
+            <div>
+              <div class="sec">没赶上 <span>1</span></div>
+              <div class="td over"><div class="ck"></div><div class="grow"><div class="tt">交 SignPlex 韩文版成片</div><div class="ds">原定 10月22日，晚了 2 天</div></div></div>
+              <div class="sec">今天 <span>2</span></div>
+              <div class="td" style="background:var(--g0);border-radius:12px;padding:11px 10px;margin:0 -10px"><div class="ck"></div><div class="grow"><div class="tt">回复 SignPlex 报价邮件</div><div class="ds">SignPlex　18:00 提醒</div></div></div>
+              <div class="td"><div class="ck"></div><div class="grow"><div class="tt">NEOX 竖版 4K 导出</div><div class="ds">NEOX</div></div></div>
+              <div class="sec">明天 <span>1</span></div>
+              <div class="td"><div class="ck"></div><div class="grow"><div class="tt">给妈妈打电话，订好蛋糕</div><div class="ds">个人　9:00 提醒</div></div></div>
+            </div>
+            <div>
+              <div class="sec">以后 <span>2</span></div>
+              <div class="td"><div class="ck"></div><div class="grow"><div class="tt">NEOX 年终片分镜</div><div class="ds">10月30日</div></div></div>
+              <div class="td"><div class="ck"></div><div class="grow"><div class="tt">SignPlex 发布会彩排</div><div class="ds">11月27日</div></div></div>
+              <div class="sec">没定时间 <span>2</span></div>
+              <div class="td"><div class="ck"></div><div class="grow"><div class="tt">买牛奶和鸡蛋</div></div></div>
+              <div class="td"><div class="ck"></div><div class="grow"><div class="tt">整理素材盘</div></div></div>
+              <div class="sec">已完成 <span>12 件，展开</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="pane"><div class="ph-h"><h4>回复 SignPlex 报价邮件</h4></div>
+          <div class="list" style="background:var(--paper)">
+            <div class="li"><div class="grow">截止</div><div class="v">今天</div></div>
+            <div class="li"><div class="grow">提醒</div><div class="v">18:00</div></div>
+            <div class="li"><div class="grow">项目</div><div class="v">SignPlex</div></div>
+          </div>
+          <div class="lbl">备注</div><div style="font-size:15px">报价按 60 秒韩文版算，加一版 15 秒竖版。</div>
+          <div class="lbl">原话</div><div class="sm muted">“今天把 SignPlex 的报价邮件回了，六点提醒我”</div>
+          <p class="xs muted mt20">键盘：空格完成，T 改到今天，M 改到明天，Delete 删除。</p>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 8 随手记列表 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 8</small>随手记列表</h3>
+    <p>最快的记法：页面顶部常驻一行“写一句”，点一下就出键盘；回车保存，AI 稍后归类。</p>
+    <p>最好找：分类横排在上面，可以换行；隐私记是带锁的那个分类。分类超过 12 个时，顶部提示合并。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="note">
+      <div class="pc">
+        <div class="hd"><div class="ttl">随手记</div><div class="ibs"><button class="ib" aria-label="搜索"><svg class="i"><use href="#i-search"/></svg></button><button class="ib" aria-label="设置"><svg class="i"><use href="#i-gear"/></svg></button></div></div>
+        <div class="field">写一句，回车保存</div>
+        <div class="chips mt12"><span class="chip on">全部 128</span><span class="chip">工作想法 41</span><span class="chip">首尔生活 23</span><span class="chip">要买的 17</span><span class="chip">书和电影 12</span><span class="chip"><svg class="i"><use href="#i-lock"/></svg>隐私记</span></div>
+        <div class="card mt12 row" style="padding:10px 14px;font-size:14px"><span style="flex:1">“要买的”和“购物”像是一类，合并吗？</span><b>合并</b><span class="muted">不用</span></div>
+        <div class="sec">今天</div>
+        <div class="td"><div class="grow"><div class="tt">SignPlex 片尾的 logo 停留再长半秒，音乐收尾跟着拖</div><div class="ds">工作想法　13:42</div></div></div>
+        <div class="td"><div class="grow"><div class="tt">NEOX 竖版的字幕底条太粗，改 70%</div><div class="ds">工作想法　11:05　有 1 张图</div></div><div class="img" style="width:56px;height:56px"></div></div>
+        <div class="sec">这周</div>
+        <div class="td"><div class="grow"><div class="tt">망원동 那家面包店周一休息</div><div class="ds">首尔生活　昨天</div></div></div>
+        <div class="td"><div class="grow"><div class="tt">《破墓》导演的新片，11 月上映</div><div class="ds">书和电影　周三</div></div></div>
+        <div class="td"><div class="grow"><div class="tt">무인양품 的收纳盒，宽 26 的那款</div><div class="ds">要买的　周二</div></div><div class="img" style="width:56px;height:56px"></div></div>
+        <div class="end">往下还有 123 条</div>
+      </div>
+    </div></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="note">
+      <div class="dbody" style="grid-template-columns:200px 380px 1fr;padding-top:16px">
+        <div>
+          <div style="font-size:22px;font-weight:700;margin-bottom:12px">随手记</div>
+          <div class="rail" style="background:none;border:0;padding:0">
+            <div class="ri on">全部<span class="cnt">128</span></div><div class="ri">工作想法<span class="cnt">41</span></div><div class="ri">首尔生活<span class="cnt">23</span></div><div class="ri">要买的<span class="cnt">17</span></div><div class="ri">书和电影<span class="cnt">12</span></div><div class="ri">没分类<span class="cnt">3</span></div><div class="ri"><svg class="i"><use href="#i-lock"/></svg>隐私记</div><div class="ri">最近删除</div>
+          </div>
+        </div>
+        <div class="pane" style="padding:14px">
+          <div class="field" style="min-height:44px;background:var(--paper)">写一句，回车保存</div>
+          <div class="sec" style="margin-top:14px">今天</div>
+          <div class="card" style="background:var(--paper);box-shadow:inset 0 0 0 2px var(--ink);padding:12px 14px"><div style="font-size:15px">SignPlex 片尾的 logo 停留再长半秒，音乐收尾跟着拖</div><div class="xs mt8 muted">工作想法　13:42</div></div>
+          <div class="td" style="padding:12px 4px"><div class="grow"><div class="tt">NEOX 竖版的字幕底条太粗，改 70%</div><div class="ds">工作想法　11:05　1 张图</div></div></div>
+          <div class="sec">这周</div>
+          <div class="td" style="padding:12px 4px"><div class="grow"><div class="tt">망원동 那家面包店周一休息</div><div class="ds">首尔生活　昨天</div></div></div>
+          <div class="td" style="padding:12px 4px"><div class="grow"><div class="tt">《破墓》导演的新片，11 月上映</div><div class="ds">书和电影　周三</div></div></div>
+          <div class="td" style="padding:12px 4px"><div class="grow"><div class="tt">무인양품 的收纳盒，宽 26 的那款</div><div class="ds">要买的　周二</div></div></div>
+        </div>
+        <div class="pane w" style="padding:28px 32px">
+          <div class="row sm muted" style="justify-content:space-between"><span>工作想法　今天 13:42</span><span class="kbtn">点正文直接编辑</span></div>
+          <div style="font-size:22px;font-weight:650;margin-top:14px;line-height:1.4">SignPlex 片尾的 logo 停留再长半秒，音乐收尾跟着拖</div>
+          <p class="mt12" style="font-size:16px;line-height:1.75;color:var(--g5)">现在 logo 出来 1.2 秒就切黑，客户上次说没看清。可以停 1.7 秒，配乐最后一个和弦拖长一点，正好落在切黑上。</p>
+          <div class="row wrap mt24"><button class="btn g s"><svg class="i"><use href="#i-todo"/></svg>转成待办</button><button class="btn g s"><svg class="i"><use href="#i-cal"/></svg>转成日程</button><button class="btn g s">移到其他分类</button></div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 9 随手记编辑器 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 9</small>随手记编辑器</h3>
+    <p>标题可以不写，第一行就当标题。键盘上方一排工具：插图、清单、转成待办、转成日程。</p>
+    <p>转换时 AI 先把时间填好，确认后原来这条移到“最近删除”，30 天内能找回。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="none">
+      <div class="pc tight">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px"><button class="ib" aria-label="返回"><svg class="i"><use href="#i-back"/></svg></button><span class="sm muted">工作想法　自动保存</span><button class="ib" aria-label="更多"><svg class="i"><use href="#i-more"/></svg></button></div>
+        <div style="font-size:22px;font-weight:650;line-height:1.4">NEOX 竖版的字幕底条太粗，改 70%</div>
+        <p class="mt12" style="font-size:16px;line-height:1.75;color:var(--g5)">底条现在是字高的 1.4 倍，压住了画面下面三分之一。下周二 10 点和导演对一下。</p>
+        <div class="img mt16" style="height:190px">截图：竖版第 12 秒</div>
+        <p class="mt12" style="font-size:16px;line-height:1.75">韩文字幕也跟着缩，별도로 확인<span style="display:inline-block;width:2px;height:18px;background:#000;vertical-align:-3px"></span></p>
+      </div>
+      <div style="position:absolute;left:0;right:0;bottom:290px;height:52px;background:var(--g0);border-top:1px solid var(--g2);display:flex;align-items:center;gap:4px;padding:0 8px">
+        <button class="btn g s" style="background:none"><svg class="i"><use href="#i-img"/></svg>插图</button>
+        <button class="btn g s" style="background:none"><svg class="i"><use href="#i-list"/></svg>清单</button>
+        <button class="btn g s" style="background:none"><svg class="i"><use href="#i-todo"/></svg>转待办</button>
+        <button class="btn s" style="margin-left:auto"><svg class="i"><use href="#i-cal"/></svg>转日程</button>
+      </div>
+      <div class="kbd"><div class="kr"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="kr"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="kr"><i class="m"></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="m"></i></div><div class="kr"><i class="m"></i><i class="w"></i><i class="m"></i></div></div>
+    </div><span class="flabel">编辑中</span></div></div>
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="none">
+      <div class="pc tight" style="opacity:.35">
+        <div style="height:56px"></div>
+        <div style="font-size:22px;font-weight:650;line-height:1.4">NEOX 竖版的字幕底条太粗，改 70%</div>
+        <p class="mt12" style="font-size:16px;line-height:1.75">底条现在是字高的 1.4 倍，压住了画面下面三分之一。下周二 10 点和导演对一下。</p>
+      </div>
+      <div class="dim" style="background:rgba(0,0,0,.25)"></div>
+      <div class="sheet glass" style="padding-bottom:40px">
+        <div class="grab"></div>
+        <b style="font-size:18px">转成日程</b>
+        <div class="lbl">标题</div><div class="field f" style="background:var(--paper)">和导演对 NEOX 竖版字幕底条</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><div class="lbl">日期</div><div class="field f" style="background:var(--paper)">10月27日 周二</div></div><div><div class="lbl">时间</div><div class="field f" style="background:var(--paper)">10:00 到 10:30</div></div></div>
+        <div class="lbl">提醒</div><div class="field f" style="background:var(--paper)">提前 10 分钟</div>
+        <div class="card mt16" style="background:rgba(255,255,255,.7);padding:12px 14px;font-size:14px">图片和正文会放进日程备注。原来这条随手记移到“最近删除”，30 天内能找回。</div>
+        <button class="btn w mt16" style="height:52px">转成日程</button>
+      </div>
+    </div><span class="flabel">转成日程（磨砂玻璃弹层）</span></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="note">
+      <div class="dbody" style="grid-template-columns:380px 1fr 320px;padding-top:16px">
+        <div class="pane" style="padding:14px">
+          <div class="sec" style="margin-top:0">今天</div>
+          <div class="td" style="padding:12px 4px"><div class="grow"><div class="tt">SignPlex 片尾的 logo 停留再长半秒</div><div class="ds">工作想法　13:42</div></div></div>
+          <div class="card" style="background:var(--paper);box-shadow:inset 0 0 0 2px var(--ink);padding:12px 14px"><div style="font-size:15px">NEOX 竖版的字幕底条太粗，改 70%</div><div class="xs mt8 muted">工作想法　11:05</div></div>
+          <div class="sec">这周</div>
+          <div class="td" style="padding:12px 4px"><div class="grow"><div class="tt">망원동 那家面包店周一休息</div><div class="ds">首尔生活　昨天</div></div></div>
+        </div>
+        <div class="pane w" style="padding:24px 32px">
+          <div class="row" style="gap:6px;margin-bottom:16px"><button class="btn g s"><svg class="i"><use href="#i-img"/></svg>插图</button><button class="btn g s"><svg class="i"><use href="#i-list"/></svg>清单</button><span class="muted xs" style="margin-left:auto">可以直接把图片拖进来　自动保存</span></div>
+          <div style="font-size:24px;font-weight:650;line-height:1.4">NEOX 竖版的字幕底条太粗，改 70%</div>
+          <p class="mt12" style="font-size:16px;line-height:1.75;color:var(--g5)">底条现在是字高的 1.4 倍，压住了画面下面三分之一。下周二 10 点和导演对一下。</p>
+          <div class="img mt16" style="height:250px;max-width:460px">截图：竖版第 12 秒</div>
+        </div>
+        <div class="pane"><div class="ph-h"><h4>转成待办或日程</h4></div>
+          <div class="seg" style="display:flex"><button style="flex:1" aria-pressed="false">待办</button><button style="flex:1" aria-pressed="true">日程</button></div>
+          <div class="lbl">标题</div><div class="field f" style="background:var(--paper)">和导演对 NEOX 竖版字幕底条</div>
+          <div class="lbl">时间</div><div class="field f" style="background:var(--paper)">10月27日 周二 10:00</div>
+          <div class="lbl">提醒</div><div class="field f" style="background:var(--paper)">提前 10 分钟</div>
+          <p class="xs muted mt12">原来这条移到“最近删除”，30 天内能找回。</p>
+          <button class="btn w mt16">转成日程</button>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 10 隐私记 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 10</small>隐私记：设密码、解锁</h3>
+    <p>第一次点隐私记时设 4 位以上数字密码，然后问要不要用 Face ID。之后点开先走 Face ID，失败或取消就输密码。</p>
+    <p>离开 App 或停在别的页面超过 1 分钟自动上锁；解锁后页面顶部可以立刻手动上锁。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="none">
+      <div class="pc tight">
+        <div class="row"><button class="ib" aria-label="返回"><svg class="i"><use href="#i-back"/></svg></button></div>
+        <div style="text-align:center;margin-top:30px"><svg class="i" style="width:40px;height:40px"><use href="#i-lock"/></svg>
+          <div style="font-size:22px;font-weight:650;margin-top:12px">给隐私记设一个密码</div>
+          <div class="muted mt8" style="font-size:15px">至少 4 位数字。忘了可以用邮箱重设。</div></div>
+        <div class="pin"><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i style="box-shadow:inset 0 0 0 2px var(--g3)"></i><i style="box-shadow:inset 0 0 0 2px var(--g3)"></i></div>
+        <div class="xs muted" style="text-align:center">已输 3 位，满 4 位后可以点“下一步”</div>
+        <div class="pad"><b>1</b><b>2</b><b>3</b><b>4</b><b>5</b><b>6</b><b>7</b><b>8</b><b>9</b><b class="n"></b><b>0</b><b class="n">删除</b></div>
+        <button class="btn w mt24" style="height:52px;background:var(--g3);color:var(--paper)">下一步</button>
+      </div>
+    </div><span class="flabel">设密码</span></div></div>
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="note">
+      <div class="pc" style="filter:blur(6px);opacity:.5">
+        <div class="hd"><div class="ttl">随手记</div></div>
+        <div class="field">写一句，回车保存</div>
+        <div class="td mt20"><div class="grow"><div class="tt">xxxxxxxxxxxxxxxx</div><div class="ds">xxxxxx</div></div></div>
+        <div class="td"><div class="grow"><div class="tt">xxxxxxxxxxxx</div><div class="ds">xxxxxx</div></div></div>
+      </div>
+      <div class="glass" style="position:absolute;left:50%;top:230px;width:270px;margin-left:-135px;border-radius:26px;padding:26px 20px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.18)">
+        <svg class="i" style="width:52px;height:52px;stroke-width:1.4"><use href="#i-face"/></svg>
+        <div style="font-size:17px;font-weight:600;margin-top:10px">用 Face ID 打开隐私记</div>
+        <button class="btn g w mt16">用密码</button>
+      </div>
+      <div style="position:absolute;left:20px;right:20px;top:470px" class="card"><div style="font-weight:600">解锁以后</div><div class="sm muted mt8" style="line-height:1.6">隐私记里的内容可以搜索，也会参与 AI 分类。离开 1 分钟自动上锁。</div></div>
+    </div><span class="flabel">解锁（Face ID，密码作后备）</span></div></div>
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="note">
+      <div class="pc">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px"><button class="ib" aria-label="返回"><svg class="i"><use href="#i-back"/></svg></button><button class="btn o s"><svg class="i"><use href="#i-lock"/></svg>现在上锁</button></div>
+        <div class="ttl">隐私记</div>
+        <div class="sm muted mt8">已解锁。离开 1 分钟后自动上锁。</div>
+        <div class="field mt16">写一句，只存在这里</div>
+        <div class="sec">这个月 <span>4 条</span></div>
+        <div class="td"><div class="grow"><div class="tt">体检结果：甲状腺复查，明年 3 月</div><div class="ds">10月21日</div></div></div>
+        <div class="td"><div class="grow"><div class="tt">给妈妈的生日红包 50 万韩元</div><div class="ds">10月19日</div></div></div>
+        <div class="td"><div class="grow"><div class="tt">房东说明年 2 月可能涨租</div><div class="ds">10月8日</div></div></div>
+        <div class="td"><div class="grow"><div class="tt">想好了：年底前不接新项目</div><div class="ds">10月2日</div></div></div>
+        <div class="end">就这些</div>
+      </div>
+    </div><span class="flabel">已解锁</span></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="note">
+      <div class="dbody" style="grid-template-columns:200px 1fr;padding-top:16px">
+        <div>
+          <div style="font-size:22px;font-weight:700;margin-bottom:12px">随手记</div>
+          <div class="rail" style="background:none;border:0;padding:0">
+            <div class="ri">全部<span class="cnt">128</span></div><div class="ri">工作想法<span class="cnt">41</span></div><div class="ri">首尔生活<span class="cnt">23</span></div><div class="ri">要买的<span class="cnt">17</span></div><div class="ri on"><svg class="i"><use href="#i-lock"/></svg>隐私记</div>
+          </div>
+        </div>
+        <div class="pane" style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;background:var(--g0)">
+          <div class="card" style="background:var(--paper);padding:28px">
+            <div class="xs muted">第一次打开</div>
+            <div style="font-size:20px;font-weight:650;margin-top:6px">给隐私记设一个密码</div>
+            <div class="muted sm mt8">至少 4 位数字。忘了可以用邮箱重设。</div>
+            <div class="lbl">密码</div><div class="field f line" style="letter-spacing:6px">●●●●●●</div>
+            <div class="lbl">再输一次</div><div class="field f line" style="letter-spacing:6px">●●●●</div>
+            <div class="xs mt8" style="font-weight:600">两次不一样，再输一次</div>
+            <div class="li" style="padding:14px 0 0"><div class="grow">用 Windows Hello 解锁</div><div class="tog on"></div></div>
+            <button class="btn w mt20">设好了</button>
+          </div>
+          <div class="card" style="background:var(--paper);padding:28px;text-align:center">
+            <div class="xs muted" style="text-align:left">之后每次打开</div>
+            <svg class="i" style="width:56px;height:56px;margin-top:24px;stroke-width:1.4"><use href="#i-face"/></svg>
+            <div style="font-size:18px;font-weight:600;margin-top:12px">用 Windows Hello 打开隐私记</div>
+            <div class="sm muted mt8">看一下摄像头，或输入 PIN</div>
+            <div class="field mt20" style="text-align:left">也可以输隐私记密码</div>
+            <div class="xs muted mt12">离开这台电脑 1 分钟，或锁屏，就自动上锁</div>
+          </div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 11 录音中 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 11</small>长按“＋”录音中</h3>
+    <p>按住“＋”，它展开成一条声音条，导航让开。说到“还有、然后、另外”就切一条，每条下面马上标出会存成什么。</p>
+    <p>松手就保存；手指滑到左边“取消”松手就作废；往上滑到“锁定”可以松开手继续说。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="none">
+      <div class="pc" style="opacity:.25"><div class="hd"><div class="d1">10月24日 周六</div></div><p class="say">正在开 NEOX 横版对片，14:30 结束。</p></div>
+      <div class="glass" style="position:absolute;inset:0"></div>
+      <div class="rec" style="padding:70px 20px 200px;justify-content:flex-end">
+        <div class="row" style="justify-content:space-between"><span class="tag k">正在听　0:09</span><span class="sm muted">已分成 3 条</span></div>
+        <div class="mt16">
+          <div class="seg-l"><div class="q">明天下午三点和 SignPlex 开会</div><div class="a"><span class="tag k">日程</span>10月25日 周日 15:00</div></div>
+          <div class="seg-l"><div class="q">还有买牛奶和鸡蛋</div><div class="a"><span class="tag k">待办</span>没定时间</div></div>
+          <div class="seg-l live"><div class="q">然后提醒我周五交 NEOX 竖版</div><div class="a"><span class="tag k">待办</span>10月30日 周五　还在听</div></div>
+        </div>
+        <p class="xs muted mt12">说话时先用本地规则粗分，松手后再精确识别一次。</p>
+      </div>
+      <div style="position:absolute;left:0;right:0;bottom:0;padding:0 16px 34px">
+        <div class="row" style="justify-content:space-between;font-size:13px;color:var(--g5);padding:0 10px 10px"><span>向左滑：取消</span><span>向上滑：锁定</span></div>
+        <div style="height:76px;border-radius:38px;background:var(--ink);color:var(--paper);display:flex;align-items:center;padding:0 10px 0 24px;gap:14px">
+          <div class="wave" id="wv" style="flex:1"></div>
+          <div style="width:58px;height:58px;border-radius:50%;background:var(--paper);color:var(--ink);display:flex;align-items:center;justify-content:center"><svg class="i" style="width:26px;height:26px"><use href="#i-mic"/></svg></div>
+        </div>
+        <div style="text-align:center;font-size:15px;font-weight:600;margin-top:10px">松开就保存</div>
+      </div>
+    </div></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="today">
+      <div class="cap-bar" style="background:var(--ink);color:var(--paper);height:64px;border-radius:32px">
+        <span class="tag" style="background:var(--paper);color:var(--ink)">正在听　0:09</span>
+        <div class="wave" id="wv2" style="flex:1"></div>
+        <span class="xs" style="color:var(--g3)">松开 Ctrl+Shift+空格保存　Esc 取消</span>
+        <span class="mic" style="background:var(--paper);color:var(--ink);width:48px;height:48px"><svg class="i"><use href="#i-mic"/></svg></span>
+      </div>
+      <div style="margin:12px 24px 0;display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div class="seg-l" style="background:var(--g0)"><div class="q">明天下午三点和 SignPlex 开会</div><div class="a"><span class="tag k">日程</span>10月25日 周日 15:00</div></div>
+        <div class="seg-l" style="background:var(--g0)"><div class="q">还有买牛奶和鸡蛋</div><div class="a"><span class="tag k">待办</span>没定时间</div></div>
+        <div class="seg-l live" style="background:var(--g0)"><div class="q">然后提醒我周五交 NEOX 竖版</div><div class="a"><span class="tag k">待办</span>10月30日 周五　还在听</div></div>
+      </div>
+      <div class="dbody" style="grid-template-columns:1.25fr 1fr;opacity:.35">
+        <div class="pane w"><p class="say">正在开 NEOX 横版对片，14:30 结束。</p></div>
+        <div class="pane"></div>
+      </div>
+    </div><span class="flabel">电脑：按住快捷键或按住麦克风按钮说话</span></div></div>
+  </div>
+</section>
+
+<!-- =============== 12 保存后的提示条 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 12</small>保存后的提示条</h3>
+    <p>提示条浮在导航上方，不盖列表；列表底部留出的空白比提示条和导航加起来还高。存进去的那个标签页上出现“+1”。</p>
+    <p>单条显示“撤销 / 修改”；拆成多条时每条单独能撤销，最下面“全部撤销”。6 秒后自动收起，可以在“最近删除”里再找到。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="today" data-badge="todo:1">
+      <div class="pc">
+        <div class="hd"><div><div class="d1">10月24日 周六</div><div class="d2">农历九月十五</div></div></div>
+        <p class="say">正在开 NEOX 横版对片，14:30 结束。</p>
+        <div class="tl"><div class="r cur"><div class="tm">13:00<small>14:30</small></div><div><div class="tt">NEOX 横版对片</div><div class="ds">还剩 13 分钟</div></div></div></div>
+        <div class="sec">今天要做 <span>3 件</span></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">回复 SignPlex 报价邮件</div></div></div>
+      </div>
+      <div class="toast"><div class="row"><div style="flex:1;min-width:0"><div class="xs" style="color:var(--g3)">已记下，放进待办</div><div style="font-size:16px;font-weight:600;margin-top:2px">买牛奶和鸡蛋</div></div><div class="ta"><button>撤销</button><button>修改</button></div></div></div>
+    </div><span class="flabel">单条</span></div></div>
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="today" data-badge="todo:2,cal:1">
+      <div class="pc">
+        <div class="hd"><div><div class="d1">10月24日 周六</div><div class="d2">农历九月十五</div></div></div>
+        <p class="say">正在开 NEOX 横版对片，14:30 结束。</p>
+      </div>
+      <div class="toast" style="padding-bottom:8px">
+        <div class="row" style="padding-bottom:6px"><b style="flex:1;font-size:16px">已记下 3 条</b><div class="ta"><button>全部撤销</button></div></div>
+        <div class="rw"><div class="grow">和 SignPlex 开会<div class="k">日程　明天 15:00</div></div><div class="ta"><button>撤销</button><button>修改</button></div></div>
+        <div class="rw"><div class="grow">买牛奶和鸡蛋<div class="k">待办　没定时间</div></div><div class="ta"><button>撤销</button><button>修改</button></div></div>
+        <div class="rw"><div class="grow">交 NEOX 竖版<div class="k">待办　10月30日 周五</div></div><div class="ta"><button>撤销</button><button>修改</button></div></div>
+      </div>
+    </div><span class="flabel">自动拆成多条</span></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="today" data-badge="todo:2,cal:1">
+      <div class="cap-bar"><span class="grow">记一笔：直接打字，回车保存</span><span class="kb">Ctrl+Shift+空格</span><span class="mic"><svg class="i"><use href="#i-mic"/></svg></span></div>
+      <div class="dbody" style="grid-template-columns:1.25fr 1fr">
+        <div class="pane w" style="padding:28px 32px"><div style="font-size:30px;font-weight:700">10月24日 周六</div><p class="say mt24" style="font-size:28px">正在开 NEOX 横版对片，14:30 结束。</p><p class="say2">之后空 30 分钟，先把没赶上的“交 SignPlex 韩文版成片”补上？</p></div>
+        <div class="pane"><div class="ph-h"><h4>今天要做</h4><span class="muted sm">3 件</span></div>
+          <div class="td"><div class="ck"></div><div class="grow"><div class="tt">回复 SignPlex 报价邮件</div></div></div></div>
+      </div>
+      <div class="toast" style="left:50%;right:auto;width:520px;margin-left:-260px;bottom:24px;padding-bottom:8px">
+        <div class="row" style="padding-bottom:6px"><b style="flex:1;font-size:16px">已记下 3 条</b><div class="ta"><button>全部撤销</button></div><span class="xs" style="color:var(--g3)">Ctrl+Z 撤销最后一条</span></div>
+        <div class="rw"><div class="grow">和 SignPlex 开会<div class="k">日程　明天 15:00</div></div><div class="ta"><button>撤销</button><button>修改</button></div></div>
+        <div class="rw"><div class="grow">买牛奶和鸡蛋<div class="k">待办　没定时间</div></div><div class="ta"><button>撤销</button><button>修改</button></div></div>
+        <div class="rw"><div class="grow">交 NEOX 竖版<div class="k">待办　10月30日 周五</div></div><div class="ta"><button>撤销</button><button>修改</button></div></div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 13 全局搜索 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 13</small>全局搜索</h3>
+    <p>每页右上角的放大镜进入；电脑上按 Ctrl+K。一次搜日程、待办、随手记、纪念日和原话，中韩文混搜。</p>
+    <p>隐私记解锁后才出现在结果里；锁着时只提示“隐私记里还有 1 条”。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="none">
+      <div class="pc tight">
+        <div class="row"><div class="field f line" style="flex:1"><svg class="i"><use href="#i-search"/></svg>SignPlex 韩</div><button class="sm" style="min-height:44px">取消</button></div>
+        <div class="chips mt12"><span class="chip on">全部 9</span><span class="chip">日程 3</span><span class="chip">待办 3</span><span class="chip">随手记 3</span></div>
+        <div class="sec">待办</div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt"><span class="hl">SignPlex</span> <span class="hl">韩</span>文版成片</div><div class="ds">没赶上，原定 10月22日</div></div></div>
+        <div class="td"><div class="ck done"><svg class="i"><use href="#i-check"/></svg></div><div class="grow"><div class="tt muted"><span class="hl">SignPlex</span> <span class="hl">韩</span>文字幕校对</div><div class="ds">已完成，10月18日</div></div></div>
+        <div class="sec">日程</div>
+        <div class="td"><div class="grow"><div class="tt"><span class="hl">SignPlex</span> 客户反馈会</div><div class="ds">今天 15:00　备注里有“<span class="hl">韩</span>文版第 3 稿”</div></div></div>
+        <div class="sec">随手记</div>
+        <div class="td"><div class="grow"><div class="tt"><span class="hl">SignPlex</span> 片尾的 logo 停留再长半秒</div><div class="ds">工作想法　原话：“<span class="hl">韩</span>国客户说没看清”</div></div></div>
+        <div class="card mt16 row" style="padding:12px 14px"><svg class="i"><use href="#i-lock"/></svg><span style="flex:1;font-size:14px">隐私记里还有 1 条</span><b class="sm">解锁查看</b></div>
+      </div>
+      <div class="kbd" style="height:250px"><div class="kr"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="kr"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="kr"><i class="m"></i><i class="w"></i><i class="m"></i></div></div>
+    </div></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="today">
+      <div class="dbody" style="grid-template-columns:1.25fr 1fr;opacity:.4"><div class="pane w"></div><div class="pane"></div></div>
+      <div class="dim" style="background:rgba(0,0,0,.22)"></div>
+      <div class="modal glass" style="left:50%;top:70px;width:680px;margin-left:-340px;padding:16px">
+        <div class="field f line" style="background:var(--paper);font-size:18px;min-height:56px"><svg class="i"><use href="#i-search"/></svg>SignPlex 韩<span class="kbtn" style="margin-left:auto">Esc 关闭</span></div>
+        <div class="chips mt12"><span class="chip on">全部 9</span><span class="chip">日程 3</span><span class="chip">待办 3</span><span class="chip">随手记 3</span><span class="chip">纪念日 0</span></div>
+        <div class="sec">待办</div>
+        <div class="td" style="background:var(--paper);border-radius:12px;padding:10px 12px"><div class="ck"></div><div class="grow"><div class="tt"><span class="hl">SignPlex</span> <span class="hl">韩</span>文版成片</div><div class="ds">没赶上，原定 10月22日</div></div><span class="kbtn">回车打开</span></div>
+        <div class="td" style="padding:10px 12px"><div class="ck done"><svg class="i"><use href="#i-check"/></svg></div><div class="grow"><div class="tt muted"><span class="hl">SignPlex</span> <span class="hl">韩</span>文字幕校对</div><div class="ds">已完成，10月18日</div></div></div>
+        <div class="sec">日程</div>
+        <div class="td" style="padding:10px 12px"><div class="grow"><div class="tt"><span class="hl">SignPlex</span> 客户反馈会</div><div class="ds">今天 15:00　备注里有“<span class="hl">韩</span>文版第 3 稿”</div></div></div>
+        <div class="sec">随手记</div>
+        <div class="td" style="padding:10px 12px"><div class="grow"><div class="tt"><span class="hl">SignPlex</span> 片尾的 logo 停留再长半秒</div><div class="ds">工作想法　原话：“<span class="hl">韩</span>国客户说没看清”</div></div></div>
+        <div class="row xs muted mt12" style="padding:0 4px"><svg class="i" style="width:16px;height:16px"><use href="#i-lock"/></svg>隐私记里还有 1 条，解锁后显示<span style="margin-left:auto">上下键选择</span></div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 14 设置 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 14</small>设置</h3>
+    <p>从每页右上角的齿轮进入。分组按“多久改一次”排：皮肤和语言在上，账号在最下。</p>
+    <p>AI 用量直接写“今天还能识别几次”，用完当天改用本地规则，第二天恢复。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="none">
+      <div class="pc tight">
+        <div class="row" style="justify-content:space-between;margin-bottom:8px"><button class="ib" aria-label="返回"><svg class="i"><use href="#i-back"/></svg></button><span></span></div>
+        <div class="ttl">设置</div>
+        <div class="lbl">皮肤</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="card" style="box-shadow:inset 0 0 0 2px var(--ink);padding:10px"><div style="height:64px;border-radius:12px;background:var(--g1);position:relative"><i style="position:absolute;left:8px;right:30px;bottom:8px;height:14px;border-radius:7px;background:var(--ink)"></i></div><div class="sm mt8" style="font-weight:600">现在的风格</div></div>
+          <div class="card" style="padding:10px"><div style="height:64px;border-radius:12px;background:linear-gradient(135deg,var(--g2),var(--g0));position:relative"><i style="position:absolute;left:8px;right:30px;bottom:8px;height:14px;border-radius:7px;background:rgba(255,255,255,.7);box-shadow:0 0 0 1px var(--g3)"></i></div><div class="sm mt8">磨砂玻璃</div></div>
+        </div>
+        <div class="list mt12">
+          <div class="li"><div class="grow">深色模式</div><div class="v">跟随系统</div></div>
+          <div class="li"><div class="grow">界面语言</div><div class="v">中文</div></div>
+        </div>
+        <div class="lbl">日历</div>
+        <div class="list">
+          <div class="li"><div class="grow">显示农历</div><div class="tog on"></div></div>
+          <div class="li"><div class="grow">中国节假日</div><div class="tog on"></div></div>
+          <div class="li"><div class="grow">韩国节假日</div><div class="tog on"></div></div>
+          <div class="li"><div class="grow">时区</div><div class="v">跟随手机，现在是首尔</div></div>
+        </div>
+        <div class="lbl">提醒</div>
+        <div class="list">
+          <div class="li"><div class="grow">纪念日推送时间</div><div class="v">早上 9:00</div></div>
+          <div class="li"><div class="grow">日程默认提前</div><div class="v">10 分钟</div></div>
+        </div>
+        <div class="lbl">隐私记</div>
+        <div class="list">
+          <div class="li"><div class="grow">用 Face ID 解锁</div><div class="tog on"></div></div>
+          <div class="li"><div class="grow">自动上锁</div><div class="v">离开 1 分钟</div></div>
+          <div class="li"><div class="grow">改密码</div><div class="v"><svg class="i"><use href="#i-next"/></svg></div></div>
+        </div>
+        <div class="lbl">AI 识别</div>
+        <div class="card"><div class="row" style="justify-content:space-between"><span>今天还能识别 38 次</span><span class="sm muted">每天 50 次</span></div><div class="bar-u mt8"><i style="width:24%"></i></div><div class="xs muted mt8">用完后当天改用本地规则，明天 0 点恢复。</div></div>
+        <div class="lbl">账号</div>
+        <div class="list">
+          <div class="li"><div class="grow">h***@gmail.com</div></div>
+          <div class="li"><div class="grow">邀请朋友</div><div class="v">还能邀请 3 人</div></div>
+          <div class="li"><div class="grow">功能说明</div><div class="v">4.0.0</div></div>
+          <div class="li"><div class="grow">退出登录</div></div>
+        </div>
+      </div>
+    </div></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk tall" data-nav="settings">
+      <div class="dbody" style="grid-template-columns:1fr 1fr;padding:24px 40px;gap:32px">
+        <div>
+          <div style="font-size:26px;font-weight:700;margin-bottom:4px">设置</div>
+          <div class="lbl">皮肤</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="card" style="box-shadow:inset 0 0 0 2px var(--ink);padding:10px"><div style="height:80px;border-radius:12px;background:var(--g1)"></div><div class="sm mt8" style="font-weight:600">现在的风格</div></div>
+            <div class="card" style="padding:10px"><div style="height:80px;border-radius:12px;background:linear-gradient(135deg,var(--g2),var(--g0))"></div><div class="sm mt8">磨砂玻璃</div></div>
+          </div>
+          <div class="list mt12"><div class="li"><div class="grow">深色模式</div><div class="v">跟随系统</div></div><div class="li"><div class="grow">界面语言</div><div class="v">中文</div></div></div>
+          <div class="lbl">日历</div>
+          <div class="list"><div class="li"><div class="grow">显示农历</div><div class="tog on"></div></div><div class="li"><div class="grow">中国节假日</div><div class="tog on"></div></div><div class="li"><div class="grow">韩国节假日</div><div class="tog on"></div></div><div class="li"><div class="grow">时区</div><div class="v">跟随系统，现在是首尔</div></div></div>
+          <div class="lbl">电脑</div>
+          <div class="list"><div class="li"><div class="grow">开机自动启动</div><div class="tog on"></div></div><div class="li"><div class="grow">唤出“记一笔”</div><div class="v">Ctrl+Shift+空格</div></div><div class="li"><div class="grow">关闭窗口时</div><div class="v">留在托盘里</div></div></div>
+        </div>
+        <div style="padding-top:44px">
+          <div class="lbl">提醒</div>
+          <div class="list"><div class="li"><div class="grow">纪念日推送时间</div><div class="v">早上 9:00</div></div><div class="li"><div class="grow">日程默认提前</div><div class="v">10 分钟</div></div><div class="li"><div class="grow">手机和电脑都在线时</div><div class="v">两边都响</div></div></div>
+          <div class="lbl">隐私记</div>
+          <div class="list"><div class="li"><div class="grow">用 Windows Hello 解锁</div><div class="tog on"></div></div><div class="li"><div class="grow">自动上锁</div><div class="v">离开 1 分钟</div></div></div>
+          <div class="lbl">AI 识别</div>
+          <div class="card"><div class="row" style="justify-content:space-between"><span>今天还能识别 38 次</span><span class="sm muted">每天 50 次</span></div><div class="bar-u mt8"><i style="width:24%"></i></div><div class="xs muted mt8">用完后当天改用本地规则，明天 0 点恢复。</div></div>
+          <div class="lbl">账号</div>
+          <div class="list"><div class="li"><div class="grow">h***@gmail.com</div><div class="v">退出登录</div></div><div class="li"><div class="grow">邀请朋友</div><div class="v">生成邀请码，还能邀请 3 人</div></div><div class="li"><div class="grow">功能说明</div><div class="v">4.0.0</div></div></div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 15 登录与邀请码 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 15</small>登录与邀请码注册</h3>
+    <p>不设密码：输邮箱，收 6 位验证码登录。新用户多一步：先填邀请码，再填邮箱和名字。</p>
+    <p>邀请码不对时直接说原因，例如“这个邀请码已经用过了”。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="none">
+      <div class="pc tight" style="padding-top:60px">
+        <div class="ttl" style="font-size:30px">日程与待办</div>
+        <div class="say2" style="margin-top:6px">用邮箱登录，不用记密码。</div>
+        <div class="lbl" style="margin-top:36px">邮箱</div><div class="field f line">h***@gmail.com</div>
+        <div class="lbl">验证码已发到这个邮箱</div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px">
+          <div class="field f" style="justify-content:center;font-size:22px;font-weight:600;padding:0">4</div><div class="field f" style="justify-content:center;font-size:22px;font-weight:600;padding:0">8</div><div class="field f" style="justify-content:center;font-size:22px;font-weight:600;padding:0">2</div><div class="field line" style="padding:0"></div><div class="field" style="padding:0"></div><div class="field" style="padding:0"></div>
+        </div>
+        <div class="row mt12 sm" style="justify-content:space-between"><span class="muted">没收到？看看垃圾邮件</span><span style="font-weight:600">52 秒后可重发</span></div>
+        <button class="btn w mt24" style="height:54px">登录</button>
+        <div class="card mt32" style="text-align:center"><div style="font-size:15px">第一次用？</div><div class="sm muted mt8">需要朋友给你的邀请码</div><button class="btn o w mt12">我有邀请码</button></div>
+      </div>
+    </div><span class="flabel">登录</span></div></div>
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="none">
+      <div class="pc tight" style="padding-top:20px">
+        <div class="row"><button class="ib" aria-label="返回"><svg class="i"><use href="#i-back"/></svg></button><span class="sm muted" style="margin-left:auto">第 1 步，共 3 步</span></div>
+        <div class="ttl mt24">填邀请码</div>
+        <div class="say2" style="margin-top:6px">邀请码只能用一次，30 天内有效。</div>
+        <div class="lbl" style="margin-top:28px">邀请码</div><div class="field f line" style="font-size:20px;letter-spacing:3px;font-weight:600">NEOX-7K2Q</div>
+        <div class="card mt12 row" style="padding:12px 14px"><svg class="i"><use href="#i-check"/></svg><span class="sm">可以使用，来自 h***@gmail.com 的邀请</span></div>
+        <div class="lbl">界面语言</div><div class="seg" style="display:flex"><button style="flex:1" aria-pressed="true">中文</button><button style="flex:1" aria-pressed="false" lang="ko">한국어</button></div>
+        <button class="btn w" style="height:54px;margin-top:40px">下一步：填邮箱</button>
+        <div class="list mt32" style="background:none;box-shadow:inset 0 0 0 1px var(--g2)">
+          <div class="li sm"><span style="font-weight:600;width:20px">2</span><span class="muted">邮箱和验证码</span></div>
+          <div class="li sm"><span style="font-weight:600;width:20px">3</span><span class="muted">怎么称呼你</span></div>
+        </div>
+      </div>
+    </div><span class="flabel">邀请码注册</span></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="none" style="grid-template-columns:1fr">
+      <div style="display:grid;grid-template-columns:1fr 1fr;align-items:center;height:100%">
+        <div style="padding:0 80px">
+          <div style="font-size:40px;font-weight:700;line-height:1.2">日程与待办</div>
+          <p class="say2" style="font-size:19px">用邮箱登录，不用记密码。第一次用需要朋友给你的邀请码。</p>
+        </div>
+        <div style="padding:0 80px 0 0">
+          <div class="card" style="padding:32px;background:var(--g0)">
+            <div class="seg"><button aria-pressed="false">登录</button><button aria-pressed="true">用邀请码注册</button></div>
+            <div class="lbl" style="margin-top:20px">邀请码</div><div class="field f line" style="letter-spacing:3px;font-weight:600;background:var(--paper)">NEOX-7K2Q</div>
+            <div class="xs mt8" style="font-weight:600">这个邀请码已经用过了，请找邀请人要一个新的</div>
+            <div class="lbl">邮箱</div><div class="field" style="background:var(--paper)">h***@gmail.com</div>
+            <div class="lbl">怎么称呼你</div><div class="field" style="background:var(--paper)">名字，只给你自己看</div>
+            <button class="btn w mt24" style="height:50px;background:var(--g3)">发送验证码</button>
+          </div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 16 空状态 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 16</small>空状态</h3>
+    <p>空的今天页仍然先说一句话：今天没有安排，再告诉人下一步可以做什么。</p>
+    <p>随手记空的时候直接把输入框放在中间，示范一句可以说的话。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="today">
+      <div class="pc">
+        <div class="hd"><div><div class="d1">10月25日 周日</div><div class="d2">农历九月十六</div></div><div class="ibs"><button class="ib" aria-label="搜索"><svg class="i"><use href="#i-search"/></svg></button><button class="ib" aria-label="设置"><svg class="i"><use href="#i-gear"/></svg></button></div></div>
+        <p class="say">今天没有日程。</p>
+        <p class="say2">没定时间的待办还有 2 件，挑一件今天做？</p>
+        <div class="list mt16">
+          <div class="li"><div class="ck"></div><div class="grow">买牛奶和鸡蛋</div><div class="v">放到今天</div></div>
+          <div class="li"><div class="ck"></div><div class="grow">整理素材盘</div><div class="v">放到今天</div></div>
+        </div>
+        <div class="card mt32" style="background:none;box-shadow:inset 0 0 0 1.5px var(--g3);border-style:dashed">
+          <div style="font-size:16px;font-weight:600">想到什么，按住右下角的＋说出来</div>
+          <div class="sm muted mt8" style="line-height:1.6">例如：“明天十点去 치과，下午提醒我给 NEOX 回电话”。会自动拆成一条日程、一条待办。</div>
+        </div>
+      </div>
+    </div><span class="flabel">今天：没有日程</span></div></div>
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="note">
+      <div class="pc">
+        <div class="hd"><div class="ttl">随手记</div><div class="ibs"><button class="ib" aria-label="设置"><svg class="i"><use href="#i-gear"/></svg></button></div></div>
+        <div style="margin-top:170px;text-align:center">
+          <div style="font-size:20px;font-weight:650">还没有随手记</div>
+          <div class="muted mt8" style="font-size:15px">一个想法、一个店名、一张截图都可以。</div>
+        </div>
+        <div class="field line mt24">写一句，回车保存</div>
+        <div class="xs muted mt12" style="text-align:center">记了几条以后，AI 会自动分好类</div>
+      </div>
+    </div><span class="flabel">随手记：一条都没有</span></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="today">
+      <div class="cap-bar"><span class="grow">记一笔：直接打字，回车保存</span><span class="kb">Ctrl+Shift+空格</span><span class="mic"><svg class="i"><use href="#i-mic"/></svg></span></div>
+      <div class="dbody" style="grid-template-columns:1.25fr 1fr">
+        <div class="pane w" style="padding:28px 32px"><div style="font-size:30px;font-weight:700">10月25日 周日</div><div class="muted mt8">农历九月十六</div>
+          <p class="say mt24" style="font-size:28px">今天没有日程。</p><p class="say2">没定时间的待办还有 2 件，挑一件今天做？</p>
+          <div class="list mt16" style="max-width:520px"><div class="li"><div class="ck"></div><div class="grow">买牛奶和鸡蛋</div><div class="v">放到今天</div></div><div class="li"><div class="ck"></div><div class="grow">整理素材盘</div><div class="v">放到今天</div></div></div>
+        </div>
+        <div class="pane" style="display:flex;flex-direction:column;justify-content:center;text-align:center"><div style="font-size:18px;font-weight:600">今天要做的都做完了</div><div class="muted mt8">在上面的输入栏记下一件，或按住 Ctrl+Shift+空格说话。</div></div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 17 断网 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 17</small>断网</h3>
+    <p>断网时照常能看、能打字记；新记的条目先存在本机，标“待同步”，联网后自动传上去。</p>
+    <p>语音和 AI 拆分要联网，断网时按住“＋”会提示改用打字。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="today">
+      <div class="pc">
+        <div class="card row" style="padding:12px 14px;margin:0 0 14px;background:var(--ink);color:var(--paper)"><svg class="i"><use href="#i-wifi"/></svg><span style="flex:1;font-size:14px;line-height:1.45">没有网络。新记的 2 条存在手机里，联网后自动同步。</span></div>
+        <div class="hd" style="margin-top:0"><div><div class="d1">10月24日 周六</div><div class="d2">农历九月十五</div></div></div>
+        <p class="say">正在开 NEOX 横版对片，14:30 结束。</p>
+        <div class="sec">今天要做 <span>5 件</span></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">问导演要竖版的字幕文件</div><div class="ds">待同步</div></div><span class="tag o">待同步</span></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">买电池</div><div class="ds">待同步</div></div><span class="tag o">待同步</span></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">回复 SignPlex 报价邮件</div><div class="ds">今天截止</div></div></div>
+      </div>
+      <div class="toast"><div style="font-size:15px;font-weight:600">没有网络，暂时不能语音</div><div class="sm mt8" style="color:var(--g3)">短按＋打字记录，联网后再用语音。打字的内容会按本地规则识别时间。</div></div>
+    </div><span class="flabel">断网时按住＋</span></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="today">
+      <div class="card row" style="margin:16px 24px 0;padding:12px 16px;background:var(--ink);color:var(--paper);border-radius:14px"><svg class="i"><use href="#i-wifi"/></svg><span style="flex:1">没有网络。新记的 2 条存在这台电脑上，联网后自动同步。语音暂时不能用。</span><span class="xs" style="color:var(--g3)">上次同步 14:02</span></div>
+      <div class="dbody" style="grid-template-columns:1.25fr 1fr">
+        <div class="pane w" style="padding:28px 32px"><div style="font-size:30px;font-weight:700">10月24日 周六</div><p class="say mt24" style="font-size:28px">正在开 NEOX 横版对片，14:30 结束。</p></div>
+        <div class="pane"><div class="ph-h"><h4>今天要做</h4><span class="muted sm">5 件</span></div>
+          <div class="td"><div class="ck"></div><div class="grow"><div class="tt">问导演要竖版的字幕文件</div></div><span class="tag o">待同步</span></div>
+          <div class="td"><div class="ck"></div><div class="grow"><div class="tt">买电池</div></div><span class="tag o">待同步</span></div>
+          <div class="td"><div class="ck"></div><div class="grow"><div class="tt">回复 SignPlex 报价邮件</div><div class="ds">今天截止</div></div></div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+<!-- =============== 18 韩文界面 =============== -->
+<section class="shot">
+  <div class="cap"><h3><small>画面 18</small>韩文界面</h3>
+    <p>同样的今天页和设置页换成韩文，检查变长以后的排版：一句话按词换行；导航标签最长“캘린더”三个字也放得下；设置项右侧的值过长时换到下一行，不截断。</p>
+  </div>
+  <div class="frames">
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="today" data-lang="ko" lang="ko">
+      <div class="pc">
+        <div class="hd"><div><div class="d1">10월 24일 토요일</div><div class="d2">음력 9월 15일　내일은 엄마 생신</div></div>
+          <div class="ibs"><button class="ib" aria-label="검색"><svg class="i"><use href="#i-search"/></svg></button><button class="ib" aria-label="설정"><svg class="i"><use href="#i-gear"/></svg></button></div></div>
+        <p class="say">지금 NEOX 가로판 검토 중이에요. 14:30에 끝나요.</p>
+        <p class="say2">그다음 30분 비어 있어요. 놓친 ‘SignPlex 한국어판 납품’부터 할까요?</p>
+        <div class="row mt16 wrap"><button class="btn">이것부터 하기</button><button class="btn g">다른 일 보기</button></div>
+        <div class="tl">
+          <div class="past"><span>오전 일정 2개 지나감</span><span>펼치기</span></div>
+          <div class="r cur"><div class="tm">13:00<small>14:30</small></div><div><div class="tt">NEOX 가로판 검토</div><div class="ds">텐센트 회의, 13분 남음</div><div class="prog"><i style="width:86%"></i></div></div></div>
+          <div class="nowl">지금 14:17</div>
+          <div class="gapr">14:30부터 15:00까지 30분 비어 있음</div>
+          <div class="r"><div class="tm">15:00<small>16:00</small></div><div><div class="tt">SignPlex 고객 피드백 회의</div><div class="ds">Zoom　14:50 알림</div></div></div>
+        </div>
+        <div class="sec">오늘 할 일 <span>3개</span></div>
+        <div class="td over"><div class="ck"></div><div class="grow"><div class="tt">SignPlex 한국어판 납품</div><div class="ds">놓침, 원래 10월 22일</div></div></div>
+        <div class="td"><div class="ck"></div><div class="grow"><div class="tt">SignPlex 견적 메일 회신</div><div class="ds">오늘 마감</div></div></div>
+      </div>
+    </div><span class="flabel">오늘（今天）</span></div></div>
+    <div class="set-phone"><div class="fit"><div class="frame ph" data-tab="none" lang="ko">
+      <div class="pc tight">
+        <div class="row" style="margin-bottom:8px"><button class="ib" aria-label="뒤로"><svg class="i"><use href="#i-back"/></svg></button></div>
+        <div class="ttl">설정</div>
+        <div class="lbl">테마</div>
+        <div class="list">
+          <div class="li"><div class="grow">테마</div><div class="v">지금 스타일</div></div>
+          <div class="li"><div class="grow">다크 모드</div><div class="v">시스템 설정 따르기</div></div>
+          <div class="li"><div class="grow">언어</div><div class="v">한국어</div></div>
+        </div>
+        <div class="lbl">캘린더</div>
+        <div class="list">
+          <div class="li"><div class="grow">음력 표시</div><div class="tog on"></div></div>
+          <div class="li"><div class="grow">중국 공휴일</div><div class="tog on"></div></div>
+          <div class="li"><div class="grow">한국 공휴일</div><div class="tog on"></div></div>
+          <div class="li" style="flex-wrap:wrap;row-gap:2px"><div class="grow" style="flex-basis:100%">시간대</div><div class="v" style="text-align:left">휴대폰 위치 따르기, 지금은 서울</div></div>
+        </div>
+        <div class="lbl">알림</div>
+        <div class="list">
+          <div class="li"><div class="grow">기념일 알림 시간</div><div class="v">오전 9:00</div></div>
+          <div class="li"><div class="grow">일정 기본 알림</div><div class="v">10분 전</div></div>
+        </div>
+        <div class="lbl">비밀 메모</div>
+        <div class="list">
+          <div class="li"><div class="grow">Face ID로 잠금 해제</div><div class="tog on"></div></div>
+          <div class="li"><div class="grow">자동 잠금</div><div class="v">나가고 1분 뒤</div></div>
+        </div>
+        <div class="lbl">AI 인식</div>
+        <div class="card"><div class="row wrap" style="justify-content:space-between;row-gap:2px"><span>오늘 38번 더 인식할 수 있어요</span><span class="sm muted">하루 50번</span></div><div class="bar-u mt8"><i style="width:24%"></i></div><div class="xs muted mt8">다 쓰면 오늘은 기본 규칙으로 인식하고, 내일 0시에 다시 채워져요.</div></div>
+        <div class="lbl">계정</div>
+        <div class="list"><div class="li"><div class="grow">h***@gmail.com</div><div class="v">로그아웃</div></div><div class="li"><div class="grow">친구 초대</div><div class="v">3명 더 초대 가능</div></div></div>
+      </div>
+    </div><span class="flabel">설정（设置）</span></div></div>
+    <div class="set-desk"><div class="fit"><div class="frame dk" data-nav="today" data-lang="ko" lang="ko">
+      <div class="cap-bar"><span class="grow">한 줄 메모: 입력하고 Enter로 저장</span><span class="kb">Ctrl+Shift+Space</span><span class="mic"><svg class="i"><use href="#i-mic"/></svg></span></div>
+      <div class="dbody" style="grid-template-columns:1.25fr 1fr">
+        <div class="pane w" style="padding:28px 32px">
+          <div style="font-size:30px;font-weight:700">10월 24일 토요일</div><div class="muted mt8">음력 9월 15일　서울</div>
+          <p class="say mt24" style="font-size:28px">지금 NEOX 가로판 검토 중이에요. 14:30에 끝나요.</p>
+          <p class="say2">그다음 30분 비어 있어요. 놓친 ‘SignPlex 한국어판 납품’부터 할까요?</p>
+          <div class="row mt16"><button class="btn">이것부터 하기</button><button class="btn g">다른 일 보기</button></div>
+          <div class="tl" style="max-width:560px">
+            <div class="r cur"><div class="tm">13:00<small>14:30</small></div><div><div class="tt">NEOX 가로판 검토</div><div class="ds">텐센트 회의, 13분 남음</div></div></div>
+            <div class="nowl">지금 14:17</div>
+            <div class="r"><div class="tm">15:00<small>16:00</small></div><div><div class="tt">SignPlex 고객 피드백 회의</div><div class="ds">Zoom　14:50 알림</div></div></div>
+          </div>
+        </div>
+        <div class="pane"><div class="ph-h"><h4>오늘 할 일</h4><span class="muted sm">3개, 1개 완료</span></div>
+          <div class="td over"><div class="ck"></div><div class="grow"><div class="tt">SignPlex 한국어판 납품</div><div class="ds">놓침, 원래 10월 22일</div></div></div>
+          <div class="td"><div class="ck"></div><div class="grow"><div class="tt">SignPlex 견적 메일 회신</div><div class="ds">오늘 마감</div></div></div>
+          <div class="td"><div class="ck"></div><div class="grow"><div class="tt">NEOX 세로판 4K 내보내기</div><div class="ds">오늘</div></div></div>
+          <div class="anni mt16" style="background:var(--paper)"><div class="n">1<small>일 후</small></div><div><div style="font-size:16px;font-weight:600">엄마 생신, 만 62세</div><div class="sm muted">음력 9월 16일, 내일 오전 9:00 알림</div></div></div>
+        </div>
+      </div>
+    </div></div></div>
+  </div>
+</section>
+
+</main>
+
+<script>
+(function(){
+  var L = {
+    zh:{today:"今天",cal:"日历",todo:"待办",note:"随手记",search:"搜索",settings:"设置",add:"新建"},
+    ko:{today:"오늘",cal:"캘린더",todo:"할 일",note:"메모",search:"검색",settings:"설정",add:"새로 만들기"}
+  };
+  var ICON={today:"i-today",cal:"i-cal",todo:"i-todo",note:"i-note"};
+  function use(id){return '<svg class="i"><use href="#'+id+'"/></svg>';}
+  function badges(el){
+    var b={}, s=el.getAttribute('data-badge'); if(!s) return b;
+    s.split(',').forEach(function(p){var kv=p.split(':'); b[kv[0]]=kv[1];});
+    return b;
+  }
+  // 手机：状态栏 + 底部导航
+  document.querySelectorAll('.ph').forEach(function(ph){
+    var sb=document.createElement('div'); sb.className='sb';
+    sb.innerHTML='<span>14:17</span><span class="isl"></span><span class="bat"><span class="bars"><b style="height:4px"></b><b style="height:6px"></b><b style="height:9px"></b><b style="height:12px"></b></span><i></i></span>';
+    if(ph.querySelector('.sb')==null) ph.insertBefore(sb, ph.firstChild);
+    var tab=ph.getAttribute('data-tab'); if(!tab||tab==='none') return;
+    var lang=ph.getAttribute('data-lang')||'zh', t=L[lang], b=badges(ph);
+    var nav=document.createElement('div'); nav.className='nav';
+    var h='<div class="bar">';
+    ['today','cal','todo','note'].forEach(function(k){
+      h+='<button class="t'+(k===tab?' on':'')+'" aria-label="'+t[k]+'">'+use(ICON[k])+'<span>'+t[k]+'</span>'+(b[k]?'<span class="bdg">+'+b[k]+'</span>':'')+'</button>';
+    });
+    h+='</div><button class="plus" aria-label="'+t.add+'">'+use('i-plus')+'</button>';
+    nav.innerHTML=h; ph.appendChild(nav);
+    var hm=document.createElement('div'); hm.className='home'; ph.appendChild(hm);
+  });
+  // 电脑：标题栏 + 左侧导航
+  document.querySelectorAll('.dk').forEach(function(dk){
+    var nv=dk.getAttribute('data-nav'), lang=dk.getAttribute('data-lang')||'zh', t=L[lang], b=badges(dk);
+    var inner=dk.innerHTML; dk.innerHTML='';
+    var tb=document.createElement('div'); tb.className='dtb';
+    tb.innerHTML='<span>'+(lang==='ko'?'일정과 할 일':'日程与待办')+'</span><span class="wc"><i>&#8211;</i><i>&#9633;</i><i>&#215;</i></span>';
+    dk.appendChild(tb);
+    if(nv==='none'){ var m0=document.createElement('div'); m0.style.gridColumn='1/3'; m0.innerHTML=inner; dk.appendChild(m0); return; }
+    var rail=document.createElement('div'); rail.className='rail';
+    var h='<div class="who"><span class="av">H</span><span class="sm">h***@gmail.com</span></div>';
+    ['today','cal','todo','note'].forEach(function(k,i){
+      h+='<div class="ri'+(k===nv?' on':'')+'">'+use(ICON[k])+t[k]+(b[k]?'<span class="cnt">+'+b[k]+'</span>':'<span class="k">Ctrl+'+(i+1)+'</span>')+'</div>';
+    });
+    h+='<div class="ri" style="margin-top:10px">'+use('i-search')+t.search+'<span class="k">Ctrl+K</span></div>';
+    h+='<div class="sp"></div><div class="ri'+(nv==='settings'?' on':'')+'">'+use('i-gear')+t.settings+'</div>';
+    rail.innerHTML=h; dk.appendChild(rail);
+    var m=document.createElement('div'); m.className='dmain'; m.innerHTML=inner; dk.appendChild(m);
+  });
+
+  // 月历数据：2026年10月（9月28日周一起）
+  var LU={ '9-28':'十八','9-29':'十九','9-30':'二十','10-1':'国庆','10-2':'廿二','10-3':'开天节','10-4':'廿四','10-5':'廿五','10-6':'廿六','10-7':'廿七','10-8':'寒露','10-9':'韩文日','10-10':'九月','10-11':'初二','10-12':'初三','10-13':'初四','10-14':'初五','10-15':'初六','10-16':'初七','10-17':'初八','10-18':'重阳','10-19':'初十','10-20':'十一','10-21':'十二','10-22':'十三','10-23':'霜降','10-24':'十五','10-25':'十六','10-26':'十七','10-27':'十八','10-28':'十九','10-29':'二十','10-30':'廿一','10-31':'廿二','11-1':'廿三'};
+  var FX={'10-1':1,'10-3':1,'10-8':1,'10-9':1,'10-10':1,'10-18':1,'10-23':1};
+  var CN={'10-1':1,'10-2':1,'10-3':1,'10-4':1,'10-5':1,'10-6':1,'10-7':1};
+  var KR={'10-3':1,'10-5':1,'10-9':1};
+  var EV={'10-2':1,'10-6':2,'10-8':1,'10-12':2,'10-13':1,'10-15':2,'10-16':1,'10-19':2,'10-20':1,'10-21':1,'10-22':2,'10-23':1,'10-24':3,'10-25':1,'10-27':2,'10-28':1,'10-30':2};
+  var BD={'10-25':1,'10-11':1};
+  var DT={'10-6':['10:00 NEOX 周会','14:00 SignPlex 脚本'],'10-12':['10:00 NEOX 周会','16:00 SignPlex 报价'],'10-15':['13:00 NEOX 拍摄','19:00 瑜伽'],'10-19':['10:00 NEOX 周会','14:00 SignPlex 脚本评审'],'10-21':['13:00 NEOX 拍摄'],'10-22':['交 SignPlex 韩文版','19:00 瑜伽'],'10-23':['10:00 SignPlex 客户会'],'10-24':['09:30 NEOX 晨会','13:00 NEOX 横版对片','15:00 SignPlex 反馈会','18:30 和 민지 吃晚饭'],'10-25':['妈妈生日','12:00 家庭午饭'],'10-27':['10:00 和导演对字幕','15:00 NEOX 周会'],'10-30':['交 NEOX 竖版','16:00 SignPlex 彩排'],'10-2':['休假：釜山'],'10-8':['11:00 治牙'],'10-13':['20:00 看电影'],'10-16':['15:00 SignPlex 中期'],'10-20':['11:00 치과'],'10-28':['NEOX 年终片分镜']};
+  var days=[]; [28,29,30].forEach(function(d){days.push([9,d]);}); for(var d=1;d<=31;d++) days.push([10,d]); days.push([11,1]);
+  var W=['一','二','三','四','五','六','日'];
+  var pm=document.getElementById('pmg'), dm=document.getElementById('dmg');
+  var ph='', dh='';
+  W.forEach(function(w){ph+='<div class="w">'+w+'</div>'; dh+='<div class="w">周'+w+'</div>';});
+  days.forEach(function(a){
+    var k=a[0]+'-'+a[1], out=a[0]!==10, sel=(k==='10-24');
+    var ev=EV[k]||0, bars='';
+    for(var i=0;i<Math.min(ev,3);i++) bars+='<i></i>';
+    if(BD[k]) bars+='<i class="bd"></i>';
+    var xu=''; if(CN[k]) xu='<span class="xu">休</span>'; else if(KR[k]) xu='<span class="xu kr">休</span>';
+    if(CN[k]&&KR[k]) xu='<span class="xu">休</span>';
+    ph+='<div class="c'+(out?' out':'')+(sel?' sel':'')+((CN[k]||KR[k])?' hol':'')+'">'+xu+'<div class="dt">'+a[1]+'</div><div class="lu'+(FX[k]?' fx':'')+'">'+LU[k]+'</div><div class="ev">'+bars+'</div></div>';
+    var es='';
+    var hn = (KR[k]&&CN[k])?'<span class="xu">中休</span><span class="xu kr" style="margin-left:2px">韩休</span>':(CN[k]?'<span class="xu">中休</span>':(KR[k]?'<span class="xu kr">韩休</span>':''));
+    var list=DT[k]||[]; var shown=list.slice(0,3);
+    shown.forEach(function(s){ var cls = /生日/.test(s)?' b':((/^交/.test(s))?'':''); es+='<div class="e'+(sel?' k':'')+cls+'">'+s+'</div>';});
+    if(list.length>3) es+='<div class="xs muted" style="margin-top:2px">还有 '+(list.length-3)+' 项</div>';
+    dh+='<div class="c'+(out?' out':'')+(sel?' sel':'')+(k==='10-24'?' tdy':'')+'"><div class="hrow"><span class="dt">'+a[1]+'</span><span class="lu'+(FX[k]?' fx':'')+'">'+LU[k]+'</span>'+hn+'</div>'+es+'</div>';
+  });
+  if(pm) pm.innerHTML=ph; if(dm) dm.innerHTML=dh;
+
+  // 电脑周网格 8:00–20:00
+  var g=document.getElementById('dwg');
+  if(g){
+    var h=''; for(var r=8;r<=20;r++){ h+='<div class="tc">'+r+':00</div>'; for(var c=0;c<7;c++) h+='<div class="cell"></div>'; }
+    var ad=document.createElement('div'); ad.className='wg'; ad.style.cssText='border-bottom:1px solid var(--g2);padding:4px 0 6px;margin-bottom:2px';
+    var ah='<div class="tc" style="height:auto;transform:none;padding-top:3px">全天</div>';
+    for(var c=0;c<7;c++){ ah+='<div style="padding:0 3px">'+(c===3?'<div class="wev o" style="position:static"><b>交 SignPlex 韩文版</b>截止</div>':'')+(c===6?'<div class="wev o" style="position:static;border-radius:999px"><b>妈妈生日</b>62 周岁</div>':'')+'</div>'; }
+    ad.innerHTML=ah; g.parentNode.insertBefore(ad,g.nextSibling);
+    var body=document.createElement('div'); body.className='wg'; body.style.position='relative'; body.innerHTML=h;
+    ad.parentNode.insertBefore(body,ad.nextSibling);
+    var rowH=48;
+    var E=[[0,10,11,'NEOX 周会',''],[0,14,16,'SignPlex 脚本评审','会议室 3'],[1,11,12,'치과',''],[2,13,18,'NEOX 拍摄','성수동 스튜디오'],[3,19,20,'瑜伽',''],[4,10,12,'SignPlex 客户会','线上'],[5,9.5,10,'NEOX 晨会',''],[5,13,14.5,'NEOX 横版对片','进行中','k'],[5,15,16,'SignPlex 客户反馈会','Zoom','k'],[5,18.5,20,'和 민지 吃晚饭','延南洞'],[6,12,14,'家庭午饭','']];
+    E.forEach(function(e){
+      var d=document.createElement('div'); d.className='wev'+(e[5]?' '+e[5]:'');
+      d.style.left='calc(52px + (100% - 52px) * '+e[0]+' / 7 + 3px)'; d.style.width='calc((100% - 52px) / 7 - 6px)';
+      d.style.top=((e[1]-8)*rowH+2)+'px'; d.style.height=((e[2]-e[1])*rowH-4)+'px';
+      d.innerHTML='<b>'+e[3]+'</b>'+((e[2]-e[1])>=1.5?e[4]:''); if(e[2]-e[1]<1){d.style.whiteSpace='nowrap';d.style.padding='1px 7px';} body.appendChild(d);
+    });
+    var nl=document.createElement('div'); nl.style.cssText='position:absolute;height:2px;background:#000;left:calc(52px + (100% - 52px) * 5 / 7);width:calc((100% - 52px) / 7);top:'+((14.28-8)*rowH)+'px';
+    body.appendChild(nl);
+  }
+  // 电脑纪念日表
+  var an=document.getElementById('danni');
+  if(an){
+    var A=[['1 天后','妈妈生日','阴历九月十六，62 周岁','生日'],['12 天后','结婚纪念日','11月5日，第 8 年','纪念日'],['37 天后','SignPlex 正式上线','11月30日 周一','倒数日'],['58 天后','민지 生日','12月21日','生日'],['260 天后','지호 生日','阴历闰六月初八，2 周岁','生日'],['46 天前','NEOX 第一支片交付','9月8日','倒数日']];
+    var h2='';
+    A.forEach(function(a,i){ var s='padding:14px 0;border-top:1px solid var(--g1);'+(i===0?'font-weight:600;':'')+(i===5?'color:var(--g4);':'');
+      h2+='<div style="'+s+'font-size:20px;font-weight:700">'+a[0]+'</div><div style="'+s+'">'+a[1]+'</div><div style="'+s+'color:var(--g4)">'+a[2]+'</div><div style="'+s+'"><span class="tag">'+a[3]+'</span></div>';});
+    an.innerHTML=h2;
+  }
+  // 声波
+  ['wv','wv2'].forEach(function(id){var w=document.getElementById(id); if(!w) return; var s='', n=id==='wv'?38:90;
+    for(var i=0;i<n;i++){ var v=Math.round(6+28*Math.abs(Math.sin(i*0.55)*Math.cos(i*0.17))); s+='<i style="height:'+v+'px;background:#fff"></i>'; } w.innerHTML=s;});
+
+  // 缩放
+  function fit(){
+    document.querySelectorAll('.fit').forEach(function(f){
+      var fr=f.firstElementChild; if(!fr) return;
+      if(f.offsetParent===null) return;
+      var pad=8, W=fr.offsetWidth+pad*2, H=fr.offsetHeight+pad*2;
+      var avail=f.parentElement.parentElement.clientWidth;
+      var s=Math.min(1, avail/W);
+      fr.style.transform='translate('+pad*s+'px,'+pad*s+'px) scale('+s+')';
+      f.style.width=(W*s)+'px'; f.style.height=(H*s)+'px';
+    });
+  }
+  function setMode(m){
+    document.body.classList.toggle('m-phone',m==='phone'); document.body.classList.toggle('m-desk',m==='desk');
+    document.querySelectorAll('.seg button[data-mode]').forEach(function(b){b.setAttribute('aria-pressed', b.getAttribute('data-mode')===m?'true':'false');});
+    try{ history.replaceState(null,'','#'+m); }catch(e){}
+    fit();
+  }
+  document.querySelectorAll('.seg button[data-mode]').forEach(function(b){ b.addEventListener('click',function(){ setMode(b.getAttribute('data-mode')); }); });
+  window.addEventListener('resize',fit);
+  setMode(location.hash==='#desk'?'desk':'phone');
+})();
+</script>
+</body>
+</html>
