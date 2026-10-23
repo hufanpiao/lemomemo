@@ -19,7 +19,9 @@ function applyView(v){
   document.querySelectorAll("#nav button").forEach(b => {
     const on = b.dataset.go === v;
     b.setAttribute("aria-current", on ? "page" : "false");
-    b.querySelector(".lab").hidden = !on && innerWidth < C.NARROW_NAV_PX;
+    const lab = b.querySelector(".lab");
+    b.setAttribute("aria-label", lab.textContent);   // 窄屏隐藏文字时，读屏仍能读出按钮名（PM-C⑩）
+    lab.hidden = !on && innerWidth < C.NARROW_NAV_PX;
   });
   requestAnimationFrame(placeInd);
 }
