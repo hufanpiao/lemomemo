@@ -1,6 +1,6 @@
 # 职责：架构检查。按 docs/10-架构/架构约定.md 检查 src/ 有没有走样：分层越界、文件头缺失、依赖顺序与 manifest 矛盾、
 #       加载时就用的模块写成了“运行时调用”、用了别的模块却没在文件头声明、src/ 下有文件没写进 manifest、单文件过长、
-#       组件 CSS 写死颜色。不通过时给出中文原因和“文件:行号”。
+#       组件 CSS 写死颜色（A11，颜色只能写在 src/styles/skins/ 的皮肤文件里）。不通过时给出中文原因和“文件:行号”。
 #   用法：python build/check_arch.py              检查当前源码（build.py 默认先跑它）
 #         python build/check_arch.py --self-test  用 tests/arch-fixtures/ 里故意违规的示例证明每条规则真能拦住
 # 依赖：Python 3.8+ 标准库
@@ -35,7 +35,7 @@ RULES = {
     "A9": "用到了别的模块，但文件头的“依赖：”或“运行时调用：”里没写",
     "A10": "src/ 下的文件没写进 build/manifest.json，或 manifest 里的文件不存在",
     "W1": "单个 JS 文件超过 %d 行，应该拆分（警告）" % MAX_LINES,
-    "W2": "组件 CSS 里写死了颜色，应改用 tokens 里的变量（警告；ADR-008，T7 改完后升级为错误）",
+    "A11": "组件 CSS 里写死了颜色，应改用皮肤文件（src/styles/skins/）里的变量（ADR-008）",
 }
 # (规则, 适用层, 正则, 说明)。匹配对象是“去掉注释、清空字符串内容、把 x["y"] 改写成 x.y”之后的代码。
 PURE = {"core", "logic"}
@@ -215,7 +215,7 @@ def find_pattern(pat, line):
     return re.search(pat, line) is not None
 
 
-def check_css(path, css, warns):
+def check_css(path, css, errors):
     """组件 CSS 里写死的颜色（只看声明的值，不看选择器）。"""
     text = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), css, flags=re.S)
     for m in re.finditer(r"([\w-]+)\s*:\s*([^;{}]+)", text):
@@ -223,7 +223,7 @@ def check_css(path, css, warns):
             continue   # 自定义属性（变量定义）不管
         for c in COLOR_RE.finditer(m.group(2)):
             line = text.count("\n", 0, m.start(2) + c.start()) + 1
-            warns.append(("W2", path, line, "%s: 里写死了颜色 %s" % (m.group(1), m.group(2).strip()[:60])))
+            errors.append(("A11", path, line, "%s: 里写死了颜色 %s，请改用变量" % (m.group(1), m.group(2).strip()[:60])))
 
 
 def check(manifest, files, all_src_files, css_files=None):
@@ -241,7 +241,7 @@ def check(manifest, files, all_src_files, css_files=None):
             err("A10", "build/manifest.json", 0, "manifest 里的 %s 不存在" % p)
     for p, css in sorted((css_files or {}).items()):
         if p.startswith(COMPONENT_CSS):
-            check_css(p, css, warns)
+            check_css(p, css, errors)
     prov = providers(files)
     short = lambda p: p[len(SCRIPTS):] if p.startswith(SCRIPTS) else p
     pos = {short(p): i for i, p in enumerate(order)}

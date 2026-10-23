@@ -1,6 +1,7 @@
 // 职责：模拟 window.claude：提供 claude.use("db") 的集合 / 文档接口（含 get；集合按需创建，logs 也能用）（与 claude.ai 数据库同形），用来在本地验证
 //       platform/claude-db.js 适配器。数据默认取 plannerSampleData(现在)；测试可预先设置
 //       globalThis.plannerStubSeed（自定义数据）、globalThis.plannerStubFail = "invalid_argument" 等（让写入失败）。
+//       另带一个 downloads 能力的桩（use("downloads")），记下保存的文件。
 // 依赖：tests/mock/sample-data.js（未设置 plannerStubSeed 时）。build.py 把两者一起放进 dist/test-claude.html 的桩脚本。
 (function(){
   const g = globalThis;
@@ -20,5 +21,11 @@
       async update(v){ await failIf(); Object.assign(bag(c)[id], v); emit(c); },
       async delete(){ await failIf(); delete bag(c)[id]; emit(c); }}; }});
   g.window = g.window || g;
-  g.window.claude = {use: async () => ({collection:coll})};
+  // downloads 能力：记下文件后返回 saved；预先设 plannerStubDownloadFail = "declined" 等可模拟拒绝；设 plannerStubNoDownloads 模拟不可用
+  const downloads = {async save(req){
+    if (g.plannerStubDownloadFail){ const e = new Error("stub"); e.code = g.plannerStubDownloadFail; throw e; }
+    (g.plannerDownloads = g.plannerDownloads || []).push(req); g.plannerLastDownload = req;
+    return {status:"saved"};
+  }};
+  g.window.claude = {use: async name => name === "downloads" ? (g.plannerStubNoDownloads ? null : downloads) : {collection:coll}};
 })();

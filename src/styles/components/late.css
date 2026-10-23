@@ -2,11 +2,11 @@
    依赖：tokens.css、panel.css。 */
 /* 没赶上 */
 .late-panel{background:var(--red-soft)}
-.late-panel .ph h2{color:var(--red)}
+.late-panel .ph h2{color:var(--red-ink)}
 .late-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid color-mix(in srgb,var(--red) 18%,transparent)}
 .late-row:first-of-type{border-top:0}
 .late-row .t{overflow-wrap:anywhere;min-width:0}
-.late-row .t small{display:block;font-size:12px;color:var(--red)}
+.late-row .t small{display:block;font-size:12px;color:var(--red-ink)}
 .mini{display:flex;gap:6px}
 .mini button{border:0;border-radius:999px;padding:6px 12px;font-size:14px;background:var(--panel);min-height:36px}
 .btn-dark{border:0;border-radius:999px;padding:10px 18px;background:var(--ink);color:var(--panel);font-weight:500;min-height:44px}

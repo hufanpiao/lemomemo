@@ -3,6 +3,7 @@
   "template": "src/index.html",
   "styles": [
     "src/styles/tokens.css",
+    "src/styles/skins/bento.css",
     "src/styles/base.css",
     "src/styles/layout.css",
     "src/styles/components/header.css",
@@ -16,7 +17,11 @@
     "src/styles/components/empty.css",
     "src/styles/components/toast.css",
     "src/styles/components/sheet.css",
-    "src/styles/components/notice.css"
+    "src/styles/components/notice.css",
+    "src/styles/components/remind.css",
+    "src/styles/components/theme.css",
+    "src/styles/components/search.css",
+    "src/styles/components/trash.css"
   ],
   "scripts": [
     "src/scripts/core/const.js",
@@ -33,11 +38,13 @@
     "src/scripts/logic/parse-marks.js",
     "src/scripts/logic/parse-quick.js",
     "src/scripts/logic/remind.js",
+    "src/scripts/logic/search.js",
     "src/scripts/platform/index.js",
     "src/scripts/platform/env.js",
     "src/scripts/platform/prefs.js",
     "src/scripts/platform/notify.js",
     "src/scripts/platform/claude-db.js",
+    "src/scripts/platform/download.js",
     "src/scripts/data/bus.js",
     "src/scripts/data/store.js",
     "src/scripts/data/normalize.js",
@@ -46,25 +53,32 @@
     "src/scripts/data/state.js",
     "src/scripts/data/write.js",
     "src/scripts/data/subscribe.js",
+    "src/scripts/data/archive.js",
     "src/scripts/ui/dom.js",
     "src/scripts/ui/view-state.js",
     "src/scripts/ui/toast.js",
+    "src/scripts/ui/filter.js",
     "src/scripts/ui/render.js",
     "src/scripts/ui/today-late.js",
     "src/scripts/ui/today-timeline.js",
     "src/scripts/ui/today.js",
     "src/scripts/ui/schedule.js",
     "src/scripts/ui/todos.js",
+    "src/scripts/ui/sheet-form.js",
     "src/scripts/ui/sheet.js",
     "src/scripts/ui/nav.js",
     "src/scripts/ui/remind.js",
-    "src/scripts/ui/theme.js"
+    "src/scripts/ui/theme.js",
+    "src/scripts/ui/search.js",
+    "src/scripts/ui/trash.js",
+    "src/scripts/ui/backup.js"
   ],
   "entry": "src/scripts/app.js",
   "tests": {
     "skeleton": "tests/harness/skeleton.html",
     "sampleData": "tests/mock/sample-data.js",
     "mockAdapter": "tests/mock/mock-db.js",
-    "claudeStub": "tests/mock/claude-stub.js"
+    "claudeStub": "tests/mock/claude-stub.js",
+    "mockDownload": "tests/mock/mock-download.js"
   }
 }

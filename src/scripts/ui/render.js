@@ -26,8 +26,9 @@ function renderHead(){
   const chips = $("hd-chips"); chips.textContent = "";
   const doneToday = visTd().filter(x => isDoneOn(x, t)).length;
   const late = visTd().filter(x => isLate(x, t)).length;
-  if (doneToday) chips.append(h("span",{class:"chip"},"今天完成 ",h("b",null,doneToday)," 件"));
+  // “没赶上”排在前面，紧贴日期下方（采纳结论 #2）
   if (late) chips.append(h("button",{class:"chip late",type:"button",onclick:()=>{ App.ui.nav.go("today"); $("late").scrollIntoView({behavior:"smooth",block:"center"}); }},h("b",null,late)," 件没赶上"));
+  if (doneToday) chips.append(h("span",{class:"chip"},"今天完成 ",h("b",null,doneToday)," 件"));
 }
 
 function showNoData(hint){

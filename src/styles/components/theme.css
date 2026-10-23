@@ -1,0 +1,15 @@
+/* 组件：主题按钮与选择器（ADR-008、采纳结论 #2 #19）。按钮 44px 固定在抬头右上角；选择器是黑色胶囊三选一，
+   浮层盖在内容上（不推挤内容），1px 描边；弹出：缩放 .92→1 加淡入 180ms，收起 150ms；减少动效时只留透明度。
+   切换时 <html class="theme-anim"> 让颜色过渡 200ms（与 core/const.js 的 THEME_* 一致）。依赖：tokens.css、skins/*.css、header.css。 */
+.theme-btn{width:44px;height:44px;border-radius:50%;border:0;background:var(--panel);color:var(--ink);display:grid;place-items:center;flex:none;padding:0}
+.theme-btn svg{width:20px;height:20px}
+.theme-pick{position:absolute;right:4px;top:52px;z-index:20;display:flex;background:var(--dock);border-radius:999px;padding:4px;
+  box-shadow:var(--shadow),0 0 0 1px var(--line);transform-origin:calc(100% - 22px) 0;
+  opacity:0;transform:scale(.92);transition:opacity .15s cubic-bezier(.4,0,.2,1),transform .15s cubic-bezier(.4,0,.2,1)}
+.theme-pick.on{opacity:1;transform:none;transition-duration:.18s;transition-timing-function:cubic-bezier(.22,1,.36,1)}
+.theme-pick button{border:0;background:none;color:var(--dock-ink);border-radius:999px;min-height:44px;padding:0 14px;display:flex;align-items:center;gap:6px;font-size:14px;white-space:nowrap}
+.theme-pick button svg{width:16px;height:16px;flex:none}
+.theme-pick button[aria-checked=true]{background:var(--pill-on);color:var(--pill-on-ink);font-weight:600}
+.theme-anim,.theme-anim *,.theme-anim *::before,.theme-anim *::after{
+  transition:background-color var(--theme-fade) ease,color var(--theme-fade) ease,border-color var(--theme-fade) ease,box-shadow var(--theme-fade) ease,fill var(--theme-fade) ease!important}
+@media (prefers-reduced-motion:reduce){.theme-pick,.theme-pick.on{transform:none!important;transition:opacity .12s linear!important}}

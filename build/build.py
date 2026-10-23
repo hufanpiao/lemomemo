@@ -80,14 +80,21 @@ def banner(kind):
     return html.replace("{{文案}}", text).replace("{{底色}}", bg).replace("{{字色}}", fg)
 
 
-def harness(m, app_html, stub_files):
-    """测试页：骨架 + 测试提示条 + 页面脚本之前的一段 <script>（示例数据、可选的 window.claude 桩）+ 页面。"""
+def harness(m, app_html, stub_files, kind="test"):
+    """测试页 / 预发布页：骨架（带 charset、viewport）+ 环境提示条 + 页面脚本之前的一段 <script>（示例数据、可选的
+    window.claude 桩；预发布页没有）+ 页面。"""
     sk = strip_lead_comment(read(m["tests"]["skeleton"])).rstrip("\n")
-    stub = "<script>\n" + "\n".join(read(p).rstrip("\n") for p in stub_files) + "\n</script>\n"
+    stub = "<script>\n" + "\n".join(read(p).rstrip("\n") for p in stub_files) + "\n</script>\n" if stub_files else ""
     for mark in ("<!-- @banner -->", "<!-- @stub -->", "<!-- @app -->"):
         if sk.count(mark) != 1:
             fail("测试页骨架 %s 里 %s 必须恰好出现一次" % (m["tests"]["skeleton"], mark))
-    return sk.replace("<!-- @banner -->", banner("test")).replace("<!-- @stub -->", stub).replace("<!-- @app -->", app_html) + "\n"
+    return sk.replace("<!-- @banner -->", banner(kind)).replace("<!-- @stub -->", stub).replace("<!-- @app -->", app_html) + "\n"
+
+
+def check_charset(name, html):
+    """测试页和预发布页是直接用浏览器打开的，必须自带 UTF-8 编码声明（否则中文乱码、韩文正则可能报错）。"""
+    if not re.search(r'<meta charset="utf-8">', html[:1024], re.I):
+        fail("%s 开头 1024 字节内没有 <meta charset=\"utf-8\">" % name)
 
 
 def check_no_banner(name, html):
@@ -107,15 +114,18 @@ def build_claude(m):
     prod = page(m, {"target": "claude", "storage": "claude-db"})
     check_no_banner("dist/planner.html", prod)
     write("planner.html", prod)
-    mock = page(m, {"target": "test", "storage": "mock-db"}, [m["tests"]["mockAdapter"]])
     t = m["tests"]
-    write("test.html", harness(m, mock, [t["sampleData"]]))
-    write("test-claude.html", harness(m, prod, [t["sampleData"], t["claudeStub"]]))
+    mock = page(m, {"target": "test", "storage": "mock-db", "download": "mock"}, [t["mockAdapter"], t["mockDownload"]])
+    for name, html in (("test.html", harness(m, mock, [t["sampleData"]])),
+                       ("test-claude.html", harness(m, prod, [t["sampleData"], t["claudeStub"]]))):
+        check_charset("dist/" + name, html)
+        write(name, html)
 
 
 def build_staging(m):
-    """预发布版：和正式版同一份页面、接真实数据库，只多一条“预发布测试版”提示条。"""
-    html = page(m, {"target": "staging", "storage": "claude-db"}) + "\n" + banner("staging") + "\n"
+    """预发布版：和正式版同一份页面、接真实数据库；套上测试骨架（带 charset，本地预览不乱码），顶部是“预发布测试版”提示条。"""
+    html = harness(m, page(m, {"target": "staging", "storage": "claude-db"}), [], "staging")
+    check_charset("dist/staging.html", html)
     write("staging.html", html)
     prod = ROOT / "dist/planner.html"
     if prod.is_file():

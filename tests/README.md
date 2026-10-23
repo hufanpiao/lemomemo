@@ -16,6 +16,9 @@ node tests/run-all.mjs
 |---|---|
 | `unit/parse-quick.test.mjs` | 一句话解析：直接读 `docs/06-测试/测试用例-v3.md` 第 4 节的解析表（PQ-ZH/KO/MIX/VO 共 134 行），外加表外补充用例。“今天”固定为 2026-10-23（周五）。与测试用例不一致、按主持人或需求澄清改过的行写在文件里的 `OVERRIDES` |
 | `unit/build-output.test.mjs` | 构建产物：`dist/planner.html` 不能带环境提示条；测试页必须带“测试页面”提示；`dist/staging.html`（若已生成）带“预发布测试版”提示并接 claude-db |
+| `unit/search.test.mjs` | 搜索：标题、备注、原话；大小写；韩文；顺序；高亮切分 |
+| `unit/archive.test.mjs` | 最近删除列表、导出备份（含已删除和 logs）、运行记录（最近 7 天、只留时间/动作/集合/编号） |
+| `unit/download.test.mjs` | 下载适配器：claude 版（接桩）和 mock 版，成功、拒绝、不可用的错误码 |
 | `unit/date.test.mjs` | `core/date.js` 日期工具；`core/clock.js` 的 tick / wake / 跨天事件（假 env 驱动） |
 | `unit/sort.test.mjs` | `pickNext`“下一件事”、待办排序、`logic/items.js` 的判断、`logic/format.js` 的文案 |
 | `unit/normalize.test.mjs` | 快照字段整理：类型、补零、长度、deletedAt、id 以文档 id 为准、坏数据不抛错 |
@@ -43,6 +46,7 @@ python build/check_arch.py --self-test
 
 - 两个测试页的示例数据都来自 `mock/sample-data.js`，按打开页面的日期和时间生成，刷新即重置。
 - 外壳用的是 `harness/skeleton.html`（doctype、charset、viewport），模拟发布平台给单文件页面补上的那一层。
+- `dist/test.html` 的“导出备份”用模拟下载（`mock/mock-download.js`），文件记在 `window.plannerDownloads`；`test-claude.html` 走 claude-db 桩里的 downloads 能力。
 - 两个测试页顶部都有一条黄色固定提示“测试页面：这里用的是模拟数据，刷新就会还原，不会保存到云端”（`harness/banner.html`，不挡操作）。
 - 预发布版用 `python build/build.py --target staging` 生成 `dist/staging.html`：和正式版一样接真实数据库，顶部是蓝色提示“预发布测试版：不是你的正式数据”。
 

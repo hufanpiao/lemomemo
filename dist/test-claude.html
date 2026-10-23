@@ -22,6 +22,7 @@ globalThis.plannerSampleData = function plannerSampleData(nowMs){
 // 职责：模拟 window.claude：提供 claude.use("db") 的集合 / 文档接口（含 get；集合按需创建，logs 也能用）（与 claude.ai 数据库同形），用来在本地验证
 //       platform/claude-db.js 适配器。数据默认取 plannerSampleData(现在)；测试可预先设置
 //       globalThis.plannerStubSeed（自定义数据）、globalThis.plannerStubFail = "invalid_argument" 等（让写入失败）。
+//       另带一个 downloads 能力的桩（use("downloads")），记下保存的文件。
 // 依赖：tests/mock/sample-data.js（未设置 plannerStubSeed 时）。build.py 把两者一起放进 dist/test-claude.html 的桩脚本。
 (function(){
   const g = globalThis;
@@ -41,7 +42,13 @@ globalThis.plannerSampleData = function plannerSampleData(nowMs){
       async update(v){ await failIf(); Object.assign(bag(c)[id], v); emit(c); },
       async delete(){ await failIf(); delete bag(c)[id]; emit(c); }}; }});
   g.window = g.window || g;
-  g.window.claude = {use: async () => ({collection:coll})};
+  // downloads 能力：记下文件后返回 saved；预先设 plannerStubDownloadFail = "declined" 等可模拟拒绝；设 plannerStubNoDownloads 模拟不可用
+  const downloads = {async save(req){
+    if (g.plannerStubDownloadFail){ const e = new Error("stub"); e.code = g.plannerStubDownloadFail; throw e; }
+    (g.plannerDownloads = g.plannerDownloads || []).push(req); g.plannerLastDownload = req;
+    return {status:"saved"};
+  }};
+  g.window.claude = {use: async name => name === "downloads" ? (g.plannerStubNoDownloads ? null : downloads) : {collection:coll}};
 })();
 </script>
 <title>日程与待办</title>
@@ -49,31 +56,44 @@ globalThis.plannerSampleData = function plannerSampleData(nowMs){
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap">
 <style>
-/* 设计变量：颜色、字体、圆角、阴影；浅色为默认，深色有两套写法
-   （跟随系统 prefers-color-scheme，以及 data-theme="dark" 强制深色）。
-   依赖：无。必须最先拼接。 */
+/* 设计变量（结构部分）：字体、圆角等与皮肤无关的变量。颜色在 skins/<皮肤>.css 里（ADR-008）。
+   依赖：无。必须最先拼接，紧接着拼皮肤文件。 */
 :root{
-  --bg:#e6e7ea; --panel:#ffffff; --panel-2:#f2f3f5; --ink:#121316; --muted:#6a6e76; --line:#e3e4e8;
-  --dock:#121316; --dock-ink:#f3f3f4; --pill-on:#ffffff; --pill-on-ink:#121316;
-  --yellow:#f1df4a; --on-yellow:#121316; --red:#e2372b; --red-soft:#fbe2df; --focus:#3a6cf4;
-  --p1:#f3e27a; --p2:#bca8f6; --p3:#f5a5c8; --p4:#95dfa8; --p5:#95d4f2; --p6:#f6a78c; --p7:#d6d7dc; --on-p:#141414;
-  --shadow:0 18px 40px -18px rgba(18,19,22,.35);
   --f-num:"Manrope","Noto Sans SC",system-ui,sans-serif;
   --f-body:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
   --r-panel:26px; --r-block:16px;
+  --theme-fade:.2s;   /* 切换深浅色时颜色过渡（采纳结论 #13、需求澄清 #32） */
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0c0d0f; --panel:#17181b; --panel-2:#212226; --ink:#f1f1f3; --muted:#8d919a; --line:#2a2b30;
+/* 皮肤 bento（便当格 + 马卡龙，v3 唯一的皮肤）：只定义颜色变量，浅色、深色各一组（ADR-008）。
+   维度：data-skin="bento"（皮肤）× data-theme="light"|"dark"|不设（深浅色，不设时跟随系统）。
+   深色写了两遍：一遍给“跟随系统且系统为深色”，一遍给“手动选深色”，两组必须保持一致。
+   新增变量：--inv/--on-inv 反色卡片；--late-bg “没赶上”胶囊等红底白字；--red-ink 红色文字；--on-red 红底上的字；
+   --on-dark 墨黑按钮上的字；--on-p-2 马卡龙色块上的说明字（实色，不用半透明）；--scrim 弹出层遮罩。
+   依赖：tokens.css。 */
+:root,:root[data-skin="bento"]{
+  --bg:#e6e7ea; --panel:#ffffff; --panel-2:#f2f3f5; --ink:#121316; --muted:#62666e; --line:#e3e4e8;
+  --dock:#121316; --dock-ink:#f3f3f4; --pill-on:#ffffff; --pill-on-ink:#121316;
+  --yellow:#f1df4a; --on-yellow:#121316; --red:#e2372b; --red-soft:#fbe2df; --focus:#3a6cf4;
+  --p1:#f3e27a; --p2:#bca8f6; --p3:#f5a5c8; --p4:#95dfa8; --p5:#95d4f2; --p6:#f6a78c; --p7:#d6d7dc; --on-p:#141414; --on-p-2:#3a3520;
+  --inv:#121316; --on-inv:#f3f3f4; --late-bg:#c42f25; --red-ink:#b3261e; --on-red:#ffffff; --on-dark:#ffffff;
+  --scrim:rgba(10,10,12,.45);
+  --shadow:0 18px 40px -18px rgba(18,19,22,.35);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]),:root[data-skin="bento"]:not([data-theme="light"]){
+  --bg:#0c0d0f; --panel:#17181b; --panel-2:#212226; --ink:#f1f1f3; --muted:#9a9ea7; --line:#2a2b30;
   --dock:#202125; --dock-ink:#f1f1f3; --pill-on:#f1f1f3; --pill-on-ink:#121316;
-  --red:#ff5a4d; --red-soft:#3a1a17; --focus:#8fb0ff;
-  --p1:#e8d56c; --p2:#ad98ee; --p3:#ea93ba; --p4:#86d29a; --p5:#86c6e6; --p6:#ec977c; --p7:#b9bac0;
+  --yellow:#e6c84a; --red:#ff5a4d; --red-soft:#3a1a17; --focus:#8fb0ff;
+  --p1:#e2c85c; --p2:#ad98ee; --p3:#ea93ba; --p4:#86d29a; --p5:#86c6e6; --p6:#ec977c; --p7:#b9bac0;
+  --inv:#f1f1f3; --on-inv:#121316; --late-bg:#b8342a; --red-ink:#ff9a90;
   --shadow:0 18px 40px -18px rgba(0,0,0,.8); color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0c0d0f; --panel:#17181b; --panel-2:#212226; --ink:#f1f1f3; --muted:#8d919a; --line:#2a2b30;
+:root[data-theme="dark"],:root[data-skin="bento"][data-theme="dark"]{
+  --bg:#0c0d0f; --panel:#17181b; --panel-2:#212226; --ink:#f1f1f3; --muted:#9a9ea7; --line:#2a2b30;
   --dock:#202125; --dock-ink:#f1f1f3; --pill-on:#f1f1f3; --pill-on-ink:#121316;
-  --red:#ff5a4d; --red-soft:#3a1a17; --focus:#8fb0ff;
-  --p1:#e8d56c; --p2:#ad98ee; --p3:#ea93ba; --p4:#86d29a; --p5:#86c6e6; --p6:#ec977c; --p7:#b9bac0;
+  --yellow:#e6c84a; --red:#ff5a4d; --red-soft:#3a1a17; --focus:#8fb0ff;
+  --p1:#e2c85c; --p2:#ad98ee; --p3:#ea93ba; --p4:#86d29a; --p5:#86c6e6; --p6:#ec977c; --p7:#b9bac0;
+  --inv:#f1f1f3; --on-inv:#121316; --late-bg:#b8342a; --red-ink:#ff9a90;
   --shadow:0 18px 40px -18px rgba(0,0,0,.8); color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light}
 /* 基础排版：盒模型、body 底色与安全区留白、表单控件继承字体、焦点框、数字字体、减少动效。
    依赖：tokens.css。 */
 *{box-sizing:border-box}
@@ -111,17 +131,19 @@ button{cursor:pointer}
 .plus{width:56px;height:56px;border-radius:50%;border:0;background:var(--yellow);color:var(--on-yellow);display:grid;place-items:center;box-shadow:var(--shadow);flex:none}
 .plus svg{width:26px;height:26px}
 @media (min-width:960px){.dock{justify-content:flex-end}}
-/* 组件：页面抬头（大号月日、星期年份、“今天完成 / 没赶上”小胶囊）。
+/* 组件：页面抬头（大号月日、星期年份、右上角主题按钮；“没赶上 / 今天完成”小胶囊在日期下面）。抬头不换行（采纳结论 #2）。
    依赖：tokens.css。 */
 /* 抬头 */
-.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:4px 4px 0}
-.top h1{margin:0;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-weight:500}
+.top{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:8px 12px;padding:4px 4px 0}
+.top .top-chips{grid-column:1/-1}
+.top .top-chips:empty{display:none}
+.top h1{margin:0;display:flex;align-items:baseline;gap:10px;flex-wrap:nowrap;white-space:nowrap;min-width:0;font-weight:500}
 .top .md{font-family:var(--f-num);font-weight:800;font-size:clamp(34px,8vw,44px);line-height:1;letter-spacing:-.02em}
 .top .md small{font-family:var(--f-body);font-weight:700;font-size:.62em;margin-left:2px}
 .top .sub{font-size:16px;color:var(--muted)}
 .top-chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 12px;font-size:14px;background:var(--panel);border:0}
-.chip.late{background:var(--red);color:#fff;font-weight:500}
+.chip.late{background:var(--late-bg);color:var(--on-red);font-weight:500}
 .chip b{font-family:var(--f-num);font-weight:700}
 /* 组件：通用面板 .panel、面板标题行 .ph、文字链接按钮、圆形图标按钮。
    依赖：tokens.css。 */
@@ -130,7 +152,7 @@ button{cursor:pointer}
 .ph h2{margin:0;font-size:20px;font-weight:700;line-height:1.3}
 .ph .meta{font-size:14px;color:var(--muted)}
 .linkbtn{background:none;border:0;padding:4px 0;color:var(--muted);font-size:14px;text-decoration:underline;text-underline-offset:3px}
-.round{width:36px;height:36px;border-radius:50%;border:0;background:var(--panel-2);display:grid;place-items:center;flex:none}
+.round{width:44px;height:44px;border-radius:50%;border:0;background:var(--panel-2);display:grid;place-items:center;flex:none}
 .round svg{width:18px;height:18px}
 /* 组件：“下一件事”大卡片（含空闲状态）。
    依赖：tokens.css。 */
@@ -141,7 +163,7 @@ button{cursor:pointer}
 .next .cd{font-size:16px;font-weight:500}
 .next .tt{font-size:20px;font-weight:700;line-height:1.35;overflow-wrap:anywhere;padding-right:56px}
 .next .proj{font-size:14px;opacity:.75}
-.next .act{position:absolute;right:16px;bottom:16px;width:48px;height:48px;border-radius:50%;border:0;background:var(--on-p);color:#fff;display:grid;place-items:center}
+.next .act{position:absolute;right:16px;bottom:16px;width:48px;height:48px;border-radius:50%;border:0;background:var(--on-p);color:var(--on-dark);display:grid;place-items:center}
 .next .act svg{width:22px;height:22px}
 .next.empty{background:var(--panel);color:var(--ink)}
 .next.empty .big{font-size:40px}
@@ -149,11 +171,11 @@ button{cursor:pointer}
    依赖：tokens.css、panel.css。 */
 /* 没赶上 */
 .late-panel{background:var(--red-soft)}
-.late-panel .ph h2{color:var(--red)}
+.late-panel .ph h2{color:var(--red-ink)}
 .late-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 0;border-top:1px solid color-mix(in srgb,var(--red) 18%,transparent)}
 .late-row:first-of-type{border-top:0}
 .late-row .t{overflow-wrap:anywhere;min-width:0}
-.late-row .t small{display:block;font-size:12px;color:var(--red)}
+.late-row .t small{display:block;font-size:12px;color:var(--red-ink)}
 .mini{display:flex;gap:6px}
 .mini button{border:0;border-radius:999px;padding:6px 12px;font-size:14px;background:var(--panel);min-height:36px}
 .btn-dark{border:0;border-radius:999px;padding:10px 18px;background:var(--ink);color:var(--panel);font-weight:500;min-height:44px}
@@ -167,14 +189,15 @@ button{cursor:pointer}
 .tl .lane i{position:absolute;left:0;right:0;border-top:1px dashed var(--line)}
 .blk{position:absolute;border-radius:12px;padding:6px 10px;color:var(--on-p);overflow:hidden;border:0;text-align:left;display:flex;flex-direction:column;gap:0;line-height:1.3}
 .blk .bt{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.blk .bm{font-size:12px;opacity:.75;font-family:var(--f-num);white-space:nowrap}
-.blk.past{filter:saturate(.35);opacity:.7}
+.blk .bm{font-size:12px;color:var(--on-p-2);font-family:var(--f-num);white-space:nowrap}
+.blk.past{filter:saturate(.35);opacity:.85}
 .now{position:absolute;left:-6px;right:0;height:0;border-top:2px solid var(--red);z-index:3;pointer-events:none}
 .now::before{content:"";position:absolute;left:-1px;top:-6px;width:10px;height:10px;border-radius:50%;background:var(--red)}
-.now span{position:absolute;right:0;top:-12px;background:var(--red);color:#fff;font-family:var(--f-num);font-weight:700;font-size:12px;padding:1px 8px;border-radius:999px}
+.now span{position:absolute;right:0;top:-12px;background:var(--late-bg);color:var(--on-red);font-family:var(--f-num);font-weight:700;font-size:12px;padding:1px 8px;border-radius:999px}
 .allday{display:flex;flex-wrap:wrap;gap:6px}
 .allday .ad{border:0;border-radius:999px;padding:4px 12px;font-size:14px;color:var(--on-p);font-weight:500}
-/* 组件：日程页的一周日期条（今天描边、选中实心、彩色小圆点）。
+/* 组件：日程页的一周日期条（今天描边、选中实心；彩色小圆点＝有日程，墨色短横线 8×2px＝有待办截止，采纳结论 #7）、
+   可点的周标题、周条下方居中的“回到今天”（#8）。
    依赖：tokens.css。 */
 /* 日期条 */
 .week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
@@ -183,11 +206,16 @@ button{cursor:pointer}
 .day .n{font-family:var(--f-num);font-weight:700;font-size:16px;width:34px;height:34px;display:grid;place-items:center;border-radius:50%}
 .day.today .n{box-shadow:inset 0 0 0 2px var(--ink)}
 .day.sel .n{background:var(--ink);color:var(--panel)}
-.day .dots{display:flex;gap:3px;height:6px}
+.day .dots{display:flex;gap:3px;height:6px;align-items:center}
 .day .dots b{width:6px;height:6px;border-radius:50%}
 .day:hover .n{background:var(--panel-2)}
 .day.sel:hover .n{background:var(--ink)}
-/* 组件：日程色块列表与日期小标题。
+.day .dots .dl{display:block;width:8px;height:2px;border-radius:1px;background:var(--ink)}
+.wk-title{border:0;background:none;padding:0;font:inherit;color:inherit;min-height:44px;text-align:left}
+.back-today{align-self:center;border:0;border-radius:999px;min-height:44px;padding:0 18px;font-size:14px;background:var(--ink);color:var(--panel);font-weight:500}
+.back-today[hidden]{display:none}
+/* 组件：日程色块列表与日期小标题；色块上的铃铛标签；日程页的截止行（圆形勾选框，可直接勾掉）。
+   色块上的说明字用实色 --on-p-2（不用半透明），保证对比度 ≥ 4.5:1（采纳结论 #21）。
    依赖：tokens.css。 */
 /* 日程色块 */
 .evlist{display:flex;flex-direction:column;gap:8px}
@@ -195,15 +223,23 @@ button{cursor:pointer}
 .dhead.is-today{color:var(--ink);font-weight:700}
 .ev{border:0;border-radius:var(--r-block);padding:12px 14px;color:var(--on-p);display:grid;grid-template-columns:auto 1fr;gap:4px 12px;text-align:left;width:100%}
 .ev .et{font-family:var(--f-num);font-weight:800;font-size:16px;line-height:1.4}
-.ev .et small{display:block;font-weight:600;font-size:12px;opacity:.7}
+.ev .et small{display:block;font-weight:600;font-size:12px;color:var(--on-p-2)}
 .ev .eb{min-width:0}
 .ev .en{font-weight:700;line-height:1.4;overflow-wrap:anywhere}
-.ev .ex{font-size:14px;opacity:.78;overflow-wrap:anywhere}
+.ev .ex{font-size:14px;color:var(--on-p-2);overflow-wrap:anywhere}
+.bell-in{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.bell-in .bi,.tag.bell .bi{display:inline-grid}
+.bell-in svg,.tag.bell svg{width:11px;height:11px}
+.deadline{display:grid;grid-template-columns:44px 1fr auto;align-items:center;border-radius:var(--r-block);background:var(--panel-2);padding-right:14px;font-size:15px}
+.deadline .dt{border:0;background:none;text-align:left;padding:12px 4px 12px 0;min-width:0;min-height:44px}
+.deadline .dt .tt{line-height:1.45;overflow-wrap:anywhere;background-image:linear-gradient(var(--muted),var(--muted));background-repeat:no-repeat;background-position:0 55%;background-size:0 1.5px;transition:background-size .28s cubic-bezier(.22,1,.36,1),color .2s}
+.deadline.done .dt .tt{background-size:100% 1.5px;color:var(--muted)}
+.deadline .dk{font-size:12px;color:var(--muted)}
 /* 组件：待办列表（项目筛选胶囊、圆形勾选、划线动画、标签、离开与新到达动画）。
    .f 胶囊也被弹出层的项目选择复用。依赖：tokens.css。 */
 /* 待办 */
 .filters{display:flex;gap:6px;flex-wrap:wrap}
-.f{border:0;border-radius:999px;padding:6px 14px;font-size:14px;background:var(--panel-2);min-height:36px;display:inline-flex;align-items:center;gap:6px}
+.f{border:0;border-radius:999px;padding:6px 14px;font-size:14px;background:var(--panel-2);min-height:44px;display:inline-flex;align-items:center;gap:6px}
 .f .sw{width:10px;height:10px;border-radius:50%}
 .f[aria-pressed=true]{background:var(--ink);color:var(--panel)}
 .todos{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
@@ -212,8 +248,8 @@ button{cursor:pointer}
 .ck{width:44px;height:48px;border:0;background:none;display:grid;place-items:center;padding:0}
 .ck span{width:24px;height:24px;border-radius:50%;box-shadow:inset 0 0 0 2px var(--muted);display:grid;place-items:center;transition:transform .16s cubic-bezier(.34,1.4,.64,1),background .16s}
 .ck svg{width:14px;height:14px;opacity:0;color:var(--panel)}
-.td.done .ck span{background:var(--ink);box-shadow:none}
-.td.done .ck svg{opacity:1}
+.td.done .ck span,.deadline.done .ck span{background:var(--ink);box-shadow:none}
+.td.done .ck svg,.deadline.done .ck svg{opacity:1}
 .ck:active span{transform:scale(.9)}
 .tb{border:0;background:none;text-align:left;padding:12px 4px 12px 0;min-width:0;display:flex;flex-direction:column;gap:4px;width:100%}
 .tb .tt{line-height:1.45;overflow-wrap:anywhere;background-image:linear-gradient(var(--muted),var(--muted));background-repeat:no-repeat;background-position:0 55%;background-size:0 1.5px;transition:background-size .28s cubic-bezier(.22,1,.36,1),color .2s}
@@ -225,13 +261,16 @@ button{cursor:pointer}
 .tag{display:inline-flex;align-items:center;gap:5px}
 .tag .sw{width:8px;height:8px;border-radius:50%}
 .tag.due-today{color:var(--ink);font-weight:500}
-.tag.over{color:var(--red);font-weight:500}
+.tag.over{color:var(--red-ink);font-weight:500}
 .tag.ai{border-radius:999px;padding:0 8px;background:var(--panel-2);color:var(--muted)}
 .td.leaving{animation:leave .24s cubic-bezier(.4,0,.2,1) forwards}
 @keyframes leave{to{opacity:0;transform:translateY(-4px)}}
 .fresh{animation:fresh 2.2s ease-out}
 @keyframes fresh{0%,70%{box-shadow:inset 3px 0 0 var(--ink),0 0 0 3px color-mix(in srgb,var(--yellow) 70%,transparent)}100%{box-shadow:none}}
 .donefold{display:flex;flex-direction:column;gap:0}
+.tag.bell{gap:3px}
+.tag.note{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deadline.leaving{animation:leave .24s cubic-bezier(.4,0,.2,1) forwards}
 /* 组件：空状态提示框与加载骨架。
    依赖：tokens.css。 */
 /* 空状态与骨架 */
@@ -247,11 +286,11 @@ button{cursor:pointer}
 .toast{transform:translateY(8px);opacity:0;background:var(--dock);color:var(--dock-ink);border-radius:999px;padding:6px 6px 6px 18px;display:flex;align-items:center;gap:12px;font-size:14px;transition:opacity .2s ease-out,transform .2s ease-out;pointer-events:none;max-width:100%;border:1px solid var(--line)}
 .toast.on{opacity:1;transform:none;pointer-events:auto}
 .toast button{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);padding:6px 14px;font-weight:700;min-height:36px}
-.netbar{position:fixed;top:0;left:0;right:0;z-index:40;background:var(--red);color:#fff;font-size:14px;text-align:center;padding:calc(4px + env(safe-area-inset-top,0px)) 16px 4px}
+.netbar{position:fixed;top:0;left:0;right:0;z-index:40;background:var(--late-bg);color:var(--on-red);font-size:14px;text-align:center;padding:calc(4px + env(safe-area-inset-top,0px)) 16px 4px}
 /* 组件：新建/编辑底部弹出层（遮罩、一句话输入框、类型切换、表单字段、操作按钮）。
    依赖：tokens.css、todo.css（.f 胶囊）。 */
 /* 底部弹出层 */
-.scrim{position:fixed;inset:0;background:rgba(10,10,12,.45);z-index:50;opacity:0;transition:opacity .2s}
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:50;opacity:0;transition:opacity .2s}
 .scrim.on{opacity:1}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:51;background:var(--panel);border-radius:28px 28px 0 0;max-height:92%;overflow-y:auto;
   padding:10px max(18px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));
@@ -278,18 +317,143 @@ button{cursor:pointer}
 .ghost{border:0;background:none;color:var(--muted);padding:12px 8px;min-height:48px}
 .danger{border:0;background:none;color:var(--red);padding:12px 8px;min-height:48px;margin-left:auto}
 .raw{font-size:12px;color:var(--muted);background:var(--panel-2);border-radius:12px;padding:8px 12px}
+
+/* —— v3 T8（草图第 3 版 ②③、采纳结论 #3–#6 #16 #20）—— */
+.q-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.q-row .q{min-height:52px}
+.q-add{border:0;border-radius:999px;background:var(--yellow);color:var(--on-yellow);font-weight:700;min-height:52px;padding:0 20px;font-size:16px}
+.q-add:disabled{opacity:.5}
+.recog{display:flex;flex-wrap:wrap;gap:6px;min-height:94px;align-content:flex-start}
+.recog[hidden]{display:none}
+.recog .v{border:0;border-radius:999px;background:var(--panel-2);color:var(--ink);min-height:44px;padding:0 14px;font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.recog .v.lock{box-shadow:inset 0 0 0 2px var(--ink)}
+.recog .lock-ico{display:inline-grid;width:12px;height:12px}
+.recog .lock-ico svg{width:12px;height:12px}
+@media (prefers-reduced-motion:no-preference){.recog .v{animation:recog-in .12s linear}}
+@keyframes recog-in{from{opacity:.4}to{opacity:1}}
+.details-toggle{border:0;background:var(--panel-2);border-radius:14px;min-height:48px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;color:var(--ink);width:100%;cursor:pointer}
+.details{display:flex;flex-direction:column;gap:14px}
+.details[hidden]{display:none}
+.row-l{font-size:12px;color:var(--muted);margin-bottom:-8px}
+.scroller{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -18px;padding:0 18px}
+.scroller::-webkit-scrollbar{display:none}
+.opt{flex:none;border:0;border-radius:999px;min-height:44px;padding:0 16px;font-size:14px;background:var(--panel-2);color:var(--ink);cursor:pointer;align-self:flex-start}
+.opt[aria-pressed=true],.opt[aria-checked=true]{background:var(--panel);color:var(--ink);font-weight:700;box-shadow:inset 0 0 0 2px var(--ink)}
+.opt:disabled{opacity:.45;cursor:default}
+.sheet .seg button{min-height:44px}
+.del-row{margin-top:24px;border:0;border-radius:14px;min-height:48px;width:100%;background:var(--red-soft);color:var(--red-ink);font-weight:600;font-size:15px;cursor:pointer}
+.del-row[hidden],.acts[hidden],.q-row[hidden],.details-toggle[hidden]{display:none}
 /* 组件：数据未连接时的提示面板。
    依赖：tokens.css。 */
 .notice{background:var(--panel);border-radius:var(--r-panel);padding:18px;color:var(--muted)}
 .notice strong{color:var(--ink)}
+/* 组件：提醒（v3 T6）。情况 A：“下一件事”卡片的提醒状态 .next.reminding；情况 B：抬头下方的反色卡片 .remind-inv。
+   动效参数来自界面预审采纳结论（UI-4）：入场下移 12px 加淡入 240ms，铃铛摆一次 400ms；减少动效时只留 ≤120ms 的淡入。
+   依赖：tokens.css（--inv、--on-inv、--yellow、--on-yellow、--on-p、--r-panel）、next-card.css。 */
+.remind-slot:empty{display:none}
+.bell-row{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;flex-wrap:wrap}
+.bell-ico{display:inline-grid;place-items:center;width:16px;height:16px}
+.bell-ico svg{width:16px;height:16px}
+.offline-tag{font-size:12px;font-weight:500;border-radius:999px;padding:0 8px;background:var(--panel-2);color:var(--ink)}
+.more-n{margin-left:auto;font-size:12px;font-weight:700}
+.r-acts{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
+.r-acts button{border:0;border-radius:999px;min-height:44px;padding:0 18px;font-weight:600;font-size:15px;cursor:pointer}
+
+/* 情况 A：下一件事卡片进入提醒状态 */
+.next.reminding{cursor:pointer}
+.next.reminding .r-acts .ok{background:var(--on-p);color:var(--p1)}
+.next.reminding .r-acts .later{background:transparent;color:var(--on-p);box-shadow:inset 0 0 0 1.5px currentColor}
+.next[role=button]{cursor:pointer}
+.next[role=button]:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+
+/* 情况 B：反色提醒卡片 */
+.remind-inv{background:var(--inv);color:var(--on-inv);border-radius:var(--r-panel);padding:16px 18px;display:flex;flex-direction:column;gap:4px}
+.remind-inv .rt{font-size:18px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+.remind-inv .rm{font-size:14px;color:var(--on-inv)}
+.remind-inv .r-acts .ok{background:var(--yellow);color:var(--on-yellow)}
+.remind-inv .r-acts .later{background:transparent;color:var(--on-inv);box-shadow:inset 0 0 0 1.5px currentColor}
+.remind-inv .offline-tag{background:var(--on-inv);color:var(--inv)}
+
+/* 入场与铃铛（只在新出现时播放一次） */
+@media (prefers-reduced-motion:no-preference){
+  .remind-inv.enter,.next.reminding.enter{animation:remind-in .24s cubic-bezier(.22,1,.36,1)}
+  .enter .bell-ico{animation:bell-swing .4s ease-in-out 1;transform-origin:50% 10%}
+}
+@media (prefers-reduced-motion:reduce){
+  .remind-inv.enter,.next.reminding.enter{animation:remind-fade .12s linear}
+}
+@keyframes remind-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+@keyframes remind-fade{from{opacity:0}to{opacity:1}}
+@keyframes bell-swing{0%,100%{transform:rotate(0)}25%{transform:rotate(8deg)}75%{transform:rotate(-8deg)}}
+/* 组件：主题按钮与选择器（ADR-008、采纳结论 #2 #19）。按钮 44px 固定在抬头右上角；选择器是黑色胶囊三选一，
+   浮层盖在内容上（不推挤内容），1px 描边；弹出：缩放 .92→1 加淡入 180ms，收起 150ms；减少动效时只留透明度。
+   切换时 <html class="theme-anim"> 让颜色过渡 200ms（与 core/const.js 的 THEME_* 一致）。依赖：tokens.css、skins/*.css、header.css。 */
+.theme-btn{width:44px;height:44px;border-radius:50%;border:0;background:var(--panel);color:var(--ink);display:grid;place-items:center;flex:none;padding:0}
+.theme-btn svg{width:20px;height:20px}
+.theme-pick{position:absolute;right:4px;top:52px;z-index:20;display:flex;background:var(--dock);border-radius:999px;padding:4px;
+  box-shadow:var(--shadow),0 0 0 1px var(--line);transform-origin:calc(100% - 22px) 0;
+  opacity:0;transform:scale(.92);transition:opacity .15s cubic-bezier(.4,0,.2,1),transform .15s cubic-bezier(.4,0,.2,1)}
+.theme-pick.on{opacity:1;transform:none;transition-duration:.18s;transition-timing-function:cubic-bezier(.22,1,.36,1)}
+.theme-pick button{border:0;background:none;color:var(--dock-ink);border-radius:999px;min-height:44px;padding:0 14px;display:flex;align-items:center;gap:6px;font-size:14px;white-space:nowrap}
+.theme-pick button svg{width:16px;height:16px;flex:none}
+.theme-pick button[aria-checked=true]{background:var(--pill-on);color:var(--pill-on-ink);font-weight:600}
+.theme-anim,.theme-anim *,.theme-anim *::before,.theme-anim *::after{
+  transition:background-color var(--theme-fade) ease,color var(--theme-fade) ease,border-color var(--theme-fade) ease,box-shadow var(--theme-fade) ease,fill var(--theme-fade) ease!important}
+@media (prefers-reduced-motion:reduce){.theme-pick,.theme-pick.on{transform:none!important;transition:opacity .12s linear!important}}
+/* 组件：待办页顶部的搜索框、结果计数、关键词高亮、“没找到”和“清空”（采纳结论 #9、TC-SEARCH-07）。
+   依赖：tokens.css、skins/*.css、empty.css。 */
+.search{width:100%;border:0;border-radius:14px;background:var(--panel-2);padding:10px 14px 10px 40px;font-size:16px;min-height:44px;color:var(--ink);
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='gray' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6'/%3E%3Cpath d='M20 20l-4.5-4.5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:12px 50%;background-size:18px}
+.search::placeholder{color:var(--muted);opacity:1}
+.search::-webkit-search-cancel-button{display:none}
+.search-res{display:flex;flex-direction:column;gap:10px}
+.search-res[hidden],.td-main[hidden]{display:none}
+.td-main{display:flex;flex-direction:column;gap:14px}
+.res-n{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:var(--muted)}
+.btn-clear{border:0;border-radius:999px;background:var(--panel-2);color:var(--ink);min-height:44px;padding:0 16px;font-size:14px;font-weight:500}
+.search-none .btn-clear{display:block;margin-top:10px;background:var(--panel)}
+mark{background:var(--yellow);color:var(--on-yellow);border-radius:3px;padding:0 1px}
+/* 组件：待办面板底部的“最近删除”（默认折叠成一行 panel-2 色块，不加分隔线，采纳结论 #9）、“运行记录”（只读）、
+   “导出备份（JSON）”按钮（面板底部，无下划线，#18）。依赖：tokens.css、skins/*.css、todo.css（.leaving 动画）。 */
+.trash{border:0;width:100%;border-radius:14px;background:var(--panel-2);min-height:48px;padding:0 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;color:var(--muted);text-align:left}
+.trash b{color:var(--ink);font-weight:500}
+.trash .chev{transition:transform .2s cubic-bezier(.22,1,.36,1);flex:none}
+.trash[aria-expanded=true] .chev{transform:rotate(90deg)}
+.trash-list,.log-list{display:flex;flex-direction:column;gap:6px;margin-top:-8px}
+.trash-list[hidden],.log-list[hidden]{display:none}
+.trash-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;border-radius:14px;background:var(--panel-2);padding:6px 6px 6px 14px}
+.trash-row.leaving{animation:leave .24s cubic-bezier(.4,0,.2,1) forwards}
+.tr-b{display:flex;flex-direction:column;min-width:0}
+.tr-t{overflow-wrap:anywhere;line-height:1.4}
+.tr-m{font-size:12px;color:var(--muted)}
+.restore{border:0;border-radius:999px;background:var(--ink);color:var(--panel);min-height:44px;padding:0 16px;font-size:14px;font-weight:500}
+.restore:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
+.trash-off,.log-note{margin:0;font-size:12px;color:var(--muted);padding:2px 4px}
+.log-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;max-height:320px;overflow-y:auto;border-radius:14px;background:var(--panel-2)}
+.log-row{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:baseline;padding:8px 14px;font-size:13px;border-top:1px solid var(--line)}
+.log-row:first-child{border-top:0}
+.log-row .lg-t,.log-row .lg-i{font-family:var(--f-num);font-variant-numeric:tabular-nums;color:var(--muted)}
+.log-row .lg-a{font-weight:500}
+.log-row .lg-c{color:var(--muted)}
+.log-row.run .lg-a{color:var(--red-ink)}
+.export{align-self:center;margin-top:-4px;border:0;background:none;color:var(--muted);font-size:13px;min-height:44px;padding:0 12px}
+.export:disabled{opacity:.7}
 </style>
 
 <div class="app">
   <header class="top">
     <h1><span class="md" id="hd-md">--</span><span class="sub" id="hd-sub"></span></h1>
+    <button class="theme-btn" type="button" id="theme-btn" aria-haspopup="true" aria-expanded="false" aria-controls="theme-pick" aria-label="外观：跟随系统"></button>
+    <div class="theme-pick" id="theme-pick" role="radiogroup" aria-label="外观" hidden>
+      <button type="button" role="radio" data-mode="system" aria-checked="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>跟随系统</button>
+      <button type="button" role="radio" data-mode="light" aria-checked="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></svg>浅色</button>
+      <button type="button" role="radio" data-mode="dark" aria-checked="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>深色</button>
+    </div>
     <div class="top-chips" id="hd-chips"></div>
   </header>
   <div id="notice" hidden class="notice"></div>
+  <div id="remind" class="remind-slot" aria-live="polite"></div>
 
   <div class="grid">
     <!-- 今天 -->
@@ -315,13 +479,15 @@ button{cursor:pointer}
     <div class="view" id="v-sched" data-view="sched">
       <section class="panel" aria-labelledby="h-wk">
         <div class="ph">
-          <h2 id="h-wk"><span id="wk-title"></span></h2>
+          <h2 id="h-wk"><button type="button" class="wk-title" id="wk-title"></button></h2>
           <div style="display:flex;gap:6px">
             <button class="round" type="button" id="wk-prev" aria-label="上一周"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
             <button class="round" type="button" id="wk-next" aria-label="下一周"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
           </div>
         </div>
         <div class="week" id="week"></div>
+        <button class="back-today" type="button" id="wk-today" hidden>回到今天</button>
+        <div class="filters" id="sched-filters" role="group" aria-label="按项目筛选"></div>
         <div class="evlist" id="day-list"></div>
       </section>
       <section class="panel" aria-labelledby="h-up">
@@ -334,10 +500,19 @@ button{cursor:pointer}
     <div class="view" id="v-todo" data-view="todo">
       <section class="panel" aria-labelledby="h-td">
         <div class="ph"><h2 id="h-td">待办</h2><span class="meta" id="td-meta"></span></div>
-        <div class="filters" id="filters"></div>
-        <ul class="todos" id="todos"></ul>
-        <button class="linkbtn" type="button" id="done-toggle" hidden></button>
-        <ul class="todos" id="done-list" hidden></ul>
+        <input class="search" id="search" type="search" enterkeyhint="search" autocomplete="off" placeholder="搜索标题、备注、原话" aria-label="搜索标题、备注、原话">
+        <div class="search-res" id="search-res" hidden></div>
+        <div class="td-main" id="td-main">
+          <div class="filters" id="filters" role="group" aria-label="按项目筛选"></div>
+          <ul class="todos" id="todos"></ul>
+          <button class="linkbtn" type="button" id="done-toggle" hidden></button>
+          <ul class="todos" id="done-list" hidden></ul>
+        </div>
+        <button class="trash" type="button" id="trash-toggle" hidden aria-expanded="false" aria-controls="trash-list"></button>
+        <div class="trash-list" id="trash-list" hidden></div>
+        <button class="trash" type="button" id="log-toggle" aria-expanded="false" aria-controls="log-list"><span><b>运行记录</b>  最近 7 天，只读</span><span class="chev" aria-hidden="true">›</span></button>
+        <div class="log-list" id="log-list" hidden></div>
+        <button class="export" type="button" id="export">导出备份（JSON）</button>
       </section>
     </div>
   </div>
@@ -359,33 +534,44 @@ button{cursor:pointer}
 <div class="scrim" id="scrim" hidden></div>
 <form class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-title" hidden>
   <div class="grab"></div>
-  <h3 id="sh-title">新建</h3>
-  <div id="q-wrap">
-    <input class="q" id="q" type="text" autocomplete="off" placeholder="例如：明天下午3点和 NEOX 对片" aria-label="用一句话描述">
-    <p class="hint">写清时间就记成日程，没写时间就记成待办。下面可以再改。</p>
+  <h3 id="sh-title">记一件事</h3>
+  <div id="q-wrap" class="q-row">
+    <input class="q" id="q" type="text" autocomplete="off" enterkeyhint="done" aria-label="用一句话描述要记的事" placeholder="写一句话，例如：明天下午3点和 NEOX 对片">
+    <button class="q-add" type="submit" id="q-add">加入</button>
   </div>
-  <div class="seg" id="seg" role="group" aria-label="类型">
-    <button type="button" data-k="event" aria-pressed="false">日程</button>
-    <button type="button" data-k="todo" aria-pressed="true">待办</button>
+  <div class="recog" id="recog" aria-live="polite"></div>
+  <button class="details-toggle" type="button" id="details-toggle" aria-expanded="false" aria-controls="details"><span>改细节：类型、日期、时间、提醒、备注</span><span aria-hidden="true">›</span></button>
+  <div id="details" class="details" hidden>
+    <div class="seg" id="seg" role="group" aria-label="类型">
+      <button type="button" data-k="event" aria-pressed="false">日程</button>
+      <button type="button" data-k="todo" aria-pressed="true">待办</button>
+    </div>
+    <div class="fields"><label class="wide">标题<input id="f-title" type="text" maxlength="160" required></label></div>
+    <div class="row-l" id="date-chips-lab">截止</div>
+    <div class="scroller" id="date-chips" role="group" aria-label="快捷日期"></div>
+    <div class="fields">
+      <label><span id="f-date-lab">截止日期</span><input id="f-date" type="date"></label>
+      <label class="ev-only">时间<input id="f-time" type="time"></label>
+      <label class="ev-only">时长<select id="f-dur">
+        <option value="30">30 分钟</option><option value="60" selected>1 小时</option><option value="90">1.5 小时</option>
+        <option value="120">2 小时</option><option value="180">3 小时</option><option value="240">半天</option></select></label>
+      <label class="td-only chk"><input id="f-imp" type="checkbox">重要</label>
+    </div>
+    <button type="button" class="opt ev-only" id="push-1h" hidden>推后 1 小时</button>
+    <div class="row-l">提醒</div>
+    <div class="scroller" id="remind-chips" role="radiogroup" aria-label="提醒"></div>
+    <div class="fields">
+      <label class="wide">项目<input id="f-proj" type="text" maxlength="40" placeholder="可不填" list="proj-list"></label>
+      <div class="projs wide" id="proj-chips"></div>
+      <label class="wide"><span id="f-note-lab">备注</span><input id="f-note" type="text" maxlength="200" placeholder="可不填"></label>
+    </div>
+    <div class="raw" id="raw" hidden></div>
   </div>
-  <div class="fields">
-    <label class="wide">标题<input id="f-title" type="text" maxlength="160" required></label>
-    <label><span id="f-date-lab">截止日期</span><input id="f-date" type="date"></label>
-    <label class="ev-only">时间<input id="f-time" type="time"></label>
-    <label class="ev-only">时长<select id="f-dur">
-      <option value="30">30 分钟</option><option value="60" selected>1 小时</option><option value="90">1.5 小时</option>
-      <option value="120">2 小时</option><option value="180">3 小时</option><option value="240">半天</option></select></label>
-    <label class="td-only chk" style="align-self:end;padding-bottom:10px"><input id="f-imp" type="checkbox">重要</label>
-    <label class="wide">项目<input id="f-proj" type="text" maxlength="40" placeholder="可不填" list="proj-list"></label>
-    <div class="projs wide" id="proj-chips"></div>
-    <label class="wide ev-only">地点或备注<input id="f-note" type="text" maxlength="200" placeholder="可不填"></label>
-  </div>
-  <div class="raw" id="raw" hidden></div>
-  <div class="acts">
-    <button class="save" type="submit" id="save">加入</button>
+  <div class="acts" id="acts" hidden>
+    <button class="save" type="submit" id="save">保存修改</button>
     <button class="ghost" type="button" id="cancel">取消</button>
-    <button class="danger" type="button" id="del" hidden>删除</button>
   </div>
+  <button class="del-row" type="button" id="del" hidden>删除</button>
 </form>
 <datalist id="proj-list"></datalist>
 
@@ -459,8 +645,20 @@ App.core.C = {
   LOG_KEEP_DAYS: 90,                  // 保留 90 天
   LOG_FLUSH_MS: 30000,                // 每 30 秒写一次（切到后台时立即写）
 
+  // 主题、日程页、待办页（v3 T7、T9、T5、T10，程序员 1）
+  THEMES: ["system", "light", "dark"],   // pv-theme 的合法值（ADR-008）
+  SKINS: ["bento"],                    // pv-skin 的合法值；v3 只有一套
+  THEME_OPEN_MS: 180,                  // 主题选择器弹出：缩放 .92→1 + 淡入（采纳结论 动效补充）
+  THEME_HOLD_MS: 300,                  // 选完停 300ms 再收起
+  THEME_CLOSE_MS: 150,                 // 收起
+  THEME_FADE_MS: 200,                  // 切换时颜色过渡（需求澄清 #32）
+  SEARCH_MAX: 100,                     // 搜索最多列多少条
+  LOG_VIEW_DAYS: 7,                    // “运行记录”显示最近几天
+  LOG_VIEW_MAX: 200,                   // “运行记录”最多列多少条
+  DAY_MS: 86400000,
+
   // 时钟、写入与连接
-  CLOCK_TICK_MS: 60000,         // 每分钟刷新一次时间轴和倒计时
+  CLOCK_TICK_MS: 60000,        // 每分钟刷新一次时间轴和倒计时
   CLOCK_ALIGN_MS: 200,          // tick 安排在整分钟后 200 毫秒（要求 1 秒内）
   WRITE_TIMEOUT_MS: 10000,      // 写入超过 10 秒没回应算失败
   RECONNECT_MS: [3000, 10000, 30000, 60000],   // 断线后第 1、2、3、4+ 次重连的等待
@@ -1072,6 +1270,46 @@ function currentValue(item, kind){
 
 App.logic.remind = {setting, baseAt, computeRemindAt, eventSpan, due, dueList, shouldResetSnooze, options, label, currentValue};
 })();
+// ==== src/scripts/logic/search.js ====
+(function(){
+// 职责：搜索（纯函数）：search(events, todos, q) 在标题、备注、原话里找关键词（不分大小写，中文、韩文按原样匹配），
+//       范围包括已完成的待办和过去的日程；调用方传入的应是未删除的条目。结果先列待办（未完成在前），再列日程（新的在前）。
+//       segments(text, q) 把一段文字切成 [{text, hit}]，界面据此高亮关键词（不拼 HTML）。
+// 依赖：logic/sort.js
+App.logic = App.logic || {};
+
+const {sortTodos} = App.logic.sort;
+const FIELDS = ["title", "note", "rawText"];
+const norm = s => String(s == null ? "" : s).toLowerCase();
+
+function matches(x, q){ return FIELDS.some(f => norm(x[f]).includes(q)); }
+
+// 返回 [{kind:"todo"|"event", item}]；q 为空时返回 []
+function search(events, todos, q, max){
+  const k = norm(q).trim();
+  if (!k) return [];
+  const td = sortTodos(todos.filter(x => matches(x, k)));
+  const ev = events.filter(e => matches(e, k)).sort((a,b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
+  const out = td.map(item => ({kind:"todo", item})).concat(ev.map(item => ({kind:"event", item})));
+  return max ? out.slice(0, max) : out;
+}
+// 文字里出现关键词的地方标 hit:true；没有关键词时整段 hit:false
+function segments(text, q){
+  const s = text == null ? "" : String(text), k = norm(q).trim();
+  if (!k) return [{text:s, hit:false}];
+  const low = s.toLowerCase(), out = [];
+  let i = 0, j;
+  while ((j = low.indexOf(k, i)) >= 0){
+    if (j > i) out.push({text:s.slice(i, j), hit:false});
+    out.push({text:s.slice(j, j + k.length), hit:true});
+    i = j + k.length;
+  }
+  if (i < s.length) out.push({text:s.slice(i), hit:false});
+  return out.length ? out : [{text:s, hit:false}];
+}
+
+App.logic.search = {search, segments, matches};
+})();
 // ==== src/scripts/platform/index.js ====
 (function(){
 // 职责：平台能力入口。所有依赖运行环境（claude.ai / 以后的独立服务器 PWA / 浏览器本身）的能力都注册在 App.platform 下：
@@ -1149,24 +1387,50 @@ App.platform.prefs = {KEYS, get, set, deviceId};
 })();
 // ==== src/scripts/platform/notify.js ====
 (function(){
-// 职责：【v3 预留，尚未实现】提示音与推送的平台接口。ui/remind.js 只调用这里，不直接碰浏览器通知或 claude.ai 能力。
+// 职责：提示音与推送的平台接口。ui/remind.js 只调用这里，不直接碰 Web Audio、震动或浏览器通知。
+//       chime()：页面开着时到点响一声提示音（Web Audio 合成两声短音，不加载外部文件）。浏览器要求先有一次用户操作
+//       才能出声，所以第一次点按或按键时解锁；还没解锁时返回 false。能震动的设备顺带震一下（iPhone Safari 不支持，会忽略）。
+//       页面关闭时的推送：claude.ai 版不支持（改由 Claude 定时任务推送，ADR-005）；独立服务器 PWA 版再实现 Web Push。
 // 依赖：platform/index.js
 App.platform = App.platform || {};
 
-/*
- * chime(): boolean
- *   页面开着时到点响一声提示音（Web Audio 合成，不加载外部文件）。浏览器不允许自动播放时返回 false。
- * pushSupported(): boolean
- *   当前平台能否在页面关闭时推送。claude.ai 版：false（改由 Claude 定时任务推送，见 ADR-005）；
- *   独立服务器 PWA 版：Service Worker + Web Push 可用时为 true。
- * requestPermission(): Promise<"granted" | "denied" | "unsupported">
- * push({title, body, at}): Promise<boolean>
- *   推送文字要脱敏：只写“10:00 1 项日程（NEOX）”这类时间加项目简称，不带完整标题、备注和地点（安全审查）。
- */
+let audio = null;
+function unlock(){
+  try {
+    const AC = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (!AC) return;
+    if (!audio) audio = new AC();
+    if (audio.state === "suspended") audio.resume();
+  } catch(e){ audio = null; }
+}
+if (typeof addEventListener === "function"){
+  addEventListener("pointerdown", unlock, {passive:true});
+  addEventListener("keydown", unlock);
+}
+
+// 两声短音：880Hz 再 660Hz，各 120 毫秒，柔和起落，避免爆音
+function chime(){
+  // 用户还没点过页面时浏览器会拦截震动，所以只在解锁之后震
+  try { if (audio && globalThis.navigator && navigator.vibrate) navigator.vibrate([60, 40, 60]); } catch(e){}
+  if (!audio || audio.state !== "running") return false;
+  const t0 = audio.currentTime;
+  [[880, 0], [660, 0.16]].forEach(([f, at]) => {
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = "sine"; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t0 + at);
+    g.gain.exponentialRampToValueAtTime(0.18, t0 + at + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.12);
+    o.connect(g).connect(audio.destination);
+    o.start(t0 + at); o.stop(t0 + at + 0.14);
+  });
+  return true;
+}
+
 App.platform.notify = {
-  chime: () => false,
+  chime,
   pushSupported: () => false,
   requestPermission: async () => "unsupported",
+  // 推送文字要脱敏：只写“10:00 1 项日程（NEOX）”这类时间加项目简称，不带完整标题、备注和地点（安全审查）
   push: async () => false,
 };
 })();
@@ -1222,6 +1486,43 @@ App.platform.storage["claude-db"] = function createClaudeDb(){
     },
     // 平台没有批量写入接口：不提供 batch，由 data/store.js 逐条写
   };
+};
+})();
+// ==== src/scripts/platform/download.js ====
+(function(){
+// 职责：下载能力的适配器（把页面生成的文件交给用户保存），界面只调 App.platform.download.save({filename, data})。
+//       claude.ai 版用 window.claude.use("downloads") 的 save()：会先弹确认，用户同意才保存；拒绝或不可用时 reject，不重试。
+//       错误码统一成：declined（用户拒绝）、unavailable（这里不能下载）、rate_limited（已有一个在等确认）、
+//       too_large（太大）、format（格式不允许）、failed（其他）。测试页用 tests/mock/mock-download.js 的模拟实现。
+//       用哪个实现由 app.js 一处配置（App.BUILD.download，缺省 "claude"）。以后独立服务器版加 "browser"（<a download>）。
+// 依赖：platform/index.js
+App.platform = App.platform || {};
+App.platform.downloads = App.platform.downloads || {};   // 下载适配器工厂：{"claude": fn, "mock": fn}
+
+const MAP = {
+  declined:"declined", rate_limited:"rate_limited", too_large:"too_large",
+  rejected_extension:"format", extension_not_enabled:"format",
+  unavailable:"unavailable", not_granted:"unavailable", capability_disabled:"unavailable", capability_removed:"unavailable",
+};
+const downloadError = (code, cause) => { const e = new Error("下载：" + code); e.code = code; e.cause = cause; return e; };
+App.platform.downloadError = downloadError;
+
+App.platform.downloads["claude"] = function createClaudeDownloads(){
+  let cap;   // undefined＝还没取过；null＝这里不能下载
+  return {
+    async save(req){
+      if (cap === undefined) cap = window.claude && window.claude.use ? await window.claude.use("downloads").catch(() => null) : null;
+      if (!cap) throw downloadError("unavailable");
+      try { return await cap.save({filename:req.filename, data:req.data}); }
+      catch(e){ throw downloadError(MAP[e && e.code] || (e && e.code ? "failed" : "unavailable"), e); }
+    },
+  };
+};
+
+let impl = null;
+App.platform.download = {
+  use(name){ const f = App.platform.downloads[name] || App.platform.downloads["claude"]; impl = f(); },
+  save(req){ if (!impl) App.platform.download.use("claude"); return impl.save(req); },
 };
 })();
 // ==== src/scripts/data/bus.js ====
@@ -1746,6 +2047,53 @@ function stop(){ for (const c in unsubs){ try { unsubs[c](); } catch(e){} delete
 
 App.data.subscribe = {start, stop};
 })();
+// ==== src/scripts/data/archive.js ====
+(function(){
+// 职责：只读的汇总数据（不写入）：trash() 最近删除列表（日程和待办，按删除时间新到旧）；
+//       backup(now) 导出备份用的完整数据（从存储直接读 events、todos、logs，含已删除条目和 deletedAt，需求澄清 #19）；
+//       recentLogs(today, days) 运行记录：最近几天所有设备的日志条目，只保留时间、动作、集合、编号（ADR-010）。
+// 依赖：core/const.js、core/date.js、data/store.js、data/state.js、data/log.js
+App.data = App.data || {};
+
+const C = App.core.C;
+const {addDays} = App.core.date;
+const store = App.data.store, S = App.data.state;
+
+function trash(){
+  const all = S.events.filter(x => x.deletedAt).map(item => ({coll:"events", kind:"event", item}))
+    .concat(S.todos.filter(x => x.deletedAt).map(item => ({coll:"todos", kind:"todo", item})));
+  return all.sort((a, b) => b.item.deletedAt - a.item.deletedAt);
+}
+// 导出备份：数据库里有什么就导出什么（不经过页面的字段整理）。logs 读不到时导出为空数组并带 logsError
+// 读日志前先把内存里攒着的写进去，导出和“运行记录”才包含刚刚的操作
+const flushLogs = async () => { try { await App.data.log.flush(); } catch(e){} };
+async function backup(now){
+  await flushLogs();
+  const [events, todos] = await Promise.all([store.list("events"), store.list("todos")]);
+  let logs = [], logsError;
+  try { logs = await store.list("logs"); } catch(e){ logsError = (e && e.code) || "network"; }
+  const out = {app:"planner", format:1, exportedAt:now, counts:{events:events.length, todos:todos.length, logs:logs.length}, events, todos, logs};
+  if (logsError) out.logsError = logsError;
+  return out;
+}
+// 运行记录：[{t, act, coll, id, kind}]，新到旧，最多 LOG_VIEW_MAX 条
+async function recentLogs(today, days){
+  await flushLogs();
+  const from = addDays(today, -(days - 1));
+  const out = [];
+  for (const doc of await store.list("logs")){
+    const day = typeof doc.day === "string" ? doc.day : String(doc.id).slice(0, 10);
+    if (day < from || !Array.isArray(doc.entries)) continue;
+    for (const e of doc.entries){
+      if (!e || typeof e.t !== "number") continue;
+      out.push({t:e.t, act:String(e.act || ""), coll: e.coll ? String(e.coll) : "", id: e.id == null ? "" : String(e.id), kind: e.kind === "run" ? "run" : "op"});
+    }
+  }
+  return out.sort((a, b) => b.t - a.t).slice(0, C.LOG_VIEW_MAX);
+}
+
+App.data.archive = {trash, backup, recentLogs};
+})();
 // ==== src/scripts/ui/dom.js ====
 (function(){
 // 职责：界面用的 DOM 小工具：$(id) 取元素、h() 一次建好带属性和子节点的元素（子节点文字一律当纯文本插入，
@@ -1773,7 +2121,7 @@ App.ui.dom = {$, h, ICON_CHECK, skeleton, emptyBox};
 // ==== src/scripts/ui/view-state.js ====
 (function(){
 // 职责：界面状态：当前页（记在本机偏好）、日程页选中的日期与本周起点、待办的项目筛选、是否展开已完成、
-//       勾选动画的停顿时刻 holdUntil。跨天时 onDayChange() 把停在“旧的今天”的选中日期和本周挪到新的今天。
+//       勾选动画的停顿时刻 holdUntil、刚恢复条目的高亮 flash。项目筛选 projFilter 由日程页和待办页共用（不作用于今天页）。跨天时 onDayChange() 把停在“旧的今天”的选中日期和本周挪到新的今天。
 // 依赖：core/date.js、platform/prefs.js
 App.ui = App.ui || {};
 
@@ -1783,6 +2131,7 @@ const prefs = App.platform.prefs;
 const V = {
   view: "today", selDay: "", weekStart: "", projFilter: null, showDone: false,
   holdUntil: 0, holdTimer: null,
+  flash: new Set(),   // 刚从“最近删除”恢复的 id：回到原位时用 .fresh 短暂高亮
 };
 function init(t){
   V.view = prefs.get(prefs.KEYS.view, "today");
@@ -1828,6 +2177,47 @@ function show(msg, btnText, action, ms){
 
 App.ui.toast = {show, dismiss};
 })();
+// ==== src/scripts/ui/filter.js ====
+(function(){
+// 职责：日程页和待办页共用的项目筛选（需求澄清 #21：今天页不筛选）。render(容器 id) 画“全部 + 各项目”胶囊，
+//       点了改 V.projFilter 后整页重绘，两页同时生效；inScope(x) 判断条目是否在筛选范围内。
+//       项目名单取自未删除的日程和待办；筛选的项目不见了就自动回到“全部”。另含 bellTag()、hl() 两个列表共用的小部件。
+// 依赖：logic/projects.js、logic/remind.js、logic/search.js、data/state.js、ui/dom.js、ui/view-state.js
+// 运行时调用：ui/render.js
+App.ui = App.ui || {};
+
+const {projColor} = App.logic.projects;
+const remind = App.logic.remind, {segments} = App.logic.search;
+const visEv = App.data.visEv, visTd = App.data.visTd;
+const {$, h} = App.ui.dom;
+const V = App.ui.view;
+
+const names = () => [...new Set(visEv().map(e => e.project).concat(visTd().map(x => x.project)).filter(Boolean))];
+const inScope = x => !V.projFilter || x.project === V.projFilter;
+function set(p){ V.projFilter = p; App.ui.render(); }
+function render(id){
+  const f = $(id); f.textContent = "";
+  const ps = names();
+  if (V.projFilter && !ps.includes(V.projFilter)) V.projFilter = null;
+  f.hidden = !ps.length;
+  if (!ps.length) return;
+  f.append(h("button",{class:"f",type:"button","aria-pressed":!V.projFilter?"true":"false",onclick:()=>set(null)},"全部"));
+  ps.forEach(p => f.append(h("button",{class:"f",type:"button","aria-pressed":V.projFilter===p?"true":"false",onclick:()=>set(p)},
+    h("span",{class:"sw",style:"background:"+projColor(p)}), p)));
+}
+
+const BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>';
+// 铃铛标签：提醒设置的文字（“提前 15 分”“前一天 9:00”）；不提醒或已完成时返回 null
+function bellTag(item, kind, cls){
+  if (item.done) return null;
+  const text = remind.label(item, kind);
+  return text ? h("span",{class:(cls || "tag") + " bell","aria-label":"提醒："+text}, h("span",{class:"bi","aria-hidden":"true",html:BELL}), text) : null;
+}
+// 关键词高亮：把文字切成普通文字和 <mark>（只用文本节点，不拼 HTML）
+function hl(text, q){ return segments(text, q).map(s => s.hit ? h("mark",null,s.text) : s.text); }
+
+App.ui.filter = {render, inScope, names, bellTag, hl};
+})();
 // ==== src/scripts/ui/render.js ====
 (function(){
 // 职责：渲染调度与数据事件的接线：订阅 data 层的 change / error / notice（连不上、断线自动重连中、已重新连上），决定重绘和提示；
@@ -1858,8 +2248,9 @@ function renderHead(){
   const chips = $("hd-chips"); chips.textContent = "";
   const doneToday = visTd().filter(x => isDoneOn(x, t)).length;
   const late = visTd().filter(x => isLate(x, t)).length;
-  if (doneToday) chips.append(h("span",{class:"chip"},"今天完成 ",h("b",null,doneToday)," 件"));
+  // “没赶上”排在前面，紧贴日期下方（采纳结论 #2）
   if (late) chips.append(h("button",{class:"chip late",type:"button",onclick:()=>{ App.ui.nav.go("today"); $("late").scrollIntoView({behavior:"smooth",block:"center"}); }},h("b",null,late)," 件没赶上"));
+  if (doneToday) chips.append(h("span",{class:"chip"},"今天完成 ",h("b",null,doneToday)," 件"));
 }
 
 function showNoData(hint){
@@ -1999,11 +2390,12 @@ App.ui.todayTimeline = {render: renderTimeline, layoutLanes};
 })();
 // ==== src/scripts/ui/today.js ====
 (function(){
-// 职责：“今天”视图的总装：下一件事大卡片、今天要做、晚上预告明天；没赶上面板和时间轴分别在
+// 职责：“今天”视图的总装：下一件事大卡片（整张可点；到了提醒时间进入提醒状态，见 ui/remind.js）、今天要做、晚上预告明天；
+//       每次重绘先让 ui/remind.js 更新提醒，再画抬头下方的反色提醒卡片。没赶上面板和时间轴分别在
 //       ui/today-late.js、ui/today-timeline.js 里，这里按顺序调用。
 // 依赖：core/const.js、core/date.js、logic/items.js、logic/projects.js、logic/sort.js、logic/format.js、
 //       data/state.js、ui/dom.js、ui/today-late.js、ui/today-timeline.js
-// 运行时调用：ui/sheet.js、ui/todos.js、ui/schedule.js、App.clock
+// 运行时调用：ui/sheet.js、ui/todos.js、ui/schedule.js、ui/remind.js、App.clock
 App.ui = App.ui || {};
 
 const C = App.core.C;
@@ -2018,27 +2410,46 @@ const openSheet = (...a) => App.ui.sheet.open(...a);
 const todoRow = x => App.ui.todos.row(x);
 const evBlock = e => App.ui.schedule.evBlock(e);
 
+// 整张卡都能点开编辑（PM-A⑩）；卡片里的按钮自己阻止冒泡
+function cardOpen(card, kind, item){
+  card.tabIndex = 0; card.setAttribute("role", "button");
+  card.setAttribute("aria-label", (kind === "event" ? "编辑日程：" : "编辑待办：") + item.title);
+  card.onclick = () => openSheet(kind, item);
+  card.onkeydown = ev => { if (ev.target === card && (ev.key === "Enter" || ev.key === " ")){ ev.preventDefault(); openSheet(kind, item); } };
+  return card;
+}
+// 返回被画成提醒状态的那一条 {kind, id}（情况 A），没有就返回 null
 function renderNext(t, nm){
   const box = $("next"); box.textContent = "";
-  if (!ready()){ box.append(h("div",{class:"next empty"}, ...skeleton(2))); return; }
+  if (!ready()){ box.append(h("div",{class:"next empty"}, ...skeleton(2))); return null; }
   const n = pickNext(visEv(), visTd(), t, nm);
   if (!n){
+    const nothing = !visEv().length && !visTd().length;
     box.append(h("div",{class:"next empty"}, h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},"空闲"),
-      h("span",{class:"cd"},"今天没有别的安排了。点右下角的＋记一件新的事。")));
-  } else if (n.kind === "event"){
-    const e = n.item;
-    box.append(h("button",{class:"next",type:"button",style:"background:"+projColor(e.project)+";border:0;text-align:left;width:100%",onclick:()=>openSheet("event",e)},
-      h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},e.time), h("span",{class:"cd"},startsText(n.start - nm, n.end)),
-      h("span",{class:"tt"},e.title), e.project || e.note ? h("span",{class:"proj"},[e.project,e.note].filter(Boolean).join("  ")) : null));
-  } else {
-    const x = n.item;
-    const card = h("div",{class:"next",style:"background:"+projColor(x.project)},
-      h("span",{class:"lbl"},"下一件事"), h("span",{class:"big",style:"font-size:40px"}, x.due ? dueText(x.due, t).replace("截止","") : "待办"),
-      h("span",{class:"tt"},x.title), x.project ? h("span",{class:"proj"},x.project) : null,
-      h("button",{class:"act",type:"button","aria-label":"完成："+x.title,html:ICON_CHECK,onclick:()=>App.ui.todos.toggle(x,true)}));
-    card.querySelector(".tt").onclick = () => openSheet("todo", x);
-    box.append(card);
+      h("span",{class:"cd"}, nothing
+        ? "还没有安排。点右下角的＋写一句话就能记下，也可以在聊天里跟 Claude 说“帮我记一下……”。"
+        : "今天没有别的安排了。点右下角的＋记一件新的事。")));
+    return null;
   }
+  const kind = n.kind, x = n.item;
+  const rem = App.ui.remind.todayVisible() ? App.ui.remind.decorateNext(kind, x) : null;
+  let card;
+  if (kind === "event"){
+    card = h("div",{class:"next",style:"background:"+projColor(x.project)},
+      rem ? rem.bell : h("span",{class:"lbl"},"下一件事"), h("span",{class:"big"},x.time),
+      rem ? null : h("span",{class:"cd"},startsText(n.start - nm, n.end)),
+      h("span",{class:"tt"},x.title), x.project || x.note ? h("span",{class:"proj"},[x.project,x.note].filter(Boolean).join("  ")) : null,
+      rem ? rem.acts : null);
+  } else {
+    card = h("div",{class:"next",style:"background:"+projColor(x.project)},
+      rem ? rem.bell : h("span",{class:"lbl"},"下一件事"),
+      h("span",{class:"big",style:"font-size:40px"}, x.due ? dueText(x.due, t).replace("截止","") : (x.important ? "重要" : "待办")),
+      h("span",{class:"tt"},x.title), x.project ? h("span",{class:"proj"},x.project) : null,
+      rem ? rem.acts : h("button",{class:"act",type:"button","aria-label":"完成："+x.title,html:ICON_CHECK,onclick:ev=>{ ev.stopPropagation(); App.ui.todos.toggle(x,true); }}));
+  }
+  if (rem){ card.classList.add("reminding"); card.setAttribute("role", "alert"); if (rem.isNew) card.classList.add("enter"); }
+  box.append(cardOpen(card, kind, x));
+  return rem ? {kind, id:x.id} : null;
 }
 
 function renderTodayTodos(t){
@@ -2050,7 +2461,7 @@ function renderTodayTodos(t){
   sortTodos(list);
   if (!list.length){
     const anyOpen = visTd().some(x => !x.done);
-    ul.append(h("li",null, emptyBox(anyOpen ? "最近两天没有到期的事" : "没有待办", anyOpen ? "其他待办在“全部待办”里。" : "点右下角的＋，写一句话就能记下。")));
+    ul.append(h("li",null, emptyBox(anyOpen ? "最近两天没有到期的事" : "没有待办", anyOpen ? "其他待办在“全部待办”里。" : "点右下角的＋，写一句话就能记下；也可以在聊天里让 Claude 代记。")));
   } else list.forEach(x => ul.append(todoRow(x)));
 }
 
@@ -2069,7 +2480,9 @@ function renderTomorrow(t){
 
 function renderToday(){
   const t = App.clock.today(), nm = App.clock.nowMin();
-  renderNext(t, nm);
+  App.ui.remind.update();
+  const shownInNext = renderNext(t, nm);
+  App.ui.remind.renderCard(shownInNext);
   App.ui.todayLate.render(t);
   App.ui.todayTimeline.render(t, nm);
   renderTodayTodos(t);
@@ -2080,11 +2493,12 @@ App.ui.today = {render: renderToday};
 })();
 // ==== src/scripts/ui/schedule.js ====
 (function(){
-// 职责：“日程”视图：一周日期条（上一周 / 下一周）、选中那天的日程、“接下来”按日期分组的日程；
-//       evBlock() 生成一个日程色块，今天视图预告明天时也用。
+// 职责：“日程”视图：一周日期条（圆点＝有日程，墨色短横线＝有待办截止）、翻到别的周时周条下方出现“回到今天”
+//       （点标题也能回到今天；翻周时保持星期几）、周条下的项目筛选（与待办页共用）、选中那天的日程和截止的待办
+//       （截止行可以直接勾掉）、“接下来”按日期分组的日程；evBlock() 生成一个日程色块（带铃铛标签），今天视图预告明天和搜索结果也用。
 // 依赖：core/const.js、core/date.js、logic/items.js、logic/projects.js、logic/sort.js、logic/format.js、
-//       data/state.js、ui/dom.js、ui/view-state.js
-// 运行时调用：ui/sheet.js、App.clock
+//       data/state.js、ui/dom.js、ui/view-state.js、ui/filter.js
+// 运行时调用：ui/sheet.js、ui/todos.js、App.clock
 App.ui = App.ui || {};
 
 const C = App.core.C;
@@ -2093,50 +2507,74 @@ const {endMin} = App.logic.items;
 const {projColor} = App.logic.projects;
 const {byTime} = App.logic.sort;
 const {relDay} = App.logic.format;
-const S = App.data.state, visEv = App.data.visEv, ready = App.data.ready;
-const {$, h, skeleton, emptyBox} = App.ui.dom;
-const V = App.ui.view;
+const S = App.data.state, visEv = App.data.visEv, visTd = App.data.visTd, ready = App.data.ready;
+const {$, h, ICON_CHECK, skeleton, emptyBox} = App.ui.dom;
+const V = App.ui.view, filter = App.ui.filter;
 const openSheet = (...a) => App.ui.sheet.open(...a);
 
-function evBlock(e){
+// opts：{q 高亮关键词, showDate 在说明行前加日期（搜索结果用）}
+function evBlock(e, opts){
+  const o = opts || {}, t = App.clock.today();
   const end = e.time ? m2hm(endMin(e)) : "";
+  const extra = [o.showDate ? relDay(e.date, t) : "", e.project, e.note, e.source === "chat" ? "Claude 代记" : ""].filter(Boolean).join("  ");
+  const bell = filter.bellTag(e, "event", "bell-in");
   const b = h("button",{class:"ev",type:"button",style:"background:"+projColor(e.project),onclick:()=>openSheet("event",e)},
     h("span",{class:"et"}, e.time || "全天", end ? h("small",null,"至 "+end) : null),
-    h("span",{class:"eb"}, h("span",{class:"en"},e.title),
-      (e.project || e.note || e.source === "chat") ? h("span",{class:"ex",style:"display:block"},[e.project, e.note, e.source === "chat" ? "Claude 代记" : ""].filter(Boolean).join("  ")) : null));
-  if (S.fresh.has(e.id)) b.classList.add("fresh");
+    h("span",{class:"eb"}, h("span",{class:"en"}, o.q ? filter.hl(e.title, o.q) : e.title),
+      (extra || bell) ? h("span",{class:"ex",style:"display:block"}, o.q ? filter.hl(extra, o.q) : extra, extra && bell ? "  " : null, bell) : null));
+  if (S.fresh.has(e.id) || V.flash.has(e.id)) b.classList.add("fresh");
   return b;
 }
-function groupByDay(){
-  const byDay = {};
-  for (const e of visEv()) (byDay[e.date] = byDay[e.date] || []).push(e);
-  return byDay;
+// 日程页的截止行：圆形勾选框可以直接勾掉（划线、停顿后移出，需求澄清 #38），点标题打开编辑
+function deadlineRow(x){
+  const row = h("div",{class:"deadline"+(x.done?" done":"")+(S.fresh.has(x.id) || V.flash.has(x.id) ? " fresh":""),"data-id":x.id});
+  const ck = h("button",{class:"ck",type:"button","aria-pressed":x.done?"true":"false","aria-label":"完成："+x.title}, h("span",{html:ICON_CHECK}));
+  ck.onclick = () => App.ui.todos.toggleInList(x, row);
+  row.append(ck, h("button",{class:"dt",type:"button",onclick:()=>openSheet("todo",x)}, h("span",{class:"tt"},x.title)), h("span",{class:"dk"},"截止"));
+  return row;
 }
-function renderWeek(t, byDay){
-  const d0 = parse(V.weekStart), d6 = parse(addDays(V.weekStart,6));
-  $("wk-title").textContent = (d0.getMonth()+1)+"月" + (V.weekStart === mondayOf(t) ? " 本周" : (d0.getDate()+"日–"+(d6.getMonth()+1)+"月"+d6.getDate()+"日"));
+function groupByDay(){
+  const ev = {}, dl = {};
+  for (const e of visEv().filter(filter.inScope)) (ev[e.date] = ev[e.date] || []).push(e);
+  for (const x of visTd().filter(x => x.due && !x.done && filter.inScope(x))) (dl[x.due] = dl[x.due] || []).push(x);
+  return {ev, dl};
+}
+// 标题：本周“10月 本周”；别的周“11月 第1周”（按这一周的周四算属于哪个月、第几周）
+function weekTitle(t){
+  const thu = parse(addDays(V.weekStart, 3));
+  if (V.weekStart === mondayOf(t)) return (thu.getMonth()+1) + "月 本周";
+  return (thu.getMonth()+1) + "月 第" + Math.ceil(thu.getDate() / 7) + "周";
+}
+function renderWeek(t, g){
+  const title = weekTitle(t), away = V.weekStart !== mondayOf(t);
+  $("wk-title").textContent = title;
+  $("wk-title").setAttribute("aria-label", title + (away ? "，点按回到今天" : ""));
+  $("wk-today").hidden = !away;
   const wk = $("week"); wk.textContent = "";
   for (let i = 0; i < 7; i++){
-    const k = addDays(V.weekStart, i), d = parse(k);
-    const dots = h("span",{class:"dots"});
-    (byDay[k] || []).slice(0, C.WEEK_DOTS_MAX).forEach(e => dots.append(h("b",{style:"background:"+projColor(e.project)})));
-    wk.append(h("button",{type:"button",class:"day"+(k===t?" today":"")+(k===V.selDay?" sel":""),"aria-label":relDay(k, t)+((byDay[k]||[]).length?"，"+byDay[k].length+" 项":""),"aria-pressed":k===V.selDay?"true":"false",
+    const k = addDays(V.weekStart, i), d = parse(k), evs = g.ev[k] || [], dls = g.dl[k] || [];
+    const dots = h("span",{class:"dots","aria-hidden":"true"});
+    evs.slice(0, C.WEEK_DOTS_MAX).forEach(e => dots.append(h("b",{style:"background:"+projColor(e.project)})));
+    if (dls.length) dots.append(h("i",{class:"dl"}));
+    const say = [evs.length ? evs.length + " 项日程" : "", dls.length ? dls.length + " 件截止" : ""].filter(Boolean).join("、");
+    wk.append(h("button",{type:"button",class:"day"+(k===t?" today":"")+(k===V.selDay?" sel":""),"aria-label":relDay(k, t)+(say?"，"+say:""),"aria-pressed":k===V.selDay?"true":"false",
       onclick:()=>{ V.selDay = k; renderSched(); }},
       h("span",{class:"w"},WK[d.getDay()].slice(1)), h("span",{class:"n"},d.getDate()), dots));
   }
 }
-function renderDay(t, byDay){
+function renderDay(t, g){
   const dl = $("day-list"); dl.textContent = "";
   dl.append(h("div",{class:"dhead"+(V.selDay===t?" is-today":"")}, relDay(V.selDay, t)));
   if (!ready()){ dl.append(...skeleton(2)); return; }
-  const list = (byDay[V.selDay] || []).slice().sort(byTime);
-  if (!list.length) dl.append(emptyBox("这一天还没有安排", h("button",{class:"linkbtn",type:"button",style:"display:block;margin-top:4px",onclick:()=>openSheet("event",null,V.selDay)},"给这天记一件事")));
-  else list.forEach(e => dl.append(evBlock(e)));
+  const list = (g.ev[V.selDay] || []).slice().sort(byTime), dls = g.dl[V.selDay] || [];
+  if (!list.length && !dls.length) dl.append(emptyBox("这一天还没有安排", h("button",{class:"linkbtn",type:"button",style:"display:block;margin-top:4px",onclick:()=>openSheet("event",null,V.selDay)},"给这天记一件事")));
+  list.forEach(e => dl.append(evBlock(e)));
+  dls.forEach(x => dl.append(deadlineRow(x)));
 }
 function renderUpcoming(t){
   const up = $("up-list"); up.textContent = "";
   if (!ready()){ up.append(...skeleton(2)); return; }
-  const after = visEv().filter(e => e.date > (V.selDay > t ? V.selDay : t) && e.date !== V.selDay).sort(byTime).slice(0, C.UPCOMING_MAX);
+  const after = visEv().filter(e => filter.inScope(e) && e.date > (V.selDay > t ? V.selDay : t) && e.date !== V.selDay).sort(byTime).slice(0, C.UPCOMING_MAX);
   $("up-meta").textContent = after.length ? after.length+" 项" : "";
   if (!after.length){ up.append(emptyBox("后面还没有安排", "以后的日程会按日期排在这里。")); return; }
   let cur = null;
@@ -2146,25 +2584,33 @@ function renderUpcoming(t){
   }
 }
 function renderSched(){
-  const t = App.clock.today(), byDay = groupByDay();
-  renderWeek(t, byDay);
-  renderDay(t, byDay);
+  const t = App.clock.today(), g = groupByDay();
+  renderWeek(t, g);
+  filter.render("sched-filters");
+  renderDay(t, g);
   renderUpcoming(t);
 }
+// 翻周：保持选中的星期几（TC-SCHED-03）
+function shiftWeek(n){ V.weekStart = addDays(V.weekStart, 7 * n); V.selDay = addDays(V.selDay, 7 * n); renderSched(); }
+function backToToday(){ const t = App.clock.today(); V.weekStart = mondayOf(t); V.selDay = t; renderSched(); $("wk-title").focus(); }
 function init(){
-  $("wk-prev").onclick = () => { V.weekStart = addDays(V.weekStart,-7); V.selDay = V.weekStart; renderSched(); };
-  $("wk-next").onclick = () => { V.weekStart = addDays(V.weekStart,7); V.selDay = V.weekStart; renderSched(); };
+  $("wk-prev").onclick = () => shiftWeek(-1);
+  $("wk-next").onclick = () => shiftWeek(1);
+  $("wk-today").onclick = backToToday;
+  $("wk-title").onclick = backToToday;
 }
 
-App.ui.schedule = {render: renderSched, evBlock, init};
+App.ui.schedule = {render: renderSched, evBlock, deadlineRow, init};
 })();
 // ==== src/scripts/ui/todos.js ====
 (function(){
-// 职责：“待办”视图：项目筛选胶囊、未完成 + 今天完成的列表、折叠的更早已完成；row() 生成一行待办（勾选、标签），
-//       toggle() 是勾选的统一入口（今天视图的大卡片也用）：写入后提示“今天第 N 件”并可撤销；列表里勾选时先播完划线动画再重排。
+// 职责：“待办”视图：项目筛选胶囊（与日程页共用）、未完成 + 今天完成的列表、折叠的更早已完成；row() 生成一行待办
+//       （勾选、项目、截止、铃铛标签，可高亮搜索关键词），toggle() 是勾选的统一入口（今天视图的大卡片、日程页截止行也用）：
+//       写入后提示“今天第 N 件”并可撤销；toggleInList() 在列表里勾选时先播完划线动画再重排。
+//       搜索、最近删除、运行记录和导出分别在 ui/search.js、ui/trash.js、ui/backup.js，这里按顺序调用。
 // 依赖：core/const.js、core/date.js、logic/items.js、logic/projects.js、logic/sort.js、logic/format.js、
-//       data/state.js、data/write.js、ui/dom.js、ui/view-state.js、ui/toast.js
-// 运行时调用：ui/sheet.js、App.clock
+//       data/state.js、data/write.js、ui/dom.js、ui/view-state.js、ui/toast.js、ui/filter.js
+// 运行时调用：ui/sheet.js、ui/search.js、ui/trash.js、App.clock
 App.ui = App.ui || {};
 
 const C = App.core.C;
@@ -2174,7 +2620,7 @@ const {sortTodos} = App.logic.sort;
 const {dueText} = App.logic.format;
 const S = App.data.state, visTd = App.data.visTd, ready = App.data.ready, write = App.data.write;
 const {$, h, ICON_CHECK, skeleton, emptyBox} = App.ui.dom;
-const V = App.ui.view, toast = App.ui.toast;
+const V = App.ui.view, toast = App.ui.toast, filter = App.ui.filter;
 const {dayDiff} = App.core.date;
 const openSheet = (...a) => App.ui.sheet.open(...a);
 
@@ -2186,7 +2632,7 @@ function toggle(x, done){
     toast.show("完成了，今天第 "+n+" 件", "撤销", () => toggle(x, false), C.TOAST_UNDO_MS);
   }
 }
-// 列表里勾选：先让这一行播完划线动画（holdUntil 期间暂缓重绘），再重排
+// 列表里勾选：先让这一行（待办行或日程页截止行）播完划线动画（holdUntil 期间暂缓重绘），再重排
 function toggleInList(x, li){
   const done = !x.done;
   li.classList.toggle("done", done);
@@ -2195,9 +2641,10 @@ function toggleInList(x, li){
   toggle(x, done);
 }
 
-function todoRow(x){
-  const t = App.clock.today();
-  const li = h("li",{class:"td"+(x.done?" done":"")+(x.important?" imp":"")+(S.fresh.has(x.id)?" fresh":""),"data-id":x.id});
+// opts：{q 高亮搜索关键词}
+function todoRow(x, opts){
+  const o = opts || {}, t = App.clock.today();
+  const li = h("li",{class:"td"+(x.done?" done":"")+(x.important?" imp":"")+(S.fresh.has(x.id) || V.flash.has(x.id) ?" fresh":""),"data-id":x.id});
   const ck = h("button",{class:"ck",type:"button","aria-pressed":x.done?"true":"false","aria-label":(x.done?"标为未完成：":"完成：")+x.title}, h("span",{html:ICON_CHECK}));
   ck.onclick = () => toggleInList(x, li);
   const tags = h("span",{class:"tags"});
@@ -2206,27 +2653,19 @@ function todoRow(x){
     const n = dayDiff(x.due, t);
     tags.append(h("span",{class:"tag"+(n<0?" over":n===0?" due-today":"")}, dueText(x.due, t)));
   }
+  const bell = filter.bellTag(x, "todo");
+  if (bell) tags.append(bell);
   if (x.source === "chat") tags.append(h("span",{class:"tag ai"},"Claude 代记"));
-  const body = h("button",{class:"tb",type:"button",onclick:()=>openSheet("todo",x)}, h("span",{class:"tt"},x.title), tags.childNodes.length ? tags : null);
+  if (o.q && x.note) tags.append(h("span",{class:"tag note"}, filter.hl(x.note, o.q)));
+  const body = h("button",{class:"tb",type:"button",onclick:()=>openSheet("todo",x)}, h("span",{class:"tt"}, o.q ? filter.hl(x.title, o.q) : x.title), tags.childNodes.length ? tags : null);
   li.append(ck, body);
   return li;
 }
-function renderFilters(){
-  const f = $("filters"); f.textContent = "";
-  const ps = [...new Set(visTd().map(x => x.project).filter(Boolean))];
-  if (V.projFilter && !ps.includes(V.projFilter)) V.projFilter = null;
-  if (ps.length){
-    f.append(h("button",{class:"f",type:"button","aria-pressed":!V.projFilter?"true":"false",onclick:()=>{V.projFilter=null;renderTodos();}},"全部"));
-    ps.forEach(p => f.append(h("button",{class:"f",type:"button","aria-pressed":V.projFilter===p?"true":"false",onclick:()=>{V.projFilter=p;renderTodos();}},
-      h("span",{class:"sw",style:"background:"+projColor(p)}), p)));
-  }
-  f.hidden = !ps.length;
-}
 function renderTodos(){
-  renderFilters();
+  filter.render("filters");
   const ul = $("todos"); ul.textContent = "";
   const t = App.clock.today();
-  const inScope = x => !V.projFilter || x.project === V.projFilter;
+  const inScope = filter.inScope;
   const open = visTd().filter(x => !x.done && inScope(x));
   const list = sortTodos(visTd().filter(x => inScope(x) && (!x.done || isDoneOn(x, t))));
   $("td-meta").textContent = open.length ? open.length+" 件未完成" : "";
@@ -2241,122 +2680,285 @@ function renderTodos(){
   tg.textContent = V.showDone ? "收起已完成" : "已完成 "+old.length+" 件";
   dlist.hidden = !V.showDone || !old.length; dlist.textContent = "";
   if (V.showDone) old.slice(0, C.OLD_DONE_MAX).forEach(x => dlist.append(todoRow(x)));
+  App.ui.search.render();
+  App.ui.trash.render();
 }
 function init(){
   $("done-toggle").onclick = () => { V.showDone = !V.showDone; renderTodos(); };
 }
 
-App.ui.todos = {render: renderTodos, row: todoRow, toggle, init};
+App.ui.todos = {render: renderTodos, row: todoRow, toggle, toggleInList, init};
 })();
-// ==== src/scripts/ui/sheet.js ====
+// ==== src/scripts/ui/sheet-form.js ====
 (function(){
-// 职责：新建 / 编辑弹出层：一句话输入实时解析填表、日程 / 待办切换、项目胶囊；保存、删除都交给 data/write.js，
-//       本文件只负责读表单、开关弹出层和提示（删除后“已删除 + 撤销”，撤销即恢复）。
-// 依赖：core/const.js、core/date.js、logic/projects.js、logic/parse-quick.js、logic/format.js、
-//       data/state.js、data/write.js、ui/dom.js、ui/view-state.js、ui/toast.js
-// 运行时调用：App.clock
+// 职责：弹出层的表单状态（v3 T8，界面依据草图第 3 版 ②③、采纳结论 #3–#6 #16 #17、需求澄清 #22 #33 #37）：
+//       类型切换、快捷日期胶囊、提醒选项胶囊、识别结果胶囊（每项是按钮，点了展开对应字段；手动改过的加锁、不再被覆盖）、
+//       一句话识别停顿 250ms 后才填表。读表单交给 ui/sheet.js 保存。
+// 依赖：core/date.js、logic/remind.js、logic/format.js、logic/projects.js、logic/parse-quick.js、data/state.js、ui/dom.js、ui/view-state.js
+// 运行时调用：ui/sheet.js、App.clock
 App.ui = App.ui || {};
 
-const C = App.core.C;
-const {mondayOf} = App.core.date;
-const {projColor} = App.logic.projects;
+const R = App.logic.remind;
 const {relDay} = App.logic.format;
-const write = App.data.write;
+const {projColor} = App.logic.projects;
+const {addDays, mondayOf, parse} = App.core.date;
 const {$, h} = App.ui.dom;
-const V = App.ui.view, toast = App.ui.toast;
-const parseQuick = s => App.logic.parseQuick(s, App.clock.today(), App.data.projects());
+const V = App.ui.view;
+const RECOG_DEBOUNCE_MS = 250;
+const ICON_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 
-let sheetKind = "todo", editing = null, lastFocus = null;
+// kind：当前类型；origKind：编辑时原来的类型（切换类型时用来转换）；remind：undefined＝没动过（按默认规则）
+const F = {kind:"todo", origKind:null, editing:null, locks:new Set(), remind:undefined};
+let debounce = null;
+const today = () => App.clock.today();
+const hasTime = () => F.kind === "event" && !!$("f-time").value;
+
 function setKind(k){
-  sheetKind = k;
+  F.kind = k;
   document.querySelectorAll("#seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.k === k ? "true" : "false"));
-  document.querySelectorAll(".ev-only").forEach(el => el.hidden = k !== "event");
-  document.querySelectorAll(".td-only").forEach(el => el.hidden = k !== "todo");
+  document.querySelectorAll("#sheet .ev-only").forEach(el => el.hidden = k !== "event");
+  document.querySelectorAll("#sheet .td-only").forEach(el => el.hidden = k !== "todo");
+  $("push-1h").hidden = !(k === "event" && F.editing && F.origKind === "event");
   $("f-date-lab").textContent = k === "event" ? "日期" : "截止日期";
+  $("date-chips-lab").textContent = k === "event" ? "日期" : "截止";
+  $("f-note-lab").textContent = k === "event" ? "地点或备注" : "备注";
   $("f-date").required = k === "event";
+  if (k === "event" && !$("f-date").value) $("f-date").value = V.selDay || today();
+  refresh();
+}
+// 表单当前内容，按条目的样子组装（给提醒规则算默认值、标签用）
+function draft(){
+  const d = {date:$("f-date").value, time: F.kind === "event" ? $("f-time").value : "", due:$("f-date").value,
+    important:$("f-imp").checked, done:false, deletedAt:null, durationMin:Number($("f-dur").value) || 60};
+  if (F.remind !== undefined){ if (hasTime()) d.remindMin = F.remind; else d.remindDays = F.remind; }
+  else if (F.editing){ d.remindMin = F.editing.remindMin; d.remindDays = F.editing.remindDays; }
+  return d;
+}
+
+// —— 快捷日期（#22）——
+function dateChoices(){
+  const t = today(), dow = parse(t).getDay();
+  const list = [["今天", t], ["明天", addDays(t, 1)], ["周六", addDays(t, (6 - dow + 7) % 7)], ["下周一", addDays(mondayOf(t), 7)]];
+  if (F.kind === "todo") list.push(["不设", ""]);
+  return list;
+}
+function renderDateChips(){
+  const box = $("date-chips"); box.textContent = "";
+  const cur = $("f-date").value;
+  box.append(h("button",{type:"button",class:"opt",onclick:() => { const el = $("f-date"); el.focus(); try { el.showPicker && el.showPicker(); } catch(e){} }},"选日期…"));
+  for (const [label, val] of dateChoices()){
+    box.append(h("button",{type:"button",class:"opt","aria-pressed": cur === val ? "true" : "false",
+      onclick:() => { $("f-date").value = val; F.locks.add("date"); refresh(); }}, label));
+  }
+}
+
+// —— 提醒选项 ——
+function renderRemind(){
+  const box = $("remind-chips"); box.textContent = "";
+  const opts = R.options(F.kind, hasTime());
+  if (F.remind !== undefined && !opts.some(o => o.value === F.remind)) F.remind = undefined;   // 换了类型，原选项不适用
+  const noDate = !$("f-date").value;
+  const cur = noDate && F.kind === "todo" ? null : (F.remind !== undefined ? F.remind : R.currentValue(draft(), F.kind));
+  for (const o of opts){
+    box.append(h("button",{type:"button",class:"opt",role:"radio","aria-checked": o.value === cur ? "true" : "false", disabled: noDate && F.kind === "todo" ? true : null,
+      onclick:() => { F.remind = o.value; F.locks.add("remind"); refresh(); }}, o.label));
+  }
+}
+
+// —— 识别结果胶囊：每项是按钮，点了展开对应字段；锁住的加锁形图标 ——
+function chip(field, text, focusId){
+  const locked = F.locks.has(field);
+  return h("button",{type:"button",class:"v" + (locked ? " lock" : ""),
+    "aria-label": text + (locked ? "，已手动修改，不会被识别结果覆盖" : "，点按修改"),
+    onclick:() => { App.ui.sheet.openDetails(); const el = $(focusId); if (el) el.focus(); }},
+    locked ? h("span",{class:"lock-ico", html:ICON_LOCK}) : null, text);
+}
+function renderRecog(){
+  const box = $("recog");
+  const show = !F.editing && !!$("q").value.trim();
+  box.hidden = !show; box.textContent = "";
+  if (!show) return;
+  const d = draft(), t = today();
+  box.append(chip("kind", F.kind === "event" ? "日程" : "待办", "seg"));
+  if ($("f-date").value) box.append(chip("date", (F.kind === "todo" ? "截止 " : "") + relDay($("f-date").value, t), "f-date"));
+  if (F.kind === "event") box.append(chip("time", $("f-time").value || "全天", "f-time"));
+  if ($("f-proj").value.trim()) box.append(chip("project", $("f-proj").value.trim(), "f-proj"));
+  if (F.kind === "todo" && $("f-imp").checked) box.append(chip("important", "重要", "f-imp"));
+  const lab = R.label(d, F.kind);
+  if (lab || F.remind === null) box.append(chip("remind", lab ? "提醒：" + lab : "不提醒", "remind-chips"));
 }
 function fillProjChips(){
   const c = $("proj-chips"); c.textContent = "";
   const dl = $("proj-list"); dl.textContent = "";
   App.data.projects().forEach(p => {
     dl.append(h("option",{value:p}));
-    c.append(h("button",{class:"f",type:"button","aria-pressed":$("f-proj").value===p?"true":"false",onclick:()=>{ $("f-proj").value = $("f-proj").value === p ? "" : p; fillProjChips(); }},
+    c.append(h("button",{class:"f",type:"button","aria-pressed":$("f-proj").value===p?"true":"false",
+      onclick:()=>{ $("f-proj").value = $("f-proj").value === p ? "" : p; F.locks.add("project"); refresh(); }},
       h("span",{class:"sw",style:"background:"+projColor(p)}), p));
   });
 }
-function openSheet(kind, item, presetDate){
-  if (!App.data.isConnected()){ toast.show("数据未连接，暂时不能编辑"); return; }
-  lastFocus = document.activeElement;
-  editing = item || null;
-  $("sh-title").textContent = item ? (kind === "event" ? "编辑日程" : "编辑待办") : "新建";
-  $("q-wrap").hidden = !!item; $("seg").hidden = !!item;
+function refresh(){ renderDateChips(); renderRemind(); renderRecog(); fillProjChips(); }
+
+// —— 一句话识别：停顿 250ms 后填表，锁住的字段不动 ——
+function applyParse(){
+  const s = $("q").value;
+  if (!s.trim()){ refresh(); return; }
+  const p = App.logic.parseQuick(s, today(), App.data.projects());
+  const L = F.locks;
+  if (!L.has("kind") && p.kind !== F.kind){ F.kind = p.kind; setKind(p.kind); }
+  if (!L.has("title")) $("f-title").value = p.title;
+  if (!L.has("date")) $("f-date").value = p.date || (F.kind === "event" ? today() : "");
+  if (!L.has("time")) $("f-time").value = p.time;
+  if (!L.has("important")) $("f-imp").checked = p.important;
+  if (!L.has("project")) $("f-proj").value = p.project;
+  if (!L.has("remind")) F.remind = !p.remind ? undefined : p.remind.off ? null : p.remind.min != null ? p.remind.min : p.remind.days;
+  refresh();
+}
+function onQuickInput(){ clearTimeout(debounce); debounce = setTimeout(applyParse, RECOG_DEBOUNCE_MS); }
+function flushParse(){ if (debounce){ clearTimeout(debounce); debounce = null; applyParse(); } }
+
+// 打开弹出层时重置。kind 为 null 表示新建时让识别结果决定
+function reset(kind, item, presetDate){
+  F.editing = item || null; F.origKind = item ? kind : null; F.locks = new Set(); F.remind = undefined;
+  clearTimeout(debounce); debounce = null;
   $("q").value = "";
   $("f-title").value = item ? item.title : "";
   $("f-date").value = item ? (kind === "event" ? item.date : (item.due || "")) : (presetDate || "");
   $("f-time").value = item && item.time || "";
-  $("f-dur").value = String(item && item.durationMin || C.DEFAULT_DURATION_MIN);
-  if (![...$("f-dur").options].some(o => o.value === $("f-dur").value)) $("f-dur").value = String(C.DEFAULT_DURATION_MIN);
+  const dur = String(item && item.durationMin || 60), sel = $("f-dur");
+  if (![...sel.options].some(o => o.value === dur)) sel.append(h("option",{value:dur}, dur + " 分钟"));   // 不在选项里的时长也保留（PM-C②）
+  sel.value = dur;
   $("f-note").value = item && item.note || "";
   $("f-imp").checked = !!(item && item.important);
   $("f-proj").value = item && item.project || "";
   $("raw").hidden = !(item && item.rawText);
   $("raw").textContent = item && item.rawText ? "原话：" + item.rawText : "";
-  $("del").hidden = !item;
-  $("save").textContent = item ? "保存修改" : "加入";
+  // 电脑上不提麦克风（#37）
+  const coarse = globalThis.matchMedia && matchMedia("(pointer:coarse)").matches;
+  $("q").placeholder = coarse ? "说或写一句话，例如：明天下午3点和 NEOX 对片（点键盘上的麦克风，中文、韩文都能说）" : "写一句话，例如：明天下午3点和 NEOX 对片";
   setKind(kind || (presetDate ? "event" : "todo"));
-  fillProjChips();
+}
+function readForm(){
+  flushParse();
+  return {title:$("f-title").value.trim(), date:$("f-date").value, time: F.kind === "event" ? $("f-time").value : "", dur:$("f-dur").value,
+    project:$("f-proj").value.trim(), note:$("f-note").value.trim(), important:$("f-imp").checked, remind:F.remind, raw:$("q").value.trim()};
+}
+// 日程“推后 1 小时”：跨过零点时日期加一天（#22）
+function pushHour(){
+  const t = $("f-time").value; if (!t) return;
+  const [hh, mm] = t.split(":").map(Number); let m = hh * 60 + mm + 60, d = $("f-date").value;
+  if (m >= 1440){ m -= 1440; d = addDays(d, 1); }
+  $("f-time").value = String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+  $("f-date").value = d; refresh();
+}
+function init(){
+  document.querySelectorAll("#seg button").forEach(b => b.onclick = () => { F.locks.add("kind"); setKind(b.dataset.k); });
+  $("q").oninput = onQuickInput;
+  const lockOn = (id, field, ev) => $(id).addEventListener(ev, () => { F.locks.add(field); refresh(); });
+  lockOn("f-title", "title", "input"); lockOn("f-date", "date", "change"); lockOn("f-time", "time", "change");
+  lockOn("f-imp", "important", "change"); lockOn("f-proj", "project", "input");
+  $("push-1h").onclick = pushHour;
+}
+
+App.ui.sheetForm = {state: F, init, reset, readForm, refresh, setKind};
+})();
+// ==== src/scripts/ui/sheet.js ====
+(function(){
+// 职责：新建 / 编辑弹出层的开关与操作（v3 T8，界面依据草图第 3 版 ②③）：
+//       新建时只显示一句话输入框、右侧的“加入”和识别结果，细节默认折叠在“改细节”里；编辑时直接展开细节，可以切换类型；
+//       保存、类型互转、删除都交给 data/write.js；删除后提示“已删除 1 项”加“撤销”（不显示标题，#17）。
+//       弹出层打开时焦点困在里面（Tab 循环），Esc 或点遮罩关闭，焦点回到打开它的按钮。表单状态在 ui/sheet-form.js。
+// 依赖：core/const.js、core/date.js、logic/format.js、data/state.js、data/write.js、ui/dom.js、ui/view-state.js、ui/toast.js、ui/sheet-form.js
+// 运行时调用：ui/nav.js、App.clock
+App.ui = App.ui || {};
+
+const C = App.core.C;
+const {mondayOf} = App.core.date;
+const {relDay} = App.logic.format;
+const write = App.data.write;
+const {$} = App.ui.dom;
+const V = App.ui.view, toast = App.ui.toast, SF = App.ui.sheetForm, F = App.ui.sheetForm.state;
+let lastFocus = null;
+const isDesktop = () => globalThis.matchMedia && matchMedia("(min-width:960px)").matches;
+
+function openDetails(){
+  $("details").hidden = false; $("details-toggle").hidden = true;
+  $("details-toggle").setAttribute("aria-expanded", "true");
+  $("acts").hidden = false;
+}
+function openSheet(kind, item, presetDate){
+  if (!App.data.isConnected()){ toast.show("数据未连接，暂时不能编辑"); return; }
+  lastFocus = document.activeElement;
+  SF.reset(kind, item, presetDate);
+  const editingMode = !!item;
+  $("sh-title").textContent = editingMode ? (kind === "event" ? "编辑日程" : "编辑待办") : "记一件事";
+  $("q-wrap").hidden = editingMode;
+  $("details").hidden = !editingMode; $("details-toggle").hidden = editingMode;
+  $("details-toggle").setAttribute("aria-expanded", editingMode ? "true" : "false");
+  $("acts").hidden = !editingMode;
+  $("save").textContent = editingMode ? "保存修改" : "加入";
+  $("del").hidden = !editingMode;
+  $("del").textContent = kind === "event" ? "删除这条日程" : "删除这条待办";
   $("scrim").hidden = false; $("sheet").hidden = false;
-  requestAnimationFrame(() => { $("scrim").classList.add("on"); $("sheet").classList.add("on"); (item ? $("f-title") : $("q")).focus(); });
+  requestAnimationFrame(() => { $("scrim").classList.add("on"); $("sheet").classList.add("on"); (editingMode ? $("f-title") : $("q")).focus(); });
 }
 function closeSheet(){
   $("scrim").classList.remove("on"); $("sheet").classList.remove("on");
   setTimeout(() => { $("scrim").hidden = true; $("sheet").hidden = true; }, C.SHEET_ANIM_MS);
-  if (lastFocus && lastFocus.focus) lastFocus.focus();
+  if (lastFocus && lastFocus.focus && document.contains(lastFocus)) lastFocus.focus();
 }
 const isClosed = () => $("sheet").hidden;
 
-function readForm(){
-  return {title:$("f-title").value.trim(), date:$("f-date").value, time:$("f-time").value, dur:$("f-dur").value,
-    project:$("f-proj").value.trim(), note:$("f-note").value.trim(), important:$("f-imp").checked, raw:$("q").value.trim()};
+function setBusy(busy){
+  for (const id of ["save", "q-add"]){ const b = $(id); b.disabled = busy; }
+  $("save").textContent = busy ? "保存中…" : (F.editing ? "保存修改" : "加入");
+  $("q-add").textContent = busy ? "…" : "加入";
 }
 async function onSubmit(ev){
   ev.preventDefault();
-  const v = readForm();
-  if (!v.title){ $("f-title").focus(); return; }
-  if (sheetKind === "event" && !v.date){ $("f-date").focus(); return; }
-  $("save").disabled = true; $("save").textContent = "保存中…";
-  const r = await write.saveItem(sheetKind, editing, v);
-  if (r.ok && !editing && r.coll === "events"){ V.selDay = r.data.date; V.weekStart = mondayOf(r.data.date); }
-  $("save").disabled = false; $("save").textContent = editing ? "保存修改" : "加入";
-  if (r.ok){ closeSheet(); toast.show(editing ? "已保存" : (r.coll === "events" ? "已记下日程，"+relDay(r.data.date, App.clock.today()) : "已加入待办")); }
+  const v = SF.readForm();
+  if (!v.title){ openDetails(); $("f-title").focus(); return; }
+  if (F.kind === "event" && !v.date){ openDetails(); $("f-date").focus(); return; }
+  setBusy(true);
+  const editing = F.editing, converting = editing && F.kind !== F.origKind;
+  const r = converting ? await write.convert(F.origKind, editing, v) : await write.saveItem(F.kind, editing, v);
+  setBusy(false);
+  if (!r.ok) return;
+  if (r.coll === "events" && !editing){ V.selDay = r.data.date; V.weekStart = mondayOf(r.data.date); }
+  closeSheet();
+  if (converting) toast.show(r.coll === "events" ? "已改成日程" : "已改成待办");
+  else if (editing) toast.show("已保存");
+  else if (r.coll === "events") toast.show("已记下日程，" + relDay(r.data.date, App.clock.today()));
+  else if (!v.date && V.view === "today" && !isDesktop()) toast.show("已加入待办", "查看", () => App.ui.nav.go("todo"));   // PM-A⑥
+  else toast.show("已加入待办");
 }
 function onDelete(){
-  const it = editing, coll = write.collOf(sheetKind);
+  const it = F.editing, coll = write.collOf(F.origKind || F.kind);
   closeSheet();
   if (!it) return;
   write.softDelete(coll, it);
-  const title = it.title.length > C.DELETE_TITLE_CHARS ? it.title.slice(0, C.DELETE_TITLE_CHARS)+"…" : it.title;
-  toast.show("已删除“"+title+"”", "撤销", () => write.restore(coll, it), C.TOAST_UNDO_MS);
+  toast.show("已删除 1 项", "撤销", () => write.restore(coll, it), C.TOAST_UNDO_MS);
+}
+// 焦点困在弹出层里：Tab / Shift+Tab 循环
+function trapFocus(e){
+  if (e.key !== "Tab" || $("sheet").hidden) return;
+  const els = [...$("sheet").querySelectorAll("button, input, select, textarea, [tabindex]")].filter(el => !el.disabled && el.offsetParent !== null);
+  if (!els.length) return;
+  const first = els[0], last = els[els.length - 1];
+  if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
 }
 function init(){
-  document.querySelectorAll("#seg button").forEach(b => b.onclick = () => { setKind(b.dataset.k); if (b.dataset.k === "event" && !$("f-date").value) $("f-date").value = V.selDay || App.clock.today(); });
-  $("f-proj").oninput = fillProjChips;
-  $("q").oninput = () => {
-    const p = parseQuick($("q").value);
-    if (!$("q").value.trim()) return;
-    setKind(p.kind);
-    $("f-title").value = p.title; $("f-date").value = p.date; $("f-time").value = p.time;
-    $("f-imp").checked = p.important; $("f-proj").value = p.project; fillProjChips();
-  };
-  $("q").onkeydown = e => { if (e.key === "Enter"){ e.preventDefault(); $("sheet").requestSubmit(); } };
+  SF.init();
+  $("details-toggle").onclick = openDetails;
   $("cancel").onclick = closeSheet; $("scrim").onclick = closeSheet;
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); trapFocus(e); });
   $("del").onclick = onDelete;
   $("sheet").addEventListener("submit", onSubmit);
   $("plus").onclick = () => openSheet(null, null, V.view === "sched" ? V.selDay : null);
 }
 
-App.ui.sheet = {open: openSheet, close: closeSheet, isClosed, init};
+App.ui.sheet = {open: openSheet, close: closeSheet, isClosed, init, openDetails};
 })();
 // ==== src/scripts/ui/nav.js ====
 (function(){
@@ -2399,54 +3001,390 @@ App.ui.nav = {go, applyView, placeInd, init, initNet};
 })();
 // ==== src/scripts/ui/remind.js ====
 (function(){
-// 职责：【v3 预留，尚未实现】页面开着时的提醒：每次时钟 tick 检查到点的条目，在顶部弹提醒卡片
-//       （“知道了” / “10 分钟后再提醒”），并调用 platform/notify.js 响提示音。
-// 依赖：platform/notify.js、ui/dom.js
-// 运行时调用：data/write.js（写 notifiedFor / snoozeAt）、logic/remind.js、App.clock
+// 职责：页面开着时的提醒（v3 T6，界面依据草图第 3 版 ①A ①B、采纳结论 #1 #12、需求澄清 #3 #7 #31）。
+//       update() 用 logic/remind.js 算出现在该提醒的条目；新出现的响一声提示音、记运行日志。
+//       情况 A：被提醒的正好是“下一件事”且今天页看得见 → 由 ui/today.js 把下一件事卡片画成提醒状态（forItem 查询）；
+//       情况 B：其余的在抬头下方显示一张反色提醒卡片，只显示最早的一条，右上角标“+N”。
+//       “知道了”写 notifiedFor，“10 分钟后”写 snoozeAt（data/write.js）；别的设备确认后这里自动收起，并提示“已在别处确认”。
+// 依赖：core/date.js、logic/remind.js、logic/format.js、data/state.js、ui/dom.js、ui/view-state.js、ui/toast.js
+// 运行时调用：data/write.js、platform/notify.js、data/log.js、ui/render.js、App.clock
 App.ui = App.ui || {};
 
-/*
- * 计划接口：
- *   init()          在 app.js 里调用；订阅 App.clock 的 "tick" 和 "wake"
- *   check(now)      找出 remindAt（或 snoozeAt）≤ now 且 notifiedFor ≠ remindAt 的条目，逐个弹卡片
- *   卡片按钮：“知道了” → data/write.js 写 notifiedFor = remindAt；
- *             “10 分钟后再提醒” → 写 snoozeAt = now + 10 分钟
- *   提醒卡片的文案可以带完整标题（只在本机屏幕上显示）；推送文字要脱敏，见 platform/notify.js。
- */
-App.ui.remind = {
-  init(){},   // v3 实现
-};
+const R = App.logic.remind;
+const {relDay, dueText, startsText} = App.logic.format;
+const {hm2m, minOfDay} = App.core.date;
+const {$, h} = App.ui.dom;
+const V = App.ui.view, toast = App.ui.toast;
+const visEv = App.data.visEv, visTd = App.data.visTd, ready = App.data.ready;
+
+const ICON_BELL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>';
+const keyOf = d => d.kind + ":" + d.item.id + ":" + d.at;
+
+let current = [];              // 现在该提醒的：[{kind, item, at}]
+let shown = new Set();         // 本次打开页面后已经出过的（响过铃、做过入场动画）
+const handledHere = new Set(); // 在本机点过“知道了 / 10 分钟后”的
+let entering = new Set();      // 这一轮新出现的（做入场动画）
+
+// 每次重绘前调用：重新计算，处理新出现的和被别处确认的
+function update(){
+  if (!ready()){ current = []; return; }
+  const now = App.clock.now();
+  const next = R.dueList(visEv(), visTd(), now, 0);
+  const keys = new Set(next.map(keyOf));
+  const fresh = next.filter(d => !shown.has(keyOf(d)));
+  entering = new Set(fresh.map(keyOf));
+  if (fresh.length){
+    App.platform.notify.chime();
+    fresh.forEach(d => App.data.log.run("remind_shown", null, {coll: d.kind === "event" ? "events" : "todos", id: d.item.id}));
+  }
+  for (const k of shown){
+    if (!keys.has(k) && !handledHere.has(k)){
+      const [kind, id] = k.split(":");
+      const item = (kind === "event" ? visEv() : visTd()).find(x => x.id === id);
+      if (item && item.notifiedFor) toast.show("已在别处确认");
+    }
+  }
+  current = next;
+  fresh.forEach(d => shown.add(keyOf(d)));
+  shown = new Set([...shown].filter(k => keys.has(k)));
+}
+// 情况 A 用：这一条现在是否在提醒中，是就返回 {at}
+function forItem(kind, item){
+  const d = current.find(x => x.kind === kind && x.item.id === item.id);
+  return d ? {at: d.at} : null;
+}
+// 提醒卡片上的第一行文字
+function headline(d){
+  const t = App.clock.today(), x = d.item;
+  if (d.kind === "event"){
+    if (!x.time) return relDay(x.date, t).split(" ")[0] + " 全天";
+    const span = R.eventSpan(x), nowMs = App.clock.now();
+    const mins = Math.round((span.start - nowMs) / 60000);
+    return x.date === t ? startsText(mins, minOfDay(span.end)) : relDay(x.date, t) + " " + x.time;
+  }
+  return dueText(x.due, t);
+}
+function actions(d, cls){
+  return h("div",{class:"r-acts " + (cls || "")},
+    h("button",{type:"button",class:"ok",onclick: ev => { ev.stopPropagation(); ack(d); }},"知道了"),
+    h("button",{type:"button",class:"later",onclick: ev => { ev.stopPropagation(); snooze(d); }},"10 分钟后"));
+}
+function ack(d){ handledHere.add(keyOf(d)); App.data.write.ackReminder(d.kind, d.item, d.at); }
+function snooze(d){ handledHere.add(keyOf(d)); App.data.write.snoozeReminder(d.kind, d.item, d.at); toast.show("10 分钟后再提醒"); }
+const offline = () => globalThis.navigator && navigator.onLine === false;
+
+// 下一件事卡片进入提醒状态时要插的两部分（由 ui/today.js 调用）
+function decorateNext(kind, item){
+  const r = forItem(kind, item);
+  if (!r) return null;
+  const d = {kind, item, at: r.at};
+  return {
+    bell: h("span",{class:"bell-row"}, h("span",{class:"bell-ico", html:ICON_BELL}), "提醒：" + headline(d), offline() ? h("span",{class:"offline-tag"},"离线，提醒可能延迟") : null),
+    acts: actions(d),
+    isNew: entering.has(keyOf(d)),
+  };
+}
+
+// 情况 B：反色卡片。exclude：已经由下一件事卡片显示的那一条（{kind, id}）
+function renderCard(exclude){
+  const slot = $("remind"); if (!slot) return;
+  const list = current.filter(d => !(exclude && d.kind === exclude.kind && d.item.id === exclude.id));
+  slot.textContent = "";
+  if (!list.length) return;
+  const d = list[0], x = d.item;
+  const meta = [x.project, d.kind === "event" ? "日程" : "待办"].filter(Boolean).join("  ");
+  const card = h("div",{class:"remind-inv", role:"alert"},
+    h("span",{class:"bell-row"}, h("span",{class:"bell-ico", html:ICON_BELL}), headline(d),
+      offline() ? h("span",{class:"offline-tag"},"离线，提醒可能延迟") : null,
+      list.length > 1 ? h("span",{class:"more-n", "aria-label":"还有 " + (list.length - 1) + " 条提醒"},"+" + (list.length - 1)) : null),
+    h("span",{class:"rt"}, x.title),
+    meta ? h("span",{class:"rm"}, meta) : null,
+    actions(d));
+  if (entering.has(keyOf(d)) || slot.dataset.key !== keyOf(d)) card.classList.add("enter");
+  slot.dataset.key = keyOf(d);
+  slot.append(card);
+}
+
+// 今天页看得见吗（手机上在今天页，或者电脑上三栏同时显示）
+const todayVisible = () => V.view === "today" || (globalThis.matchMedia && matchMedia("(min-width:960px)").matches);
+
+function init(){
+  App.clock.on("wake", () => App.ui.render());
+}
+
+App.ui.remind = {init, update, forItem, decorateNext, renderCard, todayVisible, ICON_BELL};
 })();
 // ==== src/scripts/ui/theme.js ====
 (function(){
-// 职责：【v3 预留，尚未实现】深色 / 浅色切换：抬头右上角的圆形按钮，在“跟随系统 → 浅色 → 深色”之间切换，
-//       选择存在本机偏好 pv-theme；通过给 <html> 设 data-theme="light"|"dark"（跟随系统时去掉）生效，
-//       tokens.css 已经支持这两种写法。
-// 依赖：platform/prefs.js
+// 职责：深色 / 浅色切换（ADR-008）。抬头右上角的圆形按钮弹出黑色胶囊三选一（跟随系统 / 浅色 / 深色），浮层盖在内容上；
+//       选完立即生效、停 300ms 后收起；点外面或按 Esc 关闭，焦点回到按钮；方向键在三项间移动。
+//       两个维度：<html data-theme="light|dark">（跟随系统时不设）和 <html data-skin="bento">；偏好存 pv-theme、pv-skin。
+//       切换时给 <html> 临时加 .theme-anim，让颜色过渡 200ms（减少动效时不过渡）。
+// 依赖：core/const.js、platform/prefs.js、ui/dom.js
 App.ui = App.ui || {};
 
-/*
- * 计划接口：
- *   init()        启动时读 prefs.get(prefs.KEYS.theme, "system") 并应用；绑定按钮
- *   cycle()       system → light → dark → system，保存并应用
- *   apply(mode)   mode = "system" | "light" | "dark"
- */
-App.ui.theme = {
-  init(){},   // v3 实现
+const C = App.core.C;
+const prefs = App.platform.prefs;
+const {$} = App.ui.dom;
+
+const NAMES = {system:"跟随系统", light:"浅色", dark:"深色"};
+const ICONS = {
+  system: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>',
+  light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></svg>',
+  dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
 };
+let mode = "system", closeTimer = null, animTimer = null;
+const root = () => document.documentElement;
+const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const valid = (v, list, dflt) => list.includes(v) ? v : dflt;
+
+function apply(m, animate){
+  mode = valid(m, C.THEMES, "system");
+  if (animate && !reduced()){
+    root().classList.add("theme-anim");
+    clearTimeout(animTimer); animTimer = setTimeout(() => root().classList.remove("theme-anim"), C.THEME_FADE_MS + 50);
+  }
+  if (mode === "system") root().removeAttribute("data-theme"); else root().setAttribute("data-theme", mode);
+  const btn = $("theme-btn");
+  if (btn){ btn.innerHTML = ICONS[mode]; btn.setAttribute("aria-label", "外观：" + NAMES[mode]); }
+  document.querySelectorAll("#theme-pick [role=radio]").forEach(r => {
+    const on = r.dataset.mode === mode;
+    r.setAttribute("aria-checked", on ? "true" : "false");
+    r.tabIndex = on ? 0 : -1;
+  });
+}
+const isOpen = () => !$("theme-pick").hidden;
+function open(){
+  clearTimeout(closeTimer);
+  const pick = $("theme-pick");
+  pick.hidden = false; pick.classList.remove("on");
+  $("theme-btn").setAttribute("aria-expanded", "true");
+  requestAnimationFrame(() => { pick.classList.add("on"); (pick.querySelector("[aria-checked=true]") || pick.querySelector("[role=radio]")).focus(); });
+}
+function close(focusBtn){
+  clearTimeout(closeTimer);
+  const pick = $("theme-pick");
+  if (pick.hidden) return;
+  pick.classList.remove("on");
+  $("theme-btn").setAttribute("aria-expanded", "false");
+  closeTimer = setTimeout(() => { pick.hidden = true; }, reduced() ? 0 : C.THEME_CLOSE_MS);
+  if (focusBtn) $("theme-btn").focus();
+}
+function choose(m){
+  apply(m, true);
+  prefs.set(prefs.KEYS.theme, mode);
+  clearTimeout(closeTimer);
+  closeTimer = setTimeout(() => close(true), C.THEME_HOLD_MS);
+}
+function onKey(e){
+  if (!isOpen()) return;
+  if (e.key === "Escape"){ e.preventDefault(); close(true); return; }
+  const radios = [...document.querySelectorAll("#theme-pick [role=radio]")];
+  const i = radios.indexOf(document.activeElement);
+  if (i < 0) return;
+  const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+  if (step){ e.preventDefault(); radios[(i + step + radios.length) % radios.length].focus(); }
+}
+
+function init(){
+  root().setAttribute("data-skin", valid(prefs.get(prefs.KEYS.skin, "bento"), C.SKINS, "bento"));
+  apply(prefs.get(prefs.KEYS.theme, "system"), false);
+  $("theme-btn").onclick = e => { e.stopPropagation(); isOpen() ? close(true) : open(); };
+  document.querySelectorAll("#theme-pick [role=radio]").forEach(r => { r.onclick = e => { e.stopPropagation(); choose(r.dataset.mode); }; });
+  document.addEventListener("click", e => { if (isOpen() && !$("theme-pick").contains(e.target)) close(true); });
+  document.addEventListener("keydown", onKey);
+}
+
+App.ui.theme = {init, apply, open, close, current: () => mode};
+})();
+// ==== src/scripts/ui/search.js ====
+(function(){
+// 职责：待办页顶部的搜索：在标题、备注、原话里找，范围包括已完成的待办和过去的日程（不含已删除，不受项目筛选影响）。
+//       有结果时显示“N 条”并高亮关键词，结果替换掉原来的列表；没结果时显示“没找到”和“清空”按钮；清空或按 Esc 回到原列表。
+// 依赖：core/const.js、logic/search.js、data/state.js、ui/dom.js
+// 运行时调用：ui/todos.js、ui/schedule.js
+App.ui = App.ui || {};
+
+const C = App.core.C;
+const {search} = App.logic.search;
+const visEv = App.data.visEv, visTd = App.data.visTd;
+const {$, h} = App.ui.dom;
+
+let q = "";
+const active = () => !!q.trim();
+function clear(){ q = ""; $("search").value = ""; render(); $("search").focus(); }
+
+function render(){
+  const box = $("search-res"), main = $("td-main");
+  box.textContent = "";
+  box.hidden = !active(); main.hidden = active();
+  if (!active()) return;
+  const res = search(visEv(), visTd(), q, C.SEARCH_MAX);
+  if (!res.length){
+    box.append(h("div",{class:"empty search-none"}, h("strong",null,"没找到"), "换个词试试，也可以在聊天里让 Claude 帮你找。",
+      h("button",{class:"btn-clear",type:"button",onclick:clear},"清空")));
+    return;
+  }
+  box.append(h("div",{class:"res-n",role:"status"}, h("span",null, res.length + " 条"), h("button",{class:"btn-clear",type:"button",onclick:clear},"清空")));
+  const ul = h("ul",{class:"todos"}), ev = h("div",{class:"evlist"});
+  for (const r of res){
+    if (r.kind === "todo") ul.append(App.ui.todos.row(r.item, {q}));
+    else ev.append(App.ui.schedule.evBlock(r.item, {q, showDate:true}));
+  }
+  if (ul.childNodes.length) box.append(ul);
+  if (ev.childNodes.length) box.append(ev);
+}
+function init(){
+  $("search").oninput = () => { q = $("search").value; render(); };
+  $("search").onkeydown = e => { if (e.key === "Escape" && active()){ e.preventDefault(); e.stopPropagation(); clear(); } };
+}
+
+App.ui.search = {init, render, clear, active};
+})();
+// ==== src/scripts/ui/trash.js ====
+(function(){
+// 职责：待办页的“最近删除”：默认折叠成一行色块“最近删除 N 件  30 天后自动清理 ›”（采纳结论 #9），展开后每条显示
+//       标题、类型、“N 天前删除”和“恢复”按钮；恢复时这一行先淡出，条目回到原位并用 .fresh 短暂高亮（TC-DEL-09）。
+//       断网或没连上数据时“恢复”置灰（TC-DEL-19），恢复网络后自动可用。
+// 依赖：core/const.js、data/state.js、data/write.js、data/archive.js、ui/dom.js、ui/view-state.js
+// 运行时调用：ui/render.js、App.clock
+App.ui = App.ui || {};
+
+const C = App.core.C;
+const write = App.data.write, archive = App.data.archive;
+const {$, h} = App.ui.dom;
+const V = App.ui.view;
+
+let open = false;
+const online = () => navigator.onLine !== false && App.data.isConnected();
+function ago(ms){
+  const d = Math.floor((App.clock.now() - ms) / C.DAY_MS);
+  return d <= 0 ? "今天删除" : d + " 天前删除";
+}
+function restore(r, row){
+  row.classList.add("leaving");
+  setTimeout(() => {
+    const id = r.item.id;
+    V.flash.add(id);
+    setTimeout(() => { V.flash.delete(id); }, C.FRESH_MS);
+    write.restore(r.coll, r.item);
+  }, 240);   // 与 todo.css 的 .leaving 动画 .24s 一致
+}
+function render(){
+  const btn = $("trash-toggle"), list = $("trash-list"), items = archive.trash();
+  btn.hidden = !items.length;
+  if (!items.length){ open = false; list.hidden = true; list.textContent = ""; return; }
+  btn.textContent = "";
+  btn.append(h("span",null, h("b",null,"最近删除 " + items.length + " 件"), "  " + C.TRASH_KEEP_DAYS + " 天后自动清理"), h("span",{class:"chev","aria-hidden":"true"},"›"));
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+  list.hidden = !open; list.textContent = "";
+  if (!open) return;
+  const ok = online();
+  if (!ok) list.append(h("p",{class:"trash-off"},"网络断开了，恢复网络后才能恢复条目。"));
+  for (const r of items){
+    const row = h("div",{class:"trash-row"},
+      h("span",{class:"tr-b"}, h("span",{class:"tr-t"}, r.item.title || "（没有标题）"),
+        h("span",{class:"tr-m"}, (r.kind === "event" ? "日程" : "待办") + " · " + ago(r.item.deletedAt))),
+      h("button",{class:"restore",type:"button",disabled:!ok,"aria-label":"恢复：" + (r.item.title || "没有标题的条目")},"恢复"));
+    row.querySelector(".restore").onclick = () => restore(r, row);
+    list.append(row);
+  }
+}
+function init(){
+  $("trash-toggle").onclick = () => { open = !open; render(); };
+  addEventListener("online", render); addEventListener("offline", render);
+}
+
+App.ui.trash = {init, render};
+})();
+// ==== src/scripts/ui/backup.js ====
+(function(){
+// 职责：待办面板底部的“导出备份（JSON）”和“运行记录”。
+//       导出：读出 events、todos、logs 全部数据（含已删除条目，需求澄清 #19），交给 platform/download.js 保存为 .json；
+//             用户拒绝或这里不能下载时给出提示，不重试。
+//       运行记录（只读）：展开时读取最近 7 天所有设备的日志，列出时间、动作、集合和编号，不显示任何内容（ADR-010）。
+// 依赖：core/const.js、core/date.js、data/archive.js、platform/download.js、ui/dom.js、ui/toast.js
+// 运行时调用：App.clock
+App.ui = App.ui || {};
+
+const C = App.core.C;
+const {pad} = App.core.date;
+const archive = App.data.archive, download = App.platform.download;
+const {$, h} = App.ui.dom;
+const toast = App.ui.toast;
+
+const SAVE_ERR = {
+  declined: "已取消导出",
+  rate_limited: "已经有一个下载在等你确认",
+  too_large: "备份太大，暂时导不出来",
+  format: "这里不允许下载 JSON 文件",
+  unavailable: "这里不能下载文件，可以在 claude.ai 网页里打开再导出",
+};
+async function exportBackup(){
+  const btn = $("export");
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = "正在准备备份…";
+  try {
+    let data;
+    try { data = await archive.backup(App.clock.now()); }
+    catch(e){ toast.show("没读到数据，检查网络后再试"); return; }
+    const filename = "planner-backup-" + App.clock.today() + ".json";
+    try {
+      await download.save({filename, data: JSON.stringify(data, null, 2)});
+      toast.show("已导出备份：" + data.counts.events + " 项日程、" + data.counts.todos + " 件待办");
+    } catch(e){ toast.show(SAVE_ERR[e && e.code] || "没导出成功"); }
+  } finally { btn.disabled = false; btn.textContent = "导出备份（JSON）"; }
+}
+
+const ACT = {create:"新建", update:"修改", done:"完成", undone:"取消完成", reschedule:"改期", delete:"删除", restore:"恢复",
+  purge:"彻底清理", convert:"改类型", ack:"知道了", snooze:"稍后提醒", save_failed:"保存失败", timeout:"超时",
+  disconnect:"断线", reconnect:"重新连上", remind_shown:"弹出提醒", remind_ack:"提醒：知道了", remind_snooze:"提醒：10 分钟后"};
+const COLL = {events:"日程", todos:"待办", logs:"日志"};
+const when = ms => { const d = new Date(ms); return pad(d.getMonth()+1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()); };
+
+let logsOpen = false;
+async function renderLogs(){
+  const list = $("log-list");
+  $("log-toggle").setAttribute("aria-expanded", logsOpen ? "true" : "false");
+  list.hidden = !logsOpen; list.textContent = "";
+  if (!logsOpen) return;
+  list.append(h("p",{class:"log-note"},"读取中…"));
+  let rows;
+  try { rows = await archive.recentLogs(App.clock.today(), C.LOG_VIEW_DAYS); }
+  catch(e){ list.textContent = ""; list.append(h("p",{class:"log-note"},"读不到运行记录，检查网络后再试。")); return; }
+  if (!logsOpen) return;
+  list.textContent = "";
+  if (!rows.length){ list.append(h("p",{class:"log-note"},"最近 " + C.LOG_VIEW_DAYS + " 天没有记录。")); return; }
+  const ol = h("ol",{class:"log-rows","aria-label":"最近 " + C.LOG_VIEW_DAYS + " 天的运行记录"});
+  for (const r of rows){
+    ol.append(h("li",{class:"log-row" + (r.kind === "run" ? " run" : "")},
+      h("span",{class:"lg-t"}, when(r.t)), h("span",{class:"lg-a"}, ACT[r.act] || r.act),
+      h("span",{class:"lg-c"}, COLL[r.coll] || r.coll), h("span",{class:"lg-i"}, r.id ? r.id.slice(0, 10) : "")));
+  }
+  list.append(ol, h("p",{class:"log-note"},"只记操作类型和编号，不记标题、备注等内容。"));
+}
+function init(){
+  $("export").onclick = exportBackup;
+  $("log-toggle").onclick = () => { logsOpen = !logsOpen; renderLogs(); };
+}
+
+App.ui.backup = {init, exportBackup};
 })();
 // ==== src/scripts/app.js ====
 (function(){
 // 职责：启动入口：选定存储适配器（全项目唯一一处配置）、创建统一时钟、绑定各模块事件、首屏渲染、连接数据、启动时钟。
 //       App.BUILD 由 build.py 在包头写入：发布版为 {storage:"claude-db"}，测试页为 {storage:"mock-db"}。
 // 依赖：core/clock.js、platform/index.js、platform/env.js、platform/prefs.js、platform/claude-db.js、data/bus.js、data/store.js、data/log.js、data/write.js、data/subscribe.js、
-//       ui/view-state.js、ui/render.js、ui/today.js、ui/schedule.js、ui/todos.js、ui/sheet.js、ui/nav.js、ui/remind.js、ui/theme.js
+//       ui/view-state.js、ui/render.js、ui/today.js、ui/schedule.js、ui/todos.js、ui/sheet.js、ui/nav.js、ui/remind.js、ui/theme.js、
+//       platform/download.js、ui/search.js、ui/trash.js、ui/backup.js
 
 // —— 存储适配器配置 ——
 // 可选值：App.platform.storage 里注册过的名字。"claude-db"（claude.ai）、"mock-db"（测试页）；
 // 以后独立服务器版加 "rest" 适配器后在这里切换。
 const STORAGE = (App.BUILD && App.BUILD.storage) || "claude-db";
 App.data.store.use(App.platform.storage[STORAGE]());
+// —— 下载适配器配置 ——（"claude"：claude.ai 的 downloads 能力；"mock"：测试页的模拟实现）
+App.platform.download.use((App.BUILD && App.BUILD.download) || "claude");
 
 // —— 统一时钟（全页面只有这一个“现在”）——
 App.clock = App.core.clock.create(App.platform.env);
@@ -2462,7 +3400,10 @@ App.ui.sheet.init();
 App.ui.nav.init();
 App.ui.schedule.init();
 App.ui.nav.initNet();
-App.ui.theme.init();           // v3 预留
+App.ui.theme.init();           // 深浅色（ADR-008）
+App.ui.search.init();          // 待办页搜索
+App.ui.trash.init();           // 最近删除
+App.ui.backup.init();          // 导出备份、运行记录
 App.ui.remind.init();          // v3 预留
 
 App.clock.on("daychange", ({prev, day}) => { App.ui.viewState.onDayChange(prev, day); App.ui.render(); });

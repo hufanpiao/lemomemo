@@ -1,0 +1,38 @@
+/* 组件：提醒（v3 T6）。情况 A：“下一件事”卡片的提醒状态 .next.reminding；情况 B：抬头下方的反色卡片 .remind-inv。
+   动效参数来自界面预审采纳结论（UI-4）：入场下移 12px 加淡入 240ms，铃铛摆一次 400ms；减少动效时只留 ≤120ms 的淡入。
+   依赖：tokens.css（--inv、--on-inv、--yellow、--on-yellow、--on-p、--r-panel）、next-card.css。 */
+.remind-slot:empty{display:none}
+.bell-row{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:600;flex-wrap:wrap}
+.bell-ico{display:inline-grid;place-items:center;width:16px;height:16px}
+.bell-ico svg{width:16px;height:16px}
+.offline-tag{font-size:12px;font-weight:500;border-radius:999px;padding:0 8px;background:var(--panel-2);color:var(--ink)}
+.more-n{margin-left:auto;font-size:12px;font-weight:700}
+.r-acts{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
+.r-acts button{border:0;border-radius:999px;min-height:44px;padding:0 18px;font-weight:600;font-size:15px;cursor:pointer}
+
+/* 情况 A：下一件事卡片进入提醒状态 */
+.next.reminding{cursor:pointer}
+.next.reminding .r-acts .ok{background:var(--on-p);color:var(--p1)}
+.next.reminding .r-acts .later{background:transparent;color:var(--on-p);box-shadow:inset 0 0 0 1.5px currentColor}
+.next[role=button]{cursor:pointer}
+.next[role=button]:focus-visible{outline:2px solid var(--focus);outline-offset:3px}
+
+/* 情况 B：反色提醒卡片 */
+.remind-inv{background:var(--inv);color:var(--on-inv);border-radius:var(--r-panel);padding:16px 18px;display:flex;flex-direction:column;gap:4px}
+.remind-inv .rt{font-size:18px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+.remind-inv .rm{font-size:14px;color:var(--on-inv)}
+.remind-inv .r-acts .ok{background:var(--yellow);color:var(--on-yellow)}
+.remind-inv .r-acts .later{background:transparent;color:var(--on-inv);box-shadow:inset 0 0 0 1.5px currentColor}
+.remind-inv .offline-tag{background:var(--on-inv);color:var(--inv)}
+
+/* 入场与铃铛（只在新出现时播放一次） */
+@media (prefers-reduced-motion:no-preference){
+  .remind-inv.enter,.next.reminding.enter{animation:remind-in .24s cubic-bezier(.22,1,.36,1)}
+  .enter .bell-ico{animation:bell-swing .4s ease-in-out 1;transform-origin:50% 10%}
+}
+@media (prefers-reduced-motion:reduce){
+  .remind-inv.enter,.next.reminding.enter{animation:remind-fade .12s linear}
+}
+@keyframes remind-in{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+@keyframes remind-fade{from{opacity:0}to{opacity:1}}
+@keyframes bell-swing{0%,100%{transform:rotate(0)}25%{transform:rotate(8deg)}75%{transform:rotate(-8deg)}}

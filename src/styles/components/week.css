@@ -1,4 +1,5 @@
-/* 组件：日程页的一周日期条（今天描边、选中实心、彩色小圆点）。
+/* 组件：日程页的一周日期条（今天描边、选中实心；彩色小圆点＝有日程，墨色短横线 8×2px＝有待办截止，采纳结论 #7）、
+   可点的周标题、周条下方居中的“回到今天”（#8）。
    依赖：tokens.css。 */
 /* 日期条 */
 .week{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
@@ -7,7 +8,11 @@
 .day .n{font-family:var(--f-num);font-weight:700;font-size:16px;width:34px;height:34px;display:grid;place-items:center;border-radius:50%}
 .day.today .n{box-shadow:inset 0 0 0 2px var(--ink)}
 .day.sel .n{background:var(--ink);color:var(--panel)}
-.day .dots{display:flex;gap:3px;height:6px}
+.day .dots{display:flex;gap:3px;height:6px;align-items:center}
 .day .dots b{width:6px;height:6px;border-radius:50%}
 .day:hover .n{background:var(--panel-2)}
 .day.sel:hover .n{background:var(--ink)}
+.day .dots .dl{display:block;width:8px;height:2px;border-radius:1px;background:var(--ink)}
+.wk-title{border:0;background:none;padding:0;font:inherit;color:inherit;min-height:44px;text-align:left}
+.back-today{align-self:center;border:0;border-radius:999px;min-height:44px;padding:0 18px;font-size:14px;background:var(--ink);color:var(--panel);font-weight:500}
+.back-today[hidden]{display:none}
