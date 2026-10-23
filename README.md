@@ -58,6 +58,7 @@ python build/backup.py v3开发前
 ```
 
 - 源码会打包到项目外的 `D:\claude code\待办APP-备份\源码\`；用 `git clone <bundle 文件> 待办APP` 就能完整恢复。
+- **每天约 23:39 自动同步**一次云端数据到 `data/backups/<日期>_每日/`，保留 30 天（定时任务 `planner-daily-snapshot`，要求电脑上的 Claude App 开着）。
 - `data/backups/` 是真实个人数据，不进 git。
 
 ## 测试
