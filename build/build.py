@@ -2,9 +2,11 @@
 #   --target claude（默认）：生成发布用单文件 dist/planner.html，以及两个本地测试页
 #       dist/test.html         模拟存储适配器 mock-db（tests/mock/mock-db.js），不需要 claude.ai
 #       dist/test-claude.html  与发布版同一份页面 + window.claude 桩（tests/mock/claude-stub.js），验证 claude-db 适配器
-#       两个测试页的示例数据都来自 tests/mock/sample-data.js
+#       两个测试页的示例数据都来自 tests/mock/sample-data.js；顶部有“测试页面”提示条（tests/harness/banner.html）
+#   --target staging：预发布版 dist/staging.html，和正式版一样接真实数据库，顶部提示“预发布测试版：不是你的正式数据”
 #   --target web：独立服务器 / PWA 版，预留，尚未实现。
-# 依赖：Python 3.8+ 标准库、build/check_arch.py。用法：python build/build.py [--target claude|web]
+#   发布用的 dist/planner.html 里不能出现任何环境提示文案，构建时会检查。
+# 依赖：Python 3.8+ 标准库、build/check_arch.py。用法：python build/build.py [--target claude|staging|web]
 import argparse
 import json
 import pathlib
@@ -65,11 +67,34 @@ def page(m, build_cfg, extra_before_entry=()):
     return tpl.replace("<!-- @scripts -->", js_bundle(m, build_cfg, extra_before_entry))
 
 
+# 环境提示条：文案 → (底色, 字色)。发布版不能出现这里的任何一句
+BANNERS = {
+    "test": ("测试页面：这里用的是模拟数据，刷新就会还原，不会保存到云端", "#f1df4a", "#121316"),
+    "staging": ("预发布测试版：不是你的正式数据", "#3a6cf4", "#ffffff"),
+}
+
+
+def banner(kind):
+    text, bg, fg = BANNERS[kind]
+    html = strip_lead_comment(read("tests/harness/banner.html")).strip()
+    return html.replace("{{文案}}", text).replace("{{底色}}", bg).replace("{{字色}}", fg)
+
+
 def harness(m, app_html, stub_files):
-    """测试页：骨架 + 页面脚本之前的一段 <script>（示例数据、可选的 window.claude 桩）+ 页面。"""
+    """测试页：骨架 + 测试提示条 + 页面脚本之前的一段 <script>（示例数据、可选的 window.claude 桩）+ 页面。"""
     sk = strip_lead_comment(read(m["tests"]["skeleton"])).rstrip("\n")
     stub = "<script>\n" + "\n".join(read(p).rstrip("\n") for p in stub_files) + "\n</script>\n"
-    return sk.replace("<!-- @stub -->", stub).replace("<!-- @app -->", app_html) + "\n"
+    for mark in ("<!-- @banner -->", "<!-- @stub -->", "<!-- @app -->"):
+        if sk.count(mark) != 1:
+            fail("测试页骨架 %s 里 %s 必须恰好出现一次" % (m["tests"]["skeleton"], mark))
+    return sk.replace("<!-- @banner -->", banner("test")).replace("<!-- @stub -->", stub).replace("<!-- @app -->", app_html) + "\n"
+
+
+def check_no_banner(name, html):
+    """发布版里不能混进环境提示文案。"""
+    for text, _, _ in BANNERS.values():
+        if text in html:
+            fail("%s 里出现了环境提示“%s”，发布版不能带测试提示" % (name, text))
 
 
 def write(name, text):
@@ -80,11 +105,21 @@ def write(name, text):
 
 def build_claude(m):
     prod = page(m, {"target": "claude", "storage": "claude-db"})
+    check_no_banner("dist/planner.html", prod)
     write("planner.html", prod)
     mock = page(m, {"target": "test", "storage": "mock-db"}, [m["tests"]["mockAdapter"]])
     t = m["tests"]
     write("test.html", harness(m, mock, [t["sampleData"]]))
     write("test-claude.html", harness(m, prod, [t["sampleData"], t["claudeStub"]]))
+
+
+def build_staging(m):
+    """预发布版：和正式版同一份页面、接真实数据库，只多一条“预发布测试版”提示条。"""
+    html = page(m, {"target": "staging", "storage": "claude-db"}) + "\n" + banner("staging") + "\n"
+    write("staging.html", html)
+    prod = ROOT / "dist/planner.html"
+    if prod.is_file():
+        check_no_banner("dist/planner.html", prod.read_text(encoding="utf-8"))
 
 
 def build_web(m):
@@ -101,8 +136,8 @@ def main():
     if hasattr(sys.stdout, "reconfigure"):   # Windows 下管道输出默认是 GBK，统一成 UTF-8
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="日程与待办 构建脚本")
-    ap.add_argument("--target", choices=["claude", "web"], default="claude",
-                    help="claude：单文件发布版（默认）；web：独立服务器 PWA 版（预留）")
+    ap.add_argument("--target", choices=["claude", "staging", "web"], default="claude",
+                    help="claude：单文件发布版和测试页（默认）；staging：预发布版 dist/staging.html；web：独立服务器 PWA 版（预留）")
     args = ap.parse_args()
     try:
         m = json.loads(read("build/manifest.json"))
@@ -116,6 +151,11 @@ def main():
         fail("架构检查没通过，先按上面的提示修改（规则见 docs/10-架构/架构约定.md）")
     if args.target == "web":
         sys.exit(build_web(m))
+    if args.target == "staging":
+        print("构建 --target staging")
+        build_staging(m)
+        print("完成")
+        return
     print("构建 --target claude")
     build_claude(m)
     print("完成")

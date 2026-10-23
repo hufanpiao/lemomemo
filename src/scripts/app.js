@@ -1,6 +1,6 @@
 // 职责：启动入口：选定存储适配器（全项目唯一一处配置）、创建统一时钟、绑定各模块事件、首屏渲染、连接数据、启动时钟。
 //       App.BUILD 由 build.py 在包头写入：发布版为 {storage:"claude-db"}，测试页为 {storage:"mock-db"}。
-// 依赖：core/clock.js、platform/index.js、platform/env.js、platform/claude-db.js、data/store.js、data/write.js、data/subscribe.js、
+// 依赖：core/clock.js、platform/index.js、platform/env.js、platform/prefs.js、platform/claude-db.js、data/bus.js、data/store.js、data/log.js、data/write.js、data/subscribe.js、
 //       ui/view-state.js、ui/render.js、ui/today.js、ui/schedule.js、ui/todos.js、ui/sheet.js、ui/nav.js、ui/remind.js、ui/theme.js
 
 // —— 存储适配器配置 ——
@@ -12,6 +12,8 @@ App.data.store.use(App.platform.storage[STORAGE]());
 // —— 统一时钟（全页面只有这一个“现在”）——
 App.clock = App.core.clock.create(App.platform.env);
 App.data.write.init(App.clock);
+App.data.log.init({clock: App.clock, device: App.platform.prefs.deviceId(), src: "page"});   // 运行日志（ADR-010）
+App.platform.env.onHidden(() => App.data.log.flush());
 App.ui.viewState.init(App.clock.today());
 
 // —— 事件绑定 ——
@@ -30,4 +32,11 @@ App.clock.on("tick", () => { if (App.ui.sheet.isClosed()) App.ui.render(); });
 // —— 首屏与数据 ——
 App.ui.nav.go(App.ui.view.view); App.ui.render();
 App.data.subscribe.start();
+// 每天最多一次：清理 30 天前删除的条目和 90 天前的日志（等两个集合都加载完再做）
+App.data.on("loaded", () => {
+  const P = App.platform.prefs, day = App.clock.today();
+  if (P.get(P.KEYS.purged, "") === day) return;
+  P.set(P.KEYS.purged, day);
+  App.data.write.purgeDeleted(); App.data.log.purge();
+});
 App.clock.start();

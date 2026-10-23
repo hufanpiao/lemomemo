@@ -26,6 +26,8 @@ App.data = App.data || {};
  *   add(collection, id, data): Promise<void>      用 newId 得到的 id 新建一条记录
  *   update(collection, id, patch): Promise<void>  合并更新部分字段（值为 null 表示清空该字段）
  *   remove(collection, id): Promise<void>         彻底删除一条记录（页面上的“删除”是软删除，用 update 写 deletedAt）
+ *   get(collection, id): Promise<object|null>     （v3）读一条记录，不存在返回 null；运行日志追加前要先读出当天那份
+ *   list(collection): Promise<object[]>           （v3）一次读出整个集合（含已删除），用于清理过期的日志和最近删除
  *   batch(ops): Promise<void>                     （可选）一次写多条，ops = [{op:"add"|"update"|"remove", coll, id, data}]
  *     写入失败时 reject，错误对象带中性错误码 code（用 App.platform.storeError 生成）：
  *       forbidden 没有写权限 / not_found 记录不存在 / quota 存储已满 / network 网络或未知 / unauthenticated 未登录
@@ -38,6 +40,8 @@ App.data = App.data || {};
  *   add       → PUT    /api/{collection}/{id}   body: data
  *   update    → PATCH  /api/{collection}/{id}   body: patch
  *   remove    → DELETE /api/{collection}/{id}
+ *   get       → GET    /api/{collection}/{id}（404 → null）
+ *   list      → GET    /api/{collection}
  *   batch     → POST   /api/batch               body: ops（服务器端用事务）
  *   HTTP 401 → unauthenticated，403 → forbidden，404 → not_found，413/507 → quota，其他 → network。
  *   离线时可先写入 IndexedDB 队列，恢复网络后补发（配合 Service Worker）。
@@ -54,6 +58,8 @@ const store = {
   add: (coll, id, data) => adapter.add(coll, id, data),
   update: (coll, id, patch) => adapter.update(coll, id, patch),
   remove: (coll, id) => adapter.remove(coll, id),
+  get: (coll, id) => adapter.get(coll, id),
+  list: coll => adapter.list(coll),
   async batch(ops){
     if (adapter.batch) return adapter.batch(ops);
     for (const o of ops) await store[o.op](o.coll, o.id, o.data);

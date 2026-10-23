@@ -52,6 +52,18 @@ for (const [name, make] of Object.entries(ADAPTERS)) {
     const s = await firstSnap(a, "todos");
     assert.equal(s.items.find(x => x.title === "数据里自带 id").id, "t2");
   });
+  test(`${name}：get 读一条，不存在返回 null（v3）`, async () => {
+    const a = make(SEED()); await a.connect();
+    const t = plain(await a.get("todos", "t2"));
+    assert.equal(t.id, "t2"); assert.equal(t.title, "数据里自带 id");
+    assert.equal(await a.get("todos", "没有这条"), null);
+  });
+  test(`${name}：新集合 logs 可以写入、读出、列出（v3）`, async () => {
+    const a = make(SEED()); await a.connect();
+    await a.add("logs", "2026-10-23_dev1", { day: "2026-10-23", device: "dev1", entries: [{ t: 1, kind: "op", act: "create", src: "page" }] });
+    assert.equal(plain(await a.get("logs", "2026-10-23_dev1")).entries.length, 1);
+    assert.deepEqual(plain((await a.list("logs")).map(x => x.id)), ["2026-10-23_dev1"]);
+  });
   test(`${name}：newId 同步返回且不重复`, async () => {
     const a = make(SEED()); await a.connect();
     const x = a.newId("todos"), y = a.newId("todos");

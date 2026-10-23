@@ -44,6 +44,24 @@ App.core.C = {
   TOMORROW_PREVIEW_HOUR: 18,    // 几点以后预告明天
   NARROW_NAV_PX: 380,           // 窄于这个宽度时导航只显示当前页文字
 
+  // 提醒（v3，需求澄清 #1–#5、#28–#30）
+  REMIND_EVENT_DEFAULT_MIN: 15,       // 有时间的日程默认提前 15 分钟
+  REMIND_EVENT_OPTIONS: [null, 0, 15, 30, 60, 1440],   // 不提醒 / 准时 / 15 / 30 / 1 小时 / 1 天
+  REMIND_DAY_MORNING_MIN: 9 * 60,     // 待办、全天日程“当天”提醒在 9:00
+  REMIND_ALLDAY_PREV_MIN: 20 * 60,    // 全天日程“前一天”提醒在 20:00
+  REMIND_TODO_PREV_MIN: 9 * 60,       // 待办“前一天”提醒在 9:00
+  REMIND_STALE_MS: 60 * 60000,        // 提醒时刻过去 60 分钟以上就不再发（#30）
+  PUSH_LEAD_MS: 15 * 60000,           // 定时推送宁可提前 15 分钟（#5）
+  SNOOZE_MS: 10 * 60000,              // “10 分钟后”
+
+  // 最近删除（v3，ADR-006）
+  TRASH_KEEP_DAYS: 30,                // 软删除 30 天后彻底清理
+
+  // 运行日志（v3，ADR-010）
+  LOG_MAX_ENTRIES: 500,               // 每台设备每天一条文档，最多 500 条
+  LOG_KEEP_DAYS: 90,                  // 保留 90 天
+  LOG_FLUSH_MS: 30000,                // 每 30 秒写一次（切到后台时立即写）
+
   // 时钟、写入与连接
   CLOCK_TICK_MS: 60000,         // 每分钟刷新一次时间轴和倒计时
   CLOCK_ALIGN_MS: 200,          // tick 安排在整分钟后 200 毫秒（要求 1 秒内）

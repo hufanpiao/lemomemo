@@ -1,66 +1,95 @@
-// 职责：一句话解析 parseQuick 的单元测试。“今天”固定为 2026-10-23（周五），项目名单为三个已知项目。
-//       预期值直接写死在下面（最初取自 v2 线上版本的输出）；v3 改解析规则时，改对应行的预期值即可。
-//       另测拆分出来的几个步骤函数。
-// 依赖：tests/lib/harness.mjs、src/scripts/core/date.js、src/scripts/logic/parse-quick.js
+// 职责：一句话解析 parseQuick 的单元测试。用例直接读 docs/06-测试/测试用例-v3.md 第 4 节的解析表（PQ-ZH / PQ-KO / PQ-MIX / PQ-VO），
+//       “今天”2026-10-23（周五），项目名单 SignPlex、NEOX、SOIL STUDIO；测试用例改了，这里自动跟着变。
+//       与测试用例不一致、按主持人或需求澄清改过的行写在 OVERRIDES 里（报告里列出）；另有表外的补充用例 EXTRA。
+// 依赖：tests/lib/harness.mjs、src/scripts/core/date.js、logic/projects.js、logic/parse-*.js、docs/06-测试/测试用例-v3.md
+import fs from "node:fs";
+import path from "node:path";
 import assert from "node:assert/strict";
-import { loadApp, src, plain, test, done } from "../lib/harness.mjs";
+import { ROOT, loadApp, src, plain, test, done } from "../lib/harness.mjs";
 
 const TODAY = "2026-10-23";
 const PROJECTS = ["SignPlex", "NEOX", "SOIL STUDIO"];
-const ctx = loadApp([src("core/date.js"), src("logic/projects.js"), src("logic/parse-quick.js")]);
-const parseQuick = s => plain(ctx.App.logic.parseQuick(s, TODAY, PROJECTS));
-const steps = ctx.App.logic.parseQuickSteps;
+const ctx = loadApp([src("core/date.js"), src("logic/projects.js"), src("logic/parse-text.js"), src("logic/parse-date-zh.js"),
+  src("logic/parse-date-ko.js"), src("logic/parse-time.js"), src("logic/parse-marks.js"), src("logic/parse-quick.js")]);
+const parseQuick = (s, names = PROJECTS) => plain(ctx.App.logic.parseQuick(s, TODAY, names));
 
-// 必测的 7 句
-const REQUIRED = [
-  ["下周三下午两点半和 NEOX 对片", {title:"和 NEOX 对片", date:"2026-10-28", time:"14:30", important:false, project:"NEOX", kind:"event"}],
-  ["明天上午10点 SignPlex 客户会", {title:"SignPlex 客户会", date:"2026-10-24", time:"10:00", important:false, project:"SignPlex", kind:"event"}],
-  ["周五前交 SOIL STUDIO 横版 重要", {title:"交 SOIL STUDIO 横版", date:"2026-10-23", time:"", important:true, project:"SOIL STUDIO", kind:"todo"}],
-  ["10月30号 体检", {title:"体检", date:"2026-10-30", time:"", important:false, project:"", kind:"todo"}],
-  ["今晚8:30 看粗剪", {title:"看粗剪", date:"2026-10-23", time:"20:30", important:false, project:"", kind:"event"}],
-  ["买硬盘", {title:"买硬盘", date:"", time:"", important:false, project:"", kind:"todo"}],
-  ["十一月三号下午三点 报价", {title:"报价", date:"2026-11-03", time:"15:00", important:false, project:"", kind:"event"}],
-];
-// 其他说法
-const MORE = [
-  ["后天 交 NEOX 竖版", {title:"交 NEOX 竖版", date:"2026-10-25", time:"", important:false, project:"NEOX", kind:"todo"}],
-  ["大后天下午4点一刻 开会", {title:"开会", date:"2026-10-26", time:"16:15", important:false, project:"", kind:"event"}],
-  ["明早9点 跑步", {title:"跑步", date:"2026-10-24", time:"09:00", important:false, project:"", kind:"event"}],
-  ["这周日 大扫除", {title:"大扫除", date:"2026-10-25", time:"", important:false, project:"", kind:"todo"}],
-  ["下下周一 交报告", {title:"交报告", date:"2026-11-02", time:"", important:false, project:"", kind:"todo"}],
-  ["星期3 中午12点 吃饭", {title:"吃饭", date:"2026-10-28", time:"12:00", important:false, project:"", kind:"event"}],
-  ["礼拜天 休息", {title:"休息", date:"2026-10-25", time:"", important:false, project:"", kind:"todo"}],
-  ["2027年1月5日 续签合同", {title:"续签合同", date:"2027-01-05", time:"", important:false, project:"", kind:"todo"}],
-  ["12/25 圣诞", {title:"圣诞", date:"2026-12-25", time:"", important:false, project:"", kind:"todo"}],
-  ["15号 交房租", {title:"交房租", date:"2026-11-15", time:"", important:false, project:"", kind:"todo"}],
-  ["3号 体检", {title:"体检", date:"2026-11-03", time:"", important:false, project:"", kind:"todo"}],
-  ["凌晨2点 渲染", {title:"渲染", date:"2026-10-23", time:"02:00", important:false, project:"", kind:"event"}],
-  ["傍晚6点半 散步", {title:"散步", date:"2026-10-23", time:"18:30", important:false, project:"", kind:"event"}],
-  ["晚上11点三刻 睡觉", {title:"睡觉", date:"2026-10-23", time:"23:45", important:false, project:"", kind:"event"}],
-  ["提醒我 明天 打电话 !!", {title:"打电话", date:"2026-10-24", time:"", important:true, project:"", kind:"todo"}],
-  ["记得 买牛奶 紧急", {title:"买牛奶", date:"", time:"", important:true, project:"", kind:"todo"}],
-  ["signplex 改字幕", {title:"signplex 改字幕", date:"", time:"", important:false, project:"SignPlex", kind:"todo"}],
-  ["soil studio 选植物", {title:"soil studio 选植物", date:"", time:"", important:false, project:"SOIL STUDIO", kind:"todo"}],
-  ["明天", {title:"明天", date:"2026-10-24", time:"", important:false, project:"", kind:"todo"}],
-  ["下午", {title:"下午", date:"", time:"", important:false, project:"", kind:"todo"}],
-  ["  ", {title:"", date:"", time:"", important:false, project:"", kind:"todo"}],
-  ["今天下午两点 25分", {title:"25分", date:"2026-10-23", time:"14:00", important:false, project:"", kind:"event"}],
-  ["10点 和 neox 开会", {title:"和 neox 开会", date:"2026-10-23", time:"10:00", important:false, project:"NEOX", kind:"event"}],
-  ["周五", {title:"周五", date:"2026-10-23", time:"", important:false, project:"", kind:"todo"}],
-  ["1月1日", {title:"1月1日", date:"2027-01-01", time:"", important:false, project:"", kind:"todo"}],
-  ["十号 交稿", {title:"交稿", date:"2026-11-10", time:"", important:false, project:"", kind:"todo"}],
-  ["明天 25点 看片", {title:"看片", date:"2026-10-24", time:"", important:false, project:"", kind:"todo"}],
-];
+// —— 读表 ——
+// 列：编号 | 输入 | 今天 | kind | title | date | time | project | important | 提醒 | 优先级 | 备注
+const unq = v => (v === '""' ? "" : v);
+// 提醒列 → remind：带 * 的是默认值（解析器没识别到）→ null；“-”→ null；min=null / days=null → {off:true}
+function remindOf(cell){
+  if (cell === "-" || cell.endsWith("*")) return null;
+  const [k, v] = cell.split("=");
+  if (v === "null") return { off: true };
+  return k === "min" ? { min: Number(v) } : { days: Number(v) };
+}
+function readTable(){
+  const md = fs.readFileSync(path.join(ROOT, "docs/06-测试/测试用例-v3.md"), "utf8");
+  const sec = md.slice(md.indexOf("## 4. 一句话解析用例表"), md.indexOf("## 5. "));
+  const rows = [];
+  for (const line of sec.split("\n")) {
+    if (!/^\| PQ-/.test(line)) continue;
+    const c = line.split("|").slice(1, -1).map(x => x.trim());
+    rows.push({ id: c[0].split("（")[0], input: c[1], today: c[2], prio: c[10], note: c[11],
+      want: { title: unq(c[4]), date: unq(c[5]), time: unq(c[6]), important: c[8] === "true", project: unq(c[7]), kind: c[3], remind: remindOf(c[9]) } });
+  }
+  return rows;
+}
 
-test("已知项目名单与测试假设一致", () => assert.deepEqual(plain(ctx.App.logic.projects.projectList([], [])), PROJECTS));
-for (const [input, want] of REQUIRED) test("必测：" + input, () => assert.deepEqual(parseQuick(input), want));
-for (const [input, want] of MORE) test("其他：" + JSON.stringify(input), () => assert.deepEqual(parseQuick(input), want));
-test("步骤：中文数字只转紧跟点/月/日/号/分的", () => assert.equal(steps.digitize("周三下午两点半 十一月三号"), "周三下午2点半 11月3号"));
-test("步骤：项目匹配长名字优先、不分大小写", () => {
-  assert.equal(steps.findProject(" soil studio 和 SOIL ", ["SOIL", "SOIL STUDIO"]), "SOIL STUDIO");
-  assert.equal(steps.findProject(" 买菜 ", PROJECTS), "");
+// 与测试用例不一致的地方（以主持人 T4 指示 / 需求澄清为准），值是要改写的字段
+const OVERRIDES = {
+  // 主持人 T4：“无效的‘25点’不要从标题里删掉”；测试用例写的是“看片”
+  "PQ-ZH-40": { title: "25点 看片" },
+};
+
+const ROWS = readTable();
+test("解析表读出了全部用例（四组都有）", () => {
+  for (const g of ["PQ-ZH", "PQ-KO", "PQ-MIX", "PQ-VO"]) assert.ok(ROWS.some(r => r.id.startsWith(g)), g);
+  assert.ok(ROWS.length >= 130, "只读到 " + ROWS.length + " 行");
+  for (const r of ROWS) assert.equal(r.today, TODAY, r.id + " 的“今天”不是 " + TODAY);
 });
-test("步骤：标题去掉开头的“记得/提醒我”和首尾标点", () => assert.equal(steps.cleanTitle("  记得 买牛奶， ", "x"), "买牛奶"));
-test("传入的项目名单不会被修改", () => { const names = ["NEOX", "SOIL STUDIO"]; ctx.App.logic.parseQuick("NEOX", TODAY, names); assert.deepEqual(names, ["NEOX", "SOIL STUDIO"]); });
+for (const r of ROWS) {
+  const want = Object.assign({}, r.want, OVERRIDES[r.id] || {});
+  test(`${r.id}（${r.prio}）${r.input}`, () => assert.deepEqual(parseQuick(r.input), want));
+}
 
-await done("parseQuick 单元测试（今天固定为 " + TODAY + " 周五）");
+// —— 表外补充：主持人 T4 点名的说法和边界 ——
+const EXTRA = [
+  ["提前15分钟提醒 明天下午3点开会", { title: "开会", date: "2026-10-24", time: "15:00", important: false, project: "", kind: "event", remind: { min: 15 } }],
+  ["明天下午3点开会 提前十五分钟提醒", { title: "开会", date: "2026-10-24", time: "15:00", important: false, project: "", kind: "event", remind: { min: 15 } }],
+  ["下周一交报告 提前一天提醒", { title: "交报告", date: "2026-10-26", time: "", important: false, project: "", kind: "todo", remind: { days: 1 } }],
+  ["내일 오후 3시 회의 하루 전 알림", { title: "회의", date: "2026-10-24", time: "15:00", important: false, project: "", kind: "event", remind: { min: 1440 } }],
+  ["금요일까지 보고서 하루 전 알림", { title: "보고서", date: "2026-10-23", time: "", important: false, project: "", kind: "todo", remind: { days: 1 } }],
+  ["下午3点前交稿", { title: "交稿 15:00前", date: "2026-10-23", time: "", important: false, project: "", kind: "todo", remind: null }],
+  ["明天6点前交稿", { title: "交稿 18:00前", date: "2026-10-24", time: "", important: false, project: "", kind: "todo", remind: null }],
+  ["明晚12点 上线", { title: "上线", date: "2026-10-25", time: "00:00", important: false, project: "", kind: "event", remind: null }],
+  ["下个月三号 体检", { title: "体检", date: "2026-11-03", time: "", important: false, project: "", kind: "todo", remind: null }],
+  ["3号线换乘", { title: "3号线换乘", date: "", time: "", important: false, project: "", kind: "todo", remind: null }],
+  ["重要的会议 明天", { title: "会议", date: "2026-10-24", time: "", important: true, project: "", kind: "todo", remind: null }],
+  ["星期3 中午12点 吃饭", { title: "吃饭", date: "2026-10-28", time: "12:00", important: false, project: "", kind: "event", remind: null }],
+  ["礼拜天 休息", { title: "休息", date: "2026-10-25", time: "", important: false, project: "", kind: "todo", remind: null }],
+  ["밤 2시 렌더링", { title: "렌더링", date: "2026-10-24", time: "02:00", important: false, project: "", kind: "event", remind: null }],
+  ["3시간 회의", { title: "3시간 회의", date: "", time: "", important: false, project: "", kind: "todo", remind: null }],
+  ["세 시간 촬영", { title: "세 시간 촬영", date: "", time: "", important: false, project: "", kind: "todo", remind: null }],
+  ["5号院", { title: "5号院", date: "", time: "", important: false, project: "", kind: "todo", remind: null }],
+  ["오후 세 시 반", { title: "오후 세 시 반", date: "2026-10-23", time: "15:30", important: false, project: "", kind: "event", remind: null }],
+  ["！！！", { title: "！！！", date: "", time: "", important: false, project: "", kind: "todo", remind: null }],
+];
+for (const [input, want] of EXTRA) test("补充：" + input, () => assert.deepEqual(parseQuick(input), want));
+test("补充：英文项目名按词边界匹配，“UI”不会命中“GUI”", () => {
+  assert.equal(parseQuick("GUI 改版", ["UI"]).project, "");
+  assert.equal(parseQuick("改 UI 稿", ["UI"]).project, "UI");
+  assert.equal(parseQuick("改UI稿", ["UI"]).project, "UI");          // 紧挨中文可以
+  assert.equal(parseQuick("UI2 方案", ["UI"]).project, "");          // 紧挨数字不行
+});
+test("补充：传入的项目名单不会被修改", () => {
+  const names = ["NEOX", "SOIL STUDIO"];
+  ctx.App.logic.parseQuick("NEOX", TODAY, names);
+  assert.deepEqual(names, ["NEOX", "SOIL STUDIO"]);
+});
+test("补充：空输入和只有空格不抛错", () => {
+  assert.equal(parseQuick("").title, "");
+  assert.equal(parseQuick("   ").kind, "todo");
+});
+
+await done(`parseQuick 单元测试（今天 ${TODAY} 周五；解析表 ${ROWS.length} 行 + 补充 ${EXTRA.length + 3} 项）`);

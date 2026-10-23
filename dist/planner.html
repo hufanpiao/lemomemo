@@ -395,6 +395,24 @@ App.core.C = {
   TOMORROW_PREVIEW_HOUR: 18,    // 几点以后预告明天
   NARROW_NAV_PX: 380,           // 窄于这个宽度时导航只显示当前页文字
 
+  // 提醒（v3，需求澄清 #1–#5、#28–#30）
+  REMIND_EVENT_DEFAULT_MIN: 15,       // 有时间的日程默认提前 15 分钟
+  REMIND_EVENT_OPTIONS: [null, 0, 15, 30, 60, 1440],   // 不提醒 / 准时 / 15 / 30 / 1 小时 / 1 天
+  REMIND_DAY_MORNING_MIN: 9 * 60,     // 待办、全天日程“当天”提醒在 9:00
+  REMIND_ALLDAY_PREV_MIN: 20 * 60,    // 全天日程“前一天”提醒在 20:00
+  REMIND_TODO_PREV_MIN: 9 * 60,       // 待办“前一天”提醒在 9:00
+  REMIND_STALE_MS: 60 * 60000,        // 提醒时刻过去 60 分钟以上就不再发（#30）
+  PUSH_LEAD_MS: 15 * 60000,           // 定时推送宁可提前 15 分钟（#5）
+  SNOOZE_MS: 10 * 60000,              // “10 分钟后”
+
+  // 最近删除（v3，ADR-006）
+  TRASH_KEEP_DAYS: 30,                // 软删除 30 天后彻底清理
+
+  // 运行日志（v3，ADR-010）
+  LOG_MAX_ENTRIES: 500,               // 每台设备每天一条文档，最多 500 条
+  LOG_KEEP_DAYS: 90,                  // 保留 90 天
+  LOG_FLUSH_MS: 30000,                // 每 30 秒写一次（切到后台时立即写）
+
   // 时钟、写入与连接
   CLOCK_TICK_MS: 60000,         // 每分钟刷新一次时间轴和倒计时
   CLOCK_ALIGN_MS: 200,          // tick 安排在整分钟后 200 毫秒（要求 1 秒内）
@@ -405,7 +423,7 @@ App.core.C = {
 // ==== src/scripts/core/date.js ====
 (function(){
 // 职责：日期与时间纯函数。日期用 "YYYY-MM-DD" 字符串，时间用 "HH:MM"；解析、加减天数、相差天数、
-//       分钟互转、本周一、“10月23日”格式；todayOf/minOfDay/hourOf 把毫秒时间戳换成当天日期和分钟。
+//       分钟互转、本周一、“10月23日”格式；todayOf/minOfDay/hourOf 把毫秒时间戳换成当天日期和分钟，msAt 反过来把日期加分钟换成时间戳。
 //       “现在”一律由调用方传入（来自 core/clock.js），本文件不读系统时间。
 // 依赖：无
 App.core = App.core || {};
@@ -423,8 +441,10 @@ const md = s => { const d = parse(s); return (d.getMonth()+1)+"月"+d.getDate()+
 const todayOf = ms => ymd(new Date(ms));
 const minOfDay = ms => { const n = new Date(ms); return n.getHours()*60+n.getMinutes(); };
 const hourOf = ms => new Date(ms).getHours();
+// 本地时间 "YYYY-MM-DD" 当天第 min 分钟的毫秒时间戳（min 可以是负数或超过 1440，会自动跨天）
+const msAt = (s, min) => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d, 0, min).getTime(); };
 
-App.core.date = {WK, pad, ymd, parse, addDays, dayDiff, hm2m, m2hm, mondayOf, md, todayOf, minOfDay, hourOf};
+App.core.date = {WK, pad, ymd, parse, addDays, dayDiff, hm2m, m2hm, mondayOf, md, todayOf, minOfDay, hourOf, msAt};
 })();
 // ==== src/scripts/core/clock.js ====
 (function(){
@@ -584,135 +604,427 @@ function pickNext(events, todos, t, nm){
 
 App.logic.sort = {byTime, sortTodos, pickNext};
 })();
-// ==== src/scripts/logic/parse-quick.js ====
+// ==== src/scripts/logic/parse-text.js ====
 (function(){
-// 职责：一句话解析 parseQuick(s, t, projectNames)（纯函数）：从“下周三下午两点半和 NEOX 对片”里取出日期、时间、
-//       是否重要、项目和标题；有时间就判为日程，否则为待办。“今天”由 t（"YYYY-MM-DD"）传入。
-//       分四步：中文数字 → 日期 → 时间 → 标记（重要）→ 项目 → 标题；每步从剩余文字里“取走”识别到的部分。
-// 依赖：core/date.js
+// 职责：一句话解析的文字预处理与公共工具（纯函数）：全角数字和标点转半角、中文星期先改成数字（防止“周五十点”被读成 50）、
+//       中文数字转阿拉伯数字（“两点”“二十五分”“十一月”“三点二十”）、韩文固有数词转数字（“세 시”→“3시”）、
+//       take()/cut() 从剩余文字里取走一段、cnNum() 中文数字换算。
+// 依赖：无
 App.logic = App.logic || {};
 
-const {pad, ymd, parse, addDays, mondayOf} = App.core.date;
-const CN_WEEKDAY = {"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"日":0,"天":0};
 const CN_DIGIT = {"零":0,"一":1,"二":2,"两":2,"三":3,"四":4,"五":5,"六":6,"七":7,"八":8,"九":9};
+const CN_WEEKDAY = {"一":1,"二":2,"三":3,"四":4,"五":5,"六":6,"日":7,"天":7};
+const KO_NATIVE = {"한":1,"두":2,"세":3,"네":4,"다섯":5,"여섯":6,"일곱":7,"여덟":8,"아홉":9,"열":10,"열한":11,"열두":12};
 
-// 第 0 步：中文数字转阿拉伯数字（只处理紧跟“点/月/日/号/分”的，避免误伤“周三”）
+// “十”“十五”“二十”“两”→ 数字；认不出返回 undefined
 function cnNum(w){
+  if (/^\d+$/.test(w)) return Number(w);
   if (w === "十") return 10;
   if (w.includes("十")){ const [a,b] = w.split("十"); return (a ? CN_DIGIT[a] : 1)*10 + (b ? CN_DIGIT[b] : 0); }
   return CN_DIGIT[w];
 }
-const digitize = s => s.replace(/[零一二两三四五六七八九十]{1,3}(?=[点月日号分])/g, w => { const n = cnNum(w); return n == null ? w : String(n); });
+// 全角数字、冒号、空格转半角（听写和中文输入法常出全角）
+const toHalfWidth = s => s.replace(/[\uFF10-\uFF19]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/：/g, ":").replace(/[　 ]/g, " ");
+// 周X / 星期X / 礼拜X 的“X”先换成 1–7（7＝周日），后面的中文数字转换就不会把“周五十点”读成“50 点”
+const protectWeekdays = s => s.replace(/(周|星期|礼拜)([一二三四五六日天])/g, (m, a, b) => a + CN_WEEKDAY[b]);
+// 中文数字转阿拉伯数字：只处理紧跟“点/月/日/号/分”的，以及“N点”后面的分钟（“三点二十”），避免误伤普通词
+function digitize(s){
+  const conv = w => { const n = cnNum(w); return n == null ? w : String(n); };
+  s = s.replace(/[零一二两三四五六七八九十]{1,3}(?=\s*[点月日号分])/g, conv);
+  return s.replace(/点([零一二两三四五六七八九十]{1,3})(?![刻])/g, (m, w) => "点" + conv(w));
+}
+// 韩文固有数词 + 시：“세 시”“열한 시”→“3시”“11시”（不碰“시간”“시작”）
+const koNative = s => s.replace(/(?<![\uAC00-\uD7A3])(열한|열두|다섯|여섯|일곱|여덟|아홉|열|한|두|세|네)\s*시(?![간작])/g, (m, w) => KO_NATIVE[w] + "시");
 
 // 在剩余文字 st.text 里找 re，找到就把那一段换成空格，返回匹配结果
 function take(st, re){ const m = st.text.match(re); if (m) st.text = st.text.replace(m[0], " "); return m; }
+// 把已经找到的那段文字（字符串）从 st.text 里取走
+function cut(st, str){ st.text = st.text.replace(str, " "); }
 
-// 第 1 步：日期（今天/明天…、周几、几月几日、几号），返回 "YYYY-MM-DD" 或 ""
-function takeDate(st, t){
+function prepare(s){ return koNative(digitize(protectWeekdays(toHalfWidth(s)))); }
+
+App.logic.parseText = {cnNum, toHalfWidth, protectWeekdays, digitize, koNative, take, cut, prepare};
+})();
+// ==== src/scripts/logic/parse-date-zh.js ====
+(function(){
+// 职责：一句话解析的中文日期（纯函数）：今天/明天/后天/大后天（今晚、明早带出时段提示）、周几（这/下/下下周）、
+//       下个月 N 号、带年份的日期、N月N日、M/D、N号/N日。“3号楼”“3.5万”“版本1.5”“第3-5集”都不当日期。
+//       “今天”由参数 t 传入。返回 {date, period} 或 null（period 是“今晚”带出的“晚上”这类时段提示）。
+// 依赖：core/date.js、logic/parse-text.js
+App.logic = App.logic || {};
+
+const {ymd, parse, addDays, mondayOf} = App.core.date;
+const {take, cut} = App.logic.parseText;
+
+// 没写年份的月日：已经过去就算明年
+function monthDay(t, y, mo, d, hasYear){
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  let x = new Date(y, mo - 1, d);
+  if (!hasYear && ymd(x) < t) x = new Date(y + 1, mo - 1, d);
+  return ymd(x);
+}
+// 只写了几号：本月已过就算下个月
+function dayOnly(t, d){
+  if (d < 1 || d > 31) return null;
+  const n = parse(t); let x = new Date(n.getFullYear(), n.getMonth(), d);
+  if (ymd(x) < t) x = new Date(n.getFullYear(), n.getMonth() + 1, d);
+  return ymd(x);
+}
+// 周几：wd 为 1–7（7＝周日）；prefix 为 下/下下/这/本 或空（空＝从今天起最近的那一天，今天是周五时“周五”指今天）
+function weekday(t, prefix, wd){
+  const mon = mondayOf(t), idx = (wd + 6) % 7, js = wd % 7;
+  if (prefix === "下") return addDays(mon, 7 + idx);
+  if (prefix === "下下") return addDays(mon, 14 + idx);
+  if (prefix === "这" || prefix === "本") return addDays(mon, idx);
+  return addDays(t, (js - parse(t).getDay() + 7) % 7);
+}
+
+function takeDateZh(st, t){
+  const y = parse(t).getFullYear();
   let m;
   if ((m = take(st, /(大后天|后天|明天|明早|明晚|今天|今晚|今早)/))){
     const w = m[1];
-    if (w === "明晚" || w === "今晚") st.text = " 晚上" + st.text;
-    if (w === "明早" || w === "今早") st.text = " 早上" + st.text;
-    return addDays(t, w === "大后天" ? 3 : w === "后天" ? 2 : w.startsWith("明") ? 1 : 0);
+    const period = w.endsWith("晚") ? "晚上" : w.endsWith("早") ? "早上" : "";
+    return {date: addDays(t, w === "大后天" ? 3 : w === "后天" ? 2 : w.startsWith("明") ? 1 : 0), period};
   }
-  if ((m = take(st, /(下下|下|这|本)?(?:个)?(?:周|星期|礼拜)([一二三四五六日天1-7])/))){
-    const wd = CN_WEEKDAY[m[2]] != null ? CN_WEEKDAY[m[2]] : Number(m[2]) % 7;
-    const mon = mondayOf(t), idx = (wd + 6) % 7;
-    if (m[1] === "下") return addDays(mon, 7 + idx);
-    if (m[1] === "下下") return addDays(mon, 14 + idx);
-    if (m[1] === "这" || m[1] === "本") return addDays(mon, idx);
-    return addDays(t, (wd - parse(t).getDay() + 7) % 7);
+  if ((m = take(st, /(下下|下|这|本)?(?:个)?(?:周|星期|礼拜)([1-7])/))) return {date: weekday(t, m[1], Number(m[2]))};
+  if ((m = take(st, /下个?月\s*(\d{1,2})\s*[日号](?![楼栋室])/))){
+    const n = parse(t), d = Number(m[1]);
+    return d >= 1 && d <= 31 ? {date: ymd(new Date(n.getFullYear(), n.getMonth() + 1, d))} : null;
   }
-  if ((m = take(st, /(?:(\d{4})[年\/.-])?(\d{1,2})[月\/.-](\d{1,2})[日号]?/))){
-    const y = m[1] ? Number(m[1]) : parse(t).getFullYear();
-    let d = new Date(y, Number(m[2])-1, Number(m[3]));
-    if (!m[1] && ymd(d) < t) d = new Date(y+1, Number(m[2])-1, Number(m[3]));
-    return isNaN(d) ? "" : ymd(d);
+  if ((m = st.text.match(/(\d{4})\s*[年\/.-]\s*(\d{1,2})\s*[月\/.-]\s*(\d{1,2})\s*[日号]?/))){
+    const date = monthDay(t, Number(m[1]), Number(m[2]), Number(m[3]), true);
+    if (date){ cut(st, m[0]); return {date}; }
   }
-  if ((m = take(st, /(\d{1,2})[日号]/))){
-    const n = parse(t); let d = new Date(n.getFullYear(), n.getMonth(), Number(m[1]));
-    if (ymd(d) < t) d = new Date(n.getFullYear(), n.getMonth()+1, Number(m[1]));
-    return ymd(d);
+  // N月N日：“十一月三号”在预处理时已变成“11月3号”
+  if ((m = st.text.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?(?![楼栋室])/))){
+    const date = monthDay(t, y, Number(m[1]), Number(m[2]), false);
+    if (date){ cut(st, m[0]); return {date}; }
   }
-  return "";
+  // M/D（12/25）；用“.”“-”分隔的必须带“日/号”，否则“3.5万”“版本1.5”“第3-5集”会被误认
+  if ((m = st.text.match(/(?<![\d.\/])(\d{1,2})\/(\d{1,2})(?![\d\/.])/) || st.text.match(/(?<![\d.第])(\d{1,2})[.\-](\d{1,2})[日号]/))){
+    const date = monthDay(t, y, Number(m[1]), Number(m[2]), false);
+    if (date){ cut(st, m[0]); return {date}; }
+  }
+  // N号 / N日：“3号楼”“3号线”“5号院”不算
+  if ((m = st.text.match(/(?<![\d.第])(\d{1,2})\s*[日号](?![楼栋室线院间])/))){
+    const date = dayOnly(t, Number(m[1]));
+    if (date){ cut(st, m[0]); return {date}; }
+  }
+  return null;
 }
 
-// 第 2 步：时间（上午/下午 + 几点几分 / 8:30），返回 "HH:MM" 或 ""；最后把单独剩下的“上午/晚上”等也取走
-function takeTime(st){
-  let time = "";
-  const m = take(st, /(凌晨|早上|上午|中午|下午|傍晚|晚上)?\s*(\d{1,2})(?:[:：](\d{2})|点(?:钟)?(半|一刻|三刻|(\d{1,2})分?)?)/);
-  if (m){
-    let hh = Number(m[2]);
-    const mm = m[3] ? Number(m[3]) : m[4] === "半" ? 30 : m[4] === "一刻" ? 15 : m[4] === "三刻" ? 45 : m[5] ? Number(m[5]) : 0;
-    const p = m[1] || "";
-    if ((p === "下午" || p === "傍晚" || p === "晚上") && hh < 12) hh += 12;
-    if (p === "中午" && hh < 6) hh += 12;
-    if (hh <= 23 && mm <= 59) time = pad(hh)+":"+pad(mm);
+App.logic.parseDateZh = {takeDateZh, monthDay, dayOnly, weekday};
+})();
+// ==== src/scripts/logic/parse-date-ko.js ====
+(function(){
+// 职责：一句话解析的韩文日期（纯函数）：오늘/내일/모레/글피、월요일~일요일（이번 주/다음 주/다다음 주，按周一开头）、
+//       N월 N일、N일；后面带的“까지”（截止）和助词“에”一并取走。“今天”由参数 t 传入。返回 {date} 或 null。
+// 依赖：core/date.js、logic/parse-text.js、logic/parse-date-zh.js
+App.logic = App.logic || {};
+
+const {addDays, parse} = App.core.date;
+const {take, cut} = App.logic.parseText;
+const {monthDay, dayOnly, weekday} = App.logic.parseDateZh;
+
+const KO_WEEKDAY = {"월":1,"화":2,"수":3,"목":4,"금":5,"토":6,"일":7};
+const KO_REL = {"오늘":0,"내일":1,"모레":2,"글피":3};
+// 日期后面可以跟“까지”（截止）或助词“에”
+const TAIL = "(?:\\s*까지)?(?:에(?![\uAC00-\uD7A3]))?";
+
+function takeDateKo(st, t){
+  let m;
+  if ((m = take(st, new RegExp("(오늘|내일|모레|글피)" + TAIL)))) return {date: addDays(t, KO_REL[m[1]])};
+  if ((m = take(st, new RegExp("(다다음\\s*주|다음\\s*주|담주|이번\\s*주)?\\s*(월|화|수|목|금|토|일)요일" + TAIL)))){
+    const p = (m[1] || "").replace(/\s+/g, "");
+    const prefix = p === "다음주" || p === "담주" ? "下" : p === "다다음주" ? "下下" : p === "이번주" ? "这" : "";
+    return {date: weekday(t, prefix, KO_WEEKDAY[m[2]])};
   }
-  take(st, /(凌晨|早上|上午|中午|下午|傍晚|晚上)/);
-  return time;
+  if ((m = st.text.match(new RegExp("(\\d{1,2})\\s*월\\s*(\\d{1,2})\\s*일(?![요간])" + TAIL)))){
+    const date = monthDay(t, parse(t).getFullYear(), Number(m[1]), Number(m[2]), false);
+    if (date){ cut(st, m[0]); return {date}; }
+  }
+  if ((m = st.text.match(new RegExp("(?<![\\d.])(\\d{1,2})\\s*일(?![요간])" + TAIL)))){
+    const date = dayOnly(t, Number(m[1]));
+    if (date){ cut(st, m[0]); return {date}; }
+  }
+  return null;
 }
 
-// 第 3 步：标记（重要 / 紧急 / 感叹号）
-const takeImportant = st => !!take(st, /(重要|紧急|[!！]+)/);
+App.logic.parseDateKo = {takeDateKo};
+})();
+// ==== src/scripts/logic/parse-time.js ====
+(function(){
+// 职责：一句话解析的时间（纯函数），中文和韩文共用一套规则：
+//       时段词（上午/下午/晚上/凌晨…、오전/오후/저녁/밤/새벽/아침/점심）+ N点[半/一刻/三刻/N分] / N:MM / N시[반/N분]；
+//       没写时段时 1–6 点按下午（澄清#11，含冒号写法和韩文）；“今晚12点”“밤 12시”是次日 00:00（澄清#9、9.2-10）；
+//       “N点前 / N시까지”是截止（澄清#10），返回 deadline 文案，由调用方记成当天截止的待办。
+//       认不出的时间（如“25点”）原样留在文字里，不取走。返回 {time, deadline, nextDay}。
+// 依赖：core/date.js、logic/parse-text.js
+App.logic = App.logic || {};
 
-// 第 4 步：项目（名字长的优先，不分大小写）
+const {pad} = App.core.date;
+const {cut} = App.logic.parseText;
+
+const MORNING = ["凌晨","早上","早晨","上午","오전","새벽","아침"];
+const NOON = ["中午","점심","낮"];
+const EVENING = ["下午","傍晚","晚上","오후","저녁"];
+const NIGHT = ["夜里","半夜","深夜","밤"];
+const PERIODS = MORNING.concat(NOON, EVENING, NIGHT);
+const TIME_RE = new RegExp(
+  "(" + PERIODS.join("|") + ")?\\s*(\\d{1,2})" +
+  "(?:\\s*:\\s*(\\d{2})" +                                                  // 8:30
+  "|\\s*点(?:钟)?(半|一刻|三刻|(\\d{1,2})\\s*分?)?" +                         // 3点 / 3点半 / 3点20 / 3点25分
+  "|\\s*시(?![간작])(?:\\s*(반)|\\s*(\\d{1,2})\\s*분)?)" +                   // 3시 / 3시 반 / 3시 30분
+  "(\\s*(?:之前|以前|前|까지))?(?:에(?![\uAC00-\uD7A3]))?");                         // 截止、助词“에”
+
+// period：时段词；hint：日期词带出的时段（“今晚”→“晚上”）。返回 {hh, nextDay}
+function applyPeriod(hh, period, hint){
+  const p = period || hint || "";
+  if (MORNING.includes(p)) return {hh: hh === 12 && (p === "오전" || p === "새벽" || p === "凌晨") ? 0 : hh, nextDay:false};
+  if (NOON.includes(p)) return {hh: hh < 6 ? hh + 12 : hh, nextDay:false};
+  if (NIGHT.includes(p) || (p === "晚上" && hh === 12)){
+    if (hh === 12) return {hh:0, nextDay:true};
+    if (hh >= 1 && hh <= 5 && p !== "晚上") return {hh, nextDay:true};
+    return {hh: hh < 12 ? hh + 12 : hh, nextDay:false};
+  }
+  if (EVENING.includes(p)) return {hh: hh < 12 ? hh + 12 : hh, nextDay:false};
+  return {hh: hh >= 1 && hh <= 6 ? hh + 12 : hh, nextDay:false};   // 没写时段：1–6 点按下午
+}
+
+function takeTime(st, hint){
+  const m = st.text.match(TIME_RE);
+  if (!m) return {time:"", deadline:"", nextDay:false};
+  const raw = Number(m[2]);
+  const mm = m[3] ? Number(m[3]) : m[4] === "半" || m[6] ? 30 : m[4] === "一刻" ? 15 : m[4] === "三刻" ? 45 : m[5] ? Number(m[5]) : m[7] ? Number(m[7]) : 0;
+  if (raw > 24 || mm > 59) return {time:"", deadline:"", nextDay:false};   // 认不出：不取走，留在标题里
+  const {hh, nextDay} = applyPeriod(raw, m[1], hint);
+  if (hh > 23) return {time:"", deadline:"", nextDay:false};
+  cut(st, m[0]);
+  const time = pad(hh) + ":" + pad(mm);
+  if (m[8]) return {time:"", deadline: time + (m[8].includes("까지") ? "까지" : "前"), nextDay};
+  return {time, deadline:"", nextDay};
+}
+// 时间之外单独剩下的中文时段词（“下午”）从标题去掉；韩文的“저녁 약속”“점심 미팅”是标题的一部分，保留
+function takeStrayPeriod(st){ const m = st.text.match(/(凌晨|早上|上午|中午|下午|傍晚|晚上)/); if (m) cut(st, m[0]); }
+
+App.logic.parseTime = {takeTime, applyPeriod, takeStrayPeriod, TIME_RE};
+})();
+// ==== src/scripts/logic/parse-marks.js ====
+(function(){
+// 职责：一句话解析的标记与收尾（纯函数）：提醒说法（“提前半小时提醒”“不用提醒”“30분 전 알림”“알림 없이”）、
+//       重要（只认“重要/紧急/중요/급함”这类词，“不重要/안 중요”不算，感叹号不算，澄清#15）、
+//       项目匹配（英文项目名前后不能紧挨英文字母或数字）、标题整理（去多余空白、首尾标点、感叹号、“记得/提醒我”等开头）。
+// 依赖：logic/parse-text.js
+App.logic = App.logic || {};
+
+const {cnNum, take} = App.logic.parseText;
+
+// 提醒说法。返回 {off:true} / {min:N} / {days:N} / null（没提到）
+function takeRemind(st){
+  let m;
+  if (take(st, /(?:不用|不要|无需|不需要|别)\s*提醒|不提醒|알림\s*(?:없이|없음|끄기|안\s*함)/)) return {off:true};
+  if ((m = take(st, /提前\s*(半|[\d零一二两三四五六七八九十]+)\s*个?\s*(分钟|分|小时|钟头|天|日)\s*提醒(?:我)?/))){
+    const unit = m[2], n = m[1] === "半" ? 0.5 : cnNum(m[1]);
+    if (n == null) return null;
+    if (unit === "天" || unit === "日") return n >= 1 ? {days: Math.round(n)} : {min: Math.round(n * 1440)};
+    return {min: Math.round(unit === "小时" || unit === "钟头" ? n * 60 : n)};
+  }
+  if ((m = take(st, /(\d+)\s*(분|시간)\s*전(?:에)?\s*알림/))) return {min: Number(m[1]) * (m[2] === "시간" ? 60 : 1)};
+  if ((m = take(st, /(하루|이틀|(\d+)\s*일)\s*전(?:에)?\s*알림/))) return {days: m[1] === "하루" ? 1 : m[1] === "이틀" ? 2 : Number(m[2])};
+  return null;
+}
+
+// 重要。“不重要的事”这类修饰用法：不标重要，标题保留（9.2-12）；单独的“不重要 / 안 중요”：不标重要，从标题去掉
+const KEEP = ["不重要的", "不紧急的"];
+const MARK = i => "〔保留" + i + "〕";
+function takeImportant(st){
+  KEEP.forEach((w, i) => { st.text = st.text.split(w).join(MARK(i)); });   // 先藏起来，免得被下面的规则拆掉
+  take(st, /不重要|不紧急|안\s*(?:중요|급)(?:함|해|한)?/);
+  const hit = !!take(st, /重要的?|紧急的?|중요한|중요(?:함|해)?|급함|급해|긴급/);
+  KEEP.forEach((w, i) => { st.text = st.text.split(MARK(i)).join(w); });
+  return hit;
+}
+
+const isWordChar = c => /[A-Za-z0-9]/.test(c);
+const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// 项目：名字长的优先、不分大小写；英文名前后不能紧挨英文字母或数字（“UI”不会命中“GUI”）
 function findProject(text, names){
-  const low = text.toLowerCase();
-  for (const p of names.slice().sort((a,b) => b.length - a.length)) if (low.indexOf(p.toLowerCase()) >= 0) return p;
+  for (const p of names.slice().sort((a,b) => b.length - a.length)){
+    if (!p) continue;
+    const re = new RegExp((isWordChar(p[0]) ? "(?<![A-Za-z0-9])" : "") + esc(p) + (isWordChar(p[p.length - 1]) ? "(?![A-Za-z0-9])" : ""), "i");
+    if (re.test(text)) return p;
+  }
   return "";
 }
 
-// 第 5 步：标题（去掉多余空白、开头的“前/之前”“记得/提醒我”等、首尾标点）
-function cleanTitle(text, original){
-  const title = text.replace(/\s+/g," ").trim().replace(/^(之前|以前|前)\s*/,"").replace(/^(在|要|得|记得|提醒我|帮我记一下|记一下)\s*/,"").replace(/^[，,。、\s]+|[，,。、\s]+$/g,"");
-  return title || original.trim();
+// 标题：去掉感叹号、多余空白、首尾标点，以及开头的“前/之前”（“周五前交”）和“记得/提醒我”等口头语
+const EDGE = /^[\s，,。.、；;:？?]+|[\s，,。.、；;:？?]+$/g;
+function cleanTitle(text){
+  let s = text.replace(/[!！]+/g, " ").replace(/\s+/g, " ");
+  s = s.replace(/\s*([，,。、；;])(?:\s*[，,。、；;])+/g, "$1").replace(EDGE, "");
+  s = s.replace(/^(之前|以前|前)\s*/, "").replace(/^(在|要|得|记得|提醒我|帮我记一下|记一下)\s*/, "").replace(EDGE, "");
+  return s;
 }
 
+App.logic.parseMarks = {takeRemind, takeImportant, findProject, cleanTitle};
+})();
+// ==== src/scripts/logic/parse-quick.js ====
+(function(){
+// 职责：一句话解析 parseQuick(s, t, projectNames)（纯函数）：从“下周三下午两点半和 NEOX 对片”“내일 오후 3시 NEOX 미팅”
+//       里取出日期、时间、是否重要、项目、提醒和标题；有时间就判为日程，否则为待办。“今天”由 t（"YYYY-MM-DD"）传入。
+//       步骤：预处理 → 提醒说法 → 日期（中文、韩文）→ 时间 → 重要 → 项目 → 标题，每步从剩余文字里“取走”识别到的部分。
+// 依赖：core/date.js、logic/parse-text.js、logic/parse-date-zh.js、logic/parse-date-ko.js、logic/parse-time.js、logic/parse-marks.js
+App.logic = App.logic || {};
+
+const {addDays} = App.core.date;
+const {prepare} = App.logic.parseText;
+const {takeDateZh} = App.logic.parseDateZh;
+const {takeDateKo} = App.logic.parseDateKo;
+const {takeTime, takeStrayPeriod} = App.logic.parseTime;
+const {takeRemind, takeImportant, findProject, cleanTitle} = App.logic.parseMarks;
+
+/*
+ * 返回 {title, date, time, important, project, kind, remind}
+ *   title：什么都没剩下时用原话
+ *   kind：有时间为 "event"，否则 "todo"；“N点前 / N시까지”记成当天截止的待办，时间写进标题（“交稿 18:00前”）
+ *   remind：null 没提到；{off:true} 不提醒；{min:N} 提前 N 分钟（日程说“提前1天”换成 {min:1440}）；{days:N} 待办提前 N 天
+ */
 function parseQuick(s, t, projectNames){
-  s = digitize(s);
-  const st = {text: " " + s + " "};
-  let date = takeDate(st, t);
-  const time = takeTime(st);
-  if (time && !date) date = t;
+  const x = prepare(s);
+  const st = {text: " " + x + " "};
+  let remind = takeRemind(st);
+  const d = takeDateKo(st, t) || takeDateZh(st, t) || {date:"", period:""};
+  const tm = takeTime(st, d.period);
+  let date = d.date;
+  if ((tm.time || tm.deadline) && !date) date = t;
+  if (tm.nextDay) date = addDays(date || t, 1);
+  takeStrayPeriod(st);
   const important = takeImportant(st);
   const project = findProject(st.text, projectNames);
-  const title = cleanTitle(st.text, s);
-  return {title, date, time, important, project, kind: time ? "event" : "todo"};
+  const core = cleanTitle(st.text);
+  const title = tm.deadline ? (core ? core + " " + tm.deadline : tm.deadline) : (core || s.trim());
+  const kind = tm.time ? "event" : "todo";
+  if (remind && remind.days != null && kind === "event") remind = {min: remind.days * 1440};
+  return {title, date, time: tm.time, important, project, kind, remind};
 }
 
 App.logic.parseQuick = parseQuick;
-App.logic.parseQuickSteps = {digitize, takeDate, takeTime, takeImportant, findProject, cleanTitle};
 })();
 // ==== src/scripts/logic/remind.js ====
 (function(){
-// 职责：【v3 预留，尚未实现】提醒时刻计算（纯函数）。保存条目时由 data/write.js 调用，结果写进 remindAt。
-//       字段含义见 docs/05-数据字典/数据字典.md 与 docs/02-设计/修改清单-v3.md。
+// 职责：提醒规则（纯函数）。按条目字段算出“实际提醒时刻”，判断现在该不该提醒，给出提醒选项和标签文案。
+//       页面（ui/remind.js）和 Claude 定时推送用同一套规则，“现在”一律由调用方传入，本文件不读系统时间。
+//       规则依据：docs/02-设计/需求澄清-v3.md #1–#5、#28–#31，数据字典“v3 计划中的规则补充”。
 // 依赖：core/const.js、core/date.js
 App.logic = App.logic || {};
 
-/*
- * computeRemindAt(item, kind, now) → number | null
- *   item：整理过的条目（data/normalize.js 的输出）
- *   kind："event" | "todo"
- *   now ：当前毫秒时间戳（由调用方传入，本函数不读系统时间）
- *   返回：提醒时刻（毫秒）；不需要提醒、已完成、已删除或时刻已过时返回 null。
- *
- * 规则（v3 修改清单）：
- *   有时间的日程：remindMin = null 不提醒 / 0 准时 / 15 / 30 / 60 / 1440（提前 1 天）；默认 15。
- *                 remindAt = date + time 的时刻 − remindMin 分钟。
- *   全天日程：    remindDays = null 不提醒 / 0 当天 9:00 / 1 前一天 20:00。
- *   待办（有 due）：remindDays = null 不提醒 / 0 当天 9:00 / 1 前一天 9:00；默认 0，important 时默认 1。
- *                 done 为 true 时返回 null。
- *   任何条目：    deletedAt 有值时返回 null。
- *   snoozeAt（稍后再提醒）和 notifiedFor（已提醒去重）不在这里处理，由 ui/remind.js 和 data/write.js 负责。
- */
-function computeRemindAt(item, kind, now){
-  return null;   // v3 实现
+const C = App.core.C;
+const {msAt, hm2m, addDays} = App.core.date;
+const MIN = 60000;
+
+// 条目的提醒设置（缺字段时按默认规则，需求澄清 #2）：
+//   有时间的日程 → {type:"event-time", min}；全天日程 → {type:"event-allday", days}；有截止日的待办 → {type:"todo", days}
+//   不提醒、没有日期、待办没截止日 → null
+function setting(item, kind){
+  if (!item) return null;
+  if (kind === "event"){
+    if (!item.date) return null;
+    if (item.time){
+      const v = item.remindMin === undefined ? C.REMIND_EVENT_DEFAULT_MIN : item.remindMin;
+      return v === null ? null : {type:"event-time", min:v};
+    }
+    const d = item.remindDays === undefined ? 1 : item.remindDays;
+    return d === null ? null : {type:"event-allday", days:d};
+  }
+  if (!item.due) return null;
+  const d = item.remindDays === undefined ? (item.important ? 1 : 0) : item.remindDays;
+  return d === null ? null : {type:"todo", days:d};
 }
 
-App.logic.remind = {computeRemindAt};
+// 按规则算出的提醒时刻（毫秒），不考虑 snoozeAt
+function baseAt(item, kind){
+  const s = setting(item, kind);
+  if (!s) return null;
+  if (s.type === "event-time") return msAt(item.date, hm2m(item.time)) - s.min * MIN;
+  if (s.type === "event-allday") return s.days >= 1 ? msAt(addDays(item.date, -s.days), C.REMIND_ALLDAY_PREV_MIN) : msAt(item.date, C.REMIND_DAY_MORNING_MIN);
+  return s.days >= 1 ? msAt(addDays(item.due, -s.days), C.REMIND_TODO_PREV_MIN) : msAt(item.due, C.REMIND_DAY_MORNING_MIN);
+}
+
+// 实际提醒时刻 = max(按规则算出的时刻, snoozeAt)；已删除、已完成、不提醒时为 null（需求澄清 #4）
+function computeRemindAt(item, kind){
+  if (!item || item.deletedAt) return null;
+  if (kind === "todo" && item.done) return null;
+  const base = baseAt(item, kind);
+  if (base == null) return null;
+  return item.snoozeAt && item.snoozeAt > base ? item.snoozeAt : base;
+}
+
+// 日程的开始和结束时刻（全天日程为当天 0:00–24:00）
+function eventSpan(item){
+  if (!item.time) return {start: msAt(item.date, 0), end: msAt(item.date, 24 * 60)};
+  const start = msAt(item.date, hm2m(item.time));
+  return {start, end: start + (Number(item.durationMin) || C.DEFAULT_DURATION_MIN) * MIN};
+}
+
+// 现在该不该提醒这一条。lead：提前量（页面为 0；定时推送为 C.PUSH_LEAD_MS，宁可早到）。
+// 返回 {at} 或 null。规则：
+//   - 实际提醒时刻 ≤ 现在 + lead；
+//   - 过了实际提醒时刻 60 分钟以上的不再提醒（#30）；
+//   - notifiedFor 等于实际提醒时刻 → 已经提醒过（去重）；
+//   - 日程已经结束的不提醒；提醒时刻已过但还没开始的照样提醒（#3）。
+function due(item, kind, now, lead){
+  const at = computeRemindAt(item, kind);
+  if (at == null) return null;
+  if (item.notifiedFor === at) return null;
+  if (at > now + (lead || 0)) return null;
+  if (now - at > C.REMIND_STALE_MS) return null;
+  if (kind === "event" && now >= eventSpan(item).end) return null;
+  return {at};
+}
+
+// 从全部条目里挑出现在要提醒的，按提醒时刻从早到晚排序。
+// events/todos：已整理、未删除的条目；返回 [{kind, item, at}]
+function dueList(events, todos, now, lead){
+  const out = [];
+  for (const e of events){ const d = due(e, "event", now, lead); if (d) out.push({kind:"event", item:e, at:d.at}); }
+  for (const t of todos){ const d = due(t, "todo", now, lead); if (d) out.push({kind:"todo", item:t, at:d.at}); }
+  return out.sort((a, b) => a.at - b.at);
+}
+
+// 改了哪些字段时要清空 snoozeAt（#28）：日期、时间、提醒选项
+const SNOOZE_RESET_FIELDS = ["date", "time", "due", "remindMin", "remindDays"];
+const shouldResetSnooze = (before, patch) => SNOOZE_RESET_FIELDS.some(k => k in patch && patch[k] !== before[k]);
+
+// 弹出层里的提醒选项：[{value, label}]；value 写进 remindMin（有时间的日程）或 remindDays（其他）
+function options(kind, hasTime){
+  if (kind === "event" && hasTime) return C.REMIND_EVENT_OPTIONS.map(v => ({value:v, label: minLabel(v)}));
+  if (kind === "event") return [{value:null, label:"不提醒"}, {value:0, label:"当天 9:00"}, {value:1, label:"前一天 20:00"}];
+  return [{value:null, label:"不提醒"}, {value:0, label:"当天 9:00"}, {value:1, label:"前一天 9:00"}];
+}
+function minLabel(v){
+  if (v === null) return "不提醒";
+  if (v === 0) return "准时";
+  if (v % 1440 === 0) return v / 1440 + " 天";
+  if (v % 60 === 0) return v / 60 + " 小时";
+  return v + " 分";
+}
+// 条目上铃铛标签的文字；不提醒时为 ""
+function label(item, kind){
+  const s = setting(item, kind);
+  if (!s) return "";
+  if (s.type === "event-time") return s.min === 0 ? "准时提醒" : "提前 " + minLabel(s.min);
+  if (s.type === "event-allday") return s.days >= 1 ? "前一天 20:00" : "当天 9:00";
+  return s.days >= 1 ? "前一天 9:00" : "当天 9:00";
+}
+// 当前选中的选项值（缺字段时显示默认值）
+function currentValue(item, kind){
+  const s = setting(item, kind);
+  if (!s) return null;
+  return s.type === "event-time" ? s.min : s.days;
+}
+
+App.logic.remind = {setting, baseAt, computeRemindAt, eventSpan, due, dueList, shouldResetSnooze, options, label, currentValue};
 })();
 // ==== src/scripts/platform/index.js ====
 (function(){
@@ -736,7 +1048,7 @@ App.platform.storeError = function storeError(code, cause){
 // ==== src/scripts/platform/env.js ====
 (function(){
 // 职责：运行环境的时间来源与定时器，注入给 core/clock.js：now() 当前毫秒、after(ms, fn) 延时一次（返回句柄）、
-//       cancel(句柄) 取消、onVisible(fn) 页面切回前台。测试里用假的 env 替换，就能固定“现在”。
+//       cancel(句柄) 取消、onVisible(fn) 页面切回前台、onHidden(fn) 切到后台或关闭。测试里用假的 env 替换，就能固定“现在”。
 // 依赖：platform/index.js
 App.platform = App.platform || {};
 
@@ -746,6 +1058,11 @@ App.platform.env = {
   cancel: h => clearTimeout(h),
   onVisible(fn){
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") fn(); });
+  },
+  // v3：页面切到后台或关闭（用来立即写运行日志）
+  onHidden(fn){
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") fn(); });
+    addEventListener("pagehide", fn);
   },
 };
 })();
@@ -758,7 +1075,10 @@ App.platform = App.platform || {};
 
 const KEYS = {
   view: "pv-view",     // 上次打开的视图：today / sched / todo（v2 起）
-  theme: "pv-theme",   // 【v3 预留】主题：system / light / dark
+  theme: "pv-theme",   // v3：深浅色 system / light / dark（ADR-008）
+  skin: "pv-skin",     // v3：皮肤，目前只有 bento（ADR-008）
+  device: "pv-device", // v3：本机设备号，运行日志用（ADR-010）
+  purged: "pv-purged", // v3：上次清理过期日志和最近删除的日期（每天最多一次）
 };
 function get(key, fallback){
   try { const v = localStorage.getItem(key); return v == null || v === "" ? fallback : v; }
@@ -768,7 +1088,18 @@ function set(key, value){
   try { localStorage.setItem(key, value); } catch(e){}
 }
 
-App.platform.prefs = {KEYS, get, set};
+// 本机设备号：第一次用时随机生成并保存；存不下（隐私模式）时每次打开都是新的，不影响功能
+function deviceId(){
+  let id = get(KEYS.device, "");
+  if (!id){
+    const r = (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()).slice(2);
+    id = "d-" + r.replace(/-/g, "").slice(0, 10);
+    set(KEYS.device, id);
+  }
+  return id;
+}
+
+App.platform.prefs = {KEYS, get, set, deviceId};
 })();
 // ==== src/scripts/platform/notify.js ====
 (function(){
@@ -835,6 +1166,14 @@ App.platform.storage["claude-db"] = function createClaudeDb(){
     add: (coll, id, data) => guard(() => ref(coll, id).set(data)),
     update: (coll, id, patch) => guard(() => db.collection(coll).doc(id).update(patch)),
     remove: (coll, id) => guard(() => db.collection(coll).doc(id).delete()),
+    async get(coll, id){
+      try { const s = await db.collection(coll).doc(id).get(); return s.exists ? Object.assign({}, s.data(), {id:s.id || id}) : null; }
+      catch(e){ throw toStoreError(e); }
+    },
+    async list(coll){
+      try { const s = await db.collection(coll).get(); return s.docs.map(d => Object.assign({}, d.data(), {id:d.id})); }
+      catch(e){ throw toStoreError(e); }
+    },
     // 平台没有批量写入接口：不提供 batch，由 data/store.js 逐条写
   };
 };
@@ -886,6 +1225,8 @@ App.data = App.data || {};
  *   add(collection, id, data): Promise<void>      用 newId 得到的 id 新建一条记录
  *   update(collection, id, patch): Promise<void>  合并更新部分字段（值为 null 表示清空该字段）
  *   remove(collection, id): Promise<void>         彻底删除一条记录（页面上的“删除”是软删除，用 update 写 deletedAt）
+ *   get(collection, id): Promise<object|null>     （v3）读一条记录，不存在返回 null；运行日志追加前要先读出当天那份
+ *   list(collection): Promise<object[]>           （v3）一次读出整个集合（含已删除），用于清理过期的日志和最近删除
  *   batch(ops): Promise<void>                     （可选）一次写多条，ops = [{op:"add"|"update"|"remove", coll, id, data}]
  *     写入失败时 reject，错误对象带中性错误码 code（用 App.platform.storeError 生成）：
  *       forbidden 没有写权限 / not_found 记录不存在 / quota 存储已满 / network 网络或未知 / unauthenticated 未登录
@@ -898,6 +1239,8 @@ App.data = App.data || {};
  *   add       → PUT    /api/{collection}/{id}   body: data
  *   update    → PATCH  /api/{collection}/{id}   body: patch
  *   remove    → DELETE /api/{collection}/{id}
+ *   get       → GET    /api/{collection}/{id}（404 → null）
+ *   list      → GET    /api/{collection}
  *   batch     → POST   /api/batch               body: ops（服务器端用事务）
  *   HTTP 401 → unauthenticated，403 → forbidden，404 → not_found，413/507 → quota，其他 → network。
  *   离线时可先写入 IndexedDB 队列，恢复网络后补发（配合 Service Worker）。
@@ -914,6 +1257,8 @@ const store = {
   add: (coll, id, data) => adapter.add(coll, id, data),
   update: (coll, id, patch) => adapter.update(coll, id, patch),
   remove: (coll, id) => adapter.remove(coll, id),
+  get: (coll, id) => adapter.get(coll, id),
+  list: coll => adapter.list(coll),
   async batch(ops){
     if (adapter.batch) return adapter.batch(ops);
     for (const o of ops) await store[o.op](o.coll, o.id, o.data);
@@ -926,6 +1271,8 @@ App.data.store = store;
 (function(){
 // 职责：快照进来先整理字段，再进状态：强制类型（字符串、数字、布尔）、日期和时间补零（"2026-1-5" → "2026-01-05"、
 //       "9:5" → "09:05"，认不出就置空）、限制长度、deletedAt 统一为毫秒数或 null；id 一律用文档 id。
+//       v3 提醒字段：remindMin（日程）/ remindDays 只认合法取值，null 表示“不提醒”，不合法或缺失时去掉该字段（按默认规则提醒，
+//       需求澄清 #2）；snoozeAt、notifiedFor、remindAt 统一为毫秒数或 null。待办也有 note（#20）。
 //       Claude 写入的不规范数据不会让页面出错。未知字段原样保留。纯函数。
 // 依赖：core/const.js、core/date.js
 App.data = App.data || {};
@@ -952,6 +1299,25 @@ function time(v){
   return h <= 23 && mi <= 59 ? pad(h)+":"+pad(mi) : "";
 }
 const deletedAt = v => { const n = num(v, 0); return n > 0 ? n : null; };
+const msOrNull = v => { const n = num(v, 0); return n > 0 ? n : null; };
+// 提醒选项：raw 里没有这个键、或取值不合法 → 返回 undefined（调用方删掉该键，按默认规则）；null → 不提醒
+function remindOpt(raw, key, allowed){
+  if (!(key in raw)) return undefined;
+  const v = raw[key];
+  if (v === null || v === "null" || v === false) return null;
+  const n = Number(v);
+  return v !== "" && allowed.includes(n) ? n : undefined;
+}
+function remindFields(out, raw, kind){
+  const keys = kind === "event" ? [["remindMin", C.REMIND_EVENT_OPTIONS.filter(x => x !== null)], ["remindDays", [0, 1]]] : [["remindDays", [0, 1]]];
+  for (const [k, allowed] of keys){
+    const v = remindOpt(raw, k, allowed);
+    if (v === undefined) delete out[k]; else out[k] = v;
+  }
+  if (kind !== "event") delete out.remindMin;
+  out.snoozeAt = msOrNull(raw.snoozeAt); out.notifiedFor = msOrNull(raw.notifiedFor); out.remindAt = msOrNull(raw.remindAt);
+  return out;
+}
 const duration = v => { const n = num(v, 0); return n > 0 ? n : C.DEFAULT_DURATION_MIN; };
 
 function common(raw){
@@ -963,16 +1329,20 @@ function common(raw){
 }
 function normalizeEvent(raw, id){
   raw = raw || {};
-  return Object.assign({}, raw, common(raw), {
+  const out = Object.assign({}, raw, common(raw), {
     date: date(raw.date), time: time(raw.time), durationMin: duration(raw.durationMin), note: str(raw.note, C.NOTE_MAX),
-  }, {id: String(id)});
+  });
+  remindFields(out, raw, "event");
+  out.id = String(id);
+  return out;
 }
 function normalizeTodo(raw, id){
   raw = raw || {};
   const out = Object.assign({}, raw, common(raw), {
     done: bool(raw.done), doneAt: num(raw.doneAt, 0), due: date(raw.due), important: bool(raw.important),
   });
-  if ("note" in raw) out.note = str(raw.note, C.NOTE_MAX);
+  out.note = str(raw.note, C.NOTE_MAX);
+  remindFields(out, raw, "todo");
   out.id = String(id);
   return out;
 }
@@ -983,28 +1353,120 @@ App.data.normalize = {normalizeEvent, normalizeTodo, normalizeItem, date, time};
 })();
 // ==== src/scripts/data/fields.js ====
 (function(){
-// 职责：把弹出层表单的值整理成要写入存储的日程 / 待办记录（字段和顺序与 v2 一致），
-//       新建时补上 createdAt、source、rawText 和待办的 done/doneAt。纯函数，只被 data/write.js 使用。
+// 职责：把弹出层表单的值整理成要写入存储的日程 / 待办记录，新建时补上 createdAt、source、rawText 和待办的 done/doneAt；
+//       编辑时 diff() 只留下真正改过的字段（避免把另一台设备期间的修改覆盖掉，PM-C②）。
+//       v3：提醒选项 remind（undefined＝没动过，按默认规则；null＝不提醒；数字＝选项值）写进 remindMin 或 remindDays；
+//       待办也有 note。纯函数，只被 data/write.js 使用。
 // 依赖：core/const.js
 App.data = App.data || {};
 
 const C = App.core.C;
 
-// v：{title, date, time, dur, project, note}
-function eventFields(v, now){
-  return {title:v.title, date:v.date, time:v.time || "", durationMin:Number(v.dur)||C.DEFAULT_DURATION_MIN, project:v.project, note:v.note, updatedAt:now};
+// 有时间的日程用 remindMin，全天日程和待办用 remindDays
+function remindPatch(kind, hasTime, remind){
+  if (remind === undefined) return {};
+  return kind === "event" && hasTime ? {remindMin: remind} : {remindDays: remind};
 }
-// v：{title, date, important, project}
+// v：{title, date, time, dur, project, note, remind}
+function eventFields(v, now){
+  const time = v.time || "";
+  return Object.assign({title:v.title, date:v.date, time, durationMin:Number(v.dur)||C.DEFAULT_DURATION_MIN,
+    project:v.project, note:v.note || ""}, remindPatch("event", !!time, v.remind), {updatedAt:now});
+}
+// v：{title, date, important, project, note, remind}
 function todoFields(v, now){
-  return {title:v.title, due:v.date || "", important:v.important, project:v.project, updatedAt:now};
+  return Object.assign({title:v.title, due:v.date || "", important:!!v.important, project:v.project, note:v.note || ""},
+    remindPatch("todo", false, v.remind), {updatedAt:now});
 }
 function asNew(data, coll, now, raw){
   Object.assign(data, {createdAt:now, source:"page", rawText:raw});
   if (coll === "todos") Object.assign(data, {done:false, doneAt:0});
   return data;
 }
+// 只保留和 before 不同的字段；updatedAt 总是保留
+function diff(before, data){
+  const out = {};
+  for (const k of Object.keys(data)) if (k === "updatedAt" || data[k] !== before[k]) out[k] = data[k];
+  return out;
+}
 
-App.data.fields = {eventFields, todoFields, asNew};
+App.data.fields = {eventFields, todoFields, asNew, diff, remindPatch};
+})();
+// ==== src/scripts/data/log.js ====
+(function(){
+// 职责：运行日志（ADR-010）。op() 记操作、run() 记运行状况，先在内存里攒着，每 LOG_FLUSH_MS 或页面切到后台时
+//       写进存储的 logs 集合：每台设备每天一条文档，id 为 "<YYYY-MM-DD>_<设备号>"，最多 LOG_MAX_ENTRIES 条。
+//       purge() 每天最多一次，清掉 LOG_KEEP_DAYS 天以前的日志文档。**只记编号、字段名和错误码，不记任何内容。**
+//       日志写入失败不影响正常功能：静默丢弃，不发 error 事件。
+// 依赖：core/const.js、core/date.js、data/store.js
+App.data = App.data || {};
+
+const C = App.core.C;
+const {addDays} = App.core.date;
+const store = App.data.store;
+const ACTS_WITH_FIELDS = ["update"];
+
+let clock = null, device = "unknown", src = "page", timer = null;
+let pending = [];             // 还没写进存储的
+const days = {};              // 本次打开页面后已写过的那一天：{day: entries 数组}
+
+// opts：{clock, device, src}
+function init(opts){
+  clock = opts.clock; device = String(opts.device || "unknown").slice(0, 40); src = opts.src || "page";
+}
+function push(e){
+  if (!clock) return;
+  e.t = clock.now(); e.src = src;
+  pending.push(e);
+  if (timer == null) timer = setTimeout(() => { timer = null; flush(); }, C.LOG_FLUSH_MS);
+}
+// 操作：act 如 create / update / done / undone / reschedule / delete / restore / purge；fields 只在 update 时记
+function op(act, coll, id, fields){
+  const e = {kind:"op", act, coll, id: id == null ? undefined : String(id)};
+  if (fields && ACTS_WITH_FIELDS.includes(act)) e.fields = fields.filter(f => f !== "updatedAt").slice(0, 20);
+  push(clean(e));
+}
+// 运行：act 如 save_failed / timeout / disconnect / reconnect / remind_shown / remind_ack / remind_snooze；code 为中性错误码
+function run(act, code, extra){
+  push(clean(Object.assign({kind:"run", act, code}, extra && {coll: extra.coll, id: extra.id == null ? undefined : String(extra.id)})));
+}
+const clean = e => { for (const k of Object.keys(e)) if (e[k] === undefined) delete e[k]; return e; };
+
+// 把攒着的写进存储；按“发生那天”分组，每组读出当天文档（本次第一次写时）后追加
+async function flush(){
+  if (!pending.length || !store.connected) return;
+  const batch = pending; pending = [];
+  const byDay = {};
+  for (const e of batch){ const d = App.core.date.todayOf(e.t); (byDay[d] = byDay[d] || []).push(e); }
+  for (const [day, list] of Object.entries(byDay)){
+    const id = day + "_" + device;
+    try {
+      if (!days[day]){
+        const old = await store.get("logs", id);
+        days[day] = old && Array.isArray(old.entries) ? old.entries.slice() : [];
+      }
+      days[day] = days[day].concat(list).slice(-C.LOG_MAX_ENTRIES);
+      await store.add("logs", id, {day, device, entries: days[day], updatedAt: clock.now()});
+    } catch(e){ /* 日志失败不影响功能，丢弃 */ }
+  }
+}
+// 删除 LOG_KEEP_DAYS 天以前的日志文档（所有设备的，包括 claude / task）；返回删掉的文档数
+async function purge(){
+  if (!store.connected || !clock) return 0;
+  const cutoff = addDays(clock.today(), -C.LOG_KEEP_DAYS);
+  let n = 0;
+  try {
+    for (const doc of await store.list("logs")){
+      const day = typeof doc.day === "string" ? doc.day : String(doc.id).slice(0, 10);
+      if (day < cutoff){ await store.remove("logs", doc.id); n++; }
+    }
+  } catch(e){ /* 同上 */ }
+  return n;
+}
+// 测试用：看攒着的条目
+const peek = () => pending.slice();
+
+App.data.log = {init, op, run, flush, purge, peek};
 })();
 // ==== src/scripts/data/state.js ====
 (function(){
@@ -1034,23 +1496,29 @@ App.data.isConnected = () => store.connected;
 })();
 // ==== src/scripts/data/write.js ====
 (function(){
-// 职责：全部写入的唯一入口：saveItem 新建 / 编辑、toggleDone 勾选、reschedule 改期、moveAll 全部改到今天、
-//       softDelete 软删除（写 deletedAt）、restore 恢复（清空 deletedAt）。先改本地、发 "change"，再写存储；
-//       写入 10 秒没回应或失败就回滚本地，发 "error" {code, retry}，retry 会把整个操作重做一遍。
-//       以后的 remindAt 计算也在这里统一接入（logic/remind.js）。不碰界面，提示文案由界面根据事件决定。
-//       时钟由 init(clock) 注入（app.js 传入统一时钟，测试传入假时钟），本文件不读全局时钟。
-// 依赖：core/const.js、platform/index.js、data/bus.js、data/store.js、data/state.js、data/fields.js
+// 职责：全部写入的唯一入口：saveItem 新建 / 编辑（编辑只写改过的字段）、convert 日程和待办互转、toggleDone 勾选、
+//       reschedule 改期、moveAll 全部改到今天、softDelete 软删除、restore 恢复、purgeDeleted 清理 30 天前删除的、
+//       ackReminder“知道了”、snoozeReminder“10 分钟后”。先改本地、发 "change"，再写存储；写入 10 秒没回应或失败
+//       就回滚本地，发 "error" {code, retry}，retry 会把整个操作重做一遍。
+//       每次写入都顺带更新提醒时刻的缓存 remindAt（logic/remind.js；页面实际以实时推算为准），并记运行日志（data/log.js）。
+//       不碰界面，提示文案由界面根据事件决定。时钟由 init(clock) 注入，本文件不读全局时钟。
+// 依赖：core/const.js、logic/remind.js、platform/index.js、data/bus.js、data/store.js、data/state.js、data/fields.js、data/log.js
 App.data = App.data || {};
 
 const C = App.core.C;
-const emit = App.data.emit, store = App.data.store, S = App.data.state, F = App.data.fields;
+const R = App.logic.remind;
+const emit = App.data.emit, store = App.data.store, S = App.data.state, F = App.data.fields, log = App.data.log;
 let clock = null;   // {now(), today()}，由 init 注入
 function init(c){ clock = c; }
 const now = () => clock.now();
 const today = () => clock.today();
 const collOf = kind => kind === "event" ? "events" : "todos";
+const kindOf = coll => coll === "events" ? "event" : "todo";
+const DAY_MS = 86400000;
 // 快照会整体替换数组；按 id 找到当前那份对象，避免改到旧对象
 const live = (coll, x) => S[coll].find(y => y.id === x.id) || x;
+// 合并后的条目重新算提醒时刻缓存
+const remindAtOf = (kind, merged) => R.computeRemindAt(merged, kind);
 
 function withTimeout(p, ms){
   return new Promise((resolve, reject) => {
@@ -1062,79 +1530,135 @@ function withTimeout(p, ms){
 async function run(op, rollback, redo){
   try { await withTimeout(op(), C.WRITE_TIMEOUT_MS); return true; }
   catch(e){
+    const code = (e && e.code) || "network";
+    log.run(code === "timeout" ? "timeout" : "save_failed", code);
     if (rollback) rollback();
-    emit("error", {code: (e && e.code) || "network", retry: redo || (() => run(op, rollback, redo))});
+    emit("error", {code, retry: redo || (() => run(op, rollback, redo))});
     emit("change");
     return false;
   }
 }
 
 // kind："event" | "todo"；item：要编辑的条目，新建时为 null；
-// v：表单值 {title, date, time, dur, project, note, important, raw}。返回 {ok, coll, id, data}
+// v：表单值 {title, date, time, dur, project, note, important, remind, raw}。返回 {ok, coll, id, data}
 async function saveItem(kind, item, v){
   const coll = collOf(kind), t = now();
-  const data = kind === "event" ? F.eventFields(v, t) : F.todoFields(v, t);
+  let data = kind === "event" ? F.eventFields(v, t) : F.todoFields(v, t);
   if (item){
-    const id = item.id;
-    return {ok: await run(() => store.update(coll, id, data)), coll, id, data};
+    const id = item.id, before = live(coll, item);
+    data = F.diff(before, data);
+    if (before.snoozeAt && R.shouldResetSnooze(before, data)) data.snoozeAt = null;
+    const at = remindAtOf(kind, Object.assign({}, before, data));
+    if (at !== before.remindAt) data.remindAt = at;
+    const ok = await run(() => store.update(coll, id, data));
+    if (ok) log.op("update", coll, id, Object.keys(data));
+    return {ok, coll, id, data};
   }
   F.asNew(data, coll, t, v.raw || "");
+  data.remindAt = remindAtOf(kind, data);
   const id = store.newId(coll);
   S.localIds.add(id);
-  return {ok: await run(() => store.add(coll, id, data)), coll, id, data};
+  const ok = await run(() => store.add(coll, id, data));
+  if (ok) log.op("create", coll, id);
+  return {ok, coll, id, data};
+}
+// 编辑时切换类型：新建另一类，旧的软删除（可以在“最近删除”里找回）。返回 {ok, coll, id}
+async function convert(fromKind, item, v){
+  const res = await saveItem(fromKind === "event" ? "todo" : "event", null, Object.assign({}, v, {raw: item.rawText || ""}));
+  if (res.ok) await softDelete(collOf(fromKind), item);
+  return res;
 }
 function toggleDone(x, done){
   x = live("todos", x);
   const prev = {done:x.done, doneAt:x.doneAt};
   x.done = done; x.doneAt = done ? now() : 0;
   emit("change");
-  return run(() => store.update("todos", x.id, {done, doneAt:x.doneAt, updatedAt:now()}),
+  const patch = {done, doneAt:x.doneAt, remindAt: remindAtOf("todo", x), updatedAt:now()};
+  return run(() => store.update("todos", x.id, patch).then(() => log.op(done ? "done" : "undone", "todos", x.id)),
     () => { x.done = prev.done; x.doneAt = prev.doneAt; }, () => toggleDone(x, done));
 }
 function reschedule(x, d){
   x = live("todos", x);
-  const prev = x.due; x.due = d;
+  const prev = {due:x.due, snoozeAt:x.snoozeAt};
+  x.due = d; x.snoozeAt = null;
   emit("change");
-  return run(() => store.update("todos", x.id, {due:d, updatedAt:now()}), () => { x.due = prev; }, () => reschedule(x, d));
+  const patch = {due:d, snoozeAt:null, remindAt: remindAtOf("todo", x), updatedAt:now()};
+  return run(() => store.update("todos", x.id, patch).then(() => log.op("reschedule", "todos", x.id)),
+    () => { x.due = prev.due; x.snoozeAt = prev.snoozeAt; }, () => reschedule(x, d));
 }
 function moveAll(list){
   const t = today();
   list = list.map(x => live("todos", x));
-  const prev = list.map(x => x.due);
-  list.forEach(x => x.due = t);
+  const prev = list.map(x => [x.due, x.snoozeAt]);
+  list.forEach(x => { x.due = t; x.snoozeAt = null; });
   emit("change");
   const ts = now();
-  return run(() => store.batch(list.map(x => ({op:"update", coll:"todos", id:x.id, data:{due:t, updatedAt:ts}}))),
-    () => list.forEach((x, i) => x.due = prev[i]), () => moveAll(list));
+  return run(() => store.batch(list.map(x => ({op:"update", coll:"todos", id:x.id, data:{due:t, snoozeAt:null, remindAt: remindAtOf("todo", x), updatedAt:ts}})))
+      .then(() => list.forEach(x => log.op("reschedule", "todos", x.id))),
+    () => list.forEach((x, i) => { x.due = prev[i][0]; x.snoozeAt = prev[i][1]; }), () => moveAll(list));
 }
 // coll："events" | "todos"
 function softDelete(coll, item){
   const x = live(coll, item), prev = x.deletedAt;
   x.deletedAt = now();
   emit("change");
-  return run(() => store.update(coll, x.id, {deletedAt:x.deletedAt, updatedAt:now()}), () => { x.deletedAt = prev; }, () => softDelete(coll, x));
+  return run(() => store.update(coll, x.id, {deletedAt:x.deletedAt, remindAt:null, updatedAt:now()}).then(() => log.op("delete", coll, x.id)),
+    () => { x.deletedAt = prev; }, () => softDelete(coll, x));
 }
 function restore(coll, item){
   const x = live(coll, item), prev = x.deletedAt;
   x.deletedAt = null;
   emit("change");
-  return run(() => store.update(coll, x.id, {deletedAt:null, updatedAt:now()}), () => { x.deletedAt = prev; }, () => restore(coll, x));
+  const patch = {deletedAt:null, remindAt: remindAtOf(kindOf(coll), x), updatedAt:now()};
+  return run(() => store.update(coll, x.id, patch).then(() => log.op("restore", coll, x.id)),
+    () => { x.deletedAt = prev; }, () => restore(coll, x));
+}
+// 彻底删除 30 天前软删除的条目（ADR-006、需求澄清 #18）。由界面每天最多调用一次；失败不打扰用户。返回删除条数
+async function purgeDeleted(){
+  const cutoff = now() - C.TRASH_KEEP_DAYS * DAY_MS;
+  let n = 0;
+  for (const coll of ["events", "todos"]){
+    for (const x of S[coll].filter(y => y.deletedAt && y.deletedAt < cutoff)){
+      try { await store.remove(coll, x.id); log.op("purge", coll, x.id); n++; } catch(e){ /* 下次再清 */ }
+    }
+  }
+  return n;
+}
+// “知道了”：记下已经提醒过的那个时刻（notifiedFor），其他设备据此收起提醒（需求澄清 #7）
+function ackReminder(kind, item, at){
+  const coll = collOf(kind), x = live(coll, item), prev = x.notifiedFor;
+  x.notifiedFor = at;
+  emit("change");
+  return run(() => store.update(coll, x.id, {notifiedFor:at, updatedAt:now()}).then(() => log.run("remind_ack", null, {coll, id:x.id})),
+    () => { x.notifiedFor = prev; }, () => ackReminder(kind, x, at));
+}
+// “10 分钟后”：这次算已提醒，snoozeAt 设为现在 + 10 分钟，到时再提醒一次（需求澄清 #4）
+function snoozeReminder(kind, item, at){
+  const coll = collOf(kind), x = live(coll, item), prev = [x.notifiedFor, x.snoozeAt];
+  x.notifiedFor = at; x.snoozeAt = now() + C.SNOOZE_MS;
+  emit("change");
+  const patch = {notifiedFor:at, snoozeAt:x.snoozeAt, remindAt:x.snoozeAt, updatedAt:now()};
+  return run(() => store.update(coll, x.id, patch).then(() => log.run("remind_snooze", null, {coll, id:x.id})),
+    () => { x.notifiedFor = prev[0]; x.snoozeAt = prev[1]; }, () => snoozeReminder(kind, x, at));
 }
 
-App.data.write = {init, saveItem, toggleDone, reschedule, moveAll, softDelete, restore, collOf};
+App.data.write = {init, saveItem, convert, toggleDone, reschedule, moveAll, softDelete, restore, purgeDeleted, ackReminder, snoozeReminder, collOf, kindOf};
 })();
 // ==== src/scripts/data/subscribe.js ====
 (function(){
 // 职责：连接存储并订阅 events / todos 两个集合：快照先经 normalize 整理再进状态，发 "change"；
 //       别处新加的记录记入 fresh 短暂高亮（自己刚加的不算）；连不上发 "notice" unavailable；
 //       订阅出错时发 "notice" lost（两个集合一起断也只发一次），并按 RECONNECT_MS 逐步拉长间隔自动重新订阅，
-//       断掉的集合全部恢复后发一次 reconnected。
-// 依赖：core/const.js、data/bus.js、data/store.js、data/state.js、data/normalize.js
+//       断掉的集合全部恢复后发一次 reconnected。两个集合都第一次加载完时发一次 "loaded"（v3：触发每日清理）。
+//       断线、重连都记运行日志（ADR-010）。
+// 依赖：core/const.js、data/bus.js、data/store.js、data/state.js、data/normalize.js、data/log.js
 App.data = App.data || {};
 
 const C = App.core.C;
 const emit = App.data.emit, store = App.data.store, S = App.data.state;
 const {normalizeItem} = App.data.normalize;
+const log = App.data.log;
+let loadedOnce = false;
 const KEY = {events:"ev", todos:"td"};
 const unsubs = {}, fails = {events:0, todos:0};
 const down = new Set();   // 当前断着的集合
@@ -1150,13 +1674,14 @@ function watch(coll){
   if (unsubs[coll]){ try { unsubs[coll](); } catch(e){} }
   unsubs[coll] = store.subscribe(coll, snap => {
     fails[coll] = 0;
-    if (down.delete(coll) && !down.size) emit("notice", {type:"reconnected"});
+    if (down.delete(coll) && !down.size){ log.run("reconnect"); emit("notice", {type:"reconnected"}); }
     markFresh(snap, key);
     S[coll] = snap.items.map(r => normalizeItem(coll, r));
     S.loaded[key] = true;
     emit("change");
-  }, () => {
-    if (!down.size) emit("notice", {type:"lost"});
+    if (!loadedOnce && S.loaded.ev && S.loaded.td){ loadedOnce = true; emit("loaded"); }
+  }, err => {
+    if (!down.size){ log.run("disconnect", (err && err.code) || "network"); emit("notice", {type:"lost"}); }
     down.add(coll);
     const wait = C.RECONNECT_MS[Math.min(fails[coll], C.RECONNECT_MS.length - 1)];
     fails[coll]++;
@@ -1868,7 +2393,7 @@ App.ui.theme = {
 (function(){
 // 职责：启动入口：选定存储适配器（全项目唯一一处配置）、创建统一时钟、绑定各模块事件、首屏渲染、连接数据、启动时钟。
 //       App.BUILD 由 build.py 在包头写入：发布版为 {storage:"claude-db"}，测试页为 {storage:"mock-db"}。
-// 依赖：core/clock.js、platform/index.js、platform/env.js、platform/claude-db.js、data/store.js、data/write.js、data/subscribe.js、
+// 依赖：core/clock.js、platform/index.js、platform/env.js、platform/prefs.js、platform/claude-db.js、data/bus.js、data/store.js、data/log.js、data/write.js、data/subscribe.js、
 //       ui/view-state.js、ui/render.js、ui/today.js、ui/schedule.js、ui/todos.js、ui/sheet.js、ui/nav.js、ui/remind.js、ui/theme.js
 
 // —— 存储适配器配置 ——
@@ -1880,6 +2405,8 @@ App.data.store.use(App.platform.storage[STORAGE]());
 // —— 统一时钟（全页面只有这一个“现在”）——
 App.clock = App.core.clock.create(App.platform.env);
 App.data.write.init(App.clock);
+App.data.log.init({clock: App.clock, device: App.platform.prefs.deviceId(), src: "page"});   // 运行日志（ADR-010）
+App.platform.env.onHidden(() => App.data.log.flush());
 App.ui.viewState.init(App.clock.today());
 
 // —— 事件绑定 ——
@@ -1898,6 +2425,13 @@ App.clock.on("tick", () => { if (App.ui.sheet.isClosed()) App.ui.render(); });
 // —— 首屏与数据 ——
 App.ui.nav.go(App.ui.view.view); App.ui.render();
 App.data.subscribe.start();
+// 每天最多一次：清理 30 天前删除的条目和 90 天前的日志（等两个集合都加载完再做）
+App.data.on("loaded", () => {
+  const P = App.platform.prefs, day = App.clock.today();
+  if (P.get(P.KEYS.purged, "") === day) return;
+  P.set(P.KEYS.purged, day);
+  App.data.write.purgeDeleted(); App.data.log.purge();
+});
 App.clock.start();
 })();
 })();

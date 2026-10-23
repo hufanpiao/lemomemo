@@ -31,7 +31,25 @@ test("待办：done / important 只认真正的 true，字符串 \"false\" 不�
   const t = plain(N.normalizeTodo({ title: "a", done: "false", important: "true", due: "2026-10-30", doneAt: "x" }, "t1"));
   assert.equal(t.done, false); assert.equal(t.important, true); assert.equal(t.due, "2026-10-30"); assert.equal(t.doneAt, 0);
   assert.equal(plain(N.normalizeTodo({ done: true }, "t")).done, true);
-  assert.equal("note" in plain(N.normalizeTodo({}, "t")), false);
+  assert.equal(plain(N.normalizeTodo({}, "t")).note, "", "v3 起待办也有备注（需求澄清 #20）");
+});
+test("v3 提醒字段：合法取值保留，null 表示不提醒，不合法或缺失时去掉（按默认规则）", () => {
+  const e = (o) => plain(N.normalizeEvent(Object.assign({ title: "a", date: "2026-10-23" }, o), "e"));
+  assert.equal(e({ remindMin: 30 }).remindMin, 30);
+  assert.equal(e({ remindMin: "60" }).remindMin, 60);
+  assert.equal(e({ remindMin: null }).remindMin, null);
+  assert.equal("remindMin" in e({ remindMin: 7 }), false, "7 分钟不是可选值");
+  assert.equal("remindMin" in e({}), false);
+  assert.equal(e({ remindDays: 1 }).remindDays, 1);
+  const t = (o) => plain(N.normalizeTodo(Object.assign({ title: "a" }, o), "t"));
+  assert.equal(t({ remindDays: 0 }).remindDays, 0);
+  assert.equal(t({ remindDays: "null" }).remindDays, null);
+  assert.equal("remindDays" in t({ remindDays: 5 }), false);
+  assert.equal("remindMin" in t({ remindMin: 15 }), false, "待办没有 remindMin");
+});
+test("v3 时间戳字段：snoozeAt、notifiedFor、remindAt 是正数毫秒或 null", () => {
+  const t = plain(N.normalizeTodo({ snoozeAt: "1790000000000", notifiedFor: 0, remindAt: "abc" }, "t"));
+  assert.equal(t.snoozeAt, 1790000000000); assert.equal(t.notifiedFor, null); assert.equal(t.remindAt, null);
 });
 test("deletedAt：正数保留，0 / 空 / 乱写都算没删除", () => {
   assert.equal(plain(N.normalizeTodo({ deletedAt: 1700000000000 }, "t")).deletedAt, 1700000000000);

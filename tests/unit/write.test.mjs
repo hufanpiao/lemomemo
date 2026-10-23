@@ -6,8 +6,8 @@ import assert from "node:assert/strict";
 import { loadApp, src, plain, sleep, fakeClock, test, done } from "../lib/harness.mjs";
 
 const FILES = [
-  src("core/const.js"), src("core/date.js"), src("logic/items.js"), src("logic/projects.js"), src("platform/index.js"),
-  src("data/bus.js"), src("data/store.js"), src("data/normalize.js"), src("data/fields.js"), src("data/state.js"),
+  src("core/const.js"), src("core/date.js"), src("logic/items.js"), src("logic/projects.js"), src("logic/remind.js"), src("platform/index.js"),
+  src("data/bus.js"), src("data/store.js"), src("data/normalize.js"), src("data/fields.js"), src("data/log.js"), src("data/state.js"),
   src("data/write.js"), src("data/subscribe.js"), "tests/mock/mock-db.js",
 ];
 const SEED = () => ({
@@ -106,12 +106,12 @@ test("store.batch：适配器没有 batch 时逐条写", async () => {
   await App.data.store.batch([{ op: "update", coll: "todos", id: "t1", data: { due: "x" } }, { op: "update", coll: "todos", id: "t2", data: { due: "y" } }]);
   assert.deepEqual(plain(calls), ["t1", "t2"]);
 });
-test("saveItem 新建：字段与 v2 一致，id 记入 localIds；编辑只用 update", async () => {
+test("saveItem 新建：v2 的字段 + v3 的 note、remindAt，id 记入 localIds；编辑只用 update", async () => {
   const { App, db, clock } = await setup();
   const r = await App.data.write.saveItem("todo", null, { title: "买硬盘", date: "", important: false, project: "", raw: "买硬盘" });
   assert.equal(r.ok, true); assert.equal(App.data.state.localIds.has(r.id), true);
   assert.deepEqual(plain(db.data.todos[r.id]), { title: "买硬盘", due: "", important: false, project: "", updatedAt: clock.now(),
-    createdAt: clock.now(), source: "page", rawText: "买硬盘", done: false, doneAt: 0 });
+    createdAt: clock.now(), source: "page", rawText: "买硬盘", done: false, doneAt: 0, note: "", remindAt: null });
   const e = await App.data.write.saveItem("event", App.data.state.events[0], { title: "对片2", date: "2026-10-24", time: "", dur: "90", project: "NEOX", note: "" });
   assert.equal(e.ok, true); assert.equal(db.data.events.e1.title, "对片2"); assert.equal(db.data.events.e1.durationMin, 90);
 });
@@ -140,6 +140,95 @@ test("订阅断线：两个集合一起断只提示一次 lost，自动重新订
   await sleep(80);
   assert.ok(subs >= 5, "应已重新订阅，实际 " + subs + " 次");
   assert.deepEqual(plain(got), ["lost", "reconnected"]);
+});
+
+// —— v3：提醒、编辑只写改过的字段、类型互转、最近删除、运行日志 ——
+const ms = (App, d, hm) => { const [h, m] = hm.split(":").map(Number); return App.core.date.msAt(d, h * 60 + m); };
+test("v3 编辑只写改过的字段（PM-C②），并更新 remindAt 缓存", async () => {
+  const { App, db } = await setup();
+  const calls = []; const upd = db.update; db.update = (c, id, v) => { calls.push(plain(v)); return upd(c, id, v); };
+  await App.data.write.saveItem("event", App.data.state.events[0], { title: "对片", date: "2026-10-23", time: "11:00", dur: "60", project: "NEOX", note: "" });
+  const sent = calls[0];
+  assert.deepEqual(Object.keys(sent).sort(), ["remindAt", "time", "updatedAt"]);
+  assert.equal(sent.remindAt, ms(App, "2026-10-23", "10:45"), "默认提前 15 分钟");
+});
+test("v3 改了时间才清空 snoozeAt；只改标题时保留（#28）", async () => {
+  const { App, db } = await setup();
+  const e = App.data.state.events[0]; e.snoozeAt = ms(App, "2026-10-23", "09:55");
+  await App.data.write.saveItem("event", e, { title: "对片改名", date: "2026-10-23", time: "10:00", dur: "60", project: "NEOX", note: "" });
+  assert.equal("snoozeAt" in db.data.events.e1, false, "只改标题，不动 snoozeAt");
+  await App.data.write.saveItem("event", App.data.state.events[0], { title: "对片改名", date: "2026-10-23", time: "12:00", dur: "60", project: "NEOX", note: "" });
+  assert.equal(db.data.events.e1.snoozeAt, null);
+});
+test("v3 提醒选项写进 remindMin（有时间的日程）或 remindDays（待办、全天日程）", async () => {
+  const { App, db } = await setup();
+  const r1 = await App.data.write.saveItem("event", null, { title: "a", date: "2026-10-24", time: "15:00", dur: "60", project: "", note: "", remind: 30 });
+  assert.equal(db.data.events[r1.id].remindMin, 30); assert.equal(db.data.events[r1.id].remindAt, ms(App, "2026-10-24", "14:30"));
+  const r2 = await App.data.write.saveItem("todo", null, { title: "b", date: "2026-10-24", important: false, project: "", remind: null });
+  assert.equal(db.data.todos[r2.id].remindDays, null); assert.equal(db.data.todos[r2.id].remindAt, null);
+});
+test("v3 知道了：写 notifiedFor；10 分钟后：写 snoozeAt = 现在 + 10 分钟", async () => {
+  const { App, db, clock } = await setup();
+  const t = byId(App, "t2"); const at = ms(App, "2026-10-22", "09:00");
+  await App.data.write.ackReminder("todo", t, at);
+  assert.equal(db.data.todos.t2.notifiedFor, at);
+  await App.data.write.snoozeReminder("todo", byId(App, "t2"), at);
+  assert.equal(db.data.todos.t2.snoozeAt, clock.now() + App.core.C.SNOOZE_MS);
+});
+test("v3 软删除清空 remindAt；恢复后重新计算", async () => {
+  const { App, db } = await setup();
+  await App.data.write.softDelete("events", App.data.state.events[0]);
+  assert.equal(db.data.events.e1.remindAt, null); assert.ok(db.data.events.e1.deletedAt > 0);
+  await App.data.write.restore("events", App.data.state.events[0]);
+  assert.equal(db.data.events.e1.deletedAt, null); assert.equal(db.data.events.e1.remindAt, ms(App, "2026-10-23", "09:45"));
+});
+test("v3 清理 30 天前删除的条目，30 天内的保留（ADR-006）", async () => {
+  const { App, db, clock } = await setup();
+  db.data.todos.t1.deletedAt = clock.now() - 31 * 86400000;
+  db.data.todos.t2.deletedAt = clock.now() - 29 * 86400000;
+  db.update("todos", "t3", {}); await sleep(5);   // 触发一次快照，让状态拿到 deletedAt
+  assert.equal(await App.data.write.purgeDeleted(), 1);
+  assert.equal("t1" in db.data.todos, false); assert.equal("t2" in db.data.todos, true);
+});
+test("v3 编辑时把待办改成日程：新建日程，旧待办进最近删除", async () => {
+  const { App, db } = await setup();
+  const r = await App.data.write.convert("todo", byId(App, "t2"), { title: "导出", date: "2026-10-22", time: "15:00", dur: "60", project: "", note: "" });
+  assert.equal(r.coll, "events"); assert.equal(db.data.events[r.id].time, "15:00");
+  assert.ok(db.data.todos.t2.deletedAt > 0);
+});
+test("v3 运行日志：写入成功记 op，只记编号和字段名，不记标题", async () => {
+  const { App } = await setup();
+  App.data.log.init({ clock: fakeClock(loadApp([src("core/date.js")]), 2026, 10, 23), device: "dev", src: "page" });
+  await App.data.write.saveItem("event", App.data.state.events[0], { title: "秘密标题", date: "2026-10-23", time: "11:00", dur: "60", project: "NEOX", note: "" });
+  const entries = plain(App.data.log.peek());
+  const last = entries[entries.length - 1];
+  assert.equal(last.act, "update"); assert.equal(last.coll, "events"); assert.equal(last.id, "e1");
+  assert.ok(last.fields.includes("time") && !last.fields.includes("updatedAt"));
+  assert.equal(JSON.stringify(entries).includes("秘密标题"), false);
+});
+test("v3 运行日志：写入失败记 save_failed 和错误码", async () => {
+  const { App } = await setup({ fail: () => "forbidden" });
+  App.data.log.init({ clock: fakeClock(loadApp([src("core/date.js")]), 2026, 10, 23), device: "dev", src: "page" });
+  await App.data.write.toggleDone(byId(App, "t1"), true);
+  const last = plain(App.data.log.peek()).pop();
+  assert.equal(last.act, "save_failed"); assert.equal(last.code, "forbidden");
+});
+test("v3 运行日志：flush 写进 logs/<日期>_<设备>，追加到已有记录后面，最多 500 条", async () => {
+  const { App, db } = await setup();
+  const clock = fakeClock(loadApp([src("core/date.js")]), 2026, 10, 23);
+  App.data.log.init({ clock, device: "dev", src: "page" });
+  db.data.logs = { "2026-10-23_dev": { day: "2026-10-23", device: "dev", entries: Array.from({ length: 499 }, (_, i) => ({ t: i, kind: "op", act: "create", src: "page" })) } };
+  App.data.log.run("reconnect"); App.data.log.run("remind_shown");
+  await App.data.log.flush();
+  const doc = db.data.logs["2026-10-23_dev"];
+  assert.equal(doc.entries.length, 500); assert.equal(doc.entries[499].act, "remind_shown"); assert.equal(doc.entries[0].t, 1, "最早的一条被挤掉");
+});
+test("v3 运行日志：清理 90 天前的日志文档（所有设备）", async () => {
+  const { App, db } = await setup();
+  App.data.log.init({ clock: fakeClock(loadApp([src("core/date.js")]), 2026, 10, 23), device: "dev", src: "page" });
+  db.data.logs = { "2026-07-01_dev": { day: "2026-07-01" }, "2026-07-01_claude": { day: "2026-07-01" }, "2026-08-01_dev": { day: "2026-08-01" } };
+  assert.equal(await App.data.log.purge(), 2);
+  assert.deepEqual(Object.keys(db.data.logs), ["2026-08-01_dev"]);
 });
 
 await done("write / subscribe 单元测试（mock-db 适配器）");
