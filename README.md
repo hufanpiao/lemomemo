@@ -48,6 +48,18 @@ python build/build.py --target claude  # 同上，显式写法
 python build/build.py --target web     # 预留：独立服务器版（PWA），阶段 2 起实现
 ```
 
+## 数据与备份
+
+- 真实数据在 claude.ai 云端数据库；数据结构见 `data/schema/` 和 [数据字典](docs/05-数据字典/数据字典.md)。
+- **每次做新版本前、每次发布前都要备份**（[ADR-009](docs/04-决策/ADR-009-每个版本前备份数据和源码.md)）：Claude 先把云端数据导出到 `data/backups/<日期>_<时机>/`，再运行：
+
+```bash
+python build/backup.py v3开发前
+```
+
+- 源码会打包到项目外的 `D:\claude code\待办APP-备份\源码\`；用 `git clone <bundle 文件> 待办APP` 就能完整恢复。
+- `data/backups/` 是真实个人数据，不进 git。
+
 ## 测试
 
 ```bash

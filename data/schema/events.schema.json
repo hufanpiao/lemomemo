@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "planner/events.schema.json",
+  "title": "events",
+  "description": "日程。与 docs/05-数据字典/数据字典.md 保持一致；文档 id 不在字段里，数据里带 id 字段会被忽略。",
+  "type": "object",
+  "required": [
+    "title",
+    "date",
+    "createdAt"
+  ],
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "description": "标题"
+    },
+    "project": {
+      "type": "string",
+      "maxLength": 40,
+      "default": "",
+      "description": "项目名，决定颜色和筛选"
+    },
+    "note": {
+      "type": "string",
+      "maxLength": 200,
+      "default": "",
+      "description": "备注（待办从 v3 起）"
+    },
+    "source": {
+      "enum": [
+        "page",
+        "chat"
+      ],
+      "default": "page",
+      "description": "来源；chat 显示“Claude 代记”"
+    },
+    "rawText": {
+      "type": "string",
+      "default": "",
+      "description": "用户原话"
+    },
+    "createdAt": {
+      "type": "number",
+      "minimum": 0,
+      "description": "创建时间（毫秒）"
+    },
+    "updatedAt": {
+      "type": "number",
+      "minimum": 0,
+      "description": "最后修改时间（毫秒）"
+    },
+    "remindAt": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "v3：缓存的提醒时刻；以页面实时推算为准"
+    },
+    "notifiedFor": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "default": null,
+      "description": "v3：已提醒过的那个提醒时刻，用于去重"
+    },
+    "snoozeAt": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "default": null,
+      "description": "v3：“10 分钟后”再提醒的时刻"
+    },
+    "deletedAt": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "default": null,
+      "description": "v3：软删除时间；有值表示在“最近删除”里"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "日期 YYYY-MM-DD"
+    },
+    "time": {
+      "type": "string",
+      "pattern": "^(\\d{2}:\\d{2})?$",
+      "default": "",
+      "description": "开始时间 HH:MM；空表示全天"
+    },
+    "durationMin": {
+      "type": "number",
+      "minimum": 1,
+      "default": 60,
+      "description": "时长（分钟）"
+    },
+    "remindMin": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "enum": [
+        0,
+        15,
+        30,
+        60,
+        1440,
+        null
+      ],
+      "default": 15,
+      "description": "v3：有时间的日程提前多少分钟提醒；null 不提醒"
+    },
+    "remindDays": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "enum": [
+        0,
+        1,
+        null
+      ],
+      "default": 1,
+      "description": "v3：全天日程 0＝当天 9:00，1＝前一天 20:00，null 不提醒"
+    }
+  },
+  "additionalProperties": true
+}
