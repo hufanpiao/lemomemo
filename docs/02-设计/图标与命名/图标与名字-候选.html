@@ -29,7 +29,7 @@ p{margin:0 0 10px;max-width:68ch}
 .pill.r{background:var(--pinkbg);color:var(--red)}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px}
 .hero{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center}
-.hero .ic{width:132px;height:132px;border-radius:29.5px;overflow:hidden;flex:none}
+.hero .ic{width:132px;height:132px;border-radius:29.5px;overflow:hidden;flex:none;box-shadow:0 0 0 2px #4a4d55}
 @media (max-width:560px){.hero{grid-template-columns:1fr}.hero .ic{width:104px;height:104px;border-radius:23px}}
 ul.tight{margin:6px 0 0;padding-left:1.2em}
 ul.tight li{margin:3px 0}
@@ -181,10 +181,135 @@ table.score th{font-weight:800;white-space:nowrap}
       <rect width="1024" height="1024" fill="#F2DF4A"/>
       <use href="#markC"/>
     </symbol>
+
+    <!-- ============ 第二轮：柠檬记 ============ -->
+    <!-- 丁：切开的柠檬，拿出一瓣 -->
+    <symbol id="markD" viewBox="0 0 1024 1024">
+      <g transform="translate(470 560)">
+        <circle r="300" fill="#F2DF4A"/>
+        <circle r="266" fill="#141518"/>
+        <path transform="rotate(0)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(45)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(90)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(135)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(180)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(225)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(270)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(-45) translate(118 0)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+      </g>
+    </symbol>
+    <symbol id="icD" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#141518"/>
+      <use href="#markD"/>
+    </symbol>
+
+    <!-- 戊：会说话的柠檬 -->
+    <symbol id="markE" viewBox="0 0 1024 1024">
+      <g transform="translate(468 560) rotate(-20) scale(.94)">
+        <path d="M-356 0 C-332 -36 -286 -62 -246 -122 C-170 -222 170 -222 246 -122 C286 -62 332 -36 356 0 C332 36 286 62 246 122 C170 222 -170 222 -246 122 C-286 62 -332 36 -356 0 Z" fill="#141518"/>
+        <path d="M-150 160 L-240 314 L-16 204 Z" fill="#141518" stroke="#141518" stroke-width="24" stroke-linejoin="round"/>
+        <path d="M352 -4 L392 -30" stroke="#141518" stroke-width="22" stroke-linecap="round"/>
+        <path d="M386 -26 Q420 -128 528 -140 Q500 -40 386 -26 Z" fill="#141518"/>
+        <g stroke="#F2DF4A" stroke-width="46" stroke-linecap="round">
+          <line x1="-160" y1="-44" x2="140" y2="-44"/>
+          <line x1="-160" y1="54" x2="30" y2="54"/>
+        </g>
+      </g>
+    </symbol>
+    <symbol id="icE" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#F2DF4A"/>
+      <use href="#markE"/>
+    </symbol>
+
+    <!-- 己：字标 Lemo，o 是柠檬切片 -->
+    <symbol id="sliceO" viewBox="-130 -130 260 260">
+      <circle r="128" fill="#141518"/>
+      <circle r="104" fill="#F2DF4A"/>
+      <circle r="88" fill="#141518"/>
+      <path transform="rotate(0)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+      <path transform="rotate(60)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+      <path transform="rotate(120)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+      <path transform="rotate(180)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+      <path transform="rotate(240)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+      <path transform="rotate(300)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="markF" viewBox="0 0 1024 1024">
+      <g fill="none" stroke="#141518" stroke-width="84" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M222 176 V472 H430"/>
+        <path d="M594 362 H812 A110 110 0 1 0 774 446"/>
+        <path d="M196 862 V708 A70 70 0 0 1 336 708 V862 M336 708 A70 70 0 0 1 476 708 V862"/>
+      </g>
+      <use href="#sliceO" x="572" y="622" width="256" height="256"/>
+    </symbol>
+    <symbol id="icF" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#F2DF4A"/>
+      <use href="#markF"/>
+    </symbol>
+    <!-- 己的小尺寸版（32 px 及以下）：只留 L 和柠檬切片 -->
+    <symbol id="icFs" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#F2DF4A"/>
+      <path d="M300 200 V790 H560" fill="none" stroke="#141518" stroke-width="160" stroke-linecap="round" stroke-linejoin="round"/>
+      <use href="#sliceO" x="470" y="250" width="380" height="380"/>
+    </symbol>
   </defs>
 </svg>
 
 <div class="wrap">
+
+  <section id="round2">
+  <p class="sub">日程与待办 4.0.0　需求 R-61　UI-1 视觉风格　2026-10-24 第二轮</p>
+  <h1>第二轮：柠檬记的 3 个图标方案（丁、戊、己）</h1>
+  <p>名字基本定为<b>柠檬记 / Lemo / 레모</b>。三个方案都只用柠檬黄 #F2DF4A 和黑色，分别走具象（丁）、极简几何（戊）、字标（己）三条路。iPhone 主屏幕上的显示名统一是“柠檬记”。第一轮的全部内容保留在本页后半部分，作为对照。</p>
+
+  <div class="card ink">
+    <div class="hero">
+      <svg class="ic" viewBox="0 0 1024 1024"><use href="#icD"/></svg>
+      <div>
+        <h3 style="font-size:24px">推荐：方案丁「切开的柠檬，拿出一瓣」</h3>
+        <p>一眼就是柠檬，和“柠檬记”对得最直接；被拿出来的那一瓣，就是“说一句，拆出一条”。黑底黄片延续了第一轮甲的配色，柠檬瓣是一个个独立的圆头色块，和 App 里的马卡龙色块、圆角胶囊是同一种语言。缩到 16 px 是一个带外圈的黄色圆片，在三个方案里最稳。</p>
+        <p>选戊，是要“柠檬会说话”这个更俏皮的点子，代价是形状更复杂；选己，是想让 Lemo 这个名字本身成为品牌，代价是小图要另画一套。</p>
+        <p style="margin:0;color:#F2DF4A">三个方案的主屏幕显示名都是“柠檬记”，3 个字不会被截断。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>怎么处理“柠檬 = 酸了”这个梗</h3>
+    <ul class="tight">
+      <li><b>图形上不碰“酸”的符号：</b>不画挤出的汁水、飞溅的水滴、皱眉或眯眼的表情，也不画被咬了一口的柠檬。只用切面、叶子、整颗剪影这些“新鲜、刚切开”的元素。</li>
+      <li><b>颜色上用明亮的柠檬黄配纯黑：</b>偏向“提神、醒目”；不用偏绿的青柠色（更容易让人想到酸）。</li>
+      <li><b>文案上把柠檬说成“提神”：</b>启动画面的话写“说一句，清清爽爽记下来”，强调轻快和清爽。建议 App 里不要出现“酸”“柠檬精”之类的字眼和玩笑。</li>
+      <li><b>梗本身不必回避到底：</b>“我酸了”是轻松的玩笑，不是骂人。名字一旦被用户接受，好记反而是优点。这一点我判断风险可控，但仍建议产品负责人拿给两三位中国朋友看一眼名字和图标，听第一反应。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>自评结果，以及据此改了什么</h3>
+    <p class="sub">做法同第一轮：按 design-critique 的五项看无头 Edge 截图（桌面 1280 宽、375 宽 iframe），逐个看 16 px 小图。下表是改完后的分数（10 分制）。</p>
+    <div class="tablewrap">
+    <table class="score">
+      <tr><th>项目</th><th>丁</th><th>戊</th><th>己</th><th>说明</th></tr>
+      <tr><td>名字和图案对得上</td><td>9</td><td>8</td><td>10</td><td>己本身就是名字；丁一眼是柠檬切片；戊要看到尖头和叶子才认出是柠檬</td></tr>
+      <tr><td>16 px 能否认出</td><td>8</td><td>7</td><td>8</td><td>丁剩一个带外圈的黄圆片；戊剩一团黑剪影；己用小尺寸版 L＋柠檬片</td></tr>
+      <tr><td>能看出是做什么的</td><td>8</td><td>9</td><td>6</td><td>己只说了名字，没有说“说一句、拆成几条”</td></tr>
+      <tr><td>清新、不让人想到酸</td><td>8</td><td>9</td><td>8</td><td>戊有叶子最“新鲜”；丁切面明亮但没有汁水</td></tr>
+      <tr><td>造型完成度</td><td>9</td><td>7</td><td>8</td><td>戊改了三次轮廓，仍是三个里最不利落的</td></tr>
+    </table>
+    </div>
+    <p class="sub-h" style="margin-top:14px">看截图发现的问题和修改</p>
+    <ul class="tight fix" id="fix2">
+      <li><b>丁像披萨：</b>第一版用直线把圆分成 7 份，拿出的那块是尖三角，缩小后看起来是披萨或饼图，空出来的缺口也和分割线对不齐。改成 8 个圆头的柠檬瓣，瓣与瓣之间留黑缝，外面一圈黄色果皮；拿出的那一瓣和其他瓣同形，这下读成柑橘切面。</li>
+      <li><b>戊不像柠檬：</b>第一版叶子挡住了柠檬尖，整体像对话泡或一条鱼；第二版把叶子竖在顶上，又很像苹果公司的标志。第三版把轮廓画成两头收尖的一整条曲线（真正的柠檬形），叶子带一小段梗、顺着右边尖头伸出去，尾巴挪到下方。仍然是三个里最难一眼读懂的，分数如实压低。</li>
+      <li><b>己的 o 像车轮：</b>第一版 o 里是三根直线交叉，像自行车轮。改成 6 个圆头柠檬瓣加一圈果皮，和丁用同一种画法。</li>
+      <li><b>推荐因此从戊改成丁：</b>最初推荐的是戊（点子最巧），但改完以后丁的完成度和小尺寸表现都更好，戊的形状仍不够利落，所以改推丁。</li>
+      <li><b>“酸”的处理：</b>三个方案都去掉了汁水、水滴和表情，启动画面的话统一写“说一句，清清爽爽记下来”。</li>
+    </ul>
+  </div>
+
+  <div id="dirs2"></div>
+  </section>
+
+  <h2 style="margin-top:72px;padding-top:28px;border-top:2px dashed var(--g2)">以下是第一轮（对照，内容保留原样）</h2>
 
   <p class="sub">日程与待办 4.0.0　需求 R-61　UI-1 视觉风格　2026-10-24 草图稿，交产品负责人挑选</p>
   <h1>给 App 起名字、画图标</h1>
@@ -332,9 +457,27 @@ const DIRS = [
     con:'单看图标不说明功能，要靠名字「一一」和第一次使用来建立联想。如果最后不用「一一」这个名字，这个图标的意思会变弱。柠檬黄满底在浅色壁纸上边缘略淡。' },
 ];
 
+
+const DIRS2 = [
+  { id:'D', tag:'方案丁', title:'切开的柠檬，拿出一瓣', name:'柠檬记', name2:'Lemo　레모', sz:170,
+    idea:'具象。黑底上一片横切的柠檬，其中一瓣被拿了出来，挪到右上角。整片柠檬是你说的那句话，拿出来的那一瓣就是拆出来的一条待办。切面的放射纹一看就是柠檬，不需要文字。',
+    splashBg:'#141518', splashInk:'#fff', foot:'说一句，清清爽爽记下来',
+    pro:'名字和图案对得最直接：看到切片就想到“柠檬”，再看到被拿出的一瓣，就有“拆出一条”的意思。黑底黄片延续上一轮甲的配色和对比，主屏幕上很醒目。',
+    con:'柠檬瓣之间的黑缝在 32 px 以下看不清，16 px 时只剩一个带外圈的黄圆片，“拿出一瓣”的意思要到 60 px 以上才看得出。黑底在深色壁纸上边缘会融进去（第一轮甲也有这个问题）。' },
+  { id:'E', tag:'方案戊', title:'会说话的柠檬', name:'柠檬记', name2:'Lemo　레모', sz:170,
+    idea:'极简几何。柠檬黄满底，一个黑色柠檬剪影：一头是柠檬尖和一片叶子，另一头长出对话泡的小尾巴，肚子里两道黄线是写下的字。柠檬、说话、记事三件事合成一个形状。',
+    splashBg:'#F2DF4A', splashInk:'#141518', foot:'说一句，清清爽爽记下来',
+    pro:'一个剪影就讲完了“柠檬＋说一句＋记下来”，图形只用黄和黑两种颜色，最简单。叶子让人想到新鲜、刚摘下来，不会往“酸”去想。16 px 时剪影还在。',
+    con:'对话泡尾巴加两道横线是聊天类图标常见的语言，单看肚子里的线有一点“消息 App”味道；靠柠檬尖和叶子把它拉回来。叶子和尾巴在 16 px 时只剩轮廓上的小凸起。' },
+  { id:'F', tag:'方案己', title:'字标 Lemo，o 是一片柠檬', name:'柠檬记', name2:'Lemo　레모', sz:200,
+    idea:'字标。柠檬黄满底，粗圆头黑笔画写“Le / mo”两行，最后的 o 换成一片柠檬切面。32 px 及以下自动换成小尺寸版：只留一个大写 L 和那片柠檬，保证小图不糊。',
+    splashBg:'#F2DF4A', splashInk:'#141518', foot:'说一句，清清爽爽记下来',
+    pro:'名字就是图形，Lemo 和 레모 读音一样，韩国朋友也能直接叫出来。柠檬片只出现在 o 上，一点就够，不吵。印在启动画面、贴纸、周边上都好用。',
+    con:'要两套图：大图是四个字母，32 px 以下换成 L＋柠檬片，两者要靠颜色和那片柠檬联系起来。四个字母在 60 px 主屏幕上笔画约 5 px，能读但不如单个图形一眼认出。' },
+];
 const others = ['#c9ccd3','#b6bac3','#d8dbe1','#a9aeb8','#c2c6ce','#b0b4bd','#d0d3d9','#bcc0c8','#a5aab4','#cdd0d6','#b8bcc4'];
 const othersDark = ['#3b3e46','#4a4e57','#33363d','#565a63','#40434b','#4d5159','#373a41','#454850','#5a5e67','#3e4148','#4f525a'];
-function ic(id, size, cls){ return `<svg class="${cls||'ios'}" width="${size}" height="${size}" viewBox="0 0 1024 1024" style="width:${size}px;height:${size}px;${cls==='sq'?'':'border-radius:'+(size*0.2237).toFixed(1)+'px'}"><use href="#ic${id}"/></svg>`; }
+function ic(id0, size, cls){ const id = (id0==='F' && size<=32) ? 'Fs' : id0; return `<svg class="${cls||'ios'}" width="${size}" height="${size}" viewBox="0 0 1024 1024" style="width:${size}px;height:${size}px;${cls==='sq'?'':'border-radius:'+(size*0.2237).toFixed(1)+'px'}"><use href="#ic${id}"/></svg>`; }
 
 function homeScreen(d, mode){
   const pal = mode==='light'?others:othersDark;
@@ -357,15 +500,15 @@ function splash(d){
   let bg;
   if(d.splashBg==='glass'){ bg = `<svg class="bgfill" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice"><use href="#bgB" x="-227" y="0" width="844" height="844"/></svg>`; }
   else bg = `<div style="position:absolute;inset:0;background:${d.splashBg}"></div>`;
-  const mark = d.id==='A' ? 'markA' : d.id==='B' ? 'markB' : 'markC';
-  const sz = d.id==='C'? 180 : 140;
+  const mark = 'mark'+d.id;
+  const sz = d.sz || (d.id==='C'? 180 : 140);
   return `<div class="splash">${bg}<div class="mid" style="color:${d.splashInk};${d.id==='C'?'top:33%':''}">
       <svg width="${sz}" height="${sz}" viewBox="0 0 1024 1024"><use href="#${mark}"/></svg>
       <div class="nm1">${d.name}</div><div class="nm2">${d.name2}</div></div>
       <div class="foot" style="color:${d.splashInk}">${d.foot}</div></div>`;
 }
 
-document.getElementById('dirs').innerHTML = DIRS.map(d=>`
+function renderDirs(LIST, el){ document.getElementById(el).innerHTML = LIST.map(d=>`
 <section class="dir" id="dir${d.id}">
   <div class="dirhead"><span class="tag">${d.tag}</span><h3 style="font-size:24px;margin:0">${d.title}</h3><span class="sub">配的名字：「${d.name}」${d.label?'，主屏幕显示“'+d.label+'”':''}</span></div>
   <div class="mainrow">
@@ -397,7 +540,9 @@ document.getElementById('dirs').innerHTML = DIRS.map(d=>`
       <div><b>弱在哪</b>${d.con}</div>
     </div>
   </div>
-</section>`).join('');
+</section>`).join(''); }
+renderDirs(DIRS,'dirs');
+renderDirs(DIRS2,'dirs2');
 </script>
 </body>
 </html>
