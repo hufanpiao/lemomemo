@@ -312,6 +312,23 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 .sfig{flex:1;border:1.5px solid var(--g4);border-radius:14px;padding:10px;background:#fff;font-size:12px}
 .sfig .bar{display:flex;justify-content:space-around;align-items:center;background:var(--g6);border-radius:10px;height:34px;font-size:15px}
 .sfig .shl{outline:2px solid #111;outline-offset:2px;border-radius:6px;padding:0 4px;background:#fff}
+.vt{display:inline-flex;border:1.5px solid var(--g4);border-radius:12px;overflow:hidden;margin-right:6px;flex:none;background:#fff}
+.vb{width:44px;height:40px;display:flex;align-items:center;justify-content:center;color:var(--g1)}
+.vb.on{background:#111;color:#fff}
+.il{display:block;width:16px;height:2px;background:currentColor;box-shadow:0 5px 0 currentColor,0 -5px 0 currentColor}
+.ig{display:block;width:6px;height:6px;background:currentColor;box-shadow:8px 0 0 currentColor,0 8px 0 currentColor,8px 8px 0 currentColor;transform:translate(-4px,-4px)}
+.msn{columns:2;column-gap:10px}
+.msn.c3{columns:3;column-gap:14px}
+.mcard{break-inside:avoid;background:#fff;border-radius:14px;overflow:hidden;margin-bottom:10px;display:block}
+.mcard .mimg{position:relative;aspect-ratio:16/10;background:repeating-linear-gradient(45deg,var(--g6) 0 6px,var(--g5) 6px 12px);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--g2)}
+.mcard .mimg em{position:absolute;right:6px;top:6px;font-style:normal;background:#111;color:#fff;border-radius:8px;padding:1px 7px;font-size:12px;font-weight:700}
+.mcard .mb{padding:10px 10px 0}
+.mcard .mt{font-size:14px;font-weight:700;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mcard .mx{font-size:12px;color:var(--g1);line-height:1.5;margin-top:4px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.mcard .mf span{white-space:nowrap}
+.mcard .mf{display:flex;align-items:center;gap:6px;padding:6px 0 0 10px;font-size:11px;color:var(--g2)}
+.mcard .mf .chip{font-size:11px;padding:1px 8px;min-height:0}
+.mcard .mf .mo{width:44px;height:40px;margin:0 0 0 auto}
 </style>
 </head>
 <body data-v="p">
@@ -322,6 +339,12 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 <nav class="toc" id="toc"></nav>
 <main id="main">
   <section class="intro" style="grid-template-columns:1fr">
+<div>
+<h2>第三版补充：随手记两种显示方式（产品负责人要求）</h2>
+<ul class="pick" style="list-style:disc;padding-left:20px"><li>随手记页右上角、搜索左边加“列表 / 格子”两个小图标，点击区 44px；系统记住上次的选择，手机和电脑分开记。</li><li><b>手机默认“列表”（左文右图），电脑默认“瀑布流”。</b>瀑布流手机两列、电脑三列，参考甲方案画面 7，改成乙的样式。</li><li>瀑布流卡片：图在顶部，最大 16:10，多图标“+2”；没有标题时取正文前两行；分类胶囊在底部；“⋯”在右下角。</li><li>两种方式共用：“⋯”菜单和长按菜单、隐私记那一行、分类胶囊、“合并分类”提示、底部输入行。左滑只在列表方式可用，已写进手势表。</li><li>新画面：手机瀑布流、电脑瀑布流，在“随手记列表”。</li></ul>
+</div>
+</section>
+<section class="intro" style="grid-template-columns:1fr">
 <div>
 <h2>第三版修改记录</h2>
 <p class="lead">依据第二轮复审：UI-2 有条件通过（3 个条件），新用户走查 7 分。下面按协调人列出的 1–9 条逐条对应；第二版的修改记录保留在下面。</p>
@@ -565,21 +588,36 @@ dn:['<p>列表加右侧编辑栏；单字母快捷键处理最常见的操作。
 /* 7 随手记列表 */
 const NCHIPS='<div class="chips"><span class="chip on">全部 34</span><span class="chip">工作灵感 12</span><span class="chip">韩国生活 7</span><span class="chip">购物 5</span><span class="chip">读书 4</span></div>';
 const LOCKROW='<div class="lockrow"><span class="lock"></span><b>隐私记</b><span class="lr2">已上锁 · 6 条</span><span class="lr3">Face ID 解锁 ›</span></div>';
-const NOTEFLOW='<div class="st"><b>今天</b></div><div class="card" style="padding:4px 12px">'+row('nt','14:02','NEOX 片尾 logo 停留可以再短 0.5 秒','配合鼓点收尾 · 工作灵感')+'<div class="sep"></div><div class="row"><span class="tm">11:40</span><span class="m m-nt"></span><div class="tx"><b>首尔林银杏黄了</b><small>下周末带相机，去 서울숲 东门 · 韩国生活<span class="tag">AI</span></small></div><div class="img" style="width:46px;height:46px;flex:none">图</div></div></div>'
+const NOTEFLOW='<div class="st"><b>今天</b></div><div class="card" style="padding:4px 12px">'+row('nt','14:02','NEOX 片尾 logo 停留可以再短 0.5 秒','配合鼓点收尾 · 工作灵感')+'<div class="sep"></div><div class="row"><span class="tm">11:40</span><span class="m m-nt"></span><div class="tx"><b>首尔林银杏黄了</b><small>下周末带相机，去 서울숲 东门 · 韩国生活</small></div><div class="img" style="width:46px;height:46px;flex:none">图</div></div></div>'
  +'<div class="st"><b>昨天</b></div><div class="card" style="padding:4px 12px">'+row('nt','21:15','外国人登录证更新要带的','护照、照片 1 张、手续费 3 万韩元 · 韩国生活')+'<div class="sep"></div>'+row('nt','16:30','SignPlex 落地页标题：一次签完，不用打印','工作灵感<span class="tag">AI</span>')+'</div>'
  +'<div class="st"><b>10月21日</b></div><div class="card" style="padding:4px 12px">'+row('nt','08:50','牛奶、鸡蛋、猫砂、종량제 봉투 20L','清单 0/4 · 购物')+'</div>';
 function SIDENOTES(){return '<div class="col side" style="width:220px;padding:20px 14px"><div class="d1" style="font-size:22px;margin-bottom:12px">随手记</div>'+[['全部',34,1],['工作灵感',12],['韩国生活',7],['购物',5],['读书',4],['书单',2],['生活杂事',4]].map(c=>'<div style="display:flex;justify-content:space-between;padding:7px 10px;border-radius:10px;font-size:14px;'+(c[2]?'background:#111;color:#fff':'')+'"><span>'+c[0]+'</span><span style="opacity:.7">'+c[1]+'</span></div>').join('')+'<div style="font-size:11px;color:var(--g3);margin-top:14px;padding:0 10px">分类由 AI 建立，可拖动排序；右键可改名、合并</div></div>'}
+const VT=(on)=>'<span class="vt"><span class="vb'+(on==='list'?' on':'')+'"><i class="il"></i></span><span class="vb'+(on==='grid'?' on':'')+'"><i class="ig"></i></span></span>';
+const NOTETOP=(on)=>'<div class="top"><div class="tt d1" style="font-size:24px">随手记</div>'+VT(on)+ICONS+'</div>';
+const MERGE='<div class="card" style="background:var(--g6);font-size:12px;padding:8px 12px;margin:6px 0;display:flex;gap:8px;align-items:center"><span style="flex:1">“读书”和“书单”两个分类很像，合成一个吗？</span><span class="btn s">合并</span><span class="btn s g">不用</span></div>';
+const MC=[
+ {img:1,plus:2,t:'首尔林银杏黄了',x:'下周末带相机，去 서울숲 东门，顺便买咖啡豆',c:'韩国生活',tm:'今天 11:40'},
+ {t:null,x:'NEOX 片尾 logo 停留可以再短 0.5 秒，配合鼓点收尾，最后一拍落在黑场上',c:'工作灵感',tm:'今天 14:02'},
+ {t:'外国人登录证更新要带的',x:'护照、照片 1 张、手续费 3 万韩元，11月5日前去 출입국',c:'韩国生活',tm:'昨天 21:15'},
+ {img:1,t:'SignPlex 落地页标题：一次签完，不用打印',x:'副标题备选：合同、报价单、入职文件，手机上一次签完',c:'工作灵感',ai:1,tm:'昨天 16:30'},
+ {t:'牛奶、鸡蛋、猫砂、종량제 봉투 20L',x:'清单 0/4',c:'购物',tm:'10月21日'},
+ {img:1,plus:4,t:null,x:'연남동 那家面包店周一休息，下次周二去，记得带保温袋',c:'生活',tm:'10月20日'},
+ {t:'想读：《어린 왕자》韩文版',x:'朋友推荐的版本，插图是原版的',c:'读书',tm:'10月19日'}];
+const MCARD=c=>'<div class="mcard">'+(c.img?'<div class="mimg">图'+(c.plus?'<em>+'+c.plus+'</em>':'')+'</div>':'')+'<div class="mb">'+(c.t?'<div class="mt">'+c.t+'</div><div class="mx">'+c.x+'</div>':'<div class="mt">'+c.x+'</div>')+'</div><div class="mf"><span class="chip">'+c.c+(c.ai?' <span class="tag">AI</span>':'')+'</span><span>'+c.tm+'</span><span class="mo">⋯</span></div></div>';
+const MASON=(n,c3)=>'<div class="msn'+(c3?' c3':'')+'">'+MC.slice(0,n).map(MCARD).join('')+'</div>';
+const MASONDESK=desk(SIDENOTES()+'<div class="col" style="width:984px;padding:20px 26px;background:#fff;position:relative"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div class="d1" style="font-size:24px;flex:1">全部 34</div>'+VT('grid')+'<div class="inp" style="padding:8px 12px;font-size:13px;width:240px"><span class="isr"></span> 在随手记里搜</div></div>'+LOCKROW.replace('Face ID 解锁','Windows Hello')+MERGE+'<div style="height:6px"></div>'+MASON(7,1)+'<div style="position:absolute;left:26px;right:26px;bottom:18px;background:#fff;border:1.5px solid #111;border-radius:22px;padding:6px 6px 6px 14px;display:flex;align-items:center;gap:8px"><span style="flex:1;color:var(--g3)">接着记一句…（Enter 记下）</span><span class="img" style="width:40px;height:40px;border-radius:12px">图</span></div></div>',{tab:3});
 const NOTEROW_SW='<div class="swp"><div style="flex:1;min-width:0">'+row('nt','21:15','外国人登录证更新要带的','护照、照片 1 张…')+'</div><span class="sa g2">转成<br>待办</span><span class="sa g1">移到<br>隐私记</span><span class="sa k">删除</span></div>';
 const COMPOSER=(txt,bottom)=>(txt?'<div style="position:absolute;left:0;right:0;bottom:336px;height:64px;background:var(--g7);border-top:1px solid var(--g5);z-index:28"></div>':'')+'<div style="position:absolute;left:10px;right:10px;bottom:'+bottom+'px;background:#fff;border:1.5px solid #111;border-radius:22px;padding:6px 6px 6px 14px;display:flex;align-items:center;gap:8px;z-index:29">'+(txt?'<span style="flex:1;color:#111">'+txt+'<b>|</b></span>':'<span style="flex:1;color:var(--g3)">接着记一句…</span>')+'<span class="img" style="width:44px;height:44px;border-radius:12px">图</span>'+(txt?'<span class="btn p" style="min-height:44px">记下</span>':'')+'</div>';
-S.push({id:'s7',t:'随手记列表',sub:'像给自己发消息：时间流 + 常驻输入行；隐私记固定在顶部',
-p:[[phone('<div class="top"><div class="tt d1" style="font-size:24px">随手记</div>'+ICONS+'</div>'+NCHIPS+LOCKROW+'<div class="card" style="background:var(--g6);font-size:12px;padding:8px 12px;margin:6px 0;display:flex;gap:8px;align-items:center"><span style="flex:1">“读书”和“书单”两个分类很像，合成一个吗？</span><span class="btn s">合并</span><span class="btn s g">不用</span></div>'+NOTEFLOW.replace(row('nt','21:15','外国人登录证更新要带的','护照、照片 1 张、手续费 3 万韩元 · 韩国生活'),NOTEROW_SW),{tab:3,pb:190,ov:COMPOSER('',116)}),'平时（一条左滑开）'],
- [phone('<div class="top"><div class="tt d1" style="font-size:24px">随手记</div>'+ICONS+'</div>'+NCHIPS+LOCKROW+NOTEFLOW,{nav:false,fix:1,ov:COMPOSER('外国人登录证 11月5日前要去 출입국 更新',344)+KBD('登录证 | 登陆 | 灯')}),'点输入行：键盘弹起'],
- [phone('<div class="top"><div class="tt d1" style="font-size:24px">随手记</div></div>'+NCHIPS+LOCKROW+NOTEFLOW,{tab:3,ov:MENU('外国人登录证更新要带的',['转成待办','转成日程','移到隐私记','删除'])}),'点“⋯”或长按一行：菜单']],
-pn:['<p><b>隐私记常驻在列表顶部一行：</b>“隐私记 · 已上锁 · 6 条 · Face ID 解锁 ›”，点一下直接解锁进入。</p>','<p><b>每一行右边的“⋯”（或长按一行）打开菜单：转成待办 / 转成日程 / 移到隐私记 / 删除。</b>左滑是快捷方式，露出“转成待办 / 移到隐私记 / 删除”，删除只能点按钮。编辑器右上角“⋯”和长按菜单里也有“移到隐私记”。只有随手记能移进隐私记，待办和日程不出现这个选项。</p>','<p><b>键盘弹起时（右图）：</b>输入行贴在键盘上沿（按 visualViewport 计算位置），底部导航和“＋”隐藏；回车或点“记下”就存，新的一条出现在列表最上面并带“刚记下”。在随手记页短按“＋”，直接聚焦这一行，不另开输入面板。</p>'],
-d:desk(SIDENOTES()
- +'<div class="col" style="width:330px;padding:20px 14px;background:#fff;border-right:1px solid var(--g5)"><div class="inp" style="padding:8px 12px;font-size:13px;margin-bottom:6px"><span class="isr"></span> 在随手记里搜</div>'+LOCKROW.replace('Face ID 解锁','Windows Hello')+NOTEFLOW.replace(/class="card"/g,'class="card" style="padding:0"').replace('<div class="row "><span class="tm">16:30','<div class="row flash"><span class="tm">16:30')+'</div>'
- +'<div class="col" style="width:654px;padding:30px 40px"><div style="font-size:12px;color:var(--g3);margin-bottom:10px">昨天 16:30 · 工作灵感 · 已自动保存</div><div style="font-size:24px;font-weight:700;margin-bottom:12px">SignPlex 落地页标题：一次签完，不用打印</div><div style="font-size:15px;line-height:1.9;color:var(--g1)">副标题备选：<br>· 合同、报价单、入职文件，手机上一次签完<br>· 서명 한 번이면 끝<br><br>对比竞品 모두싸인 的首屏：他们先讲安全，我们先讲省事。</div><div style="position:absolute;bottom:24px;right:30px;display:flex;gap:8px"><span class="btn g">插入图片</span><span class="btn g">移到隐私记</span><span class="btn g">转成待办</span><span class="btn g">转成日程</span></div></div>',{tab:3}),
-dn:['<p><b>三栏：分类 ｜ 列表 ｜ 正文。</b>正文区就是编辑器。右键一条随手记，菜单里有“移到隐私记”；正文底部也有这个按钮。</p>']});
+S.push({id:'s7',t:'随手记列表',sub:'像给自己发消息：时间流 + 常驻输入行；隐私记固定在顶部；可切换列表 / 瀑布流',
+p:[[phone(NOTETOP('list')+NCHIPS+LOCKROW+'<div class="card" style="background:var(--g6);font-size:12px;padding:8px 12px;margin:6px 0;display:flex;gap:8px;align-items:center"><span style="flex:1">“读书”和“书单”两个分类很像，合成一个吗？</span><span class="btn s">合并</span><span class="btn s g">不用</span></div>'+NOTEFLOW.replace(row('nt','21:15','外国人登录证更新要带的','护照、照片 1 张、手续费 3 万韩元 · 韩国生活'),NOTEROW_SW),{tab:3,pb:190,ov:COMPOSER('',116)}),'列表（手机默认，一条左滑开）'],
+ [phone(NOTETOP('grid')+NCHIPS+LOCKROW+MERGE+MASON(6),{tab:3,pb:190,ov:COMPOSER('',116)}),'两列瀑布流'],
+ [phone(NOTETOP('list')+NCHIPS+LOCKROW+NOTEFLOW,{nav:false,fix:1,ov:COMPOSER('外国人登录证 11月5日前要去 출입국 更新',344)+KBD('登录证 | 登陆 | 灯')}),'点输入行：键盘弹起'],
+ [phone(NOTETOP('list')+NCHIPS+LOCKROW+NOTEFLOW,{tab:3,ov:MENU('外国人登录证更新要带的',['转成待办','转成日程','移到隐私记','删除'])}),'点“⋯”或长按一条：菜单（两种方式相同）']],
+pn:['<p><b>两种显示方式：</b>右上角搜索左边是一对小图标（列表 / 格子），每个点击区 44px。<b>手机默认“列表”（左文右图），电脑默认“瀑布流”</b>；系统记住上次的选择，手机和电脑分开记。两种方式下隐私记那一行、分类胶囊、“合并分类”提示、底部输入行、“⋯”菜单和长按菜单都一样。</p><p><b>瀑布流卡片（第二张）：</b>有图时图在顶部，最大 16:10，多张图在右上角标“+2”；没有标题时取正文前两行当标题；分类胶囊和时间在卡片底部，“⋯”在卡片右下角。<b>瀑布流里不能左滑</b>，操作只能用“⋯”或长按。</p><p><b>隐私记常驻在列表顶部一行：</b>“隐私记 · 已上锁 · 6 条 · Face ID 解锁 ›”，点一下直接解锁进入。</p>','<p><b>每一行右边的“⋯”（或长按一行）打开菜单：转成待办 / 转成日程 / 移到隐私记 / 删除。</b>左滑是快捷方式，露出“转成待办 / 移到隐私记 / 删除”，删除只能点按钮。编辑器右上角“⋯”和长按菜单里也有“移到隐私记”。只有随手记能移进隐私记，待办和日程不出现这个选项。</p>','<p><b>键盘弹起时（右图）：</b>输入行贴在键盘上沿（按 visualViewport 计算位置），底部导航和“＋”隐藏；回车或点“记下”就存，新的一条出现在列表最上面并带“刚记下”。在随手记页短按“＋”，直接聚焦这一行，不另开输入面板。</p>'],
+d:[[desk(SIDENOTES()
+ +'<div class="col" style="width:330px;padding:20px 14px;background:#fff;border-right:1px solid var(--g5)"><div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><div class="inp" style="flex:1;padding:8px 12px;font-size:13px"><span class="isr"></span> 在随手记里搜</div>'+VT('list')+'</div>'+MERGE.replace('两个分类很像，合成一个吗？','很像，合成一个吗？')+''+LOCKROW.replace('Face ID 解锁','Windows Hello')+NOTEFLOW.replace(/class="card"/g,'class="card" style="padding:0"').replace('<div class="row "><span class="tm">16:30','<div class="row flash"><span class="tm">16:30')+'<div class="inp" style="margin-top:10px;font-size:13px;color:var(--g3)">接着记一句…（Enter 记下）</div></div>'
+ +'<div class="col" style="width:654px;padding:30px 40px"><div style="font-size:12px;color:var(--g3);margin-bottom:10px">昨天 16:30 · 工作灵感 · 已自动保存</div><div style="font-size:24px;font-weight:700;margin-bottom:12px">SignPlex 落地页标题：一次签完，不用打印</div><div style="font-size:15px;line-height:1.9;color:var(--g1)">副标题备选：<br>· 合同、报价单、入职文件，手机上一次签完<br>· 서명 한 번이면 끝<br><br>对比竞品 모두싸인 的首屏：他们先讲安全，我们先讲省事。</div><div style="position:absolute;bottom:24px;right:30px;display:flex;gap:8px"><span class="btn g">插入图片</span><span class="btn g">移到隐私记</span><span class="btn g">转成待办</span><span class="btn g">转成日程</span></div></div>',{tab:3}),1280,800,'列表（左文右图）'],[MASONDESK,1280,800,'瀑布流：电脑上三列（电脑默认）']],
+dn:['<p><b>电脑默认瀑布流（第二张）：</b>分类栏右边三列卡片，点一张在右侧滑出编辑栏；右键或卡片右下角“⋯”打开同一个菜单。切回列表（第一张）就是三栏：分类 ｜ 列表 ｜ 正文。</p><p><b>列表方式：</b>正文区就是编辑器。右键一条随手记，菜单里有“移到隐私记”；正文底部也有这个按钮。</p>']});
 
 /* 8 编辑器 */
 const EDITOR='<div style="font-size:24px;font-weight:700;line-height:1.3;margin:6px 0 10px">SignPlex 4.0 发布前要做的</div><div style="font-size:15px;line-height:1.8">落地页改完以后，先给 박 대리 看一眼。</div><div class="img" style="height:150px;margin:10px 0 4px">落地页截图.png（插入的图片）</div><div style="font-size:12px;color:var(--g3);margin-bottom:10px">图片说明：首屏第二版</div><div style="font-size:15px;line-height:2"><span class="m m-td" style="width:15px;height:15px"></span> 周五 18:00 前交落地页终稿<br><span class="m m-td" style="width:15px;height:15px"></span> 韩文版文案再过一遍<br><span class="m m-td" style="width:15px;height:15px"></span> 下周二和客户确认上线时间</div>';
@@ -732,7 +770,7 @@ dn:['<p><b>三档断点：</b>大于等于 1200px 用三栏（时间河 ｜ 本�
 
 /* 17c 手势与快捷键 */
 const GEST='<div class="tblw"><table class="gtab"><tr><th>页面</th><th>“⋯”菜单（点“⋯”或长按一行）</th><th>右滑（快捷）</th><th>左滑（快捷）</th></tr>'
- +[['今天（时间河）','日程：编辑 / 删除<br>待办：完成 / 推迟到明天 / 改时间 / 删除','待办：完成','待办：露出 推迟 / 删除'],['待办','完成 / 推迟到明天 / 改时间 / 转成日程 / 删除','完成','露出 推迟 / 删除'],['随手记','转成待办 / 转成日程 / 移到隐私记 / 删除','—','露出 转成待办 / 移到隐私记 / 删除'],['纪念日','编辑 / 生成待办 / 删除','—','露出 编辑 / 删除'],['周视图、月历','—（长按空白处新建：吸附到整点或半点，先弹出时间微调）','上一周 / 上个月','下一周 / 下个月'],['子页面（编辑器、设置、搜索、整页提醒）','—','从屏幕左边缘右滑：返回','—']].map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</table></div>'
+ +[['今天（时间河）','日程：编辑 / 删除<br>待办：完成 / 推迟到明天 / 改时间 / 删除','待办：完成','待办：露出 推迟 / 删除'],['待办','完成 / 推迟到明天 / 改时间 / 转成日程 / 删除','完成','露出 推迟 / 删除'],['随手记','转成待办 / 转成日程 / 移到隐私记 / 删除（列表、瀑布流相同；瀑布流的“⋯”在卡片右下角）','—','列表方式：露出 转成待办 / 移到隐私记 / 删除<br>瀑布流：不可用，用“⋯”或长按'],['纪念日','编辑 / 生成待办 / 删除','—','露出 编辑 / 删除'],['周视图、月历','—（长按空白处新建：吸附到整点或半点，先弹出时间微调）','上一周 / 上个月','下一周 / 下个月'],['子页面（编辑器、设置、搜索、整页提醒）','—','从屏幕左边缘右滑：返回','—']].map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</table></div>'
  +'<p style="font-size:13px;margin-bottom:6px"><b>统一规则：</b>① 每一行右边都有“⋯”，点它或长按这一行打开同一个菜单；所有操作都在菜单里，不会滑动也能用全部功能。② 右滑只有一个意思：完成待办。③ 左滑露出菜单里最常用的几项，删除总在最右边、只能点按钮；滑到底不执行任何操作。④ 行内滑动从屏幕左边 24px 以内起手的不算，留给“返回”。⑤ 滑出的按钮高度跟着行高走，最小 44px。⑥ “＋”、导航和所有可长按的区域禁用系统长按菜单、文字选择和放大镜（-webkit-touch-callout:none、user-select:none、拦截 contextmenu），录音期间整页 touch-action:none。⑦ 所有贴底的元素（导航、“＋”、输入行、提示条、提醒按钮条）按 visualViewport 定位，离底边至少 env(safe-area-inset-bottom) + 8px；键盘弹起时导航和“＋”隐藏。</p>'
  +'<h3 style="font-size:15px;margin:16px 0 6px">电脑快捷键</h3><div class="tblw"><table class="gtab"><tr><th>按键</th><th>作用</th><th>什么时候生效</th></tr>'
  +[['按住 Ctrl+Alt+空格','说话记一条，松开保存','全局：App 在后台也生效（需实测，备选“按一下开始、再按一下结束”）'],['Ctrl+N','打字记一条','窗口在前台时，任何地方'],['Ctrl+K','搜索','窗口在前台时，任何地方'],['Ctrl+1 ～ 4','切到 今天 / 日历 / 待办 / 随手记','窗口在前台时，任何地方'],['Ctrl+Z','撤销最近一次记录','焦点不在输入框时'],['Ctrl+L','立即锁上隐私记','窗口在前台时，任何地方'],['J / K、E、T、Enter、Del','上下移动、完成、改到今天、打开编辑、删除','只在焦点在列表上时；在输入框里打字时不生效'],['Esc','编辑栏 → 回到列表；浮层、面板 → 关闭','任何时候'],['?','打开快捷键一览','焦点在列表上时']].map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</table></div>'
