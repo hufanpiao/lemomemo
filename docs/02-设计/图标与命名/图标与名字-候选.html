@@ -120,6 +120,20 @@ table.score th{font-weight:800;white-space:nowrap}
 .nb .tri b{font-weight:700;color:var(--g1)}
 .nb dl{margin:0}.nb dt{font-weight:800;margin-top:8px}.nb dd{margin:2px 0 0}
 .smn{margin-top:10px;font-size:14px;border-left:4px solid var(--lemon);padding:4px 0 4px 12px}
+.btab{display:flex;align-items:flex-end;gap:2px;padding:8px 10px 0;border-radius:14px 14px 0 0;max-width:520px;margin:6px auto 0;overflow:hidden}
+.btab.l{background:#dfe1e5}.btab.d{background:#202124}
+.btab .t{display:flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:10px 10px 0 0;font-size:12px;min-width:0;flex:0 1 200px;white-space:nowrap;overflow:hidden}
+.btab.l .t.on{background:#fff;color:#141518}.btab.d .t.on{background:#35363a;color:#e8eaed}
+.btab.l .t{color:#5f6368}.btab.d .t{color:#9aa0a6}
+.btab .t i{display:block;width:16px;height:16px;border-radius:4px;flex:none}
+.btab.l .t i{background:#b9bbc0}.btab.d .t i{background:#5f6368}
+.btab .t span{overflow:hidden;text-overflow:ellipsis}
+table.dev{border-collapse:collapse;width:100%;font-size:14px;margin-top:8px;min-width:560px}
+table.dev th,table.dev td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--g4);vertical-align:top}
+table.dev th{font-weight:800;white-space:nowrap}
+table.dev td.k{white-space:nowrap}
+.tag2{display:inline-block;border-radius:999px;padding:0 9px;font-size:12px;font-weight:700;white-space:nowrap}
+.tag2.m{background:#141518;color:#fff}.tag2.s{background:var(--lemon);color:#141518}
 </style>
 </head>
 <body>
@@ -348,10 +362,144 @@ table.score th{font-weight:800;white-space:nowrap}
       </g>
       <path d="M440 170 L700 820 L150 820 Z" fill="#fff" stroke="#fff" stroke-width="60" stroke-linejoin="round"/>
     </symbol>
+
+    <!-- ============ 定稿：柠檬记 + 磨砂玻璃声音 ============ -->
+    <linearGradient id="gL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F5F4EE"/><stop offset="1" stop-color="#E3E6EC"/>
+    </linearGradient>
+    <clipPath id="clipL"><circle cx="512" cy="512" r="304"/></clipPath>
+    <symbol id="bgL" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">
+      <rect width="1024" height="1024" fill="url(#gL)"/>
+      <g filter="url(#blurB1)">
+        <circle cx="350" cy="330" r="300" fill="#F2DF4A"/>
+        <circle cx="720" cy="720" r="240" fill="#F2DF4A" opacity=".85"/>
+        <circle cx="800" cy="270" r="150" fill="#F4A9A0" opacity=".55"/>
+        <circle cx="240" cy="820" r="160" fill="#7FBFE4" opacity=".45"/>
+      </g>
+    </symbol>
+    <symbol id="markL" viewBox="0 0 1024 1024">
+      <ellipse cx="512" cy="850" rx="250" ry="40" fill="#3a3418" opacity=".16" filter="url(#shB)"/>
+      <g clip-path="url(#clipL)">
+        <rect width="1024" height="1024" fill="#f3f2ea"/>
+        <g filter="url(#blurB2)" opacity=".9">
+          <circle cx="350" cy="330" r="300" fill="#F2DF4A"/>
+          <circle cx="720" cy="720" r="240" fill="#F2DF4A" opacity=".85"/>
+          <circle cx="800" cy="270" r="150" fill="#F4A9A0" opacity=".5"/>
+        </g>
+        <rect width="1024" height="1024" fill="#fff" opacity=".40"/>
+      </g>
+      <circle cx="512" cy="512" r="301" fill="none" stroke="#fff" stroke-opacity=".92" stroke-width="7"/>
+      <circle cx="512" cy="512" r="268" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="5"/>
+      <path d="M300 404 A240 240 0 0 1 430 262" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" opacity=".95"/>
+      <rect x="320" y="402" width="96" height="220" rx="48" fill="#141518"/>
+      <rect x="464" y="322" width="96" height="380" rx="48" fill="#141518"/>
+      <rect x="608" y="387" width="96" height="250" rx="48" fill="#141518"/>
+    </symbol>
+    <symbol id="icL" viewBox="0 0 1024 1024"><use href="#bgL"/><use href="#markL"/></symbol>
+    <symbol id="icLs" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#F2DF4A"/>
+      <circle cx="512" cy="512" r="380" fill="#fff"/>
+      <rect x="282" y="372" width="130" height="280" rx="65" fill="#141518"/>
+      <rect x="447" y="262" width="130" height="500" rx="65" fill="#141518"/>
+      <rect x="612" y="342" width="130" height="340" rx="65" fill="#141518"/>
+    </symbol>
   </defs>
 </svg>
 
 <div class="wrap">
+
+  <section id="final">
+  <p class="sub">日程与待办 4.0.0　需求 R-61　UI-1 视觉风格　2026-10-24 定稿</p>
+  <h1>定稿：柠檬记 + 磨砂玻璃声音</h1>
+  <p>名字定为<b>柠檬记 / Lemo / 레모</b>，图标用第一轮方向乙“磨砂玻璃里的声音”。这一节是定稿和交给开发的清单；前三轮的内容原样保留在后面。</p>
+
+  <div class="card ink">
+    <div class="hero">
+      <svg class="ic" viewBox="0 0 1024 1024"><use href="#icL"/></svg>
+      <div>
+        <h3 style="font-size:24px">和第一轮乙相比，改了哪里、为什么</h3>
+        <ul class="tight">
+          <li><b>光的颜色：</b>背景三团光原来是黄、粉、蓝三等分，现在柠檬黄占了大半，左上和右下两团都是黄色，粉和蓝缩小、调淡，只留在角落里提亮。名字叫柠檬记，图标的主色就该是柠檬黄；三色平分也正是乙“像谁都可以”的原因。</li>
+          <li><b>一道果皮内圈：</b>玻璃圆片外沿内侧多了一道很淡的白色细圈，像柠檬切片的果皮和果肉之间那一圈。只是暗示，不画果瓣，不改变“玻璃圆片”的读法。</li>
+          <li><b>底色偏一点暖：</b>浅灰底改成从极浅的暖灰到冷灰的渐变，让黄光不发脏，也让图标在浅色壁纸上边缘稍微清楚一些。</li>
+          <li><b>没有动的：</b>圆片的位置和大小、三根声纹的位置、长短、粗细和颜色、左上的高光弧线、下方的投影，全部和第一轮一样。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>自评结果，以及据此改了什么</h3>
+    <p class="sub">按 design-critique 的五项看了无头 Edge 截图（桌面 1280 宽、375 宽 iframe），逐个看了 32、24、16 px 的简化图和网页标签页。</p>
+    <div class="tablewrap">
+    <table class="score">
+      <tr><th>项目</th><th>第一轮乙</th><th>定稿</th><th>说明</th></tr>
+      <tr><td>第一眼（2 秒）</td><td>7</td><td>8</td><td>黄光让它在主屏幕上更亮，但仍比实色图标安静</td></tr>
+      <tr><td>16 px 能否认出</td><td>5</td><td>9</td><td>简化图：黄底、白圆、三根黑竖条，在浅色和深色标签栏上都清楚</td></tr>
+      <tr><td>名字和图标对得上</td><td>4</td><td>8</td><td>柠檬黄主光加果皮内圈；不画具体的柠檬，所以不是 10 分</td></tr>
+      <tr><td>保留原版气质</td><td>10</td><td>9</td><td>构图完全没动，只是颜色变暖、变黄</td></tr>
+      <tr><td>不像模板</td><td>6</td><td>7</td><td>玻璃加光斑这种做法仍常见，靠黄色主光拉开了一点</td></tr>
+    </table>
+    </div>
+    <p class="sub-h" style="margin-top:14px">看截图发现的问题和修改</p>
+    <ul class="tight fix" id="fixL">
+      <li><b>manifest 底色和启动画面对不上：</b>第一版清单里 <code>background_color</code> 写的是浅灰 #EEEFF1，但截图里启动画面中间其实是一大片柠檬黄光。安卓、电脑版 Chrome 打开时会先闪一下这个底色，灰底一闪再变黄会很跳。改成从启动画面截图取样的 #F0E289。</li>
+      <li><b>“多大用简化图”前后说法不一：</b>图标说明里写的是“32 px 及以下”，导出清单里写的是“48 px 及以下”。以清单为准，统一成 48 px 及以下：Windows 在 150%、200% 缩放下任务栏会用 36～48 px，这个尺寸下主图的玻璃细边已经糊了。</li>
+      <li><b>没改、但要说明的：</b>60 px 时玻璃圆片的外沿和新加的果皮内圈挨得很近，看起来像一圈双线边框。这是刻意保留的“切面”暗示，放大到 180 px 才读得出来，小尺寸下不影响认图，所以没有删。</li>
+      <li><b>保持克制：</b>动手前考虑过在玻璃里画出淡淡的果瓣，但会比原版多一层东西，也会和第二轮的方案丁撞车，所以没有画，只留了一道内圈。</li>
+    </ul>
+  </div>
+
+  <div id="dirs4"></div>
+
+  <div class="dir">
+    <h3 style="font-size:22px">网页标签页的小图标</h3>
+    <p>浏览器标签页上是 16 px 的简化图（高分屏是 32 px）。下面按实际尺寸画了浅色和深色两种标签栏。</p>
+    <div class="btab l"><div class="t on"><svg width="16" height="16" viewBox="0 0 1024 1024"><use href="#icLs"/></svg><span>柠檬记</span></div><div class="t"><i></i><span>邮箱</span></div><div class="t"><i></i><span>地图</span></div></div><div class="btab d"><div class="t on"><svg width="16" height="16" viewBox="0 0 1024 1024"><use href="#icLs"/></svg><span>柠檬记</span></div><div class="t"><i></i><span>邮箱</span></div><div class="t"><i></i><span>地图</span></div></div>
+  </div>
+
+  <div class="dir">
+    <h3 style="font-size:22px">交给开发的导出清单</h3>
+    <p>规则只有一条：<b>48 px 及以下用简化图，60 px 及以上用主图</b>（页面上的展示只演示到 32 px）。所有 PNG 都是方形、满底、不透明、不预切圆角；源文件就是本页里的 SVG（主图 <code>icL</code>、简化图 <code>icLs</code>），开发可以直接从本页拷出来导出。</p>
+    <div class="tablewrap"><table class="dev">
+      <tr><th>用在哪里</th><th>文件名（建议）</th><th>尺寸</th><th>用哪张</th><th>说明</th></tr>
+      <tr><td class="k">iOS 主屏幕</td><td>apple-touch-icon.png</td><td class="k">180×180</td><td><span class="tag2 m">主图</span></td><td>不透明、不预切圆角；放在 &lt;link rel="apple-touch-icon"&gt;</td></tr>
+<tr><td class="k">iOS 主屏幕（可选）</td><td>apple-touch-icon-167.png / -152.png / -120.png</td><td class="k">167、152、120</td><td><span class="tag2 m">主图</span></td><td>iPad 和旧 iPhone 用；不放时 iOS 会从 180 缩</td></tr>
+<tr><td class="k">PWA manifest</td><td>icon-192.png</td><td class="k">192×192</td><td><span class="tag2 m">主图</span></td><td>purpose: "any"</td></tr>
+<tr><td class="k">PWA manifest</td><td>icon-512.png</td><td class="k">512×512</td><td><span class="tag2 m">主图</span></td><td>purpose: "any"</td></tr>
+<tr><td class="k">PWA manifest</td><td>icon-maskable-192.png</td><td class="k">192×192</td><td><span class="tag2 m">主图</span></td><td>purpose: "maskable"。主体玻璃圆片直径约占画面 59%，在 80% 安全圈以内，可直接用主图；光斑底色本来就铺满，不怕被裁</td></tr>
+<tr><td class="k">PWA manifest</td><td>icon-maskable-512.png</td><td class="k">512×512</td><td><span class="tag2 m">主图</span></td><td>同上</td></tr>
+<tr><td class="k">网页标签页</td><td>favicon.ico</td><td class="k">16、32、48（打在一个文件里）</td><td><span class="tag2 s">简化图</span></td><td>三个尺寸都用简化图</td></tr>
+<tr><td class="k">网页标签页</td><td>favicon.svg</td><td class="k">矢量</td><td><span class="tag2 s">简化图</span></td><td>&lt;link rel="icon" type="image/svg+xml"&gt;，新浏览器优先用它</td></tr>
+<tr><td class="k">网页标签页</td><td>favicon-32.png、favicon-16.png</td><td class="k">32、16</td><td><span class="tag2 s">简化图</span></td><td>给不认 svg 的环境兜底</td></tr>
+<tr><td class="k">Windows exe</td><td>app.ico</td><td class="k">16、20、24、32、40、48</td><td><span class="tag2 s">简化图</span></td><td>任务栏、资源管理器小图标、标题栏；150%、200% 缩放时任务栏会用到 36～48</td></tr>
+<tr><td class="k">Windows exe</td><td>app.ico（同一个文件）</td><td class="k">64、96、128、256</td><td><span class="tag2 m">主图</span></td><td>大图标视图、开始菜单、安装程序；256 存成 PNG 压缩</td></tr>
+<tr><td class="k">应用内</td><td>logo-mark.svg</td><td class="k">矢量</td><td><span class="tag2 m">主图</span></td><td>关于页、设置页用；简化图另存 logo-mark-small.svg</td></tr>
+    </table></div>
+    <p class="sub-h">manifest 里的颜色</p>
+    <p><code>theme_color</code> 用 <code>#F2DF4A</code>；<code>background_color</code> 用 <code>#F0E289</code>（启动画面中间那片柠檬黄光的颜色，从截图取样）；<code>name</code> 写“柠檬记”，<code>short_name</code> 也写“柠檬记”。iPhone 主屏幕显示的名字取 <code>&lt;meta name="apple-mobile-web-app-title" content="柠檬记"&gt;</code>。</p>
+    <p class="sub-h">iOS 启动图（apple-touch-startup-image，只出竖屏）</p>
+    <p>每张图都是“启动画面”那一张的版式：满底的柠檬黄光、正中偏上的玻璃圆片、下面“柠檬记 / Lemo”、底部一句“说一句，清清爽爽记下来”。按设备各导一张 PNG，用 <code>media</code> 里的 <code>device-width</code>、<code>device-height</code>、<code>-webkit-device-pixel-ratio</code> 区分。下表的分辨率是按我所知的机型整理的，<b>新机型和实际匹配需要开发在真机上核对</b>；深色模式是否能单独指定一张启动图，也需实测。</p>
+    <div class="tablewrap"><table class="dev">
+      <tr><th>机型</th><th>图片尺寸（px）</th><th>CSS 尺寸与倍率</th></tr>
+      <tr><td>iPhone 17 Pro Max、16 Pro Max</td><td class="k">1320×2868</td><td class="k">440×956 @3x</td></tr>
+<tr><td>iPhone Air</td><td class="k">1260×2736</td><td class="k">420×912 @3x</td></tr>
+<tr><td>iPhone 17、17 Pro、16 Pro</td><td class="k">1206×2622</td><td class="k">402×874 @3x</td></tr>
+<tr><td>iPhone 16 Plus、15 Plus、15 Pro Max、14 Pro Max</td><td class="k">1290×2796</td><td class="k">430×932 @3x</td></tr>
+<tr><td>iPhone 16、15、15 Pro、14 Pro</td><td class="k">1179×2556</td><td class="k">393×852 @3x</td></tr>
+<tr><td>iPhone 14 Plus、13 Pro Max、12 Pro Max</td><td class="k">1284×2778</td><td class="k">428×926 @3x</td></tr>
+<tr><td>iPhone 14、13、13 Pro、12、12 Pro</td><td class="k">1170×2532</td><td class="k">390×844 @3x</td></tr>
+<tr><td>iPhone 13 mini、12 mini</td><td class="k">1080×2340</td><td class="k">360×780 @3x</td></tr>
+<tr><td>iPhone 11 Pro、XS、X</td><td class="k">1125×2436</td><td class="k">375×812 @3x</td></tr>
+<tr><td>iPhone 11 Pro Max、XS Max</td><td class="k">1242×2688</td><td class="k">414×896 @3x</td></tr>
+<tr><td>iPhone 11、XR</td><td class="k">828×1792</td><td class="k">414×896 @2x</td></tr>
+<tr><td>iPhone SE（第 2、3 代）、8</td><td class="k">750×1334</td><td class="k">375×667 @2x</td></tr>
+    </table></div>
+    <p class="note" style="margin-top:8px;font-size:14px">版式规则（方便开发批量导出）：图标直径取屏幕宽度的 42%，圆心放在屏幕高度 40% 处；名字字号取屏幕宽度的 8%；底部那句话距底边 6%，字号取屏幕宽度的 3.4%；所有文字在左右各留 10% 的安全边距内。</p>
+  </div>
+  </section>
+
+  <h2 style="margin-top:72px;padding-top:28px;border-top:2px dashed var(--g2)">以下是第三轮（对照，内容保留原样）</h2>
 
   <section id="round3">
   <p class="sub">日程与待办 4.0.0　需求 R-61　UI-1 视觉风格　2026-10-24 第三轮</p>
@@ -662,9 +810,18 @@ const DIRS3 = [
     pro:'把产品最核心的“说一句，拆成几条”画成了一个物理现象，讲得最准、也最少见。三条出射光用了柠檬黄、粉和黑，和 App 里的马卡龙色块是同一套颜色。浅天蓝底在主屏幕上清爽，和前两轮都不一样。',
     con:'画面元素最多（声波、棱镜、三条光），60 px 时入射的声波已经很细；小图版去掉了声波，“声音”的意思只能靠名字和大图。三棱镜加彩色光会让一部分人想到 Pink Floyd 的唱片封面，这里用了天蓝底、黑色入射线、三条而非六条来拉开距离。' },
 ];
+
+const DIRS4 = [
+  { id:'L', tag:'定稿', title:'柠檬记：磨砂玻璃里的声音', name:'柠檬记', name2:'Lemo', sz:190, small:true, splashSvg:'bgL', splashInk:'#141518',
+    foot:'说一句，清清爽爽记下来',
+    idea:'构图和第一轮乙完全一样：一块磨砂玻璃圆片，上面三根黑色声纹，位置、大小、粗细都没动。只改了光的颜色，并在玻璃边缘加了一道很淡的内圈，暗示柠檬切面的果皮。',
+    extra: `<div class="smn"><b>大图和小图怎么对应：</b>大图是“柠檬黄的光＋玻璃圆片＋三根声纹”。48 px 及以下用简化图（本页演示了 32、24、16）：柠檬黄满底（光变成了底色），玻璃圆片变成实心白圆，三根声纹加粗约 1.35 倍、长短比例不变。去掉了模糊、半透明和高光这些小尺寸下会糊的东西，“黄、白圆、三竖条”三样在大小图里一一对应。</div>`,
+    pro:'保住了产品负责人喜欢的那一版：通透、柔和、一看就是“说话”。柠檬黄成了主光以后，名字“柠檬记”和图标对上了，也比第一轮的黄粉蓝三色更有自己的样子。简化图在 16 px 仍是“黄底白圆里三根竖条”，第一轮最大的短板补上了。',
+    con:'大图和简化图是两张图，开发要按清单分尺寸导出，不能一张图缩到底。玻璃和光斑的质感本身仍是 iOS 26 之后常见的风格，区分度主要靠柠檬黄主光和那道果皮内圈。浅色壁纸上大图边缘偏淡（第一轮就有，这次底色加了一点暖灰，好了一些，但没有根治）。' },
+];
 const others = ['#c9ccd3','#b6bac3','#d8dbe1','#a9aeb8','#c2c6ce','#b0b4bd','#d0d3d9','#bcc0c8','#a5aab4','#cdd0d6','#b8bcc4'];
 const othersDark = ['#3b3e46','#4a4e57','#33363d','#565a63','#40434b','#4d5159','#373a41','#454850','#5a5e67','#3e4148','#4f525a'];
-function ic(id0, size, cls){ const id = (['F','G','H','I'].includes(id0) && size<=32) ? id0+'s' : id0; return `<svg class="${cls||'ios'}" width="${size}" height="${size}" viewBox="0 0 1024 1024" style="width:${size}px;height:${size}px;${cls==='sq'?'':'border-radius:'+(size*0.2237).toFixed(1)+'px'}"><use href="#ic${id}"/></svg>`; }
+function ic(id0, size, cls){ const id = (['F','G','H','I','L'].includes(id0) && size<=32) ? id0+'s' : id0; return `<svg class="${cls||'ios'}" width="${size}" height="${size}" viewBox="0 0 1024 1024" style="width:${size}px;height:${size}px;${cls==='sq'?'':'border-radius:'+(size*0.2237).toFixed(1)+'px'}"><use href="#ic${id}"/></svg>`; }
 
 function homeScreen(d, mode){
   const pal = mode==='light'?others:othersDark;
@@ -732,6 +889,7 @@ function renderDirs(LIST, el){ document.getElementById(el).innerHTML = LIST.map(
 renderDirs(DIRS,'dirs');
 renderDirs(DIRS2,'dirs2');
 renderDirs(DIRS3,'dirs3');
+renderDirs(DIRS4,'dirs4');
 </script>
 </body>
 </html>
