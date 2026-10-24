@@ -511,6 +511,55 @@ body[data-hit="1"] .done-c::after{outline:1.5px dashed #2F7BF5}
 .date.pick .tpbtn svg{width:100%;height:100%}
 .nb::after,.tdy::after,.backchip::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
 body[data-hit="1"] .nb::after,body[data-hit="1"] .tdy::after,body[data-hit="1"] .backchip::after{outline:1.5px dashed #2F7BF5;outline-offset:-1px}
+
+/* ===== 补画：日历·周、纪念日（视觉沿用现有令牌；色块配色同月历 C 方案标签） ===== */
+.wkp{padding:6px 8px 4px}
+.wrul{position:relative;height:18px;margin:0 32px 0 50px;font-size:11px;color:var(--text-2)}
+.wrul span{position:absolute;top:2px;transform:translateX(-50%)}
+.wlane{display:flex;align-items:center;height:58px;border-bottom:1px solid var(--line);border-radius:14px}
+.wlane:last-of-type{border-bottom:0}
+.wlane.sel{background:var(--panel-2);box-shadow:inset 0 0 0 2px var(--text);border-bottom-color:transparent}
+.wlane .wd{width:50px;flex:none;line-height:1.15;padding-left:6px}
+.wlane .wd small{display:block;font-size:10.5px;color:var(--text-2)}
+.wlane .wd b{display:inline-block;font-size:16px;font-weight:700}
+.wlane .wd.t b{background:var(--today-bg);color:var(--today-fg);border-radius:10px;padding:0 6px}
+.wlane .trk{flex:1;height:32px;position:relative;background:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px calc(100% / 7));box-shadow:inset -1px 0 0 var(--line)}
+.wev{position:absolute;top:4px;height:24px;border-radius:6px;background:var(--pb);box-shadow:inset 2px 0 0 var(--pc)}
+.wtd{position:absolute;top:9px;width:14px;height:14px;border-radius:50%;background:var(--panel);box-shadow:inset 0 0 0 2.5px var(--pc);margin-left:-7px}
+.wnow{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--nowline);box-shadow:var(--nowline-glow);border-radius:1px}
+.wedge{position:absolute;left:2px;top:8px;font-size:10px;line-height:15px;padding:0 4px;border-radius:6px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line);color:var(--text-2)}
+.wlane .tdn{width:32px;flex:none;text-align:right;font-size:12px;font-weight:700;padding-right:6px;line-height:1.15}
+.wlane .tdn em{display:block;font-style:normal;font-size:10.5px;color:var(--danger-text)}
+/* 电脑周视图 */
+.dwkv{display:grid;grid-template-columns:52px repeat(7,minmax(0,1fr));font-size:12px}
+.dwkv .hdc{text-align:center;padding:4px 0 6px;border-bottom:1px solid var(--line);line-height:1.2}
+.dwkv .hdc span{display:block;font-size:11.5px;color:var(--text-2)}
+.dwkv .hdc b{display:inline-block;font-size:18px;font-weight:700;padding:0 8px;border-radius:12px}
+.dwkv .hdc small{display:block;font-size:11px;color:var(--text-2)}
+.dwkv .hdc.t b{background:var(--today-bg);color:var(--today-fg)}
+.dwkv .adc{min-height:34px;padding:4px 3px;border-bottom:1px solid var(--line);border-left:1px solid var(--line);display:grid;gap:2px;align-content:start}
+.dwkv .adc.lab{border-left:0;font-size:10.5px;color:var(--text-2);text-align:right;padding-right:8px;align-content:center}
+.adt{font-style:normal;display:block;font-size:10.5px;font-weight:600;line-height:20px;height:20px;padding:0 6px;border-radius:6px;background:var(--panel);box-shadow:inset 0 0 0 1.5px var(--pc);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dwkv .hrc{position:relative;height:560px}
+.dwkv .hrc span{position:absolute;right:8px;font-size:10.5px;color:var(--text-2)}
+.dwkv .tcol{position:relative;height:560px;border-left:1px solid var(--line);background:linear-gradient(var(--line) 1px,transparent 1px) 0 0/100% 40px}
+.dwkv .be{position:absolute;left:3px;right:3px;border-radius:7px;background:var(--pb);box-shadow:inset 3px 0 0 var(--pc);color:var(--on-p);font-size:11px;font-weight:600;line-height:1.3;padding:3px 5px 3px 8px;overflow:hidden}
+.dwkv .be.sel{outline:2px solid var(--text);outline-offset:1px}
+/* 纪念日 */
+.annbig{margin-top:12px}
+.annrow{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:10px;min-height:64px;border-bottom:1px solid var(--line)}
+.annrow:last-child{border-bottom:0}
+.annrow.hl{box-shadow:0 0 0 2.5px var(--text);border-radius:14px;margin:4px -8px;padding:0 8px;border-bottom-color:transparent}
+.annrow .t1{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.annrow .t2{font-size:12px;color:var(--text-2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.annrow .dn{text-align:right;white-space:nowrap}
+.annrow .dn b{font-size:24px;font-weight:700;letter-spacing:-.02em}
+.annrow .dn small{font-size:12px;color:var(--text-2);margin-left:2px}
+.wheel{display:flex;position:relative;background:var(--panel-2);border-radius:16px;padding:6px 0;margin-top:8px}
+.wheel .band{position:absolute;left:8px;right:8px;top:50%;height:38px;margin-top:-19px;border-radius:12px;background:var(--panel);box-shadow:inset 0 0 0 1.5px var(--text)}
+.wheel .wc{flex:1;text-align:center;position:relative;line-height:38px;font-size:14px;color:var(--text-2)}
+.wheel .wc .on{font-size:17px;font-weight:700;color:var(--text)}
+.nextpv{font-size:13px;margin:10px 0 2px;padding:8px 12px;border-left:3px solid var(--accent);background:var(--panel-2);border-radius:0 10px 10px 0}
 </style>
 </head>
 <body data-skin="simple" data-mode="light" data-dev="p" data-rt="0" data-hit="0">
@@ -1207,6 +1256,90 @@ PH.annedit = () => phone(`<div class="blurbg" style="height:844px;overflow:hidde
   <span class="btn pri w" style="margin-top:16px;height:50px">好了</span></div>`, {nav:false});
 DK.annedit = () => `<div style="display:flex;justify-content:center">${PH.annedit()}</div>`;
 /* ---------------- 画面清单 ---------------- */
+/* ---------------- 补画：日历·周、纪念日列表、新建纪念日（交互按定稿线框 s2 / s4 / s5） ---------------- */
+const TP_ICON = `<span class="tpbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></span>`;
+const SEG3 = (on, ko) => `<div class="segc" style="margin-top:0;flex:1;min-width:0">${(ko?['주','월','기념일']:['周','月','纪念日']).map((x,i)=>`<span class="${i===on?'on':''}">${x}</span>`).join('')}</div>`;
+/* 周数据：[星期, 日, 农历, 日程[[开始,结束,项目]], 截止的待办[[时刻,项目]], 件数, 有逾期] */
+const WKD = [['一','19','初十',[[10,11,1],[14,16,2]],[],2],['二','20','十一',[[9.5,10.5,3],[16,17,5]],[],2],['三','21','十二',[[13,17,2]],[[18,1]],2],
+  ['四','22','十三',[[11,12,1]],[[18,2]],2,1],['五','23','霜降',[[15,16,2],[19,21,3]],[],2],['六','24','十五',[[10.5,11.5,2],[13,14.5,1],[15.5,16.5,2],[19,21,3]],[[21.6,1],[22,2]],6],['日','25','十六',[[11,13,3]],[],1]];
+function weekLanes(){
+  const H0=8,H1=22,X=h=>((h-H0)/(H1-H0)*100);
+  let h=`<div class="panel wkp"><div class="wrul">${[8,10,12,14,16,18,20,22].map(t=>`<span class="num" style="left:${X(t)}%">${t}</span>`).join('')}</div>`;
+  WKD.forEach((r,i)=>{const sel=i===5;
+    h+=`<div class="wlane ${sel?'sel':''}"><div class="wd ${sel?'t':''}"><small>周${r[0]}</small><b class="num">${r[1]}</b><small>${r[2]}</small></div><div class="trk">`
+     + r[3].map(e=>`<i class="wev" style="left:${X(e[0])}%;width:${X(e[1])-X(e[0])}%;--pc:var(--p${e[2]}s);--pb:var(--p${e[2]})"></i>`).join('')
+     + r[4].map(t=>`<i class="wtd" style="left:${X(t[0])}%;--pc:var(--p${t[1]}s)"></i>`).join('')
+     + (sel?`<i class="wnow" style="left:${X(14.28)}%"></i>`:'') + (i===0?'<span class="wedge num">‹7:30</span>':'')
+     + `</div><div class="tdn num">${r[5]}${r[6]?'<em>逾</em>':''}</div></div>`;});
+  return h+`<div class="legend"><span><i class="lgtag" style="--pc:var(--p2s);--pb:var(--p2);width:18px;height:10px;padding:0"></i>色块：日程（颜色＝项目）</span><span><i class="wtd" style="position:static;display:inline-block;vertical-align:-2px;margin:0 4px 0 0;--pc:var(--p1s)"></i>截止的待办</span><span>竖线：现在</span><span>右边数字：当天共几项</span><span><em style="font-style:normal;color:var(--danger-text);font-weight:700">逾</em>：有逾期没做完的待办</span><span>“‹7:30”：8 点前还有事</span></div></div>`;
+}
+const DAY24 = [['10:30','k',2,'SignPlex 字幕校对','已过去',1],['13:00','k',1,'NEOX 横版对片','到 14:30 · 进行中'],['15:30','k',2,'SignPlex 客户反馈会','到 16:30 · Zoom'],['19:00','k',3,'和 지민 吃饭','연남동'],['今天内','c',1,'NEOX 竖版 4K 导出','今天截止'],['','c',2,'回复 박 대리 的邮件','SignPlex']];
+PH.week = () => phone(`<div class="pg"><div class="hd" style="align-items:center"><div class="tt"><div class="date pt pick" role="button" aria-label="选择周"><span class="num">10</span>月<span class="num">19</span>日–<span class="num">25</span>日${TP_ICON}</div></div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
+  <div style="display:flex;align-items:center;gap:8px;margin-top:12px">${SEG3(0)}${MNAV.today(true)}</div>
+  <div class="muted" style="text-align:center;font-size:12px;margin:10px 0 6px">第 43 周 · 17 项</div>
+  ${weekLanes()}
+  <div class="secth"><span>周六 24日 · 农历九月十五</span><a>6 项</a></div>
+  <div class="panel river">${DAY24.map(r=>row(r).replace('class="row ','class="row '+(r[5]?'past ':''))).join('')}</div></div>`, {nav:1, long:true});
+/* 电脑周视图：7 列时间格，顶部“全天”行放截止的待办和纪念日 */
+const DWKD=[['一',19,'初十',[[10,11,1,'NEOX 周会'],[14,16,2,'SignPlex 剪辑']]],['二',20,'十一',[[9.5,10.5,3,'치과 洗牙'],[16,17,5,'韩语作业']]],['三',21,'十二',[[13,17,2,'SignPlex 韩文版配音']]],['四',22,'十三',[[11,12,1,'NEOX 提案']]],['五',23,'霜降',[[15,16,2,'SignPlex 内审'],[19,21,3,'瑜伽']]],['六',24,'十五',[[10.5,11.5,2,'字幕校对'],[13,14.5,1,'NEOX 横版对片'],[15.5,16.5,2,'SignPlex 客户反馈会',1],[19,21,3,'和 지민 吃饭']]],['日',25,'十六',[[11,13,3,'家庭 브런치']]]];
+function dWeekV(){
+  const H0=8,PX=40,fmt=t=>String(t).replace('.5',':30').replace(/^(\d+)$/,'$1:00');
+  const AD=['','','',`<i class="adt" style="--pc:var(--p2s)">○ 交韩文版成片</i>`,'',`<i class="adt" style="--pc:var(--p1s)">○ 竖版 4K 导出</i>`,''];
+  let h=`<div class="dwkv"><div class="hdc"></div>${DWKD.map((d,i)=>`<div class="hdc ${i===5?'t':''}"><span>周${d[0]}</span><b class="num">${d[1]}</b><small>${d[2]}</small></div>`).join('')}`;
+  h+=`<div class="adc lab">全天</div>${AD.map(a=>`<div class="adc">${a}</div>`).join('')}`;
+  h+=`<div class="hrc">${[8,9,10,11,12,13,14,15,16,17,18,19,20,21].map(x=>`<span class="num" style="top:${(x-H0)*PX-7}px">${x}:00</span>`).join('')}</div>`;
+  DWKD.forEach((d,i)=>{h+=`<div class="tcol">${d[3].map(e=>`<div class="be ${e[4]?'sel':''}" style="top:${(e[0]-H0)*PX+1}px;height:${(e[1]-e[0])*PX-3}px;--pc:var(--p${e[2]}s);--pb:var(--p${e[2]})"><span class="num">${fmt(e[0])}</span> ${e[3]}</div>`).join('')}${i===5?`<i class="wnow" style="top:${(14.28-H0)*PX}px;left:0;right:0;width:auto;height:2px;bottom:auto"></i>`:''}</div>`;});
+  return h+'</div>';
+}
+DK.week = () => desk(rail(1)+`<div class="col"><div class="hd" style="align-items:center;gap:12px"><div class="tt"><div class="date pick" role="button" aria-label="选择周"><span class="num">10</span>月<span class="num">19</span>日–<span class="num">25</span>日<span class="muted" style="font-size:14px;font-weight:600;margin-left:8px">第 43 周</span>${TP_ICON}</div></div><div class="segc" style="margin:0;width:260px"><span class="on">周</span><span>月</span><span>纪念日</span></div>${MNAV.today(true)}</div><div class="panel" style="margin-top:12px;padding:6px 10px 10px">${dWeekV()}</div><div class="muted" style="font-size:12px;margin-top:8px">← → 翻周 · T 回到今天 · 拖动色块改时间，拖下边缘改时长</div></div>`
+  + editor('日程 · 已选中','SignPlex 客户反馈会',[['时间','10月24日 周六 15:30 – 16:30'],['项目','SignPlex'],['提醒','提前 15 分'],['备注','带上韩文版字幕的问题清单']],2), 'two');
+
+/* 纪念日列表 */
+const ANN = {
+ zh:{title:'纪念日', add:'＋ 新建', chips:['全部 6','生日 4','纪念日 1','倒数日 1'], nk:'最近的一个 · 生日', big:'3', unit:'天后', nt:'김지민 生日 · 满 29 周岁', ns:'10月27日 周二 · 提前 7 天和前一天 9:00 提醒', fold:'▸ 已过去的倒数日 2', tagC:'倒数日', d:'天',
+  rows:[['김지민 生日','10月27日 周二 · 阳历 · 满 29 周岁','3'],['结婚纪念日','11月2日 周一 · 阳历 · 第 6 年','9'],['妈妈生日','阴历十月初八 · 今年 11月16日 · 满 58 周岁','23'],['SignPlex 4.0 上线','11月30日 周一','37',1],['爸爸生日','12月21日 周一 · 阳历 · 不知道年份','58'],['外婆生日','阴历闰三月初十 · 明年 4月15日 周四','173']]},
+ ko:{title:'기념일', add:'＋ 추가', chips:['전체 6','생일 4','기념일 1','디데이 1'], nk:'가장 가까운 날 · 생일', big:'3', unit:'일 후', nt:'김지민 생일 · 만 29세', ns:'10월 27일 (화) · 7일 전, 하루 전 오전 9:00 알림', fold:'▸ 지난 디데이 2', tagC:'디데이', d:'일',
+  rows:[['김지민 생일','10월 27일 (화) · 양력 · 만 29세','3'],['결혼기념일','11월 2일 (월) · 양력 · 6주년','9'],['엄마 생신','음력 10월 8일 · 올해 11월 16일 (월) · 만 58세','23'],['SignPlex 4.0 출시','11월 30일 (월)','37',1],['아빠 생신','12월 21일 (월) · 양력 · 출생 연도 모름','58'],['외할머니 생신','음력 윤3월 10일 · 내년 4월 15일 (목)','173']]}
+};
+const annRows = (t, hl) => t.rows.map((r,i)=>`<div class="annrow ${hl===i?'hl':''}"><span class="dia" style="width:12px;height:12px"></span><div style="min-width:0"><div class="t1">${r[0]}${r[3]?`<span class="cat" style="height:18px;font-size:10.5px;margin-left:6px;vertical-align:1px">${t.tagC}</span>`:''}</div><div class="t2">${r[1]}</div></div><div class="dn"><b class="num">${r[2]}</b><small>${t.d}</small></div></div>`).join('');
+function annBody(lang='zh', hl){
+  const t=ANN[lang], ko=lang==='ko';
+  return `<div class="hd" style="align-items:center"><div class="tt"><div class="date pt">${t.title}</div></div><span class="btn sm pri">${t.add}</span><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
+  <div style="display:flex;margin-top:12px">${SEG3(2,ko)}</div>
+  <div class="chips">${t.chips.map((c,i)=>`<span class="chip ${i===0?'on':''}">${c}</span>`).join('')}</div>
+  <div class="now annbig"><div class="k"><span class="dia" style="width:9px;height:9px"></span>${t.nk}</div><div style="display:flex;align-items:baseline;gap:8px;margin-top:2px"><b class="num" style="font-size:44px;line-height:1.05;letter-spacing:-.02em">${t.big}</b><span style="font-size:15px;font-weight:600">${t.unit}</span></div><div class="ti" style="font-size:18px;margin-top:2px">${t.nt}</div><div class="me">${t.ns}</div></div>
+  <div class="panel lst" style="margin-top:12px">${annRows(t, hl)}</div>
+  <div class="fold" style="margin-top:8px">${t.fold}</div>`;
+}
+PH.anniv = () => phone(`<div class="pg">${annBody('zh')}</div>`, {nav:1, long:true});
+PH.annko = () => phone(`<div class="pg">${annBody('ko')}</div>`, {nav:1, long:true, lang:'ko'});
+DK.annko = () => `<div style="display:flex;justify-content:center">${PH.annko()}</div>`;
+DK.anniv = () => desk(rail(1)+`<div class="col">${annBody('zh', 2).replace('<div class="date pt">','<div class="date">')}</div>`
+  + `<div class="col ed"><div style="display:flex;justify-content:space-between;font-size:12.5px"><span style="display:flex;align-items:center;gap:6px"><span class="dia" style="width:10px;height:10px"></span>生日 · 阴历</span><span class="muted">改了就自动保存</span></div><div style="font-size:22px;font-weight:800;margin:8px 0 6px">妈妈生日</div>
+  <div class="fld"><div class="k">日期</div><div class="v">阴历 十月初八 · 1968 年出生</div></div>
+  <div class="fld"><div class="k">今年</div><div class="v">11月16日 周一 · 满 58 周岁 · 还有 23 天</div></div>
+  <div class="fld"><div class="k">接下来 3 次的公历日期</div><div class="v" style="line-height:1.8"><span class="num">2026-11-16</span> 周一<br><span class="num">2027-11-05</span> 周五<br><span class="num">2028-11-23</span> 周四</div></div>
+  <div class="fld"><div class="k">提醒</div><div class="v" style="display:flex;justify-content:space-between"><span class="muted">提前 7 天、前一天 · 9:00（默认）</span><span class="chev">›</span></div></div>
+  <div class="fld"><div class="k">备注</div><div class="v">订 성수동 那家蛋糕，提前 3 天</div></div>
+  <div class="muted" style="font-size:11.5px;margin-top:10px">公历日期由换算库算出，图中是示意数据</div>
+  <div style="display:flex;gap:8px;margin-top:14px"><span class="btn sm soft">删除</span></div></div>`, 'two');
+
+/* 新建纪念日（手机弹层；阴历、闰月） */
+const LUNWHEEL = `<div class="wheel"><i class="band"></i>${[['1954','1955','1956'],['三月','闰三月','四月'],['初九','初十','十一']].map(c=>`<div class="wc">${c.map((x,i)=>`<div class="${i===1?'on':''}">${x}</div>`).join('')}</div>`).join('')}</div>`;
+PH.annnew = () => phone(`<div class="blurbg" style="height:844px;overflow:hidden"><div class="pg">${annBody('zh')}</div></div><div class="scrim"></div>
+  <div class="sheet ${glassy()}" style="top:58px;padding:12px 20px 30px"><div style="width:36px;height:4px;border-radius:2px;background:var(--step-off);margin:0 auto 10px"></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;font-size:15px;height:36px"><span class="muted">取消</span><b style="font-size:17px">新建纪念日</b><b>保存</b></div>
+  <div class="segc" style="margin-top:8px"><span class="on">生日</span><span>纪念日</span><span>倒数日</span></div>
+  <div class="lab" style="margin-top:12px">名字</div><div class="inp" style="height:46px">外婆生日</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin:12px 2px 0"><span class="lab" style="margin:0">日期</span><div class="segc" style="margin:0;width:150px"><span>阳历</span><span class="on">阴历</span></div></div>
+  ${LUNWHEEL}
+  <div class="muted" style="font-size:11.5px;margin:2px 2px 0">只有真有闰月的年份，月份这一列才出现闰月（1955 年有闰三月）</div>
+  <div class="srow" style="border:0;min-height:46px"><span>不知道出生年份<span class="muted" style="font-size:12px">（不显示周岁）</span></span><span class="tgl"></span></div>
+  <div class="panel" style="background:var(--panel-2);box-shadow:none;padding:10px 14px;font-size:13px;line-height:1.6"><b>闰三月不是每年都有，没有的年份：</b><div>◉ 按三月初十过（推荐）</div><div class="muted">○ 只在有闰三月的年份提醒</div></div>
+  <div class="nextpv"><b>下一次：</b><span class="num">2027</span>年 三月初十<br>→ 公历 <span class="num">4月15日</span> 周四 · 满 <span class="num">72</span> 周岁</div>
+  <div class="srow" style="border:0;min-height:46px;border-top:1px solid var(--line)"><span>提醒</span><span class="v">提前 7 天、前一天 · 9:00（默认）</span><span class="chev">›</span></div></div>`, {nav:false});
+DK.annnew = () => `<div style="display:flex;justify-content:center">${PH.annnew()}</div>`;
+
 const LIST = [
   ['today','今天','“现在”卡、没赶上、时间河、今天记的'],
   ['alert','提醒响起时','“现在”卡原地变成提醒；手机按钮在屏幕下方（按钮条离底 118px，磨砂玻璃里半透明，R-89），电脑按钮留在卡片里。exe 的 Windows 通知不带按钮，点通知打开整页提醒（R-85）'],
@@ -1232,7 +1365,11 @@ const LIST = [
   ['firstpw','隐私记：第一次设密码','4 到 12 位数字；够 4 位“确定”才可按；Face ID 只在支持的设备上出现'],
   ['empty','空状态：今天页没有日程','“试一句”卡，点一下真的走一遍记录流程；右下角提示只在前 3 次打开时出现'],
   ['annedit','纪念日编辑：提醒设置（R-94）','默认提前 7 天和前一天、早上 9:00（灰字写“默认”）；每一条都能单独改：提前天数可多选（当天、前一天、提前 3 / 7 / 14 天），时间可改；只画了手机'],
-  ['kosettings','韩文设置页','和中文设置同一结构；“투명 효과 줄이기”“메모 보기 방식”同样补上；캘린더 默认“공휴일: 한국”（R-97）。选“两国都显示”时，本国节日名在前，另一国的节日名小一号写在第二行（例：中文界面 10月3日 写“廿三”下面小字“开天节”；10月1日 写“国庆”）']
+  ['kosettings','韩文设置页','和中文设置同一结构；“투명 효과 줄이기”“메모 보기 방식”同样补上；캘린더 默认“공휴일: 한국”（R-97）。选“两国都显示”时，本国节日名在前，另一国的节日名小一号写在第二行（例：中文界面 10月3日 写“廿三”下面小字“开天节”；10月1日 写“国庆”）'],
+  ['week','日历 · 周','标题胶囊“10月19日–25日 ⌄”点开选周；“周”选中，右侧“‹ 今天 ›”（本周时“今天”是灰的），左右滑动也能翻周。7 条泳道、8–22 点刻度：日程色块＝项目块色底＋左侧深色竖线（和月历标签同一套配色），截止的待办是项目色小圆圈，右边是当天件数，“逾”是有逾期没做完的待办。选中的那天整条高亮，下面接当天完整清单','日历 · 周（电脑）','7 列时间格，每小时 40px（比线框加高）；顶部“全天”一行放当天截止的待办，纪念日也放这一行，前面带 ◆ 菱形（这一周没有纪念日，图里只有待办）；日程色块按项目色，选中的一块加粗描边，右侧编辑栏显示它。← → 翻周，T 回到今天'],
+  ['anniv','纪念日列表','顶部“最近的一个”大卡用“现在”卡的令牌（简洁浅色墨黑、简洁深色柠檬黄、玻璃浅色柠檬黄渐变、玻璃深色带黄光的深色卡）；筛选胶囊 全部 / 生日 / 纪念日 / 倒数日；列表只按还有几天排序，每行是纪念日菱形（柠檬黄＋边，R-77 方案 A）＋名字＋阳历 / 阴历＋满几周岁 / 第几年＋右侧大号天数，只有倒数日标小标签；已过去的倒数日折叠。点一行进入编辑，左滑露出“编辑 / 删除”','纪念日（电脑）','左边列表，右边详情：日期、今年、接下来 3 次的公历日期、提醒（默认值灰字，点开是“纪念日编辑：提醒设置”那个弹层）、备注；选中的一行描边'],
+  ['annnew','新建纪念日（阴历、闰月）','手机底部弹层：生日 / 纪念日 / 倒数日分段；名字；阳历 / 阴历切换；阴历三列滚轮，闰月和正常月份排在同一列，只有真有闰月的年份才出现（示例 1955 闰三月 初十）；“不知道出生年份”开关；选了闰月才出现“没有闰月的年份怎么过”；“下一次”实时预览；提醒一行默认灰字（R-94），点开就是上面那个提醒设置弹层。选“倒数日”时周岁那行换成“到期后：移到已过去 / 每年重复”。只画了手机'],
+  ['annko','韩文纪念日列表（기념일）','和中文同一结构；名字和日期行不折行，放不下时用省略号收尾（如“음력 10월 8일 · 올해 11월 16일 (월) · 만 58세”）；倒数日标“디데이”。只画了手机']
 ];
 function render(){
   const d=document.body.dataset.dev;
