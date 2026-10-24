@@ -6,7 +6,7 @@
 <title>图标与名字候选</title>
 <style>
 :root{
-  --ink:#141518; --ink2:#3a3c42; --g1:#6b6e76; --g2:#9a9da5; --g3:#d1d3d9; --g4:#e4e5e9;
+  --ink:#141518; --ink2:#3a3c42; --g1:#5a5d65; --g2:#9a9da5; --g3:#d1d3d9; --g4:#e4e5e9;
   --bg:#e9eaee; --card:#fff; --lemon:#F2DF4A; --pink:#F4B8B0; --pinkbg:#fbe0de; --sky:#8CC9E8; --red:#c4302b;
   --f: -apple-system, "PingFang SC", "Apple SD Gothic Neo", "Microsoft YaHei UI", "Microsoft YaHei", "Malgun Gothic", "Segoe UI", sans-serif;
 }
@@ -174,7 +174,7 @@ table.score th{font-weight:800;white-space:nowrap}
     <symbol id="markC" viewBox="0 0 1024 1024">
       <g transform="translate(0 30)">
         <path d="M178 452 L500 440 L532 592 L178 600 Q146 600 146 568 L146 484 Q146 453 178 452 Z" fill="#141518"/>
-        <path d="M556 438 L756 431 L812 370 L884 516 Q894 574 838 578 L588 590 Z" fill="#141518"/>
+        <path d="M556 438 L768 430 L814 388 L866 450 Q880 474 876 522 Q870 574 826 579 L588 590 Z" fill="#141518"/>
       </g>
     </symbol>
     <symbol id="icC" viewBox="0 0 1024 1024">
@@ -366,7 +366,7 @@ function splash(d){
 
 document.getElementById('dirs').innerHTML = DIRS.map(d=>`
 <section class="dir" id="dir${d.id}">
-  <div class="dirhead"><span class="tag">${d.tag}</span><h3 style="font-size:24px;margin:0">${d.title}</h3><span class="sub">配的名字：${d.name}</span></div>
+  <div class="dirhead"><span class="tag">${d.tag}</span><h3 style="font-size:24px;margin:0">${d.title}</h3><span class="sub">配的名字：「${d.name}」${d.label?'，主屏幕显示“'+d.label+'”':''}</span></div>
   <div class="mainrow">
     <div>
       <div class="master"><svg width="1024" height="1024" viewBox="0 0 1024 1024"><use href="#ic${d.id}"/></svg></div>
