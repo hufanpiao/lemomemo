@@ -46,7 +46,7 @@ h2.doc{font-size:clamp(22px,4vw,30px);line-height:1.2;margin:48px 0 10px;font-we
 .dcard li{margin:4px 0}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:14px}
 .tw{overflow-x:auto;margin-top:8px}
-table.t{border-collapse:collapse;font-size:13px;min-width:720px;width:100%}
+table.t{border-collapse:collapse;font-size:14px;min-width:720px;width:100%}
 table.t th,table.t td{border-bottom:1px solid var(--doc-line);padding:6px 8px;text-align:left;vertical-align:middle;white-space:nowrap}
 table.t th{font-weight:800;position:sticky;top:0;background:var(--doc-card)}
 table.t td.name{font-weight:700}
@@ -55,7 +55,7 @@ table.t td code{word-break:break-all;font-size:12px}
 table.t td.name,table.t td.name code{white-space:nowrap;word-break:normal}
 .sw{display:inline-block;width:16px;height:16px;border-radius:5px;vertical-align:-3px;margin-right:6px;border:1px solid rgba(128,128,128,.35)}
 .ok{color:var(--doc-ok);font-weight:800}.ng{color:var(--doc-ng);font-weight:800}
-.note{font-size:13px;color:var(--doc-fg2)}
+.note{font-size:14px;color:var(--doc-fg2)}
 .screens{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,390px),1fr));gap:28px 22px;margin-top:18px}
 body[data-dev="d"] .screens{grid-template-columns:1fr}
 figure.sc{margin:0;min-width:0}
@@ -209,7 +209,7 @@ figure.sc .cap2{font-size:13px;color:var(--doc-fg2);font-weight:400;display:bloc
 .cell{min-height:66px;text-align:center;padding:6px 0 4px;border-radius:12px;margin:1px}
 .cell.h{background:var(--hol-bg)}
 .cell .d{font-family:var(--f-num);font-weight:800;font-size:17px;width:32px;height:32px;line-height:32px;margin:0 auto;border-radius:50%}
-.cell.o .d,.cell.o .l{color:var(--text-2);opacity:.75}
+.cell.o .d,.cell.o .l{color:var(--text-2);font-weight:600}
 .cell .l{font-size:11px;color:var(--text-2);line-height:1.2}
 .cell .l.f{color:var(--text);font-weight:800}
 .cell .n{font-size:11px;font-weight:700;line-height:1.2}
@@ -388,7 +388,10 @@ figure.sc .cap2{font-size:13px;color:var(--doc-fg2);font-weight:400;display:bloc
 .anc{border-radius:20px;padding:12px 14px}
 .kbd{display:inline-block;border-radius:6px;box-shadow:inset 0 0 0 1px var(--text-2);padding:0 5px;font-size:11px;color:var(--text)}
 .dtoast{position:absolute;left:22px;right:22px;bottom:22px}
-.dtoast .btn{height:40px;padding:0 10px}
+.dtoast .r{flex-wrap:wrap}
+.dtoast .r > div{flex:1 1 100% !important}
+.dtoast .r .btn{height:40px;padding:0 16px;margin-top:8px}
+.dtoast .r .btn:first-of-type{margin-left:auto}
 .dwin{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:8;border-radius:30px;background:var(--sheet-bg);padding:24px 26px}
 </style>
 </head>
@@ -448,8 +451,75 @@ figure.sc .cap2{font-size:13px;color:var(--doc-fg2);font-weight:400;display:bloc
 
 <div class="wrap">
 <h1 class="doc">柠檬记 4.0.0：两套皮肤的视觉稿</h1>
-<p class="lead">开发前的最后一份设计稿。布局和交互按定稿线框，不做改动；这里定颜色、字体、圆角、阴影、玻璃和动效，并把它们全部写成变量。</p>
-<!--SELFCRIT-->
+<p class="lead">开发前的最后一份设计稿。布局和交互按定稿线框（草图 v4 定稿），这次不改；这里定的是颜色、字体、圆角、阴影、玻璃和动效，并把它们全部写成变量。后半部分另有登录页和官网首页。</p>
+
+<div class="grid2">
+  <div class="dcard">
+    <h3>简洁（默认）</h3>
+    <ul>
+      <li>在 v3 的基础上往前走：便当格、马卡龙项目色、黑色胶囊导航、柠檬黄 #F2DF4A 的“＋”和主按钮都保留。</li>
+      <li>面板一律纯白（深色是 #1C1D22）、不加阴影，只靠底色区分；圆角分三级：大面板 28、小卡片 20、输入框 14，胶囊全圆。</li>
+      <li>黄色只留给“该你动手”的地方：主按钮、“＋”、“现在”卡的进度条、时间河上的“现在”时间。其他地方用黑白灰，所以黄色一出现就知道该点哪里。</li>
+      <li>深色模式里，“现在”卡从黑色换成整块柠檬黄，在黑底上一眼就能找到。</li>
+    </ul>
+  </div>
+  <div class="dcard">
+    <h3>磨砂玻璃</h3>
+    <ul>
+      <li>底色就是图标的光：左上和右下两团柠檬黄柔光，右上一点粉，左下一点蓝，位置和图标里的光斑一致。</li>
+      <li>按纪要第十三节第 12 条，玻璃只用在导航、“＋”、提示条、弹层和录音面板上；列表和卡片一律实色，保证字清楚。</li>
+      <li>选中状态从“黑底白字”换成“柠檬黄底黑字”；“现在”卡浅色时是一块柠檬黄，深色时是带黄光的深色卡。</li>
+      <li>系统打开“降低透明度”，或 Windows 关掉透明效果时，玻璃自动换成实色后备值（令牌表里的 <code>--glass-solid</code>）。页面顶部可以勾“模拟降低透明度”来看效果。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="dcard">
+  <h3>和图标怎么呼应</h3>
+  <ul>
+    <li><b>柠檬黄的光</b>：图标的主光就是 #F2DF4A。两套皮肤的主按钮、“＋”和“现在”的标记都用它；磨砂玻璃的底色直接取自图标的光斑。</li>
+    <li><b>三根声纹</b>：图标上的三根黑色竖条，就是录音面板里的声波。录音时画面里的声波和图标是同一种笔画：黑色（深色模式用柠檬黄）、圆头、粗细一致。</li>
+    <li><b>玻璃圆片</b>：录音按钮外面的两圈光晕，就是图标玻璃圆片的外沿和内圈；登录页和官网首屏背景里那块大玻璃圆片，直接用了图标的主体。</li>
+    <li><b>启动画面</b>：登录页、Safari 引导页和官网首屏都用启动画面的柠檬光做背景（令牌 <code>--login-bg</code>），第一眼看到的和启动时看到的一样。</li>
+  </ul>
+</div>
+
+<div class="dcard">
+  <h3>字体</h3>
+  <ul>
+    <li>数字（时间、日期、计时）：Manrope，等宽数字；没有时退回 SF Pro Rounded、系统字体或 Segoe UI。</li>
+    <li>中文：系统字体，iPhone 上是苹方，Windows 上是微软雅黑 UI。</li>
+    <li>韩文：Apple SD Gothic Neo、Malgun Gothic 优先，按词换行（<code>word-break: keep-all</code>）。</li>
+    <li>给开发的建议：只自带 Manrope 一种字体，裁成拉丁字母和数字（woff2 大约 30 KB，开源 OFL 许可）；中文、韩文用系统字体，不打包。本页没有引用任何外部字体文件，没装 Manrope 的电脑上看到的是退回后的字体。</li>
+  </ul>
+</div>
+
+<div class="dcard">
+  <h3>自评结果，以及据此改了什么</h3>
+  <p class="note">按 design-critique 的五项（第一眼、可用性、层级、一致性、可读性），用无头 Edge 逐个看了四种组合的手机版和电脑版截图，再用脚本实测对比度。分数是改完以后的（10 分制）。</p>
+  <div class="tw"><table class="t" style="min-width:560px">
+    <tr><th>项目</th><th>简洁·浅</th><th>简洁·深</th><th>玻璃·浅</th><th>玻璃·深</th><th>说明</th></tr>
+    <tr><td>第一眼</td><td>9</td><td>9</td><td>8</td><td>8</td><td>“现在”卡最先被看到，这是对的；玻璃皮肤的底色更吸引注意，略分散</td></tr>
+    <tr><td>层级</td><td>9</td><td>8</td><td>8</td><td>8</td><td>深色里项目色小标记偏亮，和标题抢一点</td></tr>
+    <tr><td>和图标一致</td><td>8</td><td>9</td><td>9</td><td>9</td><td>简洁浅色的柠檬黄只出现在几处，和图标的联系最弱</td></tr>
+    <tr><td>可读性</td><td>9</td><td>9</td><td>8</td><td>8</td><td>对比度全部达标，但玻璃上的字是按最不利情况调出来的，透明度比一开始高</td></tr>
+    <tr><td>和线框一致</td><td>9</td><td>9</td><td>9</td><td>9</td><td>布局、文案、按钮位置都没改，只是“现在”卡和列表放进了实色面板</td></tr>
+  </table></div>
+  <p class="note" style="margin-top:14px"><b>看截图和跑脚本发现的问题，以及改了什么：</b></p>
+  <ul>
+    <li><b>玻璃上的字不够清楚</b>：第一次跑对比度，有 5 项没过，都在玻璃上：深色玻璃上的次要文字只有 2.93，深色导航文字 3.90，深色提示条小字 3.78，浅色弹层的次要文字 3.81，深色底色上的次要文字 4.42。把浅色玻璃的透明度从 72% 提到 80%、深色从 74% 提到 84%，并把相关的灰字调亮或调深一档，现在全部 ≥ 4.5。</li>
+    <li><b>令牌表只看得到一列</b>：字体那几行的取值很长又不换行，把第一列撑得很宽，其他三列被挤到外面。改成单元格内换行。</li>
+    <li><b>瀑布流卡片底部挤成两行</b>：分类胶囊“韩国生活”被折成两行。改成不换行、字号小一号，时间放不下时省略。</li>
+    <li><b>韩文日期折行</b>：“10월 24일 토요일”在 30 px 下放不下，折成两行。韩文日期改成 27 px 不换行。</li>
+    <li><b>随手记最后一条被输入行挡住</b>：手机列表底部加大留白，最后一条能完整滚出来。</li>
+    <li><b>电脑月历超出窗口</b>：月历放大 1.25 倍后最后一行被裁掉，改成 1.06 倍。</li>
+    <li><b>电脑提示条太挤</b>：放在中间一栏底部时，两颗按钮和文字挤在一行，标题和说明都被折成好几行。改成上下两层：上面是文字，下面右对齐放“撤销 / 修改”。</li>
+    <li><b>深色模式下手机外框看不见</b>：外框和页面都是近黑色，加了一圈很淡的描边。</li>
+    <li><b>官网手机首屏</b>：主视觉里的手机被裁掉了底部，拆出来的三条盖住了录音面板。缩小手机、收窄卡片，并加了一行“AI 拆成了 3 条”。深色页面上官网手机框的状态栏看不见，也一并修了。</li>
+    <li><b>官网文案和隐私说明对不上</b>：需求要写“数据只有你自己能看到”，但设置里已经写明“免费 AI 的录音和文字可能被谷歌用于改进产品”。官网改成“你记的东西只有你自己能看到，邀请你的朋友也看不到”，后面补一句录音会交给 AI、详见隐私说明。这一句需要产品负责人确认。</li>
+  </ul>
+  <p class="note" style="margin-top:10px"><b>还没解决、需要开发实测的：</b>iPhone 主屏幕版的 Safari 是否支持 <code>prefers-reduced-transparency</code> 需实测，不支持时可以在“设置 › 皮肤”里加一个“少用透明效果”的开关，用同一组实色后备值；Windows 版要读系统的“透明效果”设置，再切换同一组变量。</p>
+</div>
 
 
 <h2 class="doc">画面</h2>
@@ -792,7 +862,7 @@ function siteBody(pc){
 }
 function siteFrame(inner, pc){
   return pc ? `<div class="web" style="height:auto"><div class="bchrome"><div class="tabs"><div class="tab1"><svg viewBox="0 0 1024 1024"><use href="#icLs"/></svg>柠檬记 · Lemo</div></div><div class="addr"><span>‹</span><span>›</span><span>↻</span><span class="u">lemomemo.com</span></div></div>${inner}</div>`
-            : `<div class="phone"><div class="scr" style="min-height:0;padding-bottom:0">${status()}${inner}<div class="home"></div></div></div>`;
+            : `<div class="phone"><div class="scr app" style="min-height:0;padding-bottom:0">${status()}${inner}<div class="home"></div></div></div>`;
 }
 function renderHome(){
   const pc=document.body.dataset.dev==='d';
