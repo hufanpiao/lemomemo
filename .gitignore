@@ -35,8 +35,15 @@ data/backups/*
 supabase/.temp/
 supabase/.branches/
 
-# 构建时生成、CI 部署前再生成的文件（架构设计-v4 8.1）
-supabase/functions/_shared/logic.gen.js
+# 构建时生成、CI 部署前再生成的文件（架构设计-v4 2.5、8.1）
+supabase/functions/_shared/gen/
+# Vite / TypeScript / 测试的产物（R-96）
+dist/web/
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+.vite/
 
 # Tauri（exe）的 Rust 编译产物
 desktop/src-tauri/target/
