@@ -1,4 +1,4 @@
-# 日程与待办 —— Git 忽略规则
+# 柠檬记（原“日程与待办”）—— Git 忽略规则
 # dist/ 是发布产物，保留在仓库里（发布要用 dist/planner.html），不忽略。
 
 # Python / Node 缓存
@@ -20,5 +20,30 @@ desktop.ini
 tmp/
 
 # 真实数据的本地备份：只留在本机，不进 git（只保留说明文件）
+# 4.0.0 起备份挪到项目目录之外（D:\柠檬记-备份\，架构设计-v4 第 10 节），这里只是兜底
 data/backups/*
 !data/backups/README.md
+
+# 本机环境变量与密钥（架构设计-v4 8.4）：一切 .env* 都不进仓库，只保留样板
+.env*
+!.env.example
+# Cloudflare wrangler 本机密钥和缓存（独立 Worker lemo-ops、Pages Functions 本机调试）
+.dev.vars
+.dev.vars.*
+.wrangler/
+# Supabase CLI 本机临时文件
+supabase/.temp/
+supabase/.branches/
+
+# 构建时生成、CI 部署前再生成的文件（架构设计-v4 8.1）
+supabase/functions/_shared/logic.gen.js
+
+# Tauri（exe）的 Rust 编译产物
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
+# 签名私钥、证书一律不进仓库（只放 GitHub Environments 和离线备份）
+*.key
+*.pem
+*.p12
+*.pfx
