@@ -504,7 +504,11 @@ body[data-hit="1"] .done-c::after{outline:1.5px dashed #2F7BF5}
 .mnav-b{display:inline-flex;align-items:center;gap:4px;flex:none}
 .tdy{height:32px;padding:0 12px;border-radius:999px;display:inline-flex;align-items:center;font-size:13px;font-weight:600;background:var(--panel);color:var(--text-2);position:relative;box-shadow:var(--shadow-1)}
 .tdy.on{background:var(--ink);color:var(--on-ink)}
-.caret{font-size:13px;color:var(--text-2);margin-left:4px;vertical-align:3px}
+/* 月历标题做成胶囊，点了选年月（R-101） */
+.date.pick{display:inline-flex;align-items:center;gap:0;background:var(--panel);border-radius:999px;padding:4px 14px 4px 16px;box-shadow:var(--shadow-1),inset 0 0 0 1.5px var(--line);font-size:22px;position:relative}
+.date.pick::after{content:"";position:absolute;inset:-4px}
+.date.pick .tpbtn{display:inline-flex;width:14px;height:14px;margin-left:8px;color:var(--text-2)}
+.date.pick .tpbtn svg{width:100%;height:100%}
 .nb::after,.tdy::after,.backchip::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
 body[data-hit="1"] .nb::after,body[data-hit="1"] .tdy::after,body[data-hit="1"] .backchip::after{outline:1.5px dashed #2F7BF5;outline-offset:-1px}
 </style>
@@ -931,7 +935,7 @@ function monthHead(m, mode, cur){
   const title = `<span class="num">2026</span>年<span class="num">${m}</span>月`;
   if(mode==='A') return `<div class="hd" style="align-items:center"><div class="tt"><div style="display:flex;align-items:center;gap:2px"><div class="date pt">${title}</div>${MNAV.arrows()}</div>${cur?'':'<span class="backchip" role="button">回到今天</span>'}</div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
   <div class="segc"><span>周</span><span class="on">月</span><span>纪念日</span></div>`;
-  return `<div class="hd" style="align-items:center"><div class="tt"><div class="date pt" role="button">${title}<span class="caret">▾</span></div></div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
+  return `<div class="hd" style="align-items:center"><div class="tt"><div class="date pt pick" role="button" aria-label="选择年月">${title}<span class="tpbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></span></div></div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
   <div style="display:flex;align-items:center;gap:8px;margin-top:12px"><div class="segc" style="margin-top:0;flex:1;min-width:0"><span>周</span><span class="on">月</span><span>纪念日</span></div>${MNAV.today(cur)}</div>`;
 }
 PH.month = (mode='B', m=10) => {
@@ -950,7 +954,7 @@ PH.monthB11 = () => PH.month('B', 11);
 DK.month = () => {
   const f=frag(PH.month());
   const sh=f.querySelectorAll('.secth')[0].outerHTML, list=f.querySelector('.panel.river').outerHTML;
-  return desk(rail(1)+`<div class="col"><div class="hd" style="align-items:center;gap:12px"><div class="tt"><div class="date" role="button"><span class="num">2026</span>年<span class="num">10</span>月<span class="caret">▾</span></div></div><div class="segc" style="margin:0;width:260px"><span>周</span><span class="on">月</span><span>纪念日</span></div>${MNAV.today(true)}</div><div class="mvd" style="margin-top:10px">${monthGridV(10, 4)}</div><div class="muted" style="font-size:12px;margin-top:8px">← → 翻月 · T 回到今天 · 也可以在触控板上左右滑</div></div><div class="col ed">${sh}${list}</div>`, 'two');
+  return desk(rail(1)+`<div class="col"><div class="hd" style="align-items:center;gap:12px"><div class="tt"><div class="date pick" role="button" aria-label="选择年月"><span class="num">2026</span>年<span class="num">10</span>月<span class="tpbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></svg></span></div></div><div class="segc" style="margin:0;width:260px"><span>周</span><span class="on">月</span><span>纪念日</span></div>${MNAV.today(true)}</div><div class="mvd" style="margin-top:10px">${monthGridV(10, 4)}</div><div class="muted" style="font-size:12px;margin-top:8px">← → 翻月 · T 回到今天 · 也可以在触控板上左右滑</div></div><div class="col ed">${sh}${list}</div>`, 'two');
 };
 DK.monthA11 = () => `<div style="display:flex;justify-content:center">${PH.monthA11()}</div>`;
 DK.monthB11 = () => `<div style="display:flex;justify-content:center">${PH.monthB11()}</div>`;
@@ -1206,9 +1210,8 @@ DK.annedit = () => `<div style="display:flex;justify-content:center">${PH.annedi
 const LIST = [
   ['today','今天','“现在”卡、没赶上、时间河、今天记的'],
   ['alert','提醒响起时','“现在”卡原地变成提醒；手机按钮在屏幕下方（按钮条离底 118px，磨砂玻璃里半透明，R-89），电脑按钮留在卡片里。exe 的 Windows 通知不带按钮，点通知打开整页提醒（R-85）'],
-  ['month','月历（翻页摆法 B，推荐）','R-100 色块标签：每件事一个项目色小标签写简称，手机每格最多 2 个、多出来写“+N”，纪念日仍是菱形；R-97 默认只显示中国节假日（开天节、韩文节不再标）。翻页摆法 B：标题行不加箭头，点“2026年10月 ▾”弹出年月选择；“‹ 今天 ›”在分段控件右侧，本月时“今天”是灰的。左右滑动也能翻页','月历（电脑）','标签最多 4 个；日期和农历并排省高度。标题点开选年月，“‹ 今天 ›”在分段控件右侧；← → 翻月，T 回到今天'],
+  ['month','月历','R-100 色块标签：每件事一个项目色小标签写简称，手机每格最多 2 个、多出来写“+N”，纪念日仍是菱形；R-97 默认只显示中国节假日（开天节、韩文节不再标）。翻页摆法 B：标题行不加箭头，点标题胶囊“2026年10月 ⌄”弹出年月选择（R-101）；“‹ 今天 ›”在分段控件右侧，本月时“今天”是灰的。左右滑动也能翻页','月历（电脑）','标签最多 4 个；日期和农历并排省高度。标题点开选年月，“‹ 今天 ›”在分段控件右侧；← → 翻月，T 回到今天'],
   ['monthB11','月历：翻到 11 月（摆法 B）','不在本月时“今天”变成黑底，点它回到今天；标题、分段控件位置都不动。375 宽不挤：分段控件缩短到约 210px'],
-  ['monthA11','月历：翻到 11 月（摆法 A，备选）','小箭头贴在标题旁（看得见 28px，点击区 44px），搜索和头像不动；不在本月时标题下方出现“回到今天”小胶囊（本月时不出现，标题区会高出 30px）'],
   ['todo','待办','固定分组，项目只做筛选；“今天 / 明天”两颗小按钮看得见 32px 高，点击区外扩到 44px，间距 8px'],
   ['mason','随手记：瀑布流（默认）','手机两列，电脑三列；页面上不放切换按钮（R-78）；卡片“⋯”点击区 44px'],
   ['notes','随手记：列表','在“设置 › 随手记显示方式”里改成列表后的样子；行尾“⋯”点击区 44px'],
