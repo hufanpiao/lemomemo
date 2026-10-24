@@ -113,6 +113,13 @@ table.score th{font-weight:800;white-space:nowrap}
 .tablewrap{overflow-x:auto}
 .fix li{margin:4px 0}
 .note{font-size:13px;color:var(--g1)}
+.nb{background:#f3f4f6;border-radius:20px;padding:14px 16px;margin:12px 0 0;font-size:14px}
+.nbh{display:flex;align-items:baseline;gap:10px}
+.nbn{font-size:30px;font-weight:800;line-height:1.1}
+.nb .tri{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:8px 0 4px}
+.nb .tri b{font-weight:700;color:var(--g1)}
+.nb dl{margin:0}.nb dt{font-weight:800;margin-top:8px}.nb dd{margin:2px 0 0}
+.smn{margin-top:10px;font-size:14px;border-left:4px solid var(--lemon);padding:4px 0 4px 12px}
 </style>
 </head>
 <body>
@@ -251,10 +258,153 @@ table.score th{font-weight:800;white-space:nowrap}
       <path d="M300 200 V790 H560" fill="none" stroke="#141518" stroke-width="160" stroke-linecap="round" stroke-linejoin="round"/>
       <use href="#sliceO" x="470" y="250" width="380" height="380"/>
     </symbol>
+
+    <!-- ============ 第三轮：磨砂玻璃 + 声音 ============ -->
+    <!-- 庚：玻璃对话泡里，一道声波写成一个勾 -->
+    <clipPath id="clipG"><path d="M512 190 A290 290 0 1 1 330 705 L236 792 L261 625 A290 290 0 0 1 512 190 Z"/></clipPath>
+    <symbol id="markG" viewBox="0 0 1024 1024">
+      <ellipse cx="540" cy="840" rx="250" ry="38" fill="#1d2433" opacity=".16" filter="url(#shB)"/>
+      <g clip-path="url(#clipG)">
+        <rect width="1024" height="1024" fill="#eef0f4"/>
+        <g filter="url(#blurB2)" opacity=".85"><circle cx="300" cy="290" r="230" fill="#F2DF4A"/><circle cx="770" cy="400" r="210" fill="#F4A9A0"/><circle cx="560" cy="820" r="260" fill="#7FBFE4"/></g>
+        <rect width="1024" height="1024" fill="#fff" opacity=".42"/>
+      </g>
+      <path d="M512 190 A290 290 0 1 1 330 705 L236 792 L261 625 A290 290 0 0 1 512 190 Z" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="7" stroke-linejoin="round"/>
+      <path d="M300 380 A230 230 0 0 1 420 250" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round"/>
+      <path d="M296 486 Q342 366 388 486 T480 486 L566 572 L732 382" fill="none" stroke="#141518" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icG" viewBox="0 0 1024 1024"><use href="#bgB"/><use href="#markG"/></symbol>
+    <linearGradient id="gGs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F6E98E"/><stop offset=".55" stop-color="#F3C3BC"/><stop offset="1" stop-color="#9ECFEB"/></linearGradient>
+    <symbol id="icGs" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="url(#gGs)"/>
+      <path d="M512 150 A330 330 0 1 1 300 750 L190 860 L220 680 A330 330 0 0 1 512 150 Z" fill="#fff"/>
+      <path d="M300 510 Q370 340 440 510 L540 610 L736 380" fill="none" stroke="#141518" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- 辛：夜里的玻璃话筒，说话时柠檬色的光从下往上涨 -->
+    <linearGradient id="gH" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#232733"/><stop offset="1" stop-color="#101217"/></linearGradient>
+    <clipPath id="clipH"><rect x="372" y="160" width="280" height="460" rx="140"/></clipPath>
+    <clipPath id="clipHs"><rect x="352" y="130" width="320" height="520" rx="160"/></clipPath>
+    <symbol id="bgH" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">
+      <rect width="1024" height="1024" fill="url(#gH)"/>
+      <g filter="url(#blurB2)"><circle cx="512" cy="560" r="300" fill="#F2DF4A" opacity=".30"/><circle cx="760" cy="250" r="190" fill="#7FBFE4" opacity=".22"/></g>
+    </symbol>
+    <symbol id="markH" viewBox="0 0 1024 1024">
+      <g clip-path="url(#clipH)">
+        <rect width="1024" height="1024" fill="#3a3f4c"/>
+        <g filter="url(#blurB1)"><circle cx="512" cy="600" r="220" fill="#F2DF4A" opacity=".55"/><circle cx="640" cy="200" r="150" fill="#7FBFE4" opacity=".5"/></g>
+        <rect width="1024" height="1024" fill="#fff" opacity=".16"/>
+        <path d="M372 438 Q442 400 512 438 T652 438 V640 H372 Z" fill="#F2DF4A"/>
+        <g stroke="#fff" stroke-opacity=".55" stroke-width="18" stroke-linecap="round">
+          <line x1="452" y1="262" x2="572" y2="262"/><line x1="440" y1="312" x2="584" y2="312"/><line x1="440" y1="362" x2="584" y2="362"/>
+        </g>
+      </g>
+      <rect x="372" y="160" width="280" height="460" rx="140" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="8"/>
+      <path d="M404 210 A120 120 0 0 1 470 172" fill="none" stroke="#fff" stroke-width="14" stroke-linecap="round"/>
+      <g fill="none" stroke="#E9ECF2" stroke-width="40" stroke-linecap="round">
+        <path d="M290 470 A222 222 0 0 0 734 470"/>
+        <path d="M512 694 V810"/><path d="M420 816 H604"/>
+      </g>
+    </symbol>
+    <symbol id="icH" viewBox="0 0 1024 1024"><use href="#bgH"/><use href="#markH"/></symbol>
+    <symbol id="icHs" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#1a1d25"/>
+      <g clip-path="url(#clipHs)"><rect width="1024" height="1024" fill="#e9ecf2"/><path d="M352 420 Q432 380 512 420 T672 420 V700 H352 Z" fill="#F2DF4A"/></g>
+      <g fill="none" stroke="#e9ecf2" stroke-width="70" stroke-linecap="round">
+        <path d="M250 490 A262 262 0 0 0 774 490"/><path d="M512 752 V880"/>
+      </g>
+    </symbol>
+
+    <!-- 壬：一道声音穿过玻璃三棱镜，分成三条 -->
+    <linearGradient id="gI" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D6E8F4"/><stop offset="1" stop-color="#9CC4E0"/></linearGradient>
+    <clipPath id="clipI"><path d="M512 236 Q530 236 540 254 L742 690 Q752 716 724 716 L300 716 Q272 716 282 690 L484 254 Q494 236 512 236 Z"/></clipPath>
+    <symbol id="bgI" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">
+      <rect width="1024" height="1024" fill="url(#gI)"/>
+      <g filter="url(#blurB1)" opacity=".7"><circle cx="230" cy="200" r="200" fill="#fff"/><circle cx="820" cy="860" r="220" fill="#F4A9A0" opacity=".5"/></g>
+    </symbol>
+    <symbol id="markI" viewBox="0 0 1024 1024">
+      <path d="M108 520 Q140 466 172 520 T236 520 T300 520 T386 520" fill="none" stroke="#141518" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+      <g stroke-linecap="round" stroke-width="64">
+        <line x1="600" y1="430" x2="900" y2="400" stroke="#F2DF4A"/>
+        <line x1="620" y1="528" x2="900" y2="528" stroke="#F4A9A0"/>
+        <line x1="640" y1="626" x2="880" y2="656" stroke="#141518"/>
+      </g>
+      <ellipse cx="512" cy="740" rx="230" ry="30" fill="#1d2433" opacity=".14" filter="url(#shB)"/>
+      <g clip-path="url(#clipI)">
+        <rect width="1024" height="1024" fill="#eef3f8"/>
+        <g filter="url(#blurB1)" opacity=".9"><circle cx="600" cy="420" r="110" fill="#F2DF4A"/><circle cx="620" cy="540" r="100" fill="#F4A9A0"/><circle cx="400" cy="560" r="120" fill="#7FBFE4"/></g>
+        <rect width="1024" height="1024" fill="#fff" opacity=".35"/>
+      </g>
+      <path d="M512 236 Q530 236 540 254 L742 690 Q752 716 724 716 L300 716 Q272 716 282 690 L484 254 Q494 236 512 236 Z" fill="none" stroke="#fff" stroke-opacity=".95" stroke-width="8" stroke-linejoin="round"/>
+      <path d="M470 300 L350 560" stroke="#fff" stroke-width="14" stroke-linecap="round" opacity=".9"/>
+    </symbol>
+    <symbol id="icI" viewBox="0 0 1024 1024"><use href="#bgI"/><use href="#markI"/></symbol>
+    <symbol id="icIs" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#B5D5EA"/>
+      <g stroke-linecap="round" stroke-width="110">
+        <line x1="600" y1="380" x2="890" y2="350" stroke="#F2DF4A"/>
+        <line x1="640" y1="540" x2="890" y2="540" stroke="#F4A9A0"/>
+        <line x1="680" y1="700" x2="880" y2="730" stroke="#141518"/>
+      </g>
+      <path d="M440 170 L700 820 L150 820 Z" fill="#fff" stroke="#fff" stroke-width="60" stroke-linejoin="round"/>
+    </symbol>
   </defs>
 </svg>
 
 <div class="wrap">
+
+  <section id="round3">
+  <p class="sub">日程与待办 4.0.0　需求 R-61　UI-1 视觉风格　2026-10-24 第三轮</p>
+  <h1>第三轮：磨砂玻璃 + 声音的 3 个方案（庚、辛、壬）</h1>
+  <p>沿第一轮方向乙“磨砂玻璃里的声音”继续做。三个方案都保留玻璃的通透和柔光、保留“说一句话”的意象，造型分别走三条路：声波变成勾（庚）、玻璃话筒（辛）、三棱镜分光（壬）。每个方案配一个名字，并针对乙暴露的两个短板做了补救：<b>每个方案都有一张 32 px 及以下用的简化小图</b>，<b>每个方案都有一个只属于自己的记忆点</b>，不再靠“玻璃＋彩色光斑”撑场面。第一、二轮原样保留在后面。</p>
+
+  <div class="card ink">
+    <div class="hero">
+      <svg class="ic" viewBox="0 0 1024 1024"><use href="#icH"/></svg>
+      <div>
+        <h3 style="font-size:24px" id="rec3h">推荐：方案辛「开麦」</h3>
+        <p>“灌了柠檬光的玻璃话筒”是三个里唯一一眼就记得住、又没人这么画过的形象：玻璃话筒说明了“按住说一句”，胶囊形话筒头和 App 底部的黑胶囊导航是同一个形状，玻璃里的柠檬黄水位既是音量、也把品牌色留住了。它的简化小图也最稳：深底上一个黄白胶囊加一道弧，16 px 仍认得出。</p>
+        <p>名字「开麦」直接说出了这个动作，2 个字不截断。需要注意它会让人联想到“话筒一直开着”，介绍和首次使用时要写清“只有按住才录音”；如果介意这一点，辛的图标也可以配第二轮的「柠檬记」，柠檬黄水位正好对得上。</p>
+        <p style="margin:0;color:#F2DF4A">想要讲得最准的比喻，选壬「分光」；想要最温和、最接近第一轮乙的样子，选庚「一声」。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>第一轮乙的两个短板，这一轮怎么补</h3>
+    <ul class="tight">
+      <li><b>16 px 认不出：</b>玻璃、模糊光斑、细高光在小尺寸下全都会糊，所以每个方案另画一张简化小图，32 px、16 px 和 Windows 任务栏（24 px）都用它。做法统一：去掉模糊和半透明，主体改成实心、线条加粗，只保留大图里最能认出的那个轮廓。每个方案下面都写了大图和小图怎么对应。</li>
+      <li><b>没有区分度：</b>玻璃只当材质，不再当主角。三个方案各有一个只属于自己的记忆点：庚是“写成一个勾的声波”，辛是“灌了柠檬光的玻璃话筒”，壬是“三棱镜把一句话分成三条”。底色也拉开了：庚浅色三色光、辛深色夜景、壬浅天蓝。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>自评结果，以及据此改了什么</h3>
+    <p class="sub">做法同前两轮：按 design-critique 的五项看无头 Edge 截图（桌面 1280 宽、375 宽 iframe），逐个看 16 px 简化小图。下表是改完后的分数（10 分制）。</p>
+    <div class="tablewrap" id="score3">
+    <table class="score">
+      <tr><th>项目</th><th>庚</th><th>辛</th><th>壬</th><th>说明</th></tr>
+      <tr><td>记忆点（区分度）</td><td>6</td><td>9</td><td>8</td><td>庚的勾是通用“完成”符号；辛的发光玻璃话筒最独特；壬的分光比喻少见，但会让人想到唱片封面</td></tr>
+      <tr><td>16 px 简化小图能否认出</td><td>8</td><td>9</td><td>7</td><td>壬的三条线在 16 px 挤在一起，只剩“白三角＋彩边”</td></tr>
+      <tr><td>玻璃与声音的气质</td><td>9</td><td>9</td><td>7</td><td>壬的入射声波在 60 px 时已经很细，“声音”偏弱</td></tr>
+      <tr><td>能看出是做什么的</td><td>8</td><td>8</td><td>9</td><td>壬把“说一句，拆成几条”讲得最准</td></tr>
+      <tr><td>名字和图标对得上</td><td>8</td><td>9</td><td>8</td><td>开麦 ＝ 话筒；分光 ＝ 棱镜；一声 ＝ 对话泡</td></tr>
+    </table>
+    </div>
+    <p class="sub-h" style="margin-top:14px">看截图发现的问题和修改</p>
+    <ul class="tight fix" id="fix3">
+      <li><b>庚的声波像一笔乱画：</b>第一版波浪太短、线太粗，那一小段起伏看起来像随手涂的“～”，不像声波。把波长拉长约 1.3 倍、振幅加大、线条从 54 收细到 48，小图版同样拉开起伏。改完能看出“先起伏、再打勾”，但记忆点仍偏弱，分数如实给 6。</li>
+      <li><b>小尺寸说明文字把一行挤断：</b>“32（简化小图）”这类说明太长，桌面宽度下 16 px 的浏览器标签示意被挤到下一行。改成“32 简化图”，同一行放得下。</li>
+      <li><b>壬的“声音”在小图里丢了：</b>简化小图只留了三角和三条线，入射声波去掉了（16 px 放不下）。没有硬塞回去，如实写进不足；“声音”的意思靠名字和大图补。</li>
+      <li><b>壬名字从“棱镜”换成“分光”：</b>起名时先想到的是“棱镜 / Prism”，但它和美国的“棱镜”监控计划同名，一个会听你说话的 App 用这个名字很不利，所以改用中韩同一个汉字词“分光”。</li>
+      <li><b>辛没有改：</b>截图里辛的大图、简化小图、主屏幕和启动画面都没有发现需要改的问题。它的不足是结构性的（话筒加支架的轮廓本身常见、深底在深色壁纸上会融进去），已写进不足。</li>
+    </ul>
+  </div>
+
+  <div id="dirs3"></div>
+  </section>
+
+  <h2 style="margin-top:72px;padding-top:28px;border-top:2px dashed var(--g2)">以下是第二轮（对照，内容保留原样）</h2>
 
   <section id="round2">
   <p class="sub">日程与待办 4.0.0　需求 R-61　UI-1 视觉风格　2026-10-24 第二轮</p>
@@ -475,9 +625,46 @@ const DIRS2 = [
     pro:'名字就是图形，Lemo 和 레모 读音一样，韩国朋友也能直接叫出来。柠檬片只出现在 o 上，一点就够，不吵。印在启动画面、贴纸、周边上都好用。',
     con:'要两套图：大图是四个字母，32 px 以下换成 L＋柠檬片，两者要靠颜色和那片柠檬联系起来。四个字母在 60 px 主屏幕上笔画约 5 px，能读但不如单个图形一眼认出。' },
 ];
+
+function nameBox(n){ return `<div class="nb"><div class="nbh"><span class="nbn">${n.zh}</span><span class="sub">这个方案配的名字</span></div>
+  <div class="tri">${n.tri.map(([a,b])=>`<b>${a}</b><span>${b}</span>`).join('')}</div>
+  <dl><dt>寓意</dt><dd>${n.mean}</dd><dt>iPhone 桌面显示</dt><dd>${n.trunc}</dd><dt>风险</dt><dd>${n.risk}　域名：需查询。</dd></dl></div>`; }
+function smallBox(t){ return `<div class="smn"><b>大图和小图怎么对应：</b>${t}</div>`; }
+const DIRS3 = [
+  { id:'G', tag:'方案庚', title:'一道声波，写成一个勾', name:'一声', name2:'Said　한마디', sz:200, small:true, splashSvg:'bgB', splashInk:'#141518',
+    foot:'说一声，就记下了',
+    idea:'磨砂玻璃做成一个对话泡，里面一笔黑线：前半段是起伏的声波，后半段顺势写成一个勾。说一句话，事情就记下、办妥了。记忆点是这根“会变成勾的声波”，不是玻璃本身。',
+    extra: nameBox({ zh:'一声', tri:[['中文','一声　yī shēng'],['英文','Said　/sɛd/'],['韩文','한마디　han-ma-di']],
+      mean:'“跟我说一声”的那个一声：一句话的事。英文 Said 是“说过了”，韩文 한마디 是“一句话”，三种叫法意思一样。',
+      trunc:'中文 2 字、英文 4 个字母、韩文 3 个字，都不会截断。',
+      risk:'三种语言用的是三个不同的词，品牌不完全统一；英文 Said 是常用词，很难单独注册；“一声”在拼音教学里也指第一声（阴平），联想无害。是否与知名 App 重名需查询。' })
+      + smallBox('32 px 及以下去掉玻璃、光斑和高光，对话泡变成实心白色，声波只留一个起伏再接勾，线条加粗到约 1.8 倍；底色用黄、粉、蓝的平铺渐变代替模糊光斑。两者共用“对话泡＋波浪勾”这个轮廓。'),
+    pro:'“声波变成勾”一眼能看懂：说了，就办好了。对话泡轮廓和勾都很结实，小图版在 16 px 仍是“白泡里一个勾”。玻璃保留了第一轮乙的通透和柔光。',
+    con:'勾是“完成”的通用符号，和待办、打卡类 App 有撞车风险，记忆点主要靠前面那一小段波浪。背景仍是三色光斑，和第一轮乙最像，区分度三者里最低。' },
+  { id:'H', tag:'方案辛', title:'夜里的玻璃话筒，光从下往上涨', name:'开麦', name2:'Mic On　마이크 온', sz:200, small:true, splashSvg:'bgH', splashInk:'#fff',
+    foot:'按住，开麦说一句',
+    idea:'深色底上一支磨砂玻璃话筒，话筒头是胶囊形，和 App 底部的黑胶囊导航同一个形状。玻璃里装着半截柠檬黄的光，水面是一道声波，像说话时音量一点点涨上来。记忆点是“灌了柠檬光的玻璃话筒”。',
+    extra: nameBox({ zh:'开麦', tri:[['中文','开麦　kāi mài'],['英文','Mic On'],['韩文','마이크 온　ma-i-keu on（音译）']],
+      mean:'“开麦”就是打开话筒、开始说话，正是“按住＋说一句”这个动作。英文 Mic On 一样直白。',
+      trunc:'中文 2 字、英文 6 个字符，都不会截断。',
+      risk:'“开麦”多用在直播、游戏语音里，偏年轻、偏网络；更要紧的是，名字和图标都在强调“话筒开着”，可能让人担心 App 一直在听，介绍时要说清“只有按住才录”。韩文只是音译，韩国朋友多半直接叫英文名。是否重名需查询。' })
+      + smallBox('32 px 及以下去掉玻璃纹理、格栅和背景光晕，话筒头变成实心浅灰胶囊，下半截柠檬黄、上沿保留一道波浪；支架只留弧线和竖杆，线条加粗。深底、胶囊、黄色水位三样不变。'),
+    pro:'三个里最独特：话筒很常见，但“灌了柠檬光的玻璃胶囊”没人这么画。深底让玻璃和黄光都更亮，在浅色、深色壁纸上都跳出来。胶囊形和现有界面直接呼应，柠檬黄也保住了品牌色。',
+    con:'话筒加支架整体仍是常见的话筒图标结构，单看轮廓不新；小图版在 16 px 时只剩“黄白胶囊＋一道弧”。深底在深色壁纸上边缘会融进去。名字有“一直在听”的隐私联想。' },
+  { id:'I', tag:'方案壬', title:'一句话穿过玻璃，分成三条', name:'分光', name2:'Spectra　분광', sz:200, small:true, splashSvg:'bgI', splashInk:'#141518',
+    foot:'说一句，分成几条',
+    idea:'一道黑色声波从左边射进一块磨砂玻璃三棱镜，从右边出来时分成三条：柠檬黄、粉、黑，就像白光被棱镜分成几种颜色。说的一句话，被拆成几条待办。记忆点是“三棱镜分光”这个比喻。',
+    extra: nameBox({ zh:'分光', tri:[['中文','分光　fēn guāng'],['英文','Spectra'],['韩文','분광　bun-gwang']],
+      mean:'把一束光分成几种颜色。中文和韩文是同一个汉字词“分光”，韩国朋友能直接念出来、也懂意思；比喻的是“一句话分成几条”。',
+      trunc:'中文 2 字、英文 7 个字母、韩文 2 字，都不会截断。',
+      risk:'“分光”是物理名词，听起来偏实验室、偏技术（让人想到分光仪）；Spectra 是很多品牌在用的词。我考虑过“棱镜 / Prism”，但它和美国的“棱镜”监控计划同名，对一个会听你说话的 App 很不利，所以没有用。是否重名需查询。' })
+      + smallBox('32 px 及以下去掉玻璃纹理、高光和入射的声波，棱镜变成实心白色三角，出来的三条加粗到约 1.7 倍、拉得更开；底色换成平铺的浅天蓝。“白三角＋三条彩线”这个结构在大小图里一致。'),
+    pro:'把产品最核心的“说一句，拆成几条”画成了一个物理现象，讲得最准、也最少见。三条出射光用了柠檬黄、粉和黑，和 App 里的马卡龙色块是同一套颜色。浅天蓝底在主屏幕上清爽，和前两轮都不一样。',
+    con:'画面元素最多（声波、棱镜、三条光），60 px 时入射的声波已经很细；小图版去掉了声波，“声音”的意思只能靠名字和大图。三棱镜加彩色光会让一部分人想到 Pink Floyd 的唱片封面，这里用了天蓝底、黑色入射线、三条而非六条来拉开距离。' },
+];
 const others = ['#c9ccd3','#b6bac3','#d8dbe1','#a9aeb8','#c2c6ce','#b0b4bd','#d0d3d9','#bcc0c8','#a5aab4','#cdd0d6','#b8bcc4'];
 const othersDark = ['#3b3e46','#4a4e57','#33363d','#565a63','#40434b','#4d5159','#373a41','#454850','#5a5e67','#3e4148','#4f525a'];
-function ic(id0, size, cls){ const id = (id0==='F' && size<=32) ? 'Fs' : id0; return `<svg class="${cls||'ios'}" width="${size}" height="${size}" viewBox="0 0 1024 1024" style="width:${size}px;height:${size}px;${cls==='sq'?'':'border-radius:'+(size*0.2237).toFixed(1)+'px'}"><use href="#ic${id}"/></svg>`; }
+function ic(id0, size, cls){ const id = (['F','G','H','I'].includes(id0) && size<=32) ? id0+'s' : id0; return `<svg class="${cls||'ios'}" width="${size}" height="${size}" viewBox="0 0 1024 1024" style="width:${size}px;height:${size}px;${cls==='sq'?'':'border-radius:'+(size*0.2237).toFixed(1)+'px'}"><use href="#ic${id}"/></svg>`; }
 
 function homeScreen(d, mode){
   const pal = mode==='light'?others:othersDark;
@@ -498,7 +685,8 @@ function taskbar(d, mode){
 }
 function splash(d){
   let bg;
-  if(d.splashBg==='glass'){ bg = `<svg class="bgfill" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice"><use href="#bgB" x="-227" y="0" width="844" height="844"/></svg>`; }
+  if(d.splashSvg){ bg = `<svg class="bgfill" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice"><use href="#${d.splashSvg}" x="-227" y="0" width="844" height="844"/></svg>`; }
+  else if(d.splashBg==='glass'){ bg = `<svg class="bgfill" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice"><use href="#bgB" x="-227" y="0" width="844" height="844"/></svg>`; }
   else bg = `<div style="position:absolute;inset:0;background:${d.splashBg}"></div>`;
   const mark = 'mark'+d.id;
   const sz = d.sz || (d.id==='C'? 180 : 140);
@@ -517,13 +705,13 @@ function renderDirs(LIST, el){ document.getElementById(el).innerHTML = LIST.map(
       <div class="cap">主图 1024×1024，方形满底（此处缩小显示）</div>
     </div>
     <div>
-      <p>${d.idea}</p>
+      <p>${d.idea}</p>${d.extra||''}
       <div class="sub-h">小尺寸</div>
       <div class="sizes">
         <figure>${ic(d.id,180)}<figcaption>180（iPhone 主屏幕图）</figcaption></figure>
         <figure>${ic(d.id,60)}<figcaption>60</figcaption></figure>
-        <figure>${ic(d.id,32,'sq')}<figcaption>32</figcaption></figure>
-        <figure>${ic(d.id,16,'sq')}<figcaption>16</figcaption></figure>
+        <figure>${ic(d.id,32,'sq')}<figcaption>32${d.small?' 简化图':''}</figcaption></figure>
+        <figure>${ic(d.id,16,'sq')}<figcaption>16${d.small?' 简化图':''}</figcaption></figure>
         <figure><div class="duo"><span style="background:#fff">${ic(d.id,16,'sq')}</span><span style="background:#202124">${ic(d.id,16,'sq')}</span></div><figcaption>16 px 放在浏览器标签页（浅 / 深）</figcaption></figure>
       </div>
     </div>
@@ -543,6 +731,7 @@ function renderDirs(LIST, el){ document.getElementById(el).innerHTML = LIST.map(
 </section>`).join(''); }
 renderDirs(DIRS,'dirs');
 renderDirs(DIRS2,'dirs2');
+renderDirs(DIRS3,'dirs3');
 </script>
 </body>
 </html>
