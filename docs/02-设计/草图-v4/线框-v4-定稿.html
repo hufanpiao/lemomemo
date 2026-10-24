@@ -360,6 +360,11 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 .r7w .way{flex:none;font-size:11px;border-radius:12px;padding:2px 8px;border:1px solid var(--g3)}
 .r7w .way.b{background:var(--g6);border-color:transparent;font-weight:700}
 .r7w .mk2{width:18px;flex:none;display:flex;justify-content:center}
+
+/* R-110：周视图挤在一起的那天分上下两排 */
+.wr .ev.r0,.wr .ev.r1{height:11.5px;border-radius:3px}.wr .ev.r0{top:2.5px}.wr .ev.r1{top:16px}
+.wr .ev.r0 span,.wr .ev.r1 span{line-height:11.5px}
+.wmore{position:absolute;top:16px;height:11.5px;line-height:11.5px;padding:0 3px;border-radius:3px;font-size:9.5px;font-weight:700;color:#111;background:#fff;border:1px solid #111;box-sizing:border-box}
 </style>
 </head>
 <body data-v="p">
@@ -371,7 +376,7 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 <main id="main">
   <section class="intro" style="grid-template-columns:1fr;border:2px solid #111">
 <div>
-<h2>第四版补充（R-76～R-109，2026-10-24 第七轮整体检查之后）</h2>
+<h2>第四版补充（R-76～R-110，2026-10-24 第七轮整体检查之后）</h2>
 <p class="lead"><b>以哪份为准：</b>视觉以皮肤视觉稿（docs/02-设计/皮肤-v4/皮肤视觉稿.html）为准，交互以本线框为准；两者冲突时，以需求记录（docs/01-需求/需求记录.md）里编号最新的一条为准。</p>
 <h3 style="font-size:15px;margin:12px 0 6px">本线框里已经直接改掉的过时内容</h3>
 <ul class="pick" style="list-style:disc;padding-left:20px">
@@ -397,9 +402,10 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 <li><b>节假日三选一（R-97）：</b>设置 › 日历：只显示中国 / 只显示韩国 / 两国都显示，默认跟界面语言（中文→中国，韩文→韩国）。中文月历按“只显示中国”画；两国都显示时，本国节日名在前、另一国小号写在第二行。</li>
 <li><b>周、月翻页（R-99）：</b>都能左右滑动翻页，电脑用 ← →。已定摆法 B（R-101）：标题做成胶囊“2026年10月 ⌄”，点了弹出年月选择；“‹ 今天 ›”放在分段控件右侧，不在本周 / 本月时“今天”变黑。原来周视图的“‹ 上周 / 下周 ›”统一改成这一种写法。</li>
 </ul>
-<h3 style="font-size:15px;margin:12px 0 6px">第二轮复查与 R-102～R-109</h3>
+<h3 style="font-size:15px;margin:12px 0 6px">第二轮复查与 R-102～R-110</h3>
 <ul class="pick" style="list-style:disc;padding-left:20px">
-<li><b>周视图色块写简称（R-107、R-109）：</b>手机泳道和电脑时间格的日程色块里写 2 个字的事项简称，和月历标签同一套、同字号（9.5px）。手机色块最小宽约 28px，所有色块都写字，短事项按最小宽度画（不代表时长），重叠时往右错开。</li>
+<li><b>周视图色块写简称（R-107、R-109、R-110）：</b>手机泳道和电脑时间格的日程色块里写 2 个字的事项简称，和月历标签同一套、同字号（9.5px）。手机色块最小宽约 28px，所有色块都写字，短事项按最小宽度画（不代表时长）。<b>R-110：</b>短事项挤在一起时当天那行分上下两排，各自从开始时间画起，超过两排写“+N”。“块太短不写字”只适用于电脑时间格。</li>
+<li><b>电脑版登录（R-110）：</b>exe 的登录在单独的小窗口完成，表单和网页登录相同。</li>
 <li><b>“这个邮箱还没注册”（R-108）：</b>会暴露邮箱是否注册过，产品负责人已确认保留。</li>
 <li><b>补了两节（架构 0.16）：</b>“年月选择器”和“未来 7 天的提醒”，交互和视觉稿一致。</li>
 <li><b>隐私句（R-104）：</b>官网、登录页、告知页统一用“其他用户看不到你记的东西。数据存在服务器上，运营者在技术上能访问；文字、录音和隐私记会交给谷歌 AI 处理，详见隐私说明。”（取代 R-81 原句）。</li>
@@ -529,15 +535,15 @@ function monthGrid(desktop){
  return h+'</div><div class="mleg"><span>灰底：中国节假日（设置 › 日历 可改成韩国或两国）</span><span><u class="tg" style="display:inline-block;width:28px">客户</u> 标签：一件事，写简称（颜色＝项目）</span><span>+N：还有 N 件</span><span><span class="m m-an" style="width:8px;height:8px"></span> 纪念日</span></div>'}
 
 /* ===== 手机周视图（泳道 8–22 点） ===== */
-const WK=[['一','19','初十',[[10,11,'周会'],[14,16,'剪辑']],[],'2'],['二','20','十一',[[9.5,10.5,'洗牙'],[16,17,'韩语']],[],'2'],['三','21','十二',[[13,17,'配音']],[18],'2'],['四','22','十三',[[11,12,'提案']],[18],'2 · 逾'],['五','23','霜降',[[15,16,'内审'],[19,21,'瑜伽']],[],'2'],['六','24','十五',[[10.5,11.5,'校对'],[13,14.5,'对片'],[15.5,16.5,'反馈'],[19,21,'吃饭']],[21.75,21.75],'6'],['日','25','十六',[[11,13,'早午']],[],'1']];
+const WK=[['一','19','初十',[[10,11,'周会'],[14,16,'剪辑']],[],'2'],['二','20','十一',[[9.5,10.5,'洗牙'],[14,14.5,'对稿'],[14.5,15,'回电'],[16,17,'韩语']],[],'4'],['三','21','十二',[[13,17,'配音']],[18],'2'],['四','22','十三',[[11,12,'提案'],[11.5,12,'电话'],[12,13,'午饭']],[18],'4 · 逾'],['五','23','霜降',[[15,16,'内审'],[19,21,'瑜伽']],[],'2'],['六','24','十五',[[10.5,11.5,'校对'],[13,14.5,'对片'],[15.5,16.5,'反馈'],[19,21,'吃饭']],[21.75,21.75],'6'],['日','25','十六',[[11,13,'早午']],[],'1']];
 function weekRows(){const H0=8,H1=22,P=h=>((h-H0)/(H1-H0)*100);
  let h='<div class="wk"><div class="wrul">'+[8,10,12,14,16,18,20,22].map(t=>'<span style="left:'+P(t)+'%">'+t+'</span>').join('')+'</div>';
  WK.forEach((r,i)=>{const sel=i===5;
   h+='<div class="wr'+(sel?' sel':'')+'"><div class="wd'+(sel?' t':'')+'"><small>周'+r[0]+'</small><b>'+r[1]+'</b><small>'+r[2]+'</small></div><div class="trk">'
-   +(function(){let end=null;return r[3].map(e=>{const w='max('+(P(e[1])-P(e[0]))+'%, 28px)',l=end?'max('+P(e[0])+'%, calc('+end+' + 2px))':P(e[0])+'%';end=l+' + '+w;return '<div class="ev'+(sel?' dk2':'')+'" style="left:'+l+';width:'+w+'"><span>'+e[2]+'</span></div>'}).join('')})()
+   +(function(){/* R-110：挤在一起的那天分上下两排，放不下写 +N */const ends=[-1,-1],out=[],hid=[];r[3].forEach(e=>{const k=ends.findIndex(x=>x<=e[0]);if(k<0){hid.push(e);return}ends[k]=Math.max(e[1],e[0]+1.6);out.push([e,k])});const two=out.some(o=>o[1]===1);let last=null;return out.map(([e,k])=>{const w='max('+(P(e[1])-P(e[0]))+'%, 28px)';if(k===1)last=[P(e[0]),w];return '<div class="ev'+(sel?' dk2':'')+(two?' r'+k:'')+'" style="left:'+P(e[0])+'%;width:'+w+'"><span>'+e[2]+'</span></div>'}).join('')+(hid.length?'<span class="wmore" style="left:calc('+last[0]+'% + '+last[1]+' + 2px)">+'+hid.length+'</span>':'')})()
    +r[4].map((t,k)=>'<i class="tdo" style="left:calc('+P(t)+'% - '+(k*10)+'px)"></i>').join('')
    +(sel?'<div class="nl" style="left:'+P(14.28)+'%"></div>':'')+(i===0?'<span class="wedge" style="left:0">‹7:30</span>':'')+'</div><div class="tdn">'+r[5]+'</div></div>'});
- return h+'<div class="wleg"><span><span class="m m-ev" style="height:12px"></span> 日程（块里写 2 个字的简称；短事项按最小宽度画，不代表时长）</span><span><i></i> 截止的待办</span><span>竖黑线：现在</span><span>右边数字：当天共几项</span><span>“逾”：有逾期没做完的待办</span><span>“‹7:30”：8 点前还有事</span><span>黑色块：选中的那天</span></div></div>'}
+ return h+'<div class="wleg"><span><span class="m m-ev" style="height:12px"></span> 日程（块里写 2 个字的简称；短事项按最小宽度画，不代表时长）</span><span><b class="wmore" style="position:static;display:inline-block">+1</b> 挤在一起时当天分上下两排，放不下的写“+N”</span><span><i></i> 截止的待办</span><span>竖黑线：现在</span><span>右边数字：当天共几项</span><span>“逾”：有逾期没做完的待办</span><span>“‹7:30”：8 点前还有事</span><span>黑色块：选中的那天</span></div></div>'}
 
 /* ===== 电脑周视图 ===== */
 const DWK=[['一',19,'初十',[[10,11,'周会',0],[14,16,'剪辑',0]]],['二',20,'十一',[[9.5,10.5,'洗牙',0],[16,17,'韩语',0]]],['三',21,'十二',[[13,17,'配音',0]]],['四',22,'十三',[[11,12,'提案',0]]],['五',23,'霜降',[[15,16,'内审',0],[19,21,'瑜伽',0]]],['六',24,'十五',[[10.5,11.5,'校对',0],[13,14.5,'对片',1],[15.5,16.5,'反馈',2],[19,21,'吃饭',0]]],['日',25,'十六',[[11,13,'早午',0]]]];
@@ -623,8 +629,8 @@ ROWMORE=true;
 /* 2 周视图 */
 const CALHEAD=(on,title,ex)=>{const nav=on<2;const seg='<div class="seg"'+(nav?'':' style="margin-bottom:10px"')+'>'+['周','月','纪念日'].map((x,i)=>'<span'+(i===on?' class="on"':'')+'>'+x+'</span>').join('')+'</div>';return '<div class="top"><div class="tt d1" style="font-size:24px">'+(nav?'<span style="display:inline-block;font-size:21px;border:1.5px solid #ccc;border-radius:999px;padding:1px 12px;background:#fff">'+title+' <span style="font-size:13px;color:var(--g2)">⌄</span></span>':title)+'</div>'+(ex||'')+'<div class="ib"><span class="isr"></span></div><div class="av">H</div></div>'+(nav?'<div class="calnav">'+seg+'<span class="cnb">‹</span><span class="cnb" style="color:var(--g3)">今天</span><span class="cnb">›</span></div>':seg)}; /* R-101 摆法 B：标题胶囊点开选年月；“‹ 今天 ›”在分段控件右侧，间距 8px */
 S.push({id:'s2',t:'日历 · 周视图',sub:'手机用 7 条带刻度的泳道，电脑用 7 列时间格',
-p:[phone(CALHEAD(0,'10月19日–25日')+'<div style="text-align:center;font-size:12px;color:var(--g2);margin:0 0 6px">第 43 周 · 17 项</div>'+weekRows()+'<div class="card" style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>周六 24日 · 农历九月十五</b><span style="color:var(--g2)">6 项</span></div>'+row('ev','10:30','SignPlex 字幕校对','已过去',null,'pst')+row('ev','13:00','NEOX 横版对片','到 14:30 · 进行中')+row('ev','15:30','SignPlex 客户反馈会','到 16:30 · Zoom')+row('ev','19:00','和 지민 吃饭','연남동')+row('td','今天内','NEOX 竖版 4K 导出','今天截止')+row('td','','回复 박 대리 的邮件','SignPlex')+'</div>',{tab:1})],
-pn:['<p><b>一天一条泳道，横轴 8–22 点。</b>每 2 小时一条刻度线，顶部标数字；看位置和长短，哪天满、哪段空一眼就能看出来。<b>R-107：</b>色块里写 2 个字的事项简称（和月历 C 方案同一套简称，9.5px，R-104 有意例外）。<b>R-109：</b>色块最小宽约 28px（能完整放下 2 个字），所有色块都写字；短事项从开始时间画起，宽度取 max(真实时长, 最小宽度)，图例写明“短事项色块按最小宽度画，不代表时长”；相邻短事项因此重叠时，后一块往右错开（离前一块 2px），字不被遮住。灰稿里的简称是示意文字。</p>','<p><b>点哪条泳道，就选中那天：</b>整条加灰底，色块变黑，下面列出当天的全部日程和待办（包括没定时间的）。空心圆是截止的待办，右边数字是当天共几项。</p>','<p><b>翻页（R-99、R-101）：</b>左右滑动换周，电脑用 ← →。标题做成胶囊“10月19日–25日 ⌄”，点了弹出周选择；“‹ 今天 ›”放在“周 / 月 / 纪念日”分段控件右侧（三者间距 8px，点击区各 44px），本周时“今天”是灰的，翻到别的周变黑，点它回到本周。</p><p><b>长按泳道空白处新建：</b>时间吸附到整点或半点，先弹出可以微调的时间，再新建；长按同样禁用系统长按菜单。8 点前、22 点后的事项在泳道两端用“‹7:30”这样的小标签标出。</p>'],
+p:[phone(CALHEAD(0,'10月19日–25日')+'<div style="text-align:center;font-size:12px;color:var(--g2);margin:0 0 6px">第 43 周 · 21 项</div>'+weekRows()+'<div class="card" style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>周六 24日 · 农历九月十五</b><span style="color:var(--g2)">6 项</span></div>'+row('ev','10:30','SignPlex 字幕校对','已过去',null,'pst')+row('ev','13:00','NEOX 横版对片','到 14:30 · 进行中')+row('ev','15:30','SignPlex 客户反馈会','到 16:30 · Zoom')+row('ev','19:00','和 지민 吃饭','연남동')+row('td','今天内','NEOX 竖版 4K 导出','今天截止')+row('td','','回复 박 대리 的邮件','SignPlex')+'</div>',{tab:1})],
+pn:['<p><b>一天一条泳道，横轴 8–22 点。</b>每 2 小时一条刻度线，顶部标数字；看位置和长短，哪天满、哪段空一眼就能看出来。<b>R-107：</b>色块里写 2 个字的事项简称（和月历 C 方案同一套简称，9.5px，R-104 有意例外）。<b>R-109：</b>色块最小宽约 28px（能完整放下 2 个字），所有色块都写字；短事项从开始时间画起，宽度取 max(真实时长, 最小宽度)，图例写明“短事项色块按最小宽度画，不代表时长”。<b>R-110：</b>短事项挤在一起（按最小宽度画会重叠）时，当天那行分上下两排，每块仍从自己的开始时间画起；两排都放不下的，在第二排末尾写“+N”，点这一天在下面看完整清单（示例：周二 14:00、14:30 两件 30 分钟的事分两排；周四三件挤在一起，第三件写“+1”）。取代原来的“往右错开”。灰稿里的简称是示意文字。</p>','<p><b>点哪条泳道，就选中那天：</b>整条加灰底，色块变黑，下面列出当天的全部日程和待办（包括没定时间的）。空心圆是截止的待办，右边数字是当天共几项。</p>','<p><b>翻页（R-99、R-101）：</b>左右滑动换周，电脑用 ← →。标题做成胶囊“10月19日–25日 ⌄”，点了弹出年月选择器，选年月后跳到该月 1 日所在的周；“‹ 今天 ›”放在“周 / 月 / 纪念日”分段控件右侧（三者间距 8px，点击区各 44px），本周时“今天”是灰的，翻到别的周变黑，点它回到本周。</p><p><b>长按泳道空白处新建：</b>时间吸附到整点或半点，先弹出可以微调的时间，再新建；长按同样禁用系统长按菜单。8 点前、22 点后的事项在泳道两端用“‹7:30”这样的小标签标出。</p>'],
 d:desk('<div class="col" style="width:864px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><div class="d1" style="font-size:24px"><span class="dpick">10月19日–25日 <small style="font-size:14px;color:var(--g2);font-weight:600">第 43 周</small><em>⌄</em></span></div><div class="seg" style="width:240px;margin-left:auto">'+['周','月','纪念日'].map((x,i)=>'<span'+(i===0?' class="on"':'')+'>'+x+'</span>').join('')+'</div><span class="cnb">‹</span><span class="cnb" style="color:var(--g3)">今天</span><span class="cnb">›</span></div>'+dWeek()+'</div><div class="insp"><div class="ih"><span class="m m-ev"></span>日程 · 已选中<span class="r">拖动可改时间</span></div><div class="it">SignPlex 客户反馈会</div>'+fld('时间','10月24日 周六 15:30 – 16:30')+fld('项目','SignPlex')+fld('提醒','提前 15 分')+fld('备注','带上韩文版字幕的问题清单')+'<div class="st"><b>这一天还有</b></div>'+row('ev','13:00','NEOX 横版对片','')+row('ev','19:00','和 지민 吃饭','')+row('td','','NEOX 竖版 4K 导出','今天截止')+'</div>',{tab:1}),
 dn:['<p><b>宽屏用经典 7 列时间格。</b>顶部“全天”行放当天截止的待办和节假日；表头日期下面是农历。色块里同样只写 2 个字的简称（R-107，9.5px），完整标题和时间看右侧编辑栏。</p>','<p>拖动色块改时间，拖动下边缘改时长；在空白处框选一段时间直接打字新建。</p>','<p>右侧编辑栏显示选中的日程，下面列出同一天的其他事项。</p>']});
 
@@ -647,7 +653,7 @@ const YMW=(st,week,sel)=>'<div class="ymw" style="'+st+'"><div class="cols"><div
 const YMDIM='<div style="position:absolute;inset:0;background:rgba(255,255,255,.55);z-index:29"></div>';
 S.push({id:'sYM',t:'年月选择器',sub:'点月历、周视图的标题胶囊，从下面展开；左列年、右列月，底部“回到今天”',
 p:[[phone(CALHEAD(1,'2026年11月')+'<div class="card" style="padding:6px 4px">'+monthGrid(false)+'</div>',{tab:1,ov:YMDIM+YMW('top:118px;left:16px;right:16px',false,11)}),'月历：翻到 11 月时点标题'],
- [phone(CALHEAD(0,'10月19日–25日')+'<div style="text-align:center;font-size:12px;color:var(--g2);margin:0 0 6px">第 43 周 · 17 项</div>'+weekRows(),{tab:1,ov:YMDIM+YMW('top:118px;left:16px;right:16px',true,10)}),'周视图：同一个选择器']],
+ [phone(CALHEAD(0,'10月19日–25日')+'<div style="text-align:center;font-size:12px;color:var(--g2);margin:0 0 6px">第 43 周 · 21 项</div>'+weekRows(),{tab:1,ov:YMDIM+YMW('top:118px;left:16px;right:16px',true,10)}),'周视图：同一个选择器']],
 pn:['<p><b>同一个组件（架构 0.16：Radix Popover）。</b>点标题胶囊“2026年11月 ⌄”从胶囊下面展开浮层，背后内容稍微变淡；点外面、按 Esc 或再点一次胶囊收起。</p>','<p><b>两列：</b>左列年（前后各两年，可上下滚），右列 1–12 月三列排。选中的是正在看的年月（黑底），今天所在的年月下面有小点。点一下月份就跳过去并收起；只点年份不收起，等选月份。</p>','<p><b>底部“回到今天”：</b>和分段控件右侧的“今天”作用一样，跳回今天并收起。周视图点标题弹出同一个选择器，选好年月后跳到该月 1 日所在的那一周。每个格子点击区 44px。</p>'],
 d:desk('<div class="col" style="width:864px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><div class="d1" style="font-size:24px"><span class="dpick">2026年10月<em>⌄</em></span></div><div class="seg" style="width:240px;margin-left:auto">'+['周','月','纪念日'].map((x,i)=>'<span'+(i===1?' class="on"':'')+'>'+x+'</span>').join('')+'</div><span class="cnb">‹</span><span class="cnb" style="color:var(--g3)">今天</span><span class="cnb">›</span></div><div class="card" style="height:600px;display:flex;align-items:center;justify-content:center;color:var(--g3)">（月历，同“日历 · 月视图”）</div></div>',{tab:1,ov:YMW('top:100px;left:130px;width:340px',false,10)}),
 dn:['<p>电脑同一个浮层，从标题胶囊下面展开，背后不变淡。键盘：方向键在格子间移动，Enter 选中，Esc 收起。</p>']});
@@ -816,7 +822,7 @@ dn:['<p><b>左边是分组，右边一次摊开相关的几组。</b>“电脑�
 
 /* 14 登录 */
 /* 未来 7 天的提醒（架构 0.16） */
-const R7W=[['今天 · 10月24日 周六',[['15:15','ev','SignPlex 客户反馈会','15:30 开始 · 提前 15 分',1],['18:45','ev','和 지민 吃饭','19:00 开始 · 提前 15 分',0]]],['明天 · 10月25日 周日',[['10:45','ev','家庭 브런치','11:00 开始 · 提前 15 分',0]]],['10月26日 周一',[['9:00','an','김지민 生日','明天满 29 周岁 · 提前 1 天',1],['9:00','td','回复 박 대리 的邮件','待办 · 当天 9:00',1]]],['10月27日 周二',[['10:45','ev','NEOX 提案','11:00 开始 · 提前 15 分',1]]],['10月29日 周四',[['9:45','ev','SignPlex 合同签字','10:00 开始 · 提前 15 分',1]]],['10月30日 周五',[['18:45','ev','瑜伽','19:00 开始 · 提前 15 分',0]]]];
+const R7W=[['今天 · 10月24日 周六',[['15:15','ev','SignPlex 客户反馈会','15:30 开始 · 提前 15 分',1],['15:15','td','回复 박 대리 的邮件','待办 · 今天截止',1],['18:45','ev','和 지민 吃饭','19:00 开始 · 提前 15 分',0]]],['明天 · 10月25日 周日',[['10:45','ev','家庭 브런치','11:00 开始 · 提前 15 分',0]]],['10月26日 周一',[['9:00','an','김지민 生日','明天满 29 周岁 · 提前 1 天',1]]],['10月27日 周二',[['10:45','ev','NEOX 提案','11:00 开始 · 提前 15 分',1]]],['10月29日 周四',[['9:45','ev','SignPlex 合同签字','10:00 开始 · 提前 15 分',1]]],['10月30日 周五',[['18:45','ev','瑜伽','19:00 开始 · 提前 15 分',0]]]];
 const R7G=d=>'<div class="gt" style="display:flex;justify-content:space-between"><b style="color:var(--g1)">'+d[0]+'</b><span>'+d[1].length+' 条</span></div><div class="grp">'+d[1].map(r=>'<div class="r7w"><span class="tm2">'+r[0]+'</span><span class="mk2"><span class="m m-'+r[1]+'"></span></span><div class="tx"><b>'+r[2]+'</b><small>'+r[3]+'</small></div><span class="way'+(r[4]?' b':'')+'">'+(r[4]?'两边都响':'推送')+'</span><span style="color:var(--g3)">›</span></div>').join('')+'</div>';
 S.push({id:'sR7',t:'未来 7 天的提醒',sub:'设置 › 提醒与通知 最上面的入口；按天分组，点一条可改',
 p:[[phone('<div style="display:flex;align-items:center;height:40px;position:relative;font-size:14px">‹ 设置<b style="position:absolute;left:0;right:0;text-align:center;font-size:17px">提醒与通知</b></div>'+SETG('',[['<b>未来 7 天的提醒</b>','8 条 ›']])+'<div style="font-size:12px;color:var(--g2);margin:-4px 4px 10px">看看接下来一周会响哪些提醒，点一条可以改。</div>'+SETG('',R_PUSH),{nav:false}),'设置 › 提醒与通知：入口在最上面'],
