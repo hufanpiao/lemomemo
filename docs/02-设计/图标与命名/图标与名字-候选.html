@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图标与名字候选</title>
+<style>
+:root{
+  --ink:#141518; --ink2:#3a3c42; --g1:#6b6e76; --g2:#9a9da5; --g3:#d1d3d9; --g4:#e4e5e9;
+  --bg:#e9eaee; --card:#fff; --lemon:#F2DF4A; --pink:#F4B8B0; --pinkbg:#fbe0de; --sky:#8CC9E8; --red:#c4302b;
+  --f: -apple-system, "PingFang SC", "Apple SD Gothic Neo", "Microsoft YaHei UI", "Microsoft YaHei", "Malgun Gothic", "Segoe UI", sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:15px;line-height:1.6}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 16px 80px}
+h1{font-size:clamp(30px,6vw,46px);line-height:1.15;margin:8px 0 6px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:clamp(24px,4.4vw,32px);line-height:1.2;margin:56px 0 8px;font-weight:800}
+h3{font-size:19px;margin:0 0 6px;font-weight:800}
+p{margin:0 0 10px;max-width:68ch}
+.sub{color:var(--g1);font-size:14px}
+.card{background:var(--card);border-radius:28px;padding:22px 22px 18px;margin-top:14px}
+.ink{background:var(--ink);color:#fff}
+.ink .sub{color:#b9bcc4}
+.lemon{background:var(--lemon)}
+.pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700;background:var(--g4);color:var(--ink);margin:0 6px 6px 0;white-space:nowrap}
+.pill.y{background:var(--lemon)}
+.pill.k{background:var(--ink);color:#fff}
+.pill.r{background:var(--pinkbg);color:var(--red)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px}
+.hero{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center}
+.hero .ic{width:132px;height:132px;border-radius:29.5px;overflow:hidden;flex:none}
+@media (max-width:560px){.hero{grid-template-columns:1fr}.hero .ic{width:104px;height:104px;border-radius:23px}}
+ul.tight{margin:6px 0 0;padding-left:1.2em}
+ul.tight li{margin:3px 0}
+/* 名字 */
+.names{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-top:14px}
+.nm{background:#fff;border-radius:28px;padding:20px}
+.nm.ctrl{background:transparent;border:2px dashed var(--g2)}
+.nm .big{font-size:40px;font-weight:800;line-height:1.1;letter-spacing:.01em}
+.nm .tri{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:12px 0 10px;font-size:14px}
+.nm .tri b{font-weight:700;color:var(--g1)}
+.nm dl{margin:0;font-size:14px}
+.nm dt{font-weight:800;margin-top:10px}
+.nm dd{margin:2px 0 0}
+.lbl{display:flex;gap:10px;align-items:flex-end;margin-top:4px}
+.lbl .mini{width:52px;text-align:center;font-size:11px;line-height:1.25;color:#fff;background:#5f6f86;border-radius:14px;padding:44px 0 6px;position:relative;overflow:hidden;white-space:nowrap}
+.lbl .mini::before{content:"";position:absolute;left:8px;top:6px;width:36px;height:36px;border-radius:9px;background:#d8dbe2}
+.lbl .mini span{display:block;overflow:hidden;text-overflow:ellipsis;padding:0 1px}
+/* 方向 */
+.dir{background:#fff;border-radius:32px;padding:22px;margin-top:18px}
+.dirhead{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline}
+.dirhead .tag{font-size:15px;font-weight:800;background:var(--ink);color:#fff;border-radius:999px;padding:3px 14px}
+.mainrow{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:22px;margin-top:16px;align-items:start}
+@media (max-width:760px){.mainrow{grid-template-columns:1fr}}
+.master{background:repeating-conic-gradient(#f1f2f4 0 25%,#fff 0 50%) 0 0/24px 24px;border-radius:18px;padding:14px}
+.master svg{display:block;width:100%;height:auto}
+.cap{font-size:13px;color:var(--g1);margin-top:6px}
+.sizes{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;margin-top:4px}
+.sizes figure{margin:0;text-align:center}
+.sizes figcaption{font-size:12px;color:var(--g1);margin-top:4px}
+.ios{overflow:hidden;display:block}
+.sq{display:block}
+.duo{display:flex;gap:10px}
+.duo span{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px}
+.sub-h{font-size:15px;font-weight:800;margin:22px 0 8px}
+/* 主屏幕 */
+.screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}
+.phone{position:relative;width:100%;max-width:300px;aspect-ratio:300/600;border-radius:38px;overflow:hidden;margin:0 auto;border:6px solid #1d1e22}
+.phone .sb{display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding:10px 22px 0}
+.hs{display:grid;grid-template-columns:repeat(4,1fr);gap:16px 0;padding:22px 14px 0}
+.app{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.app .t{width:52px;height:52px;border-radius:12px;overflow:hidden}
+.app .n{font-size:10.5px;line-height:1.1;max-width:62px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
+.app .bar{width:30px;height:6px;border-radius:3px;margin-top:3px}
+.dock{position:absolute;left:10px;right:10px;bottom:12px;height:78px;border-radius:30px;display:flex;justify-content:space-around;align-items:center;padding:0 8px}
+.light .sb{color:#141518}.dark .sb{color:#fff}
+.light{background:linear-gradient(170deg,#f3efe9 0%,#d9e3ec 55%,#c6d2de 100%)}
+.dark{background:linear-gradient(170deg,#262b36 0%,#14161c 60%,#0d0e12 100%)}
+.light .n{color:#141518}.dark .n{color:#fff}
+.light .dock{background:rgba(255,255,255,.45);backdrop-filter:blur(10px)}
+.dark .dock{background:rgba(255,255,255,.12);backdrop-filter:blur(10px)}
+/* 任务栏 */
+.tb{display:flex;align-items:center;justify-content:center;gap:4px;height:48px;border-radius:14px;padding:0 10px;max-width:520px;margin:6px auto 0;overflow:hidden}
+.tb.d{background:#1f1f1f}.tb.l{background:#eeeeee}
+.tb .b{width:40px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;position:relative;flex:none}
+.tb .b i{display:block;width:24px;height:24px;border-radius:5px}
+.tb.d .b i{background:#55575c}.tb.l .b i{background:#b9bbc0}
+.tb .b.on{background:rgba(255,255,255,.09)}
+.tb.l .b.on{background:rgba(0,0,0,.06)}
+.tb .b.on::after{content:"";position:absolute;bottom:2px;left:50%;width:16px;height:3px;margin-left:-8px;border-radius:2px;background:#7fb6ff}
+.tb .win{width:22px;height:22px;display:grid;grid-template-columns:1fr 1fr;gap:2px}
+.tb .win s{background:#5aa7e8;border-radius:1px}
+.tb .search{height:32px;width:110px;border-radius:16px;margin:0 6px;flex:none}
+.tb.d .search{background:#2d2d2d}.tb.l .search{background:#fff}
+@media (max-width:420px){.tb .search{display:none}}
+/* 启动画面 */
+.splashrow{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:640px){.splashrow{grid-template-columns:1fr}}
+.splash{position:relative;width:100%;max-width:260px;aspect-ratio:390/844;border-radius:34px;overflow:hidden;border:6px solid #1d1e22;margin:0 auto}
+.splash svg.bgfill{position:absolute;inset:0;width:100%;height:100%}
+.splash .mid{position:absolute;left:0;right:0;top:36%;display:flex;flex-direction:column;align-items:center}
+.splash .nm1{font-size:30px;font-weight:800;margin-top:14px;letter-spacing:.02em}
+.splash .nm2{font-size:13px;margin-top:2px;opacity:.7}
+.splash .foot{position:absolute;bottom:34px;left:0;right:0;text-align:center;font-size:12px;opacity:.6}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:560px){.pc{grid-template-columns:1fr}}
+.pc div{border-radius:20px;padding:14px 16px;background:#f3f4f6;font-size:14px}
+.pc b{display:block;margin-bottom:4px}
+table.score{border-collapse:collapse;width:100%;font-size:14px;margin-top:8px}
+table.score th,table.score td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--g4);vertical-align:top}
+table.score th{font-weight:800;white-space:nowrap}
+.tablewrap{overflow-x:auto}
+.fix li{margin:4px 0}
+.note{font-size:13px;color:var(--g1)}
+</style>
+</head>
+<body>
+
+<!-- ============ 图标源图（全部内联 SVG，1024×1024，无圆角、无透明） ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- 方向甲：一句话拆成几条 -->
+    <symbol id="markA" viewBox="0 0 1024 1024"><g transform="translate(-26 0)">
+      <path d="M268 470 V766 H340 M268 586 H340" fill="none" stroke="#5a5d66" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M272 196 H752 A94 94 0 0 1 752 384 H330 L236 470 V372 A94 94 0 0 1 272 196 Z" fill="#F2DF4A"/>
+      <rect x="340" y="516" width="500" height="140" rx="70" fill="#F4B8B0"/>
+      <rect x="340" y="696" width="340" height="140" rx="70" fill="#8CC9E8"/>
+    </g></symbol>
+    <symbol id="icA" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#141518"/>
+      <use href="#markA"/>
+    </symbol>
+
+    <!-- 方向乙：磨砂玻璃上的声音 -->
+    <linearGradient id="gB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F1F2F5"/><stop offset="1" stop-color="#D3D8E2"/>
+    </linearGradient>
+    <filter id="blurB1" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="70"/></filter>
+    <filter id="blurB2" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="120"/></filter>
+    <filter id="shB" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="40"/></filter>
+    <clipPath id="clipB"><circle cx="512" cy="512" r="304"/></clipPath>
+    <symbol id="bgB" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">
+      <rect width="1024" height="1024" fill="url(#gB)"/>
+      <g filter="url(#blurB1)">
+        <circle cx="300" cy="290" r="230" fill="#F2DF4A"/>
+        <circle cx="770" cy="400" r="210" fill="#F4A9A0"/>
+        <circle cx="560" cy="820" r="260" fill="#7FBFE4"/>
+      </g>
+    </symbol>
+    <symbol id="markB" viewBox="0 0 1024 1024">
+      <ellipse cx="512" cy="850" rx="250" ry="40" fill="#1d2433" opacity=".16" filter="url(#shB)"/>
+      <g clip-path="url(#clipB)">
+        <rect width="1024" height="1024" fill="#eef0f4"/>
+        <g filter="url(#blurB2)" opacity=".85">
+          <circle cx="300" cy="290" r="230" fill="#F2DF4A"/>
+          <circle cx="770" cy="400" r="210" fill="#F4A9A0"/>
+          <circle cx="560" cy="820" r="260" fill="#7FBFE4"/>
+        </g>
+        <rect width="1024" height="1024" fill="#fff" opacity=".42"/>
+      </g>
+      <circle cx="512" cy="512" r="301" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="7"/>
+      <path d="M300 404 A240 240 0 0 1 430 262" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" opacity=".95"/>
+      <rect x="320" y="402" width="96" height="220" rx="48" fill="#141518"/>
+      <rect x="464" y="322" width="96" height="380" rx="48" fill="#141518"/>
+      <rect x="608" y="387" width="96" height="250" rx="48" fill="#141518"/>
+    </symbol>
+    <symbol id="icB" viewBox="0 0 1024 1024">
+      <use href="#bgB"/>
+      <use href="#markB"/>
+    </symbol>
+
+    <!-- 方向丙：一笔，断成两截（一一） -->
+    <symbol id="markC" viewBox="0 0 1024 1024">
+      <g transform="translate(0 30)">
+        <path d="M178 452 L500 440 L532 592 L178 600 Q146 600 146 568 L146 484 Q146 453 178 452 Z" fill="#141518"/>
+        <path d="M556 438 L756 431 L812 370 L884 516 Q894 574 838 578 L588 590 Z" fill="#141518"/>
+      </g>
+    </symbol>
+    <symbol id="icC" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#F2DF4A"/>
+      <use href="#markC"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+  <p class="sub">日程与待办 4.0.0　需求 R-61　UI-1 视觉风格　2026-10-24 草图稿，交产品负责人挑选</p>
+  <h1>给 App 起名字、画图标</h1>
+  <p>5 个名字候选加现名对照，3 个图标方向。每个方向都放到了 iPhone 主屏幕、Windows 任务栏和启动画面里看过。名字和图标可以任意组合，下面写的是我的推荐搭配。</p>
+
+  <!-- 推荐 -->
+  <div class="card ink">
+    <div class="hero">
+      <svg class="ic" viewBox="0 0 1024 1024"><use href="#icC"/></svg>
+      <div>
+        <h3 style="font-size:24px">推荐：名字「一一」＋ 图标方向丙</h3>
+        <p>「一一」就是“一条一条”：你说一句，App 帮你一条一条记下来，正好是这个 App 最核心的那个动作。中文念 yī yī，韩文写 일일、念 il-il，韩语里“일일이”也是“一条一条、逐个”的意思，朋友不用学新词。</p>
+        <p>图标是一笔粗横，从中间断开成两截：一句话，拆成两条。柠檬黄底、黑笔画，和现在界面的主按钮同一套颜色；到 16 px 断口看不见了，也还是“黄底一横”，照样认得出。</p>
+        <p>主屏幕上的显示名建议用“一一记”：只写“一一”的话，系统字体里看起来像一条破折号（详见名字卡）。</p>
+        <p style="margin:0;color:#F2DF4A">备选搭配：想和现有界面贴得最紧，选「随口记」＋ 方向甲。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 自评 -->
+  <div class="card">
+    <h3>自评结果，以及据此改了什么</h3>
+    <p class="sub">按 design-critique 的五项（第一眼、可用性、层级、一致性、可读性）看了第一版的无头 Edge 截图：桌面 1280 宽、手机 390 宽，并逐个看了 16 px 小图。下表是改完后的分数（10 分制）。</p>
+    <div class="tablewrap">
+    <table class="score">
+      <tr><th>项目</th><th>甲</th><th>乙</th><th>丙</th><th>说明</th></tr>
+      <tr><td>第一眼（2 秒）</td><td>8</td><td>7</td><td>9</td><td>丙在主屏幕上整块黄色最跳；乙在浅色壁纸上偏淡</td></tr>
+      <tr><td>16 px 能否认出</td><td>7</td><td>5</td><td>9</td><td>甲的连线消失，只剩黄粉蓝三条；乙只剩一个带白圈的小点</td></tr>
+      <tr><td>和现有界面一致</td><td>9</td><td>8</td><td>8</td><td>甲直接用了胶囊、柠檬黄、马卡龙；乙对应磨砂皮肤；丙只用黄和黑</td></tr>
+      <tr><td>能看出是做什么的</td><td>9</td><td>8</td><td>6</td><td>丙要配上名字「一一」才完整，单看只是一横</td></tr>
+      <tr><td>不像模板、不像 AI 出的</td><td>7</td><td>5</td><td>9</td><td>乙的“玻璃圆片＋彩色光斑”是 iOS 26 之后很常见的做法，区分度最低</td></tr>
+    </table>
+    </div>
+    <p class="sub-h" style="margin-top:14px">第一版截图里看出的问题，以及改了什么</p>
+    <ul class="tight fix">
+      <li><b>丙的笔画形状不对：</b>第一版倾斜太大，右端收笔画成了大圆包，缩小后像一只靴子或一支雪茄，不像“一”。改成几乎水平（只微微右高），右端换成宋体那种尖的三角顿角；笔画从约 120 加粗到 150，并整体下移居中，60 px 时笔画约 9 px，清楚很多。</li>
+      <li><b>「一一」在文字里像破折号：</b>系统黑体里两个“一”连在一起就是“——”。主屏幕显示名改成“一一记”，名字卡里放了两种显示的对比，并把这一条写进风险。这一条也是推荐它时最大的保留意见。</li>
+      <li><b>推荐卡里的图标看不见：</b>第一版推荐卡用柠檬黄底，丙的黄底和卡片融成一片，只剩一道黑笔画。推荐卡改成黑底。</li>
+      <li><b>甲整体偏右：</b>对话泡加连线的视觉重心比画面中心偏右约 26 px，已左移居中（主图和启动画面都改了）。</li>
+      <li><b>乙在小尺寸上弱：</b>没有硬改。玻璃和光斑本来就是靠面积撑起来的，加粗声纹以后 32 px 还能认，16 px 不行。如实写进缺点；如果选乙，Windows 和网页小图建议单独出一版“白底三根竖条”的简化图。</li>
+      <li><b>构思时就否掉的：</b>甲原本想画三根并排彩色胶囊，太像普通清单图标，改成“对话泡拆成两条”；丙原本想上下叠两横，会被读成“二”（还带“犯二”的贬义），改成左右断开。</li>
+    </ul>
+  </div>
+
+  <!-- ============ 名字 ============ -->
+  <h2>名字候选</h2>
+  <p>iPhone 主屏幕图标下方大约能放 5～6 个汉字或 10～12 个英文字母，再长会被截成“…”，具体以真机为准。每张卡右上角的小图模拟了截断效果。商标、域名、应用商店里有没有同名，都还<b>需查询</b>，这里没有做任何判断。</p>
+
+  <div class="names" id="names"></div>
+
+  <!-- ============ 图标 ============ -->
+  <h2>图标的三个方向</h2>
+  <p>主图都是 1024×1024 的方形，没有预先画圆角，也没有透明背景（下面的棋盘格只是衬底，图本身是满底的）。iPhone 会自己裁成圆角方形；Windows 的 exe 图标和网页小图标保持方形。</p>
+
+  <div id="dirs"></div>
+
+  <div class="card" style="margin-top:28px">
+    <h3>还没核实、需要协调人去查的事</h3>
+    <ul class="tight">
+      <li>五个名字的商标、域名、App Store 同名情况：一律需查询。</li>
+      <li>iPhone 主屏幕名字在 iOS 26 上的实际截断字数，需要用真机装一次确认（这里按约 5～6 个汉字估算）。</li>
+      <li>「一一」与电影《一一》（杨德昌，2000）同名，是否构成问题需查询；其他名字是否与知名 App 重名同样需查询。</li>
+      <li>iPhone 以网页形式装到主屏幕时，启动画面要按每种屏幕尺寸各出一张图；这里只画了竖屏样子，定下方向后再出全套尺寸。</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+/* ---------- 名字数据 ---------- */
+const NAMES = [
+  { zh:'一一', type:['中韩都能念','推荐'], tri:[['中文','一一　yī yī'],['英文','Yiyi'],['韩文','일일　il-il']],
+    label:'一一', label2:'一一记',
+    mean:'“一条一条”。中文“一一列出”、韩文“일일이”都是逐个的意思；说一句话，App 帮你一条一条记下来。',
+    trunc:'2 个字，不会截断。但截图里发现：系统黑体里“一一”两个字连在一起，看上去就是一条破折号“——”，放在图标下面像没起名字。建议主屏幕显示名用“一一记”（3 个字，不截断），App 里和启动画面再用「一一」字标。右边两个小图是对比。',
+    fit:'贴合最核心的“说一句，拆成几条”；日程、待办、随手记、纪念日都是“一条一条”的东西，不会被名字限定成某一种。',
+    risk:'纯文字场合（推送标题、分享链接、聊天里提到）容易被看成破折号，要尽量带上图标或写成“一一记”。和杨德昌的电影《一一》同名（需查询是否有影响）。竖着排会被看成“二”，所以图标和字标都只能横排。韩文“일일”单独出现时也常指“一天、每日”，意思不坏，但不唯一。'},
+  { zh:'随口记', type:['中文名'], tri:[['中文','随口记　suí kǒu jì'],['英文','Saynote'],['韩文','말로 메모　mallo memo（意译）']],
+    label:'随口记',
+    mean:'随口说一句就记下了，强调“不用打字”。',
+    trunc:'3 个字，不会截断。',
+    fit:'对“按住说话”很贴切，一听就懂；但纪念日、阴历生日这些功能从名字里看不出来。',
+    risk:'韩国朋友念不出中文名，只能叫英文名 Saynote，两个名字不统一。“随口”有一点“随便说说、不当真”的意味。和知名 App 是否重名需查询。'},
+  { zh:'说了算', type:['中文名','英文名'], tri:[['中文','说了算　shuō le suàn'],['英文','Sayso　/ˈseɪsoʊ/'],['韩文','세이소　se-i-so']],
+    label:'说了算',
+    mean:'中文“我说了算”，英文 say-so 也是“凭你一句话”的意思，中英两个名字意思对得上。',
+    trunc:'中文 3 字、英文 5 个字母，都不会截断。',
+    fit:'突出语音输入和“你说它就办”的感觉；对纪念日、隐私记的表达弱。',
+    risk:'语气有点强势，邀请朋友时可能显得“我说了算”；韩文 세이소 只是音译，没有意思。是否重名需查询。'},
+  { zh:'柠檬记', type:['英文名','中韩都能念'], tri:[['中文','柠檬记　níng méng jì'],['英文','Lemo'],['韩文','레모　re-mo']],
+    label:'Lemo',
+    mean:'柠檬（lemon）＋ 备忘（memo）。直接来自界面的柠檬黄主按钮，颜色就是名字。',
+    trunc:'英文 Lemo 4 个字母、中文 3 个字，都不会截断。主屏幕建议统一显示 Lemo，中韩朋友都能念。',
+    fit:'和视觉的关系最紧，好记、亲切；但名字本身不说明是做什么的。',
+    risk:'“柠檬”在中文网络语里有“羡慕嫉妒（我酸了）”的梗；Lemo 也可能与其他品牌同名（需查询）。'},
+  { zh:'手帖', type:['中韩都能念'], tri:[['中文','手帖　shǒu tiě'],['英文','Sucheop'],['韩文','수첩　su-cheop']],
+    label:'手帖',
+    mean:'随身的小本子。韩国人天天在用“수첩”（手帖）这个汉字词，中文“手帖、手帐”也都熟。',
+    trunc:'2 个字，不会截断。',
+    fit:'能装下日程、待办、随手记、纪念日，覆盖面最全；但完全没有“按住说话、AI 帮你拆”的新意。',
+    risk:'太普通，手帐类 App 很多，难以区分，同名概率高（需查询）。英文 Sucheop 外国人不会念。中文里“手帖”也指书法字帖，略有歧义。'},
+];
+const CTRL = { zh:'日程与待办', tri:[['中文','日程与待办　rì chéng yǔ dài bàn'],['英文','Plan & To-do（直译）'],['韩文','일정과 할 일（意译）']],
+  label:'日程与待办',
+  mean:'把两个主要功能直接写出来，现在用的名字。',
+  trunc:'5 个字，大约到 iPhone 能放下的上限，小屏或大字体设置下可能截成“日程与待…”。',
+  fit:'功能写得清楚，但随手记、纪念日没有包括；读起来像功能分类，不像一个 App 的名字。',
+  risk:'太通用，几乎不可能注册商标；韩国朋友只能看译名。' };
+
+function nameCard(n, ctrl){
+  const tags = ctrl ? '<span class="pill k">对照组：现名</span>' :
+    n.type.map(t=>`<span class="pill ${t==='推荐'?'y':''}">${t}</span>`).join('');
+  return `<div class="nm ${ctrl?'ctrl':''}">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+      <div><div>${tags}</div><div class="big">${n.zh}</div></div>
+      <div class="lbl" title="主屏幕显示模拟"><div class="mini"><span>${n.label}</span></div>${n.label2?`<div class="mini"><span>${n.label2}</span></div>`:''}</div>
+    </div>
+    <div class="tri">${n.tri.map(([a,b])=>`<b>${a}</b><span>${b}</span>`).join('')}</div>
+    <dl>
+      <dt>寓意</dt><dd>${n.mean}</dd>
+      <dt>iPhone 桌面显示</dt><dd>${n.trunc}</dd>
+      <dt>和功能的贴合度</dt><dd>${n.fit}</dd>
+      <dt>风险</dt><dd>${n.risk}　域名：需查询。</dd>
+    </dl>
+  </div>`;
+}
+document.getElementById('names').innerHTML = NAMES.map(n=>nameCard(n)).join('') + nameCard(CTRL,true);
+
+/* ---------- 方向数据 ---------- */
+const DIRS = [
+  { id:'A', tag:'方向甲', title:'说一句，拆成几条', name:'随口记', name2:'Saynote',
+    idea:'黑底上一个柠檬黄对话泡，代表你说的那一句；从泡的尾巴引出两条线，连到下面一粉一蓝两条胶囊，代表 AI 拆出来的条目。颜色、胶囊、圆角全部取自现有界面。',
+    splashBg:'#141518', splashInk:'#fff', foot:'按住 ＋，说一句',
+    pro:'和现有界面一眼就是一家：黑胶囊导航、黄按钮、马卡龙色块都在。图形本身把核心动作讲清楚了，不用看名字也能猜到“说话记事”。',
+    con:'三种颜色加一根连线，元素在四个里最多；32 px 以下连线看不见，只剩“黄泡＋两条”，接近普通清单图标。黑底在深色壁纸上边缘会融进去。' },
+  { id:'B', tag:'方向乙', title:'磨砂玻璃里的声音', name:'Lemo', name2:'柠檬记　레모',
+    idea:'浅灰底上晕开柠檬黄、粉、天蓝三团柔光，正中是一块磨砂玻璃圆片，上面三根黑色竖条是声纹，代表“按住说话”。对应 App 的第二套磨砂玻璃皮肤。',
+    splashBg:'glass', splashInk:'#141518', foot:'按住 ＋，说一句',
+    pro:'和 iOS 26 的玻璃质感最协调，柔和、不吵，放在浅色壁纸上很安静。声纹一看就是“语音”。',
+    con:'三个方向里最不像自己：玻璃加彩色光斑现在很常见，容易和系统 App、其他工具混在一起。16 px 时玻璃和光斑都看不出，只剩一小块深色；Windows 任务栏小图最吃亏。' },
+  { id:'C', tag:'方向丙', title:'一笔，断成两截', name:'一一', label:'一一记', name2:'일일　Yiyi',
+    idea:'柠檬黄满底，一笔粗黑横画，从中间斜着断开成左右两截：一句话拆成两条。左端圆起笔，右端留宋体横画收笔的小顿角，读起来是汉字“一”，配上名字就是“一一”。',
+    splashBg:'#F2DF4A', splashInk:'#141518', foot:'按住 ＋，说一句',
+    pro:'最简单也最好认：主屏幕上整块黄色很跳，16 px 仍是“黄底一横”。和现有主按钮同色，品牌感强。没有模板味。',
+    con:'单看图标不说明功能，要靠名字「一一」和第一次使用来建立联想。如果最后不用「一一」这个名字，这个图标的意思会变弱。柠檬黄满底在浅色壁纸上边缘略淡。' },
+];
+
+const others = ['#c9ccd3','#b6bac3','#d8dbe1','#a9aeb8','#c2c6ce','#b0b4bd','#d0d3d9','#bcc0c8','#a5aab4','#cdd0d6','#b8bcc4'];
+const othersDark = ['#3b3e46','#4a4e57','#33363d','#565a63','#40434b','#4d5159','#373a41','#454850','#5a5e67','#3e4148','#4f525a'];
+function ic(id, size, cls){ return `<svg class="${cls||'ios'}" width="${size}" height="${size}" viewBox="0 0 1024 1024" style="width:${size}px;height:${size}px;${cls==='sq'?'':'border-radius:'+(size*0.2237).toFixed(1)+'px'}"><use href="#ic${id}"/></svg>`; }
+
+function homeScreen(d, mode){
+  const pal = mode==='light'?others:othersDark;
+  const barc = mode==='light'?'rgba(20,21,24,.22)':'rgba(255,255,255,.28)';
+  let cells='';
+  for(let i=0;i<16;i++){
+    if(i===5){ cells += `<div class="app"><div class="t">${ic(d.id,52)}</div><div class="n">${d.label||d.name}</div></div>`; }
+    else { cells += `<div class="app"><div class="t" style="background:${pal[i%pal.length]}"></div><div class="bar" style="background:${barc}"></div></div>`; }
+  }
+  let dock='';
+  for(let i=0;i<4;i++) dock += `<div class="t" style="width:52px;height:52px;border-radius:12px;background:${pal[(i+3)%pal.length]}"></div>`;
+  return `<figure style="margin:0"><div class="phone ${mode}"><div class="sb"><span>9:41</span><span>●●●</span></div><div class="hs">${cells}</div><div class="dock">${dock}</div></div><figcaption class="cap" style="text-align:center">${mode==='light'?'浅色壁纸':'深色壁纸'}</figcaption></figure>`;
+}
+function taskbar(d, mode){
+  let b='';
+  for(let i=0;i<5;i++){ b += (i===3? `<div class="b on">${ic(d.id,24,'sq')}</div>` : `<div class="b"><i></i></div>`); }
+  return `<div class="tb ${mode}"><div class="b"><span class="win"><s></s><s></s><s></s><s></s></span></div><div class="search"></div>${b}</div>`;
+}
+function splash(d){
+  let bg;
+  if(d.splashBg==='glass'){ bg = `<svg class="bgfill" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice"><use href="#bgB" x="-227" y="0" width="844" height="844"/></svg>`; }
+  else bg = `<div style="position:absolute;inset:0;background:${d.splashBg}"></div>`;
+  const mark = d.id==='A' ? 'markA' : d.id==='B' ? 'markB' : 'markC';
+  const sz = d.id==='C'? 180 : 140;
+  return `<div class="splash">${bg}<div class="mid" style="color:${d.splashInk};${d.id==='C'?'top:33%':''}">
+      <svg width="${sz}" height="${sz}" viewBox="0 0 1024 1024"><use href="#${mark}"/></svg>
+      <div class="nm1">${d.name}</div><div class="nm2">${d.name2}</div></div>
+      <div class="foot" style="color:${d.splashInk}">${d.foot}</div></div>`;
+}
+
+document.getElementById('dirs').innerHTML = DIRS.map(d=>`
+<section class="dir" id="dir${d.id}">
+  <div class="dirhead"><span class="tag">${d.tag}</span><h3 style="font-size:24px;margin:0">${d.title}</h3><span class="sub">配的名字：${d.name}</span></div>
+  <div class="mainrow">
+    <div>
+      <div class="master"><svg width="1024" height="1024" viewBox="0 0 1024 1024"><use href="#ic${d.id}"/></svg></div>
+      <div class="cap">主图 1024×1024，方形满底（此处缩小显示）</div>
+    </div>
+    <div>
+      <p>${d.idea}</p>
+      <div class="sub-h">小尺寸</div>
+      <div class="sizes">
+        <figure>${ic(d.id,180)}<figcaption>180（iPhone 主屏幕图）</figcaption></figure>
+        <figure>${ic(d.id,60)}<figcaption>60</figcaption></figure>
+        <figure>${ic(d.id,32,'sq')}<figcaption>32</figcaption></figure>
+        <figure>${ic(d.id,16,'sq')}<figcaption>16</figcaption></figure>
+        <figure><div class="duo"><span style="background:#fff">${ic(d.id,16,'sq')}</span><span style="background:#202124">${ic(d.id,16,'sq')}</span></div><figcaption>16 px 放在浏览器标签页（浅 / 深）</figcaption></figure>
+      </div>
+    </div>
+  </div>
+  <div class="sub-h">iPhone 主屏幕</div>
+  <div class="screens">${homeScreen(d,'light')}${homeScreen(d,'dark')}</div>
+  <div class="sub-h">Windows 11 任务栏（深色 / 浅色，24 px，第四个是这个 App）</div>
+  ${taskbar(d,'d')}${taskbar(d,'l')}
+  <div class="sub-h">启动画面（手机竖屏）与取舍</div>
+  <div class="splashrow">
+    ${splash(d)}
+    <div class="pc" style="align-content:start">
+      <div><b>好在哪</b>${d.pro}</div>
+      <div><b>弱在哪</b>${d.con}</div>
+    </div>
+  </div>
+</section>`).join('');
+</script>
+</body>
+</html>
