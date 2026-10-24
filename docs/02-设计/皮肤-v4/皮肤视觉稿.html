@@ -657,7 +657,7 @@ PH.todo = () => {
   <div class="fold">▸ 已完成 12（点开也能改）　　▸ 最近删除 3</div></div>`, {nav:2});
 };
 function notesHead(grid){
-  return `<div class="hd" style="align-items:center"><div class="tt"><div class="date pt">随手记</div></div><div class="vt"><span class="${grid?'':'on'}">${ic('list')}</span><span class="${grid?'on':''}">${ic('grid')}</span></div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
+  return `<div class="hd" style="align-items:center"><div class="tt"><div class="date pt">随手记</div></div><div class="ibtn">${ic('search')}</div><div class="av">H</div></div>
   <div class="chips"><span class="chip on">全部 34</span><span class="chip" ${P(4)}><i class="d"></i>工作灵感 12</span><span class="chip" ${P(5)}><i class="d"></i>韩国生活 7</span><span class="chip" ${P(6)}><i class="d"></i>购物 5</span><span class="chip">读书 3</span></div>
   <div class="panel lockrow">${ic('lock')}<b>隐私记</b><span class="muted" style="font-size:13px">已上锁 · 6 条</span><b style="margin-left:auto;font-size:13px;font-weight:600">Face ID 解锁 ›</b></div>
   <div class="merge"><span style="flex:1">“读书”和“书单”两个分类很像，合成一个吗？</span><span class="btn sm out">合并</span><span class="btn sm soft">不用</span></div>`;
@@ -704,7 +704,7 @@ PH.settings = () => {
   const skin = document.body.dataset.skin==='glass'?'磨砂玻璃':'简洁';
   return phone(`<div class="pg"><div style="display:flex;align-items:center;height:44px;position:relative"><span style="font-size:14px">‹ 今天</span><b style="position:absolute;left:0;right:0;text-align:center;font-size:17px;pointer-events:none">设置</b></div>
   <div class="panel" style="display:flex;align-items:center;gap:12px;padding:14px 16px;margin-top:8px"><div class="av">H</div><div style="flex:1;min-width:0"><b style="font-size:14px">h***@gmail.com</b><div class="muted" style="font-size:12px">2 台设备：iPhone、Windows</div></div><span class="chev">›</span></div>
-  <div class="panel set" style="margin-top:12px">${s('界面语言','中文')}${s('皮肤',skin+' · 白天 / 夜间跟着手机')}${s('日历','农历、中国和韩国节假日')}${s('提醒与通知','通知已打开 · 两边都响')}${s('语音与 AI','麦克风已允许 · 今天 AI 用了 18 次')}${s('隐私记','Face ID · 离开 1 分钟上锁')}${s('时区','跟随所在地 · 首尔')}</div>
+  <div class="panel set" style="margin-top:12px">${s('界面语言','中文')}${s('皮肤',skin+' · 白天 / 夜间跟着手机')}${s('随手记显示方式','瀑布流')}${s('日历','农历、中国和韩国节假日')}${s('提醒与通知','通知已打开 · 两边都响')}${s('语音与 AI','麦克风已允许 · 今天 AI 用了 18 次')}${s('隐私记','Face ID · 离开 1 分钟上锁')}${s('时区','跟随所在地 · 首尔')}</div>
   <div class="panel set" style="margin-top:12px">${s('数据','每天 03:00 备份 · 最近删除 3 条')}${s('在 Claude 聊天里记事','已连接')}${s('邀请朋友','还能邀请 3 人')}${s('符号说明','竖条、圆圈、菱形是什么')}<div class="srow"><svg viewBox="0 0 1024 1024" style="width:28px;height:28px;border-radius:7px"><use href="#icL"/></svg><span>关于柠檬记</span><span class="v">4.0.0 · 功能说明</span><span class="chev">›</span></div></div>
   <div style="text-align:center;margin:22px 0 0;font-size:14px;font-weight:400">退出登录</div></div>`, {nav:false});
 };
@@ -900,8 +900,8 @@ const LIST = [
   ['alert','提醒响起时','“现在”卡原地变成提醒；手机按钮在屏幕下方，电脑按钮留在卡片里'],
   ['month','月历','灰底放假、节日名、“N项”、今天高亮'],
   ['todo','待办','固定分组，项目只做筛选'],
-  ['notes','随手记：列表','手机默认列表'],
-  ['mason','随手记：瀑布流','手机两列，电脑三列'],
+  ['mason','随手记：瀑布流（默认）','手机两列，电脑三列；页面上不放切换按钮'],
+  ['notes','随手记：列表','在“设置 › 随手记显示方式”里改成列表后的样子'],
   ['rec','长按“＋”录音中','录音面板是玻璃（磨砂玻璃皮肤）'],
   ['toast','保存后的提示条','“已记下”，新的一条描边高亮'],
   ['unlock','隐私记解锁','背后列表打上磨砂'],
