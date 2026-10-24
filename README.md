@@ -4,7 +4,7 @@
 
 - 线上地址（claude.ai 版）：https://claude.ai/artifact/MVXvnr3rFUxgFKZesXWGVT（仅本人可见）
 - 数据：claude.ai 云端数据库，两个集合 `events`、`todos`，字段见 [数据字典](docs/05-数据字典/数据字典.md)
-- 当前状态：v3 已发布；4.0.0（柠檬记）设计完成；第七轮整体检查整改中（R-92～R-105）；下一步交齐开工前 7 份文档（ADR-011～017 已交，还差需求澄清-v4、数据字典 v4、测试用例 v4、AI 句库、开发计划 v4、开工前备份）（见 [CHANGELOG](CHANGELOG.md)、[路线图](docs/09-路线图/路线图.md)）
+- 当前状态：v3 已发布；4.0.0（柠檬记）设计完成；第七轮整体检查第三轮整改中（R-92～R-110）；下一步交齐开工前 7 份文档（ADR-011～017 已交；还差需求澄清-v4、数据字典 v4、测试用例 v4（冒烟回归集）、AI 句库与阈值、开发计划 v4、功能说明、开工前备份）（见 [CHANGELOG](CHANGELOG.md)、[路线图](docs/09-路线图/路线图.md)）
 - 下一版：4.0.0 柠檬记（Lemo / 레모，lemomemo.com），独立软件：iPhone 主屏幕 PWA、网页、Windows exe 三端共用一套前端（**React + TypeScript + Vite**，R-96、[ADR-017](docs/04-决策/ADR-017-前端用React与TypeScript.md)；v3 的原生 JS 代码不沿用），后端 Supabase 首尔节点 + Cloudflare，多用户邀请制、中韩双语（见 [架构设计-v4](docs/10-架构/架构设计-v4.md)、[ADR-007](docs/04-决策/ADR-007-目标形态PWA与独立服务器.md)）
 
 ## 目录说明
