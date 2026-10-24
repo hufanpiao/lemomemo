@@ -177,8 +177,8 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 .wr .trk{flex:1;height:30px;position:relative;border-right:1px solid var(--g5);background:repeating-linear-gradient(90deg,var(--g5) 0 1px,transparent 1px calc(100% / 7))}
 .wr .ev{position:absolute;top:4px;height:22px;background:var(--g3);border-radius:5px}
 .wr .ev.dk2{background:#111}
-/* R-107：色块里写 2 个字的简称（9.5px，和月历标签同一套）；放不下就不写 */
-.wr .ev{container-type:inline-size;overflow:hidden}.wr .ev span{display:block;font-size:9.5px;font-weight:700;line-height:22px;color:#fff;padding-left:3px;white-space:nowrap}@container (max-width:24px){.wr .ev span{display:none}}
+/* R-107：色块里写 2 个字的简称（9.5px，和月历标签同一套）；R-109：色块最小宽 28px，所有色块都写字 */
+.wr .ev{container-type:inline-size;overflow:hidden}.wr .ev span{display:block;font-size:9.5px;font-weight:700;line-height:22px;color:#fff;padding-left:3px;white-space:nowrap}
 .dwk .be .sh{font-size:9.5px;font-weight:700}
 .wr .tdo{position:absolute;top:9px;width:12px;height:12px;border-radius:50%;border:2px solid #111;background:#fff;margin-left:-6px}
 .wr .tdn{width:36px;flex:none;text-align:right;font-size:11px;color:var(--g1)}
@@ -340,6 +340,26 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 .cnb{min-width:32px;height:32px;border:1.5px solid var(--g4);border-radius:16px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;padding:0 8px;background:#fff;position:relative}
 .cnb::after{content:"";position:absolute;left:50%;top:50%;width:max(100%,44px);height:44px;transform:translate(-50%,-50%)}
 .cnb.k{background:#111;color:#fff;border-color:#111}
+
+/* 年月选择器（Radix Popover） */
+.ymw{position:absolute;z-index:30;background:#fff;border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,.18),0 0 0 1px var(--g5);padding:12px}
+.ymw::before{content:"";position:absolute;top:-7px;left:46px;width:14px;height:14px;background:#fff;transform:rotate(45deg);box-shadow:-1px -1px 0 var(--g5)}
+.ymw .cols{display:grid;grid-template-columns:90px 1fr;gap:10px}
+.ymw .ch{font-size:11px;color:var(--g3);margin:0 0 4px 10px}
+.ymw .ml{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.ymw .it{height:44px;display:flex;align-items:center;justify-content:center;border-radius:10px;font-size:15px;font-weight:600;position:relative}
+.ymw .yl .it{justify-content:flex-start;padding-left:12px}
+.ymw .it.on{background:#111;color:#fff}
+.ymw .it.cur::after{content:"";position:absolute;bottom:6px;left:50%;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:var(--g3)}
+.ymw .yl .it.cur::after{left:auto;right:10px;bottom:auto;top:50%;margin-top:-2.5px}
+.ymw .ft{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--g6);font-size:11px;color:var(--g2)}
+.r7w{display:flex;align-items:center;gap:10px;min-height:54px;border-bottom:1px solid var(--g6)}
+.r7w:last-child{border-bottom:0}
+.r7w .tm2{width:42px;flex:none;font-weight:700;font-size:14px}
+.r7w .tx{flex:1;min-width:0}.r7w .tx b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.r7w .tx small{font-size:12px;color:var(--g2)}
+.r7w .way{flex:none;font-size:11px;border-radius:12px;padding:2px 8px;border:1px solid var(--g3)}
+.r7w .way.b{background:var(--g6);border-color:transparent;font-weight:700}
+.r7w .mk2{width:18px;flex:none;display:flex;justify-content:center}
 </style>
 </head>
 <body data-v="p">
@@ -351,7 +371,7 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 <main id="main">
   <section class="intro" style="grid-template-columns:1fr;border:2px solid #111">
 <div>
-<h2>第四版补充（R-76～R-107，2026-10-24 第七轮整体检查之后）</h2>
+<h2>第四版补充（R-76～R-109，2026-10-24 第七轮整体检查之后）</h2>
 <p class="lead"><b>以哪份为准：</b>视觉以皮肤视觉稿（docs/02-设计/皮肤-v4/皮肤视觉稿.html）为准，交互以本线框为准；两者冲突时，以需求记录（docs/01-需求/需求记录.md）里编号最新的一条为准。</p>
 <h3 style="font-size:15px;margin:12px 0 6px">本线框里已经直接改掉的过时内容</h3>
 <ul class="pick" style="list-style:disc;padding-left:20px">
@@ -377,9 +397,11 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 <li><b>节假日三选一（R-97）：</b>设置 › 日历：只显示中国 / 只显示韩国 / 两国都显示，默认跟界面语言（中文→中国，韩文→韩国）。中文月历按“只显示中国”画；两国都显示时，本国节日名在前、另一国小号写在第二行。</li>
 <li><b>周、月翻页（R-99）：</b>都能左右滑动翻页，电脑用 ← →。已定摆法 B（R-101）：标题做成胶囊“2026年10月 ⌄”，点了弹出年月选择；“‹ 今天 ›”放在分段控件右侧，不在本周 / 本月时“今天”变黑。原来周视图的“‹ 上周 / 下周 ›”统一改成这一种写法。</li>
 </ul>
-<h3 style="font-size:15px;margin:12px 0 6px">第二轮复查与 R-102～R-107</h3>
+<h3 style="font-size:15px;margin:12px 0 6px">第二轮复查与 R-102～R-109</h3>
 <ul class="pick" style="list-style:disc;padding-left:20px">
-<li><b>周视图色块写简称（R-107）：</b>手机泳道和电脑时间格的日程色块里写 2 个字的事项简称，和月历标签同一套、同字号（9.5px）；块太短放不下 2 个字时只留色块。</li>
+<li><b>周视图色块写简称（R-107、R-109）：</b>手机泳道和电脑时间格的日程色块里写 2 个字的事项简称，和月历标签同一套、同字号（9.5px）。手机色块最小宽约 28px，所有色块都写字，短事项按最小宽度画（不代表时长），重叠时往右错开。</li>
+<li><b>“这个邮箱还没注册”（R-108）：</b>会暴露邮箱是否注册过，产品负责人已确认保留。</li>
+<li><b>补了两节（架构 0.16）：</b>“年月选择器”和“未来 7 天的提醒”，交互和视觉稿一致。</li>
 <li><b>隐私句（R-104）：</b>官网、登录页、告知页统一用“其他用户看不到你记的东西。数据存在服务器上，运营者在技术上能访问；文字、录音和隐私记会交给谷歌 AI 处理，详见隐私说明。”（取代 R-81 原句）。</li>
 <li><b>朋友第一次登录的告知页（R-103）：</b>“同意 AI 处理”勾选框不预先勾选，没勾时“同意并继续”不可按；“先不同意，直接用”：服务器不送 AI，按本地规则整理，录音用手机自带识别；写明可能被谷歌用来改进产品、可能经人工审阅、须满 18 岁。画面见视觉稿。</li>
 <li><b>设置：</b>“语音与 AI”加“AI 整理”总开关和“隐私记交给 AI”开关（同意后默认都开，R-82）；“皮肤”下“减少透明效果”旁加“减少动态效果”（只留淡入淡出）；AI 用量统一写“今天 AI 用了 18 次 / 共 50 次”；电脑设置的透明效果只留一处说法。</li>
@@ -512,10 +534,10 @@ function weekRows(){const H0=8,H1=22,P=h=>((h-H0)/(H1-H0)*100);
  let h='<div class="wk"><div class="wrul">'+[8,10,12,14,16,18,20,22].map(t=>'<span style="left:'+P(t)+'%">'+t+'</span>').join('')+'</div>';
  WK.forEach((r,i)=>{const sel=i===5;
   h+='<div class="wr'+(sel?' sel':'')+'"><div class="wd'+(sel?' t':'')+'"><small>周'+r[0]+'</small><b>'+r[1]+'</b><small>'+r[2]+'</small></div><div class="trk">'
-   +r[3].map(e=>'<div class="ev'+(sel?' dk2':'')+'" style="left:'+P(e[0])+'%;width:'+(P(e[1])-P(e[0]))+'%"><span>'+e[2]+'</span></div>').join('')
+   +(function(){let end=null;return r[3].map(e=>{const w='max('+(P(e[1])-P(e[0]))+'%, 28px)',l=end?'max('+P(e[0])+'%, calc('+end+' + 2px))':P(e[0])+'%';end=l+' + '+w;return '<div class="ev'+(sel?' dk2':'')+'" style="left:'+l+';width:'+w+'"><span>'+e[2]+'</span></div>'}).join('')})()
    +r[4].map((t,k)=>'<i class="tdo" style="left:calc('+P(t)+'% - '+(k*10)+'px)"></i>').join('')
    +(sel?'<div class="nl" style="left:'+P(14.28)+'%"></div>':'')+(i===0?'<span class="wedge" style="left:0">‹7:30</span>':'')+'</div><div class="tdn">'+r[5]+'</div></div>'});
- return h+'<div class="wleg"><span><span class="m m-ev" style="height:12px"></span> 日程（块里写 2 个字的简称，太短就不写）</span><span><i></i> 截止的待办</span><span>竖黑线：现在</span><span>右边数字：当天共几项</span><span>“逾”：有逾期没做完的待办</span><span>“‹7:30”：8 点前还有事</span><span>黑色块：选中的那天</span></div></div>'}
+ return h+'<div class="wleg"><span><span class="m m-ev" style="height:12px"></span> 日程（块里写 2 个字的简称；短事项按最小宽度画，不代表时长）</span><span><i></i> 截止的待办</span><span>竖黑线：现在</span><span>右边数字：当天共几项</span><span>“逾”：有逾期没做完的待办</span><span>“‹7:30”：8 点前还有事</span><span>黑色块：选中的那天</span></div></div>'}
 
 /* ===== 电脑周视图 ===== */
 const DWK=[['一',19,'初十',[[10,11,'周会',0],[14,16,'剪辑',0]]],['二',20,'十一',[[9.5,10.5,'洗牙',0],[16,17,'韩语',0]]],['三',21,'十二',[[13,17,'配音',0]]],['四',22,'十三',[[11,12,'提案',0]]],['五',23,'霜降',[[15,16,'内审',0],[19,21,'瑜伽',0]]],['六',24,'十五',[[10.5,11.5,'校对',0],[13,14.5,'对片',1],[15.5,16.5,'反馈',2],[19,21,'吃饭',0]]],['日',25,'十六',[[11,13,'早午',0]]]];
@@ -602,7 +624,7 @@ ROWMORE=true;
 const CALHEAD=(on,title,ex)=>{const nav=on<2;const seg='<div class="seg"'+(nav?'':' style="margin-bottom:10px"')+'>'+['周','月','纪念日'].map((x,i)=>'<span'+(i===on?' class="on"':'')+'>'+x+'</span>').join('')+'</div>';return '<div class="top"><div class="tt d1" style="font-size:24px">'+(nav?'<span style="display:inline-block;font-size:21px;border:1.5px solid #ccc;border-radius:999px;padding:1px 12px;background:#fff">'+title+' <span style="font-size:13px;color:var(--g2)">⌄</span></span>':title)+'</div>'+(ex||'')+'<div class="ib"><span class="isr"></span></div><div class="av">H</div></div>'+(nav?'<div class="calnav">'+seg+'<span class="cnb">‹</span><span class="cnb" style="color:var(--g3)">今天</span><span class="cnb">›</span></div>':seg)}; /* R-101 摆法 B：标题胶囊点开选年月；“‹ 今天 ›”在分段控件右侧，间距 8px */
 S.push({id:'s2',t:'日历 · 周视图',sub:'手机用 7 条带刻度的泳道，电脑用 7 列时间格',
 p:[phone(CALHEAD(0,'10月19日–25日')+'<div style="text-align:center;font-size:12px;color:var(--g2);margin:0 0 6px">第 43 周 · 17 项</div>'+weekRows()+'<div class="card" style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>周六 24日 · 农历九月十五</b><span style="color:var(--g2)">6 项</span></div>'+row('ev','10:30','SignPlex 字幕校对','已过去',null,'pst')+row('ev','13:00','NEOX 横版对片','到 14:30 · 进行中')+row('ev','15:30','SignPlex 客户反馈会','到 16:30 · Zoom')+row('ev','19:00','和 지민 吃饭','연남동')+row('td','今天内','NEOX 竖版 4K 导出','今天截止')+row('td','','回复 박 대리 的邮件','SignPlex')+'</div>',{tab:1})],
-pn:['<p><b>一天一条泳道，横轴 8–22 点。</b>每 2 小时一条刻度线，顶部标数字；看位置和长短，哪天满、哪段空一眼就能看出来。<b>R-107：</b>色块里写 2 个字的事项简称（和月历 C 方案同一套简称，9.5px，R-104 有意例外），块太短放不下 2 个字（例如 1 小时的“周会”）就不写字、只留色块。灰稿里的简称是示意文字。</p>','<p><b>点哪条泳道，就选中那天：</b>整条加灰底，色块变黑，下面列出当天的全部日程和待办（包括没定时间的）。空心圆是截止的待办，右边数字是当天共几项。</p>','<p><b>翻页（R-99、R-101）：</b>左右滑动换周，电脑用 ← →。标题做成胶囊“10月19日–25日 ⌄”，点了弹出周选择；“‹ 今天 ›”放在“周 / 月 / 纪念日”分段控件右侧（三者间距 8px，点击区各 44px），本周时“今天”是灰的，翻到别的周变黑，点它回到本周。</p><p><b>长按泳道空白处新建：</b>时间吸附到整点或半点，先弹出可以微调的时间，再新建；长按同样禁用系统长按菜单。8 点前、22 点后的事项在泳道两端用“‹7:30”这样的小标签标出。</p>'],
+pn:['<p><b>一天一条泳道，横轴 8–22 点。</b>每 2 小时一条刻度线，顶部标数字；看位置和长短，哪天满、哪段空一眼就能看出来。<b>R-107：</b>色块里写 2 个字的事项简称（和月历 C 方案同一套简称，9.5px，R-104 有意例外）。<b>R-109：</b>色块最小宽约 28px（能完整放下 2 个字），所有色块都写字；短事项从开始时间画起，宽度取 max(真实时长, 最小宽度)，图例写明“短事项色块按最小宽度画，不代表时长”；相邻短事项因此重叠时，后一块往右错开（离前一块 2px），字不被遮住。灰稿里的简称是示意文字。</p>','<p><b>点哪条泳道，就选中那天：</b>整条加灰底，色块变黑，下面列出当天的全部日程和待办（包括没定时间的）。空心圆是截止的待办，右边数字是当天共几项。</p>','<p><b>翻页（R-99、R-101）：</b>左右滑动换周，电脑用 ← →。标题做成胶囊“10月19日–25日 ⌄”，点了弹出周选择；“‹ 今天 ›”放在“周 / 月 / 纪念日”分段控件右侧（三者间距 8px，点击区各 44px），本周时“今天”是灰的，翻到别的周变黑，点它回到本周。</p><p><b>长按泳道空白处新建：</b>时间吸附到整点或半点，先弹出可以微调的时间，再新建；长按同样禁用系统长按菜单。8 点前、22 点后的事项在泳道两端用“‹7:30”这样的小标签标出。</p>'],
 d:desk('<div class="col" style="width:864px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><div class="d1" style="font-size:24px"><span class="dpick">10月19日–25日 <small style="font-size:14px;color:var(--g2);font-weight:600">第 43 周</small><em>⌄</em></span></div><div class="seg" style="width:240px;margin-left:auto">'+['周','月','纪念日'].map((x,i)=>'<span'+(i===0?' class="on"':'')+'>'+x+'</span>').join('')+'</div><span class="cnb">‹</span><span class="cnb" style="color:var(--g3)">今天</span><span class="cnb">›</span></div>'+dWeek()+'</div><div class="insp"><div class="ih"><span class="m m-ev"></span>日程 · 已选中<span class="r">拖动可改时间</span></div><div class="it">SignPlex 客户反馈会</div>'+fld('时间','10月24日 周六 15:30 – 16:30')+fld('项目','SignPlex')+fld('提醒','提前 15 分')+fld('备注','带上韩文版字幕的问题清单')+'<div class="st"><b>这一天还有</b></div>'+row('ev','13:00','NEOX 横版对片','')+row('ev','19:00','和 지민 吃饭','')+row('td','','NEOX 竖版 4K 导出','今天截止')+'</div>',{tab:1}),
 dn:['<p><b>宽屏用经典 7 列时间格。</b>顶部“全天”行放当天截止的待办和节假日；表头日期下面是农历。色块里同样只写 2 个字的简称（R-107，9.5px），完整标题和时间看右侧编辑栏。</p>','<p>拖动色块改时间，拖动下边缘改时长；在空白处框选一段时间直接打字新建。</p>','<p>右侧编辑栏显示选中的日程，下面列出同一天的其他事项。</p>']});
 
@@ -620,6 +642,15 @@ const ANNLIST=row('an',null,'김지민 生日','10月27日 周二 · 阳历 · �
  +row('an',null,'SignPlex 4.0 上线 <span class="tag">倒数日</span>','11月30日 周一','<b style="font-size:22px">37<small style="font-size:12px"> 天</small></b>')+'<div class="sep"></div>'
  +row('an',null,'爸爸生日','12月21日 周一 · 阳历 · 不知道年份','<b style="font-size:22px">58<small style="font-size:12px"> 天</small></b>')+'<div class="sep"></div>'
  +row('an',null,'外婆生日','阴历闰三月初十 · 明年 4月15日 · 没有闰月的年份按三月初十','<b style="font-size:22px">173<small style="font-size:12px"> 天</small></b>');
+/* 年月选择器（架构 0.16） */
+const YMW=(st,week,sel)=>'<div class="ymw" style="'+st+'"><div class="cols"><div><div class="ch">年</div><div class="yl">'+[2024,2025,2026,2027,2028].map(y=>'<div class="it'+(y===2026?' on cur':'')+'">'+y+'</div>').join('')+'</div></div><div><div class="ch">月</div><div class="ml">'+Array.from({length:12},(_,i)=>i+1).map(m=>'<div class="it'+(m===sel?' on':'')+(m===10?' cur':'')+'">'+m+'月</div>').join('')+'</div></div></div><div class="ft"><span style="flex:1">'+(week?'选好后跳到该月 1 日所在的那一周':'点一下就跳过去')+' · 小点是今天</span><span class="btn" style="font-size:12px;padding:6px 12px">回到今天</span></div></div>';
+const YMDIM='<div style="position:absolute;inset:0;background:rgba(255,255,255,.55);z-index:29"></div>';
+S.push({id:'sYM',t:'年月选择器',sub:'点月历、周视图的标题胶囊，从下面展开；左列年、右列月，底部“回到今天”',
+p:[[phone(CALHEAD(1,'2026年11月')+'<div class="card" style="padding:6px 4px">'+monthGrid(false)+'</div>',{tab:1,ov:YMDIM+YMW('top:118px;left:16px;right:16px',false,11)}),'月历：翻到 11 月时点标题'],
+ [phone(CALHEAD(0,'10月19日–25日')+'<div style="text-align:center;font-size:12px;color:var(--g2);margin:0 0 6px">第 43 周 · 17 项</div>'+weekRows(),{tab:1,ov:YMDIM+YMW('top:118px;left:16px;right:16px',true,10)}),'周视图：同一个选择器']],
+pn:['<p><b>同一个组件（架构 0.16：Radix Popover）。</b>点标题胶囊“2026年11月 ⌄”从胶囊下面展开浮层，背后内容稍微变淡；点外面、按 Esc 或再点一次胶囊收起。</p>','<p><b>两列：</b>左列年（前后各两年，可上下滚），右列 1–12 月三列排。选中的是正在看的年月（黑底），今天所在的年月下面有小点。点一下月份就跳过去并收起；只点年份不收起，等选月份。</p>','<p><b>底部“回到今天”：</b>和分段控件右侧的“今天”作用一样，跳回今天并收起。周视图点标题弹出同一个选择器，选好年月后跳到该月 1 日所在的那一周。每个格子点击区 44px。</p>'],
+d:desk('<div class="col" style="width:864px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><div class="d1" style="font-size:24px"><span class="dpick">2026年10月<em>⌄</em></span></div><div class="seg" style="width:240px;margin-left:auto">'+['周','月','纪念日'].map((x,i)=>'<span'+(i===1?' class="on"':'')+'>'+x+'</span>').join('')+'</div><span class="cnb">‹</span><span class="cnb" style="color:var(--g3)">今天</span><span class="cnb">›</span></div><div class="card" style="height:600px;display:flex;align-items:center;justify-content:center;color:var(--g3)">（月历，同“日历 · 月视图”）</div></div>',{tab:1,ov:YMW('top:100px;left:130px;width:340px',false,10)}),
+dn:['<p>电脑同一个浮层，从标题胶囊下面展开，背后不变淡。键盘：方向键在格子间移动，Enter 选中，Esc 收起。</p>']});
 S.push({id:'s4',t:'纪念日列表',sub:'生日、纪念日、倒数日合在一起，按“还有几天”排序',
 p:[phone(CALHEAD(2,'纪念日','<span class="btn p s" style="min-height:38px">＋ 新建</span>')+'<div class="chips"><span class="chip on">全部 6</span><span class="chip">生日 4</span><span class="chip">纪念日 1</span><span class="chip">倒数日 1</span></div><div class="nowc" style="margin:8px 0 10px"><div class="nk">最近的一个</div><div style="display:flex;align-items:baseline;gap:10px"><b style="font-size:44px;line-height:1.1">3</b><span>天后</span></div><div class="nt" style="font-size:18px">김지민 生日 · 满 29 周岁</div><div class="ns">10月27日 周二 · 提前 7 天和前一天 9:00 提醒</div></div><div class="card">'+ANNLIST+'</div><div class="done">▸ 已过去的倒数日 2</div>',{tab:1})],
 pn:['<p><b>三种合在一个列表里，只按“还有几天”排。</b>右边的大数字就是天数，类型用小标签注明（只有倒数日才标）。</p>','<p>阴历的同时显示“今年对应的公历”；不知道出生年份的不显示周岁。</p>','<p><b>新建：点右上角“＋ 新建”</b>（打开画面“新建纪念日”）；也可以短按或按住“＋”，打字或说“妈妈生日是阴历十月初八”，AI 会识别成阴历生日，并在提示条里写明“已放进纪念日 · 阴历十月初八”。</p><p>点一条进入编辑；左滑露出“编辑 / 删除”，删除只能点按钮，不能滑到底执行。</p>'],
@@ -784,6 +815,15 @@ d:desk('<div class="col side" style="width:240px;padding:20px 14px"><div class="
 dn:['<p><b>左边是分组，右边一次摊开相关的几组。</b>“电脑”分组只在 Windows 版出现，含开机自启、托盘、打字快捷键（默认 Ctrl+Alt+空格，弹出打字框，可以改）和透明效果（跟随 Windows）。电脑版不做语音（R-90）。</p>']});
 
 /* 14 登录 */
+/* 未来 7 天的提醒（架构 0.16） */
+const R7W=[['今天 · 10月24日 周六',[['15:15','ev','SignPlex 客户反馈会','15:30 开始 · 提前 15 分',1],['18:45','ev','和 지민 吃饭','19:00 开始 · 提前 15 分',0]]],['明天 · 10月25日 周日',[['10:45','ev','家庭 브런치','11:00 开始 · 提前 15 分',0]]],['10月26日 周一',[['9:00','an','김지민 生日','明天满 29 周岁 · 提前 1 天',1],['9:00','td','回复 박 대리 的邮件','待办 · 当天 9:00',1]]],['10月27日 周二',[['10:45','ev','NEOX 提案','11:00 开始 · 提前 15 分',1]]],['10月29日 周四',[['9:45','ev','SignPlex 合同签字','10:00 开始 · 提前 15 分',1]]],['10月30日 周五',[['18:45','ev','瑜伽','19:00 开始 · 提前 15 分',0]]]];
+const R7G=d=>'<div class="gt" style="display:flex;justify-content:space-between"><b style="color:var(--g1)">'+d[0]+'</b><span>'+d[1].length+' 条</span></div><div class="grp">'+d[1].map(r=>'<div class="r7w"><span class="tm2">'+r[0]+'</span><span class="mk2"><span class="m m-'+r[1]+'"></span></span><div class="tx"><b>'+r[2]+'</b><small>'+r[3]+'</small></div><span class="way'+(r[4]?' b':'')+'">'+(r[4]?'两边都响':'推送')+'</span><span style="color:var(--g3)">›</span></div>').join('')+'</div>';
+S.push({id:'sR7',t:'未来 7 天的提醒',sub:'设置 › 提醒与通知 最上面的入口；按天分组，点一条可改',
+p:[[phone('<div style="display:flex;align-items:center;height:40px;position:relative;font-size:14px">‹ 设置<b style="position:absolute;left:0;right:0;text-align:center;font-size:17px">提醒与通知</b></div>'+SETG('',[['<b>未来 7 天的提醒</b>','8 条 ›']])+'<div style="font-size:12px;color:var(--g2);margin:-4px 4px 10px">看看接下来一周会响哪些提醒，点一条可以改。</div>'+SETG('',R_PUSH),{nav:false}),'设置 › 提醒与通知：入口在最上面'],
+ [phone('<div style="display:flex;align-items:center;height:40px;position:relative;font-size:14px">‹ 提醒与通知<b style="position:absolute;left:0;right:0;text-align:center;font-size:17px;padding-left:40px">未来 7 天的提醒</b></div><div style="text-align:center;font-size:12px;color:var(--g2);margin-bottom:8px">现在 14:17 之后 · 共 8 条 · 10月28日 没有提醒</div>'+R7W.map(R7G).join(''),{nav:false}),'列表页']],
+pn:['<p><b>按天分组：</b>今天、明天、具体日期；没有提醒的日子不列，在顶部说明。范围是从现在起 7 天，只列会响的提醒。</p>','<p><b>每一条：</b>响的时间、项目色记号（日程竖条 / 待办圆圈 / 纪念日菱形）、标题、它是什么提醒（几点开始、提前多久）、提醒方式“推送”（只有手机响）或“两边都响”（手机和电脑一起响，装了电脑版时）。</p>','<p><b>点一条进入编辑：</b>改提醒时间和方式，只改这一条，不影响默认值。落在免打扰时段里的提醒推到 8:00，在副标题里写明。</p>'],
+d:desk('<div class="col" style="width:560px"><div class="d1" style="font-size:24px;margin-bottom:4px">未来 7 天的提醒</div><div style="font-size:12px;color:var(--g2);margin-bottom:10px">设置 › 提醒与通知 · 现在 14:17 之后 · 共 8 条</div>'+R7W.slice(0,3).map(R7G).join('')+'</div><div class="col" style="width:420px;padding-top:70px">'+R7W.slice(3).map(R7G).join('')+'</div>',{tab:-1}),
+dn:['<p>电脑设置首页右栏“提醒与通知”同样在最上面加这一行；列表分两栏，点一条在右侧编辑。</p>']});
 S.push({id:'s14',t:'登录和邀请码注册',sub:'一个流程：先填邮箱，新邮箱才需要邀请码',
 p:[phone('<div style="padding:60px 10px 0"><div style="font-size:30px;font-weight:700;line-height:1.25">柠檬记</div><div style="color:var(--g2);margin:6px 0 40px">说一句，清清爽爽记下来</div><div style="font-size:12px;color:var(--g3);margin-bottom:4px">邮箱</div><div class="inp f">h***@gmail.com</div><span class="btn p w" style="margin-top:16px">发验证码</span><div style="font-size:12px;color:var(--g3);margin-top:14px;text-align:center">不用密码。每次登录发一个 6 位验证码到邮箱。</div></div>',{nav:false}),
  phone('<div style="padding:60px 10px 0"><div style="font-size:24px;font-weight:700">第一次来？</div><div style="color:var(--g2);margin:6px 0 24px;font-size:14px">这个邮箱还没注册，需要邀请码</div><div style="font-size:12px;color:var(--g3);margin-bottom:4px">邀请码</div><div class="inp f" style="letter-spacing:3px">K7Q2-M9XD-4TPA</div><div style="font-size:12px;color:var(--g2);margin:6px 0 18px">邀请码有效的话，6 位验证码会发到这个邮箱</div><div style="font-size:12px;color:var(--g3);margin-bottom:4px">邮箱里的 6 位验证码</div><div style="display:flex;gap:8px">'+['4','8','1','','',''].map(x=>'<div class="inp'+(x?' f':'')+'" style="flex:1;text-align:center;padding:12px 0;font-size:20px;font-weight:700">'+x+'</div>').join('')+'</div><div style="font-size:13px;color:var(--g1);margin-top:14px;text-align:center">填满 6 位就自动登录，不用再点按钮</div><div style="font-size:12px;color:var(--g2);margin-top:12px;text-align:center">没收到？60 秒后可以重发 · 看看垃圾邮件</div><div style="font-size:12px;color:var(--g2);margin-top:16px;text-align:center">没有邀请码？请向柠檬记的负责人要一个</div></div>',{nav:false}),
@@ -870,7 +910,7 @@ dn:['<p>电脑今天页的韩文版：三栏结构不变，右侧编辑栏的字
 
 /* ===== 渲染 ===== */
 const host=document.getElementById('screens'),toc=document.getElementById('toc');
-const ORDER=['s1','sOn','sType','s10','s11','s1b','s2','s3','s4','s5','s6','s7','s8','s9','s12','s13','s14','s15','s16','sStates','sWin','sGest','s18'];
+const ORDER=['s1','sOn','sType','s10','s11','s1b','s2','s3','sYM','s4','s5','s6','s7','s8','s9','s12','s13','sR7','s14','s15','s16','sStates','sWin','sGest','s18'];
 S.sort((a,b)=>ORDER.indexOf(a.id)-ORDER.indexOf(b.id));
 S.forEach((s,i)=>{
  const n=i+1;
