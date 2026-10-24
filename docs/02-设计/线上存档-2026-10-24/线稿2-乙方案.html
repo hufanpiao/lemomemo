@@ -1,0 +1,525 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>线框 v4 · 乙方案</title>
+<style>
+:root{--k:#111;--g1:#2b2b2b;--g2:#5a5a5a;--g3:#8a8a8a;--g4:#bdbdbd;--g5:#dcdcdc;--g6:#ebebeb;--g7:#f4f4f4;--w:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei UI","Microsoft YaHei","Apple SD Gothic Neo","Malgun Gothic",sans-serif;background:#e4e4e4;color:var(--k);font-size:14px;line-height:1.5;-webkit-text-size-adjust:100%}
+header.bar{position:sticky;top:0;z-index:50;background:#111;color:#fff;display:flex;align-items:center;gap:12px;padding:10px 16px;flex-wrap:wrap}
+header.bar h1{font-size:15px;font-weight:600;margin-right:auto}
+.tg{display:flex;background:#333;border-radius:20px;padding:3px}
+.tg button{border:0;background:transparent;color:#ccc;font:inherit;font-size:13px;padding:6px 14px;border-radius:17px;cursor:pointer}
+.tg button.on{background:#fff;color:#111;font-weight:600}
+.toc{display:flex;gap:6px;overflow-x:auto;padding:8px 16px;background:#fff;border-bottom:1px solid var(--g5);position:sticky;top:52px;z-index:49;scrollbar-width:none}
+.toc a{flex:none;font-size:12px;color:var(--g1);text-decoration:none;border:1px solid var(--g4);border-radius:12px;padding:2px 9px}
+main{max-width:1640px;margin:0 auto;padding:20px 16px 80px}
+.intro{background:#fff;border-radius:16px;padding:22px;margin-bottom:22px;display:grid;grid-template-columns:1fr 1fr;gap:28px}
+@media(max-width:900px){.intro{grid-template-columns:1fr}}
+.intro h2{font-size:17px;margin-bottom:10px}
+.intro ol{padding-left:20px}.intro li{margin-bottom:8px}
+.intro .pick li b{display:block}
+.intro .pick li span{color:var(--g2);font-size:13px}
+.legend{background:#fff;border-radius:16px;padding:16px 22px;margin-bottom:22px;display:flex;flex-wrap:wrap;gap:18px 28px;align-items:center;font-size:13px}
+.legend>div{display:flex;align-items:center;gap:8px}
+.scr{background:#fff;border-radius:16px;padding:18px;margin-bottom:22px}
+.scr>h2{font-size:17px;margin-bottom:14px;display:flex;gap:10px;align-items:baseline}
+.scr>h2 small{font-size:12px;font-weight:400;color:var(--g3)}
+.blk{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start}
+.note{flex:1 1 230px;max-width:340px;font-size:13px;color:var(--g1);border-left:3px solid #111;padding:2px 0 2px 12px}
+.note p{margin-bottom:8px}
+.note p b{font-weight:600}
+body[data-v="p"] .v-d{display:none}
+body[data-v="d"] .v-p{display:none}
+.fw{flex:none;position:relative}
+.fw>*{transform-origin:0 0;position:absolute;left:0;top:0}
+.cap{font-size:12px;color:var(--g3);margin-top:6px}
+
+/* —— 手机外框 —— */
+.ph{width:390px;height:844px;border-radius:50px;border:2px solid #111;background:var(--g7);position:relative;overflow:hidden}
+.ph .isl{position:absolute;top:11px;left:50%;width:122px;height:35px;background:#111;border-radius:20px;transform:translateX(-50%);z-index:9}
+.sb{height:50px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 32px 6px;font-size:15px;position:relative;z-index:8}
+.sb span{font-size:12px;letter-spacing:1px}
+.pc{position:absolute;top:50px;left:0;right:0;bottom:0;overflow:hidden;padding:6px 16px 130px}
+.bn{position:absolute;left:14px;right:94px;bottom:28px;height:62px;border-radius:31px;background:rgba(34,34,34,.93);display:flex;padding:5px;gap:2px;z-index:20}
+.bi{flex:1;border-radius:26px;color:#d6d6d6;font-size:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.bi .gl{font-size:16px;line-height:1}
+.bi.on{background:#fff;color:#111;font-weight:600}
+.plus{position:absolute;right:14px;bottom:26px;width:66px;height:66px;border-radius:50%;background:#111;color:#fff;font-size:34px;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 4px var(--g7),0 0 0 5px var(--g4);z-index:21}
+.hi{position:absolute;bottom:8px;left:50%;width:134px;height:5px;border-radius:3px;background:#111;transform:translateX(-50%);z-index:30}
+
+/* —— 电脑外框 —— */
+.dk{width:1280px;height:800px;border:2px solid #111;border-radius:12px;background:var(--g7);overflow:hidden;position:relative;font-size:14px}
+.tb{height:32px;background:#fff;border-bottom:1px solid var(--g5);display:flex;align-items:center;justify-content:space-between;padding:0 0 0 14px;font-size:12px;color:var(--g2)}
+.tb .wc{display:flex;height:100%}.tb .wc i{width:46px;display:flex;align-items:center;justify-content:center;font-style:normal}
+.dw{display:flex;height:764px}
+.rail{width:76px;flex:none;background:#fff;border-right:1px solid var(--g5);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px}
+.rplus{width:52px;height:52px;border-radius:50%;background:#111;color:#fff;font-size:28px;display:flex;align-items:center;justify-content:center;margin-bottom:2px}
+.rhint{font-size:10px;color:var(--g3);margin-bottom:12px;text-align:center;line-height:1.3}
+.rit{width:62px;padding:8px 0;border-radius:12px;display:flex;flex-direction:column;align-items:center;font-size:11px;color:var(--g2);gap:2px}
+.rit .gl{font-size:17px;line-height:1}
+.rit.on{background:#111;color:#fff;font-weight:600}
+.rsp{flex:1}
+.dm{flex:1;display:flex;min-width:0;position:relative}
+.col{padding:20px 22px;overflow:hidden;height:764px;flex:none}
+.side{background:var(--g6)}
+.insp{width:340px;flex:none;background:#fff;border-left:1px solid var(--g5);padding:20px 22px;height:764px;overflow:hidden}
+kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--g2);background:#fff}
+
+/* —— 类型形状 —— */
+.m{flex:none;display:inline-block;vertical-align:middle}
+.m-ev{width:5px;height:20px;border-radius:3px;background:#111}
+.m-td{width:18px;height:18px;border-radius:50%;border:2px solid #111}
+.m-td.ok{background:#111;box-shadow:inset 0 0 0 3px #fff}
+.m-an{width:11px;height:11px;background:#111;transform:rotate(45deg);margin:0 3px}
+.m-nt{width:14px;height:17px;border:2px solid #111;border-radius:3px;background:linear-gradient(#111,#111) 2px 3px/6px 2px no-repeat,linear-gradient(#111,#111) 2px 7px/4px 2px no-repeat}
+.lock{display:inline-block;width:12px;height:10px;border-radius:2px;background:currentColor;position:relative;margin:5px 2px 0;vertical-align:middle}
+.lock::before{content:"";position:absolute;left:2px;top:-6px;width:8px;height:8px;border:2px solid currentColor;border-bottom:0;border-radius:5px 5px 0 0;box-sizing:border-box}
+.lock.big{width:34px;height:28px;border-radius:6px;margin-top:20px}
+.lock.big::before{left:6px;top:-18px;width:22px;height:22px;border-width:4px;border-radius:12px 12px 0 0}
+.isr{display:inline-block;width:13px;height:13px;border:2px solid currentColor;border-radius:50%;position:relative;vertical-align:middle}
+.isr::after{content:"";position:absolute;width:2px;height:7px;background:currentColor;right:-4px;bottom:-6px;transform:rotate(-45deg)}
+.mic{display:inline-block;width:10px;height:15px;border:2px solid currentColor;border-radius:6px;vertical-align:middle}
+
+/* —— 通用件 —— */
+.top{display:flex;align-items:center;gap:10px;margin:4px 0 12px}
+.top .tt{margin-right:auto}
+.d1{font-size:28px;font-weight:700;letter-spacing:-.5px;line-height:1.15}
+.d2{font-size:13px;color:var(--g2)}
+.ib{width:38px;height:38px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;color:#111;font-size:13px;font-weight:700;flex:none}
+.av{width:38px;height:38px;border-radius:50%;background:#111;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex:none}
+.card{background:#fff;border-radius:18px;padding:14px}
+.st{font-size:12px;color:var(--g3);margin:14px 0 4px;display:flex;justify-content:space-between}
+.st b{color:var(--g1);font-weight:600}
+.row{display:flex;align-items:center;gap:10px;padding:9px 0}
+.row .tx{flex:1;min-width:0}
+.row .tx b{display:block;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .tx small{display:block;font-size:12px;color:var(--g2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .tm{width:44px;flex:none;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.row .tm.g{color:var(--g3);font-weight:400;font-size:12px}
+.sep{border-top:1px solid var(--g6)}
+.chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--g4);border-radius:14px;padding:3px 11px;font-size:12px;white-space:nowrap;background:#fff}
+.chip.on{background:#111;color:#fff;border-color:#111}
+.chips{display:flex;gap:6px;overflow:hidden;margin:6px 0 4px}
+.seg{display:flex;background:var(--g5);border-radius:18px;padding:3px}
+.seg span{flex:1;text-align:center;font-size:13px;padding:5px 12px;border-radius:15px;color:var(--g1)}
+.seg span.on{background:#111;color:#fff;font-weight:600}
+.btn{display:inline-flex;align-items:center;justify-content:center;border:1.5px solid #111;border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;background:#fff;white-space:nowrap}
+.btn.p{background:#111;color:#fff}
+.btn.s{padding:3px 10px;font-size:12px}
+.btn.g{border-color:var(--g4);color:var(--g2);font-weight:400}
+.btn.w{width:100%;padding:12px;font-size:15px;border-radius:14px}
+.tag{font-size:10px;border:1px solid var(--g3);color:var(--g2);border-radius:4px;padding:0 4px;margin-left:4px;font-weight:400;vertical-align:1px}
+.tag.k{background:#111;color:#fff;border-color:#111}
+.nowc{background:#111;color:#fff;border-radius:20px;padding:14px 16px}
+.nowc .nk{font-size:12px;color:#bbb}
+.nowc .nt{font-size:21px;font-weight:700;margin:2px 0}
+.nowc .ns{font-size:13px;color:#ddd}
+.nowc .pb{height:4px;background:#444;border-radius:2px;margin:10px 0 8px}
+.nowc .pb i{display:block;height:4px;background:#fff;border-radius:2px}
+.nowc .nx{font-size:13px;color:#ddd;border-top:1px solid #333;padding-top:8px}
+.od{border:2px solid #111;border-radius:16px;padding:10px 12px;display:flex;align-items:center;gap:10px;margin-top:10px;background:#fff}
+.nowl{position:relative;height:16px;margin:2px 0}
+.nowl::before{content:"";position:absolute;left:44px;right:0;top:7px;border-top:2px solid #111}
+.nowl span{position:absolute;left:0;top:-1px;background:#111;color:#fff;font-size:11px;padding:0 5px;border-radius:8px;font-weight:600}
+.done{color:var(--g3);font-size:13px;padding:6px 0}
+.annb{display:flex;gap:8px}
+.annb .card{flex:1;padding:10px 12px}
+.annb b{font-size:20px}
+.fld{margin-bottom:12px}
+.fld label{display:block;font-size:11px;color:var(--g3);margin-bottom:3px}
+.fld div{background:var(--g7);border-radius:10px;padding:8px 10px;font-size:14px}
+.ih{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--g2);margin-bottom:6px}
+.ih .r{margin-left:auto;font-size:11px;color:var(--g3)}
+.it{font-size:20px;font-weight:700;margin-bottom:14px;line-height:1.3}
+.hl{background:#111;color:#fff;padding:0 2px;border-radius:2px}
+.dim{position:absolute;inset:0;background:rgba(240,240,240,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:25}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);border-radius:28px 28px 0 0;z-index:26;padding:10px 18px 30px;box-shadow:0 -6px 30px rgba(0,0,0,.12)}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--g4);margin:0 auto 10px}
+.toast{position:absolute;left:14px;right:14px;bottom:104px;background:#111;color:#fff;border-radius:18px;padding:12px 14px;z-index:24;font-size:14px}
+.toast .tl{height:3px;background:#444;border-radius:2px;margin-top:10px}
+.toast .tl i{display:block;height:3px;width:60%;background:#fff;border-radius:2px}
+.flash{outline:3px solid #111;outline-offset:3px;border-radius:10px;background:#fff}
+.ban{background:#111;color:#fff;font-size:12px;padding:8px 12px;border-radius:12px;display:flex;gap:8px;align-items:center}
+.sync{border:1.5px dashed var(--g2);border-radius:10px;padding:0 8px}
+.wave{display:flex;align-items:center;gap:3px;height:34px}
+.wave i{width:4px;background:#111;border-radius:2px}
+.kp{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 22px;padding:0 26px}
+.kp span{height:62px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;width:62px;margin:0 auto}
+.kp span.e{background:transparent;font-size:14px}
+.dots{display:flex;gap:16px;justify-content:center;margin:18px 0 26px}
+.dots i{width:14px;height:14px;border-radius:50%;border:2px solid #111}
+.dots i.f{background:#111}
+.tg2{width:42px;height:25px;border-radius:13px;background:var(--g4);position:relative;flex:none}
+.tg2::after{content:"";position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:#fff}
+.tg2.on{background:#111}.tg2.on::after{left:19px}
+.grp{background:#fff;border-radius:14px;padding:0 14px;margin-bottom:12px}
+.grp .row{border-bottom:1px solid var(--g6);padding:11px 0}
+.grp .row:last-child{border-bottom:0}
+.grp .row .v{color:var(--g2);font-size:13px}
+.gt{font-size:12px;color:var(--g3);margin:4px 4px 6px}
+.img{background:repeating-linear-gradient(45deg,var(--g5) 0 8px,var(--g6) 8px 16px);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--g2);font-size:12px}
+.inp{background:#fff;border:1.5px solid var(--g4);border-radius:14px;padding:11px 14px;font-size:15px;color:var(--g3)}
+.inp.f{border-color:#111;color:#111}
+
+/* 周视图（手机横条） */
+.wk{background:#fff;border-radius:18px;padding:8px 12px}
+.wr{display:flex;align-items:center;height:58px;border-bottom:1px solid var(--g6);position:relative}
+.wr:last-child{border-bottom:0}
+.wr .wd{width:46px;flex:none;line-height:1.15}
+.wr .wd b{font-size:17px;display:block}
+.wr .wd small{font-size:10px;color:var(--g3)}
+.wr .wd.t b{background:#111;color:#fff;border-radius:12px;width:30px;text-align:center}
+.wr .trk{flex:1;height:34px;position:relative;background:linear-gradient(90deg,var(--g6) 1px,transparent 1px) 0 0/25% 100%}
+.wr .ev{position:absolute;top:3px;height:28px;background:var(--g2);border-radius:6px;color:#fff;font-size:10px;padding:0 4px;overflow:hidden;white-space:nowrap;line-height:28px}
+.wr .ev.dk2{background:#111}
+.wr .tdn{width:40px;flex:none;text-align:right;font-size:11px;color:var(--g2)}
+.wr .nl{position:absolute;top:-4px;bottom:-4px;width:2px;background:#111}
+.ruler{display:flex;margin-left:46px;margin-right:40px;font-size:10px;color:var(--g3)}
+.ruler span{flex:1}
+
+/* 月历 */
+.mg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.mh{font-size:11px;color:var(--g3);text-align:center;padding:4px 0}
+.mc{height:66px;border-top:1px solid var(--g6);padding:4px 2px 0;text-align:center;position:relative}
+.mc b{display:inline-block;font-size:16px;width:28px;height:28px;line-height:28px;border-radius:50%;font-weight:600}
+.mc i{display:block;font-style:normal;font-size:9.5px;color:var(--g2);white-space:nowrap;overflow:hidden;line-height:1.2}
+.mc i.h{color:#111;font-weight:700}
+.mc i u{text-decoration:none;font-size:8px;background:#111;color:#fff;border-radius:3px;padding:0 2px;margin-right:1px}
+.mc s{display:flex;justify-content:center;gap:2px;margin-top:3px;text-decoration:none;height:4px;align-items:center}
+.mc s q{width:9px;height:3px;background:var(--g1);border-radius:2px}
+.mc s q.d{width:6px;height:6px;transform:rotate(45deg);border-radius:0;background:#111}
+.mc s em{font-style:normal;font-size:9px;line-height:1;color:var(--g2)}
+.mc.off{background:var(--g6)}
+.mc .xiu{position:absolute;right:2px;top:2px;font-size:8px;color:var(--g2);font-style:normal}
+.mc.o b{color:var(--g4)}.mc.o i{color:var(--g4)}
+.mc.t b{background:#111;color:#fff}
+.mc.sel b{box-shadow:0 0 0 2px #111}
+/* 电脑月历 */
+.dmg .mc{height:118px;text-align:left;padding:6px 6px 0}
+.dmg .mc b{width:auto;height:auto;line-height:1.2;border-radius:6px;padding:1px 6px;font-size:15px}
+.dmg .mc i{display:inline;font-size:11px;margin-left:4px}
+.dmg .mc .ln{display:block;font-size:11px;background:var(--g5);border-radius:4px;padding:1px 5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+.dmg .mc .ln.a{background:#fff;border:1px solid #111}
+.dmg .mc .more{font-size:11px;color:var(--g2);margin-top:2px}
+.dmg .mc.t b{background:#111;color:#fff}
+.dmg .mc.sel{box-shadow:inset 0 0 0 2px #111}
+/* 电脑周视图 */
+.dwk{display:grid;grid-template-columns:52px repeat(7,minmax(0,1fr));font-size:12px}
+.dwk .hd{text-align:center;padding:4px 0 6px;border-bottom:1px solid var(--g5)}
+.dwk .hd b{display:block;font-size:18px}
+.dwk .hd.t b{background:#111;color:#fff;border-radius:14px;width:36px;margin:0 auto}
+.dwk .ad{border-bottom:1px solid var(--g5);padding:4px 3px;min-height:30px;border-left:1px solid var(--g6)}
+.dwk .tc{position:relative;border-left:1px solid var(--g6);height:504px;background:linear-gradient(var(--g6) 1px,transparent 1px) 0 0/100% 36px}
+.dwk .hr{position:relative;height:504px}
+.dwk .hr span{position:absolute;right:6px;font-size:10px;color:var(--g3)}
+.dwk .be{position:absolute;left:3px;right:3px;background:var(--g2);color:#fff;border-radius:6px;padding:3px 5px;font-size:11px;overflow:hidden;line-height:1.3}
+.dwk .be.k{background:#111}
+.dwk .be.sel{outline:3px solid #111;outline-offset:1px;background:#fff;color:#111}
+.dwk .nl{position:absolute;left:0;right:0;border-top:2px solid #111}
+.dwk .nl::before{content:"";position:absolute;left:-4px;top:-5px;width:8px;height:8px;border-radius:50%;background:#111}
+</style>
+</head>
+<body data-v="p">
+<header class="bar">
+  <h1>日程与待办 4.0.0 · 线框乙方案</h1>
+  <div class="tg"><button id="bp" class="on">手机 390</button><button id="bd">电脑 1280</button></div>
+</header>
+<nav class="toc" id="toc"></nav>
+<main id="main">
+  <section class="intro">
+    <div>
+      <h2>我这套方案的核心思路</h2>
+      <ol>
+        <li><b>只用时间做主轴。</b>今天页不再分成提醒卡、下一件事卡、时间轴卡，而是把日程、待办、纪念日、随手记按时间排成一列（下文叫“时间河”）。四种东西靠左边的形状区分，从上往下看就行。</li>
+        <li><b>记录不用确认，但要看得到存到了哪。</b>说完就保存，提示条写明“放进了明天的日程”，新条目在列表里高亮一下。一句话拆成几条时，可以逐条改、逐条撤销，也能一键合并回一条。</li>
+        <li><b>手机上信息太多就收起来，不把字缩小。</b>月历每格只放日期、一行农历或节日、最多 3 条短横线。周视图改成“7 行横条”，哪天忙一眼就能看出来。</li>
+        <li><b>电脑宽屏不做大仪表盘，做成“导航栏 + 主视图 + 常驻编辑栏”。</b>点哪条，右栏就能直接改，不弹窗。另外加一个全局快捷键：App 在后台时也能按住说话、记一句。</li>
+        <li><b>随手记当作“写给自己的消息”。</b>按时间往下排，底部常驻一行输入框，分类交给 AI。隐私记是分类条最后那个带锁的文件夹。</li>
+      </ol>
+    </div>
+    <div>
+      <h2>需要产品负责人选的地方（8 条）</h2>
+      <ol class="pick">
+        <li><b>今天页：时间河混排，还是按类型分块？</b><span>推荐时间河。缺点是第一眼不知道“待办一共几条”，所以待办页角标会显示数量。</span></li>
+        <li><b>手机周视图：7 行横条，还是传统的 7 列时间格？</b><span>推荐 7 行横条。手机上 7 列每列只有约 45px，标题放不下；横条能看出哪天忙、哪段时间空。</span></li>
+        <li><b>手机月历格：只放短横线，还是放 1 条标题？</b><span>推荐只放短横线，加农历或节日。1 条标题在 55px 宽的格子里只能显示 3 个字，看了也认不出是什么。</span></li>
+        <li><b>随手记列表：单列时间流，还是双列卡片墙？</b><span>推荐单列时间流加常驻输入行。多数记录没有图，双列会留下大片空白。</span></li>
+        <li><b>录音时要不要实时预告“会拆成几条”？</b><span>推荐要。录音中的预告只用本地规则，不花 AI 额度；松手后再交给 AI 定稿。</span></li>
+        <li><b>电脑端全局快捷键用哪个？</b><span>推荐“按住 Ctrl+Alt+空格”，避开 Ctrl+空格（Windows 上常用来切换输入法），设置里可以改。</span></li>
+        <li><b>电脑端编辑：右侧常驻编辑栏，还是弹窗？</b><span>推荐常驻编辑栏，改完自动保存，不用点“保存”。</span></li>
+        <li><b>登录和注册合并成一个流程？</b><span>推荐合并：先填邮箱，系统发现是新邮箱时才多出一格邀请码，不用分“登录 / 注册”两个页签。</span></li>
+      </ol>
+    </div>
+  </section>
+  <section class="legend">
+    <b>全局约定</b>
+    <div><span class="m m-ev"></span>日程（竖条）</div>
+    <div><span class="m m-td"></span>待办（圆圈，完成后填黑）</div>
+    <div><span class="m m-an"></span>纪念日（菱形，含生日、纪念日、倒数日）</div>
+    <div><span class="m m-nt"></span>随手记（纸片）</div>
+    <div><span class="tag">AI</span>表示 AI 定的分类，手动改过就不再显示</div>
+    <div>线框里的深灰色块，在正式皮肤里换成项目颜色（NEOX、SignPlex、生活…）</div>
+    <div>磨砂玻璃皮肤只用在：底部导航、“＋”、提示条、底部弹层、录音面板；列表一律用实色</div>
+  </section>
+  <div id="screens"></div>
+</main>
+
+<script>
+const NAVN=['今天','日历','待办','随手记'],NAVG=['◎','▦','✓','✎'];
+function navbar(t){return '<div class="bn">'+NAVN.map((n,i)=>'<div class="bi'+(i===t?' on':'')+'"><span class="gl">'+NAVG[i]+'</span>'+n+'</div>').join('')+'</div><div class="plus">＋</div>'}
+function phone(body,o){o=o||{};const t=o.tab===undefined?0:o.tab;
+ return '<div class="ph"><div class="isl"></div><div class="sb"><b>'+(o.sb||'14:17')+'</b><span>▂▄▆ 5G ▭</span></div><div class="pc">'+body+'</div>'+(o.nav===false?'':navbar(t))+(o.ov||'')+'<div class="hi"></div></div>'}
+function rail(t){return '<div class="rail"><div class="rplus">＋</div><div class="rhint">点一下打字<br>按住说话</div>'+NAVN.map((n,i)=>'<div class="rit'+(i===t?' on':'')+'"><span class="gl">'+NAVG[i]+'</span>'+n+'</div>').join('')+'<div class="rsp"></div><div class="rit"><span class="isr"></span>搜索<kbd>Ctrl K</kbd></div><div class="av" style="margin-top:8px">H</div></div>'}
+function desk(main,o){o=o||{};return '<div class="dk"><div class="tb"><span>日程与待办 4.0.0</span><span class="wc"><i>—</i><i>☐</i><i>✕</i></span></div><div class="dw">'+rail(o.tab===undefined?0:o.tab)+'<div class="dm">'+main+'</div></div>'+(o.ov||'')+'</div>'}
+function row(m,tm,title,sub,extra,cls){return '<div class="row '+(cls||'')+'">'+(tm!==null?'<span class="tm'+(tm&&tm.length>5?' g':'')+'">'+(tm||'')+'</span>':'')+'<span class="m m-'+m+'"></span><div class="tx"><b>'+title+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div>'+(extra||'')+'</div>'}
+function fld(l,v){return '<div class="fld"><label>'+l+'</label><div>'+v+'</div></div>'}
+
+/* ===== 共用内容片段 ===== */
+const TODAY_TOP='<div class="top"><div class="tt"><div class="d1">10月24日 周六</div><div class="d2">农历九月十五 · 霜降后第 1 天</div></div><div class="ib"><span class="isr"></span></div><div class="av">H</div></div>';
+const NOWC='<div class="nowc"><div class="nk">现在 14:17 · 进行中</div><div class="nt">NEOX 横版对片</div><div class="ns">13:00–14:30 · 腾讯会议 · 还剩 13 分钟</div><div class="pb"><i style="width:86%"></i></div><div class="nx">接下来：15:30 SignPlex 客户反馈会（1 小时 13 分后）</div></div>';
+const OVERDUE='<div class="od"><span class="m m-td"></span><div style="flex:1;min-width:0"><b style="font-size:14px">交 SignPlex 韩文版成片</b><div style="font-size:12px;color:var(--g2)">原定 10月22日 · 晚了 2 天</div></div><span class="btn s">今天</span><span class="btn s g">明天</span></div>';
+function river(flashRow){return '<div class="done">▸ 已过去 2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓</div>'
+ +row('ev','13:00','NEOX 横版对片','到 14:30 · NEOX · 腾讯会议')
+ +'<div class="nowl"><span>14:17</span></div>'
+ +row('ev','15:30','SignPlex 客户反馈会','到 16:30 · 提前 15 分提醒')
+ +(flashRow||'')
+ +row('td','今天内','NEOX 竖版 4K 导出','今天截止 · NEOX')
+ +row('td','','回复 박 대리 的邮件','SignPlex')
+ +row('ev','19:00','和 지민 吃饭','연남동 · 生活')}
+const ANNB='<div class="st"><b>快到了</b><span>纪念日 ›</span></div><div class="annb"><div class="card"><div style="font-size:12px;color:var(--g2)"><span class="m m-an"></span> 生日</div><b>3 天</b><div style="font-size:12px">김지민 · 满 29 周岁</div></div><div class="card"><div style="font-size:12px;color:var(--g2)"><span class="m m-an"></span> 生日 · 阴历</div><b>23 天</b><div style="font-size:12px">妈妈 · 十月初八</div></div></div>';
+const ANNLINE='<div style="display:flex;gap:8px;margin:-4px 0 10px;font-size:12px"><span class="chip"><span class="m m-an" style="width:8px;height:8px"></span>3 天后 김지민 生日</span><span class="chip"><span class="m m-an" style="width:8px;height:8px"></span>23 天后 妈妈生日（阴历）</span></div>';
+const NOTESTODAY='<div class="st"><b>今天记的 2</b><span>随手记 ›</span></div>'+row('nt',null,'NEOX 片尾 logo 停留可以再短 0.5 秒','14:02 · 工作灵感')+row('nt',null,'首尔林银杏黄了，下周末带相机','11:40 · 韩国生活 · 1 张图');
+
+/* ===== 月历数据 ===== */
+const LN=['','初一','初二','初三','初四','初五','初六','初七','初八','初九','初十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十','廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
+function lun(m,d){if(m===9)return LN[d-10];if(m===11)return LN[d+22];return d<10?LN[20+d]:(d===10?'九月':LN[d-9])}
+const HOL={1:['中','国庆'],3:['韩','开天节'],5:['韩','补休'],9:['韩','韩文节']};
+const TERM={8:'寒露',18:'重阳',23:'霜降'};
+const OFF=[1,2,3,4,5,6,7,9];
+const EVN={2:1,6:2,13:1,14:2,15:3,16:1,19:2,20:1,21:1,22:1,23:2,24:4,25:1,26:2,27:1,28:1,29:2,30:1};
+const DT={2:['10:00 NEOX 值班'],6:['14:00 SignPlex 访谈','20:00 韩语课'],13:['20:00 韩语课'],14:['10:00 NEOX 月会','15:00 SignPlex 评审'],15:['09:30 출입국 外国人登录证','14:00 NEOX 拍摄','19:00 瑜伽'],16:['11:00 SignPlex 配音'],19:['10:00 NEOX 周会','14:00 SignPlex 剪辑'],20:['09:30 치과'],21:['13:00 SignPlex 韩文版配音'],22:['11:00 NEOX 提案'],23:['15:00 SignPlex 内审','19:00 瑜伽'],24:['10:30 字幕校对','13:00 NEOX 横版对片','15:30 SignPlex 反馈会','19:00 和 지민 吃饭'],25:['11:00 家庭 브런치'],26:['10:00 NEOX 周会','20:00 韩语课'],27:['19:00 지민 生日聚餐'],28:['14:00 SignPlex 上线评审'],29:['10:00 NEOX 拍摄','19:00 瑜伽'],30:['16:00 SignPlex 周报']};
+const CELLS=[[9,28],[9,29],[9,30]];for(let d=1;d<=31;d++)CELLS.push([10,d]);CELLS.push([11,1]);
+function monthGrid(desktop){
+ let h='<div class="mg'+(desktop?' dmg':'')+'">'+['一','二','三','四','五','六','日'].map(x=>'<div class="mh">'+x+'</div>').join('');
+ CELLS.forEach(([m,d])=>{const cur=m===10;const hol=cur&&HOL[d];const off=cur&&OFF.includes(d);
+  const lab=hol?'<i class="h"><u>'+hol[0]+'</u>'+hol[1]+'</i>':(cur&&TERM[d]?'<i class="h">'+TERM[d]+'</i>':'<i>'+lun(m,d)+'</i>');
+  const cls='mc'+(off?' off':'')+(cur?'':' o')+(cur&&d===24?' t':'')+(cur&&d===24&&!desktop?' sel':'')+(cur&&d===24&&desktop?' sel':'');
+  let inner='';
+  if(!desktop){const n=cur?(EVN[d]||0):0;let s='';for(let k=0;k<Math.min(n,3);k++)s+='<q></q>';if(n>3)s+='<em>+</em>';if(cur&&d===27)s+='<q class="d"></q>';inner='<b>'+d+'</b>'+lab+'<s>'+s+'</s>';}
+  else{const ts=cur?(DT[d]||[]):[];let s='';if(cur&&d===27)s+='<div class="ln a">◆ 김지민 生日</div>';ts.slice(0,3).forEach(t=>s+='<div class="ln">'+t+'</div>');if(ts.length>3)s+='<div class="more">还有 '+(ts.length-3)+' 项</div>';inner='<b>'+d+'</b>'+lab+s;}
+  h+='<div class="'+cls+'">'+inner+(off?'<em class="xiu">休</em>':'')+'</div>';});
+ return h+'</div>'}
+
+/* ===== 手机周视图 ===== */
+const WK=[['一','19','初十',[[10,11,''],[14,16,'剪辑']],'○ 2'],['二','20','十一',[[9.5,10.5,'치과']],''],['三','21','十二',[[13,17,'SignPlex 配音']],'○ 1'],['四','22','十三',[[11,12,'提案']],'晚 1'],['五','23','霜降',[[15,16,''],[19,21,'瑜伽']],''],['六','24','十五',[[10.5,11.5,''],[13,14.5,'对片'],[15.5,16.5,'反馈'],[19,21,'지민']],'○ 3'],['日','25','十六',[[11,13,'브런치']],'']];
+function pct(h){return ((h-8)/16*100).toFixed(2)}
+function weekRows(){return '<div class="ruler"><span>8</span><span>12</span><span>16</span><span>20</span></div><div class="wk">'+WK.map((r,i)=>'<div class="wr"><div class="wd'+(i===5?' t':'')+'"><small>周'+r[0]+'</small><b>'+r[1]+'</b><small>'+r[2]+'</small></div><div class="trk">'+r[3].map(e=>'<div class="ev'+(i===5&&e[0]===13?' dk2':'')+'" style="left:'+pct(e[0])+'%;width:'+(pct(e[1])-pct(e[0]))+'%">'+(e[1]-e[0]>=2?e[2]:'')+'</div>').join('')+(i===5?'<div class="nl" style="left:'+pct(14.28)+'%"></div>':'')+'</div><div class="tdn">'+r[4]+'</div></div>').join('')+'</div>'}
+
+/* ===== 电脑周视图 ===== */
+const DWK=[['一',19,'初十',[[10,11,'NEOX 周会',0],[14,16,'SignPlex 剪辑',0]]],['二',20,'十一',[[9.5,10.5,'치과 洗牙',0],[16,17,'韩语作业',0]]],['三',21,'十二',[[13,17,'SignPlex 韩文版配音',0]]],['四',22,'十三',[[11,12,'NEOX 提案',0]]],['五',23,'霜降',[[15,16,'SignPlex 内审',0],[19,21,'瑜伽',0]]],['六',24,'十五',[[10.5,11.5,'字幕校对',0],[13,14.5,'NEOX 横版对片',1],[15.5,16.5,'SignPlex 客户反馈会',2],[19,21,'和 지민 吃饭',0]]],['日',25,'十六',[[11,13,'家庭 브런치',0]]]];
+function dWeek(){const H0=8,PX=36;let h='<div class="dwk"><div class="hd"></div>'+DWK.map((d,i)=>'<div class="hd'+(i===5?' t':'')+'">周'+d[0]+'<b>'+d[1]+'</b><span style="color:var(--g3)">'+d[2]+'</span></div>').join('');
+ h+='<div class="ad" style="border-left:0;font-size:10px;color:var(--g3)">全天</div>';
+ const AD=['','','','<span class="chip" style="font-size:10px;padding:0 6px">○ 交韩文版成片</span>','','<span class="chip" style="font-size:10px;padding:0 6px">○ 竖版 4K 导出</span>',''];
+ AD.forEach(a=>h+='<div class="ad">'+a+'</div>');
+ h+='<div class="hr">'+[8,9,10,11,12,13,14,15,16,17,18,19,20,21].map(x=>'<span style="top:'+((x-H0)*PX-6)+'px">'+x+':00</span>').join('')+'</div>';
+ DWK.forEach((d,i)=>{h+='<div class="tc">'+d[3].map(e=>'<div class="be'+(e[3]===1?' k':'')+(e[3]===2?' sel':'')+'" style="top:'+((e[0]-H0)*PX+1)+'px;height:'+((e[1]-e[0])*PX-2)+'px">'+String(e[0]).replace('.5',':30').replace(/^(\d+)$/,'$1:00')+' '+e[2]+'</div>').join('')+(i===5?'<div class="nl" style="top:'+((14.28-H0)*PX)+'px"></div>':'')+'</div>'});
+ return h+'</div>'}
+
+/* ===== 画面定义 ===== */
+const S=[];
+
+/* 1 今天 */
+S.push({id:'s1',t:'今天',sub:'时间河：所有东西按时间排成一列',
+p:[phone(TODAY_TOP+ANNLINE+NOWC+OVERDUE+river()+NOTESTODAY,{tab:0})],
+pn:['<p><b>只有一列。</b>日程、有时间的待办、晚上的饭局按时间往下排，没定时间的待办挂在“今天内”。左边的形状区分类型，不再拆成四张卡。</p>','<p><b>顶部“现在”卡</b>只回答两个问题：现在在做什么、下一件是什么。提醒响时，这张卡原地变成提醒（知道了 / 10 分钟后）。</p>','<p>已过去的折叠成一行。没赶上的固定在“现在”下面，点“今天 / 明天”改期，右滑完成。快到的纪念日压成日期下面的一行小标签；今天记的随手记排在最后。</p>'],
+d:desk('<div class="col" style="width:520px">'+TODAY_TOP.replace('<div class="ib"><span class="isr"></span></div><div class="av">H</div>','<span class="d2">J / K 上下 · E 完成 · Enter 编辑</span>')+NOWC+OVERDUE+'<div style="height:6px"></div>'+river().replace('<div class="row ">'+'<span class="tm">15:30</span>','<div class="row flash"><span class="tm">15:30</span>')+row('td','','买 다이소 收纳盒','生活')+'</div>'
+ +'<div class="col side" style="width:344px"><div class="st" style="margin-top:0"><b>本周</b><span>日历 ›</span></div><div class="card" style="display:flex;gap:6px;align-items:flex-end;height:120px">'+[[2,'一'],[1,'二'],[1,'三'],[1,'四'],[2,'五'],[4,'六'],[1,'日']].map((x,i)=>'<div style="flex:1;text-align:center;font-size:11px;color:var(--g2)"><div style="height:'+x[0]*16+'px;background:'+(i===5?'#111':'var(--g4)')+';border-radius:4px;margin-bottom:4px"></div>'+x[1]+'<br><b style="color:#111">'+(19+i)+'</b></div>').join('')+'</div>'+ANNB+'<div class="card" style="margin-top:8px;padding:10px 12px">'+row('an',null,'结婚纪念日 · 第 6 年','11月2日 · 还有 9 天')+'</div>'+NOTESTODAY+'<div class="card" style="margin-top:10px;font-size:12px;color:var(--g2)">在任何窗口按住 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>空格</kbd> 说一句，松开就记下。</div></div>'
+ +'<div class="insp"><div class="ih"><span class="m m-ev"></span>日程<span class="r">改了就自动保存</span></div><div class="it">SignPlex 客户反馈会</div>'+fld('时间','今天 15:30 – 16:30')+fld('项目','SignPlex')+fld('提醒','提前 15 分 · 推送显示标题')+fld('地点 / 链接','Zoom 링크 · zoom.us/j/8812…')+fld('备注','带上韩文版字幕的问题清单')+fld('原话（10月22日 语音）','“下午三点半跟 SignPlex 客户开反馈会，提前一刻钟提醒我”')+'<div style="display:flex;gap:8px;margin-top:16px"><span class="btn g">复制一条</span><span class="btn g">转成待办</span><span class="btn g">删除</span></div></div>',{tab:0}),
+dn:['<p><b>三栏：时间河 ｜ 周边信息 ｜ 编辑栏。</b>中间一栏放“本周忙闲、快到的纪念日、今天记的”，宽屏多出来的空间用在“往后看”上。</p>','<p><b>右侧编辑栏常驻。</b>选中哪条就显示哪条，直接改，失焦即保存，不弹窗。原话一直保留，方便核对 AI 有没有听错。</p>','<p>键盘操作：J / K 上下移动，E 完成，Enter 编辑，Ctrl+K 搜索。</p>']});
+
+/* 2 周视图 */
+const CALHEAD=(on,title)=>'<div class="top"><div class="tt d1" style="font-size:24px">'+title+'</div><div class="ib"><span class="isr"></span></div><div class="av">H</div></div><div class="seg" style="margin-bottom:10px">'+['周','月','纪念日'].map((x,i)=>'<span'+(i===on?' class="on"':'')+'>'+x+'</span>').join('')+'</div>';
+S.push({id:'s2',t:'日历 · 周视图',sub:'手机用 7 行横条，电脑用 7 列时间格',
+p:[phone(CALHEAD(0,'10月19日–25日')+'<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--g2);margin:0 0 6px"><span>‹ 上周</span><span>第 43 周 · 本周 13 件，完成 6</span><span>下周 ›</span></div>'+weekRows()+'<div class="card" style="margin-top:10px"><div style="display:flex;justify-content:space-between;font-size:13px"><b>周六 24日 · 九月十五</b><span style="color:var(--g2)">点别的行切换</span></div>'+row('ev','13:00','NEOX 横版对片','到 14:30')+row('ev','15:30','SignPlex 客户反馈会','到 16:30')+row('td','今天内','NEOX 竖版 4K 导出','今天截止')+'</div>',{tab:1})],
+pn:['<p><b>一天一行，横轴是 8 点到 24 点。</b>深色块越多越长，这天就越忙；空白就是空闲时间，约人时一眼能看到。</p>','<p>右边一栏是当天截止的待办数，“晚 1”表示有没赶上的。今天那行有一条竖线标出现在的时刻。</p>','<p>点一行，下方卡片换成那天的完整列表；左右滑动翻周；长按某行的空白处，用那个时间新建日程。</p>'],
+d:desk('<div class="col" style="width:864px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><div class="d1" style="font-size:24px">2026年10月 · 第 43 周</div><div class="seg" style="width:240px;margin-left:auto">'+['周','月','纪念日'].map((x,i)=>'<span'+(i===0?' class="on"':'')+'>'+x+'</span>').join('')+'</div><span class="btn g">‹</span><span class="btn g">今天</span><span class="btn g">›</span></div>'+dWeek()+'</div><div class="insp"><div class="ih"><span class="m m-ev"></span>日程 · 已选中<span class="r">拖动可改时间</span></div><div class="it">SignPlex 客户反馈会</div>'+fld('时间','10月24日 周六 15:30 – 16:30')+fld('项目','SignPlex')+fld('提醒','提前 15 分')+fld('备注','带上韩文版字幕的问题清单')+'<div class="st"><b>这一天还有</b></div>'+row('ev','13:00','NEOX 横版对片','')+row('ev','19:00','和 지민 吃饭','')+row('td','','NEOX 竖版 4K 导出','今天截止')+'</div>',{tab:1}),
+dn:['<p><b>宽屏用经典 7 列时间格。</b>顶部“全天”行放当天截止的待办和节假日；表头日期下面是农历。</p>','<p>拖动色块改时间，拖动下边缘改时长；在空白处框选一段时间直接打字新建。</p>','<p>右侧编辑栏显示选中的日程，下面列出同一天的其他事项。</p>']});
+
+/* 3 月视图 */
+S.push({id:'s3',t:'日历 · 月视图',sub:'每格固定三层：日期 / 一行文字 / 最多 3 条短横线',
+p:[phone(CALHEAD(1,'2026年10月')+'<div class="card" style="padding:6px 4px">'+monthGrid(false)+'</div><div class="card" style="margin-top:8px;padding:10px 14px"><div style="font-size:13px;display:flex;justify-content:space-between"><b>10月24日 周六 · 丙午年九月十五</b><span style="color:var(--g2)">4 项</span></div>'+row('ev','13:00','NEOX 横版对片','到 14:30')+row('ev','15:30','SignPlex 客户反馈会','到 16:30')+row('ev','19:00','和 지민 吃饭','연남동')+'</div>',{tab:1})],
+pn:['<p><b>每格只有三层：</b>日期；一行文字（显示优先级：节假日 > 节气、传统节日 > 农历，农历初一显示月份）；最多 3 条短横线表示有几项，超过 3 项加“+”，纪念日用菱形。</p>','<p>节假日格子整格灰底，右上角标“休”，节日名前用黑底小字“中 / 韩”标国家。设置里可以分别关掉农历、中国节假日、韩国节假日。</p>','<p>点某天，下面列出当天；往上拖下面的列表，月历收成一周一行，列表变满屏。</p>'],
+d:desk('<div class="col" style="width:864px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:10px"><div class="d1" style="font-size:24px">2026年10月</div><span class="chip on">农历</span><span class="chip on">中国节假日</span><span class="chip on">韩国节假日</span><div class="seg" style="width:240px;margin-left:auto">'+['周','月','纪念日'].map((x,i)=>'<span'+(i===1?' class="on"':'')+'>'+x+'</span>').join('')+'</div></div><div class="card" style="padding:4px 6px">'+monthGrid(true)+'</div></div><div class="insp"><div class="ih">选中的一天</div><div class="it">10月24日 周六<div style="font-size:13px;font-weight:400;color:var(--g2)">丙午年 九月十五 · 霜降后第 1 天</div></div>'+row('ev','10:30','SignPlex 字幕校对','已过去')+row('ev','13:00','NEOX 横版对片','到 14:30')+row('ev','15:30','SignPlex 客户反馈会','到 16:30')+row('ev','19:00','和 지민 吃饭','연남동')+row('td','今天内','NEOX 竖版 4K 导出','')+'<div class="st"><b>附近的节日</b></div><div style="font-size:13px;line-height:1.9">10月27日 周二 · ◆ 김지민 生日<br>11月 7日 · 立冬<br>今年下一个法定假日 · 韩 12月25日 圣诞节</div></div>',{tab:1}),
+dn:['<p><b>格子大，就放标题：</b>每格最多 3 条，超出显示“还有 N 项”；纪念日用白底加黑框，和日程区分。</p>','<p>顶部三个开关直接控制农历和两国节假日，不用进设置。</p>','<p>右栏显示选中那天的详情和附近的节日；双击格子在那天新建。</p>']});
+
+/* 4 纪念日列表 */
+const ANNLIST=row('an',null,'김지민 生日','10月27日 周二 · 阳历 · 满 29 周岁','<b style="font-size:22px">3<small style="font-size:12px"> 天</small></b>')+'<div class="sep"></div>'
+ +row('an',null,'结婚纪念日','11月2日 周一 · 阳历 · 第 6 年','<b style="font-size:22px">9<small style="font-size:12px"> 天</small></b>')+'<div class="sep"></div>'
+ +row('an',null,'妈妈生日','阴历十月初八 · 今年 11月16日 周一 · 满 58 周岁','<b style="font-size:22px">23<small style="font-size:12px"> 天</small></b>')+'<div class="sep"></div>'
+ +row('an',null,'SignPlex 4.0 上线 <span class="tag">倒数日</span>','11月30日 周一','<b style="font-size:22px">37<small style="font-size:12px"> 天</small></b>')+'<div class="sep"></div>'
+ +row('an',null,'爸爸生日','12月21日 周一 · 阳历 · 不知道年份','<b style="font-size:22px">58<small style="font-size:12px"> 天</small></b>')+'<div class="sep"></div>'
+ +row('an',null,'外婆生日','阴历闰三月初十 · 没有闰月的年份按三月初十','<b style="font-size:16px;color:var(--g2)">明年</b>');
+S.push({id:'s4',t:'纪念日列表',sub:'生日、纪念日、倒数日合在一起，按“还有几天”排序',
+p:[phone(CALHEAD(2,'纪念日')+'<div class="chips"><span class="chip on">全部 6</span><span class="chip">生日 4</span><span class="chip">纪念日 1</span><span class="chip">倒数日 1</span></div><div class="nowc" style="margin:8px 0 10px"><div class="nk">最近的一个</div><div style="display:flex;align-items:baseline;gap:10px"><b style="font-size:44px;line-height:1.1">3</b><span>天后</span></div><div class="nt" style="font-size:18px">김지민 生日 · 满 29 周岁</div><div class="ns">10月27日 周二 · 提前 7 天和前一天 9:00 提醒</div></div><div class="card">'+ANNLIST+'</div><div class="done">▸ 已过去的倒数日 2</div>',{tab:1})],
+pn:['<p><b>三种合在一个列表里，只按“还有几天”排。</b>右边的大数字就是天数，类型用小标签注明（只有倒数日才标）。</p>','<p>阴历的同时显示“今年对应的公历”；不知道出生年份的不显示周岁。</p>','<p>点一条进入编辑；左滑删除，删除的进“最近删除”。新建从右上角，或者直接对“＋”说“妈妈生日是阴历十月初八”。</p>'],
+d:desk('<div class="col" style="width:864px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><div class="d1" style="font-size:24px">纪念日</div><span class="chip on">全部 6</span><span class="chip">生日 4</span><span class="chip">纪念日 1</span><span class="chip">倒数日 1</span><div class="seg" style="width:240px;margin-left:auto">'+['周','月','纪念日'].map((x,i)=>'<span'+(i===2?' class="on"':'')+'>'+x+'</span>').join('')+'</div><span class="btn p">＋ 新建</span></div><div class="card" style="padding:6px 18px">'+ANNLIST.replace('<div class="row "><span class="m m-an"></span><div class="tx"><b>妈妈生日','<div class="row flash"><span class="m m-an"></span><div class="tx"><b>妈妈生日')+'</div></div><div class="insp"><div class="ih"><span class="m m-an"></span>生日 · 阴历<span class="r">自动保存</span></div><div class="it">妈妈生日</div>'+fld('日期','阴历 十月初八 · 1968年出生')+fld('今年','11月16日 周一 · 满 58 周岁')+fld('接下来 3 次','2026-11-16 · 2027-11-05 · 2028-11-23<br><small style="color:var(--g3)">示意数据，以换算库结果为准</small>')+fld('提醒','提前 7 天 9:00 · 前一天 9:00')+fld('备注','订 성수동 那家蛋糕，提前 3 天')+'<div style="display:flex;gap:8px;margin-top:14px"><span class="btn g">删除</span></div></div>',{tab:1}),
+dn:['<p>列表和编辑栏并排；阴历纪念日额外列出“接下来 3 次”对应的公历日期，方便核对换算。</p>','<p>倒数日到期后自动移到“已过去”，不会继续占位置。</p>']});
+
+/* 5 新建纪念日 */
+const WHEEL='<div style="display:flex;background:var(--g7);border-radius:14px;padding:6px 0;margin:8px 0;position:relative"><div style="position:absolute;left:8px;right:8px;top:50%;height:36px;margin-top:-18px;background:#fff;border-radius:10px;border:1.5px solid #111"></div>'+[['1954','1955','1956'],['三月','闰三月','四月'],['初九','初十','十一']].map(c=>'<div style="flex:1;text-align:center;position:relative;line-height:36px">'+c.map((x,i)=>'<div style="'+(i===1?'font-weight:700;font-size:17px':'color:var(--g3);font-size:14px')+'">'+x+'</div>').join('')+'</div>').join('')+'</div>';
+const ANNFORM='<div class="seg" style="margin:8px 0 12px"><span class="on">生日</span><span>纪念日</span><span>倒数日</span></div>'+fld('名字','外婆生日')+'<div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px"><span style="font-size:11px;color:var(--g3)">日期</span><div class="seg" style="width:150px"><span>阳历</span><span class="on">阴历</span></div></div>'+WHEEL+'<div class="row" style="padding:4px 0"><span class="tx" style="font-size:13px">不知道出生年份（不显示周岁）</span><span class="tg2"></span></div><div class="card" style="background:var(--g7);padding:10px 12px;font-size:13px"><b>闰三月不是每年都有，没有的年份：</b><div style="margin-top:6px">◉ 按三月初十过（推荐）</div><div>○ 只在有闰三月的年份提醒</div></div><div style="font-size:13px;margin:10px 0;padding:8px 10px;border-left:3px solid #111">下一次：2027年 三月初十 → 公历 4月15日 周四 · 满 72 周岁</div>'+fld('提醒','提前 7 天 · 前一天 · 早上 9:00　<span style="color:var(--g2)">改 ›</span>');
+S.push({id:'s5',t:'新建纪念日（阴历、闰月）',sub:'选完马上显示“下一次是哪天”',
+p:[phone(CALHEAD(2,'纪念日')+'<div class="card">'+ANNLIST+'</div>',{tab:1,ov:'<div class="dim"></div><div class="sheet" style="top:60px"><div class="grab"></div><div style="display:flex;justify-content:space-between;font-size:15px"><span style="color:var(--g2)">取消</span><b>新建纪念日</b><b>保存</b></div>'+ANNFORM+'</div>'})],
+pn:['<p><b>类型放在最上面：</b>选“倒数日”时，周岁那行换成“到期后：移到已过去 / 每年重复”。</p>','<p><b>切到阴历时用三列滚轮选日期，</b>闰月和正常月份排在同一列（三月 → 闰三月 → 四月），不另设开关。选了闰月，下面才出现“没有闰月的年份怎么过”。</p>','<p>底部那行“下一次……”随选择实时更新，让用户确认换算对不对。底部弹层在玻璃皮肤下是半透明的。</p>'],
+d:desk('<div class="col" style="width:864px;opacity:.55"><div class="d1" style="font-size:24px;margin-bottom:12px">纪念日</div><div class="card" style="padding:6px 18px">'+ANNLIST+'</div></div><div class="insp" style="box-shadow:-8px 0 30px rgba(0,0,0,.08)"><div class="ih">新建纪念日<span class="r"><kbd>Esc</kbd> 取消 · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 保存</span></div>'+ANNFORM+'<span class="btn p w" style="margin-top:6px">保存</span></div>',{tab:1}),
+dn:['<p>电脑上不弹窗，新建表单直接占用右侧编辑栏，左边列表变淡但还能看见，方便对照已有的纪念日。</p>','<p>滚轮也可以用键盘 ↑ ↓ 调，Tab 在年、月、日之间切换。</p>']});
+
+/* 6 待办 */
+const TODOS='<div class="st"><b>没赶上 1</b></div>'+row('td',null,'交 SignPlex 韩文版成片','原定 10月22日 · 晚了 2 天 · SignPlex','<span class="btn s">今天</span>')
+ +'<div class="st"><b>今天 3</b></div>'+row('td',null,'NEOX 竖版 4K 导出','今天截止 · NEOX')+row('td',null,'回复 박 대리 的邮件','SignPlex<span class="tag">语音</span>')
+ +'<div style="display:flex;align-items:center;margin:0 -16px 0 0"><div style="flex:1">'+row('td',null,'买 다이소 收纳盒','生活')+'</div><div style="background:var(--g2);color:#fff;font-size:12px;width:60px;height:46px;display:flex;align-items:center;justify-content:center">推迟</div><div style="background:#111;color:#fff;font-size:12px;width:60px;height:46px;display:flex;align-items:center;justify-content:center">删除</div></div>'
+ +'<div class="st"><b>明天 1</b></div>'+row('td',null,'整理 NEOX 素材硬盘','NEOX')
+ +'<div class="st"><b>这周 2</b></div>'+row('td',null,'订结婚纪念日的餐厅','11月2日前 · 来自纪念日 ◆')+row('td',null,'SignPlex 4.0 上线清单','周五 · SignPlex')
+ +'<div class="st"><b>没定时间 2</b></div>'+row('td',null,'练韩语 받침 规则','生活')+row('td',null,'换手机壳','')
+ +'<div class="done">▸ 已完成 12（点开也能改）　▸ 最近删除 3</div>';
+S.push({id:'s6',t:'待办',sub:'按“什么时候要做”分组，不按项目分组',
+p:[phone('<div class="top"><div class="tt d1" style="font-size:24px">待办 <span style="font-size:15px;color:var(--g3)">9</span></div><div class="ib"><span class="isr"></span></div><div class="av">H</div></div><div class="chips"><span class="chip on">全部</span><span class="chip">NEOX 2</span><span class="chip">SignPlex 4</span><span class="chip">生活 3</span></div>'+TODOS,{tab:2})],
+pn:['<p><b>分组固定为：</b>没赶上 / 今天 / 明天 / 这周 / 以后 / 没定时间。项目只作为顶部筛选，不分组。</p>','<p><b>右滑完成；左滑露出“推迟、删除”。</b>推迟默认改到明天，长按“推迟”可以选日期。从纪念日自动生成的待办（订餐厅）会注明来源。</p>','<p>已完成的放在最下面，点开同样可以编辑。用语音记下的条目带“语音”小标签，点开能看原话。</p>'],
+d:desk('<div class="col" style="width:864px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><div class="d1" style="font-size:24px">待办 <span style="font-size:15px;color:var(--g3)">9</span></div><span class="chip on" style="margin-left:16px">全部</span><span class="chip">NEOX 2</span><span class="chip">SignPlex 4</span><span class="chip">生活 3</span><span style="margin-left:auto" class="d2">E 完成 · T 改到今天 · Del 删除</span></div><div class="card" style="padding:0 20px 10px">'+TODOS.replace(/<div style="display:flex;align-items:center;margin:0 -16px 0 0"><div style="flex:1">(.*?)<\/div><div style="background:var\(--g2\).*?删除<\/div><\/div>/,'$1').replace('<div class="row "><span class="m m-td"></span><div class="tx"><b>NEOX 竖版 4K 导出','<div class="row flash"><span class="m m-td"></span><div class="tx"><b>NEOX 竖版 4K 导出')+'</div></div><div class="insp"><div class="ih"><span class="m m-td"></span>待办<span class="r">自动保存</span></div><div class="it">NEOX 竖版 4K 导出</div>'+fld('截止','今天 10月24日 · 23:59')+fld('项目','NEOX')+fld('提醒','今天 20:00')+fld('备注','用 ProRes 4444 先出一版给 박 대리 看')+fld('原话','“周六之前把 NEOX 竖版 4K 导出来”')+'<div class="row"><span class="tx" style="font-size:13px">已完成（打勾后也能继续改）</span><span class="tg2"></span></div><div style="display:flex;gap:8px;margin-top:8px"><span class="btn g">转成日程</span><span class="btn g">删除</span></div></div>',{tab:2}),
+dn:['<p>列表加右侧编辑栏；单字母快捷键处理最常见的操作。</p>','<p>拖动一条到左侧导航的“日历”上，就变成那一天的日程。</p>']});
+
+/* 7 随手记列表 */
+const NCHIPS='<div class="chips"><span class="chip on">全部 34</span><span class="chip">工作灵感 12</span><span class="chip">韩国生活 7</span><span class="chip">购物 5</span><span class="chip"><span class="lock"></span>隐私记</span></div>';
+const NOTEFLOW='<div class="st"><b>今天</b></div><div class="card" style="padding:4px 12px">'+row('nt','14:02','NEOX 片尾 logo 停留可以再短 0.5 秒','配合鼓点收尾 · 工作灵感<span class="tag">AI</span>')+'<div class="sep"></div><div class="row"><span class="tm">11:40</span><span class="m m-nt"></span><div class="tx"><b>首尔林银杏黄了</b><small>下周末带相机，去 서울숲 东门 · 韩国生活<span class="tag">AI</span></small></div><div class="img" style="width:46px;height:46px;flex:none">图</div></div></div>'
+ +'<div class="st"><b>昨天</b></div><div class="card" style="padding:4px 12px">'+row('nt','21:15','外国人登录证更新要带的','护照、照片 1 张、手续费 3 万韩元 · 韩国生活')+'<div class="sep"></div>'+row('nt','16:30','SignPlex 落地页标题：一次签完，不用打印','工作灵感<span class="tag">AI</span>')+'</div>'
+ +'<div class="st"><b>10月21日</b></div><div class="card" style="padding:4px 12px">'+row('nt','08:50','牛奶、鸡蛋、猫砂、종량제 봉투 20L','清单 0/4 · 购物')+'</div>';
+S.push({id:'s7',t:'随手记列表',sub:'像给自己发消息：时间流 + 常驻输入行',
+p:[phone('<div class="top"><div class="tt d1" style="font-size:24px">随手记</div><div class="ib"><span class="isr"></span></div><div class="av">H</div></div>'+NCHIPS+'<div class="card" style="background:var(--g6);font-size:12px;padding:8px 12px;margin:6px 0;display:flex;gap:8px;align-items:center"><span style="flex:1">“读书”和“书单”很像，要合并吗？</span><span class="btn s">合并</span><span class="btn s g">不用</span></div>'+NOTEFLOW,{tab:3,ov:'<div style="position:absolute;left:14px;right:14px;bottom:100px;background:rgba(255,255,255,.95);border:1.5px solid #111;border-radius:22px;padding:10px 14px;display:flex;align-items:center;gap:10px;z-index:22"><span style="flex:1;color:var(--g3)">接着记一句…</span><span class="img" style="width:30px;height:30px;border-radius:8px">图</span></div>'})],
+pn:['<p><b>没有标题栏，第一行就是标题。</b>按天分组，最新的在上面；带图的在右侧显示缩略图，带清单的显示进度。</p>','<p><b>底部常驻输入行：</b>在随手记页打字，回车就存成一条随手记，不经过“＋”。分类由 AI 定，带“AI”小标；手动改过就去掉小标，AI 不再动它。</p>','<p>分类条最后一个是带锁的“隐私记”。分类太多时顶部出现一次合并建议。左滑一条：转成待办 / 转成日程 / 删除。</p>'],
+d:desk('<div class="col side" style="width:220px;padding:20px 14px"><div class="d1" style="font-size:22px;margin-bottom:12px">随手记</div>'+[['全部',34,1],['工作灵感',12],['韩国生活',7],['购物',5],['读书',4],['书单',2],['生活杂事',4]].map(c=>'<div style="display:flex;justify-content:space-between;padding:7px 10px;border-radius:10px;font-size:14px;'+(c[2]?'background:#111;color:#fff':'')+'"><span>'+c[0]+'</span><span style="opacity:.6">'+c[1]+'</span></div>').join('')+'<div style="border-top:1px solid var(--g4);margin:10px 0"></div><div style="display:flex;justify-content:space-between;padding:7px 10px;font-size:14px"><span><span class="lock"></span> 隐私记</span><span style="opacity:.6">已锁</span></div><div style="font-size:11px;color:var(--g3);margin-top:14px;padding:0 10px">分类由 AI 建立，可拖动排序；右键可改名、合并</div></div>'
+ +'<div class="col" style="width:330px;padding:20px 14px;background:#fff;border-right:1px solid var(--g5)"><div class="inp" style="padding:8px 12px;font-size:13px;margin-bottom:6px"><span class="isr"></span> 在随手记里搜</div>'+NOTEFLOW.replace(/class="card"/g,'class="card" style="padding:0"').replace('<div class="row "><span class="tm">16:30','<div class="row flash"><span class="tm">16:30')+'</div>'
+ +'<div class="col" style="width:654px;padding:30px 40px"><div style="font-size:12px;color:var(--g3);margin-bottom:10px">昨天 16:30 · 工作灵感 <span class="tag">AI</span> · 在原地编辑，自动保存</div><div style="font-size:24px;font-weight:700;margin-bottom:12px">SignPlex 落地页标题：一次签完，不用打印</div><div style="font-size:15px;line-height:1.9;color:var(--g1)">副标题备选：<br>· 合同、报价单、入职文件，手机上一次签完<br>· 서명 한 번이면 끝<br><br>对比竞品 모두싸인 的首屏：他们先讲安全，我们先讲省事。</div><div style="position:absolute;bottom:24px;right:30px;display:flex;gap:8px"><span class="btn g">插入图片</span><span class="btn g">转成待办</span><span class="btn g">转成日程</span></div></div>',{tab:3}),
+dn:['<p><b>三栏：分类 ｜ 列表 ｜ 正文。</b>正文区就是编辑器，点进去直接写。这是宽屏下最顺手的笔记布局。</p>','<p>隐私记放在分类栏最下面，用分隔线隔开；锁着时只显示“已锁”。</p>']});
+
+/* 8 编辑器 */
+const EDITOR='<div style="font-size:24px;font-weight:700;line-height:1.3;margin:6px 0 10px">SignPlex 4.0 发布前要做的</div><div style="font-size:15px;line-height:1.8">落地页改完以后，先给 박 대리 看一眼。</div><div class="img" style="height:150px;margin:10px 0 4px">落地页截图.png（插入的图片）</div><div style="font-size:12px;color:var(--g3);margin-bottom:10px">图片说明：首屏第二版</div><div style="font-size:15px;line-height:2"><span class="m m-td" style="width:15px;height:15px"></span> 周五 18:00 前交落地页终稿<br><span class="m m-td" style="width:15px;height:15px"></span> 韩文版文案再过一遍<br><span class="m m-td" style="width:15px;height:15px"></span> 下周二和客户确认上线时间</div>';
+const CONV='<div style="font-size:13px;color:var(--g2);margin-bottom:6px">AI 读出来的</div><div style="font-size:12px;color:var(--g3);margin-bottom:8px">读出 3 件事，点左边的形状可以在待办和日程之间切换</div><div class="card" style="background:var(--g7);padding:10px 12px;margin-bottom:8px">'+row('td',null,'交 SignPlex 落地页终稿','周五 10月30日 18:00 前 · SignPlex')+row('td',null,'韩文版文案再过一遍','没定时间 · SignPlex')+row('ev',null,'和客户确认上线时间','下周二 11月3日 · 时间待定')+'</div><div class="seg" style="margin-bottom:10px;font-size:12px"><span class="on">每个清单项各一条（3）</span><span>整篇转成一条</span></div><span class="btn p w">转成 3 条</span><div style="font-size:12px;color:var(--g3);margin-top:8px;text-align:center">原来这条随手记会移到“最近删除”，30 天内能找回</div>';
+S.push({id:'s8',t:'随手记编辑器（插图、转成待办或日程）',sub:'正文就是全部，“转成…”是一张预览表',
+p:[phone('<div style="display:flex;align-items:center;justify-content:space-between;font-size:14px;margin:2px 0 6px"><span>‹ 随手记</span><span class="chip">工作灵感 <span class="tag">AI</span> ▾</span><b>完成</b></div>'+EDITOR,{tab:-1,nav:false,ov:'<div class="sheet" style="padding-bottom:40px"><div class="grab"></div>'+CONV+'</div>'}),
+ phone('<div style="display:flex;align-items:center;justify-content:space-between;font-size:14px;margin:2px 0 6px"><span>‹ 随手记</span><span class="chip">工作灵感 <span class="tag">AI</span> ▾</span><b>完成</b></div>'+EDITOR.replace('<div class="img" style="height:150px;margin:10px 0 4px">落地页截图.png（插入的图片）</div><div style="font-size:12px;color:var(--g3);margin-bottom:10px">图片说明：首屏第二版</div>',''),{tab:-1,nav:false,ov:'<div style="position:absolute;left:0;right:0;bottom:0;height:336px;background:#d1d3d9;z-index:20"><div style="height:44px;background:#f0f0f0;display:flex;align-items:center;justify-content:space-around;font-size:13px;border-bottom:1px solid var(--g4)"><span>图片</span><span>拍照</span><span>清单</span><span>标题</span><b>转成…</b></div><div style="text-align:center;color:var(--g2);padding-top:110px">（系统键盘）</div></div>'})],
+pn:['<p><b>左图：点“转成…”后。</b>AI 把正文里的时间和事项读出来，先给预览：每条由 AI 判断是待办还是日程，点左边的形状可以切换；清单有 3 项就默认拆成 3 条，也可以整篇转成一条。每条都能点开改。</p>','<p>转换后原随手记移到“最近删除”，30 天内能找回（纪要第 13 节第 5 条）。</p>','<p><b>右图：写的时候。</b>键盘上方一条工具栏：图片、拍照、清单、标题、转成…。顶部分类可以手动改，改了以后 AI 不再动。</p>'],
+d:desk('<div class="col side" style="width:220px;padding:20px 14px;opacity:.6"><div class="d1" style="font-size:22px;margin-bottom:12px">随手记</div><div style="padding:7px 10px;border-radius:10px;background:#111;color:#fff">工作灵感 12</div></div><div class="col" style="width:644px;padding:28px 40px;background:#fff"><div style="display:flex;gap:6px;margin-bottom:12px;font-size:12px"><span class="btn s g">B</span><span class="btn s g">标题</span><span class="btn s g">清单</span><span class="btn s g">插入图片</span><span class="btn s g">粘贴截图 Ctrl+V</span><span style="margin-left:auto;color:var(--g3)">10月23日 09:12 · 工作灵感 <span class="tag">AI</span></span></div>'+EDITOR+'</div><div class="insp"><div class="ih">转成待办或日程<span class="r"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd></span></div>'+CONV+'</div>',{tab:3}),
+dn:['<p>正文居中；“转成…”的预览放在右侧编辑栏，左右对照看，确认 AI 读得对不对。</p>','<p>可以直接把截图粘贴（Ctrl+V）或拖进正文，图片会保留拍摄地点。</p>']});
+
+/* 9 隐私记 */
+const KP='<div class="kp">'+['1','2','3','4','5','6','7','8','9','','0','⌫'].map(x=>'<span'+(x===''||x==='⌫'?' class="e"':'')+'>'+x+'</span>').join('')+'</div>';
+S.push({id:'s9',t:'隐私记：首次设密码、解锁',sub:'它防的是别人翻手机，不防服务器',
+p:[phone('<div style="font-size:14px">‹ 随手记</div><div style="text-align:center;margin-top:24px"><span class="lock big"></span><div style="font-size:22px;font-weight:700;margin-top:16px">给隐私记设个密码</div><div style="font-size:13px;color:var(--g2);margin-top:4px">至少 4 位数字 · 忘了可以用注册邮箱重设</div><div style="font-size:12px;color:var(--g3);margin-top:8px">第 1 步 / 共 2 步：输入　→　再输一次</div></div><div class="dots"><i class="f"></i><i class="f"></i><i></i><i></i><i style="border-style:dashed;border-color:var(--g4)"></i><i style="border-style:dashed;border-color:var(--g4)"></i></div>'+KP+'<div class="row" style="margin:18px 10px 0;background:#fff;border-radius:14px;padding:10px 14px"><span class="tx" style="font-size:14px">以后用 Face ID 解锁</span><span class="tg2 on"></span></div>',{nav:false}),
+ phone('<div class="top"><div class="tt d1" style="font-size:24px">随手记</div></div><div class="chips"><span class="chip">全部 34</span><span class="chip">工作灵感 12</span><span class="chip on"><span class="lock"></span>隐私记</span></div>'+NOTEFLOW,{tab:3,ov:'<div class="dim" style="background:rgba(244,244,244,.8);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)"></div><div style="position:absolute;left:30px;right:30px;top:250px;background:#fff;border-radius:26px;padding:26px 22px;text-align:center;z-index:26;box-shadow:0 10px 40px rgba(0,0,0,.12)"><span class="lock big"></span><div style="font-size:20px;font-weight:700;margin-top:14px">隐私记已锁</div><div style="font-size:13px;color:var(--g2);margin:4px 0 18px">里面有 6 条</div><span class="btn p w">用 Face ID 解锁</span><div style="margin-top:12px;font-size:14px">输入密码</div><div style="margin-top:10px;font-size:12px;color:var(--g3)">离开 App 5 分钟后自动重新上锁</div></div>'})],
+pn:['<p><b>左图：第一次点“隐私记”时设密码。</b>输入框先画 4 个实线圆加 2 个虚线圆，暗示 4 位以上都可以；输完点“下一步”，再输一次确认。</p>','<p><b>右图：解锁。</b>背后的列表打上磨砂，能看出“这里有东西”，但读不出字。优先用 Face ID，密码作后备；如果主屏幕版用不了 Face ID，就只显示密码键盘（需要实测）。</p>','<p>解锁后可以搜索，也能用 AI 分类（纪要第 11 节）；锁着时搜索结果会提示“隐私记里可能还有，解锁后一起搜”。</p>'],
+d:desk('<div class="col side" style="width:220px;padding:20px 14px"><div class="d1" style="font-size:22px;margin-bottom:12px">随手记</div>'+[['全部',34],['工作灵感',12],['韩国生活',7],['购物',5]].map(c=>'<div style="display:flex;justify-content:space-between;padding:7px 10px;font-size:14px"><span>'+c[0]+'</span><span style="opacity:.6">'+c[1]+'</span></div>').join('')+'<div style="border-top:1px solid var(--g4);margin:10px 0"></div><div style="display:flex;justify-content:space-between;padding:7px 10px;border-radius:10px;background:#111;color:#fff"><span><span class="lock"></span> 隐私记</span><span>6</span></div></div><div class="col" style="width:984px;display:flex;gap:30px;align-items:flex-start;justify-content:center;padding-top:110px"><div class="card" style="width:360px;text-align:center;padding:30px;border:1px solid var(--g5)"><span class="lock big"></span><div style="font-size:20px;font-weight:700;margin-top:14px">隐私记已锁</div><div style="font-size:13px;color:var(--g2);margin:4px 0 18px">按指纹或看摄像头</div><span class="btn p w">用 Windows Hello 解锁</span><div class="inp" style="margin-top:12px;text-align:left;font-size:14px">或者输入密码，回车解锁</div><div style="margin-top:10px;font-size:12px;color:var(--g3)">忘记密码？发验证码到 fan.hu…@gmail.com 重设</div></div><div class="card" style="width:360px;padding:26px;border:1.5px dashed var(--g3)"><div style="font-size:12px;color:var(--g3);margin-bottom:8px">第一次进入时显示这一张</div><div style="font-size:18px;font-weight:700">给隐私记设个密码</div><div style="font-size:13px;color:var(--g2);margin:4px 0 14px">至少 4 位数字，电脑和手机共用同一个密码</div><div class="inp f" style="letter-spacing:8px">●●●●</div><div class="inp" style="margin-top:8px">再输一次</div><div class="row"><span class="tx" style="font-size:13px">以后用 Windows Hello 解锁</span><span class="tg2 on"></span></div><span class="btn p w">设好了</span></div></div>',{tab:3}),
+dn:['<p>电脑上锁屏卡片放在列表和正文的位置，分类栏照常可用。右边虚线框是首次设置时的样子（实际同一时间只出现一张）。</p>','<p>密码由服务器校验，手机和电脑共用；Windows Hello 只用来在本机免输密码。</p>']});
+
+/* 10 录音中 */
+const WAVE='<div class="wave">'+[10,18,26,14,30,22,12,28,34,20,10,24,30,16,8,20,26,12].map(h=>'<i style="height:'+h+'px"></i>').join('')+'</div>';
+const REC='<div style="display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--g2)"><span>● 正在听 · 中文 / 한국어 自动识别</span><b style="color:#111">0:07</b></div><div style="font-size:21px;line-height:1.45;font-weight:600;margin:12px 0">明天下午三点和 박 대리 开会，周五前交 NEOX 片尾，还有<span style="color:var(--g3)">记得买猫砂…</span></div>'+WAVE+'<div style="font-size:12px;color:var(--g2);margin:12px 0 6px">听起来是 3 件事（松手后由 AI 定稿）</div><div class="card" style="background:var(--g7);padding:6px 12px">'+row('ev',null,'和 박 대리 开会','明天 10月25日 15:00')+row('td',null,'交 NEOX 片尾','周五 10月30日前')+row('td',null,'买猫砂','没定时间')+'</div>';
+S.push({id:'s10',t:'长按“＋”录音中',sub:'边说边看到文字，以及“会拆成几条”的预告',
+p:[phone(TODAY_TOP+NOWC+river(),{tab:0,ov:'<div class="dim"></div><div class="sheet" style="bottom:0;padding:14px 18px 130px;z-index:26">'+REC+'<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--g2);margin-top:14px"><span>↑ 上滑取消</span><span>← 左滑锁定（可以松手继续说）</span><b style="color:#111">松手保存</b></div></div><div style="position:absolute;right:6px;bottom:18px;width:84px;height:84px;border-radius:50%;background:#111;z-index:27;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 0 0 10px rgba(17,17,17,.15),0 0 0 22px rgba(17,17,17,.07)"><span class="mic" style="width:16px;height:24px;border-width:3px"></span></div>'})],
+pn:['<p><b>按住“＋”，按钮原地放大成话筒，</b>面板从底部升起（玻璃材质），背后的页面变暗、模糊。手机震一下表示开始录音。</p>','<p><b>文字逐字出现，还没确定的部分是灰色。</b>下面实时预告“会拆成几条”，用本地规则判断，不花 AI 额度。</p>','<p>手势：松手就保存，上滑取消，左滑锁定后可以松手继续说（适合长段口述），锁定后再点一下结束。</p>'],
+d:desk('<div class="col" style="width:520px">'+TODAY_TOP.replace('<div class="ib"><span class="isr"></span></div><div class="av">H</div>','')+NOWC+river()+'</div><div class="col side" style="width:344px"></div><div class="insp" style="display:flex;align-items:center;justify-content:center;color:var(--g3);font-size:13px">选中一条，就在这里编辑</div>',{tab:0,ov:'<div class="dim" style="top:32px"></div><div style="position:absolute;left:50%;top:120px;width:620px;margin-left:-310px;background:rgba(255,255,255,.97);border-radius:24px;padding:22px 26px;z-index:27;box-shadow:0 20px 60px rgba(0,0,0,.18);border:1px solid var(--g5)"><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px"><span style="width:40px;height:40px;border-radius:50%;background:#111;color:#fff;display:flex;align-items:center;justify-content:center"><span class="mic"></span></span><span style="font-size:13px;color:var(--g2)">按住 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>空格</kbd> 说话 · 松开保存 · <kbd>Esc</kbd> 取消</span></div>'+REC+'</div>'}),
+dn:['<p><b>电脑上靠全局快捷键：</b>任何程序在前台时，按住 Ctrl+Alt+空格，屏幕中上方浮出这个录音窗；松开就保存，窗口消失，不用切换到 App。</p>','<p>点导航栏的“＋”后按住话筒按钮也可以说话，效果相同。</p>']});
+
+/* 11 提示条 */
+const NEWROW='<div class="row flash" style="padding:9px 6px;margin:4px -6px"><span class="tm">17:00</span><span class="m m-ev"></span><div class="tx"><b>给 박 대리 打电话 <span class="tag k">刚记下</span></b><small>今天 · 15 分钟 · SignPlex</small></div></div>';
+const MULTI='<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:16px">已记下 3 条</b><span style="font-size:12px;color:#bbb">收起 ▾</span></div><div style="font-size:12px;color:#aaa;margin:4px 0 8px">原话：“明天下午三点和박대리开会，周五前交NEOX片尾，还有记得买猫砂”</div>'
+ +[['ev','和 박 대리 开会','明天 15:00 · 日程'],['td','交 NEOX 片尾','周五前 · 待办 · NEOX'],['td','买猫砂','没定时间 · 待办 · 生活']].map(x=>'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #333"><span class="m m-'+x[0]+'" style="'+(x[0]==='ev'?'background:#fff':'border-color:#fff')+'"></span><div style="flex:1"><b style="font-size:14px">'+x[1]+'</b><div style="font-size:12px;color:#aaa">'+x[2]+'</div></div><span style="font-size:13px;margin-left:8px">修改</span><span style="font-size:13px;margin-left:12px;color:#bbb">撤销</span></div>').join('')
+ +'<div style="display:flex;gap:8px;margin-top:10px"><span class="btn s" style="flex:1;padding:7px;color:#111">拆错了，合并成一条</span><span class="btn s" style="background:#111;color:#fff;border-color:#666;flex:1;padding:7px">全部撤销</span></div>';
+S.push({id:'s11',t:'保存后的提示条（单条、自动拆成多条）',sub:'告诉用户“存到了哪里”，而不只是“存好了”',
+p:[phone(TODAY_TOP+NOWC+river(NEWROW),{tab:0,ov:'<div class="toast"><div style="display:flex;align-items:center;gap:10px"><div style="flex:1;min-width:0"><b>已记下：17:00 给 박 대리 打电话</b><div style="font-size:12px;color:#aaa">已放进今天的日程 · 归到 SignPlex</div></div><span style="font-size:14px">撤销</span><span style="font-size:14px;margin-left:6px">修改</span></div><div class="tl"><i></i></div></div>'}),
+ phone(TODAY_TOP+NOWC+river(),{tab:0,ov:'<div class="toast" style="bottom:104px">'+MULTI+'</div>'})],
+pn:['<p><b>左图：一条。</b>提示条写清内容和去向（“已放进今天的日程 · 归到 SignPlex”），停留 8 秒，底部细线是倒计时。手指放在提示条上时暂停计时。今天页上新条目带“刚记下”标签和粗框，2 秒后恢复正常。</p>','<p><b>右图：拆成多条。</b>收起时显示“已记下 3 条 · 撤销 · 展开”，展开后每条可以单独修改、撤销，并显示原话。</p>','<p>AI 拆错时点“拆错了，合并成一条”，几条合回一条随手记，内容是原话。多条提示条叠在一起时只显示最新的一条，其余显示为“还有 2 条”。</p>'],
+d:desk('<div class="col" style="width:520px">'+TODAY_TOP.replace('<div class="ib"><span class="isr"></span></div><div class="av">H</div>','')+NOWC+river(NEWROW)+'</div><div class="col side" style="width:344px">'+ANNB+NOTESTODAY+'</div><div class="insp" style="display:flex;align-items:center;justify-content:center;color:var(--g3);font-size:13px">选中一条，就在这里编辑</div>',{tab:0,ov:'<div class="toast" style="left:auto;right:24px;bottom:24px;width:400px">'+MULTI+'</div>'}),
+dn:['<p>电脑上提示条固定在右下角，不挡主视图，展开后宽 400px。鼠标悬停时暂停倒计时，按 Ctrl+Z 撤销最近一次记录。</p>','<p>新条目在对应栏里闪一下粗框；如果它在当前视图之外（比如下周），提示条里的“去看看”会跳过去。</p>']});
+
+/* 12 搜索 */
+const RES='<div class="st"><b>日程 6</b><span>全部 ›</span></div>'+row('ev',null,'<span class="hl">NEOX</span> 横版对片','今天 13:00 · 腾讯会议')+row('ev',null,'<span class="hl">NEOX</span> 提案','10月22日 周四 11:00')
+ +'<div class="st"><b>待办 5</b></div>'+row('td',null,'<span class="hl">NEOX</span> 竖版 4K 导出','今天截止')+row('td',null,'交 <span class="hl">NEOX</span> 片尾','周五前 · 刚记下')
+ +'<div class="st"><b>随手记 6</b></div>'+row('nt',null,'<span class="hl">NEOX</span> 片尾 logo 停留可以再短 0.5 秒','今天 14:02 · 工作灵感')+row('nt',null,'客户说 “<span class="hl">네옥스</span> 로고 좀 더 크게”','10月19日 · 在原话里找到');
+S.push({id:'s12',t:'全局搜索',sub:'一个框搜所有类型，连原话、韩文写法都能搜到',
+p:[phone('<div style="display:flex;gap:10px;align-items:center;margin:4px 0 10px"><div class="inp f" style="flex:1;padding:9px 12px"><span class="isr"></span> NEOX</div><span>取消</span></div><div class="chips"><span class="chip on">全部 18</span><span class="chip">日程 6</span><span class="chip">待办 5</span><span class="chip">随手记 6</span><span class="chip">纪念日 1</span></div><div class="card" style="background:var(--g6);font-size:12px;padding:8px 12px;margin:6px 0;display:flex;align-items:center;gap:8px"><span class="lock"></span><span style="flex:1">隐私记锁着，里面可能还有</span><span class="btn s">解锁后一起搜</span></div>'+RES+'<div class="st"><b>最近搜过</b></div><div class="chips"><span class="chip">박 대리</span><span class="chip">猫砂</span><span class="chip">外国人登录证</span></div>',{tab:-1,nav:false})],
+pn:['<p><b>入口：</b>每页右上角的放大镜，或者在任何页面下拉。</p>','<p>结果按类型分组，每组先显示 2 条；顶部筛选条显示各类数量。会同时匹配标题、备注和语音原话，“NEOX”也能搜到韩文写法“네옥스”（别名表由 AI 维护）。</p>','<p>隐私记锁着时不在结果里，只给一条解锁入口。</p>'],
+d:desk('<div class="col" style="width:520px">'+TODAY_TOP.replace('<div class="ib"><span class="isr"></span></div><div class="av">H</div>','')+NOWC+river()+'</div><div class="col side" style="width:344px"></div><div class="insp" style="display:flex;align-items:center;justify-content:center;color:var(--g3);font-size:13px">选中一条，就在这里编辑</div>',{tab:0,ov:'<div class="dim" style="top:32px"></div><div style="position:absolute;left:50%;top:90px;width:860px;margin-left:-430px;height:560px;background:#fff;border-radius:20px;z-index:27;box-shadow:0 20px 60px rgba(0,0,0,.18);display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--g5)"><div style="padding:16px 20px;border-bottom:1px solid var(--g5);display:flex;align-items:center;gap:10px;font-size:18px"><span class="isr"></span><b>NEOX</b><span style="margin-left:auto" class="chip on">全部 18</span><span class="chip">日程</span><span class="chip">待办</span><span class="chip">随手记</span></div><div style="display:flex;flex:1;min-height:0"><div style="width:440px;padding:4px 20px;overflow:hidden;border-right:1px solid var(--g5)">'+RES.replace('<div class="row "><span class="m m-ev"></span><div class="tx"><b><span class="hl">NEOX</span> 横版对片','<div class="row flash"><span class="m m-ev"></span><div class="tx"><b><span class="hl">NEOX</span> 横版对片')+'</div><div style="flex:1;padding:20px 24px"><div class="ih"><span class="m m-ev"></span>日程 · 预览</div><div class="it"><span class="hl">NEOX</span> 横版对片</div>'+fld('时间','今天 13:00 – 14:30')+fld('地点','腾讯会议 618-332-905')+fld('备注','对照分镜第 3 版，重点看 0:42 转场')+'<div style="font-size:12px;color:var(--g3);margin-top:20px">↑ ↓ 选择 · Enter 打开 · Tab 切换类型 · Esc 关闭</div></div></div></div>'}),
+dn:['<p><b>Ctrl+K 打开居中的搜索面板：</b>左边是结果，右边是选中项的预览。全程用键盘，Enter 跳到原位置并在右侧编辑栏打开。</p>']});
+
+/* 13 设置 */
+const SETTINGS='<div class="gt">账号</div><div class="grp">'+'<div class="row"><span class="tx">fan.hu.neox@gmail.com</span><span class="v">退出</span></div><div class="row"><span class="tx">邀请朋友</span><span class="v">还能邀请 3 人 ›</span></div></div>'
+ +'<div class="gt">皮肤</div><div class="grp" style="padding:12px 14px"><div style="display:flex;gap:10px"><div style="flex:1;text-align:center;font-size:12px"><div style="height:70px;border-radius:12px;background:#fff;border:2.5px solid #111;margin-bottom:4px"></div>现在的风格</div><div style="flex:1;text-align:center;font-size:12px"><div style="height:70px;border-radius:12px;background:linear-gradient(135deg,var(--g5),#fff 60%,var(--g4));border:1px solid var(--g4);margin-bottom:4px"></div>磨砂玻璃</div></div><div class="seg" style="margin-top:10px"><span class="on">跟随系统</span><span>浅色</span><span>深色</span></div></div>'
+ +'<div class="gt">日历</div><div class="grp"><div class="row"><span class="tx">显示农历</span><span class="tg2 on"></span></div><div class="row"><span class="tx">中国节假日</span><span class="tg2 on"></span></div><div class="row"><span class="tx">韩国节假日</span><span class="tg2 on"></span></div><div class="row"><span class="tx">每周从周一开始</span><span class="tg2 on"></span></div></div>'
+ +'<div class="gt">提醒</div><div class="grp"><div class="row"><span class="tx">纪念日默认提醒</span><span class="v">提前 7 天、前一天 · 9:00 ›</span></div><div class="row"><span class="tx">日程默认提前</span><span class="v">15 分钟 ›</span></div></div>'
+ +'<div class="gt">语音与 AI</div><div class="grp"><div class="row"><span class="tx">识别语言</span><span class="v">中文 + 한국어 自动 ›</span></div><div class="row"><span class="tx">今天的 AI 额度</span><span class="v">已用 18 / 50 条</span></div></div>'
+ +'<div class="gt">隐私记</div><div class="grp"><div class="row"><span class="tx">用 Face ID 解锁</span><span class="tg2 on"></span></div><div class="row"><span class="tx">离开多久后重新上锁</span><span class="v">5 分钟 ›</span></div><div class="row"><span class="tx">修改密码</span><span class="v">›</span></div></div>'
+ +'<div class="gt">数据</div><div class="grp"><div class="row"><span class="tx">最近删除</span><span class="v">3 条 ›</span></div><div class="row"><span class="tx">导出备份</span><span class="v">每天自动备份 · 昨天 03:00 ›</span></div><div class="row"><span class="tx">功能说明</span><span class="v">›</span></div><div class="row"><span class="tx">版本</span><span class="v">4.0.0</span></div></div>';
+S.push({id:'s13',t:'设置',sub:'从右上角头像进入',
+p:[phone('<style>.cmp .grp .row{padding:6px 0;font-size:13px}.cmp .gt{margin:2px 4px 3px}.cmp .grp{margin-bottom:8px}</style><div class="cmp"><div style="display:flex;justify-content:space-between;align-items:center;margin:2px 0 8px"><span>‹ 返回</span><b style="font-size:17px">设置</b><span style="width:40px"></span></div>'+SETTINGS+'</div>',{nav:false})],
+pn:['<p><b>入口是右上角的头像</b>（纪要：设置在右上角），每个主页面都在同一位置。</p>','<p>皮肤直接用两张缩略图选，再选深浅；系统开了“降低透明度”时，磨砂玻璃自动换成实色，这里会显示一行说明。</p>','<p>AI 额度直接显示当天用了多少；用完当天改用本地规则识别，第二天恢复。</p>'],
+d:desk('<div class="col side" style="width:260px;padding:20px 14px"><div class="d1" style="font-size:22px;margin-bottom:12px">设置</div>'+['账号与邀请','皮肤','日历与节假日','提醒','语音与 AI','隐私记','电脑','数据与备份','关于'].map((x,i)=>'<div style="padding:8px 12px;border-radius:10px;'+(i===1?'background:#111;color:#fff':'')+'">'+x+'</div>').join('')+'</div><div class="col" style="width:944px;padding:30px 40px"><div style="font-size:20px;font-weight:700;margin-bottom:16px">皮肤</div><div style="display:flex;gap:18px;margin-bottom:20px">'+[['现在的风格','#fff','2.5px solid #111'],['磨砂玻璃','linear-gradient(135deg,var(--g5),#fff 60%,var(--g4))','1px solid var(--g4)']].map(x=>'<div style="width:300px"><div style="height:180px;border-radius:16px;background:'+x[1]+';border:'+x[2]+';margin-bottom:6px;padding:14px"><div style="width:60%;height:12px;background:var(--g4);border-radius:6px;margin-bottom:8px"></div><div style="width:80%;height:40px;background:var(--g6);border-radius:10px"></div></div>'+x[0]+'</div>').join('')+'</div><div class="seg" style="width:340px;margin-bottom:24px"><span class="on">跟随系统</span><span>浅色</span><span>深色</span></div><div style="font-size:13px;color:var(--g2);margin-bottom:26px">磨砂玻璃只用在导航栏、弹层和提示条；Windows 开了“透明效果：关”时自动改成实色。</div><div style="font-size:20px;font-weight:700;margin-bottom:10px">电脑</div><div class="grp" style="background:var(--g7);max-width:620px"><div class="row"><span class="tx">开机自动启动（最小化到托盘）</span><span class="tg2 on"></span></div><div class="row"><span class="tx">按住说话的快捷键</span><span class="v"><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>空格</kbd> 改 ›</span></div><div class="row"><span class="tx">关掉窗口时</span><span class="v">缩到托盘，不退出 ›</span></div></div></div>',{tab:-1}),
+dn:['<p>左侧分组，右侧详情；“电脑”分组只在 Windows 版出现，包含开机自启、全局快捷键和托盘行为。</p>']});
+
+/* 14 登录 */
+S.push({id:'s14',t:'登录和邀请码注册',sub:'一个流程：先填邮箱，新邮箱才需要邀请码',
+p:[phone('<div style="padding:60px 10px 0"><div style="font-size:30px;font-weight:700;line-height:1.25">日程与待办</div><div style="color:var(--g2);margin:6px 0 40px">说一句就记下</div><div style="font-size:12px;color:var(--g3);margin-bottom:4px">邮箱</div><div class="inp f">fan.hu.neox@gmail.com</div><span class="btn p w" style="margin-top:16px">发验证码</span><div style="font-size:12px;color:var(--g3);margin-top:14px;text-align:center">不用密码。每次登录发一个 6 位验证码到邮箱。</div></div>',{nav:false}),
+ phone('<div style="padding:60px 10px 0"><div style="font-size:24px;font-weight:700">第一次来？</div><div style="color:var(--g2);margin:6px 0 24px;font-size:14px">jimin.kim@naver.com 还没注册，需要朋友给的邀请码</div><div style="font-size:12px;color:var(--g3);margin-bottom:4px">邀请码</div><div class="inp f" style="letter-spacing:3px">NEOX-7K2Q</div><div style="font-size:12px;margin:6px 0 18px">✓ 有效 · 来自 fan.hu.neox@gmail.com</div><div style="font-size:12px;color:var(--g3);margin-bottom:4px">邮箱里的 6 位验证码</div><div style="display:flex;gap:8px">'+['4','8','1','','',''].map(x=>'<div class="inp'+(x?' f':'')+'" style="flex:1;text-align:center;padding:12px 0;font-size:20px;font-weight:700">'+x+'</div>').join('')+'</div><span class="btn p w" style="margin-top:20px">开始使用</span><div style="font-size:12px;color:var(--g3);margin-top:12px;text-align:center">没收到？60 秒后可以重发 · 看看垃圾邮件</div></div>',{nav:false})],
+pn:['<p><b>左图：</b>只有一个邮箱框。老用户点“发验证码”，下一屏直接输 6 位码，不用密码。</p>','<p><b>右图：</b>系统发现是新邮箱，同一屏多出“邀请码”，输入时立刻检查是否有效、是谁发的。验证码 6 格，从邮件粘贴时自动填满；iPhone 上能直接从邮件提示里一键填入。</p>','<p>没有“注册”按钮，也没有“登录 / 注册”两个页签。</p>'],
+d:'<div class="dk"><div class="tb"><span>日程与待办 4.0.0</span><span class="wc"><i>—</i><i>☐</i><i>✕</i></span></div><div style="display:flex;height:764px"><div style="width:640px;background:#111;color:#fff;padding:80px 60px"><div style="font-size:40px;font-weight:700;line-height:1.2">日程与待办</div><div style="color:#bbb;margin-top:10px;font-size:16px">手机说一句，电脑上马上看到</div><div style="margin-top:60px;font-size:14px;color:#999;line-height:2">· 按住 Ctrl+Alt+空格 随时记<br>· 农历、中国和韩国节假日<br>· 邀请制，每个人只能看到自己的数据</div></div><div style="flex:1;padding:120px 100px"><div style="font-size:24px;font-weight:700">第一次来？</div><div style="color:var(--g2);margin:6px 0 24px;font-size:14px">jimin.kim@naver.com 还没注册</div><div style="font-size:12px;color:var(--g3);margin-bottom:4px">邮箱</div><div class="inp f">jimin.kim@naver.com</div><div style="font-size:12px;color:var(--g3);margin:14px 0 4px">邀请码</div><div class="inp f" style="letter-spacing:3px">NEOX-7K2Q</div><div style="font-size:12px;margin:6px 0 14px">✓ 有效 · 来自 fan.hu.neox@gmail.com</div><div style="font-size:12px;color:var(--g3);margin-bottom:4px">邮箱里的 6 位验证码</div><div style="display:flex;gap:8px;max-width:380px">'+['4','8','1','','',''].map(x=>'<div class="inp'+(x?' f':'')+'" style="flex:1;text-align:center;padding:10px 0;font-size:20px;font-weight:700">'+x+'</div>').join('')+'</div><span class="btn p w" style="margin-top:20px;max-width:380px">开始使用</span></div></div></div>',
+dn:['<p>电脑版左边介绍、右边表单；流程和手机完全一样。登录一次以后长期保持，换设备才需要重新输验证码。</p>']});
+
+/* 15 空状态 */
+S.push({id:'s15',t:'空状态',sub:'空的时候教用户怎么记，而不只是告诉他“没有内容”',
+p:[phone(TODAY_TOP.replace('农历九月十五 · 霜降后第 1 天','农历九月十五')+'<div class="card" style="padding:26px 20px;margin-top:10px"><div style="font-size:22px;font-weight:700">今天还空着</div><div style="color:var(--g2);font-size:14px;margin:6px 0 18px">点下面任意一句试试，会真的记下来，不想要可以撤销</div>'+['“明天上午 10 点 치과”','“周五前交 NEOX 片尾”','“妈妈生日是阴历十月初八”'].map(x=>'<div style="border:1.5px solid #111;border-radius:14px;padding:10px 14px;margin-bottom:8px;font-size:15px">'+x+'</div>').join('')+'</div><div style="position:absolute;right:20px;bottom:110px;text-align:right;font-size:13px;line-height:1.5"><b>点一下打字</b><br><b>按住说话</b><div style="font-size:26px;line-height:1;margin-right:16px">↘</div></div>',{tab:0})],
+pn:['<p><b>今天页的空状态是一张“试一句”卡：</b>3 个例句分别对应日程、待办和阴历纪念日，点一下就真的走一遍“识别 → 保存 → 提示条”的完整流程。</p>','<p>其他页的空状态文案：待办“都做完了”；随手记“想到什么就记一句，不用写标题”；纪念日“说一句‘某某生日是…’就能加”。</p>','<p>右下角箭头指向“＋”，只在前 3 次打开时出现。</p>'],
+d:desk('<div class="col side" style="width:220px;padding:20px 14px"><div class="d1" style="font-size:22px;margin-bottom:12px">随手记</div><div style="padding:7px 10px;border-radius:10px;background:#111;color:#fff;display:flex;justify-content:space-between"><span>全部</span><span>0</span></div><div style="font-size:12px;color:var(--g3);margin-top:12px;padding:0 10px">记几条之后，AI 会自动建分类</div></div><div class="col" style="width:984px;display:flex;align-items:center;justify-content:center"><div style="text-align:center;max-width:460px"><span class="m m-nt" style="transform:scale(2.4);margin-bottom:24px"></span><div style="font-size:24px;font-weight:700">想到什么就记一句</div><div style="color:var(--g2);margin:8px 0 22px">不用写标题。直接在这里打字，或者在任何地方按住 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>空格</kbd> 说话。</div><div class="inp f" style="text-align:left">比如：SignPlex 落地页标题可以试试“一次签完”</div><div style="font-size:12px;color:var(--g3);margin-top:10px">也可以把图片直接拖进来</div></div></div>',{tab:3}),
+dn:['<p>电脑上示范随手记的空状态：输入框直接放在页面中间，同时教全局快捷键。</p>']});
+
+/* 16 断网 */
+const SYNCROW='<div class="row sync" style="margin-top:6px"><span class="tm">今天内</span><span class="m m-td"></span><div class="tx"><b>买 다이소 收纳盒</b><small>等联网后同步 · 时间按本地规则识别</small></div></div>';
+S.push({id:'s16',t:'断网',sub:'照样能记，只是标出“还没同步”',
+p:[phone('<div class="ban" style="margin:2px 0 8px"><span style="flex:1">没有网络 · 2 条存在手机里，联网后自动同步</span></div>'+TODAY_TOP+NOWC+SYNCROW+river(),{tab:0,ov:'<div class="toast" style="background:#fff;color:#111;border:1.5px solid #111"><b>没网时不能用语音</b><div style="font-size:12px;color:var(--g2)">iPhone 的语音识别要联网。先打字记下，联网后会自动补上 AI 分类。</div><span class="btn s p" style="margin-top:8px">改用打字</span></div>'})],
+pn:['<p><b>顶部一条黑色横幅，</b>说明“没网也能记、联网后自动同步”，并显示还有几条待同步。</p>','<p>断网时记下的条目用虚线框标出；时间先用本地规则识别，联网后 AI 再补分类和拆分。</p>','<p>长按“＋”时给出明确说明（语音识别需要联网），一键改为打字，不是静默失败。</p>'],
+d:desk('<div style="position:absolute;left:0;right:0;top:0;z-index:5;padding:8px 22px"><div class="ban">没有网络 · 2 条存在本机，联网后自动同步 · 日历和随手记都可以照常查看</div></div><div class="col" style="width:520px;padding-top:56px">'+TODAY_TOP.replace('<div class="ib"><span class="isr"></span></div><div class="av">H</div>','')+NOWC+river()+SYNCROW+'</div><div class="col side" style="width:344px;padding-top:56px">'+ANNB+'</div><div class="insp" style="padding-top:56px"><div class="ih"><span class="m m-td"></span>待办 · 未同步</div><div class="it">买 다이소 收纳盒</div>'+fld('截止','今天（本地规则识别）')+fld('分类','联网后由 AI 补上')+'<div style="font-size:12px;color:var(--g3)">断网期间的修改都先存在本机，联网后按时间顺序上传；如果同一条在手机上也改过，以最后一次修改为准，并在这里提示。</div></div>',{tab:0}),
+dn:['<p>电脑版同样在顶部显示横幅；右侧编辑栏说明冲突怎么处理（以最后一次修改为准，并提示用户）。</p>']});
+
+/* ===== 渲染 ===== */
+const host=document.getElementById('screens'),toc=document.getElementById('toc');
+S.forEach((s,i)=>{
+ const n=i+1;
+ toc.insertAdjacentHTML('beforeend','<a href="#'+s.id+'">'+n+' '+s.t+'</a>');
+ const pf=s.p.map(x=>'<div class="fw" data-w="390" data-h="844">'+x+'</div>').join('');
+ host.insertAdjacentHTML('beforeend','<section class="scr" id="'+s.id+'"><h2>'+n+'　'+s.t+'<small>'+(s.sub||'')+'</small></h2>'
+  +'<div class="blk v-p">'+pf+'<div class="note">'+s.pn.join('')+'</div></div>'
+  +'<div class="blk v-d"><div class="fw" data-w="1280" data-h="800">'+s.d+'</div><div class="note">'+s.dn.join('')+'</div></div></section>');
+});
+function fit(){
+ const avail=document.getElementById('main').clientWidth-36;
+ document.querySelectorAll('.fw').forEach(w=>{
+  const W=+w.dataset.w,H=+w.dataset.h;
+  let a=avail; if(W===390&&avail<820&&avail>=400)a=avail; // 手机框在窄屏时一列显示
+  const s=Math.min(1,a/W);
+  w.style.width=(W*s)+'px';w.style.height=(H*s)+'px';
+  w.firstElementChild.style.transform='scale('+s+')';
+ });
+}
+function setV(v){document.body.dataset.v=v;document.getElementById('bp').classList.toggle('on',v==='p');document.getElementById('bd').classList.toggle('on',v==='d');try{localStorage.setItem('v4b-view',v)}catch(e){}fit()}
+document.getElementById('bp').onclick=()=>setV('p');
+document.getElementById('bd').onclick=()=>setV('d');
+let v0='p';try{v0=localStorage.getItem('v4b-view')||'p'}catch(e){}
+setV(v0);
+addEventListener('resize',fit);
+</script>
+</body>
+</html>
+
+</body></html>

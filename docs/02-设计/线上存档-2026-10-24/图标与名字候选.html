@@ -1,0 +1,898 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图标与名字候选</title>
+<style>
+:root{
+  --ink:#141518; --ink2:#3a3c42; --g1:#5a5d65; --g2:#9a9da5; --g3:#d1d3d9; --g4:#e4e5e9;
+  --bg:#e9eaee; --card:#fff; --lemon:#F2DF4A; --pink:#F4B8B0; --pinkbg:#fbe0de; --sky:#8CC9E8; --red:#c4302b;
+  --f: -apple-system, "PingFang SC", "Apple SD Gothic Neo", "Microsoft YaHei UI", "Microsoft YaHei", "Malgun Gothic", "Segoe UI", sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:15px;line-height:1.6}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 16px 80px}
+h1{font-size:clamp(30px,6vw,46px);line-height:1.15;margin:8px 0 6px;font-weight:800;letter-spacing:-.01em}
+h2{font-size:clamp(24px,4.4vw,32px);line-height:1.2;margin:56px 0 8px;font-weight:800}
+h3{font-size:19px;margin:0 0 6px;font-weight:800}
+p{margin:0 0 10px;max-width:68ch}
+.sub{color:var(--g1);font-size:14px}
+.card{background:var(--card);border-radius:28px;padding:22px 22px 18px;margin-top:14px}
+.ink{background:var(--ink);color:#fff}
+.ink .sub{color:#b9bcc4}
+.lemon{background:var(--lemon)}
+.pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:700;background:var(--g4);color:var(--ink);margin:0 6px 6px 0;white-space:nowrap}
+.pill.y{background:var(--lemon)}
+.pill.k{background:var(--ink);color:#fff}
+.pill.r{background:var(--pinkbg);color:var(--red)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px}
+.hero{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center}
+.hero .ic{width:132px;height:132px;border-radius:29.5px;overflow:hidden;flex:none;box-shadow:0 0 0 2px #4a4d55}
+@media (max-width:560px){.hero{grid-template-columns:1fr}.hero .ic{width:104px;height:104px;border-radius:23px}}
+ul.tight{margin:6px 0 0;padding-left:1.2em}
+ul.tight li{margin:3px 0}
+/* 名字 */
+.names{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-top:14px}
+.nm{background:#fff;border-radius:28px;padding:20px}
+.nm.ctrl{background:transparent;border:2px dashed var(--g2)}
+.nm .big{font-size:40px;font-weight:800;line-height:1.1;letter-spacing:.01em}
+.nm .tri{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:12px 0 10px;font-size:14px}
+.nm .tri b{font-weight:700;color:var(--g1)}
+.nm dl{margin:0;font-size:14px}
+.nm dt{font-weight:800;margin-top:10px}
+.nm dd{margin:2px 0 0}
+.lbl{display:flex;gap:10px;align-items:flex-end;margin-top:4px}
+.lbl .mini{width:52px;text-align:center;font-size:11px;line-height:1.25;color:#fff;background:#5f6f86;border-radius:14px;padding:44px 0 6px;position:relative;overflow:hidden;white-space:nowrap}
+.lbl .mini::before{content:"";position:absolute;left:8px;top:6px;width:36px;height:36px;border-radius:9px;background:#d8dbe2}
+.lbl .mini span{display:block;overflow:hidden;text-overflow:ellipsis;padding:0 1px}
+/* 方向 */
+.dir{background:#fff;border-radius:32px;padding:22px;margin-top:18px}
+.dirhead{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline}
+.dirhead .tag{font-size:15px;font-weight:800;background:var(--ink);color:#fff;border-radius:999px;padding:3px 14px}
+.mainrow{display:grid;grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:22px;margin-top:16px;align-items:start}
+@media (max-width:760px){.mainrow{grid-template-columns:1fr}}
+.master{background:repeating-conic-gradient(#f1f2f4 0 25%,#fff 0 50%) 0 0/24px 24px;border-radius:18px;padding:14px}
+.master svg{display:block;width:100%;height:auto}
+.cap{font-size:13px;color:var(--g1);margin-top:6px}
+.sizes{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;margin-top:4px}
+.sizes figure{margin:0;text-align:center}
+.sizes figcaption{font-size:12px;color:var(--g1);margin-top:4px}
+.ios{overflow:hidden;display:block}
+.sq{display:block}
+.duo{display:flex;gap:10px}
+.duo span{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px}
+.sub-h{font-size:15px;font-weight:800;margin:22px 0 8px}
+/* 主屏幕 */
+.screens{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}
+.phone{position:relative;width:100%;max-width:300px;aspect-ratio:300/600;border-radius:38px;overflow:hidden;margin:0 auto;border:6px solid #1d1e22}
+.phone .sb{display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding:10px 22px 0}
+.hs{display:grid;grid-template-columns:repeat(4,1fr);gap:16px 0;padding:22px 14px 0}
+.app{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.app .t{width:52px;height:52px;border-radius:12px;overflow:hidden}
+.app .n{font-size:10.5px;line-height:1.1;max-width:62px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
+.app .bar{width:30px;height:6px;border-radius:3px;margin-top:3px}
+.dock{position:absolute;left:10px;right:10px;bottom:12px;height:78px;border-radius:30px;display:flex;justify-content:space-around;align-items:center;padding:0 8px}
+.light .sb{color:#141518}.dark .sb{color:#fff}
+.light{background:linear-gradient(170deg,#f3efe9 0%,#d9e3ec 55%,#c6d2de 100%)}
+.dark{background:linear-gradient(170deg,#262b36 0%,#14161c 60%,#0d0e12 100%)}
+.light .n{color:#141518}.dark .n{color:#fff}
+.light .dock{background:rgba(255,255,255,.45);backdrop-filter:blur(10px)}
+.dark .dock{background:rgba(255,255,255,.12);backdrop-filter:blur(10px)}
+/* 任务栏 */
+.tb{display:flex;align-items:center;justify-content:center;gap:4px;height:48px;border-radius:14px;padding:0 10px;max-width:520px;margin:6px auto 0;overflow:hidden}
+.tb.d{background:#1f1f1f}.tb.l{background:#eeeeee}
+.tb .b{width:40px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;position:relative;flex:none}
+.tb .b i{display:block;width:24px;height:24px;border-radius:5px}
+.tb.d .b i{background:#55575c}.tb.l .b i{background:#b9bbc0}
+.tb .b.on{background:rgba(255,255,255,.09)}
+.tb.l .b.on{background:rgba(0,0,0,.06)}
+.tb .b.on::after{content:"";position:absolute;bottom:2px;left:50%;width:16px;height:3px;margin-left:-8px;border-radius:2px;background:#7fb6ff}
+.tb .win{width:22px;height:22px;display:grid;grid-template-columns:1fr 1fr;gap:2px}
+.tb .win s{background:#5aa7e8;border-radius:1px}
+.tb .search{height:32px;width:110px;border-radius:16px;margin:0 6px;flex:none}
+.tb.d .search{background:#2d2d2d}.tb.l .search{background:#fff}
+@media (max-width:420px){.tb .search{display:none}}
+/* 启动画面 */
+.splashrow{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:640px){.splashrow{grid-template-columns:1fr}}
+.splash{position:relative;width:100%;max-width:260px;aspect-ratio:390/844;border-radius:34px;overflow:hidden;border:6px solid #1d1e22;margin:0 auto}
+.splash svg.bgfill{position:absolute;inset:0;width:100%;height:100%}
+.splash .mid{position:absolute;left:0;right:0;top:36%;display:flex;flex-direction:column;align-items:center}
+.splash .nm1{font-size:30px;font-weight:800;margin-top:14px;letter-spacing:.02em}
+.splash .nm2{font-size:13px;margin-top:2px;opacity:.7}
+.splash .foot{position:absolute;bottom:34px;left:0;right:0;text-align:center;font-size:12px;opacity:.6}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:560px){.pc{grid-template-columns:1fr}}
+.pc div{border-radius:20px;padding:14px 16px;background:#f3f4f6;font-size:14px}
+.pc b{display:block;margin-bottom:4px}
+table.score{border-collapse:collapse;width:100%;font-size:14px;margin-top:8px}
+table.score th,table.score td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--g4);vertical-align:top}
+table.score th{font-weight:800;white-space:nowrap}
+.tablewrap{overflow-x:auto}
+.fix li{margin:4px 0}
+.note{font-size:13px;color:var(--g1)}
+.nb{background:#f3f4f6;border-radius:20px;padding:14px 16px;margin:12px 0 0;font-size:14px}
+.nbh{display:flex;align-items:baseline;gap:10px}
+.nbn{font-size:30px;font-weight:800;line-height:1.1}
+.nb .tri{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:8px 0 4px}
+.nb .tri b{font-weight:700;color:var(--g1)}
+.nb dl{margin:0}.nb dt{font-weight:800;margin-top:8px}.nb dd{margin:2px 0 0}
+.smn{margin-top:10px;font-size:14px;border-left:4px solid var(--lemon);padding:4px 0 4px 12px}
+.btab{display:flex;align-items:flex-end;gap:2px;padding:8px 10px 0;border-radius:14px 14px 0 0;max-width:520px;margin:6px auto 0;overflow:hidden}
+.btab.l{background:#dfe1e5}.btab.d{background:#202124}
+.btab .t{display:flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:10px 10px 0 0;font-size:12px;min-width:0;flex:0 1 200px;white-space:nowrap;overflow:hidden}
+.btab.l .t.on{background:#fff;color:#141518}.btab.d .t.on{background:#35363a;color:#e8eaed}
+.btab.l .t{color:#5f6368}.btab.d .t{color:#9aa0a6}
+.btab .t i{display:block;width:16px;height:16px;border-radius:4px;flex:none}
+.btab.l .t i{background:#b9bbc0}.btab.d .t i{background:#5f6368}
+.btab .t span{overflow:hidden;text-overflow:ellipsis}
+table.dev{border-collapse:collapse;width:100%;font-size:14px;margin-top:8px;min-width:560px}
+table.dev th,table.dev td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--g4);vertical-align:top}
+table.dev th{font-weight:800;white-space:nowrap}
+table.dev td.k{white-space:nowrap}
+.tag2{display:inline-block;border-radius:999px;padding:0 9px;font-size:12px;font-weight:700;white-space:nowrap}
+.tag2.m{background:#141518;color:#fff}.tag2.s{background:var(--lemon);color:#141518}
+</style>
+</head>
+<body>
+
+<!-- ============ 图标源图（全部内联 SVG，1024×1024，无圆角、无透明） ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- 方向甲：一句话拆成几条 -->
+    <symbol id="markA" viewBox="0 0 1024 1024"><g transform="translate(-26 0)">
+      <path d="M268 470 V766 H340 M268 586 H340" fill="none" stroke="#5a5d66" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M272 196 H752 A94 94 0 0 1 752 384 H330 L236 470 V372 A94 94 0 0 1 272 196 Z" fill="#F2DF4A"/>
+      <rect x="340" y="516" width="500" height="140" rx="70" fill="#F4B8B0"/>
+      <rect x="340" y="696" width="340" height="140" rx="70" fill="#8CC9E8"/>
+    </g></symbol>
+    <symbol id="icA" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#141518"/>
+      <use href="#markA"/>
+    </symbol>
+
+    <!-- 方向乙：磨砂玻璃上的声音 -->
+    <linearGradient id="gB" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F1F2F5"/><stop offset="1" stop-color="#D3D8E2"/>
+    </linearGradient>
+    <filter id="blurB1" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="70"/></filter>
+    <filter id="blurB2" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="120"/></filter>
+    <filter id="shB" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="40"/></filter>
+    <clipPath id="clipB"><circle cx="512" cy="512" r="304"/></clipPath>
+    <symbol id="bgB" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">
+      <rect width="1024" height="1024" fill="url(#gB)"/>
+      <g filter="url(#blurB1)">
+        <circle cx="300" cy="290" r="230" fill="#F2DF4A"/>
+        <circle cx="770" cy="400" r="210" fill="#F4A9A0"/>
+        <circle cx="560" cy="820" r="260" fill="#7FBFE4"/>
+      </g>
+    </symbol>
+    <symbol id="markB" viewBox="0 0 1024 1024">
+      <ellipse cx="512" cy="850" rx="250" ry="40" fill="#1d2433" opacity=".16" filter="url(#shB)"/>
+      <g clip-path="url(#clipB)">
+        <rect width="1024" height="1024" fill="#eef0f4"/>
+        <g filter="url(#blurB2)" opacity=".85">
+          <circle cx="300" cy="290" r="230" fill="#F2DF4A"/>
+          <circle cx="770" cy="400" r="210" fill="#F4A9A0"/>
+          <circle cx="560" cy="820" r="260" fill="#7FBFE4"/>
+        </g>
+        <rect width="1024" height="1024" fill="#fff" opacity=".42"/>
+      </g>
+      <circle cx="512" cy="512" r="301" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="7"/>
+      <path d="M300 404 A240 240 0 0 1 430 262" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" opacity=".95"/>
+      <rect x="320" y="402" width="96" height="220" rx="48" fill="#141518"/>
+      <rect x="464" y="322" width="96" height="380" rx="48" fill="#141518"/>
+      <rect x="608" y="387" width="96" height="250" rx="48" fill="#141518"/>
+    </symbol>
+    <symbol id="icB" viewBox="0 0 1024 1024">
+      <use href="#bgB"/>
+      <use href="#markB"/>
+    </symbol>
+
+    <!-- 方向丙：一笔，断成两截（一一） -->
+    <symbol id="markC" viewBox="0 0 1024 1024">
+      <g transform="translate(0 30)">
+        <path d="M178 452 L500 440 L532 592 L178 600 Q146 600 146 568 L146 484 Q146 453 178 452 Z" fill="#141518"/>
+        <path d="M556 438 L768 430 L814 388 L866 450 Q880 474 876 522 Q870 574 826 579 L588 590 Z" fill="#141518"/>
+      </g>
+    </symbol>
+    <symbol id="icC" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#F2DF4A"/>
+      <use href="#markC"/>
+    </symbol>
+
+    <!-- ============ 第二轮：柠檬记 ============ -->
+    <!-- 丁：切开的柠檬，拿出一瓣 -->
+    <symbol id="markD" viewBox="0 0 1024 1024">
+      <g transform="translate(470 560)">
+        <circle r="300" fill="#F2DF4A"/>
+        <circle r="266" fill="#141518"/>
+        <path transform="rotate(0)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(45)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(90)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(135)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(180)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(225)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(270)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+        <path transform="rotate(-45) translate(118 0)" d="M52 0 L217.8 -60.4 A226 226 0 0 1 217.8 60.4 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="26" stroke-linejoin="round"/>
+      </g>
+    </symbol>
+    <symbol id="icD" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#141518"/>
+      <use href="#markD"/>
+    </symbol>
+
+    <!-- 戊：会说话的柠檬 -->
+    <symbol id="markE" viewBox="0 0 1024 1024">
+      <g transform="translate(468 560) rotate(-20) scale(.94)">
+        <path d="M-356 0 C-332 -36 -286 -62 -246 -122 C-170 -222 170 -222 246 -122 C286 -62 332 -36 356 0 C332 36 286 62 246 122 C170 222 -170 222 -246 122 C-286 62 -332 36 -356 0 Z" fill="#141518"/>
+        <path d="M-150 160 L-240 314 L-16 204 Z" fill="#141518" stroke="#141518" stroke-width="24" stroke-linejoin="round"/>
+        <path d="M352 -4 L392 -30" stroke="#141518" stroke-width="22" stroke-linecap="round"/>
+        <path d="M386 -26 Q420 -128 528 -140 Q500 -40 386 -26 Z" fill="#141518"/>
+        <g stroke="#F2DF4A" stroke-width="46" stroke-linecap="round">
+          <line x1="-160" y1="-44" x2="140" y2="-44"/>
+          <line x1="-160" y1="54" x2="30" y2="54"/>
+        </g>
+      </g>
+    </symbol>
+    <symbol id="icE" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#F2DF4A"/>
+      <use href="#markE"/>
+    </symbol>
+
+    <!-- 己：字标 Lemo，o 是柠檬切片 -->
+    <symbol id="sliceO" viewBox="-130 -130 260 260">
+      <circle r="128" fill="#141518"/>
+      <circle r="104" fill="#F2DF4A"/>
+      <circle r="88" fill="#141518"/>
+      <path transform="rotate(0)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+      <path transform="rotate(60)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+      <path transform="rotate(120)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+      <path transform="rotate(180)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+      <path transform="rotate(240)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+      <path transform="rotate(300)" d="M16 0 L68.9 -21.1 A72 72 0 0 1 68.9 21.1 Z" fill="#F2DF4A" stroke="#F2DF4A" stroke-width="10" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="markF" viewBox="0 0 1024 1024">
+      <g fill="none" stroke="#141518" stroke-width="84" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M222 176 V472 H430"/>
+        <path d="M594 362 H812 A110 110 0 1 0 774 446"/>
+        <path d="M196 862 V708 A70 70 0 0 1 336 708 V862 M336 708 A70 70 0 0 1 476 708 V862"/>
+      </g>
+      <use href="#sliceO" x="572" y="622" width="256" height="256"/>
+    </symbol>
+    <symbol id="icF" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#F2DF4A"/>
+      <use href="#markF"/>
+    </symbol>
+    <!-- 己的小尺寸版（32 px 及以下）：只留 L 和柠檬切片 -->
+    <symbol id="icFs" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#F2DF4A"/>
+      <path d="M300 200 V790 H560" fill="none" stroke="#141518" stroke-width="160" stroke-linecap="round" stroke-linejoin="round"/>
+      <use href="#sliceO" x="470" y="250" width="380" height="380"/>
+    </symbol>
+
+    <!-- ============ 第三轮：磨砂玻璃 + 声音 ============ -->
+    <!-- 庚：玻璃对话泡里，一道声波写成一个勾 -->
+    <clipPath id="clipG"><path d="M512 190 A290 290 0 1 1 330 705 L236 792 L261 625 A290 290 0 0 1 512 190 Z"/></clipPath>
+    <symbol id="markG" viewBox="0 0 1024 1024">
+      <ellipse cx="540" cy="840" rx="250" ry="38" fill="#1d2433" opacity=".16" filter="url(#shB)"/>
+      <g clip-path="url(#clipG)">
+        <rect width="1024" height="1024" fill="#eef0f4"/>
+        <g filter="url(#blurB2)" opacity=".85"><circle cx="300" cy="290" r="230" fill="#F2DF4A"/><circle cx="770" cy="400" r="210" fill="#F4A9A0"/><circle cx="560" cy="820" r="260" fill="#7FBFE4"/></g>
+        <rect width="1024" height="1024" fill="#fff" opacity=".42"/>
+      </g>
+      <path d="M512 190 A290 290 0 1 1 330 705 L236 792 L261 625 A290 290 0 0 1 512 190 Z" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="7" stroke-linejoin="round"/>
+      <path d="M300 380 A230 230 0 0 1 420 250" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round"/>
+      <path d="M296 486 Q342 366 388 486 T480 486 L566 572 L732 382" fill="none" stroke="#141518" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icG" viewBox="0 0 1024 1024"><use href="#bgB"/><use href="#markG"/></symbol>
+    <linearGradient id="gGs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F6E98E"/><stop offset=".55" stop-color="#F3C3BC"/><stop offset="1" stop-color="#9ECFEB"/></linearGradient>
+    <symbol id="icGs" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="url(#gGs)"/>
+      <path d="M512 150 A330 330 0 1 1 300 750 L190 860 L220 680 A330 330 0 0 1 512 150 Z" fill="#fff"/>
+      <path d="M300 510 Q370 340 440 510 L540 610 L736 380" fill="none" stroke="#141518" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- 辛：夜里的玻璃话筒，说话时柠檬色的光从下往上涨 -->
+    <linearGradient id="gH" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#232733"/><stop offset="1" stop-color="#101217"/></linearGradient>
+    <clipPath id="clipH"><rect x="372" y="160" width="280" height="460" rx="140"/></clipPath>
+    <clipPath id="clipHs"><rect x="352" y="130" width="320" height="520" rx="160"/></clipPath>
+    <symbol id="bgH" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">
+      <rect width="1024" height="1024" fill="url(#gH)"/>
+      <g filter="url(#blurB2)"><circle cx="512" cy="560" r="300" fill="#F2DF4A" opacity=".30"/><circle cx="760" cy="250" r="190" fill="#7FBFE4" opacity=".22"/></g>
+    </symbol>
+    <symbol id="markH" viewBox="0 0 1024 1024">
+      <g clip-path="url(#clipH)">
+        <rect width="1024" height="1024" fill="#3a3f4c"/>
+        <g filter="url(#blurB1)"><circle cx="512" cy="600" r="220" fill="#F2DF4A" opacity=".55"/><circle cx="640" cy="200" r="150" fill="#7FBFE4" opacity=".5"/></g>
+        <rect width="1024" height="1024" fill="#fff" opacity=".16"/>
+        <path d="M372 438 Q442 400 512 438 T652 438 V640 H372 Z" fill="#F2DF4A"/>
+        <g stroke="#fff" stroke-opacity=".55" stroke-width="18" stroke-linecap="round">
+          <line x1="452" y1="262" x2="572" y2="262"/><line x1="440" y1="312" x2="584" y2="312"/><line x1="440" y1="362" x2="584" y2="362"/>
+        </g>
+      </g>
+      <rect x="372" y="160" width="280" height="460" rx="140" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="8"/>
+      <path d="M404 210 A120 120 0 0 1 470 172" fill="none" stroke="#fff" stroke-width="14" stroke-linecap="round"/>
+      <g fill="none" stroke="#E9ECF2" stroke-width="40" stroke-linecap="round">
+        <path d="M290 470 A222 222 0 0 0 734 470"/>
+        <path d="M512 694 V810"/><path d="M420 816 H604"/>
+      </g>
+    </symbol>
+    <symbol id="icH" viewBox="0 0 1024 1024"><use href="#bgH"/><use href="#markH"/></symbol>
+    <symbol id="icHs" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#1a1d25"/>
+      <g clip-path="url(#clipHs)"><rect width="1024" height="1024" fill="#e9ecf2"/><path d="M352 420 Q432 380 512 420 T672 420 V700 H352 Z" fill="#F2DF4A"/></g>
+      <g fill="none" stroke="#e9ecf2" stroke-width="70" stroke-linecap="round">
+        <path d="M250 490 A262 262 0 0 0 774 490"/><path d="M512 752 V880"/>
+      </g>
+    </symbol>
+
+    <!-- 壬：一道声音穿过玻璃三棱镜，分成三条 -->
+    <linearGradient id="gI" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#D6E8F4"/><stop offset="1" stop-color="#9CC4E0"/></linearGradient>
+    <clipPath id="clipI"><path d="M512 236 Q530 236 540 254 L742 690 Q752 716 724 716 L300 716 Q272 716 282 690 L484 254 Q494 236 512 236 Z"/></clipPath>
+    <symbol id="bgI" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">
+      <rect width="1024" height="1024" fill="url(#gI)"/>
+      <g filter="url(#blurB1)" opacity=".7"><circle cx="230" cy="200" r="200" fill="#fff"/><circle cx="820" cy="860" r="220" fill="#F4A9A0" opacity=".5"/></g>
+    </symbol>
+    <symbol id="markI" viewBox="0 0 1024 1024">
+      <path d="M108 520 Q140 466 172 520 T236 520 T300 520 T386 520" fill="none" stroke="#141518" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+      <g stroke-linecap="round" stroke-width="64">
+        <line x1="600" y1="430" x2="900" y2="400" stroke="#F2DF4A"/>
+        <line x1="620" y1="528" x2="900" y2="528" stroke="#F4A9A0"/>
+        <line x1="640" y1="626" x2="880" y2="656" stroke="#141518"/>
+      </g>
+      <ellipse cx="512" cy="740" rx="230" ry="30" fill="#1d2433" opacity=".14" filter="url(#shB)"/>
+      <g clip-path="url(#clipI)">
+        <rect width="1024" height="1024" fill="#eef3f8"/>
+        <g filter="url(#blurB1)" opacity=".9"><circle cx="600" cy="420" r="110" fill="#F2DF4A"/><circle cx="620" cy="540" r="100" fill="#F4A9A0"/><circle cx="400" cy="560" r="120" fill="#7FBFE4"/></g>
+        <rect width="1024" height="1024" fill="#fff" opacity=".35"/>
+      </g>
+      <path d="M512 236 Q530 236 540 254 L742 690 Q752 716 724 716 L300 716 Q272 716 282 690 L484 254 Q494 236 512 236 Z" fill="none" stroke="#fff" stroke-opacity=".95" stroke-width="8" stroke-linejoin="round"/>
+      <path d="M470 300 L350 560" stroke="#fff" stroke-width="14" stroke-linecap="round" opacity=".9"/>
+    </symbol>
+    <symbol id="icI" viewBox="0 0 1024 1024"><use href="#bgI"/><use href="#markI"/></symbol>
+    <symbol id="icIs" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#B5D5EA"/>
+      <g stroke-linecap="round" stroke-width="110">
+        <line x1="600" y1="380" x2="890" y2="350" stroke="#F2DF4A"/>
+        <line x1="640" y1="540" x2="890" y2="540" stroke="#F4A9A0"/>
+        <line x1="680" y1="700" x2="880" y2="730" stroke="#141518"/>
+      </g>
+      <path d="M440 170 L700 820 L150 820 Z" fill="#fff" stroke="#fff" stroke-width="60" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- ============ 定稿：柠檬记 + 磨砂玻璃声音 ============ -->
+    <linearGradient id="gL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F5F4EE"/><stop offset="1" stop-color="#E3E6EC"/>
+    </linearGradient>
+    <clipPath id="clipL"><circle cx="512" cy="512" r="304"/></clipPath>
+    <symbol id="bgL" viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">
+      <rect width="1024" height="1024" fill="url(#gL)"/>
+      <g filter="url(#blurB1)">
+        <circle cx="350" cy="330" r="300" fill="#F2DF4A"/>
+        <circle cx="720" cy="720" r="240" fill="#F2DF4A" opacity=".85"/>
+        <circle cx="800" cy="270" r="150" fill="#F4A9A0" opacity=".55"/>
+        <circle cx="240" cy="820" r="160" fill="#7FBFE4" opacity=".45"/>
+      </g>
+    </symbol>
+    <symbol id="markL" viewBox="0 0 1024 1024">
+      <ellipse cx="512" cy="850" rx="250" ry="40" fill="#3a3418" opacity=".16" filter="url(#shB)"/>
+      <g clip-path="url(#clipL)">
+        <rect width="1024" height="1024" fill="#f3f2ea"/>
+        <g filter="url(#blurB2)" opacity=".9">
+          <circle cx="350" cy="330" r="300" fill="#F2DF4A"/>
+          <circle cx="720" cy="720" r="240" fill="#F2DF4A" opacity=".85"/>
+          <circle cx="800" cy="270" r="150" fill="#F4A9A0" opacity=".5"/>
+        </g>
+        <rect width="1024" height="1024" fill="#fff" opacity=".40"/>
+      </g>
+      <circle cx="512" cy="512" r="301" fill="none" stroke="#fff" stroke-opacity=".92" stroke-width="7"/>
+      <circle cx="512" cy="512" r="268" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="5"/>
+      <path d="M300 404 A240 240 0 0 1 430 262" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" opacity=".95"/>
+      <rect x="320" y="402" width="96" height="220" rx="48" fill="#141518"/>
+      <rect x="464" y="322" width="96" height="380" rx="48" fill="#141518"/>
+      <rect x="608" y="387" width="96" height="250" rx="48" fill="#141518"/>
+    </symbol>
+    <symbol id="icL" viewBox="0 0 1024 1024"><use href="#bgL"/><use href="#markL"/></symbol>
+    <symbol id="icLs" viewBox="0 0 1024 1024">
+      <rect width="1024" height="1024" fill="#F2DF4A"/>
+      <circle cx="512" cy="512" r="380" fill="#fff"/>
+      <rect x="282" y="372" width="130" height="280" rx="65" fill="#141518"/>
+      <rect x="447" y="262" width="130" height="500" rx="65" fill="#141518"/>
+      <rect x="612" y="342" width="130" height="340" rx="65" fill="#141518"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+  <section id="final">
+  <p class="sub">日程与待办 4.0.0　需求 R-61　UI-1 视觉风格　2026-10-24 定稿</p>
+  <h1>定稿：柠檬记 + 磨砂玻璃声音</h1>
+  <p>名字定为<b>柠檬记 / Lemo / 레모</b>，图标用第一轮方向乙“磨砂玻璃里的声音”。这一节是定稿和交给开发的清单；前三轮的内容原样保留在后面。</p>
+
+  <div class="card ink">
+    <div class="hero">
+      <svg class="ic" viewBox="0 0 1024 1024"><use href="#icL"/></svg>
+      <div>
+        <h3 style="font-size:24px">和第一轮乙相比，改了哪里、为什么</h3>
+        <ul class="tight">
+          <li><b>光的颜色：</b>背景三团光原来是黄、粉、蓝三等分，现在柠檬黄占了大半，左上和右下两团都是黄色，粉和蓝缩小、调淡，只留在角落里提亮。名字叫柠檬记，图标的主色就该是柠檬黄；三色平分也正是乙“像谁都可以”的原因。</li>
+          <li><b>一道果皮内圈：</b>玻璃圆片外沿内侧多了一道很淡的白色细圈，像柠檬切片的果皮和果肉之间那一圈。只是暗示，不画果瓣，不改变“玻璃圆片”的读法。</li>
+          <li><b>底色偏一点暖：</b>浅灰底改成从极浅的暖灰到冷灰的渐变，让黄光不发脏，也让图标在浅色壁纸上边缘稍微清楚一些。</li>
+          <li><b>没有动的：</b>圆片的位置和大小、三根声纹的位置、长短、粗细和颜色、左上的高光弧线、下方的投影，全部和第一轮一样。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>自评结果，以及据此改了什么</h3>
+    <p class="sub">按 design-critique 的五项看了无头 Edge 截图（桌面 1280 宽、375 宽 iframe），逐个看了 32、24、16 px 的简化图和网页标签页。</p>
+    <div class="tablewrap">
+    <table class="score">
+      <tr><th>项目</th><th>第一轮乙</th><th>定稿</th><th>说明</th></tr>
+      <tr><td>第一眼（2 秒）</td><td>7</td><td>8</td><td>黄光让它在主屏幕上更亮，但仍比实色图标安静</td></tr>
+      <tr><td>16 px 能否认出</td><td>5</td><td>9</td><td>简化图：黄底、白圆、三根黑竖条，在浅色和深色标签栏上都清楚</td></tr>
+      <tr><td>名字和图标对得上</td><td>4</td><td>8</td><td>柠檬黄主光加果皮内圈；不画具体的柠檬，所以不是 10 分</td></tr>
+      <tr><td>保留原版气质</td><td>10</td><td>9</td><td>构图完全没动，只是颜色变暖、变黄</td></tr>
+      <tr><td>不像模板</td><td>6</td><td>7</td><td>玻璃加光斑这种做法仍常见，靠黄色主光拉开了一点</td></tr>
+    </table>
+    </div>
+    <p class="sub-h" style="margin-top:14px">看截图发现的问题和修改</p>
+    <ul class="tight fix" id="fixL">
+      <li><b>manifest 底色和启动画面对不上：</b>第一版清单里 <code>background_color</code> 写的是浅灰 #EEEFF1，但截图里启动画面中间其实是一大片柠檬黄光。安卓、电脑版 Chrome 打开时会先闪一下这个底色，灰底一闪再变黄会很跳。改成从启动画面截图取样的 #F0E289。</li>
+      <li><b>“多大用简化图”前后说法不一：</b>图标说明里写的是“32 px 及以下”，导出清单里写的是“48 px 及以下”。以清单为准，统一成 48 px 及以下：Windows 在 150%、200% 缩放下任务栏会用 36～48 px，这个尺寸下主图的玻璃细边已经糊了。</li>
+      <li><b>没改、但要说明的：</b>60 px 时玻璃圆片的外沿和新加的果皮内圈挨得很近，看起来像一圈双线边框。这是刻意保留的“切面”暗示，放大到 180 px 才读得出来，小尺寸下不影响认图，所以没有删。</li>
+      <li><b>保持克制：</b>动手前考虑过在玻璃里画出淡淡的果瓣，但会比原版多一层东西，也会和第二轮的方案丁撞车，所以没有画，只留了一道内圈。</li>
+    </ul>
+  </div>
+
+  <div id="dirs4"></div>
+
+  <div class="dir">
+    <h3 style="font-size:22px">网页标签页的小图标</h3>
+    <p>浏览器标签页上是 16 px 的简化图（高分屏是 32 px）。下面按实际尺寸画了浅色和深色两种标签栏。</p>
+    <div class="btab l"><div class="t on"><svg width="16" height="16" viewBox="0 0 1024 1024"><use href="#icLs"/></svg><span>柠檬记</span></div><div class="t"><i></i><span>邮箱</span></div><div class="t"><i></i><span>地图</span></div></div><div class="btab d"><div class="t on"><svg width="16" height="16" viewBox="0 0 1024 1024"><use href="#icLs"/></svg><span>柠檬记</span></div><div class="t"><i></i><span>邮箱</span></div><div class="t"><i></i><span>地图</span></div></div>
+  </div>
+
+  <div class="dir">
+    <h3 style="font-size:22px">交给开发的导出清单</h3>
+    <p>规则只有一条：<b>48 px 及以下用简化图，60 px 及以上用主图</b>（页面上的展示只演示到 32 px）。所有 PNG 都是方形、满底、不透明、不预切圆角；源文件就是本页里的 SVG（主图 <code>icL</code>、简化图 <code>icLs</code>），开发可以直接从本页拷出来导出。</p>
+    <div class="tablewrap"><table class="dev">
+      <tr><th>用在哪里</th><th>文件名（建议）</th><th>尺寸</th><th>用哪张</th><th>说明</th></tr>
+      <tr><td class="k">iOS 主屏幕</td><td>apple-touch-icon.png</td><td class="k">180×180</td><td><span class="tag2 m">主图</span></td><td>不透明、不预切圆角；放在 &lt;link rel="apple-touch-icon"&gt;</td></tr>
+<tr><td class="k">iOS 主屏幕（可选）</td><td>apple-touch-icon-167.png / -152.png / -120.png</td><td class="k">167、152、120</td><td><span class="tag2 m">主图</span></td><td>iPad 和旧 iPhone 用；不放时 iOS 会从 180 缩</td></tr>
+<tr><td class="k">PWA manifest</td><td>icon-192.png</td><td class="k">192×192</td><td><span class="tag2 m">主图</span></td><td>purpose: "any"</td></tr>
+<tr><td class="k">PWA manifest</td><td>icon-512.png</td><td class="k">512×512</td><td><span class="tag2 m">主图</span></td><td>purpose: "any"</td></tr>
+<tr><td class="k">PWA manifest</td><td>icon-maskable-192.png</td><td class="k">192×192</td><td><span class="tag2 m">主图</span></td><td>purpose: "maskable"。主体玻璃圆片直径约占画面 59%，在 80% 安全圈以内，可直接用主图；光斑底色本来就铺满，不怕被裁</td></tr>
+<tr><td class="k">PWA manifest</td><td>icon-maskable-512.png</td><td class="k">512×512</td><td><span class="tag2 m">主图</span></td><td>同上</td></tr>
+<tr><td class="k">网页标签页</td><td>favicon.ico</td><td class="k">16、32、48（打在一个文件里）</td><td><span class="tag2 s">简化图</span></td><td>三个尺寸都用简化图</td></tr>
+<tr><td class="k">网页标签页</td><td>favicon.svg</td><td class="k">矢量</td><td><span class="tag2 s">简化图</span></td><td>&lt;link rel="icon" type="image/svg+xml"&gt;，新浏览器优先用它</td></tr>
+<tr><td class="k">网页标签页</td><td>favicon-32.png、favicon-16.png</td><td class="k">32、16</td><td><span class="tag2 s">简化图</span></td><td>给不认 svg 的环境兜底</td></tr>
+<tr><td class="k">Windows exe</td><td>app.ico</td><td class="k">16、20、24、32、40、48</td><td><span class="tag2 s">简化图</span></td><td>任务栏、资源管理器小图标、标题栏；150%、200% 缩放时任务栏会用到 36～48</td></tr>
+<tr><td class="k">Windows exe</td><td>app.ico（同一个文件）</td><td class="k">64、96、128、256</td><td><span class="tag2 m">主图</span></td><td>大图标视图、开始菜单、安装程序；256 存成 PNG 压缩</td></tr>
+<tr><td class="k">应用内</td><td>logo-mark.svg</td><td class="k">矢量</td><td><span class="tag2 m">主图</span></td><td>关于页、设置页用；简化图另存 logo-mark-small.svg</td></tr>
+    </table></div>
+    <p class="sub-h">manifest 里的颜色</p>
+    <p><code>theme_color</code> 用 <code>#F2DF4A</code>；<code>background_color</code> 用 <code>#F0E289</code>（启动画面中间那片柠檬黄光的颜色，从截图取样）；<code>name</code> 写“柠檬记”，<code>short_name</code> 也写“柠檬记”。iPhone 主屏幕显示的名字取 <code>&lt;meta name="apple-mobile-web-app-title" content="柠檬记"&gt;</code>。</p>
+    <p class="sub-h">iOS 启动图（apple-touch-startup-image，只出竖屏）</p>
+    <p>每张图都是“启动画面”那一张的版式：满底的柠檬黄光、正中偏上的玻璃圆片、下面“柠檬记 / Lemo”、底部一句“说一句，清清爽爽记下来”。按设备各导一张 PNG，用 <code>media</code> 里的 <code>device-width</code>、<code>device-height</code>、<code>-webkit-device-pixel-ratio</code> 区分。下表的分辨率是按我所知的机型整理的，<b>新机型和实际匹配需要开发在真机上核对</b>；深色模式是否能单独指定一张启动图，也需实测。</p>
+    <div class="tablewrap"><table class="dev">
+      <tr><th>机型</th><th>图片尺寸（px）</th><th>CSS 尺寸与倍率</th></tr>
+      <tr><td>iPhone 17 Pro Max、16 Pro Max</td><td class="k">1320×2868</td><td class="k">440×956 @3x</td></tr>
+<tr><td>iPhone Air</td><td class="k">1260×2736</td><td class="k">420×912 @3x</td></tr>
+<tr><td>iPhone 17、17 Pro、16 Pro</td><td class="k">1206×2622</td><td class="k">402×874 @3x</td></tr>
+<tr><td>iPhone 16 Plus、15 Plus、15 Pro Max、14 Pro Max</td><td class="k">1290×2796</td><td class="k">430×932 @3x</td></tr>
+<tr><td>iPhone 16、15、15 Pro、14 Pro</td><td class="k">1179×2556</td><td class="k">393×852 @3x</td></tr>
+<tr><td>iPhone 14 Plus、13 Pro Max、12 Pro Max</td><td class="k">1284×2778</td><td class="k">428×926 @3x</td></tr>
+<tr><td>iPhone 14、13、13 Pro、12、12 Pro</td><td class="k">1170×2532</td><td class="k">390×844 @3x</td></tr>
+<tr><td>iPhone 13 mini、12 mini</td><td class="k">1080×2340</td><td class="k">360×780 @3x</td></tr>
+<tr><td>iPhone 11 Pro、XS、X</td><td class="k">1125×2436</td><td class="k">375×812 @3x</td></tr>
+<tr><td>iPhone 11 Pro Max、XS Max</td><td class="k">1242×2688</td><td class="k">414×896 @3x</td></tr>
+<tr><td>iPhone 11、XR</td><td class="k">828×1792</td><td class="k">414×896 @2x</td></tr>
+<tr><td>iPhone SE（第 2、3 代）、8</td><td class="k">750×1334</td><td class="k">375×667 @2x</td></tr>
+    </table></div>
+    <p class="note" style="margin-top:8px;font-size:14px">版式规则（方便开发批量导出）：图标直径取屏幕宽度的 42%，圆心放在屏幕高度 40% 处；名字字号取屏幕宽度的 8%；底部那句话距底边 6%，字号取屏幕宽度的 3.4%；所有文字在左右各留 10% 的安全边距内。</p>
+  </div>
+  </section>
+
+  <h2 style="margin-top:72px;padding-top:28px;border-top:2px dashed var(--g2)">以下是第三轮（对照，内容保留原样）</h2>
+
+  <section id="round3">
+  <p class="sub">日程与待办 4.0.0　需求 R-61　UI-1 视觉风格　2026-10-24 第三轮</p>
+  <h1>第三轮：磨砂玻璃 + 声音的 3 个方案（庚、辛、壬）</h1>
+  <p>沿第一轮方向乙“磨砂玻璃里的声音”继续做。三个方案都保留玻璃的通透和柔光、保留“说一句话”的意象，造型分别走三条路：声波变成勾（庚）、玻璃话筒（辛）、三棱镜分光（壬）。每个方案配一个名字，并针对乙暴露的两个短板做了补救：<b>每个方案都有一张 32 px 及以下用的简化小图</b>，<b>每个方案都有一个只属于自己的记忆点</b>，不再靠“玻璃＋彩色光斑”撑场面。第一、二轮原样保留在后面。</p>
+
+  <div class="card ink">
+    <div class="hero">
+      <svg class="ic" viewBox="0 0 1024 1024"><use href="#icH"/></svg>
+      <div>
+        <h3 style="font-size:24px" id="rec3h">推荐：方案辛「开麦」</h3>
+        <p>“灌了柠檬光的玻璃话筒”是三个里唯一一眼就记得住、又没人这么画过的形象：玻璃话筒说明了“按住说一句”，胶囊形话筒头和 App 底部的黑胶囊导航是同一个形状，玻璃里的柠檬黄水位既是音量、也把品牌色留住了。它的简化小图也最稳：深底上一个黄白胶囊加一道弧，16 px 仍认得出。</p>
+        <p>名字「开麦」直接说出了这个动作，2 个字不截断。需要注意它会让人联想到“话筒一直开着”，介绍和首次使用时要写清“只有按住才录音”；如果介意这一点，辛的图标也可以配第二轮的「柠檬记」，柠檬黄水位正好对得上。</p>
+        <p style="margin:0;color:#F2DF4A">想要讲得最准的比喻，选壬「分光」；想要最温和、最接近第一轮乙的样子，选庚「一声」。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>第一轮乙的两个短板，这一轮怎么补</h3>
+    <ul class="tight">
+      <li><b>16 px 认不出：</b>玻璃、模糊光斑、细高光在小尺寸下全都会糊，所以每个方案另画一张简化小图，32 px、16 px 和 Windows 任务栏（24 px）都用它。做法统一：去掉模糊和半透明，主体改成实心、线条加粗，只保留大图里最能认出的那个轮廓。每个方案下面都写了大图和小图怎么对应。</li>
+      <li><b>没有区分度：</b>玻璃只当材质，不再当主角。三个方案各有一个只属于自己的记忆点：庚是“写成一个勾的声波”，辛是“灌了柠檬光的玻璃话筒”，壬是“三棱镜把一句话分成三条”。底色也拉开了：庚浅色三色光、辛深色夜景、壬浅天蓝。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>自评结果，以及据此改了什么</h3>
+    <p class="sub">做法同前两轮：按 design-critique 的五项看无头 Edge 截图（桌面 1280 宽、375 宽 iframe），逐个看 16 px 简化小图。下表是改完后的分数（10 分制）。</p>
+    <div class="tablewrap" id="score3">
+    <table class="score">
+      <tr><th>项目</th><th>庚</th><th>辛</th><th>壬</th><th>说明</th></tr>
+      <tr><td>记忆点（区分度）</td><td>6</td><td>9</td><td>8</td><td>庚的勾是通用“完成”符号；辛的发光玻璃话筒最独特；壬的分光比喻少见，但会让人想到唱片封面</td></tr>
+      <tr><td>16 px 简化小图能否认出</td><td>8</td><td>9</td><td>7</td><td>壬的三条线在 16 px 挤在一起，只剩“白三角＋彩边”</td></tr>
+      <tr><td>玻璃与声音的气质</td><td>9</td><td>9</td><td>7</td><td>壬的入射声波在 60 px 时已经很细，“声音”偏弱</td></tr>
+      <tr><td>能看出是做什么的</td><td>8</td><td>8</td><td>9</td><td>壬把“说一句，拆成几条”讲得最准</td></tr>
+      <tr><td>名字和图标对得上</td><td>8</td><td>9</td><td>8</td><td>开麦 ＝ 话筒；分光 ＝ 棱镜；一声 ＝ 对话泡</td></tr>
+    </table>
+    </div>
+    <p class="sub-h" style="margin-top:14px">看截图发现的问题和修改</p>
+    <ul class="tight fix" id="fix3">
+      <li><b>庚的声波像一笔乱画：</b>第一版波浪太短、线太粗，那一小段起伏看起来像随手涂的“～”，不像声波。把波长拉长约 1.3 倍、振幅加大、线条从 54 收细到 48，小图版同样拉开起伏。改完能看出“先起伏、再打勾”，但记忆点仍偏弱，分数如实给 6。</li>
+      <li><b>小尺寸说明文字把一行挤断：</b>“32（简化小图）”这类说明太长，桌面宽度下 16 px 的浏览器标签示意被挤到下一行。改成“32 简化图”，同一行放得下。</li>
+      <li><b>壬的“声音”在小图里丢了：</b>简化小图只留了三角和三条线，入射声波去掉了（16 px 放不下）。没有硬塞回去，如实写进不足；“声音”的意思靠名字和大图补。</li>
+      <li><b>壬名字从“棱镜”换成“分光”：</b>起名时先想到的是“棱镜 / Prism”，但它和美国的“棱镜”监控计划同名，一个会听你说话的 App 用这个名字很不利，所以改用中韩同一个汉字词“分光”。</li>
+      <li><b>辛没有改：</b>截图里辛的大图、简化小图、主屏幕和启动画面都没有发现需要改的问题。它的不足是结构性的（话筒加支架的轮廓本身常见、深底在深色壁纸上会融进去），已写进不足。</li>
+    </ul>
+  </div>
+
+  <div id="dirs3"></div>
+  </section>
+
+  <h2 style="margin-top:72px;padding-top:28px;border-top:2px dashed var(--g2)">以下是第二轮（对照，内容保留原样）</h2>
+
+  <section id="round2">
+  <p class="sub">日程与待办 4.0.0　需求 R-61　UI-1 视觉风格　2026-10-24 第二轮</p>
+  <h1>第二轮：柠檬记的 3 个图标方案（丁、戊、己）</h1>
+  <p>名字基本定为<b>柠檬记 / Lemo / 레모</b>。三个方案都只用柠檬黄 #F2DF4A 和黑色，分别走具象（丁）、极简几何（戊）、字标（己）三条路。iPhone 主屏幕上的显示名统一是“柠檬记”。第一轮的全部内容保留在本页后半部分，作为对照。</p>
+
+  <div class="card ink">
+    <div class="hero">
+      <svg class="ic" viewBox="0 0 1024 1024"><use href="#icD"/></svg>
+      <div>
+        <h3 style="font-size:24px">推荐：方案丁「切开的柠檬，拿出一瓣」</h3>
+        <p>一眼就是柠檬，和“柠檬记”对得最直接；被拿出来的那一瓣，就是“说一句，拆出一条”。黑底黄片延续了第一轮甲的配色，柠檬瓣是一个个独立的圆头色块，和 App 里的马卡龙色块、圆角胶囊是同一种语言。缩到 16 px 是一个带外圈的黄色圆片，在三个方案里最稳。</p>
+        <p>选戊，是要“柠檬会说话”这个更俏皮的点子，代价是形状更复杂；选己，是想让 Lemo 这个名字本身成为品牌，代价是小图要另画一套。</p>
+        <p style="margin:0;color:#F2DF4A">三个方案的主屏幕显示名都是“柠檬记”，3 个字不会被截断。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>怎么处理“柠檬 = 酸了”这个梗</h3>
+    <ul class="tight">
+      <li><b>图形上不碰“酸”的符号：</b>不画挤出的汁水、飞溅的水滴、皱眉或眯眼的表情，也不画被咬了一口的柠檬。只用切面、叶子、整颗剪影这些“新鲜、刚切开”的元素。</li>
+      <li><b>颜色上用明亮的柠檬黄配纯黑：</b>偏向“提神、醒目”；不用偏绿的青柠色（更容易让人想到酸）。</li>
+      <li><b>文案上把柠檬说成“提神”：</b>启动画面的话写“说一句，清清爽爽记下来”，强调轻快和清爽。建议 App 里不要出现“酸”“柠檬精”之类的字眼和玩笑。</li>
+      <li><b>梗本身不必回避到底：</b>“我酸了”是轻松的玩笑，不是骂人。名字一旦被用户接受，好记反而是优点。这一点我判断风险可控，但仍建议产品负责人拿给两三位中国朋友看一眼名字和图标，听第一反应。</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>自评结果，以及据此改了什么</h3>
+    <p class="sub">做法同第一轮：按 design-critique 的五项看无头 Edge 截图（桌面 1280 宽、375 宽 iframe），逐个看 16 px 小图。下表是改完后的分数（10 分制）。</p>
+    <div class="tablewrap">
+    <table class="score">
+      <tr><th>项目</th><th>丁</th><th>戊</th><th>己</th><th>说明</th></tr>
+      <tr><td>名字和图案对得上</td><td>9</td><td>8</td><td>10</td><td>己本身就是名字；丁一眼是柠檬切片；戊要看到尖头和叶子才认出是柠檬</td></tr>
+      <tr><td>16 px 能否认出</td><td>8</td><td>7</td><td>8</td><td>丁剩一个带外圈的黄圆片；戊剩一团黑剪影；己用小尺寸版 L＋柠檬片</td></tr>
+      <tr><td>能看出是做什么的</td><td>8</td><td>9</td><td>6</td><td>己只说了名字，没有说“说一句、拆成几条”</td></tr>
+      <tr><td>清新、不让人想到酸</td><td>8</td><td>9</td><td>8</td><td>戊有叶子最“新鲜”；丁切面明亮但没有汁水</td></tr>
+      <tr><td>造型完成度</td><td>9</td><td>7</td><td>8</td><td>戊改了三次轮廓，仍是三个里最不利落的</td></tr>
+    </table>
+    </div>
+    <p class="sub-h" style="margin-top:14px">看截图发现的问题和修改</p>
+    <ul class="tight fix" id="fix2">
+      <li><b>丁像披萨：</b>第一版用直线把圆分成 7 份，拿出的那块是尖三角，缩小后看起来是披萨或饼图，空出来的缺口也和分割线对不齐。改成 8 个圆头的柠檬瓣，瓣与瓣之间留黑缝，外面一圈黄色果皮；拿出的那一瓣和其他瓣同形，这下读成柑橘切面。</li>
+      <li><b>戊不像柠檬：</b>第一版叶子挡住了柠檬尖，整体像对话泡或一条鱼；第二版把叶子竖在顶上，又很像苹果公司的标志。第三版把轮廓画成两头收尖的一整条曲线（真正的柠檬形），叶子带一小段梗、顺着右边尖头伸出去，尾巴挪到下方。仍然是三个里最难一眼读懂的，分数如实压低。</li>
+      <li><b>己的 o 像车轮：</b>第一版 o 里是三根直线交叉，像自行车轮。改成 6 个圆头柠檬瓣加一圈果皮，和丁用同一种画法。</li>
+      <li><b>推荐因此从戊改成丁：</b>最初推荐的是戊（点子最巧），但改完以后丁的完成度和小尺寸表现都更好，戊的形状仍不够利落，所以改推丁。</li>
+      <li><b>“酸”的处理：</b>三个方案都去掉了汁水、水滴和表情，启动画面的话统一写“说一句，清清爽爽记下来”。</li>
+    </ul>
+  </div>
+
+  <div id="dirs2"></div>
+  </section>
+
+  <h2 style="margin-top:72px;padding-top:28px;border-top:2px dashed var(--g2)">以下是第一轮（对照，内容保留原样）</h2>
+
+  <p class="sub">日程与待办 4.0.0　需求 R-61　UI-1 视觉风格　2026-10-24 草图稿，交产品负责人挑选</p>
+  <h1>给 App 起名字、画图标</h1>
+  <p>5 个名字候选加现名对照，3 个图标方向。每个方向都放到了 iPhone 主屏幕、Windows 任务栏和启动画面里看过。名字和图标可以任意组合，下面写的是我的推荐搭配。</p>
+
+  <!-- 推荐 -->
+  <div class="card ink">
+    <div class="hero">
+      <svg class="ic" viewBox="0 0 1024 1024"><use href="#icC"/></svg>
+      <div>
+        <h3 style="font-size:24px">推荐：名字「一一」＋ 图标方向丙</h3>
+        <p>「一一」就是“一条一条”：你说一句，App 帮你一条一条记下来，正好是这个 App 最核心的那个动作。中文念 yī yī，韩文写 일일、念 il-il，韩语里“일일이”也是“一条一条、逐个”的意思，朋友不用学新词。</p>
+        <p>图标是一笔粗横，从中间断开成两截：一句话，拆成两条。柠檬黄底、黑笔画，和现在界面的主按钮同一套颜色；到 16 px 断口看不见了，也还是“黄底一横”，照样认得出。</p>
+        <p>主屏幕上的显示名建议用“一一记”：只写“一一”的话，系统字体里看起来像一条破折号（详见名字卡）。</p>
+        <p style="margin:0;color:#F2DF4A">备选搭配：想和现有界面贴得最紧，选「随口记」＋ 方向甲。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 自评 -->
+  <div class="card">
+    <h3>自评结果，以及据此改了什么</h3>
+    <p class="sub">按 design-critique 的五项（第一眼、可用性、层级、一致性、可读性）看了第一版的无头 Edge 截图：桌面 1280 宽、手机 390 宽，并逐个看了 16 px 小图。下表是改完后的分数（10 分制）。</p>
+    <div class="tablewrap">
+    <table class="score">
+      <tr><th>项目</th><th>甲</th><th>乙</th><th>丙</th><th>说明</th></tr>
+      <tr><td>第一眼（2 秒）</td><td>8</td><td>7</td><td>9</td><td>丙在主屏幕上整块黄色最跳；乙在浅色壁纸上偏淡</td></tr>
+      <tr><td>16 px 能否认出</td><td>7</td><td>5</td><td>9</td><td>甲的连线消失，只剩黄粉蓝三条；乙只剩一个带白圈的小点</td></tr>
+      <tr><td>和现有界面一致</td><td>9</td><td>8</td><td>8</td><td>甲直接用了胶囊、柠檬黄、马卡龙；乙对应磨砂皮肤；丙只用黄和黑</td></tr>
+      <tr><td>能看出是做什么的</td><td>9</td><td>8</td><td>6</td><td>丙要配上名字「一一」才完整，单看只是一横</td></tr>
+      <tr><td>不像模板、不像 AI 出的</td><td>7</td><td>5</td><td>9</td><td>乙的“玻璃圆片＋彩色光斑”是 iOS 26 之后很常见的做法，区分度最低</td></tr>
+    </table>
+    </div>
+    <p class="sub-h" style="margin-top:14px">第一版截图里看出的问题，以及改了什么</p>
+    <ul class="tight fix">
+      <li><b>丙的笔画形状不对：</b>第一版倾斜太大，右端收笔画成了大圆包，缩小后像一只靴子或一支雪茄，不像“一”。改成几乎水平（只微微右高），右端换成宋体那种尖的三角顿角；笔画从约 120 加粗到 150，并整体下移居中，60 px 时笔画约 9 px，清楚很多。</li>
+      <li><b>「一一」在文字里像破折号：</b>系统黑体里两个“一”连在一起就是“——”。主屏幕显示名改成“一一记”，名字卡里放了两种显示的对比，并把这一条写进风险。这一条也是推荐它时最大的保留意见。</li>
+      <li><b>推荐卡里的图标看不见：</b>第一版推荐卡用柠檬黄底，丙的黄底和卡片融成一片，只剩一道黑笔画。推荐卡改成黑底。</li>
+      <li><b>甲整体偏右：</b>对话泡加连线的视觉重心比画面中心偏右约 26 px，已左移居中（主图和启动画面都改了）。</li>
+      <li><b>乙在小尺寸上弱：</b>没有硬改。玻璃和光斑本来就是靠面积撑起来的，加粗声纹以后 32 px 还能认，16 px 不行。如实写进缺点；如果选乙，Windows 和网页小图建议单独出一版“白底三根竖条”的简化图。</li>
+      <li><b>构思时就否掉的：</b>甲原本想画三根并排彩色胶囊，太像普通清单图标，改成“对话泡拆成两条”；丙原本想上下叠两横，会被读成“二”（还带“犯二”的贬义），改成左右断开。</li>
+    </ul>
+  </div>
+
+  <!-- ============ 名字 ============ -->
+  <h2>名字候选</h2>
+  <p>iPhone 主屏幕图标下方大约能放 5～6 个汉字或 10～12 个英文字母，再长会被截成“…”，具体以真机为准。每张卡右上角的小图模拟了截断效果。商标、域名、应用商店里有没有同名，都还<b>需查询</b>，这里没有做任何判断。</p>
+
+  <div class="names" id="names"></div>
+
+  <!-- ============ 图标 ============ -->
+  <h2>图标的三个方向</h2>
+  <p>主图都是 1024×1024 的方形，没有预先画圆角，也没有透明背景（下面的棋盘格只是衬底，图本身是满底的）。iPhone 会自己裁成圆角方形；Windows 的 exe 图标和网页小图标保持方形。</p>
+
+  <div id="dirs"></div>
+
+  <div class="card" style="margin-top:28px">
+    <h3>还没核实、需要协调人去查的事</h3>
+    <ul class="tight">
+      <li><b>域名（协调人已查，2026-10-24，查询来源：Verisign RDAP）：</b>yiyi.com、yiyiji.com、suikouji.com、sayso.com、saysoapp.com、lemo.com、lemoapp.com、shoutie.com、sucheop.com 都<b>已被注册</b>；加连字符的 yiyi-ji.com、yiyiji-app.com、suikouji-app.com、sayso-notes.com 等<b>目前未注册</b>。选好名字后再查 .app、.kr 等其他后缀和更多拼法。</li>
+      <li>五个名字的商标、App Store 同名情况：需查询。</li>
+      <li>iPhone 主屏幕名字在 iOS 26 上的实际截断字数，需要用真机装一次确认（这里按约 5～6 个汉字估算）。</li>
+      <li>「一一」与电影《一一》（杨德昌，2000）同名，是否构成问题需查询；其他名字是否与知名 App 重名同样需查询。</li>
+      <li>iPhone 以网页形式装到主屏幕时，启动画面要按每种屏幕尺寸各出一张图；这里只画了竖屏样子，定下方向后再出全套尺寸。</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+/* ---------- 名字数据 ---------- */
+const NAMES = [
+  { zh:'一一', type:['中韩都能念','推荐'], tri:[['中文','一一　yī yī'],['英文','Yiyi'],['韩文','일일　il-il']],
+    label:'一一', label2:'一一记',
+    mean:'“一条一条”。中文“一一列出”、韩文“일일이”都是逐个的意思；说一句话，App 帮你一条一条记下来。',
+    trunc:'2 个字，不会截断。但截图里发现：系统黑体里“一一”两个字连在一起，看上去就是一条破折号“——”，放在图标下面像没起名字。建议主屏幕显示名用“一一记”（3 个字，不截断），App 里和启动画面再用「一一」字标。右边两个小图是对比。',
+    fit:'贴合最核心的“说一句，拆成几条”；日程、待办、随手记、纪念日都是“一条一条”的东西，不会被名字限定成某一种。',
+    risk:'纯文字场合（推送标题、分享链接、聊天里提到）容易被看成破折号，要尽量带上图标或写成“一一记”。和杨德昌的电影《一一》同名（需查询是否有影响）。竖着排会被看成“二”，所以图标和字标都只能横排。韩文“일일”单独出现时也常指“一天、每日”，意思不坏，但不唯一。'},
+  { zh:'随口记', type:['中文名'], tri:[['中文','随口记　suí kǒu jì'],['英文','Saynote'],['韩文','말로 메모　mallo memo（意译）']],
+    label:'随口记',
+    mean:'随口说一句就记下了，强调“不用打字”。',
+    trunc:'3 个字，不会截断。',
+    fit:'对“按住说话”很贴切，一听就懂；但纪念日、阴历生日这些功能从名字里看不出来。',
+    risk:'韩国朋友念不出中文名，只能叫英文名 Saynote，两个名字不统一。“随口”有一点“随便说说、不当真”的意味。和知名 App 是否重名需查询。'},
+  { zh:'说了算', type:['中文名','英文名'], tri:[['中文','说了算　shuō le suàn'],['英文','Sayso　/ˈseɪsoʊ/'],['韩文','세이소　se-i-so']],
+    label:'说了算',
+    mean:'中文“我说了算”，英文 say-so 也是“凭你一句话”的意思，中英两个名字意思对得上。',
+    trunc:'中文 3 字、英文 5 个字母，都不会截断。',
+    fit:'突出语音输入和“你说它就办”的感觉；对纪念日、隐私记的表达弱。',
+    risk:'语气有点强势，邀请朋友时可能显得“我说了算”；韩文 세이소 只是音译，没有意思。是否重名需查询。'},
+  { zh:'柠檬记', type:['英文名','中韩都能念'], tri:[['中文','柠檬记　níng méng jì'],['英文','Lemo'],['韩文','레모　re-mo']],
+    label:'Lemo',
+    mean:'柠檬（lemon）＋ 备忘（memo）。直接来自界面的柠檬黄主按钮，颜色就是名字。',
+    trunc:'英文 Lemo 4 个字母、中文 3 个字，都不会截断。主屏幕建议统一显示 Lemo，中韩朋友都能念。',
+    fit:'和视觉的关系最紧，好记、亲切；但名字本身不说明是做什么的。',
+    risk:'“柠檬”在中文网络语里有“羡慕嫉妒（我酸了）”的梗；Lemo 也可能与其他品牌同名（需查询）。'},
+  { zh:'手帖', type:['中韩都能念'], tri:[['中文','手帖　shǒu tiě'],['英文','Sucheop'],['韩文','수첩　su-cheop']],
+    label:'手帖',
+    mean:'随身的小本子。韩国人天天在用“수첩”（手帖）这个汉字词，中文“手帖、手帐”也都熟。',
+    trunc:'2 个字，不会截断。',
+    fit:'能装下日程、待办、随手记、纪念日，覆盖面最全；但完全没有“按住说话、AI 帮你拆”的新意。',
+    risk:'太普通，手帐类 App 很多，难以区分，同名概率高（需查询）。英文 Sucheop 外国人不会念。中文里“手帖”也指书法字帖，略有歧义。'},
+];
+const CTRL = { zh:'日程与待办', tri:[['中文','日程与待办　rì chéng yǔ dài bàn'],['英文','Plan & To-do（直译）'],['韩文','일정과 할 일（意译）']],
+  label:'日程与待办',
+  mean:'把两个主要功能直接写出来，现在用的名字。',
+  trunc:'5 个字，大约到 iPhone 能放下的上限，小屏或大字体设置下可能截成“日程与待…”。',
+  fit:'功能写得清楚，但随手记、纪念日没有包括；读起来像功能分类，不像一个 App 的名字。',
+  risk:'太通用，几乎不可能注册商标；韩国朋友只能看译名。' };
+
+function nameCard(n, ctrl){
+  const tags = ctrl ? '<span class="pill k">对照组：现名</span>' :
+    n.type.map(t=>`<span class="pill ${t==='推荐'?'y':''}">${t}</span>`).join('');
+  return `<div class="nm ${ctrl?'ctrl':''}">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+      <div><div>${tags}</div><div class="big">${n.zh}</div></div>
+      <div class="lbl" title="主屏幕显示模拟"><div class="mini"><span>${n.label}</span></div>${n.label2?`<div class="mini"><span>${n.label2}</span></div>`:''}</div>
+    </div>
+    <div class="tri">${n.tri.map(([a,b])=>`<b>${a}</b><span>${b}</span>`).join('')}</div>
+    <dl>
+      <dt>寓意</dt><dd>${n.mean}</dd>
+      <dt>iPhone 桌面显示</dt><dd>${n.trunc}</dd>
+      <dt>和功能的贴合度</dt><dd>${n.fit}</dd>
+      <dt>风险</dt><dd>${n.risk}　域名：需查询。</dd>
+    </dl>
+  </div>`;
+}
+document.getElementById('names').innerHTML = NAMES.map(n=>nameCard(n)).join('') + nameCard(CTRL,true);
+
+/* ---------- 方向数据 ---------- */
+const DIRS = [
+  { id:'A', tag:'方向甲', title:'说一句，拆成几条', name:'随口记', name2:'Saynote',
+    idea:'黑底上一个柠檬黄对话泡，代表你说的那一句；从泡的尾巴引出两条线，连到下面一粉一蓝两条胶囊，代表 AI 拆出来的条目。颜色、胶囊、圆角全部取自现有界面。',
+    splashBg:'#141518', splashInk:'#fff', foot:'按住 ＋，说一句',
+    pro:'和现有界面一眼就是一家：黑胶囊导航、黄按钮、马卡龙色块都在。图形本身把核心动作讲清楚了，不用看名字也能猜到“说话记事”。',
+    con:'三种颜色加一根连线，元素在四个里最多；32 px 以下连线看不见，只剩“黄泡＋两条”，接近普通清单图标。黑底在深色壁纸上边缘会融进去。' },
+  { id:'B', tag:'方向乙', title:'磨砂玻璃里的声音', name:'Lemo', name2:'柠檬记　레모',
+    idea:'浅灰底上晕开柠檬黄、粉、天蓝三团柔光，正中是一块磨砂玻璃圆片，上面三根黑色竖条是声纹，代表“按住说话”。对应 App 的第二套磨砂玻璃皮肤。',
+    splashBg:'glass', splashInk:'#141518', foot:'按住 ＋，说一句',
+    pro:'和 iOS 26 的玻璃质感最协调，柔和、不吵，放在浅色壁纸上很安静。声纹一看就是“语音”。',
+    con:'三个方向里最不像自己：玻璃加彩色光斑现在很常见，容易和系统 App、其他工具混在一起。16 px 时玻璃和光斑都看不出，只剩一小块深色；Windows 任务栏小图最吃亏。' },
+  { id:'C', tag:'方向丙', title:'一笔，断成两截', name:'一一', label:'一一记', name2:'일일　Yiyi',
+    idea:'柠檬黄满底，一笔粗黑横画，从中间斜着断开成左右两截：一句话拆成两条。左端圆起笔，右端留宋体横画收笔的小顿角，读起来是汉字“一”，配上名字就是“一一”。',
+    splashBg:'#F2DF4A', splashInk:'#141518', foot:'按住 ＋，说一句',
+    pro:'最简单也最好认：主屏幕上整块黄色很跳，16 px 仍是“黄底一横”。和现有主按钮同色，品牌感强。没有模板味。',
+    con:'单看图标不说明功能，要靠名字「一一」和第一次使用来建立联想。如果最后不用「一一」这个名字，这个图标的意思会变弱。柠檬黄满底在浅色壁纸上边缘略淡。' },
+];
+
+
+const DIRS2 = [
+  { id:'D', tag:'方案丁', title:'切开的柠檬，拿出一瓣', name:'柠檬记', name2:'Lemo　레모', sz:170,
+    idea:'具象。黑底上一片横切的柠檬，其中一瓣被拿了出来，挪到右上角。整片柠檬是你说的那句话，拿出来的那一瓣就是拆出来的一条待办。切面的放射纹一看就是柠檬，不需要文字。',
+    splashBg:'#141518', splashInk:'#fff', foot:'说一句，清清爽爽记下来',
+    pro:'名字和图案对得最直接：看到切片就想到“柠檬”，再看到被拿出的一瓣，就有“拆出一条”的意思。黑底黄片延续上一轮甲的配色和对比，主屏幕上很醒目。',
+    con:'柠檬瓣之间的黑缝在 32 px 以下看不清，16 px 时只剩一个带外圈的黄圆片，“拿出一瓣”的意思要到 60 px 以上才看得出。黑底在深色壁纸上边缘会融进去（第一轮甲也有这个问题）。' },
+  { id:'E', tag:'方案戊', title:'会说话的柠檬', name:'柠檬记', name2:'Lemo　레모', sz:170,
+    idea:'极简几何。柠檬黄满底，一个黑色柠檬剪影：一头是柠檬尖和一片叶子，另一头长出对话泡的小尾巴，肚子里两道黄线是写下的字。柠檬、说话、记事三件事合成一个形状。',
+    splashBg:'#F2DF4A', splashInk:'#141518', foot:'说一句，清清爽爽记下来',
+    pro:'一个剪影就讲完了“柠檬＋说一句＋记下来”，图形只用黄和黑两种颜色，最简单。叶子让人想到新鲜、刚摘下来，不会往“酸”去想。16 px 时剪影还在。',
+    con:'对话泡尾巴加两道横线是聊天类图标常见的语言，单看肚子里的线有一点“消息 App”味道；靠柠檬尖和叶子把它拉回来。叶子和尾巴在 16 px 时只剩轮廓上的小凸起。' },
+  { id:'F', tag:'方案己', title:'字标 Lemo，o 是一片柠檬', name:'柠檬记', name2:'Lemo　레모', sz:200,
+    idea:'字标。柠檬黄满底，粗圆头黑笔画写“Le / mo”两行，最后的 o 换成一片柠檬切面。32 px 及以下自动换成小尺寸版：只留一个大写 L 和那片柠檬，保证小图不糊。',
+    splashBg:'#F2DF4A', splashInk:'#141518', foot:'说一句，清清爽爽记下来',
+    pro:'名字就是图形，Lemo 和 레모 读音一样，韩国朋友也能直接叫出来。柠檬片只出现在 o 上，一点就够，不吵。印在启动画面、贴纸、周边上都好用。',
+    con:'要两套图：大图是四个字母，32 px 以下换成 L＋柠檬片，两者要靠颜色和那片柠檬联系起来。四个字母在 60 px 主屏幕上笔画约 5 px，能读但不如单个图形一眼认出。' },
+];
+
+function nameBox(n){ return `<div class="nb"><div class="nbh"><span class="nbn">${n.zh}</span><span class="sub">这个方案配的名字</span></div>
+  <div class="tri">${n.tri.map(([a,b])=>`<b>${a}</b><span>${b}</span>`).join('')}</div>
+  <dl><dt>寓意</dt><dd>${n.mean}</dd><dt>iPhone 桌面显示</dt><dd>${n.trunc}</dd><dt>风险</dt><dd>${n.risk}　域名：需查询。</dd></dl></div>`; }
+function smallBox(t){ return `<div class="smn"><b>大图和小图怎么对应：</b>${t}</div>`; }
+const DIRS3 = [
+  { id:'G', tag:'方案庚', title:'一道声波，写成一个勾', name:'一声', name2:'Said　한마디', sz:200, small:true, splashSvg:'bgB', splashInk:'#141518',
+    foot:'说一声，就记下了',
+    idea:'磨砂玻璃做成一个对话泡，里面一笔黑线：前半段是起伏的声波，后半段顺势写成一个勾。说一句话，事情就记下、办妥了。记忆点是这根“会变成勾的声波”，不是玻璃本身。',
+    extra: nameBox({ zh:'一声', tri:[['中文','一声　yī shēng'],['英文','Said　/sɛd/'],['韩文','한마디　han-ma-di']],
+      mean:'“跟我说一声”的那个一声：一句话的事。英文 Said 是“说过了”，韩文 한마디 是“一句话”，三种叫法意思一样。',
+      trunc:'中文 2 字、英文 4 个字母、韩文 3 个字，都不会截断。',
+      risk:'三种语言用的是三个不同的词，品牌不完全统一；英文 Said 是常用词，很难单独注册；“一声”在拼音教学里也指第一声（阴平），联想无害。是否与知名 App 重名需查询。' })
+      + smallBox('32 px 及以下去掉玻璃、光斑和高光，对话泡变成实心白色，声波只留一个起伏再接勾，线条加粗到约 1.8 倍；底色用黄、粉、蓝的平铺渐变代替模糊光斑。两者共用“对话泡＋波浪勾”这个轮廓。'),
+    pro:'“声波变成勾”一眼能看懂：说了，就办好了。对话泡轮廓和勾都很结实，小图版在 16 px 仍是“白泡里一个勾”。玻璃保留了第一轮乙的通透和柔光。',
+    con:'勾是“完成”的通用符号，和待办、打卡类 App 有撞车风险，记忆点主要靠前面那一小段波浪。背景仍是三色光斑，和第一轮乙最像，区分度三者里最低。' },
+  { id:'H', tag:'方案辛', title:'夜里的玻璃话筒，光从下往上涨', name:'开麦', name2:'Mic On　마이크 온', sz:200, small:true, splashSvg:'bgH', splashInk:'#fff',
+    foot:'按住，开麦说一句',
+    idea:'深色底上一支磨砂玻璃话筒，话筒头是胶囊形，和 App 底部的黑胶囊导航同一个形状。玻璃里装着半截柠檬黄的光，水面是一道声波，像说话时音量一点点涨上来。记忆点是“灌了柠檬光的玻璃话筒”。',
+    extra: nameBox({ zh:'开麦', tri:[['中文','开麦　kāi mài'],['英文','Mic On'],['韩文','마이크 온　ma-i-keu on（音译）']],
+      mean:'“开麦”就是打开话筒、开始说话，正是“按住＋说一句”这个动作。英文 Mic On 一样直白。',
+      trunc:'中文 2 字、英文 6 个字符，都不会截断。',
+      risk:'“开麦”多用在直播、游戏语音里，偏年轻、偏网络；更要紧的是，名字和图标都在强调“话筒开着”，可能让人担心 App 一直在听，介绍时要说清“只有按住才录”。韩文只是音译，韩国朋友多半直接叫英文名。是否重名需查询。' })
+      + smallBox('32 px 及以下去掉玻璃纹理、格栅和背景光晕，话筒头变成实心浅灰胶囊，下半截柠檬黄、上沿保留一道波浪；支架只留弧线和竖杆，线条加粗。深底、胶囊、黄色水位三样不变。'),
+    pro:'三个里最独特：话筒很常见，但“灌了柠檬光的玻璃胶囊”没人这么画。深底让玻璃和黄光都更亮，在浅色、深色壁纸上都跳出来。胶囊形和现有界面直接呼应，柠檬黄也保住了品牌色。',
+    con:'话筒加支架整体仍是常见的话筒图标结构，单看轮廓不新；小图版在 16 px 时只剩“黄白胶囊＋一道弧”。深底在深色壁纸上边缘会融进去。名字有“一直在听”的隐私联想。' },
+  { id:'I', tag:'方案壬', title:'一句话穿过玻璃，分成三条', name:'分光', name2:'Spectra　분광', sz:200, small:true, splashSvg:'bgI', splashInk:'#141518',
+    foot:'说一句，分成几条',
+    idea:'一道黑色声波从左边射进一块磨砂玻璃三棱镜，从右边出来时分成三条：柠檬黄、粉、黑，就像白光被棱镜分成几种颜色。说的一句话，被拆成几条待办。记忆点是“三棱镜分光”这个比喻。',
+    extra: nameBox({ zh:'分光', tri:[['中文','分光　fēn guāng'],['英文','Spectra'],['韩文','분광　bun-gwang']],
+      mean:'把一束光分成几种颜色。中文和韩文是同一个汉字词“分光”，韩国朋友能直接念出来、也懂意思；比喻的是“一句话分成几条”。',
+      trunc:'中文 2 字、英文 7 个字母、韩文 2 字，都不会截断。',
+      risk:'“分光”是物理名词，听起来偏实验室、偏技术（让人想到分光仪）；Spectra 是很多品牌在用的词。我考虑过“棱镜 / Prism”，但它和美国的“棱镜”监控计划同名，对一个会听你说话的 App 很不利，所以没有用。是否重名需查询。' })
+      + smallBox('32 px 及以下去掉玻璃纹理、高光和入射的声波，棱镜变成实心白色三角，出来的三条加粗到约 1.7 倍、拉得更开；底色换成平铺的浅天蓝。“白三角＋三条彩线”这个结构在大小图里一致。'),
+    pro:'把产品最核心的“说一句，拆成几条”画成了一个物理现象，讲得最准、也最少见。三条出射光用了柠檬黄、粉和黑，和 App 里的马卡龙色块是同一套颜色。浅天蓝底在主屏幕上清爽，和前两轮都不一样。',
+    con:'画面元素最多（声波、棱镜、三条光），60 px 时入射的声波已经很细；小图版去掉了声波，“声音”的意思只能靠名字和大图。三棱镜加彩色光会让一部分人想到 Pink Floyd 的唱片封面，这里用了天蓝底、黑色入射线、三条而非六条来拉开距离。' },
+];
+
+const DIRS4 = [
+  { id:'L', tag:'定稿', title:'柠檬记：磨砂玻璃里的声音', name:'柠檬记', name2:'Lemo', sz:190, small:true, splashSvg:'bgL', splashInk:'#141518',
+    foot:'说一句，清清爽爽记下来',
+    idea:'构图和第一轮乙完全一样：一块磨砂玻璃圆片，上面三根黑色声纹，位置、大小、粗细都没动。只改了光的颜色，并在玻璃边缘加了一道很淡的内圈，暗示柠檬切面的果皮。',
+    extra: `<div class="smn"><b>大图和小图怎么对应：</b>大图是“柠檬黄的光＋玻璃圆片＋三根声纹”。48 px 及以下用简化图（本页演示了 32、24、16）：柠檬黄满底（光变成了底色），玻璃圆片变成实心白圆，三根声纹加粗约 1.35 倍、长短比例不变。去掉了模糊、半透明和高光这些小尺寸下会糊的东西，“黄、白圆、三竖条”三样在大小图里一一对应。</div>`,
+    pro:'保住了产品负责人喜欢的那一版：通透、柔和、一看就是“说话”。柠檬黄成了主光以后，名字“柠檬记”和图标对上了，也比第一轮的黄粉蓝三色更有自己的样子。简化图在 16 px 仍是“黄底白圆里三根竖条”，第一轮最大的短板补上了。',
+    con:'大图和简化图是两张图，开发要按清单分尺寸导出，不能一张图缩到底。玻璃和光斑的质感本身仍是 iOS 26 之后常见的风格，区分度主要靠柠檬黄主光和那道果皮内圈。浅色壁纸上大图边缘偏淡（第一轮就有，这次底色加了一点暖灰，好了一些，但没有根治）。' },
+];
+const others = ['#c9ccd3','#b6bac3','#d8dbe1','#a9aeb8','#c2c6ce','#b0b4bd','#d0d3d9','#bcc0c8','#a5aab4','#cdd0d6','#b8bcc4'];
+const othersDark = ['#3b3e46','#4a4e57','#33363d','#565a63','#40434b','#4d5159','#373a41','#454850','#5a5e67','#3e4148','#4f525a'];
+function ic(id0, size, cls){ const id = (['F','G','H','I','L'].includes(id0) && size<=32) ? id0+'s' : id0; return `<svg class="${cls||'ios'}" width="${size}" height="${size}" viewBox="0 0 1024 1024" style="width:${size}px;height:${size}px;${cls==='sq'?'':'border-radius:'+(size*0.2237).toFixed(1)+'px'}"><use href="#ic${id}"/></svg>`; }
+
+function homeScreen(d, mode){
+  const pal = mode==='light'?others:othersDark;
+  const barc = mode==='light'?'rgba(20,21,24,.22)':'rgba(255,255,255,.28)';
+  let cells='';
+  for(let i=0;i<16;i++){
+    if(i===5){ cells += `<div class="app"><div class="t">${ic(d.id,52)}</div><div class="n">${d.label||d.name}</div></div>`; }
+    else { cells += `<div class="app"><div class="t" style="background:${pal[i%pal.length]}"></div><div class="bar" style="background:${barc}"></div></div>`; }
+  }
+  let dock='';
+  for(let i=0;i<4;i++) dock += `<div class="t" style="width:52px;height:52px;border-radius:12px;background:${pal[(i+3)%pal.length]}"></div>`;
+  return `<figure style="margin:0"><div class="phone ${mode}"><div class="sb"><span>9:41</span><span>●●●</span></div><div class="hs">${cells}</div><div class="dock">${dock}</div></div><figcaption class="cap" style="text-align:center">${mode==='light'?'浅色壁纸':'深色壁纸'}</figcaption></figure>`;
+}
+function taskbar(d, mode){
+  let b='';
+  for(let i=0;i<5;i++){ b += (i===3? `<div class="b on">${ic(d.id,24,'sq')}</div>` : `<div class="b"><i></i></div>`); }
+  return `<div class="tb ${mode}"><div class="b"><span class="win"><s></s><s></s><s></s><s></s></span></div><div class="search"></div>${b}</div>`;
+}
+function splash(d){
+  let bg;
+  if(d.splashSvg){ bg = `<svg class="bgfill" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice"><use href="#${d.splashSvg}" x="-227" y="0" width="844" height="844"/></svg>`; }
+  else if(d.splashBg==='glass'){ bg = `<svg class="bgfill" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice"><use href="#bgB" x="-227" y="0" width="844" height="844"/></svg>`; }
+  else bg = `<div style="position:absolute;inset:0;background:${d.splashBg}"></div>`;
+  const mark = 'mark'+d.id;
+  const sz = d.sz || (d.id==='C'? 180 : 140);
+  return `<div class="splash">${bg}<div class="mid" style="color:${d.splashInk};${d.id==='C'?'top:33%':''}">
+      <svg width="${sz}" height="${sz}" viewBox="0 0 1024 1024"><use href="#${mark}"/></svg>
+      <div class="nm1">${d.name}</div><div class="nm2">${d.name2}</div></div>
+      <div class="foot" style="color:${d.splashInk}">${d.foot}</div></div>`;
+}
+
+function renderDirs(LIST, el){ document.getElementById(el).innerHTML = LIST.map(d=>`
+<section class="dir" id="dir${d.id}">
+  <div class="dirhead"><span class="tag">${d.tag}</span><h3 style="font-size:24px;margin:0">${d.title}</h3><span class="sub">配的名字：「${d.name}」${d.label?'，主屏幕显示“'+d.label+'”':''}</span></div>
+  <div class="mainrow">
+    <div>
+      <div class="master"><svg width="1024" height="1024" viewBox="0 0 1024 1024"><use href="#ic${d.id}"/></svg></div>
+      <div class="cap">主图 1024×1024，方形满底（此处缩小显示）</div>
+    </div>
+    <div>
+      <p>${d.idea}</p>${d.extra||''}
+      <div class="sub-h">小尺寸</div>
+      <div class="sizes">
+        <figure>${ic(d.id,180)}<figcaption>180（iPhone 主屏幕图）</figcaption></figure>
+        <figure>${ic(d.id,60)}<figcaption>60</figcaption></figure>
+        <figure>${ic(d.id,32,'sq')}<figcaption>32${d.small?' 简化图':''}</figcaption></figure>
+        <figure>${ic(d.id,16,'sq')}<figcaption>16${d.small?' 简化图':''}</figcaption></figure>
+        <figure><div class="duo"><span style="background:#fff">${ic(d.id,16,'sq')}</span><span style="background:#202124">${ic(d.id,16,'sq')}</span></div><figcaption>16 px 放在浏览器标签页（浅 / 深）</figcaption></figure>
+      </div>
+    </div>
+  </div>
+  <div class="sub-h">iPhone 主屏幕</div>
+  <div class="screens">${homeScreen(d,'light')}${homeScreen(d,'dark')}</div>
+  <div class="sub-h">Windows 11 任务栏（深色 / 浅色，24 px，第四个是这个 App）</div>
+  ${taskbar(d,'d')}${taskbar(d,'l')}
+  <div class="sub-h">启动画面（手机竖屏）与取舍</div>
+  <div class="splashrow">
+    ${splash(d)}
+    <div class="pc" style="align-content:start">
+      <div><b>好在哪</b>${d.pro}</div>
+      <div><b>弱在哪</b>${d.con}</div>
+    </div>
+  </div>
+</section>`).join(''); }
+renderDirs(DIRS,'dirs');
+renderDirs(DIRS2,'dirs2');
+renderDirs(DIRS3,'dirs3');
+renderDirs(DIRS4,'dirs4');
+</script>
+</body>
+</html>
+
+</body></html>
