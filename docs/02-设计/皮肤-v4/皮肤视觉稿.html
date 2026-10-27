@@ -164,7 +164,8 @@ body[data-hit="1"] .btn.sm::after,body[data-hit="1"] .mo::after,body[data-hit="1
 .secth{display:flex;justify-content:space-between;align-items:baseline;margin:14px 4px 6px;font-size:12px;font-weight:400}
 .secth a{font-weight:400;color:var(--text-2)}
 .newtag{font-size:11px;font-weight:400;background:var(--accent);color:var(--on-accent);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:2px}
-.row.hl{box-shadow:0 0 0 2.5px var(--text);border-radius:16px;border-bottom-color:transparent;margin:4px -6px;padding:0 6px}
+.row.hl{background:var(--panel-2);border-radius:16px;border-bottom-color:transparent;margin:4px -6px;padding:0 6px;position:relative} /* R-142：选中行 = 浅灰底 + 左侧 3px 柠檬竖条（替换原 2.5px 墨黑描边） */
+.row.hl::before,.annrow.hl::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:2px;background:var(--accent)}
 
 /* 底部贴底元素，位置和定稿线框一致：导航离底 42px（安全区 34 + 8）；“＋”离底 40px（66 高，与 62 高的导航中线对齐）；
    提醒按钮条、提示条离底 118px（42 + 62 + 14），输入行 116px。
@@ -508,7 +509,7 @@ body[data-skin="simple"] .toast,body[data-skin="simple"] .abar,.th-simple-light 
 /* 对齐定稿线框（R-77）：今天页时间河、待办列表直接铺在底色上 */
 .flat{background:transparent;box-shadow:none;padding:0;margin-top:0;border-radius:0}
 .flat .row,.flat .lrow{border-bottom:0}
-.flat .row.hl{background:var(--panel)}
+.flat .row.hl{background:var(--panel)}.desk .flat .row.hl{background:var(--panel-2)} /* R-142：电脑今天列表在白面板里，仍用浅灰 */
 .btn.soft{font-weight:400}
 .alertpg > .secth,.alertpg > .secth + .river{display:none}
 /* 左滑示范 */
@@ -660,7 +661,7 @@ body[data-hit="1"] .nb::after,body[data-hit="1"] .tdy::after,body[data-hit="1"] 
 .annbig{margin-top:12px}
 .annrow{display:grid;grid-template-columns:36px 1fr auto;align-items:center;gap:10px;min-height:64px;border-bottom:1px solid var(--line)}
 .annrow:last-child{border-bottom:0}
-.annrow.hl{box-shadow:0 0 0 2.5px var(--text);border-radius:14px;margin:4px -8px;padding:0 8px;border-bottom-color:transparent}
+.annrow.hl{background:var(--panel-2);border-radius:14px;margin:4px -8px;padding:0 8px;border-bottom-color:transparent;position:relative} /* R-142 */
 /* R-117：纪念日头像（圆形）。R-121：没有头像时显示“名字第一个字 + 类型颜色”的圆，和头像同大小，取代原来的菱形（只有月历格子里的菱形标记不变）。
    类型颜色直接用项目色板：生日 --p1（柠檬黄）、纪念日 --p3（珊瑚粉）、倒数日 --p2（浅蓝）；字用 --on-p（墨黑），四套皮肤对比度都 ≥ 7:1 */
 .avt{width:36px;height:36px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--line)}
@@ -980,7 +981,8 @@ body[data-rt="1"] .pblur{--pb-tint:94%}
 <div class="dcard">
   <h3>第七轮整体检查之后改了什么（2026-10-24，R-76～R-110；2026-10-27 补 R-111～R-118）</h3>
   <ul>
-    <li><b>R-139（负责人决定）</b>：底部导航后面加渐进模糊带，选 底部模糊-对比.html 第 3 档“中”：带高 160px，5 层模糊 1～16px，底色叠 55%（磨砂玻璃叠一半）；底栏后面的字认不出，往上一行半渐渐清楚。所有带底栏的手机画面都已加上；减少透明效果时只留底色渐变。</li>
+    <li><b>R-142（负责人决定）</b>：选中的那一行（电脑点开右边抽屉的那条、手机“刚记下”的那条）不再套 2.5px 墨黑描边，改成浅灰底 + 左侧 3px 柠檬竖条，选 选中样式-对比 的 B。手机今天列表直接铺在底色上，浅灰底用白色卡片色。</li>
+<li><b>R-139（负责人决定）</b>：底部导航后面加渐进模糊带，选 底部模糊-对比.html 第 3 档“中”：带高 160px，5 层模糊 1～16px，底色叠 55%（磨砂玻璃叠一半）；底栏后面的字认不出，往上一行半渐渐清楚。所有带底栏的手机画面都已加上；减少透明效果时只留底色渐变。</li>
     <li><b>R-136（负责人决定）</b>：App 全部画面非必要不加粗，只留每页最顶上的大标题、“现在”卡正在进行的那一件、警示、选中状态；状态栏、图标字形不变；R-115 告知页的“图片和附件”经负责人确认也不加粗（R-138），只靠“新”标签提示。</li>
     <li><b>R-135（负责人决定）</b>：字体页四套改成 系统字体（默认）、细线黑（未来荧黑 + Pretendard 细字重）、悠哉体（悠哉字体 + Hi Melody）、文楷；原来的统一黑体（思源黑体 + Pretendard）和圆体（资源圆体 CN + NanumSquare Round）去掉。按 统一黑体-对比.html 的 D、F 两组。细线黑：日期大标题特细，正文细体，粗体只到中粗，数字用 Pretendard 细体（等宽）；悠哉体粗体用“中”，不做假粗体。</li>
     <li><b>R-134（负责人决定）</b>：普通日程和待办的标题一律常规字重，不加粗（今天列表、待办清单、未来 7 天、没赶上、AI 拆分、月历 / 周视图色块里的标题）；“现在”卡、时间数字、日期大标题不变。</li>
