@@ -108,7 +108,7 @@ body.gl .css-only{opacity:.45}
   <h1>液态玻璃真机试验</h1>
   <p class="lead">请在 iPhone 的 Safari 里打开，用手指上下滑动列表，看底栏边缘有没有把经过的内容弯进来、跟不跟手。点底栏的按钮看液滴滑过去，按住选中的那一项看它鼓起来。右上角是实时帧率（60 或 120 是满帧）和最近 5 秒掉帧的次数。下面几个开关可以换参数，看哪一组又好看又不卡。</p>
   <p class="lead">第 2 版加强了四处，都能单独开关，方便和苹果自带 App（照片、音乐）对比：① 12 圈折射，边缘更顺；② 边缘色散，彩边很细；③ 自动深浅——列表里每隔几行有深色块，滑到底栏背后时底栏会自己变深；④ 倾斜高光——点“开”后允许使用动作与方向，左右歪手机，高光会跟着走。在 claude.ai 里打开时 iPhone 不给读陀螺仪，请拖“模拟倾斜”滑条看效果。</p>
-  <p class="lead">第 3 版换了一种做法（默认就是它）：底栏附近几行内容先画成一张小图，再交给 WebGL 着色器，一次算出折射、色散、模糊、着色和高光，不再叠十几层网页副本。可以在“玻璃做法”里切回第 2 版对比；“折射圈数”只对第 2 版有效。</p>
+  <p class="lead">负责人已定（R-153）：正式 App 用第 2 版、不折射、其他都开，这也是本页默认。第 3 版换了一种做法，保留作对比：底栏附近几行内容先画成一张小图，再交给 WebGL 着色器，一次算出折射、色散、模糊、着色和高光，不再叠十几层网页副本。可以在“玻璃做法”里切换；“折射圈数”只对第 2 版有效。</p>
   <div class="ctl">
     <div class="r"><span>玻璃做法</span><button data-k="eng" data-v="gl">着色器（第 3 版）</button><button data-k="eng" data-v="css">复制内容（第 2 版）</button><span id="glst" style="min-width:0;font-size:12px"></span></div>
     <div class="r"><span>着色器折射</span><button data-k="gr" data-v="2">强</button><button data-k="gr" data-v="1">弱</button><button data-k="gr" data-v="0">关</button></div>
@@ -149,8 +149,8 @@ list.style.height = N * H + 'px';
 list.innerHTML = Array.from({length:N}, (_, i) => rowHTML(i)).join('');
 
 const RINGS_ALL = {bar:[[22,2],[17,4],[13,7],[10,10],[7.5,14],[5.5,18],[3.5,23],[2,28]], fab:[[18,2],[14,4],[10,7],[7,10],[4.5,14],[2.5,19]], drop:[[12,4],[7,9],[3.5,15]]};
-const opt = {eng:'gl', gr:2, rings:0, disp:1, ad:1, tilt:0, blur:1, pb:1, theme:'auto'};   // 第 2 版默认按负责人真机试的结论：不折射、其他都开（R-151）；第 3 版默认用着色器（R-152）
-try{ Object.assign(opt, JSON.parse(localStorage.getItem('lg-test3')||'{}')); }catch(e){}
+const opt = {eng:'css', gr:2, rings:0, disp:1, ad:1, tilt:0, blur:1, pb:1, theme:'auto'};   // 第 2 版默认按负责人真机试的结论：不折射、其他都开（R-151）；第 3 版着色器保留可切换；负责人定案用第 2 版不折射（R-153），默认改回第 2 版
+try{ Object.assign(opt, JSON.parse(localStorage.getItem('lg-test4')||'{}')); }catch(e){}
 opt.tilt = 0;   // 陀螺仪每次打开页面都要重新点“开”授权
 // 按原来 8 圈的宽度和弯曲量插值出更密的圈（12 圈：底栏 12、“＋”9、液滴 5）
 function interp(r, n){ return Array.from({length:n}, (_, k) => { const t = k * (r.length - 1) / (n - 1), a = Math.floor(t), b = Math.min(a + 1, r.length - 1), f = t - a;
@@ -291,7 +291,7 @@ function applyOpt(){
   document.querySelectorAll('.ctl button').forEach(b => b.setAttribute('aria-pressed', String(String(opt[b.dataset.k]) === b.dataset.v)));
   document.body.classList.toggle('nopb', !opt.pb);
   if(opt.theme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = opt.theme;
-  try{ localStorage.setItem('lg-test3', JSON.stringify(opt)); }catch(e){}
+  try{ localStorage.setItem('lg-test4', JSON.stringify(opt)); }catch(e){}
   GL.dirty = true;
 }
 document.querySelectorAll('.ctl button').forEach(b => b.addEventListener('click', async () => {
