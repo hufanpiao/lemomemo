@@ -475,6 +475,21 @@ table.xl{border-collapse:collapse;font-size:13px;margin-top:10px;width:100%}tabl
 .pblur i:nth-child(4){--b:8px;--m0:50%;--m1:66.7%;--m2:83.3%;--m3:100%}
 .pblur i:nth-child(5){--b:16px;--m0:66.7%;--m1:83.3%;--m2:100%;--m3:100.1%}
 .pblur b{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 0%,color-mix(in srgb,var(--g7) 55%,transparent) 70%,color-mix(in srgb,var(--g7) 55%,transparent) 100%)}
+
+/* R-128、R-135：设置 › 字体（单选列表；每项用该字体写一行示例，线框里只用系统字体示意） */
+.fo{display:grid;grid-template-columns:22px 1fr;gap:2px 10px;padding:12px 0;border-bottom:1px solid var(--g6)}
+.fo:last-child{border-bottom:0}
+.fo .rd{width:18px;height:18px;border-radius:50%;border:2px solid var(--g3);box-sizing:border-box;margin-top:2px}
+.fo.on .rd{border:6px solid #111}
+.fo .nm{font-size:15px}
+.fo .pr{font-size:12px;color:var(--g2)}
+.fo .sp{grid-column:2;font-size:14px;margin-top:4px;padding:6px 10px;border:1px dashed var(--g4);border-radius:8px}
+.fo .stt{grid-column:2;font-size:12px;color:var(--g2);margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fo .stt .use{border:1px solid #111;border-radius:6px;padding:0 6px;color:#111}
+.fo .stt .bar{flex:1;min-width:80px;height:6px;background:var(--g5);border-radius:3px;overflow:hidden}
+.fo .stt .bar i{display:block;height:100%;background:#111}
+.fo .stt .err{color:#111;text-decoration:underline}
+.fo .stt .btn{height:26px;padding:0 10px;font-size:12px}
 </style>
 </head>
 <body data-v="p">
@@ -494,6 +509,8 @@ table.xl{border-collapse:collapse;font-size:13px;margin-top:10px;width:100%}tabl
 <li><b>搜索按钮去掉（R-118）：</b>各页面右上角的放大镜、随手记页里的搜索框、电脑侧栏的“搜索”都去掉，查找全靠“＋”；电脑 Ctrl+K 打开和“＋”同一个输入框。</li>
 <li><b>今天页上半部分（R-118）：</b>按 皮肤-v4/今天顶部-对比.html 的方案 A：日期一行、“现在”卡标题 17px 半粗、圆角 14；“现在”卡 4 种状态见第 1 节第二张。</li>
 <li><b>导航和“＋”（R-118）：</b>随手记图标改线性铅笔，日历 3×3 方格；右下角“＋”的外环所有页面一致，电脑侧栏的“＋”也加了外环；输入行插图按钮不变。</li>
+<li><b>补画（R-128、R-135）：</b>新增一节“设置 › 字体”（中文、韩文、电脑），设置首页“皮肤”那组下面加“字体”一行，电脑设置侧栏也加“字体”。四种字体和下载状态同皮肤视觉稿。</li>
+<li><b>R-139：</b>底部导航后面加渐进模糊带（160px，5 层模糊 1～16px，底色叠 55%），所有带底栏的手机画面都加了，参数同视觉稿。</li>
 <li><b>R-132：</b>简洁皮肤剩下的三处黑块按 黑块-对比.html 方案 C 改（灰度对应）：纪念日“最近的一个”大卡改成白卡 + 细边，“最近的一个”是 K 卡同款黑底小标签，大数字加浅灰荧光笔底（视觉稿里是柠檬黄）；“今天”标记（月历格子、电脑月历、周视图日期、电脑周视图表头）改成 2px 墨圈、不填色，今天又被选中时墨圈外加选中圈；电脑“本周”条选中那天改成白柱 + 2px 墨边（视觉稿里是柠檬柱）。线框里没有官网邀请卡，视觉稿里已改。选中的筛选标签不在范围内。</li>
 <li><b>R-131 追问：</b>K 卡时间轴的细轨碰到色块就断开（两端各留 3px），被截断的一端直角截断、不再渐隐，色块底下不再透出线。玻璃皮肤的“进度条 + 圆头”只在视觉稿里（线框是灰度，不分皮肤）。</li>
 <li><b>R-131：</b>今天页“现在”卡换成 进行中卡片-对比.html 的方案 K 小时间尺：手机、电脑（没选中、选中、窄窗口）、韩文、提醒状态、状态 ②、同步骨架都换了；进度条和“接下来…”一行去掉，由时间轴代替。时间窗规则、玻璃皮肤保留柠檬黄底、边缘状态（没有进行中、95%、超过 2 小时、两件重叠）见 皮肤视觉稿。</li>
@@ -975,14 +992,14 @@ const R_DATA=[['最后备份','今天 03:00（每天自动）'],['导出全部',
 const R_CLA=[['在 Claude 聊天里记事','TG1'],['连接码','只能新增，不能看、改、删 · 10/24 连接'],['断开连接','',1]];
 const N_CLA='Claude 是一个 AI 聊天助手。打开后，你在自己的 Claude 里说“帮我记一下……”，就会记到这里；别人看不到你的记事。断开后 Claude 立刻不能再记；需要时可以重新连接。';
 const SETHOME='<div class="cmp"><div style="display:flex;justify-content:space-between;align-items:center;margin:2px 0 10px"><span>‹ 今天</span><b style="font-size:17px">设置</b><span style="width:40px"></span></div><div class="grp" style="display:flex;align-items:center;gap:12px;padding:12px 14px"><div class="av">H</div><div style="flex:1"><b>h***@gmail.com</b><div style="font-size:12px;color:var(--g2)">2 台设备：iPhone、Windows</div></div><span class="v">›</span></div>'
- +SETG('',[['界面语言','中文 ›'],['皮肤','简洁 · 白天 / 夜间跟着手机 ›'],['　减少透明效果','TG0'],['　减少动态效果（只留淡入淡出）','TG0'],['随手记显示方式','瀑布流 · 只对本类设备生效 ›'],['日历','农历 · 节假日：中国 ›'],['提醒与通知','通知已打开 · 两边都响 ›'],['语音与 AI','AI 整理已打开 · 今天 AI 用了 18 次 / 共 50 次 ›'],['隐私记','Face ID · 离开 1 分钟上锁 ›'],['时区','跟随所在地 · 首尔 ›']])
+ +SETG('',[['界面语言','中文 ›'],['皮肤','简洁 · 白天 / 夜间跟着手机 ›'],['　减少透明效果','TG0'],['　减少动态效果（只留淡入淡出）','TG0'],['字体','系统字体（默认） ›'],['随手记显示方式','瀑布流 · 只对本类设备生效 ›'],['日历','农历 · 节假日：中国 ›'],['提醒与通知','通知已打开 · 两边都响 ›'],['语音与 AI','AI 整理已打开 · 今天 AI 用了 18 次 / 共 50 次 ›'],['隐私记','Face ID · 离开 1 分钟上锁 ›'],['时区','跟随所在地 · 首尔 ›']])
  +SETG('',[['数据','每天 03:00 备份 · 最近删除 3 条 ›'],['在 Claude 聊天里记事','已连接 ›'],['邀请朋友（只在管理员账号出现）','发邀请码 ›'],['符号说明','竖条、圆圈、菱形是什么 ›'],['关于','4.0.0 · 功能说明 ›']])
  +'<div style="text-align:center;font-size:14px;margin-top:4px;padding:12px">退出登录</div></div>';
 const SETDETAIL='<div class="cmp"><div style="margin:2px 0 10px">‹ 设置</div>'+SETG('提醒与通知',R_PUSH,N_PUSH)+SETG('语音与 AI',R_AI,N_AI)+SETG('隐私记',[['用 Face ID 解锁','TG1'],['自动上锁','离开 1 分钟 ›'],['修改密码','›'],['忘记密码','用登录邮箱重设 ›']])+SETG('数据',R_DATA)+SETG('在 Claude 聊天里记事',R_CLA,N_CLA)+'</div>';
 S.push({id:'s13',t:'设置',sub:'从右上角头像进入；每组直接写出当前的值',
 p:[[phone(SETHOME,{nav:false}),'设置首页'],[phone(SETDETAIL,{nav:false}),'各分组展开后（按顺序往下排）']],
 pn:['<p><b>首页每组右边直接写当前值。</b>入口是每页右上角的头像“H”。“提醒与通知”直接显示通知有没有打开；没打开时写“通知没开，提醒不会响”。</p>','<p><b>改成通俗说法：</b>“Claude 代记 / 钥匙 / 吊销”改成“在 Claude 聊天里记事 / 连接码 / 断开连接”；“推送自检”改成“测试提醒能不能收到”；AI 用量写成“今天 AI 用了 18 次 / 共 50 次”，不再提“朋友加入后”的限额；皮肤“现在的风格”改名“简洁”。</p>','<p><b>“语音与 AI”只留两行（R-62）：</b>麦克风状态、今天 AI 用量（写明“说一次话算 1 次”），下面一句说明“免费 AI 的录音和文字可能被谷歌用于改进产品”。删掉了“语音识别语言”。新增“符号说明”，随时可以再看一次新手说明卡。</p>'],
-d:desk('<div class="col side" style="width:240px;padding:20px 14px"><div class="d1" style="font-size:22px;margin-bottom:12px">设置</div>'+['账号与邀请','界面语言','皮肤','日历与节假日','提醒与通知','语音与 AI','隐私记','时区','数据','在 Claude 聊天里记事','电脑','符号说明','关于'].map((x,i)=>'<div style="padding:7px 12px;border-radius:10px;'+(i===4?'background:#111;color:#fff':'')+'">'+x+'</div>').join('')+'</div><div class="col" style="width:964px;padding:24px 30px;display:flex;gap:28px"><div class="cmp" style="flex:1;min-width:0">'+SETG('提醒与通知',R_PUSH.map(r=>r[0]==='通知'?['通知','已打开']:r),N_PUSH)+SETG('语音与 AI',R_AI.map(r=>r[0]==='麦克风'?['麦克风','已允许']:r),N_AI)+'</div><div class="cmp" style="flex:1;min-width:0">'+SETG('电脑',[['开机自动启动','TG1'],['关闭窗口时','缩到托盘，不退出 ›'],['托盘图标显示今天的待办数','TG1'],['打字快捷键（弹出打字框）','<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>空格</kbd> 改 ›']],'透明效果只看一处：Windows 关掉“透明效果”时自动变实色；也可以在 皮肤 › 减少透明效果 手动打开。')+SETG('在 Claude 聊天里记事',R_CLA,N_CLA)+SETG('数据',R_DATA)+'</div></div>',{tab:-1}),
+d:desk('<div class="col side" style="width:240px;padding:20px 14px"><div class="d1" style="font-size:22px;margin-bottom:12px">设置</div>'+['账号与邀请','界面语言','皮肤','字体','日历与节假日','提醒与通知','语音与 AI','隐私记','时区','数据','在 Claude 聊天里记事','电脑','符号说明','关于'].map((x,i)=>'<div style="padding:7px 12px;border-radius:10px;'+(i===5?'background:#111;color:#fff':'')+'">'+x+'</div>').join('')+'</div><div class="col" style="width:964px;padding:24px 30px;display:flex;gap:28px"><div class="cmp" style="flex:1;min-width:0">'+SETG('提醒与通知',R_PUSH.map(r=>r[0]==='通知'?['通知','已打开']:r),N_PUSH)+SETG('语音与 AI',R_AI.map(r=>r[0]==='麦克风'?['麦克风','已允许']:r),N_AI)+'</div><div class="cmp" style="flex:1;min-width:0">'+SETG('电脑',[['开机自动启动','TG1'],['关闭窗口时','缩到托盘，不退出 ›'],['托盘图标显示今天的待办数','TG1'],['打字快捷键（弹出打字框）','<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>空格</kbd> 改 ›']],'透明效果只看一处：Windows 关掉“透明效果”时自动变实色；也可以在 皮肤 › 减少透明效果 手动打开。')+SETG('在 Claude 聊天里记事',R_CLA,N_CLA)+SETG('数据',R_DATA)+'</div></div>',{tab:-1}),
 dn:['<p><b>左边是分组，右边一次摊开相关的几组。</b>“电脑”分组只在 Windows 版出现，含开机自启、托盘、打字快捷键（默认 Ctrl+Alt+空格，弹出打字框，可以改）和透明效果（跟随 Windows）。电脑版不做语音（R-90）。</p>']});
 
 /* 14 登录 */
@@ -1062,7 +1079,7 @@ const KO_OD='<div class="od"><span class="m m-td"></span><div style="flex:1;min-
 const KO_RIV='<div class="done">▸ 지난 일정 2개: 10:30 SignPlex 자막 검수 · 원두 사기 ✓</div>'+row('ev','13:00','NEOX 가로판 검토','14:30까지 · NEOX · 텐센트 회의')+'<div class="nowl"><span>14:17</span></div>'+row('ev','15:30','SignPlex 고객 피드백 회의','16:30까지 · 15분 전 알림')+row('td','오늘 중','NEOX 세로판 4K 내보내기','오늘 마감 · NEOX')+row('td','','박 대리 메일 회신','SignPlex')+row('ev','19:00','지민이랑 저녁','연남동 · 생활');
 const KO_NOTES='<div class="st"><b>오늘 쓴 메모 2</b><span>메모 ›</span></div>'+row('nt',null,'NEOX 엔딩 로고는 0.5초 더 짧게','14:02 · 작업 아이디어')+row('nt',null,'서울숲 은행나무가 노랗게 물들었어요. 다음 주말에 카메라 챙기기','11:40 · 한국 생활 · 사진 1장');
 const KO_SETHOME='<div class="cmp"><div style="display:flex;justify-content:space-between;align-items:center;margin:2px 0 10px"><span>‹ 오늘</span><b style="font-size:17px">설정</b><span style="width:40px"></span></div><div class="grp" style="display:flex;align-items:center;gap:12px;padding:12px 14px"><div class="av">H</div><div style="flex:1"><b>h***@gmail.com</b><div style="font-size:12px;color:var(--g2)">기기 2대: iPhone, Windows</div></div><span class="v">›</span></div>'
- +SETG('',[['언어','한국어 ›'],['테마','심플 · 다크 모드는 시스템 설정 따르기 ›'],['　투명 효과 줄이기','TG0'],['　움직임 효과 줄이기','TG0'],['메모 보기 방식','카드형 · 이 기기 종류에만 적용 ›'],['캘린더','음력 · 공휴일: 한국 ›'],['알림','알림 켜짐 · 둘 다 울림 ›'],['음성 · AI','AI 정리 켜짐 · 오늘 AI 18번 / 총 50번 ›'],['비밀 메모','Face ID · 나가고 1분 뒤 잠금 ›'],['시간대','현재 위치 따르기 · 서울 ›']])
+ +SETG('',[['언어','한국어 ›'],['테마','심플 · 다크 모드는 시스템 설정 따르기 ›'],['　투명 효과 줄이기','TG0'],['　움직임 효과 줄이기','TG0'],['글꼴','시스템 글꼴 (기본) ›'],['메모 보기 방식','카드형 · 이 기기 종류에만 적용 ›'],['캘린더','음력 · 공휴일: 한국 ›'],['알림','알림 켜짐 · 둘 다 울림 ›'],['음성 · AI','AI 정리 켜짐 · 오늘 AI 18번 / 총 50번 ›'],['비밀 메모','Face ID · 나가고 1분 뒤 잠금 ›'],['시간대','현재 위치 따르기 · 서울 ›']])
  +SETG('',[['데이터','매일 03:00 백업 · 최근 삭제 3개 ›'],['Claude 채팅에서 기록하기','연결됨 ›'],['친구 초대 (관리자만)','초대 코드 발급 ›'],['기호 설명','막대, 동그라미, 마름모가 뭔가요 ›'],['정보','4.0.0 · 기능 설명 ›']])
  +'<div class="grp" style="opacity:.6"><div class="row"><span class="tx">컴퓨터</span><span class="v">Windows 버전에서만 보여요</span></div></div><div style="text-align:center;font-size:14px;margin-top:4px;padding:12px">로그아웃</div></div>';
 const KO_SETDETAIL='<div class="cmp"><div style="margin:2px 0 10px">‹ 설정</div>'
@@ -1210,6 +1227,26 @@ p:[[phone('<div class="cmp"><div style="margin:2px 0 10px">‹ 设置</div><div 
 pn:['<p><b>用量条（评审 A5、G5）：</b>“已用 412 MB / 700 MB”，下面分图片和文档；到 90% 时文字加粗、提示“快满了”。700 MB 是负责人自己的上限，朋友默认 50 MB（以后邀请时）。</p>','<p><b>导出：</b>手机只导出文字，写“附件请在电脑上导出”；电脑导出 zip 含附件（见电脑画面）。“预览 PPT”一行改第一次选的“预览 / 只下载”；下面另一行“隐私记 PPT 预览”单独记录这台设备的选择（隐私记的 PPT 先解密再交给微软，和普通 PPT 分开问、分开记，第五轮复查轻 6）。</p>','<p><b>语音与 AI（评审 G4、轻 5）：</b>“今天 AI 用了 N 次 / 共 50 次”含经“＋”的查找和总结；“今天识别了 N 张图”“今天按意思找了 N 次”，负责人写“不限”，朋友写“/ 共 40”“/ 共 200”。</p>'],
 d:desk('<div class="col" style="width:520px;padding:20px 22px"><div class="d1" style="font-size:22px;margin-bottom:12px">设置</div><div class="cmp"><div class="gt">数据</div>'+USAGE(412,59)+SETG('',R_DATA2)+'</div></div><div class="col side" style="width:344px"></div><div class="insp"></div>',{tab:-1,ov:'<div class="dim" style="top:32px"></div><div style="position:absolute;left:50%;top:200px;width:460px;margin-left:-230px;background:#fff;border-radius:22px;padding:22px 24px;z-index:27;box-shadow:0 20px 60px rgba(0,0,0,.18);border:1px solid var(--g5)"><div style="font-size:18px;font-weight:400">正在导出全部（含附件）</div><div style="font-size:13px;color:var(--g1);margin:6px 0 12px">附件 132 / 418 · 已打包 180 MB / 412 MB</div><div class="ubar"><i style="width:44%"></i></div><div style="font-size:12px;color:var(--g2);line-height:1.7;margin-top:8px">隐私记已解锁，里面的附件会解密后放进 zip：<b>导出的文件不加密</b>，请放在安全的地方。</div><div style="display:flex;justify-content:flex-end;margin-top:12px"><span class="btn g">取消</span></div></div>'}),
 dn:['<p>电脑上“导出全部”打成 zip，含附件；进度写件数和大小。隐私记的附件要先解锁，解密后放进 zip，提示“导出的文件不加密”。</p>']});
+
+/* ===== 设置 › 字体（R-128、R-135） ===== */
+const FONTOPT={zh:[['系统字体（默认）','iPhone 苹方 + Apple SD Gothic Neo；电脑 微软雅黑 + 맑은 고딕','<span class="use">正在使用</span>不用下载'],
+  ['细线黑','未来荧黑 + Pretendard（细字重）','<span style="white-space:nowrap">下载中 62% · 约 19 MB</span><span class="bar"><i style="width:62%"></i></span><span style="flex-basis:100%">下完之前先用系统字体</span>',1],
+  ['悠哉体','悠哉字体 + Hi Melody','约 18 MB · 选中后下载'],
+  ['文楷','霞鹜文楷 + Gowun Batang','<span class="err">下载失败 · 已回退系统字体</span><span class="btn g">重试</span><span style="flex-basis:100%">约 24 MB</span>']],
+ ko:[['시스템 글꼴 (기본)','iPhone 핑팡 + Apple SD Gothic Neo · PC 微软雅黑 + 맑은 고딕','<span class="use">사용 중</span>다운로드 없음'],
+  ['가는 고딕','Glow Sans(未来荧黑) + Pretendard 가는 굵기','<span style="white-space:nowrap">다운로드 중 62% · 약 19 MB</span><span class="bar"><i style="width:62%"></i></span><span style="flex-basis:100%">다 받을 때까지 시스템 글꼴로 보여요</span>',1],
+  ['유자이체','유자이(悠哉) + 하이 멜로디','약 18 MB · 선택하면 다운로드'],
+  ['원카이','LXGW 원카이(霞鹜文楷) + 고운바탕','<span class="err">다운로드 실패 · 시스템 글꼴로 돌아갔어요</span><span class="btn g">다시 시도</span><span style="flex-basis:100%">약 24 MB</span>']]};
+const FONTLIST=ko=>{const L=FONTOPT[ko?'ko':'zh'],smp=ko?'오후 3시 반 고객 회의 · 下午三点半开会 15:30':'下午三点半开会 · 오후 3시 반 고객 회의 15:30';
+ return '<div class="grp">'+L.map(o=>'<div class="fo'+(o[3]?' on':'')+'"><span class="rd"></span><div><div class="nm">'+o[0]+'</div><div class="pr">'+o[1]+'</div></div><div class="sp">'+smp+'</div><div class="stt">'+o[2]+'</div></div>').join('')+'</div>'
+ +'<div class="sn" style="margin-top:0">'+(ko?'중국어·한국어 글꼴을 한 세트로 바꿔요. 글꼴 설정은 계정에 저장돼 모든 기기에 적용돼요. 다운로드 중이거나 실패하면 시스템 글꼴로 보여요.':'中文和韩文的字体成套切换；字体设置跟账号走，在所有设备上生效。下载中或下载失败时先用系统字体显示。')+'</div>'};
+const FONTHD=(b,t)=>'<div style="display:flex;justify-content:space-between;align-items:center;margin:2px 0 12px"><span>‹ '+b+'</span><b style="font-size:17px">'+t+'</b><span style="width:40px"></span></div>';
+S.push({id:'sFont',t:'设置 › 字体',sub:'R-128、R-135：系统字体（默认）、细线黑、悠哉体、文楷；选中后才下载',
+p:[[phone('<div class="cmp">'+FONTHD('设置','字体')+FONTLIST(0)+'</div>',{nav:false}),'设置 › 字体：四种状态'],
+ [phone('<div class="cmp">'+FONTHD('설정','글꼴')+FONTLIST(1)+'</div>',{nav:false,lang:'ko'}),'韩文界面：설정 › 글꼴']],
+pn:['<p><b>入口：</b>设置首页“皮肤”那一组下面的“字体”一行，右边写当前字体。</p>','<p><b>单选列表（R-135）：</b>系统字体（默认）、细线黑（未来荧黑 + Pretendard 细字重）、悠哉体（悠哉字体 + Hi Melody）、文楷（霞鹜文楷 + Gowun Batang）。每项下面用这款字体写一行中韩示例（线框只用系统字体示意，真实样子见皮肤视觉稿）。</p>','<p><b>状态：</b>系统字体“正在使用 · 不用下载”；点一款没下载的就开始下载，显示进度和大小，下完之前先用系统字体；没下载的写“约 N MB · 选中后下载”；下载失败写“下载失败 · 已回退系统字体”和“重试”。字体设置跟账号走，所有设备生效；中文和韩文成套切换。</p>'],
+d:desk('<div class="col" style="width:520px;padding:20px 22px"><div class="d1" style="font-size:22px;margin-bottom:12px">设置 › 字体</div><div class="cmp">'+FONTLIST(0)+'</div></div><div class="col side" style="width:344px;padding:20px 18px"><div class="gt">预览：细线黑（下完才真正换）</div><div class="grp" style="padding:14px"><div style="font-size:22px">10月24日 周六</div><div style="font-size:13px;color:var(--g2);margin:4px 0 10px">农历九月十五</div><div style="font-size:15px">NEOX 横版对片</div><div style="font-size:12px;color:var(--g2)">到 14:30 · NEOX · 腾讯会议</div><div style="font-size:15px;margin-top:8px">回复 박 대리 的邮件</div><div style="font-size:12px;color:var(--g2)">SignPlex</div></div></div><div class="insp"></div>',{tab:-1}),
+dn:['<p>电脑上左边是同一个列表，右边面板预览选中的字体（下完才真正换）。</p>']});
 
 /* ===== 渲染 ===== */
 const host=document.getElementById('screens'),toc=document.getElementById('toc');
