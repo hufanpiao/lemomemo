@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>柠檬记皮肤视觉稿</title>
-<!-- R-128：字体选择页的预览。思源黑体用 Noto Sans SC；资源圆体 CN 用本地子集 fonts/ResourceHanRoundedCN-*.subset.woff2（v0.990，只含本页用到的字，SIL OFL 1.1，见 fonts/ResourceHanRounded-OFL.txt）。
-     线上版只允许 Google Fonts 的样式表，所以 Pretendard（v1.3.9）、NanumSquare Round（Naver 官方包）、霞鹜文楷（v1.530 Regular / Medium）也改成本地子集（fonts/，只含本页用到的字，许可证都是 SIL OFL 1.1，见 fonts/*-OFL.txt）。
-     Pretendard 和 NanumSquare Round 的许可证有保留字体名，子集算修改版，所以子集内部改名为 LemoSubP / LemoSubNR，页面里用这两个名字引用；霞鹜文楷的许可证附加条款允许网页用的子集保留原名。 -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Gowun+Batang:wght@400;700&display=swap">
+<!-- R-128 / R-135：字体选择页的预览。四套：系统字体（默认）、细线黑（未来荧黑 + Pretendard 细字重）、悠哉体（悠哉字体 + Hi Melody）、文楷（霞鹜文楷 + Gowun Batang）。
+     线上版只允许 Google Fonts 的样式表，所以未来荧黑（v0.93.2 ExtraLight / Light / Medium）、Pretendard（v1.3.9）、悠哉字体（v0.868 Regular / Medium）、霞鹜文楷（v1.530 Regular / Medium）都用本地子集（fonts/，只含本页用到的字，许可证都是 SIL OFL 1.1，见 fonts/*-OFL.txt）；Hi Melody、Gowun Batang 走 Google Fonts。
+     Pretendard 的许可证有保留字体名，子集算修改版，所以子集内部改名为 LemoSubP，页面里用这个名字引用；未来荧黑没有保留字体名，悠哉字体只保留“Y.Oz / YOz”字样，霞鹜文楷的附加条款允许网页子集保留原名，这三款保留原名。 -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Hi+Melody&display=swap">
 <style>
 /* ================= 设计令牌（由脚本生成，组件只引用这些变量） ================= */
 body[data-skin="simple"][data-mode="light"], body .th-simple-light{--k-bg:#FFFFFF;--k-fg:#141518;--k-fg2:#595C64;--k-trk:#F0F1F4;--k-nxt-bg:#F0F1F4;--k-line:#ECEDF0;--k-cur:#F7EDB0;--k-cur-bd:transparent;--k-done:#F2DF4A;--k-mark:#141518;--k-co:#D6ECF7;--k-co-done:#8CC9E8;--k-ring:transparent;--klv-bg:#141518;--klv-fg:#F2DF4A;--bg:#E9EAEE;--scr-bg:#E9EAEE;--panel:#FFFFFF;--panel-2:#F0F1F4;--line:#ECEDF0;--text:#141518;--text-2:#595C64;--accent:#F2DF4A;--on-accent:#141518;--ink:#141518;--on-ink:#FFFFFF;--danger-text:#B0291F;--danger-bg:#FBE2DF;--now-bg:#FFFFFF;--now-fg:#141518;--now-fg2:#595C64;--now-track:#383A41;--now-prog:#F2DF4A;--alert-ring:#F2DF4A;--hol-bg:#EEEFF2;--today-bg:transparent;--today-fg:#141518;--now-num:#141518;--now-hl:#F2DF4A;--now-hl-pad:3px;--now-bd:#ECEDF0;--now-avt-ring:#FFFFFF;--now-k-bg:#141518;--now-k-fg:#F2DF4A;--now-k-pad:3px 9px;--now-k-w:700;--today-ring:#141518;--wk-on:#F2DF4A;--wk-on-ring:#141518;--chip-on-bg:#141518;--chip-on-fg:#FFFFFF;--step-off:#D3D5DB;--nowline:#141518;--nowline-glow:none;--nowpill-bg:#141518;--nowpill-fg:#F2DF4A;--nav-bg:rgba(20,21,24,.7);--nav-fg:#FFFFFF;--nav-active-bg:#FFFFFF;--nav-active-fg:#141518;--fab-bg:#F2DF4A;--fab-fg:#141518;--b-canvas:radial-gradient(55% 45% at 6% 0%,rgba(242,223,74,.30),transparent 70%),radial-gradient(45% 45% at 100% 100%,rgba(140,201,232,.26),transparent 70%),linear-gradient(170deg,#F5F4EE,#E8EBF0);--b-rail:#FFFFFF;--b-rail-shadow:0 12px 32px rgba(20,21,24,.12),0 0 0 1px rgba(20,21,24,.05);--b-tile:rgba(255,255,255,.80);--b-tile-shadow:0 4px 18px rgba(20,21,24,.06),inset 0 0 0 1px rgba(255,255,255,.95);--b-drawer:#FFFFFF;--b-drawer-shadow:-18px 0 48px rgba(20,21,24,.16),inset 0 0 0 1px #ECEDF0;--b-blur:0px;--float-bg:rgba(20,21,24,.82);--float-sat:140%;--float-solid:#141518;--abar-bg:rgba(20,21,24,.82);--abar-fg:#FFFFFF;--toast-bg:var(--float-bg);--toast-fg:#FFFFFF;--toast-fg2:#C5C8CF;--toast-track:rgba(255,255,255,.18);--sheet-bg:#FFFFFF;--scrim:rgba(20,21,24,.32);--scrim-blur:6px;--rec-dot:#E5483B;--rec-dot-halo:rgba(229,72,59,.18);--wave:#141518;--mic-bg:#141518;--mic-fg:#FFFFFF;--mic-halo:rgba(20,21,24,.10);--mic-halo2:rgba(20,21,24,.05);--glass-blur:0px;--glass-sat:100%;--glass-bg:#FFFFFF;--glass-border:transparent;--glass-solid:#FFFFFF;--shadow-1:none;--shadow-2:0 10px 30px rgba(20,21,24,.14);--mid-bg:#E2E3E8;--rail-bg:#E9EAEE;--wbar-bg:#E9EAEE;--login-bg:radial-gradient(80% 50% at 85% 0%, rgba(242,223,74,.45), transparent 70%), radial-gradient(60% 40% at 0% 100%, rgba(242,223,74,.22), transparent 70%), #F3F4F6;--inp-line:#D9DBE0;--ok-text:#1C7A43;--wbar-solid:#E3E4E8;--p1:#F2DF4A;--p1s:#857200;--p2:#8CC9E8;--p2s:#1F77A6;--p3:#F5B5AC;--p3s:#B8473C;--p4:#C8B9F2;--p4s:#6A4FC4;--p5:#A6DCB4;--p5s:#23794A;--p6:#F6C48C;--p6s:#A35D10;--on-p:#141518;--r-xl:28px;--r-lg:20px;--r-md:14px;--r-sm:10px;--r-pill:999px;--dur-press:120ms;--dur-ui:220ms;--dur-sheet:380ms;--ease-standard:cubic-bezier(.2,0,0,1);--ease-spring:cubic-bezier(.34,1.32,.64,1);--ease-out:cubic-bezier(.23,1,.32,1);--ease-drawer:cubic-bezier(.32,.72,0,1);--f-num:"Manrope", "SF Pro Rounded", -apple-system, "Segoe UI Variable Display", "Segoe UI", sans-serif;--f-zh:-apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;--f-ko:"Apple SD Gothic Neo", "Malgun Gothic", -apple-system, "PingFang SC", sans-serif;--focus:#2F7BF5}
@@ -470,24 +470,22 @@ body[data-skin="simple"] .toast,body[data-skin="simple"] .abar,.th-simple-light 
 .desk.nar .nrow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .desk.nar .nann .panel{height:100%;box-sizing:border-box}
 .desk.nar .nrow .panel{background:var(--b-tile);box-shadow:var(--b-tile-shadow);border-radius:22px;margin:0}
-/* 线上版：Pretendard / NanumSquare Round / 霞鹜文楷 的本地子集，字重对应和原来的 CDN 样式表一样：
-   Pretendard 原样表每个字重一个文件（本页用到 400 / 500 / 600 / 700 / 800，只切这 5 个）；
-   NanumSquare Round 原样表 300 / 400 / 700 / 800（本页没用 300，只切 400 / 700 / 800，500 落 400、600 落 700，和原来一样）；
-   霞鹜文楷原样表 Regular = 400、Bold（新版叫 Medium）= 700，600 / 700 / 800 都落到 Medium，不做假粗体。原样表没有 unicode-range 限制（文楷原来是分片，合起来就是整套字），子集本身只含本页用到的字，所以这里也不写 unicode-range */
-@font-face{font-family:'LemoSubP';font-weight:400;font-display:swap;src:url('fonts/LemoSubP-Regular.subset.woff2') format('woff2')}
-@font-face{font-family:'LemoSubP';font-weight:500;font-display:swap;src:url('fonts/LemoSubP-Medium.subset.woff2') format('woff2')}
-@font-face{font-family:'LemoSubP';font-weight:600;font-display:swap;src:url('fonts/LemoSubP-SemiBold.subset.woff2') format('woff2')}
-@font-face{font-family:'LemoSubP';font-weight:700;font-display:swap;src:url('fonts/LemoSubP-Bold.subset.woff2') format('woff2')}
-@font-face{font-family:'LemoSubP';font-weight:800;font-display:swap;src:url('fonts/LemoSubP-ExtraBold.subset.woff2') format('woff2')}
-@font-face{font-family:'LemoSubNR';font-weight:400;font-display:swap;src:url('fonts/LemoSubNR-Regular.subset.woff2') format('woff2')}
-@font-face{font-family:'LemoSubNR';font-weight:700;font-display:swap;src:url('fonts/LemoSubNR-Bold.subset.woff2') format('woff2')}
-@font-face{font-family:'LemoSubNR';font-weight:800;font-display:swap;src:url('fonts/LemoSubNR-ExtraBold.subset.woff2') format('woff2')}
+/* 线上版字体（R-135）：都是本地子集，字重这样对应——
+   细线黑：界面里 400 及以下落到细体（Light 300），500～900 落到中粗（Medium 500），只有日期大标题单独用特细（ExtraLight 200，见 .fthin）；
+   中文、拉丁字母和标点用未来荧黑（LemoGlow），韩文落到 Pretendard（LemoSubPT），数字用 Pretendard 细体的等宽数字（未来荧黑的数字不等宽，时间列对不齐）；
+   悠哉体：400 及以下落常规，500～900 落“中”（Medium）。悠哉字体正式版只有细 / 常规 / 中三档，不做假粗体；韩文 Hi Melody 只有一档；
+   霞鹜文楷：Regular = 400、Medium = 600 / 700 / 800，不做假粗体。 */
+@font-face{font-family:'LemoGlow';font-weight:100 249;font-display:swap;src:url('fonts/GlowSansSC-ExtraLight.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoGlow';font-weight:250 449;font-display:swap;src:url('fonts/GlowSansSC-Light.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoGlow';font-weight:450 900;font-display:swap;src:url('fonts/GlowSansSC-Medium.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoSubPT';font-weight:100 249;font-display:swap;src:url('fonts/LemoSubP-ExtraLight.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoSubPT';font-weight:250 449;font-display:swap;src:url('fonts/LemoSubP-Light.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoSubPT';font-weight:450 900;font-display:swap;src:url('fonts/LemoSubP-Medium.subset.woff2') format('woff2')}
+@font-face{font-family:'Yozai';font-weight:100 499;font-display:swap;src:url('fonts/Yozai-Regular.subset.woff2') format('woff2')}
+@font-face{font-family:'Yozai';font-weight:500 900;font-display:swap;src:url('fonts/Yozai-Medium.subset.woff2') format('woff2')}
 @font-face{font-family:'LXGW WenKai';font-weight:400;font-display:swap;src:url('fonts/LXGWWenKai-Regular.subset.woff2') format('woff2')}
 @font-face{font-family:'LXGW WenKai';font-weight:700;font-display:swap;src:url('fonts/LXGWWenKai-Medium.subset.woff2') format('woff2')}
-/* R-128：资源圆体 CN（本地子集，只管汉字和中文标点；韩文和拉丁字母落到 NanumSquare Round） */
-@font-face{font-family:'RHR-Han';font-weight:100 499;src:url('fonts/ResourceHanRoundedCN-Regular.subset.woff2') format('woff2');unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF,U+2014,U+2018-201D,U+2026,U+00B7}
-@font-face{font-family:'RHR-Han';font-weight:500 749;src:url('fonts/ResourceHanRoundedCN-Bold.subset.woff2') format('woff2');unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF,U+2014,U+2018-201D,U+2026,U+00B7}
-@font-face{font-family:'RHR-Han';font-weight:750 900;src:url('fonts/ResourceHanRoundedCN-Heavy.subset.woff2') format('woff2');unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF,U+2014,U+2018-201D,U+2026,U+00B7}
+.fthin .date,.fthin .th1 .dt{font-weight:200} /* 细线黑：日期大标题用特细 */
 /* ===== R-128：设置 › 字体 ===== */
 .fopt{display:grid;grid-template-columns:22px 1fr;gap:4px 12px;padding:14px 16px;border-bottom:1px solid var(--line)}
 .fopt:last-child{border-bottom:0}
@@ -952,11 +950,13 @@ body .th-simple-light .krul .sg.nxt b.bar,body .th-simple-dark .krul .sg.nxt b.b
 <div class="dcard">
   <h3>第七轮整体检查之后改了什么（2026-10-24，R-76～R-110；2026-10-27 补 R-111～R-118）</h3>
   <ul>
+    <li><b>R-135（负责人决定）</b>：字体页四套改成 系统字体（默认）、细线黑（未来荧黑 + Pretendard 细字重）、悠哉体（悠哉字体 + Hi Melody）、文楷；原来的统一黑体（思源黑体 + Pretendard）和圆体（资源圆体 CN + NanumSquare Round）去掉。按 统一黑体-对比.html 的 D、F 两组。细线黑：日期大标题特细，正文细体，粗体只到中粗，数字用 Pretendard 细体（等宽）；悠哉体粗体用“中”，不做假粗体。</li>
+    <li><b>R-134（负责人决定）</b>：普通日程和待办的标题一律常规字重，不加粗（今天列表、待办清单、未来 7 天、没赶上、AI 拆分、月历 / 周视图色块里的标题）；“现在”卡、时间数字、日期大标题不变。</li>
     <li><b>R-131 追问（负责人决定）</b>：磨砂玻璃两套的 K 时间轴换成 进行中卡片-对比.html 急件一节的改法 3“进度条 + 圆头”：8px 胶囊，已过去墨黑 / 柠檬黄实心，还没到奶油 #FFFBE8 / 深橄榄 #4A4834 不透明实心，此刻 14px 圆头 + 2.5px 描圈；下一件改成项目色竖条 + 文字、不画框。四套皮肤一起改：细轨碰到色块就断开（不再从色块底下透出来），被截断的一端直角截断、不再渐隐（简洁两套长事项原来渐隐那一截会透出细轨）。“还没到”在玻璃上对卡底 1.2 / 1.3，低于 3，有意接受（见“现在”卡说明的对比度一段）。今天页、韩文页、提醒、状态 ②、四屏边缘状态、电脑各画面和官网主视觉的小手机都用同一个 kRuler，一起变了。新令牌 <code>--k-ring</code>。</li>
     <li><b>R-132（负责人决定）</b>：简洁皮肤剩下的三处黑块按 黑块-对比.html 的方案 C“普通卡片 + 柠檬点缀”一起改，和 K 卡同一套语言。① 纪念日页“最近的一个”大卡（手机、电脑、韩文）：简洁·浅色白卡、简洁·深色深灰卡 #1C1D22（原来是整块柠檬黄，负责人已知道一起改）；“最近的一个”做成 K 卡同款小标签（<code>--klv-bg</code> / <code>--klv-fg</code>）；大数字浅色用柠檬荧光笔底、深色用柠檬字。② 官网邀请卡：同样的卡，标题荧光笔底（浅）/ 柠檬字（深），简洁·浅色加 1px 细边。③ “今天”标记：简洁·浅色的月历格子、月历小日历、周视图日期、电脑周视图表头改成 2px 墨圈、不填色（简洁·深色和玻璃本来就是柠檬圆，不变）；电脑“本周”条选中那天四套都是柠檬柱，简洁·浅色再加 2px 墨边。玻璃两套不动。选中的筛选标签（“全部 6”）不在这次范围内。新令牌 <code>--now-num</code> <code>--now-hl</code> <code>--now-hl-pad</code> <code>--now-bd</code> <code>--now-avt-ring</code> <code>--now-k-bg</code> <code>--now-k-fg</code> <code>--now-k-pad</code> <code>--now-k-w</code> <code>--today-ring</code> <code>--wk-on</code> <code>--wk-on-ring</code>，令牌表已同步。实测对比度（简洁·浅色）：大数字 13.4、标题 18.3、小字 6.7、今天日期 16.2–18.3；（简洁·深色）大数字 12.4、标题 15.2、小字 7.2，都 ≥ 4.5。</li>
     <li><b>R-131（负责人决定）</b>：今天页“现在”卡换成 进行中卡片-对比.html 的方案 K 小时间尺：手机、电脑方案 B（没选中、选中、窄窗口）、韩文今天页、提醒状态、“现在”卡状态 ②、官网主视觉里的小手机都换了，简洁皮肤用普通卡片底色、柠檬黄只在时间轴上正在进行的那一段，磨砂玻璃皮肤保留原来的柠檬黄 / 深橄榄渐变底（负责人：“磨砂页面还是用柠檬黄的底”），时间轴的当前事项在玻璃上改成描边 + 实心；新增令牌 <code>--k-bg</code> <code>--k-fg</code> <code>--k-fg2</code> <code>--k-trk</code> <code>--k-nxt-bg</code> <code>--k-line</code> <code>--k-cur</code> <code>--k-cur-bd</code> <code>--k-done</code> <code>--k-mark</code> <code>--k-co</code> <code>--k-co-done</code> <code>--klv-bg</code> <code>--klv-fg</code>；刻度字 11px（负责人：不要调大）；时间窗规则见“现在”卡说明；边缘状态补了 4 屏（没有进行中、快结束 95%、超过 2 小时、两件重叠）。<code>--now-bg</code> 等旧令牌只剩纪念日大卡、邀请卡在用（R-132 起这两处在简洁皮肤里也换成普通卡片）。</li>
     <li><b>R-126（负责人决定）</b>：电脑版用 R-120 方案 B。电脑画面全部按方案 B 重画（改的是 .desk 的公共样式和侧栏，所有电脑屏一起变）：悬浮圆角侧栏，底部 ⋯ 和头像，选中项柠檬黄；画布 --b-canvas 渐变；时间河和中间各块是半透明面板 --b-tile；详情是从右滑出的抽屉 --b-drawer（左边有拖宽把手）。新令牌 --b-canvas / --b-rail / --b-rail-shadow / --b-tile / --b-tile-shadow / --b-drawer / --b-drawer-shadow / --b-blur，四套皮肤都有（简洁·深色、玻璃·浅色两套是这次补的）。新增第 2 屏“窄窗口一列”。R-125：电脑和网页的纪念日处一律用头像。 <b>更正（核对后）</b>：详情不再是常驻右栏，改回负责人选的 B——没选中时不显示、面板占满；选中一条时抽屉从右边盖上来（今天页画了“没选中”和“选中了一条”两张；待办、随手记、纪念日、附件等画选中状态；周/月视图也画在右边（R-130 统一）；窄窗口一列时同样盖上来）。</li>
-    <li><b>R-128</b>：设置 › 皮肤下面加“字体”一行；字体页手机、电脑各一张（中文、韩文各一套），四套：系统字体（默认）、统一黑体（思源黑体 + Pretendard）、圆体（资源圆体 CN + NanumSquare Round）、文楷（霞鹜文楷 + Gowun Batang），各写一行中韩示例；未下载标大小和“选中后下载”，下载中、下载失败（回退系统字体，可重试）各画一处；字体跟账号走，在所有设备上生效。另加“同一个今天页 · 四种字体”对比。数字：系统字体、统一黑体用 Manrope，圆体、文楷跟字体走（都等宽）。文楷粗体一律用 Medium，不做假粗体。预览用网页字体；资源圆体 CN 用本地子集（v0.990，SIL OFL 1.1，许可证在 fonts/）。</li>
+    <li><b>R-128</b>：设置 › 皮肤下面加“字体”一行；字体页手机、电脑各一张（中文、韩文各一套），四套：系统字体（默认）、统一黑体（思源黑体 + Pretendard）、圆体（资源圆体 CN + NanumSquare Round）、文楷（霞鹜文楷 + Gowun Batang），各写一行中韩示例；未下载标大小和“选中后下载”，下载中、下载失败（回退系统字体，可重试）各画一处；字体跟账号走，在所有设备上生效。另加“同一个今天页 · 四种字体”对比。数字：系统字体、统一黑体用 Manrope，圆体、文楷跟字体走（都等宽）。文楷粗体一律用 Medium，不做假粗体。预览用网页字体；资源圆体 CN 用本地子集（v0.990，SIL OFL 1.1，许可证在 fonts/）。<b>统一黑体和圆体已按 R-135 换成细线黑和悠哉体，见上面。</b></li>
     <li><b>R-122（负责人决定）</b>：底部浮出的提示条、撤销条（手机 .toast、电脑 .dtoast）和提醒按钮条（.abar）改成和底部导航同一套半透明磨砂玻璃：同样 blur(6px)＋饱和度、同样的玻璃描边和阴影，底色和底栏同色相；透明度从 .70 加深到 .82（新令牌 --float-bg / --float-sat / --float-solid），背后是白底、黑卡、柠檬黄时正文和灰字都 ≥ 4.5:1。简洁深色原来是浅底提示条，现在也是深色玻璃。“知道了”这类主按钮保留柠檬黄。减少透明效果时换成实色。追加：顶部提醒横幅 .tban 和断网横幅 .offban 也用同一套玻璃；提醒横幅的 1.5px 墨黑描边改成 1.5px 柠檬黄强调色边（深色玻璃上墨黑边看不见）。</li>
     <li><b>R-121（负责人决定）</b>：纪念日没有头像时，头像位置显示“名字第一个字 + 类型颜色”的圆（和头像同大小），取代原来的菱形；类型颜色用项目色板：生日 --p1 柠檬黄、纪念日 --p3 珊瑚粉、倒数日 --p2 浅蓝，字用 --on-p 墨黑。改到：纪念日列表、“最近的一个”大卡、电脑详情、编辑、新建（没加头像时显示第一个字，右下角小图标表示可加）；今天页的纪念日提示（手机日期下的小标签、电脑“快到了”两张卡）也改成圆形头像。<b>只有月历格子里的菱形标记不变</b>（符号说明里的菱形也是讲月历标记，保留）。</li>
     <li><b>R-118（负责人决定）</b>：① 今天页上半部分按 今天顶部-对比.html 的方案 A（手机、电脑、四套皮肤、韩文都换）：日期一行、“现在”卡标题 17px 半粗、圆角 14；“现在”卡 4 种状态，②③④ 新画在第 63 屏，③ 写“明天 11:00 家庭 브런치”。② 各页面右上角的搜索按钮全部去掉，查找全靠“＋”，电脑侧栏也去掉搜索，Ctrl+K 打开和“＋”同一个输入框；查找结果页顶上改成这次经“＋”说的话。③ R-117 第 2 项的“＋”是右下角黄色大按钮：外环保留，电脑侧栏的“＋”也加了同样的外环；输入行插图按钮不变。④ 底部导航随手记图标改成线性铅笔（2px 描边，和其他三个一致），日历仍是 3×3 方格。⑤ D-16 定为不查，D-13 定为保留原随手记、新条目链回，两处去掉“待确认”。⑥ D-12 改为隐私记的 PPT 也用微软预览：第 42 屏改成和普通 PPT 一样先问，多一句“隐私记的文件会先解密再交给微软”；隐私说明更新页“预览 PPT”一行加“包括隐私记里的 PPT”，告知里的“交给微软的”同步改。⑦ 负责人也会看到“隐私说明更新了”，不改。</li>
@@ -1935,35 +1935,35 @@ PH.nowstates = () => phone(`<div class="pg xa">${TH1('zh')}${ANN_A()}
 DK.nowstates = () => CEN(PH.nowstates());
 
 /* ===== R-128：设置 › 字体（预览用网页字体近似，示意） ===== */
-const FONTS = {  /* zh：中文界面的字体顺序；ko：韩文界面；num：数字（系统、统一黑体用 Manrope；圆体、文楷跟着自己的字体，两款数字都等宽，见报告） */
+const FONTS = {  /* zh：中文界面的字体顺序；ko：韩文界面；num：数字（系统字体用 Manrope；细线黑用 Pretendard 细体的等宽数字；悠哉体、文楷跟着自己的字体，两款数字都等宽，见报告） */
   sys:  {zh:'', ko:'', num:'', n:{zh:['系统字体（默认）','iPhone 苹方 + Apple SD Gothic Neo；电脑 微软雅黑 + 맑은 고딕'], ko:['시스템 글꼴 (기본)','iPhone 핑팡 + Apple SD Gothic Neo · PC 微软雅黑 + 맑은 고딕']}},
-  hei:  {zh:"'LemoSubP','Noto Sans SC','Source Han Sans SC',sans-serif", ko:"'LemoSubP','Noto Sans SC','Source Han Sans SC',sans-serif", num:'', n:{zh:['统一黑体','思源黑体 + Pretendard'], ko:['통일 고딕','본고딕(思源黑体) + Pretendard']}},
-  round:{zh:"'RHR-Han','LemoSubNR',sans-serif", ko:"'RHR-Han','LemoSubNR',sans-serif", num:"'LemoSubNR',sans-serif", n:{zh:['圆体','资源圆体 CN + NanumSquare Round'], ko:['둥근체','리소스 한 라운디드 CN(资源圆体) + 나눔스퀘어라운드']}},
+  thin: {zh:"'LemoGlow','LemoSubPT',sans-serif", ko:"'LemoSubPT','LemoGlow',sans-serif", num:"'LemoSubPT',sans-serif", n:{zh:['细线黑','未来荧黑 + Pretendard（细字重）'], ko:['가는 고딕','Glow Sans(未来荧黑) + Pretendard 가는 굵기']}},
+  yozai:{zh:"'Yozai','Hi Melody',sans-serif", ko:"'Hi Melody','Yozai',sans-serif", num:"'Yozai',sans-serif", n:{zh:['悠哉体','悠哉字体 + Hi Melody'], ko:['유자이체','유자이(悠哉) + 하이 멜로디']}},
   kai:  {zh:"'LXGW WenKai','Gowun Batang',serif", ko:"'Gowun Batang','LXGW WenKai',serif", num:"'LXGW WenKai',serif", n:{zh:['文楷','霞鹜文楷 + Gowun Batang'], ko:['원카이','LXGW 원카이(霞鹜文楷) + 고운바탕']}}
 };
-const FVARS = (k, lang='zh') => { const f=FONTS[k]; if(!f.zh) return ''; return `--f-zh:${f.zh};--f-ko:${f.ko};${f.num?`--f-num:${f.num};`:''}${k==='kai'?'font-synthesis:none;':''}`; };
+const FVARS = (k, lang='zh') => { const f=FONTS[k]; if(!f.zh) return ''; return `--f-zh:${f.zh};--f-ko:${f.ko};${f.num?`--f-num:${f.num};`:''}${k!=='sys'?'font-synthesis:none;':''}`; };
 const fontList = (lang) => {
   const ko = lang==='ko';
   const smp = ko ? '오후 3시 반 고객 회의 · 下午三点半开会' : '下午三点半开会 · 오후 3시 반 고객 회의';
-  const T = ko ? {use:'사용 중',nodl:'다운로드 없음',dling:'다운로드 중 62% · 약 18 MB',dlnote:'다 받을 때까지 시스템 글꼴로 보여요',size:'약 11 MB · 선택하면 다운로드',fail:'다운로드 실패 · 시스템 글꼴로 돌아갔어요',retry:'다시 시도',kaisz:'약 24 MB'}
-               : {use:'正在使用',nodl:'不用下载',dling:'下载中 62% · 约 18 MB',dlnote:'下完之前先用系统字体',size:'约 11 MB · 选中后下载',fail:'下载失败 · 已回退系统字体',retry:'重试',kaisz:'约 24 MB'};
-  const o = (k, on, st, sub) => { const f=FONTS[k], n=f.n[ko?'ko':'zh'], ff=f[ko?'ko':'zh']; return `<div class="fopt ${on?'on':''}"><span class="rd"></span><div><div class="nm">${n[0]}</div><div class="pair">${n[1]}</div></div><div class="smp" style="${ff?`font-family:${ff};${k==='kai'?'font-synthesis:none':''}`:''}">${smp} <span style="opacity:.75">15:30</span></div><div class="st">${st}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`; };
+  const T = ko ? {use:'사용 중',nodl:'다운로드 없음',dling:'다운로드 중 62% · 약 19 MB',dlnote:'다 받을 때까지 시스템 글꼴로 보여요',size:'약 18 MB · 선택하면 다운로드',fail:'다운로드 실패 · 시스템 글꼴로 돌아갔어요',retry:'다시 시도',kaisz:'약 24 MB'}
+               : {use:'正在使用',nodl:'不用下载',dling:'下载中 62% · 约 19 MB',dlnote:'下完之前先用系统字体',size:'约 18 MB · 选中后下载',fail:'下载失败 · 已回退系统字体',retry:'重试',kaisz:'约 24 MB'};
+  const o = (k, on, st, sub) => { const f=FONTS[k], n=f.n[ko?'ko':'zh'], ff=f[ko?'ko':'zh']; return `<div class="fopt ${on?'on':''}"><span class="rd"></span><div><div class="nm">${n[0]}</div><div class="pair">${n[1]}</div></div><div class="smp" style="${ff?`font-family:${ff};font-synthesis:none`:''}">${smp} <span style="opacity:.75">15:30</span></div><div class="st">${st}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`; };
   return `<div class="panel" style="padding:0">`
     + o('sys', false, `<span class="tag use">${T.use}</span>${T.nodl}`)
-    + o('hei', true, `<span style="white-space:nowrap">${T.dling}</span><span class="bar"><i style="width:62%"></i></span>`, T.dlnote)
-    + o('round', false, T.size)
+    + o('thin', true, `<span style="white-space:nowrap">${T.dling}</span><span class="bar"><i style="width:62%"></i></span>`, T.dlnote)
+    + o('yozai', false, T.size)
     + o('kai', false, `<span class="err">${T.fail}</span><span class="rt">${T.retry}</span>`, T.kaisz)
-    + `</div><div class="fnote">${ko?'중국어·한국어 글꼴을 한 세트로 바꿔요. 글꼴 설정은 계정에 저장돼 모든 기기에 적용돼요. 다운로드 중이거나 실패하면 시스템 글꼴로 보여요.<br>※ 시안의 미리보기는 웹 글꼴로 비슷하게 보여 준 것(리소스 한 라운디드는 이 페이지에 쓰인 글자만 잘라 낸 부분 글꼴)이고, 용량은 추정치예요.':'中文和韩文的字体成套切换；字体设置跟账号走，在所有设备上生效。下载中或下载失败时先用系统字体显示。<br>※ 设计稿里的预览用网页字体近似（资源圆体 CN 用本页用到的字切出的子集），大小是估算，仅示意。'}</div>`;
+    + `</div><div class="fnote">${ko?'중국어·한국어 글꼴을 한 세트로 바꿔요. 글꼴 설정은 계정에 저장돼 모든 기기에 적용돼요. 다운로드 중이거나 실패하면 시스템 글꼴로 보여요.<br>※ 시안의 미리보기는 웹 글꼴로 비슷하게 보여 준 것(이 페이지에 쓰인 글자만 잘라 낸 부분 글꼴)이고, 용량은 추정치예요.':'中文和韩文的字体成套切换；字体设置跟账号走，在所有设备上生效。下载中或下载失败时先用系统字体显示。<br>※ 设计稿里的预览用网页字体近似（用本页用到的字切出的子集），大小是估算，仅示意。'}</div>`;
 };
 const fontHead = (back, title) => `<div style="display:flex;align-items:center;height:44px;position:relative"><span style="font-size:14px">‹ ${back}</span><b style="position:absolute;left:0;right:0;text-align:center;font-size:17px;pointer-events:none">${title}</b></div><div style="height:10px"></div>`;
 PH.fontpick = () => phone(`<div class="pg">${fontHead('设置','字体')}${fontList('zh')}</div>`, {nav:false});
 PH.fontpickko = () => phone(`<div class="pg">${fontHead('설정','글꼴')}${fontList('ko')}</div>`, {nav:false, lang:'ko'});
-const fontPrev = (lang) => { const ko=lang==='ko'; const f={ff:FONTS.hei[lang]};
+const fontPrev = (lang) => { const ko=lang==='ko'; const f={ff:FONTS.thin[lang]};
   const rows = ko ? [['15:30','SignPlex 고객 피드백 회의','16:30까지 · 15분 전 알림'],['19:00','지민이랑 저녁','연남동 · 생활']] : [['15:30','SignPlex 客户反馈会','到 16:30 · 提前 15 分提醒'],['19:00','和 지민 吃饭','연남동 · 生活']];
-  return `<div class="col mid"><div class="secth" style="margin-top:0"><span>${ko?'미리보기 · 통일 고딕':'预览 · 统一黑体'}</span></div><div class="panel" style="padding:16px 18px;font-family:${f.ff}"><div style="font-size:22px;font-weight:800">${ko?'10월 24일 토요일':'10月24日 周六'}</div><div class="muted" style="font-size:13px;margin-bottom:10px">${ko?'음력 9월 15일':'农历九月十五'}</div>${rows.map(r=>`<div style="display:grid;grid-template-columns:52px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)"><b>${r[0]}</b><div><div style="font-weight:700">${r[1]}</div><div class="muted" style="font-size:12.5px">${r[2]}</div></div></div>`).join('')}<div style="font-size:14px;margin-top:10px;line-height:1.6">${ko?'서울숲 은행나무가 노랗게 물들었어요. 다음 주말에 카메라 챙기기.':'首尔林银杏黄了，下周末带相机，去 서울숲 东门。'}</div></div><div class="fnote">${ko?'다운로드가 끝나야 이 글꼴로 바뀌어요. 실패하면 시스템 글꼴 그대로예요.':'下载完才换成这个字体；失败就保持系统字体。'}</div></div>`; };
+  return `<div class="col mid"><div class="secth" style="margin-top:0"><span>${ko?'미리보기 · 가는 고딕':'预览 · 细线黑'}</span></div><div class="panel" style="padding:16px 18px;font-family:${f.ff};font-synthesis:none"><div style="font-size:22px;font-weight:200">${ko?'10월 24일 토요일':'10月24日 周六'}</div><div class="muted" style="font-size:13px;margin-bottom:10px">${ko?'음력 9월 15일':'农历九月十五'}</div>${rows.map(r=>`<div style="display:grid;grid-template-columns:52px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)"><b>${r[0]}</b><div><div style="font-weight:700">${r[1]}</div><div class="muted" style="font-size:12.5px">${r[2]}</div></div></div>`).join('')}<div style="font-size:14px;margin-top:10px;line-height:1.6">${ko?'서울숲 은행나무가 노랗게 물들었어요. 다음 주말에 카메라 챙기기.':'首尔林银杏黄了，下周末带相机，去 서울숲 东门。'}</div></div><div class="fnote">${ko?'다운로드가 끝나야 이 글꼴로 바뀌어요. 실패하면 시스템 글꼴 그대로예요.':'下载完才换成这个字体；失败就保持系统字体。'}</div></div>`; };
 DK.fontpick = () => desk(rail(-1)+`<div class="col"><div class="date" style="font-size:26px;margin-bottom:10px">设置 › 字体</div><div style="max-width:600px">${fontList('zh')}</div></div>${fontPrev('zh')}`,'two');
 DK.fontpickko = () => desk(rail(-1,'ko')+`<div class="col"><div class="date" style="font-size:26px;margin-bottom:10px">설정 › 글꼴</div><div style="max-width:600px">${fontList('ko')}</div></div>${fontPrev('ko')}`,'two','','ko');
-PH.fontcmp = () => `<div class="fcmp">${[['sys','系统字体（默认）','苹方 + Apple SD Gothic Neo · 数字 Manrope'],['hei','统一黑体','思源黑体 + Pretendard · 数字 Manrope'],['round','圆体','资源圆体 CN + NanumSquare Round · 数字跟字体'],['kai','文楷','霞鹜文楷 + Gowun Batang · 数字跟字体<br>粗体一律用 Medium，不做假粗体']].map(([k,n,d])=>{ return `<div class="th-simple-light" style="background:none;${FVARS(k)}"><div class="fcap">${n}<small>${d}</small></div>${PH.today()}</div>`;}).join('')}</div>`;
+PH.fontcmp = () => `<div class="fcmp">${[['sys','系统字体（默认）','苹方 + Apple SD Gothic Neo · 数字 Manrope'],['thin','细线黑','未来荧黑 + Pretendard（细字重）· 数字 Pretendard 细体<br>日期特细，正文细体，粗体只到中粗'],['yozai','悠哉体','悠哉字体 + Hi Melody · 数字跟字体<br>粗体用“中”，不做假粗体'],['kai','文楷','霞鹜文楷 + Gowun Batang · 数字跟字体<br>粗体一律用 Medium，不做假粗体']].map(([k,n,d])=>{ return `<div class="th-simple-light ${k==='thin'?'fthin':''}" style="background:none;${FVARS(k)}"><div class="fcap">${n}<small>${d}</small></div>${PH.today()}</div>`;}).join('')}</div>`;
 DK.fontcmp = () => PH.fontcmp();
 /* R-126 更正：选中项描边 */
 const selRow=(h,txt)=>{const j=h.indexOf(txt); if(j<0) return h; const i=h.lastIndexOf('class="lrow',j); return i<0?h:h.slice(0,i)+'class="lrow sel '+h.slice(i+11);};
@@ -2002,9 +2002,9 @@ const LIST = [
   ['rec','长按“＋”录音中','录音面板是玻璃（磨砂玻璃皮肤）','电脑：Ctrl+Alt+空格 弹出打字框','exe 不做语音（R-90），全局快捷键弹出打字框，和 Ctrl+N 同一个框；说话请用手机'],
   ['toast','保存后的提示条','“已记下”，新的一条描边高亮；提示条离底 118px，R-122 起和底部导航同一套半透明磨砂玻璃'],
   ['unlock','隐私记解锁','背后列表打上磨砂；减少透明效果时遮罩改成实色、不模糊','隐私记解锁（电脑 exe）','R-105：页面打包进 exe，exe 里不能用 Windows Hello，只能输入隐私记密码。在电脑浏览器里打开网页版（lemomemo.com/app/）时，支持的设备上仍可用 Windows Hello，解锁卡和手机一样多一颗“用 Windows Hello 解锁”'],
-  ['fontpick','设置 › 字体（R-128）','设置 › 皮肤下面加“字体”一行，点进来是这页。四套：系统字体（默认）、统一黑体、圆体、文楷，每项用该字体写一行中韩示例。图里示意三种状态：统一黑体“下载中”（下完之前先用系统字体）、圆体“未下载：约 11 MB · 选中后下载”、文楷“下载失败，已回退系统字体 · 重试”。字体设置跟账号走，在所有设备上生效。预览用网页字体近似，大小是估算，仅示意','电脑：设置 › 字体（方案 B）','左边是同一个列表，右边面板预览选中的字体（下完才真正换）'],
-  ['fontpickko','설정 › 글꼴（韩文界面，R-128）','韩文界面的同一页：시스템 글꼴 / 통일 고딕 / 둥근체 / 원카이；示例句韩文在前','电脑：설정 › 글꼴（方案 B）','同中文版，文案换成韩文'],
-  ['fontcmp','同一个今天页 · 四种字体（R-128）','手机，简洁·浅色；从左到右：系统字体、统一黑体、圆体、文楷。网页字体近似，仅示意。数字：系统字体、统一黑体用 Manrope；圆体、文楷跟着各自字体（两款数字都等宽，时间对得齐）。文楷粗体一律用 Medium','同一个今天页 · 四种字体（手机对比）','同左：手机，简洁·浅色'],
+  ['fontpick','设置 › 字体（R-128）','设置 › 皮肤下面加“字体”一行，点进来是这页。四套（R-135）：系统字体（默认）、细线黑、悠哉体、文楷，每项用该字体写一行中韩示例。图里示意三种状态：细线黑“下载中”（下完之前先用系统字体）、悠哉体“未下载：约 18 MB · 选中后下载”、文楷“下载失败，已回退系统字体 · 重试”。字体设置跟账号走，在所有设备上生效。预览用网页字体近似，大小是估算，仅示意','电脑：设置 › 字体（方案 B）','左边是同一个列表，右边面板预览选中的字体（下完才真正换）'],
+  ['fontpickko','설정 › 글꼴（韩文界面，R-128）','韩文界面的同一页：시스템 글꼴 / 가는 고딕 / 유자이체 / 원카이；示例句韩文在前','电脑：설정 › 글꼴（方案 B）','同中文版，文案换成韩文'],
+  ['fontcmp','同一个今天页 · 四种字体（R-128）','手机，简洁·浅色；从左到右：系统字体、细线黑、悠哉体、文楷（R-135）。网页字体近似，仅示意。数字：系统字体用 Manrope；细线黑用 Pretendard 细体的等宽数字（未来荧黑自带的数字不等宽）；悠哉体、文楷跟着各自字体（两款数字都等宽，时间对得齐）。细线黑日期特细、正文细体、粗体只到中粗；悠哉体粗体用“中”；文楷粗体一律用 Medium','同一个今天页 · 四种字体（手机对比）','同左：手机，简洁·浅色'],
   ['settings','设置首页','皮肤下面多了“减少透明效果”开关（默认关，R-84）；“随手记显示方式”只对本类设备生效；“日历”的节假日三选一：只显示中国 / 只显示韩国 / 两国都显示，默认跟界面语言（中文→中国，R-97）。“邀请朋友”一行只在管理员账号（产品负责人）出现，朋友的账号里没有（R-83）；这里画的是管理员账号'],
   ['onb','首次引导：符号说明','第 3 步，共 3 步'],
   ['ko','韩文今天页（方案 A）','韩文用 Apple SD Gothic Neo / Malgun Gothic，按词换行；上半部分同中文方案 A；“现在”卡 K 的文案：진행 중 · 지금 14:17 · 13분 남음（R-131）'],
