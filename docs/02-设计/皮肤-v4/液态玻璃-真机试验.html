@@ -7,7 +7,8 @@
 <style>
 /* 液态玻璃真机试验（R-143 正式做法的验证页）：在 iPhone Safari 上真实滑动，看折射跟不跟手、掉不掉帧。
    做法：底栏里放“折射副本”——只复制底栏附近的几行内容（不是整屏），分几圈按离边缘的距离压缩，边缘把栏外的内容弯进来；
-   副本随滚动同步移动。所有参数可在页面顶部切换，右上角实时显示帧率。 */
+   副本随滚动同步移动。所有参数可在页面顶部切换，右上角实时显示帧率。
+   第 2 版（R-150）：12 圈折射、最外两圈红绿蓝分开弯（色散）、底栏按背后内容自动深浅、高光跟手机倾斜；副本铺背景色，去掉边缘重影。 */
 :root{--bg:#E9EAEE;--panel:#FFFFFF;--text:#141518;--text-2:#595C64;--line:#ECEDF0;--accent:#F2DF4A;
   --g-tint:rgba(255,255,255,.34);--g-hi:rgba(255,255,255,.95);--g-hi2:rgba(255,255,255,.55);--g-glow:.35;--g-sheen:.45;--g-drop:.14;--g-fg:#141518;--g-pill:rgba(20,21,24,.09);--g-fab-tint:rgba(242,223,74,.72);
   --safe:env(safe-area-inset-bottom,0px)}
@@ -49,10 +50,22 @@ h1{font-size:22px;margin:8px 0 4px}
 .fab svg{width:28px;height:28px;position:relative;z-index:2}
 .lens{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none;z-index:0;isolation:isolate;transform:translateZ(0)}
 .lens .lr{position:absolute;inset:0;-webkit-mask-size:100% 100%;mask-size:100% 100%}
-.lens .cp{position:absolute;left:0;top:0;will-change:transform}
-.lens .tint{position:absolute;inset:0;background:var(--g-tint)}
-.lens .spec{position:absolute;inset:0;border-radius:inherit;box-shadow:inset 1.5px 1.5px 0 -.5px var(--g-hi),inset -1px -1px 0 -.5px var(--g-hi2),inset 0 0 10px rgba(255,255,255,var(--g-glow));
-  background:radial-gradient(120% 90% at 22% -30%,rgba(255,255,255,var(--g-sheen)) 0 38%,transparent 60%)}
+/* 副本铺满背景色：每圈只露出自己弯进来的内容，不和底下真实的字叠成重影（第 2 版） */
+.lens .cp{position:absolute;left:0;top:0;will-change:transform;background:var(--bg);box-shadow:0 0 0 80px var(--bg)}
+.lens .tint{position:absolute;inset:0;background:var(--g-tint);transition:background .35s}
+/* 色散（第 2 版）：最外两圈拆成红、绿、蓝三份，各弯一点不同的量，再叠回去，边缘出现细细的彩边 */
+.lens .lr.dsp{background:#000;isolation:isolate}
+.lens .ch{position:absolute;inset:0;mix-blend-mode:plus-lighter}
+.lens .ch i{position:absolute;inset:-80px;mix-blend-mode:multiply}
+/* 高光位置 --sx/--sy、沿边亮线方向 --hx/--hy 由“倾斜高光”按手机倾斜实时改（第 2 版） */
+.lens .spec{position:absolute;inset:0;border-radius:inherit;box-shadow:inset calc(1.5px * var(--hx,1)) calc(1.5px * var(--hy,1)) 0 -.5px var(--g-hi),inset calc(-1px * var(--hx,1)) calc(-1px * var(--hy,1)) 0 -.5px var(--g-hi2),inset 0 0 10px rgba(255,255,255,var(--g-glow));
+  background:radial-gradient(120% 90% at var(--sx,22%) var(--sy,-30%),rgba(255,255,255,var(--g-sheen)) 0 38%,transparent 60%)}
+/* 自动深浅（第 2 版）：底栏背后大多是深色内容时，底栏自己换成深色玻璃 */
+.tabbar[data-ad="dark"]{--g-tint:rgba(30,31,36,.44);--g-hi:rgba(255,255,255,.45);--g-hi2:rgba(255,255,255,.18);--g-glow:.10;--g-sheen:.14;--g-fg:#F2F3F5;--g-pill:rgba(255,255,255,.14)}
+.tab{transition:color .35s}
+.row.dk{background:linear-gradient(100deg,#1d2b3c,#3b2d52);color:#fff;border-bottom-color:transparent}
+.row.dk .tm,.row.dk .t2{color:rgba(255,255,255,.72)}
+#tiltst{font-size:12px;color:var(--text-2);min-width:0}
 .fab .lens .tint{background:var(--g-fab-tint)}
 @property --dx{syntax:'<length>';inherits:true;initial-value:0px}
 .drop{position:absolute;top:5px;height:52px;left:var(--dx);border-radius:999px;z-index:1;pointer-events:none;transition:--dx .55s cubic-bezier(.34,1.45,.5,1)}
@@ -81,8 +94,12 @@ body.nopb .pblur{display:none}
 <div class="wrap">
   <h1>液态玻璃真机试验</h1>
   <p class="lead">请在 iPhone 的 Safari 里打开，用手指上下滑动列表，看底栏边缘有没有把经过的内容弯进来、跟不跟手。点底栏的按钮看液滴滑过去，按住选中的那一项看它鼓起来。右上角是实时帧率（60 或 120 是满帧）和最近 5 秒掉帧的次数。下面几个开关可以换参数，看哪一组又好看又不卡。</p>
+  <p class="lead">第 2 版加强了四处，都能单独开关，方便和苹果自带 App（照片、音乐）对比：① 12 圈折射，边缘更顺；② 边缘色散，彩边很细；③ 自动深浅——列表里每隔几行有深色块，滑到底栏背后时底栏会自己变深；④ 倾斜高光——点“开”后允许使用动作与方向，左右歪手机，高光会跟着走。</p>
   <div class="ctl">
-    <div class="r"><span>折射圈数</span><button data-k="rings" data-v="8">8 圈</button><button data-k="rings" data-v="5">5 圈</button><button data-k="rings" data-v="3">3 圈</button><button data-k="rings" data-v="0">不折射</button></div>
+    <div class="r"><span>折射圈数</span><button data-k="rings" data-v="12">12 圈</button><button data-k="rings" data-v="8">8 圈</button><button data-k="rings" data-v="5">5 圈</button><button data-k="rings" data-v="3">3 圈</button><button data-k="rings" data-v="0">不折射</button></div>
+    <div class="r"><span>边缘色散</span><button data-k="disp" data-v="1">开</button><button data-k="disp" data-v="0">关</button></div>
+    <div class="r"><span>自动深浅</span><button data-k="ad" data-v="1">开</button><button data-k="ad" data-v="0">关</button></div>
+    <div class="r"><span>倾斜高光</span><button data-k="tilt" data-v="1">开</button><button data-k="tilt" data-v="0">关</button><span id="tiltst"></span></div>
     <div class="r"><span>背后模糊</span><button data-k="blur" data-v="1">轻模糊</button><button data-k="blur" data-v="0">不模糊</button></div>
     <div class="r"><span>渐进模糊带</span><button data-k="pb" data-v="1">开</button><button data-k="pb" data-v="0">关</button></div>
     <div class="r"><span>深浅色</span><button data-k="theme" data-v="auto">跟随系统</button><button data-k="theme" data-v="light">浅色</button><button data-k="theme" data-v="dark">深色</button></div>
@@ -102,20 +119,25 @@ const H = 64, N = 80, WIN = 3;   // 行高、行数、副本窗口（底栏上�
 const COLORS = ['#F2DF4A','#8CC9E8','#F5B5AC','#C8B9F2','#A6DCB4','#F6C48C'];
 const TITLES = ['NEOX 横版对片','SignPlex 客户反馈会','和 지민 吃饭','回复 박 대리 的邮件','交 SignPlex 韩文版成片','妈妈生日','买咖啡豆','NEOX 竖版 4K 导出','整理发票','健身房'];
 const SUBS = ['到 14:30 · NEOX · 腾讯会议','提前 15 分提醒','연남동 · 生活','今天截止 · SignPlex','原定 10月22日','阴历十月初八'];
+const isDark = i => i % 10 === 6 || i % 10 === 7;   // 每 10 行有两行深色块，试“自动深浅”
 function rowHTML(i){
   const c = COLORS[i % 6], h = 9 + (i % 12), m = (i * 17) % 60;
   const thumb = i % 4 === 1 ? `<span class="th" style="background:linear-gradient(135deg,${COLORS[(i+2)%6]},${COLORS[(i+4)%6]})"></span>` : '';
   const chip = i % 3 === 0 ? `<span class="chip" style="background:${COLORS[(i+1)%6]}">${['NEOX','SignPlex','生活'][i%3===0?(i/3)%3:0]}</span>` : '';
-  return `<div class="row" style="top:${i*H}px"><span class="tm">${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}</span><span class="bar" style="background:${c}"></span><span class="tx"><div class="t1">${TITLES[i%10]}</div><div class="t2">${SUBS[i%6]}</div></span>${chip}${thumb}</div>`;
+  return `<div class="row${isDark(i) ? ' dk' : ''}" style="top:${i*H}px"><span class="tm">${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}</span><span class="bar" style="background:${c}"></span><span class="tx"><div class="t1">${TITLES[i%10]}</div><div class="t2">${SUBS[i%6]}</div></span>${chip}${thumb}</div>`;
 }
 const list = document.getElementById('list');
 list.style.height = N * H + 'px';
 list.innerHTML = Array.from({length:N}, (_, i) => rowHTML(i)).join('');
 
 const RINGS_ALL = {bar:[[22,2],[17,4],[13,7],[10,10],[7.5,14],[5.5,18],[3.5,23],[2,28]], fab:[[18,2],[14,4],[10,7],[7,10],[4.5,14],[2.5,19]], drop:[[12,4],[7,9],[3.5,15]]};
-const opt = {rings:8, blur:1, pb:1, theme:'auto'};
-try{ Object.assign(opt, JSON.parse(localStorage.getItem('lg-test')||'{}')); }catch(e){}
-function pick(kind){ const r = RINGS_ALL[kind]; const n = opt.rings; if(n>=8) return r; if(n===0) return []; return n===5 ? r.filter((_,i)=>[0,2,4,6,7].includes(i)).slice(0,5) : r.filter((_,i)=>[1,4,r.length-1].includes(i)); }
+const opt = {rings:12, disp:1, ad:1, tilt:0, blur:1, pb:1, theme:'auto'};
+try{ Object.assign(opt, JSON.parse(localStorage.getItem('lg-test2')||'{}')); }catch(e){}
+opt.tilt = 0;   // 陀螺仪每次打开页面都要重新点“开”授权
+// 按原来 8 圈的宽度和弯曲量插值出更密的圈（12 圈：底栏 12、“＋”9、液滴 5）
+function interp(r, n){ return Array.from({length:n}, (_, k) => { const t = k * (r.length - 1) / (n - 1), a = Math.floor(t), b = Math.min(a + 1, r.length - 1), f = t - a;
+  return [r[a][0] + (r[b][0] - r[a][0]) * f, r[a][1] + (r[b][1] - r[a][1]) * f]; }); }
+function pick(kind){ const r = RINGS_ALL[kind]; const n = opt.rings; if(n===12) return interp(r, Math.round(r.length * 1.5)); if(n>=8) return r; if(n===0) return []; return n===5 ? r.filter((_,i)=>[0,2,4,6,7].includes(i)).slice(0,5) : r.filter((_,i)=>[1,4,r.length-1].includes(i)); }
 function bandMask(W,H,w){
   const r=H/2, ri=Math.max(r-w,0.5);
   const pill=(x,y,W,H,r)=>`M${x+r},${y}h${W-2*r}a${r},${r} 0 0 1 0,${2*r}h${-(W-2*r)}a${r},${r} 0 0 1 0,${-2*r}z`;
@@ -126,14 +148,22 @@ let copies = [];   // {el, host, kind, extraX}
 function lens(host, kind, W, Hh, uniform){
   const L = document.createElement('div'); L.className = 'lens';
   const fx = opt.blur ? (kind==='drop' ? 'saturate(1.5) brightness(1.06)' : 'blur(2px) saturate(1.8) brightness(1.04)') : 'saturate(1.6)';
-  const mk = (d, w, u) => { const R = document.createElement('div'); R.className = 'lr';
-    const sx = u || (W/2)/(W/2+d), sy = u || (Hh/2)/(Hh/2+d);
-    R.style.transform = `scale(${sx},${sy})`; R.style.transformOrigin = `${W/2}px ${Hh/2}px`;
+  const scl = (d, u) => `scale(${u || (W/2)/(W/2+d)},${u || (Hh/2)/(Hh/2+d)})`;
+  const copy = f => { const cp = document.createElement('div'); cp.className = 'cp'; cp.style.filter = f; copies.push({el:cp, host, kind}); return cp; };
+  const mk = (d, w, u, dsp) => { const R = document.createElement('div'); R.className = 'lr';
+    R.style.transformOrigin = `${W/2}px ${Hh/2}px`;
     if(w){ const m = bandMask(W,Hh,w); R.style.webkitMaskImage = m; R.style.maskImage = m; }
-    const cp = document.createElement('div'); cp.className = 'cp'; cp.style.filter = w ? fx + ' brightness(1.06)' : fx;
-    R.appendChild(cp); copies.push({el:cp, host, kind}); return R; };
+    const f = w ? fx + ' brightness(1.06)' : fx;
+    if(dsp){   // 蓝光弯得多、红光弯得少：三份各用不同弯曲量，各留一个颜色通道，相加还原
+      R.classList.add('dsp');
+      [['#f00', .8], ['#0f0', 1], ['#00f', 1.22]].forEach(([c, k]) => { const C = document.createElement('div'); C.className = 'ch';
+        C.style.transform = scl(d * k); C.style.transformOrigin = `${W/2}px ${Hh/2}px`;
+        C.appendChild(copy(f)); C.insertAdjacentHTML('beforeend', `<i style="background:${c}"></i>`); R.appendChild(C); });
+    } else { R.style.transform = scl(d, u); R.appendChild(copy(f)); }
+    return R; };
   L.appendChild(mk(0, 0, uniform));
-  pick(kind).forEach(([w,d]) => L.appendChild(mk(d, w)));
+  const rs = pick(kind);
+  rs.forEach(([w,d], i) => L.appendChild(mk(d, w, 0, opt.disp && kind !== 'drop' && i >= rs.length - 2)));   // 色散只加在最外两圈
   L.insertAdjacentHTML('beforeend','<div class="tint"></div><div class="spec"></div>');
   return L;
 }
@@ -165,12 +195,52 @@ function sync(force){
   const lx = list.getBoundingClientRect().left, rects = new Map();
   copies.forEach(c => { if(!rects.has(c.host)) rects.set(c.host, c.host === drop ? {left: bar.getBoundingClientRect().left + drop.offsetLeft, top: bTop + 5} : c.host.getBoundingClientRect()); });
   copies.forEach(c => { const r = rects.get(c.host); c.el.style.transform = `translate3d(${lx - r.left}px, ${listTop - sy - r.top}px, 0)`; });
+  adapt(sy + bTop - listTop, bar.offsetHeight);
+}
+// 自动深浅：算底栏背后深色行占了多少高度；超过 55% 变深、低于 45% 变回（留一段缓冲，免得在边界上来回闪）
+function adapt(y0, h){
+  let want = 'light';
+  if(opt.ad){
+    let dark = 0;
+    for(let i = Math.max(0, Math.floor(y0 / H)); i * H < y0 + h && i < N; i++) if(isDark(i)) dark += Math.min(y0 + h, (i + 1) * H) - Math.max(y0, i * H);
+    const f = dark / h, cur = bar.dataset.ad || 'light';
+    want = f > .55 ? 'dark' : f < .45 ? 'light' : cur;
+  }
+  if((bar.dataset.ad || 'light') !== want) bar.dataset.ad = want;
+}
+// 倾斜高光：左右歪（gamma）移动高光的横向位置和亮边方向，前后仰（beta）移动纵向位置；每帧往目标值靠一点，动得顺
+const tilt = {tx:22, ty:-30, x:22, y:-30, got:false};
+function onTilt(e){
+  if(e.gamma == null) return;
+  tilt.got = true;
+  const g = Math.max(-35, Math.min(35, e.gamma)), b = Math.max(0, Math.min(90, e.beta ?? 45));
+  tilt.tx = 50 + g * 1.6; tilt.ty = -30 + (45 - b) * .6;
+}
+function stepTilt(){
+  if(!opt.tilt) return;
+  const nx = tilt.x + (tilt.tx - tilt.x) * .15, ny = tilt.y + (tilt.ty - tilt.y) * .15;
+  if(Math.abs(nx - tilt.x) < .05 && Math.abs(ny - tilt.y) < .05) return;
+  tilt.x = nx; tilt.y = ny;
+  const s = document.documentElement.style, hx = Math.max(-1, Math.min(1, (50 - nx) / 40));
+  s.setProperty('--sx', nx.toFixed(1) + '%'); s.setProperty('--sy', ny.toFixed(1) + '%'); s.setProperty('--hx', hx.toFixed(2));
+}
+async function setTilt(on){
+  const st = document.getElementById('tiltst');
+  if(!on){ removeEventListener('deviceorientation', onTilt); ['--sx','--sy','--hx'].forEach(k => document.documentElement.style.removeProperty(k)); tilt.x = 22; tilt.y = -30; st.textContent = ''; return true; }
+  try{
+    if(typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission){
+      if(await DeviceOrientationEvent.requestPermission() !== 'granted'){ st.textContent = '没有授权'; return false; }
+    }
+  }catch(e){ st.textContent = '这里不能请求授权'; return false; }
+  tilt.got = false; addEventListener('deviceorientation', onTilt); st.textContent = '等待数据…';
+  setTimeout(() => { if(opt.tilt) st.textContent = tilt.got ? '已开' : '收不到方向数据（嵌在网页里时可能被拦）'; }, 1500);
+  return true;
 }
 function measure(){ listTop = list.getBoundingClientRect().top + window.scrollY; }
 // 帧率表
 let last = performance.now(), frames = [], drops = [];
 function loop(now){
-  sync(false);
+  sync(false); stepTilt();
   const dt = now - last; last = now; frames.push(dt); if(frames.length > 60) frames.shift();
   if(dt > 1000/50) drops.push(now); drops = drops.filter(t => now - t < 5000);
   const avg = frames.reduce((a,b)=>a+b,0) / frames.length;
@@ -191,11 +261,12 @@ function applyOpt(){
   document.querySelectorAll('.ctl button').forEach(b => b.setAttribute('aria-pressed', String(String(opt[b.dataset.k]) === b.dataset.v)));
   document.body.classList.toggle('nopb', !opt.pb);
   if(opt.theme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = opt.theme;
-  try{ localStorage.setItem('lg-test', JSON.stringify(opt)); }catch(e){}
+  try{ localStorage.setItem('lg-test2', JSON.stringify(opt)); }catch(e){}
 }
-document.querySelectorAll('.ctl button').forEach(b => b.addEventListener('click', () => {
+document.querySelectorAll('.ctl button').forEach(b => b.addEventListener('click', async () => {
   const k = b.dataset.k; opt[k] = (k === 'theme') ? b.dataset.v : Number(b.dataset.v);
-  applyOpt(); if(k === 'rings' || k === 'blur') buildGlass();
+  if(k === 'tilt' && !(await setTilt(opt.tilt))) opt.tilt = 0;
+  applyOpt(); if(k === 'rings' || k === 'blur' || k === 'disp') buildGlass();
 }));
 addEventListener('resize', () => { measure(); buildGlass(); });
 applyOpt(); measure(); buildGlass(); requestAnimationFrame(loop);
