@@ -463,6 +463,18 @@ table.xl{border-collapse:collapse;font-size:13px;margin-top:10px;width:100%}tabl
 .ph b,.dk b{font-weight:inherit}
 .ph .sb b,.dk .dtop b{font-weight:700} /* 手机状态栏、抽屉拖动把手（图标） */
 .d1 span[style*="color"]{font-weight:400} /* 标题旁的数量 */
+
+/* R-139：底部导航后面的渐进模糊带（第 3 档“中”，参数同视觉稿）：带高 160px，5 层模糊 1～16px，底色（--g7）叠 55% */
+.pblur{position:absolute;left:0;right:0;bottom:0;height:160px;z-index:19;pointer-events:none}
+.pblur i{position:absolute;inset:0;-webkit-backdrop-filter:blur(var(--b));backdrop-filter:blur(var(--b));
+  -webkit-mask-image:linear-gradient(to bottom,transparent var(--m0),#000 var(--m1),#000 var(--m2),transparent var(--m3));
+          mask-image:linear-gradient(to bottom,transparent var(--m0),#000 var(--m1),#000 var(--m2),transparent var(--m3))}
+.pblur i:nth-child(1){--b:1px;--m0:0%;--m1:16.7%;--m2:33.3%;--m3:50%}
+.pblur i:nth-child(2){--b:2px;--m0:16.7%;--m1:33.3%;--m2:50%;--m3:66.7%}
+.pblur i:nth-child(3){--b:4px;--m0:33.3%;--m1:50%;--m2:66.7%;--m3:83.3%}
+.pblur i:nth-child(4){--b:8px;--m0:50%;--m1:66.7%;--m2:83.3%;--m3:100%}
+.pblur i:nth-child(5){--b:16px;--m0:66.7%;--m1:83.3%;--m2:100%;--m3:100.1%}
+.pblur b{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 0%,color-mix(in srgb,var(--g7) 55%,transparent) 70%,color-mix(in srgb,var(--g7) 55%,transparent) 100%)}
 </style>
 </head>
 <body data-v="p">
@@ -595,7 +607,7 @@ table.xl{border-collapse:collapse;font-size:13px;margin-top:10px;width:100%}tabl
 
 <script>
 const NAVN=['今天','日历','待办','随手记'],NAVK=['오늘','캘린더','할 일','메모'],NAVG=['◎','▦','✓','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.2 3.8l4 4L8.5 19.5 3.8 20.2l.7-4.7z"/><path d="M13.8 6.2l4 4"/></svg>']; /* R-118：随手记用线性铅笔，日历 3×3 方格 */
-function navbar(t,ko){const N=ko?NAVK:NAVN;return '<div class="bn">'+N.map((n,i)=>'<div class="bi'+(i===t?' on':'')+'"><span class="gl">'+NAVG[i]+'</span>'+n+'</div>').join('')+'</div><div class="plus">＋</div>'}
+function navbar(t,ko){const N=ko?NAVK:NAVN;return '<div class="pblur" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><b></b></div><div class="bn">'+N.map((n,i)=>'<div class="bi'+(i===t?' on':'')+'"><span class="gl">'+NAVG[i]+'</span>'+n+'</div>').join('')+'</div><div class="plus">＋</div>'}
 function phone(body,o){o=o||{};const t=o.tab===undefined?0:o.tab;const ko=o.lang==='ko';
  return '<div class="ph"'+(o.fix?' data-g="1"':'')+(ko?' lang="ko"':'')+(o.bg?' style="background:'+o.bg+'"':'')+'><div class="isl"></div><div class="sb"><b>'+(o.sb||'14:17')+'</b><span>▂▄▆ 5G ▭</span></div><div class="pc"'+(o.pb?' style="padding-bottom:'+o.pb+'px"':(o.nav===false?' style="padding-bottom:40px"':''))+'>'+body+'</div>'+(o.nav===false?'':navbar(t,ko))+(o.ov||'')+'<div class="hi"></div></div>'}
 function rail(t,ko){const N=ko?NAVK:NAVN;return '<div class="rail"><div class="rplus">＋</div><div class="rhint">'+(ko?'클릭 또는<br>Ctrl+K<br>입력·찾기':'点一下<br>或 Ctrl+K<br>打字、查找')+'</div>'+N.map((n,i)=>'<div class="rit'+(i===t?' on':'')+'"><span class="gl">'+NAVG[i]+'</span>'+n+'</div>').join('')+'<div class="rsp"></div><div class="rmore">⋯</div><div class="av" style="margin-top:8px">H</div></div>'}

@@ -255,7 +255,7 @@ body[data-skin="simple"] .toast,body[data-skin="simple"] .abar,.th-simple-light 
 .lockrow{margin-top:12px;display:flex;align-items:center;gap:10px;padding:0 16px;height:52px;font-size:14px}
 .merge{margin-top:10px;display:flex;align-items:center;gap:8px;padding:10px 12px 10px 16px;border-radius:var(--r-lg);background:var(--panel-2);font-size:12px}
 .thumb{width:44px;height:44px;border-radius:12px;flex:none}
-.inrow{font-size:14px;position:absolute;left:14px;right:14px;bottom:116px;height:56px;border-radius:var(--r-lg);background:var(--panel);display:flex;align-items:center;padding:0 8px 0 18px;gap:8px;color:var(--text-2);z-index:4;box-shadow:var(--shadow-2)}
+.inrow{font-size:14px;position:absolute;left:14px;right:14px;bottom:116px;height:56px;border-radius:var(--r-lg);background:var(--panel);display:flex;align-items:center;padding:0 8px 0 18px;gap:8px;color:var(--text-2);z-index:5;box-shadow:var(--shadow-2)}
 .mason{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;align-items:start}
 .mcard{border-radius:22px;overflow:hidden;background:var(--panel);box-shadow:var(--shadow-1)}
 .mcard .im{aspect-ratio:16/10;position:relative}
@@ -822,6 +822,29 @@ body .th-simple-light .krul .sg.nxt b.bar,body .th-simple-dark .krul .sg.nxt b.b
 .grp.dg{font-weight:600} /* 警示：没赶上 */
 .lang span.on,.rail .rt.on,.ympop .it.cur{font-weight:600} /* 选中状态 */
 .date .muted,.annbig .ti{font-weight:400} /* 标题旁的数量、纪念日大卡（不是“现在”卡）不加粗 */
+
+/* R-139：底部导航后面的渐进模糊带（负责人选 底部模糊-对比.html 第 3 档“中”）。
+   铺在内容之上、底部导航和“＋”之下（z-index 4），从屏幕底往上 160px（比底栏上沿高约 56px）。
+   5 层 backdrop-filter，从上到下 1 / 2 / 4 / 8 / 16px，每层用渐变遮罩只盖自己那一段（相邻两层重叠），越往下越糊；
+   再叠一层底色渐变（--bg 55%，从 0 到 70% 处渐入），让底栏后面的字同时变淡，往上滚出这条带时逐渐清楚。
+   磨砂玻璃的底色是光斑渐变，叠单色会发灰，底色层只叠一半。底部导航自己的样子不变（R-79、R-80）。
+   减少透明效果：不模糊，只留底色渐变并加深到 94%。实机要在 iPhone 上确认滚动流畅（固定 5 层）。 */
+.pblur{position:absolute;left:0;right:0;bottom:0;height:160px;z-index:4;pointer-events:none;--pb-tint:55%}
+.pblur i{position:absolute;inset:0;-webkit-backdrop-filter:blur(var(--b));backdrop-filter:blur(var(--b));
+  -webkit-mask-image:linear-gradient(to bottom,transparent var(--m0),#000 var(--m1),#000 var(--m2),transparent var(--m3));
+          mask-image:linear-gradient(to bottom,transparent var(--m0),#000 var(--m1),#000 var(--m2),transparent var(--m3))}
+.pblur i:nth-child(1){--b:1px;--m0:0%;--m1:16.7%;--m2:33.3%;--m3:50%}
+.pblur i:nth-child(2){--b:2px;--m0:16.7%;--m1:33.3%;--m2:50%;--m3:66.7%}
+.pblur i:nth-child(3){--b:4px;--m0:33.3%;--m1:50%;--m2:66.7%;--m3:83.3%}
+.pblur i:nth-child(4){--b:8px;--m0:50%;--m1:66.7%;--m2:83.3%;--m3:100%}
+.pblur i:nth-child(5){--b:16px;--m0:66.7%;--m1:83.3%;--m2:100%;--m3:100.1%}
+.pblur b{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 0%,color-mix(in srgb,var(--bg) var(--pb-tint),transparent) 70%,color-mix(in srgb,var(--bg) var(--pb-tint),transparent) 100%)}
+body[data-skin="glass"] .pblur b,.th-glass-light .pblur b,.th-glass-dark .pblur b{opacity:.5}
+body[data-rt="1"] .pblur i{display:none}
+body[data-rt="1"] .pblur{--pb-tint:94%}
+@media (prefers-reduced-transparency: reduce){ .pblur i{display:none} .pblur{--pb-tint:94%} }
+.scr .home{z-index:6} /* Home 横条是系统画的，永远在最上面 */
+.scr{clip-path:inset(0 round 44px)} /* 示意图专用：模糊只在屏幕里取样，不把手机外框的黑色吸进来 */
 </style>
 </head>
 <body data-skin="simple" data-mode="light" data-dev="p" data-rt="0" data-hit="0">
@@ -899,7 +922,7 @@ body .th-simple-light .krul .sg.nxt b.bar,body .th-simple-dark .krul .sg.nxt b.b
     <h3>磨砂玻璃</h3>
     <ul>
       <li>底色就是图标的光：左上和右下两团柠檬黄柔光，右上一点粉，左下一点蓝，位置和图标里的光斑一致。</li>
-      <li>玻璃用在哪里（按现状，R-79、R-80、R-89）：底部导航 70% 不透明＋模糊 6px（两套皮肤都是）；提醒按钮条、“已记下”等提示条和撤销条与底部导航同一套半透明磨砂玻璃（R-122，取代 R-89 的“提示条实色”；透明度加深到 .82，令牌 <code>--float-bg</code>）；底部弹层、录音面板、隐私记解锁卡是玻璃。“＋”是实色柠檬黄。列表和卡片一律实色，保证字清楚。</li>
+      <li>玻璃用在哪里（按现状，R-79、R-80、R-89）：底部导航 70% 不透明＋模糊 6px（两套皮肤都是），它后面还有一条 160px 高的渐进模糊带，内容滚到底栏后面会变糊变淡（R-139）；提醒按钮条、“已记下”等提示条和撤销条与底部导航同一套半透明磨砂玻璃（R-122，取代 R-89 的“提示条实色”；透明度加深到 .82，令牌 <code>--float-bg</code>）；底部弹层、录音面板、隐私记解锁卡是玻璃。“＋”是实色柠檬黄。列表和卡片一律实色，保证字清楚。</li>
       <li>选中状态从“黑底白字”换成“柠檬黄底黑字”；“现在”卡浅色时是一块柠檬黄，深色时是带黄光的深色卡（R-131 换成小时间尺后，玻璃皮肤仍保留这两种底，负责人：“磨砂页面还是用柠檬黄的底”）。</li>
       <li>减少透明效果时，玻璃、导航、遮罩都换成实色后备值（令牌表里的 <code>--glass-solid</code>），也不再模糊。iPhone 的网页读不到系统“降低透明度”，所以在“设置 › 皮肤”里放一个“减少透明效果”开关，默认关（R-84）；Windows 仍自动跟随系统的“透明效果”。页面顶部可以勾“模拟‘减少透明效果’”来看效果。</li>
     </ul>
@@ -957,6 +980,7 @@ body .th-simple-light .krul .sg.nxt b.bar,body .th-simple-dark .krul .sg.nxt b.b
 <div class="dcard">
   <h3>第七轮整体检查之后改了什么（2026-10-24，R-76～R-110；2026-10-27 补 R-111～R-118）</h3>
   <ul>
+    <li><b>R-139（负责人决定）</b>：底部导航后面加渐进模糊带，选 底部模糊-对比.html 第 3 档“中”：带高 160px，5 层模糊 1～16px，底色叠 55%（磨砂玻璃叠一半）；底栏后面的字认不出，往上一行半渐渐清楚。所有带底栏的手机画面都已加上；减少透明效果时只留底色渐变。</li>
     <li><b>R-136（负责人决定）</b>：App 全部画面非必要不加粗，只留每页最顶上的大标题、“现在”卡正在进行的那一件、警示、选中状态；状态栏、图标字形不变；R-115 告知页的“图片和附件”经负责人确认也不加粗（R-138），只靠“新”标签提示。</li>
     <li><b>R-135（负责人决定）</b>：字体页四套改成 系统字体（默认）、细线黑（未来荧黑 + Pretendard 细字重）、悠哉体（悠哉字体 + Hi Melody）、文楷；原来的统一黑体（思源黑体 + Pretendard）和圆体（资源圆体 CN + NanumSquare Round）去掉。按 统一黑体-对比.html 的 D、F 两组。细线黑：日期大标题特细，正文细体，粗体只到中粗，数字用 Pretendard 细体（等宽）；悠哉体粗体用“中”，不做假粗体。</li>
     <li><b>R-134（负责人决定）</b>：普通日程和待办的标题一律常规字重，不加粗（今天列表、待办清单、未来 7 天、没赶上、AI 拆分、月历 / 周视图色块里的标题）；“现在”卡、时间数字、日期大标题不变。</li>
@@ -1104,7 +1128,7 @@ const L = {
 function status(t='14:17'){ return `<div class="sb"><span class="num">${t}</span><span class="isl"></span><span class="sig"><span class="num">5G</span><span class="bat"></span></span></div>`; }
 function nav(active, lang='zh'){
   const t=L[lang].tabs, n=['today','cal','todo','note'];
-  return `<div class="tabbar ${glassy()}">${n.map((k,i)=>`<div class="tab ${i===active?'on':''}">${ic(k)}<span>${t[i]}</span></div>`).join('')}</div><div class="fab">${ic('plus')}</div>`;
+  return `<div class="pblur" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><b></b></div><div class="tabbar ${glassy()}">${n.map((k,i)=>`<div class="tab ${i===active?'on':''}">${ic(k)}<span>${t[i]}</span></div>`).join('')}</div><div class="fab">${ic('plus')}</div>`;
 }
 function glassy(){ return document.body.dataset.skin==='glass'?'glassy':''; }
 function phone(inner, opt={}){
@@ -1612,7 +1636,7 @@ PH.firstpw = () => phone(`<div class="pg pwpg"><div style="display:flex;justify-
 /* 空状态：今天页没有日程 */
 PH.empty = () => phone(`<div class="pg xa">${TH1('zh')}
   <div class="panel" style="padding:24px 20px;margin-top:16px"><div style="font-size:22px;font-weight:400">今天还空着</div><div class="muted" style="font-size:14px;margin:6px 0 10px">点下面任意一句试试，会真的记下来，不想要可以撤销</div>${['“明天上午 10 点 치과”','“周五前交 NEOX 片尾”','“妈妈生日是阴历十月初八”'].map(x=>`<div class="try">${x}</div>`).join('')}</div></div>
-  <div style="position:absolute;right:24px;bottom:118px;text-align:right;font-size:13px;line-height:1.5;z-index:4"><b>点一下打字</b><br><b>按住说话</b><div style="font-size:26px;line-height:1;margin-right:16px">↘</div></div>`, {nav:0});
+  <div style="position:absolute;right:24px;bottom:118px;text-align:right;font-size:13px;line-height:1.5;z-index:5"><b>点一下打字</b><br><b>按住说话</b><div style="font-size:26px;line-height:1;margin-right:16px">↘</div></div>`, {nav:0});
 /* 韩文设置页 */
 PH.kosettings = () => {
   const s=(k,v)=>`<div class="srow"><span class="k">${k}</span><span class="v">${v}</span><span class="chev">›</span></div>`;
