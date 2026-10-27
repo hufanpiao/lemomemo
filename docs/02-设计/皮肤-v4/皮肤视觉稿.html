@@ -957,7 +957,7 @@ body .th-simple-light .krul .sg.nxt b.bar,body .th-simple-dark .krul .sg.nxt b.b
 <div class="dcard">
   <h3>第七轮整体检查之后改了什么（2026-10-24，R-76～R-110；2026-10-27 补 R-111～R-118）</h3>
   <ul>
-    <li><b>R-136（负责人决定）</b>：App 全部画面非必要不加粗，只留每页最顶上的大标题、“现在”卡正在进行的那一件、警示、选中状态；状态栏、图标字形、R-115 告知页的“图片和附件”不变。</li>
+    <li><b>R-136（负责人决定）</b>：App 全部画面非必要不加粗，只留每页最顶上的大标题、“现在”卡正在进行的那一件、警示、选中状态；状态栏、图标字形不变；R-115 告知页的“图片和附件”经负责人确认也不加粗（R-138），只靠“新”标签提示。</li>
     <li><b>R-135（负责人决定）</b>：字体页四套改成 系统字体（默认）、细线黑（未来荧黑 + Pretendard 细字重）、悠哉体（悠哉字体 + Hi Melody）、文楷；原来的统一黑体（思源黑体 + Pretendard）和圆体（资源圆体 CN + NanumSquare Round）去掉。按 统一黑体-对比.html 的 D、F 两组。细线黑：日期大标题特细，正文细体，粗体只到中粗，数字用 Pretendard 细体（等宽）；悠哉体粗体用“中”，不做假粗体。</li>
     <li><b>R-134（负责人决定）</b>：普通日程和待办的标题一律常规字重，不加粗（今天列表、待办清单、未来 7 天、没赶上、AI 拆分、月历 / 周视图色块里的标题）；“现在”卡、时间数字、日期大标题不变。</li>
     <li><b>R-131 追问（负责人决定）</b>：磨砂玻璃两套的 K 时间轴换成 进行中卡片-对比.html 急件一节的改法 3“进度条 + 圆头”：8px 胶囊，已过去墨黑 / 柠檬黄实心，还没到奶油 #FFFBE8 / 深橄榄 #4A4834 不透明实心，此刻 14px 圆头 + 2.5px 描圈；下一件改成项目色竖条 + 文字、不画框。四套皮肤一起改：细轨碰到色块就断开（不再从色块底下透出来），被截断的一端直角截断、不再渐隐（简洁两套长事项原来渐隐那一截会透出细轨）。“还没到”在玻璃上对卡底 1.2 / 1.3，低于 3，有意接受（见“现在”卡说明的对比度一段）。今天页、韩文页、提醒、状态 ②、四屏边缘状态、电脑各画面和官网主视觉的小手机都用同一个 kRuler，一起变了。新令牌 <code>--k-ring</code>。</li>
@@ -1577,7 +1577,7 @@ const onPhone = (h, extra, time) => h.replace('<div class="home"></div>', (extra
 PH.ainote = () => phone(`<div class="pg" style="padding-top:14px"><div class="muted" style="text-align:center;font-size:12px">第一次登录后 · 在通知、麦克风说明之前</div>
   <div style="text-align:center;font-size:22px;font-weight:700;line-height:1.3;margin:14px 0 6px">要不要让谷歌 AI<br>帮你整理？</div>
   <div class="muted" style="text-align:center;font-size:13px;margin:0 6px 12px">同意后，柠檬记用谷歌的 Gemini 把录音转成文字、拆成几条、给随手记分类。</div>
-  <div class="panel">${[['mic','说话记事','录音交给 AI 转成文字并拆分'],['note','打字和随手记','文字交给 AI 整理、分类'],['img','<b style="font-weight:800">图片和附件</b><span class="newtag">新</span>','识别内容，用来按图片、按意思找'],['plus','用“＋”查找、总结','说的话和被总结的记录片段'],['cal','日程和待办','标题、备注、地点，用来按意思查找'],['lock','隐私记','也交给 AI（同意后默认开，设置里可关）']].map(x=>`<div class="sym" style="padding:8px 18px"><span class="c">${ic(x[0])}</span><div><b style="font-weight:400">${x[1]}</b><div class="muted" style="font-size:12px">${x[2]}</div></div></div>`).join('')}</div>
+  <div class="panel">${[['mic','说话记事','录音交给 AI 转成文字并拆分'],['note','打字和随手记','文字交给 AI 整理、分类'],['img','图片和附件<span class="newtag">新</span>','识别内容，用来按图片、按意思找'],['plus','用“＋”查找、总结','说的话和被总结的记录片段'],['cal','日程和待办','标题、备注、地点，用来按意思查找'],['lock','隐私记','也交给 AI（同意后默认开，设置里可关）']].map(x=>`<div class="sym" style="padding:8px 18px"><span class="c">${ic(x[0])}</span><div><b style="font-weight:400">${x[1]}</b><div class="muted" style="font-size:12px">${x[2]}</div></div></div>`).join('')}</div>
   <div class="panel" style="padding:11px 16px;margin-top:10px;font-size:12.5px;line-height:1.55"><b>你的文字、录音、图片、附件和隐私记会发给谷歌；按谷歌免费版条款，这些内容可能被用来改进谷歌的产品，并可能经人工审阅。</b>${PRIV.zh.replace('，详见<u>隐私说明</u>。','。')}使用柠檬记须年满 18 岁。</div>${SENDV()}
   <label class="agree"><span class="cbox"></span><span>我同意把上面这些交给谷歌 AI 处理</span></label>
   <span class="btn pri w dim" style="margin-top:10px;height:50px">同意并继续</span>
@@ -1900,12 +1900,12 @@ const SENDV = (ko) => ko
   ? `<div class="panel" style="padding:11px 16px;margin-top:10px;font-size:12.5px;line-height:1.6"><b>보내는 것:</b> 글, 녹음, 찾을 때 한 말, 일정과 할 일의 제목·메모·장소(의미로 찾기에 써요), 사진 썸네일(신분증 사진 포함), 문서 이름과 앞 2000자, 비밀 메모 본문, 요약할 기록 일부. <b>마이크로소프트:</b> PPT를 미리 볼 때 파일 전체(비밀 메모의 PPT도 복호화해서 보내요).</div>`
   : `<div class="panel" style="padding:11px 16px;margin-top:10px;font-size:12.5px;line-height:1.6"><b>会送出去的：</b>文字、录音、查找时说的话；日程和待办的标题、备注、地点（用来按意思查找）；图片的缩略图（证件照也会送）；文档的文件名和前 2000 字；隐私记解密后的文字；总结时被总结的记录片段。<b>交给微软的：</b>预览 PPT 时的整个文件，包括隐私记里的 PPT（先解密再交）。</div>`;
 PH.privupd = () => phone(`<div class="pg" style="padding-top:14px"><div style="text-align:center;font-size:22px;font-weight:800;margin:14px 0 4px">隐私说明更新了</div><div class="muted" style="text-align:center;font-size:13px;margin-bottom:12px">这次多了几样会交给第三方的东西，看完再继续</div>
-  <div class="panel">${[['img','<b style="font-weight:800">图片和附件</b><span class="newtag">新</span>','也交给谷歌 AI 识别，用来按图片、按意思找'],['plus','用“＋”查找、总结','说的话和被总结的记录片段交给谷歌 AI'],['cal','日程和待办<span class="newtag">新</span>','标题、备注、地点交给谷歌 AI，用来按意思查找'],['note','预览 PPT','文件交给微软的在线预览，包括隐私记里的 PPT']].map(x=>`<div class="sym" style="padding:8px 18px"><span class="c">${ic(x[0])}</span><div><span style="font-weight:400">${x[1]}</span><div class="muted" style="font-size:12px">${x[2]}</div></div></div>`).join('')}</div>${SENDV()}${privLine('zh','10px 6px 0')}
+  <div class="panel">${[['img','图片和附件<span class="newtag">新</span>','也交给谷歌 AI 识别，用来按图片、按意思找'],['plus','用“＋”查找、总结','说的话和被总结的记录片段交给谷歌 AI'],['cal','日程和待办<span class="newtag">新</span>','标题、备注、地点交给谷歌 AI，用来按意思查找'],['note','预览 PPT','文件交给微软的在线预览，包括隐私记里的 PPT']].map(x=>`<div class="sym" style="padding:8px 18px"><span class="c">${ic(x[0])}</span><div><span style="font-weight:400">${x[1]}</span><div class="muted" style="font-size:12px">${x[2]}</div></div></div>`).join('')}</div>${SENDV()}${privLine('zh','10px 6px 0')}
   <label class="agree"><span class="cbox"></span><span>我同意更新后的内容</span></label><span class="btn pri w dim" style="margin-top:10px;height:50px">同意并继续</span><span class="btn soft w" style="margin-top:8px;height:46px">先不同意，直接用</span>
   <div class="muted" style="text-align:center;font-size:11.5px;margin-top:6px">不同意：AI 功能先停用，按本地规则整理、只按关键词找；以后可在 设置 › 语音与 AI 打开</div></div>`, {nav:false});
 DK.privupd = () => { const t=deskToday('zh'); const f=frag(PH.privupd()); return desk(rail(0)+t.main+t.mid, '', `<div class="scrim" style="top:36px"></div><div class="dwin ${glassy()}" style="width:480px;top:56px;transform:translate(-50%,0);padding:4px 24px 20px">${f.querySelector('.pg').innerHTML}</div>`, 'zh', true); };
 PH.privupdko = () => phone(`<div class="pg" style="padding-top:14px"><div style="text-align:center;font-size:22px;font-weight:800;margin:14px 0 4px">개인정보 처리 안내가 바뀌었어요</div><div class="muted" style="text-align:center;font-size:13px;margin-bottom:12px">계속 쓰려면 바뀐 내용을 확인해 주세요</div>
-  <div class="panel">${[['img','<b style="font-weight:800">사진과 첨부파일</b><span class="newtag">새로</span>','구글 AI가 내용을 인식해요 (사진으로 찾기, 의미로 찾기)'],['plus','“＋”로 찾기·요약','한 말과 요약할 기록 일부가 구글 AI로 가요'],['cal','일정과 할 일<span class="newtag">새로</span>','제목·메모·장소가 구글 AI로 가요 (의미로 찾기)'],['note','PPT 미리보기','파일이 마이크로소프트로 가요 (비밀 메모의 PPT 포함)']].map(x=>`<div class="sym" style="padding:8px 18px"><span class="c">${ic(x[0])}</span><div><span style="font-weight:400">${x[1]}</span><div class="muted" style="font-size:12px">${x[2]}</div></div></div>`).join('')}</div>${SENDV(1)}${privLine('ko','10px 6px 0')}
+  <div class="panel">${[['img','사진과 첨부파일<span class="newtag">새로</span>','구글 AI가 내용을 인식해요 (사진으로 찾기, 의미로 찾기)'],['plus','“＋”로 찾기·요약','한 말과 요약할 기록 일부가 구글 AI로 가요'],['cal','일정과 할 일<span class="newtag">새로</span>','제목·메모·장소가 구글 AI로 가요 (의미로 찾기)'],['note','PPT 미리보기','파일이 마이크로소프트로 가요 (비밀 메모의 PPT 포함)']].map(x=>`<div class="sym" style="padding:8px 18px"><span class="c">${ic(x[0])}</span><div><span style="font-weight:400">${x[1]}</span><div class="muted" style="font-size:12px">${x[2]}</div></div></div>`).join('')}</div>${SENDV(1)}${privLine('ko','10px 6px 0')}
   <label class="agree"><span class="cbox"></span><span>바뀐 내용에 동의해요</span></label><span class="btn pri w dim" style="margin-top:10px;height:50px">동의하고 계속</span><span class="btn soft w" style="margin-top:8px;height:46px">동의하지 않고 쓰기</span></div>`, {nav:false, lang:'ko'});
 DK.privupdko = () => CEN(PH.privupdko());
 DK.ainote = () => CEN(PH.ainote());
@@ -1913,7 +1913,7 @@ DK.ainote = () => CEN(PH.ainote());
 PH.ainoteko = () => phone(`<div class="pg" style="padding-top:14px"><div class="muted" style="text-align:center;font-size:12px">처음 로그인한 뒤 · 알림·마이크 안내보다 먼저</div>
   <div style="text-align:center;font-size:22px;font-weight:700;line-height:1.3;margin:14px 0 6px">구글 AI로<br>정리해 드릴까요?</div>
   <div class="muted" style="text-align:center;font-size:13px;margin:0 6px 12px">동의하면 레모가 구글 Gemini로 녹음을 글로 바꾸고, 여러 개로 나누고, 메모를 분류해요.</div>
-  <div class="panel">${[['mic','말로 기록','녹음을 AI가 글로 바꾸고 나눠요'],['note','타이핑과 메모','글을 AI가 정리·분류해요'],['img','<b style="font-weight:800">사진과 첨부파일</b><span class="newtag">새로</span>','내용을 인식해요 (사진으로 찾기, 의미로 찾기)'],['plus','“＋”로 찾기·요약','한 말과 요약할 기록 일부'],['cal','일정과 할 일','제목·메모·장소 (의미로 찾기에 써요)'],['lock','비밀 메모','AI로 가요 (동의하면 기본으로 켜짐, 설정에서 끌 수 있어요)']].map(x=>`<div class="sym" style="padding:8px 18px"><span class="c">${ic(x[0])}</span><div><b style="font-weight:400">${x[1]}</b><div class="muted" style="font-size:12px">${x[2]}</div></div></div>`).join('')}</div>
+  <div class="panel">${[['mic','말로 기록','녹음을 AI가 글로 바꾸고 나눠요'],['note','타이핑과 메모','글을 AI가 정리·분류해요'],['img','사진과 첨부파일<span class="newtag">새로</span>','내용을 인식해요 (사진으로 찾기, 의미로 찾기)'],['plus','“＋”로 찾기·요약','한 말과 요약할 기록 일부'],['cal','일정과 할 일','제목·메모·장소 (의미로 찾기에 써요)'],['lock','비밀 메모','AI로 가요 (동의하면 기본으로 켜짐, 설정에서 끌 수 있어요)']].map(x=>`<div class="sym" style="padding:8px 18px"><span class="c">${ic(x[0])}</span><div><b style="font-weight:400">${x[1]}</b><div class="muted" style="font-size:12px">${x[2]}</div></div></div>`).join('')}</div>
   <div class="panel" style="padding:11px 16px;margin-top:10px;font-size:12.5px;line-height:1.55"><b>글, 녹음, 사진, 첨부파일, 비밀 메모가 구글로 가요. 구글 무료 버전 약관에 따라 이 내용은 구글 제품 개선에 쓰일 수 있고, 사람이 검토할 수도 있어요.</b> ${PRIV.ko.replace(' 자세한 내용은 <u>개인정보 처리 안내</u>에 있어요.','')} 레모는 만 18세 이상만 쓸 수 있어요.</div>${SENDV(1)}
   <label class="agree"><span class="cbox"></span><span>위 내용을 구글 AI가 처리하는 데 동의해요</span></label>
   <span class="btn pri w dim" style="margin-top:10px;height:50px">동의하고 계속</span>
@@ -2019,7 +2019,7 @@ const LIST = [
   ['login','登录：只填邮箱','网页地址 lemomemo.com/app/；电脑网页左边介绍、右边表单；表单下方是隐私说法（以 R-115 为准）。电脑版 exe 的登录在单独的小窗口里完成（R-110），表单内容和这里相同，登录后小窗口关闭、进入主窗口'],
   ['login2','登录：新邮箱多出邀请码和 6 格验证码','邀请码 12 位（显示时 4 位一组）；不做实时校验、不显示邀请人（架构 5.6：码对不对都返回同样结果，码有效才会收到验证码）；填满 6 位自动登录。“这个邮箱还没注册”会暴露邮箱是否注册过，已确认保留（R-108）'],
   ['safari','在 Safari 里第一次打开','打开的是 /app/；先引导“添加到主屏幕”，主屏幕上的名字是“Lemo”（R-88）。这一屏只在手机上出现'],
-  ['ainote','朋友第一次登录：AI 处理告知（R-115 新写法）','R-115：列表里“图片和附件”加粗，多了“用‘＋’查找、总结”；下面单独一块“会送出去的”，写明预览 PPT 时文件交给微软；隐私句换成 R-115 完整版。“同意 AI 处理”勾选框不预先勾选（R-103），没勾时“同意并继续”不可按；“先不同意，直接用”：服务器不送 AI，按本地规则整理。写明可能被谷歌用来改进产品、可能经人工审阅、须满 18 岁；隐私句用 R-104。只画了手机'],
+  ['ainote','朋友第一次登录：AI 处理告知（R-115 新写法）','R-115：列表里“图片和附件”带“新”标签（R-138 起不加粗），多了“用‘＋’查找、总结”；下面单独一块“会送出去的”，写明预览 PPT 时文件交给微软；隐私句换成 R-115 完整版。“同意 AI 处理”勾选框不预先勾选（R-103），没勾时“同意并继续”不可按；“先不同意，直接用”：服务器不送 AI，按本地规则整理。写明可能被谷歌用来改进产品、可能经人工审阅、须满 18 岁；隐私句用 R-104。只画了手机'],
   ['toastfail','提示条失败态：AI 没回应','录音还在手机里，可以重试；提示条和成功时同一位置、同一样式'],
   ['offline','断网','顶部横幅说明没网也能记；没同步的一条用虚线框；提示条“没网，已存在手机里”。长按“＋”时提示“没网时不能用语音”，一键改打字（见线框）'],
   ['banner','其他页面的提醒：顶部横幅','横幅只写类型和标题，待办标题前是可点的完成圆圈（点击区 44px）；按钮统一在屏幕下方，待办四颗'],
@@ -2061,7 +2061,7 @@ const LIST = [
   ['plustype','点按“＋”打字：预览先显示“查找”','点按“＋”弹出输入条并拉起键盘；边打边预览，看起来是查找的就写“查找”，点预览可以改成“记下”','点按“＋”打字（同手机）','只画了手机'],
   ['plusvault','隐私记里按“＋”：只查隐私记（D-16，R-118）','结果顶上标“只在隐私记里找”；主页面的“＋”不查隐私记（负责人定：不查）','隐私记里查找（同手机）','只画了手机'],
   ['plusko','韩文：다음 주 일정','和中文同一结构','韩文结果（同手机）','只画了手机'],
-  ['privupd','隐私说明更新了（R-115）','已同意的人下次打开先看这一屏：只列这次多出来的几样（图片和附件加粗），单独一块列出会送什么；勾选后才能“同意并继续”。架构 0.20 要求负责人也亲手同意，所以负责人的账号同样会看到','电脑：隐私说明更新了','窗口中间的弹层，内容同手机'],
+  ['privupd','隐私说明更新了（R-115）','已同意的人下次打开先看这一屏：只列这次多出来的几样（带“新”标签，R-138 起不加粗），单独一块列出会送什么；勾选后才能“同意并继续”。架构 0.20 要求负责人也亲手同意，所以负责人的账号同样会看到','电脑：隐私说明更新了','窗口中间的弹层，内容同手机'],
   ['privupdko','韩文：개인정보 처리 안내가 바뀌었어요','隐私句用 R-115 韩文（翻译照写、负责人最后看）','韩文（同手机）','只画了手机'],
   ['ainoteko','韩文：朋友第一次登录 AI 处理告知（第五轮复查补）','和中文同一结构，照中文意思译（翻译照写、负责人最后看）；隐私句用 R-115 韩文；“会送出去的”含日程和待办的标题、备注、地点','韩文（同手机）','只画了手机'],
   ['setdata','设置 › 数据：用量条','“已用 412 MB / 700 MB”（负责人的上限），下面分图片和文档；手机只导出文字，“附件请在电脑上导出”；“预览 PPT”改第一次的选择；下面另一行“隐私记 PPT 预览”单独记录这台设备的选择（和普通 PPT 分开问、分开记，第五轮复查轻 6）；“清除 AI 生成的描述和标签”','电脑：导出 zip 的进度','写件数和大小；隐私记的附件解密后放进 zip，提示“导出的文件不加密”'],
