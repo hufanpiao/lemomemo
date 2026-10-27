@@ -131,7 +131,7 @@ list.style.height = N * H + 'px';
 list.innerHTML = Array.from({length:N}, (_, i) => rowHTML(i)).join('');
 
 const RINGS_ALL = {bar:[[22,2],[17,4],[13,7],[10,10],[7.5,14],[5.5,18],[3.5,23],[2,28]], fab:[[18,2],[14,4],[10,7],[7,10],[4.5,14],[2.5,19]], drop:[[12,4],[7,9],[3.5,15]]};
-const opt = {rings:12, disp:1, ad:1, tilt:0, blur:1, pb:1, theme:'auto'};
+const opt = {rings:0, disp:1, ad:1, tilt:0, blur:1, pb:1, theme:'auto'};   // 默认按负责人真机试的结论：不折射、其他都开（R-151）
 try{ Object.assign(opt, JSON.parse(localStorage.getItem('lg-test2')||'{}')); }catch(e){}
 opt.tilt = 0;   // 陀螺仪每次打开页面都要重新点“开”授权
 // 按原来 8 圈的宽度和弯曲量插值出更密的圈（12 圈：底栏 12、“＋”9、液滴 5）
@@ -147,7 +147,8 @@ function bandMask(W,H,w){
 let copies = [];   // {el, host, kind, extraX}
 function lens(host, kind, W, Hh, uniform){
   const L = document.createElement('div'); L.className = 'lens';
-  const fx = opt.blur ? (kind==='drop' ? 'saturate(1.5) brightness(1.06)' : 'blur(2px) saturate(1.8) brightness(1.04)') : 'saturate(1.6)';
+  // 液滴移动时里面的副本也要模糊（比底栏再糊一点），不然会露出底下清楚的字（第 2 版负责人真机反馈）
+  const fx = opt.blur ? (kind==='drop' ? 'blur(3px) saturate(1.5) brightness(1.06)' : 'blur(2px) saturate(1.8) brightness(1.04)') : (kind==='drop' ? 'blur(3px) saturate(1.6)' : 'saturate(1.6)');
   const scl = (d, u) => `scale(${u || (W/2)/(W/2+d)},${u || (Hh/2)/(Hh/2+d)})`;
   const copy = f => { const cp = document.createElement('div'); cp.className = 'cp'; cp.style.filter = f; copies.push({el:cp, host, kind}); return cp; };
   const mk = (d, w, u, dsp) => { const R = document.createElement('div'); R.className = 'lr';

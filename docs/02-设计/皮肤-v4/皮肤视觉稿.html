@@ -1035,6 +1035,7 @@ body[data-rt="1"] .scr.lgx .fab .lens .tint{background:var(--fab-bg)}
   <h3>第七轮整体检查之后改了什么（2026-10-24，R-76～R-110；2026-10-27 补 R-111～R-118）</h3>
   <ul>
     <li><b>R-147（负责人决定）</b>：简洁·浅色的提示条（已记下）、撤销条、提醒按钮条和其他页面的提醒横幅，从 82% 墨黑磨砂、白字换成 82% 白色磨砂、黑字，和浅色底栏同一色调（负责人：“换成白色”）；仍是磨砂，不是液态玻璃（R-145 不变）。简洁·深色不变。减少透明效果时仍是 82% 半透明（R-146 定了不修）。</li>
+    <li><b>R-151（负责人真机反馈）</b>：切换标签时液滴里会“漏底下的字”——液滴移动中的折射副本没有模糊，露出清楚放大的列表字。液滴副本加 3px 模糊（比底栏的 2px 再糊一点），只剩颜色和光影。</li>
     <li><b>R-145（负责人决定）</b>：提示条（已记下）、撤销条、提醒按钮条不跟着底栏换液态玻璃，保持现在的半透明磨砂；R-122 的“和底栏同一套玻璃”从此不再成立，两者样子不同。</li>
     <li><b>R-144（负责人决定）</b>：今天页“现在”卡、纪念日“最近的一个”大卡不用液态玻璃，保持实色、跟着页面滚（负责人：“卡片跟着滚动，好像意义不大”）。</li>
     <li><b>R-143（负责人决定）</b>：底部导航换成液态玻璃，选 液态玻璃底栏-对比.html 第 2 档“常规玻璃 + 液滴选中”：背后内容轻模糊 2px、提饱和，叠一层浅色（深色模式叠深色），边缘八圈折射把栏外的内容弯进来，沿边高光；选中项是一颗液滴，静止时是安静的浅色玻璃片，点别的按钮时弹过去、中途拉长，按住选中项会鼓起来变成放大透镜（点本页底栏的按钮可以看）；“＋”是柠檬黄着色玻璃。四套皮肤同一套玻璃，栏上的字用正文色（原来简洁皮肤的墨黑胶囊、磨砂玻璃的白胶囊不再用）。减少透明效果时不折射、实色。R-139 的渐进模糊带保留。提示条、撤销条、提醒按钮条不跟着换，保持现在的磨砂（R-145）。网页上是模拟，要在 iPhone 上实测滑动和耗电。</li>
@@ -2195,7 +2196,7 @@ function glassify(scr){
   dp.style.width=on.offsetWidth+'px'; dp.style.setProperty('--dx', on.offsetLeft+'px');
   bar.appendChild(dp);
   const tmp=document.createElement('div'); tmp.style.cssText=`position:absolute;width:${on.offsetWidth}px;height:52px`; bar.appendChild(tmp);
-  dp.appendChild(lensFor(scr,tmp,'drop','saturate(1.5) brightness(1.06)',`calc(${-bar.offsetLeft}px - var(--dx))`,(-bar.offsetTop-5)+'px')); tmp.remove();
+  dp.appendChild(lensFor(scr,tmp,'drop','blur(3px) saturate(1.5) brightness(1.06)',`calc(${-bar.offsetLeft}px - var(--dx))`,(-bar.offsetTop-5)+'px')); tmp.remove();
   tabs.forEach(t=>t.addEventListener('pointerdown',()=>{ if(t.classList.contains('on')) dp.classList.add('press'); }));
   addEventListener('pointerup',()=>dp.classList.remove('press'));
   dp.addEventListener('animationend',()=>dp.classList.remove('mv'));
