@@ -433,7 +433,7 @@ body[data-skin="simple"] .toast,body[data-skin="simple"] .abar,.th-simple-light 
 
 /* ===== R-126：电脑版按 R-120 方案 B（悬浮侧栏 + 渐变画布 + 分栏面板）=====
    悬浮圆角侧栏：＋、四个页面、底部 ⋯ 和头像；画布是渐变（--b-canvas）；中间的块是半透明面板（--b-tile），可按住右上角 ⠿ 拖动（见 电脑版布局-对比.html）；
-   详情不占栏：没选中时不显示，面板占满；选中一条时抽屉（--b-drawer）从右边滑出，盖在面板上面（圆角、阴影、左边把手），可拖到左边或右边（日历周/月画在左边），✕、Esc 或点空白处关闭。四套皮肤各一组 --b-* 令牌，见令牌表。
+   详情不占栏：没选中时不显示，面板占满；选中一条时抽屉（--b-drawer）从右边滑出，盖在面板上面（圆角、阴影、左边把手），可拖到左边或右边（R-130：所有画面统一画在右边），✕、Esc 或点空白处关闭。四套皮肤各一组 --b-* 令牌，见令牌表。
    窗口窄于 1100px 时排成一列：侧栏不变，面板上下排，详情改成盖在上面的抽屉（见第 2 屏）。 */
 .desk{background:var(--b-canvas)}
 .desk .wbar{background:transparent}
@@ -885,7 +885,7 @@ table.xlv{border-collapse:collapse;font-size:13px;width:100%}table.xlv th,table.
 <div class="dcard">
   <h3>第七轮整体检查之后改了什么（2026-10-24，R-76～R-110；2026-10-27 补 R-111～R-118）</h3>
   <ul>
-    <li><b>R-126（负责人决定）</b>：电脑版用 R-120 方案 B。电脑画面全部按方案 B 重画（改的是 .desk 的公共样式和侧栏，所有电脑屏一起变）：悬浮圆角侧栏，底部 ⋯ 和头像，选中项柠檬黄；画布 --b-canvas 渐变；时间河和中间各块是半透明面板 --b-tile；详情是从右滑出的抽屉 --b-drawer（左边有拖宽把手）。新令牌 --b-canvas / --b-rail / --b-rail-shadow / --b-tile / --b-tile-shadow / --b-drawer / --b-drawer-shadow / --b-blur，四套皮肤都有（简洁·深色、玻璃·浅色两套是这次补的）。新增第 2 屏“窄窗口一列”。R-125：电脑和网页的纪念日处一律用头像。 <b>更正（核对后）</b>：详情不再是常驻右栏，改回负责人选的 B——没选中时不显示、面板占满；选中一条时抽屉从右边盖上来（今天页画了“没选中”和“选中了一条”两张；待办、随手记、纪念日、附件等画选中状态；周/月视图把抽屉画在左边，示意可拖到另一侧；窄窗口一列时同样盖上来）。</li>
+    <li><b>R-126（负责人决定）</b>：电脑版用 R-120 方案 B。电脑画面全部按方案 B 重画（改的是 .desk 的公共样式和侧栏，所有电脑屏一起变）：悬浮圆角侧栏，底部 ⋯ 和头像，选中项柠檬黄；画布 --b-canvas 渐变；时间河和中间各块是半透明面板 --b-tile；详情是从右滑出的抽屉 --b-drawer（左边有拖宽把手）。新令牌 --b-canvas / --b-rail / --b-rail-shadow / --b-tile / --b-tile-shadow / --b-drawer / --b-drawer-shadow / --b-blur，四套皮肤都有（简洁·深色、玻璃·浅色两套是这次补的）。新增第 2 屏“窄窗口一列”。R-125：电脑和网页的纪念日处一律用头像。 <b>更正（核对后）</b>：详情不再是常驻右栏，改回负责人选的 B——没选中时不显示、面板占满；选中一条时抽屉从右边盖上来（今天页画了“没选中”和“选中了一条”两张；待办、随手记、纪念日、附件等画选中状态；周/月视图也画在右边（R-130 统一）；窄窗口一列时同样盖上来）。</li>
     <li><b>R-128</b>：设置 › 皮肤下面加“字体”一行；字体页手机、电脑各一张（中文、韩文各一套），四套：系统字体（默认）、统一黑体（思源黑体 + Pretendard）、圆体（资源圆体 CN + NanumSquare Round）、文楷（霞鹜文楷 + Gowun Batang），各写一行中韩示例；未下载标大小和“选中后下载”，下载中、下载失败（回退系统字体，可重试）各画一处；字体跟账号走，在所有设备上生效。另加“同一个今天页 · 四种字体”对比。数字：系统字体、统一黑体用 Manrope，圆体、文楷跟字体走（都等宽）。文楷粗体一律用 Medium，不做假粗体。预览用网页字体；资源圆体 CN 用本地子集（v0.990，SIL OFL 1.1，许可证在 fonts/）。</li>
     <li><b>R-122（负责人决定）</b>：底部浮出的提示条、撤销条（手机 .toast、电脑 .dtoast）和提醒按钮条（.abar）改成和底部导航同一套半透明磨砂玻璃：同样 blur(6px)＋饱和度、同样的玻璃描边和阴影，底色和底栏同色相；透明度从 .70 加深到 .82（新令牌 --float-bg / --float-sat / --float-solid），背后是白底、黑卡、柠檬黄时正文和灰字都 ≥ 4.5:1。简洁深色原来是浅底提示条，现在也是深色玻璃。“知道了”这类主按钮保留柠檬黄。减少透明效果时换成实色。追加：顶部提醒横幅 .tban 和断网横幅 .offban 也用同一套玻璃；提醒横幅的 1.5px 墨黑描边改成 1.5px 柠檬黄强调色边（深色玻璃上墨黑边看不见）。</li>
     <li><b>R-121（负责人决定）</b>：纪念日没有头像时，头像位置显示“名字第一个字 + 类型颜色”的圆（和头像同大小），取代原来的菱形；类型颜色用项目色板：生日 --p1 柠檬黄、纪念日 --p3 珊瑚粉、倒数日 --p2 浅蓝，字用 --on-p 墨黑。改到：纪念日列表、“最近的一个”大卡、电脑详情、编辑、新建（没加头像时显示第一个字，右下角小图标表示可加）；今天页的纪念日提示（手机日期下的小标签、电脑“快到了”两张卡）也改成圆形头像。<b>只有月历格子里的菱形标记不变</b>（符号说明里的菱形也是讲月历标记，保留）。</li>
@@ -1796,11 +1796,9 @@ DK.fontpick = () => desk(rail(-1)+`<div class="col"><div class="date" style="fon
 DK.fontpickko = () => desk(rail(-1,'ko')+`<div class="col"><div class="date" style="font-size:26px;margin-bottom:10px">설정 › 글꼴</div><div style="max-width:600px">${fontList('ko')}</div></div>${fontPrev('ko')}`,'two','','ko');
 PH.fontcmp = () => `<div class="fcmp">${[['sys','系统字体（默认）','苹方 + Apple SD Gothic Neo · 数字 Manrope'],['hei','统一黑体','思源黑体 + Pretendard · 数字 Manrope'],['round','圆体','资源圆体 CN + NanumSquare Round · 数字跟字体'],['kai','文楷','霞鹜文楷 + Gowun Batang · 数字跟字体<br>粗体一律用 Medium，不做假粗体']].map(([k,n,d])=>{ return `<div class="th-simple-light" style="background:none;${FVARS(k)}"><div class="fcap">${n}<small>${d}</small></div>${PH.today()}</div>`;}).join('')}</div>`;
 DK.fontcmp = () => PH.fontcmp();
-/* R-126 更正：选中项描边、抽屉拖到左边 */
+/* R-126 更正：选中项描边 */
 const selRow=(h,txt)=>{const j=h.indexOf(txt); if(j<0) return h; const i=h.lastIndexOf('class="lrow',j); return i<0?h:h.slice(0,i)+'class="lrow sel '+h.slice(i+11);};
 {const _w=DK.week, _m=DK.month, _t=DK.todo, _n=DK.notes;
- DK.week=()=>_w().replace('class="col ed"','class="col ed lft"');
- DK.month=()=>_m().replace('class="col ed"','class="col ed lft"');
  DK.todo=()=>selRow(_t(),'回复 박 대리 的邮件');
  DK.notes=(b=false,o='')=>selRow(_n(b,o),'首尔林银杏黄了');}
 /* R-126：窗口窄于 1100px 时排成一列 */
