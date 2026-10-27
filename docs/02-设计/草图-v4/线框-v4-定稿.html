@@ -145,6 +145,34 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 .nowc .pb i{display:block;height:4px;background:#fff;border-radius:2px}
 .nowc .nx{font-size:12.5px;color:#ddd;border-top:1px solid #333;padding-top:10px;margin-top:12px}
 .nowc .pb + .nx{border:0;padding:0;margin:0}
+
+/* R-131：“现在”卡 = 方案 K 小时间尺（白卡 + 一小段时间轴；视觉见 皮肤视觉稿） */
+.kw{background:#fff;border-radius:14px;padding:14px 16px 10px;margin-top:14px;color:#111;position:relative;box-shadow:inset 0 0 0 1px var(--g5)}
+.kw.alert{box-shadow:0 0 0 4px var(--g7),0 0 0 6px #111}
+.kw .kk{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--g2);min-width:0}
+.kw .kk .krest{margin-left:auto;font-size:12.5px;white-space:nowrap}
+.kw .kk b{color:#111;font-weight:700}
+.kw .klv{display:inline-flex;align-items:center;gap:5px;height:21px;padding:0 8px;border-radius:999px;background:#111;color:#fff;font-weight:700;font-size:11.5px;white-space:nowrap;flex:none}
+.kw .klv i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.kw .klv.o{background:transparent;color:var(--g2);box-shadow:inset 0 0 0 1.5px var(--g2)}
+.kw .klv.o i{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor}
+.kw .kti{font-size:17px;font-weight:600;line-height:1.35;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kw .kal,.kw .khint{font-size:12.5px;color:var(--g2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kw .kx{font-size:12.5px;color:var(--g2);margin-top:6px;padding-top:9px;border-top:1px solid var(--g6)}
+.kw .krul{position:relative;margin-top:10px}
+.kw .trk{position:absolute;left:0;right:0;height:2px;background:var(--g6)}
+.kw .sg{position:absolute;border-radius:6px;overflow:hidden}
+.kw .sg.cur{background:var(--g5)}.kw .sg.cur i{position:absolute;left:0;top:0;bottom:0;background:var(--g3)}
+.kw .sg.co{background:var(--g6);box-shadow:inset 0 0 0 1px var(--g4)}.kw .sg.co i{position:absolute;left:0;top:0;bottom:0;background:var(--g4)}
+.kw .sg.nxt{background:var(--g7);box-shadow:inset 3px 0 0 var(--g2);font-size:11px;color:var(--g2);padding:0 6px 0 9px;white-space:nowrap}
+.kw .sg.nxt.on{box-shadow:inset 3px 0 0 #111,inset 0 0 0 1.5px #111}
+.kw .sg.cl{border-top-left-radius:0;border-bottom-left-radius:0;-webkit-mask-image:linear-gradient(90deg,transparent,#000 18px);mask-image:linear-gradient(90deg,transparent,#000 18px)}
+.kw .sg.cr{border-top-right-radius:0;border-bottom-right-radius:0;-webkit-mask-image:linear-gradient(270deg,transparent,#000 18px);mask-image:linear-gradient(270deg,transparent,#000 18px)}
+.kw .nw{position:absolute;top:0;width:2px;margin-left:-1px;background:#111}
+.kw .tk{position:absolute;font-size:11px;line-height:14px;color:var(--g2);transform:translateX(-50%);white-space:nowrap}
+.kw .tk.l{transform:none}.kw .tk.r{transform:translateX(-100%)}
+.kw .abtn .btn.o{color:#111;border-color:#111}
+.kw .abtn .btn:not(.o){background:#111;color:#fff;border-color:#111}
 .top.a{margin:2px 0 12px}.top.a .d1{font-size:19px;letter-spacing:-.2px;white-space:nowrap}.top.a .d1 small{font-size:12.5px;font-weight:400;color:var(--g2);margin-left:8px;letter-spacing:0}.top.a .av{width:34px;height:34px}
 .lineA{margin-top:14px;display:flex;align-items:center;gap:8px;height:48px;padding:0 16px;border-radius:14px;background:#fff;font-size:13px}
 .emptyA{margin-top:14px;border-radius:14px;background:#fff;padding:16px 18px}
@@ -447,6 +475,7 @@ table.xl{border-collapse:collapse;font-size:13px;margin-top:10px;width:100%}tabl
 <li><b>搜索按钮去掉（R-118）：</b>各页面右上角的放大镜、随手记页里的搜索框、电脑侧栏的“搜索”都去掉，查找全靠“＋”；电脑 Ctrl+K 打开和“＋”同一个输入框。</li>
 <li><b>今天页上半部分（R-118）：</b>按 皮肤-v4/今天顶部-对比.html 的方案 A：日期一行、“现在”卡标题 17px 半粗、圆角 14；“现在”卡 4 种状态见第 1 节第二张。</li>
 <li><b>导航和“＋”（R-118）：</b>随手记图标改线性铅笔，日历 3×3 方格；右下角“＋”的外环所有页面一致，电脑侧栏的“＋”也加了外环；输入行插图按钮不变。</li>
+<li><b>R-131：</b>今天页“现在”卡换成 进行中卡片-对比.html 的方案 K 小时间尺：手机、电脑（没选中、选中、窄窗口）、韩文、提醒状态、状态 ②、同步骨架都换了；进度条和“接下来…”一行去掉，由时间轴代替。时间窗规则、玻璃皮肤保留柠檬黄底、边缘状态（没有进行中、95%、超过 2 小时、两件重叠）见 皮肤视觉稿。</li>
 <li><b>R-126：</b>电脑版用 R-120 方案 B，所有电脑画面按 B 重画（公共样式：侧栏、画布、面板、详情抽屉）；窄窗口断点改为 1100px，900–1099px 排成一列。R-125：电脑和网页的纪念日处一律用头像。 <b>更正：</b>详情不占栏——没选中时不显示、面板占满；选中一条时抽屉从右边盖在面板上面（圆角、阴影、左边把手、✕ / Esc 关闭，可拖到左边或右边）。今天页画了“没选中”“选中了一条”两张；随手记、待办、纪念日、附件画选中状态；周 / 月视图也画在右边（R-130 统一）；900–1099px 一列时同样盖上来。</li>
 <li><b>R-122：</b>底部浮出的提示条（“已记下… 撤销 / 修改”“没网，已存在手机里”等）、提醒按钮条（“知道了 / 10 分钟后…”）和底部导航用同一套半透明磨砂玻璃，不再是实心黑底；“知道了”主按钮保留（视觉稿里是柠檬黄）。</li>
 <li><b>R-121：</b>纪念日没有头像时，头像位置显示“名字第一个字 + 类型颜色”的圆（同大小），取代菱形：列表、“最近的一个”大卡、详情、编辑 / 新建；今天页的纪念日提示（日期下小标签、电脑“快到了”、时间河条）也显示圆形头像。只有月历格子里的菱形不变。</li>
@@ -568,7 +597,39 @@ function fld(l,v){return '<div class="fld"><label>'+l+'</label><div>'+v+'</div><
 
 /* ===== 共用内容片段 ===== */
 const TODAY_TOP='<div class="top a"><div class="tt"><div class="d1">10月24日 周六<small>农历九月十五</small></div></div><div class="av">H</div></div>'; /* R-118 方案 A：日期和农历一行，右上角只有头像 */
-const NOWC='<div class="nowc"><div class="nk">现在 14:17 · 进行中</div><div class="nt">NEOX 横版对片</div><div class="ns">13:00–14:30 · 腾讯会议 · 还剩 13 分钟</div><div class="pb"><i style="width:86%"></i></div><div class="nx">接下来 15:30 SignPlex 客户反馈会 · 1 小时 13 分后</div></div>';
+/* R-131：“现在”卡 = 方案 K 小时间尺。时间窗规则（和 皮肤视觉稿 的 kWin 相同）：
+   ① 有进行中：最早开始的那件前 30 分 → 下一件结束（下一件和当前结束相隔 > 2 小时就只到当前结束后 30 分）
+   ② 没有进行中：此刻前 30 分 → 下一件结束（下一件 3 小时后才开始就只画到此刻后 2 小时）
+   ③ 两端取整到半点；④ 最多 4 小时，超出时从“此刻前 1 小时”取整截 4 小时，被截的一端渐隐开口
+   ⑤ 两件同时进行：标题用先结束的那件，时间轴多一条细轨；刻度只标整点，11px */
+const KWT={zh:{live:'进行中',live2:n=>'进行中 '+n+' 件',idle:'下一件',now:t=>'现在 '+t,rest:s=>'还剩 <b>'+s+'</b>',soon:s=>'<b>'+s+'</b>后'},
+ ko:{live:'진행 중',live2:n=>'진행 중 '+n+'개',idle:'다음 일정',now:t=>'지금 '+t,rest:s=>'<b>'+s+'</b> 남음',soon:s=>'<b>'+s+'</b> 후'}};
+function kwm(s){const a=s.split(':');return +a[0]*60+ +a[1];}
+function kwd(m,lang){const h=Math.floor(m/60),mm=m%60;if(lang==='ko')return (h?h+'시간':'')+(h&&mm?' ':'')+(mm||!h?mm+'분':'');return (h?h+' 小时':'')+(h&&mm?' ':'')+(mm||!h?mm+' 分'+(h?'':'钟'):'');}
+function kwWin(cur,nx,now){const f=x=>Math.floor(x/30)*30,c=x=>Math.ceil(x/30)*30;let A,B;
+ if(cur.length){const s0=Math.min(...cur.map(x=>x.s)),e0=Math.max(...cur.map(x=>x.e));A=s0-30;B=(nx&&nx.s-e0<=120)?nx.e:e0+30;}
+ else{A=now-30;B=(nx&&nx.s-now<=180)?nx.e:now+120;}
+ A=f(A);B=c(B);if(B-A>240){let a=Math.max(A,f(now-60)),b=a+240;if(b>B){b=B;a=B-240;}A=a;B=b;}return {A,B};}
+function kw(o){const lang=o.lang||'zh',T=KWT[lang],now=kwm(o.now);
+ const cur=(o.cur||[]).map(x=>Object.assign({},x,{s:kwm(x.s),e:kwm(x.e)})).sort((a,b)=>a.e-b.e);
+ const nx=o.next?Object.assign({},o.next,{s:kwm(o.next.s),e:kwm(o.next.e)}):null;
+ const w=kwWin(o.mode==='live'?cur:[],nx,now),W=w.B-w.A,X=m=>(Math.min(Math.max(m,w.A),w.B)-w.A)/W*100;
+ const lanes=[[]];if(o.mode==='live')cur.forEach((x,i)=>{if(i===0)lanes[0].push(Object.assign({kind:'cur'},x));else if(i===1)lanes[1]=[Object.assign({kind:'co'},x)];});
+ if(nx)lanes[0].push(Object.assign({kind:'nxt',on:o.mode!=='live'},nx));
+ const n=lanes.length,lh=n>1?13:20,LH=n*lh+(n-1)*4;let r=n===1?'<div class="trk" style="top:'+(4+lh/2-1)+'px"></div>':'';
+ lanes.forEach((ln,li)=>ln.forEach(g=>{if(g.e<=w.A||g.s>=w.B)return;const l=X(g.s),rr=X(g.e);let fill='';
+  if(g.kind!=='nxt'){const a=Math.max(g.s,w.A),b=Math.min(g.e,w.B);fill='<i style="width:'+Math.max(0,Math.min(1,(now-a)/(b-a)))*100+'%"></i>';}
+  r+='<div class="sg '+g.kind+(g.s<w.A?' cl':'')+(g.e>w.B?' cr':'')+(g.on?' on':'')+'" style="left:'+l.toFixed(2)+'%;width:'+(rr-l).toFixed(2)+'%;top:'+(4+li*(lh+4))+'px;height:'+lh+'px;line-height:'+lh+'px">'+fill+(g.kind==='nxt'&&n===1?g.label:'')+'</div>';}));
+ r+='<div class="nw" style="left:'+X(now).toFixed(2)+'%;height:'+(LH+8)+'px"></div>';
+ for(let t=Math.ceil(w.A/60)*60;t<=w.B;t+=60)r+='<span class="tk '+(t===w.A?'l':t===w.B?'r':'')+'" style="left:'+X(t).toFixed(2)+'%;top:'+(LH+11)+'px">'+Math.floor(t/60)+':00</span>';
+ let k;if(o.mode==='live')k='<span class="klv"><i></i>'+(cur.length>1?T.live2(cur.length):T.live)+'</span><span>'+T.now(o.now)+'</span><span class="krest">'+T.rest(kwd(cur[0].e-now,lang))+'</span>';
+ else if(o.mode==='idle')k='<span class="klv o"><i></i>'+T.idle+'</span><span class="krest">'+T.soon(kwd(nx.s-now,lang))+'</span>';
+ else k='<span class="klv">'+o.alertK+'</span>';
+ const ti=o.mode==='live'?cur[0].title:o.next.s+' '+nx.title;
+ const hint=(nx&&nx.s>=w.B)?'<div class="khint">'+(lang==='ko'?'다음 ':'下一件 ')+o.next.s+' '+nx.title+'</div>':'';
+ return '<div class="kw'+(o.mode==='alert'?' alert':'')+'"><div class="kk">'+k+'</div><div class="kti">'+ti+'</div>'+(o.also||'')+'<div class="krul" style="height:'+(LH+26)+'px">'+r+'</div>'+hint+(o.extra||'')+'</div>';}
+const KWN={s:'15:30',e:'16:30',title:'SignPlex 客户反馈会',label:'SignPlex'};
+const NOWC=kw({mode:'live',now:'14:17',cur:[{s:'13:00',e:'14:30',title:'NEOX 横版对片'}],next:KWN});
 const OVERDUE='<div class="od"><span class="m m-td"></span><div style="flex:1;min-width:0"><b style="font-size:14px">交 SignPlex 韩文版成片</b><div style="font-size:12px;color:var(--g2)">原定 10月22日 · 晚了 2 天</div></div><span class="btn s">今天</span><span class="btn s g">明天</span></div>';
 const ICONS='<div class="av">H</div>';
 function river(flashRow,now){return '<div class="done">▸ 已过去 '+(now?'3 件：10:30 字幕校对 · 13:00 NEOX 横版对片 · 买咖啡豆 ✓':'2 件：10:30 SignPlex 字幕校对 · 买咖啡豆 ✓')+'</div>'
@@ -635,13 +696,13 @@ function dWeek(){const H0=8,PX=36;let h='<div class="dwk"><div class="hd"></div>
 const S=[];
 
 /* 1 今天 */
-const NOWSTATES='<div class="stlab"><span>② 没有进行中，今天还有下一件</span><span>14:17</span></div><div class="nowc"><div class="nk">下一件 · 还有 1 小时 13 分</div><div class="nt">15:30 SignPlex 客户反馈会</div><div class="ns">到 16:30 · Zoom · 提前 15 分提醒</div><div class="nx">之后 19:00 和 지민 吃饭</div></div>'
+const NOWSTATES='<div class="stlab"><span>② 没有进行中，今天还有下一件</span><span>14:17</span></div>'+kw({mode:'idle',now:'14:17',next:KWN})+''
  +'<div class="stlab"><span>③ 今天的日程都结束了</span><span>21:40</span></div><div class="lineA"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><b>今天的日程都结束了</b><span style="color:var(--g2)"> · 明天 11:00 家庭 브런치</span></span><span style="color:var(--g3)">›</span></div>'
  +'<div class="stlab"><span>④ 今天整天没有日程</span><span>9:05</span></div><div class="emptyA"><b style="font-size:16px;font-weight:600">今天没有日程</b><div style="font-size:12.5px;color:var(--g2);margin-top:4px">还有 3 件待办 · 明天 11:00 家庭 브런치</div><div style="font-size:12px;color:var(--g2);margin-top:10px">按住“＋”说一句，就能加一件日程</div></div>'
  +'<div style="font-size:12px;color:var(--g3);margin:14px 4px 0;line-height:1.6">下面的“没赶上”和时间河照常；③ 时已过去的收进“▸ 已过去 4 件”。</div>';
 S.push({id:'s1',t:'今天',sub:'时间河：所有东西按时间排成一列',
 p:[[phone(TODAY_TOP+ANNLINE+NOWC+OVERDUE+river()+NOTESTODAY,{tab:0}),'状态 ①：有进行中的日程（14:17）'],[phone(TODAY_TOP+ANNLINE+NOWSTATES,{tab:0}),'“现在”卡另外 3 种状态（R-118）']],
-pn:['<p><b>上半部分按对比页方案 A（R-118）：</b>日期和农历一行（19px），右上角只有头像（没有搜索按钮，查找全靠“＋”）；“现在”卡保留深色，标题 17px 半粗、圆角 14。“现在”卡 4 种状态：① 有进行中（第一张）；② 没有进行中、今天还有下一件：“下一件 · 还有多久”，不画进度条；③ 今天的日程都结束了：收成一行，写明天第一件的开始时间“明天 11:00 家庭 브런치”；④ 今天整天没有日程：浅色卡，带待办数和明天第一件，提示按住“＋”。</p><p><b>只有一列。</b>日程、有时间的待办、晚上的饭局按时间往下排，没定时间的待办挂在“今天内”。左边的形状区分类型，不再拆成四张卡。</p>','<p><b>顶部“现在”卡</b>只回答两个问题：现在在做什么、下一件是什么。提醒响时，这张卡原地变成提醒，按钮放在屏幕下方（见“提醒响起时”）。</p>','<p>已过去的折叠成一行。没赶上的固定在“现在”下面，点“今天 / 明天”改期，右滑完成。7 天内的纪念日压成日期下面的一行小标签（更远的不占首屏）；今天记的随手记排在最后。</p>'],
+pn:['<p><b>上半部分按对比页方案 A（R-118）：</b>日期和农历一行（19px），右上角只有头像（没有搜索按钮，查找全靠“＋”）；“现在”卡按 R-131 换成方案 K 小时间尺：白卡，第一行“● 进行中 · 现在 14:17 · 还剩 13 分钟”，第二行标题 17px 半粗，下面一小段时间轴（当前事项色块、已过部分涂实、竖线是此刻、后面是下一件），刻度只标整点 11px；时间窗规则见 皮肤视觉稿 的“现在”卡说明。“现在”卡 4 种状态：① 有进行中（第一张）；② 没有进行中、今天还有下一件：“○ 下一件 · 1 小时 13 分后”，时间轴上只把下一件描边；③ 今天的日程都结束了：收成一行，写明天第一件的开始时间“明天 11:00 家庭 브런치”；④ 今天整天没有日程：浅色卡，带待办数和明天第一件，提示按住“＋”。</p><p><b>只有一列。</b>日程、有时间的待办、晚上的饭局按时间往下排，没定时间的待办挂在“今天内”。左边的形状区分类型，不再拆成四张卡。</p>','<p><b>顶部“现在”卡</b>只回答两个问题：现在在做什么、下一件是什么。提醒响时，这张卡原地变成提醒，按钮放在屏幕下方（见“提醒响起时”）。</p>','<p>已过去的折叠成一行。没赶上的固定在“现在”下面，点“今天 / 明天”改期，右滑完成。7 天内的纪念日压成日期下面的一行小标签（更远的不占首屏）；今天记的随手记排在最后。</p>'],
 d:desk('<div class="col" style="width:520px">'+TODAY_TOP.replace('<div class="av">H</div>','<span class="d2">J / K 上下 · E 完成 · Enter 编辑</span>')+NOWC+OVERDUE+'<div style="height:6px"></div>'+river().replace('<div class="row ">'+'<span class="tm">15:30</span>','<div class="row flash"><span class="tm">15:30</span>')+row('td','','买 다이소 收纳盒','生活')+'</div>'
  +'<div class="col side" style="width:344px"><div class="st" style="margin-top:0"><b>本周</b><span>日历 ›</span></div><div class="card" style="display:flex;gap:6px;align-items:flex-end;height:120px">'+[[2,'一'],[1,'二'],[1,'三'],[1,'四'],[2,'五'],[4,'六'],[1,'日']].map((x,i)=>'<div style="flex:1;text-align:center;font-size:11px;color:var(--g2)"><div style="height:'+x[0]*16+'px;background:'+(i===5?'#111':'var(--g4)')+';border-radius:4px;margin-bottom:4px"></div>'+x[1]+'<br><b style="color:#111">'+(19+i)+'</b></div>').join('')+'</div>'+ANNB+'<div class="card" style="margin-top:8px;padding:10px 12px">'+row('fb mem" data-c="结',null,'结婚纪念日 · 第 6 年','11月2日 · 还有 9 天')+'</div>'+NOTESTODAY+'<div class="card" style="margin-top:10px;font-size:12px;color:var(--g2)">在任何窗口按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>空格</kbd> 弹出打字框，写一句按 Enter 就记下。</div></div>'
  +'<div class="insp"><div class="ih"><span class="m m-ev"></span>日程<span class="r">改了就自动保存</span></div><div class="it">SignPlex 客户反馈会</div>'+fld('时间','今天 15:30 – 16:30')+fld('项目','SignPlex')+fld('提醒','提前 15 分 · 推送显示标题')+fld('地点 / 链接','Zoom 링크 · zoom.us/j/8812…')+fld('备注','带上韩文版字幕的问题清单')+fld('原话（10月22日 语音）','“下午三点半跟 SignPlex 客户开反馈会，提前一刻钟提醒我”')+'<div style="display:flex;gap:8px;margin-top:16px"><span class="btn g">复制一条</span><span class="btn g">转成待办</span><span class="btn g">删除</span></div></div>',{tab:0}),
@@ -649,8 +710,8 @@ dn:['<p><b>两栏面板＋详情抽屉：时间河 ｜ 周边信息；选中一�
 
 /* 1b 提醒响起时 */
 const BELL='<span class="bell"></span>';
-const ALERTCD='<div class="nowc alert"><div class="nk">'+BELL+' 提醒 · 15 分钟后开始</div><div class="nt">15:30 SignPlex 客户反馈会</div><div class="ns">到 16:30 · 地点 / 链接：Zoom</div><div class="abtn"><span class="btn">知道了</span><span class="btn o">10 分钟后</span><span class="btn o">开始时再提醒</span></div><div class="nx">还有 1 条：15:15 回复 박 대리 的邮件 ›</div></div>';
-const ALERTC='<div class="nowc alert"><div class="nk">'+BELL+' 提醒 · 15 分钟后开始</div><div class="nt">15:30 SignPlex 客户反馈会</div><div class="ns">到 16:30 · 地点 / 链接：Zoom</div><div class="nx" style="margin-top:10px">还有 1 条：15:15 回复 박 대리 的邮件 ›</div></div>';
+const ALERTCD=kw({mode:'alert',now:'15:15',next:KWN,alertK:BELL+' 提醒 · 15 分钟后开始',extra:'<div class="kx"><div class="abtn" style="margin:0 0 10px"><span class="btn">知道了</span><span class="btn o">10 分钟后</span><span class="btn o">开始时再提醒</span></div>还有 1 条：15:15 回复 박 대리 的邮件 ›</div>'});
+const ALERTC=kw({mode:'alert',now:'15:15',next:KWN,alertK:BELL+' 提醒 · 15 分钟后开始',extra:'<div class="kx">还有 1 条：15:15 回复 박 대리 的邮件 ›</div>'});
 const ABAR='<div class="abar"><span class="btn">知道了</span><span class="btn o">10 分钟后</span><span class="btn o">开始时再提醒</span></div>';
 const LOCKSCR='<div style="text-align:center;margin-top:26px"><div style="font-size:16px;font-weight:600">10月24日 星期六</div><div style="font-size:88px;font-weight:700;line-height:1;letter-spacing:-3px">15:15</div></div><div style="margin-top:36px">'
  +[['现在','15:30 SignPlex 客户反馈会','15 分钟后开始 · 到 16:30 · Zoom'],['15:15','回复 박 대리 的邮件','待办提醒 · 今天截止 · SignPlex'],['10月20日','7 天后是 김지민 生日','10月27日 周二 · 满 29 周岁']].map(n=>'<div class="ntf"><span class="appi">L</span><div style="flex:1;min-width:0"><div style="display:flex;font-size:12px;color:var(--g2)"><b style="color:#111">Lemo</b><span style="margin-left:auto">'+n[0]+'</span></div><div style="font-weight:700;font-size:15px">'+n[1]+'</div><div style="font-size:13px;color:var(--g1)">'+n[2]+'</div></div></div>').join('')
@@ -934,7 +995,7 @@ d:desk('<div style="position:absolute;left:0;right:0;top:0;z-index:5;padding:8px
 dn:['<p>电脑版同样在顶部显示横幅；右侧编辑栏说明冲突怎么处理（以最后一次修改为准，并提示用户）。</p>']});
 
 /* 17 加载与出错 */
-const SKEL='<div class="top a"><div class="tt"><div class="d1">10月24日 周六<small>农历九月十五</small></div></div>'+ICONS+'</div><div class="card" style="font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="micbtn prep" style="position:static;width:22px;height:22px;border-width:3px"></span>正在同步…</div><div class="nowc" style="opacity:.35"><div class="skel" style="background:#555;width:40%"></div><div class="skel" style="background:#555;width:70%;height:22px"></div><div class="skel" style="background:#555;width:55%"></div></div>'+[1,2,3,4].map(()=> '<div class="row"><span class="tm"><div class="skel" style="width:36px"></div></span><div class="tx"><div class="skel" style="width:70%"></div><div class="skel" style="width:40%;height:10px"></div></div></div>').join('');
+const SKEL='<div class="top a"><div class="tt"><div class="d1">10月24日 周六<small>农历九月十五</small></div></div>'+ICONS+'</div><div class="card" style="font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="micbtn prep" style="position:static;width:22px;height:22px;border-width:3px"></span>正在同步…</div><div class="kw" style="opacity:.35"><div class="skel" style="background:#555;width:40%"></div><div class="skel" style="background:#555;width:70%;height:22px"></div><div class="skel" style="background:#555;width:55%"></div></div>'+[1,2,3,4].map(()=> '<div class="row"><span class="tm"><div class="skel" style="width:36px"></div></span><div class="tx"><div class="skel" style="width:70%"></div><div class="skel" style="width:40%;height:10px"></div></div></div>').join('');
 const ERRC=(t,b,btn)=>'<div class="card" style="margin-bottom:10px"><b style="font-size:15px">'+t+'</b><div style="font-size:13px;color:var(--g1);margin:4px 0 8px;line-height:1.6">'+b+'</div>'+(btn?'<div style="display:flex;gap:8px">'+btn.map((x,k)=>'<span class="btn'+(k===0?' p':'')+'" style="min-height:44px">'+x+'</span>').join('')+'</div>':'')+'</div>';
 const ERRS='<div style="height:6px"></div>'
  +ERRC('有 2 条没同步上','可能是网络不稳。内容还在这台手机里，不会丢。',['重试','查看是哪 2 条'])
@@ -972,7 +1033,7 @@ S.push({id:'sGest',t:'手势与快捷键',sub:'每一行的“⋯”菜单是主
 /* 18 韩文界面 */
 const KO_TOP='<div class="top a"><div class="tt"><div class="d1">10월 24일 토요일<small>음력 9월 15일</small></div></div>'+ICONS+'</div>';
 const KO_ANN='<div style="display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 10px"><span class="chip"><span class="m m-av xs"></span>3일 후 김지민 생일</span></div>';
-const KO_NOW='<div class="nowc"><div class="nk">지금 14:17 · 진행 중</div><div class="nt">NEOX 가로판 검토</div><div class="ns">13:00–14:30 · 텐센트 회의 · 13분 남음</div><div class="pb"><i style="width:86%"></i></div><div class="nx">다음 15:30 SignPlex 고객 피드백 회의 · 1시간 13분 후</div></div>';
+const KO_NOW=kw({lang:'ko',mode:'live',now:'14:17',cur:[{s:'13:00',e:'14:30',title:'NEOX 가로판 검토'}],next:{s:'15:30',e:'16:30',title:'SignPlex 고객 피드백 회의',label:'SignPlex'}});
 const KO_OD='<div class="od"><span class="m m-td"></span><div style="flex:1;min-width:0"><b style="font-size:14px">SignPlex 한국어판 납품</b><div style="font-size:12px;color:var(--g2)">원래 10월 22일 · 2일 지남</div></div><span class="btn s">오늘</span><span class="btn s g">내일</span></div>';
 const KO_RIV='<div class="done">▸ 지난 일정 2개: 10:30 SignPlex 자막 검수 · 원두 사기 ✓</div>'+row('ev','13:00','NEOX 가로판 검토','14:30까지 · NEOX · 텐센트 회의')+'<div class="nowl"><span>14:17</span></div>'+row('ev','15:30','SignPlex 고객 피드백 회의','16:30까지 · 15분 전 알림')+row('td','오늘 중','NEOX 세로판 4K 내보내기','오늘 마감 · NEOX')+row('td','','박 대리 메일 회신','SignPlex')+row('ev','19:00','지민이랑 저녁','연남동 · 생활');
 const KO_NOTES='<div class="st"><b>오늘 쓴 메모 2</b><span>메모 ›</span></div>'+row('nt',null,'NEOX 엔딩 로고는 0.5초 더 짧게','14:02 · 작업 아이디어')+row('nt',null,'서울숲 은행나무가 노랗게 물들었어요. 다음 주말에 카메라 챙기기','11:40 · 한국 생활 · 사진 1장');
