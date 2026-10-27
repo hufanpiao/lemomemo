@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>统一黑体候选</title>
+<!-- R-128 追问：“统一黑体”和系统字体太像，换候选。字体从网上 CDN 加载，只是看字，不进视觉稿 -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cn-fontsource-lxgw-neo-xi-hei-regular@1.0.1/font.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sun-typeface/SUIT@2.0.5/fonts/static/woff2/SUIT.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cn-fontsource-smiley-sans-oblique-regular@1.0.1/font.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/static/split/WantedSans.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chinese-fonts/stdgt@2.0.0/dist/%E4%B8%8A%E5%9B%BE%E4%B8%9C%E8%A7%82%E4%BD%93-%E5%B8%B8%E8%A7%84/result.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chinese-fonts/stdgt@2.0.0/dist/%E4%B8%8A%E5%9B%BE%E4%B8%9C%E8%A7%82%E4%BD%93-%E7%B2%97%E4%BD%93/result.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chinese-fonts/yozai@3.0.0/dist/Yozai-Regular/result.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chinese-fonts/yozai@3.0.0/dist/Yozai-Bold/result.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chinese-fonts/lxgwmanhei@3.0.0/dist/LXGWMarkerGothic/result.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chinese-fonts/dymh@3.0.0/dist/DouyinSansBold/result.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Hi+Melody&family=Gaegu:wght@400;700&family=Jua&display=swap">
+<style>
+@font-face{font-family:'Glow Sans SC';font-weight:400;src:url('https://cdn.jsdelivr.net/npm/@fontpkg/glow-sans-sc@0.93.2/GlowSansSC-Normal-Regular.otf') format('opentype')}
+@font-face{font-family:'Glow Sans SC';font-weight:700;src:url('https://cdn.jsdelivr.net/npm/@fontpkg/glow-sans-sc@0.93.2/GlowSansSC-Normal-Bold.otf') format('opentype')}
+@font-face{font-family:'Glow Sans SC';font-weight:200;src:url('https://cdn.jsdelivr.net/npm/@fontpkg/glow-sans-sc@0.93.2/GlowSansSC-Normal-ExtraLight.otf') format('opentype')}
+@font-face{font-family:'Glow Sans SC';font-weight:300;src:url('https://cdn.jsdelivr.net/npm/@fontpkg/glow-sans-sc@0.93.2/GlowSansSC-Normal-Light.otf') format('opentype')}
+@font-face{font-family:'Glow Sans SC';font-weight:500;src:url('https://cdn.jsdelivr.net/npm/@fontpkg/glow-sans-sc@0.93.2/GlowSansSC-Normal-Medium.otf') format('opentype')}
+:root{--bg:#E9EAEE;--panel:#fff;--text:#141518;--text-2:#595C64;--line:#ECEDF0;--accent:#F2DF4A}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;padding:24px 16px 60px}
+h1{font-size:20px;margin:0 auto 4px;max-width:1180px}
+.lead{max-width:1180px;margin:0 auto 18px;font-size:13px;color:var(--text-2);line-height:1.6}
+.grid{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
+.c{background:var(--panel);border-radius:20px;padding:18px 20px 20px}
+.c.now{box-shadow:inset 0 0 0 1.5px var(--line)}
+.lab{font-family:-apple-system,"PingFang SC","Microsoft YaHei UI",sans-serif;display:flex;align-items:baseline;gap:8px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.lab b{font-size:15px}.lab span{font-size:12px;color:var(--text-2)}
+.lab em{font-style:normal;font-size:11px;font-weight:700;background:var(--accent);border-radius:999px;padding:1px 8px;margin-left:auto;white-space:nowrap}
+.s{font-family:var(--ff);font-weight:var(--wb,400)}
+.s .d,.s .t,.s .n,.s b,.s .w span:last-child{font-family:var(--ffb,var(--ff))}
+.d{font-size:30px;font-weight:var(--wd,700);letter-spacing:-.01em;line-height:1.2}
+.t{font-size:18px;font-weight:var(--wt,700);margin-top:10px}
+.m{font-size:14px;color:var(--text-2);margin-top:4px}
+.p{font-size:15px;line-height:1.7;margin-top:12px}
+.k{font-size:15px;line-height:1.7;margin-top:6px}
+.k b{font-weight:var(--wB,700)}
+.n{font-size:22px;font-weight:var(--wn,700);margin-top:10px;letter-spacing:.01em}
+.w{display:flex;gap:16px;margin-top:10px;font-size:20px}
+.w span:first-child{font-weight:var(--wb,400)}.w span:last-child{font-weight:var(--wB,700)}
+.note{font-family:-apple-system,"PingFang SC","Microsoft YaHei UI",sans-serif;font-size:11.5px;color:var(--text-2);margin-top:12px;line-height:1.5}
+@media (max-width:420px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>“统一黑体”换哪套：同一段字</h1>
+<div class="lead">每张卡上的字都一样：日期大标题、日程标题、小字说明、一段随手记、韩文、数字，以及“常规 / 粗体”两档。第一张是系统字体（对照），第二张是现在的统一黑体。A～H 是候选（D～H 是第二批，风格拉开），中文和韩文成套换；候选里中文字体排在前面，所以数字和英文跟着中文字体走。字体从网上加载，只是看字用。</div>
+<div class="grid" id="g"></div>
+<script>
+const SETS = [
+  ['sys', '系统字体（对照）', '苹方 / 微软雅黑 + Apple SD Gothic Neo / 맑은 고딕', '', '-apple-system,"PingFang SC","Microsoft YaHei UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif', ''],
+  ['now', '现在的统一黑体', '思源黑体 + Pretendard', '和系统太像', '"Pretendard","Noto Sans SC",sans-serif', ''],
+  ['a', 'A　霞鹜新晰黑 + IBM Plex Sans KR', '日系黑体底子，笔画干净、字面略小', '', '"LXGW Neo XiHei","IBM Plex Sans KR",sans-serif', '霞鹜新晰黑只有一个字重，粗体由浏览器加粗，实际会略糊。'],
+  ['b', 'B　未来荧黑 + SUIT', '几何感、偏现代，字重从细到特粗都有', '', '"Glow Sans SC","SUIT",sans-serif', ''],
+  ['c', 'C　得意黑 + Wanted Sans', '窄身、略斜，像杂志标题', '', '"Smiley Sans Oblique","Wanted Sans",sans-serif', '得意黑只有一个字重，而且本身是斜的；适合标题，正文看久了可能累。'],
+  ['d', 'D　细线黑：未来荧黑 + Pretendard（细字重）', '接近方正兰亭超细黑的感觉：大字用特细，正文用细体，粗体只到中粗', '', '"Glow Sans SC","Pretendard",sans-serif', '大标题和数字 200（特细）、正文 300（细）、日程标题和粗体 500（中粗）。小字太细会发虚，正文最细只能到 300。', '--wd:200;--wn:200;--wt:500;--wb:300;--wB:500'],
+  ['e', 'E　上图东观体 + Gowun Dodum', '上海图书馆出的字体，人文感、笔画有粗细变化，温和、有书卷气', '', '"STDongGuanTi","Gowun Dodum",sans-serif', '有细 / 常规 / 粗三档；韩文 Gowun Dodum 只有一档。', '--ffb:"STDongGuanTi Bld","Gowun Dodum",sans-serif'],
+  ['f', 'F　悠哉体 + Hi Melody', '手写感、圆润随和，像手账', '', '"Yozai","Hi Melody",sans-serif', '悠哉体有细 / 常规 / 中 / 粗四档；韩文 Hi Melody 只有一档。'],
+  ['g', 'G　霞鹜漫黑 + Gaegu', '马克笔写的黑体，轻松、有温度', '', '"LXGW Marker Gothic","Gaegu",sans-serif', '霞鹜漫黑只有一个字重，粗体由浏览器加粗。'],
+  ['h', 'H　抖音美好体 + Jua', '圆胖、活泼，像贴纸', '', '"Douyin Sans","Jua",sans-serif', '两款都只有粗体，常规那一档也是粗的；更适合标题，正文全用会很“重”。']
+];
+const SAMPLE = `
+  <div class="d">10月24日 周六</div>
+  <div class="t">NEOX 横版对片 · 下午三点半开会</div>
+  <div class="m">到 14:30 · 腾讯会议 · 还剩 13 分钟</div>
+  <div class="p">首尔林的银杏黄了，下周末带相机去东门，顺便买咖啡豆。外国人登录证更新要带护照、照片 1 张、手续费 3 万韩元。</div>
+  <div class="k"><b>SignPlex 고객 피드백 회의</b> · 오후 3시 반<br>서울숲 은행나무가 노랗게 물들었어요.</div>
+  <div class="n">13:00–14:30　09:45　3 天后</div>
+  <div class="w"><span>柠檬记 레모 常规</span><span>柠檬记 레모 粗体</span></div>`;
+document.getElementById('g').innerHTML = SETS.map(([k,n,d,tag,ff,note,vars='']) =>
+  `<div class="c ${k==='now'?'now':''}"><div class="lab"><b>${n}</b><span>${d}</span>${tag?`<em>${tag}</em>`:''}</div>
+   <div class="s" style="--ff:${ff.replace(/"/g,'&quot;')};${vars.replace(/"/g,'&quot;')}">${SAMPLE}</div>${note?`<div class="note">${note}</div>`:''}</div>`).join('');
+</script>
+</body>
+</html>
