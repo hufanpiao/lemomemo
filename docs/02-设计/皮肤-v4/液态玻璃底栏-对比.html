@@ -164,7 +164,8 @@ body[data-hit="1"] .btn.sm::after,body[data-hit="1"] .mo::after,body[data-hit="1
 .secth{display:flex;justify-content:space-between;align-items:baseline;margin:14px 4px 6px;font-size:12px;font-weight:400}
 .secth a{font-weight:400;color:var(--text-2)}
 .newtag{font-size:11px;font-weight:400;background:var(--accent);color:var(--on-accent);border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:2px}
-.row.hl{box-shadow:0 0 0 2.5px var(--text);border-radius:16px;border-bottom-color:transparent;margin:4px -6px;padding:0 6px}
+.row.hl{background:var(--panel-2);border-radius:16px;border-bottom-color:transparent;margin:4px -6px;padding:0 6px;position:relative} /* R-142：选中行 = 浅灰底 + 左侧 3px 柠檬竖条（替换原 2.5px 墨黑描边） */
+.row.hl::before,.annrow.hl::before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:2px;background:var(--accent)}
 
 /* 底部贴底元素，位置和定稿线框一致：导航离底 42px（安全区 34 + 8）；“＋”离底 40px（66 高，与 62 高的导航中线对齐）；
    提醒按钮条、提示条离底 118px（42 + 62 + 14），输入行 116px。
@@ -508,7 +509,7 @@ body[data-skin="simple"] .toast,body[data-skin="simple"] .abar,.th-simple-light 
 /* 对齐定稿线框（R-77）：今天页时间河、待办列表直接铺在底色上 */
 .flat{background:transparent;box-shadow:none;padding:0;margin-top:0;border-radius:0}
 .flat .row,.flat .lrow{border-bottom:0}
-.flat .row.hl{background:var(--panel)}
+.flat .row.hl{background:var(--panel)}.desk .flat .row.hl{background:var(--panel-2)} /* R-142：电脑今天列表在白面板里，仍用浅灰 */
 .btn.soft{font-weight:400}
 .alertpg > .secth,.alertpg > .secth + .river{display:none}
 /* 左滑示范 */
@@ -660,7 +661,7 @@ body[data-hit="1"] .nb::after,body[data-hit="1"] .tdy::after,body[data-hit="1"] 
 .annbig{margin-top:12px}
 .annrow{display:grid;grid-template-columns:36px 1fr auto;align-items:center;gap:10px;min-height:64px;border-bottom:1px solid var(--line)}
 .annrow:last-child{border-bottom:0}
-.annrow.hl{box-shadow:0 0 0 2.5px var(--text);border-radius:14px;margin:4px -8px;padding:0 8px;border-bottom-color:transparent}
+.annrow.hl{background:var(--panel-2);border-radius:14px;margin:4px -8px;padding:0 8px;border-bottom-color:transparent;position:relative} /* R-142 */
 /* R-117：纪念日头像（圆形）。R-121：没有头像时显示“名字第一个字 + 类型颜色”的圆，和头像同大小，取代原来的菱形（只有月历格子里的菱形标记不变）。
    类型颜色直接用项目色板：生日 --p1（柠檬黄）、纪念日 --p3（珊瑚粉）、倒数日 --p2（浅蓝）；字用 --on-p（墨黑），四套皮肤对比度都 ≥ 7:1 */
 .avt{width:36px;height:36px;border-radius:50%;flex:none;display:inline-flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px var(--line)}
@@ -846,48 +847,56 @@ body[data-rt="1"] .pblur{--pb-tint:94%}
 .scr .home{z-index:6} /* Home 横条是系统画的，永远在最上面 */
 .scr{clip-path:inset(0 round 44px)} /* 示意图专用：模糊只在屏幕里取样，不把手机外框的黑色吸进来 */
 
-/* ===== 底部导航：液态玻璃对比（对比页）=====
-   只用 iPhone Safari 支持的手段：半透明底 + backdrop-filter（模糊、饱和度、亮度）+ 多层内阴影做玻璃边缘高光和厚度
-   + 一层从上往下的反光渐变。苹果原生的“边缘折射”要 SVG 扭曲滤镜，Safari 不支持，所以不做。
-   每档在浅色用白玻璃、深色用深玻璃；栏上文字用正文色（--text），不用灰字。 */
-.lg .tabbar{-webkit-backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat)) brightness(var(--lg-bri));backdrop-filter:blur(var(--lg-blur)) saturate(var(--lg-sat)) brightness(var(--lg-bri));
-  background:var(--lg-bg);box-shadow:inset 0 1px 0 var(--lg-hi),inset 0 -1px 0 var(--lg-lo),inset 0 0 0 1px var(--lg-rim),0 10px 28px rgba(0,0,0,var(--lg-drop))}
-.lg .tabbar::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(180deg,var(--lg-sheen),transparent 55%)}
-.lg .tab{position:relative;z-index:1;color:var(--text)}
-.lg .tab.on{background:var(--lg-on-bg);color:var(--lg-on-fg);box-shadow:var(--lg-on-sh)}
-/* 浅色 / 深色的玻璃底色和高光 */
-body[data-mode="light"] .lg{--lg-tint:255,255,255;--lg-hi:rgba(255,255,255,.95);--lg-lo:rgba(255,255,255,.35);--lg-rim:rgba(255,255,255,.55);--lg-sheen:rgba(255,255,255,.55);--lg-drop:.12}
-body[data-mode="dark"] .lg{--lg-tint:44,46,54;--lg-hi:rgba(255,255,255,.28);--lg-lo:rgba(255,255,255,.06);--lg-rim:rgba(255,255,255,.14);--lg-sheen:rgba(255,255,255,.10);--lg-drop:.45}
-/* 1 轻液态：62% 不透明、模糊 14px；选中项沿用各皮肤自己的实心胶囊 */
-.lg-1{--lg-blur:14px;--lg-sat:170%;--lg-bri:1}
-.lg-1 .tabbar{--lg-bg:rgba(var(--lg-tint),.62)}
-body[data-skin="simple"][data-mode="light"] .lg-1{--lg-on-bg:#141518;--lg-on-fg:#FFFFFF}
-body[data-skin="simple"][data-mode="dark"] .lg-1{--lg-on-bg:#F2F3F5;--lg-on-fg:#141518}
-body[data-skin="glass"] .lg-1{--lg-on-bg:var(--accent);--lg-on-fg:#141518}
-.lg-1{--lg-on-sh:none}
-/* 2 标准液态：40% 不透明、模糊 20px、饱和 200%；选中项是一颗凸起的玻璃珠 */
-.lg-2{--lg-blur:20px;--lg-sat:200%;--lg-bri:1.06}
-.lg-2 .tabbar{--lg-bg:rgba(var(--lg-tint),.40)}
-/* 3 通透液态：24% 不透明、模糊 12px、饱和 220%；玻璃珠更亮；“＋”也换成柠檬玻璃 */
-.lg-3{--lg-blur:12px;--lg-sat:220%;--lg-bri:1.08}
-.lg-3 .tabbar{--lg-bg:rgba(var(--lg-tint),.24)}
-body[data-mode="light"] .lg-2,body[data-mode="light"] .lg-3{--lg-on-bg:rgba(20,21,24,.08);--lg-on-fg:#141518;--lg-on-sh:inset 0 1px 0 rgba(255,255,255,.9),inset 0 -1px 1px rgba(0,0,0,.08),inset 0 0 0 1px rgba(255,255,255,.5)}
-body[data-mode="dark"] .lg-2,body[data-mode="dark"] .lg-3{--lg-on-bg:rgba(255,255,255,.16);--lg-on-fg:#FFFFFF;--lg-on-sh:inset 0 1px 0 rgba(255,255,255,.35),inset 0 -1px 1px rgba(0,0,0,.25),0 2px 8px rgba(0,0,0,.3)}
-body[data-mode="light"] .lg-3{--lg-on-bg:rgba(20,21,24,.11)}
-body[data-mode="dark"] .lg-3{--lg-on-bg:rgba(255,255,255,.22)}
-/* 选中的那颗玻璃珠里，图标点一下柠檬色（只在深色，浅色柠檬黄压白看不清） */
-body[data-mode="dark"] .lg-2 .tab.on .ico,body[data-mode="dark"] .lg-3 .tab.on .ico{color:var(--accent)}
-.lg-3 .fab{background:rgba(242,223,74,.80);-webkit-backdrop-filter:blur(12px) saturate(200%);backdrop-filter:blur(12px) saturate(200%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.85),inset 0 -2px 3px rgba(120,100,0,.18),inset 0 0 0 1px rgba(255,255,255,.45),0 0 0 4px var(--bg),0 0 0 5px var(--step-off),0 10px 28px rgba(0,0,0,.16)}
-/* 深色底上 80% 柠檬会发浑，深色用 92% */
-body[data-mode="dark"] .lg-3 .fab{background:rgba(242,223,74,.92)}
-/* 减少透明效果：三档都退回实色（和现状的实色后备一致） */
-body[data-rt="1"] .lg .tabbar{--lg-bg:var(--glass-solid);-webkit-backdrop-filter:none;backdrop-filter:none}
-body[data-rt="1"] .lg-3 .fab{background:var(--fab-bg);-webkit-backdrop-filter:none;backdrop-filter:none}
+/* ===== 液态玻璃对比（对比页 第 2 版）===== */
+@property --dx{syntax:'<length>';inherits:true;initial-value:0px}
+.cv{transform:translateY(var(--sy,0px));will-change:transform}
+.lgx .tabbar,.lgx .fab{background:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;overflow:visible}
+.lgx .tabbar{box-shadow:0 8px 24px rgba(0,0,0,var(--g-drop)),0 1px 3px rgba(0,0,0,calc(var(--g-drop) * .8))}
+.lgx .fab{box-shadow:0 0 0 4px var(--bg),0 0 0 5px var(--step-off),0 8px 24px rgba(0,0,0,var(--g-drop))}
+.lens{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none;z-index:0;isolation:isolate;transform:translateZ(0)}
+.lens .lr{position:absolute;inset:0;-webkit-mask-size:100% 100%;mask-size:100% 100%}
+.lens .lc{position:absolute;margin:0!important;clip-path:none!important;border-radius:0!important;pointer-events:none}
+.lens .tint{position:absolute;inset:0;background:var(--g-tint)}
+/* 高光：上左亮、下右弱的细边 + 内侧一圈柔光 + 顶部一道弧形反光 */
+.lens .spec{position:absolute;inset:0;border-radius:inherit;
+  box-shadow:inset 1.5px 1.5px 0 -.5px var(--g-hi),inset -1px -1px 0 -.5px var(--g-hi2),inset 0 0 10px rgba(255,255,255,var(--g-glow));
+  background:radial-gradient(120% 90% at 22% -30%,rgba(255,255,255,var(--g-sheen)) 0 38%,transparent 60%)}
+.lgx .tab,.lgx .fab > :not(.lens){position:relative;z-index:2}
+.lgx .tab{color:var(--g-fg);transition:color .3s}
+.lgx .tab.on{background:transparent;color:var(--g-fg-on)}
+/* 选中项：1 号是安静的浅色胶囊；2、3 号是一颗会移动的透明液滴 */
+.lg-r .tab.on{background:var(--g-pill)}
+.drop{position:absolute;top:5px;height:52px;left:var(--dx);border-radius:999px;z-index:1;pointer-events:none;
+  transition:--dx .55s cubic-bezier(.34,1.45,.5,1)}
+.drop.mv{animation:gel .55s cubic-bezier(.3,.9,.4,1)}
+/* 液滴静止时是安静的浅色玻璃片；移动或按住时才“活过来”，变成放大透镜（苹果：静止时安静，触碰时亮起） */
+.drop .lr{opacity:0;transition:opacity .3s}.drop.mv .lr,.drop.press .lr{opacity:1}
+.drop .tint{transition:background .3s}.drop:not(.mv):not(.press) .tint{background:var(--g-pill)!important}
+.drop.press{transform:scale(1.12);transition:--dx .55s cubic-bezier(.34,1.45,.5,1),transform .25s cubic-bezier(.3,1.5,.5,1)}
+
+@keyframes gel{0%{transform:scale(1,1)}35%{transform:scale(1.22,.86)}70%{transform:scale(.96,1.04)}100%{transform:scale(1,1)}}
+.drop .lens .spec{box-shadow:inset 1.5px 1.5px 0 -.5px rgba(255,255,255,.9),inset -1px -1px 0 -.5px rgba(255,255,255,.4),inset 0 0 8px rgba(255,255,255,.35),0 2px 8px rgba(0,0,0,.12)}
+.lgx .tab{cursor:pointer}
+/* 浅色 / 深色：常规玻璃随环境变浅或变深；透明玻璃两种模式都是“压暗 + 白字” */
+body[data-mode="light"] .lgx{--g-tint:rgba(255,255,255,.34);--g-hi:rgba(255,255,255,.95);--g-hi2:rgba(255,255,255,.55);--g-glow:.35;--g-sheen:.45;--g-drop:.14;--g-fg:#141518;--g-fg-on:#141518;--g-pill:rgba(20,21,24,.09)}
+body[data-mode="dark"] .lgx{--g-tint:rgba(30,31,36,.44);--g-hi:rgba(255,255,255,.45);--g-hi2:rgba(255,255,255,.18);--g-glow:.10;--g-sheen:.14;--g-drop:.45;--g-fg:#F2F3F5;--g-fg-on:#FFFFFF;--g-pill:rgba(255,255,255,.14)}
+body[data-mode] .lg-c{--g-tint:rgba(0,0,0,.26);--g-hi:rgba(255,255,255,.85);--g-hi2:rgba(255,255,255,.35);--g-glow:.2;--g-sheen:.3;--g-fg:#FFFFFF;--g-fg-on:#FFFFFF}
+.lg-c .tab{text-shadow:0 1px 3px rgba(0,0,0,.45)}.lg-c .tab .ico{filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
+body[data-mode="dark"] .lgx .tab.on .ico{color:var(--accent)}
+/* “＋”：柠檬色玻璃（苹果的“着色玻璃”，只给主要操作用） */
+.lgx .fab .lens .tint{background:rgba(242,223,74,.72)}
+body[data-mode="dark"] .lgx .fab .lens .tint{background:rgba(242,223,74,.86)}
+.lgx .fab{color:#141518}
+/* 减少透明效果：退回实色，不折射（苹果规范：更磨砂、遮住更多背后内容） */
+body[data-rt="1"] .lens .lr{display:none}
+body[data-rt="1"] .lgx .tabbar .lens .tint{background:var(--glass-solid)}
+body[data-rt="1"] .lg-c{--g-fg:var(--text);--g-fg-on:var(--text)}body[data-rt="1"] .lg-c .tab{text-shadow:none}
 .lgrow{display:grid;grid-template-columns:repeat(3,minmax(0,406px));gap:18px;margin-top:10px}
 @media (max-width:900px){.lgrow{grid-template-columns:1fr}}
 h2.vt{font-size:20px;margin:36px 0 2px}
 .vt small{display:block;font-size:13px;font-weight:400;color:var(--doc-fg2);margin-top:2px}
+.lgbar{display:flex;gap:10px;align-items:center;margin:14px 0 0;flex-wrap:wrap}
+.lgbar button{font:inherit;font-size:14px;padding:7px 14px;border-radius:999px;border:1px solid var(--doc-frame);background:var(--doc-bg,#fff);color:inherit;cursor:pointer}
 </style>
 </head>
 <body data-skin="simple" data-mode="light" data-dev="p" data-rt="0" data-hit="0">
@@ -946,17 +955,17 @@ h2.vt{font-size:20px;margin:36px 0 2px}
 </div></div>
 
 <div class="wrap">
-<h1 class="doc">底部导航：液态玻璃 3 档对比</h1>
-<p class="lead">负责人原话：“现在导航栏下面本身加了模糊，所以字已经不会透出来了，按照液态玻璃的标准做几个给我挑一下”。每档画三张：今天、随手记瀑布流（背后有彩色图片）、月历。R-139 的渐进模糊带保留。顶部可以切皮肤和浅深色，勾“模拟‘减少透明效果’”看实色后备。</p>
+<h1 class="doc">底部导航：液态玻璃对比（第 2 版）</h1>
+<p class="lead">负责人原话：“都没有那个效果，你先去查一下液态玻璃的标准，再重新弄一下”。上一版三档其实只是“更透的磨砂”，缺了液态玻璃最关键的<b>边缘折射</b>。这一版按苹果的规范重做：内容会自动往上滚（循环），注意看内容经过底栏时，<b>边缘把外面的内容弯折进来</b>；点底栏的四个按钮，看选中的液滴怎么滑过去。顶部可以切皮肤和浅深色。</p>
+<div class="lgbar"><button id="lgplay" type="button">暂停滚动</button></div>
 <div class="dcard"><ul>
-<li><b>参照的液态玻璃特征</b>：更透的底、更强的模糊和饱和度（背后的颜色透上来但看不清形状）、上沿一道亮高光和一圈细亮边（玻璃边缘）、下沿一点暗（厚度）、从上往下一层反光；选中项是一颗凸起的玻璃珠；浅色是白玻璃、深色是深玻璃。</li>
-<li><b>做不到的一点</b>：苹果原生的“边缘把背后内容折弯放大”要 SVG 扭曲滤镜，iPhone 的 Safari 不支持，所以三档都没有折射，只有上面这些。</li>
-<li><b>和现在的区别</b>：现在简洁皮肤是深色胶囊（70% 墨黑＋模糊 6px，白字），磨砂玻璃是白胶囊；三档都改成“浅色白玻璃 / 深色深玻璃”，栏上的字用正文色。</li>
-<li><b>1 轻液态</b>：62% 不透明、模糊 14px、饱和 170%，加高光和亮边；选中项还是各皮肤自己的实心胶囊（简洁·浅色墨黑、简洁·深色白、玻璃柠檬黄）。</li>
-<li><b>2 标准液态</b>：40% 不透明、模糊 20px、饱和 200%、略提亮；选中项换成凸起的玻璃珠（浅色淡灰珠，深色淡白珠 + 柠檬图标）。</li>
-<li><b>3 通透液态</b>：24% 不透明、模糊 12px、饱和 220%；玻璃珠更亮；右边“＋”也换成柠檬黄玻璃。最像液态玻璃，背后颜色透得最多。</li>
-<li><b>字清不清楚</b>：栏后面有渐进模糊带，背后内容先被糊掉、叠了 55% 底色，所以栏上用正文色时，最坏情况（浅色时背后正好是一大块墨黑、深色时背后是一大块白）估算：1 轻 ≥ 9:1，2 标准 ≥ 7:1，3 通透约 5:1，都过 4.5。估算假设背后是整块纯色，实际内容更杂，选定后再按真实画面实测。</li>
-<li><b>注意</b>：选了以后，R-122 定的提示条、提醒按钮条“和底栏同一套玻璃”要不要一起换，需要再定；模糊更强会更耗电，要在 iPhone 上实测滑动。</li>
+<li><b>查到的规范（苹果 WWDC25《Meet Liquid Glass》）</b>：① 液态玻璃靠“透镜”成立——不是把背后糊掉，而是把光弯折、聚拢，边缘的弯折让人看出玻璃的形状和厚度；② 高光随形状走，沿边缘一圈亮；③ 阴影在文字上方更深、在浅色背景上更浅；④ 小的元素（底栏）会跟着背后内容在浅色和深色之间切换；⑤ 交互时控件像一颗透明液滴，手指下先亮起来，移动时会像果冻一样拉伸；⑥ 分“常规”和“透明”两种，透明的只能用在图片很多的地方，而且要加一层压暗；⑦ 着色玻璃只给最主要的操作（这里是“＋”）。</li>
+<li><b>网页上怎么做</b>：网上常见做法是 SVG 扭曲滤镜，但 iPhone 的 Safari 不支持（只在 Chrome 里有效，Safari 里直接什么都不显示）。这一版换了一种 Safari 能跑的做法：玻璃里放一份背后画面的副本，按离边缘的距离分八圈，每圈往里压缩不同的量，边缘就会把栏外面的内容弯折进来；中间基本不变形。</li>
+<li><b>1 常规玻璃</b>：苹果默认的那种。背后内容轻模糊（2px）、提饱和，叠一层浅色（深色模式叠深色），八圈边缘折射，边缘高光；选中项是一块安静的浅色胶囊。</li>
+<li><b>2 常规玻璃 + 液滴选中</b>：同 1，但选中项是一颗小透明液滴，里面的内容被放大（像透镜），点别的按钮时液滴弹过去、中途拉长；按住选中的那一项，液滴会鼓起来变成透镜。静止时它只是一块安静的浅色玻璃片（苹果规范：静止时安静，触碰时才亮起来）。</li>
+<li><b>3 透明玻璃 + 液滴选中</b>：几乎不模糊，背后内容最清楚、折射最明显；按规范加一层压暗、字和图标用白色带阴影。苹果只建议在图片多的页面用，放在列表页上字会更难认。</li>
+<li><b>三档都有</b>：“＋”做成柠檬黄着色玻璃，同样有边缘折射和高光；R-139 的渐进模糊带保留（玻璃以外的地方还是渐渐模糊）。</li>
+<li><b>要注意</b>：① 这是模拟，副本要和真实内容同步，正式做时要在 iPhone 上实测滑动是否流畅、是否耗电；② 字清不清楚要按真实画面实测，尤其第 3 档；③ 选了以后，提示条、提醒按钮条要不要一起换成这套玻璃（R-122），再单独问。</li>
 </ul></div>
 <div id="screens"></div>
 <div id="homes" style="display:none"></div>
@@ -1896,11 +1905,84 @@ PH.klong = () => phone(todayBody('zh',{nowHtml:kcard({lang:'zh', mode:'live', no
 PH.koverlap = () => phone(todayBody('zh',{nowHtml:kcard({lang:'zh', mode:'live', now:'14:17', cur:[{s:'13:00', e:'14:30', title:'NEOX 横版对片', p:1},{s:'14:00', e:'15:00', title:'SignPlex 韩文字幕确认', p:2}], next:KNEXT.zh}),
   rows:[ZR[0],['14:00','k',2,'SignPlex 韩文字幕确认','到 15:00 · SignPlex'],...ZR.slice(1)]}), {nav:0});
 DK.kidle = () => CEN(PH.kidle()); DK.k95 = () => CEN(PH.k95()); DK.klong = () => CEN(PH.klong()); DK.koverlap = () => CEN(PH.koverlap());
-const LGV = [['','现状','简洁：70% 墨黑胶囊＋模糊 6px；磨砂玻璃：白胶囊'],['lg lg-1','1 轻液态','62% 不透明 · 模糊 14px · 饱和 170% · 选中项实心胶囊'],['lg lg-2','2 标准液态','40% 不透明 · 模糊 20px · 饱和 200% · 选中项玻璃珠'],['lg lg-3','3 通透液态','24% 不透明 · 模糊 12px · 饱和 220% · 玻璃珠更亮 · “＋”柠檬玻璃']];
+const LGV = [['','现状','简洁：70% 墨黑胶囊＋模糊 6px；磨砂玻璃：白胶囊（作对照）'],['lgx lg-r','1 常规玻璃','轻模糊 2px · 边缘八圈折射 · 边缘高光 · 选中项浅色胶囊'],['lgx lg-d','2 常规玻璃 + 液滴选中','同 1 · 选中项是会滑动、会拉伸的放大液滴'],['lgx lg-c lg-d','3 透明玻璃 + 液滴选中','几乎不模糊 · 折射最明显 · 压暗 + 白字']];
 const LIST = [];
+/* ---- 液态玻璃：边缘折射 ---- */
+const RINGS = {bar:[[22,2],[17,4],[13,7],[10,10],[7.5,14],[5.5,18],[3.5,23],[2,28]], drop:[[12,4],[7,9],[3.5,15]], fab:[[18,2],[14,4],[10,7],[7,10],[4.5,14],[2.5,19]]};
+function bandMask(W,H,w){ // 圆角胶囊外圈 w 宽的一条带子（边缘柔化）
+  const r=H/2, ri=Math.max(r-w,0.5), x=w, y=w, Wi=W-2*w, Hi=H-2*w;
+  const pill=(x,y,W,H,r)=>`M${x+r},${y}h${W-2*r}a${r},${r} 0 0 1 0,${2*r}h${-(W-2*r)}a${r},${r} 0 0 1 0,${-2*r}z`;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><filter id="b" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${Math.min(1.6,w/3)}"/></filter><path filter="url(#b)" fill="#fff" fill-rule="evenodd" d="${pill(0,0,W,H,r)} ${pill(x,y,Wi,Hi,ri)}"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+function lensFor(scr, el, kind, fx, ox, oy){
+  const W=el.offsetWidth, H=el.offsetHeight;
+  const src=scr.querySelector(':scope > .lsrc');
+  const lens=document.createElement('div'); lens.className='lens';
+  const mk=(d,w,u)=>{ const L=document.createElement('div'); L.className='lr'+(w?' ring':'');
+    const sx=u||(W/2)/(W/2+d), sy=u||(H/2)/(H/2+d);
+    L.style.transform=`scale(${sx},${sy})`; L.style.transformOrigin=`${W/2}px ${H/2}px`;
+    if(w){ const m=bandMask(W,H,w); L.style.webkitMaskImage=m; L.style.maskImage=m; }
+    const c=src.cloneNode(true); c.classList.remove('lsrc'); c.classList.add('lc'); c.style.display='';
+    c.style.left=ox; c.style.top=oy; c.style.filter=w?fx+' brightness(1.06)':fx; L.appendChild(c); return L; };
+  lens.appendChild(mk(0,0,kind==='drop'?1.16:0));
+  RINGS[kind].forEach(([w,d])=>lens.appendChild(mk(d,w)));
+  lens.insertAdjacentHTML('beforeend','<div class="tint"></div><div class="spec"></div>');
+  return lens;
+}
+function glassify(fig){
+  const row=fig.closest('.lgrow'); const scr=fig.querySelector('.scr'); if(!scr) return;
+  const clear=row.classList.contains('lg-c'), drop=row.classList.contains('lg-d');
+  // 1 流动内容装进 .cv，自动滚动时整体移动；状态栏、底栏、“＋”、模糊带和贴底的输入条不动
+  const cv=document.createElement('div'); cv.className='cv';
+  const kids=[...scr.children].filter(c=>!c.matches('.sb,.tabbar,.fab,.pblur,.home') && !['absolute','fixed'].includes(getComputedStyle(c).position));
+  if(kids.length){ kids[0].before(cv); kids.forEach(k=>cv.appendChild(k)); }
+  // 内容接一份在后面，循环往上滚，底栏后面一直有内容经过
+  scr.style.height='844px'; scr.style.minHeight='0'; // 长页面也固定成一屏高，底栏贴在屏幕底部
+  fig._h=cv.offsetHeight; [...cv.children].forEach(k=>cv.appendChild(k.cloneNode(true)));
+  // 2 背后画面的副本源：整块屏幕去掉玻璃本身
+  const src=scr.cloneNode(true); src.classList.add('lsrc'); src.style.display='none';
+  src.querySelectorAll('.tabbar,.fab,.pblur,.home').forEach(n=>n.remove());
+  src.style.width=scr.offsetWidth+'px'; src.style.height=scr.offsetHeight+'px'; src.style.minHeight='0';
+  scr.appendChild(src);
+  const fx = clear ? 'blur(1.2px) saturate(1.4)' : 'blur(2px) saturate(1.8) brightness(1.04)';
+  const bar=scr.querySelector('.tabbar'), fab=scr.querySelector('.fab');
+  if(bar){ bar.prepend(lensFor(scr,bar,'bar',fx,-bar.offsetLeft+'px',-bar.offsetTop+'px')); }
+  if(fab){ fab.prepend(lensFor(scr,fab,'fab',clear?'blur(.6px)':'blur(2px) saturate(1.5)',-fab.offsetLeft+'px',-fab.offsetTop+'px')); }
+  if(bar && drop){
+    const tabs=[...bar.querySelectorAll('.tab')], on=bar.querySelector('.tab.on')||tabs[0];
+    const dp=document.createElement('div'); dp.className='drop';
+    dp.style.width=on.offsetWidth+'px'; dp.style.setProperty('--dx', on.offsetLeft+'px');
+    bar.appendChild(dp);
+    const ox=`calc(${-bar.offsetLeft}px - var(--dx))`, oy=(-bar.offsetTop-5)+'px';
+    // 液滴里的副本：不做模糊，放大
+    const tmp=document.createElement('div'); tmp.style.cssText=`position:absolute;width:${on.offsetWidth}px;height:52px`; bar.appendChild(tmp);
+    dp.appendChild(lensFor(scr,tmp,'drop',clear?'saturate(1.3)':'saturate(1.5) brightness(1.06)',ox,oy)); tmp.remove();
+    dp.querySelector('.tint').style.background = clear ? 'rgba(255,255,255,.10)' : 'rgba(255,255,255,.18)';
+    tabs.forEach(t=>t.addEventListener('pointerdown',()=>{ if(t.classList.contains('on')) dp.classList.add('press'); }));
+    addEventListener('pointerup',()=>dp.classList.remove('press'));
+    dp.addEventListener('animationend',()=>dp.classList.remove('mv'));
+    tabs.forEach(t=>t.addEventListener('click',()=>{
+      tabs.forEach(x=>x.classList.remove('on')); t.classList.add('on');
+      dp.classList.remove('mv'); void dp.offsetWidth; dp.classList.add('mv');
+      dp.style.setProperty('--dx', t.offsetLeft+'px');
+    }));
+  } else if(bar){
+    const tabs=[...bar.querySelectorAll('.tab')];
+    tabs.forEach(t=>t.addEventListener('click',()=>{ tabs.forEach(x=>x.classList.remove('on')); t.classList.add('on'); }));
+  }
+}
+let lgPlay=true, lgT0=performance.now(), lgT0p=0;
+function lgTick(now){
+  if(lgPlay){ const d=(now-lgT0)*.035;
+    document.querySelectorAll('.lgrow figure').forEach(f=>{ if(!f._h) return; const p=f.querySelector('.phone'); p.style.setProperty('--sy', (-(d%f._h)).toFixed(1)+'px'); }); }
+  else lgT0=now-(lgT0p||0);
+  requestAnimationFrame(lgTick);
+}
 function render(){
   const fig=(html,cap)=>`<figure class="sc"><div class="fit"><div class="inner">${html}</div></div><figcaption>${cap}</figcaption></figure>`;
-  document.getElementById('screens').innerHTML = LGV.map(([c,t,d])=>`<h2 class="vt">${t}<small>${d}</small></h2><div class="lgrow ${c}">${fig(PH.today(),'今天')}${fig(PH.mason(),'随手记 · 瀑布流')}${fig(PH.month(),'月历')}</div>`).join('');
+  document.getElementById('screens').innerHTML = LGV.map(([c,t,d])=>`<h2 class="vt">${t}<small>${d}</small></h2><div class="lgrow ${c}">${fig(PH.today(),'今天')}${fig(PH.mason(),'随手记 · 瀑布流')}${fig(PH.anniv(),'纪念日（头像、彩色）')}</div>`).join('');
+  document.querySelectorAll('.lgrow.lgx figure').forEach(glassify);
   fit();
 }
 function fit(){
@@ -1927,6 +2009,11 @@ document.getElementById('hit').addEventListener('change',e=>{document.body.datas
   if(q.get('hit')==='1'){document.body.dataset.hit='1';document.getElementById('hit').checked=true;}
   render(); addEventListener('resize',fit);
 })();
+</script>
+<script>
+document.getElementById('lgplay').addEventListener('click',e=>{ if(lgPlay) lgT0p=performance.now()-lgT0; lgPlay=!lgPlay; e.target.textContent=lgPlay?'暂停滚动':'继续滚动'; });
+if(new URLSearchParams(location.search).get('still')==='1') lgPlay=false;
+requestAnimationFrame(lgTick);
 </script>
 </body>
 </html>
