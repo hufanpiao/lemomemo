@@ -60,6 +60,12 @@ h1{font-size:22px;margin:8px 0 4px}
 /* 高光位置 --sx/--sy、沿边亮线方向 --hx/--hy 由“倾斜高光”按手机倾斜实时改（第 2 版） */
 .lens .spec{position:absolute;inset:0;border-radius:inherit;box-shadow:inset calc(1.5px * var(--hx,1)) calc(1.5px * var(--hy,1)) 0 -.5px var(--g-hi),inset calc(-1px * var(--hx,1)) calc(-1px * var(--hy,1)) 0 -.5px var(--g-hi2),inset 0 0 10px rgba(255,255,255,var(--g-glow));
   background:radial-gradient(120% 90% at var(--sx,22%) var(--sy,-30%),rgba(255,255,255,var(--g-sheen)) 0 38%,transparent 60%)}
+/* 沿边亮光：上沿一段亮边在 --sx 处，下沿一段在对称位置，跟着倾斜沿边滑动（R-151：浅色玻璃上只挪柔光看不出来） */
+.lens .spec::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.6px;
+  background:radial-gradient(34% 120% at var(--sx,22%) 0%,rgba(255,255,255,var(--g-rim,1)),transparent 70%),radial-gradient(30% 120% at calc(100% - var(--sx,22%)) 100%,rgba(255,255,255,calc(var(--g-rim,1) * .7)),transparent 70%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+:root{--rim-shade:rgba(20,21,24,.10)}
+.tabbar .lens .spec,.fab .lens .spec{outline:.5px solid var(--rim-shade);outline-offset:-.5px}
 /* 自动深浅（第 2 版）：底栏背后大多是深色内容时，底栏自己换成深色玻璃 */
 .tabbar[data-ad="dark"]{--g-tint:rgba(30,31,36,.44);--g-hi:rgba(255,255,255,.45);--g-hi2:rgba(255,255,255,.18);--g-glow:.10;--g-sheen:.14;--g-fg:#F2F3F5;--g-pill:rgba(255,255,255,.14)}
 .tab{transition:color .35s}
@@ -94,12 +100,13 @@ body.nopb .pblur{display:none}
 <div class="wrap">
   <h1>液态玻璃真机试验</h1>
   <p class="lead">请在 iPhone 的 Safari 里打开，用手指上下滑动列表，看底栏边缘有没有把经过的内容弯进来、跟不跟手。点底栏的按钮看液滴滑过去，按住选中的那一项看它鼓起来。右上角是实时帧率（60 或 120 是满帧）和最近 5 秒掉帧的次数。下面几个开关可以换参数，看哪一组又好看又不卡。</p>
-  <p class="lead">第 2 版加强了四处，都能单独开关，方便和苹果自带 App（照片、音乐）对比：① 12 圈折射，边缘更顺；② 边缘色散，彩边很细；③ 自动深浅——列表里每隔几行有深色块，滑到底栏背后时底栏会自己变深；④ 倾斜高光——点“开”后允许使用动作与方向，左右歪手机，高光会跟着走。</p>
+  <p class="lead">第 2 版加强了四处，都能单独开关，方便和苹果自带 App（照片、音乐）对比：① 12 圈折射，边缘更顺；② 边缘色散，彩边很细；③ 自动深浅——列表里每隔几行有深色块，滑到底栏背后时底栏会自己变深；④ 倾斜高光——点“开”后允许使用动作与方向，左右歪手机，高光会跟着走。在 claude.ai 里打开时 iPhone 不给读陀螺仪，请拖“模拟倾斜”滑条看效果。</p>
   <div class="ctl">
     <div class="r"><span>折射圈数</span><button data-k="rings" data-v="12">12 圈</button><button data-k="rings" data-v="8">8 圈</button><button data-k="rings" data-v="5">5 圈</button><button data-k="rings" data-v="3">3 圈</button><button data-k="rings" data-v="0">不折射</button></div>
     <div class="r"><span>边缘色散</span><button data-k="disp" data-v="1">开</button><button data-k="disp" data-v="0">关</button></div>
     <div class="r"><span>自动深浅</span><button data-k="ad" data-v="1">开</button><button data-k="ad" data-v="0">关</button></div>
     <div class="r"><span>倾斜高光</span><button data-k="tilt" data-v="1">开</button><button data-k="tilt" data-v="0">关</button><span id="tiltst"></span></div>
+    <div class="r"><span>模拟倾斜</span><input id="tiltsim" type="range" min="-35" max="35" step="1" value="0" aria-label="模拟左右倾斜手机" style="flex:1;min-width:140px"><span id="tiltval" style="min-width:0;font-size:12px">拖动＝左右歪手机</span></div>
     <div class="r"><span>背后模糊</span><button data-k="blur" data-v="1">轻模糊</button><button data-k="blur" data-v="0">不模糊</button></div>
     <div class="r"><span>渐进模糊带</span><button data-k="pb" data-v="1">开</button><button data-k="pb" data-v="0">关</button></div>
     <div class="r"><span>深浅色</span><button data-k="theme" data-v="auto">跟随系统</button><button data-k="theme" data-v="light">浅色</button><button data-k="theme" data-v="dark">深色</button></div>
@@ -217,8 +224,12 @@ function onTilt(e){
   const g = Math.max(-35, Math.min(35, e.gamma)), b = Math.max(0, Math.min(90, e.beta ?? 45));
   tilt.tx = 50 + g * 1.6; tilt.ty = -30 + (45 - b) * .6;
 }
+// 嵌在 claude.ai 里时 iPhone 不给框读陀螺仪（R-151 真机试出）：用滑条模拟左右倾斜，看高光走动的效果
+const sim = document.getElementById('tiltsim');
+sim.addEventListener('input', () => { const g = Number(sim.value); tilt.sim = true; tilt.tx = 50 + g * 1.6; tilt.ty = -30;
+  document.getElementById('tiltval').textContent = g === 0 ? '端平' : (g < 0 ? '向左 ' : '向右 ') + Math.abs(g) + '°'; });
 function stepTilt(){
-  if(!opt.tilt) return;
+  if(!opt.tilt && !tilt.sim) return;
   const nx = tilt.x + (tilt.tx - tilt.x) * .15, ny = tilt.y + (tilt.ty - tilt.y) * .15;
   if(Math.abs(nx - tilt.x) < .05 && Math.abs(ny - tilt.y) < .05) return;
   tilt.x = nx; tilt.y = ny;
@@ -232,9 +243,9 @@ async function setTilt(on){
     if(typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission){
       if(await DeviceOrientationEvent.requestPermission() !== 'granted'){ st.textContent = '没有授权'; return false; }
     }
-  }catch(e){ st.textContent = '这里不能请求授权'; return false; }
+  }catch(e){ st.textContent = '嵌在网页里用不了陀螺仪，请用下面的滑条模拟'; return false; }
   tilt.got = false; addEventListener('deviceorientation', onTilt); st.textContent = '等待数据…';
-  setTimeout(() => { if(opt.tilt) st.textContent = tilt.got ? '已开' : '收不到方向数据（嵌在网页里时可能被拦）'; }, 1500);
+  setTimeout(() => { if(opt.tilt) st.textContent = tilt.got ? '已开' : '收不到方向数据，请用下面的滑条模拟'; }, 1500);
   return true;
 }
 function measure(){ listTop = list.getBoundingClientRect().top + window.scrollY; }
