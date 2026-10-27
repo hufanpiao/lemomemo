@@ -957,6 +957,44 @@ table.crt td.bad{color:#B0291F;font-weight:700}
 .rul .tk{position:absolute;top:30px;font-family:var(--f-num);font-size:11px;color:var(--text-2);transform:translateX(-50%)}
 .rul .tk:first-of-type{transform:none}
 </style>
+
+<style>
+/* ===== 急件：玻璃皮肤 K 时间轴 3 个改法（只在对比页里，视觉稿没改） ===== */
+.kgw h3.doc{font-size:20px;margin:34px 0 4px}
+.kgrid{display:grid;grid-template-columns:repeat(3,max-content);gap:18px 18px;align-items:start}
+.kgrid figure{margin:0}
+.kgrid figcaption{font-size:12px;line-height:1.5;color:var(--doc-fg);margin-top:6px;max-width:382px}
+.kgrid figcaption b{font-weight:800}
+.kgrid figcaption .bad{color:#B0291F;font-weight:800}
+.kgcell{width:382px;box-sizing:border-box;padding:12px;background:var(--scr-bg);border-radius:18px}
+.kgcell .nowK{margin-top:0}
+.kgrow{font:800 13px/1.4 var(--f-zh);color:var(--doc-fg);margin:14px 0 6px}
+/* 修正后的时间轴：细轨在色块处断开（kRulerFix 生成分段 .trk），色块全部不透明，裁切端不再渐隐 */
+.kfix .krul .sg.cl,.kfix .krul .sg.cr{-webkit-mask-image:none;mask-image:none}
+.kfix .krul .sg.cur{background:var(--v-rem,var(--k-cur));box-shadow:none}
+.kfix .krul .sg.cur i{background:var(--v-done,var(--k-done))}
+/* 下一件：和普通日程一样，项目色竖条 + 文字，去掉框 */
+.kgv .krul .sg.nxt,.kgv .krul .sg.nxt.on{background:none;box-shadow:none;padding:0 0 0 9px;color:var(--k-fg2);overflow:hidden}
+.kgv .krul .sg.nxt b.bar{position:absolute;left:0;top:3px;bottom:3px;width:3px;border-radius:2px;background:var(--pc)}
+.kgv .krul .nw b.dot{position:absolute;border-radius:50%}
+/* 改法 1：贴近简洁版 K —— 20px 色块，已过去 = 浅色实心，还没到 = 更浅的实心；此刻 = 和色块等高的细线 + 小圆点 */
+.kg1.th-glass-light{--v-done:#F9EFA5;--v-rem:#FFFBE8;--v-mark:#141518}
+.kg1.th-glass-dark{--v-done:#706A2A;--v-rem:#3F3E30;--v-mark:#F8F4D8}
+.kg1 .krul .sg.cur i{border-radius:6px 0 0 6px}
+.kg1 .krul .nw{width:2px;margin-left:-1px;background:var(--v-mark);border-radius:1px}
+.kg1 .krul .nw b.dot{left:-2.5px;top:-3.5px;width:7px;height:7px;background:var(--v-mark)}
+/* 改法 2：只用细线 —— 2px 细轨，当前事项 4px 线段（细轨在这段断开，不重叠）；此刻 = 实心小圆点 */
+.kg2.th-glass-light{--v-done:#141518;--v-rem:#C6B63F;--v-mark:#141518}
+.kg2.th-glass-dark{--v-done:#F2DF4A;--v-rem:#59584C;--v-mark:#F2DF4A}
+.kg2 .krul .sg.cur{border-radius:2px}
+.kg2 .krul .nw{width:10px;height:10px;margin-left:-5px;border-radius:50%;background:var(--v-mark)}
+/* 改法 3（我的）：进度条 —— 8px 胶囊，已过去 = 墨色 / 柠檬实心，还没到 = 奶油色 / 深橄榄实心；此刻 = 带底色描圈的圆头（像播放进度） */
+.kg3.th-glass-light{--v-done:#141518;--v-rem:#FFFBE8;--v-mark:#141518;--v-ring:#FFFBE8}
+.kg3.th-glass-dark{--v-done:#F2DF4A;--v-rem:#4A4834;--v-mark:#F2DF4A;--v-ring:#2A2919}
+.kg3 .krul .sg.cur{border-radius:4px}
+.kg3 .krul .sg.cur i{border-radius:4px 0 0 4px}
+.kg3 .krul .nw{width:14px;height:14px;margin-left:-7px;border-radius:50%;background:var(--v-mark);box-shadow:0 0 0 2.5px var(--v-ring)}
+</style>
 </head>
 <body data-skin="simple" data-mode="light" data-dev="p" data-rt="0" data-hit="0">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -1008,7 +1046,7 @@ table.crt td.bad{color:#B0291F;font-weight:700}
 <div class="topbar"><div class="in"><div class="brand"><svg viewBox="0 0 1024 1024"><use href="#icL"/></svg>柠檬记 4.0.0　“现在 · 进行中”卡片：第一轮 A–E · 第二轮 F–K</div></div></div>
 <div class="cmpw">
 <h1 class="doc">“现在 · 进行中”卡片：5 个方案</h1>
-<p class="lead" style="border-left:4px solid #F2DF4A;padding:8px 12px;background:rgba(242,223,74,.14);font-size:16px"><b>负责人已选 K（R-131）。</b>已落到皮肤视觉稿和定稿线框；刻度字保持 11px；磨砂玻璃皮肤保留原来的柠檬黄 / 深橄榄渐变底，卡里换成 K 的内容。</p>
+<p class="lead" style="border-left:4px solid #F2DF4A;padding:8px 12px;background:rgba(242,223,74,.14);font-size:16px"><b>负责人已选 K（R-131）。</b><a href="#kg-v0">页面末尾新增：磨砂玻璃时间轴 3 个改法（急件）</a>。已落到皮肤视觉稿和定稿线框；刻度字保持 11px；磨砂玻璃皮肤保留原来的柠檬黄 / 深橄榄渐变底，卡里换成 K 的内容。</p>
 <p class="lead">负责人看了今天页顶部的“现在 · 进行中”卡片，问：“这个是不是太黑了？有没有更好的方案呢”。<br>
 这页在<b>同一个手机今天页</b>里只换这张卡，日期、纪念日提示、没赶上、时间河都不动。每个方案画四套皮肤。<br>
 注意：<b>方案 A（现状）四套皮肤本来就不一样</b>。只有简洁·浅色是黑底白字；简洁·深色是柠檬黄底、磨砂玻璃·浅色是柠檬黄渐变、磨砂玻璃·深色是暗橄榄渐变。<br>
@@ -1047,6 +1085,19 @@ F 不做卡片，“现在”融进时间河；G 柠檬黄实底；H 圆环倒�
 <p class="idea" id="dk2note"></p>
 <div class="dkwrap th-simple-light" id="dk2"></div>
 </section>
+<section data-sec="kglass" class="kgw">
+<h1 class="doc r2sep">急件：磨砂玻璃皮肤 K 卡时间轴 · 3 个改法</h1>
+<p class="lead" style="border-left:4px solid #F2DF4A;padding:8px 12px;background:rgba(242,223,74,.14);font-size:16px"><b>负责人已选改法 3（进度条 + 圆头，记在 R-131 追问）。</b>已落到皮肤视觉稿的两套玻璃皮肤；细轨断开、截断端直角这两条四套皮肤一起改了。“还没到”那段对卡底低于 3:1，按协调人决定接受，视觉稿说明里已写明。</p>
+<p class="lead">负责人：“手机磨砂玻璃界面的大卡看起来有点奇怪”；补充：“还没到的时间那一块是透明的，导致可以看到后面的时间线，你不觉得很丑吗？”<br>
+这一节<b>只改时间轴本身</b>，卡片底色保持柠檬黄渐变（玻璃·浅色）和深橄榄渐变（玻璃·深色）。三个改法共同遵守的硬规则：<br>
+① 当前事项色块里还没到的那一段是<b>不透明实心</b>（同色系浅色），不画描边、不用半透明；<br>
+② 细轨<b>在色块处断开</b>（两端各留 3px 空隙），色块底下没有线；<br>
+③ “下一件”改成和普通日程一样的写法：<b>项目色竖条 + 文字，去掉框</b>，细轨也在它那一段断开；<br>
+④ 被窗口截断的一端改成直角截断，不再渐隐（渐隐会变半透明，又会透出东西）。<br>
+三个状态：进行中 13 分钟（13:13）、快结束 95%（14:26）、空闲（14:17，下一件 15:30）。每张图下面是页面里实测的对比度：文字要求 ≥ 4.5，图形要求 ≥ 3；半透明的按渐变每个色标叠出来取最差。</p>
+<div id="kgbody"></div>
+</section>
+
 </div>
 <script>
 /* ---------------- 图标（线性，2px，圆头） ---------------- */
@@ -2172,8 +2223,111 @@ document.querySelectorAll('figure').forEach(fg=>{
 });
 document.getElementById('crt2').innerHTML = `<table class="crt"><tr><th>方案</th>${Object.keys(SKN).map(k=>`<th>${SKN[k]}</th>`).join('')}</tr>${SCH2.map(([id])=>`<tr><th>${id}</th>${Object.keys(SKN).map(k=>{const m=(RES[id]||{})[k]||{}; const bad=Object.values(m).some(v=>v<4.5); return `<td class="${bad?'bad':''}">${['t','n','s'].filter(c=>m[c]!=null).map(c=>`${CAT[c]} ${m[c].toFixed(1)}:1`).join('<br>')}</td>`;}).join('')}</tr>`).join('')}</table>`;
 window.__RES = RES;
+
+/* ===== 急件：玻璃 K 时间轴改法 ===== */
+let __KV = '';
+function kRulerFix(w, now, lanes){
+  const W=w.B-w.A, cl=m=>Math.min(Math.max(m,w.A),w.B), X=m=>(cl(m)-w.A)/W*100;
+  const n=lanes.length, lh=n>1?13:20, gap=4, LH=n*lh+(n-1)*gap, cy=4+lh/2;
+  let h='';
+  if(n===1){
+    const iv=lanes[0].filter(sg=>!(sg.e<=w.A||sg.s>=w.B)).map(sg=>[X(sg.s),X(sg.e)]).sort((a,b)=>a[0]-b[0]);
+    let x=0, xs=true;
+    const piece=(a,b,ga,gb)=>{ const L=ga?`calc(${a.toFixed(2)}% + 3px)`:`${a.toFixed(2)}%`, R=gb?`calc(${(100-b).toFixed(2)}% + 3px)`:`${(100-b).toFixed(2)}%`;
+      return `<div class="trk" style="top:${cy-1}px;left:${L};right:${R}"></div>`; };
+    iv.forEach(([a,b])=>{ if(a>x+0.5) h+=piece(x,a,!xs,true); x=Math.max(x,b); xs=false; });
+    if(x<99.5) h+=piece(x,100,!xs,false);
+  }
+  lanes.forEach((ln,li)=>ln.forEach(sg=>{
+    if(sg.e<=w.A || sg.s>=w.B) return;
+    const l=X(sg.s), r=X(sg.e), cls=[sg.kind, sg.s<w.A?'cl':'', sg.e>w.B?'cr':'', sg.on?'on':''].join(' ');
+    let top=4+li*(lh+gap), hh=lh;
+    if(sg.kind==='cur' && __KV==='v2'){ hh=4; top=cy-2; }
+    if(sg.kind==='cur' && __KV==='v3'){ hh=8; top=cy-4; }
+    let fill='';
+    if(sg.kind!=='nxt'){ const a=Math.max(sg.s,w.A), b=Math.min(sg.e,w.B); fill=`<i style="width:${Math.max(0,Math.min(1,(now-a)/(b-a)))*100}%"></i>`; }
+    const lab = sg.kind==='nxt' ? ((__KV?'<b class="bar"></b>':'')+(n===1?sg.label:'')) : '';
+    h+=`<div class="sg ${cls}" style="${sg.p?'--pc:var(--p'+sg.p+'s);':''}left:${l.toFixed(2)}%;width:${(r-l).toFixed(2)}%;top:${top}px;height:${hh}px;line-height:${lh}px">${fill}${lab}</div>`;
+  }));
+  const xn=X(now).toFixed(2);
+  if(__KV==='v1') h+=`<div class="nw" style="left:${xn}%;top:4px;height:${lh}px"><b class="dot"></b></div>`;
+  else if(__KV==='v2') h+=`<div class="nw" style="left:${xn}%;top:${cy-5}px"></div>`;
+  else if(__KV==='v3') h+=`<div class="nw" style="left:${xn}%;top:${cy-7}px"></div>`;
+  else h+=`<div class="nw" style="left:${xn}%;height:${LH+8}px"></div>`;
+  for(let t=Math.ceil(w.A/60)*60; t<=w.B; t+=60){ const x=X(t); h+=`<span class="tk ${t===w.A?'l':t===w.B?'r':''}" style="left:${x.toFixed(2)}%;top:${LH+11}px">${Math.floor(t/60)}:00</span>`; }
+  return `<div class="krul" style="height:${LH+11+15}px">${h}</div>`;
+}
+{
+  const KG_ST = [
+    ['live','进行中 13 分钟（13:13）', ()=>kcard({lang:'zh', mode:'live', now:'13:13', cur:[{s:'13:00', e:'14:30', title:'NEOX 横版对片', p:1}], next:KNEXT.zh})],
+    ['p95','快结束 95%（14:26）', ()=>kcard({lang:'zh', mode:'live', now:'14:26', cur:[{s:'13:00', e:'14:30', title:'NEOX 横版对片', p:1}], next:KNEXT.zh})],
+    ['idle','空闲（14:17）', ()=>kcard({lang:'zh', mode:'idle', now:'14:17', next:KNEXT.zh})]
+  ];
+  const KG_V = [
+    ['v0','现状（R-131，供对照）','', '玻璃·浅色当前段是 1.5px 墨边透明框、已过部分墨黑实心；玻璃·深色是柠檬边透明框、柠檬实心，此刻竖线比色块高；还没到的那段是透明的，底下的细轨透出来；“下一件”是半透明白块 + 蓝边。',''],
+    ['v1','改法 1：贴近简洁版 K','v1','和简洁版 K 同一个结构：20px 高的圆角色块，已过去 = 浅色实心（玻璃·浅色 #F9EFA5，相当于白 50% 叠在柠檬黄上再转成实色；玻璃·深色 #706A2A，相当于柠檬黄 35% 叠在深橄榄上再转成实色），还没到 = 更浅一级的实心（#FFFBE8 / #3F3E30）；此刻 = 和色块等高的 2px 细线 + 7px 小圆点（墨色 / 奶油白）。','和简洁版最像，换皮肤时结构不跳。缺点：色块本身和柠檬黄底太接近（浅色只有 1.1–1.4，深色 1.9–2.5），“在哪一段”主要靠此刻细线和刻度来读；玻璃·深色的已过去部分转成实色后仍偏芥末色，和负责人说的“发脏”没有完全解决。'],
+    ['v2','改法 2：只用细线','v2','整条最轻：2px 细轨，当前事项是一段 4px 线段（已过去 = 墨色 / 柠檬黄实心，还没到 = 同色系实心浅一级 #C6B63F / #59584C），细轨在这一段<b>断开</b>，不和粗线叠在一起；此刻 = 10px 实心圆点。','最轻、最干净，黄底上也不显脏。缺点：4px 线太细，一眼看“还剩多少”不如色块直观；手机上 13:00 和 14:30 两个端点要靠刻度对。'],
+    ['v3','改法 3（我的推荐）：进度条 + 圆头','v3','把当前事项画成一根 8px 的进度胶囊：已过去 = 墨色（浅）/ 干净的柠檬黄 #F2DF4A（深）实心，还没到 = 奶油色 #FFFBE8（浅）/ 深橄榄 #4A4834（深）实心；此刻 = 14px 圆头，外面一圈和“还没到”同色的 2.5px 描圈，像播放进度条的拖动点。细轨在胶囊处断开。','“进行到哪了、还剩多少”一眼能读，比改法 1 轻、比改法 2 清楚；深色用的是干净柠檬黄、不再有芥末色；浅色里墨色只占已过去那一小截（8px 高），不再是一块小黑块。']
+  ];
+  const SK = [['glass-light','磨砂玻璃·浅色'],['glass-dark','磨砂玻璃·深色']];
+  let html='';
+  KG_V.forEach(([vid,name,kv,idea,self])=>{
+    html+=`<h3 class="doc" id="kg-${vid}">${name}</h3><p class="idea">${idea}</p>${self?`<p class="idea"><b>自评：</b>${self}</p>`:''}`;
+    SK.forEach(([th,thn])=>{
+      html+=`<div class="kgrow">${thn}</div><div class="kgrid">`;
+      KG_ST.forEach(([st,stn,fn])=>{
+        __KV=kv; const orig=kRuler; if(vid!=='v0') kRuler=kRulerFix; let card; try{ card=fn(); } finally { kRuler=orig; __KV=''; }
+        html+=`<figure data-kcell="${vid}-${th}-${st}"><div class="kgcell th-${th} ${vid!=='v0'?'kfix kgv kg'+vid.slice(1):''}">${card}</div><figcaption><b>${name.replace(/（.*）/,'')} · ${thn} · ${stn}</b><br><span class="kgc"></span></figcaption></figure>`;
+      });
+      html+='</div>';
+    });
+  });
+  /* 简洁两套：现有 K 的透线检查 */
+  html+=`<h3 class="doc" id="kg-simple">简洁两套皮肤：现有 K 的透线检查</h3><p class="idea">简洁皮肤的色块本来是实色（浅色 #F7EDB0 / 深色 #3D3920，下一件 #F0F1F4 / #28292F），正常状态细轨被盖住、不透；<b>但被窗口截断的一端是渐隐的</b>（超过 4 小时的事、或下一件超出窗口时），渐隐那一截变成半透明，底下的细轨会透出来。修法和玻璃一样：细轨在色块处断开，截断端改成直角、不渐隐。下面每行左边是现状，右边是修正后（10:00–14:30 的长事项，此刻 12:20）。</p>`;
+  [['simple-light','简洁·浅色'],['simple-dark','简洁·深色']].forEach(([th,thn])=>{
+    html+=`<div class="kgrow">${thn}</div><div class="kgrid">`;
+    [['before','现状',false],['after','修正后',true]].forEach(([st,stn,fix])=>{
+      const orig=kRuler; if(fix) kRuler=kRulerFix; let card; try{ card=kcard({lang:'zh', mode:'live', now:'12:20', cur:[{s:'10:00', e:'14:30', title:'NEOX 4K 调色', p:1}], next:KNEXT.zh}); } finally { kRuler=orig; }
+      html+=`<figure data-kcell="s-${th}-${st}"><div class="kgcell th-${th} ${fix?'kfix':''}">${card}</div><figcaption><b>${thn} · 长事项 · ${stn}</b><br><span class="kgc"></span></figcaption></figure>`;
+    });
+    html+='</div>';
+  });
+  document.getElementById('kgbody').innerHTML=html;
+
+  /* 对比度：图形 ≥ 3，文字 ≥ 4.5 */
+  const pc=c=>{ const m=c.match(/rgba?\(([^)]+)\)/); if(!m) return null; const p=m[1].split(',').map(x=>parseFloat(x)); return {r:p[0],g:p[1],b:p[2],a:p.length>3?p[3]:1}; };
+  const lum=c=>{ const f=v=>{v/=255; return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)}; return .2126*f(c.r)+.7152*f(c.g)+.0722*f(c.b); };
+  const cr=(a,b)=>{ const x=lum(a), y=lum(b); return (Math.max(x,y)+.05)/(Math.min(x,y)+.05); };
+  const over=(f,b)=>({r:f.r*f.a+b.r*(1-f.a), g:f.g*f.a+b.g*(1-f.a), b:f.b*f.a+b.b*(1-f.a), a:1});
+  const stops=card=>{ const cs=getComputedStyle(card); const bi=cs.backgroundImage; const arr=(bi&&bi!=='none')?(bi.match(/rgba?\([^)]+\)/g)||[]).map(pc):[]; const bc=pc(cs.backgroundColor); if(!arr.length && bc && bc.a>0) arr.push(bc); return arr.map(c=>c.a<1?over(c,{r:255,g:255,b:255,a:1}):c); };
+  const worst=(col,st)=>{ if(!col||col.a===0) return null; return Math.min(...st.map(b=>cr(over(col,b),b))); };
+  const KR={};
+  document.querySelectorAll('[data-kcell]').forEach(fg=>{
+    const card=fg.querySelector('.nowK'), st=stops(card), q=s=>fg.querySelector(s), bg=(e,ps)=>e?pc(getComputedStyle(e,ps||null).backgroundColor):null;
+    const out=[];
+    const add=(lab,v,min)=>{ if(v==null) return; out.push(`${lab} <span class="${v<min?'bad':''}">${v.toFixed(1)}</span>`); (KR[fg.dataset.kcell]=KR[fg.dataset.kcell]||{})[lab]=+v.toFixed(2); };
+    const nw=q('.krul .nw'); add('此刻',worst(bg(nw),st),3);
+    const cur=q('.krul .sg.cur');
+    if(cur){ const cb=bg(cur); const bd=getComputedStyle(cur).boxShadow; add('已过去',worst(bg(cur.querySelector('i')),st),3); if(cb&&cb.a>0) add('还没到',worst(cb,st),3); else add('还没到（透明）',null,3);
+      if(cb&&cb.a>0&&cb.a<1) out.push('<span class="bad">还没到是半透明</span>'); if(!cb||cb.a===0) out.push('<span class="bad">还没到是透明的</span>'); }
+    const nx=q('.krul .sg.nxt'); if(nx){ const bar=nx.querySelector('b.bar'); if(bar) add('下一件竖条',worst(bg(bar),st),3); else { const nb=bg(nx); if(nb&&nb.a<1) out.push('<span class="bad">下一件是半透明块</span>'); }
+      const tc=pc(getComputedStyle(nx).color); add('下一件文字',worst(tc,st),4.5); }
+    const tk=q('.krul .tk'); if(tk) add('刻度字',worst(pc(getComputedStyle(tk).color),st),4.5);
+    /* 细轨有没有压在色块下面 */
+    const kr=q('.krul').getBoundingClientRect(); let under=0;
+    fg.querySelectorAll('.krul .trk').forEach(t=>{ const a=t.getBoundingClientRect(); fg.querySelectorAll('.krul .sg').forEach(s=>{ const b=s.getBoundingClientRect(); const ov=Math.min(a.right,b.right)-Math.max(a.left,b.left); if(ov>0.5 && a.bottom>b.top && a.top<b.bottom) under+=ov; }); });
+    out.push(under>0.5?`<span class="bad">细轨在色块下 ${under.toFixed(0)}px</span>`:'细轨不进色块');
+    (KR[fg.dataset.kcell]=KR[fg.dataset.kcell]||{}).under=+under.toFixed(1);
+    fg.querySelector('.kgc').innerHTML='实测：'+out.join(' · ');
+  });
+  window.__KR=KR;
+}
+
 /* ?only=xxx：只显示某一节，截图用 */
 { const o=new URLSearchParams(location.search).get('only'); if(o){ document.querySelectorAll('.cmpw > *').forEach(e=>e.style.display='none'); o.split(',').forEach(s=>{ const t=document.querySelector(`[data-sec="${s}"]`); if(t){ let e=t; while(e.parentElement && !e.parentElement.classList.contains('cmpw')) e=e.parentElement; e.style.display=''; if(e.id==='schemes2'){ e.querySelectorAll('section').forEach(x=>x.style.display = x===t?'':'none'); } } }); document.querySelector('.topbar').style.display='none'; } }
+
+/* ?kcell=id：只显示一张卡（截图放大用），外面是品红底，方便自动裁切 */
+{ const id=new URLSearchParams(location.search).get('kcell'); if(id){ const el=document.querySelector(`[data-kcell="${id}"] .kgcell`); const c=el.cloneNode(true); document.body.innerHTML=''; document.body.style.cssText='margin:0;padding:8px;background:#FF00FF'; document.documentElement.style.background='#FF00FF'; c.style.borderRadius='0'; document.body.appendChild(c); } }
 </script>
 </body>
 </html>

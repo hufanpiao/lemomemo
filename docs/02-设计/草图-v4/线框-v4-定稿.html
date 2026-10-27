@@ -137,10 +137,11 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 .tag{font-size:10px;border:1px solid var(--g3);color:var(--g2);border-radius:4px;padding:0 4px;margin-left:4px;font-weight:400;vertical-align:1px}
 .tag.k{background:#111;color:#fff;border-color:#111}
 /* R-118：“现在”卡按对比页方案 A：标题 17px 半粗、圆角 14、卡内外间距加大 */
-.nowc{background:#111;color:#fff;border-radius:14px;padding:16px 18px 14px;margin-top:14px}
-.nowc .nk{font-size:12px;color:#bbb}
+.nowc{background:#fff;color:#111;border-radius:14px;padding:16px 18px 14px;margin-top:14px;box-shadow:inset 0 0 0 1px var(--g5)} /* R-132 方案 C：普通卡片（原来是黑块） */
+.nowc .nk{display:inline-flex;align-items:center;height:21px;padding:0 8px;border-radius:999px;background:#111;color:#fff;font-weight:700;font-size:11.5px} /* R-132：K 卡同款小标签 */
+.nowc b.num{background:linear-gradient(transparent 56%,var(--g5) 56%,var(--g5) 90%,transparent 90%);padding:0 3px;margin-left:-3px} /* R-132：大数字荧光笔底（视觉稿里是柠檬黄） */
 .nowc .nt{font-size:17px;font-weight:600;margin:4px 0 0;line-height:1.35}
-.nowc .ns{font-size:12.5px;color:#ddd;margin-top:3px}
+.nowc .ns{font-size:12.5px;color:var(--g2);margin-top:3px}
 .nowc .pb{height:4px;background:#444;border-radius:2px;margin:12px 0 10px}
 .nowc .pb i{display:block;height:4px;background:#fff;border-radius:2px}
 .nowc .nx{font-size:12.5px;color:#ddd;border-top:1px solid #333;padding-top:10px;margin-top:12px}
@@ -160,14 +161,14 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 .kw .kal,.kw .khint{font-size:12.5px;color:var(--g2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kw .kx{font-size:12.5px;color:var(--g2);margin-top:6px;padding-top:9px;border-top:1px solid var(--g6)}
 .kw .krul{position:relative;margin-top:10px}
-.kw .trk{position:absolute;left:0;right:0;height:2px;background:var(--g6)}
+.kw .trk{position:absolute;left:0;right:0;height:2px;background:var(--g6)} /* R-131 追问：细轨碰到色块就断开（两端各留 3px），色块底下没有线 */
 .kw .sg{position:absolute;border-radius:6px;overflow:hidden}
 .kw .sg.cur{background:var(--g5)}.kw .sg.cur i{position:absolute;left:0;top:0;bottom:0;background:var(--g3)}
 .kw .sg.co{background:var(--g6);box-shadow:inset 0 0 0 1px var(--g4)}.kw .sg.co i{position:absolute;left:0;top:0;bottom:0;background:var(--g4)}
 .kw .sg.nxt{background:var(--g7);box-shadow:inset 3px 0 0 var(--g2);font-size:11px;color:var(--g2);padding:0 6px 0 9px;white-space:nowrap}
 .kw .sg.nxt.on{box-shadow:inset 3px 0 0 #111,inset 0 0 0 1.5px #111}
-.kw .sg.cl{border-top-left-radius:0;border-bottom-left-radius:0;-webkit-mask-image:linear-gradient(90deg,transparent,#000 18px);mask-image:linear-gradient(90deg,transparent,#000 18px)}
-.kw .sg.cr{border-top-right-radius:0;border-bottom-right-radius:0;-webkit-mask-image:linear-gradient(270deg,transparent,#000 18px);mask-image:linear-gradient(270deg,transparent,#000 18px)}
+.kw .sg.cl{border-top-left-radius:0;border-bottom-left-radius:0} /* R-131 追问：截断端直角，不渐隐（渐隐会透出细轨） */
+.kw .sg.cr{border-top-right-radius:0;border-bottom-right-radius:0}
 .kw .nw{position:absolute;top:0;width:2px;margin-left:-1px;background:#111}
 .kw .tk{position:absolute;font-size:11px;line-height:14px;color:var(--g2);transform:translateX(-50%);white-space:nowrap}
 .kw .tk.l{transform:none}.kw .tk.r{transform:translateX(-100%)}
@@ -231,7 +232,7 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 .wr .wd{width:46px;flex:none;line-height:1.15;padding-left:2px}
 .wr .wd b{font-size:16px;display:block}
 .wr .wd small{font-size:11px;color:var(--g2)}
-.wr .wd.t b{background:#111;color:#fff;border-radius:12px;width:30px;text-align:center}
+.wr .wd.t b{background:transparent;color:#111;border-radius:12px;width:30px;text-align:center;box-shadow:inset 0 0 0 2px #111} /* R-132：今天 = 2px 墨圈、不填色 */
 .wr .trk{flex:1;height:30px;position:relative;border-right:1px solid var(--g5);background:repeating-linear-gradient(90deg,var(--g5) 0 1px,transparent 1px calc(100% / 7))}
 .wr .ev{position:absolute;top:4px;height:22px;background:var(--g3);border-radius:5px}
 .wr .ev.dk2{background:#111}
@@ -259,8 +260,9 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 .mc.off{background:var(--g6)}
 .mc .xiu{position:absolute;right:2px;top:2px;font-size:8px;color:var(--g2);font-style:normal}
 .mc.o b{color:var(--g4)}.mc.o i{color:var(--g4)}
-.mc.t b{background:#111;color:#fff}
+.mc.t b{background:transparent;color:#111;box-shadow:inset 0 0 0 2px #111} /* R-132 */
 .mc.sel b{box-shadow:0 0 0 2px #111}
+.mc.t.sel b{box-shadow:inset 0 0 0 2px #111,0 0 0 2px #fff,0 0 0 4px #111} /* R-132：今天又被选中时，墨圈外再留一圈白、加选中圈 */
 /* 电脑月历 */
 .dmg .mc{height:118px;text-align:left;padding:6px 6px 0}
 .dmg .mc b{width:auto;height:auto;line-height:1.2;border-radius:6px;padding:1px 6px;font-size:15px}
@@ -268,13 +270,13 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 .dmg .mc .ln{display:block;font-size:11px;background:var(--g5);border-radius:4px;padding:1px 5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
 .dmg .mc .ln.a{background:transparent;padding-left:0;font-weight:600}
 .dmg .mc .more{font-size:11px;color:var(--g2);margin-top:2px}
-.dmg .mc.t b{background:#111;color:#fff}
+.dmg .mc.t b{background:transparent;color:#111;box-shadow:inset 0 0 0 2px #111} /* R-132 */
 .dmg .mc.sel{box-shadow:inset 0 0 0 2px #111}
 /* 电脑周视图 */
 .dwk{display:grid;grid-template-columns:52px repeat(7,minmax(0,1fr));font-size:12px}
 .dwk .hd{text-align:center;padding:4px 0 6px;border-bottom:1px solid var(--g5)}
 .dwk .hd b{display:block;font-size:18px}
-.dwk .hd.t b{background:#111;color:#fff;border-radius:14px;width:36px;margin:0 auto}
+.dwk .hd.t b{background:transparent;color:#111;border-radius:14px;width:36px;margin:0 auto;box-shadow:inset 0 0 0 2px #111} /* R-132 */
 .dwk .ad{border-bottom:1px solid var(--g5);padding:4px 3px;min-height:30px;border-left:1px solid var(--g6)}
 .dwk .tc{position:relative;border-left:1px solid var(--g6);height:504px;background:linear-gradient(var(--g6) 1px,transparent 1px) 0 0/100% 36px}
 .dwk .hr{position:relative;height:504px}
@@ -443,7 +445,7 @@ kbd{font-family:inherit;font-size:10px;border:1px solid var(--g4);border-bottom-
 .m-fb .pl{position:absolute;right:-4px;bottom:-4px;width:18px;height:18px;border-radius:50%;background:#fff;border:1.5px solid #111;font-size:12px;line-height:15px;text-align:center;z-index:1}
 .card:has(.m-av) .row > .m-an{margin:0 11.5px}
 .chip .m-av.xs,.chip .m-fb.xs{margin-left:-4px}
-.nowc .m-av{position:absolute;right:14px;top:14px;border-color:#fff}
+.nowc .m-av{position:absolute;right:14px;top:14px;border-color:#fff;box-shadow:0 0 0 1px var(--g5)}
 /* R-111～R-116：附件、预览、查找、“＋”结果 */
 .fi{display:inline-flex;align-items:center;justify-content:center;width:30px;height:38px;flex:none;border:1.5px solid #111;border-radius:6px;font-size:10px;font-weight:800;background:#fff;color:#111}
 .att{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--g6)}
@@ -475,6 +477,8 @@ table.xl{border-collapse:collapse;font-size:13px;margin-top:10px;width:100%}tabl
 <li><b>搜索按钮去掉（R-118）：</b>各页面右上角的放大镜、随手记页里的搜索框、电脑侧栏的“搜索”都去掉，查找全靠“＋”；电脑 Ctrl+K 打开和“＋”同一个输入框。</li>
 <li><b>今天页上半部分（R-118）：</b>按 皮肤-v4/今天顶部-对比.html 的方案 A：日期一行、“现在”卡标题 17px 半粗、圆角 14；“现在”卡 4 种状态见第 1 节第二张。</li>
 <li><b>导航和“＋”（R-118）：</b>随手记图标改线性铅笔，日历 3×3 方格；右下角“＋”的外环所有页面一致，电脑侧栏的“＋”也加了外环；输入行插图按钮不变。</li>
+<li><b>R-132：</b>简洁皮肤剩下的三处黑块按 黑块-对比.html 方案 C 改（灰度对应）：纪念日“最近的一个”大卡改成白卡 + 细边，“最近的一个”是 K 卡同款黑底小标签，大数字加浅灰荧光笔底（视觉稿里是柠檬黄）；“今天”标记（月历格子、电脑月历、周视图日期、电脑周视图表头）改成 2px 墨圈、不填色，今天又被选中时墨圈外加选中圈；电脑“本周”条选中那天改成白柱 + 2px 墨边（视觉稿里是柠檬柱）。线框里没有官网邀请卡，视觉稿里已改。选中的筛选标签不在范围内。</li>
+<li><b>R-131 追问：</b>K 卡时间轴的细轨碰到色块就断开（两端各留 3px），被截断的一端直角截断、不再渐隐，色块底下不再透出线。玻璃皮肤的“进度条 + 圆头”只在视觉稿里（线框是灰度，不分皮肤）。</li>
 <li><b>R-131：</b>今天页“现在”卡换成 进行中卡片-对比.html 的方案 K 小时间尺：手机、电脑（没选中、选中、窄窗口）、韩文、提醒状态、状态 ②、同步骨架都换了；进度条和“接下来…”一行去掉，由时间轴代替。时间窗规则、玻璃皮肤保留柠檬黄底、边缘状态（没有进行中、95%、超过 2 小时、两件重叠）见 皮肤视觉稿。</li>
 <li><b>R-126：</b>电脑版用 R-120 方案 B，所有电脑画面按 B 重画（公共样式：侧栏、画布、面板、详情抽屉）；窄窗口断点改为 1100px，900–1099px 排成一列。R-125：电脑和网页的纪念日处一律用头像。 <b>更正：</b>详情不占栏——没选中时不显示、面板占满；选中一条时抽屉从右边盖在面板上面（圆角、阴影、左边把手、✕ / Esc 关闭，可拖到左边或右边）。今天页画了“没选中”“选中了一条”两张；随手记、待办、纪念日、附件画选中状态；周 / 月视图也画在右边（R-130 统一）；900–1099px 一列时同样盖上来。</li>
 <li><b>R-122：</b>底部浮出的提示条（“已记下… 撤销 / 修改”“没网，已存在手机里”等）、提醒按钮条（“知道了 / 10 分钟后…”）和底部导航用同一套半透明磨砂玻璃，不再是实心黑底；“知道了”主按钮保留（视觉稿里是柠檬黄）。</li>
@@ -600,7 +604,7 @@ const TODAY_TOP='<div class="top a"><div class="tt"><div class="d1">10月24日 �
 /* R-131：“现在”卡 = 方案 K 小时间尺。时间窗规则（和 皮肤视觉稿 的 kWin 相同）：
    ① 有进行中：最早开始的那件前 30 分 → 下一件结束（下一件和当前结束相隔 > 2 小时就只到当前结束后 30 分）
    ② 没有进行中：此刻前 30 分 → 下一件结束（下一件 3 小时后才开始就只画到此刻后 2 小时）
-   ③ 两端取整到半点；④ 最多 4 小时，超出时从“此刻前 1 小时”取整截 4 小时，被截的一端渐隐开口
+   ③ 两端取整到半点；④ 最多 4 小时，超出时从“此刻前 1 小时”取整截 4 小时，被截的一端直角截断（R-131 追问：不渐隐，细轨碰到色块就断开）
    ⑤ 两件同时进行：标题用先结束的那件，时间轴多一条细轨；刻度只标整点，11px */
 const KWT={zh:{live:'进行中',live2:n=>'进行中 '+n+' 件',idle:'下一件',now:t=>'现在 '+t,rest:s=>'还剩 <b>'+s+'</b>',soon:s=>'<b>'+s+'</b>后'},
  ko:{live:'진행 중',live2:n=>'진행 중 '+n+'개',idle:'다음 일정',now:t=>'지금 '+t,rest:s=>'<b>'+s+'</b> 남음',soon:s=>'<b>'+s+'</b> 후'}};
@@ -616,7 +620,10 @@ function kw(o){const lang=o.lang||'zh',T=KWT[lang],now=kwm(o.now);
  const w=kwWin(o.mode==='live'?cur:[],nx,now),W=w.B-w.A,X=m=>(Math.min(Math.max(m,w.A),w.B)-w.A)/W*100;
  const lanes=[[]];if(o.mode==='live')cur.forEach((x,i)=>{if(i===0)lanes[0].push(Object.assign({kind:'cur'},x));else if(i===1)lanes[1]=[Object.assign({kind:'co'},x)];});
  if(nx)lanes[0].push(Object.assign({kind:'nxt',on:o.mode!=='live'},nx));
- const n=lanes.length,lh=n>1?13:20,LH=n*lh+(n-1)*4;let r=n===1?'<div class="trk" style="top:'+(4+lh/2-1)+'px"></div>':'';
+ const n=lanes.length,lh=n>1?13:20,LH=n*lh+(n-1)*4;let r='';
+ if(n===1){const iv=lanes[0].filter(g=>!(g.e<=w.A||g.s>=w.B)).map(g=>[X(g.s),X(g.e)]).sort((p,q)=>p[0]-q[0]);
+  const pc=(p,q,gp,gq)=>'<div class="trk" style="top:'+(4+lh/2-1)+'px;left:'+(gp?'calc('+p.toFixed(2)+'% + 3px)':p.toFixed(2)+'%')+';right:'+(gq?'calc('+(100-q).toFixed(2)+'% + 3px)':(100-q).toFixed(2)+'%')+'"></div>';
+  let x=0,first=true;iv.forEach(v=>{if(v[0]>x+0.5)r+=pc(x,v[0],!first,true);x=Math.max(x,v[1]);first=false;});if(x<99.5)r+=pc(x,100,!first,false);}
  lanes.forEach((ln,li)=>ln.forEach(g=>{if(g.e<=w.A||g.s>=w.B)return;const l=X(g.s),rr=X(g.e);let fill='';
   if(g.kind!=='nxt'){const a=Math.max(g.s,w.A),b=Math.min(g.e,w.B);fill='<i style="width:'+Math.max(0,Math.min(1,(now-a)/(b-a)))*100+'%"></i>';}
   r+='<div class="sg '+g.kind+(g.s<w.A?' cl':'')+(g.e>w.B?' cr':'')+(g.on?' on':'')+'" style="left:'+l.toFixed(2)+'%;width:'+(rr-l).toFixed(2)+'%;top:'+(4+li*(lh+4))+'px;height:'+lh+'px;line-height:'+lh+'px">'+fill+(g.kind==='nxt'&&n===1?g.label:'')+'</div>';}));
@@ -704,7 +711,7 @@ S.push({id:'s1',t:'今天',sub:'时间河：所有东西按时间排成一列',
 p:[[phone(TODAY_TOP+ANNLINE+NOWC+OVERDUE+river()+NOTESTODAY,{tab:0}),'状态 ①：有进行中的日程（14:17）'],[phone(TODAY_TOP+ANNLINE+NOWSTATES,{tab:0}),'“现在”卡另外 3 种状态（R-118）']],
 pn:['<p><b>上半部分按对比页方案 A（R-118）：</b>日期和农历一行（19px），右上角只有头像（没有搜索按钮，查找全靠“＋”）；“现在”卡按 R-131 换成方案 K 小时间尺：白卡，第一行“● 进行中 · 现在 14:17 · 还剩 13 分钟”，第二行标题 17px 半粗，下面一小段时间轴（当前事项色块、已过部分涂实、竖线是此刻、后面是下一件），刻度只标整点 11px；时间窗规则见 皮肤视觉稿 的“现在”卡说明。“现在”卡 4 种状态：① 有进行中（第一张）；② 没有进行中、今天还有下一件：“○ 下一件 · 1 小时 13 分后”，时间轴上只把下一件描边；③ 今天的日程都结束了：收成一行，写明天第一件的开始时间“明天 11:00 家庭 브런치”；④ 今天整天没有日程：浅色卡，带待办数和明天第一件，提示按住“＋”。</p><p><b>只有一列。</b>日程、有时间的待办、晚上的饭局按时间往下排，没定时间的待办挂在“今天内”。左边的形状区分类型，不再拆成四张卡。</p>','<p><b>顶部“现在”卡</b>只回答两个问题：现在在做什么、下一件是什么。提醒响时，这张卡原地变成提醒，按钮放在屏幕下方（见“提醒响起时”）。</p>','<p>已过去的折叠成一行。没赶上的固定在“现在”下面，点“今天 / 明天”改期，右滑完成。7 天内的纪念日压成日期下面的一行小标签（更远的不占首屏）；今天记的随手记排在最后。</p>'],
 d:desk('<div class="col" style="width:520px">'+TODAY_TOP.replace('<div class="av">H</div>','<span class="d2">J / K 上下 · E 完成 · Enter 编辑</span>')+NOWC+OVERDUE+'<div style="height:6px"></div>'+river().replace('<div class="row ">'+'<span class="tm">15:30</span>','<div class="row flash"><span class="tm">15:30</span>')+row('td','','买 다이소 收纳盒','生活')+'</div>'
- +'<div class="col side" style="width:344px"><div class="st" style="margin-top:0"><b>本周</b><span>日历 ›</span></div><div class="card" style="display:flex;gap:6px;align-items:flex-end;height:120px">'+[[2,'一'],[1,'二'],[1,'三'],[1,'四'],[2,'五'],[4,'六'],[1,'日']].map((x,i)=>'<div style="flex:1;text-align:center;font-size:11px;color:var(--g2)"><div style="height:'+x[0]*16+'px;background:'+(i===5?'#111':'var(--g4)')+';border-radius:4px;margin-bottom:4px"></div>'+x[1]+'<br><b style="color:#111">'+(19+i)+'</b></div>').join('')+'</div>'+ANNB+'<div class="card" style="margin-top:8px;padding:10px 12px">'+row('fb mem" data-c="结',null,'结婚纪念日 · 第 6 年','11月2日 · 还有 9 天')+'</div>'+NOTESTODAY+'<div class="card" style="margin-top:10px;font-size:12px;color:var(--g2)">在任何窗口按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>空格</kbd> 弹出打字框，写一句按 Enter 就记下。</div></div>'
+ +'<div class="col side" style="width:344px"><div class="st" style="margin-top:0"><b>本周</b><span>日历 ›</span></div><div class="card" style="display:flex;gap:6px;align-items:flex-end;height:120px">'+[[2,'一'],[1,'二'],[1,'三'],[1,'四'],[2,'五'],[4,'六'],[1,'日']].map((x,i)=>'<div style="flex:1;text-align:center;font-size:11px;color:var(--g2)"><div style="height:'+x[0]*16+'px;background:'+(i===5?'#fff;box-shadow:inset 0 0 0 2px #111':'var(--g4)')+';border-radius:4px;margin-bottom:4px"></div>'+x[1]+'<br><b style="color:#111">'+(19+i)+'</b></div>').join('')+'</div>'+ANNB+'<div class="card" style="margin-top:8px;padding:10px 12px">'+row('fb mem" data-c="结',null,'结婚纪念日 · 第 6 年','11月2日 · 还有 9 天')+'</div>'+NOTESTODAY+'<div class="card" style="margin-top:10px;font-size:12px;color:var(--g2)">在任何窗口按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>空格</kbd> 弹出打字框，写一句按 Enter 就记下。</div></div>'
  +'<div class="insp"><div class="ih"><span class="m m-ev"></span>日程<span class="r">改了就自动保存</span></div><div class="it">SignPlex 客户反馈会</div>'+fld('时间','今天 15:30 – 16:30')+fld('项目','SignPlex')+fld('提醒','提前 15 分 · 推送显示标题')+fld('地点 / 链接','Zoom 링크 · zoom.us/j/8812…')+fld('备注','带上韩文版字幕的问题清单')+fld('原话（10月22日 语音）','“下午三点半跟 SignPlex 客户开反馈会，提前一刻钟提醒我”')+'<div style="display:flex;gap:8px;margin-top:16px"><span class="btn g">复制一条</span><span class="btn g">转成待办</span><span class="btn g">删除</span></div></div>',{tab:0}),
 dn:['<p><b>两栏面板＋详情抽屉：时间河 ｜ 周边信息；选中一条时抽屉从右边盖上来（R-126 方案 B）。</b>中间一栏放“本周忙闲、快到的纪念日、今天记的”，宽屏多出来的空间用在“往后看”上。</p>','<p><b>右侧详情抽屉（R-126 方案 B）。</b>选中一条时从右边滑出，选中哪条就显示哪条，直接改，失焦即保存，不弹窗；Esc 或点空白处收起，左边的把手可拖宽。原话一直保留，方便核对 AI 有没有听错。</p>','<p>键盘操作：J / K 上下移动，E 完成，Enter 编辑，Ctrl+K 打开“＋”的输入框（打字记一条或查找）。</p>']});
 
@@ -799,7 +806,7 @@ pn:['<p><b>同一个组件（架构 0.16：Radix Popover）。</b>点标题胶�
 d:desk('<div class="col" style="width:864px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><div class="d1" style="font-size:24px"><span class="dpick">2026年10月<em>⌄</em></span></div><div class="seg" style="width:240px;margin-left:auto">'+['周','月','纪念日'].map((x,i)=>'<span'+(i===1?' class="on"':'')+'>'+x+'</span>').join('')+'</div><span class="cnb">‹</span><span class="cnb" style="color:var(--g3)">今天</span><span class="cnb">›</span></div><div class="card" style="height:600px;display:flex;align-items:center;justify-content:center;color:var(--g3)">（月历，同“日历 · 月视图”）</div></div>',{tab:1,ov:YMW('top:100px;left:130px;width:340px',false,10)}),
 dn:['<p>电脑同一个浮层，从标题胶囊下面展开，背后不变淡。键盘：方向键在格子间移动，Enter 选中，Esc 收起。</p>']});
 S.push({id:'s4',t:'纪念日列表',sub:'生日、纪念日、倒数日合在一起，按“还有几天”排序',
-p:[phone(CALHEAD(2,'纪念日','<span class="btn p s" style="min-height:38px">＋ 新建</span>')+'<div class="chips"><span class="chip on">全部 6</span><span class="chip">生日 4</span><span class="chip">纪念日 1</span><span class="chip">倒数日 1</span></div><div class="nowc" style="margin:8px 0 10px;position:relative"><span class="m m-av"></span><div class="nk">最近的一个</div><div style="display:flex;align-items:baseline;gap:10px"><b style="font-size:44px;line-height:1.1">3</b><span>天后</span></div><div class="nt" style="font-size:18px">김지민 生日 · 满 29 周岁</div><div class="ns">10月27日 周二 · 提前 7 天和前一天 9:00 提醒</div></div><div class="card">'+ANNLIST+'</div><div class="done">▸ 已过去的倒数日 2</div>',{tab:1})],
+p:[phone(CALHEAD(2,'纪念日','<span class="btn p s" style="min-height:38px">＋ 新建</span>')+'<div class="chips"><span class="chip on">全部 6</span><span class="chip">生日 4</span><span class="chip">纪念日 1</span><span class="chip">倒数日 1</span></div><div class="nowc" style="margin:8px 0 10px;position:relative"><span class="m m-av"></span><div class="nk">最近的一个</div><div style="display:flex;align-items:baseline;gap:10px"><b class="num" style="font-size:44px;line-height:1.1">3</b><span>天后</span></div><div class="nt" style="font-size:18px">김지민 生日 · 满 29 周岁</div><div class="ns">10月27日 周二 · 提前 7 天和前一天 9:00 提醒</div></div><div class="card">'+ANNLIST+'</div><div class="done">▸ 已过去的倒数日 2</div>',{tab:1})],
 pn:['<p><b>头像（R-117）：</b>每行左侧显示头像（圆形）；没有头像的显示名字第一个字加类型颜色的圆（R-121，生日柠檬黄、纪念日珊瑚粉、倒数日浅蓝），和头像同大小。顶部“最近的一个”大卡右上角也显示头像。头像在新建、编辑里加：点圆圈从相册选，裁成圆形，可以“去掉”。存储方式由架构定。</p><p><b>三种合在一个列表里，只按“还有几天”排。</b>右边的大数字就是天数，类型用小标签注明（只有倒数日才标）。</p>','<p>阴历的同时显示“今年对应的公历”；不知道出生年份的不显示周岁。</p>','<p><b>新建：点右上角“＋ 新建”</b>（打开画面“新建纪念日”）；也可以短按或按住“＋”，打字或说“妈妈生日是阴历十月初八”，AI 会识别成阴历生日，并在提示条里写明“已放进纪念日 · 阴历十月初八”。</p><p>点一条进入编辑；左滑露出“编辑 / 删除”，删除只能点按钮，不能滑到底执行。</p>'],
 d:desk('<div class="col" style="width:864px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:12px"><div class="d1" style="font-size:24px">纪念日</div><span class="chip on">全部 6</span><span class="chip">生日 4</span><span class="chip">纪念日 1</span><span class="chip">倒数日 1</span><div class="seg" style="width:240px;margin-left:auto">'+['周','月','纪念日'].map((x,i)=>'<span'+(i===2?' class="on"':'')+'>'+x+'</span>').join('')+'</div><span class="btn p">＋ 新建</span></div><div class="card" style="padding:6px 18px">'+ANNLIST.replace('<div class="row "><span class="m m-av"></span><div class="tx"><b>妈妈生日','<div class="row flash"><span class="m m-av"></span><div class="tx"><b>妈妈生日')+'</div></div><div class="insp"><div class="ih"><span class="m" style="width:10px;height:10px;border-radius:50%;background:#F2DF4A;border:1.5px solid #111;margin-right:4px"></span>生日 · 阴历<span class="r">自动保存</span></div><div class="it">妈妈生日</div><div style="display:flex;align-items:center;gap:12px;margin:-4px 0 12px"><span class="m m-av lg"></span><span style="font-size:12px;color:var(--g2);flex:1">点头像从相册换一张，会裁成圆形</span><span class="btn s g">去掉</span></div>'+fld('日期','阴历 十月初八 · 1968年出生')+fld('今年','11月16日 周一 · 满 58 周岁')+fld('接下来 3 次','2026-11-16 · 2027-11-05 · 2028-11-23')+fld('提醒','提前 7 天 9:00 · 前一天 9:00')+fld('备注','订 성수동 那家蛋糕，提前 3 天')+'<div style="display:flex;gap:8px;margin-top:14px"><span class="btn g">删除</span></div></div>',{tab:1}),
 dn:['<p>列表和编辑栏并排；阴历纪念日额外列出“接下来 3 次”对应的公历日期，方便核对换算（图中日期是示意数据，以换算库结果为准）。</p>','<p>倒数日到期后自动移到“已过去”，不会继续占位置。</p>']});
