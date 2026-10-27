@@ -846,6 +846,52 @@ body[data-rt="1"] .pblur{--pb-tint:94%}
 @media (prefers-reduced-transparency: reduce){ .pblur i{display:none} .pblur{--pb-tint:94%} }
 .scr .home{z-index:6} /* Home 横条是系统画的，永远在最上面 */
 .scr{clip-path:inset(0 round 44px)} /* 示意图专用：模糊只在屏幕里取样，不把手机外框的黑色吸进来 */
+
+/* ===== R-143：底部导航液态玻璃（负责人选 液态玻璃底栏-对比.html 第 2 档“常规玻璃 + 液滴选中”）=====
+   苹果 Liquid Glass 规范：边缘透镜折射、沿边高光、选中项是一颗液滴（静止时安静，移动、按住时变放大透镜）、“＋”是柠檬着色玻璃。
+   做法（iPhone Safari 能跑）：玻璃里放一份背后画面的副本，分八圈、越靠边压缩越多，边缘把栏外的内容弯进来；只用 transform 和 mask。
+   副本由脚本贴上（glassify）；贴上之前、以及“减少透明效果”时，底栏是下面这层后备：同色玻璃底 + 轻模糊 / 实色。
+   R-139 的渐进模糊带保留。四套皮肤同一套玻璃：浅色是浅玻璃、深色是深玻璃，栏上的字用正文色。 */
+@property --dx{syntax:'<length>';inherits:true;initial-value:0px}
+body[data-mode="light"],.th-simple-light,.th-glass-light{--g-tint:rgba(255,255,255,.34);--g-tint-fb:rgba(255,255,255,.62);--g-hi:rgba(255,255,255,.95);--g-hi2:rgba(255,255,255,.55);--g-glow:.35;--g-sheen:.45;--g-drop:.14;--g-fg:#141518;--g-fg-on:#141518;--g-pill:rgba(20,21,24,.09)}
+body[data-mode="dark"],.th-simple-dark,.th-glass-dark{--g-tint:rgba(30,31,36,.44);--g-tint-fb:rgba(30,31,36,.72);--g-hi:rgba(255,255,255,.45);--g-hi2:rgba(255,255,255,.18);--g-glow:.10;--g-sheen:.14;--g-drop:.45;--g-fg:#F2F3F5;--g-fg-on:#FFFFFF;--g-pill:rgba(255,255,255,.14)}
+/* 后备（副本还没贴上时）：同色玻璃 */
+body .tabbar,body .tabbar.glassy{background:var(--g-tint-fb);-webkit-backdrop-filter:blur(8px) saturate(1.8);backdrop-filter:blur(8px) saturate(1.8);
+  box-shadow:inset 1.5px 1.5px 0 -.5px var(--g-hi),inset -1px -1px 0 -.5px var(--g-hi2),0 8px 24px rgba(0,0,0,var(--g-drop)),0 1px 3px rgba(0,0,0,calc(var(--g-drop) * .8))}
+body .tabbar .tab{color:var(--g-fg);position:relative;z-index:2;transition:color .3s;cursor:pointer}
+body .tabbar .tab.on{background:var(--g-pill);color:var(--g-fg-on)}
+body[data-mode="dark"] .tabbar .tab.on .ico,.th-simple-dark .tabbar .tab.on .ico,.th-glass-dark .tabbar .tab.on .ico{color:var(--accent)}
+/* 贴上副本后：底透明，看到的全是副本 */
+.scr.lgx .tabbar,.scr.lgx .fab{background:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;overflow:visible}
+.scr.lgx .tabbar{box-shadow:0 8px 24px rgba(0,0,0,var(--g-drop)),0 1px 3px rgba(0,0,0,calc(var(--g-drop) * .8))}
+.scr.lgx .fab{box-shadow:0 0 0 4px var(--bg),0 0 0 5px var(--step-off),0 8px 24px rgba(0,0,0,var(--g-drop));color:#141518}
+.scr.lgx .fab > :not(.lens){position:relative;z-index:2}
+.scr.lgx .tabbar .tab.on{background:transparent}
+.lens{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none;z-index:0;isolation:isolate;transform:translateZ(0)}
+.lens .lr{position:absolute;inset:0;-webkit-mask-size:100% 100%;mask-size:100% 100%}
+.lens .lc{position:absolute;margin:0!important;clip-path:none!important;border-radius:0!important;pointer-events:none}
+.lens .tint{position:absolute;inset:0;background:var(--g-tint)}
+.lens .spec{position:absolute;inset:0;border-radius:inherit;
+  box-shadow:inset 1.5px 1.5px 0 -.5px var(--g-hi),inset -1px -1px 0 -.5px var(--g-hi2),inset 0 0 10px rgba(255,255,255,var(--g-glow));
+  background:radial-gradient(120% 90% at 22% -30%,rgba(255,255,255,var(--g-sheen)) 0 38%,transparent 60%)}
+.scr.lgx .fab .lens .tint{background:rgba(242,223,74,.72)}
+body[data-mode="dark"] .scr.lgx .fab .lens .tint{background:rgba(242,223,74,.86)}
+/* 液滴：静止时安静的浅色玻璃片；移动或按住时变放大透镜，移动中像果冻一样拉长 */
+.drop{position:absolute;top:5px;height:52px;left:var(--dx);border-radius:999px;z-index:1;pointer-events:none;transition:--dx .55s cubic-bezier(.34,1.45,.5,1)}
+.drop.mv{animation:gel .55s cubic-bezier(.3,.9,.4,1)}
+.drop .lr{opacity:0;transition:opacity .3s}.drop.mv .lr,.drop.press .lr{opacity:1}
+.drop .tint{transition:background .3s}.drop:not(.mv):not(.press) .tint{background:var(--g-pill)!important}
+.drop.press{transform:scale(1.12);transition:--dx .55s cubic-bezier(.34,1.45,.5,1),transform .25s cubic-bezier(.3,1.5,.5,1)}
+@keyframes gel{0%{transform:scale(1,1)}35%{transform:scale(1.22,.86)}70%{transform:scale(.96,1.04)}100%{transform:scale(1,1)}}
+.drop .lens .spec{box-shadow:inset 1.5px 1.5px 0 -.5px rgba(255,255,255,.9),inset -1px -1px 0 -.5px rgba(255,255,255,.4),inset 0 0 8px rgba(255,255,255,.35),0 2px 8px rgba(0,0,0,.12)}
+/* 减少动态效果：液滴直接到位，不拉伸不鼓起 */
+@media (prefers-reduced-motion: reduce){ .drop{transition:none}.drop.mv{animation:none}.drop.press{transform:none} }
+/* 减少透明效果：不折射、不模糊，底栏实色（--glass-solid），“＋”回到实色柠檬黄 */
+body[data-rt="1"] .lens .lr{display:none}
+body[data-rt="1"] .tabbar,body[data-rt="1"] .tabbar.glassy{background:var(--glass-solid);-webkit-backdrop-filter:none;backdrop-filter:none}
+body[data-rt="1"] .scr.lgx .tabbar .lens .tint{background:var(--glass-solid)}
+body[data-rt="1"] .scr.lgx .fab .lens .tint{background:var(--fab-bg)}
+@media (prefers-reduced-transparency: reduce){ .lens .lr{display:none} body .tabbar{background:var(--glass-solid);-webkit-backdrop-filter:none;backdrop-filter:none} .scr.lgx .tabbar .lens .tint{background:var(--glass-solid)} .scr.lgx .fab .lens .tint{background:var(--fab-bg)} }
 </style>
 </head>
 <body data-skin="simple" data-mode="light" data-dev="p" data-rt="0" data-hit="0">
@@ -923,9 +969,9 @@ body[data-rt="1"] .pblur{--pb-tint:94%}
     <h3>磨砂玻璃</h3>
     <ul>
       <li>底色就是图标的光：左上和右下两团柠檬黄柔光，右上一点粉，左下一点蓝，位置和图标里的光斑一致。</li>
-      <li>玻璃用在哪里（按现状，R-79、R-80、R-89）：底部导航 70% 不透明＋模糊 6px（两套皮肤都是），它后面还有一条 160px 高的渐进模糊带，内容滚到底栏后面会变糊变淡（R-139）；提醒按钮条、“已记下”等提示条和撤销条与底部导航同一套半透明磨砂玻璃（R-122，取代 R-89 的“提示条实色”；透明度加深到 .82，令牌 <code>--float-bg</code>）；底部弹层、录音面板、隐私记解锁卡是玻璃。“＋”是实色柠檬黄。列表和卡片一律实色，保证字清楚。</li>
+      <li>玻璃用在哪里（按现状，R-79、R-80、R-89、R-143）：底部导航是液态玻璃（R-143，边缘折射＋沿边高光＋选中液滴，浅色浅玻璃、深色深玻璃，四套皮肤同一套），它后面还有一条 160px 高的渐进模糊带，内容滚到底栏后面会变糊变淡（R-139）；提醒按钮条、“已记下”等提示条和撤销条与底部导航同一套半透明磨砂玻璃（R-122，取代 R-89 的“提示条实色”；透明度加深到 .82，令牌 <code>--float-bg</code>）；底部弹层、录音面板、隐私记解锁卡是玻璃。“＋”是柠檬黄着色液态玻璃（R-143）。列表和卡片一律实色，保证字清楚。</li>
       <li>选中状态从“黑底白字”换成“柠檬黄底黑字”；“现在”卡浅色时是一块柠檬黄，深色时是带黄光的深色卡（R-131 换成小时间尺后，玻璃皮肤仍保留这两种底，负责人：“磨砂页面还是用柠檬黄的底”）。</li>
-      <li>减少透明效果时，玻璃、导航、遮罩都换成实色后备值（令牌表里的 <code>--glass-solid</code>），也不再模糊。iPhone 的网页读不到系统“降低透明度”，所以在“设置 › 皮肤”里放一个“减少透明效果”开关，默认关（R-84）；Windows 仍自动跟随系统的“透明效果”。页面顶部可以勾“模拟‘减少透明效果’”来看效果。</li>
+      <li>减少透明效果时，玻璃、导航、遮罩都换成实色后备值（令牌表里的 <code>--glass-solid</code>），也不再模糊；底部导航不再折射、换成实色，“＋”回到实色柠檬黄（R-143）。iPhone 的网页读不到系统“降低透明度”，所以在“设置 › 皮肤”里放一个“减少透明效果”开关，默认关（R-84）；Windows 仍自动跟随系统的“透明效果”。页面顶部可以勾“模拟‘减少透明效果’”来看效果。</li>
     </ul>
   </div>
 </div>
@@ -981,6 +1027,7 @@ body[data-rt="1"] .pblur{--pb-tint:94%}
 <div class="dcard">
   <h3>第七轮整体检查之后改了什么（2026-10-24，R-76～R-110；2026-10-27 补 R-111～R-118）</h3>
   <ul>
+    <li><b>R-143（负责人决定）</b>：底部导航换成液态玻璃，选 液态玻璃底栏-对比.html 第 2 档“常规玻璃 + 液滴选中”：背后内容轻模糊 2px、提饱和，叠一层浅色（深色模式叠深色），边缘八圈折射把栏外的内容弯进来，沿边高光；选中项是一颗液滴，静止时是安静的浅色玻璃片，点别的按钮时弹过去、中途拉长，按住选中项会鼓起来变成放大透镜（点本页底栏的按钮可以看）；“＋”是柠檬黄着色玻璃。四套皮肤同一套玻璃，栏上的字用正文色（原来简洁皮肤的墨黑胶囊、磨砂玻璃的白胶囊不再用）。减少透明效果时不折射、实色。R-139 的渐进模糊带保留。提示条、提醒按钮条（R-122“和底栏同一套玻璃”）要不要跟着换，另外定。网页上是模拟，要在 iPhone 上实测滑动和耗电。</li>
     <li><b>R-142（负责人决定）</b>：选中的那一行（电脑点开右边抽屉的那条、手机“刚记下”的那条）不再套 2.5px 墨黑描边，改成浅灰底 + 左侧 3px 柠檬竖条，选 选中样式-对比 的 B。手机今天列表直接铺在底色上，浅灰底用白色卡片色。</li>
 <li><b>R-139（负责人决定）</b>：底部导航后面加渐进模糊带，选 底部模糊-对比.html 第 3 档“中”：带高 160px，5 层模糊 1～16px，底色叠 55%（磨砂玻璃叠一半）；底栏后面的字认不出，往上一行半渐渐清楚。所有带底栏的手机画面都已加上；减少透明效果时只留底色渐变。</li>
     <li><b>R-136（负责人决定）</b>：App 全部画面非必要不加粗，只留每页最顶上的大标题、“现在”卡正在进行的那一件、警示、选中状态；状态栏、图标字形不变；R-115 告知页的“图片和附件”经负责人确认也不加粗（R-138），只靠“新”标签提示。</li>
@@ -2098,11 +2145,69 @@ const LIST = [
   ['klong','“现在”卡 K · 一件持续超过 2 小时的事（R-131）','简洁·浅色，10:00–14:30 NEOX 4K 调色，现在 12:20。按规则 ① 的窗口是 9:30 → 16:30，超过 4 小时，按规则 ④ 从“此刻前 1 小时”取整截 4 小时：11:00 → 15:00。色块左端被截，画成直角截断；下一件 15:30 落在窗口外，就在时间轴下面写一行“下一件 15:30 SignPlex 客户反馈会 · 3 小时 10 分后”','（电脑同一画法，只画了手机）','电脑左栏顶部同一张卡'],
   ['koverlap','“现在”卡 K · 两件事时间重叠（R-131）','简洁·浅色，14:17 同时在进行 NEOX 横版对片（13:00–14:30）和 SignPlex 韩文字幕确认（14:00–15:00）。标签写“进行中 2 件”，标题和“还剩”用先结束的那件；第二件写在标题下一行“同时：…”。时间轴分两条：上面一条是先结束的那件和下一件，下面一条细一点、用第二件的项目色。三件及以上：标题下只写“同时还有 2 件”，时间轴最多两条，其余不画','（电脑同一画法，只画了手机）','电脑左栏顶部同一张卡'],
 ];
+/* ---- R-143 液态玻璃底栏：边缘折射（同 液态玻璃底栏-对比.html 第 2 档）---- */
+const RINGS = {bar:[[22,2],[17,4],[13,7],[10,10],[7.5,14],[5.5,18],[3.5,23],[2,28]], drop:[[12,4],[7,9],[3.5,15]], fab:[[18,2],[14,4],[10,7],[7,10],[4.5,14],[2.5,19]]};
+function bandMask(W,H,w){ // 圆角胶囊外圈 w 宽的一条带子（边缘柔化）
+  const r=H/2, ri=Math.max(r-w,0.5), x=w, y=w, Wi=W-2*w, Hi=H-2*w;
+  const pill=(x,y,W,H,r)=>`M${x+r},${y}h${W-2*r}a${r},${r} 0 0 1 0,${2*r}h${-(W-2*r)}a${r},${r} 0 0 1 0,${-2*r}z`;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><filter id="b" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${Math.min(1.6,w/3)}"/></filter><path filter="url(#b)" fill="#fff" fill-rule="evenodd" d="${pill(0,0,W,H,r)} ${pill(x,y,Wi,Hi,ri)}"/></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+function lensFor(scr, el, kind, fx, ox, oy){
+  const W=el.offsetWidth, H=el.offsetHeight;
+  const src=scr.querySelector(':scope > .lsrc');
+  const lens=document.createElement('div'); lens.className='lens';
+  const mk=(d,w,u)=>{ const L=document.createElement('div'); L.className='lr';
+    const sx=u||(W/2)/(W/2+d), sy=u||(H/2)/(H/2+d);
+    L.style.transform=`scale(${sx},${sy})`; L.style.transformOrigin=`${W/2}px ${H/2}px`;
+    if(w){ const m=bandMask(W,H,w); L.style.webkitMaskImage=m; L.style.maskImage=m; }
+    const c=src.cloneNode(true); c.classList.remove('lsrc'); c.classList.add('lc'); c.style.display='';
+    c.style.left=ox; c.style.top=oy; c.style.filter=w?fx+' brightness(1.06)':fx; L.appendChild(c); return L; };
+  lens.appendChild(mk(0,0,kind==='drop'?1.16:0));
+  RINGS[kind].forEach(([w,d])=>lens.appendChild(mk(d,w)));
+  lens.insertAdjacentHTML('beforeend','<div class="tint"></div><div class="spec"></div>');
+  return lens;
+}
+function glassify(scr){
+  if(scr.classList.contains('lgx')) return;
+  const bar=scr.querySelector(':scope > .tabbar'), fab=scr.querySelector(':scope > .fab'); if(!bar) return;
+  scr.classList.add('lgx');
+  // 背后画面的副本源：整块屏幕去掉玻璃本身
+  const src=scr.cloneNode(true); src.classList.remove('lgx'); src.classList.add('lsrc'); src.style.display='none';
+  src.querySelectorAll('.tabbar,.fab,.pblur,.home').forEach(n=>n.remove());
+  src.style.width=scr.offsetWidth+'px'; src.style.height=scr.offsetHeight+'px'; src.style.minHeight='0';
+  scr.appendChild(src);
+  const fx='blur(2px) saturate(1.8) brightness(1.04)';
+  bar.prepend(lensFor(scr,bar,'bar',fx,-bar.offsetLeft+'px',-bar.offsetTop+'px'));
+  if(fab) fab.prepend(lensFor(scr,fab,'fab','blur(2px) saturate(1.5)',-fab.offsetLeft+'px',-fab.offsetTop+'px'));
+  const tabs=[...bar.querySelectorAll('.tab')], on=bar.querySelector('.tab.on')||tabs[0];
+  const dp=document.createElement('div'); dp.className='drop';
+  dp.style.width=on.offsetWidth+'px'; dp.style.setProperty('--dx', on.offsetLeft+'px');
+  bar.appendChild(dp);
+  const tmp=document.createElement('div'); tmp.style.cssText=`position:absolute;width:${on.offsetWidth}px;height:52px`; bar.appendChild(tmp);
+  dp.appendChild(lensFor(scr,tmp,'drop','saturate(1.5) brightness(1.06)',`calc(${-bar.offsetLeft}px - var(--dx))`,(-bar.offsetTop-5)+'px')); tmp.remove();
+  dp.querySelector('.tint').style.background='rgba(255,255,255,.18)';
+  tabs.forEach(t=>t.addEventListener('pointerdown',()=>{ if(t.classList.contains('on')) dp.classList.add('press'); }));
+  addEventListener('pointerup',()=>dp.classList.remove('press'));
+  dp.addEventListener('animationend',()=>dp.classList.remove('mv'));
+  tabs.forEach(t=>t.addEventListener('click',()=>{
+    tabs.forEach(x=>x.classList.remove('on')); t.classList.add('on');
+    dp.classList.remove('mv'); void dp.offsetWidth; dp.classList.add('mv');
+    dp.style.setProperty('--dx', t.offsetLeft+'px');
+  }));
+}
+// 画面很多，副本只在快滚到时才贴（每屏约 20 份副本）
+let lgIO=null;
+function lgObserve(){
+  if(lgIO) lgIO.disconnect();
+  lgIO=new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting){ lgIO.unobserve(e.target); glassify(e.target); } }),{rootMargin:'900px 0px'});
+  document.querySelectorAll('#screens .scr').forEach(sc=>{ if(sc.querySelector(':scope > .tabbar')) lgIO.observe(sc); });
+}
 function render(){
   const d=document.body.dataset.dev;
   renderHome();
   document.getElementById('screens').innerHTML = LIST.map(([k,t,c,dt,dc],i)=>`<figure class="sc"><div class="fit"><div class="inner">${(d==='d'?DK:PH)[k]()}</div></div><figcaption>${i+1}　${d==='d'&&dt?dt:t}<span class="cap2">${d==='d'&&dc?dc:c}</span></figcaption></figure>`).join('');
-  fit();
+  fit(); lgObserve();
 }
 function fit(){
   document.querySelectorAll('.fit').forEach(f=>{
