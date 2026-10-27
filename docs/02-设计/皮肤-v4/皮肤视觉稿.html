@@ -4,12 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>柠檬记皮肤视觉稿</title>
-<!-- R-128：字体选择页的预览。思源黑体用 Noto Sans SC；资源圆体 CN 用本地子集 fonts/ResourceHanRoundedCN-*.subset.woff2（v0.990，只含本页用到的字，SIL OFL 1.1，见 fonts/ResourceHanRounded-OFL.txt） -->
+<!-- R-128：字体选择页的预览。思源黑体用 Noto Sans SC；资源圆体 CN 用本地子集 fonts/ResourceHanRoundedCN-*.subset.woff2（v0.990，只含本页用到的字，SIL OFL 1.1，见 fonts/ResourceHanRounded-OFL.txt）。
+     线上版只允许 Google Fonts 的样式表，所以 Pretendard（v1.3.9）、NanumSquare Round（Naver 官方包）、霞鹜文楷（v1.530 Regular / Medium）也改成本地子集（fonts/，只含本页用到的字，许可证都是 SIL OFL 1.1，见 fonts/*-OFL.txt）。
+     Pretendard 和 NanumSquare Round 的许可证有保留字体名，子集算修改版，所以子集内部改名为 LemoSubP / LemoSubNR，页面里用这两个名字引用；霞鹜文楷的许可证附加条款允许网页用的子集保留原名。 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Gowun+Batang:wght@400;700&display=swap">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
-<link rel="stylesheet" href="https://hangeul.pstatic.net/hangeul_static/css/nanum-square-round.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-bold.css"><!-- 1.7.0 的 Bold 就是后来改名的 Medium；界面 600/700 一律落到它，不做假粗体 -->
 <style>
 /* ================= 设计令牌（由脚本生成，组件只引用这些变量） ================= */
 body[data-skin="simple"][data-mode="light"], body .th-simple-light{--k-bg:#FFFFFF;--k-fg:#141518;--k-fg2:#595C64;--k-trk:#F0F1F4;--k-nxt-bg:#F0F1F4;--k-line:#ECEDF0;--k-cur:#F7EDB0;--k-cur-bd:transparent;--k-done:#F2DF4A;--k-mark:#141518;--k-co:#D6ECF7;--k-co-done:#8CC9E8;--k-ring:transparent;--klv-bg:#141518;--klv-fg:#F2DF4A;--bg:#E9EAEE;--scr-bg:#E9EAEE;--panel:#FFFFFF;--panel-2:#F0F1F4;--line:#ECEDF0;--text:#141518;--text-2:#595C64;--accent:#F2DF4A;--on-accent:#141518;--ink:#141518;--on-ink:#FFFFFF;--danger-text:#B0291F;--danger-bg:#FBE2DF;--now-bg:#FFFFFF;--now-fg:#141518;--now-fg2:#595C64;--now-track:#383A41;--now-prog:#F2DF4A;--alert-ring:#F2DF4A;--hol-bg:#EEEFF2;--today-bg:transparent;--today-fg:#141518;--now-num:#141518;--now-hl:#F2DF4A;--now-hl-pad:3px;--now-bd:#ECEDF0;--now-avt-ring:#FFFFFF;--now-k-bg:#141518;--now-k-fg:#F2DF4A;--now-k-pad:3px 9px;--now-k-w:700;--today-ring:#141518;--wk-on:#F2DF4A;--wk-on-ring:#141518;--chip-on-bg:#141518;--chip-on-fg:#FFFFFF;--step-off:#D3D5DB;--nowline:#141518;--nowline-glow:none;--nowpill-bg:#141518;--nowpill-fg:#F2DF4A;--nav-bg:rgba(20,21,24,.7);--nav-fg:#FFFFFF;--nav-active-bg:#FFFFFF;--nav-active-fg:#141518;--fab-bg:#F2DF4A;--fab-fg:#141518;--b-canvas:radial-gradient(55% 45% at 6% 0%,rgba(242,223,74,.30),transparent 70%),radial-gradient(45% 45% at 100% 100%,rgba(140,201,232,.26),transparent 70%),linear-gradient(170deg,#F5F4EE,#E8EBF0);--b-rail:#FFFFFF;--b-rail-shadow:0 12px 32px rgba(20,21,24,.12),0 0 0 1px rgba(20,21,24,.05);--b-tile:rgba(255,255,255,.80);--b-tile-shadow:0 4px 18px rgba(20,21,24,.06),inset 0 0 0 1px rgba(255,255,255,.95);--b-drawer:#FFFFFF;--b-drawer-shadow:-18px 0 48px rgba(20,21,24,.16),inset 0 0 0 1px #ECEDF0;--b-blur:0px;--float-bg:rgba(20,21,24,.82);--float-sat:140%;--float-solid:#141518;--abar-bg:rgba(20,21,24,.82);--abar-fg:#FFFFFF;--toast-bg:var(--float-bg);--toast-fg:#FFFFFF;--toast-fg2:#C5C8CF;--toast-track:rgba(255,255,255,.18);--sheet-bg:#FFFFFF;--scrim:rgba(20,21,24,.32);--scrim-blur:6px;--rec-dot:#E5483B;--rec-dot-halo:rgba(229,72,59,.18);--wave:#141518;--mic-bg:#141518;--mic-fg:#FFFFFF;--mic-halo:rgba(20,21,24,.10);--mic-halo2:rgba(20,21,24,.05);--glass-blur:0px;--glass-sat:100%;--glass-bg:#FFFFFF;--glass-border:transparent;--glass-solid:#FFFFFF;--shadow-1:none;--shadow-2:0 10px 30px rgba(20,21,24,.14);--mid-bg:#E2E3E8;--rail-bg:#E9EAEE;--wbar-bg:#E9EAEE;--login-bg:radial-gradient(80% 50% at 85% 0%, rgba(242,223,74,.45), transparent 70%), radial-gradient(60% 40% at 0% 100%, rgba(242,223,74,.22), transparent 70%), #F3F4F6;--inp-line:#D9DBE0;--ok-text:#1C7A43;--wbar-solid:#E3E4E8;--p1:#F2DF4A;--p1s:#857200;--p2:#8CC9E8;--p2s:#1F77A6;--p3:#F5B5AC;--p3s:#B8473C;--p4:#C8B9F2;--p4s:#6A4FC4;--p5:#A6DCB4;--p5s:#23794A;--p6:#F6C48C;--p6s:#A35D10;--on-p:#141518;--r-xl:28px;--r-lg:20px;--r-md:14px;--r-sm:10px;--r-pill:999px;--dur-press:120ms;--dur-ui:220ms;--dur-sheet:380ms;--ease-standard:cubic-bezier(.2,0,0,1);--ease-spring:cubic-bezier(.34,1.32,.64,1);--ease-out:cubic-bezier(.23,1,.32,1);--ease-drawer:cubic-bezier(.32,.72,0,1);--f-num:"Manrope", "SF Pro Rounded", -apple-system, "Segoe UI Variable Display", "Segoe UI", sans-serif;--f-zh:-apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;--f-ko:"Apple SD Gothic Neo", "Malgun Gothic", -apple-system, "PingFang SC", sans-serif;--focus:#2F7BF5}
@@ -472,6 +470,20 @@ body[data-skin="simple"] .toast,body[data-skin="simple"] .abar,.th-simple-light 
 .desk.nar .nrow{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .desk.nar .nann .panel{height:100%;box-sizing:border-box}
 .desk.nar .nrow .panel{background:var(--b-tile);box-shadow:var(--b-tile-shadow);border-radius:22px;margin:0}
+/* 线上版：Pretendard / NanumSquare Round / 霞鹜文楷 的本地子集，字重对应和原来的 CDN 样式表一样：
+   Pretendard 原样表每个字重一个文件（本页用到 400 / 500 / 600 / 700 / 800，只切这 5 个）；
+   NanumSquare Round 原样表 300 / 400 / 700 / 800（本页没用 300，只切 400 / 700 / 800，500 落 400、600 落 700，和原来一样）；
+   霞鹜文楷原样表 Regular = 400、Bold（新版叫 Medium）= 700，600 / 700 / 800 都落到 Medium，不做假粗体。原样表没有 unicode-range 限制（文楷原来是分片，合起来就是整套字），子集本身只含本页用到的字，所以这里也不写 unicode-range */
+@font-face{font-family:'LemoSubP';font-weight:400;font-display:swap;src:url('fonts/LemoSubP-Regular.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoSubP';font-weight:500;font-display:swap;src:url('fonts/LemoSubP-Medium.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoSubP';font-weight:600;font-display:swap;src:url('fonts/LemoSubP-SemiBold.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoSubP';font-weight:700;font-display:swap;src:url('fonts/LemoSubP-Bold.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoSubP';font-weight:800;font-display:swap;src:url('fonts/LemoSubP-ExtraBold.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoSubNR';font-weight:400;font-display:swap;src:url('fonts/LemoSubNR-Regular.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoSubNR';font-weight:700;font-display:swap;src:url('fonts/LemoSubNR-Bold.subset.woff2') format('woff2')}
+@font-face{font-family:'LemoSubNR';font-weight:800;font-display:swap;src:url('fonts/LemoSubNR-ExtraBold.subset.woff2') format('woff2')}
+@font-face{font-family:'LXGW WenKai';font-weight:400;font-display:swap;src:url('fonts/LXGWWenKai-Regular.subset.woff2') format('woff2')}
+@font-face{font-family:'LXGW WenKai';font-weight:700;font-display:swap;src:url('fonts/LXGWWenKai-Medium.subset.woff2') format('woff2')}
 /* R-128：资源圆体 CN（本地子集，只管汉字和中文标点；韩文和拉丁字母落到 NanumSquare Round） */
 @font-face{font-family:'RHR-Han';font-weight:100 499;src:url('fonts/ResourceHanRoundedCN-Regular.subset.woff2') format('woff2');unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF,U+2014,U+2018-201D,U+2026,U+00B7}
 @font-face{font-family:'RHR-Han';font-weight:500 749;src:url('fonts/ResourceHanRoundedCN-Bold.subset.woff2') format('woff2');unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF,U+2014,U+2018-201D,U+2026,U+00B7}
@@ -1924,8 +1936,8 @@ DK.nowstates = () => CEN(PH.nowstates());
 /* ===== R-128：设置 › 字体（预览用网页字体近似，示意） ===== */
 const FONTS = {  /* zh：中文界面的字体顺序；ko：韩文界面；num：数字（系统、统一黑体用 Manrope；圆体、文楷跟着自己的字体，两款数字都等宽，见报告） */
   sys:  {zh:'', ko:'', num:'', n:{zh:['系统字体（默认）','iPhone 苹方 + Apple SD Gothic Neo；电脑 微软雅黑 + 맑은 고딕'], ko:['시스템 글꼴 (기본)','iPhone 핑팡 + Apple SD Gothic Neo · PC 微软雅黑 + 맑은 고딕']}},
-  hei:  {zh:"Pretendard,'Noto Sans SC','Source Han Sans SC',sans-serif", ko:"Pretendard,'Noto Sans SC','Source Han Sans SC',sans-serif", num:'', n:{zh:['统一黑体','思源黑体 + Pretendard'], ko:['통일 고딕','본고딕(思源黑体) + Pretendard']}},
-  round:{zh:"'RHR-Han','NanumSquareRound',sans-serif", ko:"'RHR-Han','NanumSquareRound',sans-serif", num:"'NanumSquareRound',sans-serif", n:{zh:['圆体','资源圆体 CN + NanumSquare Round'], ko:['둥근체','리소스 한 라운디드 CN(资源圆体) + 나눔스퀘어라운드']}},
+  hei:  {zh:"'LemoSubP','Noto Sans SC','Source Han Sans SC',sans-serif", ko:"'LemoSubP','Noto Sans SC','Source Han Sans SC',sans-serif", num:'', n:{zh:['统一黑体','思源黑体 + Pretendard'], ko:['통일 고딕','본고딕(思源黑体) + Pretendard']}},
+  round:{zh:"'RHR-Han','LemoSubNR',sans-serif", ko:"'RHR-Han','LemoSubNR',sans-serif", num:"'LemoSubNR',sans-serif", n:{zh:['圆体','资源圆体 CN + NanumSquare Round'], ko:['둥근체','리소스 한 라운디드 CN(资源圆体) + 나눔스퀘어라운드']}},
   kai:  {zh:"'LXGW WenKai','Gowun Batang',serif", ko:"'Gowun Batang','LXGW WenKai',serif", num:"'LXGW WenKai',serif", n:{zh:['文楷','霞鹜文楷 + Gowun Batang'], ko:['원카이','LXGW 원카이(霞鹜文楷) + 고운바탕']}}
 };
 const FVARS = (k, lang='zh') => { const f=FONTS[k]; if(!f.zh) return ''; return `--f-zh:${f.zh};--f-ko:${f.ko};${f.num?`--f-num:${f.num};`:''}${k==='kai'?'font-synthesis:none;':''}`; };
@@ -2045,7 +2057,7 @@ const LIST = [
   ['ainoteko','韩文：朋友第一次登录 AI 处理告知（第五轮复查补）','和中文同一结构，照中文意思译（翻译照写、负责人最后看）；隐私句用 R-115 韩文；“会送出去的”含日程和待办的标题、备注、地点','韩文（同手机）','只画了手机'],
   ['setdata','设置 › 数据：用量条','“已用 412 MB / 700 MB”（负责人的上限），下面分图片和文档；手机只导出文字，“附件请在电脑上导出”；“预览 PPT”改第一次的选择；下面另一行“隐私记 PPT 预览”单独记录这台设备的选择（和普通 PPT 分开问、分开记，第五轮复查轻 6）；“清除 AI 生成的描述和标签”','电脑：导出 zip 的进度','写件数和大小；隐私记的附件解密后放进 zip，提示“导出的文件不加密”'],
   ['setdata90','到 90%：文字变色','“快满了：还剩 60 MB”，满了以后不能再加附件，文字照常能记','到 90%（同手机）','只画了手机'],
-  ['nowstates','今天页：“现在”卡另外 3 种状态（R-118）','② 按 R-131 换成 K 卡的“下一件”：空心“○ 下一件”标签、右边“1 小时 13 分后”，时间轴上没有柠檬黄，只把下一件描边；③ 收成一行“今天的日程都结束了 · 明天 11:00 家庭 브런치”（写明天第一件的开始时间），点开看明天；④ 浅色卡“今天没有日程”，带待办数和明天第一件，提示按住“＋”。状态 ① 见第 1 屏','“现在”卡另外 3 种状态（电脑同一画法）','电脑的今天页“现在”卡用同一套 4 种状态，只画了手机']
+  ['nowstates','今天页：“现在”卡另外 3 种状态（R-118）','② 按 R-131 换成 K 卡的“下一件”：空心“○ 下一件”标签、右边“1 小时 13 分后”，时间轴上没有柠檬黄，只把下一件描边；③ 收成一行“今天的日程都结束了 · 明天 11:00 家庭 브런치”（写明天第一件的开始时间），点开看明天；④ 浅色卡“今天没有日程”，带待办数和明天第一件，提示按住“＋”。状态 ① 见第 1 屏','“现在”卡另外 3 种状态（电脑同一画法）','电脑的今天页“现在”卡用同一套 4 种状态，只画了手机'],
   ['kidle','“现在”卡 K · 没有进行中（R-131）','简洁·浅色。NEOX 横版对片已结束（收进“已过去 3 件”），下一件 15:30。卡片仍是普通底色，柠檬黄一处都不出现；时间轴按规则 ② 画（此刻前半小时取整 13:30 → 下一件结束 16:30），下一件描边','（电脑同一画法，只画了手机）','电脑左栏顶部同一张卡'],
   ['k95','“现在”卡 K · 快结束 95%（R-131）','简洁·浅色，14:26，还剩 4 分钟。柠檬色块几乎涂满，竖线贴到色块右端；时间窗和 14:17 时一样（规则 ① 12:30 → 16:30），卡片不变高、不变色','（电脑同一画法，只画了手机）','电脑左栏顶部同一张卡'],
   ['klong','“现在”卡 K · 一件持续超过 2 小时的事（R-131）','简洁·浅色，10:00–14:30 NEOX 4K 调色，现在 12:20。按规则 ① 的窗口是 9:30 → 16:30，超过 4 小时，按规则 ④ 从“此刻前 1 小时”取整截 4 小时：11:00 → 15:00。色块左端被截，画成直角截断；下一件 15:30 落在窗口外，就在时间轴下面写一行“下一件 15:30 SignPlex 客户反馈会 · 3 小时 10 分后”','（电脑同一画法，只画了手机）','电脑左栏顶部同一张卡'],
