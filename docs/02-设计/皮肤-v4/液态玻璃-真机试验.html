@@ -8,7 +8,8 @@
 /* 液态玻璃真机试验（R-143 正式做法的验证页）：在 iPhone Safari 上真实滑动，看折射跟不跟手、掉不掉帧。
    做法：底栏里放“折射副本”——只复制底栏附近的几行内容（不是整屏），分几圈按离边缘的距离压缩，边缘把栏外的内容弯进来；
    副本随滚动同步移动。所有参数可在页面顶部切换，右上角实时显示帧率。
-   第 2 版（R-150）：12 圈折射、最外两圈红绿蓝分开弯（色散）、底栏按背后内容自动深浅、高光跟手机倾斜；副本铺背景色，去掉边缘重影。 */
+   第 2 版（R-150）：12 圈折射、最外两圈红绿蓝分开弯（色散）、底栏按背后内容自动深浅、高光跟手机倾斜；副本铺背景色，去掉边缘重影。
+   第 3 版（R-152）：默认改用 WebGL 着色器——底栏附近几行画成一张小图，一个着色器按圆角距离场做折射、色散、模糊、着色和亮边；第 2 版做法保留可切换。 */
 :root{--bg:#E9EAEE;--panel:#FFFFFF;--text:#141518;--text-2:#595C64;--line:#ECEDF0;--accent:#F2DF4A;
   --g-tint:rgba(255,255,255,.34);--g-hi:rgba(255,255,255,.95);--g-hi2:rgba(255,255,255,.55);--g-glow:.35;--g-sheen:.45;--g-drop:.14;--g-fg:#141518;--g-pill:rgba(20,21,24,.09);--g-fab-tint:rgba(242,223,74,.72);
   --safe:env(safe-area-inset-bottom,0px)}
@@ -93,6 +94,12 @@ h1{font-size:22px;margin:8px 0 4px}
 .pblur i:nth-child(5){--b:16px;--m0:66.7%;--m1:83.3%;--m2:100%;--m3:100.1%}
 .pblur b{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 0%,color-mix(in srgb,var(--bg) 55%,transparent) 70%)}
 body.nopb .pblur{display:none}
+/* 第 3 版（R-152）：一张 WebGL 画布垫在底栏和“＋”下面，用着色器做折射、色散和高光；图标和字仍是网页元素，盖在最上面 */
+#glc{position:fixed;left:0;right:0;bottom:0;z-index:9;pointer-events:none;display:none}
+body.gl #glc{display:block}
+body.gl .pblur{z-index:8}
+body.gl .drop{visibility:hidden}
+body.gl .css-only{opacity:.45}
 </style>
 </head>
 <body>
@@ -101,8 +108,11 @@ body.nopb .pblur{display:none}
   <h1>液态玻璃真机试验</h1>
   <p class="lead">请在 iPhone 的 Safari 里打开，用手指上下滑动列表，看底栏边缘有没有把经过的内容弯进来、跟不跟手。点底栏的按钮看液滴滑过去，按住选中的那一项看它鼓起来。右上角是实时帧率（60 或 120 是满帧）和最近 5 秒掉帧的次数。下面几个开关可以换参数，看哪一组又好看又不卡。</p>
   <p class="lead">第 2 版加强了四处，都能单独开关，方便和苹果自带 App（照片、音乐）对比：① 12 圈折射，边缘更顺；② 边缘色散，彩边很细；③ 自动深浅——列表里每隔几行有深色块，滑到底栏背后时底栏会自己变深；④ 倾斜高光——点“开”后允许使用动作与方向，左右歪手机，高光会跟着走。在 claude.ai 里打开时 iPhone 不给读陀螺仪，请拖“模拟倾斜”滑条看效果。</p>
+  <p class="lead">第 3 版换了一种做法（默认就是它）：底栏附近几行内容先画成一张小图，再交给 WebGL 着色器，一次算出折射、色散、模糊、着色和高光，不再叠十几层网页副本。可以在“玻璃做法”里切回第 2 版对比；“折射圈数”只对第 2 版有效。</p>
   <div class="ctl">
-    <div class="r"><span>折射圈数</span><button data-k="rings" data-v="12">12 圈</button><button data-k="rings" data-v="8">8 圈</button><button data-k="rings" data-v="5">5 圈</button><button data-k="rings" data-v="3">3 圈</button><button data-k="rings" data-v="0">不折射</button></div>
+    <div class="r"><span>玻璃做法</span><button data-k="eng" data-v="gl">着色器（第 3 版）</button><button data-k="eng" data-v="css">复制内容（第 2 版）</button><span id="glst" style="min-width:0;font-size:12px"></span></div>
+    <div class="r"><span>着色器折射</span><button data-k="gr" data-v="2">强</button><button data-k="gr" data-v="1">弱</button><button data-k="gr" data-v="0">关</button></div>
+    <div class="r css-only"><span>折射圈数</span><button data-k="rings" data-v="12">12 圈</button><button data-k="rings" data-v="8">8 圈</button><button data-k="rings" data-v="5">5 圈</button><button data-k="rings" data-v="3">3 圈</button><button data-k="rings" data-v="0">不折射</button></div>
     <div class="r"><span>边缘色散</span><button data-k="disp" data-v="1">开</button><button data-k="disp" data-v="0">关</button></div>
     <div class="r"><span>自动深浅</span><button data-k="ad" data-v="1">开</button><button data-k="ad" data-v="0">关</button></div>
     <div class="r"><span>倾斜高光</span><button data-k="tilt" data-v="1">开</button><button data-k="tilt" data-v="0">关</button><span id="tiltst"></span></div>
@@ -114,6 +124,7 @@ body.nopb .pblur{display:none}
   <div id="list"></div>
 </div>
 <div class="pblur" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><b></b></div>
+<canvas id="glc" aria-hidden="true"></canvas>
 <nav class="tabbar" aria-label="底部导航">
   <div class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/></svg><span>今天</span></div>
   <div class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 5v15M15 5v15M4 15h16"/></svg><span>日历</span></div>
@@ -138,8 +149,8 @@ list.style.height = N * H + 'px';
 list.innerHTML = Array.from({length:N}, (_, i) => rowHTML(i)).join('');
 
 const RINGS_ALL = {bar:[[22,2],[17,4],[13,7],[10,10],[7.5,14],[5.5,18],[3.5,23],[2,28]], fab:[[18,2],[14,4],[10,7],[7,10],[4.5,14],[2.5,19]], drop:[[12,4],[7,9],[3.5,15]]};
-const opt = {rings:0, disp:1, ad:1, tilt:0, blur:1, pb:1, theme:'auto'};   // 默认按负责人真机试的结论：不折射、其他都开（R-151）
-try{ Object.assign(opt, JSON.parse(localStorage.getItem('lg-test2')||'{}')); }catch(e){}
+const opt = {eng:'gl', gr:2, rings:0, disp:1, ad:1, tilt:0, blur:1, pb:1, theme:'auto'};   // 第 2 版默认按负责人真机试的结论：不折射、其他都开（R-151）；第 3 版默认用着色器（R-152）
+try{ Object.assign(opt, JSON.parse(localStorage.getItem('lg-test3')||'{}')); }catch(e){}
 opt.tilt = 0;   // 陀螺仪每次打开页面都要重新点“开”授权
 // 按原来 8 圈的宽度和弯曲量插值出更密的圈（12 圈：底栏 12、“＋”9、液滴 5）
 function interp(r, n){ return Array.from({length:n}, (_, k) => { const t = k * (r.length - 1) / (n - 1), a = Math.floor(t), b = Math.min(a + 1, r.length - 1), f = t - a;
@@ -180,11 +191,18 @@ const tabs = [...bar.querySelectorAll('.tab')];
 let drop;
 function buildGlass(){
   copies = []; document.querySelectorAll('.lens,.drop').forEach(n => n.remove());
-  bar.prepend(lens(bar, 'bar', bar.offsetWidth, bar.offsetHeight));
-  fab.prepend(lens(fab, 'fab', fab.offsetWidth, fab.offsetHeight));
+  const useGL = opt.eng === 'gl' && GL.ok();
+  document.body.classList.toggle('gl', useGL);
+  document.getElementById('glst').textContent = opt.eng === 'gl' && !useGL ? '这台设备不支持 WebGL2，已用第 2 版' : '';
+  if(!useGL){
+    bar.prepend(lens(bar, 'bar', bar.offsetWidth, bar.offsetHeight));
+    fab.prepend(lens(fab, 'fab', fab.offsetWidth, fab.offsetHeight));
+  }
   const on = bar.querySelector('.tab.on');
   drop = document.createElement('div'); drop.className = 'drop'; drop.style.width = on.offsetWidth + 'px'; drop.style.setProperty('--dx', on.offsetLeft + 'px');
-  drop.appendChild(lens(drop, 'drop', on.offsetWidth, 52, 1.16)); bar.appendChild(drop);
+  if(!useGL) drop.appendChild(lens(drop, 'drop', on.offsetWidth, 52, 1.16));   // 着色器做法里液滴只用来算位置和果冻形变，画面由着色器画
+  bar.appendChild(drop);
+  GL.dirty = true;
   drop.addEventListener('animationend', () => drop.classList.remove('mv'));
   winStart = -1; sync(true);
 }
@@ -252,7 +270,7 @@ function measure(){ listTop = list.getBoundingClientRect().top + window.scrollY;
 // 帧率表
 let last = performance.now(), frames = [], drops = [];
 function loop(now){
-  sync(false); stepTilt();
+  sync(false); stepTilt(); if(document.body.classList.contains('gl')) GL.frame();
   const dt = now - last; last = now; frames.push(dt); if(frames.length > 60) frames.shift();
   if(dt > 1000/50) drops.push(now); drops = drops.filter(t => now - t < 5000);
   const avg = frames.reduce((a,b)=>a+b,0) / frames.length;
@@ -273,13 +291,163 @@ function applyOpt(){
   document.querySelectorAll('.ctl button').forEach(b => b.setAttribute('aria-pressed', String(String(opt[b.dataset.k]) === b.dataset.v)));
   document.body.classList.toggle('nopb', !opt.pb);
   if(opt.theme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = opt.theme;
-  try{ localStorage.setItem('lg-test2', JSON.stringify(opt)); }catch(e){}
+  try{ localStorage.setItem('lg-test3', JSON.stringify(opt)); }catch(e){}
+  GL.dirty = true;
 }
 document.querySelectorAll('.ctl button').forEach(b => b.addEventListener('click', async () => {
-  const k = b.dataset.k; opt[k] = (k === 'theme') ? b.dataset.v : Number(b.dataset.v);
+  const k = b.dataset.k; opt[k] = (k === 'theme' || k === 'eng') ? b.dataset.v : Number(b.dataset.v);
   if(k === 'tilt' && !(await setTilt(opt.tilt))) opt.tilt = 0;
-  applyOpt(); if(k === 'rings' || k === 'blur' || k === 'disp') buildGlass();
+  applyOpt(); if(k === 'rings' || k === 'blur' || k === 'disp' || k === 'eng') buildGlass();
 }));
+// ===== 第 3 版：WebGL 着色器玻璃（R-152） =====
+// 1) 只把底栏附近的几行用 Canvas 2D 画进一张小图（和第 2 版一样不碰整屏）；
+// 2) 一个着色器按圆角形状的距离场算出边缘法线：越靠边越往外取样（把栏外内容弯进来），红绿蓝取样距离不同（色散），
+//    用多级纹理取模糊，再叠着色、沿边亮光（方向跟倾斜）、内侧柔光；
+// 3) 图标和字仍是网页元素，盖在画布上面，清楚、能点。
+const GL = (() => {
+  const cv = document.getElementById('glc');
+  const tc = document.createElement('canvas'), tx = tc.getContext('2d');
+  const FONT = '-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+  const M = 40;          // 小图比画布往上多画 40px，边缘往外取样时有内容可取
+  let gl = null, prog, tex, U = {}, tried = false, okv = false, lastKey = '';
+  const st = {k:0, tint:null};
+  const VS = `#version 300 es
+in vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }`;
+  const FS = `#version 300 es
+precision highp float;
+uniform sampler2D uTex; uniform vec2 uCv; uniform float uDpr; uniform vec2 uTexSize; uniform float uTs;
+uniform vec4 uBar, uFab, uDrop; uniform float uDropK;
+uniform vec4 uTintBar, uTintFab, uPill, uTintDrop;
+uniform vec3 uHi; uniform vec2 uLight; uniform float uRefr, uDisp, uLod, uSat;
+out vec4 o;
+float sdPill(vec2 p, vec2 b){ float r = min(b.x, b.y); vec2 q = abs(p) - b + r; return min(max(q.x, q.y), 0.) + length(max(q, 0.)) - r; }
+vec3 bg(vec2 p, float lod){ return textureLod(uTex, vec2(p.x, p.y + ${M}.) / uTexSize, lod).rgb; }
+vec3 sat(vec3 c, float s){ float l = dot(c, vec3(.2126, .7152, .0722)); return mix(vec3(l), c, s); }
+// 一块玻璃：c 中心、b 半宽高（CSS px）、mag 放大、refr 折射强度、lod 模糊、tint 着色
+vec4 glass(vec2 p, vec2 c, vec2 b, float mag, float refr, float lod, vec4 tint, float hiK){
+  vec2 lp = p - c; float d = sdPill(lp, b);
+  if(d > 1.) return vec4(0.);
+  float e = .5;
+  vec2 n = normalize(vec2(sdPill(lp + vec2(e, 0.), b) - sdPill(lp - vec2(e, 0.), b), sdPill(lp + vec2(0., e), b) - sdPill(lp - vec2(0., e), b)) + 1e-5);
+  float depth = max(-d, 0.), rim = min(b.y, 22.), t = clamp(depth / rim, 0., 1.);
+  float bend = (1. - t) * (1. - t) * refr;                 // 越靠边弯得越多，往外取样
+  vec2 sp = c + lp / mag + n * bend;
+  vec3 col;
+  if(uDisp > .5 && refr > 0.){ col = vec3(bg(sp - n * bend * .14, lod).r, bg(sp, lod).g, bg(sp + n * bend * .2, lod).b); }   // 蓝光弯得多
+  else col = bg(sp, lod);
+  col = sat(col, uSat);   // 不再额外提亮：对过像素，这样和第 2 版的亮度一致
+  col = mix(col, tint.rgb, tint.a);
+  vec2 L = normalize(uLight);
+  float band = smoothstep(2.2, 0., depth);                  // 沿边 2px 的亮线
+  float face = max(dot(n, L), 0.), back = max(dot(n, -L), 0.);
+  col += band * (uHi.x * (.1 + 1.3 * face * face) + uHi.y * back * back * .7) * hiK;   // 亮边集中在迎光的一侧
+  col += exp(-depth / 6.) * uHi.z * .1;                    // 内侧柔光
+  vec2 sh = (lp - vec2(L.x * b.x * .8, -b.y * 1.2)) / vec2(b.x * .7, b.y * 1.2);
+  col += smoothstep(1., .3, length(sh)) * uHi.z * .12;     // 顶部弧形反光，位置跟光源
+  return vec4(col, clamp(.5 - d, 0., 1.));
+}
+void main(){
+  vec2 p = vec2(gl_FragCoord.x, uCv.y - gl_FragCoord.y) / uDpr;
+  vec4 acc = glass(p, uBar.xy, uBar.zw, 1., uRefr, uLod, uTintBar, 1.);
+  // 液滴：静止时是一片浅色玻璃片，滑动或按住时变成会放大的透镜
+  if(uDrop.z > 0.){
+    float dd = sdPill(p - uDrop.xy, uDrop.zw);
+    float a = clamp(.5 - dd, 0., 1.);
+    if(a > 0.){
+      vec4 lensC = glass(p, uDrop.xy, uDrop.zw, 1.16, uRefr * .6, uLod + .5, uTintDrop, 1.3);
+      vec3 rest = mix(acc.rgb, uPill.rgb, uPill.a);
+      vec3 dc = mix(rest, lensC.rgb, uDropK);
+      acc.rgb = mix(acc.rgb, dc, a);
+    }
+  }
+  vec4 f = glass(p, uFab.xy, uFab.zw, 1., uRefr * .9, uLod, uTintFab, 1.);
+  acc = vec4(mix(acc.rgb, f.rgb, f.a), max(acc.a, f.a));
+  o = vec4(acc.rgb * acc.a, acc.a);
+}`;
+  function init(){
+    tried = true;
+    gl = cv.getContext('webgl2', {premultipliedAlpha:true, alpha:true, antialias:false});
+    if(!gl) return false;
+    const sh = (t, s) => { const x = gl.createShader(t); gl.shaderSource(x, s); gl.compileShader(x); if(!gl.getShaderParameter(x, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(x)); return x; };
+    prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+    if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+    const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    ['uTex','uCv','uDpr','uTexSize','uTs','uBar','uFab','uDrop','uDropK','uTintBar','uTintFab','uPill','uTintDrop','uHi','uLight','uRefr','uDisp','uLod','uSat'].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+    tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.uniform1i(U.uTex, 0);
+    return true;
+  }
+  const rgba = s => { const m = String(s).match(/rgba?\(([^)]+)\)/); if(m){ const v = m[1].split(',').map(Number); return [v[0]/255, v[1]/255, v[2]/255, v.length > 3 ? v[3] : 1]; }
+    const h = String(s).trim().match(/^#([0-9a-f]{6})$/i); if(h){ const n = parseInt(h[1], 16); return [(n>>16&255)/255, (n>>8&255)/255, (n&255)/255, 1]; } return [1,1,1,0]; };
+  // 小图：照着 rowHTML 的排版把几行画出来（模糊后看不出细微差别）
+  function paint(top, w, h, ts){
+    const cs = getComputedStyle(document.documentElement), v = k => cs.getPropertyValue(k).trim();
+    tc.width = Math.ceil(w * ts); tc.height = Math.ceil(h * ts);
+    tx.setTransform(ts, 0, 0, ts, 0, 0);
+    tx.fillStyle = v('--bg'); tx.fillRect(0, 0, w, h);
+    const lr = list.getBoundingClientRect(), x0 = lr.left, lw = lr.width;
+    const first = Math.max(0, Math.floor((top - lr.top) / H)), last = Math.min(N - 1, Math.floor((top + h - lr.top) / H));
+    for(let i = first; i <= last; i++){
+      const y = lr.top + i * H - top, dk = isDark(i);
+      if(dk){ const g = tx.createLinearGradient(x0, y + 64, x0 + lw, y); g.addColorStop(0, '#1d2b3c'); g.addColorStop(1, '#3b2d52'); tx.fillStyle = g; tx.fillRect(x0, y, lw, 64); }
+      else { tx.fillStyle = v('--line'); tx.fillRect(x0, y + 63, lw, 1); }
+      const sub = dk ? 'rgba(255,255,255,.72)' : v('--text-2'), main = dk ? '#fff' : v('--text');
+      const h2 = 9 + (i % 12), m2 = (i * 17) % 60;
+      tx.textBaseline = 'middle'; tx.font = `13px ${FONT}`; tx.fillStyle = sub; tx.fillText(`${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}`, x0 + 4, y + 32);
+      tx.fillStyle = COLORS[i % 6]; tx.beginPath(); tx.roundRect(x0 + 60, y + 14, 4, 36, 2); tx.fill();
+      let rx = x0 + lw - 4;
+      if(i % 4 === 1){ const g = tx.createLinearGradient(rx - 44, y + 10, rx, y + 54); g.addColorStop(0, COLORS[(i+2)%6]); g.addColorStop(1, COLORS[(i+4)%6]); tx.fillStyle = g; tx.beginPath(); tx.roundRect(rx - 44, y + 10, 44, 44, 10); tx.fill(); rx -= 56; }
+      if(i % 3 === 0){ const lab = ['NEOX','SignPlex','生活'][(i/3)%3]; tx.font = `11px ${FONT}`; const cw = tx.measureText(lab).width + 16;
+        tx.fillStyle = COLORS[(i+1)%6]; tx.beginPath(); tx.roundRect(rx - cw, y + 23, cw, 18, 9); tx.fill(); tx.fillStyle = '#141518'; tx.fillText(lab, rx - cw + 8, y + 32); rx -= cw + 12; }
+      tx.save(); tx.beginPath(); tx.rect(x0 + 76, y, Math.max(0, rx - x0 - 76), 64); tx.clip();
+      tx.font = `15px ${FONT}`; tx.fillStyle = main; tx.fillText(TITLES[i%10], x0 + 76, y + 23);
+      tx.font = `12px ${FONT}`; tx.fillStyle = sub; tx.fillText(SUBS[i%6], x0 + 76, y + 44); tx.restore();
+    }
+  }
+  function frame(){
+    if(!gl) return;
+    const dpr = Math.min(devicePixelRatio || 1, 3), ts = Math.min(devicePixelRatio || 1, 2);
+    const br = bar.getBoundingClientRect(), fr = fab.getBoundingClientRect(), vw = innerWidth, vh = innerHeight;
+    const top = Math.floor(Math.min(br.top, fr.top) - 16), ch = vh - top;
+    const dm = getComputedStyle(drop).transform, mm = dm && dm !== 'none' ? dm.match(/matrix\(([^)]+)\)/) : null, ms = mm ? mm[1].split(',').map(Number) : [1,0,0,1];
+    const dl = br.left + drop.offsetLeft, dw = drop.offsetWidth;
+    st.k += ((drop.classList.contains('mv') || drop.classList.contains('press') ? 1 : 0) - st.k) * .2;
+    const bcs = getComputedStyle(bar), fcs = getComputedStyle(fab);
+    const want = {bar: rgba(bcs.getPropertyValue('--g-tint')), fab: rgba(fcs.getPropertyValue('--g-fab-tint')), pill: rgba(bcs.getPropertyValue('--g-pill')),
+      hi: [rgba(bcs.getPropertyValue('--g-hi'))[3], rgba(bcs.getPropertyValue('--g-hi2'))[3], parseFloat(bcs.getPropertyValue('--g-sheen')) || .3]};
+    if(!st.tint) st.tint = JSON.parse(JSON.stringify(want));
+    const lerp = (a, b) => a.map((x, j) => x + (b[j] - x) * .14);   // 自动深浅时颜色慢慢过渡，约 0.35 秒
+    st.tint = {bar: lerp(st.tint.bar, want.bar), fab: lerp(st.tint.fab, want.fab), pill: lerp(st.tint.pill, want.pill), hi: lerp(st.tint.hi, want.hi)};
+    const lx = (tilt.x - 50) / 50;
+    const key = [scrollY, vw, vh, dl.toFixed(2), ms.join(), st.k.toFixed(3), JSON.stringify(st.tint).slice(0, 400), lx.toFixed(3), opt.gr, opt.disp, opt.blur, opt.theme, GL.dirty].join('|');
+    if(key === lastKey) return;   // 画面没变就不重画，省电
+    lastKey = key;
+    if(cv.width !== Math.round(vw * dpr) || cv.height !== Math.round(ch * dpr)){ cv.width = Math.round(vw * dpr); cv.height = Math.round(ch * dpr); cv.style.height = ch + 'px'; }
+    const texTop = top - M, texH = ch + M;
+    if(GL.dirty || GL.sy !== scrollY || GL.vw !== vw){
+      paint(texTop, vw, texH, ts); GL.sy = scrollY; GL.vw = vw; GL.dirty = false;
+      gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tc); gl.generateMipmap(gl.TEXTURE_2D);
+    }
+    gl.viewport(0, 0, cv.width, cv.height);
+    gl.uniform2f(U.uCv, cv.width, cv.height); gl.uniform1f(U.uDpr, dpr); gl.uniform2f(U.uTexSize, vw, texH); gl.uniform1f(U.uTs, ts);
+    gl.uniform4f(U.uBar, br.left + br.width / 2, br.top - top + br.height / 2, br.width / 2, br.height / 2);
+    gl.uniform4f(U.uFab, fr.left + fr.width / 2, fr.top - top + fr.height / 2, fr.width / 2, fr.height / 2);
+    gl.uniform4f(U.uDrop, dl + dw / 2, br.top - top + 5 + 26, dw / 2 * ms[0], 26 * ms[3]);
+    gl.uniform1f(U.uDropK, st.k);
+    gl.uniform4fv(U.uTintBar, st.tint.bar); gl.uniform4fv(U.uTintFab, st.tint.fab); gl.uniform4fv(U.uPill, st.tint.pill); gl.uniform4f(U.uTintDrop, 1, 1, 1, .12);
+    gl.uniform3f(U.uHi, st.tint.hi[0], st.tint.hi[1], st.tint.hi[2]);
+    gl.uniform2f(U.uLight, lx, -1);
+    gl.uniform1f(U.uRefr, [0, 9, 18][opt.gr]); gl.uniform1f(U.uDisp, opt.disp ? 1 : 0);
+    gl.uniform1f(U.uSat, opt.blur ? 1.8 : 1.6);
+    gl.uniform1f(U.uLod, opt.blur ? Math.log2(6 * ts) : 0);   // 多级纹理是方块平均，要比第 2 版的 2px 高斯取得更大才一样糊
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  return { dirty:true, sy:-1, vw:0, frame, ok(){ if(!tried){ try{ okv = init(); }catch(e){ console.error(e); okv = false; } } return okv; } };
+})();
 addEventListener('resize', () => { measure(); buildGlass(); });
 applyOpt(); measure(); buildGlass(); requestAnimationFrame(loop);
 </script>
