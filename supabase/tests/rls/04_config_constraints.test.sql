@@ -1,0 +1,101 @@
+-- 配置、约束、桶和每日清理：TC-B0-53、74、76、88、98；0.27（features、min_client_version）；P-05
+begin;
+select plan(31);
+\ir _helpers.psql
+select tests.seed();
+
+-- ===== app_config.features（0.27 第 4 点；P-05：每项必须是对象、有布尔 on） =====
+select is((select features from public.app_config), '{"event":{"on":true},"todo":{"on":true},"note":{"on":false},"anniv":{"on":false}}'::jsonb, '默认值写全四个键');
+select is(tests.try_as('postgres', null, $$update public.app_config set features = features || '{"note":{"on":true,"min_client":"4.0.0"}}'$$), 'ok', '合法的开关能写');
+select ok(tests.try_as('postgres', null, $$update public.app_config set features = '{"note":true}'$$) like '23514%', '值不是对象：拒绝');
+select ok(tests.try_as('postgres', null, $$update public.app_config set features = '{"note":{"min_client":"4.0.0"}}'$$) like '23514%', '缺 on：拒绝');
+select ok(tests.try_as('postgres', null, $$update public.app_config set features = '{"note":{"on":"true"}}'$$) like '23514%', 'on 是字符串：拒绝');
+select ok(tests.try_as('postgres', null, $$update public.app_config set features = '{"note":[{"on":true}]}'$$) like '23514%',
+  '值是数组：拒绝（strict 模式；lax 会把数组展开放过去）');
+select ok(tests.try_as('postgres', null, $$update public.app_config set features = '[]'$$) like '23514%', 'features 不是对象：拒绝');
+-- TC-B0-53
+select ok(tests.try_as('postgres', null, $$update public.app_config set min_client_version = '4.1'$$) like '23514%', 'min_client_version = 4.1 被拒');
+select is(tests.try_as('postgres', null, $$update public.app_config set min_client_version = '4.0.1'$$), 'ok', 'min_client_version = 4.0.1 能写');
+select ok(tests.try_as('postgres', null, $$insert into public.app_config (id, ai) values (2, '{}')$$) like '23514%', 'app_config 只能有一行');
+-- 换模型时间由触发器写
+update public.app_config set ai = ai || '{"embed_model_next": "gemini-embedding-3"}';
+select ok((select ai ? 'embed_model_next_set_at' from public.app_config), '改 embed_model_next：触发器写 embed_model_next_set_at');
+
+-- ===== TC-B0-76：counters 键的格式（附录 A 的键各插一条，再插不合规的） =====
+select is(tests.try_as('postgres', null, $$insert into private.counters (key, window_start, count) values
+  ('ai:aaaaaaaa-0000-4000-8000-000000000001:2026-10-28', now(), 1),
+  ('ai-min:aaaaaaaa-0000-4000-8000-000000000001:20261028T0930', now(), 1),
+  ('media:aaaaaaaa-0000-4000-8000-000000000001:2026-10-28', now(), 1),
+  ('search:aaaaaaaa-0000-4000-8000-000000000001:2026-10-28', now(), 1),
+  ('search-min:aaaaaaaa-0000-4000-8000-000000000001:20261028T0930', now(), 1),
+  ('logs:aaaaaaaa-0000-4000-8000-000000000001:2026-10-28', now(), 1),
+  ('preview:aaaaaaaa-0000-4000-8000-000000000001:20261028T09', now(), 1),
+  ('intake-h:aaaaaaaa-0000-4000-8000-000000000001:0b000000-0000-4000-8000-000000000001.20261028T09', now(), 1),
+  ('intake-d:aaaaaaaa-0000-4000-8000-000000000001:0b000000-0000-4000-8000-000000000001.2026-10-28', now(), 1),
+  ('signup-ip:ip:3f2a9c', now(), 1),
+  ('signup-mail:mail:9c3f2a', now(), 1),
+  ('signup:global:2026-10-28', now(), 1),
+  ('ai:global:2026-10-28', now(), 1),
+  ('embed:global:2026-10-28', now(), 1),
+  ('account:aaaaaaaa-0000-4000-8000-000000000001:2026-10-28', now(), 1),
+  ('rebind:aaaaaaaa-0000-4000-8000-000000000001:2026-10-28', now(), 1),
+  ('restore:aaaaaaaa-0000-4000-8000-000000000001:2026-10-28', now(), 1),
+  ('hook-err:global:20261028T0915', now(), 1),
+  ('hook-alert:global:20261028T09', now(), 1)$$), 'ok', '附录 A 列的 19 种键都过得了约束');
+select ok(tests.try_as('postgres', null, $$insert into private.counters values ('ai:aaaaaaaa-0000-4000-8000-000000000001:2026-10-28T09:30', now(), 1)$$) like '23514%', '第三段带冒号：拒绝');
+select ok(tests.try_as('postgres', null, $$insert into private.counters values ('ai:2026-10-28', now(), 1)$$) like '23514%', '只有两段：拒绝');
+select ok(tests.try_as('postgres', null, $$insert into private.counters values ('AI:global:x', now(), 1)$$) like '23514%', '用途名大写：拒绝');
+select ok(tests.try_as('postgres', null, $$insert into private.counters values ('ai:someone:x', now(), 1)$$) like '23514%', '第二段既不是 uuid 也不是 global/ip/mail：拒绝');
+
+-- ===== TC-B0-74：6 个桶 =====
+select is((select string_agg(id || ':' || public || ':' || file_size_limit || ':' || cardinality(allowed_mime_types), ',' order by id) from storage.buckets),
+  'backups:false:52428800:1,files:false:10485760:11,images:false:2097152:1,vault-files:false:10551296:1,vault-images:false:2097152:1,vault-preview:false:10485760:1',
+  '6 个桶都是私有，大小和类型限制照附录 A');
+select is((select string_agg(policyname, ',' order by policyname) from pg_policies where schemaname = 'storage' and tablename = 'objects'),
+  'file_ins,file_sel,img_del,img_ins,img_sel', '存储策略只有 images、files 的五条（隐私桶和 backups 不建策略）');
+-- 重跑桶的 insert … on conflict 能把手工改大的限制改回来
+update storage.buckets set file_size_limit = 99999999 where id = 'images';
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('images', 'images', false, 2097152, array['image/webp'])
+  on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+select is((select file_size_limit from storage.buckets where id = 'images'), 2097152::bigint, '重跑迁移的桶语句把限制改回附录 A 的值');
+
+-- images 桶策略：只认两种路径；files 桶策略：只认本人 pending、还没有对象的路径
+select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values ('images',
+  'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-000000000001/1e000000-0000-4000-8000-000000000001.t.webp')$$), 'ok', 'images：本人的缩略图路径能传');
+select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values ('images',
+  'aaaaaaaa-0000-4000-8000-000000000001/x/evil.webp')$$) like '42501%', 'images：拼法不对的路径被拒');
+select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values ('images',
+  'bbbbbbbb-0000-4000-8000-000000000002/40000000-0000-4000-8000-000000000001/1e000000-0000-4000-8000-000000000001.webp')$$) like '42501%', 'images：别人目录被拒');
+insert into public.notes (id, user_id, body, created_at, updated_at) values ('40000000-0000-4000-8000-0000000000f1', 'aaaaaaaa-0000-4000-8000-000000000001', 'n', 1, 1);
+insert into public.note_files (id, user_id, note_id, kind, path, has_thumb, name, mime, bytes, sha256, created_at, updated_at) values
+  ('f0000000-0000-4000-8000-0000000000f1', 'aaaaaaaa-0000-4000-8000-000000000001', '40000000-0000-4000-8000-0000000000f1', 'pdf',
+   'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000f1/f0000000-0000-4000-8000-0000000000f1.pdf', true, 'a.pdf', 'application/pdf', 1, 'x', 1, 1);
+select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values ('files',
+  'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000f1/ffffffff-0000-4000-8000-0000000000f1.pdf')$$) like '42501%', 'files：没有对应行的路径被拒');
+select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values
+  ('files', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000f1/f0000000-0000-4000-8000-0000000000f1.pdf'),
+  ('files', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000f1/f0000000-0000-4000-8000-0000000000f1.t.webp')$$), 'ok',
+  'files：本人 pending 行的文件和缩略图能传');
+select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$update storage.objects set name = name
+  where bucket_id = 'files'$$) = 'ok' and (select count(*) from storage.objects where bucket_id = 'files') = 2, 'files：没有 update 策略（0 行）');
+update public.note_files set check_status = 'ok' where id = 'f0000000-0000-4000-8000-0000000000f1';
+delete from storage.objects where bucket_id = 'files';
+select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values
+  ('files', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000f1/f0000000-0000-4000-8000-0000000000f1.pdf')$$) like '42501%',
+  'files：检查过（ok）的文件不能再传（换不掉）');
+
+-- ===== TC-B0-88、98：每日清理 =====
+insert into private.webauthn_challenges values ('old', 'aaaaaaaa-0000-4000-8000-000000000001', now() - interval '1 minute'),
+                                               ('new', 'aaaaaaaa-0000-4000-8000-000000000001', now() + interval '1 minute');
+insert into public.todos (id, user_id, title, deleted_at, created_at, updated_at) values
+  ('70000000-0000-4000-8000-0000000000c1', 'aaaaaaaa-0000-4000-8000-000000000001', '31 天前删的', ((extract(epoch from now()) - 31 * 86400) * 1000)::bigint, 1, 1),
+  ('70000000-0000-4000-8000-0000000000c2', 'aaaaaaaa-0000-4000-8000-000000000001', '昨天删的', ((extract(epoch from now()) - 86400) * 1000)::bigint, 1, 1);
+select ok(private.cleanup_batch() >= 2, '每日清理跑一批');
+select is((select string_agg(challenge, ',') from private.webauthn_challenges), 'new', '过期挑战清掉，没过期的留着');
+select is((select string_agg(title, ',') from public.todos where id::text like '70000000-0000-4000-8000-0000000000c%'), '昨天删的', '30 天前软删除的行硬删，没满的留着');
+select is((select count(*)::int from cron.job where command like 'set statement_timeout = ''4min''; select private.%'), 1, '清理的 cron 命令以 set statement_timeout 开头');
+select is((select string_agg(s, ',') from pg_db_role_setting d, unnest(d.setconfig) s where d.setrole = 'service_role'::regrole), 'statement_timeout=4min',
+  'service_role 的 statement_timeout = 4min');
+
+select * from finish();
+rollback;

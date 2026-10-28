@@ -392,10 +392,12 @@ create table public.app_config (
   min_client_version text check (min_client_version ~ '^\d+\.\d+\.\d+$'),   -- 0.27 第 1 点
   latest_version text,
   -- 0.27 第 4 点：以键为名，每项 {on, min_client?}；0.29（P-02）：默认值写全四个键
-  -- P-05（B0 实测定）：每项必须是对象、有布尔 on；用 strict（lax 会把数组展开，数组值能混过去，离线实测见回报）
+  -- P-05（B0 实测定）：每项必须是对象、有布尔 on。分两条：第一条用 strict（lax 会把数组值展开、混过去）；
+  --   第二条用 lax（strict 下缺 on 是结构错误，过滤条件变成 unknown，反而放过去）。离线实测见 04_config_constraints.test.sql
   features jsonb not null default '{"event":{"on":true},"todo":{"on":true},"note":{"on":false},"anniv":{"on":false}}'
     check (jsonb_typeof(features) = 'object'
-       and not jsonb_path_exists(features, 'strict $.* ? (@.type() != "object" || !(exists(@.on)) || @.on.type() != "boolean")')),
+       and not jsonb_path_exists(features, 'strict $.* ? (@.type() != "object")')
+       and not jsonb_path_exists(features, 'lax $.* ? (!(exists(@.on)) || @.on.type() != "boolean")')),
   ai jsonb not null, notice jsonb,
   limits jsonb not null default '{"media_mb_default": 50, "file_mb_max": 10}');
 
