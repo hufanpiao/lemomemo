@@ -24,7 +24,8 @@
     -Manual：不用管理令牌，网页上手动粘贴。只做一件事：在内存里生成 FILES_URL_SECRET，屏幕显示一次，
         你粘贴进 Pages 加密变量，按回车后清屏、清剪贴板（同 new-proxy-secret.ps1）。R2 的令牌直接从 Cloudflare 页面复制到 Pages 和 Supabase。
 
-  开头检查（任何一项不过就停，同 new-proxy-secret.ps1、publish.ps1）：没有 Claude 在运行、Windows 剪贴板历史关着、
+  开头检查（任何一项不过就停，和 new-proxy-secret.ps1、publish.ps1 同一段、逐字相同）：没有 Claude 在运行
+  （进程名 claude*，以及命令行带 claude-code / @anthropic-ai 的 node.exe）、Windows 剪贴板历史关着、
   系统没开 PowerShell 的 transcript / 模块日志 / 脚本块日志策略、本窗口没在记 transcript；关掉本窗口的历史记录。
   粘贴一律用 Read-Host -AsSecureString（屏幕不显示、不进历史），每读完一项清剪贴板；不写任何文件、不打印任何值；
   结尾清掉内存里的变量和剪贴板。值只在发给 Cloudflare / Supabase 的 HTTPS 请求正文里出现一次。
@@ -72,6 +73,9 @@ function Clear-Clip {
     } catch { }
 }
 
+# ==== 安全窗口检查：开始（tools/keys/new-proxy-secret.ps1、tools/keys/set-r2-tokens.ps1、tools/release/publish.ps1 三处逐字相同，tests/build/keys-guard-sync.test.ts 核对；改一处三处一起改）====
+# B0 安全审查低 5：Claude 不只叫 claude*。npm 装的 Claude Code、IDE 扩展里的都可能是 node.exe，所以再按命令行查一遍 node 进程。
+# 只看命令行里有没有 claude-code / @anthropic-ai，不打印命令行内容（只报进程号）。查不了命令行（例如管理员权限启动的 node）就按“可能在运行”处理。
 function Test-PolicyOn([string]$key, [string]$name) {
     foreach ($root in 'HKLM:', 'HKCU:') {
         $v = Get-ItemProperty -Path "$root\$key" -Name $name -ErrorAction SilentlyContinue
@@ -80,22 +84,52 @@ function Test-PolicyOn([string]$key, [string]$name) {
     return $false
 }
 
-function Assert-SafeWindow {
-    $ai = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like 'claude*' }
-    if ($ai) { Fail "检测到 Claude 还在运行（$(@($ai.ProcessName | Sort-Object -Unique) -join ', ')）。Claude 能读终端里的内容，请完全退出 Claude 桌面 App 和终端里的 claude，再重新运行" }
-    Ok '没有 Claude 在运行'
+function Assert-NoClaude {
+    $named = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like 'claude*' })
+    if ($named.Count -gt 0) {
+        Fail "检测到 Claude 还在运行（$(@($named.ProcessName | Sort-Object -Unique) -join ', ')）。Claude 能读终端里的内容，请完全退出 Claude 桌面 App、终端里的 claude 和编辑器里的 Claude 扩展，再重新运行"
+    }
+    try {
+        $nodes = @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'node.exe'" -ErrorAction Stop)
+    } catch {
+        Fail '查不了 node 进程的命令行（Get-CimInstance 失败），没法确认 Claude 已退出。请在聊天里告诉运维'
+    }
+    $hit = @()
+    $unknown = @()
+    foreach ($p in $nodes) {
+        $cl = [string]$p.CommandLine
+        if ([string]::IsNullOrEmpty($cl)) { $unknown += $p.ProcessId }
+        elseif ($cl -match '(?i)claude-code|@anthropic-ai') { $hit += $p.ProcessId }
+    }
+    if ($hit.Count -gt 0) {
+        Fail "检测到以 node 运行的 Claude（进程号 $($hit -join ', ')）。请完全退出终端和编辑器里的 Claude，再重新运行"
+    }
+    if ($unknown.Count -gt 0) {
+        Fail "有 node 进程查不到命令行（进程号 $($unknown -join ', ')，可能是管理员权限启动的），没法确认不是 Claude。请关掉这些程序，再重新运行"
+    }
+    Ok '没有 Claude 在运行（含以 node 运行的）'
+}
+
+function Assert-NoRecording {
     $hist = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Clipboard' -Name 'EnableClipboardHistory' -ErrorAction SilentlyContinue
     if ($hist -and $hist.EnableClipboardHistory -eq 1) {
-        Fail 'Windows 剪贴板历史（Win+V）开着，粘贴的令牌会留在历史里。请到 设置 › 系统 › 剪贴板 关掉“剪贴板历史记录”和“跨设备共享”，再重新运行'
+        Fail 'Windows 剪贴板历史（Win+V）开着，复制、粘贴的值会留在历史里。请到 设置 › 系统 › 剪贴板 关掉“剪贴板历史记录”和“跨设备共享”，再重新运行'
     }
     Ok 'Windows 剪贴板历史是关的'
-    if (Test-PolicyOn 'SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription' 'EnableTranscripting') { Fail '系统策略开着 PowerShell transcript。这台电脑不适合写令牌，请在聊天里告诉运维' }
-    if (Test-PolicyOn 'SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging' 'EnableModuleLogging') { Fail '系统策略开着 PowerShell 模块日志。这台电脑不适合写令牌，请在聊天里告诉运维' }
-    if (Test-PolicyOn 'SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging' 'EnableScriptBlockLogging') { Fail '系统策略开着 PowerShell 脚本块日志。这台电脑不适合写令牌，请在聊天里告诉运维' }
+    if (Test-PolicyOn 'SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription' 'EnableTranscripting') { Fail '系统策略开着 PowerShell transcript（屏幕内容会被自动存成文件）。这台电脑不适合处理密钥，请在聊天里告诉运维' }
+    if (Test-PolicyOn 'SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging' 'EnableModuleLogging') { Fail '系统策略开着 PowerShell 模块日志。这台电脑不适合处理密钥，请在聊天里告诉运维' }
+    if (Test-PolicyOn 'SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging' 'EnableScriptBlockLogging') { Fail '系统策略开着 PowerShell 脚本块日志。这台电脑不适合处理密钥，请在聊天里告诉运维' }
+    # 本窗口如果有人手动 Start-Transcript：停掉它（此时还没读、没生成任何值），并要求换一个干净的窗口
     $wasRecording = $false
     try { Stop-Transcript -ErrorAction Stop | Out-Null; $wasRecording = $true } catch { }
-    if ($wasRecording) { Fail '这个窗口在记录 transcript（已停掉，还没读任何值）。请关掉这个窗口，新开一个 PowerShell 再运行' }
+    if ($wasRecording) { Fail '这个窗口在记录 transcript（已停掉，还没读、没生成任何值）。请关掉这个窗口，新开一个 PowerShell 再运行' }
     Ok '没有在记录 transcript、没有日志策略'
+}
+# ==== 安全窗口检查：结束 ====
+
+function Assert-SafeWindow {
+    Assert-NoClaude
+    Assert-NoRecording
 }
 
 # 粘贴一项：屏幕不显示，读完清剪贴板；按格式粗查（不打印内容）

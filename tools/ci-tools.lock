@@ -25,6 +25,11 @@ gitleaks     8.30.1   windows_amd64  gitleaks_8.30.1_windows_x64.zip          d2
 # 出处：https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_SHA256SUMS（2026-10-28 抄）
 osv-scanner  2.7.0    linux_amd64    osv-scanner_linux_amd64                  160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b  https://github.com/google/osv-scanner/releases/download/v2.7.0/osv-scanner_linux_amd64
 
+# actionlint：检查 .github/workflows/*.yml（unit.yml 的 workflow-lint 任务，B0 QA D-05）；runner 自带的 shellcheck 一起查 run: 脚本
+# 1.7.12 发布于 2026-03-30（满两周的正式版，和本机装的同一版）
+# 出处：https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_checksums.txt（2026-10-28 抄）
+actionlint   1.7.12   linux_amd64    actionlint_1.7.12_linux_amd64.tar.gz     8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+
 # supabase CLI：本地数据库测试（ci.yml）、预览部署（deploy-preview.yml）、正式发布（publish.ps1）
 # 2.120.0 发布于 2026-10-06（选满两周的正式版；2.121.0、2.122.0 当时还不满两周）
 # 出处：https://github.com/supabase/cli/releases/download/v2.120.0/checksums.txt（2026-10-28 抄）

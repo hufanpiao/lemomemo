@@ -153,3 +153,28 @@ jobs:
       - name: OSV-Scanner（package-lock、deno.lock、Cargo.lock）
         # 有漏洞就失败；确认不受影响的，写进 osv-scanner.toml 并注明原因和复查日期，由安全审查员会签
         run: osv-scanner scan source --recursive .
+
+  workflow-lint:
+    name: 工作流检查（actionlint ＋ shellcheck）
+    # B0 QA D-05：四个工作流都要过 actionlint；run: 里的脚本由 actionlint 调 runner 自带的 shellcheck 一起查
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 安装 actionlint（版本和 SHA-256 见 tools/ci-tools.lock）
+        run: bash build/ci/install-tool.sh actionlint
+
+      - name: actionlint（有问题就失败）
+        run: |
+          # 没有 shellcheck 时 actionlint 会悄悄不查 run: 里的脚本，这里先确认它在（ubuntu-24.04 runner 自带）
+          if ! command -v shellcheck >/dev/null; then
+            echo "::error::runner 上没有 shellcheck，actionlint 查不了 run: 里的脚本"
+            exit 1
+          fi
+          shellcheck --version | head -n 2
+          actionlint -no-color -shellcheck="$(command -v shellcheck)"

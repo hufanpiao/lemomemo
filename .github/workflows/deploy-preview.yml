@@ -24,6 +24,7 @@ name: deploy-preview
 on:
   push:
     branches: [main]
+  # 手动重跑用；只有选 main 时才部署（见 deploy 任务的 if）
   workflow_dispatch:
 
 permissions: {}
@@ -106,6 +107,8 @@ jobs:
   deploy:
     name: 部署到预览环境
     needs: build
+    # 只部署 main（B0 安全审查低 6）：workflow_dispatch 能选任意分支手动跑，选了别的分支时 build 照跑、这一步跳过，带密钥的任务不会在 main 以外运行
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

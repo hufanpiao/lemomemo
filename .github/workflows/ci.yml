@@ -1,7 +1,8 @@
 # ci：PR、合进 main 时跑的重检查（架构 8.3 “ci.yml” 一行）
 #   db 任务：要 Docker 的数据库测试单列一个任务（本地 Supabase：db reset、类型比对、D1 正例、D1 反例和违规样例、RLS、deno test、旧版契约、兼容样例 --sample）
 #            本地 Supabase 的配置用标准位置的 supabase/config.toml（后端维护），本文件不另写配置、不传 --workdir
-#            同一个任务里起 S3 替身代替 R2（架构 0.32、8.6：node build/objstore.mjs up，LocalStack 按 digest 锁）
+#            同一个任务里起 S3 替身代替 R2（架构 0.32、8.6：node build/objstore.mjs up，LocalStack 按 digest 锁），
+#            并真的打它：objstore 的 Vitest 严格模式、seed.mjs、Deno 下同一组（缺环境就失败，不许悄悄跳过）
 #   e2e 任务：Playwright（chromium + webkit，wrangler pages dev 带 _headers 的 CSP 和 Pages Functions）
 # 不碰任何部署密钥：本文件不引用 secrets。本地 Supabase 的 anon / service key 是 CLI 每次随机生成的测试值，只在 runner 里。
 # 预览环境的 E2E（要预览项目的 service key）不在这里，架构 0.30 定为 push 到 main 时在 deploy-preview 之后跑，等前端 B 牵头联调时接上（环境清单第七节第 2 条）。
@@ -84,8 +85,35 @@ jobs:
 
       - name: 起 S3 替身（代替 R2：LocalStack 按 digest 锁定，建 4 个桶，验 SigV4 path-style、If-None-Match 412、ListObjectsV2、DeleteObjects）
         # 架构 8.6、0.32 第 4 条；镜像和 digest 见 tools/ci-tools.lock（localstack / oci），docker-compose.objstore.yml 不一致就失败
-        # 后面的函数测试、注销生成用例打它：地址和测试凭据在本任务的 env（OBJSTORE_*、R2_ENDPOINT、R2_BUCKET_PREFIX），都不是密钥
+        # 地址和测试凭据在本任务的 env（OBJSTORE_*、R2_ENDPOINT、R2_BUCKET_PREFIX），都不是密钥。
+        # 现在打它的：下面两步（objstore.test.ts 的真替身组走 shared/objstore.ts、seed.mjs 两遍再计数）和 deno task test 里同一组；
+        # TC-B0-116、117 的整条链路（files-get、objstore-cases、purge-runner 三处 describe.skip）要等 file-check、account-purge，落地后加进下面的严格模式（B0 QA D-03）
         run: node build/objstore.mjs up
+
+      - name: 打 S3 替身的变量都在（缺了就失败，不许让下面的测试悄悄跳过）
+        run: |
+          for v in OBJSTORE_ENDPOINT OBJSTORE_ACCESS_KEY_ID OBJSTORE_SECRET_ACCESS_KEY R2_ENDPOINT; do
+            if [ -z "${!v}" ]; then echo "::error::$v 是空的：本任务的 env 里要有它"; exit 1; fi
+          done
+
+      - name: objstore 打真的 S3 替身（Vitest 严格模式：shared/objstore.ts 对 LocalStack；跳过、占位、没跑到都算失败；B0 代码审查中 2、QA D-04）
+        run: node build/ci/vitest_strict.mjs --must '条件写回 exists' -- tests/shared/objstore.test.ts
+
+      - name: seed.mjs 往替身放 A、B 的测试对象，跑两遍（第二遍全部“已存在”），再 --check 计数（实测清单 L19）
+        # 凭据是替身的固定测试值（seed.mjs 故意不用 R2_FN_* 这个名字，那是九个规定函数专用的）
+        env:
+          OBJSTORE_TEST_KEY_ID: test
+          OBJSTORE_TEST_SECRET: test
+        run: |
+          first="$(node supabase/tests/objstore/seed.mjs)"; echo "$first"
+          second="$(node supabase/tests/objstore/seed.mjs)"; echo "$second"
+          n="$(sed -nE 's/^seed：写入 ([0-9]+) 个，已存在 0 个.*/\1/p' <<<"$first")"
+          if [ -z "$n" ] || [ "$n" -eq 0 ]; then echo "::error::第一遍应该全部写入、已存在 0 个"; exit 1; fi
+          if ! grep -qE "^seed：写入 0 个，已存在 $n 个" <<<"$second"; then echo "::error::第二遍应该写入 0 个、已存在 $n 个（条件写不覆盖）"; exit 1; fi
+          counts="$(node supabase/tests/objstore/seed.mjs --check)"; echo "$counts"
+          if [ "$(grep -cE '：A [1-9][0-9]* 个，B [1-9][0-9]* 个$' <<<"$counts")" -ne 4 ]; then
+            echo "::error::--check 应该列出四个桶，每个桶 A、B 都至少 1 个"; exit 1
+          fi
 
       - name: 从头建库（全部迁移 + seed.sql）
         run: supabase db reset
@@ -112,8 +140,18 @@ jobs:
 
       - name: shared 在 Deno 下再跑一遍（deno task test），服务器函数和 D1 入口过 deno check（deno task check）
         # deno.json 用 nodeModulesDir=manual，npm 包取 npm ci 装好的 node_modules（版本由 package-lock.json 锁定，没有 deno.lock）
+        # deno task test 的权限按最小给：只读仓库、只读五个替身变量、只连 127.0.0.1:4566（B0 代码审查中 2）；
+        # 本任务设了替身变量，objstore.test.ts 的真替身组必须真跑并通过，出现“跳过”占位或没跑到就失败
+        env:
+          NO_COLOR: '1'
         run: |
-          deno task test
+          deno task test 2>&1 | tee "$RUNNER_TEMP/deno-test.log"
+          if grep -q '> 跳过' "$RUNNER_TEMP/deno-test.log"; then
+            echo '::error::Deno 下有用例走了“跳过”占位（缺环境或缺权限），CI 里不许'; exit 1
+          fi
+          if ! grep -qE '条件写回 exists.* \.\.\. ok' "$RUNNER_TEMP/deno-test.log"; then
+            echo "::error::Deno 下 objstore 打真替身的那一组没跑或没通过"; exit 1
+          fi
           deno task check
 
       - name: 找旧版契约测试的基线

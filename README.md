@@ -17,6 +17,16 @@
 | `data/` | 只放说明；备份本身在 `E:\柠檬记-备份\`，不进 git |
 | `文件登记册.md` | 每个文件的路径、用途、来源、状态 |
 
+## 开发第一步：启用提交前密钥检查
+
+每台开发电脑克隆或拿到仓库后，**先做这一步再写代码**（仓库根目录执行一次，不用管理员；各 worktree 共用这一项设置）：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+启用后每次提交都会先用 gitleaks 扫暂存区，找不到 gitleaks 也会拒绝提交（`.githooks/pre-commit`，架构 8.2、S-B0b）。用 `git config --get core.hooksPath` 核对，应输出 `.githooks`；输出为空就是没启用，TC-B0-58“本机提交被拦”在这台电脑上不成立（B0 QA D-09）。其余本机工具见 [B0 本机开发环境](docs/07-开发日志/B0-本机开发环境.md)。
+
 ## 检查脚本
 
 ```bash

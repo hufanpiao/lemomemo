@@ -14,7 +14,7 @@
        算产物指纹，请你在 iPhone 上打开 GitHub 里这个 tag 的 release-build 摘要页核对（R-206：CI 只构建和测试）；
     4. 装部署工具到临时目录：Supabase CLI（核对 tools\ci-tools.lock 里的 SHA-256）、wrangler（tools\deploy 的锁文件）；
     —— -DryRun 到这里停 ——
-    5. 确认 Claude 已退出、Windows 剪贴板历史已关，然后依次粘贴三把令牌（屏幕不显示，粘贴后立即清剪贴板）；
+    5. 确认 Claude 已退出（含以 node 运行的）、Windows 剪贴板历史已关、没有 transcript 和日志策略（和 tools\keys 两个脚本同一段检查），然后依次粘贴三把令牌（屏幕不显示，粘贴后立即清剪贴板）；
     6. 正式项目状态 → db push（先演练给你看，你输入“确认推送”才真推）→ functions deploy → pages deploy；
     7. 核对 https://lemomemo.com/app/version.json；
     8. 不论成功失败：清掉本进程里的令牌、剪贴板、临时目录和 supabase link 的本地文件。
@@ -287,15 +287,63 @@ function Install-Tools {
     Ok 'wrangler：按 tools\deploy\package-lock.json 装好（npm 已核对 integrity）'
 }
 
-function Assert-NoAiSession {
-    $ai = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like 'claude*' }
-    if ($ai) { Fail "检测到 Claude 还在运行（$(@($ai.ProcessName | Sort-Object -Unique) -join ', ')）。请完全退出 Claude 桌面 App 和终端里的 claude，再重新运行本脚本（R-206）" }
-    Ok '没有 Claude 在运行'
-    $hist = (Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Clipboard' -Name 'EnableClipboardHistory' -ErrorAction SilentlyContinue)
+# ==== 安全窗口检查：开始（tools/keys/new-proxy-secret.ps1、tools/keys/set-r2-tokens.ps1、tools/release/publish.ps1 三处逐字相同，tests/build/keys-guard-sync.test.ts 核对；改一处三处一起改）====
+# B0 安全审查低 5：Claude 不只叫 claude*。npm 装的 Claude Code、IDE 扩展里的都可能是 node.exe，所以再按命令行查一遍 node 进程。
+# 只看命令行里有没有 claude-code / @anthropic-ai，不打印命令行内容（只报进程号）。查不了命令行（例如管理员权限启动的 node）就按“可能在运行”处理。
+function Test-PolicyOn([string]$key, [string]$name) {
+    foreach ($root in 'HKLM:', 'HKCU:') {
+        $v = Get-ItemProperty -Path "$root\$key" -Name $name -ErrorAction SilentlyContinue
+        if ($v -and $v.$name -eq 1) { return $true }
+    }
+    return $false
+}
+
+function Assert-NoClaude {
+    $named = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like 'claude*' })
+    if ($named.Count -gt 0) {
+        Fail "检测到 Claude 还在运行（$(@($named.ProcessName | Sort-Object -Unique) -join ', ')）。Claude 能读终端里的内容，请完全退出 Claude 桌面 App、终端里的 claude 和编辑器里的 Claude 扩展，再重新运行"
+    }
+    try {
+        $nodes = @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'node.exe'" -ErrorAction Stop)
+    } catch {
+        Fail '查不了 node 进程的命令行（Get-CimInstance 失败），没法确认 Claude 已退出。请在聊天里告诉运维'
+    }
+    $hit = @()
+    $unknown = @()
+    foreach ($p in $nodes) {
+        $cl = [string]$p.CommandLine
+        if ([string]::IsNullOrEmpty($cl)) { $unknown += $p.ProcessId }
+        elseif ($cl -match '(?i)claude-code|@anthropic-ai') { $hit += $p.ProcessId }
+    }
+    if ($hit.Count -gt 0) {
+        Fail "检测到以 node 运行的 Claude（进程号 $($hit -join ', ')）。请完全退出终端和编辑器里的 Claude，再重新运行"
+    }
+    if ($unknown.Count -gt 0) {
+        Fail "有 node 进程查不到命令行（进程号 $($unknown -join ', ')，可能是管理员权限启动的），没法确认不是 Claude。请关掉这些程序，再重新运行"
+    }
+    Ok '没有 Claude 在运行（含以 node 运行的）'
+}
+
+function Assert-NoRecording {
+    $hist = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Clipboard' -Name 'EnableClipboardHistory' -ErrorAction SilentlyContinue
     if ($hist -and $hist.EnableClipboardHistory -eq 1) {
-        Fail 'Windows 剪贴板历史（Win+V）开着，粘贴的令牌会留在历史里。请到 设置 › 系统 › 剪贴板 关掉“剪贴板历史记录”和“跨设备同步”，再重新运行'
+        Fail 'Windows 剪贴板历史（Win+V）开着，复制、粘贴的值会留在历史里。请到 设置 › 系统 › 剪贴板 关掉“剪贴板历史记录”和“跨设备共享”，再重新运行'
     }
     Ok 'Windows 剪贴板历史是关的'
+    if (Test-PolicyOn 'SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription' 'EnableTranscripting') { Fail '系统策略开着 PowerShell transcript（屏幕内容会被自动存成文件）。这台电脑不适合处理密钥，请在聊天里告诉运维' }
+    if (Test-PolicyOn 'SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging' 'EnableModuleLogging') { Fail '系统策略开着 PowerShell 模块日志。这台电脑不适合处理密钥，请在聊天里告诉运维' }
+    if (Test-PolicyOn 'SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging' 'EnableScriptBlockLogging') { Fail '系统策略开着 PowerShell 脚本块日志。这台电脑不适合处理密钥，请在聊天里告诉运维' }
+    # 本窗口如果有人手动 Start-Transcript：停掉它（此时还没读、没生成任何值），并要求换一个干净的窗口
+    $wasRecording = $false
+    try { Stop-Transcript -ErrorAction Stop | Out-Null; $wasRecording = $true } catch { }
+    if ($wasRecording) { Fail '这个窗口在记录 transcript（已停掉，还没读、没生成任何值）。请关掉这个窗口，新开一个 PowerShell 再运行' }
+    Ok '没有在记录 transcript、没有日志策略'
+}
+# ==== 安全窗口检查：结束 ====
+
+function Assert-NoAiSession {
+    Assert-NoClaude
+    Assert-NoRecording
 }
 
 # ---------------------------------------------------------------- 5～7. 部署

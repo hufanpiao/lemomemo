@@ -1,0 +1,27 @@
+# .dev.vars 样板：本机 `wrangler pages dev dist/web` 跑 Pages Functions（/sb/*、/files/*）时读的变量（B0 R2 任务单 FB-3、第四节第 4 步）
+#
+# 用法：复制成仓库根目录的 .dev.vars（.gitignore 已忽略它，不进仓库），在“=”后面填本机的值。
+# 本文件只写变量名和说明，不写任何值；也不要把预览、正式环境的真实值填进 .dev.vars。
+# 本机该填什么见 docs/07-开发日志/B0-本机开发环境.md 第五节（都是本地 Supabase 和 S3 替身的测试值）。
+# 预览、正式的值只在 Cloudflare Pages 项目的变量里（加密的几项由负责人运行 tools/keys/ 下的脚本写入），不经过这个文件。
+
+# ── /sb/* 转发和版本门（functions/sb/[[path]].ts 的 SbEnv、functions/_lib/gate.ts）──
+# 上游 Supabase 地址；本机是 `supabase start` 给出的 API 地址
+SUPABASE_UPSTREAM=
+# 本地 Supabase 的 anon（publishable）key：`supabase status` 里那一项，不要用 service_role
+SUPABASE_ANON_KEY=
+# 转发层和服务器函数共用的密钥（架构 0.31 第 11 条）；本机随便写一串，和 supabase/.env.local 里的一致即可
+PROXY_SECRET=
+
+# ── /files/*（functions/_lib/files-http.ts 的 FilesEnv）──
+# R2 的 S3 地址；本机指向 S3 替身（node build/objstore.mjs up 起的那个）
+R2_ENDPOINT=
+# 桶名前缀：本机留空，预览是 preview-，正式留空
+R2_BUCKET_PREFIX=
+# 签名区域：可不写（默认 auto，R2 用）；替身要别的区域时才写
+R2_REGION=
+# /files 专用的 R2 令牌（只管 images、files 两个桶）；本机填替身的测试凭据
+R2_FILES_ACCESS_KEY_ID=
+R2_FILES_SECRET_ACCESS_KEY=
+# 签 /files 下载链接的 HMAC 密钥，至少 32 个字符；本机自己随便生成一串
+FILES_URL_SECRET=

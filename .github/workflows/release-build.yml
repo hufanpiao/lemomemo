@@ -1,9 +1,10 @@
 # release-build：打正式 tag（vX.Y.Z）时在 CI 里构建一次正式产物，只构建和测试、不部署（R-206）
 #
-# 正式发布由负责人在自己电脑上运行 tools/release/publish.ps1：它在本机从同一个 tag 构建，
-# 算出产物指纹，让负责人用 iPhone 打开本次运行的摘要页，核对两边的指纹一样再继续。
-# 这样不用在开发电脑上登录 GitHub 下载产物（R-206：负责人的 GitHub 账号不在开发电脑上登录），
-# 也能发现本机构建被动过手脚。
+# 正式发布由负责人在自己电脑上运行 tools/release/publish.ps1，部署的就是本工作流上传的产物（架构 0.31 第 24 条定方案 A、8.3a 第 2、3 步）：
+# publish.ps1 不在本机重新构建、不跑 npm，只用一把只读令牌经 GitHub REST API 下载这个 tag 的产物 zip，
+# 逐个文件按 SHA256SUMS 核对，再算总指纹；负责人用 iPhone 打开本次运行的 Summary 页，和总指纹、提交 SHA 对一遍，一致才继续。
+# 现状（B0）：本文件还只上传 dist/web 并在 Summary 写总指纹；SHA256SUMS、函数和迁移文件的打包，
+# 以及 publish.ps1 从“本机构建”改成“下载 + 核对”，都在 B6-exe 期间做、B7a 前审查冻结（0.31 第 24 条，B0 安全审查中 2）。
 #
 # 不引用任何 secrets。正式环境的公开配置放在 repository variables（PROD_ 开头，都是公开值）。
 name: release-build
@@ -80,7 +81,7 @@ jobs:
             exit 1
           fi
 
-      - name: 产物指纹（负责人发布时在 iPhone 上看这一段，和 publish.ps1 显示的核对）
+      - name: 产物指纹（负责人发布时在 iPhone 上看这一段，和 publish.ps1 下载核对后显示的核对）
         env:
           TAG: ${{ github.ref_name }}
         run: |
@@ -94,7 +95,7 @@ jobs:
             echo "提交：$GITHUB_SHA"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: 上传产物（存档用，发布不从这里取）
+      - name: 上传产物（publish.ps1 下载部署的就是这一份，方案 A；保留 90 天）
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-${{ github.ref_name }}

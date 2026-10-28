@@ -3,7 +3,7 @@
 # 哈希对不上就失败，不重试、不换地址（架构 8.3 依赖供应链第 ⑤ 条）。
 #
 # 用法：bash build/ci/install-tool.sh <名称> [平台]
-#   名称：gitleaks、osv-scanner、supabase（见 tools/ci-tools.lock）
+#   名称：gitleaks、osv-scanner、supabase、actionlint（见 tools/ci-tools.lock）
 #   平台：默认 linux_amd64
 # 只在 GitHub Actions 的 Linux runner 上用；本机发布用 tools/release/publish.ps1 里自己的一份。
 set -euo pipefail
@@ -43,7 +43,7 @@ case "$file" in
   *) cp "$work/$file" "$work/$name" ;;
 esac
 
-# 解压出来的可执行文件名：supabase、gitleaks；osv-scanner 是单文件，上面已改名
+# 解压出来的可执行文件名：supabase、gitleaks、actionlint；osv-scanner 是单文件，上面已改名
 src="$work/$name"
 if [ ! -f "$src" ]; then
   echo "::error::解压后没找到 $name 可执行文件"

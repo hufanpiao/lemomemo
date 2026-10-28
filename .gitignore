@@ -29,6 +29,8 @@ data/backups/*
 # Cloudflare wrangler 本机密钥和缓存（独立 Worker lemo-ops、Pages Functions 本机调试）
 .dev.vars
 .dev.vars.*
+# 只放行样板（只有变量名和说明，没有值；B0 QA D-11）
+!.dev.vars.example
 .wrangler/
 # Supabase CLI 本机临时文件
 supabase/.temp/
