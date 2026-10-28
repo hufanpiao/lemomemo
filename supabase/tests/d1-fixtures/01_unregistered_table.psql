@@ -1,4 +1,4 @@
--- expect: 没登记进任何清单
--- TC-B0-22：多建一张表、不登记
+-- expect: 数据库有表 public.qa_probe，没登记进任何清单
+-- TC-B0-22：多建一张表、不登记（QA D-08：expect 带上表名，报的是别的表时不能算通过）
 create table public.qa_probe (id uuid primary key);
 alter table public.qa_probe enable row level security;

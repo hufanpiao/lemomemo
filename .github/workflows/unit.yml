@@ -67,6 +67,10 @@ jobs:
       - name: check_arch（架构 2.3）
         run: python -I build/check_arch.py
 
+      - name: 后端静态检查 check_backend（函数的钥匙范围 F1～F5、迁移写法 M1～M3；TC-B0-35、68、73、75、92、97）
+        # 违规样例在 tests/arch-fixtures/check_backend/，由下一步的 Vitest（tests/build/check-backend.test.ts）证明拦得住
+        run: python -I build/check_backend.py
+
       - name: 单元和组件测试（UTC、首尔、洛杉矶三个时区各一遍，架构第 9 节 H2）
         # 前端 A 的 test 脚本如果已经自己按三个时区跑，这里改成只跑一遍
         run: |

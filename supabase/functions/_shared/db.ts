@@ -1,5 +1,5 @@
 // 直连数据库（6.2）：只给 fn_vault、fn_ai 两个低权限角色用，禁止 SUPABASE_DB_URL
-// 谁能 import 本文件、读哪个连接串由 CI 管（TC-B0-35）：vault、vault-file、account 用 fn_vault；
+// 谁能 import 本文件、读哪个连接串由 CI 管（TC-B0-35，build/check_backend.py 的 F1、F2，名单写在那里）：vault、vault-file、account 用 fn_vault；
 // ai-embed、ai-media、note-search、ai-summarize、file-check 以及只验 pin_epoch 的 ai-parse、ai-voice、vault-image 用 fn_ai
 // 每次请求开一个连接、用完就关，不做连接池（Edge Function 是短进程）；走 Supavisor 事务模式，关掉预编译（prepare: false，待 B0 实测）
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json 一致，tests/build/deno-config.test.ts 核对）

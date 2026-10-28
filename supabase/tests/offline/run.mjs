@@ -110,6 +110,15 @@ if (!only || only === 'd1') {
   if (negStore.some((p) => p.includes('桶 images 的 store 在各清单里不一致'))) log(`✔ D1 反例：头像段写 store: 'supabase' 时报错（${negStore.find((p) => p.includes('store'))}）`);
   else fail(`D1 反例：头像段 store 和 images 桶不一致却没报错（实际：${negStore.join(' | ') || '无'}）`);
 
+  // TC-B0-93（续第 83、121、125 条）：11 张表、两个隐私桶的 export 必须是 none；把 vault_ai、vault-files 改成能导出，D1 必须报出两处
+  const leaky = allManifests.map((m) => m.feature === 'vault' ? { ...m,
+    tables: m.tables.map((t) => t.name === 'vault_ai' ? { ...t, export: 'json' } : t),
+    buckets: m.buckets.map((b) => b.name === 'vault-files' ? { ...b, export: 'zip' } : b) } : m);
+  const negExport = await runD1(q, leaky);
+  const hitT = negExport.find((p) => p.includes('private.vault_ai') && p.includes('export')), hitB = negExport.find((p) => p.includes('vault-files') && p.includes('export'));
+  if (hitT && hitB) log(`✔ D1 反例：vault_ai 写 export: json、vault-files 写 export: zip 时报错（${hitT}；${hitB}）`);
+  else fail(`D1 反例：隐私表、隐私桶能导出却没报错（实际：${negExport.join(' | ') || '无'}）`);
+
   // 0.32（BE-4）：/files 的规则表和清单一致（build/d1/files-rules.ts）。规则表由前端 B 的生成器产出，没合进来时只记说明
   const { checkFilesRules, filesRulesFacts, FILES_RULES_PATH, FILES_FUNCTION_DIR, GENERATED_HEADER } = await import('../../../build/d1/files-rules.ts');
   const { existsSync } = await import('node:fs');

@@ -76,6 +76,19 @@ export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault'
   fn_ai: [],
 };
 
+/** pg_cron 里动 public / private 数据、却故意不经 private.account_usable 的任务（TC-B0-97 ④；0.29 续第 138 条④“故意不用的”）。
+ *  名单外的任务，命令或它调的 private 函数体里必须出现 account_usable。加名单要写原因 */
+export const CRON_WITHOUT_USABLE: Record<string, string> = {
+  'cleanup-batch': '30 天清理：冷静期里照常清理（0.29 续第 138 条④）',
+};
+
+/** export 必须是 none 的表和桶（TC-B0-93；架构 0.29 续第 83 条（R-184）、续第 121、125、131 条）：
+ *  9 张隐私和内部表加 tombstones、pending_deletions 共 11 张；vault-images、vault-files 两个隐私桶 */
+export const EXPORT_NONE_TABLES = ['private.vault', 'private.vault_credentials', 'private.device_secrets', 'private.webauthn_challenges',
+  'private.note_vectors', 'private.embed_queue', 'private.vault_preview', 'private.counters', 'private.vault_ai',
+  'public.tombstones', 'private.pending_deletions'];
+export const EXPORT_NONE_BUCKETS = ['vault-images', 'vault-files'];
+
 /** public 里只准有这九个 RPC（3.3 D；0.32 加 files_authorize，只给 /files 函数用），一律 security invoker、只授给 authenticated */
 export const PUBLIC_RPCS = ['apply_patch', 'report_tz', 'claim_endpoint', 'remove_device', 'my_ai_usage', 'record_consent', 'my_sessions', 'purge_deleted', 'files_authorize'];
 
