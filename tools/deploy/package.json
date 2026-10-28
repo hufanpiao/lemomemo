@@ -1,0 +1,11 @@
+{
+  "name": "lemo-deploy-tools",
+  "private": true,
+  "description": "只给部署用的 wrangler，版本和整棵依赖树由 package-lock.json 锁定；部署任务和 publish.ps1 用 npm ci --ignore-scripts 装，不装项目依赖、不跑项目脚本（环境清单第七节）",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "wrangler": "4.150.0"
+  }
+}
