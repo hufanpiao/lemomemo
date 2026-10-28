@@ -9,5 +9,10 @@ export const BY_USER = { by: 'column', col: 'user_id' } as const;
 /** 客户端只在 update 时写的公共列（删除、撤销，0.29 P-40） */
 export const SOFT_DELETE_COLS = ['deleted_at', 'undone'] as const;
 
+/** 客户端能经 /files/v1/* 上传、签链接的桶（0.32，3.3 G“R2 起”）：只有 images、files；vault-* 只经服务器函数。
+ *  private.files_authorize_impl 写死同一份名单；D1 核对这两个桶 store = 'r2'、它们的 pathPattern 和 files_authorize_impl 里的正则一字不差；
+ *  /files 的规则表生成器（build/gen_files_rules.mjs，前端 B）按它挑桶 */
+export const CLIENT_FILE_BUCKETS = ['images', 'files'] as const;
+
 /** uuid 段（存储策略的正则写法，和 3.3 G 一字不差） */
 export const UUID_RE = '[0-9a-f-]{36}';

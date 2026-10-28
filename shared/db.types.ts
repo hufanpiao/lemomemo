@@ -102,6 +102,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      files_authorize: { Args: { p_op: string; p_items: Json }; Returns: Json };
       purge_deleted: { Args: { p_items?: Json }; Returns: number };
       record_consent: { Args: { policy_ver: string; revoke?: boolean }; Returns: undefined };
     };

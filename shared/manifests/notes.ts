@@ -30,7 +30,7 @@ export const notes = defineManifest({
       systemCols: ['ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at'], noConflict: [] },
   ],
   buckets: [
-    { name: 'images', limits: { fileSizeLimit: 2097152, allowedMimeTypes: ['image/webp'] },
+    { name: 'images', store: 'r2', limits: { fileSizeLimit: 2097152, allowedMimeTypes: ['image/webp'] },
       pathPrefix: '<user_id>/', pathPattern: `^${UUID_RE}/${UUID_RE}/${UUID_RE}(\\.t)?\\.webp$`,
       backup: 'weekly-s3', export: 'zip', countsToQuota: true,
       orphanSweep: { after: '24 hours', table: 'note_images', col: 'path' }, userLookup: { by: 'pathPattern', level: 1 } },

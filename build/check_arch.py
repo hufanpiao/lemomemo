@@ -3,6 +3,10 @@
 用法：python -I build/check_arch.py [--root 目录] [--json]
   A14  src、shared、dist/web 里不能有密钥特征；import.meta.env 只能读 VITE_PUBLIC_* 和 Vite 自带的 MODE/DEV/PROD/BASE_URL/SSR
   A20  TS/TSX 的字符串和 JSX 文本里不能有汉字、谚文（注释不算）；例外见 A20_EXEMPT
+  A19  SW 只走网络的路径（15.3 第 1 条）：src/sw/routes.ts 的 NETWORK_ONLY_PREFIXES 必须有 '/sb'、'/files'；
+       sw 的其他文件里不准再写 /sb、/files 的路径（不能给它们另挂 Workbox 路由或缓存）
+  R2   src 里不准 import 对象存储的任何东西：shared/objstore.ts、aws4fetch、functions/ 下的文件（含生成的 files-rules）。
+       App 只经 platform/files.ts 调同源的 /files/v1/*（架构 0.32 第 2、4 条，任务单 FA-2）
   W2   src/public/holidays/cn|kr/ 缺明年的文件（警告）
   P142 supabase/migrations 里 private 的触发器函数不准出现 current_user，用 current_setting('role', true)（0.29 续第 142 条）
 有错误时退出码 1，只有警告时 0。--root 给自测用（tests/arch-fixtures/check_arch/ 下的样例目录）。
@@ -132,6 +136,67 @@ def check_a20(root, errors):
                     errors.append(("A20", rel, ln, f"字符串或 JSX 文本里有汉字或谚文：{line.strip()[:40]}"))
 
 
+SW_PREFIXES_RE = re.compile(r"NETWORK_ONLY_PREFIXES\s*=\s*\[([^\]]*)\]")
+SW_REQUIRED = ("/sb", "/files")
+# 字符串、模板字符串或正则字面量里以 /sb、/files 这一段开头（/sbx、/filesystem 不算）
+SW_PATH_LITERAL = re.compile(r"""['"`]/(sb|files)(?![A-Za-z0-9_-])|/\^?\\/(sb|files)(?![A-Za-z0-9_-])""")
+
+
+def line_of(text, pos):
+    return text.count("\n", 0, pos) + 1
+
+
+def check_a19(root, errors):
+    sw = root / "src" / "sw"
+    if not sw.exists():
+        return
+    routes = sw / "routes.ts"
+    if not routes.exists():
+        errors.append(("A19", "src/sw/routes.ts", 0, "缺 SW 的路由表 routes.ts（NETWORK_ONLY_PREFIXES）"))
+    else:
+        code = strip_comments(routes.read_text(encoding="utf-8"))
+        m = SW_PREFIXES_RE.search(code)
+        listed = set(re.findall(r"""['"]([^'"]+)['"]""", m.group(1))) if m else set()
+        for need in SW_REQUIRED:
+            if need not in listed:
+                errors.append(("A19", "src/sw/routes.ts", line_of(code, m.start()) if m else 0,
+                               f"NETWORK_ONLY_PREFIXES 里没有 '{need}'：{need}/* 必须只走网络、不进 Cache Storage"))
+    for p in iter_files(root, "src/sw", (".ts",)):
+        rel = p.relative_to(root).as_posix()
+        if rel == "src/sw/routes.ts" or "/__tests__/" in rel:
+            continue
+        code = strip_comments(p.read_text(encoding="utf-8"))
+        for m in SW_PATH_LITERAL.finditer(code):
+            seg = m.group(1) or m.group(2)
+            errors.append(("A19", rel, line_of(code, m.start()),
+                           f"sw 里另写了 /{seg} 的路径：只走网络的路径只在 routes.ts 的 NETWORK_ONLY_PREFIXES 里登记"))
+
+
+IMPORT_SPEC_RE = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)['"]([^'"]+)['"]""")
+
+
+def r2_forbidden(spec):
+    norm = spec.replace("\\", "/")
+    if re.match(r"^(npm:)?aws4fetch(@[^/]*)?(/|$)", norm):
+        return "aws4fetch"
+    if re.search(r"(^|/)shared/objstore(\.ts)?$", norm):
+        return "shared/objstore.ts"
+    if re.match(r"^(\.\./)+functions/", norm) or "_generated/files-rules" in norm:
+        return "functions/ 下的文件（Pages Functions、生成的规则表）"
+    return None
+
+
+def check_r2(root, errors):
+    for p in iter_files(root, "src", SOURCE_EXT):
+        rel = p.relative_to(root).as_posix()
+        code = strip_comments(p.read_text(encoding="utf-8"))
+        for m in IMPORT_SPEC_RE.finditer(code):
+            what = r2_forbidden(m.group(1))
+            if what:
+                errors.append(("R2", rel, line_of(code, m.start()),
+                               f"App 不准 import 对象存储的东西（{what}）：照片和附件一律经 platform/files.ts 调 /files/v1/*"))
+
+
 def check_w2(root, warnings, today):
     next_year = today.year + 1
     for country in ("cn", "kr"):
@@ -183,6 +248,8 @@ def main(argv=None):
     errors, warnings = [], []
     check_a14(root, errors)
     check_a20(root, errors)
+    check_a19(root, errors)
+    check_r2(root, errors)
     check_w2(root, warnings, today)
     check_p142(root, errors)
 

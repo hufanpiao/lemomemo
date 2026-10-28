@@ -2,6 +2,7 @@
 // 只依赖一个 query 函数：CI 用 Deno + postgres 连本地库（build/check_data_manifest.ts），离线用 PGlite（supabase/tests/offline/run.mjs）
 // 返回问题列表，空 = 通过
 import type { Manifest, ManifestTable } from '../../shared/schema/manifest.ts';
+import { CLIENT_FILE_BUCKETS } from '../../shared/manifests/_common.ts';
 import { COLUMN_GRANTS, FUNCTION_EXEC, PUBLIC_RPCS, REQUIRED_CONSTRAINTS, TABLE_GRANTS } from './whitelist.ts';
 
 export type Row = Record<string, unknown>;
@@ -42,13 +43,24 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   const colRows = await q<{ s: string; t: string; c: string }>(`select table_schema as s, table_name as t, column_name as c from information_schema.columns where table_schema in ('public', 'private')`);
   const colsOf = (s: string, t: string) => colRows.filter((r) => r.s === s && r.t === t).map((r) => r.c);
 
-  // ---------- 2. 桶 ----------
+  // ---------- 2. 桶（0.32 起按 store 分开核对：supabase 的和 storage.buckets 逐项比，r2 的必须不在 storage.buckets 里） ----------
   const dbBuckets = await q<{ id: string; public: boolean; file_size_limit: number | string | null; allowed_mime_types: string[] | null }>(`select id, public, file_size_limit, allowed_mime_types from storage.buckets`);
   const bucketOwner = new Map<string, string>();
+  const bucketStore = new Map<string, string>();
+  for (const m of manifests) for (const b of m.buckets) {
+    const s = bucketStore.get(b.name);
+    if (s === undefined) bucketStore.set(b.name, b.store);
+    else if (s !== b.store) bad(`桶 ${b.name} 的 store 在各清单里不一致：${s}、${b.store}（${m.feature}）`);
+  }
   for (const m of manifests) for (const b of m.buckets) if (b.limits) {
     if (bucketOwner.has(b.name)) bad(`桶 ${b.name} 有两个主人：${bucketOwner.get(b.name)}、${m.feature}`);
     bucketOwner.set(b.name, m.feature);
     const d = dbBuckets.find((x) => x.id === b.name);
+    if (b.store === 'r2') {
+      // 防止有人又在 Supabase 建了同名桶（客户端经 storage-js 绕过 /files 和 files_authorize）
+      if (d) bad(`桶 ${b.name} 是 R2 桶（${m.feature} 写 store: 'r2'），不能出现在 storage.buckets 里`);
+      continue;
+    }
     if (!d) { bad(`清单登记了桶 ${b.name}（${m.feature}），数据库里没有`); continue; }
     if (d.public) bad(`桶 ${b.name} 是公开的`);
     if (Number(d.file_size_limit) !== b.limits.fileSizeLimit) bad(`桶 ${b.name} 的 file_size_limit 是 ${d.file_size_limit}，清单写 ${b.limits.fileSizeLimit}`);
@@ -56,10 +68,24 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   }
   for (const d of dbBuckets) if (!bucketOwner.has(d.id)) bad(`数据库有桶 ${d.id}，没登记进任何清单`);
   for (const m of manifests) for (const b of m.buckets) if (!b.limits && !bucketOwner.has(b.name)) bad(`${m.feature} 登记了桶 ${b.name} 的一段路径，但这个桶没有主人`);
-  // 存储策略里的路径正则和清单的 pathPattern 一字不差（images、files 两个有客户端策略的桶）
-  const storagePolicies = (await q<{ expr: string | null }>(`select coalesce(with_check, qual) as expr from pg_policies where schemaname = 'storage' and tablename = 'objects'`)).map((r) => String(r.expr));
-  for (const m of manifests) for (const b of m.buckets) if (b.name === 'images') {
-    if (!storagePolicies.some((p) => p.includes(b.pathPattern))) bad(`images 桶的存储策略里找不到 ${m.feature} 的 pathPattern ${b.pathPattern}`);
+  // 0.32：客户端不直接访问 Supabase Storage（只剩 vault-preview、backups，都只经服务器函数），storage.objects 上一条策略都不建
+  const storagePolicies = await q<{ name: string }>(`select policyname as name from pg_policies where schemaname = 'storage' and tablename = 'objects'`);
+  for (const p of storagePolicies) bad(`storage.objects 上有策略 ${p.name}：0.32 起客户端不直接访问 Supabase Storage，不建任何存储策略`);
+  // 客户端可传的桶（images、files）：store = 'r2'；files_authorize_impl 里出现的路径正则和这两个桶各段的 pathPattern 一字不差（双向）
+  const clientBuckets: readonly string[] = CLIENT_FILE_BUCKETS;
+  for (const n of clientBuckets) {
+    if (!bucketOwner.has(n)) bad(`客户端可传的桶 ${n} 没有主人（清单里没有带 limits 的登记）`);
+    else if (bucketStore.get(n) !== 'r2') bad(`客户端可传的桶 ${n} 的 store 不是 r2`);
+  }
+  const authz = (await q<{ src: string }>(`select p.prosrc as src from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'private' and p.proname = 'files_authorize_impl'`))[0]?.src;
+  if (authz === undefined) bad('private.files_authorize_impl 不在（0.32，3.3 G“R2 起”）');
+  else {
+    const wantRe = manifests.flatMap((m) => m.buckets).filter((b) => clientBuckets.includes(b.name)).map((b) => b.pathPattern);
+    const haveRe = [...authz.matchAll(/'(\^[^']*\$)'/g)].map((x) => x[1] ?? '');
+    if (!eq(haveRe, wantRe)) bad(`private.files_authorize_impl 里的路径正则和清单 pathPattern 不一致：${diff(wantRe, haveRe)}`);
+    const list = `not in (${clientBuckets.map((n) => `'${n}'`).join(', ')})`;
+    if (!authz.includes(list)) bad(`private.files_authorize_impl 里找不到桶名单“b ${list}”（和 CLIENT_FILE_BUCKETS 一致）`);
   }
 
   // ---------- 3. Realtime ----------
@@ -130,7 +156,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     }
   }
   for (const f of fns.filter((f) => f.s === 'public')) {
-    if (!PUBLIC_RPCS.includes(f.f)) bad(`public.${f.f} 不在 3.3 D 的八个 RPC 里`);
+    if (!PUBLIC_RPCS.includes(f.f)) bad(`public.${f.f} 不在 3.3 D 的九个 RPC 里`);
     if (f.definer) bad(`public.${f.f} 是 security definer（public 里一律 invoker）`);
     if (f.anon || f.service_role) bad(`public.${f.f} 给了 anon 或 service_role 执行权`);
     if (!f.authenticated) bad(`public.${f.f} 没给 authenticated 执行权`);

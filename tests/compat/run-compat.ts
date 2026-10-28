@@ -11,7 +11,7 @@
 // 用法：
 //   node tests/compat/run-compat.ts <基线的 tests/compat 目录>    CI：compat_baseline.py extract 取出来的目录
 //   node tests/compat/run-compat.ts                                本机：自己调 compat_baseline.py 选基线、取出
-//   加 --sample supabase/tests/compat/sample_add_column.sql         先把兼容样例迁移叠到数据库上，再看结果和样例头上的
+//   加 --sample supabase/tests/compat/sample_add_column.psql        先把兼容样例迁移叠到数据库上，再看结果和样例头上的
 //                                                                  expect-old-client 是否一致（TC-B0-57 验证机制用；会改库，只在一次性的本地库上用）
 // 环境变量（supabase status -o env 给的本地值）：API_URL、ANON_KEY（.test.ts 用例），DB_URL（.sql 用例和 --sample；也认 LEMO_TEST_DB_URL）
 // 需要 Node 22.18 以上（直接跑 .ts）。

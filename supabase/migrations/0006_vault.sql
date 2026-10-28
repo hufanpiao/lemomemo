@@ -1,4 +1,4 @@
--- 0006_vault.sql：隐私记的 private 表、三个隐私桶、scan_vault_preview（附录 A；6.2；数据字典 5.2；清单 vault.ts）
+-- 0006_vault.sql：隐私记的 private 表、vault-preview 桶（vault-images、vault-files 0.32 起在 R2）、scan_vault_preview（附录 A；6.2；数据字典 5.2；清单 vault.ts）
 -- service_role 不碰这里的任何表（0.29 续第 52 条 ①）；只经 fn_vault、fn_ai 直连，会话变量版 RLS
 
 create table private.vault (
@@ -72,10 +72,10 @@ create view private.scan_vault_preview with (security_barrier = true) as
 revoke all on private.scan_vault_preview from public, anon, authenticated;
 grant select on private.scan_vault_preview to fn_vault;
 
--- ===== 三个隐私桶：不建任何策略，只能经服务器函数访问（3.3 G；0.29 续第 33 条、P-20） =====
+-- ===== vault-preview 桶：不建任何策略，只能经服务器函数访问（3.3 G；0.29 续第 33 条、P-20） =====
+-- 0.32（R-213）：vault-images、vault-files 两个隐私桶改存 Cloudflare R2，这里不再建（只经服务器函数用 R2_FN_* 令牌读写；
+--   大小、类型由服务器函数按清单执行；D1 核对它们不在 storage.buckets 里）。预览项目还没部署，直接改这里，不另写迁移
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values
-  ('vault-images',  'vault-images',  false, 2097152,  array['image/webp']),
-  ('vault-files',   'vault-files',   false, 10551296, array['application/octet-stream']),   -- 10 MB + 64 KB
   ('vault-preview', 'vault-preview', false, 10485760, array['application/vnd.openxmlformats-officedocument.presentationml.presentation'])
 on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;

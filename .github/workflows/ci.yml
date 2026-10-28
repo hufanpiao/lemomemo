@@ -1,6 +1,7 @@
 # ci：PR、合进 main 时跑的重检查（架构 8.3 “ci.yml” 一行）
 #   db 任务：要 Docker 的数据库测试单列一个任务（本地 Supabase：db reset、类型比对、D1 正例、D1 反例和违规样例、RLS、deno test、旧版契约、兼容样例 --sample）
 #            本地 Supabase 的配置用标准位置的 supabase/config.toml（后端维护），本文件不另写配置、不传 --workdir
+#            同一个任务里起 S3 替身代替 R2（架构 0.32、8.6：node build/objstore.mjs up，LocalStack 按 digest 锁）
 #   e2e 任务：Playwright（chromium + webkit，wrangler pages dev 带 _headers 的 CSP 和 Pages Functions）
 # 不碰任何部署密钥：本文件不引用 secrets。本地 Supabase 的 anon / service key 是 CLI 每次随机生成的测试值，只在 runner 里。
 # 预览环境的 E2E（要预览项目的 service key）不在这里，架构 0.30 定为 push 到 main 时在 deploy-preview 之后跑，等前端 B 牵头联调时接上（环境清单第七节第 2 条）。
@@ -33,6 +34,13 @@ jobs:
     timeout-minutes: 40
     permissions:
       contents: read
+    env:
+      # S3 替身（build/objstore.mjs、docker-compose.objstore.yml）：固定的本机测试值，不是密钥；R2 的真地址和令牌只在预览、正式（环境清单第四节）
+      OBJSTORE_ENDPOINT: http://127.0.0.1:4566
+      OBJSTORE_ACCESS_KEY_ID: test
+      OBJSTORE_SECRET_ACCESS_KEY: test
+      R2_ENDPOINT: http://127.0.0.1:4566
+      R2_BUCKET_PREFIX: ''
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,6 +81,11 @@ jobs:
       - name: 启动本地 Supabase
         # studio 用不到，不起
         run: supabase start -x studio
+
+      - name: 起 S3 替身（代替 R2：LocalStack 按 digest 锁定，建 4 个桶，验 SigV4 path-style、If-None-Match 412、ListObjectsV2、DeleteObjects）
+        # 架构 8.6、0.32 第 4 条；镜像和 digest 见 tools/ci-tools.lock（localstack / oci），docker-compose.objstore.yml 不一致就失败
+        # 后面的函数测试、注销生成用例打它：地址和测试凭据在本任务的 env（OBJSTORE_*、R2_ENDPOINT、R2_BUCKET_PREFIX），都不是密钥
+        run: node build/objstore.mjs up
 
       - name: 从头建库（全部迁移 + seed.sql）
         run: supabase db reset
@@ -129,7 +142,7 @@ jobs:
         run: |
           shopt -s nullglob
           n=0
-          for f in supabase/tests/compat/*.sql; do
+          for f in supabase/tests/compat/*.psql; do
             case "$(basename "$f")" in _*) continue ;; esac
             n=$((n + 1))
             echo "::group::$f"
@@ -147,6 +160,10 @@ jobs:
       - name: 停掉本地 Supabase
         if: always()
         run: supabase stop --no-backup || true
+
+      - name: 停掉 S3 替身
+        if: always()
+        run: node build/objstore.mjs down || true
 
   e2e:
     name: 端到端（Playwright，带 CSP）

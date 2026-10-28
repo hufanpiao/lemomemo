@@ -12,7 +12,7 @@ export interface SqlCaseInput {
   caseSql: string;
   /** supabase/tests/rls/_helpers.psql 的内容（tests.try_as、tests.seed） */
   helpersSql: string;
-  /** 可选：先叠上的兼容样例迁移（supabase/tests/compat/sample_*.sql） */
+  /** 可选：先叠上的兼容样例迁移（supabase/tests/compat/sample_*.psql） */
   sampleSql?: string;
 }
 
