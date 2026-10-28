@@ -1,4 +1,5 @@
-// 生成器的命令行：把用例写成 JSON、一份 SQL 清单和一份对象存储探针清单（R2 的桶，0.32），给后端审、给 runner 读。
+// 生成器的命令行：把用例写成 JSON、一份 SQL 清单和一份对象存储探针清单（R2 的桶，0.32），给后端审、给 runner 读；
+// 用真清单时另写“表 × 角色 × 操作”的 grant-cases.json / grant-cases.txt（TC-B0-89，0.33）。
 //
 //   node tests/data-manifest/cli.ts --sample --out <目录>     用样例清单
 //   node tests/data-manifest/cli.ts --out <目录>              用 shared/manifests/index.ts（后端写好后）
@@ -9,6 +10,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { generate, type GeneratedCase } from './generate.ts';
+import { describeGrantCase, generateGrantMatrix } from './grant-matrix.ts';
 import { describeObjProbe } from './objstore-cases.ts';
 import type { Manifest } from './types.ts';
 
@@ -48,6 +50,15 @@ async function main(): Promise<void> {
   const obj = cases.filter((c) => c.runner === 'objstore');
   const objText = obj.map((c) => [`${c.id}（${c.kind}）：${c.objProbe ? describeObjProbe(c.objProbe) : ''}`, `  期望：${c.expect}`, ''].join('\n'));
   writeFileSync(join(out, 'cases-objstore.txt'), objText.join(''));
+  // TC-B0-89：表 × 角色 × 操作（只用真清单：期望要和 build/d1/whitelist.ts 对上，样例清单对不上）。给后端审断言
+  if (!args.includes('--sample')) {
+    const wl = await import(pathToFileURL(join(ROOT, 'build', 'd1', 'whitelist.ts')).href);
+    const grants = generateGrantMatrix(await loadManifests(false), wl);
+    writeFileSync(join(out, 'grant-cases.json'), JSON.stringify(grants, null, 2) + '\n');
+    const lines = [...grants.cases.map(describeGrantCase), ...grants.rpcCases.map((c) => `${c.id}：${c.expect ? '能执行' : '不能执行'}`)];
+    writeFileSync(join(out, 'grant-cases.txt'), lines.join('\n') + '\n');
+    console.log(`表 × 角色 × 操作：${grants.cases.length} 格、RPC ${grants.rpcCases.length} 条`);
+  }
   console.log(`已写到 ${out}`);
 }
 
