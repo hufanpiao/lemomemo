@@ -24,7 +24,7 @@ describe('deno.json', () => {
   const deno = readJson('deno.json') as { imports: Record<string, string>; tasks: Record<string, string> };
 
   it('映射的 npm 包版本都和 package.json 一致', () => {
-    for (const name of ['zod', 'postgres', '@supabase/supabase-js']) {
+    for (const name of ['zod', 'aws4fetch', 'postgres', '@supabase/supabase-js']) {
       expect(deno.imports[name], name).toBe(`npm:${name}@${deps[name]}`);
     }
   });

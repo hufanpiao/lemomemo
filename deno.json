@@ -3,6 +3,7 @@
   "nodeModulesDir": "manual",
   "imports": {
     "zod": "npm:zod@4.6.7",
+    "aws4fetch": "npm:aws4fetch@1.0.20",
     "postgres": "npm:postgres@3.4.5",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2.118.0",
     "vitest": "./tests/shared/deno-vitest-shim.ts"
