@@ -1,6 +1,6 @@
-// SW 路由（架构 15.3 第 1 条、16.1）：/sb/* 一律直连不缓存；作用域只有 /app/
+// SW 路由（架构 15.3 第 1 条、16.1；TC-B0-40）：/sb/*、/files/*（0.32）一律直连不缓存；作用域只有 /app/
 import { describe, expect, it } from 'vitest';
-import { APP_SCOPE, excludedFromPrecache, routeOf } from '../routes.ts';
+import { APP_SCOPE, NETWORK_ONLY_PREFIXES, excludedFromPrecache, isNetworkOnly, routeOf } from '../routes.ts';
 
 const ORIGIN = 'https://lemomemo.com';
 const r = (path: string, method = 'GET', mode = 'cors', origin = ORIGIN) => routeOf(new URL(path, origin), method, mode, ORIGIN);
@@ -10,6 +10,23 @@ describe('routeOf', () => {
     expect(r('/sb/rest/v1/events?select=*')).toBe('bypass');
     expect(r('/sb/auth/v1/user', 'GET', 'navigate')).toBe('bypass');
     expect(r('/sb')).toBe('bypass');
+  });
+
+  it('/files/* 一律直连（0.32：签名链接、上传、批量签名都不进 Cache Storage）', () => {
+    expect(r('/files/v1/o/images/00000000-0000-4000-8000-000000000001/a/b.webp?e=1&d=&s=x')).toBe('bypass');
+    expect(r('/files/v1/o/files/u/n/i.pdf?e=1&d=a.pdf&s=x', 'GET', 'navigate')).toBe('bypass');
+    expect(r('/files/v1/sign', 'POST')).toBe('bypass');
+    expect(r('/files/v1/o/images/u/n/i.webp', 'PUT')).toBe('bypass');
+    expect(r('/files')).toBe('bypass');
+  });
+
+  it('只走网络的前缀表：正好是 /sb 和 /files，按路径段比', () => {
+    expect([...NETWORK_ONLY_PREFIXES].sort()).toEqual(['/files', '/sb']);
+    expect(isNetworkOnly('/files/v1/sign')).toBe(true);
+    expect(isNetworkOnly('/sb')).toBe(true);
+    expect(isNetworkOnly('/filesx/a')).toBe(false);
+    expect(isNetworkOnly('/app/files/a.js')).toBe(false);
+    expect(r('/app/files/a.js')).toBe('precache-or-network');
   });
 
   it('非 GET、别的源、/app/ 以外一律直连', () => {
