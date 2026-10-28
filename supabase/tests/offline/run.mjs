@@ -131,7 +131,7 @@ if (!only || only === 'compat') {
   const helpersSql = readFileSync(join(rlsDir, '_helpers.psql'), 'utf8');
   const exec = (sql) => db.exec(sql);
   const query = async (sql) => (await db.query(sql)).rows;
-  for (const f of readdirSync(compatDir).filter((f) => f.endsWith('.sql') && !f.startsWith('_')).sort()) {
+  for (const f of readdirSync(compatDir).filter((f) => f.endsWith('.psql') && !f.startsWith('_')).sort()) {
     const sampleSql = readFileSync(join(compatDir, f), 'utf8');
     try {
       const expect = sampleExpectation(sampleSql);
