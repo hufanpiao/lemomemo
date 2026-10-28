@@ -1,8 +1,0 @@
-/* 设计变量（结构部分）：字体、圆角等与皮肤无关的变量。颜色在 skins/<皮肤>.css 里（ADR-008）。
-   依赖：无。必须最先拼接，紧接着拼皮肤文件。 */
-:root{
-  --f-num:"Manrope","Noto Sans SC",system-ui,sans-serif;
-  --f-body:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
-  --r-panel:26px; --r-block:16px;
-  --theme-fade:.2s;   /* 切换深浅色时颜色过渡（采纳结论 #13、需求澄清 #32） */
-}

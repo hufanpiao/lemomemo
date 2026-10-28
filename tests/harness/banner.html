@@ -1,4 +1,0 @@
-<!-- 环境提示条：本地测试页和预发布版顶部的一条固定提示，告诉使用者这不是正式数据。不挡操作（pointer-events:none），
-     层级低于断网红条（z-index 40）和弹出层，只占页面顶部留白的那 20px。{{文案}}、{{底色}}、{{字色}} 由 build/build.py 替换。
-     依赖：无。本注释在构建时去掉；发布用的 dist/planner.html 不包含这段（build.py 会检查）。 -->
-<div class="pv-env-banner" role="note" style="position:fixed;top:0;left:0;right:0;z-index:39;pointer-events:none;padding:calc(1px + env(safe-area-inset-top,0px)) 8px 1px;background:{{底色}};color:{{字色}};font:600 11px/18px system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;text-align:center;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.94">{{文案}}</div>

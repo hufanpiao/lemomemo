@@ -11,6 +11,6 @@
 4. 在 [发布记录](../../docs/08-发布/发布记录.md) 里记一笔（路径、大小、SHA256、提交号）。
 
 ## 怎么恢复
-`git -c core.longpaths=true clone <bundle 文件> 待办APP`（仓库有超长路径，不加会检出失败）。
+`git -c core.longpaths=true clone <bundle 文件> 柠檬记APP`，再 `git -C 柠檬记APP config core.longpaths true`（仓库有超长路径，不加会检出失败）。
 
 本文件夹里除本 README 以外的内容都**不进 git**。

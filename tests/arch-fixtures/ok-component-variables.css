@@ -1,3 +1,0 @@
-/* @fixture 路径=src/styles/components/ok-vars.css 期望=无 */
-/* 合规示例：只用变量；选择器里的 #id、注释里的 #fff 和 rgba() 都不算写死颜色 */
-#seg .ok-chip{background:var(--red);color:var(--on-p);border:1px solid color-mix(in srgb,var(--red) 18%,transparent)}

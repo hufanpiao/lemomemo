@@ -1,8 +1,0 @@
-/* 组件：空状态提示框与加载骨架。
-   依赖：tokens.css。 */
-/* 空状态与骨架 */
-.empty{border-radius:var(--r-block);background:var(--panel-2);padding:18px;color:var(--muted);font-size:14px}
-.empty strong{display:block;color:var(--ink);font-size:16px;font-weight:700;margin-bottom:2px}
-.sk{height:56px;border-radius:var(--r-block);background:var(--panel-2)}
-@media (prefers-reduced-motion:no-preference){.sk{animation:pulse 1.2s ease-in-out infinite alternate}}
-@keyframes pulse{to{opacity:.45}}

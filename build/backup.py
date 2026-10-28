@@ -11,7 +11,7 @@
    中途出错会删掉做了一半的文件夹。
 
 数据不在这里备份：R-208 起 v3 数据不要了；4.0.0 上线后的数据备份另行设计（架构第 10 节）。
-恢复：git -c core.longpaths=true clone <bundle 文件> 待办APP
+恢复：git -c core.longpaths=true clone <bundle 文件> 柠檬记APP，再 git -C 柠檬记APP config core.longpaths true
       （仓库里有超长路径，不加 core.longpaths=true 会检出失败）
 """
 import datetime
@@ -91,7 +91,7 @@ def restore_test(bundle, commit, tree):
     """从 bundle clone 到临时目录，跑 fsck，核对 HEAD、HEAD^{tree}、分支和标签。返回写进清单的结果。"""
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="柠檬记恢复测试_"))
     try:
-        target = tmp / "待办APP"
+        target = tmp / "柠檬记APP"
         # 仓库里有超过 260 字符的路径（assets/reference/ui参考/…），不开 longpaths 会检出失败
         c = git("-c", "core.longpaths=true", "clone", "-q", str(bundle), str(target), cwd=tmp)
         if c.returncode != 0:
@@ -177,7 +177,7 @@ def run(state):
         "bundle 校验": "git bundle verify 通过",
         "恢复测试": restore,
         "说明": "只备份源码，不加密（R-209）；v3 数据不再备份（R-208）。"
-                "恢复：git -c core.longpaths=true clone <bundle> 待办APP。",
+                "恢复：git -c core.longpaths=true clone <bundle> 柠檬记APP，再 git -C 柠檬记APP config core.longpaths true。",
     }
     (out / "清单.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     state["out"] = None  # 做完了，不再自动删除
