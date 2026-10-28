@@ -1,0 +1,10 @@
+{
+  "name": "柠檬记",
+  "short_name": "Lemo",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "background_color": "#E9EAEE",
+  "theme_color": "#E9EAEE",
+  "icons": []
+}

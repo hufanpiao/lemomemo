@@ -1,0 +1,79 @@
+{
+  "$comment": "Stylelint（架构 2.3）：A11 组件样式不准写死颜色，颜色只在 styles/skins/*.css；A24 transition、animation 只能用 var(--dur-*)、var(--ease-*)。src/styles/tokens.css 和 skins/*.css 由 build/tokens.py 生成（--check 保证和令牌一致），不过 Stylelint。违规样例在 tests/arch-fixtures/，tests/arch/stylelint.test.ts 证明拦得住",
+  "extends": [
+    "stylelint-config-standard"
+  ],
+  "rules": {
+    "color-no-hex": [
+      true,
+      {
+        "message": "A11：不准写死颜色（#xxx），用 var(--…)，颜色只在 styles/skins/*.css"
+      }
+    ],
+    "color-named": [
+      "never",
+      {
+        "message": "A11：不准写颜色名，用 var(--…)"
+      }
+    ],
+    "function-disallowed-list": [
+      [
+        "rgb",
+        "rgba",
+        "hsl",
+        "hsla",
+        "hwb",
+        "lab",
+        "lch",
+        "oklab",
+        "oklch",
+        "color",
+        "color-mix",
+        "cubic-bezier",
+        "steps"
+      ],
+      {
+        "message": "A11 / A24：不准写死颜色或曲线（%s），用 var(--…)"
+      }
+    ],
+    "declaration-property-value-disallowed-list": [
+      {
+        "/^(transition|animation)(-duration|-delay)?$/": [
+          "/(?<![-\\w])-?\\d*\\.?\\d+m?s(?![-\\w])/"
+        ],
+        "/^(transition|animation)(-timing-function)?$/": [
+          "/(?<![-\\w])(ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end)(?![-\\w])/"
+        ]
+      },
+      {
+        "message": "A24：transition、animation 的时长和曲线只能用 var(--dur-*)、var(--ease-*)"
+      }
+    ],
+    "selector-class-pattern": null,
+    "custom-property-pattern": null,
+    "keyframes-name-pattern": null,
+    "value-keyword-case": null,
+    "import-notation": null
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/**/*.module.css"
+      ],
+      "rules": {
+        "selector-pseudo-class-no-unknown": [
+          true,
+          {
+            "ignorePseudoClasses": [
+              "global"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "ignoreFiles": [
+    "src/styles/tokens.css",
+    "src/styles/skins/*.css"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  // 构建配置、测试（Vitest、Playwright、架构规则自测）：Node 环境
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": ["node"],
+    "resolveJsonModule": true,
+    "allowJs": true
+  },
+  "include": ["src/vite-env.d.ts", "vite.config.ts", "vite.sw.config.ts", "vitest.config.ts", "playwright.config.ts", "tests/**/*.ts", "tests/**/*.tsx", "src/**/__tests__/**/*.ts", "src/**/__tests__/**/*.tsx"],
+  "exclude": ["tests/arch-fixtures/**", "tests/shared/deno-vitest-shim.ts"]
+}

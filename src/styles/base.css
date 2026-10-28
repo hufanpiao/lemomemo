@@ -1,0 +1,37 @@
+/* 全局基础样式：只用令牌（颜色在 skins/*.css，时长和曲线在 tokens.css；A11、A24） */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* stylelint-disable-next-line property-no-vendor-prefix -- iOS Safari 只认带前缀的写法 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--f-zh);
+  font-size: var(--fs-15);
+}
+
+:lang(ko) body,
+body:lang(ko) {
+  font-family: var(--f-ko);
+}
+
+/* 弹层打开时锁住页面滚动：自己写，不用 Radix 的 react-remove-scroll（它会插内联 <style>，CSP 下被拦；B0 验证结论，架构 2.0 做法 ①） */
+html.scroll-locked,
+html.scroll-locked body {
+  overflow: hidden;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

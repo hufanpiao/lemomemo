@@ -1,0 +1,53 @@
+.page {
+  display: grid;
+  gap: 16px;
+  padding: 24px 16px;
+}
+
+.btn {
+  min-height: var(--hit);
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: var(--fs-14);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+}
+
+.panel {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  padding: 20px;
+  border-radius: var(--r-xl);
+  background: var(--sheet-bg);
+}
+
+.box {
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--panel);
+}
+
+.row,
+.rowEnd {
+  display: flex;
+}
+
+.rowEnd {
+  justify-content: flex-end;
+}
+
+.dot {
+  padding: 8px 12px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+}

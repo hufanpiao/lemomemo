@@ -1,0 +1,44 @@
+# /app/* 的响应头（前端 A；架构 8.1、15.6 第 4b 条、0.27 第 5 点、B0 CSP 验证）
+# 构建时由 build/assemble_web.mjs 和首页那一段（site/_headers，前端 B）拼成 dist/web/_headers。
+# {{WSS}} 按构建模式替换：正式 wss://lemomemo.com，预览 wss://preview.lemomemo.com，本机 ws://127.0.0.1:8788。
+# 注意：Cloudflare 对同一路径命中的多条规则会把同名头用逗号拼起来（两个 CSP 都生效、取交集），
+# 所以首页那段不要用 /* 设 CSP；下面的预览沙箱和登录页先用 “! 头名” 去掉 /app/* 的 CSP 再写自己的。
+# 例外不放宽：主 App 的 style-src 仍是 'self'（Radix 的 Dialog.Overlay 不用，滚动锁自己写；见 B0 验证记录）
+
+/app/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' {{WSS}}; worker-src 'self'; font-src 'self'; manifest-src 'self'; frame-src 'self' https://view.officeapps.live.com; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), geolocation=(), microphone=(self), accelerometer=(self), gyroscope=(self), magnetometer=(), payment=(), usb=()
+
+/app/
+  Cache-Control: no-cache
+
+/app/index.html
+  Cache-Control: no-cache
+
+/app/sw.js
+  Cache-Control: no-cache
+
+/app/manifest.webmanifest
+  Cache-Control: no-cache
+
+/app/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 预览沙箱（5.13 第 3 点、第四轮安全 L1）：单独一套 CSP，只能被 App 自己嵌入
+# Pages 会把 /app/preview.html 308 到 /app/preview（B0 实测），真正返回页面的是后者；两条都写
+/app/preview
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'
+  Cache-Control: no-cache
+
+/app/preview.html
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'
+  Cache-Control: no-cache
+
+# 登录页（15.6 第 4b 条，入口 B1 才建）：只有这里放行 Turnstile
+/app/auth/*
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' {{WSS}}; worker-src 'self'; font-src 'self'; frame-src https://challenges.cloudflare.com; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'

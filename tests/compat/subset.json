@@ -1,4 +1,9 @@
 {
+  "$comment": "旧版客户端契约测试子集（架构 0.27 第 1 点）：CI 取上一个发布 tag 的这批用例，对当前分支的迁移跑一遍。不放和 db.types 逐字比对这类结构一变就必然失败的用例。id 对应 tests/compat/*.test.ts 里 contract() 的第一个参数。合并说明：前端 B 的 run-compat 读 version/files，前端 A 的 harness 读 ids，两套写法待统一（B0 集成）",
   "version": 1,
-  "files": []
+  "files": [],
+  "ids": [
+    "headers.app-version",
+    "headers.app-version-preview"
+  ]
 }

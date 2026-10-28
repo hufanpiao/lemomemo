@@ -6,7 +6,9 @@
 令牌源：docs/02-设计/皮肤-v4/令牌/tokens.json
 写入：  皮肤视觉稿.html 里 /* tokens:begin */ … /* tokens:end */ 之间的四行主题变量，
         <!-- tokentable:begin --> … <!-- tokentable:end --> 之间的令牌表；
-        令牌/tokens.css、令牌/tokens.ts（开发时抄进 src/styles/skins 和 TS 常量）。
+        令牌/tokens.css、令牌/tokens.ts（开发时抄进 src/styles/skins 和 TS 常量）；
+        App 用的 src/styles/tokens.css（和皮肤无关：时长、曲线、圆角、字体、字号，架构 17.2）
+        和 src/styles/skins/simple.css、glass.css（各皮肤的颜色等；B0 前端 A 加）。
 """
 import html
 import json
@@ -21,6 +23,9 @@ SRC = DIR / "令牌/tokens.json"
 VIS = DIR / "皮肤视觉稿.html"
 OUT_CSS = DIR / "令牌/tokens.css"
 OUT_TS = DIR / "令牌/tokens.ts"
+APP_STYLES = ROOT / "src/styles"
+# 和皮肤无关、进 src/styles/tokens.css 的令牌（按前缀；四套主题的值必须一样，否则报错）
+SKINLESS = ("--dur-", "--ease-", "--r-", "--f-", "--fs-", "--hit")
 LABEL = {"simple-light": "简洁·浅色", "simple-dark": "简洁·深色", "glass-light": "磨砂玻璃·浅色", "glass-dark": "磨砂玻璃·深色"}
 
 
@@ -90,6 +95,33 @@ def build():
     return s, "\n".join(css) + "\n", "\n".join(ts) + "\n", toks
 
 
+def app_styles(d, toks):
+    """App 的样式令牌：tokens.css（和皮肤无关）+ skins/<皮肤>.css。返回 {路径: 内容}。"""
+    head = "/* 由 build/tokens.py 从 docs/02-设计/皮肤-v4/令牌/tokens.json 生成，不要手改（改令牌只改 tokens.json） */"
+    skinless = [t for t in toks if t["name"].startswith(SKINLESS)]
+    for t in skinless:
+        if len(set(t["values"].values())) != 1:
+            raise SystemExit(f"令牌 {t['name']} 四套主题的值不一样，不能放进和皮肤无关的 tokens.css")
+    first = d["themes"][0]
+    css = [head, "/* 和皮肤无关的令牌（架构 17.2）：时长、曲线、圆角、字体、字号、点按区域 */",
+           ":root{" + ";".join(f'{t["name"]}:{t["values"][first]}' for t in skinless) + "}",
+           '/* 减少动态效果：按下回弹的时长设 0（17.2 第 5 点）；系统设置或设置里的开关（data-rm="1"） */',
+           "@media (prefers-reduced-motion: reduce){:root{--dur-press:0ms}}",
+           ':root[data-rm="1"]{--dur-press:0ms}']
+    out = {APP_STYLES / "tokens.css": "\n".join(css) + "\n"}
+    names = {t["name"] for t in skinless}
+    for skin in sorted({th.split("-")[0] for th in d["themes"]}):
+        lines = [head, f"/* 皮肤 {skin} 的浅色和深色（ADR-008：data-skin、data-theme 写在 <html> 上） */"]
+        for th in d["themes"]:
+            sk, md = th.split("-")
+            if sk != skin:
+                continue
+            body = ";".join(f'{t["name"]}:{t["values"][th]}' for t in toks if t["name"] not in names)
+            lines.append(f':root[data-skin="{sk}"][data-theme="{md}"]{{{body}}}')
+        out[APP_STYLES / f"skins/{skin}.css"] = "\n".join(lines) + "\n"
+    return out
+
+
 def audit(s, toks):
     style = "\n".join(re.findall(r"<style>(.*?)</style>", s, re.S))
     used = set(re.findall(r"var\((--[\w-]+)(?![\w$-]*,)(?![$'])", s))  # 带后备值的 var(--x,…) 和模板里拼出来的 var(--p${n}) 不算
@@ -105,14 +137,19 @@ def audit(s, toks):
 
 def main():
     s, css, ts, toks = build()
+    app = app_styles(load()[0], toks)
+    pairs = [(VIS, s), (OUT_CSS, css), (OUT_TS, ts), *app.items()]
     if "--check" in sys.argv:
-        drift = [p.name for p, c in [(VIS, s), (OUT_CSS, css), (OUT_TS, ts)] if not p.exists() or p.read_text(encoding="utf-8") != c]
+        drift = [p.relative_to(ROOT).as_posix() for p, c in pairs if not p.exists() or p.read_text(encoding="utf-8") != c]
         for p in drift:
             print("⚠ 和 tokens.json 不一致（要重新运行 build/tokens.py）：", p)
     else:
         VIS.write_text(s, encoding="utf-8", newline="\n")
         OUT_CSS.write_text(css, encoding="utf-8", newline="\n")
         OUT_TS.write_text(ts, encoding="utf-8", newline="\n")
+        for p, c in app.items():
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(c, encoding="utf-8", newline="\n")
         drift = []
     undefined, unused = audit(s, toks)
     for n in undefined:

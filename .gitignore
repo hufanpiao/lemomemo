@@ -38,7 +38,10 @@ supabase/.branches/
 supabase/functions/_shared/gen/
 # Vite / TypeScript / 测试的产物（R-96）
 dist/web/
+dist/vite-manifest/
 *.tsbuildinfo
+.eslintcache
+.stylelintcache
 coverage/
 playwright-report/
 test-results/

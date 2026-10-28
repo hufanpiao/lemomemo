@@ -1,0 +1,8 @@
+/* 按下回弹：按下 scale(0.97) 用 --dur-press，松开用 --ease-spring 弹回（17.1） */
+.pressable {
+  transition: transform var(--dur-press) var(--ease-spring);
+}
+
+.pressable[data-state="pressed"] {
+  transform: scale(0.97);
+}

@@ -1,0 +1,15 @@
+.page {
+  padding: 24px 16px;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: var(--fs-24);
+}
+
+.sub {
+  margin: 0;
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: var(--fs-13);
+}
