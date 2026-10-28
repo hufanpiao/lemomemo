@@ -6,9 +6,10 @@
 #   下面凡是“本地和线上不一样”的项都在行尾写了【线上】的值；改总表时同步改这里的注释。
 # - 不准写任何真实密钥。要用的值一律 env(...) 引用，变量放本机 supabase/.env.local 或 shell 环境（.env* 不进 git）；
 #   CI 不给这些变量，本地 Supabase 的 anon、service key 是 CLI 每次随机生成的测试值。
-# - pgTAP 测试一律 `npm run test:db`（= supabase test db supabase/tests/rls）。不要裸跑 `supabase test db`：CLI 用
-#   `pg_prove --ext .pg --ext .sql -r` 递归跑整个 supabase/tests，会把 d1-fixtures、compat 的样例和 offline 的桩当测试执行，
-#   还会改本地库（0.31 第 22 条；config.toml 没有改测试目录的设置）。离线 run.mjs 检查 test:db 的写法。
+# - pgTAP 测试一律 `npm run test:db`（= supabase test db supabase/tests/rls）。裸跑 `supabase test db` 时 CLI 用
+#   `pg_prove --ext .pg --ext .sql -r` 递归跑整个 supabase/tests（0.31 第 22 条；config.toml 没有改测试目录的设置），
+#   所以 d1-fixtures、compat 的样例和 offline 的桩一律用 .psql 后缀，supabase/tests/ 下以 .sql / .pg 结尾的只有 rls/*.test.sql，
+#   裸跑也不会执行样例、不会改本地库。离线 run.mjs 第 0 步检查 test:db 的写法和这条后缀规则。
 # - 版本：Supabase CLI 2.120.0（package.json、tools/ci-tools.lock）。改设置前先用 `npx supabase init` 在临时目录看这一版的模板。
 
 project_id = "lemomemo"

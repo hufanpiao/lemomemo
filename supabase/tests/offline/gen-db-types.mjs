@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../..');
 const db = new PGlite({ extensions: { vector } });
-await db.exec(readFileSync(join(here, 'supabase-stub.sql'), 'utf8'));
+await db.exec(readFileSync(join(here, 'supabase-stub.psql'), 'utf8'));
 for (const f of readdirSync(join(root, 'supabase/migrations')).sort()) {
   await db.exec(readFileSync(join(root, 'supabase/migrations', f), 'utf8').replace(/^create extension if not exists (pg_cron|pg_net)[^;]*;/gim, ''));
 }

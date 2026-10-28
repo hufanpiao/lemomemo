@@ -21,7 +21,7 @@ for (const line of sec4.split('\n')) {
   tables[cur].push({ col: cells[0].replace(/\*|`/g, ''), who: cells[cells.length - 1] });
 }
 const db = new PGlite({ extensions: { vector } });
-await db.exec(readFileSync(join(off, 'supabase-stub.sql'), 'utf8'));
+await db.exec(readFileSync(join(off, 'supabase-stub.psql'), 'utf8'));
 await db.exec(`set search_path = "$user", public, extensions;`);
 for (const f of readdirSync(join(root, 'supabase/migrations')).sort())
   await db.exec(readFileSync(join(root, 'supabase/migrations', f), 'utf8').replace(/^create extension if not exists (pg_cron|pg_net)[^;]*;/gim, ''));
