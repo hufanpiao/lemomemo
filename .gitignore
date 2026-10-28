@@ -59,3 +59,8 @@ desktop/src-tauri/gen/
 
 # 开发 agent 的临时工作副本（git worktree）
 .claude/worktrees/
+
+# 旧版契约测试临时取出的基线用例（tests/compat/run-compat.ts）
+.compat-base/
+# 按清单生成的用例（npm run gen:manifest）
+dist/data-manifest/

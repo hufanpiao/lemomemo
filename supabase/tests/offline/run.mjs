@@ -111,22 +111,29 @@ if (!only || only === 'd1') {
   }
 }
 
-// 4) 兼容样例：“只加列”的迁移叠在 7 个迁移之上能跑，改名、删列的样例被 compat 检查拦下由前端 B 负责
+// 4) 兼容样例：每个样例叠在 7 个迁移之上，再跑一遍 tests/compat/subset.json 里的 SQL 契约用例（4.0.0 客户端的写法），
+//    结果和样例头上的 expect-old-client 比。跑法和 CI 的 tests/compat/run-compat.ts 是同一个函数（tests/compat/sql-case.ts，B0 集成）
+//    迁移文件里出现 rename column / drop column 由前端 B 的 compat 检查拦下
 if (!only || only === 'compat') {
-  // 每个样例：建 A、叠上样例迁移、再以 4.0.0 客户端的身份写一遍（_old_client.sql），结果和样例头上的 expect-old-client 比
-  const helpers = readFileSync(join(rlsDir, '_helpers.psql'), 'utf8');
-  const oldClient = readFileSync(join(compatDir, '_old_client.sql'), 'utf8');
+  const { runSqlCase, sampleExpectation } = await import('../../../tests/compat/sql-case.ts');
+  const { parseSubset, sqlCases } = await import('../../../tests/compat/subset.ts');
+  const subset = parseSubset(readFileSync(join(root, 'tests/compat/subset.json'), 'utf8'));
+  const cases = sqlCases(subset);
+  if (cases.length === 0) fail('tests/compat/subset.json 里没有 SQL 契约用例，兼容样例没东西可验');
+  const helpersSql = readFileSync(join(rlsDir, '_helpers.psql'), 'utf8');
+  const exec = (sql) => db.exec(sql);
+  const query = async (sql) => (await db.query(sql)).rows;
   for (const f of readdirSync(compatDir).filter((f) => f.endsWith('.sql') && !f.startsWith('_')).sort()) {
-    const sql = readFileSync(join(compatDir, f), 'utf8');
-    const expect = /^-- expect-old-client: (ok|fail)$/m.exec(sql)?.[1];
+    const sampleSql = readFileSync(join(compatDir, f), 'utf8');
     try {
-      await db.exec('begin;' + helpers + 'select tests.seed();' + sql);
-      const r = (await db.query(oldClient)).rows[0].old_client;
-      const ok = r === 'ok';
-      if ((expect === 'ok') === ok) log(`✔ 兼容样例 ${f}：旧版客户端${ok ? '照常读写' : `写入失败（${r.split(' ')[0]}），符合预期`}`);
-      else fail(`兼容样例 ${f}：预期 ${expect}，实际 ${r}`);
+      const expect = sampleExpectation(sampleSql);
+      const results = [];
+      for (const c of cases) results.push([c.id, await runSqlCase(exec, query, { caseSql: readFileSync(join(root, c.file), 'utf8'), helpersSql, sampleSql })]);
+      const ok = results.every(([, r]) => r === 'ok');
+      const detail = results.filter(([, r]) => r !== 'ok').map(([id, r]) => `${id}：${r.split(' ')[0]}`).join('，');
+      if ((expect === 'ok') === ok) log(`✔ 兼容样例 ${f}：旧版客户端${ok ? '照常读写' : `写入失败（${detail}），符合预期`}`);
+      else fail(`兼容样例 ${f}：预期 ${expect}，实际 ${ok ? 'ok' : detail}`);
     } catch (e) { fail(`兼容样例 ${f} 执行出错：${e.message}`); }
-    await db.exec('rollback').catch(() => {});
   }
 }
 
