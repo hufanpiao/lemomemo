@@ -23,7 +23,8 @@ def registered_paths():
         cell = line.split("|")[1].strip()
         m = re.match(r"\[([^\]]+)\]\(", cell)
         cell = m.group(1) if m else cell.strip("`")
-        if cell and "." in cell.split("/")[-1]:
+        # 有扩展名的算文件；没扩展名的（.githooks/pre-commit、VERSION 这类）只要确实是文件也算（10-28 运维加）
+        if cell and ("." in cell.split("/")[-1] or (ROOT / cell).is_file()):
             paths.add(cell)
     return paths
 
