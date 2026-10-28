@@ -1,0 +1,30 @@
+# 独立 Worker lemo-ops（架构 6.1）：监控、告警、保活。由负责人本机 publish.ps1 -Ops 执行 wrangler deploy（架构 8.3a，R-206）。
+# 这里不写任何密钥。下面标【负责人提供】的，部署前由负责人填或用 wrangler secret put 设（见 .dev.vars.example 的说明）。
+name = "lemo-ops"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = false   # 不对外提供网址，只跑 Cron Trigger
+
+[triggers]
+# 改这两个表达式时同步改 src/index.ts 的 CRON_HEARTBEAT、CRON_DAILY（tests/build/lemo-ops-config.test.ts 核对）
+crons = ["*/15 * * * *", "7 0 * * *"]
+
+# 告警去重状态（同一件事 6 小时内只发一次、恢复后发“已恢复”）。
+# 【负责人提供】在 Cloudflare 控制台 Workers KV 建一个命名空间（建议名 lemo-ops-state），把它的 ID 填到下面；占位值部署会失败，不会误部署
+[[kv_namespaces]]
+binding = "OPS_STATE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[vars]
+# 没有心跳行也要告警的 cron 函数（逗号分隔）。哪个函数上了线就把它加进来；没上线的不写，免得天天告警
+REQUIRED_HEARTBEATS = ""
+# "on" 时每天另查 usage-report {part: usage}（B7 做好 usage 部分以后再开）
+USAGE_CHECK = "off"
+
+# 以下用 wrangler secret put 设，不写在这里：
+#   SUPABASE_URL        正式项目地址 https://<ref>.supabase.co（直连，不经 /sb）
+#   SUPABASE_ANON_KEY   正式项目的 anon（公开）key：网关转发要它，保活查询也用它
+#   OPS_SECRET          和 Supabase secrets 里的 OPS_SECRET 同一个值（usage-report 用它认 lemo-ops）
+#   RESEND_API_KEY_OPS  Resend 第三把只发信的密钥
+#   ALERT_TO            收告警的邮箱（产品负责人）
+#   ALERT_FROM          发件人，例如 柠檬记监控 <ops@lemomemo.com>（必须是 Resend 里验证过的域名）

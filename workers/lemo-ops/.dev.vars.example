@@ -1,0 +1,16 @@
+# lemo-ops 的变量样板：只有名字和说明，没有值（B0 QA D-11）。
+# 本机调试时复制成 .dev.vars（已被 .gitignore 忽略）再填；线上一律用 wrangler secret put <名字>，由负责人粘贴，不经 AI。
+# 预览和正式各一套，值都不一样。
+
+# 项目地址，只写到域名：https://<ref>.supabase.co
+SUPABASE_URL=
+# 该项目的 anon（公开）key
+SUPABASE_ANON_KEY=
+# 和该项目 supabase secrets 里的 OPS_SECRET 相同（单独一把，不和 CRON_SECRET 共用）
+OPS_SECRET=
+# Resend 只发信、只限 lemomemo.com 的那一把（第三把）
+RESEND_API_KEY_OPS=
+# 收告警的邮箱
+ALERT_TO=
+# 发件人（Resend 验证过的域名），例如：柠檬记监控 <ops@lemomemo.com>
+ALERT_FROM=
