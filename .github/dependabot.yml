@@ -30,6 +30,8 @@ updates:
         patterns: ['*']
     open-pull-requests-limit: 3
 
+  # wrangler 在根目录（E2E）和 tools/deploy（部署）各有一份，必须同一版（架构 0.31 第 26 条，unit.yml 比对）：
+  # 只升了一边的 PR 会被 CI 拦下，人工把另一边改成同一版再合
   - package-ecosystem: npm
     directory: /tools/deploy
     schedule:

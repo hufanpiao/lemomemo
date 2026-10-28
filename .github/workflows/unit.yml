@@ -47,6 +47,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: wrangler 两处版本一致（package.json 给 E2E、tools/deploy 给部署，含两份锁文件；架构 0.31 第 26 条）
+        # 只读 JSON，不安装；不一致就失败，两处一起升
+        run: python -I build/ci/check_wrangler_version.py
+
       - name: 安装依赖（不跑任何安装脚本）
         run: npm ci --ignore-scripts
 
