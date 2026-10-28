@@ -1,7 +1,7 @@
 -- 触发器和 RPC：touch()（TC-B0-28、72）、settings_guard、guard_profile_disabled、devices 会话、row_quota（TC-B0-37）、
 --   tombstones 和 purge_deleted（TC-B0-95、96）、admin_set_disabled、account_usable
 begin;
-select plan(53);
+select plan(57);
 \ir _helpers.psql
 select tests.seed();
 
@@ -149,6 +149,29 @@ select is(tests.try_as('fn_vault', null, $$select private.purge_vault_impl('aaaa
 select is((select count(*)::int from public.notes where id = '40000000-0000-4000-8000-0000000000d2'), 0, 'V1 已删');
 select ok(tests.try_as('fn_vault', null, $$select private.purge_vault_impl('bbbbbbbb-0000-4000-8000-000000000002')$$, 'aaaaaaaa-0000-4000-8000-000000000001') like '%uid_mismatch%',
   'p_user 和 app.uid 不一致：uid_mismatch');
+-- ===== guard_note_image（架构 0.33 第 4 条，B0 代码审查低 8）：客户端插的图只能挂在本人的普通随手记上 =====
+insert into public.notes (id, user_id, is_private, body_enc, enc_key_id, created_at, updated_at) values
+  ('40000000-0000-4000-8000-0000000000e1', 'aaaaaaaa-0000-4000-8000-000000000001', true, '\x01', 1, 1, 1);
+insert into public.notes (id, user_id, body, created_at, updated_at) values
+  ('40000000-0000-4000-8000-0000000000e2', 'aaaaaaaa-0000-4000-8000-000000000001', 'n', 1, 1);
+select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$
+  insert into public.note_images (id, note_id, bucket, path, bytes) values ('1e000000-0000-4000-8000-0000000000e1', '40000000-0000-4000-8000-0000000000e1', 'images',
+    'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000e1/1e000000-0000-4000-8000-0000000000e1.webp', 1)$$) like '%note_not_writable%',
+  '客户端把图挂到本人的隐私记上：note_not_writable');
+select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$
+  insert into public.note_images (id, note_id, bucket, path, bytes) values ('1e000000-0000-4000-8000-0000000000e2', '40000000-0000-4000-8000-0000000000e2', 'images',
+    'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000e2/1e000000-0000-4000-8000-0000000000e2.webp', 1)$$), 'ok',
+  '客户端把图挂到本人的普通随手记上：照常');
+select is(tests.try_as('fn_vault', null, $$
+  insert into public.note_images (id, user_id, note_id, bucket, path, bytes) values ('1e000000-0000-4000-8000-0000000000e3', 'aaaaaaaa-0000-4000-8000-000000000001',
+    '40000000-0000-4000-8000-0000000000e1', 'vault-images',
+    'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000e1/1e000000-0000-4000-8000-0000000000e3.webp', 1)$$, 'aaaaaaaa-0000-4000-8000-000000000001'), 'ok',
+  '服务器一侧（fn_vault，vault-image 上传）往隐私记挂图不拦');
+select is((select p.prosecdef::text || ':' || coalesce(array_to_string(p.proconfig, ','), '') || ':' || count(t.*)::text
+    from pg_proc p left join pg_trigger t on t.tgfoid = p.oid and t.tgrelid = 'public.note_images'::regclass and not t.tgisinternal
+   where p.oid = 'private.guard_note_image()'::regprocedure group by p.prosecdef, p.proconfig),
+  'true:search_path="":1', 'guard_note_image 是 security definer、search_path = 空，挂在 note_images 上');
+
 -- 停用账号硬删不写墓碑（注销冷静期、管理员停用）
 delete from public.tombstones;
 update public.profiles set disabled_at = now(), disabled_reason = 'admin' where user_id = 'aaaaaaaa-0000-4000-8000-000000000001';

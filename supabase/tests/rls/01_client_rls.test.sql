@@ -1,7 +1,7 @@
 -- 客户端身份（A、B、anon）的 RLS 和列级授权：TC-B0-32、38、54、55、79、94
 -- 跑法：supabase test db（待 Docker）；离线：supabase/tests/offline/run.mjs
 begin;
-select plan(47);
+select plan(48);
 \ir _helpers.psql
 select tests.seed();
 
@@ -62,8 +62,13 @@ select ok(tests.try_as('authenticated', 'bbbbbbbb-0000-4000-8000-000000000002', 
   'B 引用 A 的分类：复合外键拒绝（23503）');
 select ok(tests.try_as('authenticated', 'bbbbbbbb-0000-4000-8000-000000000002', $$
   insert into public.note_images (id, note_id, bucket, path, bytes) values ('1e000000-0000-4000-8000-00000000000b', '40000000-0000-4000-8000-00000000000a', 'images',
-    'bbbbbbbb-0000-4000-8000-000000000002/40000000-0000-4000-8000-00000000000a/1e000000-0000-4000-8000-00000000000b.webp', 1)$$) like '23503%',
-  'B 把图片挂到 A 的随手记：复合外键拒绝');
+    'bbbbbbbb-0000-4000-8000-000000000002/40000000-0000-4000-8000-00000000000a/1e000000-0000-4000-8000-00000000000b.webp', 1)$$) ~ '^(23503|P0001 note_not_writable)',
+  'B 把图片挂到 A 的随手记：被拒（0.33 起 guard_note_image 先拦，复合外键是第二道）');
+select ok(tests.try_as('service_role', null, $$
+  insert into public.note_images (id, user_id, note_id, bucket, path, bytes) values ('1e000000-0000-4000-8000-00000000000c', 'bbbbbbbb-0000-4000-8000-000000000002',
+    '40000000-0000-4000-8000-00000000000a', 'images',
+    'bbbbbbbb-0000-4000-8000-000000000002/40000000-0000-4000-8000-00000000000a/1e000000-0000-4000-8000-00000000000c.webp', 1)$$) like '23503%',
+  '触发器不拦的服务器一侧：B 的图挂到 A 的随手记仍被复合外键拒绝（23503）');
 select ok(tests.try_as('authenticated', 'bbbbbbbb-0000-4000-8000-000000000002', $$
   insert into public.applied_ops (op_id, result) values ('0b000000-0000-4000-8000-00000000000a', '{}')$$) = 'ok',
   'B 用 A 用过的 op_id：主键 (user_id, op_id)，不撞库');

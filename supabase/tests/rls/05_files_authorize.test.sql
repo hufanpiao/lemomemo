@@ -2,7 +2,7 @@
 -- /files 函数带用户的 JWT 调 public.files_authorize；这里用 tests.fa 模拟“以某人、某会话的身份经 PostgREST 调”
 -- 返回值：{uid, items: [{i, ok, reason?}]}，整批不过时 {uid, error, items: []}；入参不对报 22023
 begin;
-select plan(55);
+select plan(57);
 \ir _helpers.psql
 select tests.seed();
 
@@ -211,6 +211,18 @@ select is(tests.fa1('put', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/anniv
   'not_owner', '头像：avatar 段不是合法 uuid → not_owner（不报错）');
 select is(tests.fa1('put', 'files', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-00000000000-/f0000000-0000-4000-8000-0000000000a4.t.webp'),
   'no_row', '附件缩略图：note_id 段不是合法 uuid → no_row（不报错）');
+
+-- ===== 架构 0.33 第 4 条（B0 代码审查低 8）：images put 另要“挂的随手记 is_private = false”，不过回 bad_bucket =====
+-- 模拟“行插进去以后随手记被移进隐私记”（postgres 直接写，绕过触发器）：bucket 仍是 images、行在、没删
+insert into public.notes (id, user_id, is_private, body_enc, enc_key_id, created_at, updated_at) values
+  ('40000000-0000-4000-8000-0000000000a9', 'aaaaaaaa-0000-4000-8000-000000000001', true, '\x01', 1, 1, 1);
+insert into public.note_images (id, user_id, note_id, bucket, path, bytes, has_thumb, deleted_at) values
+  ('1e000000-0000-4000-8000-0000000000a9', 'aaaaaaaa-0000-4000-8000-000000000001', '40000000-0000-4000-8000-0000000000a9', 'images',
+   'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a9/1e000000-0000-4000-8000-0000000000a9.webp', 1, true, null);
+select is(tests.fa1('put', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a9/1e000000-0000-4000-8000-0000000000a9.webp'),
+  'bad_bucket', 'put：图挂在隐私记上（is_private = true）→ bad_bucket');
+select is(tests.fa1('put', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a9/1e000000-0000-4000-8000-0000000000a9.t.webp'),
+  'bad_bucket', 'put 缩略图：图挂在隐私记上 → bad_bucket');
 
 -- ===== TC-B0-105：限流（一个事务里 now() 不变，分钟窗口不会跨） =====
 delete from private.counters where key like 'files_%';

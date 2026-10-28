@@ -82,14 +82,45 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(errors.find((e) => e.line === 2)?.message).toContain('private.qa_probe_definer');
   });
 
-  it('M2（TC-B0-73 ①②）：0001 第一句不对、grant 挪到别的文件、0001 以外整段 revoke → 错误；新建函数不写 grant 不报（④ 由默认权限兜底）', () => {
+  it('M2（TC-B0-73 ①②）：0001 第一句不对、grant 挪到别的文件、grant 和建函数中间隔了别的语句、0001 以外整段 revoke → 错误；新建函数不写 grant 不报（④ 由默认权限兜底）', () => {
     const { code, errors } = run(sample('m2-grant-placement'));
     expect(code).toBe(1);
     expect(where(errors)).toEqual([
       'M2 supabase/migrations/0001_core.sql:2',
       'M2 supabase/migrations/0001_core.sql:5',
       'M2 supabase/migrations/0003_notes.sql:2',
+      'M2 supabase/migrations/0004_attachments.sql:9',
     ]);
+    expect(errors.find((e) => e.line === 9)?.message).toContain('紧跟');
+  });
+
+  it('M4（TC-B0-73 ①，架构 3.3 C 0.33 写法）：迁移的授权和 3.3 C 逐行比对、核对行尾标的文件，附录 A 末尾和 3.3 C 一字不差', () => {
+    const { code, errors } = run(sample('m4-grant-summary'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      'M4 docs/10-架构/架构设计-v4.md:12', // 标 0004 的一句 0004 里没有（写进了 0001）
+      'M4 docs/10-架构/架构设计-v4.md:13', // 标 0001 的一句 0001 里没有
+      'M4 docs/10-架构/架构设计-v4.md:14', // 行尾没标文件
+      'M4 docs/10-架构/架构设计-v4.md:25', // 附录 A 和 3.3 C 不一样
+      'M4 supabase/migrations/0001_core.sql:7', // 标 0004，写在 0001
+      'M4 supabase/migrations/0001_core.sql:9', // 3.3 C 里没有
+      'M4 supabase/migrations/20261101000000_b1.sql:5', // 标 0001 的写进了新迁移
+    ]);
+    expect(errors.find((e) => e.file.endsWith('0001_core.sql') && e.line === 7)?.message).toContain('0004');
+  });
+
+  it('M5、M6（TC-B0-73 ③⑤）：0001 的先后、同步表建表后紧跟 table_meta 行、(user_id, synced_at) 索引写在建表的文件里', () => {
+    const { code, errors } = run(sample('m5-migration-order'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      'M5 supabase/migrations/0001_core.sql:11',
+      'M5 supabase/migrations/0001_core.sql:4',
+      'M5 supabase/migrations/0001_core.sql:7',
+      'M5 supabase/migrations/0001_core.sql:9',
+      'M5 supabase/migrations/0003_notes.sql:4',
+      'M6 supabase/migrations/0002_calendar_todos.sql:2',
+    ]);
+    expect(errors.find((e) => e.rule === 'M6')?.message).toContain('0003_notes.sql:2');
   });
 
   it('M3（TC-B0-68）：改 0001～0007 建表文件来打开开关（列默认值、update）→ 错误；带时间戳的数据迁移可以', () => {
