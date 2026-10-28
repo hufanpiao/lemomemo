@@ -1,0 +1,6 @@
+body { font: 15px/1.6 system-ui, "Microsoft YaHei", "Malgun Gothic", sans-serif; margin: 20px; }
+code { word-break: break-all; }
+label, input, button { display: block; margin: 8px 0; }
+input { width: 100%; max-width: 420px; }
+#widget { min-height: 70px; margin: 12px 0; }
+#log { font-family: ui-monospace, Consolas, monospace; font-size: 13px; }

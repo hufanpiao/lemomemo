@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- B0 小验证：Tauri 壳里的 Turnstile（架构 5.10、第三轮架构 M4；TC-B0-65）。
+     模拟 exe 的 auth 小窗口：全局 CSP 在 tauri.conf.json（5.10 那一条），这里的 meta CSP 按 5.10 把 style-src 收紧回 'self'。
+     默认用 Cloudflare 官方测试 sitekey（任何主机名都能用、不验证主机名）；验证“允许主机名里加 tauri.localhost”要换成真实 sitekey，见验证文档。 -->
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' ipc: http://ipc.localhost https://lemomemo.com wss://lemomemo.com; frame-src 'self' https://challenges.cloudflare.com; base-uri 'none'; form-action 'self'; object-src 'none'">
+<title>Turnstile 小验证</title>
+<link rel="stylesheet" href="probe.css">
+<script src="probe.js"></script>
+</head>
+<body>
+<h1>Turnstile 在 Tauri 里的小验证</h1>
+<p>来源：<code id="origin"></code></p>
+<label>sitekey
+  <select id="key">
+    <option value="1x00000000000000000000AA">测试：总是通过（可见）</option>
+    <option value="2x00000000000000000000AB">测试：总是失败（可见）</option>
+    <option value="3x00000000000000000000FF">测试：强制出交互题</option>
+    <option value="custom">真实 sitekey（在下面填）</option>
+  </select>
+</label>
+<input id="custom" placeholder="0x…（公开的 sitekey，不是 secret）" autocomplete="off" spellcheck="false">
+<button id="render" type="button">出题</button>
+<div id="widget"></div>
+<h2>结果</h2>
+<ol id="log"></ol>
+</body>
+</html>
