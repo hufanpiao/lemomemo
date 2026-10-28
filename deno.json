@@ -1,14 +1,21 @@
 {
-  "$comment": "只给 Deno 跑 tests/shared 用（架构 2.5）。zod 钉到和 package.json 同一版本（tests/build/deno-config.test.ts 核对）；nodeModulesDir=manual 直接用 npm ci 装好的 node_modules，不另外下载。vitest 指到自写的替身",
+  "$comment": "Deno 跑 tests/shared、deno check 服务器函数和 D1 入口用（架构 2.5）。版本一律和 package.json 一样（tests/build/deno-config.test.ts 核对）；nodeModulesDir=manual 直接用 npm ci 装好的 node_modules，不另外下载。supabase/functions/ 里写全 npm:包@版本（部署时没有 import map），这里同时映射裸名和全名，两种写法都落到 node_modules 里同一份。vitest 指到自写的替身",
   "nodeModulesDir": "manual",
   "imports": {
     "zod": "npm:zod@4.6.7",
+    "postgres": "npm:postgres@3.4.5",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.118.0",
     "vitest": "./tests/shared/deno-vitest-shim.ts"
   },
   "compilerOptions": {
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "lib": ["deno.ns", "es2023"]
+    "lib": ["deno.window", "es2023"]
+  },
+  "tasks": {
+    "test": "deno test --allow-read tests/shared",
+    "check": "deno check supabase/functions/_shared/ build/check_data_manifest.ts",
+    "d1": "deno run --allow-net=127.0.0.1:54322 --allow-env=D1_DB_URL --allow-read build/check_data_manifest.ts"
   }
 }

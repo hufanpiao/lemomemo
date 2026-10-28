@@ -6,6 +6,8 @@ const PORT = 8788;
 
 export default defineConfig({
   testDir: 'tests/e2e',
+  // 只认 *.spec.ts；tests/e2e/*.preview.test.ts 是 Vitest 跑的预览环境用例（B0 集成）
+  testMatch: '**/*.spec.ts',
   fullyParallel: true,
   forbidOnly: process.env.CI === 'true',
   retries: process.env.CI === 'true' ? 1 : 0,

@@ -1,11 +1,12 @@
 {
-  // Pages Functions（functions/，前端 B）和独立 Worker（workers/）：Cloudflare Workers 运行环境。
+  // Pages Functions（functions/，前端 B）、独立 Worker（workers/）和它们的单元测试（tests/functions/）：Cloudflare Workers 运行环境。
   // 一并编译 shared，保证 shared 在 Workers 环境下也编译得过（pickLocale 等由 functions/index.ts 使用）。
-  // supabase/functions/ 是 Deno 代码，由 deno check 检查，不在这里。
+  // supabase/functions/ 是 Deno 代码，由 deno check 检查（deno.json 的 tasks.check），不在这里。
+  // B0 集成：原 functions/tsconfig.json 并进来，删掉
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023"],
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["functions/**/*.ts", "workers/**/*.ts", "shared/**/*.ts"]
+  "include": ["functions/**/*.ts", "workers/**/*.ts", "shared/**/*.ts", "tests/functions/**/*.ts"]
 }

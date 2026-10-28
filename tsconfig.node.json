@@ -1,5 +1,7 @@
 {
-  // 构建配置、测试（Vitest、Playwright、架构规则自测）：Node 环境
+  // 构建配置、构建脚本里的 TS（build/d1）、测试（Vitest、Playwright、架构规则自测、数据清单生成器、compat）：Node 环境
+  // B0 集成：原 tests/tsconfig.node.json（前端 B）并进来，删掉；tests/functions/ 归 tsconfig.functions.json（Workers 类型）
+  // build/check_data_manifest.ts 是 Deno 脚本，由 deno check 检查
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
@@ -8,6 +10,10 @@
     "resolveJsonModule": true,
     "allowJs": true
   },
-  "include": ["src/vite-env.d.ts", "vite.config.ts", "vite.sw.config.ts", "vitest.config.ts", "playwright.config.ts", "tests/**/*.ts", "tests/**/*.tsx", "src/**/__tests__/**/*.ts", "src/**/__tests__/**/*.tsx"],
-  "exclude": ["tests/arch-fixtures/**", "tests/shared/deno-vitest-shim.ts"]
+  "include": [
+    "src/vite-env.d.ts", "vite.config.ts", "vite.sw.config.ts", "vitest.config.ts", "playwright.config.ts",
+    "build/d1/**/*.ts",
+    "tests/**/*.ts", "tests/**/*.tsx", "src/**/__tests__/**/*.ts", "src/**/__tests__/**/*.tsx"
+  ],
+  "exclude": ["tests/arch-fixtures/**", "tests/shared/deno-vitest-shim.ts", "tests/functions/**"]
 }
