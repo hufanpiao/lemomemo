@@ -103,7 +103,7 @@ jobs:
         # 这一步只是正例（库和清单一致）；反例、违规样例在下一步打同一个真库，兼容样例在本任务最后
         run: npm run test:db
 
-      - name: D1 反例和违规样例（真库：清单少登记一张表、supabase/tests/d1-fixtures 逐个在事务里改一处，都必须报错，跑完回滚）
+      - name: D1 反例和违规样例（真库：清单少登记一张表、supabase/tests/d1-fixtures/*.psql 逐个在事务里改一处，都必须报错，跑完回滚）
         # 和 unit.yml 的 test:db:offline（PGlite）是同一套样例、同一个 runD1；这里证明在真 Supabase 上也拦得住
         # 连接串只取 supabase status 的 DB_URL（CLI 本次的本地值），不读 SUPABASE_DB_URL
         run: |

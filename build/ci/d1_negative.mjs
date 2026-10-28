@@ -2,7 +2,7 @@
 // 证明 D1 在真 Supabase 上也“拦得住”，不只是 PGlite 加桩时拦得住（B0 集成回报：原先只在 unit.yml 离线跑）
 //   0) 正例再确认一次（库本身不干净时，“报出来了”说明不了问题）
 //   1) 反例：清单故意少登记 anniversaries，D1 必须报出 anniversaries
-//   2) 违规样例 supabase/tests/d1-fixtures/*.sql：每个在事务里改一处，D1 必须报出样例头上 `-- expect:` 那句，然后回滚
+//   2) 违规样例 supabase/tests/d1-fixtures/*.psql：每个在事务里改一处，D1 必须报出样例头上 `-- expect:` 那句，然后回滚
 // 前提：supabase db reset 刚跑过。样例都在事务里执行并回滚，跑完库不变
 // 用法（仓库根目录）：D1_DB_URL=<supabase status 的 DB_URL> node build/ci/d1_negative.mjs
 //   连接串取 D1_DB_URL，默认是 supabase start 的本地库；不读 SUPABASE_DB_URL（TC-B0-35）
@@ -30,8 +30,8 @@ export async function runNegative(q, exec, log = console.log) {
   if (neg.some((p) => p.includes('anniversaries'))) log(`✔ D1 反例：少登记 anniversaries 时报错（${neg.length} 处，例：${neg[0]}）`);
   else fails.push('D1 反例：清单少登记 anniversaries，却没报错');
 
-  const files = readdirSync(fxDir).filter((f) => f.endsWith('.sql')).sort();
-  if (files.length === 0) fails.push('supabase/tests/d1-fixtures/ 里没有违规样例');
+  const files = readdirSync(fxDir).filter((f) => f.endsWith('.psql')).sort();
+  if (files.length === 0) fails.push('supabase/tests/d1-fixtures/ 里没有违规样例（.psql）');
   for (const f of files) {
     const text = readFileSync(join(fxDir, f), 'utf8');
     const expect = /^-- expect: (.+)$/m.exec(text)?.[1]?.trim();

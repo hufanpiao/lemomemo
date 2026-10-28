@@ -5,7 +5,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { vector } from '@electric-sql/pglite-pgvector';
 import { readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -26,8 +26,8 @@ const inlineIncludes = (sql, dir) => sql.replace(/^\\ir\s+(\S+)\s*$/gm, (_, f) =
 
 async function freshDb({ migrations = true } = {}) {
   const db = new PGlite({ extensions: { vector } });
-  await db.exec(readFileSync(join(here, 'supabase-stub.sql'), 'utf8'));
-  await db.exec(readFileSync(join(here, 'tap-shim.sql'), 'utf8'));
+  await db.exec(readFileSync(join(here, 'supabase-stub.psql'), 'utf8'));
+  await db.exec(readFileSync(join(here, 'tap-shim.psql'), 'utf8'));
   await db.exec(`alter role postgres set search_path = "$user", public, extensions; set search_path = "$user", public, extensions;`);
   if (migrations) {
     for (const f of readdirSync(migDir).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort()) {
@@ -36,6 +36,14 @@ async function freshDb({ migrations = true } = {}) {
     }
   }
   return db;
+}
+
+/** pg_prove --ext .pg --ext .sql -r <dir> 会选中的文件（相对 dir，用 / 分隔） */
+function pgTestFiles(dir) {
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((d) => d.isFile() && /\.(sql|pg)$/.test(d.name))
+    .map((d) => relative(dir, join(d.parentPath, d.name)).split(sep).join('/'))
+    .sort();
 }
 
 // 跑一个 pgTAP 风格的测试文件，返回 not ok 的行
@@ -49,9 +57,18 @@ async function runTap(db, file) {
   return { lines, errors };
 }
 
-// 0) supabase test db 只能跑 supabase/tests/rls（0.31 第 22 条）：CLI 用 pg_prove --ext .sql -r 递归跑给它的目录，
-//    不给路径就是整个 supabase/tests，会把 d1-fixtures、compat 的样例和本目录的桩当测试执行（还会改本地库）。
-//    所以 package.json 的 test:db 必须写明路径；CI 跑的就是 npm run test:db
+// 0) supabase test db 只能跑 supabase/tests/rls（0.31 第 22 条）：CLI 用 pg_prove --ext .pg --ext .sql -r 递归跑给它的目录，
+//    不给路径就是整个 supabase/tests。两道保险：
+//    a) package.json 的 test:db 写明路径；CI 跑的就是 npm run test:db
+//    b) 裸跑也安全：d1-fixtures 的违规样例、compat 的样例、本目录的桩一律用 .psql 后缀，supabase/tests/ 下以 .sql、.pg 结尾的
+//       只准是 rls/*.test.sql（pgTestFiles 列出 pg_prove 会选中的文件，以后谁加了别的 .sql 这里就失败）
+{
+  const picked = pgTestFiles(join(root, 'supabase/tests'));
+  const bad = picked.filter((f) => !/^rls\/[^/]+\.test\.sql$/.test(f));
+  if (bad.length) fail(`裸跑 supabase test db 会把这些文件当测试执行（改成 .psql）：${bad.join('、')}`);
+  else if (picked.length === 0) fail('supabase/tests/rls 下没有 *.test.sql，pg_prove 没东西可跑');
+  else log(`✔ 裸跑 supabase test db 也只会选中 rls/*.test.sql（${picked.length} 个）`);
+}
 {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   if (!/\bsupabase test db supabase\/tests\/rls(\s|&|$)/.test(pkg.scripts?.['test:db'] ?? '')) fail('package.json 的 test:db 没把 supabase test db 限定在 supabase/tests/rls');
@@ -117,7 +134,9 @@ if (!only || only === 'd1') {
 
   // 违规样例：每个样例在事务里改一处，D1 必须报出 expect 那句，然后回滚
   const fxDir = join(root, 'supabase/tests/d1-fixtures');
-  for (const f of readdirSync(fxDir).filter((f) => f.endsWith('.sql')).sort()) {
+  const fxFiles = readdirSync(fxDir).filter((f) => f.endsWith('.psql')).sort();
+  if (fxFiles.length === 0) fail('supabase/tests/d1-fixtures/ 里没有违规样例（.psql）');
+  for (const f of fxFiles) {
     const sql = readFileSync(join(fxDir, f), 'utf8');
     const expect = /^-- expect: (.+)$/m.exec(sql)?.[1]?.trim();
     await db.exec('begin');
