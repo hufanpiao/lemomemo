@@ -3,7 +3,8 @@
 // - 上传 PUT /files/v1/o/<桶>/<路径>：带 JWT 和 X-App-Version；409 exists 当成功（重试时对象已在）；
 //   403 not_pending 单独报出（kind not_pending，架构 0.33 第 5 条），不并进 denied、不重传
 // - 批量签名 POST /files/v1/sign：一次最多 100 项，超了自动分批；不过的项单独标出，不整批失败
-// - 取字节 GET 签名链接：不带 JWT；先核对链接的来源和路径前缀（不只比字符串前缀，14.2 第 3 点）
+// - 取字节 GET 对象地址：不带 JWT，签名放请求头 X-Files-Sig（URL 不带查询串；B1 P-files-sig：Cloudflare 实时日志会显示查询串）；
+//   先核对地址的来源和路径前缀（不只比字符串前缀，14.2 第 3 点）。只有 ms（给微软查看器的 .pptx）的签名在查询串里
 // - 错误码映射成 data 层用的几类（FileErrorKind），界面文案由 data / ui 按类别取
 // 业务代码只经功能的 data 层用本文件（1.3b；ESLint 分层规则拦 ui、hooks、kit、app）；对象存储本身（shared/objstore.ts、aws4fetch）
 // App 一律引不到（check_arch 的 R2）
@@ -49,8 +50,21 @@ export interface FileError {
 }
 
 export type UploadResult = { ok: true; etag: string | null; existed: boolean } | FileError;
-export type SignResult = { ok: true; url: string; expiresAt: number } | FileError;
+/**
+ * view、download：url 不带查询串，sig 是请求头 X-Files-Sig 的值，用 fetchBlob({url, sig}) 取；
+ * ms：url 带签名查询串（交给微软查看器），sig 是 null
+ */
+export type SignResult = { ok: true; url: string; sig: string | null; expiresAt: number } | FileError;
 export type BlobResult = { ok: true; blob: Blob; contentType: string } | FileError;
+
+/** fetchBlob 的参数：sign 回的 view、download 那一项（url + sig） */
+export interface SignedLink {
+  url: string;
+  sig: string;
+}
+
+/** 放签名的请求头（服务器 functions/_lib/files-sign.ts 的 SIG_HEADER；CORS 已放行） */
+export const SIG_HEADER = 'X-Files-Sig';
 
 export interface SignItem {
   bucket: FileBucket;
@@ -92,12 +106,14 @@ function baseUrl(base: string): URL {
   return u;
 }
 
+type Expect = { bucket: FileBucket; path: string };
+
 /**
- * 核对签名链接：来源（scheme、主机、端口）等于本站；路径正好是 <base>o/<桶>/<路径>，桶和路径过 isSafePath；
- * 原文和解析结果逐字一致（挡 ..、百分号编码、反斜杠这类被 URL 解析器“规范化”掉的写法）；查询串只有 e、d、s，e 是数字。
- * expect 给了就要求桶和路径正好是这一项。通过时返回到期时刻（毫秒），否则 null
+ * 核对地址的来源和路径（view、download 不带查询串，ms 只许 e、s）：来源（scheme、主机、端口）等于本站；
+ * 路径正好是 <base>o/<桶>/<路径>，桶和路径过 isSafePath；原文和解析结果逐字一致（挡 ..、百分号编码、反斜杠这类被 URL 解析器“规范化”掉的写法）。
+ * expect 给了就要求桶和路径正好是这一项。通过时返回解析结果，否则 null
  */
-export function checkSignedUrl(raw: string, base: string, expect?: { bucket: FileBucket; path: string }): number | null {
+function checkObjectPart(raw: string, base: string, withQuery: boolean, expect?: Expect): URL | null {
   let u: URL;
   try {
     u = new URL(raw);
@@ -115,12 +131,41 @@ export function checkSignedUrl(raw: string, base: string, expect?: { bucket: Fil
   if (slash <= 0 || !isFileBucket(bucket) || !isSafePath(path)) return null;
   if (expect && (expect.bucket !== bucket || expect.path !== path)) return null;
   const q = raw.indexOf('?');
+  if (!withQuery) return q < 0 && raw === `${u.origin}${u.pathname}` ? u : null;
   if (q < 0 || raw.slice(0, q) !== `${u.origin}${u.pathname}`) return null;
-  const keys = [...u.searchParams.keys()];
-  if (keys.some((k) => k !== 'e' && k !== 'd' && k !== 's') || new Set(keys).size !== keys.length) return null;
-  const e = u.searchParams.get('e') ?? '';
-  if (!/^\d{1,12}$/.test(e) || !u.searchParams.get('s')) return null;
-  return Number(e) * 1000;
+  return u;
+}
+
+/** view、download 的对象地址：同上，且没有查询串 */
+export function checkObjectUrl(raw: string, base: string, expect?: Expect): boolean {
+  return checkObjectPart(raw, base, false, expect) !== null;
+}
+
+/** `k=v&…` 只许 keys 里的键、不重复，e 是数字、s 不空；通过时返回各键的值 */
+function sigPairs(raw: string, keys: readonly string[]): URLSearchParams | null {
+  const q = new URLSearchParams(raw);
+  const got = [...q.keys()];
+  if (got.some((k) => !keys.includes(k)) || new Set(got).size !== got.length) return null;
+  return /^\d{1,12}$/.test(q.get('e') ?? '') && q.get('s') ? q : null;
+}
+
+/** ms 的签名链接：查询串只有 e、s，e 是数字；返回到期时刻（毫秒），否则 null */
+export function checkMsUrl(raw: string, base: string, expect?: Expect): number | null {
+  const u = checkObjectPart(raw, base, true, expect);
+  const q = u ? sigPairs(u.search, ['e', 's']) : null;
+  return q ? Number(q.get('e')) * 1000 : null;
+}
+
+/**
+ * X-Files-Sig 的值：p=view|download&e=<数字>&d=<编码过的文件名>&s=<签名>，只有可打印 ASCII、键不重复。
+ * want 给了就要求 p 正好是这个用途。返回到期时刻（毫秒），否则 null
+ */
+export function checkSig(sig: string, want?: 'view' | 'download'): number | null {
+  if (sig.length > 2048 || !/^[!-~]+$/.test(sig)) return null;
+  const q = sigPairs(sig, ['p', 'e', 'd', 's']);
+  const p = q?.get('p');
+  if (!q || (p !== 'view' && p !== 'download') || (want !== undefined && p !== want)) return null;
+  return Number(q.get('e')) * 1000;
 }
 
 // ───────── 错误码 → 类别 ─────────
@@ -201,7 +246,7 @@ const UploadOk = z.object({ etag: z.string().max(200).optional() });
 const SignBody = z.object({
   items: z.array(
     z.union([
-      z.object({ i: z.number().int().nonnegative(), ok: z.literal(true), url: z.string().max(4096) }),
+      z.object({ i: z.number().int().nonnegative(), ok: z.literal(true), url: z.string().max(4096), sig: z.string().max(2048).optional() }),
       z.object({ i: z.number().int().nonnegative(), ok: z.literal(false), reason: z.string().min(1).max(64) }),
     ]),
   ),
@@ -210,7 +255,7 @@ const SignBody = z.object({
 export interface FilesClient {
   upload(bucket: FileBucket, path: string, blob: Blob, contentType: string): Promise<UploadResult>;
   sign(items: readonly SignItem[]): Promise<SignResult[]>;
-  fetchBlob(url: string): Promise<BlobResult>;
+  fetchBlob(link: SignedLink): Promise<BlobResult>;
 }
 
 export function createFilesClient(deps: FilesDeps): FilesClient {
@@ -303,8 +348,14 @@ export function createFilesClient(deps: FilesDeps): FilesClient {
         out[r.i] = fail(200, r.reason, r.reason);
         continue;
       }
-      const expiresAt = checkSignedUrl(r.url, base.toString(), { bucket: want.bucket, path: want.path });
-      out[r.i] = expiresAt === null ? local('bad_url') : { ok: true, url: r.url, expiresAt };
+      const expect = { bucket: want.bucket, path: want.path };
+      if (want.purpose === 'ms') {
+        const expiresAt = r.sig === undefined ? checkMsUrl(r.url, base.toString(), expect) : null;
+        out[r.i] = expiresAt === null ? local('bad_url') : { ok: true, url: r.url, sig: null, expiresAt };
+      } else {
+        const expiresAt = r.sig !== undefined && checkObjectUrl(r.url, base.toString(), expect) ? checkSig(r.sig, want.purpose) : null;
+        out[r.i] = expiresAt === null || r.sig === undefined ? local('bad_url') : { ok: true, url: r.url, sig: r.sig, expiresAt };
+      }
     }
     return out;
   }
@@ -329,10 +380,11 @@ export function createFilesClient(deps: FilesDeps): FilesClient {
     return out;
   }
 
-  async function fetchBlob(url: string): Promise<BlobResult> {
-    if (checkSignedUrl(url, base.toString()) === null) return local('bad_url');
+  async function fetchBlob(link: SignedLink): Promise<BlobResult> {
+    // 签名只放请求头；地址带查询串（例如 ms 链接）一律不取
+    if (!checkObjectUrl(link.url, base.toString()) || checkSig(link.sig) === null) return local('bad_url');
     // 计时包含读完响应体（10 MB 附件在慢网上读一半卡住也会按时结束）
-    return exchange(url, { method: 'GET' }, TIMEOUT_MS.get, async (res): Promise<BlobResult> => {
+    return exchange(link.url, { method: 'GET', headers: { [SIG_HEADER]: link.sig } }, TIMEOUT_MS.get, async (res): Promise<BlobResult> => {
       if (!res.ok) return failFromResponse(res);
       const blob = await res.blob();
       return { ok: true, blob, contentType: res.headers.get('Content-Type') ?? blob.type };
@@ -364,4 +416,4 @@ function client(): FilesClient {
 
 export const upload: FilesClient['upload'] = (bucket, path, blob, contentType) => client().upload(bucket, path, blob, contentType);
 export const sign: FilesClient['sign'] = (items) => client().sign(items);
-export const fetchBlob: FilesClient['fetchBlob'] = (url) => client().fetchBlob(url);
+export const fetchBlob: FilesClient['fetchBlob'] = (link) => client().fetchBlob(link);

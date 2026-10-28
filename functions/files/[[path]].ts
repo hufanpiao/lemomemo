@@ -2,17 +2,19 @@
 // 不是转发，是自己的接口；后面是 R2，经 shared/objstore.ts 的 S3 接口（令牌 R2_FILES_*，只授 images、files 两个桶），不用 R2 绑定（0.32 第 4 条）。
 //   PUT  /files/v1/o/<桶>/<路径>   要 JWT 和 X-App-Version；规则表 → files_authorize('put') → 大小、类型、webp 文件头 → 条件写
 //   POST /files/v1/sign            要 JWT；最多 100 项；files_authorize('get') 过了的逐项签 HMAC 链接
-//   GET  /files/v1/o/<桶>/<路径>?e=&d=&s=   不要 JWT；验签名和到期 → 从 R2 流式返回
+//   GET  /files/v1/o/<桶>/<路径>            不要 JWT；view、download 的签名在请求头 X-Files-Sig（p=&e=&d=&s=），URL 不带查询串；
+//   GET  /files/v1/o/<桶>/<路径>?e=&s=      只给 ms（微软查看器的 .pptx）：签名在查询串；验签名和到期 → 从 R2 流式返回
+//        （B1 P-files-sig：Cloudflare 实时日志会显示完整查询串；用途在签名范围内，两种位置签出来的互不通用）
 // 没有删除、没有覆盖。日志只记错误码和耗时，不记 URL、查询串、路径、请求头（14.2 第 8 点）。
 // 错误体一律 {code, reason?}（和 /sb 本地错误一样；src/platform/files.ts 按它解析）。
 
 import { createObjStore, ObjStoreError, type ObjStore } from '../../shared/objstore.ts';
-import { applyCors, FILES_ALLOW_METHODS, isAllowedOrigin, preflightHeaders } from '../_lib/cors.ts';
+import { applyCors, FILES_ALLOW_HEADERS, FILES_ALLOW_METHODS, isAllowedOrigin, preflightHeaders } from '../_lib/cors.ts';
 import { filesAuthorize } from '../_lib/files-authorize.ts';
 import { authzConfig, bearerOf, err, json, MAX_NAME_INPUT, PATH_RE, secretOk, SUSPICIOUS_RE, type FilesDeps, type FilesEnv } from '../_lib/files-http.ts';
-import { isClientBucket, matchPath, TTL } from '../_lib/files-rules.ts';
+import { isClientBucket, matchPath, ttlFor, TTL } from '../_lib/files-rules.ts';
 import { handleSign } from '../_lib/files-sign-route.ts';
-import { contentDisposition, verify } from '../_lib/files-sign.ts';
+import { contentDisposition, SIG_HEADER, verify, type SigPurpose } from '../_lib/files-sign.ts';
 import { prepareUpload } from '../_lib/files-upload.ts';
 import { gateFor } from '../_lib/gate.ts';
 import { rawPathAndQuery } from '../_lib/raw-url.ts';
@@ -98,38 +100,73 @@ async function handlePut(request: Request, env: FilesEnv, deps: FilesDeps, bucke
 
 // ---------- GET ----------
 
-function parseQuery(query: string): { e: string; d: string; s: string } | null {
-  if (!query) return null;
+/** 解析 `k=v&k=v`：只许 allowed 里的键、不许重复；值按 URL 编码解开 */
+function parsePairs(raw: string, allowed: readonly string[]): Map<string, string> | null {
+  if (!raw) return null;
   const seen = new Map<string, string>();
-  for (const pair of query.split('&')) {
+  for (const pair of raw.split('&')) {
     const eq = pair.indexOf('=');
     const k = eq < 0 ? pair : pair.slice(0, eq);
-    if (k !== 'e' && k !== 'd' && k !== 's') return null;
-    if (seen.has(k)) return null;
+    if (!allowed.includes(k) || seen.has(k)) return null;
     try {
       seen.set(k, decodeURIComponent((eq < 0 ? '' : pair.slice(eq + 1)).replace(/\+/g, ' ')));
     } catch {
       return null;
     }
   }
-  const e = seen.get('e');
-  const s = seen.get('s');
-  if (e === undefined || s === undefined) return null;
-  return { e, d: seen.get('d') ?? '', s };
+  return seen;
 }
 
-async function handleGet(env: FilesEnv, deps: FilesDeps, bucket: string, path: string, query: string, origin: string | null): Promise<[Response, string]> {
+interface SigParts {
+  purpose: SigPurpose;
+  e: string;
+  d: string;
+  s: string;
+}
+
+/**
+ * 取签名：请求头和查询串只能有一个。
+ * - 请求头 X-Files-Sig = p=view|download&e=&d=&s=（URL 不带查询串；d 必须有，view 为空、download 不空）；
+ * - 查询串 ?e=&s= 只当 ms 核对（不收 d：ms 不给 attachment）。
+ * 用途在签名范围内，所以 ms 的签名搬进请求头、view/download 的签名搬进查询串都对不上
+ */
+export function sigFrom(header: string | null, query: string): SigParts | null {
+  if (header !== null) {
+    if (query !== '' || header.length > 2048) return null;
+    const m = parsePairs(header.trim(), ['p', 'e', 'd', 's']);
+    const p = m?.get('p');
+    const e = m?.get('e');
+    const s = m?.get('s');
+    const d = m?.get('d');
+    if (!m || (p !== 'view' && p !== 'download') || e === undefined || s === undefined || d === undefined) return null;
+    // 只有一种合法写法：view 的 d 必须是空的，download 必须带文件名（sign 一定给，没给就用路径最后一段）
+    if ((p === 'view') !== (d === '')) return null;
+    return { purpose: p, e, d, s };
+  }
+  const m = parsePairs(query, ['e', 's']);
+  const e = m?.get('e');
+  const s = m?.get('s');
+  if (!m || e === undefined || s === undefined) return null;
+  return { purpose: 'ms', e, d: '', s };
+}
+
+async function handleGet(env: FilesEnv, deps: FilesDeps, request: Request, bucket: string, path: string, query: string, origin: string | null): Promise<[Response, string]> {
   if (!secretOk(env)) return [err(500, 'files_misconfigured', origin), 'get_misconfigured'];
-  const q = parseQuery(query);
+  const q = sigFrom(request.headers.get(SIG_HEADER), query);
   if (!q || !/^\d{1,12}$/.test(q.e) || q.d.length > MAX_NAME_INPUT * 4) return [err(403, 'bad_signature', origin), 'get_bad_signature'];
   const e = Number(q.e);
-  if (!(await verify(env.FILES_URL_SECRET, bucket, path, e, q.d, q.s))) return [err(403, 'bad_signature', origin), 'get_bad_signature'];
+  if (!(await verify(env.FILES_URL_SECRET, q.purpose, bucket, path, e, q.d, q.s))) return [err(403, 'bad_signature', origin), 'get_bad_signature'];
   const nowS = Math.floor(deps.now() / 1000);
   if (nowS > e) return [err(403, 'expired', origin), 'get_expired'];
   // 签名对但有效期超过硬上限：不是我们签出来的（或者密钥泄露），一律拒
   if (e - nowS > TTL.max) return [err(403, 'bad_signature', origin), 'get_ttl_over_max'];
   const m = isClientBucket(bucket) ? matchPath(bucket, path) : null;
   if (!m) return [err(404, 'not_found', origin), 'get_bad_path'];
+  // 按用途和类型再收紧一次（和 sign 用同一张有效期表 files-rules.ts 的 TTL）：超过这一项该有的时长就不是我们签的；
+  // ms 只给 files 桶的 .pptx（ttlFor 回 null），签的时候已经拦了，这里再核一次
+  const cap = ttlFor(m, q.purpose);
+  if (cap === null) return [err(403, 'bad_signature', origin), 'get_bad_purpose'];
+  if (e - nowS > cap) return [err(403, 'bad_signature', origin), 'get_ttl_over_purpose'];
 
   let obj;
   try {
@@ -157,7 +194,7 @@ export async function handleFiles(request: Request, env: FilesEnv, deps: FilesDe
   let code: string;
   if (method === 'OPTIONS') {
     // 只给 /files 实际支持的方法（安全审查低 4 ②：原来和 /sb 共用，带了 PATCH、DELETE）
-    const h = preflightHeaders(isAllowedOrigin(origin) ? origin : null, FILES_ALLOW_METHODS);
+    const h = preflightHeaders(isAllowedOrigin(origin) ? origin : null, FILES_ALLOW_METHODS, FILES_ALLOW_HEADERS);
     applyFilesSecurityHeaders(h);
     return new Response(null, { status: 204, headers: h });
   }
@@ -169,7 +206,7 @@ export async function handleFiles(request: Request, env: FilesEnv, deps: FilesDe
   } else if (method === 'PUT') {
     [res, code] = await handlePut(request, env, deps, route.bucket, route.path, origin);
   } else if (method === 'GET') {
-    [res, code] = await handleGet(env, deps, route.bucket, route.path, route.query, origin);
+    [res, code] = await handleGet(env, deps, request, route.bucket, route.path, route.query, origin);
   } else {
     // 没有 DELETE，没有 HEAD、POST（只认 GET 取对象、PUT 上传）
     [res, code] = [err(405, 'method_not_allowed', origin), 'object_method'];

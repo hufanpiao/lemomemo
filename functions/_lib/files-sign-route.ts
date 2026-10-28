@@ -1,9 +1,10 @@
-// POST /files/v1/sign：批量签 HMAC 链接（架构 14.2 第 11 点；任务单 FB-3）。要 JWT；最多 100 项、请求体最多 64 KB；
+// POST /files/v1/sign：批量签 HMAC 签名（架构 14.2 第 11 点；任务单 FB-3；B1 P-files-sig）。要 JWT；最多 100 项、请求体最多 64 KB；
 // 先本地按规则表逐项核对，再一次 files_authorize('get')；某一项不过只影响这一项。
+// 回的每一项：view、download → {url（不带查询串）, sig（放进请求头 X-Files-Sig 的值）, e}；ms → {url（签名在查询串里）, e}。
 import { filesAuthorize, type AuthzItem } from './files-authorize.ts';
 import { authzConfig, bearerOf, err, json, MAX_NAME_INPUT, PATH_RE, secretOk, SUSPICIOUS_RE, type FilesDeps, type FilesEnv } from './files-http.ts';
 import { isClientBucket, matchPath, ttlFor, TTL, type FilesBucket, type MatchedPath, type Purpose } from './files-rules.ts';
-import { sanitizeFilename, sign, signedUrl } from './files-sign.ts';
+import { msUrl, objectUrl, sanitizeFilename, sigHeaderValue, sign } from './files-sign.ts';
 import { concat } from './files-upload.ts';
 
 const MAX_SIGN_ITEMS = 100;
@@ -111,8 +112,11 @@ export async function handleSign(request: Request, env: FilesEnv, deps: FilesDep
         continue;
       }
       const e = nowS + Math.min(v.r.ttl, TTL.max);
-      const s = await sign(env.FILES_URL_SECRET, v.r.bucket, v.r.path, e, v.r.d);
-      out[v.i] = { i: v.i, ok: true, url: signedUrl(origin0, v.r.bucket, v.r.path, e, v.r.d, s), e };
+      const s = await sign(env.FILES_URL_SECRET, v.r.purpose, v.r.bucket, v.r.path, e, v.r.d);
+      out[v.i] =
+        v.r.purpose === 'ms'
+          ? { i: v.i, ok: true, url: msUrl(origin0, v.r.bucket, v.r.path, e, s), e }
+          : { i: v.i, ok: true, url: objectUrl(origin0, v.r.bucket, v.r.path), sig: sigHeaderValue(v.r.purpose, e, v.r.d, s), e };
     }
   }
   for (let i = 0; i < out.length; i++) out[i] ??= { i, ok: false, reason: 'denied' };

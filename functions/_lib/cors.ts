@@ -35,6 +35,12 @@ export const ALLOW_HEADERS: readonly string[] = [
   'x-vault-token',
 ];
 
+/**
+ * /files/* 的预检多一个 x-files-sig（B1 P-files-sig：view、download 的签名放这个请求头，不放查询串）。
+ * 不加进 /sb 的 ALLOW_HEADERS：/sb 用不到它
+ */
+export const FILES_ALLOW_HEADERS: readonly string[] = [...ALLOW_HEADERS, 'x-files-sig'];
+
 /** 暴露的响应头：时钟偏差读 Date，计数和分页读 Content-Range（5.10）；/files 上传回的 ETag（0.32，14.2 第 11 点） */
 export const EXPOSE_HEADERS: readonly string[] = ['Date', 'Content-Range', 'Content-Length', 'X-Supabase-Api-Version', 'ETag'];
 
@@ -57,14 +63,14 @@ export function applyCors(h: Headers, origin: string | null): void {
   // 不带 Allow-Credentials：登录令牌走 Authorization 头，不用 cookie
 }
 
-/** 预检由我们直接回 204，不转发给 Supabase；methods 默认 /sb 的那一套 */
-export function preflightHeaders(origin: string | null, methods: string = ALLOW_METHODS): Headers {
+/** 预检由我们直接回 204，不转发给 Supabase；methods、headers 默认 /sb 的那一套 */
+export function preflightHeaders(origin: string | null, methods: string = ALLOW_METHODS, headers: readonly string[] = ALLOW_HEADERS): Headers {
   const h = new Headers();
   appendVary(h, 'Origin');
   if (!isAllowedOrigin(origin)) return h;
   h.set('Access-Control-Allow-Origin', EXE_ORIGIN);
   h.set('Access-Control-Allow-Methods', methods);
-  h.set('Access-Control-Allow-Headers', ALLOW_HEADERS.join(', '));
+  h.set('Access-Control-Allow-Headers', headers.join(', '));
   h.set('Access-Control-Max-Age', '600');
   return h;
 }

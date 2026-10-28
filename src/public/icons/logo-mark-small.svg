@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- 柠檬记简化图（定稿 icLs，R-72，2026-10-24）：48 px 及以下用；原样取自 docs/02-设计/图标与命名/图标与名字-候选.html，不要手改 -->
+  <rect width="1024" height="1024" fill="#F2DF4A"/>
+  <circle cx="512" cy="512" r="380" fill="#fff"/>
+  <rect x="282" y="372" width="130" height="280" rx="65" fill="#141518"/>
+  <rect x="447" y="262" width="130" height="500" rx="65" fill="#141518"/>
+  <rect x="612" y="342" width="130" height="340" rx="65" fill="#141518"/>
+</svg>

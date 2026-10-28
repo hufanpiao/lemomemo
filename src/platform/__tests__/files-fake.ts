@@ -46,4 +46,11 @@ export function stalledResponse(status: number, headers: Record<string, string> 
   return { res: new Response(body, { status, headers }), cancelled: () => cancelled };
 }
 
-export const signed =(bucket: string, path: string, e = 1_900_000_000, extra = '') => `${BASE}o/${bucket}/${path}?e=${e}&d=${extra}&s=abc_-123`;
+/** view、download 的对象地址（不带查询串） */
+export const objUrl = (bucket: string, path: string) => `${BASE}o/${bucket}/${path}`;
+/** 请求头 X-Files-Sig 的值（B1 P-files-sig） */
+export const sigOf = (purpose: 'view' | 'download' = 'view', e = 1_900_000_000, d = '') => `p=${purpose}&e=${e}&d=${d}&s=abc_-123`;
+/** view、download 的一项：{url, sig} */
+export const link = (bucket: string, path: string, purpose: 'view' | 'download' = 'view', e = 1_900_000_000) => ({ url: objUrl(bucket, path), sig: sigOf(purpose, e) });
+/** ms 的链接：签名在查询串（只有 e、s） */
+export const msSigned = (bucket: string, path: string, e = 1_900_000_000) => `${BASE}o/${bucket}/${path}?e=${e}&s=abc_-123`;

@@ -36,15 +36,15 @@ export function matchPath(bucket: FilesBucket, path: string): MatchedPath | null
 export type Purpose = 'view' | 'download' | 'ms';
 
 export const TTL = {
-  /** 随手记插图和缩略图 view */
-  imageView: 600,
+  /** 随手记插图和缩略图 view；10-29 从 600 秒降到 120 秒（B0 R2 任务单第五节第 7 项、B1 P-files-sig ①） */
+  imageView: 120,
   /** 纪念日头像 */
   avatar: 60,
   /** 附件（含附件缩略图）view、download；图片的 download 也按这个 */
   file: 60,
   /** 给微软查看器的 .pptx；B0 实测后取最短（任务单第五节第 3 项） */
   ms: 300,
-  /** 硬上限：任何一项都不能超过 */
+  /** 硬上限：任何一项都不能超过；保持 ≤600 秒（安全审查员 10-29 条件③），GET 也按它拒 */
   max: 600,
 } as const;
 

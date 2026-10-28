@@ -1,34 +1,38 @@
 // platform/files.ts 的签名和取字节（架构 0.32；14.2 第 3、11 点；5.13 第 3、4 点；任务单 FA-2；TC-B0-114 的客户端部分）
 // 用假的 fetch：签名分批、单项不过、ms 只给 .pptx、链接的主机和路径前缀核对、取字节不带 JWT
+// B1 P-files-sig：view、download 回 {url（不带查询串）, sig}，fetchBlob 把 sig 放进请求头 X-Files-Sig；只有 ms 的签名在查询串
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SIGN_BATCH_MAX, TIMEOUT_MS, type SignItem } from '../files.ts';
-import { BASE, I, IMG, N, PDF, PPTX, U, client, fakeFetch, json, signed, stalledResponse, type Call } from './files-fake.ts';
+import { BASE, I, IMG, N, PDF, PPTX, U, client, fakeFetch, json, link, msSigned, objUrl, sigOf, stalledResponse, type Call } from './files-fake.ts';
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe('sign：POST /files/v1/sign', () => {
-  /** 按请求体逐项回成功（或按 deny 回不过） */
+  /** 按请求体逐项回成功（或按 deny 回不过）；ms 回查询串链接，别的回 {url, sig} */
   const echo = (deny: (p: string) => string | null = () => null) => async ({ init }: Call) => {
     const body = JSON.parse(String(init.body)) as { items: SignItem[] };
     return json(200, {
       items: body.items.map((x, i) => {
         const reason = deny(x.path);
-        return reason ? { i, ok: false, reason } : { i, ok: true, url: signed(x.bucket, x.path) };
+        if (reason) return { i, ok: false, reason };
+        return x.purpose === 'ms' ? { i, ok: true, url: msSigned(x.bucket, x.path) } : { i, ok: true, ...link(x.bucket, x.path, x.purpose) };
       }),
     });
   };
 
-  it('请求体和头；返回的链接核对通过，带到期时刻', async () => {
+  it('请求体和头；返回的地址和签名核对通过，带到期时刻；ms 的 sig 是 null', async () => {
     const f = fakeFetch(echo());
     const r = await client(f).sign([
       { bucket: 'images', path: IMG, purpose: 'view' },
       { bucket: 'files', path: PDF, purpose: 'download', d: 'report.pdf' },
+      { bucket: 'files', path: PPTX, purpose: 'ms' },
     ]);
     expect(r).toEqual([
-      { ok: true, url: signed('images', IMG), expiresAt: 1_900_000_000_000 },
-      { ok: true, url: signed('files', PDF), expiresAt: 1_900_000_000_000 },
+      { ok: true, url: objUrl('images', IMG), sig: sigOf('view'), expiresAt: 1_900_000_000_000 },
+      { ok: true, url: objUrl('files', PDF), sig: sigOf('download'), expiresAt: 1_900_000_000_000 },
+      { ok: true, url: msSigned('files', PPTX), sig: null, expiresAt: 1_900_000_000_000 },
     ]);
     const { url, init } = f.calls[0] as Call;
     expect(url).toBe(`${BASE}sign`);
@@ -40,6 +44,7 @@ describe('sign：POST /files/v1/sign', () => {
       items: [
         { bucket: 'images', path: IMG, purpose: 'view' },
         { bucket: 'files', path: PDF, purpose: 'download', d: 'report.pdf' },
+        { bucket: 'files', path: PPTX, purpose: 'ms' },
       ],
     });
   });
@@ -54,7 +59,7 @@ describe('sign：POST /files/v1/sign', () => {
     const r = await client(f).sign(items);
     expect(f.calls.map((c) => (JSON.parse(String(c.init.body)) as { items: unknown[] }).items.length)).toEqual([100, 100, 50]);
     expect(r).toHaveLength(250);
-    r.forEach((x, k) => expect(x.ok && x.url).toBe(signed('images', (items[k] as SignItem).path)));
+    r.forEach((x, k) => expect(x.ok && x.url).toBe(objUrl('images', (items[k] as SignItem).path)));
   });
 
   it('单项不过只标那一项（TC-B0-114 的客户端部分），reason 映射类别', async () => {
@@ -83,17 +88,37 @@ describe('sign：POST /files/v1/sign', () => {
     expect((JSON.parse(String(f.calls[0]?.init.body)) as { items: unknown[] }).items).toHaveLength(1);
   });
 
-  it('服务器回的链接不对（别的主机、别的路径、http、多了查询参数、带 ..）→ 那一项 bad_url', async () => {
-    const bad = [
-      signed('images', IMG).replace('lemomemo.com', 'evil.example'),
-      signed('images', `${U}/${N}/${N}.webp`),
-      signed('images', IMG).replace('https:', 'http:'),
-      `${signed('images', IMG)}&x=1`,
-      `${BASE}o/images/${U}/${N}/../${N}/${I}.webp?e=1&d=&s=x`,
-      signed('files', IMG),
+  it('服务器回的 view 不对（别的主机、别的路径、http、带查询串、带 ..、没有 sig、sig 用途不对或格式不对）→ 那一项 bad_url', async () => {
+    const good = link('images', IMG);
+    const bad: { url: string; sig?: string }[] = [
+      { ...good, url: good.url.replace('lemomemo.com', 'evil.example') },
+      { ...good, url: objUrl('images', `${U}/${N}/${N}.webp`) },
+      { ...good, url: good.url.replace('https:', 'http:') },
+      { ...good, url: `${good.url}?e=1&s=x` },
+      { ...good, url: `${BASE}o/images/${U}/${N}/../${N}/${I}.webp` },
+      { ...good, url: objUrl('files', IMG) },
+      { url: good.url },
+      { url: good.url, sig: sigOf('download') },
+      { url: good.url, sig: 'p=ms&e=1&d=&s=x' },
+      { url: good.url, sig: 'p=view&e=soon&d=&s=x' },
+      { url: good.url, sig: 'p=view&e=1&d=&s=' },
+      { url: good.url, sig: 'p=view&e=1&e=2&d=&s=x' },
+      { url: good.url, sig: 'p=view&e=1&d=&s=x&x=1' },
+      { url: good.url, sig: 'p=view&e=1&d=中文&s=x' },
     ];
-    const f = fakeFetch(json(200, { items: bad.map((url, i) => ({ i, ok: true, url })) }));
+    const f = fakeFetch(json(200, { items: bad.map((x, i) => ({ i, ok: true, ...x })) }));
     const r = await client(f).sign(bad.map(() => ({ bucket: 'images', path: IMG, purpose: 'view' }) as const));
+    expect(r.map((x) => !x.ok && x.code)).toEqual(bad.map(() => 'bad_url'));
+  });
+
+  it('服务器回的 ms 不对（没有查询串、多了 d、带了 sig）→ bad_url', async () => {
+    const bad: { url: string; sig?: string }[] = [
+      { url: objUrl('files', PPTX) },
+      { url: `${objUrl('files', PPTX)}?e=1&d=&s=x` },
+      { url: msSigned('files', PPTX), sig: sigOf('view') },
+    ];
+    const f = fakeFetch(json(200, { items: bad.map((x, i) => ({ i, ok: true, ...x })) }));
+    const r = await client(f).sign(bad.map(() => ({ bucket: 'files', path: PPTX, purpose: 'ms' }) as const));
     expect(r.map((x) => !x.ok && x.code)).toEqual(bad.map(() => 'bad_url'));
   });
 
@@ -119,7 +144,7 @@ describe('sign：POST /files/v1/sign', () => {
       { bucket: 'files', path: PDF, purpose: 'view' },
     ];
     expect((await client(fakeFetch(json(200, { nope: 1 }))).sign(two)).map((x) => !x.ok && x.code)).toEqual(['bad_response', 'bad_response']);
-    const partial = fakeFetch(json(200, { items: [{ i: 1, ok: true, url: signed('files', PDF) }, { i: 7, ok: true, url: signed('files', PDF) }] }));
+    const partial = fakeFetch(json(200, { items: [{ i: 1, ok: true, ...link('files', PDF) }, { i: 7, ok: true, ...link('files', PDF) }] }));
     const r = await client(partial).sign(two);
     expect(r[0]).toMatchObject({ ok: false, code: 'bad_response' });
     expect(r[1]?.ok).toBe(true);
@@ -144,17 +169,21 @@ describe('sign：POST /files/v1/sign', () => {
   });
 });
 
-describe('fetchBlob：GET 签名链接', () => {
-  it('不带 JWT、不带 cookie、不进 HTTP 缓存；返回字节和类型', async () => {
+describe('fetchBlob：GET 对象地址，签名放请求头', () => {
+  it('签名在 X-Files-Sig、地址不带查询串；不带 JWT、不带 cookie、不进 HTTP 缓存；返回字节和类型', async () => {
     const f = fakeFetch(new Response('RIFF....WEBP', { status: 200, headers: { 'Content-Type': 'image/webp' } }));
-    const r = await client(f).fetchBlob(signed('images', IMG));
+    const r = await client(f).fetchBlob(link('images', IMG));
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.contentType).toBe('image/webp');
       expect(await r.blob.text()).toBe('RIFF....WEBP');
     }
-    const { init } = f.calls[0] as Call;
-    expect(new Headers(init.headers).has('Authorization')).toBe(false);
+    const { url, init } = f.calls[0] as Call;
+    expect(url).toBe(objUrl('images', IMG));
+    expect(url).not.toContain('?');
+    const h = new Headers(init.headers);
+    expect(h.get('X-Files-Sig')).toBe(sigOf('view'));
+    expect(h.has('Authorization')).toBe(false);
     expect(init.credentials).toBe('omit');
     expect(init.cache).toBe('no-store');
   });
@@ -162,39 +191,47 @@ describe('fetchBlob：GET 签名链接', () => {
   it('响应头到了、10 MB 的响应体读到一半卡住（代码审查低 6）→ retry/timeout，不会一直挂着；响应体被取消', async () => {
     vi.useFakeTimers();
     const { res, cancelled } = stalledResponse(200, { 'Content-Type': 'image/webp' });
-    const p = client(fakeFetch(() => res)).fetchBlob(signed('images', IMG));
+    const p = client(fakeFetch(() => res)).fetchBlob(link('images', IMG));
     await vi.advanceTimersByTimeAsync(TIMEOUT_MS.get);
     expect(await p).toEqual({ ok: false, kind: 'retry', code: 'timeout', status: 0 });
     expect(cancelled()).toBe(true);
   });
 
   it('403 expired、bad_signature → resign（重新签）；404 → denied；断网 → retry', async () => {
-    expect(await client(fakeFetch(json(403, { code: 'expired' }))).fetchBlob(signed('images', IMG))).toMatchObject({ kind: 'resign', code: 'expired' });
-    expect(await client(fakeFetch(json(403, { code: 'bad_signature' }))).fetchBlob(signed('images', IMG))).toMatchObject({ kind: 'resign', code: 'bad_signature' });
-    expect(await client(fakeFetch(json(404, { code: 'not_found' }))).fetchBlob(signed('images', IMG))).toMatchObject({ kind: 'denied' });
-    expect(await client(fakeFetch(new TypeError('offline'))).fetchBlob(signed('images', IMG))).toMatchObject({ kind: 'retry', code: 'network' });
+    const l = link('images', IMG);
+    expect(await client(fakeFetch(json(403, { code: 'expired' }))).fetchBlob(l)).toMatchObject({ kind: 'resign', code: 'expired' });
+    expect(await client(fakeFetch(json(403, { code: 'bad_signature' }))).fetchBlob(l)).toMatchObject({ kind: 'resign', code: 'bad_signature' });
+    expect(await client(fakeFetch(json(404, { code: 'not_found' }))).fetchBlob(l)).toMatchObject({ kind: 'denied' });
+    expect(await client(fakeFetch(new TypeError('offline'))).fetchBlob(l)).toMatchObject({ kind: 'retry', code: 'network' });
   });
 
-  it('不是本站 /files/v1/o/ 的链接一律不取（14.2 第 3 点：核对主机和路径前缀，不只比字符串前缀）', async () => {
+  it('不是本站 /files/v1/o/ 的地址、带查询串的地址（含 ms 链接）、签名不像样，一律不取（14.2 第 3 点）', async () => {
     const f = fakeFetch(new Response('x'));
     const c = client(f);
-    for (const url of [
-      signed('images', IMG).replace('lemomemo.com', 'lemomemo.com.evil.example'),
-      signed('images', IMG).replace('https://lemomemo.com', 'https://user@lemomemo.com'),
-      `https://lemomemo.com/sb/storage/v1/object/sign/images/${IMG}?token=x`,
-      `https://lemomemo.com/files/v1/o/vault-images/${IMG}?e=1&d=&s=x`,
-      `https://lemomemo.com/files/v1/o/images/${U}/${N}/..%2F${I}.webp?e=1&d=&s=x`,
-      `https://lemomemo.com/files/v1/o/images/${U}%2F${N}/${I}.webp?e=1&d=&s=x`,
-      `https://lemomemo.com/files/v1/x/../o/images/${IMG}?e=1&d=&s=x`,
-      `https://lemomemo.com/files/v1/o/images/${IMG}`,
-      `https://lemomemo.com/files/v1/o/images/${IMG}?e=1&d=`,
-      `https://lemomemo.com/files/v1/o/images/${IMG}?e=soon&d=&s=x`,
-      `https://lemomemo.com/files/v1/o/images/${IMG}?e=1&e=2&d=&s=x`,
-      `${signed('images', IMG)}#frag`,
-      `/files/v1/o/images/${IMG}?e=1&d=&s=x`,
-      'javascript:alert(1)',
-    ]) {
-      expect(await c.fetchBlob(url), url).toMatchObject({ ok: false, kind: 'denied', code: 'bad_url' });
+    const sig = sigOf('view');
+    const cases: { url: string; sig: string }[] = [
+      ...[
+        objUrl('images', IMG).replace('lemomemo.com', 'lemomemo.com.evil.example'),
+        objUrl('images', IMG).replace('https://lemomemo.com', 'https://user@lemomemo.com'),
+        `https://lemomemo.com/sb/storage/v1/object/sign/images/${IMG}`,
+        `https://lemomemo.com/files/v1/o/vault-images/${IMG}`,
+        `https://lemomemo.com/files/v1/o/images/${U}/${N}/..%2F${I}.webp`,
+        `https://lemomemo.com/files/v1/o/images/${U}%2F${N}/${I}.webp`,
+        `https://lemomemo.com/files/v1/x/../o/images/${IMG}`,
+        `https://lemomemo.com/files/v1/o/images/${IMG}?e=1&s=x`,
+        `https://lemomemo.com/files/v1/o/images/${IMG}?`,
+        msSigned('files', PPTX),
+        `${objUrl('images', IMG)}#frag`,
+        `/files/v1/o/images/${IMG}`,
+        'javascript:alert(1)',
+      ].map((url) => ({ url, sig })),
+      { url: objUrl('images', IMG), sig: '' },
+      { url: objUrl('images', IMG), sig: 'p=ms&e=1&d=&s=x' },
+      { url: objUrl('images', IMG), sig: 'p=view&e=soon&d=&s=x' },
+      { url: objUrl('images', IMG), sig: 'p=view&e=1&d=&s=x\r\nX-Evil: 1' },
+    ];
+    for (const x of cases) {
+      expect(await c.fetchBlob(x), JSON.stringify(x)).toMatchObject({ ok: false, kind: 'denied', code: 'bad_url' });
     }
     expect(f.fn).not.toHaveBeenCalled();
   });

@@ -1,8 +1,8 @@
 // platform/files.ts（架构 0.32；14.2 第 3、11 点；5.13 第 2、4 点；任务单 FA-2；TC-B0-108 的客户端部分）
 // 用假的 fetch：核对发出去的请求、每个错误码映射成哪一类、409 exists 当成功、签名分批和链接核对
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TIMEOUT_MS, checkSignedUrl, classify, filesBaseFrom, isSafePath, type FileError } from '../files.ts';
-import { BASE, I, IMG, N, PDF, PPTX, U, client, fakeFetch, json, signed, stalledResponse, type Call } from './files-fake.ts';
+import { TIMEOUT_MS, checkMsUrl, checkObjectUrl, checkSig, classify, filesBaseFrom, isSafePath, type FileError } from '../files.ts';
+import { BASE, I, IMG, N, PDF, PPTX, U, client, fakeFetch, json, msSigned, objUrl, sigOf, stalledResponse, type Call } from './files-fake.ts';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -175,11 +175,28 @@ describe('纯函数', () => {
     expect(isSafePath(`${U}/${N}/a..b`)).toBe(false);
   });
 
-  it('checkSignedUrl：只认来源、路径、e、d、s 都对的；返回到期毫秒', () => {
-    expect(checkSignedUrl(signed('files', PDF, 1_800_000_000, 'a.pdf'), BASE)).toBe(1_800_000_000_000);
-    expect(checkSignedUrl(signed('files', PDF), BASE, { bucket: 'files', path: PDF })).not.toBeNull();
-    expect(checkSignedUrl(signed('files', PDF), BASE, { bucket: 'images', path: PDF })).toBeNull();
-    expect(checkSignedUrl(signed('files', PDF), 'https://preview.lemomemo.com/files/v1/')).toBeNull();
+  it('checkObjectUrl：只认来源、路径都对、不带查询串的地址', () => {
+    expect(checkObjectUrl(objUrl('files', PDF), BASE)).toBe(true);
+    expect(checkObjectUrl(objUrl('files', PDF), BASE, { bucket: 'files', path: PDF })).toBe(true);
+    expect(checkObjectUrl(objUrl('files', PDF), BASE, { bucket: 'images', path: PDF })).toBe(false);
+    expect(checkObjectUrl(objUrl('files', PDF), 'https://preview.lemomemo.com/files/v1/')).toBe(false);
+    expect(checkObjectUrl(`${objUrl('files', PDF)}?e=1&s=x`, BASE)).toBe(false);
+  });
+
+  it('checkMsUrl：查询串只有 e、s；返回到期毫秒', () => {
+    expect(checkMsUrl(msSigned('files', PPTX, 1_800_000_000), BASE)).toBe(1_800_000_000_000);
+    expect(checkMsUrl(msSigned('files', PPTX), BASE, { bucket: 'files', path: PPTX })).not.toBeNull();
+    expect(checkMsUrl(`${objUrl('files', PPTX)}?e=1&d=&s=x`, BASE)).toBeNull();
+    expect(checkMsUrl(objUrl('files', PPTX), BASE)).toBeNull();
+  });
+
+  it('checkSig：p=view|download、e 是数字、s 不空、只有可打印 ASCII；want 给了就核用途', () => {
+    expect(checkSig(sigOf('view', 1_800_000_000))).toBe(1_800_000_000_000);
+    expect(checkSig(sigOf('download'), 'download')).not.toBeNull();
+    expect(checkSig(sigOf('download'), 'view')).toBeNull();
+    expect(checkSig('p=ms&e=1&d=&s=x')).toBeNull();
+    expect(checkSig('p=view&e=1&d=a b&s=x')).toBeNull();
+    expect(checkSig('p=view&e=1&d=&s=x&p=view')).toBeNull();
   });
 
   it('filesBaseFrom：和数据接口同一个来源；没配时用页面自己的来源', () => {

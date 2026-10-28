@@ -184,7 +184,8 @@ describe('POST sign（TC-B0-110、112、114）', () => {
     const s = setup();
     const nowS = T0 / 1000;
     const cases: [Record<string, unknown>, number | null][] = [
-      [{ bucket: 'images', path: IMG, purpose: 'view' }, 600],
+      // B1 P-files-sig ①：图片 view 从 600 秒降到 120 秒
+      [{ bucket: 'images', path: IMG, purpose: 'view' }, 120],
       [{ bucket: 'images', path: AVATAR, purpose: 'view' }, 60],
       [{ bucket: 'files', path: PDF, purpose: 'view' }, 60],
       [{ bucket: 'files', path: PDF, purpose: 'download', d: '报告.pdf' }, 60],
@@ -203,14 +204,28 @@ describe('POST sign（TC-B0-110、112、114）', () => {
     }
   });
 
-  it('签出的链接：同源、路径前缀 /files/v1/o/<桶>/，查询串只有 e、d、s（src/platform/files.ts 的 checkSignedUrl 认这个格式）', async () => {
+  it('签出的 view/download：地址同源、路径前缀 /files/v1/o/<桶>/、不带查询串；签名在 sig（p、e、d、s；src/platform/files.ts 的 checkObjectUrl、checkSig 认这个格式）', async () => {
     const s = setup();
     const r = await signOne(s, { bucket: 'files', path: PDF, purpose: 'download', d: 'a b.pdf' });
+    expect(r.url).toBe(`${BASE}/files/v1/o/files/${PDF}`);
+    const sig = new URLSearchParams(r.sig ?? '');
+    expect([...sig.keys()]).toEqual(['p', 'e', 'd', 's']);
+    expect(sig.get('p')).toBe('download');
+    expect(sig.get('e')).toBe(String(r.e));
+    expect(sig.get('d')).toBe('a b.pdf');
+    expect(r.sig).toMatch(/^[!-~]+$/); // 只有可打印 ASCII，能放进请求头
+    const v = await signOne(s, { bucket: 'images', path: IMG, purpose: 'view' });
+    expect(new URLSearchParams(v.sig ?? '').get('p')).toBe('view');
+    expect(new URLSearchParams(v.sig ?? '').get('d')).toBe('');
+  });
+
+  it('签出的 ms：查询串只有 e、s，没有 sig', async () => {
+    const s = setup();
+    const r = await signOne(s, { bucket: 'files', path: PPTX, purpose: 'ms' });
     const u = new URL(r.url ?? '');
-    expect(u.origin).toBe(BASE);
-    expect(u.pathname).toBe(`/files/v1/o/files/${PDF}`);
-    expect([...u.searchParams.keys()]).toEqual(['e', 'd', 's']);
-    expect(u.searchParams.get('d')).toBe('a b.pdf');
+    expect(`${u.origin}${u.pathname}`).toBe(`${BASE}/files/v1/o/files/${PPTX}`);
+    expect([...u.searchParams.keys()]).toEqual(['e', 's']);
+    expect(r.sig).toBeUndefined();
   });
 
   it('TC-B0-114：混进别人的一张图 → 只有那一项 not_owner，自己的照常签', async () => {

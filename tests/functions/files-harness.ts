@@ -63,8 +63,23 @@ export const signReq = (items: unknown[], uid: string = UA) =>
     body: JSON.stringify({ items }),
   });
 
-export async function signOne(s: ReturnType<typeof setup>, item: Record<string, unknown>) {
+export interface SignedItem {
+  ok: boolean;
+  url?: string;
+  /** view、download 才有：请求头 X-Files-Sig 的值 */
+  sig?: string;
+  e?: number;
+  reason?: string;
+}
+
+export async function signOne(s: ReturnType<typeof setup>, item: Record<string, unknown>): Promise<SignedItem> {
   const r = await s.call(signReq([item]));
-  const j = (await r.json()) as { items: { ok: boolean; url?: string; e?: number; reason?: string }[] };
+  const j = (await r.json()) as { items: SignedItem[] };
   return j.items[0] ?? { ok: false };
+}
+
+/** 用 sign 回的一项造 GET：有 sig 就放进请求头 X-Files-Sig（B1 P-files-sig） */
+export function getReq(it: { url?: string; sig?: string | undefined }, init: { method?: string; body?: string; headers?: Record<string, string> } = {}): Request {
+  const headers: Record<string, string> = { ...(it.sig !== undefined ? { 'X-Files-Sig': it.sig } : {}), ...init.headers };
+  return new Request(it.url ?? '', { ...init, headers });
 }
