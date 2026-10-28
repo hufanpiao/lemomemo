@@ -40,13 +40,13 @@ const rel = (p) => relative(SITE, p).split(sep).join('/');
 
 // ---------- 检查 ----------
 
-export async function checkSite() {
+export async function checkSite(siteDir = SITE) {
   const errors = [];
-  const files = walk(SITE).map(rel);
+  const files = walk(siteDir).map((p) => relative(siteDir, p).split(sep).join('/'));
 
   // 首页里不能出现 supabase、/sb/（16.2）：HTML、JS、CSS 都查；_routes.json、_headers、robots.txt 本来就要写 /sb/
   for (const f of files.filter((x) => /\.(html|js|css)$/.test(x))) {
-    const text = readFileSync(join(SITE, f), 'utf8');
+    const text = readFileSync(join(siteDir, f), 'utf8');
     if (/supabase/i.test(text)) errors.push(`${f}：出现了 supabase`);
     if (text.includes('/sb/')) errors.push(`${f}：出现了 /sb/`);
   }
@@ -61,7 +61,7 @@ export async function checkSite() {
 
   // 每页的 SEO 基本项和 CSP 约束
   for (const f of pages) {
-    const html = readFileSync(join(SITE, f), 'utf8');
+    const html = readFileSync(join(siteDir, f), 'utf8');
     const lang = f.startsWith('zh/') ? 'zh-Hans' : 'ko';
     const need = [
       [new RegExp(`<html lang="${lang}">`), `<html lang="${lang}">`],
@@ -88,7 +88,7 @@ export async function checkSite() {
   }
 
   for (const f of files.filter((x) => x.endsWith('.html'))) {
-    const html = readFileSync(join(SITE, f), 'utf8');
+    const html = readFileSync(join(siteDir, f), 'utf8');
     if (/<script(?![^>]*\ssrc=)[^>]*>/i.test(html)) errors.push(`${f}：有内联脚本`);
     if (/<style[\s>]/i.test(html)) errors.push(`${f}：有内联 <style>`);
     if (/\sstyle=/i.test(html)) errors.push(`${f}：有 style 属性`);
@@ -99,12 +99,12 @@ export async function checkSite() {
 
   // 首页才带 lp.js（隐私说明、条款页不跳）
   for (const f of ['zh/index.html', 'ko/index.html']) {
-    if (files.includes(f) && !readFileSync(join(SITE, f), 'utf8').includes('<script src="/lp.js"></script>')) errors.push(`${f}：缺少 /lp.js`);
+    if (files.includes(f) && !readFileSync(join(siteDir, f), 'utf8').includes('<script src="/lp.js"></script>')) errors.push(`${f}：缺少 /lp.js`);
   }
 
   // _routes.json 只让 / 和 /sb/* 进 Functions（14.2 第 7 点）
   try {
-    const routes = JSON.parse(readFileSync(join(SITE, '_routes.json'), 'utf8'));
+    const routes = JSON.parse(readFileSync(join(siteDir, '_routes.json'), 'utf8'));
     const inc = JSON.stringify([...(routes.include ?? [])].sort());
     if (routes.version !== 1 || inc !== JSON.stringify(['/', '/sb/*']) || (routes.exclude ?? []).length !== 0) {
       errors.push('_routes.json：include 只能是 ["/", "/sb/*"]，exclude 为空');
@@ -115,7 +115,7 @@ export async function checkSite() {
 
   // _headers 里官网的 CSP 和 Functions 的一字不差
   const { SITE_CSP } = await import('../functions/_lib/security-headers.ts');
-  const headers = readFileSync(join(SITE, '_headers'), 'utf8');
+  const headers = readFileSync(join(siteDir, '_headers'), 'utf8');
   for (const block of ['/zh/*', '/ko/*', '/errors/*']) {
     const m = new RegExp(`^${block.replace(/[/*]/g, (c) => '\\' + c)}\\r?\\n((?:[ \\t]+.*\\r?\\n?)*)`, 'm').exec(headers);
     const csp = m ? /Content-Security-Policy:\s*(.+)/.exec(m[1])?.[1]?.trim() : undefined;

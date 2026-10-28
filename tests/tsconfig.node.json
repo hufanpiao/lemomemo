@@ -17,5 +17,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["./build/**/*.ts", "./data-manifest/**/*.ts", "./compat/**/*.ts", "./shared/i18n/**/*.ts", "../shared/i18n/pick-locale.ts"]
+  "include": ["./build/**/*.ts", "./data-manifest/**/*.ts", "./compat/**/*.ts", "./e2e/sb-forward.preview.test.ts", "./shared/i18n/**/*.ts", "../shared/i18n/pick-locale.ts"]
 }
