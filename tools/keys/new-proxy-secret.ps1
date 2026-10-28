@@ -112,7 +112,7 @@ function Assert-NoRecording {
 # ==== 安全窗口检查：结束 ====
 
 function Assert-SafeWindow {
-    Assert-NoClaude
+    # 10-29 负责人定（R-223）：不再检查 Claude 是否在运行
     Assert-NoRecording
 }
 

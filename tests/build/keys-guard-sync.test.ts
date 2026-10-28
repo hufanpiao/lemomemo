@@ -33,11 +33,12 @@ describe('密钥脚本的安全窗口检查', () => {
     }
   });
 
-  it('每个脚本都真的调用了这两项检查', () => {
+  // 10-29 负责人定（R-223）：撤掉“不能有 Claude 在运行”的检查，只剩防录屏
+  it('每个脚本都真的调用了防录屏检查', () => {
     for (const f of FILES) {
       const text = readFileSync(join(root, f), 'utf8');
       const rest = text.slice(text.indexOf(END) + END.length);
-      expect(rest, f).toMatch(/^\s*Assert-NoClaude\s*$/m);
+      expect(rest, f).not.toMatch(/^\s*Assert-NoClaude\s*$/m);
       expect(rest, f).toMatch(/^\s*Assert-NoRecording\s*$/m);
     }
   });
