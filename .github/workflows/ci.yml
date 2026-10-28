@@ -87,7 +87,7 @@ jobs:
         # 架构 8.6、0.32 第 4 条；镜像和 digest 见 tools/ci-tools.lock（localstack / oci），docker-compose.objstore.yml 不一致就失败
         # 地址和测试凭据在本任务的 env（OBJSTORE_*、R2_ENDPOINT、R2_BUCKET_PREFIX），都不是密钥。
         # 现在打它的：下面两步（objstore.test.ts 的真替身组走 shared/objstore.ts、seed.mjs 两遍再计数）和 deno task test 里同一组；
-        # TC-B0-116、117 的整条链路（files-get、objstore-cases、purge-runner 三处 describe.skip）要等 file-check、account-purge，落地后加进下面的严格模式（B0 QA D-03）
+        # files-get、objstore-cases、purge-runner 三组 0.33 起改为 skipIf（有替身变量就必须真跑），已加进下面的严格模式；TC-B0-116、117 挪到 B4b-1、B1（B0 QA D-03）
         run: node build/objstore.mjs up
 
       - name: 打 S3 替身的变量都在（缺了就失败，不许让下面的测试悄悄跳过）
@@ -97,7 +97,16 @@ jobs:
           done
 
       - name: objstore 打真的 S3 替身（Vitest 严格模式：shared/objstore.ts 对 LocalStack；跳过、占位、没跑到都算失败；B0 代码审查中 2、QA D-04）
-        run: node build/ci/vitest_strict.mjs --must '条件写回 exists' -- tests/shared/objstore.test.ts
+        run: >-
+          node build/ci/vitest_strict.mjs
+          --must '条件写回 exists'
+          --must '探针打真的 S3 替身'
+          --must '注销 runner：探针打真的 S3 替身'
+          --must 'files 打真的 S3 替身'
+          --allow-todo 'TC-B0-116 整条链路'
+          --allow-todo 'TC-B0-117 整条链路'
+          -- tests/shared/objstore.test.ts tests/data-manifest/objstore-cases.test.ts
+          tests/data-manifest/purge-runner.test.ts tests/functions/files-get.test.ts
 
       - name: seed.mjs 往替身放 A、B 的测试对象，跑两遍（第二遍全部“已存在”），再 --check 计数（实测清单 L19）
         # 凭据是替身的固定测试值（seed.mjs 故意不用 R2_FN_* 这个名字，那是九个规定函数专用的）
