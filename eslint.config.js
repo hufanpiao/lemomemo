@@ -126,6 +126,12 @@ const layerPolicies = [
   // A19：sw 只认 shared 和自己（外部包另由 no-restricted-imports 限成 workbox-*）
   { from: { element: { type: 'sw' } }, allow: { to: any('shared', 'sw') } },
   { from: { element: { type: 'preview' } }, allow: { to: any('shared', 'preview', 'styles') } },
+  // 0.32（1.3b、任务单 FA-2）：platform/files.ts（照片和附件的 /files/v1/*）业务代码只经功能的 data 层用；
+  // 功能的 hooks、ui、根文件，kit、app 一律不准直接引（放在最后，覆盖上面对 platform 的放行）
+  {
+    from: any('feature-hooks', 'feature-ui', 'feature', 'kit', 'kit-hooks', 'app'),
+    disallow: { to: { element: { type: 'platform', fileInternalPath: 'files.ts' } } },
+  },
 ];
 
 // ───────── 按目录拼 no-restricted-* ─────────
