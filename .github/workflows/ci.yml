@@ -158,7 +158,9 @@ jobs:
         env:
           NO_COLOR: '1'
         run: |
-          deno task test 2>&1 | tee "$RUNNER_TEMP/deno-test.log"
+          # GitHub 上 NO_COLOR 不一定管用（第一次 CI 实测 “... ok” 中间夹着颜色码），先去掉颜色码再查
+          deno task test 2>&1 | tee "$RUNNER_TEMP/deno-test.raw.log"
+          sed -E 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/deno-test.raw.log" > "$RUNNER_TEMP/deno-test.log"
           if grep -q '> 跳过' "$RUNNER_TEMP/deno-test.log"; then
             echo '::error::Deno 下有用例走了“跳过”占位（缺环境或缺权限），CI 里不许'; exit 1
           fi
