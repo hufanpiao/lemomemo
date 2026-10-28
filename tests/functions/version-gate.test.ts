@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   EXEMPT_FUNCTIONS,
+  EXEMPT_RULES,
   compareTriple,
   createVersionGate,
   needsVersionCheck,
@@ -35,6 +36,12 @@ describe('needsVersionCheck：哪些请求要查', () => {
     ['POST', '/storage/v1/object/move'],
     ['POST', '/functions/v1/ai-parse'],
     ['GET', '/functions/v1/anything'],
+    // 0.32：存储签名、列文件不再免查（客户端不访问 Supabase Storage，/sb 回 404）
+    ['POST', '/storage/v1/object/sign/images'],
+    ['POST', '/storage/v1/object/list/images'],
+    // 0.32：/files 的上传要查（14.2 第 11 点、TC-B0-51）
+    ['PUT', '/files/v1/o/images/a/b/c.webp'],
+    ['PUT', '/files/v1/o/files/a/b/c.pdf'],
   ])('%s %s → 查', (m, p) => {
     expect(needsVersionCheck(m, p)).toBe(true);
   });
@@ -48,17 +55,19 @@ describe('needsVersionCheck：哪些请求要查', () => {
     ['POST', '/auth/v1/token'],
     ['POST', '/auth/v1/logout'],
     ['DELETE', '/auth/v1/factors/x'],
-    ['POST', '/storage/v1/object/sign/images'],
-    ['POST', '/storage/v1/object/sign/images/a.webp'],
-    ['POST', '/storage/v1/object/list/images'],
     ['GET', '/realtime/v1/websocket'],
+    // 0.32：/files 的签名和取对象只是读
+    ['POST', '/files/v1/sign'],
+    ['GET', '/files/v1/o/images/a/b/c.webp'],
+    ['OPTIONS', '/files/v1/o/images/a/b/c.webp'],
     ['OPTIONS', '/rest/v1/todos'],
     ['OPTIONS', '/functions/v1/ai-parse'],
   ])('%s %s → 不查', (m, p) => {
     expect(needsVersionCheck(m, p)).toBe(false);
   });
 
-  it('签名免查只认 POST（别的方法照查）', () => {
+  it('0.32：免查名单里没有 /storage/v1/ 的规则', () => {
+    expect(EXEMPT_RULES.filter((r) => r.path.startsWith('/storage/'))).toEqual([]);
     expect(needsVersionCheck('DELETE', '/storage/v1/object/sign/images/a.webp')).toBe(true);
   });
 
@@ -173,8 +182,8 @@ describe('createVersionGate', () => {
     const loadMin = vi.fn(async () => '9.9.9');
     const gate = createVersionGate({ loadMin });
     expect((await gate.check('POST', '/auth/v1/otp', headers())).action).toBe('pass');
-    expect((await gate.check('POST', '/storage/v1/object/sign/images', headers())).action).toBe('pass');
-    expect((await gate.check('POST', '/storage/v1/object/list/images', headers())).action).toBe('pass');
+    expect((await gate.check('POST', '/files/v1/sign', headers())).action).toBe('pass');
+    expect((await gate.check('GET', '/files/v1/o/images/a/b/c.webp', headers())).action).toBe('pass');
     expect(loadMin).not.toHaveBeenCalled();
   });
 });

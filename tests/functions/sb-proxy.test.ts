@@ -49,7 +49,7 @@ describe('upstreamPath：路径白名单和穿越', () => {
     ['/sb/rest/v1/todos', '/rest/v1/todos'],
     ['/sb/rest/v1/todos?select=*&id=eq.1', '/rest/v1/todos'],
     ['/sb/auth/v1/otp', '/auth/v1/otp'],
-    ['/sb/storage/v1/object/sign/images/a%20b.webp', '/storage/v1/object/sign/images/a%20b.webp'],
+    ['/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx', '/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx'],
     ['/sb/functions/v1/ai-parse', '/functions/v1/ai-parse'],
     ['/sb/realtime/v1/websocket?apikey=x&vsn=1.0.0', '/realtime/v1/websocket'],
   ])('%s → %s', (p, want) => {
@@ -293,14 +293,50 @@ describe('写入先查版本（TC-B0-46～48、51 经转发层）', () => {
 
   it.each([
     ['POST', '/sb/auth/v1/otp'],
-    ['POST', '/sb/storage/v1/object/sign/images/a.webp'],
-    ['POST', '/sb/storage/v1/object/list/images'],
+    ['GET', '/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx?token=t'],
     ['GET', '/sb/rest/v1/todos'],
   ])('TC-B0-51：不带版本头 %s %s 照常转发', async (m, p) => {
     const s = setup({ min: '9.9.9' });
     const r = await handleSb(new Request(BASE + p, { method: m, ...(m === 'GET' ? {} : { body: '{}' }) }), ENV, s.deps);
     expect(r.status).toBe(200);
     expect(s.fetchStub).toHaveBeenCalledTimes(1);
+  });
+});
+
+// 架构 0.32（R-213）、14.2 第 1 点；TC-B0-119、S-B0 ⑧
+describe('TC-B0-119：/sb 的存储收窄，files_authorize 不经 /sb', () => {
+  const VP = '/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx?token=abc';
+  it.each([
+    ['POST', '/sb/storage/v1/object/images/u/n/i.webp'],
+    ['PUT', '/sb/storage/v1/object/images/u/n/i.webp'],
+    ['POST', '/sb/storage/v1/object/list/images'],
+    ['POST', '/sb/storage/v1/object/sign/files/u/n/i.pdf'],
+    ['GET', '/sb/storage/v1/object/sign/files/u/n/i.pdf?token=abc'],
+    ['GET', '/sb/storage/v1/object/authenticated/images/u/n/i.webp'],
+    ['GET', '/sb/storage/v1/object/public/images/x.webp'],
+    ['GET', '/sb/storage/v1/bucket'],
+    ['POST', '/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx'],
+    ['DELETE', '/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx'],
+    ['HEAD', VP],
+    ['POST', '/sb/rest/v1/rpc/files_authorize'],
+    ['POST', '/sb/rest/v1/rpc/FILES_AUTHORIZE'],
+    ['POST', '/sb/rest/v1/rpc/files_authorize/'],
+    ['GET', '/sb/rest/v1/rpc/files_authorize?p_op=get'],
+  ])('%s %s → 本地 404，不转发', async (m, p) => {
+    const s = setup();
+    const r = await handleSb(new Request(BASE + p, { method: m, ...(m === 'GET' || m === 'HEAD' ? {} : { body: '{}' }), headers: { 'X-App-Version': '4.0.0' } }), ENV, s.deps);
+    expect(r.status).toBe(404);
+    if (m !== 'HEAD') expect(await r.json()).toEqual({ code: 'not_found' });
+    expect(s.fetchStub).not.toHaveBeenCalled();
+  });
+
+  it('vault-preview 的 GET 照常转发（给微软取隐私记 PPT），查询串原样带上', async () => {
+    const s = setup();
+    const r = await handleSb(new Request(BASE + VP), ENV, s.deps);
+    expect(r.status).toBe(200);
+    expect(s.fetchStub).toHaveBeenCalledTimes(1);
+    expect(new URL(s.first().url).pathname).toBe('/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx');
+    expect(new URL(s.first().url).search).toBe('?token=abc');
   });
 });
 
@@ -327,7 +363,7 @@ describe('日志不打印 URL（14.2 第 8 点）', () => {
   it('转发正常时一条日志都不写', async () => {
     const s = setup();
     const spy = vi.spyOn(console, 'log');
-    await handleSb(req('/sb/storage/v1/object/sign/images/a.webp?token=abc'), ENV, s.deps);
+    await handleSb(req('/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx?token=abc'), ENV, s.deps);
     expect(s.log).not.toHaveBeenCalled();
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
