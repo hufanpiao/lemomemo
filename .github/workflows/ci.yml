@@ -100,7 +100,7 @@ jobs:
         run: >-
           node build/ci/vitest_strict.mjs
           --must '条件写回 exists'
-          --must '探针打真的 S3 替身'
+          --must '四个 R2 桶：生成的 count 探针数得对'
           --must '注销 runner：探针打真的 S3 替身'
           --must 'files 打真的 S3 替身'
           --allow-todo 'TC-B0-116 整条链路'
@@ -154,15 +154,18 @@ jobs:
       - name: shared 在 Deno 下再跑一遍（deno task test），服务器函数和 D1 入口过 deno check（deno task check）
         # deno.json 用 nodeModulesDir=manual，npm 包取 npm ci 装好的 node_modules（版本由 package-lock.json 锁定，没有 deno.lock）
         # deno task test 的权限按最小给：只读仓库、只读五个替身变量、只连 127.0.0.1:4566（B0 代码审查中 2）；
-        # 本任务设了替身变量，objstore.test.ts 的真替身组必须真跑并通过，出现“跳过”占位或没跑到就失败
+        # 本任务设了替身变量，objstore.test.ts 的真替身组必须真跑并通过，有用例报 ignored（跳过）或没跑到就失败
+        # 垫片把 describe.skipIf / it.skip 登记成 Deno.test({ ignore: true })，Deno 报告里逐条显示“... ignored”、汇总行“N ignored”（B1 接手清单 C1）
         env:
           NO_COLOR: '1'
+        # 显式写 shell: bash，GitHub 就用 bash --noprofile --norc -eo pipefail：deno 失败不会被 tee 的退出码吞掉（B1 代码审查）
+        shell: bash
         run: |
           # GitHub 上 NO_COLOR 不一定管用（第一次 CI 实测 “... ok” 中间夹着颜色码），先去掉颜色码再查
           deno task test 2>&1 | tee "$RUNNER_TEMP/deno-test.raw.log"
           sed -E 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/deno-test.raw.log" > "$RUNNER_TEMP/deno-test.log"
-          if grep -q '> 跳过' "$RUNNER_TEMP/deno-test.log"; then
-            echo '::error::Deno 下有用例走了“跳过”占位（缺环境或缺权限），CI 里不许'; exit 1
+          if grep -qE ' \.\.\. ignored|\| [1-9][0-9]* ignored' "$RUNNER_TEMP/deno-test.log"; then
+            echo '::error::Deno 下有用例报 ignored（跳过：缺环境或缺权限），CI 里不许'; exit 1
           fi
           if ! grep -qE '条件写回 exists.* \.\.\. ok' "$RUNNER_TEMP/deno-test.log"; then
             echo "::error::Deno 下 objstore 打真替身的那一组没跑或没通过"; exit 1

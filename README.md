@@ -25,7 +25,7 @@
 git config core.hooksPath .githooks
 ```
 
-启用后每次提交都会先用 gitleaks 扫暂存区，找不到 gitleaks 也会拒绝提交（`.githooks/pre-commit`，架构 8.2、S-B0b）。用 `git config --get core.hooksPath` 核对，应输出 `.githooks`；输出为空就是没启用，TC-B0-58“本机提交被拦”在这台电脑上不成立（B0 QA D-09）。其余本机工具见 [B0 本机开发环境](docs/07-开发日志/B0-本机开发环境.md)。
+启用后每次提交都会先用 gitleaks 扫暂存区，找不到 gitleaks 也会拒绝提交（`.githooks/pre-commit`，架构 8.2、S-B0b）。也可以 `npm run hooks:install`；没启用时 `npm run check:hooks`、`npm run deps:rebuild` 会打中文提示（B1 接手清单 C12）。用 `git config --get core.hooksPath` 核对，应输出 `.githooks`；输出为空就是没启用，TC-B0-58“本机提交被拦”在这台电脑上不成立（B0 QA D-09）。其余本机工具见 [B0 本机开发环境](docs/07-开发日志/B0-本机开发环境.md)。
 
 ## 检查脚本
 

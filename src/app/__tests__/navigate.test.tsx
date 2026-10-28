@@ -88,6 +88,94 @@ describe('navigate：新页面在 View Transition 的回调里画完（M-2）', 
   });
 });
 
+/** 派一个带 hasUAVisualTransition 的 popstate（jsdom 的 PopStateEvent 没有这个属性，手动挂上） */
+function popState(ua: boolean | undefined): void {
+  const e = new PopStateEvent('popstate', { state: null });
+  if (ua !== undefined) Object.defineProperty(e, 'hasUAVisualTransition', { value: ua });
+  window.dispatchEvent(e);
+}
+
+describe('iPhone 侧滑返回不叠两次动画（UI-4 第二轮 N-1）', () => {
+  it('popstate.hasUAVisualTransition 为 true：紧接着的 hashchange 不起 View Transition，直接画完', async () => {
+    render(<Where />);
+    const { spy } = fakeVt();
+    await act(async () => {
+      history.replaceState(null, '', '#/calendar');
+      popState(true);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      await Promise.resolve();
+    });
+    expect(spy).not.toHaveBeenCalled();
+    expect(screen.getByTestId('where').textContent).toBe('calendar');
+  });
+
+  it('标记只管紧接着的这一次：下一次普通后退照常起 View Transition', async () => {
+    render(<Where />);
+    const { spy, seen } = fakeVt();
+    await act(async () => {
+      history.replaceState(null, '', '#/calendar');
+      popState(true);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      history.replaceState(null, '', '#/todos');
+      popState(false);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      await Promise.resolve();
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual(['todos']);
+  });
+
+  it('侧滑 popstate 后没有 hashchange（两条历史 hash 相同）：之后点链接、navigate 到别页照常起动画', async () => {
+    render(<Where />);
+    const { spy, seen } = fakeVt();
+    await act(async () => {
+      popState(true); // 地址还是 #/today，没有 hashchange
+      history.pushState(null, '', '#/calendar'); // 相当于点链接：地址变了再来 hashchange
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      await navigate('todos');
+    });
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(seen).toEqual(['calendar', 'todos']);
+  });
+
+  it('hasUAVisualTransition 为 false 或没有这个属性（老浏览器）：照常起 View Transition', async () => {
+    render(<Where />);
+    const { spy, seen } = fakeVt();
+    await act(async () => {
+      history.replaceState(null, '', '#/calendar');
+      popState(undefined);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      await Promise.resolve();
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual(['calendar']);
+  });
+});
+
+describe('跳到当前页不起空 transition（UI-4 第二轮 N-2）', () => {
+  it('地址没变：不调 startViewTransition、不加历史', async () => {
+    render(<Where />);
+    const { spy } = fakeVt();
+    const before = history.length;
+    await act(async () => {
+      await navigate('today');
+    });
+    expect(spy).not.toHaveBeenCalled();
+    expect(history.length).toBe(before);
+    expect(screen.getByTestId('where').textContent).toBe('today');
+  });
+
+  it('带参数的当前页同样直接返回', async () => {
+    history.replaceState(null, '', '#/notes/a%20b');
+    render(<Where />);
+    const { spy } = fakeVt();
+    await act(async () => {
+      await navigate('notes', 'a b');
+    });
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
 function Where2() {
   const r = useRoute();
   return <span>{r.name}</span>;

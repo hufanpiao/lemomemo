@@ -6,7 +6,7 @@
 // 走真的 shared/objstore.ts（前端 B 的 FB-1 定稿版），和服务器函数同一份 S3 客户端；写入和计数用 tests/fakes/objstore-seed.ts 的
 //   putSeedObjects、countSeedUsers（按 ObjStore 接口写，内存替身的单测也用同一份）
 // 只连本机替身：R2_ENDPOINT 不是 127.0.0.1 / localhost 就拒绝，防止把测试数据写进预览或正式的 R2
-// 令牌只从环境变量读，不打印、不写文件；变量名故意不用 R2_FN_*（那是九个规定函数专用的，TC-B0-75 的 CI grep 查它）。需要 Docker（替身容器）：待 Docker
+// 令牌只从环境变量读，不打印、不写文件；变量名故意不用 R2_FN_*（那是九个规定函数专用的，TC-B0-35 的 CI 越界检查 F3 查它）。需要 Docker（替身容器，先 node build/objstore.mjs up）
 import { createObjStore } from '../../../shared/objstore.ts';
 import { countSeedUsers, putSeedObjects, R2_BUCKETS } from '../../../tests/fakes/objstore-seed.ts';
 

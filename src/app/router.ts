@@ -52,24 +52,50 @@ function notifyAll(): void {
   for (const l of [...listeners]) l();
 }
 
-/** 改地址（可选）并同步把新页面画完；包在 View Transition 里 */
-function commit(change?: () => void): Promise<void> {
-  return transition(() => {
+/** 改地址（可选）并同步把新页面画完；animate 为 true 时包在 View Transition 里 */
+function commit(change?: () => void, animate = true): Promise<void> {
+  const update = (): void => {
     change?.();
     flushSync(notifyAll);
-  });
+  };
+  if (!animate) {
+    update();
+    return Promise.resolve();
+  }
+  return transition(update);
+}
+
+// UI-4 第二轮 N-1：iPhone Safari 左边缘侧滑返回时系统自己已经播了返回动画（popstate.hasUAVisualTransition 为 true），
+// 再起 View Transition 会叠一次交叉淡入淡出。浏览器先派 popstate、紧接着派 hashchange：
+// popstate 里记下这个标记和当时的地址，hashchange 只有地址对得上才用它，是侧滑就不包动画、直接画新页面。
+// 两条历史 hash 相同时只有 popstate 没有 hashchange：标记会留着，但之后点链接来的 hashchange 地址对不上，不会被误跳过
+let uaVisualHash: string | null = null;
+
+function onPopState(e: PopStateEvent): void {
+  // 老浏览器没有这个属性，当 false
+  const ua = (e as PopStateEvent & { hasUAVisualTransition?: boolean }).hasUAVisualTransition === true;
+  uaVisualHash = ua ? window.location.hash : null;
 }
 
 function onHashChange(): void {
-  void commit();
+  const skip = uaVisualHash !== null && uaVisualHash === window.location.hash;
+  uaVisualHash = null;
+  void commit(undefined, !skip);
 }
 
 function subscribe(cb: () => void): () => void {
-  if (listeners.size === 0) window.addEventListener('hashchange', onHashChange);
+  if (listeners.size === 0) {
+    window.addEventListener('popstate', onPopState);
+    window.addEventListener('hashchange', onHashChange);
+  }
   listeners.add(cb);
   return () => {
     listeners.delete(cb);
-    if (listeners.size === 0) window.removeEventListener('hashchange', onHashChange);
+    if (listeners.size === 0) {
+      window.removeEventListener('popstate', onPopState);
+      window.removeEventListener('hashchange', onHashChange);
+      uaVisualHash = null;
+    }
   };
 }
 
@@ -83,11 +109,13 @@ export function useRoute(): Route {
 
 /**
  * 跳到某个路由；页面切换包在 View Transitions 里（17.2 第 3 点）。
- * 用 history.pushState 同步改地址（不触发 hashchange，不会重复切换），再 flushSync 让 React 在回调里画完新页面
+ * 用 history.pushState 同步改地址（不触发 hashchange，不会重复切换），再 flushSync 让 React 在回调里画完新页面。
+ * 已经在这一页（地址没变）就直接返回：不起空 transition，免得切换期间约 0.25 秒点按被吞掉（UI-4 第二轮 N-2）
  */
 export function navigate(name: RouteName, ...params: string[]): Promise<void> {
   const href = hrefOf(name, ...params);
+  if (window.location.hash === href) return Promise.resolve();
   return commit(() => {
-    if (window.location.hash !== href) window.history.pushState(null, '', href);
+    window.history.pushState(null, '', href);
   });
 }

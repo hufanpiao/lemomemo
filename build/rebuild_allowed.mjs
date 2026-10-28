@@ -5,6 +5,10 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { warnIfHooksOff } from './check_hooks.mjs';
+
+// 装完依赖顺带提示：本机 git 钩子没启用就打一段中文提示（只提示，不影响退出码；CI 里跳过；B1 接手清单 C12）
+warnIfHooksOff();
 
 const root = join(import.meta.dirname, '..');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));

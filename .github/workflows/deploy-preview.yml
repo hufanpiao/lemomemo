@@ -133,6 +133,8 @@ jobs:
         run: npx --no-install wrangler pages functions build functions --outdir dist/web/_worker.js
 
       - name: 产物指纹
+        # 显式写 shell: bash，GitHub 才用 -eo pipefail，指纹脚本失败不会被 tee 吞掉（10-29 代码审查）
+        shell: bash
         run: python3 -I build/ci/dist_hash.py dist/web | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 上传产物

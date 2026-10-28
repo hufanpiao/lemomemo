@@ -31,7 +31,9 @@
     "size": "node build/check_size.mjs",
     "e2e": "playwright test",
     "copy:shared": "node build/copy_shared.mjs",
-    "deps:rebuild": "node build/rebuild_allowed.mjs"
+    "deps:rebuild": "node build/rebuild_allowed.mjs",
+    "check:hooks": "node build/check_hooks.mjs",
+    "hooks:install": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.3.1",
