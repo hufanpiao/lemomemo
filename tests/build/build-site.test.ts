@@ -36,6 +36,7 @@ describe('官网构建检查', () => {
     ['style 属性', (d: string) => edit(d, 'zh/index.html', (s) => s.replace('<main>', '<main style="color:red">')), /style/],
     ['外部资源', (d: string) => edit(d, 'zh/index.html', (s) => s.replace('</head>', '<script src="https://cdn.example/x.js"></script></head>')), /外部资源/],
     ['_routes.json 多放了路径', (d: string) => writeFileSync(join(d, '_routes.json'), '{"version":1,"include":["/*"],"exclude":[]}'), /_routes/],
+    ['_routes.json 少了 /files/*', (d: string) => writeFileSync(join(d, '_routes.json'), '{"version":1,"include":["/","/sb/*"],"exclude":[]}'), /_routes/],
     ['_headers 的 CSP 和 Functions 不一致', (d: string) => edit(d, '_headers', (s) => s.replace("connect-src 'none'", "connect-src 'self'")), /CSP/],
     ['_headers 写了 /* 全站规则', (d: string) => edit(d, '_headers', (s) => s + '\n/*\n  X-Frame-Options: DENY\n'), /全站/],
     // 0.31 第 31 条：Pages 的静态 404 和删掉的自定义错误页

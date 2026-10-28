@@ -10,7 +10,7 @@
 // 1. site/ 原样复制到 dist/web/；脚本、样式、og 图改成带哈希的文件名放进 /s/（_headers 给 /s/* 设 immutable），
 //    HTML 里的引用跟着改；
 // 2. 检查：首页里不能出现 supabase 和 /sb/；中韩页面成对；每页有 title、description、og、canonical、hreflang；
-//    没有内联脚本和样式；_routes.json 只让 / 和 /sb/* 进 Functions；_headers 里官网的 CSP 和 Pages Function 里的一字不差；
+//    没有内联脚本和样式；_routes.json 只让 /、/files/* 和 /sb/* 进 Functions；_headers 里官网的 CSP 和 Pages Function 里的一字不差；
 //    根目录有 404.html（Pages 的静态 404：noindex、中韩两段、去两个首页的链接、引用写绝对路径；0.31 第 31 条）；
 //    没有 site/errors/ 和 _headers 的 /errors/* 段（Cloudflare 自定义错误页免费版不能用，0.31 第 31 条删掉）；
 //    输出不覆盖 dist/web/app/ 下 Vite 的产物。
@@ -125,12 +125,12 @@ export async function checkSite(siteDir = SITE) {
   }
   if (files.some((f) => f.startsWith('errors/'))) errors.push('site/errors/ 要删掉：Cloudflare 自定义错误页免费版不能用，放着会让人以为它生效（0.31 第 31 条）');
 
-  // _routes.json 只让 / 和 /sb/* 进 Functions（14.2 第 7 点）
+  // _routes.json 只让 /、/files/*（0.32 起照片和附件）和 /sb/* 进 Functions（14.2 第 7 点）
   try {
     const routes = JSON.parse(readFileSync(join(siteDir, '_routes.json'), 'utf8'));
     const inc = JSON.stringify([...(routes.include ?? [])].sort());
-    if (routes.version !== 1 || inc !== JSON.stringify(['/', '/sb/*']) || (routes.exclude ?? []).length !== 0) {
-      errors.push('_routes.json：include 只能是 ["/", "/sb/*"]，exclude 为空');
+    if (routes.version !== 1 || inc !== JSON.stringify(['/', '/files/*', '/sb/*']) || (routes.exclude ?? []).length !== 0) {
+      errors.push('_routes.json：include 只能是 ["/", "/files/*", "/sb/*"]，exclude 为空');
     }
   } catch {
     errors.push('_routes.json：缺少或不是合法 JSON');
