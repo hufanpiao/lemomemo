@@ -1,4 +1,4 @@
-// 内存里的 S3 替身（只给测试用；架构 8.6 的 MinIO 替身起不来时用它，任务单 FB-1）。
+// 内存里的 S3 替身（只给测试用；本机没有 Docker、S3 替身 LocalStack（运维 O-1）起不来时用它，任务单 FB-1）。
 // 只实现 shared/objstore.ts 用到的：PutObject（If-None-Match: *）、GetObject、HeadObject、ListObjectsV2、DeleteObjects。
 // SigV4 自己独立验一遍（不用 aws4fetch），签错了回 403 SignatureDoesNotMatch——这样能测出签名、路径编码的毛病；
 // DeleteObjects 核对 Content-MD5（用 node:crypto 算，和 shared 里自写的 MD5 互相印证）。

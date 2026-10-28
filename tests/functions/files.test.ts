@@ -135,6 +135,18 @@ describe('PUT 上传（TC-B0-106～109、115）', () => {
     expect(s.store.objects.size).toBe(0);
   });
 
+  // 代码审查 低 4：“桶不对”只有一种回法——本地判断和 RPC 回 bad_bucket 都是 403 forbidden + reason bad_bucket（和 TC-B0-36、sign 的单项 reason 一致）
+  it('RPC 回 bad_bucket → 403 forbidden / bad_bucket（和本地判断同一种写法）；RPC 回 bad_path → 400 bad_path', async () => {
+    const s = setup();
+    s.authz.deny.set(`put:images/${IMG}`, 'bad_bucket');
+    const r = await s.call(put(IMG, webp(100)));
+    expect([r.status, await r.json()]).toEqual([403, { code: 'forbidden', reason: 'bad_bucket' }]);
+    s.authz.deny.set(`put:images/${IMG}`, 'bad_path');
+    const r2 = await s.call(put(IMG, webp(100)));
+    expect([r2.status, await r2.json()]).toEqual([400, { code: 'bad_path' }]);
+    expect(s.store.objects.size).toBe(0);
+  });
+
   it('后端入参校验 raise 22023 → 400 bad_path，没碰存储', async () => {
     const s = setup();
     s.authz.badInput = 'put_one_item';

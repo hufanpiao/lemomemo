@@ -1,4 +1,5 @@
-// `/` 的语言分流（架构 16.1、16.4，R-75）。只处理 `/` 这一个路径（_routes.json 只让 `/` 和 `/sb/*` 进 Functions）。
+// `/` 的语言分流（架构 16.1、16.4，R-75）。只处理 `/` 这一个路径（site/_routes.json 让 `/`、`/files/*`、`/sb/*` 进 Functions；
+// `/files/*` 由 functions/files/[[path]].ts、`/sb/*` 由 functions/sb/[[path]].ts 处理，都不经这里）。
 // 依次：cookie lemo_lang → 搜索引擎直接给 200 中文版（x-default）→ Accept-Language → 默认中文。
 // `/zh/`、`/ko/` 是固定网址，由 Pages 直接给静态文件，永不自动跳转。
 

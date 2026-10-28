@@ -44,7 +44,7 @@ test.describe('/files/v1/*（本机假后端）', () => {
     expect(await bad.json()).toEqual({ code: 'bad_signature' });
   });
 
-  test('vault-* 不经 /files（403 bad_bucket）；别人的路径 403 not_owner；没带版本号 426', async ({ request }) => {
+  test('vault-* 不经 /files（403 bad_bucket）；别人的路径 403 not_owner；没带版本号 426；版本过低 426', async ({ request }) => {
     const me = ids();
     const other = ids();
     const h = { Authorization: me.auth, 'X-App-Version': '4.0.0', 'Content-Type': 'image/webp' };
@@ -52,6 +52,11 @@ test.describe('/files/v1/*（本机假后端）', () => {
     expect([vault.status(), await vault.json()]).toEqual([403, { code: 'forbidden', reason: 'bad_bucket' }]);
     const theirs = await request.put(`/files/v1/o/images/${other.path}`, { headers: h, data: WEBP });
     expect([theirs.status(), await theirs.json()]).toEqual([403, { code: 'forbidden', reason: 'not_owner' }]);
+    // QA D-10：真的不带 X-App-Version 头（原来这里发的是 3.9.0，和标题不符）
+    const { 'X-App-Version': _omit, ...noVersion } = h;
+    const none = await request.put(`/files/v1/o/images/${me.path}`, { headers: noVersion, data: WEBP });
+    expect(none.status()).toBe(426);
+    expect((await none.json()) as { code: string }).toHaveProperty('code', 'upgrade_required');
     const old = await request.put(`/files/v1/o/images/${me.path}`, { headers: { ...h, 'X-App-Version': '3.9.0' }, data: WEBP });
     expect(old.status()).toBe(426);
   });

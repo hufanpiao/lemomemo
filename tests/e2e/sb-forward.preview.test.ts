@@ -83,19 +83,17 @@ describe.skipIf(!ready)('【待预览环境】/sb/* 转发', () => {
 
   it.todo('Auth：校验验证码（用准备步骤 generateLink 拿到的 email_otp，B1 Turnstile 定了再写全）');
 
-  it('Storage：签名链接是相对路径，拼上 /sb/storage/v1 后能取到，主机是自己的域名', async () => {
+  // QA D-11：架构 0.32 把“Storage 签名链接是相对路径”从 TC-B0-43 划掉（照片和附件改走 /files，/sb 的存储只留 vault-preview 的 GET）。
+  // 这里改成核对线上收窄确实生效（TC-B0-119 的预览部分），以及 QA D-02 的百分号编码在 Cloudflare 边缘也绕不过去。
+  it('Storage：除 vault-preview 的 GET 以外一律本地 404；编码过的 files_authorize 也是 404', async () => {
     const path = `${UID}/${crypto.randomUUID()}/${crypto.randomUUID()}.webp`;
-    const webp = Uint8Array.from(atob('UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA=='), (c) => c.charCodeAt(0));
-    const up = await sb(`/storage/v1/object/images/${path}`, { method: 'POST', headers: { 'Content-Type': 'image/webp' }, body: webp });
-    expect(up.status).toBe(200);
-    const s = await sb(`/storage/v1/object/sign/images/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"expiresIn":60}' });
-    const { signedURL } = (await s.json()) as { signedURL: string };
-    expect(signedURL.startsWith('/object/sign/')).toBe(true);
-    expect(signedURL).not.toContain('supabase.co');
-    const got = await fetch(`${BASE}/sb/storage/v1${signedURL}`);
-    expect(got.status).toBe(200);
-    expect(got.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
-    await sb(`/storage/v1/object/images/${path}`, { method: 'DELETE' }).catch(() => undefined);
+    const up = await sb(`/storage/v1/object/images/${path}`, { method: 'POST', headers: { 'Content-Type': 'image/webp' }, body: 'x' });
+    expect(up.status).toBe(404);
+    expect(await up.json()).toEqual({ code: 'not_found' });
+    for (const p of ['/rest/v1/rpc/files%5Fauthorize', '/rest/v1/rpc/%66iles_authorize', '/rest/v1/rpc/files%255Fauthorize']) {
+      const r = await sb(p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      expect(r.status, p).toBe(404);
+    }
   });
 
   it.skipIf(!env.PREVIEW_FN_PROBE)('Functions：固定在首尔运行', async () => {
