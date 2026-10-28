@@ -21,6 +21,12 @@ describe('TC-B0-119：/sb 的存储收窄，files_authorize 不经 /sb', () => {
     ['POST', '/sb/rest/v1/rpc/FILES_AUTHORIZE'],
     ['POST', '/sb/rest/v1/rpc/files_authorize/'],
     ['GET', '/sb/rest/v1/rpc/files_authorize?p_op=get'],
+    // QA D-02：百分号编码（含多重、大小写）绕不过去
+    ['POST', '/sb/rest/v1/rpc/files%5Fauthorize'],
+    ['POST', '/sb/rest/v1/rpc/%66iles_authorize'],
+    ['POST', '/sb/rest/v1/rpc/files%255fauthorize'],
+    ['GET', '/sb/storage/v1/object/sign/vault-preview/%252e%252e/files/u/n/i.pdf?token=abc'],
+    ['GET', '/sb/storage/v1/object/sign/vault-preview/x%252Fy.pptx?token=abc'],
   ])('%s %s → 本地 404，不转发', async (m, p) => {
     const s = setup();
     const r = await handleSb(new Request(BASE + p, { method: m, ...(m === 'GET' || m === 'HEAD' ? {} : { body: '{}' }), headers: { 'X-App-Version': '4.0.0' } }), ENV, s.deps);

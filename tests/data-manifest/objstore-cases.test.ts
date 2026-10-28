@@ -23,7 +23,7 @@ function fakeStore(prefix = '') {
   const fake = createFakeS3({ accessKeyId: 'FAKEKEYIDLOCALTEST', secretAccessKey: 'fake-secret-for-local-tests-only', buckets: R2.map((b) => prefix + b) });
   const fetch: ObjFetch = (url, init) => fake.handle(new Request(url, init as RequestInit));
   const store = createObjStore({
-    endpoint: 'http://fake-s3.test',
+    endpoint: 'https://fake-s3.test',
     accessKeyId: 'FAKEKEYIDLOCALTEST',
     secretAccessKey: 'fake-secret-for-local-tests-only',
     bucketPrefix: prefix,
@@ -145,6 +145,7 @@ describe('runner：探针在 S3 替身上数得对（经 shared/objstore.ts）',
 // 【待 Docker / 待 R2】同样的探针打 LocalStack 替身（node build/objstore.mjs up 之后，CI 的 db 任务）和预览环境的 R2：
 // 后端的注销 runner（tests/data-manifest/purge-runner.ts）已把 runner = 'objstore' 的用例接上（造数据 → account-delete → account-purge → runObjProbe），
 // 离线用内存替身跑通（purge-runner.test.ts）；打真替身那一遍待 Docker、待 B1 的 account-purge。
-describe.skip('TC-B0-117 整条链路（待 Docker：本地 Supabase + S3 替身 + account-purge）', () => {
-  it('account-purge 之后四个 R2 桶里 A 的对象为 0、删完再列一次确认、B 不变', () => {});
+// QA D-03：不留空的 it，改成 todo（报告里显示“待做”，不当成真测试）
+describe('TC-B0-117 整条链路（待 Docker：本地 Supabase + S3 替身 + account-purge）', () => {
+  it.todo('account-purge 之后四个 R2 桶里 A 的对象为 0、删完再列一次确认、B 不变（要 account-purge：B1，和 Docker）');
 });

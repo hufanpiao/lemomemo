@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { ttlFor } from '../../functions/_lib/files-rules.ts';
 import { contentDisposition, sanitizeFilename, sign, signedUrl, verify } from '../../functions/_lib/files-sign.ts';
-import { parseRoute } from '../../functions/files/[[path]].ts';
+import { onRequest, parseRoute, type FilesEnv } from '../../functions/files/[[path]].ts';
 import { B_IMG, BASE, ENV, EXE, IMG, PDF, put, setup, signOne, signReq, T0, THUMB } from './files-harness.ts';
 import { ID1, ID2, NOTE, UA, webp } from './files-fakes.ts';
 
@@ -147,9 +147,29 @@ describe('预检和杂项', () => {
     const s = setup();
     const ok = await s.call(new Request(`${BASE}/files/v1/sign`, { method: 'OPTIONS', headers: { Origin: EXE } }));
     expect(ok.status).toBe(204);
-    expect(ok.headers.get('Access-Control-Allow-Methods')).toContain('PUT');
+    // 安全审查 低 4 ②：/files 的预检只给实际支持的方法，不带 /sb 的 PATCH、DELETE
+    expect(ok.headers.get('Access-Control-Allow-Methods')).toBe('GET, PUT, POST, OPTIONS');
+    expect(ok.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    const obj = await s.call(new Request(`${BASE}/files/v1/o/images/${IMG}`, { method: 'OPTIONS', headers: { Origin: EXE } }));
+    expect(obj.headers.get('Access-Control-Allow-Methods')).toBe('GET, PUT, POST, OPTIONS');
     const no = await s.call(new Request(`${BASE}/files/v1/sign`, { method: 'OPTIONS', headers: { Origin: 'https://evil.example' } }));
     expect(no.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+
+  // 代码审查 低 5、安全审查 低 4 ①：onRequest 建 store 出错的 500 也带齐安全头和 CORS
+  it('Pages 入口：R2 配置不合规（建 store 抛错）→ 500 files_misconfigured，带安全头和 CORS', async () => {
+    for (const R2_ENDPOINT of ['http://r2.evil.example', 'not a url', '']) {
+      const env: FilesEnv = { ...ENV, R2_ENDPOINT };
+      const ctx = { request: new Request(`${BASE}/files/v1/sign`, { method: 'POST', headers: { Origin: EXE } }), env } as unknown as Parameters<typeof onRequest>[0];
+      const r = await onRequest(ctx);
+      expect(r.status, R2_ENDPOINT).toBe(500);
+      expect(await r.json()).toEqual({ code: 'files_misconfigured' });
+      expect(r.headers.get('X-Content-Type-Options')).toBe('nosniff');
+      expect(r.headers.get('Content-Security-Policy')).toBe("sandbox; default-src 'none'");
+      expect(r.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(r.headers.get('Access-Control-Allow-Origin')).toBe(EXE);
+      expect(r.headers.get('Content-Type')).toBe('application/json; charset=utf-8');
+    }
   });
 
   it('FILES_URL_SECRET 太短 → 500 files_misconfigured，不签也不放行', async () => {
@@ -162,6 +182,7 @@ describe('预检和杂项', () => {
 // 【待 Docker】TC-B0-116：经 /files PUT 附件 → file-check {action: check} 经 shared/objstore.ts 读到同一个对象、sha256 一致、
 // check_status 变 ok → sign 能签出。要本地 Supabase（files_authorize、note_files）、S3 替身（运维 O-1）和后端的 file-check。
 // 本机没有 Docker，替身起不来；本机端到端改用 tests/e2e/files.spec.ts（wrangler pages dev + tests/e2e/fake-backends.ts）。
-describe.skip('TC-B0-116（待 Docker：本地 Supabase + S3 替身 + file-check）', () => {
-  it('上传后 file-check 读到同一个对象', () => {});
+// QA D-03：不留空的 it，改成 todo（报告里显示“待做”，不会被当成通过或跳过的真测试）
+describe('TC-B0-116（待 Docker：本地 Supabase + S3 替身 + file-check）', () => {
+  it.todo('上传后 file-check 读到同一个对象、sha256 一致、check_status 变 ok、sign 能签出（要 file-check 函数：B4b-1，和 Docker）');
 });

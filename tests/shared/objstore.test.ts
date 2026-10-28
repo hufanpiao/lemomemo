@@ -23,7 +23,7 @@ function setup(extra: { prefix?: string; allowed?: string[]; secret?: string } =
   });
   const fetch: ObjFetch = (url, init) => fake.handle(new Request(url, init as RequestInit));
   const store = createObjStore({
-    endpoint: 'http://fake-s3.test',
+    endpoint: 'https://fake-s3.test',
     accessKeyId: KEY_ID,
     secretAccessKey: extra.secret ?? SECRET,
     bucketPrefix: p,
@@ -163,7 +163,7 @@ describe('objstore：读写', () => {
 
   it('网络错误、5xx 分别报 network、http', async () => {
     const store = createObjStore({
-      endpoint: 'http://fake-s3.test',
+      endpoint: 'https://fake-s3.test',
       accessKeyId: KEY_ID,
       secretAccessKey: SECRET,
       fetch: () => Promise.reject(new Error('boom')),
@@ -244,7 +244,7 @@ describe('objstore：列和删（注销、清理用）', () => {
   });
 });
 
-// ---------- 打真的替身（MinIO）或 R2：【待 Docker / 待 R2】 ----------
+// ---------- 打真的替身（LocalStack，运维 O-1）或 R2：【待 Docker / 待 R2】 ----------
 
 function env(name: string): string | undefined {
   try {
@@ -256,25 +256,22 @@ function env(name: string): string | undefined {
 }
 
 const LIVE = env('OBJSTORE_ENDPOINT');
+// 没设 OBJSTORE_ENDPOINT 时报告里显示“跳过”，不是“通过”（QA D-10）
+const liveIt = LIVE ? it : it.skip;
 
 describe('objstore：打真的 S3 替身（待 Docker / 待 R2；没设 OBJSTORE_ENDPOINT 时跳过）', () => {
-  if (!LIVE) {
-    it('跳过：本机没有替身（运维 O-1 写好 docker-compose.objstore.yml 后在 CI 跑）', () => {
-      expect(LIVE).toBe(undefined);
+  liveIt('条件写回 exists、列、批量删、删完为 0（架构 8.6 的四个条件）', async () => {
+    const store = createObjStore({
+      endpoint: LIVE ?? '',
+      accessKeyId: env('OBJSTORE_ACCESS_KEY_ID') ?? 'test',
+      secretAccessKey: env('OBJSTORE_SECRET_ACCESS_KEY') ?? 'test',
+      bucketPrefix: env('R2_BUCKET_PREFIX') ?? '',
+      region: env('OBJSTORE_REGION') ?? 'us-east-1',
+      fetch: (url, init) => fetch(url, init as RequestInit),
+      now: () => Date.now(),
     });
-    return;
-  }
-  const store = createObjStore({
-    endpoint: LIVE,
-    accessKeyId: env('OBJSTORE_ACCESS_KEY_ID') ?? 'test',
-    secretAccessKey: env('OBJSTORE_SECRET_ACCESS_KEY') ?? 'test',
-    bucketPrefix: env('R2_BUCKET_PREFIX') ?? '',
-    region: env('OBJSTORE_REGION') ?? 'us-east-1',
-    fetch: (url, init) => fetch(url, init as RequestInit),
-    now: () => Date.now(),
-  });
-  const run = `objstore-test-${Date.now().toString(36)}`;
-  it('条件写回 exists、列、批量删、删完为 0（架构 8.6 的四个条件）', async () => {
+    // deletePrefix 只认 <uuid>/，测试前缀也用一个随机 uuid
+    const run = crypto.randomUUID();
     const key = `${run}/a.pdf`;
     await store.put('files', key, enc.encode('one'), { contentType: 'application/pdf', ifNoneMatch: true });
     expect(await codeOf(store.put('files', key, enc.encode('two'), { contentType: 'application/pdf', ifNoneMatch: true }))).toBe('exists');

@@ -5,7 +5,7 @@
 //   get 流式、head 回 { contentType, contentLength, etag }；不存在回 null
 //   list：按前缀、按 key 排序、分页（{ continuationToken, maxKeys } → { objects, nextToken }）；listAll 自动翻页
 //   deleteMany：每 1000 个一批（和真客户端一样自己拆批），不存在的 key 也算删了，返回请求删除的个数
-//   deletePrefix：前缀不准空；删完再列一次，不是 0 抛 not_empty；返回 { deleted }
+//   deletePrefix：前缀只认 `<uuid>/`；删完再列一次，不是 0 抛 not_empty；返回 { deleted }
 //   键、桶、参数不合规抛 bad_input；没建的桶按 S3 回 404：get、head 回 null，其他抛 ObjStoreError('http', 404)
 // 纯 TS，不用 Node、Deno 的 API（vitest 和 deno test 都能 import）
 import {
@@ -42,6 +42,9 @@ function checkPrefix(prefix: string, allowEmpty: boolean): void {
     throw new ObjStoreError('bad_input');
   }
 }
+
+/** 和 shared/objstore.ts 一样：deletePrefix 只认一个人的整个前缀 `<小写 uuid>/`（B0 返工，代码审查低 2、安全审查低 3） */
+const USER_PREFIX_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/$/;
 
 async function readAll(body: ObjBody): Promise<Uint8Array> {
   if (typeof body === 'string') return enc.encode(body);
@@ -166,8 +169,8 @@ export class MemoryObjStore implements ObjStore {
   }
 
   async deletePrefix(bucket: string, prefix: string): Promise<{ deleted: number }> {
-    // 前缀不准空：防止一个空字符串把整个桶删光
-    checkPrefix(prefix, false);
+    // 只认 `<uuid>/`：空字符串会把整个桶删光，少了 / 或更短的前缀会删到别人
+    if (!USER_PREFIX_RE.test(prefix)) throw new ObjStoreError('bad_input');
     const objs = await this.listAll(bucket, prefix);
     const deleted = objs.length ? await this.deleteMany(bucket, objs.map((o) => o.key)) : 0;
     const again = await this.list(bucket, prefix, { maxKeys: 1 });

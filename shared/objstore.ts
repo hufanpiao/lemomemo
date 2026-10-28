@@ -1,47 +1,42 @@
 // 对象存储客户端（架构 0.32 第 4 条、3.3 G“R2 起”、3.4、8.6；任务单 FB-1）。
 // 照片和附件存在 Cloudflare R2，一律走 S3 接口（不用 R2 绑定）：Pages Function（/files/v1/*，令牌 R2_FILES_*）
 // 和服务器函数（Deno，supabase/functions，令牌 R2_FN_*，经 build/copy_shared.mjs 复制成 _shared/gen/objstore.ts）共用这一份；
-// 本机和 CI 打 S3 兼容替身（MinIO），预览和正式换成 R2 的地址和令牌，代码不变。
+// 本机和 CI 打 S3 兼容替身（LocalStack，运维 O-1；为什么不用 MinIO 见 docker-compose.objstore.yml），预览和正式换成 R2 的地址和令牌，代码不变。
 //
 // • SigV4 签名用 aws4fetch（package.json 和 Deno 的 npm:aws4fetch@<版本> 锁同一版），path-style：<endpoint>/<桶>/<键>
 // • 网络请求和时钟都由调用方传进来（shared 不碰全局 fetch、不读系统时间，A2、A12），测试可以换成内存替身
 // • 不打印任何东西；出错抛 ObjStoreError，message 是英文错误码，不带键名和地址（14.2 第 8 点：日志不留路径）
 // • 只有 put 带 If-None-Match: * 的条件写；没有覆盖写的便捷方法，删除只给清理和注销用（deleteMany、deletePrefix）
+// • 每个请求都有超时（B0 评审：代码审查中 3）：list、head、删除用 timeoutMs（默认 10 秒，含读完响应体），
+//   put、get 用 transferTimeoutMs（默认 30 秒，只算到拿到响应头；get 的流式响应体交给调用方，不计时）；超时中止请求、抛 timeout
+// • 用不到的响应体一律 cancel（404、412、出错、put 的 200、超时后才回来的响应），不占连接、Deno 测试不报资源泄漏（代码审查低 1）
+// • deletePrefix 只认 `<uuid>/`（一个人的整个前缀）；非本机地址只许 https（代码审查低 2、安全审查低 2、低 3）
 import { AwsV4Signer } from 'aws4fetch';
+import {
+  checkEndpoint,
+  checkTimeout,
+  DEFAULT_TIMEOUT_MS,
+  DEFAULT_TRANSFER_TIMEOUT_MS,
+  discard,
+  type ObjFetch,
+  type ObjHeaders,
+  type ObjRequestInit,
+  type ObjResponse,
+  ObjStoreError,
+  timedFetch,
+  USER_PREFIX_RE,
+} from './objstore-net.ts';
 import { base64, deleteBody, type ListedObject, type ListPage, md5, parseDeleteResult, parseListV2, utf8 } from './objstore-wire.ts';
 
 export type { ListedObject, ListPage } from './objstore-wire.ts';
-
-// ---------- 和运行环境之间的最小接口（shared 的 lib 里没有 DOM 类型，按结构写） ----------
-
-export interface ObjHeaders {
-  get(name: string): string | null;
-}
-
-export interface ObjResponse {
-  status: number;
-  headers: ObjHeaders;
-  /** 流式响应体（Web ReadableStream）；只透传给调用方，这里不读 */
-  body: unknown;
-  text(): Promise<string>;
-}
-
-export interface ObjRequestInit {
-  method: string;
-  /** aws4fetch 签好的 Headers 对象，原样交给 fetch */
-  headers: unknown;
-  body?: unknown;
-  /** Node（undici）发流式请求体要带 */
-  duplex?: 'half';
-}
-
-export type ObjFetch = (url: string, init: ObjRequestInit) => Promise<ObjResponse>;
+export { DEFAULT_TIMEOUT_MS, DEFAULT_TRANSFER_TIMEOUT_MS, ObjStoreError } from './objstore-net.ts';
+export type { ObjFetch, ObjHeaders, ObjRequestInit, ObjResponse, ObjStoreErrorCode } from './objstore-net.ts';
 
 /** 请求体：字节，或者流（Web ReadableStream；Workers 里要包成 FixedLengthStream，R2 的 PutObject 要知道长度） */
 export type ObjBody = Uint8Array | ArrayBuffer | string | { getReader(): unknown };
 
 export interface ObjStoreConfig {
-  /** https://<账号 ID>.r2.cloudflarestorage.com；本机是替身的 http://127.0.0.1:<端口>（8.4、8.6） */
+  /** https://<账号 ID>.r2.cloudflarestorage.com；本机是替身的 http://127.0.0.1:<端口>（8.4、8.6）。http 只许 127.0.0.1、localhost、[::1] */
   endpoint: string;
   accessKeyId: string;
   secretAccessKey: string;
@@ -52,27 +47,10 @@ export interface ObjStoreConfig {
   fetch: ObjFetch;
   /** 现在的毫秒数（签名的 X-Amz-Date 用） */
   now: () => number;
-}
-
-export type ObjStoreErrorCode =
-  | 'exists' // 条件写：对象已存在（S3 回 412）
-  | 'denied' // 403：令牌没有这个桶的权限
-  | 'http' // 其他非预期状态码
-  | 'network' // fetch 抛错（含超时中止）
-  | 'bad_response' // 响应体解析不了
-  | 'bad_input' // 桶名、键、参数不合规（没发请求）
-  | 'delete_partial' // DeleteObjects 有删失败的
-  | 'not_empty'; // 删完再列一次，前缀下还有对象
-
-export class ObjStoreError extends Error {
-  readonly code: ObjStoreErrorCode;
-  readonly status: number | null;
-  constructor(code: ObjStoreErrorCode, status: number | null = null) {
-    super(status === null ? `objstore_${code}` : `objstore_${code}_${status}`);
-    this.name = 'ObjStoreError';
-    this.code = code;
-    this.status = status;
-  }
+  /** list、head、deleteMany 的超时（毫秒，含读完响应体），默认 DEFAULT_TIMEOUT_MS */
+  timeoutMs?: number;
+  /** put、get 拿到响应头的超时（毫秒），默认 DEFAULT_TRANSFER_TIMEOUT_MS */
+  transferTimeoutMs?: number;
 }
 
 export interface ObjectMeta {
@@ -188,7 +166,9 @@ export async function signS3(input: SignInput): Promise<SignedRequest> {
 
 export function createObjStore(cfg: ObjStoreConfig): ObjStore {
   const endpoint = cfg.endpoint.replace(/\/+$/, '');
-  if (!/^https?:\/\/[^/?#]+$/.test(endpoint)) throw new ObjStoreError('bad_input');
+  checkEndpoint(endpoint);
+  const timeoutMs = checkTimeout(cfg.timeoutMs, DEFAULT_TIMEOUT_MS);
+  const transferTimeoutMs = checkTimeout(cfg.transferTimeoutMs, DEFAULT_TRANSFER_TIMEOUT_MS);
   // 读不到 R2_BUCKET_PREFIX（正式环境不设）当空字符串
   const prefix = cfg.bucketPrefix ?? '';
   if (prefix && !/^[a-z0-9-]+$/.test(prefix)) throw new ObjStoreError('bad_input');
@@ -202,12 +182,18 @@ export function createObjStore(cfg: ObjStoreConfig): ObjStore {
     return `${endpoint}/${real}`;
   };
 
-  async function send(
+  /**
+   * 签名、发请求，并在 ms 毫秒内跑完 then（拿到响应后的处理：判断状态码、需要时读响应体）。
+   * 超时：中止请求、抛 timeout；超时后才回来的响应把体取消掉。then 抛错（fail 等不读体的分支）时也取消响应体。
+   */
+  async function send<T>(
     method: string,
     url: string,
     headers: Record<string, string>,
-    body?: ObjBody,
-  ): Promise<ObjResponse> {
+    body: ObjBody | undefined,
+    ms: number,
+    then: (res: ObjResponse) => Promise<T> | T,
+  ): Promise<T> {
     const signed = await signS3({
       method,
       url,
@@ -223,11 +209,7 @@ export function createObjStore(cfg: ObjStoreConfig): ObjStore {
       init.body = body;
       if (typeof body === 'object' && 'getReader' in body) init.duplex = 'half';
     }
-    try {
-      return await cfg.fetch(signed.url, init);
-    } catch {
-      throw new ObjStoreError('network');
-    }
+    return timedFetch(cfg.fetch, signed.url, init, ms, then);
   }
 
   function fail(res: ObjResponse): never {
@@ -253,10 +235,12 @@ export function createObjStore(cfg: ObjStoreConfig): ObjStore {
     if (!Number.isInteger(max) || max < 1 || max > LIST_PAGE_MAX) throw new ObjStoreError('bad_input');
     q.set('max-keys', String(max));
     const qs = [...q].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
-    const res = await send('GET', `${bucketUrl(bucket)}?${qs}`, {});
-    if (res.status !== 200) fail(res);
+    const xml = await send('GET', `${bucketUrl(bucket)}?${qs}`, {}, undefined, timeoutMs, (res) => {
+      if (res.status !== 200) fail(res);
+      return res.text();
+    });
     try {
-      return parseListV2(await res.text());
+      return parseListV2(xml);
     } catch {
       throw new ObjStoreError('bad_response');
     }
@@ -284,16 +268,20 @@ export function createObjStore(cfg: ObjStoreConfig): ObjStore {
       const batch = keys.slice(i, i + DELETE_BATCH);
       const xml = deleteBody(batch);
       const bytes = utf8(xml);
-      const res = await send(
+      const text = await send(
         'POST',
         `${bucketUrl(bucket)}?delete=`,
         { 'content-type': 'application/xml', 'content-md5': base64(md5(bytes)) },
         bytes,
+        timeoutMs,
+        (res) => {
+          if (res.status !== 200) fail(res);
+          return res.text();
+        },
       );
-      if (res.status !== 200) fail(res);
       let failures: { key: string; code: string }[];
       try {
-        failures = parseDeleteResult(await res.text());
+        failures = parseDeleteResult(text);
       } catch {
         throw new ObjStoreError('bad_response');
       }
@@ -309,26 +297,38 @@ export function createObjStore(cfg: ObjStoreConfig): ObjStore {
       if (!opts.contentType || /[\r\n]/.test(opts.contentType)) throw new ObjStoreError('bad_input');
       const headers: Record<string, string> = { 'content-type': opts.contentType };
       if (opts.ifNoneMatch) headers['if-none-match'] = '*';
-      const res = await send('PUT', `${bucketUrl(bucket)}/${encodeKey(key)}`, headers, body);
-      if (res.status === 412 && opts.ifNoneMatch) throw new ObjStoreError('exists', 412);
-      if (res.status !== 200) fail(res);
-      return { etag: res.headers.get('etag') };
+      return send('PUT', `${bucketUrl(bucket)}/${encodeKey(key)}`, headers, body, transferTimeoutMs, (res) => {
+        if (res.status === 412 && opts.ifNoneMatch) throw new ObjStoreError('exists', 412);
+        if (res.status !== 200) fail(res);
+        discard(res); // 成功的响应体（通常是空的）也用不到
+        return { etag: res.headers.get('etag') };
+      });
     },
 
     async get(bucket, key) {
       checkKey(key);
-      const res = await send('GET', `${bucketUrl(bucket)}/${encodeKey(key)}`, {});
-      if (res.status === 404) return null;
-      if (res.status !== 200) fail(res);
-      return { ...meta(res), body: res.body };
+      // 只算到拿到响应头：200 的流式响应体交给调用方，不计时、不取消
+      return send('GET', `${bucketUrl(bucket)}/${encodeKey(key)}`, {}, undefined, transferTimeoutMs, (res) => {
+        if (res.status === 404) {
+          discard(res);
+          return null;
+        }
+        if (res.status !== 200) fail(res);
+        return { ...meta(res), body: res.body };
+      });
     },
 
     async head(bucket, key) {
       checkKey(key);
-      const res = await send('HEAD', `${bucketUrl(bucket)}/${encodeKey(key)}`, {});
-      if (res.status === 404) return null;
-      if (res.status !== 200) fail(res);
-      return meta(res);
+      return send('HEAD', `${bucketUrl(bucket)}/${encodeKey(key)}`, {}, undefined, timeoutMs, (res) => {
+        if (res.status === 404) {
+          discard(res);
+          return null;
+        }
+        if (res.status !== 200) fail(res);
+        discard(res);
+        return meta(res);
+      });
     },
 
     list,
@@ -336,8 +336,8 @@ export function createObjStore(cfg: ObjStoreConfig): ObjStore {
     deleteMany,
 
     async deletePrefix(bucket, pfx) {
-      // 前缀不准空：防止一个空字符串把整个桶删光
-      checkPrefix(pfx, false);
+      // 只认 `<uuid>/`：空字符串会把整个桶删光，少了 / 或更短的前缀会删到别人（注销、清理都按一个人的整个前缀删）
+      if (!USER_PREFIX_RE.test(pfx)) throw new ObjStoreError('bad_input');
       const objs = await listAll(bucket, pfx);
       const deleted = objs.length ? await deleteMany(bucket, objs.map((o) => o.key)) : 0;
       const again = await list(bucket, pfx, { maxKeys: 1 });

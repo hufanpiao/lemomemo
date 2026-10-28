@@ -14,7 +14,7 @@ function realStore(buckets: readonly string[]): ObjStore {
   const fake = createFakeS3({ accessKeyId: 'FAKEKEYIDLOCALTEST', secretAccessKey: 'fake-secret-for-local-tests-only', buckets: [...buckets] });
   const fetch: ObjFetch = (url, init) => fake.handle(new Request(url, init as RequestInit));
   return createObjStore({
-    endpoint: 'http://fake-s3.test',
+    endpoint: 'https://fake-s3.test',
     accessKeyId: 'FAKEKEYIDLOCALTEST',
     secretAccessKey: 'fake-secret-for-local-tests-only',
     fetch,
@@ -91,21 +91,23 @@ describe.each(impls)('ObjStore 行为（%s）', (_, make) => {
     expect(await s.deleteMany('files', Array.from({ length: 1001 }, (_, i) => `u/k${i}`))).toBe(1001);
   });
 
-  it('deletePrefix：只删这个前缀，回 { deleted }；空前缀抛 bad_input', async () => {
+  it('deletePrefix：只删这个前缀，回 { deleted }；空前缀、不是 <uuid>/ 的前缀抛 bad_input（B0 返工：代码审查低 2、安全审查低 3）', async () => {
     const s = make(['files']);
-    for (const k of ['a/1', 'a/2', 'ab/1', 'b/1']) await s.put('files', k, bytes('x'), { contentType: 'application/pdf' });
-    expect(await s.deletePrefix('files', 'a/')).toEqual({ deleted: 2 });
-    expect((await s.listAll('files', '')).map((o) => o.key)).toEqual(['ab/1', 'b/1']);
-    expect(await s.deletePrefix('files', 'a/')).toEqual({ deleted: 0 });
-    expect(await code(s.deletePrefix('files', ''))).toBe('bad_input');
+    const [a, b] = [SEED_USERS.a, SEED_USERS.b];
+    for (const k of [`${a}/1`, `${a}/2`, `${a}x/1`, `${b}/1`]) await s.put('files', k, bytes('x'), { contentType: 'application/pdf' });
+    expect(await s.deletePrefix('files', `${a}/`)).toEqual({ deleted: 2 });
+    expect((await s.listAll('files', '')).map((o) => o.key)).toEqual([`${a}x/1`, `${b}/1`]);
+    expect(await s.deletePrefix('files', `${a}/`)).toEqual({ deleted: 0 });
+    for (const p of ['', 'a/', a, `${a}/x/`, `${a.toUpperCase()}/`]) expect(await code(s.deletePrefix('files', p)), p).toBe('bad_input');
   });
 
   it('没建的桶：list、put、deleteMany 抛 http 404（S3 的 NoSuchBucket），head、get 回 null', async () => {
     const s = make(['images']);
     expect(await s.head('backups', 'k')).toBeNull();
     expect(await s.get('backups', 'k')).toBeNull();
-    for (const p of [s.put('backups', 'k', bytes('x'), { contentType: 'image/webp' }), s.deleteMany('backups', ['k'])]) {
-      const x = await p.catch((err: unknown) => err);
+    // 一个一个发：两个同时发时，后一个先失败会被当成“没处理的拒绝”
+    for (const p of [() => s.put('backups', 'k', bytes('x'), { contentType: 'image/webp' }), () => s.deleteMany('backups', ['k'])]) {
+      const x = await p().catch((err: unknown) => err);
       expect(x instanceof ObjStoreError && x.code === 'http' && x.status === 404).toBe(true);
     }
     const e = await s.list('backups', '').catch((x: unknown) => x);
@@ -121,9 +123,9 @@ describe('MemoryObjStore 的测试辅助', () => {
     s.failOnce('list');
     expect(await code(s.list('images', ''))).toBe('network');
     expect((await s.list('images', '')).objects).toEqual([]);
-    await s.put('images', 'u/1', bytes('x'), { contentType: 'image/webp' });
+    await s.put('images', `${SEED_USERS.a}/1`, bytes('x'), { contentType: 'image/webp' });
     s.calls.length = 0;
-    await s.deletePrefix('images', 'u/');
+    await s.deletePrefix('images', `${SEED_USERS.a}/`);
     expect(s.calls.map((c) => c.op)).toEqual(['list', 'deleteMany', 'list']);
   });
 
@@ -131,13 +133,13 @@ describe('MemoryObjStore 的测试辅助', () => {
     class Racy extends MemoryObjStore {
       override async deleteMany(bucket: string, keys: readonly string[]): Promise<number> {
         const n = await super.deleteMany(bucket, keys);
-        this.plant(bucket, 'u/late', bytes('x'));
+        this.plant(bucket, `${SEED_USERS.a}/late`, bytes('x'));
         return n;
       }
     }
     const s = new Racy(['images']);
-    await s.put('images', 'u/1', bytes('x'), { contentType: 'image/webp' });
-    expect(await code(s.deletePrefix('images', 'u/'))).toBe('not_empty');
+    await s.put('images', `${SEED_USERS.a}/1`, bytes('x'), { contentType: 'image/webp' });
+    expect(await code(s.deletePrefix('images', `${SEED_USERS.a}/`))).toBe('not_empty');
   });
 
   it('deleteMany 超过 1000 个时按 1000 一批记调用', async () => {

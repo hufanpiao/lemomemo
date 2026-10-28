@@ -4,6 +4,7 @@ import { filesAuthorize, type AuthzItem } from './files-authorize.ts';
 import { authzConfig, bearerOf, err, json, MAX_NAME_INPUT, PATH_RE, secretOk, SUSPICIOUS_RE, type FilesDeps, type FilesEnv } from './files-http.ts';
 import { isClientBucket, matchPath, ttlFor, TTL, type FilesBucket, type MatchedPath, type Purpose } from './files-rules.ts';
 import { sanitizeFilename, sign, signedUrl } from './files-sign.ts';
+import { concat } from './files-upload.ts';
 
 const MAX_SIGN_ITEMS = 100;
 const MAX_SIGN_BODY = 64 * 1024;
@@ -35,14 +36,8 @@ async function readLimited(request: Request, max: number): Promise<string | null
     }
     chunks.push(value);
   }
-  const all = new Uint8Array(n);
-  let off = 0;
-  for (const c of chunks) {
-    all.set(c, off);
-    off += c.length;
-  }
   try {
-    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(all);
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(concat(chunks, n));
   } catch {
     return null;
   }

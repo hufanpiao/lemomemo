@@ -7,7 +7,7 @@
 // 错误体一律 {code, reason?}（和 /sb 本地错误一样；src/platform/files.ts 按它解析）。
 
 import { createObjStore, ObjStoreError, type ObjStore } from '../../shared/objstore.ts';
-import { applyCors, isAllowedOrigin, preflightHeaders } from '../_lib/cors.ts';
+import { applyCors, FILES_ALLOW_METHODS, isAllowedOrigin, preflightHeaders } from '../_lib/cors.ts';
 import { filesAuthorize } from '../_lib/files-authorize.ts';
 import { authzConfig, bearerOf, err, json, MAX_NAME_INPUT, PATH_RE, secretOk, SUSPICIOUS_RE, type FilesDeps, type FilesEnv } from '../_lib/files-http.ts';
 import { isClientBucket, matchPath, TTL } from '../_lib/files-rules.ts';
@@ -15,6 +15,7 @@ import { handleSign } from '../_lib/files-sign-route.ts';
 import { contentDisposition, verify } from '../_lib/files-sign.ts';
 import { prepareUpload } from '../_lib/files-upload.ts';
 import { gateFor } from '../_lib/gate.ts';
+import { rawPathAndQuery } from '../_lib/raw-url.ts';
 import { applyFilesSecurityHeaders } from '../_lib/security-headers.ts';
 import { upgradeRequiredResponse } from '../sb/version-gate.ts';
 
@@ -24,15 +25,9 @@ type Route = { kind: 'object'; bucket: string; path: string; query: string } | {
 
 /** 从原始 URL 取路由；不合规返回 null（回 404） */
 export function parseRoute(rawUrl: string): Route {
-  const schemeEnd = rawUrl.indexOf('//');
-  const pathStart = schemeEnd < 0 ? -1 : rawUrl.indexOf('/', schemeEnd + 2);
-  if (pathStart < 0) return null;
-  const rest = rawUrl.slice(pathStart);
-  const hash = rest.indexOf('#');
-  const noHash = hash < 0 ? rest : rest.slice(0, hash);
-  const q = noHash.indexOf('?');
-  const rawPath = q < 0 ? noHash : noHash.slice(0, q);
-  const query = q < 0 ? '' : noHash.slice(q + 1);
+  const parts = rawPathAndQuery(rawUrl);
+  if (!parts) return null;
+  const { path: rawPath, query } = parts;
   if (rawPath === '/files/v1/sign') return { kind: 'sign' };
   const pre = '/files/v1/o/';
   if (!rawPath.startsWith(pre)) return null;
@@ -53,6 +48,7 @@ async function handlePut(request: Request, env: FilesEnv, deps: FilesDeps, bucke
   if (verdict.action === 'block') return [upgradeRequiredResponse(verdict.min, (h) => { applyFilesSecurityHeaders(h); applyCors(h, origin); }), 'put_upgrade_required'];
   const bearer = bearerOf(request);
   if (!bearer) return [err(401, 'unauthorized', origin), 'put_unauthorized'];
+  // “桶不对”只有一种回法：403 forbidden + reason bad_bucket（本地判断和 RPC 回的一样；TC-B0-36；代码审查低 4）
   if (!isClientBucket(bucket)) return [err(403, 'forbidden', origin, 'bad_bucket'), 'put_bad_bucket'];
   const m = matchPath(bucket, path);
   if (!m) return [err(400, 'bad_path', origin), 'put_bad_path'];
@@ -77,10 +73,11 @@ async function handlePut(request: Request, env: FilesEnv, deps: FilesDeps, bucke
   if (authz.kind === 'error') return [err(authz.status, authz.code, origin, authz.reason), authz.log];
   const item = authz.items[0];
   if (!item?.ok) {
-    // 后端 BE-2 的映射：bad_bucket、bad_path → 400 bad_path；其余 403 forbidden 带 reason
+    // RPC 的单项 reason：bad_path → 400 bad_path；其余（含 bad_bucket）→ 403 forbidden 带 reason。
+    // bad_bucket 和上面本地判断同一种写法（代码审查低 4：原来这里回 400 bad_path，一个错误两种回法）
     const why = item?.reason ?? 'denied';
-    if (why === 'bad_bucket' || why === 'bad_path') return [err(400, 'bad_path', origin), 'put_rpc_bad_path'];
-    return [err(403, 'forbidden', origin, why), 'put_denied'];
+    if (why === 'bad_path') return [err(400, 'bad_path', origin), 'put_rpc_bad_path'];
+    return [err(403, 'forbidden', origin, why), why === 'bad_bucket' ? 'put_rpc_bad_bucket' : 'put_denied'];
   }
   // 写 R2 前再断言：路径第一段等于 files_authorize 返回的 uid
   if (m.owner !== authz.uid) return [err(403, 'forbidden', origin, 'not_owner'), 'put_uid_mismatch'];
@@ -159,7 +156,8 @@ export async function handleFiles(request: Request, env: FilesEnv, deps: FilesDe
   let res: Response;
   let code: string;
   if (method === 'OPTIONS') {
-    const h = preflightHeaders(isAllowedOrigin(origin) ? origin : null);
+    // 只给 /files 实际支持的方法（安全审查低 4 ②：原来和 /sb 共用，带了 PATCH、DELETE）
+    const h = preflightHeaders(isAllowedOrigin(origin) ? origin : null, FILES_ALLOW_METHODS);
     applyFilesSecurityHeaders(h);
     return new Response(null, { status: 204, headers: h });
   }
@@ -207,19 +205,19 @@ function logFiles(code: string, ms: number): void {
 
 export const onRequest: PagesFunction<FilesEnv> = async (ctx) => {
   const env = ctx.env;
+  const origin = ctx.request.headers.get('Origin');
+  // 缺配置、配置不合规（例如 R2_ENDPOINT 是非本机的 http，createObjStore 拒绝）都回同一个 500，
+  // 和别的响应一样带 /files 的安全头和 CORS（代码审查低 5、安全审查低 4 ①）
   if (!env.R2_ENDPOINT || !env.R2_FILES_ACCESS_KEY_ID || !env.R2_FILES_SECRET_ACCESS_KEY) {
     logFiles('files_misconfigured', 0);
-    const h = new Headers({ 'Content-Type': 'application/json; charset=utf-8' });
-    applyFilesSecurityHeaders(h);
-    applyCors(h, ctx.request.headers.get('Origin'));
-    return new Response(JSON.stringify({ code: 'files_misconfigured' }), { status: 500, headers: h });
+    return err(500, 'files_misconfigured', origin);
   }
   let store: ObjStore;
   try {
     store = storeFor(env);
   } catch {
     logFiles('files_misconfigured', 0);
-    return new Response(JSON.stringify({ code: 'files_misconfigured' }), { status: 500 });
+    return err(500, 'files_misconfigured', origin);
   }
   return handleFiles(ctx.request, env, {
     fetch: (r) => fetch(r),

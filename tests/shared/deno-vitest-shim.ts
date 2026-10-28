@@ -1,7 +1,10 @@
 // Deno 跑 tests/shared 用的最小 vitest 替身（架构 2.5：shared 的测试 Node 和 Deno 都跑）
 // deno.json 的 import map 把 'vitest' 指到这里；只实现 shared 测试用到的几个匹配器，用多了这里会报“没实现”
 // 本文件只给 Deno 用，不进 tsconfig.node.json
-declare const Deno: { test(name: string, fn: () => void | Promise<void>): void };
+declare const Deno: {
+  test(name: string, fn: () => void | Promise<void>): void;
+  test(def: { name: string; ignore: boolean; fn: () => void }): void;
+};
 
 const stack: string[] = [];
 
@@ -18,6 +21,10 @@ export function it(name: string, a: unknown, b?: unknown): void {
   const fn = (typeof a === 'function' ? a : b) as () => void | Promise<void>;
   Deno.test([...stack, name].join(' > '), fn);
 }
+/** 报告里显示“ignored”（跳过），不是“通过”（QA D-10） */
+it.skip = (name: string, _a?: unknown, _b?: unknown): void => {
+  Deno.test({ name: [...stack, name].join(' > '), ignore: true, fn: () => {} });
+};
 export const test = it;
 
 function same(a: unknown, b: unknown): boolean {

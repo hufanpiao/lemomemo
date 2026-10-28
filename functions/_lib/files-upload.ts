@@ -25,7 +25,8 @@ export function isWebpHeader(b: Uint8Array): boolean {
   );
 }
 
-function concat(chunks: readonly Uint8Array[], total: number): Uint8Array {
+/** 把读到的若干块拼成一个 Uint8Array（files-sign-route.ts 读请求体也用这一份） */
+export function concat(chunks: readonly Uint8Array[], total: number): Uint8Array {
   const out = new Uint8Array(total);
   let off = 0;
   for (const c of chunks) {

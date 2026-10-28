@@ -1,0 +1,21 @@
+# Pages Functions（/sb/*、/files/*）本机调试用的变量样板（B0 R2 任务单 FB-3、第四节第 4 步；架构 8.4、14.2）。
+# 用法：复制成 .dev.vars（已被 .gitignore 忽略，不进仓库），按注释填本机的值，再 `npx wrangler pages dev dist/web`。
+# 这里只写变量名，不写任何真值。只填本机 Supabase（supabase start）和 S3 替身（node build/objstore.mjs up）的测试值；
+# 预览、正式的令牌一律不放进 .dev.vars，也不要发给 Claude、不要截图。
+
+# 本地 Supabase（supabase start 打印的 API URL）
+SUPABASE_UPSTREAM=http://127.0.0.1:54321
+# 本地 anon key（supabase start 打印的 anon key）
+SUPABASE_ANON_KEY=
+# /sb 转发给服务器函数的共享密钥：本机随便写一串（至少 32 个字符）
+PROXY_SECRET=
+
+# S3 替身（LocalStack，只听 127.0.0.1:4566）。objstore 只许本机地址用 http，别的地址必须 https
+R2_ENDPOINT=http://127.0.0.1:4566
+# 本机和正式留空，预览是 preview-
+R2_BUCKET_PREFIX=
+# 替身的测试凭据（不是真令牌）
+R2_FILES_ACCESS_KEY_ID=
+R2_FILES_SECRET_ACCESS_KEY=
+# /files 签链接的 HMAC 密钥：本机随便写一串（至少 32 个字符）
+FILES_URL_SECRET=

@@ -8,7 +8,7 @@ export const T0 = Date.UTC(2026, 9, 28, 3, 0, 0);
 export const ENV: FilesEnv = {
   SUPABASE_UPSTREAM: 'http://supabase.fake.test',
   SUPABASE_ANON_KEY: 'fake-anon-key',
-  R2_ENDPOINT: 'http://s3.fake.test',
+  R2_ENDPOINT: 'https://s3.fake.test',
   R2_FILES_ACCESS_KEY_ID: 'FAKEKEYID',
   R2_FILES_SECRET_ACCESS_KEY: 'fake-secret',
   FILES_URL_SECRET: 'fake-files-url-secret-for-tests-only-0000',
