@@ -161,15 +161,32 @@ const STATUS_CODE: Record<number, string> = {
 };
 
 async function failFromResponse(res: Response): Promise<FileError> {
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // 不是 JSON（例如 Cloudflare 的默认错误页）：按状态码算
-  }
-  const parsed = ErrorBody.safeParse(body);
+  // 不是 JSON（例如 Cloudflare 的默认错误页）：按状态码算
+  const parsed = ErrorBody.safeParse(await readJson(res));
   if (parsed.success) return fail(res.status, parsed.data.code, parsed.data.reason);
   return fail(res.status, STATUS_CODE[res.status] ?? `http_${res.status}`);
+}
+
+/** 读 JSON 响应体；不是 JSON 或读不下来都回 null（读体卡住由 exchange 的超时兜底） */
+async function readJson(res: Response): Promise<unknown> {
+  try {
+    return JSON.parse(await res.text()) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/** 用自己持有的 reader 转一手响应体，超时时 exchange 能经这个 reader 取消（原响应体已上锁，直接 cancel 会被拒） */
+function relay(res: Response, reader: ReadableStreamDefaultReader<Uint8Array>): Response {
+  const body = new ReadableStream<Uint8Array>({
+    async pull(c) {
+      const { done, value } = await reader.read();
+      if (done) c.close();
+      else c.enqueue(value);
+    },
+    cancel: (why) => reader.cancel(why),
+  });
+  return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
 }
 
 // ───────── 客户端 ─────────
@@ -195,16 +212,41 @@ export function createFilesClient(deps: FilesDeps): FilesClient {
   const doFetch = deps.fetch ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
   const objectUrl = (bucket: FileBucket, path: string) => new URL(`o/${bucket}/${path}`, base).toString();
 
-  /** 发请求；网络错和超时折成 FileError */
-  async function send(url: string, init: RequestInit, timeoutMs: number): Promise<Response | FileError> {
+  /**
+   * 发请求并读完响应体；网络错和超时折成 FileError（代码审查低 6）。
+   * 计时器从发请求一直管到 read 读完响应体：响应头到了、响应体卡住（慢网读 10 MB）也会按时变成 retry/timeout，
+   * 而不是一直挂着。超时时先 abort 请求，再经自己持有的 reader 取消响应体（read 正在读、流已上锁时也取消得掉）
+   */
+  async function exchange<T>(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+    read: (res: Response) => Promise<T | FileError>,
+  ): Promise<T | FileError> {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    const failed = (): FileError => ({ ok: false, kind: 'retry', code: ctl.signal.aborted ? 'timeout' : 'network', status: 0 });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<'timeout'>((resolve) => {
+      timer = setTimeout(() => {
+        ctl.abort();
+        resolve('timeout');
+      }, timeoutMs);
+    });
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     try {
-      return await doFetch(url, { ...init, signal: ctl.signal, credentials: 'omit', cache: 'no-store', redirect: 'error' });
+      const got = await Promise.race([
+        doFetch(url, { ...init, signal: ctl.signal, credentials: 'omit', cache: 'no-store', redirect: 'error' }),
+        expired,
+      ]);
+      if (got === 'timeout') return failed();
+      reader = got.body?.getReader();
+      const out = await Promise.race([read(reader ? relay(got, reader) : got), expired]);
+      return out === 'timeout' ? failed() : out;
     } catch {
-      return { ok: false, kind: 'retry', code: ctl.signal.aborted ? 'timeout' : 'network', status: 0 };
+      return failed();
     } finally {
       clearTimeout(timer);
+      if (ctl.signal.aborted) reader?.cancel().catch(() => undefined);
     }
   }
 
@@ -218,23 +260,18 @@ export function createFilesClient(deps: FilesDeps): FilesClient {
     if (!isFileBucket(bucket) || !isSafePath(path)) return local('bad_path');
     const headers = await authHeaders({ 'Content-Type': contentType });
     if (!(headers instanceof Headers)) return headers;
-    const res = await send(objectUrl(bucket, path), { method: 'PUT', headers, body: blob }, TIMEOUT_MS.upload);
-    if (!(res instanceof Response)) return res;
-    const headerEtag = res.headers.get('ETag');
-    if (res.status === 409) {
-      const err = await failFromResponse(res);
-      // 只有 exists 当成功：重试时对象已经在了（条件写保证不会被覆盖，内容由 file-check 核对）
-      return err.code === 'exists' ? { ok: true, etag: headerEtag, existed: true } : err;
-    }
-    if (!res.ok) return failFromResponse(res);
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch {
-      // 成功但没有 JSON：用响应头的 ETag
-    }
-    const parsed = UploadOk.safeParse(body);
-    return { ok: true, etag: (parsed.success ? parsed.data.etag : undefined) ?? headerEtag, existed: false };
+    return exchange(objectUrl(bucket, path), { method: 'PUT', headers, body: blob }, TIMEOUT_MS.upload, async (res): Promise<UploadResult> => {
+      const headerEtag = res.headers.get('ETag');
+      if (res.status === 409) {
+        const err = await failFromResponse(res);
+        // 只有 exists 当成功：重试时对象已经在了（条件写保证不会被覆盖，内容由 file-check 核对）
+        return err.code === 'exists' ? { ok: true, etag: headerEtag, existed: true } : err;
+      }
+      if (!res.ok) return failFromResponse(res);
+      const body = await readJson(res);
+      const parsed = UploadOk.safeParse(body);
+      return { ok: true, etag: (parsed.success ? parsed.data.etag : undefined) ?? headerEtag, existed: false };
+    });
   }
 
   /** 一批（≤ 100 项）；返回和这一批同序的结果 */
@@ -243,16 +280,14 @@ export function createFilesClient(deps: FilesDeps): FilesClient {
     const headers = await authHeaders({ 'Content-Type': 'application/json' });
     if (!(headers instanceof Headers)) return all(headers);
     const items = batch.map((x) => (x.d === undefined ? { bucket: x.bucket, path: x.path, purpose: x.purpose } : { ...x }));
-    const res = await send(new URL('sign', base).toString(), { method: 'POST', headers, body: JSON.stringify({ items }) }, TIMEOUT_MS.sign);
-    if (!(res instanceof Response)) return all(res);
-    if (!res.ok) return all(await failFromResponse(res));
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch {
-      // 落到下面的 bad_response
-    }
-    const parsed = SignBody.safeParse(body);
+    const body = await exchange(
+      new URL('sign', base).toString(),
+      { method: 'POST', headers, body: JSON.stringify({ items }) },
+      TIMEOUT_MS.sign,
+      async (res): Promise<{ json: unknown } | FileError> => (res.ok ? { json: await readJson(res) } : failFromResponse(res)),
+    );
+    if ('ok' in body) return all(body);
+    const parsed = SignBody.safeParse(body.json);
     if (!parsed.success) return all(local('bad_response'));
     const out: SignResult[] = all(local('bad_response'));
     for (const r of parsed.data.items) {
@@ -290,15 +325,12 @@ export function createFilesClient(deps: FilesDeps): FilesClient {
 
   async function fetchBlob(url: string): Promise<BlobResult> {
     if (checkSignedUrl(url, base.toString()) === null) return local('bad_url');
-    const res = await send(url, { method: 'GET' }, TIMEOUT_MS.get);
-    if (!(res instanceof Response)) return res;
-    if (!res.ok) return failFromResponse(res);
-    try {
+    // 计时包含读完响应体（10 MB 附件在慢网上读一半卡住也会按时结束）
+    return exchange(url, { method: 'GET' }, TIMEOUT_MS.get, async (res): Promise<BlobResult> => {
+      if (!res.ok) return failFromResponse(res);
       const blob = await res.blob();
       return { ok: true, blob, contentType: res.headers.get('Content-Type') ?? blob.type };
-    } catch {
-      return { ok: false, kind: 'retry', code: 'network', status: 0 };
-    }
+    });
   }
 
   return { upload, sign, fetchBlob };

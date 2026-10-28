@@ -1,4 +1,4 @@
-// arch-fixture: path=src/features/notes/ui/Long.tsx expect=max-lines-per-function severity=warn
+// arch-fixture: path=src/features/notes/ui/Long.tsx expect=max-lines-per-function severity=warn rule=W1
 // 违规（警告）：单个组件超过 150 行
 export function Long() {
   const v0 = 0;

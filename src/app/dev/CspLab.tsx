@@ -17,6 +17,7 @@ function RawRadixDialog() {
         Raw Radix dialog (with Overlay)
       </RD.Trigger>
       <RD.Portal>
+        {/* eslint-disable-next-line no-restricted-syntax -- 对照组：tests/e2e/csp.spec.ts 要证明 Overlay 确实被 CSP 拦（只在开发版挂） */}
         <RD.Overlay className={styles.overlay} />
         <RD.Content className={styles.panel} data-testid="raw-dialog" aria-describedby={undefined}>
           <RD.Title>Raw</RD.Title>

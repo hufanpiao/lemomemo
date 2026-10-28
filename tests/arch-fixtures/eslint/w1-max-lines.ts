@@ -1,4 +1,4 @@
-// arch-fixture: path=src/core/long.ts expect=max-lines severity=warn
+// arch-fixture: path=src/core/long.ts expect=max-lines severity=warn rule=W1
 // 违规（警告）：单个文件超过 300 行
 export const v0 = 0;
 export const v1 = 1;

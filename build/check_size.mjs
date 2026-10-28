@@ -1,6 +1,6 @@
 // 体积预算（架构 2.6、W3）：按 Vite 的 manifest 找出首屏要下载的 JS（入口 + 它静态 import 的 chunk），gzip 后合计
 // 首屏 JS ≤ 150 KB（含 React）超了就失败；全部 JS ≤ 250 KB 只提示（硬验收在 B2，B0 只做脚本，空白 App 的数字没有意义）
-// 用法：node build/check_size.mjs [--json]
+// 用法：node build/check_size.mjs [--json] [--app-dir <目录>]（--app-dir 默认 dist/web/app；违规样例测试用它指到临时目录，QA D-06）
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,7 +41,9 @@ export function measure(appDir) {
 
 function main() {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const r = measure(resolve(root, 'dist/web/app'));
+  const i = process.argv.indexOf('--app-dir');
+  const appDir = i > 0 && process.argv[i + 1] ? resolve(process.argv[i + 1]) : resolve(root, 'dist/web/app');
+  const r = measure(appDir);
   const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
   if (process.argv.includes('--json')) console.log(JSON.stringify(r));
   else {

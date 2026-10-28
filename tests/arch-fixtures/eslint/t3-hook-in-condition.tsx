@@ -1,4 +1,4 @@
-// arch-fixture: path=src/features/notes/hooks/useBad.ts expect=react-hooks/rules-of-hooks
+// arch-fixture: path=src/features/notes/hooks/useBad.ts expect=react-hooks/rules-of-hooks rule=T3
 // 违规：条件里调 hook
 import { useState } from 'react';
 

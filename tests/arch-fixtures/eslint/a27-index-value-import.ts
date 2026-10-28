@@ -1,4 +1,4 @@
-// arch-fixture: path=src/features/notes/index.ts expect=lemo/feature-index-exports
+// arch-fixture: path=src/features/notes/index.ts expect=lemo/feature-index-exports message=A27 rule=A27
 // 违规：值导入自己的 ui，再放进路由表
 import NotesPage from './ui/NotesPage.tsx';
 

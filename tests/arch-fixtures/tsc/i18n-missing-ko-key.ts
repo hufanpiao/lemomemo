@@ -1,4 +1,4 @@
-// arch-fixture: expect=TS1360
+// arch-fixture: expect=TS1360 rule=2.4
 // 违规：韩文词典少一个键编译不过（satisfies Record<SharedMsgKey, string>）
 import type { SharedMsgKey } from '../../../shared/i18n/i18n.ts';
 
