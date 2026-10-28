@@ -2,7 +2,7 @@
 -- /files 函数带用户的 JWT 调 public.files_authorize；这里用 tests.fa 模拟“以某人、某会话的身份经 PostgREST 调”
 -- 返回值：{uid, items: [{i, ok, reason?}]}，整批不过时 {uid, error, items: []}；入参不对报 22023
 begin;
-select plan(57);
+select plan(59);
 \ir _helpers.psql
 select tests.seed();
 
@@ -223,6 +223,11 @@ select is(tests.fa1('put', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/40000
   'bad_bucket', 'put：图挂在隐私记上（is_private = true）→ bad_bucket');
 select is(tests.fa1('put', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a9/1e000000-0000-4000-8000-0000000000a9.t.webp'),
   'bad_bucket', 'put 缩略图：图挂在隐私记上 → bad_bucket');
+-- 架构 0.34 第 2 条：get 也查（隐私记的图不经 /files 不只靠 vault 函数把 bucket 改对）
+select is(tests.fa1('get', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a9/1e000000-0000-4000-8000-0000000000a9.webp'),
+  'bad_bucket', 'get：图挂在隐私记上（is_private = true）→ bad_bucket');
+select is(tests.fa1('get', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a9/1e000000-0000-4000-8000-0000000000a9.t.webp'),
+  'bad_bucket', 'get 缩略图：图挂在隐私记上 → bad_bucket');
 
 -- ===== TC-B0-105：限流（一个事务里 now() 不变，分钟窗口不会跨） =====
 delete from private.counters where key like 'files_%';

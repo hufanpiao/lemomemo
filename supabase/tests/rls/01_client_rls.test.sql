@@ -1,7 +1,7 @@
 -- 客户端身份（A、B、anon）的 RLS 和列级授权：TC-B0-32、38、54、55、79、94
 -- 跑法：supabase test db（待 Docker）；离线：supabase/tests/offline/run.mjs
 begin;
-select plan(48);
+select plan(60);
 \ir _helpers.psql
 select tests.seed();
 
@@ -51,6 +51,38 @@ select ok(tests.try_as('authenticated', 'bbbbbbbb-0000-4000-8000-000000000002',
 select is(tests.try_as('authenticated', 'bbbbbbbb-0000-4000-8000-000000000002',
   $$delete from public.devices where id = 'de000000-0000-4000-8000-00000000000a'$$, null, 'bbbbbbbb-5555-4000-8000-000000000002'), 'ok', 'B 删 A 的设备：不报错');
 select is((select count(*)::int from public.devices where id = 'de000000-0000-4000-8000-00000000000a'), 1, 'A 的设备还在');
+
+-- TC-B0-89 必含反例（QA 第二轮 D-12；0.29 续第 98 条②、第 99 条①）：A 的删、改只能动 session_id 等于 JWT 本会话的那一行。
+--   同一个用户的另一会话的设备、session_id 为空的行都被 RLS 过滤成 0 行（不报错、行不变）。postgres 直写造数据
+insert into auth.sessions (id, user_id) values ('aaaaaaaa-6666-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001');
+insert into public.devices (id, user_id, platform, label, session_id) values
+  ('de000000-0000-4000-8000-00000000000b', 'aaaaaaaa-0000-4000-8000-000000000001', 'ios', '会话2', 'aaaaaaaa-6666-4000-8000-000000000001'),
+  ('de000000-0000-4000-8000-00000000000c', 'aaaaaaaa-0000-4000-8000-000000000001', 'windows', '没会话', null);
+select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001',
+  $$update public.devices set label = '会话1改的' where id = 'de000000-0000-4000-8000-00000000000b'$$, null, 'aaaaaaaa-5555-4000-8000-000000000001'), 'ok',
+  'A 以会话 1 改会话 2 的设备：不报错（被 RLS 过滤）');
+select is((select label from public.devices where id = 'de000000-0000-4000-8000-00000000000b'), '会话2', 'A 以会话 1 改不了会话 2 的设备');
+select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001',
+  $$update public.devices set label = '会话1改的' where id = 'de000000-0000-4000-8000-00000000000c'$$, null, 'aaaaaaaa-5555-4000-8000-000000000001'), 'ok',
+  'A 改 session_id 为空的设备：不报错（被 RLS 过滤）');
+select is((select label from public.devices where id = 'de000000-0000-4000-8000-00000000000c'), '没会话', 'A 改不了 session_id 为空的设备（不能认领）');
+select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001',
+  $$delete from public.devices where id = 'de000000-0000-4000-8000-00000000000b'$$, null, 'aaaaaaaa-5555-4000-8000-000000000001'), 'ok',
+  'A 以会话 1 删会话 2 的设备：不报错（被 RLS 过滤）');
+select is((select count(*)::int from public.devices where id = 'de000000-0000-4000-8000-00000000000b'), 1, 'A 以会话 1 删不了会话 2 的设备');
+select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001',
+  $$delete from public.devices where id = 'de000000-0000-4000-8000-00000000000c'$$, null, 'aaaaaaaa-5555-4000-8000-000000000001'), 'ok',
+  'A 删 session_id 为空的设备：不报错（被 RLS 过滤）');
+select is((select count(*)::int from public.devices where id = 'de000000-0000-4000-8000-00000000000c'), 1, 'A 删不了 session_id 为空的设备');
+-- 对照：本机那一行（session_id = JWT 的会话）能改、能删
+select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$
+  insert into public.devices (id, platform, label) values ('de000000-0000-4000-8000-00000000000d', 'web', '本机');
+  update public.devices set label = '本机改的' where id = 'de000000-0000-4000-8000-00000000000d'$$, null, 'aaaaaaaa-5555-4000-8000-000000000001'), 'ok',
+  'A 以会话 1 登记并改本机设备');
+select is((select label from public.devices where id = 'de000000-0000-4000-8000-00000000000d'), '本机改的', '本机设备改成了');
+select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001',
+  $$delete from public.devices where id = 'de000000-0000-4000-8000-00000000000d'$$, null, 'aaaaaaaa-5555-4000-8000-000000000001'), 'ok', 'A 以会话 1 删本机设备');
+select is((select count(*)::int from public.devices where id = 'de000000-0000-4000-8000-00000000000d'), 0, '本机设备删掉了');
 
 -- B 冒用 A 的 user_id 写入
 select ok(tests.try_as('authenticated', 'bbbbbbbb-0000-4000-8000-000000000002', $$

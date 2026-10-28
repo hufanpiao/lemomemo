@@ -67,7 +67,7 @@ jobs:
       - name: check_arch（架构 2.3）
         run: python -I build/check_arch.py
 
-      - name: 后端静态检查 check_backend（函数的钥匙范围 F1～F5、迁移写法 M1～M3；TC-B0-35、68、73、75、92、97）
+      - name: 后端静态检查 check_backend（函数的钥匙范围 F1～F5、迁移写法 M1～M6；TC-B0-35、68、73、75、92、97）
         # 违规样例在 tests/arch-fixtures/check_backend/，由下一步的 Vitest（tests/build/check-backend.test.ts）证明拦得住
         run: python -I build/check_backend.py
 
