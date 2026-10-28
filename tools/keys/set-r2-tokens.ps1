@@ -150,9 +150,12 @@ function Read-Value([string]$label, [string]$where, [string]$pattern, [string]$h
             return $plain
         }
         $len = $plain.Length
-        $bad = ($plain -replace '[0-9a-fA-F]', '').Length
-        $plain = $null
-        Warn "格式不对（要 $hint）：收到 $len 个字符，其中 $bad 个不是十六进制。多半复制错了栏（例如复制成了上面的“令牌值”）或没复制全"
+        $other = $plain -replace '[0-9a-fA-F]', ''
+        $bad = $other.Length
+        # 只列出不属于十六进制的字符编码（它们不是密钥的一部分），不显示值本身
+        $codes = (($other.ToCharArray() | Select-Object -Unique -First 5) | ForEach-Object { 'U+{0:X4}' -f [int]$_ }) -join ' '
+        $plain = $null; $other = $null
+        Warn "格式不对（要 $hint）：收到 $len 个字符，其中 $bad 个不是十六进制 $codes。多半复制错了栏（例如复制成了上面的“令牌值”）或没复制全"
         if ($try -lt 3) { Say '  请回到网页重新复制这一项，再粘贴一次：' }
     }
     Fail "$label 连续 3 次格式不对，已停止"
