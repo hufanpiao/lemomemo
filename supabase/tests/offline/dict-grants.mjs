@@ -1,5 +1,5 @@
 // 数据字典人工核对的辅助：从数据字典第 4 节抽出每张 public 表的列和“谁写”，列出 PGlite 上 authenticated 的实际列级授权（I/U），供人逐行看
-// 用法：cd supabase/tests/offline && node dict-grants.mjs（只打印，不判断对错；结论见 docs/03-评审/B0/后端-数据字典人工核对.md）
+// 用法（仓库根目录，依赖用根目录的 package.json）：node supabase/tests/offline/dict-grants.mjs（只打印，不判断对错；结论见 docs/03-评审/B0/后端-数据字典人工核对.md）
 import { PGlite } from '@electric-sql/pglite';
 import { vector } from '@electric-sql/pglite-pgvector';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -33,7 +33,7 @@ const COMMON = ['settings', 'devices', 'events', 'todos', 'categories', 'notes',
 for (const [t, cols] of Object.entries(tables)) {
   const out = [];
   const all = [...cols];
-  if (COMMON.includes(t)) for (const c of ['id', 'deleted_at', 'undone', 'legacy_id', 'rev', 'fv', 'synced_at', 'user_id']) if (!all.some((x) => x.col === c)) all.push({ col: c, who: '(公共列)' });
+  if (COMMON.includes(t)) for (const c of ['id', 'deleted_at', 'undone', 'rev', 'fv', 'synced_at', 'user_id']) if (!all.some((x) => x.col === c)) all.push({ col: c, who: '(公共列)' });
   for (const { col, who } of all) {
     if (col.startsWith('＜')) continue;
     const p = g[t]?.[col] ?? new Set();

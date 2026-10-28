@@ -1,7 +1,7 @@
 // 清单共用的片段：公共列、找人方式（只放常量，不放逻辑）
 
 /** 有公共列的表（3.2）都有这几列；隐私记行的 neutralCols 都含它们 */
-export const COMMON_COLS = ['id', 'user_id', 'rev', 'fv', 'deleted_at', 'undone', 'synced_at', 'legacy_id'] as const;
+export const COMMON_COLS = ['id', 'user_id', 'rev', 'fv', 'deleted_at', 'undone', 'synced_at'] as const;   // legacy_id 不建（R-208，架构 0.30）
 
 /** 按 user_id 找人 */
 export const BY_USER = { by: 'column', col: 'user_id' } as const;

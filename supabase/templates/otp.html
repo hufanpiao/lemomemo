@@ -1,0 +1,12 @@
+<!-- 登录验证码邮件（Supabase Auth 的 magic_link 模板；架构 15.6 总表、5.6、2.4 第 6 点）
+     只写 {{ .Token }}，不放登录链接；按 user_metadata.locale 分中韩（invite-signup 建用户时写、改语言时 auth.updateUser 写）。
+     【线上】运维把同一份内容贴进控制台的模板。这个写法上线前要实测（2.4 第 6 点）。文案待韩文审校（R-106）。 -->
+{{ if eq .Data.locale "ko-KR" }}
+<p>레모 인증 코드</p>
+<p style="font-size:24px;letter-spacing:4px"><strong>{{ .Token }}</strong></p>
+<p>10분 동안 유효해요. 직접 요청하지 않았다면 이 메일은 무시해 주세요.</p>
+{{ else }}
+<p>柠檬记验证码</p>
+<p style="font-size:24px;letter-spacing:4px"><strong>{{ .Token }}</strong></p>
+<p>10 分钟内有效。如果不是你本人操作，请忽略这封邮件。</p>
+{{ end }}

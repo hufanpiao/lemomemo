@@ -77,7 +77,9 @@ export async function requireActiveUser(req: Request, admin: SupabaseClient, opt
   if (!jwt) throw new AuthError('unauthorized', 401);
 
   const { data, error } = await timed(admin.auth.getUser(jwt));
-  if (error && ((error as { status?: number }).status ?? 500) >= 500) throw new AuthError('try_later', 503);   // Auth 服务出错不算“没登录”
+  // Auth 服务出错不算“没登录”：5xx、429（限流），以及连不上——supabase-js 2.x 把网络错误报成 AuthRetryableFetchError、status 为 0
+  const st = error ? (error as { status?: number }).status : undefined;
+  if (error && (st === undefined || st === 0 || st === 429 || st >= 500)) throw new AuthError('try_later', 503);
   if (error || !data.user) throw new AuthError('unauthorized', 401);
   const userId = data.user.id;
   const c = claims(jwt);

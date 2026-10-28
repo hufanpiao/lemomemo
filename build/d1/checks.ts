@@ -227,6 +227,39 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     if (!cons.some((r) => r.s === s && r.t === n && re.test(r.d))) bad(`${t} 缺约束 ${re.source}`);
   }
 
+  // ---------- 11b. 注销：onAccountDelete、userLookup 和外键、约束一致（架构 0.31 第 15、17 条；数据字典第 12 节） ----------
+  const fksOf = (s: string, t: string) => cons.filter((r) => r.s === s && r.t === t && r.d.startsWith('FOREIGN KEY')).map((r) => r.d);
+  const authFk = (col: string) => new RegExp(`^FOREIGN KEY \\(${col}\\) REFERENCES auth\\.users\\(id\\)( ON DELETE (CASCADE|SET NULL))?$`);
+  for (const t of tables.filter(has)) {
+    const name = key(t.schema, t.name), cols = colsOf(t.schema, t.name), u = t.userLookup;
+    if (!u) continue;
+    for (const c of u.by === 'rowRef' ? [u.tableCol, u.idCol] : u.by === 'column' || u.by === 'emailHash' || u.by === 'keyPattern' ? [u.col] : []) {
+      if (!cols.includes(c)) bad(`${name} 的 userLookup 写了列 ${c}，表里没有`);
+    }
+    if (u.by === 'column') {
+      const fk = fksOf(t.schema, t.name).map((d) => authFk(u.col).exec(d)).find(Boolean);
+      const action = fk ? (fk[2] ?? 'NO ACTION') : null;
+      // cascade：删 auth.users 时这一行跟着删；keep-id-only：行要留着，不能跟着删
+      if (t.onAccountDelete === 'cascade' && action !== 'CASCADE') bad(`${name} 写 onAccountDelete: cascade，${u.col} 却没有 references auth.users on delete cascade`);
+      if (t.onAccountDelete !== 'cascade' && action === 'CASCADE') bad(`${name} 写 onAccountDelete: ${t.onAccountDelete}，${u.col} 却 on delete cascade`);
+    }
+    if (u.by === 'rowRef') {
+      // P-29：tableCol 只能是 check 约束列出的表，每张都登记过、按 user_id 找人、有 idCol 那一列
+      const chk = cons.find((r) => r.s === t.schema && r.t === t.name && r.d.startsWith('CHECK') && r.d.includes(`(${u.tableCol} = ANY`));
+      const refs = chk ? [...chk.d.matchAll(/'([a-z_]+)'::text/g)].map((x) => x[1] ?? '') : [];
+      if (!refs.length) bad(`${name} 的 ${u.tableCol} 没有 check 约束限定能引用哪几张表（P-29）`);
+      for (const r of refs) {
+        const ref = tables.find((x) => x.schema === 'public' && x.name === r);
+        if (!ref || !has(ref)) bad(`${name}.${u.tableCol} 能引用 ${r}，它不是登记过的 public 表`);
+        else if (ref.userLookup?.by !== 'column' || ref.userLookup.col !== 'user_id' || !colsOf('public', r).includes(u.idCol)) bad(`${name}.${u.tableCol} 能引用 ${r}，它没有 user_id 或 ${u.idCol}，回查不到人`);
+      }
+      // remind_queue：往里写的触发器只能挂在这几张表上（挂到别的表上，一写就撞 check）
+      if (t.name === 'remind_queue') for (const tr of trig.filter((x) => x.f === 'enqueue_remind')) {
+        if (!refs.includes(tr.t)) bad(`enqueue_remind() 挂在 ${tr.t} 上，remind_queue.${u.tableCol} 的 check 约束不收它`);
+      }
+    }
+  }
+
   // ---------- 12. cron：动用户表的命令一律带超时（0.29 续第 141 条） ----------
   const jobs = await q<{ jobname: string; command: string }>(`select jobname, command from cron.job`);
   for (const j of jobs) if (/\bprivate\.\w+_batch\(|\b(update|delete)\s+(from\s+)?public\./i.test(j.command) && !/^set statement_timeout = '4min';/.test(j.command)) {
