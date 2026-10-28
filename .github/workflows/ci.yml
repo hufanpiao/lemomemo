@@ -77,13 +77,16 @@ jobs:
             exit 1
           fi
 
-      - name: D1、SQL 安全检查、RLS、契约测试（Vitest 打本地数据库；后端）
-        # 脚本名 test:db 是运维的提议，后端合并时确认；D1 比对不过不能合并（人员名单：运维把 D1 接进 CI）
+      - name: RLS（pgTAP，supabase test db supabase/tests/rls）和 D1（deno task d1）；后端
+        # B0 集成：test:db = supabase test db supabase/tests/rls && deno task d1；D1 比对不过不能合并
+        # D1 的违规样例、兼容样例在 unit.yml 的 test:db:offline（PGlite）里跑
         run: npm run test:db
 
-      - name: 函数测试和 shared 在 Deno 下再跑一遍（deno test；后端）
-        # 任务名 test 写在 deno.json 里，后端合并时确认；deno.lock 对不上就失败
-        run: deno task test
+      - name: shared 在 Deno 下再跑一遍（deno task test），服务器函数和 D1 入口过 deno check（deno task check）
+        # deno.json 用 nodeModulesDir=manual，npm 包取 npm ci 装好的 node_modules（版本由 package-lock.json 锁定，没有 deno.lock）
+        run: |
+          deno task test
+          deno task check
 
       - name: 找旧版契约测试的基线
         id: compat
@@ -99,7 +102,11 @@ jobs:
         if: steps.compat.outputs.ref != ''
         # strict 为 false 时这一步失败只标黄，不让整个任务失败（0.28 第 4 点、TC-B0-57）
         continue-on-error: ${{ steps.compat.outputs.strict != 'true' }}
-        run: npm run test:compat -- "$RUNNER_TEMP/compat-base/tests/compat"
+        # 契约用例要本地 Supabase 的 API_URL、ANON_KEY（.test.ts 用例）和 DB_URL（.sql 用例）：只取这三项，都是 CLI 本次随机生成的本地值
+        run: |
+          eval "$(supabase status -o env | grep -E '^(API_URL|ANON_KEY|DB_URL)=')"
+          export API_URL ANON_KEY DB_URL
+          npm run test:compat -- "$RUNNER_TEMP/compat-base/tests/compat"
 
       - name: 停掉本地 Supabase
         if: always()

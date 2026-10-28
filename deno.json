@@ -15,7 +15,7 @@
   },
   "tasks": {
     "test": "deno test --allow-read tests/shared",
-    "check": "deno check supabase/functions/_shared/ build/check_data_manifest.ts",
+    "check": "deno check supabase/functions/_shared/ shared/ build/check_data_manifest.ts",
     "d1": "deno run --allow-net=127.0.0.1:54322 --allow-env=D1_DB_URL --allow-read build/check_data_manifest.ts"
   }
 }
