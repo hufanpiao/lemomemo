@@ -1,0 +1,14 @@
+[api]
+enabled = true
+
+[functions]
+# 违规 F6：点号键声明预览专用函数，键名用转义拼出来（正则看不出来，tomllib 解析后看得出）
+"r2-probe".verify_jwt = false
+# 违规 F6：entrypoint 指到 supabase/functions/ 以外
+push-dispatch = { entrypoint = "../tools/evil.ts" }
+# 违规 F6：entrypoint 用转义拼出预览专用目录
+vault = { entrypoint = "./functions/_preview/r2-probe/index.ts" }
+# 违规 F6：entrypoint 用 .. 绕出 supabase/functions/（按解析后的路径判断）
+ai-embed.entrypoint = "./functions/_shared/../../../x.ts"
+# 对照：entrypoint 在 supabase/functions/ 里面
+anniv-roll.entrypoint = "./functions/anniv-roll/index.ts"

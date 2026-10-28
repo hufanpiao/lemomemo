@@ -62,6 +62,8 @@ if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
 # 本进程里放令牌的环境变量；finally 里统一清掉
 $SecretEnvNames = @('SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD', 'CLOUDFLARE_API_TOKEN')
 $script:WorkDir = $null
+# 预览专用函数的名单，第 1 步读（Invoke-Checks）
+$script:PreviewFuncs = $null
 $script:TokensRead = $false
 
 function Say([string]$msg) { Write-Host $msg }
@@ -202,7 +204,38 @@ function Invoke-Checks {
         if (-not (Test-Path -LiteralPath (Join-Path $RepoPath $f))) { Fail "缺 $f" }
     }
     Ok '工具锁文件和脚本都在'
+
+    # 预览专用函数的名单（build\check_backend.py 的 PREVIEW_FUNCS，名单只写那一处）。在这里读：此时还没输入任何令牌，
+    # 不让带令牌的进程去跑仓库里的脚本；部署前的检查（Assert-NoPreviewFunctions）只用 PowerShell 查文件
+    Push-Location $RepoPath
+    try { $names = & python -I 'build\check_backend.py' '--print-preview-funcs'; $code = $LASTEXITCODE } finally { Pop-Location }
+    if ($code -ne 0) { Fail '读不出预览专用函数的名单（python -I build\check_backend.py --print-preview-funcs）' }
+    $script:PreviewFuncs = @($names | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' })
+    foreach ($n in $script:PreviewFuncs) { if ($n -notmatch '^[a-z][a-z0-9-]{0,62}$') { Fail '预览专用函数名单里有不合规的名字' } }
+    Assert-NoPreviewFunctions
     return @{ Ver = $ver; Commit = $tagCommit }
+}
+
+# 正式环境不能带上预览专用函数（架构 6.2 末尾预览专用一行，check_backend F6；B0 审查中 2）：
+# supabase\functions\ 下不能有和名单同名的目录（入口只许 deploy-preview.yml 在预览产物里生成），
+# supabase\config.toml 里不能出现 _preview，也不能声明 [functions.<预览专用函数名>]（CLI 会部署配置里声明的函数）。
+# 第 1 步查一次；第 4 步装完工具、第 5 步输入令牌之前再查一次（第二轮审查中 B：不能在输令牌、db push 之后才失败）。
+# 以后改成“下载 CI 产物部署”时，这个断言要改成查下载下来的产物，不是查本机工作区。
+function Assert-NoPreviewFunctions {
+    if ($null -eq $script:PreviewFuncs) { Fail '还没读预览专用函数的名单' }
+    $fnDir = Join-Path $RepoPath 'supabase\functions'
+    foreach ($n in $script:PreviewFuncs) {
+        if (Test-Path -LiteralPath (Join-Path $fnDir $n)) { Fail "supabase\functions\$n 存在：$n 是预览专用函数，正式环境不能部署它" }
+    }
+    $cfg = Join-Path $RepoPath 'supabase\config.toml'
+    if (Test-Path -LiteralPath $cfg) {
+        $text = Get-Content -LiteralPath $cfg -Raw -Encoding UTF8
+        if ($text -match '(?<![A-Za-z0-9_])_preview(?![A-Za-z0-9_])') { Fail 'supabase\config.toml 里出现了 _preview（预览专用函数的配置不能进正式发布）' }
+        foreach ($n in $script:PreviewFuncs) {
+            if ($text -match ('(?m)^\s*\[\s*functions\s*\.\s*["'']?' + [regex]::Escape($n) + '["'']?\s*[\].]')) { Fail "supabase\config.toml 里声明了预览专用函数 [functions.$n]" }
+        }
+    }
+    Ok "没有预览专用函数（$(@($script:PreviewFuncs).Count) 个名单内的都不在，config.toml 里也没有）"
 }
 
 # ---------------------------------------------------------------- 2. 备份
@@ -420,6 +453,7 @@ try {
     Invoke-Backup $info
     Invoke-Build $info
     Install-Tools
+    Assert-NoPreviewFunctions
     if ($DryRun) { Say ''; Say '演练（-DryRun）到此结束：没有输入令牌，没有部署任何东西。'; return }
     Invoke-Deploy $info
     Step '完成'

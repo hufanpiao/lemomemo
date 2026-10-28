@@ -71,6 +71,65 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(where(errors)).toEqual(['F5 supabase/functions/push-dispatch/index.ts:2']);
   });
 
+  it('F6（架构 6.2 末尾预览专用一行，B0 P12）：_preview/ 下不在名单的目录、散放的文件；_shared 和正式函数引 _preview/；顶层同名入口进了仓库 → 错误；r2-probe 本身用 R2 不报', () => {
+    const { code, errors } = run(sample('f6-preview-only'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      'F3 supabase/functions/r2-probe/index.ts:2', // 顶层同名目录不算预览专用，用 R2 照样越界
+      'F6 supabase/functions/_preview/loose.ts:1',
+      'F6 supabase/functions/_preview/other-probe/index.ts:1',
+      'F6 supabase/functions/_shared/leak.ts:2',
+      'F6 supabase/functions/push-dispatch/index.ts:2',
+      'F6 supabase/functions/r2-probe/index.ts:1',
+      'F6 supabase/functions/r2-probe/index.ts:2',
+    ]);
+    expect(errors.some((e) => e.file.includes('_preview/r2-probe/'))).toBe(false);
+    expect(errors.find((e) => e.file.endsWith('r2-probe/index.ts') && e.line === 1)?.message).toContain('deploy-preview.yml');
+  });
+
+  it('F6（审查中 2）：supabase/ 下 _preview/ 以外的任何文件（json 配置、迁移注释、源码字符串）提到 _preview → 错误；vault_preview 这类表名不算', () => {
+    const { code, errors } = run(sample('f6-preview-mention'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      'F6 supabase/functions/deno.json:3',
+      'F6 supabase/functions/push-dispatch/index.ts:2',
+      'F6 supabase/migrations/20261101000000_note.sql:2',
+    ]);
+  });
+
+  it('F6（审查中 2）：.toml 里声明预览专用函数 [functions.r2-probe]（含带引号、子表的写法）→ 错误；别的函数的声明不算', () => {
+    const { code, errors } = run(sample('f6-preview-config'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual(['F6 supabase/config.toml:2']);
+    expect(errors[0]?.message).toContain('[functions.r2-probe]');
+  });
+
+  it('F6（第二轮审查低 3）：config.toml 用 tomllib 解析——点号键、转义拼出的键名、entrypoint 指到 supabase/functions/ 以外或 _preview/ 里都查得出', () => {
+    const { code, errors } = run(sample('f6-config-dotted'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual(['F6 supabase/config.toml:10', 'F6 supabase/config.toml:12', 'F6 supabase/config.toml:6', 'F6 supabase/config.toml:8']);
+    expect(errors.find((e) => e.line === 6)?.message).toContain('[functions.r2-probe]');
+    for (const line of [8, 10, 12]) expect(errors.find((e) => e.line === line)?.message).toContain('entrypoint');
+  });
+
+  it('F6（第二轮审查低 3）：根上的内联表 functions = { r2-probe = … } 也算声明', () => {
+    const { code, errors } = run(sample('f6-config-inline'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual(['F6 supabase/config.toml:2']);
+    expect(errors[0]?.message).toContain('[functions.r2-probe]');
+  });
+
+  it('F2、F3（审查中 2）：反引号的动态 import（模板字符串）也认得出来', () => {
+    const { code, errors } = run(sample('f3-dyn-backtick'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual(['F2 supabase/functions/anniv-roll/index.ts:2', 'F3 supabase/functions/push-dispatch/index.ts:2']);
+  });
+
+  it('--print-preview-funcs：一行一个打印预览专用函数名单（deploy-preview.yml、publish.ps1 读这一份）', () => {
+    const out = execFileSync('python', ['-I', join(ROOT, 'build', 'check_backend.py'), '--print-preview-funcs'], { encoding: 'utf8' });
+    expect(out.split(/\r?\n/).filter(Boolean)).toEqual(['r2-probe']);
+  });
+
   it("M1（TC-B0-92 续第 117 条）：security definer 函数没写 set search_path = '' → 错误（含 QA 复现原句、写在函数体后面的）", () => {
     const { code, errors } = run(sample('m1-definer-search-path'));
     expect(code).toBe(1);

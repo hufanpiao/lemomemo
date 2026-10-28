@@ -178,8 +178,8 @@ function New-RandomHex32 {
 # 调接口；出错时只打印状态码和对方的错误说明（不含我们发的值）
 function Invoke-Api([string]$method, [string]$uri, [hashtable]$headers, [string]$json) {
     try {
-        if ($json) { return Invoke-RestMethod -Method $method -Uri $uri -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) }
-        return Invoke-RestMethod -Method $method -Uri $uri -Headers $headers
+        if ($json) { return Invoke-RestMethod -Method $method -Uri $uri -Headers $headers -MaximumRedirection 0 -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) }
+        return Invoke-RestMethod -Method $method -Uri $uri -Headers $headers -MaximumRedirection 0
     } catch {
         $code = ''; $detail = ''
         try { $code = [int]$_.Exception.Response.StatusCode } catch { }

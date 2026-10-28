@@ -1,6 +1,7 @@
 """后端的静态检查：服务器函数的钥匙范围、迁移的写法（B0 返工：QA D-01，安全审查中 1，代码审查中 1）。
 
 用法：python -I build/check_backend.py [--root 目录] [--json]
+      python -I build/check_backend.py --print-preview-funcs   （只打印 PREVIEW_FUNCS，一行一个；deploy-preview.yml、publish.ps1 用，名单只写这一处）
 有错误时退出码 1。--root 给自测用（tests/arch-fixtures/check_backend/ 下的样例目录，tests/build/check-backend.test.ts）。
 
 服务器函数（supabase/functions/<函数名>/，下划线开头的目录是共用模块）：
@@ -12,6 +13,14 @@
       服务器函数一律不准读 R2_FILES_* / R2_PULL_*（那是 Pages 和负责人本机的令牌）；_shared 里只有 objstore*.ts 能读 R2_*。
       架构第 6 节开头（0.32）、8.4、TC-B0-75、S-B0 ⑦
   F5  disabled_at 只准出现在 _shared/auth.ts、account、account-purge（生成目录 _shared/gen/ 不算）。架构 0.29 续第 138 条④、TC-B0-97 ④
+  F6  预览专用函数（supabase/functions/_preview/<函数名>/，只由 deploy-preview.yml 在产物里生成入口部署，正式发布不带）：
+      目录名必须在 PREVIEW_FUNCS 里；不准有同名的顶层函数目录（入口只许 CI 生成）；_preview/ 以外的任何文件（函数、_shared）不准 import _preview/ 里的东西；
+      _preview/ 下只放函数目录。预览专用函数照样过 F1～F3、F5（能用 R2 的另见 PREVIEW_R2_FUNCS）。架构 6.2 末尾“越界检查白名单”预览专用一行（B0 P12）
+      另外两处绕法（审查中 2）：supabase/ 下除 functions/_preview/ 本身以外，任何文件（config.toml、*.json、迁移、所有源码，注释也算）
+      出现 _preview（按词边界：前面不是字母、数字、下划线，所以 vault_preview 这类表名不算）都报；supabase/ 下任何 .toml 里
+      出现 [functions.<预览专用函数名>] 都报（CLI 会部署 config.toml 里声明的函数，入口可以指到任何地方）。
+      supabase/config.toml 另用 tomllib 解析（第二轮审查低 3）：functions 表的键里不准有预览专用函数（点号键、内联表、
+      转义拼出的键名都算），任何函数的 entrypoint 解析后只能在 supabase/functions/ 里面、不能进 functions/_preview/；解析不了也报
 Pages Functions（functions/）和 App、shared：
   F4  functions/ 里只有 /files（functions/files/**、functions/_lib/files-*.ts）能 import shared/objstore*.ts、aws4fetch，读 R2_*；
       functions/、src/、shared/ 一律不准出现 R2_FN_*、R2_PULL_*、SUPABASE_DB_URL、FN_VAULT_DB_URL、FN_AI_DB_URL。架构 0.32 第 4 条、8.4
@@ -37,6 +46,7 @@ import json
 import pathlib
 import re
 import sys
+import tomllib
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from check_arch import strip_comments  # noqa: E402  去掉 // 和 /* */，行号不变
@@ -49,6 +59,11 @@ AI_FUNCS = frozenset({"ai-embed", "ai-media", "note-search", "ai-summarize", "fi
 DB_FUNCS = VAULT_FUNCS | AI_FUNCS
 # 架构 6.2 末尾越界检查白名单（唯一出处）；第 6 节开头（0.32，R-213）、8.4 R2_FN_* 一行：只有这九个函数能 import _shared/objstore.ts 或读 R2_FN_*、R2_ENDPOINT、R2_BUCKET_PREFIX
 R2_FUNCS = frozenset({"file-check", "ai-media", "vault", "vault-file", "vault-image", "storage-sweep", "account", "account-purge", "usage-report"})
+# 架构 6.2 末尾越界检查白名单“预览专用”一行（唯一出处）：supabase/functions/_preview/<名>/ 下的一次性函数，只在预览部署（F6）
+PREVIEW_DIR = "_preview"
+PREVIEW_FUNCS = frozenset({"r2-probe"})
+# 同上：预览专用函数里能用 objstore、读 R2_* 的（r2-probe：B0 实测清单 P12，R2 任务单第五节第 1、5、8 项；测完删）
+PREVIEW_R2_FUNCS = frozenset({"r2-probe"})
 # 架构 0.29 续第 138 条④：除这三处以外不准出现 disabled_at（一律经 _shared/auth.ts 的 isUsable / usableUserIds）
 DISABLED_AT_OK = ("_shared/auth.ts", "account/", "account-purge/")
 
@@ -58,7 +73,8 @@ FN_ROOT = "supabase/functions"
 # import 的三种写法：import … from '…' / export … from '…'、import '…'、import('…')
 FROM_RE = re.compile(r"""\b(import|export)\b([^;'"`]*?)\bfrom\s*(['"])([^'"]+)\3""")
 BARE_RE = re.compile(r"""\bimport\s*(['"])([^'"]+)\1""")
-DYN_RE = re.compile(r"""\bimport\s*\(\s*(['"])([^'"]+)\1""")
+# 动态 import 也认反引号（模板字符串，审查中 2）：import(`../_shared/db.ts`)
+DYN_RE = re.compile(r"""\bimport\s*\(\s*(['"`])([^'"`]+)\1""")
 OBJSTORE_SPEC = re.compile(r"(^|/)objstore[\w-]*(\.ts)?$")
 AWS4FETCH_SPEC = re.compile(r"^(npm:)?aws4fetch(@[^/]*)?(/|$)")
 R2_NAME = re.compile(r"\bR2_[A-Z0-9_]+")
@@ -128,10 +144,41 @@ class Fns:
         return files, specs
 
 
+def is_preview(rel):
+    return rel.startswith(PREVIEW_DIR + "/")
+
+
 def owner(rel):
-    """函数名；共用模块（_shared 等下划线开头的目录、根目录的文件）返回 None"""
-    top = rel.split("/", 1)[0]
-    return None if "/" not in rel or top.startswith("_") else top
+    """函数名；预览专用函数（_preview/<名>/…）返回 <名>；共用模块（_shared 等下划线开头的目录、根目录的文件）返回 None"""
+    parts = rel.split("/")
+    if parts[0] == PREVIEW_DIR:
+        return parts[1] if len(parts) >= 3 else None
+    return None if len(parts) == 1 or parts[0].startswith("_") else parts[0]
+
+
+def same_fn(a, b):
+    """两个文件属于同一个函数目录（顶层的 x/ 和 _preview/x/ 不算同一个）"""
+    return owner(a) is not None and owner(a) == owner(b) and is_preview(a) == is_preview(b)
+
+
+def check_preview(fns, errors):
+    """F6：预览专用函数只在 _preview/ 里、只在名单里，正式会部署的代码引不到它"""
+    reported = set()
+    for rel in fns.code:
+        path = f"{FN_ROOT}/{rel}"
+        fn = owner(rel)
+        if is_preview(rel):
+            if fn is None:
+                errors.append(("F6", path, 1, f"{PREVIEW_DIR}/ 下只放预览专用函数的目录（{PREVIEW_DIR}/<函数名>/），不放共用文件"))
+            elif fn not in PREVIEW_FUNCS and fn not in reported:
+                reported.add(fn)
+                errors.append(("F6", path, 1, f"{PREVIEW_DIR}/{fn}/ 不在预览专用函数的名单里（PREVIEW_FUNCS，出处架构 6.2 末尾）"))
+            continue
+        if fn in PREVIEW_FUNCS:
+            errors.append(("F6", path, 1, f"{fn} 是预览专用函数，源码只放 {PREVIEW_DIR}/{fn}/；顶层入口只由 deploy-preview.yml 在产物里生成，不进仓库（否则正式发布会把它带上去）"))
+        for line, target, spec in fns.edges(rel):
+            if (target and is_preview(target)) or re.search(r"(^|/)" + PREVIEW_DIR + r"/", spec):
+                errors.append(("F6", path, line, f"正式会部署的代码不准 import {PREVIEW_DIR}/ 里的东西（{spec}）：预览专用函数只在预览部署"))
 
 
 def is_db(rel):
@@ -146,12 +193,93 @@ def touches_objstore(files, specs):
     return any(is_objstore_file(f) for f in files) or any(OBJSTORE_SPEC.search(s) or AWS4FETCH_SPEC.match(s) for s in specs)
 
 
+# 词边界的 _preview：前面不是字母、数字、下划线（vault_preview 不算）
+PREVIEW_WORD = re.compile(r"(?<![A-Za-z0-9_])" + PREVIEW_DIR + r"(?![A-Za-z0-9_])")
+SUPABASE_SKIP = (".temp", ".branches")
+
+
+def check_preview_mentions(root, errors):
+    """F6：supabase/ 下 _preview/ 以外的文件不准提到 _preview；.toml 里不准声明预览专用函数"""
+    base = root / "supabase"
+    if not base.exists():
+        return
+    own = (base / "functions" / PREVIEW_DIR).resolve()
+    decl = re.compile(r"""^\s*\[\s*functions\s*\.\s*["']?(""" + "|".join(re.escape(n) for n in sorted(PREVIEW_FUNCS)) + r""")["']?\s*[\].]""", re.MULTILINE) if PREVIEW_FUNCS else None
+    for p in sorted(base.rglob("*")):
+        if not p.is_file() or "node_modules" in p.parts or any(part in SUPABASE_SKIP for part in p.relative_to(base).parts):
+            continue
+        rp = p.resolve()
+        if rp == own or own in rp.parents:
+            continue
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue   # 二进制文件
+        rel = p.relative_to(root).as_posix()
+        for m in PREVIEW_WORD.finditer(text):
+            errors.append(("F6", rel, line_of(text, m.start()), f"supabase/ 下只有 functions/{PREVIEW_DIR}/ 自己能提到 {PREVIEW_DIR}（配置、声明、源码、注释都不行）：预览专用函数的入口和配置只由 deploy-preview.yml 在产物里生成"))
+        if decl and p.suffix == ".toml" and rel != CONFIG_TOML:   # config.toml 另用 tomllib 解析（check_config_toml）
+            for m in decl.finditer(text):
+                errors.append(("F6", rel, line_of(text, m.start()), f"不准在配置里声明预览专用函数 [functions.{m.group(1)}]：CLI 会按声明部署它（正式发布也会），预览的设置只由 deploy-preview.yml 写进产物"))
+
+
+CONFIG_TOML = "supabase/config.toml"
+
+
+def _toml_line(lines, *needles):
+    """找第一行（跳过注释行）同时含所有 needles 的行号（1 起）；找不到退一步只找第一个，再找不到报 1"""
+    for group in (needles, needles[:1]):
+        for i, line in enumerate(lines, 1):
+            if not line.lstrip().startswith("#") and all(n in line for n in group):
+                return i
+    return 1
+
+
+def check_config_toml(root, errors):
+    """F6（第二轮审查低 3）：用 tomllib 解析 supabase/config.toml，按解析结果查 functions 表：
+    ① 键里不能有预览专用函数（[functions.x]、点号键、内联表、带 \\u 转义的引号键都算）；
+    ② 任何函数的 entrypoint 都只能指到 supabase/functions/ 里面，而且不能指进 functions/_preview/。"""
+    cfg = root / CONFIG_TOML
+    if not cfg.exists():
+        return
+    text = cfg.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as e:
+        errors.append(("F6", CONFIG_TOML, getattr(e, "lineno", 1) or 1, f"config.toml 解析不了（{e}），没法确认里面没有声明预览专用函数"))
+        return
+    fns = data.get("functions", {})
+    if not isinstance(fns, dict):
+        errors.append(("F6", CONFIG_TOML, _toml_line(lines, "functions"), "config.toml 的 functions 必须是表"))
+        return
+    base = (root / "supabase").resolve()
+    fn_root = (base / "functions").resolve()
+    preview = (fn_root / PREVIEW_DIR).resolve()
+    for name, conf in fns.items():
+        if name in PREVIEW_FUNCS:
+            errors.append(("F6", CONFIG_TOML, _toml_line(lines, name) if name in text else _toml_line(lines, "functions"),
+                           f"不准在配置里声明预览专用函数 [functions.{name}]（tomllib 解析出来的键）：CLI 会按声明部署它（正式发布也会），预览的设置只由 deploy-preview.yml 写进产物"))
+        if not isinstance(conf, dict) or "entrypoint" not in conf:
+            continue
+        ep = conf["entrypoint"]
+        target = (base / str(ep)).resolve() if isinstance(ep, str) else None
+        if target is None or not (fn_root in target.parents) or target == preview or preview in target.parents:
+            errors.append(("F6", CONFIG_TOML, _toml_line(lines, "entrypoint", name) if name in text else _toml_line(lines, "entrypoint"),
+                           f"[functions.{name}] 的 entrypoint 只能指到 supabase/functions/ 里面、而且不能指进 functions/{PREVIEW_DIR}/（按解析后的路径判断）"))
+
+
 def check_functions(root, errors):
+    check_preview_mentions(root, errors)
+    check_config_toml(root, errors)
     fns = Fns(root)
+    check_preview(fns, errors)
     for rel, code in fns.code.items():
         path = f"{FN_ROOT}/{rel}"
         fn = owner(rel)
         gen = rel.startswith("_shared/gen/")
+        # 能用 R2 的：九个函数；预览专用函数另看 PREVIEW_R2_FUNCS（顶层同名目录不算，F6 另报）
+        r2_ok = fn in (PREVIEW_R2_FUNCS if is_preview(rel) else R2_FUNCS)
 
         # F1
         for m in re.finditer(r"\bSUPABASE_DB_URL\b", code):
@@ -180,14 +308,14 @@ def check_functions(root, errors):
 
         # 函数自己的文件：经 import 引到的东西（同一个函数目录里的文件各自检查，这里只看引到目录外的）
         for line, target, spec in fns.edges(rel):
-            if target is not None and owner(target) == fn:
+            if target is not None and same_fn(target, rel):
                 continue
             files, specs = fns.closure(target) if target else (set(), set())
             specs = specs | {spec}
             via = f"（经 {target}）" if target and not is_db(target) and not is_objstore_file(target) else ""
             if fn not in DB_FUNCS and (any(is_db(f) for f in files)):
                 errors.append(("F2", path, line, f"{fn} 不在能直连数据库的名单里，却引到 _shared/db.ts{via}（名单见架构 6.2）"))
-            if fn not in R2_FUNCS and touches_objstore(files, specs):
+            if not r2_ok and touches_objstore(files, specs):
                 errors.append(("F3", path, line, f"{fn} 不在能用 R2 的九个函数里，却引到对象存储（objstore / aws4fetch）{via}（名单见架构第 6 节开头）"))
 
         # 函数自己的代码：角色和变量
@@ -201,7 +329,7 @@ def check_functions(root, errors):
             name = m.group(0)
             if name.startswith(("R2_FILES_", "R2_PULL_")):
                 errors.append(("F3", path, line_of(code, m.start()), f"服务器函数不准读 {name}（Pages / 本机的令牌），用 R2_FN_*"))
-            elif fn not in R2_FUNCS:
+            elif not r2_ok:
                 errors.append(("F3", path, line_of(code, m.start()), f"{fn} 不在能用 R2 的九个函数里，却读 {name}"))
 
 
@@ -615,7 +743,12 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=str(pathlib.Path(__file__).resolve().parent.parent))
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--print-preview-funcs", action="store_true")
     args = ap.parse_args(argv)
+    if args.print_preview_funcs:
+        for n in sorted(PREVIEW_FUNCS):
+            print(n)
+        return 0
     root = pathlib.Path(args.root).resolve()
 
     errors = []

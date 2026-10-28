@@ -18,7 +18,7 @@
     "check:gate": "node build/check_version_gate.mjs",
     "gen:files-rules": "node build/gen_files_rules.mjs",
     "check:files-rules": "node build/gen_files_rules.mjs --check",
-    "check:deno": "deno task check",
+    "check:deno": "npm run copy:shared && deno task check",
     "test": "vitest run",
     "test:tz": "node build/run_tz_tests.mjs",
     "test:deno": "deno task test",

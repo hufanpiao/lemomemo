@@ -1,12 +1,12 @@
-// 三个处理密钥的 PowerShell 脚本开头的“安全窗口检查”必须逐字相同（B0 安全审查低 5、中 2 第 4 点）：
-// 改了一处忘了另外两处，就会有脚本漏查（例如只按进程名 claude* 判断，漏掉以 node 运行的 Claude）
+// 处理密钥的 PowerShell 脚本开头的“安全窗口检查”必须逐字相同（B0 安全审查低 5、中 2 第 4 点；10-28 加上 set-fn-role-passwords.ps1，共四个）：
+// 改了一处忘了别的，就会有脚本漏查（例如只按进程名 claude* 判断，漏掉以 node 运行的 Claude）
 // 只读文本，不运行脚本
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = join(import.meta.dirname, '..', '..');
-const FILES = ['tools/keys/new-proxy-secret.ps1', 'tools/keys/set-r2-tokens.ps1', 'tools/release/publish.ps1'];
+const FILES = ['tools/keys/new-proxy-secret.ps1', 'tools/keys/set-r2-tokens.ps1', 'tools/keys/set-fn-role-passwords.ps1', 'tools/release/publish.ps1'];
 const BEGIN = '# ==== 安全窗口检查：开始';
 const END = '# ==== 安全窗口检查：结束 ====';
 
@@ -21,7 +21,7 @@ function block(rel: string): string {
 }
 
 describe('密钥脚本的安全窗口检查', () => {
-  it('三个脚本逐字相同', () => {
+  it('各脚本逐字相同', () => {
     const [first, ...rest] = FILES.map(block);
     for (const [i, b] of rest.entries()) expect(b, FILES[i + 1]).toBe(first);
   });

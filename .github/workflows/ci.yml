@@ -167,6 +167,8 @@ jobs:
           if ! grep -qE '条件写回 exists.* \.\.\. ok' "$RUNNER_TEMP/deno-test.log"; then
             echo "::error::Deno 下 objstore 打真替身的那一组没跑或没通过"; exit 1
           fi
+          # 函数 import 的 _shared/gen/ 不进仓库（.gitignore），deno check 前先生成（预览专用的 _preview/r2-probe 引 _shared/gen/objstore.ts）
+          npm run copy:shared
           deno task check
 
       - name: 找旧版契约测试的基线

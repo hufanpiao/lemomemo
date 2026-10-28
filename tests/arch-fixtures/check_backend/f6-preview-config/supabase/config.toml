@@ -1,0 +1,10 @@
+# 违规 F6：在配置里声明预览专用函数（CLI 会按声明部署它，入口可以指到任何地方）
+[functions.r2-probe]
+verify_jwt = false
+
+# 违规 F6：带引号、带子表的写法也算
+[functions."r2-probe".static_files]
+
+# 对照：别的函数的声明不算
+[functions.push-dispatch]
+verify_jwt = true

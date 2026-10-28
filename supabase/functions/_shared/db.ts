@@ -15,7 +15,14 @@ const TIMEOUT = '4min';   // 0.29 续第 141 条：和 cron、service_role 同�
 function connect(role: FnRole) {
   const url = Deno.env.get(URL_ENV[role]);
   if (!url) throw new Error(`${URL_ENV[role]} 未设置`);
-  return postgres(url, { prepare: false, max: 1, connect_timeout: 10, idle_timeout: 5 });
+  // 强制 TLS（10-28 安全审查严重 1）：postgres.js 3.4.5 默认 ssl: false，连接串里没写 sslmode 就是明文，密码和数据都在公网上裸传。
+  // 这里写死 'require'，不依赖连接串（连接串里的 sslmode 会被这个选项盖掉，连接串写成 disable 也没用）；服务器不肯加密时直接报错，不降级成明文。
+  // 'require' 只加密、不校验证书（postgres.js 对它传 rejectUnauthorized: false）：Supavisor 连接池的证书是不是由 Supabase 自己的根证书
+  // （控制台可下载的 prod-ca-2021.crt）签发，离线没法确认，改成 { ca, rejectUnauthorized: true } 之前要在预览项目上实测（后端-B0实测清单 P6）
+  // 本机开发（10-28 安全复审低 C，这次只写注释、不改代码）：supabase functions serve 连本地库（54322）时，本地 Postgres 不一定开了 SSL，
+  // 可能被这里的 'require' 挡住（是否挡住见实测清单 P6）。真要留口子，只能按主机名放行（127.0.0.1、host.docker.internal、supabase_db_*），
+  // 绝不接受连接串里的 sslmode=disable——连接串来自 secrets，按连接串放行就等于谁能改 secrets 谁就能关掉加密
+  return postgres(url, { ssl: 'require', prepare: false, max: 1, connect_timeout: 10, idle_timeout: 5 });
 }
 
 async function run<T>(role: FnRole, uid: string | null, fn: (tx: Tx) => Promise<T>): Promise<T> {

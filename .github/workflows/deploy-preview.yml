@@ -88,6 +88,43 @@ jobs:
         # B0 集成：改用 build/copy_shared.mjs —— 'zod' 改写成 npm:zod@<版本>（函数部署时没有 import map），相对 import 必须带 .ts
         run: npm run copy:shared
 
+      - name: 预览专用函数（supabase/functions/_preview/<名>/，只在这里生成入口；正式发布不带，架构 6.2 末尾预览专用一行）
+        # supabase functions deploy 不带函数名时，部署的是 supabase/functions/ 下名字合规（不以下划线开头）的函数目录，
+        # 再加上 config.toml 里 [functions.<名>] 声明的函数（声明可以把入口指到任何地方）。所以 _preview/ 下的源码在正式发布
+        # （tools/release/publish.ps1）里不会被部署，前提是仓库里没有同名顶层目录、配置里没有声明、别处没有引用——这三条由
+        # build/check_backend.py F6 管，这一步先跑一遍，不过就停；publish.ps1 部署前也另查一遍。
+        # 这里只在预览的产物里给名单（check_backend 的 PREVIEW_FUNCS，--print-preview-funcs 读出，不在这里另写一份）里的
+        # 每个 _preview/<名>/ 生成一个一行的入口 supabase/functions/<名>/index.ts（import 源码），并在产物的 config.toml 末尾
+        # 给它 verify_jwt = false（按“任何人都能调用”设计，防护在函数里：只认 R2_BUCKET_PREFIX=preview-、写死的过期时间、
+        # 只收 POST、按时段分键的锁、总预算）。
+        # 现在只有 r2-probe（B0 实测清单 P12，一次性；下线步骤见 docs/09-路线图/B0-R2探测函数.md）。
+        run: |
+          python3 -I build/check_backend.py
+          mapfile -t allowed < <(python3 -I build/check_backend.py --print-preview-funcs | tr -d '\r')
+          for d in supabase/functions/_preview/*/; do
+            [ -d "$d" ] || continue
+            name="$(basename "$d")"
+            # 名字先过格式再打印；不合规时不回显目录名（审查低 5）
+            if ! [[ "$name" =~ ^[a-z][a-z0-9-]{0,62}$ ]]; then
+              echo "::error::supabase/functions/_preview/ 下有名字不合规的目录"; exit 1
+            fi
+            listed=0
+            for a in "${allowed[@]}"; do [ "$a" = "$name" ] && listed=1; done
+            if [ "$listed" -ne 1 ]; then
+              echo "::error::预览专用函数 $name 不在 check_backend 的 PREVIEW_FUNCS 名单里"; exit 1
+            fi
+            if [ ! -f "$d/index.ts" ]; then
+              echo "::error::预览专用函数 $name 没有 index.ts"; exit 1
+            fi
+            if [ -e "supabase/functions/$name" ]; then
+              echo "::error::supabase/functions/$name 已经存在：预览专用函数的入口只许这一步生成（check_backend F6）"; exit 1
+            fi
+            mkdir "supabase/functions/$name"
+            printf '// 由 deploy-preview.yml 在预览产物里生成，不进仓库。源码在 ../_preview/%s/\nimport '"'"'../_preview/%s/index.ts'"'"';\n' "$name" "$name" > "supabase/functions/$name/index.ts"
+            printf '\n[functions.%s]\nverify_jwt = false\n' "$name" >> supabase/config.toml
+            echo "预览专用函数：$name（入口已生成，verify_jwt = false）" | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+
       - name: 打包 Pages Functions（_worker.js，在无密钥任务里打包）
         # functions/ 引用 shared/ 和 zod、aws4fetch；deploy 任务不装项目依赖，所以在这里打包成 dist/web/_worker.js/，
         # deploy 只上传（10-28 第一次预览部署实测：在 deploy 里打包找不到 shared/）。dist/web/_routes.json 照旧决定哪些路径进 Functions

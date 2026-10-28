@@ -1,0 +1,2 @@
+# 违规 F6：根上用内联表声明预览专用函数（对照：同一张内联表里的 ai-embed 不算）
+functions = { r2-probe = { verify_jwt = false }, ai-embed = { verify_jwt = true } }

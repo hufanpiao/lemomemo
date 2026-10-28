@@ -1,0 +1,4 @@
+{
+  "$comment": "违规 F6：supabase/ 下的配置文件提到预览专用目录（例如用 import map 把它带进正式函数）",
+  "imports": { "probe": "./_preview/r2-probe/index.ts" }
+}
