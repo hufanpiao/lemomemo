@@ -1,8 +1,8 @@
 {
-  // 离线类型检查：后端写的 shared/schema、shared/manifests、build/d1、db.types、_shared（合并后改由根目录的 tsconfig 管）
+  // 离线类型检查：后端写的 shared/schema、shared/manifests、build/d1、db.types、functions/_shared（合并后改由根目录的 tsconfig 和 deno check 管）
   "compilerOptions": {
     "target": "ES2023",
-    "lib": ["ES2023"],
+    "lib": ["ES2023", "DOM"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "strict": true,
@@ -12,13 +12,20 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "types": [],
-    "paths": { "zod": ["./node_modules/zod"] }
+    "paths": {
+      "zod": ["./node_modules/zod"],
+      "npm:postgres@3.4.5": ["./node_modules/postgres"],
+      "npm:@supabase/supabase-js@2.49.4": ["./node_modules/@supabase/supabase-js"]
+    }
   },
   "files": [
+    "./deno-shim.d.ts",
     "../../../shared/schema/manifest.ts",
     "../../../shared/schema/kinds.ts",
     "../../../shared/manifests/index.ts",
     "../../../shared/db.types.ts",
-    "../../../build/d1/checks.ts"
+    "../../../build/d1/checks.ts",
+    "../../functions/_shared/db.ts",
+    "../../functions/_shared/auth.ts"
   ]
 }

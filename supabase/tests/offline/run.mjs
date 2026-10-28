@@ -1,5 +1,5 @@
 // 离线 SQL 检查（没有 Docker 时用）：PGlite（WASM 版 Postgres）+ Supabase 桩，依次跑 7 个迁移、RLS 测试、D1 比对和样例
-// 用法：cd supabase/tests/offline && npm ci && node run.mjs [--only=rls|d1|compat]
+// 用法：cd supabase/tests/offline && npm ci && node run.mjs [--only=rls|d1|compat|fn]
 // 不代替 supabase db reset / supabase test db：桩不是 Supabase 的真实定义，pg_cron、pg_net 被跳过，真库差异见 B0 实测清单
 import { PGlite } from '@electric-sql/pglite';
 import { vector } from '@electric-sql/pglite-pgvector';
@@ -129,6 +129,14 @@ if (!only || only === 'compat') {
     } catch (e) { fail(`兼容样例 ${f} 执行出错：${e.message}`); }
     await db.exec('rollback').catch(() => {});
   }
+}
+
+// 5) functions/_shared/auth.ts：假客户端走一遍 requireActiveUser 的各分支
+if (!only || only === 'fn') {
+  const { checkAuth } = await import('./auth-check.mjs');
+  const { n, fails } = await checkAuth();
+  if (fails.length) { fail(`requireActiveUser：${fails.length} 处不对`); fails.forEach((f) => log('    ' + f)); }
+  else log(`✔ requireActiveUser、isUsable：${n} 个分支全对`);
 }
 
 await db.close();
