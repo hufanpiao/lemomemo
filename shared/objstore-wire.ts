@@ -108,8 +108,11 @@ export function xmlUnescape(s: string): string {
   });
 }
 
+const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', [String.fromCharCode(34)]: '&quot;', [String.fromCharCode(39)]: '&apos;' };
+
+// 两种引号用字符码写：check_arch 的字符串扫描不认正则字面量，裸引号会让它把后面的注释当成字符串
 export function xmlEscape(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => `&${c === '&' ? 'amp' : c === '<' ? 'lt' : c === '>' ? 'gt' : c === '"' ? 'quot' : 'apos'};`);
+  return s.replace(/[&<>\x22\x27]/g, (c) => ESCAPES[c] ?? c);
 }
 
 function blocks(xml: string, name: string): string[] {
