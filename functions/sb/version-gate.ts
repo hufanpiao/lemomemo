@@ -17,11 +17,13 @@ export interface ExemptRule {
   why: string;
 }
 
-/** REST、存储、Auth 的免查规则。B0 只放已有的三项，其余各批随函数和 RPC 在同一个 PR 里加（15.4 S-B0c） */
+/**
+ * REST、Auth 的免查规则。其余各批随函数和 RPC 在同一个 PR 里加（15.4 S-B0c）。
+ * 0.32（R-213）：存储的两条（object/sign、object/list）删去——客户端不再访问 Supabase Storage，/sb 对它们回 404；
+ * 不准再往这里加 /storage/v1/ 的规则（build/check_version_gate.mjs 检查）。
+ */
 export const EXEMPT_RULES: readonly ExemptRule[] = [
   { method: '*', path: '/auth/v1/', match: 'prefix', why: '登录、刷新令牌、退出登录、退出其他设备' },
-  { method: 'POST', path: '/storage/v1/object/sign/', match: 'prefix', why: '签名链接，只是读，旧版也要能看图和附件' },
-  { method: 'POST', path: '/storage/v1/object/list/', match: 'prefix', why: '列文件，只是读' },
 ];
 
 export interface ExemptFunction {
@@ -52,10 +54,11 @@ function functionName(path: string): string | null {
 /**
  * 会改数据的请求才查（0.27 第 1 点）：
  * - `/rest/v1/*` 的 POST、PATCH、PUT、DELETE（含 `/rest/v1/rpc/*`，免查的 RPC 按名单）；
- * - `/storage/v1/*` 的上传、删除等写操作（签名和列文件免查）；
+ * - `/storage/v1/*` 的写操作（0.32 起 /sb 只放行 vault-preview 的 GET，写操作本来就到不了上游，这里照旧算“要查”）；
+ * - `/files/v1/*`（0.32，14.2 第 11 点）：只有 PUT 上传要查；POST sign 和 GET 取对象只是读，不查；
  * - `/functions/v1/*` 的所有函数，免查的除外；
  * - `/auth/v1/*`、`/realtime/v1/*` 不查。
- * path 是去掉 /sb 前缀、不带查询串的路径；method 大写。
+ * path 是去掉 /sb 前缀、不带查询串的路径（/files 的路径原样传，以 /files/v1/ 开头）；method 大写。
  */
 export function needsVersionCheck(method: string, path: string): boolean {
   const m = method.toUpperCase();
@@ -69,6 +72,7 @@ export function needsVersionCheck(method: string, path: string): boolean {
     const ex = EXEMPT_FUNCTIONS.find((f) => f.name === name);
     return !(ex && methodHit(ex.methods, m));
   }
+  if (path.startsWith('/files/v1/')) return m === 'PUT';
   if (path.startsWith('/rest/v1/') || path.startsWith('/storage/v1/')) return WRITE_METHODS.has(m);
   return false;
 }

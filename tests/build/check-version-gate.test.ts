@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkExemptFunctions } from '../../build/check_version_gate.mjs';
+import { checkExemptFunctions, checkRules } from '../../build/check_version_gate.mjs';
+import { EXEMPT_RULES, needsVersionCheck } from '../../functions/sb/version-gate.ts';
 
 type Check = (exempt: readonly { name: string; methods: readonly string[] }[], dir: string) => string[];
 const check = checkExemptFunctions as Check;
@@ -33,5 +34,25 @@ describe('check_version_gate', () => {
     const dir = fakeFunctionsDir(['a']);
     expect(check([{ name: 'a', methods: ['POST'] }, { name: 'a', methods: [] }], dir).length).toBe(2);
     expect(check([{ name: '../x', methods: ['POST'] }], dir).length).toBeGreaterThan(0);
+  });
+});
+
+// 0.32（R-213，14.2 第 10、11 点）：存储不再免查；/files 只有 PUT 查
+describe('check_version_gate：0.32 的规则', () => {
+  type Rules = (rules: readonly { method: string; path: string }[], needs: (m: string, p: string) => boolean) => string[];
+  const checkR = checkRules as Rules;
+
+  it('真名单和真 needsVersionCheck 通过', () => {
+    expect(checkR(EXEMPT_RULES, needsVersionCheck)).toEqual([]);
+  });
+
+  it('违规样例：免查规则里加回存储签名、把 /files 写进规则 → 报错', () => {
+    const bad = [...EXEMPT_RULES, { method: 'POST', path: '/storage/v1/object/sign/' }, { method: 'PUT', path: '/files/v1/o/' }];
+    expect(checkR(bad, needsVersionCheck)).toHaveLength(2);
+  });
+
+  it('违规样例：/files 的 PUT 不查 → 报错', () => {
+    const lax = (m: string, p: string) => (p.startsWith('/files/') ? false : needsVersionCheck(m, p));
+    expect(checkR(EXEMPT_RULES, lax).some((e) => e.includes('PUT /files/v1/o/images'))).toBe(true);
   });
 });

@@ -51,6 +51,8 @@ export interface OrphanSweep {
 
 export interface ManifestBucket {
   name: string;
+  /** 存在哪（0.32，后端 BE-3 起清单必填）：'r2' 的桶用对象存储探针；没写当 'supabase'（只有样例清单会不写） */
+  store?: 'supabase' | 'r2' | undefined;
   /** 例如 '<user_id>/anniv/' */
   pathPrefix?: string | undefined;
   pathPattern?: string | undefined;

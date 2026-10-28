@@ -1,55 +1,16 @@
 // `/sb/*` 转发的单元测试（14.2 第 1～10 点；TC-B0-39、TC-B0-46、TC-B0-59 的转发层部分、TC-B0-91 的转发层部分）。
 // 上游用桩：记录收到的请求，不连真实 Supabase。经预览环境的真实转发见 tests/e2e/sb-forward.preview.test.ts。
 import { describe, expect, it, vi } from 'vitest';
-import { STRIPPED_REQUEST_HEADERS, geoHeader, handleSb, upstreamPath, type SbEnv } from '../../functions/sb/[[path]].ts';
-import { createVersionGate } from '../../functions/sb/version-gate.ts';
+import { STRIPPED_REQUEST_HEADERS, geoHeader, handleSb, upstreamPath } from '../../functions/sb/[[path]].ts';
 import { ALLOW_HEADERS, EXE_ORIGIN } from '../../functions/_lib/cors.ts';
-
-const ENV: SbEnv = {
-  SUPABASE_UPSTREAM: 'https://abcdefghijklmnop.supabase.co',
-  SUPABASE_ANON_KEY: 'anon-test',
-  PROXY_SECRET: 'proxy-secret-test',
-};
-
-function setup(opts: { min?: string; upstream?: (req: Request) => Promise<Response> } = {}) {
-  const seen: Request[] = [];
-  const log = vi.fn();
-  const fetchStub = vi.fn(async (req: Request) => {
-    seen.push(req);
-    if (opts.upstream) return opts.upstream(req);
-    return new Response('{"ok":true}', {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Credentials': 'true',
-        'Content-Range': '0-0/1',
-        'Set-Cookie': '__cf_bm=x; Domain=.supabase.co',
-      },
-    });
-  });
-  const gate = createVersionGate({ loadMin: async () => opts.min ?? '4.0.0' });
-  /** 上游收到的第一个请求；没收到就让用例失败（不用非空断言） */
-  const first = (): Request => {
-    const r = seen[0];
-    if (!r) throw new Error('上游没有收到请求');
-    return r;
-  };
-  return { seen, first, log, fetchStub, deps: { fetch: fetchStub, gate, log } };
-}
-
-const BASE = 'https://lemomemo.com';
-
-function req(path: string, init: RequestInit & { headers?: Record<string, string> } = {}): Request {
-  return new Request(BASE + path, { ...init, headers: { 'X-App-Version': '4.0.0', ...(init.headers ?? {}) } });
-}
+import { BASE, ENV, req, setup } from './sb-harness.ts';
 
 describe('upstreamPath：路径白名单和穿越', () => {
   it.each([
     ['/sb/rest/v1/todos', '/rest/v1/todos'],
     ['/sb/rest/v1/todos?select=*&id=eq.1', '/rest/v1/todos'],
     ['/sb/auth/v1/otp', '/auth/v1/otp'],
-    ['/sb/storage/v1/object/sign/images/a%20b.webp', '/storage/v1/object/sign/images/a%20b.webp'],
+    ['/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx', '/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx'],
     ['/sb/functions/v1/ai-parse', '/functions/v1/ai-parse'],
     ['/sb/realtime/v1/websocket?apikey=x&vsn=1.0.0', '/realtime/v1/websocket'],
   ])('%s → %s', (p, want) => {
@@ -293,8 +254,7 @@ describe('写入先查版本（TC-B0-46～48、51 经转发层）', () => {
 
   it.each([
     ['POST', '/sb/auth/v1/otp'],
-    ['POST', '/sb/storage/v1/object/sign/images/a.webp'],
-    ['POST', '/sb/storage/v1/object/list/images'],
+    ['GET', '/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx?token=t'],
     ['GET', '/sb/rest/v1/todos'],
   ])('TC-B0-51：不带版本头 %s %s 照常转发', async (m, p) => {
     const s = setup({ min: '9.9.9' });
@@ -327,7 +287,7 @@ describe('日志不打印 URL（14.2 第 8 点）', () => {
   it('转发正常时一条日志都不写', async () => {
     const s = setup();
     const spy = vi.spyOn(console, 'log');
-    await handleSb(req('/sb/storage/v1/object/sign/images/a.webp?token=abc'), ENV, s.deps);
+    await handleSb(req('/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx?token=abc'), ENV, s.deps);
     expect(s.log).not.toHaveBeenCalled();
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();

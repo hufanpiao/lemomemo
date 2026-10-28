@@ -4,7 +4,8 @@
 
 import { applyCors, isAllowedOrigin, preflightHeaders } from '../_lib/cors.ts';
 import { applySbSecurityHeaders } from '../_lib/security-headers.ts';
-import { createVersionGate, upgradeRequiredResponse, type VersionGate } from './version-gate.ts';
+import { gateFor, logCode } from '../_lib/gate.ts';
+import { upgradeRequiredResponse, type VersionGate } from './version-gate.ts';
 
 export interface SbEnv {
   /** 上游，例如 https://<ref>.supabase.co（预览环境指向预览项目，14.2 第 6 点） */
@@ -15,11 +16,18 @@ export interface SbEnv {
   PROXY_SECRET: string;
 }
 
-/** 允许转发的上游路径前缀（去掉 /sb 之后） */
-export const ALLOWED_PREFIXES: readonly string[] = ['/rest/v1/', '/auth/v1/', '/storage/v1/', '/functions/v1/', '/realtime/v1/'];
+/** 存储唯一放行的前缀（0.32） */
+export const STORAGE_ALLOWED_PREFIX = '/storage/v1/object/sign/vault-preview/';
 
-/** 白名单里也不放行的：管理接口、PostgREST 的整库结构说明 */
-const DENIED_PREFIXES: readonly string[] = ['/auth/v1/admin'];
+/**
+ * 允许转发的上游路径前缀（去掉 /sb 之后）。
+ * 0.32（R-213，14.2 第 1 点）：存储只放行 vault-preview 的签名链接（给微软取隐私记 PPT 的临时明文），而且只许 GET；
+ * 其余存储路径（上传、列目录、签名、其他桶）一律本地 404。照片和附件走 /files/v1/*。
+ */
+export const ALLOWED_PREFIXES: readonly string[] = ['/rest/v1/', '/auth/v1/', STORAGE_ALLOWED_PREFIX, '/functions/v1/', '/realtime/v1/'];
+
+/** 白名单里也不放行的：管理接口；files_authorize 只给 /files 函数用（0.32，14.2 第 1 点） */
+const DENIED_PREFIXES: readonly string[] = ['/auth/v1/admin', '/rest/v1/rpc/files_authorize'];
 const DENIED_EXACT: readonly string[] = ['/rest/v1/'];
 
 const ALLOWED_METHODS = new Set(['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS']);
@@ -68,7 +76,7 @@ export function upstreamPath(rawUrl: string): string | null {
   if (SUSPICIOUS_PATH_RE.test(rawPath) || !PATH_CHARS_RE.test(rawPath)) return null;
   const p = rawPath.slice('/sb'.length);
   if (!ALLOWED_PREFIXES.some((pre) => p.startsWith(pre))) return null;
-  if (DENIED_EXACT.includes(p) || DENIED_PREFIXES.some((pre) => p.startsWith(pre))) return null;
+  if (DENIED_EXACT.includes(p) || DENIED_PREFIXES.some((pre) => p.toLowerCase().startsWith(pre))) return null;
   return p;
 }
 
@@ -124,6 +132,9 @@ export async function handleSb(
   // 拼完再核一次：不会请求别的主机（TC-B0-39）
   if (target.origin !== base.origin) return localJson(404, 'not_found', origin);
 
+  // 存储只许 GET（vault-preview 的签名链接）；不转发
+  if (path.startsWith('/storage/v1/') && method !== 'GET') return localJson(404, 'not_found', origin);
+
   const isWebSocket = (request.headers.get('Upgrade') ?? '').toLowerCase() === 'websocket';
   if (isWebSocket && !path.startsWith('/realtime/v1/')) return localJson(404, 'not_found', origin);
 
@@ -163,34 +174,6 @@ export async function handleSb(
 }
 
 // ---------- Pages Functions 入口 ----------
-
-let gateCache: { key: string; gate: VersionGate } | null = null;
-
-function gateFor(env: SbEnv): VersionGate {
-  const key = `${env.SUPABASE_UPSTREAM}\n${env.SUPABASE_ANON_KEY}`;
-  if (gateCache?.key === key) return gateCache.gate;
-  const gate = createVersionGate({
-    loadMin: async (signal) => {
-      const url = new URL('/rest/v1/app_config?select=min_client_version&limit=1', env.SUPABASE_UPSTREAM);
-      const r = await fetch(url.toString(), {
-        headers: { apikey: env.SUPABASE_ANON_KEY, accept: 'application/json' },
-        signal,
-      });
-      if (!r.ok) throw new Error('gate_config_http');
-      const rows: unknown = await r.json();
-      if (!Array.isArray(rows) || rows.length === 0) return null;
-      const row: unknown = rows[0];
-      return row && typeof row === 'object' && 'min_client_version' in row ? row.min_client_version : null;
-    },
-    log: logCode,
-  });
-  gateCache = { key, gate };
-  return gate;
-}
-
-function logCode(code: string): void {
-  console.log(JSON.stringify({ evt: code }));
-}
 
 export const onRequest: PagesFunction<SbEnv> = (ctx) =>
   handleSb(ctx.request, ctx.env, { fetch: (r) => fetch(r), gate: gateFor(ctx.env), log: logCode }, ctx.request.cf);
