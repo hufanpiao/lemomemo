@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ManifestError, generate } from './generate.ts';
 import { sampleCore, sampleManifests, sampleNotes } from './sample-manifests.ts';
 import type { Manifest } from './types.ts';
+import { allManifests } from '../../shared/manifests/index.ts';
 
 const byId = (id: string) => generate(sampleManifests).cases.find((c) => c.id === id);
 
@@ -155,5 +156,26 @@ describe('清单不合规时拒绝生成', () => {
   it('桶没有任何找人办法', () => {
     const bad: Manifest = { feature: 'x', owner: 'x', tables: [], buckets: [{ name: 'files', userLookup: { by: 'column', col: 'user_id' } }] };
     expect(() => generate([bad])).toThrow(ManifestError);
+  });
+});
+
+// B0 集成：后端的真清单（shared/manifests）直接传进生成器
+describe('后端的真清单', () => {
+  const { cases } = generate(allManifests);
+
+  it('每张表一条注销用例，编号不重复', () => {
+    const tables = allManifests.flatMap((m) => m.tables).map((t) => `TC-DEL-${t.name}`);
+    const del = new Set(cases.filter((c) => c.kind === 'account-delete').map((c) => c.id));
+    for (const id of tables) expect(del.has(id), id).toBe(true);
+  });
+
+  it('remind_queue 按引用的行找人（rowRef）', () => {
+    const c = cases.find((x) => x.id === 'TC-DEL-remind_queue');
+    expect(c?.probe?.a).toMatch(/table_name = 'todos' and exists \(select 1 from public\.todos r where r\.id = id and r\.user_id = :user_a\)/);
+  });
+
+  it('backups 桶按第二级目录找人；孤儿清理用 after', () => {
+    expect(cases.find((x) => x.id === 'TC-DEL-bucket-backups')?.probe?.a).toContain("split_part(name, '/', 2)");
+    expect(cases.some((x) => x.kind === 'orphan-sweep' && x.act?.includes('早于 24 hours'))).toBe(true);
   });
 });

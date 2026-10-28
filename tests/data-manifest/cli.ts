@@ -3,7 +3,7 @@
 //   node tests/data-manifest/cli.ts --sample --out <目录>     用样例清单
 //   node tests/data-manifest/cli.ts --out <目录>              用 shared/manifests/index.ts（后端写好后）
 //
-// shared/manifests/index.ts 要导出 `manifests: Manifest[]`（或默认导出同样的数组）。需要 Node 22.18 以上。
+// 真清单读 shared/manifests/index.ts 的 allManifests（后端）。npm run gen:manifest 写到 dist/data-manifest/。需要 Node 22.18 以上。
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -17,9 +17,9 @@ async function loadManifests(sample: boolean): Promise<readonly Manifest[]> {
   if (sample) return (await import('./sample-manifests.ts')).sampleManifests;
   const index = join(ROOT, 'shared', 'manifests', 'index.ts');
   if (!existsSync(index)) throw new Error('还没有 shared/manifests/index.ts（后端写），先用 --sample');
-  const mod: { manifests?: readonly Manifest[]; default?: readonly Manifest[] } = await import(pathToFileURL(index).href);
-  const list = mod.manifests ?? mod.default;
-  if (!Array.isArray(list)) throw new Error('shared/manifests/index.ts 要导出 manifests 数组');
+  const mod: { allManifests?: readonly Manifest[] } = await import(pathToFileURL(index).href);
+  const list = mod.allManifests;
+  if (!Array.isArray(list)) throw new Error('shared/manifests/index.ts 要导出 allManifests 数组');
   return list;
 }
 

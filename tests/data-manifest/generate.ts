@@ -52,7 +52,7 @@ function lit(s: string): string {
   return `'${s.replace(/'/g, "''")}'`;
 }
 
-function requireOneOf(o: { userLookup?: UserLookup; noUserData?: true }, where: string): void {
+function requireOneOf(o: { userLookup?: UserLookup | undefined; noUserData?: true | undefined }, where: string): void {
   const has = !!o.userLookup;
   const none = o.noUserData === true;
   if (has === none) throw new ManifestError(`${where}：userLookup 和 noUserData 必须二选一（3.5，0.23 N3）`);
@@ -60,7 +60,7 @@ function requireOneOf(o: { userLookup?: UserLookup; noUserData?: true }, where: 
 
 // ---------- 注销：表 ----------
 
-function tableCondition(t: ManifestTable, who: 'a' | 'b'): string {
+function tableCondition(t: ManifestTable, who: 'a' | 'b', refTables: readonly string[] = []): string {
   const lk = t.userLookup;
   if (!lk) throw new ManifestError(`${t.name}：没有 userLookup`);
   const uid = `:user_${who}`;
@@ -77,10 +77,19 @@ function tableCondition(t: ManifestTable, who: 'a' | 'b'): string {
       return `${ident(lk.col, '列名')} = ${uid}`;
     case 'pathPattern':
       throw new ManifestError(`${t.name}：表不能用 pathPattern 找人`);
+    case 'rowRef': {
+      // 引用的行在哪张表由 tableCol 列决定：逐个对“按 user_id 找人”的 public 表拼 exists（例如 remind_queue → events、todos、anniversaries）
+      const tc = ident(lk.tableCol, '列名');
+      const ic = ident(lk.idCol, '列名');
+      if (refTables.length === 0) throw new ManifestError(`${t.name}：rowRef 找不到可以引用的表`);
+      return `(${refTables
+        .map((r) => `(${tc} = ${lit(r)} and exists (select 1 from ${qualified('public', r)} r where r.id = ${ic} and r.user_id = ${uid}))`)
+        .join(' or ')})`;
+    }
   }
 }
 
-function deleteCaseForTable(t: ManifestTable, manifest: string): GeneratedCase {
+function deleteCaseForTable(t: ManifestTable, manifest: string, refTables: readonly string[] = []): GeneratedCase {
   const q = qualified(t.schema, t.name);
   if (t.noUserData) {
     // 注销前后整张表不变
@@ -105,8 +114,8 @@ function deleteCaseForTable(t: ManifestTable, manifest: string): GeneratedCase {
     target: q,
     manifests: [manifest],
     probe: {
-      a: `select count(*) from ${from} where ${tableCondition(t, 'a')}`,
-      b: `select count(*) from ${from} where ${tableCondition(t, 'b')}`,
+      a: `select count(*) from ${from} where ${tableCondition(t, 'a', refTables)}`,
+      b: `select count(*) from ${from} where ${tableCondition(t, 'b', refTables)}`,
     },
     act: 'account-delete',
     expect: `冷静期里 A 的行还在；account-purge 之后 A 的为 0、B 的条数不变（按 ${describeLookup(lk)} 找人）`,
@@ -131,7 +140,9 @@ function describeLookup(lk: UserLookup): string {
     case 'registry':
       return `登记表 ${lk.table}.${lk.col}`;
     case 'pathPattern':
-      return `路径第 ${lk.segment ?? 1} 级目录`;
+      return `路径第 ${lk.level} 级目录`;
+    case 'rowRef':
+      return `${lk.tableCol}、${lk.idCol} 引用的行`;
   }
 }
 
@@ -146,21 +157,30 @@ function bucketSegmentCondition(b: ManifestBucket, who: 'a' | 'b'): string {
     return `name in (select ${pathCol} from ${qualified(s, t)} where ${ident(lk.col, '列名')} = :user_${who})`;
   }
   const conds: string[] = [];
-  if (b.pathPrefix) {
+  // 第一级就是 user_id、又写了 '<user_id>/…' 前缀的，按前缀找（更精确）；其余按第几级目录（backups：<date>/<user_id>/…，level 2）
+  const byPrefix = b.pathPrefix?.startsWith('<user_id>/') && (lk?.by !== 'pathPattern' || lk.level === 1);
+  if (lk?.by === 'pathPattern' && !byPrefix) {
+    const seg = lk.level;
+    if (!Number.isInteger(seg) || seg < 1) throw new ManifestError(`${b.name}：level 要是正整数`);
+    conds.push(`split_part(name, '/', ${seg}) = ${uid}`);
+    // 同一个桶分段登记时（images 桶的纪念日头像段），再按前缀里 <user_id>/ 后面那一段收窄
+    const rest = b.pathPrefix?.startsWith('<user_id>/') ? b.pathPrefix.slice('<user_id>/'.length) : '';
+    if (rest) conds.push(`name like ${uid} || ${lit('/' + escapeLike(rest) + '%')}`);
+  } else if (b.pathPrefix) {
     // 按路径前缀找人：'<user_id>/'、'<user_id>/anniv/'
     if (!b.pathPrefix.startsWith('<user_id>/')) throw new ManifestError(`${b.name}：pathPrefix 要以 <user_id>/ 开头，或者改用 userLookup`);
-    const rest = b.pathPrefix.slice('<user_id>/'.length).replace(/[\\%_]/g, (c) => '\\' + c);
+    const rest = escapeLike(b.pathPrefix.slice('<user_id>/'.length));
     conds.push(`name like ${uid} || ${lit('/' + rest + '%')}`);
-  } else if (lk?.by === 'pathPattern') {
-    // 不按第一级目录找人的桶（backups：<日期>/<user_id>/…，segment 2）
-    const seg = lk.segment ?? 1;
-    if (!Number.isInteger(seg) || seg < 1) throw new ManifestError(`${b.name}：segment 要是正整数`);
-    conds.push(`split_part(name, '/', ${seg}) = ${uid}`);
   } else {
     throw new ManifestError(`${b.name}：桶没有 pathPrefix，也没有 pathPattern / registry 的 userLookup`);
   }
   if (b.pathPattern) conds.push(`name ~ ${lit(b.pathPattern)}`);
   return conds.join(' and ');
+}
+
+/** like 里的 \ % _ 转义 */
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => '\\' + c);
 }
 
 function deleteCaseForBucket(name: string, segments: { b: ManifestBucket; manifest: string }[]): GeneratedCase {
@@ -209,6 +229,12 @@ export function generate(manifests: readonly Manifest[]): GenerateResult {
   const syncTables: string[] = [];
   const localStores = new Map<string, LocalStore & { manifest: string }>();
 
+  // rowRef 能引用的表：public 里按 user_id 列找人的表
+  const refTables = manifests
+    .flatMap((m) => m.tables)
+    .filter((t) => t.schema === 'public' && t.userLookup?.by === 'column' && t.userLookup.col === 'user_id')
+    .map((t) => t.name);
+
   for (const m of manifests) {
     for (const t of m.tables) {
       const key = `${t.schema}.${t.name}`;
@@ -216,7 +242,7 @@ export function generate(manifests: readonly Manifest[]): GenerateResult {
       if (tableOwners.has(key)) throw new ManifestError(`${key} 登记在 ${tableOwners.get(key)} 和 ${m.feature} 两份清单里`);
       tableOwners.set(key, m.feature);
       requireOneOf(t, key);
-      cases.push(deleteCaseForTable(t, m.feature));
+      cases.push(deleteCaseForTable(t, m.feature, refTables));
       if (t.sync === true) syncTables.push(t.name);
       cases.push(...systemColCases(t, m.feature));
       if (t.softDelete) cases.push(softDeleteCase(t, m.feature));
@@ -357,7 +383,7 @@ function orphanCase(b: ManifestBucket, manifest: string): GeneratedCase {
       a: `select count(*) from storage.objects where bucket_id = ${lit(b.name)} and name = :old_id`,
       b: `select count(*) from storage.objects where bucket_id = ${lit(b.name)} and name = :new_id`,
     },
-    act: `造两个在 ${qualified(s, t)}.${ident(o.col, '列名')} 里没有记录的对象：早于 ${o.olderThan}（:old_id）、晚于（:new_id）；跑孤儿清理`,
+    act: `造两个在 ${qualified(s, t)}.${ident(o.col, '列名')} 里没有记录的对象：早于 ${o.after}（:old_id）、晚于（:new_id）；跑孤儿清理`,
     expect: '早的被清掉，新的留着（上传和写记录之间的空档不误删）',
   };
 }
