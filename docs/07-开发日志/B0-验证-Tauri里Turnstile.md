@@ -56,7 +56,7 @@
    每一把都要截图保存日志。日志里不能出现 "CSP 拦截"。
 5. **用真 sitekey 测**：
    - 测试 key 不检查域名，所以这一步不能省。
-   - 产品负责人在 Cloudflare 控制台里，给 Turnstile 小部件的 Hostname 加上 `tauri.localhost`。
+   - 产品负责人在 Cloudflare 控制台里，给**预览站点**的 Turnstile 小部件的 Hostname 加上 `tauri.localhost`（架构 0.30：只加在预览站点上，正式站点要不要加到 B6-exe 再定）。
    - 然后在页面里选"自定义"，填入真 sitekey。sitekey 是公开的；secret 不交给 AI。
    - 如果报错码 `110200`，说明这个域名没有被允许，Turnstile 不接受 `tauri.localhost`。
 6. **服务端校验**：
