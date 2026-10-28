@@ -4,11 +4,14 @@
   "type": "module",
   "description": "没有 Docker 时的离线 SQL 检查：用 PGlite（WASM 版 Postgres）加 Supabase 桩跑迁移和 RLS 测试；不代替 supabase db reset",
   "scripts": {
-    "check": "node run.mjs"
+    "check": "node run.mjs",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "gen:types": "node gen-db-types.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
     "@electric-sql/pglite-pgvector": "0.0.9",
+    "typescript": "6.0.3",
     "zod": "4.6.7"
   }
 }

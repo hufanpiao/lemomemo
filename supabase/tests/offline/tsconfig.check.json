@@ -1,0 +1,24 @@
+{
+  // 离线类型检查：后端写的 shared/schema、shared/manifests、build/d1、db.types、_shared（合并后改由根目录的 tsconfig 管）
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": [],
+    "paths": { "zod": ["./node_modules/zod"] }
+  },
+  "files": [
+    "../../../shared/schema/manifest.ts",
+    "../../../shared/schema/kinds.ts",
+    "../../../shared/manifests/index.ts",
+    "../../../shared/db.types.ts",
+    "../../../build/d1/checks.ts"
+  ]
+}

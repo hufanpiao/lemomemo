@@ -607,5 +607,5 @@ grant select (id, user_id, deleted_at, session_id) on public.devices to fn_vault
 -- ===== 20. 收尾：private 的表一律不给客户端角色（之后新建的表没有任何默认授权） =====
 revoke all on all tables in schema private from public, anon, authenticated;         -- 0001
 
--- Realtime：同步的 9 张表各在自己的文件里进 publication（0.29 第 29 条，P-22）；tombstones 不进，增量同步按 deleted_at 拉
-alter publication supabase_realtime add table public.settings, public.devices;
+-- Realtime：同步的 9 张表各在自己的文件里进 publication（0.29 第 29 条，P-22）；tombstones 也进，客户端只订阅它的 INSERT（数据字典 4.3b）
+alter publication supabase_realtime add table public.settings, public.devices, public.tombstones;

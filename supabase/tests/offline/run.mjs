@@ -6,6 +6,9 @@ import { vector } from '@electric-sql/pglite-pgvector';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { register } from 'node:module';
+
+register('./resolve-zod.mjs', import.meta.url);   // shared/ 的 import 'zod' 从本目录找
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../..');
@@ -66,23 +69,65 @@ if (!only || only === 'rls') {
 if (!only || only === 'd1') {
   const { runD1 } = await import('../../../build/d1/checks.ts');
   const { allManifests } = await import('../../../shared/manifests/index.ts');
+  const kinds = await import('../../../shared/schema/kinds.ts');   // 加载时核对字面量名单和清单一致，不一致直接抛错
+  log(`✔ kinds.ts 和清单一致：向量类型 ${kinds.VECTOR_KINDS.join('、')}`);
   const q = async (sql, params = []) => (await db.query(sql, params)).rows;
   const problems = await runD1(q, allManifests);
   if (problems.length) { fail(`D1 比对：${problems.length} 处不一致`); problems.forEach((p) => log('    ' + p)); }
   else log('✔ D1 比对：清单和数据库一致');
 
-  const broken = allManifests.map((m) => m.name === 'anniv' ? { ...m, tables: [] } : m);
+  const broken = allManifests.map((m) => m.feature === 'anniv' ? { ...m, tables: [] } : m);
   const neg = await runD1(q, broken);
   if (neg.some((p) => p.includes('anniversaries'))) log(`✔ D1 反例：少登记 anniversaries 时报错（${neg.length} 处，例：${neg[0]}）`);
   else fail('D1 反例：少登记 anniversaries 却没报错');
+
+  // 违规样例：每个样例在事务里改一处，D1 必须报出 expect 那句，然后回滚
+  const fxDir = join(root, 'supabase/tests/d1-fixtures');
+  for (const f of readdirSync(fxDir).filter((f) => f.endsWith('.sql')).sort()) {
+    const sql = readFileSync(join(fxDir, f), 'utf8');
+    const expect = /^-- expect: (.+)$/m.exec(sql)?.[1]?.trim();
+    await db.exec('begin');
+    try {
+      await db.exec(sql);
+      const ps = await runD1(q, allManifests);
+      if (expect && ps.some((p) => p.includes(expect))) log(`✔ D1 违规样例 ${f}：报出“${ps.find((p) => p.includes(expect))}”`);
+      else fail(`D1 违规样例 ${f}：没报出“${expect}”（实际：${ps.join(' | ') || '无'}）`);
+    } catch (e) { fail(`D1 违规样例 ${f} 执行出错：${e.message}`); }
+    await db.exec('rollback');
+  }
+
+  // 清单本身的违规（zod 在加载时拦下，TC-B0-24、26）
+  const { defineManifest } = await import('../../../shared/schema/manifest.ts');
+  const base = { name: 'qa', schema: 'public', sync: false, realtime: false, localCache: 'none', clientWritable: ['a'], softDelete: false,
+    backup: 'none', export: 'none', onAccountDelete: 'cascade' };
+  const bads = [
+    ['systemCols 和 clientWritable 重叠', { ...base, userLookup: { by: 'column', col: 'user_id' }, systemCols: ['a'], noConflict: [] }],
+    ['userLookup 和 noUserData 同时写', { ...base, userLookup: { by: 'column', col: 'user_id' }, noUserData: true }],
+    ['userLookup 和 noUserData 都没写', { ...base }],
+    ['noConflict 放了不可写的列', { ...base, userLookup: { by: 'column', col: 'user_id' }, systemCols: [], noConflict: ['b'] }],
+  ];
+  for (const [what, t] of bads) {
+    try { defineManifest({ feature: 'qa', owner: 'feature', tables: [t] }); fail(`清单违规“${what}”没被拦下`); }
+    catch { log(`✔ 清单违规“${what}”加载时报错`); }
+  }
 }
 
 // 4) 兼容样例：“只加列”的迁移叠在 7 个迁移之上能跑，改名、删列的样例被 compat 检查拦下由前端 B 负责
 if (!only || only === 'compat') {
-  for (const f of readdirSync(compatDir).filter((f) => f.endsWith('.sql')).sort()) {
+  // 每个样例：建 A、叠上样例迁移、再以 4.0.0 客户端的身份写一遍（_old_client.sql），结果和样例头上的 expect-old-client 比
+  const helpers = readFileSync(join(rlsDir, '_helpers.psql'), 'utf8');
+  const oldClient = readFileSync(join(compatDir, '_old_client.sql'), 'utf8');
+  for (const f of readdirSync(compatDir).filter((f) => f.endsWith('.sql') && !f.startsWith('_')).sort()) {
     const sql = readFileSync(join(compatDir, f), 'utf8');
-    try { await db.exec('begin;' + sql + 'rollback;'); log(`✔ 兼容样例 ${f} 能在现有结构上执行`); }
-    catch (e) { await db.exec('rollback').catch(() => {}); fail(`兼容样例 ${f}：${e.message}`); }
+    const expect = /^-- expect-old-client: (ok|fail)$/m.exec(sql)?.[1];
+    try {
+      await db.exec('begin;' + helpers + 'select tests.seed();' + sql);
+      const r = (await db.query(oldClient)).rows[0].old_client;
+      const ok = r === 'ok';
+      if ((expect === 'ok') === ok) log(`✔ 兼容样例 ${f}：旧版客户端${ok ? '照常读写' : `写入失败（${r.split(' ')[0]}），符合预期`}`);
+      else fail(`兼容样例 ${f}：预期 ${expect}，实际 ${r}`);
+    } catch (e) { fail(`兼容样例 ${f} 执行出错：${e.message}`); }
+    await db.exec('rollback').catch(() => {});
   }
 }
 
