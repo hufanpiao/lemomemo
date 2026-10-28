@@ -207,6 +207,15 @@ function Invoke-Checks {
 
     # 预览专用函数的名单（build\check_backend.py 的 PREVIEW_FUNCS，名单只写那一处）。在这里读：此时还没输入任何令牌，
     # 不让带令牌的进程去跑仓库里的脚本；部署前的检查（Assert-NoPreviewFunctions）只用 PowerShell 查文件
+    # 先跑一次完整的后端越界检查（含 F6：config.toml 和预览专用函数），失败就停（B1 接手清单 P-r2probe）。
+    # check_backend 用 tomllib 解析 config.toml，要 Python 3.11 以上
+    # 参数里不能用双引号：Windows PowerShell 5.1 传给外部程序时会把双引号吞掉
+    $pyVer = & python -I -c 'import sys; print(''%d.%d'' % sys.version_info[:2])'
+    if ($LASTEXITCODE -ne 0 -or [version]"$pyVer" -lt [version]'3.11') { Fail "要 Python 3.11 以上（现在是 $pyVer）" }
+    Push-Location $RepoPath
+    try { & python -I 'build\check_backend.py'; $code = $LASTEXITCODE } finally { Pop-Location }
+    if ($code -ne 0) { Fail '后端越界检查没通过（python -I build\check_backend.py），先修好再发布' }
+    Ok "后端越界检查通过（Python $pyVer）"
     Push-Location $RepoPath
     try { $names = & python -I 'build\check_backend.py' '--print-preview-funcs'; $code = $LASTEXITCODE } finally { Pop-Location }
     if ($code -ne 0) { Fail '读不出预览专用函数的名单（python -I build\check_backend.py --print-preview-funcs）' }
