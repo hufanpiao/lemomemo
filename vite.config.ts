@@ -1,12 +1,13 @@
 // Vite：App 主体和预览沙箱两个页面入口（SW 单独打包，见 vite.sw.config.ts）（架构 8.1）
 // base '/app/'，输出到 dist/web/app/；没有内联脚本和样式，modulepreload polyfill 关掉
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { buildVersion } from './build/assemble_web.mjs';
 
 const root = import.meta.dirname;
-export const APP_VERSION = readFileSync(resolve(root, 'VERSION'), 'utf8').trim();
+// LEMO_BUILD_VERSION（deploy-preview 给的 X.Y.Z-preview.N）优先，否则 VERSION 文件；和 app/version.json 同一个来源
+export const APP_VERSION: string = buildVersion(root);
 
 export default defineConfig(({ mode }) => {
   if (mode === 'production') {

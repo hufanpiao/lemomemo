@@ -1,8 +1,8 @@
 // 官网静态页的构建和检查（架构 8.1、16.2）。
 //
 // 用法：
-//   node build/build_site.mjs                     # 检查 site/，再复制到 dist/web 根目录
-//   node build/build_site.mjs --mode preview      # 预览环境：robots.txt 换成整站禁止
+//   node build/build_site.mjs                     # 检查 site/，再复制到 dist/web 根目录（npm run build:site）
+//   node build/build_site.mjs --mode preview      # 预览环境：robots.txt 换成整站禁止（production 以外的模式都这样）
 //   node build/build_site.mjs --check             # 只检查，不输出
 //   node build/build_site.mjs --out <目录>
 //
@@ -12,10 +12,13 @@
 // 2. 检查：首页里不能出现 supabase 和 /sb/；中韩页面成对；每页有 title、description、og、canonical、hreflang；
 //    没有内联脚本和样式；_routes.json 只让 / 和 /sb/* 进 Functions；_headers 里官网的 CSP 和 Pages Function 里的一字不差；
 //    输出不覆盖 dist/web/app/ 下 Vite 的产物。
+// 3. _headers 不原样复制：和 src/_headers（/app/* 那几段）一起由 build/assemble_web.mjs 的 writeHeaders 拼好再写，
+//    所以单独跑本脚本、或在 npm run build 前后跑，dist/web/_headers 都是完整的两段（B0 集成）。
+//    npm run build（build_web.mjs）里已经调了本脚本的 buildSite，部署前不用再单独跑。
 // 需要 Node 22.18 以上（直接 import .ts，读 Functions 里的 CSP 常量）。
 
 import { createHash } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -136,11 +139,14 @@ function hashName(name, buf) {
 
 export function buildSite({ out, mode }) {
   const map = new Map();
+  // 旧的带哈希文件不留（/s/ 只放官网的资源）
+  rmSync(join(out, 's'), { recursive: true, force: true });
   for (const name of HASHED) map.set(name, hashName(name, readFileSync(join(SITE, name))));
 
   for (const abs of walk(SITE)) {
     const f = rel(abs);
     if (f.startsWith('app/')) throw new Error(`site/${f}：site/ 里不能有 app/，那是 Vite 的输出`);
+    if (f === '_headers') continue;   // 由 writeHeaders 和 src/_headers 拼好再写
     let target = map.get(f) ?? f;
     const dest = join(out, ...target.split('/'));
     mkdirSync(dirname(dest), { recursive: true });
@@ -178,10 +184,12 @@ async function main() {
   console.log('官网检查通过');
   if (args.includes('--check')) return;
   const mode = opt('--mode', 'production');
-  if (mode !== 'production' && mode !== 'preview') throw new Error('--mode 只能是 production 或 preview');
+  const { MODES, writeHeaders } = await import('./assemble_web.mjs');
+  if (!MODES.includes(mode)) throw new Error(`--mode 只能是 ${MODES.join('、')}`);
   const out = resolve(ROOT, opt('--out', 'dist/web'));
   if (!existsSync(out)) mkdirSync(out, { recursive: true });
-  const map = buildSite({ out, mode });
+  const map = buildSite({ out, mode: mode === 'production' ? 'production' : 'preview' });
+  writeHeaders({ root: ROOT, mode, out });
   console.log(`已复制到 ${relative(ROOT, out) || '.'}（${mode}），带哈希的资源：`);
   for (const [from, to] of map) console.log(`  ${from} → ${to}`);
 }
