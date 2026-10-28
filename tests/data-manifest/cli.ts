@@ -1,4 +1,4 @@
-// 生成器的命令行：把用例写成 JSON 和一份 SQL 清单，给后端审、给 runner 读。
+// 生成器的命令行：把用例写成 JSON、一份 SQL 清单和一份对象存储探针清单（R2 的桶，0.32），给后端审、给 runner 读。
 //
 //   node tests/data-manifest/cli.ts --sample --out <目录>     用样例清单
 //   node tests/data-manifest/cli.ts --out <目录>              用 shared/manifests/index.ts（后端写好后）
@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { generate, type GeneratedCase } from './generate.ts';
+import { describeObjProbe } from './objstore-cases.ts';
 import type { Manifest } from './types.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -43,6 +44,10 @@ async function main(): Promise<void> {
   mkdirSync(out, { recursive: true });
   writeFileSync(join(out, 'cases.json'), JSON.stringify(cases, null, 2) + '\n');
   writeFileSync(join(out, 'cases.sql'), cases.filter((c) => c.runner === 'sql').map(toSql).join('\n'));
+  // store = 'r2' 的桶（0.32）：runner 读 cases.json 的 objProbe；这份给人审
+  const obj = cases.filter((c) => c.runner === 'objstore');
+  const objText = obj.map((c) => [`${c.id}（${c.kind}）：${c.objProbe ? describeObjProbe(c.objProbe) : ''}`, `  期望：${c.expect}`, ''].join('\n'));
+  writeFileSync(join(out, 'cases-objstore.txt'), objText.join(''));
   console.log(`已写到 ${out}`);
 }
 

@@ -7,7 +7,8 @@
 //   :row_id / :old_id / :new_id  runner 造的行
 //   :new_value                runner 按列类型造的新值（和原值不同）
 
-import { maxLifetimeCase, orphanCase, softDeleteCase, systemColCases, vaultRowsCase } from './other-cases.ts';
+import { objDeleteCase, objMaxLifetimeCase, objOrphanCase } from './objstore-cases.ts';
+import { maxLifetimeCase, orphanCase, segmentSuffix, softDeleteCase, systemColCases, vaultRowsCase } from './other-cases.ts';
 import { type CaseKind, type GeneratedCase, ManifestError, ident, lit, qualified, splitQualified } from './sql.ts';
 import type { LocalStore, Manifest, ManifestBucket, ManifestTable, UserLookup } from './types.ts';
 
@@ -222,8 +223,9 @@ export function generate(manifests: readonly Manifest[]): GenerateResult {
       const list = buckets.get(b.name) ?? [];
       list.push({ b, manifest: m.feature });
       buckets.set(b.name, list);
-      if (b.orphanSweep) cases.push(orphanCase(b, m.feature));
-      if (b.maxLifetime) cases.push(maxLifetimeCase(b, m.feature));
+      const r2 = b.store === 'r2';
+      if (b.orphanSweep) cases.push(r2 ? objOrphanCase(b, m.feature, segmentSuffix(b)) : orphanCase(b, m.feature));
+      if (b.maxLifetime) cases.push(r2 ? objMaxLifetimeCase(b, m.feature, segmentSuffix(b)) : maxLifetimeCase(b, m.feature));
     }
     for (const s of m.localStores ?? []) {
       if (localStores.has(s.name)) throw new ManifestError(`本机仓 ${s.name} 登记了两次`);
@@ -231,7 +233,12 @@ export function generate(manifests: readonly Manifest[]): GenerateResult {
     }
   }
 
-  for (const [name, segs] of buckets) cases.push(deleteCaseForBucket(name, segs));
+  // 0.32：store = 'r2' 的桶用对象存储探针；同一个桶的各段必须写同一个 store
+  for (const [name, segs] of buckets) {
+    const stores = new Set(segs.map((s) => s.b.store ?? 'supabase'));
+    if (stores.size > 1) throw new ManifestError(`桶 ${name} 的几段登记 store 不一致`);
+    cases.push(stores.has('r2') ? objDeleteCase(name, segs) : deleteCaseForBucket(name, segs));
+  }
 
   // 本机：同步表的仓合成一条，其他仓各一条（3.3 节 TC-DEL-idb-*）
   if (syncTables.length) {

@@ -61,7 +61,7 @@ export function softDeleteCase(t: ManifestTable, manifest: string): GeneratedCas
 }
 
 /** 同一个桶分段登记时（images 桶的纪念日头像段）用路径段区分编号：'<user_id>/anniv/' → '-anniv' */
-function segmentSuffix(b: ManifestBucket): string {
+export function segmentSuffix(b: ManifestBucket): string {
   const seg = (b.pathPrefix ?? '').replace('<user_id>/', '').replace(/\/+$/, '').replace(/\//g, '-');
   return seg ? `-${seg}` : '';
 }
