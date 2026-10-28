@@ -51,6 +51,9 @@ def actual_paths():
         # docs/02-设计/线上存档/ 里是发布时自动存的稿子副本（钩子生成），只登记它的 README
         if rel.startswith("docs/02-设计/线上存档/") and rel != "docs/02-设计/线上存档/README.md":
             continue
+        # .claude/ 是本机 Claude Code 的设置和其他 agent 的 worktree 工作副本（.claude/worktrees/），不是项目文件
+        if rel.startswith(".claude/"):
+            continue
         out.add(rel)
     return out
 

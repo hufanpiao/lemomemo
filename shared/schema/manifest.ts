@@ -60,7 +60,7 @@ export const tableSchema = z.object({
   .refine((t) => (t.systemCols === undefined) === (t.noConflict === undefined), { message: 'manifest_system_cols_with_no_conflict' })   // systemCols、noConflict 要么都写（挂 touch() 的表），要么都不写
   .refine((t) => !t.systemCols || t.systemCols.every((c) => !t.clientWritable.includes(c)), { message: 'manifest_system_cols_overlap_writable' })   // systemCols 和 clientWritable 不能重叠
   .refine((t) => !t.noConflict || t.noConflict.every((c) => t.clientWritable.includes(c)), { message: 'manifest_no_conflict_not_writable' })   // noConflict 只放客户端可写列
-  .refine((t) => !t.vaultRows || !t.systemCols || t.systemCols.every((c) => !t.vaultRows!.cipherCols.includes(c) && !t.vaultRows!.flag.includes(c)),
+  .refine(({ vaultRows: v, systemCols }) => !v || !systemCols || systemCols.every((c) => !v.cipherCols.includes(c) && !v.flag.includes(c)),
     { message: 'manifest_system_cols_in_vault_rows' });   // systemCols 不能含 vaultRows 的 flag 列和 cipherCols
 export type ManifestTable = z.infer<typeof tableSchema>;
 /** 清单作者写的表（带默认值的字段可以省） */

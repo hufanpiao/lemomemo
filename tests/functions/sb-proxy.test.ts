@@ -29,7 +29,13 @@ function setup(opts: { min?: string; upstream?: (req: Request) => Promise<Respon
     });
   });
   const gate = createVersionGate({ loadMin: async () => opts.min ?? '4.0.0' });
-  return { seen, log, fetchStub, deps: { fetch: fetchStub, gate, log } };
+  /** 上游收到的第一个请求；没收到就让用例失败（不用非空断言） */
+  const first = (): Request => {
+    const r = seen[0];
+    if (!r) throw new Error('上游没有收到请求');
+    return r;
+  };
+  return { seen, first, log, fetchStub, deps: { fetch: fetchStub, gate, log } };
 }
 
 const BASE = 'https://lemomemo.com';
@@ -90,7 +96,7 @@ describe('handleSb：白名单外、穿越', () => {
   it('上游地址按 SUPABASE_UPSTREAM 拼，主机不变、查询串原样', async () => {
     const s = setup();
     await handleSb(req('/sb/rest/v1/todos?select=id,title&id=eq.1'), ENV, s.deps);
-    const u = new URL(s.seen[0]!.url);
+    const u = new URL(s.first().url);
     expect(u.origin).toBe(ENV.SUPABASE_UPSTREAM);
     expect(u.pathname).toBe('/rest/v1/todos');
     expect(u.search).toBe('?select=id,title&id=eq.1');
@@ -126,7 +132,7 @@ describe('请求头重写（14.2 第 4、5 点；TC-B0-91 转发层部分）', (
       s.deps,
       { country: 'CN', city: '上海' },
     );
-    const h = s.seen[0]!.headers;
+    const h = s.first().headers;
     expect(h.get('x-client-ip')).toBe('203.0.113.9');
     expect(h.get('x-proxy-secret')).toBe(ENV.PROXY_SECRET);
     expect(h.get('x-lemo-geo')).toBe('CN|' + encodeURIComponent('上海'));
@@ -142,20 +148,20 @@ describe('请求头重写（14.2 第 4、5 点；TC-B0-91 转发层部分）', (
   it('没有 CF-Connecting-IP 时不写 x-client-ip（客户端传的照样删掉）', async () => {
     const s = setup();
     await handleSb(req('/sb/rest/v1/todos', { headers: { 'x-client-ip': '6.6.6.6' } }), ENV, s.deps);
-    expect(s.seen[0]!.headers.get('x-client-ip')).toBeNull();
+    expect(s.first().headers.get('x-client-ip')).toBeNull();
   });
 
   it('函数固定首尔：x-region = ap-northeast-2，覆盖客户端传的', async () => {
     const s = setup();
     await handleSb(req('/sb/functions/v1/ai-parse', { method: 'POST', body: '{}', headers: { 'x-region': 'us-east-1' } }), ENV, s.deps);
-    expect(s.seen[0]!.headers.get('x-region')).toBe('ap-northeast-2');
+    expect(s.first().headers.get('x-region')).toBe('ap-northeast-2');
   });
 
   it('方法和请求体原样转发', async () => {
     const s = setup();
     await handleSb(req('/sb/rest/v1/todos', { method: 'PATCH', body: '{"title":"x"}', headers: { 'Content-Type': 'application/json' } }), ENV, s.deps);
-    expect(s.seen[0]!.method).toBe('PATCH');
-    expect(await s.seen[0]!.text()).toBe('{"title":"x"}');
+    expect(s.first().method).toBe('PATCH');
+    expect(await s.first().text()).toBe('{"title":"x"}');
   });
 
   it('删除名单覆盖架构列出的几个头', () => {
@@ -238,7 +244,7 @@ describe('响应头：安全头和 CORS（5.10、15.6；TC-B0-59 的 /sb/ 部分
     const r = await handleSb(req('/sb/auth/v1/verify?token=x&type=magiclink'), ENV, s.deps);
     expect(r.status).toBe(303);
     expect(r.headers.get('Location')).toBe('https://lemomemo.com/app/');
-    expect(s.seen[0]!.redirect).toBe('manual');
+    expect(s.first().redirect).toBe('manual');
   });
 
   it('缺配置：500 proxy_misconfigured，不转发', async () => {
@@ -305,8 +311,8 @@ describe('WebSocket（Realtime）', () => {
     const s = setup({ min: '9.9.9', upstream: async () => upstreamResp });
     const r = await handleSb(new Request(BASE + '/sb/realtime/v1/websocket?apikey=a&vsn=1.0.0', { headers: { Upgrade: 'websocket' } }), ENV, s.deps);
     expect(r).toBe(upstreamResp);
-    expect(s.seen[0]!.headers.get('upgrade')).toBe('websocket');
-    expect(s.seen[0]!.headers.get('x-proxy-secret')).toBe(ENV.PROXY_SECRET);
+    expect(s.first().headers.get('upgrade')).toBe('websocket');
+    expect(s.first().headers.get('x-proxy-secret')).toBe(ENV.PROXY_SECRET);
   });
 
   it('别的路径带 Upgrade 一律 404', async () => {

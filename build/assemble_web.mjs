@@ -74,11 +74,29 @@ export function checkHeaders(text) {
   return errors;
 }
 
+/**
+ * 架构 0.31 第 7 条：site/_headers（官网）和 src/_headers（/app/*）两段的路径互不命中。
+ * 重叠时 Cloudflare 会把两边的同名头用逗号拼起来，谁也管不住谁，所以构建直接失败。
+ */
+export function overlapErrors(siteBlocks, appBlocks) {
+  const errors = [];
+  for (const s of siteBlocks) {
+    for (const a of appBlocks) {
+      if (covers(s.path, a.path) || covers(a.path, s.path)) {
+        errors.push(`_headers：官网那段的 ${s.path} 和 /app 那段的 ${a.path} 重叠（0.31 第 7 条：两段路径不准重叠）`);
+      }
+    }
+  }
+  return errors;
+}
+
 export function renderHeaders(appHeaders, siteHeaders, mode) {
   const wss = WSS[mode];
   if (!wss) throw new Error(`未知的构建模式：${mode}`);
   const app = appHeaders.replaceAll('{{WSS}}', wss);
   if (app.includes('{{')) throw new Error('_headers 里还有没替换的占位符');
+  const overlap = overlapErrors(parseHeaders(siteHeaders), parseHeaders(app));
+  if (overlap.length) throw new Error(overlap.join('\n'));
   const text = siteHeaders ? `${siteHeaders.trimEnd()}\n\n${app}` : app;
   const errors = checkHeaders(text);
   if (errors.length) throw new Error(errors.join('\n'));

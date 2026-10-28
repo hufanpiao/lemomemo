@@ -3,7 +3,7 @@
 // - global.headers 带 X-App-Version：REST、Storage、Functions 都会带上；转发层按它挡旧版本的写入
 // - supabase-js 约 40 KB，不进首屏：调用 getSupabase() 时才动态 import（先用 IndexedDB 画出上次的内容）
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { buildInfo } from '../../app/build-info.ts';
+import { buildInfo } from '../env.ts';
 import { APP_VERSION_HEADER, appFetch } from '../http.ts';
 import type { Database } from './database.ts';
 

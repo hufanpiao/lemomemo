@@ -8,7 +8,7 @@ import '../styles/skins/glass.css';
 import '../styles/base.css';
 import { registerServiceWorker } from '../platform/sw-register.ts';
 import { App } from './App.tsx';
-import { buildInfo } from './build-info.ts';
+import { buildInfo } from '../platform/env.ts';
 
 const el = document.getElementById('root');
 if (!el) throw new Error('root_missing');
