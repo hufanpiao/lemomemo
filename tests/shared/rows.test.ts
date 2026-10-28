@@ -1,7 +1,7 @@
 // shared/schema（架构 2.5）：严格版多一列、类型不对都拒收；有时刻必须有时区
 import { describe, expect, it } from 'vitest';
 import { apiError, upgradeRequired } from '../../shared/schema/api.ts';
-import { eventsWrite, patchSchema, profilesWrite, rowsWrite, todosWrite } from '../../shared/schema/rows.ts';
+import { devicesWrite, eventsWrite, insertSchema, patchSchema, profilesWrite, rowsWrite, todosWrite } from '../../shared/schema/rows.ts';
 
 const ID = '0f8fad5b-d9cb-469f-a165-70867728950e';
 
@@ -23,6 +23,8 @@ const event = {
   batch_id: null,
   remind_min: 15,
   remind_days: null,
+  notified_for: null,
+  snooze_at: null,
   deleted_at: null,
   undone: false,
   created_at: 1,
@@ -58,9 +60,49 @@ describe('rows 严格版', () => {
     expect(p.safeParse({ user_id: ID }).success).toBe(false);
   });
 
-  it('rowsWrite 登记了三张表', () => {
-    expect(Object.keys(rowsWrite).sort()).toEqual(['events', 'profiles', 'todos']);
+  it('rowsWrite 登记了四张表', () => {
+    expect(Object.keys(rowsWrite).sort()).toEqual(['devices', 'events', 'profiles', 'todos']);
     expect(todosWrite.safeParse({}).success).toBe(false);
+  });
+
+  it('insert 不能带只能 update 的列（deleted_at、undone）；时刻配时区照样查', () => {
+    const { deleted_at: _d, undone: _u, ...ins } = event;
+    const s = insertSchema('events');
+    expect(s.safeParse(ins).success).toBe(true);
+    expect(s.safeParse(event).success).toBe(false);
+    expect(s.safeParse({ ...ins, tz: null }).success).toBe(false);
+  });
+
+  it('patch 不能改只能 insert 的列（id、created_at、devices.platform）', () => {
+    expect(patchSchema('events').safeParse({ id: ID }).success).toBe(false);
+    expect(patchSchema('events').safeParse({ created_at: 1 }).success).toBe(false);
+    expect(patchSchema('events').safeParse({ deleted_at: 3, undone: false }).success).toBe(true);
+    expect(patchSchema('devices').safeParse({ platform: 'web' }).success).toBe(false);
+    expect(patchSchema('devices').safeParse({ label: 'iPhone', last_seen_at: '2026-10-28T01:02:03Z' }).success).toBe(true);
+  });
+
+  it('devices：platform 只认四种；insert 能写 platform', () => {
+    const dev = { id: ID, label: null, platform: 'ios', app_version: '4.0.0', last_seen_at: null, install_id: ID };
+    expect(insertSchema('devices').safeParse(dev).success).toBe(true);
+    expect(insertSchema('devices').safeParse({ ...dev, platform: 'android' }).success).toBe(false);
+    expect(devicesWrite.safeParse({ ...dev, deleted_at: null, undone: false }).success).toBe(true);
+  });
+
+  it('profiles 客户端不能 insert', () => {
+    expect(() => insertSchema('profiles')).toThrow('insert_not_allowed:profiles');
+  });
+
+  it('todos：有截止时刻必须有截止日期；提醒提前量只认六种', () => {
+    const todo = {
+      id: ID, title: 'T', done: false, due: null, important: false, project: '', note: '', source: 'page', raw_text: '',
+      batch_id: null, from_note_id: null, from_anniv_id: null, short: null, short_by: null, done_at: 0, remind_days: null,
+      remind_time: '09:00', due_time: null, remind_before_min: null, push_show_title: null, notified_for: null, snooze_at: null,
+      deleted_at: null, undone: false, created_at: 1, updated_at: 1,
+    };
+    expect(todosWrite.safeParse(todo).success).toBe(true);
+    expect(todosWrite.safeParse({ ...todo, due_time: '18:00' }).success).toBe(false);
+    expect(todosWrite.safeParse({ ...todo, due: '2026-11-01', due_time: '18:00', remind_before_min: 30 }).success).toBe(true);
+    expect(todosWrite.safeParse({ ...todo, remind_before_min: 5 }).success).toBe(false);
   });
 });
 
