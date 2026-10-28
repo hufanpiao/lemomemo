@@ -20,18 +20,18 @@ v3.0.0 这类 4.0.0 以前的 tag 不算（它们没有 `tests/compat/`，也不
 
 ## 二、什么时候打、什么时候挪
 
-**谁打**：主持人（要推送 tag 的权限）。脚本只在本机打 tag、不推送，打完会打印推送命令。运维和其他角色不推 tag。
+**谁打**：运维（架构 1.3b 0.30：机制归前端 B，样例迁移归后端，打 tag 归运维）。脚本只在本机打 tag、不推送，打完会打印推送命令；运维在自己的 worktree 里没有推送权限，所以**推 tag 由主持人执行**打印出来的那条命令（下面的命令按“运维打、主持人推”两步写）。
 
-1. **第一次（B0）**：后端把 `tests/compat/` 的第一批子集、`test:compat` 脚本和“只加列”的样例迁移合进 develop，并且 ci 的 db 任务是绿的以后，主持人在 develop 的**那个提交**上打：
+1. **第一次（B0）**：前端 B 把 `tests/compat/` 的机制和 `test:compat` 脚本、后端把第一批子集和“只加列”的样例迁移合进 main（架构 8.3 0.30：只有 main，没有 develop），并且 ci 的 db 任务是绿的以后，运维在 main 的**那个提交**上打、主持人推：
    ```
-   git switch develop
+   git switch main
    git pull
    python -I build/compat_baseline.py tag
    git push origin refs/tags/compat-baseline
    ```
    然后按 TC-B0-57 验一遍：再开一个只做“改列名”样例的 PR，CI 的旧版契约那一步应该**标黄但任务通过**（只报告、不拦）。
 
-2. **上线前每批签完挪一次**：某一批六环签完的当天，主持人把 `compat-baseline` 挪到签字时的那个提交，让“旧版”始终是上一批签过字的版本：
+2. **上线前每批签完挪一次**：某一批六环签完的当天，运维把 `compat-baseline` 挪到签字时的那个提交（主持人推），让“旧版”始终是上一批签过字的版本：
    ```
    python -I build/compat_baseline.py tag --move --reason "B1 签完"
    git push --force origin refs/tags/compat-baseline
@@ -56,8 +56,9 @@ v3.0.0 这类 4.0.0 以前的 tag 不算（它们没有 `tests/compat/`，也不
 
 | 东西 | 谁 | 说明 |
 |---|---|---|
+| `tests/compat/` 的机制（目录约定、怎么跑基线） | 前端 B（架构 1.3b 0.30） | 运维的 `build/compat_baseline.py` 只负责找基线、取出、打 tag |
 | `tests/compat/` 子集名单和用例 | 后端（契约测试）；QA 核对 | 不含和 `db.types` 逐字比对这类结构一变必然失败的用例（0.27 第 1 点） |
-| `npm run test:compat -- <目录>` | 后端（脚本名是运维的提议，合并时确认） | 参数是基线测试所在的目录；用当前的本地数据库 |
+| `npm run test:compat -- <目录>` | 前端 B（架构 1.3b 0.30；脚本名是运维的提议，合并时确认） | 参数是基线测试所在的目录；用当前的本地数据库 |
 | “只加列”“改列名”两个样例迁移 | 后端 | TC-B0-57 用；样例只放在测试分支或 `tests/compat/fixtures/`，不进正式迁移 |
 
 ## 五、自测记录（2026-10-28，运维，在临时仓库里测，没碰本仓库的 tag）

@@ -11,7 +11,7 @@
        正式环境的公开配置文件在、工具锁文件在；
     2. 备份：E:\柠檬记-备份\版本前\ 下已有这个 tag 的“发布前”备份且恢复测试通过，没有就调 build\backup.py 做一份；
     3. 构建：npm ci --ignore-scripts → 白名单 rebuild → npm run build -- --mode production → 体积预算 → 不能有 source map；
-       算产物指纹，请你在 iPhone 上打开 GitHub 里这个 tag 的 build-release 摘要页核对（R-206：CI 只构建和测试）；
+       算产物指纹，请你在 iPhone 上打开 GitHub 里这个 tag 的 release-build 摘要页核对（R-206：CI 只构建和测试）；
     4. 装部署工具到临时目录：Supabase CLI（核对 tools\ci-tools.lock 里的 SHA-256）、wrangler（tools\deploy 的锁文件）；
     —— -DryRun 到这里停 ——
     5. 确认 Claude 已退出、Windows 剪贴板历史已关，然后依次粘贴三把令牌（屏幕不显示，粘贴后立即清剪贴板）；
@@ -52,6 +52,12 @@ Set-StrictMode -Version 3
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
+
+# 架构 8.3a 第 1 步：关掉本窗口的 PowerShell 历史记录（PSReadLine），这个窗口之后输入的命令都不存盘。
+# 令牌本来就用 Read-Host -AsSecureString 读、不进历史，这一步是多一道保险；窗口关掉后下次开新窗口恢复默认。
+if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
+    try { Set-PSReadLineOption -HistorySaveStyle SaveNothing } catch { Write-Host '提示：没能关掉 PowerShell 历史记录（不是交互窗口时正常），继续。' }
+}
 
 # 本进程里放令牌的环境变量；finally 里统一清掉
 $SecretEnvNames = @('SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD', 'CLOUDFLARE_API_TOKEN')
@@ -246,7 +252,7 @@ function Invoke-Build($info) {
         if ($LASTEXITCODE -ne 0) { Fail '算产物指纹失败' }
     } finally { Pop-Location }
     Say ''
-    Say "  请在 iPhone 上打开：GitHub › 仓库 › Actions › build-release › $Tag 那一次 › Summary，"
+    Say "  请在 iPhone 上打开：GitHub › 仓库 › Actions › release-build › $Tag 那一次 › Summary，"
     Say '  核对“文件数”和“总指纹”和上面完全一样。'
     Ask-Exact '  一样就输入“一致”回车（不一样直接回车，发布停止）' '一致'
     Ok '产物和 CI 构建的一致'

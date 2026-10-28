@@ -1,14 +1,14 @@
-# ci：PR、合进 develop / main 时跑的重检查（架构 8.3 “ci.yml” 一行）
+# ci：PR、合进 main 时跑的重检查（架构 8.3 “ci.yml” 一行）
 #   db 任务：要 Docker 的数据库测试单列一个任务（本地 Supabase：db reset、类型比对、D1、SQL 安全检查、RLS、契约、deno test、旧版契约）
 #   e2e 任务：Playwright（chromium + webkit，wrangler pages dev 带 _headers 的 CSP 和 Pages Functions）
 # 不碰任何部署密钥：本文件不引用 secrets。本地 Supabase 的 anon / service key 是 CLI 每次随机生成的测试值，只在 runner 里。
-# 预览环境的 E2E（要预览项目的 service key）不在这里，见环境清单第七节偏离第 3 条。
+# 预览环境的 E2E（要预览项目的 service key）不在这里，架构 0.30 定为 push 到 main 时在 deploy-preview 之后跑，等前端 B 牵头联调时接上（环境清单第七节第 2 条）。
 name: ci
 
 on:
   pull_request:
   push:
-    branches: [develop, main]
+    branches: [main]
   schedule:
     # 每周一首尔 06:47 跑一遍，确认 main 上的数据库测试没被外部变化（镜像、CLI）弄坏
     - cron: '47 21 * * 0'
@@ -51,8 +51,8 @@ jobs:
 
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
-          # 版本和后端用的 deno.lock 对齐；后端定了确切版本后改成写死的版本号
-          deno-version: v2.x
+          # 和本机同一版（架构 8.6：Deno 锁具体版本，本机和 CI 一致；本机 deno --version 为 2.9.8）
+          deno-version: 2.9.8
 
       - name: 安装依赖（不跑任何安装脚本）
         run: |

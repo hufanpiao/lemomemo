@@ -5,7 +5,7 @@
 - 脚本：[`tools/release/publish.ps1`](../../tools/release/publish.ps1)（Windows PowerShell 5.1 能跑，UTF-8 带 BOM）
 - 谁运行：**产品负责人本人**，在自己电脑上新开的 PowerShell 窗口里。AI 只写脚本，不运行正式发布，不碰令牌。
 
-> 架构 8.3 的 deploy-prod.yml（tag 触发、production 环境审批）被 R-206 取代：GitHub 免费版私有仓库**没有 Environments**（环境密钥、审批人都用不了，2026-10-28 已查 GitHub 官方文档）。现在 CI 在打 tag 时只跑 [build-release.yml](../../.github/workflows/build-release.yml)：构建、测试、显示产物指纹，不部署。架构 8.3、8.4 的对应几行要由架构师改，见[环境清单](环境清单-v4.md)第七节。
+> 架构 8.3 的 deploy-prod.yml（tag 触发、production 环境审批）被 R-206 取代：GitHub 免费版私有仓库**没有 Environments**（环境密钥、审批人都用不了，2026-10-28 已查 GitHub 官方文档）。现在 CI 在打 tag 时只跑 [release-build.yml](../../.github/workflows/release-build.yml)：构建、测试、显示产物指纹，不部署。架构 0.30 已按这个做法改了 8.3、8.4，并新增 8.3a；本脚本和 8.3a 还不一样的地方见[环境清单](环境清单-v4.md)第七节第 1 条。
 
 ---
 
@@ -19,7 +19,7 @@ R-206 时已告诉负责人：发布时令牌会经过 AI 所在的电脑，安�
 | 发布期间不开 AI 会话 | 输入令牌前检查有没有名字以 `claude` 开头的进程，有就停 |
 | 粘贴后清剪贴板 | 每粘贴一把令牌立即清空剪贴板，并尝试清 Windows 剪贴板历史；剪贴板历史（Win+V）开着就不让继续 |
 | 令牌不落盘、不打印 | `Read-Host -AsSecureString` 读入，只放进本进程的环境变量；不写文件、不进命令行参数（PowerShell 历史里没有）；结束时清掉 |
-| 本机构建没被动过手脚 | 本机构建的产物算一个“总指纹”，你在 iPhone 上看 GitHub 里同一个 tag 的 build-release 摘要，两边一样才继续 |
+| 本机构建没被动过手脚 | 本机构建的产物算一个“总指纹”，你在 iPhone 上看 GitHub 里同一个 tag 的 release-build 摘要，两边一样才继续 |
 | 先构建、后输令牌 | `npm ci`、构建都在输入令牌之前做完；部署工具（Supabase CLI、wrangler）装到临时目录并核对哈希，用前再核对一次 |
 | 发错项目 | 用令牌查项目：必须在首尔、状态正常；你要手动输入项目名确认 |
 | 迁移出意外 | `db push` 先演练列出要执行的迁移，你输入“确认推送”才真推 |
@@ -44,7 +44,7 @@ R-206 时已告诉负责人：发布时令牌会经过 AI 所在的电脑，安�
 | 正式数据库密码 | “柠檬记 Supabase 正式数据库密码” | 负责人 | 建正式项目时生成的那个 |
 | 正式 Cloudflare 令牌 | “柠檬记 Cloudflare 正式令牌” | 负责人 | 只给 “Cloudflare Pages: Edit”，到期 90 天 |
 | `.env.production.local` | 仓库根目录（被 `.gitignore` 忽略，不进仓库） | 运维写好内容、负责人核对 | **只放公开值**，脚本会检查只能有 `VITE_PUBLIC_` 开头的行。内容见下 |
-| GitHub 仓库 Variables 的 `PROD_` 几项 | GitHub › 仓库 › Settings › Secrets and variables › Actions › Variables | 负责人 | 和 `.env.production.local` 的值一样，给 build-release 用，两边构建才一致 |
+| GitHub 仓库 Variables 的 `PROD_` 几项 | GitHub › 仓库 › Settings › Secrets and variables › Actions › Variables | 负责人 | 和 `.env.production.local` 的值一样，给 release-build 用，两边构建才一致 |
 | 关掉 Windows 剪贴板历史 | 设置 › 系统 › 剪贴板 | 负责人 | “剪贴板历史记录”“跨设备共享”都关 |
 
 `.env.production.local` 的内容（值都是公开的，写进前端的就是这些）：
@@ -64,7 +64,7 @@ VITE_PUBLIC_TURNSTILE_SITE_KEY=<Turnstile 站点密钥（Site Key，公开的那
 
 ## 四、每次发布（约 15～20 分钟）
 
-前提：这一版的 B7a（或修复版的对应检查）已签完，[上线与回滚手册](上线与回滚手册-v4.md)第二节的检查清单全部打勾；主持人已在 main 上打好带说明的 tag（`git tag -a vX.Y.Z`）并推到 GitHub，build-release 是绿的。
+前提：这一版的 B7a（或修复版的对应检查）已签完，[上线与回滚手册](上线与回滚手册-v4.md)第二节的检查清单全部打勾；主持人已在 main 上打好带说明的 tag（`git tag -a vX.Y.Z`）并推到 GitHub，release-build 是绿的。
 
 1. **完全退出 Claude**（桌面 App 和所有终端里的 claude）。
 2. 开一个新的 PowerShell 窗口：

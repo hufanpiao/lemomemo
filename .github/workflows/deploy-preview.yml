@@ -1,4 +1,4 @@
-# deploy-preview：develop 每次更新，部署到预览环境 preview.lemomemo.com（架构 8.3 “deploy-preview.yml” 一行，R-206）
+# deploy-preview：main 每次更新（架构 8.3 分支模型：只有 main，没有 develop），部署到预览环境 preview.lemomemo.com（架构 8.3 “deploy-preview.yml” 一行，R-206）
 #
 # 两个任务，密钥只在第二个：
 #   build：拿不到任何密钥（不引用 secrets），npm ci --ignore-scripts → 构建 → 复制 shared 到函数目录 → 上传产物
@@ -19,7 +19,7 @@ name: deploy-preview
 
 on:
   push:
-    branches: [develop]
+    branches: [main]
   workflow_dispatch:
 
 permissions: {}

@@ -1,4 +1,4 @@
-# build-release：打正式 tag（vX.Y.Z）时在 CI 里构建一次正式产物，只构建和测试、不部署（R-206）
+# release-build：打正式 tag（vX.Y.Z）时在 CI 里构建一次正式产物，只构建和测试、不部署（R-206）
 #
 # 正式发布由负责人在自己电脑上运行 tools/release/publish.ps1：它在本机从同一个 tag 构建，
 # 算出产物指纹，让负责人用 iPhone 打开本次运行的摘要页，核对两边的指纹一样再继续。
@@ -6,7 +6,7 @@
 # 也能发现本机构建被动过手脚。
 #
 # 不引用任何 secrets。正式环境的公开配置放在 repository variables（PROD_ 开头，都是公开值）。
-name: build-release
+name: release-build
 
 on:
   push:
@@ -35,7 +35,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: tag 和 VERSION 一致（架构 8.3 deploy-prod 第一步）
+      - name: tag 和 VERSION 一致（架构 8.3 release-build 第一步）
         env:
           TAG: ${{ github.ref_name }}
         run: |
