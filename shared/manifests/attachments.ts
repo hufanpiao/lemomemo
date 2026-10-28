@@ -33,7 +33,7 @@ export const attachments = defineManifest({
       systemCols: ['ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at', 'check_status', 'etag'], noConflict: ['updated_at'] },
   ],
   buckets: [
-    { name: 'files', limits: { fileSizeLimit: 10485760, allowedMimeTypes: [...DOC_MIME, 'image/webp'] },
+    { name: 'files', store: 'r2', limits: { fileSizeLimit: 10485760, allowedMimeTypes: [...DOC_MIME, 'image/webp'] },
       pathPrefix: '<user_id>/', pathPattern: `^${UUID_RE}/${UUID_RE}/${UUID_RE}(\\.(pdf|docx|xlsx|pptx|docm|xlsm|pptm|doc|xls|ppt)|\\.t\\.webp)$`,
       backup: 'weekly-s3', export: 'zip', countsToQuota: true,
       orphanSweep: { after: '24 hours', table: 'note_files', col: 'path' }, userLookup: { by: 'pathPattern', level: 1 } },

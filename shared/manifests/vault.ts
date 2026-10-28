@@ -16,15 +16,15 @@ export const vault = defineManifest({
     { ...priv, name: 'vault_preview', backup: 'none' },
   ],
   buckets: [
-    { name: 'vault-images', limits: { fileSizeLimit: 2097152, allowedMimeTypes: ['image/webp'] },
+    { name: 'vault-images', store: 'r2', limits: { fileSizeLimit: 2097152, allowedMimeTypes: ['image/webp'] },
       pathPrefix: '<user_id>/', pathPattern: `^${UUID_RE}/${UUID_RE}/${UUID_RE}(\\.t)?\\.webp$`,
       backup: 'weekly-s3', export: 'none', countsToQuota: true,   // R-184：隐私桶不进导出
       orphanSweep: { after: '24 hours', table: 'note_images', col: 'path' }, userLookup: { by: 'pathPattern', level: 1 } },
-    { name: 'vault-files', limits: { fileSizeLimit: 10551296, allowedMimeTypes: ['application/octet-stream'] },
+    { name: 'vault-files', store: 'r2', limits: { fileSizeLimit: 10551296, allowedMimeTypes: ['application/octet-stream'] },
       pathPrefix: '<user_id>/', pathPattern: `^${UUID_RE}/${UUID_RE}/${UUID_RE}(\\.(pdf|docx|xlsx|pptx|docm|xlsm|pptm|doc|xls|ppt)|\\.t\\.webp)$`,
       backup: 'weekly-s3', export: 'none', countsToQuota: true,
       orphanSweep: { after: '24 hours', table: 'note_files', col: 'path' }, userLookup: { by: 'pathPattern', level: 1 } },
-    { name: 'vault-preview',
+    { name: 'vault-preview', store: 'supabase',
       limits: { fileSizeLimit: 10485760, allowedMimeTypes: ['application/vnd.openxmlformats-officedocument.presentationml.presentation'] },
       pathPrefix: '', pathPattern: '^[0-9a-f]{32}\\.pptx$',   // 随机路径，不含 user_id
       backup: 'none', export: 'none', countsToQuota: false, orphanSweep: null, maxLifetime: 'link_ttl + 1 minute',

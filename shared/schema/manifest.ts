@@ -68,10 +68,15 @@ export type ManifestTableInput = z.input<typeof tableSchema>;
 
 export const bucketSchema = z.object({
   name: z.string(),
-  /** 桶的主人才写大小和类型限制（D1 和 storage.buckets 比对）；只登记一段路径的（纪念日头像）不写 */
+  /** 存在哪（0.32，R-213；必填、不给默认值，漏写就过不了 zod）：'supabase' 是 Supabase Storage（backups、vault-preview），
+   *  'r2' 是 Cloudflare R2（images、files、vault-images、vault-files）。同名桶的每一段登记必须写同一个值（D1 核对） */
+  store: z.enum(['supabase', 'r2']),
+  /** 桶的主人才写大小和类型限制；只登记一段路径的（纪念日头像）不写。
+   *  store = 'supabase'：D1 和 storage.buckets 比对；store = 'r2'：生成 /files 的规则表和服务器函数的上传类型表（0.32） */
   limits: z.object({ fileSizeLimit: z.number().int(), allowedMimeTypes: z.array(z.string()) }).optional(),
   pathPrefix: z.string(),
-  /** 整条路径的正则，和存储策略一字不差（0.23 L8）；没有客户端策略的桶写服务器端的拼法 */
+  /** 整条路径的正则（0.23 L8）；0.32 起客户端可传的 R2 桶（images、files）和 private.files_authorize_impl 里的正则一字不差（D1 核对），
+   *  同时生成 /files 的规则表；只经服务器函数的桶写服务器端的拼法 */
   pathPattern: z.string(),
   backup: z.enum(['weekly-s3', 'none']),
   export: z.enum(['zip', 'none']),
