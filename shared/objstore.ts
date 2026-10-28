@@ -89,7 +89,7 @@ export interface ObjectBody extends ObjectMeta {
 export interface PutOptions {
   contentType: string;
   /** If-None-Match: *，对象已存在就抛 ObjStoreError('exists')（3.3 G：不提供覆盖） */
-  ifNoneMatch?: boolean;
+  ifNoneMatch?: boolean | '*';
 }
 
 export interface ObjStore {
@@ -142,9 +142,54 @@ function amzDate(ms: number): string {
   return new Date(ms).toISOString().replace(/[:-]|\.\d{3}/g, '');
 }
 
+export interface SignInput {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  accessKeyId: string;
+  secretAccessKey: string;
+  region: string;
+  /** X-Amz-Date，例如 20130524T000000Z */
+  datetime: string;
+  cache?: Map<string, ArrayBuffer>;
+  /** 只给样例向量测试用：连 range 等 aws4fetch 默认不签的头也签 */
+  allHeaders?: boolean;
+}
+
+export interface SignedRequest {
+  url: string;
+  /** 签好的 Headers 对象（运行环境的 Headers），原样交给 fetch */
+  headers: ObjHeaders;
+  authorization: string;
+}
+
+/**
+ * S3 的 SigV4 头签名（service 固定 s3；只签请求头，不用预签名查询串）。objstore 的每个请求都经这里；
+ * tests/shared/objstore-sigv4.test.ts 用 AWS 官方文档的样例向量核对（替身 LocalStack 默认不验签名，不能只靠它证明签得对）。
+ * 没带 X-Amz-Content-Sha256 时 aws4fetch 对 s3 用 UNSIGNED-PAYLOAD（流式请求体只能这样；全程 HTTPS）。
+ */
+export async function signS3(input: SignInput): Promise<SignedRequest> {
+  const signer = new AwsV4Signer({
+    method: input.method,
+    url: input.url,
+    headers: input.headers,
+    accessKeyId: input.accessKeyId,
+    secretAccessKey: input.secretAccessKey,
+    service: 's3',
+    region: input.region,
+    datetime: input.datetime,
+    ...(input.cache ? { cache: input.cache } : {}),
+    ...(input.allHeaders ? { allHeaders: true } : {}),
+  });
+  const signed = await signer.sign();
+  const headers = signed.headers as ObjHeaders;
+  return { url: String(signed.url), headers, authorization: headers.get('authorization') ?? '' };
+}
+
 export function createObjStore(cfg: ObjStoreConfig): ObjStore {
   const endpoint = cfg.endpoint.replace(/\/+$/, '');
   if (!/^https?:\/\/[^/?#]+$/.test(endpoint)) throw new ObjStoreError('bad_input');
+  // 读不到 R2_BUCKET_PREFIX（正式环境不设）当空字符串
   const prefix = cfg.bucketPrefix ?? '';
   if (prefix && !/^[a-z0-9-]+$/.test(prefix)) throw new ObjStoreError('bad_input');
   const region = cfg.region || 'auto';
@@ -163,28 +208,23 @@ export function createObjStore(cfg: ObjStoreConfig): ObjStore {
     headers: Record<string, string>,
     body?: ObjBody,
   ): Promise<ObjResponse> {
-    const signer = new AwsV4Signer({
+    const signed = await signS3({
       method,
       url,
       headers,
-      // aws4fetch 的类型写的是 BodyInit；字节和流运行时都认
-      body: body as never,
       accessKeyId: cfg.accessKeyId,
       secretAccessKey: cfg.secretAccessKey,
-      service: 's3',
       region,
-      cache: keyCache,
       datetime: amzDate(cfg.now()),
+      cache: keyCache,
     });
-    // 没带 X-Amz-Content-Sha256 时 aws4fetch 对 s3 用 UNSIGNED-PAYLOAD（流式请求体只能这样；全程 HTTPS）
-    const signed = await signer.sign();
-    const init: ObjRequestInit = { method: signed.method, headers: signed.headers };
+    const init: ObjRequestInit = { method, headers: signed.headers };
     if (body !== undefined) {
       init.body = body;
       if (typeof body === 'object' && 'getReader' in body) init.duplex = 'half';
     }
     try {
-      return await cfg.fetch(String(signed.url), init);
+      return await cfg.fetch(signed.url, init);
     } catch {
       throw new ObjStoreError('network');
     }

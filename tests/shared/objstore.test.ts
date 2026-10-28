@@ -1,6 +1,6 @@
 // shared/objstore.ts（任务单 FB-1；架构 0.32 第 4 条、8.6）。Node（vitest）和 Deno（deno task test）跑同一组。
 // 默认打内存替身 tests/shared/fake-s3.ts（独立验 SigV4、核 Content-MD5）。
-// 设了 OBJSTORE_TEST_ENDPOINT / OBJSTORE_TEST_KEY_ID / OBJSTORE_TEST_SECRET 时，最后一组改打真的替身（MinIO）或 R2：
+// 设了 OBJSTORE_ENDPOINT（变量名和运维 build/objstore.mjs 一致：OBJSTORE_ACCESS_KEY_ID、OBJSTORE_SECRET_ACCESS_KEY、OBJSTORE_REGION、R2_BUCKET_PREFIX）时，最后一组改打真的替身（LocalStack）或 R2：
 // 【待 Docker / 待 R2】本机没有 Docker，这一组目前跳过。
 import { describe, expect, it } from 'vitest';
 import { createObjStore, DELETE_BATCH, ObjStoreError, type ObjFetch, type ObjStore } from '../../shared/objstore.ts';
@@ -255,9 +255,9 @@ function env(name: string): string | undefined {
   }
 }
 
-const LIVE = env('OBJSTORE_TEST_ENDPOINT');
+const LIVE = env('OBJSTORE_ENDPOINT');
 
-describe('objstore：打真的 S3 替身（待 Docker / 待 R2；没设 OBJSTORE_TEST_ENDPOINT 时跳过）', () => {
+describe('objstore：打真的 S3 替身（待 Docker / 待 R2；没设 OBJSTORE_ENDPOINT 时跳过）', () => {
   if (!LIVE) {
     it('跳过：本机没有替身（运维 O-1 写好 docker-compose.objstore.yml 后在 CI 跑）', () => {
       expect(LIVE).toBe(undefined);
@@ -266,10 +266,10 @@ describe('objstore：打真的 S3 替身（待 Docker / 待 R2；没设 OBJSTORE
   }
   const store = createObjStore({
     endpoint: LIVE,
-    accessKeyId: env('OBJSTORE_TEST_KEY_ID') ?? '',
-    secretAccessKey: env('OBJSTORE_TEST_SECRET') ?? '',
-    bucketPrefix: env('OBJSTORE_TEST_BUCKET_PREFIX') ?? '',
-    region: env('OBJSTORE_TEST_REGION') ?? 'auto',
+    accessKeyId: env('OBJSTORE_ACCESS_KEY_ID') ?? 'test',
+    secretAccessKey: env('OBJSTORE_SECRET_ACCESS_KEY') ?? 'test',
+    bucketPrefix: env('R2_BUCKET_PREFIX') ?? '',
+    region: env('OBJSTORE_REGION') ?? 'us-east-1',
     fetch: (url, init) => fetch(url, init as RequestInit),
     now: () => Date.now(),
   });
