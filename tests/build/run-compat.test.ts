@@ -3,7 +3,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseArgs } from '../compat/run-compat.ts';
+import { missingSupabaseEnv, parseArgs } from '../compat/run-compat.ts';
 import { runSqlCase, sampleExpectation } from '../compat/sql-case.ts';
 import { parseSubset, sqlCases, testFiles } from '../compat/subset.ts';
 
@@ -70,6 +70,13 @@ describe('run-compat 参数', () => {
     expect(() => parseArgs(['--mode', 'report'])).toThrow();
     expect(() => parseArgs(['a', 'b'])).toThrow();
     expect(() => parseArgs(['--sample'])).toThrow();
+  });
+
+  it('有 .test.ts 用例却没给本地 Supabase 地址：报缺哪个（否则用例全被跳过、看起来像通过）', () => {
+    expect(missingSupabaseEnv({})).toEqual(['API_URL', 'ANON_KEY']);
+    expect(missingSupabaseEnv({ API_URL: 'http://127.0.0.1:54321' })).toEqual(['ANON_KEY']);
+    expect(missingSupabaseEnv({ API_URL: 'u', ANON_KEY: 'k' })).toEqual([]);
+    expect(missingSupabaseEnv({ LEMO_TEST_SUPABASE_URL: 'u', LEMO_TEST_ANON_KEY: 'k' })).toEqual([]);
   });
 });
 

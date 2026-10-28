@@ -16,6 +16,27 @@ export function asLocale(v: string | null | undefined): Locale | null {
   return v === 'zh' || v === 'ko' ? v : null;
 }
 
+/** profiles.ui_locale 存的值（0001 的 check 约束只许这两个） */
+export type UiLocale = 'zh-CN' | 'ko-KR';
+
+const TO_UI: Readonly<Record<Locale, UiLocale>> = { zh: 'zh-CN', ko: 'ko-KR' };
+
+/**
+ * profiles.ui_locale → pickLocale 认的 'zh' / 'ko'（架构 0.31 第 12 条）。
+ * ui_locale 存的是 'zh-CN' / 'ko-KR'，直接传给 pickLocale 会被当成“没选过”，所以先转。
+ * 只认这两个精确值；别的（null、''、'zh'、大小写不同）返回 null，App 接着按 pv-locale → cookie → navigator.languages 往下取。
+ */
+export function fromUiLocale(v: string | null | undefined): Locale | null {
+  if (v === 'zh-CN') return 'zh';
+  if (v === 'ko-KR') return 'ko';
+  return null;
+}
+
+/** 'zh' / 'ko' → 写回 profiles.ui_locale 的值（架构 0.31 第 12 条） */
+export function toUiLocale(locale: Locale): UiLocale {
+  return TO_UI[locale];
+}
+
 /**
  * 规则：
  * 1. 手动选过的语言（saved）优先；

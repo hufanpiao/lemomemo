@@ -171,13 +171,81 @@ describe('后端的真清单', () => {
     for (const id of tables) expect(del.has(id), id).toBe(true);
   });
 
-  it('remind_queue 按引用的行找人（rowRef）', () => {
+  it('remind_queue 按引用的行找人（rowRef）：外层列写全名，只引用同步表', () => {
     const c = cases.find((x) => x.id === 'TC-DEL-remind_queue');
-    expect(c?.probe?.a).toMatch(/table_name = 'todos' and exists \(select 1 from public\.todos r where r\.id = id and r\.user_id = :user_a\)/);
+    expect(c?.probe?.a).toContain(
+      "(table_name = 'todos' and exists (select 1 from public.todos r where r.id = private.remind_queue.id and r.user_id = :user_a))",
+    );
+    // 裸的 id 在子查询里会解析成 r.id，条件恒真
+    expect(c?.probe?.a).not.toMatch(/r\.id = id\b/);
+    // profiles 没有 id 列（主键是 user_id），拼进去整条 SQL 报错
+    expect(c?.probe?.a).not.toContain('public.profiles');
+    for (const t of ['events', 'todos', 'anniversaries']) expect(c?.probe?.a).toContain(`public.${t} r`);
+    // A 那一侧连孤儿一起数；B 那一侧只数 B 的
+    expect(c?.probe?.a).toContain(' or not (');
+    expect(c?.probe?.b).not.toContain(' or not (');
   });
 
   it('backups 桶按第二级目录找人；孤儿清理用 after', () => {
     expect(cases.find((x) => x.id === 'TC-DEL-bucket-backups')?.probe?.a).toContain("split_part(name, '/', 2)");
     expect(cases.some((x) => x.kind === 'orphan-sweep' && x.act?.includes('早于 24 hours'))).toBe(true);
+  });
+});
+
+// 0.31 第 17 条（P-29）：rowRef 生成的 SQL 在真的 Postgres（PGlite）上跑，看数得对不对
+describe('rowRef 的探针在数据库上数得对（PGlite）', () => {
+  const A = 'aaaaaaaa-0000-4000-8000-000000000001';
+  const B = 'bbbbbbbb-0000-4000-8000-000000000002';
+  const bind = (sql: string) => sql.replace(/:user_([ab])\b/g, (_m, w: string) => `'${w === 'a' ? A : B}'::uuid`);
+  const refsOf = (sql: string) => [...sql.matchAll(/from public\.([a-z_]+) r /g)].map((m) => m[1]);
+
+  it('A 的队列行能数到；漏删（被引用的行删了、队列行还在）也数得到；删干净后为 0，B 不受影响', async () => {
+    const { PGlite } = await import('@electric-sql/pglite');
+    const db = new PGlite();
+    try {
+      const c = generate(allManifests).cases.find((x) => x.id === 'TC-DEL-remind_queue');
+      const a = c?.probe?.a ?? '';
+      const b = c?.probe?.b ?? '';
+      await db.exec(
+        `create schema private;
+         create table private.remind_queue (table_name text, id uuid, primary key (table_name, id));
+         ${[...new Set(refsOf(a))].map((r) => `create table public.${r} (id uuid primary key, user_id uuid not null);`).join('\n')}
+         insert into public.todos values ('10000000-0000-4000-8000-000000000001', '${A}'), ('10000000-0000-4000-8000-000000000002', '${B}');
+         insert into public.events values ('20000000-0000-4000-8000-000000000001', '${A}');
+         insert into public.anniversaries values ('30000000-0000-4000-8000-000000000001', '${B}');
+         insert into private.remind_queue values
+           ('todos', '10000000-0000-4000-8000-000000000001'), ('events', '20000000-0000-4000-8000-000000000001'),
+           ('todos', '10000000-0000-4000-8000-000000000002'), ('anniversaries', '30000000-0000-4000-8000-000000000001');`,
+      );
+      const count = async (sql: string) => Number((await db.query<{ count: number }>(bind(sql))).rows[0]?.count);
+      expect(await count(a)).toBe(2);
+      expect(await count(b)).toBe(2);
+
+      // 漏删：A 的待办、日程删了，队列行还在 → 仍然数到 2（只按主人数的话这里是 0，测不出漏删）
+      await db.exec(`delete from public.todos where user_id = '${A}'; delete from public.events where user_id = '${A}';`);
+      expect(await count(a)).toBe(2);
+      expect(await count(b)).toBe(2);
+
+      // 按 0.31 第 17 条删掉 A 的队列行：A 为 0，B 不变
+      await db.exec(
+        `delete from private.remind_queue where id in ('10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001');`,
+      );
+      expect(await count(a)).toBe(0);
+      expect(await count(b)).toBe(2);
+    } finally {
+      await db.close();
+    }
+  });
+
+  it('清单写了 tables 就只引用这几张；写了不认识的表、空表名单就拒绝', () => {
+    const withTables = (tables: string[]): Manifest[] =>
+      allManifests.map((m) => ({
+        ...m,
+        tables: m.tables.map((t) => (t.userLookup?.by === 'rowRef' ? { ...t, userLookup: { ...t.userLookup, tables } } : t)),
+      }));
+    const a = generate(withTables(['events', 'todos', 'anniversaries'])).cases.find((x) => x.id === 'TC-DEL-remind_queue')?.probe?.a ?? '';
+    expect(refsOf(a)).toEqual(['events', 'todos', 'anniversaries', 'events', 'todos', 'anniversaries']);
+    expect(() => generate(withTables(['profiles']))).toThrow(ManifestError);
+    expect(() => generate(withTables([]))).toThrow(ManifestError);
   });
 });

@@ -10,7 +10,16 @@ export type UserLookup =
   | { by: 'registry'; table: string; col: string; pathCol?: string }
   | { by: 'pathPattern'; level: number }
   /** 表里没有 user_id，按 (tableCol, idCol) 引用的那一行找主人（remind_queue） */
-  | { by: 'rowRef'; tableCol: string; idCol: string };
+  | {
+      by: 'rowRef';
+      tableCol: string;
+      idCol: string;
+      /**
+       * 可选：tableCol 能取的表名（remind_queue 是 events、todos、anniversaries，0.31 第 17 条）。
+       * 后端的 shared/schema/manifest.ts 现在没有这个字段；没写时生成器用“public 里按 user_id 找人的同步表”。
+       */
+      tables?: readonly string[] | undefined;
+    };
 
 export interface VaultRows {
   flag: string;

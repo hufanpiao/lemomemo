@@ -1,0 +1,23 @@
+<!doctype html>
+<!-- Pages 的静态 404（架构 0.31 第 31 条、14.2 第 7 点）：产物根目录的 404.html，找不到文件时 Pages 用它回 404。
+     Cloudflare 自定义错误页（5xx）免费版不能用，不做；Functions 额度用完时是 Cloudflare 的默认错误页。
+     这一页在任意路径下返回，所以引用一律写绝对路径；不用脚本和内联样式（这里不带 _headers 的 CSP，靠页面本身干净）；
+     样式表由构建换成带哈希的 /s/ 地址。build/build_site.mjs 检查它在、noindex、中韩两段、去两个首页的链接。 -->
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>找不到这个页面 · 페이지를 찾을 수 없어요 — 柠檬记 · 레모</title>
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<main class="doc">
+  <h1>找不到这个页面</h1>
+  <p>地址可能输错了，或者这个页面已经不在了。请打开 <a href="/zh/">柠檬记首页</a>。</p>
+  <h1 lang="ko">페이지를 찾을 수 없어요</h1>
+  <p lang="ko">주소가 잘못되었거나 없어진 페이지예요. <a href="/ko/">레모 홈</a>으로 가 주세요.</p>
+  <p><a class="btn" href="/app/">打开柠檬记 · <span lang="ko">레모 열기</span></a></p>
+</main>
+</body>
+</html>

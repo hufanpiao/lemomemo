@@ -4,6 +4,5 @@ Allow: /
 Disallow: /app/
 Disallow: /sb/
 Disallow: /desktop/
-Disallow: /errors/
 
 Sitemap: https://lemomemo.com/sitemap.xml

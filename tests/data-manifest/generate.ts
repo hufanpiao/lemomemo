@@ -41,13 +41,24 @@ function tableCondition(t: ManifestTable, who: 'a' | 'b', refTables: readonly st
     case 'pathPattern':
       throw new ManifestError(`${t.name}：表不能用 pathPattern 找人`);
     case 'rowRef': {
-      // 引用的行在哪张表由 tableCol 列决定：逐个对“按 user_id 找人”的 public 表拼 exists（例如 remind_queue → events、todos、anniversaries）
+      // 架构 0.31 第 17 条（P-29）：表里没有 user_id，按（tableCol 写的表名, idCol 写的行 id）回查那一行的 user_id（remind_queue → events、todos、anniversaries）。
+      // 1. 外层的列一律写全名（private.remind_queue.id）：子查询里写裸的 id 会先解析成被引用表自己的 id，条件恒真（集成版的问题）；
+      // 2. 能引用的表：清单写了 tables 就只用它（要在 refTables 里），否则用 refTables（同步表，都有 id 主键）；
+      // 3. A 那一侧另外数“孤儿”（引用的行在哪张表里都找不到）：注销时被引用的行一删，漏删的队列行按主人就再也找不出来，
+      //    只按主人数会在 purge 之后恒为 0、测不出漏删；所以孤儿也算 A 的，purge 之后必须为 0。
       const tc = ident(lk.tableCol, '列名');
       const ic = ident(lk.idCol, '列名');
-      if (refTables.length === 0) throw new ManifestError(`${t.name}：rowRef 找不到可以引用的表`);
-      return `(${refTables
-        .map((r) => `(${tc} = ${lit(r)} and exists (select 1 from ${qualified('public', r)} r where r.id = ${ic} and r.user_id = ${uid}))`)
-        .join(' or ')})`;
+      const refs = lk.tables ?? refTables;
+      for (const r of refs) {
+        if (!refTables.includes(r)) throw new ManifestError(`${t.name}：rowRef 引用的 ${r} 不是 public 里按 user_id 找人的同步表`);
+      }
+      if (refs.length === 0) throw new ManifestError(`${t.name}：rowRef 找不到可以引用的表`);
+      const outer = `${qualified(t.schema, t.name)}.${ic}`;
+      const ref = (r: string, owner: string) =>
+        `(${tc} = ${lit(r)} and exists (select 1 from ${qualified('public', r)} r where r.id = ${outer}${owner}))`;
+      const owned = refs.map((r) => ref(r, ` and r.user_id = ${uid}`)).join(' or ');
+      if (who === 'b') return `(${owned})`;
+      return `(${owned} or not (${refs.map((r) => ref(r, '')).join(' or ')}))`;
     }
   }
 }
@@ -99,7 +110,7 @@ function describeLookup(lk: UserLookup): string {
     case 'pathPattern':
       return `路径第 ${lk.level} 级目录`;
     case 'rowRef':
-      return `${lk.tableCol}、${lk.idCol} 引用的行`;
+      return `${lk.tableCol}、${lk.idCol} 引用的行；A 那一侧连引用的行已不在的孤儿一起数`;
   }
 }
 
@@ -186,10 +197,11 @@ export function generate(manifests: readonly Manifest[]): GenerateResult {
   const syncTables: string[] = [];
   const localStores = new Map<string, LocalStore & { manifest: string }>();
 
-  // rowRef 能引用的表：public 里按 user_id 列找人的表
+  // rowRef 能引用的表：public 里按 user_id 列找人、同步到设备的表（同步表都有 id 主键）。
+  // 不能放宽到所有带 user_id 的表：profiles 的主键是 user_id、没有 id 列，拼进去整条 SQL 报错（集成版的问题）
   const refTables = manifests
     .flatMap((m) => m.tables)
-    .filter((t) => t.schema === 'public' && t.userLookup?.by === 'column' && t.userLookup.col === 'user_id')
+    .filter((t) => t.schema === 'public' && t.sync === true && t.userLookup?.by === 'column' && t.userLookup.col === 'user_id')
     .map((t) => t.name);
 
   for (const m of manifests) {
