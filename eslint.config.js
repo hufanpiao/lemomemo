@@ -332,6 +332,11 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.node } },
     rules: { 'max-lines': 'off' },
   },
+  // supabase gen types 生成的文件：原样提交（CI 逐字比对），不按 W1 拆分
+  {
+    files: ['shared/db.types.ts'],
+    rules: { 'max-lines': 'off' },
+  },
   // ───────── 前端 src ─────────
   {
     files: ['src/**/*.{ts,tsx}'],

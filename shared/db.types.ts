@@ -1,280 +1,788 @@
-// 【临时】数据库类型：由 supabase/tests/offline/gen-db-types.mjs 从 7 个迁移生成（没有 Docker，跑不了 supabase gen types）
-// 待 Docker：npx supabase gen types typescript --local > shared/db.types.ts 替换本文件（结构和 Tables 等辅助类型的用法相同，调用方不用改；文本不同，CI 比对要等替换后才过）
-// 不要手改：改迁移以后重新生成
 
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
-  public: {
-    Tables: {
-      anniversaries: {
-        Row: { id: string; user_id: string; rev: number; fv: Json; deleted_at: number | null; undone: boolean; synced_at: string; kind: string; name: string; calendar: string; lunar_variant: string; month: number; day: number; is_leap: boolean; year: number | null; remind_offsets: number[] | null; remind_time: string | null; next_date: string | null; after_due: string; archived_at: number | null; push_show_title: boolean | null; remind_at: number | null; notified_for: number | null; snooze_at: number | null; pushed_for: number | null; defer_until: number | null; note: string; created_at: number; updated_at: number; avatar_id: string | null; avatar_bytes: number | null };
-        Insert: { id: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; kind: string; name: string; calendar: string; lunar_variant?: string; month: number; day: number; is_leap?: boolean; year?: number | null; remind_offsets?: number[] | null; remind_time?: string | null; next_date?: string | null; after_due?: string; archived_at?: number | null; push_show_title?: boolean | null; remind_at?: number | null; notified_for?: number | null; snooze_at?: number | null; pushed_for?: number | null; defer_until?: number | null; note?: string; created_at: number; updated_at: number; avatar_id?: string | null; avatar_bytes?: number | null };
-        Update: { id?: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; kind?: string; name?: string; calendar?: string; lunar_variant?: string; month?: number; day?: number; is_leap?: boolean; year?: number | null; remind_offsets?: number[] | null; remind_time?: string | null; next_date?: string | null; after_due?: string; archived_at?: number | null; push_show_title?: boolean | null; remind_at?: number | null; notified_for?: number | null; snooze_at?: number | null; pushed_for?: number | null; defer_until?: number | null; note?: string; created_at?: number; updated_at?: number; avatar_id?: string | null; avatar_bytes?: number | null };
-        Relationships: [];
-      };
-      api_tokens: {
-        Row: { id: string; user_id: string; label: string | null; token_hash: string; scopes: string[]; created_at: string; last_used_at: string | null; revoked_at: string | null };
-        Insert: { id?: string; user_id: string; label?: string | null; token_hash: string; scopes?: string[]; created_at?: string; last_used_at?: string | null; revoked_at?: string | null };
-        Update: { id?: string; user_id?: string; label?: string | null; token_hash?: string; scopes?: string[]; created_at?: string; last_used_at?: string | null; revoked_at?: string | null };
-        Relationships: [];
-      };
-      app_config: {
-        Row: { id: number; min_client_version: string | null; latest_version: string | null; features: Json; ai: Json; notice: Json | null; limits: Json };
-        Insert: { id?: number; min_client_version?: string | null; latest_version?: string | null; features?: Json; ai: Json; notice?: Json | null; limits?: Json };
-        Update: { id?: number; min_client_version?: string | null; latest_version?: string | null; features?: Json; ai?: Json; notice?: Json | null; limits?: Json };
-        Relationships: [];
-      };
-      applied_ops: {
-        Row: { op_id: string; user_id: string; at: string; result: Json | null };
-        Insert: { op_id: string; user_id?: string; at?: string; result?: Json | null };
-        Update: { op_id?: string; user_id?: string; at?: string; result?: Json | null };
-        Relationships: [];
-      };
-      categories: {
-        Row: { id: string; user_id: string; rev: number; fv: Json; deleted_at: number | null; undone: boolean; synced_at: string; name: string; color: string | null; sort: number; created_by: string; merged_into: string | null };
-        Insert: { id: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; name: string; color?: string | null; sort?: number; created_by?: string; merged_into?: string | null };
-        Update: { id?: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; name?: string; color?: string | null; sort?: number; created_by?: string; merged_into?: string | null };
-        Relationships: [];
-      };
-      devices: {
-        Row: { id: string; user_id: string; rev: number; fv: Json; deleted_at: number | null; undone: boolean; synced_at: string; label: string | null; platform: string; push_endpoint: string | null; p256dh: string | null; auth: string | null; app_version: string | null; last_seen_at: string | null; last_push_ok_at: string | null; push_fail_count: number; session_id: string | null; install_id: string | null };
-        Insert: { id: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; label?: string | null; platform: string; push_endpoint?: string | null; p256dh?: string | null; auth?: string | null; app_version?: string | null; last_seen_at?: string | null; last_push_ok_at?: string | null; push_fail_count?: number; session_id?: string | null; install_id?: string | null };
-        Update: { id?: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; label?: string | null; platform?: string; push_endpoint?: string | null; p256dh?: string | null; auth?: string | null; app_version?: string | null; last_seen_at?: string | null; last_push_ok_at?: string | null; push_fail_count?: number; session_id?: string | null; install_id?: string | null };
-        Relationships: [];
-      };
-      events: {
-        Row: { id: string; user_id: string; rev: number; fv: Json; deleted_at: number | null; undone: boolean; synced_at: string; title: string; date: string; time: string | null; tz: string | null; duration_min: number; project: string; note: string; source: string; raw_text: string; location: string; short: string | null; short_by: string | null; push_show_title: boolean | null; batch_id: string | null; repeat: Json | null; repeat_skip: string[]; remind_min: number | null; remind_days: number | null; remind_at: number | null; notified_for: number | null; snooze_at: number | null; pushed_for: number | null; defer_until: number | null; ai_status: string; created_at: number; updated_at: number };
-        Insert: { id: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; title: string; date: string; time?: string | null; tz?: string | null; duration_min?: number; project?: string; note?: string; source?: string; raw_text?: string; location?: string; short?: string | null; short_by?: string | null; push_show_title?: boolean | null; batch_id?: string | null; repeat?: Json | null; repeat_skip?: string[]; remind_min?: number | null; remind_days?: number | null; remind_at?: number | null; notified_for?: number | null; snooze_at?: number | null; pushed_for?: number | null; defer_until?: number | null; ai_status?: string; created_at: number; updated_at: number };
-        Update: { id?: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; title?: string; date?: string; time?: string | null; tz?: string | null; duration_min?: number; project?: string; note?: string; source?: string; raw_text?: string; location?: string; short?: string | null; short_by?: string | null; push_show_title?: boolean | null; batch_id?: string | null; repeat?: Json | null; repeat_skip?: string[]; remind_min?: number | null; remind_days?: number | null; remind_at?: number | null; notified_for?: number | null; snooze_at?: number | null; pushed_for?: number | null; defer_until?: number | null; ai_status?: string; created_at?: number; updated_at?: number };
-        Relationships: [];
-      };
-      logs: {
-        Row: { id: number; user_id: string; t: number; device: string | null; kind: string | null; act: string | null; src: string | null; coll: string | null; item_id: string | null; fields: string[] | null; code: string | null };
-        Insert: { id?: number; user_id?: string; t: number; device?: string | null; kind?: string | null; act?: string | null; src?: string | null; coll?: string | null; item_id?: string | null; fields?: string[] | null; code?: string | null };
-        Update: { id?: number; user_id?: string; t?: number; device?: string | null; kind?: string | null; act?: string | null; src?: string | null; coll?: string | null; item_id?: string | null; fields?: string[] | null; code?: string | null };
-        Relationships: [];
-      };
-      note_files: {
-        Row: { id: string; user_id: string; rev: number; fv: Json; deleted_at: number | null; undone: boolean; synced_at: string; note_id: string; kind: string; path: string; has_thumb: boolean; is_vault: boolean; name: string | null; mime: string; bytes: number; sha256: string; pages: number | null; text_excerpt: string | null; name_enc: string | null; text_enc: string | null; dek_enc: string | null; enc_key_id: number | null; etag: string | null; check_status: string; ai_status: string; skip_reason: string | null; ai_desc: string | null; ai_tags: string[]; ai_tries: number; ai_next_at: number | null; created_at: number; updated_at: number };
-        Insert: { id: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; note_id: string; kind: string; path: string; has_thumb?: boolean; is_vault?: boolean; name?: string | null; mime: string; bytes: number; sha256: string; pages?: number | null; text_excerpt?: string | null; name_enc?: string | null; text_enc?: string | null; dek_enc?: string | null; enc_key_id?: number | null; etag?: string | null; check_status?: string; ai_status?: string; skip_reason?: string | null; ai_desc?: string | null; ai_tags?: string[]; ai_tries?: number; ai_next_at?: number | null; created_at: number; updated_at: number };
-        Update: { id?: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; note_id?: string; kind?: string; path?: string; has_thumb?: boolean; is_vault?: boolean; name?: string | null; mime?: string; bytes?: number; sha256?: string; pages?: number | null; text_excerpt?: string | null; name_enc?: string | null; text_enc?: string | null; dek_enc?: string | null; enc_key_id?: number | null; etag?: string | null; check_status?: string; ai_status?: string; skip_reason?: string | null; ai_desc?: string | null; ai_tags?: string[]; ai_tries?: number; ai_next_at?: number | null; created_at?: number; updated_at?: number };
-        Relationships: [];
-      };
-      note_images: {
-        Row: { id: string; user_id: string; rev: number; fv: Json; deleted_at: number | null; undone: boolean; synced_at: string; note_id: string; bucket: string; path: string; bytes: number; width: number | null; height: number | null; mime: string; taken_at: number | null; has_thumb: boolean; ai_status: string; skip_reason: string | null; ai_desc: string | null; ai_tags: string[]; ai_tries: number; ai_next_at: number | null };
-        Insert: { id: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; note_id: string; bucket: string; path: string; bytes: number; width?: number | null; height?: number | null; mime?: string; taken_at?: number | null; has_thumb?: boolean; ai_status?: string; skip_reason?: string | null; ai_desc?: string | null; ai_tags?: string[]; ai_tries?: number; ai_next_at?: number | null };
-        Update: { id?: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; note_id?: string; bucket?: string; path?: string; bytes?: number; width?: number | null; height?: number | null; mime?: string; taken_at?: number | null; has_thumb?: boolean; ai_status?: string; skip_reason?: string | null; ai_desc?: string | null; ai_tags?: string[]; ai_tries?: number; ai_next_at?: number | null };
-        Relationships: [];
-      };
-      notes: {
-        Row: { id: string; user_id: string; rev: number; fv: Json; deleted_at: number | null; undone: boolean; synced_at: string; title: string | null; body: string | null; is_private: boolean; body_enc: string | null; enc_key_id: number | null; category_id: string | null; category_source: string; category_seen: boolean; ai_status: string; ai_meta: Json | null; tags: string[]; converted_to: Json | null; source: string; raw_text: string; batch_id: string | null; created_at: number; updated_at: number };
-        Insert: { id: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; title?: string | null; body?: string | null; is_private?: boolean; body_enc?: string | null; enc_key_id?: number | null; category_id?: string | null; category_source?: string; category_seen?: boolean; ai_status?: string; ai_meta?: Json | null; tags?: string[]; converted_to?: Json | null; source?: string; raw_text?: string; batch_id?: string | null; created_at: number; updated_at: number };
-        Update: { id?: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; title?: string | null; body?: string | null; is_private?: boolean; body_enc?: string | null; enc_key_id?: number | null; category_id?: string | null; category_source?: string; category_seen?: boolean; ai_status?: string; ai_meta?: Json | null; tags?: string[]; converted_to?: Json | null; source?: string; raw_text?: string; batch_id?: string | null; created_at?: number; updated_at?: number };
-        Relationships: [];
-      };
-      profiles: {
-        Row: { user_id: string; display_name: string | null; ui_locale: string; tz_mode: string; current_tz: string; current_tz_device: string | null; current_tz_at: string | null; disabled_at: string | null; disabled_reason: string | null; created_at: string; consent_ai_at: string | null; consent_policy_ver: string | null; beta_features: string[] };
-        Insert: { user_id: string; display_name?: string | null; ui_locale?: string; tz_mode?: string; current_tz?: string; current_tz_device?: string | null; current_tz_at?: string | null; disabled_at?: string | null; disabled_reason?: string | null; created_at?: string; consent_ai_at?: string | null; consent_policy_ver?: string | null; beta_features?: string[] };
-        Update: { user_id?: string; display_name?: string | null; ui_locale?: string; tz_mode?: string; current_tz?: string; current_tz_device?: string | null; current_tz_at?: string | null; disabled_at?: string | null; disabled_reason?: string | null; created_at?: string; consent_ai_at?: string | null; consent_policy_ver?: string | null; beta_features?: string[] };
-        Relationships: [];
-      };
-      settings: {
-        Row: { id: string; user_id: string; rev: number; fv: Json; deleted_at: number | null; undone: boolean; synced_at: string; key: string; value: Json };
-        Insert: { id: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; key: string; value: Json };
-        Update: { id?: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; key?: string; value?: Json };
-        Relationships: [];
-      };
-      todos: {
-        Row: { id: string; user_id: string; rev: number; fv: Json; deleted_at: number | null; undone: boolean; synced_at: string; title: string; done: boolean; due: string | null; important: boolean; project: string; note: string; source: string; raw_text: string; batch_id: string | null; from_note_id: string | null; from_anniv_id: string | null; short: string | null; short_by: string | null; repeat: Json | null; repeat_skip: string[]; done_at: number; remind_days: number | null; remind_time: string; push_show_title: boolean | null; due_time: string | null; remind_before_min: number | null; remind_at: number | null; notified_for: number | null; snooze_at: number | null; pushed_for: number | null; defer_until: number | null; ai_status: string; created_at: number; updated_at: number };
-        Insert: { id: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; title: string; done?: boolean; due?: string | null; important?: boolean; project?: string; note?: string; source?: string; raw_text?: string; batch_id?: string | null; from_note_id?: string | null; from_anniv_id?: string | null; short?: string | null; short_by?: string | null; repeat?: Json | null; repeat_skip?: string[]; done_at?: number; remind_days?: number | null; remind_time?: string; push_show_title?: boolean | null; due_time?: string | null; remind_before_min?: number | null; remind_at?: number | null; notified_for?: number | null; snooze_at?: number | null; pushed_for?: number | null; defer_until?: number | null; ai_status?: string; created_at: number; updated_at: number };
-        Update: { id?: string; user_id?: string; rev?: number; fv?: Json; deleted_at?: number | null; undone?: boolean; synced_at?: string; title?: string; done?: boolean; due?: string | null; important?: boolean; project?: string; note?: string; source?: string; raw_text?: string; batch_id?: string | null; from_note_id?: string | null; from_anniv_id?: string | null; short?: string | null; short_by?: string | null; repeat?: Json | null; repeat_skip?: string[]; done_at?: number; remind_days?: number | null; remind_time?: string; push_show_title?: boolean | null; due_time?: string | null; remind_before_min?: number | null; remind_at?: number | null; notified_for?: number | null; snooze_at?: number | null; pushed_for?: number | null; defer_until?: number | null; ai_status?: string; created_at?: number; updated_at?: number };
-        Relationships: [];
-      };
-      tombstones: {
-        Row: { tbl: string; id: string; user_id: string; deleted_at: string };
-        Insert: { tbl: string; id: string; user_id: string; deleted_at?: string };
-        Update: { tbl?: string; id?: string; user_id?: string; deleted_at?: string };
-        Relationships: [];
-      };
-    };
-    Views: {
-      [_ in never]: never;
-    };
-    Functions: {
-      files_authorize: { Args: { p_op: string; p_items: Json }; Returns: Json };
-      purge_deleted: { Args: { p_items?: Json }; Returns: number };
-      record_consent: { Args: { policy_ver: string; revoke?: boolean }; Returns: undefined };
-    };
-    Enums: {
-      [_ in never]: never;
-    };
-    CompositeTypes: {
-      [_ in never]: never;
-    };
-  };
-  private: {
-    Tables: {
-      admins: {
-        Row: { user_id: string };
-        Insert: { user_id: string };
-        Update: { user_id?: string };
-        Relationships: [];
-      };
-      ai_state: {
-        Row: { provider: string; exhausted_until: string | null };
-        Insert: { provider: string; exhausted_until?: string | null };
-        Update: { provider?: string; exhausted_until?: string | null };
-        Relationships: [];
-      };
-      counters: {
-        Row: { key: string; window_start: string; count: number | null };
-        Insert: { key: string; window_start: string; count?: number | null };
-        Update: { key?: string; window_start?: string; count?: number | null };
-        Relationships: [];
-      };
-      deleted_accounts: {
-        Row: { user_id: string; deleted_at: string | null };
-        Insert: { user_id: string; deleted_at?: string | null };
-        Update: { user_id?: string; deleted_at?: string | null };
-        Relationships: [];
-      };
-      device_secrets: {
-        Row: { device_id: string; user_id: string; draft_salt: string; enc_key_id: number; created_at: string };
-        Insert: { device_id: string; user_id: string; draft_salt: string; enc_key_id: number; created_at?: string };
-        Update: { device_id?: string; user_id?: string; draft_salt?: string; enc_key_id?: number; created_at?: string };
-        Relationships: [];
-      };
-      embed_queue: {
-        Row: { kind: string; source_id: string; user_id: string; queued_at: string; tries: number; next_at: string | null; model: string };
-        Insert: { kind: string; source_id: string; user_id: string; queued_at?: string; tries?: number; next_at?: string | null; model?: string };
-        Update: { kind?: string; source_id?: string; user_id?: string; queued_at?: string; tries?: number; next_at?: string | null; model?: string };
-        Relationships: [];
-      };
-      heartbeat: {
-        Row: { name: string; at: string; detail: Json | null };
-        Insert: { name: string; at: string; detail?: Json | null };
-        Update: { name?: string; at?: string; detail?: Json | null };
-        Relationships: [];
-      };
-      invites: {
-        Row: { code_hash: string; created_by: string | null; max_uses: number | null; used_count: number | null; expires_at: string | null; note: string | null };
-        Insert: { code_hash: string; created_by?: string | null; max_uses?: number | null; used_count?: number | null; expires_at?: string | null; note?: string | null };
-        Update: { code_hash?: string; created_by?: string | null; max_uses?: number | null; used_count?: number | null; expires_at?: string | null; note?: string | null };
-        Relationships: [];
-      };
-      note_vectors: {
-        Row: { user_id: string; kind: string; source_id: string; is_vault: boolean; note_id: string | null; image_id: string | null; file_id: string | null; event_id: string | null; todo_id: string | null; model: string; content_hash: string; embedding: string; updated_at: string };
-        Insert: { user_id: string; kind: string; source_id: string; is_vault?: boolean; note_id?: string | null; image_id?: string | null; file_id?: string | null; event_id?: string | null; todo_id?: string | null; model: string; content_hash: string; embedding: string; updated_at?: string };
-        Update: { user_id?: string; kind?: string; source_id?: string; is_vault?: boolean; note_id?: string | null; image_id?: string | null; file_id?: string | null; event_id?: string | null; todo_id?: string | null; model?: string; content_hash?: string; embedding?: string; updated_at?: string };
-        Relationships: [];
-      };
-      pending_deletions: {
-        Row: { user_id: string; requested_at: string; purge_after: string; notice_sent: boolean; purge_started_at: string | null };
-        Insert: { user_id: string; requested_at?: string; purge_after: string; notice_sent?: boolean; purge_started_at?: string | null };
-        Update: { user_id?: string; requested_at?: string; purge_after?: string; notice_sent?: boolean; purge_started_at?: string | null };
-        Relationships: [];
-      };
-      pending_signups: {
-        Row: { email_hash: string; otp_hash: string; tries: number; expires_at: string };
-        Insert: { email_hash: string; otp_hash: string; tries?: number; expires_at: string };
-        Update: { email_hash?: string; otp_hash?: string; tries?: number; expires_at?: string };
-        Relationships: [];
-      };
-      remind_queue: {
-        Row: { table_name: string; id: string };
-        Insert: { table_name: string; id: string };
-        Update: { table_name?: string; id?: string };
-        Relationships: [];
-      };
-      revoked_sessions: {
-        Row: { session_id: string; user_id: string; revoked_at: string };
-        Insert: { session_id: string; user_id: string; revoked_at?: string };
-        Update: { session_id?: string; user_id?: string; revoked_at?: string };
-        Relationships: [];
-      };
-      table_meta: {
-        Row: { tbl: string; system_cols: string[]; no_conflict: string[] };
-        Insert: { tbl: string; system_cols: string[]; no_conflict: string[] };
-        Update: { tbl?: string; system_cols?: string[]; no_conflict?: string[] };
-        Relationships: [];
-      };
-      user_limits: {
-        Row: { user_id: string; media_mb: number | null; media_daily: number | null; search_daily: number | null };
-        Insert: { user_id: string; media_mb?: number | null; media_daily?: number | null; search_daily?: number | null };
-        Update: { user_id?: string; media_mb?: number | null; media_daily?: number | null; search_daily?: number | null };
-        Relationships: [];
-      };
-      vault: {
-        Row: { user_id: string; pin_hash: string; pin_epoch: number; fail_count: number | null; lock_level: number | null; locked_until: string | null; last_reset_at: string | null };
-        Insert: { user_id: string; pin_hash: string; pin_epoch?: number; fail_count?: number | null; lock_level?: number | null; locked_until?: string | null; last_reset_at?: string | null };
-        Update: { user_id?: string; pin_hash?: string; pin_epoch?: number; fail_count?: number | null; lock_level?: number | null; locked_until?: string | null; last_reset_at?: string | null };
-        Relationships: [];
-      };
-      vault_ai: {
-        Row: { kind: string; source_id: string; user_id: string; image_id: string | null; file_id: string | null; desc_enc: string; tags_enc: string; enc_key_id: number; updated_at: string };
-        Insert: { kind: string; source_id: string; user_id: string; image_id?: string | null; file_id?: string | null; desc_enc: string; tags_enc: string; enc_key_id: number; updated_at?: string };
-        Update: { kind?: string; source_id?: string; user_id?: string; image_id?: string | null; file_id?: string | null; desc_enc?: string; tags_enc?: string; enc_key_id?: number; updated_at?: string };
-        Relationships: [];
-      };
-      vault_credentials: {
-        Row: { credential_id: string; user_id: string; public_key: string; sign_count: number; device_label: string | null };
-        Insert: { credential_id: string; user_id: string; public_key: string; sign_count?: number; device_label?: string | null };
-        Update: { credential_id?: string; user_id?: string; public_key?: string; sign_count?: number; device_label?: string | null };
-        Relationships: [];
-      };
-      vault_preview: {
-        Row: { path: string; user_id: string; file_id: string; created_at: string; expires_at: string };
-        Insert: { path: string; user_id: string; file_id: string; created_at?: string; expires_at: string };
-        Update: { path?: string; user_id?: string; file_id?: string; created_at?: string; expires_at?: string };
-        Relationships: [];
-      };
-      webauthn_challenges: {
-        Row: { challenge: string; user_id: string; expires_at: string };
-        Insert: { challenge: string; user_id: string; expires_at: string };
-        Update: { challenge?: string; user_id?: string; expires_at?: string };
-        Relationships: [];
-      };
-    };
-    Views: {
-      scan_embed_queue: {
-        Row: { kind: string | null; source_id: string | null; model: string | null; user_id: string | null; next_at: string | null };
-        Relationships: [];
-      };
-      scan_note_files: {
-        Row: { id: string | null; user_id: string | null; check_status: string | null; ai_status: string | null; ai_next_at: number | null };
-        Relationships: [];
-      };
-      scan_note_images: {
-        Row: { id: string | null; user_id: string | null; ai_status: string | null; ai_next_at: number | null };
-        Relationships: [];
-      };
-      scan_vault_preview: {
-        Row: { path: string | null; user_id: string | null; expires_at: string | null };
-        Relationships: [];
-      };
-    };
-    Functions: {
-      [_ in never]: never;
-    };
-    Enums: {
-      [_ in never]: never;
-    };
-    CompositeTypes: {
-      [_ in never]: never;
-    };
-  };
-};
+  
+  "private": {
+          Tables: {
+            "admins": {
+                  Row: {
+                    "user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "user_id": string
+                  }
+                  Update: {
+                    "user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"ai_state": {
+                  Row: {
+                    "exhausted_until": string | null,"provider": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "exhausted_until"?: string | null,"provider": string
+                  }
+                  Update: {
+                    "exhausted_until"?: string | null,"provider"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"counters": {
+                  Row: {
+                    "count": number | null,"key": string,"window_start": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "count"?: number | null,"key": string,"window_start": string
+                  }
+                  Update: {
+                    "count"?: number | null,"key"?: string,"window_start"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"deleted_accounts": {
+                  Row: {
+                    "deleted_at": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "deleted_at"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "deleted_at"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"device_secrets": {
+                  Row: {
+                    "created_at": string,"device_id": string,"draft_salt": string,"enc_key_id": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"device_id": string,"draft_salt": string,"enc_key_id": number,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"device_id"?: string,"draft_salt"?: string,"enc_key_id"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"embed_queue": {
+                  Row: {
+                    "kind": string,"model": string,"next_at": string | null,"queued_at": string,"source_id": string,"tries": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "kind": string,"model"?: string,"next_at"?: string | null,"queued_at"?: string,"source_id": string,"tries"?: number,"user_id": string
+                  }
+                  Update: {
+                    "kind"?: string,"model"?: string,"next_at"?: string | null,"queued_at"?: string,"source_id"?: string,"tries"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"heartbeat": {
+                  Row: {
+                    "at": string,"detail": Json | null,"name": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "at": string,"detail"?: Json | null,"name": string
+                  }
+                  Update: {
+                    "at"?: string,"detail"?: Json | null,"name"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"invites": {
+                  Row: {
+                    "code_hash": string,"created_by": string | null,"expires_at": string | null,"max_uses": number | null,"note": string | null,"used_count": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code_hash": string,"created_by"?: string | null,"expires_at"?: string | null,"max_uses"?: number | null,"note"?: string | null,"used_count"?: number | null
+                  }
+                  Update: {
+                    "code_hash"?: string,"created_by"?: string | null,"expires_at"?: string | null,"max_uses"?: number | null,"note"?: string | null,"used_count"?: number | null
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"note_vectors": {
+                  Row: {
+                    "content_hash": string,"embedding": unknown,"event_id": string | null,"file_id": string | null,"image_id": string | null,"is_vault": boolean,"kind": string,"model": string,"note_id": string | null,"source_id": string,"todo_id": string | null,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "content_hash": string,"embedding": unknown,"event_id"?: string | null,"file_id"?: string | null,"image_id"?: string | null,"is_vault"?: boolean,"kind": string,"model": string,"note_id"?: string | null,"source_id": string,"todo_id"?: string | null,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "content_hash"?: string,"embedding"?: unknown,"event_id"?: string | null,"file_id"?: string | null,"image_id"?: string | null,"is_vault"?: boolean,"kind"?: string,"model"?: string,"note_id"?: string | null,"source_id"?: string,"todo_id"?: string | null,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "note_vectors_file_id_user_id_fkey"
+      columns: ["file_id","user_id"]
+isOneToOne: false
+      referencedRelation: "scan_note_files"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "note_vectors_image_id_user_id_fkey"
+      columns: ["image_id","user_id"]
+isOneToOne: false
+      referencedRelation: "scan_note_images"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"pending_deletions": {
+                  Row: {
+                    "notice_sent": boolean,"purge_after": string,"purge_started_at": string | null,"requested_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "notice_sent"?: boolean,"purge_after": string,"purge_started_at"?: string | null,"requested_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "notice_sent"?: boolean,"purge_after"?: string,"purge_started_at"?: string | null,"requested_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"pending_signups": {
+                  Row: {
+                    "email_hash": string,"expires_at": string,"otp_hash": string,"tries": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "email_hash": string,"expires_at": string,"otp_hash": string,"tries"?: number
+                  }
+                  Update: {
+                    "email_hash"?: string,"expires_at"?: string,"otp_hash"?: string,"tries"?: number
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"remind_queue": {
+                  Row: {
+                    "id": string,"table_name": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id": string,"table_name": string
+                  }
+                  Update: {
+                    "id"?: string,"table_name"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"revoked_sessions": {
+                  Row: {
+                    "revoked_at": string,"session_id": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "revoked_at"?: string,"session_id": string,"user_id": string
+                  }
+                  Update: {
+                    "revoked_at"?: string,"session_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"table_meta": {
+                  Row: {
+                    "no_conflict": (string)[],"system_cols": (string)[],"tbl": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "no_conflict": (string)[],"system_cols": (string)[],"tbl": string
+                  }
+                  Update: {
+                    "no_conflict"?: (string)[],"system_cols"?: (string)[],"tbl"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"user_limits": {
+                  Row: {
+                    "media_daily": number | null,"media_mb": number | null,"search_daily": number | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "media_daily"?: number | null,"media_mb"?: number | null,"search_daily"?: number | null,"user_id": string
+                  }
+                  Update: {
+                    "media_daily"?: number | null,"media_mb"?: number | null,"search_daily"?: number | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"vault": {
+                  Row: {
+                    "fail_count": number | null,"last_reset_at": string | null,"lock_level": number | null,"locked_until": string | null,"pin_epoch": number,"pin_hash": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "fail_count"?: number | null,"last_reset_at"?: string | null,"lock_level"?: number | null,"locked_until"?: string | null,"pin_epoch"?: number,"pin_hash": string,"user_id": string
+                  }
+                  Update: {
+                    "fail_count"?: number | null,"last_reset_at"?: string | null,"lock_level"?: number | null,"locked_until"?: string | null,"pin_epoch"?: number,"pin_hash"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"vault_ai": {
+                  Row: {
+                    "desc_enc": string,"enc_key_id": number,"file_id": string | null,"image_id": string | null,"kind": string,"source_id": string,"tags_enc": string,"updated_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "desc_enc": string,"enc_key_id": number,"file_id"?: string | null,"image_id"?: string | null,"kind": string,"source_id": string,"tags_enc": string,"updated_at"?: string,"user_id": string
+                  }
+                  Update: {
+                    "desc_enc"?: string,"enc_key_id"?: number,"file_id"?: string | null,"image_id"?: string | null,"kind"?: string,"source_id"?: string,"tags_enc"?: string,"updated_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "vault_ai_file_id_user_id_fkey"
+      columns: ["file_id","user_id"]
+isOneToOne: false
+      referencedRelation: "scan_note_files"
+      referencedColumns: ["id","user_id"]
+    },{
+      foreignKeyName: "vault_ai_image_id_user_id_fkey"
+      columns: ["image_id","user_id"]
+isOneToOne: false
+      referencedRelation: "scan_note_images"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"vault_credentials": {
+                  Row: {
+                    "credential_id": string,"device_label": string | null,"public_key": string,"sign_count": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "credential_id": string,"device_label"?: string | null,"public_key": string,"sign_count"?: number,"user_id": string
+                  }
+                  Update: {
+                    "credential_id"?: string,"device_label"?: string | null,"public_key"?: string,"sign_count"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"vault_preview": {
+                  Row: {
+                    "created_at": string,"expires_at": string,"file_id": string,"path": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"expires_at": string,"file_id": string,"path": string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"expires_at"?: string,"file_id"?: string,"path"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"webauthn_challenges": {
+                  Row: {
+                    "challenge": string,"expires_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "challenge": string,"expires_at": string,"user_id": string
+                  }
+                  Update: {
+                    "challenge"?: string,"expires_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                }
+          }
+          Views: {
+            "scan_embed_queue": {
+                  Row: {
+                    "kind": string | null,"model": string | null,"next_at": string | null,"source_id": string | null,"user_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                           "kind"?: string | null,"model"?: string | null,"next_at"?: string | null,"source_id"?: string | null,"user_id"?: string | null
+                         }
+                        Update: {
+                           "kind"?: string | null,"model"?: string | null,"next_at"?: string | null,"source_id"?: string | null,"user_id"?: string | null
+                         }
+                        Relationships: [
+                    
+                  ]
+                },"scan_note_files": {
+                  Row: {
+                    "ai_next_at": number | null,"ai_status": string | null,"check_status": string | null,"id": string | null,"user_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                           "ai_next_at"?: number | null,"ai_status"?: string | null,"check_status"?: string | null,"id"?: string | null,"user_id"?: string | null
+                         }
+                        Update: {
+                           "ai_next_at"?: number | null,"ai_status"?: string | null,"check_status"?: string | null,"id"?: string | null,"user_id"?: string | null
+                         }
+                        Relationships: [
+                    
+                  ]
+                },"scan_note_images": {
+                  Row: {
+                    "ai_next_at": number | null,"ai_status": string | null,"id": string | null,"user_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                           "ai_next_at"?: number | null,"ai_status"?: string | null,"id"?: string | null,"user_id"?: string | null
+                         }
+                        Update: {
+                           "ai_next_at"?: number | null,"ai_status"?: string | null,"id"?: string | null,"user_id"?: string | null
+                         }
+                        Relationships: [
+                    
+                  ]
+                },"scan_vault_preview": {
+                  Row: {
+                    "expires_at": string | null,"path": string | null,"user_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                           "expires_at"?: string | null,"path"?: string | null,"user_id"?: string | null
+                         }
+                        Update: {
+                           "expires_at"?: string | null,"path"?: string | null,"user_id"?: string | null
+                         }
+                        Relationships: [
+                    
+                  ]
+                }
+          }
+          Functions: {
+            "account_usable":
+{ Args: { "p_user": string }; Returns: boolean
+                           },
+"admin_set_disabled":
+{ Args: { "p_on": boolean,"p_user": string }; Returns: undefined
+                           },
+"cleanup_batch":
+{ Args: { "p_limit"?: number }; Returns: number
+                           },
+"files_authorize_impl":
+{ Args: { "p_items": Json,"p_op": string }; Returns: Json
+                           },
+"is_active":
+{ Args: Record<PropertyKey, never>; Returns: boolean
+                           },
+"long_transactions":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "app": string,"pid": number,"role": unknown,"xact_start": string
+            }[]
+                           },
+"purge_deleted_impl":
+{ Args: { "p_items"?: Json }; Returns: number
+                           },
+"purge_vault_impl":
+{ Args: { "p_items"?: Json,"p_user": string }; Returns: number
+                           },
+"record_consent_impl":
+{ Args: { "p_revoke"?: boolean,"p_ver": string }; Returns: undefined
+                           },
+"session_alive":
+{ Args: { "p_session": string }; Returns: boolean
+                           },
+"table_meta_of":
+{ Args: { "p_tbl": string }; Returns: {
+              "no_conflict": (string)[],"system_cols": (string)[]
+            }[]
+                           }
+          }
+          Enums: {
+            [_ in never]: never
+          }
+          CompositeTypes: {
+            [_ in never]: never
+          }
+        },"public": {
+          Tables: {
+            "anniversaries": {
+                  Row: {
+                    "after_due": string,"archived_at": number | null,"avatar_bytes": number | null,"avatar_id": string | null,"calendar": string,"created_at": number,"day": number,"defer_until": number | null,"deleted_at": number | null,"fv": NonNullable<Json>,"id": string,"is_leap": boolean,"kind": string,"lunar_variant": string,"month": number,"name": string,"next_date": string | null,"note": string,"notified_for": number | null,"push_show_title": boolean | null,"pushed_for": number | null,"remind_at": number | null,"remind_offsets": (number)[] | null,"remind_time": string | null,"rev": number,"snooze_at": number | null,"synced_at": string,"undone": boolean,"updated_at": number,"user_id": string,"year": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "after_due"?: string,"archived_at"?: number | null,"avatar_bytes"?: number | null,"avatar_id"?: string | null,"calendar": string,"created_at": number,"day": number,"defer_until"?: number | null,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id": string,"is_leap"?: boolean,"kind": string,"lunar_variant"?: string,"month": number,"name": string,"next_date"?: string | null,"note"?: string,"notified_for"?: number | null,"push_show_title"?: boolean | null,"pushed_for"?: number | null,"remind_at"?: number | null,"remind_offsets"?: (number)[] | null,"remind_time"?: string | null,"rev"?: number,"snooze_at"?: number | null,"synced_at"?: string,"undone"?: boolean,"updated_at": number,"user_id"?: string,"year"?: number | null
+                  }
+                  Update: {
+                    "after_due"?: string,"archived_at"?: number | null,"avatar_bytes"?: number | null,"avatar_id"?: string | null,"calendar"?: string,"created_at"?: number,"day"?: number,"defer_until"?: number | null,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id"?: string,"is_leap"?: boolean,"kind"?: string,"lunar_variant"?: string,"month"?: number,"name"?: string,"next_date"?: string | null,"note"?: string,"notified_for"?: number | null,"push_show_title"?: boolean | null,"pushed_for"?: number | null,"remind_at"?: number | null,"remind_offsets"?: (number)[] | null,"remind_time"?: string | null,"rev"?: number,"snooze_at"?: number | null,"synced_at"?: string,"undone"?: boolean,"updated_at"?: number,"user_id"?: string,"year"?: number | null
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"api_tokens": {
+                  Row: {
+                    "created_at": string,"id": string,"label": string | null,"last_used_at": string | null,"revoked_at": string | null,"scopes": (string)[],"token_hash": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"label"?: string | null,"last_used_at"?: string | null,"revoked_at"?: string | null,"scopes"?: (string)[],"token_hash": string,"user_id": string
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"label"?: string | null,"last_used_at"?: string | null,"revoked_at"?: string | null,"scopes"?: (string)[],"token_hash"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"app_config": {
+                  Row: {
+                    "ai": NonNullable<Json>,"features": NonNullable<Json>,"id": number,"latest_version": string | null,"limits": NonNullable<Json>,"min_client_version": string | null,"notice": Json | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ai": NonNullable<Json>,"features"?: NonNullable<Json>,"id"?: number,"latest_version"?: string | null,"limits"?: NonNullable<Json>,"min_client_version"?: string | null,"notice"?: Json | null
+                  }
+                  Update: {
+                    "ai"?: NonNullable<Json>,"features"?: NonNullable<Json>,"id"?: number,"latest_version"?: string | null,"limits"?: NonNullable<Json>,"min_client_version"?: string | null,"notice"?: Json | null
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"applied_ops": {
+                  Row: {
+                    "at": string,"op_id": string,"result": Json | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "at"?: string,"op_id": string,"result"?: Json | null,"user_id"?: string
+                  }
+                  Update: {
+                    "at"?: string,"op_id"?: string,"result"?: Json | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"categories": {
+                  Row: {
+                    "color": string | null,"created_by": string,"deleted_at": number | null,"fv": NonNullable<Json>,"id": string,"merged_into": string | null,"name": string,"rev": number,"sort": number,"synced_at": string,"undone": boolean,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "color"?: string | null,"created_by"?: string,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id": string,"merged_into"?: string | null,"name": string,"rev"?: number,"sort"?: number,"synced_at"?: string,"undone"?: boolean,"user_id"?: string
+                  }
+                  Update: {
+                    "color"?: string | null,"created_by"?: string,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id"?: string,"merged_into"?: string | null,"name"?: string,"rev"?: number,"sort"?: number,"synced_at"?: string,"undone"?: boolean,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"devices": {
+                  Row: {
+                    "app_version": string | null,"auth": string | null,"deleted_at": number | null,"fv": NonNullable<Json>,"id": string,"install_id": string | null,"label": string | null,"last_push_ok_at": string | null,"last_seen_at": string | null,"p256dh": string | null,"platform": string,"push_endpoint": string | null,"push_fail_count": number,"rev": number,"session_id": string | null,"synced_at": string,"undone": boolean,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "app_version"?: string | null,"auth"?: string | null,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id": string,"install_id"?: string | null,"label"?: string | null,"last_push_ok_at"?: string | null,"last_seen_at"?: string | null,"p256dh"?: string | null,"platform": string,"push_endpoint"?: string | null,"push_fail_count"?: number,"rev"?: number,"session_id"?: string | null,"synced_at"?: string,"undone"?: boolean,"user_id"?: string
+                  }
+                  Update: {
+                    "app_version"?: string | null,"auth"?: string | null,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id"?: string,"install_id"?: string | null,"label"?: string | null,"last_push_ok_at"?: string | null,"last_seen_at"?: string | null,"p256dh"?: string | null,"platform"?: string,"push_endpoint"?: string | null,"push_fail_count"?: number,"rev"?: number,"session_id"?: string | null,"synced_at"?: string,"undone"?: boolean,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"events": {
+                  Row: {
+                    "ai_status": string,"batch_id": string | null,"created_at": number,"date": string,"defer_until": number | null,"deleted_at": number | null,"duration_min": number,"fv": NonNullable<Json>,"id": string,"location": string,"note": string,"notified_for": number | null,"project": string,"push_show_title": boolean | null,"pushed_for": number | null,"raw_text": string,"remind_at": number | null,"remind_days": number | null,"remind_min": number | null,"repeat": Json | null,"repeat_skip": (string)[],"rev": number,"short": string | null,"short_by": string | null,"snooze_at": number | null,"source": string,"synced_at": string,"time": string | null,"title": string,"tz": string | null,"undone": boolean,"updated_at": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ai_status"?: string,"batch_id"?: string | null,"created_at": number,"date": string,"defer_until"?: number | null,"deleted_at"?: number | null,"duration_min"?: number,"fv"?: NonNullable<Json>,"id": string,"location"?: string,"note"?: string,"notified_for"?: number | null,"project"?: string,"push_show_title"?: boolean | null,"pushed_for"?: number | null,"raw_text"?: string,"remind_at"?: number | null,"remind_days"?: number | null,"remind_min"?: number | null,"repeat"?: Json | null,"repeat_skip"?: (string)[],"rev"?: number,"short"?: string | null,"short_by"?: string | null,"snooze_at"?: number | null,"source"?: string,"synced_at"?: string,"time"?: string | null,"title": string,"tz"?: string | null,"undone"?: boolean,"updated_at": number,"user_id"?: string
+                  }
+                  Update: {
+                    "ai_status"?: string,"batch_id"?: string | null,"created_at"?: number,"date"?: string,"defer_until"?: number | null,"deleted_at"?: number | null,"duration_min"?: number,"fv"?: NonNullable<Json>,"id"?: string,"location"?: string,"note"?: string,"notified_for"?: number | null,"project"?: string,"push_show_title"?: boolean | null,"pushed_for"?: number | null,"raw_text"?: string,"remind_at"?: number | null,"remind_days"?: number | null,"remind_min"?: number | null,"repeat"?: Json | null,"repeat_skip"?: (string)[],"rev"?: number,"short"?: string | null,"short_by"?: string | null,"snooze_at"?: number | null,"source"?: string,"synced_at"?: string,"time"?: string | null,"title"?: string,"tz"?: string | null,"undone"?: boolean,"updated_at"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"logs": {
+                  Row: {
+                    "act": string | null,"code": string | null,"coll": string | null,"device": string | null,"fields": (string)[] | null,"id": number,"item_id": string | null,"kind": string | null,"src": string | null,"t": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "act"?: string | null,"code"?: string | null,"coll"?: string | null,"device"?: string | null,"fields"?: (string)[] | null,"id"?: number,"item_id"?: string | null,"kind"?: string | null,"src"?: string | null,"t": number,"user_id"?: string
+                  }
+                  Update: {
+                    "act"?: string | null,"code"?: string | null,"coll"?: string | null,"device"?: string | null,"fields"?: (string)[] | null,"id"?: number,"item_id"?: string | null,"kind"?: string | null,"src"?: string | null,"t"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"note_files": {
+                  Row: {
+                    "ai_desc": string | null,"ai_next_at": number | null,"ai_status": string,"ai_tags": (string)[],"ai_tries": number,"bytes": number,"check_status": string,"created_at": number,"dek_enc": string | null,"deleted_at": number | null,"enc_key_id": number | null,"etag": string | null,"fv": NonNullable<Json>,"has_thumb": boolean,"id": string,"is_vault": boolean,"kind": string,"mime": string,"name": string | null,"name_enc": string | null,"note_id": string,"pages": number | null,"path": string,"rev": number,"sha256": string,"skip_reason": string | null,"synced_at": string,"text_enc": string | null,"text_excerpt": string | null,"undone": boolean,"updated_at": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ai_desc"?: string | null,"ai_next_at"?: number | null,"ai_status"?: string,"ai_tags"?: (string)[],"ai_tries"?: number,"bytes": number,"check_status"?: string,"created_at": number,"dek_enc"?: string | null,"deleted_at"?: number | null,"enc_key_id"?: number | null,"etag"?: string | null,"fv"?: NonNullable<Json>,"has_thumb"?: boolean,"id": string,"is_vault"?: boolean,"kind": string,"mime": string,"name"?: string | null,"name_enc"?: string | null,"note_id": string,"pages"?: number | null,"path": string,"rev"?: number,"sha256": string,"skip_reason"?: string | null,"synced_at"?: string,"text_enc"?: string | null,"text_excerpt"?: string | null,"undone"?: boolean,"updated_at": number,"user_id"?: string
+                  }
+                  Update: {
+                    "ai_desc"?: string | null,"ai_next_at"?: number | null,"ai_status"?: string,"ai_tags"?: (string)[],"ai_tries"?: number,"bytes"?: number,"check_status"?: string,"created_at"?: number,"dek_enc"?: string | null,"deleted_at"?: number | null,"enc_key_id"?: number | null,"etag"?: string | null,"fv"?: NonNullable<Json>,"has_thumb"?: boolean,"id"?: string,"is_vault"?: boolean,"kind"?: string,"mime"?: string,"name"?: string | null,"name_enc"?: string | null,"note_id"?: string,"pages"?: number | null,"path"?: string,"rev"?: number,"sha256"?: string,"skip_reason"?: string | null,"synced_at"?: string,"text_enc"?: string | null,"text_excerpt"?: string | null,"undone"?: boolean,"updated_at"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "note_files_note_id_user_id_fkey"
+      columns: ["note_id","user_id"]
+isOneToOne: false
+      referencedRelation: "notes"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"note_images": {
+                  Row: {
+                    "ai_desc": string | null,"ai_next_at": number | null,"ai_status": string,"ai_tags": (string)[],"ai_tries": number,"bucket": string,"bytes": number,"deleted_at": number | null,"fv": NonNullable<Json>,"has_thumb": boolean,"height": number | null,"id": string,"mime": string,"note_id": string,"path": string,"rev": number,"skip_reason": string | null,"synced_at": string,"taken_at": number | null,"undone": boolean,"user_id": string,"width": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ai_desc"?: string | null,"ai_next_at"?: number | null,"ai_status"?: string,"ai_tags"?: (string)[],"ai_tries"?: number,"bucket": string,"bytes": number,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"has_thumb"?: boolean,"height"?: number | null,"id": string,"mime"?: string,"note_id": string,"path": string,"rev"?: number,"skip_reason"?: string | null,"synced_at"?: string,"taken_at"?: number | null,"undone"?: boolean,"user_id"?: string,"width"?: number | null
+                  }
+                  Update: {
+                    "ai_desc"?: string | null,"ai_next_at"?: number | null,"ai_status"?: string,"ai_tags"?: (string)[],"ai_tries"?: number,"bucket"?: string,"bytes"?: number,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"has_thumb"?: boolean,"height"?: number | null,"id"?: string,"mime"?: string,"note_id"?: string,"path"?: string,"rev"?: number,"skip_reason"?: string | null,"synced_at"?: string,"taken_at"?: number | null,"undone"?: boolean,"user_id"?: string,"width"?: number | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "note_images_note_id_user_id_fkey"
+      columns: ["note_id","user_id"]
+isOneToOne: false
+      referencedRelation: "notes"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"notes": {
+                  Row: {
+                    "ai_meta": Json | null,"ai_status": string,"batch_id": string | null,"body": string | null,"body_enc": string | null,"category_id": string | null,"category_seen": boolean,"category_source": string,"converted_to": Json | null,"created_at": number,"deleted_at": number | null,"enc_key_id": number | null,"fv": NonNullable<Json>,"id": string,"is_private": boolean,"raw_text": string,"rev": number,"source": string,"synced_at": string,"tags": (string)[],"title": string | null,"undone": boolean,"updated_at": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ai_meta"?: Json | null,"ai_status"?: string,"batch_id"?: string | null,"body"?: string | null,"body_enc"?: string | null,"category_id"?: string | null,"category_seen"?: boolean,"category_source"?: string,"converted_to"?: Json | null,"created_at": number,"deleted_at"?: number | null,"enc_key_id"?: number | null,"fv"?: NonNullable<Json>,"id": string,"is_private"?: boolean,"raw_text"?: string,"rev"?: number,"source"?: string,"synced_at"?: string,"tags"?: (string)[],"title"?: string | null,"undone"?: boolean,"updated_at": number,"user_id"?: string
+                  }
+                  Update: {
+                    "ai_meta"?: Json | null,"ai_status"?: string,"batch_id"?: string | null,"body"?: string | null,"body_enc"?: string | null,"category_id"?: string | null,"category_seen"?: boolean,"category_source"?: string,"converted_to"?: Json | null,"created_at"?: number,"deleted_at"?: number | null,"enc_key_id"?: number | null,"fv"?: NonNullable<Json>,"id"?: string,"is_private"?: boolean,"raw_text"?: string,"rev"?: number,"source"?: string,"synced_at"?: string,"tags"?: (string)[],"title"?: string | null,"undone"?: boolean,"updated_at"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "notes_category_id_user_id_fkey"
+      columns: ["category_id","user_id"]
+isOneToOne: false
+      referencedRelation: "categories"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
+                },"profiles": {
+                  Row: {
+                    "beta_features": (string)[],"consent_ai_at": string | null,"consent_policy_ver": string | null,"created_at": string,"current_tz": string,"current_tz_at": string | null,"current_tz_device": string | null,"disabled_at": string | null,"disabled_reason": string | null,"display_name": string | null,"tz_mode": string,"ui_locale": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "beta_features"?: (string)[],"consent_ai_at"?: string | null,"consent_policy_ver"?: string | null,"created_at"?: string,"current_tz"?: string,"current_tz_at"?: string | null,"current_tz_device"?: string | null,"disabled_at"?: string | null,"disabled_reason"?: string | null,"display_name"?: string | null,"tz_mode"?: string,"ui_locale"?: string,"user_id": string
+                  }
+                  Update: {
+                    "beta_features"?: (string)[],"consent_ai_at"?: string | null,"consent_policy_ver"?: string | null,"created_at"?: string,"current_tz"?: string,"current_tz_at"?: string | null,"current_tz_device"?: string | null,"disabled_at"?: string | null,"disabled_reason"?: string | null,"display_name"?: string | null,"tz_mode"?: string,"ui_locale"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"settings": {
+                  Row: {
+                    "deleted_at": number | null,"fv": NonNullable<Json>,"id": string,"key": string,"rev": number,"synced_at": string,"undone": boolean,"user_id": string,"value": NonNullable<Json>
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id": string,"key": string,"rev"?: number,"synced_at"?: string,"undone"?: boolean,"user_id"?: string,"value": NonNullable<Json>
+                  }
+                  Update: {
+                    "deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id"?: string,"key"?: string,"rev"?: number,"synced_at"?: string,"undone"?: boolean,"user_id"?: string,"value"?: NonNullable<Json>
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"todos": {
+                  Row: {
+                    "ai_status": string,"batch_id": string | null,"created_at": number,"defer_until": number | null,"deleted_at": number | null,"done": boolean,"done_at": number,"due": string | null,"due_time": string | null,"from_anniv_id": string | null,"from_note_id": string | null,"fv": NonNullable<Json>,"id": string,"important": boolean,"note": string,"notified_for": number | null,"project": string,"push_show_title": boolean | null,"pushed_for": number | null,"raw_text": string,"remind_at": number | null,"remind_before_min": number | null,"remind_days": number | null,"remind_time": string,"repeat": Json | null,"repeat_skip": (string)[],"rev": number,"short": string | null,"short_by": string | null,"snooze_at": number | null,"source": string,"synced_at": string,"title": string,"undone": boolean,"updated_at": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "ai_status"?: string,"batch_id"?: string | null,"created_at": number,"defer_until"?: number | null,"deleted_at"?: number | null,"done"?: boolean,"done_at"?: number,"due"?: string | null,"due_time"?: string | null,"from_anniv_id"?: string | null,"from_note_id"?: string | null,"fv"?: NonNullable<Json>,"id": string,"important"?: boolean,"note"?: string,"notified_for"?: number | null,"project"?: string,"push_show_title"?: boolean | null,"pushed_for"?: number | null,"raw_text"?: string,"remind_at"?: number | null,"remind_before_min"?: number | null,"remind_days"?: number | null,"remind_time"?: string,"repeat"?: Json | null,"repeat_skip"?: (string)[],"rev"?: number,"short"?: string | null,"short_by"?: string | null,"snooze_at"?: number | null,"source"?: string,"synced_at"?: string,"title": string,"undone"?: boolean,"updated_at": number,"user_id"?: string
+                  }
+                  Update: {
+                    "ai_status"?: string,"batch_id"?: string | null,"created_at"?: number,"defer_until"?: number | null,"deleted_at"?: number | null,"done"?: boolean,"done_at"?: number,"due"?: string | null,"due_time"?: string | null,"from_anniv_id"?: string | null,"from_note_id"?: string | null,"fv"?: NonNullable<Json>,"id"?: string,"important"?: boolean,"note"?: string,"notified_for"?: number | null,"project"?: string,"push_show_title"?: boolean | null,"pushed_for"?: number | null,"raw_text"?: string,"remind_at"?: number | null,"remind_before_min"?: number | null,"remind_days"?: number | null,"remind_time"?: string,"repeat"?: Json | null,"repeat_skip"?: (string)[],"rev"?: number,"short"?: string | null,"short_by"?: string | null,"snooze_at"?: number | null,"source"?: string,"synced_at"?: string,"title"?: string,"undone"?: boolean,"updated_at"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"tombstones": {
+                  Row: {
+                    "deleted_at": string,"id": string,"tbl": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "deleted_at"?: string,"id": string,"tbl": string,"user_id": string
+                  }
+                  Update: {
+                    "deleted_at"?: string,"id"?: string,"tbl"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                }
+          }
+          Views: {
+            [_ in never]: never
+          }
+          Functions: {
+            "files_authorize":
+{ Args: { "p_items": Json,"p_op": string }; Returns: Json
+                           },
+"purge_deleted":
+{ Args: { "p_items"?: Json }; Returns: number
+                           },
+"record_consent":
+{ Args: { "policy_ver": string,"revoke"?: boolean }; Returns: undefined
+                           }
+          }
+          Enums: {
+            [_ in never]: never
+          }
+          CompositeTypes: {
+            [_ in never]: never
+          }
+        }
+}
 
-type SchemaRef = { schema: keyof Database };
-type RowsOf<S extends keyof Database> = Database[S]['Tables'] & Database[S]['Views'];
-type TablesOf<S extends keyof Database> = Database[S]['Tables'];
-export type Tables<T extends keyof RowsOf<'public'> | SchemaRef, N extends (T extends SchemaRef ? keyof RowsOf<T['schema']> : never) = never> =
-  T extends SchemaRef ? (RowsOf<T['schema']>[N & keyof RowsOf<T['schema']>] extends { Row: infer R } ? R : never)
-  : T extends keyof RowsOf<'public'> ? (RowsOf<'public'>[T] extends { Row: infer R } ? R : never) : never;
-export type TablesInsert<T extends keyof TablesOf<'public'> | SchemaRef, N extends (T extends SchemaRef ? keyof TablesOf<T['schema']> : never) = never> =
-  T extends SchemaRef ? (TablesOf<T['schema']>[N & keyof TablesOf<T['schema']>] extends { Insert: infer R } ? R : never)
-  : T extends keyof TablesOf<'public'> ? (TablesOf<'public'>[T] extends { Insert: infer R } ? R : never) : never;
-export type TablesUpdate<T extends keyof TablesOf<'public'> | SchemaRef, N extends (T extends SchemaRef ? keyof TablesOf<T['schema']> : never) = never> =
-  T extends SchemaRef ? (TablesOf<T['schema']>[N & keyof TablesOf<T['schema']>] extends { Update: infer R } ? R : never)
-  : T extends keyof TablesOf<'public'> ? (TablesOf<'public'>[T] extends { Update: infer R } ? R : never) : never;
+type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+  ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never
+> = DefaultSchemaTableNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+  ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never
+> = DefaultSchemaEnumNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+  ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+  : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof DatabaseWithoutInternals }
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+  ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+  : never
+
+export const Constants = {
+  "private": {
+          Enums: {
+            
+          }
+        },"public": {
+          Enums: {
+            
+          }
+        }
+} as const
