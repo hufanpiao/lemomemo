@@ -295,9 +295,9 @@ try {
     Ok "Pages 项目：$pages（生产环境现有变量 $($before.Count) 个：$($before -join '、')）"
 
     Step "粘贴 R2 令牌（$label，桶前缀“$prefix”）"
-    $vals.FilesId = Read-Value 'R2_FILES 的 Access Key ID' "令牌“柠檬记 $label files”生成后的页面（只授 ${prefix}images、${prefix}files 两个桶，读写）" '^[0-9a-f]{32}$' '32 位十六进制'
+    $vals.FilesId = Read-Value 'R2_FILES 的 Access Key ID' "令牌「柠檬记 $label files」生成后的页面（只授 ${prefix}images、${prefix}files 两个桶，读写）" '^[0-9a-f]{32}$' '32 位十六进制'
     $vals.FilesSk = Read-Value 'R2_FILES 的 Secret Access Key' '同一页' '^[0-9a-f]{64}$' '64 位十六进制'
-    $vals.FnId = Read-Value 'R2_FN 的 Access Key ID' "令牌“柠檬记 $label functions”生成后的页面（授四个桶，读写）" '^[0-9a-f]{32}$' '32 位十六进制'
+    $vals.FnId = Read-Value 'R2_FN 的 Access Key ID' "令牌「柠檬记 $label functions」生成后的页面（授四个桶，读写）" '^[0-9a-f]{32}$' '32 位十六进制'
     $vals.FnSk = Read-Value 'R2_FN 的 Secret Access Key' '同一页' '^[0-9a-f]{64}$' '64 位十六进制'
     if ($vals.FilesId -eq $vals.FnId) { Fail 'R2_FILES 和 R2_FN 贴成了同一把令牌：两把要分开生成（权限范围不同）' }
     $vals.UrlSecret = New-RandomHex32
