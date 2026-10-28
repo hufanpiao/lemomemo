@@ -75,6 +75,30 @@ describe('build/check_arch.py（tests/arch-fixtures/check_arch）', () => {
     expect(p142[0]?.line).toBe(5);
   });
 
+  it('A19：SW 只走网络的前缀表漏了 /files → 错误（15.3 第 1 条，0.32）', () => {
+    const { code, report } = run(sample('a19-files-not-bypassed'));
+    expect(code).toBe(1);
+    expect(report.errors.map((e) => `${e.rule} ${e.file}`)).toEqual(['A19 src/sw/routes.ts']);
+    expect(report.errors[0]?.message).toContain("'/files'");
+  });
+
+  it('A19：sw.ts 另给 /files 挂缓存路由 → 错误；注释和 /filesystem 不算', () => {
+    const { code, report } = run(sample('a19-sw-files-route'));
+    expect(code).toBe(1);
+    expect(report.errors.map((e) => `${e.rule} ${e.file}:${e.line}`)).toEqual(['A19 src/sw/sw.ts:4']);
+  });
+
+  it('R2：src 里 import shared/objstore.ts、aws4fetch（含动态 import）、functions/ 的生成表 → 错误', () => {
+    const { code, report } = run(sample('r2-import'));
+    expect(code).toBe(1);
+    expect(report.errors.map((e) => `${e.rule} ${e.file}:${e.line}`)).toEqual([
+      'R2 src/app/bad.ts:2',
+      'R2 src/features/notes/data/bad.ts:2',
+      'R2 src/platform/bad.ts:2',
+      'R2 src/platform/bad.ts:4',
+    ]);
+  });
+
   it('真仓库：0 个错误', { timeout: 60_000 }, () => {
     const { code, report } = run(ROOT);
     expect(report.errors).toEqual([]);
