@@ -84,15 +84,17 @@ describe.skipIf(!ready)('【待预览环境】/sb/* 转发', () => {
   it.todo('Auth：校验验证码（用准备步骤 generateLink 拿到的 email_otp，B1 Turnstile 定了再写全）');
 
   // QA D-11：架构 0.32 把“Storage 签名链接是相对路径”从 TC-B0-43 划掉（照片和附件改走 /files，/sb 的存储只留 vault-preview 的 GET）。
-  // 这里改成核对线上收窄确实生效（TC-B0-119 的预览部分），以及 QA D-02 的百分号编码在 Cloudflare 边缘也绕不过去。
-  it('Storage：除 vault-preview 的 GET 以外一律本地 404；编码过的 files_authorize 也是 404', async () => {
+  // 这里改成核对线上收窄确实生效（TC-B0-119 的预览部分），以及架构 0.33 第 10 条“路径里有 % 一律本地 404”在线上也成立
+  // （QA 待实测第 24 项：Cloudflare 边缘会不会先把 %61 这类编码解开；不管解不解开，结果都必须是转发层自己回的 not_found）。
+  it('Storage：除 vault-preview 的 GET 以外一律本地 404；路径带 % 的（四条反例）也是本地 404', async () => {
     const path = `${UID}/${crypto.randomUUID()}/${crypto.randomUUID()}.webp`;
     const up = await sb(`/storage/v1/object/images/${path}`, { method: 'POST', headers: { 'Content-Type': 'image/webp' }, body: 'x' });
     expect(up.status).toBe(404);
     expect(await up.json()).toEqual({ code: 'not_found' });
-    for (const p of ['/rest/v1/rpc/files%5Fauthorize', '/rest/v1/rpc/%66iles_authorize', '/rest/v1/rpc/files%255Fauthorize']) {
+    for (const p of ['/rest/v1/rpc/files%5Fauthorize', '/rest/v1/rpc/%66iles_authorize', '/auth/v1/%61dmin/users', '/auth/v1/adm%69n']) {
       const r = await sb(p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       expect(r.status, p).toBe(404);
+      expect(await r.json(), p).toEqual({ code: 'not_found' }); // 转发层回的，不是上游的 404
     }
   });
 
