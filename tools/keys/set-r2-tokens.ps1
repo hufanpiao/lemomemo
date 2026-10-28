@@ -17,7 +17,7 @@
         **不用 supabase CLI**：`supabase secrets set` 只能把值写在命令行参数里或先写进 env 文件，两样都违反“值不进命令行参数、不落盘”。
         要粘贴两把“管理令牌”：Cloudflare（只要 Account › Cloudflare Pages › Edit）和 Supabase（只管这个项目的项目级令牌，
         能写 Edge Functions 的 secrets）。预览环境没有存这两把（第 ⑥ 节生成后只贴进了 GitHub），按负责人B0网页操作清单第 ⑫ 节
-        临时生成两把 1 天到期的，用完删掉；正式环境用“密码”App 里的正式令牌。
+        临时生成两把 1 天到期的，用完删掉；正式环境同样当场临时生成（只管正式项目、1 天到期），用完删掉（R-220：令牌不另存）。
     -Kind pull（只能 -Target production）：本机每周拉照片和附件用的只读令牌 R2_PULL_*，写进 Windows 凭据管理器
         （目标名 lemomemo/R2_PULL_ACCESS_KEY_ID、lemomemo/R2_PULL_SECRET_ACCESS_KEY；B7 tools/backup/pull.ps1 按这两个名字读）。
         用 Win32 CredWrite 写，不经 cmdkey（cmdkey 要把密码写在命令行参数里）。
@@ -230,7 +230,7 @@ try {
         $sha = [Security.Cryptography.SHA256]::Create()
         try { $digest = [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($v))).Replace('-', '').ToLowerInvariant() } finally { $sha.Dispose() }
         Say ''
-        Say '  值（64 位，只有 0～9 和 a～f；只显示这一次，不用存“密码”App——丢了重新生成就行，旧链接最多 10 分钟内作废）：'
+        Say '  值（64 位，只有 0～9 和 a～f；只显示这一次，不用另存——丢了重新生成就行，旧链接最多 10 分钟内作废）：'
         Say ''
         $shown = $true
         [Console]::WriteLine("      $v")
@@ -262,8 +262,8 @@ try {
     $endpoint = "https://$acct.r2.cloudflarestorage.com"
 
     Step '粘贴两把管理令牌（只用来写这一次）'
-    $cfTok = Read-Value 'Cloudflare 令牌（Account › Cloudflare Pages › Edit）' "$(if ($Target -eq 'preview') { '第 ⑫ 节临时生成的“柠檬记 R2 写入（临时）”' } else { '“密码”App 里“柠檬记 Cloudflare 正式令牌”' })" '^[A-Za-z0-9_-]{30,}$' '30 位以上的字母、数字、- 和 _'
-    $sbTok = Read-Value "Supabase 令牌（只管 $supaName）" "$(if ($Target -eq 'preview') { '第 ⑫ 节临时生成的项目级令牌' } else { '“密码”App 里“柠檬记 Supabase 正式令牌”' })" '^sbp_[A-Za-z0-9_]{20,}$' '以 sbp_ 开头'
+    $cfTok = Read-Value 'Cloudflare 令牌（Account › Cloudflare Pages › Edit）' "$(if ($Target -eq 'preview') { '第 ⑫ 节临时生成的“柠檬记 R2 写入（临时）”' } else { '刚临时生成的正式 Cloudflare 管理令牌（1 天到期，用完删掉）' })" '^[A-Za-z0-9_-]{30,}$' '30 位以上的字母、数字、- 和 _'
+    $sbTok = Read-Value "Supabase 令牌（只管 $supaName）" "$(if ($Target -eq 'preview') { '第 ⑫ 节临时生成的项目级令牌' } else { '刚临时生成的正式 Supabase 项目级令牌（1 天到期，用完删掉）' })" '^sbp_[A-Za-z0-9_]{20,}$' '以 sbp_ 开头'
 
     $cfH = @{ Authorization = "Bearer $cfTok" }
     $sbH = @{ Authorization = "Bearer $sbTok" }

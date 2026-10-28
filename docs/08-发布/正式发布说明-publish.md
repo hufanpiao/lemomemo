@@ -1,7 +1,7 @@
 # 正式发布说明：本机运行 `publish.ps1`（R-206）
 
 - 日期：2026-10-28（B0，运维初稿；B7a 前按演练结果再改一版）
-- 依据：R-206（不买 GitHub Pro；正式环境的令牌不放 GitHub；正式发布由负责人本机运行脚本，每次从 iPhone“密码”App 粘贴令牌；CI 只构建和测试）；架构 8.3 deploy-prod 一行、8.4、8.5；人员名单第七节；[上线与回滚手册-v4](上线与回滚手册-v4.md)
+- 依据：R-206（不买 GitHub Pro；正式环境的令牌不放 GitHub；正式发布由负责人本机运行脚本；CI 只构建和测试）；R-220（令牌不另存：正式令牌每次发布时临时生成、发完删掉，取代 R-206 的“每次从 iPhone‘密码’App 粘贴令牌”）；架构 8.3 deploy-prod 一行、8.4、8.5；人员名单第七节；[上线与回滚手册-v4](上线与回滚手册-v4.md)
 - 脚本：[`tools/release/publish.ps1`](../../tools/release/publish.ps1)（Windows PowerShell 5.1 能跑，UTF-8 带 BOM）
 - 谁运行：**产品负责人本人**，在自己电脑上新开的 PowerShell 窗口里。AI 只写脚本，不运行正式发布，不碰令牌。
 
@@ -40,11 +40,10 @@ R-206 时已告诉负责人：发布时令牌会经过 AI 所在的电脑，安�
 
 ## 三、第一次发布前要准备的（只做一次）
 
+三把正式令牌和密码**不在这里准备、也不另存**（R-220）：每次发布当场生成，见本节末尾的“发布当天临时生成”。
+
 | 东西 | 放在哪 | 谁做 | 说明 |
 |---|---|---|---|
-| 正式 Supabase 令牌 | iPhone“密码”App，条目名“柠檬记 Supabase 正式令牌” | 负责人 | 只管正式项目的项目级令牌，权限见[环境清单](环境清单-v4.md)第四节；到期 90 天 |
-| 正式数据库密码 | “柠檬记 Supabase 正式数据库密码” | 负责人 | 建正式项目时生成的那个 |
-| 正式 Cloudflare 令牌 | “柠檬记 Cloudflare 正式令牌” | 负责人 | 只给 “Cloudflare Pages: Edit”，到期 90 天 |
 | `.env.production.local` | 仓库根目录（被 `.gitignore` 忽略，不进仓库） | 运维写好内容、负责人核对 | **只放公开值**，脚本会检查只能有 `VITE_PUBLIC_` 开头的行。内容见下 |
 | GitHub 仓库 Variables 的 `PROD_` 几项 | GitHub › 仓库 › Settings › Secrets and variables › Actions › Variables | 负责人 | 和 `.env.production.local` 的值一样，给 release-build 用，两边构建才一致 |
 | 关掉 Windows 剪贴板历史 | 设置 › 系统 › 剪贴板 | 负责人 | “剪贴板历史记录”“跨设备共享”都关 |
@@ -59,10 +58,11 @@ VITE_PUBLIC_VAPID_KEY=<VAPID 公钥>
 VITE_PUBLIC_TURNSTILE_SITE_KEY=<Turnstile 站点密钥（Site Key，公开的那个，不是 Secret Key）>
 ```
 
-**令牌怎么从 iPhone 到电脑上（待负责人选）**：R-206 写的是“从 iPhone‘密码’App 粘贴”，但 iPhone 上复制的内容到 Windows 要经过某个通道，三种都有代价，请负责人选一种（运维建议 ①）：
-1. 在电脑上照着 iPhone 一个字一个字敲：最干净，但 Supabase 令牌有 40 多位，容易敲错（敲错脚本会报“不像 Supabase 令牌”或部署失败，不会泄露）；
-2. Windows 版“iCloud 密码”App：在电脑上登录 Apple 账号后能直接复制，但等于把整个钥匙串放到了开发电脑上；
-3. 手机连接（Phone Link）的剪贴板同步：会经过微软的云和剪贴板历史，**不建议**。
+**发布当天临时生成（R-220，取代原来“令牌怎么从 iPhone 到电脑上”的待选项）**：正式令牌不长期保存，每次发布前在这台电脑的浏览器里当场生成，复制后直接粘贴进脚本，不经过手机：
+1. 正式 Supabase 令牌：Supabase › Account › Access Tokens › 生成新令牌（不要选 legacy），资源范围只勾正式项目，权限照[环境清单](环境清单-v4.md)第四节，**到期 1 天**；
+2. 正式数据库密码：正式项目 › Project Settings › Database › 重设数据库密码（Reset database password），生成一个新的；
+3. 正式 Cloudflare 令牌：Cloudflare › 我的个人资料 › API 令牌 › 创建自定义令牌，权限照环境清单第四节（Pages: Edit ＋ Workers Scripts: Edit），TTL 结束日期选**明天**；
+4. 发布完（不论成功失败）：回到这两页把两把令牌删掉（数据库密码不用再改，下次发布再重设）。
 
 ## 四、每次发布（约 15～20 分钟）
 
@@ -89,7 +89,7 @@ VITE_PUBLIC_TURNSTILE_SITE_KEY=<Turnstile 站点密钥（Site Key，公开的那
    - 输入 Cloudflare Account ID（不是密钥）；
    - 核对项目名并输入它；看迁移演练、输入“确认推送”；
    - 自动部署函数和网页，最后核对 `https://lemomemo.com/app/version.json`。
-5. 看到“完成”以后关掉这个 PowerShell 窗口。
+5. 看到“完成”以后关掉这个 PowerShell 窗口，**马上删掉这次临时生成的两把令牌**（第三节末尾第 4 条）。
 6. 在聊天里告诉主持人“发布完成”和屏幕上的产物指纹（指纹不是密钥），主持人记进[发布记录](发布记录.md)。
 
 只想查一下能不能发：`-CheckOnly`，只做第 1 步检查。
@@ -98,7 +98,7 @@ VITE_PUBLIC_TURNSTILE_SITE_KEY=<Turnstile 站点密钥（Site Key，公开的那
 
 - 任何一步不过，脚本会写“发布停止：……”并退出；令牌、剪贴板、临时文件照样清掉。把这一行原话发给主持人（**不要截令牌所在的窗口以外的东西，也不要把令牌发出来**）。
 - 迁移推了一半、网页没上：按[上线与回滚手册](上线与回滚手册-v4.md)第四节处理。回滚要用正式令牌的那几步，同样由你本人在自己的窗口里执行（人员名单第七节第 5 条）。
-- 怀疑令牌泄露：立刻在 Supabase › Account › Access Tokens、Cloudflare › My Profile › API Tokens 里删掉那一把，重新生成存进“密码”App。
+- 怀疑令牌泄露：立刻在 Supabase › Account › Access Tokens、Cloudflare › My Profile › API Tokens 里删掉那一把；下次发布照常当场重新生成（R-220，不另存）。
 
 ## 六、这个脚本还没做的（照实写）
 

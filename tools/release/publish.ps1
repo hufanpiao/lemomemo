@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   GitHub 免费版私有仓库不能设“必须由负责人批准才发布”，所以正式环境的令牌不放 GitHub，
-  正式发布由负责人本机运行本脚本，令牌每次从 iPhone“密码”App 粘贴（R-206）。
+  正式发布由负责人本机运行本脚本，令牌每次发布前在网页上临时生成（建议 1 天到期）、粘贴进来，发完删掉（R-206、R-220：令牌不另存）。
 
   做的事（按顺序，任何一步不过就停）：
     1. 发布前检查：tag 格式、在 main 上、是带说明的 tag、当前检出的就是这个 tag、工作区干净、VERSION 一致、
@@ -108,7 +108,7 @@ function Clear-Clip {
 function Read-Secret([string]$label, [string]$where) {
     Say ''
     Say "请粘贴：$label"
-    Say "  （在 iPhone“密码”App 里找“$where”。屏幕上不显示，粘贴后按回车。）"
+    Say "  （粘贴刚为这次发布临时生成的：$where。屏幕上不显示，粘贴后按回车。）"
     $script:TokensRead = $true
     $sec = Read-Host -AsSecureString '  粘贴到这里'
     Clear-Clip
@@ -356,12 +356,12 @@ function Invoke-Deploy($info) {
     $ref = $ref.Trim()
     if ($ref -notmatch '^[a-z]{20}$') { Fail 'Project ref 的格式不对' }
 
-    $sb = Read-Secret '正式 Supabase 令牌（只管正式项目的那把）' '柠檬记 Supabase 正式令牌'
+    $sb = Read-Secret '正式 Supabase 令牌（只管正式项目的那把）' 'Supabase › Account › Access Tokens 里新建的正式项目级令牌（1 天到期，发完删掉）'
     Set-SecretEnv 'SUPABASE_ACCESS_TOKEN' $sb
     if (-not $env:SUPABASE_ACCESS_TOKEN.StartsWith('sbp_')) { Fail '这不像 Supabase 令牌（应以 sbp_ 开头）' }
-    $db = Read-Secret '正式数据库密码' '柠檬记 Supabase 正式数据库密码'
+    $db = Read-Secret '正式数据库密码' '正式项目 › Project Settings › Database 里重设的新密码'
     Set-SecretEnv 'SUPABASE_DB_PASSWORD' $db
-    $cf = Read-Secret '正式 Cloudflare 令牌（Pages 编辑）' '柠檬记 Cloudflare 正式令牌'
+    $cf = Read-Secret '正式 Cloudflare 令牌（Pages 编辑）' 'Cloudflare › 我的个人资料 › API 令牌里新建的正式令牌（1 天到期，发完删掉）'
     Set-SecretEnv 'CLOUDFLARE_API_TOKEN' $cf
     $sb.Dispose(); $db.Dispose(); $cf.Dispose()
 

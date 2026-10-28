@@ -12,12 +12,13 @@
        （和 set-r2-tokens.ps1、publish.ps1 同一段检查，逐字相同）；
     2. 在本机内存里生成 32 字节随机值（.NET RandomNumberGenerator），写成 64 位小写十六进制；
     3. 在屏幕上显示一次，同时显示它的 SHA-256（不是密钥，用来核对 Supabase 页面上的 Digest）；
-       你照负责人B0网页操作清单第 ⑧ 节：存进 iPhone“密码”App → 粘贴进 Cloudflare Pages（加密变量）→ 粘贴进 Supabase（函数 secret）；
+       你照负责人B0网页操作清单第 ⑧ 节：粘贴进 Cloudflare Pages（加密变量）→ 粘贴进 Supabase（函数 secret）；
+       不用另存（R-220），丢了重新运行本脚本；
     4. 你按回车以后：清屏（含滚动记录）、清剪贴板、清掉内存里的值。
 
   不写任何文件、不进命令行参数、不交给任何 cmdlet（只用 .NET 的 [Console]::WriteLine 显示，模块日志记不到），
   所以不会留在 PowerShell 历史、transcript 或事件日志里。脚本本身不联网、不登录任何账号。
-  中途出错或关了窗口：重新运行一次，生成一把新的，三个地方都换成新值（旧值作废即可，它不加密任何数据）。
+  中途出错或关了窗口：重新运行一次，生成一把新的，两个地方都换成新值（旧值作废即可，它不加密任何数据）。
 
 .PARAMETER Target
   preview（预览：Pages 项目 lemomemo-preview、Supabase 项目 lemomemo-preview）
@@ -149,14 +150,13 @@ try {
     Say ''
     Say "  SHA-256（不是密钥，用来核对 Supabase 页面上的 Digest）：$digest"
     Say ''
-    Say '  照负责人B0网页操作清单第 ⑧ 节做，三处要一模一样：'
-    Say "    1. iPhone“密码”App 新建一条，名字“$entry”，照着上面的值敲进去（或用你选定的办法），核对一遍；"
-    Say "    2. Cloudflare › Workers & Pages › $pages › 设置 › 变量和机密 › Production：PROXY_SECRET，类型选“密钥 / Secret”（加密），粘贴；"
-    Say "    3. Supabase › $supa › Edge Functions › Secrets：Name 填 PROXY_SECRET，Value 粘贴，保存。"
+    Say '  照负责人B0网页操作清单第 ⑧ 节做，两处要一模一样（不用另存，丢了重新运行本脚本，R-220）：'
+    Say "    1. Cloudflare › Workers & Pages › $pages › 设置 › 变量和机密 › Production：PROXY_SECRET，类型选“密钥 / Secret”（加密），粘贴；"
+    Say "    2. Supabase › $supa › Edge Functions › Secrets：Name 填 PROXY_SECRET，Value 粘贴，保存。"
     Say '  复制方法：用鼠标选中上面那一行的值（不要带前后的空格），按回车或右键复制。'
     Say '  不要截图、不要发给 Claude 或任何人。'
     Say ''
-    $null = Read-Host '  三处都做好了按回车（会清屏、清剪贴板）'
+    $null = Read-Host '  两处都做好了按回车（会清屏、清剪贴板）'
 }
 finally {
     if ($null -ne $bytes) { [Array]::Clear($bytes, 0, $bytes.Length) }
