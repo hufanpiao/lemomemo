@@ -23,7 +23,7 @@ export const sampleCore: Manifest = {
     { name: 'pending_signups', schema: 'private', sync: false, userLookup: { by: 'emailHash', col: 'email_hash' } },
     { name: 'tombstones', schema: 'public', sync: 'tombstone', userLookup: { by: 'column', col: 'user_id' } },
   ],
-  buckets: [{ name: 'backups', userLookup: { by: 'pathPattern', segment: 2 } }],
+  buckets: [{ name: 'backups', userLookup: { by: 'pathPattern', level: 2 } }],
   localStores: [{ name: 'meta', rebuildable: false }, { name: 'outbox', rebuildable: false }],
 };
 
@@ -52,8 +52,8 @@ export const sampleNotes: Manifest = {
       name: 'images',
       pathPrefix: '<user_id>/',
       pathPattern: '^[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f-]{36}(\\.t)?\\.webp$',
-      orphanSweep: { olderThan: '24 hours', table: 'public.note_images', col: 'path' },
-      userLookup: { by: 'pathPattern' },
+      orphanSweep: { after: '24 hours', table: 'public.note_images', col: 'path' },
+      userLookup: { by: 'pathPattern', level: 1 },
     },
   ],
 };
@@ -63,7 +63,7 @@ export const sampleAnniv: Manifest = {
   owner: 'anniv',
   tables: [],
   // 纪念日头像在 images 桶里，由 anniv 登记自己那一段（3.5 “一条原则”）
-  buckets: [{ name: 'images', pathPrefix: '<user_id>/anniv/', userLookup: { by: 'pathPattern' } }],
+  buckets: [{ name: 'images', pathPrefix: '<user_id>/anniv/', userLookup: { by: 'pathPattern', level: 1 } }],
 };
 
 export const sampleVault: Manifest = {

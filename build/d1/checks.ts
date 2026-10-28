@@ -4,9 +4,9 @@
 import type { Manifest, ManifestTable } from '../../shared/schema/manifest.ts';
 import { COLUMN_GRANTS, FUNCTION_EXEC, PUBLIC_RPCS, REQUIRED_CONSTRAINTS, TABLE_GRANTS } from './whitelist.ts';
 
-// deno-lint-ignore no-explicit-any
-export type Row = Record<string, any>;
-export type Query = (sql: string, params?: unknown[]) => Promise<Row[]>;
+export type Row = Record<string, unknown>;
+/** 查询函数：T 是这条 SQL 结果行的形状（调用处按 select 的列写明；数据库给的值不做运行时校验） */
+export type Query = <T extends object = Row>(sql: string, params?: unknown[]) => Promise<T[]>;
 
 const key = (schema: string, name: string) => `${schema}.${name}`;
 const sorted = (a: Iterable<string>) => [...new Set(a)].sort();
@@ -30,7 +30,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     if (owner.has(k)) bad(`表 ${k} 被 ${owner.get(k)} 和 ${m.feature} 两份清单登记`);
     owner.set(k, m.feature); tables.push(t);
   }
-  const dbTables = (await q(`select n.nspname as s, c.relname as t, c.relrowsecurity as rls from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  const dbTables = (await q<{ s: string; t: string; rls: boolean }>(`select n.nspname as s, c.relname as t, c.relrowsecurity as rls from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where c.relkind in ('r', 'p') and n.nspname in ('public', 'private')`));
   const dbSet = new Set(dbTables.map((r) => key(r.s, r.t)));
   for (const k of dbSet) if (!owner.has(k)) bad(`数据库有表 ${k}，没登记进任何清单`);
@@ -39,11 +39,11 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   const has = (t: ManifestTable) => dbSet.has(key(t.schema, t.name));
 
   // 列
-  const colRows = await q(`select table_schema as s, table_name as t, column_name as c from information_schema.columns where table_schema in ('public', 'private')`);
-  const colsOf = (s: string, t: string) => colRows.filter((r) => r.s === s && r.t === t).map((r) => r.c as string);
+  const colRows = await q<{ s: string; t: string; c: string }>(`select table_schema as s, table_name as t, column_name as c from information_schema.columns where table_schema in ('public', 'private')`);
+  const colsOf = (s: string, t: string) => colRows.filter((r) => r.s === s && r.t === t).map((r) => r.c);
 
   // ---------- 2. 桶 ----------
-  const dbBuckets = await q(`select id, public, file_size_limit, allowed_mime_types from storage.buckets`);
+  const dbBuckets = await q<{ id: string; public: boolean; file_size_limit: number | string | null; allowed_mime_types: string[] | null }>(`select id, public, file_size_limit, allowed_mime_types from storage.buckets`);
   const bucketOwner = new Map<string, string>();
   for (const m of manifests) for (const b of m.buckets) if (b.limits) {
     if (bucketOwner.has(b.name)) bad(`桶 ${b.name} 有两个主人：${bucketOwner.get(b.name)}、${m.feature}`);
@@ -57,23 +57,23 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   for (const d of dbBuckets) if (!bucketOwner.has(d.id)) bad(`数据库有桶 ${d.id}，没登记进任何清单`);
   for (const m of manifests) for (const b of m.buckets) if (!b.limits && !bucketOwner.has(b.name)) bad(`${m.feature} 登记了桶 ${b.name} 的一段路径，但这个桶没有主人`);
   // 存储策略里的路径正则和清单的 pathPattern 一字不差（images、files 两个有客户端策略的桶）
-  const storagePolicies = (await q(`select coalesce(with_check, qual) as expr from pg_policies where schemaname = 'storage' and tablename = 'objects'`)).map((r) => String(r.expr));
+  const storagePolicies = (await q<{ expr: string | null }>(`select coalesce(with_check, qual) as expr from pg_policies where schemaname = 'storage' and tablename = 'objects'`)).map((r) => String(r.expr));
   for (const m of manifests) for (const b of m.buckets) if (b.name === 'images') {
     if (!storagePolicies.some((p) => p.includes(b.pathPattern))) bad(`images 桶的存储策略里找不到 ${m.feature} 的 pathPattern ${b.pathPattern}`);
   }
 
   // ---------- 3. Realtime ----------
-  const pub = (await q(`select schemaname as s, tablename as t from pg_publication_tables where pubname = 'supabase_realtime'`)).map((r) => key(r.s, r.t));
+  const pub = (await q<{ s: string; t: string }>(`select schemaname as s, tablename as t from pg_publication_tables where pubname = 'supabase_realtime'`)).map((r) => key(r.s, r.t));
   const wantPub = tables.filter((t) => t.realtime).map((t) => key(t.schema, t.name));
   if (!eq(pub, wantPub)) bad(`supabase_realtime 里的表：${diff(wantPub, pub)}`);
 
   // ---------- 4. 客户端授权：表级、列级 ----------
-  const tg = await q(`select table_schema as s, table_name as t, grantee as g, privilege_type as p from information_schema.role_table_grants
+  const tg = await q<{ s: string; t: string; g: string; p: string }>(`select table_schema as s, table_name as t, grantee as g, privilege_type as p from information_schema.role_table_grants
     where grantee in ('anon', 'authenticated', 'service_role', 'fn_vault', 'fn_ai')`);
-  const cg = await q(`select table_schema as s, table_name as t, column_name as c, grantee as g, privilege_type as p from information_schema.column_privileges
+  const cg = await q<{ s: string; t: string; c: string; g: string; p: string }>(`select table_schema as s, table_name as t, column_name as c, grantee as g, privilege_type as p from information_schema.column_privileges
     where grantee in ('anon', 'authenticated', 'fn_vault', 'fn_ai')`);
-  const tableLevel = (g: string, s: string, t: string) => tg.filter((r) => r.g === g && r.s === s && r.t === t).map((r) => r.p as string);
-  const colLevel = (g: string, s: string, t: string, p: string) => cg.filter((r) => r.g === g && r.s === s && r.t === t && r.p === p).map((r) => r.c as string);
+  const tableLevel = (g: string, s: string, t: string) => tg.filter((r) => r.g === g && r.s === s && r.t === t).map((r) => r.p);
+  const colLevel = (g: string, s: string, t: string, p: string) => cg.filter((r) => r.g === g && r.s === s && r.t === t && r.p === p).map((r) => r.c);
   for (const t of tables.filter((t) => t.schema === 'public' && has(t))) {
     const name = `public.${t.name}`;
     const wantTable = ['SELECT', ...(t.clientDelete ? ['DELETE'] : [])];
@@ -102,10 +102,10 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     if (!eq(haveCols, wantCols)) bad(`${role} 的列级授权和白名单不一致：${diff(wantCols, haveCols)}`);
   }
   // 函数角色：属性和成员关系（TC-B0-33、77、83）
-  const roles = await q(`select rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolbypassrls from pg_roles where rolname in ('fn_vault', 'fn_ai')`);
+  const roles = await q<{ rolname: string; rolsuper: boolean; rolinherit: boolean; rolcreaterole: boolean; rolcreatedb: boolean; rolbypassrls: boolean }>(`select rolname, rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolbypassrls from pg_roles where rolname in ('fn_vault', 'fn_ai')`);
   if (roles.length !== 2) bad('fn_vault、fn_ai 没建全');
   for (const r of roles) if (r.rolsuper || r.rolinherit || r.rolcreaterole || r.rolcreatedb || r.rolbypassrls) bad(`${r.rolname} 的角色属性不对（要 nosuperuser noinherit nocreaterole nocreatedb nobypassrls）`);
-  const members = await q(`select r.rolname as role, u.rolname as member from pg_auth_members m join pg_roles r on r.oid = m.roleid join pg_roles u on u.oid = m.member
+  const members = await q<{ role: string; member: string }>(`select r.rolname as role, u.rolname as member from pg_auth_members m join pg_roles r on r.oid = m.roleid join pg_roles u on u.oid = m.member
     where r.rolname in ('fn_vault', 'fn_ai') or u.rolname in ('fn_vault', 'fn_ai')`);
   for (const m of members) {
     // PG16：建角色的 postgres 自动成为带 ADMIN、不带 INHERIT 和 SET 的成员，D1 只放过这一条
@@ -114,7 +114,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   }
 
   // ---------- 6. 函数执行权、属主、public RPC ----------
-  const fns = await q(`select p.proname as f, pg_get_userbyid(p.proowner) as owner, p.prosecdef as definer,
+  const fns = await q<{ f: string; owner: string; definer: boolean; pub: boolean; anon: boolean; authenticated: boolean; service_role: boolean; fn_vault: boolean; fn_ai: boolean; s: string }>(`select p.proname as f, pg_get_userbyid(p.proowner) as owner, p.prosecdef as definer,
       p.proacl is null or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0 and a.privilege_type = 'EXECUTE') as pub,
       has_function_privilege('anon', p.oid, 'EXECUTE') as anon, has_function_privilege('authenticated', p.oid, 'EXECUTE') as authenticated,
       has_function_privilege('service_role', p.oid, 'EXECUTE') as service_role, has_function_privilege('fn_vault', p.oid, 'EXECUTE') as fn_vault,
@@ -136,7 +136,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     if (!f.authenticated) bad(`public.${f.f} 没给 authenticated 执行权`);
   }
   // 视图：public 一律 security_invoker；private（扫描视图）一律 security_barrier
-  const views = await q(`select n.nspname as s, c.relname as v, coalesce(array_to_string(c.reloptions, ','), '') as opts
+  const views = await q<{ s: string; v: string; opts: string }>(`select n.nspname as s, c.relname as v, coalesce(array_to_string(c.reloptions, ','), '') as opts
     from pg_class c join pg_namespace n on n.oid = c.relnamespace where c.relkind = 'v' and n.nspname in ('public', 'private')`);
   for (const v of views) {
     if (v.s === 'public' && !v.opts.includes('security_invoker=true')) bad(`public.${v.v} 没设 security_invoker`);
@@ -144,8 +144,8 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   }
 
   // ---------- 7. 同步表：synced_at 和索引；软删除；触发器 ----------
-  const idx = await q(`select tablename as t, indexdef as d from pg_indexes where schemaname = 'public'`);
-  const trig = await q(`select n.nspname as s, c.relname as t, p.proname as f, t.tgname as name,
+  const idx = await q<{ t: string; d: string }>(`select tablename as t, indexdef as d from pg_indexes where schemaname = 'public'`);
+  const trig = await q<{ s: string; t: string; f: string; name: string; cols: string[] }>(`select n.nspname as s, c.relname as t, p.proname as f, t.tgname as name,
       array(select a.attname::text from unnest(t.tgattr::int2[]) k join pg_attribute a on a.attrelid = t.tgrelid and a.attnum = k) as cols
     from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace join pg_proc p on p.oid = t.tgfoid
     where not t.tgisinternal and n.nspname in ('public', 'private')`);
@@ -166,7 +166,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   if (!eq(trigTables('row_quota'), quotaWant)) bad(`row_quota() 挂的表：${diff(quotaWant, trigTables('row_quota'))}`);
 
   // ---------- 8. table_meta 和清单的 systemCols、noConflict ----------
-  const meta = await q(`select tbl, system_cols, no_conflict from private.table_meta`);
+  const meta = await q<{ tbl: string; system_cols: string[]; no_conflict: string[] }>(`select tbl, system_cols, no_conflict from private.table_meta`);
   for (const t of tables.filter((t) => t.systemCols)) {
     const m = meta.find((r) => r.tbl === t.name);
     if (!m) { bad(`${t.name} 挂了 touch()，private.table_meta 里没有它的行`); continue; }
@@ -188,11 +188,11 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   // ---------- 10. recordKinds（0.27 第 2 点） ----------
   const kinds = manifests.flatMap((m) => m.recordKinds);
   const vecKinds = kinds.filter((k) => k.vector).map((k) => k.kind);
-  const cons = await q(`select n.nspname as s, c.relname as t, pg_get_constraintdef(k.oid) as d from pg_constraint k
+  const cons = await q<{ s: string; t: string; d: string }>(`select n.nspname as s, c.relname as t, pg_get_constraintdef(k.oid) as d from pg_constraint k
     join pg_class c on c.oid = k.conrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname in ('public', 'private')`);
   for (const t of ['note_vectors', 'embed_queue']) {
     const d = cons.find((r) => r.s === 'private' && r.t === t && /^CHECK \(\(kind = ANY/.test(r.d));
-    const inDb = d ? [...String(d.d).matchAll(/'([a-z]+)'::text/g)].map((x) => x[1]) : [];
+    const inDb = d ? [...String(d.d).matchAll(/'([a-z]+)'::text/g)].map((x) => x[1] ?? '') : [];
     if (!eq(inDb, vecKinds)) bad(`private.${t} 的 kind 约束和带 vector 的 recordKinds 不一致：${diff(vecKinds, inDb)}`);
   }
   for (const k of kinds.filter((k) => k.vector)) {
@@ -210,7 +210,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     else if (!eq(r.cols, cs)) bad(`${t} 的 enqueue_embed() 触发列和 ai.vectors 不一致：${diff(cs, r.cols)}`);
   }
   for (const r of embedTrig) if (!vectors[r.t] && !extra.includes(key(r.s, r.t))) bad(`enqueue_embed() 挂在 ${key(r.s, r.t)} 上，清单没登记`);
-  const featDefault = (await q(`select pg_get_expr(d.adbin, d.adrelid) as e from pg_attrdef d join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
+  const featDefault = (await q<{ e: string | null }>(`select pg_get_expr(d.adbin, d.adrelid) as e from pg_attrdef d join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
     where d.adrelid = 'public.app_config'::regclass and a.attname = 'features'`))[0]?.e ?? '';
   const featKeys = Object.keys(JSON.parse((/'(.*)'::jsonb/s.exec(featDefault) ?? ['', '{}'])[1]));
   for (const f of new Set(kinds.map((k) => k.flag))) if (!featKeys.includes(f)) bad(`开关 ${f} 不在 app_config.features 的默认值里`);
@@ -222,7 +222,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   }
 
   // ---------- 12. cron：动用户表的命令一律带超时（0.29 续第 141 条） ----------
-  const jobs = await q(`select jobname, command from cron.job`);
+  const jobs = await q<{ jobname: string; command: string }>(`select jobname, command from cron.job`);
   for (const j of jobs) if (/\bprivate\.\w+_batch\(|\b(update|delete)\s+(from\s+)?public\./i.test(j.command) && !/^set statement_timeout = '4min';/.test(j.command)) {
     bad(`cron 任务 ${j.jobname} 动用户表，却不以 set statement_timeout 开头`);
   }

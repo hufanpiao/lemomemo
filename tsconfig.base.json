@@ -1,5 +1,5 @@
 {
-  // 三份 tsconfig 共用的严格选项（架构 2.3 T1）
+  // 各份 tsconfig 共用的严格选项（架构 2.3 T1）
   "compilerOptions": {
     "target": "ES2023",
     "module": "ESNext",
@@ -14,6 +14,8 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
+    // 只用可擦除的语法：shared 要给 Deno、Node（直接跑 .ts）用（前端 B、后端原先各自的 tsconfig 都开着，B0 集成并到这里）
+    "erasableSyntaxOnly": true,
     // shared 要给 Deno 用，import 写全 .ts 后缀（架构 2.5）
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,

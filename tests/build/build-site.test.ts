@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-// @ts-expect-error 构建脚本是 .mjs，没有类型声明
 import { checkSite } from '../../build/build_site.mjs';
 
 const check = checkSite as (dir?: string) => Promise<string[]>;

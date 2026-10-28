@@ -39,7 +39,10 @@ for (const s of ['public', 'private']) {
   out.push(`  ${s}: {`);
   for (const kind of [['Tables', 'r'], ['Views', 'v']]) {
     out.push(`    ${kind[0]}: {`);
-    for (const r of rels.filter((r) => r.s === s && r.k === kind[1])) {
+    const list = rels.filter((r) => r.s === s && r.k === kind[1]);
+    // 空的一节写成 supabase gen types 的样子（{ [_ in never]: never }），不写 {}（ESLint no-empty-object-type，B0 集成）
+    if (list.length === 0) out.push('      [_ in never]: never;');
+    for (const r of list) {
       const cs = cols.filter((c) => c.table_schema === s && c.table_name === r.t);
       out.push(`      ${r.t}: {`);
       out.push(`        Row: { ${cs.map((c) => `${c.column_name}: ${tsType(c)}${c.is_nullable === 'YES' ? ' | null' : ''}`).join('; ')} };`);
@@ -48,19 +51,29 @@ for (const s of ['public', 'private']) {
         out.push(`        Insert: { ${cs.map((c) => `${c.column_name}${opt(c) ? '?' : ''}: ${tsType(c)}${c.is_nullable === 'YES' ? ' | null' : ''}`).join('; ')} };`);
         out.push(`        Update: { ${cs.map((c) => `${c.column_name}?: ${tsType(c)}${c.is_nullable === 'YES' ? ' | null' : ''}`).join('; ')} };`);
       }
+      // supabase-js 的 GenericTable / GenericView 要有 Relationships（和 supabase gen types 一样；外键关系离线不生成）
+      out.push('        Relationships: [];');
       out.push('      };');
     }
     out.push('    };');
   }
   out.push('    Functions: {');
   const pgTs = { text: 'string', uuid: 'string', jsonb: 'Json', boolean: 'boolean', integer: 'number', void: 'undefined' };
-  if (s === 'public') for (const f of fns) {
+  const fnList = s === 'public' ? fns : [];
+  if (fnList.length === 0) out.push('      [_ in never]: never;');
+  for (const f of fnList) {
     const args = f.args.split(',').map((a) => a.trim()).filter(Boolean).map((a) => {
       const m = /^(\w+) (\w+)( DEFAULT .*)?$/.exec(a);
       return m ? `${m[1]}${m[3] ? '?' : ''}: ${pgTs[m[2]] ?? 'unknown'}` : '';
     }).join('; ');
     out.push(`      ${f.f}: { Args: { ${args} }; Returns: ${pgTs[f.ret] ?? 'unknown'} };`);
   }
+  out.push('    };');
+  out.push('    Enums: {');
+  out.push('      [_ in never]: never;');
+  out.push('    };');
+  out.push('    CompositeTypes: {');
+  out.push('      [_ in never]: never;');
   out.push('    };');
   out.push('  };');
 }

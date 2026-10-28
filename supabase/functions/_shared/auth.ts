@@ -1,13 +1,14 @@
 // 带 JWT 的函数一律先过 requireActiveUser（第 6 节）；cron 按用户处理前用 isUsable（0.29 续第 138 条：只经 private.account_usable 判断）
 // admin = 用 service role 建的 supabase-js 客户端（绕过 RLS，所以这里必须自己查停用和会话）
-import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.49.4';
+// 部署时函数没有 import map，写全 npm: 版本（和 package.json 一致，tests/build/deno-config.test.ts 核对）
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 
 export type AuthCode = 'unauthorized' | 'account_disabled' | 'account_pending_deletion' | 'session_revoked' | 'try_later';
 
 export class AuthError extends Error {
   readonly code: AuthCode;
   readonly status: number;
-  readonly purgeAfter?: string;
+  readonly purgeAfter: string | undefined;
   constructor(code: AuthCode, status: number, purgeAfter?: string) {
     super(code);
     this.code = code;
@@ -20,7 +21,7 @@ export class AuthError extends Error {
   }
 }
 
-export type Usable = { ok: true } | { ok: false; code: 'account_disabled' | 'account_pending_deletion'; purgeAfter?: string };
+export type Usable = { ok: true } | { ok: false; code: 'account_disabled' | 'account_pending_deletion'; purgeAfter?: string | undefined };
 
 const RPC_TIMEOUT_MS = 2000;   // 0.29 续第 110 条：查会话超时或出错一律不放行
 
@@ -53,7 +54,9 @@ export async function isUsable(admin: SupabaseClient, userId: string): Promise<U
 /** JWT 的 payload（只在 getUser 验过以后读，不单独信任） */
 function claims(jwt: string): { sub?: string; session_id?: string } {
   try {
-    const b64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const part = jwt.split('.')[1];
+    if (!part) return {};
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
     return JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '=')));
   } catch {
     return {};
@@ -71,6 +74,7 @@ export async function requireActiveUser(req: Request, admin: SupabaseClient, opt
   const m = /^Bearer\s+(\S+)$/i.exec(req.headers.get('authorization') ?? '');
   if (!m) throw new AuthError('unauthorized', 401);
   const jwt = m[1];
+  if (!jwt) throw new AuthError('unauthorized', 401);
 
   const { data, error } = await timed(admin.auth.getUser(jwt));
   if (error && ((error as { status?: number }).status ?? 500) >= 500) throw new AuthError('try_later', 503);   // Auth 服务出错不算“没登录”

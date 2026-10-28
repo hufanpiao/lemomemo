@@ -242,6 +242,7 @@ export default tseslint.config(
       'desktop/**',
       'tests/arch-fixtures/**', // 违规样例：只在 tests/arch 里用虚拟路径过 ESLint
       'supabase/functions/_shared/gen/**',
+      '.compat-base/**', // 旧版契约测试临时取出的基线用例（tests/compat/run-compat.ts）
     ],
   },
   { linterOptions: { reportUnusedDisableDirectives: 'error' } },
@@ -404,6 +405,16 @@ export default tseslint.config(
     files: ['functions/**/*.ts', 'workers/**/*.ts'],
     plugins: { lemo },
     rules: { 'lemo/no-log-request': 'error' },
+  },
+  // 官网静态页的脚本（前端 B）：普通 <script>，浏览器环境（B0 集成补上，原先按 Node 模块报 document 未定义）
+  {
+    files: ['site/**/*.js'],
+    languageOptions: { sourceType: 'script', globals: { ...globals.browser } },
+  },
+  // 数据库测试的 Node 脚本（后端：离线 SQL 检查等）
+  {
+    files: ['supabase/tests/**/*.{js,mjs}'],
+    languageOptions: { globals: { ...globals.node } },
   },
   // 测试
   {

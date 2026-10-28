@@ -8,6 +8,10 @@ afterEach(() => {
 });
 
 describe('X-App-Version', () => {
+  it('头名和转发层、契约用例（tests/compat/headers.test.ts 写死的）一致', () => {
+    expect(APP_VERSION_HEADER).toBe('X-App-Version');
+  });
+
   it('withAppVersion：补上版本头，同名头以构建版本为准', () => {
     const h = withAppVersion({ 'X-App-Version': '0.0.1', 'Content-Type': 'application/json' }, '4.0.0');
     expect(h.get(APP_VERSION_HEADER)).toBe('4.0.0');

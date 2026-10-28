@@ -75,15 +75,13 @@ jobs:
           VITE_PUBLIC_ANON_KEY: ${{ vars.PREVIEW_SUPABASE_ANON_KEY }}
           VITE_PUBLIC_VAPID_KEY: ${{ vars.PREVIEW_VAPID_PUBLIC_KEY }}
           VITE_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.PREVIEW_TURNSTILE_SITE_KEY }}
-          # 带 -preview.N 的完整版本号；前端 A 的 vite.config 读它（没有就用 VERSION），合并时确认
+          # 带 -preview.N 的完整版本号；vite.config 和 app/version.json 都读它（build/assemble_web.mjs 的 buildVersion，B0 集成确认）
           LEMO_BUILD_VERSION: ${{ steps.ver.outputs.version }}
         run: npm run build -- --mode preview
 
       - name: 复制 shared 给服务器函数（架构 2.5）
-        run: |
-          rm -rf supabase/functions/_shared/gen
-          mkdir -p supabase/functions/_shared/gen
-          cp -R shared/. supabase/functions/_shared/gen/
+        # B0 集成：改用 build/copy_shared.mjs —— 'zod' 改写成 npm:zod@<版本>（函数部署时没有 import map），相对 import 必须带 .ts
+        run: npm run copy:shared
 
       - name: 产物指纹
         run: python3 -I build/ci/dist_hash.py dist/web | tee -a "$GITHUB_STEP_SUMMARY"

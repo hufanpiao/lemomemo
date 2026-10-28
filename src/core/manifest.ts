@@ -20,9 +20,17 @@ export function allTables(list: readonly Manifest[] = manifests): ManifestTable[
   return out;
 }
 
-/** 要同步到本机的表（sync: true），本机缓存按它建 store */
+/**
+ * 要同步到本机、按它建本机仓的表（sync: true）。
+ * sync: 'tombstone'（只有 tombstones）不算：不建本机仓，按 deleted_at 增量拉、只订阅 INSERT（数据字典 4.3b），见 tombstoneTables
+ */
 export function syncTables(list: readonly Manifest[] = manifests): ManifestTable[] {
-  return allTables(list).filter((t) => t.sync);
+  return allTables(list).filter((t) => t.sync === true);
+}
+
+/** 墓碑表（sync: 'tombstone'）：sync 按它拉“别处已删除”的记录，再删本机仓里对应的行 */
+export function tombstoneTables(list: readonly Manifest[] = manifests): ManifestTable[] {
+  return allTables(list).filter((t) => t.sync === 'tombstone');
 }
 
 /** 某张表的客户端可写列；没登记的表返回 null（outbox 拒收） */

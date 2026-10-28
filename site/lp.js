@@ -5,7 +5,7 @@
   try {
     var key = 'sb-' + location.hostname.split('.')[0] + '-auth-token';
     if (localStorage.getItem(key)) location.replace('/app/');
-  } catch (e) {
+  } catch {
     // 读不了 localStorage（隐私模式等）就留在首页
   }
 })();

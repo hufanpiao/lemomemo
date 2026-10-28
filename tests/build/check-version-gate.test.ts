@@ -3,7 +3,6 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-// @ts-expect-error 构建脚本是 .mjs，没有类型声明
 import { checkExemptFunctions } from '../../build/check_version_gate.mjs';
 
 type Check = (exempt: readonly { name: string; methods: readonly string[] }[], dir: string) => string[];

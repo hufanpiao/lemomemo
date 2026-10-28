@@ -70,6 +70,8 @@ jobs:
           done
           npm run build -- --mode production
           node build/check_size.mjs
+          # 构建以后 A14 连 dist/web 一起扫
+          python3 -I build/check_arch.py
 
       - name: 发布包里不能有 source map（上线与回滚手册 第二节）
         run: |

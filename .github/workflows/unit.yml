@@ -72,11 +72,20 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: 构建（preview 模式，不带任何环境的真实地址）
+      - name: 离线数据库检查（PGlite：7 个迁移、RLS、D1 和违规样例、兼容样例、requireActiveUser；不要 Docker，真库在 ci.yml）
+        run: npm run test:db:offline
+
+      - name: 官网检查（首页不出现 supabase、页面成对、CSP 和 Functions 一致）
+        run: npm run check:site
+
+      - name: 构建（preview 模式，不带任何环境的真实地址；含官网和拼好的 _headers）
         run: npm run build -- --mode preview
 
       - name: 体积预算（架构 2.6）
         run: node build/check_size.mjs
+
+      - name: check_arch 再跑一次（构建以后，A14 连 dist/web 一起扫）
+        run: python -I build/check_arch.py
 
       - name: 文件登记册
         run: python -I build/check_registry.py
@@ -88,15 +97,8 @@ jobs:
         run: python -I build/tokens.py --check
 
       - name: 免查名单和 supabase/functions/ 对照（前端 B 的脚本，架构 0.27 第 1 点）
-        # 等前端 B 合并：脚本合进来以前只出警告，合进来以后失败就是失败。
-        # 文件名以前端 B 合并时为准，合并时由主持人把下面的路径改对，并删掉“还没合并”这一支。
-        run: |
-          script=build/check_version_gate.mjs
-          if [ -f "$script" ]; then
-            node "$script"
-          else
-            echo "::warning::$script 还没合并（等前端 B），本次没有核对免查名单"
-          fi
+        # B0 集成：前端 B 已合并，脚本名 build/check_version_gate.mjs，npm 脚本 check:gate
+        run: npm run check:gate
 
   secrets-scan:
     name: 密钥扫描（gitleaks，CI 第二道）

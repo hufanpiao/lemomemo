@@ -1,6 +1,7 @@
 // 数据清单的类型（架构 3.5；0.23 vaultRows、userLookup；0.27 recordKinds、systemCols、noConflict、rebuildable）
 // 每个功能一份 shared/manifests/<功能>.ts；D1（build/d1/）在 db reset 后拿它和数据库逐项比对
 // 纯 TS + zod，前端、Edge Functions（Deno）、Node 脚本共用：只用可擦除的语法，import 带 .ts 后缀
+// 校验失败的 message 写成英文错误码（A20：shared 的字符串里不放汉字，B0 集成改），中文说明写在行尾注释
 import { z } from 'zod';
 
 const col = z.string().regex(/^[a-z_][a-z0-9_]*$/);
@@ -55,12 +56,12 @@ export const tableSchema = z.object({
   noConflict: cols.optional(),
   /** 本机库迁移出错时能不能清空重拉 */
   rebuildable: z.boolean().default(true),
-}).refine((t) => (t.userLookup === undefined) !== (t.noUserData === undefined), { message: 'userLookup 和 noUserData 必须二选一' })
-  .refine((t) => (t.systemCols === undefined) === (t.noConflict === undefined), { message: 'systemCols、noConflict 要么都写（挂 touch() 的表），要么都不写' })
-  .refine((t) => !t.systemCols || t.systemCols.every((c) => !t.clientWritable.includes(c)), { message: 'systemCols 和 clientWritable 不能重叠' })
-  .refine((t) => !t.noConflict || t.noConflict.every((c) => t.clientWritable.includes(c)), { message: 'noConflict 只放客户端可写列' })
+}).refine((t) => (t.userLookup === undefined) !== (t.noUserData === undefined), { message: 'manifest_user_lookup_xor_no_user_data' })   // userLookup 和 noUserData 必须二选一
+  .refine((t) => (t.systemCols === undefined) === (t.noConflict === undefined), { message: 'manifest_system_cols_with_no_conflict' })   // systemCols、noConflict 要么都写（挂 touch() 的表），要么都不写
+  .refine((t) => !t.systemCols || t.systemCols.every((c) => !t.clientWritable.includes(c)), { message: 'manifest_system_cols_overlap_writable' })   // systemCols 和 clientWritable 不能重叠
+  .refine((t) => !t.noConflict || t.noConflict.every((c) => t.clientWritable.includes(c)), { message: 'manifest_no_conflict_not_writable' })   // noConflict 只放客户端可写列
   .refine((t) => !t.vaultRows || !t.systemCols || t.systemCols.every((c) => !t.vaultRows!.cipherCols.includes(c) && !t.vaultRows!.flag.includes(c)),
-    { message: 'systemCols 不能含 vaultRows 的 flag 列和 cipherCols' });
+    { message: 'manifest_system_cols_in_vault_rows' });   // systemCols 不能含 vaultRows 的 flag 列和 cipherCols
 export type ManifestTable = z.infer<typeof tableSchema>;
 /** 清单作者写的表（带默认值的字段可以省） */
 export type ManifestTableInput = z.input<typeof tableSchema>;
@@ -79,7 +80,7 @@ export const bucketSchema = z.object({
   maxLifetime: z.string().optional(),
   userLookup: userLookupSchema.optional(),
   noUserData: z.literal(true).optional(),
-}).refine((b) => (b.userLookup === undefined) !== (b.noUserData === undefined), { message: 'userLookup 和 noUserData 必须二选一' });
+}).refine((b) => (b.userLookup === undefined) !== (b.noUserData === undefined), { message: 'manifest_user_lookup_xor_no_user_data' });   // 二选一
 export type ManifestBucket = z.infer<typeof bucketSchema>;
 
 /** 记录类型（0.27 第 2 点；按 0.27② 的字段写，systemCols、noConflict 挂在表上，见数据字典 P-01） */
