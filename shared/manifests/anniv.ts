@@ -19,7 +19,8 @@ export const anniv = defineManifest({
       orphanSweep: { after: '24 hours', table: 'anniversaries', col: 'avatar_id' }, userLookup: { by: 'pathPattern', level: 1 } },
   ],
   recordKinds: [
-    { kind: 'anniv', table: 'anniversaries', flag: 'anniv', ai: { parse: true, intent: true }, plusResult: true, vector: null },
+    // 架构 0.31 第 16 条：AI 能把“妈妈生日 3 月 5 日”记成纪念日（parse），但纪念日不进“＋”的查找和总结（intent、plusResult 都是 false），也没有向量
+    { kind: 'anniv', table: 'anniversaries', flag: 'anniv', ai: { parse: true, intent: false }, plusResult: false, vector: null },
   ],
   settingsKeys: ['anniv.*'],
   usageReport: { rows: true, buckets: false },

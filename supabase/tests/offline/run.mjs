@@ -8,7 +8,6 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../..');
 const migDir = join(root, 'supabase/migrations');
@@ -48,6 +47,15 @@ async function runTap(db, file) {
   const lines = res.flatMap((r) => r.rows.flatMap((row) => Object.values(row))).filter((v) => typeof v === 'string');
   const errors = lines.filter((l) => l.startsWith('not ok') || l.startsWith('# Looks like'));
   return { lines, errors };
+}
+
+// 0) supabase test db 只能跑 supabase/tests/rls（0.31 第 22 条）：CLI 用 pg_prove --ext .sql -r 递归跑给它的目录，
+//    不给路径就是整个 supabase/tests，会把 d1-fixtures、compat 的样例和本目录的桩当测试执行（还会改本地库）。
+//    所以 package.json 的 test:db 必须写明路径；CI 跑的就是 npm run test:db
+{
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  if (!/\bsupabase test db supabase\/tests\/rls(\s|&|$)/.test(pkg.scripts?.['test:db'] ?? '')) fail('package.json 的 test:db 没把 supabase test db 限定在 supabase/tests/rls');
+  else log('✔ test:db 只让 supabase test db 跑 supabase/tests/rls');
 }
 
 // 1) 迁移

@@ -5,7 +5,7 @@ create table public.categories (
   id uuid primary key,
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
   rev int not null default 1, fv jsonb not null default '{}', deleted_at bigint,
-  undone boolean not null default false, synced_at timestamptz not null default now(), legacy_id text,
+  undone boolean not null default false, synced_at timestamptz not null default now(),
   name text not null check (char_length(name) between 1 and 12),
   color text, sort int not null default 0,
   created_by text not null default 'user' check (created_by in ('ai','user')), merged_into uuid);
@@ -33,7 +33,7 @@ create table public.notes (
   id uuid primary key,
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
   rev int not null default 1, fv jsonb not null default '{}', deleted_at bigint,
-  undone boolean not null default false, synced_at timestamptz not null default now(), legacy_id text,
+  undone boolean not null default false, synced_at timestamptz not null default now(),
   title text check (char_length(title) <= 160), body text check (char_length(body) <= 20000),
   is_private boolean not null default false, body_enc bytea, enc_key_id smallint,
   category_id uuid, category_source text not null default 'none',
@@ -75,7 +75,7 @@ create table public.note_images (
   id uuid primary key,
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
   rev int not null default 1, fv jsonb not null default '{}', deleted_at bigint,
-  undone boolean not null default false, synced_at timestamptz not null default now(), legacy_id text,
+  undone boolean not null default false, synced_at timestamptz not null default now(),
   note_id uuid not null,
   foreign key (note_id, user_id) references public.notes (id, user_id) on delete cascade,   -- 不能挂到别人的随手记上（安全审查低 3）
   bucket text not null check (bucket in ('images','vault-images')), path text not null unique,

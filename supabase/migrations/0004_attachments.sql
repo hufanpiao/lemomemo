@@ -4,7 +4,7 @@ create table public.note_files (
   id uuid primary key,
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
   rev int not null default 1, fv jsonb not null default '{}', deleted_at bigint,
-  undone boolean not null default false, synced_at timestamptz not null default now(), legacy_id text,
+  undone boolean not null default false, synced_at timestamptz not null default now(),
   note_id uuid not null,
   foreign key (note_id, user_id) references public.notes (id, user_id) on delete cascade,
   kind text not null check (kind in ('pdf','docx','xlsx','pptx','docm','xlsm','pptm','doc','xls','ppt')),   -- R-114 D-4

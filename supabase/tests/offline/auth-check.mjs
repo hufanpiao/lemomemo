@@ -30,6 +30,9 @@ export async function checkAuth() {
   await expect('没带 JWT', requireActiveUser(req(null), fake(good)), 'unauthorized');
   await expect('JWT 无效', requireActiveUser(req(tok), fake({ ...good, user: { data: { user: null }, error: { status: 401 } } })), 'unauthorized');
   await expect('Auth 服务出错', requireActiveUser(req(tok), fake({ ...good, user: { data: { user: null }, error: { status: 502 } } })), 'try_later');
+  // supabase-js 2.118：fetch 失败报 AuthRetryableFetchError、status 0（B0 集成升版后复查补的两条）
+  await expect('Auth 连不上（status 0）', requireActiveUser(req(tok), fake({ ...good, user: { data: { user: null }, error: { name: 'AuthRetryableFetchError', status: 0 } } })), 'try_later');
+  await expect('Auth 限流（429）', requireActiveUser(req(tok), fake({ ...good, user: { data: { user: null }, error: { status: 429 } } })), 'try_later');
   await expect('JWT 没有 session_id', requireActiveUser(req(jwtOf({ sub: A })), fake(good)), 'unauthorized');
   const off = (reason, pd) => fake({ rpc: { ...good.rpc, account_usable: { data: false, error: null } },
     tables: { profiles: { data: reason ? { disabled_reason: reason } : null, error: null }, pending_deletions: { data: pd, error: null } } });
@@ -45,5 +48,5 @@ export async function checkAuth() {
     const u = await isUsable(off('deletion', { purge_after: 'P' }), A);
     if (u.ok || u.code !== 'account_pending_deletion' || u.purgeAfter !== 'P') fails.push('isUsable 冷静期：没带 purge_after');
   } catch (e) { fails.push(`isUsable 冷静期：${e.message}`); }
-  return { n: 14, fails };
+  return { n: 16, fails };
 }

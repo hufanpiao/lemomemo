@@ -4,7 +4,7 @@ create table public.anniversaries (
   id uuid primary key,
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
   rev int not null default 1, fv jsonb not null default '{}', deleted_at bigint,
-  undone boolean not null default false, synced_at timestamptz not null default now(), legacy_id text,
+  undone boolean not null default false, synced_at timestamptz not null default now(),
   kind text not null check (kind in ('birthday','anniversary','countdown')),
   name text not null check (char_length(name) between 1 and 60),
   calendar text not null check (calendar in ('solar','lunar')),

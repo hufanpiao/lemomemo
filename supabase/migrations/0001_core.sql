@@ -161,7 +161,10 @@ create table private.counters (key text, window_start timestamptz, count int, pr
   -- 0.29 续第 34 条：键一律三段 <用途>:<user_id | global | ip | mail>:<窗口或哈希>；第三段不准有冒号
   check (key ~ '^[a-z][a-z0-9_-]*:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|global|ip|mail):[^:]+$'));
 create table private.ai_state (provider text primary key, exhausted_until timestamptz);
-create table private.remind_queue (table_name text, id uuid, primary key (table_name, id));
+-- 架构 0.31 第 17 条（P-29）：注销按（table_name, id）回查被引用行的 user_id，所以 table_name 只能是带 user_id 的这三张同步表
+-- （预览项目还没部署，直接改 0001；已部署以后改这里要新写迁移）
+create table private.remind_queue (table_name text, id uuid, primary key (table_name, id),
+  constraint remind_queue_table_name_check check (table_name in ('events', 'todos', 'anniversaries')));
 create table private.heartbeat (name text primary key, at timestamptz not null, detail jsonb);
 create table private.user_limits (   -- R-114 D-2、D-9：null = 不设上限（P-30：归 core，放 0001）
   user_id uuid primary key references auth.users on delete cascade,
@@ -230,7 +233,7 @@ create table public.settings (
   id uuid primary key,
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
   rev int not null default 1, fv jsonb not null default '{}', deleted_at bigint,
-  undone boolean not null default false, synced_at timestamptz not null default now(), legacy_id text,
+  undone boolean not null default false, synced_at timestamptz not null default now(),
   key text not null, value jsonb not null, unique (user_id, key),
   check (pg_column_size(value) <= 4096),                                     -- 安全审查中 4
   check (key <> 'ai.vault' or value in ('true'::jsonb, 'false'::jsonb)));   -- 0.29 续第 140 条：ai.vault 只能是布尔
@@ -269,7 +272,7 @@ create table public.devices (
   id uuid primary key,
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
   rev int not null default 1, fv jsonb not null default '{}', deleted_at bigint,
-  undone boolean not null default false, synced_at timestamptz not null default now(), legacy_id text,
+  undone boolean not null default false, synced_at timestamptz not null default now(),
   label text, platform text not null check (platform in ('ios','windows','web','tauri')),
   push_endpoint text unique, p256dh text, auth text, app_version text,
   last_seen_at timestamptz, last_push_ok_at timestamptz, push_fail_count int not null default 0,

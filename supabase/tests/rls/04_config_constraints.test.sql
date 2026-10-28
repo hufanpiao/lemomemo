@@ -1,6 +1,6 @@
--- 配置、约束、桶和每日清理：TC-B0-53、74、76、88、98；0.27（features、min_client_version）；P-05
+-- 配置、约束、桶和每日清理：TC-B0-53、74、76、88、98；0.27（features、min_client_version）；P-05；0.31 第 15、17 条（remind_queue、注销级联）
 begin;
-select plan(31);
+select plan(37);
 \ir _helpers.psql
 select tests.seed();
 
@@ -46,6 +46,30 @@ select ok(tests.try_as('postgres', null, $$insert into private.counters values (
 select ok(tests.try_as('postgres', null, $$insert into private.counters values ('ai:2026-10-28', now(), 1)$$) like '23514%', '只有两段：拒绝');
 select ok(tests.try_as('postgres', null, $$insert into private.counters values ('AI:global:x', now(), 1)$$) like '23514%', '用途名大写：拒绝');
 select ok(tests.try_as('postgres', null, $$insert into private.counters values ('ai:someone:x', now(), 1)$$) like '23514%', '第二段既不是 uuid 也不是 global/ip/mail：拒绝');
+
+-- ===== 架构 0.31 第 17 条（P-29）：remind_queue.table_name 只能是 events、todos、anniversaries =====
+select is(tests.try_as('service_role', null, $$insert into private.remind_queue (table_name, id) values
+  ('events', 'e0000000-0000-4000-8000-0000000000d1'), ('todos', '70000000-0000-4000-8000-0000000000d1'),
+  ('anniversaries', 'a0000000-0000-4000-8000-0000000000d1')$$), 'ok', 'remind_queue：三张表的名字都能写（service_role，push-dispatch 的权限）');
+select ok(tests.try_as('service_role', null, $$insert into private.remind_queue (table_name, id) values ('notes', 'e0000000-0000-4000-8000-0000000000d2')$$) like '23514%',
+  'remind_queue：notes 被 check 拒绝');
+select ok(tests.try_as('postgres', null, $$insert into private.remind_queue (table_name, id) values ('profiles', 'e0000000-0000-4000-8000-0000000000d3')$$) like '23514%',
+  'remind_queue：postgres 写 profiles 也被 check 拒绝');
+select ok(tests.try_as('postgres', null, $$insert into private.remind_queue (table_name, id) values ('Events', 'e0000000-0000-4000-8000-0000000000d4')$$) like '23514%',
+  'remind_queue：大小写不同也拒绝');
+insert into public.anniversaries (id, user_id, kind, name, calendar, month, day, created_at, updated_at) values
+  ('a0000000-0000-4000-8000-0000000000d5', 'aaaaaaaa-0000-4000-8000-000000000001', 'birthday', '妈妈', 'solar', 3, 5, 1, 1);
+select is((select count(*)::int from private.remind_queue where table_name = 'anniversaries' and id = 'a0000000-0000-4000-8000-0000000000d5'), 1,
+  'remind_queue：纪念日的触发器写入的名字过得了 check');
+-- 架构 0.31 第 15 条：pending_deletions、revoked_sessions 随 auth.users 一起删（清单 cascade）；tombstones 也是
+insert into private.pending_deletions (user_id, purge_after) values ('bbbbbbbb-0000-4000-8000-000000000002', now() + interval '30 days');
+insert into private.revoked_sessions (session_id, user_id) values ('bbbbbbbb-5555-4000-8000-0000000000d6', 'bbbbbbbb-0000-4000-8000-000000000002');
+insert into public.tombstones (tbl, id, user_id) values ('todos', '70000000-0000-4000-8000-0000000000d7', 'bbbbbbbb-0000-4000-8000-000000000002');
+delete from auth.users where id = 'bbbbbbbb-0000-4000-8000-000000000002';
+select is((select count(*)::int from private.pending_deletions where user_id = 'bbbbbbbb-0000-4000-8000-000000000002')
+        + (select count(*)::int from private.revoked_sessions where user_id = 'bbbbbbbb-0000-4000-8000-000000000002')
+        + (select count(*)::int from public.tombstones where user_id = 'bbbbbbbb-0000-4000-8000-000000000002'), 0,
+  '删 auth.users：pending_deletions、revoked_sessions、tombstones 跟着删');
 
 -- ===== TC-B0-74：6 个桶 =====
 select is((select string_agg(id || ':' || public || ':' || file_size_limit || ':' || cardinality(allowed_mime_types), ',' order by id) from storage.buckets),

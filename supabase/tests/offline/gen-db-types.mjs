@@ -1,5 +1,6 @@
 // 临时生成 shared/db.types.ts：没有 Docker 跑不了 supabase gen types，先从 PGlite 上的迁移结果按同样的形状生成
-// 有 Docker 后改用：npx supabase gen types typescript --local --schema public,private > shared/db.types.ts，删掉本脚本
+// 有 Docker 后改用：npx supabase gen types typescript --local > shared/db.types.ts（不写 --schema 时取 config.toml 的 [api] schemas，即 public、private；和 CI 同一条命令），删掉本脚本
+// 注意：这里只保证 Database 的结构和 Tables 等辅助类型的用法相同，文件文本和真生成的不同，所以第一次在 Docker 上跑 CI 的 db.types 比对一定失败，用真生成的文件替换后提交（B0 实测清单 L15）
 import { PGlite } from '@electric-sql/pglite';
 import { vector } from '@electric-sql/pglite-pgvector';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -29,7 +30,7 @@ const fns = (await db.query(`select p.proname as f, pg_get_function_arguments(p.
 
 const out = [];
 out.push('// 【临时】数据库类型：由 supabase/tests/offline/gen-db-types.mjs 从 7 个迁移生成（没有 Docker，跑不了 supabase gen types）');
-out.push('// 待 Docker：npx supabase gen types typescript --local --schema public,private > shared/db.types.ts 替换本文件（形状相同，调用方不用改）');
+out.push('// 待 Docker：npx supabase gen types typescript --local > shared/db.types.ts 替换本文件（结构和 Tables 等辅助类型的用法相同，调用方不用改；文本不同，CI 比对要等替换后才过）');
 out.push('// 不要手改：改迁移以后重新生成');
 out.push('');
 out.push('export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];');
@@ -79,9 +80,19 @@ for (const s of ['public', 'private']) {
 }
 out.push('};');
 out.push('');
-out.push("export type Tables<S extends keyof Database, T extends keyof Database[S]['Tables']> = Database[S]['Tables'][T] extends { Row: infer R } ? R : never;");
-out.push("export type TablesInsert<S extends keyof Database, T extends keyof Database[S]['Tables']> = Database[S]['Tables'][T] extends { Insert: infer R } ? R : never;");
-out.push("export type TablesUpdate<S extends keyof Database, T extends keyof Database[S]['Tables']> = Database[S]['Tables'][T] extends { Update: infer R } ? R : never;");
+// 辅助类型的用法和 supabase gen types 一样（B0 集成后复查：原来写成 Tables<'public', 'events'>，换成真生成的文件时调用处会坏）：
+//   Tables<'events'>（默认 public，含视图）、Tables<{ schema: 'private' }, 'remind_queue'>；TablesInsert、TablesUpdate 只有表
+out.push('type SchemaRef = { schema: keyof Database };');
+out.push("type RowsOf<S extends keyof Database> = Database[S]['Tables'] & Database[S]['Views'];");
+out.push("type TablesOf<S extends keyof Database> = Database[S]['Tables'];");
+out.push("export type Tables<T extends keyof RowsOf<'public'> | SchemaRef, N extends (T extends SchemaRef ? keyof RowsOf<T['schema']> : never) = never> =");
+out.push("  T extends SchemaRef ? (RowsOf<T['schema']>[N & keyof RowsOf<T['schema']>] extends { Row: infer R } ? R : never)");
+out.push("  : T extends keyof RowsOf<'public'> ? (RowsOf<'public'>[T] extends { Row: infer R } ? R : never) : never;");
+for (const [name, part] of [['TablesInsert', 'Insert'], ['TablesUpdate', 'Update']]) {
+  out.push(`export type ${name}<T extends keyof TablesOf<'public'> | SchemaRef, N extends (T extends SchemaRef ? keyof TablesOf<T['schema']> : never) = never> =`);
+  out.push(`  T extends SchemaRef ? (TablesOf<T['schema']>[N & keyof TablesOf<T['schema']>] extends { ${part}: infer R } ? R : never)`);
+  out.push(`  : T extends keyof TablesOf<'public'> ? (TablesOf<'public'>[T] extends { ${part}: infer R } ? R : never) : never;`);
+}
 out.push('');
 writeFileSync(join(root, 'shared/db.types.ts'), out.join('\n'));
 await db.close();

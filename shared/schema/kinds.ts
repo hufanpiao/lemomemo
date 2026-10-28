@@ -5,8 +5,8 @@ import { z } from 'zod';
 import { allManifests } from '../manifests/index.ts';
 
 export const AI_KINDS = ['event', 'todo', 'note', 'anniv'] as const;                 // AI 能识别出来的（打字整理、录音）
-export const INTENT_KINDS = ['event', 'todo', 'note', 'anniv'] as const;             // “＋”的意图里能出现的
-export const RESULT_KINDS = ['event', 'todo', 'note', 'image', 'file', 'anniv'] as const;   // “＋”查找结果里显示的
+export const INTENT_KINDS = ['event', 'todo', 'note'] as const;                      // “＋”的意图里能出现的（0.31 第 16 条：没有 anniv）
+export const RESULT_KINDS = ['event', 'todo', 'note', 'image', 'file'] as const;     // “＋”查找结果里显示的（0.31 第 16 条：没有 anniv）
 export const VECTOR_KINDS = ['event', 'todo', 'note', 'image', 'file'] as const;     // 进按意思查找的（= note_vectors、embed_queue 的 check）
 
 const kinds = allManifests.flatMap((m) => m.recordKinds);

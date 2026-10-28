@@ -1,0 +1,179 @@
+# 柠檬记 4.0.0 的本地 Supabase 配置（supabase start / db reset / test db / gen types 用；CI 的 db 任务也用它）
+# 依据：架构 15.6 第 1 点“Supabase Auth 设置总表”（唯一出处）、3.3 C（private 暴露）、0.31 第 22 条（test db 只跑 rls/）。
+#
+# 重要：
+# - 本文件只管本地。预览、正式两个项目的设置由运维在控制台按 15.6 的总表设、B1 的 S-B1 逐项核对截图，不用 `supabase config push`。
+#   下面凡是“本地和线上不一样”的项都在行尾写了【线上】的值；改总表时同步改这里的注释。
+# - 不准写任何真实密钥。要用的值一律 env(...) 引用，变量放本机 supabase/.env.local 或 shell 环境（.env* 不进 git）；
+#   CI 不给这些变量，本地 Supabase 的 anon、service key 是 CLI 每次随机生成的测试值。
+# - pgTAP 测试一律 `npm run test:db`（= supabase test db supabase/tests/rls）。不要裸跑 `supabase test db`：CLI 用
+#   `pg_prove --ext .pg --ext .sql -r` 递归跑整个 supabase/tests，会把 d1-fixtures、compat 的样例和 offline 的桩当测试执行，
+#   还会改本地库（0.31 第 22 条；config.toml 没有改测试目录的设置）。离线 run.mjs 检查 test:db 的写法。
+# - 版本：Supabase CLI 2.120.0（package.json、tools/ci-tools.lock）。改设置前先用 `npx supabase init` 在临时目录看这一版的模板。
+
+project_id = "lemomemo"
+
+[api]
+enabled = true
+port = 54321
+# 0.29 续第 52 条（做法 A）：private 加进暴露列表，安全靠授权（anon、authenticated 对 private 的表一律没有权限，D1 逐项比对）。
+# 不放 graphql_public：4.0.0 不用 GraphQL（0.29 续第 52 条条件 ③，pg_graphql 是否反射 private 见 B0 实测清单 P2）。
+# 【线上】控制台 API 设置的 Exposed schemas 同样是 public、private；暴露 private 时不点控制台建议的“授权”。
+schemas = ["public", "private"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+# auto_expose_new_tables 不写，用默认 true（和线上一致）：service_role 对 public 新表的默认权限要和线上一样，
+# 函数里用 service role 读 profiles 等表才不会本地、线上两个结果。anon、authenticated 的权限由 0001 开头的
+# alter default privileges 和每张表的 revoke all … grant 收紧（0.31 第 20 条 ①），不靠这个开关。
+
+[api.tls]
+enabled = false
+
+[db]
+# build/check_data_manifest.ts（D1）默认连 127.0.0.1:54322
+port = 54322
+shadow_port = 54320
+health_timeout = "2m"
+# 要和预览、正式项目一样：第一次 link 预览项目时 `show server_version` 核对（B0 实测清单 L9），不一样就改这里
+major_version = 17
+
+[db.pooler]
+# 本地不起 Supavisor。【线上】Edge Function 经 Supavisor 事务模式直连（_shared/db.ts，prepare: false 待 B0 实测 P6）
+enabled = false
+port = 54329
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100
+
+[db.migrations]
+enabled = true
+schema_paths = []
+
+[db.seed]
+# 没有 seed.sql：RLS 测试在自己的事务里造数据（_helpers.psql 的 tests.seed()），跑完回滚；D1 只看结构。
+enabled = false
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = true
+
+[studio]
+# CI 用 `supabase start -x studio` 不起它
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+# 本地的收信箱（Mailpit）：验证码邮件不真的发出去，在 http://127.0.0.1:54324 看
+[local_smtp]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+# 全局上限；每个桶自己的大小和类型由迁移里的 storage.buckets 设（附录 A，D1 比对），这里不建桶。
+# 最大的是 backups 桶 50 MiB（52428800）
+file_size_limit = "50MiB"
+
+[storage.s3_protocol]
+enabled = true
+
+[auth]
+enabled = true
+# 【线上】正式只放 https://lemomemo.com/app/；预览只放 https://preview.lemomemo.com/app/（15.6 总表 Site URL、Redirect URLs）
+# 本地：vite dev（5173）和 wrangler pages dev（8788，E2E）
+site_url = "http://127.0.0.1:5173/app/"
+additional_redirect_urls = ["http://localhost:5173/app/", "http://127.0.0.1:8788/app/"]
+# 15.6 总表：JWT 有效期 600 秒（0.29 续第 98 条）。本地、线上相同
+jwt_expiry = 600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+# 15.6 总表：不允许新用户自己注册，只走邀请（invite-signup 用 service role 建用户；5.6、R-83）。本地、线上相同
+enable_signup = false
+# 15.6 总表：匿名登录关。本地、线上相同
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+# 不用密码登录（只有邮箱验证码），这两项不起作用，保持模板默认
+minimum_password_length = 6
+password_requirements = ""
+
+[auth.rate_limit]
+# 15.6 总表：发信上限每小时约 30 封，不调高。本地、线上相同（本地发到 Mailpit）
+email_sent = 30
+# 15.6 总表：发码和校验的内置限流（含 Token verifications）保持默认
+sms_sent = 30
+anonymous_users = 30
+token_refresh = 150
+sign_in_sign_ups = 30
+token_verifications = 30
+web3 = 30
+
+# 15.6 总表：CAPTCHA 开，Cloudflare Turnstile（15.2 中 1 ①）。
+# 【本地关】CI 和本机没有 Turnstile 的密钥，也不该连 Cloudflare；【线上开】，各环境的密钥由运维在控制台填。
+# 本机要试 Turnstile 时：把 enabled 改 true，在 supabase/.env.local 里设 SUPABASE_AUTH_CAPTCHA_SECRET
+# （可用 Cloudflare 公布的测试密钥），改完别提交 enabled = true。
+[auth.captcha]
+enabled = false
+provider = "turnstile"
+secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"
+
+[auth.email]
+# 15.6 总表：不允许自己注册（同上面的 enable_signup）
+enable_signup = false
+# 15.6 总表：Secure email change 开（换邮箱要新旧两个邮箱都确认）。本地、线上相同
+double_confirm_changes = true
+# 和线上项目的默认（Confirm email 开）一致；invite-signup 自己先验过邮箱，用 service role 建用户时标已确认
+enable_confirmations = true
+secure_password_change = false
+# 15.6 总表：发验证码每个邮箱 60 秒一次。本地、线上相同
+max_frequency = "60s"
+# 15.6 总表：Email OTP 长度 6 位、有效期 600 秒（默认 1 小时；15.2 中 1 ⑤）。本地、线上相同
+otp_length = 6
+otp_expiry = 600
+
+# 15.6 总表：验证码邮件模板写 {{ .Token }}，按 .Data.locale 分中韩两种（5.6、2.4 第 6 点）。
+# 登录用 signInWithOtp（已注册的用户）发的是 magic_link 这一封。【线上】运维把同一份模板贴进控制台。
+[auth.email.template.magic_link]
+subject = "柠檬记 · 레모 验证码 / 인증 코드"
+content_path = "./supabase/templates/otp.html"
+
+# 15.6 总表：自定义 SMTP 用 Resend，发件人 noreply@lemomemo.com，单独一把只发信的密钥（8.4）。
+# 【本地不用】本地发到上面的 Mailpit；【线上】运维在控制台填，密钥不经本文件。
+# 本机要试真发信时才取消注释，并在 supabase/.env.local 里设 RESEND_SMTP_KEY（不要提交）：
+# [auth.email.smtp]
+# enabled = true
+# host = "smtp.resend.com"
+# port = 465
+# user = "resend"
+# pass = "env(RESEND_SMTP_KEY)"
+# admin_email = "noreply@lemomemo.com"
+# sender_name = "柠檬记"
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+
+# 不用 MFA（隐私记的 Face ID / Windows Hello 是自己的 WebAuthn，5.5；exe 不提供 Windows Hello，15.6 第 3 点）
+[auth.mfa]
+max_enrolled_factors = 10
+
+[auth.mfa.totp]
+enroll_enabled = false
+verify_enabled = false
+
+[auth.mfa.phone]
+enroll_enabled = false
+verify_enabled = false
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+inspector_port = 8083
+deno_version = 2
+# 函数的 secret（PROXY_SECRET、VAULT_KEY、AI 和 Resend 的密钥等，8.4、0.31 第 11 条）不写在这里：
+# 本机 `supabase functions serve --env-file supabase/.env.local`；【线上】由负责人或运维按 8.4 设，不经 AI。
+
+[analytics]
+# 本地不需要日志分析，少起一个容器；【线上】照常有
+enabled = false
+port = 54327
+backend = "postgres"
