@@ -104,6 +104,9 @@ jobs:
         # B0 集成：前端 B 已合并，脚本名 build/check_version_gate.mjs，npm 脚本 check:gate
         run: npm run check:gate
 
+      - name: /files 规则表和清单一致（前端 B 的脚本，架构 3.5 第 2 点、0.32 第 9 条）
+        run: npm run check:files-rules
+
   secrets-scan:
     name: 密钥扫描（gitleaks，CI 第二道）
     runs-on: ubuntu-24.04
