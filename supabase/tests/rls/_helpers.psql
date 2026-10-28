@@ -1,0 +1,73 @@
+-- RLS 测试的共用辅助（每个 *.test.sql 用 \ir _helpers.psql 引入；在测试事务里建，随 rollback 一起消失）
+-- 用法：tests.try_as(角色, 用户, 'SQL')       → 'ok' 或 '<sqlstate> <错误信息>'；成功的写入保留到事务结束
+--       tests.rows_as(角色, 用户, 'select …') → 结果行的 jsonb 数组
+--       第四个参数给 fn_vault / fn_ai 的 app.uid（会话变量版 RLS），第五个参数给 JWT 的 session_id
+
+create schema tests;
+
+-- 真库上 postgres 不是超级用户：PG16 建角色时自动给的成员关系不带 SET，切不到 fn_vault、fn_ai；只在这个测试事务里补上
+do $$ begin
+  if not (select rolsuper from pg_roles where rolname = current_user) then
+    execute 'grant fn_vault, fn_ai to ' || quote_ident(current_user) || ' with set true, inherit false';
+  end if;
+end $$;
+
+create function tests.claims(p_role text, p_uid uuid, p_session uuid) returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims',
+    jsonb_strip_nulls(jsonb_build_object('sub', p_uid, 'role', p_role, 'session_id', p_session))::text, true);
+end $$;
+
+create function tests.try_as(p_role text, p_uid uuid, p_sql text, p_app_uid uuid default null, p_session uuid default null)
+  returns text language plpgsql as $$
+declare r text := 'ok';
+begin
+  begin
+    perform tests.claims(p_role, p_uid, p_session);
+    perform set_config('app.uid', coalesce(p_app_uid::text, ''), true);
+    execute format('set local role %I', p_role);
+    execute p_sql;
+    reset role;
+  exception when others then
+    r := sqlstate || ' ' || sqlerrm;
+  end;
+  reset role;
+  perform set_config('request.jwt.claims', '', true);
+  perform set_config('app.uid', '', true);
+  return r;
+end $$;
+
+create function tests.rows_as(p_role text, p_uid uuid, p_sql text, p_app_uid uuid default null, p_session uuid default null)
+  returns jsonb language plpgsql as $$
+declare res jsonb;
+begin
+  begin
+    perform tests.claims(p_role, p_uid, p_session);
+    perform set_config('app.uid', coalesce(p_app_uid::text, ''), true);
+    execute format('set local role %I', p_role);
+    execute format('select coalesce(jsonb_agg(t), ''[]''::jsonb) from (%s) t', p_sql) into res;
+    reset role;
+  exception when others then
+    res := jsonb_build_object('error', sqlstate || ' ' || sqlerrm);
+  end;
+  reset role;
+  perform set_config('request.jwt.claims', '', true);
+  perform set_config('app.uid', '', true);
+  return res;
+end $$;
+
+-- 两个用户 A、B（各有 profile），一个停用的 C；每人一个会话
+create function tests.seed() returns void language plpgsql as $$
+begin
+  insert into auth.users (id, email) values
+    ('aaaaaaaa-0000-4000-8000-000000000001', 'a@test.local'),
+    ('bbbbbbbb-0000-4000-8000-000000000002', 'b@test.local'),
+    ('cccccccc-0000-4000-8000-000000000003', 'c@test.local');
+  insert into public.profiles (user_id) values
+    ('aaaaaaaa-0000-4000-8000-000000000001'), ('bbbbbbbb-0000-4000-8000-000000000002');
+  insert into public.profiles (user_id, disabled_at, disabled_reason) values
+    ('cccccccc-0000-4000-8000-000000000003', now(), 'admin');
+  insert into auth.sessions (id, user_id) values
+    ('aaaaaaaa-5555-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001'),
+    ('bbbbbbbb-5555-4000-8000-000000000002', 'bbbbbbbb-0000-4000-8000-000000000002');
+end $$;
