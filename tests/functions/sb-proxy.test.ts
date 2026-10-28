@@ -1,48 +1,9 @@
 // `/sb/*` 转发的单元测试（14.2 第 1～10 点；TC-B0-39、TC-B0-46、TC-B0-59 的转发层部分、TC-B0-91 的转发层部分）。
 // 上游用桩：记录收到的请求，不连真实 Supabase。经预览环境的真实转发见 tests/e2e/sb-forward.preview.test.ts。
 import { describe, expect, it, vi } from 'vitest';
-import { STRIPPED_REQUEST_HEADERS, geoHeader, handleSb, upstreamPath, type SbEnv } from '../../functions/sb/[[path]].ts';
-import { createVersionGate } from '../../functions/sb/version-gate.ts';
+import { STRIPPED_REQUEST_HEADERS, geoHeader, handleSb, upstreamPath } from '../../functions/sb/[[path]].ts';
 import { ALLOW_HEADERS, EXE_ORIGIN } from '../../functions/_lib/cors.ts';
-
-const ENV: SbEnv = {
-  SUPABASE_UPSTREAM: 'https://abcdefghijklmnop.supabase.co',
-  SUPABASE_ANON_KEY: 'anon-test',
-  PROXY_SECRET: 'proxy-secret-test',
-};
-
-function setup(opts: { min?: string; upstream?: (req: Request) => Promise<Response> } = {}) {
-  const seen: Request[] = [];
-  const log = vi.fn();
-  const fetchStub = vi.fn(async (req: Request) => {
-    seen.push(req);
-    if (opts.upstream) return opts.upstream(req);
-    return new Response('{"ok":true}', {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Credentials': 'true',
-        'Content-Range': '0-0/1',
-        'Set-Cookie': '__cf_bm=x; Domain=.supabase.co',
-      },
-    });
-  });
-  const gate = createVersionGate({ loadMin: async () => opts.min ?? '4.0.0' });
-  /** 上游收到的第一个请求；没收到就让用例失败（不用非空断言） */
-  const first = (): Request => {
-    const r = seen[0];
-    if (!r) throw new Error('上游没有收到请求');
-    return r;
-  };
-  return { seen, first, log, fetchStub, deps: { fetch: fetchStub, gate, log } };
-}
-
-const BASE = 'https://lemomemo.com';
-
-function req(path: string, init: RequestInit & { headers?: Record<string, string> } = {}): Request {
-  return new Request(BASE + path, { ...init, headers: { 'X-App-Version': '4.0.0', ...(init.headers ?? {}) } });
-}
+import { BASE, ENV, req, setup } from './sb-harness.ts';
 
 describe('upstreamPath：路径白名单和穿越', () => {
   it.each([
@@ -300,43 +261,6 @@ describe('写入先查版本（TC-B0-46～48、51 经转发层）', () => {
     const r = await handleSb(new Request(BASE + p, { method: m, ...(m === 'GET' ? {} : { body: '{}' }) }), ENV, s.deps);
     expect(r.status).toBe(200);
     expect(s.fetchStub).toHaveBeenCalledTimes(1);
-  });
-});
-
-// 架构 0.32（R-213）、14.2 第 1 点；TC-B0-119、S-B0 ⑧
-describe('TC-B0-119：/sb 的存储收窄，files_authorize 不经 /sb', () => {
-  const VP = '/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx?token=abc';
-  it.each([
-    ['POST', '/sb/storage/v1/object/images/u/n/i.webp'],
-    ['PUT', '/sb/storage/v1/object/images/u/n/i.webp'],
-    ['POST', '/sb/storage/v1/object/list/images'],
-    ['POST', '/sb/storage/v1/object/sign/files/u/n/i.pdf'],
-    ['GET', '/sb/storage/v1/object/sign/files/u/n/i.pdf?token=abc'],
-    ['GET', '/sb/storage/v1/object/authenticated/images/u/n/i.webp'],
-    ['GET', '/sb/storage/v1/object/public/images/x.webp'],
-    ['GET', '/sb/storage/v1/bucket'],
-    ['POST', '/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx'],
-    ['DELETE', '/sb/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx'],
-    ['HEAD', VP],
-    ['POST', '/sb/rest/v1/rpc/files_authorize'],
-    ['POST', '/sb/rest/v1/rpc/FILES_AUTHORIZE'],
-    ['POST', '/sb/rest/v1/rpc/files_authorize/'],
-    ['GET', '/sb/rest/v1/rpc/files_authorize?p_op=get'],
-  ])('%s %s → 本地 404，不转发', async (m, p) => {
-    const s = setup();
-    const r = await handleSb(new Request(BASE + p, { method: m, ...(m === 'GET' || m === 'HEAD' ? {} : { body: '{}' }), headers: { 'X-App-Version': '4.0.0' } }), ENV, s.deps);
-    expect(r.status).toBe(404);
-    if (m !== 'HEAD') expect(await r.json()).toEqual({ code: 'not_found' });
-    expect(s.fetchStub).not.toHaveBeenCalled();
-  });
-
-  it('vault-preview 的 GET 照常转发（给微软取隐私记 PPT），查询串原样带上', async () => {
-    const s = setup();
-    const r = await handleSb(new Request(BASE + VP), ENV, s.deps);
-    expect(r.status).toBe(200);
-    expect(s.fetchStub).toHaveBeenCalledTimes(1);
-    expect(new URL(s.first().url).pathname).toBe('/storage/v1/object/sign/vault-preview/0123456789abcdef0123456789abcdef.pptx');
-    expect(new URL(s.first().url).search).toBe('?token=abc');
   });
 });
 

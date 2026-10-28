@@ -28,3 +28,12 @@ export function applySbSecurityHeaders(h: Headers): void {
   h.set('Content-Security-Policy', SB_CSP);
   h.set('Referrer-Policy', 'no-referrer');
 }
+
+/**
+ * `/files/*`（0.32，14.2 第 11 点）的每个响应都加：和 /sb 同样的 nosniff、`CSP: sandbox`、no-referrer，
+ * 另加 `Cache-Control: private, no-store`（签名链接取到的图片和附件不进 CDN 和浏览器缓存）。
+ */
+export function applyFilesSecurityHeaders(h: Headers): void {
+  applySbSecurityHeaders(h);
+  h.set('Cache-Control', 'private, no-store');
+}

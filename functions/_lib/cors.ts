@@ -1,4 +1,4 @@
-// `/sb/*` 的 CORS（架构 5.10）：只给 exe 的来源，网页版同源不需要。
+// `/sb/*` 和 `/files/*`（0.32）的 CORS（架构 5.10）：只给 exe 的来源，网页版同源不需要。
 // 这不是身份校验（5.10 第三轮安全 X6）：所有 Tauri 应用在 Windows 上都是这个来源。
 
 /** exe 的来源，精确比对，不用通配符。开了 useHttpsScheme 就要改成 https，两者只能选一个（B6 核实） */
@@ -31,8 +31,8 @@ export const ALLOW_HEADERS: readonly string[] = [
   'x-vault-token',
 ];
 
-/** 暴露的响应头：时钟偏差读 Date，计数和分页读 Content-Range（5.10） */
-export const EXPOSE_HEADERS: readonly string[] = ['Date', 'Content-Range', 'Content-Length', 'X-Supabase-Api-Version'];
+/** 暴露的响应头：时钟偏差读 Date，计数和分页读 Content-Range（5.10）；/files 上传回的 ETag（0.32，14.2 第 11 点） */
+export const EXPOSE_HEADERS: readonly string[] = ['Date', 'Content-Range', 'Content-Length', 'X-Supabase-Api-Version', 'ETag'];
 
 export function isAllowedOrigin(origin: string | null): boolean {
   return origin === EXE_ORIGIN;
