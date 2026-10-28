@@ -1,0 +1,10 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=lemo/reduced-motion-override rule=A24 message=prefers-reduced-motion */
+@media (prefers-reduced-motion: no-preference), (width >= 0) {
+  .b {
+    transition: transform var(--dur-sheet) var(--ease-out);
+  }
+}
+
+:global(:root[data-rm="1"]) .b {
+  transition: none;
+}

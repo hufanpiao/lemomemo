@@ -1,0 +1,9 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=lemo/reduced-motion-override rule=A24 message=动到transform count=16 */
+.a1 { transition: block-size var(--dur-sheet) var(--ease-out); }
+.a2 { transition: max-inline-size var(--dur-sheet) var(--ease-out); }
+.a3 { transition: rx var(--dur-sheet) var(--ease-out); }
+.a4 { transition: stroke-dashoffset var(--dur-sheet) var(--ease-out); }
+.a5 { transition: flex-basis var(--dur-sheet) var(--ease-out); }
+.a6 { transition: grid-template-rows var(--dur-sheet) var(--ease-out); }
+.a7 { transition: background-size var(--dur-sheet) var(--ease-out); }
+.a8 { transition: mask-position var(--dur-sheet) var(--ease-out); }

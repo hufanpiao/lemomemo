@@ -6,3 +6,26 @@
 .pressable[data-state="pressed"] {
   transform: scale(0.97);
 }
+
+/* 减少动态效果（17.2 第 5 点，UI-4 L-1）：系统设置和设置里的开关两种都写；
+   不只是把时长变 0（那样还是瞬间缩一下），连 scale 一起关掉；
+   按下的反馈换成瞬时变淡（不加过渡，“直接切换”），手指按住时仍然看得出按到了 */
+@media (prefers-reduced-motion: reduce) {
+  .pressable {
+    transition: none;
+  }
+
+  .pressable[data-state="pressed"] {
+    transform: none;
+    opacity: var(--press-dim);
+  }
+}
+
+:global(:root[data-rm="1"]) .pressable {
+  transition: none;
+}
+
+:global(:root[data-rm="1"]) .pressable[data-state="pressed"] {
+  transform: none;
+  opacity: var(--press-dim);
+}

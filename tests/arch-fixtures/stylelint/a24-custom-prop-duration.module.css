@@ -1,0 +1,5 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=declaration-property-value-disallowed-list rule=A24 count=2 */
+.a {
+  --d: 900ms;
+  --e: ease-in;
+}

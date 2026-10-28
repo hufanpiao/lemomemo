@@ -1,0 +1,31 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=lemo/reduced-motion-override rule=A24 message=写回原值 count=4 */
+.a {
+  transition:
+    padding-top var(--dur-ui) var(--ease-out),
+    margin-top var(--dur-ui) var(--ease-out);
+}
+
+.a:hover {
+  padding-top: 40px;
+  margin-top: 40px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .a {
+    transition: none;
+  }
+
+  .a:hover {
+    padding-top: auto;
+    margin-top: auto;
+  }
+}
+
+:global(:root[data-rm="1"]) .a {
+  transition: none;
+}
+
+:global(:root[data-rm="1"]) .a:hover {
+  padding-top: auto;
+  margin-top: auto;
+}

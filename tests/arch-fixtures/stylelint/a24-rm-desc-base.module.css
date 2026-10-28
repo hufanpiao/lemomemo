@@ -1,0 +1,18 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=lemo/reduced-motion-override rule=A24 message=类名开头 */
+.list .a {
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+
+.list:hover .a {
+  transform: scale(0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .list .a {
+    transition: none;
+  }
+}
+
+:global(:root[data-rm="1"]) .list .a {
+  transition: none;
+}

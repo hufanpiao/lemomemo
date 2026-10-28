@@ -1,0 +1,29 @@
+/* arch-fixture: path=src/kit/components/Good.module.css expect=none */
+.a {
+  --k: 1;
+
+  transform: scale(var(--k));
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+
+.a[data-state="pressed"] {
+  --k: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .a {
+    transition: none;
+  }
+
+  .a[data-state="pressed"] {
+    --k: 1;
+  }
+}
+
+:global(:root[data-rm="1"]) .a {
+  transition: none;
+}
+
+:global(:root[data-rm="1"]) .a[data-state="pressed"] {
+  --k: 1;
+}

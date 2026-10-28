@@ -1,9 +1,13 @@
 {
-  "$comment": "Stylelint（架构 2.3）：A11 组件样式不准写死颜色，颜色只在 styles/skins/*.css；A24 transition、animation 只能用 var(--dur-*)、var(--ease-*)。src/styles/tokens.css 和 skins/*.css 由 build/tokens.py 生成（--check 保证和令牌一致），不过 Stylelint。违规样例在 tests/arch-fixtures/，tests/arch/stylelint.test.ts 证明拦得住",
+  "$comment": "Stylelint（架构 2.3）：A11 组件样式不准写死颜色，颜色只在 styles/skins/*.css；A24 transition、animation 只能用 var(--dur-*)、var(--ease-*)（var() 只认这两类，calc 只准 calc(var(--dur-ui) / 2)，组件里的自定义属性不准写时长和缓动关键字，带浏览器前缀的同样管）；lemo/reduced-motion-override（build/stylelint-rules/，17.2 第 5 点、UI-4 L-1）：动 transform 的选择器同文件里要有 @media (prefers-reduced-motion: reduce) 和 :global(:root[data-rm=\"1\"]) 两段覆盖。src/styles/tokens.css 和 skins/*.css 由 build/tokens.py 生成（--check 保证和令牌一致），不过 Stylelint。违规样例在 tests/arch-fixtures/，tests/arch/stylelint.test.ts 证明拦得住",
   "extends": [
     "stylelint-config-standard"
   ],
+  "plugins": [
+    "./build/stylelint-rules/reduced-motion-override.js"
+  ],
   "rules": {
+    "lemo/reduced-motion-override": true,
     "color-no-hex": [
       true,
       {
@@ -38,15 +42,39 @@
     ],
     "declaration-property-value-disallowed-list": [
       {
-        "/^(transition|animation)(-duration|-delay)?$/": [
-          "/(?<![-\\w])-?\\d*\\.?\\d+m?s(?![-\\w])/"
+        "/^(-(webkit|moz|ms|o)-)?(transition|animation)(-duration|-delay)?$/i": [
+          "/(?<![-\\w.])[+-]?(\\d+\\.?\\d*|\\.\\d+)(e[+-]?\\d+)?m?s(?![-\\w])/i"
         ],
-        "/^(transition|animation)(-timing-function)?$/": [
-          "/(?<![-\\w])(ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end)(?![-\\w])/"
+        "/^(-(webkit|moz|ms|o)-)?(transition|animation)(-timing-function)?$/i": [
+          "/(?<![-\\w])(ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end)(?![-\\w])/i"
+        ],
+        "/^(-(webkit|moz|ms|o)-)?(transition|animation)(-[a-z-]+)?$/i": [
+          "/var\\(\\s*--(?!dur-|ease-)/i",
+          "/calc\\((?!\\s*var\\(\\s*--dur-ui\\s*\\)\\s*\\/\\s*2\\s*\\))/i"
+        ],
+        "/^--/": [
+          "/(?<![-\\w.])[+-]?(\\d+\\.?\\d*|\\.\\d+)(e[+-]?\\d+)?m?s(?![-\\w])/i",
+          "/(?<![-\\w])(ease|ease-in|ease-out|ease-in-out|linear|step-start|step-end)(?![-\\w])/i"
         ]
       },
       {
-        "message": "A24：transition、animation 的时长和曲线只能用 var(--dur-*)、var(--ease-*)"
+        "message": "A24：transition、animation 的时长和曲线只能用 var(--dur-*)、var(--ease-*)，var() 只认这两类，calc 只准 calc(var(--dur-ui) / 2)；组件里的自定义属性不准写时长和缓动关键字（令牌只在 styles/tokens.css）"
+      }
+    ],
+    "property-disallowed-list": [
+      [
+        "/^--(dur|ease)-/"
+      ],
+      {
+        "message": "A24：--dur-*、--ease-* 只在 src/styles/tokens.css 定义（build/tokens.py 生成），组件里不准重新声明（%s）"
+      }
+    ],
+    "selector-disallowed-list": [
+      [
+        "/\\x5c/"
+      ],
+      {
+        "message": "17.2 第 6 点（UI-4 M4）：选择器里不准写 CSS 转义（\\），减少动态效果的检查认不出转义后的类名（%s）"
       }
     ],
     "selector-class-pattern": null,
@@ -75,5 +103,6 @@
   "ignoreFiles": [
     "src/styles/tokens.css",
     "src/styles/skins/*.css"
-  ]
+  ],
+  "reportDescriptionlessDisables": true
 }

@@ -1,0 +1,10 @@
+/* arch-fixture: path=src/kit/components/Good.module.css expect=none */
+@media (prefers-reduced-motion: no-preference) {
+  .b {
+    transition: transform var(--dur-ui) var(--ease-out);
+  }
+}
+
+:global(:root[data-rm="1"]) .b {
+  transition: none;
+}

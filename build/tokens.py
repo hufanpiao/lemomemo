@@ -25,7 +25,7 @@ OUT_CSS = DIR / "令牌/tokens.css"
 OUT_TS = DIR / "令牌/tokens.ts"
 APP_STYLES = ROOT / "src/styles"
 # 和皮肤无关、进 src/styles/tokens.css 的令牌（按前缀；四套主题的值必须一样，否则报错）
-SKINLESS = ("--dur-", "--ease-", "--r-", "--f-", "--fs-", "--hit")
+SKINLESS = ("--dur-", "--ease-", "--press-", "--r-", "--f-", "--fs-", "--hit")
 LABEL = {"simple-light": "简洁·浅色", "simple-dark": "简洁·深色", "glass-light": "磨砂玻璃·浅色", "glass-dark": "磨砂玻璃·深色"}
 
 
@@ -103,7 +103,7 @@ def app_styles(d, toks):
         if len(set(t["values"].values())) != 1:
             raise SystemExit(f"令牌 {t['name']} 四套主题的值不一样，不能放进和皮肤无关的 tokens.css")
     first = d["themes"][0]
-    css = [head, "/* 和皮肤无关的令牌（架构 17.2）：时长、曲线、圆角、字体、字号、点按区域 */",
+    css = [head, "/* 和皮肤无关的令牌（架构 17.2）：时长、曲线、按下反馈、圆角、字体、字号、点按区域 */",
            ":root{" + ";".join(f'{t["name"]}:{t["values"][first]}' for t in skinless) + "}",
            '/* 减少动态效果：按下回弹的时长设 0（17.2 第 5 点）；系统设置或设置里的开关（data-rm="1"） */',
            "@media (prefers-reduced-motion: reduce){:root{--dur-press:0ms}}",

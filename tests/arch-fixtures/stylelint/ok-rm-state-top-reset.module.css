@@ -1,0 +1,26 @@
+/* arch-fixture: path=src/kit/components/Good.module.css expect=none */
+.a {
+  transition: top var(--dur-ui) var(--ease-out);
+}
+
+.a:active {
+  top: 40px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .a {
+    transition: none;
+  }
+
+  .a:active {
+    top: auto;
+  }
+}
+
+:global(:root[data-rm="1"]) .a {
+  transition: none;
+}
+
+:global(:root[data-rm="1"]) .a:active {
+  top: auto;
+}

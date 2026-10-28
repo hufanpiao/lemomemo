@@ -1,0 +1,4 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=CssSyntaxError rule=A24 */
+.a {
+  animation: :global(slide) var(--dur-ui) var(--ease-out);
+}

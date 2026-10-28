@@ -1,0 +1,15 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=lemo/reduced-motion-override rule=A24 message=动到transform count=4 */
+.b {
+  transition:
+    d var(--dur-sheet) var(--ease-out),
+    cx var(--dur-sheet) var(--ease-out),
+    r var(--dur-sheet) var(--ease-out),
+    x var(--dur-sheet) var(--ease-out);
+}
+
+.c {
+  transition:
+    font-size var(--dur-sheet) var(--ease-out),
+    transform-origin var(--dur-sheet) var(--ease-out),
+    perspective var(--dur-sheet) var(--ease-out);
+}

@@ -1,0 +1,16 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=lemo/reduced-motion-override rule=A24 message=@layer count=2 */
+.a {
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+
+@layer base {
+  @media (prefers-reduced-motion: reduce) {
+    .a {
+      transition: none;
+    }
+  }
+
+  :global(:root[data-rm="1"]) .a {
+    transition: none;
+  }
+}

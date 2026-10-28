@@ -1,0 +1,18 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=lemo/reduced-motion-override rule=A24 message=动到transform count=8 */
+.a {
+  transition:
+    width var(--dur-ui) var(--ease-out),
+    height var(--dur-ui) var(--ease-out);
+}
+
+.b {
+  transition: padding-top var(--dur-ui) var(--ease-out);
+}
+
+.c {
+  transition: background-position var(--dur-ui) var(--ease-out);
+}
+
+.d {
+  transition: max-height var(--dur-ui) var(--ease-out);
+}

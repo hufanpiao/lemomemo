@@ -1,0 +1,10 @@
+/* arch-fixture: path=src/kit/components/Good.module.css expect=none */
+@media screen and (prefers-reduced-motion: no-preference) and (width >= 600px) {
+  .b {
+    transition: transform var(--dur-sheet) var(--ease-out);
+  }
+}
+
+:global(:root[data-rm="1"]) .b {
+  transition: none;
+}

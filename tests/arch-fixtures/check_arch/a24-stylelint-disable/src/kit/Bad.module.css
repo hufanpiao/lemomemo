@@ -1,0 +1,14 @@
+/* 违规 A24：三种写法各一处——不写规则名、关 lemo/*、关 A24 的规则 */
+/* stylelint-disable-next-line -- 想偷懒 */
+.a {
+  transition: transform 900ms ease-in;
+}
+
+/* stylelint-disable-next-line lemo/reduced-motion-override -- 想偷懒 */
+.b {
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+
+.c {
+  transition: opacity 900ms var(--ease-out); /* stylelint-disable-line declaration-property-value-disallowed-list -- 想偷懒 */
+}

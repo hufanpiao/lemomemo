@@ -1,7 +1,7 @@
 """架构检查里 ESLint、Stylelint、tsc 管不到的几条（架构 2.3）。
 
 用法：python -I build/check_arch.py [--root 目录] [--json]
-  A14  src、shared、dist/web 里不能有密钥特征；import.meta.env 只能读 VITE_PUBLIC_* 和 Vite 自带的 MODE/DEV/PROD/BASE_URL/SSR
+  A14  src、shared、dist/web 里不能有密钥特征（sb_secret_、sb_publishable_、sbp_ 要前缀后紧跟至少 20 个密钥字符才算）；import.meta.env 只能读 VITE_PUBLIC_* 和 Vite 自带的 MODE/DEV/PROD/BASE_URL/SSR
   A20  TS/TSX 的字符串和 JSX 文本里不能有汉字、谚文（注释不算）；例外见 A20_EXEMPT
   A19  SW 只走网络的路径（15.3 第 1 条）：src/sw/routes.ts 的 NETWORK_ONLY_PREFIXES 必须有 '/sb'、'/files'；
        sw 的其他文件里不准再写 /sb、/files 的路径（不能给它们另挂 Workbox 路由或缓存）
@@ -9,6 +9,8 @@
        App 只经 platform/files.ts 调同源的 /files/v1/*（架构 0.32 第 2、4 条，任务单 FA-2）
   W2   src/public/holidays/cn|kr/ 缺明年的文件（警告）
   P142 supabase/migrations 里 private 的触发器函数不准出现 current_user，用 current_setting('role', true)（0.29 续第 142 条）
+  A24  src 的 CSS 里 stylelint-disable 注释不准不写规则名（等于全关），也不准关 lemo/* 和 A24 的三条规则
+       （declaration-property-value-disallowed-list、function-disallowed-list、property-disallowed-list；UI-4 M4 第三轮）
 有错误时退出码 1，只有警告时 0。--root 给自测用（tests/arch-fixtures/check_arch/ 下的样例目录）。
 """
 import argparse
@@ -18,9 +20,12 @@ import pathlib
 import re
 import sys
 
+# Supabase 各种密钥的前缀：只在前缀后面紧跟至少 20 个密钥字符时才算（B1 K4）。
+# supabase-js 自己带着 'sb_secret_' 这类前缀字面量做判断，打进产物后后面不跟任何密钥，只认前缀会误报
+SUPABASE_KEY_PREFIXES = ("sb_secret_", "sb_publishable_", "sbp_")
 SECRET_PATTERNS = [
     ("service_role", re.compile(r"service_role")),
-    ("sb_secret_", re.compile(r"sb_secret_")),
+    *[(f"{p} 密钥", re.compile(rf"(?<![A-Za-z0-9_]){re.escape(p)}[A-Za-z0-9_\-]{{20,}}")) for p in SUPABASE_KEY_PREFIXES],
     ("Google API key", re.compile(r"AIza[0-9A-Za-z_\-]{30,}")),
     ("Resend key", re.compile(r"\bre_[0-9A-Za-z_]{32,}")),
     ("私钥", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY")),
@@ -235,6 +240,27 @@ def check_p142(root, errors):
                 errors.append(("P142", rel, line, f"{name} 是 private 的触发器函数，不准用 current_user，改用 current_setting('role', true)"))
 
 
+# A24 和 17.2 第 5 点靠这几条 Stylelint 规则；不准用 stylelint-disable 关掉（UI-4 M4 第三轮 n09）
+A24_STYLELINT_RULES = {"declaration-property-value-disallowed-list", "function-disallowed-list", "property-disallowed-list"}
+STYLELINT_DISABLE_RE = re.compile(r"/\*\s*stylelint-disable(?:-next-line|-line)?(?![-\w])(.*?)\*/", re.S)
+
+
+def check_a24_disable(root, errors):
+    for p in iter_files(root, "src", (".css",)):
+        rel = p.relative_to(root).as_posix()
+        text = p.read_text(encoding="utf-8")
+        for m in STYLELINT_DISABLE_RE.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            names = m.group(1).split("--", 1)[0]
+            rules = [r.strip() for r in names.split(",") if r.strip()]
+            if not rules:
+                errors.append(("A24", rel, line, "stylelint-disable 不写规则名等于全部关掉（含 lemo/* 和 A24），要写明关哪一条"))
+                continue
+            bad = [r for r in rules if r.startswith("lemo/") or r in A24_STYLELINT_RULES]
+            if bad:
+                errors.append(("A24", rel, line, f"不准用 stylelint-disable 关掉 {', '.join(bad)}（A24、17.2 第 5 点）"))
+
+
 def main(argv=None):
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
@@ -252,6 +278,7 @@ def main(argv=None):
     check_r2(root, errors)
     check_w2(root, warnings, today)
     check_p142(root, errors)
+    check_a24_disable(root, errors)
 
     if args.json:
         as_dict = lambda r: {"rule": r[0], "file": r[1], "line": r[2], "message": r[3]}  # noqa: E731

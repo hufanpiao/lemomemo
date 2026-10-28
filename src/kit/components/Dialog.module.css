@@ -22,6 +22,20 @@
   transition: transform var(--dur-sheet) var(--ease-drawer);
 }
 
+/* 减少动态效果（17.2 第 5 点，UI-4 L-1）：系统设置和设置里的开关两种都写，不做滑入位移。
+   换成淡入要先让过渡真能生效（UI-4 L-2，B2） */
+@media (prefers-reduced-motion: reduce) {
+  .content[data-state="open"] {
+    transform: none;
+    transition: none;
+  }
+}
+
+:global(:root[data-rm="1"]) .content[data-state="open"] {
+  transform: none;
+  transition: none;
+}
+
 .title {
   margin: 0 0 8px;
   font-size: var(--fs-18);

@@ -30,10 +30,24 @@ function run(root: string): { code: number; report: Report } {
 const sample = (name: string) => join(FIXTURES, 'check_arch', name);
 
 describe('build/check_arch.py（tests/arch-fixtures/check_arch）', () => {
-  it('A14：源码里有密钥特征 → 错误', () => {
-    const { code, report } = run(sample('a14-secret'));
+  it('A14：sb_secret_、sb_publishable_、sbp_ 后面紧跟 ≥ 20 个密钥字符 → 各一条错误', () => {
+    const { code, report } = run(sample('a14-secret-prefixes'));
     expect(code).toBe(1);
-    expect(report.errors.map((e) => e.rule)).toContain('A14');
+    expect(report.errors.map((e) => `${e.rule} ${e.file}:${e.line}`)).toEqual([
+      'A14 src/core/bad.ts:2',
+      'A14 src/core/bad.ts:3',
+      'A14 src/core/bad.ts:4',
+    ]);
+  });
+
+  // 注意：a14-secret 这个目录名看着像“违规样例”，其实放的是“不该报”的对照样例（前缀后只有 16 个 x，B1 K4 起改成对照）；
+  // 违规样例在 a14-secret-prefixes。目录不要改名：.gitleaksignore 里历史提交 df16331 的指纹按这个路径放行，改名就对不上了
+  it('A14 对照：只有前缀字面量（supabase-js 产物里那种）、或前缀后不足 20 个字符 → 不报（B1 K4）', () => {
+    for (const name of ['a14-secret-prefix-only', 'a14-secret']) {
+      const { code, report } = run(sample(name));
+      expect(report.errors, name).toEqual([]);
+      expect(code, name).toBe(0);
+    }
   });
 
   it('A14：import.meta.env 读了非 VITE_PUBLIC_* → 错误', () => {
@@ -49,6 +63,22 @@ describe('build/check_arch.py（tests/arch-fixtures/check_arch）', () => {
 
   it('A20：文件头豁免只在 shared/logic/parse/ 有效', () => {
     expect(run(sample('a20-header-elsewhere')).report.errors.map((e) => e.rule)).toEqual(['A20']);
+  });
+
+  it('A24：CSS 里 stylelint-disable 不写规则名、关 lemo/*、关 A24 的规则 → 各一条错误（UI-4 M4 第三轮）', () => {
+    const { code, report } = run(sample('a24-stylelint-disable'));
+    expect(code).toBe(1);
+    const a24 = report.errors.filter((e) => e.rule === 'A24');
+    expect(a24.map((e) => e.line)).toEqual([2, 7, 13]);
+    expect(a24[0]?.message).toContain('不写规则名');
+    expect(a24[1]?.message).toContain('lemo/reduced-motion-override');
+    expect(a24[2]?.message).toContain('declaration-property-value-disallowed-list');
+  });
+
+  it('A24 对照：关别的规则（写了说明）不报', () => {
+    const { code, report } = run(sample('a24-stylelint-disable-ok'));
+    expect(report.errors).toEqual([]);
+    expect(code).toBe(0);
   });
 
   it('对照：i18n 目录、注释、带豁免头的解析词表都不报；节假日齐全时没有警告', () => {

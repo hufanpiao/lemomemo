@@ -1,0 +1,5 @@
+/* 对照：关别的规则、写了说明，不报 */
+html {
+  /* stylelint-disable-next-line property-no-vendor-prefix -- iOS Safari 只认带前缀的写法 */
+  -webkit-text-size-adjust: 100%;
+}

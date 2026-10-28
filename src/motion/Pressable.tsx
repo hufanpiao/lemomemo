@@ -4,7 +4,7 @@ import { useState, type ButtonHTMLAttributes } from 'react';
 import styles from './Pressable.module.css';
 
 export function Pressable(props: ButtonHTMLAttributes<HTMLButtonElement>) {
-  const { className, onPointerDown, onPointerUp, onPointerLeave, type, ...rest } = props;
+  const { className, onPointerDown, onPointerUp, onPointerLeave, onPointerCancel, type, ...rest } = props;
   const [pressed, setPressed] = useState(false);
   return (
     <button
@@ -23,6 +23,11 @@ export function Pressable(props: ButtonHTMLAttributes<HTMLButtonElement>) {
       onPointerLeave={(e) => {
         setPressed(false);
         onPointerLeave?.(e);
+      }}
+      // 手指按下后开始滚动，触屏浏览器发 pointercancel、不发 pointerup：要在这里松开，不然一直停在按下（缩小或变淡）
+      onPointerCancel={(e) => {
+        setPressed(false);
+        onPointerCancel?.(e);
       }}
     />
   );
