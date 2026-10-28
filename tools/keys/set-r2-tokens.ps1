@@ -59,6 +59,7 @@ if (Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue) {
 function Say([string]$msg) { Write-Host $msg }
 function Step([string]$msg) { Write-Host ''; Write-Host "== $msg ==" -ForegroundColor Cyan }
 function Ok([string]$msg) { Write-Host "  ✔ $msg" -ForegroundColor Green }
+function Warn([string]$msg) { Write-Host "  ✘ $msg" -ForegroundColor Yellow }
 function Fail([string]$msg) { throw "已停止：$msg" }
 
 function Clear-Clip {
@@ -137,14 +138,24 @@ function Read-Value([string]$label, [string]$where, [string]$pattern, [string]$h
     Say ''
     Say "请粘贴：$label"
     Say "  （$where。屏幕上不显示，粘贴后按回车。）"
-    $sec = Read-Host -AsSecureString '  粘贴到这里'
-    Clear-Clip
-    $plain = To-Plain $sec
-    $sec.Dispose()
-    $plain = $plain.Trim()
-    if ($plain -notmatch $pattern) { $plain = $null; Fail "$label 的格式不对（$hint），像是贴错了或没贴全" }
-    Ok "$label 已收到（剪贴板已清空）"
-    return $plain
+    # 网页“单击以复制”可能带零宽字符、不换行空格，统一去掉；格式不对时当场重贴（最多 3 次），只报长度和非十六进制字符个数，不显示值（10-28 实测）
+    for ($try = 1; $try -le 3; $try++) {
+        $sec = Read-Host -AsSecureString '  粘贴到这里'
+        Clear-Clip
+        $plain = To-Plain $sec
+        $sec.Dispose()
+        $plain = $plain -replace '[\s ​-‍⁠﻿]', ''
+        if ($plain -match $pattern) {
+            Ok "$label 已收到（剪贴板已清空）"
+            return $plain
+        }
+        $len = $plain.Length
+        $bad = ($plain -replace '[0-9a-fA-F]', '').Length
+        $plain = $null
+        Warn "格式不对（要 $hint）：收到 $len 个字符，其中 $bad 个不是十六进制。多半复制错了栏（例如复制成了上面的“令牌值”）或没复制全"
+        if ($try -lt 3) { Say '  请回到网页重新复制这一项，再粘贴一次：' }
+    }
+    Fail "$label 连续 3 次格式不对，已停止"
 }
 
 function To-Plain([Security.SecureString]$sec) {
