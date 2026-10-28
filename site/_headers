@@ -2,6 +2,8 @@
 # 只管静态文件；`/` 的分流和 `/sb/*` 由 Pages Functions 在代码里自己加安全头（functions/_lib/security-headers.ts）。
 # 同一个头被多条规则命中时 Cloudflare 会用逗号拼起来，所以不写 `/*` 这种全站规则，各段路径不重叠。
 # 首页 CSP 必须和 functions/_lib/security-headers.ts 的 SITE_CSP 一字不差（build/build_site.mjs 检查）。
+# 不写 /errors/*（0.31 第 31 条：Cloudflare 自定义错误页免费版不能用，site/errors/ 已删）。
+# 根目录的 404.html 是 Pages 找不到文件时回的页面，按请求路径匹配不到这里的任何一段，所以页面本身不带脚本、不收信息。
 
 # ---------- 官网静态页（前端 B） ----------
 /zh/*
@@ -16,13 +18,6 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), geolocation=(), microphone=(), accelerometer=(), gyroscope=(), magnetometer=(), payment=(), usb=()
-  Cache-Control: no-cache
-
-/errors/*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
-  X-Content-Type-Options: nosniff
-  Referrer-Policy: strict-origin-when-cross-origin
-  X-Robots-Tag: noindex
   Cache-Control: no-cache
 
 # 官网的脚本、样式、og 图：构建时改成带哈希的文件名放进 /s/

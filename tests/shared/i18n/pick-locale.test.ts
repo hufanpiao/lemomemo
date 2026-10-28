@@ -2,9 +2,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   asLocale,
+  fromUiLocale,
   localeFromCookieHeader,
   parseAcceptLanguage,
   pickLocale,
+  toUiLocale,
 } from '../../../shared/i18n/pick-locale.ts';
 
 describe('pickLocale', () => {
@@ -74,5 +76,40 @@ describe('cookie', () => {
     expect(asLocale('ko')).toBe('ko');
     expect(asLocale('KO')).toBeNull();
     expect(asLocale(' zh')).toBeNull();
+  });
+});
+
+// 架构 0.31 第 12 条：profiles.ui_locale 存 zh-CN / ko-KR，传给 pickLocale 前先转
+describe('fromUiLocale / toUiLocale', () => {
+  it('zh-CN → zh，ko-KR → ko', () => {
+    expect(fromUiLocale('zh-CN')).toBe('zh');
+    expect(fromUiLocale('ko-KR')).toBe('ko');
+  });
+
+  it('别的值一律 null（App 接着往下取 pv-locale、cookie、navigator.languages）', () => {
+    for (const v of [null, undefined, '', 'zh', 'ko', 'zh-cn', 'KO-KR', 'zh-TW', 'zh-Hans', 'ko_KR', ' zh-CN', 'en-US']) {
+      expect(fromUiLocale(v), String(v)).toBeNull();
+    }
+  });
+
+  it('toUiLocale 是 fromUiLocale 的反函数', () => {
+    expect(toUiLocale('zh')).toBe('zh-CN');
+    expect(toUiLocale('ko')).toBe('ko-KR');
+    for (const l of ['zh', 'ko'] as const) expect(fromUiLocale(toUiLocale(l))).toBe(l);
+  });
+
+  it('不转直接传给 pickLocale 会被当成没选过（这就是要转的原因）', () => {
+    expect(pickLocale('ko-KR', ['zh-CN'])).toBe('zh');
+    expect(pickLocale(fromUiLocale('ko-KR'), ['zh-CN'])).toBe('ko');
+  });
+
+  it('按 0.31 的顺序取第一个有效值：ui_locale → pv-locale → cookie → navigator.languages → 中文', () => {
+    const pick = (ui: string | null, pv: string | null, cookie: string | null, langs: string[]) =>
+      pickLocale(fromUiLocale(ui) ?? asLocale(pv) ?? localeFromCookieHeader(cookie), langs);
+    expect(pick('ko-KR', 'zh', 'lemo_lang=zh', ['zh-CN'])).toBe('ko');
+    expect(pick(null, 'ko', 'lemo_lang=zh', ['zh-CN'])).toBe('ko');
+    expect(pick('bad', null, 'lemo_lang=ko', ['zh-CN'])).toBe('ko');
+    expect(pick(null, null, null, ['en-US', 'ko-KR'])).toBe('ko');
+    expect(pick(null, null, null, ['en-US'])).toBe('zh');
   });
 });

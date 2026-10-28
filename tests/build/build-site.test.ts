@@ -1,12 +1,13 @@
 // build/build_site.mjs 的检查：正常的 site/ 通过，每类违规样例都被拦住（16.2 构建检查）
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { checkSite } from '../../build/build_site.mjs';
+import { buildSite, checkSite } from '../../build/build_site.mjs';
 
 const check = checkSite as (dir?: string) => Promise<string[]>;
+const build = buildSite as (o: { out: string; mode: 'production' | 'preview' }) => Map<string, string>;
 const SITE = fileURLToPath(new URL('../../site', import.meta.url));
 
 function copy(): string {
@@ -37,6 +38,18 @@ describe('官网构建检查', () => {
     ['_routes.json 多放了路径', (d: string) => writeFileSync(join(d, '_routes.json'), '{"version":1,"include":["/*"],"exclude":[]}'), /_routes/],
     ['_headers 的 CSP 和 Functions 不一致', (d: string) => edit(d, '_headers', (s) => s.replace("connect-src 'none'", "connect-src 'self'")), /CSP/],
     ['_headers 写了 /* 全站规则', (d: string) => edit(d, '_headers', (s) => s + '\n/*\n  X-Frame-Options: DENY\n'), /全站/],
+    // 0.31 第 31 条：Pages 的静态 404 和删掉的自定义错误页
+    ['缺少 404.html', (d: string) => rmSync(join(d, '404.html')), /缺少 404\.html/],
+    ['404.html 没有 noindex', (d: string) => edit(d, '404.html', (s) => s.replace('<meta name="robots" content="noindex">', '')), /noindex/],
+    ['404.html 少了韩文段', (d: string) => edit(d, '404.html', (s) => s.replaceAll(' lang="ko"', '')), /中韩两段/],
+    ['404.html 没有去 /ko/ 的链接', (d: string) => edit(d, '404.html', (s) => s.replaceAll('href="/ko/"', 'href="/zh/"')), /\/ko\//],
+    ['404.html 用相对路径引样式', (d: string) => edit(d, '404.html', (s) => s.replace('href="/site.css"', 'href="site.css"')), /绝对路径/],
+    ['404.html 带外链脚本', (d: string) => edit(d, '404.html', (s) => s.replace('</head>', '<script src="/lang.js"></script></head>')), /不能有脚本/],
+    ['又放回 site/errors/', (d: string) => {
+      mkdirSync(join(d, 'errors'));
+      writeFileSync(join(d, 'errors', '5xx.html'), '<!doctype html><title>x</title>');
+    }, /site\/errors\//],
+    ['_headers 又写了 /errors/* 段', (d: string) => edit(d, '_headers', (s) => s + '\n/errors/*\n  X-Robots-Tag: noindex\n'), /\/errors\/\*/],
   ])('违规样例：%s', async (_name, mutate, re) => {
     const dir = copy();
     try {
@@ -45,6 +58,22 @@ describe('官网构建检查', () => {
       expect(errs.join('\n')).toMatch(re);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('官网构建产物', () => {
+  it('产物根目录有 404.html，样式表换成带哈希的 /s/ 地址；没有 errors/ 和 _headers（_headers 由 writeHeaders 另写）', () => {
+    const out = mkdtempSync(join(tmpdir(), 'lemo-site-out-'));
+    try {
+      const map = build({ out, mode: 'production' });
+      const html = readFileSync(join(out, '404.html'), 'utf8');
+      expect(html).toContain(`href="/${map.get('site.css')}"`);
+      expect(html).not.toContain('href="/site.css"');
+      expect(existsSync(join(out, 'errors'))).toBe(false);
+      expect(readdirSync(out)).not.toContain('_headers');
+    } finally {
+      rmSync(out, { recursive: true, force: true });
     }
   });
 });

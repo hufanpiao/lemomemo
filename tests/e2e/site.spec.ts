@@ -46,6 +46,16 @@ test.describe('官网骨架', () => {
     expect(errors.filter((e) => /Content Security Policy/i.test(e))).toEqual([]);
   });
 
+  test('0.31 第 31 条：找不到的路径回 404 和根目录的 404.html（中韩两段），不是当单页应用回首页', async ({ page }) => {
+    for (const p of ['/no-such-page', '/zh/no-such-page', '/errors/5xx.html']) {
+      const r = await page.goto(p);
+      expect(r?.status(), p).toBe(404);
+      await expect(page.getByRole('heading', { name: '找不到这个页面' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: '페이지를 찾을 수 없어요' })).toBeVisible();
+      await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex');
+    }
+  });
+
   test('16.3 ④：首页不注册 Service Worker，/app/ 以外的路径没被接管', async ({ page }) => {
     await page.goto('/zh/');
     const regs = await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).map((r) => r.scope));
