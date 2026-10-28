@@ -33,7 +33,17 @@
 
 ## 三、本机检查结果（最后一次 commit 之后）
 
-见文末回报；各命令都在本 worktree 从 `npm ci --ignore-scripts` 起跑。
+各命令都在本 worktree 从 `npm ci --ignore-scripts` 起跑（提交 b675836 的内容）：
+
+| 命令 | 结果 |
+|---|---|
+| `npm run lint`（ESLint + Stylelint） | 0 错误 0 警告 |
+| `npm run typecheck`（五份 tsconfig） | 0 错误 |
+| `npx vitest run` | 50 个文件通过、1 个跳过；636 条通过、13 条跳过、2 条 todo（跳过的和第一轮相同，都是待 Docker / 待预览）。第一轮是 592 条 |
+| `CI=true npx playwright test`（chromium + webkit，e2e 构建 + wrangler pages dev） | 42 通过、2 跳过（预览环境那两条，同第一轮） |
+| `python -I build/check_registry.py` | 没登记 0、登记了不存在 0 |
+| `python build/req_index.py --check` | 需求 218 条，问题 0 |
+| check_arch（`tests/arch/check-arch.test.ts` 的“真仓库 0 个错误”） | 通过 |
 
 ## 四、未改及原因
 
