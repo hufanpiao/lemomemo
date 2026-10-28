@@ -269,10 +269,10 @@ try {
     }
 
     Step '不是密钥的两项'
-    $acct = (Read-Host '  Cloudflare Account ID（32 位，R2 页右侧或 Cloudflare 首页右侧，不是密钥）').Trim()
-    if ($acct -notmatch '^[0-9a-f]{32}$') { Fail 'Account ID 的格式不对' }
-    $ref = (Read-Host "  $label Supabase 项目的 Project ref（20 个小写字母，不是密钥）").Trim()
-    if ($ref -notmatch '^[a-z]{20}$') { Fail 'Project ref 的格式不对' }
+    # 这两项不是密钥，直接写在脚本里（环境清单-v4 记着同样的值，10-28 负责人嫌粘贴太多）；后面会用临时令牌核对项目名，不对就停
+    $acct = '85bc77b19e5133870fa049da6da2deda'
+    $ref = if ($Target -eq 'preview') { 'yoeqwhygehbaftkppati' } else { 'uvlnwawwsdfihziaielj' }
+    Ok "Account ID、$label Project ref 已自动填好"
     $endpoint = "https://$acct.r2.cloudflarestorage.com"
 
     Step '粘贴两把管理令牌（只用来写这一次）'
