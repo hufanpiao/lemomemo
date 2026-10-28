@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "probe-auth",
+  "description": "小验证页不调任何命令：不给权限，只证明 Turnstile 在本地页面上能用",
+  "windows": ["auth"],
+  "permissions": []
+}

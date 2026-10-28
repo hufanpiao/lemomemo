@@ -1,0 +1,9 @@
+# 官网的 robots（架构 16.2）。预览环境由 build/build_site.mjs 换成整站禁止。
+User-agent: *
+Allow: /
+Disallow: /app/
+Disallow: /sb/
+Disallow: /desktop/
+Disallow: /errors/
+
+Sitemap: https://lemomemo.com/sitemap.xml

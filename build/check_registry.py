@@ -23,7 +23,9 @@ def registered_paths():
         cell = line.split("|")[1].strip()
         m = re.match(r"\[([^\]]+)\]\(", cell)
         cell = m.group(1) if m else cell.strip("`")
-        if cell and "." in cell.split("/")[-1]:
+        # 无扩展名的文件（如 Cloudflare 的 _headers）也算；以 / 结尾的是目录行
+        name = cell.split("/")[-1]
+        if cell and not cell.endswith("/") and ("." in name or name.startswith("_")):
             paths.add(cell)
     return paths
 
