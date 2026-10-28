@@ -26,3 +26,14 @@ osv-scanner  2.7.0    linux_amd64    osv-scanner_linux_amd64                  16
 # 出处：https://github.com/supabase/cli/releases/download/v2.120.0/checksums.txt（2026-10-28 抄）
 supabase     2.120.0  linux_amd64    supabase_2.120.0_linux_amd64.tar.gz      7074584113aa00495beeac661c41fb09f1ddd0a483cd7333894b0d080086dc6e  https://github.com/supabase/cli/releases/download/v2.120.0/supabase_2.120.0_linux_amd64.tar.gz
 supabase     2.120.0  windows_amd64  supabase_2.120.0_windows_amd64.tar.gz    53920013d24bc9e66180f35ceeea9ddc20e65a7afa883421e9c0ba60ad7457ee  https://github.com/supabase/cli/releases/download/v2.120.0/supabase_2.120.0_windows_amd64.tar.gz
+
+# localstack：S3 替身的容器镜像（架构 8.6、0.32 第 4 条；B0 R2 任务单 O-1）。只在 ci.yml 的 db 任务和本机测试里用，不进部署任务、不进 publish.ps1。
+#   这一行的列含义不同于上面：平台写 oci，“文件名”一列是镜像名:标签，SHA-256 一列是多架构清单（manifest list）的 digest（去掉 sha256: 前缀），
+#   下载地址一列是 Docker Hub 的标签页（只供人核对，脚本不从这里下载）。install-tool.sh 不装它；docker-compose.objstore.yml 的 image
+#   必须等于“镜像名:标签@sha256:digest”，build/objstore.mjs pin 比对，CI 里不一致就失败。
+#   为什么不是 MinIO：官方镜像（Docker Hub minio/minio、quay.io/minio/minio）10-28 实测都不能匿名拉取，上游只发源码；
+#   为什么是 4.14.0：LocalStack 2026.03 起的新版本启动要 auth token（要注册、CI 要放 secret），4.14.0（2026-02-26）是之前最后一版社区版。
+#   代价：这一版不会再有安全更新（只在 runner 和本机回环地址上跑、没有真数据，可以接受，交安全审查员确认）；对请求头里的 SigV4 签名默认不校验。
+# 出处：Docker Hub registry API（registry-1.docker.io/v2/localstack/localstack/manifests/4.14.0 的 Docker-Content-Digest），
+#       和 hub.docker.com/v2/repositories/localstack/localstack/tags/4.14.0 的 digest 一致（2026-10-28 运维抄）
+localstack   4.14.0   oci            localstack/localstack:4.14.0             3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a  https://hub.docker.com/r/localstack/localstack/tags?name=4.14.0
