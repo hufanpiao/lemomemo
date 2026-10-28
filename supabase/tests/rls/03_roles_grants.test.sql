@@ -72,7 +72,7 @@ select is((select count(*)::int from pg_proc p where p.pronamespace = 'private':
   'private 每个函数的属主都是 postgres');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
-  'devices_session_guard,enqueue_anniv_defaults,enqueue_embed,enqueue_remind,file_slot_open,guard_note_file,guard_token_revoke,is_active,'
+  'devices_session_guard,enqueue_anniv_defaults,enqueue_embed,enqueue_remind,files_authorize_impl,guard_note_file,guard_token_revoke,is_active,'
   || 'purge_deleted_impl,record_consent_impl,row_quota,table_meta_of,touch,vault_ai_off',
   'authenticated 能执行的 private 函数 = 白名单（B1 的几个 *_impl 还没建）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
@@ -85,9 +85,12 @@ select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_ai', p.oid, 'EXECUTE')), null, 'fn_ai 不能执行任何 private 函数');
 select is((select string_agg(p.proname || ':' || p.prosecdef, ',' order by p.proname) from pg_proc p where p.pronamespace = 'public'::regnamespace),
-  'purge_deleted:false,record_consent:false', 'public 里只有两个 RPC，都是 security invoker（其余六个 B1 起）');
+  'files_authorize:false,purge_deleted:false,record_consent:false', 'public 里只有三个 RPC，都是 security invoker（其余六个 B1 起；files_authorize 是 0.32 加的）');
 select ok(not has_function_privilege('anon', 'public.purge_deleted(jsonb)', 'EXECUTE') and not has_function_privilege('anon', 'public.record_consent(text, boolean)', 'EXECUTE')
-  and not has_function_privilege('service_role', 'public.purge_deleted(jsonb)', 'EXECUTE'), 'public RPC 只授给 authenticated');
+  and not has_function_privilege('service_role', 'public.purge_deleted(jsonb)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.files_authorize(text, jsonb)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.files_authorize(text, jsonb)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.files_authorize(text, jsonb)', 'EXECUTE'), 'public RPC 只授给 authenticated');
 
 -- ===== TC-B0-95：表级 DELETE 只有 devices =====
 select is((select string_agg(table_name || ':' || grantee, ',' order by table_name, grantee) from information_schema.role_table_grants

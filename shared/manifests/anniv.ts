@@ -14,7 +14,7 @@ export const anniv = defineManifest({
       systemCols: ['pushed_for', 'defer_until', 'remind_at', 'next_date', 'archived_at'], noConflict: ['notified_for', 'snooze_at', 'updated_at'] },
   ],
   buckets: [
-    { name: 'images', pathPrefix: '<user_id>/anniv/', pathPattern: `^${UUID_RE}/anniv/${UUID_RE}/${UUID_RE}\\.webp$`,
+    { name: 'images', store: 'r2', pathPrefix: '<user_id>/anniv/', pathPattern: `^${UUID_RE}/anniv/${UUID_RE}/${UUID_RE}\\.webp$`,
       backup: 'weekly-s3', export: 'zip', countsToQuota: true,
       orphanSweep: { after: '24 hours', table: 'anniversaries', col: 'avatar_id' }, userLookup: { by: 'pathPattern', level: 1 } },
   ],

@@ -85,10 +85,10 @@ describe('SQL 用例', () => {
     const dir = join(root, 'supabase', 'tests', 'compat');
     const got = Object.fromEntries(
       readdirSync(dir)
-        .filter((f) => f.endsWith('.sql'))
+        .filter((f) => f.endsWith('.psql'))
         .map((f) => [f, sampleExpectation(readFileSync(join(dir, f), 'utf8'))]),
     );
-    expect(got).toEqual({ 'sample_add_column.sql': 'ok', 'sample_rename_column.sql': 'fail' });
+    expect(got).toEqual({ 'sample_add_column.psql': 'ok', 'sample_rename_column.psql': 'fail' });
     expect(() => sampleExpectation('select 1')).toThrow();
   });
 

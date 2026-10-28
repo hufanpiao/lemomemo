@@ -142,7 +142,7 @@ jobs:
         run: |
           shopt -s nullglob
           n=0
-          for f in supabase/tests/compat/*.sql; do
+          for f in supabase/tests/compat/*.psql; do
             case "$(basename "$f")" in _*) continue ;; esac
             n=$((n + 1))
             echo "::group::$f"

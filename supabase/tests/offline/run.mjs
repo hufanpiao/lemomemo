@@ -6,7 +6,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { vector } from '@electric-sql/pglite-pgvector';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../..');
@@ -87,6 +87,33 @@ if (!only || only === 'd1') {
   const neg = await runD1(q, broken);
   if (neg.some((p) => p.includes('anniversaries'))) log(`✔ D1 反例：少登记 anniversaries 时报错（${neg.length} 处，例：${neg[0]}）`);
   else fail('D1 反例：少登记 anniversaries 却没报错');
+  // 0.32：同名桶的各段登记 store 必须一致（anniv 的头像段写成 supabase）
+  const mixed = allManifests.map((m) => m.feature === 'anniv' ? { ...m, buckets: m.buckets.map((b) => ({ ...b, store: 'supabase' })) } : m);
+  const negStore = await runD1(q, mixed);
+  if (negStore.some((p) => p.includes('桶 images 的 store 在各清单里不一致'))) log(`✔ D1 反例：头像段写 store: 'supabase' 时报错（${negStore.find((p) => p.includes('store'))}）`);
+  else fail(`D1 反例：头像段 store 和 images 桶不一致却没报错（实际：${negStore.join(' | ') || '无'}）`);
+
+  // 0.32（BE-4）：/files 的规则表和清单一致（build/d1/files-rules.ts）。规则表由前端 B 的生成器产出，没合进来时只记说明
+  const { checkFilesRules, filesRulesFacts, FILES_RULES_PATH, FILES_FUNCTION_DIR, GENERATED_HEADER } = await import('../../../build/d1/files-rules.ts');
+  const { existsSync } = await import('node:fs');
+  const genPath = join(root, 'build/gen_files_rules.mjs');
+  const render = existsSync(genPath) ? (await import(pathToFileURL(genPath).href)).renderFilesRules : undefined;
+  const rulesPath = join(root, FILES_RULES_PATH);
+  const rules = checkFilesRules({ generated: existsSync(rulesPath) ? readFileSync(rulesPath, 'utf8') : null,
+    functionExists: existsSync(join(root, FILES_FUNCTION_DIR)), render }, allManifests);
+  if (rules.problems.length) { fail(`/files 规则表：${rules.problems.length} 处不一致`); rules.problems.forEach((p) => log('    ' + p)); }
+  else log(`✔ /files 规则表核对：${rules.notes.length ? rules.notes.join('；') : '和清单一致'}`);
+  // 自测（TC-B0-118 第三份样例）：按清单拼一份“规则表”，手改其中一个字，核对必须失败
+  const facts = filesRulesFacts(allManifests);
+  const sample = [`// ${GENERATED_HEADER}`, ...facts.map((f) => f.forms[f.forms.length - 1])].join('\n');
+  const okSample = checkFilesRules({ generated: sample, functionExists: true }, allManifests).problems;
+  const tampered = sample.replace('application/pdf', 'application/pdg');   // 只出现一次的值（重复出现的值手改一处要靠逐字比拦）
+  const badSample = checkFilesRules({ generated: tampered, functionExists: true }, allManifests).problems;
+  const noGen = checkFilesRules({ generated: null, functionExists: true }, allManifests).problems;
+  const drift = checkFilesRules({ generated: sample, functionExists: true, render: () => sample + ' ' }, allManifests).problems;
+  if (okSample.length === 0 && badSample.length > 0 && noGen.length > 0 && drift.length > 0)
+    log(`✔ /files 规则表核对自测：样例通过；手改一个字报“${badSample[0]}”；函数在、规则表不在报错；和生成器输出差一个字报错`);
+  else fail(`/files 规则表核对自测不对：样例 ${okSample.join('|') || '通过'}；手改 ${badSample.length}；缺文件 ${noGen.length}；差一字 ${drift.length}`);
 
   // 违规样例：每个样例在事务里改一处，D1 必须报出 expect 那句，然后回滚
   const fxDir = join(root, 'supabase/tests/d1-fixtures');
@@ -117,6 +144,12 @@ if (!only || only === 'd1') {
     try { defineManifest({ feature: 'qa', owner: 'feature', tables: [t] }); fail(`清单违规“${what}”没被拦下`); }
     catch { log(`✔ 清单违规“${what}”加载时报错`); }
   }
+  // 0.32（TC-B0-118 第一份样例）：桶不写 store、写错值，zod 在加载时拦下
+  const bucket = { name: 'qa', pathPrefix: '<user_id>/', pathPattern: '^x$', backup: 'none', export: 'none', countsToQuota: false, orphanSweep: null, noUserData: true };
+  for (const [what, b] of [['桶不写 store', bucket], ['桶的 store 写成 s3', { ...bucket, store: 's3' }]]) {
+    try { defineManifest({ feature: 'qa', owner: 'feature', tables: [], buckets: [b] }); fail(`清单违规“${what}”没被拦下`); }
+    catch (e) { log(`✔ 清单违规“${what}”加载时报错（${String(e.message).includes('store') ? '报错里有 store' : e.message.slice(0, 60)}）`); }
+  }
 }
 
 // 4) 兼容样例：每个样例叠在 7 个迁移之上，再跑一遍 tests/compat/subset.json 里的 SQL 契约用例（4.0.0 客户端的写法），
@@ -131,7 +164,7 @@ if (!only || only === 'compat') {
   const helpersSql = readFileSync(join(rlsDir, '_helpers.psql'), 'utf8');
   const exec = (sql) => db.exec(sql);
   const query = async (sql) => (await db.query(sql)).rows;
-  for (const f of readdirSync(compatDir).filter((f) => f.endsWith('.sql') && !f.startsWith('_')).sort()) {
+  for (const f of readdirSync(compatDir).filter((f) => f.endsWith('.psql') && !f.startsWith('_')).sort()) {
     const sampleSql = readFileSync(join(compatDir, f), 'utf8');
     try {
       const expect = sampleExpectation(sampleSql);
