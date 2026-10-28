@@ -14,7 +14,11 @@
 # 本文件只写 secret 和 variable 的名字，值由负责人在 GitHub 网页上填（负责人B0网页操作清单）。
 #   secrets：PREVIEW_SUPABASE_ACCESS_TOKEN、PREVIEW_SUPABASE_DB_PASSWORD、PREVIEW_CLOUDFLARE_API_TOKEN
 #   variables（公开值）：PREVIEW_SUPABASE_PROJECT_REF、PREVIEW_PAGES_PROJECT、PREVIEW_SITE_ORIGIN、CLOUDFLARE_ACCOUNT_ID、
-#                        PREVIEW_SUPABASE_ANON_KEY、PREVIEW_VAPID_PUBLIC_KEY、PREVIEW_TURNSTILE_SITE_KEY
+#                        PREVIEW_SUPABASE_ANON_KEY、PREVIEW_VAPID_PUBLIC_KEY、PREVIEW_TURNSTILE_SITE_KEY、
+#                        PREVIEW_R2_READY（架构 0.32：R2 开通并写好令牌后设成 true，打开“R2 配置核对”一步）
+# R2（照片和附件，架构 0.32）不加任何 GitHub secret：/files 用的令牌和 FILES_URL_SECRET 在 Cloudflare Pages 项目的加密变量里，
+# 服务器函数用的在 Supabase secrets 里，都由负责人运行 tools/keys/set-r2-tokens.ps1 写入；本文件只核对 Pages 那边的名字。
+# 预览 E2E 经 preview.lemomemo.com/files 跑（任务单 O-4、第五节第 9 项）等前端 B 牵头联调时接在 deploy 后面（环境清单第七节第 2 条）。
 name: deploy-preview
 
 on:
@@ -186,6 +190,35 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.PREVIEW_SUPABASE_ACCESS_TOKEN }}
         run: supabase functions deploy --project-ref "$PROJECT_REF" --use-api --yes
+
+      - name: R2 配置核对（R2 开通、负责人运行 set-r2-tokens.ps1 以后；仓库变量 PREVIEW_R2_READY 设成 true 才跑）
+        # 架构 0.32、8.4：/files 函数要的变量在 Cloudflare Pages 项目的生产环境里（不在 GitHub），这里只查名字和类型、不读值：
+        #   文本：R2_ENDPOINT（https://<账号 ID>.r2.cloudflarestorage.com）、R2_BUCKET_PREFIX（preview-）
+        #   加密：R2_FILES_ACCESS_KEY_ID、R2_FILES_SECRET_ACCESS_KEY、FILES_URL_SECRET
+        # 服务器函数的 R2_ENDPOINT、R2_BUCKET_PREFIX、R2_FN_ACCESS_KEY_ID、R2_FN_SECRET_ACCESS_KEY 在 Supabase secrets 里；
+        # 预览的 Supabase 令牌没有“读 secrets”的权限，这里不查（要查得加一项权限，先过安全审查员），由 set-r2-tokens.ps1 写完当场核对。
+        # 没设变量就跳过：R2 开通前（最晚 11-10）部署照常。缺了就失败，不部署网页。
+        if: vars.PREVIEW_R2_READY == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PREVIEW_CLOUDFLARE_API_TOKEN }}
+        run: |
+          cfg="$(printf 'header = "Authorization: Bearer %s"\n' "$CLOUDFLARE_API_TOKEN" |
+            curl --config - --fail --silent --show-error --proto '=https' \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PAGES_PROJECT" |
+            jq -c '.result.deployment_configs.production.env_vars // {} | with_entries(.value |= {type, value: (if .type == "plain_text" then .value else null end)})')"
+          bad=0
+          for n in R2_FILES_ACCESS_KEY_ID R2_FILES_SECRET_ACCESS_KEY FILES_URL_SECRET; do
+            t="$(jq -r --arg n "$n" '.[$n].type // "缺"' <<<"$cfg")"
+            if [ "$t" != "secret_text" ]; then echo "::error::Pages 生产环境的 $n 应是加密变量，现在是：$t"; bad=1; fi
+          done
+          ep="$(jq -r '.R2_ENDPOINT.value // ""' <<<"$cfg")"
+          if [ "$ep" != "https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" ]; then
+            echo "::error::Pages 生产环境的 R2_ENDPOINT 不对（应是 https://<CLOUDFLARE_ACCOUNT_ID>.r2.cloudflarestorage.com），现在是：${ep:-缺}"; bad=1
+          fi
+          pf="$(jq -r '.R2_BUCKET_PREFIX.value // ""' <<<"$cfg")"
+          if [ "$pf" != "preview-" ]; then echo "::error::Pages 生产环境的 R2_BUCKET_PREFIX 应是 preview-，现在是：${pf:-缺}"; bad=1; fi
+          if [ "$bad" -ne 0 ]; then echo "负责人照负责人B0网页操作清单第 ⑫ 节 C 重新运行 set-r2-tokens.ps1 -Target preview"; exit 1; fi
+          echo "Pages 生产环境的 R2 变量齐全（只核对名字、类型和两个公开值）" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 网页（wrangler pages deploy，含 Pages Functions）
         env:
