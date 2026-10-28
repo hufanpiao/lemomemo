@@ -1,6 +1,7 @@
 // 照片和附件经同源的 /files/v1/*（架构 0.32；14.2 第 3、11 点；5.13 第 2、4 点；任务单 FA-2）
 // - 只认 images、files 两个桶（vault-* 只经服务器函数）；没有删除、没有覆盖
-// - 上传 PUT /files/v1/o/<桶>/<路径>：带 JWT 和 X-App-Version；409 exists 当成功（重试时对象已在）
+// - 上传 PUT /files/v1/o/<桶>/<路径>：带 JWT 和 X-App-Version；409 exists 当成功（重试时对象已在）；
+//   403 not_pending 单独报出（kind not_pending，架构 0.33 第 5 条），不并进 denied、不重传
 // - 批量签名 POST /files/v1/sign：一次最多 100 项，超了自动分批；不过的项单独标出，不整批失败
 // - 取字节 GET 签名链接：不带 JWT；先核对链接的来源和路径前缀（不只比字符串前缀，14.2 第 3 点）
 // - 错误码映射成 data 层用的几类（FileErrorKind），界面文案由 data / ui 按类别取
@@ -29,9 +30,12 @@ export const TIMEOUT_MS = { upload: 120_000, sign: 15_000, get: 60_000 } as cons
  * - auth：401 unauthorized——登录过期，刷新会话后再试一次，还不行回登录页
  * - account：账号停用或这台设备的会话已被吊销（account_disabled、session_revoked）——交给会话处理
  * - resign：取字节时 403 expired / bad_signature——重新签一次再取（换过 FILES_URL_SECRET 也会这样）
- * - denied：bad_path、forbidden（not_owner、not_pending、no_row…）、not_found、链接不对等——不重试
+ * - not_pending：上传时 403 forbidden / not_pending（架构 0.33 第 5 条，5.13 第 2 点）——这一行已经不在 pending
+ *   （file-check 判过了，或行已删）。**不是上传失败**：不重传、不按出错提示；data 层读这一行的 check_status：
+ *   ok → 当成功、不再调 file-check；rejected → 按“没能加上”显示；行已删 → 丢掉。只有 upload 会给出这一类
+ * - denied：bad_path、forbidden（not_owner、no_row…）、not_found、链接不对等——不重试
  */
-export type FileErrorKind = 'retry' | 'too_big' | 'bad_type' | 'upgrade' | 'auth' | 'account' | 'resign' | 'denied';
+export type FileErrorKind = 'retry' | 'too_big' | 'bad_type' | 'upgrade' | 'auth' | 'account' | 'resign' | 'not_pending' | 'denied';
 
 export interface FileError {
   ok: false;
@@ -136,6 +140,8 @@ export function classify(status: number, code: string, reason?: string): FileErr
   if ((reason !== undefined && ACCOUNT_REASONS.has(reason)) || ACCOUNT_REASONS.has(code)) return 'account';
   if (code === 'unauthorized' || status === 401) return 'auth';
   if (code === 'expired' || code === 'bad_signature') return 'resign';
+  // 只认 PUT 的 403 forbidden 带的 reason（签名单项不过时 code 就是 reason，不会走到这里）
+  if (code === 'forbidden' && reason === 'not_pending') return 'not_pending';
   return 'denied';
 }
 

@@ -44,7 +44,7 @@ describe('upload：PUT /files/v1/o/<桶>/<路径>', () => {
     [400, { code: 'bad_path' }, 'denied'],
     [401, { code: 'unauthorized' }, 'auth'],
     [403, { code: 'forbidden', reason: 'not_owner' }, 'denied'],
-    [403, { code: 'forbidden', reason: 'not_pending' }, 'denied'],
+    [403, { code: 'forbidden', reason: 'not_pending' }, 'not_pending'],
     [403, { code: 'forbidden', reason: 'no_row' }, 'denied'],
     [403, { code: 'forbidden', reason: 'account_disabled' }, 'account'],
     [403, { code: 'forbidden', reason: 'session_revoked' }, 'account'],
@@ -63,6 +63,24 @@ describe('upload：PUT /files/v1/o/<桶>/<路径>', () => {
     const want: Partial<FileError> = { ok: false, kind, code: body.code, status };
     if ('reason' in body) want.reason = body.reason;
     expect(r).toEqual(want);
+  });
+
+  // 架构 0.33 第 5 条（代码审查低 9）：PUT 回 403 not_pending = 这一行已经不在 pending（file-check 判过了，或行已删）。
+  // 不是失败、不重传：单独报给 data 层，由它读这一行的 check_status 决定当成功、“没能加上”还是丢掉
+  it('403 forbidden/not_pending 单独报出（kind not_pending），不并进 denied、不算 retry', async () => {
+    const f = fakeFetch(json(403, { code: 'forbidden', reason: 'not_pending' }));
+    const r = await client(f).upload('files', PDF, new Blob(['x']), 'application/pdf');
+    expect(r).toEqual({ ok: false, kind: 'not_pending', code: 'forbidden', reason: 'not_pending', status: 403 });
+    expect(f.calls).toHaveLength(1); // 客户端自己不重传
+  });
+
+  it('not_pending 只认 403 forbidden 带的 reason：别的码、别的 reason 照旧', async () => {
+    expect(classify(403, 'forbidden', 'not_pending')).toBe('not_pending');
+    expect(classify(403, 'forbidden', 'not_owner')).toBe('denied');
+    expect(classify(403, 'forbidden', 'no_row')).toBe('denied');
+    // 签名里单项不过的 reason（code 就是 reason，不是 forbidden）不算，签名不会遇到 pending 的问题
+    expect(classify(200, 'not_pending', 'not_pending')).toBe('denied');
+    expect(classify(404, 'not_found', 'not_pending')).toBe('denied');
   });
 
   it('错误响应不是 JSON（例如 Cloudflare 的默认错误页）：按状态码算', async () => {

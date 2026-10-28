@@ -36,6 +36,28 @@ test.describe('响应头', () => {
     expect(csp).not.toContain("default-src 'self'");
   });
 
+  // TC-B0-59（15.6 第 4b 条、0.18 N6）：分路径断言。/app/ 和预览沙箱都有 base-uri、form-action，
+  // 都不放行 challenges.cloudflare.com（只有 /app/auth/ 放行，入口 B1 才建，B1 起本条加上它），也不放行任何第三方脚本
+  test('TC-B0-59：/app/ 和预览沙箱都有 base-uri、form-action；不放行 Turnstile 和任何第三方脚本', async ({ request }) => {
+    const want: Record<string, { base: string; form: string }> = {
+      '/app/': { base: "base-uri 'none'", form: "form-action 'self'" },
+      '/app/preview': { base: "base-uri 'none'", form: "form-action 'none'" },
+    };
+    for (const [path, { base, form }] of Object.entries(want)) {
+      const res = await request.get(path);
+      expect(res.status(), path).toBe(200);
+      const csp = res.headers()['content-security-policy'] ?? '';
+      const directives = csp.split(';').map((d) => d.trim());
+      expect(directives, path).toContain(base);
+      expect(directives, path).toContain(form);
+      expect(csp, path).not.toContain('challenges.cloudflare.com');
+      // script-src 只有 'self'：没有任何主机、https:、*、unsafe-*
+      expect(directives.find((d) => d.startsWith('script-src ')), path).toBe("script-src 'self'");
+      // 同一路径只有一条 CSP（“! 头名”去掉了 /app/* 那条，不叠加；叠加时 Cloudflare 用逗号拼）
+      expect(csp, path).not.toContain(',');
+    }
+  });
+
   test('/files 和网页同源（0.32）：connect-src、img-src 只要 self，不为它另开任何主机', async ({ request }) => {
     const csp = (await request.get('/app/')).headers()['content-security-policy'] ?? '';
     const directive = (name: string) => csp.split(';').map((d) => d.trim()).find((d) => d.startsWith(`${name} `)) ?? '';

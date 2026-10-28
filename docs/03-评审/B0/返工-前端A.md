@@ -61,3 +61,42 @@
 - `eslint.config.js` 的 CSP 规则里 `X.Overlay` 是按名字认的：以后如果自己写一个叫 `Something.Overlay` 的组件也会被拦，到时改名或加带理由的单行豁免。
 - `tests/arch-fixtures/` 的违规样例从现在起**必须写 `rule=<架构规则号>`**，不写测试直接报错；新增架构规则时，`coverage.test.ts` 会要求它有样例。
 - `tests/arch-fixtures/eslint-targets/` 是给边界规则用的假目标文件，等仓库里有了真的功能 `data/` 以后可以改成引真文件、删掉它。
+
+---
+
+# 第二次（架构 0.33）
+
+- **起点**：main `8332dcb`；分支 `worktree-agent-af6fc8ece5038b86d`
+- **依据**：架构设计-v4.md“0.33 B0 第一轮评审返工”第 5、9、16 条和“交给谁 · 前端 A”；返工-架构师.md 第三节“前端 A”
+- **范围**：只改 `src/platform/files.ts`、`src/platform/__tests__/files.test.ts`、`tests/e2e/csp.spec.ts` 和本文件。没有新文件。B1 / B2 项（第 8 条动效、manifest icons、L-2）不做
+- **说明**：本节只是登记，**不是签字**
+
+## 一、逐条
+
+| 清单项 | 做了什么 | 怎么验证 | 先失败 |
+|---|---|---|---|
+| **代低 9 / 0.33 第 5 条** `not_pending` 单独报出 | `src/platform/files.ts`：`FileErrorKind` 加 `not_pending`；`classify()` 只在 `code = forbidden` 且 `reason = not_pending` 时给它（签名里单项不过时 code 就是 reason，不会误中）。文件头和类别说明写明：这一类**不是上传失败**，客户端不重传、不按出错提示，data 层读这一行的 `check_status`（ok → 当成功、不再调 file-check；rejected → “没能加上”；行已删 → 丢掉），只有 upload 会给出。`denied` 的说明里去掉了 not_pending | `files.test.ts`：错误码表里 `403 forbidden/not_pending` 改成期望 `not_pending`；新增两条：PUT 回 not_pending → `{ok:false, kind:'not_pending', code:'forbidden', reason:'not_pending', status:403}`，只发一次请求；`classify` 只认 403 forbidden 带的 reason，`not_owner`、`no_row`、签名单项的 `not_pending`、404 带这个 reason 都还是 `denied` | 3 条失败（都收到 `denied`） |
+| **代低 6** 客户端超时管到读完响应体 | 只核对：main 上已是 `exchange()`（`files.ts:226` 起），上一轮做的 | `files.test.ts`、`files-sign.test.ts` 里“响应头到了、响应体卡住”三条照常通过 | — |
+| **TC-B0-59** `/app/` CSP 的 base-uri / form-action | `tests/e2e/csp.spec.ts` 新增一条，分路径断言：`/app/` 和 `/app/preview` 的 CSP 各自有 `base-uri 'none'` 和 `form-action`（主 App `'self'`、预览沙箱 `'none'`）；都不含 `challenges.cloudflare.com`；`script-src` 正好是 `'self'`（没有任何主机、`https:`、`*`、`unsafe-*`）；CSP 里没有逗号（没被 Cloudflare 叠成两条）。`/app/auth/` 入口 B1 才建，按用例原文 B1 起加；`/sb/*` 的 nosniff、sandbox 归前端 B（`sb-forward.preview.test.ts` 已有） | chromium + webkit 都过 | `_headers` 本来就对，所以**故意改坏**验证：去掉 `/app/*` 的 `base-uri` → 失败；改回，再去掉 `/app/preview` 的 `form-action` → 失败；之后 `src/_headers` 已还原，无改动 |
+| **check_arch 的 `disabled_at` 规则**（TC-B0-97 ④） | **没在 src/ 加规则**，理由见第三节第 1 条 | src/ 里搜 `disabled_at` 无结果；后端 `build/check_backend.py` F5 管 `supabase/functions/`，样例 `tests/arch-fixtures/check_backend/f5-disabled-at/`，unit.yml 已接 | — |
+| `rule=`、T1、W3（超预算）、400 ms、data → data、TC-B0-13、TC-B0-18 | 只核对 main：`tests/arch/fixture-header.ts`、`coverage.test.ts`、`tsc/t1-strict.ts`、`check_size/w3-over-budget/`、`durations/tc-b0-10-500ms.css`、`eslint/a1-data-imports-other-feature-data.ts`、`src/app/__tests__/webmanifest.test.ts`、`src/kit/hooks/__tests__/useCollection.test.tsx` 都在 | 全量 vitest 通过（见第二节） | — |
+
+## 二、本机检查结果
+
+| 命令 | 结果 |
+|---|---|
+| `npm run lint` | 0 错误 0 警告 |
+| `npm run typecheck`（五份 tsconfig） | 0 错误 |
+| `npx vitest run` | 54 个文件通过、1 个跳过；695 条通过、12 条跳过、4 条 todo |
+| `CI=true npx playwright test`（chromium + webkit） | 44 通过、2 跳过（预览环境那两条）；上一轮 42，多的是 TC-B0-59 两个浏览器各一条 |
+| `python -I build/check_arch.py` | 0 个错误，2 个警告（W2：cn、kr 缺 2027 节假日文件，原来就有） |
+| `python -I build/check_registry.py` | 没登记 0、登记了不存在 0 |
+| `python build/req_index.py --check` | 需求 218 条，问题 0 |
+
+## 三、未改及原因
+
+1. **src/ 侧不加 `disabled_at` 规则**：TC-B0-97 ④ 的期望范围是“`supabase/functions/` 里除 `_shared/auth.ts`、account、account-purge 以外”，后端已在 `check_backend.py` F5 做了（带违规样例、接进 unit.yml），按任务要求不重复。src/ 侧架构没有对应规则：App 不读也不写这一列（写由 `guard_profile_disabled()` 触发器拦，停用后 RLS 的 `is_active()` 直接拒绝，客户端只会收到 `account_disabled`），现在 src/ 里也没有一处出现。若架构师要在 src/ 也禁止（例如防 B1 的设置页直接读 `profiles.disabled_at`），请写进 2.3 规则表，我再补规则和样例。另外 0.33 和 1.3b 写的是“check_arch”，实际在 `check_backend.py`，名字不一致请架构师顺手改
+2. **`not_pending` 用 `ok: false` + 单独的 `kind` 表示，没做成 `ok: true`**：任务说“不当失败”，我理解为 data 层不按失败处理（不重传、不弹错），而不是算成上传成功——要读 `check_status` 才知道是成功、“没能加上”还是丢掉，并进 `ok: true` 会让只看 `ok` 的调用方直接去调 file-check。kind 是联合类型，data 层 `switch` 漏了这一类 tsc 会报。若架构师 / 前端 B 要别的形状（例如 upload 返回三态），只动这一处
+3. **data 层按 `check_status` 处理 not_pending 没写**：功能的 data 层（照片、附件）是 B4b-1 的事，本次只把类别报出来
+4. **TC-B0-59 的 `/app/auth/`**：入口 B1 才有，按用例原文 B1 起加
+5. B1 / B2 项按任务不做
