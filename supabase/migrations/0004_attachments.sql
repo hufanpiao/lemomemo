@@ -167,10 +167,13 @@ begin
     elsif b = 'images' then
       -- 随手记插图：先写行再传（比原来 img_ins 严）；缩略图要 has_thumb
       base := case when thumb then left(p, -7) || '.webp' else p end;
-      select ni.bucket, ni.has_thumb, ni.deleted_at into row_ from public.note_images ni
+      select ni.bucket, ni.has_thumb, ni.deleted_at, n.is_private into row_ from public.note_images ni
+        join public.notes n on n.id = ni.note_id and n.user_id = ni.user_id
        where ni.user_id = uid and ni.path = base;
       if not found or (thumb and not row_.has_thumb) then r := 'no_row';
       elsif row_.bucket <> 'images' then r := 'not_owner';   -- 隐私记的图（vault-images）不经 /files
+      -- 0.33（B0 代码审查低 8）：put 另要挂的随手记 is_private = false（和触发器 guard_note_image() 同一口径；纵深一道）
+      elsif p_op = 'put' and row_.is_private then r := 'bad_bucket';
       elsif row_.deleted_at is not null and (p_op = 'put' or row_.deleted_at < now_ms - keep_ms) then r := 'deleted';
       end if;
     else

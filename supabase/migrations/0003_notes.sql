@@ -95,6 +95,18 @@ alter table public.note_images add constraint note_images_id_user_key unique (id
 create index on public.note_images (user_id, synced_at);
 create index on public.note_images (note_id);
 
+-- 0.33（B0 代码审查低 8）：客户端插的图只能挂在本人的普通随手记上（隐私记的图只经 vault-image {action: upload}）
+--   和 guard_note_file() 同一口径：只拦请求角色 authenticated / anon，服务器一侧（fn_vault 移进移出、vault-image）靠列级授权；
+--   update 只授 deleted_at、undone，改不了 note_id，所以只查 insert。预览项目还没部署，直接写在这里（同 0.31 第 17 条）
+create function private.guard_note_image() returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if coalesce(current_setting('role', true), '') not in ('authenticated', 'anon') then return new; end if;
+  if not exists (select 1 from public.notes n where n.id = new.note_id and n.user_id = new.user_id and not n.is_private) then
+    raise exception 'note_not_writable'; end if;
+  return new;
+end $$;
+grant execute on function private.guard_note_image() to authenticated;        -- 0003  触发器函数：security definer
+create trigger note_images_guard before insert on public.note_images for each row execute function private.guard_note_image();
 create trigger note_images_touch before insert or update on public.note_images for each row execute function private.touch();
 create trigger note_images_quota before insert on public.note_images for each row execute function private.row_quota();
 create trigger note_images_tombstone after delete on public.note_images for each row execute function private.write_tombstone();

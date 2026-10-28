@@ -70,7 +70,7 @@ export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
 export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault' | 'fn_ai', string[]> = {
   authenticated: ['is_active', 'report_tz_impl', 'claim_endpoint_impl', 'my_ai_usage_impl', 'record_consent_impl', 'remove_device_impl',
     'devices_session_guard', 'purge_deleted_impl', 'my_sessions_impl', 'touch', 'enqueue_remind', 'row_quota', 'guard_token_revoke',
-    'table_meta_of', 'guard_note_file', 'files_authorize_impl', 'enqueue_anniv_defaults', 'enqueue_embed', 'vault_ai_off'],
+    'table_meta_of', 'guard_note_image', 'guard_note_file', 'files_authorize_impl', 'enqueue_anniv_defaults', 'enqueue_embed', 'vault_ai_off'],
   service_role: ['take_rate', 'session_alive', 'rebind_device_impl', 'long_transactions', 'account_usable'],
   fn_vault: ['purge_vault_impl'],
   fn_ai: [],
