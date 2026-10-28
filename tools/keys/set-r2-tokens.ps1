@@ -155,7 +155,7 @@ function Read-Value([string]$label, [string]$where, [string]$pattern, [string]$h
         # 只列出不属于十六进制的字符编码（它们不是密钥的一部分），不显示值本身
         $codes = (($other.ToCharArray() | Select-Object -Unique -First 5) | ForEach-Object { 'U+{0:X4}' -f [int]$_ }) -join ' '
         $plain = $null; $other = $null
-        Warn "格式不对（要 $hint）：收到 $len 个字符，其中 $bad 个不是十六进制 $codes。多半复制错了栏（例如复制成了上面的“令牌值”）或没复制全"
+        Warn "格式不对（要 $hint）：收到 $len 个字符，其中 $bad 个不是十六进制 $codes。多半复制错了栏（例如复制成了上面的「令牌值」）或没复制全"
         if ($try -lt 3) { Say '  请回到网页重新复制这一项，再粘贴一次：' }
     }
     Fail "$label 连续 3 次格式不对，已停止"
@@ -251,7 +251,7 @@ try {
         $v = $null
         Say ''
         Say "  SHA-256（不是密钥）：$digest"
-        Say "  Cloudflare › Workers & Pages › $pages › 设置 › 变量和机密 › 生产（Production）› 添加：类型选“密钥 / Secret”，名称 FILES_URL_SECRET，粘贴，保存。"
+        Say "  Cloudflare › Workers & Pages › $pages › 设置 › 变量和机密 › 生产（Production）› 添加：类型选「密钥 / Secret」，名称 FILES_URL_SECRET，粘贴，保存。"
         Say '  复制方法：用鼠标选中上面那一行的值（不要带前后的空格），按回车复制。'
         $null = Read-Host '  贴好了按回车（会清屏、清剪贴板）'
         return
@@ -276,7 +276,7 @@ try {
     $endpoint = "https://$acct.r2.cloudflarestorage.com"
 
     Step '粘贴两把管理令牌（只用来写这一次）'
-    $cfTok = Read-Value 'Cloudflare 令牌（Account › Cloudflare Pages › Edit）' "$(if ($Target -eq 'preview') { '第 ⑫ 节临时生成的“柠檬记 R2 写入（临时）”' } else { '刚临时生成的正式 Cloudflare 管理令牌（1 天到期，用完删掉）' })" '^[A-Za-z0-9_-]{30,}$' '30 位以上的字母、数字、- 和 _'
+    $cfTok = Read-Value 'Cloudflare 令牌（Account › Cloudflare Pages › Edit）' "$(if ($Target -eq 'preview') { '第 ⑫ 节临时生成的「柠檬记 R2 写入（临时）」' } else { '刚临时生成的正式 Cloudflare 管理令牌（1 天到期，用完删掉）' })" '^[A-Za-z0-9_-]{30,}$' '30 位以上的字母、数字、- 和 _'
     $sbTok = Read-Value "Supabase 令牌（只管 $supaName）" "$(if ($Target -eq 'preview') { '第 ⑫ 节临时生成的项目级令牌' } else { '刚临时生成的正式 Supabase 项目级令牌（1 天到期，用完删掉）' })" '^sbp_[A-Za-z0-9_]{20,}$' '以 sbp_ 开头'
 
     $cfH = @{ Authorization = "Bearer $cfTok" }
@@ -284,7 +284,7 @@ try {
 
     Step '核对项目（防止贴错环境）'
     $proj = Invoke-Api GET "https://api.supabase.com/v1/projects/$ref" $sbH ''
-    if ($proj.name -ne $supaName) { Fail "这个 Supabase 项目叫“$($proj.name)”，不是 $supaName。是不是贴成了另一个环境的 ref？" }
+    if ($proj.name -ne $supaName) { Fail "这个 Supabase 项目叫「$($proj.name)」，不是 $supaName。是不是贴成了另一个环境的 ref？" }
     if ($proj.region -ne 'ap-northeast-2') { Fail "Supabase 项目不在首尔（$($proj.region)）" }
     Ok "Supabase 项目：$($proj.name)（首尔）"
     $cfProj = Invoke-Api GET "https://api.cloudflare.com/client/v4/accounts/$acct/pages/projects/$pages" $cfH ''
@@ -294,7 +294,7 @@ try {
     if ($ev) { $before = @($ev.PSObject.Properties.Name) }
     Ok "Pages 项目：$pages（生产环境现有变量 $($before.Count) 个：$($before -join '、')）"
 
-    Step "粘贴 R2 令牌（$label，桶前缀“$prefix”）"
+    Step "粘贴 R2 令牌（$label，桶前缀「$prefix」）"
     $vals.FilesId = Read-Value 'R2_FILES 的 Access Key ID' "令牌「柠檬记 $label files」生成后的页面（只授 ${prefix}images、${prefix}files 两个桶，读写）" '^[0-9a-f]{32}$' '32 位十六进制'
     $vals.FilesSk = Read-Value 'R2_FILES 的 Secret Access Key' '同一页' '^[0-9a-f]{64}$' '64 位十六进制'
     $vals.FnId = Read-Value 'R2_FN 的 Access Key ID' "令牌「柠檬记 $label functions」生成后的页面（授四个桶，读写）" '^[0-9a-f]{32}$' '32 位十六进制'
@@ -340,7 +340,7 @@ try {
     Ok "已写入 Supabase：R2_ENDPOINT、R2_FN_ACCESS_KEY_ID、R2_FN_SECRET_ACCESS_KEY$(if ($prefix) { '、R2_BUCKET_PREFIX' })"
 
     Say ''
-    Say "全部写好。Pages 的变量只对之后的部署生效：在聊天里说“第 ⑫ 节 $label 的令牌写好了”，主持人会安排重新部署一次。"
+    Say "全部写好。Pages 的变量只对之后的部署生效：在聊天里说「第 ⑫ 节 $label 的令牌写好了」，主持人会安排重新部署一次。"
     if ($Target -eq 'preview') { Say '别忘了：到 Cloudflare 和 Supabase 把这次临时生成的两把管理令牌删掉（第 ⑫ 节）。' }
 }
 finally {
