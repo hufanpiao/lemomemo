@@ -1,11 +1,12 @@
 // shared/objstore.ts（任务单 FB-1；架构 0.32 第 4 条、8.6）。Node（vitest）和 Deno（deno task test）跑同一组。
 // 默认打内存替身 tests/shared/fake-s3.ts（独立验 SigV4、核 Content-MD5）。
 // 设了 OBJSTORE_ENDPOINT（变量名和运维 build/objstore.mjs 一致：OBJSTORE_ACCESS_KEY_ID、OBJSTORE_SECRET_ACCESS_KEY、OBJSTORE_REGION、R2_BUCKET_PREFIX）时，最后一组改打真的替身（LocalStack）或 R2：
-// 【待 Docker / 待 R2】本机没有 Docker，这一组目前跳过。
+// 没设这个变量时这一组跳过（tests/shared/objstore-live.ts）。
 import { describe, expect, it } from 'vitest';
 import { createObjStore, DELETE_BATCH, ObjStoreError, type ObjFetch, type ObjStore } from '../../shared/objstore.ts';
 import { base64, md5, parseListV2, utf8, xmlEscape, xmlUnescape } from '../../shared/objstore-wire.ts';
 import { createFakeS3, type FakeS3 } from './fake-s3.ts';
+import { liveObjStore, OBJSTORE_LIVE } from './objstore-live.ts';
 
 const KEY_ID = 'FAKEKEYIDLOCALTEST';
 const SECRET = 'fake-secret-for-local-tests-only';
@@ -244,32 +245,12 @@ describe('objstore：列和删（注销、清理用）', () => {
   });
 });
 
-// ---------- 打真的替身（LocalStack，运维 O-1）或 R2：【待 Docker / 待 R2】 ----------
+// ---------- 打真的替身（LocalStack，运维 O-1）或 R2 ----------
+// 架构 0.33 第 13 条：按变量 describe.skipIf；没设 OBJSTORE_ENDPOINT 时报告里显示“跳过”，不是“通过”（QA D-10）
 
-function env(name: string): string | undefined {
-  try {
-    const p = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
-    return p?.env?.[name];
-  } catch {
-    return undefined; // Deno 没给 --allow-env
-  }
-}
-
-const LIVE = env('OBJSTORE_ENDPOINT');
-// 没设 OBJSTORE_ENDPOINT 时报告里显示“跳过”，不是“通过”（QA D-10）
-const liveIt = LIVE ? it : it.skip;
-
-describe('objstore：打真的 S3 替身（待 Docker / 待 R2；没设 OBJSTORE_ENDPOINT 时跳过）', () => {
-  liveIt('条件写回 exists、列、批量删、删完为 0（架构 8.6 的四个条件）', async () => {
-    const store = createObjStore({
-      endpoint: LIVE ?? '',
-      accessKeyId: env('OBJSTORE_ACCESS_KEY_ID') ?? 'test',
-      secretAccessKey: env('OBJSTORE_SECRET_ACCESS_KEY') ?? 'test',
-      bucketPrefix: env('R2_BUCKET_PREFIX') ?? '',
-      region: env('OBJSTORE_REGION') ?? 'us-east-1',
-      fetch: (url, init) => fetch(url, init as RequestInit),
-      now: () => Date.now(),
-    });
+describe.skipIf(!OBJSTORE_LIVE)('objstore：打真的 S3 替身（没设 OBJSTORE_ENDPOINT 时跳过）', () => {
+  it('条件写回 exists、列、批量删、删完为 0（架构 8.6 的四个条件）', async () => {
+    const store = liveObjStore();
     // deletePrefix 只认 <uuid>/，测试前缀也用一个随机 uuid
     const run = crypto.randomUUID();
     const key = `${run}/a.pdf`;

@@ -57,36 +57,17 @@ export const STRIPPED_REQUEST_HEADERS: readonly string[] = [
 /** 函数固定在首尔运行（14.2 第 5 点） */
 export const FUNCTION_REGION = 'ap-northeast-2';
 
-// 路径里出现这些就直接拒：点段、编码的点和斜杠、反斜杠、空字节、双斜杠
-const SUSPICIOUS_PATH_RE = /%2e|%2f|%5c|%00|\\|\/\/|(^|\/)\.\.?(\/|$)/i;
-const PATH_CHARS_RE = /^[A-Za-z0-9\-._~!$&'()*+,;=:@/%]*$/;
-// eslint-disable-next-line no-control-regex -- 就是要拦解码后冒出来的控制字符
-const CONTROL_RE = /[\u0000-\u001f\u007f]/;
-/** 最多解几层百分号编码；解完还有 % 就拒（正常客户端的路径不会多重编码） */
-const MAX_DECODE_ROUNDS = 4;
-
 /**
- * 原始路径和逐层百分号解码后的每一层（QA D-02、代码审查低 7、安全审查低 1）。
- * 上游（Kong、PostgREST、GoTrue）会解码路径，所以白名单、拒绝名单要对“解码后的样子”也成立：
- * `%5F`、`%61` 这类编码过的普通字符、`%255F` 这类多重编码、大小写不同的写法都要算进去。
- * 解不开（`%zz`、`%`、坏的 UTF-8）或解了 MAX_DECODE_ROUNDS 层还有 % 的，返回 null（拒）。
+ * 路径允许的字符：**不含 `%`**（架构 0.33 第 10 条、14.2 第 1 点：路径里一律不许出现百分号编码，查询串不受影响）。
+ * 理由：经 /sb 的合法路径（REST 表名和 rpc 名、Auth、函数名、Realtime、vault-preview 的随机文件名）都不含要编码的字符；
+ * 拒绝名单按原始字符串比，`files%5Fauthorize`、`%61dmin` 这类上游解码后才露出原形的写法，全部拒掉比“先解码再比”少一处口径不一致。
  */
-function decodedLayers(rawPath: string): string[] | null {
-  const layers = [rawPath];
-  let cur = rawPath;
-  for (let i = 0; i < MAX_DECODE_ROUNDS && cur.includes('%'); i++) {
-    try {
-      cur = decodeURIComponent(cur);
-    } catch {
-      return null;
-    }
-    layers.push(cur);
-  }
-  return cur.includes('%') ? null : layers;
-}
+const PATH_CHARS_RE = /^[A-Za-z0-9\-._~!$&'()*+,;=:@/]*$/;
+// 路径里出现这些也拒：点段、反斜杠（上一条已拦，留着防以后放宽字符表）、双斜杠
+const SUSPICIOUS_PATH_RE = /\\|\/\/|(^|\/)\.\.?(\/|$)/;
 
-/** 某一层（含原始那层）是否落在白名单内、拒绝名单外；p 是去掉 /sb 之后的路径 */
-function layerAllowed(p: string): boolean {
+/** 去掉 /sb 之后的路径是否落在白名单内、拒绝名单外（拒绝名单按小写比） */
+function pathAllowed(p: string): boolean {
   if (!ALLOWED_PREFIXES.some((pre) => p.startsWith(pre))) return false;
   const lower = p.toLowerCase();
   return !DENIED_EXACT.includes(lower) && !DENIED_PREFIXES.some((pre) => lower.startsWith(pre));
@@ -94,22 +75,17 @@ function layerAllowed(p: string): boolean {
 
 /**
  * 从原始 URL 里取出 /sb 之后的路径；不合规返回 null。
- * 用原始字符串判断，不用 new URL().pathname（它会把 `..`、`%2e%2e` 先规整掉，判断就晚了）。
- * 原始路径和每一层解码结果都要：不出现点段、编码的斜杠等可疑写法和控制字符，在白名单内、不在拒绝名单里。
- * 转发给上游的是原始路径（不替上游解码）。
+ * 用原始字符串判断，不用 new URL().pathname（它会把 `..` 先规整掉，判断就晚了）。
+ * 顺序：先查字符（有 `%` 就拒，在比白名单、拒绝名单之前）→ 点段、反斜杠、双斜杠 → 白名单、拒绝名单。
+ * 转发给上游的是原始路径。
  */
 export function upstreamPath(rawUrl: string): string | null {
   const parts = rawPathAndQuery(rawUrl);
   if (!parts) return null;
   const rawPath = parts.path;
-  if (!rawPath.startsWith('/sb/') || !PATH_CHARS_RE.test(rawPath)) return null;
-  const layers = decodedLayers(rawPath);
-  if (!layers) return null;
-  for (const layer of layers) {
-    if (!layer.startsWith('/sb/') || SUSPICIOUS_PATH_RE.test(layer) || CONTROL_RE.test(layer)) return null;
-    if (!layerAllowed(layer.slice('/sb'.length))) return null;
-  }
-  return rawPath.slice('/sb'.length);
+  if (!rawPath.startsWith('/sb/') || !PATH_CHARS_RE.test(rawPath) || SUSPICIOUS_PATH_RE.test(rawPath)) return null;
+  const p = rawPath.slice('/sb'.length);
+  return pathAllowed(p) ? p : null;
 }
 
 /** x-lemo-geo 的格式：`<国家两位码>|<城市，encodeURIComponent>`，缺的写 `-`（服务器函数按这个解析） */

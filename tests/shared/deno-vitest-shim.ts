@@ -17,7 +17,21 @@ export function describe(name: string, fn: () => void): void {
   }
 }
 
+/** 正在 describe.skipIf(true) 的组里：组里每条都登记成 ignored */
+let skipping = 0;
+/** 和 vitest 一样：条件成立时整组跳过（组里每条在 Deno 报告里显示 ignored），不成立就照常跑（架构 0.33 第 13 条的打替身组用） */
+describe.skipIf = (cond: unknown) => (name: string, fn: () => void): void => {
+  if (!cond) return describe(name, fn);
+  skipping++;
+  try {
+    describe(name, fn);
+  } finally {
+    skipping--;
+  }
+};
+
 export function it(name: string, a: unknown, b?: unknown): void {
+  if (skipping > 0) return it.skip(name);
   const fn = (typeof a === 'function' ? a : b) as () => void | Promise<void>;
   Deno.test([...stack, name].join(' > '), fn);
 }

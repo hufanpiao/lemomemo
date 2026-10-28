@@ -36,6 +36,11 @@ export interface ManifestTable {
   softDelete?: boolean | undefined;
   onAccountDelete?: 'cascade' | 'explicit' | 'keep-id-only' | undefined;
   clientWritable?: readonly string[] | undefined;
+  /** 下面四项给“表 × 角色 × 操作”生成器（grant-matrix.ts）用，写法和 D1 第 4 节同一口径 */
+  insertOnly?: readonly string[] | undefined;
+  updateOnly?: readonly string[] | undefined;
+  anonReadable?: readonly string[] | undefined;
+  clientDelete?: boolean | undefined;
   systemCols?: readonly string[] | undefined;
   vaultRows?: VaultRows | undefined;
   userLookup?: UserLookup | undefined;

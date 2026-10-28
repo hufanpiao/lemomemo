@@ -1,7 +1,8 @@
 // tests/functions/files*.test.ts 共用：环境（假值）、调用入口、造请求的小工具。
 import { handleFiles, type FilesDeps, type FilesEnv } from '../../functions/files/[[path]].ts';
 import { createVersionGate } from '../../functions/sb/version-gate.ts';
-import { bearer, clock, fakeAuthz, ID1, ID2, memStore, NOTE, UA, UB } from './files-fakes.ts';
+import type { ObjStore } from '../../shared/objstore.ts';
+import { bearer, clock, fakeAuthz, ID1, ID2, type MemStore, memStore, NOTE, UA, UB } from './files-fakes.ts';
 
 export const BASE = 'https://lemomemo.com';
 export const T0 = Date.UTC(2026, 9, 28, 3, 0, 0);
@@ -22,8 +23,9 @@ export const PDF = `${UA}/${NOTE}/${ID2}.pdf`;
 export const PPTX = `${UA}/${NOTE}/${ID1}.pptx`;
 export const B_IMG = `${UB}/${NOTE}/${ID1}.webp`;
 
-export function setup(opts: { min?: string; fixed?: boolean; timeoutMs?: number } = {}) {
-  const store = memStore();
+/** store：默认内存替身；打真的 S3 替身时传 liveObjStore()（files-get.test.ts 的替身组） */
+export function setup<S extends ObjStore = MemStore>(opts: { min?: string; fixed?: boolean; timeoutMs?: number; store?: S } = {}) {
+  const store = (opts.store ?? memStore()) as S;
   const authz = fakeAuthz();
   const c = clock(T0);
   const logs: { code: string; ms: number }[] = [];
