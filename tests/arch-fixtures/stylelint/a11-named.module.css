@@ -1,0 +1,4 @@
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=color-named */
+.a {
+  color: red;
+}
