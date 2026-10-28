@@ -3,6 +3,10 @@
 // 结论写在 docs/07-开发日志/B0-验证-CSP下Radix与Motion.md
 import { expect, test } from './csp-fixture.ts';
 
+/** 一条形状正确的 /files 签名链接（0.32；本机没有 /files 的上游，只用来看 CSP 和 SW 怎么对待它） */
+const FILES_LINK =
+  '/files/v1/o/images/0b7c6a1e-2d3f-4a5b-8c9d-0e1f2a3b4c5d/1b7c6a1e-2d3f-4a5b-8c9d-0e1f2a3b4c5d/2b7c6a1e-2d3f-4a5b-8c9d-0e1f2a3b4c5d.webp?e=4102444800&d=&s=e2e';
+
 test.describe('响应头', () => {
   test('/app/ 带 CSP：style-src 只有 self，没有 unsafe-inline / unsafe-eval；带 Permissions-Policy', async ({ request }) => {
     const res = await request.get('/app/');
@@ -30,6 +34,15 @@ test.describe('响应头', () => {
     expect(csp).toContain("frame-ancestors 'self'");
     expect(csp).not.toContain("frame-ancestors 'none'");
     expect(csp).not.toContain("default-src 'self'");
+  });
+
+  test('/files 和网页同源（0.32）：connect-src、img-src 只要 self，不为它另开任何主机', async ({ request }) => {
+    const csp = (await request.get('/app/')).headers()['content-security-policy'] ?? '';
+    const directive = (name: string) => csp.split(';').map((d) => d.trim()).find((d) => d.startsWith(`${name} `)) ?? '';
+    expect(directive('img-src')).toBe("img-src 'self' blob: data:");
+    expect(directive('connect-src').split(' ').slice(0, 2)).toEqual(['connect-src', "'self'"]);
+    // connect-src 除了 self 只有 Realtime 的 ws(s) 地址，没有 http(s) 主机（R2 不开公开访问，浏览器只和同源的 /files 打交道）
+    expect(directive('connect-src').split(' ').slice(2).every((s) => /^wss?:\/\//.test(s))).toBe(true);
   });
 
   test('带哈希的静态文件长缓存，index.html 和 sw.js 不缓存', async ({ request }) => {
@@ -79,6 +92,23 @@ test.describe('带 CSP 打开页面', () => {
       .toBeGreaterThan((before?.x ?? 0) + 20);
   });
 
+  test('取 /files 的链接（fetch、<img>、POST sign）没有 CSP 报错（0.32）', async ({ page }) => {
+    await page.goto('/app/');
+    await expect(page.locator('main[data-feature="today"]')).toBeVisible();
+    const done = await page.evaluate(async (link) => {
+      await fetch('/files/v1/sign', { method: 'POST', body: '{}' }).catch(() => null);
+      await fetch(link).catch(() => null);
+      return new Promise<string>((resolve) => {
+        const img = document.createElement('img');
+        img.onload = () => resolve('load');
+        img.onerror = () => resolve('error'); // 本机没有上游，404 也算“浏览器去取了”，没被 CSP 拦就行
+        img.src = link;
+        document.body.append(img);
+      });
+    }, FILES_LINK);
+    expect(['load', 'error']).toContain(done);
+  });
+
   test('对照组：Radix 原样带 Dialog.Overlay 会被 CSP 拦（证明上面的“没有报错”不是因为没在查）', async ({ page, csp }) => {
     csp.expectViolations();
     await page.goto('/app/#/dev-csp');
@@ -96,6 +126,44 @@ test.describe('Service Worker', () => {
     await page.goto('/app/');
     const scope = await page.evaluate(async () => (await navigator.serviceWorker.ready).scope);
     expect(new URL(scope).pathname).toBe('/app/');
+  });
+
+  // TC-B0-40（15.3 第 1 条；0.32 加 /files/*）：本机没有 /sb、/files 的上游，请求本身成不成功不要紧，要看的是 SW 不缓存它们
+  test('TC-B0-40：/sb/、/files/ 不进 Cache Storage；断网时 /files 链接取不到，不是读到缓存', async ({ page, context }) => {
+    await page.goto('/app/');
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+    });
+    await page.reload(); // 装好以后重新打开，页面才归 SW 管
+    expect(await page.evaluate(() => navigator.serviceWorker.controller !== null)).toBe(true);
+    const fetchAll = (urls: string[]) =>
+      page.evaluate(async (list) => {
+        const out: string[] = [];
+        for (const u of list) {
+          try {
+            out.push(`status ${(await fetch(u)).status}`);
+          } catch {
+            out.push('failed');
+          }
+        }
+        return out;
+      }, urls);
+    await fetchAll(['/sb/rest/v1/events?select=id&limit=1', FILES_LINK, FILES_LINK]);
+    const cached = await page.evaluate(async () => {
+      const paths: string[] = [];
+      for (const name of await caches.keys()) {
+        for (const req of await (await caches.open(name)).keys()) paths.push(new URL(req.url).pathname);
+      }
+      return paths;
+    });
+    expect(cached.length, '预缓存里应当有 App 的文件（证明确实查到了 Cache Storage）').toBeGreaterThan(0);
+    expect(cached.filter((p) => p.startsWith('/sb/') || p.startsWith('/files/'))).toEqual([]);
+    await context.setOffline(true);
+    try {
+      expect(await fetchAll([FILES_LINK])).toEqual(['failed']);
+    } finally {
+      await context.setOffline(false);
+    }
   });
 });
 
