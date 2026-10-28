@@ -1,4 +1,4 @@
--- 0003_notes.sql：categories、notes、note_images、images 桶（附录 A；数据字典 4.10～4.12；清单 notes.ts）
+-- 0003_notes.sql：categories、notes、note_images（images 桶 0.32 起在 R2，不在这里建；附录 A；数据字典 4.10～4.12；清单 notes.ts）
 
 -- ===== categories =====
 create table public.categories (
@@ -133,20 +133,9 @@ grant select (id, user_id, note_id, bucket, path, has_thumb, mime, deleted_at,
   ai_status, skip_reason, ai_desc, ai_tags, ai_tries, ai_next_at) on public.note_images to fn_ai;
 grant update (ai_status, skip_reason, ai_desc, ai_tags, ai_tries, ai_next_at) on public.note_images to fn_ai;
 
--- ===== images 桶（3.3 G；0.29 续第 33 条） =====
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values
-  ('images', 'images', false, 2097152, array['image/webp'])
-on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit,
-  allowed_mime_types = excluded.allowed_mime_types;
-create policy img_sel on storage.objects for select to authenticated
-  using (bucket_id = 'images' and (storage.foldername(name))[1] = (select auth.uid())::text);
-create policy img_ins on storage.objects for insert to authenticated
-  with check (bucket_id = 'images' and (storage.foldername(name))[1] = (select auth.uid())::text
-    -- 0.23 L8：整条路径只认两种拼法（清单 pathPattern 一字不差）
-    and (name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f-]{36}(\.t)?\.webp$'              -- 随手记插图和缩略图
-      or name ~ '^[0-9a-f-]{36}/anniv/[0-9a-f-]{36}/[0-9a-f-]{36}\.webp$'));          -- 纪念日头像
-create policy img_del on storage.objects for delete to authenticated
-  using (bucket_id = 'images' and (storage.foldername(name))[1] = (select auth.uid())::text);
--- 不建 update 策略：图片不可变，换图就换一个 id
+-- ===== images 桶：0.32（R-213）起存 Cloudflare R2，这里不建桶、不建存储策略 =====
+-- 原来的 images 桶和 img_sel、img_ins、img_del 三条策略由 public.files_authorize（0004）和 /files/v1/* 函数取代（3.3 G“R2 起”）；
+--   路径正则原样搬进 private.files_authorize_impl，清单 notes.ts、anniv.ts 的 pathPattern 是唯一出处（D1 核对一字不差）；
+--   D1 核对 images 不在 storage.buckets 里（清单 store = 'r2'）。预览项目还没部署，直接改这里，不另写迁移
 
 alter publication supabase_realtime add table public.categories, public.notes, public.note_images;

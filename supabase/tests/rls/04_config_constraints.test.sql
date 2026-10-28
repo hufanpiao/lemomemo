@@ -1,6 +1,6 @@
 -- 配置、约束、桶和每日清理：TC-B0-53、74、76、88、98；0.27（features、min_client_version）；P-05；0.31 第 15、17 条（remind_queue、注销级联）
 begin;
-select plan(37);
+select plan(34);
 \ir _helpers.psql
 select tests.seed();
 
@@ -71,42 +71,25 @@ select is((select count(*)::int from private.pending_deletions where user_id = '
         + (select count(*)::int from public.tombstones where user_id = 'bbbbbbbb-0000-4000-8000-000000000002'), 0,
   '删 auth.users：pending_deletions、revoked_sessions、tombstones 跟着删');
 
--- ===== TC-B0-74：6 个桶 =====
+-- ===== TC-B0-74（0.32 改）：storage.buckets 只剩 Supabase 的 2 个桶；images、files、vault-images、vault-files 在 R2 =====
 select is((select string_agg(id || ':' || public || ':' || file_size_limit || ':' || cardinality(allowed_mime_types), ',' order by id) from storage.buckets),
-  'backups:false:52428800:1,files:false:10485760:11,images:false:2097152:1,vault-files:false:10551296:1,vault-images:false:2097152:1,vault-preview:false:10485760:1',
-  '6 个桶都是私有，大小和类型限制照附录 A');
-select is((select string_agg(policyname, ',' order by policyname) from pg_policies where schemaname = 'storage' and tablename = 'objects'),
-  'file_ins,file_sel,img_del,img_ins,img_sel', '存储策略只有 images、files 的五条（隐私桶和 backups 不建策略）');
+  'backups:false:52428800:1,vault-preview:false:10485760:1',
+  'storage.buckets 只有 backups、vault-preview，都是私有，大小和类型限制照附录 A');
+select is((select count(*)::int from pg_policies where schemaname = 'storage' and tablename = 'objects'), 0,
+  'storage.objects 上没有任何策略（0.32：img_*、file_* 由 files_authorize 取代；vault-preview、backups 本来就不建）');
+select is((select count(*)::int from pg_proc where proname = 'file_slot_open'), 0, 'file_slot_open() 已删（判断并进 files_authorize_impl）');
 -- 重跑桶的 insert … on conflict 能把手工改大的限制改回来
-update storage.buckets set file_size_limit = 99999999 where id = 'images';
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('images', 'images', false, 2097152, array['image/webp'])
+update storage.buckets set file_size_limit = 99999999 where id = 'backups';
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('backups', 'backups', false, 52428800, array['application/gzip'])
   on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
-select is((select file_size_limit from storage.buckets where id = 'images'), 2097152::bigint, '重跑迁移的桶语句把限制改回附录 A 的值');
-
--- images 桶策略：只认两种路径；files 桶策略：只认本人 pending、还没有对象的路径
-select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values ('images',
-  'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-000000000001/1e000000-0000-4000-8000-000000000001.t.webp')$$), 'ok', 'images：本人的缩略图路径能传');
-select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values ('images',
-  'aaaaaaaa-0000-4000-8000-000000000001/x/evil.webp')$$) like '42501%', 'images：拼法不对的路径被拒');
-select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values ('images',
-  'bbbbbbbb-0000-4000-8000-000000000002/40000000-0000-4000-8000-000000000001/1e000000-0000-4000-8000-000000000001.webp')$$) like '42501%', 'images：别人目录被拒');
-insert into public.notes (id, user_id, body, created_at, updated_at) values ('40000000-0000-4000-8000-0000000000f1', 'aaaaaaaa-0000-4000-8000-000000000001', 'n', 1, 1);
-insert into public.note_files (id, user_id, note_id, kind, path, has_thumb, name, mime, bytes, sha256, created_at, updated_at) values
-  ('f0000000-0000-4000-8000-0000000000f1', 'aaaaaaaa-0000-4000-8000-000000000001', '40000000-0000-4000-8000-0000000000f1', 'pdf',
-   'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000f1/f0000000-0000-4000-8000-0000000000f1.pdf', true, 'a.pdf', 'application/pdf', 1, 'x', 1, 1);
-select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values ('files',
-  'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000f1/ffffffff-0000-4000-8000-0000000000f1.pdf')$$) like '42501%', 'files：没有对应行的路径被拒');
-select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values
-  ('files', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000f1/f0000000-0000-4000-8000-0000000000f1.pdf'),
-  ('files', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000f1/f0000000-0000-4000-8000-0000000000f1.t.webp')$$), 'ok',
-  'files：本人 pending 行的文件和缩略图能传');
-select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$update storage.objects set name = name
-  where bucket_id = 'files'$$) = 'ok' and (select count(*) from storage.objects where bucket_id = 'files') = 2, 'files：没有 update 策略（0 行）');
-update public.note_files set check_status = 'ok' where id = 'f0000000-0000-4000-8000-0000000000f1';
-delete from storage.objects where bucket_id = 'files';
-select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values
-  ('files', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000f1/f0000000-0000-4000-8000-0000000000f1.pdf')$$) like '42501%',
-  'files：检查过（ok）的文件不能再传（换不掉）');
+select is((select file_size_limit from storage.buckets where id = 'backups'), 52428800::bigint, '重跑迁移的桶语句把限制改回附录 A 的值');
+-- 客户端经 storage-js 直传 Supabase Storage 一律不行（没有策略，RLS 拒绝）；能不能传改由 files_authorize 判断（05 文件）
+select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values ('backups',
+  '2026-10-28/aaaaaaaa-0000-4000-8000-000000000001/todos.json.gz')$$) like '42501%', 'backups：客户端直传被拒');
+select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$insert into storage.objects (bucket_id, name) values ('vault-preview',
+  '0123456789abcdef0123456789abcdef.pptx')$$) like '42501%', 'vault-preview：客户端直传被拒');
+select is(tests.rows_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', 'select name from storage.objects'), '[]'::jsonb,
+  'storage.objects：客户端读不到任何对象');
 
 -- ===== TC-B0-88、98：每日清理 =====
 insert into private.webauthn_challenges values ('old', 'aaaaaaaa-0000-4000-8000-000000000001', now() - interval '1 minute'),
