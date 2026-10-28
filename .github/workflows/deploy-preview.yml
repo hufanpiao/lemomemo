@@ -1,7 +1,7 @@
 # deploy-preview：main 每次更新（架构 8.3 分支模型：只有 main，没有 develop），部署到预览环境 preview.lemomemo.com（架构 8.3 “deploy-preview.yml” 一行，R-206）
 #
 # 两个任务，密钥只在第二个：
-#   build：拿不到任何密钥（不引用 secrets），npm ci --ignore-scripts → 构建 → 复制 shared 到函数目录 → 上传产物
+#   build：拿不到任何密钥（不引用 secrets），npm ci --ignore-scripts → 构建 → 复制 shared 到函数目录 → 打包 Pages Functions 成 _worker.js → 上传产物
 #   deploy：只下载产物、不装项目依赖、不跑项目脚本；用 tools/ci-tools.lock 锁定的 Supabase CLI
 #           和 tools/deploy/package-lock.json 锁定的 wrangler → 预览项目暂停就恢复 → db push → functions deploy → pages deploy → 核对线上版本
 #
@@ -88,6 +88,11 @@ jobs:
         # B0 集成：改用 build/copy_shared.mjs —— 'zod' 改写成 npm:zod@<版本>（函数部署时没有 import map），相对 import 必须带 .ts
         run: npm run copy:shared
 
+      - name: 打包 Pages Functions（_worker.js，在无密钥任务里打包）
+        # functions/ 引用 shared/ 和 zod、aws4fetch；deploy 任务不装项目依赖，所以在这里打包成 dist/web/_worker.js/，
+        # deploy 只上传（10-28 第一次预览部署实测：在 deploy 里打包找不到 shared/）。dist/web/_routes.json 照旧决定哪些路径进 Functions
+        run: npx --no-install wrangler pages functions build functions --outdir dist/web/_worker.js
+
       - name: 产物指纹
         run: python3 -I build/ci/dist_hash.py dist/web | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -95,10 +100,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: preview-bundle
-          # dist/web：静态页面；functions/：Pages Functions（/ 的分流、/sb/* 转发）；supabase/：迁移、函数、config.toml
+          # dist/web：静态页面 + _worker.js/（打包好的 Pages Functions：/ 的分流、/sb/* 转发、/files/*）；supabase/：迁移、函数、config.toml
           path: |
             dist/web/
-            functions/
             supabase/
           include-hidden-files: false
           if-no-files-found: error
@@ -229,10 +233,11 @@ jobs:
           if [ "$bad" -ne 0 ]; then echo "负责人照负责人B0网页操作清单第 ⑫ 节 C 重新运行 set-r2-tokens.ps1 -Target preview"; exit 1; fi
           echo "Pages 生产环境的 R2 变量齐全（只核对名字、类型和两个公开值）" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: 网页（wrangler pages deploy，含 Pages Functions）
+      - name: 网页（wrangler pages deploy，含打包好的 _worker.js）
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.PREVIEW_CLOUDFLARE_API_TOKEN }}
         run: |
+          test -f dist/web/_worker.js/index.js || { echo "::error::产物里没有 _worker.js/index.js"; exit 1; }
           wrangler pages deploy dist/web \
             --project-name "$PAGES_PROJECT" \
             --branch main \
