@@ -1,5 +1,4 @@
 # 柠檬记（原“日程与待办”）—— Git 忽略规则
-# dist/ 是发布产物，保留在仓库里（发布要用 dist/planner.html），不忽略。
 
 # Python / Node 缓存
 __pycache__/
@@ -20,7 +19,7 @@ desktop.ini
 tmp/
 
 # 真实数据的本地备份：只留在本机，不进 git（只保留说明文件）
-# 4.0.0 起备份挪到项目目录之外（E:\柠檬记-备份\，加密，R-105，架构设计-v4 第 10 节），这里只是兜底
+# 4.0.0 起备份挪到项目目录之外（E:\柠檬记-备份\，R-105；R-209 起不加密，架构设计-v4 第 10 节），这里只是兜底
 data/backups/*
 !data/backups/README.md
 
@@ -49,8 +48,11 @@ test-results/
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
 
-# 签名私钥、证书一律不进仓库（只放 GitHub Environments 和离线备份）
+# 签名私钥、证书一律不进仓库（R-206：不放 GitHub，只在负责人本机和离线备份）
 *.key
 *.pem
 *.p12
 *.pfx
+
+# 开发 agent 的临时工作副本（git worktree）
+.claude/worktrees/

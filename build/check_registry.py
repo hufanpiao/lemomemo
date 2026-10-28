@@ -38,6 +38,9 @@ def actual_paths():
         # docs/02-设计/线上存档/ 里是发布时自动存的稿子副本（钩子生成），只登记它的 README
         if rel.startswith("docs/02-设计/线上存档/") and rel != "docs/02-设计/线上存档/README.md":
             continue
+        # .claude/worktrees/ 是开发 agent 的临时工作副本（不进 git、不登记）
+        if rel.startswith(".claude/worktrees/"):
+            continue
         if p.is_file() and not (set(p.relative_to(ROOT).parts) & SKIP_DIRS):
             out.add(rel)
     return out
