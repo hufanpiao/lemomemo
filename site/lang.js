@@ -10,7 +10,7 @@ document.addEventListener('click', function (e) {
   document.cookie = 'lemo_lang=' + lang + '; Path=/; Max-Age=31536000; SameSite=Lax' + secure;
   try {
     localStorage.setItem('pv-locale', lang);
-  } catch (err) {
+  } catch {
     // 存不了就只靠 cookie
   }
 });

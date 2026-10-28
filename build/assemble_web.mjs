@@ -17,9 +17,15 @@ const WSS = {
 
 export const MODES = Object.keys(WSS);
 
-/** 解析 _headers：[{ path, lines: ['Header: value', '! Header'] }] */
+/**
+ * 解析 _headers：[{ path, lines: ['Header: value', '! Header'] }]
+ * @param {string} text
+ * @returns {{ path: string, lines: string[] }[]}
+ */
 export function parseHeaders(text) {
+  /** @type {{ path: string, lines: string[] }[]} */
   const blocks = [];
+  /** @type {{ path: string, lines: string[] } | null} */
   let cur = null;
   for (const raw of text.split(/\r?\n/)) {
     if (/^\s*(#|$)/.test(raw)) continue;

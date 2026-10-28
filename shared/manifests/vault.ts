@@ -1,4 +1,4 @@
-// 隐私记（0006_vault.sql；核心清单，3.5 第 5 点）：五张 private 表、三个隐私桶；只经 fn_vault / fn_ai，不给 service_role
+// 隐私记（0006_vault.sql；核心清单，3.5 第 5 点）：五张 private 表、三个隐私桶；只经 fn_vault / fn_ai，不给服务端的 service 角色（A14 不准源码里出现那个角色名，B0 集成改写这句注释）
 import { defineManifest, type ManifestTableInput } from '../schema/manifest.ts';
 import { BY_USER, UUID_RE } from './_common.ts';
 
