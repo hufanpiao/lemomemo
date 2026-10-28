@@ -1,0 +1,3 @@
+-- expect: cron 任务 qa-probe 动 public / private 的数据，却没经 private.account_usable
+-- TC-B0-97 ④（0.29 续第 138 条④）：pg_cron 里挑用户的 SQL 一律 where private.account_usable(user_id)；这里建一个直接挑 profiles 的任务
+select cron.schedule('qa-probe', '0 * * * *', $$select user_id from public.profiles where disabled_at is null$$);

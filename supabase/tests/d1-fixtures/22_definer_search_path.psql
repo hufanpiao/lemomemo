@@ -1,0 +1,5 @@
+-- expect: private.qa_probe_definer 是 security definer，没设 search_path = ''
+-- TC-B0-92（0.29 续第 117 条）、QA D-01 第 2 条：public、private 里每个 security definer 函数都要带 search_path=""
+-- 复现 QA 报告的原句：建一个没设 search_path 的 security definer 函数（只收回 PUBLIC）
+create function private.qa_probe_definer() returns int language sql security definer as 'select 1';
+revoke execute on function private.qa_probe_definer() from public;

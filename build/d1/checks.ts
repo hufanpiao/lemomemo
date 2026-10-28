@@ -3,7 +3,7 @@
 // 返回问题列表，空 = 通过
 import type { Manifest, ManifestTable } from '../../shared/schema/manifest.ts';
 import { CLIENT_FILE_BUCKETS } from '../../shared/manifests/_common.ts';
-import { COLUMN_GRANTS, FUNCTION_EXEC, PUBLIC_RPCS, REQUIRED_CONSTRAINTS, TABLE_GRANTS } from './whitelist.ts';
+import { COLUMN_GRANTS, CRON_WITHOUT_USABLE, EXPORT_NONE_BUCKETS, EXPORT_NONE_TABLES, FUNCTION_EXEC, PUBLIC_RPCS, REQUIRED_CONSTRAINTS, TABLE_GRANTS } from './whitelist.ts';
 
 export type Row = Record<string, unknown>;
 /** 查询函数：T 是这条 SQL 结果行的形状（调用处按 select 的列写明；数据库给的值不做运行时校验） */
@@ -42,6 +42,18 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   // 列
   const colRows = await q<{ s: string; t: string; c: string }>(`select table_schema as s, table_name as t, column_name as c from information_schema.columns where table_schema in ('public', 'private')`);
   const colsOf = (s: string, t: string) => colRows.filter((r) => r.s === s && r.t === t).map((r) => r.c);
+
+  // ---------- 1b. export（TC-B0-93）：清单 zod 已要求每张表、每个桶都写 export；这 11 张表、两个隐私桶必须是 none ----------
+  for (const k of EXPORT_NONE_TABLES) {
+    const t = tables.find((x) => key(x.schema, x.name) === k);
+    if (!t) bad(`${k} 应登记且 export: none（TC-B0-93），清单里没有`);
+    else if (t.export !== 'none') bad(`${k} 的 export 是 ${t.export}，必须是 none（TC-B0-93）`);
+  }
+  for (const n of EXPORT_NONE_BUCKETS) {
+    const segs = manifests.flatMap((m) => m.buckets).filter((b) => b.name === n);
+    if (!segs.length) bad(`桶 ${n} 应登记且 export: none（TC-B0-93），清单里没有`);
+    for (const b of segs) if (b.export !== 'none') bad(`桶 ${n} 的 export 是 ${b.export}，必须是 none（TC-B0-93，R-184）`);
+  }
 
   // ---------- 2. 桶（0.32 起按 store 分开核对：supabase 的和 storage.buckets 逐项比，r2 的必须不在 storage.buckets 里） ----------
   const dbBuckets = await q<{ id: string; public: boolean; file_size_limit: number | string | null; allowed_mime_types: string[] | null }>(`select id, public, file_size_limit, allowed_mime_types from storage.buckets`);
@@ -140,12 +152,16 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   }
 
   // ---------- 6. 函数执行权、属主、public RPC ----------
-  const fns = await q<{ f: string; owner: string; definer: boolean; pub: boolean; anon: boolean; authenticated: boolean; service_role: boolean; fn_vault: boolean; fn_ai: boolean; s: string }>(`select p.proname as f, pg_get_userbyid(p.proowner) as owner, p.prosecdef as definer,
+  const fns = await q<{ f: string; owner: string; definer: boolean; config: string[] | null; pub: boolean; anon: boolean; authenticated: boolean; service_role: boolean; fn_vault: boolean; fn_ai: boolean; s: string }>(`select p.proname as f, pg_get_userbyid(p.proowner) as owner, p.prosecdef as definer, p.proconfig as config,
       p.proacl is null or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0 and a.privilege_type = 'EXECUTE') as pub,
       has_function_privilege('anon', p.oid, 'EXECUTE') as anon, has_function_privilege('authenticated', p.oid, 'EXECUTE') as authenticated,
       has_function_privilege('service_role', p.oid, 'EXECUTE') as service_role, has_function_privilege('fn_vault', p.oid, 'EXECUTE') as fn_vault,
       has_function_privilege('fn_ai', p.oid, 'EXECUTE') as fn_ai, n.nspname as s
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('public', 'private')`);
+  // TC-B0-92（0.29 续第 117 条）：public、private 里每个 security definer 函数都带 search_path=""（只看 pg_proc.proconfig，不看源码）
+  for (const f of fns.filter((f) => f.definer)) {
+    if (!(f.config ?? []).includes('search_path=""')) bad(`${f.s}.${f.f} 是 security definer，没设 search_path = ''（proconfig：${(f.config ?? []).join(', ') || '空'}）`);
+  }
   for (const f of fns.filter((f) => f.s === 'private')) {
     if (f.pub) bad(`private.${f.f} 给了 PUBLIC 执行权`);
     if (f.owner !== 'postgres') bad(`private.${f.f} 的属主是 ${f.owner}，不是 postgres`);
@@ -245,7 +261,10 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   const featDefault = (await q<{ e: string | null }>(`select pg_get_expr(d.adbin, d.adrelid) as e from pg_attrdef d join pg_attribute a on a.attrelid = d.adrelid and a.attnum = d.adnum
     where d.adrelid = 'public.app_config'::regclass and a.attname = 'features'`))[0]?.e ?? '';
   const featKeys = Object.keys(JSON.parse((/'(.*)'::jsonb/s.exec(featDefault) ?? ['', '{}'])[1]));
-  for (const f of new Set(kinds.map((k) => k.flag))) if (!featKeys.includes(f)) bad(`开关 ${f} 不在 app_config.features 的默认值里`);
+  const flags = new Set(kinds.map((k) => k.flag));
+  for (const f of flags) if (!featKeys.includes(f)) bad(`开关 ${f} 不在 app_config.features 的默认值里`);
+  // 0.29 第 1 条（P-02）：默认值里不许有清单之外的键
+  for (const f of featKeys) if (!flags.has(f)) bad(`app_config.features 的默认值里有清单之外的键 ${f}`);
 
   // ---------- 11. 必须有的约束 ----------
   for (const [t, re] of REQUIRED_CONSTRAINTS) {
@@ -290,6 +309,13 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   const jobs = await q<{ jobname: string; command: string }>(`select jobname, command from cron.job`);
   for (const j of jobs) if (/\bprivate\.\w+_batch\(|\b(update|delete)\s+(from\s+)?public\./i.test(j.command) && !/^set statement_timeout = '4min';/.test(j.command)) {
     bad(`cron 任务 ${j.jobname} 动用户表，却不以 set statement_timeout 开头`);
+  }
+  // TC-B0-97 ④（0.29 续第 138 条④）：动 public / private 数据的 cron 命令要经 private.account_usable 挑用户（写在命令里，或写在它调的 private 函数里）
+  const privSrc = new Map((await q<{ f: string; src: string }>(`select p.proname as f, p.prosrc as src from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'private'`)).map((r) => [r.f, r.src]));
+  for (const j of jobs) {
+    if (!/\b(public|private)\./i.test(j.command) || j.jobname in CRON_WITHOUT_USABLE) continue;
+    const called = [...j.command.matchAll(/\bprivate\.(\w+)\s*\(/gi)].map((m) => privSrc.get(m[1] ?? '') ?? '');
+    if (![j.command, ...called].some((t) => /\baccount_usable\b/.test(t))) bad(`cron 任务 ${j.jobname} 动 public / private 的数据，却没经 private.account_usable（故意不用的写进 whitelist.ts 的 CRON_WITHOUT_USABLE 并注明原因）`);
   }
   return out;
 }

@@ -2,7 +2,7 @@
 -- /files 函数带用户的 JWT 调 public.files_authorize；这里用 tests.fa 模拟“以某人、某会话的身份经 PostgREST 调”
 -- 返回值：{uid, items: [{i, ok, reason?}]}，整批不过时 {uid, error, items: []}；入参不对报 22023
 begin;
-select plan(51);
+select plan(55);
 \ir _helpers.psql
 select tests.seed();
 
@@ -200,6 +200,17 @@ select is(tests.fa('aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-5555-4000-8
   'session_id 不在 auth.sessions 里（已退出登录）：session_revoked');
 select is((select count(*)::int from private.counters where key like 'files_%:cccccccc-%' or key like 'files_%:bbbbbbbb-%'), 0,
   '停用、冷静期的调用不计数（先查身份再限流）');
+
+-- ===== 按 uuid 比 id（代码审查低 3）：路径里的 id 段先认成 uuid 再和 uuid 列比，不把列转成文本（主键索引用得上）；
+--       过得了路径正则、却不是合法 uuid 的段（正则 [0-9a-f-]{36} 放得过）只当“没有这一行”，不报错 =====
+select is((select count(*)::int from pg_proc p where p.oid = 'private.files_authorize_impl(text, jsonb)'::regprocedure
+  and p.prosrc ~ '\.(id|note_id|avatar_id)::text'), 0, 'files_authorize_impl 不把 id、note_id、avatar_id 列转成文本再比');
+select is(tests.fa1('put', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/anniv/a0000000-0000-4000-8000-00000000000-/0a000000-0000-4000-8000-0000000000a1.webp'),
+  'no_row', '头像：纪念日 id 段不是合法 uuid → no_row（不报错）');
+select is(tests.fa1('put', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/anniv/a0000000-0000-4000-8000-0000000000a1/0a000000-0000-4000-8000-00000000000-.webp'),
+  'not_owner', '头像：avatar 段不是合法 uuid → not_owner（不报错）');
+select is(tests.fa1('put', 'files', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-00000000000-/f0000000-0000-4000-8000-0000000000a4.t.webp'),
+  'no_row', '附件缩略图：note_id 段不是合法 uuid → no_row（不报错）');
 
 -- ===== TC-B0-105：限流（一个事务里 now() 不变，分钟窗口不会跨） =====
 delete from private.counters where key like 'files_%';

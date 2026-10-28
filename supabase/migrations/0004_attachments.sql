@@ -104,6 +104,9 @@ declare
   keep_ms constant bigint := 30::bigint * 86400 * 1000;   -- “最近删除”里的图和附件 30 天内还能取（3.4）
   it record; row_ record;
   b text; p text; base text; thumb boolean; r text;
+  seg_id uuid; seg_id2 uuid; seg text;
+  -- 8-4-4-4-12 的小写 uuid（和 uuid::text 一致）；不加首尾锚点，配合 length = 36 判整段（D1 把函数体里带首尾锚点的字符串都当成路径正则和清单核对）
+  uuid_re constant text := '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
   out_ jsonb := '[]'::jsonb;
 begin
   if p_op is null or p_op not in ('put', 'get') then raise exception 'bad_op' using errcode = '22023'; end if;
@@ -151,10 +154,14 @@ begin
       r := 'not_owner';
     elsif b = 'images' and split_part(p, '/', 2) = 'anniv' then
       -- 纪念日头像：本人这一行的 avatar_id 等于路径里的那个 id
+      -- 代码审查低 3：路径段先认成 uuid 再和 uuid 列比（不把列转成文本，主键索引用得上）；
+      --   路径正则 [0-9a-f-]{36} 放得过、却不是 8-4-4-4-12 的段认成 null（不转换、不报错），当“没有这一行”
+      seg := split_part(p, '/', 3);                 seg_id  := case when length(seg) = 36 and seg ~ uuid_re then seg::uuid end;
+      seg := left(split_part(p, '/', 4), -5);       seg_id2 := case when length(seg) = 36 and seg ~ uuid_re then seg::uuid end;
       select a.avatar_id, a.deleted_at into row_ from public.anniversaries a
-       where a.user_id = uid and a.id::text = split_part(p, '/', 3);
+       where a.user_id = uid and a.id = seg_id;
       if not found then r := 'no_row';
-      elsif row_.avatar_id is null or row_.avatar_id::text || '.webp' <> split_part(p, '/', 4) then r := 'not_owner';
+      elsif row_.avatar_id is null or seg_id2 is null or row_.avatar_id <> seg_id2 then r := 'not_owner';
       elsif row_.deleted_at is not null and (p_op = 'put' or row_.deleted_at < now_ms - keep_ms) then r := 'deleted';
       end if;
     elsif b = 'images' then
@@ -169,8 +176,11 @@ begin
     else
       -- 附件（原 file_slot_open）：put 只认本人、普通、pending、没删的行；get 只给 check_status = 'ok' 的
       if thumb then
+        -- 缩略图按 (note_id, id) 找原文件（扩展名未知）；两段都按 uuid 比（同上，代码审查低 3）
+        seg := split_part(p, '/', 2);                         seg_id  := case when length(seg) = 36 and seg ~ uuid_re then seg::uuid end;
+        seg := split_part(split_part(p, '/', 3), '.', 1);     seg_id2 := case when length(seg) = 36 and seg ~ uuid_re then seg::uuid end;
         select f.is_vault, f.has_thumb, f.deleted_at, f.check_status into row_ from public.note_files f
-         where f.user_id = uid and f.note_id::text = split_part(p, '/', 2) and f.id::text = split_part(split_part(p, '/', 3), '.', 1);
+         where f.user_id = uid and f.note_id = seg_id and f.id = seg_id2;
       else
         select f.is_vault, f.has_thumb, f.deleted_at, f.check_status into row_ from public.note_files f
          where f.user_id = uid and f.path = p;
