@@ -33,8 +33,6 @@ export default defineConfig({
             'tests/arch/**/*.test.ts',
             'tests/build/**/*.test.ts',
             'tests/functions/**/*.test.ts',
-            // supabase/functions 里能脱离 Deno 测的纯逻辑（预览专用的 r2-probe 等），打 tests/fakes/ 的替身
-            'tests/edge/**/*.test.ts',
             'tests/data-manifest/**/*.test.ts',
             'tests/e2e/**/*.preview.test.ts',
           ],

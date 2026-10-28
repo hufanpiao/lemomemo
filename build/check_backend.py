@@ -2,6 +2,7 @@
 
 用法：python -I build/check_backend.py [--root 目录] [--json]
       python -I build/check_backend.py --print-preview-funcs   （只打印 PREVIEW_FUNCS，一行一个；deploy-preview.yml、publish.ps1 用，名单只写这一处）
+      python -I build/check_backend.py --root 样例 --sample-preview-funcs r2-probe   （只给样例测试用：把这些名字当作名单；不能和上一行一起用）
 有错误时退出码 1。--root 给自测用（tests/arch-fixtures/check_backend/ 下的样例目录，tests/build/check-backend.test.ts）。
 
 服务器函数（supabase/functions/<函数名>/，下划线开头的目录是共用模块）：
@@ -61,9 +62,11 @@ DB_FUNCS = VAULT_FUNCS | AI_FUNCS
 R2_FUNCS = frozenset({"file-check", "ai-media", "vault", "vault-file", "vault-image", "storage-sweep", "account", "account-purge", "usage-report"})
 # 架构 6.2 末尾越界检查白名单“预览专用”一行（唯一出处）：supabase/functions/_preview/<名>/ 下的一次性函数，只在预览部署（F6）
 PREVIEW_DIR = "_preview"
-PREVIEW_FUNCS = frozenset({"r2-probe"})
-# 同上：预览专用函数里能用 objstore、读 R2_* 的（r2-probe：B0 实测清单 P12，R2 任务单第五节第 1、5、8 项；测完删）
-PREVIEW_R2_FUNCS = frozenset({"r2-probe"})
+# 现在是空的：r2-probe（B0 实测清单 P12）10-28 下线、源码已删。名单空了 F6 照样管：_preview/ 下任何目录都报，
+# 别处提到 _preview、config.toml 声明或 entrypoint 指进 _preview/ 也都报
+PREVIEW_FUNCS = frozenset()
+# 同上：预览专用函数里能用 objstore、读 R2_* 的
+PREVIEW_R2_FUNCS = frozenset()
 # 架构 0.29 续第 138 条④：除这三处以外不准出现 disabled_at（一律经 _shared/auth.ts 的 isUsable / usableUserIds）
 DISABLED_AT_OK = ("_shared/auth.ts", "account/", "account-purge/")
 
@@ -744,7 +747,17 @@ def main(argv=None):
     ap.add_argument("--root", default=str(pathlib.Path(__file__).resolve().parent.parent))
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--print-preview-funcs", action="store_true")
+    # 只给样例测试用（tests/build/check-backend.test.ts）：把这些名字当作预览专用函数（同时能用 R2），
+    # 证明名单里的函数照规则放行。不能和 --print-preview-funcs 一起用（deploy-preview.yml、publish.ps1 读的名单只能是上面那一份）
+    ap.add_argument("--sample-preview-funcs", default=None)
     args = ap.parse_args(argv)
+    if args.sample_preview_funcs is not None:
+        if args.print_preview_funcs:
+            print("--sample-preview-funcs 不能和 --print-preview-funcs 一起用", file=sys.stderr)
+            return 2
+        global PREVIEW_FUNCS, PREVIEW_R2_FUNCS
+        names = frozenset(n for n in args.sample_preview_funcs.split(",") if n)
+        PREVIEW_FUNCS = PREVIEW_R2_FUNCS = names
     if args.print_preview_funcs:
         for n in sorted(PREVIEW_FUNCS):
             print(n)
