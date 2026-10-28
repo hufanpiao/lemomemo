@@ -23,7 +23,8 @@ def registered_paths():
         cell = line.split("|")[1].strip()
         m = re.match(r"\[([^\]]+)\]\(", cell)
         cell = m.group(1) if m else cell.strip("`")
-        if cell and "." in cell.split("/")[-1]:
+        # 没有扩展名的文件（VERSION、src/_headers）只要确实是文件也算登记；没有扩展名又不是文件的当作目录行跳过
+        if cell and ("." in cell.split("/")[-1] or (ROOT / cell).is_file()):
             paths.add(cell)
     return paths
 
