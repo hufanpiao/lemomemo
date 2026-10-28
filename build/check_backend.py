@@ -28,8 +28,9 @@ Pages Functions（functions/）和 App、shared：
   M5  0001 的先后：全局默认权限 → table_meta、table_meta_of()、touch() → 各表；9 张同步表建表后的下一句是它的 table_meta 行。TC-B0-73 ③、0.29 续第 39 条
   M6  9 张同步表的 (user_id, synced_at) 索引写在建表的文件里。TC-B0-73 ⑤
   M3  0001～0007 七个建表文件里不准打开功能开关：app_config.features 的列默认值里只有 event、todo 能是 on: true，
-      不准 update app_config、不准 insert 时写 features；打开 note、anniv 用带时间戳的数据迁移。架构 0.29 第 1 条（P-02）、TC-B0-68
-白名单只在这里写一份，出处见每个常量旁的注释；改名单要先改架构。
+      不准 update app_config、不准 insert 时写 features、不准 alter column features set default 打开（只准写 JSON 字面量，QA 第二轮 D-15）；
+      打开 note、anniv 用带时间戳的数据迁移。架构 0.29 第 1 条（P-02）、TC-B0-68
+白名单在脚本里只写一份，出处见每个常量旁的注释；名单的唯一出处是架构 6.2 末尾“越界检查白名单”，改名单要先改架构。
 """
 import argparse
 import json
@@ -40,13 +41,13 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from check_arch import strip_comments  # noqa: E402  去掉 // 和 /* */，行号不变
 
-# 架构 6.2 表格、8.4 FN_VAULT_DB_URL 一行：fn_vault 的连接串只给这三个函数
+# 架构 6.2 末尾越界检查白名单（唯一出处）；6.2 表格、8.4 FN_VAULT_DB_URL 一行：fn_vault 的连接串只给这三个函数
 VAULT_FUNCS = frozenset({"vault", "vault-file", "account"})
-# 架构 6.2 表格、8.4：fn_ai 的五个函数，加上只为验 pin_epoch 直连的 ai-parse、ai-voice、vault-image（0.23 安全复核 A2）
+# 架构 6.2 末尾越界检查白名单（唯一出处）；6.2 表格、8.4：fn_ai 的五个函数，加上只为验 pin_epoch 直连的 ai-parse、ai-voice、vault-image（0.23 安全复核 A2）
 AI_FUNCS = frozenset({"ai-embed", "ai-media", "note-search", "ai-summarize", "file-check", "ai-parse", "ai-voice", "vault-image"})
 # 能 import _shared/db.ts 的 = 两组的并集
 DB_FUNCS = VAULT_FUNCS | AI_FUNCS
-# 架构第 6 节开头（0.32，R-213）、8.4 R2_FN_* 一行：只有这九个函数能 import _shared/objstore.ts 或读 R2_FN_*、R2_ENDPOINT、R2_BUCKET_PREFIX
+# 架构 6.2 末尾越界检查白名单（唯一出处）；第 6 节开头（0.32，R-213）、8.4 R2_FN_* 一行：只有这九个函数能 import _shared/objstore.ts 或读 R2_FN_*、R2_ENDPOINT、R2_BUCKET_PREFIX
 R2_FUNCS = frozenset({"file-check", "ai-media", "vault", "vault-file", "vault-image", "storage-sweep", "account", "account-purge", "usage-report"})
 # 架构 0.29 续第 138 条④：除这三处以外不准出现 disabled_at（一律经 _shared/auth.ts 的 isUsable / usableUserIds）
 DISABLED_AT_OK = ("_shared/auth.ts", "account/", "account-purge/")
@@ -350,7 +351,17 @@ def check_migrations(root, errors):
                     errors.append(("M3", rel, line, "0001～0007 建表文件里不准 update app_config 打开功能开关，用带时间戳的数据迁移"))
                 if re.match(r"^insert\s+into\s+(\"?public\"?\.)?\"?app_config\"?\b", flat) and re.search(r"\bfeatures\b", flat):
                     errors.append(("M3", rel, line, "0001～0007 建表文件里插 app_config 不准写 features（用列默认值），开关用带时间戳的数据迁移打开"))
-                if re.search(r"\bapp_config\b", flat) and (fd := re.search(r"\bfeatures\s+jsonb\b[^,]*?\bdefault\s+'((?:[^']|'')*)'", r, re.IGNORECASE)):
+                # 建表时的列默认值；或 alter table app_config … alter column features set default（QA 第二轮 D-15）
+                fd = None
+                if re.search(r"\bapp_config\b", flat):
+                    fd = re.search(r"\bfeatures\s+jsonb\b[^,]*?\bdefault\s+'((?:[^']|'')*)'", r, re.IGNORECASE)
+                if re.match(r"^alter\s+table\s+(if\s+exists\s+)?(only\s+)?(\"?public\"?\.)?\"?app_config\"?(\s|$)", flat):
+                    sd = re.search(r"\balter\s+(?:column\s+)?\"?features\"?\s+set\s+default\s+(?:'((?:[^']|'')*)'(?:\s*::\s*jsonb)?\s*(?=,|;|$)|.)", r, re.IGNORECASE)
+                    if sd and sd.group(1) is None:
+                        errors.append(("M3", rel, line_of(raw, off + sd.start()), "0001～0007 建表文件里改 app_config.features 的列默认值只准写 JSON 字面量（才查得了开关开没开）"))
+                    elif sd:
+                        fd = sd
+                if fd:
                     fline = line_of(raw, off + fd.start())
                     try:
                         feats = json.loads(fd.group(1).replace("''", "'"))

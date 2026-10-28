@@ -123,11 +123,18 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(errors.find((e) => e.rule === 'M6')?.message).toContain('0003_notes.sql:2');
   });
 
-  it('M3（TC-B0-68）：改 0001～0007 建表文件来打开开关（列默认值、update）→ 错误；带时间戳的数据迁移可以', () => {
+  it('M3（TC-B0-68、QA 第二轮 D-15）：改 0001～0007 建表文件来打开开关（列默认值、update、alter column features set default）→ 错误；带时间戳的数据迁移可以', () => {
     const { code, errors } = run(sample('m3-features-open'));
     expect(code).toBe(1);
-    expect(where(errors)).toEqual(['M3 supabase/migrations/0001_core.sql:5', 'M3 supabase/migrations/0005_anniv.sql:2']);
+    expect(where(errors)).toEqual([
+      'M3 supabase/migrations/0001_core.sql:5',
+      'M3 supabase/migrations/0005_anniv.sql:2',
+      'M3 supabase/migrations/0005_anniv.sql:4',
+      'M3 supabase/migrations/0005_anniv.sql:7',
+    ]);
     expect(errors[0]?.message).toContain('note');
+    expect(errors[2]?.message).toContain('note');
+    expect(errors[3]?.message).toContain('JSON 字面量');
   });
 
   it('对照组：合规写法 0 个错误', () => {

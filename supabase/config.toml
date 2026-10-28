@@ -118,8 +118,14 @@ provider = "turnstile"
 secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"
 
 [auth.email]
-# 15.6 总表：不允许自己注册（同上面的 enable_signup）
-enable_signup = false
+# 【注意，两处开关不是一回事】这一项是“邮箱登录方式”的总开关（CLI 映射成 GOTRUE_EXTERNAL_EMAIL_ENABLED，
+#   对应控制台 Authentication → Sign In / Providers → Email 的开关），必须是 true：设成 false 连已有用户都发不了码
+#   （422 “Email logins are disabled”，QA B0 第二轮 D-14）。
+# “不允许自己注册”靠的是上面 [auth] 的 enable_signup = false（GOTRUE_DISABLE_SIGNUP，控制台的“Allow new users to sign up”关）：
+#   未知邮箱发码回 422 “Signups not allowed for this instance”，用户只能由 invite-signup 用 service role 建（15.6 总表、5.6）。
+# 【线上】Email provider 开着、“Allow new users to sign up”关着。本地、线上相同。
+# 自动测试：node supabase/tests/auth/login-probe.mjs（未知邮箱被拒、已有用户收码登录、6 位、60 秒限频、600 秒有效期）
+enable_signup = true
 # 15.6 总表：Secure email change 开（换邮箱要新旧两个邮箱都确认）。本地、线上相同
 double_confirm_changes = true
 # 和线上项目的默认（Confirm email 开）一致；invite-signup 自己先验过邮箱，用 service role 建用户时标已确认
@@ -149,6 +155,7 @@ content_path = "./supabase/templates/otp.html"
 # admin_email = "noreply@lemomemo.com"
 # sender_name = "柠檬记"
 
+# 和 [auth.email] 同理：这里的 enable_signup 是“手机登录方式”的总开关（GOTRUE_EXTERNAL_PHONE_ENABLED），不用手机登录，所以关
 [auth.sms]
 enable_signup = false
 enable_confirmations = false
