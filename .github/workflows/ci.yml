@@ -127,6 +127,10 @@ jobs:
       - name: 从头建库（全部迁移 + seed.sql）
         run: supabase db reset
 
+      - name: 邮箱验证码登录探针（邮箱登录开、禁止注册、6 位码、60 秒限频、600 秒有效、JWT 带 session_id；QA 第二轮 D-14、实测清单 L14）
+        # 只打本机 Supabase，用 supabase status 的本地演示值，不用任何 secret；每跑一次发 3 封信到本地 Mailpit
+        run: node supabase/tests/auth/login-probe.mjs
+
       - name: 重新生成 shared/db.types.ts 并和仓库比对（架构 2.5）
         run: |
           supabase gen types typescript --local > "$RUNNER_TEMP/db.types.ts"
