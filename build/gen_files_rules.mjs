@@ -13,19 +13,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const OUT = join(ROOT, 'functions', '_generated', 'files-rules.ts');
 
-/** 客户端经 /files 能传的桶（3.3 G“R2 起”：vault-* 一律只经服务器函数） */
-export const CLIENT_BUCKETS = ['images', 'files'];
+const common = await import(pathToFileURL(join(ROOT, 'shared', 'manifests', '_common.ts')).href);
 
-/**
- * 桩（后端 BE-3 还没合入）：清单的 bucketSchema 还没有 store 字段，zod 会把它去掉。
- * 清单写了 store 就以清单为准；没写时按架构 0.32 第 1 条：这四个桶是 r2，其余是 supabase。
- * BE-3 合入后 store 必填，这个兜底就用不到了，可以删。
- */
-const R2_BUCKETS_STUB = new Set(['images', 'files', 'vault-images', 'vault-files']);
+/** 客户端经 /files 能传的桶（3.3 G“R2 起”：vault-* 一律只经服务器函数）；和 files_authorize_impl、D1 用同一份（shared/manifests/_common.ts） */
+export const CLIENT_BUCKETS = [...common.CLIENT_FILE_BUCKETS];
 
+/** 清单的 store（后端 BE-3 起必填） */
 export function storeOf(b) {
-  if (b.store !== undefined) return b.store;
-  return R2_BUCKETS_STUB.has(b.name) ? 'r2' : 'supabase';
+  if (b.store !== 'r2' && b.store !== 'supabase') fail(`${b.name} 没写 store（或不是 r2、supabase）`);
+  return b.store;
 }
 
 /** 附件 10 种扩展名 → MIME（R-114 D-4）。生成时和清单的 allowedMimeTypes、pathPattern 里的扩展名逐个核对，对不上就失败 */
