@@ -1,7 +1,7 @@
 -- 触发器和 RPC：touch()（TC-B0-28、72）、settings_guard、guard_profile_disabled、devices 会话、row_quota（TC-B0-37）、
---   tombstones 和 purge_deleted（TC-B0-95、96）、admin_set_disabled、account_usable
+--   tombstones 和 purge_deleted（TC-B0-95、96）、admin_set_disabled、account_usable、auth.users 的 guard_no_password（TC-B0-121）
 begin;
-select plan(57);
+select plan(59);
 \ir _helpers.psql
 select tests.seed();
 
@@ -177,6 +177,15 @@ delete from public.tombstones;
 update public.profiles set disabled_at = now(), disabled_reason = 'admin' where user_id = 'aaaaaaaa-0000-4000-8000-000000000001';
 delete from public.todos where id = '70000000-0000-4000-8000-0000000000d2';
 select is((select count(*)::int from public.tombstones), 0, '停用账号的行硬删时不写墓碑');
+
+-- ===== guard_no_password：账号不许有密码（TC-B0-121，架构 0.36 第 1 条 ①）=====
+update auth.users set encrypted_password = 'tc-b0-121-nonempty-1' where id = 'aaaaaaaa-0000-4000-8000-000000000001';
+select is((select encrypted_password from auth.users where id = 'aaaaaaaa-0000-4000-8000-000000000001'), '',
+  'update auth.users 写非空 encrypted_password：被触发器置成空串');
+insert into auth.users (id, email, encrypted_password) values
+  ('dddddddd-0000-4000-8000-000000000121', 'tc-b0-121@test.local', 'tc-b0-121-nonempty-2');
+select is((select encrypted_password from auth.users where id = 'dddddddd-0000-4000-8000-000000000121'), '',
+  'insert auth.users 带非空 encrypted_password：被触发器置成空串');
 
 select * from finish();
 rollback;

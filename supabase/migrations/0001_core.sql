@@ -103,6 +103,17 @@ revoke execute on function private.guard_profile_disabled() from public; -- 0001
 create trigger profiles_guard_disabled before insert or update on public.profiles
   for each row execute function private.guard_profile_disabled();
 
+-- 0.36 第 1 条 ①（B0 第三轮安全 N1）：账号不许有密码。GoTrue 关不掉密码登录，设了密码就能 grant_type=password 绕过验证码；
+--   这里把写进 auth.users 的非空 encrypted_password 置成空串（不报错：admin 建用户可能自带随机密码，报错会建不出人）。
+--   函数体不引用任何对象；不授执行权（0001 第一句的默认权限已收回 PUBLIC，触发时不查执行权），所以 3.3 C 不加行。TC-B0-121
+create function private.guard_no_password() returns trigger language plpgsql set search_path = '' as $$
+begin
+  new.encrypted_password := '';
+  return new;
+end $$;
+create trigger users_guard_no_password before insert or update on auth.users
+  for each row when (coalesce(new.encrypted_password, '') <> '') execute function private.guard_no_password();
+
 -- 0.29 续第 138 条：唯一的判断（profile 存在且未停用）
 create function private.account_usable(p_user uuid) returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.profiles p where p.user_id = p_user and p.disabled_at is null)

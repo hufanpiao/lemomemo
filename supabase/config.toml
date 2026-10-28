@@ -93,7 +93,9 @@ enable_signup = false
 # 15.6 总表：匿名登录关。本地、线上相同
 enable_anonymous_sign_ins = false
 enable_manual_linking = false
-# 不用密码登录（只有邮箱验证码），这两项不起作用，保持模板默认
+# 密码登录关不掉：GoTrue 没有单独的开关，Email 登录方式开着密码这条路就开着（架构 15.6 第 1 点“密码登录关不掉，所以账号不许有密码”，0.36）。
+# 挡它的是数据库触发器 private.guard_no_password()（0001，写进 auth.users 的密码一律置空，TC-B0-121），B1 起再拒 amr 含 password 的会话；
+# 下面两项只管设密码时的长度和字符要求，挡不住密码登录，保持模板默认
 minimum_password_length = 6
 password_requirements = ""
 
@@ -124,12 +126,13 @@ secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"
 # “不允许自己注册”靠的是上面 [auth] 的 enable_signup = false（GOTRUE_DISABLE_SIGNUP，控制台的“Allow new users to sign up”关）：
 #   未知邮箱发码回 422 “Signups not allowed for this instance”，用户只能由 invite-signup 用 service role 建（15.6 总表、5.6）。
 # 【线上】Email provider 开着、“Allow new users to sign up”关着。本地、线上相同。
-# 自动测试：node supabase/tests/auth/login-probe.mjs（未知邮箱被拒、已有用户收码登录、6 位、60 秒限频、600 秒有效期）
+# 自动测试：node supabase/tests/auth/login-probe.mjs（未知邮箱被拒、已有用户收码登录、6 位、60 秒限频、600 秒有效期、设密码无效）
 enable_signup = true
 # 15.6 总表：Secure email change 开（换邮箱要新旧两个邮箱都确认）。本地、线上相同
 double_confirm_changes = true
 # 和线上项目的默认（Confirm email 开）一致；invite-signup 自己先验过邮箱，用 service role 建用户时标已确认
 enable_confirmations = true
+# 架构 0.36 第 1 条 ④：保持 false（挡不住刚登录的令牌；账号不许有密码靠 guard_no_password 触发器）。本地、线上相同
 secure_password_change = false
 # 15.6 总表：发验证码每个邮箱 60 秒一次。本地、线上相同
 max_frequency = "60s"

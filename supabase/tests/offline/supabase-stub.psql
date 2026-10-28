@@ -15,7 +15,7 @@ create schema extensions;
 create schema cron;
 grant usage on schema auth, storage, extensions to anon, authenticated, service_role;
 
-create table auth.users (id uuid primary key, email text, created_at timestamptz default now());
+create table auth.users (id uuid primary key, email text, encrypted_password varchar(255), created_at timestamptz default now());   -- encrypted_password：0001 的 guard_no_password 挂在这一列上（0.36）
 create table auth.sessions (id uuid primary key, user_id uuid references auth.users on delete cascade, created_at timestamptz default now());
 
 create function auth.jwt() returns jsonb language sql stable as $$

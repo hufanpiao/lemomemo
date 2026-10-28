@@ -7,9 +7,13 @@
 //   ④ 60 秒内第二次发码 429（max_frequency）
 //   ⑤ 有效期 600 秒：把发码时刻往回拨 601 秒，验证码作废（otp_expired）；再发一次、往回拨 590 秒，能登录
 //   ⑥ 登录拿到的真 JWT 里有 session_id，且 auth.sessions 里有这一行（files_authorize、requireActiveUser 靠它）
+//   ⑦ 账号不许有密码（TC-B0-121，架构 0.36 第 1 条 ①，触发器 private.guard_no_password）：admin 建的 A 库里没有密码；
+//      A 用自己的真令牌 PUT /auth/v1/user 设密码后库里仍为空；grant_type=password 登录回 400 invalid_credentials、没有令牌；
+//      同一令牌改 user_metadata 照常 200（触发器不误伤正常更新）。密码随机生成，不打印密码和令牌
 // 连接信息取 `supabase status -o json`（本地 CLI 的演示值，不是线上密钥；不打印）；地址不是 127.0.0.1 / localhost 就拒绝。
-// 每次用带时间戳的新邮箱，跑完用 admin 接口删掉建的用户；发信计入 [auth.rate_limit] email_sent（每小时 30 封），每跑一次发 3 封。
+// 每次用带时间戳的新邮箱，跑完用 admin 接口删掉建的用户（删不掉也算不符合）；发信计入 [auth.rate_limit] email_sent（每小时 30 封），每跑一次发 3 封。
 import { execFileSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import postgres from 'postgres';
 
 const status = JSON.parse(execFileSync('supabase', ['status', '-o', 'json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
@@ -127,10 +131,46 @@ try {
   } else {
     check(false, '⑥ 没拿到令牌，查不了 session_id');
   }
+
+  // ⑦ 账号不许有密码（TC-B0-121）
+  const pwOf = async (uid) => (await sql`select encrypted_password from auth.users where id = ${uid}`)[0]?.encrypted_password;
+  const pw0 = await pwOf(uidA);
+  check(pw0 === '' || pw0 === null, '⑦ admin 接口建的 A 库里没有密码（encrypted_password 为空串或 null）', pw0 ? '库里有密码' : '');
+  const tokenA = v2.json?.access_token;
+  if (tokenA) {
+    const password = randomBytes(18).toString('base64url');   // 24 位，只在本进程里用，不打印
+    const setPw = await auth('/user', { password }, tokenA, 'PUT');
+    console.log(`  ⑦ A 用自己的令牌 PUT /auth/v1/user 设密码：${setPw.status}`);   // 200 或报错都算过，只看库里
+    const pw1 = await pwOf(uidA);
+    check(pw1 === '' || pw1 === null, '⑦ 设密码以后库里仍为空', pw1 ? '库里存下了密码' : '');
+    const login = await auth('/token?grant_type=password', { email: emailA, password });
+    check(login.status === 400 && login.json?.error_code === 'invalid_credentials' && !login.json?.access_token,
+      '⑦ grant_type=password 登录失败（400 invalid_credentials，没有令牌）', `${login.status} ${login.json?.error_code ?? ''}`);
+    const meta = await auth('/user', { data: { locale: 'ko-KR' } }, tokenA, 'PUT');
+    check(meta.status === 200 && meta.json?.user_metadata?.locale === 'ko-KR', '⑦ 同一令牌改 user_metadata 照常 200、locale 改到',
+      `${meta.status} locale = ${meta.json?.user_metadata?.locale}`);
+  } else {
+    check(false, '⑦ 没拿到 A 的令牌，查不了设密码');
+  }
 } catch (e) {
   check(false, '探针中途出错', e instanceof Error ? e.message : String(e));
 } finally {
-  for (const id of made) await auth(`/admin/users/${id}`, undefined, service, 'DELETE');
+  // 代码审查第三轮新低 2：删不掉要算不符合（不然测试用户留在库里没人知道）
+  for (const id of made) {
+    try {
+      const d = await auth(`/admin/users/${id}`, undefined, service, 'DELETE');
+      const left = (await sql`select count(*)::int n from auth.users where id = ${id}`)[0].n;
+      check(d.status === 200 && left === 0, '清理：admin 接口删掉探针建的用户', `${d.status}，库里还剩 ${left} 行`);
+    } catch (e) {
+      check(false, '清理：admin 接口删掉探针建的用户', e instanceof Error ? e.message : String(e));
+    }
+  }
+  try {
+    const rest = (await sql`select count(*)::int n from auth.users where email in (${emailA}, ${emailK}, ${emailX})`)[0].n;
+    check(rest === 0, '清理：库里没有留下本次探针的用户', `剩 ${rest} 个`);
+  } catch (e) {
+    check(false, '清理：库里没有留下本次探针的用户', e instanceof Error ? e.message : String(e));
+  }
   await sql.end();
 }
 console.log(failed ? `login-probe：${failed} 项不符合` : 'login-probe：全部符合');
