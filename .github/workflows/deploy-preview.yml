@@ -192,7 +192,13 @@ jobs:
       - name: 服务器函数（functions deploy，在服务器端打包，不用 Docker）
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.PREVIEW_SUPABASE_ACCESS_TOKEN }}
-        run: supabase functions deploy --project-ref "$PROJECT_REF" --use-api --yes
+        # B0 还没有函数（只有 _shared），CLI 找不到函数会报错退出（10-28 实测），没有就跳过
+        run: |
+          if ! find supabase/functions -mindepth 2 -maxdepth 2 -name index.ts -not -path 'supabase/functions/_*' | grep -q .; then
+            echo "::notice::supabase/functions 下还没有函数，跳过 functions deploy"
+            exit 0
+          fi
+          supabase functions deploy --project-ref "$PROJECT_REF" --use-api --yes
 
       - name: R2 配置核对（R2 开通、负责人运行 set-r2-tokens.ps1 以后；仓库变量 PREVIEW_R2_READY 设成 true 才跑）
         # 架构 0.32、8.4：/files 函数要的变量在 Cloudflare Pages 项目的生产环境里（不在 GitHub），这里只查名字和类型、不读值：
