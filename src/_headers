@@ -27,6 +27,12 @@
   Cache-Control: public, max-age=31536000, immutable
 
 # 预览沙箱（5.13 第 3 点、第四轮安全 L1）：单独一套 CSP，只能被 App 自己嵌入
+# Pages 会把 /app/preview.html 308 到 /app/preview（B0 实测），真正返回页面的是后者；两条都写
+/app/preview
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'
+  Cache-Control: no-cache
+
 /app/preview.html
   ! Content-Security-Policy
   Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'

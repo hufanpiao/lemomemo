@@ -38,7 +38,8 @@ registerRoute(
         return shell(opts);
       }
     },
-    { allowlist: [/^\/app\//], denylist: [/^\/app\/preview\.html/] },
+    // 预览沙箱不走 App 外壳；Pages 会把 preview.html 308 到 /app/preview，两种写法都排除
+    { allowlist: [/^\/app\//], denylist: [/^\/app\/preview(\.html)?$/] },
   ),
 );
 

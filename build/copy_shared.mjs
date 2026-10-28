@@ -47,16 +47,16 @@ export function copyShared(outDir = join(ROOT, 'supabase', 'functions', '_shared
     const rel = relative(src, f).split('\\').join('/');
     const r = rewrite(readFileSync(f, 'utf8'), rel, zodVersion);
     problems.push(...r.problems);
-    outputs.push([rel, r.code]);
+    outputs.push({ rel, code: r.code });
   }
   if (problems.length > 0) throw new Error(`copy_shared 失败：\n${problems.join('\n')}`);
   rmSync(outDir, { recursive: true, force: true });
-  for (const [rel, code] of outputs) {
+  for (const { rel, code } of outputs) {
     const dst = join(outDir, rel);
     mkdirSync(dirname(dst), { recursive: true });
     writeFileSync(dst, code, 'utf8');
   }
-  return outputs.map(([rel]) => rel);
+  return outputs.map((o) => o.rel);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
