@@ -1,0 +1,146 @@
+# unit：每次 push 和 PR 都跑的快检查（架构 8.3 “unit.yml” 一行和“依赖供应链”一行）
+# 不碰任何部署密钥：本文件不引用 secrets。
+# 第三方 action 一律按提交 SHA 锁定，行尾注释写对应的版本号（15.3 第 7 条）；升级由 Dependabot 开 PR、人工审。
+# 调用的命令和脚本的负责人见 docs/08-发布/环境清单-v4.md 第六节“CI 调用的命令”。
+name: unit
+
+on:
+  push:
+    branches: ['**']
+    tags-ignore: ['**']
+  pull_request:
+  schedule:
+    # 每周一首尔 06:17 再跑一遍（UTC 周日 21:17）：没有提交时也能发现新公布的依赖漏洞
+    - cron: '17 21 * * 0'
+  workflow_dispatch:
+
+# 默认不给任何权限，各任务按需单独开
+permissions: {}
+
+concurrency:
+  group: unit-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  PYTHON_VERSION: '3.12'
+  FORCE_COLOR: '0'
+
+jobs:
+  check:
+    name: 类型、规范、架构、单元测试、构建、体积、文档检查
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 安装依赖（不跑任何安装脚本）
+        run: npm ci --ignore-scripts
+
+      - name: 白名单里的包单独 rebuild（package.json 的 lemo.allowScripts）
+        # 架构 8.3 依赖供应链第 ① 条：确实需要安装脚本的包（例如 esbuild）列进白名单，单独 npm rebuild
+        run: bash build/ci/rebuild-allowlist.sh
+
+      - name: 类型检查（tsc --noEmit，三份 tsconfig）
+        run: npm run typecheck
+
+      - name: ESLint 和 Stylelint
+        run: npm run lint
+
+      - name: check_arch（架构 2.3）
+        run: python -I build/check_arch.py
+
+      - name: 单元和组件测试（UTC、首尔、洛杉矶三个时区各一遍，架构第 9 节 H2）
+        # 前端 A 的 test 脚本如果已经自己按三个时区跑，这里改成只跑一遍
+        run: |
+          for tz in UTC Asia/Seoul America/Los_Angeles; do
+            echo "::group::TZ=$tz"
+            TZ="$tz" npm test
+            echo "::endgroup::"
+          done
+
+      - name: 构建（preview 模式，不带任何环境的真实地址）
+        run: npm run build -- --mode preview
+
+      - name: 体积预算（架构 2.6）
+        run: node build/check_size.mjs
+
+      - name: 文件登记册
+        run: python -I build/check_registry.py
+
+      - name: 需求记录索引
+        run: python -I build/req_index.py --check
+
+      - name: 设计令牌
+        run: python -I build/tokens.py --check
+
+      - name: 免查名单和 supabase/functions/ 对照（前端 B 的脚本，架构 0.27 第 1 点）
+        # 等前端 B 合并：脚本合进来以前只出警告，合进来以后失败就是失败。
+        # 文件名以前端 B 合并时为准，合并时由主持人把下面的路径改对，并删掉“还没合并”这一支。
+        run: |
+          script=build/check_version_gate.mjs
+          if [ -f "$script" ]; then
+            node "$script"
+          else
+            echo "::warning::$script 还没合并（等前端 B），本次没有核对免查名单"
+          fi
+
+  secrets-scan:
+    name: 密钥扫描（gitleaks，CI 第二道）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: 安装 gitleaks（版本和 SHA-256 见 tools/ci-tools.lock）
+        run: bash build/ci/install-tool.sh gitleaks
+
+      - name: 扫全部历史
+        # --redact：日志里不出现疑似密钥的原文
+        run: gitleaks git --redact --no-banner --exit-code 1 --log-opts="--all" .
+
+  supply-chain:
+    name: 依赖审计（npm audit、OSV-Scanner）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: npm audit（有高危就失败）
+        # 只读 package-lock.json，不安装
+        run: |
+          npm audit --audit-level=high
+          npm audit --audit-level=high --prefix tools/deploy
+
+      - name: 安装 OSV-Scanner（版本和 SHA-256 见 tools/ci-tools.lock）
+        run: bash build/ci/install-tool.sh osv-scanner
+
+      - name: OSV-Scanner（package-lock、deno.lock、Cargo.lock）
+        # 有漏洞就失败；确认不受影响的，写进 osv-scanner.toml 并注明原因和复查日期，由安全审查员会签
+        run: osv-scanner scan source --recursive .

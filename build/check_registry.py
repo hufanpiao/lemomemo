@@ -23,9 +23,9 @@ def registered_paths():
         cell = line.split("|")[1].strip()
         m = re.match(r"\[([^\]]+)\]\(", cell)
         cell = m.group(1) if m else cell.strip("`")
-        # 无扩展名的文件（如 Cloudflare 的 _headers）也算；以 / 结尾的是目录行
+        # 无扩展名的文件也算：_headers 这类以 _ 开头的（前端 B 加），.githooks/pre-commit、VERSION 这类确实是文件的（运维加）；以 / 结尾的是目录行
         name = cell.split("/")[-1]
-        if cell and not cell.endswith("/") and ("." in name or name.startswith("_")):
+        if cell and not cell.endswith("/") and ("." in name or name.startswith("_") or (ROOT / cell).is_file()):
             paths.add(cell)
     return paths
 

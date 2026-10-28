@@ -1,0 +1,42 @@
+# 依赖升级 PR（架构 8.3 依赖供应链第 ③ 条）：每周一开合并的升级 PR，按批评审，不自动合并。
+# github-actions 那一项负责把按 SHA 锁定的 action 升级成新的 SHA（行尾的版本注释会一起改）。
+# Dependabot 的版本升级在 GitHub 免费版私有仓库可用；它开的 PR 读不到 repository secrets（GitHub 的规定），不影响预览部署。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Asia/Seoul
+    groups:
+      actions:
+        patterns: ['*']
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Asia/Seoul
+    # 发布满 14 天的版本才提（供应链：给社区时间发现被投毒的版本）
+    cooldown:
+      default-days: 14
+    groups:
+      app-deps:
+        patterns: ['*']
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: npm
+    directory: /tools/deploy
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Asia/Seoul
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 1

@@ -1,0 +1,101 @@
+# release-build：打正式 tag（vX.Y.Z）时在 CI 里构建一次正式产物，只构建和测试、不部署（R-206）
+#
+# 正式发布由负责人在自己电脑上运行 tools/release/publish.ps1：它在本机从同一个 tag 构建，
+# 算出产物指纹，让负责人用 iPhone 打开本次运行的摘要页，核对两边的指纹一样再继续。
+# 这样不用在开发电脑上登录 GitHub 下载产物（R-206：负责人的 GitHub 账号不在开发电脑上登录），
+# 也能发现本机构建被动过手脚。
+#
+# 不引用任何 secrets。正式环境的公开配置放在 repository variables（PROD_ 开头，都是公开值）。
+name: release-build
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions: {}
+
+env:
+  NODE_VERSION: '24'
+  FORCE_COLOR: '0'
+
+jobs:
+  build:
+    name: 正式产物构建（无密钥、不部署）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: tag 和 VERSION 一致（架构 8.3 release-build 第一步）
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          base="$(tr -d ' \r\n' < VERSION)"
+          if [ "v$base" != "$TAG" ]; then
+            echo "::error::tag 是 $TAG，VERSION 文件是 $base，对不上"
+            exit 1
+          fi
+
+      - name: 安装依赖（不跑任何安装脚本）
+        run: |
+          npm ci --ignore-scripts
+          bash build/ci/rebuild-allowlist.sh
+
+      - name: 类型检查、规范、单元测试（发布前再跑一遍）
+        run: |
+          npm run typecheck
+          npm run lint
+          python3 -I build/check_arch.py
+          npm test
+
+      - name: 构建（production 模式）
+        env:
+          VITE_PUBLIC_ENV: production
+          VITE_PUBLIC_SUPABASE_URL: https://lemomemo.com/sb
+          VITE_PUBLIC_ANON_KEY: ${{ vars.PROD_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_VAPID_KEY: ${{ vars.PROD_VAPID_PUBLIC_KEY }}
+          VITE_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.PROD_TURNSTILE_SITE_KEY }}
+        run: |
+          for v in VITE_PUBLIC_ANON_KEY VITE_PUBLIC_VAPID_KEY VITE_PUBLIC_TURNSTILE_SITE_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::$v 是空的：去仓库 Variables 填 PROD_ 开头的那几项"; exit 1; fi
+          done
+          npm run build -- --mode production
+          node build/check_size.mjs
+
+      - name: 发布包里不能有 source map（上线与回滚手册 第二节）
+        run: |
+          if find dist/web -name '*.map' | grep -q . || grep -rl 'sourceMappingURL' dist/web --include='*.js' | grep -q .; then
+            echo "::error::dist/web 里有 source map"
+            exit 1
+          fi
+
+      - name: 产物指纹（负责人发布时在 iPhone 上看这一段，和 publish.ps1 显示的核对）
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          {
+            echo "## $TAG 正式产物指纹"
+            echo
+            echo '```'
+            python3 -I build/ci/dist_hash.py dist/web
+            echo '```'
+            echo
+            echo "提交：$GITHUB_SHA"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传产物（存档用，发布不从这里取）
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ github.ref_name }}
+          path: dist/web/
+          if-no-files-found: error
+          retention-days: 90

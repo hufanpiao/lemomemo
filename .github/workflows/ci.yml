@@ -1,0 +1,145 @@
+# ci：PR、合进 main 时跑的重检查（架构 8.3 “ci.yml” 一行）
+#   db 任务：要 Docker 的数据库测试单列一个任务（本地 Supabase：db reset、类型比对、D1、SQL 安全检查、RLS、契约、deno test、旧版契约）
+#   e2e 任务：Playwright（chromium + webkit，wrangler pages dev 带 _headers 的 CSP 和 Pages Functions）
+# 不碰任何部署密钥：本文件不引用 secrets。本地 Supabase 的 anon / service key 是 CLI 每次随机生成的测试值，只在 runner 里。
+# 预览环境的 E2E（要预览项目的 service key）不在这里，架构 0.30 定为 push 到 main 时在 deploy-preview 之后跑，等前端 B 牵头联调时接上（环境清单第七节第 2 条）。
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # 每周一首尔 06:47 跑一遍，确认 main 上的数据库测试没被外部变化（镜像、CLI）弄坏
+    - cron: '47 21 * * 0'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  PYTHON_VERSION: '3.12'
+  FORCE_COLOR: '0'
+
+jobs:
+  db:
+    name: 数据库测试（Docker：本地 Supabase）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # 旧版契约测试要找 compat-baseline 和发布 tag
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          # 和本机同一版（架构 8.6：Deno 锁具体版本，本机和 CI 一致；本机 deno --version 为 2.9.8）
+          deno-version: 2.9.8
+
+      - name: 安装依赖（不跑任何安装脚本）
+        run: |
+          npm ci --ignore-scripts
+          bash build/ci/rebuild-allowlist.sh
+
+      - name: 安装 Supabase CLI（版本和 SHA-256 见 tools/ci-tools.lock）
+        run: bash build/ci/install-tool.sh supabase
+
+      - name: 启动本地 Supabase
+        # studio 用不到，不起
+        run: supabase start -x studio
+
+      - name: 从头建库（全部迁移 + seed.sql）
+        run: supabase db reset
+
+      - name: 重新生成 shared/db.types.ts 并和仓库比对（架构 2.5）
+        run: |
+          supabase gen types typescript --local > "$RUNNER_TEMP/db.types.ts"
+          if ! diff -u shared/db.types.ts "$RUNNER_TEMP/db.types.ts"; then
+            echo "::error::shared/db.types.ts 和迁移对不上：本机跑 supabase gen types typescript --local 重新生成后提交"
+            exit 1
+          fi
+
+      - name: D1、SQL 安全检查、RLS、契约测试（Vitest 打本地数据库；后端）
+        # 脚本名 test:db 是运维的提议，后端合并时确认；D1 比对不过不能合并（人员名单：运维把 D1 接进 CI）
+        run: npm run test:db
+
+      - name: 函数测试和 shared 在 Deno 下再跑一遍（deno test；后端）
+        # 任务名 test 写在 deno.json 里，后端合并时确认；deno.lock 对不上就失败
+        run: deno task test
+
+      - name: 找旧版契约测试的基线
+        id: compat
+        run: python -I build/compat_baseline.py resolve
+
+      - name: 取出基线的 tests/compat/
+        if: steps.compat.outputs.ref != ''
+        env:
+          BASE_REF: ${{ steps.compat.outputs.ref }}
+        run: python -I build/compat_baseline.py extract "$BASE_REF" "$RUNNER_TEMP/compat-base"
+
+      - name: 旧版契约测试（上线前只报告、不拦；有 4.x 发布 tag 后必须通过）
+        if: steps.compat.outputs.ref != ''
+        # strict 为 false 时这一步失败只标黄，不让整个任务失败（0.28 第 4 点、TC-B0-57）
+        continue-on-error: ${{ steps.compat.outputs.strict != 'true' }}
+        run: npm run test:compat -- "$RUNNER_TEMP/compat-base/tests/compat"
+
+      - name: 停掉本地 Supabase
+        if: always()
+        run: supabase stop --no-backup || true
+
+  e2e:
+    name: 端到端（Playwright，带 CSP）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 安装依赖（不跑任何安装脚本）
+        run: |
+          npm ci --ignore-scripts
+          bash build/ci/rebuild-allowlist.sh
+
+      - name: 安装浏览器（chromium、webkit）
+        run: npx --no-install playwright install --with-deps chromium webkit
+
+      - name: 构建（和正式同一套产物，preview 模式）
+        run: npm run build -- --mode preview
+
+      - name: Playwright（wrangler pages dev dist/web，控制台出现 CSP 报错就算失败）
+        run: npm run e2e
+
+      - name: 失败时上传报告（只有本地测试数据，不含任何密钥）
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore

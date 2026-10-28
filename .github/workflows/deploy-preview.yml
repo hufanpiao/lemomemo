@@ -1,0 +1,218 @@
+# deploy-preview：main 每次更新（架构 8.3 分支模型：只有 main，没有 develop），部署到预览环境 preview.lemomemo.com（架构 8.3 “deploy-preview.yml” 一行，R-206）
+#
+# 两个任务，密钥只在第二个：
+#   build：拿不到任何密钥（不引用 secrets），npm ci --ignore-scripts → 构建 → 复制 shared 到函数目录 → 上传产物
+#   deploy：只下载产物、不装项目依赖、不跑项目脚本；用 tools/ci-tools.lock 锁定的 Supabase CLI
+#           和 tools/deploy/package-lock.json 锁定的 wrangler → 预览项目暂停就恢复 → db push → functions deploy → pages deploy → 核对线上版本
+#
+# GitHub 免费版私有仓库没有 Environments（环境密钥、审批人、分支限制都用不了，已查官方文档），
+# 所以预览的令牌放在 repository secrets（R-206）。它们对本仓库所有分支的工作流都可见：
+#   - Supabase 令牌必须是“只管预览项目”的项目级令牌（2026-10-06 起 Supabase 可以发，环境清单第四节）；
+#   - Cloudflare 令牌只给 “Cloudflare Pages: Edit”（能发到正式 Pages 项目，R-110 已接受）。
+# 正式环境的令牌不放 GitHub：正式发布由负责人本机运行 tools/release/publish.ps1（R-206）。
+#
+# 本文件只写 secret 和 variable 的名字，值由负责人在 GitHub 网页上填（负责人B0网页操作清单）。
+#   secrets：PREVIEW_SUPABASE_ACCESS_TOKEN、PREVIEW_SUPABASE_DB_PASSWORD、PREVIEW_CLOUDFLARE_API_TOKEN
+#   variables（公开值）：PREVIEW_SUPABASE_PROJECT_REF、PREVIEW_PAGES_PROJECT、PREVIEW_SITE_ORIGIN、CLOUDFLARE_ACCOUNT_ID、
+#                        PREVIEW_SUPABASE_ANON_KEY、PREVIEW_VAPID_PUBLIC_KEY、PREVIEW_TURNSTILE_SITE_KEY
+name: deploy-preview
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+# 同一时间只部署一次；后来的排队，不打断正在进行的 db push
+concurrency:
+  group: deploy-preview
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  FORCE_COLOR: '0'
+
+jobs:
+  build:
+    name: 构建（无密钥）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 版本号（架构 8.5：预览版写成 X.Y.Z-preview.<运行号>）
+        id: ver
+        run: |
+          base="$(tr -d ' \r\n' < VERSION)"
+          if ! [[ "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::VERSION 文件的内容不是 X.Y.Z：$base"
+            exit 1
+          fi
+          echo "version=$base-preview.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: 安装依赖（不跑任何安装脚本）
+        run: |
+          npm ci --ignore-scripts
+          bash build/ci/rebuild-allowlist.sh
+
+      - name: 构建（preview 模式）
+        env:
+          # 只有 VITE_PUBLIC_ 前缀进前端（架构 8.1、A14）；这几个都是公开值，放在 repository variables
+          VITE_PUBLIC_ENV: preview
+          VITE_PUBLIC_SUPABASE_URL: ${{ vars.PREVIEW_SITE_ORIGIN }}/sb
+          VITE_PUBLIC_ANON_KEY: ${{ vars.PREVIEW_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_VAPID_KEY: ${{ vars.PREVIEW_VAPID_PUBLIC_KEY }}
+          VITE_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.PREVIEW_TURNSTILE_SITE_KEY }}
+          # 带 -preview.N 的完整版本号；前端 A 的 vite.config 读它（没有就用 VERSION），合并时确认
+          LEMO_BUILD_VERSION: ${{ steps.ver.outputs.version }}
+        run: npm run build -- --mode preview
+
+      - name: 复制 shared 给服务器函数（架构 2.5）
+        run: |
+          rm -rf supabase/functions/_shared/gen
+          mkdir -p supabase/functions/_shared/gen
+          cp -R shared/. supabase/functions/_shared/gen/
+
+      - name: 产物指纹
+        run: python3 -I build/ci/dist_hash.py dist/web | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preview-bundle
+          # dist/web：静态页面；functions/：Pages Functions（/ 的分流、/sb/* 转发）；supabase/：迁移、函数、config.toml
+          path: |
+            dist/web/
+            functions/
+            supabase/
+          include-hidden-files: false
+          if-no-files-found: error
+          retention-days: 3
+
+  deploy:
+    name: 部署到预览环境
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      PROJECT_REF: ${{ vars.PREVIEW_SUPABASE_PROJECT_REF }}
+      PAGES_PROJECT: ${{ vars.PREVIEW_PAGES_PROJECT }}
+      SITE_ORIGIN: ${{ vars.PREVIEW_SITE_ORIGIN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      EXPECTED_VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: 检查公开配置都填了
+        run: |
+          for v in PROJECT_REF PAGES_PROJECT SITE_ORIGIN CLOUDFLARE_ACCOUNT_ID EXPECTED_VERSION; do
+            if [ -z "${!v}" ]; then echo "::error::$v 是空的：去仓库 Settings › Secrets and variables › Actions › Variables 填"; exit 1; fi
+          done
+          case "$SITE_ORIGIN" in
+            https://preview.lemomemo.com) ;;
+            *) echo "::error::PREVIEW_SITE_ORIGIN 必须是 https://preview.lemomemo.com，现在是 $SITE_ORIGIN"; exit 1 ;;
+          esac
+
+      # 只取部署要用的两个目录：锁文件和安装脚本。项目代码不在这个任务里执行
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            tools
+            build/ci
+          sparse-checkout-cone-mode: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 安装 Supabase CLI（tools/ci-tools.lock）
+        run: bash build/ci/install-tool.sh supabase
+
+      - name: 安装 wrangler（tools/deploy/package-lock.json，不跑安装脚本）
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix tools/deploy
+          echo "$GITHUB_WORKSPACE/tools/deploy/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: 下载产物
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: preview-bundle
+          path: .
+
+      - name: 预览项目暂停了就恢复（架构 8.3、M13）
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.PREVIEW_SUPABASE_ACCESS_TOKEN }}
+        run: |
+          # 令牌经 stdin 交给 curl，不出现在命令行参数里
+          api() {
+            printf 'header = "Authorization: Bearer %s"\n' "$SUPABASE_ACCESS_TOKEN" |
+              curl --config - --fail --silent --show-error --proto '=https' "$@"
+          }
+          status="$(api "https://api.supabase.com/v1/projects/$PROJECT_REF" | jq -r '.status')"
+          echo "预览项目状态：$status"
+          if [ "$status" = "INACTIVE" ]; then
+            echo "预览项目已暂停，发起恢复"
+            api -X POST "https://api.supabase.com/v1/projects/$PROJECT_REF/restore" > /dev/null
+          fi
+          for _ in $(seq 1 60); do
+            [ "$status" = "ACTIVE_HEALTHY" ] && exit 0
+            sleep 10
+            status="$(api "https://api.supabase.com/v1/projects/$PROJECT_REF" | jq -r '.status')"
+            echo "等待恢复：$status"
+          done
+          echo "::error::预览项目 10 分钟内没恢复到 ACTIVE_HEALTHY（现在是 $status）"
+          exit 1
+
+      - name: 数据库迁移（db push）
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.PREVIEW_SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.PREVIEW_SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase link --project-ref "$PROJECT_REF"
+          supabase db push --linked --yes
+
+      - name: 服务器函数（functions deploy，在服务器端打包，不用 Docker）
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.PREVIEW_SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy --project-ref "$PROJECT_REF" --use-api --yes
+
+      - name: 网页（wrangler pages deploy，含 Pages Functions）
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.PREVIEW_CLOUDFLARE_API_TOKEN }}
+        run: |
+          wrangler pages deploy dist/web \
+            --project-name "$PAGES_PROJECT" \
+            --branch main \
+            --commit-hash "$GITHUB_SHA" \
+            --commit-dirty=true
+
+      - name: 核对线上版本
+        run: |
+          for _ in $(seq 1 20); do
+            got="$(curl --fail --silent --proto '=https' "$SITE_ORIGIN/app/version.json" | jq -r '.version' || true)"
+            if [ "$got" = "$EXPECTED_VERSION" ]; then
+              echo "预览环境已是 $got" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "线上是 ${got:-（取不到）}，等 6 秒再看（期望 $EXPECTED_VERSION）"
+            sleep 6
+          done
+          echo "::error::2 分钟后线上版本仍不是 $EXPECTED_VERSION"
+          exit 1
+
+      - name: 清掉 supabase link 留下的本地文件
+        if: always()
+        run: rm -rf supabase/.temp
