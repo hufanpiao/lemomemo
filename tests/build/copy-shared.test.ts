@@ -36,6 +36,24 @@ describe('copy_shared', () => {
     expect(rewrite("import React from 'react';", 'x.ts', '4.6.7').problems).toHaveLength(1);
   });
 
+  it('rewrite：npm: / jsr: / http(s): 不再原样放行，动态 import 只准写字面量（B1 S8 代码审查：gen/ 里不许出现锁外的依赖）', () => {
+    const v = { zod: '4.6.7', aws4fetch: '1.0.20' };
+    for (const bad of [
+      "import { z } from 'npm:zod';",
+      "import ms from 'npm:ms@2.1.3';",
+      "import { z } from 'npm:zod@4.6.7';", // 写全也不行：版本只由 package.json 经改写给出
+      "import 'jsr:@std/assert@1.0.0';",
+      'import "https://deno.land/std@0.224.0/assert/mod.ts";',
+      "export * from 'http://example.com/x.ts';",
+      'await import(`npm:ms@2.1.3`);',
+      "const p = 'npm:' + 'ms@2.1.3'; await import(p);",
+      "await import('npm:' + 'ms@2.1.3');",
+    ]) {
+      expect(rewrite(bad, 'x.ts', v).problems.length, bad).toBeGreaterThan(0);
+    }
+    expect(rewrite("const m = await import('./a.ts');", 'x.ts', v).problems).toEqual([]);
+  });
+
   it('真的 shared 能完整复制过去，且不再有裸的 zod', () => {
     const files = copyShared(out);
     expect(files).toContain('core/date.ts');

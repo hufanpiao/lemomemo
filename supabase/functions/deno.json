@@ -1,0 +1,9 @@
+{
+  "$comment": "服务器函数源码的依赖锁（架构 0.33 第 7 条、B0 安全审查低 10、8.3 依赖供应链 ④）。只写 npm:包@精确版本，版本和 package.json 一致；同目录 deno.lock 记每个 npm 包（含间接依赖）的 integrity。CI 在 copy:shared 之后于本目录跑 deno install --frozen，再把全部源码（含 _shared/gen/）作入口跑一遍，源码用了锁外的依赖就失败。源码一律写全 npm:包@版本，不准用这里的裸名（tests/build/deno-config.test.ts 查）。线上部署读不读这份锁还没实测（接手清单 P-deno-lock），实测前不算部署已锁定。测试和 deno check 用仓库根的 deno.json，和这里无关",
+  "imports": {
+    "zod": "npm:zod@4.6.7",
+    "aws4fetch": "npm:aws4fetch@1.0.20",
+    "postgres": "npm:postgres@3.4.5",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.118.0"
+  }
+}

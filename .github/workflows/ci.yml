@@ -152,7 +152,7 @@ jobs:
           D1_DB_URL="$DB_URL" node build/ci/d1_negative.mjs
 
       - name: shared 在 Deno 下再跑一遍（deno task test），服务器函数和 D1 入口过 deno check（deno task check）
-        # deno.json 用 nodeModulesDir=manual，npm 包取 npm ci 装好的 node_modules（版本由 package-lock.json 锁定，没有 deno.lock）
+        # deno.json 用 nodeModulesDir=manual，npm 包取 npm ci 装好的 node_modules（测试一侧版本由 package-lock.json 锁定；函数源码另由 supabase/functions/deno.lock 核对，见下一步）
         # deno task test 的权限按最小给：只读仓库、只读五个替身变量、只连 127.0.0.1:4566（B0 代码审查中 2）；
         # 本任务设了替身变量，objstore.test.ts 的真替身组必须真跑并通过，有用例报 ignored（跳过）或没跑到就失败
         # 垫片把 describe.skipIf / it.skip 登记成 Deno.test({ ignore: true })，Deno 报告里逐条显示“... ignored”、汇总行“N ignored”（B1 接手清单 C1）
@@ -173,6 +173,23 @@ jobs:
           # 函数 import 的 _shared/gen/ 不进仓库（.gitignore），deno check 前先生成（_shared/objstore.ts 等引 _shared/gen/）
           npm run copy:shared
           deno task check
+
+      - name: 服务器函数的依赖锁（supabase/functions 下 deno install --frozen，含 _shared/gen/ 在内的全部源码作入口）
+        # 架构 0.33 第 7 条、B0 安全审查低 10。必须在上一步 copy:shared 之后：gen/ 不进仓库，先生成才扫得到。
+        # 第一行核 deno.json 和 deno.lock；第二行把每个源码文件当入口解析整张依赖图：源码里有锁外的 npm 包、不带版本的 npm:、
+        # jsr: / https: 远程模块（含模板字符串的动态 import），锁都要变，--frozen 就失败（B1 S8 代码审查实测）。
+        # 变量拼出来的动态 import Deno 看不见：gen/ 由 copy_shared 拦，其余源码由 check_backend F7 和 tests/build/deno-config.test.ts 拦。
+        # --no-check：类型检查由上一步 deno task check 管（用根目录 deno.json 的严格设置）。
+        # 只装进 Deno 全局缓存，不建 node_modules；Deno 默认不跑 npm 的安装脚本。
+        # 这里只证明“仓库里的源码和锁对得上”；部署（functions deploy --use-api）读不读这份锁待第一次预览部署函数时实测（接手清单 P-deno-lock）
+        working-directory: supabase/functions
+        shell: bash
+        run: |
+          deno install --frozen
+          mapfile -t entries < <(find . -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.mts' -o -name '*.cts' -o -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' \) -not -path '*/node_modules/*' | sort)
+          if [ "${#entries[@]}" -eq 0 ]; then echo "::error::supabase/functions 下一个源码文件都没有（copy:shared 没跑？）"; exit 1; fi
+          if ! find _shared/gen -name '*.ts' 2>/dev/null | grep -q .; then echo "::error::_shared/gen/ 是空的：先跑 npm run copy:shared"; exit 1; fi
+          deno install --frozen --no-check --entrypoint "${entries[@]}"
 
       - name: 找旧版契约测试的基线
         id: compat

@@ -42,10 +42,15 @@ export function rewrite(code, file, versions) {
       if (!spec.endsWith('.ts')) problems.push(`${file}：相对 import 要带 .ts 后缀（${spec}）`);
       return all;
     }
-    if (spec.startsWith('npm:') || spec.startsWith('jsr:')) return all;
+    // npm: / jsr: / http(s): 不再原样放行（B1 S8 代码审查）：shared 只写裸名，由上面改写成 package.json 锁的版本，
+    // 这样 gen/ 里的 npm:包@版本 一定在 supabase/functions/deno.json 和 deno.lock 里
     problems.push(`${file}：shared 只能 import ${SHARED_PACKAGES.join('、')} 和自己的文件（${spec}）`);
     return all;
   });
+  // 动态 import 只准写普通引号的字面量：模板字符串、变量、拼接都看不出引的是什么，上面的改写和锁都管不到（B1 S8 代码审查）
+  for (const m of code.matchAll(/\bimport\s*\(\s*(?!(['"])[^'"\n]*\1\s*[,)])/g)) {
+    problems.push(`${file}：动态 import( ) 只准写 '…' 或 "…" 字面量（第 ${code.slice(0, m.index).split('\n').length} 行）`);
+  }
   return { code: HEADER + out, problems };
 }
 
