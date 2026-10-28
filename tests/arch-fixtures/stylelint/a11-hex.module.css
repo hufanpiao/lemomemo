@@ -1,4 +1,4 @@
-/* arch-fixture: path=src/features/notes/ui/Bad.module.css expect=color-no-hex */
+/* arch-fixture: path=src/features/notes/ui/Bad.module.css expect=color-no-hex rule=A11 */
 .a {
   color: #f00;
 }

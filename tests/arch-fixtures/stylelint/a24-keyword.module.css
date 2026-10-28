@@ -1,4 +1,4 @@
-/* arch-fixture: path=src/kit/components/Bad.module.css expect=declaration-property-value-disallowed-list */
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=declaration-property-value-disallowed-list rule=A24 */
 .a {
   animation: fade var(--dur-ui) ease-in-out;
 }

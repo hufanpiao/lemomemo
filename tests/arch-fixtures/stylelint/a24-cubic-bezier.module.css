@@ -1,4 +1,4 @@
-/* arch-fixture: path=src/kit/components/Bad.module.css expect=function-disallowed-list */
+/* arch-fixture: path=src/kit/components/Bad.module.css expect=function-disallowed-list rule=A24 */
 .a {
   transition: opacity var(--dur-ui) cubic-bezier(0.2, 0, 0, 1);
 }

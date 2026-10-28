@@ -3,3 +3,4 @@ export { Appear } from './Appear.tsx';
 export { Pressable } from './Pressable.tsx';
 export { SharedLayout } from './SharedLayout.tsx';
 export { Celebrate } from './Celebrate.tsx';
+export { useReducedMotionPref } from './useReducedMotionPref.ts';

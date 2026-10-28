@@ -4,7 +4,14 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadFixtures, ROOT } from './fixture-header.ts';
 
-const eslint = new ESLint({ cwd: ROOT });
+// 唯一的改动：边界规则多认一个目录 tests/arch-fixtures/eslint-targets/（违规样例的引用目标，真文件）。
+// 现在仓库里还没有任何功能的 data/，引不存在的文件时边界规则认不出类型、不报（QA D-07）；目录名照仓库的写，元素类型按路径结尾认
+const eslint = new ESLint({
+  cwd: ROOT,
+  overrideConfig: {
+    settings: { 'boundaries/include': ['src/**/*', 'shared/**/*', 'tests/arch-fixtures/eslint-targets/**/*'] },
+  },
+});
 const fixtures = loadFixtures('eslint');
 
 async function lint(code: string, path: string) {
@@ -51,8 +58,11 @@ describe('ESLint 架构规则（tests/arch-fixtures/eslint）', () => {
         return;
       }
       for (const rule of f.expect) {
-        const hits = messages.filter((m) => m.ruleId === rule);
-        expect(hits.length, `${rule} 没有拦住；实际：${messages.map((m) => m.ruleId).join(', ')}`).toBeGreaterThan(0);
+        const all = messages.filter((m) => m.ruleId === rule);
+        // 写了 message= 的，只算报错文字里有这一段的（防止被同一 ruleId 下“别的一条”拦住也算过）
+        const hits = f.message === undefined ? all : all.filter((m) => m.message.includes(f.message ?? ''));
+        const actual = messages.map((m) => `${m.ruleId}「${m.message}」`).join('；');
+        expect(hits.length, `${rule}${f.message ? `（${f.message}）` : ''} 没有拦住；实际：${actual}`).toBeGreaterThanOrEqual(f.count);
         expect(hits.some((m) => m.severity === f.severity)).toBe(true);
       }
     });

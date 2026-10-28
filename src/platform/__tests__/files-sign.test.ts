@@ -1,8 +1,12 @@
 // platform/files.ts 的签名和取字节（架构 0.32；14.2 第 3、11 点；5.13 第 3、4 点；任务单 FA-2；TC-B0-114 的客户端部分）
 // 用假的 fetch：签名分批、单项不过、ms 只给 .pptx、链接的主机和路径前缀核对、取字节不带 JWT
-import { describe, expect, it } from 'vitest';
-import { SIGN_BATCH_MAX, type SignItem } from '../files.ts';
-import { BASE, I, IMG, N, PDF, PPTX, U, client, fakeFetch, json, signed, type Call } from './files-fake.ts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SIGN_BATCH_MAX, TIMEOUT_MS, type SignItem } from '../files.ts';
+import { BASE, I, IMG, N, PDF, PPTX, U, client, fakeFetch, json, signed, stalledResponse, type Call } from './files-fake.ts';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('sign：POST /files/v1/sign', () => {
   /** 按请求体逐项回成功（或按 deny 回不过） */
@@ -124,6 +128,15 @@ describe('sign：POST /files/v1/sign', () => {
     expect(f.fn).not.toHaveBeenCalled();
   });
 
+  it('响应体卡住（代码审查低 6）：整批 retry/timeout，响应体被取消', async () => {
+    vi.useFakeTimers();
+    const { res, cancelled } = stalledResponse(200);
+    const p = client(fakeFetch(() => res)).sign([{ bucket: 'images', path: IMG, purpose: 'view' }]);
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS.sign);
+    expect(await p).toEqual([{ ok: false, kind: 'retry', code: 'timeout', status: 0 }]);
+    expect(cancelled()).toBe(true);
+  });
+
   it('空列表不发请求', async () => {
     const f = fakeFetch(json(200, { items: [] }));
     expect(await client(f).sign([])).toEqual([]);
@@ -144,6 +157,15 @@ describe('fetchBlob：GET 签名链接', () => {
     expect(new Headers(init.headers).has('Authorization')).toBe(false);
     expect(init.credentials).toBe('omit');
     expect(init.cache).toBe('no-store');
+  });
+
+  it('响应头到了、10 MB 的响应体读到一半卡住（代码审查低 6）→ retry/timeout，不会一直挂着；响应体被取消', async () => {
+    vi.useFakeTimers();
+    const { res, cancelled } = stalledResponse(200, { 'Content-Type': 'image/webp' });
+    const p = client(fakeFetch(() => res)).fetchBlob(signed('images', IMG));
+    await vi.advanceTimersByTimeAsync(TIMEOUT_MS.get);
+    expect(await p).toEqual({ ok: false, kind: 'retry', code: 'timeout', status: 0 });
+    expect(cancelled()).toBe(true);
   });
 
   it('403 expired、bad_signature → resign（重新签）；404 → denied；断网 → retry', async () => {

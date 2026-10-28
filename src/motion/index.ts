@@ -2,20 +2,18 @@
 // document.startViewTransition、requestAnimationFrame（A25）
 // B0 是骨架：接口定下来，具体手感在 B1（按下回弹、页面切换）、B2（弹层、列表）、B3（提示条、录音面板）里调
 import { presets, PRESS_SCALE, type AppearKind } from './presets.ts';
+import { prefersReducedMotion } from './reduced.ts';
 import { dur, ease, type Bezier } from './tokens.ts';
 
 // React 组件（Appear、Pressable、SharedLayout、Celebrate）在 ./components.ts：
 // 分开导出，免得只用函数的地方（例如 router 的 transition）把 motion/react 带进首屏（2.6）
 export { vtName } from './vt.ts';
+// 减少动态效果只有一套判断（系统设置或 <html data-rm="1">，UI-4 M-1）；React 组件经 useReducedMotionPref 读同一个
+export { prefersReducedMotion, subscribeReducedMotion } from './reduced.ts';
 export type { AppearKind } from './presets.ts';
 
 const bezierCss = (b: Bezier): string => `cubic-bezier(${b.join(',')})`;
 
-/** 系统“减少动态效果”或设置里的开关（<html data-rm="1">） */
-export function prefersReducedMotion(): boolean {
-  if (typeof document !== 'undefined' && document.documentElement.dataset['rm'] === '1') return true;
-  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
 
 function run(el: Element, kind: AppearKind, dir: 'in' | 'out'): Promise<void> {
   const p = presets[kind];

@@ -186,6 +186,34 @@ const MOTION_SYNTAX = [
     message: 'A25：requestAnimationFrame 只能写在 src/motion/',
   },
 ];
+// 架构 2.0 的三条 CSP 规矩（B0 验证记录“以后写代码要守的规矩”；UI-4 L-4）：这几种写法会往页面插内联 <style>，
+// 被 style-src 'self' 拦。每个作用域都带（src/motion、预览沙箱、测试也一样），没有开关
+const CSP_SYNTAX = [
+  {
+    selector: "JSXAttribute[name.name='mode'] Literal[value='popLayout']",
+    message: "CSP（架构 2.0）：不准用 AnimatePresence mode=\"popLayout\"（会插内联 <style>）；用默认的 sync 或 wait",
+  },
+  {
+    selector: "JSXAttribute[name.name='mode'] TemplateElement[value.cooked='popLayout']",
+    message: "CSP（架构 2.0）：不准用 AnimatePresence mode=\"popLayout\"（会插内联 <style>）；用默认的 sync 或 wait",
+  },
+  {
+    selector: "JSXMemberExpression[property.name=/^(Alert)?(Dialog)?Overlay$/]",
+    message: 'CSP（架构 2.0）：不准用 Radix Dialog / AlertDialog 的 Overlay（react-remove-scroll 插内联 <style>）；遮罩自己画，见 kit/components/Dialog.tsx',
+  },
+  {
+    selector: "ImportDeclaration[source.value=/^@radix-ui\\/react-(alert-)?dialog$/] > ImportSpecifier[imported.name=/^(Alert)?(Dialog)?Overlay$/]",
+    message: 'CSP（架构 2.0）：不准用 Radix Dialog / AlertDialog 的 Overlay（react-remove-scroll 插内联 <style>）；遮罩自己画，见 kit/components/Dialog.tsx',
+  },
+  {
+    selector: "JSXOpeningElement[name.object.name='DropdownMenu'][name.property.name='Root']:not(:has(JSXAttribute[name.name='modal'] > JSXExpressionContainer > Literal[raw='false']))",
+    message: 'CSP（架构 2.0）：DropdownMenu.Root 必须写 modal={false}（modal 模式挂 react-remove-scroll，插内联 <style>）',
+  },
+  {
+    selector: "ImportDeclaration[source.value='@radix-ui/react-dropdown-menu'] > ImportSpecifier",
+    message: 'CSP（架构 2.0）：DropdownMenu 只准 import * as DropdownMenu，好让“Root 必须 modal={false}”的检查认得出',
+  },
+];
 const PURE_SYNTAX = [
   { selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']", message: 'A2：shared 里不准 Date.now()，把 now 当参数传进来' },
   { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: 'A2：shared 里不准无参 new Date()，把 now 当参数传进来' },
@@ -215,12 +243,13 @@ const MOTION_PATH_IMPORTS = {
 };
 // 0.31 第 3 条：app/router.ts 下层也能引，所以它自己只准 import react、shared 和 motion/index.ts，
 // 不能 import 任何功能、kit、platform 和 app 的其他文件（否则整个 app 会被拖进下层）
+// UI-4 M-2：另准 react-dom（只为 flushSync：17.2 第 3 点要求页面切换在 View Transition 的回调里画完；react-dom 本来就在首屏）
 const ROUTER_IMPORTS = {
   paths: [],
   patterns: [
     {
-      regex: '^(?!react$|(?:\\.\\./)+shared/|\\.\\./motion/index\\.ts$)',
-      message: '0.31 第 3 条：app/router.ts 只准 import react、shared 和 motion/index.ts',
+      regex: '^(?!react$|react-dom$|(?:\\.\\./)+shared/|\\.\\./motion/index\\.ts$)',
+      message: '0.31 第 3 条：app/router.ts 只准 import react、react-dom（flushSync）、shared 和 motion/index.ts',
     },
   ],
 };
@@ -249,6 +278,7 @@ function scope({ net = false, device = false, motion = false, html = false, pure
       ...(html ? [] : HTML_SYNTAX),
       ...(motion ? [] : MOTION_SYNTAX),
       ...(pure ? PURE_SYNTAX : []),
+      ...CSP_SYNTAX,
     ],
     'no-restricted-imports': restrictedImports(...imports),
   };

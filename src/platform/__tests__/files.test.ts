@@ -2,7 +2,7 @@
 // 用假的 fetch：核对发出去的请求、每个错误码映射成哪一类、409 exists 当成功、签名分批和链接核对
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TIMEOUT_MS, checkSignedUrl, classify, filesBaseFrom, isSafePath, type FileError } from '../files.ts';
-import { BASE, I, IMG, N, PDF, PPTX, U, client, fakeFetch, json, signed, type Call } from './files-fake.ts';
+import { BASE, I, IMG, N, PDF, PPTX, U, client, fakeFetch, json, signed, stalledResponse, type Call } from './files-fake.ts';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -92,6 +92,24 @@ describe('upload：PUT /files/v1/o/<桶>/<路径>', () => {
     const p = client(hang).upload('files', PDF, new Blob(['x']), 'application/pdf');
     await vi.advanceTimersByTimeAsync(TIMEOUT_MS.upload);
     expect(await p).toEqual({ ok: false, kind: 'retry', code: 'timeout', status: 0 });
+  });
+
+  // 代码审查低 6：响应头到了、响应体卡住，也要在同一个超时里折成 retry/timeout，并取消响应体
+  it('响应头到了但响应体卡住（成功、409、出错三种都读体）→ retry/timeout，响应体被取消', async () => {
+    vi.useFakeTimers();
+    for (const status of [200, 409, 500]) {
+      const { res, cancelled } = stalledResponse(status);
+      const f = fakeFetch(() => res);
+      const p = client(f).upload('files', PDF, new Blob(['x']), 'application/pdf');
+      await vi.advanceTimersByTimeAsync(TIMEOUT_MS.upload - 1);
+      let settled = false;
+      void p.then(() => (settled = true));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled, `${status}：超时之前不该结束`).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await p).toEqual({ ok: false, kind: 'retry', code: 'timeout', status: 0 });
+      expect(cancelled(), `${status}：响应体要取消`).toBe(true);
+    }
   });
 
   it('没登录：不发请求，auth/no_session', async () => {

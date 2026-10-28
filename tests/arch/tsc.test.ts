@@ -30,6 +30,29 @@ describe('tsc 架构规则（tests/arch-fixtures/tsc）', () => {
     });
   }
 
+  // T1（QA D-06）：样例用 shared 的选项编译；这里再证明五份 tsconfig 解析出来都开着这几个选项（哪份关掉一个就失败）
+  it.each(['tsconfig.app.json', 'tsconfig.sw.json', 'tsconfig.shared.json', 'tsconfig.functions.json', 'tsconfig.node.json'])(
+    'T1：%s 开着 strict、noUncheckedIndexedAccess、exactOptionalPropertyTypes、noImplicitOverride、useUnknownInCatchVariables',
+    (name) => {
+      const cfgPath = join(ROOT, name);
+      const cfg = ts.readConfigFile(cfgPath, (p) => ts.sys.readFile(p));
+      const o = ts.parseJsonConfigFileContent(cfg.config, ts.sys, ROOT, undefined, cfgPath).options;
+      expect({
+        strict: o.strict,
+        noUncheckedIndexedAccess: o.noUncheckedIndexedAccess,
+        exactOptionalPropertyTypes: o.exactOptionalPropertyTypes,
+        noImplicitOverride: o.noImplicitOverride,
+        useUnknownInCatchVariables: o.useUnknownInCatchVariables ?? o.strict,
+      }).toEqual({
+        strict: true,
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
+        noImplicitOverride: true,
+        useUnknownInCatchVariables: true,
+      });
+    },
+  );
+
   it('真的 shared 代码按同样的选项编译 0 错误（证明上面的错误不是选项本身造成的）', { timeout: 60_000 }, () => {
     const file = join(ROOT, 'shared', 'i18n', 'fmt.ts');
     expect(diagnosticsOf(file)).toEqual([]);

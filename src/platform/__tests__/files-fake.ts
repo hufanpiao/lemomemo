@@ -32,4 +32,18 @@ export function client(f: ReturnType<typeof fakeFetch>, token: string | null = '
   return createFilesClient({ base: BASE, fetch: f.fn as unknown as typeof fetch, getAccessToken: () => Promise.resolve(token), version: '4.0.0' });
 }
 
-export const signed = (bucket: string, path: string, e = 1_900_000_000, extra = '') => `${BASE}o/${bucket}/${path}?e=${e}&d=${extra}&s=abc_-123`;
+/** 响应头马上到、响应体发一块就再也不来（慢网读体卡住）；cancelled() 看客户端有没有取消响应体 */
+export function stalledResponse(status: number, headers: Record<string, string> = { 'Content-Type': 'application/json' }) {
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    start(ctl) {
+      ctl.enqueue(new TextEncoder().encode('{'));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  return { res: new Response(body, { status, headers }), cancelled: () => cancelled };
+}
+
+export const signed =(bucket: string, path: string, e = 1_900_000_000, extra = '') => `${BASE}o/${bucket}/${path}?e=${e}&d=${extra}&s=abc_-123`;
