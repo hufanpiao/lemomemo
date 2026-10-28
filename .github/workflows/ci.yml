@@ -1,5 +1,6 @@
 # ci：PR、合进 main 时跑的重检查（架构 8.3 “ci.yml” 一行）
-#   db 任务：要 Docker 的数据库测试单列一个任务（本地 Supabase：db reset、类型比对、D1、SQL 安全检查、RLS、契约、deno test、旧版契约）
+#   db 任务：要 Docker 的数据库测试单列一个任务（本地 Supabase：db reset、类型比对、D1 正例、D1 反例和违规样例、RLS、deno test、旧版契约、兼容样例 --sample）
+#            本地 Supabase 的配置用标准位置的 supabase/config.toml（后端维护），本文件不另写配置、不传 --workdir
 #   e2e 任务：Playwright（chromium + webkit，wrangler pages dev 带 _headers 的 CSP 和 Pages Functions）
 # 不碰任何部署密钥：本文件不引用 secrets。本地 Supabase 的 anon / service key 是 CLI 每次随机生成的测试值，只在 runner 里。
 # 预览环境的 E2E（要预览项目的 service key）不在这里，架构 0.30 定为 push 到 main 时在 deploy-preview 之后跑，等前端 B 牵头联调时接上（环境清单第七节第 2 条）。
@@ -62,6 +63,13 @@ jobs:
       - name: 安装 Supabase CLI（版本和 SHA-256 见 tools/ci-tools.lock）
         run: bash build/ci/install-tool.sh supabase
 
+      - name: 本地 Supabase 的配置在标准位置（supabase/config.toml，后端维护）
+        run: |
+          if [ ! -f supabase/config.toml ]; then
+            echo "::error::没有 supabase/config.toml：supabase start 要用它（后端维护，标准位置就是这里）"
+            exit 1
+          fi
+
       - name: 启动本地 Supabase
         # studio 用不到，不起
         run: supabase start -x studio
@@ -79,8 +87,15 @@ jobs:
 
       - name: RLS（pgTAP，supabase test db supabase/tests/rls）和 D1（deno task d1）；后端
         # B0 集成：test:db = supabase test db supabase/tests/rls && deno task d1；D1 比对不过不能合并
-        # D1 的违规样例、兼容样例在 unit.yml 的 test:db:offline（PGlite）里跑
+        # 这一步只是正例（库和清单一致）；反例、违规样例在下一步打同一个真库，兼容样例在本任务最后
         run: npm run test:db
+
+      - name: D1 反例和违规样例（真库：清单少登记一张表、supabase/tests/d1-fixtures 逐个在事务里改一处，都必须报错，跑完回滚）
+        # 和 unit.yml 的 test:db:offline（PGlite）是同一套样例、同一个 runD1；这里证明在真 Supabase 上也拦得住
+        # 连接串只取 supabase status 的 DB_URL（CLI 本次的本地值），不读 SUPABASE_DB_URL
+        run: |
+          eval "$(supabase status -o env | grep -E '^DB_URL=')"
+          D1_DB_URL="$DB_URL" node build/ci/d1_negative.mjs
 
       - name: shared 在 Deno 下再跑一遍（deno task test），服务器函数和 D1 入口过 deno check（deno task check）
         # deno.json 用 nodeModulesDir=manual，npm 包取 npm ci 装好的 node_modules（版本由 package-lock.json 锁定，没有 deno.lock）
@@ -107,6 +122,27 @@ jobs:
           eval "$(supabase status -o env | grep -E '^(API_URL|ANON_KEY|DB_URL)=')"
           export API_URL ANON_KEY DB_URL
           npm run test:compat -- "$RUNNER_TEMP/compat-base/tests/compat"
+
+      - name: 兼容样例（test:compat --sample，TC-B0-57：每个样例先重新建库再叠上去，旧版契约的结果必须和样例头上的 expect-old-client 一致）
+        # 样例会改库，所以放在最后，每个样例前 db reset；契约用当前分支的 tests/compat（验证“契约测试拦得住破坏性改动”这个机制，
+        # 和 unit.yml 离线版第 4 段同一套样例；离线版只跑 SQL 用例，这里 .test.ts 用例也打真 API）。不受基线和 strict 影响，必须通过
+        run: |
+          shopt -s nullglob
+          n=0
+          for f in supabase/tests/compat/*.sql; do
+            case "$(basename "$f")" in _*) continue ;; esac
+            n=$((n + 1))
+            echo "::group::$f"
+            supabase db reset
+            eval "$(supabase status -o env | grep -E '^(API_URL|ANON_KEY|DB_URL)=')"
+            export API_URL ANON_KEY DB_URL
+            npm run test:compat -- tests/compat --sample "$f"
+            echo "::endgroup::"
+          done
+          if [ "$n" -eq 0 ]; then
+            echo "::error::supabase/tests/compat/ 里没有兼容样例"
+            exit 1
+          fi
 
       - name: 停掉本地 Supabase
         if: always()
@@ -136,10 +172,9 @@ jobs:
       - name: 安装浏览器（chromium、webkit）
         run: npx --no-install playwright install --with-deps chromium webkit
 
-      - name: 构建（和正式同一套产物，preview 模式）
-        run: npm run build -- --mode preview
-
-      - name: Playwright（wrangler pages dev dist/web，控制台出现 CSP 报错就算失败）
+      # 不单独构建：playwright.config.ts 的 webServer 自己先 npm run build -- --mode e2e 再起 wrangler pages dev（CI 下不复用已有服务），
+      # 这里再构建一次 preview 模式会被覆盖掉，白花时间
+      - name: Playwright（e2e 模式构建 + wrangler pages dev dist/web，控制台出现 CSP 报错就算失败）
         run: npm run e2e
 
       - name: 失败时上传报告（只有本地测试数据，不含任何密钥）
