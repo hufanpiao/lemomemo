@@ -1,7 +1,7 @@
 // App 外壳：按 hash 路由挂页面（各页面懒加载，A27）
 import { lazy, Suspense } from 'react';
 import { useT } from '../kit/hooks/useT.ts';
-import { isProduction } from './build-info.ts';
+import { isProduction } from '../platform/env.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { featureRoutes, type FeatureRoute } from './features.ts';
 import { useRoute } from './router.ts';

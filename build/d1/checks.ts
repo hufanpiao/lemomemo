@@ -167,19 +167,23 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
 
   // ---------- 8. table_meta 和清单的 systemCols、noConflict ----------
   const meta = await q<{ tbl: string; system_cols: string[]; no_conflict: string[] }>(`select tbl, system_cols, no_conflict from private.table_meta`);
-  for (const t of tables.filter((t) => t.systemCols)) {
+  for (const t of tables) {
+    // 清单的 refine 保证 systemCols、noConflict 要么都写、要么都不写
+    const { systemCols, noConflict } = t;
+    if (!systemCols || !noConflict) continue;
     const m = meta.find((r) => r.tbl === t.name);
     if (!m) { bad(`${t.name} 挂了 touch()，private.table_meta 里没有它的行`); continue; }
-    if (!eq(m.system_cols, t.systemCols!)) bad(`table_meta.${t.name}.system_cols 和清单不一致：${diff(t.systemCols!, m.system_cols)}`);
-    if (!eq(m.no_conflict, t.noConflict!)) bad(`table_meta.${t.name}.no_conflict 和清单不一致：${diff(t.noConflict!, m.no_conflict)}`);
+    if (!eq(m.system_cols, systemCols)) bad(`table_meta.${t.name}.system_cols 和清单不一致：${diff(systemCols, m.system_cols)}`);
+    if (!eq(m.no_conflict, noConflict)) bad(`table_meta.${t.name}.no_conflict 和清单不一致：${diff(noConflict, m.no_conflict)}`);
     const cols = colsOf(t.schema, t.name);
-    for (const c of [...t.systemCols!, ...t.noConflict!]) if (!cols.includes(c)) bad(`${t.name} 的 systemCols / noConflict 有 ${c}，表里没有`);
+    for (const c of [...systemCols, ...noConflict]) if (!cols.includes(c)) bad(`${t.name} 的 systemCols / noConflict 有 ${c}，表里没有`);
   }
   for (const m of meta) if (!tables.some((t) => t.name === m.tbl && t.systemCols)) bad(`table_meta 有 ${m.tbl}，清单里没写 systemCols`);
 
   // ---------- 9. vaultRows：每一列都归了类（TC-B0-25） ----------
-  for (const t of tables.filter((t) => t.vaultRows && has(t))) {
-    const v = t.vaultRows!;
+  for (const t of tables) {
+    const v = t.vaultRows;
+    if (!v || !has(t)) continue;
     const classified = new Set([...v.cipherCols, ...v.plainColsMustBeNull, ...v.neutralCols]);
     for (const c of colsOf(t.schema, t.name)) if (!classified.has(c)) bad(`${t.name}.${c} 没归进 vaultRows 的 cipherCols / plainColsMustBeNull / neutralCols`);
     for (const c of classified) if (!colsOf(t.schema, t.name).includes(c)) bad(`${t.name} 的 vaultRows 写了 ${c}，表里没有`);
@@ -195,9 +199,11 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     const inDb = d ? [...String(d.d).matchAll(/'([a-z]+)'::text/g)].map((x) => x[1] ?? '') : [];
     if (!eq(inDb, vecKinds)) bad(`private.${t} 的 kind 约束和带 vector 的 recordKinds 不一致：${diff(vecKinds, inDb)}`);
   }
-  for (const k of kinds.filter((k) => k.vector)) {
-    const re = new RegExp(`^FOREIGN KEY \\(${k.vector!.fk}, user_id\\) REFERENCES (public\\.)?${k.table}\\(id, user_id\\) ON DELETE CASCADE$`);
-    if (!cons.some((r) => r.s === 'private' && r.t === 'note_vectors' && re.test(r.d))) bad(`note_vectors 缺 ${k.kind} 的外键 ${k.vector!.fk} → ${k.table}`);
+  for (const k of kinds) {
+    const vec = k.vector;
+    if (!vec) continue;
+    const re = new RegExp(`^FOREIGN KEY \\(${vec.fk}, user_id\\) REFERENCES (public\\.)?${k.table}\\(id, user_id\\) ON DELETE CASCADE$`);
+    if (!cons.some((r) => r.s === 'private' && r.t === 'note_vectors' && re.test(r.d))) bad(`note_vectors 缺 ${k.kind} 的外键 ${vec.fk} → ${k.table}`);
   }
   const vectors: Record<string, string[]> = {};
   for (const m of manifests) Object.assign(vectors, m.ai?.vectors ?? {});

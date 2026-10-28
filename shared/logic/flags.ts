@@ -13,7 +13,7 @@ export type FeaturesConfig = Readonly<Record<string, FeatureFlag | undefined>>;
 export interface FeatureCtx {
   /** profiles.beta_features：先给这个人打开的功能 */
   beta: readonly string[];
-  /** 发请求的客户端版本（前端用 build-info 的版本，函数用 X-App-Version） */
+  /** 发请求的客户端版本（前端用 platform/env.ts 的版本，函数用 X-App-Version） */
   appVersion: string;
 }
 

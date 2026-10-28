@@ -96,9 +96,11 @@ describe('系统列用例（TC-B0-29）', () => {
   });
 
   it('系统列同时在 clientWritable 里 → 报错（违规样例）', () => {
+    const [notes] = sampleNotes.tables;
+    if (!notes) throw new Error('样例清单没有表');
     const bad: Manifest = {
       ...sampleNotes,
-      tables: [{ ...sampleNotes.tables[0]!, clientWritable: ['body', 'ai_meta'] }],
+      tables: [{ ...notes, clientWritable: ['body', 'ai_meta'] }],
     };
     expect(() => generate([bad])).toThrow(ManifestError);
   });

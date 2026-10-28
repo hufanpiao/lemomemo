@@ -37,28 +37,28 @@ const elements = [
 
 const same = (type) => ({ element: { type, captured: { feature: '{{from.element.captured.feature}}' } } });
 const any = (...types) => types.map((type) => ({ element: { type } }));
-// app 里有两个文件下层也能用：build-info.ts（构建信息）和 router.ts（hrefOf、navigate）
-const BUILD_INFO = { element: { type: 'app', fileInternalPath: 'build-info.ts' } };
+// app 里只有 router.ts（hrefOf、navigate、路由类型）下层也能用（0.31 第 3 条；router.ts 自己能引什么见下面 ROUTER_IMPORTS）
+// 构建信息在 platform/env.ts，是正常的向下依赖，不开例外（0.31 第 3 条）
 const ROUTER = { element: { type: 'app', fileInternalPath: 'router.ts' } };
 /** 别的功能：只能经它的 index.ts */
 const otherFeatureIndex = { element: { type: 'feature', fileInternalPath: 'index.ts' } };
 
 const layerPolicies = [
   { from: { element: { type: 'shared' } }, allow: { to: any('shared') } },
-  { from: { element: { type: 'platform' } }, allow: { to: [...any('shared', 'platform', 'platform-supabase'), BUILD_INFO] } },
-  { from: { element: { type: 'platform-supabase' } }, allow: { to: [...any('shared', 'platform', 'platform-supabase'), BUILD_INFO] } },
-  { from: { element: { type: 'core' } }, allow: { to: [...any('shared', 'platform', 'platform-supabase', 'core'), BUILD_INFO] } },
+  { from: { element: { type: 'platform' } }, allow: { to: [...any('shared', 'platform', 'platform-supabase')] } },
+  { from: { element: { type: 'platform-supabase' } }, allow: { to: [...any('shared', 'platform', 'platform-supabase')] } },
+  { from: { element: { type: 'core' } }, allow: { to: [...any('shared', 'platform', 'platform-supabase', 'core')] } },
   // 功能的 data：只认 shared、platform、core 和自己功能的 data；功能之间不能互相用 data
   {
     from: { element: { type: 'feature-data' } },
-    allow: { to: [...any('shared', 'platform', 'platform-supabase', 'core'), BUILD_INFO, same('feature-data')] },
+    allow: { to: [...any('shared', 'platform', 'platform-supabase', 'core'), same('feature-data')] },
   },
   // 功能的 hooks：唯一能同时碰 React 和数据层的地方
   {
     from: { element: { type: 'feature-hooks' } },
     allow: {
       to: [
-        ...any('shared', 'platform', 'platform-supabase', 'core', 'kit', 'kit-hooks', 'motion'), BUILD_INFO, ROUTER,
+        ...any('shared', 'platform', 'platform-supabase', 'core', 'kit', 'kit-hooks', 'motion'), ROUTER,
         same('feature-data'),
         same('feature-hooks'),
         same('feature-i18n'),
@@ -71,7 +71,7 @@ const layerPolicies = [
     from: { element: { type: 'feature-ui' } },
     allow: {
       to: [
-        ...any('shared', 'platform', 'kit', 'kit-hooks', 'motion'), BUILD_INFO, ROUTER,
+        ...any('shared', 'platform', 'kit', 'kit-hooks', 'motion'), ROUTER,
         same('feature-hooks'),
         same('feature-ui'),
         same('feature-i18n'),
@@ -98,7 +98,7 @@ const layerPolicies = [
     from: { element: { type: 'feature-tests' } },
     allow: {
       to: [
-        ...any('shared', 'platform', 'platform-supabase', 'core', 'kit', 'kit-hooks', 'motion'), BUILD_INFO, ROUTER,
+        ...any('shared', 'platform', 'platform-supabase', 'core', 'kit', 'kit-hooks', 'motion'), ROUTER,
         same('feature'),
         same('feature-data'),
         same('feature-hooks'),
@@ -108,17 +108,17 @@ const layerPolicies = [
     },
   },
   // kit 不认识任何功能；kit 的 hooks 才能碰 core
-  { from: { element: { type: 'kit' } }, allow: { to: [...any('shared', 'kit', 'kit-hooks', 'motion'), BUILD_INFO, ROUTER] } },
+  { from: { element: { type: 'kit' } }, allow: { to: [...any('shared', 'kit', 'kit-hooks', 'motion'), ROUTER] } },
   {
     from: { element: { type: 'kit-hooks' } },
-    allow: { to: [...any('shared', 'platform', 'core', 'kit', 'kit-hooks'), BUILD_INFO] },
+    allow: { to: [...any('shared', 'platform', 'core', 'kit', 'kit-hooks')] },
   },
   { from: { element: { type: 'motion' } }, allow: { to: any('shared', 'motion') } },
   {
     from: { element: { type: 'app' } },
     allow: {
       to: [
-        ...any('shared', 'platform', 'core', 'kit', 'kit-hooks', 'motion', 'styles', 'app'), BUILD_INFO, ROUTER,
+        ...any('shared', 'platform', 'core', 'kit', 'kit-hooks', 'motion', 'styles', 'app'), ROUTER,
         otherFeatureIndex,
       ],
     },
@@ -197,6 +197,27 @@ const MOTION_IMPORTS = {
   paths: [],
   patterns: [{ regex: '^(motion|framer-motion)(/|$)', message: 'A25：Motion 只能在 src/motion/ 里 import' }],
 };
+// 0.31 第 6 条：src/motion 以外只准引 motion/index.ts（函数和类型）、motion/components.ts（React 组件）
+const MOTION_PATH_IMPORTS = {
+  paths: [],
+  patterns: [
+    {
+      regex: '^\\.{1,2}/(?:.*/)?motion(?:/(?!(?:index|components)\\.ts$).*)?$',
+      message: '0.31 第 6 条：src/motion 以外只准引 motion/index.ts 和 motion/components.ts',
+    },
+  ],
+};
+// 0.31 第 3 条：app/router.ts 下层也能引，所以它自己只准 import react、shared 和 motion/index.ts，
+// 不能 import 任何功能、kit、platform 和 app 的其他文件（否则整个 app 会被拖进下层）
+const ROUTER_IMPORTS = {
+  paths: [],
+  patterns: [
+    {
+      regex: '^(?!react$|(?:\\.\\./)+shared/|\\.\\./motion/index\\.ts$)',
+      message: '0.31 第 3 条：app/router.ts 只准 import react、shared 和 motion/index.ts',
+    },
+  ],
+};
 const TAURI_IMPORTS = { paths: [], patterns: [{ regex: '^@tauri-apps/', message: 'A13：@tauri-apps/* 只能在 src/platform/ 里 import' }] };
 
 function restrictedImports(...parts) {
@@ -236,6 +257,7 @@ export default tseslint.config(
       'coverage/**',
       'playwright-report/**',
       'test-results/**',
+      '.claude/**', // 其他 agent 的 worktree 工作副本（.claude/worktrees/），不是本仓库的代码
       'docs/**',
       'assets/**',
       'data/**',
@@ -312,18 +334,18 @@ export default tseslint.config(
       'lemo/no-inline-color': 'error',
       'lemo/motion-tokens': 'error',
       'lemo/safe-href': 'error',
-      ...scope({ imports: [MOTION_IMPORTS, TAURI_IMPORTS] }),
+      ...scope({ imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
     },
   },
   // platform：网络和设备能力都在这里；不准 React
   {
     files: ['src/platform/**/*.{ts,tsx}'],
-    rules: scope({ net: true, device: true, imports: [REACT_IMPORTS] }),
+    rules: scope({ net: true, device: true, imports: [REACT_IMPORTS, MOTION_PATH_IMPORTS] }),
   },
   // core、功能的 data：纯 TS，不准 React
   {
-    files: ['src/core/**/*.ts', 'src/features/*/data/**/*.ts', 'src/app/build-info.ts'],
-    rules: scope({ imports: [REACT_IMPORTS, TAURI_IMPORTS] }),
+    files: ['src/core/**/*.ts', 'src/features/*/data/**/*.ts'],
+    rules: scope({ imports: [REACT_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
   },
   // A18：隐私记的 data 不碰本机缓存、队列、日志
   {
@@ -332,6 +354,7 @@ export default tseslint.config(
       imports: [
         REACT_IMPORTS,
         TAURI_IMPORTS,
+        MOTION_PATH_IMPORTS,
         {
           paths: [],
           patterns: [
@@ -350,6 +373,11 @@ export default tseslint.config(
     rules: scope({ motion: true, imports: [TAURI_IMPORTS] }),
   },
   { files: ['src/motion/tokens.ts'], rules: { 'lemo/motion-tokens': 'off' } },
+  // 0.31 第 3 条：router.ts 只准 import react、shared、motion/index.ts
+  {
+    files: ['src/app/router.ts'],
+    rules: scope({ imports: [MOTION_IMPORTS, TAURI_IMPORTS, ROUTER_IMPORTS] }),
+  },
   // A19：sw 只能 import shared 和 workbox-*
   {
     files: ['src/sw/**/*.ts'],
@@ -367,13 +395,13 @@ export default tseslint.config(
   // A22 的唯一例外：预览沙箱里第三方预览库要写 DOM（0.20）
   {
     files: ['src/preview-frame/**/*.{ts,tsx}'],
-    rules: scope({ html: true, imports: [MOTION_IMPORTS, TAURI_IMPORTS] }),
+    rules: scope({ html: true, imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
   },
   // 测试文件里可以用网络、rAF 等全局（模拟用）
   {
     files: ['src/**/__tests__/**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.node } },
-    rules: { ...scope({ net: true, device: true, motion: true }), 'max-lines-per-function': 'off' },
+    rules: { ...scope({ net: true, device: true, motion: true, imports: [MOTION_PATH_IMPORTS] }), 'max-lines-per-function': 'off' },
   },
   // ───────── shared：前后端共用，纯 TS（A2）─────────
   {

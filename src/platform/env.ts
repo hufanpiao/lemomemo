@@ -1,4 +1,4 @@
-// 构建信息（架构 8.1、8.5）：取代 v3 的 App.BUILD
+// 构建信息（架构 8.1、8.5；0.31 第 3 条从 app/build-info.ts 挪来）：取代 v3 的 App.BUILD
 // 版本号来自 VERSION 文件（vite define 注入）；其余只读 VITE_PUBLIC_ 开头的变量（A14）
 
 export type AppEnv = 'production' | 'preview' | 'development' | 'test';

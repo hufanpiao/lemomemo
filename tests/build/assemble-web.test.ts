@@ -45,6 +45,14 @@ describe('renderHeaders', () => {
     expect(checkHeaders(`/a\n  X: 1\n\n/a\n  Y: 2\n`).join()).toContain('两段');
     expect(() => renderHeaders(`/app/*\n${csp}\n`, `/*\n${csp}\n`, 'production')).toThrow();
   });
+
+  it('拦得住：官网那段和 /app 那段路径重叠就构建失败（0.31 第 7 条）', () => {
+    const appPart = '/app/*\n  X-Content-Type-Options: nosniff\n';
+    expect(() => renderHeaders(appPart, '/app/*\n  Cache-Control: no-cache\n', 'production')).toThrow(/重叠/);
+    expect(() => renderHeaders(appPart, '/app/sw.js\n  Cache-Control: no-cache\n', 'production')).toThrow(/重叠/);
+    expect(() => renderHeaders('/app/\n  Cache-Control: no-cache\n', '/app/*\n  X-Frame-Options: DENY\n', 'production')).toThrow(/重叠/);
+    expect(() => renderHeaders(appPart, '/zh/*\n  Cache-Control: no-cache\n', 'production')).not.toThrow();
+  });
 });
 
 describe('buildVersion', () => {
