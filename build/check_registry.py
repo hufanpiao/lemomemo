@@ -6,10 +6,10 @@
 """
 import pathlib
 import re
+import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SKIP_DIRS = {".git"}
 
 
 def registered_paths():
@@ -28,18 +28,28 @@ def registered_paths():
     return paths
 
 
+def git_files():
+    """项目里的文件 = git 跟踪的 + 没被 .gitignore 忽略的新文件。
+    4.0.0 起有 node_modules、dist/web、.wrangler 这些被忽略的大目录，不能再整棵树扫。"""
+    res = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        cwd=ROOT, capture_output=True, check=True,
+    )
+    for rel in res.stdout.decode("utf-8").split("\0"):
+        if rel and (ROOT / rel).is_file():  # 已删但还在暂存区的不算
+            yield rel
+
+
 def actual_paths():
     out = set()
-    for p in ROOT.rglob("*"):
-        rel = p.relative_to(ROOT).as_posix()
+    for rel in git_files():
         # data/backups/ 里是真实数据（不进 git、不登记），只登记它的 README
         if rel.startswith("data/backups/") and rel != "data/backups/README.md":
             continue
         # docs/02-设计/线上存档/ 里是发布时自动存的稿子副本（钩子生成），只登记它的 README
         if rel.startswith("docs/02-设计/线上存档/") and rel != "docs/02-设计/线上存档/README.md":
             continue
-        if p.is_file() and not (set(p.relative_to(ROOT).parts) & SKIP_DIRS):
-            out.add(rel)
+        out.add(rel)
     return out
 
 

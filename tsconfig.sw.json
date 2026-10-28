@@ -1,0 +1,9 @@
+{
+  // Service Worker：只有 WebWorker 库（和 DOM 库互斥，所以单独一份；算在“前端”这一份里）
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "WebWorker"],
+    "types": []
+  },
+  "include": ["src/sw/**/*.ts", "src/vite-env.d.ts"]
+}

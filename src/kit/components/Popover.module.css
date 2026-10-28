@@ -1,0 +1,7 @@
+.content {
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--panel);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+}

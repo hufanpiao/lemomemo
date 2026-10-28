@@ -1,0 +1,11 @@
+{
+  // Pages Functions（functions/，前端 B）和独立 Worker（workers/）：Cloudflare Workers 运行环境。
+  // 一并编译 shared，保证 shared 在 Workers 环境下也编译得过（pickLocale 等由 functions/index.ts 使用）。
+  // supabase/functions/ 是 Deno 代码，由 deno check 检查，不在这里。
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["functions/**/*.ts", "workers/**/*.ts", "shared/**/*.ts"]
+}
