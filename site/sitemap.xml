@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 占位（架构 16.2）：B7b 上正式内容时补 lastmod -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://lemomemo.com/zh/</loc>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://lemomemo.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lemomemo.com/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lemomemo.com/"/>
+  </url>
+  <url>
+    <loc>https://lemomemo.com/ko/</loc>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://lemomemo.com/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lemomemo.com/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lemomemo.com/"/>
+  </url>
+  <url>
+    <loc>https://lemomemo.com/zh/privacy</loc>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://lemomemo.com/zh/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lemomemo.com/ko/privacy"/>
+  </url>
+  <url>
+    <loc>https://lemomemo.com/ko/privacy</loc>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://lemomemo.com/zh/privacy"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lemomemo.com/ko/privacy"/>
+  </url>
+  <url>
+    <loc>https://lemomemo.com/zh/terms</loc>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://lemomemo.com/zh/terms"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lemomemo.com/ko/terms"/>
+  </url>
+  <url>
+    <loc>https://lemomemo.com/ko/terms</loc>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://lemomemo.com/zh/terms"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://lemomemo.com/ko/terms"/>
+  </url>
+</urlset>
