@@ -5,6 +5,7 @@ import { contentDisposition, sanitizeFilename, sign, signedUrl, verify } from '.
 import { onRequest, parseRoute, type FilesEnv } from '../../functions/files/[[path]].ts';
 import { B_IMG, BASE, ENV, EXE, IMG, PDF, put, setup, signOne, signReq, T0, THUMB } from './files-harness.ts';
 import { ID1, ID2, NOTE, UA, webp } from './files-fakes.ts';
+import { liveObjStore, OBJSTORE_LIVE } from '../shared/objstore-live.ts';
 
 describe('GET 取对象（TC-B0-110、111、113）', () => {
   async function uploadAndSign(s: ReturnType<typeof setup>, item: Record<string, unknown>, body: Uint8Array) {
@@ -179,10 +180,46 @@ describe('预检和杂项', () => {
   });
 });
 
-// 【待 Docker】TC-B0-116：经 /files PUT 附件 → file-check {action: check} 经 shared/objstore.ts 读到同一个对象、sha256 一致、
-// check_status 变 ok → sign 能签出。要本地 Supabase（files_authorize、note_files）、S3 替身（运维 O-1）和后端的 file-check。
-// 本机没有 Docker，替身起不来；本机端到端改用 tests/e2e/files.spec.ts（wrangler pages dev + tests/e2e/fake-backends.ts）。
-// QA D-03：不留空的 it，改成 todo（报告里显示“待做”，不会被当成通过或跳过的真测试）
-describe('TC-B0-116（待 Docker：本地 Supabase + S3 替身 + file-check）', () => {
-  it.todo('上传后 file-check 读到同一个对象、sha256 一致、check_status 变 ok、sign 能签出（要 file-check 函数：B4b-1，和 Docker）');
+// 架构 0.33 第 13 条（代码审查中 2 ②）：/files 的上传、签名、取对象打真的 S3 替身（TC-B0-106～115 的存储一侧），没设 OBJSTORE_ENDPOINT 时跳过。
+// files_authorize 仍用 fakeAuthz（打本地 Supabase 的一遍在 tests/e2e/files.spec.ts 和预览环境）；对象真的写进 LocalStack、条件写真的回 412。
+// 用户 id 每次随机，跑完删掉这个前缀。
+describe.skipIf(!OBJSTORE_LIVE)('/files 打真的 S3 替身（没设 OBJSTORE_ENDPOINT 时跳过）', () => {
+  it('PUT → 同一路径再 PUT 回 409 exists → sign → GET 内容和类型一致；B 的路径 403；对象确实在替身里', async () => {
+    const store = liveObjStore();
+    const s = setup({ store });
+    const u = crypto.randomUUID();
+    const img = `${u}/${NOTE}/${ID1}.webp`;
+    const pdf = `${u}/${NOTE}/${ID2}.pdf`;
+    const body = webp(64);
+    try {
+      expect((await s.call(put(img, body, { uid: u }))).status).toBe(200);
+      const again = await s.call(put(img, webp(32), { uid: u }));
+      expect(again.status).toBe(409);
+      expect(await again.json()).toEqual({ code: 'exists' });
+      expect((await s.call(put(pdf, new TextEncoder().encode('%PDF-1.7\n'), { uid: u }))).status).toBe(200);
+      expect((await s.call(put(`${UA}/${NOTE}/${ID1}.webp`, body, { uid: u }))).status).toBe(403);
+
+      const r = await s.call(signReq([{ bucket: 'images', path: img, purpose: 'view' }, { bucket: 'files', path: pdf, purpose: 'download', d: 'a.pdf' }], u));
+      const items = ((await r.json()) as { items: { ok: boolean; url?: string }[] }).items;
+      expect(items.map((i) => i.ok)).toEqual([true, true]);
+      const got = await s.call(new Request(items[0]?.url ?? ''));
+      expect(got.status).toBe(200);
+      expect(got.headers.get('Content-Type')).toBe('image/webp');
+      expect(new Uint8Array(await got.arrayBuffer())).toEqual(body); // 第二次 PUT 没覆盖
+      const doc = await s.call(new Request(items[1]?.url ?? ''));
+      expect(doc.status).toBe(200);
+      expect(doc.headers.get('Content-Disposition')).toContain('attachment');
+      expect(await doc.text()).toBe('%PDF-1.7\n');
+
+      expect((await store.listAll('images', `${u}/`)).map((o) => o.key)).toEqual([img]);
+      expect((await store.listAll('files', `${u}/`)).map((o) => o.key)).toEqual([pdf]);
+    } finally {
+      for (const b of ['images', 'files']) await store.deletePrefix(b, `${u}/`);
+    }
+  });
+});
+
+// QA D-03、架构 0.33 第 1 条：TC-B0-116 整条链路挪到 B4b-1（要 file-check），不留空的 it，写成 todo
+describe('TC-B0-116 整条链路（架构 0.33 第 1 条挪到 B4b-1）', () => {
+  it.todo('上传后 file-check 读到同一个对象、sha256 一致、check_status 变 ok、sign 能签出（要 B4b-1 的 file-check、本地 Supabase 和 S3 替身）');
 });

@@ -1,5 +1,5 @@
 // FB-6、TC-B0-117：store = 'r2' 的桶的注销、孤儿、临时桶用例由生成器产出对象存储探针，不手写；
-// 探针在内存 S3 替身（tests/shared/fake-s3.ts，经真的 shared/objstore.ts）上数得对。打 LocalStack 替身、真 R2 的一遍【待 Docker / 待 R2】。
+// 探针在内存 S3 替身（tests/shared/fake-s3.ts，经真的 shared/objstore.ts）上数得对；设了 OBJSTORE_ENDPOINT 时另打真的 S3 替身。真 R2 的一遍【待 R2】。
 import { describe, expect, it } from 'vitest';
 import { createObjStore, type ObjFetch } from '../../shared/objstore.ts';
 import { allManifests } from '../../shared/manifests/index.ts';
@@ -8,6 +8,8 @@ import { ManifestError, generate } from './generate.ts';
 import { describeObjProbe } from './objstore-cases.ts';
 import { matches, runObjProbe } from './objstore-probe.ts';
 import { sampleManifests } from './sample-manifests.ts';
+import { liveObjStore, OBJSTORE_LIVE } from '../shared/objstore-live.ts';
+import type { ObjStore } from '../../shared/objstore.ts';
 import type { Manifest } from './types.ts';
 
 const R2 = ['images', 'files', 'vault-images', 'vault-files'];
@@ -33,7 +35,7 @@ function fakeStore(prefix = '') {
   return { fake, store };
 }
 
-const put = (s: ReturnType<typeof fakeStore>['store'], bucket: string, key: string) =>
+const put = (s: Pick<ObjStore, 'put'>, bucket: string, key: string) =>
   s.put(bucket, key, new TextEncoder().encode('x'), { contentType: 'application/octet-stream' });
 
 describe('生成器：R2 桶用对象存储探针（真清单）', () => {
@@ -142,10 +144,34 @@ describe('runner：探针在 S3 替身上数得对（经 shared/objstore.ts）',
   });
 });
 
-// 【待 Docker / 待 R2】同样的探针打 LocalStack 替身（node build/objstore.mjs up 之后，CI 的 db 任务）和预览环境的 R2：
-// 后端的注销 runner（tests/data-manifest/purge-runner.ts）已把 runner = 'objstore' 的用例接上（造数据 → account-delete → account-purge → runObjProbe），
-// 离线用内存替身跑通（purge-runner.test.ts）；打真替身那一遍待 Docker、待 B1 的 account-purge。
-// QA D-03：不留空的 it，改成 todo（报告里显示“待做”，不当成真测试）
-describe('TC-B0-117 整条链路（待 Docker：本地 Supabase + S3 替身 + account-purge）', () => {
-  it.todo('account-purge 之后四个 R2 桶里 A 的对象为 0、删完再列一次确认、B 不变（要 account-purge：B1，和 Docker）');
+// 架构 0.33 第 1、13 条：同样的探针打真的 S3 替身（node build/objstore.mjs up 之后，CI 的 db 任务），没设 OBJSTORE_ENDPOINT 时跳过。
+// 这是 B0 留下的“探针在替身上能列前缀数个数”；A、B 用随机 uuid，不和 purge-runner.test.ts（用 SEED_USERS）同时跑时互相踩。
+describe.skipIf(!OBJSTORE_LIVE)('探针打真的 S3 替身（没设 OBJSTORE_ENDPOINT 时跳过）', () => {
+  it('四个 R2 桶：生成的 count 探针数得对（含头像段、缩略图），删掉 A 之后 A 为 0、B 不变', async () => {
+    const store = liveObjStore();
+    const a = crypto.randomUUID(), b = crypto.randomUUID();
+    const keys = (u: string) => ({
+      images: [`${u}/${N}/${I}.webp`, `${u}/${N}/${I}.t.webp`, `${u}/anniv/${N}/${I}.webp`],
+      files: [`${u}/${N}/${I}.pdf`, `${u}/${N}/${I}.t.webp`],
+      'vault-images': [`${u}/${N}/${I}.webp`],
+      'vault-files': [`${u}/${N}/${I}.pdf`],
+    });
+    try {
+      for (const u of [a, b]) for (const [bucket, ks] of Object.entries(keys(u))) for (const k of ks) await put(store, bucket, k);
+      for (const bucket of R2) {
+        const c = byId(`TC-DEL-bucket-${bucket}`);
+        const want = keys(a)[bucket as keyof ReturnType<typeof keys>].length;
+        expect(await runObjProbe(store, c?.objProbe ?? { bucket, mode: 'count' }, { user_a: a, user_b: b }), bucket).toEqual({ mode: 'count', a: want, b: want });
+        await store.deletePrefix(bucket, `${a}/`);
+        expect(await runObjProbe(store, c?.objProbe ?? { bucket, mode: 'count' }, { user_a: a, user_b: b }), bucket).toEqual({ mode: 'count', a: 0, b: want });
+      }
+    } finally {
+      for (const bucket of R2) for (const u of [a, b]) await store.deletePrefix(bucket, `${u}/`);
+    }
+  });
+});
+
+// QA D-03、架构 0.33 第 1 条：TC-B0-117 整条链路挪到 B1，不留空的 it，写成 todo（报告里显示“待做”，不当成真测试）
+describe('TC-B0-117 整条链路（架构 0.33 第 1 条挪到 B1）', () => {
+  it.todo('account-purge 之后四个 R2 桶里 A 的对象为 0、删完再列一次确认、B 不变（要 B1 的 account-purge、本地 Supabase 和 S3 替身）');
 });
