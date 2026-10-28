@@ -1,0 +1,394 @@
+// 按数据清单生成用例（架构 3.5 第 4 点、0.27 第 2 点；测试用例 v4 的 TC-B0-29、TC-B0-30 和 3.3 节 TC-DEL-*）。
+// 新功能写了清单，用例就自动有了。生成的 SQL 断言由后端审；执行这些用例的 runner 要本地 Supabase，CI 里跑。
+//
+// SQL 里的占位符（runner 用参数绑定替换，不拼字符串）：
+//   :user_a / :user_b         两个测试账号的 user_id（A 注销，B 是对照）
+//   :email_hash_a / _b        按 _shared/email-hash.ts 算出的邮箱哈希（和 invite-signup 同一个函数）
+//   :row_id / :old_id / :new_id  runner 造的行
+//   :new_value                runner 按列类型造的新值（和原值不同）
+
+import type { LocalStore, Manifest, ManifestBucket, ManifestTable, UserLookup } from './types.ts';
+
+export type CaseKind =
+  | 'account-delete'
+  | 'system-cols'
+  | 'soft-delete-purge'
+  | 'orphan-sweep'
+  | 'max-lifetime'
+  | 'vault-rows-cipher-only';
+
+export interface GeneratedCase {
+  id: string;
+  kind: CaseKind;
+  /** 'sql'：runner 打本地数据库；'e2e'：要在浏览器里跑（本机 IndexedDB） */
+  runner: 'sql' | 'e2e';
+  target: string;
+  manifests: string[];
+  /** 造数据之后、执行之前先跑一次，执行之后再跑一次 */
+  probe?: { a: string; b?: string };
+  /** 执行的动作（account-delete 是“A 申请注销 → 满 7 天 → account-purge”，由 runner 统一做） */
+  act?: string;
+  expect: string;
+  /** vault-rows：本机缓存里允许出现和禁止出现的列 */
+  cols?: { allowed: string[]; forbidden: string[] };
+}
+
+export class ManifestError extends Error {}
+
+const IDENT = /^[a-z_][a-z0-9_]*$/;
+const BUCKET = /^[a-z0-9][a-z0-9-]*$/;
+
+function ident(s: string, what: string): string {
+  if (!IDENT.test(s)) throw new ManifestError(`${what} 不是合法标识符：${s}`);
+  return s;
+}
+
+function qualified(schema: string, table: string): string {
+  return `${ident(schema, 'schema')}.${ident(table, '表名')}`;
+}
+
+/** SQL 字符串字面量（只用于清单里写死的模式串、前缀，不用于用户数据） */
+function lit(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`;
+}
+
+function requireOneOf(o: { userLookup?: UserLookup; noUserData?: true }, where: string): void {
+  const has = !!o.userLookup;
+  const none = o.noUserData === true;
+  if (has === none) throw new ManifestError(`${where}：userLookup 和 noUserData 必须二选一（3.5，0.23 N3）`);
+}
+
+// ---------- 注销：表 ----------
+
+function tableCondition(t: ManifestTable, who: 'a' | 'b'): string {
+  const lk = t.userLookup;
+  if (!lk) throw new ManifestError(`${t.name}：没有 userLookup`);
+  const uid = `:user_${who}`;
+  switch (lk.by) {
+    case 'column':
+      return `${ident(lk.col, '列名')} = ${uid}`;
+    case 'keyPattern': {
+      if (!lk.pattern.includes('<user>')) throw new ManifestError(`${t.name}：keyPattern 里没有 <user>`);
+      return `${ident(lk.col, '列名')} like replace(${lit(lk.pattern)}, '<user>', ${uid}::text)`;
+    }
+    case 'emailHash':
+      return `${ident(lk.col, '列名')} = :email_hash_${who}`;
+    case 'registry':
+      return `${ident(lk.col, '列名')} = ${uid}`;
+    case 'pathPattern':
+      throw new ManifestError(`${t.name}：表不能用 pathPattern 找人`);
+  }
+}
+
+function deleteCaseForTable(t: ManifestTable, manifest: string): GeneratedCase {
+  const q = qualified(t.schema, t.name);
+  if (t.noUserData) {
+    // 注销前后整张表不变
+    const snap = `select md5(coalesce(string_agg(x::text, '|' order by x::text), '')) from ${q} x`;
+    return {
+      id: `TC-DEL-${t.name}`,
+      kind: 'account-delete',
+      runner: 'sql',
+      target: q,
+      manifests: [manifest],
+      probe: { a: snap },
+      act: 'account-delete',
+      expect: 'noUserData：注销前后快照不变',
+    };
+  }
+  const lk = t.userLookup!;
+  const from = lk.by === 'registry' ? qualified(...splitQualified(lk.table)) : q;
+  return {
+    id: `TC-DEL-${t.name}`,
+    kind: 'account-delete',
+    runner: 'sql',
+    target: q,
+    manifests: [manifest],
+    probe: {
+      a: `select count(*) from ${from} where ${tableCondition(t, 'a')}`,
+      b: `select count(*) from ${from} where ${tableCondition(t, 'b')}`,
+    },
+    act: 'account-delete',
+    expect: `冷静期里 A 的行还在；account-purge 之后 A 的为 0、B 的条数不变（按 ${describeLookup(lk)} 找人）`,
+  };
+}
+
+function splitQualified(name: string): [string, string] {
+  const parts = name.split('.');
+  if (parts.length === 2) return [parts[0]!, parts[1]!];
+  if (parts.length === 1) return ['public', parts[0]!];
+  throw new ManifestError(`登记表名不对：${name}`);
+}
+
+function describeLookup(lk: UserLookup): string {
+  switch (lk.by) {
+    case 'column':
+      return `列 ${lk.col}`;
+    case 'keyPattern':
+      return `${lk.col} 匹配 ${lk.pattern}`;
+    case 'emailHash':
+      return `邮箱哈希 ${lk.col}`;
+    case 'registry':
+      return `登记表 ${lk.table}.${lk.col}`;
+    case 'pathPattern':
+      return `路径第 ${lk.segment ?? 1} 级目录`;
+  }
+}
+
+// ---------- 注销：桶 ----------
+
+function bucketSegmentCondition(b: ManifestBucket, who: 'a' | 'b'): string {
+  const uid = `:user_${who}::text`;
+  const lk = b.userLookup;
+  if (lk?.by === 'registry') {
+    const [s, t] = splitQualified(lk.table);
+    const pathCol = ident(lk.pathCol ?? 'path', '列名');
+    return `name in (select ${pathCol} from ${qualified(s, t)} where ${ident(lk.col, '列名')} = :user_${who})`;
+  }
+  const conds: string[] = [];
+  if (b.pathPrefix) {
+    // 按路径前缀找人：'<user_id>/'、'<user_id>/anniv/'
+    if (!b.pathPrefix.startsWith('<user_id>/')) throw new ManifestError(`${b.name}：pathPrefix 要以 <user_id>/ 开头，或者改用 userLookup`);
+    const rest = b.pathPrefix.slice('<user_id>/'.length).replace(/[\\%_]/g, (c) => '\\' + c);
+    conds.push(`name like ${uid} || ${lit('/' + rest + '%')}`);
+  } else if (lk?.by === 'pathPattern') {
+    // 不按第一级目录找人的桶（backups：<日期>/<user_id>/…，segment 2）
+    const seg = lk.segment ?? 1;
+    if (!Number.isInteger(seg) || seg < 1) throw new ManifestError(`${b.name}：segment 要是正整数`);
+    conds.push(`split_part(name, '/', ${seg}) = ${uid}`);
+  } else {
+    throw new ManifestError(`${b.name}：桶没有 pathPrefix，也没有 pathPattern / registry 的 userLookup`);
+  }
+  if (b.pathPattern) conds.push(`name ~ ${lit(b.pathPattern)}`);
+  return conds.join(' and ');
+}
+
+function deleteCaseForBucket(name: string, segments: { b: ManifestBucket; manifest: string }[]): GeneratedCase {
+  if (!BUCKET.test(name)) throw new ManifestError(`桶名不合规：${name}`);
+  const userSegs = segments.filter((s) => !s.b.noUserData);
+  if (userSegs.length === 0) {
+    return {
+      id: `TC-DEL-bucket-${name}`,
+      kind: 'account-delete',
+      runner: 'sql',
+      target: `storage:${name}`,
+      manifests: segments.map((s) => s.manifest),
+      probe: { a: `select md5(coalesce(string_agg(name, '|' order by name), '')) from storage.objects where bucket_id = ${lit(name)}` },
+      act: 'account-delete',
+      expect: 'noUserData：注销前后桶里的对象不变',
+    };
+  }
+  const cond = (who: 'a' | 'b') => userSegs.map((s) => `(${bucketSegmentCondition(s.b, who)})`).join(' or ');
+  return {
+    id: `TC-DEL-bucket-${name}`,
+    kind: 'account-delete',
+    runner: 'sql',
+    target: `storage:${name}`,
+    manifests: [...new Set(segments.map((s) => s.manifest))],
+    probe: {
+      a: `select count(*) from storage.objects where bucket_id = ${lit(name)} and (${cond('a')})`,
+      b: `select count(*) from storage.objects where bucket_id = ${lit(name)} and (${cond('b')})`,
+    },
+    act: 'account-delete',
+    expect: '冷静期里 A 的对象还在；account-purge 之后 A 的为 0（每一段路径都造一个），B 的不变',
+  };
+}
+
+// ---------- 主函数 ----------
+
+export interface GenerateResult {
+  cases: GeneratedCase[];
+  /** 注销用例的条数（TC-B0-30 拿来和测试用例 3.3 节的表比） */
+  counts: Record<CaseKind, number>;
+}
+
+export function generate(manifests: readonly Manifest[]): GenerateResult {
+  const cases: GeneratedCase[] = [];
+  const tableOwners = new Map<string, string>();
+  const buckets = new Map<string, { b: ManifestBucket; manifest: string }[]>();
+  const syncTables: string[] = [];
+  const localStores = new Map<string, LocalStore & { manifest: string }>();
+
+  for (const m of manifests) {
+    for (const t of m.tables) {
+      const key = `${t.schema}.${t.name}`;
+      // 一张表的主人只有一份清单（3.5 “一条原则”）
+      if (tableOwners.has(key)) throw new ManifestError(`${key} 登记在 ${tableOwners.get(key)} 和 ${m.feature} 两份清单里`);
+      tableOwners.set(key, m.feature);
+      requireOneOf(t, key);
+      cases.push(deleteCaseForTable(t, m.feature));
+      if (t.sync === true) syncTables.push(t.name);
+      cases.push(...systemColCases(t, m.feature));
+      if (t.softDelete) cases.push(softDeleteCase(t, m.feature));
+      if (t.vaultRows) cases.push(vaultRowsCase(t, m.feature));
+    }
+    for (const b of m.buckets ?? []) {
+      requireOneOf(b, `桶 ${b.name}${b.pathPrefix ? ` ${b.pathPrefix}` : ''}`);
+      const list = buckets.get(b.name) ?? [];
+      list.push({ b, manifest: m.feature });
+      buckets.set(b.name, list);
+      if (b.orphanSweep) cases.push(orphanCase(b, m.feature));
+      if (b.maxLifetime) cases.push(maxLifetimeCase(b, m.feature));
+    }
+    for (const s of m.localStores ?? []) {
+      if (localStores.has(s.name)) throw new ManifestError(`本机仓 ${s.name} 登记了两次`);
+      localStores.set(s.name, { ...s, manifest: m.feature });
+    }
+  }
+
+  for (const [name, segs] of buckets) cases.push(deleteCaseForBucket(name, segs));
+
+  // 本机：同步表的仓合成一条，其他仓各一条（3.3 节 TC-DEL-idb-*）
+  if (syncTables.length) {
+    cases.push({
+      id: 'TC-DEL-idb-sync',
+      kind: 'account-delete',
+      runner: 'e2e',
+      target: `idb:${syncTables.join(',')}`,
+      manifests: [...new Set(manifests.filter((m) => m.tables.some((t) => t.sync === true)).map((m) => m.feature))],
+      act: 'account-delete',
+      expect: `另一台登录过的设备最迟 10 分钟内清空这些仓：${syncTables.join('、')}`,
+    });
+  }
+  for (const s of localStores.values()) {
+    cases.push({
+      id: `TC-DEL-idb-${s.name}`,
+      kind: 'account-delete',
+      runner: 'e2e',
+      target: `idb:${s.name}`,
+      manifests: [s.manifest],
+      act: 'account-delete',
+      expect: `本机仓 ${s.name} 清空`,
+    });
+  }
+
+  const counts: Record<CaseKind, number> = {
+    'account-delete': 0,
+    'system-cols': 0,
+    'soft-delete-purge': 0,
+    'orphan-sweep': 0,
+    'max-lifetime': 0,
+    'vault-rows-cipher-only': 0,
+  };
+  for (const c of cases) counts[c.kind]++;
+  const ids = new Set<string>();
+  for (const c of cases) {
+    if (ids.has(c.id)) throw new ManifestError(`生成的用例编号重复：${c.id}`);
+    ids.add(c.id);
+  }
+  return { cases, counts };
+}
+
+// ---------- 其他几类 ----------
+
+/** TC-B0-29：挂 touch() 的表各两条——只改系统列 rev 不变；改普通列 rev 加 1 */
+function systemColCases(t: ManifestTable, manifest: string): GeneratedCase[] {
+  if (t.sync !== true) return [];
+  const q = qualified(t.schema, t.name);
+  const sys = t.systemCols ?? [];
+  const writable = (t.clientWritable ?? []).filter((c) => !sys.includes(c));
+  const plain = writable[0];
+  if (!plain) throw new ManifestError(`${q}：同步表没有可写的普通列，生成不了系统列用例`);
+  for (const c of sys) {
+    if ((t.clientWritable ?? []).includes(c)) throw new ManifestError(`${q}：${c} 同时在 systemCols 和 clientWritable 里（0.27 第 2 点）`);
+  }
+  const rev = `select rev from ${q} where id = :row_id`;
+  const out: GeneratedCase[] = [];
+  const sysCol = sys[0];
+  out.push({
+    id: `TC-SYS-${t.name}-system`,
+    kind: 'system-cols',
+    runner: 'sql',
+    target: q,
+    manifests: [manifest],
+    probe: { a: rev },
+    act: sysCol
+      ? `update ${q} set ${ident(sysCol, '列名')} = :new_value where id = :row_id`
+      : `-- ${q} 没有登记系统列：只改 updated_at（no_conflict）\nupdate ${q} set updated_at = :new_value where id = :row_id`,
+    expect: 'rev 不变',
+  });
+  out.push({
+    id: `TC-SYS-${t.name}-plain`,
+    kind: 'system-cols',
+    runner: 'sql',
+    target: q,
+    manifests: [manifest],
+    probe: { a: rev },
+    act: `update ${q} set ${ident(plain, '列名')} = :new_value where id = :row_id`,
+    expect: 'rev 加 1',
+  });
+  return out;
+}
+
+/** 30 天清理（3.4）：31 天前删的清掉，29 天前删的留着 */
+function softDeleteCase(t: ManifestTable, manifest: string): GeneratedCase {
+  const q = qualified(t.schema, t.name);
+  return {
+    id: `TC-PURGE-${t.name}`,
+    kind: 'soft-delete-purge',
+    runner: 'sql',
+    target: q,
+    manifests: [manifest],
+    probe: {
+      a: `select count(*) from ${q} where id = :old_id`,
+      b: `select count(*) from ${q} where id = :new_id`,
+    },
+    act: '造两行：deleted_at = 注入的现在 - 31 天（:old_id）、- 29 天（:new_id）；跑每日清理',
+    expect: ':old_id 的为 0，:new_id 的为 1',
+  };
+}
+
+/** 同一个桶分段登记时（images 桶的纪念日头像段）用路径段区分编号：'<user_id>/anniv/' → '-anniv' */
+function segmentSuffix(b: ManifestBucket): string {
+  const seg = (b.pathPrefix ?? '').replace('<user_id>/', '').replace(/\/+$/, '').replace(/\//g, '-');
+  return seg ? `-${seg}` : '';
+}
+
+function orphanCase(b: ManifestBucket, manifest: string): GeneratedCase {
+  const o = b.orphanSweep!;
+  const [s, t] = splitQualified(o.table);
+  return {
+    id: `TC-ORPHAN-${b.name}${segmentSuffix(b)}`,
+    kind: 'orphan-sweep',
+    runner: 'sql',
+    target: `storage:${b.name}`,
+    manifests: [manifest],
+    probe: {
+      a: `select count(*) from storage.objects where bucket_id = ${lit(b.name)} and name = :old_id`,
+      b: `select count(*) from storage.objects where bucket_id = ${lit(b.name)} and name = :new_id`,
+    },
+    act: `造两个在 ${qualified(s, t)}.${ident(o.col, '列名')} 里没有记录的对象：早于 ${o.olderThan}（:old_id）、晚于（:new_id）；跑孤儿清理`,
+    expect: '早的被清掉，新的留着（上传和写记录之间的空档不误删）',
+  };
+}
+
+function maxLifetimeCase(b: ManifestBucket, manifest: string): GeneratedCase {
+  return {
+    id: `TC-TTL-${b.name}${segmentSuffix(b)}`,
+    kind: 'max-lifetime',
+    runner: 'sql',
+    target: `storage:${b.name}`,
+    manifests: [manifest],
+    probe: { a: `select count(*) from storage.objects where bucket_id = ${lit(b.name)} and name = :old_id` },
+    act: `造一个对象，注入时间到 ${b.maxLifetime} 之后；跑临时桶清理`,
+    expect: '对象和登记都没有了',
+  };
+}
+
+/** 0.23 N3：有 vaultRows 的表另生成一条“隐私记行同步到本机只有密文” */
+function vaultRowsCase(t: ManifestTable, manifest: string): GeneratedCase {
+  const v = t.vaultRows!;
+  const allowed = [...v.cipherCols, ...(v.neutralCols ?? [])];
+  const overlap = v.plainColsMustBeNull.filter((c) => allowed.includes(c));
+  if (overlap.length) throw new ManifestError(`${t.name}：${overlap.join('、')} 既在 plainColsMustBeNull 又在 cipherCols / neutralCols 里`);
+  return {
+    id: `TC-VAULT-${t.name}`,
+    kind: 'vault-rows-cipher-only',
+    runner: 'e2e',
+    target: `${t.schema}.${t.name}`,
+    manifests: [manifest],
+    act: `造一条 ${v.flag} 的隐私记行，同步到本机`,
+    expect: '本机缓存里这一行只有 cipherCols 和 neutralCols，plainColsMustBeNull 一列都不出现',
+    cols: { allowed, forbidden: [...v.plainColsMustBeNull] },
+  };
+}
