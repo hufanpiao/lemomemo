@@ -459,17 +459,17 @@ _BINIMPORT_YAML_CMD_KEYS = r"(?:run|script|before_script|after_script|command|en
 
 
 def _binimport_shell_cmd_re(make):
-    line_start = r"^[ \t]*[@-]*" if make else r"^[ \t]*"
+    # 每个分支自己吃掉点号前面的空白，外层不再跟 [ \t]*：两个空白量词紧挨着（^[ \t]* 后面又接 [ \t]*），
+    # 遇到长空白行不是点号时要把空白在两个量词之间换着分，按空白长度平方回溯（单行 4 万个空格 3.4 秒）
+    line_start = r"^[ \t]*(?:[@-]+[ \t]*)?" if make else r"^[ \t]*"
     dot_start = (
         rf"(?:{line_start}"
-        rf"|^[ \t]*(?:-[ \t]+)?{_BINIMPORT_YAML_CMD_KEYS}:[ \t]+[\"']?"
+        rf"|^[ \t]*(?:-[ \t]+)?{_BINIMPORT_YAML_CMD_KEYS}:[ \t]+(?:[\"'][ \t]*)?"
         r"|(?P<li>^[ \t]*-[ \t]+)"
-        r"|(?<=[;&|{`])|(?<=\$\()"
-        r"|(?:^|(?<=[;&|]))[ \t]*(?:then|do|else)(?=[ \t])"
-        + _BINIMPORT_DASH_C +
-        r"|(?<=\": \")|(?<=\":\"))"
+        r"|(?:(?<=[;&|{`])|(?<=\$\()" + _BINIMPORT_DASH_C + r"|(?<=\": \")|(?<=\":\"))[ \t]*"
+        r"|(?:^|(?<=[;&|]))[ \t]*(?:then|do|else)[ \t]+)"
     )
-    return re.compile(rf"(?<![\w$.\-@])(?P<cmd>{_BINIMPORT_CMDS}|source)(?=[ \t])|{dot_start}[ \t]*(?P<dot>\.)(?=[ \t])", re.M)
+    return re.compile(rf"(?<![\w$.\-@])(?P<cmd>{_BINIMPORT_CMDS}|source)(?=[ \t])|{dot_start}(?P<dot>\.)(?=[ \t])", re.M)
 
 
 BINIMPORT_SHELL_CMD_RE = _binimport_shell_cmd_re(make=False)
@@ -721,12 +721,14 @@ def _binimport_js_hits(skel, literals):
             new = set()
             for annot in (r"\s*:[^;]{0,200}?", ""):
                 new |= set(re.findall(
-                    rf"(?<![\w$.])([\w$]+){annot}\s*=\s*{wrap}{prefix}(?<![\w$])(?:{alt})(?![\w$])(?!\s*\)?\s*(?:\?\.\s*)?\()", skel))
+                    rf"(?<![\w$.])([\w$]+){annot}\s*=\s*{wrap}{prefix}(?<![\w$])(?:{alt})(?![\w$])(?!\s*(?:\)\s*)?(?:\?\.\s*)?\()", skel))
             if new <= factories:
                 break
             factories |= new
         fact_alt = "|".join(re.escape(f) for f in sorted(factories))
-        fact_call = rf"(?<![\w$])(?:{fact_alt})\s*\)?\s*\("  # createRequire(、(createRequire)( 的右半
+        # createRequire(、(createRequire)( 的右半。写成 \s*(?:\)\s*)?\( 而不是 \s*\)?\s*\(：后者没有 ) 时两个 \s* 紧挨着，
+        # createRequire 后面跟一长串空白时按长度平方回溯
+        fact_call = rf"(?<![\w$])(?:{fact_alt})\s*(?:\)\s*)?\("
         # 绑定出来的名字都当 require（只会多报：多收的名字只有拿二进制扩展名的字符串去调时才报）。
         # 右边的部分都写在前瞻里、只消耗名字本身：findall 不重叠，消耗整段时 “const x: T = 1, r = createRequire(” 的 r 会被前一段吞掉
         # a) 带 TS 类型注解的 const r: NodeRequire = createRequire(…)（注解里可有 =>、泛型，非贪婪、可跨行、不跨 ;）。
@@ -743,7 +745,7 @@ def _binimport_js_hits(skel, literals):
         for group in re.findall(rf"(?<![\w$\])])\[([^\[\]=;]{{0,200}})\](?=\s*=\s*[^;\n]{{0,200}}?{fact_call})", skel):
             bound |= set(re.findall(r"[A-Za-z_$][\w$]*", group))
         # e) createRequire(…) 之后 200 个字符内（不跨 ;）的 .then((r) => …) 回调参数
-        bound |= set(re.findall(rf"{fact_call}(?=[^;]{{0,200}}?\.\s*then\s*\(\s*(?:async\s*)?\(?\s*([\w$]+))", skel))
+        bound |= set(re.findall(rf"{fact_call}(?=[^;]{{0,200}}?\.\s*then\s*\(\s*(?:async\s*)?(?:\(\s*)?([\w$]+))", skel))
         bound -= set(BINIMPORT_CALL_NAMES) | set(BINIMPORT_EXEC_NAMES)
     names = {n: f"{n}()" for n in BINIMPORT_CALL_NAMES + BINIMPORT_EXEC_NAMES}
     names.update({n: f"createRequire 得到的 {n}()" for n in bound})

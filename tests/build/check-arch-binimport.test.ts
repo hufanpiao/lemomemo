@@ -614,6 +614,22 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
     expect(many.errors.length).toBe(20_000);
   });
 
+  it('长空白不回溯：单行 4 万个空格（.sh、Makefile、yml 的 run: / “- ” 后面）、createRequire 后跟 4 万个空格，check_binimport 各 0.5 秒内跑完', () => {
+    const sp = ' '.repeat(40_000);
+    const cases: Record<string, string> = {
+      'build/a.sh': `${sp}x\n`,
+      Makefile: `${sp}x\n`,
+      'a.yml': `run:${sp}x\n- ${sp}x\n${sp}x\n`,
+      'lib/a.mjs': `createRequire${sp}x\n`, // 绑定规则里 createRequire 后面的 \s*\)?\s*\(
+      'lib/b.mjs': `createRequire; const cr = createRequire${sp}x\n`, // 别名规则的否定前瞻
+      'lib/c.mjs': `createRequire(u).then(${sp}x\n`, // .then 回调参数前的空白
+    };
+    for (const [rel, body] of Object.entries(cases)) {
+      const { seconds } = timed(repo({ [rel]: body }));
+      expect(seconds, rel).toBeLessThan(0.5);
+    }
+  });
+
   it('②取词耗时：200 万字单行的 node "a" 重复、未闭合引号、\\" 三种，check_binimport 各 2 秒内跑完（行尾按换行位置二分，find 限在行内）', () => {
     const B = '\\';
     for (const unit of ['node "a" ', 'node "a ', `node ${B}"a `]) {
