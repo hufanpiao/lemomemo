@@ -1,4 +1,5 @@
-# 独立 Worker lemo-ops（架构 6.1）：监控、告警、保活。由负责人本机 publish.ps1 -Ops 执行 wrangler deploy（架构 8.3a，R-206）。
+# 独立 Worker lemo-ops（架构 6.1）：监控、告警、保活。由负责人本机 publish.ps1 -Ops 执行 wrangler deploy（架构 8.3a，R-206；上线与回滚手册第三节“部署 lemo-ops”）。
+# publish.ps1 -Ops 第 1 步核对下面 KV 的 id 已换成真的 32 位命名空间 ID，还是占位值就停。
 # 这里不写任何密钥。下面标【负责人提供】的，部署前由负责人填或用 wrangler secret put 设（见 .dev.vars.example 的说明）。
 name = "lemo-ops"
 main = "src/index.ts"

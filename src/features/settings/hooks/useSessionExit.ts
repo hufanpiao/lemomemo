@@ -1,6 +1,9 @@
 // 离开这台设备（架构 4.1、0.29 续第 98 条、0.38 第 7 条；K9 第二轮审查 N1、N2、L1）
-// • 被移除 / 被退出 / 会话不认（session_revoked、unauthorized、401、刷新失败）：先清本机库和 Cache Storage，
-//   清完马上同步删本机会话（clearLocalSession；服务器上的会话已经没了，不用等 signOut），signOut local 放后台调、不等它；
+// • 被移除 / 被退出 / 会话不认（session_revoked、unauthorized、401、刷新失败）：一发现就同步删本机会话、记下删之前的 session_id
+//   （接手清单 K6-sugg3 ①，同 core/account.ts 的 signedOutHere；服务器上的会话已经没了，不用等 signOut），signOut local 紧接着放后台、不等它；
+//   再清本机库和 Cache Storage，清完、回登录页前只在本机会话还是记下的那一个时再删（clearLocalSession(sid)）——
+//   清库那几秒里别的标签页刚登录的新会话不删。signOut 不能放到清库之后：supabase-js 的 signOut 自己读本机会话、最后自己删会话键，
+//   放在后面会把那个新会话当成本页的退掉；放在前面时本机会话已删，它不发请求，几毫秒就做完
 //   提示“这台设备已在别的设备上被移除……”。“去登录”和几秒后的自动跳转都等清理做完再跳（最多等 LEAVE_WAIT_MAX_MS），
 //   清理没做完时按钮禁用，免得页面卸载把 IndexedDB 事务中止、留下“有会话、有库”
 // • 本机已经没有会话（别的标签页正常退出了）：同上，提示“已退出登录”
@@ -11,7 +14,9 @@
 // • 本页自己处理“会话没了”时也会调 signOut：先 markSelfSignOutThisTab()（只打本页内存里的），会话层的 SIGNED_OUT 监听见到标记不再重复处理（K6-signedout）。
 //   本页不另开 SIGNED_OUT 监听
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { deleteDbAgain, dropSession, SIGN_OUT_TIMEOUT_MS, signOutThisDevice, withTimeout, wipeThisDevice } from '../../../platform/sign-out.ts';
+import {
+  deleteDbAgain, dropSession, sessionIdOf, SIGN_OUT_TIMEOUT_MS, signOutThisDevice, withTimeout, wipeThisDevice,
+} from '../../../platform/sign-out.ts';
 import { markSelfSignOutThisTab } from '../../../platform/session.ts';
 import { defaultExitDeps, type ExitDeps } from '../data/local.ts';
 import type { SettingsApi } from '../data/settings-api.ts';
@@ -55,8 +60,11 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
   const exiting = useRef(false);
   const cleanup = useRef<Promise<void> | null>(null);
   const left = useRef(false);
+  /** 退出开始时（或发现会话没了时）本机会话的 session_id；undefined = 还没记下（K6-sugg3 ①） */
+  const deadSid = useRef<string | null | undefined>(undefined);
 
-  const clearSession = useCallback(() => dropSession(exit), [exit]);
+  /** 再删一次本机会话：记下过 session_id 就只在本机会话还是它时才删，别的标签页刚登录的新会话不删 */
+  const clearSession = useCallback(() => dropSession(exit, deadSid.current), [exit]);
 
   /** 记下清理进度；跳转前要等它 */
   const track = useCallback((p: Promise<void>): Promise<void> => {
@@ -96,13 +104,16 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
       // 下面后台调的 signOut 会引起本页的 SIGNED_OUT：先打标记，会话层不再按“被移除”重复处理（K6-signedout）。
       // 只打本页的（审查建议 4）：这是真的被移除，别的标签页收到转来的 SIGNED_OUT 仍要提示“被移除”
       markSelfSignOutThisTab();
+      // 同一个同步段里删本机会话，记下删之前的 session_id（K6-sugg3 ①）；signOut local 紧接着放后台（见文件头）
+      deadSid.current = sessionIdOf(exit);
+      dropSession(exit);
+      void api.dropLocalSession(deadSid.current).catch(() => undefined);
       setNotice(kind);
       void track(
         (async () => {
           await wipeThisDevice(exit);
-          clearSession();
-          void api.dropLocalSession().catch(() => undefined);
-          // 清库那几秒会话还在，别的标签页可能借旧会话 reload 重建了库：会话删掉以后再删一次（platform/sign-out.ts ⑤）
+          clearSession();   // 旧会话被晚到的令牌刷新写回时再删
+          // 别的标签页可能在本页删会话之前借旧会话 reload 重建了库：会话删掉以后再删一次（platform/sign-out.ts ⑤）
           await deleteDbAgain(exit);
         })(),
       );
@@ -127,9 +138,12 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
       if (exiting.current) return;
       exiting.current = true;
       setSigningOut(true);
+      // 退出前的会话（K6-sugg3 ①）：兜底删会话、跳登录页前再删一次都只删它
+      deadSid.current = sessionIdOf(exit);
+      const sid = deadSid.current;
       // 顺序、超时、晚到处理都在 platform/sign-out.ts（和登录页共用）
       const run = signOutThisDevice({
-        server: { deleteOwnDevice: () => api.deleteOwnDevice(currentDeviceId), signOut: () => api.dropLocalSession() },
+        server: { deleteOwnDevice: () => api.deleteOwnDevice(currentDeviceId), signOut: () => api.dropLocalSession(sid) },
         steps: exit,
         readUserId: () => exit.readUserId(),
         timeoutMs: exitTimeoutMs,

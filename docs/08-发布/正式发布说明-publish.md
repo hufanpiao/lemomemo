@@ -79,24 +79,32 @@ VITE_PUBLIC_TURNSTILE_SITE_KEY=<Turnstile 站点密钥（Site Key，公开的那
    ```
 3. 先演练一遍（不要令牌，可以前一天做）：
    ```
-   powershell -NoProfile -ExecutionPolicy Bypass -File E:\柠檬记-发布\publish-v4.0.0.ps1 -Tag v4.0.0 -DryRun
+   powershell -NoProfile -ExecutionPolicy Bypass -File E:\柠檬记-发布\publish-v4.0.0.ps1 -Tag v4.0.0 -Ops -DryRun
    ```
-   会做：发布前检查 → 发布前备份（没有就做一份，放 `E:\柠檬记-备份\版本前\<日期>_4.0.0发布前\`）→ 构建 → 显示产物指纹（你在 iPhone 上核对后输入“一致”）→ 装部署工具。到这里停。
-4. 正式发布：同一行命令去掉 `-DryRun`。前面几步会再走一遍（备份已有就跳过），然后：
-   - 检查 Claude 没在运行、剪贴板历史关着；
+   **一定要带 `-Ops`**（10-29 起）：usage-report 和监控 Worker lemo-ops 必须同一次部署，这个 tag 里两样都有时不带 `-Ops` 脚本第 1 步就停（[上线与回滚手册](上线与回滚手册-v4.md)第三节“部署 lemo-ops”）。第一次带 `-Ops` 前，`workers/lemo-ops/wrangler.toml` 里 KV 的 id 要换成真的命名空间 ID，还是占位值第 1 步也会停。
+   会做：发布前检查（含 lemo-ops 的配置）→ 发布前备份（没有就做一份，放 `E:\柠檬记-备份\版本前\<日期>_4.0.0发布前\`）→ 构建 → 显示产物指纹（你在 iPhone 上核对后输入“一致”）→ 装部署工具 → lemo-ops 打包演练（`wrangler deploy --dry-run`，不上传）。到这里停。
+4. 正式发布：同一行命令去掉 `-DryRun`（`-Ops` 留着）。前面几步会再走一遍（备份已有就跳过），然后：
+   - 再核对一次工作区干净、仍是这个 tag、仓库里没有 `.env`、`.env.local`（wrangler 会自动读它们，有就停）；检查剪贴板历史关着、没有 transcript 和日志策略（R-223 起不再检查 Claude 是否在运行，但第 1 条照样要你先退出 Claude）；
    - 输入正式项目的 Project ref（不是密钥）；
-   - 按提示依次粘贴三把令牌（屏幕不显示）；
+   - 按提示依次粘贴三样（屏幕不显示，每样粘完清剪贴板）：正式 Supabase 令牌、正式数据库密码、正式 Cloudflare 令牌（要有 Pages: Edit ＋ Workers Scripts: Edit）；
    - 输入 Cloudflare Account ID（不是密钥）；
-   - 核对项目名并输入它；看迁移演练、输入“确认推送”；
-   - 自动部署函数和网页，最后核对 `https://lemomemo.com/app/version.json`。
+   - 核对项目名并输入它；脚本先只读核对 Cloudflare 令牌有 Workers 权限（没有就停，此时还没改库）；看迁移演练、输入“确认推送”；
+   - 自动部署函数、紧接着部署 lemo-ops、再部署网页，最后核对 `https://lemomemo.com/app/version.json`。
 5. 看到“完成”以后关掉这个 PowerShell 窗口，**马上删掉这次临时生成的两把令牌**（第三节末尾第 4 条）。
 6. 在聊天里告诉主持人“发布完成”和屏幕上的产物指纹（指纹不是密钥），主持人记进[发布记录](发布记录.md)。
 
-只想查一下能不能发：`-CheckOnly`，只做第 1 步检查。
+只想查一下能不能发：`-CheckOnly -Ops`，只做第 1 步检查。
+
+**回滚服务器函数**（[上线与回滚手册](上线与回滚手册-v4.md)第四节第 2 层办法 A）：照第 2 步切到上一个 tag（`git switch --detach <上一个 tag>`），然后
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File E:\柠檬记-发布\publish-v4.0.0.ps1 -Tag <上一个 tag> -Only functions -Ops
+```
+可以先加 `-DryRun` 演练（不要令牌）。只重新部署那个 tag 的服务器函数，紧接着把 lemo-ops 也部署成同一个 tag 的版本；不构建网页、不 db push、不部署 Pages，**不要数据库密码**，只粘贴 Supabase 令牌和 Cloudflare 令牌（Workers Scripts: Edit）两样；tag 里没有 lemo-ops、不带 `-Ops` 时只要 Supabase 令牌一样。不要不带 `-Only` 跑整套（会连 db push 和网页一起动）。
 
 ## 五、出错时
 
 - 任何一步不过，脚本会写“发布停止：……”并退出；令牌、剪贴板、临时文件照样清掉。把这一行原话发给主持人（**不要截令牌所在的窗口以外的东西，也不要把令牌发出来**）。
+- **停在 lemo-ops 这一步**（屏幕上是“发布停止：lemo-ops 部署失败……”）：这时数据库迁移已推、服务器函数已是新版，lemo-ops 和网页还是旧版。这种状态能用，只是 usage-report 和 lemo-ops 的新约定（上线与回滚手册第三节“usage-report 和 lemo-ops 必须同一次部署”）没生效。处理：把这一行原话发给主持人，修好原因（常见是令牌少了 Workers Scripts: Edit、KV id 不对、六个密钥没设）后，**用同一个 tag、同样的参数原样重跑 `-Ops`**（迁移演练会显示没有新迁移，函数和 lemo-ops 重新部署一遍，再部署网页）。回滚时（`-Only functions -Ops`）停在这一步也一样：函数已是那个 tag 的版本、lemo-ops 还是原来的，修好后原样重跑。
 - 迁移推了一半、网页没上：按[上线与回滚手册](上线与回滚手册-v4.md)第四节处理。回滚要用正式令牌的那几步，同样由你本人在自己的窗口里执行（人员名单第七节第 5 条）。
 - 怀疑令牌泄露：立刻在 Supabase › Account › Access Tokens、Cloudflare › My Profile › API Tokens 里删掉那一把；下次发布照常当场重新生成（R-220，不另存）。
 

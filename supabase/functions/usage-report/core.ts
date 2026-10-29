@@ -51,8 +51,8 @@ export interface UsageDb {
   /**
    * 发信量（0.38 第 12 条，口径见 AuthMailCounts）。index.ts 经 rpc private.auth_mail_counts() 提供（迁移 20261029230000）；
    * 不提供时返回体里就没有 `auth_mail`，lemo-ops 不查这一件。单独计时 AUTH_MAIL_TIMEOUT_MS；出错、超时、auth_1h 不对只让 `auth_mail` 为 null
-   * （日志记 auth_mail:error / auth_mail:timeout / auth_mail:bad_data），只有 resend_24h 不对时只把它置 null（记 auth_mail:bad_resend），
-   * 不连累心跳那几项。
+   * （日志记 auth_mail:error / auth_mail:timeout / auth_mail:bad_data），只有 resend_24h 不对时只把它置 null 并另给 resend_unreadable: true
+   * （记 auth_mail:bad_resend；和“没接”的 null 分开，OPS-mail-sugg ②），不连累心跳那几项。
    */
   authMail?(signal: AbortSignal): Promise<AuthMailCounts>;
 }
@@ -106,22 +106,24 @@ function isCount(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 0;
 }
 
-/** 返回体里的 auth_mail：resend_24h 没接时固定写 null */
+/** 返回体里的 auth_mail：resend_24h 没接时固定写 null；读到的不对时也写 null，另带 resend_unreadable: true（lemo-ops 据此保留 mail:day） */
 interface AuthMailOut {
   auth_1h: number;
   resend_24h: number | null;
+  resend_unreadable?: true;
 }
 
 /**
  * 校验读取器给的发信量。auth_1h 不对：整个 auth_mail 为 null（记 auth_mail:bad_data）；
- * 只有 resend_24h 不对：只把它置 null、保留好的 auth_1h，另记 auth_mail:bad_resend（OPS-mail-src 复查建议）
+ * 只有 resend_24h 不对：只把它置 null、保留好的 auth_1h，另带 resend_unreadable: true、记 auth_mail:bad_resend
+ * （OPS-mail-src 复查建议；OPS-mail-sugg ②：返回体里要能和“没接”的 null 分开）
  */
 function pickAuthMail(r: unknown): { out: AuthMailOut | null; code?: string } {
   if (typeof r !== 'object' || r === null || Array.isArray(r)) return { out: null, code: 'auth_mail:bad_data' };
   const { auth_1h: h, resend_24h: d } = r as Record<string, unknown>;
   if (!isCount(h)) return { out: null, code: 'auth_mail:bad_data' };
   if (d === undefined || d === null) return { out: { auth_1h: h, resend_24h: null } };
-  return isCount(d) ? { out: { auth_1h: h, resend_24h: d } } : { out: { auth_1h: h, resend_24h: null }, code: 'auth_mail:bad_resend' };
+  return isCount(d) ? { out: { auth_1h: h, resend_24h: d } } : { out: { auth_1h: h, resend_24h: null, resend_unreadable: true }, code: 'auth_mail:bad_resend' };
 }
 
 const TIMED_OUT = Symbol('timeout');

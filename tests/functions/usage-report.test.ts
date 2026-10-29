@@ -199,9 +199,12 @@ describe('发信量 auth_mail（架构 0.38 第 12 条；审查必改 1、2）',
     expect('auth_mail' in (await body(await handle(req({ part: 'heartbeat' }), deps())))).toBe(false);
   });
 
-  it('提供了：带上 auth_1h；resend_24h 没给时写 null；多出的键不转发', async () => {
+  it('提供了：带上 auth_1h；resend_24h 没给时写 null（没接：不带 resend_unreadable）；多出的键不转发', async () => {
     const one = fakeDb({ authMail: async () => ({ auth_1h: 21 }) });
     expect((await body(await handle(req({ part: 'heartbeat' }), deps({ db: one }))))['auth_mail']).toEqual({ auth_1h: 21, resend_24h: null });
+    // 读取器自己带的 resend_unreadable 不转发（只由 pickAuthMail 判了坏数据才加）
+    const nul = fakeDb({ authMail: async () => ({ auth_1h: 21, resend_24h: null, resend_unreadable: true }) as never });
+    expect((await body(await handle(req({ part: 'heartbeat' }), deps({ db: nul }))))['auth_mail']).toEqual({ auth_1h: 21, resend_24h: null });
     const two = fakeDb({ authMail: async () => ({ auth_1h: 3, resend_24h: 64, note: 'x' }) as never });
     expect((await body(await handle(req({ part: 'heartbeat' }), deps({ db: two }))))['auth_mail']).toEqual({ auth_1h: 3, resend_24h: 64 });
   });
@@ -226,13 +229,13 @@ describe('发信量 auth_mail（架构 0.38 第 12 条；审查必改 1、2）',
     expect(log).toHaveBeenLastCalledWith('auth_mail:bad_data');
   });
 
-  it('只有 resend_24h 不对：只把它置 null、保留好的 auth_1h，另记 auth_mail:bad_resend（OPS-mail-src 复查建议）', async () => {
+  it('只有 resend_24h 不对：置 null 并另带 resend_unreadable: true、保留好的 auth_1h，另记 auth_mail:bad_resend（OPS-mail-src 复查建议、OPS-mail-sugg ②）', async () => {
     for (const d of [1.5, -2, '64', true, {}]) {
       const log = vi.fn();
       const db = fakeDb({ authMail: async () => ({ auth_1h: 21, resend_24h: d }) as never });
       const r = await handle(req({ part: 'heartbeat' }), deps({ db, log }));
       expect(r.status).toBe(200);
-      expect((await body(r))['auth_mail']).toEqual({ auth_1h: 21, resend_24h: null });
+      expect((await body(r))['auth_mail']).toEqual({ auth_1h: 21, resend_24h: null, resend_unreadable: true });
       expect(log.mock.calls).toEqual([['auth_mail:bad_resend']]);
     }
     // auth_1h 也不对：整个为 null，只记 bad_data（不另记 bad_resend）

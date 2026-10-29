@@ -323,7 +323,7 @@ describe('“自己退出”的标记：时间戳 + 退出前的 session_id（K6
     expect(out).toHaveBeenCalledTimes(1);
   });
 
-  it('默认取退出前本机会话的 session_id；有一边不知道 session_id（旧格式纯时间戳、令牌坏了）时只看时间', () => {
+  it('默认取退出前本机会话的 session_id；标记不知道 session_id（旧格式纯时间戳）时只看时间', () => {
     seed('s1');
     markSelfSignOut(localStorage, 100);
     resetSelfSignOutForTest();
@@ -331,9 +331,34 @@ describe('“自己退出”的标记：时间戳 + 退出前的 session_id（K6
     expect(isSelfSignOut(localStorage, 200, 's2')).toBe(false);
     localStorage.setItem('lemo.self_signout', '100');   // 上一版写的纯时间戳
     expect(isSelfSignOut(localStorage, 200, 's2')).toBe(true);
+    // 不核对会话（不给 sessionId）：只看时间
     markSelfSignOut(localStorage, 100, 's1');
     resetSelfSignOutForTest();
+    expect(isSelfSignOut(localStorage, 200)).toBe(true);
+  });
+
+  it('本页的 sid 未知（null，K6-sugg3 ③）：不认带 sid 的新格式标记，只认旧格式（以及同样不知道 sid 的）', () => {
+    markSelfSignOut(localStorage, 100, 's1');
+    resetSelfSignOutForTest();
+    expect(isSelfSignOut(localStorage, 200, null)).toBe(false);
+    expect(localStorage.getItem('lemo.self_signout')).not.toBeNull();   // 不归这个会话管：不删
+    localStorage.setItem('lemo.self_signout', '100');   // 旧格式纯时间戳
     expect(isSelfSignOut(localStorage, 200, null)).toBe(true);
+    markSelfSignOut(localStorage, 100, null);   // 退出时也读不出 sid
+    resetSelfSignOutForTest();
+    expect(isSelfSignOut(localStorage, 200, null)).toBe(true);
+    // 本页内存里那份同一规则
+    markSelfSignOutThisTab(100, 's1');
+    localStorage.clear();
+    expect(isSelfSignOut(localStorage, 200, null)).toBe(false);
+    expect(isSelfSignOut(localStorage, 200, 's1')).toBe(true);
+    // 会话层：挂监听时已没有会话（initialSessionId null），收到 SIGNED_OUT 时有一个带 sid 的标记 → 按被移除上报
+    resetSelfSignOutForTest();
+    markSelfSignOut(localStorage, Date.now(), 's1');
+    resetSelfSignOutForTest();
+    const out = vi.fn();
+    authEventHandler(vi.fn(), out, { initialSessionId: null })('SIGNED_OUT', null);
+    expect(out).toHaveBeenCalledTimes(1);
   });
 
   it('坏值、未来的时间戳不认', () => {

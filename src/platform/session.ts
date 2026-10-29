@@ -5,7 +5,7 @@
 // • 本标签页的 SIGNED_OUT（刷新失败、被移除、被退出）也走这同一个 onAuthStateChange（onAuthUser 的第二个回调，接手清单 K6-signedout）；
 //   自己点“退出登录”的那一次由退出流程先 markSelfSignOut()，这里见到标记就不往上报（K8、各功能页不各自监听 SIGNED_OUT）。
 //   全仓只有这个文件能写 onAuthStateChange、认 'SIGNED_OUT'：ESLint 规则 lemo/auth-events-in-session（架构 2.3 A30）
-// • 官网首页（site/）和 App 同源，能读写这里用的 localStorage 键（会话、lemo.self_signout）：首页不加第三方脚本（架构 2.0）
+// • 官网首页（site/）和 App 同源，能读写这里用的 localStorage 键（会话、lemo.self_signout）：首页不加第三方脚本（架构 16.1）
 // • Cache Storage 的清理也在这里（caches 只在 platform 用）：只删运行时缓存，SW 预缓存保留（0.38 第 36 条）
 // • clearLocalSession：signOut 失败时的兜底，同步删掉本机的 supabase 会话键
 // 只读 user.id、user.email 和令牌 payload 里的 session_id（sessionIdOfToken），不校验、不记录、不打印令牌
@@ -208,7 +208,7 @@ export function authEventHandler(
 //   那边由 storage 事件（会话变 null）走普通的“别的标签页退出了”
 // • 存“时间戳 + 退出前的 session_id”（K6-signedout-sugg ①，JSON `{"at":…,"sid":…}`；不存账号、不存令牌）：
 //   只滤掉那个会话的 SIGNED_OUT——退出后马上在别处登录了新会话、新会话随即被移除，照样按“被移除”提示。
-//   有一边读不出 session_id（旧格式的纯时间戳、令牌坏了）时退回只看时间
+//   标记读不出 session_id（旧格式的纯时间戳）时退回只看时间；本页读不出 session_id 时只认这种旧格式的，不认带 sid 的（K6-sugg3 ③）
 // • SIGNED_IN 时，新会话不是标记里那个就把标记清掉（forgetSelfSignOut）
 // • 另记一份在本页内存里（localStorage 写不进时兜底）
 // • 只认 SELF_SIGN_OUT_TTL_MS 以内的：退出流程最坏约 19 秒，过期的标记读到时删掉，不会挡住以后真的被移除
@@ -227,9 +227,17 @@ function fresh(at: number, now: number): boolean {
   return Number.isFinite(at) && now - at >= 0 && now - at < SELF_SIGN_OUT_TTL_MS;
 }
 
-/** 标记和这个会话对得上：有一边不知道 session_id 时只看时间 */
+/**
+ * 标记和这个会话对得上：
+ * • sid 为 undefined（调用方不核对会话）：只看时间
+ * • 本页的 sid 未知（null：挂监听时已没有会话、令牌坏了，K6-sugg3 ③）：只认同样不知道 session_id 的标记（旧格式纯时间戳等），
+ *   带 sid 的新格式标记是某个具体会话的，分不清是不是本页这次，不认（按“被移除”处理）
+ * • 本页知道 sid：标记不知道 session_id（旧格式）时只看时间，知道就要相同
+ */
 function sameSession(m: SelfMark, sid: string | null | undefined): boolean {
-  return sid === null || sid === undefined || m.sid === null || m.sid === sid;
+  if (sid === undefined) return true;
+  if (sid === null) return m.sid === null;
+  return m.sid === null || m.sid === sid;
 }
 
 /** 读 localStorage 里的标记；旧格式（纯时间戳）按 sid 未知；认不出返回 null */
@@ -281,7 +289,15 @@ export function isSelfSignOut(storage?: Storage, now: number = Date.now(), sessi
   return false;
 }
 
-/** 本页见到 SIGNED_IN：登录的不是标记里那个会话（两边都知道 session_id 且不同）就清掉标记（本页内存和 localStorage）。不抛错 */
+/**
+ * 本页见到 SIGNED_IN：登录的不是标记里那个会话（两边都知道 session_id 且不同）就清掉标记（本页内存和 localStorage）。不抛错。
+ * 已知边界（接手清单 K6-sugg3 ⑧，只记不改）：A 页自己退出、退出流程还没走完（最坏十几秒）时，别的标签页收到新会话的 SIGNED_IN，
+ * 会把 A 打在 localStorage 里的标记清掉（supabase-js 把这次 SIGNED_IN 转给 A 页时，A 页内存里那份也会清）；
+ * 之后 A 的 signOut 引起的那次 SIGNED_OUT 就不再被认成“自己退出”，按“被移除”处理、提示。
+ * （A 页自己已在退出流程里，boot.switching 挡着；受影响的是收到转来的 SIGNED_OUT 的其他标签页：多一次清库、一句“被移除”提示，
+ * 新登录的若是同一个账号，那个新会话也会被 takeLocalSession 删掉，要再登录一次）。
+ * 要在一个标签页退出的同时在另一个标签页登录才碰得到，暂不处理
+ */
 export function forgetSelfSignOut(sessionId: string | null, storage?: Storage): void {
   if (sessionId === null) return;
   if (selfMark?.sid && selfMark.sid !== sessionId) selfMark = null;

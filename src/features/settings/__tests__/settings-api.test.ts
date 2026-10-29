@@ -182,6 +182,18 @@ describe('createSettingsApi', () => {
     expect(b.clear).toHaveBeenCalledTimes(1);
   });
 
+  it('dropLocalSession(sid)：兜底删会话时把 sid 原样转给 clearLocalSession（只删那一个，K6-sugg3 ①）；不给时不带参数', async () => {
+    const a = fakeDb({ signOutThrows: true });
+    await a.api.dropLocalSession('s-me');
+    expect(a.clear.mock.calls).toEqual([['s-me']]);
+    const b = fakeDb({ signOutThrows: true });
+    await b.api.dropLocalSession(null);
+    expect(b.clear.mock.calls).toEqual([[null]]);
+    const c = fakeDb({ signOutThrows: true });
+    await c.api.dropLocalSession();
+    expect(c.clear.mock.calls).toEqual([[]]);
+  });
+
   it('令牌已失效（服务器回 session_not_found）：兜底删本机会话，服务器那边本来就没了（serverDone = true）', async () => {
     const { api, clear } = fakeDb({ signOut: { error: { name: 'AuthApiError', code: 'session_not_found', status: 404 } } });
     expect(await api.dropLocalSession()).toEqual({ serverDone: true });

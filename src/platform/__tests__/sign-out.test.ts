@@ -33,7 +33,8 @@ function steps(log: string[], over: Partial<ExitSteps> = {}): ExitSteps & { [K i
   return {
     deleteDb: vi.fn(async () => void log.push('deleteDb')),
     clearCacheStorage: vi.fn(async () => void log.push('caches')),
-    clearLocalSession: vi.fn(() => void log.push('session')),
+    clearLocalSession: vi.fn((_onlyIf?: string | null) => void log.push('session')),
+    readSessionId: vi.fn((): string | null => 's1'),
     ...over,
   } as never;
 }
@@ -251,7 +252,7 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
           return { serverDone: false };
         },
       },
-      steps: { deleteDb: () => deleteLocalDb(factory), clearCacheStorage: async () => undefined, clearLocalSession: () => void seq.push('session') },
+      steps: { deleteDb: () => deleteLocalDb(factory), clearCacheStorage: async () => undefined, clearLocalSession: () => void seq.push('session'), readSessionId: () => 's1' },
       readUserId: () => 'u1',
     });
     expect(r).toEqual({ serverDone: false });

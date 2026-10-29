@@ -43,6 +43,7 @@ const exit: ExitDeps = {
   deleteDb: vi.fn(async () => undefined),
   clearCacheStorage: vi.fn(async () => undefined),
   clearLocalSession: vi.fn(),
+  readSessionId: () => null,
   readUserId: () => null,
   pendingCount: async () => 0,
   goToAuth: vi.fn(),

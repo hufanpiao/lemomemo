@@ -20,6 +20,8 @@ export const zh = {
   'update.updating': '正在更新…',
   'update.failed': '更新失败 · 联网后再试',
   'update.stillOld': '已是最新版本，请稍后再试',
+  'app.crashed.title': '哎呀，卡住了',
+  'app.crashed.refresh': '刷新一下',
   'remind.push.event': '{time} {title}',
   'fmt.monthDay': '{m}月{d}日',
   'fmt.monthDayWeek': '{m}月{d}日 {w}',

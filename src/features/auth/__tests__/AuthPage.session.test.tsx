@@ -24,7 +24,8 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
   /** 记下本机清理每一步的先后；clearLocalSession 是 K6 的 platform 函数的替身 */
   function exitSpy(log: string[]) {
     return {
-      clearLocalSession: vi.fn(() => void log.push('clearLocalSession')),
+      clearLocalSession: vi.fn((_onlyIf?: string | null) => void log.push('clearLocalSession')),
+      readSessionId: () => 's1',
       deleteDb: vi.fn(async () => {
         log.push('deleteDb');
         return 'deleted' as const;

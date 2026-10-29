@@ -533,10 +533,11 @@ export default tseslint.config(
     files: ['tests/shared/**/*.mjs'],
     languageOptions: { globals: { Deno: 'readonly' } },
   },
-  // A30（接手清单 K6-signedout-sugg ③）：onAuthStateChange、'SIGNED_OUT' 只准出现在 platform/session.ts；
-  // 扫 src、shared、官网 site 的 ts / tsx / js / mjs（官网和 App 同源），测试不管（要模拟事件）
+  // A30（接手清单 K6-signedout-sugg ③；K6-sugg3 ⑤ 统一）：onAuthStateChange、'SIGNED_OUT' 只准出现在 platform/session.ts；
+  // 扫 src、shared、官网 site 三处的 ts / tsx / js / mjs（官网和 App 同源），测试不管（要模拟事件）。
+  // 扫不到的：site 的 HTML 里内联的 <script>（ESLint 不解析 HTML），架构 2.3 A30 写明，靠审查
   {
-    files: ['src/**/*.{ts,tsx,js,mjs}', 'shared/**/*.{ts,js,mjs}', 'site/**/*.js'],
+    files: ['src/**/*.{ts,tsx,js,mjs}', 'shared/**/*.{ts,tsx,js,mjs}', 'site/**/*.{ts,tsx,js,mjs}'],
     ignores: ['src/platform/session.ts', '**/__tests__/**'],
     plugins: { lemo },
     rules: { 'lemo/auth-events-in-session': 'error' },

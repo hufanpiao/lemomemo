@@ -21,6 +21,8 @@ export const ko = {
   'update.updating': '업데이트 중…', // R-106 B1 第一遍已审（10-29）
   'update.failed': '업데이트하지 못했어요 · 인터넷에 연결한 뒤 다시 시도해 주세요', // R-106 B1 第一遍已审（10-29）
   'update.stillOld': '이미 최신 버전이에요. 잠시 후 다시 시도해 주세요', // R-106 B1 第一遍已审（10-29）
+  'app.crashed.title': '앗, 멈췄어요', // TODO(ko): 初稿待审校（R-106）；App 顶层出错的整屏兜底（K6-sugg3 ⑥）
+  'app.crashed.refresh': '새로고침하기', // TODO(ko): 初稿待审校（R-106）
   'remind.push.event': '{time} {title}',
   'fmt.monthDay': '{m}월 {d}일',
   'fmt.monthDayWeek': '{m}월 {d}일 ({w})',

@@ -123,27 +123,65 @@ describe('启动关口 ConsentGate（CONSENT-wire ②）', () => {
     }
   });
 
-  it('上限以后才回来的 first：不管（已经进 App，不再弹告知页）', async () => {
+  it('上限以后才回来的 first：不管（不再弹告知页、不再放行第二次）——放行后关口不卸，证明是 settle 开关挡住的（K6-sugg3 ⑦）', async () => {
     vi.useFakeTimers();
     try {
       let answer: (r: Result<NoticeState>) => void = () => undefined;
       const api: ConsentApi = { record: vi.fn(), noticeState: vi.fn(() => new Promise<Result<NoticeState>>((r) => (answer = r))) };
-      await renderGate(api, wiring().deps, 3000);
+      const onPass = vi.fn();
+      // 直接画关口、放行后不换成 App：关口一直挂着，晚到的结果如果没被 settle 挡住，就会把告知页画出来
+      await act(async () => {
+        render(<ConsentGate api={api} wiring={wiring().deps} onPass={onPass} limitMs={3000} />);
+      });
       await act(async () => {
         vi.advanceTimersByTime(3000);
       });
+      expect(onPass).toHaveBeenCalledOnce();
       await act(async () => {
         answer(first);
       });
-      expect(screen.getByTestId('the-app')).toBeTruthy();
       expect(consentShown()).toBe(false);
+      expect(onPass).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('默认上限是 CONSENT_GATE_MS（3 秒，比 noticeState 自己的 8 秒短）', () => {
-    expect(CONSENT_GATE_MS).toBe(3000);
+  it('给了 startedAt（GatedApp 挂上的时刻，K6-sugg3 ④）：上限从那一刻算起，分包加载用掉的时间扣掉；已经过了就当场放行', async () => {
+    vi.useFakeTimers();
+    try {
+      const onPass = vi.fn();
+      const t0 = Date.now();
+      vi.advanceTimersByTime(2000);   // 分包加载用了 2 秒
+      await act(async () => {
+        render(<ConsentGate api={fakeApi('hang')} wiring={wiring().deps} onPass={onPass} limitMs={3000} startedAt={t0} />);
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(999);
+      });
+      expect(onPass).not.toHaveBeenCalled();
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(onPass).toHaveBeenCalledOnce();
+      cleanup();
+      const late = vi.fn();
+      const onStart = vi.fn();
+      await act(async () => {
+        render(<ConsentGate api={fakeApi('hang')} wiring={wiring().deps} onPass={late} limitMs={3000} startedAt={Date.now() - 5000} onStart={onStart} />);
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(0);
+      });
+      expect(late).toHaveBeenCalledOnce();
+      expect(onStart).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('默认上限是 CONSENT_GATE_MS（5 秒，比 noticeState 自己的 8 秒短）', () => {
+    expect(CONSENT_GATE_MS).toBe(5000);
     expect(CONSENT_GATE_MS).toBeLessThan(CONSENT_SLOW_MS);
   });
 

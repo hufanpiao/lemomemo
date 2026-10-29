@@ -151,7 +151,7 @@ try {
     Say "  SHA-256（不是密钥，用来核对 Supabase 页面上的 Digest）：$digest"
     Say ''
     Say '  照负责人B0网页操作清单第 ⑧ 节做，两处要一模一样（不用另存，丢了重新运行本脚本，R-220）：'
-    Say "    1. Cloudflare › Workers & Pages › $pages › 设置 › 变量和机密 › Production：PROXY_SECRET，类型选“密钥 / Secret”（加密），粘贴；"
+    Say "    1. Cloudflare › Workers & Pages › $pages › 设置 › 变量和机密 › Production：PROXY_SECRET，类型选「密钥 / Secret」（加密），粘贴；"
     Say "    2. Supabase › $supa › Edge Functions › Secrets：Name 填 PROXY_SECRET，Value 粘贴，保存。"
     Say '  复制方法：用鼠标选中上面那一行的值（不要带前后的空格），按回车或右键复制。'
     Say '  不要截图、不要发给 Claude 或任何人。'

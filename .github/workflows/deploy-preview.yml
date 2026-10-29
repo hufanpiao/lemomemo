@@ -322,6 +322,10 @@ jobs:
           echo "::error::2 分钟后线上版本仍不是 $EXPECTED_VERSION"
           exit 1
 
+      # 接手清单 SW-update ①：Cloudflare“浏览器缓存 TTL”不是“遵循现有标头”时，sw.js 会被改写成 max-age=14400（10-29 负责人已改，此步防回退）
+      - name: 核对 sw.js 缓存头（no-cache）
+        run: python3 -I build/ci/check_live_headers.py "$SITE_ORIGIN"
+
       - name: 清掉 supabase link 留下的本地文件
         if: always()
         run: rm -rf supabase/.temp

@@ -65,6 +65,8 @@ const CLEANUP_RECENT_S = 30 * MIN;
  * - **Resend 当天用量**（resend_24h：经 Resend 发出的所有邮件合计，含验证码、注册、注销通知、本监控的告警）
  *   **超过 70%**（免费版每天 100 封）。“当天”按过去 24 小时算（不管 Resend 按哪个时区换日都不会少算）。
  *   这一项要有读权限的 Resend 密钥，暂不接：resend_24h 为 null 时不查。
+ *   “没接”和“读到了坏数据”分开（OPS-mail-sugg ②）：坏数据时 usage-report 另给 resend_unreadable: true（或 lemo-ops 自己发现
+ *   resend_24h 不是非负整数），这一轮只查 mail:hour、mail:day 原样保留，另报“Resend 用量读不到”，不当成没接把 mail:day 删掉。
  */
 export const AUTH_MAIL_HOUR_LIMIT = 20;
 export const RESEND_DAILY_QUOTA = 100;
@@ -92,8 +94,10 @@ export interface PendingDeletionItem {
 export interface AuthMailReport {
   /** 过去 1 小时 Supabase Auth（GoTrue）发出的验证码邮件数 */
   auth_1h: number;
-  /** 过去 24 小时经 Resend 发出的所有邮件合计；null = 没接 */
+  /** 过去 24 小时经 Resend 发出的所有邮件合计；null = 没接（resend_unreadable 为 true 时 = 这一轮读不到） */
   resend_24h: number | null;
+  /** true = 接了但这一轮读不到 / 读到的不对（usage-report 记 auth_mail:bad_resend）；没有这个键 = 正常或没接 */
+  resend_unreadable?: true;
 }
 
 export interface HeartbeatReport {
@@ -121,7 +125,7 @@ function isCount(v: unknown): v is number {
 
 /**
  * 校验返回体的形状；对不上返回 null（按“返回体解析不了”算调不通，TC-B1-94 ⑤）。
- * log：只记错误码（auth_mail 里只有 resend_24h 不对时记 auth_mail:bad_resend）
+ * log：只记错误码（auth_mail 里 lemo-ops 自己发现 resend_24h 不对时记 auth_mail:bad_resend）
  */
 export function parseHeartbeatReport(v: unknown, log?: (code: string) => void): HeartbeatReport | null {
   if (!isObj(v) || v['ok'] !== true) return null;
@@ -152,14 +156,24 @@ export function parseHeartbeatReport(v: unknown, log?: (code: string) => void): 
   return out;
 }
 
-/** auth_1h 不对：整个降级成 null（报“读不到”）；只有 resend_24h 不对：只把它置 null、保留好的 auth_1h，记 auth_mail:bad_resend（OPS-mail-src 复查建议） */
+/**
+ * auth_1h 不对：整个降级成 null（报“读不到”）。
+ * Resend 那项（OPS-mail-sugg ②）：usage-report 给了 resend_unreadable → 读不到；**任何非 undefined、非 false 的值**
+ * （true、null、"false"、1……）都按读不到处理，标记和合法的 resend_24h 同时出现时也以标记为准。这是有意偏安全：
+ * 判成读不到只多一封“Resend 用量读不到”、mail:day 原样保留；判成没接会把已在报的 mail:day 悄悄删掉。
+ * **不许改成 `=== true`**（那样 "false"、null 这类坏标记会落回“没接”，又回到删 mail:day 的老问题）。
+ * resend_24h 本身不对 → 也算读不到，记 auth_mail:bad_resend；都保留好的 auth_1h。resend_24h 缺省或 null 且没有标记 → 没接。
+ */
 function parseAuthMail(am: unknown, log?: (code: string) => void): AuthMailReport | null {
   if (!isObj(am) || !isCount(am['auth_1h'])) return null;
+  const h = am['auth_1h'];
+  const flag = am['resend_unreadable'];
   const d = am['resend_24h'];
-  if (d === undefined || d === null) return { auth_1h: am['auth_1h'], resend_24h: null };
-  if (isCount(d)) return { auth_1h: am['auth_1h'], resend_24h: d };
+  if (flag !== undefined && flag !== false) return { auth_1h: h, resend_24h: null, resend_unreadable: true };
+  if (d === undefined || d === null) return { auth_1h: h, resend_24h: null };
+  if (isCount(d)) return { auth_1h: h, resend_24h: d };
   log?.('auth_mail:bad_resend');
-  return { auth_1h: am['auth_1h'], resend_24h: null };
+  return { auth_1h: h, resend_24h: null, resend_unreadable: true };
 }
 
 /** 秒数写成“x 小时 y 分”这种给人看的样子 */
@@ -176,21 +190,27 @@ export const SCOPE_UNREACHABLE = 'unreachable';
 /** 15 分钟一轮的心跳检查查过的 key 前缀（调通时） */
 export const SCOPE_BAD_DATA = 'bad-data';
 export const HEARTBEAT_SCOPES = [SCOPE_UNREACHABLE, SCOPE_BAD_DATA, 'hb:', 'purge:', 'longtx', 'cleanup-slow', 'push-failed'];
-/** 发信量的三件事；usage-report 不带 auth_mail（没接）时整组悄悄删掉 */
+/** 发信量的四件事；usage-report 不带 auth_mail（没接）时整组悄悄删掉 */
 export const SCOPE_AUTH_MAIL = 'mail:';
 export const MAIL_UNREADABLE = 'mail:unreadable';
 export const MAIL_HOUR = 'mail:hour';
 export const MAIL_DAY = 'mail:day';
+/** Resend 用量接了但这一轮读不到（OPS-mail-sugg ②） */
+export const MAIL_RESEND_UNREADABLE = 'mail:resend-unreadable';
 
 /**
  * 发信量（0.38 第 12 条）。标题不带数字（数字每轮变，带进标题会被当成“情况有变”反复发）。
  * 范围：读不到的那一轮只查“读不到”这一件，mail:hour、mail:day 的状态原样留着（不能因为读不到就报“已恢复”）；
- * resend_24h 没接（null）时 mail:day 不查、留下的状态悄悄删掉。
+ * resend_24h 没接（null、没有 resend_unreadable）时 mail:day 不查、留下的状态悄悄删掉；
+ * Resend 那项读不到（resend_unreadable）时和 auth_1h 读不到一个做法：报“Resend 用量读不到”，mail:hour 照常判，
+ * mail:day 原样留着（不判已恢复、不删），读到后照常判（OPS-mail-sugg ②）。
+ * 真没接时连 mail:resend-unreadable 一起悄悄删掉，**即使已经发过“Resend 用量读不到”也不发“已恢复”**：这是有意的，
+ * 没接就不再查这一项，谈不上恢复（和 auth_mail 整个不再出现时删掉 mail: 整组同一个做法）。
  */
 export function evaluateAuthMail(am: AuthMailReport | null): Evaluation {
   if (am === null) {
     return {
-      active: [{ key: MAIL_UNREADABLE, title: '发信量读不到', lines: ['usage-report 这一轮没读到发信量，发信量告警暂时失效。', '心跳等其他检查不受影响；请看 usage-report 的函数日志（auth_mail:error、auth_mail:timeout 或 auth_mail:bad_data）。'] }],
+      active: [{ key: MAIL_UNREADABLE, title: '发信量读不到', lines: ['usage-report 这一轮没读到发信量，发信量告警暂时失效。', '心跳等其他检查不受影响；请看 usage-report 的函数日志（auth_mail:error、auth_mail:timeout 或 auth_mail:bad_data）。', 'auth_mail:timeout 反复出现时可能是表太大，见上线与回滚手册“auth.audit_log_entries 的增长和清理”。'] }],
       scopes: [MAIL_UNREADABLE],
     };
   }
@@ -206,7 +226,18 @@ export function evaluateAuthMail(am: AuthMailReport | null): Evaluation {
       ],
     });
   }
-  if (am.resend_24h === null) return { active, scopes: [MAIL_UNREADABLE, MAIL_HOUR], drop: [MAIL_DAY] };
+  if (am.resend_unreadable === true) {
+    active.push({
+      key: MAIL_RESEND_UNREADABLE,
+      title: 'Resend 用量读不到',
+      lines: [
+        'usage-report 这一轮读到的 Resend 当天用量不对，Resend 当天额度告警暂时失效（已在报的不会因此判成已恢复）。',
+        '验证码一小时内的封数照常检查；请看 usage-report 的函数日志或 lemo-ops 的日志（auth_mail:bad_resend）。',
+      ],
+    });
+    return { active, scopes: [MAIL_UNREADABLE, MAIL_HOUR, MAIL_RESEND_UNREADABLE] };
+  }
+  if (am.resend_24h === null) return { active, scopes: [MAIL_UNREADABLE, MAIL_HOUR], drop: [MAIL_DAY, MAIL_RESEND_UNREADABLE] };
   if (am.resend_24h * 100 > RESEND_DAILY_QUOTA * RESEND_DAILY_WARN_PCT) {
     active.push({
       key: MAIL_DAY,
@@ -218,7 +249,7 @@ export function evaluateAuthMail(am: AuthMailReport | null): Evaluation {
       ],
     });
   }
-  return { active, scopes: [MAIL_UNREADABLE, MAIL_HOUR, MAIL_DAY] };
+  return { active, scopes: [MAIL_UNREADABLE, MAIL_HOUR, MAIL_DAY, MAIL_RESEND_UNREADABLE] };
 }
 
 /**

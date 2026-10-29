@@ -52,8 +52,11 @@ export interface SettingsApi {
   signOutOthers(): Promise<Result>;
   /** 退出前删本机那一行（4.1；del 策略只许删本会话那一行）；断网、已被删、出错都 resolve，不挡退出。不带超时，由调用方套 */
   deleteOwnDevice(currentDeviceId: string | null): Promise<void>;
-  /** 退出本机会话：signOut local，不是 ok 就兜底删；本机会话一定清掉。不带超时，由调用方套 */
-  dropLocalSession(): Promise<LocalSignOut>;
+  /**
+   * 退出本机会话：signOut local，不是 ok 就兜底删。不带超时，由调用方套。
+   * 给了 onlyIf（含 null，退出前记下的 session_id）：兜底只在本机会话还是它时才删（K6-sugg3 ①）；不给时一定删
+   */
+  dropLocalSession(onlyIf?: string | null): Promise<LocalSignOut>;
   saveLocale(locale: UiLocale): Promise<Result>;
 }
 
@@ -138,7 +141,15 @@ export const API_TIMEOUT_MS = 8000;
 
 const OFFLINE: Result<never> = { ok: false, error: 'offline' };
 
-export function createSettingsApi(getDb: () => Promise<Db>, clearLocalSession: () => void, timeoutMs: number = API_TIMEOUT_MS): SettingsApi {
+/**
+ * clearLocalSession：兜底删本机会话（设置页传 ExitDeps.clearLocalSession）。dropLocalSession(sid) 给了 session_id 时原样转给它，
+ * 只在本机会话还是那一个时才删（K6-sugg3 ①）；不给时直接删
+ */
+export function createSettingsApi(
+  getDb: () => Promise<Db>,
+  clearLocalSession: (onlyIf?: string | null) => void,
+  timeoutMs: number = API_TIMEOUT_MS,
+): SettingsApi {
   /** 超时按断网处理（只提示，不清本机） */
   const timed = <T>(run: () => Promise<Result<T>>): Promise<Result<T>> => withTimeout(run, timeoutMs, () => OFFLINE);
 
@@ -160,20 +171,21 @@ export function createSettingsApi(getDb: () => Promise<Db>, clearLocalSession: (
   }
 
   /** signOut({scope: 'local'})；不是 ok 就兜底删本机会话。不先查 getSession（令牌过期、断网时那一步本身会失败） */
-  async function dropLocal(db: Db | null): Promise<LocalSignOut> {
+  async function dropLocal(db: Db | null, onlyIf: string | null | undefined): Promise<LocalSignOut> {
+    const clear = (): void => (onlyIf === undefined ? clearLocalSession() : clearLocalSession(onlyIf));
     if (!db) {
-      clearLocalSession();
+      clear();
       return { serverDone: false };
     }
     try {
       const { error } = await db.auth.signOut({ scope: 'local' });
       if (!error) return { serverDone: true };
-      clearLocalSession();
+      clear();
       const kind = mapSettingsError(error);
       // 服务器说会话本来就不在了：不用再吊销
       return { serverDone: kind === 'revoked' || kind === 'signed_out' };
     } catch {
-      clearLocalSession();
+      clear();
       return { serverDone: false };
     }
   }
@@ -226,7 +238,7 @@ export function createSettingsApi(getDb: () => Promise<Db>, clearLocalSession: (
       }
     },
 
-    dropLocalSession: async () => dropLocal(await dbOrNull()),
+    dropLocalSession: async (onlyIf) => dropLocal(await dbOrNull(), onlyIf),
 
     saveLocale: (locale) =>
       timed(() =>

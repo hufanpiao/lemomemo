@@ -136,7 +136,10 @@ describe('writeAiSwitchSettled：insert 撞唯一约束被拒后，等同步拉�
   /** 服务器上早就有的那一行（本机还没拉到） */
   const serverRow = { id: ID(30), key: 'ai.enabled', value: false, rev: 5, deleted_at: null, undone: false, created_at: 1, updated_at: 1 };
 
-  /** 把 insert 那一项交给“服务器”，按 (user_id, key) 唯一约束拒掉 */
+  /**
+   * 把 insert 那一项交给“服务器”，按 (user_id, key) 唯一约束拒掉。回的码按实际（K6-sugg3 ② 核对）：insert 走 PostgREST 的
+   * upsert(onConflict: 'id')，撞 (user_id, key) 抛 23505，PostgREST 回 409；sync-transport 的 toFailure 得 {status: 409, code: '23505'}
+   */
   async function rejectInsert(b: Awaited<ReturnType<typeof boot>>, opId: string) {
     const sent = await b.outbox?.next();
     expect(sent?.op_id).toBe(opId);
@@ -153,6 +156,26 @@ describe('writeAiSwitchSettled：insert 撞唯一约束被拒后，等同步拉�
     await vi.waitFor(() => expect(settings().get(ID(30))?.value).toBe(true));
     const patch = ((await b.outbox?.list()) ?? []).find((i) => i.op === 'patch');
     expect(patch).toMatchObject({ table: 'settings', id: ID(30), data: { value: true } });
+    // 补写成功后，被拒的 insert 从“发送失败”区删掉（K6-sugg3 ②）
+    await vi.waitFor(async () => expect(((await b.outbox?.list()) ?? []).find((i) => i.op_id === opId)).toBeUndefined());
+    expect(b.outbox?.getStatus().failed).toBe(0);
+  });
+
+  it('被拒后先在“发送失败”区（state = failed）；补写成功才删，补写前点了重试正在发的（inflight）不删', async () => {
+    const b = await boot();
+    const r = await writeAiSwitchSettled({ key: 'ai.enabled', value: true }, { newId: () => ID(25) });
+    const opId = r.ok && r.item ? r.item.op_id : '';
+    await rejectInsert(b, opId);
+    expect(((await b.outbox?.list()) ?? []).find((i) => i.op_id === opId)?.state).toBe('failed');
+    expect(b.outbox?.getStatus().failed).toBe(1);
+    // 用户点了重试、正在发
+    await b.outbox?.retryFailed([opId]);
+    const again = await b.outbox?.next();
+    expect(again?.op_id).toBe(opId);
+    await b.outbox?.applyServer('settings', [{ row: serverRow }]);
+    await vi.waitFor(async () => expect(((await b.outbox?.list()) ?? []).some((i) => i.op === 'patch')).toBe(true));
+    await new Promise((res) => setTimeout(res, 20));
+    expect(((await b.outbox?.list()) ?? []).find((i) => i.op_id === opId)?.state).toBe('inflight');
   });
 
   it('被拒时服务器那一行已经在本机集合里（同步抢先到了）：当场 patch', async () => {

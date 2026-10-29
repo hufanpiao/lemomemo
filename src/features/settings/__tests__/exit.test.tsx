@@ -26,13 +26,14 @@ afterEach(() => {
 });
 
 describe('会话没了：提示后回登录页（0.29 续第 98 条、0.38 第 7 条）', () => {
-  it('读列表回 revoked：先清本机库和缓存，清完马上同步删本机会话，signOut 放后台；弹“需要重新登录”，点“去登录”回登录页', async () => {
+  it('读列表回 revoked：一发现就同步删本机会话、signOut 紧接着放后台，再清本机库和缓存，清完只删同一个会话；弹“需要重新登录”，点“去登录”回登录页', async () => {
     const { exit, order } = fakeExit();
     const api = fakeApi({ loadDevices: vi.fn(async () => fail('revoked')) }, order);
     render(<SettingsPage deps={{ api, exit, now }} />);
     const dlg = await screen.findByRole('dialog');
     expect(text(dlg)).toContain(zh['settings.revoked.body']);
-    await waitFor(() => expect(order).toEqual(['wipe', 'caches', 'session', 'signout', 'deleteDb']));
+    await waitFor(() => expect(order).toEqual(['session', 'signout', 'wipe', 'caches', 'session', 'deleteDb']));
+    expect(exit.clearLocalSession.mock.calls).toEqual([[], ['s-me']]);   // K6-sugg3 ①：开头直接删，之后只删记下的那一个
     const go = await within(dlg).findByRole('button', { name: zh['settings.revoked.go'] });
     await act(async () => {
       fireEvent.click(go);
@@ -75,7 +76,7 @@ describe('会话没了：提示后回登录页（0.29 续第 98 条、0.38 第 7
       vi.advanceTimersByTime(1500);
     });
     expect(exit.goToAuth).not.toHaveBeenCalled();
-    expect(exit.clearLocalSession).not.toHaveBeenCalled();
+    expect(exit.clearLocalSession).toHaveBeenCalledTimes(1);   // 只有一开头那次（K6-sugg3 ①）
     await act(async () => {
       gate.resolve();
     });

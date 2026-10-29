@@ -36,10 +36,13 @@ export type NoticeView = 'pending' | NoticeState | 'error';
  * 启动关口最多等多久（CONSENT-sugg ①）：noticeState 自己的超时是 8 秒（CONSENT_SLOW_MS），慢网时整屏空白太久。
  * 到点按读失败放行进 App：服务器端没有同意记录就不送 AI（aiAllowed），这次没显示的告知页下次打开再问
  */
-export const CONSENT_GATE_MS = 3000;
+export const CONSENT_GATE_MS = 5000;
 
-/** 问一次 noticeState()；给了 limitMs 时到点按 'error'；卸载后、到点后晚到的结果丢掉 */
-export function useNoticeState(api: ConsentApi, limitMs?: number): NoticeView {
+/**
+ * 问一次 noticeState()；给了 limitMs 时到点按 'error'；卸载后、到点后晚到的结果丢掉。
+ * 给了 startedAt（Date.now() 毫秒）时上限从那一刻算起（K6-sugg3 ④：GatedApp 挂上时，含关口分包加载），已经过了就当场按 'error'
+ */
+export function useNoticeState(api: ConsentApi, limitMs?: number, startedAt?: number): NoticeView {
   const [view, setView] = useState<NoticeView>('pending');
   useEffect(() => {
     let live = true;
@@ -48,7 +51,8 @@ export function useNoticeState(api: ConsentApi, limitMs?: number): NoticeView {
       live = false;
       setView(v);
     };
-    const timer = limitMs === undefined ? undefined : setTimeout(() => settle('error'), limitMs);
+    const left = limitMs === undefined ? undefined : startedAt === undefined ? limitMs : Math.max(0, limitMs - (Date.now() - startedAt));
+    const timer = left === undefined ? undefined : setTimeout(() => settle('error'), left);
     api.noticeState().then(
       (r) => settle(r.ok ? r.value : 'error'),
       () => settle('error'),
@@ -57,7 +61,7 @@ export function useNoticeState(api: ConsentApi, limitMs?: number): NoticeView {
       live = false;
       clearTimeout(timer);
     };
-  }, [api, limitMs]);
+  }, [api, limitMs, startedAt]);
   return view;
 }
 

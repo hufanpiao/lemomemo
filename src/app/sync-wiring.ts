@@ -9,10 +9,13 @@
 //   （core/device-reg.ts：登记或复用本会话的 devices 行，0.38 第 62 条④；登记好以后它顺带每天刷新一次 last_seen_at、app_version），
 //   登记好了再报，登记不上这次不报（接手清单 K8-tz-device）。恢复网络（online）时也走一遍（登记 60 秒间隔、上报 5 分钟间隔照旧）
 // • 被移除只处理一次：同步引擎（刷新令牌失败）和 outbox 的 removed 事件走同一个 onRemoved
-//   → wipeOnRemoved：设闸 → 清空本机库和运行时缓存 → 关库（原因 'closed'，不触发 versionchange → 重新载入）→ 删本机会话、回登录页
+//   → 删本机会话 → wipeOnRemoved：设闸 → 清空本机库和运行时缓存 → 关库（原因 'closed'，不触发 versionchange → 重新载入）→ 回登录页
 // • 被停用、注销冷静期（outbox 的 disabled 事件：account_disabled、account_pending_deletion）和被移除走同一套（4.3、4.3b、0.29 续第 131 条②）：
 //   设闸 → 清库 → 删会话 → 回登录页；跳转前记下退出原因（platform/session.ts 的 setExitNotice），登录页提示“已停用”或冷静期的恢复入口。
 //   页面一定会跳走，不会出现“停在原页、写入被 switching 静默丢掉”
+// • 删本机会话的时机（接手清单 K6-sugg3 ①，同 core/account.ts 的 signedOutHere）：收到事件的同一个同步段里就删（takeLocalSession，
+//   记下删之前的 session_id），清完库、回登录页前只在本机会话还是那一个时再删一次（clearLocalSessionIf）——清库要几秒，
+//   等清完再无条件删会把这几秒里别的标签页刚登录的新会话也删掉；旧会话被晚到的令牌刷新写回来时照样删掉
 // • 已经在走别的退出流程（watchAccount 发现会话没了或换了账号，boot.switching 已设）：不再清第二遍、不再跳第二次
 import { wipeOnRemoved } from '../core/account.ts';
 import type { BootResult } from '../core/boot.ts';
@@ -28,8 +31,10 @@ export interface WireSyncDeps {
   transport: SyncTransport;
   /** platform/session.ts 的 clearCacheStorage（只删运行时缓存） */
   clearCacheStorage(): Promise<void>;
-  /** platform/session.ts 的 clearLocalSession */
-  clearLocalSession(): void;
+  /** platform/session.ts 的 takeLocalSession：同步删掉本机会话，返回删之前的 session_id（被移除、停用时一收到事件就调） */
+  takeLocalSession(): string | null;
+  /** platform/session.ts 的 clearLocalSessionIf：回登录页前，本机会话还是 takeLocalSession 删掉的那一个才再删 */
+  clearLocalSessionIf(sessionId: string | null): void;
   /** platform/session.ts 的 goToAuth */
   goToAuth(): void;
   /** platform/session.ts 的 setExitNotice：回登录页前记下退出原因 */
@@ -95,13 +100,20 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   const onRemoved = (code: string): void => {
     if (removedHandled || boot.switching) return;
     removedHandled = true;
+    // 同一个同步段里先删本机会话（K6-sugg3 ①）：清库那几秒里别的标签页登录的新会话，回登录页时不删
+    let dead: string | null = null;
+    try {
+      dead = deps.takeLocalSession();
+    } catch {
+      dead = null;   // 存储不可用：本来也存不下会话
+    }
     deps.clearLogs?.();
     leader?.post({ type: 'reset' });
     void wipeOnRemoved(boot, {
       clearCacheStorage: deps.clearCacheStorage,
       onRemoved: () => {
         deps.setExitNotice(exitNoticeOf(code));
-        deps.clearLocalSession();
+        deps.clearLocalSessionIf(dead);
         deps.goToAuth();
       },
     });

@@ -111,7 +111,7 @@ export type OutboxEvent =
   | { type: 'rejected'; item: OutboxItem; code: string }
   /** 426：整个队列已暂停 */
   | { type: 'upgrade_required'; min: string | null }
-  /** 被移除（session_revoked）：队列已设闸；调用方清空本机（session.ts 的 clearLocalSession 兜底删会话）、回登录页 */
+  /** 被移除（session_revoked）：队列已设闸；调用方一收到就删本机会话（session.ts 的 takeLocalSession），清空本机、回登录页（K6-sugg3 ①） */
   | { type: 'removed'; code: string }
   /** 被停用（account_disabled）或注销冷静期（account_pending_deletion）：队列已设闸；调用方和 removed 一样清空本机、回登录页，按 code 提示 */
   | { type: 'disabled'; code: string };

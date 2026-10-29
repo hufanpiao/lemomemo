@@ -13,7 +13,8 @@
 //    它问 noticeState()，first 先显示告知页（排在通知、麦克风说明之前），updated 留给“隐私说明更新了”那一屏（还没做，现在直接进 App），
 //    读失败、超过 3 秒（CONSENT-sugg ①）、懒加载失败都不挡进 App。noticeState 在关口里调而不是在这里 await：A27 只许 app 经 index.ts
 //    拿懒加载的组件，拿不到 data 层的函数；#root 本来是空的，关口回答之前不画 App，看起来和“等完再渲染”一样，同步也不用跟着等。
-//    选根（关口、离线、version_too_new）在 root.tsx（CONSENT-sugg ③⑥：错误边界只包关口，单独有测试）
+//    选根（关口、离线、version_too_new）在 root.tsx（CONSENT-sugg ③⑥：错误边界只包关口，单独有测试）；
+//    选出来的根外面再包一层静态的“出错了 · 刷新”兜底（root.tsx 的 withCrashFallback，K6-sugg3 ⑥）
 import '../platform/zod-jitless.ts';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -34,13 +35,13 @@ import { createLogUploader, createSupabaseTransport } from '../platform/sync-net
 import { uiStore } from '../kit/state/ui-store.ts';
 import { buildInfo } from '../platform/env.ts';
 import {
-  clearCacheStorage, clearLocalSession, goToAuth, onAuthUser, onSessionStorageChange, readSessionId, readSessionUserId, setExitNotice,
+  clearCacheStorage, clearLocalSessionIf, goToAuth, onAuthUser, onSessionStorageChange, readSessionId, readSessionUserId, setExitNotice,
   takeLocalSession,
 } from '../platform/session.ts';
 import { registerServiceWorker, reloadPage } from '../platform/sw-register.ts';
 import { mountFeatures } from './features.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
-import { startRoot } from './root.tsx';
+import { startRoot, withCrashFallback } from './root.tsx';
 import { wireSync } from './sync-wiring.ts';
 
 /** 界面语言（16.4）：缓存的 profiles.ui_locale → 本机选过的（pv-locale）→ 设备语言 → 中文；规则同 src/auth/main.tsx，多一层缓存的 profile */
@@ -120,7 +121,9 @@ async function start(): Promise<void> {
     onRefresh: reloadPage,
     ...(import.meta.env.DEV ? {} : { registerSw: registerServiceWorker }),
   });
-  createRoot(el).render(import.meta.env.DEV ? <StrictMode>{root}</StrictMode> : root);
+  // 最外层兜底（K6-sugg3 ⑥）：App 顶层出错不白屏，显示静态的“出错了 · 刷新”
+  const guarded = withCrashFallback(root, reloadPage);
+  createRoot(el).render(import.meta.env.DEV ? <StrictMode>{guarded}</StrictMode> : guarded);
 
   // 同步（K8）：只在 boot 正常时启动；被移除（同步引擎、outbox 的 removed 事件）只处理一次：清空本机、删本机会话、回登录页
   // 设备行（0.38 第 62 条④，接手清单 K8-tz-device）：主页拿到锁后登记或复用本会话的 devices 行，id 存 meta，report_tz 用它
@@ -134,7 +137,10 @@ async function start(): Promise<void> {
       })
     : null;
   wireSync(boot, {
-    transport, clearCacheStorage, clearLocalSession, goToAuth, setExitNotice, platform, log: logs.log,
+    transport, clearCacheStorage, goToAuth, setExitNotice, platform, log: logs.log,
+    // 被移除、停用：一收到就删本机会话，回登录页前只在会话还是那一个时再删（K6-sugg3 ①）
+    takeLocalSession: () => takeLocalSession(),
+    clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
     onLeader: (on) => logQueue.setLeader(on),
     clearLogs,
     ...(device ? { deviceId: device.id, ensureDevice: device.ensure } : {}),

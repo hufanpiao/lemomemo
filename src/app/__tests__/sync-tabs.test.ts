@@ -40,7 +40,7 @@ function page(boot: Awaited<ReturnType<typeof coldStart>>, locks: LocksLike, bus
   const sync = wireSync(boot, {
     transport: t,
     clearCacheStorage: () => Promise.resolve(),
-    clearLocalSession: () => undefined,
+    takeLocalSession: () => null, clearLocalSessionIf: () => undefined,
     goToAuth: () => undefined,
     setExitNotice: () => undefined,
     deviceId: () => 'dev-1',

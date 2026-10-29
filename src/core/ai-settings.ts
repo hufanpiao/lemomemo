@@ -8,7 +8,14 @@
 // • 本机还没拉到服务器上已有的那一行时 insert 会和 (user_id, key) 唯一约束撞上（CONSENT-sugg ②）：首次告知页（consent_policy_ver 为空）时
 //   服务器上一般没有 ai.enabled 行（只有 record_consent 的撤回分支写它，写了就有版本号），以后从设置页重开告知页时才可能碰到。
 //   writeAiSwitchSettled 兜这一种：insert 那一项被服务器拒（outbox 的 error / rejected 事件）以后，等同步把服务器那一行拉进集合，
-//   再按那一行 patch 一次；SETTLE_MS 内没等到就算了（AI 只是还没打开，设置 › 语音与 AI 能再开）
+//   再按那一行 patch 一次；SETTLE_MS 内没等到就算了（AI 只是还没打开，设置 › 语音与 AI 能再开）。
+//   补写（patch 入队）成功后，把被拒的那一项从“发送失败”区删掉（outbox.discard；接手清单 K6-sugg3 ②）：留着点重试只会再撞一次约束。
+//   正在发的（inflight，用户刚点了重试）不动；rejected（已丢掉）的本来就不在队列里
+// • 被拒时服务器实际回的（K6-sugg3 ② 核对）：insert 不走 apply_patch，走 PostgREST 的 upsert(onConflict: 'id', ignoreDuplicates)
+//   （platform/supabase/sync-transport.ts 的 insertRow，= INSERT … ON CONFLICT (id) DO NOTHING）；撞的是 (user_id, key) 不是 id，
+//   ON CONFLICT 兜不住，抛 unique_violation（SQLSTATE 23505），PostgREST 回 HTTP 409、code '23505'；toFailure 得 {status: 409, code: '23505'}，
+//   classifyFailure 归 permanent → outbox 发 error 事件、这一项进“发送失败”区。apply_patch 自己只把 applied_ops 主键冲突当幂等处理，
+//   别的唯一约束照原样抛（同样是 409 / 23505），settings 的 patch 改不了 key，碰不到 (user_id, key)
 // 纯 TS：不准 import React 和任何功能（A1）
 import { getBoot } from './boot.ts';
 import { collection, type Row } from './store.ts';
@@ -75,7 +82,13 @@ export async function writeAiSwitchSettled(
     const row = rowOf(sw.key, item.id);
     if (!row) return false;
     stop();
-    void writeOn(sw, row, () => crypto.randomUUID()).catch(() => undefined);
+    void (async () => {
+      const w = await writeOn(sw, row, () => crypto.randomUUID());
+      if (!w.ok) return;
+      // 补写成功：被拒的 insert 不再有用，从“发送失败”区删掉（K6-sugg3 ②）
+      const cur = (await outbox.list()).find((i) => i.op_id === item.op_id);
+      if (cur && cur.state !== 'inflight') await outbox.discard(item.op_id);
+    })().catch(() => undefined);
     return true;
   };
   const offEvent = outbox.onEvent((e) => {

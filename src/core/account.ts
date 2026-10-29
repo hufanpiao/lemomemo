@@ -234,7 +234,10 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
 export interface RemovedDeps {
   /** platform/session.ts 的 clearCacheStorage（只删运行时缓存） */
   clearCacheStorage(): Promise<void>;
-  /** 清完以后：删本机会话（clearLocalSession，signOut 这时多半走不通）、回登录页显示“已被移除”的提示 */
+  /**
+   * 清完以后：回登录页显示“已被移除”的提示。本机会话由调用方在调 wipeOnRemoved 之前同步删掉（takeLocalSession），
+   * 这里只按删掉的 session_id 再删一次（clearLocalSessionIf；K6-sugg3 ①，同 signedOutHere）
+   */
   onRemoved(): void;
 }
 

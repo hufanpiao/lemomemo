@@ -9,6 +9,7 @@ import { createSync, type Sync, type SyncOptions } from '../../core/sync/engine.
 import { fakeTransport } from '../../core/sync/__tests__/fake-server.ts';
 import { fakeIndexedDB } from '../../core/__tests__/idb-fake.ts';
 import { todo, uid } from '../../core/__tests__/outbox-fixtures.ts';
+import { clearLocalSessionIf, readSessionUserId, takeLocalSession } from '../../platform/session.ts';
 import { wireSync } from '../sync-wiring.ts';
 
 const reload = vi.fn();
@@ -38,7 +39,8 @@ function deps(create?: (b: BootResult, o: SyncOptions) => Sync) {
   return {
     transport: fakeTransport(),
     clearCacheStorage: vi.fn(() => Promise.resolve()),
-    clearLocalSession: vi.fn(),
+    takeLocalSession: vi.fn((): string | null => 's1'),
+    clearLocalSessionIf: vi.fn(),
     goToAuth: vi.fn(),
     setExitNotice: vi.fn(),
     ...(create ? { create } : {}),
@@ -89,7 +91,9 @@ describe('wireSync', () => {
     s.removed('session_not_found');
     s.removed('auth_failed');
     await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
-    expect(d.clearLocalSession).toHaveBeenCalledTimes(1);
+    expect(d.takeLocalSession).toHaveBeenCalledTimes(1);
+    expect(d.clearLocalSessionIf).toHaveBeenCalledTimes(1);
+    expect(d.clearLocalSessionIf).toHaveBeenCalledWith('s1');   // 只在会话还是开头删掉的那一个时再删
     expect(d.clearCacheStorage).toHaveBeenCalledTimes(1);
     expect(boot.cache?.isClosed()).toBe(true);
     expect(reload).not.toHaveBeenCalled();
@@ -122,7 +126,8 @@ describe('wireSync', () => {
       await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
       expect(d.setExitNotice).toHaveBeenCalledWith(notice);
       expect(d.setExitNotice.mock.invocationCallOrder[0]).toBeLessThan(d.goToAuth.mock.invocationCallOrder[0] ?? 0);
-      expect(d.clearLocalSession).toHaveBeenCalledTimes(1);
+      expect(d.takeLocalSession).toHaveBeenCalledTimes(1);
+      expect(d.clearLocalSessionIf).toHaveBeenCalledWith('s1');
       expect(d.clearCacheStorage).toHaveBeenCalledTimes(1);
       expect(boot.switching).toBe(true);
       expect(boot.cache?.isClosed()).toBe(true);
@@ -138,5 +143,66 @@ describe('wireSync', () => {
     s.removed('session_not_found');
     await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
     expect(d.setExitNotice).toHaveBeenCalledWith('removed');
+  });
+});
+
+// K6-sugg3 ①：被移除、停用时，本机会话在收到事件的同一个同步段里就删；清库那几秒里别的标签页刚登录的新会话，回登录页前不再被删
+describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 takeLocalSession / clearLocalSessionIf）', () => {
+  const A = '00000000-0000-4000-8000-00000000000a';
+  const B = '00000000-0000-4000-8000-00000000000b';
+  /** 测试环境没配 supabaseUrl：session.ts 按 `sb-*-auth-token` 格式找 */
+  const KEY = 'sb-lemotest-auth-token';
+  const tok = (sid: string): string => `h.${btoa(JSON.stringify({ session_id: sid })).replace(/=+$/, '')}.s`;
+  const seed = (sid: string, user = A): void => localStorage.setItem(KEY, JSON.stringify({ access_token: tok(sid), user: { id: user } }));
+
+  afterEach(() => localStorage.clear());
+
+  /** 清运行时缓存卡在 gate 上（= 清库那几秒）；会话层用真的 */
+  async function setup() {
+    seed('s1');
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    const boot = await coldStart(opts(fakeIndexedDB().factory));
+    const s = spySync();
+    const d = {
+      ...deps(s.create),
+      clearCacheStorage: vi.fn(() => gate),
+      takeLocalSession: () => takeLocalSession(),
+      clearLocalSessionIf: (sid: string | null) => clearLocalSessionIf(sid),
+    };
+    wireSync(boot, d);
+    return { boot, s, d, release };
+  }
+
+  for (const via of ['同步引擎（刷新令牌失败）', 'outbox 的 disabled 事件'] as const) {
+    it(`${via}：收到的同一刻就删；清库期间别的标签页登录的新会话（别的账号、同一账号的新会话）回登录页时都不删`, async () => {
+      for (const [sid, user] of [['s2', B], ['s2', A]] as const) {
+        resetBootForTest();
+        localStorage.clear();
+        const t = await setup();
+        if (via === '同步引擎（刷新令牌失败）') t.s.removed('session_not_found');
+        else {
+          const ob = t.boot.outbox;
+          if (!ob) throw new Error('outbox');
+          await ob.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
+          const a = await ob.next();
+          await ob.fail(a?.op_id ?? '', { status: 403, code: 'account_disabled' });
+        }
+        expect(readSessionUserId()).toBeNull();   // 删掉了，清库还没完
+        seed(sid, user);   // 清库那几秒：别的标签页登录了
+        t.release();
+        await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
+        expect(readSessionUserId()).toBe(user);   // 新会话还在
+      }
+    });
+  }
+
+  it('旧会话被晚到的令牌刷新写回（还是 s1）：回登录页前再删一次', async () => {
+    const t = await setup();
+    t.s.removed('session_not_found');
+    seed('s1');
+    t.release();
+    await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
+    expect(readSessionUserId()).toBeNull();
   });
 });

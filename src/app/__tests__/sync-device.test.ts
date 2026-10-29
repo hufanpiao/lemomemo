@@ -42,7 +42,7 @@ async function wire(platform: string, offline = false) {
   wireSync(boot, {
     transport: t,
     clearCacheStorage: () => Promise.resolve(),
-    clearLocalSession: () => undefined,
+    takeLocalSession: () => null, clearLocalSessionIf: () => undefined,
     goToAuth: () => undefined,
     setExitNotice: () => undefined,
     platform,
@@ -124,7 +124,7 @@ describe('登记挂起期间的状态变化（K4 审查 2）、恢复网络（K4
     wireSync(boot, {
       transport: t,
       clearCacheStorage: () => Promise.resolve(),
-      clearLocalSession: () => undefined,
+      takeLocalSession: () => null, clearLocalSessionIf: () => undefined,
       goToAuth: () => undefined,
       setExitNotice: () => undefined,
       platform: 'web',
@@ -212,7 +212,7 @@ describe('report_tz 回 rate_limited（接手清单 K8-tz-rl）', () => {
     const spy = vi.spyOn(Date, 'now').mockImplementation(() => clock);
     try {
       wireSync(boot, {
-        transport: t, clearCacheStorage: () => Promise.resolve(), clearLocalSession: () => undefined, goToAuth: () => undefined,
+        transport: t, clearCacheStorage: () => Promise.resolve(), takeLocalSession: () => null, clearLocalSessionIf: () => undefined, goToAuth: () => undefined,
         setExitNotice: () => undefined, platform: 'ios', deviceId: () => 'dev-1', create: () => idleSync(), lifecycle: fakeLife(true),
         log: (act) => logs.push(act),
         onActivity: (fn) => {

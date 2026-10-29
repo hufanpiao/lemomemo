@@ -90,6 +90,8 @@
 - **A. 自动（推荐）**：Resend 域名页上有 **Sign in to Cloudflare** 按钮（Domain Connect），点了以后在 Cloudflare 页面里确认，Resend 会把记录自动加好。这一步是给 Resend 授权改你的 DNS，**只授权这一次、只对 lemomemo.com**；你看清楚授权页写的是什么再点同意。
 - **B. 手动**：打开 Cloudflare › lemomemo.com › DNS › Records › Add record，照 Resend 页面上的值逐条加。名字一栏**只填前缀**（例如 `send`），不要填成 `send.lemomemo.com`。
 
+> **10-29 22:40 实做更正**：Resend 现在给的是新格式，用 A 自动配置加了三条：TXT `resend._domainkey`（DKIM）、CNAME `send` → `send.forge.rmta.net`、CNAME `rsend` → `rsend-apne1.forge.rmta.net`（都是“仅 DNS”）。没有下表里的 MX 和 SPF 的 TXT。主持人已在公网查到三条都生效。`_dmarc` 仍要手动加。下表是旧格式，留作参照。
+
 要加的记录（**值一律以 Resend 页面上显示的为准**，下面是样子）：
 
 | 类型 | 名称 | 内容 | 优先级 | 代理状态 | 作用 |
@@ -130,6 +132,10 @@ DMARC 先用 `p=none`（只观察、不拦截）。上线后两周如果预览�
 3. 点 **Save**。
 4. 保存后，Supabase 会把“每小时发信上限”设成 30 封。**保持 30，不要调高**（架构 15.6 总表、12 节风险 4d）。在 Authentication › Rate Limits 页能看到。
 5. 回到 Claude 说一句“预览（或正式）的 SMTP 填好了”。不要把密钥发过来。
+
+### 第 4b 步：验证码位数和有效期（10-29 实测补）
+
+托管项目默认是 8 位、3600 秒，和本机 `config.toml`（`otp_length = 6`、`otp_expiry = 600`）、邮件里写的“10 分钟内有效”不一致。在 **Authentication › Sign In / Providers › Email** 把 **Email OTP length** 改成 `6`、**Email OTP expiration** 改成 `600`，点 Save。预览、正式各一次。
 
 ### 第 5 步：粘贴模板（负责人粘贴；约 2 分钟）
 
