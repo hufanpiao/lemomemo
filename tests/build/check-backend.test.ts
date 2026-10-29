@@ -436,6 +436,35 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(errors.every((e) => e.message.includes('全局事件属性'))).toBe(true);
   });
 
+  it('F7（审查员第九轮低 1）：简写属性 { onunhandledrejection }、{ addEventListener }、{ Reflect } 把全局的东西当值带走，照报；同名的本地变量、参数不报', () => {
+    const { code, errors } = run(sample('f7-shorthand'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([2, 3, 4, 5].map((n) => `F7 supabase/functions/push-dispatch/index.ts:${n}`));
+  });
+
+  it('F7（代码审查第十轮）：本地 import 有百分号编码、查询串或锚点报 F7，解码 / 去掉后照样查 F2、F3（第十二轮）；解析后落在 supabase/functions 外面的本地 import 报 F7；没有百分号、落在里面的不报', () => {
+    const { code, errors } = run(sample('f7-import-local'));
+    expect(code).toBe(1);
+    const f = 'supabase/functions/push-dispatch/index.ts';
+    expect(where(errors)).toEqual([
+      `F2 ${f}:2`, `F7 ${f}:2`, `F2 ${f}:3`, `F7 ${f}:3`, `F3 ${f}:4`, `F7 ${f}:4`, `F7 ${f}:5`, `F7 ${f}:6`,
+      `F2 ${f}:7`, `F7 ${f}:7`, `F3 ${f}:8`, `F7 ${f}:8`,
+    ].sort());
+    const f7 = (line: number) => errors.find((e) => e.rule === 'F7' && e.line === line)?.message ?? '';
+    expect(f7(2)).toContain('百分号');
+    expect(f7(5)).toContain('supabase/functions 外面');
+    expect(f7(6)).toContain('supabase/functions 外面');
+    expect(f7(7)).toContain('查询串或锚点');
+    expect(f7(8)).toContain('查询串或锚点');
+  });
+
+  it('F2（B1 接手清单 C10）：不在名单里的函数用绝对路径、盘符路径、file: 地址、指到绝对路径的 import map 别名引 db.ts → 错误；名单里的函数、引别的共用模块不报', () => {
+    const { code, errors } = run(sample('f2-abs-path'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([2, 3, 4, 5].map((n) => `F2 supabase/functions/push-dispatch/index.ts:${n}`));
+    expect(errors.every((e) => e.message.includes('_shared/db.ts'))).toBe(true);
+  });
+
   it('F7（代码审查第八轮必改 ②）：Object.values / entries / assign 的参数、对象展开 { ...x } 的类型是 EventTarget、{}、object 报；类型具体的、对象字面量、条件展开字面量不报', () => {
     const { code, errors } = run(sample('f7-spread-vague'));
     expect(code).toBe(1);

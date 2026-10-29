@@ -1,0 +1,4 @@
+{
+  "$comment": "样例（B1 接手清单 C10）：别名指到绝对路径的 db.ts",
+  "imports": { "@db": "/home/runner/work/lemo/supabase/functions/_shared/db.ts" }
+}

@@ -90,11 +90,14 @@ Pages Functions（functions/）和 App、shared：
 """
 import argparse
 import json
+import os
 import pathlib
 import re
 import subprocess
 import sys
 import tomllib
+import urllib.parse
+import urllib.request
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from check_arch import strip_comments  # noqa: E402  去掉 // 和 /* */，行号不变；只给 import map 的 JSON 用，源码一律走 check_backend_ast.mjs（AST）
@@ -311,11 +314,66 @@ class Fns:
         for line, spec, type_only in imports(self.ast[rel]):
             if type_only:
                 continue
-            target = self._target((self.base / rel).parent / spec) if spec.startswith(".") else None
-            out.append((line, target, spec))
+            out.append((line, self._local(spec, (self.base / rel).parent), spec))
             for mapped, d in self.expand(spec):
-                t = self._target(d / mapped) if mapped.startswith(".") else None
-                out.append((line, t, mapped))
+                out.append((line, self._local(mapped, d), mapped))
+        return out
+
+    @staticmethod
+    def is_local(spec):
+        """本地文件的 import：相对路径、/ 开头、盘符开头、file: 地址"""
+        return (spec.startswith(".") or spec.startswith("/") or spec.lower().startswith("file:")
+                or (re.match(r"^[A-Za-z]:", spec) is not None and spec[2:3] in ("/", chr(92))))
+
+    def _local_path(self, spec, base_dir):
+        """本地 import 解析成本机路径（百分号编码先解码：Deno 按 URL 解析，../_shared/%64b.ts 就是 db.ts，第十轮必改）；不是本地 import 返回 None"""
+        if not self.is_local(spec):
+            return None
+        spec = re.split(r"[?#]", spec, maxsplit=1)[0]   # 查询串、锚点不影响载入哪个文件（第十二轮必改：db.ts?v=1、db.ts#a 就是 db.ts）
+        if spec.lower().startswith("file:"):
+            p = urllib.parse.urlparse(spec)
+            raw = urllib.request.url2pathname(p.netloc + p.path) if os.name == "nt" else urllib.parse.unquote(p.path)
+        else:
+            raw = urllib.parse.unquote(spec)
+        return base_dir / raw if spec.startswith(".") else pathlib.Path(raw)
+
+    def _local(self, spec, base_dir):
+        """spec 指到 supabase/functions 里的哪个文件（rel）或 None。相对路径按 base_dir 解析；
+        绝对路径（/…、盘符开头的 C: 路径）和 file: 地址（B1 接手清单 C10）先按本机路径解析，对不上再按路径里 supabase/functions/ 后面那段对
+        （别的机器上的绝对路径、CI 里的路径也认得出；目录名大小写不同也算，宁严勿漏）"""
+        path = self._local_path(spec, base_dir)
+        if path is None:
+            return None
+        t = self._target(path)
+        if t is not None or spec.startswith("."):
+            return t
+        m = re.search(r"(?:^|/)supabase/functions/(.+)$", str(path).replace(chr(92), "/"), re.IGNORECASE)
+        if not m:
+            return None
+        tail = m.group(1).lower()
+        return next((r for r in self.code if r.lower() == tail), None)
+
+    def local_findings(self, rel):
+        """F7（第十轮）：本地 import 里有百分号编码；解析后落在 supabase/functions 外面（不在扫描范围，查不到里面读了什么）。
+        import map 展开后的结果按 map 所在目录同样查。返回 [(行号, 说明)]"""
+        out = []
+        for line, spec, type_only in imports(self.ast[rel]):
+            cands = [(spec, (self.base / rel).parent)] + [(m, d) for m, d in self.expand(spec)]
+            for s, d in cands:
+                if not self.is_local(s):
+                    continue
+                if "%" in s:
+                    out.append((line, f"本地 import 的地址里不准有百分号编码（{s}）：Deno 会先解码再载入，名字匹配看不出引的是哪个文件"))
+                    continue
+                if "?" in s or "#" in s:
+                    out.append((line, f"本地 import 的地址里不准带查询串或锚点（{s}）：Deno 去掉 ? / # 后面的部分照样载入那个文件，名字匹配看不出引的是哪个"))
+                    continue
+                if self._local(s, d) is not None:
+                    continue
+                try:
+                    self._local_path(s, d).resolve().relative_to(self.base.resolve())
+                except ValueError:
+                    out.append((line, f"本地 import 落在 supabase/functions 外面（{s}）：那里不在扫描范围，查不到里面读了什么（部署时也不存在）"))
         return out
 
     def expand(self, spec):
@@ -516,6 +574,8 @@ def check_bypass(fns, errors):
         for f in res["findings"]:
             errors.append(("F7", path, f["line"], f["message"]))
         for line, msg in import_findings(fns, rel):
+            errors.append(("F7", path, line, msg))
+        for line, msg in fns.local_findings(rel):
             errors.append(("F7", path, line, msg))
         # 第五轮必改 1：不准 import 别的函数目录里的文件（只准 _shared/ 和本函数目录）。
         #   否则 SIGNUP_HASH_SECRET、fn_vault 这类“只准某几个函数读”的规则，换个函数 import 一下就绕开了

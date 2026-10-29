@@ -312,7 +312,9 @@ function makeKeyRules(checker) {
   };
   /** 不带前缀的名字是不是指向全局（声明都在 TypeScript 自带的 lib 文件里，或者解析不到声明） */
   const isGlobalName = (id) => {
-    const ds = resolve(id)?.declarations ?? [];
+    // 简写属性 { x } 的名字解析到的是新对象的属性，值的来源要用 getShorthandAssignmentValueSymbol 取
+    const sym = id.parent && ts.isShorthandPropertyAssignment(id.parent) && id.parent.name === id ? checker.getShorthandAssignmentValueSymbol(id.parent) : resolve(id);
+    const ds = sym?.declarations ?? [];
     return ds.length === 0 || ds.every((d) => d.getSourceFile().hasNoDefaultLib || /[\\/]typescript[\\/]lib[\\/]/.test(d.getSourceFile().fileName));
   };
   return { keyProblem, whitelisted, staticFn, hasOwnGuarded, argAnyish, isGlobalName };
@@ -469,7 +471,8 @@ function analyse(path, rel, f7, fnRel, rules, program) {
     //   Object 只准跟 .名字，按键取属性的那几个方法只准直接调用。类型位置（x: Object、typeof Reflect）不管
     if (name === 'Reflect' || name === 'Object') {
       if (p && (ts.isTypeReferenceNode(p) || ts.isTypeQueryNode(p) || ts.isExpressionWithTypeArguments(p) || ts.isQualifiedName(p))) return;
-      if (p && v === node && 'name' in p && p.name === node) return;   // 声明 / 属性名本身（{ Object: 1 }）
+      // 简写属性 { Reflect } 会把 Reflect 当值带走，不算属性名，照查（第九轮低 1）
+      if (p && v === node && 'name' in p && p.name === node && !ts.isShorthandPropertyAssignment(p)) return;   // 声明 / 属性名本身（{ Object: 1 }）
       const d = dotAfter(v);
       const called = d && ts.isCallExpression(d.parent) && d.parent.expression === d && !d.parent.questionDotToken;
       if (name === 'Reflect' && !called) { bad(node, 'Reflect 只准直接调用 Reflect.方法(…)：存进变量、解构、方括号取值、?. 都能绕开键参数的检查'); return; }
@@ -509,18 +512,21 @@ function analyse(path, rel, f7, fnRel, rules, program) {
     }
     // 第八轮必改 ①：全局的事件监听 / 派发（不带对象前缀，或挂在 globalThis / self / window 上）一律禁用——事件对象能带出全局对象
     if (EVENT_FNS.has(name)) {
-      if (v === node && p && 'name' in p && p.name === node) return;   // 声明的名字（类方法、对象属性）本身不算
+      // 简写属性 { addEventListener } 同上，照查（第九轮低 1）
+      if (v === node && p && 'name' in p && p.name === node && !ts.isShorthandPropertyAssignment(p)) return;   // 声明的名字（类方法、对象属性）本身不算
       const owner = v !== node ? v.expression : null;
       let o = owner;
       while (o && (ts.isParenthesizedExpression(o) || ASSERT(o))) o = o.expression;
-      if (!owner || (ts.isIdentifier(o) && (GLOBALS.has(o.text) || aliases.has(o.text)))) {
+      // 不带前缀的：名字确实指向全局才报（同名的局部变量、参数不算；没有类型检查器时一律报）
+      if ((!owner && (!rules || rules.isGlobalName(node))) || (o && ts.isIdentifier(o) && (GLOBALS.has(o.text) || aliases.has(o.text)))) {
         bad(node, `全局的 ${name} 不准用（不带对象前缀、或 globalThis / self / window. 上的）：事件对象能带出全局对象；要监听请用具体对象的方法`);
         return;
       }
     }
     // 第八轮低：全局事件属性 onunhandledrejection、onerror、onload…——给它赋值就能拿到全局事件（事件对象带得出全局对象），读取也不准
     if (EVENT_PROPS.has(name)) {
-      if (v === node && p && 'name' in p && p.name === node) return;   // 声明的名字本身（局部变量、参数、属性名）
+      // 简写属性 { onunhandledrejection } 读的是同名变量的值，不算声明，照查（第九轮低 1）
+      if (v === node && p && 'name' in p && p.name === node && !ts.isShorthandPropertyAssignment(p)) return;   // 声明的名字本身（局部变量、参数、属性名）
       const owner = v !== node ? v.expression : null;
       let o = owner;
       while (o && (ts.isParenthesizedExpression(o) || ASSERT(o))) o = o.expression;
