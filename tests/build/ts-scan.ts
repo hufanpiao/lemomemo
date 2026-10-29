@@ -3,113 +3,9 @@
 // 不 import typescript：否则引它的测试文件按 tests/arch/coverage.test.ts 要登记进 vitest.config.ts 的 SLOW_NODE_TESTS。
 // 正反例在 tests/build/ts-scan.test.ts。偏严：认不出的写法宁可当“没覆盖”，不当“覆盖了”。
 
-export type Scanned = { text: string; skel: string };
+import { firstNonSpace, literalAt, matchClose, scan, splitTop, stmtEnd, type Scanned } from './ts-scan-core.ts';
 
-/** 这些词后面的 / 是正则开头（其余词、) ] } 和后置 ++ -- 后面是除号） */
-const REGEX_AFTER_WORD = new Set(['return', 'typeof', 'instanceof', 'case', 'of', 'in', 'else', 'await', 'yield', 'void', 'throw', 'new', 'delete', 'do']);
-
-/** text：注释换成空格；skel：再把字符串、模板字面部分、正则字面量的内容换成空格（引号留着），用来找括号、调用 */
-export function scan(code: string): Scanned {
-  const text = code.split(''), skel = code.split('');
-  const n = code.length;
-  const blank = (arr: string[], from: number, to: number) => { for (let k = from; k < Math.min(to, n); k++) if (arr[k] !== '\n') arr[k] = ' '; };
-  let prev = '', prevWord = '';
-  const regexOk = () => prev === '' || '(,=:[!&|?{};+-*%<>~^'.includes(prev) || REGEX_AFTER_WORD.has(prevWord);
-
-  function template(start: number): number {
-    let j = start + 1, lit = j;
-    while (j < n && code[j] !== '`') {
-      if (code[j] === '\\') { j += 2; continue; }
-      if (code[j] === '$' && code[j + 1] === '{') {
-        blank(skel, lit, j);
-        prev = '{'; prevWord = '';
-        j = run(j + 2, true);
-        lit = j;
-        continue;
-      }
-      j++;
-    }
-    blank(skel, lit, j);
-    return j + 1;
-  }
-
-  /** 扫代码；inExpr（模板的 ${…}）时遇到本层的 } 返回它后面的下标 */
-  function run(start: number, inExpr: boolean): number {
-    let i = start, depth = 0;
-    while (i < n) {
-      const c = code[i] ?? '';
-      const d = code[i + 1] ?? '';
-      if (c === '/' && (d === '/' || d === '*')) {
-        const cl = d === '/' ? code.indexOf('\n', i) : code.indexOf('*/', i + 2);
-        const end = cl < 0 ? n : d === '/' ? cl : cl + 2;
-        blank(text, i, end); blank(skel, i, end); i = end; continue;
-      }
-      if (c === '\'' || c === '"') {
-        let j = i + 1;
-        while (j < n && code[j] !== c && code[j] !== '\n') j += code[j] === '\\' ? 2 : 1;
-        blank(skel, i + 1, j); i = j + 1; prev = c; prevWord = ''; continue;
-      }
-      if (c === '`') { i = template(i); prev = '`'; prevWord = ''; continue; }
-      if (c === '/' && regexOk()) {
-        let j = i + 1, cls = false;
-        while (j < n && code[j] !== '\n' && (cls || code[j] !== '/')) {
-          if (code[j] === '\\') { j += 2; continue; }
-          if (code[j] === '[') cls = true; else if (code[j] === ']') cls = false;
-          j++;
-        }
-        blank(skel, i + 1, j); i = j + 1; prev = ')'; prevWord = ''; continue;
-      }
-      if (/[\w$]/.test(c)) {
-        let j = i;
-        while (j < n && /[\w$]/.test(code[j] ?? '')) j++;
-        prevWord = code.slice(i, j); prev = 'a'; i = j; continue;
-      }
-      if ((c === '+' || c === '-') && d === c) { prev = ')'; prevWord = ''; i += 2; continue; }
-      if (inExpr && c === '{') depth++;
-      if (inExpr && c === '}') { if (depth === 0) return i + 1; depth--; }
-      if (!/\s/.test(c)) { prev = c; prevWord = ''; }
-      i++;
-    }
-    return n;
-  }
-
-  run(0, false);
-  return { text: text.join(''), skel: skel.join('') };
-}
-
-/** skel 里 open 处的 ( [ { 对应的闭括号下标；找不到回 -1 */
-export function matchClose(skel: string, open: number): number {
-  const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
-  const stack: string[] = [];
-  for (let k = open; k < skel.length; k++) {
-    const ch = skel[k] ?? '';
-    if (ch in pairs) stack.push(pairs[ch] ?? '');
-    else if (ch === ')' || ch === ']' || ch === '}') { if (stack.pop() !== ch) return -1; if (stack.length === 0) return k; }
-  }
-  return -1;
-}
-
-/** 括号 open..close 之间按顶层逗号切开：[起, 止) 列表 */
-function splitTop(skel: string, open: number, close: number): [number, number][] {
-  const out: [number, number][] = [];
-  let depth = 0, from = open + 1;
-  for (let k = open + 1; k < close; k++) {
-    const ch = skel[k];
-    if (ch === '(' || ch === '[' || ch === '{') depth++;
-    else if (ch === ')' || ch === ']' || ch === '}') depth--;
-    else if (ch === ',' && depth === 0) { out.push([from, k]); from = k + 1; }
-  }
-  if (skel.slice(from, close).trim() !== '') out.push([from, close]);
-  return out;
-}
-
-const firstNonSpace = (s: string, at: number) => { let k = at; while (/\s/.test(s[k] ?? '')) k++; return k; };
-
-/** 字符串字面量的内容（skel 里引号之间是空格，闭引号就是下一个同样的引号） */
-function literalAt(sc: Scanned, at: number): string | null {
-  const q = sc.skel[at] ?? '', close = sc.skel.indexOf(q, at + 1);
-  return (q !== '\'' && q !== '"' && q !== '`') || close < 0 ? null : sc.text.slice(at + 1, close);
-}
+export { matchClose, scan, type Scanned } from './ts-scan-core.ts';
 
 const SKIP_KEYS = new Set(['ignore', 'skip', 'todo', 'fails']);
 
@@ -202,9 +98,60 @@ export function testCases(code: string): TestCase[] {
     if (title === null) continue;
     const inSkip = spans.find((s) => s.span[0] < open && close < s.span[1]);
     if (inSkip) skipped = `包在 ${inSkip.why} 里`;
-    out.push({ title, body: sc.text.slice(open, close + 1), skel: sc.skel.slice(open, close + 1), skipped });
+    const body = sc.text.slice(open, close + 1), skel = sc.skel.slice(open, close + 1);
+    skipped ??= runtimeSkip({ body, skel });
+    out.push({ title, body, skel, skipped });
   }
   return out;
+}
+
+const FALSY = /^(?:false|0|null|undefined|NaN|void\s+0|!\s*(?:true|1)|''|""|``)$/;
+
+/** 永远不执行的 then 分支：if (false) / if (0) / if (null) … 后面那一句或那一块（else 分支照常执行，不算） */
+function deadSpans(tc: Pick<TestCase, 'body' | 'skel'>): [number, number][] {
+  const { skel, body } = tc, out: [number, number][] = [];
+  for (const m of skel.matchAll(/(?<![\w$.])if\s*\(/g)) {
+    const o = (m.index ?? 0) + m[0].length - 1, c = matchClose(skel, o); if (c < 0) continue;
+    let cond = body.slice(o + 1, c).trim();
+    while (/^\(.*\)$/s.test(cond) && matchClose(cond, 0) === cond.length - 1) cond = cond.slice(1, -1).trim();
+    if (!FALSY.test(cond)) continue;
+    const at = firstNonSpace(skel, c + 1);
+    out.push([at, skel[at] === '{' ? matchClose(skel, at) : stmtEnd(skel, at)]);
+  }
+  return out;
+}
+
+/** 只有一层函数（用例回调本身）包着 pos：回调里直接执行，不在嵌套函数里 */
+const directIn = (skel: string) => { const fns = fnSpans(skel); return (pos: number) => fns.filter((s) => s[0] <= pos && pos <= s[1]).length === 1; };
+
+/**
+ * 运行时才跳过（FN-cov-gaps ②；静态的 it.skip、describe.skip、{ skip / ignore } 选项在上面）：回原因，null = 会跑。
+ * ① 回调里直接执行的 return（if (!db) return、if (!db) { …; return; } 都算）后面还有白名单断言：断言可能不执行；
+ *   return 那一句自己带的断言（return expect(p).resolves.toBe(x)）不算在“后面”；嵌套函数里的 return 不算；
+ *   紧挨着的上一句 expect 已经钉死了条件的 if (…) return（类型收窄写法，见 guardedReturn）不算。
+ * ② 回调里任何地方调了 skip(…)（vitest 的 ctx.skip()、context.skip(cond)、解构出来的 skip()、mocha 的 this.skip()）：
+ *   不论前后有没有断言都算（偏严）。边界（DBTEST-sugg ②）：只看调用名是不是 skip，不看是谁的 skip——
+ *   查询构造器、游标、数组包装之类别的对象的 .skip(n)、自己定义的同名函数 skip(…) 也一律算“运行时跳过”（误报只会让用例被当成不会跑，
+ *   不会当成覆盖了）；被 PLAN 引用的用例里真要用这种 API，就换个名字包一层（如 const page = q.skip.bind(q)，不写成 skip( 调用）。
+ *   skipIf(…)、mySkip(…)、x.skipped 这类名字里只是带 skip 的不算。
+ * if (false) {…} 这类永远不执行的分支里的 return、skip 不算（里面的断言也不算，见 expectations）。
+ * 认不出的：经变量间接调 skip（const s = ctx.skip; s()）、throw 后的断言、process.exit 之类，照旧当会跑。
+ */
+function runtimeSkip(tc: Pick<TestCase, 'body' | 'skel'>): string | null {
+  const { skel } = tc, direct = directIn(skel), dead = deadSpans(tc);
+  const live = (p: number) => !dead.some(([a, b]) => a <= p && p <= b);
+  for (const m of skel.matchAll(/(?<![\w$])skip\s*\(/g)) {
+    const at = m.index ?? 0; if (!live(at)) continue;
+    const recv = (/(?:[\w$]+\s*\.\s*)?$/.exec(skel.slice(Math.max(0, at - 40), at))?.[0] ?? '').replace(/\s+/g, '');
+    return `运行时跳过：回调里调了 ${recv}skip(…)`;
+  }
+  const asserts = expectations(tc).map((e) => e.at), chains = expectChains(tc);
+  for (const m of skel.matchAll(/(?<![\w$.])return(?![\w$])/g)) {
+    const r = m.index ?? 0; if (!direct(r) || !live(r)) continue;
+    const end = stmtEnd(skel, r + 'return'.length);
+    if (asserts.some((q) => q > end) && !guardedReturn(tc, r, chains)) return '运行时可能跳过：回调里断言前有 return';
+  }
+  return null;
 }
 
 const CONTROL = new Set(['if', 'for', 'while', 'switch', 'catch', 'function', 'return', 'with']);
@@ -235,14 +182,18 @@ function fnSpans(skel: string): [number, number][] {
 const ASSERT_FNS = new Set(['assertEquals', 'assertStrictEquals', 'assertObjectMatch', 'assertMatch']);
 const MATCHERS = new Set(['toEqual', 'toStrictEqual', 'toMatchObject', 'toBe']);
 
-/** 用例回调里直接执行（不在嵌套函数里）的白名单断言：返回“期望值”参数的文本（expect 链取匹配器的参数，assert 取第 2 个参数） */
-function expectations(tc: Pick<TestCase, 'body' | 'skel'>): { fn: string; text: string }[] {
-  const { skel, body } = tc, fns = fnSpans(skel);
-  const direct = (pos: number) => fns.filter((s) => s[0] <= pos && pos <= s[1]).length === 1;
-  const out: { fn: string; text: string }[] = [];
-  for (const m of skel.matchAll(/(?<![\w$.])expect(?:\s*\.\s*soft)?\s*\(/g)) {
-    const start = m.index ?? 0;
-    let end = matchClose(skel, start + m[0].length - 1), lastCall: [number, number] | null = null;
+/** 一条 expect 链：expect(subject…)[.mods].matcher(arg)；soft = expect.soft（失败不抛，不能当守卫）；end = 链最后的 ) */
+type ExpectChain = { start: number; soft: boolean; subject: string; matcher: string; mods: string[]; arg: string; end: number };
+
+/** 用例回调里直接执行（不在嵌套函数里、不在 if (false) 死分支里）的 expect 链 */
+function expectChains(tc: Pick<TestCase, 'body' | 'skel'>): ExpectChain[] {
+  const { skel, body } = tc, inFn = directIn(skel), dead = deadSpans(tc);
+  const direct = (pos: number) => inFn(pos) && !dead.some(([a, b]) => a <= pos && pos <= b);
+  const out: ExpectChain[] = [];
+  for (const m of skel.matchAll(/(?<![\w$.])expect(\s*\.\s*soft)?\s*\(/g)) {
+    const start = m.index ?? 0, open = start + m[0].length - 1;
+    let end = matchClose(skel, open), lastCall: [number, number] | null = null;
+    const subj = end < 0 ? undefined : splitTop(skel, open, end)[0];
     const names: string[] = [];
     while (end > 0) {
       const rest = skel.slice(end + 1), dot = /^\s*\.\s*([\w$]+)/.exec(rest);
@@ -251,14 +202,82 @@ function expectations(tc: Pick<TestCase, 'body' | 'skel'>): { fn: string; text: 
       const o = end + call[0].length;
       end = matchClose(skel, o); lastCall = [o, end];
     }
-    const matcher = names[names.length - 1] ?? '', mods = names.slice(0, -1);
-    if (!lastCall || lastCall[1] < 0 || !MATCHERS.has(matcher) || mods.some((x) => x !== 'resolves') || !direct(start)) continue;
-    out.push({ fn: matcher, text: body.slice(lastCall[0] + 1, lastCall[1]) });
+    if (!lastCall || lastCall[1] < 0 || !subj || !direct(start)) continue;
+    out.push({
+      start, soft: m[1] !== undefined, subject: body.slice(subj[0], subj[1]), matcher: names[names.length - 1] ?? '',
+      mods: names.slice(0, -1), arg: body.slice(lastCall[0] + 1, lastCall[1]), end: lastCall[1],
+    });
+  }
+  return out;
+}
+
+/** 去掉引号外的空白（引号里的原样留着） */
+const squash = (s: string) => s.replace(/('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")|\s+/g, (_m, q: string | undefined) => q ?? '');
+
+/** 守卫的 E 只许纯标识符或成员访问链：a、r.ok、r?.ok、r['k']、r[0]（下标只许数字或字符串字面量）；运算、调用、await、++、模板都不认 */
+const PURE_PATH = /^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*|\[(?:\d+|'[^'\\]*'|"[^"\\]*")\])*$/;
+
+/** if 条件去掉外层括号 */
+const unparen = (s: string) => { let c = s.trim(); while (/^\(.*\)$/s.test(c) && matchClose(c, 0) === c.length - 1) c = c.slice(1, -1).trim(); return c; };
+
+/**
+ * 守卫：return 是 if (cond) return 的整个 then 分支，而且 if 紧挨着的上一句（同一块、只隔空白和 ;）是一条会抛的 expect，
+ * 它通过就意味着 cond 为假（DBTEST-sugg ①：expect(r.ok).toBe(true); if (!r.ok) return; 是类型收窄，不会跳过断言）。认的组合：
+ *   if (!E) ← expect(E).toBe(true) / toBeTruthy()
+ *   if (E)  ← expect(E).toBe(false) / toBeFalsy()（toEqual / toStrictEqual 不认：只认 Object.is 语义，偏严）
+ *   if (E === undefined) ← expect(E).toBeDefined()
+ * E 只许纯标识符或成员访问链（PURE_PATH；a || b、a + b、三元、it.next().done、await ready()、i++ 一律不认，免得优先级或重复求值骗过），
+ *   两边去空白后逐字相同；那条 expect 前面得是 ; { }（语句开头，不是 if (c) expect(…) 这种条件执行的）；expect.soft、带 .not / .resolves 的不认。
+ * 不认（照旧算可能跳过，偏严）：expect(m).toBeDefined(); if (!m) return;（m 是 null 时 toBeDefined 也过，return 真会执行）——
+ * 要写成 expect(m).toBeTruthy() 或 if (m === undefined) return；中间隔了别的语句、不写分号、else 分支里的 return 也不认。
+ */
+function guardedReturn(tc: Pick<TestCase, 'body' | 'skel'>, r: number, chains: ExpectChain[]): boolean {
+  const { skel, body } = tc, retEnd = stmtEnd(skel, r + 'return'.length);
+  if (skel.slice(r + 'return'.length, retEnd).trim() !== '') return false;
+  for (const m of skel.matchAll(/(?<![\w$.])if\s*\(/g)) {
+    const ifAt = m.index ?? 0, o = ifAt + m[0].length - 1, c = matchClose(skel, o); if (c < 0 || c > r) continue;
+    const at = firstNonSpace(skel, c + 1);
+    let whole = at === r;
+    if (!whole && skel[at] === '{') {
+      const bc = matchClose(skel, at), afterRet = firstNonSpace(skel, skel[retEnd] === ';' ? retEnd + 1 : retEnd);
+      whole = firstNonSpace(skel, at + 1) === r && afterRet === bc;
+    }
+    if (!whole) continue;
+    let before = ifAt - 1;
+    while (before >= 0 && /[\s;]/.test(skel[before] ?? '')) before--;
+    const g = chains.find((e) => e.end === before);
+    if (!g || g.soft || g.mods.length > 0) return false;
+    let p = g.start - 1; while (p >= 0 && /\s/.test(skel[p] ?? '')) p--;
+    if (p >= 0 && !';{}'.includes(skel[p] ?? '')) return false;
+    // 先拿原文过 PURE_PATH（审查必改：只比文本不管优先级，a || b 对 !a || b；带调用、await、++ 的还会重复求值），
+    //   再只去掉引号外的空白比对（r['a b'] 和 r['ab'] 是两个键）
+    const raw = g.subject.trim(); if (!PURE_PATH.test(raw)) return false;
+    const cond = squash(unparen(body.slice(o + 1, c))), subj = squash(raw), arg = squash(g.arg);
+    const eq = g.matcher === 'toBe';   // 只认 Object.is 语义（偏严）
+    if (cond === `!${subj}` || cond === `!(${subj})`) return (eq && arg === 'true') || (g.matcher === 'toBeTruthy' && arg === '');
+    if (cond === subj) return (eq && arg === 'false') || (g.matcher === 'toBeFalsy' && arg === '');
+    if (cond === `${subj}===undefined`) return g.matcher === 'toBeDefined' && arg === '';
+    return false;
+  }
+  return false;
+}
+
+/**
+ * 用例回调里直接执行（不在嵌套函数里）的白名单断言：返回“期望值”参数的文本（expect 链取匹配器的参数，assert 取第 2 个参数）和断言的起点；
+ * if (false) {…} 这类永远不执行的分支里的不算
+ */
+function expectations(tc: Pick<TestCase, 'body' | 'skel'>): { fn: string; text: string; at: number }[] {
+  const { skel, body } = tc, inFn = directIn(skel), dead = deadSpans(tc);
+  const direct = (pos: number) => inFn(pos) && !dead.some(([a, b]) => a <= pos && pos <= b);
+  const out: { fn: string; text: string; at: number }[] = [];
+  for (const e of expectChains(tc)) {
+    if (!MATCHERS.has(e.matcher) || e.mods.some((x) => x !== 'resolves')) continue;
+    out.push({ fn: e.matcher, text: e.arg, at: e.start });
   }
   for (const m of skel.matchAll(/(?<![\w$.])([\w$]+)\s*\(/g)) {
     const fn = m[1] ?? '', o = (m.index ?? 0) + m[0].length - 1; if (!ASSERT_FNS.has(fn) || !direct(m.index ?? 0)) continue;
     const arg = splitTop(skel, o, matchClose(skel, o))[1];
-    if (arg) out.push({ fn, text: body.slice(arg[0], arg[1]) });
+    if (arg) out.push({ fn, text: body.slice(arg[0], arg[1]), at: m.index ?? 0 });
   }
   return out;
 }
@@ -303,63 +322,5 @@ export function references(code: string, name: string): boolean {
   return [...names].some((nm) => new RegExp(`(?<![\\w$])${nm.replace(/\$/g, '\\$')}(?![\\w$])`).test(rest));
 }
 
-// ---------------- config.toml：只认这里用得到的子集（段落、点号键、内联表） ----------------
-
-function splitKey(k: string): string[] {
-  const out: string[] = [], re = /\s*(?:"([^"]*)"|'([^']*)'|([\w-]+))\s*(?:\.|$)/y;
-  let m: RegExpExecArray | null;
-  while (re.lastIndex < k.length && (m = re.exec(k))) out.push(m[1] ?? m[2] ?? m[3] ?? '');
-  return out;
-}
-
-/** 在引号、括号外找第一个 ch（at 处开始） */
-function topIndex(s: string, ch: string): number {
-  let q = '', depth = 0;
-  for (let k = 0; k < s.length; k++) {
-    const c = s[k] ?? ''; if (q) { if (c === q) q = ''; continue; }
-    if (c === '"' || c === '\'') q = c;
-    else if (c === '{' || c === '[') depth++;
-    else if (c === '}' || c === ']') depth--;
-    else if (c === ch && depth === 0) return k;
-  }
-  return -1;
-}
-
-/** config.toml 里声明的函数：名字 → { 键: 原样的值 }（[functions.x]、[functions] 下 x.k = v、x = { k = v }、根上 functions = { x = { … } }） */
-export function tomlFunctions(toml: string): Map<string, Map<string, string>> {
-  const out = new Map<string, Map<string, string>>();
-  const ensure = (path: string[]) => {
-    const nm = path[0] === 'functions' ? path[1] : undefined;
-    if (nm !== undefined && !out.has(nm)) out.set(nm, new Map());
-    return nm === undefined ? undefined : out.get(nm);
-  };
-  const put = (path: string[], raw: string) => {
-    const v = raw.trim(), kv0 = ensure(path);
-    if (v.startsWith('{') && v.endsWith('}')) {
-      let body = v.slice(1, -1);
-      while (body.trim() !== '') {
-        const comma = topIndex(body, ','), kv = comma < 0 ? body : body.slice(0, comma), eq = topIndex(kv, '=');
-        if (eq > 0) put([...path, ...splitKey(kv.slice(0, eq))], kv.slice(eq + 1));
-        body = comma < 0 ? '' : body.slice(comma + 1);
-      }
-      return;
-    }
-    if (path.length >= 3) kv0?.set(path.slice(2).join('.'), v);
-  };
-  let section: string[] = [];
-  for (const raw of toml.split('\n')) {
-    const hash = topIndex(raw, '#'), line = (hash < 0 ? raw : raw.slice(0, hash)).trim();
-    if (!line) continue;
-    if (line.startsWith('[[')) { section = ['[[]]']; continue; }
-    const sec = /^\[\s*(.+?)\s*\]$/.exec(line);
-    if (sec) { section = splitKey(sec[1] ?? ''); ensure(section); continue; }
-    const eq = topIndex(line, '=');
-    if (eq > 0) put([...section, ...splitKey(line.slice(0, eq))], line.slice(eq + 1));
-  }
-  return out;
-}
-
-/** config.toml 里 verify_jwt = true 的函数 */
-export function verifyJwtTrue(toml: string): Set<string> {
-  return new Set([...tomlFunctions(toml)].filter(([, kv]) => kv.get('verify_jwt') === 'true').map(([nm]) => nm));
-}
+// config.toml 的解析（tomlFunctions、verifyJwtTrue）在 ts-scan-toml.ts，这里转出，调用方照旧从 ts-scan.ts 引
+export { tomlFunctions, verifyJwtTrue } from './ts-scan-toml.ts';

@@ -18,7 +18,13 @@ export function applyLocale(locale: Locale): void {
   void updateCachedLocale(ui);
 }
 
-export function useLocaleSwitch(api: SettingsApi, onRevoked: (sid: string | null) => void, onSignedOut: (sid: string | null) => void) {
+export function useLocaleSwitch(
+  api: SettingsApi,
+  onRevoked: (sid: string | null) => void,
+  onSignedOut: (sid: string | null) => void,
+  /** account_disabled：先探测再定是否离开（R-256 ③）；不给就只提示失败 */
+  onDisabled?: (sid: string | null) => void,
+) {
   const current: Locale = useUi((s) => (s.locale === 'ko-KR' ? 'ko' : 'zh'));
   const [sync, setSync] = useState<LocaleSyncState>('idle');
 
@@ -34,9 +40,10 @@ export function useLocaleSwitch(api: SettingsApi, onRevoked: (sid: string | null
       }
       if (r.error === 'revoked') onRevoked(r.sid);   // 被拒那次请求用的会话（K6-sugg4 ①）
       else if (r.error === 'signed_out') onSignedOut(r.sid);
+      else if (r.error === 'account_disabled') onDisabled?.(r.sid);
       setSync('failed');
     },
-    [api, current, onRevoked, onSignedOut],
+    [api, current, onRevoked, onSignedOut, onDisabled],
   );
 
   return { current, sync, choose };

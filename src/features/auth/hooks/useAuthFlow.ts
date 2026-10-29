@@ -1,6 +1,8 @@
 // 登录页的流程（架构 5.6、5.9；线框 s14“一个流程：先填邮箱，新邮箱才需要邀请码”）
 //   email ──发码成功──▶ code ──填满 6 位自动校验──▶ done（跳回 /app/）
 //     └─回“还没注册”─▶ invite ──邀请码 + 人机验证──▶ invite-code ──填满 6 位──▶ done
+// 拿到会话以后、跳进 /app/ 之前先探测账号状态（R-256 ③、R-258，useAccountGate 的 check('login') 经 probe 传进来）：
+//   冷静期、停用、探测不出（unknown）时不跳，由登录页原地显示恢复页、“账号已停用”或“暂时无法确认账号状态”；active 才进 App
 // 错误各自一张卡片；发得太频繁、刚发过码都有 60 秒倒计时（Supabase：同一邮箱 60 秒一次）
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getSupabase } from '../../../platform/supabase/client.ts';
@@ -16,6 +18,7 @@ import {
   type AuthErr,
 } from '../data/auth-api.ts';
 import type { ExitSteps } from '../../../platform/sign-out.ts';
+import type { AccountGateApi } from '../data/account-gate.ts';
 import type { Captcha } from './useTurnstile.ts';
 
 export type { AuthErr };
@@ -56,17 +59,26 @@ export interface AuthFlowDeps {
   localExit?: ExitSteps;
   /** 测试用：“退出并换账号”服务器那一半的总超时（默认 useSessionGate 的 SIGN_OUT_TIMEOUT_MS） */
   signOutTimeoutMs?: number;
+  /** 测试用：account 的 status、restore 和恢复页退出用的 signOut local（默认 data/account-gate.ts 的 createAccountGateApi） */
+  account?: AccountGateApi;
+  /** 测试用：本机会话的 access token（默认 platform/session.ts 的 readSessionAccessToken；恢复页探测时记进内存） */
+  readToken?: () => string | null;
+  /** 测试用：会话已被别的标签页换掉时，用旧令牌直接 /logout（默认 platform/sign-out.ts 的 logoutWithToken） */
+  logoutWithToken?: (token: string, timeoutMs: number) => Promise<{ serverDone: boolean }>;
 }
 
 const defaultApi = (): AuthApi => createAuthApi(getSupabase);
 const goApp = () => location.replace('/app/');
 
-export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}) {
+/**
+ * probe：拿到会话以后先探测，true 才跳进 App（不传就直接跳）。
+ * 返回的 enterApp：不再探测、直接进 App（恢复页“恢复账号”成功后用）
+ */
+export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}, probe?: () => Promise<boolean>) {
   const api = useMemo(() => deps.api ?? defaultApi(), [deps.api]);
   const now = deps.now ?? Date.now;
   const onDone = deps.onDone ?? goApp;
   const locale = useUi((s) => s.locale);
-
   const [step, setStep] = useState<AuthStep>('email');
   const [email, setEmailRaw] = useState('');
   const [invite, setInviteRaw] = useState('');
@@ -77,7 +89,6 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}) {
   const [sentAt, setSentAt] = useState(0);
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [tick, setTick] = useState(() => now());
-
   // 倒计时：只在有倒计时的时候每秒刷新一次
   useEffect(() => {
     if (cooldownUntil <= tick) return undefined;
@@ -103,7 +114,7 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}) {
     return t;
   }, [captcha]);
 
-  const finish = useCallback(() => {
+  const enterApp = useCallback(() => {
     setStep('done');
     onDone();
   }, [onDone]);
@@ -169,9 +180,11 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}) {
         step === 'invite-code'
           ? await api.inviteVerify({ email: email.trim(), code: normalizeInvite(invite), emailOtp: otp, locale })
           : await api.verifyCode(email.trim(), otp);
+      // 拿到会话以后先探测（R-256 ③、R-258），探测完才放开 busy；冷静期、停用、探测不出时不跳
+      const go = r.ok && (!probe || (await probe()));
       setBusy(false);
       if (r.ok) {
-        finish();
+        if (go) enterApp();
         return;
       }
       // 回到邮箱那一屏（邮箱保留）再提示的三种（架构 5.6、0.38 第 20 条）：
@@ -187,7 +200,7 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}) {
       }
       setError(splitCodeError(r.error, sentAt, now()));
     },
-    [api, step, email, invite, locale, sentAt, now, finish],
+    [api, step, email, invite, locale, sentAt, now, enterApp, probe],
   );
 
   /** 验证码输入：只留数字，填满 6 位自动提交（5.9“键盘弹起”） */
@@ -231,5 +244,5 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}) {
   }, []);
 
   const state: AuthFlowState = { step, email, invite, code, busy, error, hint, cooldown };
-  return { state, setEmail, setInvite, setCode: setCodeInput, sendCode, sendInvite, resend, backToEmail, dismissError };
+  return { state, enterApp, setEmail, setInvite, setCode: setCodeInput, sendCode, sendInvite, resend, backToEmail, dismissError };
 }

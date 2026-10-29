@@ -64,9 +64,18 @@ export async function checkAuth() {
   await expect('对象 otp 和字符串 password 混合', requireActiveUser(req(at([{ method: 'otp', timestamp: ts }, 'password'])), fake(good)), 'unauthorized');
   await expect('amr 是字符串数组 ["otp"]', requireActiveUser(req(at(['otp'])), fake(good)), 'ok');
   await expect('amr 是 null（有键、不是数组）', requireActiveUser(req(at(null)), fake(good)), 'unauthorized');
+  // account 的 status 靠 pendingDeletion 分出正常和冷静期：正常账号没有这个键，冷静期放行时带 purge_after
+  try {
+    const r = await requireActiveUser(req(tok), fake(good));
+    if (Object.hasOwn(r, 'pendingDeletion')) fails.push('正常账号：不应带 pendingDeletion');
+    const p = await requireActiveUser(req(tok), off('deletion', { purge_after: 'P' }), { allowPendingDeletion: true });
+    if (p.pendingDeletion?.purgeAfter !== 'P') fails.push('冷静期放行：pendingDeletion.purgeAfter 应为 P');
+    const q = await requireActiveUser(req(tok), off('deletion', null), { allowPendingDeletion: true });
+    if (q.pendingDeletion?.purgeAfter !== null) fails.push('冷静期放行、没有 pending_deletions 行：purgeAfter 应为 null');
+  } catch (e) { fails.push(`pendingDeletion：${e.code ?? e.message}`); }
   try {
     const u = await isUsable(off('deletion', { purge_after: 'P' }), A);
     if (u.ok || u.code !== 'account_pending_deletion' || u.purgeAfter !== 'P') fails.push('isUsable 冷静期：没带 purge_after');
   } catch (e) { fails.push(`isUsable 冷静期：${e.message}`); }
-  return { n: 30, fails };
+  return { n: 33, fails };
 }

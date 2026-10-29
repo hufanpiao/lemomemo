@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { zh } from '../i18n/zh.ts';
 import AuthPage from '../ui/AuthPage.tsx';
-import { fakeApi, now, resetHarness } from './auth-page-harness.tsx';
+import { fakeAccount, fakeApi, now, resetHarness } from './auth-page-harness.tsx';
 import { turnstile } from './turnstile-fake.ts';
 
 vi.mock('../../../platform/turnstile.ts', async () => (await import('./turnstile-fake.ts')).fakeTurnstileModule);
@@ -42,7 +42,7 @@ describe('别的标签页换了账号（K6-auth-switch 审查建议）', () => {
 
   it('会话变成 B：提示换成 B 的邮箱；卸载时取消监听', () => {
     const { s, deps } = session(USER, 'a@example.com');
-    const { unmount } = render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), localExit: exitSpy([]), ...deps }} />);
+    const { unmount } = render(<AuthPage gate="login" deps={{ account: fakeAccount(), api: fakeApi(), now, onDone: vi.fn(), localExit: exitSpy([]), ...deps }} />);
     expect(screen.getByTestId('auth-signed-in').textContent).toBe('当前已登录 a@example.com，要换账号请先退出');
     s.userId = OTHER;
     s.email = 'b@example.com';
@@ -56,7 +56,7 @@ describe('别的标签页换了账号（K6-auth-switch 审查建议）', () => {
   it('默认监听就是 storage 事件（platform 的 onSessionStorageChange）', () => {
     let userId: string | null = USER;
     let email: string | null = 'a@example.com';
-    render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), localExit: exitSpy([]), readUserId: () => userId, readEmail: () => email }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api: fakeApi(), now, onDone: vi.fn(), localExit: exitSpy([]), readUserId: () => userId, readEmail: () => email }} />);
     userId = OTHER;
     email = 'b@example.com';
     act(() => {
@@ -67,7 +67,7 @@ describe('别的标签页换了账号（K6-auth-switch 审查建议）', () => {
 
   it('别的页面退出了（会话没了）：直接出登录表单', async () => {
     const { s, deps } = session(USER, 'a@example.com');
-    render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), localExit: exitSpy([]), ...deps }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api: fakeApi(), now, onDone: vi.fn(), localExit: exitSpy([]), ...deps }} />);
     s.userId = null;
     s.email = null;
     act(() => s.fire());
@@ -78,7 +78,7 @@ describe('别的标签页换了账号（K6-auth-switch 审查建议）', () => {
 
   it('没登录时别的页面登录了：改成“当前已登录”提示', () => {
     const { s, deps } = session(null, null);
-    render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), localExit: exitSpy([]), ...deps }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api: fakeApi(), now, onDone: vi.fn(), localExit: exitSpy([]), ...deps }} />);
     s.userId = OTHER;
     s.email = 'b@example.com';
     act(() => s.fire());
@@ -90,7 +90,7 @@ describe('别的标签页换了账号（K6-auth-switch 审查建议）', () => {
     const log: string[] = [];
     const localExit = exitSpy(log);
     const api = fakeApi();
-    render(<AuthPage gate="login" deps={{ api, now, onDone: vi.fn(), localExit, ...deps }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api, now, onDone: vi.fn(), localExit, ...deps }} />);
     s.userId = OTHER;
     s.email = 'b@example.com';
     await act(async () => {
@@ -112,7 +112,7 @@ describe('别的标签页换了账号（K6-auth-switch 审查建议）', () => {
     const { s, deps } = session(USER, 'a@example.com');
     const log: string[] = [];
     const api = fakeApi();
-    render(<AuthPage gate="login" deps={{ api, now, onDone: vi.fn(), localExit: exitSpy(log), ...deps }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api, now, onDone: vi.fn(), localExit: exitSpy(log), ...deps }} />);
     s.userId = null;
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
@@ -129,7 +129,7 @@ describe('别的标签页换了账号（K6-auth-switch 审查建议）', () => {
     const api = fakeApi({
       signOutHere: vi.fn(() => new Promise<{ ok: true; value: undefined }>((r) => (release = () => r({ ok: true, value: undefined })))),
     });
-    render(<AuthPage gate="login" deps={{ api, now, onDone: vi.fn(), localExit: exitSpy([]), ...deps }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api, now, onDone: vi.fn(), localExit: exitSpy([]), ...deps }} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
     });
@@ -150,7 +150,7 @@ describe('别的标签页换了账号（K6-auth-switch 审查建议）', () => {
     const api = fakeApi({
       signOutHere: vi.fn(() => new Promise<{ ok: true; value: undefined }>((r) => (release = () => r({ ok: true, value: undefined })))),
     });
-    render(<AuthPage gate="login" deps={{ api, now, onDone: vi.fn(), localExit: exitSpy([]), ...deps }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api, now, onDone: vi.fn(), localExit: exitSpy([]), ...deps }} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
     });

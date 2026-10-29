@@ -6,6 +6,8 @@
 //   和 signOut 共用 SIGN_OUT_TIMEOUT_MS）再 signOut({scope: 'local'})，只吊销本会话；不是 ok（断网、令牌过期、客户端拿不到）或超时就兜底
 //   清本机会话（只删退出前那一个，K6-sugg3 ①）→ ⑤ 会话删掉以后再删一次库。做完才显示登录表单；最坏约 16 秒。
 //   会话放在 ④：中途被打断最坏是“有会话、没库”，下次打开能自愈
+//   ④ 拿到 signOutThisDevice 一开头记下的旧会话（prior）：删 devices 行用它的 sid；auth-api 在 signOut 之前再读一次本机会话，
+//   已换成别的标签页的新会话就改用旧令牌直接 logout，不让 supabase-js 把新会话退掉（K6-signout-lib）
 // - 超时以后请求才回来：本机会话还是退出前那个 user_id（旧会话被刷新写回）就再清一次，别的账号或没有会话不动
 // - 这条主路径里旧会话还在，所以删得掉 devices 行（以后还有推送订阅）；别的标签页换了账号的兜底在主 App（K6）
 // - 服务器没退成（serverDone = false：断网、超时、出错）：本机照样清空，登录表单上方多一句“服务器上的这次登录暂时没能吊销”
@@ -83,7 +85,8 @@ export function useSessionGate(deps: AuthFlowDeps = {}) {
     setChanged(false);
     setState('exiting');
     const r = await signOutThisDevice({
-      server: { signOut: async () => ({ serverDone: (await api.signOutHere()).ok }) },
+      // prior = 退出一开头记下的旧会话（sid、令牌、④ 剩下的预算）：删行用它的 sid，紧贴 signOut 前判断会话换没换（K6-signout-lib）
+      server: { signOut: async (prior) => ({ serverDone: (await api.signOutHere(prior)).ok }) },
       steps: localExit,
       readUserId,
       timeoutMs: deps.signOutTimeoutMs ?? SIGN_OUT_TIMEOUT_MS,

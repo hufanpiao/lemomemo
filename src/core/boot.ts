@@ -55,6 +55,11 @@ export interface BootOptions {
   schemaV?: number;
   /** 默认 true：经 platform/http.ts 订阅所有请求的 426 */
   listen426?: boolean;
+  /**
+   * 升级中心一建好就同步调（在开库之前）：main.tsx 用它盯 blocked（“请关掉其他打开的柠檬记窗口”整屏提示）——
+   * 被挡住时 coldStart 还在等库打开，App 还没画（架构师 10-30 第 8 点）
+   */
+  onUpgradeCenter?: (upgrade: UpgradeCenter) => void;
 }
 
 export type BootStatus =
@@ -173,6 +178,7 @@ export async function coldStart(opts: BootOptions): Promise<BootResult> {
   const appVersion = opts.appVersion ?? buildInfo.version;
   const now = opts.now ?? (() => Date.now());
   const upgrade = createUpgradeCenter(defaultUpgradeDeps(appVersion, opts.upgradeDeps));
+  opts.onUpgradeCenter?.(upgrade);
   off426?.();
   off426 = opts.listen426 !== false ? onUpgradeRequired((u) => upgrade.reportUpgradeRequired(u.min)) : null;
 

@@ -1,74 +1,27 @@
-// 设置页骨架（B1 K9；TC-B1-18、TC-B1-19；定稿线框 s13）
-// 本批只有：中韩切换、已登录设备（移除、退出其他所有设备、另有 N 个登录）、导出和注销的入口（K3 做，现在“即将开放”）、退出登录。
-// 其余分组（皮肤、提醒与通知、语音与 AI、隐私记、时区、数据……）由各功能在后面的批次按 features.ts 登记接进来
-import { useRef, useState } from 'react';
+// 设置页骨架（B1 K9；TC-B1-18、TC-B1-19、TC-B1-71；定稿线框 s13；R-256 ①）
+// 分组顺序只看 data/sections.ts 的固定表：账号（已登录设备、退出其他所有设备、注销入口）→ 界面语言 → 数据（导出全部）；
+// 其余分组（皮肤、提醒与通知、语音与 AI、隐私记、时区……）由各功能在后面的批次按表里的位置接进来。
+// “退出登录”不是分组：页面最底下单独一行，永远在所有分组之后。
+// 注销账号是本页里的另一屏（view = 'delete'），离开本机的提示框两屏都在
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { hrefOf } from '../../../app/router.ts';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { Pressable } from '../../../motion/components.ts';
-import { useSettingsPage, type ExitNotice, type SettingsDeps } from '../hooks/useSettingsPage.ts';
+import { orderSections, useSettingsPage, type ExitNotice, type SettingsDeps, type SettingsSectionId } from '../hooks/useSettingsPage.ts';
+import { useRecentExport } from '../hooks/useRecentExport.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
+import { AccountSection } from './AccountSection.tsx';
 import { ConfirmDialog } from './ConfirmDialog.tsx';
-import { DevicesSection } from './DevicesSection.tsx';
+import { DataSection } from './DataSection.tsx';
+import { DeleteAccountView } from './DeleteAccountView.tsx';
+import { LanguageSection } from './LanguageSection.tsx';
 import styles from './SettingsPage.module.css';
 
-type Page = ReturnType<typeof useSettingsPage>;
-
-function LanguageSection({ locale }: { locale: Page['locale'] }) {
+/** 页面最底下的“退出登录”（交给页面的 askSignOut，先数没上传的） */
+function SignOutRow({ busy, signingOut, onSignOut }: { busy: boolean; signingOut: boolean; onSignOut(): void }) {
   const t = useSettingsT();
   return (
-    <section aria-labelledby="settings-lang-title">
-      <ul className={styles.grp}>
-        <li className={styles.row}>
-          <h2 id="settings-lang-title" className={styles.tx}>
-            {t('settings.lang.title', {})}
-          </h2>
-          <div className={styles.seg} role="group" aria-labelledby="settings-lang-title" data-testid="settings-lang">
-            {(['zh', 'ko'] as const).map((l) => (
-              <Pressable
-                key={l}
-                className={styles.segBtn}
-                lang={l === 'ko' ? 'ko' : 'zh'}
-                aria-pressed={locale.current === l}
-                data-locale={l}
-                onClick={() => void locale.choose(l)}
-              >
-                {t(l === 'ko' ? 'settings.lang.ko' : 'settings.lang.zh', {})}
-              </Pressable>
-            ))}
-          </div>
-        </li>
-      </ul>
-      <p className={styles.sn}>{t('settings.lang.note', {})}</p>
-      {locale.sync === 'failed' ? (
-        <p className={styles.error} role="alert">
-          {t('settings.lang.syncFailed', {})}
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-/** 导出、注销只放入口（K3 后面做）：按钮禁用，旁边写“即将开放”。退出登录交给页面的 askSignOut（先数没上传的） */
-function AccountSection({ busy, signingOut, onSignOut }: { busy: boolean; signingOut: boolean; onSignOut(): void }) {
-  const t = useSettingsT();
-  const soon = t('settings.soon', {});
-  return (
-    <section aria-labelledby="settings-account-title">
-      <h2 id="settings-account-title" className={styles.gt}>
-        {t('settings.account.title', {})}
-      </h2>
-      <ul className={styles.grp}>
-        {(['settings.account.export', 'settings.account.delete'] as const).map((key) => (
-          <li key={key} className={styles.row}>
-            <Pressable className={`${styles.btn} ${styles.tx}`} disabled aria-disabled data-testid={key} aria-describedby={`${key}-soon`}>
-              {t(key, {})}
-            </Pressable>
-            <span id={`${key}-soon`} className={styles.v}>
-              {soon}
-            </span>
-          </li>
-        ))}
-      </ul>
+    <div className={styles.bottom}>
       <Pressable
         className={`${styles.btn} ${styles.wide}`}
         disabled={busy || signingOut}
@@ -82,7 +35,7 @@ function AccountSection({ busy, signingOut, onSignOut }: { busy: boolean; signin
       <p className={styles.status} role="status" data-testid="settings-signing-out">
         {signingOut ? t('settings.signingOut', {}) : ''}
       </p>
-    </section>
+    </div>
   );
 }
 
@@ -138,8 +91,13 @@ function ExitDialog({ notice, cleaning, onGo }: { notice: ExitNotice | null; cle
 export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   const t = useSettingsT();
   const page = useSettingsPage(deps);
-  const { exit, devices, locale } = page;
+  const { exit, devices, locale, account, recentExports } = page;
+  /** 本页导出成功一次加 1：最近的导出重读 */
+  const [exportTick, setExportTick] = useState(0);
+  const recent = useRecentExport(recentExports, exportTick);
   const [ask, setAsk] = useState<Ask>(null);
+  const [view, setView] = useState<'home' | 'delete'>('home');
+  const nowFn = deps?.now ?? Date.now;
   const counting = useRef(false);
 
   /** 先数没上传的（离线队列 + 草稿，先重新读库，别的标签页的也算上），再决定直接退还是先问 */
@@ -156,17 +114,34 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
     if (n === 0 && from === 'account') void devices.signOutThis();
     else setAsk({ n, from });
   };
+  const bumpExport = useCallback(() => setExportTick((n) => n + 1), []);
+  const sections: Partial<Record<SettingsSectionId, ReactNode>> = {
+    account: (
+      <AccountSection devices={devices} recent={recent} onExitHere={() => void askSignOut('device')} onDelete={() => setView('delete')} />
+    ),
+    language: <LanguageSection locale={locale} />,
+    data: <DataSection account={account} onExported={bumpExport} />,
+  };
   return (
     <main className={styles.page} data-feature="settings" aria-busy={devices.busy !== null}>
-      <header className={styles.top}>
-        <a className={styles.back} href={hrefOf('today')}>
-          ‹ {t('settings.back', {})}
-        </a>
-        <h1 className={styles.title}>{t('settings.title', {})}</h1>
-      </header>
-      <LanguageSection locale={locale} />
-      <DevicesSection devices={devices} onExitHere={() => void askSignOut('device')} />
-      <AccountSection busy={devices.busy !== null} signingOut={exit.signingOut} onSignOut={() => void askSignOut('account')} />
+      {view === 'delete' ? (
+        <DeleteAccountView account={account} pendingCount={exit.pendingCount} now={nowFn} onBack={() => setView('home')} />
+      ) : (
+        <>
+          <header className={styles.top}>
+            <a className={styles.back} href={hrefOf('today')}>
+              ‹ {t('settings.back', {})}
+            </a>
+            <h1 className={styles.title}>{t('settings.title', {})}</h1>
+          </header>
+          {orderSections(sections).map(([id, node]) => (
+            <div key={id} data-section-slot={id}>
+              {node}
+            </div>
+          ))}
+          <SignOutRow busy={devices.busy !== null} signingOut={exit.signingOut} onSignOut={() => void askSignOut('account')} />
+        </>
+      )}
       <SignOutConfirm
         ask={ask}
         onOk={() => {

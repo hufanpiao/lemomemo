@@ -153,30 +153,20 @@ describe('已登录设备', () => {
     expect(screen.getAllByTestId('settings-device')).toHaveLength(4);
   });
 
-  it('账号停用或在注销冷静期（account_disabled）：只提示可以重新登录恢复，不清本机', async () => {
+  it('账号停用或在注销冷静期（account_disabled）：先提示；探测说账号正常（active）时就只提示，不清本机（探测其余结果见 settings-disabled-probe.test.tsx）', async () => {
     const api = fakeApi({ loadDevices: vi.fn(async () => fail('account_disabled')) });
     const { exit } = fakeExit();
-    render(<SettingsPage deps={{ api, exit, now }} />);
+    const leaveAccount = vi.fn(async () => undefined);
+    const resolveDisabled = vi.fn(async () => 'active' as const);
+    render(<SettingsPage deps={{ api, exit, now, leaveAccount, resolveDisabled }} />);
     expect(await screen.findByText(zh['settings.err.accountDisabled'])).toBeTruthy();
+    await waitFor(() => expect(resolveDisabled).toHaveBeenCalledWith('s-me', undefined));
+    expect(leaveAccount).not.toHaveBeenCalled();
     expect(exit.wipe).not.toHaveBeenCalled();
   });
 });
 
-describe('导出、注销入口（K3 做，现在只放入口）和退出登录', () => {
-  it('两个按钮都禁用，旁边写“即将开放”；点了不调任何接口', async () => {
-    const api = fakeApi();
-    await renderPage(api);
-    for (const key of ['settings.account.export', 'settings.account.delete'] as const) {
-      const btn = screen.getByTestId(key);
-      expect((btn as HTMLButtonElement).disabled).toBe(true);
-      expect(document.getElementById(btn.getAttribute('aria-describedby') ?? '')?.textContent).toBe(zh['settings.soon']);
-      fireEvent.click(btn);
-    }
-    expect(api.removeDevice).not.toHaveBeenCalled();
-    expect(api.deleteOwnDevice).not.toHaveBeenCalled();
-    expect(api.dropLocalSession).not.toHaveBeenCalled();
-  });
-
+describe('退出登录（页面最底下单独一行）', () => {
   it('退出登录先数没上传的，确认以后才开始清库（计数在封存之前）', async () => {
     const { exit, order } = fakeExit(2);
     exit.pendingCount.mockImplementation(async () => {
@@ -216,20 +206,31 @@ describe('导出、注销入口（K3 做，现在只放入口）和退出登录'
   });
 });
 
-// TC-B1-71：设置页分组顺序（R-36、R-79）。后面各批加分组时本条复跑；B7a 时十组齐全。
-// 架构 0.29 把“外观”改叫“皮肤”，两个叫法都认；不在清单里的分组（界面语言、已登录设备）不参与比较。
+// TC-B1-71（R-256 改过）：账号第一，其余按定稿线框（第 996～998 行）的相对顺序；“退出登录”单独一行在所有分组之后。
+// 已有的分组按这个相对顺序出现即可；后面各批加分组时复跑，B7a 时齐全。只认二级标题（分组名），已登录设备是账号里的三级标题
 describe('设置分组顺序（TC-B1-71）', () => {
-  const ORDER = ['账号', '外观', '日历', '提醒', '随手记', '隐私记', '时区', '数据', '桌面', '关于'];
-  const canon = (name: string) => (name === '皮肤' ? '外观' : name);
+  const ORDER = [
+    '账号', '界面语言', '皮肤', '字体', '随手记显示方式', '日历', '提醒与通知', '语音与 AI', '隐私记', '时区',
+    '数据', '在 Claude 聊天里记事', '邀请朋友', '电脑', '符号说明', '关于',
+  ];
 
-  it('已有的分组按“账号、外观、日历、提醒、随手记、隐私记、时区、数据、桌面、关于”的顺序排', async () => {
+  it('账号排第一、界面语言紧随、数据在后；分组不重复；“退出登录”在最后一个分组之后', async () => {
     await renderPage();
-    const groups = screen
-      .getAllByRole('heading', { level: 2 })
-      .map((h) => canon((h.textContent ?? '').trim()))
-      .filter((n) => ORDER.includes(n));
-    expect(groups.length).toBeGreaterThan(0);
+    const heads = screen.getAllByRole('heading', { level: 2 });
+    const groups = heads.map((h) => (h.textContent ?? '').trim()).filter((n) => ORDER.includes(n));
+    expect(groups.slice(0, 3)).toEqual(['账号', '界面语言', '数据']);
     expect(groups).toEqual([...groups].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
     expect(new Set(groups).size).toBe(groups.length);
+    // 已登录设备、退出其他所有设备、注销入口都在账号这一组里
+    const account = screen.getByRole('heading', { level: 2, name: '账号' }).closest('section') as HTMLElement;
+    expect(within(account).getByRole('heading', { level: 3, name: zh['settings.devices.title'] })).toBeTruthy();
+    expect(within(account).getByRole('button', { name: zh['settings.devices.signOutOthers'] })).toBeTruthy();
+    expect(within(account).getByTestId('settings-delete-entry')).toBeTruthy();
+    expect(within(account).queryByTestId('settings-signout')).toBeNull();
+    // 退出登录：在 DOM 里排在最后一个分组之后
+    const signOut = screen.getByTestId('settings-signout');
+    const last = heads[heads.length - 1]?.closest('section') as HTMLElement;
+    expect(last.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(last.contains(signOut)).toBe(false);
   });
 });

@@ -1,12 +1,12 @@
 // E2E 用的本机假后端（playwright.config.ts 的 webServer 先起它，再起 wrangler pages dev）：
 //   127.0.0.1:9199  S3 替身（tests/shared/fake-s3.ts：独立验 SigV4、If-None-Match 412），代替 R2；建 images、files、vault-images、vault-files
-//   127.0.0.1:9198  假 Supabase：只答 /rest/v1/app_config（版本门）和 /rest/v1/rpc/files_authorize（tests/functions/files-fakes.ts 的 fakeAuthz）
+//   127.0.0.1:9198  假 Supabase：只答 /rest/v1/app_config（版本门）、/functions/v1/*（回 {forwarded, secretOk} 标记）和 /rest/v1/rpc/files_authorize（tests/functions/files-fakes.ts 的 fakeAuthz）
 // 凭据全是一看就是假的固定值（FAKE…、fake-…），只给本机用；要 Docker 的真替身（LocalStack）和本地 Supabase 的一遍见 TC-B0-116【待 Docker】。
 // 用法：node tests/e2e/fake-backends.ts（Node 22.18 以上，直接跑 .ts）
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { fakeAuthz } from '../functions/files-fakes.ts';
 import { createFakeS3 } from '../shared/fake-s3.ts';
-import { FAKE_S3_KEY_ID, FAKE_S3_PORT, FAKE_S3_SECRET, FAKE_SUPABASE_PORT } from './fake-values.ts';
+import { FAKE_PROXY_SECRET, FAKE_S3_KEY_ID, FAKE_S3_PORT, FAKE_S3_SECRET, FAKE_SUPABASE_PORT } from './fake-values.ts';
 
 async function toRequest(req: IncomingMessage, port: number): Promise<Request> {
   const chunks: Buffer[] = [];
@@ -61,6 +61,10 @@ serve(FAKE_SUPABASE_PORT, async (r) => {
   const url = new URL(r.url);
   if (url.pathname === '/rest/v1/app_config') return Response.json([{ min_client_version: '4.0.0' }]);
   if (url.pathname === '/health') return new Response('ok');
+  // /functions/v1/*：回一个带标记的响应，给 b1-version-gate.spec.ts 核对转发层拼对了路径、带上了 x-proxy-secret（只回对不对，不回密钥本身）
+  if (url.pathname.startsWith('/functions/v1/')) {
+    return Response.json({ forwarded: url.pathname, secretOk: r.headers.get('x-proxy-secret') === FAKE_PROXY_SECRET });
+  }
   return authz.fetch(r);
 });
 console.log(`fake backends: s3 ${FAKE_S3_PORT}, supabase ${FAKE_SUPABASE_PORT}`);

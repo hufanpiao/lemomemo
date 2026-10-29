@@ -15,7 +15,10 @@
 // • 错误边界只包关口（CONSENT-sugg ③）：关口的分包加载失败、关口出错 → 放行画 App；App 画在边界外面，App 自己出错不会被当成关口失败
 //   再画一遍 App
 import { Suspense, useCallback, useEffect, useState, type ReactElement } from 'react';
+import { createRoot } from 'react-dom/client';
 import type { BootResult } from '../core/boot.ts';
+import type { UpgradeCenter } from '../core/upgrade.ts';
+import { CacheBlockedScreen } from './CacheBlockedScreen.tsx';
 import { ConsentGate } from '../features/onboarding/index.ts';
 import { App } from './App.tsx';
 import { AppCrashFallback } from './AppCrashFallback.tsx';
@@ -105,4 +108,39 @@ export async function startRoot(boot: Pick<BootResult, 'status' | 'upgrade'>, d:
   } catch {
     return fallback;
   }
+}
+
+/**
+ * 升级本机库被别的标签页挡住（TC-B1-48 的 blocked；架构师 10-30 第 8 点）：upgrade.blocked 变成 true 时整屏提示
+ * “请关掉其他打开的柠檬记窗口”。这时 coldStart 还在等库打开，#root 还没 createRoot，所以另挂一个容器（body 下的
+ * #lemo-blocked）和它自己的根；画出来的下一帧收起启动画面（SplashRelease）。blocked 变回 false（库打开了）就卸掉、删容器。
+ * main.tsx 经 coldStart 的 onUpgradeCenter 调；返回取消订阅（同时卸掉）
+ */
+export function watchCacheBlocked(upgrade: UpgradeCenter, doc: Document = document): () => void {
+  let host: HTMLElement | null = null;
+  let root: ReturnType<typeof createRoot> | null = null;
+  const unmount = (): void => {
+    root?.unmount();
+    host?.remove();
+    root = null;
+    host = null;
+  };
+  const sync = (): void => {
+    const blocked = upgrade.getState().blocked;
+    if (blocked && !root) {
+      host = doc.createElement('div');
+      host.id = 'lemo-blocked';
+      doc.body.appendChild(host);
+      root = createRoot(host);
+      root.render(released(<CacheBlockedScreen upgrade={upgrade} />));
+    } else if (!blocked && root) {
+      unmount();
+    }
+  };
+  const off = upgrade.subscribe(sync);
+  sync();
+  return () => {
+    off();
+    unmount();
+  };
 }

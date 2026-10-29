@@ -13,6 +13,8 @@ export default defineConfig({
   testDir: 'tests/e2e',
   // 只认 *.spec.ts；tests/e2e/*.preview.test.ts 是 Vitest 跑的预览环境用例（B0 集成）
   testMatch: '**/*.spec.ts',
+  // *.real.spec.ts 是真后端那组（playwright.real.config.ts，npm run e2e:real），这里不跑；两组都写 dist/web，不能同时跑
+  testIgnore: '**/*.real.spec.ts',
   fullyParallel: true,
   forbidOnly: process.env.CI === 'true',
   retries: process.env.CI === 'true' ? 1 : 0,

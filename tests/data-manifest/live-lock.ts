@@ -22,6 +22,11 @@ export async function takeLiveLock(conn: Tag, waitS = LIVE_LOCK_WAIT_S): Promise
     }
     throw e;
   } finally {
-    await conn`select set_config('lock_timeout', '0', false)`;
+    // 连接已断时复原也会抛错：吞掉，免得盖掉原来的报错（LocalStack 批复查建议 ②）
+    try {
+      await conn`select set_config('lock_timeout', '0', false)`;
+    } catch {
+      // 不抛：保留 try 里原来的报错
+    }
   }
 }

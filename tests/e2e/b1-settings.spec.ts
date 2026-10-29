@@ -1,4 +1,4 @@
-// B1 K9：设置页骨架（TC-B1-19 中韩切换和“刷新后保持”；导出、注销只放入口）
+// B1 K9：设置页骨架（TC-B1-19 中韩切换和“刷新后保持”；TC-B1-71 分组顺序，R-256 ①）
 // 带真实响应头跑（wrangler pages dev + _headers，csp-fixture 收 CSP 报错）。
 // e2e 构建没有 VITE_PUBLIC_SUPABASE_URL，设置页拿不到 Supabase 客户端：设备列表显示“读不出来、重试”（不当成被移除、不跳登录页），
 // 语言切换照样在本机生效，写账号失败只提示一句。设备列表、移除、退出其他设备、session_revoked 的流程在组件测试里
@@ -27,13 +27,34 @@ test.describe('设置页骨架', () => {
     });
   });
 
-  test('能打开；导出、注销按钮禁用且页面写“即将开放”；读设备失败显示提示（role=alert），仍停在 /app/', async ({ page }) => {
+  // TC-B1-71（R-256 改过）：账号 → 界面语言 → 数据；导出入口在数据组、注销入口在账号组；“退出登录”单独一行在所有分组之后。
+  // 导出、注销的流程（含断网、错误码、确认词）在组件测试 src/features/settings/__tests__/account.test.tsx
+  test('能打开；分组顺序是账号、界面语言、数据；导出在数据组，“退出登录”在最底下；读设备失败显示提示（role=alert），仍停在 /app/', async ({ page }) => {
     await page.goto(SETTINGS);
-    await expect(settingsMain(page)).toBeVisible();
-    for (const id of ['settings.account.export', 'settings.account.delete']) {
-      await expect(page.getByTestId(id)).toBeDisabled();
-    }
-    await expect(settingsMain(page)).toContainText('即将开放');
+    const main = settingsMain(page);
+    await expect(main).toBeVisible();
+    const groups = (await main.getByRole('heading', { level: 2 }).allTextContents()).map((s) => s.trim());
+    expect(groups.slice(0, 3)).toEqual(['账号', '界面语言', '数据']);
+
+    const account = main.locator('section[data-section="account"]');
+    const data = main.locator('section[data-section="data"]');
+    await expect(data.getByTestId('settings-export')).toBeVisible();
+    await expect(data.getByTestId('settings-export')).toContainText('导出全部数据');
+    await expect(account.getByTestId('settings-delete-entry')).toContainText('注销账号');
+    await expect(account.getByTestId('settings-export')).toHaveCount(0);
+    await expect(main).not.toContainText('即将开放');
+
+    // 退出登录：不在任何分组里，DOM 里排在最后一个分组之后
+    const signOut = main.getByTestId('settings-signout');
+    await expect(signOut).toBeVisible();
+    await expect(main.locator('section').getByTestId('settings-signout')).toHaveCount(0);
+    const after = await signOut.evaluate((el) => {
+      const sections = el.ownerDocument.querySelectorAll('main[data-feature="settings"] section');
+      const last = sections[sections.length - 1];
+      return last ? Boolean(last.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) : false;
+    });
+    expect(after).toBe(true);
+
     await expect(page.getByRole('alert').first()).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/app/');
   });

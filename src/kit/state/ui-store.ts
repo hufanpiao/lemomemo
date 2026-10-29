@@ -14,7 +14,8 @@ export interface Toast {
 
 export interface Banner {
   id: string;
-  kind: 'remind' | 'update' | 'upgrade-required';
+  /** sync-paused：主 App 收到 account_disabled、探测说账号正常，但 5 分钟内已重新载入过一次（app/sync-wiring.ts 限次），同步暂停 */
+  kind: 'remind' | 'update' | 'upgrade-required' | 'sync-paused';
 }
 
 export interface UiState {

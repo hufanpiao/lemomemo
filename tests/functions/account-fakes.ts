@@ -43,7 +43,7 @@ export class FakeDb {
   pendingSignups = new Set<string>();                 // email_hash
   deleted = new Set<string>();                        // private.deleted_accounts
   heartbeat: Record<string, number> | null = null;
-  logs: { id: number; user_id: string; act: string; device: string | null; t: number }[] = [];
+  logs: { id: number; user_id: string; act: string; device: string | null; t: number; code?: string }[] = [];
   private logSeq = 0;
   devices = new Map<string, { user_id: string; label: string | null }>();
   tables = new Map<string, Record<string, unknown>[]>();   // 导出读的 public 表
@@ -134,7 +134,7 @@ export class FakeDb {
       deviceLabel: async (u, d) => { const v = this.devices.get(d); return v && v.user_id === u ? v.label : null; },
       insertLog: async (u, row) => {
         this.guard(`insertLog:${row.act}`);
-        this.logs.push({ id: ++this.logSeq, user_id: u, act: row.act, device: row.device, t: row.t });
+        this.logs.push({ id: ++this.logSeq, user_id: u, act: row.act, device: row.device, t: row.t, ...(row.code === undefined ? {} : { code: row.code }) });
       },
       // = select * from <t> where user_id = u [and keyCol > after] order by keyCol limit n（和 PostgREST 一样按主键往后翻）
       readPage: async (t, keyCol, u, after, limit) => {
@@ -227,12 +227,15 @@ export function accountDeps(db: FakeDb, box: Outbox[], over: Partial<AccountDeps
   const jwt = jwtWith(over.amr ?? [{ method: 'otp', timestamp: Math.floor(db.clock.ms / 1000) - 60 }]);
   const authenticate = async (_req: Request, opts: { allowPendingDeletion: boolean }): Promise<AuthResult> => {
     const deny = (code: string, status: number, extra: Record<string, unknown> = {}) =>
-      ({ ok: false as const, response: new Response(JSON.stringify({ error: code, ...extra }), { status }) });
+      ({ ok: false as const, response: new Response(JSON.stringify({ error: code, ...extra }), { status }), code });
     const p = db.profiles.get(uid);
     if (!p || (p.disabled_at !== null && p.disabled_reason !== 'deletion')) return deny('account_disabled', 403);
     if (p.disabled_at !== null && !opts.allowPendingDeletion) return deny('account_pending_deletion', 403, { purge_after: db.pending.get(uid)?.purge_after });
     if (!db.sessions.has(session) || db.revoked.has(session)) return deny('session_revoked', 401);
-    const user: ActiveUser = { userId: uid, sessionId: session, jwt };
+    // 冷静期放行时带 pendingDeletion（和 requireActiveUser 一样：取不到 pending_deletions 行就是 null）
+    const user: ActiveUser = p.disabled_at !== null
+      ? { userId: uid, sessionId: session, jwt, pendingDeletion: { purgeAfter: db.pending.get(uid)?.purge_after ?? null } }
+      : { userId: uid, sessionId: session, jwt };
     return { ok: true, user };
   };
   const base: AccountDeps & { bg: Promise<unknown>[] } = {

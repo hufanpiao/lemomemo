@@ -19,7 +19,7 @@ describe('兜底只删退出前那一个会话（K6-sugg3 ①）', () => {
       readSessionId: vi.fn((): string | null => 's1'),
     } satisfies ExitSteps;
     await signOutThisDevice({ server: { signOut: async () => ({ serverDone: false }) }, steps: s, readUserId: () => 'u1', markSelf: () => undefined });
-    expect(s.readSessionId).toHaveBeenCalledTimes(1);
+    expect(s.readSessionId).toHaveBeenCalledTimes(2);   // 一开头一次、④ 前再读一次（K6-signout-lib）
     expect(s.clearLocalSessionIf.mock.calls).toEqual([['s1']]);
   });
 

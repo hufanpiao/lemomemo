@@ -75,7 +75,7 @@ export interface WatchAccountDeps extends EnsureAccountDeps {
    * 本页的 SIGNED_IN、TOKEN_REFRESHED（platform/session.ts 的 onAuthUser）；同一个监听的 SIGNED_OUT 回调 onSignedOut
    * （自己退出的已滤掉，K6-signedout）。K8、各功能页不另开 SIGNED_OUT 监听
    */
-  onAuthUser(fn: (userId: string) => void, onSignedOut?: () => void): () => void;
+  onAuthUser(fn: (userId: string) => void, onSignedOut?: (deadSessionId?: string | null) => void): () => void;
   /** 别的标签页改了会话（platform/session.ts 的 onSessionStorageChange）；null 表示那边退出了 */
   onStorageUser(fn: (userId: string | null) => void): () => void;
   /** 现在会话里的 user_id（platform/session.ts 的 readSessionUserId）：挂上监听后马上再比一次（M1） */
@@ -199,7 +199,7 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
     );
   };
   /** 本页的 SIGNED_OUT（不是自己退出，K6-signedout） */
-  const signedOutHere = (): void => {
+  const signedOutHere = (lastSessionId: string | null = null): void => {
     if (handled || boot.switching) return;   // 已经在走换账号、被移除、自己退出等流程
     const now = deps.currentUserId();
     if (now !== null && now !== boot.userId) {
@@ -213,6 +213,9 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
     } catch {
       dead = null;   // 删不掉（存储不可用）：本来也存不下会话
     }
+    // auth-js 先删键再通知 SIGNED_OUT：这时本机多半已没有会话、删不出 session_id，用会话层带来的“本页最后见到的那个”
+    // （K6-signout-lib），回登录页前按它再删一次（晚到的刷新把它写回时）
+    dead ??= lastSessionId;
     handled = true;
     closeGate(boot);
     try {

@@ -6,6 +6,8 @@ export const FAKE_S3_KEY_ID = 'FAKEKEYIDE2EONLY';
 export const FAKE_S3_SECRET = 'fake-s3-secret-for-e2e-only';
 export const FAKE_ANON_KEY = 'fake-anon-key';
 export const FAKE_FILES_URL_SECRET = 'fake-files-url-secret-for-e2e-only-000000';
+/** /sb 转发层写给上游的 x-proxy-secret；没有它 functions/sb/[[path]].ts 一律回 500 proxy_misconfigured */
+export const FAKE_PROXY_SECRET = 'fake-proxy-secret-for-e2e-only';
 
 /** wrangler pages dev 的 --binding（/files 和 /sb 函数读的环境变量），指向本机假后端；R2_BUCKET_PREFIX 不设（当空字符串） */
 export const E2E_BINDINGS: Record<string, string> = {
@@ -15,4 +17,5 @@ export const E2E_BINDINGS: Record<string, string> = {
   R2_FILES_ACCESS_KEY_ID: FAKE_S3_KEY_ID,
   R2_FILES_SECRET_ACCESS_KEY: FAKE_S3_SECRET,
   FILES_URL_SECRET: FAKE_FILES_URL_SECRET,
+  PROXY_SECRET: FAKE_PROXY_SECRET,
 };

@@ -1,7 +1,11 @@
 // 告知页里会话不认、账号停用时离开这台设备（架构 4.1“被移除或被退出”、4.3 ②；接手清单 CONSENT-wire ④）
 // 不另写一套：调现有的出口 core/account 的 wipeOnRemoved（设闸 → 清空本机库和运行时缓存 → 关库），清完记下退出原因、回登录页——
 // 和 app/sync-wiring.ts 的 onRemoved 同一顺序；退出原因按服务器码定（platform/session.ts 的 exitNoticeOf）：
-// session_revoked → removed（登录页 auth.exit.removed），account_disabled → disabled（auth.exit.disabled）
+// session_revoked → removed（登录页 auth.exit.removed）。
+// account_disabled 先探测再定（R-256 ③、DISABLED-probe-later ①；record_consent 一路按 is_active() 判断，停用和冷静期都回它）：
+//   platform/account-status.ts 的 exitForDisabled（和 sync-wiring 同一份）：pending_deletion → 冷静期提示；disabled → 已停用；
+//   signed_out → removed；探测不出 → disabled_unsure；active（刚好恢复了）→ 不离开、不清本机，留在告知页可以再点一次。
+//   探测期间（最多 8 秒）先不删会话——探测要用它的令牌；探测完别的退出流程已接手（boot.switching）就什么也不做
 // • 已经在走别的退出流程（boot.switching：换账号、同步层的被移除、退出登录）：什么也不做，不清第二遍、不跳第二次
 // • 没启动过（getBoot() 为 null）：没有库可清，删会话、记原因、回登录页
 // • 这个账号的日志上传队列（localStorage lemo.logq.<user_id>）一起清（架构 0.38 第 68 条 ⑤；审查 M1）：wipeOnRemoved 之前清一次，
@@ -14,6 +18,7 @@
 import { wipeOnRemoved } from '../../../core/account.ts';
 import { getBoot, type BootResult } from '../../../core/boot.ts';
 import { clearLogQueue } from '../../../platform/log-store.ts';
+import { exitForDisabled } from '../../../platform/account-status.ts';
 import {
   clearCacheStorage, clearLocalSessionIf, exitNoticeOf, goToAuth, setExitNotice, type ExitNotice,
 } from '../../../platform/session.ts';
@@ -30,6 +35,8 @@ export interface LeaveDeps {
   goToAuth(): void;
   /** 清日志上传队列：给 user_id 只清这个账号的，null 清全部 lemo.logq.* */
   clearLogs(userId: string | null): void;
+  /** account_disabled 先探测（默认 platform/account-status.ts 的 exitForDisabled） */
+  resolveDisabled?: (sid: string | null) => Promise<ExitNotice | 'active'>;
 }
 
 export const defaultLeaveDeps: LeaveDeps = {
@@ -39,12 +46,26 @@ export const defaultLeaveDeps: LeaveDeps = {
 
 let leaving = false;
 
-/** 只处理一次；sid：被拒那次请求用的会话（必填，K6-sugg4 ①②）。返回清理做完（或不用清）的 Promise */
+/** 只处理一次；sid：被拒那次请求用的会话（必填，K6-sugg4 ①②）。返回清理做完（或不用清、没离开）的 Promise */
 export function leaveThisDevice(code: LeaveCode, sid: string | null, deps: LeaveDeps = defaultLeaveDeps): Promise<void> {
   if (leaving) return Promise.resolve();
-  const boot = deps.getBoot();
-  if (boot?.switching) return Promise.resolve();
+  if (deps.getBoot()?.switching) return Promise.resolve();
   leaving = true;
+  if (code !== 'account_disabled') return leaveNow(exitNoticeOf(code), sid, deps);
+  return (async () => {
+    const r = await (deps.resolveDisabled ?? ((s: string | null) => exitForDisabled(s)))(sid);
+    if (deps.getBoot()?.switching) return;   // 探测期间别的退出流程接手了
+    if (r === 'active') {
+      leaving = false;   // 账号正常：留在告知页，可以再点一次
+      return;
+    }
+    await leaveNow(r, sid, deps);
+  })();
+}
+
+/** 清本机、记退出原因、回登录页（顺序见文件头） */
+function leaveNow(notice: ExitNotice, sid: string | null, deps: LeaveDeps): Promise<void> {
+  const boot = deps.getBoot();
   // 同一个同步段里先删本机会话——只删被拒的那个（K6-sugg3 ①、K6-sugg4 ①）
   const dead = sid;
   const drop = (): void => {
@@ -59,7 +80,7 @@ export function leaveThisDevice(code: LeaveCode, sid: string | null, deps: Leave
   deps.clearLogs(userId);
   const finish = (): void => {
     deps.clearLogs(userId);   // 兜底：清库期间又记下的
-    deps.setExitNotice(exitNoticeOf(code));
+    deps.setExitNotice(notice);
     drop();   // 旧会话被晚到的令牌刷新写回时再删；别的标签页刚登录的新会话不动
     deps.goToAuth();
   };

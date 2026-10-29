@@ -11,7 +11,7 @@
     "allowJs": true
   },
   "include": [
-    "src/vite-env.d.ts", "vite.config.ts", "vite.sw.config.ts", "vitest.config.ts", "playwright.config.ts",
+    "src/vite-env.d.ts", "vite.config.ts", "vite.sw.config.ts", "vitest.config.ts", "playwright.config.ts", "playwright.real.config.ts",
     "build/d1/**/*.ts",
     "tests/**/*.ts", "tests/**/*.tsx", "src/**/__tests__/**/*.ts", "src/**/__tests__/**/*.tsx"
   ],

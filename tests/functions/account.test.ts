@@ -3,10 +3,10 @@
 // 只测 core.ts（index.ts 只是把 supabase-js、requireActiveUser、Resend 接上）；数据库一半在 supabase/tests/rls/11_account_deletion.test.sql。
 import { describe, expect, it } from 'vitest';
 import {
-  ACCOUNT_DAILY_LIMIT, ACCOUNT_ERRS, confirmOk, cleanDeviceLabel, EXPORT_MAX_LOG_ROWS, EXPORT_MAX_ROWS, EXPORT_PAGE, exportRows, exportTablesOf, handle,
+  ACCOUNT_DAILY_LIMIT, ACCOUNT_ERRS, ACCOUNT_STATUS_VALUES, confirmOk, cleanDeviceLabel, EXPORT_MAX_LOG_ROWS, EXPORT_MAX_ROWS, EXPORT_PAGE, exportRows, exportTablesOf, handle,
   isVaultRow, keys, otpFresh, RESTORE_DAILY_LIMIT,
 } from '../../supabase/functions/account/core.ts';
-import { ACCOUNT_ERROR_CODES, accountErrorCode } from '../../shared/schema/account.ts';
+import { ACCOUNT_ERROR_CODES, ACCOUNT_STATUSES, accountErrorCode, accountStatusResponse } from '../../shared/schema/account.ts';
 import {
   deletionDoneMail, deletionReminderMail, deletionRequestedMail, exportMail, fmtWhen, restoredMail, safeTz,
 } from '../../supabase/functions/_shared/account-mail.ts';
@@ -343,6 +343,36 @@ describe('account export（TC-B1-67：回 gzip 的 JSON、不发下载链接、�
     const r = await exportOnce(db, box, {}, {}, { sendMail: async () => false });
     expect(r.status).toBe(200);
     expect(db.logs.map((l) => l.act)).toEqual(['export', 'export_mail_failed']);
+    // 配对：export_mail_failed 的 code = export 那一行 t 的 ISO 字符串（logs.code ≤ 64）
+    expect(db.logs[1]?.code).toBe(new Date(db.logs[0]?.t ?? 0).toISOString());
+    expect(db.logs[0]?.code).toBeUndefined();
+  });
+
+  it('同一台设备连着导出两次、两封信都没发出去，晚的先失败：两条 export_mail_failed 各自配得上自己那次导出（code = export 的 t）', async () => {
+    const { db, box, clock } = setup();
+    const dev = 'dddddddd-0000-4000-8000-000000000001';
+    const gates: ((ok: boolean) => void)[] = [];
+    const deps = accountDeps(db, box, { exportTables: TABLES, sendMail: () => new Promise<boolean>((res) => { gates.push(res); }) });
+    expect((await handle(accountReq({ action: 'export', device_id: dev }), deps)).status).toBe(200);
+    clock.advance(1000);
+    expect((await handle(accountReq({ action: 'export', device_id: dev }), deps)).status).toBe(200);
+    await new Promise((r) => setTimeout(r, 0));   // 两次的发信都卡在 sendMail
+    expect(gates).toHaveLength(2);
+    clock.advance(2000);
+    gates[1]?.(false);   // 第二次先失败
+    await new Promise((r) => setTimeout(r, 0));
+    clock.advance(1000);
+    gates[0]?.(false);
+    await Promise.all(deps.bg);
+    const exports = db.logs.filter((l) => l.act === 'export');
+    const fails = db.logs.filter((l) => l.act === 'export_mail_failed');
+    expect(exports.map((l) => l.t)).toEqual([T0, T0 + 1000]);
+    expect(fails.map((l) => l.t)).toEqual([T0 + 3000, T0 + 4000]);   // t 照旧是失败时刻
+    expect(fails.map((l) => l.code)).toEqual([new Date(T0 + 1000).toISOString(), new Date(T0).toISOString()]);
+    for (const f of fails) {
+      expect(f.code?.length).toBeLessThanOrEqual(64);
+      expect(exports.filter((e) => e.device === f.device && new Date(e.t).toISOString() === f.code)).toHaveLength(1);
+    }
   });
 
   it('设备查不到写“未知设备”；没经转发层（头不可信）写“未知地区”；像链接的设备名不用', async () => {
@@ -556,6 +586,101 @@ describe('account 的错误码（0.38 第 48 条：shared/schema/account.ts 的 
     await grab(await call(db, box, { action: 'delete', confirm: '注销' }));
     expect(seen.size).toBeGreaterThanOrEqual(4);
     for (const c of seen) expect(c === 'bad_request' || accountErrorCode.safeParse(c).success, c).toBe(true);
+  });
+});
+
+describe('account status（登录页判断要不要显示恢复页；10-30 架构师）', () => {
+  /** 任何一个 store 方法被调到就抛错：status 不该碰数据库 */
+  const untouchable = new Proxy({}, { get: (_t, k) => () => { throw new Error(`store_${String(k)}_touched`); } }) as never;
+
+  async function statusOf(db: FakeDb, box: Outbox[], over: Parameters<typeof accountDeps>[2] = {}) {
+    const logs: string[] = [];
+    const r = await call(db, box, { action: 'status' }, { store: untouchable, log: (c) => logs.push(c), ...over });
+    expect(logs).toEqual([]);   // 没走到 catch（store 被碰会变成 db_error）
+    return r;
+  }
+
+  it('正常账号：200 {ok, status: active}；不写 logs、不计次数、不发信、不碰 store', async () => {
+    const { db, box } = setup();
+    const r = await statusOf(db, box);
+    expect(r.status).toBe(200);
+    expect(r.headers.get('cache-control')).toBe('no-store');
+    const b = await r.json();
+    expect(b).toEqual({ ok: true, status: 'active' });
+    expect(accountStatusResponse.parse(b)).toEqual(b);
+    expect(db.logs).toEqual([]);
+    expect(db.counters.size).toBe(0);
+    expect(box).toEqual([]);
+  });
+
+  it('冷静期（重新登录的新会话）：放行，200 {ok, status: pending_deletion, purge_after}；什么都不写', async () => {
+    const { db, box } = setup();
+    await call(db, box, { action: 'delete', confirm: '注销' });
+    box.length = 0;
+    db.sessions.set('aaaaaaaa-s9', A);
+    const counters = new Map(db.counters);
+    const r = await statusOf(db, box, { session: 'aaaaaaaa-s9' });
+    expect(r.status).toBe(200);
+    const b = await r.json();
+    expect(b).toEqual({ ok: true, status: 'pending_deletion', purge_after: db.pending.get(A)?.purge_after });
+    expect(typeof (b as { purge_after: unknown }).purge_after).toBe('string');
+    expect(accountStatusResponse.parse(b)).toEqual(b);
+    expect(db.counters).toEqual(counters);
+    expect(db.logs).toEqual([]);
+    expect(box).toEqual([]);
+    expect(db.pending.has(A)).toBe(true);
+    // 别的动作照旧被拦（只有 restore、status 放行）
+    const e = await call(db, box, { action: 'export' }, { session: 'aaaaaaaa-s9' });
+    expect(await e.json()).toMatchObject({ error: 'account_pending_deletion' });
+  });
+
+  it('冷静期但取不到 pending_deletions 行：purge_after 为 null（不猜时刻）', async () => {
+    const { db, box } = setup();
+    await call(db, box, { action: 'delete', confirm: '注销' });
+    db.pending.delete(A);
+    db.sessions.set('aaaaaaaa-s9', A);
+    const b = await (await statusOf(db, box, { session: 'aaaaaaaa-s9' })).json();
+    expect(b).toEqual({ ok: true, status: 'pending_deletion', purge_after: null });
+    expect(accountStatusResponse.parse(b)).toEqual(b);
+  });
+
+  it('管理员停用、没有 profile：200 {ok, status: disabled}（不是 403）；冷静期里被管理员停用的也是 disabled', async () => {
+    const { db, box } = setup();
+    const p = db.profiles.get(A);
+    if (!p) throw new Error('no profile');
+    p.disabled_at = '2026-10-29T00:00:00.000Z';
+    p.disabled_reason = 'admin';
+    const r = await statusOf(db, box);
+    expect(r.status).toBe(200);
+    const b = await r.json();
+    expect(b).toEqual({ ok: true, status: 'disabled' });
+    expect(accountStatusResponse.parse(b)).toEqual(b);
+    db.profiles.delete(B);
+    expect(await (await statusOf(db, box, { user: B })).json()).toEqual({ ok: true, status: 'disabled' });
+    expect(db.logs).toEqual([]);
+    expect(db.counters.size).toBe(0);
+    expect(box).toEqual([]);
+  });
+
+  it('会话失效：照 requireActiveUser 原样回 401 session_revoked', async () => {
+    const { db, box } = setup();
+    await call(db, box, { action: 'delete', confirm: '注销' });   // 吊销全部会话
+    const r = await statusOf(db, box);
+    expect(r.status).toBe(401);
+    expect(await r.json()).toEqual({ error: 'session_revoked' });
+  });
+
+  it('不占 export、delete 每天 3 次的额度：status 调多少次，导出照样能导 3 次', async () => {
+    const { db, box } = setup();
+    for (let i = 0; i < 10; i++) expect((await statusOf(db, box)).status).toBe(200);
+    expect(db.counters.size).toBe(0);
+    for (let i = 0; i < ACCOUNT_DAILY_LIMIT; i++) expect((await call(db, box, { action: 'export' })).status).toBe(200);
+    expect((await call(db, box, { action: 'export' })).status).toBe(429);
+    expect(db.logs.map((l) => l.act)).toEqual(['export', 'export', 'export']);   // status 一条都没写
+  });
+
+  it('三种状态和 shared/schema/account.ts 的 ACCOUNT_STATUSES 一字不差', () => {
+    expect([...ACCOUNT_STATUS_VALUES]).toEqual([...ACCOUNT_STATUSES]);
   });
 });
 

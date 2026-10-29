@@ -13,7 +13,8 @@
 //   ④ deleteUser 以后 profiles、pending_deletions 为 0 行，函数判 purged；导出的 makeStore 直接测 remainingRows（没删的 2、随机 uuid 0）；
 //   ⑤ TC-B1-108 ② 竞态：两个真连接——一个事务里 account_restore 持 for update 锁，认领 update 经 PostgREST 等锁（pg_blocking_pids 为证），
 //      restore 提交后认领更新 0 行。
-// 另外：refundRate 在真 counters 上比较并交换（含每天 3 次的退回上限）、requestDeletion 的报错映射、经 account 处理函数申请注销再恢复。
+// 另外：refundRate 在真 counters 上比较并交换（含每天 3 次的退回上限）、requestDeletion 的报错映射、经 account 处理函数申请注销再恢复、
+//   status 的四种账号（正常、冷静期、管理员停用、没有 profile）和“没有副作用”（ACCOUNT-sugg ②）。
 // 安全：本机库是共用的，account-purge 会处理库里所有到期的 pending_deletions。
 //   • 开跑先清上次残留（被 kill 时）：supabase/.temp/store-it-ids.json 记的 id 和 auth.users 里 k3-store-it-*@example.com 的人，
 //     删用户、deleted_accounts 行、counters 键、backups 路径，再 drop 本测试的临时 schema store_it；
@@ -212,6 +213,54 @@ Deno.test({ name: 'account 真 store：申请注销（requestDeletion）→ 恢�
   assertEquals(ea.error?.message, 'admin_cannot_delete');
   const ra = await callAccount(await jwtOf(adm), { action: 'delete', confirm: '注销' });
   assertEquals([ra.status, ra.json], [403, { error: 'admin_cannot_delete' }]);
+} });
+
+Deno.test({ name: 'account status 真库：正常 active、冷静期 pending_deletion（purge_after 和库里一致）、管理员停用和没有 profile 都是 disabled；不写库、不计次、不发信', ...opts, async fn() {
+  // ACCOUNT-sugg ②：status 只用真 requireActiveUser（allowPendingDeletion）+ 真 account_usable，单测里鉴权是假的，这里走真 JWT、真库
+  const ok = await mkUser('st-active'), pd = await mkUser('st-pending'), dis = await mkUser('st-admin'), np = await mkUser('st-noprofile', false);
+  const who = [ok, pd, dis, np];
+  // 副作用快照（审查建议）：这几个人的 counters 逐行比计数值（key、count、window_start），logs、profiles、pending_deletions 逐行比整行
+  //   （pending_deletions 含 purge_after、purge_started_at），加上 Resend 替身收到的信数
+  const traces = async () => ({
+    db: one(await sql<{ j: string }[]>`select jsonb_build_object(
+      'ctr', (select jsonb_agg(jsonb_build_array(c.key, c.count, c.window_start) order by c.key, c.window_start)
+                from private.counters c where split_part(c.key, ':', 2) in ${sql(who)}),
+      'logs', (select jsonb_agg(to_jsonb(l) order by l.id) from public.logs l where l.user_id in ${sql(who)}),
+      'prof', (select jsonb_agg(to_jsonb(p) order by p.user_id) from public.profiles p where p.user_id in ${sql(who)}),
+      'pend', (select jsonb_agg(to_jsonb(d) order by d.user_id) from private.pending_deletions d where d.user_id in ${sql(who)}))::text as j`).j,
+    mails: mails.length,
+  });
+  const r0 = await callAccount(await jwtOf(pd), { action: 'delete', confirm: '注销' });
+  try {   // r0 之后就进 try：后面任何一步（含 admin_set_disabled）出错，pd 的 pending_deletions 也会清掉
+    assertEquals(r0.status, 200, JSON.stringify(r0.json));
+    await sql`select private.admin_set_disabled(${dis}::uuid, true)`;
+    const jwts = { ok: await jwtOf(ok), pd: await jwtOf(pd), dis: await jwtOf(dis), np: await jwtOf(np) };
+    const before = await traces();
+    const { pa } = one(await sql<{ pa: Date }[]>`select purge_after as pa from private.pending_deletions where user_id = ${pd}`);
+    for (let round = 0; round < 2; round++) {   // 连调两遍结果一样（没有副作用、不受次数限制）
+      const a = await callAccount(jwts.ok, { action: 'status' });
+      assertEquals([a.status, a.json], [200, { ok: true, status: 'active' }]);
+      const p = await callAccount(jwts.pd, { action: 'status' });
+      assertEquals([p.status, p.json?.ok, p.json?.status], [200, true, 'pending_deletion'], JSON.stringify(p.json));
+      assertEquals(new Date(String(p.json?.purge_after)).getTime(), pa.getTime(), 'purge_after 和 pending_deletions 里的不一致');
+      assertEquals(Object.keys(p.json ?? {}).sort(), ['ok', 'purge_after', 'status']);
+      const d = await callAccount(jwts.dis, { action: 'status' });
+      assertEquals([d.status, d.json], [200, { ok: true, status: 'disabled' }]);
+      const n = await callAccount(jwts.np, { action: 'status' });
+      assertEquals([n.status, n.json], [200, { ok: true, status: 'disabled' }]);
+    }
+    // 对照：冷静期的人调 export 仍被拦（status 的放行没漏到别的动作；requireActiveUser 回 account_pending_deletion 带同一个 purge_after）
+    const e = await callAccount(jwts.pd, { action: 'export' });
+    assertEquals([e.status, e.json?.error], [403, 'account_pending_deletion'], JSON.stringify(e.json));
+    assertEquals(new Date(String(e.json?.purge_after)).getTime(), pa.getTime());
+    await sleep(200);   // 有后台发信的话让它落地，再比
+    assertEquals(await traces(), before, 'status（或被拦的 export）改了 counters 计数、logs、profiles、pending_deletions，或发了信');
+    // 状态本身也没被 status 改动
+    const prof = await sql<{ u: string; r: string | null }[]>`select user_id::text as u, disabled_reason as r from public.profiles where user_id in ${sql(who)} order by user_id`;
+    assertEquals(new Map(prof.map((x) => [x.u, x.r])), new Map<string, string | null>([[ok, null], [pd, 'deletion'], [dis, 'admin']]));
+  } finally {
+    await sql`delete from private.pending_deletions where user_id = ${pd}`;   // 7 天后到期，别留给别人的 account-purge
+  }
 } });
 
 Deno.test({ name: 'TC-B1-10：没有 profiles 行的账号调 account delete 回 403 account_disabled', ...opts, async fn() {

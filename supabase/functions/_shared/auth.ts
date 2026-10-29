@@ -78,11 +78,15 @@ function isPasswordSession(c: Claims): boolean {
     || (typeof e === 'object' && e !== null && (e as { method?: unknown }).method === 'password'));
 }
 
-export type ActiveUser = { userId: string; sessionId: string; jwt: string };
+/**
+ * pendingDeletion：只在 allowPendingDeletion 放行了冷静期账号时才有（purgeAfter 取不到 pending_deletions 行时为 null）；
+ * account 的 status 靠它分出“正常”和“冷静期”，其余函数不会拿到冷静期账号，不用看它
+ */
+export type ActiveUser = { userId: string; sessionId: string; jwt: string; pendingDeletion?: { purgeAfter: string | null } };
 
 /**
  * 验 JWT → 不是密码会话（amr 里没有 password，0.36）→ 账号能不能用 → 会话还在不在、有没有被吊销（private.session_alive）。
- * allowPendingDeletion：只有 account 的 restore 传 true，冷静期里放行。
+ * allowPendingDeletion：只有 account 的 restore、status 传 true，冷静期里放行（返回值带 pendingDeletion）。
  * 不通过抛 AuthError，函数入口 catch 后 return e.toResponse(cors)。
  */
 export async function requireActiveUser(req: Request, admin: SupabaseClient, opts: { allowPendingDeletion?: boolean } = {}): Promise<ActiveUser> {
@@ -111,5 +115,5 @@ export async function requireActiveUser(req: Request, admin: SupabaseClient, opt
   if (e2 || typeof alive !== 'boolean') throw new AuthError('try_later', 503);   // 数据库一抖不能把所有人当成“被移除”
   if (!alive) throw new AuthError('session_revoked', 401);
 
-  return { userId, sessionId: c.session_id, jwt };
+  return u.ok ? { userId, sessionId: c.session_id, jwt } : { userId, sessionId: c.session_id, jwt, pendingDeletion: { purgeAfter: u.purgeAfter ?? null } };
 }

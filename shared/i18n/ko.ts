@@ -21,8 +21,13 @@ export const ko = {
   'update.updating': '업데이트 중…', // R-106 B1 第一遍已审（10-29）
   'update.failed': '업데이트하지 못했어요 · 인터넷에 연결한 뒤 다시 시도해 주세요', // R-106 B1 第一遍已审（10-29）
   'update.stillOld': '이미 최신 버전이에요. 잠시 후 다시 시도해 주세요', // R-106 B1 第一遍已审（10-29）
-  'app.crashed.title': '앗, 멈췄어요', // TODO(ko): 初稿待审校（R-106）；App 顶层出错的整屏兜底（K6-sugg3 ⑥）
-  'app.crashed.refresh': '새로고침하기', // TODO(ko): 初稿待审校（R-106）
+  'update.update': '업데이트', // R-106 B1 第一遍已审（10-30）；426 横幅的按钮（0.27 第 1 点“更新”）
+  'update.queued': '변경 사항 {n}개는 업데이트한 뒤에 동기화돼요 · 내용은 이 기기에 그대로 있어요', // R-106 B1 第一遍已审（10-30），按审校意见改过；426 时排队的条数（0.27 第 1 点）
+  'update.newVersion': '새 버전이 있어요', // R-106 B1 第一遍已审（10-30）；SW 有新版本的横幅（8.1“有新版本 · 重新打开”），按钮沿用 update.reopen
+  'update.blocked.title': '열려 있는 다른 레모 창을 닫아 주세요', // R-106 B1 第一遍已审（10-30）；“창”是否改成“창이나 탭”待负责人（明早清单第 25 条）；升级本机库被别的标签页挡住的整屏提示（TC-B1-48）
+  'update.blocked.body': '다른 창에서 아직 이전 버전을 쓰고 있어요. 그 창을 닫으면 여기서 자동으로 이어서 열려요. 기록한 내용은 이 기기에 그대로 있어요.', // R-106 B1 第一遍已审（10-30）；“창”是否改成“창이나 탭”待负责人（明早清单第 25 条）；同上
+  'app.crashed.title': '앗, 멈췄어요', // R-106 B1 第一遍已审（10-30）；App 顶层出错的整屏兜底（K6-sugg3 ⑥）
+  'app.crashed.refresh': '새로고침', // R-106 B1 第一遍已审（10-30）；和 update.tooNew.refresh 统一成 새로고침
   'remind.push.event': '{time} {title}',
   'fmt.monthDay': '{m}월 {d}일',
   'fmt.monthDayWeek': '{m}월 {d}일 ({w})',
@@ -33,4 +38,5 @@ export const ko = {
   'fmt.wd.4': '목',
   'fmt.wd.5': '금',
   'fmt.wd.6': '토',
+  'update.syncPaused': '동기화가 잠시 멈췄어요. 잠시 후 다시 열어 주세요', // REVIEW(ko)；同 zh：探测说账号正常但 5 分钟内已重新载入过，同步暂停（10-30）
 } as const satisfies Record<SharedMsgKey, string>;

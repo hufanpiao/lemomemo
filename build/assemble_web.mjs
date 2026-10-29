@@ -1,6 +1,7 @@
 // 拼出 dist/web（架构 8.1、16.2）：
 // - 官网：调 build/build_site.mjs 的 buildSite（先检查，再把 site/ 复制到 dist/web/ 根目录，脚本、样式、og 图改成带哈希的 /s/ 文件名）
 // - _headers = site/_headers（首页那几段，前端 B）+ src/_headers（/app/* 那几段，前端 A），{{WSS}} 按模式替换
+//   e2e-real（真后端那组 e2e）：前端和 /sb 同源，由 8789 端口的服务一起提供；http 那一项 'self' 已经覆盖，connect-src 只加 ws://127.0.0.1:8789
 //   build_web.mjs 和 build_site.mjs 都用这里的 writeHeaders 写 _headers：谁先谁后、只跑哪一个，结果都一样，互不覆盖对方的段
 // - dist/web/app/version.json（LEMO_BUILD_VERSION 优先，否则 VERSION 文件）
 // 输出目录的分工：Vite 只写 dist/web/app/（emptyOutDir 只清它）；官网只写 dist/web/ 根上 site/ 里有的文件和 /s/；_headers 两边共用
@@ -11,11 +12,48 @@ const WSS = {
   production: 'wss://lemomemo.com',
   preview: 'wss://preview.lemomemo.com',
   e2e: 'ws://127.0.0.1:8788',
+  'e2e-real': 'ws://127.0.0.1:8789',
   development: 'ws://127.0.0.1:8788',
   test: 'ws://127.0.0.1:8788',
 };
 
 export const MODES = Object.keys(WSS);
+
+/** e2e-real 构建必须由调用方给的公开配置（构建脚本不写死；值来自本机真后端，先跑 npm run e2e:real:up 再取 env） */
+export const E2E_REAL_ENV = ['VITE_PUBLIC_SUPABASE_URL', 'VITE_PUBLIC_ANON_KEY'];
+
+/** 本机地址的主机名（URL.hostname 已转小写；IPv6 带方括号） */
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+/**
+ * 构建前检查环境变量（build_web.mjs 在 vite build 之前调）：
+ * - e2e-real：两个公开配置缺哪个就报哪个；
+ * - production：VITE_PUBLIC_SUPABASE_URL 不准指向本机（防止 e2e-real 的环境变量漏进正式构建）；没给或缺别的由 vite.config.ts 报；
+ * - 其他模式不检查。
+ * @param {string} mode
+ * @param {Record<string, string | undefined>} env
+ * @returns {string[]}
+ */
+export function buildEnvErrors(mode, env = process.env) {
+  if (mode === 'production') {
+    const raw = env.VITE_PUBLIC_SUPABASE_URL?.trim();
+    if (!raw) return [];
+    let host;
+    try {
+      host = new URL(raw).hostname;
+    } catch {
+      return [`production 构建的 VITE_PUBLIC_SUPABASE_URL 不是合法网址：${raw}`];
+    }
+    if (LOOPBACK_HOSTS.has(host)) {
+      return [`production 构建的 VITE_PUBLIC_SUPABASE_URL 指向本机（${host}）：多半是 e2e-real 的环境变量漏进来了，正式版必须用 https://lemomemo.com/sb；先清掉这个变量再构建`];
+    }
+    return [];
+  }
+  if (mode !== 'e2e-real') return [];
+  const missing = E2E_REAL_ENV.filter((k) => !env[k]?.trim());
+  if (!missing.length) return [];
+  return [`e2e-real 构建缺少 ${missing.join('、')}：先跑 npm run e2e:real:up，再按它输出的 env 设好这两个变量后重新构建`];
+}
 
 /**
  * 解析 _headers：[{ path, lines: ['Header: value', '! Header'] }]

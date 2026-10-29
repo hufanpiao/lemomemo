@@ -3,6 +3,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
+import type { AccountGateApi } from '../data/account-gate.ts';
 import type { AuthApi } from '../data/auth-api.ts';
 import { zh } from '../i18n/zh.ts';
 import AuthPage from '../ui/AuthPage.tsx';
@@ -22,6 +23,18 @@ export function fakeApi(over: Partial<AuthApi> = {}): FakeApi {
   } as FakeApi;
 }
 
+export type FakeAccount = AccountGateApi & Record<keyof AccountGateApi, ReturnType<typeof vi.fn>>;
+
+/** 假的 account（status、restore、signOut local）；默认 status 回 active，不挡登录 */
+export function fakeAccount(over: Partial<AccountGateApi> = {}): FakeAccount {
+  return {
+    status: vi.fn(async () => ({ kind: 'active' as const })),
+    restore: vi.fn(async () => ({ ok: true as const })),
+    signOutLocal: vi.fn(async () => true),
+    ...over,
+  } as FakeAccount;
+}
+
 /** 测试里的“现在”：用例里直接改 time.clock 拨时间 */
 export const time = { clock: 1_000_000 };
 export const now = () => time.clock;
@@ -32,8 +45,8 @@ export function resetHarness(): void {
   uiStore.getState().setLocale('zh-CN');
 }
 
-export async function renderPage(api: AuthApi, onDone = vi.fn()) {
-  render(<AuthPage gate="login" deps={{ api, now, onDone }} />);
+export async function renderPage(api: AuthApi, onDone = vi.fn(), account: AccountGateApi = fakeAccount()) {
+  render(<AuthPage gate="login" deps={{ api, now, onDone, account }} />);
   await waitFor(() => expect(turnstile.mounted).toBe(1));
   return onDone;
 }
@@ -56,4 +69,30 @@ export async function toInviteCode(api: AuthApi) {
     fireEvent.change(screen.getByLabelText(zh['auth.code.label']), { target: { value: '654321' } });
   });
   return api;
+}
+
+/** 恢复页测试共用：记下本机清理每一步（readSessionId 固定回 s1） */
+export function exitSpy(log: string[]) {
+  return {
+    clearLocalSessionIf: vi.fn((sid: string | null) => void log.push(`clearLocalSessionIf:${sid}`)),
+    readSessionId: () => 's1',
+    deleteDb: vi.fn(async () => {
+      log.push('deleteDb');
+      return 'deleted' as const;
+    }),
+    clearCacheStorage: vi.fn(async () => void log.push('clearCacheStorage')),
+  };
+}
+
+/** 恢复页测试共用：渲染登录表单、填邮箱、填满 6 位验证码 */
+export async function loginWith(account: AccountGateApi, log: string[] = []) {
+  const api = fakeApi();
+  const onDone = vi.fn(() => void log.push('onDone'));
+  const localExit = exitSpy(log);
+  render(<AuthPage gate="login" deps={{ api, now, onDone, account, localExit }} />);
+  await typeEmailAndSend('me@example.com');
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText(zh['auth.code.label']), { target: { value: '123456' } });
+  });
+  return { api, onDone, localExit };
 }

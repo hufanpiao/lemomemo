@@ -43,7 +43,7 @@ function deps(create?: (b: BootResult, o: SyncOptions) => Sync) {
     takeLocalSession: vi.fn((): string | null => 's1'),
     clearLocalSessionIf: vi.fn(),
     goToAuth: vi.fn(),
-    setExitNotice: vi.fn(),
+    setExitNotice: vi.fn((_n: string, _sid?: string | null) => undefined),
     ...(create ? { create } : {}),
   };
 }
@@ -125,7 +125,7 @@ describe('wireSync', () => {
       const a = await ob.next();
       expect(await ob.fail(a?.op_id ?? '', { status: 403, code })).toBe('disabled');
       await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
-      expect(d.setExitNotice).toHaveBeenCalledWith(notice);
+      expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain(notice);
       expect(d.setExitNotice.mock.invocationCallOrder[0]).toBeLessThan(d.goToAuth.mock.invocationCallOrder[0] ?? 0);
       // 这里 fail 没带 sid：退回 K6-sugg3 的写法（收到那一刻 takeLocalSession），回登录页前只删它
       expect(d.takeLocalSession).toHaveBeenCalledTimes(1);
@@ -144,7 +144,7 @@ describe('wireSync', () => {
     wireSync(boot, d);
     s.removed('session_not_found');
     await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
-    expect(d.setExitNotice).toHaveBeenCalledWith('removed');
+    expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain('removed');
   });
 });
 
@@ -226,7 +226,7 @@ describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 
         t.release();
         await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
         expect(readSessionUserId()).toBe(user);
-        expect(t.d.setExitNotice).toHaveBeenCalledWith('removed');
+        expect(t.d.setExitNotice.mock.calls.map((c) => c[0])).toContain('removed');
       }
     });
   }

@@ -9,8 +9,10 @@
 // 业务代码只经功能的 data 层用本文件（1.3b；ESLint 分层规则拦 ui、hooks、kit、app）；对象存储本身（shared/objstore.ts、aws4fetch）
 // App 一律引不到（check_arch 的 R2）
 import { z } from 'zod';
+import { exitForDisabled, type DisabledExitOptions } from './account-status.ts';
 import { buildInfo } from './env.ts';
 import { withAppVersion } from './http.ts';
+import type { ExitNotice } from './session.ts';
 
 export const FILE_BUCKETS = ['images', 'files'] as const;
 export type FileBucket = (typeof FILE_BUCKETS)[number];
@@ -29,7 +31,8 @@ export const TIMEOUT_MS = { upload: 120_000, sign: 15_000, get: 60_000 } as cons
  * - bad_type：415 bad_type——类型不对（含 webp 文件头不对）
  * - upgrade：426 upgrade_required——走升级提示（0.27 第 1 点），不重试
  * - auth：401 unauthorized——登录过期，刷新会话后再试一次，还不行回登录页
- * - account：账号停用或这台设备的会话已被吊销（account_disabled、session_revoked）——交给会话处理
+ * - account：账号停用或这台设备的会话已被吊销（account_disabled、session_revoked）——交给会话处理；退出原因用 accountExitOf 定
+ *   （account_disabled 先探测分清停用和冷静期，R-256 ③，和 sync-wiring 同一份）
  * - resign：取字节时 403 expired / bad_signature——重新签一次再取（换过 FILES_URL_SECRET 也会这样）
  * - not_pending：上传时 403 forbidden / not_pending（架构 0.33 第 5 条，5.13 第 2 点）——这一行已经不在 pending
  *   （file-check 判过了，或行已删）。**不是上传失败**：不重传、不按出错提示；data 层读这一行的 check_status：
@@ -173,6 +176,18 @@ export function checkSig(sig: string, want?: 'view' | 'download'): number | null
 const ErrorBody = z.object({ code: z.string().min(1).max(64), reason: z.string().max(64).optional() });
 
 const ACCOUNT_REASONS = new Set(['account_disabled', 'session_revoked']);
+
+/**
+ * kind 为 account 的错误 → 退出原因（R-256 ③、PROBE-sugg ②）：session_revoked → removed；
+ * account_disabled（files 函数按 is_active() 判断，停用和冷静期都回它）→ platform/account-status.ts 的 exitForDisabled 探测再定
+ * （冷静期 / 已停用 / removed / 探测不出 disabled_unsure / 'active' 账号正常、不离开）。
+ * sid：发这次请求时本机会话的 session_id（调用方发请求前记下）。不是 account 类的错误返回 null
+ */
+export async function accountExitOf(e: FileError, sid: string | null, o: DisabledExitOptions = {}): Promise<ExitNotice | 'active' | null> {
+  if (e.kind !== 'account') return null;
+  const disabled = e.code === 'account_disabled' || e.reason === 'account_disabled';
+  return disabled ? exitForDisabled(sid, o) : 'removed';
+}
 
 /** HTTP 状态 + 服务器错误码 → 类别（14.2 第 11 点的错误码表） */
 export function classify(status: number, code: string, reason?: string): FileErrorKind {

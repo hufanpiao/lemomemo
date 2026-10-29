@@ -32,24 +32,25 @@ import { createDeviceRegistrar } from '../core/device-reg.ts';
 import { createLogQueue, guardOwner } from '../core/log/queue.ts';
 import { devicePlatform, readInstallId, withLock } from '../platform/device-info.ts';
 import { clearLogQueue, clearOtherLogQueues, logQueueStore } from '../platform/log-store.ts';
+import { probeAccountForExit } from '../platform/account-status.ts';
 import { browserLifecycle } from '../platform/net.ts';
 import { createLogUploader, createSupabaseTransport } from '../platform/sync-net.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
-import { buildInfo } from '../platform/env.ts';
+import { buildInfo, registerJsErrorLog } from '../platform/env.ts';
 import {
-  clearCacheStorage, clearLocalSessionIf, goToAuth, onAuthUser, onSessionStorageChange, readSessionId, readSessionUserId, setExitNotice,
-  takeLocalSession,
+  clearCacheStorage, clearLocalSessionIf, goToAuth, onAuthUser, onSessionStorageChange, readSessionAccessToken, readSessionId, readSessionUserId,
+  setExitNotice, takeLocalSession,
 } from '../platform/session.ts';
 import { hideSplashAfter, hideSplashWhenPainted } from '../platform/splash.ts';
 import { nextFrame } from '../motion/index.ts';
-import { registerServiceWorker, reloadPage } from '../platform/sw-register.ts';
+import { checkSwOnForeground, registerServiceWorker, reloadPage, watchServiceWorkerUpdate } from '../platform/sw-register.ts';
 import { mountFeatures } from './features.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
-import { startRoot, withCrashFallback } from './root.tsx';
+import { startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
 import { wireSync } from './sync-wiring.ts';
 
 /** 界面语言（16.4）：缓存的 profiles.ui_locale → 本机选过的（pv-locale）→ 设备语言 → 中文；规则同 src/auth/main.tsx，多一层缓存的 profile */
-function applyLocale(boot: BootResult): void {
+function applyLocale(boot: Pick<BootResult, 'profile'>): void {
   const cachedUi = boot.profile?.['ui_locale'];
   let savedLocal: string | null = null;
   try {
@@ -85,6 +86,8 @@ async function start(): Promise<void> {
 
   // 日志通道（K8-logs、K6-log）：outbox、同步、时区上报、设备登记都交到这里；写 logs 表的那一端接上以前先在内存里留着（log-channel.ts）
   const logs = createLogChannel();
+  // 客户端错误日志（TC-B1-68、架构 6.1）：只记“类型@文件名:行号”，同一个 code 每天 5 条
+  registerJsErrorLog(logs.log);
   // 写 logs 表的那一端（架构 0.38 第 68 条）：localStorage 队列 lemo.logq.<user_id>，主页在线时批量上传；别的账号留下的队列清掉
   clearOtherLogQueues(userId);
   // 上传前核对会话主人：别的标签页换成了别的账号，这一页拿到的是新账号的令牌，不能用它传这个账号的日志
@@ -101,6 +104,12 @@ async function start(): Promise<void> {
     // 别的标签页退出登录、按库名删本机库（versionchange 的 newVersion 为 null，K6 复审 C）：同步读一次会话，
     // 没有了就回登录页（库正在被删，watchAccount 收到 storage 事件后也会走退出流程，重复跳转无害）；还有（那边已重新登录）就重新载入
     onCacheDeleted: () => (readSessionUserId() ? reloadPage() : goToAuth()),
+    // 升级本机库被别的标签页挡住：coldStart 还在等库打开时整屏提示“请关掉其他打开的柠檬记窗口”，库打开后自动消失（root.tsx，架构师 10-30 第 8 点）。
+    // 这时 profile 还没读出来，先按本机选过的语言和设备语言定一次界面语言（下面 applyLocale(boot) 再按缓存的 profile 定）
+    onUpgradeCenter: (u) => {
+      applyLocale({ profile: null });
+      watchCacheBlocked(u);
+    },
   });
   applyLocale(boot);
   // unavailable 照样渲染 App（只联网用）；version_too_new 只渲染整屏提示（下面），不挂功能入口
@@ -146,17 +155,33 @@ async function start(): Promise<void> {
       })
     : null;
   wireSync(boot, {
-    transport, clearCacheStorage, goToAuth, setExitNotice, platform, log: logs.log,
+    transport, clearCacheStorage, goToAuth, platform, log: logs.log,
+    // 第二个参数是 sid（被拒那次请求的会话），不是 session 的 setExitNotice 的 storage，要包一层
+    setExitNotice: (n, sid) => setExitNotice(n, undefined, { sid: sid ?? null }),
     // 被移除、停用：一收到就删本机会话，回登录页前只在会话还是那一个时再删（K6-sugg3 ①）
     takeLocalSession: () => takeLocalSession(),
     clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
+    // 收到 account_disabled 先探测是停用还是注销冷静期（R-256 ③ 后续）：用被拒那次会话的令牌调 account status
+    probeAccount: (token) => probeAccountForExit({ token }),
+    readSession: () => ({ sid: readSessionId(), token: readSessionAccessToken() }),
+    reload: reloadPage,
+    // 限次触发、已让出同步主页：顶部出“同步暂停，请稍后重新打开”（App.tsx 的 UpdateBanner 读 ui-store 的 sync-paused）
+    onSyncPaused: () => uiStore.getState().pushBanner({ id: 'sync-paused', kind: 'sync-paused' }),
     onLeader: (on) => logQueue.setLeader(on),
     clearLogs,
     ...(device ? { deviceId: device.id, ensureDevice: device.ensure } : {}),
   });
 
   // version_too_new 时上面已经注册过
-  if (!import.meta.env.DEV && boot.status !== 'version_too_new') void registerServiceWorker();
+  // 注册以后盯住“后台装好了新版本”（8.1）：顶部提示“有新版本 · 重新打开”（App.tsx 的 UpdateBanner），不强制刷新
+  if (!import.meta.env.DEV && boot.status !== 'version_too_new') {
+    void registerServiceWorker().then((reg) => {
+      if (!reg) return;
+      watchServiceWorkerUpdate(reg, () => boot.upgrade.setSwReady());
+      // 切到前台、在线、距上次查满 1 小时才主动查新版本（架构师 10-30 第 5 点；和同步引擎“切到前台时比较最低版本”同一个时机）
+      checkSwOnForeground(reg, { life: browserLifecycle });
+    });
+  }
 }
 
 // start 自己不该抛（coldStart 不抛）；万一抛了（例如没有 #root）不留白屏：回登录页，登录页会显示“已登录 · 继续”

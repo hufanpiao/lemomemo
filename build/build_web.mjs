@@ -1,4 +1,4 @@
-// 构建 dist/web/（架构 8.1）：npm run build -- --mode preview|production
+// 构建 dist/web/（架构 8.1）：npm run build -- --mode preview|production（另有本机用的 development、test、e2e、e2e-real）
 // 步骤：vite build（App + 预览沙箱）→ 单独打包 sw.ts → 注入预缓存清单 → 拼 dist/web（site/、_headers、_routes.json、version.json）→ 体积预算
 // tsc、ESLint、Stylelint、check_arch 由 CI 在这之前单独跑（unit.yml），这里不重复
 import { spawnSync } from 'node:child_process';
@@ -6,7 +6,7 @@ import { cpSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
-import { assembleWeb } from './assemble_web.mjs';
+import { assembleWeb, buildEnvErrors, MODES } from './assemble_web.mjs';
 import { injectSwManifest } from './inject_sw_manifest.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,12 +19,19 @@ function argMode(argv) {
 }
 
 const mode = argMode(process.argv.slice(2));
-if (!['production', 'preview', 'development', 'test', 'e2e'].includes(mode)) {
+if (!MODES.includes(mode)) {
   console.error(`未知的构建模式：${mode}`);
   process.exit(2);
 }
-// e2e：本机端到端测试用的预览版（带 CSP 试验页），WebSocket 指向本机
-const viteMode = mode === 'e2e' ? 'preview' : mode;
+// e2e：本机端到端测试用的预览版（带 CSP 试验页），WebSocket 指向本机 8788
+// e2e-real：同上，但接本机真后端（8789 端口同源的 /sb）；VITE_PUBLIC_SUPABASE_URL、VITE_PUBLIC_ANON_KEY 由调用方从环境变量传入，Vite 按 envPrefix 自己读
+// buildEnvErrors 另外拦住 production 的 VITE_PUBLIC_SUPABASE_URL 指向本机（e2e-real 的变量漏进正式构建）
+const envErrors = buildEnvErrors(mode);
+if (envErrors.length) {
+  for (const e of envErrors) console.error(e);
+  process.exit(2);
+}
+const viteMode = mode === 'e2e' || mode === 'e2e-real' ? 'preview' : mode;
 
 await build({ configFile: resolve(ROOT, 'vite.config.ts'), mode: viteMode, logLevel: 'warn' });
 await build({ configFile: resolve(ROOT, 'vite.sw.config.ts'), mode: viteMode, logLevel: 'warn' });

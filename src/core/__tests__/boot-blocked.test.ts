@@ -75,6 +75,14 @@ describe('升级本机库被挡住（blocked）：延迟 BLOCKED_PROMPT_DELAY_MS
     vi.useRealTimers();
   });
 
+  it('onUpgradeCenter 在开库之前同步拿到升级中心（main.tsx 据此盯 blocked 画整屏提示，架构师 10-30 第 8 点）', () => {
+    let got: unknown = null;
+    const open = vi.fn(() => ({}));
+    void coldStart(opts({ open } as unknown as IDBFactory, { onUpgradeCenter: (u) => (got = u) }));
+    expect(got).toBe(getBoot()?.upgrade);
+    expect(got).not.toBeNull();
+  });
+
   it('常量：VERSION_CLOSE_WAIT_MS 加余量', () => {
     expect(BLOCKED_PROMPT_DELAY_MS).toBeGreaterThan(VERSION_CLOSE_WAIT_MS);
   });

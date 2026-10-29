@@ -55,7 +55,41 @@ export const zh = {
   'settings.account.export': '导出全部数据',
   'settings.account.delete': '注销账号',
   'settings.account.signOut': '退出登录',
-  'settings.soon': '即将开放',
+  'settings.account.rateLimited': '导出和注销一天合计 3 次，今天已经用完，请明天再试',
+
+  // 设置 › 数据（R-256 ②；B1 只有“导出全部”一行）
+  'settings.data.title': '数据',
+  'settings.export.hint': '存成一个备份文件',
+  'settings.export.offline': '联网后才能导出',
+  'settings.export.busy': '正在导出…数据多时要等一会儿',
+  'settings.export.done': '已导出，通知邮件已发到你的邮箱',
+  'settings.export.notSaved': '已导出，但文件还没存下来',
+  'settings.export.vaultOmitted': '隐私记没有导出（没解锁）',
+  'settings.export.saveAgain': '再存一次',
+
+  // 设置 › 账号 › 最近的导出（R-256 ②；架构 0.29 续第 96 条③）
+  'settings.recentExport.title': '最近的导出',
+  'settings.recentExport.none': '最近 90 天没有导出过',
+  'settings.recentExport.mailFailed': '标着“通知邮件没发出去”的那几次，你没有收到通知邮件。如果不是你本人导出的，请马上用上面的“退出其他所有设备”。',
+  'settings.recentExport.mailMark': '通知邮件没发出去',
+  'settings.recentExport.removedDevice': '已移除的设备',
+  'settings.recentExport.unknownDevice': '未知设备',
+  'settings.recentExport.showAll': '显示全部（共 {n} 条）',
+
+  // 设置 › 账号 › 注销账号（R-188、R-192、R-256；功能说明第 30 项；架构 0.29 续第 129、131、137 条）
+  'settings.delete.back': '设置',
+  'settings.delete.body.what': '注销后，你在柠檬记里的全部记录、照片、附件、设置，以及服务器上的备份都会删除。',
+  'settings.delete.body.cooling': '提交后有 7 天冷静期：账号先停用，所有设备都会退出；{date} 之前用邮箱验证码登录，可以选择恢复账号。',
+  'settings.delete.body.final': '满 7 天后彻底删除，不能再恢复。',
+  'settings.delete.body.mail': '注销只会用邮件通知你，请留意垃圾邮件。',
+  'settings.delete.unsent': '还有 {n} 条改动没上传，注销后会丢弃',
+  'settings.delete.unsentUnknown': '可能有改动还没上传，注销后会丢弃',
+  'settings.delete.label': '请输入“{word}”确认',
+  'settings.delete.word': '注销',
+  'settings.delete.submit': '注销账号',
+  'settings.delete.busy': '正在注销…正在清空这台设备上的数据',
+  'settings.delete.confirmRequired': '请照着输入“{word}”',
+  'settings.delete.admin': '管理员账号请在控制台处理',
 
   'settings.busy': '请稍候…',
   'settings.signingOut': '正在退出…正在清空这台设备上的数据，网络不好时最多要十几秒。',

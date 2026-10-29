@@ -20,3 +20,16 @@ export const ACCOUNT_ERROR_CODES = [
 
 export const accountErrorCode = z.enum(ACCOUNT_ERROR_CODES);
 export type AccountErrorCode = z.infer<typeof accountErrorCode>;
+
+// account {action: 'status'} 的返回（10-30 架构师：登录页靠它判断要不要显示恢复页）：冷静期放行、不写库、不计次数、不发信。
+// 管理员停用（含没有 profile）回 disabled，不是 403；会话失效、没登录照旧回 {error}（session_revoked、unauthorized、try_later）。
+// 服务器：supabase/functions/account/core.ts 的 ACCOUNT_STATUS_VALUES 和这里一字不差（tests/functions/account.test.ts 核对）。
+export const ACCOUNT_STATUSES = ['active', 'pending_deletion', 'disabled'] as const;
+
+export const accountStatusResponse = z.discriminatedUnion('status', [
+  z.object({ ok: z.literal(true), status: z.literal('active') }),
+  // purge_after：ISO 时刻；冷静期但取不到 pending_deletions 行时为 null（不该出现，前端按“冷静期、时刻未知”处理）
+  z.object({ ok: z.literal(true), status: z.literal('pending_deletion'), purge_after: z.string().nullable() }),
+  z.object({ ok: z.literal(true), status: z.literal('disabled') }),
+]);
+export type AccountStatusResponse = z.infer<typeof accountStatusResponse>;

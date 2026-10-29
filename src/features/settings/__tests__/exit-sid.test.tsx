@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { readSessionUserId, resetSelfSignOutForTest } from '../../../platform/session.ts';
 import { defaultExitSteps } from '../../../platform/sign-out.ts';
+import { guardedLocalStorage, isRemovalGuarded } from '../../../platform/supabase/auth-storage.ts';
 import { zh } from '../i18n/zh.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';
 import { clickSignOut, deferred, fail, fakeApi, fakeExit, now, renderPage, text } from './fakes.tsx';
@@ -121,8 +122,40 @@ describe('删本机会话只删本页那一个（K6-sugg3 ①，真的 localStor
     expect(readSessionUserId()).toBeNull();   // 这就是建议 ① 说的窗口：s2 被删了
   });
 
+  it('被移除时后台那次 signOut 也挂删键保护（K6-signout-lib）：它最后删会话键时本机已是别的标签页的 s2，就不删；落定后撤掉', async () => {
+    seed('s1');
+    const { exit } = realExit();
+    let late: (() => void) | null = null;
+    const api = fakeApi({
+      loadDevices: vi.fn(async () => fail('revoked', 's1')),
+      // 模拟 auth-js：初始化、排锁那几秒以后才走到 _removeSession
+      dropLocalSession: vi.fn(
+        () =>
+          new Promise<{ serverDone: boolean }>((resolve) => {
+            late = () => {
+              guardedLocalStorage.removeItem(KEY);
+              resolve({ serverDone: true });
+            };
+          }),
+      ),
+    });
+    render(<SettingsPage deps={{ api, exit, now }} />);
+    await screen.findByRole('dialog');
+    expect(api.dropLocalSession).toHaveBeenCalledWith('s1');
+    expect(isRemovalGuarded()).toBe(true);
+    seed('s2', B);
+    await act(async () => {
+      late?.();
+    });
+    expect(readSessionUserId()).toBe(B);
+    expect(isRemovalGuarded()).toBe(false);
+  });
+
   it('自己退出、服务器没退成：兜底删会话、跳登录页前再删都只删退出前那一个；退出期间别的标签页登录的新会话不删', async () => {
     seed('s1');
+    // ④ 前会话已换成 s2：改用旧令牌直接 logout（复审建议 1：不真的发相对路径请求）；旧令牌过期，401 = 服务器没退成
+    const fetchFn = vi.fn(async (_u: RequestInfo | URL, _i?: RequestInit) => new Response(null, { status: 401 }));
+    vi.stubGlobal('fetch', fetchFn);
     const { exit, gate } = realExit();
     const api = fakeApi({ dropLocalSession: vi.fn(async () => ({ serverDone: false })) });
     await renderPage(api, exit);
@@ -134,13 +167,17 @@ describe('删本机会话只删本页那一个（K6-sugg3 ①，真的 localStor
     });
     const dlg = await screen.findByRole('dialog');
     expect(text(dlg)).toContain(zh['settings.offlineOut.body']);
-    expect(api.dropLocalSession).toHaveBeenCalledWith('s1');
+    expect(api.dropLocalSession).not.toHaveBeenCalled();   // ④ 前会话已换成 s2：不调 supabase-js，改用旧令牌直接 logout（R-257）
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(String(fetchFn.mock.calls[0]?.[0])).toContain('/auth/v1/logout?scope=local');
+    expect(new Headers(fetchFn.mock.calls[0]?.[1]?.headers).get('Authorization')).toBe(`Bearer ${tok('s1')}`);   // 带的是旧令牌
     expect(readSessionUserId()).toBe(B);
     await act(async () => {
       fireEvent.click(within(dlg).getByRole('button', { name: zh['settings.revoked.go'] }));
     });
     await waitFor(() => expect(exit.goToAuth).toHaveBeenCalledTimes(1));
     expect(readSessionUserId()).toBe(B);
+    vi.unstubAllGlobals();
   });
 
   it('对照：自己退出、服务器没退成、没有别的标签页登录：退出前那个会话照样删掉', async () => {

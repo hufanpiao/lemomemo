@@ -10,164 +10,11 @@
 //
 // 能跑的：每种环境的自检（模拟值真的生效、按判断式该分到“教程”还是“登录”）、/app/ 外壳在该环境下能打开且没有 CSP 报错、
 //   登录页 /app/auth/（K4）上该出教程还是登录表单（TC-B1-16、TC-B1-17 的页面部分；R-225 起 iOS 上的 Chrome、KakaoTalk、微信也只给教程）。
-// 还用 test.fixme 标着的：“能登录”那两条，要 e2e 的 /sb 接本地 Supabase ＋ Mailpit（现在 playwright.config 的 SUPABASE_UPSTREAM 指向假后端，假后端不发验证码）。
-import { devices, type APIRequestContext, type Page } from '@playwright/test';
-import { randomUUID } from 'node:crypto';
+// “能登录”那两条（原来 test.fixme 着：TC-B1-16 桌面走一遍网页登录、TC-B1-17 主屏幕版能登录）已搬到真后端组
+//   tests/e2e/b1-login-ua.real.spec.ts（E2E-REAL 第 5 步，npm run e2e:real 跑；/sb 接 lemo-e2e、验证码从 Mailpit 取）。
+// 模拟 UA 的函数、登录页的选择器在 tests/e2e/ua-emulation.ts（两组共用）。
 import { expect, test } from './csp-fixture.ts';
-
-type Device = (typeof devices)[string];
-
-/** describe 里不能改 defaultBrowserType（会强制换 worker），去掉它 */
-function withoutBrowser(d: Device): Omit<Device, 'defaultBrowserType'> {
-  const { defaultBrowserType: _ignored, ...rest } = d;
-  return rest;
-}
-
-const IPHONE = withoutBrowser(devices['iPhone 15'] as Device);
-const MAC_SAFARI = withoutBrowser(devices['Desktop Safari'] as Device);
-const DESKTOP_CHROME = withoutBrowser(devices['Desktop Chrome'] as Device);
-
-type Kind = 'iphone' | 'standalone' | 'ipad' | 'desktop';
-
-/** 在页面脚本之前改掉模拟不到的接口：navigator.standalone、display-mode、maxTouchPoints */
-async function emulate(page: Page, kind: Kind): Promise<void> {
-  await page.addInitScript(
-    ({ standalone, touchPoints, safari }) => {
-      // iOS / iPadOS 的 Safari 一直有 navigator.standalone（主屏幕版 true、Safari 里 false）；桌面不动它
-      if (safari) {
-        Object.defineProperty(Navigator.prototype, 'standalone', { configurable: true, get: () => standalone });
-      }
-      if (touchPoints !== null) {
-        Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { configurable: true, get: () => touchPoints });
-      }
-      if (!standalone) return;
-      const orig = window.matchMedia.bind(window);
-      window.matchMedia = (query: string): MediaQueryList => {
-        const m = /^\s*\(\s*display-mode\s*:\s*([a-z-]+)\s*\)\s*$/i.exec(query);
-        const list = orig(query);
-        if (!m) return list;
-        const matches = m[1]?.toLowerCase() === 'standalone';
-        return new Proxy(list, {
-          get(target, prop) {
-            if (prop === 'matches') return matches;
-            const v: unknown = Reflect.get(target, prop, target);
-            return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
-          },
-        });
-      };
-    },
-    {
-      standalone: kind === 'standalone',
-      touchPoints: kind === 'ipad' ? 5 : null,
-      safari: kind !== 'desktop',
-    },
-  );
-}
-
-interface EnvSeen {
-  ua: string;
-  maxTouchPoints: number;
-  navStandalone: boolean | null;
-  displayStandalone: boolean;
-}
-
-async function readEnv(page: Page): Promise<EnvSeen> {
-  return page.evaluate(() => {
-    const s = (navigator as Navigator & { standalone?: unknown }).standalone;
-    return {
-      ua: navigator.userAgent,
-      maxTouchPoints: navigator.maxTouchPoints,
-      navStandalone: typeof s === 'boolean' ? s : null,
-      displayStandalone: window.matchMedia('(display-mode: standalone)').matches,
-    };
-  });
-}
-
-/**
- * 判断式（测试这边的参照，不是 App 的实现；R-225 起不分浏览器）：
- * iPhone、iPad（iPadOS 是 Mac UA ＋ maxTouchPoints > 1）上不在主屏幕模式 → 只给“添加到主屏幕”教程；
- * 其中不是 Safari 的（iOS 的 Chrome、KakaoTalk、微信等）另提示“请在 Safari 里打开本页”；电脑浏览器照常登录
- */
-function expectedGate(e: EnvSeen): 'tutorial' | 'tutorial-safari' | 'login' {
-  const appleTouch = /iPhone|iPad|iPod/.test(e.ua) || (/Macintosh/.test(e.ua) && e.maxTouchPoints > 1);
-  const safari = /Safari\//.test(e.ua) && /Version\//.test(e.ua) && !/CriOS|FxiOS|EdgiOS|KAKAOTALK|MicroMessenger|Chrome\//.test(e.ua);
-  const standalone = e.displayStandalone || e.navStandalone === true;
-  if (!appleTouch || standalone) return 'login';
-  return safari ? 'tutorial' : 'tutorial-safari';
-}
-
-// ───────── 登录页上的操作（按 K4 实际的登录页：src/features/auth/ui/AuthPage.tsx）─────────
-
-/** 教程页：标题“先把它放到主屏幕”，第二步写着“添加到主屏幕” */
-const TUTORIAL = /添加到主屏幕/;
-
-/** 邮箱框（label“邮箱”；验证码框的 label 是“邮箱里的 6 位验证码”，所以要精确匹配） */
-function emailBox(page: Page) {
-  return page.getByRole('textbox', { name: '邮箱', exact: true });
-}
-
-/** 登录页上用到 Turnstile 的地方一律换成假的（不连 Cloudflare）；只有登录页的 CSP 放行这个地址 */
-async function fakeTurnstile(page: Page): Promise<void> {
-  await page.route('https://challenges.cloudflare.com/**', (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'text/javascript',
-      body: `window.turnstile = { render(el, o) { setTimeout(() => o.callback && o.callback('XXXX.DUMMY.TOKEN.XXXX'), 0); return 'w'; }, reset() {}, remove() {} };`,
-    }),
-  );
-}
-
-/** 本机 Mailpit 里取最新一封给 email 的 6 位验证码；地址只许本机。不打印验证码 */
-async function otpFromMailpit(request: APIRequestContext, email: string): Promise<string> {
-  const base = process.env['LEMO_E2E_MAILPIT_URL'] ?? 'http://127.0.0.1:54324';
-  expect(['127.0.0.1', 'localhost', '[::1]']).toContain(new URL(base).hostname);
-  let id = '';
-  await expect
-    .poll(async () => {
-      const r = await request.get(`${base}/api/v1/search`, { params: { query: `to:"${email}"` } });
-      const j = (await r.json()) as { messages?: { ID: string }[] };
-      id = j.messages?.[0]?.ID ?? '';
-      return id;
-    }, { timeout: 15_000 })
-    .not.toBe('');
-  const msg = (await (await request.get(`${base}/api/v1/message/${id}`)).json()) as { Text?: string };
-  const code = /\b(\d{6})\b/.exec(msg.Text ?? '')?.[1];
-  expect(code, '邮件里有 6 位验证码').toBeTruthy();
-  return code ?? '';
-}
-
-/**
- * 测试账号：本机 Supabase 的 admin 接口建（不许注册：[auth] enable_signup = false），邮箱 e2e-<随机>@lemomemo.test（架构第 9 节护栏 ①）。
- * 地址和 service key 由准备步骤从 `supabase status -o json` 填进环境变量；只许本机地址
- */
-async function seedAccount(request: APIRequestContext): Promise<string> {
-  const api = process.env['LEMO_E2E_SB_API'] ?? 'http://127.0.0.1:54321';
-  const key = process.env['LEMO_E2E_SB_SERVICE_KEY'] ?? '';
-  expect(['127.0.0.1', 'localhost', '[::1]']).toContain(new URL(api).hostname);
-  expect(key, '准备步骤要设 LEMO_E2E_SB_SERVICE_KEY（本机 supabase status 的演示值）').not.toBe('');
-  const email = `e2e-${randomUUID().slice(0, 8)}@lemomemo.test`;
-  const r = await request.post(`${api}/auth/v1/admin/users`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
-    data: { email, email_confirm: true },
-  });
-  expect(r.status()).toBe(200);
-  return email;
-}
-
-/**
- * 走一遍网页登录：邮箱 → 发验证码 → 输码（填满 6 位自动提交，没有“登录”按钮）→ 回到 App。验证码这一步不截图、不进 trace（架构第 9 节）
- * Turnstile 用假脚本给 Cloudflare 官方的假令牌，所以本地 Supabase 的 CAPTCHA 要么关着、要么配官方测试 secret
- */
-async function loginViaPage(page: Page, email: string): Promise<void> {
-  await fakeTurnstile(page);
-  await page.goto('/app/auth/');
-  await emailBox(page).fill(email);
-  await page.getByRole('button', { name: '发验证码' }).click();
-  const code = await otpFromMailpit(page.request, email);
-  await page.getByRole('textbox', { name: '邮箱里的 6 位验证码' }).fill(code);
-  await expect(page).toHaveURL(/\/app\/(#\/.*)?$/);
-  await expect(page.locator('main[data-feature]')).toBeVisible();
-}
+import { DESKTOP_CHROME, IPHONE, MAC_SAFARI, TUTORIAL, emailBox, emulate, expectedGate, fakeTurnstile, readEnv } from './ua-emulation.ts';
 
 // ───────── 各模拟环境 ─────────
 
@@ -228,11 +75,6 @@ test.describe('模拟 iPhone 主屏幕版（standalone）', () => {
     await page.goto('/app/auth/');
     await expect(emailBox(page)).toBeVisible();
     await expect(page.getByText(TUTORIAL)).toHaveCount(0);
-  });
-
-  test.fixme('TC-B1-17：主屏幕版能登录【需真后端：e2e 的 /sb 现在接假后端，不发验证码、没有 RLS；要 /sb 接本地 Supabase ＋ Mailpit 才能跑】', async ({ page }) => {
-    const email = await seedAccount(page.request);
-    await loginViaPage(page, email);
   });
 });
 
@@ -298,11 +140,6 @@ test.describe('桌面（chromium：Desktop Chrome；webkit：Desktop Safari）',
     await page.goto('/app/auth/');
     await expect(emailBox(page)).toBeVisible();
     await expect(page.getByText(TUTORIAL)).toHaveCount(0);
-  });
-
-  test.fixme('TC-B1-16：走一遍网页登录，能登录【需真后端：e2e 的 /sb 现在接假后端，不发验证码、没有 RLS；要 /sb 接本地 Supabase ＋ Mailpit 才能跑】', async ({ page }) => {
-    const email = await seedAccount(page.request);
-    await loginViaPage(page, email);
   });
 });
 

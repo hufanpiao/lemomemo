@@ -122,6 +122,146 @@ describe('用例：会不会跑', () => {
   });
 });
 
+describe('用例：运行时才跳过（B1 接手清单 FN-cov-gaps ②）', () => {
+  const E = "expect(r).toEqual({ error: 'account_disabled' });";
+  const why = (code: string) => testCases(code)[0]?.skipped ?? null;
+
+  it('算跳过：回调里直接执行的 return 后面还有断言（有分号、不写分号、块里 return、两条断言中间 return）', () => {
+    for (const body of [
+      `if (!db) return; ${E}`,
+      `if (!db) return\n  ${E.replace(';', '')}`,
+      `if (!db) { console.warn('没有库，跳过'); return; }\n${E}`,
+      `if (!db) {\n  return\n}\n${E}`,
+      `return;\n${E}`,
+      `expect(1).toBe(1);\nif (!x) return;\n${E}`,
+      `for (const k of ks) { if (!k) return; }\n${E}`,
+    ]) {
+      expect(why(`it('X', async () => {\n${body}\n});`), body).toBe('运行时可能跳过：回调里断言前有 return');
+      expect(live(`it('X', async () => {\n${body}\n});`), body).toEqual([]);
+    }
+    expect(why("Deno.test({ name: 'X', async fn() { if (!db) return; assertEquals(a, 'account_disabled'); } });")).toBe('运行时可能跳过：回调里断言前有 return');
+    expect(why("Deno.test('X', async () => { if (!db) return; assertEquals(a, 'account_disabled'); });")).toBe('运行时可能跳过：回调里断言前有 return');
+    expect(why(`it('X', async function () { if (!db) return; ${E} });`)).toBe('运行时可能跳过：回调里断言前有 return');
+  });
+
+  it('算跳过：回调里调了 skip(…)（ctx.skip、context.skip(条件)、解构的 skip、this.skip），断言前后都算', () => {
+    expect(why(`it('X', async (ctx) => { if (!db) ctx.skip(); ${E} });`)).toBe('运行时跳过：回调里调了 ctx.skip(…)');
+    expect(why(`it('X', async (context) => { context.skip(!db, '没有库'); ${E} });`)).toBe('运行时跳过：回调里调了 context.skip(…)');
+    expect(why(`it('X', ({ skip }) => { skip(); ${E} });`)).toBe('运行时跳过：回调里调了 skip(…)');
+    expect(why(`it('X', function () { this.skip(); ${E} });`)).toBe('运行时跳过：回调里调了 this.skip(…)');
+    expect(why(`it('X', async (ctx) => { ${E} ctx.skip(); });`)).toBe('运行时跳过：回调里调了 ctx.skip(…)');
+    expect(why(`it('X', async (ctx) => { const s = () => ctx . skip (); s(); ${E} });`)).toBe('运行时跳过：回调里调了 ctx.skip(…)');
+    expect(live(`it('X', async (ctx) => { ctx.skip(); });`)).toEqual([]);
+  });
+
+  it('不算（反例）：嵌套函数里的 return、断言之后的 return、return 自带断言、死分支里的 return / skip、名字或字符串里带 skip', () => {
+    for (const body of [
+      `const f = () => { return 1; };\n${E}`,
+      `function g(x) { if (!x) return; return 2; }\n${E}`,
+      `ks.forEach((k) => { if (!k) return; });\n${E}`,
+      `const o = { m() { return 1; } };\n${E}`,
+      `${E}\nreturn;`,
+      `${E}\nif (!db) return`,
+      "return expect(p).resolves.toEqual({ error: 'account_disabled' });",
+      "return expect(p)\n  .resolves.toEqual({ error: 'account_disabled' });",
+      `if (false) return;\n${E}`,
+      `if (false) { ctx.skip(); }\n${E}`,
+      `if (0) ctx.skip();\n${E}`,
+      `const skipped = doSkip(r) + skipIf(1) + mySkip(2);\n${E}`,
+      `const s = 'ctx.skip()';\n// ctx.skip();\n/* return; */\n${E}`,
+      `x.return(1);\n${E}`,
+    ]) {
+      expect(why(`it('X', async (ctx) => {\n${body}\n});`), body).toBeNull();
+      expect(assertsLiteral(one(`it('X', async (ctx) => {\n${body}\n});`), AD), body).toBe(true);
+    }
+  });
+
+  it('不算（DBTEST-sugg ①）：紧挨着的上一句 expect 已经钉死条件的 if (…) return（类型收窄）', () => {
+    for (const body of [
+      `expect(r.ok).toBe(true);\nif (!r.ok) return;\n${E}`,
+      `expect(r.ok).toBe(true);\nif (!r.ok) { return; }\n${E}`,
+      `expect( r.ok ,'说明').toBe(true)\n;if ((!r.ok)) return\n${E}`,
+      `expect(r.ok).toBe(false);\nif (r.ok) return;\n${E}`,
+      `expect(m).toBeTruthy();\nif (!m) return;\n${E}`,
+      `expect(m).toBeFalsy();\nif (m) return;\n${E}`,
+      `expect(p).toBeDefined();\nif (p === undefined) return;\n${E}`,
+      `for (const k of ks) { expect(k.ok).toBe(true); if (!k.ok) return; }\n${E}`,
+      // 纯成员访问链：可选链、字面量下标；注释隔开照样算紧挨着（注释已遮成空格）
+      `expect(r?.ok).toBe(true);\nif (!r?.ok) return;\n${E}`,
+      `expect(r['ok']).toBe(true);\nif (!r['ok']) return;\n${E}`,
+      `expect(r['a b']).toBe(true);\nif (! r[ 'a b' ]) return;\n${E}`,
+      `expect(rs[0].ok).toBe(true);\nif (!rs[0].ok) return;\n${E}`,
+      `expect(r.ok).toBe(true); // x\n/* y */ if (!r.ok) return;\n${E}`,
+    ]) {
+      expect(why(`it('X', async () => {\n${body}\n});`), body).toBeNull();
+    }
+  });
+
+  it('照旧算跳过：守卫和条件对不上、不紧挨、条件执行、soft、.not、toBeDefined 配 !m、E 不是纯成员访问链', () => {
+    for (const body of [
+      `expect(r.ok).toBe(true);\nif (!r.okk) return;\n${E}`,
+      `expect(r.ok).toBe(true);\nif (r.ok) return;\n${E}`,
+      `expect(r.ok).toBe(1);\nif (!r.ok) return;\n${E}`,
+      `expect(r.ok).toBe(true);\nconst x = 1;\nif (!r.ok) return;\n${E}`,
+      `if (c) expect(r.ok).toBe(true);\nif (!r.ok) return;\n${E}`,
+      `expect.soft(r.ok).toBe(true);\nif (!r.ok) return;\n${E}`,
+      `expect(r.ok).not.toBe(false);\nif (!r.ok) return;\n${E}`,
+      `expect(m).toBeDefined();\nif (!m) return;\n${E}`,
+      `expect(r.ok).toBe(true);\nif (!r.ok) { log(); return; }\n${E}`,
+      `expect(r.ok).toBe(true);\nif (!r.ok || x) return;\n${E}`,
+      `const f = () => expect(r.ok).toBe(true);\nif (!r.ok) return;\n${E}`,
+      // 审查必改：E 不是纯成员访问链的一律不认——运算符优先级（只比文本会把 !a || b 当成 !(a || b)）
+      `expect(a || b).toBe(true);\nif (!a || b) return;\n${E}`,
+      `expect(a && b).toBeTruthy();\nif (!a && b) return;\n${E}`,
+      `expect(a + b).toBeTruthy();\nif (!a + b) return;\n${E}`,
+      `expect(a || b).toBeDefined();\nif (a || b === undefined) return;\n${E}`,
+      `expect(a ? b : c).toBeDefined();\nif (a ? b : c === undefined) return;\n${E}`,
+      `expect(a ? b : c).toBe(false);\nif (a ? b : c) return;\n${E}`,
+      // ……和带调用、await、自增、变量下标的（两次求值结果可以不同）
+      `expect(it.next().done).toBe(false);\nif (it.next().done) return;\n${E}`,
+      `expect(await ready()).toBe(true);\nif (!(await ready())) return;\n${E}`,
+      `expect(i++).toBeFalsy();\nif (i++) return;\n${E}`,
+      `expect(r[i++]).toBe(true);\nif (!r[i++]) return;\n${E}`,
+      // toEqual / toStrictEqual 不当守卫：只认 Object.is 语义，偏严
+      // 引号里的空白不能去掉：r['a b'] 和 r['ab'] 是两个键
+      `expect(r['a b']).toBe(true);\nif (!r['ab']) return;\n${E}`,
+      `expect(b).toEqual(false);\nif (b) return;\n${E}`,
+      `expect(b).toStrictEqual(false);\nif (b) return;\n${E}`,
+      `expect(r.ok).toEqual(true);\nif (!r.ok) return;\n${E}`,
+      // 审查员试过不会误放的：.resolves、else / for / while / do 单句体、&& 和逗号里、label、try 块里、中间重新赋值、条件里赋值、可选链不一致、else 分支的 return
+      `expect(p).resolves.toBe(true);\nif (!p) return;\n${E}`,
+      `if (c) {} else expect(r.ok).toBe(true);\nif (!r.ok) return;\n${E}`,
+      `for (const x of xs) expect(r.ok).toBe(true);\nif (!r.ok) return;\n${E}`,
+      `while (0) expect(r.ok).toBe(true);\nif (!r.ok) return;\n${E}`,
+      `do expect(r.ok).toBe(true); while (0);\nif (!r.ok) return;\n${E}`,
+      `c && expect(r.ok).toBe(true);\nif (!r.ok) return;\n${E}`,
+      `f(), expect(r.ok).toBe(true);\nif (!r.ok) return;\n${E}`,
+      `L: expect(r.ok).toBe(true);\nif (!r.ok) return;\n${E}`,
+      `try { expect(r.ok).toBe(true); } catch {}\nif (!r.ok) return;\n${E}`,
+      `expect(r.ok).toBe(true); r = bad;\nif (!r.ok) return;\n${E}`,
+      `expect(ok).toBe(true);\nif (!(ok = g())) return;\n${E}`,
+      `expect(r.ok).toBe(true);\nif (!r?.ok) return;\n${E}`,
+      `expect(r.ok).toBe(true);\nif (r.ok) {} else return;\n${E}`,
+    ]) {
+      expect(why(`it('X', async () => {\n${body}\n});`), body).toBe('运行时可能跳过：回调里断言前有 return');
+    }
+  });
+
+  it('skip 只看名字（DBTEST-sugg ② 的边界）：别的对象的 .skip(n) 也算跳过；名字里只是带 skip 的不算', () => {
+    expect(why(`it('X', async () => { const rows = await q.skip(5).take(1); ${E} });`)).toBe('运行时跳过：回调里调了 q.skip(…)');
+    expect(why(`it('X', async () => { const page = q.skip.bind(q); ${E} });`)).toBeNull();
+  });
+
+  it('死分支：if (false) / if (0) / if ((null)) 的 then 分支里的断言不算；else 分支、非字面条件、名字以 false 开头的照算', () => {
+    for (const body of [`if (false) { ${E} }`, `if (0) ${E}`, `if ((null)) {\n${E}\n}`, `if (undefined) ${E}`, `if ('') { ${E} }`, `if (!true) ${E}`, `if (void 0) ${E}`]) {
+      expect(assertsLiteral(inIt(body), AD), body).toBe(false);
+    }
+    for (const body of [`if (false) {} else { ${E} }`, `if (x) { ${E} }`, `if (falsey) { ${E} }`, `if (false || x) { ${E} }`, `if (false) {}\n${E}`]) {
+      expect(assertsLiteral(inIt(body), AD), body).toBe(true);
+    }
+  });
+});
+
 describe('断言：白名单、只看期望值、只认回调里直接执行的', () => {
   it('算：toEqual / toStrictEqual / toMatchObject / toBe、resolves、expect.soft；assertEquals 等四个的第 2 个参数', () => {
     expect(assertsLiteral(inIt("expect(await r.json()).toEqual({ error: 'account_disabled' });"), AD)).toBe(true);

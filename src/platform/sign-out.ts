@@ -25,12 +25,34 @@
 // • 兜底删本机会话只删“退出前那一个”（接手清单 K6-sugg3 ①）：一开头记下本机会话的 session_id，④ 不是 ok、④ 晚到时都按它
 //   clearLocalSessionIf(sid)（= session.ts 的 clearLocalSessionIf），退出那几秒里别的标签页刚登录的新会话不删。
 //   ExitSteps 只有这一个删会话的方法、sid 必填（K6-sugg4 ②）：没有“不给参数就直接删”的写法，桩忽略参数也不会让生产代码变成无条件删
-//   已知边界：④ 里 supabase-js 的 signOut 自己读本机会话、最后自己删会话键，那几秒里别的标签页写进来的新会话会被它当成本页的会话退掉——
-//   不归这里管，只能靠“别的标签页这时登录”本来就少见（登录页见到有会话先显示“当前已登录”）
+// • ④ 里 supabase-js 自己删会话键也只删“退出前那一个”（接手清单 K6-signout-lib，架构师 10-30：不改成直接调 /logout，加存储保护）：
+//   auth-js 2.118 的 _signOut 先读本机会话、拿它的令牌调 /logout，最后 _removeSession 无条件删会话键（默认不加锁）。
+//   client.ts 给 auth 传的是包了 localStorage 的适配器（supabase/auth-storage.ts），这里从一开头到 ④ 的请求回来（晚到也算，
+//   最多 SELF_SIGN_OUT_TTL_MS）挂上删键判断：session.ts 的 mayRemoveSessionKey(key, sid)，本机会话已不是 sid 就不删它和它的附属键。
+//   平时适配器和直接用 localStorage 一样，键名、storage 事件都不变
+// • ④ 前再读一次 sid（K6-signout-lib 收窄，架构师 10-30 更正）：supabase-js 调 /logout 用的令牌是它在 ④ 里从本机读的，
+//   ①②③ 那几秒里别的标签页登录的新会话会被它读到、在服务器上吊销。所以一开头和 sid 一起把旧会话的 access token 记在内存里（不记录、不写回），
+//   ④ 前再读一次 sid：还是那一个或读到 null 就照旧调 supabase-js（存储保护照旧）；已经换成别的会话就不调 supabase-js、也不碰存储，
+//   用记下的旧令牌经 appFetch 直接 POST <supabaseUrl>/auth/v1/logout?scope=local（logoutWithToken；版本门对它放行）：
+//   2xx（一般 204）算 serverDone，401（令牌过期）、断网、超时都算没退成，过期也不刷新令牌；等待用 ④ 剩下的预算
+//   剩下的已知问题：服务器上可能吊销了新会话——只剩“再读 sid”到 supabase-js 自己读本机会话之间几个微任务
+//   （signOut 先等 initializePromise 再 _useSession 读存储），这时别的标签页正好写进新会话才会碰到；后果是那个标签页要重新登录。不再处理
 // • localStorage 里的 install_id、pv-locale 不清；日志上传队列 lemo.logq.<user_id>（log-store.ts，架构 0.38 第 68 条）在 ② 清本机时一起清
 //   （读不到是谁时清全部 lemo.logq.*）
+import { buildInfo } from './env.ts';
+import { appFetch } from './http.ts';
 import { clearLogQueue } from './log-store.ts';
-import { clearCacheStorage, clearLocalSessionIf, markSelfSignOut, readSessionId, readSessionUserId } from './session.ts';
+import {
+  clearCacheStorage,
+  clearLocalSessionIf,
+  markSelfSignOut,
+  mayRemoveSessionKey,
+  readSessionAccessToken,
+  readSessionId,
+  readSessionUserId,
+  SELF_SIGN_OUT_TTL_MS,
+} from './session.ts';
+import { guardSessionRemoval } from './supabase/auth-storage.ts';
 
 /** 本机库名（= core/cache.ts 的 DB_NAME；platform 不引 core，测试守着两边一致） */
 export const LOCAL_DB_NAME = 'planner-v4';
@@ -157,12 +179,26 @@ export function sessionIdOf(steps: Pick<ExitSteps, 'readSessionId'>): string | n
   }
 }
 
+/** 退出一开头记下的旧会话（④ 交给 server.signOut，K6-signout-lib）：只在内存里，不记录、不打印 */
+export interface PriorSession {
+  /** 退出前本机会话的 session_id；读不出为 null */
+  sid: string | null;
+  /** 退出前本机会话的 access token；读不出为 null */
+  token: string | null;
+  /** ④ 剩下的等待预算（毫秒）：封装里直接 logout 时按它 abort */
+  budgetMs: number;
+}
+
 /** 服务器那一半（调用方用自己的接口实现） */
 export interface SignOutServer {
   /** ① 删本会话那一行 devices；出错也 resolve。没有这一步（signOut 里已经删了）不传 */
   deleteOwnDevice?(): Promise<void>;
-  /** ④ signOut({scope: 'local'})；serverDone = 服务器上的这次登录已吊销（或本来就不在了） */
-  signOut(): Promise<{ serverDone: boolean }>;
+  /**
+   * ④ signOut({scope: 'local'})；serverDone = 服务器上的这次登录已吊销（或本来就不在了）。
+   * prior = 退出一开头记下的旧会话：封装拿到客户端以后、紧贴 db.auth.signOut 之前再判断一次 sessionReplaced(prior.sid)，
+   * 换了就不调 signOut、改 logoutReplaced(prior.token, prior.budgetMs)（K6-signout-lib；删 devices 行也用 prior.sid）
+   */
+  signOut(prior: PriorSession): Promise<{ serverDone: boolean }>;
 }
 
 export interface SignOutOptions {
@@ -172,6 +208,15 @@ export interface SignOutOptions {
   readUserId?: () => string | null;
   /** 打“自己退出”的标记（默认 session.ts 的 markSelfSignOut；测试换掉） */
   markSelf?: () => void;
+  /**
+   * 挂上 supabase-js 删会话键的保护（K6-signout-lib），返回撤掉的函数；sid = 退出前本机会话的 session_id。
+   * 默认 defaultGuardRemoval（auth-storage.ts 的 guardSessionRemoval + session.ts 的 mayRemoveSessionKey）；测试换掉
+   */
+  guardRemoval?: (sid: string | null) => () => void;
+  /** 一开头记下旧会话的 access token（默认 session.ts 的 readSessionAccessToken）；读不出为 null */
+  readToken?: () => string | null;
+  /** ④ 前会话已被换掉时，用旧令牌直接 /logout（默认 logoutWithToken）；测试换掉 */
+  logoutWithToken?: (token: string, timeoutMs: number) => Promise<{ serverDone: boolean }>;
   timeoutMs?: number;
   wipeMs?: number;
   cachesMs?: number;
@@ -186,6 +231,70 @@ export async function deleteDbAgain(steps: Pick<ExitSteps, 'deleteDb'>): Promise
   }
 }
 
+/**
+ * 用记下的旧令牌直接吊销那一次登录：经 appFetch POST <supabaseUrl>/auth/v1/logout?scope=local（同 auth-js admin.signOut 的请求，
+ * 带 apikey 和 Authorization: Bearer）。2xx = serverDone；401（过期）等非 2xx、断网都算没退成，不刷新令牌、不碰存储。
+ * 到 timeoutMs 还没回来就 abort（复审建议 2），按没退成。永远 resolve
+ */
+export async function logoutWithToken(
+  token: string,
+  timeoutMs: number = SIGN_OUT_TIMEOUT_MS,
+  supabaseUrl: string = buildInfo.supabaseUrl,
+  anonKey: string = buildInfo.anonKey,
+): Promise<{ serverDone: boolean }> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const res = await appFetch(`${supabaseUrl.replace(/\/+$/, '')}/auth/v1/logout?scope=local`, {
+      method: 'POST',
+      headers: { apikey: anonKey, Authorization: `Bearer ${token}` },
+      signal: ctl.signal,
+    });
+    return { serverDone: res.ok };
+  } catch {
+    return { serverDone: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 本机会话已换成别的标签页的新会话：重读的 session_id 不是 null、且不是 sid（K6-signout-lib）。
+ * 重读为 null 不算：auth-js 读到没有会话本来就不发 /logout。sign-out.ts 的 ④ 和两个封装（紧贴 db.auth.signOut 之前）共用。不抛错
+ */
+export function sessionReplaced(sid: string | null, read: () => string | null = () => readSessionId()): boolean {
+  const now = readSafe(read);
+  return now !== null && now !== sid;
+}
+
+/**
+ * 会话被换掉时代替 supabase-js 的 signOut：有旧令牌就 logoutWithToken。
+ * 没有旧令牌 = 退出前本机本来就没有会话，没有要吊销的登录，**有意**算退成（serverDone = true，复审建议 3）：
+ * 算没退成会多提示一句“服务器上的这次登录暂时没能吊销”，而那次登录并不存在
+ */
+export function logoutReplaced(
+  token: string | null,
+  timeoutMs: number = SIGN_OUT_TIMEOUT_MS,
+  logout: (token: string, timeoutMs: number) => Promise<{ serverDone: boolean }> = logoutWithToken,
+): Promise<{ serverDone: boolean }> {
+  if (token === null) return Promise.resolve({ serverDone: true });
+  return logout(token, timeoutMs);
+}
+
+/** 同步读，不抛错（读不出为 null） */
+function readSafe(read: () => string | null): string | null {
+  try {
+    return read();
+  } catch {
+    return null;
+  }
+}
+
+/** 默认的删键保护：退出期间 supabase-js 只能删“还是 sid 那一个”的会话键；最多挂 SELF_SIGN_OUT_TTL_MS */
+export function defaultGuardRemoval(sid: string | null): () => void {
+  return guardSessionRemoval((key) => mayRemoveSessionKey(key, sid), SELF_SIGN_OUT_TTL_MS);
+}
+
 /** 退出这台设备：①②③④⑤，本机一定清空、本机会话一定删掉；serverDone = false 时调用方提示“服务器上的这次登录暂时没能吊销” */
 export async function signOutThisDevice(o: SignOutOptions): Promise<{ serverDone: boolean }> {
   const steps = o.steps ?? defaultExitSteps;
@@ -196,18 +305,38 @@ export async function signOutThisDevice(o: SignOutOptions): Promise<{ serverDone
   const before = readUserId();
   // 退出前的会话（K6-sugg3 ①）：兜底只删它，别的标签页刚登录的新会话不删
   const sid = sessionIdOf(steps);
+  // 旧会话的令牌只留在内存里：④ 前会话被换掉时用它直接 /logout（K6-signout-lib 收窄）
+  const token = readSafe(o.readToken ?? (() => readSessionAccessToken()));
+  // supabase-js 自己删会话键前先核对 sid（K6-signout-lib）：挂到本函数结束、且 ④ 的请求回来（晚到也等）为止
+  const release = (o.guardRemoval ?? defaultGuardRemoval)(sid);
+  let req: Promise<unknown> = Promise.resolve();
   const onLate = (): void => {
     if (before !== null && readUserId() === before) dropSession(steps, sid);
   };
-  const t0 = Date.now();
-  const { deleteOwnDevice } = o.server;
-  if (deleteOwnDevice) await withTimeout(deleteOwnDevice, Math.floor(timeoutMs / 2), () => undefined);
-  // 删行用掉多少，signOut 就少等多少（清本机的时间另算，它自己有上限）
-  const rest = Math.max(timeoutMs - (Date.now() - t0), 0);
-  await wipeThisDevice(steps, o.wipeMs, o.cachesMs);
-  clearLogQueue(before);   // 这个账号没传完的日志不再传（退出、换账号）
-  const r = await withTimeout(() => o.server.signOut(), rest, () => ({ serverDone: false }), onLate);
-  if (!r.serverDone) dropSession(steps, sid);
-  await deleteDbAgain(steps);
-  return { serverDone: r.serverDone };
+  try {
+    const t0 = Date.now();
+    const { deleteOwnDevice } = o.server;
+    if (deleteOwnDevice) await withTimeout(deleteOwnDevice, Math.floor(timeoutMs / 2), () => undefined);
+    // 删行用掉多少，signOut 就少等多少（清本机的时间另算，它自己有上限）
+    const rest = Math.max(timeoutMs - (Date.now() - t0), 0);
+    await wipeThisDevice(steps, o.wipeMs, o.cachesMs);
+    clearLogQueue(before);   // 这个账号没传完的日志不再传（退出、换账号）
+    const signOut = (): Promise<{ serverDone: boolean }> => {
+      // ④ 前再读一次 sid（中间不再有 await）：读到别的会话（非 null 且不是 sid），就不调 supabase-js
+      // （它会读到新会话的令牌去吊销），也不碰存储。读到 null 照常调：auth-js 读到没有会话本来就不发 /logout。
+      // 封装里拿到客户端以后、紧贴 db.auth.signOut 之前还会按 prior 再判断一次（getDb、删 devices 行也要时间）
+      const p = sessionReplaced(sid, () => steps.readSessionId())
+        ? logoutReplaced(token, rest, o.logoutWithToken)
+        : o.server.signOut({ sid, token, budgetMs: rest });
+      req = p;
+      return p;
+    };
+    const r = await withTimeout(signOut, rest, () => ({ serverDone: false }), onLate);
+    if (!r.serverDone) dropSession(steps, sid);
+    await deleteDbAgain(steps);
+    return { serverDone: r.serverDone };
+  } finally {
+    // supabase-js 删会话键发生在 ④ 的请求 resolve 之前，等它回来再撤（没走到 ④ 时 req 是已完成的，当场撤）
+    void req.then(release, release);
+  }
 }

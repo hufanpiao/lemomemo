@@ -20,6 +20,11 @@ export const zh = {
   'update.updating': '正在更新…',
   'update.failed': '更新失败 · 联网后再试',
   'update.stillOld': '已是最新版本，请稍后再试',
+  'update.update': '更新',
+  'update.queued': '有 {n} 条等更新后同步 · 内容还在本机',
+  'update.newVersion': '有新版本',
+  'update.blocked.title': '请关掉其他打开的柠檬记窗口',
+  'update.blocked.body': '别的窗口还在用旧版本，关掉以后这里会自动接着打开。你的内容都还在本机。',
   'app.crashed.title': '哎呀，卡住了',
   'app.crashed.refresh': '刷新一下',
   'remind.push.event': '{time} {title}',
@@ -32,4 +37,6 @@ export const zh = {
   'fmt.wd.4': '周四',
   'fmt.wd.5': '周五',
   'fmt.wd.6': '周六',
+  // 主 App 收到 account_disabled、探测说账号正常，但 5 分钟内已重新载入过一次：同步暂停（app/sync-wiring.ts 限次，10-30 复审建议）；按钮沿用 update.reopen
+  'update.syncPaused': '同步暂停，请稍后重新打开',
 } as const;

@@ -15,7 +15,7 @@
 //   离开本机时只删这个 sid 的会话（clearLocalSessionIf），不在回包那一刻读本机会话、删“现在那个”
 import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { readSessionId } from '../../../platform/session.ts';
-import { withTimeout } from '../../../platform/sign-out.ts';
+import { logoutReplaced, sessionReplaced, withTimeout, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import type { DeviceRow } from './devices.ts';
 import { sessionIdOfToken } from './devices.ts';
@@ -25,7 +25,10 @@ export type SettingsErr =
   | 'revoked'
   /** 本机没有会话（别的标签页退出了）：清空本机、提示“已退出登录”、回登录页 */
   | 'signed_out'
-  /** 账号停用或在注销冷静期（account_disabled）：只提示，重新登录可恢复（R-192） */
+  /**
+   * 账号停用或在注销冷静期（account_disabled，RLS 一路分不清）：带上 sid，由 hooks 先探测再定（R-256 ③，data/account-exit.ts 的
+   * leaveForDisabled）——冷静期、已停用、不确定都清本机回登录页按原因提示；探测说账号正常就只提示
+   */
   | 'account_disabled'
   | 'offline'
   /** 服务器忙（503 try_later，0.29 续第 110、119 条）：只提示稍后再试，不清本机 */
@@ -37,16 +40,18 @@ export type SettingsErr =
 
 /** 会话没了的两种错误：一定带着 sid（这次请求用的会话；那时本机没有会话为 null） */
 export type SessionLostErr = 'revoked' | 'signed_out';
+/** 要带 sid 的错误：会话没了的两种，加上 account_disabled（先探测要用那个会话的令牌，R-256 ③） */
+export type SidErr = SessionLostErr | 'account_disabled';
 
 export type Failure =
-  | { ok: false; error: SessionLostErr; sid: string | null }
-  | { ok: false; error: Exclude<SettingsErr, SessionLostErr> };
+  | { ok: false; error: SidErr; sid: string | null }
+  | { ok: false; error: Exclude<SettingsErr, SidErr> };
 
 export type Result<T = undefined> = { ok: true; value: T } | Failure;
 
-/** 按错误码组出失败结果：会话没了的两种带上 sid，别的不带 */
+/** 按错误码组出失败结果：会话没了的两种和 account_disabled 带上 sid，别的不带 */
 export function failWith(error: SettingsErr, sid: string | null): Failure {
-  return error === 'revoked' || error === 'signed_out' ? { ok: false, error, sid } : { ok: false, error };
+  return error === 'revoked' || error === 'signed_out' || error === 'account_disabled' ? { ok: false, error, sid } : { ok: false, error };
 }
 
 export interface LoadedDevices {
@@ -70,9 +75,11 @@ export interface SettingsApi {
   deleteOwnDevice(currentDeviceId: string | null): Promise<void>;
   /**
    * 退出本机会话：signOut local，不是 ok 就兜底删。不带超时，由调用方套。
-   * sessionId 必填（退出前记下的 session_id，K6-sugg3 ①、K6-sugg4 ②）：兜底只在本机会话还是它时才删
+   * sessionId 必填（退出前记下的 session_id，K6-sugg3 ①、K6-sugg4 ②）：兜底只在本机会话还是它时才删。
+   * 拿到客户端以后、紧贴 signOut 之前再读一次本机会话（K6-signout-lib）：已换成别的标签页的新会话（非 null 且不是 sessionId），
+   * 就不调 signOut（它会吊销那个新会话）、也不兜底删，改用 prior.token 直接 logout（logoutReplaced；没传 prior 时没有旧令牌，按退成）
    */
-  dropLocalSession(sessionId: string | null): Promise<LocalSignOut>;
+  dropLocalSession(sessionId: string | null, prior?: Pick<PriorSession, 'token' | 'budgetMs'>): Promise<LocalSignOut>;
   saveLocale(locale: UiLocale): Promise<Result>;
 }
 
@@ -198,12 +205,14 @@ export function createSettingsApi(
   }
 
   /** signOut({scope: 'local'})；不是 ok 就兜底删本机会话。不先查 getSession（令牌过期、断网时那一步本身会失败） */
-  async function dropLocal(db: Db | null, sessionId: string | null): Promise<LocalSignOut> {
+  async function dropLocal(db: Db | null, sessionId: string | null, prior?: Pick<PriorSession, 'token' | 'budgetMs'>): Promise<LocalSignOut> {
     const clear = (): void => clearLocalSessionIf(sessionId);
     if (!db) {
       clear();
       return { serverDone: false };
     }
+    // 紧贴 signOut 之前（K6-signout-lib）：本机已是别的标签页的新会话，就用旧令牌直接 logout，不调 supabase-js、不 clear()
+    if (sessionReplaced(sessionId, safeSid)) return logoutReplaced(prior?.token ?? null, prior?.budgetMs);
     try {
       const { error } = await db.auth.signOut({ scope: 'local' });
       if (!error) return { serverDone: true };
@@ -265,7 +274,7 @@ export function createSettingsApi(
       }
     },
 
-    dropLocalSession: async (sessionId) => dropLocal(await dbOrNull(), sessionId),
+    dropLocalSession: async (sessionId, prior) => dropLocal(await dbOrNull(), sessionId, prior),
 
     saveLocale: (locale) =>
       timed(() =>

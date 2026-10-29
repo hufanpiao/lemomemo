@@ -1,0 +1,67 @@
+/* 顶部版本横幅（UpdateBanner.tsx）：贴在页面最上面、跟着滚动不走，不盖住内容（挡同步、不挡查看和记录）。没有动效 */
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: max(env(safe-area-inset-top), 10px) 16px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.main {
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: 1.45;
+}
+
+.sub {
+  margin: 2px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+  line-height: 1.4;
+}
+
+/* 空的播报区不占地方，但留在可访问树里（display: none 会让后来的播报读不出来） */
+.sub:empty {
+  margin: 0;
+}
+
+.action {
+  flex: none;
+  min-height: var(--hit);
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-14);
+}
+
+.action[aria-disabled='true'] {
+  opacity: 0.6;
+}
+
+/* 只有“有新版本”这一种有关闭按钮 */
+.close {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--hit);
+  height: var(--hit);
+  margin-right: -8px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-2);
+}

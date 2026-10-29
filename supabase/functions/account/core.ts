@@ -2,17 +2,23 @@
 // 0.29 续第 88、92～96、129、131、134、137、138 条；0.38 第 45、47、48 条；TC-B1-95、98、99、100、103、104、108）。
 // 数据库、Auth、发信、鉴权都由 index.ts 注入，Vitest 直接测这一份；不 import npm 包、不碰 Deno 全局。
 //
-// 三个 action（JWT；requireActiveUser 由 index.ts 注入成 authenticate）：
+// 四个 action（JWT；requireActiveUser 由 index.ts 注入成 authenticate）：
+//   status  {action}：登录后判断要不要显示恢复页（10-30 架构师：冷静期里别的 RPC 都回 account_disabled，客户端分不出）。
+//           冷静期放行；没有副作用：不写库、不计次数、不发信。管理员停用（含没有 profile）不当错误，回 200 {ok, status: 'disabled'}；
+//           会话失效、没登录等照 requireActiveUser 原样回（session_revoked、unauthorized、try_later）。
+//           → {ok, status: 'active'} / {ok, status: 'pending_deletion', purge_after} / {ok, status: 'disabled'}
 //   delete  {action, confirm}：confirm 去掉首尾空白后等于“注销”或“탈퇴”（R-188）→ 管理员拒 → 每天 3 次（和 export 合计）
 //           → rpc account_request_deletion（一个事务：pending_deletions、停用、吊销全部会话；0.38 第 45 条）→ {ok, purge_after}
 //           → 响应之后发第一封信（不放链接，时刻按本人时区）。不删任何数据、不写 deleted_accounts。
-//   restore {action}：只有它在冷静期里放行（allowPendingDeletion）；amr 里 otp 在 10 分钟内 → 每天 5 次
+//   restore {action}：和 status 一样在冷静期里放行（allowPendingDeletion）；amr 里 otp 在 10 分钟内 → 每天 5 次
 //           → rpc account_restore（service role 调 definer 函数，先锁 pending_deletions 行再判断，和 account-purge 的认领互斥；
 //           0.38 第 45 条）→ {ok} → 发“已恢复”。
+//   status  {action}：冷静期放行、没有副作用（不写库、不计次、不发信）→ {ok, status: active / pending_deletion（带 purge_after）/ disabled}；
+//           管理员停用排在会话检查前面，停用且会话已吊销时回 disabled，不回 session_revoked（R-256 ③）。
 //   export  {action, device_id?}（请求头可带 x-vault-token）：每天 3 次（和 delete 合计）→ 先写一条 logs（写不进就 try_later、不导出）
 //           → 按数据清单读本人各表（按主键往后翻页，每张表有行数上限，logs 另算）→ 边读边压缩成 gzip（内存里只留压缩后的块，
 //           原文总字节有上限）→ 直接回 gzip 的 JSON（attachment、no-store，不发下载链接）→ 响应之后发导出通知；
-//           发信失败另记一条 logs（act = export_mail_failed），不当作“没导出”。
+//           发信失败另记一条 logs（act = export_mail_failed，code = 对应 export 那一行的 t 的 ISO 字符串，两行靠它配对），不当作“没导出”。
 //           计次以后的失败都回 try_later；写不进 logs、数据库出错这类临时性失败把当天这一次退回去（K3 安全审查必改 2），
 //           数据本身导致的（超行数、超字节、读到别人的行等）照常扣次数（K3 复审 B）。
 //           没带 vault_token：包里不放隐私记的任何行，顶层 "vault": "omitted"；带了但无效或过期整个请求被拒（vault_locked / vault_relock）；
@@ -60,8 +66,10 @@ export const ACCOUNT_ERRS = [
 export type AccountErr = (typeof ACCOUNT_ERRS)[number] | 'bad_request' | 'method_not_allowed';
 
 // ---------------- 注入的依赖 ----------------
-export interface ActiveUser { userId: string; sessionId: string; jwt: string }
-export type AuthResult = { ok: true; user: ActiveUser } | { ok: false; response: Response };
+/** pendingDeletion：只在 allowPendingDeletion 放行了冷静期账号时才有（_shared/auth.ts 的 requireActiveUser） */
+export interface ActiveUser { userId: string; sessionId: string; jwt: string; pendingDeletion?: { purgeAfter: string | null } | undefined }
+/** 没过时 code = requireActiveUser 的错误码（AuthError.code）；status 靠它把 account_disabled 变成 {status: 'disabled'} */
+export type AuthResult = { ok: true; user: ActiveUser } | { ok: false; response: Response; code?: string | undefined };
 
 /** 清单里 export: json 的 public 表（index.ts 从 _shared/gen/manifests 算出来；测试从 shared/manifests 算） */
 export interface ExportTable {
@@ -102,7 +110,8 @@ export function exportTablesOf(manifests: readonly ManifestLike[]): ExportTable[
   return out;
 }
 
-export interface LogRow { t: number; device: string | null; kind: 'run'; act: 'export' | 'export_mail_failed'; src: 'account' }
+/** code：只有 export_mail_failed 带，写对应 export 那一行 t 的 ISO 字符串（24 个字符，logs.code ≤ 64） */
+export interface LogRow { t: number; device: string | null; kind: 'run'; act: 'export' | 'export_mail_failed'; src: 'account'; code?: string }
 
 /** 数据库（index.ts 用 service role 的 supabase-js 实现）。出错一律抛错，code 用 DbError 带出 rpc 抛的业务错误 */
 export interface AccountStore {
@@ -260,6 +269,16 @@ function mailLater(deps: Deps, userId: string, make: (loc: MailLocale, tz: strin
       deps.log?.(failCode);
     }
   })());
+}
+
+// ---------------- status（账号状态，登录页用） ----------------
+/** status 回的三种状态（和 shared/schema/account.ts 的 ACCOUNT_STATUSES 一字不差，测试核对） */
+export const ACCOUNT_STATUS_VALUES = ['active', 'pending_deletion', 'disabled'] as const;
+
+/** 只看鉴权结果，不碰 store、不发信、不计次数 */
+function status(user: ActiveUser): Response {
+  if (user.pendingDeletion) return json(200, { ok: true, status: 'pending_deletion', purge_after: user.pendingDeletion.purgeAfter });
+  return json(200, { ok: true, status: 'active' });
 }
 
 // ---------------- delete（申请注销） ----------------
@@ -499,7 +518,11 @@ async function exportData(req: Request, body: Record<string, unknown>, user: Act
     }
     if (!sent) {
       deps.log?.('mail_failed:export');
-      await store.insertLog(user.userId, { t: deps.now(), device: deviceId, kind: 'run', act: 'export_mail_failed', src: 'account' })
+      // t 是发信失败的时刻；code 写 export 那一行的 t（ISO），同一台设备连着导出两次也配得准
+      //   （logs 没有唯一约束，两种都行；不让两行 t 相同，是为了留下失败时刻，t 也照旧是“发生时刻”）
+      await store.insertLog(user.userId, {
+        t: deps.now(), device: deviceId, kind: 'run', act: 'export_mail_failed', src: 'account', code: new Date(now).toISOString(),
+      })
         .catch(() => deps.log?.('export_mail_log_failed'));
     }
   })());
@@ -521,12 +544,17 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   const body = await readBody(req);
   if (!body || typeof body.action !== 'string') return err(400, 'bad_request');
   const action = body.action;
-  if (action !== 'delete' && action !== 'restore' && action !== 'export') return err(400, 'bad_request');
+  if (action !== 'delete' && action !== 'restore' && action !== 'export' && action !== 'status') return err(400, 'bad_request');
 
   try {
-    // 只有 restore 在冷静期里放行；管理员停用的（account_disabled）restore 也被 requireActiveUser 拦下
-    const auth = await deps.authenticate(req, { allowPendingDeletion: action === 'restore' });
-    if (!auth.ok) return auth.response;
+    // 只有 restore、status 在冷静期里放行；管理员停用的（account_disabled）restore 也被 requireActiveUser 拦下
+    const auth = await deps.authenticate(req, { allowPendingDeletion: action === 'restore' || action === 'status' });
+    if (!auth.ok) {
+      // status：管理员停用（含没有 profile）是一种状态，不是错误；其余（session_revoked、unauthorized、try_later）原样回
+      if (action === 'status' && auth.code === 'account_disabled') return json(200, { ok: true, status: 'disabled' });
+      return auth.response;
+    }
+    if (action === 'status') return status(auth.user);
     if (action === 'delete') return await del(body, auth.user, deps);
     if (action === 'restore') return await restore(auth.user, deps);
     return await exportData(req, body, auth.user, deps);

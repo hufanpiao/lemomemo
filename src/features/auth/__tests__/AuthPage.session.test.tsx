@@ -9,7 +9,7 @@ import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import AuthPage from '../ui/AuthPage.tsx';
-import { fakeApi, now, resetHarness, type FakeApi } from './auth-page-harness.tsx';
+import { fakeAccount, fakeApi, now, resetHarness, type FakeApi } from './auth-page-harness.tsx';
 import { turnstile } from './turnstile-fake.ts';
 
 vi.mock('../../../platform/turnstile.ts', async () => (await import('./turnstile-fake.ts')).fakeTurnstileModule);
@@ -38,7 +38,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
     const api = fakeApi();
     const onDone = vi.fn();
     const localExit = exitSpy([]);
-    render(<AuthPage gate="login" deps={{ api, now, onDone, readUserId: () => USER, localExit }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api, now, onDone, readUserId: () => USER, localExit }} />);
     expect(screen.getByTestId('auth-signed-in').textContent).toBe(zh['auth.session.signedIn']);
     expect(screen.queryByLabelText(zh['auth.email.label'])).toBeNull();
     expect(turnstile.mounted).toBe(0);
@@ -50,17 +50,17 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
 
   it('4.1 原文：会话里有邮箱时说“当前已登录 <邮箱>，要换账号请先退出”；读不到邮箱用不带邮箱的那句', () => {
     const { unmount } = render(
-      <AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => USER, readEmail: () => 'a@example.com', localExit: exitSpy([]) }} />,
+      <AuthPage gate="login" deps={{ account: fakeAccount(), api: fakeApi(), now, onDone: vi.fn(), readUserId: () => USER, readEmail: () => 'a@example.com', localExit: exitSpy([]) }} />,
     );
     expect(screen.getByTestId('auth-signed-in').textContent).toBe('当前已登录 a@example.com，要换账号请先退出');
     unmount();
-    render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => USER, readEmail: () => null, localExit: exitSpy([]) }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api: fakeApi(), now, onDone: vi.fn(), readUserId: () => USER, readEmail: () => null, localExit: exitSpy([]) }} />);
     expect(screen.getByTestId('auth-signed-in').textContent).toBe(zh['auth.session.signedIn']);
   });
 
   it('没登录时不读邮箱', () => {
     const readEmail = vi.fn(() => 'a@example.com');
-    render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => null, readEmail }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api: fakeApi(), now, onDone: vi.fn(), readUserId: () => null, readEmail }} />);
     expect(readEmail).not.toHaveBeenCalled();
   });
 
@@ -68,7 +68,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
     const before = uiStore.getState().locale;
     act(() => uiStore.getState().setLocale('ko-KR'));
     try {
-      render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => USER, readEmail: () => 'a@example.com', localExit: exitSpy([]) }} />);
+      render(<AuthPage gate="login" deps={{ account: fakeAccount(), api: fakeApi(), now, onDone: vi.fn(), readUserId: () => USER, readEmail: () => 'a@example.com', localExit: exitSpy([]) }} />);
       expect(screen.getByTestId('auth-signed-in').textContent).toBe(ko['auth.session.signedInAs'].replace('{email}', 'a@example.com'));
       expect(screen.getByRole('button', { name: ko['auth.session.switch'] })).toBeTruthy();
       expect(screen.getByRole('button', { name: ko['auth.session.backToApp'] })).toBeTruthy();
@@ -83,7 +83,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
   ] as const) {
     it(`退出以后的登录表单（${name}）`, async () => {
       const api = fakeApi({ signOutHere: vi.fn(async () => result) });
-      render(<AuthPage gate="login" deps={{ api, now, onDone: vi.fn(), readUserId: () => USER, localExit: exitSpy([]) }} />);
+      render(<AuthPage gate="login" deps={{ account: fakeAccount(), api, now, onDone: vi.fn(), readUserId: () => USER, localExit: exitSpy([]) }} />);
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
       });
@@ -95,12 +95,12 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
   }
 
   it('服务器没退成的提示只在填邮箱那一步：没登录直接打开登录页时没有', () => {
-    render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => null }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api: fakeApi(), now, onDone: vi.fn(), readUserId: () => null }} />);
     expect(screen.queryByTestId('auth-server-pending')).toBeNull();
   });
 
   it('readSessionUserId 为 null：直接出登录表单', async () => {
-    render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => null }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api: fakeApi(), now, onDone: vi.fn(), readUserId: () => null }} />);
     expect(screen.queryByTestId('auth-signed-in')).toBeNull();
     expect(screen.getByLabelText(zh['auth.email.label'])).toBeTruthy();
     await waitFor(() => expect(turnstile.mounted).toBe(1));
@@ -119,7 +119,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
           return result;
         }),
       });
-      render(<AuthPage gate="login" deps={{ api, now, onDone: vi.fn(), readUserId: () => USER, localExit: exitSpy(log) }} />);
+      render(<AuthPage gate="login" deps={{ account: fakeAccount(), api, now, onDone: vi.fn(), readUserId: () => USER, localExit: exitSpy(log) }} />);
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
       });
@@ -134,7 +134,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
     try {
       const log: string[] = [];
       const api = fakeApi({ signOutHere: vi.fn(() => new Promise<never>(() => undefined)) });
-      render(<AuthPage gate="login" deps={{ api, now, onDone: vi.fn(), readUserId: () => USER, localExit: exitSpy(log) }} />);
+      render(<AuthPage gate="login" deps={{ account: fakeAccount(), api, now, onDone: vi.fn(), readUserId: () => USER, localExit: exitSpy(log) }} />);
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
       });
@@ -162,7 +162,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
     it(`signOutHere 抛异常（${how}）：按“不是 ok”走兜底清理，出登录表单`, async () => {
       const log: string[] = [];
       const api = fakeApi({ signOutHere: vi.fn(impl) as unknown as FakeApi['signOutHere'] });
-      render(<AuthPage gate="login" deps={{ api, now, onDone: vi.fn(), readUserId: () => USER, localExit: exitSpy(log) }} />);
+      render(<AuthPage gate="login" deps={{ account: fakeAccount(), api, now, onDone: vi.fn(), readUserId: () => USER, localExit: exitSpy(log) }} />);
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
       });
@@ -184,7 +184,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
         const log: string[] = [];
         const localExit = exitSpy(log);
         const api = fakeApi({ signOutHere: vi.fn(() => new Promise<{ ok: true; value: undefined }>((r) => (late = r))) });
-        render(<AuthPage gate="login" deps={{ api, now, onDone: vi.fn(), readUserId: () => current, localExit }} />);
+        render(<AuthPage gate="login" deps={{ account: fakeAccount(), api, now, onDone: vi.fn(), readUserId: () => current, localExit }} />);
         await act(async () => {
           fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
         });
@@ -216,7 +216,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
     try {
       const log: string[] = [];
       const localExit = exitSpy(log);
-      render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => USER, localExit }} />);
+      render(<AuthPage gate="login" deps={{ account: fakeAccount(), api: fakeApi(), now, onDone: vi.fn(), readUserId: () => USER, localExit }} />);
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
       });
@@ -239,7 +239,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
           }),
       ),
     });
-    render(<AuthPage gate="login" deps={{ api, now, onDone: vi.fn(), readUserId: () => USER, localExit: exitSpy([]) }} />);
+    render(<AuthPage gate="login" deps={{ account: fakeAccount(), api, now, onDone: vi.fn(), readUserId: () => USER, localExit: exitSpy([]) }} />);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
     });

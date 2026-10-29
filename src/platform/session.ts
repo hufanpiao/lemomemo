@@ -11,6 +11,7 @@
 //   clearAnyLocalSession() 不管是谁的都删（名字里写明，只给 takeLocalSession 和测试用）。不再有“给不给参数决定删不删”的写法
 // 只读 user.id、user.email 和令牌 payload 里的 session_id（sessionIdOfToken），不校验、不记录、不打印令牌
 import { buildInfo } from './env.ts';
+import { readExitNotice, setExitNotice, type ExitNotice } from './exit-notice.ts';
 import { getSupabase, onClientReady } from './supabase/client.ts';
 
 const KEY_RE = /^sb-.+-auth-token$/;
@@ -97,18 +98,26 @@ export function sessionIdOfToken(token: unknown): string | null {
   }
 }
 
-/** 本机会话 access token 里的 session_id（键名取法同 readSessionUserId，同步读、离线也能读）；没登录、读不到、格式不对都返回 null */
-export function readSessionId(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
+/**
+ * 本机会话的 access token 原文（键名取法同 readSessionUserId，同步读、不联网）；没登录、读不到、不是字符串都返回 null。
+ * 只给退出流程留在内存里、会话被别的标签页换掉时拿它直接调 /logout（sign-out.ts，K6-signout-lib）；不记录、不打印、不写回存储
+ */
+export function readSessionAccessToken(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
   try {
     const s = storage ?? localStorage;
     const key = findKey(s, supabaseUrl);
     const raw = key ? s.getItem(key) : null;
     if (!raw) return null;
-    const o = JSON.parse(raw) as { access_token?: unknown } | null;
-    return sessionIdOfToken(o?.access_token);
+    const t = (JSON.parse(raw) as { access_token?: unknown } | null)?.access_token;
+    return typeof t === 'string' && t ? t : null;
   } catch {
     return null;
   }
+}
+
+/** 本机会话 access token 里的 session_id（键名取法同 readSessionUserId，同步读、离线也能读）；没登录、读不到、格式不对都返回 null */
+export function readSessionId(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
+  return sessionIdOfToken(readSessionAccessToken(storage, supabaseUrl));
 }
 
 /** 别的标签页改了会话（登录、换账号、退出）：回调新的 user_id（没有会话为 null）。返回取消函数 */
@@ -144,7 +153,7 @@ export function whenIdle(fn: () => void): void {
  *   initialize 里刷新被拒发的 SIGNED_OUT 一定收得到
  * • 没人用 supabase-js 时，等首屏画完、浏览器空闲才加载它（whenIdle，K6 审查 L6）。返回取消函数
  */
-export function onAuthUser(fn: (userId: string) => void, onSignedOut?: () => void): () => void {
+export function onAuthUser(fn: (userId: string) => void, onSignedOut?: (deadSessionId?: string | null) => void): () => void {
   let off: (() => void) | null = null;
   let cancelled = false;
   const offReady = onClientReady((db) => {
@@ -189,10 +198,14 @@ export type AuthEventSession = { user: { id: string }; access_token?: unknown } 
  *   这次 SIGNED_OUT 说的是本页原来那个会话（多半是 supabase-js 从别的标签页转来的），本机现在那个是别的标签页刚登录的新会话——
  *   不回调 onSignedOut（不删它、不清库、不跳登录页），本页改认这个新会话（之后它的 SIGNED_OUT 照常处理）；
  *   新会话若是别的账号，换账号由 storage 事件那一路（watchAccount）管。本机没有会话、或任一边不知道 session_id 时照旧回调
+ * • onSignedOut 带上本页最后见到的 session_id（作废的那个，K6-signout-lib）：auth-js 先删键再通知，回调时本机键多半已经没了，
+ *   调用方删不出 session_id，回登录页前按它再删一次（晚到的刷新把旧会话写回时用得上）
+ * • SIGNED_OUT 时本机会话还在、而且就是本页认的那个（K6-signout-lib）：删键被 auth-storage.ts 的保护拦下了
+ *   （典型是别的标签页退出旧会话时 auth-js 转来的 SIGNED_OUT，本页是刚登录的新会话），不回调、会话保留
  */
 export function authEventHandler(
   fn: (userId: string) => void,
-  onSignedOut?: () => void,
+  onSignedOut?: (deadSessionId?: string | null) => void,
   o: AuthEventOptions = {},
 ): (event: string, session: AuthEventSession) => void {
   const selfSignOut = o.selfSignOut ?? ((sid: string | null) => isSelfSignOut(undefined, undefined, sid));
@@ -211,8 +224,10 @@ export function authEventHandler(
         sid = local;   // 本机已是别的标签页刚登录的新会话：这次 SIGNED_OUT 不归它（K6-sugg4 ④）
         return;
       }
-      onSignedOut();
-    } else if (event === 'INITIAL_SESSION' && session === null && sessionGone()) onSignedOut();
+      // 本机会话还在、就是本页认的那个：auth-js 先删键再通知，键还在只说明删除被存储保护拦下了（K6-signout-lib，见上）。忽略
+      if (local !== null && local === sid) return;
+      onSignedOut(sid);
+    } else if (event === 'INITIAL_SESSION' && session === null && sessionGone()) onSignedOut(sid);
   };
 }
 
@@ -409,6 +424,25 @@ export function clearLocalSessionIf(sessionId: string | null, storage?: Storage,
 }
 
 /**
+ * 退出期间 supabase-js 要删 key 时能不能删（supabase/auth-storage.ts 的删键判断，接手清单 K6-signout-lib；sign-out.ts 挂上）：
+ * • 不是会话的键（会话键和它的附属键 `<会话键>-…` 以外）：照删
+ * • 会话的键：本机没有会话键、或本机会话的 session_id（readSessionId 的口径）还是 sessionId 才删——
+ *   别的标签页这时写进来的新会话（session_id 不同）连同它的附属键都留着。sessionId 为 null 时同 clearLocalSessionIf，只认本机仍读不出的
+ * 键名取法同 sessionStorageKey()；supabaseUrl 解析不出来时按格式认。不抛错（读不到存储时按能删，和原来的行为一样）
+ */
+export function mayRemoveSessionKey(key: string, sessionId: string | null, storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): boolean {
+  try {
+    const main = sessionStorageKey(supabaseUrl);
+    const related = main ? key === main || key.startsWith(`${main}-`) : /^sb-.+-auth-token(-.*)?$/.test(key);
+    if (!related) return true;
+    const s = storage ?? localStorage;
+    return findKey(s, supabaseUrl) === null || readSessionId(s, supabaseUrl) === sessionId;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * 没登录：去登录页（不建本机库）。带 notice 时先记下退出原因（setExitNotice），登录页据此提示：
  * watchAccount 收到本页的 SIGNED_OUT（不是自己退出）时调 goToAuth('removed', 删掉的那个 session_id)（K6-signedout）。
  * 带 'removed' 时先删本机会话（审查建议 5）：服务器上已经作废，留着登录页会同时显示“当前已登录”和“被移除”。
@@ -426,45 +460,7 @@ export function goToAuth(...args: GoToAuthArgs): void {
 /** goToAuth 的参数：不带原因；带 disabled / pending_deletion；带 removed 时必须给删掉的那个 session_id（K6-sugg4 ②） */
 export type GoToAuthArgs = [] | [notice: Exclude<ExitNotice, 'removed'>] | [notice: 'removed', deadSessionId: string | null];
 
-// ───────── 退出原因（K6 复审 A：被移除、被停用、注销冷静期清本机后回登录页，登录页据此提示）─────────
-// 存在本标签页的 sessionStorage（goToAuth 是同一个标签页跳转，跳过去还在）；只存原因，不存账号、邮箱等任何个人信息
-
-/** removed：会话被吊销（session_revoked）；disabled：账号被管理员停用（account_disabled）；pending_deletion：注销冷静期（account_pending_deletion，R-192） */
-export type ExitNotice = 'removed' | 'disabled' | 'pending_deletion';
-
-const EXIT_NOTICE_KEY = 'lemo.exit_notice';
-const EXIT_NOTICES: readonly ExitNotice[] = ['removed', 'disabled', 'pending_deletion'];
-
-/** 按服务器的错误码定退出原因（不认识的一律算 removed） */
-export function exitNoticeOf(code: string): ExitNotice {
-  if (code === 'account_disabled') return 'disabled';
-  if (code === 'account_pending_deletion') return 'pending_deletion';
-  return 'removed';
-}
-
-export function setExitNotice(n: ExitNotice, storage?: Storage): void {
-  try {
-    (storage ?? sessionStorage).setItem(EXIT_NOTICE_KEY, n);
-  } catch {
-    // 拿不到 sessionStorage：登录页就不提示原因
-  }
-}
-
-/** 登录页读（不删；渲染里读，StrictMode 调两次也一样）；值不认识按没有处理 */
-export function readExitNotice(storage?: Storage): ExitNotice | null {
-  try {
-    const v = (storage ?? sessionStorage).getItem(EXIT_NOTICE_KEY);
-    return EXIT_NOTICES.find((n) => n === v) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/** 登录页显示过以后删掉（effect 里调），刷新登录页不再提示 */
-export function clearExitNotice(storage?: Storage): void {
-  try {
-    (storage ?? sessionStorage).removeItem(EXIT_NOTICE_KEY);
-  } catch {
-    // 同上
-  }
-}
+// ───────── 退出原因：搬到 platform/exit-notice.ts（10-30，session.ts 回到 300 行以内）；这里原样转出，原有的 import 不用改 ─────────
+export {
+  clearExitNotice, EXIT_NOTICE_TTL_MS, exitNoticeOf, isExitNotice, readExitNotice, setExitNotice, type ExitNotice,
+} from './exit-notice.ts';

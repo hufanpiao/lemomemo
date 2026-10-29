@@ -98,3 +98,45 @@ describe('选主（4.3b）', () => {
     expect(b.msgs).toEqual([{ type: 'changed', colls: ['todos'] }]);
   });
 });
+
+describe('postSyncMessage（不选主时发一条提醒，R-256 ⑤）', () => {
+  it('临时开频道发完就关；没有 BroadcastChannel、发送抛错都不抛', async () => {
+    const { postSyncMessage, syncChannelName } = await import('../tab-leader.ts');
+    const sent: unknown[] = [];
+    let closed = 0;
+    const names: string[] = [];
+    postSyncMessage(syncChannelName('u1'), { type: 'reset' }, (name) => {
+      names.push(name);
+      return { postMessage: (m) => void sent.push(m), close: () => void closed++, onmessage: null };
+    });
+    expect(names).toEqual(['lemo-sync:u1']);
+    expect(sent).toEqual([{ type: 'reset' }]);
+    expect(closed).toBe(1);
+    expect(() => postSyncMessage('x', { type: 'reset' }, () => null)).not.toThrow();
+    expect(() =>
+      postSyncMessage('x', { type: 'reset' }, () => ({
+        postMessage: () => {
+          throw new Error('closed');
+        },
+        close: () => void closed++,
+        onmessage: null,
+      })),
+    ).not.toThrow();
+    expect(closed).toBe(2);
+  });
+});
+
+describe('reset 带退出原因（DISABLED-probe-later ②）', () => {
+  it('带 notice、sid 的 reset 原样转给别的页面；类型不对的 notice、sid 去掉，当普通 reset', async () => {
+    const locks = fakeLocks();
+    const bus = fakeBus();
+    const a = page(locks, bus);
+    const b = page(locks, bus);
+    await flush();
+    a.leader.post({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
+    bus('lemo-sync:u1').postMessage({ type: 'reset', notice: 5, sid: 7 });
+    await flush();
+    expect(b.msgs).toContainEqual({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
+    expect(b.msgs).toContainEqual({ type: 'reset' });
+  });
+});

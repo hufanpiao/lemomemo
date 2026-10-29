@@ -11,6 +11,16 @@ html {
   text-size-adjust: 100%;
 }
 
+/* 页面顶部要留的安全区（架构师 10-30 第 7 点）：顶部有版本横幅时（UpdateBanner 在根节点设 data-top-banner）由横幅占安全区，
+   页面不再留。页面顶部的 padding 写 var(--safe-top)，不直接写 env(safe-area-inset-top) */
+:root {
+  --safe-top: env(safe-area-inset-top);
+}
+
+:root[data-top-banner] {
+  --safe-top: 0px;
+}
+
 body {
   margin: 0;
   min-height: 100dvh;

@@ -101,3 +101,18 @@ export const defaultExitDeps: ExitDeps = {
     r?.();
   },
 };
+
+/**
+ * 本机缓存 meta 键 device 里记的设备行 id（core/device-reg.ts 登记的本会话 devices 行；导出时带给服务器，通知邮件写设备名）。
+ * 没启动、库已关、还没登记、读失败都为 null（导出照样做，邮件写“未知设备”）
+ */
+export async function readLocalDeviceId(): Promise<string | null> {
+  try {
+    const cache = getBoot()?.cache;
+    if (!cache || cache.isClosed()) return null;
+    const rec = await cache.getMeta('device');
+    return typeof rec?.id === 'string' ? rec.id : null;
+  } catch {
+    return null;
+  }
+}

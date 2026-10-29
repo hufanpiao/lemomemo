@@ -73,4 +73,28 @@ export const zh = {
   'auth.ios.step3': '回到主屏幕，点“Lemo”的图标打开，再登录',
   'auth.ios.noShare': '看不到分享按钮时，先点“在 Safari 中打开”。',
   'auth.ios.note': '这个页面不能登录。请从主屏幕上的图标打开，再登录，这样只用登一次。',
+  // 注销冷静期的恢复页（R-256 ③、架构 0.29 续第 131 条④ 原文；{when} 是 purge_after 按本机时区的“日期 时刻”，口径同邮件 fmtWhen）
+  'auth.restore.ask': '账号在注销冷静期，{when} 后彻底删除。恢复吗？',
+  // {when} 的写法，口径同邮件 fmtWhen：2026年11月5日 14:30（Asia/Seoul）
+  'auth.restore.when': '{y}年{m}月{d}日 {hh}:{mm}（{zone}）',
+  // purge_after 为 null（服务器取不到时刻）时用这一句
+  'auth.restore.askNoDate': '账号在注销冷静期，到期后会彻底删除。恢复吗？',
+  'auth.restore.restore': '恢复账号',
+  'auth.restore.keep': '保持注销并退出',
+  // restore 回 reauth_required（最近 10 分钟内没用验证码登录过）：已退出本会话，回填邮箱那一步
+  'auth.restore.reauth': '为了确认是你本人，恢复账号前要重新收一次验证码。请再登录一次，然后点“恢复账号”。',
+  // restore 的错误（架构第 6 节 account 的错误码表）
+  'auth.restore.err.tooLate': '已开始删除，无法恢复。',
+  'auth.restore.err.rateLimited': '今天恢复的次数太多了，请明天再试。',
+  'auth.restore.err.tryLater': '服务器忙，请稍后再试。',
+  'auth.restore.err.offline': '现在没有网络，连上网络后再试一次。',
+  'auth.restore.err.unknown': '出了点问题，请稍后再试。',
+  // 验证码刚通过、探测不出账号状态（超时、断网、503、回包认不出；R-258）：不进 App、不清本机，给“重试”“仍然进入”
+  'auth.gate.unsure': '暂时无法确认账号状态。可以重试，或者先进入柠檬记。',
+  'auth.gate.retry': '重试',
+  'auth.gate.enterAnyway': '仍然进入',
+  // 停用页的按钮（审查建议 3：停用页不能是死路）；本会话已退出，回填邮箱那一步
+  'auth.gate.backToLogin': '回到登录',
+  // 主 App 收到含糊的 account_disabled、探测不出是停用还是冷静期（断网、超时），保守清了本机（R-256 ③ 后续）：两种情况都说到
+  'auth.exit.disabledUnsure': '账号暂时不能使用，这台设备上的数据已清除。如果你申请过注销，冷静期内用邮箱验证码登录，可以选择恢复账号；否则请联系柠檬记的负责人。',
 } as const;

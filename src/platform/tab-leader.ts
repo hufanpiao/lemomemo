@@ -6,6 +6,7 @@
 // • 兜底：没有 navigator.locks（某些内嵌浏览器）：这个页面自己当主页（回到 0.38 以前的做法），记一次 sync_no_locks；
 //   没有 BroadcastChannel：不发提醒（回到前台整份重读兜底）
 // 纯 TS：不准 import React（A1）
+import type { ExitNotice } from './session.ts';
 
 /** 页面之间的提醒（4.3b） */
 export type SyncMessage =
@@ -13,8 +14,12 @@ export type SyncMessage =
   | { type: 'outbox' }
   /** 主页把服务器的变化写进了本机库：其余页面重读这几个集合 */
   | { type: 'changed'; colls: readonly string[] }
-  /** 整表重拉、清库：其余页面整份重读 */
-  | { type: 'reset' };
+  /**
+   * 整表重拉、清库：其余页面整份重读。
+   * 因被移除、停用、冷静期退出时带 notice（退出原因）和 sid（被拒那次请求的会话）：收到的页面先记下同一条退出原因再走自己的退出流程
+   * （DISABLED-probe-later ②）；值不认识的 notice 收到时丢掉，当普通 reset
+   */
+  | { type: 'reset'; notice?: ExitNotice; sid?: string | null };
 
 /** 用到的 Web Locks 部分（测试可换假的） */
 export interface LocksLike {
@@ -54,7 +59,14 @@ export interface TabLeader {
 const isMessage = (v: unknown): v is SyncMessage => {
   if (typeof v !== 'object' || v === null) return false;
   const t = (v as { type?: unknown }).type;
-  if (t === 'outbox' || t === 'reset') return true;
+  if (t === 'outbox') return true;
+  if (t === 'reset') {
+    // notice、sid 类型不对：去掉这两项，当普通 reset（真相在 IndexedDB，提醒本身照样有用）；notice 的取值由收的一方再核对
+    const r = v as { notice?: unknown; sid?: unknown };
+    if (r.notice !== undefined && typeof r.notice !== 'string') delete r.notice;
+    if (r.sid !== undefined && r.sid !== null && typeof r.sid !== 'string') delete r.sid;
+    return true;
+  }
   return t === 'changed' && Array.isArray((v as { colls?: unknown }).colls);
 };
 
@@ -157,4 +169,27 @@ export function createTabLeader(o: TabLeaderOptions): TabLeader {
       ch?.close();
     },
   };
+}
+
+/** 页面之间的频道名（和锁同名）：'lemo-sync:' + user_id */
+export const syncChannelName = (userId: string): string => `lemo-sync:${userId}`;
+
+/**
+ * 不当主页、也不选主时发一条提醒（设置页注销后清完本机库发 reset，R-256 ⑤）：临时开频道、发完就关。
+ * 没有 BroadcastChannel、发不出去都不抛（提醒丢了不要紧，别的页面回到前台整份重读兜底）
+ */
+export function postSyncMessage(name: string, m: SyncMessage, channel: (name: string) => ChannelLike | null = defaultChannel): void {
+  let ch: ChannelLike | null = null;
+  try {
+    ch = channel(name);
+    ch?.postMessage(m);
+  } catch {
+    // 同上
+  } finally {
+    try {
+      ch?.close();
+    } catch {
+      // 已关
+    }
+  }
 }

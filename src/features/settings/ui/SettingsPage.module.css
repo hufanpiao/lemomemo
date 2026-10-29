@@ -4,7 +4,7 @@
   max-width: 560px;
   min-height: 100dvh;
   margin: 0 auto;
-  padding: max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 24px);
+  padding: max(var(--safe-top), 16px) 16px max(env(safe-area-inset-bottom), 24px);
   background: var(--bg);
   color: var(--text);
 }
@@ -184,4 +184,103 @@
 .primaryDanger {
   background: var(--danger-bg);
   color: var(--danger-text);
+}
+
+/* 账号组里设备列表下面的另一张卡片（注销入口） */
+.gap {
+  margin-top: 12px;
+}
+
+/* 整行可点的一行（导出全部、注销账号）：文字在左、值或箭头在右 */
+.rowBtn {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.rowBtn:disabled {
+  color: var(--text-2);
+}
+
+.line {
+  margin: 0;
+}
+
+/* 页面最底下单独一行“退出登录”（R-256 ①） */
+.bottom {
+  margin-top: 24px;
+}
+
+.backBtn {
+  justify-self: start;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-15);
+}
+
+/* 只给读屏的标题 */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.card {
+  padding: 4px 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.para {
+  margin: 10px 0;
+  font-size: var(--fs-15);
+  overflow-wrap: anywhere;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.label {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.input {
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--text);
+
+  /* iOS 小于 16px 会在聚焦时放大页面 */
+  font-size: var(--fs-16);
+}
+
+.full {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.full:disabled {
+  background: var(--panel-2);
+  color: var(--text-2);
 }

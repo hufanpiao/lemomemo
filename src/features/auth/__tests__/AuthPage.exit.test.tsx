@@ -29,6 +29,15 @@ describe('登录页：退出原因', () => {
     expect(readExitNotice()).toBeNull();
   });
 
+  it('disabled_unsure（主 App 收到 account_disabled、探测不出是停用还是冷静期）：显示不确定的说法，两种情况都说到', async () => {
+    setExitNotice('disabled_unsure');
+    await renderPage(fakeApi());
+    const line = screen.getByTestId('auth-exit-notice');
+    expect(line.getAttribute('data-reason')).toBe('disabled_unsure');
+    expect(line.textContent).toBe(zh['auth.exit.disabledUnsure']);
+    expect(readExitNotice()).toBeNull();
+  });
+
   it('没有退出原因、或值不认识：不显示', async () => {
     sessionStorage.setItem('lemo.exit_notice', 'whatever');
     await renderPage(fakeApi());

@@ -46,7 +46,7 @@ function effective(text: string, path: string): Map<string, string[]> {
 const directives = (csp: string) => csp.split(';').map((d) => d.trim()).filter(Boolean);
 const directive = (csp: string, name: string) => directives(csp).find((d) => d.startsWith(`${name} `)) ?? '';
 
-describe.each(['production', 'preview', 'e2e'] as const)('T5 / TC-B0-59：分路径的 CSP（%s）', (mode) => {
+describe.each(['production', 'preview', 'e2e', 'e2e-real'] as const)('T5 / TC-B0-59：分路径的 CSP（%s）', (mode) => {
   const text = renderHeaders(app, site, mode);
 
   it.each(['/app/auth/', '/app/auth/index.html', '/app/auth/assets/x.js'])('%s：只有一条 CSP，放行 Turnstile', (path) => {
@@ -96,7 +96,7 @@ describe.each(['production', 'preview', 'e2e'] as const)('T5 / TC-B0-59：分路
 // 注意：accelerometer、gyroscope 是 /app/* 那一条按架构 8.1 整段放开的（B2 底栏倾斜高光要用），试验页没有单独的规则；
 // 这里断言：试验页（含 Pages 去掉 .html 后的地址和它的脚本）只有一条 Permissions-Policy、两项是 (self)、其余设备能力关着；
 // /app/ 以外（官网 /zh/*、/ko/*）照旧全部关闭。
-describe.each(['production', 'preview', 'e2e'] as const)('TC-B1-54：倾斜授权试验页的 Permissions-Policy（%s）', (mode) => {
+describe.each(['production', 'preview', 'e2e', 'e2e-real'] as const)('TC-B1-54：倾斜授权试验页的 Permissions-Policy（%s）', (mode) => {
   const text = renderHeaders(app, site, mode);
   const items = (pp: string) => pp.split(',').map((s) => s.trim()).filter(Boolean);
 

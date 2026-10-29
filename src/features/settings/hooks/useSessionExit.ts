@@ -8,7 +8,8 @@
 //   signOut 不能放到清库之后：supabase-js 的 signOut 自己读本机会话、最后自己删会话键（含 `-user` 等），放在后面会把那个新会话当成本页的退掉。
 //   放在前面时本机会话已删，它读到没有会话就不发吊销请求，但不是“几毫秒就做完”（K6-sugg4 ⑤）：客户端还没建好时要先加载 supabase-js 分包
 //   （慢网几秒；离线加载失败就走兜底删），建好了也要先等它初始化完（initializePromise，里面可能在刷新令牌）、再排 auth-js 的锁（auth-js GoTrueClient.signOut）；最后它照样无条件删一次会话键，
-//   这段时间里别的标签页写进来的新会话仍会被删（库本身的行为，接手清单 K6-signout-lib）
+//   这段时间里别的标签页写进来的新会话：K6-signout-lib 起后台这次 signOut 也挂 defaultGuardRemoval(sid)，会话键已不是 sid 就不删；
+//   settings-api 紧贴 signOut 前也会再读一次本机会话，换了就不调 signOut
 //   界面提示“这台设备已在别的设备上被移除……”。“去登录”和几秒后的自动跳转都等清理做完再跳（最多等 LEAVE_WAIT_MAX_MS），
 //   清理没做完时按钮禁用，免得页面卸载把 IndexedDB 事务中止、留下“有会话、有库”
 // • 本机已经没有会话（别的标签页正常退出了）：同上，提示“已退出登录”
@@ -20,7 +21,7 @@
 //   本页不另开 SIGNED_OUT 监听
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  deleteDbAgain, dropSession, sessionIdOf, SIGN_OUT_TIMEOUT_MS, signOutThisDevice, withTimeout, wipeThisDevice,
+  defaultGuardRemoval, deleteDbAgain, dropSession, sessionIdOf, SIGN_OUT_TIMEOUT_MS, signOutThisDevice, withTimeout, wipeThisDevice,
 } from '../../../platform/sign-out.ts';
 import { markSelfSignOutThisTab } from '../../../platform/session.ts';
 import { defaultExitDeps, type ExitDeps } from '../data/local.ts';
@@ -117,7 +118,11 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
       dropSession(exit, sid);
       // 本机会话已经是别的会话（回包前别的标签页写进来的，上面没删）：不调 signOut，免得把它退掉（见文件头）
       const now = sessionIdOf(exit);
-      if (now === null || now === sid) void api.dropLocalSession(sid).catch(() => undefined);
+      if (now === null || now === sid) {
+        // 后台的 signOut 也挂删键保护（K6-signout-lib 复审建议）：它最后删会话键时，本机若已是别的标签页的新会话就不删
+        const release = defaultGuardRemoval(sid);
+        void api.dropLocalSession(sid).catch(() => undefined).finally(release);
+      }
       setNotice(kind);
       void track(
         (async () => {
@@ -153,7 +158,8 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
       const sid = deadSid.current;
       // 顺序、超时、晚到处理都在 platform/sign-out.ts（和登录页共用）
       const run = signOutThisDevice({
-        server: { deleteOwnDevice: () => api.deleteOwnDevice(currentDeviceId), signOut: () => api.dropLocalSession(sid) },
+        // prior = 退出一开头记下的旧会话：settings-api 紧贴 signOut 前判断会话换没换，换了用旧令牌直接 logout（K6-signout-lib）
+        server: { deleteOwnDevice: () => api.deleteOwnDevice(currentDeviceId), signOut: (prior) => api.dropLocalSession(sid, prior) },
         steps: exit,
         readUserId: () => exit.readUserId(),
         timeoutMs: exitTimeoutMs,

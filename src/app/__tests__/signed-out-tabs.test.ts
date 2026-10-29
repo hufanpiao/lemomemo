@@ -4,6 +4,8 @@
 // • A 页自己退出（打标记）→ B 页收到 supabase-js 转来的 SIGNED_OUT 和 storage(null)：两种先后都按普通退出（不提示被移除），
 //   清库期间的写入被拒（switching）、在途那一项回来时不写库，最后整库删掉
 // • 复查建议 ①：被移除时本机会话在收到 SIGNED_OUT 的同一个同步段里就删；清库那几秒里别的标签页登录的新会话，回登录页时不再被删
+//   （K6-signout-lib 起按 auth-js 的真实顺序：_removeSession 先删键再通知，测试先删键再发 SIGNED_OUT）
+// • K6-signout-lib 审查必改：SIGNED_OUT 到时本机会话还在、就是本页认的那个（删键被存储保护拦下）：忽略
 // • K6-sugg4 ④：收到转来的 SIGNED_OUT 时本机会话已是别的标签页用同一账号刚登录的 s2（本页最后见到的是 s1）：不删 s2、不清库、不跳
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { claimCache, watchAccount, type WatchAccountDeps } from '../../core/account.ts';
@@ -134,8 +136,9 @@ describe('被移除时删本机会话的时机（复查建议 ①）', () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));
     const b = await tabB({ deleteDb: () => gate });
+    localStorage.removeItem(KEY);   // auth-js 的 _removeSession 先删键、再通知 SIGNED_OUT（K6-signout-lib）
     b.emit('SIGNED_OUT', null);   // 会话层：不是自己退出 → watchAccount 的 signedOutHere
-    expect(readSessionUserId()).toBeNull();   // 同步删掉了（还没 await 任何东西）
+    expect(readSessionUserId()).toBeNull();
     // 清库还没完：别的标签页登录了 B（新会话 s2）
     seed('s2', B);
     b.storage();   // 本页已经在走退出流程，只处理一次
@@ -149,6 +152,7 @@ describe('被移除时删本机会话的时机（复查建议 ①）', () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));
     const b = await tabB({ deleteDb: () => gate });
+    localStorage.removeItem(KEY);   // 同上：先删键再通知
     b.emit('SIGNED_OUT', null);
     seed('s2');
     release();
@@ -160,6 +164,7 @@ describe('被移除时删本机会话的时机（复查建议 ①）', () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));
     const b = await tabB({ deleteDb: () => gate });
+    localStorage.removeItem(KEY);   // 同上：先删键再通知
     b.emit('SIGNED_OUT', null);
     seed('s1');
     release();
@@ -176,6 +181,7 @@ describe('被移除时删本机会话的时机（复查建议 ①）', () => {
       clearAnyLocalSession();   // 修之前：回登录页时不管是谁的会话都删
       goToAuth();
     };
+    localStorage.removeItem(KEY);   // 同上：先删键再通知
     b.emit('SIGNED_OUT', null);
     seed('s2', B);
     release();
@@ -187,6 +193,7 @@ describe('被移除时删本机会话的时机（复查建议 ①）', () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));
     const b = await tabB({ deleteDb: () => gate });
+    localStorage.removeItem(KEY);   // 同上：先删键再通知
     b.emit('SIGNED_OUT', null);
     seed('s2', B);
     b.emit('SIGNED_IN', { user: { id: B }, access_token: tok('s2') });
@@ -212,8 +219,9 @@ describe('转来的 SIGNED_OUT 到时本机已是同一账号的新会话（K6-s
     expect(readExitNotice()).toBe('removed');
   });
 
-  it('本机会话还是 s1（或已经没了）：照旧按被移除处理', async () => {
+  it('本机会话已经没了（auth-js 先删键再通知）：照旧按被移除处理', async () => {
     const b = await tabB();
+    localStorage.removeItem(KEY);
     b.emit('SIGNED_OUT', null);
     await vi.waitFor(() => expect(b.replace).toHaveBeenCalledTimes(1));
     expect(readSessionUserId()).toBeNull();
@@ -232,5 +240,33 @@ describe('转来的 SIGNED_OUT 到时本机已是同一账号的新会话（K6-s
     emitOld('SIGNED_OUT', null);
     expect(readSessionUserId()).toBeNull();   // 这就是建议 ④ 说的：删掉了本账号刚登录的新会话
     expect(b.boot.switching).toBe(true);
+  });
+});
+
+describe('转来的 SIGNED_OUT 到时本机会话还在、就是本页认的那个（K6-signout-lib 审查必改）', () => {
+  it('别的标签页退出旧会话时删键被存储保护拦下、SIGNED_OUT 照样转来：本页新会话保留，不清库、不跳登录页', async () => {
+    const onSignedOut = vi.fn();   // 只看本页的（前面用例在后台清库、晚到的 location.replace 会落到本页的桩上）
+    const b = await tabB({ onSignedOut });   // 本页是刚登录的新会话 s1
+    markSelfSignOut(localStorage, Date.now(), 's0');   // 别的标签页退出旧会话 s0 打的标记
+    resetSelfSignOutForTest();
+    b.emit('SIGNED_OUT', null);   // 那边 _removeSession 没删掉 s1（保护拦下），通知照样转来
+    expect(readSessionUserId()).toBe(A);
+    expect(b.boot.switching).toBe(false);
+    await Promise.resolve();
+    expect(onSignedOut).not.toHaveBeenCalled();
+  });
+
+  it('本页已收到 B 页 SIGNED_IN 的广播（sid 改认 s2）：A 页自己退出 s1 的 SIGNED_OUT 随后转来，被忽略，不误跳登录页', async () => {
+    const onSignedOut = vi.fn();
+    const b = await tabB({ onSignedOut });   // 本页原来是 s1（和 A 页同一个会话）
+    markSelfSignOut(localStorage, Date.now(), 's1');   // A 页开始退出 s1
+    resetSelfSignOutForTest();
+    seed('s2');   // B 页用同一账号登录了 s2
+    b.emit('SIGNED_IN', { user: { id: A }, access_token: tok('s2') });   // 广播转来：本页改认 s2，A 的标记被清掉
+    b.emit('SIGNED_OUT', null);   // A 页 _removeSession 被保护拦下（本机是 s2），通知照样转来
+    expect(readSessionUserId()).toBe(A);
+    expect(b.boot.switching).toBe(false);
+    await Promise.resolve();
+    expect(onSignedOut).not.toHaveBeenCalled();
   });
 });

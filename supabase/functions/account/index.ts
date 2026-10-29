@@ -1,6 +1,6 @@
 // account 入口（架构第 6 节函数表 account、“account delete”、“account-purge 怎么执行”的时序 1、2；R-185、R-188、R-192）。
 // 逻辑和测试见 core.ts、tests/functions/account.test.ts。
-// 经 supabase-js（service role）：rpc private.account_request_deletion / account_restore / take_rate（20261029150000、20261029130000），
+// status 只用 requireActiveUser（冷静期放行，不碰 store）；其余经 supabase-js（service role）：rpc private.account_request_deletion / account_restore / take_rate（20261029150000、20261029130000），
 //   读 private.admins、public.profiles、public.devices，写 public.logs，读 export: json 的 public 表；
 //   导出失败时退回当天的一次：读、改 private.counters（比较并交换）；Auth 管理接口 getUserById。
 // restore、delete 用 service role 调 definer 函数（0.38 第 45 条），不用 fn_vault。
@@ -139,7 +139,7 @@ Deno.serve((req) => {
       try {
         return { ok: true, user: await requireActiveUser(r, admin, opts) };
       } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse({ 'cache-control': 'no-store' }) };
+        if (e instanceof AuthError) return { ok: false, response: e.toResponse({ 'cache-control': 'no-store' }), code: e.code };
         throw e;
       }
     },

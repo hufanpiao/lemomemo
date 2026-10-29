@@ -89,9 +89,9 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
 
   return (
     <section aria-labelledby="settings-devices-title">
-      <h2 id="settings-devices-title" className={styles.gt} ref={titleRef} tabIndex={-1}>
+      <h3 id="settings-devices-title" className={styles.gt} ref={titleRef} tabIndex={-1}>
         {t('settings.devices.title', {})}
-      </h2>
+      </h3>
       {state.kind === 'loading' ? (
         <p className={styles.status} role="status">
           {t('settings.devices.loading', {})}

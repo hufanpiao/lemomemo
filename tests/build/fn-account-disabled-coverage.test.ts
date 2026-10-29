@@ -11,6 +11,9 @@
 // config.toml 里 verify_jwt = true 的函数必须是 jwt。
 // 还没有用例的格子写 { todo: '…' }：TC-B1-10 要求“每个带 JWT 的函数都返回 account_disabled”，所以 todo 不是警告，最后一条用例照样失败并列出要补的用例。
 // 不 import typescript（否则按 tests/arch/coverage.test.ts 要登记进 SLOW_NODE_TESTS）：注释、字符串、正则字面量交给 ts-scan.ts 的小扫描器。
+// 被 PLAN 引用的用例别在断言前 return：“先断言再 if (…) return”的类型收窄只认紧挨着、钉死条件的那几种（expect(r.ok).toBe(true); if (!r.ok) return;
+// 等，见 ts-scan.ts 的 guardedReturn）；expect(m).toBeDefined(); if (!m) return; 仍算可能跳过（m 为 null 也能过），写成 toBeTruthy() 或 m === undefined。
+// skip( 只看名字，别的对象的 .skip(n) 也算跳过（见 runtimeSkip）。
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';

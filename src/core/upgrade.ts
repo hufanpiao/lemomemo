@@ -5,6 +5,7 @@
 //   重新载入后版本仍不够 → 'still_old'（“已是最新版本，请稍后再试”），不再自动重新载入，记错误码
 // • 别的标签页以更高 DB_VERSION 打开本机库：本页关库、挡写入；没有录音和编辑在进行就自动重新载入，
 //   否则 cache = 'closed_for_upgrade'（“柠檬记有新版本 · 重新打开”），录音或编辑结束（busy 归零）时自动重新载入
+// • SW 在后台装好了新版本（8.1）：swReady = true，界面顶部提示“有新版本 · 重新打开”，不强制刷新；按了才 requestUpdate()
 // • 本机库来自更新的版本（VersionError）：cache = 'too_new'，整屏提示“这台设备上的数据来自更新的版本，请更新柠檬记”
 // • 升级本机库被挡住（blocked）：blocked = true，提示“请关掉其他打开的柠檬记窗口”
 //   （boot.ts 收到 blocked 后等 BLOCKED_PROMPT_DELAY_MS 仍没打开才调 setBlocked(true)，配合升级的页关库期间不闪提示）
@@ -32,6 +33,10 @@ export interface UpgradeState {
   update: UpdatePhase;
   /** 有录音、编辑在进行（横幅等它结束再出，0.27 第 1 点） */
   busy: boolean;
+  /** SW 已在后台装好新版本、等着接管，或者别的标签页已让新 SW 接管了本页（8.1“有新版本 · 重新打开”） */
+  swReady: boolean;
+  /** 用户关掉了“有新版本”横幅（只在内存里）；和 swReady 分开记：关了横幅，新版本照样已就绪（复审建议 2） */
+  swDismissed: boolean;
 }
 
 export interface UpgradeDeps {
@@ -61,12 +66,16 @@ export interface UpgradeCenter {
   setCacheTooNew(): void;
   /** 升级本机库被别的标签页挡住 / 挡住解除 */
   setBlocked(blocked: boolean): void;
+  /** SW 在后台装好了新版本（platform/sw-register.ts 的 watchServiceWorkerUpdate 回调） */
+  setSwReady(): void;
+  /** 关掉“有新版本”横幅（只记在内存里，下次打开 App 又会出；架构师 10-30 第 4 点）：只设 swDismissed，不动 swReady。426、本机库已关的横幅不给关 */
+  dismissSwReady(): void;
   /**
    * 录音、编辑开始时调用，结束时调返回的函数。
    * 本机库已为升级关闭时，最后一个结束会自动重新载入：调用方在结束前自己把内存里的内容放好（库已关，写不进 drafts）
    */
   holdBusy(reason: string): () => void;
-  /** 按“更新” */
+  /** 按“更新”：要重新载入时如果正在录音、编辑，等它结束再载入（复审建议 1） */
   requestUpdate(): Promise<UpdatePhase>;
   /** 启动时（checkMinVersion 和队列暂停都报过以后）调一次：刚按过更新而版本仍不够 → still_old */
   afterReloadCheck(): void;
@@ -78,10 +87,16 @@ function lowerThan(app: string, min: string): boolean {
 }
 
 export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
-  let state: UpgradeState = { syncBlocked: null, cache: 'ok', blocked: false, update: 'idle', busy: false };
+  let state: UpgradeState = { syncBlocked: null, cache: 'ok', blocked: false, update: 'idle', busy: false, swReady: false, swDismissed: false };
   const listeners = new Set<() => void>();
   const busy = new Map<number, string>();
   let busySeq = 0;
+  /** 按过“更新”、该重新载入了，但当时有录音、编辑在进行：等 busy 归零再载入 */
+  let reloadPending = false;
+  const reloadWhenIdle = (): void => {
+    if (busy.size === 0) deps.reload();
+    else reloadPending = true;
+  };
 
   const set = (patch: Partial<UpgradeState>): void => {
     const next = { ...state, ...patch };
@@ -123,6 +138,12 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
     setBlocked(blocked) {
       set({ blocked });
     },
+    setSwReady() {
+      set({ swReady: true });
+    },
+    dismissSwReady() {
+      set({ swDismissed: true });
+    },
     holdBusy(reason) {
       const key = ++busySeq;
       busy.set(key, reason);
@@ -134,7 +155,10 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
         busy.delete(key);
         if (busy.size > 0) return;
         set({ busy: false });
-        if (state.cache === 'closed_for_upgrade') deps.reload();
+        if (state.cache === 'closed_for_upgrade' || reloadPending) {
+          reloadPending = false;
+          deps.reload();
+        }
       };
     },
     async requestUpdate() {
@@ -143,7 +167,14 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
       deps.attempt.set(state.syncBlocked?.min ?? '');
       const r = await deps.swUpdate();
       if (r === 'reloading') {
-        deps.reload();
+        reloadWhenIdle();
+        return 'updating';
+      }
+      // 别的标签页已经按过、新 SW 已接管（这一页 reg.waiting 没了，update() 查不到新的，断网时还会失败）：swReady 说明新版本已经装好，
+      // 直接重新载入就是新版本；不能当成“没有新版本”挂着不动、更不能误报“已是最新版本”或“更新失败”（审查必改 2、复审必改）。
+      // 横幅关没关（swDismissed）不影响这一条
+      if ((r === 'no_update' || r === 'failed') && state.swReady) {
+        reloadWhenIdle();
         return 'updating';
       }
       deps.attempt.set(null);

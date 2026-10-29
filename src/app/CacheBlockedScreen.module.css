@@ -1,0 +1,30 @@
+/* 升级本机库被别的标签页挡住的整屏提示（CacheBlockedScreen.tsx）：盖住整个视口（启动画面已收起），没有动效 */
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+}
+
+.title {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: var(--fs-22);
+  line-height: 1.35;
+}
+
+.body {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-15);
+  line-height: 1.6;
+}

@@ -5,6 +5,7 @@
 // - verifyOtp 先不带 captchaToken（官方文档只写发码和注册要；B1 实测 TC-B1-08，要的话在这里补）
 // 只认错误码，不把服务器原文显示给用户
 import type { ApiError } from '../../../../shared/schema/api.ts';
+import { logoutReplaced, sessionReplaced, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import { readStoredAccessToken } from './local-exit.ts';
 
@@ -141,9 +142,12 @@ export interface AuthApi {
    * ① 删本会话那一行 devices（del 策略只许删本会话那一行；断网、已被删都不挡退出）；
    * ② signOut({scope: 'local'})，只吊销本会话，不动别的设备。
    * 不先 getSession 预检；不是 ok 的一律回错（含断网、令牌过期、客户端拿不到），调用方据此兜底清本机会话。
-   * 本机库和缓存由调用方接着清（local-exit.ts）
+   * 本机库和缓存由调用方接着清（local-exit.ts）。
+   * prior（K6-signout-lib，useSessionGate 经 signOutThisDevice 传入）：删行用 prior.sid（退出一开头记下的，不在这时现读）；
+   * 拿到客户端、删完行以后、紧贴 signOut 之前再读一次本机会话，已换成别的标签页的新会话就不调 signOut（它会吊销那个新会话），
+   * 改用 prior.token 直接 logout（logoutReplaced）。不传 prior 时按原来的：删行的 sid 从本机令牌现读，不做这一判断
    */
-  signOutHere(): Promise<Result>;
+  signOutHere(prior?: PriorSession): Promise<Result>;
 }
 
 /** 从 access token 的 payload 里读 session_id（找本会话那一行 devices 用）：只在 platform/session.ts 留一份（K4 复核建议 2） */
@@ -207,17 +211,22 @@ export function createAuthApi(getDb: () => Promise<Db>, readToken: () => string 
         return { ok: false, error: 'registered_login' };
       }),
 
-    signOutHere: () =>
+    signOutHere: (prior) =>
       run(async (db) => {
         // 不先 getSession 预检（K9 退出流程审查：预检失败会跳过 signOut、令牌过期时还会先联网刷新）；
-        // session_id 从本机存着的 access token 里读，只用来找要删的那一行
-        const sid = sessionIdOfToken(readToken());
+        // session_id 用退出一开头记下的（prior）；没传时从本机存着的 access token 里读，只用来找要删的那一行
+        const sid = prior ? prior.sid : sessionIdOfToken(readToken());
         if (sid) {
           try {
             await (db as unknown as DevicesDeleteDb).from('devices').delete().eq('session_id', sid);
           } catch {
             // 断网、行已被删：照样退出
           }
+        }
+        // 紧贴 signOut 之前（K6-signout-lib）：本机已是别的标签页的新会话，就用旧令牌直接 logout，不调 supabase-js、不碰存储
+        if (prior && sessionReplaced(prior.sid)) {
+          const r = await logoutReplaced(prior.token, prior.budgetMs);
+          return r.serverDone ? { ok: true, value: undefined } : { ok: false, error: 'offline' };
         }
         const { error } = await db.auth.signOut({ scope: 'local' });
         // 不是 ok 的一律报回去（断网、令牌过期也算），调用方据此兜底清本机会话

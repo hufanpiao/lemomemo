@@ -1,12 +1,13 @@
 -- apply_patch（架构 4.4、4.4.1；0.38 第 57 条；迁移 20261029200000_core_apply_patch.sql）
 -- 覆盖 4.4.1 末尾“pgTAP 至少覆盖”各项：五种 status、同 op_id 连调、别人的行和隐私记行回 not_found、停用账号回 account_disabled、
 --   白名单外的列被丢掉、profiles 回 patch_table_not_allowed、own_revs 命中与超过 20 个、forked 副本、另一个事务持锁 3 秒后 55P03、anon 被拒；
---   另加：参数检查各条、白名单和 grant update 列逐表一致、五种 status 都记 applied_ops、同 op_id 真并发（后到的撞主键回滚、拿到先到的结果）。
+--   另加：参数检查各条、白名单和 grant update 列逐表一致、五种 status 都记 applied_ops、同 op_id 真并发（后到的撞主键回滚、拿到先到的结果）；
+--   TC-B1-69：B 用 A 用过的 op_id、B 用自己的 op_id 改 A 的行，都不影响 A 的数据（applied_ops 主键 (user_id, op_id)）。
 -- 真并发和 55P03 要两条真连接：经 dblink 连回本库（本机 supabase start 的 postgres 密码是 postgres，走容器网络地址才能带密码）；
 --   离线 PGlite 没有 dblink，这几条记为 SKIP（条数不变）；库里有 dblink 却连不上就判失败（审查建议 2：环境变量传不进
 --   supabase test db 跑的 SQL，实测 PGOPTIONS 带不进去，所以按“有没有 dblink”判，真库上一律严格）。经 dblink 写的数据是真提交的，用固定 id，开头先清、结尾删掉。
 begin;
-select plan(63);
+select plan(73);
 \ir _helpers.psql
 select tests.seed();   -- A、B 正常，C 停用
 
@@ -217,6 +218,35 @@ select is((select count(*)::int from public.applied_ops where op_id in ('a0c0000
 select is((select string_agg(distinct result ->> 'status', ',' order by result ->> 'status') from public.applied_ops),
   'conflict,forked,gone,not_found,ok', '五种 status 都记进 applied_ops');
 select is((select count(*)::int from public.applied_ops where user_id <> 'aaaaaaaa-0000-4000-8000-000000000001'), 0, 'applied_ops 的 user_id 是调用人自己');
+
+-- ===== TC-B1-69：B 用 A 用过的 op_id、B 用自己的 op_id 改 A 的行（applied_ops 主键 (user_id, op_id)，0001 安全审查低 8） =====
+-- A 用过的：…0001（改 e1，结果 ok rev 2）、…0002（改 e1，结果 conflict）。幂等先查受 sel 策略约束，B 查不到 A 的记录，
+--   所以 B 的调用照常执行、按 B 自己记；A 的记录、A 的行、A 再用同一 op_id 拿到的结果都不变
+create table tests.snap69 as
+  select (select jsonb_agg(to_jsonb(a) order by a.op_id) from public.applied_ops a where a.user_id = 'aaaaaaaa-0000-4000-8000-000000000001') as a_ops,
+         (select to_jsonb(e) from public.events e where e.id = 'ae000000-0000-4000-8000-000000000001') as e1;
+select is(tests.ap('bbbbbbbb-0000-4000-8000-000000000002', 'events', 'ae000000-0000-4000-8000-000000000001', '{"title": "B 改 A 的"}', 1, 'a0b00000-0000-4000-8000-000000000001'),
+  '{"status": "not_found", "rev": null, "prev_rev": null}'::jsonb,
+  'TC-B1-69：B 用 A 用过的 op_id 改 A 的行，回 not_found（不是 A 那次缓存的 ok，A 的结果没漏给 B）');
+select is(tests.ap('bbbbbbbb-0000-4000-8000-000000000002', 'events', 'ae000000-0000-4000-8000-0000000000b1', '{"title": "B 自己改"}', 1, 'a0b00000-0000-4000-8000-000000000002'),
+  '{"status": "ok", "rev": 2, "prev_rev": 1}'::jsonb,
+  'TC-B1-69：B 用 A 用过的 op_id 改自己的行，照常应用、回 B 自己的结果（不是 A 那次的 conflict）');
+select is((select title || '|' || rev from public.events where id = 'ae000000-0000-4000-8000-0000000000b1'), 'B 自己改|2', 'TC-B1-69：B 的行确实改上了（撞 op_id 没被当成重复）');
+select is(tests.ap('bbbbbbbb-0000-4000-8000-000000000002', 'events', 'ae000000-0000-4000-8000-000000000001', '{"title": "B 再改 A 的"}', 1, 'b0b00000-0000-4000-8000-000000000001') ->> 'status',
+  'not_found', 'TC-B1-69：B 用自己的 op_id 改 A 的行，回 not_found（被拒，数据库那一半见 TC-B0-38）');
+select is((select to_jsonb(e) from public.events e where e.id = 'ae000000-0000-4000-8000-000000000001'), (select e1 from tests.snap69),
+  'TC-B1-69：A 的行 e1 整行不变');
+select is((select jsonb_agg(to_jsonb(a) order by a.op_id) from public.applied_ops a where a.user_id = 'aaaaaaaa-0000-4000-8000-000000000001'), (select a_ops from tests.snap69),
+  'TC-B1-69：A 的 applied_ops 记录（含 at、result）一条不变');
+select is((select string_agg(a.op_id::text || '=' || (a.result ->> 'status'), ',' order by a.op_id) from public.applied_ops a where a.user_id = 'bbbbbbbb-0000-4000-8000-000000000002'),
+  'a0b00000-0000-4000-8000-000000000001=not_found,a0b00000-0000-4000-8000-000000000002=ok,b0b00000-0000-4000-8000-000000000001=not_found',
+  'TC-B1-69：B 的三次按 B 自己记（同一 op_id 下 A、B 各一行）');
+select is(tests.rows_as('authenticated', 'bbbbbbbb-0000-4000-8000-000000000002', 'select count(*)::int as n from public.applied_ops where user_id <> auth.uid()'),
+  '[{"n": 0}]'::jsonb, 'TC-B1-69：B 读 applied_ops 看不到 A 的记录（sel 策略）');
+select is(tests.ap('aaaaaaaa-0000-4000-8000-000000000001', 'events', 'ae000000-0000-4000-8000-000000000001', '{"title": "A 重发"}', 1, 'a0b00000-0000-4000-8000-000000000001'),
+  '{"status": "ok", "rev": 2, "prev_rev": 1}'::jsonb, 'TC-B1-69：B 用过之后 A 重发同一 op_id，拿到的仍是 A 自己上次的结果');
+select is((select to_jsonb(e) from public.events e where e.id = 'ae000000-0000-4000-8000-000000000001'), (select e1 from tests.snap69),
+  'TC-B1-69：A 重发后 e1 仍不变（只改一次）');
 
 -- ===== 两条真连接：同 op_id 并发、另一个事务持锁 3 秒后 55P03 =====
 create function tests.dbl() returns boolean language plpgsql as $$
