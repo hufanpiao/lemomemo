@@ -518,19 +518,32 @@ def js_skeleton(code):
     return "".join(skel), literals
 
 
-def _match_close(skel, open_at):
-    """skel 里 open_at 处的 ( 对应的 )；括号不配对时退回这一行的行尾"""
-    pairs = {"(": ")", "[": "]", "{": "}"}
-    stack = []
-    for k in range(open_at, len(skel)):
-        ch = skel[k]
-        if ch in pairs:
-            stack.append(pairs[ch])
-        elif ch in ")]}":
-            if not stack or stack.pop() != ch:
-                break
-            if not stack:
-                return k
+_BRACKET_RE = re.compile(r"[()\[\]{}]")
+_BRACKET_CLOSE = {"(": ")", "[": "]", "{": "}"}
+
+
+def _bracket_pairs(skel):
+    """骨架上用栈一遍扫完（O(n)），返回 {开括号下标: 配对的闭括号下标}；不配对的开括号不在表里。
+    和“从每个开括号往后单独扫”的结果一致：遇到类型不对的闭括号时，栈里所有还开着的括号单独扫也都会在这里碰上它，
+    全部记为不配对并清栈；栈空时多出来的闭括号谁也碰不上，忽略；扫到文件尾还开着的也不配对"""
+    pairs, stack = {}, []
+    for m in _BRACKET_RE.finditer(skel):
+        k, ch = m.start(), m.group(0)
+        if ch in _BRACKET_CLOSE:
+            stack.append(k)
+        elif stack:
+            if _BRACKET_CLOSE[skel[stack[-1]]] == ch:
+                pairs[stack.pop()] = k
+            else:
+                stack.clear()
+    return pairs
+
+
+def _match_close(skel, open_at, pairs):
+    """skel 里 open_at 处的 ( 对应的 )（查 _bracket_pairs 的表）；括号不配对时退回这一行的行尾"""
+    close = pairs.get(open_at)
+    if close is not None:
+        return close
     eol = skel.find("\n", open_at)
     return len(skel) if eol < 0 else eol
 
@@ -556,15 +569,17 @@ def check_binimport(root, errors):
         skel, literals = js_skeleton(code)
         hits = []  # (开引号下标, 写法)
         lit_pos = sorted(literals)
+        brackets = _bracket_pairs(skel)
+        spans = {}  # 写法 -> [(开括号, 闭括号)]
 
         def in_parens(open_at, how):
-            # 括号里的所有字符串都看（拼接、三元、importScripts 多个参数都算）；按下标二分取区间，不逐个比（压缩文件里调用多、字符串多）
-            close = _match_close(skel, open_at)
-            lo, hi = bisect.bisect_right(lit_pos, open_at), bisect.bisect_left(lit_pos, close)
-            return [(at, how) for at in lit_pos[lo:hi]]
+            # 括号里的所有字符串都看（拼接、三元、importScripts 多个参数都算）。先只记区间，最后按写法合并区间再二分取字符串：
+            # 逐个调用取字符串在层层嵌套时是“层数 × 字符串数”（5 千层平衡嵌套的 require 跑过 7 秒）
+            spans.setdefault(how, []).append((open_at, _match_close(skel, open_at, brackets)))
 
         factories = {"createRequire"}
         bound = set()
+        fact_alt = "createRequire"
         # 骨架里不出现 createRequire 就没有绑定可收，整段跳过（别名、绑定都要先写出 createRequire 这个词）
         if "createRequire" in skel:
             factories |= set(BINIMPORT_FACTORY_ALIAS_RE.findall(skel))
@@ -578,18 +593,28 @@ def check_binimport(root, errors):
             for annot in (r"\s*:[^;]{0,200}?", ""):
                 bound |= set(re.findall(rf"(?<![\w$.])([\w$]+){annot}\s*=\s*{prefix}(?:{fact_alt})\s*\(", skel))
             bound -= set(BINIMPORT_CALL_NAMES)
-        fact_alt = "|".join(re.escape(f) for f in sorted(factories))
         names = {n: f"{n}()" for n in BINIMPORT_CALL_NAMES}
         names.update({n: f"createRequire 得到的 {n}()" for n in bound})
         call_re = re.compile(rf"(?<![\w$])({'|'.join(re.escape(n) for n in sorted(names))}){BINIMPORT_CALL_TAIL}")
         for m in call_re.finditer(skel):
-            hits += in_parens(m.end() - 1, names[m.group(1)])
+            in_parens(m.end() - 1, names[m.group(1)])
         # createRequire(…)(…) 连写：看第二对括号
         for m in re.finditer(rf"(?<![\w$])(?:{fact_alt})\s*\(", skel):
-            close = _match_close(skel, m.end() - 1)
+            close = _match_close(skel, m.end() - 1, brackets)
             nxt = re.compile(r"\s*(?:\?\.\s*)?\(").match(skel, close + 1)
             if close < len(skel) and skel[close] == ")" and nxt:
-                hits += in_parens(nxt.end() - 1, "createRequire(…)()")
+                in_parens(nxt.end() - 1, "createRequire(…)()")
+        # 同一写法的区间合并成互不重叠的几段（开区间：字符串下标要严格落在两括号之间），每段二分取字符串
+        for how, ivs in spans.items():
+            merged = []
+            for a, b in sorted(ivs):
+                if merged and a < merged[-1][1]:
+                    merged[-1][1] = max(merged[-1][1], b)
+                else:
+                    merged.append([a, b])
+            for a, b in merged:
+                lo, hi = bisect.bisect_right(lit_pos, a), bisect.bisect_left(lit_pos, b)
+                hits += [(at, how) for at in lit_pos[lo:hi]]
         for m in BINIMPORT_FROM_RE.finditer(skel):
             if m.end() in literals:
                 hits.append((m.end(), "import/export … from" if m.group(1) == "from" else "import"))

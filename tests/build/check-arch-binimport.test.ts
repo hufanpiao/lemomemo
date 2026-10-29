@@ -191,6 +191,33 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
     expect(seconds).toBeLessThan(5);
   });
 
+  it('括号配对一遍算完：1 万个未闭合的 require(、5 千层平衡嵌套的 require(…)，check_binimport 各 5 秒内跑完，结果照报', () => {
+    const unclosed = `${"require('./a.js', ".repeat(10_000)}'./z.png'\n`;
+    const nested = `${"require('./a.js', ".repeat(5_000)}'./z.png'${')'.repeat(5_000)};\n`;
+    const root = repo({ 'lib/unclosed.js': unclosed, 'lib/nested.js': nested });
+    const script = [
+      'import importlib.util, json, pathlib, sys, time',
+      'spec = importlib.util.spec_from_file_location("check_arch", sys.argv[1])',
+      'mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)',
+      'out = {}',
+      'for name in ("unclosed.js", "nested.js"):',
+      '    d = pathlib.Path(sys.argv[2]) / name.replace(".", "_"); (d / "lib").mkdir(parents=True)',
+      '    (d / "lib" / name).write_bytes((pathlib.Path(sys.argv[2]) / "lib" / name).read_bytes())',
+      '    errors = []; t = time.perf_counter(); mod.check_binimport(d, errors)',
+      '    out[name] = [time.perf_counter() - t, [f"{e[1]}:{e[2]}" for e in errors]]',
+      'print(json.dumps(out))',
+    ].join('\n');
+    const out = JSON.parse(execFileSync('python', ['-I', '-c', script, join(ROOT, 'build', 'check_arch.py'), root], { encoding: 'utf8' })) as Record<
+      string,
+      [number, string[]]
+    >;
+    expect(out['unclosed.js']?.[0]).toBeLessThan(5);
+    expect(out['nested.js']?.[0]).toBeLessThan(5);
+    // 最里层的 './z.png' 在每一层 require 的括号里，只报一次
+    expect(out['unclosed.js']?.[1]).toEqual(['lib/unclosed.js:1']);
+    expect(out['nested.js']?.[1]).toEqual(['lib/nested.js:1']);
+  });
+
   it('对照：不是 createRequire 绑定出来的同名函数调用、createRequire 本身的参数 → 不报', () => {
     const body = lines(
       "import { createRequire } from 'node:module';",
