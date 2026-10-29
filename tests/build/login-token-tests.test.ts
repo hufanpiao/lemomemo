@@ -5,7 +5,7 @@
 // ③ 运行方式：没设 LEMO_TEST_API=1 时 -SupabaseBase 被拒；点源、在窗口里用 & 调用被拒（只许 -File）；都在发任何请求之前
 // 需要 Windows PowerShell（Windows 上）或 pwsh（其他系统）；都没有就整组跳过
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -55,6 +55,15 @@ $web = @($ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.
     expect(web.length).toBeGreaterThan(0);
     for (const w of web) expect(w.ok, `第 ${w.line} 行没带 -MaximumRedirection 0`).toBe(true);
   }, 60_000);
+
+  it('finally 清掉登录时的哈希、解码后的链接、SecureString 和 $Matches（两次 verify 之间按 Ctrl+C 也不留在作用域里）', () => {
+    const text = readFileSync(SCRIPT, 'utf8');
+    const fin = text.slice(text.lastIndexOf('\nfinally {'));
+    expect(fin).toContain('$hash = $null; $u = $null; $sec = $null; $Matches = $null');
+    // 去掉 pkce_ 前缀的哈希、解码循环里每一步的链接都登记成秘密
+    expect(text).toContain("$hash = $hash -replace '\\Apkce_', ''");
+    expect(text).toMatch(/for \(\$k = 0; \$k -lt 3; \$k\+\+\) \{ \$u = \[uri\]::UnescapeDataString\(\$u\); Add-Secret \$u \}/);
+  });
 
   it('Hide-Secrets：验证码只换整词，令牌整串换', () => {
     const f = writePs(

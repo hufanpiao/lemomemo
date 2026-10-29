@@ -10,8 +10,11 @@
                                supabase/migrations/*.sql 读出来（不手抄）。白名单里 5 个函数（purge_deleted_impl、record_consent_impl、
                                files_authorize_impl、report_tz_impl、remove_device_impl）经 POST 带「一定报错、什么都不改」的参数调；其余函数一律经
                                GET /rpc/（PostgREST 放在只读事务里跑，写不了任何东西）带按类型填的占位参数调，不传 null（null 会盖掉参数默认值）。
+                               白名单函数回 404 PGRST202：触发器函数（迁移里 returns trigger，PostgREST 不暴露）算正常；其他判不符合
+                               （预览缺迁移或没部署），列出函数名。
     S1                         S1 安全复审必改（TC-B1-111 真库那一半）：登录后只报访问令牌 payload 里 amr 的形状（是不是数组、每项的 method 名），
                                用登录令牌调 private.is_active（GET，只读）应为 true；用刷新令牌换一次新令牌，再核一遍。不打印令牌本身。
+                               is_active 为 false 时提示测试账号可能没有 profile 行，打印补行的 SQL（带预览库检查、可重复执行），不等待、照常往下。
     R2-9                       docs/09-路线图/B0-R2任务单.md 第五节第 9 项：经 preview.lemomemo.com/files 上传一张 1×1 的 webp、
                                签 view 链接、取回来逐字节相同；不带签名、改过的签名都被拒；同一路径再传一次 409（不覆盖）。
     R2-6                       第 6 项：/files 的 GET 响应 cf-cache-status 必须是 DYNAMIC 或 BYPASS（webp 取两次，pptx 取一次）。
@@ -273,13 +276,31 @@ function Invoke-Http([string]$method, [string]$uri, [hashtable]$headers, $body, 
         if ($null -ne $r.RawContentStream) { $bytes = $r.RawContentStream.ToArray() }
         $text = [Text.Encoding]::UTF8.GetString($bytes)
     } catch {
+        $err = $_
         $resp = $null
-        try { $resp = $_.Exception.Response } catch { }
+        try { $resp = $err.Exception.Response } catch { }
         if ($null -ne $resp) {
             try { $status = [int]$resp.StatusCode } catch { }
             try { foreach ($k in @($resp.Headers.AllKeys)) { $hdr[[string]$k] = [string]$resp.Headers[$k] } } catch { }
         }
-        try { if ($null -ne $_.ErrorDetails) { $text = [string]$_.ErrorDetails.Message } } catch { }
+        try { if ($null -ne $err.ErrorDetails) { $text = [string]$err.ErrorDetails.Message } } catch { }
+        # PS 5.1 下 ErrorDetails 大多是空的：改从响应流读错误体（UTF-8，读完就关；读不到就保持为空，不抛出）。
+        # 这里不打印：错误体只用来解析错误码，打印处（Rec、Warn）照样先过 Hide-Secrets
+        if (-not $text -and $null -ne $resp) {
+            $rs = $null; $sr = $null
+            try {
+                $rs = $resp.GetResponseStream()
+                if ($null -ne $rs) {
+                    try { if ($rs.CanSeek) { $rs.Position = 0 } } catch { }
+                    $sr = New-Object System.IO.StreamReader($rs, [Text.Encoding]::UTF8)
+                    $text = [string]$sr.ReadToEnd()
+                }
+            } catch { $text = '' }
+            finally {
+                if ($null -ne $sr) { try { $sr.Dispose() } catch { } }
+                if ($null -ne $rs) { try { $rs.Dispose() } catch { } }
+            }
+        }
     }
     $json = $null
     if ($text) { try { $json = $text | ConvertFrom-Json } catch { $json = $null } }
@@ -326,11 +347,14 @@ function Ask-YesNo([string]$q) {
     Fail '连续 3 次没有回答 y 或 n，已停止'
 }
 
-function Wait-Sql([string]$why, [string[]]$sql) {
+function Show-Sql([string]$why, [string[]]$sql) {
     Say ''
     Say "  请打开 Supabase › lemomemo-preview › SQL Editor，执行下面的 SQL（$why）："
     Say '  （整段全选执行：粘贴后按 Ctrl+A 全选再运行，不要只选中一部分；开头的检查段要和后面一起执行才有用）'
     foreach ($l in $sql) { Write-Host "      $l" -ForegroundColor White }
+}
+function Wait-Sql([string]$why, [string[]]$sql) {
+    Show-Sql $why $sql
     $null = Read-Host '  执行完后按回车继续'
 }
 
@@ -435,9 +459,16 @@ function Probe-Amr {
     $shape = if ($null -eq $amr) { '没有 amr' } elseif ($isArr) { "数组 $($methods.Count) 项，method：$(if ($methods.Count) { $methods -join '、' } else { '无' })$(if ($strItems.Count) { '（其中字符串项：' + ($strItems -join '、') + '）' })" } else { "不是数组（$($amr.GetType().Name)）" }
     $h = User-Headers; $h['Accept-Profile'] = 'private'
     $r = Invoke-Http GET "$SupabaseBase/rest/v1/rpc/is_active" $h $null ''
-    $active = $r.Status -eq 200 -and $r.Text.Trim() -eq 'true'
+    # 写明 is_active 实际返回了什么：true、false，或者错误码
+    $body = ([string]$r.Text).Trim()
+    $active = $r.Status -eq 200 -and $body -eq 'true'
+    $inactive = $r.Status -eq 200 -and $body -eq 'false'
+    $desc = if ($active) { 'is_active = true' }
+        elseif ($inactive) { 'is_active = false' }
+        elseif ($r.Status -eq 200) { "is_active 返回的不是 true/false（$(if ($body.Length -gt 40) { $body.Substring(0, 40) + '…' } else { $body })）" }
+        else { "is_active 调用出错（$(D $r)）" }
     $c = $null; $amr = $null; $h = $null
-    return [pscustomobject]@{ Shape = $shape; IsArray = $isArr; Methods = $methods; Active = $active; ActiveDesc = $(if ($active) { 'is_active = true' } else { "is_active 不是 true（$(D $r)）" }) }
+    return [pscustomobject]@{ Shape = $shape; IsArray = $isArr; Methods = $methods; Active = $active; Inactive = $inactive; ActiveDesc = $desc }
 }
 
 function User-Headers {
@@ -464,7 +495,7 @@ function Find-PublishableKey {
 
 # ───────────────────────── 主流程 ─────────────────────────
 $noteId = $null; $made = $script:made
-$version = $null; $viaMagic = $false
+$version = $null; $viaMagic = $false; $viaLink = $false
 $v = $null; $h = $null; $set = $null; $login = $null; $claims = $null
 try {
     Step '登录令牌测试（预览 lemomemo-preview）：先检查这个窗口'
@@ -516,17 +547,44 @@ try {
         Fail "发验证码失败（$(D $send)）。账号不在预览项目里时是 422 otp_disabled / signup_disabled"
     }
     for ($try = 1; $try -le 3 -and -not $script:acc; $try++) {
-        $sec = Read-Host -AsSecureString '  粘贴邮件里的验证码（屏幕上不显示，粘贴后回车）'
+        # 默认邮件模板（没配自定义 SMTP 改不了）只有登录链接、没有 6 位码：也收链接，取出 token（哈希）换会话；链接不要点开，点开就用掉了
+        $sec = Read-Host -AsSecureString '  粘贴邮件里的 6 位验证码；邮件里只有登录链接时，右键链接“复制链接地址”粘贴（别点开链接）。屏幕上不显示，粘贴后回车'
         Clear-Clip
         $otp = (To-Plain $sec) -replace '\s', ''
         $sec.Dispose()
-        if ($otp -notmatch '\A\d{6,10}\z') { Warn "验证码应是 6 位数字（收到 $($otp.Length) 个字符）"; $otp = $null; continue }
+        $hash = $null
+        if ($otp -notmatch '\A\d{6,10}\z') {
+            Add-Secret $otp
+            $u = $otp -replace '&amp;', '&'
+            Add-Secret $u
+            # 每解一次都登记：解到一半的链接也不许出现在屏幕上
+            for ($k = 0; $k -lt 3; $k++) { $u = [uri]::UnescapeDataString($u); Add-Secret $u }
+            if ($u -match '[?&]token=([A-Za-z0-9_-]{20,})') { $hash = $Matches[1] }
+            $Matches = $null
+            $u = $null
+            if ($hash) {
+                # 链接里的 token 带 pkce_ 前缀；verify 收的 token_hash 不带（和 GoTrue 一致）。两种形态都登记
+                Add-Secret $hash
+                $hash = $hash -replace '\Apkce_', ''
+                Add-Secret $hash
+                if ($hash.Length -lt 20) { $hash = $null }
+            }
+            if (-not $hash) { Warn "应是 6 位数字或登录链接（收到 $($otp.Length) 个字符）"; $otp = $null; continue }
+        }
         Add-Secret $otp
-        $v = Invoke-Http POST "$SupabaseBase/auth/v1/verify" (Base-Headers) (J @{ type = 'email'; email = $Email; token = $otp })
+        if ($hash) {
+            Add-Secret $hash
+            $v = Invoke-Http POST "$SupabaseBase/auth/v1/verify" (Base-Headers) (J @{ type = 'email'; token_hash = $hash })
+            if ($v.Status -ne 200) { $v = Invoke-Http POST "$SupabaseBase/auth/v1/verify" (Base-Headers) (J @{ type = 'magiclink'; token_hash = $hash }) }
+            $hash = $null
+            if ($v.Status -eq 200) { $viaLink = $true }
+        } else {
+            $v = Invoke-Http POST "$SupabaseBase/auth/v1/verify" (Base-Headers) (J @{ type = 'email'; email = $Email; token = $otp })
+        }
         $otp = $null
-        if ($v.Status -eq 200) { Set-Session $v.Json } else { Warn "验证码没通过（$(D $v)）" }
+        if ($v.Status -eq 200) { Set-Session $v.Json } else { Warn "验证码或登录链接没通过（$(D $v)）" }
     }
-    if (-not $script:acc) { Fail '验证码连续 3 次没通过，已停止（没有拿到令牌）' }
+    if (-not $script:acc) { Fail '验证码或登录链接连续 3 次没通过，已停止（没有拿到令牌）' }
     $claims = Decode-JwtPayload $script:acc
     $script:uid = [string](Get-Prop $claims 'sub')
     if ($script:uid -notmatch '\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z') { Fail '令牌里的用户 id 格式不对' }
@@ -541,10 +599,26 @@ try {
         Refresh-Now
         $a2 = Probe-Amr
         $how = if ($viaMagic) { '控制台 magic link 发的码' } else { '脚本发的 otp' }
-        $detail = "登录（$how）：$($a1.Shape)，$($a1.ActiveDesc)；刷新一次后：$($a2.Shape)，$($a2.ActiveDesc)；$(if ($viaMagic) { '脚本发 otp 那条路未测' } else { 'magiclink 未测' })"
+        if ($viaLink) { $how += '，用邮件里的登录链接（token_hash）换的会话' }
+        $detail = "登录（$how）：$($a1.Shape)，$($a1.ActiveDesc)；刷新一次后：$($a2.Shape)，$($a2.ActiveDesc)；$(if ($viaMagic) { '脚本发 otp 那条路未测' } elseif ($viaLink) { '6 位码那条路未测（默认邮件模板里没有码）' } else { 'magiclink 未测' })"
         $okS1 = $a1.IsArray -and $a2.IsArray -and $a1.Active -and $a2.Active -and $a1.Methods.Count -gt 0 -and $a2.Methods.Count -gt 0 -and
             ($a1.Methods -notcontains 'password') -and ($a2.Methods -notcontains 'password')
+        $noProfile = $a1.Inactive -or $a2.Inactive
+        if ($noProfile) { $detail += '。is_active 返回 false：测试账号可能没有 public.profiles 行（修复 SQL 打印在 S1 这一行的下面）' }
         if ($okS1) { Rec 'S1' '通过' 'amr 形状' $detail } else { Rec 'S1' '不符合' 'amr 形状' $detail }
+        if ($noProfile) {
+            # 控制台邀请建的账号没经过 invite-signup，就没有 profile 行；按 invite-signup 的写法补（user_id、ui_locale），可重复执行。脚本不改库、不等待
+            Write-Host ''
+            Write-Host '  ！！！ is_active 返回 false：测试账号可能没有 public.profiles 行（控制台邀请建的账号没经过 invite-signup）！！！' -ForegroundColor Red
+            Show-Sql '补测试账号的 profile 行；可以重复执行，已有就不插。脚本不等这一步，照常往下跑；执行后重跑本脚本再核 S1' (@(Guard-Sql) + @(
+                    "insert into public.profiles (user_id, ui_locale)",
+                    "select u.id, 'zh-CN' from auth.users u",
+                    "where u.email = '$Email'",
+                    "  and not exists (select 1 from public.profiles p where p.user_id = u.id);"))
+            # 另一种可能：profile 行在，但已经被停用。只读诊断，不改任何东西、不需要预览库检查段
+            Say '  另一种可能：profile 行在，但已经被停用。可以另外单独执行下面这条只读查询看看（不改任何东西）：'
+            Write-Host "      select disabled_at, disabled_reason from public.profiles p join auth.users u on u.id = p.user_id where u.email = '$Email';" -ForegroundColor White
+        }
     } catch { Rec 'S1' '不符合' 'amr 形状' "中途出错：$($_.Exception.Message)" }
 
     # ─────────── P2：authenticated 读 private ───────────
@@ -555,6 +629,9 @@ try {
         foreach ($m in [regex]::Matches($sqlText, '(?is)create\s+(?:or\s+replace\s+)?function\s+private\.([a-z_][a-z0-9_]*)\s*\(([^)]*)\)')) { $fnArgs[$m.Groups[1].Value] = $m.Groups[2].Value }
         $white = @([regex]::Matches($sqlText, '(?im)^\s*grant\s+execute\s+on\s+function\s+private\.([a-z_][a-z0-9_]*)\s*\([^)]*\)\s+to\s+([^;]+);') | Where-Object { $_.Groups[2].Value -match '(?i)\bauthenticated\b' } | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
         if ($tables.Count -lt 1 -or $fnArgs.Count -lt 1) { Fail '没从迁移里读出 private 的表或函数' }
+        # 触发器函数（迁移里 returns trigger）：PostgREST 不暴露，回 404 PGRST202 是正常的
+        $trigFns = @([regex]::Matches($sqlText, '(?is)create\s+(?:or\s+replace\s+)?function\s+private\.([a-z_][a-z0-9_]*)\s*\([^)]*\)\s*returns\s+trigger\b') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
+        $white404Trig = @(); $white404Missing = @()
         # 白名单里会改数据的函数：用「一定报错或什么都不改」的参数调
         $nilId = '00000000-0000-0000-0000-000000000000'
         $safeArgs = @{
@@ -603,6 +680,9 @@ try {
                 $nWhite++
                 $wCodes[(D $r)] = 1 + [int]$wCodes[(D $r)]
                 if ($r.Code -eq '42501' -or $r.Status -eq 0) { $bad += "白名单函数 $name 被拒 $(D $r)" }
+                elseif ($r.Status -eq 404 -and $r.Code -eq 'PGRST202') {
+                    if ($trigFns -contains $name) { $white404Trig += $name } else { $white404Missing += $name }
+                }
             } else {
                 $nOther++
                 $fCodes[(D $r)] = 1 + [int]$fCodes[(D $r)]
@@ -611,7 +691,9 @@ try {
             }
         }
         $fmt = { param($h) (@($h.Keys | Sort-Object | ForEach-Object { "$_ ×$($h[$_])" }) -join '，') }
+        if ($white404Missing.Count) { $bad += "白名单函数回 404 PGRST202（预览缺迁移或没部署）：$($white404Missing -join '、')" }
         $detail = "private $($tables.Count) 张表（$(& $fmt $tCodes)）；白名单外函数 $nOther 个（$(& $fmt $fCodes)）；白名单函数 $nWhite 个（$(& $fmt $wCodes)）"
+        if ($white404Trig.Count) { $detail += "；白名单里的触发器函数回 404（PostgREST 不暴露，正常）：$($white404Trig -join '、')" }
         if ($bad.Count) { Rec 'P2' '不符合' 'authenticated 读 private' "$detail。不符合的：$($bad -join '；')" }
         else { Rec 'P2' '通过' 'authenticated 读 private' $detail }
     } catch { Rec 'P2' '不符合' 'authenticated 读 private' "中途出错：$($_.Exception.Message)" }
@@ -897,6 +979,7 @@ finally {
         $lo = $null
     }
     $script:acc = $null; $script:rtok = $null; $otp = $null; $pw = $null; $leak = $null
+    $hash = $null; $u = $null; $sec = $null; $Matches = $null
     $v = $null; $h = $null; $set = $null; $login = $null; $claims = $null
     Clear-Clip
 

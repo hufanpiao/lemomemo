@@ -55,6 +55,9 @@ export const REFRESH = 'TESTONLYrefresh-token-zz';
 export const LEAK = 'TESTONLYleaked-password-session-token';
 export const OTP = '864209';
 export const PK = 'sb_publishable_TESTONLYpublishablekey123456';
+// 登录链接里的 token（哈希）：默认邮件模板只有链接、没有 6 位码时，脚本取出它按 token_hash 换会话。
+// 和真实 GoTrue 一致：链接里是 pkce_ 前缀加哈希，verify 只认去掉前缀的哈希（HASH）
+export const HASH = 'TESTONLY0123456789abcdef0123456789abcdef0123456789abcdef';
 
 export type Req = { method: string; path: string; auth: string; headers: IncomingMessage['headers']; body: Buffer };
 export type Opts = {
@@ -65,6 +68,10 @@ export type Opts = {
   refreshFailAfterP8?: number; // P8 测试函数被调到第 n 次以后，刷新令牌一律失败
   amrStrings?: string[];      // amr 发成裸字符串数组（GoTrue 有的版本这样发）
   logoutFail?: boolean;       // 退出登录回 500（模拟 Ctrl+C 或网络断了，会话没作废）
+  hashMagicOnly?: boolean;    // token_hash 只认 type=magiclink（type=email 回 403）
+  errBodyStreamOnly?: boolean; // 模拟 PS 5.1：HTTP 出错时 ErrorDetails 为空，错误体只能从 $_.Exception.Response.GetResponseStream() 读到
+  white404?: string[];        // 这些白名单函数回 404 PGRST202（触发器函数 PostgREST 不暴露；或预览缺迁移）
+  inactive?: boolean;         // private.is_active 回 false（测试账号没有 profile 行）
   plain: string[];            // Read-Host（明文）依次的回答
   secure: string[];           // Read-Host -AsSecureString 依次的回答
   args?: string;              // 额外参数
@@ -114,7 +121,13 @@ export async function runScript(dir: string, opts: Opts) {
         if (req.headers.apikey !== PK) return send(res, 401, { message: 'no apikey' });
         if (req.method === 'POST' && p === '/auth/v1/otp') return opts.captcha ? send(res, 400, { code: 400, error_code: 'captcha_failed' }) : send(res, 200, {});
         if (req.method === 'POST' && p === '/auth/v1/verify') {
-          return json().token === OTP && json().type === 'email' ? send(res, 200, { access_token: tokA, refresh_token: REFRESH, expires_in: 600, user: { id: UID } }) : send(res, 403, { code: 403, error_code: 'otp_expired' });
+          const v = json();
+          if (v.token_hash !== undefined) {
+            // 只收 { type, token_hash } 两个字段：不带 token、email
+            const okHash = v.token_hash === HASH && Object.keys(v).length === 2 && (v.type === 'magiclink' || (v.type === 'email' && !opts.hashMagicOnly));
+            return okHash ? send(res, 200, { access_token: tokA, refresh_token: REFRESH, expires_in: 600, user: { id: UID } }) : send(res, 403, { code: 403, error_code: 'otp_expired' });
+          }
+          return v.token === OTP && v.type === 'email' ? send(res, 200, { access_token: tokA, refresh_token: REFRESH, expires_in: 600, user: { id: UID } }) : send(res, 403, { code: 403, error_code: 'otp_expired' });
         }
         if (req.method === 'POST' && p === '/auth/v1/token?grant_type=refresh_token') {
           if (opts.refreshFailAfterP8 !== undefined && p8 >= opts.refreshFailAfterP8) return send(res, 400, { code: 400, error_code: 'refresh_token_not_found' });
@@ -143,7 +156,8 @@ export async function runScript(dir: string, opts: Opts) {
           const name = m[1] ?? '';
           const profile = req.method === 'GET' ? req.headers['accept-profile'] : req.headers['content-profile'];
           if (profile !== 'private') return send(res, 404, { code: 'PGRST202' });
-          if (name === 'is_active' && req.method === 'GET') return send(res, 200, 'true');
+          if (opts.white404?.includes(name)) return send(res, 404, { code: 'PGRST202', message: 'Could not find the function' });
+          if (name === 'is_active' && req.method === 'GET') return send(res, 200, opts.inactive ? 'false' : 'true');
           // 白名单函数：权限放行，用占位参数跑下去会报错（只读事务、或者参数不对）
           return WHITE.has(name) ? send(res, 400, { code: req.method === 'GET' ? '25006' : 'P0001', message: 'probe' }) : send(res, 403, { code: '42501', message: 'permission denied for function' });
         }
@@ -199,6 +213,25 @@ export async function runScript(dir: string, opts: Opts) {
   const port = (server.address() as AddressInfo).port;
   base = `http://127.0.0.1:${port}`;
   const opened = join(dir, `opened-${port}.txt`);
+  // errBodyStreamOnly：包一层 Invoke-WebRequest，HTTP 出错时换成一个不带 ErrorDetails 的错误，错误体只放进 Response.GetResponseStream()
+  // （pwsh 7 带 SkipHttpErrorCheck 不抛，这层不起作用）
+  const streamOnly = opts.errBodyStreamOnly
+    ? `function global:Invoke-WebRequest {
+  try { Microsoft.PowerShell.Utility\\Invoke-WebRequest @args }
+  catch {
+    $src = $_.Exception.Response
+    if ($null -eq $src) { throw }
+    $msg = if ($null -ne $_.ErrorDetails) { [string]$_.ErrorDetails.Message } else { '' }
+    $bytes = [Text.Encoding]::UTF8.GetBytes($msg)
+    $fake = [pscustomobject]@{ StatusCode = [int]$src.StatusCode; Headers = $src.Headers }
+    $fake | Add-Member -MemberType ScriptMethod -Name GetResponseStream -Value ({ New-Object System.IO.MemoryStream (,$bytes) }.GetNewClosure())
+    $ex = New-Object System.Exception 'test: 错误体只在响应流里'
+    $ex | Add-Member -MemberType NoteProperty -Name Response -Value $fake
+    throw (New-Object System.Management.Automation.ErrorRecord ($ex, 'test', [System.Management.Automation.ErrorCategory]::NotSpecified, $null))
+  }
+}
+`
+    : '';
   const harness = writePs(
     dir,
     `run-${port}.ps1`,
@@ -209,7 +242,7 @@ function global:Get-CimInstance { @() }
 function global:Get-ItemProperty { $null }
 function global:Set-Clipboard { }
 function global:Add-Type { throw 'test: Add-Type 已屏蔽' }
-function global:Start-Process { param([Parameter(Position = 0)][string]$FilePath) Add-Content -LiteralPath ${q(opened)} -Value $FilePath -Encoding UTF8 }
+${streamOnly}function global:Start-Process { param([Parameter(Position = 0)][string]$FilePath) Add-Content -LiteralPath ${q(opened)} -Value $FilePath -Encoding UTF8 }
 $global:plain = New-Object System.Collections.Queue
 $global:secure = New-Object System.Collections.Queue
 ${opts.plain.map((v) => `$global:plain.Enqueue(${q(v)})`).join('\n')}

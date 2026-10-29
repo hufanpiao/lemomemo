@@ -2,14 +2,15 @@
 // 模拟输入，把 -SupabaseBase、-SiteBase 指向本机假服务（另设 LEMO_TEST_API=1），核对：八项结果、屏幕上没有令牌 / 验证码 / 测试密码 / 用户 id、
 // 改库 SQL 带只认预览库的检查、P2 的 GET 只读调用和安全参数、留在桶里的对象路径、结束时退出会话、测试行标成已删除；
 // 出错路径：private 表读得到；密码登录竟然成功、被 429 挡住且库里不是 0（都要打印清空密码的 SQL 并复查）；P8 中途出错、中途停下（打印恢复 SQL）；
-// 刷新令牌路径（每次请求前都换）；人机验证 + 页面里没有 key；验证码连错 3 次
+// PS 5.1 下错误体只能从响应流读到；白名单函数回 404（触发器函数算正常、其他判不符合）；is_active 为 false 时打印补 profile 行的 SQL；
+// 刷新令牌路径（每次请求前都换）；人机验证 + 页面里没有 key；验证码连错 3 次；粘贴登录链接（含 Gmail 外包一层）换 token_hash、只认 magiclink、乱粘计失败
 // 需要 Windows PowerShell（Windows 上）或 pwsh（其他系统）；都没有就整组跳过。会清一次本机剪贴板历史（脚本收尾的 Clear-Clip）
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  ACCESS, ACCESS2, FINALLY, LEAK, OTP, PK, PRIVATE_FNS, PRIVATE_TABLES, PS, REFRESH, runScript, SAFE_POST, summary, UID, WHITE,
+  ACCESS, ACCESS2, FINALLY, HASH, LEAK, OTP, PK, PRIVATE_FNS, PRIVATE_TABLES, PS, REFRESH, runScript, SAFE_POST, summary, UID, WHITE,
   type Opts, type RunResult,
 } from './login-token-fake.ts';
 
@@ -122,6 +123,60 @@ describe.skipIf(!PS)('login-token-tests.ps1 从头跑到尾', () => {
     expectNoSecrets(r);
   }, 180_000);
 
+  it('PS 5.1 下 ErrorDetails 为空、错误体只能从响应流读到：403、404 照样取到错误码，P2 通过；白名单里的触发器函数回 404 算正常', async () => {
+    const trig = ['touch', 'guard_note_image'];
+    for (const n of trig) expect(WHITE.has(n), n).toBe(true);
+    const r = await run({ errBodyStreamOnly: true, white404: trig, secure: [OTP], plain: ['', 'y', '', '', 'y'] });
+    expect(r.err).toBe('');
+    expect(r.code).toBe(0);
+    const s = summary(r.out);
+    expect(s).toMatch(/\[通过\] P2 /);
+    expect(s).toContain(`HTTP 403 42501 ×${PRIVATE_TABLES.length}`);
+    expect(s).toMatch(/白名单函数 \d+ 个（[^）]*HTTP 404 PGRST202 ×2/);
+    expect(s).toContain('白名单里的触发器函数回 404（PostgREST 不暴露，正常）：touch、guard_note_image');
+    expect(s).toMatch(/\[通过\] S1 /);
+    expect(s).toMatch(/\[通过\] TC-B1-112 /);
+    expectNoSecrets(r);
+  }, 180_000);
+
+  it('白名单里的非触发器函数回 404 PGRST202：P2 判不符合（预览缺迁移或没部署）并列出函数名，触发器函数不列', async () => {
+    const missing = ['not_password_session', 'report_tz_impl', 'remove_device_impl', 'my_sessions_impl'];
+    for (const n of missing) expect(WHITE.has(n), n).toBe(true);
+    const r = await run({ errBodyStreamOnly: true, white404: ['touch', ...missing], secure: [OTP], plain: ['', 'y', '', '', 'y'] });
+    expect(r.code).toBe(0);
+    const s = summary(r.out);
+    expect(s).toMatch(/\[不符合\] P2 /);
+    const cut = s.slice(s.indexOf('不符合的：'));
+    expect(cut).toContain(`白名单函数回 404 PGRST202（预览缺迁移或没部署）：${missing.join('、')}`);
+    expect(cut).not.toMatch(/(^|[^_])touch/);
+    expect(s).toContain('白名单里的触发器函数回 404（PostgREST 不暴露，正常）：touch');
+    expectNoSecrets(r);
+  }, 180_000);
+
+  it('is_active 返回 false：S1 不符合并写明 false，醒目提示可能没有 profile 行，打印补行 SQL（带预览库检查、可重复执行），不等待、照常往下跑', async () => {
+    const r = await run({ inactive: true, secure: [OTP], plain: ['', 'y', '', '', 'y'] });
+    expect(r.err).toBe('');
+    expect(r.code).toBe(0);
+    const s = summary(r.out);
+    expect(s).toMatch(/\[不符合\] S1 amr 形状：登录（脚本发的 otp）：数组 1 项，method：otp，is_active = false；刷新一次后：数组 1 项，method：otp，is_active = false；.*测试账号可能没有 public\.profiles 行/);
+    expect(r.out).toContain('！！！ is_active 返回 false：测试账号可能没有 public.profiles 行');
+    const ins = 'insert into public.profiles (user_id, ui_locale)';
+    expect(count(r.out, ins)).toBe(1);
+    const tail = r.out.slice(r.out.indexOf('！！！ is_active 返回 false'));
+    expect(tail.indexOf(GUARD)).toBeGreaterThan(-1);
+    expect(tail.indexOf(GUARD)).toBeLessThan(tail.indexOf(ins));
+    expect(tail).toContain("select u.id, 'zh-CN' from auth.users u");
+    expect(tail).toContain("where u.email = 'hufanp+lemotest@gmail.com'");
+    expect(tail).toContain('and not exists (select 1 from public.profiles p where p.user_id = u.id);');
+    // 另一种可能（profile 行在、但已停用）：只读诊断查询
+    expect(tail).toContain("select disabled_at, disabled_reason from public.profiles p join auth.users u on u.id = p.user_id where u.email = 'hufanp+lemotest@gmail.com';");
+    expect(tail.indexOf('select disabled_at')).toBeGreaterThan(tail.indexOf(ins));
+    // 照常往下：P2、TC-B1-112 都跑了
+    expect(s).toMatch(/\[通过\] P2 /);
+    expect(s).toMatch(/\[通过\] TC-B1-112 /);
+    expectNoSecrets(r);
+  }, 180_000);
+
   it('设密码后密码登录竟然成功：立即退出那个会话，打印清空密码的 SQL（带预览库检查）并复查', async () => {
     // pptx 跳过、查行数、是 0、清空密码、复查、复查是 0
     const r = await run({ pwLogin: 'ok', secure: [OTP], plain: ['', 'y', '', '', 'y', '', '', 'y'] });
@@ -207,10 +262,73 @@ describe.skipIf(!PS)('login-token-tests.ps1 从头跑到尾', () => {
     expectNoSecrets(b);
   }, 180_000);
 
+  // 默认邮件模板只有登录链接：粘贴链接（直接的、Gmail 外包一层的）取出 token（哈希）按 token_hash 换会话
+  const LINK = `https://abcdefghijklmnopqrst.supabase.co/auth/v1/verify?token=pkce_${HASH}&type=magiclink&redirect_to=https://lemomemo-preview.example/app/`;
+  const LINK_RAW = LINK.replace(`pkce_${HASH}`, HASH);   // 不带 pkce_ 前缀的链接也认
+  const GMAIL = `https://www.google.com/url?q=${encodeURIComponent(LINK)}&amp;sa=D&amp;source=editors&amp;ust=1761700000000&amp;usg=AOvVaw0TESTONLYusg`;
+  const verifies = (r: RunResult) => r.reqs.filter((x) => x.method === 'POST' && x.path === '/auth/v1/verify').map((x) => JSON.parse(x.body.toString('utf8')));
+  function expectNoLink(r: RunResult, pasted: string) {
+    for (const s of [r.out, r.err]) {
+      for (const v of [HASH, `pkce_${HASH}`, pasted, LINK, encodeURIComponent(LINK)]) expect(s.includes(v), `输出里出现了 ${v.slice(0, 16)}…`).toBe(false);
+    }
+  }
+
+  for (const [label, pasted] of [['登录链接', LINK], ['Gmail 外包一层的登录链接', GMAIL], ['不带 pkce_ 前缀的登录链接', LINK_RAW]] as const) {
+    it(`粘贴${label}：取出哈希按 token_hash 登录，后续照常；输出里没有哈希和链接`, async () => {
+      const r = await run({ secure: [` ${pasted} `], plain: ['', 'y', '', '', 'y'] });
+      expect(r.err).toBe('');
+      expect(r.code).toBe(0);
+      expect(r.out).toContain('已登录（令牌只在本脚本内存里，不显示）');
+      expect(r.out).not.toContain('应是 6 位数字或登录链接');
+      expect(r.out).not.toContain('验证码或登录链接没通过');
+      // 假服务只认 { type, token_hash }：一次 type=email 就过，不带 token、email
+      expect(verifies(r)).toEqual([{ type: 'email', token_hash: HASH }]);
+      const s = summary(r.out);
+      for (const id of ['S1', 'P2', 'TC-B1-112']) expect(s, id).toMatch(new RegExp(`\\[通过\\] ${id} `));
+      expect(r.reqs.some((x) => x.path.startsWith('/rest/v1/rpc/'))).toBe(true);
+      expect(r.reqs.filter((x) => x.path === '/auth/v1/logout?scope=local').length).toBeGreaterThan(0);
+      expectNoSecrets(r);
+      expectNoLink(r, pasted);
+    }, 180_000);
+  }
+
+  it('token_hash 只认 type=magiclink：type=email 被拒后改用 magiclink，照样登录', async () => {
+    const r = await run({ hashMagicOnly: true, secure: [GMAIL], plain: ['', 'y', '', '', 'y'] });
+    expect(r.err).toBe('');
+    expect(r.code).toBe(0);
+    expect(verifies(r)).toEqual([{ type: 'email', token_hash: HASH }, { type: 'magiclink', token_hash: HASH }]);
+    expect(r.out).toContain('已登录（令牌只在本脚本内存里，不显示）');
+    expect(r.out).not.toContain('验证码或登录链接没通过');
+    expect(summary(r.out)).toMatch(/\[通过\] P2 /);
+    expectNoSecrets(r);
+    expectNoLink(r, GMAIL);
+  }, 180_000);
+
+  it('乱粘（不是数字、也不是含 token 的链接）：提示应是 6 位数字或登录链接，每次计一次失败', async () => {
+    const junk = ['hello-TESTONLY-junk', 'https://www.google.com/url?q=https%3A%2F%2Fexample.com%2F%3Ftoken%3Dshort&sa=D', '12345'];
+    const r = await run({ secure: junk, plain: ['', 'y'] });
+    expect(r.code).toBe(0);
+    expect(count(r.out, '应是 6 位数字或登录链接')).toBe(3);
+    expect(r.out).toContain('验证码或登录链接连续 3 次没通过');
+    expect(r.out).toContain(FINALLY);
+    expect(verifies(r)).toEqual([]);
+    expect(r.reqs.some((x) => x.path.startsWith('/rest/') || x.path.startsWith('/files/'))).toBe(false);
+    for (const v of junk) expect(r.out.includes(v)).toBe(false);
+    // 乱粘一次以后再粘对：第 2 次就登录
+    const b = await run({ secure: ['not-a-code-at-all', OTP], plain: ['', 'y', '', '', 'y'] });
+    expect(b.err).toBe('');
+    expect(b.code).toBe(0);
+    expect(count(b.out, '应是 6 位数字或登录链接')).toBe(1);
+    expect(verifies(b)).toEqual([{ type: 'email', email: 'hufanp+lemotest@gmail.com', token: OTP }]);
+    expect(b.out).toContain('已登录（令牌只在本脚本内存里，不显示）');
+    expectNoSecrets(b);
+  }, 240_000);
+
   it('验证码连错 3 次：停在登录，没有一项测试请求，finally 照跑', async () => {
     const r = await run({ secure: ['111111', '222222', '333333'], plain: ['', 'y'] });
     expect(r.code).toBe(0);
-    expect(r.out).toContain('验证码连续 3 次没通过');
+    expect(r.out).toContain('验证码或登录链接连续 3 次没通过');
+    expect(count(r.out, '验证码或登录链接没通过（HTTP 403 otp_expired）')).toBe(3);
     expect(r.out).toContain(FINALLY);
     expect(r.reqs.some((x) => x.path.startsWith('/rest/') || x.path.startsWith('/files/'))).toBe(false);
     expect(r.reqs.some((x) => x.path.startsWith('/auth/v1/logout'))).toBe(false);
