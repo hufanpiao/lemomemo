@@ -23,7 +23,7 @@
     "test:tz": "node build/run_tz_tests.mjs",
     "test:deno": "deno task test",
     "test:compat": "node tests/compat/run-compat.ts",
-    "test:db": "supabase test db supabase/tests/rls && deno task d1",
+    "test:db": "supabase test db supabase/tests/rls && deno task d1 && node supabase/tests/store-it/run.mjs",
     "test:db:offline": "node supabase/tests/offline/run.mjs",
     "gen:manifest": "node tests/data-manifest/cli.ts --out dist/data-manifest",
     "build": "node build/build_web.mjs",

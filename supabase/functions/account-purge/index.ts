@@ -30,7 +30,8 @@ function must<T>(r: { data: T; error: unknown }): T {
 /** PostgREST 的 or 过滤里时间值加双引号（里面有冒号和点） */
 const unclaimedOr = (staleIso: string) => `purge_started_at.is.null,purge_started_at.lt."${staleIso}"`;
 
-function makeStore(admin: Admin): PurgeStore {
+// 导出只给 supabase/tests/store-it 直接测 remainingRows 用（Edge 运行时只看 Deno.serve）
+export function makeStore(admin: Admin): PurgeStore {
   const priv = admin.schema('private');
   const pd = () => priv.from('pending_deletions');
   return {

@@ -139,8 +139,9 @@ jobs:
             exit 1
           fi
 
-      - name: RLS（pgTAP，supabase test db supabase/tests/rls）和 D1（deno task d1）；后端
-        # B0 集成：test:db = supabase test db supabase/tests/rls && deno task d1；D1 比对不过不能合并
+      - name: RLS（pgTAP，supabase test db supabase/tests/rls）、D1（deno task d1）和 store-it（account、account-purge 真 store 打本机库）；后端
+        # B0 集成：test:db = supabase test db supabase/tests/rls && deno task d1 && node supabase/tests/store-it/run.mjs；D1 比对不过不能合并
+        # store-it 用上面装好的 deno；连接只取 supabase status -o json 的 API_URL、DB_URL 和两把本地演示钥匙，不是本机地址就拒绝
         # 这一步只是正例（库和清单一致）；反例、违规样例在下一步打同一个真库，兼容样例在本任务最后
         run: npm run test:db
 
