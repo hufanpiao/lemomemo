@@ -180,7 +180,7 @@ Deno.test({ name: '⑤ TC-B1-108 ② 真库竞态：restore 持 for update 锁�
   }
 } });
 
-Deno.test({ name: 'account 真 store：申请注销（requestDeletion）→ 恢复（restore）走一遍；报错映射（account_disabled、admin_cannot_delete → 403）', ...opts, async fn() {
+Deno.test({ name: 'account 真 store：申请注销（requestDeletion）→ 恢复（restore）走一遍；报错映射（admin_cannot_delete → 403）', ...opts, async fn() {
   const d = await mkUser('delrestore');
   const r1 = await callAccount(await jwtOf(d), { action: 'delete', confirm: '注销' });
   assertEquals(r1.status, 200, JSON.stringify(r1.json));
@@ -199,6 +199,16 @@ Deno.test({ name: 'account 真 store：申请注销（requestDeletion）→ 恢�
   assertEquals(one(await sql<{ x: string | null }[]>`select disabled_at as x from public.profiles where user_id = ${d}`).x, null);
 
   // requestDeletion 的报错映射：rpc 抛的业务码 PostgREST 原样放在 message 里，index.ts 按 RPC_CODES 认出来、回 403。
+  //   没有 profile 的人（account_disabled）见下一条 TC-B1-10。
+  const adm = await mkUser('admin');
+  await sql`insert into private.admins (user_id) values (${adm})`;
+  const ea = await admin.schema('private').rpc('account_request_deletion', { p_user: adm });
+  assertEquals(ea.error?.message, 'admin_cannot_delete');
+  const ra = await callAccount(await jwtOf(adm), { action: 'delete', confirm: '注销' });
+  assertEquals([ra.status, ra.json], [403, { error: 'admin_cannot_delete' }]);
+} });
+
+Deno.test({ name: 'TC-B1-10：没有 profiles 行的账号调 account delete 回 403 account_disabled', ...opts, async fn() {
   //   没有 profile 的人：入口 requireActiveUser 先拦（account_usable 为 false、也不在冷静期）→ 403 account_disabled；
   //   rpc 自己那一道 account_disabled 碰不到（入口先拦），所以用 service role 直接调 rpc 核对消息就是码本身。
   const np = await mkUser('noprofile', false);
@@ -206,12 +216,6 @@ Deno.test({ name: 'account 真 store：申请注销（requestDeletion）→ 恢�
   assertEquals(error?.message, 'account_disabled', 'rpc 的业务错误消息不是码本身，index.ts 的 RPC_CODES 认不出');
   const rn = await callAccount(await jwtOf(np), { action: 'delete', confirm: '注销' });
   assertEquals([rn.status, rn.json], [403, { error: 'account_disabled' }]);
-  const adm = await mkUser('admin');
-  await sql`insert into private.admins (user_id) values (${adm})`;
-  const ea = await admin.schema('private').rpc('account_request_deletion', { p_user: adm });
-  assertEquals(ea.error?.message, 'admin_cannot_delete');
-  const ra = await callAccount(await jwtOf(adm), { action: 'delete', confirm: '注销' });
-  assertEquals([ra.status, ra.json], [403, { error: 'admin_cannot_delete' }]);
 } });
 
 Deno.test({ name: 'account 真 store：refundRate 在真 counters 上比较并交换退回；每天退回 3 次以后照常扣', ...opts, async fn() {

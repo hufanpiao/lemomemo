@@ -192,6 +192,18 @@ describe('invite-admin create（TC-B1-01：只有管理员发码，只存哈希�
     expect(store.counters.size).toBe(0);
   });
 
+  it('TC-B1-10：没有 profiles 行的账号调 create、list 回 403 account_disabled，不查管理员表、不计次数', async () => {
+    const store = new FakeStore();
+    for (const action of ['create', 'list']) {
+      const { res } = await call(store, { action }, { profile: { missing: true } });
+      expect(res.status, action).toBe(403);
+      expect(await res.json(), action).toEqual({ error: 'account_disabled' });
+    }
+    expect(store.calls).toEqual([]);
+    expect(store.invites.size).toBe(0);
+    expect(store.counters.size).toBe(0);
+  });
+
   it('没带 JWT 401 unauthorized；会话被吊销 401 session_revoked；都不碰库', async () => {
     const store = new FakeStore();
     const d = deps(store);

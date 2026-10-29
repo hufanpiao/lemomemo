@@ -47,18 +47,19 @@ export class FakeStore implements InviteStore {
   async minClientVersion() { this.calls.push('minClientVersion'); return this.minVersion; }
 }
 
-type Profile = { disabled: boolean; revoked: boolean };
+/** missing：profiles 里没有这个人的行（requireActiveUser 经 account_usable 判不能用，又不在冷静期 → account_disabled；TC-B1-10） */
+type Profile = { disabled: boolean; revoked: boolean; missing: boolean };
 
-/** authenticate 模仿 requireActiveUser：没带 JWT 401 unauthorized；停用 403 account_disabled；会话吊销 401 session_revoked */
+/** authenticate 模仿 requireActiveUser：没带 JWT 401 unauthorized；停用或没有 profiles 行 403 account_disabled；会话吊销 401 session_revoked */
 export function deps(store: FakeStore, over: Partial<Deps> & { user?: string; profile?: Partial<Profile>; codes?: string[] } = {}): Deps & { logs: string[] } {
   const uid = over.user ?? ADMIN;
-  const prof: Profile = { disabled: false, revoked: false, ...over.profile };
+  const prof: Profile = { disabled: false, revoked: false, missing: false, ...over.profile };
   const logs: string[] = [];
   const codes = over.codes ? [...over.codes] : null;
   const authenticate = async (req: Request): Promise<AuthResult> => {
     const deny = (code: string, status: number) => ({ ok: false as const, response: new Response(JSON.stringify({ error: code }), { status }) });
     if (!/^Bearer\s+\S+$/i.test(req.headers.get('authorization') ?? '')) return deny('unauthorized', 401);
-    if (prof.disabled) return deny('account_disabled', 403);
+    if (prof.disabled || prof.missing) return deny('account_disabled', 403);
     if (prof.revoked) return deny('session_revoked', 401);
     return { ok: true, user: { userId: uid, sessionId: 's1', jwt: 'jwt' } };
   };
