@@ -2,7 +2,8 @@
 // 只管小写开头的原生元素（<a>、<img>、<iframe>…）；自己的组件在组件内部落到原生元素时再检查
 // A26-import：只认从 shared/logic/link.ts 导入的 safeHref、从 src/app/router.ts 导入的 hrefOf（按导入语句和作用域认，
 //   不按函数名认；别名导入、命名空间导入都认；router.ts、link.ts 自己文件里定义的那个也认）。本地同名函数、别处导入的同名函数都不算
-//   来源路径只认 .ts、不带扩展名、.js（指向 .ts）三种写法；router.tsx、link.mjs、link.tsx 这类同名兄弟文件不算
+//   来源路径只认写全 .ts 后缀的（架构 2.5）：不带扩展名、写 .js 的都不算（同目录有 link.mjs、link.js 时 Vite 加载的是那个冒牌文件），
+//   router.tsx、link.mjs、link.tsx 这类同名兄弟文件也不算
 // A26-spread：原生元素上的展开属性也查。对象字面量逐个键查；键名算不出来（计算键、嵌套展开）或展开的是变量（{...props}），
 //   静态看不出有没有 href，一律报
 // 属性名比较不分大小写（HREF、formaction、srcset、xlink:HREF 都算）：React 只拦写法完全正确的 href、formAction，
@@ -27,12 +28,9 @@ function canon(abs) {
   return process.platform === 'win32' ? p.toLowerCase() : p;
 }
 
-/** import 写的路径 → 指向的 .ts 文件（去掉扩展名后的形式）；只认 .ts、不带扩展名、.js 三种，别的扩展名返回 undefined */
+/** import 写的路径 → 指向的 .ts 文件（去掉 .ts 后的形式）；只认写全 .ts 后缀的（架构 2.5），别的一律返回 undefined */
 function importTarget(abs) {
-  const ext = extname(abs);
-  if (ext === '') return canon(abs);
-  if (ext === '.ts' || ext === '.js') return canon(abs.slice(0, -ext.length));
-  return undefined;
+  return extname(abs) === '.ts' ? canon(abs.slice(0, -3)) : undefined;
 }
 
 const SAFE_FILES = new Map([...SAFE_SOURCES].map(([fn, rel]) => [fn, canon(resolve(ROOT, rel))]));
