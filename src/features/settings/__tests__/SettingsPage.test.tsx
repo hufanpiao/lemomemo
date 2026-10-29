@@ -215,3 +215,21 @@ describe('导出、注销入口（K3 做，现在只放入口）和退出登录'
     await waitFor(() => expect(exit.goToAuth).toHaveBeenCalledTimes(2));
   });
 });
+
+// TC-B1-71：设置页分组顺序（R-36、R-79）。后面各批加分组时本条复跑；B7a 时十组齐全。
+// 架构 0.29 把“外观”改叫“皮肤”，两个叫法都认；不在清单里的分组（界面语言、已登录设备）不参与比较。
+describe('设置分组顺序（TC-B1-71）', () => {
+  const ORDER = ['账号', '外观', '日历', '提醒', '随手记', '隐私记', '时区', '数据', '桌面', '关于'];
+  const canon = (name: string) => (name === '皮肤' ? '外观' : name);
+
+  it('已有的分组按“账号、外观、日历、提醒、随手记、隐私记、时区、数据、桌面、关于”的顺序排', async () => {
+    await renderPage();
+    const groups = screen
+      .getAllByRole('heading', { level: 2 })
+      .map((h) => canon((h.textContent ?? '').trim()))
+      .filter((n) => ORDER.includes(n));
+    expect(groups.length).toBeGreaterThan(0);
+    expect(groups).toEqual([...groups].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
+    expect(new Set(groups).size).toBe(groups.length);
+  });
+});

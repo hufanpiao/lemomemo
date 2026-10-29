@@ -128,7 +128,7 @@ describe('account delete（申请注销）', () => {
     expect(await r.json()).toEqual({ error: 'admin_cannot_delete' });
   });
 
-  it('export、delete 合计每天 3 次：第 4 次 rate_limited，不进冷静期', async () => {
+  it('TC-B1-65 ③：export、delete 合计每天 3 次：第 4 次 rate_limited，不进冷静期', async () => {
     const { db, box } = setup();
     for (let i = 0; i < ACCOUNT_DAILY_LIMIT; i++) expect((await call(db, box, { action: 'export' })).status).toBe(200);
     const r = await call(db, box, { action: 'delete', confirm: '注销' });
@@ -251,7 +251,7 @@ describe('account restore（冷静期里恢复）', () => {
   });
 });
 
-describe('account export', () => {
+describe('account export（TC-B1-67：回 gzip 的 JSON、不发下载链接、只有本人的行、第 4 次被拒）', () => {
   const TABLES = exportTablesOf(allManifests);
 
   it('按清单挑表：只要 public、export = json 的；private 的表、vault 系列、向量一律不在', () => {
@@ -296,7 +296,7 @@ describe('account export', () => {
     return JSON.parse(await new Response(s).text()) as Record<string, unknown>;
   }
 
-  it('回 gzip 的 JSON：attachment、no-store；先记 logs 再导出；没带令牌 vault = omitted、包里没有任何隐私记行；只有本人的行', async () => {
+  it('TC-B1-67：回 gzip 的 JSON：attachment、no-store；先记 logs 再导出；没带令牌 vault = omitted、包里没有任何隐私记行；只有本人的行', async () => {
     const { db, box } = setup();
     db.tables.set('notes', [
       { id: 'n1', user_id: A, is_private: false, body: 'a-note' },
@@ -569,7 +569,7 @@ describe('入口', () => {
     }
   });
 
-  it('鉴权没过：原样回 requireActiveUser 的错误（会话被吊销的旧设备）', async () => {
+  it('TC-B1-65 ②：鉴权没过：原样回 requireActiveUser 的错误（会话被吊销的旧设备）', async () => {
     const { db, box } = setup();
     await call(db, box, { action: 'delete', confirm: '注销' });
     const r = await call(db, box, { action: 'restore' });   // 原来的会话 aaaaaaaa-s1 已吊销

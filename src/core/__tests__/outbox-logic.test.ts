@@ -12,7 +12,7 @@ import {
 import { mk, todo, uid } from './outbox-fixtures.ts';
 
 describe('纯函数', () => {
-  it('失败归类：426 不算永久失败；401 刷新；断网、5xx、429 退避；vault_required 丢掉；其他 4xx 永久', () => {
+  it('TC-B1-110（归类一半）：失败归类：426 不算永久失败；401 刷新；断网、5xx、429 退避；vault_required 丢掉；其他 4xx 永久', () => {
     expect(classifyFailure({ status: 426, min: '4.1.0' })).toBe('upgrade');
     expect(classifyFailure({ status: 400, code: 'upgrade_required' })).toBe('upgrade');
     expect(classifyFailure({ status: 401 })).toBe('auth');
