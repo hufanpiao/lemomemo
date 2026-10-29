@@ -29,7 +29,7 @@ const PS = findPs();
 let dir = '';
 function writePs(name: string, text: string): string {
   const p = join(dir, name);
-  writeFileSync(p, '﻿' + text, 'utf8');
+  writeFileSync(p, '\uFEFF' + text, 'utf8');
   return p;
 }
 function psFile(file: string, args: string[] = []): string {

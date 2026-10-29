@@ -183,7 +183,7 @@ function Read-Token([string]$label, [string]$where) {
         Clear-Clip
         $plain = To-Plain $sec
         $sec.Dispose()
-        $plain = $plain -replace '[\s ​-‍⁠﻿]', ''
+        $plain = $plain -replace '[\s\u00A0\u200B-\u200D\u2060\uFEFF]', ''
         if ($plain -match '^sbp_[A-Za-z0-9_]{20,}$') {
             Ok "$label 已收到（剪贴板已清空）"
             return $plain

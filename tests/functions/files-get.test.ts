@@ -182,7 +182,7 @@ describe('GET 取对象（TC-B0-110、111、113；B1 P-files-sig：view、downlo
 
   it('TC-B0-113：下载文件名清理过（../、U+202E、CON、a:b），用 filename*=UTF-8', async () => {
     const s = setup();
-    const it0 = await uploadAndSign(s, { bucket: 'files', path: PDF, purpose: 'download', d: '../evil‮fdp.exe' }, new Uint8Array([1]));
+    const it0 = await uploadAndSign(s, { bucket: 'files', path: PDF, purpose: 'download', d: '../evil\u202Efdp.exe' }, new Uint8Array([1]));
     const r = await s.call(getReq(it0));
     const cd = r.headers.get('Content-Disposition') ?? '';
     expect(cd.startsWith("attachment; filename*=UTF-8''")).toBe(true);

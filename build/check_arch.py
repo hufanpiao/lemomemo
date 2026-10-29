@@ -11,6 +11,10 @@
   P142 supabase/migrations 里 private 的触发器函数不准出现 current_user，用 current_setting('role', true)（0.29 续第 142 条）
   A24  src 的 CSS 里 stylelint-disable 注释不准不写规则名（等于全关），也不准关 lemo/* 和 A24 的三条规则
        （declaration-property-value-disallowed-list、function-disallowed-list、property-disallowed-list；UI-4 M4 第三轮）
+  BIDI git ls-files 里除二进制外的所有文件不准原样出现看不见的双向、零宽、填充类控制字符
+       （U+200B–U+200F、U+202A–U+202E、U+2060–U+2069、U+061C、U+2028、U+2029、U+180E、U+3164、U+115F、U+1160、U+FFA0、
+       U+E0000–U+E007F、文件中间的 U+FEFF；U+00AD、U+FE00–U+FE0F 只在代码类扩展名里拦），要写成转义
+       （B1 接手清单 LINT-bidi，防 Trojan Source；UTF-16 文件先解码再扫；--root 不在 git 里或 git 出错时整棵树扫）
 有错误时退出码 1，只有警告时 0。--root 给自测用（tests/arch-fixtures/check_arch/ 下的样例目录）。
 """
 import argparse
@@ -18,6 +22,7 @@ import datetime
 import json
 import pathlib
 import re
+import subprocess
 import sys
 
 # Supabase 各种密钥的前缀：只在前缀后面紧跟至少 20 个密钥字符时才算（B1 K4）。
@@ -261,6 +266,142 @@ def check_a24_disable(root, errors):
                 errors.append(("A24", rel, line, f"不准用 stylelint-disable 关掉 {', '.join(bad)}（A24、17.2 第 5 点）"))
 
 
+# BIDI（B1 接手清单 LINT-bidi，防 Trojan Source）：源码里不准原样出现看不见的双向、零宽、填充类控制字符，
+# 要用就写转义（BS + "u202e" 这类，BS 即反斜杠）。本文件只用 chr() 拼这些字符，自己不含原样字符
+def _cps(*ranges):
+    out = []
+    for r in ranges:
+        lo, hi = r if isinstance(r, tuple) else (r, r)
+        out += [chr(c) for c in range(lo, hi + 1)]
+    return frozenset(out)
+
+
+BIDI_CHARS = _cps(
+    (0x200B, 0x200F),  # 零宽空格、ZWNJ、ZWJ、LRM、RLM
+    (0x202A, 0x202E),  # LRE、RLE、PDF、LRO、RLO
+    (0x2066, 0x2069),  # LRI、RLI、FSI、PDI
+    (0x2060, 0x2064),  # 词连接符、不可见的函数应用/乘号/分隔符/加号
+    0x061C, 0x2028, 0x2029, 0xFEFF,  # ALM、行分隔符、段分隔符、BOM（文件开头的 BOM 不算）
+    0x180E, 0x3164, 0x115F, 0x1160, 0xFFA0,  # 蒙古文元音分隔符、各种谚文填充符
+    (0xE0000, 0xE007F),  # 标签字符
+)
+# 只在代码类扩展名里拦：软连字符、变体选择符（.md 等文档里可能正常出现）
+BIDI_CODE_ONLY = _cps(0x00AD, (0xFE00, 0xFE0F))
+BIDI_CODE_EXT = (
+    ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".css", ".sql", ".psql", ".py", ".ps1", ".psm1",
+    ".sh", ".rs", ".json", ".jsonc", ".toml", ".yml", ".yaml", ".html", ".svg", ".xml", ".webmanifest",
+)
+BIDI_RE = re.compile("[" + "".join(sorted(BIDI_CHARS | BIDI_CODE_ONLY)) + "]")
+# 例外名单：文件路径 → {行号: 这一行允许的码位}；只放行这一行实际出现的码位，别的行、别的码位照样报
+BIDI_EXEMPT = {
+    # 已上线迁移，不可改；这是拦 bidi 文件名的正则本身（第 16 行 name !~ '[...]' 里原样写了区间端点）
+    "supabase/migrations/0004_attachments.sql": {16: _cps(0x202A, 0x202E, 0x2066, 0x2069)},
+}
+# 二进制：扩展名命中并且内容含 NUL 才跳过；其余文件坏字节按 replace 解码照扫（只有没扩展名或扩展名不认识的文件含 NUL 才当二进制）
+BIDI_BINARY_EXT = (
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico", ".icns", ".bmp", ".woff", ".woff2", ".ttf", ".otf",
+    ".eot", ".pdf", ".zip", ".gz", ".tgz", ".7z", ".mp3", ".mp4", ".wav", ".ogg", ".webm", ".wasm", ".exe", ".dll",
+    ".bin", ".db", ".sqlite", ".lockb", ".pyc", ".blend", ".psd",
+)
+
+
+def bidi_files(root):
+    """要扫的文件：git ls-files（已跟踪 + 未忽略的新文件）的全部文件，强制提交进 git 的 node_modules 也扫；
+    --root 指的目录不在 git 里、或 git 出错（自测的临时目录）就整棵树走一遍，这时才排除 node_modules 和 .git。
+    二进制不在这里排除，由 check_bidi 按“扩展名 + 含 NUL”判定"""
+    try:
+        out = subprocess.run(
+            ["git", "-c", "core.quotepath=off", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            cwd=root, capture_output=True, check=True,
+        ).stdout.decode("utf-8")
+        rels = sorted(set(r for r in out.split("\0") if r))
+    except (OSError, subprocess.CalledProcessError):
+        rels = sorted(
+            rel for rel in (p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
+            if not {"node_modules", ".git"} & set(rel.split("/"))
+        )
+    for rel in rels:
+        p = root / rel
+        if p.is_file():
+            yield rel, p
+
+
+# 认得的文本扩展名（不在 BIDI_CODE_EXT 里但肯定是文本）：和代码文件一样无条件扫
+BIDI_TEXT_EXT = (".md", ".markdown", ".txt", ".csv", ".tsv", ".ini", ".cfg", ".conf", ".env", ".example", ".lock", ".gitignore", ".gitattributes", ".editorconfig", ".npmrc", ".nvmrc", ".bat", ".cmd")
+
+
+BIDI_UTF16_BOMS = (b"\xff\xfe", b"\xfe\xff")
+
+
+def bidi_decode(data):
+    """返回要扫的文本列表；坏字节一律 errors='replace'，不让坏字节把整份文件带过。
+    FF FE / FE FF 开头的文件按 UTF-16（BOM 去掉）和 UTF-8 各解码一遍，两种都扫
+    （开头放个假 BOM、后面其实是 UTF-8 的 .sh 照样能被 bash 执行），其余按 UTF-8"""
+    if data[:2] in BIDI_UTF16_BOMS:
+        return [data.decode("utf-16", errors="replace"), data.decode("utf-8", errors="replace")]
+    return [data.decode("utf-8", errors="replace")]
+
+
+def bidi_head_has_nul(data):
+    """前 8000 字节有没有 NUL（和 git 判断二进制的方式一致）。
+    FF FE / FE FF 开头的：UTF-16 解码后含 NUL、并且原始字节里也含 NUL，两个都满足才算"""
+    head = data[:8000]
+    if data[:2] in BIDI_UTF16_BOMS:
+        return "\0" in head.decode("utf-16", errors="replace") and b"\0" in head
+    return b"\0" in head
+
+
+def bidi_hits(text, code_file, exempt):
+    """一种解码下的命中：[(行号, 码位)]，按出现顺序"""
+    hits = []
+    for m in BIDI_RE.finditer(text):
+        c = m.group(0)
+        if m.start() == 0 and c == chr(0xFEFF):
+            continue
+        if c in BIDI_CODE_ONLY and not code_file:
+            continue
+        # 行号只数 \n：U+2028、U+2029 本身不算换行，和编辑器、git diff 对得上
+        line = text.count("\n", 0, m.start()) + 1
+        if c in exempt.get(line, ()):
+            continue
+        hits.append((line, ord(c)))
+    return hits
+
+
+def check_bidi(root, errors):
+    bs = chr(92)
+    for rel, p in bidi_files(root):
+        # 文件名（相对路径）本身也扫：git diff、编辑器里显示的路径同样会被双向字符翻转
+        for m in BIDI_RE.finditer(rel):
+            if m.group(0) in BIDI_CHARS:
+                cp = ord(m.group(0))
+                errors.append(("BIDI", rel, 0, f"文件名里原样出现看不见的控制字符 U+{cp:04X}（Trojan Source 一类），要改名"))
+        data = p.read_bytes()
+        low = rel.lower()
+        head_has_nul = bidi_head_has_nul(data)
+        # 二进制：扩展名在 BIDI_BINARY_EXT 里、并且前 8000 字节含 NUL 才跳过（.png 能被 require 当 JS、.bin 能被 python 当脚本跑）
+        if low.endswith(BIDI_BINARY_EXT) and head_has_nul:
+            continue
+        code_file = low.endswith(BIDI_CODE_EXT)
+        # 代码和认得的文本扩展名无条件扫，
+        # 只有没扩展名或扩展名不认识的文件才保留 NUL 判定（防在注释里塞 0xFF、NUL 绕过检查），同样只看前 8000 字节
+        if not code_file and not low.endswith(BIDI_TEXT_EXT) and head_has_nul:
+            continue
+        exempt = BIDI_EXEMPT.get(rel, {})
+        # 多种解码的命中合并：同一（行号, 码位）取各解码里出现次数的最大值，同一处不重复报
+        merged = {}
+        for text in bidi_decode(data):
+            counts = {}
+            for key in bidi_hits(text, code_file, exempt):
+                counts[key] = counts.get(key, 0) + 1
+            for key, n in counts.items():
+                merged[key] = max(merged.get(key, 0), n)
+        for (line, cp), n in sorted(merged.items()):
+            esc = f"{bs}u{cp:04x}" if cp <= 0xFFFF else f"{bs}u{{{cp:x}}}"
+            for _ in range(n):
+                errors.append(("BIDI", rel, line, f"原样出现看不见的控制字符 U+{cp:04X}（Trojan Source 一类），要写成转义 {esc}"))
+
+
 def main(argv=None):
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
@@ -279,6 +420,7 @@ def main(argv=None):
     check_w2(root, warnings, today)
     check_p142(root, errors)
     check_a24_disable(root, errors)
+    check_bidi(root, errors)
 
     if args.json:
         as_dict = lambda r: {"rule": r[0], "file": r[1], "line": r[2], "message": r[3]}  # noqa: E731

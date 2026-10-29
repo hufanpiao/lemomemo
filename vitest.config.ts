@@ -29,6 +29,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/arch/eslint.test.ts', // ESLint API（整套规则、类型信息）
   'tests/arch/stylelint.test.ts', // stylelint API
   'tests/arch/tsc.test.ts', // TypeScript 编译器
+  'tests/build/check-arch-bidi.test.ts', // python build/check_arch.py、git init（LINT-bidi）
   'tests/build/check-backend.test.ts', // python build/check_backend.py（建 TypeScript 类型检查器）
   'tests/build/check-size.test.ts', // 另起 node 跑 build/check_size.mjs
   'tests/build/fn-version-gate-coverage.test.ts', // TypeScript 编译器

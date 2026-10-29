@@ -144,7 +144,7 @@ function Read-Value([string]$label, [string]$where, [string]$pattern, [string]$h
         Clear-Clip
         $plain = To-Plain $sec
         $sec.Dispose()
-        $plain = $plain -replace '[\s ​-‍⁠﻿]', ''
+        $plain = $plain -replace '[\s\u00A0\u200B-\u200D\u2060\uFEFF]', ''
         if ($plain -match $pattern) {
             Ok "$label 已收到（剪贴板已清空）"
             return $plain
