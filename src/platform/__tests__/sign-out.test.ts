@@ -279,3 +279,34 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
     }
   });
 });
+
+describe('signOutThisDevice 清日志上传队列（架构 0.38 第 68 条）', () => {
+  afterEach(() => localStorage.clear());
+
+  it('清本机那一步之后、signOut 之前清掉这个账号的 lemo.logq.<user_id>；别的账号、install_id 不动', async () => {
+    localStorage.setItem('lemo.logq.u1', '{"items":[],"dropped":0}');
+    localStorage.setItem('lemo.logq.u2', 'x');
+    localStorage.setItem('lemo.install_id', 'i');
+    const log: string[] = [];
+    let atSignOut: string | null = 'unset';
+    const r = await signOutThisDevice({
+      server: { signOut: async () => ((atSignOut = localStorage.getItem('lemo.logq.u1')), log.push('signout'), { serverDone: true }) },
+      steps: steps(log),
+      readUserId: () => 'u1',
+    });
+    expect(r).toEqual({ serverDone: true });
+    expect(atSignOut).toBeNull();
+    expect(localStorage.getItem('lemo.logq.u2')).toBe('x');
+    expect(localStorage.getItem('lemo.install_id')).toBe('i');
+  });
+
+  it('读不到是谁：清全部 lemo.logq.*', async () => {
+    localStorage.setItem('lemo.logq.u1', 'a');
+    localStorage.setItem('lemo.logq.u2', 'b');
+    localStorage.setItem('pv-locale', 'ko');
+    await signOutThisDevice({ server: { signOut: async () => ({ serverDone: true }) }, steps: steps([]), readUserId: () => null });
+    expect(localStorage.getItem('lemo.logq.u1')).toBeNull();
+    expect(localStorage.getItem('lemo.logq.u2')).toBeNull();
+    expect(localStorage.getItem('pv-locale')).toBe('ko');
+  });
+});

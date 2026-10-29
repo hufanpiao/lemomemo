@@ -20,7 +20,9 @@
 //   B2 的 SW：⑴ 只往已存在、owner 仓有 user_id 的库里写（遇到要新建库就中止），且推送带的 user_id 和 owner 一致才写，不一致丢掉（不能直接用 owner 的值，防串号）；
 //   ⑵ 开库后监听 versionchange、收到立刻关连接，否则 ⑤ 删库被挡、退出卡住；⑶ 退出、换账号时退掉推送订阅或由服务器换绑，旧账号的通知不再推来。
 //   ⑤ 删库以后 SW 写不进去。不靠“通知 SW 停写”：SW 随时被浏览器停掉重启，内存里的标记会丢
-// • localStorage 里的 install_id、pv-locale 不清
+// • localStorage 里的 install_id、pv-locale 不清；日志上传队列 lemo.logq.<user_id>（log-store.ts，架构 0.38 第 68 条）在 ② 清本机时一起清
+//   （读不到是谁时清全部 lemo.logq.*）
+import { clearLogQueue } from './log-store.ts';
 import { clearCacheStorage, clearLocalSession, readSessionUserId } from './session.ts';
 
 /** 本机库名（= core/cache.ts 的 DB_NAME；platform 不引 core，测试守着两边一致） */
@@ -175,6 +177,7 @@ export async function signOutThisDevice(o: SignOutOptions): Promise<{ serverDone
   // 删行用掉多少，signOut 就少等多少（清本机的时间另算，它自己有上限）
   const rest = Math.max(timeoutMs - (Date.now() - t0), 0);
   await wipeThisDevice(steps, o.wipeMs, o.cachesMs);
+  clearLogQueue(before);   // 这个账号没传完的日志不再传（退出、换账号）
   const r = await withTimeout(() => o.server.signOut(), rest, () => ({ serverDone: false }), onLate);
   if (!r.serverDone) dropSession(steps);
   await deleteDbAgain(steps);

@@ -5,7 +5,9 @@
 // • 页面之间的提醒（BroadcastChannel）：非主页往 outbox 写了发 outbox，主页收到马上发送；主页写了本机库发 changed，
 //   其余页面 outbox.refresh() 并重读这几个集合；清库发 reset。消息只是提醒，非主页回到前台时整份重读一次兜底
 // • report_tz（4.6、4.3b）：主页拿到锁、同步启动、本会话的设备行登记好后 report(true)；之后 pointerdown / keydown 调 report()
-//   （自带 5 分钟间隔）；重新拿到锁时再 report(true)。设备行 id 由 deps.deviceId 给（还没接上时不报，见接手清单 K8-tz-device）
+//   （自带 5 分钟间隔）；重新拿到锁时再 report(true)。设备行 id 由 deps.deviceId 给；还没有时先 deps.ensureDevice()
+//   （core/device-reg.ts：登记或复用本会话的 devices 行，0.38 第 62 条④；登记好以后它顺带每天刷新一次 last_seen_at、app_version），
+//   登记好了再报，登记不上这次不报（接手清单 K8-tz-device）。恢复网络（online）时也走一遍（登记 60 秒间隔、上报 5 分钟间隔照旧）
 // • 被移除只处理一次：同步引擎（刷新令牌失败）和 outbox 的 removed 事件走同一个 onRemoved
 //   → wipeOnRemoved：设闸 → 清空本机库和运行时缓存 → 关库（原因 'closed'，不触发 versionchange → 重新载入）→ 删本机会话、回登录页
 // • 被停用、注销冷静期（outbox 的 disabled 事件：account_disabled、account_pending_deletion）和被移除走同一套（4.3、4.3b、0.29 续第 131 条②）：
@@ -34,8 +36,14 @@ export interface WireSyncDeps {
   setExitNotice(n: ExitNotice): void;
   /** 本会话的 devices 行 id（登录流程登记设备后才有）；不给或返回 null 时不报时区 */
   deviceId?: () => string | null;
+  /** 登记或复用本会话的 devices 行、按天刷新 last_seen_at（core/device-reg.ts 的 ensure）；只在主页调（拿到锁、用户操作、恢复网络） */
+  ensureDevice?: () => Promise<string | null>;
   /** devices.platform：ios / windows / web / tauri（默认 web） */
   platform?: string;
+  /** 拿到 / 放开同步锁（日志上传队列只在主页传，core/log/queue.ts 的 setLeader）；放开时返回正在进行的上传，放锁前等它 */
+  onLeader?: (on: boolean) => void | Promise<void>;
+  /** 被移除、停用、注销冷静期退出时停掉并清掉这个账号的日志队列（架构 0.38 第 68 条） */
+  clearLogs?: () => void;
   /** 记日志（act + coll / code，不记内容和服务器原文） */
   log?: SyncLog;
   /** 测试用：换掉 createSync、选主、前后台、用户操作 */
@@ -87,6 +95,7 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   const onRemoved = (code: string): void => {
     if (removedHandled || boot.switching) return;
     removedHandled = true;
+    deps.clearLogs?.();
     leader?.post({ type: 'reset' });
     void wipeOnRemoved(boot, {
       clearCacheStorage: deps.clearCacheStorage,
@@ -126,11 +135,25 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     current = sync;
     const detach = f.attach(sync);
     sync.start();
-    void reporter.report(true);
-    const offActivity = (deps.onActivity ?? onUserActivity)(() => void reporter.report());
+    /** 报时区：先登记或复用设备行（已登记好时只是读内存，到点才刷新 last_seen_at）；登记期间放手了、在换账号就不报 */
+    const tz = async (force: boolean): Promise<void> => {
+      if (deps.ensureDevice) {
+        await deps.ensureDevice();
+        if (current !== sync || boot.switching) return;
+      }
+      await reporter.report(force);
+    };
+    void tz(true);
+    void deps.onLeader?.(true);
+    const offActivity = (deps.onActivity ?? onUserActivity)(() => void tz(false));
+    const offOnline = life.onOnline(() => void tz(false));
     return async () => {
       offActivity();
+      offOnline();
+      // 日志正在传的那一批传完再放锁，免得新主页把同一批再传一遍（上传自带超时，等不久）
+      const logsDone = deps.onLeader?.(false);
       await sync.drain();
+      await logsDone;
       detach();
       if (current === sync) current = null;
       f.changed();

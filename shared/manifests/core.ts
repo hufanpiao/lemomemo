@@ -19,7 +19,7 @@ export const core = defineManifest({
       clientWritable: ['id', 'label', 'platform', 'app_version', 'last_seen_at', 'install_id', ...SOFT_DELETE_COLS],
       insertOnly: ['id', 'platform', 'install_id'], updateOnly: [...SOFT_DELETE_COLS], clientDelete: true,
       softDelete: true, backup: 'json', export: 'json', onAccountDelete: 'cascade', userLookup: BY_USER,
-      systemCols: ['last_push_ok_at', 'push_fail_count'], noConflict: ['last_seen_at', 'app_version'],
+      systemCols: ['last_push_ok_at', 'push_fail_count', 'created_at'], noConflict: ['last_seen_at', 'app_version'],   // created_at：B1 迁移 20261029192000 加（0.38 第 8 条）
       exportOmitCols: ['push_endpoint', 'p256dh', 'auth', 'session_id'] },   // 导出不带推送订阅的密钥和会话 id（K3 安全审查低 8）
     { name: 'tombstones', schema: 'public', sync: 'tombstone', realtime: true, localCache: 'none', clientWritable: [],
       softDelete: false, backup: 'none', export: 'none', onAccountDelete: 'cascade', userLookup: BY_USER },

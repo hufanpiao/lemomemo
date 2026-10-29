@@ -73,24 +73,37 @@ select is((select count(*)::int from pg_proc p where p.pronamespace = 'private':
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
   'devices_session_guard,enqueue_anniv_defaults,enqueue_embed,enqueue_remind,files_authorize_impl,guard_note_file,guard_note_image,guard_token_revoke,is_active,'
-  || 'purge_deleted_impl,record_consent_impl,row_quota,table_meta_of,touch,vault_ai_off',
-  'authenticated 能执行的 private 函数 = 白名单（B1 的几个 *_impl 还没建）');
+  || 'my_sessions_impl,not_password_session,purge_deleted_impl,record_consent_impl,remove_device_impl,report_tz_impl,row_quota,table_meta_of,touch,vault_ai_off',
+  'authenticated 能执行的 private 函数 = 白名单（B1 迁移 20261029192000 建了 report_tz_impl、remove_device_impl、my_sessions_impl；claim_endpoint_impl B2、my_ai_usage_impl B3）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')), null, 'anon 不能执行任何 private 函数');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('service_role', p.oid, 'EXECUTE')),
-  'account_request_deletion,account_restore,account_usable,long_transactions,session_alive,take_rate', 'service_role 能执行的 private 函数 = 白名单（take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
+  'account_request_deletion,account_restore,account_usable,long_transactions,rebind_device_impl,session_alive,take_rate', 'service_role 能执行的 private 函数 = 白名单（rebind_device_impl 是 B1 迁移 20261029192000 建的；take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_vault', p.oid, 'EXECUTE')), 'purge_vault_impl', 'fn_vault 只能执行 purge_vault_impl');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_ai', p.oid, 'EXECUTE')), null, 'fn_ai 不能执行任何 private 函数');
 select is((select string_agg(p.proname || ':' || p.prosecdef, ',' order by p.proname) from pg_proc p where p.pronamespace = 'public'::regnamespace),
-  'files_authorize:false,purge_deleted:false,record_consent:false', 'public 里只有三个 RPC，都是 security invoker（其余六个 B1 起；files_authorize 是 0.32 加的）');
+  'apply_patch:false,files_authorize:false,my_sessions:false,purge_deleted:false,record_consent:false,remove_device:false,report_tz:false',
+  'public 里只有这七个 RPC，都是 security invoker（B1 迁移 20261029192000 加了 report_tz、remove_device、my_sessions，20261029200000 加了 apply_patch；claim_endpoint B2、my_ai_usage B3）');
 select ok(not has_function_privilege('anon', 'public.purge_deleted(jsonb)', 'EXECUTE') and not has_function_privilege('anon', 'public.record_consent(text, boolean)', 'EXECUTE')
   and not has_function_privilege('service_role', 'public.purge_deleted(jsonb)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.files_authorize(text, jsonb)', 'EXECUTE')
   and not has_function_privilege('service_role', 'public.files_authorize(text, jsonb)', 'EXECUTE')
-  and has_function_privilege('authenticated', 'public.files_authorize(text, jsonb)', 'EXECUTE'), 'public RPC 只授给 authenticated');
+  and has_function_privilege('authenticated', 'public.files_authorize(text, jsonb)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.report_tz(text, uuid, text)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.report_tz(text, uuid, text)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.report_tz(text, uuid, text)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.remove_device(uuid)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.remove_device(uuid)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.remove_device(uuid)', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.my_sessions()', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.my_sessions()', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.my_sessions()', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.apply_patch(text, uuid, jsonb, int, uuid, int[])', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.apply_patch(text, uuid, jsonb, int, uuid, int[])', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.apply_patch(text, uuid, jsonb, int, uuid, int[])', 'EXECUTE'), 'public RPC 只授给 authenticated');
 
 -- ===== TC-B0-95：表级 DELETE 只有 devices =====
 select is((select string_agg(table_name || ':' || grantee, ',' order by table_name, grantee) from information_schema.role_table_grants

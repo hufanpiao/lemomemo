@@ -4,7 +4,7 @@
 // • 换账号的判断时机里，“别的标签页”走 storage 事件（onSessionStorageChange），“登录 / 刷新令牌”走 onAuthStateChange（onAuthUser）
 // • Cache Storage 的清理也在这里（caches 只在 platform 用）：只删运行时缓存，SW 预缓存保留（0.38 第 36 条）
 // • clearLocalSession：signOut 失败时的兜底，同步删掉本机的 supabase 会话键
-// 只读 user.id，不读、不打印令牌
+// 只读 user.id、user.email 和令牌 payload 里的 session_id（sessionIdOfToken），不校验、不记录、不打印令牌
 import { buildInfo } from './env.ts';
 import { getSupabase } from './supabase/client.ts';
 
@@ -69,6 +69,38 @@ export function readSessionEmail(storage?: Storage, supabaseUrl: string = buildI
     const o = JSON.parse(raw) as { user?: { email?: unknown } } | null;
     const email = o?.user?.email;
     return typeof email === 'string' && email.length <= 254 && /^[^\s@]+@[^\s@]+$/.test(email) ? email : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 从 access token 的 payload 里读 session_id（base64url）；只解这一个字段，不校验签名、不记录、不打印令牌。
+ * 用途：设置 › 设备标“本机”、认出本会话的 devices 行（真正的判断都在服务器，0.29 续第 99 条）。格式不对返回 null
+ */
+export function sessionIdOfToken(token: unknown): string | null {
+  if (typeof token !== 'string') return null;
+  const part = token.split('.')[1];
+  if (!part) return null;
+  try {
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '='))) as { session_id?: unknown } | null;
+    const sid = json?.session_id;
+    return typeof sid === 'string' && sid ? sid : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 本机会话 access token 里的 session_id（键名取法同 readSessionUserId，同步读、离线也能读）；没登录、读不到、格式不对都返回 null */
+export function readSessionId(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
+  try {
+    const s = storage ?? localStorage;
+    const key = findKey(s, supabaseUrl);
+    const raw = key ? s.getItem(key) : null;
+    if (!raw) return null;
+    const o = JSON.parse(raw) as { access_token?: unknown } | null;
+    return sessionIdOfToken(o?.access_token);
   } catch {
     return null;
   }

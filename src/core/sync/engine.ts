@@ -253,6 +253,8 @@ export function createSync(boot: BootResult, opts: SyncOptions): Sync {
       outbox.onEvent((e) => {
         if (e.type === 'removed' || e.type === 'disabled') halt();   // main.tsx / sync-wiring 已接 outbox 的事件
         else if (e.type === 'rejected') {
+          // 0.38 第 67 条①：拒收码进 code；patch_bad_args 已由 send.ts 记 sync_patch_bad_args（带 sqlstate），这里不重复记
+          if (e.code !== 'patch_bad_args') opts.log?.('outbox_rejected', { coll: e.item.table, code: e.code });
           round.pendingFull.add(e.item.table);   // vault_required、settings_key_immutable、not_found：整表重拉这张表
           pulls.pullTableSoon(e.item.table);
         }

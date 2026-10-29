@@ -1,5 +1,7 @@
 // requireActiveUser、isUsable 的离线检查：用假的 supabase-js 客户端走一遍各分支（真 Auth、真库待 Docker）
-// 由 run.mjs 的 fn 阶段调用，返回失败说明的数组
+// 由 run.mjs 的 fn 阶段调用（Node），tests/shared/auth.test.mjs 用 Deno 再跑一遍；返回失败说明的数组
+// Buffer 从 node:buffer 取：Deno 下也能跑
+import { Buffer } from 'node:buffer';
 const A = 'aaaaaaaa-0000-4000-8000-000000000001';
 const S = 'aaaaaaaa-5555-4000-8000-000000000001';
 const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -44,9 +46,27 @@ export async function checkAuth() {
   await expect('session_alive 出错', requireActiveUser(req(tok), fake({ rpc: { account_usable: good.rpc.account_usable } })), 'try_later');
   await expect('session_alive 超时', requireActiveUser(req(tok), fake({ ...good, rpcHang: ['session_alive'] })), 'try_later');
   await expect('account_usable 出错', requireActiveUser(req(tok), fake({ rpc: { session_alive: good.rpc.session_alive } })), 'try_later');
+  // TC-B1-111（架构 0.36 第 1 条 ②、0.38）：amr 里有 password、或有 amr 却不是数组，回 401 unauthorized；没有 amr、otp、magiclink、recovery 照常
+  const at = (amr) => jwtOf({ sub: A, session_id: S, amr });
+  const ts = 1761700000;
+  await expect('密码会话', requireActiveUser(req(at([{ method: 'password', timestamp: ts }])), fake(good)), 'unauthorized');
+  await expect('刷新后的密码会话（iat 新、amr 沿用）', requireActiveUser(req(jwtOf({ sub: A, session_id: S, iat: ts + 3600, amr: [{ method: 'password', timestamp: ts }] })), fake(good)), 'unauthorized');
+  await expect('密码和验证码都有', requireActiveUser(req(at([{ method: 'otp', timestamp: ts }, { method: 'password', timestamp: ts }])), fake(good)), 'unauthorized');
+  // 先于查库：数据库出错时也回 unauthorized，不是 try_later
+  await expect('密码会话、数据库出错', requireActiveUser(req(at([{ method: 'password', timestamp: ts }])), fake({})), 'unauthorized');
+  await expect('验证码会话', requireActiveUser(req(at([{ method: 'otp', timestamp: ts }])), fake(good)), 'ok');
+  await expect('magiclink 会话', requireActiveUser(req(at([{ method: 'magiclink', timestamp: ts }])), fake(good)), 'ok');
+  await expect('recovery 会话', requireActiveUser(req(at([{ method: 'recovery', timestamp: ts }])), fake(good)), 'ok');
+  await expect('amr 不是数组（字符串标量）', requireActiveUser(req(at('otp')), fake(good)), 'unauthorized');
+  await expect('amr 是对象（不是数组）', requireActiveUser(req(at({ method: 'otp' })), fake(good)), 'unauthorized');
+  await expect('amr 是字符串数组 ["password"]', requireActiveUser(req(at(['password'])), fake(good)), 'unauthorized');
+  await expect('字符串和对象混合', requireActiveUser(req(at(['otp', { method: 'password', timestamp: ts }])), fake(good)), 'unauthorized');
+  await expect('对象 otp 和字符串 password 混合', requireActiveUser(req(at([{ method: 'otp', timestamp: ts }, 'password'])), fake(good)), 'unauthorized');
+  await expect('amr 是字符串数组 ["otp"]', requireActiveUser(req(at(['otp'])), fake(good)), 'ok');
+  await expect('amr 是 null（有键、不是数组）', requireActiveUser(req(at(null)), fake(good)), 'unauthorized');
   try {
     const u = await isUsable(off('deletion', { purge_after: 'P' }), A);
     if (u.ok || u.code !== 'account_pending_deletion' || u.purgeAfter !== 'P') fails.push('isUsable 冷静期：没带 purge_after');
   } catch (e) { fails.push(`isUsable 冷静期：${e.message}`); }
-  return { n: 16, fails };
+  return { n: 30, fails };
 }

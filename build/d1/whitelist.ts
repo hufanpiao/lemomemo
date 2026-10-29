@@ -68,7 +68,7 @@ export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
 
 /** private 函数的执行权（3.3 C）。B1 起才建的函数也列在这里：没建时 D1 不报，建了却没授权或授多了才报 */
 export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault' | 'fn_ai', string[]> = {
-  authenticated: ['is_active', 'report_tz_impl', 'claim_endpoint_impl', 'my_ai_usage_impl', 'record_consent_impl', 'remove_device_impl',
+  authenticated: ['is_active', 'not_password_session', 'report_tz_impl', 'claim_endpoint_impl', 'my_ai_usage_impl', 'record_consent_impl', 'remove_device_impl',
     'devices_session_guard', 'purge_deleted_impl', 'my_sessions_impl', 'touch', 'enqueue_remind', 'row_quota', 'guard_token_revoke',
     'table_meta_of', 'guard_note_image', 'guard_note_file', 'files_authorize_impl', 'enqueue_anniv_defaults', 'enqueue_embed', 'vault_ai_off'],
   service_role: ['take_rate', 'session_alive', 'rebind_device_impl', 'long_transactions', 'account_usable', 'account_request_deletion', 'account_restore'],

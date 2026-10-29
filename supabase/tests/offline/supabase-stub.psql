@@ -16,7 +16,9 @@ create schema cron;
 grant usage on schema auth, storage, extensions to anon, authenticated, service_role;
 
 create table auth.users (id uuid primary key, email text, encrypted_password varchar(255), created_at timestamptz default now());   -- encrypted_password：0001 的 guard_no_password 挂在这一列上（0.36）
-create table auth.sessions (id uuid primary key, user_id uuid references auth.users on delete cascade, created_at timestamptz default now());
+-- updated_at、refreshed_at 照真库的类型（refreshed_at 是不带时区的 timestamp）：B1 的 my_sessions_impl 用（0.29 续第 111 条）
+create table auth.sessions (id uuid primary key, user_id uuid references auth.users on delete cascade, created_at timestamptz default now(),
+  updated_at timestamptz, refreshed_at timestamp);
 
 create function auth.jwt() returns jsonb language sql stable as $$
   select coalesce(nullif(current_setting('request.jwt.claim', true), ''), nullif(current_setting('request.jwt.claims', true), ''))::jsonb

@@ -51,8 +51,10 @@ export async function isUsable(admin: SupabaseClient, userId: string): Promise<U
   return { ok: false, code: 'account_pending_deletion', purgeAfter };
 }
 
+type Claims = { sub?: string; session_id?: string; amr?: unknown };
+
 /** JWT 的 payload（只在 getUser 验过以后读，不单独信任） */
-function claims(jwt: string): { sub?: string; session_id?: string } {
+function claims(jwt: string): Claims {
   try {
     const part = jwt.split('.')[1];
     if (!part) return {};
@@ -63,10 +65,23 @@ function claims(jwt: string): { sub?: string; session_id?: string } {
   }
 }
 
+/**
+ * 密码会话（架构 0.36 第 1 条 ②，TC-B1-111）：amr 是数组，元素两种写法都认——对象 {method: 'password', timestamp: …}（GoTrue 文档）
+ * 和裸字符串 'password'（B0 第四轮 QA 真库实测记作 amr = ["password"]）。
+ * 只认 password（黑名单）：otp、magiclink、recovery、email_change 等照常；刷新出来的令牌沿用原会话的 amr，照样被拒。
+ * 和 SQL 一侧 private.not_password_session() 同一口径（0.38）：没有 amr 放行；有 amr 但不是数组（含 null、字符串）当密码会话拒。
+ */
+function isPasswordSession(c: Claims): boolean {
+  if (c.amr === undefined) return false;
+  if (!Array.isArray(c.amr)) return true;
+  return c.amr.some((e: unknown) => e === 'password'
+    || (typeof e === 'object' && e !== null && (e as { method?: unknown }).method === 'password'));
+}
+
 export type ActiveUser = { userId: string; sessionId: string; jwt: string };
 
 /**
- * 验 JWT → 账号能不能用 → 会话还在不在、有没有被吊销（private.session_alive）。
+ * 验 JWT → 不是密码会话（amr 里没有 password，0.36）→ 账号能不能用 → 会话还在不在、有没有被吊销（private.session_alive）。
  * allowPendingDeletion：只有 account 的 restore 传 true，冷静期里放行。
  * 不通过抛 AuthError，函数入口 catch 后 return e.toResponse(cors)。
  */
@@ -84,6 +99,8 @@ export async function requireActiveUser(req: Request, admin: SupabaseClient, opt
   const userId = data.user.id;
   const c = claims(jwt);
   if (c.sub !== userId || !c.session_id) throw new AuthError('unauthorized', 401);
+  // 0.36：密码会话按“没登录”处理（401 unauthorized，不加新错误码，客户端回登录页）
+  if (isPasswordSession(c)) throw new AuthError('unauthorized', 401);
 
   const u = await isUsable(admin, userId);
   if (!u.ok && !(u.code === 'account_pending_deletion' && opts.allowPendingDeletion)) {

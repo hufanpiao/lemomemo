@@ -22,9 +22,11 @@ export type {
 
 /**
  * 记一条日志（logs 表，数据字典 4.6）：act 是登记过的动作名（≤ 32 字），coll 表名、code 错误码或 sqlstate。
- * 不记内容，也不记服务器返回的原始错误文本（0.38 第 62 条）
+ * 不记内容，也不记服务器返回的原始错误文本（0.38 第 62 条）。
+ * itemId（logs.item_id）只给数据字典 4.6 写明要记录 id 的 act 用（现在只有 outbox_vault_shell_drop，接手清单 K6-log）；
+ * 同步层的 act（0.38 第 67 条）一律不填
  */
-export type SyncLog = (act: string, f?: { coll?: string; code?: string }) => void;
+export type SyncLog = (act: string, f?: { coll?: string; code?: string; itemId?: string }) => void;
 
 /**
  * 同步用到的全部网络调用。实现只做“请求 → 结果”，不碰本机库；所有方法不抛（网络错一律变成 { ok: false, error: { network: true } }）

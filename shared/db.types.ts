@@ -386,6 +386,9 @@ isOneToOne: false
 "cleanup_batch":
 { Args: { "p_limit"?: number }; Returns: number
                            },
+"enqueue_floating":
+{ Args: { "p_user": string }; Returns: undefined
+                           },
 "files_authorize_impl":
 { Args: { "p_items": Json,"p_op": string }; Returns: Json
                            },
@@ -397,14 +400,31 @@ isOneToOne: false
               "app": string,"pid": number,"role": unknown,"xact_start": string
             }[]
                            },
+"my_sessions_impl":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "orphan_count": number,"orphan_last_at": string,"signed_out_device_ids": (string)[]
+            }[]
+                           },
+"not_password_session":
+{ Args: Record<PropertyKey, never>; Returns: boolean
+                           },
 "purge_deleted_impl":
 { Args: { "p_items"?: Json }; Returns: number
                            },
 "purge_vault_impl":
 { Args: { "p_items"?: Json,"p_user": string }; Returns: number
                            },
+"rebind_device_impl":
+{ Args: { "p_device": string,"p_new_session": string,"p_old_session": string,"p_user": string }; Returns: undefined
+                           },
 "record_consent_impl":
 { Args: { "p_revoke"?: boolean,"p_ver": string }; Returns: undefined
+                           },
+"remove_device_impl":
+{ Args: { "p_device": string }; Returns: undefined
+                           },
+"report_tz_impl":
+{ Args: { "p_device": string,"p_platform": string,"p_tz": string }; Returns: string
                            },
 "session_alive":
 { Args: { "p_session": string }; Returns: boolean
@@ -498,14 +518,14 @@ isOneToOne: false
                   ]
                 },"devices": {
                   Row: {
-                    "app_version": string | null,"auth": string | null,"deleted_at": number | null,"fv": NonNullable<Json>,"id": string,"install_id": string | null,"label": string | null,"last_push_ok_at": string | null,"last_seen_at": string | null,"p256dh": string | null,"platform": string,"push_endpoint": string | null,"push_fail_count": number,"rev": number,"session_id": string | null,"synced_at": string,"undone": boolean,"user_id": string
+                    "app_version": string | null,"auth": string | null,"created_at": string,"deleted_at": number | null,"fv": NonNullable<Json>,"id": string,"install_id": string | null,"label": string | null,"last_push_ok_at": string | null,"last_seen_at": string | null,"p256dh": string | null,"platform": string,"push_endpoint": string | null,"push_fail_count": number,"rev": number,"session_id": string | null,"synced_at": string,"undone": boolean,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "app_version"?: string | null,"auth"?: string | null,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id": string,"install_id"?: string | null,"label"?: string | null,"last_push_ok_at"?: string | null,"last_seen_at"?: string | null,"p256dh"?: string | null,"platform": string,"push_endpoint"?: string | null,"push_fail_count"?: number,"rev"?: number,"session_id"?: string | null,"synced_at"?: string,"undone"?: boolean,"user_id"?: string
+                    "app_version"?: string | null,"auth"?: string | null,"created_at"?: string,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id": string,"install_id"?: string | null,"label"?: string | null,"last_push_ok_at"?: string | null,"last_seen_at"?: string | null,"p256dh"?: string | null,"platform": string,"push_endpoint"?: string | null,"push_fail_count"?: number,"rev"?: number,"session_id"?: string | null,"synced_at"?: string,"undone"?: boolean,"user_id"?: string
                   }
                   Update: {
-                    "app_version"?: string | null,"auth"?: string | null,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id"?: string,"install_id"?: string | null,"label"?: string | null,"last_push_ok_at"?: string | null,"last_seen_at"?: string | null,"p256dh"?: string | null,"platform"?: string,"push_endpoint"?: string | null,"push_fail_count"?: number,"rev"?: number,"session_id"?: string | null,"synced_at"?: string,"undone"?: boolean,"user_id"?: string
+                    "app_version"?: string | null,"auth"?: string | null,"created_at"?: string,"deleted_at"?: number | null,"fv"?: NonNullable<Json>,"id"?: string,"install_id"?: string | null,"label"?: string | null,"last_push_ok_at"?: string | null,"last_seen_at"?: string | null,"p256dh"?: string | null,"platform"?: string,"push_endpoint"?: string | null,"push_fail_count"?: number,"rev"?: number,"session_id"?: string | null,"synced_at"?: string,"undone"?: boolean,"user_id"?: string
                   }
                   Relationships: [
                     
@@ -660,14 +680,28 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "files_authorize":
+            "apply_patch":
+{ Args: { "p_base_rev": number,"p_id": string,"p_op_id": string,"p_own_revs"?: (number)[],"p_patch": Json,"p_table": string }; Returns: Json
+                           },
+"files_authorize":
 { Args: { "p_items": Json,"p_op": string }; Returns: Json
+                           },
+"my_sessions":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "orphan_count": number,"orphan_last_at": string,"signed_out_device_ids": (string)[]
+            }[]
                            },
 "purge_deleted":
 { Args: { "p_items"?: Json }; Returns: number
                            },
 "record_consent":
 { Args: { "policy_ver": string,"revoke"?: boolean }; Returns: undefined
+                           },
+"remove_device":
+{ Args: { "p_device_id": string }; Returns: undefined
+                           },
+"report_tz":
+{ Args: { "device_id": string,"platform": string,"tz": string }; Returns: string
                            }
           }
           Enums: {

@@ -1,4 +1,4 @@
-// 离线 SQL 检查（没有 Docker 时用）：PGlite（WASM 版 Postgres）+ Supabase 桩，依次跑全部迁移、RLS 测试、D1 比对和样例
+// 离线 SQL 检查（不起 Docker 的快速检查；真库用 npm run test:db，CI 的 db 任务每次都跑）：PGlite（WASM 版 Postgres）+ Supabase 桩，依次跑全部迁移、RLS 测试、D1 比对和样例
 // 用法（仓库根目录，依赖用根目录的 package.json）：npm run test:db:offline [-- --only=rls|d1|compat|fn]
 //   即 node supabase/tests/offline/run.mjs [--only=…]
 // 不代替 supabase db reset / supabase test db：桩不是 Supabase 的真实定义，pg_cron、pg_net 被跳过，真库差异见 B0 实测清单

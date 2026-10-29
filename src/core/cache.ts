@@ -77,6 +77,17 @@ export interface OutboxPause {
   at: number;
 }
 
+/** 本会话的 devices 行：id、它绑着的会话；ok = 服务器上已确认有这一行（false = 已选好 id、insert 还没确认） */
+export interface DeviceMeta {
+  id: string;
+  session: string;
+  ok: boolean;
+  /** 上次写 last_seen_at、app_version 的时刻（毫秒；insert 或每天一次的刷新），没有为还没写过 */
+  seenAt?: number;
+  /** 上次写进去的 app_version */
+  ver?: string;
+}
+
 /** meta 仓的键和值的类型 */
 export interface MetaMap {
   /** 写进缓存时的 rows.ts 版本（shared/schema/rows.ts 的 SCHEMA_V）；变了就整表重拉（2.6，TC-B1-40） */
@@ -84,6 +95,8 @@ export interface MetaMap {
   config: CachedConfig;
   profile: CachedProfile;
   outbox_pause: OutboxPause;
+  /** 本会话的 devices 行（core/device-reg.ts；0.38 第 62 条④）：退出、换账号、被移除时随整库清掉 */
+  device: DeviceMeta;
   /** 各表的同步游标（K8） */
   [k: `cursor:${string}`]: SyncCursor;
   /** 各表“待补拉”的 id（K7：一行解析不了时记下，下次启动单独补拉） */

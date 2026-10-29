@@ -115,6 +115,7 @@ delete from public.categories where user_id = 'aaaaaaaa-0000-4000-8000-000000000
 delete from public.tombstones;
 
 -- ===== purge_deleted 和 tombstones（TC-B0-95、96） =====
+-- B1（K1 审查）：purge_deleted 要求 JWT 的会话还在，下面三次调用都带 A 的会话
 insert into public.todos (id, user_id, title, deleted_at, created_at, updated_at) values
   ('70000000-0000-4000-8000-0000000000d1', 'aaaaaaaa-0000-4000-8000-000000000001', 'T1', 1, 1, 1),
   ('70000000-0000-4000-8000-0000000000d2', 'aaaaaaaa-0000-4000-8000-000000000001', 'T2', null, 1, 1),
@@ -129,11 +130,11 @@ insert into public.notes (id, user_id, is_private, body_enc, deleted_at, created
 insert into public.note_images (id, user_id, note_id, bucket, path, bytes) values ('1e000000-0000-4000-8000-0000000000d1', 'aaaaaaaa-0000-4000-8000-000000000001',
   '40000000-0000-4000-8000-0000000000d1', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000d1/1e000000-0000-4000-8000-0000000000d1.webp', 1);
 select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001',
-  $$select public.purge_deleted('[{"tbl":"profiles","id":"aaaaaaaa-0000-4000-8000-000000000001"}]')$$) like '%bad_table%', 'purge_deleted 不认的表名：bad_table');
+  $$select public.purge_deleted('[{"tbl":"profiles","id":"aaaaaaaa-0000-4000-8000-000000000001"}]')$$, null, 'aaaaaaaa-5555-4000-8000-000000000001') like '%bad_table%', 'purge_deleted 不认的表名：bad_table');
 select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001',
-  $$select public.purge_deleted((select jsonb_agg(jsonb_build_object('tbl','todos','id',gen_random_uuid())) from generate_series(1, 501)))$$) like '%too_many_items%',
+  $$select public.purge_deleted((select jsonb_agg(jsonb_build_object('tbl','todos','id',gen_random_uuid())) from generate_series(1, 501)))$$, null, 'aaaaaaaa-5555-4000-8000-000000000001') like '%too_many_items%',
   'purge_deleted 超过 500 项整批拒绝');
-select is(tests.rows_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$select public.purge_deleted() as n$$), '[{"n": 4}]'::jsonb,
+select is(tests.rows_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$select public.purge_deleted() as n$$, null, 'aaaaaaaa-5555-4000-8000-000000000001'), '[{"n": 4}]'::jsonb,
   'A 全部清空：删 T1、E1、撤销行 U、普通随手记 N1');
 select is((select string_agg(title, ',' order by title) from public.todos where id in ('70000000-0000-4000-8000-0000000000d2', '70000000-0000-4000-8000-0000000000b1')), 'T2,TB',
   '没删的 T2、B 的 TB 还在');

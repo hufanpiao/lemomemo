@@ -126,6 +126,7 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
       if (r.status === 'gone') {
         await d.outbox.fail(item.op_id, { status: 409, code: 'gone' });
         d.emit({ type: 'gone', table: item.table, id: item.id, opId: item.op_id, data: item.data });
+        d.log?.('sync_gone', { coll: item.table, code: 'gone' });   // 0.38 第 67 条：不记 data、opId、记录 id
         d.touched(item.table);   // 拿到服务器上已软删的那一行，界面据此显示“已被删除”
         continue;
       }
@@ -139,6 +140,7 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
           type: 'conflict', status: r.status, table: item.table, id: item.id,
           conflicts: r.conflicts ?? [], old: r.old ?? null, forkId: r.fork_id ?? null,
         });
+        d.log?.('sync_conflict', { coll: item.table, code: r.status });   // 0.38 第 67 条：code 是 conflict / forked；不记 old、conflicts、forkId、记录 id
         d.touched(item.table);
       }
       continue;

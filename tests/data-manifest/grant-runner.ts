@@ -1,4 +1,4 @@
-// 执行“表 × 角色 × 操作”用例（TC-B0-89；生成器见 grant-matrix.ts）。数据库由调用方传入：离线是 PGlite + 7 个迁移（grant-matrix.test.ts），
+// 执行“表 × 角色 × 操作”用例（TC-B0-89；生成器见 grant-matrix.ts）。数据库由调用方传入：离线是 PGlite + 全部迁移（grant-matrix.test.ts），
 // CI 可以接本地 Supabase（同一个 { exec, query } 接口）。
 //
 // 做法：每格先用 has_table_privilege / has_column_privilege 算出能用的列，和期望逐项比；再以那个角色真的执行来印证授权表——
@@ -130,19 +130,32 @@ async function runOne(db: GrantDb, c: GrantCase, cols: readonly string[]): Promi
     if (extra.length) problems.push(`多给了：${extra.join('、')}`);
     if (missing.length) problems.push(`少给了：${missing.join('、')}`);
     if (table && c.expect !== 'all') actual = ['*'];
-  } else if (!wantAll && actual.length) {
-    problems.push('不该能 DELETE，实际能');
   }
+  // DELETE 不按列，actual 就是表级结果：表级有无上面已比过一次，这里不再另报“不该能 DELETE”（B1 接手清单 C9：原来同一处报两遍）
   return { id: c.id, ok: problems.length === 0, problems, actual };
 }
+
+/**
+ * 还没建、按计划在后面批次新迁移里才建的 public RPC（架构设计-v4 0.31 第 23 条确认改标注、0.33 第 3 条；
+ * B0 批次的迁移建了 record_consent、purge_deleted（0001）和 files_authorize（0004）；
+ * B1 迁移 20261029192000_core_devices_sessions.sql 建了 report_tz、remove_device、my_sessions，20261029200000_core_apply_patch.sql 建了 apply_patch）。
+ * 只有这里列出的没建算正常；九个里别的没建一律报错。哪一个建好了就从这里删掉。
+ */
+export const RPCS_BUILT_LATER: Readonly<Record<string, 'B1' | 'B2' | 'B3'>> = {
+  claim_endpoint: 'B2', // B2 新迁移，配 private.claim_endpoint_impl（0.31 第 23 条）
+  my_ai_usage: 'B3', // B3 新迁移，配 private.my_ai_usage_impl（0.31 第 23 条）
+};
 
 async function runRpc(db: GrantDb, c: RpcCase): Promise<GrantRunResult['rpc'][number]> {
   const fns = await db.query<{ ok: boolean }>(
     `select has_function_privilege($1, p.oid, 'EXECUTE') as ok from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = $2`,
     [c.role, c.fn],
   );
-  // 3.3 D 的九个里 B1～B3 才建的，没建不算“少”（架构 0.33 第 3 条）
-  if (fns.rows.length === 0) return { id: c.id, ok: true, missing: true };
+  if (fns.rows.length === 0) {
+    const later = Object.hasOwn(RPCS_BUILT_LATER, c.fn) ? RPCS_BUILT_LATER[c.fn] : undefined;
+    // 名单里的（B1～B3 才建）没建不算“少”；名单外的没建就是少了
+    return later ? { id: c.id, ok: true, missing: true } : { id: c.id, ok: false, missing: true, problem: `数据库里没有 public.${c.fn}（不在后面批次才建的名单里）` };
+  }
   const bad = fns.rows.find((r) => r.ok !== c.expect);
   return bad ? { id: c.id, ok: false, problem: `${c.role} ${c.expect ? '应能' : '不该能'}执行 public.${c.fn}` } : { id: c.id, ok: true };
 }

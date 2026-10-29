@@ -100,7 +100,7 @@ describe('sessionIdOfToken', () => {
   });
 });
 
-describe('toSessionInfo（my_sessions，第 111、118 条；20261029160000）', () => {
+describe('toSessionInfo（my_sessions，第 111、118 条；20261029193000）', () => {
   it('读第一行的 orphan_count、orphan_last_at、signed_out_device_ids', () => {
     const info = toSessionInfo([{ orphan_count: 2, orphan_last_at: '2026-10-28T01:00:00Z', signed_out_device_ids: ['a', 'b'] }]);
     expect(info.orphans).toEqual({ count: 2, lastAtMs: Date.parse('2026-10-28T01:00:00Z') });

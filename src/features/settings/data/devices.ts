@@ -2,7 +2,7 @@
 // 依据：架构 0.29 续第 98、99、103、108、111 条；0.38 第 14 条
 // • 本机：这一行的 session_id 等于当前令牌里的 session_id（第 99 条⑥，服务器的 is_current_device 用同一个判断）
 // • 已退出：session_id 为空（第 103 条①），或在 my_sessions() 的 signed_out_device_ids 里（会话已不在、已被吊销；
-//   20261029160000，0.38 第 38 条，TC-B1-79 ②）；已退出的照样能点“移除”
+//   20261029193000，0.38 第 38 条，TC-B1-79 ②）；已退出的照样能点“移除”
 // • 很久没用：最后活动超过 150 天，写“<日期> 后自动移除”（180 天，第 108 条）；last_seen_at 比现在快 1 天以上的不认
 
 export type Platform = 'ios' | 'windows' | 'web' | 'tauri';
@@ -76,21 +76,10 @@ export function sortDevices(list: readonly DeviceView[]): DeviceView[] {
   });
 }
 
-/** 从 access token 的 payload 里读 session_id（只用来在界面上标“本机”；真正的判断在服务器） */
-export function sessionIdOfToken(token: string | null | undefined): string | null {
-  if (!token) return null;
-  const part = token.split('.')[1];
-  if (!part) return null;
-  try {
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-    const json = JSON.parse(atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '='))) as { session_id?: unknown };
-    return typeof json.session_id === 'string' && json.session_id ? json.session_id : null;
-  } catch {
-    return null;
-  }
-}
+/** 从 access token 的 payload 里读 session_id：只在 platform/session.ts 留一份（K4 审查 6） */
+export { sessionIdOfToken } from '../../../platform/session.ts';
 
-/** my_sessions() 的一行：没有设备行的会话个数和最近时间（第 111、118 条）、已退出的设备 id（20261029160000） */
+/** my_sessions() 的一行：没有设备行的会话个数和最近时间（第 111、118 条）、已退出的设备 id（20261029193000） */
 export interface Orphans {
   count: number;
   lastAtMs: number | null;

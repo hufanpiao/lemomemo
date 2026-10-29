@@ -1,11 +1,11 @@
 // TC-B0-89：“表 × 角色 × 操作”正反用例生成器（grant-matrix.ts）和 runner（grant-runner.ts）。
-// 生成部分纯函数；执行部分在 PGlite 上跑 7 个迁移后的真授权（离线，和 npm run test:db:offline 同一套桩）。
+// 生成部分纯函数；执行部分在 PGlite 上跑完全部迁移后的真授权（离线，和 npm run test:db:offline 同一套桩）。
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import * as realWhitelist from '../../build/d1/whitelist.ts';
 import { allManifests } from '../../shared/manifests/index.ts';
 import { describeGrantCase, generateGrantMatrix, type GrantCase, type GrantWhitelist } from './grant-matrix.ts';
-import { grantProblems, runGrantMatrix, type GrantDb } from './grant-runner.ts';
+import { grantProblems, RPCS_BUILT_LATER, runGrantMatrix, type GrantDb } from './grant-runner.ts';
 import { ManifestError } from './sql.ts';
 import type { Manifest } from './types.ts';
 
@@ -76,7 +76,7 @@ describe('生成：每张表 × 五个角色 × 四种操作都有一条', () =>
   });
 });
 
-describe('执行：PGlite 上 7 个迁移之后的真授权（离线）', () => {
+describe('执行：PGlite 上跑完全部迁移之后的真授权（离线）', () => {
   // 每条用例一个新实例：PGlite 每抛一次错会漏一点栈（grant-runner.ts 的注释），反例会故意多抛错
   let pg: PGlite;
   let db: GrantDb;
@@ -93,11 +93,52 @@ describe('执行：PGlite 上 7 个迁移之后的真授权（离线）', () => 
     const r = await runGrantMatrix(db, m);
     expect(grantProblems(r)).toEqual([]);
     expect(r.outcomes).toHaveLength(m.cases.length);
-    // 九个里 B0 迁移建了 3 个，其余随 B1～B3 建，没建的不算少（架构 0.33 第 3 条）
-    expect([...new Set(r.rpc.filter((x) => !x.missing).map((x) => x.id.split('-')[3]))].sort()).toEqual(['files_authorize', 'purge_deleted', 'record_consent']);
+    // 九个里 B0 迁移建了 3 个、B1 迁移 20261029192000 建了 3 个、20261029200000 建了 apply_patch，其余随 B2、B3 建，没建的不算少（架构 0.33 第 3 条）
+    expect([...new Set(r.rpc.filter((x) => !x.missing).map((x) => x.id.split('-')[3]))].sort()).toEqual(
+      ['apply_patch', 'files_authorize', 'my_sessions', 'purge_deleted', 'record_consent', 'remove_device', 'report_tz']);
+    // 暂缺的正好是“后面批次才建”名单里的两个（claim_endpoint、my_ai_usage），名单本身也都在九个里
+    expect([...new Set(r.rpc.filter((x) => x.missing).map((x) => x.id.split('-')[3]))].sort()).toEqual(Object.keys(RPCS_BUILT_LATER).sort());
+    expect(Object.keys(RPCS_BUILT_LATER).filter((f) => !WL.PUBLIC_RPCS.includes(f))).toEqual([]);
     // 正例真的执行成功了（不是什么都 42501）
     expect(r.outcomes.find((o) => o.id === 'TC-GRANT-private.vault-fn_ai-SELECT')?.actual).toEqual(['user_id', 'pin_epoch']);
     expect(r.outcomes.find((o) => o.id === 'TC-GRANT-public.devices-authenticated-DELETE')?.actual).toEqual(['*']);
+  }, 120_000);
+
+  it('B1 新函数的执行权（3.3 C、3.3 D）：五个角色逐个核对，public 包装只给 authenticated，rebind_device_impl 只给 service_role', async () => {
+    const roles = ['anon', 'authenticated', 'service_role', 'fn_vault', 'fn_ai'] as const;
+    const want: Record<string, readonly (typeof roles)[number][]> = {
+      'public.report_tz(text, uuid, text)': ['authenticated'],
+      'public.remove_device(uuid)': ['authenticated'],
+      'public.my_sessions()': ['authenticated'],
+      'public.apply_patch(text, uuid, jsonb, int, uuid, int[])': ['authenticated'],
+      'private.report_tz_impl(text, uuid, text)': ['authenticated'],
+      'private.remove_device_impl(uuid)': ['authenticated'],
+      'private.my_sessions_impl()': ['authenticated'],
+      'private.record_consent_impl(text, boolean)': ['authenticated'],
+      'private.rebind_device_impl(uuid, uuid, uuid, uuid)': ['service_role'],
+    };
+    const got: Record<string, string[]> = {};
+    for (const fn of Object.keys(want)) {
+      got[fn] = [];
+      for (const role of roles) {
+        const r = await pg.query<{ ok: boolean }>(`select has_function_privilege($1, $2, 'EXECUTE') as ok`, [role, fn]);
+        if (r.rows[0]?.ok) got[fn].push(role);
+      }
+    }
+    expect(got).toEqual(want);
+    // 和 D1 的白名单（build/d1/whitelist.ts FUNCTION_EXEC）一致
+    for (const f of ['report_tz_impl', 'remove_device_impl', 'my_sessions_impl', 'record_consent_impl']) expect(realWhitelist.FUNCTION_EXEC.authenticated).toContain(f);
+    expect(realWhitelist.FUNCTION_EXEC.service_role).toContain('rebind_device_impl');
+    // 真的执行一次：anon 调 public.report_tz、authenticated 调 rebind_device_impl 都是 42501
+    for (const [role, sql] of [
+      ['anon', `select public.report_tz('Asia/Seoul', gen_random_uuid(), 'ios')`],
+      ['authenticated', `select private.rebind_device_impl(gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), gen_random_uuid())`],
+    ] as const) {
+      await pg.exec(`begin; set local role ${role};`);
+      const err = await pg.exec(sql).then(() => null, (e: unknown) => e as { code?: string });
+      await pg.exec('rollback');
+      expect(err?.code, `${role}：${sql}`).toBe('42501');
+    }
   }, 120_000);
 
   it('改坏数据库一处（多给 fn_ai 一列、收回 fn_vault 一项、给 authenticated 删 events、给 anon 执行 RPC、多一张表），都报出来', async () => {
@@ -109,11 +150,19 @@ describe('执行：PGlite 上 7 个迁移之后的真授权（离线）', () => 
     const ps = grantProblems(await runGrantMatrix(db, m));
     expect(ps.find((p) => p.startsWith('TC-GRANT-private.vault-fn_ai-SELECT'))).toBe('TC-GRANT-private.vault-fn_ai-SELECT：多给了：pin_hash');
     expect(ps.find((p) => p.startsWith('TC-GRANT-private.vault_credentials-fn_vault-INSERT'))).toContain('应有表级 INSERT，实际没有');
-    expect(ps.find((p) => p.startsWith('TC-GRANT-public.events-authenticated-DELETE'))).toContain('不该有表级 DELETE');
+    // DELETE 越权只报一遍（C9：原来还多报一句“不该能 DELETE，实际能”）
+    expect(ps.find((p) => p.startsWith('TC-GRANT-public.events-authenticated-DELETE'))).toBe('TC-GRANT-public.events-authenticated-DELETE：不该有表级 DELETE，实际有');
     expect(ps.some((p) => p.startsWith('TC-GRANT-rpc-record_consent-anon'))).toBe(true);
     expect(ps).toContain('数据库里有 private.qa_extra，清单和白名单都没有（生成器没覆盖）');
     // 只报改坏的这几处，别的格不受影响
     expect(ps).toHaveLength(5);
+  }, 120_000);
+
+  it('名单外的 RPC 没建（删掉 B0 已建的 files_authorize）要报错，不能当“后面批次才建”放过', async () => {
+    await pg.exec(`drop function public.files_authorize cascade;`);
+    const ps = grantProblems(await runGrantMatrix(db, { ...m, cases: [] }));
+    expect(ps.filter((p) => p.includes('数据库里没有 public.files_authorize'))).toHaveLength(3);
+    expect(ps).toHaveLength(3);
   }, 120_000);
 
   it('改坏白名单一处（期望 fn_ai 能读 vault 的全部列），runner 报“少给了”', async () => {

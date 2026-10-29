@@ -6,7 +6,7 @@
 // 2. await coldStart({userId})：开本机库（迁移、换账号清库）、把上次的内容灌进集合、按缓存的 config / profile 算功能开关；
 //    coldStart 不抛错，出错已降级成 unavailable（不渲染缓存，只联网用）
 // 3. 定界面语言：缓存的 profiles.ui_locale → pv-locale → 设备语言 → 中文（降级时没有 profile，照样走后几层）
-// 4. 按 flags 挂功能入口，再渲染（先用缓存画），然后启动 K8 同步（sync-wiring.ts）；本机库来自更新的版本时只渲染整屏提示 CacheTooNewScreen
+// 4. 按 flags 挂功能入口，再渲染（先用缓存画），然后启动 K8 同步（sync-wiring.ts，主页顺带登记本会话的 devices 行、报时区）；本机库来自更新的版本时只渲染整屏提示 CacheTooNewScreen
 // 5.（在 render 之前）盯住换账号的另外三个时机：本页 SIGNED_IN、TOKEN_REFRESHED（supabase-js 空闲时才加载），别的标签页的 storage 事件；
 //    挂上后马上再读一次会话比一次，补上 1 到 5 之间漏掉的变化（K6 审查 M1）
 import '../platform/zod-jitless.ts';
@@ -20,17 +20,23 @@ import { fromUiLocale, LOCALE_STORAGE_KEY, pickLocale, toUiLocale } from '../../
 import { watchAccount } from '../core/account.ts';
 import { coldStart, type BootResult } from '../core/boot.ts';
 import { deleteCacheDb } from '../core/cache.ts';
-import { createSupabaseTransport } from '../platform/sync-net.ts';
+import { createDeviceRegistrar } from '../core/device-reg.ts';
+import { createLogQueue, guardOwner } from '../core/log/queue.ts';
+import { devicePlatform, readInstallId, withLock } from '../platform/device-info.ts';
+import { clearLogQueue, clearOtherLogQueues, logQueueStore } from '../platform/log-store.ts';
+import { browserLifecycle } from '../platform/net.ts';
+import { createLogUploader, createSupabaseTransport } from '../platform/sync-net.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
 import { buildInfo } from '../platform/env.ts';
 import {
-  clearCacheStorage, clearLocalSession, goToAuth, onAuthUser, onSessionStorageChange, readSessionUserId, setExitNotice,
+  clearCacheStorage, clearLocalSession, goToAuth, onAuthUser, onSessionStorageChange, readSessionId, readSessionUserId, setExitNotice,
 } from '../platform/session.ts';
 import { registerServiceWorker, reloadPage } from '../platform/sw-register.ts';
 import { App } from './App.tsx';
 import { CacheTooNewFallback } from './CacheTooNewFallback.tsx';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { mountFeatures } from './features.ts';
+import { createLogChannel, outboxLog } from './log-channel.ts';
 import { wireSync } from './sync-wiring.ts';
 
 /** 界面语言（16.4）：缓存的 profiles.ui_locale → 本机选过的（pv-locale）→ 设备语言 → 中文；规则同 src/auth/main.tsx，多一层缓存的 profile */
@@ -61,8 +67,19 @@ async function start(): Promise<void> {
     return;
   }
 
+  // 日志通道（K8-logs、K6-log）：outbox、同步、时区上报、设备登记都交到这里；写 logs 表的那一端接上以前先在内存里留着（log-channel.ts）
+  const logs = createLogChannel();
+  // 写 logs 表的那一端（架构 0.38 第 68 条）：localStorage 队列 lemo.logq.<user_id>，主页在线时批量上传；别的账号留下的队列清掉
+  clearOtherLogQueues(userId);
+  // 上传前核对会话主人：别的标签页换成了别的账号，这一页拿到的是新账号的令牌，不能用它传这个账号的日志
+  const logQueue = createLogQueue({
+    store: logQueueStore(userId), upload: guardOwner(userId, readSessionUserId, createLogUploader()),
+    isOnline: () => browserLifecycle.isOnline(), onOnline: (fn) => browserLifecycle.onOnline(fn),
+  });
+  logs.setSink((e) => logQueue.add(e));
   const boot = await coldStart({
     userId,
+    outboxOptions: { log: outboxLog(logs.log) },
     // 别的标签页退出登录、按库名删本机库（versionchange 的 newVersion 为 null，K6 复审 C）：同步读一次会话，
     // 没有了就回登录页（库正在被删，watchAccount 收到 storage 事件后也会走退出流程，重复跳转无害）；还有（那边已重新登录）就重新载入
     onCacheDeleted: () => (readSessionUserId() ? reloadPage() : goToAuth()),
@@ -107,7 +124,29 @@ async function start(): Promise<void> {
   createRoot(el).render(import.meta.env.DEV ? <StrictMode>{root}</StrictMode> : root);
 
   // 同步（K8）：只在 boot 正常时启动；被移除（同步引擎、outbox 的 removed 事件）只处理一次：清空本机、删本机会话、回登录页
-  wireSync(boot, { transport: createSupabaseTransport(), clearCacheStorage, clearLocalSession, goToAuth, setExitNotice });
+  // 设备行（0.38 第 62 条④，接手清单 K8-tz-device）：主页拿到锁后登记或复用本会话的 devices 行，id 存 meta，report_tz 用它
+  const transport = createSupabaseTransport();
+  const platform = devicePlatform();
+  const device = boot.cache
+    ? createDeviceRegistrar({
+        transport, cache: boot.cache, platform, appVersion: buildInfo.version,
+        sessionId: () => readSessionId(), installId: () => readInstallId(),
+        lock: (fn) => withLock(`lemo-device-reg:${userId}`, fn), log: logs.log,
+      })
+    : null;
+  wireSync(boot, {
+    transport, clearCacheStorage, clearLocalSession, goToAuth, setExitNotice, platform, log: logs.log,
+    onLeader: (on) => logQueue.setLeader(on),
+    // 被移除、停用、注销冷静期：停止上传并清掉这个账号的日志队列（和退出登录一样）
+    // close 立刻生效（之后不记、不传、在途那一批传完也不写回），所以先同步清一次，不打乱 onRemoved 后面清本机、回登录页的顺序；
+    // 等在途那一批收尾后再清一次兜底
+    clearLogs: () => {
+      const closing = logQueue.close();
+      clearLogQueue(userId);
+      void closing.then(() => clearLogQueue(userId));
+    },
+    ...(device ? { deviceId: device.id, ensureDevice: device.ensure } : {}),
+  });
 
   // version_too_new 时上面已经注册过
   if (!import.meta.env.DEV && boot.status !== 'version_too_new') void registerServiceWorker();

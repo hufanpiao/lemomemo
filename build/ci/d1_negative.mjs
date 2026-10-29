@@ -44,7 +44,16 @@ export async function runNegative(q, exec, log = console.log) {
       if (hit) log(`✔ D1 违规样例 ${f}：报出“${hit}”`);
       else fails.push(`D1 违规样例 ${f}：没报出“${expect}”（实际：${ps.join(' | ') || '无'}）`);
     } catch (e) {
-      fails.push(`D1 违规样例 ${f} 执行出错：${e instanceof Error ? e.message : e}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      // 代码审查第三轮低：25、26 在 auth.users 上 drop / create trigger，真 Supabase 上 postgres 不一定是属主。
+      //   这种情况单独、明确地报出来（照样算失败），不和别的执行错误混在一起：说明这个样例在真库上没证明任何东西
+      if (/must be owner/i.test(msg)) {
+        fails.push(`D1 违规样例 ${f} 在真库上没有权限执行（${msg}）：postgres 不是表的属主，这一支在真库上证明不了，`
+          + '只有离线 PGlite（npm run test:db:offline）和 tests/build/d1-guard-no-password.test.ts 证明过；'
+          + '要么换有属主权限的连接跑这个样例，要么把它挪出 d1-fixtures（改成只在离线跑）并在 B1 接手清单记下');
+      } else {
+        fails.push(`D1 违规样例 ${f} 执行出错：${msg}`);
+      }
     } finally {
       await exec('rollback');
     }

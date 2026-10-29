@@ -528,6 +528,11 @@ export default tseslint.config(
     files: ['tests/**/*.{ts,tsx,js,mjs}'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
+  // tests/shared 下用 deno test 跑的 .mjs（如 auth.test.mjs）：和服务器函数一样声明全局 Deno（只读）
+  {
+    files: ['tests/shared/**/*.mjs'],
+    languageOptions: { globals: { Deno: 'readonly' } },
+  },
   {
     files: TS,
     rules: { '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }] },

@@ -1,7 +1,7 @@
 // 设置页的接口（B1 K9）：设备列表、移除设备、退出其他所有设备、退出本机、改界面语言
 // 依据：架构 0.29 续第 98、99、101、103、111、118 条，0.38 第 7、15、38 条，2.4 第 4 条
 // • 设备列表：经 RLS 读 devices（只看得到本人的行）；“另有 N 个登录”和“已退出”的设备：rpc my_sessions()
-//   （20261029160000 起多一列 signed_out_device_ids uuid[]：session_id 为空、会话已不在、已被吊销的设备行 id）
+//   （20261029193000 起多一列 signed_out_device_ids uuid[]：session_id 为空、会话已不在、已被吊销的设备行 id）
 // • 移除别的设备：rpc remove_device(p_device_id)（服务器吊销那台的会话、删行）；移除本机由调用方改走“退出登录”
 // • 退出其他所有设备：auth.signOut({scope: 'others'})（POST /auth/v1/logout?scope=others，免查名单）
 // • 退出本机分两步，由 hooks/useSessionExit.ts 排顺序、套总超时（K9 第二轮 L1、N2）：deleteOwnDevice 删本机那一行 →（清本机库）→
@@ -90,10 +90,10 @@ export function mapSettingsError(e: unknown): SettingsErr {
   return 'unknown';
 }
 
-// 类型文件 shared/db.types.ts 还没按 20261029120000 / 20261029160000 重新生成（没有 my_sessions、remove_device、devices.created_at），
+// 类型文件 shared/db.types.ts 还没按 20261029192000 / 20261029193000 重新生成（没有 my_sessions、remove_device、devices.created_at），
 // 这几处按迁移的签名手写最小的类型；重新生成后可以换回 Db 的类型
 type Res<T = unknown> = PromiseLike<{ data: T | null; error: unknown }>;
-/** my_sessions() 的一行（20261029160000） */
+/** my_sessions() 的一行（20261029193000） */
 export interface MySessionsRow {
   orphan_count: number;
   orphan_last_at: string | null;

@@ -146,19 +146,9 @@ export interface AuthApi {
   signOutHere(): Promise<Result>;
 }
 
-/** 从 access token 的 payload 里读 session_id（找本会话那一行 devices 用；真正的判断在服务器 RLS） */
-export function sessionIdOfToken(token: string | null | undefined): string | null {
-  if (!token) return null;
-  const part = token.split('.')[1];
-  if (!part) return null;
-  try {
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-    const json = JSON.parse(atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '='))) as { session_id?: unknown };
-    return typeof json.session_id === 'string' && json.session_id ? json.session_id : null;
-  } catch {
-    return null;
-  }
-}
+/** 从 access token 的 payload 里读 session_id（找本会话那一行 devices 用）：只在 platform/session.ts 留一份（K4 复核建议 2） */
+import { sessionIdOfToken } from '../../../platform/session.ts';
+export { sessionIdOfToken };
 
 /** devices 表的类型还没进生成的 Database（K1 在补），删行只用到这一小段 */
 interface DevicesDeleteDb {
