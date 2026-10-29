@@ -3,8 +3,11 @@
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
 import { useReducedMotionConfig } from 'motion/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { appearMotion } from '../Appear.tsx';
 import { Appear, SharedLayout, useReducedMotionPref } from '../components.ts';
-import { prefersReducedMotion } from '../index.ts';
+import { animateIn, prefersReducedMotion, press } from '../index.ts';
+import { presets, PRESS_SCALE } from '../presets.ts';
+import { dur } from '../tokens.ts';
 
 const html = document.documentElement;
 
@@ -122,5 +125,109 @@ describe('组件跟着同一套判断（只开设置里的开关、系统没开�
       </SharedLayout>,
     );
     expect(seen).toBe(false);
+  });
+});
+
+describe('Appear 减少动态效果时交给 Motion 的参数', () => {
+  for (const kind of ['toast', 'sheet', 'row', 'page'] as const) {
+    it(`${kind}：起始透明度 0、没有 transform，时长是预设的一半；关时照预设（对照）`, () => {
+      const on = appearMotion(kind, true);
+      expect(on.initial).toEqual({ opacity: 0 });
+      expect('transform' in on.animate).toBe(false);
+      expect(on.transition.duration).toBe(presets[kind].transition.duration / 2);
+      expect(on.transition.ease).toEqual(presets[kind].transition.ease);
+      const off = appearMotion(kind, false);
+      expect(off.initial).toEqual(presets[kind].initial);
+      expect(off.transition.duration).toBe(presets[kind].transition.duration);
+    });
+  }
+
+  it('渲染出来的起始透明度是 0（data-rm="1"）', () => {
+    fakeSystem(false);
+    html.dataset['rm'] = '1';
+    render(
+      <Appear kind="toast" show>
+        <span>hi</span>
+      </Appear>,
+    );
+    const el = screen.getByText('hi').parentElement as HTMLElement;
+    expect(el.style.opacity).toBe('0');
+  });
+});
+
+describe('TC-B1-52：只开系统设置（data-rm 没开）同样不做位移', () => {
+  it('Appear：系统 prefers-reduced-motion 开时只淡入，不位移', () => {
+    fakeSystem(true);
+    render(
+      <Appear kind="toast" show>
+        <span>hi</span>
+      </Appear>,
+    );
+    const el = screen.getByText('hi').parentElement as HTMLElement;
+    expect(el.style.transform === '' || el.style.transform === 'none').toBe(true);
+  });
+
+  it('SharedLayout：系统设置开时 layoutId 的弹簧关掉', () => {
+    fakeSystem(true);
+    let seen: boolean | null = null;
+    function Probe() {
+      seen = useReducedMotionConfig();
+      return null;
+    }
+    render(
+      <SharedLayout id="x">
+        <Probe />
+      </SharedLayout>,
+    );
+    expect(seen).toBe(true);
+  });
+});
+
+/** 给元素装一个假的 element.animate（jsdom 没有），记下调用参数 */
+function stubAnimate(el: Element) {
+  const fn = vi.fn((_frames: Keyframe[], _opts: KeyframeAnimationOptions) => ({ finished: Promise.resolve() }));
+  (el as Element & { animate: unknown }).animate = fn;
+  return fn;
+}
+
+describe('17.4 B1（UI-4 M-1）：非 React 的 animateIn、press 和组件表现一致', () => {
+  for (const [name, setup] of [
+    ['data-rm="1"', () => { fakeSystem(false); html.dataset['rm'] = '1'; }],
+    ['系统设置', () => fakeSystem(true)],
+  ] as const) {
+    it(`animateIn：${name} 时只淡入（关键帧里没有 transform），时长减半`, async () => {
+      setup();
+      const el = document.createElement('div');
+      const fn = stubAnimate(el);
+      await animateIn(el, 'toast');
+      const [frames, opts] = fn.mock.calls[0] ?? [];
+      expect(frames?.every((f) => !('transform' in f))).toBe(true);
+      expect(opts?.duration).toBe((presets.toast.transition.duration * 1000) / 2);
+    });
+
+    it(`press：${name} 时不缩放（不调 element.animate）`, async () => {
+      setup();
+      const el = document.createElement('button');
+      const fn = stubAnimate(el);
+      await press(el);
+      expect(fn).not.toHaveBeenCalled();
+    });
+  }
+
+  it('都没开（对照）：animateIn 带位移、用预设时长；press 缩到 PRESS_SCALE、时长取 --dur-press', async () => {
+    fakeSystem(false);
+    const el = document.createElement('div');
+    const fn = stubAnimate(el);
+    await animateIn(el, 'toast');
+    const [frames, opts] = fn.mock.calls[0] ?? [];
+    expect(frames?.[0]?.transform).toBe(presets.toast.initial.transform);
+    expect(opts?.duration).toBe(presets.toast.transition.duration * 1000);
+
+    const btn = document.createElement('button');
+    const pf = stubAnimate(btn);
+    await press(btn);
+    const [pFrames, pOpts] = pf.mock.calls[0] ?? [];
+    expect(pFrames?.[1]?.transform).toBe(`scale(${PRESS_SCALE})`);
+    expect(pOpts?.duration).toBe(dur.press * 1000 * 2);
   });
 });

@@ -15,10 +15,21 @@ export interface AppearProps {
   className?: string | undefined;
 }
 
+/** 某种进出场在“减少动态效果”开或关时交给 Motion 的参数（组件和测试共用一份，改手感只改 presets） */
+export function appearMotion(kind: AppearKind, reduced: boolean) {
+  const p = presets[kind];
+  return {
+    initial: reduced ? p.reduced : p.initial,
+    animate: reduced ? { opacity: 1 } : p.animate,
+    exit: reduced ? p.reduced : p.exit,
+    // 减少动态效果：只淡入淡出，时长减半（17.2 第 5 点）
+    transition: reduced ? { ...p.transition, duration: p.transition.duration / 2 } : p.transition,
+  };
+}
+
 export function Appear({ kind, show, children, className }: AppearProps) {
   const reduced = useReducedMotionPref();
-  const p = presets[kind];
-  const transition = reduced ? { ...p.transition, duration: p.transition.duration / 2 } : p.transition;
+  const mo = appearMotion(kind, reduced);
   return (
     <MotionConfig reducedMotion={reduced ? 'always' : 'never'}>
       <LazyMotion features={motionFeatures} strict>
@@ -28,10 +39,10 @@ export function Appear({ kind, show, children, className }: AppearProps) {
               key={kind}
               className={className}
               data-appear={kind}
-              initial={reduced ? p.reduced : p.initial}
-              animate={reduced ? { opacity: 1 } : p.animate}
-              exit={reduced ? p.reduced : p.exit}
-              transition={transition}
+              initial={mo.initial}
+              animate={mo.animate}
+              exit={mo.exit}
+              transition={mo.transition}
             >
               {children}
             </m.div>

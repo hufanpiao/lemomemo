@@ -214,6 +214,22 @@ const CSP_SYNTAX = [
     message: 'CSP（架构 2.0）：DropdownMenu 只准 import * as DropdownMenu，好让“Root 必须 modal={false}”的检查认得出',
   },
 ];
+// UI-4 M-1（17.2 第 5 点）：Motion 的 useReducedMotion() 只认系统设置、不认设置里的开关 data-rm="1"；
+// 一律用 src/motion 的 useReducedMotionPref()。每个作用域都带（src/motion 里也不准）
+const REDUCED_MOTION_SYNTAX = [
+  {
+    selector: "MemberExpression[property.name='useReducedMotion']",
+    message: 'UI-4 M-1：不准用 Motion 的 useReducedMotion()（只认系统设置），用 src/motion 的 useReducedMotionPref()',
+  },
+];
+const REDUCED_MOTION_IMPORTS = {
+  paths: ['motion/react', 'framer-motion'].map((name) => ({
+    name,
+    importNames: ['useReducedMotion'],
+    message: 'UI-4 M-1：不准用 Motion 的 useReducedMotion()（只认系统设置），用 src/motion 的 useReducedMotionPref()',
+  })),
+  patterns: [],
+};
 const PURE_SYNTAX = [
   { selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']", message: 'A2：shared 里不准 Date.now()，把 now 当参数传进来' },
   { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: 'A2：shared 里不准无参 new Date()，把 now 当参数传进来' },
@@ -279,8 +295,9 @@ function scope({ net = false, device = false, motion = false, html = false, pure
       ...(motion ? [] : MOTION_SYNTAX),
       ...(pure ? PURE_SYNTAX : []),
       ...CSP_SYNTAX,
+      ...REDUCED_MOTION_SYNTAX,
     ],
-    'no-restricted-imports': restrictedImports(...imports),
+    'no-restricted-imports': restrictedImports(...imports, REDUCED_MOTION_IMPORTS),
   };
 }
 

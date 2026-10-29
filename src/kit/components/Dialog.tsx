@@ -34,12 +34,12 @@ export function Dialog({ open, onOpenChange, title, description, children }: Dia
     <RD.Root open={open} onOpenChange={onOpenChange}>
       <RD.Portal>
         {open ? <div className={styles.scrim} data-state="open" aria-hidden="true" /> : null}
-        <RD.Content className={styles.content} aria-describedby={description === undefined ? undefined : 'dlg-desc'}>
+        {/* 描述的 id 和 aria-describedby 都交给 Radix 管（每个弹层各生成一个，不重名）：有描述时什么都不传；
+            没描述时显式传 undefined，Radix 就不写 aria-describedby，也不报缺描述的警告 */}
+        <RD.Content className={styles.content} {...(description === undefined ? { 'aria-describedby': undefined } : {})}>
           <RD.Title className={styles.title}>{title}</RD.Title>
           {description === undefined ? null : (
-            <RD.Description id="dlg-desc" className={styles.desc}>
-              {description}
-            </RD.Description>
+            <RD.Description className={styles.desc}>{description}</RD.Description>
           )}
           {children}
         </RD.Content>

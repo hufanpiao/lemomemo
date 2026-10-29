@@ -1,4 +1,4 @@
-// 按下回弹的状态标记（架构 17.1、17.2 第 2 点）：按下是 pressed，松开、移出、被取消（触屏开始滚动）都回到 idle
+// 按下回弹的状态标记（架构 17.1、17.2 第 2 点；TC-B1-51 的按下回弹）：按下是 pressed，松开、移出、被取消（触屏开始滚动）都回到 idle
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Pressable } from '../Pressable.tsx';
