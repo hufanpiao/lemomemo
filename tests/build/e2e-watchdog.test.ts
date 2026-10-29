@@ -3,6 +3,7 @@
 //   （它再拉一个孙进程），阈值 2 秒，断言退出码 124、子孙都已不在；一直有输出（阈值 5 秒）的不结束；子进程自己退出时退出码原样带出；
 //   子进程已退出、孙进程攥着管道时：过了退出宽限就收尾（不等静默阈值），POSIX 收进程组、Windows 不结束任何进程；
 //   --debug、--ui、PWDEBUG 整个透传（接手清单 E2E-watchdog-sugg ①③④，10-30）
+// 拉不起命令的提示（spawnHint）、npx [-y|--yes] playwright 的代换在 e2e-watchdog-spawn.test.ts（本文件已到 300 行，10-30 拆出）
 // • tests/e2e/global-timeout.ts：E2E_GLOBAL_TIMEOUT_MS 上下限、两组默认值
 // • 两个配置真加载出来的 globalTimeout、真后端组 webkit 项目的 actionTimeout、navigationTimeout、workers
 // 子进程都经 tools/e2e/run-watchdog.mjs 起（node），登记在 vitest.config.ts 的 SLOW_NODE_TESTS；
@@ -121,12 +122,14 @@ describe('run-watchdog 纯函数', () => {
     expect(() => parseArgs(['--kill-port', '8789', '--', 'x'])).toThrow('认不出的参数');
   });
 
-  it('命令：node、playwright 换成当前 node（playwright 走 @playwright/test 的 cli.js），不经 shell', () => {
+  it('命令：node、playwright、npx playwright 换成当前 node（playwright 走 @playwright/test 的 cli.js），不经 shell', () => {
     expect(resolveCommand(['node', '-v'])).toEqual({ file: process.execPath, args: ['-v'] });
     const pw = resolveCommand(['playwright', 'test', '--list']);
     expect(pw.file).toBe(process.execPath);
     expect(pw.args[0]?.replaceAll('\\', '/')).toMatch(/node_modules\/@playwright\/test\/cli\.js$/);
     expect(pw.args.slice(1)).toEqual(['test', '--list']);
+    expect(resolveCommand(['npx', 'playwright', 'test', '--list'])).toEqual(pw);
+    expect(resolveCommand(['npx', 'vitest', 'run'])).toEqual({ file: 'npx', args: ['vitest', 'run'] }); // 别的 npx 不代换，起不来时有提示
   });
 
   it('源码：不按端口、进程名找或结束进程；package.json 的 e2e、e2e:real 都套了看门狗', () => {
@@ -190,8 +193,7 @@ describe('run-watchdog 真跑（起 node 子进程，只结束自己拉起的那
 
   it('子进程自己退出：退出码原样带出，标准错误也转发', SLOW, async () => {
     const err = sink();
-    const code = await runWatchdog({ command: ['node', '-e', "console.error('boom'); process.exit(3)"], silenceMs: 60_000, out: sink().stream, err: err.stream });
-    expect(code).toBe(3);
+    expect(await runWatchdog({ command: ['node', '-e', "console.error('boom'); process.exit(3)"], silenceMs: 60_000, out: sink().stream, err: err.stream })).toBe(3);
     expect(err.text()).toContain('boom');
   });
 

@@ -4,11 +4,13 @@
 // -Only functions 不 link、不 db push、不部署 Pages、不要数据库密码；usage-report 和 lemo-ops 必须同一次部署；KV id 是占位值就停；
 // 屏幕输出和工具参数里没有任何令牌。（解析和中文弯引号的静态检查在 ps1-static.test.ts，覆盖 tools/ 下全部 .ps1。）
 // OPS-deploy ②③⑤⑥⑦⑧（依赖树哈希、每个子进程只拿要的令牌、secret list、aws4fetch、从临时目录部署、全局 git 配置）在 publish-run-deploy.test.ts。
+// core.hookspath 放行与否的一组用例（R266-sugg ⑧ 改成 guardRepoConfig 写法时）挪到了 publish-run-gitsafety.test.ts。
 // 只在 Windows 上跑。会清一次本机剪贴板历史（脚本收尾的 Clear-Clip，同 set-fn-role-passwords-run.test.ts）。
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { guardRepoConfig } from './publish-run-gitguard.ts';
 import {
   ACCT, CF_TOKEN, ctx, DB_PW, functionNames, git, has, KV_ID, noSecrets, PS, REF, runScript, SB_TOKEN, setup, tagHere, teardown, wranglerSafe, writeBackupManifest,
   type Run,
@@ -216,8 +218,10 @@ describe.skipIf(!PS)('publish.ps1 从头跑到尾（假仓库、假工具、假�
       const marker = join(ctx.dir, 'fsmonitor-ran.txt');
       const hook = join(ctx.dir, 'fsmonitor.sh');
       writeFileSync(hook, `#!/bin/sh\necho ran >> '${marker.replace(/\\/g, '/')}'\n`, 'utf8');
-      git(['config', '--local', 'core.fsmonitor', hook.replace(/\\/g, '/')]);
+      // R266-sugg ⑧：照 guardRepoConfig 的写法，设置写在 try 里，finally 里有就删，并核对 .git\config、引用、git status 和开始前一字不差
+      const restore = guardRepoConfig([], ['core.fsmonitor']);
       try {
+        git(['config', '--local', 'core.fsmonitor', hook.replace(/\\/g, '/')]);
         // 探针有效：普通的 git status 会执行它
         spawnSync('git', ['status', '--porcelain'], { cwd: ctx.repo, encoding: 'utf8' });
         expect(existsSync(marker), 'fsmonitor 探针没生效，这个用例测不出东西').toBe(true);
@@ -232,7 +236,7 @@ describe.skipIf(!PS)('publish.ps1 从头跑到尾（假仓库、假工具、假�
         expect(r.log.some((l) => l.startsWith('npm\t') || l.startsWith('download\t'))).toBe(false);
       } finally {
         c.undo();
-        git(['config', '--local', '--unset', 'core.fsmonitor']);
+        restore();
         rmSync(marker, { force: true });
       }
     }, 180_000);
@@ -277,33 +281,6 @@ describe.skipIf(!PS)('publish.ps1 从头跑到尾（假仓库、假工具、假�
       rmSync(marker, { force: true });
     }
   }, 180_000);
-
-  // core.hookspath 只放行指向本仓库被跟踪的 .githooks（项目的密钥检查钩子），其他都在第 1 步停
-  const hooksCases: { name: string; value: () => string; extra?: () => string; ok: boolean; want: string }[] = [
-    { name: '指向仓库外的目录', value: () => join(ctx.dir, 'hooks-outside'), ok: false, want: '不许有的设置：core.hookspath' },
-    { name: '指向 .githooks，但里面有被忽略的文件', value: () => join(ctx.repo, '.githooks'), extra: () => join(ctx.repo, '.githooks', 'x.tmp'), ok: false, want: '.githooks 下有没被 git 跟踪的文件（含被忽略的）：.githooks/x.tmp' },
-    { name: '指向 <RepoPath>\\.githooks（项目规定的写法）', value: () => join(ctx.repo, '.githooks'), ok: true, want: 'core.hookspath 指向本仓库被跟踪的 .githooks' },
-    { name: '相对路径 .githooks', value: () => '.githooks', ok: true, want: 'core.hookspath 指向本仓库被跟踪的 .githooks' },
-  ];
-  for (const c of hooksCases) {
-    it(`core.hookspath ${c.name}：${c.ok ? '不拦' : '第 1 步就停'}`, async () => {
-      mkdirSync(join(ctx.dir, 'hooks-outside'), { recursive: true });
-      git(['config', '--local', 'core.hookspath', c.value()]);
-      const extra = c.extra?.();
-      if (extra) writeFileSync(extra, 'x\n', 'utf8');
-      try {
-        // 被忽略的文件不进 git status：确认工作区仍算干净，拦下它的是 .githooks 的检查
-        if (extra) expect(git(['status', '--porcelain', '--untracked-files=all'])).toBe('');
-        const r = await runScript('-CheckOnly -Ops', []);
-        expect(r.code, r.out).toBe(c.ok ? 0 : 1);
-        expect(r.out).toContain(c.want);
-        expect(r.calls).toEqual([]);
-      } finally {
-        if (extra) rmSync(extra, { force: true });
-        git(['config', '--local', '--unset', 'core.hookspath']);
-      }
-    }, 180_000);
-  }
 
   it('-Ops 时 KV id 还是占位值：第 1 步就停', async () => {
     const tomlPath = join(ctx.repo, 'workers', 'lemo-ops', 'wrangler.toml');

@@ -19,7 +19,8 @@
 // CI（CI=true）：不计静默、不结束任何进程，stdio 直接继承，只把退出码原样带出来——CI 的 e2e 任务靠 timeout-minutes（ci.yml 30 分钟）
 // 和配置里的 globalTimeout（无后端组 20 分钟）收尾。
 //
-// 命令名：node 换成当前 node（process.execPath），playwright 换成 node + @playwright/test 的 cli.js；不经 shell，参数原样传。
+// 命令名：node 换成当前 node（process.execPath），playwright、npx playwright 换成 node + @playwright/test 的 cli.js；不经 shell，参数原样传。
+// 不经 shell 起 .cmd/.bat（Windows 上的 npx、npm、node_modules/.bin 里的命令）：起不来时 spawnHint 给中文提示该怎么写。
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { connect } from 'node:net';
@@ -120,11 +121,14 @@ export function parseArgs(args) {
 }
 
 /**
- * node → 当前 node；playwright → node + @playwright/test/cli.js；其余原样（不经 shell）
+ * node → 当前 node；playwright、npx [-y|--yes] playwright → node + @playwright/test/cli.js；其余原样（不经 shell）
  * @param {readonly string[]} command
  * @returns {{ file: string, args: string[] }}
  */
 export function resolveCommand(command) {
+  // npx playwright、npx -y playwright、npx --yes playwright：用仓库里锁定的那份；带 @版本、--package= 的照旧不认
+  const at = command[1] === '-y' || command[1] === '--yes' ? 2 : 1;
+  if (command[0] === 'npx' && command[at] === 'playwright') return resolveCommand(command.slice(at));
   const [head = '', ...rest] = command;
   if (head === 'node') return { file: execPath, args: rest };
   if (head === 'playwright') {
@@ -132,6 +136,24 @@ export function resolveCommand(command) {
     return { file: execPath, args: [cli, ...rest] };
   }
   return { file: head, args: rest };
+}
+
+/**
+ * 拉不起命令时的中文提示（纯函数）。找不到命令（ENOENT）时说明看门狗不经 shell；Windows 上点明 .cmd/.bat 起不来、该怎么写。
+ * 不改成经 shell 起 .cmd：cmd.exe 对 % ^ & | " 等的转义规则又多又怪（CVE-2024-27980 一类），参数里有 -g 正则时极易出错
+ * @param {{ code?: string, message: string }} e spawn 的 error
+ * @param {string} file 实际要起的命令
+ * @param {string} plat process.platform
+ * @returns {string}
+ */
+export function spawnHint(e, file, plat) {
+  if (e.code !== 'ENOENT') return `拉不起命令：${e.message}`;
+  const base = `找不到命令 ${file}（看门狗不经 shell 起命令）`;
+  if (plat !== 'win32') return `${base}：确认它在 PATH 里，或写完整路径`;
+  return (
+    `${base}：Windows 上 npx、npm 和 node_modules/.bin 里的命令都是 .cmd/.bat，不经 shell 起不来。` +
+    '请直接写 playwright …（看门狗换成 node + @playwright/test 的 cli.js）、node 脚本路径 …，或写 .exe 的完整路径'
+  );
 }
 
 /** @param {number} ms */
@@ -236,7 +258,7 @@ export function runWatchdog(o) {
     return new Promise((resolve) => {
       const child = spawn(file, args, { stdio: 'inherit' });
       child.once('error', (e) => {
-        err.write(`run-watchdog：拉不起命令：${e.message}\n`);
+        err.write(`run-watchdog：${spawnHint(e, file, plat)}\n`);
         resolve(1);
       });
       child.once('exit', (code) => resolve(code ?? 1));
@@ -315,7 +337,7 @@ export function runWatchdog(o) {
       }, graceMs).unref();
     }, tick);
     child.once('error', (e) => {
-      err.write(`run-watchdog：拉不起命令：${e.message}\n`);
+      err.write(`run-watchdog：${spawnHint(e, file, plat)}\n`);
       finish(1);
     });
     child.on('close', (code) => {

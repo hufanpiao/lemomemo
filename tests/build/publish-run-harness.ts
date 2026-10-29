@@ -115,7 +115,7 @@ public static class FakeTool {
       string target = what == "web" ? Path.Combine(Path.Combine(w, "web"), "index.html")
         : what == "tree" ? Path.Combine(Path.Combine(Path.Combine(Path.Combine(Path.Combine(w, "deploy"), "node_modules"), "wrangler"), "bin"), "wrangler.js")
         : what;
-      File.AppendAllText(target, "tampered");
+      if (what.StartsWith("git:")) { System.Diagnostics.Process p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("git", what.Substring(4)) { UseShellExecute = false }); p.WaitForExit(); } else { File.AppendAllText(target, "tampered"); }
     }
     string fail = Environment.GetEnvironmentVariable("LEMO_FAKE_FAIL");
     if (!string.IsNullOrEmpty(fail) && args.Contains(fail)) { Console.Error.WriteLine("fake " + name + " failed"); return 1; }
@@ -196,7 +196,7 @@ export type RunOpts = {
   cfDeny?: boolean;
   /** 运行前设进演练窗口的环境变量 */
   env?: Record<string, string>;
-  /** 假工具参数里含 tamperAt 时改一处文件：web（临时目录里的网页）、tree（wrangler 依赖树）或绝对路径 */
+  /** 假工具参数里含 tamperAt 时改一处文件：web（临时目录里的网页）、tree（wrangler 依赖树）或绝对路径；git:<参数> 则跑一次真 git（R-268 第 5 步用） */
   tamperAt?: string;
   tamper?: string;
   /** wrangler secret list 打印的名单（默认六个都在） */
@@ -303,7 +303,7 @@ L ('left' + $T + $global:inputs.Count)
 # Dispose 过的 SecureString 调 IsReadOnly() 会抛 ObjectDisposedException（Windows PowerShell 5.1 里读 Length 不抛，不能用）
 $disposed = if ($null -eq $global:lastSec) { '' } else { try { $null = $global:lastSec.IsReadOnly(); 'no' } catch { 'yes' } }
 L ('secdisposed' + $T + $disposed)
-$still = @('SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_BASE_URL', 'WRANGLER_WRITE_LOGS', 'WRANGLER_LOG_PATH', 'WRANGLER_SEND_METRICS', 'DO_NOT_TRACK', 'WRANGLER_SEND_ERROR_REPORTS', 'WRANGLER_HIDE_BANNER', 'WRANGLER_NO_SKILLS_UPDATE_PROMPTS', 'GIT_ATTR_NOSYSTEM', 'GIT_NO_REPLACE_OBJECTS', 'GIT_INDEX_FILE','GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1') | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }
+$still = @('SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_BASE_URL', 'WRANGLER_WRITE_LOGS', 'WRANGLER_LOG_PATH', 'WRANGLER_SEND_METRICS', 'DO_NOT_TRACK', 'WRANGLER_SEND_ERROR_REPORTS', 'WRANGLER_HIDE_BANNER', 'WRANGLER_NO_SKILLS_UPDATE_PROMPTS', 'GIT_ATTR_NOSYSTEM', 'GIT_NO_REPLACE_OBJECTS', 'GIT_INDEX_FILE','GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1', 'GIT_CONFIG_KEY_2', 'GIT_CONFIG_VALUE_2') | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }
 L ('envleft' + $T + ($still -join ','))
 exit $code`,
   );

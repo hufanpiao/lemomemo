@@ -19,7 +19,8 @@ const CLEAN_SECTIONS = ['attr', 'extensions'];
 // 最后核对全部引用、git status 也和开始前一样
 // R-269：files 的原文开始时就存下，撤销时写回（同样长度、修改时间改回去的文件 git checkout 会当成没改、不重写），最后核对一字不差。
 // 开头先断言 ctx.repo 是系统临时目录下的绝对路径：万一是空串，git 会落到本仓库、checkout 掉本仓库的文件
-export function guardRepoConfig(files: string[] = []): () => void {
+// R266-sugg ⑧：keys 是用例另外设的 .git\config 项（core.fsmonitor、core.hookspath），撤销时一样有就删
+export function guardRepoConfig(files: string[] = [], keys: string[] = []): () => void {
   const tmp = resolve(tmpdir()).toLowerCase() + sep;
   expect(ctx.repo !== '' && isAbsolute(ctx.repo) && resolve(ctx.repo).toLowerCase().startsWith(tmp), `ctx.repo 不是系统临时目录下的绝对路径：${ctx.repo}`).toBe(true);
   const cfg = join(ctx.repo, '.git', 'config');
@@ -35,7 +36,7 @@ export function guardRepoConfig(files: string[] = []): () => void {
       expect(readFileSync(join(ctx.repo, f)).equals(orig[i] ?? Buffer.alloc(0)), `${f} 没复原`).toBe(true);
     });
     rmSync(join(ctx.repo, '.git', 'config.worktree'), { force: true });
-    for (const k of ['extensions.worktreeConfig', 'attr.tree']) gitTry(['config', '--local', '--unset-all', k]);
+    for (const k of ['extensions.worktreeConfig', 'attr.tree', ...keys]) gitTry(['config', '--local', '--unset-all', k]);
     for (const m of readFileSync(cfg, 'utf8').matchAll(/^[ \t]*\[([A-Za-z]+)\][ \t]*$/gm)) {
       const name = m[1] ?? '';
       if (!CLEAN_SECTIONS.includes(name.toLowerCase())) continue;

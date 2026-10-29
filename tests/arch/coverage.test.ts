@@ -163,7 +163,8 @@ function nodeTestFiles(): string[] {
 }
 
 describe('Vitest 分组：重型测试都在 node-slow（vitest.config.ts 的 SLOW_NODE_TESTS）', () => {
-  it('起子进程或用 ESLint / stylelint / TypeScript / PGlite 的测试文件都登记了；登记的都还是重型的、文件都在', async () => {
+  // 要 await import vitest.config.ts（加载 react 插件等），机器忙时会超过 node 组默认的 5 秒（R266-sugg ⑨），这一条单独给 30 秒
+  it('起子进程或用 ESLint / stylelint / TypeScript / PGlite 的测试文件都登记了；登记的都还是重型的、文件都在', { timeout: 30_000 }, async () => {
     const { SLOW_NODE_TESTS } = await import('../../vitest.config.ts');
     const flagged = nodeTestFiles().filter((f) => isHeavy(join(ROOT, f)));
     expect(Object.keys(NOT_HEAVY).filter((f) => !flagged.includes(f))).toEqual([]);

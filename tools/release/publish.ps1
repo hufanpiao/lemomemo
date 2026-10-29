@@ -461,8 +461,10 @@ function Assert-StillClean($info) {
 # update-index --refresh 只能逐个按 .gitattributes 和换行设置转换后算哈希（和 git status 同一套规则），diff-files 列出内容不一样的文件。
 # 10-30 实测：本仓库（* text=auto eol=lf，system 一级 core.autocrlf=true，1684 个文件，0.4 秒）列出的和 git status 的已跟踪改动完全一样，干净时没有误报。
 # GIT_INDEX_FILE 只在这三次调用里设，结束还原成原值（主流程开头“窗口里有 GIT_INDEX_FILE 就停”在这之前，不受影响）；临时索引用完就删。
-# 有差异就停，只列文件名（最多 10 个）。第 1 步（status 之后）和第 5 步（Assert-StillClean）各跑一次
-function Assert-ContentMatchesHead {
+# 临时索引的位置是 [IO.Path]::GetTempPath()：Windows 上按 TMP 优先，其次 TEMP，再其次 USERPROFILE（本脚本建的 lemo-nohooks-* 用的是 TEMP，两者一般相同）。
+# 有差异就停，只列文件名（最多 10 个）。第 1 步（status 之后）、第 5 步（Assert-StillClean）各跑一次；
+# 第 6 步部署服务器函数之前、部署 lemo-ops 之前再各跑一次（R-269 复审：每次约 0.4 秒，缩小“核对之后、部署之前被改”的窗口），$state 写明那时已经做了什么
+function Assert-ContentMatchesHead([string]$state = '没输入任何令牌') {
     $tmp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
     $repoFull = [IO.Path]::GetFullPath($RepoPath).TrimEnd('\', '/') + '\'
     if ($tmp.StartsWith($repoFull, [StringComparison]::OrdinalIgnoreCase)) { Fail "临时目录 $tmp 在仓库里面，不能在那里建临时索引。请把 TEMP 设回系统默认再运行" }
@@ -480,7 +482,7 @@ function Assert-ContentMatchesHead {
     if ($diff) {
         $bad = @($diff -split "`r?`n")
         $show = @($bad | Select-Object -First 10) -join '、'
-        Fail "有被 git 跟踪的文件内容和检出的提交不一样，git status 却看不出来（大小、修改时间都没变）：$show$(if ($bad.Count -gt 10) { " 等 $($bad.Count) 个" })。没输入任何令牌。请本人检查是谁改的，再用 git checkout 取回或重新 clone"
+        Fail "有被 git 跟踪的文件内容和检出的提交不一样，git status 却看不出来（大小、修改时间都没变）：$show$(if ($bad.Count -gt 10) { " 等 $($bad.Count) 个" })。$state。请本人检查是谁改的，再用 git checkout 取回或重新 clone"
     }
     Ok '被跟踪的文件逐个比过内容（不靠大小和修改时间），和检出的提交一致'
 }
@@ -1117,12 +1119,16 @@ function Invoke-Deploy($info) {
         if (Test-Path -LiteralPath $shared) { Remove-Item -LiteralPath $shared -Recurse -Force }
         New-Item -ItemType Directory -Path $shared | Out-Null
         Copy-Item -Path (Join-Path $RepoPath 'shared\*') -Destination $shared -Recurse
+        # R-269 复审：部署服务器函数之前再逐个比一次内容（迁移和函数没有指纹核对）
+        Assert-ContentMatchesHead "$(if ($script:DoWeb) { '数据库迁移已推，' })服务器函数、lemo-ops、网页都还是旧版，没部署任何代码"
         # 部署函数不连数据库，只给 Supabase 令牌
         Invoke-WithSecrets @('SUPABASE_ACCESS_TOKEN') { Run $script:SupabaseExe (@('functions', 'deploy') + $script:FunctionNames + @('--project-ref', $ref, '--use-api', '--yes')) }
         Ok "服务器函数部署完成（$Tag：$($script:FunctionNames -join '、')）"
 
         # 紧接着函数部署 lemo-ops：usage-report 和 lemo-ops 必须同一次部署（上线与回滚手册第三节）
         if ($script:DoOps) {
+            # R-269 复审：部署 lemo-ops 之前再逐个比一次内容（lemo-ops 没有指纹核对）
+            Assert-ContentMatchesHead "$(if ($script:DoWeb) { '数据库迁移已推、' })服务器函数已是新版，lemo-ops$(if ($script:DoWeb) { '和网页' })还是旧版。这种状态能用，查清原因后用同一个 tag 原样重跑"
             try { Run-Wrangler @('deploy', '--config', $script:OpsConfig, '--tag', $Tag, '--message', "$Tag@$($info.Commit.Substring(0,12))") -WithToken } catch {
                 $done = if ($script:DoWeb) { '数据库迁移已推、服务器函数已是新版，lemo-ops 和网页还是旧版' } else { '服务器函数已是这个 tag 的版本，lemo-ops 还是原来的版本' }
                 Fail "lemo-ops 部署失败（$($_.Exception.Message -replace '^发布停止：', '')）。现在：$done。这种状态能用，只是 usage-report 和 lemo-ops 的新约定没生效。修好原因后用同一个 tag、同样的参数原样重跑（上线与回滚手册第三节「部署 lemo-ops」）"
@@ -1136,7 +1142,7 @@ function Invoke-Deploy($info) {
             Assert-WebCopyUnchanged $state
             Assert-Aws4Unchanged $state
             Ok '网页产物和第 3 步核对过的一致，从临时目录里的副本部署'
-            Run-Wrangler @('pages', 'deploy', $script:WebDir, '--project-name', $PagesProject, '--branch', 'main', '--commit-hash', $info.Commit, '--commit-dirty=true') -WithToken
+            Run-Wrangler @('pages', 'deploy', $script:WebDir, '--project-name', $PagesProject, '--branch', 'main', '--commit-hash', $info.Commit, '--commit-message', "$Tag@$($info.Commit.Substring(0,12))", '--commit-dirty=true') -WithToken
             Ok '网页部署完成'
         }
     } finally { Pop-Location }
@@ -1193,11 +1199,17 @@ try {
     if (@($gitEnv).Count -gt 0) { Fail "这个窗口里有会改 git 行为的环境变量：$(@($gitEnv) -join '、')。请开一个新的 PowerShell 窗口再运行" }
     $script:NoHooksDir = Join-Path $env:TEMP ('lemo-nohooks-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $script:NoHooksDir | Out-Null
-    [Environment]::SetEnvironmentVariable('GIT_CONFIG_COUNT', '2', 'Process')
+    # R266-sugg ③：第三项 log.showSignature=false。.git\config 或全局配置里设了 log.showSignature=true、gpg.program=<任意程序> 时，
+    # git log / git show 遇到带签名的提交会执行那个程序（wrangler pages deploy 没传 --commit-message 时会跑 git show -s --format=%B，
+    # 那时进程里已有 Cloudflare 令牌），签名校验的输出还会混进解析的结果。git 2.55 实测：命令行级 false 以后不再执行 gpg.program。
+    # pages deploy 另外显式传 --commit-message，wrangler 就不再跑那条 git show。
+    [Environment]::SetEnvironmentVariable('GIT_CONFIG_COUNT', '3', 'Process')
     [Environment]::SetEnvironmentVariable('GIT_CONFIG_KEY_0', 'core.fsmonitor', 'Process')
     [Environment]::SetEnvironmentVariable('GIT_CONFIG_VALUE_0', 'false', 'Process')
     [Environment]::SetEnvironmentVariable('GIT_CONFIG_KEY_1', 'core.hooksPath', 'Process')
     [Environment]::SetEnvironmentVariable('GIT_CONFIG_VALUE_1', $script:NoHooksDir, 'Process')
+    [Environment]::SetEnvironmentVariable('GIT_CONFIG_KEY_2', 'log.showSignature', 'Process')
+    [Environment]::SetEnvironmentVariable('GIT_CONFIG_VALUE_2', 'false', 'Process')
     # R-265：git 不读系统属性文件（Git for Windows 安装目录的 etc\gitattributes）。窗口里预先有这个变量也一样，一律设成 1；
     # 子进程（wrangler、supabase）继承，finally 里清掉。Assert-NoRiskyGlobalGitConfig 核对它真的生效了
     [Environment]::SetEnvironmentVariable('GIT_ATTR_NOSYSTEM', '1', 'Process')
@@ -1233,7 +1245,7 @@ try {
     Clear-SecretEnv
     Clear-Secrets
     $script:CfAccountId = $null
-    foreach ($n in @($script:WranglerEnvNames) + @('CLOUDFLARE_API_BASE_URL', 'SUPABASE_API_URL', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1', 'GIT_ATTR_NOSYSTEM', 'GIT_NO_REPLACE_OBJECTS')) { [Environment]::SetEnvironmentVariable($n, $null, 'Process') }
+    foreach ($n in @($script:WranglerEnvNames) + @('CLOUDFLARE_API_BASE_URL', 'SUPABASE_API_URL', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1', 'GIT_CONFIG_KEY_2', 'GIT_CONFIG_VALUE_2', 'GIT_ATTR_NOSYSTEM', 'GIT_NO_REPLACE_OBJECTS')) { [Environment]::SetEnvironmentVariable($n, $null, 'Process') }
     if ($script:NoHooksDir -and (Test-Path -LiteralPath $script:NoHooksDir)) { Remove-Item -LiteralPath $script:NoHooksDir -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:TokensRead) { Clear-Clip }
     # lemo-ops 打包演练时 wrangler 在 workers\lemo-ops 下建的 .wrangler（本来没有才删；已被 .gitignore 忽略）
