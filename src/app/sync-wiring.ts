@@ -17,7 +17,7 @@
 //   同步层发请求前记下本机会话的 session_id，随事件带回（engine 的 onRemoved(code, sid)、outbox 事件的 sid）。
 //   收到事件的同一个同步段里 clearLocalSessionIf(sid)，清完库、回登录页前再 clearLocalSessionIf(sid) 一次——
 //   请求在路上、清库那几秒里别的标签页刚登录的新会话（同一账号、别的账号）都不删；旧会话被晚到的令牌刷新写回来时照样删掉。
-//   事件没带 sid（outbox.fail 的调用方没给）时退回 K6-sugg3 的写法：收到那一刻 takeLocalSession，记下删之前的 session_id
+//   sid 必填（K6-sugg5 ②）：outbox 事件、引擎的 onRemoved 都一定带着，没有“收到那一刻不管是谁都删”的兜底
 // • 已经在走别的退出流程（watchAccount 发现会话没了或换了账号，boot.switching 已设）：不再清第二遍、不再跳第二次
 // • 收到 account_disabled 先探测再决定（R-256 ③ 后续）、active 的重新载入限次、别的标签页发来的退出原因怎么记：见 app/sync-disabled.ts
 // • 退出时删会话之前先广播 reset，带上退出原因和被拒的 sid（DISABLED-probe-later ②），别的标签页回登录页显示同一条提示
@@ -29,7 +29,7 @@ import { createTzReporter, type TzReporter } from '../core/sync/report-tz.ts';
 import type { SyncState, SyncTransport } from '../core/sync/types.ts';
 import { browserLifecycle, onUserActivity, type Lifecycle } from '../platform/net.ts';
 import { exitNoticeOf, type ExitNotice } from '../platform/session.ts';
-import { canProbe, currentSid, noteExitFromOtherTab, probeThenLeave, type SyncDisabledDeps } from './sync-disabled.ts';
+import { canProbe, noteExitFromOtherTab, probeThenLeave, type SyncDisabledDeps } from './sync-disabled.ts';
 import { createTabLeader, type SyncMessage, type TabLeader, type TabLeaderOptions } from '../platform/tab-leader.ts';
 
 export { ACTIVE_RELOAD_KEY, ACTIVE_RELOAD_WINDOW_MS } from './sync-disabled.ts';
@@ -39,8 +39,6 @@ export interface WireSyncDeps extends SyncDisabledDeps {
   transport: SyncTransport;
   /** platform/session.ts 的 clearCacheStorage（只删运行时缓存） */
   clearCacheStorage(): Promise<void>;
-  /** platform/session.ts 的 takeLocalSession：同步删掉本机会话，返回删之前的 session_id（只在事件没带 sid 时用，见文件头） */
-  takeLocalSession(): string | null;
   /** platform/session.ts 的 clearLocalSessionIf：本机会话还是被拒那次请求用的会话才删（收到事件时、回登录页前各一次） */
   clearLocalSessionIf(sessionId: string | null): void;
   /** platform/session.ts 的 goToAuth */
@@ -101,16 +99,14 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   const life = deps.lifecycle ?? browserLifecycle;
   let removedHandled = false;
   let leader: TabLeader | null = null;
-  /** 清本机、回登录页；sid：被拒那次请求发出前本机会话的 session_id；undefined = 事件没带（见文件头） */
-  const leave = (notice: ExitNotice, sid: string | null | undefined): void => {
+  /** 清本机、回登录页；sid：被拒那次请求发出前本机会话的 session_id */
+  const leave = (notice: ExitNotice, sid: string | null): void => {
     // 先告诉别的标签页退出原因（DISABLED-probe-later ②）：赶在删会话（storage 事件 → 它们的 watchAccount 清库、回登录页）之前发，
     // 那边收到就 setExitNotice，回登录页时显示同一条提示。带上被拒的 sid：那边的会话已换成别的就不记
-    leader?.post({ type: 'reset', notice, sid: sid === undefined ? currentSid(deps) : sid });
+    leader?.post({ type: 'reset', notice, sid });
     // 同一个同步段里先删本机会话——只删被拒的那个（K6-sugg3 ①、K6-sugg4 ①）
-    let dead: string | null = sid ?? null;
     try {
-      if (sid === undefined) dead = deps.takeLocalSession();
-      else deps.clearLocalSessionIf(sid);
+      deps.clearLocalSessionIf(sid);
     } catch {
       // 存储不可用：本来也存不下会话
     }
@@ -118,14 +114,14 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     void wipeOnRemoved(boot, {
       clearCacheStorage: deps.clearCacheStorage,
       onRemoved: () => {
-        deps.setExitNotice(notice, dead);
-        deps.clearLocalSessionIf(dead);
+        deps.setExitNotice(notice, sid);
+        deps.clearLocalSessionIf(sid);
         deps.goToAuth();
       },
     });
   };
-  /** sid：被拒那次请求发出前本机会话的 session_id；undefined = 事件没带 */
-  const onRemoved = (code: string, sid: string | null | undefined): void => {
+  /** sid：被拒那次请求发出前本机会话的 session_id */
+  const onRemoved = (code: string, sid: string | null): void => {
     if (removedHandled || boot.switching) return;
     removedHandled = true;
     if (code === 'account_disabled' && canProbe(deps)) {

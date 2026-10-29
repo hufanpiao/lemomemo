@@ -50,7 +50,6 @@ function setup(boot: BootResult, answer: () => Promise<AccountProbe>, session = 
   const d = {
     transport: fakeTransport(),
     clearCacheStorage: vi.fn(() => Promise.resolve()),
-    takeLocalSession: vi.fn((): string | null => 's1'),
     clearLocalSessionIf: vi.fn((sid: string | null) => void order.push(`session:${sid ?? 'null'}`)),
     goToAuth: vi.fn(),
     setExitNotice: vi.fn((_n: string, _sid?: string | null) => undefined),

@@ -44,7 +44,6 @@ function deps(create: (b: BootResult, o: SyncOptions) => Sync, answer: () => Pro
   return {
     transport: fakeTransport(),
     clearCacheStorage: vi.fn(() => Promise.resolve()),
-    takeLocalSession: vi.fn((): string | null => 's1'),
     clearLocalSessionIf: vi.fn(),
     goToAuth: vi.fn(),
     setExitNotice: vi.fn((_n: string, _sid?: string | null) => undefined),
@@ -95,7 +94,6 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
       expect(d.clearLocalSessionIf).toHaveBeenCalledWith('s1');
       // 本页自己记的原因也带上被拒那次的 sid（exit-notice 存起来，过期规则同一套）
       expect(d.setExitNotice).toHaveBeenCalledWith(notice, 's1');
-      expect(d.takeLocalSession).not.toHaveBeenCalled();
       expect(d.clearCacheStorage).toHaveBeenCalledTimes(1);
       expect(boot.cache?.isClosed()).toBe(true);
       expect(d.reload).not.toHaveBeenCalled();
@@ -129,7 +127,7 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
     expect(d.clearLocalSessionIf.mock.calls.every(([sid]) => sid === 's1')).toBe(true);
   });
 
-  it('outbox 的 disabled 事件没带 sid：按收到那一刻本机会话的 sid 和令牌探测，不先 takeLocalSession', async () => {
+  it('fail 的调用方没给 sid（K6-sugg5 ②）：事件按 null 发，不拿本机现在那个会话的令牌去探测，按 disabled_unsure 退出、只用 null 删', async () => {
     const boot = await coldStart(opts(fakeIndexedDB().factory));
     const s = spySync();
     const d = deps(s.create, async () => ({ kind: 'pending_deletion', purgeAfter: null }));
@@ -140,10 +138,9 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
     const a = await ob.next();
     expect(await ob.fail(a?.op_id ?? '', { status: 403, code: 'account_disabled' })).toBe('disabled');
     await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
-    expect(d.probeAccount).toHaveBeenCalledWith('tok-1');
-    expect(d.takeLocalSession).not.toHaveBeenCalled();
-    expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain('pending_deletion');
-    expect(d.clearLocalSessionIf).toHaveBeenCalledWith('s1');
+    expect(d.probeAccount).not.toHaveBeenCalled();
+    expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain('disabled_unsure');
+    expect(d.clearLocalSessionIf.mock.calls.every(([sid]) => sid === null)).toBe(true);
   });
 
   it('account_pending_deletion、session_revoked 不探测，照旧直接退出', async () => {

@@ -9,7 +9,7 @@ import { createSync, type Sync, type SyncOptions } from '../../core/sync/engine.
 import { fakeTransport } from '../../core/sync/__tests__/fake-server.ts';
 import { fakeIndexedDB } from '../../core/__tests__/idb-fake.ts';
 import { todo, uid } from '../../core/__tests__/outbox-fixtures.ts';
-import { clearLocalSessionIf, readSessionUserId, takeLocalSession } from '../../platform/session.ts';
+import { clearLocalSessionIf, readSessionUserId } from '../../platform/session.ts';
 import { wireSync } from '../sync-wiring.ts';
 
 const reload = vi.fn();
@@ -40,7 +40,6 @@ function deps(create?: (b: BootResult, o: SyncOptions) => Sync) {
   return {
     transport: fakeTransport(),
     clearCacheStorage: vi.fn(() => Promise.resolve()),
-    takeLocalSession: vi.fn((): string | null => 's1'),
     clearLocalSessionIf: vi.fn(),
     goToAuth: vi.fn(),
     setExitNotice: vi.fn((_n: string, _sid?: string | null) => undefined),
@@ -92,8 +91,7 @@ describe('wireSync', () => {
     s.removed('session_not_found');
     s.removed('auth_failed');
     await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
-    // 引擎带着 sid：收到时、回登录页前都只删那个会话（K6-sugg4 ①），不用 takeLocalSession
-    expect(d.takeLocalSession).not.toHaveBeenCalled();
+    // 引擎带着 sid：收到时、回登录页前都只删那个会话（K6-sugg4 ①）
     expect(d.clearLocalSessionIf.mock.calls).toEqual([['s1'], ['s1']]);
     expect(d.clearCacheStorage).toHaveBeenCalledTimes(1);
     expect(boot.cache?.isClosed()).toBe(true);
@@ -123,13 +121,12 @@ describe('wireSync', () => {
       if (!ob) throw new Error('outbox');
       await ob.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
       const a = await ob.next();
-      expect(await ob.fail(a?.op_id ?? '', { status: 403, code })).toBe('disabled');
+      expect(await ob.fail(a?.op_id ?? '', { status: 403, code, sid: 's1' })).toBe('disabled');
       await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
       expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain(notice);
       expect(d.setExitNotice.mock.invocationCallOrder[0]).toBeLessThan(d.goToAuth.mock.invocationCallOrder[0] ?? 0);
-      // 这里 fail 没带 sid：退回 K6-sugg3 的写法（收到那一刻 takeLocalSession），回登录页前只删它
-      expect(d.takeLocalSession).toHaveBeenCalledTimes(1);
-      expect(d.clearLocalSessionIf).toHaveBeenCalledWith('s1');
+      // 事件带着被拒那次的 sid（K6-sugg5 ② 起必填）：收到时、回登录页前都只删它
+      expect(d.clearLocalSessionIf.mock.calls).toEqual([['s1'], ['s1']]);
       expect(d.clearCacheStorage).toHaveBeenCalledTimes(1);
       expect(boot.switching).toBe(true);
       expect(boot.cache?.isClosed()).toBe(true);
@@ -149,7 +146,7 @@ describe('wireSync', () => {
 });
 
 // K6-sugg3 ①：被移除、停用时，本机会话在收到事件的同一个同步段里就删；清库那几秒里别的标签页刚登录的新会话，回登录页前不再被删
-describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 takeLocalSession / clearLocalSessionIf）', () => {
+describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 clearLocalSessionIf）', () => {
   const A = '00000000-0000-4000-8000-00000000000a';
   const B = '00000000-0000-4000-8000-00000000000b';
   /** 测试环境没配 supabaseUrl：session.ts 按 `sb-*-auth-token` 格式找 */
@@ -169,7 +166,6 @@ describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 
     const d = {
       ...deps(s.create),
       clearCacheStorage: vi.fn(() => gate),
-      takeLocalSession: () => takeLocalSession(),
       clearLocalSessionIf: (sid: string | null) => clearLocalSessionIf(sid),
     };
     wireSync(boot, d);
@@ -188,7 +184,7 @@ describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 
           if (!ob) throw new Error('outbox');
           await ob.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
           const a = await ob.next();
-          await ob.fail(a?.op_id ?? '', { status: 403, code: 'account_disabled' });
+          await ob.fail(a?.op_id ?? '', { status: 403, code: 'account_disabled', sid: 's1' });
         }
         expect(readSessionUserId()).toBeNull();   // 删掉了，清库还没完
         seed(sid, user);   // 清库那几秒：别的标签页登录了
@@ -231,7 +227,7 @@ describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 
     });
   }
 
-  it('对照（修之前的写法：事件不带 sid，收到时 takeLocalSession 删“现在那个”）：同样的时序会把 s2 删掉', async () => {
+  it('fail 的调用方没给 sid（K6-sugg5 ②）：事件按 null 发，不删“现在那个”s2（修之前这里会 takeLocalSession 把 s2 删掉）', async () => {
     const t = await setup();
     const ob = t.boot.outbox;
     if (!ob) throw new Error('outbox');
@@ -241,6 +237,6 @@ describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 
     await ob.fail(a?.op_id ?? '', { status: 403, code: 'session_revoked' });
     t.release();
     await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
-    expect(readSessionUserId()).toBeNull();   // 这就是建议 ① 说的窗口：s2 被删了
+    expect(readSessionUserId()).toBe(A);   // s2 还在：没有“不管是谁都删”的兜底了
   });
 });

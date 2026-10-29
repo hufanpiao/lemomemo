@@ -6,7 +6,7 @@
 //   → 被移除；unknown（断网、超时、令牌拿不到、不带码的 401）→ 保守照停用清本机，提示 disabled_unsure；
 //   active（刚好恢复了）→ 不清本机，重新载入页面重新同步（outbox 已设闸、闸只能靠重新载入解开；队列项还在库里，载入后照发）。
 //   探测期间（最多 8 秒）不先删会话——探测要用它；之后照旧只按被拒那次的 sid 删。
-//   事件没带 sid 时按收到那一刻本机会话的 sid 记下（不 takeLocalSession，免得探测还没做就删掉）
+//   sid 必填（K6-sugg5 ②）：fail 的调用方没给时 outbox 按 null 发——不拿本机现在那个会话的令牌探测，按 unknown（disabled_unsure）退出、只用 null 删
 // • active 的重新载入有次数限制（10-30 复审必改）：RPC 一路 uid 为 null 时也回 account_disabled，探测用的却是本机存的令牌，
 //   两边可能一直说不到一块，会无限重新载入。重新载入前在 sessionStorage 记下时刻（ACTIVE_RELOAD_KEY）；5 分钟内第二次遇到 active
 //   就不再载入：闸保持关着，记日志 disabled_probe_active_loop，让出同步主页（免得别的标签页也都不同步），经 onSyncPaused 在顶部提示
@@ -72,13 +72,13 @@ export function currentSid(deps: SyncDisabledDeps): string | null {
 export const canProbe = (deps: SyncDisabledDeps): boolean => Boolean(deps.probeAccount && deps.readSession && deps.reload);
 
 /**
- * 先探测再决定（见文件头）。sid：被拒那次请求发出前本机会话的 session_id；undefined = 事件没带。
+ * 先探测再决定（见文件头）。sid：被拒那次请求发出前本机会话的 session_id；null = 发请求时没有读得出的会话。
  * leave：按退出原因清本机、回登录页（sync-wiring 的那一套）；yieldLeader：让出同步主页。探测期间别的退出流程接手了（boot.switching）就不再处理
  */
 export async function probeThenLeave(
   boot: BootResult,
   deps: SyncDisabledDeps,
-  sid: string | null | undefined,
+  sid: string | null,
   leave: (notice: ExitNotice, dead: string | null) => void,
   yieldLeader: () => void,
 ): Promise<void> {
@@ -88,12 +88,11 @@ export async function probeThenLeave(
   } catch {
     // 存储不可用：拿不到令牌，按 unknown
   }
-  const dead = sid === undefined ? now.sid : sid;
   // 本机会话已不是被拒那一个（别的标签页换了人）：exitForDisabled 不拿别人的令牌去查
   const probe = deps.probeAccount;
-  const r = await exitForDisabled(dead, { readSession: () => now, ...(probe ? { probe } : {}) });
+  const r = await exitForDisabled(sid, { readSession: () => now, ...(probe ? { probe } : {}) });
   if (boot.switching) return;
-  if (r !== 'active') return leave(r, dead);
+  if (r !== 'active') return leave(r, sid);
   // 闸保持关着；只有 5 分钟内头一次、并且记得下时刻才重新载入
   if (mayReloadForActive(deps)) return void deps.reload?.();
   deps.log?.('disabled_probe_active_loop');

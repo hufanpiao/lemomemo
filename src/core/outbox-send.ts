@@ -68,8 +68,8 @@ export async function ackImpl(ctx: Ctx, opId: string, ack: AckResult): Promise<v
   await ctx.refresh();
 }
 
-/** 被拒那次请求的会话（K6-sugg4 ①）：调用方给了才带上 */
-const sidOf = (f: SendFailure): { sid?: string | null } => (f.sid === undefined ? {} : { sid: f.sid });
+/** 被拒那次请求的会话（K6-sugg4 ①）。事件里必填（K6-sugg5 ②）：调用方没给按 null（sync/send.ts 发 removed、disabled 时总会给） */
+const sidOf = (f: SendFailure): { sid: string | null } => ({ sid: f.sid ?? null });
 
 export async function failImpl(ctx: Ctx, opId: string, failure: SendFailure): Promise<FailureKind> {
   const kind = classifyFailure(failure);

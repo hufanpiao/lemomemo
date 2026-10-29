@@ -55,9 +55,7 @@ function coverage(c: GeneratedCase, seed: readonly SeedObject[]): string[] {
   for (const sel of p.selectors ?? []) {
     for (const who of ['a', 'b'] as const) {
       const user = SEED_USERS[who];
-      if (!seed.some((o) => o.bucket === p.bucket && matches(sel, o.key, user))) {
-        out.push(`造数据没覆盖 ${p.bucket} 的 ${sel.prefix || '（整桶）'}${sel.pattern ? ` ${sel.pattern}` : ''}（${who.toUpperCase()}）`);
-      }
+      if (!seed.some((o) => o.bucket === p.bucket && matches(sel, o.key, user))) out.push(`造数据没覆盖 ${p.bucket} 的 ${sel.prefix || '（整桶）'}${sel.pattern ? ` ${sel.pattern}` : ''}（${who.toUpperCase()}）`);
     }
   }
   return out;
@@ -72,9 +70,7 @@ function judge(c: GeneratedCase, before: ProbeResult, afterDelete: ProbeResult, 
     if (afterPurge.b !== before.b) out.push(`account-purge 动了 B 的对象：${before.b} → ${afterPurge.b}`);
   } else if (before.mode === 'snapshot' && afterPurge.mode === 'snapshot') {
     if (afterPurge.digest !== before.digest) out.push('noUserData 的桶在注销前后变了');
-  } else {
-    out.push(`${c.id}：探针模式 ${before.mode} 不是注销用例该有的（count / snapshot）`);
-  }
+  } else out.push(`${c.id}：探针模式 ${before.mode} 不是注销用例该有的（count / snapshot）`);
   return out;
 }
 
@@ -113,20 +109,15 @@ export function memoryPurgeActs(store: Pick<ObjStore, 'listAll' | 'deleteMany' |
   const segs = manifests.flatMap((m) => m.buckets ?? []).filter((b) => b.store === 'r2' && !b.noUserData);
   return {
     pending,
-    async accountDelete(user) {
-      pending.add(user);
-    },
+    async accountDelete(user) { pending.add(user); },
     async accountPurge(user) {
       if (!pending.has(user)) throw new Error('account_purge_not_pending');
       for (const b of segs) {
         const lk = b.userLookup;
         if (!lk || lk.by !== 'pathPattern') throw new Error(`purge 替身：${b.name} 不按路径找人`);
-        if (lk.level === 1) {
-          await store.deletePrefix(b.name, `${user}/`);
-        } else {
-          const keys = (await store.listAll(b.name, '')).map((o) => o.key).filter((k) => k.split('/')[lk.level - 1] === user);
-          if (keys.length) await store.deleteMany(b.name, keys);
-        }
+        if (lk.level === 1) { await store.deletePrefix(b.name, `${user}/`); continue; }
+        const keys = (await store.listAll(b.name, '')).map((o) => o.key).filter((k) => k.split('/')[lk.level - 1] === user);
+        if (keys.length) await store.deleteMany(b.name, keys);
       }
       pending.delete(user);
     },
@@ -322,8 +313,16 @@ export async function startLivePurge(cfg: LiveSupabase, s3: LiveS3): Promise<Liv
     // B0-117-dev-sugg ①：上次被 kill 时 close 没跑到，purge-it-* 用户在 LocalStack 里的对象还在——先按他们的 id 清前缀，再删人
     //   （删了人以后就不知道这些 id 了；替身组常常先跑，所以替身组设了 OBJSTORE_ENDPOINT 也清）。只清 purge-it-*@example.com 的人
     //   （本测试自己建的），别人的前缀不碰。替身组清不动只提醒；都没设 OBJSTORE_ENDPOINT 时清不了，node build/objstore.mjs down 会连桶一起清掉
-    await sweepRealPrefixes(real ?? realS3Backend((n) => process.env[n]), R2_BUCKETS, leftovers, realFetch).catch((e: Error) => { if (real) throw e; console.warn(`[提醒] live purge：清 LocalStack 里上次残留的对象失败（${e.message}）；可 node build/objstore.mjs down 一并清掉`); }).then(() => wipe(leftovers));
+    try {
+      await sweepRealPrefixes(real ?? realS3Backend((n) => process.env[n]), R2_BUCKETS, leftovers, realFetch);
+    } catch (e) {
+      if (real) throw e;   // LocalStack 组：清不动就不删人（人删了就不知道这些 id，对象再也清不到），整个开跑失败
+      console.warn(`[提醒] live purge：清 LocalStack 里上次残留的对象失败（${(e as Error).message}）；可 node build/objstore.mjs down 一并清掉`);   // 替身组：只提醒，照常删人
+    }
+    await wipe(leftovers);
     heartbeat = (await sql<{ at: Date; detail: unknown }[]>`select at, detail from private.heartbeat where name = 'account-purge'`)[0] ?? null;
+    // 兜底：以前 close 的写法每跑一轮把 detail 多包一层 JSON 字符串（account-purge 写的本是对象）；读到 string 就一层层解开，close 时按原样写回（只碰 account-purge 这一行）
+    while (heartbeat && typeof heartbeat.detail === 'string') heartbeat.detail = JSON.parse(heartbeat.detail) as unknown;
   } catch (e) {
     restore();
     await release();
@@ -385,8 +384,10 @@ export async function startLivePurge(cfg: LiveSupabase, s3: LiveS3): Promise<Liv
         await Promise.allSettled(bg); // 后台发信全部结束（期间 Resend 仍被拦）再往下
         const s3Err = await cleanS3(ours).then(() => null, (e: unknown) => e);
         await wipe(ours);
-        if (heartbeat) await sql`update private.heartbeat set at = ${heartbeat.at}, detail = ${heartbeat.detail === null ? null : JSON.stringify(heartbeat.detail)}::jsonb where name = 'account-purge'`;
-        else await sql`delete from private.heartbeat where name = 'account-purge'`;
+        // sql.json 只序列化一次；以前先 JSON.stringify 再交给 ::jsonb 参数，postgres.js 又序列化一遍，每轮多包一层字符串，越跑越长直到 RangeError
+        const back = heartbeat && await sql<{ t: string | null }[]>`update private.heartbeat set at = ${heartbeat.at}, detail = ${heartbeat.detail === null ? null : sql.json(heartbeat.detail as Parameters<typeof sql.json>[0])} where name = 'account-purge' returning jsonb_typeof(detail) as t`;
+        if (!heartbeat) await sql`delete from private.heartbeat where name = 'account-purge'`;
+        else if (heartbeat.detail !== null && back?.[0]?.t !== 'object') throw new Error(`live purge：还原 account-purge 心跳后 detail 是 ${back?.[0]?.t}，应为 object（被包成字符串了）`);
         if (s3Err) throw new Error(`live purge：收尾清 LocalStack 里的测试对象失败：${(s3Err as Error).message}`);
       } finally {
         restore();

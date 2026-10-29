@@ -164,8 +164,7 @@ async function start(): Promise<void> {
     transport, clearCacheStorage, goToAuth, platform, log: logs.log,
     // 第二个参数是 sid（被拒那次请求的会话），不是 session 的 setExitNotice 的 storage，要包一层
     setExitNotice: (n, sid) => setExitNotice(n, undefined, { sid: sid ?? null }),
-    // 被移除、停用：一收到就删本机会话，回登录页前只在会话还是那一个时再删（K6-sugg3 ①）
-    takeLocalSession: () => takeLocalSession(),
+    // 被移除、停用：一收到就删被拒那次请求的会话，回登录页前只在会话还是那一个时再删（K6-sugg3 ①；sid 必填，K6-sugg5 ②）
     clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
     // 收到 account_disabled 先探测是停用还是注销冷静期（R-256 ③ 后续）：用被拒那次会话的令牌调 account status
     probeAccount: (token) => probeAccountForExit({ token }),

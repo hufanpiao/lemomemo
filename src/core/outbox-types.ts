@@ -113,12 +113,12 @@ export type OutboxEvent =
   | { type: 'upgrade_required'; min: string | null }
   /**
    * 被移除（session_revoked）：队列已设闸；调用方一收到就删本机会话，清空本机、回登录页（K6-sugg3 ①）。
-   * sid：被拒那次请求发出前本机会话的 session_id（send.ts 记在 SendFailure.sid 里，K6-sugg4 ①）——调用方只删这个会话；
-   * 没带（fail 的调用方没给）时调用方退回“收到那一刻删本机会话”
+   * sid：被拒那次请求发出前本机会话的 session_id（send.ts 记在 SendFailure.sid 里，K6-sugg4 ①）——调用方只删这个会话。
+   * 必填（K6-sugg5 ②）：fail 的调用方没给时按 null 发（= 发请求时没有读得出的会话），调用方一律 clearLocalSessionIf(sid)
    */
-  | { type: 'removed'; code: string; sid?: string | null }
+  | { type: 'removed'; code: string; sid: string | null }
   /** 被停用（account_disabled）或注销冷静期（account_pending_deletion）：队列已设闸；调用方和 removed 一样清空本机、回登录页，按 code 提示；sid 同 removed */
-  | { type: 'disabled'; code: string; sid?: string | null };
+  | { type: 'disabled'; code: string; sid: string | null };
 
 /** 启动时整理队列的结果 */
 export interface OutboxBootReport {

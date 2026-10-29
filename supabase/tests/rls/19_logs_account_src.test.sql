@@ -2,7 +2,7 @@
 -- “设置 › 账号 › 最近的导出”只认 src = 'account' 的行（account 函数经 service role 写）；客户端能写的话就能伪造导出记录
 -- 原有条件照旧：本人、账号可用（停用的 C 写不进）；别的 src、src 为 null 照常能写；service role 写 src = 'account' 照常成功
 begin;
-select plan(12);
+select plan(13);
 \ir _helpers.psql
 select tests.seed();   -- A、B 正常，C 停用
 
@@ -46,6 +46,42 @@ select is((select string_agg(policyname || '/' || permissive || '/' || array_to_
 select ok((select position('(src IS DISTINCT FROM ''account''::text)' in with_check) > 0
              from pg_policies where schemaname = 'public' and tablename = 'logs' and policyname = 'ins'),
   '守门：ins 的 with check 里还留着 src IS DISTINCT FROM ''account''（重写这个策略时不准丢，R-259）');
+-- 上一条只查子串：with check (true or src is distinct from 'account') 留着原文、逻辑却坏了（TESTCLEAN-sugg ①）。
+-- 再按顶层切开：顶层（括号外、引号外）不许有 OR，src 那一条要是顶层 AND 里单独的一项——… and (true or src …) 这种套一层的也过不了
+create function tests.top_and(p text) returns text[] language plpgsql as $$
+declare s text := btrim(p); n int; i int; d int; q boolean; c text; parts text[] := '{}'; st int := 1; wrapped boolean;
+begin
+  loop   -- 剥掉包住整个表达式的外层括号（pg_get_expr 会给整体加一层）
+    n := length(s);
+    exit when n < 2 or left(s, 1) <> '(' or right(s, 1) <> ')';
+    d := 0; q := false; wrapped := true; i := 1;
+    while i <= n loop
+      c := substr(s, i, 1);
+      if c = '''' then q := not q;
+      elsif not q and c = '(' then d := d + 1;
+      elsif not q and c = ')' then d := d - 1; if d = 0 and i < n then wrapped := false; exit; end if;
+      end if;
+      i := i + 1;
+    end loop;
+    exit when not wrapped;
+    s := btrim(substr(s, 2, n - 2));
+  end loop;
+  n := length(s); d := 0; q := false; i := 1;
+  while i <= n loop
+    c := substr(s, i, 1);
+    if c = '''' then q := not q;
+    elsif not q and c = '(' then d := d + 1;
+    elsif not q and c = ')' then d := d - 1;
+    elsif not q and d = 0 and upper(substr(s, i, 4)) = ' OR ' then return null;   -- 顶层有 OR
+    elsif not q and d = 0 and upper(substr(s, i, 5)) = ' AND ' then parts := parts || btrim(substr(s, st, i - st)); st := i + 5; i := i + 4;
+    end if;
+    i := i + 1;
+  end loop;
+  return parts || btrim(substr(s, st));
+end $$;
+select ok(coalesce((select '(src IS DISTINCT FROM ''account''::text)' = any(tests.top_and(with_check))
+             from pg_policies where schemaname = 'public' and tablename = 'logs' and policyname = 'ins'), false),
+  '守门：ins 的 with check 顶层没有 OR，src IS DISTINCT FROM ''account'' 是顶层 AND 里单独的一项（true or …、… and (x or src …) 都过不了）');
 
 select * from finish();
 rollback;

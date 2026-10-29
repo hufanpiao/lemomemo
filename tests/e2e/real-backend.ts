@@ -121,9 +121,10 @@ export interface Account {
 
 /**
  * 建一个测试账号：admin 接口建用户（[auth] enable_signup = false，不能注册），邮箱 e2e-<随机>@lemomemo.test（架构第 9 节护栏 ①）；
- * 再用 service role 补一行 profiles {user_id, ui_locale}——迁移里没有建 profiles 的触发器，没这行 record_consent 等会回 account_disabled
+ * 再用 service role 补一行 profiles {user_id, ui_locale}——迁移里没有建 profiles 的触发器，没这行 record_consent 等会回 account_disabled。
+ * consentPolicyVer（TC-B1-11 ③ ④，10-30）：给了就同一次 POST 写进 profiles.consent_policy_ver（模拟“看过某一版告知”）；不给就留空（first）
  */
-export async function createAccount(opts: { uiLocale?: 'zh-CN' | 'ko-KR' } = {}): Promise<Account> {
+export async function createAccount(opts: { uiLocale?: 'zh-CN' | 'ko-KR'; consentPolicyVer?: string } = {}): Promise<Account> {
   const email = `e2e-${randomUUID().slice(0, 8)}@lemomemo.test`;
   const u = await admin('/auth/v1/admin/users', { method: 'POST', body: { email, email_confirm: true } });
   if (u.status !== 200) throw new Error(await failMsg('建用户', u));
@@ -131,11 +132,31 @@ export async function createAccount(opts: { uiLocale?: 'zh-CN' | 'ko-KR' } = {})
   if (typeof userId !== 'string') throw new Error('建用户的回包里没有 id');
   const p = await admin('/rest/v1/profiles', {
     method: 'POST',
-    body: { user_id: userId, ui_locale: opts.uiLocale ?? 'zh-CN' },
+    body: {
+      user_id: userId,
+      ui_locale: opts.uiLocale ?? 'zh-CN',
+      ...(opts.consentPolicyVer === undefined ? {} : { consent_policy_ver: opts.consentPolicyVer }),
+    },
     prefer: 'return=minimal',
   });
   if (p.status !== 201) throw new Error(await failMsg('补 profiles 行', p));
   return { email, userId };
+}
+
+/** lemo-e2e 里 app_config.notice 的两个版本号（只读；用例按它算“看过同一版”“版本更旧”，不写死日期） */
+export interface NoticeVersions {
+  policyVer: string;
+  minConsentVer: string | null;
+}
+
+/** 用 service role 读 app_config.notice 的 policy_ver、min_consent_ver（只读，不改全局配置；E2E-REAL TC-B1-11 ③ ④，10-30） */
+export async function readNotice(): Promise<NoticeVersions> {
+  const r = await admin('/rest/v1/app_config?select=notice&id=eq.1', { method: 'GET' });
+  if (r.status !== 200) throw new Error(await failMsg('读 app_config.notice', r));
+  const rows = (await r.json()) as { notice?: { policy_ver?: unknown; min_consent_ver?: unknown } | null }[];
+  const n = rows[0]?.notice;
+  if (rows.length !== 1 || typeof n?.policy_ver !== 'string') throw new Error('app_config.notice.policy_ver 读不出来');
+  return { policyVer: n.policy_ver, minConsentVer: typeof n.min_consent_ver === 'string' ? n.min_consent_ver : null };
 }
 
 /**
