@@ -40,6 +40,18 @@ export const EXEMPT_RULES: readonly ExemptRule[] = [
     match: 'exact',
     why: '撤回 AI 同意随时能做（15.5，TC-B1-14）',
   },
+  {
+    method: 'POST',
+    path: '/rest/v1/rpc/my_sessions',
+    match: 'exact',
+    why: '设置 › 设备列表要先读到才能移除，旧版也要能看（R-237，架构 0.39）',
+  },
+  {
+    method: 'POST',
+    path: '/rest/v1/rpc/my_ai_usage',
+    match: 'exact',
+    why: '只读 AI 用量；supabase-js rpc() 默认 POST（R-237，架构 0.39；函数 B3 才建）',
+  },
 ];
 
 export interface ExemptFunction {
