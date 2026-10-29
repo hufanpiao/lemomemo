@@ -74,3 +74,38 @@ export function s3Route(s3: LiveS3, fallback: { endpoint: string; accessKeyId: s
     },
   };
 }
+
+/**
+ * LocalStack 后端开跑前对四个桶各做一次 HeadBucket（purge-runner.ts 的 startLivePurge 调，B0-117-dev-sugg ③）（aws4fetch 签名，和 shared/objstore.ts 同一套），用 realFetch 直接发（不经测试的 fetch 守卫、不记进 s3Calls）。
+ * 连不上 → 提示先 node build/objstore.mjs up；404 → 桶没建（up 会建四个桶，只缺桶时 buckets）；其余非 2xx 原样报。
+ */
+export async function headBuckets(cfg: S3Route['cfg'], buckets: readonly string[], realFetch: typeof fetch): Promise<void> {
+  const { AwsClient } = await import('aws4fetch');
+  const aws = new AwsClient({ accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, service: 's3', region: cfg.region ?? 'us-east-1' });
+  for (const b of buckets) {
+    const name = cfg.bucketPrefix + b;
+    let res: Response;
+    try {
+      res = await realFetch(await aws.sign(`${cfg.endpoint}/${encodeURIComponent(name)}`, { method: 'HEAD' }));
+    } catch (e) {
+      throw new Error(`live purge：LocalStack（${cfg.endpoint}）连不上，先 node build/objstore.mjs up（${(e as Error).message}）`);
+    }
+    if (res.status === 404) throw new Error(`live purge：LocalStack 里没有桶 ${name}，先 node build/objstore.mjs up（会建四个桶；只缺桶时 node build/objstore.mjs buckets）`);
+    if (!res.ok) throw new Error(`live purge：LocalStack HeadBucket ${name} 回 ${res.status}（先 node build/objstore.mjs up，再看 OBJSTORE_* 凭据、R2_BUCKET_PREFIX）`);
+  }
+}
+
+/**
+ * B0-117-dev-sugg ①：清这些人在 LocalStack 各桶里的前缀（purge-runner.ts 开跑清上次被 kill 的残留用）。backend 为 null 时什么都不做。
+ * 用 realFetch 直接发（不经测试的 fetch 守卫、不记进 s3Calls）；只许本机回环地址
+ */
+export async function sweepRealPrefixes(backend: RealS3Backend | null, buckets: readonly string[], ids: readonly string[], realFetch: typeof fetch): Promise<void> {
+  if (!backend || ids.length === 0) return;
+  if (!isLoopback(backend.endpoint)) throw new Error('live purge：OBJSTORE_ENDPOINT 只许本机回环地址（LocalStack），不打真 R2');
+  const { createObjStore } = await import('../../shared/objstore.ts');
+  const store = createObjStore({
+    endpoint: new URL(backend.endpoint).origin, accessKeyId: backend.accessKeyId, secretAccessKey: backend.secretAccessKey,
+    bucketPrefix: backend.bucketPrefix ?? '', ...(backend.region ? { region: backend.region } : {}), fetch: (u, i) => realFetch(u, i as RequestInit), now: () => Date.now(),
+  });
+  for (const b of buckets) for (const id of new Set(ids)) await store.deletePrefix(b, `${id}/`);
+}

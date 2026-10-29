@@ -65,6 +65,7 @@ export const SW_FOREGROUND_CHECK_MS = 60 * 60 * 1000;
 export interface ForegroundCheckDeps {
   /** platform/net.ts 的 browserLifecycle（切到前台：和“切到前台时比较最低版本”同一个时机，visibilitychange） */
   life: Pick<Lifecycle, 'onVisibility' | 'isOnline'>;
+  /** 默认 Date.now()。不用 performance.now()：iOS WebKit 锁屏睡眠时它不走，后台放一夜也算不满 1 小时（B 组审查必改） */
   now?: () => number;
   intervalMs?: number;
 }
@@ -78,33 +79,50 @@ export function checkSwOnForeground(reg: ServiceWorkerRegistration, d: Foregroun
   const interval = d.intervalMs ?? SW_FOREGROUND_CHECK_MS;
   let last = now();
   return d.life.onVisibility((visible) => {
-    if (!visible || !d.life.isOnline() || now() - last < interval) return;
-    last = now();
+    if (!visible || !d.life.isOnline()) return;
+    const t = now();
+    // 系统时间往回调过（BANNER-sugg ②）：从现在重新计时，不会因为“上次”在未来而很久不查
+    if (t < last) {
+      last = t;
+      return;
+    }
+    if (t - last < interval) return;
+    last = t;
     // 查失败（断网、服务器错）不影响使用，下一次满间隔再查
     void reg.update().catch(() => undefined);
   });
 }
 
-/** “更新”按钮的结果（0.27 第 1 点）：reloading = 新 SW 已接管，调用方重新载入；no_update = 没有新版本；failed = 更新失败 */
-export type SwUpdateResult = 'reloading' | 'no_update' | 'failed' | 'unsupported';
+/**
+ * “更新”按钮的结果（0.27 第 1 点）：reloading = 新 SW 已接管，调用方重新载入；no_update = 没有新版本；
+ * failed = 没查成（update() 失败且没有在装、装好的，或者拿注册出错）或新 SW 安装失败（redundant）；
+ * takeover_timeout = 查到了新 SW，但 waitMs 内没装好，或发了 SKIP_WAITING 后没接管、也没 activated（BANNER-sugg ⑤：和“没查成”分开，
+ * 调用方不能因为 swReady 就重新载入——载入后还是旧版本）
+ */
+export type SwUpdateResult = 'reloading' | 'no_update' | 'failed' | 'takeover_timeout' | 'unsupported';
 
 /** 等新 SW 装好、接管的最长时间 */
 const SW_UPDATE_WAIT_MS = 30_000;
 
-function waitInstalled(sw: ServiceWorker, ms: number): Promise<boolean> {
+/** 等新 SW 装好：installed = 装好了；redundant = 安装失败；timeout = ms 内没装好 */
+function waitInstalled(sw: ServiceWorker, ms: number): Promise<'installed' | 'redundant' | 'timeout'> {
   return new Promise((resolve) => {
     if (sw.state === 'installed' || sw.state === 'activated') {
-      resolve(true);
+      resolve('installed');
       return;
     }
-    const timer = setTimeout(() => resolve(false), ms);
+    if (sw.state === 'redundant') {
+      resolve('redundant');
+      return;
+    }
+    const timer = setTimeout(() => resolve('timeout'), ms);
     sw.addEventListener('statechange', () => {
       if (sw.state === 'installed' || sw.state === 'activated') {
         clearTimeout(timer);
-        resolve(true);
+        resolve('installed');
       } else if (sw.state === 'redundant') {
         clearTimeout(timer);
-        resolve(false);
+        resolve('redundant');
       }
     });
   });
@@ -114,6 +132,7 @@ function waitInstalled(sw: ServiceWorker, ms: number): Promise<boolean> {
  * 按“更新”：registration.update() → 等新 SW 装好 → 发 SKIP_WAITING（sw.ts 收到后 skipWaiting）→ 等 controllerchange。
  * 已经有等着接管的（reg.waiting）就不再 update()，直接发 SKIP_WAITING：断网时 update() 会失败，但新版本早就装好了（复审必改）。
  * update() 单独接住：失败了仍看一眼 installing / waiting，都没有才回 failed（没查成，不能说“没有新版本”）。
+ * 有新 SW 但 waitMs 内没装好、或 SKIP_WAITING 后没接管也没 activated：回 takeover_timeout；安装失败（redundant）回 failed。
  * 不自己重新载入，返回 reloading 由调用方（core/upgrade.ts）载入
  */
 export async function updateServiceWorker(waitMs: number = SW_UPDATE_WAIT_MS): Promise<SwUpdateResult> {
@@ -131,7 +150,10 @@ export async function updateServiceWorker(waitMs: number = SW_UPDATE_WAIT_MS): P
     }
     const sw = reg.installing ?? reg.waiting;
     if (!sw) return checkFailed ? 'failed' : 'no_update';
-    if (!(await waitInstalled(sw, waitMs))) return 'failed';
+    const installed = await waitInstalled(sw, waitMs);
+    // 安装失败（redundant）算更新失败，不是接管超时（B 组审查建议 3）
+    if (installed === 'redundant') return 'failed';
+    if (installed === 'timeout') return 'takeover_timeout';
     const changed = new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => resolve(false), waitMs);
       navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -140,7 +162,10 @@ export async function updateServiceWorker(waitMs: number = SW_UPDATE_WAIT_MS): P
       }, { once: true });
     });
     sw.postMessage({ type: 'SKIP_WAITING' });
-    return (await changed) ? 'reloading' : 'failed';
+    if (await changed) return 'reloading';
+    // 没等到 controllerchange，但新 SW 已经 activated（例如本页原来没有 controller，不会派 controllerchange）：
+    // 新版本已经生效，重新载入就是新版本，不能卡在 stalled（B 组审查建议 3）
+    return sw.state === 'activated' ? 'reloading' : 'takeover_timeout';
   } catch {
     return 'failed';
   }
@@ -167,6 +192,26 @@ export const updateAttemptStore = {
     } catch {
       // 隐私模式等拿不到 sessionStorage：只是少了“仍不够新”的提示
     }
+  },
+};
+
+const UPGRADE_LOG_COUNT_KEY = 'lemo.upglog';
+
+/**
+ * 升级中心日志的每日计数（core/upgrade.ts 的 logCounts；B 组审查建议 1，照 js_error 的 lemo.jserr）：
+ * localStorage，只存 {d: 本机日期, c: {act: 条数}}，不含账号信息；跨重新载入、跨标签页都算在同一天里
+ */
+export const upgradeLogCountStore = {
+  get(): string | null {
+    try {
+      return localStorage.getItem(UPGRADE_LOG_COUNT_KEY);
+    } catch {
+      return null;
+    }
+  },
+  set(v: string): void {
+    // 写不进（存储满、隐私模式）会抛：由升级中心接住，退回只在内存里计
+    localStorage.setItem(UPGRADE_LOG_COUNT_KEY, v);
   },
 };
 

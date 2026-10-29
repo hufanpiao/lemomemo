@@ -233,3 +233,19 @@ describe('active 的重新载入有次数限制（RPC 和探测一直说不到�
     }
   });
 });
+
+describe('sid 读不出（null）时删会话（第八轮必改 1：不另认同账号）', () => {
+  it('停用、被移除都只用 clearLocalSessionIf(null)', async () => {
+    for (const code of ['account_disabled', 'session_revoked'] as const) {
+      resetBootForTest();
+      const boot = await coldStart(opts(fakeIndexedDB().factory));
+      const s = spySync();
+      const d = deps(s.create, async () => ({ kind: 'disabled' }), { sid: null, token: null });
+      wireSync(boot, d);
+      s.removed(code, null);
+      await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
+      expect(d.clearLocalSessionIf.mock.calls.every(([x]) => x === null)).toBe(true);
+      expect(d.clearLocalSessionIf).toHaveBeenCalledTimes(2);
+    }
+  });
+});

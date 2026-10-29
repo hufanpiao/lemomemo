@@ -2,7 +2,7 @@
 -- “设置 › 账号 › 最近的导出”只认 src = 'account' 的行（account 函数经 service role 写）；客户端能写的话就能伪造导出记录
 -- 原有条件照旧：本人、账号可用（停用的 C 写不进）；别的 src、src 为 null 照常能写；service role 写 src = 'account' 照常成功
 begin;
-select plan(10);
+select plan(12);
 \ir _helpers.psql
 select tests.seed();   -- A、B 正常，C 停用
 
@@ -35,6 +35,17 @@ select ok(tests.try_as('authenticated', 'cccccccc-0000-4000-8000-000000000003', 
 select is(tests.try_as('service_role', null, $$insert into public.logs (user_id, t, device, kind, act, src) values ('aaaaaaaa-0000-4000-8000-000000000001', 8, null, 'run', 'export', 'account')$$),
   'ok', 'service role 替 A 插 src = account、act = export：成功');
 select is(tests.n('account'), 1, 'A 名下 src = account 只有 service role 写的那一行');
+
+-- ===== 守门（R259-sugg ②）：以后重写 logs 的 ins 策略也得留着这一条 =====
+-- 只看库里最终生效的策略（pg_policies），不比迁移源码：新迁移 alter / drop + create 都逃不过；
+-- 另加一个 permissive 的 insert 策略会和 ins 按 OR 合并、把这一条绕过去，所以 insert 策略只许 ins 一个
+select is((select string_agg(policyname || '/' || permissive || '/' || array_to_string(roles, ','), ' ' order by policyname)
+             from pg_policies where schemaname = 'public' and tablename = 'logs' and cmd in ('INSERT', 'ALL')),
+          'ins/PERMISSIVE/authenticated',
+  '守门：public.logs 上管 insert 的策略只有 ins 一个（permissive、只给 authenticated），没有别的策略能 OR 掉它');
+select ok((select position('(src IS DISTINCT FROM ''account''::text)' in with_check) > 0
+             from pg_policies where schemaname = 'public' and tablename = 'logs' and policyname = 'ins'),
+  '守门：ins 的 with check 里还留着 src IS DISTINCT FROM ''account''（重写这个策略时不准丢，R-259）');
 
 select * from finish();
 rollback;

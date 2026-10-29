@@ -55,3 +55,11 @@ describe('createLeaveAccount', () => {
     expect(order).toEqual(['session:s-me', 'logs:null', 'logs:null', 'session:s-me', 'auth:pending_deletion']);
   });
 });
+
+describe('sid 读不出（null）时删会话（第八轮必改 1：不另认同账号）', () => {
+  it('两次删会话都用 clearLocalSessionIf(null)', async () => {
+    const { d } = deps();
+    await createLeaveAccount(d)('disabled', null);
+    expect(d.clearLocalSessionIf.mock.calls).toEqual([[null], [null]]);
+  });
+});

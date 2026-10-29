@@ -68,6 +68,7 @@ function leaveNow(notice: ExitNotice, sid: string | null, deps: LeaveDeps): Prom
   const boot = deps.getBoot();
   // 同一个同步段里先删本机会话——只删被拒的那个（K6-sugg3 ①、K6-sugg4 ①）
   const dead = sid;
+  const userId = boot ? boot.userId : null;
   const drop = (): void => {
     try {
       deps.clearLocalSessionIf(dead);
@@ -76,7 +77,6 @@ function leaveNow(notice: ExitNotice, sid: string | null, deps: LeaveDeps): Prom
     }
   };
   drop();
-  const userId = boot ? boot.userId : null;
   deps.clearLogs(userId);
   const finish = (): void => {
     deps.clearLogs(userId);   // 兜底：清库期间又记下的

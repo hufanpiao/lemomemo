@@ -90,7 +90,7 @@ describe('收到 426（TC-B1-42、43）', () => {
 
   it('录音、编辑在进行：横幅先不出，结束后再出', () => {
     const { u } = center();
-    const release = u.holdBusy('edit');
+    const release = u.holdBusy('editing');
     render(<UpdateBanner upgrade={u} outbox={null} onReload={vi.fn()} />);
     act(() => u.reportUpgradeRequired('4.1.0'));
     expect(screen.queryByTestId('update-banner')).toBeNull();
@@ -118,7 +118,7 @@ describe('SW 有新版本（8.1）', () => {
 
   it('正在编辑时不出、不打断；编辑结束后再出', () => {
     const { u } = center();
-    const release = u.holdBusy('edit');
+    const release = u.holdBusy('editing');
     render(<UpdateBanner upgrade={u} outbox={null} onReload={vi.fn()} />);
     act(() => u.setSwReady());
     expect(screen.queryByTestId('update-banner')).toBeNull();
@@ -143,7 +143,7 @@ describe('关闭、根节点标记、多标签页（架构师 10-30 第 4、7 �
     expect(screen.queryByRole('button', { name: '关闭' })).toBeNull();
     cleanup();
     const c = center();
-    c.u.holdBusy('edit');
+    c.u.holdBusy('editing');
     c.u.onCacheVersionChange();
     render(<UpdateBanner upgrade={c.u} outbox={null} onReload={vi.fn()} />);
     expect(screen.queryByRole('button', { name: '关闭' })).toBeNull();
@@ -194,7 +194,7 @@ describe('先后（bannerKind）', () => {
 
   it('本机库被新版本的标签页关了（TC-B1-48，编辑中）：编辑中也出“柠檬记有新版本 · 重新打开”，按钮直接重新载入', () => {
     const { u, swUpdate } = center();
-    u.holdBusy('edit');
+    u.holdBusy('editing');
     u.onCacheVersionChange();
     const onReload = vi.fn();
     render(<UpdateBanner upgrade={u} outbox={null} onReload={onReload} />);
@@ -231,7 +231,7 @@ describe('复审：断网、录音中、关过横幅（复审必改、建议 1�
       const { u, reload, finish } = center(result);
       u.setSwReady();
       const p = u.requestUpdate();
-      const release = u.holdBusy('record');
+      const release = u.holdBusy('recording');
       await finish();
       await p;
       expect(reload).not.toHaveBeenCalled();
@@ -250,5 +250,36 @@ describe('复审：断网、录音中、关过横幅（复审必改、建议 1�
     await finish();
     expect(reload).toHaveBeenCalledTimes(1);
     expect(u.getState().update).not.toBe('still_old');
+  });
+});
+
+describe('接管超时（BANNER-sugg ⑤）', () => {
+  it('新 SW 30 秒内没接管：播报“新版本还没装好 · 请稍后再试”，有新版本也不重新载入', async () => {
+    const { u, reload, finish } = center('takeover_timeout');
+    u.reportUpgradeRequired('4.1.0');
+    u.setSwReady();
+    render(<UpdateBanner upgrade={u} outbox={null} onReload={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '更新' }));
+    await finish();
+    expect(screen.getByRole('status').textContent).toBe('新版本还没装好 · 请稍后再试');
+    expect(reload).not.toHaveBeenCalled();
+  });
+});
+
+describe('busy 漏了释放（PROBE-sugg2 ③）', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('令牌占满 30 分钟作废以后，被压着的“需要更新”横幅出来', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const { BUSY_MAX_MS } = await import('../../core/upgrade.ts');
+    const { u } = center();
+    u.holdBusy('sign_out');
+    u.reportUpgradeRequired('4.1.0');
+    render(<UpdateBanner upgrade={u} outbox={null} onReload={vi.fn()} />);
+    expect(screen.queryByTestId('update-banner')).toBeNull();
+    act(() => void vi.advanceTimersByTime(BUSY_MAX_MS));
+    expect(screen.getByTestId('update-banner').dataset['kind']).toBe('required');
   });
 });

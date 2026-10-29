@@ -57,6 +57,7 @@ export function createLeaveAccount(deps: AccountLeaveDeps = defaultAccountLeaveD
     const boot = deps.getBoot();
     if (boot?.switching) return Promise.resolve();
     leaving = true;
+    const userId = boot ? boot.userId : null;
     const drop = (): void => {
       try {
         deps.clearLocalSessionIf(sid);
@@ -64,7 +65,6 @@ export function createLeaveAccount(deps: AccountLeaveDeps = defaultAccountLeaveD
         // 存储不可用：本来也存不下会话
       }
     };
-    const userId = boot ? boot.userId : null;
     if (userId) {
       try {
         deps.broadcastReset(userId, { notice, sid });

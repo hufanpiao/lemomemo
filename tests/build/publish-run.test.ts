@@ -465,12 +465,26 @@ public static class FakeTool {
       expect(existsSync(marker), 'post-index-change 探针没生效，这个用例测不出东西').toBe(true);
       rmSync(marker, { force: true });
       stale();
-      const r = await runScript('-DryRun -Ops', ['一致']);
+      // PUBLISH-tmp：给脚本一个本次演练私有的 TEMP（publish.ps1 在 $env:TEMP 下建 lemo-nohooks-*），只查这个目录——
+      //   不看系统临时目录，本机同时跑的另一份全量、别人的残留都碰不到这个断言。
+      //   演练期间每 20 ms 看一眼这个目录，记下出现过的 lemo-nohooks-*：要真见过一次（脚本确实建在这里，不是空查），跑完又没有了
+      const ownTemp = join(dir, `temp-${Math.random().toString(36).slice(2, 10)}`);
+      mkdirSync(ownTemp);
+      const seen = new Set<string>();
+      const peek = () => { try { for (const n of readdirSync(ownTemp)) if (n.startsWith('lemo-nohooks-')) seen.add(n); } catch { /* 目录正在变动，下一次再看 */ } };
+      const timer = setInterval(peek, 20);
+      let r: Run;
+      try {
+        r = await runScript('-DryRun -Ops', ['一致'], '', false, { TEMP: ownTemp, TMP: ownTemp });
+      } finally {
+        clearInterval(timer);
+      }
       expect(r.code, r.out).toBe(0);
       expect(existsSync(marker), '发布脚本运行时 post-index-change 钩子被执行了').toBe(false);
       expect(r.out).toContain('演练（-DryRun）到此结束');
       // 空的钩子目录用完就删，GIT_CONFIG_* 也清掉
-      expect(readdirSync(tmpdir()).filter((n) => n.startsWith('lemo-nohooks-'))).toEqual([]);
+      expect(seen.size, '演练期间没在本次的 TEMP 里见到 lemo-nohooks-*（脚本没用传进去的 TEMP，这条测不出东西）').toBe(1);
+      expect(readdirSync(ownTemp).filter((n) => n.startsWith('lemo-nohooks-'))).toEqual([]);
       expect(r.envLeft).toBe('');
     } finally {
       rmSync(hook, { force: true });

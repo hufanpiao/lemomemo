@@ -1,5 +1,5 @@
 // 退出原因会过期（第六轮审查建议 ②；platform/exit-notice.ts）：存时带上时刻（和 sid），读时超过 10 分钟当没有并删掉；
-// 本页自己写的、别的标签页广播来的走同一套；旧格式（只有原因字符串）照样认
+// 本页自己写的、别的标签页广播来的走同一套；旧格式（只有原因字符串）按过期处理（PROBE-sugg2 ②）
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearExitNotice, EXIT_NOTICE_TTL_MS, readExitNotice, setExitNotice } from '../exit-notice.ts';
 import { readExitNotice as viaSession } from '../session.ts';
@@ -42,12 +42,16 @@ describe('退出原因带时刻、会过期', () => {
     expect(readExitNotice()).toBeNull();
   });
 
-  it('旧格式（只有原因字符串）照样认；认不出的值、JSON 里原因不对或没有时刻：当没有', () => {
-    sessionStorage.setItem(KEY, 'disabled');
-    expect(readExitNotice(undefined, T)).toBe('disabled');
-    for (const bad of ['whatever', '{"n":"oops","at":1}', '{"n":"disabled"}', '{"n":"disabled","at":"x"}', '{bad']) {
+  it('旧格式（只有原因字符串，PROBE-sugg2 ②）按过期处理：当没有并删掉；认不出的值、JSON 里原因不对或没有时刻：同样当没有并删掉', () => {
+    for (const bad of ['disabled', 'pending_deletion', 'whatever', '{"n":"oops","at":1}', '{"n":"disabled"}', '{"n":"disabled","at":"x"}', '{bad']) {
       sessionStorage.setItem(KEY, bad);
       expect(readExitNotice(undefined, T)).toBeNull();
+      expect(sessionStorage.getItem(KEY)).toBeNull();
     }
+  });
+
+  it('存下的 sid 只留着排查用：读的结果不受它影响（PROBE-sugg2 ①）', () => {
+    setExitNotice('removed', undefined, { sid: 's-old', now: T });
+    expect(readExitNotice(undefined, T + 1)).toBe('removed');
   });
 });

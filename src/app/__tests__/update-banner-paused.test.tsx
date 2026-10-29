@@ -43,7 +43,7 @@ describe('同步暂停横幅', () => {
 
   it('录音、编辑进行中（upgrade.busy）先不出，busy 归零后出（第六轮审查建议 ④）', () => {
     const u = center();
-    const done = u.holdBusy('record');
+    const done = u.holdBusy('recording');
     render(<UpdateBanner upgrade={u} outbox={null} onReload={vi.fn()} />);
     act(() => uiStore.getState().pushBanner({ id: 'sync-paused', kind: 'sync-paused' }));
     expect(screen.queryByTestId('update-banner')).toBeNull();

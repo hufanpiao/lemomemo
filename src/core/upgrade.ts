@@ -1,7 +1,8 @@
 // 强制升级与新版本（架构 0.27 第 1 点、8.1）：界面只读这里的状态，横幅和整屏提示由 UI 层（kit / app）画
 // • 低于最低版本（启动、切到前台时用 config 比；收到 426 时用响应体里的 min）：挡同步、不挡查看和记录
 //   → syncBlocked 不为 null：顶部固定一条关不掉的横幅“需要更新才能继续同步 · 你记下的内容都还在本机 · 更新”
-// • 按“更新”：requestUpdate() → registration.update()，新 SW 接管后重新载入；失败 → 'failed'（“更新失败 · 联网后再试”）；
+// • 按“更新”：requestUpdate() → registration.update()，新 SW 接管后重新载入；没查成 → 'failed'（“更新失败 · 联网后再试”）；
+//   查到了新 SW 但 30 秒内没接管 → 'stalled'（“新版本还没装好 · 请稍后再试”），不重新载入（BANNER-sugg ⑤：载入后仍是旧版本）；
 //   重新载入后版本仍不够 → 'still_old'（“已是最新版本，请稍后再试”），不再自动重新载入，记错误码
 // • 别的标签页以更高 DB_VERSION 打开本机库：本页关库、挡写入；没有录音和编辑在进行就自动重新载入，
 //   否则 cache = 'closed_for_upgrade'（“柠檬记有新版本 · 重新打开”），录音或编辑结束（busy 归零）时自动重新载入
@@ -9,11 +10,27 @@
 // • 本机库来自更新的版本（VersionError）：cache = 'too_new'，整屏提示“这台设备上的数据来自更新的版本，请更新柠檬记”
 // • 升级本机库被挡住（blocked）：blocked = true，提示“请关掉其他打开的柠檬记窗口”
 //   （boot.ts 收到 blocked 后等 BLOCKED_PROMPT_DELAY_MS 仍没打开才调 setBlocked(true)，配合升级的页关库期间不闪提示）
+// • busy 兜底（PROBE-sugg2 ③、BANNER-sugg ⑥）：单个 busy 令牌超过 BUSY_MAX_MS（30 分钟）自动作废、记 upgrade_busy_expired，
+//   免得哪里漏了释放，required、new_version、sync_paused 三种横幅一直不出、reloadPending 一直挂着。
+//   作废后不自动重新载入（持有方可能真的还在录音、编辑）：等着的“更新”回到 idle，用户再按一次直接载入（不再去查）；closed_for_upgrade 的横幅本来就有“重新打开”
 // 纯 TS：不准 import React 和任何功能（A1）
 import { parseVersion, versionAtLeast } from '../../shared/core/version.ts';
 import type { SwUpdateResult } from '../platform/sw-register.ts';
 
-export type UpdatePhase = 'idle' | 'updating' | 'failed' | 'still_old';
+/** stalled：查到了新版本，但没能在 30 秒内装好、接管（BANNER-sugg ⑤） */
+export type UpdatePhase = 'idle' | 'updating' | 'failed' | 'stalled' | 'still_old';
+
+/** 单个 busy 令牌最多占多久（PROBE-sugg2 ③）：超过就作废、记日志 */
+export const BUSY_MAX_MS = 30 * 60 * 1000;
+
+/**
+ * 占住 busy 的原因（作废时写进日志的 code 列）：只准是这几个固定的词，不准传带内容的文字（B 组审查建议 2）。
+ * 现在只有退出登录用 sign_out；recording、editing 留给录音、编辑接上时用
+ */
+export type BusyReason = 'sign_out' | 'recording' | 'editing';
+
+/** 升级中心的日志：同一个 act 每台设备每天（本机日期）最多几条（B 组审查建议 1，同 js_error 的 JS_ERROR_DAILY_MAX） */
+export const UPGRADE_LOG_DAILY_MAX = 5;
 
 export interface SyncBlock {
   /** 要求的最低版本；426 响应体里没有时为 null */
@@ -48,8 +65,13 @@ export interface UpgradeDeps {
   swUpdate(): Promise<SwUpdateResult>;
   /** 跨重新载入记住“刚按过更新”（platform/sw-register.ts 的 updateAttemptStore） */
   attempt: { get(): string | null; set(min: string | null): void };
-  /** 记错误码（不记内容）；B1 接上日志以后传进来 */
-  log?(code: string): void;
+  /** 记错误码（不记内容）：act 是动作名，code 可选（busy 作废时是 holdBusy 的 reason，例如 sign_out）；main.tsx 接到日志通道。
+   *  同一个 act 每天最多 UPGRADE_LOG_DAILY_MAX 条（断网时连点“更新”不刷满本机 200 条队列和每天的日志额度） */
+  log?(act: string, code?: string): void;
+  /** 日志每日计数存哪里（platform/sw-register.ts 的 upgradeLogCountStore）；不给或读写出错时只在内存里计 */
+  logCounts?: { get(): string | null; set(v: string): void };
+  /** 墙上时钟（按本机日期分天）；默认 Date.now() */
+  now?: () => number;
 }
 
 export interface UpgradeCenter {
@@ -74,11 +96,67 @@ export interface UpgradeCenter {
    * 录音、编辑开始时调用，结束时调返回的函数。
    * 本机库已为升级关闭时，最后一个结束会自动重新载入：调用方在结束前自己把内存里的内容放好（库已关，写不进 drafts）
    */
-  holdBusy(reason: string): () => void;
+  holdBusy(reason: BusyReason): () => void;
   /** 按“更新”：要重新载入时如果正在录音、编辑，等它结束再载入（复审建议 1） */
   requestUpdate(): Promise<UpdatePhase>;
   /** 启动时（checkMinVersion 和队列暂停都报过以后）调一次：刚按过更新而版本仍不够 → still_old */
   afterReloadCheck(): void;
+}
+
+/** 本机日期 YYYY-MM-DD（同 platform/env.ts 的 js_error 计数） */
+function localDay(t: number): string {
+  const d = new Date(t);
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+interface LogCounts {
+  d: string;
+  c: Record<string, number>;
+}
+
+/** 按 act 每天限次的 log；计数优先读写 store，出错退回内存 */
+function limitedLog(deps: UpgradeDeps): (act: string, code?: string) => void {
+  const now = deps.now ?? (() => Date.now());
+  let mem: LogCounts = { d: '', c: {} };
+  let memOnly = false;
+  const load = (day: string): LogCounts => {
+    let st = mem;
+    if (!memOnly && deps.logCounts) {
+      try {
+        const text = deps.logCounts.get();
+        if (text) {
+          const o = JSON.parse(text) as Partial<LogCounts> | null;
+          if (o && typeof o.d === 'string' && typeof o.c === 'object' && o.c !== null) st = { d: o.d, c: { ...o.c } };
+        }
+      } catch {
+        // 读不到或坏了：用内存里的
+      }
+    }
+    return st.d === day ? st : { d: day, c: {} };
+  };
+  return (act, code) => {
+    const log = deps.log;
+    if (!log) return;
+    try {
+      const st = load(localDay(now()));
+      const n = typeof st.c[act] === 'number' ? (st.c[act] as number) : 0;
+      if (n >= UPGRADE_LOG_DAILY_MAX) return;
+      st.c[act] = n + 1;
+      mem = st;
+      if (!memOnly && deps.logCounts) {
+        try {
+          deps.logCounts.set(JSON.stringify(st));
+        } catch {
+          memOnly = true;   // 写不进：这一页以后只用内存计数
+        }
+      }
+      if (code === undefined) log(act);
+      else log(act, code);
+    } catch {
+      // 日志出错不挡业务
+    }
+  };
 }
 
 function lowerThan(app: string, min: string): boolean {
@@ -87,12 +165,17 @@ function lowerThan(app: string, min: string): boolean {
 }
 
 export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
+  const log = limitedLog(deps);
   let state: UpgradeState = { syncBlocked: null, cache: 'ok', blocked: false, update: 'idle', busy: false, swReady: false, swDismissed: false };
   const listeners = new Set<() => void>();
-  const busy = new Map<number, string>();
+  const busy = new Map<number, BusyReason>();
+  /** 每个令牌的兜底计时器 */
+  const busyTimers = new Map<number, ReturnType<typeof setTimeout>>();
   let busySeq = 0;
   /** 按过“更新”、该重新载入了，但当时有录音、编辑在进行：等 busy 归零再载入 */
   let reloadPending = false;
+  /** 等着的重新载入因 busy 作废被取消了：新 SW 已接管，下次按“更新”直接载入，不再去查（再查会因为没有 waiting 误报 still_old） */
+  let reloadArmed = false;
   const reloadWhenIdle = (): void => {
     if (busy.size === 0) deps.reload();
     else reloadPending = true;
@@ -149,11 +232,28 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
       busy.set(key, reason);
       set({ busy: true });
       let released = false;
-      return () => {
-        if (released) return;
+      const drop = (): boolean => {
+        if (released) return false;
         released = true;
+        clearTimeout(busyTimers.get(key));
+        busyTimers.delete(key);
         busy.delete(key);
-        if (busy.size > 0) return;
+        return busy.size === 0;
+      };
+      // 兜底：超过 BUSY_MAX_MS 还没释放就作废这一个令牌（不自动重新载入，见文件头）
+      busyTimers.set(key, setTimeout(() => {
+        const idle = drop();
+        log('upgrade_busy_expired', reason);
+        if (!idle) return;
+        if (reloadPending) {
+          reloadPending = false;
+          reloadArmed = true;
+          if (state.update === 'updating') set({ update: 'idle' });
+        }
+        set({ busy: false });
+      }, BUSY_MAX_MS));
+      return () => {
+        if (!drop()) return;
         set({ busy: false });
         if (state.cache === 'closed_for_upgrade' || reloadPending) {
           reloadPending = false;
@@ -164,6 +264,11 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
     async requestUpdate() {
       if (state.update === 'updating') return 'updating';
       set({ update: 'updating' });
+      if (reloadArmed) {
+        reloadArmed = false;
+        reloadWhenIdle();
+        return 'updating';
+      }
       deps.attempt.set(state.syncBlocked?.min ?? '');
       const r = await deps.swUpdate();
       if (r === 'reloading') {
@@ -172,15 +277,22 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
       }
       // 别的标签页已经按过、新 SW 已接管（这一页 reg.waiting 没了，update() 查不到新的，断网时还会失败）：swReady 说明新版本已经装好，
       // 直接重新载入就是新版本；不能当成“没有新版本”挂着不动、更不能误报“已是最新版本”或“更新失败”（审查必改 2、复审必改）。
-      // 横幅关没关（swDismissed）不影响这一条
+      // 横幅关没关（swDismissed）不影响这一条。只认“没查成”（failed）和“查成了没有 waiting”（no_update）：
+      // 接管超时（takeover_timeout）不在这里，载入后还是旧版本（BANNER-sugg ⑤）
       if ((r === 'no_update' || r === 'failed') && state.swReady) {
         reloadWhenIdle();
         return 'updating';
       }
       deps.attempt.set(null);
+      // 查到了新版本但没接管（BANNER-sugg ⑤）：不重新载入，swReady 也不算（载入后仍是旧版本，426 时还会误报“已是最新版本”）
+      if (r === 'takeover_timeout') {
+        log('update_takeover_timeout');
+        set({ update: 'stalled' });
+        return 'stalled';
+      }
       // 本机库来自更新的版本（too_new）时，没有新版本也要告诉用户（整屏提示上点了没反应不行）
       if (r === 'no_update' && (state.syncBlocked || state.cache === 'too_new')) {
-        deps.log?.('update_still_old');
+        log('update_still_old');
         set({ update: 'still_old' });
         return 'still_old';
       }
@@ -188,7 +300,7 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
         set({ update: 'idle' });
         return 'idle';
       }
-      deps.log?.(r === 'unsupported' ? 'update_unsupported' : 'update_failed');
+      log(r === 'unsupported' ? 'update_unsupported' : 'update_failed');
       set({ update: 'failed' });
       return 'failed';
     },
@@ -197,7 +309,7 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
       if (attempted === null) return;
       deps.attempt.set(null);
       if (state.syncBlocked || state.cache === 'too_new') {
-        deps.log?.('update_still_old');
+        log('update_still_old');
         set({ update: 'still_old' });
       }
     },

@@ -84,3 +84,11 @@ describe('告知页 account_disabled：先探测再定退出原因', () => {
     expect(d.setExitNotice).toHaveBeenCalledWith('disabled_unsure');
   });
 });
+
+describe('sid 读不出（null）时删会话（第八轮必改 1：不另认同账号）', () => {
+  it('停用类退出也只用 clearLocalSessionIf(null)，前后两次', async () => {
+    const { d, order } = deps(async () => 'disabled');
+    await leaveThisDevice('account_disabled', null, d);
+    expect(order.filter((x) => x.startsWith('session:'))).toEqual(['session:null', 'session:null']);
+  });
+});

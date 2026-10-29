@@ -43,7 +43,7 @@ import {
 } from '../platform/session.ts';
 import { hideSplashAfter, hideSplashWhenPainted } from '../platform/splash.ts';
 import { nextFrame } from '../motion/index.ts';
-import { checkSwOnForeground, registerServiceWorker, reloadPage, watchServiceWorkerUpdate } from '../platform/sw-register.ts';
+import { checkSwOnForeground, registerServiceWorker, reloadPage, upgradeLogCountStore, watchServiceWorkerUpdate } from '../platform/sw-register.ts';
 import { mountFeatures } from './features.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
 import { startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
@@ -98,20 +98,26 @@ async function start(): Promise<void> {
   logs.setSink((e) => logQueue.add(e));
   // 被移除、停用、注销冷静期、本页收到 SIGNED_OUT：停止上传并清掉这个账号的日志队列（架构 0.38 第 68 条）；watchAccount（K6-signedout）和 wireSync 共用
   const clearLogs = logQueueCleaner(logQueue, userId);
+  /** 已按 boot 的 profile 定过界面语言（之后 blocked 也不再按“没有 profile”覆盖） */
+  let localeFromBoot = false;
   const boot = await coldStart({
     userId,
     outboxOptions: { log: outboxLog(logs.log) },
     // 别的标签页退出登录、按库名删本机库（versionchange 的 newVersion 为 null，K6 复审 C）：同步读一次会话，
     // 没有了就回登录页（库正在被删，watchAccount 收到 storage 事件后也会走退出流程，重复跳转无害）；还有（那边已重新登录）就重新载入
     onCacheDeleted: () => (readSessionUserId() ? reloadPage() : goToAuth()),
+    // 升级中心的错误码（update_failed、update_takeover_timeout、upgrade_busy_expired 等，PROBE-sugg2 ③）进同一条日志通道；
+    // 同一个 act 每天最多 5 条，计数在 localStorage lemo.upglog（B 组审查建议 1）
+    upgradeDeps: { log: (act, code) => logs.log(act, code ? { code } : undefined), logCounts: upgradeLogCountStore },
     // 升级本机库被别的标签页挡住：coldStart 还在等库打开时整屏提示“请关掉其他打开的柠檬记窗口”，库打开后自动消失（root.tsx，架构师 10-30 第 8 点）。
-    // 这时 profile 还没读出来，先按本机选过的语言和设备语言定一次界面语言（下面 applyLocale(boot) 再按缓存的 profile 定）
+    // 这时 profile 还没读出来：blocked 第一次为 true、整屏提示画出来之前才按本机选过的语言和设备语言定一次界面语言（BANNER-sugg ③；
+    // 没被挡住就不定，下面 applyLocale(boot) 按缓存的 profile 定；已经按 profile 定过就不再覆盖）
     onUpgradeCenter: (u) => {
-      applyLocale({ profile: null });
-      watchCacheBlocked(u);
+      watchCacheBlocked(u, { onFirstBlocked: () => (localeFromBoot ? undefined : applyLocale({ profile: null })) });
     },
   });
   applyLocale(boot);
+  localeFromBoot = true;
   // unavailable 照样渲染 App（只联网用）；version_too_new 只渲染整屏提示（下面），不挂功能入口
   mountFeatures(boot.flags);
 

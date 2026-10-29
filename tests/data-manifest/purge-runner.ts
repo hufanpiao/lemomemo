@@ -13,7 +13,7 @@ import { putSeedObjects, R2_BUCKETS, SEED_USERS, type SeedObject, seedObjects } 
 import { type ProbeResult, matches, runObjProbe } from './objstore-probe.ts';
 import type { GeneratedCase } from './sql.ts';
 import type { Manifest } from './types.ts';
-import { isLoopback, type LiveS3, type S3Call, s3Route } from './live-s3.ts';
+import { headBuckets, isLoopback, type LiveS3, realS3Backend, type S3Call, s3Route, sweepRealPrefixes } from './live-s3.ts';
 import { LIVE_LOCK, takeLiveLock } from './live-lock.ts';
 
 /** 注销的两步动作：离线是替身，真替身是调本地 Supabase 的函数 */
@@ -317,9 +317,12 @@ export async function startLivePurge(cfg: LiveSupabase, s3: LiveS3): Promise<Liv
       const row = (await sql<{ email: string | null }[]>`select email from auth.users where id = ${id}`)[0];
       if (row && !LIVE_EMAIL_RE.test(row.email ?? '')) throw new Error(`live purge：${id} 已被别的用户占用（邮箱不是 purge-it-*@example.com），不删，请换一个干净的本地库`);
     }
-    await wipe(leftovers);
-    // 先查完 SEED_USERS 没被别人占（上面），再碰 LocalStack：只读地列一个随机前缀，证明它在、四个桶都建了
-    if (real) await Promise.all(R2_BUCKETS.map((b) => store.listAll(b, `${crypto.randomUUID()}/`))).catch((e: Error) => { throw new Error(`live purge：LocalStack（${base}）打不通或没建桶（先 node build/objstore.mjs up）：${e.message}`); });
+    // 先查完 SEED_USERS 没被别人占（上面），再碰 LocalStack：四个桶各一次 HeadBucket（只读），没起、没建桶都直接提示（B0-117-dev-sugg ③）
+    if (real) await headBuckets(r.cfg, R2_BUCKETS, realFetch);
+    // B0-117-dev-sugg ①：上次被 kill 时 close 没跑到，purge-it-* 用户在 LocalStack 里的对象还在——先按他们的 id 清前缀，再删人
+    //   （删了人以后就不知道这些 id 了；替身组常常先跑，所以替身组设了 OBJSTORE_ENDPOINT 也清）。只清 purge-it-*@example.com 的人
+    //   （本测试自己建的），别人的前缀不碰。替身组清不动只提醒；都没设 OBJSTORE_ENDPOINT 时清不了，node build/objstore.mjs down 会连桶一起清掉
+    await sweepRealPrefixes(real ?? realS3Backend((n) => process.env[n]), R2_BUCKETS, leftovers, realFetch).catch((e: Error) => { if (real) throw e; console.warn(`[提醒] live purge：清 LocalStack 里上次残留的对象失败（${e.message}）；可 node build/objstore.mjs down 一并清掉`); }).then(() => wipe(leftovers));
     heartbeat = (await sql<{ at: Date; detail: unknown }[]>`select at, detail from private.heartbeat where name = 'account-purge'`)[0] ?? null;
   } catch (e) {
     restore();

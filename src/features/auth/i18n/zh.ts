@@ -84,7 +84,7 @@ export const zh = {
   // restore 回 reauth_required（最近 10 分钟内没用验证码登录过）：已退出本会话，回填邮箱那一步
   'auth.restore.reauth': '为了确认是你本人，恢复账号前要重新收一次验证码。请再登录一次，然后点“恢复账号”。',
   // restore 的错误（架构第 6 节 account 的错误码表）
-  'auth.restore.err.tooLate': '已开始删除，无法恢复。',
+  'auth.restore.err.tooLate': '账号已开始删除，无法恢复。', // GATE-sugg ⑥（10-30）：补主语
   'auth.restore.err.rateLimited': '今天恢复的次数太多了，请明天再试。',
   'auth.restore.err.tryLater': '服务器忙，请稍后再试。',
   'auth.restore.err.offline': '现在没有网络，连上网络后再试一次。',

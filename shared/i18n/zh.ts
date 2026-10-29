@@ -39,4 +39,6 @@ export const zh = {
   'fmt.wd.6': '周六',
   // 主 App 收到 account_disabled、探测说账号正常，但 5 分钟内已重新载入过一次：同步暂停（app/sync-wiring.ts 限次，10-30 复审建议）；按钮沿用 update.reopen
   'update.syncPaused': '同步暂停，请稍后重新打开',
+  // 查到了新版本但 30 秒内没装好、接管（BANNER-sugg ⑤）：不重新载入，提示稍后再试（core/upgrade.ts 的 stalled）
+  'update.stalled': '新版本还没装好 · 请稍后再试',
 } as const;

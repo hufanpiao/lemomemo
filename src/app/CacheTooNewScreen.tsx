@@ -34,9 +34,11 @@ export function CacheTooNewScreen({ upgrade, onRefresh }: CacheTooNewScreenProps
       ? t('update.updating', {})
       : state.update === 'failed'
         ? t('update.failed', {})
-        : state.update === 'still_old'
-          ? t('update.stillOld', {})
-          : '';
+        : state.update === 'stalled'
+          ? t('update.stalled', {})
+          : state.update === 'still_old'
+            ? t('update.stillOld', {})
+            : '';
 
   const screen = (
     <div

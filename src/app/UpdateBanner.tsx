@@ -68,9 +68,11 @@ export function UpdateBanner({ upgrade, outbox, onReload }: UpdateBannerProps) {
       ? t('update.updating', {})
       : state.update === 'failed'
         ? t('update.failed', {})
-        : state.update === 'still_old'
-          ? t('update.stillOld', {})
-          : '';
+        : state.update === 'stalled'
+          ? t('update.stalled', {})
+          : state.update === 'still_old'
+            ? t('update.stillOld', {})
+            : '';
   const update = (): void => {
     if (!updating) void upgrade.requestUpdate();
   };

@@ -117,7 +117,7 @@ insert into public.devices (id, user_id, platform, label, session_id) values
 create function tests.cy() returns jsonb language sql as $$ select tests.cl('aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-1150-4000-8000-0000000000a1') $$;
 create function tests.cy_pw() returns jsonb language sql as $$ select tests.cl('aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-1150-4000-8000-0000000000a1', true) $$;
 -- 快照里的 revoked、tomb 只取测试用户 A、B 的行（DBTEST-sugg ③：库里有别的用户残留时不误报；p116 的 ai、p117 的 tomb 同样）；
---   A、B 以外的行数单独放在 other 里，只和快照比（写死期望的那几条先 #- '{state,other}' 再比，另有一条比 other）；
+--   A、B 以外的行的主键列表单独放在 other 里（DBTEST-sugg2：原来只比行数），只和快照比（写死期望的那几条先 #- '{state,other}' 再比，另有一条比 other）；
 --   revoked_sessions、tombstones（0001）、note_vectors、embed_queue（0007）的 user_id 都是 not null，not in / <> 不会漏掉 null 行
 create function tests.p115() returns text language sql as $$ select $q$
   select jsonb_build_object(
@@ -125,9 +125,9 @@ create function tests.p115() returns text language sql as $$ select $q$
     'sess', (select jsonb_agg(s.id order by s.id) from auth.sessions s where s.id::text like '%-1150-%'),
     'revoked', (select jsonb_agg(jsonb_build_object('s', r.session_id, 'u', r.user_id) order by r.session_id) from private.revoked_sessions r where r.user_id in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
     'tomb', (select jsonb_agg(t.id order by t.id) from public.tombstones t where t.tbl = 'devices' and t.user_id in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
-    'other', jsonb_build_object(   -- A、B 以外的行数：只和快照比（库里别人的残留多少都行，但这次调用不能动它们）
-      'revoked', (select count(*) from private.revoked_sessions r where r.user_id not in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
-      'tomb', (select count(*) from public.tombstones t where t.tbl = 'devices' and t.user_id not in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002'))))$q$ $$;
+    'other', jsonb_build_object(   -- A、B 以外的行的主键列表：只和快照比（库里别人的残留多少都行，但这次调用不能动它们；比主键，删一行又多一行也测得出）
+      'revoked', (select jsonb_agg(r.session_id order by r.session_id) from private.revoked_sessions r where r.user_id not in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
+      'tomb', (select jsonb_agg(t.id order by t.id) from public.tombstones t where t.tbl = 'devices' and t.user_id not in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002'))))$q$ $$;
 create function tests.s115() returns jsonb language plpgsql as $$ declare r jsonb; begin execute tests.p115() into r; return r; end $$;
 insert into tests.snap values ('115', tests.s115());
 
@@ -145,7 +145,7 @@ select is(tests.dry(tests.cy(), $$select coalesce(nullif((private.remove_device_
   'TC-B1-115 ③：A 在 Y 上直接调 impl(X) 成功：X 的会话写进 revoked_sessions、auth.sessions 删掉，devices 行删掉（留墓碑）');
 select is(tests.dry(tests.cy(), $$select coalesce(nullif((private.remove_device_impl('de000000-0000-4000-8000-0000000115a2'))::text, ''), 'void') as r$$, tests.p115()) -> 'state' -> 'other',
           (select v -> 'other' from tests.snap where k = '115'),
-  'TC-B1-115 ③：A、B 以外的吊销记录、设备墓碑行数和快照一样（没动别人的）');
+  'TC-B1-115 ③：A、B 以外的吊销记录、设备墓碑和快照一样（逐个主键，没动别人的）');
 select is(tests.dry(tests.cy(), $$select coalesce(nullif((private.remove_device_impl('de000000-0000-4000-8000-0000000115a2'))::text, ''), 'void') as r$$, tests.p115()),
           tests.dry(tests.cy(), $$select coalesce(nullif((public.remove_device('de000000-0000-4000-8000-0000000115a2'))::text, ''), 'void') as r$$, tests.p115()),
   'TC-B1-115 ③：impl(X) 和同一份数据上经 remove_device(X) 的返回值、会话、吊销记录、设备行、墓碑逐项相同');
@@ -183,10 +183,10 @@ create function tests.p116() returns text language sql as $$ select $q$
     'vec', (select count(*) from private.note_vectors where user_id = 'aaaaaaaa-0000-4000-8000-000000000001'),
     'queue', (select count(*) from private.embed_queue where user_id = 'aaaaaaaa-0000-4000-8000-000000000001'),
     'ai', (select jsonb_agg(jsonb_build_object('u', s.user_id, 'v', s.value) order by s.user_id) from public.settings s where s.key = 'ai.enabled' and s.user_id in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
-    'other', jsonb_build_object(   -- A、B 以外（向量、队列是 A 以外）的行数：只和快照比
-      'ai', (select count(*) from public.settings s where s.key = 'ai.enabled' and s.user_id not in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
-      'vec', (select count(*) from private.note_vectors where user_id <> 'aaaaaaaa-0000-4000-8000-000000000001'),
-      'queue', (select count(*) from private.embed_queue where user_id <> 'aaaaaaaa-0000-4000-8000-000000000001')))$q$ $$;
+    'other', jsonb_build_object(   -- A、B 以外（向量、队列是 A 以外）的行的主键列表：只和快照比
+      'ai', (select jsonb_agg(s.id order by s.id) from public.settings s where s.key = 'ai.enabled' and s.user_id not in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
+      'vec', (select jsonb_agg(jsonb_build_array(v.kind, v.source_id, v.model) order by v.kind, v.source_id, v.model) from private.note_vectors v where v.user_id <> 'aaaaaaaa-0000-4000-8000-000000000001'),
+      'queue', (select jsonb_agg(jsonb_build_array(q.kind, q.source_id, q.model) order by q.kind, q.source_id, q.model) from private.embed_queue q where q.user_id <> 'aaaaaaaa-0000-4000-8000-000000000001')))$q$ $$;
 create function tests.s116() returns jsonb language plpgsql as $$ declare r jsonb; begin execute tests.p116() into r; return r; end $$;
 insert into tests.snap values ('116', tests.s116());
 
@@ -233,8 +233,8 @@ create function tests.p117() returns text language sql as $$ select $q$
   select jsonb_build_object(
     'rows', (select jsonb_agg(jsonb_build_object('t', t.title, 'del', t.deleted_at) order by t.title) from public.todos t where t.id::text like '70000000-0000-4000-8000-0000000117%'),
     'tomb', (select jsonb_agg(t.id order by t.id) from public.tombstones t where t.tbl = 'todos' and t.user_id in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
-    'other', jsonb_build_object(   -- A、B 以外的行数：只和快照比
-      'tomb', (select count(*) from public.tombstones t where t.tbl = 'todos' and t.user_id not in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002'))))$q$ $$;
+    'other', jsonb_build_object(   -- A、B 以外的行的主键列表：只和快照比
+      'tomb', (select jsonb_agg(t.id order by t.id) from public.tombstones t where t.tbl = 'todos' and t.user_id not in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002'))))$q$ $$;
 create function tests.s117() returns jsonb language plpgsql as $$ declare r jsonb; begin execute tests.p117() into r; return r; end $$;
 insert into tests.snap values ('117', tests.s117());
 
@@ -250,7 +250,7 @@ select is(tests.dry(tests.ca(), format('select private.purge_deleted_impl(%L::js
   'TC-B1-117 ③：A 直接调 impl、参数同时带 T1、T2、T3：回 1，只有 T1 被永久删除（留墓碑），T2、T3 不动');
 select is(tests.dry(tests.ca(), format('select private.purge_deleted_impl(%L::jsonb) as r', tests.items117()), tests.p117()) -> 'state' -> 'other',
           (select v -> 'other' from tests.snap where k = '117'),
-  'TC-B1-117 ③：A、B 以外的 todos 墓碑行数和快照一样');
+  'TC-B1-117 ③：A、B 以外的 todos 墓碑和快照一样（逐个主键）');
 select is(tests.dry(tests.ca(), format('select private.purge_deleted_impl(%L::jsonb) as r', tests.items117()), tests.p117()),
           tests.dry(tests.ca(), format('select public.purge_deleted(%L::jsonb) as r', tests.items117()), tests.p117()),
   'TC-B1-117 ③：直接调 impl 和同一份数据上经 purge_deleted 同样参数，返回值、三行、墓碑逐项相同');

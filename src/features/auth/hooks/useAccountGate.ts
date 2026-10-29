@@ -89,6 +89,13 @@ function useGuarded(setBusy: (b: boolean) => void) {
   );
 }
 
+/** 总是最新值的 ref（回调里读，不进依赖） */
+function useLatestRef<T>(v: T): { current: T } {
+  const r = useRef(v);
+  r.current = v;
+  return r;
+}
+
 /** onReplaced：发现本机会话已被别的标签页换掉时调（登录页据此重走 SessionCheck） */
 export function useAccountGate(deps: AuthFlowDeps = {}, onReplaced?: () => void) {
   const account = useMemo(() => deps.account ?? createAccountGateApi(getSupabase), [deps.account]);
@@ -104,8 +111,9 @@ export function useAccountGate(deps: AuthFlowDeps = {}, onReplaced?: () => void)
   const [exit, setExit] = useState<GateExit | null>(null);
   const guarded = useGuarded(setBusy);
   const snap = useRef<Snap | null>(null);
-  const onReplacedRef = useRef(onReplaced);
-  onReplacedRef.current = onReplaced;
+  /** check 的序号：结果回来时不是最新那次就丢掉 */
+  const checkSeq = useRef(0);
+  const onReplacedRef = useLatestRef(onReplaced);
 
   const compare = useCallback(() => compareSnap(snap.current, sessionIdOf(steps), safe(readUserId)), [steps, readUserId]);
   const replaced = useCallback(() => compare() !== 'same', [compare]);
@@ -119,7 +127,7 @@ export function useAccountGate(deps: AuthFlowDeps = {}, onReplaced?: () => void)
       setView('none');
       onReplacedRef.current?.();
     },
-    [logout, timeoutMs],
+    [logout, timeoutMs, onReplacedRef],
   );
 
   /** 退出本会话（不删 devices 行）；会话已被换成别人的时不退、返回 false（已交给 reload） */
@@ -170,11 +178,15 @@ export function useAccountGate(deps: AuthFlowDeps = {}, onReplaced?: () => void)
    */
   const check = useCallback(
     async (mode: ProbeMode, quiet = false): Promise<boolean> => {
+      const my = ++checkSeq.current;
       snap.current = { sid: sessionIdOf(steps), userId: safe(readUserId), token: safe(readToken) };
       if (!quiet) setView('checking');
       setError(null);
       setExit(null);
       const s = await account.status();
+      // 第八轮审查必改 2：探测期间又发起了新的一次（别的标签页换了账号，SessionCheck 按新账号再探测）：
+      // 这次的结果已过时，丢掉——view、purgeAfter、snap 都不改，免得 A 的 pending 盖掉 B 的界面、之后“保持注销”退掉 B
+      if (my !== checkSeq.current) return false;
       if (s.kind === 'pending_deletion') {
         setPurgeAfter(s.purgeAfter);
         setView('pending');

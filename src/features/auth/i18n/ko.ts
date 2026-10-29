@@ -79,7 +79,7 @@ export const ko = {
   'auth.restore.restore': '계정 복구', // R-106 B1 第一遍已审（10-30）；；和申请注销邮件（account-mail.ts）里的“계정 복구”一致
   'auth.restore.keep': '복구하지 않고 로그아웃', // R-106 B1 第一遍已审（10-30），按审校意见改过
   'auth.restore.reauth': '본인 확인을 위해 계정을 복구하려면 인증 코드를 한 번 더 받아야 해요. 다시 로그인한 뒤 “계정 복구”를 눌러 주세요.', // R-106 B1 第一遍已审（10-30），按审校意见改过
-  'auth.restore.err.tooLate': '이미 삭제가 시작되어 복구할 수 없어요.', // R-106 B1 第一遍已审（10-30）
+  'auth.restore.err.tooLate': '계정 삭제가 이미 시작되어 복구할 수 없어요.', // REVIEW(ko)；GATE-sugg ⑥（10-30）补主语“계정”
   'auth.restore.err.rateLimited': '오늘은 복구를 더 시도할 수 없어요. 내일 다시 시도해 주세요.', // R-106 B1 第一遍已审（10-30），按审校意见改过
   'auth.restore.err.tryLater': '서버가 바빠요. 잠시 후 다시 시도해 주세요.', // R-106 B1 第一遍已审（10-30）
   'auth.restore.err.offline': '지금 인터넷에 연결되어 있지 않아요. 연결한 뒤 다시 시도해 주세요.', // R-106 B1 第一遍已审（10-30），按审校意见改过

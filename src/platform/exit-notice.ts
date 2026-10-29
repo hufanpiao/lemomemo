@@ -5,7 +5,11 @@
 // • 会过期（第六轮审查建议 ②）：别的标签页广播来的原因（app/sync-wiring.ts 收 reset）先记下，本页要等 watchAccount 清完库才回登录页，
 //   万一这一页没走到登录页，留着的原因不能等到以后某次正常退出时才冒出来。读的时候超过 EXIT_NOTICE_TTL_MS 就当没有（顺手删掉）。
 //   本页自己写的原因走同一套
-// • 旧格式（只有原因字符串，10-30 以前写的）照样认，不过期：只可能是升级前同一个标签页刚写的
+// • 存下的 sid 留着排查用（PROBE-sugg2 ①）：readExitNotice 不读它，登录页也不拿它和当前会话比对——
+//   能走到登录页时作废的会话多半已删、当前会话读出来常是 null，比不出东西；“这条原因是不是本页会话的”已经在写之前把过关
+//   （app/sync-disabled.ts 收广播时按 sid 比；本页自己退出时就是被拒的那个），再加 10 分钟过期兜底。
+//   要查“提示和哪次会话对不上”时，在开发者工具里看 sessionStorage 的 lemo.exit_notice 就能对上 session_id
+// • 旧格式（只有原因字符串，10-30 以前写的）按过期处理、读到就删（PROBE-sugg2 ②）：没有时刻判断不了新旧，宁可少一句提示
 
 /** removed：会话被吊销（session_revoked）；disabled：账号被管理员停用（account_disabled）；pending_deletion：注销冷静期（account_pending_deletion，R-192） */
 export type ExitNotice = 'removed' | 'disabled' | 'pending_deletion' | 'disabled_unsure';
@@ -40,10 +44,9 @@ export function setExitNotice(n: ExitNotice, storage?: Storage, o: { sid?: strin
   }
 }
 
-/** 存着的值 → 原因和时刻；认不出为 null（旧格式 at 为 null） */
-function parse(raw: string | null): { n: ExitNotice; at: number | null } | null {
+/** 存着的值 → 原因和时刻；认不出（含旧格式）为 null */
+function parse(raw: string | null): { n: ExitNotice; at: number } | null {
   if (raw === null) return null;
-  if (isExitNotice(raw)) return { n: raw, at: null };
   try {
     const v = JSON.parse(raw) as { n?: unknown; at?: unknown } | null;
     if (!v || !isExitNotice(v.n) || typeof v.at !== 'number' || !Number.isFinite(v.at)) return null;
@@ -53,13 +56,17 @@ function parse(raw: string | null): { n: ExitNotice; at: number | null } | null 
   }
 }
 
-/** 登录页读（不删；渲染里读，StrictMode 调两次也一样）；值不认识、写下超过 10 分钟（或时刻在将来）按没有处理，过期的顺手删掉 */
+/**
+ * 登录页读（有效的不删；渲染里读，StrictMode 调两次也一样）。认不出（含旧格式）、写下超过 10 分钟（或时刻在将来超过 1 分钟）
+ * 按没有处理，并顺手删掉
+ */
 export function readExitNotice(storage?: Storage, now: number = Date.now()): ExitNotice | null {
   try {
     const st = storage ?? sessionStorage;
-    const v = parse(st.getItem(EXIT_NOTICE_KEY));
-    if (!v) return null;
-    if (v.at !== null && (now - v.at >= EXIT_NOTICE_TTL_MS || v.at - now > 60_000)) {
+    const raw = st.getItem(EXIT_NOTICE_KEY);
+    if (raw === null) return null;
+    const v = parse(raw);
+    if (!v || now - v.at >= EXIT_NOTICE_TTL_MS || v.at - now > 60_000) {
       st.removeItem(EXIT_NOTICE_KEY);
       return null;
     }

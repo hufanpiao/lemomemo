@@ -6,7 +6,7 @@
 //   验证码刚通过时探测不出就出“暂时无法确认账号状态”（useAccountGate）；发现本机会话已被别的标签页换掉，整页重走 SessionCheck
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { installGate, type InstallGate } from '../../../platform/env.ts';
-import { clearExitNotice, readExitNotice, type ExitNotice } from '../../../platform/session.ts';
+import { clearExitNotice, readExitNotice, readSessionUserId, type ExitNotice } from '../../../platform/session.ts';
 import { useAccountGate, type GateExit } from '../hooks/useAccountGate.ts';
 import { useAuthFlow, type AuthFlowDeps } from '../hooks/useAuthFlow.ts';
 import { useAuthT } from '../hooks/useAuthT.ts';
@@ -41,14 +41,20 @@ function SessionCheck({ deps, onReplaced }: { deps: AuthFlowDeps | undefined; on
   const s = useSessionGate(deps);
   const gate = useAccountGate(deps, onReplaced);
   // 本机已有会话：打开时探测一次（R-256 ③）。不挡两个按钮，探测不到（断网、超时）照旧（R-258：常在断网时打开，要保证离线能用）；
-  // 先点了“回到 App”的由主 App 遇到再处理
-  const probed = useRef(false);
+  // 先点了“回到 App”的由主 App 遇到再处理。
+  // 按 user_id 记下探测过的账号（GATE-sugg ①）：别的标签页把会话换成另一个账号（useSessionGate 收到 storage 事件、或点按钮时发现，重画）时，
+  // 原地按新账号再探测一次（不重挂：useSessionGate 的“会话已换”提示要留着）。check 会按新会话重新记下 snap。
+  // 正在忙（退出、恢复进行中）、已退出回到登录表单时不探测，免得打断进行中的流程；那时不记下新账号，忙完再比
+  const readUid = deps?.readUserId ?? readSessionUserId;
+  const uid = s.state === 'signed-in' ? safeRead(readUid) : null;
+  const probedFor = useRef<string | null>(null);
   const { check } = gate;
   useEffect(() => {
-    if (probed.current || s.state !== 'signed-in') return;
-    probed.current = true;
+    if (s.state !== 'signed-in' || uid === null) return;
+    if (probedFor.current === uid || gate.busy || gate.view === 'exited') return;
+    probedFor.current = uid;
     void check('session');
-  }, [s.state, check]);
+  }, [s.state, uid, check, gate.busy, gate.view]);
   if (gate.view === 'exited') return <LoginPanel deps={deps} gateExit={gate.exit} onReplaced={onReplaced} />;
   if (s.state === 'none') return <LoginPanel deps={deps} serverPending={s.serverPending} onReplaced={onReplaced} />;
   if (s.state === 'signed-in' && (gate.view === 'pending' || gate.view === 'disabled')) {
@@ -125,12 +131,11 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
   const flow = useAuthFlow(captcha, deps, probe);
   const { step, email, invite, code, busy, error, hint, cooldown } = flow.state;
   useEffect(() => setAction(step === 'invite' || step === 'invite-code' ? 'invite_start' : 'login'), [step]);
-  // 恢复页退出了本会话：回填邮箱那一步（邮箱保留）
   const { backToEmail } = flow;
   useEffect(() => {
-    if (gate.view === 'exited') backToEmail();
+    if (gate.view === 'exited') backToEmail();   // 恢复页退出了本会话：回填邮箱那一步（邮箱保留）
   }, [gate.view, backToEmail]);
-  const exitShown = gate.view === 'exited' ? gate.exit : gateExit;
+  const exitShown = useExitShown(gate.view === 'exited' ? gate.exit : gateExit);
   const gated = gate.view === 'pending' || gate.view === 'disabled' || gate.view === 'unsure';
   const askEmail = !gated && (step === 'email' || step === 'invite');
   const askCode = !gated && (step === 'code' || step === 'invite-code');
@@ -269,4 +274,21 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
       )}
     </main>
   );
+}
+
+/** 读 user_id；抛错按读不到（null） */
+function safeRead(read: () => string | null): string | null {
+  try {
+    return read();
+  } catch {
+    return null;
+  }
+}
+
+/** 恢复页的退出提示（原样返回）；显示它时 ExitNoticeLine 不挂，也要把存着的退出原因删掉（GATE-sugg ②），免得下次回到登录页又冒出来 */
+function useExitShown(shown: GateExit | null): GateExit | null {
+  useEffect(() => {
+    if (shown) clearExitNotice();
+  }, [shown]);
+  return shown;
 }

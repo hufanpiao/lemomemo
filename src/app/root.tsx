@@ -110,31 +110,98 @@ export async function startRoot(boot: Pick<BootResult, 'status' | 'upgrade'>, d:
   }
 }
 
+/** blocked 解除后整屏提示最多再留多久（#root 一直没画出东西时，例如换账号、回登录页，不能一直盖着） */
+export const BLOCKED_RELEASE_MAX_MS = 5000;
+
+export interface WatchBlockedOptions {
+  doc?: Document;
+  /** blocked 第一次变成 true、整屏提示画出来之前调一次（main.tsx 在这里先按“没有 profile”定界面语言，BANNER-sugg ③） */
+  onFirstBlocked?: () => void;
+  /** 下一帧（motion 的 nextFrame；测试可换） */
+  frame?: (cb: () => void) => () => void;
+  /** 测试用：换掉 BLOCKED_RELEASE_MAX_MS */
+  releaseMaxMs?: number;
+}
+
+/** #root 里真画出东西了（同 platform/splash.ts 的 painted：有元素子节点或非空白文本） */
+function painted(el: Element): boolean {
+  return el.firstElementChild !== null || /\S/.test(el.textContent ?? '');
+}
+
 /**
  * 升级本机库被别的标签页挡住（TC-B1-48 的 blocked；架构师 10-30 第 8 点）：upgrade.blocked 变成 true 时整屏提示
  * “请关掉其他打开的柠檬记窗口”。这时 coldStart 还在等库打开，#root 还没 createRoot，所以另挂一个容器（body 下的
- * #lemo-blocked）和它自己的根；画出来的下一帧收起启动画面（SplashRelease）。blocked 变回 false（库打开了）就卸掉、删容器。
- * main.tsx 经 coldStart 的 onUpgradeCenter 调；返回取消订阅（同时卸掉）
+ * #lemo-blocked）和它自己的根；画出来的下一帧收起启动画面（SplashRelease）。
+ * blocked 变回 false（库打开了）以后不马上卸（BANNER-sugg ①：启动画面已经收起，马上卸会空白一小段）：
+ * 等 #root 画出东西的下一帧再卸、删容器；页面里没有 #root 就马上卸；最多等 BLOCKED_RELEASE_MAX_MS。等的时候又 blocked 了就接着显示。
+ * main.tsx 经 coldStart 的 onUpgradeCenter 调；返回取消订阅（同时马上卸掉）
  */
-export function watchCacheBlocked(upgrade: UpgradeCenter, doc: Document = document): () => void {
+export function watchCacheBlocked(upgrade: UpgradeCenter, opts: WatchBlockedOptions = {}): () => void {
+  const doc = opts.doc ?? document;
+  const frame = opts.frame ?? nextFrame;
+  const maxMs = opts.releaseMaxMs ?? BLOCKED_RELEASE_MAX_MS;
   let host: HTMLElement | null = null;
   let root: ReturnType<typeof createRoot> | null = null;
+  let firstSeen = false;
+  /** 正在等 #root 画出东西：取消等待 */
+  let cancelRelease: (() => void) | null = null;
+  const stopWaiting = (): void => {
+    cancelRelease?.();
+    cancelRelease = null;
+  };
   const unmount = (): void => {
+    stopWaiting();
     root?.unmount();
     host?.remove();
     root = null;
     host = null;
   };
+  const releaseWhenPainted = (): void => {
+    if (cancelRelease) return;
+    const app = doc.getElementById('root');
+    if (!app) {
+      unmount();
+      return;
+    }
+    let cancelFrame: (() => void) | null = null;
+    let mo: MutationObserver | null = null;
+    const done = (): void => {
+      if (cancelFrame) return;
+      mo?.disconnect();
+      cancelFrame = frame(unmount);
+    };
+    const timer = setTimeout(unmount, maxMs);
+    cancelRelease = () => {
+      clearTimeout(timer);
+      mo?.disconnect();
+      cancelFrame?.();
+    };
+    if (painted(app)) {
+      done();
+      return;
+    }
+    if (typeof MutationObserver !== 'function') return;   // 只靠上面的最长等待
+    mo = new MutationObserver(() => {
+      if (painted(app)) done();
+    });
+    mo.observe(app, { childList: true, characterData: true, subtree: true });
+  };
   const sync = (): void => {
     const blocked = upgrade.getState().blocked;
-    if (blocked && !root) {
+    if (blocked) {
+      stopWaiting();
+      if (root) return;
+      if (!firstSeen) {
+        firstSeen = true;
+        opts.onFirstBlocked?.();
+      }
       host = doc.createElement('div');
       host.id = 'lemo-blocked';
       doc.body.appendChild(host);
       root = createRoot(host);
-      root.render(released(<CacheBlockedScreen upgrade={upgrade} />));
-    } else if (!blocked && root) {
-      unmount();
+      root.render(released(<CacheBlockedScreen />));
+    } else if (root) {
+      releaseWhenPainted();
     }
   };
   const off = upgrade.subscribe(sync);

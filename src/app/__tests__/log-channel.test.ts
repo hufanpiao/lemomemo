@@ -96,3 +96,10 @@ describe('logQueueCleaner（架构 0.38 第 68 条；CONSENT-wire 审查：watch
     expect(wire).toMatch(/^\s*clearLogs,$/m);
   });
 });
+
+describe('升级中心的日志接到同一条通道（PROBE-sugg2 ③）', () => {
+  it('main.tsx 给 coldStart 传 upgradeDeps.log（act 原样、code 放进 code 列）和每日计数存储', () => {
+    const src = readFileSync(join(import.meta.dirname, '../main.tsx'), 'utf8');
+    expect(src).toMatch(/upgradeDeps: \{ log: \(act, code\) => logs\.log\(act, code \? \{ code \} : undefined\), logCounts: upgradeLogCountStore \}/);
+  });
+});

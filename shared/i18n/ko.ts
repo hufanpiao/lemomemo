@@ -39,4 +39,5 @@ export const ko = {
   'fmt.wd.5': '금',
   'fmt.wd.6': '토',
   'update.syncPaused': '동기화가 잠시 멈췄어요. 잠시 후 다시 열어 주세요', // REVIEW(ko)；同 zh：探测说账号正常但 5 分钟内已重新载入过，同步暂停（10-30）
+  'update.stalled': '새 버전이 아직 준비되지 않았어요 · 잠시 후 다시 시도해 주세요', // REVIEW(ko)；同 zh：查到新版本但 30 秒内没接管（BANNER-sugg ⑤，10-30）
 } as const satisfies Record<SharedMsgKey, string>;
