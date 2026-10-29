@@ -15,10 +15,10 @@ export interface ConsentPageProps {
   api: ConsentApi;
   /** 服务器已记下：agreed=true 同意，false 不同意 */
   onDone: (agreed: boolean) => void;
-  /** 会话被吊销或不在了：交给接线方按“被移除 / 没登录”处理 */
-  onRevoked: () => void;
-  /** 账号停用（account_disabled）：交给接线方按架构 4.3 清本机、回登录页 */
-  onDisabled: () => void;
+  /** 会话被吊销或不在了：交给接线方按“被移除 / 没登录”处理（sid：被拒那次请求用的会话，K6-sugg4 ①） */
+  onRevoked: (sid: string | null) => void;
+  /** 账号停用（account_disabled）：交给接线方按架构 4.3 清本机、回登录页（sid 同上） */
+  onDisabled: (sid: string | null) => void;
   /** R-239：这次没法保存选择，先不使用 AI 进 App，下次打开再问 */
   onSkip: () => void;
 }

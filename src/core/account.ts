@@ -12,7 +12,7 @@
 // • 本页的 SIGNED_OUT（刷新失败、被移除、被退出，K6-signedout）：和 SIGNED_IN、TOKEN_REFRESHED 同一个监听（deps.onAuthUser 的第二个回调），
 //   自己点“退出登录”的那一次已由 platform 按标记滤掉；已经在走别的退出流程（boot.switching）也不管。
 //   其余按“被移除或被退出”：不删 devices（旧会话已失效）→ 设闸 → 清空整库 → 关库 → 按库名删库 → 清运行时缓存
-//   （SW 预缓存、install_id 不动）→ onSignedOut('removed')，登录页提示“这台设备已在别的设备上被移除……”。
+//   （SW 预缓存、install_id 不动）→ onSignedOut('removed', 删掉的 session_id)，登录页提示“这台设备已在别的设备上被移除……”。
 //   会话里已经是别的账号（别的标签页刚登录）就按换账号处理。
 //   本机会话在判断“会话里现在是谁”的同一个同步段里就删（deps.dropSession，K6-signedout-sugg2 ①），删掉的 session_id 交给 onSignedOut：
 //   清库要几秒，等清完再删会把这几秒里别的标签页刚登录的新会话也删掉
@@ -84,13 +84,13 @@ export interface WatchAccountDeps extends EnsureAccountDeps {
    * 会话没了，本页已经清掉本机库以后调，去登录页：别的标签页退出时不带参数；
    * 本页收到 SIGNED_OUT（被移除或被退出）时带 'removed'，登录页提示“已在别的设备上被移除”（platform/session.ts 的 goToAuth）
    */
-  onSignedOut(reason?: 'removed', deadSessionId?: string | null): void;
+  onSignedOut(...args: [] | [reason: 'removed', deadSessionId: string | null]): void;
   /**
    * 本页收到 SIGNED_OUT（被移除或被退出）时同步删掉本机会话，返回删之前的 session_id（platform/session.ts 的 takeLocalSession；
    * K6-signedout-sugg2 ①）。和判断“会话里现在是谁”在同一个同步段里调，返回值原样交给 onSignedOut('removed', …)，
-   * 那边只在会话还是这一个时才再删一次。不填不删，onSignedOut 只收到 'removed'
+   * 那边只在会话还是这一个时才再删一次。必填（K6-sugg4 ②：带 'removed' 时一定带着 session_id，不再有“不给就直接删”）
    */
-  dropSession?(): string | null;
+  dropSession(): string | null;
   /** 被移除或被退出时停掉并清掉这个账号的日志上传队列（架构 0.38 第 68 条）；不填不清 */
   clearLogs?(): void;
   /**
@@ -207,9 +207,9 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
       return;
     }
     // 同一个同步段里删本机会话（这时会话里要么没人、要么还是本账号那个已作废的会话）
-    let dead: string | null | undefined;
+    let dead: string | null;
     try {
-      dead = deps.dropSession?.();
+      dead = deps.dropSession();
     } catch {
       dead = null;   // 删不掉（存储不可用）：本来也存不下会话
     }
@@ -220,7 +220,7 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
     } catch {
       // 日志队列清不掉不挡退出
     }
-    void wipeSignedOut(boot, deps).finally(() => (dead === undefined ? deps.onSignedOut('removed') : deps.onSignedOut('removed', dead)));
+    void wipeSignedOut(boot, deps).finally(() => deps.onSignedOut('removed', dead));
   };
   const offAuth = deps.onAuthUser((id) => check(id), signedOutHere);
   const offStorage = deps.onStorageUser((id) => check(id));

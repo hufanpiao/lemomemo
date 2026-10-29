@@ -144,7 +144,7 @@ describe('已登录设备', () => {
     render(<SettingsPage deps={{ api, exit, now }} />);
     expect(await screen.findByText(zh['settings.devices.loadFailed'])).toBeTruthy();
     expect(exit.wipe).not.toHaveBeenCalled();
-    expect(exit.clearLocalSession).not.toHaveBeenCalled();
+    expect(exit.clearLocalSessionIf).not.toHaveBeenCalled();
     expect(api.dropLocalSession).not.toHaveBeenCalled();
     expect(exit.goToAuth).not.toHaveBeenCalled();
     await act(async () => {

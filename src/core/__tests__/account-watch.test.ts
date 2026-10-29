@@ -60,6 +60,7 @@ async function setup(opts: { sessionAfterBoot?: string | null; openFails?: boole
       return () => undefined;
     },
     currentUserId: () => session.id,
+    dropSession: vi.fn((): string | null => null),
     onSignedOut: vi.fn(),
     clearLogs: vi.fn(),
     onSwitched: vi.fn(),
@@ -240,7 +241,7 @@ describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signe
     const b2 = await coldStart({ userId: 'A', appVersion: '4.0.0', cacheOptions: { factory: fakeIndexedDB().factory }, listen426: false });
     watchAccount(b2, {
       clearCacheStorage: () => Promise.resolve(), onAuthUser, onStorageUser: () => () => undefined,
-      currentUserId: () => 'A', onSignedOut: vi.fn(), onSwitched: vi.fn(),
+      currentUserId: () => 'A', dropSession: () => null, onSignedOut: vi.fn(), onSwitched: vi.fn(),
     });
     expect(onAuthUser).toHaveBeenCalledTimes(1);
     expect(typeof onAuthUser.mock.calls[0]?.[1]).toBe('function');
@@ -259,7 +260,7 @@ describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signe
     expect(deps.clearLogs).toHaveBeenCalledTimes(1);
     expect(deps.onSignedOut).not.toHaveBeenCalled();   // 清完才走
     await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
-    expect(deps.onSignedOut).toHaveBeenCalledWith('removed');
+    expect(deps.onSignedOut).toHaveBeenCalledWith('removed', null);
     expect(fake.dbs.has('planner-v4')).toBe(false);
     expect(boot.cache?.isClosed()).toBe(true);
     expect(deps.clearCacheStorage).toHaveBeenCalledTimes(1);
@@ -271,7 +272,7 @@ describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signe
   it('本机会话还读得到同一个账号（别的标签页刷新令牌写回）也按被移除处理', async () => {
     const { deps, signedOut } = await setup();
     signedOut();
-    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledWith('removed'));
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledWith('removed', null));
   });
 
   it('删库、清缓存失败也照样回登录页', async () => {
@@ -283,7 +284,7 @@ describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signe
       throw new Error('quota');
     });
     signedOut();
-    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledWith('removed'));
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledWith('removed', null));
   });
 
   it('只处理一次：随后的 storage(null)、再一次 SIGNED_OUT 都不再清、不再跳', async () => {
@@ -352,4 +353,16 @@ describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signe
     await vi.waitFor(() => expect(deps.onSwitched).toHaveBeenCalledTimes(1));
     expect(deps.onSignedOut).not.toHaveBeenCalled();
   });
+});
+
+// K6-sugg4 ②：onSignedOut 带 removed 时必须带 session_id（typecheck 检查；不执行）
+function signedOutShapes(d: WatchAccountDeps): void {
+  // @ts-expect-error 带 removed 不带 session_id
+  d.onSignedOut('removed');
+  d.onSignedOut();
+  d.onSignedOut('removed', null);
+}
+
+it('K6-sugg4 ②：不给 session_id 的调用编不过（上面的 @ts-expect-error，由 typecheck 检查）', () => {
+  expect(typeof signedOutShapes).toBe('function');
 });

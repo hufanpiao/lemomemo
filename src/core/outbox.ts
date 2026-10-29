@@ -139,6 +139,21 @@ async function rewriteRecs(
   notify(table, views);
 }
 
+/**
+ * discardUnlessInflight 的写事务：在事务里重新读，还在、不是 inflight 才删，view 跟着回滚（K6-sugg4 ③：
+ * 事务外查到的状态不算数，查完到删之间可能被 next() 取去发了）。返回删没删
+ */
+async function deleteUnlessInflight(ctx: Ctx, item: OutboxItem): Promise<boolean> {
+  let done = false;
+  await rewriteRecs(ctx, item.table, [item.id], async (t) => {
+    const cur = await t.get<OutboxItem>(OUTBOX, item.op_id);
+    if (!cur || cur.state === 'inflight') return;
+    await t.delete(OUTBOX, item.op_id);
+    done = true;
+  });
+  return done;
+}
+
 export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
   let status: OutboxStatus = { pending: 0, failed: 0, paused: null, remindRecs: EMPTY_SET };
   const listeners = new Set<() => void>();
@@ -203,6 +218,13 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
       if (!item) return;
       await rewriteRecs(ctx, item.table, [item.id], (t) => t.delete(OUTBOX, opId));
       await refresh();
+    },
+    async discardUnlessInflight(opId) {
+      if (suspended) return false;
+      const item = await getItem(opId);
+      const done = item && item.state !== 'inflight' ? await deleteUnlessInflight(ctx, item) : false;
+      if (done) await refresh();
+      return done;
     },
     async retryFailed(opIds) {
       if (suspended) return;

@@ -111,10 +111,14 @@ export type OutboxEvent =
   | { type: 'rejected'; item: OutboxItem; code: string }
   /** 426：整个队列已暂停 */
   | { type: 'upgrade_required'; min: string | null }
-  /** 被移除（session_revoked）：队列已设闸；调用方一收到就删本机会话（session.ts 的 takeLocalSession），清空本机、回登录页（K6-sugg3 ①） */
-  | { type: 'removed'; code: string }
-  /** 被停用（account_disabled）或注销冷静期（account_pending_deletion）：队列已设闸；调用方和 removed 一样清空本机、回登录页，按 code 提示 */
-  | { type: 'disabled'; code: string };
+  /**
+   * 被移除（session_revoked）：队列已设闸；调用方一收到就删本机会话，清空本机、回登录页（K6-sugg3 ①）。
+   * sid：被拒那次请求发出前本机会话的 session_id（send.ts 记在 SendFailure.sid 里，K6-sugg4 ①）——调用方只删这个会话；
+   * 没带（fail 的调用方没给）时调用方退回“收到那一刻删本机会话”
+   */
+  | { type: 'removed'; code: string; sid?: string | null }
+  /** 被停用（account_disabled）或注销冷静期（account_pending_deletion）：队列已设闸；调用方和 removed 一样清空本机、回登录页，按 code 提示；sid 同 removed */
+  | { type: 'disabled'; code: string; sid?: string | null };
 
 /** 启动时整理队列的结果 */
 export interface OutboxBootReport {
@@ -175,6 +179,11 @@ export interface Outbox {
   fail(opId: string, failure: SendFailure): Promise<FailureKind>;
   /** 丢掉一项并回滚 view（“发送失败”区的丢弃、gone 时选“好的”） */
   discard(opId: string): Promise<void>;
+  /**
+   * 同 discard，但这一项正在发（inflight）时不删：“是不是 inflight”和“删”在同一个写事务里判断（接手清单 K6-sugg4 ③）。
+   * 返回 true = 删掉了；没有这一项、正在发、设了闸都返回 false
+   */
+  discardUnlessInflight(opId: string): Promise<boolean>;
   /** “发送失败”区的重试：改回 pending、清 tries，重新叠加到 view */
   retryFailed(opIds?: readonly string[]): Promise<void>;
   /** 切到前台、上线：清掉退避等待，马上能发 */

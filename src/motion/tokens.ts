@@ -15,6 +15,14 @@ export const dur = {
   drop: 0.55,
   /** --dur-glass 0.3s：液态玻璃深浅切换 */
   glass: 0.3,
+  /** --dur-splash-* ：启动画面（src/styles/splash.css，R-254 方向 B）专用，别处不用 */
+  splashStill: 0.8,
+  splashBar2: 1,
+  splashBar3: 1.2,
+  splashBreathe: 1.6,
+  splashDark: 0.6,
+  splashOutRm: 0.12,
+  splashFailsafe: 6,
 } as const;
 
 export type Bezier = readonly [number, number, number, number];
@@ -35,6 +43,8 @@ export const ease = {
   gel: [0.3, 0.9, 0.4, 1],
   /** --ease-press：按下 */
   press: [0.3, 1.5, 0.5, 1],
+  /** --ease-splash-breathe：启动画面竖条起伏（等于 ease-in-out），别处不用 */
+  splashBreathe: [0.42, 0, 0.58, 1],
 } as const satisfies Record<string, Bezier>;
 
 /** 弹簧：刚度 380、阻尼比 0.78、质量 1；Motion 用 damping，按 m = 1 换算成 2·ζ·√k（17.2） */
@@ -50,7 +60,20 @@ export const spring = {
 
 /** TS 常量和 CSS 变量的对应关系（测试用它逐项比对） */
 export const cssVarOf = {
-  dur: { press: '--dur-press', ui: '--dur-ui', sheet: '--dur-sheet', drop: '--dur-drop', glass: '--dur-glass' },
+  dur: {
+    press: '--dur-press',
+    ui: '--dur-ui',
+    sheet: '--dur-sheet',
+    drop: '--dur-drop',
+    glass: '--dur-glass',
+    splashStill: '--dur-splash-still',
+    splashBar2: '--dur-splash-bar2',
+    splashBar3: '--dur-splash-bar3',
+    splashBreathe: '--dur-splash-breathe',
+    splashDark: '--dur-splash-dark',
+    splashOutRm: '--dur-splash-out-rm',
+    splashFailsafe: '--dur-splash-failsafe',
+  },
   ease: {
     standard: '--ease-standard',
     spring: '--ease-spring',
@@ -59,6 +82,7 @@ export const cssVarOf = {
     drop: '--ease-drop',
     gel: '--ease-gel',
     press: '--ease-press',
+    splashBreathe: '--ease-splash-breathe',
   },
 } as const satisfies { dur: Record<keyof typeof dur, string>; ease: Record<keyof typeof ease, string> };
 

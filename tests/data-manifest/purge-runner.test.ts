@@ -1,6 +1,6 @@
 // 注销 runner（对象存储那一半，TC-B0-117）：生成器产出的 runner = 'objstore' 注销用例，造数据 → account-delete → account-purge → runObjProbe
 // 离线：内存替身（tests/fakes/objstore-memory.ts）+ purge 替身；设了 OBJSTORE_ENDPOINT 时另打真的 S3 替身；
-// 设了 IT_*（本地 Supabase）时跑真的 account-delete → account-purge 整条链路（TC-B0-117，B1）
+// 设了 IT_*（本地 Supabase）时跑真的 account-delete → account-purge 整条链路（TC-B0-117，B1）；再设了 OBJSTORE_ENDPOINT 时正向用例在 LocalStack 上再跑一遍
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { allManifests } from '../../shared/manifests/index.ts';
 import { MemoryObjStore } from '../fakes/objstore-memory.ts';
@@ -9,6 +9,7 @@ import { generate } from './generate.ts';
 import {
   LIVE_S3_KEY, LIVE_S3_SECRET, LIVE_TIMEOUT_MS, liveSupabase, type LivePurge, memoryPurgeActs, type PurgeActs, purgeCases, runPurgeCases, startLivePurge,
 } from './purge-runner.ts';
+import { type LiveS3, liveSkipReason, realS3Backend } from './live-s3.ts';
 import { createFakeS3 } from '../shared/fake-s3.ts';
 import type { ObjStore } from '../../shared/objstore.ts';
 import { env, liveObjStore, OBJSTORE_LIVE } from '../shared/objstore-live.ts';
@@ -121,41 +122,63 @@ describe.skipIf(!OBJSTORE_LIVE)('注销 runner：探针打真的 S3 替身（没
 });
 
 // TC-B0-117 整条链路（架构 0.33 第 1 条挪到 B1）：同一个 runPurgeCases，acts 换成真的 account（delete）、account-purge 的 index.ts，
-// 打本地 Supabase（IT_* 四个变量，和 store-it 同名）和挂在本机端口上的 S3 替身（tests/shared/fake-s3.ts）。说明见 purge-runner.ts 文末。
-// 没设 IT_* 时跳过；CI 的 db 任务在严格模式里设了，跳过就算失败。
+// 打本地 Supabase（IT_* 四个变量，和 store-it 同名）。说明见 purge-runner.ts 文末。
+// 正向用例同一份代码、两种 S3 后端（B1 接手清单 B0-117-dev）：
+//   ① 仓库替身 tests/shared/fake-s3.ts（pageSize 2，真翻页）：没设 IT_* 时跳过；
+//   ② 真的 S3 兼容实现 LocalStack（OBJSTORE_ENDPOINT，node build/objstore.mjs up）：删除语义由 LocalStack 认定，没设 IT_* 或 OBJSTORE_ENDPOINT 时跳过。
+// 跳过时在输出里打印原因；CI 的 db 任务两种都设了，严格模式里跳过就算失败。反证用例（下面的网络守卫、objstore-cases 的“替身回删了却没删”）只用替身。
 const LIVE = liveSupabase(env);
+const REAL_S3 = realS3Backend(env);
 
-describe.skipIf(!LIVE)('TC-B0-117 真 account-purge 整条链路（本地 Supabase + S3 替身；没设 IT_* 时跳过）', () => {
-  let live: LivePurge | undefined;
+function positiveChain(title: string, skip: string | null, backend: () => LiveS3) {
+  if (skip) console.warn(`[跳过] ${title}：${skip}`);
+  describe.skipIf(skip !== null)(title, () => {
+    let live: LivePurge | undefined;
+    beforeAll(async () => {
+      if (LIVE) live = await startLivePurge(LIVE, backend());
+    }, LIVE_TIMEOUT_MS);
+    afterAll(async () => {
+      await live?.close();
+    }, LIVE_TIMEOUT_MS);
+
+    it('真的 account-delete（A 的会话）→ account-purge（冷静期注入成已满）之后四个 R2 桶里 A 为 0、B 不变', async () => {
+      if (!live) throw new Error('没起来');
+      const mark = live.s3Calls.length; // 只看这条用例里的请求（runPurgeCases 自己不删，DeleteObjects 只能是 account-purge 发的）
+      const a = await live.mkUser('a', SEED_USERS.a);
+      const b = await live.mkUser('b', SEED_USERS.b);
+      const out = await runPurgeCases(cases, { store: live.store, acts: live.acts });
+      expect(out).toHaveLength(4);
+      for (const o of out) expect(o.problems, o.id).toEqual([]);
+      expect(out.find((o) => o.id === 'TC-DEL-bucket-images')?.before).toEqual({ mode: 'count', a: 3, b: 3 });
+      // 函数那一侧：这一次只删了 A；A 不在 auth.users 了，B 还在
+      expect(live.lastPurge).toMatchObject({ ok: true, purged: 1, failed: 0 });
+      expect([await live.userExists(a), await live.userExists(b)]).toEqual([false, true]);
+      // 四个桶按前缀直接列（不经探针的正则）：A 为 0，B 和造的一样多、一个不少
+      for (const bk of R2_BUCKETS) {
+        expect(await live.store.listAll(bk, `${a}/`), bk).toHaveLength(0);
+        const wantB = seedObjects().filter((o) => o.bucket === bk && o.owner === 'b').map((o) => o.key).sort();
+        expect((await live.store.listAll(bk, `${b}/`)).map((o) => o.key).sort(), bk).toEqual(wantB);
+      }
+      // 每个桶都真的发过 DeleteObjects，且 S3 回 200（LocalStack 上就是它认定的删除）
+      for (const bk of R2_BUCKETS) {
+        const dels = live.s3Calls.slice(mark).filter((c) => c.bucket === bk && c.method === 'POST' && new URLSearchParams(c.query).has('delete'));
+        expect(dels.length, `${bk} 没有 DeleteObjects`).toBeGreaterThan(0);
+        expect(dels.every((c) => c.status === 200), bk).toBe(true);
+      }
+      // 申请注销、注销完成两封信都发给了 A（Resend 被拦下）
+      expect(live.mails.filter((m) => m.startsWith('purge-it-a-')).length).toBeGreaterThanOrEqual(2);
+    }, LIVE_TIMEOUT_MS);
+  });
+}
+
+positiveChain('TC-B0-117 真 account-purge 整条链路（本地 Supabase + S3 替身；没设 IT_* 时跳过）', liveSkipReason(env, false), () => {
   const fake = createFakeS3({ accessKeyId: LIVE_S3_KEY, secretAccessKey: LIVE_S3_SECRET, buckets: R2_BUCKETS });
   fake.pageSize = 2; // 删前缀时真的走 ListObjectsV2 翻页
-  beforeAll(async () => {
-    if (LIVE) live = await startLivePurge(LIVE, fake);
-  }, LIVE_TIMEOUT_MS);
-  afterAll(async () => {
-    await live?.close();
-  }, LIVE_TIMEOUT_MS);
-
-  it('真的 account-delete（A 的会话）→ account-purge（冷静期注入成已满）之后四个 R2 桶里 A 为 0、B 不变', async () => {
-    if (!live) throw new Error('没起来');
-    const a = await live.mkUser('a', SEED_USERS.a);
-    const b = await live.mkUser('b', SEED_USERS.b);
-    const out = await runPurgeCases(cases, { store: live.store, acts: live.acts });
-    expect(out).toHaveLength(4);
-    for (const o of out) expect(o.problems, o.id).toEqual([]);
-    expect(out.find((o) => o.id === 'TC-DEL-bucket-images')?.before).toEqual({ mode: 'count', a: 3, b: 3 });
-    // 函数那一侧：这一次只删了 A；A 不在 auth.users 了，B 还在
-    expect(live.lastPurge).toMatchObject({ ok: true, purged: 1, failed: 0 });
-    expect([await live.userExists(a), await live.userExists(b)]).toEqual([false, true]);
-    // 四个桶按前缀直接列（不经探针的正则）：A 为 0，B 和造的一样多、一个不少
-    for (const bk of R2_BUCKETS) {
-      expect(await live.store.listAll(bk, `${a}/`), bk).toHaveLength(0);
-      const wantB = seedObjects().filter((o) => o.bucket === bk && o.owner === 'b').map((o) => o.key).sort();
-      expect((await live.store.listAll(bk, `${b}/`)).map((o) => o.key).sort(), bk).toEqual(wantB);
-    }
-    // 申请注销、注销完成两封信都发给了 A（Resend 被拦下）
-    expect(live.mails.filter((m) => m.startsWith('purge-it-a-')).length).toBeGreaterThanOrEqual(2);
-  }, LIVE_TIMEOUT_MS);
+  return fake;
+});
+positiveChain('TC-B0-117 LocalStack 正向：真 account-purge 整条链路（本地 Supabase + LocalStack；没设 IT_* 或 OBJSTORE_ENDPOINT 时跳过）', liveSkipReason(env, true), () => {
+  if (!REAL_S3) throw new Error('没设 OBJSTORE_ENDPOINT');
+  return REAL_S3;
 });
 
 // 网络守卫：account 的第一封信在响应之后的后台任务里发（EdgeRuntime.waitUntil）。close 要等它结束再还原，

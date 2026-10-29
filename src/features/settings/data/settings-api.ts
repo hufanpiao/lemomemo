@@ -10,7 +10,11 @@
 // • 改语言：profiles.ui_locale（推送文案）＋ auth.updateUser({data: {locale}})（邮件模板）
 // 错误只认码：session_revoked、unauthorized、401、刷新令牌失效 → revoked（0.38 第 7 条：一律当“没登录”）；
 //   本机根本没有会话（别的标签页正常退出了）→ signed_out，提示“已退出登录”，不说“被移除”
+// • revoked、signed_out 带着这次请求用的会话的 session_id（sid；接手清单 K6-sugg4 ①）：发请求前记下（getSession 拿到的令牌里读；
+//   getSession 本身出错时用调它之前同步读的本机会话），随错误带回。回包前别的标签页可能已用同一账号写进新会话，
+//   离开本机时只删这个 sid 的会话（clearLocalSessionIf），不在回包那一刻读本机会话、删“现在那个”
 import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
+import { readSessionId } from '../../../platform/session.ts';
 import { withTimeout } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import type { DeviceRow } from './devices.ts';
@@ -31,7 +35,19 @@ export type SettingsErr =
   | 'device_not_found'
   | 'unknown';
 
-export type Result<T = undefined> = { ok: true; value: T } | { ok: false; error: SettingsErr };
+/** 会话没了的两种错误：一定带着 sid（这次请求用的会话；那时本机没有会话为 null） */
+export type SessionLostErr = 'revoked' | 'signed_out';
+
+export type Failure =
+  | { ok: false; error: SessionLostErr; sid: string | null }
+  | { ok: false; error: Exclude<SettingsErr, SessionLostErr> };
+
+export type Result<T = undefined> = { ok: true; value: T } | Failure;
+
+/** 按错误码组出失败结果：会话没了的两种带上 sid，别的不带 */
+export function failWith(error: SettingsErr, sid: string | null): Failure {
+  return error === 'revoked' || error === 'signed_out' ? { ok: false, error, sid } : { ok: false, error };
+}
 
 export interface LoadedDevices {
   rows: DeviceRow[];
@@ -54,9 +70,9 @@ export interface SettingsApi {
   deleteOwnDevice(currentDeviceId: string | null): Promise<void>;
   /**
    * 退出本机会话：signOut local，不是 ok 就兜底删。不带超时，由调用方套。
-   * 给了 onlyIf（含 null，退出前记下的 session_id）：兜底只在本机会话还是它时才删（K6-sugg3 ①）；不给时一定删
+   * sessionId 必填（退出前记下的 session_id，K6-sugg3 ①、K6-sugg4 ②）：兜底只在本机会话还是它时才删
    */
-  dropLocalSession(onlyIf?: string | null): Promise<LocalSignOut>;
+  dropLocalSession(sessionId: string | null): Promise<LocalSignOut>;
   saveLocale(locale: UiLocale): Promise<Result>;
 }
 
@@ -131,48 +147,59 @@ function toRow(v: unknown): DeviceRow | null {
 }
 
 const OK: Result = { ok: true, value: undefined };
-const fail = (e: unknown): Result<never> => ({
-  ok: false,
-  error: mapSettingsError(e),
-});
+/** sid：这次请求用的会话的 session_id（见文件头） */
+const fail = (e: unknown, sid: string | null): Failure => failWith(mapSettingsError(e), sid);
 
 /** 读列表、移除、退出其他设备、改语言最多等多久（appFetch 没有超时，网络卡住时请求可能几十秒不返回） */
 export const API_TIMEOUT_MS = 8000;
 
-const OFFLINE: Result<never> = { ok: false, error: 'offline' };
+const OFFLINE: Failure = { ok: false, error: 'offline' };
 
 /**
- * clearLocalSession：兜底删本机会话（设置页传 ExitDeps.clearLocalSession）。dropLocalSession(sid) 给了 session_id 时原样转给它，
- * 只在本机会话还是那一个时才删（K6-sugg3 ①）；不给时直接删
+ * clearLocalSessionIf：兜底删本机会话（设置页传 ExitDeps.clearLocalSessionIf）。dropLocalSession(sid) 把 session_id 原样转给它，
+ * 只在本机会话还是那一个时才删（K6-sugg3 ①；参数必填，K6-sugg4 ②）。
+ * readSid：同步读本机会话的 session_id（默认 platform/session.ts 的 readSessionId；只在 getSession 本身出错时用）
  */
 export function createSettingsApi(
   getDb: () => Promise<Db>,
-  clearLocalSession: (onlyIf?: string | null) => void,
+  clearLocalSessionIf: (sessionId: string | null) => void,
   timeoutMs: number = API_TIMEOUT_MS,
+  readSid: () => string | null = () => readSessionId(),
 ): SettingsApi {
   /** 超时按断网处理（只提示，不清本机） */
   const timed = <T>(run: () => Promise<Result<T>>): Promise<Result<T>> => withTimeout(run, timeoutMs, () => OFFLINE);
 
-  /** 先确认本机有会话（没有就是 signed_out），再执行 */
+  /**
+   * 先确认本机有会话（没有就是 signed_out），再执行。fn 里的失败用 session.sessionId 组（fail(e, s.sessionId)），
+   * 这样 revoked 带回的是发请求时那个会话，不是回包时本机的会话（K6-sugg4 ①）
+   */
   async function run<T>(fn: (db: Db, session: { userId: string; sessionId: string | null }) => Promise<Result<T>>): Promise<Result<T>> {
+    let sid: string | null = null;
     try {
       const db = await getDb();
+      sid = safeSid();   // getSession 出错（刷新令牌被拒等）时，出错的就是这时本机的会话
       const { data, error } = await db.auth.getSession();
-      if (error) return fail(error);
+      if (error) return fail(error, sid);
       const s = data.session;
-      if (!s) return { ok: false, error: 'signed_out' };
-      return await fn(db, {
-        userId: s.user.id,
-        sessionId: sessionIdOfToken(s.access_token),
-      });
+      if (!s) return failWith('signed_out', null);
+      sid = sessionIdOfToken(s.access_token);
+      return await fn(db, { userId: s.user.id, sessionId: sid });
     } catch (e) {
-      return fail(e);
+      return fail(e, sid);
+    }
+  }
+
+  function safeSid(): string | null {
+    try {
+      return readSid();
+    } catch {
+      return null;
     }
   }
 
   /** signOut({scope: 'local'})；不是 ok 就兜底删本机会话。不先查 getSession（令牌过期、断网时那一步本身会失败） */
-  async function dropLocal(db: Db | null, onlyIf: string | null | undefined): Promise<LocalSignOut> {
-    const clear = (): void => (onlyIf === undefined ? clearLocalSession() : clearLocalSession(onlyIf));
+  async function dropLocal(db: Db | null, sessionId: string | null): Promise<LocalSignOut> {
+    const clear = (): void => clearLocalSessionIf(sessionId);
     if (!db) {
       clear();
       return { serverDone: false };
@@ -203,9 +230,9 @@ export function createSettingsApi(
       timed(() =>
         run(async (db, s) => {
           const [dev, ses] = await Promise.all([loose(db).from('devices').select(DEVICE_COLS).is('deleted_at', null), loose(db).rpc('my_sessions')]);
-          if (dev.error) return fail(dev.error);
+          if (dev.error) return fail(dev.error, s.sessionId);
           // my_sessions 读不出来不挡设备列表；但会话被吊销要照样处理
-          if (ses.error && mapSettingsError(ses.error) === 'revoked') return { ok: false, error: 'revoked' };
+          if (ses.error && mapSettingsError(ses.error) === 'revoked') return failWith('revoked', s.sessionId);
           const rows = (dev.data ?? []).map(toRow).filter((r): r is DeviceRow => r !== null);
           return { ok: true, value: { rows, sessions: ses.error ? null : ses.data, session: s.sessionId } };
         }),
@@ -213,17 +240,17 @@ export function createSettingsApi(
 
     removeDevice: (id) =>
       timed(() =>
-        run(async (db) => {
+        run(async (db, s) => {
           const { error } = await loose(db).rpc('remove_device', { p_device_id: id });
-          return error ? fail(error) : OK;
+          return error ? fail(error, s.sessionId) : OK;
         }),
       ),
 
     signOutOthers: () =>
       timed(() =>
-        run(async (db) => {
+        run(async (db, s) => {
           const { error } = await db.auth.signOut({ scope: 'others' });
-          return error ? fail(error) : OK;
+          return error ? fail(error, s.sessionId) : OK;
         }),
       ),
 
@@ -238,15 +265,15 @@ export function createSettingsApi(
       }
     },
 
-    dropLocalSession: async (onlyIf) => dropLocal(await dbOrNull(), onlyIf),
+    dropLocalSession: async (sessionId) => dropLocal(await dbOrNull(), sessionId),
 
     saveLocale: (locale) =>
       timed(() =>
         run(async (db, s) => {
           const p = await loose(db).from('profiles').update({ ui_locale: locale }).eq('user_id', s.userId);
-          if (p.error) return fail(p.error);
+          if (p.error) return fail(p.error, s.sessionId);
           const { error } = await db.auth.updateUser({ data: { locale } });
-          return error ? fail(error) : OK;
+          return error ? fail(error, s.sessionId) : OK;
         }),
       ),
   };

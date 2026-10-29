@@ -1,10 +1,15 @@
 // 离开这台设备（架构 4.1、0.29 续第 98 条、0.38 第 7 条；K9 第二轮审查 N1、N2、L1）
-// • 被移除 / 被退出 / 会话不认（session_revoked、unauthorized、401、刷新失败）：一发现就同步删本机会话、记下删之前的 session_id
-//   （接手清单 K6-sugg3 ①，同 core/account.ts 的 signedOutHere；服务器上的会话已经没了，不用等 signOut），signOut local 紧接着放后台、不等它；
-//   再清本机库和 Cache Storage，清完、回登录页前只在本机会话还是记下的那一个时再删（clearLocalSession(sid)）——
-//   清库那几秒里别的标签页刚登录的新会话不删。signOut 不能放到清库之后：supabase-js 的 signOut 自己读本机会话、最后自己删会话键，
-//   放在后面会把那个新会话当成本页的退掉；放在前面时本机会话已删，它不发请求，几毫秒就做完
-//   提示“这台设备已在别的设备上被移除……”。“去登录”和几秒后的自动跳转都等清理做完再跳（最多等 LEAVE_WAIT_MAX_MS），
+// • 被移除 / 被退出 / 会话不认（session_revoked、unauthorized、401、刷新失败）：“发现”来自某个接口请求的回包，
+//   回包带着那次请求用的会话的 session_id（settings-api 发请求前记下，接手清单 K6-sugg4 ①）。一发现就同步删本机会话——
+//   只删那个 session_id 的（clearLocalSessionIf(sid)）：回包前别的标签页可能已用同一账号写进新会话，那个不删
+//   （K6-sugg3 ① 的“同一同步段里删”管不到请求在路上的那几秒）。服务器上的会话已经没了，不用等 signOut。
+//   signOut local 紧接着放后台、不等它；本机会话已经是别人的（上面没删掉）时不调，免得它把那个新会话退掉。
+//   再清本机库和 Cache Storage，清完、回登录页前只在本机会话还是那个 sid 时再删——清库那几秒里别的标签页刚登录的新会话不删。
+//   signOut 不能放到清库之后：supabase-js 的 signOut 自己读本机会话、最后自己删会话键（含 `-user` 等），放在后面会把那个新会话当成本页的退掉。
+//   放在前面时本机会话已删，它读到没有会话就不发吊销请求，但不是“几毫秒就做完”（K6-sugg4 ⑤）：客户端还没建好时要先加载 supabase-js 分包
+//   （慢网几秒；离线加载失败就走兜底删），建好了也要先等它初始化完（initializePromise，里面可能在刷新令牌）、再排 auth-js 的锁（auth-js GoTrueClient.signOut）；最后它照样无条件删一次会话键，
+//   这段时间里别的标签页写进来的新会话仍会被删（库本身的行为，接手清单 K6-signout-lib）
+//   界面提示“这台设备已在别的设备上被移除……”。“去登录”和几秒后的自动跳转都等清理做完再跳（最多等 LEAVE_WAIT_MAX_MS），
 //   清理没做完时按钮禁用，免得页面卸载把 IndexedDB 事务中止、留下“有会话、有库”
 // • 本机已经没有会话（别的标签页正常退出了）：同上，提示“已退出登录”
 // • 自己退出（“退出登录”和“移除本机”）：① 删本机那一行 devices ② 清本机库和缓存 ③ signOut local，不是 ok 就删本机会话。
@@ -60,10 +65,13 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
   const exiting = useRef(false);
   const cleanup = useRef<Promise<void> | null>(null);
   const left = useRef(false);
-  /** 退出开始时（或发现会话没了时）本机会话的 session_id；undefined = 还没记下（K6-sugg3 ①） */
-  const deadSid = useRef<string | null | undefined>(undefined);
+  /**
+   * 本页那个会话的 session_id：自己退出时是退出前读的，会话没了时是被拒那次请求用的（K6-sugg3 ①、K6-sugg4 ①）。
+   * 两条路都先记下再走到 leave，没记下（null）时 clearLocalSessionIf(null) 只在本机没有会话时删，等于不删别人的
+   */
+  const deadSid = useRef<string | null>(null);
 
-  /** 再删一次本机会话：记下过 session_id 就只在本机会话还是它时才删，别的标签页刚登录的新会话不删 */
+  /** 再删一次本机会话：只在本机会话还是 deadSid 时才删，别的标签页刚登录的新会话不删 */
   const clearSession = useCallback(() => dropSession(exit, deadSid.current), [exit]);
 
   /** 记下清理进度；跳转前要等它 */
@@ -96,18 +104,20 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
     }
   }, [exit, leaveWaitMs, clearSession]);
 
-  /** 会话没了：清空本机，清完马上删本机会话；signOut 放后台 */
+  /** 会话没了（sid：被拒那次请求用的会话）：只删那个会话，清空本机，清完再删一次；signOut 放后台 */
   const onSessionLost = useCallback(
-    (kind: 'revoked' | 'signed_out') => {
+    (kind: 'revoked' | 'signed_out', sid: string | null) => {
       if (exiting.current) return;
       exiting.current = true;
       // 下面后台调的 signOut 会引起本页的 SIGNED_OUT：先打标记，会话层不再按“被移除”重复处理（K6-signedout）。
-      // 只打本页的（审查建议 4）：这是真的被移除，别的标签页收到转来的 SIGNED_OUT 仍要提示“被移除”
-      markSelfSignOutThisTab();
-      // 同一个同步段里删本机会话，记下删之前的 session_id（K6-sugg3 ①）；signOut local 紧接着放后台（见文件头）
-      deadSid.current = sessionIdOf(exit);
-      dropSession(exit);
-      void api.dropLocalSession(deadSid.current).catch(() => undefined);
+      // 只打本页的（审查建议 4）：这是真的被移除，别的标签页收到转来的 SIGNED_OUT 仍要提示“被移除”。
+      // 标记记的是被拒的那个会话（K6-sugg4 ①），不是回包时本机的会话
+      markSelfSignOutThisTab(Date.now(), sid);
+      deadSid.current = sid;
+      dropSession(exit, sid);
+      // 本机会话已经是别的会话（回包前别的标签页写进来的，上面没删）：不调 signOut，免得把它退掉（见文件头）
+      const now = sessionIdOf(exit);
+      if (now === null || now === sid) void api.dropLocalSession(sid).catch(() => undefined);
       setNotice(kind);
       void track(
         (async () => {
@@ -121,8 +131,8 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
     [api, exit, track, clearSession],
   );
 
-  const onRevoked = useCallback(() => onSessionLost('revoked'), [onSessionLost]);
-  const onSignedOut = useCallback(() => onSessionLost('signed_out'), [onSessionLost]);
+  const onRevoked = useCallback((sid: string | null) => onSessionLost('revoked', sid), [onSessionLost]);
+  const onSignedOut = useCallback((sid: string | null) => onSessionLost('signed_out', sid), [onSessionLost]);
 
   useEffect(() => {
     if (!notice) return;

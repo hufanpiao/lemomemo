@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>启动画面三方向</title>
+<!--
+  R-251 启动画面三个方向（只出方向，不写进 App）。单文件，直接用浏览器打开。
+  颜色：只用 src/styles/skins/*.css 里的令牌值（下面按皮肤 × 深浅抄了用得到的几个，名字和令牌一致）；
+        柠檬图形原样取自 src/public/icons/logo-mark.svg 的 bgL、markL 两段（和 iOS 启动图 build/export_splash.py 同一份图源）。
+  字体：只用令牌 --f-zh（系统字体），不另引字体。
+  版式：手机画面的玻璃圆片、名字、底部那句话的位置和字号，照 build/export_splash.py 的 page() 原样计算，保证和 iOS 启动图对齐。
+-->
+<style>
+:root{
+  --f-zh:-apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --f-num:"Manrope", "SF Pro Rounded", -apple-system, "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --r-xl:28px;--r-lg:20px;--r-md:14px;--r-sm:10px;--r-pill:999px;
+  --dur-ui:220ms;--dur-sheet:380ms;--ease-out:cubic-bezier(.23,1,.32,1);--ease-drawer:cubic-bezier(.32,.72,0,1);--ease-standard:cubic-bezier(.2,0,0,1);
+  /* 说明页自己的底色：simple 浅色 */
+  --doc-bg:#E9EAEE;--doc-panel:#FFFFFF;--doc-line:#ECEDF0;--doc-fg:#141518;--doc-fg2:#595C64;--doc-accent:#F2DF4A;--doc-chip:#F0F1F4;
+}
+@media (prefers-color-scheme: dark){
+  :root{--doc-bg:#111215;--doc-panel:#1C1D22;--doc-line:#2A2B31;--doc-fg:#F2F3F5;--doc-fg2:#A6A9B1;--doc-chip:#28292F}
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--doc-bg);color:var(--doc-fg);font-family:var(--f-zh);font-size:15px;line-height:1.65}
+.wrap{max-width:1180px;margin:0 auto;padding:32px 24px 80px}
+h1{font-size:28px;line-height:1.3;margin:0 0 8px;font-weight:700}
+h2{font-size:22px;line-height:1.35;margin:0;font-weight:700}
+h3{font-size:16px;margin:22px 0 8px;font-weight:400;color:var(--doc-fg2)}
+p{margin:6px 0}
+.lead{color:var(--doc-fg2);max-width:860px}
+.card{background:var(--doc-panel);border-radius:var(--r-lg);padding:24px 26px;margin-top:24px}
+.tag{display:inline-block;background:var(--doc-accent);color:#141518;border-radius:var(--r-pill);padding:1px 12px;font-size:13px;margin-right:10px;vertical-align:3px}
+.idea{font-size:18px;margin:12px 0 4px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:4px 28px}
+ul{margin:4px 0;padding-left:20px}
+li{margin:3px 0}
+.k{color:var(--doc-fg2)}
+code{font-family:ui-monospace,Consolas,monospace;font-size:13px;background:var(--doc-chip);padding:1px 6px;border-radius:6px}
+.frames{display:flex;flex-wrap:wrap;gap:20px 18px;margin-top:10px;align-items:flex-start}
+.fr{max-width:100%}
+.fr .box{overflow:hidden;border-radius:16px;box-shadow:0 0 0 1px var(--doc-line)}
+.fr .cap{font-size:13px;color:var(--doc-fg2);margin-top:6px;max-width:100%}
+.scroller{max-width:100%;overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px;margin-top:10px}
+th,td{border-top:1px solid var(--doc-line);padding:9px 10px;text-align:left;vertical-align:top}
+th{font-weight:400;color:var(--doc-fg2);white-space:nowrap}
+.tl{min-width:0;display:grid;grid-template-columns:auto 1fr;gap:2px 14px;margin:6px 0;font-size:14px}
+.tl b{font-weight:400;font-family:var(--f-num);color:var(--doc-fg2);white-space:nowrap}
+.note{border-left:3px solid var(--doc-accent);padding:2px 0 2px 12px;margin:10px 0;color:var(--doc-fg)}
+/* 动效试播 */
+.play{display:flex;flex-wrap:wrap;gap:18px 26px;align-items:flex-start;margin-top:8px}
+.ctl{display:flex;flex-direction:column;gap:10px;font-size:14px;min-width:220px;max-width:420px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button,.go{font:inherit;font-size:14px;border:0;border-radius:var(--r-pill);padding:6px 14px;background:var(--doc-chip);color:var(--doc-fg);cursor:pointer}
+.seg button[aria-pressed="true"]{background:#141518;color:#FFFFFF}
+@media (prefers-color-scheme: dark){.seg button[aria-pressed="true"]{background:#F2F3F5;color:#141518}}
+.go{background:var(--doc-accent);color:#141518;align-self:flex-start;padding:8px 22px}
+.ctl label{display:flex;gap:8px;align-items:center;cursor:pointer}
+.clock{font-family:var(--f-num);color:var(--doc-fg2);font-size:13px}
+.stagewrap{max-width:100%;overflow-x:auto}
+.stage{flex:none;position:relative;overflow:hidden;border-radius:22px;box-shadow:0 0 0 1px var(--doc-line)}
+
+/* ===== 画面里的令牌（值抄自 src/styles/skins/*.css，名字和令牌一致） ===== */
+.scene[data-skin="simple"][data-theme="light"]{--bg:#E9EAEE;--scr-bg:#E9EAEE;--b-canvas:radial-gradient(55% 45% at 6% 0%,rgba(242,223,74,.30),transparent 70%),radial-gradient(45% 45% at 100% 100%,rgba(140,201,232,.26),transparent 70%),linear-gradient(170deg,#F5F4EE,#E8EBF0);--text:#141518;--text-2:#595C64;--panel:#FFFFFF;--line:#ECEDF0;--b-rail:#FFFFFF;--fab-bg:#F2DF4A;--fab-fg:#141518}
+.scene[data-skin="simple"][data-theme="dark"]{--bg:#111215;--scr-bg:#111215;--b-canvas:radial-gradient(55% 45% at 6% 0%,rgba(242,223,74,.10),transparent 70%),radial-gradient(45% 45% at 100% 100%,rgba(140,201,232,.08),transparent 70%),linear-gradient(170deg,#17181C,#0F1013);--text:#F2F3F5;--text-2:#A6A9B1;--panel:#1C1D22;--line:#2A2B31;--b-rail:#1F2025;--fab-bg:#F2DF4A;--fab-fg:#141518}
+.scene[data-skin="glass"][data-theme="light"]{--bg:#EFEEE8;--scr-bg:radial-gradient(70% 38% at 12% 4%, rgba(242,223,74,.55), transparent 70%), radial-gradient(50% 30% at 100% 22%, rgba(244,169,160,.26), transparent 70%), radial-gradient(70% 40% at 90% 100%, rgba(242,223,74,.40), transparent 70%), radial-gradient(50% 30% at 0% 78%, rgba(127,191,228,.28), transparent 70%), linear-gradient(165deg, #F5F4EE, #E4E7EC);--text:#141518;--text-2:#4D5057;--panel:#FFFFFF;--line:#EEEDE7;--b-rail:rgba(255,255,255,.72);--fab-bg:#F2DF4A;--fab-fg:#141518}
+.scene[data-skin="glass"][data-theme="light"]{--b-canvas:var(--scr-bg)}
+.scene[data-skin="glass"][data-theme="dark"]{--bg:#121419;--scr-bg:radial-gradient(70% 38% at 12% 4%, rgba(242,223,74,.20), transparent 70%), radial-gradient(50% 30% at 100% 22%, rgba(244,169,160,.10), transparent 70%), radial-gradient(70% 40% at 90% 100%, rgba(242,223,74,.14), transparent 70%), radial-gradient(50% 30% at 0% 78%, rgba(127,191,228,.12), transparent 70%), linear-gradient(165deg, #1A1C22, #0F1014);--text:#F1F2F4;--text-2:#B4B8C1;--panel:#1E2027;--line:#2C2F37;--b-rail:rgba(34,37,46,.72);--fab-bg:#F2DF4A;--fab-fg:#141518}
+.scene[data-skin="glass"][data-theme="dark"]{--b-canvas:var(--scr-bg)}
+/* 品牌深色底：A、B 两个方向深色时不分皮肤，都用 glass 深色的 --scr-bg（柠檬光压暗） */
+.scene{--brand-dark:radial-gradient(70% 38% at 12% 4%, rgba(242,223,74,.20), transparent 70%), radial-gradient(50% 30% at 100% 22%, rgba(244,169,160,.10), transparent 70%), radial-gradient(70% 40% at 90% 100%, rgba(242,223,74,.14), transparent 70%), radial-gradient(50% 30% at 0% 78%, rgba(127,191,228,.12), transparent 70%), linear-gradient(165deg, #1A1C22, #0F1014);--brand-dark-text:#F1F2F4;--brand-dark-text2:#B4B8C1}
+
+.scene{position:relative;overflow:hidden;font-family:var(--f-zh);color:var(--text);transform-origin:0 0}
+.scene > *{position:absolute;inset:0}
+.scene .skinbg{background:var(--scr-bg)}
+.scene.desk .skinbg{background:var(--b-canvas)}
+.scene .brand-l svg{width:100%;height:100%;display:block}
+.scene .brand-d{background:var(--brand-dark)}
+.scene .big svg.mark,.scene .end svg.mark{position:absolute;display:block;overflow:visible;transform-origin:0 0}
+.scene .t{position:absolute;text-align:center;white-space:nowrap;line-height:1.2}
+.scene .t span{display:inline-block;transform-origin:0 0}
+.scene .nm{font-weight:800;letter-spacing:.02em}
+.scene .end .mini{position:absolute;white-space:nowrap;line-height:1.2;color:var(--text-2)}
+.scene .end .date{position:absolute;white-space:nowrap;line-height:1.2;font-weight:700;color:var(--text)}
+.scene .end .date small{font-size:.56em;font-weight:400;color:var(--text-2);margin-left:.45em}
+.scene .bar{transform-box:fill-box;transform-origin:50% 50%}
+.scene .breathe .bar{animation:breathe 1.6s ease-in-out infinite}
+.scene .breathe .bar.b2{animation-delay:.2s}
+.scene .breathe .bar.b3{animation-delay:.4s}
+@keyframes breathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(.84)}}
+/* 试播里的“App 首页”示意 */
+.scene .app{background:var(--scr-bg)}
+.scene .app .row{position:absolute;left:16px;right:16px;height:64px;border-radius:var(--r-lg);background:var(--panel);display:flex;align-items:center;padding:0 18px;gap:14px;font-size:15px}
+.scene .app .row i{font-style:normal;font-family:var(--f-num);color:var(--text-2);font-size:14px;width:44px}
+.scene .app .nav{position:absolute;left:24px;bottom:42px;width:236px;height:62px;border-radius:var(--r-pill);background:var(--panel);box-shadow:0 10px 30px rgba(20,21,24,.14)}
+.scene .app .fab{position:absolute;right:24px;bottom:40px;width:66px;height:66px;border-radius:50%;background:var(--fab-bg);color:var(--fab-fg);display:flex;align-items:center;justify-content:center;font-size:30px;line-height:1}
+.scene .launch-tag{inset:auto auto 14px 14px;background:rgba(20,21,24,.72);color:#FFFFFF;font-size:13px;padding:3px 10px;border-radius:var(--r-pill)}
+@media (max-width:600px){.wrap{padding:20px 16px 60px}.card{padding:18px 16px}h1{font-size:24px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>启动画面：三个方向</h1>
+<p class="lead">R-251。打开 App 时，告知页关口（<code>GatedApp</code> / <code>ConsentGate</code>，最多 5 秒）和分包加载会留一段空白。启动画面就是盖住这段空白的那一屏。这一页只给方向，选定后再出实现稿。</p>
+
+<div class="card">
+  <h2>先定的几条（三个方向都遵守）</h2>
+  <div class="cols">
+    <div>
+      <h3>和 iOS 启动图怎么接</h3>
+      <ul>
+        <li>iPhone 主屏幕打开时，系统先显示 iOS 启动图（R-232，12 张竖屏 PNG，只有浅色），网页第一次画出来的那一刻启动图消失。</li>
+        <li>所以启动画面的<b>第一帧必须和启动图一模一样</b>：同一份图源（<code>logo-mark.svg</code> 的 bgL、markL），同一套位置算法（<code>build/export_splash.py</code>：圆片直径 42% 屏宽、圆心在 40% 屏高、名字 8% 屏宽、底部那句话离底 6%）。下面所有手机浅色画面都是按这套算法画的。</li>
+        <li>要动，也只能在第一帧之后慢慢动，不能一出来就变。</li>
+        <li>电脑（exe、浏览器）没有启动图，第一帧可以直接按深浅色画。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>出现和消失</h3>
+      <ul>
+        <li><b>出现：没有动画。</b>启动画面写在静态 <code>index.html</code> 里，跟着网页第一次绘制一起出来，不等 React。</li>
+        <li><b>不设最短显示时间。</b>App 一准备好就走，多数时候不到 1 秒。</li>
+        <li><b>消失：</b>整屏透明度 1→0，<code>--dur-ui</code> 220 ms、<code>--ease-out</code>；下面的 App 已经画好，淡出就是露出来。</li>
+        <li><b>减少动态效果</b>（系统设置或设置里的开关 <code>data-rm="1"</code>）：一切位移、缩放、循环都不做，只留透明度变化，消失缩短为 120 ms。</li>
+        <li>任何时候都不出现“加载中…”“请稍候”和转圈。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 三个方向由脚本按同一套数据画出来 -->
+<div id="dirs"></div>
+
+<div class="card">
+  <h2>三个方向对比</h2>
+  <div class="scroller">
+  <table>
+    <tr><th></th><th>A 定格</th><th>B 在听</th><th>C 翻到今天</th></tr>
+    <tr><th>一句话</th><td>启动图本身就是启动画面，一动不动</td><td>柠檬里的三条声波等久了会轻轻呼吸</td><td>柠檬退到角落，今天的日期先到</td></tr>
+    <tr><th>不到 1 秒就走时</th><td>只看到启动图淡出，最干净</td><td>和 A 完全一样（0.8 秒前什么都不动）</td><td>0.5 秒后才开始变；0.5～1.1 秒之间走，会看到变到一半就淡出</td></tr>
+    <tr><th>等满 5 秒时</th><td>一张静图停 5 秒，容易让人以为卡住了</td><td>声波在轻轻起伏，看得出“它活着”</td><td>早就停在页头，安静等着</td></tr>
+    <tr><th>深色模式（iPhone）</th><td>一直是浅色，App 出来那 220 ms 才变暗</td><td>0.8 秒后和呼吸一起，0.6 秒慢慢暗下来</td><td>变形过程中自然从浅色过渡到深色</td></tr>
+    <tr><th>两套皮肤</th><td>不区分（品牌画面）</td><td>不区分（品牌画面）</td><td>停下来的那一屏用各皮肤自己的底色</td></tr>
+    <tr><th>和 App 接得顺不顺</th><td>整屏淡出，交接是一下“换画面”</td><td>同 A</td><td>页头位置和今天页一致，交接最顺；但第一屏如果是告知页，就对不上</td></tr>
+    <tr><th>实现量</th><td>最小：一段静态 HTML + 一个淡出</td><td>小：多一个 CSS 循环和一次变暗</td><td>中：要按真实页头位置做 FLIP 位移，手机、电脑各对一次</td></tr>
+    <tr><th>风险</th><td>最低</td><td>低：循环只动三根竖条的 scaleY，合成层完成</td><td>中：首屏不是今天页时要退回 A 的做法；位移途中被打断的样子要调</td></tr>
+  </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2>我的推荐：B 在听</h2>
+  <ul>
+    <li><b>短的时候它就是 A。</b>0.8 秒以内什么都不动，和 iOS 启动图严丝合缝，多数用户只看到一次淡出。</li>
+    <li><b>长的时候它比 A 好。</b>最坏要等 5 秒，静图停 5 秒最像“卡死了”；三条声波轻轻起伏，不用任何字就说明“还在走”，而且它表达的正是柠檬记的核心——说一句话。</li>
+    <li><b>深色用户不会被闪 5 秒。</b>A 在 iPhone 深色模式下会亮着等到底；B 在 0.8 秒后顺势暗下来。</li>
+    <li><b>比 C 稳。</b>C 的交接最漂亮，但它押在“第一屏一定是今天页、页头位置固定”上；第一次打开先出告知页、以后页头改版，它都要跟着改。B 不依赖 App 里的任何布局。</li>
+    <li>如果负责人更看重“打开就是今天”的连贯感，C 也值得做，可以作为以后的升级：先上 B，等今天页页头定型再评估。</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>需要负责人先知道的取舍</h2>
+  <ul>
+    <li><b>字体会差一点点。</b>iOS 启动图上的字是用 Noto Sans SC 渲染的（R-243），启动画面在 iPhone 上用系统苹方。启动图消失、启动画面接上的那一刻，“柠檬记”三个字和底部那句话的字形会有细微变化，图形部分完全一致。要做到一个像素不差，只能在启动画面里带一个只含这十几个字的 Noto Sans SC 小字库（几 KB）；这次按要求没有另引字体，留给负责人定。</li>
+    <li><b>名字是粗体。</b>为了和启动图一致，“柠檬记”沿用启动图的 800 字重；按 R-136 属于“引导等整页的主标题”，在允许范围内。C 方向停下来以后的日期也是页面大标题。其余文字都是常规字重。</li>
+    <li><b>iPhone 深色模式没有深色启动图。</b>R-232 定的是只出浅色、真机实测后再说，所以三个方向在 iPhone 上第一帧都只能是浅色；电脑和浏览器第一帧可以直接是深色。</li>
+    <li><b>背景模糊的绘制成本。</b>柠檬光背景是大半径高斯模糊，第一帧就要画。实现时建议用一张很小的预模糊图（几 KB，放大后看不出差别）代替实时模糊，免得旧 iPhone 第一帧变慢。</li>
+    <li><b>CSP。</b>启动画面要在 React 之前就画出来，样式要放进外链的 CSS 文件，不能写内联 <code>&lt;style&gt;</code>（现在的 CSP 会拦）。</li>
+    <li><b>色值。</b>画面只用了令牌里的颜色；柠檬图形里的几个色（#F2DF4A、#F4A9A0、#7FBFE4 等）是 logo 原图的，和令牌里柠檬黄、玻璃底光斑的值相同。</li>
+  </ul>
+</div>
+
+</div>
+
+<script>
+(() => {
+"use strict";
+/* ---------- 图源：原样取自 src/public/icons/logo-mark.svg（只给 id 加后缀，避免同页多份冲突） ---------- */
+let uid = 0;
+const defs = (p) => `<defs>
+<filter id="blurB1${p}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="70"/></filter>
+<filter id="blurB2${p}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="120"/></filter>
+<filter id="shB${p}" x="-50%" y="-200%" width="200%" height="500%"><feGaussianBlur stdDeviation="40"/></filter>
+<linearGradient id="gL${p}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F5F4EE"/><stop offset="1" stop-color="#E3E6EC"/></linearGradient>
+<clipPath id="clipL${p}"><circle cx="512" cy="512" r="304"/></clipPath></defs>`;
+const bgL = () => { const p = "b" + (++uid); return `<svg viewBox="0 0 1024 1024" preserveAspectRatio="xMidYMid slice">${defs(p)}
+<rect width="1024" height="1024" fill="url(#gL${p})"/>
+<g filter="url(#blurB1${p})"><circle cx="350" cy="330" r="300" fill="#F2DF4A"/><circle cx="720" cy="720" r="240" fill="#F2DF4A" opacity=".85"/><circle cx="800" cy="270" r="150" fill="#F4A9A0" opacity=".55"/><circle cx="240" cy="820" r="160" fill="#7FBFE4" opacity=".45"/></g></svg>`; };
+const markL = (box, left, top, bars) => { const p = "m" + (++uid); const b = bars || [1, 1, 1];
+  const bar = (i, x, y, h) => `<rect class="bar b${i}" x="${x}" y="${y}" width="96" height="${h}" rx="48" fill="#141518" style="transform:scaleY(${b[i - 1]})"/>`;
+  return `<svg class="mark" width="${box}" height="${box}" style="left:${left}px;top:${top}px" viewBox="0 0 1024 1024">${defs(p)}
+<ellipse cx="512" cy="850" rx="250" ry="40" fill="#3a3418" opacity=".16" filter="url(#shB${p})"/>
+<g clip-path="url(#clipL${p})"><rect width="1024" height="1024" fill="#f3f2ea"/><g filter="url(#blurB2${p})" opacity=".9"><circle cx="350" cy="330" r="300" fill="#F2DF4A"/><circle cx="720" cy="720" r="240" fill="#F2DF4A" opacity=".85"/><circle cx="800" cy="270" r="150" fill="#F4A9A0" opacity=".5"/></g><rect width="1024" height="1024" fill="#fff" opacity=".40"/></g>
+<circle cx="512" cy="512" r="301" fill="none" stroke="#fff" stroke-opacity=".92" stroke-width="7"/>
+<circle cx="512" cy="512" r="268" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="5"/>
+<path d="M300 404 A240 240 0 0 1 430 262" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" opacity=".95"/>
+${bar(1, 320, 402, 220)}${bar(2, 464, 322, 380)}${bar(3, 608, 387, 250)}</svg>`; };
+
+/* ---------- 版式：手机照 build/export_splash.py 的 page()；电脑按 400 宽的手机比例放大到正中 ---------- */
+const GLASS_R = 304;
+function big(w, h) {
+  const phone = w < h, cw = phone ? w : 400;
+  const glassD = 0.42 * cw, box = glassD * 1024 / (2 * GLASS_R), cy = (phone ? 0.40 : 0.42) * h;
+  const namePx = 0.08 * cw, nameTop = cy + box / 2 + 14 / 390 * cw;
+  return { glassD, box, cx: w / 2, cy, namePx, nameTop, name2Px: namePx * 13 / 30, name2Top: nameTop + namePx * 1.2 + 2 / 390 * cw,
+    footPx: 0.034 * cw, footBottom: 0.06 * h, side: 0.1 * w };
+}
+/* C 方向停下来的页头：手机左边距 24、电脑 40（实现时对齐今天页真实页头） */
+function end(w, h) {
+  const phone = w < h;
+  return phone ? { g: 28, gx: 24, gy: 64, mini: 15, dateX: 24, dateY: 112, datePx: 30 }
+               : { g: 32, gx: 40, gy: 40, mini: 16, dateX: 40, dateY: 104, datePx: 34 };
+}
+const WD = "日一二三四五六";
+const now = new Date();
+const DATE = `${now.getMonth() + 1}月${now.getDate()}日`, WEEK = `周${WD[now.getDay()]}`;
+
+/* mode：light＝启动图那一屏；dark＝品牌深色那一屏；end＝C 停下来的页头；app＝试播时下面的 App 示意 */
+function scene({ w, h, skin = "simple", theme = "light", mode = "light", bars, withEnd }) {
+  const el = document.createElement("div");
+  el.className = "scene" + (w < h ? "" : " desk");
+  el.dataset.skin = skin; el.dataset.theme = theme;
+  el.style.width = w + "px"; el.style.height = h + "px";
+  const m = big(w, h), e = end(w, h);
+  const ink = mode === "dark" ? "var(--brand-dark-text)" : "#141518";
+  const ink2 = mode === "dark" ? "var(--brand-dark-text2)" : "#141518";
+  const showBig = mode === "light" || mode === "dark";
+  const eBox = e.g * 1024 / (2 * GLASS_R);
+  el.innerHTML = `
+<div class="skinbg"></div>
+<div class="brand-d" style="opacity:${mode === "dark" ? 1 : 0}"></div>
+<div class="brand-l" style="opacity:${mode === "light" ? 1 : 0}">${bgL()}</div>
+${(mode === "end" || withEnd) ? `<div class="end" style="opacity:${mode === "end" ? 1 : 0}">
+  ${markL(eBox, e.gx + e.g / 2 - eBox / 2, e.gy + e.g / 2 - eBox / 2)}
+  <div class="mini" style="left:${e.gx + e.g + 10}px;top:${e.gy + e.g / 2 - e.mini * 0.6}px;font-size:${e.mini}px"><span>柠檬记</span></div>
+  <div class="date" style="left:${e.dateX}px;top:${e.dateY}px;font-size:${e.datePx}px">${DATE}<small>${WEEK}</small></div>
+</div>` : ""}
+<div class="big" style="opacity:${showBig ? 1 : 0}">
+  ${markL(m.box, m.cx - m.box / 2, m.cy - m.box / 2, bars)}
+  <div class="t nm" style="left:${m.side}px;right:${m.side}px;top:${m.nameTop}px;font-size:${m.namePx}px;color:${ink}"><span>柠檬记</span></div>
+  <div class="t n2" style="left:${m.side}px;right:${m.side}px;top:${m.name2Top}px;font-size:${m.name2Px}px;opacity:.7;color:${ink2}">Lemo</div>
+  <div class="t ft" style="left:${m.side}px;right:${m.side}px;bottom:${m.footBottom}px;font-size:${m.footPx}px;opacity:.6;color:${ink2}">说一句，清清爽爽记下来</div>
+</div>`;
+  return el;
+}
+/* 试播用：App 首页示意（今天页，页头和 C 停下来的位置一致） */
+function appMock(w, h, skin, theme) {
+  const el = scene({ w, h, skin, theme, mode: "end" });
+  const app = document.createElement("div");
+  app.className = "app";
+  const e = end(w, h);
+  app.innerHTML = el.querySelector(".end").outerHTML +
+    [["09:30", "周会"], ["12:00", "和小林吃饭"], ["", "买两个柠檬"]].map((r, i) =>
+      `<div class="row" style="top:${e.dateY + 64 + i * 76}px"><i>${r[0] || "待办"}</i>${r[1]}</div>`).join("") +
+    `<div class="nav"></div><div class="fab">＋</div>`;
+  el.innerHTML = ""; el.appendChild(app);
+  return el;
+}
+
+/* ---------- 三个方向的文字 ---------- */
+const DIRS = [
+  { id: "a", tag: "A", name: "定格",
+    idea: "iOS 启动图本身就是启动画面：一张图，一动不动，App 好了就淡出。",
+    join: "第一帧就是启动图的复刻，iOS 启动图消失时画面上什么都没变。从头到尾只有一个动作：最后的淡出。",
+    tl: [["0 秒", "和启动图完全相同的一屏。"], ["0～5 秒", "不动。"], ["App 好了", "整屏淡出 220 ms，露出 App。"]],
+    rm: "本来就不动；消失改为 120 ms 淡出。",
+    copy: "保留底部那句“说一句，清清爽爽记下来”。它在启动图上就有，拿掉反而会跳；它是一句介绍，不是状态，不会让人着急。",
+    dark: "iPhone：没有深色启动图，为了不跳，启动画面一直保持浅色，App 淡出出来的那 220 ms 才变成深色。电脑和浏览器没有启动图，深色时第一帧就画深色版（下图）。",
+    skin: "不区分皮肤。这是品牌画面，和 iOS 启动图一样只有一套；淡出时露出的才是用户选的皮肤。",
+    pros: "最稳、最省事，和启动图零差异。", cons: "等得久时是一张静图停好几秒，最像卡住；iPhone 深色用户会被亮屏照到底。" },
+  { id: "b", tag: "B", name: "在听",
+    idea: "柠檬里那三条声波，等久了会像在听你说话一样轻轻起伏。",
+    join: "前 0.8 秒和 A 一样完全静止，所以和 iOS 启动图零差异；多数打开在 0.8 秒前就结束了，用户根本看不到动效。超过 0.8 秒才开始呼吸，起点就是静止时的样子，不会跳。",
+    tl: [["0 秒", "和启动图完全相同的一屏。"], ["0.8 秒起", "三根竖条依次轻轻缩放（高度 100%→84%→100%，1.6 秒一轮，依次错开 0.2 秒），只动 scaleY，只用合成层。"], ["0.8～1.4 秒", "深色模式下，背景和文字同时用 0.6 秒慢慢暗到深色版。"], ["App 好了", "整屏淡出 220 ms；竖条不用先停，淡出时一起消失。"]],
+    rm: "不呼吸（就是 A）；深色模式下的变暗保留，但只是透明度渐变。消失 120 ms。",
+    copy: "保留底部那句“说一句，清清爽爽记下来”。和启动图一致；声波起伏时这句话正好把意思说完：它在等你开口，而不是在“加载”。",
+    dark: "iPhone：第一帧浅色（和启动图一致），0.8 秒后和呼吸一起暗下来，深色用户最多被浅色照 1.4 秒。电脑和浏览器第一帧直接是深色版（下图）。深色底用 glass 深色的 <code>--scr-bg</code>（柠檬光压暗），两套皮肤共用。",
+    skin: "不区分皮肤，理由同 A；淡出时露出用户选的皮肤。",
+    pros: "短开时和 A 一样干净；长等时有“活着”的信号，而且是产品本身的意象（声音）。", cons: "比 A 多一个循环和一次变暗，要多测一遍旧 iPhone 的帧率。" },
+  { id: "c", tag: "C", name: "翻到今天",
+    idea: "柠檬缩成左上角的小图标，今天的日期先到，启动画面自己变成今天页的页头。",
+    join: "前 0.5 秒和启动图完全一样。还没好，就用 0.6 秒把圆片缩到左上角、名字缩成小字跟在旁边，柠檬光退成当前皮肤的底色，日期从下面浮上来。停下来以后，页头的位置和今天页一致，App 出来时页头原地不动，只有下面的内容淡入。",
+    tl: [["0 秒", "和启动图完全相同的一屏。"], ["0.5～1.1 秒", "圆片和名字位移、缩小到页头（<code>--ease-drawer</code>）；Lemo 和底部那句话 0.2 秒淡出；柠檬光淡出、露出皮肤底色；日期 0.25 秒后浮上来（上移 8 px）。"], ["1.1 秒以后", "停在页头，不再动。"], ["App 好了", "整屏淡出 220 ms；页头和 App 里的页头重合，看起来只有内容淡入。"]],
+    rm: "不位移、不缩放：0.5 秒时整屏 220 ms 交叉淡入到停下来的那一屏。消失 120 ms。",
+    copy: "底部那句话换成今天的日期（“10月29日 周四”这样）。日期是有用的信息，也说明接下来是哪一页；不写任何状态字。",
+    dark: "iPhone：第一帧浅色，变形的 0.6 秒里柠檬光退成深色底，深浅切换藏在动作里，最自然。电脑和浏览器第一帧直接就是停下来的深色页头。",
+    skin: "停下来那一屏用各皮肤自己的底：simple 手机是纯色 <code>--bg</code>，电脑是 <code>--b-canvas</code> 渐变画布；glass 手机和电脑都是 <code>--scr-bg</code> 柠檬光底（下面多画了 glass 两张）。",
+    pros: "交接最顺，深色处理最自然，等久了也不显得空等。", cons: "依赖今天页页头的位置；第一次打开先出告知页时对不上，要退回 A 的淡出；0.5～1.1 秒之间走会看到变到一半，需要调。" },
+];
+
+const host = document.getElementById("dirs");
+function frame(el, s, cap) {
+  const fr = document.createElement("div"); fr.className = "fr";
+  const w = parseFloat(el.style.width), h = parseFloat(el.style.height);
+  const box = document.createElement("div"); box.className = "box";
+  box.style.width = w * s + "px"; box.style.height = h * s + "px";
+  el.style.transform = `scale(${s})`;
+  box.appendChild(el);
+  const sc = document.createElement("div"); sc.className = "scroller"; sc.appendChild(box);
+  fr.appendChild(sc);
+  const c = document.createElement("div"); c.className = "cap"; c.textContent = cap; c.style.width = w * s + "px";
+  fr.appendChild(c);
+  return fr;
+}
+const P = 0.5, D = 0.41;
+DIRS.forEach((d) => {
+  const card = document.createElement("div"); card.className = "card"; card.id = "dir-" + d.id;
+  card.innerHTML = `<h2><span class="tag">方向 ${d.tag}</span>${d.name}</h2>
+<p class="idea">${d.idea}</p>
+<p class="note"><span class="k">和 iOS 启动图怎么接：</span>${d.join}</p>
+<div class="cols">
+  <div><h3>时间线</h3><div class="tl">${d.tl.map((r) => `<b>${r[0]}</b><span>${r[1]}</span>`).join("")}</div>
+       <h3>减少动态效果</h3><p>${d.rm}</p>
+       <h3>要不要放一句话</h3><p>${d.copy}</p></div>
+  <div><h3>深色</h3><p>${d.dark}</p>
+       <h3>simple 和 glass</h3><p>${d.skin}</p>
+       <h3>长处 / 短处</h3><p>${d.pros}</p><p class="k">${d.cons}</p></div>
+</div>
+<h3>静态画面（手机 390×844 按 50%、电脑 1280×800 按 41% 缩小显示）</h3>
+<div class="frames" data-f></div>
+<div class="frames" data-fd></div>
+<h3>试播（模拟 iPhone 主屏幕打开：先是 iOS 启动图 0.3 秒，再接启动画面，到时间 App 出来）</h3>
+<div class="play"><div class="stagewrap"><div class="stage" data-stage></div></div>
+  <div class="ctl">
+    <div>App 准备好要多久</div>
+    <div class="seg" data-wait><button aria-pressed="false" data-v="400">0.4 秒</button><button aria-pressed="true" data-v="1500">1.5 秒</button><button aria-pressed="false" data-v="5000">5 秒（最坏）</button></div>
+    <div class="seg" data-th><button aria-pressed="true" data-v="light">浅色</button><button aria-pressed="false" data-v="dark">深色</button></div>
+    ${d.id === "c" ? `<div class="seg" data-sk><button aria-pressed="true" data-v="simple">simple</button><button aria-pressed="false" data-v="glass">glass</button></div>` : ""}
+    <label><input type="checkbox" data-rm> 减少动态效果</label>
+    <button class="go" data-go>播放</button>
+    <div class="clock" data-clock>点“播放”开始</div>
+  </div></div>`;
+  host.appendChild(card);
+  const f = card.querySelector("[data-f]"), fd = card.querySelector("[data-fd]");
+  const PW = 390, PH = 844, DW = 1280, DH = 800;
+  if (d.id === "a") {
+    f.append(frame(scene({ w: PW, h: PH }), P, "手机 · 浅色（和 iOS 启动图逐项对齐）"),
+             frame(scene({ w: PW, h: PH, theme: "dark", mode: "dark" }), P, "手机 · 深色（电脑、浏览器用；iPhone 上保持浅色）"));
+    fd.append(frame(scene({ w: DW, h: DH }), D, "电脑 · 浅色"),
+              frame(scene({ w: DW, h: DH, theme: "dark", mode: "dark" }), D, "电脑 · 深色"));
+  } else if (d.id === "b") {
+    const bars = [0.88, 1, 0.92];
+    f.append(frame(scene({ w: PW, h: PH, bars }), P, "手机 · 浅色（呼吸中的某一刻；0.8 秒前和 A 相同）"),
+             frame(scene({ w: PW, h: PH, theme: "dark", mode: "dark", bars: [1, 0.86, 0.95] }), P, "手机 · 深色（iPhone 上 0.8 秒后暗到这里）"));
+    fd.append(frame(scene({ w: DW, h: DH, bars }), D, "电脑 · 浅色（呼吸中）"),
+             frame(scene({ w: DW, h: DH, theme: "dark", mode: "dark", bars: [1, 0.86, 0.95] }), D, "电脑 · 深色（呼吸中）"));
+  } else {
+    f.append(frame(scene({ w: PW, h: PH, mode: "end" }), P, "手机 · 浅色 · simple（停下来的样子）"),
+             frame(scene({ w: PW, h: PH, theme: "dark", mode: "end" }), P, "手机 · 深色 · simple"),
+             frame(scene({ w: PW, h: PH, skin: "glass", mode: "end" }), P, "手机 · 浅色 · glass"),
+             frame(scene({ w: PW, h: PH, skin: "glass", theme: "dark", mode: "end" }), P, "手机 · 深色 · glass"));
+    fd.append(frame(scene({ w: DW, h: DH, mode: "end" }), D, "电脑 · 浅色 · simple"),
+             frame(scene({ w: DW, h: DH, theme: "dark", mode: "end" }), D, "电脑 · 深色 · simple"),
+             frame(scene({ w: DW, h: DH, skin: "glass", mode: "end" }), D, "电脑 · 浅色 · glass"),
+             frame(scene({ w: DW, h: DH, skin: "glass", theme: "dark", mode: "end" }), D, "电脑 · 深色 · glass"));
+  }
+  setupPlay(card, d.id);
+});
+
+/* ---------- 试播 ---------- */
+function setupPlay(card, id) {
+  const S = 0.6, W = 390, H = 844;
+  const stage = card.querySelector("[data-stage]");
+  stage.style.width = W * S + "px"; stage.style.height = H * S + "px";
+  const opt = { wait: 1500, theme: "light", skin: "simple" };
+  card.querySelectorAll(".seg").forEach((seg) => seg.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button"); if (!b) return;
+    seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    if (seg.hasAttribute("data-wait")) opt.wait = +b.dataset.v;
+    if (seg.hasAttribute("data-th")) opt.theme = b.dataset.v;
+    if (seg.hasAttribute("data-sk")) opt.skin = b.dataset.v;
+  }));
+  const clock = card.querySelector("[data-clock]");
+  let timers = [], raf = 0;
+  const layer = (el) => { el.style.position = "absolute"; el.style.left = "0"; el.style.top = "0"; el.style.transform = `scale(${S})`; stage.appendChild(el); return el; };
+  const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+  function reset() { timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(raf); stage.innerHTML = ""; }
+  function flip(from, to, extra, dur) {
+    const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
+    const k = b.height / a.height;
+    const tx = (b.left - a.left) / S, ty = (b.top - a.top) / S;
+    return from.animate([{ transform: "translate(0,0) scale(1)", ...extra[0] }, { transform: `translate(${tx}px,${ty}px) scale(${k})`, ...extra[1] }],
+      { duration: dur, easing: "cubic-bezier(.32,.72,0,1)", fill: "forwards" });
+  }
+  function draw() {
+    const rm = card.querySelector("[data-rm]").checked;
+    const { wait, theme } = opt, skin = id === "c" ? opt.skin : "simple";
+    const dk = theme === "dark";
+    reset();
+    layer(appMock(W, H, skin, theme));
+    const sp = layer(scene({ w: W, h: H, skin, theme, mode: "light", withEnd: id === "c" }));
+    const launch = layer(scene({ w: W, h: H, mode: "light" }));
+    const tag = document.createElement("div"); tag.className = "launch-tag"; tag.textContent = "iOS 启动图"; launch.appendChild(tag);
+    const T0 = 300, t0 = performance.now();
+    let label = "iOS 启动图";
+    const tick = () => { clock.textContent = `${((performance.now() - t0) / 1000).toFixed(1)} 秒 · ${label}`; raf = requestAnimationFrame(tick); };
+    tick();
+    at(T0, () => { launch.remove(); label = "启动画面"; });
+    const T = (ms) => T0 + ms; let gone = false;
+    if (id === "b") {
+      at(T(800), () => {
+        if (gone) return;
+        if (!rm) sp.querySelector(".big .mark").classList.add("breathe");
+        if (dk) {
+          const dur = 600, ease = "cubic-bezier(.2,0,0,1)";
+          sp.querySelector(".brand-d").style.opacity = "1";
+          sp.querySelector(".brand-l").animate([{ opacity: 1 }, { opacity: 0 }], { duration: dur, easing: ease, fill: "forwards" });
+          sp.querySelector(".nm").animate([{ color: "#141518" }, { color: "#F1F2F4" }], { duration: dur, easing: ease, fill: "forwards" });
+          sp.querySelectorAll(".n2,.ft").forEach((x) => x.animate([{ color: "#141518" }, { color: "#B4B8C1" }], { duration: dur, easing: ease, fill: "forwards" }));
+        }
+      });
+    }
+    if (id === "c") {
+      at(T(500), () => {
+        if (gone) return;
+        const endL = sp.querySelector(".end"), bigL = sp.querySelector(".big");
+        const fade = (el, a, b, dur, delay = 0, extra = {}) => el.animate([{ opacity: a, ...(extra.f || {}) }, { opacity: b, ...(extra.t || {}) }], { duration: dur, delay, easing: "cubic-bezier(.23,1,.32,1)", fill: "forwards" });
+        if (rm) { fade(bigL, 1, 0, 220); fade(sp.querySelector(".brand-l"), 1, 0, 220); fade(endL, 0, 1, 220); return; }
+        endL.style.opacity = "1";
+        const eMark = endL.querySelector(".mark"), eName = endL.querySelector(".mini span"), eDate = endL.querySelector(".date");
+        eMark.style.opacity = "0"; eName.style.opacity = "0"; eDate.style.opacity = "0";
+        const dur = 600;
+        sp.querySelector(".brand-l").animate([{ opacity: 1 }, { opacity: 0 }], { duration: dur, easing: "cubic-bezier(.2,0,0,1)", fill: "forwards" });
+        const t2 = dk ? (skin === "glass" ? "#B4B8C1" : "#A6A9B1") : (skin === "glass" ? "#4D5057" : "#595C64");
+        const a1 = flip(bigL.querySelector(".mark"), eMark, [{}, {}], dur);
+        const bName = bigL.querySelector(".nm span");
+        flip(bName, eName, [{ color: "#141518" }, { color: t2 }], dur);
+        /* 名字最后 200 ms 交叉淡化：大字 800 字重、小字常规字重，直接换会跳 */
+        fade(bName, 1, 0, 200, dur - 200); fade(eName, 0, 1, 200, dur - 200);
+        fade(bigL.querySelector(".n2"), 0.7, 0, 200); fade(bigL.querySelector(".ft"), 0.6, 0, 200);
+        fade(eDate, 0, 1, 350, 250, { f: { transform: "translateY(8px)" }, t: { transform: "translateY(0)" } });
+        a1.finished.then(() => { if (gone) return; eMark.style.opacity = "1"; bigL.style.opacity = "0"; });
+      });
+    }
+    at(T(wait), () => {
+      gone = true; label = "App";
+      sp.animate([{ opacity: 1 }, { opacity: 0 }], { duration: rm ? 120 : 220, easing: "cubic-bezier(.23,1,.32,1)", fill: "forwards" });
+      at(rm ? 120 : 220, () => { sp.remove(); label = "App（启动画面已移除）"; cancelAnimationFrame(raf); clock.textContent = `${((performance.now() - t0) / 1000).toFixed(1)} 秒 · ${label}`; });
+    });
+  }
+  card.querySelector("[data-go]").addEventListener("click", draw);
+  /* 初始显示启动画面第一帧 */
+  layer(scene({ w: W, h: H, skin: "simple", mode: "light" }));
+}
+})();
+</script>
+</body>
+</html>

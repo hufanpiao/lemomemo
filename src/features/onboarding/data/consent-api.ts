@@ -11,6 +11,9 @@
 //   免得晚到的“同意”落在用户随后点的“不同意”之后（服务器按到达先后记，后到的说了算）。已经到了服务器的请求 abort 拦不住，这一点只能缩小窗口
 // • 打开 ai.enabled（15.5：同意后 ai.enabled = true）不在这里写：settings 走同步层，由接线方在 onDone(true) 里写（见交付说明）。
 // 错误只认码：session_revoked、unauthorized、401 → revoked；account_disabled → disabled；fetch 失败 → offline。
+// • revoked、disabled 带着这次请求用的会话的 session_id（sid；接手清单 K6-sugg4 ①）：record 一开头（发请求前）同步读本机会话的 session_id，
+//   随错误带回；离开本机时只删这个会话（consent-exit.ts），回包前别的标签页写进来的新会话不删
+import { readSessionId } from '../../../platform/session.ts';
 import { withTimeout } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 
@@ -30,7 +33,17 @@ export type ConsentErr =
   | 'try_later'
   | 'unknown';
 
-export type Result<T = undefined> = { ok: true; value: T } | { ok: false; error: ConsentErr };
+/** 要离开本机的两种错误：一定带着 sid（这次请求用的会话；那时读不出为 null） */
+export type LeaveErr = 'revoked' | 'disabled';
+
+export type Failure = { ok: false; error: LeaveErr; sid: string | null } | { ok: false; error: Exclude<ConsentErr, LeaveErr> };
+
+export type Result<T = undefined> = { ok: true; value: T } | Failure;
+
+/** 按错误码组出失败结果：要离开本机的两种带上 sid，别的不带 */
+export function failWith(error: ConsentErr, sid: string | null): Failure {
+  return error === 'revoked' || error === 'disabled' ? { ok: false, error, sid } : { ok: false, error };
+}
 
 export type NoticeState = 'first' | 'updated' | 'none';
 
@@ -95,8 +108,8 @@ export const CONSENT_SLOW_MS = 8000;
 /** 超过这么久才放弃，回 unsure */
 export const CONSENT_HARD_MS = 30000;
 
-const fail = (e: unknown): Result<never> => ({ ok: false, error: mapConsentError(e) });
-const ERR = (error: ConsentErr): Result<never> => ({ ok: false, error });
+const fail = (e: unknown, sid: string | null): Failure => failWith(mapConsentError(e), sid);
+const ERR = (error: Exclude<ConsentErr, LeaveErr>): Failure => ({ ok: false, error });
 
 /** notice 里的一个键；不是 R-238 写法的一律当没有 */
 function noticeVer(notice: unknown, key: 'policy_ver' | 'min_consent_ver'): string | null {
@@ -105,29 +118,44 @@ function noticeVer(notice: unknown, key: 'policy_ver' | 'min_consent_ver'): stri
   return typeof v === 'string' && POLICY_VER_RE.test(v) ? v : null;
 }
 
-export function createConsentApi(getDb: () => Promise<Db>, slowMs: number = CONSENT_SLOW_MS, hardMs: number = CONSENT_HARD_MS): ConsentApi {
-  async function readNotice(db: ConsentDb): Promise<{ notice: unknown } | Result<never>> {
+/** readSid：同步读本机会话的 session_id（默认 platform/session.ts 的 readSessionId；测试换掉） */
+export function createConsentApi(
+  getDb: () => Promise<Db>,
+  slowMs: number = CONSENT_SLOW_MS,
+  hardMs: number = CONSENT_HARD_MS,
+  readSid: () => string | null = () => readSessionId(),
+): ConsentApi {
+  async function readNotice(db: ConsentDb, sid: string | null): Promise<{ notice: unknown } | Failure> {
     const cfg = await db.from('app_config').select('notice').eq('id', 1).maybeSingle();
-    return cfg.error ? fail(cfg.error) : { notice: cfg.data?.notice ?? null };
+    return cfg.error ? fail(cfg.error, sid) : { notice: cfg.data?.notice ?? null };
   }
+  const safeSid = (): string | null => {
+    try {
+      return readSid();
+    } catch {
+      return null;
+    }
+  };
 
   return {
     async record(agree, onSlow) {
       const slow = setTimeout(() => onSlow?.(), slowMs);
       const ctl = new AbortController();
+      // 发请求前记下本页的会话（K6-sugg4 ①）
+      const sid = safeSid();
       try {
         return await withTimeout(async (): Promise<Result> => {
           try {
             const db = narrow(await getDb());
-            const n = await readNotice(db);
+            const n = await readNotice(db, sid);
             if ('ok' in n) return n;
             const ver = noticeVer(n.notice, 'policy_ver');
             if (!ver) return ERR('no_policy');   // R-239：不调 RPC
             if (ctl.signal.aborted) return ERR('unsure');   // 已经放弃了：不再发
             const { error } = await db.rpc('record_consent', { policy_ver: ver, revoke: !agree }).abortSignal(ctl.signal);
-            return error ? fail(error) : { ok: true, value: undefined };
+            return error ? fail(error, sid) : { ok: true, value: undefined };
           } catch (e) {
-            return fail(e);
+            return fail(e, sid);
           }
         }, hardMs, () => ERR('unsure'));
       } finally {
@@ -139,10 +167,11 @@ export function createConsentApi(getDb: () => Promise<Db>, slowMs: number = CONS
 
     noticeState: () =>
       withTimeout(async (): Promise<Result<NoticeState>> => {
+        const sid = safeSid();
         try {
           const db = narrow(await getDb());
-          const [prof, n] = await Promise.all([db.from('profiles').select('consent_policy_ver').maybeSingle(), readNotice(db)]);
-          if (prof.error) return fail(prof.error);
+          const [prof, n] = await Promise.all([db.from('profiles').select('consent_policy_ver').maybeSingle(), readNotice(db, sid)]);
+          if (prof.error) return fail(prof.error, sid);
           if ('ok' in n) return n;
           const mine = prof.data?.consent_policy_ver ?? null;
           if (!mine) return { ok: true, value: 'first' };
@@ -151,7 +180,7 @@ export function createConsentApi(getDb: () => Promise<Db>, slowMs: number = CONS
           if (min && !policyVerAtLeast(mine, min)) return { ok: true, value: 'updated' };
           return { ok: true, value: 'none' };
         } catch (e) {
-          return fail(e);
+          return fail(e, sid);
         }
       }, slowMs, () => ERR('offline')),
   };

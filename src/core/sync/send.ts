@@ -16,6 +16,8 @@
 //   transient（含 55P03 等不到行锁）→ 停下等退避；upgrade → 整个队列已暂停；removed → outbox 已设闸并发 removed 事件（main.tsx 接）；
 //   disabled（account_disabled）→ outbox 已设闸、发 disabled 事件，这里停发；清库、回登录页由 sync-wiring 接事件做（架构 4.3）；
 //   permanent、drop → 接着发下一项
+// • 发每个请求（看令牌、发一项、刷新令牌）之前记下本机会话的 session_id（transport.sessionId()，接手清单 K6-sugg4 ①）：
+//   被移除、停用时随 removed(code, sid) 或 outbox 事件（SendFailure.sid）带回，调用方只删这个会话——回包前别的标签页写进来的新会话不删
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { Outbox, OutboxItem } from '../outbox-types.ts';
 import type { NetResult, PatchResponse, SyncEvent, SyncLog, SyncTransport } from './types.ts';
@@ -28,8 +30,8 @@ export interface SendDeps {
   /** 挡同步（低于最低版本、426）：不发 */
   blocked(): boolean;
   emit(e: SyncEvent): void;
-  /** 刷新令牌发现被移除 / 连续 401：清本机、回登录页（main.tsx 和 outbox 的 removed 事件走同一个处理） */
-  removed(code: string): void;
+  /** 刷新令牌发现被移除 / 连续 401：清本机、回登录页（main.tsx 和 outbox 的 removed 事件走同一个处理）；sid 见文件头 */
+  removed(code: string, sid: string | null): void;
   /** conflict、forked、gone 之后补拉这张表（拿到别的设备改的值） */
   touched(table: string): void;
   /** 记日志（act + coll / code，不记内容和服务器原文） */
@@ -48,22 +50,37 @@ export interface SendDeps {
 /** 一批最多 20 项或 15 秒（K8 复审建议 1） */
 export const SEND_BATCH = { items: 20, ms: 15_000 };
 
-/** 刷新令牌的结果：ok 再发；network 临时故障（留在 pending、不计 tries，稍后再试）；removed 被移除（code 交给 removed） */
-export type RefreshOutcome = { kind: 'ok' } | { kind: 'network' } | { kind: 'removed'; code: string };
+/**
+ * 刷新令牌的结果：ok 再发；network 临时故障（留在 pending、不计 tries，稍后再试）；
+ * removed 被移除（code、sid 交给 removed；sid = 被拒的那次刷新发出前本机会话的 session_id）
+ */
+export type RefreshOutcome = { kind: 'ok' } | { kind: 'network' } | { kind: 'removed'; code: string; sid: string | null };
+
+/** 本机会话现在的 session_id；实现抛错时按读不出（null） */
+export function sessionIdNow(t: Pick<SyncTransport, 'sessionId'>): string | null {
+  try {
+    return t.sessionId();
+  } catch {
+    return null;
+  }
+}
 
 /**
  * 刷新令牌（TC-B1-88）：① 断网 ② 503 ③ 429 → network；④⑤⑥ → removed；
- * ⑦ 别的 4xx 记一条日志再试一次，成功就 ok；⑧ 两次都是别的 4xx → removed（auth_refresh_failed）
+ * ⑦ 别的 4xx 记一条日志再试一次，成功就 ok；⑧ 两次都是别的 4xx → removed（auth_refresh_failed）。
+ * 每次刷新前记下本机会话的 session_id（K6-sugg4 ①），被移除时带回最后一次的
  */
-export async function refreshFlow(t: Pick<SyncTransport, 'refreshSession'>, log?: (code: string) => void): Promise<RefreshOutcome> {
+export async function refreshFlow(t: Pick<SyncTransport, 'refreshSession' | 'sessionId'>, log?: (code: string) => void): Promise<RefreshOutcome> {
+  let sid: string | null = null;
   for (let attempt = 0; attempt < 2; attempt++) {
+    sid = sessionIdNow(t);
     const r = await t.refreshSession();
     if (r === 'ok') return { kind: 'ok' };
     if (r === 'network') return { kind: 'network' };
-    if (r === 'removed') return { kind: 'removed', code: 'session_not_found' };
+    if (r === 'removed') return { kind: 'removed', code: 'session_not_found', sid };
     log?.('auth_refresh_4xx');
   }
-  return { kind: 'removed', code: 'auth_refresh_failed' };
+  return { kind: 'removed', code: 'auth_refresh_failed', sid };
 }
 
 /**
@@ -100,10 +117,11 @@ async function sendItem(t: SyncTransport, item: OutboxItem): Promise<NetResult<P
 export async function sendAll(d: SendDeps): Promise<SendOutcome> {
   if (d.gated()) return 'stopped';
   if (d.blocked()) return 'paused';
+  const sid0 = sessionIdNow(d.transport);
   const s = await d.transport.ensureSession();
   if (d.gated()) return 'stopped';
   if (s === 'removed') {
-    d.removed('session_not_found');
+    d.removed('session_not_found', sid0);
     return 'removed';
   }
   if (s === 'network') return 'retry';
@@ -117,6 +135,7 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
     const item = await d.outbox.next();
     if (!item) return 'done';
     if (d.gated()) return stopWith(d, item.op_id);   // next 期间设了闸：不发
+    const sid = sessionIdNow(d.transport);   // 这一项带着哪个会话发出去（K6-sugg4 ①）
     const res = await sendItem(d.transport, item);
     // 封存、换账号：不写回结果（下次启动 boot 复位）；只是放手：回包已拿到，照常写回，循环开头再停
     if (d.gated() && !d.released?.()) return 'stopped';
@@ -145,7 +164,7 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
       }
       continue;
     }
-    const kind = await d.outbox.fail(item.op_id, res.error);
+    const kind = await d.outbox.fail(item.op_id, { ...res.error, sid });
     if (kind === 'drop' && res.error.code === 'patch_bad_args') {
       // 服务器把 22xxx、23514、23502 也转成 patch_bad_args：丢掉这一项，但记下表名和 sqlstate，免得掩盖服务器触发器的 bug
       // （不记 sqlerrm：可能带用户填的值，0.38 第 62 条）
@@ -168,7 +187,7 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
     if (d.gated()) return stopWith(d, item.op_id);
     if (r.kind === 'ok') continue;
     if (r.kind === 'removed') {
-      d.removed(r.code);
+      d.removed(r.code, r.sid);
       return 'removed';
     }
     return 'retry';   // 断网、5xx、429 等刷新失败：留在 pending、不计 tries，稍后再刷新再发（TC-B1-82 ④、TC-B1-88 ①②③）

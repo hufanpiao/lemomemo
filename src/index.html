@@ -28,10 +28,39 @@
     <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/app/icons/startup/startup-1242x2688.png" />
     <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/app/icons/startup/startup-828x1792.png" />
     <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/app/icons/startup/startup-750x1334.png" />
+    <!-- 启动画面（R-251、R-254 方向 B、R-253 小字库）：样式外链（CSP style-src 'self'，这一页不准有内联 <style> 和 style 属性，tests/build/splash-html.test.ts 查） -->
+    <link rel="stylesheet" href="./styles/splash.css" />
+    <link rel="preload" href="./styles/fonts/splash/noto-sans-sc-splash-800.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="./styles/fonts/splash/noto-sans-sc-splash-400.woff2" as="font" type="font/woff2" crossorigin />
     <title>柠檬记</title>
   </head>
   <body>
     <div id="root"></div>
+    <!-- 启动画面：跟着网页第一次绘制出来，第一帧和 iOS 启动图一致；App 准备好后由 src/platform/splash.ts 的 hideSplash() 淡出并移除 -->
+    <div id="lemo-splash" class="lemo-splash" aria-hidden="true">
+      <div class="lemo-splash-layer lemo-splash-d">
+        <p class="lemo-splash-t lemo-splash-name">柠檬记</p>
+        <p class="lemo-splash-t lemo-splash-en">Lemo</p>
+        <p class="lemo-splash-t lemo-splash-foot">说一句，清清爽爽记下来</p>
+      </div>
+      <div class="lemo-splash-layer lemo-splash-l">
+        <p class="lemo-splash-t lemo-splash-name">柠檬记</p>
+        <p class="lemo-splash-t lemo-splash-en">Lemo</p>
+        <p class="lemo-splash-t lemo-splash-foot">说一句，清清爽爽记下来</p>
+      </div>
+      <!-- markL（src/public/icons/logo-mark.svg）：带模糊的投影和玻璃圆片底换成预模糊小图（build/export_splash_blur.py），其余原样 -->
+      <svg class="lemo-splash-mark" viewBox="0 0 1024 1024" overflow="visible" focusable="false">
+        <defs><clipPath id="lemo-splash-clip"><circle cx="512" cy="512" r="304" /></clipPath></defs>
+        <image href="./styles/splash/splash-shadow.png" x="128" y="672" width="768" height="352" preserveAspectRatio="none" />
+        <image href="./styles/splash/splash-disk.png" x="208" y="208" width="608" height="608" preserveAspectRatio="none" clip-path="url(#lemo-splash-clip)" />
+        <circle cx="512" cy="512" r="301" fill="none" stroke="#fff" stroke-opacity=".92" stroke-width="7" />
+        <circle cx="512" cy="512" r="268" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="5" />
+        <path d="M300 404 A240 240 0 0 1 430 262" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" opacity=".95" />
+        <rect class="lemo-splash-bar" x="320" y="402" width="96" height="220" rx="48" fill="#141518" />
+        <rect class="lemo-splash-bar lemo-splash-bar2" x="464" y="322" width="96" height="380" rx="48" fill="#141518" />
+        <rect class="lemo-splash-bar lemo-splash-bar3" x="608" y="387" width="96" height="250" rx="48" fill="#141518" />
+      </svg>
+    </div>
     <script type="module" src="./app/main.tsx"></script>
   </body>
 </html>

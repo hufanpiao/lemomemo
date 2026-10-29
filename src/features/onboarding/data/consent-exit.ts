@@ -7,15 +7,15 @@
 // • 这个账号的日志上传队列（localStorage lemo.logq.<user_id>）一起清（架构 0.38 第 68 条 ⑤；审查 M1）：wipeOnRemoved 之前清一次，
 //   清完回登录页前再清一次兜底（清库那几秒里可能又记了几条）；sealForExit 设了 switching 以后 sync-wiring 的 onRemoved、
 //   watchAccount 都会跳过，它们的 clearLogs 不会替这里清。没启动过（没有 boot）读不到账号，按 sign-out.ts 的写法传 null，清掉全部 lemo.logq.*
-// • 删本机会话的时机（接手清单 K6-sugg3 ①，同 core/account.ts 的 signedOutHere、app/sync-wiring.ts 的 onRemoved）：决定离开的同一个同步段里
-//   就删（takeLocalSession，记下删之前的 session_id），清完库、回登录页前只在本机会话还是那一个时再删（clearLocalSessionIf）——
-//   清库那几秒里别的标签页刚登录的新会话不删
+// • 删本机会话只删被拒那次请求用的会话（接手清单 K6-sugg3 ①、K6-sugg4 ①）：调用方把 consent-api 随错误带回的 sid 传进来
+//   （发请求前记下的），决定离开的同一个同步段里就 clearLocalSessionIf(sid)，清完库、回登录页前再 clearLocalSessionIf(sid) 一次——
+//   请求在路上、清库那几秒里别的标签页用同一账号或别的账号刚登录的新会话都不删；旧会话被晚到的令牌刷新写回时照样删掉
 // 不新挂任何监听（SIGNED_OUT 那一路归会话层）
 import { wipeOnRemoved } from '../../../core/account.ts';
 import { getBoot, type BootResult } from '../../../core/boot.ts';
 import { clearLogQueue } from '../../../platform/log-store.ts';
 import {
-  clearCacheStorage, clearLocalSessionIf, exitNoticeOf, goToAuth, setExitNotice, takeLocalSession, type ExitNotice,
+  clearCacheStorage, clearLocalSessionIf, exitNoticeOf, goToAuth, setExitNotice, type ExitNotice,
 } from '../../../platform/session.ts';
 
 export type LeaveCode = 'session_revoked' | 'account_disabled';
@@ -25,8 +25,6 @@ export interface LeaveDeps {
   wipeOnRemoved: typeof wipeOnRemoved;
   clearCacheStorage(): Promise<void>;
   setExitNotice(n: ExitNotice): void;
-  /** 同步删掉本机会话，返回删之前的 session_id（platform/session.ts 的 takeLocalSession） */
-  takeLocalSession(): string | null;
   /** 本机会话还是这个 session_id 才删（platform/session.ts 的 clearLocalSessionIf） */
   clearLocalSessionIf(sessionId: string | null): void;
   goToAuth(): void;
@@ -36,31 +34,33 @@ export interface LeaveDeps {
 
 export const defaultLeaveDeps: LeaveDeps = {
   getBoot, wipeOnRemoved, clearCacheStorage, setExitNotice, goToAuth, clearLogs: (userId) => clearLogQueue(userId),
-  takeLocalSession: () => takeLocalSession(),
   clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
 };
 
 let leaving = false;
 
-/** 只处理一次；返回清理做完（或不用清）的 Promise */
-export function leaveThisDevice(code: LeaveCode, deps: LeaveDeps = defaultLeaveDeps): Promise<void> {
+/** 只处理一次；sid：被拒那次请求用的会话（必填，K6-sugg4 ①②）。返回清理做完（或不用清）的 Promise */
+export function leaveThisDevice(code: LeaveCode, sid: string | null, deps: LeaveDeps = defaultLeaveDeps): Promise<void> {
   if (leaving) return Promise.resolve();
   const boot = deps.getBoot();
   if (boot?.switching) return Promise.resolve();
   leaving = true;
-  // 同一个同步段里先删本机会话（K6-sugg3 ①）
-  let dead: string | null = null;
-  try {
-    dead = deps.takeLocalSession();
-  } catch {
-    dead = null;   // 存储不可用：本来也存不下会话
-  }
+  // 同一个同步段里先删本机会话——只删被拒的那个（K6-sugg3 ①、K6-sugg4 ①）
+  const dead = sid;
+  const drop = (): void => {
+    try {
+      deps.clearLocalSessionIf(dead);
+    } catch {
+      // 存储不可用：本来也存不下会话
+    }
+  };
+  drop();
   const userId = boot ? boot.userId : null;
   deps.clearLogs(userId);
   const finish = (): void => {
     deps.clearLogs(userId);   // 兜底：清库期间又记下的
     deps.setExitNotice(exitNoticeOf(code));
-    deps.clearLocalSessionIf(dead);   // 旧会话被晚到的令牌刷新写回时再删；别的标签页刚登录的新会话不动
+    drop();   // 旧会话被晚到的令牌刷新写回时再删；别的标签页刚登录的新会话不动
     deps.goToAuth();
   };
   if (!boot) {

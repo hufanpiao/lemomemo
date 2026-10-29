@@ -16,6 +16,11 @@ export const sendFailure = z.object({
   network: z.boolean().optional(),
   /** 服务器给的 sqlstate（apply_patch 的 patch_bad_args 从 details 里取出），只用于记日志；服务器原文不带出来（0.38 第 62 条） */
   detail: z.string().regex(/^[0-9A-Z]{5}$/).optional(),
+  /**
+   * 发这次请求前本机会话的 session_id（接手清单 K6-sugg4 ①；core/sync/send.ts 填，传输层不填）：被移除、停用时随 outbox 的事件带回，
+   * 离开本机时只删这个会话——回包前别的标签页写进来的新会话不删。null = 那时本机没有会话或读不出
+   */
+  sid: z.string().nullable().optional(),
 });
 export type SendFailure = z.infer<typeof sendFailure>;
 

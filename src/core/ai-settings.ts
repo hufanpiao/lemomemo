@@ -9,8 +9,8 @@
 //   服务器上一般没有 ai.enabled 行（只有 record_consent 的撤回分支写它，写了就有版本号），以后从设置页重开告知页时才可能碰到。
 //   writeAiSwitchSettled 兜这一种：insert 那一项被服务器拒（outbox 的 error / rejected 事件）以后，等同步把服务器那一行拉进集合，
 //   再按那一行 patch 一次；SETTLE_MS 内没等到就算了（AI 只是还没打开，设置 › 语音与 AI 能再开）。
-//   补写（patch 入队）成功后，把被拒的那一项从“发送失败”区删掉（outbox.discard；接手清单 K6-sugg3 ②）：留着点重试只会再撞一次约束。
-//   正在发的（inflight，用户刚点了重试）不动；rejected（已丢掉）的本来就不在队列里
+//   补写（patch 入队）成功后，把被拒的那一项从“发送失败”区删掉（outbox.discardUnlessInflight；接手清单 K6-sugg3 ②、K6-sugg4 ③）：留着点重试只会再撞一次约束。
+//   正在发的（inflight，用户刚点了重试）不动，“是不是在发”和“删”在同一个写事务里判断；rejected（已丢掉）的本来就不在队列里
 // • 被拒时服务器实际回的（K6-sugg3 ② 核对）：insert 不走 apply_patch，走 PostgREST 的 upsert(onConflict: 'id', ignoreDuplicates)
 //   （platform/supabase/sync-transport.ts 的 insertRow，= INSERT … ON CONFLICT (id) DO NOTHING）；撞的是 (user_id, key) 不是 id，
 //   ON CONFLICT 兜不住，抛 unique_violation（SQLSTATE 23505），PostgREST 回 HTTP 409、code '23505'；toFailure 得 {status: 409, code: '23505'}，
@@ -85,9 +85,8 @@ export async function writeAiSwitchSettled(
     void (async () => {
       const w = await writeOn(sw, row, () => crypto.randomUUID());
       if (!w.ok) return;
-      // 补写成功：被拒的 insert 不再有用，从“发送失败”区删掉（K6-sugg3 ②）
-      const cur = (await outbox.list()).find((i) => i.op_id === item.op_id);
-      if (cur && cur.state !== 'inflight') await outbox.discard(item.op_id);
+      // 补写成功：被拒的 insert 不再有用，从“发送失败”区删掉（K6-sugg3 ②）；正在发的不删，判断和删在同一个写事务里（K6-sugg4 ③）
+      await outbox.discardUnlessInflight(item.op_id);
     })().catch(() => undefined);
     return true;
   };

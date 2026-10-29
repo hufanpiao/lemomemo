@@ -42,8 +42,8 @@ export interface SyncOptions {
   parseRows?: ParseServerRows;
   /** 宽容读取丢行时的日志（row_unknown、table_unknown；只有表名、列名、错误码、id），默认 createParseRows 带上它 */
   readLog?: (e: ReadLog) => void;
-  /** 被移除（刷新令牌失败）：清本机、删本机会话、回登录页。只调一次 */
-  onRemoved(code: string): void;
+  /** 被移除（刷新令牌失败）：清本机、删本机会话、回登录页。只调一次。sid：被拒那次请求发出前本机会话的 session_id（K6-sugg4 ①） */
+  onRemoved(code: string, sid: string | null): void;
   /** 一件活写过本机库的这些表（主页据此给别的页面发 changed，4.3b） */
   onChanged?(tables: readonly string[]): void;
   lifecycle?: Lifecycle;
@@ -73,7 +73,7 @@ interface Ctx {
   isStopped(): boolean;
   /** 闸设上了但只是放手（drain、停下；没封存、没换账号）：send 把在途的项改回 pending */
   released(): boolean;
-  removed(code: string): void;
+  removed(code: string, sid: string | null): void;
   now(): number;
 }
 
@@ -89,7 +89,7 @@ function createPulls(c: Ctx) {
     if (r === 'auth' && !c.gated()) {
       const f = await refreshFlow(c.opts.transport, c.opts.log);
       if (c.gated()) return;
-      if (f.kind === 'removed') return c.removed(f.code);
+      if (f.kind === 'removed') return c.removed(f.code, f.sid);
       if (f.kind === 'ok') r = await pullRound(ctx, c.opts.transport);
     }
     if (ctx.withConfig) c.round.withConfig = true;   // config 没拉成功的留到下一轮
@@ -184,9 +184,9 @@ export function createSync(boot: BootResult, opts: SyncOptions): Sync {
     stopTimers();
     hub.setState({ stopped: true, syncing: false });
   };
-  const removed = (code: string): void => {
+  const removed = (code: string, sid: string | null): void => {
     halt();
-    if (!removedCalled) opts.onRemoved(code);
+    if (!removedCalled) opts.onRemoved(code, sid);
     removedCalled = true;
   };
   const runner = createRunner(gated, halt, opts.log, opts.taskTimeoutMs);

@@ -1,0 +1,223 @@
+/* 启动画面（R-251；R-254 方向 B“在听”；R-253 小字库）。设计稿：docs/02-设计/草图-v4/启动画面-三方向.html
+   DOM 写在 src/index.html 的 #lemo-splash（跟着网页第一次绘制出来，不等 React）；由 src/index.html 外链
+   （CSP style-src 'self'，不能写内联 <style> 或 style 属性）。收起由 src/platform/splash.ts 的 hideSplash() 加 .is-leaving。
+   版式和 iOS 启动图同一套算法（build/export_splash.py 的 page()）：圆片直径 42% 屏宽、圆心 40% 屏高、名字 8% 屏宽、
+   名字在图标下方 14/390 屏宽、英文名字号为名字的 13/30（透明度 .7）、底部那句话离底 6%、字号 3.4% 屏宽（透明度 .6）、文字左右各留 10%。
+   电脑（横屏、方屏）照设计稿 big()：按 400 宽的手机比例放到正中，圆心在 42% 屏高。
+   时间线：0～0.8 秒一动不动（和启动图零差异）；0.8 秒起三根竖条只动 scaleY 轻轻起伏（100%→84%→100%，1.6 秒一轮，依次错开 0.2 秒）；
+   iPhone 深色模式 0.8 秒起用 0.6 秒把浅色那一层淡掉、露出深色那一层（只动透明度）；收起时整屏透明度 1→0，220 ms（减少动态效果 120 ms）。
+   减少动态效果（系统设置或 <html data-rm="1">）：不起伏；变暗保留（本来就只是透明度）。 */
+
+/* 时长和曲线只用令牌（A24）：tokens.css 由 main.tsx 引入，那时启动画面早已画出来，所以这里自己 @import 一份
+   （--dur-splash-* 和 --ease-splash-breathe 是启动画面专用令牌，tokens.json 里有说明）。
+   颜色：深色底用图（splash-dark.png，glass 深色 --scr-bg，build/export_splash_blur.py 从 skins/glass.css 读值导出）；
+   剩下三个字色写死，每处用 stylelint-disable-next-line 单独放行（只放那一行），理由：
+   启动画面是品牌画面、不随皮肤，在 React 之前画，那时皮肤变量还没按 glass 深色生效；值和 logo-mark.svg（#141518）、
+   glass 深色 --text（#F1F2F4）、--text-2（#B4B8C1）相同，tests/build/splash-html.test.ts 核对 */
+@import url("./tokens.css");
+
+
+/* 小字库（R-253）：只含启动画面这十几个字的 Noto Sans SC 子集，build/make_splash_font.py 生成；和 iOS 启动图（R-243）同一份字形。
+   font-display: block：首帧宁可等字库（同源、几十 KB、随 assets/ 进 SW 预缓存，src/index.html 里还有 preload），
+   也不先用苹方画、再换字形跳一下 */
+@font-face {
+  font-family: "Lemo Splash";
+  src: url("./fonts/splash/noto-sans-sc-splash-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Lemo Splash";
+  src: url("./fonts/splash/noto-sans-sc-splash-800.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: block;
+}
+
+.lemo-splash {
+  /* 版式基准：手机 cw = 屏宽、圆心 40% 屏高；--box 是 markL 整个 1024 方框画多大（圆片直径 42% × 1024 / 608） */
+  --cw: 100vw;
+  --cy: 40%;
+  --box: calc(var(--cw) * 0.42 * 1024 / 608);
+  --name: calc(var(--cw) * 0.08);
+  --name-top: calc(var(--cy) + var(--box) / 2 + var(--cw) * 14 / 390);
+
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow: hidden;
+  contain: strict;
+  font-family: "Lemo Splash", -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+  /* stylelint-disable-next-line color-no-hex -- 启动画面品牌字色（logo 原图的字色），见文件开头 */
+  color: #141518;
+
+  /* 兜底：hideSplash() 一直没被调到（脚本出错、没接上）时，6 秒后自己淡出并让出点击；正常路径最晚 5 秒就由 App 收起 */
+  animation: lemo-splash-failsafe var(--dur-ui) var(--ease-out) var(--dur-splash-failsafe) forwards;
+}
+
+@keyframes lemo-splash-failsafe {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* 电脑：横屏（设计稿 big() 的 phone = w < h；正方形窗口按手机算，审查定）。
+   不用 (min-aspect-ratio: 1/1)：Vite 8 的 CSS 压缩会把它改写成范围写法 (aspect-ratio>=1)，iOS 15.5～16.3、macOS Safari 15～16.3 不认，
+   电脑上圆片会画到约 1000px；orientation 不会被改写（tests/build/splash-html.test.ts 查产物） */
+@media (orientation: landscape) {
+  .lemo-splash {
+    --cw: 400px;
+    --cy: 42%;
+  }
+}
+
+/* 收起：整屏透明度 1→0（--dur-ui 220 ms、--ease-out），下面的 App 已经画好；收起途中不再挡点击 */
+.lemo-splash.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-ui) var(--ease-out);
+}
+
+/* 两层底（深色那一层用 glass 深色 --scr-bg 预渲染的小图，按 100% 100% 拉伸）：深色那一层在下，浅色那一层（预模糊图 + 深色字）在上；变暗 = 把浅色那一层淡掉 */
+.lemo-splash-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.lemo-splash-d {
+  display: none;
+  /* stylelint-disable-next-line color-no-hex -- 启动画面品牌字色（glass 深色 --text），见文件开头 */
+  color: #F1F2F4;
+  background: url("./splash/splash-dark.png") 0 0 / 100% 100% no-repeat;
+}
+
+/* 柠檬光背景：logo-mark.svg 的 bgL 预先模糊、缩成 64×64（build/export_splash_blur.py），按 cover 居中铺满，和启动图一样 */
+.lemo-splash-l {
+  background: url("./splash/splash-bg.png") center / cover no-repeat;
+}
+
+/* 柠檬：投影、玻璃圆片底是两张预模糊小图，白圈、高光弧、竖条是 SVG（src/index.html） */
+.lemo-splash-mark {
+  position: absolute;
+  left: calc(50% - var(--box) / 2);
+  top: calc(var(--cy) - var(--box) / 2);
+  width: var(--box);
+  height: var(--box);
+  overflow: visible;
+}
+
+.lemo-splash-t {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  margin: 0;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.lemo-splash-name {
+  top: var(--name-top);
+  font-size: var(--name);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.lemo-splash-en {
+  top: calc(var(--name-top) + var(--name) * 1.2 + var(--cw) * 2 / 390);
+  font-size: calc(var(--name) * 13 / 30);
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.lemo-splash-foot {
+  bottom: 6%;
+  font-size: calc(var(--cw) * 0.034);
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+/* 深色那一层的英文名和底部那句话用 --text-2 */
+.lemo-splash-d .lemo-splash-en,
+.lemo-splash-d .lemo-splash-foot {
+  /* stylelint-disable-next-line color-no-hex -- 启动画面品牌字色（glass 深色 --text-2），见文件开头 */
+  color: #B4B8C1;
+}
+
+/* 在听：0.8 秒后三根竖条依次轻轻起伏，只动 scaleY（合成层）。
+   只起伏 4 轮（最晚约 7.6 秒停）：6 秒的 CSS 兜底把整屏淡掉以后竖条跟着停，不在看不见的地方一直动 */
+.lemo-splash-bar {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: lemo-splash-breathe var(--dur-splash-breathe) var(--ease-splash-breathe) var(--dur-splash-still) 4;
+}
+
+.lemo-splash-bar2 {
+  animation: lemo-splash-breathe var(--dur-splash-breathe) var(--ease-splash-breathe) var(--dur-splash-bar2) 4;
+}
+
+.lemo-splash-bar3 {
+  animation: lemo-splash-breathe var(--dur-splash-breathe) var(--ease-splash-breathe) var(--dur-splash-bar3) 4;
+}
+
+@keyframes lemo-splash-breathe {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+
+  50% {
+    transform: scaleY(0.84);
+  }
+}
+
+/* 深色：电脑和浏览器没有 iOS 启动图，第一帧直接是深色版 */
+@media (prefers-color-scheme: dark) {
+  .lemo-splash-d {
+    display: block;
+  }
+
+  .lemo-splash-l {
+    opacity: 0;
+  }
+}
+
+/* iPhone 主屏幕版（只有它先显示浅色的 iOS 启动图，R-232）：第一帧浅色、和启动图一致，0.8 秒起 0.6 秒（--ease-standard）慢慢暗下来 */
+@media (prefers-color-scheme: dark) and (display-mode: standalone) and (hover: none) and (pointer: coarse) {
+  .lemo-splash-l {
+    opacity: 1;
+    animation: lemo-splash-to-dark var(--dur-splash-dark) var(--ease-standard) var(--dur-splash-still) forwards;
+  }
+}
+
+@keyframes lemo-splash-to-dark {
+  to {
+    opacity: 0;
+  }
+}
+
+/* 减少动态效果：不起伏（变暗只是透明度，保留）；收起缩短为 120 ms */
+@media (prefers-reduced-motion: reduce) {
+  .lemo-splash-bar,
+  .lemo-splash-bar2,
+  .lemo-splash-bar3 {
+    animation: none;
+  }
+
+  .lemo-splash.is-leaving {
+    transition-duration: var(--dur-splash-out-rm);
+  }
+}
+
+:root[data-rm="1"] .lemo-splash-bar,
+:root[data-rm="1"] .lemo-splash-bar2,
+:root[data-rm="1"] .lemo-splash-bar3 {
+  animation: none;
+}
+
+:root[data-rm="1"] .lemo-splash.is-leaving {
+  transition-duration: var(--dur-splash-out-rm);
+}

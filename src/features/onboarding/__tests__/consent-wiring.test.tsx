@@ -214,17 +214,17 @@ describe('启动关口 ConsentGate（CONSENT-wire ②）', () => {
 
   it('会话不认（④ onRevoked）：按“被移除”离开（session_revoked），不进 App', async () => {
     const w = wiring();
-    await renderGate(fakeApi(first, { ok: false, error: 'revoked' }), w.deps);
+    await renderGate(fakeApi(first, { ok: false, error: 'revoked', sid: 's1' }), w.deps);
     await decline();
-    expect(w.leave).toHaveBeenCalledWith('session_revoked');
+    expect(w.leave).toHaveBeenCalledWith('session_revoked', 's1');   // 被拒那次请求用的会话原样交过去（K6-sugg4 ①）
     expect(screen.queryByTestId('the-app')).toBeNull();
   });
 
   it('账号停用（④ onDisabled）：按“已停用”离开（account_disabled → 登录页 auth.exit.disabled），不进 App', async () => {
     const w = wiring();
-    await renderGate(fakeApi(first, { ok: false, error: 'disabled' }), w.deps);
+    await renderGate(fakeApi(first, { ok: false, error: 'disabled', sid: 's1' }), w.deps);
     await agree();
-    expect(w.leave).toHaveBeenCalledWith('account_disabled');
+    expect(w.leave).toHaveBeenCalledWith('account_disabled', 's1');
     expect(w.enableAi).not.toHaveBeenCalled();
     expect(screen.queryByTestId('the-app')).toBeNull();
   });
@@ -265,10 +265,10 @@ describe('路由 #/onboarding：ConsentRoute（CONSENT-wire ①）', () => {
     window.history.replaceState(null, '', '#/onboarding');
     const w = wiring();
     await act(async () => {
-      render(<ConsentRoute api={fakeApi(first, { ok: false, error: 'disabled' })} wiring={w.deps} />);
+      render(<ConsentRoute api={fakeApi(first, { ok: false, error: 'disabled', sid: null })} wiring={w.deps} />);
     });
     await decline();
-    expect(w.leave).toHaveBeenCalledWith('account_disabled');
+    expect(w.leave).toHaveBeenCalledWith('account_disabled', null);
     expect(window.location.hash).toBe('#/onboarding');
   });
 });

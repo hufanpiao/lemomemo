@@ -3,7 +3,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, vi } from 'vitest';
 import type { DeviceRow } from '../data/devices.ts';
-import type { LocalSignOut, SettingsApi, SettingsErr } from '../data/settings-api.ts';
+import { failWith, type Failure, type LocalSignOut, type SettingsApi, type SettingsErr } from '../data/settings-api.ts';
 import type { ExitDeps } from '../hooks/useSessionExit.ts';
 import { zh } from '../i18n/zh.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';
@@ -24,7 +24,8 @@ export const ROWS: DeviceRow[] = [
 export const SESSIONS = [{ orphan_count: 2, orphan_last_at: new Date(NOW - DAY).toISOString(), signed_out_device_ids: ['n', 'z'] }];
 
 export type Fake = SettingsApi & { [K in keyof SettingsApi]: ReturnType<typeof vi.fn> };
-export const fail = (error: SettingsErr) => ({ ok: false as const, error });
+/** 失败结果；revoked、signed_out 带上被拒那次请求的会话（默认 s-me，同 fakeExit 的 readSessionId） */
+export const fail = (error: SettingsErr, sid: string | null = 's-me'): Failure => failWith(error, sid);
 
 /** order 记下各步的先后：row = 删本机那一行，signout = signOut local（fakeExit 里：session = 删本机会话） */
 export function fakeApi(over: Partial<SettingsApi> = {}, order: string[] = []): Fake {
@@ -53,7 +54,7 @@ export function fakeExit(pending: number | null = 0) {
     }),
     deleteDb: vi.fn(async () => void order.push('deleteDb')),
     clearCacheStorage: vi.fn(async () => void order.push('caches')),
-    clearLocalSession: vi.fn((_onlyIf?: string | null): void => void order.push('session')),
+    clearLocalSessionIf: vi.fn((_sid: string | null): void => void order.push('session')),
     readSessionId: vi.fn((): string | null => 's-me'),
     readUserId: vi.fn((): string | null => 'u1'),
     pendingCount: vi.fn(async () => pending),

@@ -4,6 +4,7 @@
 import postgres from 'postgres';
 import { createClient } from '@supabase/supabase-js';
 import { createFakeS3 } from '../../../tests/shared/fake-s3.ts';
+import { LIVE_LOCK, takeLiveLock } from '../../../tests/data-manifest/live-lock.ts';
 
 type Handler = (req: Request) => Response | Promise<Response>;
 
@@ -87,6 +88,22 @@ const purgeH: Handler = purgeMaybe;
 
 // ---------------- 库、Auth ----------------
 export const sql = postgres(DB, { max: 4, onnotice: () => {} });
+
+// 和 tests/data-manifest/purge-runner.ts 的 TC-B0-117 真链路同一把会话级锁（117117）：两边都调 account-purge，它处理库里所有到期的
+// pending_deletions；本机同时跑时，一边的到期行会被另一边当成“别人的”而失败，或在查完之后被另一边的 account-purge 删掉。
+// 拿到锁才开跑（等对方跑完，最多 45 秒，超时报“等锁超时”、锁没拿到；见 live-lock.ts），收尾 releaseLock 放锁；进程被 kill 时连接断开，锁随之释放
+const lockConn = await sql.reserve();
+try {
+  await takeLiveLock(lockConn);
+} catch (e) {
+  lockConn.release();
+  await sql.end({ timeout: 5 });
+  throw e;
+}
+export async function releaseLock() {
+  await lockConn`select pg_advisory_unlock(${LIVE_LOCK})`.catch(() => {});
+  lockConn.release();
+}
 export const admin = createClient(API, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
 const anon = createClient(API, ANON, { auth: { persistSession: false, autoRefreshToken: false } });
 export const ours: string[] = [];

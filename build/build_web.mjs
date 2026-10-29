@@ -32,6 +32,9 @@ const n = await injectSwManifest(resolve(ROOT, 'dist/web/app'));
 await assembleWeb({ root: ROOT, mode });
 console.log(`构建完成：mode=${mode}，预缓存 ${n} 个文件`);
 
+// 启动画面样式的媒体查询没被压缩改写成旧版 Safari 不认的范围写法（R-254 审查必改 1）
+const splash = spawnSync(process.execPath, [resolve(ROOT, 'build/check_splash_css.mjs')], { stdio: 'inherit' });
+if (splash.status !== 0) process.exit(splash.status ?? 1);
 const size = spawnSync(process.execPath, [resolve(ROOT, 'build/check_size.mjs')], { stdio: 'inherit' });
 // Vite 的 manifest 只给体积检查用，不发布；另存一份到 dist/ 下给 npm run size 单独再查
 const vm = resolve(ROOT, 'dist/web/app/.vite');

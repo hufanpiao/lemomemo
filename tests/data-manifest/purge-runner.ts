@@ -3,15 +3,18 @@
 //       → 探针（冷静期里什么都不能少）→ account-purge（冷静期满，永久清除）→ 探针（删完再列一次：A 为 0，B 不变）
 // 探针一律用前端 B 的 runObjProbe（objstore-probe.ts），存储一律按 shared/objstore.ts 的 ObjStore 接口传进来：
 //   离线：tests/fakes/objstore-memory.ts 的内存替身 + memoryPurgeActs（按清单删 R2 前缀的替身，只代表 account-purge 对对象存储该做的事）
-//   真函数（TC-B0-117，B1）：本地 Supabase + S3 替身（tests/shared/fake-s3.ts，fetch 层转给它）+ 真的 account（delete）/ account-purge 的 index.ts，
-//     见文末 startLivePurge；真 R2 的一遍由负责人做
+//   真函数（TC-B0-117，B1）：本地 Supabase + S3 后端 + 真的 account（delete）/ account-purge 的 index.ts，见文末 startLivePurge。
+//     S3 后端二选一，同一份测试代码：仓库替身 tests/shared/fake-s3.ts（fetch 层转给它；正向、反证用例都用）；
+//     或真的 S3 兼容实现 LocalStack（设了 OBJSTORE_ENDPOINT 时，只跑正向用例，删除语义由它认定；B1 接手清单 B0-117-dev）。真 R2 的一遍由负责人做
 // runner = 'sql' 的注销用例（store = 'supabase' 的桶、表）不归这里，由 SQL runner 打本地库（待 Docker）
 
 import type { ObjStore } from '../../shared/objstore.ts';
-import { putSeedObjects, SEED_USERS, type SeedObject, seedObjects } from '../fakes/objstore-seed.ts';
+import { putSeedObjects, R2_BUCKETS, SEED_USERS, type SeedObject, seedObjects } from '../fakes/objstore-seed.ts';
 import { type ProbeResult, matches, runObjProbe } from './objstore-probe.ts';
 import type { GeneratedCase } from './sql.ts';
 import type { Manifest } from './types.ts';
+import { isLoopback, type LiveS3, type S3Call, s3Route } from './live-s3.ts';
+import { LIVE_LOCK, takeLiveLock } from './live-lock.ts';
 
 /** 注销的两步动作：离线是替身，真替身是调本地 Supabase 的函数 */
 export interface PurgeActs {
@@ -141,9 +144,10 @@ export function memoryPurgeActs(store: Pick<ObjStore, 'listAll' | 'deleteMany' |
 //   _shared/gen/ 不进仓库，要先 npm run copy:shared（CI 的 db 任务在启动本地 Supabase 之前已经跑过）。
 // 连接只取 IT_API_URL、IT_DB_URL、IT_ANON_KEY、IT_SERVICE_KEY（和 store-it 同名；CI 由 supabase status -o json 填），不是本机地址就拒绝。
 // 安全：account-purge 会处理库里所有到期的 pending_deletions。每次调之前查别人 49 小时内到期的行，有就失败、不调；
-//   两个测试文件可能在两个 worker 里同时跑，用会话级 pg_advisory_lock 串行；开跑先清上次残留（只删邮箱是 purge-it-*@example.com 的用户；
+//   两个测试文件可能在两个 worker 里同时跑，store-it（supabase/tests/store-it/harness.ts）也调 account-purge，三处用同一把会话级 pg_advisory_lock（117117，live-lock.ts；最多等 45 秒，超时报“等锁超时”）串行；开跑先清上次残留（只删邮箱是 purge-it-*@example.com 的用户；
 //   SEED_USERS 的 id 被别的邮箱占着就报错退出、不删），跑完再清；心跳 account-purge 那一行跑前记下、跑完还原。
-// 网络：fetch 打 LIVE_S3_ENDPOINT 的转给 S3 替身（照样带 SigV4 签名、替身照样验）；拦 fetch('https://api.resend.com/…') 只记收件人；
+// 网络：fetch 打 LIVE_S3_ENDPOINT 的转给 S3 替身（照样带 SigV4 签名、替身照样验），LocalStack 后端则原样发给 OBJSTORE_ENDPOINT（只许本机）；
+//   两种后端的 S3 请求都记进 s3Calls；拦 fetch('https://api.resend.com/…') 只记收件人；
 //   其余只许连本机地址。account 的第一封信在响应之后发：挂一个 EdgeRuntime.waitUntil 把这些后台任务记下，close 时等它们全部结束再还原；
 //   还原后的 fetch 也不是原来那个，而是“只许本机”的守卫（任何时刻都打不到 api.resend.com 等远端）。
 
@@ -153,8 +157,6 @@ export interface LiveSupabase { apiUrl: string; dbUrl: string; anonKey: string; 
 /** 真链路用例和它们的 beforeAll / afterAll 的超时（实际每条约 1 秒；本地库忙时留足余量） */
 export const LIVE_TIMEOUT_MS = 60_000;
 
-const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
-const isLoopback = (u: string) => URL.canParse(u) && LOOPBACK.has(new URL(u).hostname);
 const urlOf = (input: Request | URL | string) => new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
 
 /** 四个变量缺一个就是 null（调用方 describe.skipIf） */
@@ -167,7 +169,7 @@ export function liveSupabase(read: (name: string) => string | undefined): LiveSu
 export function loopbackOnlyFetch(real: typeof fetch): typeof fetch {
   return ((input: Request | URL | string, init?: RequestInit) => {
     const url = urlOf(input);
-    if (!LOOPBACK.has(url.hostname)) return Promise.reject(new Error(`live purge：不许连 ${url.hostname}（只许本机）`));
+    if (!isLoopback(url.href)) return Promise.reject(new Error(`live purge：不许连 ${url.hostname}（只许本机）`));
     return real(input, init);
   }) as typeof fetch;
 }
@@ -176,12 +178,11 @@ type Handler = (req: Request) => Response | Promise<Response>;
 /** 已拿到的处理函数：同一个 worker 里 index.ts 只执行一次（模块缓存），第二次 startLivePurge 复用；处理函数每次请求才读 Deno.env、EdgeRuntime */
 const handlers = new Map<string, Handler>();
 
-/** S3 替身要的只有这个（tests/shared/fake-s3.ts 的 createFakeS3 返回值满足） */
-export interface LiveS3 { handle(req: Request): Promise<Response> }
-
 export interface LivePurge {
-  /** 经 shared/objstore.ts 打同一个替身（和函数里 _shared/gen/objstore.ts 同一份代码） */
+  /** 经 shared/objstore.ts 打同一个后端（和函数里 _shared/gen/objstore.ts 同一份代码） */
   store: ObjStore;
+  /** 测试和函数打 S3 的全部请求（两种后端都记） */
+  s3Calls: S3Call[];
   /**
    * accountDelete：用这个人的真会话（magiclink 换的 JWT）调 account {action: 'delete'}，要求 200；
    * accountPurge：把 purge_after 改到 1 秒前（冷静期注入成已满），调 account-purge，要求 purged 1、failed 0
@@ -209,27 +210,24 @@ export const LIVE_S3_ENDPOINT = 'http://127.0.0.1:59117';
 const LIVE_CRON = 'purge-it-cron-secret-0123456789abcdef-only-local';
 const LIVE_EMAIL_LIKE = 'purge-it-%@example.com';
 const LIVE_EMAIL_RE = /^purge-it-.*@example\.com$/;
-/** 两个测试文件共用的会话级锁（pg_advisory_lock 的键） */
-const LIVE_LOCK = 117_117;
 
 export async function startLivePurge(cfg: LiveSupabase, s3: LiveS3): Promise<LivePurge> {
   if (!isLoopback(cfg.apiUrl) || !isLoopback(cfg.dbUrl)) throw new Error('live purge：只打本机的 Supabase（IT_API_URL / IT_DB_URL 不是本机地址）');
   const [{ default: postgres }, { createClient }, { createObjStore }] = await Promise.all([
     import('postgres'), import('@supabase/supabase-js'), import('../../shared/objstore.ts'),
   ]);
-  const base = LIVE_S3_ENDPOINT;
-  const store = createObjStore({
-    endpoint: base, accessKeyId: LIVE_S3_KEY, secretAccessKey: LIVE_S3_SECRET, bucketPrefix: '',
-    fetch: (url, init) => fetch(url, init as RequestInit), now: () => Date.now(),
-  });
+  // ① S3 后端（live-s3.ts）：仓库替身（地址是假的，fetch 层转给它）或真的 S3 兼容实现（LocalStack，请求原样发过去）；两种都记进 s3Calls
+  const r = s3Route(s3, { endpoint: LIVE_S3_ENDPOINT, accessKeyId: LIVE_S3_KEY, secretAccessKey: LIVE_S3_SECRET });
+  const { base, real } = r;
+  const store = createObjStore({ ...r.cfg, fetch: (url, init) => fetch(url, init as RequestInit), now: () => Date.now() });
 
-  // ② fetch：S3 替身地址转给替身，Resend 拦下，其余只许本机
+  // ② fetch：S3 地址交给 s3Route，Resend 拦下，其余只许本机
   const realFetch = globalThis.fetch;
   const guard = loopbackOnlyFetch(realFetch);
   const mails: string[] = [];
   globalThis.fetch = (async (input: Request | URL | string, init?: RequestInit) => {
     const url = urlOf(input);
-    if (url.origin === base) return s3.handle(new Request(input, init));
+    if (url.origin === base) return r.forward(url, input, init, realFetch);
     if (url.origin === 'https://api.resend.com') {
       const body = JSON.parse(String(init?.body ?? '{}')) as { to?: string[] };
       mails.push(...(body.to ?? []));
@@ -242,7 +240,7 @@ export async function startLivePurge(cfg: LiveSupabase, s3: LiveS3): Promise<Liv
   const ENV: Record<string, string> = {
     SUPABASE_URL: cfg.apiUrl, SUPABASE_SERVICE_ROLE_KEY: cfg.serviceKey, RESEND_API_KEY: 're_purge_it_fake', PROXY_SECRET: 'purge-it-proxy',
     CRON_SECRET: LIVE_CRON, SIGNUP_HASH_SECRET: 'purge-it-signup-hash-secret-only-local',
-    R2_ENDPOINT: base, R2_FN_ACCESS_KEY_ID: LIVE_S3_KEY, R2_FN_SECRET_ACCESS_KEY: LIVE_S3_SECRET, R2_BUCKET_PREFIX: '',
+    R2_ENDPOINT: base, R2_FN_ACCESS_KEY_ID: r.cfg.accessKeyId, R2_FN_SECRET_ACCESS_KEY: r.cfg.secretAccessKey, R2_BUCKET_PREFIX: r.cfg.bucketPrefix,
   };
   const g = globalThis as { Deno?: unknown; EdgeRuntime?: unknown };
   const had = { Deno: 'Deno' in g, EdgeRuntime: 'EdgeRuntime' in g };
@@ -307,16 +305,21 @@ export async function startLivePurge(cfg: LiveSupabase, s3: LiveS3): Promise<Liv
     }
     await sql.end({ timeout: 5 });
   };
+  /** LocalStack 不像替身每次都是空的：只清本测试自己的人（ours）的前缀——mkUser 建好、确认是自己的以后清一次（上次被 kill 的残留），
+   *  close 时再清一次（CI 后面 seed.mjs 要求替身里没有 SEED_USERS 的对象）。不碰别人的前缀：别的文件的真替身组也用 SEED_USERS。替身后端什么都不做 */
+  const cleanS3 = async (ids: readonly string[]) => { if (real) for (const b of R2_BUCKETS) for (const id of new Set(ids)) await store.deletePrefix(b, `${id}/`); };
   let heartbeat: { at: Date; detail: unknown } | null;
   try {
     lock = await sql.reserve();
-    await lock`select pg_advisory_lock(${LIVE_LOCK})`;
+    await takeLiveLock(lock);
     const leftovers = (await sql<{ id: string }[]>`select id::text from auth.users where email like ${LIVE_EMAIL_LIKE}`).map((r) => r.id);
     for (const id of [SEED_USERS.a, SEED_USERS.b]) {
       const row = (await sql<{ email: string | null }[]>`select email from auth.users where id = ${id}`)[0];
       if (row && !LIVE_EMAIL_RE.test(row.email ?? '')) throw new Error(`live purge：${id} 已被别的用户占用（邮箱不是 purge-it-*@example.com），不删，请换一个干净的本地库`);
     }
     await wipe(leftovers);
+    // 先查完 SEED_USERS 没被别人占（上面），再碰 LocalStack：只读地列一个随机前缀，证明它在、四个桶都建了
+    if (real) await Promise.all(R2_BUCKETS.map((b) => store.listAll(b, `${crypto.randomUUID()}/`))).catch((e: Error) => { throw new Error(`live purge：LocalStack（${base}）打不通或没建桶（先 node build/objstore.mjs up）：${e.message}`); });
     heartbeat = (await sql<{ at: Date; detail: unknown }[]>`select at, detail from private.heartbeat where name = 'account-purge'`)[0] ?? null;
   } catch (e) {
     restore();
@@ -335,13 +338,14 @@ export async function startLivePurge(cfg: LiveSupabase, s3: LiveS3): Promise<Liv
   }
 
   const live: LivePurge = {
-    store, mails, lastPurge: null, userExists, background: () => bg.length,
+    store, s3Calls: r.calls, mails, lastPurge: null, userExists, background: () => bg.length,
     async mkUser(tag, id) {
       const email = `purge-it-${tag}-${run}@example.com`;
       const { data, error } = await admin.auth.admin.createUser({ ...(id ? { id } : {}), email, email_confirm: true });
       if (error || !data.user) throw new Error(`建用户失败：${error?.message}`);
       const uid = data.user.id;
       ours.push(uid);
+      if (id) await cleanS3([uid]); // 指定 id（SEED_USERS）的：已确认是本测试建的人，清掉上次被 kill 留下的对象
       emails.set(uid, email);
       await sql`insert into public.profiles (user_id) values (${uid}) on conflict (user_id) do nothing`;
       return uid;
@@ -376,9 +380,11 @@ export async function startLivePurge(cfg: LiveSupabase, s3: LiveS3): Promise<Liv
     async close() {
       try {
         await Promise.allSettled(bg); // 后台发信全部结束（期间 Resend 仍被拦）再往下
+        const s3Err = await cleanS3(ours).then(() => null, (e: unknown) => e);
         await wipe(ours);
         if (heartbeat) await sql`update private.heartbeat set at = ${heartbeat.at}, detail = ${heartbeat.detail === null ? null : JSON.stringify(heartbeat.detail)}::jsonb where name = 'account-purge'`;
         else await sql`delete from private.heartbeat where name = 'account-purge'`;
+        if (s3Err) throw new Error(`live purge：收尾清 LocalStack 里的测试对象失败：${(s3Err as Error).message}`);
       } finally {
         restore();
         await release();

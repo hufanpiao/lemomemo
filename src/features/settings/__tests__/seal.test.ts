@@ -109,7 +109,7 @@ describe('退出时清空本机（真 core）', () => {
     const log: string[] = [];
     const r = await signOutThisDevice({
       server: { signOut: async () => (log.push('signout'), { serverDone: false }) },
-      steps: { ...defaultExitDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSession: () => void log.push('session') },
+      steps: { ...defaultExitDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSessionIf: () => void log.push('session') },
       readUserId: () => 'A',
       wipeMs: 50,
     });
@@ -138,7 +138,7 @@ describe('退出时清空本机（真 core）', () => {
     let r: { serverDone: boolean } | undefined;
     const running = signOutThisDevice({
       server: { signOut: async () => (log.push('signout'), { serverDone: true }) },
-      steps: { ...defaultExitDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSession: () => void log.push('session') },
+      steps: { ...defaultExitDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSessionIf: () => void log.push('session') },
       readUserId: () => 'A',
       wipeMs: 50,
     }).then((v) => (r = v));

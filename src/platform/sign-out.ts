@@ -1,6 +1,6 @@
 // 退出这台设备（架构 4.1、0.38 第 35～37 条；接手清单 K-signout-merge）：登录页“退出并换账号”（K4）和设置页“退出登录 / 被移除”（K9）共用这一份
 // 顺序：① 删本会话那一行 devices ② 清本机库 ③ 清 Cache Storage（只删运行时缓存，保留 workbox-precache，见 session.ts）
-//   ④ signOut({scope: 'local'})，不是 ok 就 clearLocalSession(退出前的 session_id) 兜底 ⑤ 会话删掉以后再按库名删一次库。
+//   ④ signOut({scope: 'local'})，不是 ok 就 clearLocalSessionIf(退出前的 session_id) 兜底 ⑤ 会话删掉以后再按库名删一次库。
 //   会话放在 ④：中途被打断最坏是“有会话、没库”，下次打开能自愈
 // • ⑤ 的原因（K-signout-merge 复审 M2）：②③ 那几秒会话还在；按库名删库会让别的主 App 标签页收到 versionchange 立即 reload，
 //   它用还在的旧会话 coldStart、重建库并开始同步旧账号的数据。会话删掉以后再删一次，库就不会留在硬盘上（共用电脑）。
@@ -23,13 +23,14 @@
 // • 一开头先 markSelfSignOut()（K6-signedout）：之后 ④ signOut、① 删行时刷新令牌失败等引起的本页 SIGNED_OUT，
 //   会话层（session.ts 的 onAuthUser → core/account.ts 的 watchAccount）见到标记就不再按“被移除”重复处理
 // • 兜底删本机会话只删“退出前那一个”（接手清单 K6-sugg3 ①）：一开头记下本机会话的 session_id，④ 不是 ok、④ 晚到时都按它
-//   clearLocalSession(sid)（= session.ts 的 clearLocalSessionIf），退出那几秒里别的标签页刚登录的新会话不删。
+//   clearLocalSessionIf(sid)（= session.ts 的 clearLocalSessionIf），退出那几秒里别的标签页刚登录的新会话不删。
+//   ExitSteps 只有这一个删会话的方法、sid 必填（K6-sugg4 ②）：没有“不给参数就直接删”的写法，桩忽略参数也不会让生产代码变成无条件删
 //   已知边界：④ 里 supabase-js 的 signOut 自己读本机会话、最后自己删会话键，那几秒里别的标签页写进来的新会话会被它当成本页的会话退掉——
 //   不归这里管，只能靠“别的标签页这时登录”本来就少见（登录页见到有会话先显示“当前已登录”）
 // • localStorage 里的 install_id、pv-locale 不清；日志上传队列 lemo.logq.<user_id>（log-store.ts，架构 0.38 第 68 条）在 ② 清本机时一起清
 //   （读不到是谁时清全部 lemo.logq.*）
 import { clearLogQueue } from './log-store.ts';
-import { clearCacheStorage, clearLocalSession, clearLocalSessionIf, markSelfSignOut, readSessionId, readSessionUserId } from './session.ts';
+import { clearCacheStorage, clearLocalSessionIf, markSelfSignOut, readSessionId, readSessionUserId } from './session.ts';
 
 /** 本机库名（= core/cache.ts 的 DB_NAME；platform 不引 core，测试守着两边一致） */
 export const LOCAL_DB_NAME = 'planner-v4';
@@ -102,10 +103,10 @@ export interface ExitSteps {
   deleteDb(): Promise<unknown>;
   clearCacheStorage(): Promise<void>;
   /**
-   * 同步删本机会话。不给参数：直接删（默认 session.ts 的 clearLocalSession）；
-   * 给了 onlyIf（含 null）：本机会话的 session_id 还是它才删（默认 session.ts 的 clearLocalSessionIf，K6-sugg3 ①）
+   * 同步删本机会话：本机会话的 session_id 还是 sessionId 才删（默认 session.ts 的 clearLocalSessionIf，K6-sugg3 ①）。
+   * sessionId 必填（K6-sugg4 ②）；null = 那时本机没有会话 / 读不出，只在本机仍没有会话时删
    */
-  clearLocalSession(onlyIf?: string | null): void;
+  clearLocalSessionIf(sessionId: string | null): void;
   /** 本机会话 access token 里的 session_id（默认 session.ts 的 readSessionId）；读不出为 null */
   readSessionId(): string | null;
 }
@@ -113,7 +114,7 @@ export interface ExitSteps {
 export const defaultExitSteps: ExitSteps = {
   deleteDb: () => deleteLocalDb(),
   clearCacheStorage,
-  clearLocalSession: (onlyIf) => (onlyIf === undefined ? clearLocalSession() : clearLocalSessionIf(onlyIf)),
+  clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
   readSessionId: () => readSessionId(),
 };
 
@@ -138,11 +139,10 @@ export async function wipeThisDevice(steps: ExitSteps, wipeMs = WIPE_TIMEOUT_MS,
   );
 }
 
-/** 同步删本机会话，不抛错；给了 onlyIf（含 null）时只在本机会话还是它时才删 */
-export function dropSession(steps: Pick<ExitSteps, 'clearLocalSession'>, onlyIf?: string | null): void {
+/** 同步删本机会话，不抛错；只在本机会话还是 sessionId 时才删（必填，K6-sugg4 ②） */
+export function dropSession(steps: Pick<ExitSteps, 'clearLocalSessionIf'>, sessionId: string | null): void {
   try {
-    if (onlyIf === undefined) steps.clearLocalSession();
-    else steps.clearLocalSession(onlyIf);
+    steps.clearLocalSessionIf(sessionId);
   } catch {
     // 存储不可用：本来也存不下会话
   }

@@ -21,12 +21,14 @@ import type {
   TzReportResult,
 } from '../../../shared/schema/sync.ts';
 import { patchResponse } from '../../../shared/schema/sync.ts';
+import { readSessionId } from '../session.ts';
 import { getSupabase } from './client.ts';
 
 /** 这个实现提供的方法（和 core/sync/types.ts 的 SyncTransport 形状一致；TS 结构类型，app 层直接交给 createSync） */
 export interface SupabaseSyncTransport {
   ensureSession(): Promise<SessionCheck>;
   refreshSession(): Promise<SessionCheck>;
+  sessionId(): string | null;
   insertRow(table: string, data: Readonly<Record<string, unknown>>): Promise<NetResult<{ rev: number }>>;
   applyPatch(args: PatchArgs): Promise<NetResult<PatchResponse>>;
   pullRows(table: string, q: PullQuery): Promise<NetResult<unknown[]>>;
@@ -247,6 +249,8 @@ export function subscribeRealtime(client: () => Promise<LooseDb>, tables: readon
 export interface SupabaseTransportOptions {
   /** 测试用：换掉 getSupabase */
   client?: () => Promise<LooseDb>;
+  /** 测试用：换掉“读本机会话的 session_id”（默认 platform/session.ts 的 readSessionId） */
+  sessionId?: () => string | null;
   now?: () => number;
   /** 测试用：整段超时（默认 20 秒） */
   timeoutMs?: number;
@@ -296,6 +300,8 @@ export function createSupabaseTransport(opts: SupabaseTransportOptions = {}): Su
       return refresh();
     },
     refreshSession: refresh,
+    // 同步读 supabase-js 存在 localStorage 里的会话（和它下一次请求带的令牌是同一份；K6-sugg4 ①）
+    sessionId: opts.sessionId ?? (() => readSessionId()),
 
     async insertRow(table, data) {
       const id = str(data['id']);

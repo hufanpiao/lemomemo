@@ -64,7 +64,7 @@ async function wire(extra: Partial<WireSyncDeps>) {
       leading = false;
       await stop?.();
     },
-    removed: (code: string) => onRemoved(code),
+    removed: (code: string) => onRemoved(code, null),
   };
 }
 

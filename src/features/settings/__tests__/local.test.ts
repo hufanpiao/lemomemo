@@ -153,13 +153,15 @@ describe('defaultExitDeps', () => {
   });
 });
 
-describe('defaultExitDeps.clearLocalSession（本机会话兜底，用 platform 的 clearLocalSession）', () => {
-  it('只删 sb-*-auth-token 和 sb-*-auth-token-code-verifier；pv-locale、install_id 不动', () => {
+describe('defaultExitDeps.clearLocalSessionIf（本机会话兜底，用 platform 的 clearLocalSessionIf）', () => {
+  it('只删 sb-*-auth-token 和它的 code-verifier、-user 两个附属键；pv-locale、install_id 不动', () => {
     localStorage.setItem('sb-127-auth-token', '{"user":{"id":"x"}}');
     localStorage.setItem('sb-127-auth-token-code-verifier', 'v');
+    localStorage.setItem('sb-127-auth-token-user', '{"user":{"id":"x"}}');
     localStorage.setItem('pv-locale', 'ko');
     localStorage.setItem('install_id', 'i');
-    defaultExitDeps.clearLocalSession();
+    defaultExitDeps.clearLocalSessionIf(null);   // 令牌里没有 session_id：按 null 比，对得上
+    expect(localStorage.getItem('sb-127-auth-token-user')).toBeNull();
     expect(localStorage.getItem('sb-127-auth-token')).toBeNull();
     expect(localStorage.getItem('sb-127-auth-token-code-verifier')).toBeNull();
     expect(localStorage.getItem('pv-locale')).toBe('ko');

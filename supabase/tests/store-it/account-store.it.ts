@@ -20,7 +20,7 @@
 //   • 每次调 account-purge 前查别人的到期行（49 小时内到期的也算，会收提醒信），有就失败、不调用；
 //   • 跑完照样清理。
 import {
-  assert, one, assertEquals, sleep, EMAIL_LIKE, BACKUP_DATE, START, mails, fakeS3, s3Server, s3Put, s3Has, purgeMod, sql, admin, ours, emails, writeLedger, purgeTraces, healLeftovers, mkUser, pending, runPurge, callAccount, userExists, today, counter, jwtOf,
+  assert, one, assertEquals, sleep, EMAIL_LIKE, BACKUP_DATE, START, mails, fakeS3, s3Server, s3Put, s3Has, purgeMod, sql, admin, ours, emails, writeLedger, purgeTraces, healLeftovers, mkUser, pending, runPurge, callAccount, userExists, today, counter, jwtOf, releaseLock,
 } from './harness.ts';
 
 const opts = { sanitizeOps: false, sanitizeResources: false };
@@ -253,6 +253,7 @@ Deno.test({ name: 'store-it 收尾：删掉本次建的用户和留下的行', .
     await writeLedger([]);
     assertEquals((await sql`select 1 from auth.users where email like ${EMAIL_LIKE}`).length, 0);
   } finally {
+    await releaseLock();
     await sql.end({ timeout: 5 });
     await s3Server.shutdown();
   }

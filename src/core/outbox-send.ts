@@ -68,6 +68,9 @@ export async function ackImpl(ctx: Ctx, opId: string, ack: AckResult): Promise<v
   await ctx.refresh();
 }
 
+/** 被拒那次请求的会话（K6-sugg4 ①）：调用方给了才带上 */
+const sidOf = (f: SendFailure): { sid?: string | null } => (f.sid === undefined ? {} : { sid: f.sid });
+
 export async function failImpl(ctx: Ctx, opId: string, failure: SendFailure): Promise<FailureKind> {
   const kind = classifyFailure(failure);
   if (ctx.isSuspended()) return kind;
@@ -75,13 +78,13 @@ export async function failImpl(ctx: Ctx, opId: string, failure: SendFailure): Pr
     // 被停用、注销冷静期（4.3、4.3b、0.29 续第 131 条②）：和被移除一样设闸、不回滚、不重试，调用方清空本机、回登录页；
     // 事件单独一类，登录页据 code 提示“已停用”或冷静期的恢复入口。不写库（随后整库清掉），所以不会碰上封存后的 CacheClosedError
     ctx.suspend();
-    ctx.emit({ type: 'disabled', code: failure.code ?? 'account_disabled' });
+    ctx.emit({ type: 'disabled', code: failure.code ?? 'account_disabled', ...sidOf(failure) });
     return kind;
   }
   if (kind === 'removed') {
     // 被移除（session_revoked）：设闸、不回滚、不重试；调用方清空本机、回登录页（TC-B1-77 ⑤），队列随库一起丢
     ctx.suspend();
-    ctx.emit({ type: 'removed', code: failure.code ?? 'removed' });
+    ctx.emit({ type: 'removed', code: failure.code ?? 'removed', ...sidOf(failure) });
     return kind;
   }
   // 先读出这一项在哪张表（写事务的范围要用）；写的时候在写事务里重新读，没有了就不写（K6 复审 N1：

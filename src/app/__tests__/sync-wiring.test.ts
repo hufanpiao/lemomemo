@@ -32,7 +32,8 @@ function spySync() {
     onRemoved = o.onRemoved;
     return sync;
   });
-  return { sync, create, removed: (code: string) => onRemoved(code) };
+  /** 引擎报被移除；sid = 被拒那次请求发出前本机会话的 session_id（K6-sugg4 ①，引擎总会带上） */
+  return { sync, create, removed: (code: string, sid: string | null = 's1') => onRemoved(code, sid) };
 }
 
 function deps(create?: (b: BootResult, o: SyncOptions) => Sync) {
@@ -91,9 +92,9 @@ describe('wireSync', () => {
     s.removed('session_not_found');
     s.removed('auth_failed');
     await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
-    expect(d.takeLocalSession).toHaveBeenCalledTimes(1);
-    expect(d.clearLocalSessionIf).toHaveBeenCalledTimes(1);
-    expect(d.clearLocalSessionIf).toHaveBeenCalledWith('s1');   // 只在会话还是开头删掉的那一个时再删
+    // 引擎带着 sid：收到时、回登录页前都只删那个会话（K6-sugg4 ①），不用 takeLocalSession
+    expect(d.takeLocalSession).not.toHaveBeenCalled();
+    expect(d.clearLocalSessionIf.mock.calls).toEqual([['s1'], ['s1']]);
     expect(d.clearCacheStorage).toHaveBeenCalledTimes(1);
     expect(boot.cache?.isClosed()).toBe(true);
     expect(reload).not.toHaveBeenCalled();
@@ -126,6 +127,7 @@ describe('wireSync', () => {
       await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
       expect(d.setExitNotice).toHaveBeenCalledWith(notice);
       expect(d.setExitNotice.mock.invocationCallOrder[0]).toBeLessThan(d.goToAuth.mock.invocationCallOrder[0] ?? 0);
+      // 这里 fail 没带 sid：退回 K6-sugg3 的写法（收到那一刻 takeLocalSession），回登录页前只删它
       expect(d.takeLocalSession).toHaveBeenCalledTimes(1);
       expect(d.clearLocalSessionIf).toHaveBeenCalledWith('s1');
       expect(d.clearCacheStorage).toHaveBeenCalledTimes(1);
@@ -204,5 +206,41 @@ describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 
     t.release();
     await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
     expect(readSessionUserId()).toBeNull();
+  });
+
+  // K6-sugg4 ①：请求在路上的那几秒——带着 s1 发出的请求回包之前，别的标签页用同一账号（或别的账号）写进了 s2
+  for (const via of ['同步引擎（刷新令牌失败）', 'outbox 的 removed 事件（带 sid）'] as const) {
+    it(`${via}：回包前本机已是 s2，按带回的 s1 删，s2 从头到尾不删`, async () => {
+      for (const user of [A, B]) {
+        resetBootForTest();
+        localStorage.clear();
+        const t = await setup();
+        const ob = t.boot.outbox;
+        if (!ob) throw new Error('outbox');
+        await ob.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
+        const a = await ob.next();
+        seed('s2', user);   // 回包之前
+        if (via === '同步引擎（刷新令牌失败）') t.s.removed('session_not_found', 's1');
+        else await ob.fail(a?.op_id ?? '', { status: 403, code: 'session_revoked', sid: 's1' });
+        expect(readSessionUserId()).toBe(user);
+        t.release();
+        await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
+        expect(readSessionUserId()).toBe(user);
+        expect(t.d.setExitNotice).toHaveBeenCalledWith('removed');
+      }
+    });
+  }
+
+  it('对照（修之前的写法：事件不带 sid，收到时 takeLocalSession 删“现在那个”）：同样的时序会把 s2 删掉', async () => {
+    const t = await setup();
+    const ob = t.boot.outbox;
+    if (!ob) throw new Error('outbox');
+    await ob.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
+    const a = await ob.next();
+    seed('s2');
+    await ob.fail(a?.op_id ?? '', { status: 403, code: 'session_revoked' });
+    t.release();
+    await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
+    expect(readSessionUserId()).toBeNull();   // 这就是建议 ① 说的窗口：s2 被删了
   });
 });

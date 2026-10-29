@@ -4,6 +4,7 @@
 // • A 页自己退出（打标记）→ B 页收到 supabase-js 转来的 SIGNED_OUT 和 storage(null)：两种先后都按普通退出（不提示被移除），
 //   清库期间的写入被拒（switching）、在途那一项回来时不写库，最后整库删掉
 // • 复查建议 ①：被移除时本机会话在收到 SIGNED_OUT 的同一个同步段里就删；清库那几秒里别的标签页登录的新会话，回登录页时不再被删
+// • K6-sugg4 ④：收到转来的 SIGNED_OUT 时本机会话已是别的标签页用同一账号刚登录的 s2（本页最后见到的是 s1）：不删 s2、不清库、不跳
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { claimCache, watchAccount, type WatchAccountDeps } from '../../core/account.ts';
 import { coldStart, getBoot, resetBootForTest, type BootResult } from '../../core/boot.ts';
@@ -13,8 +14,8 @@ import { todo, uid } from '../../core/__tests__/outbox-fixtures.ts';
 import { clearAllCollections } from '../../core/store.ts';
 import { write } from '../../core/write.ts';
 import {
-  authEventHandler, goToAuth, markSelfSignOut, readExitNotice, readSessionUserId, resetSelfSignOutForTest, takeLocalSession,
-  type AuthEventSession,
+  authEventHandler, clearAnyLocalSession, goToAuth, markSelfSignOut, readExitNotice, readSessionUserId, resetSelfSignOutForTest,
+  takeLocalSession, type AuthEventSession,
 } from '../../platform/session.ts';
 
 const A = '00000000-0000-4000-8000-00000000000a';
@@ -170,8 +171,11 @@ describe('被移除时删本机会话的时机（复查建议 ①）', () => {
     let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));
     const b = await tabB({ deleteDb: () => gate });
-    delete b.deps.dropSession;
-    b.deps.onSignedOut = (reason) => goToAuth(reason);
+    b.deps.dropSession = () => null;   // 修之前：开头不删
+    b.deps.onSignedOut = () => {
+      clearAnyLocalSession();   // 修之前：回登录页时不管是谁的会话都删
+      goToAuth();
+    };
     b.emit('SIGNED_OUT', null);
     seed('s2', B);
     release();
@@ -189,5 +193,44 @@ describe('被移除时删本机会话的时机（复查建议 ①）', () => {
     release();
     await vi.waitFor(() => expect(b.replace).toHaveBeenCalledTimes(1));
     expect(b.deps.onSwitched).not.toHaveBeenCalled();
+  });
+});
+
+describe('转来的 SIGNED_OUT 到时本机已是同一账号的新会话（K6-sugg4 ④）', () => {
+  it('本页最后见到 s1，本机会话已是 s2：不删 s2、不清库、不跳登录页；之后 s2 自己的 SIGNED_OUT 照常处理', async () => {
+    const b = await tabB();
+    seed('s2');   // 别的标签页用同一账号登录（还没转来 SIGNED_IN）
+    b.emit('SIGNED_OUT', null);   // s1 在别处被退出，supabase-js 转来的
+    expect(readSessionUserId()).toBe(A);
+    expect(b.boot.switching).toBe(false);
+    await Promise.resolve();
+    expect(b.replace).not.toHaveBeenCalled();
+    // 本页改认 s2：s2 随即被移除（本机会话已删），照常按被移除处理
+    localStorage.removeItem(KEY);
+    b.emit('SIGNED_OUT', null);
+    await vi.waitFor(() => expect(b.replace).toHaveBeenCalledWith('/app/auth/'));
+    expect(readExitNotice()).toBe('removed');
+  });
+
+  it('本机会话还是 s1（或已经没了）：照旧按被移除处理', async () => {
+    const b = await tabB();
+    b.emit('SIGNED_OUT', null);
+    await vi.waitFor(() => expect(b.replace).toHaveBeenCalledTimes(1));
+    expect(readSessionUserId()).toBeNull();
+    expect(readExitNotice()).toBe('removed');
+  });
+
+  it('对照（修之前的写法：不比本机会话的 session_id）：s2 被删、库被清', async () => {
+    let emitOld: Tab['emit'] = () => undefined;
+    const b = await tabB({
+      onAuthUser: (fn, out) => {
+        emitOld = authEventHandler(fn, out, { localSessionId: () => null });   // 读不出本机 sid = 退回修之前
+        return () => undefined;
+      },
+    });
+    seed('s2');
+    emitOld('SIGNED_OUT', null);
+    expect(readSessionUserId()).toBeNull();   // 这就是建议 ④ 说的：删掉了本账号刚登录的新会话
+    expect(b.boot.switching).toBe(true);
   });
 });

@@ -160,6 +160,8 @@ jobs:
         # TC-B0-117（B1）：objstore-cases、purge-runner 两组真 account-purge 整条链路打本机 Supabase（上面已 supabase start，
         # _shared/gen/ 已由 copy:shared 生成），S3 用仓库的 tests/shared/fake-s3.ts。连接和 store-it 一样只取 supabase status -o json 的
         # API_URL、DB_URL 和两把本地演示钥匙（IT_*，不是密钥；不是本机地址测试自己拒绝）。TC-B0-116 仍是 todo（B4b-1）
+        # B1 接手清单 B0-117-dev：同两组的正向用例（同一份测试代码）再打一遍上面已起的 LocalStack（OBJSTORE_ENDPOINT，4.14.0 按 digest 锁），
+        # 删除语义由真的 S3 兼容实现认定；反证用例仍只用 fake-s3。不另起 service 容器（本任务已有同一个 LocalStack），只多两条用例，约多 10～30 秒
         run: |
           st="$(supabase status -o json)"
           # 和 store-it/run.mjs 一样只解析第一个 { 到最后一个 } 之间（前后可能有提示行）
@@ -176,6 +178,8 @@ jobs:
             --must 'files 打真的 S3 替身' \
             --must 'TC-B0-117 真 account-purge 整条链路' \
             --must 'TC-B0-117 真 account-purge：生成的探针前后数' \
+            --must 'TC-B0-117 LocalStack 正向：真 account-purge 整条链路' \
+            --must 'TC-B0-117 LocalStack 正向：生成的探针前后数' \
             --allow-todo 'TC-B0-116 整条链路' \
             -- tests/shared/objstore.test.ts tests/data-manifest/objstore-cases.test.ts \
             tests/data-manifest/purge-runner.test.ts tests/functions/files-get.test.ts

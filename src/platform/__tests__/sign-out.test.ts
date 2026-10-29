@@ -29,11 +29,11 @@ function fakeFactory(how: 'success' | 'error' | 'blocked' | 'throw') {
 }
 
 /** 记下各步先后的假清理；wipe 不传就是登录页（按库名删库） */
-function steps(log: string[], over: Partial<ExitSteps> = {}): ExitSteps & { [K in 'deleteDb' | 'clearCacheStorage' | 'clearLocalSession']: ReturnType<typeof vi.fn> } {
+function steps(log: string[], over: Partial<ExitSteps> = {}): ExitSteps & { [K in 'deleteDb' | 'clearCacheStorage' | 'clearLocalSessionIf']: ReturnType<typeof vi.fn> } {
   return {
     deleteDb: vi.fn(async () => void log.push('deleteDb')),
     clearCacheStorage: vi.fn(async () => void log.push('caches')),
-    clearLocalSession: vi.fn((_onlyIf?: string | null) => void log.push('session')),
+    clearLocalSessionIf: vi.fn((_sid: string | null) => void log.push('session')),
     readSessionId: vi.fn((): string | null => 's1'),
     ...over,
   } as never;
@@ -124,10 +124,10 @@ describe('wipeThisDevice（清本机库和 Cache Storage）', () => {
     expect(done).toBe(true);
   });
 
-  it('默认几步：删本机会话用 session.ts 的 clearLocalSession，清缓存用 session.ts 的 clearCacheStorage（保留 workbox-precache）', () => {
-    const spy = vi.spyOn(session, 'clearLocalSession').mockImplementation(() => undefined);
-    defaultExitSteps.clearLocalSession();
-    expect(spy).toHaveBeenCalledTimes(1);
+  it('默认几步：删本机会话用 session.ts 的 clearLocalSessionIf，清缓存用 session.ts 的 clearCacheStorage（保留 workbox-precache）', () => {
+    const spy = vi.spyOn(session, 'clearLocalSessionIf').mockImplementation(() => undefined);
+    defaultExitSteps.clearLocalSessionIf('s1');
+    expect(spy).toHaveBeenCalledWith('s1');
     expect(defaultExitSteps.clearCacheStorage).toBe(session.clearCacheStorage);
     expect(defaultExitSteps.wipe).toBeUndefined();
   });
@@ -187,7 +187,7 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
       current = after;
       late.resolve({ serverDone: true });
       await vi.advanceTimersByTimeAsync(0);
-      expect(s.clearLocalSession).toHaveBeenCalledTimes(clears);
+      expect(s.clearLocalSessionIf).toHaveBeenCalledTimes(clears);
       vi.useRealTimers();
     }
   });
@@ -210,7 +210,7 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
     expect(log).toEqual(['deleteDb', 'caches', 'signout', 'deleteDb']);
     row.resolve();
     await vi.advanceTimersByTimeAsync(0);
-    expect(s.clearLocalSession).not.toHaveBeenCalled();
+    expect(s.clearLocalSessionIf).not.toHaveBeenCalled();
   });
 
   it('删行用掉的时间从 signOut 的等待里扣：两步合计不超过总超时', async () => {
@@ -252,7 +252,7 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
           return { serverDone: false };
         },
       },
-      steps: { deleteDb: () => deleteLocalDb(factory), clearCacheStorage: async () => undefined, clearLocalSession: () => void seq.push('session'), readSessionId: () => 's1' },
+      steps: { deleteDb: () => deleteLocalDb(factory), clearCacheStorage: async () => undefined, clearLocalSessionIf: () => void seq.push('session'), readSessionId: () => 's1' },
       readUserId: () => 'u1',
     });
     expect(r).toEqual({ serverDone: false });

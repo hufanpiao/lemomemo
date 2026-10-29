@@ -1,6 +1,6 @@
 // FB-6、TC-B0-117：store = 'r2' 的桶的注销、孤儿、临时桶用例由生成器产出对象存储探针，不手写；
 // 探针在内存 S3 替身（tests/shared/fake-s3.ts，经真的 shared/objstore.ts）上数得对；设了 OBJSTORE_ENDPOINT 时另打真的 S3 替身；
-// 设了 IT_*（本地 Supabase）时，探针在真的 account-delete → account-purge 前后数（TC-B0-117，B1）。真 R2 的一遍由负责人做。
+// 设了 IT_*（本地 Supabase）时，探针在真的 account-delete → account-purge 前后数（TC-B0-117，B1）；再设了 OBJSTORE_ENDPOINT 时正向用例在 LocalStack 上再跑一遍。真 R2 的一遍由负责人做。
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createObjStore, type ObjFetch } from '../../shared/objstore.ts';
 import { allManifests } from '../../shared/manifests/index.ts';
@@ -11,6 +11,7 @@ import { matches, runObjProbe } from './objstore-probe.ts';
 import { sampleManifests } from './sample-manifests.ts';
 import { env, liveObjStore, OBJSTORE_LIVE } from '../shared/objstore-live.ts';
 import { LIVE_S3_KEY, LIVE_S3_SECRET, LIVE_TIMEOUT_MS, liveSupabase, type LivePurge, startLivePurge } from './purge-runner.ts';
+import { liveSkipReason, realS3Backend } from './live-s3.ts';
 import type { ObjStore } from '../../shared/objstore.ts';
 import type { Manifest } from './types.ts';
 
@@ -174,11 +175,65 @@ describe.skipIf(!OBJSTORE_LIVE)('探针打真的 S3 替身（没设 OBJSTORE_END
 });
 
 // QA D-03、架构 0.33 第 1 条：TC-B0-117 整条链路挪到 B1。生成的 count 探针在真的 account-delete → account-purge 前后各数一次：
-// 本地 Supabase（IT_* 四个变量，和 store-it 同名）+ S3 替身（真签名、真验签，pageSize = 2 要翻页）+ 两个函数的真 index.ts（purge-runner.ts 文末）。
-// A、B 用随机 id 的真 Auth 用户（不和 purge-runner.test.ts 的 SEED_USERS 撞；两个文件靠 pg_advisory_lock 串行）。没设 IT_* 时跳过，CI 严格模式里跳过算失败。
+// 本地 Supabase（IT_* 四个变量，和 store-it 同名）+ S3 后端 + 两个函数的真 index.ts（purge-runner.ts 文末）。
+// A、B 用随机 id 的真 Auth 用户（不和 purge-runner.test.ts 的 SEED_USERS 撞；两个文件靠 pg_advisory_lock 串行）。
+// 正向用例同一份代码、两种 S3 后端（B1 接手清单 B0-117-dev）：仓库替身（真签名、真验签，pageSize = 2 要翻页；没设 IT_* 时跳过）和
+// LocalStack（OBJSTORE_ENDPOINT；删除语义由它认定；没设 IT_* 或 OBJSTORE_ENDPOINT 时跳过）。反证用例（替身回“删了”却没删）只在替身上跑。
+// 跳过时打印原因；CI 严格模式里跳过算失败。
 const LIVE_SB = liveSupabase(env);
+const REAL_S3 = realS3Backend(env);
+const probeKeys = (u: string): Record<string, string[]> => ({
+  images: [`${u}/${N}/${I}.webp`, `${u}/${N}/${I}.t.webp`, `${u}/anniv/${N}/${I}.webp`],
+  files: [`${u}/${N}/${I}.pdf`, `${u}/${N}/${I}.t.webp`],
+  'vault-images': [`${u}/${N}/${I}.webp`, `${u}/${N}/${I}.t.webp`],
+  'vault-files': [`${u}/${N}/${I}.pdf`],
+});
+const POSITIVE = 'account-purge 之后四个 R2 桶里 A 的对象为 0、删完再列一次确认、B 不变';
 
-describe.skipIf(!LIVE_SB)('TC-B0-117 真 account-purge：生成的探针前后数（本地 Supabase + S3 替身；没设 IT_* 时跳过）', () => {
+/** 正向用例的测试体：两种后端共用（live 由各自的 beforeAll 建好） */
+const positiveProbe = (getLive: () => LivePurge | undefined) => async () => {
+  const live = getLive();
+  if (!live) throw new Error('没起来');
+  const store = live.store;
+  const keys = probeKeys;
+  const a = await live.mkUser('ca'), b = await live.mkUser('cb');
+  for (const u of [a, b]) for (const [bucket, ks] of Object.entries(keys(u))) for (const k of ks) await put(live.store, bucket, k);
+  const vars = { user_a: a, user_b: b };
+  const probeAll = () => Promise.all(R2.map((bk) => runObjProbe(store, byId(`TC-DEL-bucket-${bk}`)?.objProbe ?? { bucket: bk, mode: 'count' }, vars)));
+  const want = R2.map((bk) => ({ mode: 'count', a: keys(a)[bk]?.length, b: keys(b)[bk]?.length }));
+  expect(await probeAll()).toEqual(want);
+
+  await live.acts.accountDelete(a);
+  expect(await probeAll()).toEqual(want); // 冷静期里一个都不少
+
+  const mark = live.s3Calls.length;
+  await live.acts.accountPurge(a);
+  const calls = live.s3Calls.slice(mark); // 只看 account-purge 发的请求（下面探针自己的列表不算）
+  expect(live.lastPurge).toMatchObject({ purged: 1, failed: 0 });
+  expect(await probeAll()).toEqual(want.map((w) => ({ ...w, a: 0 })));
+  expect([await live.userExists(a), await live.userExists(b)]).toEqual([false, true]);
+
+  // 删完再列一次：每个桶 account-purge 发的请求里，A 前缀的最后一次 DeleteObjects 之后还有一次 A 前缀的 ListObjectsV2，且回 200
+  const prefixOf = (q: string) => new URLSearchParams(q).get('prefix');
+  for (const bk of R2) {
+    const lastDel = calls.findLastIndex((c) => c.bucket === bk && c.method === 'POST' && new URLSearchParams(c.query).has('delete'));
+    const lastList = calls.findLastIndex((c) => c.bucket === bk && c.method === 'GET' && prefixOf(c.query) === `${a}/`);
+    expect(lastDel, `${bk} 没有 DeleteObjects`).toBeGreaterThanOrEqual(0);
+    expect(calls[lastDel]?.status, `${bk} DeleteObjects`).toBe(200);
+    expect(lastList, `${bk} 删完没有再列`).toBeGreaterThan(lastDel);
+    expect(calls[lastList]?.status).toBe(200);
+    // 没碰 B 的前缀
+    expect(calls.some((c) => c.bucket === bk && prefixOf(c.query) === `${b}/`), bk).toBe(false);
+  }
+  // B 的每个对象逐个 head 还在
+  for (const [bucket, ks] of Object.entries(keys(b))) for (const k of ks) expect(await live.store.head(bucket, k), `${bucket}/${k}`).not.toBeNull();
+};
+
+const FAKE_TITLE = 'TC-B0-117 真 account-purge：生成的探针前后数（本地 Supabase + S3 替身；没设 IT_* 时跳过）';
+const fakeSkip = liveSkipReason(env, false);
+if (fakeSkip) console.warn(`[跳过] ${FAKE_TITLE}：${fakeSkip}`);
+
+describe.skipIf(!LIVE_SB)(FAKE_TITLE, () => {
   let live: LivePurge | undefined;
   const fake = createFakeS3({ accessKeyId: LIVE_S3_KEY, secretAccessKey: LIVE_S3_SECRET, buckets: R2 });
   fake.pageSize = 2;
@@ -188,47 +243,8 @@ describe.skipIf(!LIVE_SB)('TC-B0-117 真 account-purge：生成的探针前后�
   afterAll(async () => {
     await live?.close();
   }, LIVE_TIMEOUT_MS);
-  const keys = (u: string): Record<string, string[]> => ({
-    images: [`${u}/${N}/${I}.webp`, `${u}/${N}/${I}.t.webp`, `${u}/anniv/${N}/${I}.webp`],
-    files: [`${u}/${N}/${I}.pdf`, `${u}/${N}/${I}.t.webp`],
-    'vault-images': [`${u}/${N}/${I}.webp`, `${u}/${N}/${I}.t.webp`],
-    'vault-files': [`${u}/${N}/${I}.pdf`],
-  });
 
-  it('account-purge 之后四个 R2 桶里 A 的对象为 0、删完再列一次确认、B 不变', async () => {
-    if (!live) throw new Error('没起来');
-    const store = live.store;
-    const a = await live.mkUser('ca'), b = await live.mkUser('cb');
-    for (const u of [a, b]) for (const [bucket, ks] of Object.entries(keys(u))) for (const k of ks) await put(live.store, bucket, k);
-    const vars = { user_a: a, user_b: b };
-    const probeAll = () => Promise.all(R2.map((bk) => runObjProbe(store, byId(`TC-DEL-bucket-${bk}`)?.objProbe ?? { bucket: bk, mode: 'count' }, vars)));
-    const want = R2.map((bk) => ({ mode: 'count', a: keys(a)[bk]?.length, b: keys(b)[bk]?.length }));
-    expect(await probeAll()).toEqual(want);
-
-    await live.acts.accountDelete(a);
-    expect(await probeAll()).toEqual(want); // 冷静期里一个都不少
-
-    const mark = fake.calls.length;
-    await live.acts.accountPurge(a);
-    const calls = fake.calls.slice(mark); // 只看 account-purge 发的请求（下面探针自己的列表不算）
-    expect(live.lastPurge).toMatchObject({ purged: 1, failed: 0 });
-    expect(await probeAll()).toEqual(want.map((w) => ({ ...w, a: 0 })));
-    expect([await live.userExists(a), await live.userExists(b)]).toEqual([false, true]);
-
-    // 删完再列一次：每个桶 account-purge 发的请求里，A 前缀的最后一次 DeleteObjects 之后还有一次 A 前缀的 ListObjectsV2，且回 200
-    const prefixOf = (q: string) => new URLSearchParams(q).get('prefix');
-    for (const bk of R2) {
-      const lastDel = calls.findLastIndex((c) => c.bucket === bk && c.method === 'POST' && new URLSearchParams(c.query).has('delete'));
-      const lastList = calls.findLastIndex((c) => c.bucket === bk && c.method === 'GET' && prefixOf(c.query) === `${a}/`);
-      expect(lastDel, `${bk} 没有 DeleteObjects`).toBeGreaterThanOrEqual(0);
-      expect(lastList, `${bk} 删完没有再列`).toBeGreaterThan(lastDel);
-      expect(calls[lastList]?.status).toBe(200);
-      // 没碰 B 的前缀
-      expect(calls.some((c) => c.bucket === bk && prefixOf(c.query) === `${b}/`), bk).toBe(false);
-    }
-    // B 的每个对象逐个 head 还在
-    for (const [bucket, ks] of Object.entries(keys(b))) for (const k of ks) expect(await live.store.head(bucket, k), `${bucket}/${k}`).not.toBeNull();
-  }, LIVE_TIMEOUT_MS);
+  it(POSITIVE, positiveProbe(() => live), LIVE_TIMEOUT_MS);
 
   it('删完再列一次是真的：替身对 A 的一个对象回“删了”却没删，account-purge 判失败（原因是 R2 再列不为 0）、不删账号，A 留在桶里', async () => {
     if (!live) throw new Error('没起来');
@@ -252,4 +268,20 @@ describe.skipIf(!LIVE_SB)('TC-B0-117 真 account-purge：生成的探针前后�
       fake.ignoreDelete.delete(stuck);
     }
   }, LIVE_TIMEOUT_MS);
+});
+
+const LS_TITLE = 'TC-B0-117 LocalStack 正向：生成的探针前后数（本地 Supabase + LocalStack；没设 IT_* 或 OBJSTORE_ENDPOINT 时跳过）';
+const lsSkip = liveSkipReason(env, true);
+if (lsSkip) console.warn(`[跳过] ${LS_TITLE}：${lsSkip}`);
+
+describe.skipIf(lsSkip !== null)(LS_TITLE, () => {
+  let live: LivePurge | undefined;
+  beforeAll(async () => {
+    if (LIVE_SB && REAL_S3) live = await startLivePurge(LIVE_SB, REAL_S3);
+  }, LIVE_TIMEOUT_MS);
+  afterAll(async () => {
+    await live?.close();
+  }, LIVE_TIMEOUT_MS);
+
+  it(POSITIVE, positiveProbe(() => live), LIVE_TIMEOUT_MS);
 });

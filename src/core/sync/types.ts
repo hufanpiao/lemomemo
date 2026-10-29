@@ -36,6 +36,11 @@ export interface SyncTransport {
   ensureSession(): Promise<SessionCheck>;
   /** 收到 401 后刷新一次（TC-B1-82 ②～④） */
   refreshSession(): Promise<SessionCheck>;
+  /**
+   * 本机会话现在的 session_id（同步读，没有会话、读不出为 null；不发请求）。send.ts、refreshFlow 在发请求前记下它，
+   * 被移除、停用时随事件带回，离开本机时只删这个会话（接手清单 K6-sugg4 ①）
+   */
+  sessionId(): string | null;
   /** insert：upsert(onConflict: id, ignoreDuplicates)（4.2 幂等）；返回服务器上这一行的 rev */
   insertRow(table: string, data: Readonly<Record<string, unknown>>): Promise<NetResult<{ rev: number }>>;
   applyPatch(args: PatchArgs): Promise<NetResult<PatchResponse>>;

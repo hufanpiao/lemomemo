@@ -13,9 +13,11 @@
 // • 被停用、注销冷静期（outbox 的 disabled 事件：account_disabled、account_pending_deletion）和被移除走同一套（4.3、4.3b、0.29 续第 131 条②）：
 //   设闸 → 清库 → 删会话 → 回登录页；跳转前记下退出原因（platform/session.ts 的 setExitNotice），登录页提示“已停用”或冷静期的恢复入口。
 //   页面一定会跳走，不会出现“停在原页、写入被 switching 静默丢掉”
-// • 删本机会话的时机（接手清单 K6-sugg3 ①，同 core/account.ts 的 signedOutHere）：收到事件的同一个同步段里就删（takeLocalSession，
-//   记下删之前的 session_id），清完库、回登录页前只在本机会话还是那一个时再删一次（clearLocalSessionIf）——清库要几秒，
-//   等清完再无条件删会把这几秒里别的标签页刚登录的新会话也删掉；旧会话被晚到的令牌刷新写回来时照样删掉
+// • 删本机会话只删被拒那次请求用的会话（接手清单 K6-sugg3 ①、K6-sugg4 ①）：“被移除、停用”都来自某个请求的回包，
+//   同步层发请求前记下本机会话的 session_id，随事件带回（engine 的 onRemoved(code, sid)、outbox 事件的 sid）。
+//   收到事件的同一个同步段里 clearLocalSessionIf(sid)，清完库、回登录页前再 clearLocalSessionIf(sid) 一次——
+//   请求在路上、清库那几秒里别的标签页刚登录的新会话（同一账号、别的账号）都不删；旧会话被晚到的令牌刷新写回来时照样删掉。
+//   事件没带 sid（outbox.fail 的调用方没给）时退回 K6-sugg3 的写法：收到那一刻 takeLocalSession，记下删之前的 session_id
 // • 已经在走别的退出流程（watchAccount 发现会话没了或换了账号，boot.switching 已设）：不再清第二遍、不再跳第二次
 import { wipeOnRemoved } from '../core/account.ts';
 import type { BootResult } from '../core/boot.ts';
@@ -31,9 +33,9 @@ export interface WireSyncDeps {
   transport: SyncTransport;
   /** platform/session.ts 的 clearCacheStorage（只删运行时缓存） */
   clearCacheStorage(): Promise<void>;
-  /** platform/session.ts 的 takeLocalSession：同步删掉本机会话，返回删之前的 session_id（被移除、停用时一收到事件就调） */
+  /** platform/session.ts 的 takeLocalSession：同步删掉本机会话，返回删之前的 session_id（只在事件没带 sid 时用，见文件头） */
   takeLocalSession(): string | null;
-  /** platform/session.ts 的 clearLocalSessionIf：回登录页前，本机会话还是 takeLocalSession 删掉的那一个才再删 */
+  /** platform/session.ts 的 clearLocalSessionIf：本机会话还是被拒那次请求用的会话才删（收到事件时、回登录页前各一次） */
   clearLocalSessionIf(sessionId: string | null): void;
   /** platform/session.ts 的 goToAuth */
   goToAuth(): void;
@@ -97,15 +99,17 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   const life = deps.lifecycle ?? browserLifecycle;
   let removedHandled = false;
   let leader: TabLeader | null = null;
-  const onRemoved = (code: string): void => {
+  /** sid：被拒那次请求发出前本机会话的 session_id；undefined = 事件没带（见文件头） */
+  const onRemoved = (code: string, sid: string | null | undefined): void => {
     if (removedHandled || boot.switching) return;
     removedHandled = true;
-    // 同一个同步段里先删本机会话（K6-sugg3 ①）：清库那几秒里别的标签页登录的新会话，回登录页时不删
-    let dead: string | null = null;
+    // 同一个同步段里先删本机会话——只删被拒的那个（K6-sugg3 ①、K6-sugg4 ①）
+    let dead: string | null = sid ?? null;
     try {
-      dead = deps.takeLocalSession();
+      if (sid === undefined) dead = deps.takeLocalSession();
+      else deps.clearLocalSessionIf(sid);
     } catch {
-      dead = null;   // 存储不可用：本来也存不下会话
+      // 存储不可用：本来也存不下会话
     }
     deps.clearLogs?.();
     leader?.post({ type: 'reset' });
@@ -119,7 +123,7 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     });
   };
   outbox.onEvent((e) => {
-    if (e.type === 'removed' || e.type === 'disabled') onRemoved(e.code);
+    if (e.type === 'removed' || e.type === 'disabled') onRemoved(e.code, e.sid);
   });
 
   const reporter: TzReporter = createTzReporter({

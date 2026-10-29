@@ -7,7 +7,8 @@
 //   全仓只有这个文件能写 onAuthStateChange、认 'SIGNED_OUT'：ESLint 规则 lemo/auth-events-in-session（架构 2.3 A30）
 // • 官网首页（site/）和 App 同源，能读写这里用的 localStorage 键（会话、lemo.self_signout）：首页不加第三方脚本（架构 16.1）
 // • Cache Storage 的清理也在这里（caches 只在 platform 用）：只删运行时缓存，SW 预缓存保留（0.38 第 36 条）
-// • clearLocalSession：signOut 失败时的兜底，同步删掉本机的 supabase 会话键
+// • 删本机会话分两个函数（接手清单 K6-sugg4 ②）：clearLocalSessionIf(sid) 只删“还是那一个”的会话（sid 必填，退出流程一律用它）；
+//   clearAnyLocalSession() 不管是谁的都删（名字里写明，只给 takeLocalSession 和测试用）。不再有“给不给参数决定删不删”的写法
 // 只读 user.id、user.email 和令牌 payload 里的 session_id（sessionIdOfToken），不校验、不记录、不打印令牌
 import { buildInfo } from './env.ts';
 import { getSupabase, onClientReady } from './supabase/client.ts';
@@ -171,6 +172,8 @@ export interface AuthEventOptions {
   initialSessionId?: string | null;
   /** SIGNED_IN：新会话不是标记里那个就清掉标记；默认 forgetSelfSignOut */
   onSignedIn?: (sessionId: string | null) => void;
+  /** 收到 SIGNED_OUT 那一刻本机会话的 session_id；默认同步读 readSessionId() */
+  localSessionId?: () => string | null;
 }
 
 /** onAuthStateChange 回调里用到的会话字段（supabase-js 的 Session 的子集） */
@@ -181,7 +184,11 @@ export type AuthEventSession = { user: { id: string }; access_token?: unknown } 
  * INITIAL_SESSION 为 null 也当 SIGNED_OUT（审查 M1：订阅晚于 initialize 时只收得到它），但要本机会话键已经没了（sessionGone）：
  * 离线冷启动、令牌又过期时 supabase-js 也给 INITIAL_SESSION null，那时会话键还在，不能当成被移除去清库（会丢没上传的改动）。
  * 记住本页最后见到的 session_id（挂上时读一次，之后每个带会话的事件更新）：SIGNED_OUT 时拿它核对“自己退出”的标记，
- * 只滤掉标记里那个会话的 SIGNED_OUT（K6-signedout-sugg ①）
+ * 只滤掉标记里那个会话的 SIGNED_OUT（K6-signedout-sugg ①）。
+ * • SIGNED_OUT 时本机会话已经是另一个（本页最后见到的 session_id 和本机会话的都知道、且不同；接手清单 K6-sugg4 ④）：
+ *   这次 SIGNED_OUT 说的是本页原来那个会话（多半是 supabase-js 从别的标签页转来的），本机现在那个是别的标签页刚登录的新会话——
+ *   不回调 onSignedOut（不删它、不清库、不跳登录页），本页改认这个新会话（之后它的 SIGNED_OUT 照常处理）；
+ *   新会话若是别的账号，换账号由 storage 事件那一路（watchAccount）管。本机没有会话、或任一边不知道 session_id 时照旧回调
  */
 export function authEventHandler(
   fn: (userId: string) => void,
@@ -191,13 +198,21 @@ export function authEventHandler(
   const selfSignOut = o.selfSignOut ?? ((sid: string | null) => isSelfSignOut(undefined, undefined, sid));
   const sessionGone = o.sessionGone ?? (() => readSessionUserId() === null);
   const onSignedIn = o.onSignedIn ?? ((sid: string | null) => forgetSelfSignOut(sid));
+  const localSessionId = o.localSessionId ?? (() => readSessionId());
   let sid = o.initialSessionId !== undefined ? o.initialSessionId : readSessionId();
   return (event, session) => {
     if (session) sid = sessionIdOfToken(session.access_token);
     if (event === 'SIGNED_IN') onSignedIn(sid);
     if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user.id) fn(session.user.id);
     else if (!onSignedOut || selfSignOut(sid)) return;
-    else if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && session === null && sessionGone())) onSignedOut();
+    else if (event === 'SIGNED_OUT') {
+      const local = localSessionId();
+      if (sid !== null && local !== null && local !== sid) {
+        sid = local;   // 本机已是别的标签页刚登录的新会话：这次 SIGNED_OUT 不归它（K6-sugg4 ④）
+        return;
+      }
+      onSignedOut();
+    } else if (event === 'INITIAL_SESSION' && session === null && sessionGone()) onSignedOut();
   };
 }
 
@@ -338,11 +353,15 @@ export async function clearCacheStorage(): Promise<void> {
 }
 
 /**
- * 同步删掉本机的 supabase 会话（signOut 的兜底：断网、令牌过期、supabase-js 分包加载失败时，保证本机不留会话）。
- * 删 `sb-<ref>-auth-token` 和 `sb-<ref>-auth-token-code-verifier` 两个键，键名取法同 sessionStorageKey()；
- * supabaseUrl 解析不出来时按格式删所有 `sb-*-auth-token`（及其 code-verifier）。不读、不记录令牌内容，不抛错
+ * 同步删掉本机的 supabase 会话，**不管是谁的**（K6-sugg4 ② 起改名，名字里写明；退出流程一律用 clearLocalSessionIf / takeLocalSession）。
+ * 删 `sb-<ref>-auth-token`、`…-code-verifier` 和 `…-user` 三个键，键名取法同 sessionStorageKey()；
+ * supabaseUrl 解析不出来时按格式删所有 `sb-*-auth-token`（及其两个附属键）。
+ * `-user`（K6-sugg4 ⑥）：supabase-js 2.118 的 auth-js 在配了 userStorage、或以前配过时把 user 单独存在 `<storageKey>-user`
+ * （node_modules/@supabase/auth-js/dist/module/GoTrueClient.js 的 _removeSession 也删它）；本项目没配 userStorage，一般不存在，删了无害。
+ * PKCE 的分流程键（`<storageKey>-code-verifier-<flowId>` 一类，lib/helpers.js 的 removeAllPKCEVerifiers）不在这里删：本项目登录走邮箱验证码，不用 PKCE。
+ * 不读、不记录令牌内容，不抛错
  */
-export function clearLocalSession(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): void {
+export function clearAnyLocalSession(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): void {
   try {
     const s = storage ?? localStorage;
     const key = sessionStorageKey(supabaseUrl);
@@ -358,6 +377,7 @@ export function clearLocalSession(storage?: Storage, supabaseUrl: string = build
       try {
         s.removeItem(k);
         s.removeItem(`${k}-code-verifier`);
+        s.removeItem(`${k}-user`);
       } catch {
         // 单个键删不掉：接着删别的
       }
@@ -368,37 +388,43 @@ export function clearLocalSession(storage?: Storage, supabaseUrl: string = build
 }
 
 /**
- * 拿走本机会话：同步读出 session_id 再删掉（clearLocalSession），返回删之前的 session_id（读不出为 null）。
+ * 拿走本机会话：同步读出 session_id 再删掉（clearAnyLocalSession），返回删之前的 session_id（读不出为 null）。
  * watchAccount 收到本页的 SIGNED_OUT 时用（K6-signedout-sugg2 ①）：和判断“会话里现在是谁”在同一个同步段里做，
- * 之后清库那几秒里别的标签页登录的新会话不会被删。不抛错
+ * 之后清库那几秒里别的标签页登录的新会话不会被删（本机会话已经不是本页那个时不会走到这里，见 authEventHandler，K6-sugg4 ④）。
+ * 发现“会话被吊销”来自某个请求的回包时不要用它（回包前别的标签页可能已写进新会话）：用发请求前记下的 sid 调 clearLocalSessionIf（K6-sugg4 ①）。
+ * 不抛错
  */
 export function takeLocalSession(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
   const sid = readSessionId(storage, supabaseUrl);
-  clearLocalSession(storage, supabaseUrl);
+  clearAnyLocalSession(storage, supabaseUrl);
   return sid;
 }
 
-/** 本机会话还是 sessionId 那一个（按 access token 的 session_id 比；没有会话也算对得上，删了无害）才删。不抛错 */
+/**
+ * 本机会话还是 sessionId 那一个（按 access token 的 session_id 比；没有会话也算对得上，删了无害）才删。
+ * sessionId 必填（K6-sugg4 ②）：null 表示“那时本机没有会话 / 读不出”，这时只在本机仍没有会话时删（等于不删别人的）。不抛错
+ */
 export function clearLocalSessionIf(sessionId: string | null, storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): void {
-  if (readSessionId(storage, supabaseUrl) === sessionId) clearLocalSession(storage, supabaseUrl);
+  if (readSessionId(storage, supabaseUrl) === sessionId) clearAnyLocalSession(storage, supabaseUrl);
 }
 
 /**
  * 没登录：去登录页（不建本机库）。带 notice 时先记下退出原因（setExitNotice），登录页据此提示：
  * watchAccount 收到本页的 SIGNED_OUT（不是自己退出）时调 goToAuth('removed', 删掉的那个 session_id)（K6-signedout）。
  * 带 'removed' 时先删本机会话（审查建议 5）：服务器上已经作废，留着登录页会同时显示“当前已登录”和“被移除”。
- * • 给了 deadSessionId（K6-signedout-sugg2 ①）：只在本机会话还是那一个时才删——清库那几秒里别的标签页刚登录的新会话不删；
- *   不给（undefined）时照旧直接删
+ * • 带 'removed' 时 deadSessionId 必填（K6-signedout-sugg2 ①、K6-sugg4 ②，类型 GoToAuthArgs 管着）：只在本机会话还是那一个时才删——
+ *   清库那几秒里别的标签页刚登录的新会话不删。不再有“不给就直接删”的写法
  * • 已经记下了退出原因（disabled、pending_deletion 等，例如 K8 的 disabled 事件先记的）时，不拿 removed 覆盖（K6-signedout-sugg ⑤）
  */
-export function goToAuth(notice?: ExitNotice, deadSessionId?: string | null): void {
-  if (notice === 'removed') {
-    if (deadSessionId === undefined) clearLocalSession();
-    else clearLocalSessionIf(deadSessionId);
-  }
+export function goToAuth(...args: GoToAuthArgs): void {
+  const [notice] = args;
+  if (args[0] === 'removed') clearLocalSessionIf(args[1]);
   if (notice && !(notice === 'removed' && readExitNotice() !== null)) setExitNotice(notice);
   location.replace('/app/auth/');
 }
+
+/** goToAuth 的参数：不带原因；带 disabled / pending_deletion；带 removed 时必须给删掉的那个 session_id（K6-sugg4 ②） */
+export type GoToAuthArgs = [] | [notice: Exclude<ExitNotice, 'removed'>] | [notice: 'removed', deadSessionId: string | null];
 
 // ───────── 退出原因（K6 复审 A：被移除、被停用、注销冷静期清本机后回登录页，登录页据此提示）─────────
 // 存在本标签页的 sessionStorage（goToAuth 是同一个标签页跳转，跳过去还在）；只存原因，不存账号、邮箱等任何个人信息

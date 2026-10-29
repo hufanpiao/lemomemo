@@ -160,6 +160,8 @@ export interface FakeTransport extends SyncTransport {
   pullCount: number;
   /** pullRows 的参数（测整表 since === null） */
   pullQueries: PullQuery[];
+  /** 本机会话的 session_id（sessionId() 返回它；K6-sugg4 ①） */
+  sid: string | null;
 }
 
 export function fakeTransport(server = new FakeServer()): FakeTransport {
@@ -177,6 +179,8 @@ export function fakeTransport(server = new FakeServer()): FakeTransport {
     pullFailAt: null,
     pullCount: 0,
     pullQueries: [],
+    sid: 's1',
+    sessionId: () => t.sid,
     ensureSession: () => Promise.resolve(t.offline ? 'network' : t.ensure),
     refreshSession: () => Promise.resolve(t.refresh.shift() ?? 'ok'),
     async insertRow(table, data) {

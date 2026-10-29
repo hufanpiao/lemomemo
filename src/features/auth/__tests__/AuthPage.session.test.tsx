@@ -24,7 +24,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
   /** 记下本机清理每一步的先后；clearLocalSession 是 K6 的 platform 函数的替身 */
   function exitSpy(log: string[]) {
     return {
-      clearLocalSession: vi.fn((_onlyIf?: string | null) => void log.push('clearLocalSession')),
+      clearLocalSessionIf: vi.fn((_sid: string | null) => void log.push('clearLocalSession')),
       readSessionId: () => 's1',
       deleteDb: vi.fn(async () => {
         log.push('deleteDb');
@@ -200,7 +200,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
           late({ ok: true, value: undefined });
           await vi.advanceTimersByTimeAsync(0);
         });
-        expect(localExit.clearLocalSession).toHaveBeenCalledTimes(clears);
+        expect(localExit.clearLocalSessionIf).toHaveBeenCalledTimes(clears);
         expect(localExit.deleteDb).toHaveBeenCalledTimes(2);
         expect(localExit.clearCacheStorage).toHaveBeenCalledTimes(1);
         expect((document.querySelector('main[data-feature="auth"]') as HTMLElement).dataset['step']).toBe('email');
@@ -223,7 +223,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
       await act(async () => {
         await vi.advanceTimersByTimeAsync(SIGN_OUT_TIMEOUT_MS * 2);
       });
-      expect(localExit.clearLocalSession).not.toHaveBeenCalled();
+      expect(localExit.clearLocalSessionIf).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

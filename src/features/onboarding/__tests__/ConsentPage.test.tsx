@@ -146,17 +146,18 @@ describe('告知与同意页（TC-B1-11）', () => {
   });
 
   it('会话被吊销：交给 onRevoked，不显示本页的提示', async () => {
-    const { api } = fakeApi([{ ok: false, error: 'revoked' }]);
+    const { api } = fakeApi([{ ok: false, error: 'revoked', sid: 's1' }]);
     const h = handlers();
     render(<ConsentPage api={api} {...h} />);
     await act(async () => { fireEvent.click(declineBtn()); });
     expect(h.onRevoked).toHaveBeenCalledOnce();
+    expect(h.onRevoked).toHaveBeenCalledWith('s1');
     expect(h.onDone).not.toHaveBeenCalled();
     expect(screen.queryByTestId('consent-error')).toBeNull();
   });
 
   it('账号停用（disabled）：交给 onDisabled，不走 onRevoked、不显示本页提示', async () => {
-    const { api } = fakeApi([{ ok: false, error: 'disabled' }]);
+    const { api } = fakeApi([{ ok: false, error: 'disabled', sid: 's1' }]);
     const h = handlers();
     render(<ConsentPage api={api} {...h} />);
     fireEvent.click(checkbox());

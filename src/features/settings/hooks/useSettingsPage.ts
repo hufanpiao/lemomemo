@@ -26,7 +26,7 @@ export interface SettingsDeps {
 
 export function useSettingsPage(deps: SettingsDeps = {}) {
   const exitDeps = deps.exit ?? defaultExitDeps;
-  const api = useMemo(() => deps.api ?? createSettingsApi(getSupabase, (onlyIf) => (onlyIf === undefined ? exitDeps.clearLocalSession() : exitDeps.clearLocalSession(onlyIf))), [deps.api, exitDeps]);
+  const api = useMemo(() => deps.api ?? createSettingsApi(getSupabase, (sid) => exitDeps.clearLocalSessionIf(sid)), [deps.api, exitDeps]);
   const exit = useSessionExit(api, exitDeps, {
     ...(deps.redirectMs === undefined ? {} : { redirectMs: deps.redirectMs }),
     ...(deps.exitTimeoutMs === undefined ? {} : { exitTimeoutMs: deps.exitTimeoutMs }),

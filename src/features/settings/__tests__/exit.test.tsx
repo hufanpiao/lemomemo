@@ -33,7 +33,7 @@ describe('会话没了：提示后回登录页（0.29 续第 98 条、0.38 第 7
     const dlg = await screen.findByRole('dialog');
     expect(text(dlg)).toContain(zh['settings.revoked.body']);
     await waitFor(() => expect(order).toEqual(['session', 'signout', 'wipe', 'caches', 'session', 'deleteDb']));
-    expect(exit.clearLocalSession.mock.calls).toEqual([[], ['s-me']]);   // K6-sugg3 ①：开头直接删，之后只删记下的那一个
+    expect(exit.clearLocalSessionIf.mock.calls).toEqual([['s-me'], ['s-me']]);   // K6-sugg4 ①：开头、清完都只删被拒那次请求用的会话
     const go = await within(dlg).findByRole('button', { name: zh['settings.revoked.go'] });
     await act(async () => {
       fireEvent.click(go);
@@ -46,7 +46,7 @@ describe('会话没了：提示后回登录页（0.29 续第 98 条、0.38 第 7
     const api = fakeApi({ loadDevices: vi.fn(async () => fail('revoked')), dropLocalSession: vi.fn(() => new Promise<LocalSignOut>(() => undefined)) });
     render(<SettingsPage deps={{ api, exit, now }} />);
     const dlg = await screen.findByRole('dialog');
-    await waitFor(() => expect(exit.clearLocalSession).toHaveBeenCalled());
+    await waitFor(() => expect(exit.clearLocalSessionIf).toHaveBeenCalled());
     const go = await within(dlg).findByRole('button', { name: zh['settings.revoked.go'] });
     expect((go as HTMLButtonElement).disabled).toBe(false);
     await act(async () => {
@@ -76,7 +76,7 @@ describe('会话没了：提示后回登录页（0.29 续第 98 条、0.38 第 7
       vi.advanceTimersByTime(1500);
     });
     expect(exit.goToAuth).not.toHaveBeenCalled();
-    expect(exit.clearLocalSession).toHaveBeenCalledTimes(1);   // 只有一开头那次（K6-sugg3 ①）
+    expect(exit.clearLocalSessionIf).toHaveBeenCalledTimes(1);   // 只有一开头那次（K6-sugg3 ①）
     await act(async () => {
       gate.resolve();
     });
@@ -93,7 +93,7 @@ describe('会话没了：提示后回登录页（0.29 续第 98 条、0.38 第 7
     const dlg = await screen.findByRole('dialog');
     expect(text(dlg)).toContain(zh['settings.signedOut.body']);
     expect(text(dlg)).not.toContain(zh['settings.revoked.body']);
-    await waitFor(() => expect(exit.clearLocalSession).toHaveBeenCalled());
+    await waitFor(() => expect(exit.clearLocalSessionIf).toHaveBeenCalled());
   });
 
   it('移除设备时回 revoked：同样处理；按钮复位；不点按钮几秒后自动回登录页', async () => {
@@ -123,7 +123,7 @@ describe('会话没了：提示后回登录页（0.29 续第 98 条、0.38 第 7
     });
     expect(await screen.findByText(`[ko]${zh['settings.revoked.body']}`)).toBeTruthy();
     expect(exit.wipe).toHaveBeenCalled();
-    await waitFor(() => expect(exit.clearLocalSession).toHaveBeenCalled());
+    await waitFor(() => expect(exit.clearLocalSessionIf).toHaveBeenCalled());
   });
 });
 
@@ -175,7 +175,7 @@ describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
     expect(text(dlg)).toContain(zh['settings.offlineOut.body']);
     expect(text(dlg)).not.toContain('没联网');
     expect(exit.wipe).toHaveBeenCalled();
-    expect(exit.clearLocalSession).toHaveBeenCalled();
+    expect(exit.clearLocalSessionIf).toHaveBeenCalled();
     expect(exit.goToAuth).not.toHaveBeenCalled();
     await act(async () => {
       fireEvent.click(within(dlg).getByRole('button', { name: zh['settings.revoked.go'] }));
@@ -197,13 +197,13 @@ describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
       vi.advanceTimersByTime(8000);
     });
     expect(await screen.findByText(zh['settings.offlineOut.body'])).toBeTruthy();
-    expect(exit.clearLocalSession).toHaveBeenCalledTimes(1);
+    expect(exit.clearLocalSessionIf).toHaveBeenCalledTimes(1);
     expect(exit.goToAuth).not.toHaveBeenCalled();
     // 晚到：本机会话还是退出前那个 user_id（令牌刷新把旧会话写回了）
     await act(async () => {
       signOut.resolve({ serverDone: true });
     });
-    await waitFor(() => expect(exit.clearLocalSession).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(exit.clearLocalSessionIf).toHaveBeenCalledTimes(2));
   });
 
   it('晚到时本机已经是别的账号（或没有会话）：不再删', async () => {
@@ -225,7 +225,7 @@ describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(exit.clearLocalSession).toHaveBeenCalledTimes(1);
+    expect(exit.clearLocalSessionIf).toHaveBeenCalledTimes(1);
   });
 
   it('删本机行一直不返回：最多等总超时的一半，接着清本机、signOut', async () => {
@@ -253,7 +253,7 @@ describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
       vi.advanceTimersByTime(4000);
     });
     expect(await screen.findByText(zh['settings.offlineOut.body'])).toBeTruthy();
-    expect(exit.clearLocalSession).toHaveBeenCalledTimes(1);
+    expect(exit.clearLocalSessionIf).toHaveBeenCalledTimes(1);
     // 删行这时才回来，本机会话里还是同一个 user_id：不因为它再删
     await act(async () => {
       del.resolve();
@@ -261,7 +261,7 @@ describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(exit.clearLocalSession).toHaveBeenCalledTimes(1);
+    expect(exit.clearLocalSessionIf).toHaveBeenCalledTimes(1);
   });
 
   it('数没上传的卡住（读库挡着）：最多等 2.5 秒，按数不出来处理，照样先确认', async () => {

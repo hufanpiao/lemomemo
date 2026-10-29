@@ -18,7 +18,7 @@ export function applyLocale(locale: Locale): void {
   void updateCachedLocale(ui);
 }
 
-export function useLocaleSwitch(api: SettingsApi, onRevoked: () => void, onSignedOut: () => void) {
+export function useLocaleSwitch(api: SettingsApi, onRevoked: (sid: string | null) => void, onSignedOut: (sid: string | null) => void) {
   const current: Locale = useUi((s) => (s.locale === 'ko-KR' ? 'ko' : 'zh'));
   const [sync, setSync] = useState<LocaleSyncState>('idle');
 
@@ -32,8 +32,8 @@ export function useLocaleSwitch(api: SettingsApi, onRevoked: () => void, onSigne
         setSync('idle');
         return;
       }
-      if (r.error === 'revoked') onRevoked();
-      else if (r.error === 'signed_out') onSignedOut();
+      if (r.error === 'revoked') onRevoked(r.sid);   // 被拒那次请求用的会话（K6-sugg4 ①）
+      else if (r.error === 'signed_out') onSignedOut(r.sid);
       setSync('failed');
     },
     [api, current, onRevoked, onSignedOut],

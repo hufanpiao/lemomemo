@@ -10,10 +10,10 @@ export type { ConsentApi, ConsentErr };
 export interface ConsentHandlers {
   /** 服务器已记下：agreed=true 同意，false 不同意 */
   onDone: (agreed: boolean) => void;
-  /** 会话被吊销或不在了（必填：按“被移除 / 没登录”处理） */
-  onRevoked: () => void;
-  /** 账号停用（服务器报 account_disabled，必填：按架构 4.3 清本机、回登录页，退出原因是“已停用”） */
-  onDisabled: () => void;
+  /** 会话被吊销或不在了（必填：按“被移除 / 没登录”处理）。sid：被拒那次请求用的会话（接手清单 K6-sugg4 ①，离开时只删它） */
+  onRevoked: (sid: string | null) => void;
+  /** 账号停用（服务器报 account_disabled，必填：按架构 4.3 清本机、回登录页，退出原因是“已停用”）。sid 同上 */
+  onDisabled: (sid: string | null) => void;
   /** R-239：这次没法保存选择，先不使用 AI、进 App，下次打开再问 */
   onSkip: () => void;
 }
@@ -37,11 +37,11 @@ export function useConsent(api: ConsentApi, { onDone, onRevoked, onDisabled, onS
       return;
     }
     if (r.error === 'revoked') {
-      onRevoked();
+      onRevoked(r.sid);
       return;
     }
     if (r.error === 'disabled') {
-      onDisabled();
+      onDisabled(r.sid);
       return;
     }
     setErr(r.error);

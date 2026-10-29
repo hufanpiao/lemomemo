@@ -1,9 +1,10 @@
 // 设置 › 已登录设备（架构 0.29 续第 98、103、108、111 条，0.38 第 38 条；TC-B1-18、TC-B1-77～79）
 // 读设备列表、“另有 N 个登录”和已退出的设备；移除别的设备、退出其他所有设备；移除本机 = 退出登录（先确认，由界面做）
-// revoked 交给 onRevoked（清空本机、提示“被移除”后回登录页）；本机没有会话交给 onSignedOut（提示“已退出登录”）
+// revoked 交给 onRevoked（清空本机、提示“被移除”后回登录页）；本机没有会话交给 onSignedOut（提示“已退出登录”）；
+// 两者都带上那次请求用的会话的 session_id（接手清单 K6-sugg4 ①：离开本机时只删它）
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { sortDevices, toDeviceView, toSessionInfo, type DeviceView, type Orphans } from '../data/devices.ts';
-import type { SettingsApi, SettingsErr } from '../data/settings-api.ts';
+import type { Failure, SettingsApi, SettingsErr } from '../data/settings-api.ts';
 
 export type { DeviceView, Orphans } from '../data/devices.ts';
 export type { SettingsErr } from '../data/settings-api.ts';
@@ -22,8 +23,9 @@ export type DeviceNotice =
 
 export interface DevicesDeps {
   api: SettingsApi;
-  onRevoked(): void;
-  onSignedOut(): void;
+  /** sid：被拒的那次请求用的会话的 session_id（settings-api 随错误带回） */
+  onRevoked(sid: string | null): void;
+  onSignedOut(sid: string | null): void;
   signOutHere(currentDeviceId: string | null): Promise<void>;
   now?: () => number;
 }
@@ -36,9 +38,9 @@ export function useDevices({ api, onRevoked, onSignedOut, signOutHere, now = Dat
 
   /** 会话没了：交给离开本机的处理；true = 已处理 */
   const lost = useCallback(
-    (e: SettingsErr): boolean => {
-      if (e === 'revoked') onRevoked();
-      else if (e === 'signed_out') onSignedOut();
+    (f: Failure): boolean => {
+      if (f.error === 'revoked') onRevoked(f.sid);
+      else if (f.error === 'signed_out') onSignedOut(f.sid);
       else return false;
       return true;
     },
@@ -55,7 +57,7 @@ export function useDevices({ api, onRevoked, onSignedOut, signOutHere, now = Dat
       setState({ kind: 'ready', list, orphans: info.orphans });
       return;
     }
-    lost(r.error);
+    lost(r);
     setState({ kind: 'error', error: r.error });
   }, [api, lost, now]);
 
@@ -87,7 +89,7 @@ export function useDevices({ api, onRevoked, onSignedOut, signOutHere, now = Dat
       if (!alive.current) return;
       setBusy(null);
       if (r.ok) setNotice({ kind: 'removed', device });
-      else if (lost(r.error)) return;
+      else if (lost(r)) return;
       else if (r.error === 'is_current_device') return setNotice({ kind: 'isCurrent' });
       else if (r.error === 'device_not_found') setNotice({ kind: 'notFound' });
       else return setNotice({ kind: 'error', error: r.error });
@@ -105,7 +107,7 @@ export function useDevices({ api, onRevoked, onSignedOut, signOutHere, now = Dat
     if (r.ok) {
       setNotice({ kind: 'othersOut' });
       await reload();
-    } else if (!lost(r.error)) setNotice({ kind: 'error', error: r.error });
+    } else if (!lost(r)) setNotice({ kind: 'error', error: r.error });
   }, [api, lost, reload]);
 
   const signOutThis = useCallback(() => exitHere(currentId, 'self'), [exitHere, currentId]);

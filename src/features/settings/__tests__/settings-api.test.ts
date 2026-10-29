@@ -3,7 +3,7 @@
 // 读列表、移除、退出其他设备、改语言各有超时（K9 第二轮 N2），超时按 offline
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Db } from '../../../platform/supabase/client.ts';
-import { createSettingsApi, mapSettingsError } from '../data/settings-api.ts';
+import { createSettingsApi, mapSettingsError, type SettingsApi } from '../data/settings-api.ts';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -127,7 +127,7 @@ describe('createSettingsApi', () => {
 
   it('本机没有会话 → signed_out（别的标签页退出了），不发请求', async () => {
     const { api, calls } = fakeDb({ session: null });
-    expect(await api.loadDevices()).toEqual({ ok: false, error: 'signed_out' });
+    expect(await api.loadDevices()).toEqual({ ok: false, error: 'signed_out', sid: null });
     expect(calls).toEqual([]);
   });
 
@@ -136,7 +136,7 @@ describe('createSettingsApi', () => {
     const r = await a.api.loadDevices();
     expect(r.ok && r.value.sessions).toBeNull();
     const b = fakeDb({ mySessions: { data: null, error: { code: 'P0001', message: 'session_revoked' } } });
-    expect(await b.api.loadDevices()).toEqual({ ok: false, error: 'revoked' });
+    expect(await b.api.loadDevices()).toEqual({ ok: false, error: 'revoked', sid: 's-me' });
   });
 
   it('removeDevice 调 rpc remove_device(p_device_id)，错误按码归类', async () => {
@@ -162,41 +162,53 @@ describe('createSettingsApi', () => {
 
   it('dropLocalSession 成功：只 signOut local，不删设备行、不用兜底', async () => {
     const { api, calls, clear } = fakeDb();
-    expect(await api.dropLocalSession()).toEqual({ serverDone: true });
+    expect(await api.dropLocalSession('s-me')).toEqual({ serverDone: true });
     expect(calls).toEqual([['signOut', { scope: 'local' }]]);
     expect(clear).not.toHaveBeenCalled();
   });
 
   it('dropLocalSession 不先查 getSession：getSession 出错时照样退出', async () => {
     const { api, calls } = fakeDb({ getSessionThrows: true });
-    expect(await api.dropLocalSession()).toEqual({ serverDone: true });
+    expect(await api.dropLocalSession('s-me')).toEqual({ serverDone: true });
     expect(calls).toEqual([['signOut', { scope: 'local' }]]);
   });
 
   it('断网（signOut 回错误或直接抛）：兜底删本机会话，serverDone = false', async () => {
     const a = fakeDb({ signOut: { error: { name: 'AuthRetryableFetchError', status: 0 } } });
-    expect(await a.api.dropLocalSession()).toEqual({ serverDone: false });
+    expect(await a.api.dropLocalSession('s-me')).toEqual({ serverDone: false });
     expect(a.clear).toHaveBeenCalledTimes(1);
     const b = fakeDb({ signOutThrows: true });
-    expect(await b.api.dropLocalSession()).toEqual({ serverDone: false });
+    expect(await b.api.dropLocalSession('s-me')).toEqual({ serverDone: false });
     expect(b.clear).toHaveBeenCalledTimes(1);
   });
 
-  it('dropLocalSession(sid)：兜底删会话时把 sid 原样转给 clearLocalSession（只删那一个，K6-sugg3 ①）；不给时不带参数', async () => {
+  it('dropLocalSession(sid)：兜底删会话时把 sid 原样转给 clearLocalSessionIf（只删那一个，K6-sugg3 ①；参数必填，K6-sugg4 ②）', async () => {
     const a = fakeDb({ signOutThrows: true });
     await a.api.dropLocalSession('s-me');
     expect(a.clear.mock.calls).toEqual([['s-me']]);
     const b = fakeDb({ signOutThrows: true });
     await b.api.dropLocalSession(null);
     expect(b.clear.mock.calls).toEqual([[null]]);
-    const c = fakeDb({ signOutThrows: true });
-    await c.api.dropLocalSession();
-    expect(c.clear.mock.calls).toEqual([[]]);
+  });
+
+  it('revoked 带回发请求时那个会话的 session_id（K6-sugg4 ①）：取 getSession 拿到的令牌，不是回包时本机的会话', async () => {
+    const readSid = vi.fn((): string | null => 's-other');   // 回包时本机已是别的标签页写进来的会话
+    const { db } = fakeDb({ removeDevice: { data: null, error: { code: 'P0001', message: 'session_revoked' } } });
+    const api = createSettingsApi(async () => db as unknown as Db, vi.fn(), 8000, readSid);
+    expect(await api.removeDevice('d9')).toEqual({ ok: false, error: 'revoked', sid: 's-me' });
+    expect(await api.signOutOthers()).toEqual({ ok: true, value: undefined });
+  });
+
+  it('getSession 本身出错（刷新令牌被拒）：sid 取调 getSession 之前同步读的本机会话', async () => {
+    const { db } = fakeDb();
+    (db.auth.getSession as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { session: null }, error: { code: 'refresh_token_not_found', status: 400 } });
+    const api = createSettingsApi(async () => db as unknown as Db, vi.fn(), 8000, () => 's-before');
+    expect(await api.loadDevices()).toEqual({ ok: false, error: 'revoked', sid: 's-before' });
   });
 
   it('令牌已失效（服务器回 session_not_found）：兜底删本机会话，服务器那边本来就没了（serverDone = true）', async () => {
     const { api, clear } = fakeDb({ signOut: { error: { name: 'AuthApiError', code: 'session_not_found', status: 404 } } });
-    expect(await api.dropLocalSession()).toEqual({ serverDone: true });
+    expect(await api.dropLocalSession('s-me')).toEqual({ serverDone: true });
     expect(clear).toHaveBeenCalledTimes(1);
   });
 
@@ -206,7 +218,7 @@ describe('createSettingsApi', () => {
       throw new Error('supabase_env_missing');
     }, clear);
     await expect(api.deleteOwnDevice('d1')).resolves.toBeUndefined();
-    expect(await api.dropLocalSession()).toEqual({ serverDone: false });
+    expect(await api.dropLocalSession('s-me')).toEqual({ serverDone: false });
     expect(clear).toHaveBeenCalledTimes(1);
   });
 
@@ -223,7 +235,7 @@ describe('createSettingsApi', () => {
 
   it('dropLocalSession：只 signOut local，不删设备行', async () => {
     const { api, calls } = fakeDb();
-    await api.dropLocalSession();
+    await api.dropLocalSession('s-me');
     expect(calls).toEqual([['signOut', { scope: 'local' }]]);
   });
 
@@ -235,7 +247,7 @@ describe('createSettingsApi', () => {
       ['updateUser', { data: { locale: 'ko-KR' } }],
     ]);
     const b = fakeDb({ profileUpdate: { data: null, error: { message: 'unauthorized' } } });
-    expect(await b.api.saveLocale('zh-CN')).toEqual({ ok: false, error: 'revoked' });
+    expect(await b.api.saveLocale('zh-CN')).toEqual({ ok: false, error: 'revoked', sid: 's-me' });
   });
 
   it('拿不到客户端（没配环境变量等）→ unknown，不当被移除', async () => {
@@ -244,4 +256,16 @@ describe('createSettingsApi', () => {
     }, vi.fn());
     expect(await api.loadDevices()).toEqual({ ok: false, error: 'unknown' });
   });
+});
+
+// K6-sugg4 ②：不给 sid 的调用编不过（typecheck 检查；不执行）
+function settingsApiShapes(api: SettingsApi): void {
+  // @ts-expect-error 设置页 dropLocalSession 的 sid 必填
+  void api.dropLocalSession();
+  // @ts-expect-error 传 undefined 也不行
+  void api.dropLocalSession(undefined);
+}
+
+it('K6-sugg4 ②：不给 session_id 的调用编不过（上面的 @ts-expect-error，由 typecheck 检查）', () => {
+  expect(typeof settingsApiShapes).toBe('function');
 });

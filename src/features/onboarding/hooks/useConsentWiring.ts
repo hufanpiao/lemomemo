@@ -67,12 +67,13 @@ export function useNoticeState(api: ConsentApi, limitMs?: number, startedAt?: nu
 
 export interface ConsentWiringDeps {
   enableAi(): Promise<unknown>;
-  leave(code: 'session_revoked' | 'account_disabled'): Promise<void>;
+  /** sid：被拒那次请求用的会话（K6-sugg4 ①），离开时只删它 */
+  leave(code: 'session_revoked' | 'account_disabled', sid: string | null): Promise<void>;
 }
 
 export const defaultConsentWiringDeps: ConsentWiringDeps = {
   enableAi: () => writeAiSwitchSettled({ key: 'ai.enabled', value: true }),
-  leave: (code) => leaveThisDevice(code),
+  leave: (code, sid) => leaveThisDevice(code, sid),
 };
 
 /** ConsentPage 的四个回调；finish = 进 App（或回到原来的页面） */
@@ -84,8 +85,8 @@ export function useConsentHandlers(finish: () => void, deps: ConsentWiringDeps =
     },
     [deps, finish],
   );
-  const onRevoked = useCallback(() => void deps.leave('session_revoked'), [deps]);
-  const onDisabled = useCallback(() => void deps.leave('account_disabled'), [deps]);
+  const onRevoked = useCallback((sid: string | null) => void deps.leave('session_revoked', sid), [deps]);
+  const onDisabled = useCallback((sid: string | null) => void deps.leave('account_disabled', sid), [deps]);
   return { onDone, onRevoked, onDisabled, onSkip: finish };
 }
 

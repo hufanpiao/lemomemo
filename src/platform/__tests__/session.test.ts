@@ -22,7 +22,7 @@ vi.mock('../supabase/client.ts', () => ({
 }));
 
 import {
-  authEventHandler, clearCacheStorage, clearLocalSession, clearLocalSessionIf, forgetSelfSignOut, goToAuth, isSelfSignOut, markSelfSignOut,
+  authEventHandler, clearAnyLocalSession, clearCacheStorage, clearLocalSessionIf, forgetSelfSignOut, goToAuth, isSelfSignOut, markSelfSignOut,
   markSelfSignOutThisTab, onAuthUser, onSessionStorageChange, PRECACHE_PREFIX, readExitNotice, readSessionEmail, readSessionUserId,
   resetSelfSignOutForTest, SELF_SIGN_OUT_TTL_MS, sessionStorageKey, setExitNotice, takeLocalSession, userIdOfSession,
 } from '../session.ts';
@@ -137,26 +137,30 @@ describe('clearCacheStorage（0.38 第 36 条）', () => {
   });
 });
 
-describe('clearLocalSession（signOut 失败的兜底）', () => {
-  it('同步删掉本机会话的两个键（auth-token、auth-token-code-verifier），别的键不动', () => {
+describe('clearAnyLocalSession（不管是谁的会话都删；退出流程用 clearLocalSessionIf / takeLocalSession）', () => {
+  it('同步删掉本机会话的三个键（auth-token、-code-verifier、supabase-js 2.118 的 -user，K6-sugg4 ⑥），别的键不动', () => {
     localStorage.setItem('sb-lemomemo-auth-token', JSON.stringify({ user: { id: A }, access_token: 'secret' }));
     localStorage.setItem('sb-lemomemo-auth-token-code-verifier', 'v');
+    localStorage.setItem('sb-lemomemo-auth-token-user', JSON.stringify({ user: { id: A } }));
     localStorage.setItem('pv-locale', 'ko');
     localStorage.setItem('install_id', 'i');
-    clearLocalSession(localStorage, 'https://lemomemo.com/sb');
+    clearAnyLocalSession(localStorage, 'https://lemomemo.com/sb');
     expect(localStorage.getItem('sb-lemomemo-auth-token')).toBeNull();
     expect(localStorage.getItem('sb-lemomemo-auth-token-code-verifier')).toBeNull();
+    expect(localStorage.getItem('sb-lemomemo-auth-token-user')).toBeNull();
     expect(localStorage.getItem('pv-locale')).toBe('ko');
     expect(localStorage.getItem('install_id')).toBe('i');
     expect(readSessionUserId(localStorage, 'https://lemomemo.com/sb')).toBeNull();
   });
 
-  it('supabaseUrl 解析不出来：按格式删所有 sb-*-auth-token（及 code-verifier）', () => {
+  it('supabaseUrl 解析不出来：按格式删所有 sb-*-auth-token（及 code-verifier、-user）', () => {
     localStorage.setItem('sb-x-auth-token', '{}');
     localStorage.setItem('sb-x-auth-token-code-verifier', 'v');
-    clearLocalSession(localStorage, '');
+    localStorage.setItem('sb-x-auth-token-user', '{}');
+    clearAnyLocalSession(localStorage, '');
     expect(localStorage.getItem('sb-x-auth-token')).toBeNull();
     expect(localStorage.getItem('sb-x-auth-token-code-verifier')).toBeNull();
+    expect(localStorage.getItem('sb-x-auth-token-user')).toBeNull();
   });
 
   it('localStorage 抛错（隐私模式等）也不抛', () => {
@@ -172,8 +176,8 @@ describe('clearLocalSession（signOut 失败的兜底）', () => {
       },
       clear: () => undefined,
     } as unknown as Storage;
-    expect(() => clearLocalSession(bad, 'https://lemomemo.com/sb')).not.toThrow();
-    expect(() => clearLocalSession(bad, '')).not.toThrow();
+    expect(() => clearAnyLocalSession(bad, 'https://lemomemo.com/sb')).not.toThrow();
+    expect(() => clearAnyLocalSession(bad, '')).not.toThrow();
   });
 });
 
@@ -413,12 +417,14 @@ describe('“自己退出”的标记：时间戳 + 退出前的 session_id（K6
 });
 
 describe('goToAuth、删本机会话（K6-signedout-sugg2 ①、sugg ⑤）', () => {
-  it('takeLocalSession：同步读出 session_id 再删两个键；没有会话返回 null', () => {
+  it('takeLocalSession：同步读出 session_id 再删三个键；没有会话返回 null', () => {
     seed('s1');
     localStorage.setItem(`${KEY}-code-verifier`, 'v');
+    localStorage.setItem(`${KEY}-user`, '{}');
     expect(takeLocalSession(localStorage, URL_)).toBe('s1');
     expect(localStorage.getItem(KEY)).toBeNull();
     expect(localStorage.getItem(`${KEY}-code-verifier`)).toBeNull();
+    expect(localStorage.getItem(`${KEY}-user`)).toBeNull();
     expect(takeLocalSession(localStorage, URL_)).toBeNull();
   });
 
@@ -437,7 +443,7 @@ describe('goToAuth、删本机会话（K6-signedout-sugg2 ①、sugg ⑤）', ()
     goToAuth();
     expect(readExitNotice()).toBeNull();
     localStorage.setItem(KEY, JSON.stringify({ user: { id: A } }));
-    goToAuth('removed');
+    goToAuth('removed', null);   // 令牌里读不出 session_id：按 null 比，对得上
     expect(readExitNotice()).toBe('removed');
     // 先删本机会话（审查建议 5）：登录页不会同时出现“当前已登录”和“被移除”
     expect(readSessionUserId(localStorage, '')).toBeNull();
@@ -461,10 +467,10 @@ describe('goToAuth、删本机会话（K6-signedout-sugg2 ①、sugg ⑤）', ()
   it('已经记下退出原因（disabled 等）：removed 不覆盖；没有时照常记 removed', () => {
     vi.stubGlobal('location', { replace: vi.fn() });
     setExitNotice('disabled');
-    goToAuth('removed');
+    goToAuth('removed', null);
     expect(readExitNotice()).toBe('disabled');
     sessionStorage.clear();
-    goToAuth('removed');
+    goToAuth('removed', null);
     expect(readExitNotice()).toBe('removed');
     goToAuth('pending_deletion');
     expect(readExitNotice()).toBe('pending_deletion');

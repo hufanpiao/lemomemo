@@ -15,6 +15,8 @@
 //    拿懒加载的组件，拿不到 data 层的函数；#root 本来是空的，关口回答之前不画 App，看起来和“等完再渲染”一样，同步也不用跟着等。
 //    选根（关口、离线、version_too_new）在 root.tsx（CONSENT-sugg ③⑥：错误边界只包关口，单独有测试）；
 //    选出来的根外面再包一层静态的“出错了 · 刷新”兜底（root.tsx 的 withCrashFallback，K6-sugg3 ⑥）
+// 启动画面（R-251、R-254；DOM 在 index.html，跟着首次绘制出来）：从这里起算最多盖 5 秒（hideSplashAfter）；
+// #root 第一次画出东西（告知页、App、整屏提示、崩溃兜底页）的下一帧收起（hideSplashWhenPainted）；root.tsx 的 SplashRelease 再各收一次
 import '../platform/zod-jitless.ts';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -38,6 +40,8 @@ import {
   clearCacheStorage, clearLocalSessionIf, goToAuth, onAuthUser, onSessionStorageChange, readSessionId, readSessionUserId, setExitNotice,
   takeLocalSession,
 } from '../platform/session.ts';
+import { hideSplashAfter, hideSplashWhenPainted } from '../platform/splash.ts';
+import { nextFrame } from '../motion/index.ts';
 import { registerServiceWorker, reloadPage } from '../platform/sw-register.ts';
 import { mountFeatures } from './features.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
@@ -58,9 +62,14 @@ function applyLocale(boot: BootResult): void {
   document.documentElement.lang = uiLocale;
 }
 
+// 启动画面最晚 5 秒收起：从入口模块开始执行算起（关口、冷启动、分包加载哪一步卡住都不再盖着）
+hideSplashAfter();
+
 async function start(): Promise<void> {
   const el = document.getElementById('root');
   if (!el) throw new Error('root_missing');
+  // 告知页关口还在问服务器时 #root 是空的，启动画面继续盖着；一画出东西就在下一帧收起
+  hideSplashWhenPainted(el, nextFrame);
   el.dataset['version'] = buildInfo.version;
 
   const userId = readSessionUserId();

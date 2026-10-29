@@ -177,6 +177,8 @@ test.describe('模拟 iPhone Safari（非主屏幕）', () => {
 
   test('自检：UA 是 iPhone Safari、不是主屏幕版 → 按架构该只给教程', async ({ page }) => {
     await page.goto('/app/');
+    // 没有会话时 /app/ 会 location.replace 到 /app/auth/：先等跳完再读，免得和跳转抢（Execution context was destroyed）
+    await page.waitForURL('**/app/auth/**');
     const e = await readEnv(page);
     expect(e.ua).toMatch(/iPhone; CPU iPhone OS .* Version\/[\d.]+ Mobile\/\w+ Safari\//);
     expect(e.navStandalone).toBe(false);
@@ -205,6 +207,8 @@ test.describe('模拟 iPhone 主屏幕版（standalone）', () => {
 
   test('自检：navigator.standalone 和 display-mode: standalone 都是 true → 按架构该能登录', async ({ page }) => {
     await page.goto('/app/');
+    // 没有会话时 /app/ 会 location.replace 到 /app/auth/：先等跳完再读，免得和跳转抢（Execution context was destroyed）
+    await page.waitForURL('**/app/auth/**');
     const e = await readEnv(page);
     expect(e.ua).toMatch(/iPhone/);
     expect(e.navStandalone).toBe(true);
@@ -238,6 +242,8 @@ test.describe('模拟 iPadOS Safari（Mac UA ＋ maxTouchPoints=5）', () => {
 
   test('自检：UA 是 Mac Safari、maxTouchPoints=5、非主屏幕 → 按架构该只给教程', async ({ page }) => {
     await page.goto('/app/');
+    // 没有会话时 /app/ 会 location.replace 到 /app/auth/：先等跳完再读，免得和跳转抢（Execution context was destroyed）
+    await page.waitForURL('**/app/auth/**');
     const e = await readEnv(page);
     expect(e.ua).toMatch(/Macintosh; Intel Mac OS X .* Version\/[\d.]+ Safari\//);
     expect(e.maxTouchPoints).toBe(5);
@@ -272,6 +278,8 @@ test.describe('桌面（chromium：Desktop Chrome；webkit：Desktop Safari）',
 
   test('自检：桌面 UA、没有触摸 → 按架构照常登录（第七轮：电脑上的 Safari 不拦）', async ({ page, browserName }) => {
     await page.goto('/app/');
+    // 没有会话时 /app/ 会 location.replace 到 /app/auth/：先等跳完再读，免得和跳转抢（Execution context was destroyed）
+    await page.waitForURL('**/app/auth/**');
     const e = await readEnv(page);
     expect(e.ua).not.toMatch(/iPhone|iPad|iPod/);
     if (browserName === 'webkit') expect(e.ua).toMatch(/Macintosh.* Version\/[\d.]+ Safari\//);
@@ -321,6 +329,8 @@ for (const [name, ua] of IN_APP) {
 
     test('自检：iPhone UA、不是 Safari、非主屏幕 → 只给教程并提示用 Safari', async ({ page }) => {
       await page.goto('/app/');
+      // 没有会话时 /app/ 会 location.replace 到 /app/auth/：先等跳完再读，免得和跳转抢（Execution context was destroyed）
+      await page.waitForURL('**/app/auth/**');
       const e = await readEnv(page);
       expect(e.ua).toBe(ua);
       expect(expectedGate(e)).toBe('tutorial-safari');

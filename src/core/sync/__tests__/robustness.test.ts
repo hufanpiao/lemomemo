@@ -184,10 +184,10 @@ describe('必改 4：刷新令牌 TC-B1-88 ①～⑧', () => {
 
   it('refreshFlow：⑦ 别的 4xx 记日志再试一次，成功不退出；⑧ 两次都失败按被移除', async () => {
     const logs: string[] = [];
-    const seq = (xs: SessionCheck[]) => ({ refreshSession: () => Promise.resolve(xs.shift() ?? 'ok') });
+    const seq = (xs: SessionCheck[]) => ({ refreshSession: () => Promise.resolve(xs.shift() ?? 'ok'), sessionId: () => 's1' });
     expect(await refreshFlow(seq(['failed', 'ok']), (c) => logs.push(c))).toEqual({ kind: 'ok' });
     expect(logs).toEqual(['auth_refresh_4xx']);
-    expect(await refreshFlow(seq(['failed', 'failed']), (c) => logs.push(c))).toEqual({ kind: 'removed', code: 'auth_refresh_failed' });
+    expect(await refreshFlow(seq(['failed', 'failed']), (c) => logs.push(c))).toEqual({ kind: 'removed', code: 'auth_refresh_failed', sid: 's1' });
     expect(logs).toHaveLength(3);
   });
 

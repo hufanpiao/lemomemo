@@ -73,13 +73,29 @@ describe('record：调 record_consent', () => {
     const a = fakeDb({ rpc: { data: null, error: { code: 'P0001', message: 'policy_ver_mismatch' } } });
     expect(await createConsentApi(a.getDb).record(true)).toEqual({ ok: false, error: 'version_changed' });
     const b = fakeDb({ rpc: { data: null, error: { code: 'P0001', message: 'session_revoked' } } });
-    expect(await createConsentApi(b.getDb).record(false)).toEqual({ ok: false, error: 'revoked' });
+    expect(await createConsentApi(b.getDb, 8000, 30000, () => 's1').record(false)).toEqual({ ok: false, error: 'revoked', sid: 's1' });
+  });
+
+  it('revoked、disabled 带回发请求前记下的会话（K6-sugg4 ①）：一开头读一次，回包时本机换成了别的会话也不改', async () => {
+    let local: string | null = 's1';
+    const readSid = vi.fn(() => local);
+    const b = fakeDb({ rpc: { data: null, error: { code: 'P0001', message: 'session_revoked' } } });
+    const getDb = vi.fn(async () => {
+      local = 's2';   // 请求在路上：别的标签页写进了新会话
+      return b.getDb();
+    });
+    expect(await createConsentApi(getDb, 8000, 30000, readSid).record(true)).toEqual({ ok: false, error: 'revoked', sid: 's1' });
+    expect(readSid).toHaveBeenCalledTimes(1);
+    expect(readSid.mock.invocationCallOrder[0]).toBeLessThan(getDb.mock.invocationCallOrder[0] ?? 0);
+    // 别的错误不带 sid
+    const c = fakeDb({ rpc: { data: null, error: { code: 'P0001', message: 'policy_ver_mismatch' } } });
+    expect(await createConsentApi(c.getDb, 8000, 30000, () => 's1').record(true)).toEqual({ ok: false, error: 'version_changed' });
   });
 
   it('服务器报 account_disabled（账号停用、没有 profile 行、一行都没更新）→ disabled，同意和不同意都一样', async () => {
     for (const agree of [true, false]) {
       const a = fakeDb({ rpc: { data: null, error: { code: 'P0001', message: 'account_disabled' } } });
-      expect(await createConsentApi(a.getDb).record(agree)).toEqual({ ok: false, error: 'disabled' });
+      expect(await createConsentApi(a.getDb, 8000, 30000, () => null).record(agree)).toEqual({ ok: false, error: 'disabled', sid: null });
     }
   });
 
