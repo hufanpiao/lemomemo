@@ -168,6 +168,29 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
     );
   });
 
+  it('跨行的类型注解：const r: 换行再写 NodeRequire = createRequire(…) → 报', () => {
+    const body = lines("import { createRequire } from 'node:module';", 'const r:', '  NodeRequire = createRequire(import.meta.url);', "r('./x.png');", '');
+    expect(where(binimport(repo({ 'tools/multi.ts': body })).errors)).toEqual(['tools/multi.ts:4']);
+  });
+
+  it('耗时上限：一行 5 万个 k:v=w（含、不含 createRequire 两种），check_binimport 5 秒内跑完（不算 python 启动；本机约 0.6 秒，留够 CI 余量，修补前要 119 秒）', () => {
+    const kv = Array.from({ length: 50_000 }, (_, i) => `k${i}:v${i}=w`).join(',');
+    const root = repo({
+      'lib/plain.js': `x={${kv}}\n`,
+      'lib/with-cr.js': `x={${kv},c:createRequire(u),d:load=createRequire(u)}\n`,
+    });
+    const script = [
+      'import importlib.util, pathlib, sys, time',
+      'spec = importlib.util.spec_from_file_location("check_arch", sys.argv[1])',
+      'mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)',
+      'errors = []; t = time.perf_counter()',
+      'mod.check_binimport(pathlib.Path(sys.argv[2]), errors)',
+      'print(time.perf_counter() - t)',
+    ].join('\n');
+    const seconds = Number(execFileSync('python', ['-I', '-c', script, join(ROOT, 'build', 'check_arch.py'), root], { encoding: 'utf8' }));
+    expect(seconds).toBeLessThan(5);
+  });
+
   it('对照：不是 createRequire 绑定出来的同名函数调用、createRequire 本身的参数 → 不报', () => {
     const body = lines(
       "import { createRequire } from 'node:module';",

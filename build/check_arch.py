@@ -23,6 +23,7 @@
 有错误时退出码 1，只有警告时 0。--root 给自测用（tests/arch-fixtures/check_arch/ 下的样例目录）。
 """
 import argparse
+import bisect
 import datetime
 import json
 import pathlib
@@ -554,23 +555,30 @@ def check_binimport(root, errors):
         code = p.read_bytes().decode("utf-8", errors="replace")
         skel, literals = js_skeleton(code)
         hits = []  # (开引号下标, 写法)
+        lit_pos = sorted(literals)
 
         def in_parens(open_at, how):
-            # 括号里的所有字符串都看（拼接、三元、importScripts 多个参数都算）
+            # 括号里的所有字符串都看（拼接、三元、importScripts 多个参数都算）；按下标二分取区间，不逐个比（压缩文件里调用多、字符串多）
             close = _match_close(skel, open_at)
-            return [(at, how) for at in literals if open_at < at < close]
+            lo, hi = bisect.bisect_right(lit_pos, open_at), bisect.bisect_left(lit_pos, close)
+            return [(at, how) for at in lit_pos[lo:hi]]
 
-        factories = {"createRequire"} | set(BINIMPORT_FACTORY_ALIAS_RE.findall(skel))
-        fact_alt = "|".join(re.escape(f) for f in sorted(factories))
-        # const/let/var r = createRequire(…) 以及 r = createRequire(…)：绑定出来的名字都当 require
-        # 允许 TS 类型注解（const r: NodeRequire = …；注解里可有 =>、泛型，所以用非贪婪、允许 =，只不跨 ; 和换行）
-        # 和 xxx. / xxx?. 前缀（module.createRequire、m.createRequire，和下面连写的认法一致）。
-        # 带注解的一遍可能把 “const x: T = a, r = createRequire(” 记成 x，再跑一遍不带注解的取并集，r 也收进来（只会多报）
-        prefix = r"(?:[\w$]+\s*\??\.\s*)*"
+        factories = {"createRequire"}
         bound = set()
-        for annot in (r"\s*:[^;\n]*?", ""):
-            bound |= set(re.findall(rf"(?<![\w$.])([\w$]+){annot}\s*=\s*{prefix}(?:{fact_alt})\s*\(", skel))
-        bound -= set(BINIMPORT_CALL_NAMES)
+        # 骨架里不出现 createRequire 就没有绑定可收，整段跳过（别名、绑定都要先写出 createRequire 这个词）
+        if "createRequire" in skel:
+            factories |= set(BINIMPORT_FACTORY_ALIAS_RE.findall(skel))
+            fact_alt = "|".join(re.escape(f) for f in sorted(factories))
+            # const/let/var r = createRequire(…) 以及 r = createRequire(…)：绑定出来的名字都当 require
+            # 允许 TS 类型注解（const r: NodeRequire = …；注解里可有 =>、泛型，所以用非贪婪、允许 =，可以跨行，不跨 ;）。
+            # 注解限 200 个字符：不限长时又长、又没分号、又有很多“名字:”的压缩行要按行长的平方回溯（0.3 MB 单行跑过 2 分钟）
+            # 和 xxx. / xxx?. 前缀（module.createRequire、m.createRequire，和下面连写的认法一致）。
+            # 带注解的一遍可能把 “const x: T = a, r = createRequire(” 记成 x，再跑一遍不带注解的取并集，r 也收进来（只会多报）
+            prefix = r"(?:[\w$]+\s*\??\.\s*)*"
+            for annot in (r"\s*:[^;]{0,200}?", ""):
+                bound |= set(re.findall(rf"(?<![\w$.])([\w$]+){annot}\s*=\s*{prefix}(?:{fact_alt})\s*\(", skel))
+            bound -= set(BINIMPORT_CALL_NAMES)
+        fact_alt = "|".join(re.escape(f) for f in sorted(factories))
         names = {n: f"{n}()" for n in BINIMPORT_CALL_NAMES}
         names.update({n: f"createRequire 得到的 {n}()" for n in bound})
         call_re = re.compile(rf"(?<![\w$])({'|'.join(re.escape(n) for n in sorted(names))}){BINIMPORT_CALL_TAIL}")
