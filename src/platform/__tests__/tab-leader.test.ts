@@ -6,7 +6,7 @@ import { fakeBus, fakeLocks, fakeVisibility } from './tab-fakes.ts';
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
-function page(locks: LocksLike | null, bus: (n: string) => ChannelLike, visible = true) {
+function page(locks: LocksLike | null, bus: (n: string) => ChannelLike, visible = true, listenOnly = false) {
   const vis = fakeVisibility(visible);
   const log: string[] = [];
   const msgs: SyncMessage[] = [];
@@ -25,6 +25,7 @@ function page(locks: LocksLike | null, bus: (n: string) => ChannelLike, visible 
     locks,
     channel: bus,
     visibility: vis,
+    ...(listenOnly ? { listenOnly: true } : {}),
   });
   return { leader, vis, log, msgs, leads: () => leads, stops: () => stops };
 }
@@ -96,6 +97,69 @@ describe('选主（4.3b）', () => {
     await flush();
     expect(a.msgs).toEqual([{ type: 'outbox' }]);
     expect(b.msgs).toEqual([{ type: 'changed', colls: ['todos'] }]);
+  });
+});
+
+describe('只听（listenOnly，TABLEADER-listen）', () => {
+  it('有锁时不排队，可见性来回变也不排队；从不 lead、锁不在它手里；另一正常页照常拿锁、关闭后锁空着', async () => {
+    const locks = fakeLocks();
+    const bus = fakeBus();
+    const l = page(locks, bus, true, true);   // 先建、可见：正常页会马上拿锁
+    await flush();
+    expect(locks.holder()).toBeNull();
+    const b = page(locks, bus);
+    await flush();
+    expect(b.leader.isLeader()).toBe(true);
+    expect(locks.holder()).toBe('w1');   // 只有 b 排过队
+    l.vis.set(false);
+    l.vis.set(true);
+    await b.leader.close();
+    await flush();
+    await flush();
+    expect(locks.holder()).toBeNull();
+    expect(l.leader.isLeader()).toBe(false);
+    expect([l.leads(), l.stops()]).toEqual([0, 0]);
+    expect(l.log).toEqual([]);
+  });
+
+  it('收得到 reset（带 notice、sid）和 changed；它 post 的别的页面收得到', async () => {
+    const locks = fakeLocks();
+    const bus = fakeBus();
+    const l = page(locks, bus, true, true);
+    const b = page(locks, bus);
+    await flush();
+    b.leader.post({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
+    b.leader.post({ type: 'changed', colls: ['todos'] });
+    l.leader.post({ type: 'outbox' });
+    await flush();
+    expect(l.msgs).toEqual([
+      { type: 'reset', notice: 'pending_deletion', sid: 's1' },
+      { type: 'changed', colls: ['todos'] },
+    ]);
+    expect(b.msgs).toEqual([{ type: 'outbox' }]);
+  });
+
+  it('没有 navigator.locks 也不当主页（D3）：isLeader false、不 lead、不记 sync_no_locks，照样收得到 reset', async () => {
+    const bus = fakeBus();
+    const l = page(null, bus, true, true);
+    expect(l.leader.isLeader()).toBe(false);
+    expect(l.leads()).toBe(0);
+    expect(l.log).toEqual([]);
+    bus('x').postMessage({ type: 'reset' });
+    await flush();
+    expect(l.msgs).toEqual([{ type: 'reset' }]);
+  });
+
+  it('close 后不再收；close 两次不抛、不 stop', async () => {
+    const bus = fakeBus();
+    const l = page(fakeLocks(), bus, true, true);
+    await l.leader.close();
+    await l.leader.close();
+    bus('x').postMessage({ type: 'reset' });
+    await flush();
+    expect(l.msgs).toEqual([]);
+    expect(l.stops()).toBe(0);
+    expect(() => l.leader.post({ type: 'outbox' })).not.toThrow();
   });
 });
 

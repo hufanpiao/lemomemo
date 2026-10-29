@@ -478,6 +478,8 @@ function Assert-NoHiddenGitState {
 # R-266：extensions.worktreeconfig 也停。开了它 git 还会读 .git\config.worktree（worktree 一级），--local --list 读不到那一级，
 # 里面的 filter.* / core.attributesfile 一样会让 git add、git status 跑外部程序。双保险：Assert-NoRiskyGlobalGitConfig 里 worktree 一级按 global 查。
 # （git 列出的键名是小写；-iin 不区分大小写，extensions.worktreeConfig 写法照样拦。）
+# R266-sugg ②：attr.tree 也停。它让 git 从任意一个 tree（比如某个提交里的 .gitattributes）读属性，和 core.attributesfile 一样能给文件挂 filter；
+# git 2.55 实测 git check-attr 能看出来。local 一级在这里查，worktree、global、system 一级在 Assert-NoRiskyGlobalGitConfig 里查（Attr.Tree 之类的写法一样拦）。
 # core.hookspath 只放行项目规定的那一种（npm run hooks:install，提交前的密钥检查）：发布时不用先卸掉钩子再装回，免得忘了装回去。
 # 放行的依据是主流程最前面的覆盖：GIT_CONFIG_KEY_1=core.hooksPath 指到一个空的临时目录，本进程和子进程（wrangler、supabase）里的 git
 # 都不执行 .git\hooks\、.githooks\ 里的任何钩子（git status 写回索引时的 post-index-change 也不执行，B0 复查 M5）。
@@ -507,11 +509,11 @@ function Assert-NoRiskyGitConfig {
     Assert-NoRiskyGlobalGitConfig
     $out = Invoke-Git @('config', '--local', '--list', '--name-only')
     $bad = @($out -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object {
-            $_ -imatch '^(filter|include|includeif)\.' -or $_ -iin 'core.worktree', 'core.attributesfile', 'core.hookspath', 'core.fsmonitor', 'extensions.worktreeconfig'
+            $_ -imatch '^(filter|include|includeif)\.' -or $_ -iin 'core.worktree', 'core.attributesfile', 'core.hookspath', 'core.fsmonitor', 'extensions.worktreeconfig', 'attr.tree'
         } | Sort-Object -Unique)
     if ($bad -contains 'core.hookspath' -and (Test-AllowedHooksPath)) { $bad = @($bad | Where-Object { $_ -ne 'core.hookspath' }) }
     if ($bad.Count -gt 0) { Fail "仓库的 .git\config 里有发布时不许有的设置：$($bad -join '、')（会让 git 执行别的程序或读别处的配置）。请在发布用的副本里用 git config --local --unset 去掉（core.hookspath 发布完再设回），或重新 clone" }
-    Ok '.git\config 里没有过滤程序、include、hooksPath、fsmonitor、extensions.worktreeConfig 之类的设置，.git\info\attributes 为空'
+    Ok '.git\config 里没有过滤程序、include、hooksPath、fsmonitor、extensions.worktreeConfig 之类的设置（也没有 attr.tree），.git\info\attributes 为空'
 }
 
 # B1 接手清单 OPS-deploy ⑧：全局配置（~\.gitconfig，以及它 include 进来的文件）里的 filter.*、core.attributesfile 一样会被这个仓库的 git 用上：
@@ -565,7 +567,8 @@ function Assert-NoRiskyGlobalGitConfig {
         $kv = $parts[$i + 2] -split "`r?`n", 2
         $name = $kv[0].Trim()
         $value = if ($kv.Count -gt 1) { $kv[1] } else { $null }
-        if (-not ($name -imatch '^filter\.' -or $name -ieq 'core.attributesfile')) { continue }
+        # R266-sugg ②：attr.tree（换掉 git 读属性的来源）和 core.attributesfile 同样处理；system 一级它不在放行的四项里，照拦
+        if (-not ($name -imatch '^filter\.' -or $name -ieq 'core.attributesfile' -or $name -ieq 'attr.tree')) { continue }
         if ($scope -ceq 'global') { $bad += "$name（$file）" }
         elseif ($scope -ceq 'worktree') { $wtBad += "$name（$file）" }
         elseif ($scope -ceq 'system') {
@@ -588,9 +591,9 @@ function Assert-NoRiskyGlobalGitConfig {
         Fail "git 的全局属性文件 $attr 不是空的（里面可以给文件挂过滤程序）。请先移走，发布完再放回"
     }
     $null = Get-GitAttrFile 'GIT_ATTR_SYSTEM'
-    Ok 'git 的 worktree 一级配置里没有 filter.*、core.attributesfile'
-    Ok 'git 的全局配置里没有 filter.*、core.attributesfile，全局属性文件不存在或为空'
-    Ok "git 的 system 一级配置里只有 Git for Windows 自带的 git-lfs 设置（$sysOk 项，值都对），没有 core.attributesfile；git 不读系统属性文件（GIT_ATTR_NOSYSTEM=1 已生效）"
+    Ok 'git 的 worktree 一级配置里没有 filter.*、core.attributesfile、attr.tree'
+    Ok 'git 的全局配置里没有 filter.*、core.attributesfile、attr.tree，全局属性文件不存在或为空'
+    Ok "git 的 system 一级配置里只有 Git for Windows 自带的 git-lfs 设置（$sysOk 项，值都对），没有 core.attributesfile、attr.tree；git 不读系统属性文件（GIT_ATTR_NOSYSTEM=1 已生效）"
 }
 
 # 被 git 忽略的文件 git status 看不见，却会跟着正式部署上线（B0 复查 M2）：
@@ -1144,7 +1147,8 @@ try {
     # GIT_CONFIG_SYSTEM 不在这里拦（R-264）：Assert-NoRiskyGlobalGitConfig 查的就是它指的那份 system 一级配置。
     # 同时把 core.hooksPath 指到一个空的临时目录（B0 复查 M5）：git status 会把刷新后的索引写回去，写索引会触发 post-index-change 钩子，
     # 钩子放在 .git\hooks\ 或 .githooks\ 都会被执行；wrangler 内部跑 git status 时进程里已有令牌。指到空目录以后任何钩子都不执行。
-    $gitEnv = @('GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_CONFIG_GLOBAL', 'GIT_EXEC_PATH', 'GIT_TEMPLATE_DIR') |
+    # R266-sugg ②：GIT_ATTR_SOURCE 让 git 从任意一个 tree 读 .gitattributes（可以给文件挂 filter），也在这里拦；报错只写变量名，不回显值。
+    $gitEnv = @('GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_CONFIG_GLOBAL', 'GIT_EXEC_PATH', 'GIT_TEMPLATE_DIR', 'GIT_ATTR_SOURCE') |
         Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }
     if (@($gitEnv).Count -gt 0) { Fail "这个窗口里有会改 git 行为的环境变量：$(@($gitEnv) -join '、')。请开一个新的 PowerShell 窗口再运行" }
     $script:NoHooksDir = Join-Path $env:TEMP ('lemo-nohooks-' + [guid]::NewGuid().ToString('N'))

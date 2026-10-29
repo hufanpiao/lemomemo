@@ -132,6 +132,9 @@ async function sendMail(emailsUrl: string, apiKey: string, to: string, mail: { s
 
 const log = (code: string) => console.error(`invite-signup: ${code}`);
 
+// 出站地址换成了回环地址（outbound.ts 的 overridden）时记 outbound_url_overridden：每个函数实例只记一次，只记日志码、不记地址（INVITE-sugg，10-30）
+let overriddenLogged = false;
+
 Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -146,6 +149,10 @@ Deno.serve((req) => {
   const siteverify = resolveOutboundUrl(Deno.env.get('TURNSTILE_SITEVERIFY_URL'), TURNSTILE_SITEVERIFY_URL, env);
   const emails = resolveOutboundUrl(Deno.env.get('RESEND_EMAILS_URL'), RESEND_EMAILS_URL, env);
   if (!siteverify.ok || !emails.ok) log('outbound_url_invalid');
+  if (!overriddenLogged && ((siteverify.ok && siteverify.overridden) || (emails.ok && emails.overridden))) {
+    overriddenLogged = true;
+    log('outbound_url_overridden');
+  }
   const siteverifyUrl = siteverify.ok ? siteverify.url : TURNSTILE_SITEVERIFY_URL;
   const emailsUrl = emails.ok ? emails.url : RESEND_EMAILS_URL;
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });

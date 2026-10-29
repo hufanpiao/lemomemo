@@ -217,11 +217,13 @@ describe('同步暂停后收到冷静期 reset：照样接手（R-263-sugg ①�
     return { boot, s };
   }
 
-  it('暂停时让出主页后另开一个只听、不抢锁的（总当作不可见）；冷静期 reset 来了清库、回登录页，不删会话；连收两次只跳一次', async () => {
+  it('暂停时让出主页后另开一个只听的（listenOnly，不借可见性）；冷静期 reset 来了清库、回登录页，不删会话；连收两次只跳一次', async () => {
     const { s } = await paused();
     expect(s.fl.leader.close).toHaveBeenCalledTimes(1);
     expect(s.fl.made).toHaveLength(2);
-    expect(s.fl.made[1]?.visibility?.isVisible()).toBe(false);
+    expect(s.fl.made[1]?.listenOnly).toBe(true);
+    expect(s.fl.made[1]?.visibility).toBeUndefined();
+    expect(s.fl.made[0]?.listenOnly).toBeUndefined();
     expect(s.fl.made[1]?.name).toBe(s.fl.made[0]?.name);
     s.fl.receive({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
     s.fl.receive({ type: 'reset', notice: 'pending_deletion', sid: 's1' });

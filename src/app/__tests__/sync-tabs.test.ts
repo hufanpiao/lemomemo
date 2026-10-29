@@ -145,3 +145,66 @@ describe('只让主页跑同步（4.3b）', () => {
     b.sync?.stop();
   });
 });
+
+describe('同步暂停后只听（TABLEADER-listen，真选主、真频道）', () => {
+  it('暂停页让出后另一页拿到锁，暂停页不再排队；暂停页收得到冷静期 reset，清库回登录页', async () => {
+    const boot = await coldStart(bootOpts());
+    const server = new FakeServer();
+    const locks = fakeLocks();
+    const bus = fakeBus();
+    const vis = fakeVisibility(true);
+    let onRemoved: SyncOptions['onRemoved'] = () => undefined;
+    const goToAuth = vi.fn();
+    const onSyncPaused = vi.fn();
+    const made: TabLeaderOptions[] = [];
+    const now = 1_000_000;
+    const a = wireSync(boot, {
+      transport: fakeTransport(server),
+      clearCacheStorage: () => Promise.resolve(),
+      clearLocalSessionIf: () => undefined,
+      goToAuth,
+      setExitNotice: () => undefined,
+      create: (b, o: SyncOptions) => ((onRemoved = o.onRemoved), createSync(b, { ...o, skipConfig: true, lifecycle: fakeLife(true) })),
+      // 和上面 page() 一样会盖掉 visibility：以前借 NEVER_VISIBLE 时只听的那个在这里会去抢锁
+      leader: (o: TabLeaderOptions) => (made.push(o), createTabLeader({ ...o, locks, channel: bus, visibility: vis })),
+      lifecycle: fakeLife(true),
+      onActivity: () => () => undefined,
+      probeAccount: () => Promise.resolve({ kind: 'active' as const }),
+      readSession: () => ({ sid: 's1', token: 'tok-1' }),
+      reload: vi.fn(),
+      reloadMarks: () => ({ getItem: () => String(now - 1000), setItem: () => undefined }),
+      now: () => now,
+      onSyncPaused,
+    });
+    await flush();
+    await a?.idle();
+    // 另一个页面（普通选主，可见）：排在 a 后面
+    let otherLeads = 0;
+    const other = createTabLeader({
+      name: 'lemo-sync:A',
+      lead: () => (otherLeads++, () => Promise.resolve()),
+      onMessage: () => undefined,
+      locks,
+      channel: bus,
+      visibility: fakeVisibility(true),
+    });
+    await flush();
+    expect(other.isLeader()).toBe(false);
+
+    onRemoved('account_disabled', 's1');   // 5 分钟内第二次 active：限次触发、让出主页
+    await vi.waitFor(() => expect(onSyncPaused).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(other.isLeader()).toBe(true), { timeout: 1000 });
+    expect(otherLeads).toBe(1);
+    expect(made.map((o) => o.listenOnly)).toEqual([undefined, true]);
+    vis.set(false);
+    vis.set(true);   // 暂停页回到前台：只听的不排队
+    await flush();
+    expect(other.isLeader()).toBe(true);
+
+    other.post({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
+    await vi.waitFor(() => expect(goToAuth).toHaveBeenCalledTimes(1), { timeout: 1000 });
+    await other.close();
+    await flush();
+    expect(locks.holder()).toBeNull();   // 另一页关了，暂停页（只听）也不接手
+  });
+});

@@ -33,12 +33,14 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/check-arch-binimport.test.ts', // python build/check_arch.py（LINT-binimport）
   'tests/build/check-backend.test.ts', // python build/check_backend.py（建 TypeScript 类型检查器）
   'tests/build/check-size.test.ts', // 另起 node 跑 build/check_size.mjs
+  'tests/build/e2e-watchdog.test.ts', // 经 tools/e2e/run-watchdog.mjs 起 node（E2E-webkit-hang 看门狗真跑）
   'tests/build/fn-version-gate-coverage.test.ts', // TypeScript 编译器
   'tests/build/login-token-tests.test.ts', // PowerShell
   'tests/build/login-token-tests-run.test.ts', // PowerShell（经 login-token-fake.ts）
   'tests/build/ps1-static.test.ts', // PowerShell 解析 .ps1
   'tests/build/publish-run.test.ts', // PowerShell、git clone（发布脚本演练）
   'tests/build/publish-run-deploy.test.ts', // PowerShell、git clone（发布脚本演练，经 publish-run-harness.ts）
+  'tests/build/publish-run-worktree.test.ts', // PowerShell、git clone（发布脚本演练：git 各级配置与属性来源，经 publish-run-harness.ts）
   'tests/build/set-cron-secret.test.ts', // PowerShell（有 docker 时还起容器）
   'tests/build/set-fn-role-passwords.test.ts', // PowerShell、python
   'tests/build/set-fn-role-passwords-run.test.ts', // PowerShell

@@ -5,6 +5,8 @@
 // • 提醒：BroadcastChannel('lemo-sync:<user_id>')，消息 outbox / changed / reset 只是提醒，真相在 IndexedDB
 // • 兜底：没有 navigator.locks（某些内嵌浏览器）：这个页面自己当主页（回到 0.38 以前的做法），记一次 sync_no_locks；
 //   没有 BroadcastChannel：不发提醒（回到前台整份重读兜底）
+// • 只听（listenOnly，TABLEADER-listen）：只开频道收提醒、能发提醒，从不排队抢锁、从不调 lead；isLeader() 恒为 false，
+//   没有 Web Locks 时也一样（D3：只听页一律不当主页，也不记 sync_no_locks）。用于同步暂停后让出主页的页面（app/sync-wiring.ts）
 // 纯 TS：不准 import React（A1）
 import type { ExitNotice } from './session.ts';
 
@@ -36,10 +38,15 @@ export interface ChannelLike {
 export interface TabLeaderOptions {
   /** 'lemo-sync:' + user_id */
   name: string;
-  /** 拿到锁：开始跑同步；返回放手时调的 stop（断 Realtime、等在途请求，最多 20 秒） */
+  /** 拿到锁：开始跑同步；返回放手时调的 stop（断 Realtime、等在途请求，最多 20 秒）。listenOnly 时从不调用 */
   lead(): () => Promise<void>;
   /** 别的页面发来的提醒 */
   onMessage(m: SyncMessage): void;
+  /**
+   * 只听：只收提醒（post 照样能发），从不排队抢锁、从不调 lead、不看可见性；isLeader() 恒为 false，
+   * 没有 Web Locks 时也不自己当主页、不记 sync_no_locks（D3）。close() 只关频道
+   */
+  listenOnly?: boolean;
   /** 记日志（act 码） */
   log?(code: string): void;
   /** 测试用：换掉 navigator.locks、BroadcastChannel、可见性 */
@@ -92,9 +99,33 @@ const docVisibility = {
   },
 };
 
+/** 发提醒：频道已关时提醒丢了不要紧（真相在 IndexedDB） */
+const postOn = (ch: ChannelLike | null, m: SyncMessage): void => {
+  try {
+    ch?.postMessage(m);
+  } catch {
+    // 频道已关或不能克隆：吞掉
+  }
+};
+
 export function createTabLeader(o: TabLeaderOptions): TabLeader {
-  const locks = o.locks === undefined ? defaultLocks() : o.locks;
   const ch = (o.channel ?? defaultChannel)(o.name);
+  const onmessage = (e: { data: unknown }): void => (isMessage(e.data) ? o.onMessage(e.data) : undefined);
+  if (o.listenOnly) {
+    // 只听：放在看 locks 之前单独走，不排队、不订阅可见性、不调 lead、不记 sync_no_locks（D3）
+    if (ch) ch.onmessage = onmessage;
+    let shut = false;
+    return {
+      isLeader: () => false,
+      post: (m) => postOn(ch, m),
+      async close() {
+        if (shut) return;
+        shut = true;
+        ch?.close();
+      },
+    };
+  }
+  const locks = o.locks === undefined ? defaultLocks() : o.locks;
   const vis = o.visibility ?? docVisibility;
   let leader = false;
   let closed = false;
@@ -103,7 +134,7 @@ export function createTabLeader(o: TabLeaderOptions): TabLeader {
   let release: (() => void) | null = null;
   let held: Promise<void> | null = null;
 
-  if (ch) ch.onmessage = (e) => (isMessage(e.data) ? o.onMessage(e.data) : undefined);
+  if (ch) ch.onmessage = onmessage;
 
   /** 持有锁期间：跑同步，等到放手 */
   const hold = async (): Promise<void> => {
@@ -157,13 +188,7 @@ export function createTabLeader(o: TabLeaderOptions): TabLeader {
 
   return {
     isLeader: () => leader,
-    post(m) {
-      try {
-        ch?.postMessage(m);
-      } catch {
-        // 频道已关：提醒丢了不要紧（真相在 IndexedDB）
-      }
-    },
+    post: (m) => postOn(ch, m),
     async close() {
       if (closed) return;
       closed = true;

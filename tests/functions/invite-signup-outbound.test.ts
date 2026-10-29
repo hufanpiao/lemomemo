@@ -1,6 +1,7 @@
 // invite-signup 出站地址可配（接手清单 INVITE-mailpit，10-30）：supabase/functions/invite-signup/outbound.ts 的 resolveOutboundUrl，
 // index.ts 的接法（读哪两个变量、不合规时当没配好）是源码核对，要读文件，放在 tests/build/e2e-real-backend-env.test.ts（本目录是 Workers 类型）。
-// 口径：不设 / 空串 → 官方地址（和改之前一样）；一字不差的官方地址任何环境都认；回环地址（127.0.0.1、localhost，http 或 https）只有本机环境认；
+// 口径：不设 / 空串 → 官方地址（和改之前一样）；全空白任何环境都拒（D4）；一字不差的官方地址任何环境都认；
+// 回环地址（原文字面写 127.0.0.1 或 localhost，localhost 不分大小写；http 或 https）只有本机环境认（D5）；
 // 其余一律拒（选的是“直接拒”：index.ts 回 500 misconfigured，不悄悄回落到官方地址）。
 import { describe, expect, it } from 'vitest';
 import {
@@ -17,10 +18,18 @@ describe('官方默认值（线上不设变量时和改之前完全一样）', (
     expect(RESEND_EMAILS_URL).toBe('https://api.resend.com/emails');
   });
 
-  it.each(ENVS)('%s：不设、空串、全空白 → 官方地址，不算改过', (env) => {
+  it.each(ENVS)('%s：不设、空串 → 官方地址，不算改过', (env) => {
     for (const official of OFFICIAL) {
-      for (const raw of [undefined, '', '   ']) {
+      for (const raw of [undefined, '']) {
         expect(resolveOutboundUrl(raw, official, env)).toEqual({ ok: true, url: official, overridden: false });
+      }
+    }
+  });
+
+  it.each(ENVS)('%s：全空白（空格、制表符、换行）不算没设，拒（D4）', (env) => {
+    for (const official of OFFICIAL) {
+      for (const raw of ['   ', '\t', '\n', ' \t\r\n ']) {
+        expect(resolveOutboundUrl(raw, official, env), JSON.stringify(raw)).toEqual({ ok: false });
       }
     }
   });
@@ -40,9 +49,30 @@ describe('本机环境可以换成回环地址', () => {
     ['http://localhost:9000/emails', 'http://localhost:9000/emails'],
     ['https://127.0.0.1/x', 'https://127.0.0.1/x'],
     ['http://LOCALHOST:1/a', 'http://localhost:1/a'],
-    ['http://127.1:8081/a', 'http://127.0.0.1:8081/a'],
+    ['HTTP://LocalHost/a', 'http://localhost/a'],
+    ['http://127.0.0.1', 'http://127.0.0.1/'],
+    ['http://localhost?x=1', 'http://localhost/?x=1'],
   ])('local：%s → 认（规范化成 %s）', (raw, url) => {
     expect(resolveOutboundUrl(raw, RESEND_EMAILS_URL, 'local')).toEqual({ ok: true, url, overridden: true });
+  });
+
+  it('回归：e2e 假出站服务的地址照样放行（tools/e2e/real-backend.mjs 写的就是它）', () => {
+    const raw = 'http://127.0.0.1:8081/e2e-fake-outbound/siteverify';
+    expect(resolveOutboundUrl(raw, TURNSTILE_SITEVERIFY_URL, 'local')).toEqual({ ok: true, url: raw, overridden: true });
+  });
+
+  it.each([
+    ['127.1 简写', 'http://127.1:8081/a'],
+    ['十进制整数', 'http://2130706433/x'],
+    ['十六进制', 'http://0x7f000001/x'],
+    ['全角数字', 'http://１２７.0.0.1/x'],
+    ['百分号编码', 'http://%31%32%37.0.0.1/x'],
+    ['末尾带点', 'http://127.0.0.1./x'],
+    ['末尾带点的 localhost', 'http://localhost./x'],
+    ['前面带空白', ' http://127.0.0.1/x'],
+  ])('local：%s（%s）解析后虽是回环，原文不是字面写法，拒（D5）', (_what, raw) => {
+    expect(new URL(raw.trim()).hostname).toMatch(/^(?:127\.0\.0\.1|localhost)\.?$/);
+    expect(resolveOutboundUrl(raw, RESEND_EMAILS_URL, 'local')).toEqual({ ok: false });
   });
 });
 
@@ -71,6 +101,9 @@ describe('不合规一律拒（{ok: false}，index.ts 当没配好回 misconfigu
     ['file 协议', 'file:///etc/passwd'],
     ['解析不了', 'not a url'],
     ['只有主机名', '127.0.0.1:8081'],
+    ['写 kong（envKind 认它是本机，出站不认）', 'http://kong:8000/functions/v1/e2e-fake-outbound/emails'],
+    ['十进制整数', 'http://2130706433/x'],
+    ['百分号编码', 'http://%31%32%37.0.0.1/x'],
   ])('%s（%s）：任何环境都拒', (_what, raw) => {
     for (const env of ENVS) expect(resolveOutboundUrl(raw, RESEND_EMAILS_URL, env), `${env} ${raw}`).toEqual({ ok: false });
   });

@@ -203,4 +203,19 @@ describe('invite-signup/index.ts 的出站地址接法（源码核对；INVITE-m
     expect(src).toContain('postWithTimeout(siteverifyUrl,');
     expect(src).toContain('postWithTimeout(emailsUrl,');
   });
+
+  it('换成回环地址时记 outbound_url_overridden：受模块级标志保护，每个实例只记一次，只记码不记地址（INVITE-sugg，10-30）', () => {
+    // 模块级（顶格、在 Deno.serve 外面）声明，初值 false
+    expect(src).toMatch(/^let overriddenLogged = false;$/m);
+    expect(src.indexOf('let overriddenLogged = false;')).toBeLessThan(src.indexOf('Deno.serve('));
+    // 只在 Deno.serve 里出现一次，且被 !overriddenLogged 挡住、记之前先置 true
+    expect(src.split("log('outbound_url_overridden')").length).toBe(2);
+    expect(src).toMatch(
+      /if \(!overriddenLogged && \(\(siteverify\.ok && siteverify\.overridden\) \|\| \(emails\.ok && emails\.overridden\)\)\) \{\r?\n\s*overriddenLogged = true;\r?\n\s*log\('outbound_url_overridden'\);\r?\n\s*\}/,
+    );
+    expect(src.indexOf("log('outbound_url_overridden')")).toBeGreaterThan(src.indexOf('Deno.serve('));
+    // 日志只带码：log 就是一个参数的 code，没有把地址拼进日志
+    expect(src).toContain('const log = (code: string) => console.error(`invite-signup: ${code}`);');
+    expect(src).not.toMatch(/log\([^)]*(?:siteverifyUrl|emailsUrl|\.url)/);
+  });
 });
