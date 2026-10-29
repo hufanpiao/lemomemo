@@ -224,6 +224,14 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
     expect(errors).toEqual(['lib/deep.js:2']);
   });
 
+  it('400 个约 4090 字、满是 ${ 却没有 } 的 require 目标：check_binimport 2 秒内跑完（${…} 替换线性扫描），扩展名照常核对', () => {
+    const spec = (ext: string) => `./${'${'.repeat(2044)}${ext}`;
+    const body = `${Array.from({ length: 400 }, () => `require('${spec('.js')}');`).join('\n')}\nrequire('${spec('.png')}');\n`;
+    const { seconds, errors } = timed(repo({ 'lib/dollar.js': body }));
+    expect(seconds).toBeLessThan(2);
+    expect(errors).toEqual(['lib/dollar.js:401']);
+  });
+
   it('目标字符串超过 4096 个字符：不核对扩展名、按可疑报；正好 4096 个字符的照常核对', () => {
     const long = `./${'a'.repeat(4096)}.js`;
     const exact = `./${'a'.repeat(4096 - 5)}.js`;

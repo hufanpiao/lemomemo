@@ -565,10 +565,40 @@ def _match_close(skel, open_at, pairs):
     return len(skel) if eol < 0 else eol
 
 
+def _replace_tpl_exprs(s):
+    """等价于 re.sub(r"\\$\\{[^`]*?\\}", "x", s)，但一次线性扫描：
+    正则版遇到满是 ${、却没有 } 的字符串，每个 ${ 都要往后试到串尾，按长度平方增长（400 个 4 千字的串要 10 秒）。
+    正则的语义：从左往右，在每个 ${ 处找它后面第一个 }（非贪婪），中间不能有反引号（[^`]，换行可以）；
+    配上了换成 x、从 } 后面接着找；配不上就只跳过这个 $。
+    这里用两个只往前走的指针记“下一个 }”“下一个反引号”的位置，总共只扫一遍"""
+    n = len(s)
+    out = []
+    i = 0
+    nc = nt = -1  # 下一个 }、下一个反引号的下标（n 表示后面没有了）；小于当前起点时才往后重找，所以总共线性
+    while True:
+        p = s.find("${", i)
+        if p < 0:
+            out.append(s[i:])
+            return "".join(out)
+        out.append(s[i:p])
+        if nc < p + 2:
+            nc = s.find("}", p + 2)
+            nc = n if nc < 0 else nc
+        if nt < p + 2:
+            nt = s.find("`", p + 2)
+            nt = n if nt < 0 else nt
+        if nc < n and nc < nt:
+            out.append("x")
+            i = nc + 1
+        else:
+            out.append("$")
+            i = p + 1
+
+
 def binimport_ext(spec):
     """目标路径以二进制扩展名结尾就返回扩展名。宁可多报：原文、去掉 ? 之后、去掉 # 之后、模板的 ${…} 换掉之后，任一种命中都算"""
     variants = set()
-    for s in (spec, re.sub(r"\$\{[^`]*?\}", "x", spec)):
+    for s in (spec, _replace_tpl_exprs(spec)):
         for cut in (s, s.split("?")[0], s.split("#")[0], s.split("?")[0].split("#")[0]):
             variants.add(cut.strip().lower())
     for v in variants:
