@@ -28,7 +28,13 @@ const SOURCE_EXT = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'
 // .npmrc 能在部署时换 npm 源（S8 复审低 4）
 const BYPASS_CONFIGS = ['deno.json', 'deno.jsonc', 'import_map.json', 'package.json', 'deno.lock', '.npmrc'];
 const LOCK_FILES = new Set(['supabase/functions/deno.json', 'supabase/functions/deno.lock']);
-const NPM_EXACT = /^npm:((?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*)@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\/[\w./-]*)?$/;
+// 出站接口地址（fetch 的目标，不是模块）：只放这几个写死的完整地址，普通引号、一字不差；用在 import / 动态 import 里照样报错。
+//   B1 K2 invite-signup 加（架构 5.6：Turnstile siteverify、Resend 发信）；加新地址要代码评审和安全审查看
+const OUTBOUND_API_URLS: ReadonlySet<string> = new Set([
+  'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+  'https://api.resend.com/emails',
+]);
+const NPM_EXACT =/^npm:((?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*)@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\/[\w./-]*)?$/;
 
 interface Lit { text: string; tpl: boolean; start: number; line: number }
 
@@ -77,7 +83,7 @@ function scanSource(code: string, locked: ReadonlySet<string>): string[] {
   const { lits, masked } = lexLiterals(code);
   const litAt = new Map(lits.map((l) => [l.start, l]));
   for (const l of lits) {
-    if (/jsr:|https?:/i.test(l.text)) errs.push(`第 ${l.line} 行：字符串里有 jsr: / http(s):（远程模块不在锁里）`);
+    if (/jsr:|https?:/i.test(l.text) && !(!l.tpl && OUTBOUND_API_URLS.has(l.text))) errs.push(`第 ${l.line} 行：字符串里有 jsr: / http(s):（远程模块不在锁里）`);
     if (l.text.includes('npm:')) {
       const m = l.tpl ? null : NPM_EXACT.exec(l.text);
       if (!m) errs.push(`第 ${l.line} 行：npm: 后面必须是“包@精确版本”，写在普通引号里（${l.text}）`);
@@ -90,6 +96,7 @@ function scanSource(code: string, locked: ReadonlySet<string>): string[] {
     const l = litAt.get(m.index + m[0].length);
     const after = l ? masked.slice(l.start + l.text.length + 2).match(/^\s*[,)]/) : null;
     if (!l || l.tpl || !after) errs.push(`第 ${code.slice(0, m.index).split('\n').length} 行：动态 import( ) 只准写 '…' 或 "…" 字面量（模板、变量、拼接都看不出引的是什么）`);
+    else if (/jsr:|https?:/i.test(l.text)) errs.push(`第 ${l.line} 行：动态 import( ) 引远程地址（不在锁里；出站接口白名单只管 fetch，不管 import）`);
   }
   // 静态 import / export … from / import '…'：只准相对路径、npm:包@版本、node:
   for (const m of masked.matchAll(/\b(?:from|import)\s*(?=['"])/g)) {
@@ -206,6 +213,11 @@ describe('deno.json', () => {
       ['裸名（靠 import map）', "import { z } from 'zod';"],
       ['字符串里藏 jsr', "const u = 'jsr:@std/assert';"],
       ['绝对路径', "import x from '/tmp/x.ts';"],
+      ['出站白名单地址拿来动态 import', "await import('https://api.resend.com/emails');"],
+      ['出站白名单地址拿来静态 import', "import 'https://api.resend.com/emails';"],
+      ['白名单地址多一个字', "const u = 'https://api.resend.com/emails/x';"],
+      ['白名单地址写成模板', 'const u = `https://api.resend.com/emails`;'],
+      ['不在白名单的出站地址', "const u = 'https://example.com/api';"],
     ];
     for (const [label, code] of bad) {
       it(label, () => {
@@ -221,6 +233,8 @@ describe('deno.json', () => {
         "const m = await import('./m.ts');",
         '// 参考 https://supabase.com/docs\n/* jsr:@std/x */\nconst n = 1;',
         "const re = Array.from('abc');",
+        "const T = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';",
+        "await fetch('https://api.resend.com/emails', { method: 'POST' });",
       ].join('\n');
       expect(scanSource(ok, locked)).toEqual([]);
     });

@@ -117,9 +117,10 @@ jobs:
         # build/check_backend.py F6 管，这一步先跑一遍，不过就停；publish.ps1 部署前也另查一遍。
         # 这里只在预览的产物里给名单（check_backend 的 PREVIEW_FUNCS，--print-preview-funcs 读出，不在这里另写一份）里的
         # 每个 _preview/<名>/ 生成一个一行的入口 supabase/functions/<名>/index.ts（import 源码），并在产物的 config.toml 末尾
-        # 给它 verify_jwt = false（按“任何人都能调用”设计，防护在函数里：只认 R2_BUCKET_PREFIX=preview-、写死的过期时间、
-        # 只收 POST、按时段分键的锁、总预算）。
-        # 现在名单是空的：r2-probe（B0 实测清单 P12，一次性）已于 10-28 下线，源码已删（docs/09-路线图/B0-R2探测函数.md）。
+        # 给它 verify_jwt = false（按“任何人都能调用”设计，防护在函数里：自带环境判断（只认预览项目）、写死的过期时间、
+        # 只收 POST、限频、总预算）。
+        # r2-probe（B0 实测清单 P12，一次性）已于 10-28 下线，源码已删（docs/09-路线图/B0-R2探测函数.md）。
+        # 现在名单里是 db-probe（B0 实测清单 P6，一次性；只认 SUPABASE_URL 是预览 ref；docs/09-路线图/B0-P6数据库探测函数.md）。
         # 名单为空、_preview/ 不存在时这一步什么都不做（glob 不匹配时 [ -d ] 不成立直接跳过）；
         # 以后有人在 _preview/ 下放目录而不进名单，这里和 check_backend F6 都会让构建失败。
         run: |

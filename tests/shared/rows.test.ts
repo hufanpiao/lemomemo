@@ -107,9 +107,16 @@ describe('rows 严格版', () => {
 });
 
 describe('api', () => {
-  it('错误只带错误码；426 带最低版本', () => {
-    expect(apiError.safeParse({ code: 'upgrade_required' }).success).toBe(true);
-    expect(apiError.safeParse({ code: '' }).success).toBe(false);
+  it('错误体是 {error: 码}（0.38 第 54 条）；426 是 {code, min}', () => {
+    expect(apiError.safeParse({ error: 'code_wrong' }).success).toBe(true);
+    expect(apiError.safeParse({ error: '' }).success).toBe(false);
+    expect(apiError.safeParse({ error: 'x'.repeat(65) }).success).toBe(false);
+    // 老写法 {code} 不再算错误体
+    expect(apiError.safeParse({ code: 'code_wrong' }).success).toBe(false);
+    // account_pending_deletion 另带 purge_after：照样通过，只留 error
+    expect(apiError.parse({ error: 'account_pending_deletion', purge_after: '2026-11-28T00:00:00Z' })).toEqual({ error: 'account_pending_deletion' });
+    // 426 体不是 apiError
+    expect(apiError.safeParse({ code: 'upgrade_required', min: '4.1.0' }).success).toBe(false);
     expect(upgradeRequired.safeParse({ code: 'upgrade_required', min: '4.1.0' }).success).toBe(true);
     expect(upgradeRequired.safeParse({ code: 'upgrade_required', min: '4.1' }).success).toBe(false);
   });

@@ -4,6 +4,7 @@
 //   → fn invite-signup {step: start}（带 Turnstile 令牌）→ {step: verify}（邮箱验证码）→ 拿到 token_hash → verifyOtp({type: 'magiclink'})
 // - verifyOtp 先不带 captchaToken（官方文档只写发码和注册要；B1 实测 TC-B1-08，要的话在这里补）
 // 只认错误码，不把服务器原文显示给用户
+import type { ApiError } from '../../../../shared/schema/api.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import { readStoredAccessToken } from './local-exit.ts';
 
@@ -108,7 +109,8 @@ const INVITE_ERRORS: Readonly<Record<string, AuthErr>> = {
 };
 
 /**
- * FunctionsHttpError 的 context 是原始 Response，错误码在响应体的 error 字段里。
+ * FunctionsHttpError 的 context 是原始 Response，错误码在响应体的 error 字段里（shared/schema/api.ts 的 apiError，0.38 第 54 条）。
+ * 只借它的类型、不在登录页引 zod 做运行时校验：字段不是字符串时按空码处理。
  * 429 只会出现在 verify（架构 0.38 第 27 条：start 被限流也回 {ok}）→ verify_limited“试得太频繁”；
  * start 万一收到 429（网关之类），不出“太频繁”，按 try_later 让人稍后重试
  */
@@ -117,8 +119,10 @@ async function inviteError(e: unknown, step: 'start' | 'verify'): Promise<AuthEr
   if (ctx instanceof Response) {
     if (ctx.status === 429) return step === 'verify' ? 'verify_limited' : 'try_later';
     try {
-      const body = (await ctx.clone().json()) as { error?: unknown };
-      const mapped = INVITE_ERRORS[str(body.error)];
+      const body = (await ctx.clone().json()) as Partial<Record<keyof ApiError, unknown>> | null;
+      // 只查表自己的键：error 是 constructor、toString 之类时不能取到 Object.prototype 上的函数（K2 复审低 1）
+      const code = str(body?.error);
+      const mapped = Object.hasOwn(INVITE_ERRORS, code) ? INVITE_ERRORS[code] : undefined;
       if (mapped) return mapped;
     } catch {
       // 响应体不是 JSON：按下面的通用规则

@@ -1,16 +1,14 @@
-// 离线 SQL 检查（没有 Docker 时用）：PGlite（WASM 版 Postgres）+ Supabase 桩，依次跑 7 个迁移、RLS 测试、D1 比对和样例
+// 离线 SQL 检查（没有 Docker 时用）：PGlite（WASM 版 Postgres）+ Supabase 桩，依次跑全部迁移、RLS 测试、D1 比对和样例
 // 用法（仓库根目录，依赖用根目录的 package.json）：npm run test:db:offline [-- --only=rls|d1|compat|fn]
 //   即 node supabase/tests/offline/run.mjs [--only=…]
 // 不代替 supabase db reset / supabase test db：桩不是 Supabase 的真实定义，pg_cron、pg_net 被跳过，真库差异见 B0 实测清单
-import { PGlite } from '@electric-sql/pglite';
-import { vector } from '@electric-sql/pglite-pgvector';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { freshDb, migrationFiles } from './fresh-db.ts';   // 建库（桩 → 迁移，跳过 pg_cron、pg_net）和 tests/data-manifest/pglite-migrated.ts 共用（C8）
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../..');
-const migDir = join(root, 'supabase/migrations');
 const rlsDir = join(root, 'supabase/tests/rls');
 const compatDir = join(root, 'supabase/tests/compat');
 const only = (process.argv.find((a) => a.startsWith('--only=')) ?? '').slice(7);
@@ -19,24 +17,8 @@ let failed = 0;
 const log = (s) => console.log(s);
 const fail = (s) => { failed++; console.log('✘ ' + s); };
 
-// 真库没有的扩展跳过（pg_cron、pg_net）；cron.schedule 由桩接住
-const stripExt = (sql) => sql.replace(/^create extension if not exists (pg_cron|pg_net)[^;]*;/gim, '-- (离线跳过) $&');
 // psql 的 \ir 由这里内联（pg_prove 走 psql，真库原样支持）
 const inlineIncludes = (sql, dir) => sql.replace(/^\\ir\s+(\S+)\s*$/gm, (_, f) => readFileSync(join(dir, f), 'utf8'));
-
-async function freshDb({ migrations = true } = {}) {
-  const db = new PGlite({ extensions: { vector } });
-  await db.exec(readFileSync(join(here, 'supabase-stub.psql'), 'utf8'));
-  await db.exec(readFileSync(join(here, 'tap-shim.psql'), 'utf8'));
-  await db.exec(`alter role postgres set search_path = "$user", public, extensions; set search_path = "$user", public, extensions;`);
-  if (migrations) {
-    for (const f of readdirSync(migDir).filter((f) => /^\d{4}_.*\.sql$/.test(f)).sort()) {
-      try { await db.exec(stripExt(readFileSync(join(migDir, f), 'utf8'))); }
-      catch (e) { throw new Error(`迁移 ${f} 失败：${e.message}`); }
-    }
-  }
-  return db;
-}
 
 /** pg_prove --ext .pg --ext .sql -r <dir> 会选中的文件（相对 dir，用 / 分隔） */
 function pgTestFiles(dir) {
@@ -76,8 +58,8 @@ async function runTap(db, file) {
 }
 
 // 1) 迁移
-const db = await freshDb();
-log('✔ 7 个迁移在 PGlite 上依次执行成功');
+const db = await freshDb({ tapShim: true });
+log(`✔ ${migrationFiles().length} 个迁移在 PGlite 上依次执行成功`);
 
 // 2) RLS 测试
 if (!only || only === 'rls') {
@@ -180,7 +162,7 @@ if (!only || only === 'd1') {
   }
 }
 
-// 4) 兼容样例：每个样例叠在 7 个迁移之上，再跑一遍 tests/compat/subset.json 里的 SQL 契约用例（4.0.0 客户端的写法），
+// 4) 兼容样例：每个样例叠在全部迁移之上，再跑一遍 tests/compat/subset.json 里的 SQL 契约用例（4.0.0 客户端的写法），
 //    结果和样例头上的 expect-old-client 比。跑法和 CI 的 tests/compat/run-compat.ts 是同一个函数（tests/compat/sql-case.ts，B0 集成）
 //    迁移文件里出现 rename column / drop column 由前端 B 的 compat 检查拦下
 if (!only || only === 'compat') {
@@ -216,4 +198,4 @@ if (!only || only === 'fn') {
 
 await db.close();
 if (failed) { console.log(`\n共 ${failed} 项失败`); process.exit(1); }
-console.log('\n全部通过（离线；真库待 Docker，见 B0 实测清单）');
+console.log('\n全部通过（离线 PGlite；真库另跑 npm run test:db，要先 supabase start，CI 的 db 任务每次都跑）');

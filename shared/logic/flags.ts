@@ -22,7 +22,7 @@ export interface FeatureCtx {
  * 配置里没有这个键、版本号解析不了：一律当作关闭（失败就关上）。
  */
 export function featureOn(cfg: FeaturesConfig, key: string, ctx: FeatureCtx): boolean {
-  const f = cfg[key];
+  const f = Object.hasOwn(cfg, key) ? cfg[key] : undefined;   // 只取自有属性（check_backend F7）
   if (!f) return false;
   if (!(f.on || ctx.beta.includes(key))) return false;
   if (f.min_client === undefined) return true;

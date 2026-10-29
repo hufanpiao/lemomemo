@@ -71,7 +71,7 @@ export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault'
   authenticated: ['is_active', 'report_tz_impl', 'claim_endpoint_impl', 'my_ai_usage_impl', 'record_consent_impl', 'remove_device_impl',
     'devices_session_guard', 'purge_deleted_impl', 'my_sessions_impl', 'touch', 'enqueue_remind', 'row_quota', 'guard_token_revoke',
     'table_meta_of', 'guard_note_image', 'guard_note_file', 'files_authorize_impl', 'enqueue_anniv_defaults', 'enqueue_embed', 'vault_ai_off'],
-  service_role: ['take_rate', 'session_alive', 'rebind_device_impl', 'long_transactions', 'account_usable'],
+  service_role: ['take_rate', 'session_alive', 'rebind_device_impl', 'long_transactions', 'account_usable', 'account_request_deletion', 'account_restore'],
   fn_vault: ['purge_vault_impl'],
   fn_ai: [],
 };
@@ -80,6 +80,7 @@ export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault'
  *  名单外的任务，命令或它调的 private 函数体里必须出现 account_usable。加名单要写原因 */
 export const CRON_WITHOUT_USABLE: Record<string, string> = {
   'cleanup-batch': '30 天清理：冷静期里照常清理（0.29 续第 138 条④）',
+  'account-purge': '满 7 天执行注销：要处理的正是冷静期里的账号（account_usable 会把它们全排除）；命令只经 pg_net 调函数、不直接碰表，挑人在函数里（0.38 第 24、46 条）',
 };
 
 /** export 必须是 none 的表和桶（TC-B0-93；架构 0.29 续第 83 条（R-184）、续第 121、125、131 条）：

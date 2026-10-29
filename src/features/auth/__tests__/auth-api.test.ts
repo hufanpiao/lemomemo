@@ -148,6 +148,19 @@ describe('createAuthApi', () => {
     }
   });
 
+  it('错误体按 apiError {error: 码} 读（0.38 第 54 条）：老写法 {code}、null、非字符串都不认；多带的字段不影响', async () => {
+    for (const [body, want] of [
+      [{ error: 'code_wrong', purge_after: '2026-11-28T00:00:00Z' }, 'code_wrong'],
+      [{ code: 'code_wrong' }, 'unknown'],
+      [null, 'unknown'],
+      [{ error: 42 }, 'unknown'],
+    ] as const) {
+      const ctx = new Response(JSON.stringify(body), { status: 400 });
+      const { api } = fakeDb({ invoke: { data: null, error: { name: 'FunctionsHttpError', context: ctx } } });
+      expect(await api.inviteVerify({ email: 'n@b.co', code: 'ABCDEFGHJKLM', emailOtp: '1', locale: 'zh-CN' })).toEqual({ ok: false, error: want });
+    }
+  });
+
   it('邀请 verify：账号建好了但 token_hash 换不到会话 → registered_login（安全审查低 4）', async () => {
     const a = fakeDb({ invoke: { data: { token_hash: 'th' }, error: null }, verifyOtp: { data: { session: null }, error: { code: 'otp_expired' } } });
     expect(await a.api.inviteVerify({ email: 'n@b.co', code: 'ABCDEFGHJKLM', emailOtp: '1', locale: 'zh-CN' })).toEqual({ ok: false, error: 'registered_login' });

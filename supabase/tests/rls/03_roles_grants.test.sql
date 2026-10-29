@@ -79,7 +79,7 @@ select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')), null, 'anon 不能执行任何 private 函数');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('service_role', p.oid, 'EXECUTE')),
-  'account_usable,long_transactions,session_alive', 'service_role 能执行的 private 函数 = 白名单');
+  'account_request_deletion,account_restore,account_usable,long_transactions,session_alive,take_rate', 'service_role 能执行的 private 函数 = 白名单（take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_vault', p.oid, 'EXECUTE')), 'purge_vault_impl', 'fn_vault 只能执行 purge_vault_impl');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p

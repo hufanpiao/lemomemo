@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = join(import.meta.dirname, '..', '..');
-const FILES = ['tools/keys/new-proxy-secret.ps1', 'tools/keys/set-r2-tokens.ps1', 'tools/keys/set-fn-role-passwords.ps1', 'tools/release/publish.ps1', 'tools/keys/login-token-tests.ps1'];
+const FILES = ['tools/keys/new-proxy-secret.ps1', 'tools/keys/set-r2-tokens.ps1', 'tools/keys/set-fn-role-passwords.ps1', 'tools/release/publish.ps1', 'tools/keys/login-token-tests.ps1', 'tools/keys/set-cron-secret.ps1'];
 const BEGIN = '# ==== 安全窗口检查：开始';
 const END = '# ==== 安全窗口检查：结束 ====';
 

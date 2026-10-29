@@ -1,8 +1,10 @@
 // 写入先查版本（架构 0.27 第 1 点、14.2 第 10 点）。
 // 这是兼容保护，不是安全措施：直连 supabase.co 就能绕过，权限照旧由 RLS 和列级授权管，不准拿它当权限用。
-// 免查名单只有这一份；14.2 第 9 点的退路 Worker 和第 6 节函数里的第二道检查都引用它。
+// 路径规则（EXEMPT_RULES）只有这一份；14.2 第 9 点的退路 Worker 引用它。
+// 免查函数的名单（B1 K10 起）放在 shared/version-gate-list.ts：这里和第 6 节函数里的第二道检查读同一份，改一处两边一起变。
 
 import { applySbSecurityHeaders } from '../_lib/security-headers.ts';
+import { FUNCTION_VERSION_EXEMPTIONS } from '../../shared/version-gate-list.ts';
 
 export const VERSION_HEADER = 'x-app-version';
 
@@ -34,8 +36,14 @@ export interface ExemptFunction {
   why: string;
 }
 
-/** 免查的 Edge Functions。B0 还没有函数，空着；名单外的函数一律查 */
-export const EXEMPT_FUNCTIONS: readonly ExemptFunction[] = [];
+/**
+ * 免查的 Edge Functions：shared/version-gate-list.ts 里 caller 为 'client' 的几项（唯一出处在那边，不在这里加）。
+ * caller 为 'server' 的（account-purge、usage-report）直连 supabase.co、不经 /sb（0.31 第 13 条），转发层照查。
+ * 名单外的函数一律查。
+ */
+export const EXEMPT_FUNCTIONS: readonly ExemptFunction[] = FUNCTION_VERSION_EXEMPTIONS
+  .filter((f) => f.caller === 'client')
+  .map((f) => ({ name: f.name, methods: f.methods, why: f.why }));
 
 // ---------- 判断哪些请求要查 ----------
 

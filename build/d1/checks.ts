@@ -317,5 +317,26 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     const called = [...j.command.matchAll(/\bprivate\.(\w+)\s*\(/gi)].map((m) => privSrc.get(m[1] ?? '') ?? '');
     if (![j.command, ...called].some((t) => /\baccount_usable\b/.test(t))) bad(`cron 任务 ${j.jobname} 动 public / private 的数据，却没经 private.account_usable（故意不用的写进 whitelist.ts 的 CRON_WITHOUT_USABLE 并注明原因）`);
   }
+  // 0.38 第 46 条：cron 命令里不能有写死的密钥（值一律放数据库 Vault，运行时从 vault.decrypted_secrets 读）
+  for (const j of jobs) {
+    const hit = cronHardcodedSecret(j.command);
+    if (hit) bad(`cron 任务 ${j.jobname} 的命令里有写死的长串（${hit.slice(0, 4)}…，${hit.length} 个字符）：密钥要放数据库 Vault、运行时从 vault.decrypted_secrets 读（0.38 第 46 条）`);
+  }
+  // K3：清单 exportOmitCols 写的列表里要有（写错列名时导出会悄悄带上本该去掉的列）
+  for (const m of manifests) for (const t of m.tables) {
+    for (const c of t.exportOmitCols) if (!colsOf(t.schema, t.name).includes(c)) bad(`${t.schema}.${t.name} 的 exportOmitCols 写了列 ${c}，表里没有`);
+  }
   return out;
+}
+
+/**
+ * cron 命令里像密钥的长串（0.38 第 46 条：命令里不能写死 ≥ 32 个字符的十六进制或 base64 串）：
+ * 连续 32 个以上的 [A-Za-z0-9+/=_-]，同时有字母和数字（十六进制、base64、base64url 的随机值几乎一定两样都有；
+ * 只有字母和下划线的长标识符不算）。返回第一个命中的串，没有返回 null
+ */
+export function cronHardcodedSecret(command: string): string | null {
+  for (const m of command.matchAll(/[A-Za-z0-9+/=_-]{32,}/g)) {
+    if (/[0-9]/.test(m[0]) && /[A-Za-z]/.test(m[0])) return m[0];
+  }
+  return null;
 }

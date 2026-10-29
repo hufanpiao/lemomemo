@@ -1,0 +1,3 @@
+{
+  "imports": { "@db": "./_shared/db.ts", "@shared/": "./_shared/", "s3sign": "https://esm.sh/aws4fetch@1.0.20", "std/": "jsr:@std/" }
+}

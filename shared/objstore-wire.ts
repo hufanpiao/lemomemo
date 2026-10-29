@@ -104,7 +104,7 @@ export function xmlUnescape(s: string): string {
   return s.replace(/&(#x[0-9a-fA-F]+|#\d+|amp|lt|gt|quot|apos);/g, (_all, e: string) => {
     if (e.startsWith('#x')) return String.fromCodePoint(parseInt(e.slice(2), 16));
     if (e.startsWith('#')) return String.fromCodePoint(parseInt(e.slice(1), 10));
-    return ENTITIES[e] ?? '';
+    return (Object.hasOwn(ENTITIES, e) ? ENTITIES[e] : undefined) ?? '';   // 只取自有属性（check_backend F7）
   });
 }
 
@@ -112,7 +112,7 @@ const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;'
 
 // 两种引号用字符码写：check_arch 的字符串扫描不认正则字面量，裸引号会让它把后面的注释当成字符串
 export function xmlEscape(s: string): string {
-  return s.replace(/[&<>\x22\x27]/g, (c) => ESCAPES[c] ?? c);
+  return s.replace(/[&<>\x22\x27]/g, (c) => (Object.hasOwn(ESCAPES, c) ? ESCAPES[c] : undefined) ?? c);
 }
 
 function blocks(xml: string, name: string): string[] {

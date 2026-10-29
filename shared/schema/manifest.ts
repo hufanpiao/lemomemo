@@ -56,12 +56,17 @@ export const tableSchema = z.object({
   noConflict: cols.optional(),
   /** 本机库迁移出错时能不能清空重拉 */
   rebuildable: z.boolean().default(true),
+  /** 导出（account export）时去掉的列：推送订阅的密钥、会话 id 这类对用户没用、外泄有害的（K3 安全审查低 8；只对 export: 'json' 的表有意义） */
+  exportOmitCols: cols.default([]),
 }).refine((t) => (t.userLookup === undefined) !== (t.noUserData === undefined), { message: 'manifest_user_lookup_xor_no_user_data' })   // userLookup 和 noUserData 必须二选一
   .refine((t) => (t.systemCols === undefined) === (t.noConflict === undefined), { message: 'manifest_system_cols_with_no_conflict' })   // systemCols、noConflict 要么都写（挂 touch() 的表），要么都不写
   .refine((t) => !t.systemCols || t.systemCols.every((c) => !t.clientWritable.includes(c)), { message: 'manifest_system_cols_overlap_writable' })   // systemCols 和 clientWritable 不能重叠
   .refine((t) => !t.noConflict || t.noConflict.every((c) => t.clientWritable.includes(c)), { message: 'manifest_no_conflict_not_writable' })   // noConflict 只放客户端可写列
   .refine(({ vaultRows: v, systemCols }) => !v || !systemCols || systemCols.every((c) => !v.cipherCols.includes(c) && !v.flag.includes(c)),
-    { message: 'manifest_system_cols_in_vault_rows' });   // systemCols 不能含 vaultRows 的 flag 列和 cipherCols
+    { message: 'manifest_system_cols_in_vault_rows' })   // systemCols 不能含 vaultRows 的 flag 列和 cipherCols
+  .refine((t) => t.exportOmitCols.length === 0 || t.export === 'json', { message: 'manifest_export_omit_without_export' })   // 不导出的表不写 exportOmitCols
+  .refine(({ vaultRows: v, exportOmitCols: o }) => !v || o.every((c) => !v.cipherCols.includes(c) && !v.flag.includes(c)),
+    { message: 'manifest_export_omit_vault_cols' });   // 不能去掉隐私记的 flag 列和密文列（导出的隐私记行要靠它们）
 export type ManifestTable = z.infer<typeof tableSchema>;
 /** 清单作者写的表（带默认值的字段可以省） */
 export type ManifestTableInput = z.input<typeof tableSchema>;

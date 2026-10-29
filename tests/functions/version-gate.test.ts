@@ -71,8 +71,13 @@ describe('needsVersionCheck：哪些请求要查', () => {
     expect(needsVersionCheck('DELETE', '/storage/v1/object/sign/images/a.webp')).toBe(true);
   });
 
-  it('B0 的免查函数名单是空的（各批随函数加）', () => {
-    expect(EXEMPT_FUNCTIONS).toEqual([]);
+  it('B1 K10：转发层只放行 account 的 POST（0.38 第 47 条）；account-purge、usage-report 直连、不经 /sb，照查（0.31 第 13 条）', () => {
+    expect(EXEMPT_FUNCTIONS.map((f) => [f.name, [...f.methods]])).toEqual([['account', ['POST']]]);
+    expect(needsVersionCheck('POST', '/functions/v1/account')).toBe(false);
+    for (const m of ['GET', 'PUT', 'PATCH', 'DELETE']) expect(needsVersionCheck(m, '/functions/v1/account'), m).toBe(true);
+    expect(needsVersionCheck('POST', '/functions/v1/account-purge')).toBe(true);
+    expect(needsVersionCheck('POST', '/functions/v1/usage-report')).toBe(true);
+    expect(needsVersionCheck('POST', '/functions/v1/invite-signup')).toBe(true);
   });
 });
 

@@ -20,7 +20,7 @@ export type ParamsOf<D extends Dict, K extends keyof D> = [ParamNames<D[K] & str
 /** 把 {name} 换成参数；参数里没有的占位符原样留着（开发时一眼能看出来） */
 export function fill(tpl: string, params: Readonly<Record<string, string | number>>): string {
   return tpl.replace(/\{(\w+)\}/g, (all, name: string) => {
-    const v = params[name];
+    const v = Object.hasOwn(params, name) ? params[name] : undefined;   // 只取自有属性（check_backend F7）
     return v === undefined ? all : String(v);
   });
 }
@@ -33,7 +33,7 @@ export function createT<D extends Dict>(dicts: { zh: D; ko: Readonly<Record<keyo
   return function t<K extends keyof D & string>(key: K, params: ParamsOf<D, K>, locale: Locale): string {
     const src: Readonly<Record<string, string | undefined>> = locale === 'ko-KR' ? dicts.ko : dicts.zh;
     const zhSrc: Readonly<Record<string, string | undefined>> = dicts.zh;
-    const tpl = src[key] ?? zhSrc[key] ?? key;
+    const tpl = (Object.hasOwn(src, key) ? src[key] : undefined) ?? (Object.hasOwn(zhSrc, key) ? zhSrc[key] : undefined) ?? key;
     return fill(tpl, params);
   };
 }

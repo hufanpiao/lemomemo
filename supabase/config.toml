@@ -51,8 +51,9 @@ enabled = true
 schema_paths = []
 
 [db.seed]
-# 没有 seed.sql：RLS 测试在自己的事务里造数据（_helpers.psql 的 tests.seed()），跑完回滚；D1 只看结构。
-enabled = false
+# seed.sql 只写本机假值的 Vault 密钥（cron_secret、functions_url，架构 0.38 第 46 条）；不造业务数据：
+# RLS 测试仍在自己的事务里造数据（_helpers.psql 的 tests.seed()），跑完回滚；D1 只看结构。
+enabled = true
 sql_paths = ["./seed.sql"]
 
 [realtime]
