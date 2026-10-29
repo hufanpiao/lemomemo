@@ -1,8 +1,8 @@
--- files_authorize（架构 0.32，3.3 D、3.3 G“R2 起”；数据字典 6.1、6.2）：TC-B0-99～105
+-- files_authorize（架构 0.32，3.3 D、3.3 G“R2 起”；数据字典 6.1、6.2）：TC-B0-99～105；TC-B1-118 ②③
 -- /files 函数带用户的 JWT 调 public.files_authorize；这里用 tests.fa 模拟“以某人、某会话的身份经 PostgREST 调”
 -- 返回值：{uid, items: [{i, ok, reason?}]}，整批不过时 {uid, error, items: []}；入参不对报 22023
 begin;
-select plan(59);
+select plan(64);
 \ir _helpers.psql
 select tests.seed();
 
@@ -228,6 +228,48 @@ select is(tests.fa1('get', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/40000
   'bad_bucket', 'get：图挂在隐私记上（is_private = true）→ bad_bucket');
 select is(tests.fa1('get', 'images', 'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a9/1e000000-0000-4000-8000-0000000000a9.t.webp'),
   'bad_bucket', 'get 缩略图：图挂在隐私记上 → bad_bucket');
+
+-- ===== TC-B1-118 ③（架构 0.38 第 5、9 条：private 对外暴露，门在 impl 里）：A 直接调 private.files_authorize_impl，一次查 Pa、Pb =====
+-- Pa = A 的插图 a1，Pb = B 的插图 b1；先直接调 impl、再经 public.files_authorize 用同样参数调，比逐项结果和 A、B 限流计数的变化
+create function tests.fa_impl(p_uid uuid, p_session uuid, p_op text, p_items jsonb) returns jsonb language plpgsql as $$
+declare r jsonb;
+begin
+  r := tests.rows_as('authenticated', p_uid, format('select private.files_authorize_impl(%L, %L::jsonb) as r', p_op, p_items::text), null, p_session);
+  return coalesce(r -> 0 -> 'r', r);
+end $$;
+create function tests.fa_counts() returns jsonb language sql as $$
+  select jsonb_build_object(
+    'a_get', coalesce((select sum(count) from private.counters where key like 'files_get:aaaaaaaa-0000-4000-8000-000000000001:%'), 0),
+    'a_put', coalesce((select sum(count) from private.counters where key like 'files_put:aaaaaaaa-0000-4000-8000-000000000001:%'), 0),
+    'b_all', coalesce((select sum(count) from private.counters where key like 'files_%:bbbbbbbb-0000-4000-8000-000000000002:%'), 0))
+$$;
+create temp table tc118 (k text primary key, v jsonb);
+insert into tc118 values ('c0', tests.fa_counts());
+insert into tc118 values ('direct', tests.fa_impl('aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-5555-4000-8000-000000000001', 'get',
+  '[{"bucket":"images","path":"aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/1e000000-0000-4000-8000-0000000000a1.webp"},
+    {"bucket":"images","path":"bbbbbbbb-0000-4000-8000-000000000002/40000000-0000-4000-8000-0000000000b1/1e000000-0000-4000-8000-0000000000b1.webp"}]'));
+insert into tc118 values ('c1', tests.fa_counts());
+insert into tc118 values ('wrapped', tests.fa('aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-5555-4000-8000-000000000001', 'get',
+  '[{"bucket":"images","path":"aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/1e000000-0000-4000-8000-0000000000a1.webp"},
+    {"bucket":"images","path":"bbbbbbbb-0000-4000-8000-000000000002/40000000-0000-4000-8000-0000000000b1/1e000000-0000-4000-8000-0000000000b1.webp"}]'));
+insert into tc118 values ('c2', tests.fa_counts());
+select is((select v from tc118 where k = 'direct'),
+  '{"uid":"aaaaaaaa-0000-4000-8000-000000000001","items":[{"i":0,"ok":true},{"i":1,"ok":false,"reason":"not_owner"}]}'::jsonb,
+  'TC-B1-118 ③：A 直接调 files_authorize_impl 查 Pa、Pb：Pa 放行、Pb 回 not_owner，uid 是 A');
+select is((select v from tc118 where k = 'direct'), (select v from tc118 where k = 'wrapped'),
+  'TC-B1-118 ③：直接调 impl 和经 files_authorize 同参数调，逐项结果完全相同');
+select is((select jsonb_build_object('a_get', (c1.v ->> 'a_get')::int - (c0.v ->> 'a_get')::int, 'a_put', (c1.v ->> 'a_put')::int - (c0.v ->> 'a_put')::int,
+                                     'b_all', (c1.v ->> 'b_all')::int - (c0.v ->> 'b_all')::int)
+             from tc118 c0, tc118 c1 where c0.k = 'c0' and c1.k = 'c1'),
+  '{"a_get":1,"a_put":0,"b_all":0}'::jsonb, 'TC-B1-118 ③：直接调 impl 一次：A 的 files_get 计数 +1，put 不动，不记到 B（Pb 的主人）头上');
+select is((select jsonb_build_object('a_get', (c2.v ->> 'a_get')::int - (c1.v ->> 'a_get')::int, 'a_put', (c2.v ->> 'a_put')::int - (c1.v ->> 'a_put')::int,
+                                     'b_all', (c2.v ->> 'b_all')::int - (c1.v ->> 'b_all')::int)
+             from tc118 c1, tc118 c2 where c1.k = 'c1' and c2.k = 'c2'),
+  '{"a_get":1,"a_put":0,"b_all":0}'::jsonb, 'TC-B1-118 ③：经 files_authorize 调一次，计数变化和直接调 impl 相同（权限、计数都不多一分）');
+-- TC-B1-118 ②：anon 直接调 private.files_authorize_impl（PostgREST 带 Content-Profile: private 时就是这样）：被拒（42501，没有执行权）
+select ok(tests.try_as('anon', null, $$select private.files_authorize_impl('get',
+  '[{"bucket":"images","path":"aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/1e000000-0000-4000-8000-0000000000a1.webp"}]'::jsonb)$$) like '42501%',
+  'TC-B1-118 ②：anon 直接调 files_authorize_impl：被拒（42501）');
 
 -- ===== TC-B0-105：限流（一个事务里 now() 不变，分钟窗口不会跨） =====
 delete from private.counters where key like 'files_%';

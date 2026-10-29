@@ -1,6 +1,6 @@
--- 配置、约束、桶和每日清理：TC-B0-53、74、76、88、98；0.27（features、min_client_version）；P-05；0.31 第 15、17 条（remind_queue、注销级联）
+-- 配置、约束、桶和每日清理：TC-B0-53、74、76、88、98；TC-B1-58、66、72、106 ①；0.27（features、min_client_version）；P-05；0.31 第 15、17 条（remind_queue、注销级联）
 begin;
-select plan(34);
+select plan(49);
 \ir _helpers.psql
 select tests.seed();
 
@@ -103,6 +103,55 @@ select is((select string_agg(title, ',') from public.todos where id::text like '
 select is((select count(*)::int from cron.job where command like 'set statement_timeout = ''4min''; select private.%'), 1, '清理的 cron 命令以 set statement_timeout 开头');
 select is((select string_agg(s, ',') from pg_db_role_setting d, unnest(d.setconfig) s where d.setrole = 'service_role'::regrole), 'statement_timeout=4min',
   'service_role 的 statement_timeout = 4min');
+
+-- ===== TC-B1-72、66、58：每日清理的保留天数（3.4；R-27；0.29 续第 48、64 条） =====
+-- 天数照 private.cleanup_batch（20261029192000 版）：logs 按 t（毫秒）90 天；applied_ops 按 at 7 天；counters 按 window_start 30 天；
+-- pending_signups 按 expires_at 过期即删。每种各放一条“刚超过”、一条“还差一点”的
+insert into public.logs (user_id, t, kind, code) values
+  ('aaaaaaaa-0000-4000-8000-000000000001', ((extract(epoch from now()) - 91 * 86400) * 1000)::bigint, 'tc72', 'd91'),
+  ('aaaaaaaa-0000-4000-8000-000000000001', ((extract(epoch from now()) - 89 * 86400) * 1000)::bigint, 'tc72', 'd89');
+insert into public.applied_ops (op_id, user_id, at) values
+  ('0b720000-0000-4000-8000-000000000008', 'aaaaaaaa-0000-4000-8000-000000000001', now() - interval '8 days'),
+  ('0b720000-0000-4000-8000-000000000006', 'aaaaaaaa-0000-4000-8000-000000000001', now() - interval '6 days');
+insert into private.counters (key, window_start, count) values
+  ('signup-ip:ip:tc66-d31', now() - interval '31 days', 1), ('signup-ip:ip:tc66-d29', now() - interval '29 days', 1),
+  ('signup-mail:mail:tc66-d31', now() - interval '31 days', 1), ('signup-mail:mail:tc66-d29', now() - interval '29 days', 1),
+  ('signup:global:tc66-d31', now() - interval '31 days', 1), ('signup:global:tc66-d29', now() - interval '29 days', 1);
+insert into private.pending_signups (email_hash, otp_hash, expires_at) values
+  ('tc58-expired', 'x', now() - interval '1 minute'), ('tc58-valid', 'x', now() + interval '10 minutes');
+select private.cleanup_batch();
+-- TC-B1-72
+select is((select string_agg(code, ',') from public.logs where kind = 'tc72'), 'd89', 'TC-B1-72：91 天前的 logs 删掉、89 天前的留着');
+select is((select string_agg(op_id::text, ',') from public.applied_ops where op_id::text like '0b720000-%'), '0b720000-0000-4000-8000-000000000006',
+  'TC-B1-72：8 天前的 applied_ops 删掉、6 天前的留着');
+-- TC-B1-66
+select is((select string_agg(key, ',') from private.counters where key like 'signup-ip:ip:tc66-%'), 'signup-ip:ip:tc66-d29',
+  'TC-B1-66：signup-ip:ip:* 31 天前的删掉、29 天前的留着');
+select is((select string_agg(key, ',') from private.counters where key like 'signup-mail:mail:tc66-%'), 'signup-mail:mail:tc66-d29',
+  'TC-B1-66：signup-mail:mail:* 31 天前的删掉、29 天前的留着');
+select is((select string_agg(key, ',') from private.counters where key like 'signup:global:tc66-%'), 'signup:global:tc66-d29',
+  'TC-B1-66：signup:global:* 31 天前的删掉、29 天前的留着');
+-- TC-B1-58
+select is((select string_agg(email_hash, ',') from private.pending_signups where email_hash like 'tc58-%'), 'tc58-valid',
+  'TC-B1-58：过期的 pending_signups 被每日清理删掉，没过期的留着');
+
+-- ===== TC-B1-106 ①：2500 行 30 天前软删除的行，每次运行只做一批（≤ 1000 行）：1000、1000、500，之后立即返回 0 =====
+-- 先把前面留下的可清理行清空（各项共用一个 1000 行预算），保证下面的返回值只来自这 2500 行
+do $$ begin while private.cleanup_batch() > 0 loop end loop; end $$;
+select is(private.cleanup_batch(), 0, 'TC-B1-106 ①：清空后再跑一次，没有要删的，返回 0');
+insert into public.todos (id, user_id, title, deleted_at, created_at, updated_at)
+  select ('7b106000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, 'aaaaaaaa-0000-4000-8000-000000000001', 'tc106',
+         ((extract(epoch from now()) - 31 * 86400) * 1000)::bigint, 1, 1
+    from generate_series(1, 2500) g;
+select is(private.cleanup_batch(), 1000, 'TC-B1-106 ①：第 1 次运行删 1000 行');
+select is((select count(*)::int from public.todos where title = 'tc106'), 1500, 'TC-B1-106 ①：第 1 次后剩 1500 行');
+select is((select (detail ->> 'rows')::int || ':' || (detail ? 'ms')::text from private.heartbeat where name = 'cleanup'), '1000:true',
+  'TC-B1-106 ①：心跳 detail 记这一批的行数和用时（ms）');
+select is(private.cleanup_batch(), 1000, 'TC-B1-106 ①：第 2 次运行删 1000 行');
+select is((select count(*)::int from public.todos where title = 'tc106'), 500, 'TC-B1-106 ①：第 2 次后剩 500 行');
+select is(private.cleanup_batch(), 500, 'TC-B1-106 ①：第 3 次运行删 500 行');
+select is((select count(*)::int from public.todos where title = 'tc106'), 0, 'TC-B1-106 ①：第 3 次后删完');
+select is(private.cleanup_batch(), 0, 'TC-B1-106 ①：第 4 次起没有要删的，立即返回 0');
 
 select * from finish();
 rollback;
