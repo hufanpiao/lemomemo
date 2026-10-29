@@ -232,6 +232,15 @@ const REDUCED_MOTION_SYNTAX = [
   {
     selector: "MemberExpression[property.name='useReducedMotion']",
     message: 'UI-4 M-1：不准用 Motion 的 useReducedMotion()（只认系统设置），用 src/motion 的 useReducedMotionPref()',
+  },  {
+    // M['useReducedMotion']
+    selector: "MemberExpression[property.value='useReducedMotion']",
+    message: 'UI-4 M-1：不准用 Motion 的 useReducedMotion()（只认系统设置），用 src/motion 的 useReducedMotionPref()',
+  },
+  {
+    // const { useReducedMotion } = M
+    selector: "Property[key.name='useReducedMotion']",
+    message: 'UI-4 M-1：不准用 Motion 的 useReducedMotion()（只认系统设置），用 src/motion 的 useReducedMotionPref()',
   },
 ];
 const REDUCED_MOTION_IMPORTS = {

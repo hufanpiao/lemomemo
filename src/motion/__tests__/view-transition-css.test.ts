@@ -34,7 +34,8 @@ describe('View Transitions 接令牌（UI-4 L-3）', () => {
 });
 
 describe('transition()：减少动态效果时不起 View Transition', () => {
-  const doc = document as Document & { startViewTransition?: unknown };
+  // 先转成 unknown：DOM 类型里 startViewTransition 是必有的，和 Document 交叉后不能 delete、也不能装假函数
+  const doc = document as unknown as { startViewTransition?: unknown };
 
   afterEach(() => {
     delete doc.startViewTransition;

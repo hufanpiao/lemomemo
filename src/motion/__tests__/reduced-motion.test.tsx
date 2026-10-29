@@ -130,10 +130,12 @@ describe('组件跟着同一套判断（只开设置里的开关、系统没开�
 
 describe('Appear 减少动态效果时交给 Motion 的参数', () => {
   for (const kind of ['toast', 'sheet', 'row', 'page'] as const) {
-    it(`${kind}：起始透明度 0、没有 transform，时长是预设的一半；关时照预设（对照）`, () => {
+    it(`${kind}：起始和退出都是透明度 0、没有 transform，时长是预设的一半；关时照预设（对照）`, () => {
       const on = appearMotion(kind, true);
       expect(on.initial).toEqual({ opacity: 0 });
       expect('transform' in on.animate).toBe(false);
+      expect(on.exit).toEqual({ opacity: 0 });
+      expect('transform' in on.exit).toBe(false);
       expect(on.transition.duration).toBe(presets[kind].transition.duration / 2);
       expect(on.transition.ease).toEqual(presets[kind].transition.ease);
       const off = appearMotion(kind, false);
@@ -186,7 +188,8 @@ describe('TC-B1-52：只开系统设置（data-rm 没开）同样不做位移', 
 /** 给元素装一个假的 element.animate（jsdom 没有），记下调用参数 */
 function stubAnimate(el: Element) {
   const fn = vi.fn((_frames: Keyframe[], _opts: KeyframeAnimationOptions) => ({ finished: Promise.resolve() }));
-  (el as Element & { animate: unknown }).animate = fn;
+  // 先转成 unknown 再看成普通对象：两套 tsconfig 的 DOM 类型不同，交叉类型在带完整 DOM 类型时会收窄成 Animation 签名
+  (el as unknown as { animate: unknown }).animate = fn;
   return fn;
 }
 
