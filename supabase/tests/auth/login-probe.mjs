@@ -22,13 +22,49 @@
 // 结果用 process.exitCode 交出（不直接 process.exit，免得 Windows 管道下输出被截断）。
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { arch, platform } from 'node:process';
+import { dirname, join } from 'node:path';
 import postgres from 'postgres';
+
+// 找 supabase CLI：① 先按 PATH 找（CI 由 build/ci/install-tool.sh 装进 PATH，行为不变）；
+// ② PATH 里没有（Windows 上 node_modules/.bin 只有 .cmd 包装，execFileSync 不经 shell 调不到）时，
+//    找 npm 包 supabase 带的平台二进制 node_modules/@supabase/cli-<平台>/bin/supabase(.exe)；③ 都没有返回 null
+const CLI_PLATFORMS = {
+  darwin: { arm64: ['darwin-arm64'], x64: ['darwin-x64'] },
+  linux: { arm64: ['linux-arm64', 'linux-arm64-musl'], x64: ['linux-x64', 'linux-x64-musl'] },
+  win32: { arm64: ['windows-arm64'], x64: ['windows-x64'] },
+};
+const CLI_INSTALL_HINT = '装法：仓库根目录 npm ci（package.json 里锁了 supabase 2.120.0，会带上本平台的 @supabase/cli-* 二进制），'
+  + '或按 https://supabase.com/docs/guides/local-development/cli/getting-started 装好 supabase CLI 并放进 PATH';
+const findCli = () => {
+  try {
+    execFileSync('supabase', ['--version'], { stdio: 'ignore' });
+    return 'supabase';
+  } catch (e) {
+    if (e?.code !== 'ENOENT') return 'supabase'; // 找到了但 --version 出错：交给下面的 status 报原文
+  }
+  const req = createRequire(import.meta.url);
+  for (const suffix of CLI_PLATFORMS[platform]?.[arch] ?? []) {
+    try {
+      const bin = join(dirname(req.resolve(`@supabase/cli-${suffix}/package.json`)), 'bin', `supabase${platform === 'win32' ? '.exe' : ''}`);
+      if (existsSync(bin)) return bin;
+    } catch { /* 没装这个平台包，试下一个 */ }
+  }
+  return null;
+};
 
 // 读 supabase status；失败时把 CLI 的 stderr 原样打出来（看得出是没起、没装还是别的），返回 null
 const readStatus = () => {
+  const cli = findCli();
+  if (!cli) {
+    console.error(`login-probe：找不到 supabase CLI（PATH 里没有，node_modules/@supabase/cli-${platform === 'win32' ? 'windows' : platform}-${arch} 也没有）。\n${CLI_INSTALL_HINT}`);
+    return null;
+  }
   let out;
   try {
-    out = execFileSync('supabase', ['status', '-o', 'json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    out = execFileSync(cli, ['status', '-o', 'json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (e) {
     const err = String(e?.stderr ?? '').trim();
     console.error(`login-probe：supabase status 失败（${e?.code ?? `退出码 ${e?.status ?? '?'}`}）${err ? `\n${err}` : `：${e?.message ?? e}`}`);

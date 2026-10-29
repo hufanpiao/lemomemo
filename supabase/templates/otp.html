@@ -1,12 +1,22 @@
 <!-- 登录验证码邮件（Supabase Auth 的 magic_link 模板；架构 15.6 总表、5.6、2.4 第 6 点）
-     只写 {{ .Token }}，不放登录链接；按 user_metadata.locale 分中韩（invite-signup 建用户时写、改语言时 auth.updateUser 写）。
-     【线上】运维把同一份内容贴进控制台的模板。这个写法上线前要实测（2.4 第 6 点）。文案待韩文审校（R-106）。 -->
+     已定用版本 A（主持人 10-29，依据架构 15.6）：只放 6 位验证码（.Token），不放登录链接；
+     按 user_metadata.locale 分中韩（invite-signup 建用户时写、改语言时 auth.updateUser 写），没有 locale 的走中文。
+     正文和 docs/00-团队/负责人-SMTP-步骤.md 第五节“版本 A”一致，韩文已审校（R-106，10-29）。
+     【线上】运维把注释以下的正文贴进控制台 Magic link or OTP 模板。
+     【测试】supabase/tests/auth/login-probe.mjs 按 strong 标签里的 6 位数字取码，并用“10 分钟内有效”“10분 동안 유효해요”分辨中韩；改文案别动这几处。
+     注释里不要写模板花括号，Go 模板会照样执行。 -->
 {{ if eq .Data.locale "ko-KR" }}
-<p>레모 인증 코드</p>
-<p style="font-size:24px;letter-spacing:4px"><strong>{{ .Token }}</strong></p>
-<p>10분 동안 유효해요. 직접 요청하지 않았다면 이 메일은 무시해 주세요.</p>
+<div lang="ko" style="font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;max-width:420px;margin:0 auto;padding:24px;color:#1f2328">
+  <p style="margin:0 0 12px;font-size:15px">레모 로그인 인증 코드예요.</p>
+  <p style="margin:0 0 16px;font-size:32px;letter-spacing:8px;font-family:'SF Mono',Menlo,Consolas,monospace"><strong>{{ .Token }}</strong></p>
+  <p style="margin:0 0 8px;font-size:14px">앱에서 이 6자리 인증 코드를 입력해 주세요. 10분 동안 유효해요.</p>
+  <p style="margin:0;font-size:13px;color:#656d76">직접 요청하지 않았다면 이 메일은 무시해 주세요. 인증 코드는 누구에게도 알려 주지 마세요.</p>
+</div>
 {{ else }}
-<p>柠檬记验证码</p>
-<p style="font-size:24px;letter-spacing:4px"><strong>{{ .Token }}</strong></p>
-<p>10 分钟内有效。如果不是你本人操作，请忽略这封邮件。</p>
+<div lang="zh-CN" style="font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;max-width:420px;margin:0 auto;padding:24px;color:#1f2328">
+  <p style="margin:0 0 12px;font-size:15px">你的柠檬记登录验证码：</p>
+  <p style="margin:0 0 16px;font-size:32px;letter-spacing:8px;font-family:'SF Mono',Menlo,Consolas,monospace"><strong>{{ .Token }}</strong></p>
+  <p style="margin:0 0 8px;font-size:14px">请在 App 里输入这 6 位验证码，10 分钟内有效。</p>
+  <p style="margin:0;font-size:13px;color:#656d76">如果不是你本人操作，请忽略这封邮件。不要把验证码告诉任何人。</p>
+</div>
 {{ end }}
