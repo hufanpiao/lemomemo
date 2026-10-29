@@ -26,6 +26,20 @@ export interface ExemptRule {
  */
 export const EXEMPT_RULES: readonly ExemptRule[] = [
   { method: '*', path: '/auth/v1/', match: 'prefix', why: '登录、刷新令牌、退出登录、退出其他设备' },
+  // B1（S-B1，P0）：supabase-js 的 rpc() 默认 POST /rest/v1/rpc/<名字>。只免 POST、只认整条路径
+  // （remove_device_x、尾部带 /、GET 等一律照查）；path 由转发层去掉了查询串
+  {
+    method: 'POST',
+    path: '/rest/v1/rpc/remove_device',
+    match: 'exact',
+    why: '远程移除丢了的设备，旧版也要能做（0.29 续第 98 条，TC-B1-80）',
+  },
+  {
+    method: 'POST',
+    path: '/rest/v1/rpc/record_consent',
+    match: 'exact',
+    why: '撤回 AI 同意随时能做（15.5，TC-B1-14）',
+  },
 ];
 
 export interface ExemptFunction {

@@ -81,6 +81,68 @@ describe('needsVersionCheck：哪些请求要查', () => {
   });
 });
 
+describe('S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC-B1-14）', () => {
+  it('两条都是精确路径、只免 POST', () => {
+    const rpc = EXEMPT_RULES.filter((r) => r.path.startsWith('/rest/v1/'));
+    expect(rpc.map((r) => [r.method, r.path, r.match])).toEqual([
+      ['POST', '/rest/v1/rpc/remove_device', 'exact'],
+      ['POST', '/rest/v1/rpc/record_consent', 'exact'],
+    ]);
+  });
+
+  it.each([
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/remove_device'],
+    ['TC-B1-14', 'POST', '/rest/v1/rpc/record_consent'],
+    ['TC-B1-80', 'post', '/rest/v1/rpc/remove_device'],
+  ])('%s：%s %s → 不查', (_tc, m, p) => {
+    expect(needsVersionCheck(m, p)).toBe(false);
+  });
+
+  it.each([
+    // 同前缀不同名
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/remove_device_x'],
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/remove_devices'],
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/remove_device/'],
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/remove_device/x'],
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/REMOVE_DEVICE'],
+    ['TC-B1-80', 'POST', '/rest/v1/rpc/x_remove_device'],
+    ['TC-B1-14', 'POST', '/rest/v1/rpc/record_consent_x'],
+    ['TC-B1-14', 'POST', '/rest/v1/rpc/record_consent/'],
+    ['TC-B1-14', 'POST', '/rest/v1/rpc/record_consents'],
+    // 其他写方法照查
+    ['TC-B1-80', 'PATCH', '/rest/v1/rpc/remove_device'],
+    ['TC-B1-80', 'PUT', '/rest/v1/rpc/remove_device'],
+    ['TC-B1-80', 'DELETE', '/rest/v1/rpc/remove_device'],
+    ['TC-B1-14', 'PATCH', '/rest/v1/rpc/record_consent'],
+    ['TC-B1-14', 'DELETE', '/rest/v1/rpc/record_consent'],
+    // 名单外的 RPC 照查（my_sessions 另请架构师裁定，暂不加）
+    ['—', 'POST', '/rest/v1/rpc/my_sessions'],
+    ['—', 'POST', '/rest/v1/rpc/apply_patch'],
+    // 不是 RPC 的同名表路径
+    ['—', 'POST', '/rest/v1/remove_device'],
+    ['—', 'POST', '/rest/v1/record_consent'],
+  ])('%s：%s %s → 查', (_tc, m, p) => {
+    expect(needsVersionCheck(m, p)).toBe(true);
+  });
+
+  it('GET 本来就不查（读请求），但不是因为免查规则', () => {
+    expect(needsVersionCheck('GET', '/rest/v1/rpc/remove_device')).toBe(false);
+    expect(EXEMPT_RULES.some((r) => r.path === '/rest/v1/rpc/remove_device' && r.method === 'GET')).toBe(false);
+  });
+
+  it('TC-B1-80、TC-B1-14：低版本客户端调这两个 RPC 不被 426 挡，调同前缀的别的名字照样挡', async () => {
+    const gate = createVersionGate({ loadMin: async () => '9.0.0' });
+    const old = headers('4.0.0');
+    expect(await gate.check('POST', '/rest/v1/rpc/remove_device', old)).toEqual({ action: 'pass' });
+    expect(await gate.check('POST', '/rest/v1/rpc/record_consent', old)).toEqual({ action: 'pass' });
+    expect(await gate.check('POST', '/rest/v1/rpc/remove_device', headers())).toEqual({ action: 'pass' });
+    expect(await gate.check('POST', '/rest/v1/rpc/remove_device_x', old)).toEqual({ action: 'block', min: '9.0.0' });
+    expect(await gate.check('POST', '/rest/v1/rpc/record_consent_x', old)).toEqual({ action: 'block', min: '9.0.0' });
+    expect(await gate.check('PATCH', '/rest/v1/rpc/remove_device', old)).toEqual({ action: 'block', min: '9.0.0' });
+    expect(await gate.check('POST', '/rest/v1/rpc/my_sessions', old)).toEqual({ action: 'block', min: '9.0.0' });
+  });
+});
+
 describe('版本号', () => {
   it('去掉 -preview 后缀只比三段', () => {
     expect(parseClientVersion('4.1.0-preview.3')).toEqual([4, 1, 0]);
