@@ -14,6 +14,9 @@
       withAiUser / withAiScan 是 fn_ai）；F2 按 import 了哪个导出名判断角色（改名导入看原名，经别的 _shared 模块转手也查），
       导入别的名字、默认导入都报。原先只认源码里带引号的 'fn_vault'，角色名拼出来（.source、fromCharCode、join、拼接、模板）就看不见。
       对 db.ts 的 import * as、export *、动态 import 报 F7（拿到模块对象就能用计算属性名取成员）
+      按角色拆共用模块（第三轮复审建议，从严、有意为之）：_shared 模块只要用了某个角色的导出，引它的函数就按那个角色查——
+      哪怕只从它导入一个无关的工具函数也算（“连坐”）。所以 _shared 里的模块要按角色拆开：fn_vault 的部分、fn_ai 的部分、
+      和数据库无关的工具函数各放各的文件，别混在一个模块里
   F3  引到 objstore（_shared/objstore*.ts、_shared/gen/objstore*.ts）或直接 import aws4fetch、读 R2_* 的函数必须在 R2_FUNCS 里；
       服务器函数一律不准读 R2_FILES_* / R2_PULL_*（那是 Pages 和负责人本机的令牌）；_shared 里只有 objstore*.ts 能读 R2_*。
       架构第 6 节开头（0.32）、8.4、TC-B0-35（0.35 起；原 TC-B0-75）、S-B0 ⑦。aws4fetch 不论从哪儿引（npm:、esm.sh、jsdelivr、deno.land/x）都算。
@@ -423,8 +426,16 @@ class Fns:
         if path is None:
             return None
         t = self._target(path)
-        if t is not None or spec.startswith("."):
+        if t is not None:
             return t
+        if spec.startswith("."):
+            # 第三轮复审建议：相对路径找不到时也按小写再比一次（和绝对路径那一支一样）——Windows 上 ../_shared/DB.ts 能载入 db.ts，
+            #   Linux CI 上文件系统区分大小写，原先就认不出是 db.ts
+            try:
+                tail = path.resolve().relative_to(self.base.resolve()).as_posix().lower()
+            except ValueError:
+                return None
+            return next((r for r in self.code if r.lower() == tail), None)
         m = re.search(r"(?:^|/)supabase/functions/(.+)$", str(path).replace(chr(92), "/"), re.IGNORECASE)
         if not m:
             return None
@@ -806,7 +817,8 @@ def check_functions(root, errors):
             if target and not is_db(target):
                 for role in sorted({r for f in files for r in db_roles[f]}):
                     if not role_ok[role]:
-                        errors.append(("F2", path, line, f"{fn} 不能用 {role}，却经 {target} 用到 _shared/db.ts 的 {role} 导出（名单见架构 6.2）"))
+                        errors.append(("F2", path, line, f"{fn} 不能用 {role}，却经 {target} 间接用到 {role}（_shared/db.ts 的 {role} 导出）；只要的是别的工具函数的话，"
+                                                    f"把 {target} 里 {role} 的部分拆到单独的模块（共用模块按角色拆开，见文件头 F2；名单见架构 6.2）"))
 
         # 复审必改（乙方案）：自己 import 了 db.ts 的哪个导出名，就是用哪个角色（改名导入看原名）
         for role, line in sorted(db_roles[rel].items()):

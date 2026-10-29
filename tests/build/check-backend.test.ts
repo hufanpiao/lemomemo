@@ -60,6 +60,7 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(code).toBe(1);
     expect(where(errors)).toEqual([
       'F2 supabase/functions/_preview/db-probe/index.ts:4',
+      'F2 supabase/functions/_preview/db-probe/scan.ts:2', // S3 第三轮复审：db-probe 导入 withVaultScan 也报（按导出名判断）
       'F2 supabase/functions/_preview/vault/index.ts:1',
       'F2 supabase/functions/_preview/vault/index.ts:2',
       'F6 supabase/functions/_preview/vault/index.ts:1',
@@ -303,7 +304,16 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     }
     expect(errors.find((e) => e.file.includes('ai-voice'))?.message).toContain('fn_vault');
     expect(errors.find((e) => e.file.includes('vault-image'))?.message).toContain('vault-helper.ts');
+    // 第三轮复审建议：间接用到时报错里给出改法（共用模块按角色拆开）
+    expect(errors.find((e) => e.file.includes('vault-image'))?.message).toContain('拆到单独的模块');
     expect(errors.find((e) => e.file.includes('/account/'))?.message).toContain('import * as');
+  });
+
+  it('F2（B1 接手清单 S3 第三轮复审建议）：相对路径大小写和文件名不同（../_shared/DB.ts、../_Shared/Db.ts）也认出是 db.ts——名单外的函数报 F2、fn_ai 名单里的函数导入 withVaultUser 报 F2；同样写法导入 withAiUser 不报', () => {
+    const { code, errors } = run(sample('f2-case-path'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual(['F2 supabase/functions/ai-voice/index.ts:2', 'F2 supabase/functions/push-dispatch/index.ts:2']);
+    expect(errors.find((e) => e.file.includes('ai-voice'))?.message).toContain('fn_vault');
   });
 
   it('F7（B1 接手清单 S3 复审小改）：supabase/functions 下的 .tsx、.jsx 一律报（JSX 属性里的 HTML 实体 fn&#95;vault 会被解码，名字匹配看不见）', () => {
