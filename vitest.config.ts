@@ -31,7 +31,15 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/arch/tsc.test.ts', // TypeScript 编译器
   'tests/build/check-arch-bidi.test.ts', // python build/check_arch.py、git init（LINT-bidi）
   'tests/build/check-arch-binimport.test.ts', // python build/check_arch.py（LINT-binimport）
+  'tests/build/check-arch-binimport-entry.test.ts', // python build/check_arch.py（LINT-binimport：读文件再执行、非 JS 入口）
+  'tests/build/check-arch-binimport-perf.test.ts', // python build/check_arch.py（LINT-binimport：耗时上限和健壮性）
+  'tests/build/check-arch-binimport-scanner.test.ts', // python build/check_arch.py（LINT-binimport：骨架扫描器、createRequire）
+  'tests/build/check-arch-binimport-source.test.ts', // python build/check_arch.py（LINT-binimport：点号 source、反斜杠续行）
   'tests/build/check-backend.test.ts', // python build/check_backend.py（建 TypeScript 类型检查器）
+  'tests/build/check-backend-alias.test.ts', // python build/check_backend.py（F2、F3、F7 别名展开）
+  'tests/build/check-backend-f7-keys.test.ts', // python build/check_backend.py（F7 类型检查器判键类型）
+  'tests/build/check-backend-f7-syntax.test.ts', // python build/check_backend.py（F7 语法层白名单）
+  'tests/build/check-backend-migrations.test.ts', // python build/check_backend.py（M1～M6 迁移写法）
   'tests/build/check-size.test.ts', // 另起 node 跑 build/check_size.mjs
   'tests/build/e2e-watchdog.test.ts', // 经 tools/e2e/run-watchdog.mjs 起 node（E2E-webkit-hang 看门狗真跑）
   'tests/build/e2e-watchdog-spawn.test.ts', // 起 node 跑看门狗（拉不起命令时的提示）

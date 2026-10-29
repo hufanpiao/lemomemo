@@ -1,5 +1,9 @@
 // invite-signup 的处理逻辑（架构 5.6、第 6 节函数表、15.2 中 1 ④、15.3 第 8 条、附录 A counters 键表、0.38 第 19、20 条；
 // TC-B1-02～05、TC-B1-64）。数据库、Auth 管理接口、Turnstile、发信都由 index.ts 注入，Vitest 直接测这一份。
+// 类型在 types.ts，回包、请求体、邮件、哈希小工具在 wire.ts（B1 第九批 lint 超行拆分）；对外的名字一律还从这里引。
+// 以后再拆也不能挪走的：handle、start、verify，以及版本门 blockedMin 的 import 和调用，都必须留在本文件——
+// tests/build/fn-version-gate-coverage.test.ts 只扫 core.ts（看 handle 开头、blockedMin 的引入和调用），挪走就判成没接版本门。
+// 拆出去的文件只放类型和不带流程的纯工具。
 // 不 import npm 包、不碰运行时全局（只用 Web 标准的 crypto、TextEncoder、Request、Response）。
 //
 // 两步（匿名调用；JWT 只是 anon key，不当身份）：
@@ -13,11 +17,19 @@
 // 日志只记错误码（A23）：不打印请求头、请求体、邮箱、验证码、邀请码、IP。
 // 从来不返回邀请人信息（R-83、TC-B1-05）：invites 只读 max_uses、used_count、expires_at 三列。
 
-import { emailHash, hmacHex, ipHash, normalizeEmail } from '../_shared/email-hash.ts';
+import { emailHash, ipHash } from '../_shared/email-hash.ts';
 import { inviteCodeHash, isInviteCode, normalizeInviteCode } from '../_shared/invite-code.ts';
-import type { EnvKind } from '../_shared/env-kind.ts';
 import { rateIp, readProxyHeaders, safeEqual } from '../_shared/proxy-headers.ts';
 import { blockedMin, upgradeRequiredResponse } from '../_shared/version-gate-core.ts';
+import type { CreateUserResult, Deps, Env, InviteRow, PendingRow, Store, TurnstileResult } from './types.ts';
+import {
+  email, err, Fail, json, keys, locale, otpHash, readBody, secureOtp, signupMail, str, type StartBody, type VerifyBody,
+} from './wire.ts';
+
+export type {
+  AuthAdmin, CreateUserResult, Deps, Env, InviteErr, InviteRow, Locale, PendingRow, Store, TurnstileResult,
+} from './types.ts';
+export { keys, otpHash, secureOtp, signupMail, utcDate } from './wire.ts';
 
 // ---------------- 常量（出处见行尾） ----------------
 export const OTP_TTL_S = 600;             // 10 分钟（5.6）
@@ -28,7 +40,6 @@ export const LIMIT_GLOBAL_PER_DAY = 50;   // 全站每天 50 封（15.3 第 8 �
 export const LIMIT_VERIFY_IP_PER_HOUR = 30;   // verify：同一 IP 每小时 30 次（K2 安全审查 P1；键 signup-verify:ip:<HMAC>，由架构登记进附录 A）
 const HOUR_S = 3600;
 const DAY_S = 86400;
-const MAX_BODY = 4096;
 /** 比较并交换的尝试次数：首次 + 最多重试 3 次（架构 0.38 第 19 条） */
 const CAS_ATTEMPTS = 4;
 /** 不可信来源（没经转发层、或 x-proxy-secret 不对）的请求共用一个 IP 桶：伪造的 x-client-ip 换不出新额度（TC-B1-64 ⑤、TC-B0-91） */
@@ -41,153 +52,6 @@ export const TURNSTILE_HOSTS: Readonly<Record<Env, readonly string[]>> = {
   preview: ['preview.lemomemo.com'],
   local: ['localhost', '127.0.0.1'],
 };
-
-export type Locale = 'zh-CN' | 'ko-KR';
-/** 环境（index.ts 用 _shared/env-kind.ts 按 SUPABASE_URL 判断；拿不准一律正式） */
-export type Env = EnvKind;
-
-/** 回给客户端的错误码（前端 src/features/auth/data/auth-api.ts 的 INVITE_ERRORS 按 error 字段认） */
-export type InviteErr =
-  | 'bad_request'
-  | 'method_not_allowed'
-  | 'misconfigured'
-  | 'captcha_failed'
-  | 'rate_limited'
-  | 'code_wrong'
-  | 'code_expired'
-  | 'too_many_tries'
-  | 'invite_invalid'
-  | 'email_exists'
-  | 'link_failed'
-  | 'try_later';
-
-export interface InviteRow {
-  max_uses: number | null;
-  used_count: number | null;
-  expires_at: string | null;
-}
-
-export interface PendingRow {
-  otp_hash: string;
-  tries: number;
-  expires_at: string;
-}
-
-/** 数据库（index.ts 用 service role 的 supabase-js 实现，private 表经 schema('private')）。出错一律抛错 */
-export interface Store {
-  /** private.take_rate(key, limit, window_s)：true = 放行 */
-  takeRate(key: string, limit: number, windowS: number): Promise<boolean>;
-  /** 只读 max_uses、used_count、expires_at（不读 created_by、note） */
-  getInvite(codeHash: string): Promise<InviteRow | null>;
-  /**
-   * 比较并交换：update private.invites set used_count = to where code_hash = $1 and used_count = from
-   *   [and expires_at > notExpiredAt]，返回是否恰好改到 1 行。单条 UPDATE，并发时只有一个能从 from 改成功。
-   */
-  casInviteUsed(codeHash: string, from: number, to: number, notExpiredAt: string | null): Promise<boolean>;
-  /** upsert private.pending_signups（同一邮箱重新发码就覆盖：新验证码、tries 归 0） */
-  putPending(emailHash: string, row: PendingRow): Promise<void>;
-  getPending(emailHash: string): Promise<PendingRow | null>;
-  /**
-   * update … set tries = to where email_hash = $1 and tries = from and otp_hash = otpHash，返回是否改到 1 行。
-   * 带上 otp_hash：读完以后同一邮箱重新发了码（行被覆盖、tries 归 0），这次尝试不会记到新码头上（K2 安全审查低 4）
-   */
-  casPendingTries(emailHash: string, from: number, to: number, otpHash: string): Promise<boolean>;
-  /**
-   * delete … where email_hash = $1 [and otp_hash = otpHash]。
-   * 带 otpHash 时只删读到的那一版：读完以后用户重新点了 start 拿到新码，新码不会被误删（第三轮复审）
-   */
-  deletePending(emailHash: string, otpHash?: string): Promise<void>;
-  /** insert public.profiles (user_id, ui_locale) */
-  insertProfile(userId: string, locale: Locale): Promise<void>;
-  /** app_config.min_client_version；读不到返回 null（放行，和转发层同一口径） */
-  minClientVersion(): Promise<string | null>;
-}
-
-export type CreateUserResult = { ok: true; userId: string } | { ok: false; exists: boolean };
-
-/** GoTrue 管理接口（service role） */
-export interface AuthAdmin {
-  /** auth.admin.createUser({email, email_confirm: true, user_metadata: {locale}})——不传 password（账号不许有密码，0.36） */
-  createUser(email: string, locale: Locale): Promise<CreateUserResult>;
-  deleteUser(userId: string): Promise<void>;
-  /** auth.admin.generateLink({type: 'magiclink', email}) 的 properties.hashed_token；失败返回 null */
-  magiclinkTokenHash(email: string): Promise<string | null>;
-}
-
-/** siteverify 返回里用得到的三项 */
-export interface TurnstileResult {
-  success: boolean;
-  hostname: string | null;
-  action: string | null;
-}
-
-export interface Deps {
-  store: Store;
-  auth: AuthAdmin;
-  env: Env;
-  /** Cloudflare siteverify；网络出错抛错 */
-  verifyTurnstile(token: string, remoteIp: string | null): Promise<TurnstileResult>;
-  /** Resend 发验证码：true = 发出去了 */
-  sendMail(to: string, mail: { subject: string; text: string }): Promise<boolean>;
-  /** 邮箱、IP、验证码哈希的 HMAC 密钥 */
-  hashSecret: string | undefined;
-  /** 正式环境没配就拒绝（misconfigured）；预览、本机只记 proxy_secret_missing（K2 安全审查低 3） */
-  proxySecret: string | undefined;
-  /** TURNSTILE_SECRET、RESEND_API_KEY 有没有配（值不进 core） */
-  configured: boolean;
-  now: () => number;
-  /** 0～999999 的均匀随机整数（测试注入固定值） */
-  randomOtp?: () => number;
-  log?: (code: string) => void;
-}
-
-// ---------------- 小工具 ----------------
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  });
-}
-const err = (status: number, code: InviteErr) => json(status, { error: code });
-
-class Fail extends Error {
-  readonly status: number;
-  readonly code: InviteErr;
-  constructor(status: number, code: InviteErr) {
-    super(code);
-    this.status = status;
-    this.code = code;
-  }
-}
-
-/** 6 位数字，拒绝采样保证均匀 */
-export function secureOtp(): number {
-  const lim = Math.floor(0x1_0000_0000 / 1_000_000) * 1_000_000;
-  const a = new Uint32Array(1);
-  for (;;) {
-    crypto.getRandomValues(a);
-    const v = a[0] ?? 0;
-    if (v < lim) return v % 1_000_000;
-  }
-}
-
-/** UTC 日期 yyyymmdd（signup:global 键的第三段） */
-export function utcDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-/** 计数键（附录 A counters 键表；都得过 counters 的 check 约束，单测核对） */
-export const keys = {
-  ip: (ipPart: string) => `signup-ip:ip:${ipPart}`,
-  verifyIp: (ipPart: string) => `signup-verify:ip:${ipPart}`,
-  mail: (eh: string) => `signup-mail:mail:${eh}`,
-  global: (ms: number) => `signup:global:${utcDate(ms)}`,
-};
-
-/** 验证码哈希：和邮箱、邀请码绑定（K2 安全审查低 2：换一个码就对不上，不能拿同一个验证码去占别的码） */
-export function otpHash(secret: string, eh: string, codeHash: string, otp: string): Promise<string> {
-  return hmacHex(secret, `otp:${eh}:${codeHash}:${otp}`);
-}
 
 /** IP 计数键的第三段：可信来源按 rateIp 规范化（IPv6 只取 /64、::ffff:a.b.c.d 当 IPv4）后取 HMAC；其余进共用桶 */
 async function ipPart(req: Request, deps: Deps, secret: string): Promise<{ part: string; trustedIp: string | null }> {
@@ -207,50 +71,6 @@ async function versionBlock(req: Request, store: Store): Promise<Response | null
   }
   const b = blockedMin(min, req.headers.get('x-app-version'));
   return b === null ? null : upgradeRequiredResponse(b);
-}
-
-// ---------------- 请求体 ----------------
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-interface StartBody { email: string; code: string; captchaToken: string; locale: Locale }
-interface VerifyBody { email: string; code: string; otp: string; locale: Locale }
-
-function str(v: unknown, max: number): string | null {
-  return typeof v === 'string' && v.length <= max ? v : null;
-}
-function locale(v: unknown): Locale {
-  return v === 'ko-KR' ? 'ko-KR' : 'zh-CN';
-}
-function email(v: unknown): string | null {
-  const s = str(v, 254);
-  if (s === null) return null;
-  const e = normalizeEmail(s);
-  return EMAIL.test(e) ? e : null;
-}
-
-async function readBody(req: Request): Promise<Record<string, unknown> | null> {
-  const text = await req.text().catch(() => null);
-  if (text === null || text.length > MAX_BODY) return null;
-  try {
-    const v: unknown = JSON.parse(text);
-    return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
-// ---------------- 邮件（不写邀请人；统一称“柠檬记的负责人”，R-83、R-105） ----------------
-export function signupMail(loc: Locale, otp: string): { subject: string; text: string } {
-  if (loc === 'ko-KR') {
-    return {
-      subject: `레모 가입 인증 코드 ${otp}`,
-      text: `레모 가입 인증 코드: ${otp}\n\n10분 안에 입력해 주세요. 본인이 요청하지 않았다면 이 메일을 무시하세요.`,
-    };
-  }
-  return {
-    subject: `柠檬记注册验证码 ${otp}`,
-    text: `你的柠檬记注册验证码：${otp}\n\n10 分钟内有效。如果不是你本人操作，请忽略这封邮件。`,
-  };
 }
 
 // ---------------- start ----------------

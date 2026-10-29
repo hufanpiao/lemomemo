@@ -8,11 +8,13 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ACCT, CF_TOKEN, ctx, DB_PW, git, has, PS, REF, root, runScript, SB_TOKEN, setup, teardown } from './publish-run-harness.ts';
+import { q } from './publish-run-fakes.ts';
 import { gitIn, guardRepoConfig } from './publish-run-gitguard.ts';
 
 const FULL = ['一致', REF, SB_TOKEN, DB_PW, CF_TOKEN, ACCT, 'lemomemo', '确认推送'];
 const CONTENT_OK = '被跟踪的文件逐个比过内容（不靠大小和修改时间），和检出的提交一致';
 const count = (s: string, sub: string) => s.split(sub).length - 1;
+const toFullWidth = (s: string) => s.replace(/[0-9]/gu, (d) => String.fromCharCode(0xff10 + Number(d)));
 const psText = () => readFileSync(join(root, 'tools', 'release', 'publish.ps1'), 'utf8');
 const body = (ps: string, name: string) => ps.slice(ps.indexOf(`function ${name}`), ps.indexOf('\n}', ps.indexOf(`function ${name}`)));
 
@@ -46,6 +48,25 @@ describe.skipIf(!PS)('publish.ps1 签名边界、第 5 步替换对象、第 6 �
         if (extra) rmSync(extra, { force: true });
         restore();
       }
+    }, 180_000);
+  }
+
+  // 第九批：tag 格式区分大小写、只认半角数字、末尾不许带换行。原写法这三种都放过，只靠后面的 git cat-file 兜底；现在第一关就停
+  const badTags: { name: string; ps: () => string; shown: () => string }[] = [
+    { name: '全角数字', ps: () => q('v' + toFullWidth(ctx.ver)), shown: () => 'v' + toFullWidth(ctx.ver) },
+    { name: '末尾带换行', ps: () => `(${q('v' + ctx.ver)} + [char]10)`, shown: () => `v${ctx.ver}\n` },
+    { name: '大写 V', ps: () => q('V' + ctx.ver), shown: () => 'V' + ctx.ver },
+  ];
+  for (const c of badTags) {
+    it(`第九批 tag ${c.name}：第 1 步第一关就停，没调任何工具`, async () => {
+      const r = await runScript('-CheckOnly -Ops', [], { tagPs: c.ps() });
+      expect(r.code, r.out).toBe(1);
+      expect(r.out.replace(/\r\n/gu, '\n')).toContain(`tag 要写成 vX.Y.Z（小写 v、半角数字），例如 v4.0.0，现在是「${c.shown()}」`);
+      expect(r.out).not.toContain('tag 格式：');
+      expect(r.out).not.toContain('不存在，或不是带说明的 tag');
+      expect(r.calls).toEqual([]);
+      expect(r.log.some((l) => /^(npm|node|download)\t/u.test(l))).toBe(false);
+      expect(r.envLeft).toBe('');
     }, 180_000);
   }
 
@@ -115,7 +136,7 @@ describe.skipIf(!PS)('publish.ps1 签名边界、第 5 步替换对象、第 6 �
 
   // R-269 复审：第 6 步中途改一个被跟踪的文件（假工具追加 tampered），部署服务器函数之前 / 部署 lemo-ops 之前逐个比内容停下
   const step6: { name: string; at: string; want: string; stopBefore: RegExp; ran: RegExp }[] = [
-    { name: '迁移演练时改：部署服务器函数之前', at: 'db push --linked --dry-run', want: '数据库迁移已推，服务器函数、lemo-ops、网页都还是旧版，没部署任何代码', stopBefore: /^supabase\tfunctions deploy/u, ran: /^supabase\tdb push --linked --yes/u },
+    { name: '迁移演练时改：部署服务器函数之前', at: 'db push --linked --dry-run', want: '数据库迁移已推，服务器函数、lemo-ops、网页都还是旧版，没部署任何代码。这种状态能用（迁移只增不改），查清原因后用同一个 tag 原样重跑', stopBefore: /^supabase\tfunctions deploy/u, ran: /^supabase\tdb push --linked --yes/u },
     { name: '部署服务器函数时改：部署 lemo-ops 之前', at: '--use-api', want: '数据库迁移已推、服务器函数已是新版，lemo-ops和网页还是旧版', stopBefore: /^wrangler\tdeploy --config \S+ --tag/u, ran: /^supabase\tfunctions deploy/u },
   ];
   for (const c of step6) {

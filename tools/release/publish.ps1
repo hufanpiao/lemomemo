@@ -265,7 +265,9 @@ function Invoke-Checks {
     Say "  本脚本的 SHA-256：$self"
     Say '  请和代码审查记录里“publish.ps1 冻结副本”的哈希核对（发布说明第二节），不一样就停下。'
 
-    if ($Tag -notmatch '^v(\d+)\.(\d+)\.(\d+)$') { Fail "tag 要写成 vX.Y.Z，例如 v4.0.0，现在是 $Tag" }
+    # 第九批（审查建议）：区分大小写、只认 ASCII 数字、\z 不放过末尾换行。原来的 -notmatch '^v(\d+)\.(\d+)\.(\d+)$' 会放过大写 V、
+    # 全角数字（.NET 的 \d 认所有 Unicode 数字）和末尾的换行（$ 能匹配在最后一个换行之前），只靠后面的 git cat-file 兜底
+    if ($Tag -cnotmatch '^v([0-9]+)\.([0-9]+)\.([0-9]+)\z') { Fail "tag 要写成 vX.Y.Z（小写 v、半角数字），例如 v4.0.0，现在是「$Tag」" }
     $ver = $Tag.Substring(1)
     if (-not (Test-Path -LiteralPath (Join-Path $RepoPath '.git'))) { Fail "$RepoPath 不是仓库根目录" }
     foreach ($exe in 'git', 'node', 'npm.cmd', 'python', 'tar.exe') {
@@ -298,7 +300,7 @@ function Invoke-Checks {
     if ($fileVer -ne $ver) { Fail "VERSION 是 $fileVer，tag 是 $Tag，对不上" }
     Ok "VERSION 一致：$ver"
 
-    $newer = (Invoke-Git @('tag', '-l', 'v*')) -split "`r?`n" | Where-Object { $_ -match '^v(\d+)\.(\d+)\.(\d+)$' } |
+    $newer = (Invoke-Git @('tag', '-l', 'v*')) -split "`r?`n" | Where-Object { $_ -cmatch '^v([0-9]+)\.([0-9]+)\.([0-9]+)\z' } |
         Where-Object { [version]$_.Substring(1) -gt [version]$ver }
     if ($newer) { Say "  ⚠ 已有更高版本的 tag：$($newer -join ', ')。发旧版本会让线上倒退，确定要发再继续。" }
 
@@ -1120,7 +1122,7 @@ function Invoke-Deploy($info) {
         New-Item -ItemType Directory -Path $shared | Out-Null
         Copy-Item -Path (Join-Path $RepoPath 'shared\*') -Destination $shared -Recurse
         # R-269 复审：部署服务器函数之前再逐个比一次内容（迁移和函数没有指纹核对）
-        Assert-ContentMatchesHead "$(if ($script:DoWeb) { '数据库迁移已推，' })服务器函数、lemo-ops、网页都还是旧版，没部署任何代码"
+        Assert-ContentMatchesHead "$(if ($script:DoWeb) { '数据库迁移已推，' })服务器函数、lemo-ops、网页都还是旧版，没部署任何代码。这种状态能用（迁移只增不改），查清原因后用同一个 tag 原样重跑"
         # 部署函数不连数据库，只给 Supabase 令牌
         Invoke-WithSecrets @('SUPABASE_ACCESS_TOKEN') { Run $script:SupabaseExe (@('functions', 'deploy') + $script:FunctionNames + @('--project-ref', $ref, '--use-api', '--yes')) }
         Ok "服务器函数部署完成（$Tag：$($script:FunctionNames -join '、')）"

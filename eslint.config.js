@@ -139,10 +139,16 @@ const layerPolicies = [
   { from: { element: { type: 'sw' } }, allow: { to: any('shared', 'sw') } },
   { from: { element: { type: 'preview' } }, allow: { to: any('shared', 'preview', 'styles') } },
   // 0.32（1.3b、任务单 FA-2）：platform/files.ts（照片和附件的 /files/v1/*）业务代码只经功能的 data 层用；
-  // 功能的 hooks、ui、根文件，kit、app 一律不准直接引（放在最后，覆盖上面对 platform 的放行）
+  // 功能的 hooks、ui、根文件，kit、app 一律不准直接引（放在最后，覆盖上面对 platform 的放行）；
+  // 从它拆出的地址核对 platform/files-url.ts（B1 W1 超行拆分）同样只给 data 层和 platform 自己用
   {
     from: any('feature-hooks', 'feature-ui', 'feature', 'kit', 'kit-hooks', 'app', 'auth-entry'),
-    disallow: { to: { element: { type: 'platform', fileInternalPath: 'files.ts' } } },
+    disallow: {
+      to: [
+        { element: { type: 'platform', fileInternalPath: 'files.ts' } },
+        { element: { type: 'platform', fileInternalPath: 'files-url.ts' } },
+      ],
+    },
   },
 ];
 
@@ -339,6 +345,7 @@ export default tseslint.config(
       'tests/arch-fixtures/**', // 违规样例：只在 tests/arch 里用虚拟路径过 ESLint
       'supabase/functions/_shared/gen/**',
       '.compat-base/**', // 旧版契约测试临时取出的基线用例（tests/compat/run-compat.ts）
+      '.e2e-sb/**', // e2e 真后端用的 supabase/ 拷贝（tools/e2e/real-backend.mjs up 生成，.gitignore 已排除）
     ],
   },
   { linterOptions: { reportUnusedDisableDirectives: 'error' } },
