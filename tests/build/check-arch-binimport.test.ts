@@ -630,11 +630,11 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
     }
   });
 
-  it('②取词耗时：200 万字单行的 node "a" 重复、未闭合引号、\\" 三种，check_binimport 各 2 秒内跑完（行尾按换行位置二分，find 限在行内）', () => {
+  it('②取词耗时：200 万字单行的 node "a" 重复、未闭合引号、\\" 三种，check_binimport 各 5 秒内跑完（行尾按换行位置二分，find 限在行内；本机约 1 秒、CI 约 2.1 秒，平方写法本机约 5.3 秒、CI 10 秒以上）', () => {
     const B = '\\';
     for (const unit of ['node "a" ', 'node "a ', `node ${B}"a `]) {
       const { seconds } = timed(repo({ 'build/a.sh': `${unit.repeat(Math.floor(2_000_000 / unit.length))}\n` }));
-      expect(seconds, unit).toBeLessThan(2);
+      expect(seconds, unit).toBeLessThan(5);
     }
   });
 
