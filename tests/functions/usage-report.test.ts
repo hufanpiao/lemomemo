@@ -1,7 +1,7 @@
 // usage-report 的单元测试（架构 6.1、0.29 续第 116、143 条）：TC-B1-94 ①、TC-B1-102 ⑤ 的 usage-report 部分。
 // 只测 core.ts（index.ts 只是把 supabase-js 接上），数据库由假对象代替。
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DB_TIMEOUT_MS, handle, safeEqual, type Deps, type UsageDb } from '../../supabase/functions/usage-report/core.ts';
+import { AUTH_MAIL_TIMEOUT_MS, DB_TIMEOUT_MS, handle, safeEqual, type Deps, type UsageDb } from '../../supabase/functions/usage-report/core.ts';
 
 const SECRET = 'test-ops-secret-xxxxxxxxxxxxxxxxxxxxxx';   // ≥ 32 字节
 const NOW = Date.parse('2026-10-29T12:00:00Z');
@@ -189,5 +189,95 @@ describe('TC-B1-102 ⑤：“冷静期中的账号”列出 purge_started_at', (
     expect(b.pending_deletions[0]).toEqual({ purge_after: iso(27 * H), purge_started_at: started, overdue_s: 27 * 3600, started_age_s: 26 * 3600 + 60 });
     expect(b.pending_deletions[1]).toMatchObject({ purge_started_at: null, started_age_s: null, overdue_s: -3 * 24 * 3600 });
     expect(JSON.stringify(b)).not.toContain('user_id');
+  });
+});
+
+describe('发信量 auth_mail（架构 0.38 第 12 条；审查必改 1、2）', () => {
+  const body = async (r: Response) => (await r.json()) as Record<string, unknown>;
+
+  it('没提供读取器（还没接）：返回体不带 auth_mail', async () => {
+    expect('auth_mail' in (await body(await handle(req({ part: 'heartbeat' }), deps())))).toBe(false);
+  });
+
+  it('提供了：带上 auth_1h；resend_24h 没给时写 null；多出的键不转发', async () => {
+    const one = fakeDb({ authMail: async () => ({ auth_1h: 21 }) });
+    expect((await body(await handle(req({ part: 'heartbeat' }), deps({ db: one }))))['auth_mail']).toEqual({ auth_1h: 21, resend_24h: null });
+    const two = fakeDb({ authMail: async () => ({ auth_1h: 3, resend_24h: 64, note: 'x' }) as never });
+    expect((await body(await handle(req({ part: 'heartbeat' }), deps({ db: two }))))['auth_mail']).toEqual({ auth_1h: 3, resend_24h: 64 });
+  });
+
+  it('读出错或数字不对：auth_mail 为 null、只记错误码，心跳照样回 200', async () => {
+    const log = vi.fn();
+    const err = fakeDb({
+      authMail: async () => {
+        throw new Error('permission denied for table audit_log_entries');
+      },
+    });
+    const r1 = await handle(req({ part: 'heartbeat' }), deps({ db: err, log }));
+    expect(r1.status).toBe(200);
+    const b1 = await body(r1);
+    expect(b1['auth_mail']).toBeNull();
+    expect(b1['heartbeats']).toHaveLength(1);
+    expect(log.mock.calls).toEqual([['auth_mail:error']]);
+    for (const bad of [{ auth_1h: -1 }, { auth_1h: 1, resend_24h: 1.5 }, { sent_1h: 1 }]) {
+      const db = fakeDb({ authMail: async () => bad as never });
+      expect((await body(await handle(req({ part: 'heartbeat' }), deps({ db, log }))))['auth_mail']).toBeNull();
+    }
+    expect(log).toHaveBeenLastCalledWith('auth_mail:bad_data');
+  });
+
+  it('发信量读得慢：单独超时，auth_mail 为 null、记 auth_mail:timeout，心跳照常回 200；读取被中止，计时器不留', async () => {
+    // 和上面 5 秒那条同一个做法：先真等读取器被调用（鉴权的 digest 走真线程池），计时器设上后再推假时钟
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const log = vi.fn();
+    let aborted = false;
+    let entered!: () => void;
+    const called = new Promise<void>((r) => (entered = r));
+    const db = fakeDb({
+      authMail: (signal) =>
+        new Promise((_, reject) => {
+          entered();
+          signal.addEventListener('abort', () => {
+            aborted = true;
+            reject(new DOMException('aborted', 'AbortError'));
+          });
+        }),
+    });
+    let settled = false;
+    const pending = handle(req({ part: 'heartbeat' }), deps({ db, log })).finally(() => (settled = true));
+    await called;
+    await vi.advanceTimersByTimeAsync(AUTH_MAIL_TIMEOUT_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const r = await pending;
+    expect(r.status).toBe(200);
+    const b = await body(r);
+    expect(b['auth_mail']).toBeNull();
+    expect(b['heartbeats']).toHaveLength(1);
+    expect(log.mock.calls).toEqual([['auth_mail:timeout']]);
+    expect(aborted).toBe(true);
+    expect(AUTH_MAIL_TIMEOUT_MS).toBeLessThan(DB_TIMEOUT_MS);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('整轮已回 503 后，发信量那边不再补记 auth_mail:error，计时器不留', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const log = vi.fn();
+    let failMail: (e: Error) => void = () => {};
+    const db = fakeDb({
+      heartbeats: async () => {
+        throw new Error('connection refused');
+      },
+      authMail: () =>
+        new Promise((_, reject) => {
+          failMail = reject;
+        }),
+    });
+    const r = await handle(req({ part: 'heartbeat' }), deps({ db, log }));
+    expect(r.status).toBe(503);
+    failMail(new Error('late'));
+    await vi.advanceTimersByTimeAsync(AUTH_MAIL_TIMEOUT_MS * 2);
+    expect(log.mock.calls).toEqual([['db_unreachable:error']]);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

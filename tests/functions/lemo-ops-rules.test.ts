@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyState, loadBudget, loadState, plan } from '../../workers/lemo-ops/src/alerts.ts';
 import { readConfig, type Env } from '../../workers/lemo-ops/src/index.ts';
-import { evaluateUsage, fmtAge } from '../../workers/lemo-ops/src/rules.ts';
+import { AUTH_MAIL_HOUR_LIMIT, evaluateAuthMail, evaluateUsage, fmtAge, parseHeartbeatReport } from '../../workers/lemo-ops/src/rules.ts';
 import { H, M, SECRET, T0, world } from './lemo-ops-harness.ts';
 
 describe('配置', () => {
@@ -183,5 +183,142 @@ describe('状态和小工具', () => {
     expect(fmtAge(59)).toBe('0 分');
     expect(fmtAge(26 * 3600 + 60)).toBe('26 小时 1 分');
     expect(fmtAge(3 * 24 * 3600)).toBe('3 天 0 小时');
+  });
+});
+
+describe('发信量（架构 0.38 第 12 条、15.6 第 4d 条 ①）', () => {
+  const subj = (w: ReturnType<typeof world>) => w.inbox.map((m) => m.subject);
+  /** 往后走一轮（15 分钟），心跳都设成刚写过 */
+  const step = async (w: ReturnType<typeof world>, n = 1) => {
+    for (let i = 0; i < n; i++) {
+      w.advance(15 * M);
+      w.freshAll();
+      await w.tick();
+    }
+  };
+  const HOUR = '【柠檬记监控】验证码邮件一小时内发得太多';
+  const DAY = '【柠檬记监控】Resend 当天额度用了超过 70%';
+  const UNREADABLE = '【柠檬记监控】发信量读不到';
+
+  it('阈值：验证码 1 小时超过 20 封才报（20 不报）；Resend 24 小时超过 100 封的 70% 才报（70 不报）；Resend 没接不查', () => {
+    const keys = (am: Parameters<typeof evaluateAuthMail>[0]) => evaluateAuthMail(am).active.map((i) => i.key);
+    expect(keys({ auth_1h: AUTH_MAIL_HOUR_LIMIT, resend_24h: 70 })).toEqual([]);
+    expect(keys({ auth_1h: 21, resend_24h: 70 })).toEqual(['mail:hour']);
+    expect(keys({ auth_1h: 0, resend_24h: 71 })).toEqual(['mail:day']);
+    expect(keys({ auth_1h: 30, resend_24h: 100 })).toEqual(['mail:hour', 'mail:day']);
+    expect(keys({ auth_1h: 30, resend_24h: null })).toEqual(['mail:hour']);
+    expect(evaluateAuthMail({ auth_1h: 0, resend_24h: null }).drop).toEqual(['mail:day']);
+    expect(keys(null)).toEqual(['mail:unreadable']);
+  });
+
+  it('没接（usage-report 不带 auth_mail）：不查、不告警', async () => {
+    const w = world();
+    w.freshAll();
+    await w.tick();
+    expect(w.inbox).toHaveLength(0);
+  });
+
+  it('验证码 30 封：正文写清是 Supabase Auth 的验证码、封数、上限和手册；数字变了不算新的一件事；连续 2 轮正常发“已恢复”', async () => {
+    const w = world();
+    w.freshAll();
+    w.setAuthMail({ auth_1h: 30 });
+    await w.tick();
+    expect(subj(w)).toEqual([HOUR]);
+    const text = w.inbox[0]?.text ?? '';
+    expect(text).toContain('过去 1 小时 Supabase Auth 发出验证码邮件 30 封，超过 20 封');
+    expect(text).toContain('每小时上限 30 封');
+    expect(text).toContain('15.6 第 4d 条');
+    w.setAuthMail({ auth_1h: 28 });
+    await step(w);
+    expect(w.inbox).toHaveLength(1);
+    w.setAuthMail({ auth_1h: 3 });
+    await step(w, 2);
+    expect(subj(w)).toEqual([HOUR, '【柠檬记监控】已恢复：验证码邮件一小时内发得太多']);
+  });
+
+  it('Resend 当天超过 70%：正文写的是 Resend 合计（不是验证码数）', async () => {
+    const w = world();
+    w.freshAll();
+    w.setAuthMail({ auth_1h: 5, resend_24h: 71 });
+    await w.tick();
+    expect(subj(w)).toEqual([DAY]);
+    expect(w.inbox[0]?.text).toContain('过去 24 小时经 Resend 发出邮件共 71 封');
+    expect(w.inbox[0]?.text).toContain('合计');
+  });
+
+  it('两件同时发生、之后同时恢复：各发一封告警、各发一封“已恢复”', async () => {
+    const w = world();
+    w.freshAll();
+    w.setAuthMail({ auth_1h: 25, resend_24h: 90 });
+    await w.tick();
+    expect(subj(w).sort()).toEqual([DAY, HOUR].sort());
+    w.setAuthMail({ auth_1h: 1, resend_24h: 10 });
+    await step(w, 2);
+    expect(subj(w).slice(2).sort()).toEqual(['【柠檬记监控】已恢复：Resend 当天额度用了超过 70%', '【柠檬记监控】已恢复：验证码邮件一小时内发得太多'].sort());
+    await step(w, 3);
+    expect(w.inbox).toHaveLength(4);
+  });
+
+  it('读不到：只报“读不到”，心跳照常检查；读不到期间不把已报的“发得太多”判成已恢复；读到后发“已恢复：读不到”', async () => {
+    const w = world();
+    w.freshAll();
+    w.setAuthMail({ auth_1h: 25 });
+    await w.tick();
+    expect(subj(w)).toEqual([HOUR]);
+    w.setAuthMail('error');
+    w.advance(15 * M);
+    w.freshAll();
+    w.setHeartbeat('push-dispatch', 6 * M);
+    await w.tick();
+    expect(subj(w).slice(1).sort()).toEqual(['【柠檬记监控】推送服务（push-dispatch）停了', UNREADABLE].sort());
+    await step(w, 2);
+    expect(subj(w).filter((s) => s.includes('验证码邮件一小时内'))).toEqual([HOUR]);   // 读不到的几轮不算恢复
+    w.setAuthMail({ auth_1h: 25 });
+    await step(w, 2);
+    expect(subj(w)).toContain('【柠檬记监控】已恢复：发信量读不到');
+    expect(subj(w)).not.toContain('【柠檬记监控】已恢复：验证码邮件一小时内发得太多');
+  });
+
+  it('监控连不上时不动发信量的状态（不报“已恢复”）', async () => {
+    const w = world();
+    w.freshAll();
+    w.setAuthMail({ auth_1h: 25 });
+    await w.tick();
+    w.setMode('network');
+    await step(w, 3);
+    expect(subj(w).filter((s) => s.includes('已恢复'))).toEqual([]);
+  });
+
+  it('没接以后（auth_mail 不再出现）：留下的状态悄悄删掉，不发“已恢复”；Resend 那项变成没接也一样', async () => {
+    const w = world();
+    w.freshAll();
+    w.setAuthMail({ auth_1h: 25, resend_24h: 80 });
+    await w.tick();
+    expect(w.inbox).toHaveLength(2);
+    w.setAuthMail({ auth_1h: 25, resend_24h: null });
+    await step(w, 3);
+    expect(w.inbox).toHaveLength(2);
+    w.setAuthMail(undefined);
+    await step(w, 3);
+    expect(w.inbox).toHaveLength(2);
+  });
+
+  it('auth_mail 形状不对只降级成 null（报“读不到”），不让整份返回体解析失败；多出的键忽略', async () => {
+    const base = { ok: true, heartbeats: [], pending_deletions: [], long_tx: 0 };
+    expect(parseHeartbeatReport(base)?.auth_mail).toBeUndefined();
+    expect(parseHeartbeatReport({ ...base, auth_mail: null })?.auth_mail).toBeNull();
+    expect(parseHeartbeatReport({ ...base, auth_mail: { auth_1h: 1 } })?.auth_mail).toEqual({ auth_1h: 1, resend_24h: null });
+    expect(parseHeartbeatReport({ ...base, auth_mail: { auth_1h: 1, resend_24h: 2, extra: 'x' }, extra_top: [1] })?.auth_mail).toEqual({ auth_1h: 1, resend_24h: 2 });
+    for (const bad of [{ auth_1h: '1' }, { auth_1h: -1 }, { auth_1h: 1.5 }, { auth_1h: 1, resend_24h: -2 }, { resend_24h: 2 }, { sent_1h: 1, sent_24h: 2 }, 5, []]) {
+      const r = parseHeartbeatReport({ ...base, auth_mail: bad });
+      expect(r).not.toBeNull();
+      expect(r?.auth_mail).toBeNull();
+    }
+    // 端到端：usage-report 那边坏形状已降级成 null，lemo-ops 只报“读不到”，不报“监控连不上服务器”
+    const w = world();
+    w.freshAll();
+    w.setAuthMail({ sent_1h: 1, sent_24h: 2 });
+    await w.tick();
+    expect(subj(w)).toEqual([UNREADABLE]);
   });
 });

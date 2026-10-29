@@ -58,6 +58,19 @@ export const PURGE_STUCK_S = 26 * HOUR;
 export const CLEANUP_SLOW_MS = 2 * MIN * 1000;
 const CLEANUP_RECENT_S = 30 * MIN;
 
+/**
+ * 发信量（架构 15.6 第 4d 条 ①、0.38 第 12 条），两项口径不同：
+ * - 过去 1 小时 **Supabase Auth 发出的验证码邮件**（auth_1h，来自 auth.audit_log_entries）**超过 20 封**
+ *   （全项目 Auth 每小时上限 30 封）；
+ * - **Resend 当天用量**（resend_24h：经 Resend 发出的所有邮件合计，含验证码、注册、注销通知、本监控的告警）
+ *   **超过 70%**（免费版每天 100 封）。“当天”按过去 24 小时算（不管 Resend 按哪个时区换日都不会少算）。
+ *   这一项要有读权限的 Resend 密钥，暂不接：resend_24h 为 null 时不查。
+ */
+export const AUTH_MAIL_HOUR_LIMIT = 20;
+export const RESEND_DAILY_QUOTA = 100;
+export const RESEND_DAILY_WARN_PCT = 70;
+const MAIL_MANUAL = '处理办法见上线与回滚手册“验证码发信额度被耗尽”（架构 15.6 第 4d 条 ③）。';
+
 // ---------- usage-report {part: heartbeat} 的返回 ----------
 
 export interface HeartbeatItem {
@@ -75,11 +88,21 @@ export interface PendingDeletionItem {
   started_age_s: number | null;
 }
 
+/** 口径和来源见上面 AUTH_MAIL_HOUR_LIMIT 的注释 */
+export interface AuthMailReport {
+  /** 过去 1 小时 Supabase Auth（GoTrue）发出的验证码邮件数 */
+  auth_1h: number;
+  /** 过去 24 小时经 Resend 发出的所有邮件合计；null = 没接 */
+  resend_24h: number | null;
+}
+
 export interface HeartbeatReport {
   ok: true;
   heartbeats: HeartbeatItem[];
   pending_deletions: PendingDeletionItem[];
   long_tx: number;
+  /** 验证码邮件数（0.38 第 12 条）：没有这个键 = 数据来源还没接，不查；null = 这一轮读不到 */
+  auth_mail?: AuthMailReport | null;
   /** 钩子出错告警（只在第三条路启用时由 usage-report 给出；0.29 续第 115 条）；同一小时最多一次 true，去重在服务器 */
   alert?: boolean;
 }
@@ -90,6 +113,10 @@ function isObj(v: unknown): v is Record<string, unknown> {
 
 function isNum(v: unknown): v is number {
   return typeof v === 'number' && Number.isFinite(v);
+}
+
+function isCount(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0;
 }
 
 /** 校验返回体的形状；对不上返回 null（按“返回体解析不了”算调不通，TC-B1-94 ⑤） */
@@ -117,7 +144,16 @@ export function parseHeartbeatReport(v: unknown): HeartbeatReport | null {
   if (alert !== undefined && typeof alert !== 'boolean') return null;
   const out: HeartbeatReport = { ok: true, heartbeats, pending_deletions: pending, long_tx: lt };
   if (alert !== undefined) out.alert = alert;
+  // 发信量形状不对只降级成 null（报“读不到”），不让整份返回体判为解析不了（审查建议 3）
+  if ('auth_mail' in v) out.auth_mail = parseAuthMail(v['auth_mail']);
   return out;
+}
+
+function parseAuthMail(am: unknown): AuthMailReport | null {
+  if (!isObj(am) || !isCount(am['auth_1h'])) return null;
+  const d = am['resend_24h'];
+  if (d === undefined || d === null) return { auth_1h: am['auth_1h'], resend_24h: null };
+  return isCount(d) ? { auth_1h: am['auth_1h'], resend_24h: d } : null;
 }
 
 /** 秒数写成“x 小时 y 分”这种给人看的样子 */
@@ -134,6 +170,50 @@ export const SCOPE_UNREACHABLE = 'unreachable';
 /** 15 分钟一轮的心跳检查查过的 key 前缀（调通时） */
 export const SCOPE_BAD_DATA = 'bad-data';
 export const HEARTBEAT_SCOPES = [SCOPE_UNREACHABLE, SCOPE_BAD_DATA, 'hb:', 'purge:', 'longtx', 'cleanup-slow', 'push-failed'];
+/** 发信量的三件事；usage-report 不带 auth_mail（没接）时整组悄悄删掉 */
+export const SCOPE_AUTH_MAIL = 'mail:';
+export const MAIL_UNREADABLE = 'mail:unreadable';
+export const MAIL_HOUR = 'mail:hour';
+export const MAIL_DAY = 'mail:day';
+
+/**
+ * 发信量（0.38 第 12 条）。标题不带数字（数字每轮变，带进标题会被当成“情况有变”反复发）。
+ * 范围：读不到的那一轮只查“读不到”这一件，mail:hour、mail:day 的状态原样留着（不能因为读不到就报“已恢复”）；
+ * resend_24h 没接（null）时 mail:day 不查、留下的状态悄悄删掉。
+ */
+export function evaluateAuthMail(am: AuthMailReport | null): Evaluation {
+  if (am === null) {
+    return {
+      active: [{ key: MAIL_UNREADABLE, title: '发信量读不到', lines: ['usage-report 这一轮没读到发信量，发信量告警暂时失效。', '心跳等其他检查不受影响；请看 usage-report 的函数日志（auth_mail:error、auth_mail:timeout 或 auth_mail:bad_data）。'] }],
+      scopes: [MAIL_UNREADABLE],
+    };
+  }
+  const active: Issue[] = [];
+  if (am.auth_1h > AUTH_MAIL_HOUR_LIMIT) {
+    active.push({
+      key: MAIL_HOUR,
+      title: '验证码邮件一小时内发得太多',
+      lines: [
+        `过去 1 小时 Supabase Auth 发出验证码邮件 ${am.auth_1h} 封，超过 ${AUTH_MAIL_HOUR_LIMIT} 封（全项目每小时上限 30 封，满了新登录收不到验证码）。`,
+        '可能有人在用某个邮箱反复刷验证码。',
+        MAIL_MANUAL,
+      ],
+    });
+  }
+  if (am.resend_24h === null) return { active, scopes: [MAIL_UNREADABLE, MAIL_HOUR], drop: [MAIL_DAY] };
+  if (am.resend_24h * 100 > RESEND_DAILY_QUOTA * RESEND_DAILY_WARN_PCT) {
+    active.push({
+      key: MAIL_DAY,
+      title: `Resend 当天额度用了超过 ${RESEND_DAILY_WARN_PCT}%`,
+      lines: [
+        `过去 24 小时经 Resend 发出邮件共 ${am.resend_24h} 封（验证码、注册、注销通知、本监控的告警合计），超过每天 ${RESEND_DAILY_QUOTA} 封的 ${RESEND_DAILY_WARN_PCT}%。`,
+        '用完后当天所有邮件（包括验证码和本监控的告警）都发不出去。',
+        MAIL_MANUAL,
+      ],
+    });
+  }
+  return { active, scopes: [MAIL_UNREADABLE, MAIL_HOUR, MAIL_DAY] };
+}
 
 /**
  * 心跳轮的判断（调通 usage-report 之后）。
@@ -202,7 +282,15 @@ export function evaluateHeartbeat(r: HeartbeatReport, required: readonly string[
     }
   }
 
-  return { active, scopes: HEARTBEAT_SCOPES, drop };
+  // 验证码发信量：usage-report 没带 auth_mail（数据来源还没接，或接了又撤掉）时不查，留下的状态悄悄删掉
+  if (r.auth_mail === undefined) {
+    drop.push(SCOPE_AUTH_MAIL);
+    return { active, scopes: HEARTBEAT_SCOPES, drop };
+  }
+  const mail = evaluateAuthMail(r.auth_mail);
+  active.push(...mail.active);
+  drop.push(...(mail.drop ?? []));
+  return { active, scopes: [...HEARTBEAT_SCOPES, ...mail.scopes], drop };
 }
 
 // ---------- 调不通（TC-B1-94 ①②⑤） ----------

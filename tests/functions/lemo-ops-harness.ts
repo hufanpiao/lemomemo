@@ -142,6 +142,15 @@ export function world() {
     setUsage(body: unknown) {
       usageBody = body;
     },
+    /** 发信量（0.38 第 12 条）：undefined = 没接（默认，和现在的 index.ts 一样）；'error' = 读出错；对象原样返回（可以故意给坏形状） */
+    setAuthMail(v: { auth_1h: number; resend_24h?: number | null } | Record<string, unknown> | 'error' | undefined) {
+      if (v === undefined) delete db.authMail;
+      else
+        db.authMail = async () => {
+          if (v === 'error') throw new Error('audit log down');
+          return v as { auth_1h: number };   // 坏形状也原样给出去，测 usage-report 的降级
+        };
+    },
     logs,
     setKvBroken(v: boolean) {
       kvBroken = v;

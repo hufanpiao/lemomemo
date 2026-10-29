@@ -16,12 +16,33 @@ export interface PendingDeletionRow {
   purge_started_at: string | null;
 }
 
-/** 三个读取都必须尊重 signal（超时后中止） */
+/** 发信量的读取单独计时（比整轮的 DB_TIMEOUT_MS 短）：到点 auth_mail 给 null，心跳那几项照常回 200 */
+export const AUTH_MAIL_TIMEOUT_MS = 2_000;
+
+/**
+ * 发信量（架构 15.6 第 4d 条 ①、0.38 第 12 条），两个数口径和来源不同：
+ * - `auth_1h`：过去 1 小时 **Supabase Auth（GoTrue）发出的验证码邮件**数。来源定为 `auth.audit_log_entries`
+ *   （经一个只给 service_role 的 private 定义者函数读，S1 合并后再接）；
+ * - `resend_24h`：过去 24 小时 **经 Resend 发出的所有邮件合计**（验证码、invite-signup、注销通知、lemo-ops 告警都算），
+ *   对照 Resend 每天 100 封的额度。要一把有读权限的 Resend 密钥，**暂不接**：缺省或 null 表示没接。
+ */
+export interface AuthMailCounts {
+  auth_1h: number;
+  resend_24h?: number | null;
+}
+
+/** 各读取都必须尊重 signal（超时后中止） */
 export interface UsageDb {
   heartbeats(signal: AbortSignal): Promise<HeartbeatRow[]>;
   pendingDeletions(signal: AbortSignal): Promise<PendingDeletionRow[]>;
   /** private.long_transactions() 的行数（超过 4 分钟的事务，0.29 续第 141 条） */
   longTxCount(signal: AbortSignal): Promise<number>;
+  /**
+   * 发信量（0.38 第 12 条，口径见 AuthMailCounts）。**还没接**：index.ts 暂不提供这一项，返回体里就没有 `auth_mail`，
+   * lemo-ops 不查这一件。接上以后：单独计时 AUTH_MAIL_TIMEOUT_MS；出错、超时、数字不对只让 `auth_mail` 为 null
+   * （日志记 auth_mail:error / auth_mail:timeout / auth_mail:bad_data），不连累心跳那几项。
+   */
+  authMail?(signal: AbortSignal): Promise<AuthMailCounts>;
 }
 
 export interface Deps {
@@ -30,6 +51,8 @@ export interface Deps {
   db: UsageDb | null;
   now: () => number;
   timeoutMs?: number;
+  /** 发信量读取的单独超时（测试用；默认 AUTH_MAIL_TIMEOUT_MS） */
+  authMailTimeoutMs?: number;
   log?: (code: string) => void;
 }
 
@@ -66,6 +89,73 @@ export async function safeEqual(a: string, b: string): Promise<boolean> {
 }
 
 class DbTimeout extends Error {}
+
+function isCount(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0;
+}
+
+/** 返回体里的 auth_mail：resend_24h 没接时固定写 null */
+interface AuthMailOut {
+  auth_1h: number;
+  resend_24h: number | null;
+}
+
+function pickAuthMail(r: unknown): AuthMailOut | null {
+  if (typeof r !== 'object' || r === null || Array.isArray(r)) return null;
+  const { auth_1h: h, resend_24h: d } = r as Record<string, unknown>;
+  if (!isCount(h)) return null;
+  if (d === undefined || d === null) return { auth_1h: h, resend_24h: null };
+  return isCount(d) ? { auth_1h: h, resend_24h: d } : null;
+}
+
+const TIMED_OUT = Symbol('timeout');
+
+/**
+ * 开始读发信量，单独计时：done 一定 resolve（出错、超时、数字不对都给 null，只记错误码）。
+ * stop()：整轮已经失败（503 / 500）时调用，中止读取、清掉计时器，之后不再记任何日志。
+ */
+function startAuthMail(read: (signal: AbortSignal) => Promise<AuthMailCounts>, ms: number, log?: (code: string) => void) {
+  const ctl = new AbortController();
+  let quiet = false;
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const say = (code: string) => {
+    if (!quiet) log?.(code);
+  };
+  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => {
+      // 先记“超时”再中止：读取方收到 abort 立刻拒绝时，记的仍是 timeout、不是 error
+      timedOut = true;
+      resolve(TIMED_OUT);
+      ctl.abort();
+    }, ms);
+  });
+  const done = (async (): Promise<AuthMailOut | null> => {
+    try {
+      const r: unknown = await Promise.race([read(ctl.signal), timeout]);
+      if (r === TIMED_OUT) {
+        say('auth_mail:timeout');
+        return null;
+      }
+      const out = pickAuthMail(r);
+      if (out === null) say('auth_mail:bad_data');
+      return out;
+    } catch {
+      say(timedOut ? 'auth_mail:timeout' : 'auth_mail:error');
+      return null;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  })();
+  return {
+    done,
+    stop() {
+      quiet = true;
+      if (timer !== undefined) clearTimeout(timer);
+      ctl.abort();
+    },
+  };
+}
 /** 数据库里的时间戳解析不了：是数据问题、不是连不上数据库，单独给错误码 */
 class BadData extends Error {}
 
@@ -95,11 +185,17 @@ async function heartbeatPart(deps: Deps & { db: UsageDb }): Promise<Response> {
       reject(new DbTimeout());
     }, ms);
   });
+  const db = deps.db;
+  const authMail = db.authMail;
+  // 发信量不进整轮的 5 秒 race：单独计时，慢了、坏了只让 auth_mail 为 null（审查必改 1）
+  const mail = authMail ? startAuthMail((s) => authMail.call(db, s), deps.authMailTimeoutMs ?? AUTH_MAIL_TIMEOUT_MS, deps.log) : null;
   try {
     const [hb, pd, lt] = await Promise.race([
-      Promise.all([deps.db.heartbeats(ctl.signal), deps.db.pendingDeletions(ctl.signal), deps.db.longTxCount(ctl.signal)]),
+      Promise.all([db.heartbeats(ctl.signal), db.pendingDeletions(ctl.signal), db.longTxCount(ctl.signal)]),
       limit,
     ]);
+    if (timer !== undefined) clearTimeout(timer);
+    const am = mail ? await mail.done : undefined;
     const now = deps.now();
     return json(200, {
       ok: true,
@@ -112,8 +208,11 @@ async function heartbeatPart(deps: Deps & { db: UsageDb }): Promise<Response> {
         started_age_s: p.purge_started_at === null ? null : ageS(now, p.purge_started_at),
       })),
       long_tx: lt,
+      // 没接数据源时不出这个键（lemo-ops 据此不查、也不报“已恢复”）；接了但这一轮读不到是 null
+      ...(am === undefined ? {} : { auth_mail: am }),
     });
   } catch (e) {
+    mail?.stop();   // 整轮已失败：不再补记 auth_mail 的日志
     if (e instanceof BadData) {
       deps.log?.('bad_data:timestamp');
       return json(500, { error: 'bad_data' });

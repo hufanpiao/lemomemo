@@ -73,7 +73,7 @@ function hourOf(ms: number): string {
   return `${d.slice(0, 4)}${d.slice(5, 7)}${d.slice(8, 10)}T${d.slice(11, 13)}`;
 }
 
-/** 每 15 分钟：心跳、冷静期删除、长事务、清理慢批、推送失败比例、钩子出错，以及“监控连不上服务器” */
+/** 每 15 分钟：心跳、冷静期删除、长事务、清理慢批、推送失败比例、钩子出错、验证码发信量（usage-report 带了才查），以及“监控连不上服务器” */
 export async function runHeartbeat(env: Env, fetchFn: FetchFn, now: number, log: LogFn = consoleLog): Promise<RunResult> {
   const cfg = readConfig(env);
   const send = (m: Mail) => sendMail(fetchFn, cfg, m.subject, m.text);

@@ -1,6 +1,8 @@
 // usage-report 入口（架构第 6 节函数表、6.1）：给独立 Worker lemo-ops 调，鉴权是 x-ops-secret。
 // 经 supabase-js（service role）读 private.heartbeat、private.pending_deletions 和 rpc long_transactions（0.29 续第 52 条：经 schema('private')）；
 // 不直连数据库（不 import _shared/db.ts），不碰 R2。逻辑和测试见 core.ts、tests/functions/usage-report.test.ts。
+// 发信量（0.38 第 12 条，core.ts 的 authMail）暂不提供，返回体不带 auth_mail：auth_1h 定为读 auth.audit_log_entries
+// （要新的 private 函数和授权，S1 合并后接）；resend_24h 要有读权限的 Resend 密钥，以后再定。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { handle, type UsageDb } from './core.ts';
 
