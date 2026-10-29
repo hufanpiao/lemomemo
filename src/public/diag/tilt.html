@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <!-- 倾斜授权试验页（R-153，架构 0.27 第 5 点；iPhone 实机验收清单 P1-05）：
+         只测“动作与方向”授权以后，从后台彻底划掉再打开，授权还在不在。
+         只显示授权结果和倾角读数，读数只放内存：不写本机存储、不发任何请求、不读任何用户数据。
+         /app/* 的 CSP 是 script-src 'self'、style-src 'self'，所以脚本和样式都是单独文件，页面里不写内联脚本、内联样式。
+         不挂 manifest、不注册 SW：添加到主屏幕后是一个单独的主屏幕网页，打开的就是这一页。 -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="倾斜试验" />
+    <title>倾斜授权试验</title>
+    <link rel="stylesheet" href="./tilt.css" />
+    <script type="module" src="./tilt.js"></script>
+  </head>
+  <body>
+    <main id="tilt-diag">
+      <h1>倾斜授权试验</h1>
+      <p class="note">给 iPhone 实机验收清单 P1-05 用。读数只在这一页里显示，不保存、不上传。</p>
+
+      <h2>① 打开后自动检测（不点按钮）</h2>
+      <p id="auto" class="result" aria-live="polite">检测中…（2 秒内请不要点按钮）</p>
+      <p id="late" class="note" aria-live="polite" hidden></p>
+      <dl id="env"></dl>
+
+      <h2>② 点按钮请求授权</h2>
+      <button id="ask" type="button">请求“动作与方向”授权</button>
+      <dl id="perm"></dl>
+      <p class="note">点完请记下：这一次系统有没有弹出授权框。</p>
+
+      <h2>③ 实时读数</h2>
+      <div id="glass" class="glass" aria-hidden="true"><span class="sheen"></span></div>
+      <dl id="live"></dl>
+    </main>
+  </body>
+</html>

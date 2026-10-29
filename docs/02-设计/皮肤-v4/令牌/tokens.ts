@@ -182,7 +182,18 @@ export const tokens: Record<Theme, Record<string, string>> = {
     "--g-fg-on": "#141518",
     "--g-pill": "rgba(20,21,24,.09)",
     "--g-fab-tint": "rgba(242,223,74,.72)",
-    "--g-drop-tint": "rgba(255,255,255,.18)"
+    "--g-drop-tint": "rgba(255,255,255,.18)",
+    "--g-rim": "1",
+    "--rim-shade": "rgba(20,21,24,.10)",
+    "--g-copy-fx": "blur(2px) saturate(1.8) brightness(1.04)",
+    "--g-drop-fx": "blur(3px) saturate(1.5) brightness(1.06)",
+    "--g-ad-tint": "rgba(30,31,36,.44)",
+    "--g-ad-hi": "rgba(255,255,255,.45)",
+    "--g-ad-hi2": "rgba(255,255,255,.18)",
+    "--g-ad-glow": ".10",
+    "--g-ad-sheen": ".14",
+    "--g-ad-fg": "#F2F3F5",
+    "--g-ad-pill": "rgba(255,255,255,.14)"
   },
   "simple-dark": {
     "--bg": "#111215",
@@ -364,7 +375,18 @@ export const tokens: Record<Theme, Record<string, string>> = {
     "--g-fg-on": "#FFFFFF",
     "--g-pill": "rgba(255,255,255,.14)",
     "--g-fab-tint": "rgba(242,223,74,.86)",
-    "--g-drop-tint": "rgba(255,255,255,.18)"
+    "--g-drop-tint": "rgba(255,255,255,.18)",
+    "--g-rim": "1",
+    "--rim-shade": "rgba(20,21,24,.10)",
+    "--g-copy-fx": "blur(2px) saturate(1.8) brightness(1.04)",
+    "--g-drop-fx": "blur(3px) saturate(1.5) brightness(1.06)",
+    "--g-ad-tint": "rgba(30,31,36,.44)",
+    "--g-ad-hi": "rgba(255,255,255,.45)",
+    "--g-ad-hi2": "rgba(255,255,255,.18)",
+    "--g-ad-glow": ".10",
+    "--g-ad-sheen": ".14",
+    "--g-ad-fg": "#F2F3F5",
+    "--g-ad-pill": "rgba(255,255,255,.14)"
   },
   "glass-light": {
     "--bg": "#EFEEE8",
@@ -546,7 +568,18 @@ export const tokens: Record<Theme, Record<string, string>> = {
     "--g-fg-on": "#141518",
     "--g-pill": "rgba(20,21,24,.09)",
     "--g-fab-tint": "rgba(242,223,74,.72)",
-    "--g-drop-tint": "rgba(255,255,255,.18)"
+    "--g-drop-tint": "rgba(255,255,255,.18)",
+    "--g-rim": "1",
+    "--rim-shade": "rgba(20,21,24,.10)",
+    "--g-copy-fx": "blur(2px) saturate(1.8) brightness(1.04)",
+    "--g-drop-fx": "blur(3px) saturate(1.5) brightness(1.06)",
+    "--g-ad-tint": "rgba(30,31,36,.44)",
+    "--g-ad-hi": "rgba(255,255,255,.45)",
+    "--g-ad-hi2": "rgba(255,255,255,.18)",
+    "--g-ad-glow": ".10",
+    "--g-ad-sheen": ".14",
+    "--g-ad-fg": "#F2F3F5",
+    "--g-ad-pill": "rgba(255,255,255,.14)"
   },
   "glass-dark": {
     "--bg": "#121419",
@@ -728,6 +761,17 @@ export const tokens: Record<Theme, Record<string, string>> = {
     "--g-fg-on": "#FFFFFF",
     "--g-pill": "rgba(255,255,255,.14)",
     "--g-fab-tint": "rgba(242,223,74,.86)",
-    "--g-drop-tint": "rgba(255,255,255,.18)"
+    "--g-drop-tint": "rgba(255,255,255,.18)",
+    "--g-rim": "1",
+    "--rim-shade": "rgba(20,21,24,.10)",
+    "--g-copy-fx": "blur(2px) saturate(1.8) brightness(1.04)",
+    "--g-drop-fx": "blur(3px) saturate(1.5) brightness(1.06)",
+    "--g-ad-tint": "rgba(30,31,36,.44)",
+    "--g-ad-hi": "rgba(255,255,255,.45)",
+    "--g-ad-hi2": "rgba(255,255,255,.18)",
+    "--g-ad-glow": ".10",
+    "--g-ad-sheen": ".14",
+    "--g-ad-fg": "#F2F3F5",
+    "--g-ad-pill": "rgba(255,255,255,.14)"
   }
 };

@@ -21,6 +21,9 @@ const SAMPLES = [
   'diag/startup.html',
   'diag/startup.js',
   'diag/startup.css',
+  'diag/tilt.html',
+  'diag/tilt.js',
+  'diag/tilt.css',
   'icons/icon-192.png',
   '.vite/manifest.json',
 ];
@@ -45,10 +48,10 @@ describe('inject_sw_manifest', () => {
     expect(m.find((e) => e.url === '/app/index.html')?.revision).toMatch(/^[0-9a-f]{8,}$/);
   });
 
-  it('机型信息页 diag/ 和 iOS 启动图 icons/startup/ 不进预缓存清单（架构 8.1、0.38 第 63 条）', () => {
+  it('机型信息页、倾斜授权试验页（diag/）和 iOS 启动图 icons/startup/ 不进预缓存清单（架构 8.1、0.38 第 63 条）', () => {
     const d = mkdtempSync(join(tmpdir(), 'lemo-sw-'));
     try {
-      for (const p of ['index.html', 'icons/icon-192.png', 'icons/startup/startup-1170x2532.png', 'diag/startup.html', 'diag/startup.js', 'diag/startup.css']) {
+      for (const p of ['index.html', 'icons/icon-192.png', 'icons/startup/startup-1170x2532.png', 'diag/startup.html', 'diag/startup.js', 'diag/startup.css', 'diag/tilt.html', 'diag/tilt.js', 'diag/tilt.css']) {
         mkdirSync(join(d, p, '..'), { recursive: true });
         writeFileSync(join(d, p), p);
       }
@@ -57,6 +60,13 @@ describe('inject_sw_manifest', () => {
     } finally {
       rmSync(d, { recursive: true, force: true });
     }
+  });
+
+  it('sw.ts 导航路由的 denylist 用的就是 routes.ts 的 NAV_DENYLIST（含 diag/，不在 sw.ts 里另写一份）', () => {
+    const sw = readFileSync(join(import.meta.dirname, '..', '..', 'src', 'sw', 'sw.ts'), 'utf8');
+    expect(sw).toMatch(/import \{[^}]*\bNAV_DENYLIST\b[^}]*\} from '\.\/routes\.ts'/);
+    expect(sw).toMatch(/denylist:\s*\[\.\.\.NAV_DENYLIST\]/);
+    expect(sw).not.toMatch(/denylist:\s*\[\s*\//);
   });
 
   it('injectSwManifest：sw.js 里找不到 self.__WB_MANIFEST（或不止一处）就失败，不悄悄产出没有预缓存的 sw.js（0.31 第 5 条）', async () => {

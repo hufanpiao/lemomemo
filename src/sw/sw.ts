@@ -5,7 +5,7 @@
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { CacheFirst, NetworkFirst } from 'workbox-strategies';
-import { routeOf } from './routes.ts';
+import { NAV_DENYLIST, routeOf } from './routes.ts';
 
 declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: string; revision: string | null }> };
 
@@ -39,8 +39,8 @@ registerRoute(
         return shell(opts);
       }
     },
-    // 预览沙箱不走 App 外壳；Pages 会把 preview.html 308 到 /app/preview，两种写法都排除
-    { allowlist: [/^\/app\//], denylist: [/^\/app\/preview(\.html)?$/] },
+    // 预览沙箱、diag/ 技术页不走 App 外壳（diag/ 在第一个 fetch 监听器就已放过，这里再排除一层）；名单在 routes.ts
+    { allowlist: [/^\/app\//], denylist: [...NAV_DENYLIST] },
   ),
 );
 

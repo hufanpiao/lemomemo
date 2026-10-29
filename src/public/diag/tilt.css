@@ -1,0 +1,80 @@
+/* 倾斜授权试验页（R-153，P1-05）的样式；CSP 不许内联样式，单独放这里。
+   不是 App 页面、不跟皮肤：颜色只用系统色（Canvas、CanvasText、GrayText、Mark），深浅跟系统走（A11 不写死颜色）。
+   高光位置 --sx、--sy 由 tilt.js 按倾角写在 #glass 自己身上（只改这一块，不写根元素） */
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+  background: Canvas;
+  color: CanvasText;
+  font:
+    15px/1.5 -apple-system,
+    'PingFang SC',
+    system-ui,
+    sans-serif;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0 0 4px;
+}
+
+h2 {
+  font-size: 16px;
+  margin: 20px 0 6px;
+}
+
+.note,
+dt {
+  color: GrayText;
+}
+
+.note {
+  font-size: 13px;
+}
+
+.result {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 8px 0 0;
+}
+
+dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid CanvasText;
+  background: Canvas;
+  color: CanvasText;
+}
+
+.glass {
+  position: relative;
+  height: 62px;
+  border-radius: 999px;
+  border: 1px solid GrayText;
+  overflow: hidden;
+}
+
+.sheen {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 140% at var(--sx, 22%) var(--sy, -30%), Mark 0 38%, transparent 70%);
+}

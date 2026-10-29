@@ -91,3 +91,36 @@ describe.each(['production', 'preview', 'e2e'] as const)('T5 / TC-B0-59：分路
     expect(directive(auth, 'connect-src')).toBe(directive(main, 'connect-src'));
   });
 });
+
+// TC-B1-54（R-153；架构 0.27 第 5 点、8.1；S-B0b）：倾斜授权试验页 /app/diag/tilt.html 拿到的 Permissions-Policy。
+// 注意：accelerometer、gyroscope 是 /app/* 那一条按架构 8.1 整段放开的（B2 底栏倾斜高光要用），试验页没有单独的规则；
+// 这里断言：试验页（含 Pages 去掉 .html 后的地址和它的脚本）只有一条 Permissions-Policy、两项是 (self)、其余设备能力关着；
+// /app/ 以外（官网 /zh/*、/ko/*）照旧全部关闭。
+describe.each(['production', 'preview', 'e2e'] as const)('TC-B1-54：倾斜授权试验页的 Permissions-Policy（%s）', (mode) => {
+  const text = renderHeaders(app, site, mode);
+  const items = (pp: string) => pp.split(',').map((s) => s.trim()).filter(Boolean);
+
+  it.each(['/app/diag/tilt.html', '/app/diag/tilt', '/app/diag/tilt.js', '/app/diag/tilt.css'])('%s：accelerometer、gyroscope 为 (self)，其余关闭', (path) => {
+    const h = effective(text, path);
+    const pp = h.get('permissions-policy') ?? [];
+    expect(pp, '同一地址只能有一条 Permissions-Policy（多条时 Cloudflare 用逗号拼，结果不可控）').toHaveLength(1);
+    const got = items(pp[0] ?? '');
+    for (const want of ['accelerometer=(self)', 'gyroscope=(self)', 'magnetometer=()', 'payment=()', 'usb=()', 'camera=()', 'geolocation=()']) {
+      expect(got, want).toContain(want);
+    }
+    // 只放给本源（self），不放给任何第三方或 *
+    expect(pp[0]).not.toMatch(/\*|https?:/);
+    // CSP 照 /app/* 那一条：脚本、样式只许同源文件
+    const csp = h.get('content-security-policy') ?? [];
+    expect(csp).toHaveLength(1);
+    expect(directive(csp[0] ?? '', 'script-src')).toBe("script-src 'self'");
+    expect(directive(csp[0] ?? '', 'style-src')).toBe("style-src 'self'");
+    expect(h.get('x-content-type-options')).toEqual(['nosniff']);
+  });
+
+  it.each(['/zh/', '/ko/'])('%s（官网）：accelerometer、gyroscope 仍然关闭', (path) => {
+    const pp = effective(text, path).get('permissions-policy') ?? [];
+    expect(pp).toHaveLength(1);
+    expect(items(pp[0] ?? '')).toEqual(expect.arrayContaining(['accelerometer=()', 'gyroscope=()']));
+  });
+});

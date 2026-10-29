@@ -26,6 +26,12 @@ OUT_TS = DIR / "令牌/tokens.ts"
 APP_STYLES = ROOT / "src/styles"
 # 和皮肤无关、进 src/styles/tokens.css 的令牌（按前缀；四套主题的值必须一样，否则报错）
 SKINLESS = ("--dur-", "--ease-", "--press-", "--r-", "--f-", "--fs-", "--hit")
+# 液态玻璃必须有的令牌（架构 0.27 第 5 点“令牌补齐”，TC-B1-56）：少了就报错。
+# --g-pill-solid（“减少透明效果”时液滴的实色）0.27 也要求补，但设计稿和架构都没给数值，等视觉设计定了再加进 tokens.json 和这里
+GLASS_REQUIRED = {
+    "--g-rim", "--rim-shade", "--g-copy-fx", "--g-drop-fx",
+    "--g-ad-tint", "--g-ad-hi", "--g-ad-hi2", "--g-ad-glow", "--g-ad-sheen", "--g-ad-fg", "--g-ad-pill",
+}
 LABEL = {"simple-light": "简洁·浅色", "simple-dark": "简洁·深色", "glass-light": "磨砂玻璃·浅色", "glass-dark": "磨砂玻璃·深色"}
 
 
@@ -156,8 +162,11 @@ def main():
         print("⚠ 用了却没定义：", n)
     for n in unused:
         print("· 定义了但视觉稿没用到（开发时确认是否删）：", n)
+    missing = sorted(GLASS_REQUIRED - {t["name"] for t in toks})
+    for n in missing:
+        print("⚠ 液态玻璃必须有的令牌缺了（架构 0.27 第 5 点）：", n)
     print(f"令牌 {len(toks)} 个；没定义 {len(undefined)}；没用到 {len(unused)}")
-    return 1 if (drift or undefined) else 0
+    return 1 if (drift or undefined or missing) else 0
 
 
 if __name__ == "__main__":

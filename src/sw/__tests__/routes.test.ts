@@ -1,6 +1,6 @@
 // SW 路由（架构 15.3 第 1 条、16.1；TC-B0-40）：/sb/*、/files/*（0.32）一律直连不缓存；作用域只有 /app/
 import { describe, expect, it } from 'vitest';
-import { APP_SCOPE, NETWORK_ONLY_PREFIXES, excludedFromPrecache, isNetworkOnly, routeOf } from '../routes.ts';
+import { APP_SCOPE, NAV_DENYLIST, NETWORK_ONLY_PREFIXES, excludedFromPrecache, isNetworkOnly, routeOf } from '../routes.ts';
 
 const ORIGIN = 'https://lemomemo.com';
 const r = (path: string, method = 'GET', mode = 'cors', origin = ORIGIN) => routeOf(new URL(path, origin), method, mode, ORIGIN);
@@ -50,9 +50,29 @@ describe('routeOf', () => {
   });
 });
 
+describe('diag/ 技术页（机型信息页、倾斜授权试验页）不归 SW 管', () => {
+  it('导航和子资源一律直连：第一个 fetch 监听器放过，不进 lemo-nav 也不进任何缓存', () => {
+    for (const p of ['/app/diag/tilt.html', '/app/diag/tilt', '/app/diag/startup.html', '/app/diag/startup']) {
+      expect(r(p, 'GET', 'navigate'), p).toBe('bypass');
+    }
+    for (const p of ['/app/diag/tilt.js', '/app/diag/tilt.css', '/app/diag/startup.js']) expect(r(p), p).toBe('bypass');
+    // 只按目录比：/app/diagx、首页带 ?diag=1（机型信息页读首页用）不受影响
+    expect(r('/app/diagx/a', 'GET', 'navigate')).toBe('navigation');
+    expect(r('/app/index.html?diag=1')).toBe('precache-or-network');
+  });
+
+  it('NavigationRoute 的 denylist：排除预览沙箱两种写法和 diag/，App 页面照常走外壳', () => {
+    const denied = (path: string) => NAV_DENYLIST.some((re) => re.test(path));
+    for (const p of ['/app/preview', '/app/preview.html', '/app/diag/tilt.html', '/app/diag/tilt', '/app/diag/startup.html']) {
+      expect(denied(p), p).toBe(true);
+    }
+    for (const p of ['/app/', '/app/index.html', '/app/auth/', '/app/previewx', '/app/diagx/a']) expect(denied(p), p).toBe(false);
+  });
+});
+
 describe('excludedFromPrecache', () => {
-  it('sw.js、节假日、字体、iOS 启动图、机型信息页、source map、version.json 不进预缓存', () => {
-    for (const p of ['sw.js', 'holidays/cn/2026.json', 'fonts/a.woff2', 'icons/startup/startup-1170x2532.png', 'diag/startup.html', 'diag/startup.js', 'diag/startup.css', 'assets/a.js.map', 'version.json', '.vite/manifest.json']) {
+  it('sw.js、节假日、字体、iOS 启动图、机型信息页和倾斜授权试验页（diag/）、source map、version.json 不进预缓存', () => {
+    for (const p of ['sw.js', 'holidays/cn/2026.json', 'fonts/a.woff2', 'icons/startup/startup-1170x2532.png', 'diag/startup.html', 'diag/startup.js', 'diag/startup.css', 'diag/tilt.html', 'diag/tilt.js', 'diag/tilt.css', 'assets/a.js.map', 'version.json', '.vite/manifest.json']) {
       expect(excludedFromPrecache(p), p).toBe(true);
     }
     for (const p of ['index.html', 'assets/index-abc.js', 'assets/index-abc.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png']) {

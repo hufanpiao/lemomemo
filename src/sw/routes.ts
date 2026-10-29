@@ -15,11 +15,21 @@ export function isNetworkOnly(pathname: string): boolean {
   return NETWORK_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+/**
+ * 技术页目录（机型信息页、倾斜授权试验页）：SW 一律放过，不走 App 外壳、不进 lemo-nav 等任何缓存。
+ * 装过 App SW 的 Safari 打开这些页时，不能把它们写进缓存（下次读到旧版，或离线时冒出旧页面）。
+ */
+export const DIAG_PREFIX = `${APP_SCOPE}diag/`;
+
+/** 不走 App 外壳的导航（sw.ts 的 NavigationRoute denylist）：预览沙箱（Pages 会把 preview.html 308 到 /app/preview，两种写法都排除）、diag/ */
+export const NAV_DENYLIST: readonly RegExp[] = [/^\/app\/preview(\.html)?$/, /^\/app\/diag\//];
+
 export type SwRoute = 'bypass' | 'navigation' | 'holidays' | 'fonts' | 'precache-or-network';
 
 /**
  * 一个请求归哪条路：
  * - /sb/*（数据接口转发）、/files/*（照片和附件，0.32）、别的源、非 GET：一律直连，SW 不碰、不缓存（15.3 第 1 条）
+ * - /app/diag/*（机型信息页、倾斜授权试验页）：同样直连，导航也不进 lemo-nav
  * - /app/ 下的页面导航：先联网、3 秒超时用缓存
  * - /app/holidays/*.json：先联网、失败用缓存（5.4）
  * - /fonts/*（R-128 选中的字体分片）：单独的运行时缓存（5.9c，B6 接）
@@ -29,6 +39,7 @@ export function routeOf(url: URL, method: string, mode: string, selfOrigin: stri
   if (url.origin !== selfOrigin) return 'bypass';
   if (isNetworkOnly(url.pathname)) return 'bypass';
   if (!url.pathname.startsWith(APP_SCOPE)) return 'bypass';
+  if (url.pathname.startsWith(DIAG_PREFIX)) return 'bypass';
   if (mode === 'navigate') return 'navigation';
   if (url.pathname.startsWith(`${APP_SCOPE}holidays/`)) return 'holidays';
   if (url.pathname.startsWith(`${APP_SCOPE}fonts/`)) return 'fonts';
