@@ -107,6 +107,12 @@ jobs:
           docker load -i "$TAR"
           rm -f "$TAR"
 
+      - name: 复制 shared 给服务器函数（架构 2.5）
+        # 和 deploy-preview.yml 同一写法。_shared/gen/ 不进仓库（.gitignore），必须在 supabase start 之前生成：
+        # config.toml 开了 edge_runtime，start 时 CLI 要读每个函数 import 到的文件（account/index.ts 引 _shared/gen/schema/account.ts），
+        # 没生成就报 failed to read file（ci 第 61 次运行）。后面 deno task check、依赖锁那两步也用这一份
+        run: npm run copy:shared
+
       - name: 启动本地 Supabase
         # studio 用不到，不起
         run: supabase start -x studio
@@ -237,12 +243,11 @@ jobs:
           if ! grep -qE '条件写回 exists.* \.\.\. ok' "$RUNNER_TEMP/deno-test.log"; then
             echo "::error::Deno 下 objstore 打真替身的那一组没跑或没通过"; exit 1
           fi
-          # 函数 import 的 _shared/gen/ 不进仓库（.gitignore），deno check 前先生成（_shared/objstore.ts 等引 _shared/gen/）
-          npm run copy:shared
+          # 函数 import 的 _shared/gen/ 不进仓库（.gitignore），已在“启动本地 Supabase”之前由 copy:shared 生成（_shared/objstore.ts 等引 _shared/gen/）
           deno task check
 
       - name: 服务器函数的依赖锁（supabase/functions 下 deno install --frozen，含 _shared/gen/ 在内的全部源码作入口）
-        # 架构 0.33 第 7 条、B0 安全审查低 10。必须在上一步 copy:shared 之后：gen/ 不进仓库，先生成才扫得到。
+        # 架构 0.33 第 7 条、B0 安全审查低 10。必须在 copy:shared 之后（本任务在启动本地 Supabase 之前那一步）：gen/ 不进仓库，先生成才扫得到。
         # 第一行核 deno.json 和 deno.lock；第二行把每个源码文件当入口解析整张依赖图：源码里有锁外的 npm 包、不带版本的 npm:、
         # jsr: / https: 远程模块（含模板字符串的动态 import），锁都要变，--frozen 就失败（B1 S8 代码审查实测）。
         # 变量拼出来的动态 import Deno 看不见：gen/ 由 copy_shared 拦，其余源码由 check_backend F7 和 tests/build/deno-config.test.ts 拦。

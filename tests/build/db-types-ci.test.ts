@@ -64,6 +64,28 @@ describe('K-dbtypes：CI 生成并比对 shared/db.types.ts', () => {
   });
 });
 
+// ci 第 61 次运行（36f359c）：config.toml 开了 edge_runtime，supabase start 要读函数 import 的 _shared/gen/ 文件，
+// gen/ 不进仓库，没先生成就报 failed to read file …/_shared/gen/schema/account.ts。生成要在 start、deno check、依赖锁之前
+describe('db 任务在 supabase start 之前生成 _shared/gen/', () => {
+  const runs = (s: string, cmd: RegExp): boolean => s.split('\n').some((l) => cmd.test(l.replace(/^\s+(- )?(run: )?/, '').replace(/\s+#.*$/, '')));
+  const npmCi = idx((s) => runs(s, /^npm ci\b/), 'npm ci');
+  const copy = idx((s) => runs(s, /^(npm run copy:shared|node build\/copy_shared\.mjs)$/), '生成 _shared/gen/（npm run copy:shared）');
+  const start = idx((s) => runs(s, /^supabase start\b/), '启动本地 Supabase');
+  const check = idx((s) => runs(s, /^deno task check$/), 'deno task check');
+  const lock = idx((s) => runs(s, /^deno install --frozen --no-check --entrypoint\b/), '服务器函数的依赖锁');
+
+  it('顺序：npm ci → copy:shared → supabase start → deno task check → 依赖锁', () => {
+    expect(npmCi).toBeLessThan(copy);
+    expect(copy).toBeLessThan(start);
+    expect(start).toBeLessThan(check);
+    expect(check).toBeLessThan(lock);
+  });
+
+  it('生成那一步单独成步、不带 continue-on-error 或 if（失败就让任务红）', () => {
+    expect(steps[copy]).not.toMatch(/^\s+(continue-on-error|if):/m);
+  });
+});
+
 // 镜像缓存只为提速（避开 ECR Public 限流），载入、存 tar 出错都不许让 db 任务变红；tar 几 GB，无论成败都要删
 describe('Supabase 镜像缓存不决定 db 任务成败', () => {
   const load = idx((s) => /docker load -i/.test(s), '载入缓存镜像 docker load');
