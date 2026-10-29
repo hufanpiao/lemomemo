@@ -440,13 +440,42 @@ BINIMPORT_SHELL_EXT = (".sh", ".bash", ".zsh", ".yml", ".yaml", ".mk")
 BINIMPORT_SHELL_NAMES = ("makefile", "gnumakefile", "dockerfile", "justfile", "procfile")
 BINIMPORT_CMD_EXT = (".py", ".ps1", ".psm1", ".cmd", ".bat")
 BINIMPORT_HTML_EXT = (".html", ".htm", ".xhtml", ".vue", ".svelte", ".astro")
-# python 带版本号（python3.11）、Windows 的 .exe（python.exe、node.exe）也认
-_BINIMPORT_CMDS = r"(?:node|nodejs|bun|deno|tsx|ts-node|python(?:[23](?:\.\d+)?)?|py|bash|sh|zsh|pwsh|powershell)(?:\.exe)?"
+# python 带版本号（python3.11）、Windows 的 .exe（python.exe、node.exe）也认；PowerShell 的命令名和 .exe 不分大小写（PWSH、PowerShell.EXE）
+_BINIMPORT_CMDS = r"(?:node|nodejs|bun|deno|tsx|ts-node|python(?:[23](?:\.\d+)?)?|py|bash|sh|zsh|dash|(?i:pwsh|powershell))(?i:\.exe)?"
 # 命令词前面不能是字母数字、点、横杠、@（setup-node@v4、node-version、foo.py 都不算），后面要跟空格或制表符
-BINIMPORT_CMD_RE = re.compile(rf"(?<![\w$.\-@])({_BINIMPORT_CMDS})(?=[ \t])")
-BINIMPORT_SHELL_CMD_RE = re.compile(rf"(?<![\w$.\-@])({_BINIMPORT_CMDS}|source)(?=[ \t])|(?:^|(?<=[;&|])|(?<=: )|(?<=: \")|(?<=: ')|(?<=\":\"))[ \t]*(\.)(?=[ \t])", re.M)
-# 不带引号的词也收反斜杠（Windows 路径 E:\a\b.ps1）；取出来以后去掉首尾的反斜杠（JSON 里的 \" 转义）
-BINIMPORT_CMD_TOKEN_RE = re.compile(r"[ \t]+(?:\"([^\"\n]*)\"|'([^'\n]*)'|([^\s;&|<>()`\"']+))")
+BINIMPORT_CMD_RE = re.compile(rf"(?<![\w$.\-@])(?P<cmd>{_BINIMPORT_CMDS})(?=[ \t])")
+# 点号 source（. ./x）只认“命令开头”的位置，其余地方的点是普通参数（echo a: . b.png、find . x.png、arr=( . a.png )）：
+#   行首（Makefile 另认配方的 @、- 前缀）；YAML 的 “- ” 列表项（命名组 li，只有落在命令类键下面的列表里才算，
+#   见 _binimport_yaml_cmd_list_spans；其他文件里的 “- . x” 不是命令开头，丢掉）；
+#   YAML 的命令类键（run、script、before_script、after_script、command、entrypoint）的“键: ”后面，键前只能有缩进和 “- ”，
+#   值可带引号（description: . logo.png、args: . -o x 这类别的键不认）；
+#   ; & | { 反引号、$( 之后（单独的 ( 不认：arr=( . a.png ) 是数组元素）；命令开头的 then、do、else 之后；
+#   sh / bash / zsh / dash -c 的引号里（grep -c '. x'、git -c 不认）；JSON 字符串开头（": " 或 ":"，
+#   package.json 里只留根对象第一层 "scripts" 里的，见 _binimport_json_scripts_spans）
+# 先用一条 (?<=-c ['"]) 快筛，再分是哪种 shell：不筛的话每个字符位置都要试 4 条带嵌套后看的分支
+_BINIMPORT_DASH_C = r"|(?<=-c ['\"])(?:" + "|".join(
+    rf"(?<=(?<![\w.\-]){sh} -c ['\"])" for sh in ("sh", "bash", "zsh", "dash")) + ")"
+_BINIMPORT_YAML_CMD_KEYS = r"(?:run|script|before_script|after_script|command|entrypoint)"
+
+
+def _binimport_shell_cmd_re(make):
+    line_start = r"^[ \t]*[@-]*" if make else r"^[ \t]*"
+    dot_start = (
+        rf"(?:{line_start}"
+        rf"|^[ \t]*(?:-[ \t]+)?{_BINIMPORT_YAML_CMD_KEYS}:[ \t]+[\"']?"
+        r"|(?P<li>^[ \t]*-[ \t]+)"
+        r"|(?<=[;&|{`])|(?<=\$\()"
+        r"|(?:^|(?<=[;&|]))[ \t]*(?:then|do|else)(?=[ \t])"
+        + _BINIMPORT_DASH_C +
+        r"|(?<=\": \")|(?<=\":\"))"
+    )
+    return re.compile(rf"(?<![\w$.\-@])(?P<cmd>{_BINIMPORT_CMDS}|source)(?=[ \t])|{dot_start}[ \t]*(?P<dot>\.)(?=[ \t])", re.M)
+
+
+BINIMPORT_SHELL_CMD_RE = _binimport_shell_cmd_re(make=False)
+BINIMPORT_MAKE_CMD_RE = _binimport_shell_cmd_re(make=True)
+# YAML 里值为空、下面接列表的命令类键（script:、- script:），按键名所在的列算缩进
+_BINIMPORT_YAML_LIST_KEY_RE = re.compile(rf"(?:-[ \t]+)?({_BINIMPORT_YAML_CMD_KEYS}):[ \t]*(?:#.*)?$")
 # 这些选项的值也是要执行的文件（node -r / --require / --import / --loader，bun --preload）：核对完值，接着往后找要执行的脚本
 BINIMPORT_VALUE_OPTS = {"-r", "--require", "--import", "--loader", "--experimental-loader", "--preload"}
 # 这些选项带一个值，但值不是文件（python -W ignore、-X utf8，node --max-old-space-size 4096、--title x）：跳过这个值
@@ -767,7 +796,141 @@ def _binimport_entry_kind(rel, p):
     return None
 
 
-def _binimport_entry_hits(kind, text):
+_BINIMPORT_TOKEN_STOP = frozenset(" \t\r\n;&|<>()`\"'")
+
+
+def _binimport_cmd_token(text, pos, line_end=None):
+    r"""从 pos 起读命令行的下一个词，返回 (词, 词在原文的起点, 读到哪里)；没有词时返回 None。
+    词前面至少要有一个空格、制表符或续行（行尾的 \ 加换行，接着读下一行）——紧跟引号的不算（JSON 字符串的结束引号后面不再往下读）。
+    "…"、'…' 开头的到同一种引号为止、不跨行，里面的反斜杠原样留着（"D:\a\b.ps1"）。
+    不带引号的词里：\ 加换行是续行、去掉；\ 加空格是转义空格、算词的一部分（a\ b.png 是一个文件名）；
+    \"…\"、\'…\' 是 JSON 字符串里转义过的引号，取里面的内容；其余反斜杠原样留着（Windows 路径 C:\tools\x.py）。
+    line_end(i)：i 所在行的行尾下标（换行位置二分得来）。找配对引号都限在本行里：不限的话，超长单行上每个词都要
+    find 到文件尾，按行长平方增长（320 万字单行跑过 12 秒）；续行之后按新位置重新取行尾"""
+    n, i = len(text), pos
+    if line_end is None:  # 单独调用（自测、探针）时：现找本行行尾；_binimport_entry_hits 里传的是二分版
+        def line_end(k):
+            e = text.find("\n", k)
+            return n if e < 0 else e
+    while i < n:
+        if text[i] in " \t":
+            i += 1
+        elif text.startswith("\\\n", i):
+            i += 2
+        elif text.startswith("\\\r\n", i):
+            i += 3
+        else:
+            break
+    if i == pos or i >= n:
+        return None
+    c = text[i]
+    if c in "\"'":
+        j = text.find(c, i + 1, line_end(i))
+        if j < 0:
+            return None
+        return text[i + 1:j].rstrip("\\"), i + 1, j + 1
+    start, buf = i, []
+    while i < n:
+        c = text[i]
+        if c == "\\" and i + 1 < n:
+            d = text[i + 1]
+            if d == "\n":
+                i += 2
+                continue
+            if d == "\r" and text.startswith("\n", i + 2):
+                i += 3
+                continue
+            if d in " \t":
+                buf.append(d)
+                i += 2
+                continue
+            if d in "\"'":
+                k = text.find("\\" + d, i + 2, line_end(i))
+                if k >= 0:
+                    if not buf:
+                        start = i + 2
+                    buf.append(text[i + 2:k])
+                    i = k + 2
+                    continue
+            buf.append(c)
+            i += 1
+            continue
+        if c in _BINIMPORT_TOKEN_STOP:
+            break
+        buf.append(c)
+        i += 1
+    return "".join(buf), start, i
+
+
+def _binimport_json_scripts_spans(text):
+    """package.json 根对象第一层 "scripts": {…} 的范围 [(起, 止)]，互不重叠、按顺序排好（查的时候二分）。
+    一遍扫完：字符串整段跳过（含转义），只数 { [ } ] 的层数；第一层读到键 "scripts"、冒号、{ 就开一段，层数回到第一层时关上，
+    文件结束还没关的到文件尾为止。只认第一层：config.scripts 这类嵌套的不是 npm 会跑的脚本；
+    也避免每个 "scripts": { 各自往后扫到对象结束（2 万个未闭合的要 97 秒）"""
+    spans, n, i, depth = [], len(text), 0, 0
+    want = 0  # 第一层：1 = 刚读到字符串 "scripts"，2 = 后面又读到冒号
+    open_at = None
+    while i < n:
+        c = text[i]
+        if c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            want = 1 if depth == 1 and open_at is None and j == i + 8 and text.startswith("scripts", i + 1) else 0
+            i = j + 1
+            continue
+        if c in " \t\r\n":
+            pass
+        elif c == ":" and want == 1:
+            want = 2
+        elif c in "{[":
+            if c == "{" and want == 2:
+                open_at = i + 1
+            want = 0
+            depth += 1
+        elif c in "}]":
+            want = 0
+            depth = max(depth - 1, 0)
+            if open_at is not None and depth == 1:
+                spans.append((open_at, i))
+                open_at = None
+        else:
+            want = 0
+        i += 1
+    if open_at is not None:
+        spans.append((open_at, n))
+    return spans
+
+
+def _binimport_yaml_cmd_list_spans(text):
+    """YAML 里命令类键（script:、before_script: 等，值为空）下面那段列表的范围 [(起, 止)]，按顺序排好。
+    一行一行看：键名所在的列记作键的缩进；后面的行缩进更深、或同一缩进但以 - 开头（YAML 允许列表和键对齐）、或空行和注释，
+    都还在这段里；遇到别的行就结束这段"""
+    spans, pos, key_col, start = [], 0, None, 0
+    for line in text.split("\n"):
+        body = line.lstrip(" \t")
+        col = len(line) - len(body)
+        body = body.rstrip("\r")
+        if key_col is not None and not (not body or body.startswith("#") or col > key_col or (col == key_col and body.startswith("-"))):
+            spans.append((start, pos))
+            key_col = None
+        if key_col is None:
+            m = _BINIMPORT_YAML_LIST_KEY_RE.match(body)
+            if m:
+                key_col, start = col + m.start(1), pos + len(line) + 1
+        pos += len(line) + 1
+    if key_col is not None:
+        spans.append((start, len(text)))
+    return spans
+
+
+def _binimport_in_spans(spans, at):
+    """at 是否落在互不重叠、按起点排好的某个 (起, 止) 里（二分）"""
+    k = bisect.bisect_right(spans, (at, float("inf"))) - 1
+    return k >= 0 and spans[k][0] <= at < spans[k][1]
+
+
+def _binimport_entry_hits(kind, text, rel=""):
     """非 JS 入口里的命中：[(下标, 写法, 目标)]。
     shell / cmd：找命令词（node、python、bash、source 等），取它后面第一个不是选项的参数（-r、--require、--import 这类选项的值也算），
     只看这一个是不是二进制扩展名：执行的是 gen.mjs、只是把 logo.png 当输出参数的不报。
@@ -779,9 +942,37 @@ def _binimport_entry_hits(kind, text):
             if binimport_ext(m.group(g)):
                 out.append((m.start(g), "<script src>", m.group(g)))
         return out
-    cmd_re = BINIMPORT_SHELL_CMD_RE if kind == "shell" else BINIMPORT_CMD_RE
+    name = rel.rsplit("/", 1)[-1].lower()
+    if kind != "shell":
+        cmd_re = BINIMPORT_CMD_RE
+    elif name in ("makefile", "gnumakefile") or name.endswith(".mk"):
+        cmd_re = BINIMPORT_MAKE_CMD_RE
+    else:
+        cmd_re = BINIMPORT_SHELL_CMD_RE
+    is_yaml = name.endswith((".yml", ".yaml"))
+    n = len(text)
+    newlines = []
+
+    def line_end(i):
+        if not newlines:
+            newlines.append(None)  # 第一次用到才记换行位置（没有命令词的文件不用算）
+            newlines.extend(k.start() for k in re.finditer("\n", text))
+        k = bisect.bisect_left(newlines, i, 1)
+        return newlines[k] if k < len(newlines) else n
+
+    # 两种范围都等第一次用到时才算（没有点号命中的文件不用算）
+    lazy = {}
+
+    def spans_of(key, fn):
+        if key not in lazy:
+            lazy[key] = fn(text)
+        return lazy[key]
+
     for m in cmd_re.finditer(text):
-        cmd = m.group(1) or "."
+        cmd = m.group("cmd") or "."
+        if m.groupdict().get("li") is not None and not (
+                is_yaml and _binimport_in_spans(spans_of("yaml", _binimport_yaml_cmd_list_spans), m.start("dot"))):
+            continue  # “- . x” 只有在 YAML 命令类键下面的列表里才是命令开头
         base = cmd.lower().removesuffix(".exe")
         ps = base in BINIMPORT_PS_CMDS
         if ps:
@@ -794,17 +985,18 @@ def _binimport_entry_hits(kind, text):
         pos, expect = m.end(), None
         # 最多看 16 个记号：真实命令行在要执行的文件前很少超过十来个选项；设上限是为了满是命令词、选项的刻意构造行不按行长退化
         for _ in range(16):
-            t = BINIMPORT_CMD_TOKEN_RE.match(text, pos)
+            t = _binimport_cmd_token(text, pos, line_end)
             if not t:
                 break
-            pos = t.end()
-            g = next(k for k in (1, 2, 3) if t.group(k) is not None)
-            tok, at = t.group(g), t.start(g)
-            if g == 3:
-                lead = len(tok) - len(tok.lstrip("\\"))
-                tok, at = tok.strip("\\"), at + lead
-                if not tok:
-                    continue
+            tok, at, pos = t
+            if not tok:
+                continue
+            if cmd in (".", "source"):
+                # 点号、source 后面第一个词就是要读的文件；- 开头的是别的命令的参数（args: . -o report.png），直接停
+                if not tok.startswith("-") and binimport_ext(tok):
+                    if name != "package.json" or _binimport_in_spans(spans_of("json", _binimport_json_scripts_spans), at):
+                        out.append((at, f"命令 {cmd}", tok))
+                break
             if expect:
                 was, expect = expect, None
                 if was in ("file", "target") and binimport_ext(tok):
@@ -848,7 +1040,7 @@ def check_binimport(root, errors):
         if not kind:
             continue
         text = p.read_bytes().decode("utf-8", errors="replace")
-        found = _binimport_entry_hits(kind, text)
+        found = _binimport_entry_hits(kind, text, rel)
         if not found:
             continue
         newlines = [m.start() for m in re.finditer("\n", text)]
