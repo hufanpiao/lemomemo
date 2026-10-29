@@ -1,0 +1,70 @@
+/* 机型信息页（R-232，P1-07）的样式；CSP 不许内联样式，单独放这里。
+   不是 App 页面、不跟皮肤：颜色只用系统色（Canvas、CanvasText、GrayText），深浅跟系统走（A11 不写死颜色） */
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  background: Canvas;
+  color: CanvasText;
+  font:
+    15px/1.5 -apple-system,
+    'PingFang SC',
+    system-ui,
+    sans-serif;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0 0 4px;
+}
+
+h2 {
+  font-size: 16px;
+  margin: 20px 0 6px;
+}
+
+.note,
+dt {
+  color: GrayText;
+}
+
+.note {
+  font-size: 13px;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0;
+}
+
+dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.result {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+ol {
+  padding-left: 22px;
+  margin: 0;
+}
+
+li {
+  padding: 4px 0;
+  border-bottom: 1px solid GrayText;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+li.hit {
+  font-weight: 700;
+}

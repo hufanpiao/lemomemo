@@ -18,6 +18,9 @@ const SAMPLES = [
   'holidays/kr/2026.json',
   'fonts/lemo-sub.woff2',
   'icons/startup/startup-1170x2532.png',
+  'diag/startup.html',
+  'diag/startup.js',
+  'diag/startup.css',
   'icons/icon-192.png',
   '.vite/manifest.json',
 ];
@@ -40,6 +43,20 @@ describe('inject_sw_manifest', () => {
     expect(urls).toEqual(SAMPLES.filter((p) => !excludedFromPrecache(p)).map((p) => `/app/${p}`).sort());
     expect(m.find((e) => e.url === '/app/assets/index-AbC12_9x.js')?.revision).toBeNull();
     expect(m.find((e) => e.url === '/app/index.html')?.revision).toMatch(/^[0-9a-f]{8,}$/);
+  });
+
+  it('机型信息页 diag/ 和 iOS 启动图 icons/startup/ 不进预缓存清单（架构 8.1、0.38 第 63 条）', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lemo-sw-'));
+    try {
+      for (const p of ['index.html', 'icons/icon-192.png', 'icons/startup/startup-1170x2532.png', 'diag/startup.html', 'diag/startup.js', 'diag/startup.css']) {
+        mkdirSync(join(d, p, '..'), { recursive: true });
+        writeFileSync(join(d, p), p);
+      }
+      const urls = (buildManifest(d) as { url: string }[]).map((e) => e.url).sort();
+      expect(urls).toEqual(['/app/icons/icon-192.png', '/app/index.html']);
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
   });
 
   it('injectSwManifest：sw.js 里找不到 self.__WB_MANIFEST（或不止一处）就失败，不悄悄产出没有预缓存的 sw.js（0.31 第 5 条）', async () => {

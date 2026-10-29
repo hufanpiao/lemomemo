@@ -40,6 +40,7 @@ export function routeOf(url: URL, method: string, mode: string, selfOrigin: stri
  * icons/startup/：iOS 启动图 12 张共约 13 MB，iOS 只在“添加到主屏幕”时按 media 取自己那一张、由系统保存，不经 SW，预缓存只会让每个用户白下；
  * 添加时断网取不到，iOS 退回 manifest 的 background_color 纯色（R-232；架构 8.1 SW 缓存策略、0.38 第 63 条）
  * “不经 SW”尚待实机清单 P1-07 第 4、5 步核对；结果相反时回来改这里和架构那两处
+ * diag/：机型信息页（P1-07 第 1、2 步用的技术页，只在联网时用），不是 App 外壳，不让每个用户都下（架构 8.1、0.38 第 63 条）
  */
 export function excludedFromPrecache(path: string): boolean {
   return (
@@ -47,6 +48,7 @@ export function excludedFromPrecache(path: string): boolean {
     path.startsWith('holidays/') ||
     path.startsWith('fonts/') ||
     path.startsWith('icons/startup/') ||
+    path.startsWith('diag/') ||
     path.startsWith('.vite/') ||
     path.endsWith('.map') ||
     path === 'version.json'

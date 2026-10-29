@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <!-- 机型信息页（R-232，iPhone 实机验收清单 P1-07 第 1、2 步）：只显示技术信息，不读也不显示任何用户数据。
+         /app/* 的 CSP 是 script-src 'self'、style-src 'self'，所以脚本和样式都是单独文件，页面里不写内联脚本、内联样式。 -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>机型信息（启动图核对）</title>
+    <link rel="stylesheet" href="./startup.css" />
+    <script type="module" src="./startup.js"></script>
+  </head>
+  <body>
+    <main id="startup-diag">
+      <h1>机型信息（启动图核对）</h1>
+      <p class="note">给 iPhone 实机验收清单 P1-07 用：截图这一页发给主持人即可。只显示屏幕和系统的技术信息。</p>
+      <h2>这台设备</h2>
+      <dl id="device"></dl>
+      <h2>匹配到的启动图</h2>
+      <p id="result" class="result">读取中…</p>
+      <h2>index.html 里的 12 条 media 逐条判断</h2>
+      <ol id="links"></ol>
+      <p id="source" class="note"></p>
+    </main>
+  </body>
+</html>

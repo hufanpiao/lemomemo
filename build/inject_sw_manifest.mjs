@@ -13,6 +13,7 @@ export function excluded(path) {
     path.startsWith('holidays/') ||
     path.startsWith('fonts/') ||
     path.startsWith('icons/startup/') ||
+    path.startsWith('diag/') ||
     path.startsWith('.vite/') ||
     path.endsWith('.map') ||
     path === 'version.json'
