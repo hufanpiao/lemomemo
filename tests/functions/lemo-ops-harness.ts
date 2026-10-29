@@ -158,16 +158,3 @@ export function world() {
   };
 }
 
-/**
- * 假时钟下等一个 promise：每次推进 step 毫秒，中间让出一次真的事件循环（crypto.subtle.digest 不是微任务，
- * 不让出的话计时器还没设上时钟就推完了）。要先 vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })。
- */
-export async function settleWithFakeTimers<T>(p: Promise<T>, advance: (ms: number) => Promise<unknown>, totalMs: number, step = 100): Promise<T> {
-  let done = false;
-  const q = p.finally(() => (done = true));
-  for (let t = 0; t < totalMs && !done; t += step) {
-    await new Promise((r) => setImmediate(r));
-    await advance(step);
-  }
-  return q;
-}

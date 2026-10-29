@@ -2,7 +2,6 @@
 // 只测 core.ts（index.ts 只是把 supabase-js 接上），数据库由假对象代替。
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DB_TIMEOUT_MS, handle, safeEqual, type Deps, type UsageDb } from '../../supabase/functions/usage-report/core.ts';
-import { settleWithFakeTimers } from './lemo-ops-harness.ts';
 
 const SECRET = 'test-ops-secret-xxxxxxxxxxxxxxxxxxxxxx';   // ≥ 32 字节
 const NOW = Date.parse('2026-10-29T12:00:00Z');
@@ -110,27 +109,35 @@ describe('TC-B1-94 ①：查数据库出错或超时回 503 db_unreachable', () 
   });
 
   it('查库超过 5 秒：约在 5 秒处回 503，并中止查询', async () => {
+    // 全程假时钟，不真等 5 秒。以前的写法是“每让出一次事件循环就推 50 ms，最多推 6 秒”：鉴权里的
+    // crypto.subtle.digest 走的是真线程池，机器忙时它迟迟不回来，假时钟先推完了，超时计时器才设上，
+    // 之后再没人推时钟，handle 永远不返回，于是报 Test timed out in 5000ms（单跑时 digest 很快，所以不出现）。
+    // 现在先等假数据库被调用（此时超时计时器已经设上，见 core.ts heartbeatPart），再从这一刻起推假时钟，
+    // 结果和机器快慢无关。
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     let aborted = false;
+    let entered!: () => void;
+    const queried = new Promise<void>((r) => (entered = r));
     const db = fakeDb({
       heartbeats: (signal) =>
         new Promise(() => {
+          entered();
           signal.addEventListener('abort', () => (aborted = true));
         }),
     });
-    let elapsed = 0;   // 假时钟已推进的毫秒数（Date 没交给假时钟）
-    let firedAt = -1;
-    const adv = async (ms: number) => {
-      await vi.advanceTimersByTimeAsync(ms);
-      elapsed += ms;
-    };
-    const p = handle(req({ part: 'heartbeat' }), deps({ db })).then((r) => {
-      firedAt = elapsed;
-      return r;
-    });
-    const done = await settleWithFakeTimers(p, adv, DB_TIMEOUT_MS + 1000, 50);
-    expect(firedAt).toBeGreaterThanOrEqual(DB_TIMEOUT_MS - 100);
-    expect(firedAt).toBeLessThanOrEqual(DB_TIMEOUT_MS + 150);
+    let settled = false;
+    const p = handle(req({ part: 'heartbeat' }), deps({ db })).finally(() => (settled = true));
+    await queried;   // 真等（毫秒级）：鉴权的 digest 回来、开始查库；这时还没推过假时钟
+    expect(vi.getTimerCount()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(DB_TIMEOUT_MS - 1);
+    expect(settled).toBe(false);
+    expect(aborted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    const done = await p;
+    expect(aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
     expect(done.status).toBe(503);
     expect(await done.json()).toEqual({ error: 'db_unreachable' });
     expect(aborted).toBe(true);

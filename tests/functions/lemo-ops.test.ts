@@ -6,10 +6,22 @@ import { RESEND_AFTER_MS, stateKey } from '../../workers/lemo-ops/src/alerts.ts'
 const HB_KEY = stateKey('heartbeat');
 const DOWN = '【柠檬记监控】监控连不上服务器';
 import { parseHeartbeatReport } from '../../workers/lemo-ops/src/rules.ts';
-import { H, M, settleWithFakeTimers, world } from './lemo-ops-harness.ts';
+import { DB_TIMEOUT_MS } from '../../supabase/functions/usage-report/core.ts';
+import { USAGE_REPORT_TIMEOUT_MS } from '../../workers/lemo-ops/src/http.ts';
+import { H, M, world } from './lemo-ops-harness.ts';
 
 const fakeTimers = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-const adv = (ms: number) => vi.advanceTimersByTimeAsync(ms);
+
+/**
+ * 等到假时钟上挂了 n 个计时器再推进。全程假时钟，不真等 5 秒、10 秒。
+ * 以前的写法是“每让出一次事件循环就推 100 ms，推满 6 秒 / 11 秒为止”：usage-report 鉴权里的
+ * crypto.subtle.digest 走真线程池，全量跑、机器忙时迟迟不回来，假时钟先推完了，超时计时器才设上，
+ * 之后再没人推时钟，tick 永远不返回，于是偶尔报 Test timed out in 5000ms。
+ * 现在用真的 setImmediate 让出（它没交给假时钟），直到计时器都设上，再从这一刻起推假时钟，和机器快慢无关。
+ */
+async function waitForTimers(n: number): Promise<void> {
+  while (vi.getTimerCount() < n) await new Promise((r) => setImmediate(r));
+}
 
 afterEach(() => {
   vi.useRealTimers();
@@ -64,7 +76,10 @@ describe('TC-B1-94 ②～④：连不上数据库 → 告警一次、6 小时内
     fakeTimers();
     const w = world();
     w.setMode('db_slow');
-    await settleWithFakeTimers(w.tick(), adv, 6_000);
+    const p = w.tick();
+    await waitForTimers(2);   // lemo-ops 调 usage-report 的 10 秒 + usage-report 查库的 5 秒
+    await vi.advanceTimersByTimeAsync(DB_TIMEOUT_MS);
+    await p;
     expect(w.inbox.map((m) => m.subject)).toEqual([DOWN]);
     expect(w.inbox[0]?.text).toContain('服务器连不上数据库');
   });
@@ -127,7 +142,12 @@ describe('TC-B1-94 ⑤：另外三种调不通都发告警（外加网络错误�
     fakeTimers();
     const w = world();
     w.setMode('hang');
-    await settleWithFakeTimers(w.tick(), adv, 11_000);
+    const p = w.tick();
+    await waitForTimers(1);   // lemo-ops 调 usage-report 的 10 秒（hang 模式不进 usage-report）
+    await vi.advanceTimersByTimeAsync(USAGE_REPORT_TIMEOUT_MS - 1);
+    expect(w.inbox).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    await p;
     expect(w.inbox).toHaveLength(1);
     expect(w.inbox[0]?.text).toContain('超时');
   });
