@@ -50,7 +50,7 @@ test('另一页“退出并换账号”：主 App 页清掉并删掉本机库、
   });
   await fakeTurnstile(other);
   await other.goto('/app/auth/');
-  await expect(other.getByTestId('auth-signed-in')).toHaveText('当前已登录，要换账号请先退出');
+  await expect(other.getByTestId('auth-signed-in')).toHaveText('当前已登录 e2e-fake@lemomemo.test，要换账号请先退出');
   await other.getByRole('button', { name: '退出并换账号' }).click();
   await expect(other.locator('#auth-email')).toBeVisible({ timeout: 15_000 });
 

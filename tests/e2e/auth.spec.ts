@@ -180,15 +180,16 @@ test.describe('登录页', () => {
 sessionTest.describe('已登录时打开登录页（0.38 第 35 条）', () => {
   sessionTest.use({ loggedIn: true });
 
-  sessionTest('先说“当前已登录，要换账号请先退出”；“退出并换账号”清掉本机会话、本机库和缓存后才出登录表单', async ({ page, browserName }) => {
+  sessionTest('先说“当前已登录 <邮箱>，要换账号请先退出”；“退出并换账号”清掉本机会话、本机库和运行时缓存（SW 预缓存保留，0.38 第 36 条）后才出登录表单', async ({ page, browserName }) => {
     sessionTest.skip(browserName !== 'chromium', 'webkit 项目是 iPhone，登录页只给教程');
     const hits = await fakeTurnstile(page);
     await page.goto('/app/auth/');
-    await expect(page.getByTestId('auth-signed-in')).toHaveText('当前已登录，要换账号请先退出');
+    // 邮箱是 session-fixture 假会话里的 user.email（4.1 原文“当前已登录 <邮箱>”）
+    await expect(page.getByTestId('auth-signed-in')).toHaveText('当前已登录 e2e-fake@lemomemo.test，要换账号请先退出');
     await expect(page.locator('#auth-email')).toHaveCount(0);
     expect(hits).toEqual([]);
 
-    // 造一份本机库和一份 Cache Storage（库要先关掉，不然删库会被自己挡住）
+    // 造一份本机库、一份运行时缓存和一份 SW 预缓存（库要先关掉，不然删库会被自己挡住）
     await page.evaluate(async () => {
       await new Promise<void>((resolve, reject) => {
         const r = indexedDB.open('planner-v4', 1);
@@ -200,10 +201,13 @@ sessionTest.describe('已登录时打开登录页（0.38 第 35 条）', () => {
         r.onerror = () => reject(r.error);
       });
       await (await caches.open('lemo-e2e')).put('/app/e2e-probe', new Response('x'));
+      await (await caches.open('workbox-precache-v2-e2e')).put('/app/e2e-shell', new Response('x'));
     });
 
     await page.getByRole('button', { name: '退出并换账号' }).click();
     await expect(page.locator('#auth-email')).toBeVisible();
+    // e2e 构建拿不到 supabase-js，服务器没退成：登录表单上方提示一次
+    await expect(page.getByTestId('auth-server-pending')).toContainText('服务器上的这次登录暂时没能吊销');
     await expect.poll(() => hits.some((u) => u.includes('/turnstile/v0/api.js'))).toBe(true);
     const left = await page.evaluate(async () => ({
       sessionKeys: Object.keys(localStorage).filter((k) => /^sb-.+-auth-token$/.test(k)),
@@ -212,7 +216,7 @@ sessionTest.describe('已登录时打开登录页（0.38 第 35 条）', () => {
     }));
     expect(left.sessionKeys).toEqual([]);
     expect(left.dbs).not.toContain('planner-v4');
-    expect(left.caches).toEqual([]);
+    expect(left.caches).toEqual(['workbox-precache-v2-e2e']);
   });
 
   sessionTest('“回到 App”回 /app/，不退出', async ({ page, browserName }) => {

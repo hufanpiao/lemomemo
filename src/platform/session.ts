@@ -56,6 +56,24 @@ export function readSessionUserId(storage?: Storage, supabaseUrl: string = build
   }
 }
 
+/**
+ * 本机会话里的邮箱（登录页“当前已登录 <邮箱>，要换账号请先退出”用，架构 4.1、0.38 第 35 条）；
+ * 只读 user.email，键名取法同 readSessionUserId。没登录、读不到、不像邮箱（没有 @、超过 254 个字符）都返回 null
+ */
+export function readSessionEmail(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
+  try {
+    const s = storage ?? localStorage;
+    const key = findKey(s, supabaseUrl);
+    const raw = key ? s.getItem(key) : null;
+    if (!raw) return null;
+    const o = JSON.parse(raw) as { user?: { email?: unknown } } | null;
+    const email = o?.user?.email;
+    return typeof email === 'string' && email.length <= 254 && /^[^\s@]+@[^\s@]+$/.test(email) ? email : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 别的标签页改了会话（登录、换账号、退出）：回调新的 user_id（没有会话为 null）。返回取消函数 */
 export function onSessionStorageChange(
   fn: (userId: string | null) => void,

@@ -1,10 +1,13 @@
-// 登录页·已登录先退出（安全审查 9、架构 0.38 第 35 条、4.1）：提示与两个按钮、退出三步的先后、总超时、晚到处理、抛异常兜底
+// 登录页·已登录先退出（安全审查 9、架构 0.38 第 35 条、4.1）：提示（带邮箱）与两个按钮、退出三步的先后、总超时、晚到处理、抛异常兜底、
+// 服务器没退成时登录表单上方的提示（K6-auth-switch）；别的标签页换了账号的情况在 AuthPage.session-switch.test.tsx
 // 退出流程和设置页共用 platform/sign-out.ts（K-signout-merge）：先清本机库和缓存，再服务器退出，不是 ok 才兜底清会话（会话放最后）
 // 登录部分在 AuthPage.test.tsx，邀请注册在 AuthPage.invite.test.tsx；共用的假接口在 auth-page-harness.tsx，假 Turnstile 在 turnstile-fake.ts
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SIGN_OUT_TIMEOUT_MS } from '../hooks/useSessionGate.ts';
+import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
+import { uiStore } from '../../../kit/state/ui-store.ts';
 import AuthPage from '../ui/AuthPage.tsx';
 import { fakeApi, now, resetHarness, type FakeApi } from './auth-page-harness.tsx';
 import { turnstile } from './turnstile-fake.ts';
@@ -42,6 +45,57 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(api.signOutHere).not.toHaveBeenCalled();
     expect(localExit.deleteDb).not.toHaveBeenCalled();
+  });
+
+  it('4.1 原文：会话里有邮箱时说“当前已登录 <邮箱>，要换账号请先退出”；读不到邮箱用不带邮箱的那句', () => {
+    const { unmount } = render(
+      <AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => USER, readEmail: () => 'a@example.com', localExit: exitSpy([]) }} />,
+    );
+    expect(screen.getByTestId('auth-signed-in').textContent).toBe('当前已登录 a@example.com，要换账号请先退出');
+    unmount();
+    render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => USER, readEmail: () => null, localExit: exitSpy([]) }} />);
+    expect(screen.getByTestId('auth-signed-in').textContent).toBe(zh['auth.session.signedIn']);
+  });
+
+  it('没登录时不读邮箱', () => {
+    const readEmail = vi.fn(() => 'a@example.com');
+    render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => null, readEmail }} />);
+    expect(readEmail).not.toHaveBeenCalled();
+  });
+
+  it('韩文界面：提示、两个按钮都是韩文（不是中文占位）', () => {
+    const before = uiStore.getState().locale;
+    act(() => uiStore.getState().setLocale('ko-KR'));
+    try {
+      render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => USER, readEmail: () => 'a@example.com', localExit: exitSpy([]) }} />);
+      expect(screen.getByTestId('auth-signed-in').textContent).toBe(ko['auth.session.signedInAs'].replace('{email}', 'a@example.com'));
+      expect(screen.getByRole('button', { name: ko['auth.session.switch'] })).toBeTruthy();
+      expect(screen.getByRole('button', { name: ko['auth.session.backToApp'] })).toBeTruthy();
+    } finally {
+      act(() => uiStore.getState().setLocale(before));
+    }
+  });
+
+  for (const [name, result, shown] of [
+    ['服务器退出 ok：不提示', { ok: true as const, value: undefined }, false],
+    ['服务器退出断网：提示“服务器上的这次登录暂时没能吊销”', { ok: false as const, error: 'offline' as const }, true],
+  ] as const) {
+    it(`退出以后的登录表单（${name}）`, async () => {
+      const api = fakeApi({ signOutHere: vi.fn(async () => result) });
+      render(<AuthPage gate="login" deps={{ api, now, onDone: vi.fn(), readUserId: () => USER, localExit: exitSpy([]) }} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
+      });
+      expect(await screen.findByLabelText(zh['auth.email.label'])).toBeTruthy();
+      const line = screen.queryByTestId('auth-server-pending');
+      if (shown) expect(line?.textContent).toBe(zh['auth.session.serverPending']);
+      else expect(line).toBeNull();
+    });
+  }
+
+  it('服务器没退成的提示只在填邮箱那一步：没登录直接打开登录页时没有', () => {
+    render(<AuthPage gate="login" deps={{ api: fakeApi(), now, onDone: vi.fn(), readUserId: () => null }} />);
+    expect(screen.queryByTestId('auth-server-pending')).toBeNull();
   });
 
   it('readSessionUserId 为 null：直接出登录表单', async () => {

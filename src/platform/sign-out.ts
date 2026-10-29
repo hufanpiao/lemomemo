@@ -15,7 +15,11 @@
 // • 晚到：④ 超时以后才回来、本机会话又是退出前那个 user_id（令牌刷新把旧会话写回）就再删一次；别的账号或没有会话不动。
 //   只挂在 ④ 上：① 晚到时本机会话本来就还在（④ 还没做），挂上会把会话提前删掉，之后 signOut 拿不到会话、误报成功
 // • 封存挡不住 Service Worker：以后 SW 收到通知按键会直接写 pending_actions（core/pending-actions.ts，推送从 B2 起），不经本页的 cache，
-//   sealForExit 管不到；退出过程中写进去的会被 ⑤ 删库带走，但 ⑤ 之后、离开页面之前写进去的会留下。交 K6 评估（接手清单 K-sw-seal）
+//   sealForExit 管不到；退出过程中写进去的会被 ⑤ 删库带走，但 ⑤ 之后、离开页面之前写进去的会留下。
+//   K-sw-seal 结论（10-29）：B1 的 SW 不碰 IndexedDB，运行时缓存只有公共的导航 HTML、节假日、字体（tests/build/sw-no-user-data.test.ts 钉住）；
+//   B2 的 SW：⑴ 只往已存在、owner 仓有 user_id 的库里写（遇到要新建库就中止），且推送带的 user_id 和 owner 一致才写，不一致丢掉（不能直接用 owner 的值，防串号）；
+//   ⑵ 开库后监听 versionchange、收到立刻关连接，否则 ⑤ 删库被挡、退出卡住；⑶ 退出、换账号时退掉推送订阅或由服务器换绑，旧账号的通知不再推来。
+//   ⑤ 删库以后 SW 写不进去。不靠“通知 SW 停写”：SW 随时被浏览器停掉重启，内存里的标记会丢
 // • localStorage 里的 install_id、pv-locale 不清
 import { clearCacheStorage, clearLocalSession, readSessionUserId } from './session.ts';
 

@@ -4,8 +4,14 @@ export const zh = {
   'auth.title': '登录柠檬记',
   'auth.lead': '不用密码。每次登录发一个 6 位验证码到邮箱。',
   'auth.session.signedIn': '当前已登录，要换账号请先退出',
+  // 架构 4.1 原文“当前已登录 <邮箱>，要换账号请先退出”；会话里读不到邮箱时用上一条
+  'auth.session.signedInAs': '当前已登录 {email}，要换账号请先退出',
   'auth.session.switch': '退出并换账号',
   'auth.session.backToApp': '回到 App',
+  // 点“退出并换账号”时发现本机会话已在别的页面换成了另一个账号：只刷新上面的提示，这次不退出（K6-auth-switch 审查）
+  'auth.session.changed': '账号刚在别的页面换过，上面已更新。确认后再点一次“退出并换账号”。',
+  // 退出并换账号时服务器没退成（断网、超时）；和设置页 settings.offlineOut.body 同一个意思
+  'auth.session.serverPending': '已退出这台设备，本机已清空。服务器上的这次登录暂时没能吊销，之后可以在别的设备上用“退出其他所有设备”清掉它。',
   // 退出原因（K6 复审 A；被移除、被停用、注销冷静期清本机后回到这里）；被移除照架构 0.29 续第 98 条的原话；冷静期文案是占位，等产品定稿（R-192 ④）
   'auth.exit.removed': '这台设备已在别的设备上被移除，请重新登录；还没上传的改动已丢弃。',
   'auth.exit.disabled': '账号已停用，这台设备上的数据已清除。如有疑问请联系柠檬记的负责人。',

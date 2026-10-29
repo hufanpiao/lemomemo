@@ -7,7 +7,7 @@ const getSupabase = vi.hoisted(() => vi.fn(() => Promise.reject(new Error('no en
 vi.mock('../supabase/client.ts', () => ({ getSupabase }));
 
 import {
-  clearCacheStorage, clearLocalSession, onAuthUser, onSessionStorageChange, PRECACHE_PREFIX, readSessionUserId, sessionStorageKey, userIdOfSession,
+  clearCacheStorage, clearLocalSession, onAuthUser, onSessionStorageChange, PRECACHE_PREFIX, readSessionEmail, readSessionUserId, sessionStorageKey, userIdOfSession,
 } from '../session.ts';
 
 const A = '00000000-0000-4000-8000-00000000000a';
@@ -43,6 +43,33 @@ describe('readSessionUserId', () => {
     localStorage.setItem('sb-other-auth-token', JSON.stringify({ user: { id: A } }));
     expect(readSessionUserId(localStorage, 'https://lemomemo.com/sb')).toBeNull();
     expect(readSessionUserId(localStorage, '')).toBe(A);
+  });
+});
+
+describe('readSessionEmail（登录页“当前已登录 <邮箱>”，0.38 第 35 条）', () => {
+  it('读会话里的 user.email；键名同 readSessionUserId，别的项目留下的键不算', () => {
+    localStorage.setItem('sb-lemomemo-auth-token', JSON.stringify({ user: { id: A, email: 'a@example.com' } }));
+    expect(readSessionEmail(localStorage, 'https://lemomemo.com/sb')).toBe('a@example.com');
+    localStorage.clear();
+    localStorage.setItem('sb-other-auth-token', JSON.stringify({ user: { id: A, email: 'a@example.com' } }));
+    expect(readSessionEmail(localStorage, 'https://lemomemo.com/sb')).toBeNull();
+    expect(readSessionEmail(localStorage, '')).toBe('a@example.com');
+  });
+
+  it('没有会话、坏 JSON、没有 email、不像邮箱、超长都返回 null', () => {
+    const k = 'sb-lemomemo-auth-token';
+    const url = 'https://lemomemo.com/sb';
+    expect(readSessionEmail(localStorage, url)).toBeNull();
+    for (const v of ['not json', '{}', JSON.stringify({ user: { id: A } }), JSON.stringify({ user: { email: 'no-at' } }),
+      JSON.stringify({ user: { email: 'a b@c.d' } }), JSON.stringify({ user: { email: `${'x'.repeat(250)}@a.bc` } }), JSON.stringify({ user: { email: 42 } })]) {
+      localStorage.setItem(k, v);
+      expect(readSessionEmail(localStorage, url)).toBeNull();
+    }
+  });
+
+  it('localStorage 抛错（隐私模式等）返回 null', () => {
+    const bad = { get length() { throw new Error('denied'); }, getItem() { throw new Error('denied'); } } as unknown as Storage;
+    expect(readSessionEmail(bad, 'https://lemomemo.com/sb')).toBeNull();
   });
 });
 

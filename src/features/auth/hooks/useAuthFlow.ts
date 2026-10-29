@@ -45,6 +45,13 @@ export interface AuthFlowDeps {
   onDone?: () => void;
   /** 测试用：本机会话里的 user_id（默认 platform/session.ts 的 readSessionUserId） */
   readUserId?: () => string | null;
+  /** 测试用：本机会话里的邮箱（默认 platform/session.ts 的 readSessionEmail；读不到为 null，提示里就不带邮箱） */
+  readEmail?: () => string | null;
+  /**
+   * 测试用：别的标签页改了会话时回调（默认 platform/session.ts 的 onSessionStorageChange，即 storage 事件）；返回取消函数。
+   * 回调只当“变了”的信号，登录页收到后自己再读 readUserId、readEmail
+   */
+  watchSession?: (onChange: () => void) => () => void;
   /** 测试用：退出后清本机的几步（默认 platform/sign-out.ts 的 defaultExitSteps） */
   localExit?: ExitSteps;
   /** 测试用：“退出并换账号”服务器那一半的总超时（默认 useSessionGate 的 SIGN_OUT_TIMEOUT_MS） */

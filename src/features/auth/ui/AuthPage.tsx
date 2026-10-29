@@ -26,20 +26,25 @@ export default function AuthPage({ deps, gate }: AuthPageProps) {
 }
 
 /**
- * 安全审查 9、架构 0.38 第 35 条：本机已有会话时先说“当前已登录，要换账号请先退出”，
+ * 安全审查 9、架构 0.38 第 35 条：本机已有会话时先说“当前已登录 <邮箱>，要换账号请先退出”（读不到邮箱就不带），
  * “退出并换账号”按 4.1 完整退出（删本会话的 devices 行 → signOut local → 清本机库和缓存）后才出登录表单；“回到 App”回 /app/
  */
 function SessionCheck({ deps }: { deps: AuthFlowDeps | undefined }) {
   const t = useAuthT();
   const s = useSessionGate(deps);
-  if (s.state === 'none') return <LoginPanel deps={deps} />;
+  if (s.state === 'none') return <LoginPanel deps={deps} serverPending={s.serverPending} />;
   const busy = s.state === 'exiting';
   return (
     <main className={styles.page} data-feature="auth" data-step="signed-in" aria-busy={busy}>
       <h1 className={styles.title}>{t('auth.title', {})}</h1>
       <p className={styles.lead} data-testid="auth-signed-in">
-        {t('auth.session.signedIn', {})}
+        {s.email ? t('auth.session.signedInAs', { email: s.email }) : t('auth.session.signedIn', {})}
       </p>
+      {s.changed && (
+        <p className={styles.notice} role="alert" data-testid="auth-session-changed">
+          {t('auth.session.changed', {})}
+        </p>
+      )}
       <div className={styles.form}>
         <button className={styles.primary} type="button" disabled={busy} onClick={() => void s.switchAccount()}>
           {busy ? t('auth.busy', {}) : t('auth.session.switch', {})}
@@ -74,7 +79,8 @@ function ExitNoticeLine() {
   );
 }
 
-function LoginPanel({ deps }: { deps: AuthFlowDeps | undefined }) {
+/** serverPending：刚“退出并换账号”、服务器上的那次登录没吊销成（本机已清空），填邮箱那一步提示一次 */
+function LoginPanel({ deps, serverPending = false }: { deps: AuthFlowDeps | undefined; serverPending?: boolean }) {
   const t = useAuthT();
   const box = useRef<HTMLDivElement>(null);
   // 安全审查 10、架构 0.38 第 30 条：登录用 action 'login'；邀请两屏的令牌都只给 start 用（含验证码那屏的重新发送），用 'invite_start'；步骤变了小窗按新的 action 重画
@@ -90,6 +96,11 @@ function LoginPanel({ deps }: { deps: AuthFlowDeps | undefined }) {
     <main className={styles.page} data-feature="auth" data-step={step} aria-busy={busy}>
       <h1 className={styles.title}>{t('auth.title', {})}</h1>
       {step === 'email' && <ExitNoticeLine />}
+      {step === 'email' && serverPending && (
+        <p className={styles.notice} role="status" data-testid="auth-server-pending">
+          {t('auth.session.serverPending', {})}
+        </p>
+      )}
       {step === 'email' && <p className={styles.lead}>{t('auth.lead', {})}</p>}
 
       {askEmail && (

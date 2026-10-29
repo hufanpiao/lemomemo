@@ -6,12 +6,15 @@ import type { zh } from './zh.ts';
 export const ko = {
   'auth.title': '登录柠檬记', // TODO(ko): 待韩文翻译，先放中文占位
   'auth.lead': '不用密码。每次登录发一个 6 位验证码到邮箱。', // TODO(ko): 待韩文翻译，先放中文占位
-  'auth.session.signedIn': '当前已登录，要换账号请先退出', // TODO(ko): 待韩文翻译，先放中文占位
-  'auth.session.switch': '退出并换账号', // TODO(ko): 待韩文翻译，先放中文占位
-  'auth.session.backToApp': '回到 App', // TODO(ko): 待韩文翻译，先放中文占位
-  'auth.exit.removed': '이 기기는 다른 기기에서 제거되었어요. 다시 로그인해 주세요. 아직 업로드되지 않은 변경 사항은 삭제되었어요.', // TODO(ko): 초안, 韩文审校待审（R-106；中文照架构 0.29 续第 98 条）
-  'auth.exit.disabled': '계정이 정지되어 이 기기의 데이터를 삭제했어요. 궁금한 점은 Lemo 담당자에게 문의해 주세요.', // TODO(ko): 초안, 韩文审校待审（R-106；App 名的韩文译法未定，先写 Lemo）
-  'auth.exit.pendingDeletion': '계정이 탈퇴 대기 중이라 이 기기의 데이터를 삭제했어요. 대기 기간 안에 이메일 인증 코드로 로그인하면 계정을 복구할 수 있어요.', // TODO(ko): 초안, 韩文审校待审（R-106；中文也是占位，R-192 ④）
+  'auth.session.signedIn': '이미 로그인되어 있어요. 다른 계정으로 바꾸려면 먼저 로그아웃해 주세요', // R-106 B1 第一遍已审（10-29）
+  'auth.session.signedInAs': '{email} 계정으로 로그인되어 있어요. 다른 계정으로 바꾸려면 먼저 로그아웃해 주세요', // R-106 B1 第一遍已审（10-29）；“{email} 계정으로”避开 (으)로 随邮箱末字变化的问题
+  'auth.session.switch': '로그아웃하고 계정 바꾸기', // R-106 B1 第一遍已审（10-29）
+  'auth.session.backToApp': '앱으로 돌아가기', // R-106 B1 第一遍已审（10-29）
+  'auth.session.changed': '다른 창에서 계정이 바뀌어 위 내용을 업데이트했어요. 확인한 뒤 “로그아웃하고 계정 바꾸기”를 다시 눌러 주세요.', // R-106 B1 第一遍已审（10-29）；按钮名照 auth.session.switch，引号照官网 site/ko 用 “ ”
+  'auth.session.serverPending': '이 기기에서 로그아웃하고 이 기기의 데이터를 모두 지웠어요. 서버에 남은 이번 로그인은 아직 끊지 못했어요. 나중에 다른 기기에서 “다른 모든 기기에서 로그아웃”으로 정리할 수 있어요.', // TODO(ko): 引号里的按钮名要和设置页 settings.devices.signOutOthers 的韩文定稿一致（那边还是中文占位）
+  'auth.exit.removed': '다른 기기에서 이 기기를 제거했어요. 다시 로그인해 주세요. 아직 동기화되지 않은 변경 사항은 삭제됐어요.', // R-106 B1 第一遍已审（10-29）；中文照架构 0.29 续第 98 条
+  'auth.exit.disabled': '계정이 사용 중지되어 이 기기에 있던 데이터를 삭제했어요. 궁금한 점은 레모 담당자에게 문의해 주세요.', // R-106 B1 第一遍已审（10-29）；App 名照 shared app.name 写 레모
+  'auth.exit.pendingDeletion': '계정이 탈퇴 대기 중이라 이 기기에 있던 데이터를 삭제했어요. 대기 기간 중에 이메일 인증 코드로 로그인하면 계정을 복구할 수 있어요.', // TODO(ko): 韩文已审（R-106 B1，10-29），但中文本身是占位，等 R-192 ④ 定稿后再对一遍
   'auth.email.label': '邮箱', // TODO(ko): 待韩文翻译，先放中文占位
   'auth.email.invalid': '邮箱格式不对，请再看一下', // TODO(ko): 待韩文翻译，先放中文占位
   'auth.email.send': '发验证码', // TODO(ko): 待韩文翻译，先放中文占位
