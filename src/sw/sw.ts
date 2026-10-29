@@ -39,7 +39,7 @@ registerRoute(
         return shell(opts);
       }
     },
-    // 预览沙箱、diag/ 技术页不走 App 外壳（diag/ 在第一个 fetch 监听器就已放过，这里再排除一层）；名单在 routes.ts
+    // 预览沙箱不走 App 外壳；名单在 routes.ts（diag 技术页 10-30 起在 /app/ 作用域外的 /diag/，SW 管不到）
     { allowlist: [/^\/app\//], denylist: [...NAV_DENYLIST] },
   ),
 );

@@ -22,6 +22,7 @@ import type {
 } from '../../../shared/schema/sync.ts';
 import { patchResponse } from '../../../shared/schema/sync.ts';
 import { readSessionId } from '../session.ts';
+import { pinAuth, pinSession } from './pin-session.ts';
 import { getSupabase } from './client.ts';
 
 /** 这个实现提供的方法（和 core/sync/types.ts 的 SyncTransport 形状一致；TS 结构类型，app 层直接交给 createSync） */
@@ -265,10 +266,14 @@ export function createSupabaseTransport(opts: SupabaseTransportOptions = {}): Su
   function call<T>(fn: (db: LooseDb, signal: AbortSignal | undefined) => PromiseLike<PgRes<T>>): Promise<NetResult<T>> {
     return withTimeout<NetResult<T>>(async () => {
       const db = await client();
+      const pin = await pinSession(db);
       const ts = timeoutSignal(ms);
       try {
-        const r = await fn(db, ts.signal);
-        if (r.error) return { ok: false, error: toFailure(r.error, r.status) };
+        const b = fn(db, ts.signal);
+        // 没有会话（token 为 null）时 supabase-js 带 anon key，sid 记 null；定不住令牌就不带 sid
+        const pinned = pin !== undefined && (pin.token === null || pinAuth(b, pin.token));
+        const r = await b;
+        if (r.error) return { ok: false, error: { ...toFailure(r.error, r.status), ...(pinned ? { sid: pin.sid } : {}) } };
         return { ok: true, value: r.data as T };
       } finally {
         ts.clear();

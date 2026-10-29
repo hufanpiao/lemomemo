@@ -19,7 +19,10 @@
   （vite.config.ts 的 assetsInlineLimit 为 0，不会被内联成 data:，CSP 的 font-src 'self' 不用放宽）
 - 名称表全部保留（含版权、许可证说明和网址，OFL 要求随字体带上）；子集属于 OFL 的“修改版”，
   字体内部名字仍是 Noto Sans SC，不含保留字体名 “Source”
-- 只留横排用的 OpenType 特性（pyftsubset 默认那组去掉竖排），启动画面没有竖排
+- 只留横排用的 OpenType 特性（pyftsubset 默认那组去掉竖排），启动画面没有竖排；竖排度量表 vhea、vmtx 也去掉
+  （SPLASH-font-sugg ⑤，省几百字节；横排的字形、步进不受影响，--verify 逐像素核对过）
+- 源字体按 sha256 核对（SPLASH-font-sugg ②）：FACES 里记着 2026-10-29 实测那两份文件的摘要，本机字体换了版本就停下，
+  不悄悄生成另一份。确实要换：先跑 --verify 确认 Edge 画出来和启动图一致，再把新摘要写进 FACES
 可以重复运行，每次全部重新生成；同样的输入生成的文件逐字节相同（不改写 head 的修改时间）。
 """
 import argparse
@@ -47,12 +50,15 @@ PUNCT = " \u3000，。、！？：；“”‘’（）《》〈〉【】…—�
 
 SYS_FONTS = pathlib.Path("C:/Windows/Fonts")
 USER_FONTS = pathlib.Path.home() / "AppData/Local/Microsoft/Windows/Fonts"
-# (字重, 源文件, 是否可变字体)
+# (字重, 源文件, 是否可变字体, 源文件的 sha256)
+# 400：Windows 自带 NotoSansSC-VF.ttf，Version 2.04（17,773,244 字节）；800：Google Fonts 静态字重 Version 2.004（10,544,016 字节）
 FACES = [
-    (400, SYS_FONTS / "NotoSansSC-VF.ttf", True),
-    (800, USER_FONTS / "NotoSansSC-ExtraBold.ttf", False),
+    (400, SYS_FONTS / "NotoSansSC-VF.ttf", True, "763146584cf0710223441356b4395e279021b0806c196614377a7a0174ae074a"),
+    (800, USER_FONTS / "NotoSansSC-ExtraBold.ttf", False, "42e2810361aa7dd0820fa09819ac47681269c9af32d46262ef624d62ad20964a"),
 ]
 DROP_FEATURES = ("vert", "vrt2", "vrtr", "vkna")
+# 竖排度量表：启动画面没有竖排（SPLASH-font-sugg ⑤）
+DROP_TABLES = ("vhea", "vmtx")
 
 
 def out_name(weight):
@@ -63,9 +69,23 @@ def splash_text():
     return "".join(sorted(set(NAME + NAME2 + FOOT + KO_TEXT + PUNCT)))
 
 
-def load_source(path, variable):
+def sha256_file(path):
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def load_source(path, variable, digest):
     if not path.is_file():
         sys.exit(f"找不到字体源文件 {path}：export_splash.py 渲染时用的就是它，先装好再跑")
+    got = sha256_file(path)
+    if got != digest:
+        sys.exit(
+            f"{path.name} 的 sha256 是 {got}，和 FACES 里记的 {digest} 不一样：本机字体换了版本。"
+            "先跑 --verify 确认 Edge 画出来和启动图一致，再把新摘要写进 FACES"
+        )
     font = TTFont(str(path), recalcTimestamp=False)
     if ("fvar" in font) != variable:
         sys.exit(f"{path.name} {'不是' if variable else '是'}可变字体，和 FACES 里写的不符")
@@ -89,6 +109,7 @@ def make_subset(font, text):
     opts.name_languages = ["*"]
     opts.notdef_outline = True
     opts.layout_features = [f for f in opts.layout_features if f not in DROP_FEATURES]
+    opts.drop_tables = list(opts.drop_tables) + [t for t in DROP_TABLES if t not in opts.drop_tables]
     sub = subset.Subsetter(options=opts)
     sub.populate(text=text)
     sub.subset(font)
@@ -97,8 +118,8 @@ def make_subset(font, text):
 def build():
     text = splash_text()
     OUT.mkdir(parents=True, exist_ok=True)
-    for weight, path, variable in FACES:
-        font = load_source(path, variable)
+    for weight, path, variable, digest in FACES:
+        font = load_source(path, variable, digest)
         cmap = font.getBestCmap()
         missing = [c for c in text if ord(c) not in cmap]
         if missing:
@@ -106,8 +127,16 @@ def build():
         check_ofl(font)
         make_subset(font, text)
         dest = OUT / out_name(weight)
+        # subset.Options 的 flavor 只管 pyftsubset 命令行的输出；这里自己 save，要在字体对象上设，否则存出来是没压缩的 TTF
+        # （10-30 前的两份就是这样：扩展名 .woff2、内容是 TTF，浏览器按内容认格式所以一直能用）
+        font.flavor = "woff2"
         font.save(str(dest), reorderTables=True)
+        if dest.read_bytes()[:4] != b"wOF2":
+            sys.exit(f"{dest.name} 不是 WOFF2（没装 brotli？pip install brotli）")
         data = dest.read_bytes()
+        left = [t for t in DROP_TABLES if t in TTFont(str(dest))]
+        if left:
+            sys.exit(f"{dest.name} 里还有 {left}：fontTools 没去掉")
         print(
             f"写入 {dest.relative_to(ROOT).as_posix()}：{len(data)} 字节，{len(font.getGlyphOrder())} 个字形，"
             f"sha256 {hashlib.sha256(data).hexdigest()[:16]}（源 {path.name}）"
@@ -146,7 +175,7 @@ def verify(edge):
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="lemo-splash-font-"))
     bad = False
     try:
-        for weight, _, _ in FACES:
+        for weight, _, _, _ in FACES:
             src = OUT / out_name(weight)
             shutil.copy(src, tmp / src.name)
             face = f"@font-face{{font-family:SplashSubset;src:url({src.name}) format('woff2');font-weight:{weight}}}"

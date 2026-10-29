@@ -12,10 +12,13 @@
 // • leaveForDisabled：设置页收到 account_disabled 先探测再定（R-256 ③；platform/account-status.ts 的 exitForDisabled，和 sync-wiring、
 //   告知页同一份）：冷静期 → pending_deletion；已停用 → disabled；signed_out → 交给 onRevoked（被移除）；探测不出 → fallback；
 //   active → 不离开（返回 false，调用方只提示）
+// • 冷静期不删会话（R-262 K6-pending-s2）：探测出冷静期、或服务器直接回 pending_deletion，说明被拒那次请求的会话还活着，
+//   删它没有安全收益，反而会误伤别的标签页刚登录的同账号 S2。清库、记退出原因、回登录页照旧，登录页 SessionCheck 探测出冷静期就地出恢复页。
+//   例外：注销申请成功（{revoked: true}）——服务器已在同一事务里吊销全部会话，留着没用，照旧删
 import { wipeOnRemoved } from '../../../core/account.ts';
 import { getBoot, type BootResult } from '../../../core/boot.ts';
 import { clearLogQueue } from '../../../platform/log-store.ts';
-import { exitForDisabled } from '../../../platform/account-status.ts';
+import { exitForDisabled, type ProbedExit } from '../../../platform/account-status.ts';
 import { clearCacheStorage, clearLocalSessionIf, goToAuth, type ExitNotice } from '../../../platform/session.ts';
 import { postSyncMessage, syncChannelName } from '../../../platform/tab-leader.ts';
 
@@ -47,18 +50,21 @@ export const defaultAccountLeaveDeps: AccountLeaveDeps = {
   goToAuth: (notice) => goToAuth(notice),
 };
 
-export type LeaveAccount = (notice: AccountLeaveNotice, sid: string | null) => Promise<void>;
+export type LeaveAccount = (notice: AccountLeaveNotice, sid: string | null, o?: { revoked?: boolean }) => Promise<void>;
 
 /** 一个页面只离开一次（返回的函数自己记着）；测试每次新建一个 */
 export function createLeaveAccount(deps: AccountLeaveDeps = defaultAccountLeaveDeps): LeaveAccount {
   let leaving = false;
-  return (notice, sid) => {
+  return (notice, sid, o) => {
     if (leaving) return Promise.resolve();
+    // 冷静期且会话没被服务器吊销：不删会话（见文件头 R-262）
+    const keepSession = notice === 'pending_deletion' && !o?.revoked;
     const boot = deps.getBoot();
     if (boot?.switching) return Promise.resolve();
     leaving = true;
     const userId = boot ? boot.userId : null;
     const drop = (): void => {
+      if (keepSession) return;
       try {
         deps.clearLocalSessionIf(sid);
       } catch {
@@ -99,7 +105,7 @@ export interface DisabledLeaveDeps {
   /** 探测说会话已失效（signed_out）：走“被移除”（useSessionExit.onRevoked） */
   onRevoked(sid: string | null): void;
   /** 测试用：换掉 exitForDisabled */
-  resolve?: (sid: string | null, fallback?: ExitNotice) => Promise<ExitNotice | 'active'>;
+  resolve?: (sid: string | null, fallback?: ProbedExit) => Promise<ProbedExit | 'active'>;
 }
 
 /**
@@ -107,7 +113,7 @@ export interface DisabledLeaveDeps {
  * fallback：探测不出时的原因——settings-api（RLS 一路，分不清）不给，按 disabled_unsure；account-api（经 requireActiveUser，码精确）给 'disabled'
  */
 export async function leaveForDisabled(sid: string | null, d: DisabledLeaveDeps, fallback?: AccountLeaveNotice): Promise<boolean> {
-  const r = await (d.resolve ?? ((s: string | null, f?: ExitNotice) => exitForDisabled(s, f ? { fallback: f } : {})))(sid, fallback);
+  const r = await (d.resolve ?? ((s: string | null, f?: ProbedExit) => exitForDisabled(s, f ? { fallback: f } : {})))(sid, fallback);
   if (r === 'active') return false;
   if (r === 'removed') d.onRevoked(sid);
   else await d.leave(r, sid);

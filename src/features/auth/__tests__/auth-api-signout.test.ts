@@ -1,6 +1,7 @@
 // 登录页“退出并换账号”的封装：signOutHere(prior)（接手清单 K6-signout-lib、R-257；auth-api.test.ts 已近 300 行，单独放）
 // • 删 devices 行用退出一开头记下的 prior.sid，不在 ④ 时现读
 // • 删完行、紧贴 db.auth.signOut 之前再读本机会话：已换成别的标签页的新会话就不调 signOut，用 prior.token 直接 logout
+// • 复审建议 ①：删行之前会话就已被换，删行改用旧令牌（setHeader）；没有旧令牌不删。② logout 的预算扣掉已用掉的时间
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Db } from '../../../platform/supabase/client.ts';
 import { createAuthApi } from '../data/auth-api.ts';
@@ -67,5 +68,40 @@ describe('signOutHere(prior)（K6-signout-lib）', () => {
     await f.api.signOutHere();
     expect(f.eq).toHaveBeenCalledWith('session_id', 's-now');
     expect(f.signOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('复审建议 ①：删行之前会话已换成 s2：删行这次请求定死旧令牌；没有旧令牌就不删', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 204 })));
+    for (const token of [tok('s1'), null]) {
+      put('s2');
+      const headers: [string, string][] = [];
+      const eq = vi.fn((_c: string, _v: string) => ({
+        setHeader: (n: string, v: string) => headers.push([n, v]),
+        then: (res: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(res),
+      }));
+      const db = { auth: { signOut: vi.fn() }, from: vi.fn(() => ({ delete: () => ({ eq }) })) } as unknown as Db;
+      await createAuthApi(async () => db, () => null).signOutHere({ sid: 's1', token, budgetMs: 4000 });
+      if (token) {
+        expect(eq).toHaveBeenCalledWith('session_id', 's1');
+        expect(headers).toEqual([['Authorization', `Bearer ${token}`]]);
+      } else expect(eq).not.toHaveBeenCalled();
+    }
+  });
+
+  it('复审建议 ②：删行用掉的时间从预算里扣掉——预算已用完时 logout 马上放弃，不再等满 budgetMs', async () => {
+    put('s1');
+    vi.stubGlobal('fetch', vi.fn((_u: RequestInfo | URL, i?: RequestInit) => new Promise<Response>((_r, rej) => {
+      i?.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')));
+    })));
+    let now = 1_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const f = fakeDb(() => {
+      put('s2');
+      now += 3_000;   // 删行花了 3 秒，预算 3 秒已用完
+    });
+    const t0 = performance.now();
+    expect((await f.api.signOutHere({ sid: 's1', token: tok('s1'), budgetMs: 3_000 })).ok).toBe(false);
+    expect(performance.now() - t0).toBeLessThan(1_000);
+    vi.mocked(Date.now).mockRestore();
   });
 });

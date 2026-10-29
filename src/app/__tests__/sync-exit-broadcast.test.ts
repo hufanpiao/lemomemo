@@ -79,13 +79,20 @@ afterEach(() => {
 });
 
 describe('本页退出：广播带退出原因的 reset', () => {
-  it('探测出冷静期：删会话之前先发 reset {notice: pending_deletion, sid: s1}', async () => {
+  it('探测出冷静期：发 reset {notice: pending_deletion, sid: s1}，不删会话（R-262）；探测出停用：删会话之前先发 reset', async () => {
     const boot = await coldStart(opts(fakeIndexedDB().factory));
     const s = setup(boot, async () => ({ kind: 'pending_deletion', purgeAfter: null }));
     s.removed('account_disabled', 's1');
     await vi.waitFor(() => expect(s.d.goToAuth).toHaveBeenCalledTimes(1));
     expect(s.fl.posts[0]).toEqual({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
-    expect(s.order.indexOf('post:reset')).toBeLessThan(s.order.indexOf('session:s1'));
+    expect(s.order.filter((x) => x.startsWith('session:'))).toEqual([]);
+    resetBootForTest();
+    const boot2 = await coldStart(opts(fakeIndexedDB().factory));
+    const s2 = setup(boot2, async () => ({ kind: 'disabled' }));
+    s2.removed('account_disabled', 's1');
+    await vi.waitFor(() => expect(s2.d.goToAuth).toHaveBeenCalledTimes(1));
+    expect(s2.fl.posts[0]).toEqual({ type: 'reset', notice: 'disabled', sid: 's1' });
+    expect(s2.order.indexOf('post:reset')).toBeLessThan(s2.order.indexOf('session:s1'));
   });
 
   it('session_revoked（不探测）：同样带 removed；事件没带 sid 时带本机会话的 sid', async () => {
@@ -160,5 +167,38 @@ describe('限次触发：让出同步主页、提示同步暂停', () => {
     await vi.waitFor(() => expect(s.d.reload).toHaveBeenCalledTimes(1));
     expect(s.fl.leader.close).not.toHaveBeenCalled();
     expect(s.d.onSyncPaused).not.toHaveBeenCalled();
+  });
+});
+
+describe('别的标签页发来冷静期 reset：跟着回登录页（R-263）', () => {
+  it('notice=pending_deletion：清库、回登录页一次，不删会话', async () => {
+    const boot = await coldStart(opts(fakeIndexedDB().factory));
+    const s = setup(boot, async () => ({ kind: 'active' }));
+    s.fl.receive({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
+    s.fl.receive({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
+    await vi.waitFor(() => expect(s.d.goToAuth).toHaveBeenCalledTimes(1));
+    expect(s.d.clearCacheStorage).toHaveBeenCalled();
+    expect(s.d.clearLocalSessionIf).not.toHaveBeenCalled();
+  });
+
+  it('反例：别的原因（disabled）照旧只记原因、不跳转；不带原因只重读、不跳转', async () => {
+    const boot = await coldStart(opts(fakeIndexedDB().factory));
+    const s = setup(boot, async () => ({ kind: 'active' }));
+    s.fl.receive({ type: 'reset', notice: 'disabled', sid: 's1' });
+    s.fl.receive({ type: 'reset' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.d.setExitNotice).toHaveBeenCalledWith('disabled', 's1');
+    expect(s.d.goToAuth).not.toHaveBeenCalled();
+    expect(s.d.clearCacheStorage).not.toHaveBeenCalled();
+  });
+
+  it('正在切换账号（boot.switching）：不处理', async () => {
+    const boot = await coldStart(opts(fakeIndexedDB().factory));
+    const s = setup(boot, async () => ({ kind: 'active' }));
+    boot.switching = true;
+    s.fl.receive({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.d.goToAuth).not.toHaveBeenCalled();
+    boot.switching = false;
   });
 });

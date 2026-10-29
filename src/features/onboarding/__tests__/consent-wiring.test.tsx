@@ -27,7 +27,7 @@ function fakeApi(notice: Result<NoticeState> | 'hang' | 'throw', record: Result 
 
 function wiring() {
   const enableAi = vi.fn(async (): Promise<unknown> => undefined);
-  const leave = vi.fn(async (_code: 'session_revoked' | 'account_disabled'): Promise<void> => undefined);
+  const leave = vi.fn(async (_code: 'session_revoked' | 'account_disabled'): Promise<boolean | void> => undefined);
   const deps: ConsentWiringDeps = { enableAi, leave };
   return { deps, enableAi, leave };
 }
@@ -227,6 +227,20 @@ describe('启动关口 ConsentGate（CONSENT-wire ②）', () => {
     expect(w.leave).toHaveBeenCalledWith('account_disabled', 's1');
     expect(w.enableAi).not.toHaveBeenCalled();
     expect(screen.queryByTestId('the-app')).toBeNull();
+  });
+
+  it('账号停用但探测说账号正常（leave 回 false）：留在告知页，提示“这一步没记下，请再点一次”（同设置页口径，PROBE 遗留）；探测出要离开则不提示', async () => {
+    for (const left of [false, true]) {
+      cleanup();
+      const w = wiring();
+      w.leave.mockImplementation(async () => left);
+      await renderGate(fakeApi(first, { ok: false, error: 'disabled', sid: 's1' }), w.deps);
+      await agree();
+      expect(w.leave).toHaveBeenCalledWith('account_disabled', 's1');
+      if (left) expect(screen.queryByText(zh['consent.err.unknown'])).toBeNull();
+      else expect(await screen.findByText(zh['consent.err.unknown'])).toBeTruthy();
+      expect(screen.queryByTestId('the-app')).toBeNull();
+    }
   });
 
   it('R-239 没法保存选择（④ onSkip）：点“继续使用”直接进 App，不写 ai.enabled', async () => {

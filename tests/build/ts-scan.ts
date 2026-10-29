@@ -135,7 +135,9 @@ const directIn = (skel: string) => { const fns = fnSpans(skel); return (pos: num
  *   不会当成覆盖了）；被 PLAN 引用的用例里真要用这种 API，就换个名字包一层（如 const page = q.skip.bind(q)，不写成 skip( 调用）。
  *   skipIf(…)、mySkip(…)、x.skipped 这类名字里只是带 skip 的不算。
  * if (false) {…} 这类永远不执行的分支里的 return、skip 不算（里面的断言也不算，见 expectations）。
- * 认不出的：经变量间接调 skip（const s = ctx.skip; s()）、throw 后的断言、process.exit 之类，照旧当会跑。
+ * ③ 经变量间接调 skip（FN-cov-gaps，10-30）：const s = ctx.skip（含 this.skip、解构改名 const { skip: s } = ctx）之后调 s(…)、
+ *   或 ctx.skip.call(…) / .apply(…)，都算跳过。q.skip.bind(q) 不算（上面 ② 留给查询构造器这类 API 的出口）。
+ * 认不出的：throw 后的断言、process.exit 之类，照旧当会跑。
  */
 function runtimeSkip(tc: Pick<TestCase, 'body' | 'skel'>): string | null {
   const { skel } = tc, direct = directIn(skel), dead = deadSpans(tc);
@@ -145,11 +147,38 @@ function runtimeSkip(tc: Pick<TestCase, 'body' | 'skel'>): string | null {
     const recv = (/(?:[\w$]+\s*\.\s*)?$/.exec(skel.slice(Math.max(0, at - 40), at))?.[0] ?? '').replace(/\s+/g, '');
     return `运行时跳过：回调里调了 ${recv}skip(…)`;
   }
+  const ind = indirectSkip(skel, live);
+  if (ind) return ind;
   const asserts = expectations(tc).map((e) => e.at), chains = expectChains(tc);
   for (const m of skel.matchAll(/(?<![\w$.])return(?![\w$])/g)) {
     const r = m.index ?? 0; if (!direct(r) || !live(r)) continue;
     const end = stmtEnd(skel, r + 'return'.length);
     if (asserts.some((q) => q > end) && !guardedReturn(tc, r, chains)) return '运行时可能跳过：回调里断言前有 return';
+  }
+  return null;
+}
+
+/** ③ 经变量间接调 skip：别名赋值（= x.skip、= skip，不带 bind）、解构改名（{ skip: s } =）之后 s(…)；.skip.call / .skip.apply */
+function indirectSkip(skel: string, live: (p: number) => boolean): string | null {
+  for (const m of skel.matchAll(/(?<![\w$])skip\s*\.\s*(call|apply)\s*\(/g)) {
+    if (live(m.index ?? 0)) return `运行时跳过：回调里调了 skip.${m[1] ?? ''}(…)`;
+  }
+  const names = new Set<string>();
+  // 别名赋值：s = ctx.skip / s = this.skip / s = skip（后面不能紧跟 ( 或 .，那是直接调用或 .bind）
+  //   类型注解里可以有 =>（const s: () => void = ctx.skip）
+  for (const m of skel.matchAll(/(?<![\w$.])([\w$]+)\s*(?::(?:=>|[^=;\n])*?)?\s*=(?![=>])\s*(?:[\w$]+\s*\.\s*)*skip(?![\w$])(?!\s*[.(])/g)) {
+    if (m[1] && live(m.index ?? 0)) names.add(m[1]);
+  }
+  // 解构改名：{ skip: s } = ctx（参数里的 ({ skip: s }) => … 不带 =，在下面单独认）
+  for (const m of skel.matchAll(/\{([^{}]*)\}\s*(?::(?:=>|[^=;\n])*?)?\s*(=(?![=>])|\)\s*=>)/g)) {
+    for (const r of (m[1] ?? '').matchAll(/(?<![\w$])skip\s*:\s*([\w$]+)/g)) if (r[1] && live(m.index ?? 0)) names.add(r[1]);
+  }
+  for (const name of names) {
+    for (let at = skel.indexOf(name); at >= 0; at = skel.indexOf(name, at + 1)) {
+      const before = skel[at - 1] ?? '', after = skel.slice(at + name.length);
+      if (/[\w$.]/.test(before) || !/^\s*\(/.test(after) || /^[\w$]/.test(after)) continue;
+      if (live(at)) return `运行时跳过：经变量 ${name} 调了 skip`;
+    }
   }
   return null;
 }

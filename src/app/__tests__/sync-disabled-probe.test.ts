@@ -91,7 +91,9 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
       answer(kind === 'pending_deletion' ? { kind, purgeAfter: null } : { kind });
       await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
       expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain(notice);
-      expect(d.clearLocalSessionIf).toHaveBeenCalledWith('s1');
+      // 冷静期不删会话（R-262），其余只删被拒那次的 s1
+      if (notice === 'pending_deletion') expect(d.clearLocalSessionIf).not.toHaveBeenCalled();
+      else expect(d.clearLocalSessionIf).toHaveBeenCalledWith('s1');
       // 本页自己记的原因也带上被拒那次的 sid（exit-notice 存起来，过期规则同一套）
       expect(d.setExitNotice).toHaveBeenCalledWith(notice, 's1');
       expect(d.clearCacheStorage).toHaveBeenCalledTimes(1);
@@ -127,7 +129,7 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
     expect(d.clearLocalSessionIf.mock.calls.every(([sid]) => sid === 's1')).toBe(true);
   });
 
-  it('fail 的调用方没给 sid（K6-sugg5 ②）：事件按 null 发，不拿本机现在那个会话的令牌去探测，按 disabled_unsure 退出、只用 null 删', async () => {
+  it('被拒那次请求发出时没有读得出的会话（sid: null；K6-sugg5 ②、OUTBOX-sid-type 起必须显式给）：不拿本机现在那个会话的令牌去探测，按 disabled_unsure 退出、只用 null 删', async () => {
     const boot = await coldStart(opts(fakeIndexedDB().factory));
     const s = spySync();
     const d = deps(s.create, async () => ({ kind: 'pending_deletion', purgeAfter: null }));
@@ -136,11 +138,52 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
     if (!ob) throw new Error('outbox');
     await ob.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
     const a = await ob.next();
-    expect(await ob.fail(a?.op_id ?? '', { status: 403, code: 'account_disabled' })).toBe('disabled');
+    expect(await ob.fail(a?.op_id ?? '', { status: 403, code: 'account_disabled', sid: null })).toBe('disabled');
     await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
     expect(d.probeAccount).not.toHaveBeenCalled();
     expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain('disabled_unsure');
     expect(d.clearLocalSessionIf.mock.calls.every(([sid]) => sid === null)).toBe(true);
+  });
+
+  it('K6-sugg5 审查建议：sid 为 null 且本机读不到账号（没有会话）→ 不探测、按 expired（登录已失效，请重新登录；R-263）退出；本机有账号或读出错 → 照旧 disabled_unsure', async () => {
+    const cases: [() => string | null, string][] = [[() => null, 'expired'], [() => 'A', 'disabled_unsure'], [() => { throw new Error('x'); }, 'disabled_unsure']];
+    for (const [readUserId, notice] of cases) {
+      resetBootForTest();
+      const boot = await coldStart(opts(fakeIndexedDB().factory));
+      const d = { ...deps(spySync().create, async () => ({ kind: 'active' }), { sid: null, token: null }), readUserId: vi.fn(readUserId) };
+      wireSync(boot, d);
+      const ob = boot.outbox;
+      if (!ob) throw new Error('outbox');
+      await ob.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
+      const a = await ob.next();
+      await ob.fail(a?.op_id ?? '', { status: 403, code: 'account_disabled', sid: null });
+      await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
+      expect(d.probeAccount).not.toHaveBeenCalled();
+      expect(d.setExitNotice).toHaveBeenCalledWith(notice, null);
+      expect(d.clearLocalSessionIf.mock.calls.every(([sid]) => sid === null)).toBe(true);
+      expect(d.reload).not.toHaveBeenCalled();
+      boot.cache?.close();
+    }
+  });
+
+  it('R-262：探测出冷静期 → 不删会话，但照样清库（clearAll）、清运行时缓存、回登录页；反例：探测出停用照旧删 s1', async () => {
+    for (const [kind, deleted] of [['pending_deletion', false], ['disabled', true]] as const) {
+      resetBootForTest();
+      const boot = await coldStart(opts(fakeIndexedDB().factory));
+      const cache = boot.cache;
+      if (!cache) throw new Error('cache');
+      const clearAll = vi.spyOn(cache, 'clearAll');
+      const s = spySync();
+      const d = deps(s.create, async () => (kind === 'pending_deletion' ? { kind, purgeAfter: null } : { kind }));
+      wireSync(boot, d);
+      s.removed('account_disabled', 's1');
+      await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
+      expect(d.clearLocalSessionIf.mock.calls).toEqual(deleted ? [['s1'], ['s1']] : []);
+      expect(clearAll).toHaveBeenCalledTimes(1);
+      expect(d.clearCacheStorage).toHaveBeenCalledTimes(1);
+      expect(cache.isClosed()).toBe(true);
+      expect(d.setExitNotice).toHaveBeenCalledWith(kind, 's1');
+    }
   });
 
   it('account_pending_deletion、session_revoked 不探测，照旧直接退出', async () => {

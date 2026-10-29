@@ -16,7 +16,7 @@ async function failedItem() {
   await outbox.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
   const a = await outbox.next();
   if (!a) throw new Error('next');
-  await outbox.fail(a.op_id, { status: 409, code: '23505' });
+  await outbox.fail(a.op_id, { status: 409, code: '23505', sid: null });
   return { cache, outbox, opId: a.op_id };
 }
 

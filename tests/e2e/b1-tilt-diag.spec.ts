@@ -1,12 +1,12 @@
-// 倾斜授权试验页 /app/diag/tilt.html（R-153，架构 0.27 第 5 点；TC-B1-54、TC-B1-55；iPhone 实机验收清单 P1-05）
-// • 响应头：Permissions-Policy 里 accelerometer、gyroscope 是 (self)，其余关闭；CSP 和 /app/* 一样（构建层的同一组断言在 tests/build/auth-headers.test.ts）
+// 倾斜授权试验页 /diag/tilt.html（R-153，架构 0.27 第 5 点；TC-B1-54、TC-B1-55；iPhone 实机验收清单 P1-05；10-30 从 /app/diag/ 搬出，SW-update ③）
+// • 响应头：Permissions-Policy 里 accelerometer、gyroscope 是 (self)，其余关闭；CSP 是 site/_headers 的 /diag/* 那一段（构建层的同一组断言在 tests/build/auth-headers.test.ts）
 // • 带 CSP 打开页面没有任何 CSP 报错（csp-fixture 自动收）
 // • 加载时不调 requestPermission，只在点按回调里调；读数只放内存（不写任何存储、不发页面自己文件以外的请求）
 // 桌面浏览器没有 requestPermission、也没有方向传感器：用 addInitScript 在两个构造函数上挂假的 requestPermission 记次数，
 // 用普通 Event 加上 beta / gamma 字段模拟 deviceorientation（WebKit 的 Windows 版不一定有 DeviceOrientationEvent 构造函数）。
 import { expect, test } from './csp-fixture.ts';
 
-const PAGE = '/app/diag/tilt.html';
+const PAGE = '/diag/tilt.html';
 
 declare global {
   interface Window {
@@ -16,7 +16,7 @@ declare global {
 
 test.describe('倾斜授权试验页', () => {
   test('TC-B1-54：响应头里 accelerometer、gyroscope 为 (self)，其余设备能力关闭；CSP 只许同源脚本和样式', async ({ request }) => {
-    for (const path of [PAGE, '/app/diag/tilt']) {
+    for (const path of [PAGE, '/diag/tilt']) {
       const res = await request.get(path);
       expect(res.status(), path).toBe(200);
       const raw = res.headers()['permissions-policy'] ?? '';
@@ -30,6 +30,10 @@ test.describe('倾斜授权试验页', () => {
       expect(csp, path).toContain("script-src 'self';");
       expect(csp, path).toContain("style-src 'self';");
       expect(csp, path).not.toContain('unsafe-inline');
+      expect(csp, path).toContain("default-src 'none';");
+      // 只有一条 CSP、一条 Permissions-Policy（/app/* 那段命不中 /diag/，不会被 Cloudflare 用逗号拼成两条）
+      expect(csp, path).not.toContain(',');
+      expect(raw.match(/accelerometer=/g), path).toHaveLength(1);
     }
   });
 
@@ -79,7 +83,7 @@ test.describe('倾斜授权试验页', () => {
       }));
       expect(stored).toEqual({ local: 0, session: 0, cookie: '', idb: 0 });
       const origin = new URL(baseURL ?? '').origin;
-      const others = requests.filter((u) => !/^\/app\/diag\/tilt(\.html|\.js|\.css)?$/.test(new URL(u).pathname) && new URL(u).pathname !== '/favicon.ico');
+      const others = requests.filter((u) => !/^\/diag\/tilt(\.html|\.js|\.css)?$/.test(new URL(u).pathname) && new URL(u).pathname !== '/favicon.ico');
       expect(others).toEqual([]);
       expect(requests.every((u) => new URL(u).origin === origin)).toBe(true);
     });

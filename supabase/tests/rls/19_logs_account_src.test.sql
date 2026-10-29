@@ -1,8 +1,9 @@
--- logs 的 ins 策略不准客户端写 src = 'account'（迁移 20261030100000_core_logs_ins_no_account_src.sql，R-259）
+-- logs 的 ins 策略不准客户端写 src = 'account'（迁移 20261030100000_core_logs_ins_no_account_src.sql，R-259），
+--   连大小写、空白、全角、零宽字符、标点的变体也不准（20261030110000_core_logs_ins_src_variants.sql，R259-sugg ①）
 -- “设置 › 账号 › 最近的导出”只认 src = 'account' 的行（account 函数经 service role 写）；客户端能写的话就能伪造导出记录
 -- 原有条件照旧：本人、账号可用（停用的 C 写不进）；别的 src、src 为 null 照常能写；service role 写 src = 'account' 照常成功
 begin;
-select plan(13);
+select plan(16);
 \ir _helpers.psql
 select tests.seed();   -- A、B 正常，C 停用
 
@@ -21,6 +22,22 @@ select ok(tests.a($$insert into public.logs (t, kind, act, src, code) values (2,
 select ok(tests.a($$insert into public.logs (t, kind, act, src) values (3, 'run', 'x', 'sync'), (4, 'run', 'export', 'account')$$) like '42501 %row-level security%',
   '一批里混一条 src = account：整批被拒');
 select is(tests.n('account'), 0, '被拒以后 A 名下没有 src = account 的行');
+
+-- ===== R259-sugg ①：'account' 的变体一样被拒（NFKC 规范化、去掉非字母数字、转小写以后等于 account） =====
+create function tests.not_rejected(p_vals text[]) returns text language sql as $$
+  select string_agg(quote_literal(v), ' | ') from unnest(p_vals) v
+   where tests.a(format('insert into public.logs (t, kind, act, src) values (9, %L, %L, %L)', 'run', 'export', v)) not like '42501 %row-level security%'
+$$;
+-- 特殊字符一律用 chr() 写（chr(9) 制表、chr(10) 换行、chr(13) 回车、chr(12288) 全角空格 U+3000、chr(8203) 零宽空格 U+200B、
+--   chr(65345) 起是全角小写字母 ａ），文件里不出现反斜杠转义
+select is(tests.not_rejected(array['Account', 'ACCOUNT', 'aCcOuNt', 'account ', ' account', 'account' || chr(9), chr(10) || 'account' || chr(13) || chr(10)]), null,
+  '大小写、两头半角空格、制表、换行的变体：一个个都被 RLS 拒（列出来的是没被拒的）');
+select is(tests.not_rejected(array['account' || chr(12288),
+    (select string_agg(chr(65345 + ascii(ch) - ascii('a')), '' order by i) from unnest(string_to_array('account', null)) with ordinality as x(ch, i)),
+    'acc' || chr(8203) || 'ount', 'ac-count', 'account.', 'a c c o u n t']), null,
+  '全角空格 U+3000、全角字母、中间夹零宽空格 U+200B、连字符、标点、字母间空格：都被拒');
+select is(tests.a($$insert into public.logs (t, kind, act, src) values (10, 'run', 'x', 'accounts'), (11, 'run', 'x', 'account1'), (12, 'run', 'x', 'myaccount')$$), 'ok',
+  '只是含 account 的别的值（accounts、account1、myaccount）照常能写：规范化以后不等于 account');
 
 -- ===== authenticated：别的 src、src 为 null 照常 =====
 select is(tests.a($$insert into public.logs (t, kind, act, src) values (5, 'run', 'x', 'sync')$$), 'ok', 'A 插 src = sync：成功');
@@ -43,9 +60,9 @@ select is((select string_agg(policyname || '/' || permissive || '/' || array_to_
              from pg_policies where schemaname = 'public' and tablename = 'logs' and cmd in ('INSERT', 'ALL')),
           'ins/PERMISSIVE/authenticated',
   '守门：public.logs 上管 insert 的策略只有 ins 一个（permissive、只给 authenticated），没有别的策略能 OR 掉它');
-select ok((select position('(src IS DISTINCT FROM ''account''::text)' in with_check) > 0
+select ok((select position('(lower(regexp_replace(NORMALIZE(src, NFKC), ''[^[:alnum:]]''::text, ''''::text, ''g''::text)) IS DISTINCT FROM ''account''::text)' in with_check) > 0
              from pg_policies where schemaname = 'public' and tablename = 'logs' and policyname = 'ins'),
-  '守门：ins 的 with check 里还留着 src IS DISTINCT FROM ''account''（重写这个策略时不准丢，R-259）');
+  '守门：ins 的 with check 里还留着“规范化以后的 src IS DISTINCT FROM ''account''”（重写这个策略时不准丢，R-259、R259-sugg ①）');
 -- 上一条只查子串：with check (true or src is distinct from 'account') 留着原文、逻辑却坏了（TESTCLEAN-sugg ①）。
 -- 再按顶层切开：顶层（括号外、引号外）不许有 OR，src 那一条要是顶层 AND 里单独的一项——… and (true or src …) 这种套一层的也过不了
 create function tests.top_and(p text) returns text[] language plpgsql as $$
@@ -79,9 +96,9 @@ begin
   end loop;
   return parts || btrim(substr(s, st));
 end $$;
-select ok(coalesce((select '(src IS DISTINCT FROM ''account''::text)' = any(tests.top_and(with_check))
+select ok(coalesce((select '(lower(regexp_replace(NORMALIZE(src, NFKC), ''[^[:alnum:]]''::text, ''''::text, ''g''::text)) IS DISTINCT FROM ''account''::text)' = any(tests.top_and(with_check))
              from pg_policies where schemaname = 'public' and tablename = 'logs' and policyname = 'ins'), false),
-  '守门：ins 的 with check 顶层没有 OR，src IS DISTINCT FROM ''account'' 是顶层 AND 里单独的一项（true or …、… and (x or src …) 都过不了）');
+  '守门：ins 的 with check 顶层没有 OR，规范化以后的 src 条件是顶层 AND 里单独的一项（true or …、… and (x or src …) 都过不了）');
 
 select * from finish();
 rollback;

@@ -52,10 +52,11 @@ B1 已经用电脑模拟 iPhone 签过；这里是真机再确认一次。发现
     4. 回到另一个窗口看。
   - 看什么（判定）：另一个窗口几秒内自己回到登录页，**不会一直闪、反复重新载入**；重新登录后今天页是空的再同步回来（本机旧数据已清掉）。不符合就打 ❌ 并写是哪一步。
 - [ ] **P1-07**　iOS 启动图（R-232，启动图审查必改第 2 条；和 P1-01 同一次做，约多 10 分钟）
-  - 准备：**机型信息页** `https://preview.lemomemo.com/app/diag/startup.html`（在 **Safari 里**打开，不用装到主屏幕；页面显示 Safari 报的 `screen.width × screen.height`、`devicePixelRatio`、方向、是否深色，并请求服务器上当前部署的 `index.html`（带 `?diag=1`，绕开这台设备 SW 里预缓存的旧版），把 12 条 `media` 逐条判断、标出匹配到的那一张，如 `startup-1179x2556.png（1179×2556 像素）`；要联网）；身边有 iPhone 12 mini 或 13 mini 的，借来一起测。
+  - **10-30 起技术页地址改了**：机型信息页、倾斜试验页从 `/app/diag/` 搬到 `/diag/`（SW-update ③）；以前把旧地址加到主屏幕的，删掉重新按新地址添加。
+  - 准备：**机型信息页** `https://preview.lemomemo.com/diag/startup.html`（在 **Safari 里**打开，不用装到主屏幕；页面显示 Safari 报的 `screen.width × screen.height`、`devicePixelRatio`、方向、是否深色，并请求服务器上当前部署的 `index.html`（带 `?diag=1`，绕开这台设备 SW 里预缓存的旧版），把 12 条 `media` 逐条判断、标出匹配到的那一张，如 `startup-1179x2556.png（1179×2556 像素）`；要联网）；身边有 iPhone 12 mini 或 13 mini 的，借来一起测。
   - 步骤：
-    1. 在手边的 iPhone 上，删掉旧的主屏幕图标，Safari 打开预览地址，“添加到主屏幕”，从图标打开，**注意第一眼的启动画面**（柠檬黄底、正中偏上的玻璃圆片、“柠檬记 / Lemo”、底部一句话）；再用 Safari 打开机型信息页 `https://preview.lemomemo.com/app/diag/startup.html`，截图，写下 Safari 报的尺寸、倍率和“匹配到的启动图”那一行的文件名；
-    2. **12 mini / 13 mini**：同样做一遍（机型信息页同一个地址 `https://preview.lemomemo.com/app/diag/startup.html`），写下 Safari 报的是 `360×780` 还是 `375×812`、匹配到哪一张。怀疑报的是 `375×812`（倍率 3），那样会用到 X / XS / 11 Pro 那张 `startup-1125x2436.png`，而 `360×780` 那条（`startup-1080x2340.png`）永远匹配不到；
+    1. 在手边的 iPhone 上，删掉旧的主屏幕图标，Safari 打开预览地址，“添加到主屏幕”，从图标打开，**注意第一眼的启动画面**（柠檬黄底、正中偏上的玻璃圆片、“柠檬记 / Lemo”、底部一句话）；再用 Safari 打开机型信息页 `https://preview.lemomemo.com/diag/startup.html`，截图，写下 Safari 报的尺寸、倍率和“匹配到的启动图”那一行的文件名；
+    2. **12 mini / 13 mini**：同样做一遍（机型信息页同一个地址 `https://preview.lemomemo.com/diag/startup.html`），写下 Safari 报的是 `360×780` 还是 `375×812`、匹配到哪一张。怀疑报的是 `375×812`（倍率 3），那样会用到 X / XS / 11 Pro 那张 `startup-1125x2436.png`，而 `360×780` 那条（`startup-1080x2340.png`）永远匹配不到；
     3. **深色模式**：设置 › 显示与亮度 改成深色，从后台彻底划掉 App 再从主屏幕打开，看启动画面；
     4. **断网首次启动**：删掉主屏幕图标；Safari 联网打开预览地址后**开飞行模式**，再“添加到主屏幕”，从图标打开（启动图不进 SW 预缓存，架构 8.1、0.38 第 63 条）；关掉飞行模式，划掉 App 再打开一次；
     5. **改图后要不要重加**：请主持人部署一版换过启动图的（换一张明显不同的测试图），先直接从主屏幕打开、等出现“有新版本 · 重新打开”并点它，再划掉 App 打开一次；然后删掉图标、重新“添加到主屏幕”再打开。

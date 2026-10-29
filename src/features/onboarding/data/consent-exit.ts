@@ -46,30 +46,37 @@ export const defaultLeaveDeps: LeaveDeps = {
 
 let leaving = false;
 
-/** 只处理一次；sid：被拒那次请求用的会话（必填，K6-sugg4 ①②）。返回清理做完（或不用清、没离开）的 Promise */
-export function leaveThisDevice(code: LeaveCode, sid: string | null, deps: LeaveDeps = defaultLeaveDeps): Promise<void> {
-  if (leaving) return Promise.resolve();
-  if (deps.getBoot()?.switching) return Promise.resolve();
+/**
+ * 只处理一次；sid：被拒那次请求用的会话（必填，K6-sugg4 ①②）。返回清理做完的 Promise：
+ * false = 探测说账号正常（active），没离开、留在告知页（调用方提示“这一步没记下，请再点一次”）；其余（离开了、不用处理）为 true
+ */
+export function leaveThisDevice(code: LeaveCode, sid: string | null, deps: LeaveDeps = defaultLeaveDeps): Promise<boolean> {
+  if (leaving) return Promise.resolve(true);
+  if (deps.getBoot()?.switching) return Promise.resolve(true);
   leaving = true;
-  if (code !== 'account_disabled') return leaveNow(exitNoticeOf(code), sid, deps);
+  if (code !== 'account_disabled') return leaveNow(exitNoticeOf(code), sid, deps).then(() => true);
   return (async () => {
     const r = await (deps.resolveDisabled ?? ((s: string | null) => exitForDisabled(s)))(sid);
-    if (deps.getBoot()?.switching) return;   // 探测期间别的退出流程接手了
+    if (deps.getBoot()?.switching) return true;   // 探测期间别的退出流程接手了
     if (r === 'active') {
       leaving = false;   // 账号正常：留在告知页，可以再点一次
-      return;
+      return false;
     }
     await leaveNow(r, sid, deps);
+    return true;
   })();
 }
 
 /** 清本机、记退出原因、回登录页（顺序见文件头） */
 function leaveNow(notice: ExitNotice, sid: string | null, deps: LeaveDeps): Promise<void> {
   const boot = deps.getBoot();
-  // 同一个同步段里先删本机会话——只删被拒的那个（K6-sugg3 ①、K6-sugg4 ①）
+  // 同一个同步段里先删本机会话——只删被拒的那个（K6-sugg3 ①、K6-sugg4 ①）。
+  // 冷静期不删（R-262 K6-pending-s2）：探测出冷静期说明被拒那次的会话还活着，删它没有安全收益、反而会误伤别的标签页刚登录的同账号 S2；
+  // 清库、记退出原因、回登录页照旧，登录页 SessionCheck 探测出冷静期就地出恢复页
   const dead = sid;
   const userId = boot ? boot.userId : null;
   const drop = (): void => {
+    if (notice === 'pending_deletion') return;
     try {
       deps.clearLocalSessionIf(dead);
     } catch {

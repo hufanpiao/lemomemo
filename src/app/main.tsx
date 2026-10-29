@@ -169,6 +169,7 @@ async function start(): Promise<void> {
     // 收到 account_disabled 先探测是停用还是注销冷静期（R-256 ③ 后续）：用被拒那次会话的令牌调 account status
     probeAccount: (token) => probeAccountForExit({ token }),
     readSession: () => ({ sid: readSessionId(), token: readSessionAccessToken() }),
+    readUserId: () => readSessionUserId(),
     reload: reloadPage,
     // 限次触发、已让出同步主页：顶部出“同步暂停，请稍后重新打开”（App.tsx 的 UpdateBanner 读 ui-store 的 sync-paused）
     onSyncPaused: () => uiStore.getState().pushBanner({ id: 'sync-paused', kind: 'sync-paused' }),

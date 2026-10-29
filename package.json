@@ -12,7 +12,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.app.json && tsc -p tsconfig.sw.json && tsc -p tsconfig.shared.json && tsc -p tsconfig.functions.json && tsc -p tsconfig.node.json",
-    "lint": "eslint . && stylelint \"src/**/*.css\"",
+    "lint": "eslint . && stylelint \"src/**/*.css\" \"site/**/*.css\"",
     "check:arch": "python -I build/check_arch.py",
     "check:site": "node build/build_site.mjs --check",
     "check:gate": "node build/check_version_gate.mjs",

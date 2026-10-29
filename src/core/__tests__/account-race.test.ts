@@ -33,10 +33,10 @@ describe('N1：失败处理、重试进行到一半时换了账号', () => {
       if (!sent) throw new Error('next');
       let p: Promise<unknown>;
       if (kind === 'retryFailed') {
-        await outbox.fail(sent.op_id, { status: 400 });
+        await outbox.fail(sent.op_id, { status: 400, sid: null });
         p = outbox.retryFailed();
       } else {
-        p = outbox.fail(sent.op_id, kind === 'transient' ? { network: true } : { status: 400 });
+        p = outbox.fail(sent.op_id, kind === 'transient' ? { network: true, sid: null } : { status: 400, sid: null });
       }
       // watchAccount 的 closeGate：同步设闸、封存，随后清库记成 B
       outbox.suspend();
@@ -55,10 +55,10 @@ describe('N1：失败处理、重试进行到一半时换了账号', () => {
       if (!sent) throw new Error('next');
       let p: Promise<unknown>;
       if (kind === 'retryFailed') {
-        await outbox.fail(sent.op_id, { status: 400 });
+        await outbox.fail(sent.op_id, { status: 400, sid: null });
         p = outbox.retryFailed();
       } else {
-        p = outbox.fail(sent.op_id, kind === 'transient' ? { network: true } : { status: 400 });
+        p = outbox.fail(sent.op_id, kind === 'transient' ? { network: true, sid: null } : { status: 400, sid: null });
       }
       const c = claimCache(cache, 'B');
       await Promise.allSettled([p, c]);

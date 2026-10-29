@@ -2,7 +2,7 @@
 // 两个函数的 core.ts 都接它，所以“申请 → 冷静期 → 彻底删除”能在一个进程里串起来（TC-B1-98、101、107、TC-B0-117）。
 // 语义以 SQL 为准（supabase/tests/rls/11_account_deletion.test.sql 测真函数），这里只照着做，不另发明规则。
 import type { AccountStore, ActiveUser, AuthResult, Deps as AccountDeps } from '../../supabase/functions/account/core.ts';
-import { DbError } from '../../supabase/functions/account/core.ts';
+import { DbError, handle } from '../../supabase/functions/account/core.ts';
 import type { Backups, Deps as PurgeDeps, PurgeStore, R2 } from '../../supabase/functions/account-purge/core.ts';
 import { BackupsSubdirError } from '../../supabase/functions/account-purge/core.ts';
 import type { Mail } from '../../supabase/functions/_shared/account-mail.ts';
@@ -284,4 +284,26 @@ export function cronReq(secret: string | null = CRON): Request {
   const headers = new Headers({ 'content-type': 'application/json' });
   if (secret !== null) headers.set('x-cron-secret', secret);
   return new Request('https://x.supabase.co/functions/v1/account-purge', { method: 'POST', headers, body: '{}' });
+}
+
+// ---------------- 三个 account 测试文件共用（从 account.test.ts 挪来，ACCOUNT-sugg ①） ----------------
+/** counters 的 check 约束（0001）：计数键都得过它 */
+export const COUNTER_KEY = /^[a-z][a-z0-9_-]*:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|global|ip|mail):[^:]+$/;
+
+/** 一个干净的假库：A（中文界面）、B（韩文界面） */
+export function accountSetup() {
+  const clock = new Clock();
+  const db = new FakeDb(clock);
+  db.addUser(A, 'a@test.local');
+  db.addUser(B, 'b@test.local', { ui_locale: 'ko-KR' });
+  const box: Outbox[] = [];
+  return { clock, db, box };
+}
+
+/** 调一次 account 的 handle，等后台的事（发信、补记日志）都做完再返回 */
+export async function callAccount(db: FakeDb, box: Outbox[], body: unknown, over: Parameters<typeof accountDeps>[2] = {}, headers: Record<string, string> = {}) {
+  const deps = accountDeps(db, box, over);
+  const res = await handle(accountReq(body, headers), deps);
+  await Promise.all(deps.bg);
+  return res;
 }

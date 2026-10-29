@@ -16,6 +16,16 @@ crons = ["*/15 * * * *", "7 0 * * *"]
 binding = "OPS_STATE"
 id = "REPLACE_WITH_KV_NAMESPACE_ID"
 
+# Workers Logs（R-261）：发信失败、KV 写不进等错误码能在 Cloudflare 面板看到。
+# 开之前核对过：src/ 里只有 index.ts 的 consoleLog 一处 console 输出，内容只有固定错误码或缺的变量名，
+# 不打印收件人、邮箱、标题、正文、请求头、响应体（A23）；tests/build/lemo-ops-config.test.ts 守住这两条
+[observability]
+enabled = true
+
+# 追踪（traces）明确关着：只要错误码日志，不要请求级的追踪记录（写法依据 wrangler 4.150.0 自带的 config-schema.json：observability.traces.enabled）
+[observability.traces]
+enabled = false
+
 [vars]
 # 没有心跳行也要告警的 cron 函数（逗号分隔）。哪个函数上了线就把它加进来；没上线的不写，免得天天告警
 REQUIRED_HEARTBEATS = ""

@@ -28,7 +28,7 @@ type LossDeps = Pick<AccountActionDeps, 'leave' | 'onRevoked' | 'onSignedOut' | 
 
 /**
  * 会话没了、账号停用、冷静期：交给离开本机的处理；true = 已处理。
- * onStay：account_disabled 探测出账号正常、不离开时调（调用方照常显示错误）
+ * onStay：account_disabled 探测出账号正常、不离开时调——调用方显示通用错误（unknown），不说“已停用”（PROBE 遗留，和设备列表同一口径）
  */
 export function handleAccountLoss(f: AccountFailure, d: LossDeps, onStay?: () => void): boolean {
   if (f.error === 'revoked') d.onRevoked(f.sid);
@@ -87,10 +87,10 @@ export function useExport(d: AccountActionDeps, onExported?: () => void) {
       const r = await d.api.exportAll(await d.readDeviceId());
       if (!alive.current) return;
       if (!r.ok) {
-        const show = (): void => {
-          if (alive.current) setState({ kind: 'error', error: r.error });
+        const show = (error: AccountErr = r.error): void => {
+          if (alive.current) setState({ kind: 'error', error });
         };
-        if (!handleAccountLoss(r, d, show)) show();
+        if (!handleAccountLoss(r, d, () => show('unknown'))) show();
         return;
       }
       onExported?.();
@@ -147,12 +147,14 @@ export function useDeleteAccount(d: Pick<AccountActionDeps, 'api' | 'leave' | 'o
       const r = await d.api.requestDeletion(confirm.trim());
       if (r.ok) {
         // 保持“正在注销”直到跳走（running 不放开，不能再提交）
-        await d.leave('pending_deletion', r.value.sid);
+        // R-263 定的例外：R-262（冷静期不删会话）的前提是“探测出冷静期说明被拒那次的会话还活着”，这一路不成立——
+        // 服务器在申请注销的同一事务里已吊销全部会话（supabase/functions/account/core.ts ④），留着只会让登录页探测出“会话失效”，所以照旧删
+        await d.leave('pending_deletion', r.value.sid, { revoked: true });
         return;
       }
       running.current = false;
-      const show = (): void => setState({ kind: 'error', error: r.error });
-      if (!handleAccountLoss(r, d, show)) show();
+      const show = (error: AccountErr = r.error): void => setState({ kind: 'error', error });
+      if (!handleAccountLoss(r, d, () => show('unknown'))) show();
     },
     [d],
   );

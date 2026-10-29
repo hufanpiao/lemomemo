@@ -142,7 +142,7 @@ describe('发送、确认、失败', () => {
     const events: unknown[] = [];
     outbox.onEvent((e) => events.push(e));
     const first = await outbox.next();
-    const kind = await outbox.fail(first?.op_id ?? '', { status: 426, code: 'upgrade_required', min: '4.1.0' });
+    const kind = await outbox.fail(first?.op_id ?? '', { status: 426, code: 'upgrade_required', min: '4.1.0', sid: null });
     expect(kind).toBe('upgrade');
     const list = await outbox.list();
     expect(list.map((i) => [i.state, i.tries])).toEqual([
@@ -172,7 +172,7 @@ describe('发送、确认、失败', () => {
     const errs: unknown[] = [];
     outbox.onEvent((e) => errs.push(e));
     const it1 = await outbox.next();
-    expect(await outbox.fail(it1?.op_id ?? '', { status: 400, code: '23514' })).toBe('permanent');
+    expect(await outbox.fail(it1?.op_id ?? '', { status: 400, code: '23514', sid: null })).toBe('permanent');
     expect((await cache.getRow('todos', uid(1)))?.view?.['title']).toBe('待办1');
     expect(collection('todos').get(uid(1))?.['title' as never]).toBe('待办1');
     expect(outbox.getStatus()).toMatchObject({ pending: 0, failed: 1 });
@@ -190,7 +190,7 @@ describe('发送、确认、失败', () => {
     const ev: unknown[] = [];
     outbox.onEvent((e) => ev.push(e));
     const it1 = await outbox.next();
-    expect(await outbox.fail(it1?.op_id ?? '', { status: 400, code: 'vault_required' })).toBe('drop');
+    expect(await outbox.fail(it1?.op_id ?? '', { status: 400, code: 'vault_required', sid: null })).toBe('drop');
     expect(await outbox.list()).toEqual([]);
     expect(await cache.getRow('todos', uid(1))).toBeUndefined();
     expect(ev).toMatchObject([{ type: 'rejected', code: 'vault_required' }]);
@@ -200,13 +200,13 @@ describe('发送、确认、失败', () => {
     const { outbox } = await setup();
     await outbox.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
     let it1 = await outbox.next();
-    expect(await outbox.fail(it1?.op_id ?? '', { network: true })).toBe('transient');
+    expect(await outbox.fail(it1?.op_id ?? '', { network: true, sid: null })).toBe('transient');
     expect((await outbox.list())[0]).toMatchObject({ tries: 1, next_at: clock.t + 2000, state: 'pending' });
     expect(await outbox.next()).toBeNull();
     await outbox.clearBackoff();
     it1 = await outbox.next();
     expect(it1).not.toBeNull();
-    expect(await outbox.fail(it1?.op_id ?? '', { status: 401 })).toBe('auth');
+    expect(await outbox.fail(it1?.op_id ?? '', { status: 401, sid: null })).toBe('auth');
     expect((await outbox.list())[0]).toMatchObject({ tries: 1, state: 'pending' });
   });
 

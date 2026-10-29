@@ -4,7 +4,7 @@
 import type { OutboxPause, ServerRow } from './cache.ts';
 import type { Manifest } from './manifest.ts';
 import type { OutboxMigration } from './outbox-migrations.ts';
-import type { SendFailure } from '../../shared/schema/sync.ts';
+import type { SentFailure } from '../../shared/schema/sync.ts';
 
 export type OutboxOp = 'insert' | 'patch';
 export type OutboxState = 'pending' | 'inflight' | 'failed';
@@ -78,7 +78,7 @@ export interface AckResult {
 }
 
 /** 网络失败的结构：线上形状，定义在 shared/schema/sync.ts（架构 4.3b、0.38 第 58 条）；这里转出，原有引用不变 */
-export type { SendFailure } from '../../shared/schema/sync.ts';
+export type { SendFailure, SentFailure } from '../../shared/schema/sync.ts';
 
 /**
  * 失败归类：
@@ -176,7 +176,7 @@ export interface Outbox {
   /** 发送成功 */
   ack(opId: string, ack: AckResult): Promise<void>;
   /** 发送失败；返回归类 */
-  fail(opId: string, failure: SendFailure): Promise<FailureKind>;
+  fail(opId: string, failure: SentFailure): Promise<FailureKind>;
   /** 丢掉一项并回滚 view（“发送失败”区的丢弃、gone 时选“好的”） */
   discard(opId: string): Promise<void>;
   /**

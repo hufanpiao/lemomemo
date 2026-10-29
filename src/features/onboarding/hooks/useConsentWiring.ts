@@ -67,8 +67,8 @@ export function useNoticeState(api: ConsentApi, limitMs?: number, startedAt?: nu
 
 export interface ConsentWiringDeps {
   enableAi(): Promise<unknown>;
-  /** sid：被拒那次请求用的会话（K6-sugg4 ①），离开时只删它 */
-  leave(code: 'session_revoked' | 'account_disabled', sid: string | null): Promise<void>;
+  /** sid：被拒那次请求用的会话（K6-sugg4 ①），离开时只删它。false = 探测说账号正常、没离开（data/consent-exit.ts） */
+  leave(code: 'session_revoked' | 'account_disabled', sid: string | null): Promise<boolean | void>;
 }
 
 export const defaultConsentWiringDeps: ConsentWiringDeps = {
@@ -86,7 +86,12 @@ export function useConsentHandlers(finish: () => void, deps: ConsentWiringDeps =
     [deps, finish],
   );
   const onRevoked = useCallback((sid: string | null) => void deps.leave('session_revoked', sid), [deps]);
-  const onDisabled = useCallback((sid: string | null) => void deps.leave('account_disabled', sid), [deps]);
+  // 探测说账号正常：留在告知页，按设置页的口径提示一句通用错误（onStay；PROBE / DISABLED-probe-later 遗留）
+  const onDisabled = useCallback(
+    (sid: string | null, onStay?: () => void) =>
+      void deps.leave('account_disabled', sid).then((left) => (left === false ? onStay?.() : undefined), () => undefined),
+    [deps],
+  );
   return { onDone, onRevoked, onDisabled, onSkip: finish };
 }
 

@@ -50,4 +50,21 @@ describe('dropLocalSession(sid, prior)（K6-signout-lib）', () => {
       expect(m.clear).toHaveBeenCalledWith('s1');
     }
   });
+
+  it('K6-signout-lib 复审建议 ②：拿客户端用掉的时间从预算里扣掉——预算已用完时 logout 马上放弃', async () => {
+    vi.stubGlobal('fetch', vi.fn((_u: RequestInfo | URL, i?: RequestInit) => new Promise<Response>((_r, rej) => {
+      i?.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')));
+    })));
+    let now = 1_000;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const db = { auth: { signOut: vi.fn() } } as unknown as Db;
+    const api = createSettingsApi(async () => {
+      now += 3_000;   // getDb 花了 3 秒
+      return db;
+    }, vi.fn(), 1000, () => 's2');
+    const t0 = performance.now();
+    expect(await api.dropLocalSession('s1', { token: tok('s1'), budgetMs: 3_000 })).toEqual({ serverDone: false });
+    expect(performance.now() - t0).toBeLessThan(1_000);
+    spy.mockRestore();
+  });
 });

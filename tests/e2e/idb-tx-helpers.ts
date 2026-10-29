@@ -5,9 +5,11 @@
 import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 import { buildSync } from 'esbuild';
+import type { coldStart as ColdStartFn } from '../../src/core/boot.ts';
 import type { Cache, CacheClosedError, OpenCacheOptions, OpenCacheResult } from '../../src/core/cache.ts';
 import type { cacheStores as CacheStoresFn } from '../../src/core/cache-schema.ts';
 import { cacheStores } from '../../src/core/cache-schema.ts';
+import type { createSync as CreateSyncFn } from '../../src/core/sync/engine.ts';
 
 /** 注入页面的真模块 */
 export interface CacheModule {
@@ -127,4 +129,70 @@ export async function blank(page: Page): Promise<void> {
 
 export function dbName(tag: string): string {
   return `p-idb-tx-${tag}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * TC-B1-46 整表重拉（P-idb-tx 余项，10-30）：再把真的 coldStart（src/core/boot.ts）、createSync（src/core/sync/engine.ts）打成一段 IIFE，
+ * 挂到 window.__boot：用例经 coldStart 的 cacheOptions 传一个会抛错的迁移，再让真同步引擎配一个记请求的假传输层跑一轮，
+ * 看 boot.fullResync 和 pullRows 的 since。只在用到的 worker 里打包（带了 supabase-js，比 cache.ts 的包大）。src 不改。
+ */
+export interface BootModule {
+  coldStart: typeof ColdStartFn;
+  createSync: typeof CreateSyncFn;
+  openCache: CacheModule['openCache'];
+  DB_VERSION: number;
+  SCHEMA_V: number;
+  OWNER: string;
+}
+
+declare global {
+  interface Window {
+    __boot?: BootModule;
+  }
+}
+
+let bootBundle: string | null = null;
+function buildBootBundle(): string {
+  if (bootBundle !== null) return bootBundle;
+  const text = buildSync({
+    stdin: {
+      contents: [
+        "export { coldStart } from './src/core/boot.ts';",
+        "export { createSync } from './src/core/sync/engine.ts';",
+        "export { openCache } from './src/core/cache.ts';",
+        "export { DB_VERSION } from './src/core/cache-migrations.ts';",
+        "export { OWNER } from './src/core/cache-schema.ts';",
+        "export { SCHEMA_V } from './shared/schema/rows.ts';",
+      ].join('\n'),
+      resolveDir: ROOT,
+      loader: 'ts',
+    },
+    bundle: true,
+    format: 'iife',
+    globalName: '__bootMod',
+    platform: 'browser',
+    target: 'es2022',
+    define: {
+      __APP_VERSION__: JSON.stringify('0.0.0-e2e'),
+      __BUILD_TIME__: JSON.stringify('1970-01-01T00:00:00.000Z'),
+      'import.meta.env': JSON.stringify({ MODE: 'e2e', DEV: false, PROD: true }),
+    },
+    write: false,
+  }).outputFiles[0]?.text;
+  if (!text) throw new Error('esbuild 没产出 boot.ts 的包');
+  bootBundle = text;
+  return text;
+}
+
+/** 打开同源空白页，注入真 coldStart、createSync（window.__boot）；页面报错带进异常 */
+export async function bootBlank(page: Page): Promise<void> {
+  await page.route(`**${BLANK}`, (route) =>
+    route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><meta charset="utf-8"><title>idb-boot</title>' }),
+  );
+  await page.addInitScript({ content: `${buildBootBundle()}\nwindow.__boot = __bootMod;` });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(BLANK);
+  const ok = await page.evaluate(() => typeof window.__boot?.coldStart === 'function' && typeof window.__boot.createSync === 'function');
+  if (!ok) throw new Error(`真 boot.ts 没注入成功：${errors.join(' | ') || '没有页面报错'}`);
 }

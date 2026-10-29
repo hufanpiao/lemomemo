@@ -143,14 +143,14 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
       authRetried = false;
       const r = res.value;
       if (r.status === 'gone') {
-        await d.outbox.fail(item.op_id, { status: 409, code: 'gone' });
+        await d.outbox.fail(item.op_id, { status: 409, code: 'gone', sid });
         d.emit({ type: 'gone', table: item.table, id: item.id, opId: item.op_id, data: item.data });
         d.log?.('sync_gone', { coll: item.table, code: 'gone' });   // 0.38 第 67 条：不记 data、opId、记录 id
         d.touched(item.table);   // 拿到服务器上已软删的那一行，界面据此显示“已被删除”
         continue;
       }
       if (r.status === 'not_found') {
-        await d.outbox.fail(item.op_id, { status: 404, code: 'not_found' });
+        await d.outbox.fail(item.op_id, { status: 404, code: 'not_found', sid });
         continue;
       }
       await d.outbox.ack(item.op_id, { status: r.status, rev: r.rev, prev_rev: r.prev_rev });
@@ -164,7 +164,8 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
       }
       continue;
     }
-    const kind = await d.outbox.fail(item.op_id, { ...res.error, sid });
+    // 传输层定死了令牌时带回的是真正发出去的那个会话（K6-sugg5 ④(b)），优先用它；没带时用发之前读的
+    const kind = await d.outbox.fail(item.op_id, { ...res.error, sid: res.error.sid !== undefined ? res.error.sid : sid });
     if (kind === 'drop' && res.error.code === 'patch_bad_args') {
       // 服务器把 22xxx、23514、23502 也转成 patch_bad_args：丢掉这一项，但记下表名和 sqlstate，免得掩盖服务器触发器的 bug
       // （不记 sqlerrm：可能带用户填的值，0.38 第 62 条）
@@ -178,7 +179,7 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
     // auth：刷新以后马上又 401：不无限重发，也不当被移除；这一项按临时故障退避，停发，记日志
     if (authRetried) {
       d.log?.('auth_retry_401');
-      await d.outbox.fail(item.op_id, { network: true, code: 'auth_retry_401' });
+      await d.outbox.fail(item.op_id, { network: true, code: 'auth_retry_401', sid });
       return 'retry';
     }
     authRetried = true;

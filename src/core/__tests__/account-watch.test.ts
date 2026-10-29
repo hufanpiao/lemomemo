@@ -158,7 +158,7 @@ describe('被移除（session_revoked、account_disabled）', () => {
     const item = await boot.outbox?.enqueue({ table: 'todos', id: uid(5), op: 'insert', data: todo(5) });
     const sent = await boot.outbox?.next();
     expect(sent?.op_id).toBeDefined();
-    expect(await boot.outbox?.fail(item?.op_id ?? '', { status: 401, code: 'session_revoked' })).toBe('removed');
+    expect(await boot.outbox?.fail(item?.op_id ?? '', { status: 401, code: 'session_revoked', sid: null })).toBe('removed');
     expect(boot.outbox?.isSuspended()).toBe(true);
     expect(events).toEqual(['removed']);
     const onRemoved = vi.fn();

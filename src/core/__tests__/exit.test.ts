@@ -47,8 +47,8 @@ describe('sealForExit', () => {
     expect(cache.isSealed()).toBe(true);
 
     await outbox.ack(a.op_id, { status: 'ok', rev: 6, prev_rev: 5 });
-    await outbox.fail(a.op_id, { status: 400 });
-    await outbox.fail(a.op_id, { network: true });
+    await outbox.fail(a.op_id, { status: 400, sid: null });
+    await outbox.fail(a.op_id, { network: true, sid: null });
     await expect(outbox.enqueue({ table: 'todos', id: uid(3), op: 'insert', data: todo(3) })).rejects.toBeInstanceOf(OutboxRejectError);
     await expect(cache.setMeta('schema_v', 9)).rejects.toBeInstanceOf(CacheClosedError);
     expect(JSON.stringify(await outbox.list())).toBe(before);
@@ -70,7 +70,7 @@ describe('localUnsentCount', () => {
     await outbox.enqueue({ table: 'todos', id: uid(2), op: 'insert', data: todo(2) });
     await outbox.enqueue({ table: 'todos', id: uid(3), op: 'insert', data: todo(3) });
     const first = await outbox.next();
-    await outbox.fail(first?.op_id ?? '', { status: 400 });   // 1 条发送失败
+    await outbox.fail(first?.op_id ?? '', { status: 400, sid: null });   // 1 条发送失败
     await outbox.next();                                       // 1 条正在发
     await cache.putDraft({ id: 'd', kind: 'capture', data: 1, updated_at: 1 });
     await cache.tx(['vault_drafts', 'pending_actions'], 'readwrite', async (t) => {

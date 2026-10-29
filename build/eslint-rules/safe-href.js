@@ -4,6 +4,10 @@
 //   不按函数名认；别名导入、命名空间导入都认；router.ts、link.ts 自己文件里定义的那个也认）。本地同名函数、别处导入的同名函数都不算
 //   来源路径只认写全 .ts 后缀的（架构 2.5）：不带扩展名、写 .js 的都不算（同目录有 link.mjs、link.js 时 Vite 加载的是那个冒牌文件），
 //   router.tsx、link.mjs、link.tsx 这类同名兄弟文件也不算
+// A26-import-ext（A26-old-gaps ⑥，10-30）：上面那些写法不光在用到的地方不算，来源本身也单独报——
+//   import / export … from / import() 的相对路径指向 shared/logic/link 或 src/app/router，但不是正好写成 “….ts”
+//   （不带扩展名、.js、.mjs、.cjs、.tsx、.jsx、.mts、.cts、大写 .TS、带 ?query 或 #hash），就在来源字符串上报 importExt；
+//   只导入不用、转出口给别人用的也拦得住。纯类型导入（import type）编译后不存在，不管
 // A26-spread：原生元素上的展开属性也查。对象字面量逐个键查；键名算不出来（计算键、嵌套展开）或展开的是变量（{...props}），
 //   静态看不出有没有 href，一律报
 // 属性名比较不分大小写（HREF、formaction、srcset、xlink:HREF 都算）：React 只拦写法完全正确的 href、formAction，
@@ -34,6 +38,20 @@ function importTarget(abs) {
 }
 
 const SAFE_FILES = new Map([...SAFE_SOURCES].map(([fn, rel]) => [fn, canon(resolve(ROOT, rel))]));
+const SAFE_TARGETS = new Set(SAFE_FILES.values());
+
+/** 脚本类扩展名（不分大小写）：去掉它（或本来就没有扩展名）以后再和 link、router 比 */
+const SCRIPT_EXT = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/i;
+
+/** 这个相对路径是不是指向 link / router（不管扩展名怎么写），而且没有正好写成 .ts */
+function wrongSafeSpelling(src, fromFile) {
+  if (typeof src !== 'string' || !src.startsWith('.')) return false;
+  const bare = src.split(/[?#]/)[0] ?? '';
+  const abs = resolve(dirname(fromFile), bare);
+  const m = SCRIPT_EXT.exec(abs);
+  if (!SAFE_TARGETS.has(canon(m ? abs.slice(0, -m[0].length) : abs))) return false;
+  return bare !== src || extname(abs) !== '.ts';
+}
 
 function attrName(n) {
   if (n.type === 'JSXIdentifier') return n.name;
@@ -61,6 +79,7 @@ export default {
     schema: [],
     messages: {
       unsafe: 'A26：<{{el}}> 的 {{attr}} 只能是字符串常量、hrefOf() 或 safeHref() 的返回值（safeHref 要从 shared/logic/link.ts 导入，hrefOf 要从 src/app/router.ts 导入）',
+      importExt: 'A26：从 {{src}} 导入 safeHref / hrefOf 要写全 .ts 后缀（架构 2.5；不带扩展名、.js、.mjs、.tsx 等写法时 Vite 可能加载同名的冒牌文件）',
       unsafeSpread: 'A26：<{{el}}> 上的展开属性看不出有没有 href、src 等链接属性；原生元素上请直接写属性，链接值只能是字符串常量、hrefOf() 或 safeHref() 的返回值',
     },
   },
@@ -121,7 +140,25 @@ export default {
       return false;
     }
 
+    /** 导入、转出口、动态 import 的来源写法（A26-import-ext） */
+    function checkSource(source, typeOnly) {
+      if (typeOnly || !source || source.type !== 'Literal') return;
+      if (wrongSafeSpelling(source.value, filename)) context.report({ node: source, messageId: 'importExt', data: { src: String(source.value) } });
+    }
+
     return {
+      ImportDeclaration(node) {
+        checkSource(node.source, node.importKind === 'type');
+      },
+      ExportNamedDeclaration(node) {
+        checkSource(node.source, node.exportKind === 'type');
+      },
+      ExportAllDeclaration(node) {
+        checkSource(node.source, node.exportKind === 'type');
+      },
+      ImportExpression(node) {
+        checkSource(node.source, false);
+      },
       JSXAttribute(node) {
         const attr = attrName(node.name);
         if (!isUrlAttr(attr)) return;

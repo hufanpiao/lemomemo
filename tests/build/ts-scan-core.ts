@@ -3,8 +3,10 @@
 
 export type Scanned = { text: string; skel: string };
 
-/** 这些词后面的 / 是正则开头（其余词、) ] } 和后置 ++ -- 后面是除号） */
+/** 这些词后面的 / 是正则开头（其余词、) ] } 和后置 ++ -- 后面是除号；if (…) 这类控制语句的条件括号之后例外，见 CONTROL_PAREN） */
 const REGEX_AFTER_WORD = new Set(['return', 'typeof', 'instanceof', 'case', 'of', 'in', 'else', 'await', 'yield', 'void', 'throw', 'new', 'delete', 'do']);
+/** 这些词后面的 ( … ) 是控制语句的条件：闭括号之后开始的是语句，/ 是正则开头（if (x) /re/.test(s)；FN-cov-gaps，10-30） */
+const CONTROL_PAREN = new Set(['if', 'while', 'for', 'with']);
 
 /** text：注释换成空格；skel：再把字符串、模板字面部分、正则字面量的内容换成空格（引号留着），用来找括号、调用 */
 export function scan(code: string): Scanned {
@@ -12,6 +14,10 @@ export function scan(code: string): Scanned {
   const n = code.length;
   const blank = (arr: string[], from: number, to: number) => { for (let k = from; k < Math.min(to, n); k++) if (arr[k] !== '\n') arr[k] = ' '; };
   let prev = '', prevWord = '';
+  /** prevWord 前一个非空白字符是不是 .（含 ?.、中间隔空白换行注释）：obj.for(k)、Symbol.for(k) 是方法调用不是控制语句（TSSCAN-sugg） */
+  let wordAfterDot = false;
+  /** 每层 ( 是不是控制语句的条件括号（一直配对到它的 )） */
+  const parens: boolean[] = [];
   const regexOk = () => prev === '' || '(,=:[!&|?{};+-*%<>~^'.includes(prev) || REGEX_AFTER_WORD.has(prevWord);
 
   function template(start: number): number {
@@ -60,9 +66,12 @@ export function scan(code: string): Scanned {
       if (/[\w$]/.test(c)) {
         let j = i;
         while (j < n && /[\w$]/.test(code[j] ?? '')) j++;
-        prevWord = code.slice(i, j); prev = 'a'; i = j; continue;
+        wordAfterDot = prev === '.'; prevWord = code.slice(i, j); prev = 'a'; i = j; continue;
       }
       if ((c === '+' || c === '-') && d === c) { prev = ')'; prevWord = ''; i += 2; continue; }
+      if (c === '(') parens.push(prev === 'a' && !wordAfterDot && CONTROL_PAREN.has(prevWord));
+      // 控制语句条件的 ) 之后当语句开头（prev 设成 ;），别的 ) 之后照旧是除号
+      if (c === ')' && parens.pop() === true) { prev = ';'; prevWord = ''; i++; continue; }
       if (inExpr && c === '{') depth++;
       if (inExpr && c === '}') { if (depth === 0) return i + 1; depth--; }
       if (!/\s/.test(c)) { prev = c; prevWord = ''; }

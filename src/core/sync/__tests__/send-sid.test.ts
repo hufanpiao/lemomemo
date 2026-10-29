@@ -45,6 +45,15 @@ describe('被移除、停用带回发请求时的 sid（K6-sugg4 ①）', () => 
     });
   }
 
+  it('K6-sugg5 ④(b)：传输层带回了真正发出去的会话（SendFailure.sid），优先用它；带回 null 也照用', async () => {
+    for (const got of ['s9', null] as const) {
+      const r = await run((t) => {
+        t.failNext.push({ status: 403, code: 'session_revoked', sid: got });
+      });
+      expect(r.events).toContainEqual({ type: 'removed', code: 'session_revoked', sid: got });
+    }
+  });
+
   it('401 后刷新令牌回被移除：removed 带的是刷新前记下的 s1', async () => {
     const r = await run((t) => {
       t.failNext.push({ status: 401 });

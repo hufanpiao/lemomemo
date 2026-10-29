@@ -19,7 +19,7 @@ import {
   statusError,
   type AccountStatus,
 } from '../../../platform/account-status.ts';
-import { logoutReplaced, sessionReplaced, withTimeout, type PriorSession } from '../../../platform/sign-out.ts';
+import { budgetLeft, logoutReplaced, sessionReplaced, withTimeout, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 
 // status 的判断（parseStatus、statusError）和调用（probeAccountStatus）在 platform/account-status.ts，主 App 收到 account_disabled 时也用它
@@ -111,9 +111,11 @@ export function createAccountGateApi(getDb: () => Promise<Db>, o: AccountGateOpt
       ),
 
     signOutLocal: async (prior) => {
+      const t0 = Date.now();
       try {
         const db = await getDb();
-        if (prior && sessionReplaced(prior.sid)) return (await logoutReplaced(prior.token, prior.budgetMs)).serverDone;
+        // 预算扣掉拿客户端用掉的时间（和 auth-api、settings-api 同一口径，K6-signout-lib 复审建议 ②）
+        if (prior && sessionReplaced(prior.sid)) return (await logoutReplaced(prior.token, budgetLeft(prior.budgetMs, t0))).serverDone;
         const { error } = await db.auth.signOut({ scope: 'local' });
         return !error;
       } catch {

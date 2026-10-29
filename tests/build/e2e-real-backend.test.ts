@@ -7,33 +7,17 @@ import {
   checkEnv,
   checkGuard,
   E2E_EMAIL_SENT,
-  E2E_FUNCTIONS_ENV,
-  functionsEnvText,
   entryKind,
-  isCompleteValue,
-  parseLines,
   E2E_PROJECT_ID,
   E2E_REDIRECT,
-  pickEnv,
-  PORT_TARGETS,
   readConfigFacts,
   rewriteConfig,
   workdirProblems,
 } from '../../tools/e2e/real-backend.mjs';
-import { FAKE_PROXY_SECRET } from '../e2e/fake-values.ts';
+import { minimal } from './e2e-real-test-helpers.ts';
 
 const repoToml = readFileSync(join(import.meta.dirname, '..', '..', 'supabase', 'config.toml'), 'utf8');
 const e2eToml = rewriteConfig(repoToml);
-
-/** 最小的合格副本：只把端口表里必写的项写全，用来单独改一项看护栏（override 的值按原文写进去） */
-function minimal(projectId: string, override: Record<string, number | string> = {}): string {
-  const bySection = new Map<string, string[]>();
-  for (const t of PORT_TARGETS.filter((x) => x.required)) {
-    const v = override[`${t.section}.${t.key}`] ?? t.value;
-    bySection.set(t.section, [...(bySection.get(t.section) ?? []), `${t.key} = ${v}`]);
-  }
-  return [`project_id = "${projectId}"`, ...[...bySection].map(([s, ls]) => `[${s}]\n${ls.join('\n')}`)].join('\n');
-}
 
 describe('护栏 checkGuard（白名单）', () => {
   it('最小的合格副本放行', () => {
@@ -254,154 +238,6 @@ describe('config 改写 rewriteConfig（用仓库真的 supabase/config.toml）'
   });
 });
 
-describe('多行值骗不过护栏（审查必改，10-30）', () => {
-  // 按标准 TOML，""" 之间的 [api] port = 55321 只是字符串，[api] 里没有 port，CLI 会用默认的 54321
-  const sneaky = (q: string) => `${minimal(E2E_PROJECT_ID).replace(/^\[api\]\nport = 55321$/m, '[api]\nenabled = true')}\n[auth]\nzz = ${q}\n[api]\nport = 55321\nyy = ${q}\n`;
-
-  it.each(['"""', "'''"])('审查给的例子（%s 多行字符串里藏 [api] port）：checkGuard 拒，rewriteConfig 抛错', (q) => {
-    const toml = sneaky(q);
-    expect(toml).not.toMatch(/^\[api\]\nport = 55321\n\[/m); // 自检：真正的 [api] 小节里确实没有 port
-    const p = checkGuard(toml);
-    expect(p.some((x) => x.includes('认不出的写法'))).toBe(true);
-    expect(() => rewriteConfig(toml)).toThrow(/认不出的写法/);
-  });
-
-  it.each([
-    ['双引号没配对', 'zz = "abc'],
-    ['单引号没配对', "zz = 'abc"],
-    ['""" 开头、同一行就结束也不认', 'zz = """abc"""'],
-    ["''' 写在值中间", "zz = \"a'''b\""],
-    ['数组没收口', 'zz = ["a",'],
-    ['内联表没收口', 'zz = { a = 1'],
-    ['多出来的右括号', 'zz = ]'],
-    ['转义写的键名（\\u0070ort）', '"\\u0070ort" = 54321'],
-    ['带引号的键名 "port"', '"port" = 54321'],
-  ])('%s：拒', (_what, line) => {
-    const p = checkGuard(`${minimal(E2E_PROJECT_ID)}\n[api]\n${line}\n`);
-    expect(p.some((x) => x.includes('认不出的写法'))).toBe(true);
-    expect(() => rewriteConfig(`project_id = "x"\n[api]\n${line}\n`)).toThrow(/认不出的写法/);
-  });
-
-  it('isCompleteValue：正常的单行值都认', () => {
-    for (const ok of ['true', '55321', '"a#b"', "'x'", '"a\\"b"', '["a", "b"]', '{ a = "]" }', '"x" # 注释里有 " 也行', '"60s"']) {
-      expect(isCompleteValue(ok), ok).toBe(true);
-    }
-    for (const bad of ['"""', "'''", '"a', '[', '{', ']', '"a\\"']) expect(isCompleteValue(bad), bad).toBe(false);
-  });
-
-  it('仓库真的 config.toml 一行认不出的都没有（改写不会抛错）', () => {
-    expect(parseLines(repoToml).filter((l: { kind: string }) => l.kind === 'other')).toEqual([]);
-  });
-});
-
-describe('行内表、转义键名、值里的 543xx 都骗不过护栏（复审必改，10-30）', () => {
-  const B = String.fromCharCode(92); // 反斜杠：源码里不写字面的 \u，免得被当成转义
-  const repoE2e = rewriteConfig(repoToml);
-  const ins = (section: string, line: string) => {
-    const out = repoE2e.replace(`\n[${section}]\n`, `\n[${section}]\n${line}\n`);
-    if (out === repoE2e) throw new Error(`副本里没有 [${section}]`);
-    return out;
-  };
-
-  it('仓库真正的 config.toml 改写后照常放行', () => {
-    expect(checkGuard(repoE2e)).toEqual([]);
-  });
-
-  it.each([
-    ['[auth.email] 下行内表里转义写的 port', 'auth.email', `smtp = { enabled = true, host = "host.docker.internal", "p${B}u006Frt" = 54325 }`],
-    ['数组里套行内表', 'auth', `xs = [{ "p${B}u006Frt" = 54321 }]`],
-    ['行内表里带引号的键', 'auth', "smtpx = { 'p' = 1 }"],
-    ['行内表里明写 port', 'db', 'pooler = { port = 54329 }'],
-    ['行内表里没有端口字样也不认', 'auth', 'x = { a = 1 }'],
-    ['\\U 大写转义', 'auth', `"p${B}U0000006Frt" = 54321`],
-    ['注释里的 \\u 也算（宁严勿松）', 'auth', `zz = 1 # ${B}u0070`],
-    ['键名里有非 ASCII 字母（西里尔字母 о）', 'api', 'pоrt = 54321'],
-  ])('%s：拒', (_what, section, line) => {
-    const t = ins(section, line);
-    expect(checkGuard(t).some((x) => x.includes('认不出的写法'))).toBe(true);
-    expect(() => rewriteConfig(t)).toThrow(/认不出的写法/);
-  });
-
-  it('顶层 API = { "\\u0070ort" = 54321 }：拒', () => {
-    const t = repoE2e.replace('\n[api]\n', `\nAPI = { "${B}u0070ort" = 54321 }\n[api]\n`);
-    expect(checkGuard(t).some((x) => x.includes('认不出的写法'))).toBe(true);
-  });
-
-  it('审查员 probe5 的写法：rewriteConfig 不再原样照抄，直接抛错', () => {
-    const src = repoToml.replace('\n[auth.email]\n', `\n[auth.email]\nsmtp = { enabled = true, host = "host.docker.internal", "p${B}u006Frt" = 54325 }\n`);
-    expect(src).not.toBe(repoToml);
-    expect(() => rewriteConfig(src)).toThrow(/认不出的写法/);
-  });
-
-  it.each([
-    ['hook 的 uri 指 54321', 'auth', 'zz_uri = "http://host.docker.internal:54321/x"'],
-    ['随便哪个键指 54329', 'api', 'whatever = "127.0.0.1:54329"'],
-    ['583xx', 'db', 'other = "http://127.0.0.1:58322/"'],
-    ['数组里的地址', 'auth', 'urls = ["http://127.0.0.1:54321/app/"]'],
-  ])('值里出现 543xx / 583xx（%s）：拒', (_what, section, line) => {
-    expect(checkGuard(ins(section, line))).toEqual([expect.stringContaining('543xx / 583xx')]);
-  });
-
-  it('值里是 553xx、8789 之类的不受这一条影响', () => {
-    expect(checkGuard(ins('auth', 'zz_uri = "http://127.0.0.1:55321/x"'))).toEqual([]);
-    expect(checkGuard(ins('auth', 'yy = "http://127.0.0.1:8789/app/"'))).toEqual([]);
-  });
-});
-
-describe('复审建议（10-30）：前导 0 的 543xx、env(...) 白名单、反斜杠 x / e 转义', () => {
-  const B = String.fromCharCode(92);
-  const repoE2e = rewriteConfig(repoToml);
-  const ins = (section: string, line: string) => {
-    const out = repoE2e.replace(`\n[${section}]\n`, `\n[${section}]\n${line}\n`);
-    if (out === repoE2e) throw new Error(`副本里没有 [${section}]`);
-    return out;
-  };
-
-  it('仓库真正的 config.toml 改写后照常放行（含唯一一处 env(SUPABASE_AUTH_CAPTCHA_SECRET)）', () => {
-    expect(repoE2e).toContain('secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"');
-    expect(checkGuard(repoE2e)).toEqual([]);
-  });
-
-  it.each([
-    [':054321', 'x_uri = "http://host.docker.internal:054321/x"'],
-    [':0054321', 'x_uri = "http://h:0054321"'],
-    [':058322', 'x_uri = "http://h:058322/"'],
-  ])('值里前导 0 的 %s：拒', (_what, line) => {
-    expect(checkGuard(ins('auth', line))).toEqual([expect.stringContaining('543xx / 583xx')]);
-  });
-
-  it('543 开头但是 6 位以上的端口号不算 543xx（如 :543210），也不误伤 55321', () => {
-    expect(checkGuard(ins('auth', 'x_uri = "http://h:543210/x"'))).toEqual([]);
-    expect(checkGuard(ins('auth', 'x_uri = "http://h:55321/x"'))).toEqual([]);
-  });
-
-  it.each([
-    ['别的键用 env(...)', 'auth', 'x_uri = "env(HOOK_URI)"'],
-    ['端口用 env(...)', 'api', 'whatever = "env(P)"'],
-    ['白名单那一节、同一个键，但换了变量名', 'auth.captcha', 'secret = "env(OTHER)"'],
-    ['值里夹着 env(', 'auth', 'x = "http://h/env(A)"'],
-  ])('%s：拒', (_what, section, line) => {
-    let t = ins(section, line);
-    if (section === 'auth.captcha') t = t.replace('secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"\n', '');
-    expect(checkGuard(t).some((x) => x.includes('env(...)'))).toBe(true);
-  });
-
-  it('白名单的值挪到别的小节也拒', () => {
-    const t = ins('auth', 'secret = "env(SUPABASE_AUTH_CAPTCHA_SECRET)"');
-    expect(checkGuard(t)).toEqual([expect.stringContaining('[auth] secret 用了 env(...)')]);
-  });
-
-  it.each([
-    ['TOML 1.1 的反斜杠 x3a', `x_uri = "http://host.docker.internal${B}x3a54321/x"`],
-    ['反斜杠 x 写的键名', `"p${B}x6Frt" = 54321`],
-    ['反斜杠 e', `x = "a${B}e"`],
-  ])('%s：认不出，拒', (_what, line) => {
-    const t = ins('auth', line);
-    expect(checkGuard(t).some((x) => x.includes('认不出的写法'))).toBe(true);
-    expect(() => rewriteConfig(t)).toThrow(/认不出的写法/);
-  });
-});
-
 describe('工作目录护栏 workdirProblems', () => {
   const root = 'D:/repo';
   const ops = (o: { links?: string[]; real?: Record<string, string>; missing?: string[] } = {}) => ({
@@ -445,28 +281,6 @@ describe('工作目录护栏 workdirProblems', () => {
   });
 });
 
-describe('pickEnv', () => {
-  const base = { API_URL: 'http://127.0.0.1:55321', ANON_KEY: 'a', SERVICE_ROLE_KEY: 's', MAILPIT_URL: 'http://127.0.0.1:55324' };
-
-  it('挑出四个字段', () => {
-    expect(pickEnv({ ...base, DB_URL: 'x' })).toEqual(base);
-  });
-
-  it('旧字段名 INBUCKET_URL 也认', () => {
-    const { MAILPIT_URL, ...rest } = base;
-    expect(pickEnv({ ...rest, INBUCKET_URL: MAILPIT_URL }).MAILPIT_URL).toBe(MAILPIT_URL);
-  });
-
-  it('缺字段抛错', () => {
-    expect(() => pickEnv({ API_URL: base.API_URL })).toThrow(/ANON_KEY/);
-  });
-
-  it('API_URL 不是 55321（比如连到了 lemomemo 的 54321）就拒绝', () => {
-    expect(() => pickEnv({ ...base, API_URL: 'http://127.0.0.1:54321' })).toThrow(/55321/);
-  });
-});
-
-/** 某个小节下的 键 → 值原文 */
 function readLinesOf(toml: string, section: string): Map<string, string> {
   const out = new Map<string, string>();
   let cur = '';
@@ -480,49 +294,3 @@ function readLinesOf(toml: string, section: string): Map<string, string> {
   }
   return out;
 }
-
-describe('边缘函数的假值环境 E2E_FUNCTIONS_ENV（第 6 步，10-30）', () => {
-  it('PROXY_SECRET 和转发层用的 FAKE_PROXY_SECRET 一样（不一样函数就不信 x-proxy-secret）', () => {
-    expect(E2E_FUNCTIONS_ENV.PROXY_SECRET).toBe(FAKE_PROXY_SECRET);
-  });
-
-  it('account 要的 RESEND_API_KEY 有（没有就 misconfigured），而且一看就是假的', () => {
-    expect(E2E_FUNCTIONS_ENV.RESEND_API_KEY).toMatch(/^fake-.*e2e-only$/);
-    for (const [k, v] of Object.entries(E2E_FUNCTIONS_ENV)) {
-      if (/SECRET|KEY/.test(k)) expect(v, k).toMatch(/^fake-.*e2e-only$/);
-    }
-  });
-
-  it('http、https 出站一律指向没人听的 127.0.0.1:9（大小写两种写法都设；10-30 审查建议 1）', () => {
-    for (const k of ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'] as const) {
-      expect(E2E_FUNCTIONS_ENV[k], k).toBe('http://127.0.0.1:9');
-    }
-  });
-
-  it('NO_PROXY 只放行 npm 源和 lemo-e2e 内部地址（kong、库、本机），不含 resend', () => {
-    const want = ['registry.npmjs.org', 'kong', 'supabase_kong_lemo-e2e', 'supabase_db_lemo-e2e', 'localhost', '127.0.0.1', 'host.docker.internal'];
-    expect(E2E_FUNCTIONS_ENV.NO_PROXY.split(',')).toEqual(want);
-    expect(E2E_FUNCTIONS_ENV.no_proxy).toBe(E2E_FUNCTIONS_ENV.NO_PROXY);
-    expect(E2E_FUNCTIONS_ENV.NO_PROXY).not.toMatch(/resend|\*/);
-  });
-
-  it('不设 SUPABASE_ 开头的变量、不设 TURNSTILE_SECRET', () => {
-    expect(Object.keys(E2E_FUNCTIONS_ENV).filter((k) => /^supabase_/i.test(k) || k === 'TURNSTILE_SECRET')).toEqual([]);
-  });
-
-  it('functionsEnvText 一行一个 KEY=VALUE，首行是注释', () => {
-    const lines = functionsEnvText().trimEnd().split(String.fromCharCode(10));
-    expect(lines[0]).toMatch(/^# /);
-    expect(lines.slice(1)).toEqual(Object.entries(E2E_FUNCTIONS_ENV).map(([k, v]) => `${k}=${v}`));
-  });
-
-  it.each([
-    [{ SUPABASE_URL: 'x' }, '变量名不认'],
-    [{ 'A-B': 'x' }, '变量名不认'],
-    [{ A: 'has space' }, '怪字符'],
-    [{ A: 'q"uote' }, '怪字符'],
-    [{ A: 'x#y' }, '怪字符'],
-  ])('functionsEnvText(%o) 抛错', (vars, msg) => {
-    expect(() => functionsEnvText(vars)).toThrow(msg);
-  });
-});

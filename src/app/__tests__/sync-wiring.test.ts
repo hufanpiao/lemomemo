@@ -9,7 +9,7 @@ import { createSync, type Sync, type SyncOptions } from '../../core/sync/engine.
 import { fakeTransport } from '../../core/sync/__tests__/fake-server.ts';
 import { fakeIndexedDB } from '../../core/__tests__/idb-fake.ts';
 import { todo, uid } from '../../core/__tests__/outbox-fixtures.ts';
-import { clearLocalSessionIf, readSessionUserId } from '../../platform/session.ts';
+import { clearLocalSessionIf, readSessionId, readSessionUserId } from '../../platform/session.ts';
 import { wireSync } from '../sync-wiring.ts';
 
 const reload = vi.fn();
@@ -125,8 +125,8 @@ describe('wireSync', () => {
       await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
       expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain(notice);
       expect(d.setExitNotice.mock.invocationCallOrder[0]).toBeLessThan(d.goToAuth.mock.invocationCallOrder[0] ?? 0);
-      // 事件带着被拒那次的 sid（K6-sugg5 ② 起必填）：收到时、回登录页前都只删它
-      expect(d.clearLocalSessionIf.mock.calls).toEqual([['s1'], ['s1']]);
+      // 事件带着被拒那次的 sid（K6-sugg5 ② 起必填）：收到时、回登录页前都只删它；冷静期不删（R-262）
+      expect(d.clearLocalSessionIf.mock.calls).toEqual(notice === 'pending_deletion' ? [] : [['s1'], ['s1']]);
       expect(d.clearCacheStorage).toHaveBeenCalledTimes(1);
       expect(boot.switching).toBe(true);
       expect(boot.cache?.isClosed()).toBe(true);
@@ -167,6 +167,7 @@ describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 
       ...deps(s.create),
       clearCacheStorage: vi.fn(() => gate),
       clearLocalSessionIf: (sid: string | null) => clearLocalSessionIf(sid),
+      readSession: () => ({ sid: readSessionId(), token: null }),
     };
     wireSync(boot, d);
     return { boot, s, d, release };
@@ -222,19 +223,55 @@ describe('被移除、停用时删本机会话的时机（K6-sugg3 ①，真的 
         t.release();
         await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
         expect(readSessionUserId()).toBe(user);
-        expect(t.d.setExitNotice.mock.calls.map((c) => c[0])).toContain('removed');
+        // K6-sugg5 ④(c)：s2 还在、是能用的会话，不提示“被移除”（被作废的只是 s1）
+        expect(t.d.setExitNotice.mock.calls.map((c) => c[0])).not.toContain('removed');
       }
     });
   }
 
-  it('fail 的调用方没给 sid（K6-sugg5 ②）：事件按 null 发，不删“现在那个”s2（修之前这里会 takeLocalSession 把 s2 删掉）', async () => {
+  it('R-262：直接收到 account_pending_deletion → 会话 s1 不删，但照样清库、清运行时缓存、关库、回登录页；反例 account_disabled（不探测）照旧删 s1', async () => {
+    for (const [code, kept] of [['account_pending_deletion', true], ['account_disabled', false]] as const) {
+      resetBootForTest();
+      localStorage.clear();
+      const t = await setup();
+      const cache = t.boot.cache;
+      const ob = t.boot.outbox;
+      if (!cache || !ob) throw new Error('boot');
+      const clearAll = vi.spyOn(cache, 'clearAll');
+      await ob.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
+      const a = await ob.next();
+      await ob.fail(a?.op_id ?? '', { status: 403, code, sid: 's1' });
+      t.release();
+      await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
+      expect(readSessionUserId()).toBe(kept ? A : null);
+      expect(clearAll).toHaveBeenCalledTimes(1);   // 清库没被一起跳过
+      expect(t.d.clearCacheStorage).toHaveBeenCalledTimes(1);
+      expect(cache.isClosed()).toBe(true);
+    }
+  });
+
+  it('K6-sugg5 ④(c) 反例：回登录页时本机还是被拒的 s1（被晚到的刷新写回来又删掉）或已没有会话：照记“被移除”', async () => {
+    for (const writeBack of [true, false]) {
+      resetBootForTest();
+      localStorage.clear();
+      const t = await setup();
+      t.s.removed('session_not_found', 's1');
+      if (writeBack) seed('s1');
+      t.release();
+      await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
+      expect(t.d.setExitNotice).toHaveBeenCalledWith('removed', 's1');
+      expect(readSessionUserId()).toBeNull();
+    }
+  });
+
+  it('被拒那次请求发出时没有读得出的会话（sid: null；K6-sugg5 ②、OUTBOX-sid-type 起必须显式给）：不删“现在那个”s2（修之前这里会 takeLocalSession 把 s2 删掉）', async () => {
     const t = await setup();
     const ob = t.boot.outbox;
     if (!ob) throw new Error('outbox');
     await ob.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
     const a = await ob.next();
     seed('s2');
-    await ob.fail(a?.op_id ?? '', { status: 403, code: 'session_revoked' });
+    await ob.fail(a?.op_id ?? '', { status: 403, code: 'session_revoked', sid: null });
     t.release();
     await vi.waitFor(() => expect(t.d.goToAuth).toHaveBeenCalledTimes(1));
     expect(readSessionUserId()).toBe(A);   // s2 还在：没有“不管是谁都删”的兜底了

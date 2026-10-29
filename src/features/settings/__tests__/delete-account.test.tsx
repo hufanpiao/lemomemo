@@ -103,7 +103,8 @@ describe('注销账号（设置 › 账号 › 注销账号）', () => {
       fireEvent.submit(input().form as HTMLFormElement);
     });
     expect(account.requestDeletion).toHaveBeenCalledWith('注销');
-    expect(leave).toHaveBeenCalledWith('pending_deletion', 's-me');
+    // 服务器已在同一事务里吊销全部会话：revoked: true，照旧删本机会话（R-262 的例外）
+    expect(leave).toHaveBeenCalledWith('pending_deletion', 's-me', { revoked: true });
     expect(api.dropLocalSession).not.toHaveBeenCalled();
     expect(api.deleteOwnDevice).not.toHaveBeenCalled();
     expect(exit.wipe).not.toHaveBeenCalled();

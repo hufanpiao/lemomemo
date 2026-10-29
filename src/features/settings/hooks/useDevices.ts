@@ -3,7 +3,8 @@
 // revoked 交给 onRevoked（清空本机、提示“被移除”后回登录页）；本机没有会话交给 onSignedOut（提示“已退出登录”）；
 // 两者都带上那次请求用的会话的 session_id（接手清单 K6-sugg4 ①：离开本机时只删它）
 // account_disabled（RLS 一路，分不清停用和冷静期）交给 onDisabled 先探测再定（R-256 ③，useSettingsPage 接 data/account-exit.ts 的
-// leaveForDisabled）；界面照常显示这次的错误，离开时页面跳走，探测说账号正常就留着这句提示
+// leaveForDisabled）。探测期间不显示“已停用”（还不知道是不是）：离开时页面跳走；探测说账号正常（active）就显示通用的
+// “出了点问题，请稍后再试”（unknown），不说停用或冷静期（PROBE / DISABLED-probe-later 遗留，10-30）
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { sortDevices, toDeviceView, toSessionInfo, type DeviceView, type Orphans } from '../data/devices.ts';
 import type { Failure, SettingsApi, SettingsErr } from '../data/settings-api.ts';
@@ -28,8 +29,8 @@ export interface DevicesDeps {
   /** sid：被拒的那次请求用的会话的 session_id（settings-api 随错误带回） */
   onRevoked(sid: string | null): void;
   onSignedOut(sid: string | null): void;
-  /** account_disabled：先探测再定是否离开（sid 同上）；不给就只提示 */
-  onDisabled?(sid: string | null): void;
+  /** account_disabled：先探测再定是否离开（sid 同上）；onStay：探测说账号正常、不离开时调。不给 onDisabled 就只提示 */
+  onDisabled?(sid: string | null, onStay?: () => void): void;
   signOutHere(currentDeviceId: string | null): Promise<void>;
   now?: () => number;
 }
@@ -40,16 +41,19 @@ export function useDevices({ api, onRevoked, onSignedOut, onDisabled, signOutHer
   const [notice, setNotice] = useState<DeviceNotice | null>(null);
   const alive = useRef(true);
 
-  /** 会话没了：交给离开本机的处理；true = 已处理 */
+  /**
+   * 会话没了、账号可能停用：交给离开本机的处理；true = 已处理（调用方这次不显示错误）。
+   * account_disabled 交给 onDisabled 先探测：探测说账号正常时 show('unknown')（见文件头）
+   */
   const lost = useCallback(
-    (f: Failure): boolean => {
+    (f: Failure, show: (e: SettingsErr) => void): boolean => {
       if (f.error === 'revoked') onRevoked(f.sid);
       else if (f.error === 'signed_out') onSignedOut(f.sid);
-      else {
-        // 不算“已处理”：探测期间（和探测说账号正常时）界面照常显示错误
-        if (f.error === 'account_disabled') onDisabled?.(f.sid);
-        return false;
-      }
+      else if (f.error === 'account_disabled' && onDisabled) {
+        onDisabled(f.sid, () => {
+          if (alive.current) show('unknown');
+        });
+      } else return false;
       return true;
     },
     [onRevoked, onSignedOut, onDisabled],
@@ -65,8 +69,8 @@ export function useDevices({ api, onRevoked, onSignedOut, onDisabled, signOutHer
       setState({ kind: 'ready', list, orphans: info.orphans });
       return;
     }
-    lost(r);
-    setState({ kind: 'error', error: r.error });
+    const fail = (error: SettingsErr): void => setState({ kind: 'error', error });
+    if (!lost(r, fail)) fail(r.error);
   }, [api, lost, now]);
 
   useEffect(() => {
@@ -97,7 +101,7 @@ export function useDevices({ api, onRevoked, onSignedOut, onDisabled, signOutHer
       if (!alive.current) return;
       setBusy(null);
       if (r.ok) setNotice({ kind: 'removed', device });
-      else if (lost(r)) return;
+      else if (lost(r, (error) => setNotice({ kind: 'error', error }))) return;
       else if (r.error === 'is_current_device') return setNotice({ kind: 'isCurrent' });
       else if (r.error === 'device_not_found') setNotice({ kind: 'notFound' });
       else return setNotice({ kind: 'error', error: r.error });
@@ -115,7 +119,7 @@ export function useDevices({ api, onRevoked, onSignedOut, onDisabled, signOutHer
     if (r.ok) {
       setNotice({ kind: 'othersOut' });
       await reload();
-    } else if (!lost(r)) setNotice({ kind: 'error', error: r.error });
+    } else if (!lost(r, (error) => setNotice({ kind: 'error', error }))) setNotice({ kind: 'error', error: r.error });
   }, [api, lost, reload]);
 
   const signOutThis = useCallback(() => exitHere(currentId, 'self'), [exitHere, currentId]);

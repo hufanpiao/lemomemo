@@ -153,14 +153,19 @@ describe('已登录设备', () => {
     expect(screen.getAllByTestId('settings-device')).toHaveLength(4);
   });
 
-  it('账号停用或在注销冷静期（account_disabled）：先提示；探测说账号正常（active）时就只提示，不清本机（探测其余结果见 settings-disabled-probe.test.tsx）', async () => {
+  it('账号停用或在注销冷静期（account_disabled）：探测期间不说“已停用”；探测说账号正常（active）就只提示读取失败，不清本机（PROBE 遗留；探测其余结果见 settings-disabled-probe.test.tsx）', async () => {
     const api = fakeApi({ loadDevices: vi.fn(async () => fail('account_disabled')) });
     const { exit } = fakeExit();
     const leaveAccount = vi.fn(async () => undefined);
-    const resolveDisabled = vi.fn(async () => 'active' as const);
+    let answer: (v: 'active') => void = () => undefined;
+    const resolveDisabled = vi.fn(() => new Promise<'active'>((r) => (answer = r)));
     render(<SettingsPage deps={{ api, exit, now, leaveAccount, resolveDisabled }} />);
-    expect(await screen.findByText(zh['settings.err.accountDisabled'])).toBeTruthy();
     await waitFor(() => expect(resolveDisabled).toHaveBeenCalledWith('s-me', undefined));
+    expect(screen.queryByText(zh['settings.err.accountDisabled'])).toBeNull();
+    expect(screen.queryByText(zh['settings.devices.loadFailed'])).toBeNull();
+    await act(async () => answer('active'));
+    expect(await screen.findByText(zh['settings.devices.loadFailed'])).toBeTruthy();
+    expect(screen.queryByText(zh['settings.err.accountDisabled'])).toBeNull();
     expect(leaveAccount).not.toHaveBeenCalled();
     expect(exit.wipe).not.toHaveBeenCalled();
   });

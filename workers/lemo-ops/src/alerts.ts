@@ -10,9 +10,15 @@
 // - **先写 KV 再发信**：KV 写不进去（去重和限额都失效）就这一轮一封都不发，只记日志，避免每轮重发；
 //   发信失败的事项退回原状态、退回额度，下一轮重试。
 // 状态按 cron 分两个键（heartbeat、daily），发信额度另一个键两个 cron 共用。
+// 发信失败另记一个键 mail-fail:v1（R-261，架构 15.6 第 4d 条 ①“发信失败另记心跳”）：两个 cron 共用，
+// 只记时刻、封数和 Resend 回的 HTTP 码，不记收件人、邮箱、标题、正文；这个键单独 try，写不进去不影响告警本身。
 // 数据库连不上时也要能去重，所以状态不能放 Supabase。
 
+import { MAIL_FAIL_KEY, parseMailFail, recordSend, withMissedNotice, type MailFail } from './mail-fail.ts';
 import type { Evaluation, Issue } from './rules.ts';
+import { stamp } from './stamp.ts';
+
+export { MAIL_FAIL_KEY, type MailFail } from './mail-fail.ts';
 
 export const RESEND_AFTER_MS = 6 * 3600 * 1000;
 export const COOLDOWN_MS = 6 * 3600 * 1000;
@@ -72,8 +78,8 @@ export interface Mail {
   text: string;
 }
 
-/** 发信：成功返回 true；失败返回 false（这件事下一轮再试，不记成已发） */
-export type SendFn = (mail: Mail) => Promise<boolean>;
+/** 发信：ok 为 false 时这件事下一轮再试，不记成已发；status 是 Resend 回的 HTTP 码（没有回应是 null） */
+export type SendFn = (mail: Mail) => Promise<{ ok: boolean; status: number | null }>;
 export type LogFn = (code: string) => void;
 
 export const SUBJECT_PREFIX = '【柠檬记监控】';
@@ -110,13 +116,6 @@ export async function loadBudget(store: StateStore, now: number): Promise<Budget
     return { day, sent: (v as Budget).sent, capNotice: (v as Budget).capNotice === true };
   }
   return { day, sent: 0, capNotice: false };
-}
-
-function stamp(ms: number): string {
-  // 负责人在韩国（UTC+9），邮件里给首尔时间；同时写 UTC，方便对日志
-  const kst = new Date(ms + 9 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16);
-  const utc = new Date(ms).toISOString().replace('T', ' ').slice(0, 16);
-  return `${kst}（首尔） / ${utc} UTC`;
 }
 
 const COOLDOWN_RULE =
@@ -294,8 +293,11 @@ export function plan(
 }
 
 /**
- * 跑一轮：读状态 → 算 → **先写 KV** → 发信 → 有发失败的退回后再写一次。
+ * 跑一轮：读状态 → 算 → **先写 KV** → 发信 → 有发失败的退回后再写一次 → 另写发信失败记录 mail-fail:v1（R-261）。
  * KV 写失败：这一轮不发任何信（不然每轮都当新事重发），只记日志错误码。
+ * mail-fail:v1 读写都单独 try：读不出（mail_fail_read_failed）这一轮不提示也不写它，免得把之前的计数冲掉；
+ * 写不进（mail_fail_write_failed）只记日志，告警照发、状态照写。
+ * 之前有没发出的（count > 0）：这一轮每封都带上提示，直到有一封发成功；发成功以后的信不再带，count 清零。
  *
  * **每封信最多发一次，可能丢**（K15 复审低 1，有意取舍：宁可丢一封，也不能重复刷屏）：
  * - 写完 KV（已记成“发过”）以后、发信之前或发信途中 Worker 被中断（超时、重新部署）：这封不会再发；
@@ -314,10 +316,26 @@ export async function runAlerts(store: StateStore, job: Job, evs: readonly Evalu
     log('kv_write_failed');
     return [];
   }
+  let fail: MailFail | null = null;
+  if (planned.length > 0) {
+    try {
+      fail = parseMailFail(await store.get(MAIL_FAIL_KEY));
+    } catch {
+      log('mail_fail_read_failed');
+    }
+  }
   const sent: Mail[] = [];
   let failed = false;
   for (const p of planned) {
-    if (await send(p.mail)) sent.push(p.mail);
+    const mail: Mail = { ...p.mail, text: withMissedNotice(p.mail.text, fail) };
+    let r: { ok: boolean; status: number | null };
+    try {
+      r = await send(mail);
+    } catch {
+      r = { ok: false, status: null };
+    }
+    if (fail !== null) fail = recordSend(fail, r.ok, r.status, now);
+    if (r.ok) sent.push(mail);
     else {
       failed = true;
       p.revert(state, budget);
@@ -330,6 +348,13 @@ export async function runAlerts(store: StateStore, job: Job, evs: readonly Evalu
       await store.put(BUDGET_KEY, JSON.stringify(budget));
     } catch {
       log('kv_write_failed');
+    }
+  }
+  if (fail !== null) {
+    try {
+      await store.put(MAIL_FAIL_KEY, JSON.stringify(fail));
+    } catch {
+      log('mail_fail_write_failed');
     }
   }
   return sent;

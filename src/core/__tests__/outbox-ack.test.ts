@@ -63,7 +63,7 @@ describe('L2：失败分类', () => {
     outbox.onEvent((e) => events.push(e.type));
     await outbox.enqueue({ table: 'todos', id: uid(1), op: 'patch', data: { title: 'x' } });
     const a = await outbox.next();
-    expect(await outbox.fail(a?.op_id ?? '', { status: 404, code: 'not_found' })).toBe('drop');
+    expect(await outbox.fail(a?.op_id ?? '', { status: 404, code: 'not_found', sid: null })).toBe('drop');
     expect(await outbox.list()).toEqual([]);
     expect((await cache.getRow('todos', uid(1)))?.view?.['title']).toBe('待办1');
     expect(events).toEqual(['rejected']);
@@ -79,11 +79,25 @@ describe('account_disabled、account_pending_deletion：被停用、注销冷静
     outbox.onEvent((e) => events.push(`${e.type}:${'code' in e ? e.code : ''}`));
     await outbox.enqueue({ table: 'todos', id: uid(1), op: 'patch', data: { title: '停用前改的' } });
     const a = await outbox.next();
-    expect(await outbox.fail(a?.op_id ?? '', { status: 403, code: 'account_pending_deletion' })).toBe('disabled');
+    expect(await outbox.fail(a?.op_id ?? '', { status: 403, code: 'account_pending_deletion', sid: null })).toBe('disabled');
     expect(events).toEqual(['disabled:account_pending_deletion']);
     expect(outbox.isSuspended()).toBe(true);
     expect(await outbox.next()).toBeNull();
     expect((await cache.getRow('todos', uid(1)))?.view?.['title']).toBe('停用前改的');   // 不回滚（随后整库清掉）
+  });
+
+  it('OUTBOX-sid-type：fail 不带 sid 编不过（@ts-expect-error 由 typecheck 检查），带了就原样进事件', async () => {
+    const { outbox } = await setup();
+    const got: unknown[] = [];
+    outbox.onEvent((e) => got.push(e));
+    await outbox.enqueue({ table: 'todos', id: uid(2), op: 'insert', data: todo(2) });
+    const a = await outbox.next();
+    const noSid = (): Promise<unknown> =>
+      // @ts-expect-error 少了 sid
+      outbox.fail(a?.op_id ?? '', { status: 403, code: 'account_disabled' });
+    expect(typeof noSid).toBe('function');
+    await outbox.fail(a?.op_id ?? '', { status: 403, code: 'account_disabled', sid: 's7' });
+    expect(got).toEqual([{ type: 'disabled', code: 'account_disabled', sid: 's7' }]);
   });
 });
 

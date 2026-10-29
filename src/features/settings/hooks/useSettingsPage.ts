@@ -54,21 +54,23 @@ export function useSettingsPage(deps: SettingsDeps = {}) {
   const { onRevoked, onSignedOut } = exit;
   // settings-api 的 account_disabled（RLS 一路，分不清停用和冷静期）：先探测再定（R-256 ③；探测不出按 disabled_unsure）
   // 设备列表和改语言共用这一个：探测中（probing）再来的不再探测（第六轮审查建议 ③，同一时刻只探测一次）；
-  // 探测说账号正常（没离开）就放开，下次再遇到可以再探测；离开了就一直挡着
+  // 探测说账号正常（没离开）就放开，下次再遇到可以再探测；离开了就一直挡着。
+  // onStay：探测说账号正常时通知调用方改显示通用错误（不说停用或冷静期）；探测中再来的也排进去，一起通知
   const probing = useRef(false);
+  const stays = useRef<(() => void)[]>([]);
   const onDisabled = useCallback(
-    (sid: string | null) => {
+    (sid: string | null, onStay?: () => void) => {
+      if (onStay) stays.current.push(onStay);
       if (probing.current) return;
       probing.current = true;
       const d = { leave, onRevoked, ...(deps.resolveDisabled ? { resolve: deps.resolveDisabled } : {}) };
-      void leaveForDisabled(sid, d).then(
-        (left) => {
-          if (!left) probing.current = false;
-        },
-        () => {
-          probing.current = false;
-        },
-      );
+      const stay = (): void => {
+        probing.current = false;
+        const fns = stays.current;
+        stays.current = [];
+        fns.forEach((f) => f());
+      };
+      void leaveForDisabled(sid, d).then((left) => (left ? undefined : stay()), stay);
     },
     [leave, onRevoked, deps.resolveDisabled],
   );

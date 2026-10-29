@@ -1,4 +1,3 @@
-/* global document, window */
 // 倾斜授权试验页（R-153，架构 0.27 第 5 点；iPhone 实机验收清单 P1-05）。
 // 要回答的只有一件事：主屏幕版里允许了“动作与方向”以后，从后台彻底划掉再打开，授权还在不在。
 // 做法：
@@ -8,7 +7,7 @@
 //      不等第一个回来再调第二个，免得第二个已经不算“用户点按里”），显示结果和用了多少毫秒。
 //   ③ 实时显示倾角和重力读数，并按试验页第 2 版的算法挪动一块高光，倾斜时看得出跟不跟手。
 // 隐私：读数只放内存、只写进本页的文字；不用 localStorage / sessionStorage / IndexedDB / Cookie，不发任何请求，不打日志。
-// 导出的函数给 src/app/__tests__/tilt-diag.test.ts 用。
+// 导出的函数给 src/app/__tests__/tilt-diag.test.ts 用。页面在 /diag/tilt.html（/app/ 作用域外，SW-update ③）。
 
 /** 打开后等多久没收到读数就判“授权不在” */
 export const AUTO_WAIT_MS = 2000;

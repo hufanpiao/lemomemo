@@ -119,7 +119,9 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
       // 本机会话已经是别的会话（回包前别的标签页写进来的，上面没删）：不调 signOut，免得把它退掉（见文件头）
       const now = sessionIdOf(exit);
       if (now === null || now === sid) {
-        // 后台的 signOut 也挂删键保护（K6-signout-lib 复审建议）：它最后删会话键时，本机若已是别的标签页的新会话就不删
+        // 后台的 signOut 也挂删键保护（K6-signout-lib 复审建议）：它最后删会话键时，本机若已是别的标签页的新会话就不删。
+        // 这里故意不传 prior（旧令牌）（K6-signout-lib 复审建议 ③）：被移除、会话失效说明服务器上这次登录已经作废，用旧令牌再 logout
+        // 只会回 401，没有要吊销的；会话被换的情形上面已经不调 signOut，dropLocal 里的 logoutReplaced 拿不到令牌也只是算退成、不发请求
         const release = defaultGuardRemoval(sid);
         void api.dropLocalSession(sid).catch(() => undefined).finally(release);
       }

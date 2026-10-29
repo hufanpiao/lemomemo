@@ -89,4 +89,5 @@ export const ko = {
   'auth.gate.enterAnyway': '그래도 들어가기', // R-106 B1 第一遍已审（10-30）
   'auth.gate.backToLogin': '로그인 화면으로 돌아가기', // R-106 B1 第一遍已审（10-30），按审校意见改过
   'auth.exit.disabledUnsure': '지금은 계정을 사용할 수 없어서 이 기기에 있던 데이터를 삭제했어요. 회원 탈퇴를 신청했다면 탈퇴 대기 기간 중에 이메일 인증 코드로 로그인해서 계정을 복구할 수 있어요. 그렇지 않다면 레모 운영자에게 문의해 주세요.', // R-106 B1 第一遍已审（10-30），按审校意见改过
+  'auth.exit.expired': '로그인이 만료됐어요. 다시 로그인해 주세요.', // R-263 新增（10-30），韩文审校改为 -해요 体（同 codeExpired、removed）
 } as const satisfies Record<keyof typeof zh, string>;

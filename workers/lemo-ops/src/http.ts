@@ -108,8 +108,14 @@ export async function keepalive(fetchFn: FetchFn, cfg: OpsConfig, ms = KEEPALIVE
   }
 }
 
-/** 用 Resend 发一封纯文本邮件（RESEND_API_KEY_OPS 只有发信权限）。成功返回 true */
-export async function sendMail(fetchFn: FetchFn, cfg: OpsConfig, subject: string, text: string, ms = MAIL_TIMEOUT_MS): Promise<boolean> {
+/** 发信结果：status 是 Resend 回的 HTTP 码；超时、网络出错没有回应时是 null（R-261 记进 mail-fail:v1 的 last_status，只有这个数字，不读响应体） */
+export interface SendOutcome {
+  ok: boolean;
+  status: number | null;
+}
+
+/** 用 Resend 发一封纯文本邮件（RESEND_API_KEY_OPS 只有发信权限）。2xx 算成功 */
+export async function sendMail(fetchFn: FetchFn, cfg: OpsConfig, subject: string, text: string, ms = MAIL_TIMEOUT_MS): Promise<SendOutcome> {
   try {
     const r = await fetchText(
       fetchFn,
@@ -121,8 +127,8 @@ export async function sendMail(fetchFn: FetchFn, cfg: OpsConfig, subject: string
       },
       ms,
     );
-    return r.status >= 200 && r.status < 300;
+    return { ok: r.status >= 200 && r.status < 300, status: r.status };
   } catch {
-    return false;
+    return { ok: false, status: null };
   }
 }

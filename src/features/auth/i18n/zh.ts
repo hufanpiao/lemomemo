@@ -97,4 +97,6 @@ export const zh = {
   'auth.gate.backToLogin': '回到登录',
   // 主 App 收到含糊的 account_disabled、探测不出是停用还是冷静期（断网、超时），保守清了本机（R-256 ③ 后续）：两种情况都说到
   'auth.exit.disabledUnsure': '账号暂时不能使用，这台设备上的数据已清除。如果你申请过注销，冷静期内用邮箱验证码登录，可以选择恢复账号；否则请联系柠檬记的负责人。',
+  // 主 App 收到 account_disabled，但请求发出时、现在本机都没有会话（R-263）：不是账号出了问题，只请重新登录
+  'auth.exit.expired': '登录已失效，请重新登录。',
 } as const;

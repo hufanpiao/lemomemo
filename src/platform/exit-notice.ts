@@ -12,12 +12,14 @@
 // • 旧格式（只有原因字符串，10-30 以前写的）按过期处理、读到就删（PROBE-sugg2 ②）：没有时刻判断不了新旧，宁可少一句提示
 
 /** removed：会话被吊销（session_revoked）；disabled：账号被管理员停用（account_disabled）；pending_deletion：注销冷静期（account_pending_deletion，R-192） */
-export type ExitNotice = 'removed' | 'disabled' | 'pending_deletion' | 'disabled_unsure';
+export type ExitNotice = 'removed' | 'disabled' | 'pending_deletion' | 'disabled_unsure' | 'expired';
+// expired（R-263，10-30 加）：主 App 收到 account_disabled，被拒那次请求没带会话（sid 为 null）、本机也没有会话——不是账号出了问题，
+// 登录页只说“登录已失效，请重新登录”（auth.exit.expired），不说“被移除”
 // disabled_unsure（R-256 ③ 后续，10-30 加）：主 App 收到含糊的 account_disabled、探测 status 又没有结果（断网、超时），
 // 保守按停用清了本机；登录页用不确定的说法（“暂时不能使用”，申请过注销的登录后可以恢复），见 platform/account-status.ts 的 exitAfterProbe
 
 const EXIT_NOTICE_KEY = 'lemo.exit_notice';
-const EXIT_NOTICES: readonly ExitNotice[] = ['removed', 'disabled', 'pending_deletion', 'disabled_unsure'];
+const EXIT_NOTICES: readonly ExitNotice[] = ['removed', 'disabled', 'pending_deletion', 'disabled_unsure', 'expired'];
 /** 写下以后多久还算数 */
 export const EXIT_NOTICE_TTL_MS = 10 * 60_000;
 

@@ -143,7 +143,7 @@ describe('writeAiSwitchSettled：insert 撞唯一约束被拒后，等同步拉�
   async function rejectInsert(b: Awaited<ReturnType<typeof boot>>, opId: string) {
     const sent = await b.outbox?.next();
     expect(sent?.op_id).toBe(opId);
-    await b.outbox?.fail(opId, { status: 409, code: '23505' });
+    await b.outbox?.fail(opId, { status: 409, code: '23505', sid: null });
   }
 
   it('被拒 → 同步拉下服务器那一行 → 按那一行 patch value = true；本机那行不再算数', async () => {

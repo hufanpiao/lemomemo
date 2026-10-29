@@ -15,7 +15,7 @@
 //   离开本机时只删这个 sid 的会话（clearLocalSessionIf），不在回包那一刻读本机会话、删“现在那个”
 import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { readSessionId } from '../../../platform/session.ts';
-import { logoutReplaced, sessionReplaced, withTimeout, type PriorSession } from '../../../platform/sign-out.ts';
+import { budgetLeft, logoutReplaced, sessionReplaced, withTimeout, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import type { DeviceRow } from './devices.ts';
 import { sessionIdOfToken } from './devices.ts';
@@ -274,7 +274,12 @@ export function createSettingsApi(
       }
     },
 
-    dropLocalSession: async (sessionId, prior) => dropLocal(await dbOrNull(), sessionId, prior),
+    dropLocalSession: async (sessionId, prior) => {
+      const t0 = Date.now();
+      const db = await dbOrNull();
+      // 拿客户端用掉的时间从 ④ 的预算里扣掉（K6-signout-lib 复审建议 ②）；dropLocal 里到 logoutReplaced 之前没有别的 await
+      return dropLocal(db, sessionId, prior && { ...prior, budgetMs: budgetLeft(prior.budgetMs, t0) });
+    },
 
     saveLocale: (locale) =>
       timed(() =>

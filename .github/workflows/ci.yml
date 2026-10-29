@@ -162,6 +162,7 @@ jobs:
         # API_URL、DB_URL 和两把本地演示钥匙（IT_*，不是密钥；不是本机地址测试自己拒绝）。TC-B0-116 仍是 todo（B4b-1）
         # B1 接手清单 B0-117-dev：同两组的正向用例（同一份测试代码）再打一遍上面已起的 LocalStack（OBJSTORE_ENDPOINT，4.14.0 按 digest 锁），
         # 删除语义由真的 S3 兼容实现认定；反证用例仍只用 fake-s3。不另起 service 容器（本任务已有同一个 LocalStack），只多两条用例，约多 10～30 秒
+        # B1 接手清单 C9（10-30）：grant-matrix.live 用同一套授权矩阵打上面这个本机库（只读 IT_DB_URL，事务里做、做完回滚）
         run: |
           st="$(supabase status -o json)"
           # 和 store-it/run.mjs 一样只解析第一个 { 到最后一个 } 之间（前后可能有提示行）
@@ -180,9 +181,11 @@ jobs:
             --must 'TC-B0-117 真 account-purge：生成的探针前后数' \
             --must 'TC-B0-117 LocalStack 正向：真 account-purge 整条链路' \
             --must 'TC-B0-117 LocalStack 正向：生成的探针前后数' \
+            --must '授权矩阵打本机真库' \
             --allow-todo 'TC-B0-116 整条链路' \
             -- tests/shared/objstore.test.ts tests/data-manifest/objstore-cases.test.ts \
-            tests/data-manifest/purge-runner.test.ts tests/functions/files-get.test.ts
+            tests/data-manifest/purge-runner.test.ts tests/functions/files-get.test.ts \
+            tests/data-manifest/grant-matrix.live.test.ts
 
       - name: seed.mjs 往替身放 A、B 的测试对象，跑两遍（第二遍全部“已存在”），再 --check 计数（实测清单 L19）
         # 凭据是替身的固定测试值（seed.mjs 故意不用 R2_FN_* 这个名字，那是九个规定函数专用的）

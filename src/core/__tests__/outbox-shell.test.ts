@@ -41,7 +41,7 @@ describe('R-229：applyServer 收到隐私记只读空壳', () => {
     await seed(cache, 'notes', uid(1), note(1));
     await outbox.enqueue({ table: 'notes', id: uid(1), op: 'patch', data: { title: '失败区里的标题' } });
     const first = await outbox.next();
-    expect(await outbox.fail(first?.op_id ?? '', { status: 400, code: '23514' })).toBe('permanent');
+    expect(await outbox.fail(first?.op_id ?? '', { status: 400, code: '23514', sid: null })).toBe('permanent');
     await outbox.enqueue({ table: 'notes', id: uid(1), op: 'patch', data: { title: '没发的标题', body: '没发的正文' } });
     expect(outbox.getStatus()).toMatchObject({ pending: 1, failed: 1 });
 
@@ -166,7 +166,7 @@ describe('R-229：applyServer 收到隐私记只读空壳', () => {
     const before = await cache.getRow('notes', uid(1));
 
     await outbox.ack(a?.op_id ?? '', { status: 'ok', rev: 7, prev_rev: 6 });
-    expect(await outbox.fail(a?.op_id ?? '', { status: 400, code: '23514' })).toBe('permanent');
+    expect(await outbox.fail(a?.op_id ?? '', { status: 400, code: '23514', sid: null })).toBe('permanent');
     expect(await cache.getRow('notes', uid(1))).toEqual(before);
     expect(JSON.stringify(before)).not.toMatch(/发送中|排着/);
     expect(await outbox.list()).toEqual([]);

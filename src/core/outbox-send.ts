@@ -4,7 +4,7 @@ import type { Cache, CachedRow, ServerRow } from './cache.ts';
 import { OUTBOX } from './cache-schema.ts';
 import { advanceAfterAck, backoffMs, classifyFailure, MAX_OWN_REVS } from './outbox-logic.ts';
 import { notify, rewriteRow } from './outbox-rows.ts';
-import type { AckResult, FailureKind, OutboxEvent, OutboxItem, OutboxOptions, SendFailure } from './outbox-types.ts';
+import type { AckResult, FailureKind, OutboxEvent, OutboxItem, OutboxOptions, SentFailure } from './outbox-types.ts';
 
 /** createOutbox 里各步共用的东西 */
 export interface Ctx {
@@ -68,10 +68,10 @@ export async function ackImpl(ctx: Ctx, opId: string, ack: AckResult): Promise<v
   await ctx.refresh();
 }
 
-/** 被拒那次请求的会话（K6-sugg4 ①）。事件里必填（K6-sugg5 ②）：调用方没给按 null（sync/send.ts 发 removed、disabled 时总会给） */
-const sidOf = (f: SendFailure): { sid: string | null } => ({ sid: f.sid ?? null });
+/** 被拒那次请求的会话（K6-sugg4 ①）。事件里必填（K6-sugg5 ②），fail 的参数里也必填（OUTBOX-sid-type，SentFailure） */
+const sidOf = (f: SentFailure): { sid: string | null } => ({ sid: f.sid });
 
-export async function failImpl(ctx: Ctx, opId: string, failure: SendFailure): Promise<FailureKind> {
+export async function failImpl(ctx: Ctx, opId: string, failure: SentFailure): Promise<FailureKind> {
   const kind = classifyFailure(failure);
   if (ctx.isSuspended()) return kind;
   if (kind === 'disabled') {

@@ -1,5 +1,5 @@
 // SW 预缓存清单（架构 16.1）：注入脚本的排除规则和 src/sw/routes.ts 一致；清单内容正确
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -18,12 +18,6 @@ const SAMPLES = [
   'holidays/kr/2026.json',
   'fonts/lemo-sub.woff2',
   'icons/startup/startup-1170x2532.png',
-  'diag/startup.html',
-  'diag/startup.js',
-  'diag/startup.css',
-  'diag/tilt.html',
-  'diag/tilt.js',
-  'diag/tilt.css',
   'icons/icon-192.png',
   '.vite/manifest.json',
 ];
@@ -48,10 +42,20 @@ describe('inject_sw_manifest', () => {
     expect(m.find((e) => e.url === '/app/index.html')?.revision).toMatch(/^[0-9a-f]{8,}$/);
   });
 
-  it('机型信息页、倾斜授权试验页（diag/）和 iOS 启动图 icons/startup/ 不进预缓存清单（架构 8.1、0.38 第 63 条）', () => {
+  it('机型信息页、倾斜授权试验页不在 dist/web/app/ 里（10-30 搬到 site/diag/，上线是 /diag/，SW-update ③）', () => {
+    const root = join(import.meta.dirname, '..', '..');
+    // Vite 只把 src/public/ 复制进 dist/web/app/：那里不能再有 diag/；页面在 site/diag/（官网那一侧原样复制到 dist/web/diag/）
+    expect(existsSync(join(root, 'src', 'public', 'diag'))).toBe(false);
+    for (const f of ['tilt.html', 'tilt.js', 'tilt.css', 'startup.html', 'startup.js', 'startup.css']) expect(existsSync(join(root, 'site', 'diag', f)), f).toBe(true);
+    // 两边的排除规则里都不再有 diag/ 的特例
+    expect(excluded('diag/tilt.html')).toBe(false);
+    expect(excludedFromPrecache('diag/tilt.html')).toBe(false);
+  });
+
+  it('iOS 启动图 icons/startup/ 不进预缓存清单（架构 8.1、0.38 第 63 条）', () => {
     const d = mkdtempSync(join(tmpdir(), 'lemo-sw-'));
     try {
-      for (const p of ['index.html', 'icons/icon-192.png', 'icons/startup/startup-1170x2532.png', 'diag/startup.html', 'diag/startup.js', 'diag/startup.css', 'diag/tilt.html', 'diag/tilt.js', 'diag/tilt.css']) {
+      for (const p of ['index.html', 'icons/icon-192.png', 'icons/startup/startup-1170x2532.png']) {
         mkdirSync(join(d, p, '..'), { recursive: true });
         writeFileSync(join(d, p), p);
       }
@@ -62,7 +66,7 @@ describe('inject_sw_manifest', () => {
     }
   });
 
-  it('sw.ts 导航路由的 denylist 用的就是 routes.ts 的 NAV_DENYLIST（含 diag/，不在 sw.ts 里另写一份）', () => {
+  it('sw.ts 导航路由的 denylist 用的就是 routes.ts 的 NAV_DENYLIST（不在 sw.ts 里另写一份）', () => {
     const sw = readFileSync(join(import.meta.dirname, '..', '..', 'src', 'sw', 'sw.ts'), 'utf8');
     expect(sw).toMatch(/import \{[^}]*\bNAV_DENYLIST\b[^}]*\} from '\.\/routes\.ts'/);
     expect(sw).toMatch(/denylist:\s*\[\.\.\.NAV_DENYLIST\]/);

@@ -21,7 +21,7 @@ export interface FunctionExemption {
 export const FUNCTION_VERSION_EXEMPTIONS: readonly FunctionExemption[] = [
   // account：导出、注销、恢复、查状态（status）。0.38 第 47 条：旧版本也必须能导出、注销（以及冷静期里恢复）；转发层不读请求体，分不出是哪个动作，所以整个 POST 免查。
   // 以后 account 新加会写同步表的动作：要么挪到别的函数，要么在 account 里自己查版本（这一项免掉的是整个 POST）。
-  { name: 'account', methods: ['POST'], caller: 'client', why: 'export-delete-restore-on-old-clients' },
+  { name: 'account', methods: ['POST'], caller: 'client', why: 'export-delete-restore-status-on-old-clients' },
   // pg_cron 经 pg_net 调，带 x-cron-secret，没有客户端版本；免查只免版本，鉴权照旧由 x-cron-secret 管
   { name: 'account-purge', methods: ['POST'], caller: 'server', why: 'cron-x-cron-secret' },
   // lemo-ops 调，带 x-ops-secret，没有客户端版本；鉴权照旧由 x-ops-secret 管

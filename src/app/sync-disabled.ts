@@ -6,7 +6,9 @@
 //   → 被移除；unknown（断网、超时、令牌拿不到、不带码的 401）→ 保守照停用清本机，提示 disabled_unsure；
 //   active（刚好恢复了）→ 不清本机，重新载入页面重新同步（outbox 已设闸、闸只能靠重新载入解开；队列项还在库里，载入后照发）。
 //   探测期间（最多 8 秒）不先删会话——探测要用它；之后照旧只按被拒那次的 sid 删。
-//   sid 必填（K6-sugg5 ②）：fail 的调用方没给时 outbox 按 null 发——不拿本机现在那个会话的令牌探测，按 unknown（disabled_unsure）退出、只用 null 删
+//   sid 必填（K6-sugg5 ②）：fail 的调用方没给时 outbox 按 null 发——不拿本机现在那个会话的令牌探测，按 unknown（disabled_unsure）退出、只用 null 删。
+//   sid 为 null、本机也读不到账号（readUserId 为 null，没有会话）时不探测，按 expired（auth.exit.expired“登录已失效，请重新登录”，R-263）退出（K6-sugg5 审查建议）：
+//   没登录时发出去的请求本来就会被拒，不是账号出了问题，不该提示“可能已停用”
 // • active 的重新载入有次数限制（10-30 复审必改）：RPC 一路 uid 为 null 时也回 account_disabled，探测用的却是本机存的令牌，
 //   两边可能一直说不到一块，会无限重新载入。重新载入前在 sessionStorage 记下时刻（ACTIVE_RELOAD_KEY）；5 分钟内第二次遇到 active
 //   就不再载入：闸保持关着，记日志 disabled_probe_active_loop，让出同步主页（免得别的标签页也都不同步），经 onSyncPaused 在顶部提示
@@ -28,6 +30,8 @@ export interface SyncDisabledDeps {
    * 和 readSession、reload 三个都给了才探测；不给就照旧直接按停用退出
    */
   probeAccount?: (token: string) => Promise<AccountProbe>;
+  /** 本机会话的 user_id（platform/session.ts 的 readSessionUserId）：sid 为 null 时据此分“没有会话”（按 removed）和“读不出 sid”（照旧探测） */
+  readUserId?: () => string | null;
   /** 本机会话现在的 session_id 和 access token（platform/session.ts 的 readSessionId、readSessionAccessToken；只放内存） */
   readSession?: () => { sid: string | null; token: string | null };
   /** 探测结果是 active：不清本机，重新载入页面重新同步（platform/sw-register.ts 的 reloadPage） */
@@ -65,6 +69,16 @@ export function currentSid(deps: SyncDisabledDeps): string | null {
     return deps.readSession?.().sid ?? null;
   } catch {
     return null;
+  }
+}
+
+/** sid 为 null 时本机是不是确实没有会话（见文件头）：readUserId 没给或读出错都不算 */
+export function noLocalSession(deps: SyncDisabledDeps, sid: string | null): boolean {
+  if (sid !== null || !deps.readUserId) return false;
+  try {
+    return deps.readUserId() === null;
+  } catch {
+    return false;
   }
 }
 

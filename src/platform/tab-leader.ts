@@ -50,7 +50,10 @@ export interface TabLeaderOptions {
 
 export interface TabLeader {
   isLeader(): boolean;
-  /** 发提醒给别的页面（自己收不到） */
+  /**
+   * 发提醒给别的页面。BroadcastChannel 只是“发消息的那个频道对象”自己收不到：本页另开的同名频道（postSyncMessage、
+   * 另一个 TabLeader）照样会收到，收消息的一方要按“可能是本页发的”处理（SETTINGS-sugg ⑤）
+   */
   post(m: SyncMessage): void;
   /** 退出登录、换账号：放手并关频道 */
   close(): Promise<void>;
@@ -176,6 +179,7 @@ export const syncChannelName = (userId: string): string => `lemo-sync:${userId}`
 
 /**
  * 不当主页、也不选主时发一条提醒（设置页注销后清完本机库发 reset，R-256 ⑤）：临时开频道、发完就关。
+ * 临时频道是另一个对象，所以本页的 TabLeader（同名频道）也会收到这条（SETTINGS-sugg ⑤），不只是别的页面。
  * 没有 BroadcastChannel、发不出去都不抛（提醒丢了不要紧，别的页面回到前台整份重读兜底）
  */
 export function postSyncMessage(name: string, m: SyncMessage, channel: (name: string) => ChannelLike | null = defaultChannel): void {

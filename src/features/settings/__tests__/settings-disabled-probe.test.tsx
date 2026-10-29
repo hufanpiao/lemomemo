@@ -4,7 +4,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
-import type { ExitNotice } from '../../../platform/session.ts';
+import type { ProbedExit } from '../../../platform/account-status.ts';
 import { leaveForDisabled } from '../data/account-exit.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
@@ -16,7 +16,7 @@ beforeEach(() => uiStore.getState().setLocale('zh-CN'));
 afterEach(cleanup);
 
 describe('leaveForDisabled', () => {
-  const run = async (r: ExitNotice | 'active', fallback?: 'disabled') => {
+  const run = async (r: ProbedExit | 'active', fallback?: 'disabled') => {
     const leave = vi.fn(async () => undefined);
     const onRevoked = vi.fn();
     const resolve = vi.fn(async () => r);
@@ -80,6 +80,9 @@ describe('设备列表、改语言同一时刻只探测一次（第六轮审查�
     await waitFor(() => expect(api.saveLocale).toHaveBeenCalledTimes(1));
     expect(resolveDisabled).toHaveBeenCalledTimes(1);
     await act(async () => answer('active'));
+    // 探测中排进来的也一起通知：设备列表改显示“读不出来”，不说停用
+    expect(await screen.findByText(new RegExp(`${zh['settings.devices.loadFailed']}|${ko['settings.devices.loadFailed']}`))).toBeTruthy();
+    expect(screen.queryByText(new RegExp(`${zh['settings.err.accountDisabled']}|${ko['settings.err.accountDisabled']}`))).toBeNull();
     await act(async () => {
       // 刚切成了韩文：按钮文字中韩都可能
       fireEvent.click(screen.getByRole('button', { name: new RegExp(`${zh['settings.devices.retry']}|${ko['settings.devices.retry']}`) }));
@@ -112,6 +115,9 @@ describe('导出（account-api）收到 account_disabled', () => {
       fireEvent.click(exportBtn());
     });
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    // 账号正常就不说“已停用”，按设备列表同一口径提示通用错误（PROBE 遗留）
+    expect(screen.getByRole('alert').textContent).toContain(zh['settings.err.unknown']);
+    expect(screen.queryByText(zh['settings.err.accountDisabled'])).toBeNull();
     expect(resolveDisabled).toHaveBeenCalledWith('s-me', 'disabled');
     expect(leave).not.toHaveBeenCalled();
   });

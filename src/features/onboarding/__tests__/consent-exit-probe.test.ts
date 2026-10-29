@@ -33,7 +33,10 @@ describe('告知页 account_disabled：先探测再定退出原因', () => {
       const { d, order } = deps(async () => notice);
       await leaveThisDevice('account_disabled', 's1', d);
       expect(d.resolveDisabled).toHaveBeenCalledWith('s1');
-      expect(order).toEqual(['session:s1', 'wipe', `notice:${notice}`, 'session:s1', 'auth']);
+      // 冷静期不删会话（R-262），清库、记原因、回登录页照旧
+      expect(order).toEqual(
+        notice === 'pending_deletion' ? ['wipe', `notice:${notice}`, 'auth'] : ['session:s1', 'wipe', `notice:${notice}`, 'session:s1', 'auth'],
+      );
     });
   }
 
@@ -44,13 +47,13 @@ describe('告知页 account_disabled：先探测再定退出原因', () => {
     await Promise.resolve();
     expect(order).toEqual([]);
     answer('pending_deletion');
-    await p;
+    expect(await p).toBe(true);
     expect(order).toContain('notice:pending_deletion');
   });
 
   it('active（账号正常）：不清本机、不跳转；之后再遇到可以再处理（不被“只处理一次”挡住）', async () => {
     const { d, order } = deps(async () => 'active');
-    await leaveThisDevice('account_disabled', 's1', d);
+    expect(await leaveThisDevice('account_disabled', 's1', d)).toBe(false);   // 告知页据此提示“这一步没记下”（PROBE 遗留）
     expect(order).toEqual([]);
     await leaveThisDevice('session_revoked', 's1', d);
     expect(order).toContain('notice:removed');

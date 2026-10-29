@@ -94,11 +94,16 @@ export function installGate(nav: NavLike = navigator, media?: (q: string) => boo
 //   不记错误消息原文、不记 stack 原文，也不记 URL 的路径、query、hash 和域名（消息、URL 里可能带用户内容）
 //   - 错误类型：error.name 在白名单 JS_ERROR_NAMES 里才用（标准 Error 类型、常见 DOMException 名、本项目自定义的错误名），
 //     否则记 Error（驼峰名里也可能拼进用户内容，审查 S1）；被 reject 的不是 Error 对象时记 NonError
-//   - 文件名：只取同源、路径是 /app/assets/<文件名> 或 /app/index.html 的文件名（去掉 query 和 hash），
+//   - 文件名：只取同源、路径是 /app/assets/<文件名>、/app/index.html 或 /app/（入口页本身，hash 路由下地址就是它，
+//     JSERR-sugg ⑧）的文件名（去掉 query 和 hash；/app/ 记 index.html），
 //     且只能是字母数字和 . _ -、以 .js / .mjs / .html 等结尾；同源的其他路径记 unknown（审查 S3），
 //     别的来源（浏览器扩展、第三方脚本）记 ext，取不到记 unknown
-//   - 行号：ErrorEvent.lineno；没有时取 stack 第一帧的行号。V8 的 stack 开头是“类型: 消息”，消息有几行就先跳过几行
-//     （消息里带换行和 “at URL” 时不会被当成帧，审查 S2），再只看 “at ” 开头的行
+//   - 行号、列号：ErrorEvent.lineno / colno；没有时取 stack 第一帧的行号和列号（打包产物几乎只有 1 行，靠列号定位，JSERR-sugg ⑦）。
+//     V8 格式的 stack（有 “at ” 开头的行）开头必须正好是“名字: 当前消息”（消息为空时只有名字），对上了才按消息行数跳过开头、
+//     只看 “at ” 开头的行；对不上（先读了 stack 再改 message、stack 被整个换掉、name 为空时开头直接是消息）就不用 stack，
+//     行号、列号记 0（JSERR-sugg ⑤：消息里伪造的同源帧不会被当成出错位置）。
+//     Safari / Firefox 格式（fn@url:行:列）不带消息，一行都不跳（函数名里碰巧有“: 消息”也不跳，JSERR-sugg ⑥）
+//   - code 格式（10-30 起）：“错误类型@文件名:行号:列号”，取不到的记 0，最长 64 字；每天 5 条、50 个不同 code 都按这整串计
 // • 同一个 code 每台设备每天（本机日期）最多 JS_ERROR_DAILY_MAX 条，计数放 localStorage 的 JS_ERROR_KEY；
 //   一天里最多记 JS_ERROR_MAX_CODES 个不同的 code，再多的不记（防止一页错误刷满每人每天 2,000 条的日志额度）；
 //   localStorage 读写失败时退回只在这一页内存里计数
@@ -124,10 +129,16 @@ export const JS_ERROR_NAMES: ReadonlySet<string> = new Set([
   'CacheClosedError', 'OutboxRejectError', 'ObjStoreError',
 ]);
 const FILE_RE = /^[A-Za-z0-9._-]{1,40}\.(?:m?js|cjs|jsx?|tsx?|html?)$/;
-const FRAME_RE = /([a-z][a-z0-9+.-]*:\/\/[^\s()@]+?):(\d{1,7})(?::\d{1,7})?\)?\s*$/i;
+const FRAME_RE = /([a-z][a-z0-9+.-]*:\/\/[^\s()@]+?):(\d{1,7})(?::(\d{1,7}))?\)?\s*$/i;
+/** V8 格式的帧行 */
+const V8_FRAME_RE = /^\s*at\s/;
+/** V8 stack 开头的名字（标识符）；name 为空时 V8 开头直接是消息，这里就对不上 */
+const V8_NAME_RE = /^[A-Za-z_$][\w$]{0,99}/;
 /** 同源里只认这个目录下的文件（vite base '/app/'，打包产物都在 assets 下，不分子目录）和入口页（审查 S3） */
 const ASSETS_DIR = '/app/assets/';
 const INDEX_PAGE = '/app/index.html';
+/** 入口页本身的地址（hash 路由：#/notes 之类都在这个路径下） */
+const APP_ROOT = '/app/';
 
 /** 出错位置里的文件名：只认同源 /app/assets/ 下、名字干净的脚本文件和 /app/index.html */
 function errorFile(url: string | undefined, origin: string): string {
@@ -140,59 +151,83 @@ function errorFile(url: string | undefined, origin: string): string {
   }
   if (u.origin !== origin) return 'ext';
   const p = u.pathname;
-  if (p === INDEX_PAGE) return 'index.html';
+  if (p === INDEX_PAGE || p === APP_ROOT) return 'index.html';
   if (!p.startsWith(ASSETS_DIR)) return 'unknown';
   const name = p.slice(ASSETS_DIR.length);
   return FILE_RE.test(name) ? name : 'unknown';
 }
 
 /**
- * 去掉 V8 stack 开头的“类型: 消息”：消息从第一行开始、有几行就跳过几行（审查 S2）。
- * Safari / Firefox 的 stack 不带消息（第一行里找不到消息），原样返回。
+ * V8 stack 去掉开头的“名字: 消息”后剩下的帧（审查 S2、JSERR-sugg ⑤）：开头必须正好是“标识符: 当前消息”（消息为空时只有标识符），
+ * 后面紧跟换行或结束；对不上返回 null（不用这个 stack）。名字只要是标识符：自定义错误类在 super() 之后才改 name，开头还是 “Error”
  */
-function dropHeader(stack: string, message: unknown): string {
-  if (typeof message !== 'string' || message === '') return stack;
-  const firstNl = stack.indexOf('\n');
-  const at = stack.indexOf(`: ${message}`);
-  if (at < 0 || (firstNl >= 0 && at > firstNl)) return stack;
-  const nl = stack.indexOf('\n', at + 2 + message.length);
-  return nl < 0 ? '' : stack.slice(nl + 1);
+function v8Body(stack: string, message: unknown): string | null {
+  if (typeof message !== 'string') return null;
+  const name = V8_NAME_RE.exec(stack)?.[0];
+  if (!name) return null;
+  const header = message === '' ? name : `${name}: ${message}`;
+  if (!stack.startsWith(header)) return null;
+  const rest = stack.slice(header.length);
+  if (rest === '') return '';
+  return rest.startsWith('\n') ? rest.slice(1) : null;
 }
 
-/** stack 第一帧的 URL 和行号（不返回消息和函数名）；message 是错误消息，用来跳过 stack 开头的消息行 */
-function firstFrame(stack: unknown, message?: unknown): { url: string; line: number } | null {
+interface Frame {
+  url: string;
+  line: number;
+  col: number;
+}
+
+/** stack 第一帧的 URL、行号、列号（不返回消息和函数名）；message 是错误消息，用来核对、跳过 V8 stack 开头的消息行 */
+function firstFrame(stack: unknown, message?: unknown): Frame | null {
   if (typeof stack !== 'string') return null;
-  const rest = dropHeader(stack, message);
   // 最多看 50 行、每行 500 字：FRAME_RE 遇到超长单行很慢（审查 S4）
-  const lines = rest.split('\n', 50).map((l) => l.slice(0, 500));
-  const v8 = lines.filter((l) => /^\s*at\s/.test(l));
-  for (const l of v8.length > 0 ? v8 : lines) {
+  const head = (t: string): string[] => t.split('\n', 50).map((l) => l.slice(0, 500));
+  const isV8 = head(stack).some((l) => V8_FRAME_RE.test(l));
+  let lines: string[];
+  if (isV8) {
+    const body = v8Body(stack, message);
+    if (body === null) return null;
+    lines = head(body).filter((l) => V8_FRAME_RE.test(l));
+  } else {
+    lines = head(stack);
+  }
+  for (const l of lines) {
     const m = FRAME_RE.exec(l);
-    if (m?.[1] && m[2]) return { url: m[1], line: Number(m[2]) };
+    if (m?.[1] && m[2]) return { url: m[1], line: Number(m[2]), col: m[3] ? Number(m[3]) : 0 };
   }
   return null;
 }
 
+/** 正整数原样，其他（0、负数、小数、不是数）记 0，最大 9,999,999 */
+function posInt(n: unknown): number {
+  return typeof n === 'number' && Number.isInteger(n) && n > 0 ? Math.min(n, 9_999_999) : 0;
+}
+
 /**
- * 一个错误 → js_error 的 code：“错误类型@文件名:行号”，最长 64 字。
- * at 是 ErrorEvent 给的位置（filename、lineno）；没有时看 stack。不含错误消息、URL 的路径和 query。
+ * 一个错误 → js_error 的 code：“错误类型@文件名:行号:列号”，最长 64 字。
+ * at 是 ErrorEvent 给的位置（filename、lineno、colno）；没有时看 stack。不含错误消息、URL 的路径和 query。
  */
-export function jsErrorCode(err: unknown, at: { filename?: string; lineno?: number } = {}, origin = ''): string {
+export function jsErrorCode(err: unknown, at: { filename?: string; lineno?: number; colno?: number } = {}, origin = ''): string {
   const isErr = typeof err === 'object' && err !== null && 'name' in err;
   const name = isErr ? (err as { name?: unknown }).name : undefined;
   const type = !isErr ? 'NonError' : typeof name === 'string' && JS_ERROR_NAMES.has(name) ? name : 'Error';
   let url = at.filename || undefined;
-  let line = typeof at.lineno === 'number' && Number.isInteger(at.lineno) && at.lineno > 0 ? at.lineno : 0;
+  let line = posInt(at.lineno);
+  // 列号跟着行号走：行号是 ErrorEvent 给的，列号也用它的
+  let col = line > 0 ? posInt(at.colno) : 0;
   if (!url || line === 0) {
     const e = err as { stack?: unknown; message?: unknown };
     const f = isErr ? firstFrame(e.stack, e.message) : null;
     if (f && (!url || f.url === url)) {
       url = f.url;
-      if (line === 0) line = f.line;
+      if (line === 0) {
+        line = posInt(f.line);
+        col = posInt(f.col);
+      }
     }
   }
-  const lineNo = Math.min(line, 9_999_999);
-  return `${type}@${errorFile(url, origin)}:${lineNo}`.slice(0, 64);
+  return `${type}@${errorFile(url, origin)}:${line}:${col}`.slice(0, 64);
 }
 
 /** 本机日期 YYYY-MM-DD（“每天”按设备的日期算） */
@@ -267,7 +302,7 @@ export function registerJsErrorLog(log: JsErrorLog, opts: JsErrorLogOptions = {}
     }
   };
 
-  const record = (err: unknown, at?: { filename?: string; lineno?: number }): void => {
+  const record = (err: unknown, at?: { filename?: string; lineno?: number; colno?: number }): void => {
     if (busy) return;
     busy = true;
     try {
@@ -294,7 +329,7 @@ export function registerJsErrorLog(log: JsErrorLog, opts: JsErrorLogOptions = {}
   const onError = (e: Event): void => {
     const ev = e as Partial<ErrorEvent>;
     // 跨源脚本的错误（“Script error.”）没有 error 对象：只记类型 Error，不新建 Error（它的 stack 会指到这里）
-    record(ev.error ?? { name: 'Error' }, { filename: ev.filename ?? '', lineno: ev.lineno ?? 0 });
+    record(ev.error ?? { name: 'Error' }, { filename: ev.filename ?? '', lineno: ev.lineno ?? 0, colno: ev.colno ?? 0 });
   };
   const onRejection = (e: Event): void => {
     record((e as Partial<PromiseRejectionEvent>).reason);

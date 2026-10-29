@@ -85,11 +85,11 @@ describe('退出时清空本机（真 core）', () => {
     expect(cache.isSealed()).toBe(true);
     // 清理进行中，正在发的那一项的响应回来了
     await outbox.ack(sending.op_id, { status: 'ok', rev: 6, prev_rev: 5 });
-    await outbox.fail(sending.op_id, { status: 400 });
+    await outbox.fail(sending.op_id, { status: 400, sid: null });
     await wiping;
     // 清完之后又晚到一次
     await outbox.ack(sending.op_id, { status: 'ok', rev: 7, prev_rev: 6 });
-    await outbox.fail(sending.op_id, { network: true });
+    await outbox.fail(sending.op_id, { network: true, sid: null });
 
     expect(await outbox.list()).toEqual([]);
     expect(await cache.getRow('todos', uid(1))).toBeUndefined();

@@ -18,6 +18,9 @@
 //   收到事件的同一个同步段里 clearLocalSessionIf(sid)，清完库、回登录页前再 clearLocalSessionIf(sid) 一次——
 //   请求在路上、清库那几秒里别的标签页刚登录的新会话（同一账号、别的账号）都不删；旧会话被晚到的令牌刷新写回来时照样删掉。
 //   sid 必填（K6-sugg5 ②）：outbox 事件、引擎的 onRemoved 都一定带着，没有“收到那一刻不管是谁都删”的兜底
+// • 冷静期不删会话（R-262 K6-pending-s2）：退出原因是 pending_deletion（直接收到 account_pending_deletion，或 account_disabled
+//   探测出冷静期）时不调 clearLocalSessionIf——能判断出冷静期，说明被拒那次请求的会话还活着，删它没有安全收益，反而会误伤
+//   别的标签页刚登录的同账号 S2。清库、记退出原因、回登录页照旧；登录页 SessionCheck 探测出冷静期就地出恢复页。停用、被移除、不确定不变
 // • 已经在走别的退出流程（watchAccount 发现会话没了或换了账号，boot.switching 已设）：不再清第二遍、不再跳第二次
 // • 收到 account_disabled 先探测再决定（R-256 ③ 后续）、active 的重新载入限次、别的标签页发来的退出原因怎么记：见 app/sync-disabled.ts
 // • 退出时删会话之前先广播 reset，带上退出原因和被拒的 sid（DISABLED-probe-later ②），别的标签页回登录页显示同一条提示
@@ -29,7 +32,7 @@ import { createTzReporter, type TzReporter } from '../core/sync/report-tz.ts';
 import type { SyncState, SyncTransport } from '../core/sync/types.ts';
 import { browserLifecycle, onUserActivity, type Lifecycle } from '../platform/net.ts';
 import { exitNoticeOf, type ExitNotice } from '../platform/session.ts';
-import { canProbe, noteExitFromOtherTab, probeThenLeave, type SyncDisabledDeps } from './sync-disabled.ts';
+import { canProbe, currentSid, noLocalSession, noteExitFromOtherTab, probeThenLeave, type SyncDisabledDeps } from './sync-disabled.ts';
 import { createTabLeader, type SyncMessage, type TabLeader, type TabLeaderOptions } from '../platform/tab-leader.ts';
 
 export { ACTIVE_RELOAD_KEY, ACTIVE_RELOAD_WINDOW_MS } from './sync-disabled.ts';
@@ -104,18 +107,25 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     // 先告诉别的标签页退出原因（DISABLED-probe-later ②）：赶在删会话（storage 事件 → 它们的 watchAccount 清库、回登录页）之前发，
     // 那边收到就 setExitNotice，回登录页时显示同一条提示。带上被拒的 sid：那边的会话已换成别的就不记
     leader?.post({ type: 'reset', notice, sid });
-    // 同一个同步段里先删本机会话——只删被拒的那个（K6-sugg3 ①、K6-sugg4 ①）
-    try {
-      deps.clearLocalSessionIf(sid);
-    } catch {
-      // 存储不可用：本来也存不下会话
-    }
+    // 同一个同步段里先删本机会话——只删被拒的那个（K6-sugg3 ①、K6-sugg4 ①）；冷静期不删（R-262，见文件头）
+    const drop = (): void => {
+      if (notice === 'pending_deletion') return;
+      try {
+        deps.clearLocalSessionIf(sid);
+      } catch {
+        // 存储不可用：本来也存不下会话
+      }
+    };
+    drop();
     deps.clearLogs?.();
     void wipeOnRemoved(boot, {
       clearCacheStorage: deps.clearCacheStorage,
       onRemoved: () => {
-        deps.setExitNotice(notice, sid);
-        deps.clearLocalSessionIf(sid);
+        // 被移除只作废了那一个会话：本机已是别的标签页刚登录的另一个会话（同账号或别的账号）时不再提示“被移除”，
+        // 免得登录页一边显示“当前已登录”一边说这台设备被移除了（K6-sugg5 ④(c)）。停用、冷静期是账号层面的，照记
+        const now = currentSid(deps);
+        if (notice !== 'removed' || now === null || now === sid) deps.setExitNotice(notice, sid);
+        drop();
         deps.goToAuth();
       },
     });
@@ -124,6 +134,8 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   const onRemoved = (code: string, sid: string | null): void => {
     if (removedHandled || boot.switching) return;
     removedHandled = true;
+    // sid 为 null、本机也没有会话：不是账号出了问题，按“登录已失效，请重新登录”退出（K6-sugg5 审查建议、R-263，见 sync-disabled.ts 文件头）
+    if (code === 'account_disabled' && noLocalSession(deps, sid)) return leave('expired', null);
     if (code === 'account_disabled' && canProbe(deps)) {
       // 限次触发时让出同步主页（这一页的闸关着，占着锁别的标签页就都不同步了）
       return void probeThenLeave(boot, deps, sid, leave, () => void leader?.close());
@@ -183,9 +195,21 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
       f.changed();
     };
   };
+  /**
+   * 别的标签页因冷静期退出（R-263）：那边不删会话（R-262），本页就收不到 storage 事件，得自己走：清库、回登录页，同样不删会话。
+   * 主页、非主页都走（设置页、告知页离开时用临时频道发，主页也会收到）；本页已经在走退出流程（boot.switching）就不管。
+   * 退出原因上面 noteExitFromOtherTab 已记下；回登录页后 SessionCheck 探测出冷静期，就地出恢复页
+   */
+  const followCooling = (): void => {
+    if (removedHandled || boot.switching) return;
+    removedHandled = true;
+    deps.clearLogs?.();
+    void wipeOnRemoved(boot, { clearCacheStorage: deps.clearCacheStorage, onRemoved: () => deps.goToAuth() });
+  };
   const onMessage = (m: SyncMessage): void => {
     // 别的标签页因被移除、停用、冷静期退出（reset 带 notice）：会话还对得上时记下同一条退出原因（app/sync-disabled.ts）
     noteExitFromOtherTab(m, deps);
+    if (m.type === 'reset' && m.notice === 'pending_deletion') return followCooling();
     if (leader?.isLeader()) {
       if (m.type === 'outbox') void current?.sendNow();
       return;

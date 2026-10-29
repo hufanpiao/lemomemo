@@ -6,6 +6,8 @@
 //      没监听的旧页挡住升级，关掉以后升级继续；
 //   ④ TC-B1-49：低版本打开高版本库报 VersionError → { reason: 'version_too_new' }，不删库。
 // ⑤（换账号清库后 outbox 为空）不在本文件，见 b1-account-switch.spec.ts。
+// 往下走真启动、真 App 的两件也不在本文件（10-30）：TC-B1-46 迁移失败后的整表重拉见 b1-idb-boot.spec.ts，
+// TC-B1-48 真 App 的 A 页自动重新载入见 b1-idb-reload.spec.ts（那里也写了横幅、blocked 提示在真页面上测不了的原因）。
 //
 // 测的是真代码：idb-tx-helpers.ts 在 Node 侧用 esbuild 把 src/core/cache.ts 打包注入页面（window.__cache），
 // 用例调真的 openCache、Cache.tx、onBeforeVersionClose、runUpgrade（经 openCache 的 migrations 选项）；src 不改。

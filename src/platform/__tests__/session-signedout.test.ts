@@ -125,6 +125,20 @@ describe('本页的 SIGNED_OUT：事件分发（K6-signedout，TC-B1-61 ②、TC
     authEventHandler(vi.fn(), vi.fn(), { selfSignOut: (sid) => (asked2.push(sid), false) })('SIGNED_OUT', null);
     expect(asked2).toEqual(['s9']);
   });
+
+  it('K6-sugg5 ④(a)：别的标签页退出 s1、登录 s2，转来的 SIGNED_IN(s2) 先到、SIGNED_OUT 后到：不上报、s2 不删', () => {
+    const out = vi.fn();
+    const h = authEventHandler(vi.fn(), out, { initialSessionId: 's1', selfSignOut: () => false, onSignedIn: () => undefined });
+    seed('s2');   // 别的标签页已写进新会话
+    h('SIGNED_IN', { user: { id: A }, access_token: tok('s2') });
+    h('SIGNED_OUT', null);
+    expect(out).not.toHaveBeenCalled();
+    expect(readSessionUserId()).toBe(A);
+    // 对照：顺序正常（SIGNED_OUT 先到，本机已是 s2）也不上报
+    const out2 = vi.fn();
+    authEventHandler(vi.fn(), out2, { initialSessionId: 's1', selfSignOut: () => false })('SIGNED_OUT', null);
+    expect(out2).not.toHaveBeenCalled();
+  });
 });
 
 describe('goToAuth、删本机会话（K6-signedout-sugg2 ①、sugg ⑤）', () => {

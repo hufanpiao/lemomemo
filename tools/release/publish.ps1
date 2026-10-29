@@ -8,23 +8,27 @@
 
   做的事（按顺序，任何一步不过就停）：
     1. 发布前检查：tag 格式、在 main 上、是带说明的 tag、当前检出的就是这个 tag、工作区干净、VERSION 一致、
-       正式环境的公开配置文件在、工具锁文件在；
+       正式环境的公开配置文件在、工具锁文件在；git 的仓库配置和全局配置里没有 filter.*、core.attributesfile 之类的设置；
     2. 备份：E:\柠檬记-备份\版本前\ 下已有这个 tag 的“发布前”备份且恢复测试通过，没有就调 build\backup.py 做一份；
     3. 构建：npm ci --ignore-scripts → 白名单 rebuild → npm run build -- --mode production → 体积预算 → 不能有 source map；
        算产物指纹，请你在 iPhone 上打开 GitHub 里这个 tag 的 release-build 摘要页核对（R-206：CI 只构建和测试）；
+       核对后记下 node_modules\aws4fetch 的哈希，把 dist\web 复制到临时目录（之后的核对和部署都用这一份）；
        -Only functions 时跳过这一步（不部署网页）；
-    4. 装部署工具到临时目录：Supabase CLI（核对 tools\ci-tools.lock 里的 SHA-256）、wrangler（tools\deploy 的锁文件）；
-       加 -Ops 时用 wrangler deploy --dry-run 把 lemo-ops 打包一遍（不上传）；
+    4. 装部署工具到临时目录：Supabase CLI（核对 tools\ci-tools.lock 里的 SHA-256）、wrangler（tools\deploy 的锁文件，
+       装好后再核对整棵依赖树的哈希，tools\release\wrangler-tree.lock）；加 -Ops 时用 wrangler deploy --dry-run 把 lemo-ops 打包一遍（不上传）；
     —— -DryRun 到这里停 ——
-    5. 再核对一次工作区干净、HEAD 是这个 tag、没有 .env / .env.local；确认 Windows 剪贴板历史已关、没有 transcript 和日志策略
+    5. 再核对一次工作区干净、HEAD 是这个 tag、没有 .env / .env.local、临时目录里的网页、aws4fetch、supabase.exe、wrangler 都没被改过；
+       确认 Windows 剪贴板历史已关、没有 transcript 和日志策略
        （R-223 起不再检查 Claude 是否在运行），然后按这次要部署的内容粘贴（屏幕不显示，粘贴后立即清剪贴板）：
        完整发布是 Supabase 令牌、数据库密码、Cloudflare 令牌三样；-Only functions -Ops 是 Supabase 令牌和 Cloudflare 令牌两样；
-       -Only functions 不带 -Ops 只要 Supabase 令牌。加 -Ops 时改库之前先只读核对 Cloudflare 令牌有 Workers 权限；
+       -Only functions 不带 -Ops 只要 Supabase 令牌。加 -Ops 时改库之前先只读核对 Cloudflare 令牌有 Workers 权限、
+       wrangler secret list 列出的 lemo-ops 密钥六个都在；
     6. 正式项目状态 → db push（先演练给你看，你输入“确认推送”才真推）→ functions deploy →（加 -Ops 时）lemo-ops → pages deploy；
     7. 核对 https://lemomemo.com/app/version.json；
     8. 不论成功失败：清掉本进程里的令牌、剪贴板、临时目录和 supabase link 的本地文件。
 
-  令牌只在本进程的内存和环境变量里，不写文件、不进命令行参数（不会留在 PowerShell 历史里）、不打印。
+  令牌只在本进程的内存里（SecureString），不写文件、不进命令行参数（不会留在 PowerShell 历史里）、不打印；
+  只在启动要用它的那个子进程时临时放进环境变量，子进程一结束就清掉（每个子进程只拿它要的那把，见 Invoke-WithSecrets）。
 
   usage-report（服务器函数）和 lemo-ops（Worker）必须同一次部署（上线与回滚手册第三节）：这个 tag 里两样都有时，
   不加 -Ops 第 1 步就停。回滚函数（-Only functions）时也一样，lemo-ops 跟着回到同一个 tag。
@@ -102,6 +106,20 @@ $script:NeedWrangler = ($script:DoWeb -or $script:DoOps)
 $script:OpsConfig = 'workers\lemo-ops\wrangler.toml'
 $script:OpsDotWrangler = $null
 $script:EmptyEnvFile = $null
+# 读进来的令牌：名字 → SecureString。平时不放进环境变量，Invoke-WithSecrets 调子进程时才设、子进程结束就清
+$script:Secrets = @{}
+$script:CfAccountId = $null
+# wrangler：临时目录里的 tools\deploy 副本、直接用 node 跑的入口、第 4 步核对过的依赖树哈希（@{ Count; Total }）
+$script:WranglerDir = $null
+$script:WranglerJs = $null
+$script:WranglerTree = $null
+$script:WranglerTreeLock = 'tools\release\wrangler-tree.lock'
+# 第 3 步之后 node_modules\aws4fetch 的哈希（functions\ 经 shared\objstore.ts 引入它，wrangler pages deploy 打包进 Functions）
+$script:Aws4Hash = $null
+# 第 3 步核对过的 dist\web 复制到临时目录的那一份；之后的核对和 pages deploy 都用它
+$script:WebDir = $null
+# lemo-ops 要的六个密钥（workers\lemo-ops\wrangler.toml 末尾的注释；tests/build/publish-run-deploy.test.ts 核对两边一致）
+$script:OpsSecretNames = @('SUPABASE_URL', 'SUPABASE_ANON_KEY', 'OPS_SECRET', 'RESEND_API_KEY_OPS', 'ALERT_TO', 'ALERT_FROM')
 
 function Say([string]$msg) { Write-Host $msg }
 function Step([string]$msg) { Write-Host ''; Write-Host "== $msg ==" -ForegroundColor Cyan }
@@ -168,6 +186,52 @@ function Set-SecretEnv([string]$name, [Security.SecureString]$sec) {
 
 function Clear-SecretEnv {
     foreach ($n in $SecretEnvNames) { [Environment]::SetEnvironmentVariable($n, $null, 'Process') }
+    [Environment]::SetEnvironmentVariable('CLOUDFLARE_ACCOUNT_ID', $null, 'Process')
+}
+
+# 架构 8.3a 冻结前五处之 ②（B1 接手清单 OPS-deploy ③）：每个子进程只给它要的那把令牌。
+# 令牌平时只以 SecureString 留在 $script:Secrets 里，本进程的环境变量里没有；调某个子进程前才把它要的那几把设进本进程的环境变量
+# （子进程启动时继承），子进程一结束（成功、失败都一样）立即清掉。于是 supabase 拿不到 Cloudflare 令牌、wrangler 拿不到 Supabase 令牌和数据库密码，
+# git、python、npm 这些别的子进程什么令牌也拿不到。各处要哪几把：
+#   supabase link、db push：Supabase 令牌 ＋ 数据库密码；supabase functions deploy：只要 Supabase 令牌；
+#   wrangler secret list、wrangler deploy（lemo-ops）、wrangler pages deploy：只要 Cloudflare 令牌（Account ID 不是密钥，也只在这时设）；
+#   wrangler deploy --dry-run：什么都不给。
+# 本进程自己发的 HTTPS 请求（Invoke-RestMethod）直接从 SecureString 取值放进请求头，不经过环境变量。
+# $action 里不要用 $sn、$secretNames、$action 这几个变量名（会被这里的同名变量盖住）
+function Invoke-WithSecrets([string[]]$secretNames, [scriptblock]$action) {
+    foreach ($sn in @($SecretEnvNames) + 'CLOUDFLARE_ACCOUNT_ID') {
+        if ([Environment]::GetEnvironmentVariable($sn, 'Process')) { Fail "启动子进程之前本进程的环境变量里已经有 $sn（不该有）" }
+    }
+    try {
+        foreach ($sn in $secretNames) {
+            if (-not $script:Secrets.ContainsKey($sn)) { Fail "还没读 $sn" }
+            Set-SecretEnv $sn $script:Secrets[$sn]
+        }
+        if ($secretNames -contains 'CLOUDFLARE_API_TOKEN') { [Environment]::SetEnvironmentVariable('CLOUDFLARE_ACCOUNT_ID', $script:CfAccountId, 'Process') }
+        & $action
+    } finally {
+        Clear-SecretEnv
+    }
+}
+
+# 本进程自己发请求用：从 SecureString 取出值拼成请求头（只在请求头里，用完调用方把变量置空）
+function Get-BearerHeader([string]$name) {
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($script:Secrets[$name])
+    try { return @{ Authorization = 'Bearer ' + [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) } } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
+}
+
+function Test-SecretPrefix([Security.SecureString]$sec, [string]$prefix) {
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+    try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr).StartsWith($prefix) } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
+}
+
+function Clear-Secrets {
+    foreach ($s in @($script:Secrets.Values)) { try { $s.Dispose() } catch { } }
+    $script:Secrets.Clear()
 }
 
 # 读 tools\ci-tools.lock 里某个工具某个平台的一行
@@ -240,7 +304,9 @@ function Invoke-Checks {
     }
     Ok '.env.production.local 只有公开值'
 
-    foreach ($f in 'tools\ci-tools.lock', 'tools\deploy\package.json', 'tools\deploy\package-lock.json', 'build\backup.py', 'build\ci\dist_hash.py') {
+    $need = @('tools\ci-tools.lock', 'tools\deploy\package.json', 'tools\deploy\package-lock.json', 'build\backup.py', 'build\ci\dist_hash.py')
+    if ($script:NeedWrangler) { $need += $script:WranglerTreeLock }
+    foreach ($f in $need) {
         if (-not (Test-Path -LiteralPath (Join-Path $RepoPath $f))) { Fail "缺 $f" }
     }
     Ok '工具锁文件和脚本都在'
@@ -349,7 +415,9 @@ function Assert-NoWranglerConfigUpward {
 # 开一个新的 PowerShell 窗口通常就没有了；系统里设了的，在 系统 › 高级系统设置 › 环境变量 里删。
 # CLOUDFLARE_API_BASE_URL、SUPABASE_API_URL 由本脚本在第 4 步设成官方地址：第 1 步不许预先有，第 5 步核对是官方地址。
 $script:ForbiddenEnv = @('HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY', 'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS',
-    'CLOUDFLARE_API_KEY', 'CLOUDFLARE_EMAIL', 'SUPABASE_ENV', 'SUPABASE_DASHBOARD_URL', 'SUPABASE_PROJECT_HOST')
+    'CLOUDFLARE_API_KEY', 'CLOUDFLARE_EMAIL', 'SUPABASE_ENV', 'SUPABASE_DASHBOARD_URL', 'SUPABASE_PROJECT_HOST',
+    # 窗口里预先有的令牌会被每个子进程继承，“每个子进程只拿它要的那把”（Invoke-WithSecrets）就做不到了
+    'SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID')
 $script:PinnedEnv = [ordered]@{ CLOUDFLARE_API_BASE_URL = 'https://api.cloudflare.com/client/v4'; SUPABASE_API_URL = 'https://api.supabase.com' }
 function Assert-CleanProcessEnv([switch]$AfterSetup) {
     $bad = @($script:ForbiddenEnv | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') })
@@ -433,6 +501,31 @@ function Assert-NoRiskyGitConfig {
     if ($bad -contains 'core.hookspath' -and (Test-AllowedHooksPath)) { $bad = @($bad | Where-Object { $_ -ne 'core.hookspath' }) }
     if ($bad.Count -gt 0) { Fail "仓库的 .git\config 里有发布时不许有的设置：$($bad -join '、')（会让 git 执行别的程序或读别处的配置）。请在发布用的副本里用 git config --local --unset 去掉（core.hookspath 发布完再设回），或重新 clone" }
     Ok '.git\config 里没有过滤程序、include、hooksPath、fsmonitor 之类的设置，.git\info\attributes 为空'
+    Assert-NoRiskyGlobalGitConfig
+}
+
+# B1 接手清单 OPS-deploy ⑧：全局配置（~\.gitconfig，以及它 include 进来的文件）里的 filter.*、core.attributesfile 一样会被这个仓库的 git 用上：
+# 全局的属性文件给文件挂上 filter，检出、status 时就会跑全局配置里的过滤程序。所以用 git config --show-origin --list
+# （加 --show-scope 区分哪一级、--name-only 不取值）逐条看，global 一级有 filter.* 或 core.attributesfile 就停，并报出是哪个文件；
+# include 进来的设置 git 会按所在的那一级列出，一并查到。没设 core.attributesfile 时 git 也会读默认的全局属性文件
+# （git var GIT_ATTR_GLOBAL，一般是 ~\.config\git\attributes），它不为空也停（和 .git\info\attributes 同一个道理）。
+# GIT_CONFIG_GLOBAL 之类改全局配置位置的环境变量，主流程最前面已经拦了。system 一级（Git for Windows 安装目录的 etc\gitconfig）不在这一条里。
+function Assert-NoRiskyGlobalGitConfig {
+    $out = Invoke-Git @('config', '--show-scope', '--show-origin', '--list', '--name-only')
+    $bad = @()
+    foreach ($l in ($out -split "`r?`n")) {
+        $c = $l -split "`t"
+        if ($c.Count -lt 3 -or $c[0] -ne 'global') { continue }
+        $name = $c[-1].Trim()
+        if ($name -imatch '^filter\.' -or $name -ieq 'core.attributesfile') { $bad += "$name（$($c[1] -replace '^file:', '')）" }
+    }
+    $bad = @($bad | Sort-Object -Unique)
+    if ($bad.Count -gt 0) { Fail "git 的全局配置里有发布时不许有的设置：$($bad -join '、')（会让这个仓库的 git 执行别的程序或读别处的属性文件）。请先用 git config --global --unset 去掉（或从括号里那个文件删掉），发布完再加回" }
+    $attr = Invoke-Git @('var', 'GIT_ATTR_GLOBAL') -allowFail
+    if ($LASTEXITCODE -eq 0 -and $attr -and (Test-Path -LiteralPath $attr -PathType Leaf) -and (Get-Item -LiteralPath $attr -Force).Length -gt 0) {
+        Fail "git 的全局属性文件 $attr 不是空的（里面可以给文件挂过滤程序）。请先移走，发布完再放回"
+    }
+    Ok 'git 的全局配置里没有 filter.*、core.attributesfile，全局属性文件不存在或为空'
 }
 
 # 被 git 忽略的文件 git status 看不见，却会跟着正式部署上线（B0 复查 M2）：
@@ -471,18 +564,25 @@ function Get-DeployFunctionNames {
 
 # dist\web 的指纹，算法和 build\ci\dist_hash.py 完全一样（每个文件“SHA-256␠␠相对路径\n”按路径的 UTF-8 字节排序，再整体算 SHA-256）。
 # 用 PowerShell 算：部署网页时进程里已经有令牌，不在这时跑仓库里的 Python 脚本。第 3 步会和 dist_hash.py 的结果对一遍，保证两边算法一致。
+# 同一个算法也用来给装好的 wrangler 依赖树（第 4 步）、node_modules\aws4fetch（第 3 步之后）记哈希。
 function Get-DistHash([string]$dir) {
     $root = (Resolve-Path -LiteralPath $dir).ProviderPath.TrimEnd('\')
     $utf8 = New-Object System.Text.UTF8Encoding($false)
     $rows = New-Object 'System.Collections.Generic.List[string[]]'
-    foreach ($f in @(Get-ChildItem -LiteralPath $root -Recurse -Force)) {
-        if ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) { Fail "产物里不应有符号链接：$($f.FullName)" }
-        if ($f.PSIsContainer) { continue }
-        $rel = $f.FullName.Substring($root.Length + 1).Replace('\', '/')
-        # 排序键：路径 UTF-8 字节的十六进制，按序号比较就等于按字节排序
-        $key = -join ($utf8.GetBytes($rel) | ForEach-Object { $_.ToString('x2') })
-        $rows.Add(@($key, $rel, (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()))
-    }
+    # 逐个文件用同一个 SHA256 对象流式算（依赖树有一千多个文件，逐个调 Get-FileHash 太慢）
+    $fsha = [Security.Cryptography.SHA256]::Create()
+    try {
+        foreach ($f in @(Get-ChildItem -LiteralPath $root -Recurse -Force)) {
+            if ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) { Fail "$dir 里不应有符号链接或联接：$($f.FullName)" }
+            if ($f.PSIsContainer) { continue }
+            $rel = $f.FullName.Substring($root.Length + 1).Replace('\', '/')
+            # 排序键：路径 UTF-8 字节的十六进制（每个字节两位、中间用 - 隔开），按序号比较就等于按字节排序
+            $key = [BitConverter]::ToString($utf8.GetBytes($rel))
+            $fs = [IO.File]::OpenRead($f.FullName)
+            try { $fh = [BitConverter]::ToString($fsha.ComputeHash($fs)).Replace('-', '').ToLowerInvariant() } finally { $fs.Dispose() }
+            $rows.Add(@($key, $rel, $fh))
+        }
+    } finally { $fsha.Dispose() }
     if ($rows.Count -eq 0) { Fail "目录是空的：$dir" }
     $keys = @($rows | ForEach-Object { $_[0] })
     $arr = $rows.ToArray()
@@ -494,16 +594,115 @@ function Get-DistHash([string]$dir) {
     return @{ Count = $rows.Count; Total = $total }
 }
 
-# 每次调用 wrangler 都带 --env-file <空文件>，不读仓库里的 .env、.env.local
-function Run-Wrangler([string[]]$argv) {
-    Run $script:WranglerCmd ($argv + @('--env-file', $script:EmptyEnvFile))
+# 每次调用 wrangler 都带 --env-file <空文件>，不读仓库里的 .env、.env.local。
+# 用 node 直接跑 wrangler 包里的 bin\wrangler.js：npm 生成的 .bin\wrangler.cmd 随本机 npm 版本变，第 4 步核对依赖树哈希前已删掉（Assert-WranglerTree）。
+# -WithToken：这次要连 Cloudflare，只把 Cloudflare 令牌（和 Account ID）给这一个子进程（Invoke-WithSecrets）；不加时什么令牌都不给
+function Get-WranglerArgs([string[]]$argv) { return @($script:WranglerJs) + $argv + @('--env-file', $script:EmptyEnvFile) }
+function Run-Wrangler([string[]]$argv, [switch]$WithToken) {
+    $full = Get-WranglerArgs $argv
+    if ($WithToken) { Invoke-WithSecrets @('CLOUDFLARE_API_TOKEN') { Run 'node' $full } } else { Run 'node' $full }
+}
+
+# B1 接手清单 OPS-deploy ②：npm ci 只按 package-lock.json 的 integrity 核对下载的包；装好以后整棵依赖树再核对一次
+# （解包后的文件被换、npm 缓存被动过，integrity 都看不出来）。tools\release\wrangler-tree.lock 记着三样：
+# 这份 tools\deploy\package-lock.json 的 SHA-256、node_modules 的文件数和树哈希（算法同 Get-DistHash）。
+# node_modules\.bin（npm 生成的启动脚本）和 node_modules\.package-lock.json（npm 的安装记录）内容随本机 npm 版本变、部署也用不到：
+# 先删掉，剩下的每个文件都进哈希；wrangler 用 node 直接跑包里的 bin\wrangler.js（Run-Wrangler）。
+# 升级 wrangler（改 tools\deploy 的锁文件）时要一起重算 wrangler-tree.lock：对不上时这里会打印实际的文件数和树哈希，核实后写进去、随代码审查提交。
+function Get-WranglerTreeLock {
+    $p = Join-Path $RepoPath $script:WranglerTreeLock
+    $rows = @(Get-Content -LiteralPath $p -Encoding UTF8 | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' -and -not $_.StartsWith('#') })
+    $c = if ($rows.Count -eq 1) { @($rows[0] -split '\s+') } else { @() }
+    if ($c.Count -ne 3 -or $c[0] -cnotmatch '^[0-9a-f]{64}$' -or $c[1] -notmatch '^[1-9][0-9]*$' -or $c[2] -cnotmatch '^[0-9a-f]{64}$') {
+        Fail "$($script:WranglerTreeLock) 的格式不对（要有且只有一行：package-lock.json 的 SHA-256、文件数、树哈希）"
+    }
+    return @{ Lock = $c[0]; Count = [int]$c[1]; Total = $c[2] }
+}
+
+function Assert-WranglerTree {
+    $want = Get-WranglerTreeLock
+    $lockSha = (Get-FileHash -LiteralPath (Join-Path $script:WranglerDir 'package-lock.json') -Algorithm SHA256).Hash.ToLower()
+    if ($lockSha -cne $want.Lock) { Fail "tools\deploy\package-lock.json 和 $($script:WranglerTreeLock) 记的不是同一份（改了 package-lock.json 要一起重算树哈希）" }
+    $nm = Join-Path $script:WranglerDir 'node_modules'
+    foreach ($x in '.bin', '.package-lock.json') {
+        $p = Join-Path $nm $x
+        if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force }
+    }
+    $script:WranglerJs = Join-Path $nm 'wrangler\bin\wrangler.js'
+    if (-not (Test-Path -LiteralPath $script:WranglerJs -PathType Leaf)) { Fail '没装上 wrangler（找不到 node_modules\wrangler\bin\wrangler.js）' }
+    $got = Get-DistHash $nm
+    if ($got.Count -ne $want.Count -or $got.Total -cne $want.Total) {
+        Fail "装好的 wrangler 依赖树和 $($script:WranglerTreeLock) 对不上：实际文件数 $($got.Count)、树哈希 $($got.Total)；锁里是 $($want.Count)、$($want.Total)。还没输入任何令牌。没改过 tools\deploy 就不要继续，请在聊天里告诉运维"
+    }
+    $script:WranglerTree = $got
+    Ok "wrangler 依赖树和 $($script:WranglerTreeLock) 一致（$($got.Count) 个文件）"
+}
+
+# 第 3 步之后给 node_modules\aws4fetch 记哈希（B1 接手清单 OPS-deploy ⑥）：functions\ 经 shared\objstore.ts 引入它，
+# wrangler pages deploy 打包 Functions 时从仓库的 node_modules 里取；它被 git 忽略，工作区检查看不见。改库前、部署网页前各再比一次
+function Get-Aws4Hash {
+    $d = Join-Path $RepoPath 'node_modules\aws4fetch'
+    if (-not (Test-Path -LiteralPath $d -PathType Container)) { Fail '找不到 node_modules\aws4fetch（第 3 步 npm ci 之后应该有）' }
+    if ((Get-Item -LiteralPath $d -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { Fail 'node_modules\aws4fetch 是符号链接或联接，不能用来发布' }
+    return Get-DistHash $d
+}
+
+function Assert-Aws4Unchanged([string]$state) {
+    if ($null -eq $script:Aws4Hash) { Fail '没有第 3 步记下的 aws4fetch 哈希' }
+    $now = Get-Aws4Hash
+    if ($now.Count -ne $script:Aws4Hash.Count -or $now.Total -cne $script:Aws4Hash.Total) { Fail "node_modules\aws4fetch 和第 3 步之后记下的不一样了（被改过）。现在：$state" }
+    Ok 'node_modules\aws4fetch 和第 3 步之后记下的一致'
+}
+
+# 临时目录里那份网页（第 3 步核对过的 dist\web 的副本，B1 接手清单 OPS-deploy ⑦）仍和第 3 步的指纹一致
+function Assert-WebCopyUnchanged([string]$state) {
+    if ($null -eq $script:DistHash -or $null -eq $script:WebDir) { Fail '没有第 3 步的产物指纹或临时目录里的网页副本' }
+    $now = Get-DistHash $script:WebDir
+    if ($now.Count -ne $script:DistHash.Count -or $now.Total -cne $script:DistHash.Total) { Fail "临时目录里的网页和第 3 步核对过的指纹不一样了（被改过）。现在：$state" }
+    Ok '临时目录里的网页仍是第 3 步核对过的产物'
+}
+
+function New-WorkDir {
+    if ($script:WorkDir) { return }
+    $script:WorkDir = Join-Path $env:TEMP ("lemo-publish-" + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $script:WorkDir | Out-Null
+}
+
+# 改库之前只读核对 lemo-ops 的六个密钥都设好了（B1 接手清单 OPS-deploy ⑤）：wrangler secret list 只列名字和类型，不返回值。
+# 没设齐就部署，lemo-ops 照样上线，但发不出告警、认不了 usage-report；这里先停，还没改库。
+# 输出只取名字，不打印；只给这一个 wrangler 子进程 Cloudflare 令牌
+function Assert-OpsSecrets {
+    $full = Get-WranglerArgs @('secret', 'list', '--config', $script:OpsConfig, '--format', 'json')
+    Push-Location $RepoPath
+    try {
+        $out = Invoke-WithSecrets @('CLOUDFLARE_API_TOKEN') {
+            $o = @(& node @full)
+            if ($LASTEXITCODE -ne 0) { Fail "wrangler secret list 退出码 $LASTEXITCODE（读不了 lemo-ops 的密钥名单）。还没改库" }
+            $o
+        }
+    } finally { Pop-Location }
+    $text = (@($out) | ForEach-Object { "$_" }) -join "`n"
+    $i = $text.IndexOf('[')
+    $j = $text.LastIndexOf(']')
+    $names = @()
+    try {
+        if ($i -lt 0 -or $j -lt $i) { throw 'no json' }
+        # Windows PowerShell 5.1 的 ConvertFrom-Json 把整个数组当一个对象送进管道：先赋给变量，foreach 才是逐个元素
+        $parsed = ConvertFrom-Json -InputObject $text.Substring($i, $j - $i + 1)
+        foreach ($s in $parsed) {
+            if ($null -ne $s -and $s.PSObject.Properties.Name -contains 'name') { $names += [string]$s.name }
+        }
+    } catch { Fail '读不懂 wrangler secret list 的结果（应是 JSON 名单）。还没改库' }
+    $missing = @($script:OpsSecretNames | Where-Object { $names -cnotcontains $_ })
+    if ($missing.Count -gt 0) { Fail "lemo-ops 还缺这些密钥：$($missing -join '、')（wrangler secret list 只读核对）。还没改库。按上线与回滚手册第三节「部署 lemo-ops」设好再原样重跑" }
+    Ok "lemo-ops 的六个密钥都在（wrangler secret list 只读核对，只看名字）"
 }
 
 # db push 之前的只读预检：这把 Cloudflare 令牌能读本账号的 Worker 列表（Workers Scripts 权限）。
 # 只发到固定的 api.cloudflare.com，令牌只在请求头里；失败只报 HTTP 状态码，不打印返回内容
 function Assert-WorkersAccess {
-    $uri = "https://api.cloudflare.com/client/v4/accounts/$env:CLOUDFLARE_ACCOUNT_ID/workers/scripts"
-    $hdr = @{ Authorization = "Bearer $env:CLOUDFLARE_API_TOKEN" }
+    $uri = "https://api.cloudflare.com/client/v4/accounts/$($script:CfAccountId)/workers/scripts"
+    $hdr = Get-BearerHeader 'CLOUDFLARE_API_TOKEN'
     $code = ''
     try { $r = Invoke-RestMethod -Uri $uri -Headers $hdr -MaximumRedirection 0 } catch {
         $hdr = $null
@@ -595,13 +794,22 @@ function Invoke-Build($info) {
     Say '  核对“文件数”和“总指纹”和上面完全一样。'
     Ask-Exact '  一样就输入“一致”回车（不一样直接回车，发布停止）' '一致'
     Ok '产物和 CI 构建的一致'
+
+    $script:Aws4Hash = Get-Aws4Hash
+    Ok "记下 node_modules\aws4fetch 的哈希（$($script:Aws4Hash.Count) 个文件，改库前、部署网页前各再比一次）"
+    # B1 接手清单 OPS-deploy ⑦：核对过的产物复制到临时目录，之后再核对、部署网页都用这一份，仓库里的 dist\web 之后被改也不影响。
+    # wrangler pages deploy 的目录参数就指向这里；配置和 functions\ 仍从当前目录（仓库根目录）取（wrangler 4.150.0 pages deploy 用 findWranglerConfig(process.cwd())）
+    New-WorkDir
+    $dst = Join-Path $script:WorkDir 'web'
+    Copy-Item -LiteralPath (Join-Path $RepoPath 'dist\web') -Destination $dst -Recurse -Force
+    $script:WebDir = $dst
+    Assert-WebCopyUnchanged '还没输入任何令牌，没部署任何东西'
 }
 
 # ---------------------------------------------------------------- 4. 部署工具
 function Install-Tools {
     Step '4. 部署工具装到临时目录（核对哈希）'
-    $script:WorkDir = Join-Path $env:TEMP ("lemo-publish-" + [guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $script:WorkDir | Out-Null
+    New-WorkDir
     # Supabase CLI 的管理接口地址明确指向官方（本进程的值优先于 supabase\.env 这类文件），结束时清掉
     [Environment]::SetEnvironmentVariable('SUPABASE_API_URL', $script:PinnedEnv['SUPABASE_API_URL'], 'Process')
 
@@ -624,9 +832,9 @@ function Install-Tools {
     Copy-Item -LiteralPath (Join-Path $RepoPath 'tools\deploy\package.json'), (Join-Path $RepoPath 'tools\deploy\package-lock.json') -Destination $wr
     Push-Location $wr
     try { Run 'npm.cmd' @('ci', '--ignore-scripts', '--no-audit', '--no-fund') } finally { Pop-Location }
-    $script:WranglerCmd = Join-Path $wr 'node_modules\.bin\wrangler.cmd'
-    if (-not (Test-Path -LiteralPath $script:WranglerCmd)) { Fail '没装上 wrangler' }
+    $script:WranglerDir = $wr
     Ok 'wrangler：按 tools\deploy\package-lock.json 装好（npm 已核对 integrity）'
+    Assert-WranglerTree
     # 不发统计、不写日志文件（日志路径也指到临时目录，跟着一起删）；API 地址明确指向 Cloudflare 官方
     [Environment]::SetEnvironmentVariable('WRANGLER_SEND_METRICS', 'false', 'Process')
     [Environment]::SetEnvironmentVariable('WRANGLER_WRITE_LOGS', 'false', 'Process')
@@ -710,67 +918,70 @@ function Assert-NoAiSession {
 function Invoke-Deploy($info) {
     Step '5. 输入正式环境的令牌'
     Assert-StillClean $info
-    # 改库之前先对一次产物指纹（部署网页前还会再对一次）
+    # 改库之前先对一次：临时目录里的网页、aws4fetch（部署网页前还会再对一次）、装好的 supabase.exe 和 wrangler 依赖树
     if ($script:DoWeb) {
-        $now = Get-DistHash (Join-Path $RepoPath 'dist\web')
-        if ($null -eq $script:DistHash -or $now.Count -ne $script:DistHash.Count -or $now.Total -cne $script:DistHash.Total) { Fail 'dist\web 的指纹和第 3 步核对过的不一样了（产物被改过），还没改库。请重新运行' }
-        Ok 'dist\web 仍是第 3 步核对过的产物'
+        Assert-WebCopyUnchanged '还没输入令牌、还没改库，请重新运行'
+        Assert-Aws4Unchanged '还没输入令牌、还没改库，请重新运行'
     }
     Assert-NoAiSession
     if ((Get-FileHash -LiteralPath $script:SupabaseExe -Algorithm SHA256).Hash -ne $script:SupabaseSha) { Fail 'supabase.exe 在安装后被改过' }
+    if ($script:NeedWrangler) {
+        $now = Get-DistHash (Join-Path $script:WranglerDir 'node_modules')
+        if ($null -eq $script:WranglerTree -or $now.Count -ne $script:WranglerTree.Count -or $now.Total -cne $script:WranglerTree.Total) { Fail 'wrangler 的依赖树在第 4 步核对之后被改过（还没输入令牌、还没改库），请重新运行' }
+        Ok 'supabase.exe 和 wrangler 依赖树都还是第 4 步核对过的'
+    }
 
     $ref = Read-Host '  正式 Supabase 项目的 Project ref（20 个小写字母，在 Supabase › 正式项目 › Project Settings 里，不是密钥）'
     $ref = $ref.Trim()
     if ($ref -notmatch '^[a-z]{20}$') { Fail 'Project ref 的格式不对' }
 
-    $sb = Read-Secret '正式 Supabase 令牌（只管正式项目的那把）' 'Supabase › Account › Access Tokens 里新建的正式项目级令牌（1 天到期，发完删掉）'
-    Set-SecretEnv 'SUPABASE_ACCESS_TOKEN' $sb
-    $sb.Dispose()
-    if (-not $env:SUPABASE_ACCESS_TOKEN.StartsWith('sbp_')) { Fail '这不像 Supabase 令牌（应以 sbp_ 开头）' }
+    # 令牌只留在 $script:Secrets 里（SecureString），不设进本进程的环境变量；用到时由 Invoke-WithSecrets 只给那一个子进程
+    $script:Secrets['SUPABASE_ACCESS_TOKEN'] = Read-Secret '正式 Supabase 令牌（只管正式项目的那把）' 'Supabase › Account › Access Tokens 里新建的正式项目级令牌（1 天到期，发完删掉）'
+    if (-not (Test-SecretPrefix $script:Secrets['SUPABASE_ACCESS_TOKEN'] 'sbp_')) { Fail '这不像 Supabase 令牌（应以 sbp_ 开头）' }
     # -Only functions 不 db push、不 link，用不到数据库密码
     if ($script:DoWeb) {
-        $db = Read-Secret '正式数据库密码' '正式项目 › Project Settings › Database 里重设的新密码'
-        Set-SecretEnv 'SUPABASE_DB_PASSWORD' $db
-        $db.Dispose()
+        $script:Secrets['SUPABASE_DB_PASSWORD'] = Read-Secret '正式数据库密码' '正式项目 › Project Settings › Database 里重设的新密码'
     }
     # 网页和 lemo-ops 用同一把正式 Cloudflare 令牌；只回滚函数且不带 -Ops 时不要
     if ($script:NeedWrangler) {
         $perm = @()
         if ($script:DoWeb) { $perm += 'Pages 编辑' }
         if ($script:DoOps) { $perm += 'Workers Scripts 编辑' }
-        $cf = Read-Secret "正式 Cloudflare 令牌（$($perm -join ' ＋ ')）" 'Cloudflare › 我的个人资料 › API 令牌里新建的正式令牌（1 天到期，发完删掉）'
-        Set-SecretEnv 'CLOUDFLARE_API_TOKEN' $cf
-        $cf.Dispose()
+        $script:Secrets['CLOUDFLARE_API_TOKEN'] = Read-Secret "正式 Cloudflare 令牌（$($perm -join ' ＋ ')）" 'Cloudflare › 我的个人资料 › API 令牌里新建的正式令牌（1 天到期，发完删掉）'
 
         $acct = Read-Host '  Cloudflare Account ID（32 位，Cloudflare 首页右侧，不是密钥）'
         $acct = $acct.Trim()
         if ($acct -notmatch '^[0-9a-f]{32}$') { Fail 'Account ID 的格式不对' }
-        [Environment]::SetEnvironmentVariable('CLOUDFLARE_ACCOUNT_ID', $acct, 'Process')
+        $script:CfAccountId = $acct
     }
 
     Step '6. 部署'
-    $hdr = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+    $hdr = Get-BearerHeader 'SUPABASE_ACCESS_TOKEN'
     $proj = Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/$ref" -Headers $hdr
     $hdr = $null
     if ($proj.region -ne 'ap-northeast-2') { Fail "这个项目不在首尔（$($proj.region)），是不是贴成了预览项目？" }
     if ($proj.status -ne 'ACTIVE_HEALTHY') { Fail "正式项目状态是 $($proj.status)，不是 ACTIVE_HEALTHY" }
     Ok "正式项目：$($proj.name)（首尔，运行正常）"
     Ask-Exact "  确认要发布到上面这个项目就输入项目名「$($proj.name)」" $proj.name
-    # 改库之前先确认 Cloudflare 令牌能部署 lemo-ops，免得迁移推了、函数换了，才发现令牌权限不够
-    if ($script:DoOps) { Assert-WorkersAccess }
+    # 改库之前先确认 Cloudflare 令牌能部署 lemo-ops、lemo-ops 的六个密钥都设好了，免得迁移推了、函数换了，才发现令牌权限不够或密钥没设
+    if ($script:DoOps) {
+        Assert-WorkersAccess
+        Assert-OpsSecrets
+    }
 
+    $sbDb = @('SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD')
     Push-Location $RepoPath
     try {
         # 上次留下的 supabase link 本地文件（项目 ref、连接池地址等）先删掉，不让它影响这次（finally 里还会再删一次）
         $linkTemp = Join-Path $RepoPath 'supabase\.temp'
         if (Test-Path -LiteralPath $linkTemp) { Remove-Item -LiteralPath $linkTemp -Recurse -Force }
         if ($script:DoWeb) {
-            Run $script:SupabaseExe @('link', '--project-ref', $ref)
+            Invoke-WithSecrets $sbDb { Run $script:SupabaseExe @('link', '--project-ref', $ref) }
             Say ''
             Say '  数据库迁移演练（不改库，只列出要执行的迁移）：'
-            Run $script:SupabaseExe @('db', 'push', '--linked', '--dry-run')
+            Invoke-WithSecrets $sbDb { Run $script:SupabaseExe @('db', 'push', '--linked', '--dry-run') }
             Ask-Exact '  核对上面的迁移，没问题输入“确认推送”' '确认推送'
-            Run $script:SupabaseExe @('db', 'push', '--linked', '--yes')
+            Invoke-WithSecrets $sbDb { Run $script:SupabaseExe @('db', 'push', '--linked', '--yes') }
             Ok '数据库迁移完成'
         } else {
             Say '  只部署服务器函数（-Only functions）：不 db push（迁移只增不改，旧函数能用新表结构）'
@@ -780,12 +991,13 @@ function Invoke-Deploy($info) {
         if (Test-Path -LiteralPath $shared) { Remove-Item -LiteralPath $shared -Recurse -Force }
         New-Item -ItemType Directory -Path $shared | Out-Null
         Copy-Item -Path (Join-Path $RepoPath 'shared\*') -Destination $shared -Recurse
-        Run $script:SupabaseExe (@('functions', 'deploy') + $script:FunctionNames + @('--project-ref', $ref, '--use-api', '--yes'))
+        # 部署函数不连数据库，只给 Supabase 令牌
+        Invoke-WithSecrets @('SUPABASE_ACCESS_TOKEN') { Run $script:SupabaseExe (@('functions', 'deploy') + $script:FunctionNames + @('--project-ref', $ref, '--use-api', '--yes')) }
         Ok "服务器函数部署完成（$Tag：$($script:FunctionNames -join '、')）"
 
         # 紧接着函数部署 lemo-ops：usage-report 和 lemo-ops 必须同一次部署（上线与回滚手册第三节）
         if ($script:DoOps) {
-            try { Run-Wrangler @('deploy', '--config', $script:OpsConfig, '--tag', $Tag, '--message', "$Tag@$($info.Commit.Substring(0,12))") } catch {
+            try { Run-Wrangler @('deploy', '--config', $script:OpsConfig, '--tag', $Tag, '--message', "$Tag@$($info.Commit.Substring(0,12))") -WithToken } catch {
                 $done = if ($script:DoWeb) { '数据库迁移已推、服务器函数已是新版，lemo-ops 和网页还是旧版' } else { '服务器函数已是这个 tag 的版本，lemo-ops 还是原来的版本' }
                 Fail "lemo-ops 部署失败（$($_.Exception.Message -replace '^发布停止：', '')）。现在：$done。这种状态能用，只是 usage-report 和 lemo-ops 的新约定没生效。修好原因后用同一个 tag、同样的参数原样重跑（上线与回滚手册第三节「部署 lemo-ops」）"
             }
@@ -793,14 +1005,12 @@ function Invoke-Deploy($info) {
         }
 
         if ($script:DoWeb) {
-            # 第 3 步核对过的产物，到这里不能被换掉（核对之后这段时间 dist\web 可能被改）
-            if ($null -eq $script:DistHash) { Fail '没有第 3 步的产物指纹' }
-            $now = Get-DistHash (Join-Path $RepoPath 'dist\web')
-            if ($now.Count -ne $script:DistHash.Count -or $now.Total -cne $script:DistHash.Total) {
-                Fail "部署网页前 dist\web 的指纹和第 3 步核对过的不一样了（产物被改过）。现在：数据库迁移、服务器函数$(if ($script:DoOps) { '、lemo-ops' })已是新版，网页还是旧版；查清原因后用同一个 tag 原样重跑"
-            }
-            Ok '网页产物和第 3 步核对过的一致'
-            Run-Wrangler @('pages', 'deploy', 'dist\web', '--project-name', $PagesProject, '--branch', 'main', '--commit-hash', $info.Commit, '--commit-dirty=true')
+            # 第 3 步核对过、复制到临时目录的那份产物，和 Functions 要打包的 aws4fetch，到这里都不能被换掉（中间这段时间可能被改）
+            $state = "数据库迁移、服务器函数$(if ($script:DoOps) { '、lemo-ops' })已是新版，网页还是旧版；查清原因后用同一个 tag 原样重跑"
+            Assert-WebCopyUnchanged $state
+            Assert-Aws4Unchanged $state
+            Ok '网页产物和第 3 步核对过的一致，从临时目录里的副本部署'
+            Run-Wrangler @('pages', 'deploy', $script:WebDir, '--project-name', $PagesProject, '--branch', 'main', '--commit-hash', $info.Commit, '--commit-dirty=true') -WithToken
             Ok '网页部署完成'
         }
     } finally { Pop-Location }
@@ -883,7 +1093,8 @@ try {
     Write-Host $_.Exception.Message -ForegroundColor Red
 } finally {
     Clear-SecretEnv
-    [Environment]::SetEnvironmentVariable('CLOUDFLARE_ACCOUNT_ID', $null, 'Process')
+    Clear-Secrets
+    $script:CfAccountId = $null
     foreach ($n in 'WRANGLER_SEND_METRICS', 'WRANGLER_WRITE_LOGS', 'WRANGLER_LOG_PATH', 'CLOUDFLARE_API_BASE_URL', 'SUPABASE_API_URL', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1') { [Environment]::SetEnvironmentVariable($n, $null, 'Process') }
     if ($script:NoHooksDir -and (Test-Path -LiteralPath $script:NoHooksDir)) { Remove-Item -LiteralPath $script:NoHooksDir -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:TokensRead) { Clear-Clip }

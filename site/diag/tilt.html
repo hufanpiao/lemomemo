@@ -4,7 +4,7 @@
     <!-- 倾斜授权试验页（R-153，架构 0.27 第 5 点；iPhone 实机验收清单 P1-05）：
          只测“动作与方向”授权以后，从后台彻底划掉再打开，授权还在不在。
          只显示授权结果和倾角读数，读数只放内存：不写本机存储、不发任何请求、不读任何用户数据。
-         /app/* 的 CSP 是 script-src 'self'、style-src 'self'，所以脚本和样式都是单独文件，页面里不写内联脚本、内联样式。
+         放在 /diag/（SW-update ③：在 /app/ 作用域外，App 的 SW 管不到，不会被拦成 App 外壳、也不进缓存）；CSP 在 site/_headers 的 /diag/* 单独一段（script-src 'self'、style-src 'self'），所以脚本和样式都是单独文件，页面里不写内联脚本、内联样式。
          不挂 manifest、不注册 SW：添加到主屏幕后是一个单独的主屏幕网页，打开的就是这一页。 -->
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />

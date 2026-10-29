@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 describe('TC-B1-68 js_error', () => {
-  it('抛一个消息含“QA探针”的 TypeError，再抛 6 次：只记 5 条，code 只有类型@文件名:行号', () => {
+  it('抛一个消息含“QA探针”的 TypeError，再抛 6 次：只记 5 条，code 只有类型@文件名:行号:列号', () => {
     const storage = memStorage();
     const s = setup({ storage });
     offs.push(s.off);
@@ -49,7 +49,7 @@ describe('TC-B1-68 js_error', () => {
       s.target.dispatchEvent(errorEvent(err, `${ORIGIN}/app/assets/sync.js?email=a%40b.com#${PROBE}`, 120));
     }
     expect(s.logs).toHaveLength(JS_ERROR_DAILY_MAX);
-    for (const l of s.logs) expect(l).toEqual({ act: JS_ERROR_ACT, code: 'TypeError@sync.js:120' });
+    for (const l of s.logs) expect(l).toEqual({ act: JS_ERROR_ACT, code: 'TypeError@sync.js:120:7' });
     // 日志和本机计数里都没有消息原文、query、hash
     const all = JSON.stringify(s.logs) + JSON.stringify([...storage.data.values()]);
     expect(all).not.toContain(PROBE);
@@ -61,20 +61,21 @@ describe('TC-B1-68 js_error', () => {
   it('unhandledrejection：从 stack 取文件名和行号；V8 stack 第一行的消息（哪怕带同源 URL）不当成出错位置', () => {
     const s = setup();
     offs.push(s.off);
-    const err = new RangeError('x');
+    const msg = `${PROBE} ${ORIGIN}/app/secret-path/abc.js:99`;
+    const err = new RangeError(msg);
     err.stack = [
-      `RangeError: ${PROBE} ${ORIGIN}/app/secret-path/abc.js:99`,
+      `RangeError: ${msg}`,
       `    at load (${ORIGIN}/app/assets/notes-Ab12.js?v=1:88:13)`,
       `    at ${ORIGIN}/app/assets/main.js:5:1`,
     ].join('\n');
     s.target.dispatchEvent(rejection(err));
-    expect(s.logs).toEqual([{ act: 'js_error', code: 'RangeError@notes-Ab12.js:88' }]);
+    expect(s.logs).toEqual([{ act: 'js_error', code: 'RangeError@notes-Ab12.js:88:13' }]);
   });
 
   it('Safari / Firefox 的 stack 格式（fn@url:行:列）', () => {
     const err = new TypeError(PROBE);
     err.stack = `save@${ORIGIN}/app/assets/sync.js:120:9\n@${ORIGIN}/app/assets/main.js:1:1`;
-    expect(jsErrorCode(err, {}, ORIGIN)).toBe('TypeError@sync.js:120');
+    expect(jsErrorCode(err, {}, ORIGIN)).toBe('TypeError@sync.js:120:9');
   });
 
   it('reject 的不是 Error（字符串、对象）：类型记 NonError，内容一律不记', () => {
@@ -82,19 +83,19 @@ describe('TC-B1-68 js_error', () => {
     offs.push(s.off);
     s.target.dispatchEvent(rejection(`${PROBE} 原话`));
     s.target.dispatchEvent(rejection({ message: PROBE, stack: `at ${ORIGIN}/app/a.js:1:1` }));
-    expect(s.logs.map((l) => l.code)).toEqual(['NonError@unknown:0', 'NonError@unknown:0']);
+    expect(s.logs.map((l) => l.code)).toEqual(['NonError@unknown:0:0', 'NonError@unknown:0:0']);
     expect(JSON.stringify(s.logs)).not.toContain(PROBE);
   });
 
   it('错误类型：只认白名单（审查 S1），自定义的怪名字记 Error', () => {
     const A = `${ORIGIN}/app/assets/a.js`;
     const named = (name: string): Error => Object.assign(new Error('m'), { name });
-    expect(jsErrorCode(named(`${PROBE}Error`), { filename: A, lineno: 3 }, ORIGIN)).toBe('Error@a.js:3');
-    expect(jsErrorCode(named('QuotaExceededError'), { filename: A, lineno: 3 }, ORIGIN)).toBe('QuotaExceededError@a.js:3');
-    expect(jsErrorCode(new DOMException('m', 'NotAllowedError'), { filename: A, lineno: 3 }, ORIGIN)).toBe('NotAllowedError@a.js:3');
+    expect(jsErrorCode(named(`${PROBE}Error`), { filename: A, lineno: 3 }, ORIGIN)).toBe('Error@a.js:3:0');
+    expect(jsErrorCode(named('QuotaExceededError'), { filename: A, lineno: 3 }, ORIGIN)).toBe('QuotaExceededError@a.js:3:0');
+    expect(jsErrorCode(new DOMException('m', 'NotAllowedError'), { filename: A, lineno: 3 }, ORIGIN)).toBe('NotAllowedError@a.js:3:0');
     const long = named('A'.repeat(40) + 'Error');
     Object.defineProperty(long, 'stack', { value: undefined });
-    expect(jsErrorCode(long, {}, ORIGIN)).toBe('Error@unknown:0');
+    expect(jsErrorCode(long, {}, ORIGIN)).toBe('Error@unknown:0:0');
   });
 
   it.each([
@@ -106,7 +107,7 @@ describe('TC-B1-68 js_error', () => {
   ])('白名单里的名字原样记：%s', (name) => {
     expect(JS_ERROR_NAMES.has(name)).toBe(true);
     const e = Object.assign(new Error('m'), { name });
-    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/assets/a.js`, lineno: 3 }, ORIGIN)).toBe(`${name}@a.js:3`);
+    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/assets/a.js`, lineno: 3 }, ORIGIN)).toBe(`${name}@a.js:3:0`);
   });
 
   it.each([
@@ -115,7 +116,7 @@ describe('TC-B1-68 js_error', () => {
     'TypeError ', ' TypeError', 'TypeError\n', '',
   ])('白名单外的名字记 Error：%j', (name) => {
     const e = Object.assign(new Error('m'), { name });
-    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/assets/a.js`, lineno: 3 }, ORIGIN)).toBe('Error@a.js:3');
+    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/assets/a.js`, lineno: 3 }, ORIGIN)).toBe('Error@a.js:3:0');
   });
 
   it('本项目自定义的错误（name 写在类里）：按类名记', () => {
@@ -135,10 +136,10 @@ describe('TC-B1-68 js_error', () => {
       override name = 'NotListedError';
     }
     const at = { filename: `${ORIGIN}/app/assets/sync-Ab12.js`, lineno: 9 };
-    expect(jsErrorCode(new CacheClosedError(PROBE), at, ORIGIN)).toBe('CacheClosedError@sync-Ab12.js:9');
-    expect(jsErrorCode(new OutboxRejectError(PROBE), at, ORIGIN)).toBe('OutboxRejectError@sync-Ab12.js:9');
-    expect(jsErrorCode(new ObjStoreError(PROBE), at, ORIGIN)).toBe('ObjStoreError@sync-Ab12.js:9');
-    expect(jsErrorCode(new NotListedError(PROBE), at, ORIGIN)).toBe('Error@sync-Ab12.js:9');
+    expect(jsErrorCode(new CacheClosedError(PROBE), at, ORIGIN)).toBe('CacheClosedError@sync-Ab12.js:9:0');
+    expect(jsErrorCode(new OutboxRejectError(PROBE), at, ORIGIN)).toBe('OutboxRejectError@sync-Ab12.js:9:0');
+    expect(jsErrorCode(new ObjStoreError(PROBE), at, ORIGIN)).toBe('ObjStoreError@sync-Ab12.js:9:0');
+    expect(jsErrorCode(new NotListedError(PROBE), at, ORIGIN)).toBe('Error@sync-Ab12.js:9:0');
   });
 
   it('多行消息（审查 S2）：stack 开头消息有几行就跳过几行，消息里的 “at 同源URL” 不当成帧', () => {
@@ -152,68 +153,68 @@ describe('TC-B1-68 js_error', () => {
     const err = new TypeError(msg);
     err.stack = [`TypeError: ${msg}`, `    at load (${ORIGIN}/app/assets/notes-Ab12.js:88:13)`, `    at ${ORIGIN}/app/assets/main.js:5:1`].join('\n');
     s.target.dispatchEvent(rejection(err));
-    expect(s.logs).toEqual([{ act: 'js_error', code: 'TypeError@notes-Ab12.js:88' }]);
+    expect(s.logs).toEqual([{ act: 'js_error', code: 'TypeError@notes-Ab12.js:88:13' }]);
   });
 
   it('多行消息以换行开头、或只有消息没有帧：不把消息当成帧', () => {
     const msg = `\n    at ${ORIGIN}/app/assets/fake.js:777:1`;
     const err = new TypeError(msg);
     err.stack = `TypeError: ${msg}\n    at ${ORIGIN}/app/assets/real.js:12:3`;
-    expect(jsErrorCode(err, {}, ORIGIN)).toBe('TypeError@real.js:12');
+    expect(jsErrorCode(err, {}, ORIGIN)).toBe('TypeError@real.js:12:3');
     const only = new TypeError(msg);
     only.stack = `TypeError: ${msg}`;
-    expect(jsErrorCode(only, {}, ORIGIN)).toBe('TypeError@unknown:0');
+    expect(jsErrorCode(only, {}, ORIGIN)).toBe('TypeError@unknown:0:0');
   });
 
   it('Safari / Firefox 的 stack 不带消息：不跳过第一帧（哪怕帧里碰巧含有消息文字）', () => {
     const err = new TypeError('sync');
     err.stack = `save@${ORIGIN}/app/assets/sync.js:120:9\n@${ORIGIN}/app/assets/main.js:1:1`;
-    expect(jsErrorCode(err, {}, ORIGIN)).toBe('TypeError@sync.js:120');
+    expect(jsErrorCode(err, {}, ORIGIN)).toBe('TypeError@sync.js:120:9');
   });
 
   it('文件名：同源的只认 /app/assets/ 下和 /app/index.html，别的路径记 unknown（审查 S3）', () => {
     const e = new TypeError(PROBE);
     const at = (path: string): string => jsErrorCode(e, { filename: `${ORIGIN}${path}`, lineno: 2 }, ORIGIN);
-    expect(at('/app/assets/main-Ab12.js')).toBe('TypeError@main-Ab12.js:2');
-    expect(at('/app/assets/main-Ab12.js?v=1#x')).toBe('TypeError@main-Ab12.js:2');
-    expect(at('/app/index.html')).toBe('TypeError@index.html:2');
+    expect(at('/app/assets/main-Ab12.js')).toBe('TypeError@main-Ab12.js:2:0');
+    expect(at('/app/assets/main-Ab12.js?v=1#x')).toBe('TypeError@main-Ab12.js:2:0');
+    expect(at('/app/index.html')).toBe('TypeError@index.html:2:0');
     // 不在 assets 下（名字本身干净也不认）
-    expect(at('/a.js')).toBe('TypeError@unknown:2');
-    expect(at('/app/a.js')).toBe('TypeError@unknown:2');
-    expect(at('/app/sw.js')).toBe('TypeError@unknown:2');
-    expect(at('/index.html')).toBe('TypeError@unknown:2');
-    expect(at('/app/notes/index.html')).toBe('TypeError@unknown:2');
-    expect(at(`/app/${encodeURIComponent('hufan@example.com')}/assets/a.js`)).toBe('TypeError@unknown:2');
+    expect(at('/a.js')).toBe('TypeError@unknown:2:0');
+    expect(at('/app/a.js')).toBe('TypeError@unknown:2:0');
+    expect(at('/app/sw.js')).toBe('TypeError@unknown:2:0');
+    expect(at('/index.html')).toBe('TypeError@unknown:2:0');
+    expect(at('/app/notes/index.html')).toBe('TypeError@unknown:2:0');
+    expect(at(`/app/${encodeURIComponent('hufan@example.com')}/assets/a.js`)).toBe('TypeError@unknown:2:0');
     // assets 下再分子目录、或者用 .. 绕：都不认（URL 会先把 .. 规整掉）
-    expect(at('/app/assets/sub/a.js')).toBe('TypeError@unknown:2');
-    expect(at('/app/assets/../secret.js')).toBe('TypeError@unknown:2');
-    expect(at('/app/assets/')).toBe('TypeError@unknown:2');
-    expect(at('/APP/ASSETS/a.js')).toBe('TypeError@unknown:2');
+    expect(at('/app/assets/sub/a.js')).toBe('TypeError@unknown:2:0');
+    expect(at('/app/assets/../secret.js')).toBe('TypeError@unknown:2:0');
+    expect(at('/app/assets/')).toBe('TypeError@unknown:2:0');
+    expect(at('/APP/ASSETS/a.js')).toBe('TypeError@unknown:2:0');
   });
 
   it('文件名：别的来源记 ext，名字不干净（含中文、空格、太长、不是脚本）记 unknown，路径和域名不记', () => {
     const e = new TypeError(PROBE);
-    expect(jsErrorCode(e, { filename: 'chrome-extension://abcdef/content.js', lineno: 2 }, ORIGIN)).toBe('TypeError@ext:2');
-    expect(jsErrorCode(e, { filename: 'https://evil.example/x.js', lineno: 2 }, ORIGIN)).toBe('TypeError@ext:2');
-    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/assets/${encodeURIComponent(PROBE)}.js`, lineno: 2 }, ORIGIN)).toBe('TypeError@unknown:2');
-    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/notes/123e4567`, lineno: 2 }, ORIGIN)).toBe('TypeError@unknown:2');
-    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/assets/${'a'.repeat(50)}.js`, lineno: 2 }, ORIGIN)).toBe('TypeError@unknown:2');
-    expect(jsErrorCode(e, { filename: 'not a url', lineno: 2 }, ORIGIN)).toBe('TypeError@unknown:2');
-    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/index.html`, lineno: 2 }, ORIGIN)).toBe('TypeError@index.html:2');
+    expect(jsErrorCode(e, { filename: 'chrome-extension://abcdef/content.js', lineno: 2 }, ORIGIN)).toBe('TypeError@ext:2:0');
+    expect(jsErrorCode(e, { filename: 'https://evil.example/x.js', lineno: 2 }, ORIGIN)).toBe('TypeError@ext:2:0');
+    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/assets/${encodeURIComponent(PROBE)}.js`, lineno: 2 }, ORIGIN)).toBe('TypeError@unknown:2:0');
+    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/notes/123e4567`, lineno: 2 }, ORIGIN)).toBe('TypeError@unknown:2:0');
+    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/assets/${'a'.repeat(50)}.js`, lineno: 2 }, ORIGIN)).toBe('TypeError@unknown:2:0');
+    expect(jsErrorCode(e, { filename: 'not a url', lineno: 2 }, ORIGIN)).toBe('TypeError@unknown:2:0');
+    expect(jsErrorCode(e, { filename: `${ORIGIN}/app/index.html`, lineno: 2 }, ORIGIN)).toBe('TypeError@index.html:2:0');
   });
 
-  it('跨源脚本的 “Script error.”（没有 error 对象、没有文件名）：Error@unknown:0', () => {
+  it('跨源脚本的 “Script error.”（没有 error 对象、没有文件名）：Error@unknown:0:0', () => {
     const s = setup();
     offs.push(s.off);
     s.target.dispatchEvent(errorEvent(null, '', 0));
-    expect(s.logs).toEqual([{ act: 'js_error', code: 'Error@unknown:0' }]);
+    expect(s.logs).toEqual([{ act: 'js_error', code: 'Error@unknown:0:0' }]);
   });
 
   it('code 最长 64 字', () => {
-    // 白名单里最长的名字 + 最长的文件名 + 7 位行号 = 76 字，截到 64
+    // 白名单里最长的名字 + 最长的文件名 + 7 位行号 + 列号 = 78 字，截到 64
     const e = new DOMException('m', 'TransactionInactiveError');
     const code = jsErrorCode(e, { filename: `${ORIGIN}/app/assets/${'b'.repeat(37)}.js`, lineno: 1234567 }, ORIGIN);
-    expect(code).toBe(`TransactionInactiveError@${'b'.repeat(37)}.js:1234567`.slice(0, 64));
+    expect(code).toBe(`TransactionInactiveError@${'b'.repeat(37)}.js:1234567:0`.slice(0, 64));
     expect(code).toHaveLength(64);
   });
 
@@ -224,7 +225,7 @@ describe('TC-B1-68 js_error', () => {
     const fire = (file: string): void => void s.target.dispatchEvent(errorEvent(new TypeError(PROBE), `${ORIGIN}/app/assets/${file}`, 1));
     for (let i = 0; i < 6; i++) fire('a.js');
     for (let i = 0; i < 2; i++) fire('b.js');
-    expect(s.logs.map((l) => l.code)).toEqual([...Array<string>(5).fill('TypeError@a.js:1'), 'TypeError@b.js:1', 'TypeError@b.js:1']);
+    expect(s.logs.map((l) => l.code)).toEqual([...Array<string>(5).fill('TypeError@a.js:1:7'), 'TypeError@b.js:1:7', 'TypeError@b.js:1:7']);
     t += 86_400_000;
     fire('a.js');
     expect(s.logs).toHaveLength(8);

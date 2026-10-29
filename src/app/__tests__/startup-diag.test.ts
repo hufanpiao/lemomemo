@@ -1,6 +1,6 @@
-// 机型信息页 src/public/diag/startup.{html,js,css}（R-232，iPhone 实机验收清单 P1-07）：
+// 机型信息页 site/diag/startup.{html,js,css}（上线 /diag/startup.html，10-30 从 /app/diag/ 搬出，SW-update ③）（R-232，iPhone 实机验收清单 P1-07）：
 // ① 页面用的 media 来源就是 index.html（运行时请求 /app/index.html?diag=1 绕开 SW 预缓存，解析结果和 index.html 的 12 条逐条一致）；
-// ② 守 /app/* 的 CSP（script-src 'self'、style-src 'self'）：没有内联脚本、内联样式、事件属性；
+// ② 守 /diag/* 的 CSP（script-src 'self'、style-src 'self'）：没有内联脚本、内联样式、事件属性；
 // ③ 在 jsdom 里跑一遍：标出第一条匹配的文件名和像素尺寸，读不到首页时给提示
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 const ROOT = join(import.meta.dirname, '..', '..', '..');
-const DIAG = join(ROOT, 'src', 'public', 'diag');
+const DIAG = join(ROOT, 'site', 'diag');
 const indexHtml = readFileSync(join(ROOT, 'src', 'index.html'), 'utf8');
 const pageHtml = readFileSync(join(DIAG, 'startup.html'), 'utf8');
 const jsText = readFileSync(join(DIAG, 'startup.js'), 'utf8');
@@ -44,7 +44,7 @@ function fakeWin(opts: { matches: (q: string) => boolean; fetchHtml: string | nu
     screen: { width: 375, height: 812 },
     devicePixelRatio: 3,
     navigator: { standalone: false, userAgent: 'test-agent' },
-    location: { href: 'https://preview.lemomemo.com/app/diag/startup.html' },
+    location: { href: 'https://preview.lemomemo.com/diag/startup.html' },
     matchMedia: (q: string) => ({ matches: opts.matches(q) }),
     fetch: (url: string) => {
       opts.fetched.push(url);
@@ -70,10 +70,11 @@ describe('机型信息页（启动图核对）', () => {
     expect(mod.parseStartupLinks(html)).toEqual([{ media: '(a)', href: '/app/icons/startup/startup-10x20.png' }]);
   });
 
-  it('首页地址取上一级的 index.html，带 ?diag=1 绕开 SW 预缓存', () => {
+  it('首页地址是同源的 /app/index.html（本页在 /diag/），带 ?diag=1 绕开 SW 预缓存', () => {
     const want = 'https://preview.lemomemo.com/app/index.html?diag=1';
-    expect(mod.indexUrl('https://preview.lemomemo.com/app/diag/startup.html')).toBe(want);
-    expect(mod.indexUrl('https://preview.lemomemo.com/app/diag/startup')).toBe(want);
+    expect(mod.indexUrl('https://preview.lemomemo.com/diag/startup.html')).toBe(want);
+    expect(mod.indexUrl('https://preview.lemomemo.com/diag/startup')).toBe(want);
+    expect(mod.indexUrl('https://preview.lemomemo.com/diag/startup?utm_source=x#a')).toBe(want);
   });
 
   it('?diag=1 确实不会命中 SW 预缓存：precacheAndRoute 没配 ignoreURLParametersMatching，参数名也不在 Workbox 默认忽略名单里', () => {
@@ -81,7 +82,7 @@ describe('机型信息页（启动图核对）', () => {
     expect(sw).toMatch(/precacheAndRoute\(self\.__WB_MANIFEST\)/);
     expect(sw).not.toMatch(/ignoreURLParametersMatching|urlManipulation/);
     // workbox-precaching 的默认忽略名单（utils/generateURLVariations.js）：/^utm_/、/^fbclid$/
-    const params = [...new URL(mod.indexUrl('https://x.test/app/diag/startup.html')).searchParams.keys()];
+    const params = [...new URL(mod.indexUrl('https://x.test/diag/startup.html')).searchParams.keys()];
     expect(params).toEqual(['diag']);
     for (const p of params) expect(/^utm_/.test(p) || /^fbclid$/.test(p)).toBe(false);
   });

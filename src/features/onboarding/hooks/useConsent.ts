@@ -12,8 +12,11 @@ export interface ConsentHandlers {
   onDone: (agreed: boolean) => void;
   /** 会话被吊销或不在了（必填：按“被移除 / 没登录”处理）。sid：被拒那次请求用的会话（接手清单 K6-sugg4 ①，离开时只删它） */
   onRevoked: (sid: string | null) => void;
-  /** 账号停用（服务器报 account_disabled，必填：按架构 4.3 清本机、回登录页，退出原因是“已停用”）。sid 同上 */
-  onDisabled: (sid: string | null) => void;
+  /**
+   * 账号停用（服务器报 account_disabled，必填：先探测再定，清本机、回登录页按原因提示）。sid 同上。
+   * onStay：探测说账号正常、留在本页时调——本页提示 consent.err.unknown“这一步没记下，请再点一次”（和设置页同一口径）
+   */
+  onDisabled: (sid: string | null, onStay?: () => void) => void;
   /** R-239：这次没法保存选择，先不使用 AI、进 App，下次打开再问 */
   onSkip: () => void;
 }
@@ -41,7 +44,7 @@ export function useConsent(api: ConsentApi, { onDone, onRevoked, onDisabled, onS
       return;
     }
     if (r.error === 'disabled') {
-      onDisabled(r.sid);
+      onDisabled(r.sid, () => setErr('unknown'));
       return;
     }
     setErr(r.error);

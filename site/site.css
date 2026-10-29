@@ -1,14 +1,20 @@
-/* 官网静态页的样式（架构 16.2）。B0 骨架，版式和配色 B7b 按视觉稿定。不用内联样式（CSP style-src 'self'）。 */
+/* 官网静态页的样式（架构 16.2）。B0 骨架，版式和配色 B7b 按视觉稿定。不用内联样式（CSP style-src 'self'）。
+   10-30 起进 npm run lint 的 stylelint：只改了排版（一条声明一行、规则之间空一行），选择器和取值没动 */
+
+/* 官网没有 App 的皮肤文件（styles/skins/*.css 只管 /app/），配色只在下面两段 :root 里定义，其余地方都用 var(--…) */
+/* stylelint-disable color-no-hex -- 官网的配色令牌只在这里定义（架构 16.2），A11 管的是 App 组件 */
 :root {
   --ink: #1d1d1f;
   --ink-2: #5b5b60;
   --bg: #fbfaf5;
-  --card: #ffffff;
+  --card: #fff;
   --line: #e6e3d6;
   --lemon: #f2df4a;
   --lemon-ink: #1d1d1f;
+
   color-scheme: light dark;
 }
+
 @media (prefers-color-scheme: dark) {
   :root {
     --ink: #f2f2f0;
@@ -18,18 +24,50 @@
     --line: #34342f;
   }
 }
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+/* stylelint-enable color-no-hex */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  /* stylelint-disable-next-line property-no-vendor-prefix -- iOS Safari 只认带前缀的写法（同 src/styles/base.css） */
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
   font: 16px/1.7 system-ui, -apple-system, "PingFang SC", "Apple SD Gothic Neo", "Malgun Gothic", "Microsoft YaHei", sans-serif;
 }
-a { color: inherit; text-underline-offset: 3px; }
-.top, main, .foot { max-width: 760px; margin: 0 auto; padding: 0 20px; }
-.top { display: flex; align-items: center; justify-content: space-between; height: 64px; }
-.brand { font-weight: 700; font-size: 18px; text-decoration: none; }
+
+a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+
+.top,
+main,
+.foot {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 18px;
+  text-decoration: none;
+}
+
 .btn {
   display: inline-block;
   padding: 8px 18px;
@@ -39,23 +77,114 @@ a { color: inherit; text-underline-offset: 3px; }
   font-weight: 600;
   text-decoration: none;
 }
-.btn:focus-visible, a:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
-.btn-big { padding: 12px 28px; font-size: 18px; }
-.hero { padding: 48px 0 32px; }
-.hero h1 { font-size: 40px; line-height: 1.2; margin: 0 0 12px; }
-.lead { font-size: 18px; color: var(--ink-2); margin: 0 0 24px; }
-.note { color: var(--ink-2); font-size: 14px; }
-h2 { font-size: 22px; margin: 40px 0 12px; }
-h3 { font-size: 17px; margin: 20px 0 4px; }
-.features ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
-.features li { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 4px 18px 12px; }
-.features p, .install p { margin: 0 0 8px; }
-.privacy { margin: 40px 0; padding: 16px 18px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); font-size: 14px; color: var(--ink-2); }
-.doc { padding-bottom: 48px; }
-.foot { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; padding-top: 24px; padding-bottom: 40px; border-top: 1px solid var(--line); font-size: 14px; color: var(--ink-2); }
-.foot nav { display: flex; gap: 12px; align-items: center; }
-.foot a[aria-current="true"] { font-weight: 700; text-decoration: none; }
+
+.btn:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.btn-big {
+  padding: 12px 28px;
+  font-size: 18px;
+}
+
+.hero {
+  padding: 48px 0 32px;
+}
+
+.hero h1 {
+  font-size: 40px;
+  line-height: 1.2;
+  margin: 0 0 12px;
+}
+
+.lead {
+  font-size: 18px;
+  color: var(--ink-2);
+  margin: 0 0 24px;
+}
+
+.note {
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+h2 {
+  font-size: 22px;
+  margin: 40px 0 12px;
+}
+
+h3 {
+  font-size: 17px;
+  margin: 20px 0 4px;
+}
+
+.features ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.features li {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 4px 18px 12px;
+}
+
+.features p,
+.install p {
+  margin: 0 0 8px;
+}
+
+.privacy {
+  margin: 40px 0;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.doc {
+  padding-bottom: 48px;
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  justify-content: space-between;
+  padding-top: 24px;
+  padding-bottom: 40px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.foot nav {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.foot a[aria-current="true"] {
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* 不改成范围写法 (width >= 640px)：Safari 16.4 起才认，官网要照顾更旧的 iPhone（认不出时整段失效、退回单栏） */
+/* stylelint-disable-next-line media-feature-range-notation -- 旧版 Safari 不认范围写法，官网不能只给新系统看 */
 @media (min-width: 640px) {
-  .features ul { grid-template-columns: 1fr 1fr; }
-  .hero h1 { font-size: 52px; }
+  .features ul {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hero h1 {
+    font-size: 52px;
+  }
 }

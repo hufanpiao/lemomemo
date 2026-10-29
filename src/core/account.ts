@@ -19,7 +19,7 @@
 // • 失败即关（M3）：清库失败也关库，再 onFailed()（默认同 onSwitched：重新载入，冷启动会再清一次；再失败就按“本机库不可用”启动，不渲染缓存）
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { BootResult } from './boot.ts';
-import type { Cache } from './cache.ts';
+import { deleteCacheDb, type Cache } from './cache.ts';
 import { OWNER } from './cache-schema.ts';
 import { clearAllCollections } from './store.ts';
 
@@ -242,18 +242,48 @@ export interface RemovedDeps {
    * 这里只按删掉的 session_id 再删一次（clearLocalSessionIf；K6-sugg3 ①，同 signedOutHere）
    */
   onRemoved(): void;
+  /** 清库卡住或失败时按库名删库（默认 core/cache.ts 的 deleteCacheDb，库名取本页的库）；测试用 */
+  deleteDb?(): Promise<unknown>;
+  /** 测试用：清库（含按库名删）、清运行时缓存各自的上限 */
+  wipeMs?: number;
+  cachesMs?: number;
+}
+
+/** wipeOnRemoved 清库、清运行时缓存各自最多等多久（SETTINGS-sugg ①；和 platform/sign-out.ts 的 WIPE_TIMEOUT_MS、CACHES_TIMEOUT_MS 同值） */
+export const REMOVED_WIPE_MS = 3000;
+export const REMOVED_CACHES_MS = 2000;
+
+/** 到点或出错都返回 false，按时完成返回 true；原来的操作不取消 */
+function capped(run: () => Promise<unknown>, ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(false), ms);
+    Promise.resolve()
+      .then(run)
+      .then(
+        () => (clearTimeout(t), resolve(true)),
+        () => (clearTimeout(t), resolve(false)),
+      );
+  });
 }
 
 /**
- * 被移除或被停用（outbox 的 removed 事件：session_revoked、account_disabled；TC-B1-77 ⑤）：
- * 设闸 → 清空整个本机库（含 outbox，还没上传的改动丢弃）和运行时缓存 → 关库 → onRemoved。清库失败也照样关库、onRemoved（失败即关）
+ * 被移除、被停用、注销冷静期（主 App 的 sync-wiring、同意页、设置页三处共用；TC-B1-77 ⑤）：
+ * 设闸 → 清空整个本机库（含 outbox，还没上传的改动丢弃）→ 清运行时缓存 → 关库 → onRemoved。
+ * 每一步都有上限（SETTINGS-sugg ①）：清库卡住或失败时先关本页连接、按库名删库（同 platform/sign-out.ts 的 ②）；
+ * 清运行时缓存卡住不等。任何情况都照样关库、onRemoved（回登录页），最坏约 REMOVED_WIPE_MS × 2 + REMOVED_CACHES_MS
  */
 export async function wipeOnRemoved(boot: BootResult, deps: RemovedDeps): Promise<void> {
   closeGate(boot);
+  const wipeMs = deps.wipeMs ?? REMOVED_WIPE_MS;
   try {
-    if (boot.cache && !boot.cache.isClosed()) await boot.cache.clearAll();
+    const cache = boot.cache;
+    const cleared = !cache || cache.isClosed() || (await capped(() => cache.clearAll(), wipeMs));
     clearAllCollections();
-    await deps.clearCacheStorage();
+    if (!cleared) {
+      closeCache(boot);   // 原因 'closed'：不触发 versionchange → 重新载入
+      await capped(deps.deleteDb ?? (() => deleteCacheDb({ name: cache?.name, waitMs: wipeMs })), wipeMs);
+    }
+    await capped(() => deps.clearCacheStorage(), deps.cachesMs ?? REMOVED_CACHES_MS);
   } catch {
     clearAllCollections();
   } finally {

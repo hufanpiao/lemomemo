@@ -1,10 +1,9 @@
-/* global document, window, URL */
 // 机型信息页（R-232，iPhone 实机验收清单 P1-07 第 1、2 步）：只显示技术信息，不读也不显示任何用户数据。
 // 12 条 media 不在这里另抄一份：运行时请求服务器上当前部署的 /app/index.html?diag=1 现场解析，
 // 改了 index.html 不用同步这里；解析函数 parseStartupLinks 由 src/app/__tests__/startup-diag.test.ts 拿 src/index.html 核对。
-// 为什么带 ?diag=1：SW 的 precacheAndRoute（src/sw/sw.ts）没配 ignoreURLParametersMatching，用 Workbox 默认值，
-// 只去掉 utm_ 开头和 fbclid 参数；带着 diag=1 的地址和预缓存清单里的 /app/index.html 对不上，也没有别的 SW 路由接它，
-// 所以一定走网络，读到的是服务器上现在的那份，不会是这台设备 SW 预缓存里的旧版。
+// 本页在 /diag/（/app/ 作用域外，SW-update ③），不受 App 的 SW 控制，fetch 本来就直接走网络；仍带 ?diag=1 多一层保险：
+// SW 的 precacheAndRoute（src/sw/sw.ts）没配 ignoreURLParametersMatching，用 Workbox 默认值，只去掉 utm_ 开头和 fbclid 参数，
+// 带着 diag=1 的地址和预缓存清单里的 /app/index.html 对不上，也没有别的 SW 路由接它，读到的一定是服务器上现在的那份。
 // 注意：这只能说明“现在部署的是什么”；iOS 实际用的是添加到主屏幕那一刻读到的那份（改图后要不要重加，见 P1-07 第 5 步）。
 export const DIAG_PARAM = 'diag';
 
@@ -27,9 +26,9 @@ export function pixelSize(href) {
   return m ? `${m[1]}×${m[2]}` : '（文件名里没有尺寸）';
 }
 
-/** 首页地址：本页在 /app/diag/ 下，首页是上一级的 index.html；带 ?diag=1 绕开 SW 预缓存（见文件开头） */
+/** 首页地址：本页在 /diag/ 下，首页是同源的 /app/index.html（写绝对路径）；带 ?diag=1 绕开 SW 预缓存（见文件开头） */
 export function indexUrl(pageUrl) {
-  const u = new URL('../index.html', pageUrl);
+  const u = new URL('/app/index.html', pageUrl);
   u.searchParams.set(DIAG_PARAM, '1');
   return u.href;
 }

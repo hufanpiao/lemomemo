@@ -123,7 +123,10 @@ export function probeAccountForExit(o: ProbeOpts = {}): Promise<AccountProbe> {
  * - signed_out（错误码 unauthorized、session_revoked；不带码的 401 算 unknown）→ 按被移除退出（auth.exit.removed）
  * - active（刚好恢复了）→ 'active'：不清本机，重新同步（sync-wiring 限 5 分钟一次）
  */
-export function exitAfterProbe(s: AccountProbe): ExitNotice | 'active' {
+/** 探测能给出的退出原因：不含 expired（那是本机没会话时 sync-wiring 自己定的，R-263） */
+export type ProbedExit = Exclude<ExitNotice, 'expired'>;
+
+export function exitAfterProbe(s: AccountProbe): ProbedExit | 'active' {
   switch (s.kind) {
     case 'signed_out':
       return 'removed';
@@ -147,7 +150,7 @@ export interface DisabledExitOptions {
    * 探测不出（unknown）时用哪个退出原因：默认 disabled_unsure（RLS 一路的 account_disabled 分不清停用和冷静期）；
    * 码本来就精确的地方（account 函数一路，经 requireActiveUser）传 'disabled'
    */
-  fallback?: ExitNotice;
+  fallback?: ProbedExit;
 }
 
 /**
@@ -156,7 +159,7 @@ export interface DisabledExitOptions {
  * - 结果按 exitAfterProbe：pending_deletion / disabled / removed（signed_out）/ unknown → fallback / 'active'（刚好恢复了，不清本机）
  * 永远 resolve
  */
-export async function exitForDisabled(sid: string | null, o: DisabledExitOptions = {}): Promise<ExitNotice | 'active'> {
+export async function exitForDisabled(sid: string | null, o: DisabledExitOptions = {}): Promise<ProbedExit | 'active'> {
   let now: { sid: string | null; token: string | null } = { sid: null, token: null };
   try {
     now = (o.readSession ?? (() => ({ sid: readSessionId(), token: readSessionAccessToken() })))();

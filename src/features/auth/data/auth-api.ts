@@ -5,7 +5,7 @@
 // - verifyOtp 先不带 captchaToken（官方文档只写发码和注册要；B1 实测 TC-B1-08，要的话在这里补）
 // 只认错误码，不把服务器原文显示给用户
 import type { ApiError } from '../../../../shared/schema/api.ts';
-import { logoutReplaced, sessionReplaced, type PriorSession } from '../../../platform/sign-out.ts';
+import { budgetLeft, logoutReplaced, sessionReplaced, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import { readStoredAccessToken } from './local-exit.ts';
 
@@ -155,9 +155,12 @@ import { sessionIdOfToken } from '../../../platform/session.ts';
 export { sessionIdOfToken };
 
 /** devices 表的类型还没进生成的 Database（K1 在补），删行只用到这一小段 */
+/** setHeader：会话已被换时把旧令牌定死在这次请求上（K6-signout-lib 复审建议 ①） */
+type DevicesDelete = PromiseLike<{ error: unknown }> & { setHeader?(name: string, value: string): unknown };
 interface DevicesDeleteDb {
-  from(t: 'devices'): { delete(): { eq(col: 'session_id', v: string): PromiseLike<{ error: unknown }> } };
+  from(t: 'devices'): { delete(): { eq(col: 'session_id', v: string): DevicesDelete } };
 }
+
 
 export const INVITE_FN = 'invite-signup';
 
@@ -211,27 +214,35 @@ export function createAuthApi(getDb: () => Promise<Db>, readToken: () => string 
         return { ok: false, error: 'registered_login' };
       }),
 
-    signOutHere: (prior) =>
-      run(async (db) => {
+    signOutHere: (prior) => {
+      const t0 = Date.now();
+      return run(async (db) => {
         // 不先 getSession 预检（K9 退出流程审查：预检失败会跳过 signOut、令牌过期时还会先联网刷新）；
         // session_id 用退出一开头记下的（prior）；没传时从本机存着的 access token 里读，只用来找要删的那一行
         const sid = prior ? prior.sid : sessionIdOfToken(readToken());
-        if (sid) {
+        // 会话已被换（复审建议 ①）：supabase-js 会带新会话的令牌，那边删不到（别的账号）就留下一条“已退出”的残留行。
+        // 改用退出前的旧令牌删；没有旧令牌就不删（由服务器按会话清理，或设备列表标“已退出”）
+        const replacedAtDelete = prior !== undefined && sessionReplaced(prior.sid);
+        if (sid && (!replacedAtDelete || prior?.token)) {
           try {
-            await (db as unknown as DevicesDeleteDb).from('devices').delete().eq('session_id', sid);
+            const q = (db as unknown as DevicesDeleteDb).from('devices').delete().eq('session_id', sid);
+            if (replacedAtDelete && prior?.token) q.setHeader?.('Authorization', `Bearer ${prior.token}`);
+            await q;
           } catch {
             // 断网、行已被删：照样退出
           }
         }
-        // 紧贴 signOut 之前（K6-signout-lib）：本机已是别的标签页的新会话，就用旧令牌直接 logout，不调 supabase-js、不碰存储
+        // 紧贴 signOut 之前（K6-signout-lib）：本机已是别的标签页的新会话，就用旧令牌直接 logout，不调 supabase-js、不碰存储；
+        // 预算扣掉 getDb、删行已经用掉的时间（复审建议 ②），外层超时以后里面的请求不再多跑
         if (prior && sessionReplaced(prior.sid)) {
-          const r = await logoutReplaced(prior.token, prior.budgetMs);
+          const r = await logoutReplaced(prior.token, budgetLeft(prior.budgetMs, t0));
           return r.serverDone ? { ok: true, value: undefined } : { ok: false, error: 'offline' };
         }
         const { error } = await db.auth.signOut({ scope: 'local' });
         // 不是 ok 的一律报回去（断网、令牌过期也算），调用方据此兜底清本机会话
         return error ? { ok: false, error: mapAuthError(error) } : { ok: true, value: undefined };
-      }),
+      });
+    },
   };
 }
 

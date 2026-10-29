@@ -31,4 +31,16 @@
 /sitemap.xml
   Cache-Control: no-cache
 
+# ---------- 技术页 /diag/*（前端 A；SW-update ③，10-30 从 /app/diag/ 搬出来） ----------
+# 机型信息页 startup.html（R-232，P1-07）、倾斜授权试验页 tilt.html（R-153，P1-05；TC-B1-54）。在 /app/ 作用域外，App 的 SW 管不到。
+# 单独一套头：倾斜试验要 accelerometer、gyroscope（只给本源），其余设备能力关闭；脚本、样式只许同源文件；
+# connect-src 只给本源（机型信息页要读 /app/index.html），不许被嵌入，不给搜索引擎收录
+/diag/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), geolocation=(), microphone=(), accelerometer=(self), gyroscope=(self), magnetometer=(), payment=(), usb=()
+  X-Robots-Tag: noindex
+  Cache-Control: no-cache
+
 # ---------- /app/*（前端 A 填写，8.1 的两套 CSP 和 no-cache / immutable） ----------

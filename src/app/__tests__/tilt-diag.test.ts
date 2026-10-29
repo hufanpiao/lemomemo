@@ -1,5 +1,5 @@
-// 倾斜授权试验页 src/public/diag/tilt.{html,js,css}（R-153，架构 0.27 第 5 点；TC-B1-55；iPhone 实机验收清单 P1-05）：
-// ① 守 /app/* 的 CSP：没有内联脚本、内联样式、事件属性，脚本里不写 style 属性（只用 CSSOM 写两个自定义属性）；
+// 倾斜授权试验页 site/diag/tilt.{html,js,css}（上线 /diag/tilt.html，10-30 从 /app/diag/ 搬出，SW-update ③）（R-153，架构 0.27 第 5 点；TC-B1-55；iPhone 实机验收清单 P1-05）：
+// ① 守 /diag/* 的 CSP：没有内联脚本、内联样式、事件属性，脚本里不写 style 属性（只用 CSSOM 写两个自定义属性）；
 // ② 加载时不调 requestPermission，只在点按回调里调，两个接口在同一次点按里同步发起；
 // ③ 打开后没点按就收到读数判“记得住”，2 秒内没有读数判“记不住”，点得太早判“这次不算”；
 // ④ 读数只放内存：脚本里没有任何存储、网络、日志调用
@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ROOT = join(import.meta.dirname, '..', '..', '..');
-const DIAG = join(ROOT, 'src', 'public', 'diag');
+const DIAG = join(ROOT, 'site', 'diag');
 const pageHtml = readFileSync(join(DIAG, 'tilt.html'), 'utf8');
 const jsText = readFileSync(join(DIAG, 'tilt.js'), 'utf8');
 

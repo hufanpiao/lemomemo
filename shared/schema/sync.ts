@@ -17,12 +17,19 @@ export const sendFailure = z.object({
   /** 服务器给的 sqlstate（apply_patch 的 patch_bad_args 从 details 里取出），只用于记日志；服务器原文不带出来（0.38 第 62 条） */
   detail: z.string().regex(/^[0-9A-Z]{5}$/).optional(),
   /**
-   * 发这次请求前本机会话的 session_id（接手清单 K6-sugg4 ①；core/sync/send.ts 填，传输层不填）：被移除、停用时随 outbox 的事件带回，
+   * 这次请求用的会话的 session_id（接手清单 K6-sugg4 ①）：传输层把令牌定死在请求上时填真正带出去的那个（K6-sugg5 ④(b)），
+   * 没填时 core/sync/send.ts 用发之前读的。被移除、停用时随 outbox 的事件带回，
    * 离开本机时只删这个会话——回包前别的标签页写进来的新会话不删。null = 那时本机没有会话或读不出
    */
   sid: z.string().nullable().optional(),
 });
 export type SendFailure = z.infer<typeof sendFailure>;
+/**
+ * 交给 outbox.fail 的失败（接手清单 OUTBOX-sid-type）：sid 必填。removed、disabled 要靠它只删被拒那次请求的会话，
+ * 而哪个码算这两类是运行时才知道的（classifyFailure 看 code），所以每次 fail 都得带上；传输层产出的 SendFailure 不知道 sid，
+ * 由 core/sync/send.ts 在发请求前读好、补上。null = 那时本机没有会话或读不出
+ */
+export type SentFailure = Omit<SendFailure, 'sid'> & { sid: string | null };
 
 /** 网络调用的结果：成功带值，失败带 SendFailure */
 export type NetResult<T> = { ok: true; value: T } | { ok: false; error: SendFailure };

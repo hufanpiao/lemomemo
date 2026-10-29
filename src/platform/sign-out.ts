@@ -281,6 +281,14 @@ export function logoutReplaced(
   return logout(token, timeoutMs);
 }
 
+/**
+ * ④ 的预算（PriorSession.budgetMs）扣掉进入 server.signOut 以后已经用掉的时间（getDb、删 devices 行；K6-signout-lib 复审建议 ②）：
+ * 外层按 budgetMs 超时以后，里面直接 logout 的请求也跟着停，不再多跑一会儿
+ */
+export function budgetLeft(budgetMs: number, t0: number, now: number = Date.now()): number {
+  return Math.max(budgetMs - Math.max(now - t0, 0), 0);
+}
+
 /** 同步读，不抛错（读不出为 null） */
 function readSafe(read: () => string | null): string | null {
   try {
