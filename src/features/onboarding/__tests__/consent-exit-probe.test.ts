@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BootResult } from '../../../core/boot.ts';
 import type { ExitNotice } from '../../../platform/session.ts';
-import { leaveThisDevice, resetLeaveForTest, type LeaveDeps } from '../data/consent-exit.ts';
+import { defaultLeaveDeps, leaveThisDevice, resetLeaveForTest, type LeaveDeps } from '../data/consent-exit.ts';
 
 function deps(answer: () => Promise<ExitNotice | 'active'>, boot: Partial<BootResult> | null = { switching: false, userId: 'U1' }) {
   const order: string[] = [];
@@ -20,6 +20,7 @@ function deps(answer: () => Promise<ExitNotice | 'active'>, boot: Partial<BootRe
     clearLocalSessionIf: vi.fn((sid: string | null) => void order.push(`session:${sid ?? 'null'}`)),
     goToAuth: vi.fn(() => void order.push('auth')),
     clearLogs: vi.fn(() => undefined),
+    broadcastReset: vi.fn(),
     resolveDisabled: vi.fn(answer),
   };
   return { d, order };
@@ -93,5 +94,59 @@ describe('sid 读不出（null）时删会话（第八轮必改 1：不另认同
     const { d, order } = deps(async () => 'disabled');
     await leaveThisDevice('account_disabled', null, d);
     expect(order.filter((x) => x.startsWith('session:'))).toEqual(['session:null', 'session:null']);
+  });
+});
+
+describe('离开前广播带原因的 reset（SESS-1030-sugg ①，和设置页、sync-wiring 一致）', () => {
+  function withPosts(answer: () => Promise<ExitNotice | 'active'>, boot: Partial<BootResult> | null = { switching: false, userId: 'U1' }) {
+    const x = deps(answer, boot);
+    x.d.broadcastReset = vi.fn((userId: string, e: { notice: ExitNotice; sid: string | null }) => {
+      x.order.push(`post:${userId}:${e.notice}:${e.sid ?? 'null'}`);
+    });
+    return x;
+  }
+
+  it('探测出冷静期：先发 reset {notice: pending_deletion, sid}，再清库、回登录页；不删会话', async () => {
+    const { d, order } = withPosts(async () => 'pending_deletion');
+    await leaveThisDevice('account_disabled', 's1', d);
+    expect(order).toEqual(['post:U1:pending_deletion:s1', 'wipe', 'notice:pending_deletion', 'auth']);
+    expect(d.broadcastReset).toHaveBeenCalledOnce();
+  });
+
+  it('停用、被移除：删会话之前先发；sid 为 null 时带 null', async () => {
+    const a = withPosts(async () => 'disabled');
+    await leaveThisDevice('account_disabled', 's1', a.d);
+    expect(a.order).toEqual(['post:U1:disabled:s1', 'session:s1', 'wipe', 'notice:disabled', 'session:s1', 'auth']);
+    resetLeaveForTest();
+    const b = withPosts(async () => 'disabled');
+    await leaveThisDevice('session_revoked', null, b.d);
+    expect(b.order[0]).toBe('post:U1:removed:null');
+  });
+
+  it('没启动过（没有 boot、读不到账号）：不发；active 不离开也不发；广播抛错照样离开', async () => {
+    const a = withPosts(async () => 'pending_deletion', null);
+    await leaveThisDevice('account_disabled', 's1', a.d);
+    expect(a.d.broadcastReset).not.toHaveBeenCalled();
+    expect(a.d.goToAuth).toHaveBeenCalledOnce();
+    resetLeaveForTest();
+    const b = withPosts(async () => 'active');
+    await leaveThisDevice('account_disabled', 's1', b.d);
+    expect(b.d.broadcastReset).not.toHaveBeenCalled();
+    resetLeaveForTest();
+    const c = withPosts(async () => 'pending_deletion');
+    c.d.broadcastReset = vi.fn(() => {
+      throw new Error('频道关了');
+    });
+    await leaveThisDevice('account_disabled', 's1', c.d);
+    expect(c.d.goToAuth).toHaveBeenCalledOnce();
+  });
+
+  it('默认的 broadcastReset 真的往 lemo-sync:<user_id> 发 reset', async () => {
+    const got: unknown[] = [];
+    const ch = new BroadcastChannel('lemo-sync:U9');
+    ch.onmessage = (e: MessageEvent) => void got.push(e.data);
+    defaultLeaveDeps.broadcastReset('U9', { notice: 'pending_deletion', sid: 's1' });
+    await vi.waitFor(() => expect(got).toEqual([{ type: 'reset', notice: 'pending_deletion', sid: 's1' }]));
+    ch.close();
   });
 });

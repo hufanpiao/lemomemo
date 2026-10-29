@@ -42,6 +42,8 @@ supabase/.branches/
 supabase/functions/_shared/gen/
 # Vite / TypeScript / 测试的产物（R-96）
 dist/web/
+# LEMO_WEB_OUT 指定的其他输出目录（真后端那组 e2e 写 dist/web-real，接手清单 E2E-dist）
+dist/web-*/
 dist/vite-manifest/
 *.tsbuildinfo
 .eslintcache

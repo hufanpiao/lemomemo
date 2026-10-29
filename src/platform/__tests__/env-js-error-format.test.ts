@@ -134,6 +134,8 @@ describe('JSERR-sugg ⑤～⑨', () => {
     const before = reads;
     for (let i = 0; i < 10; i++) fire(JS_ERROR_MAX_CODES + 2 + i);
     expect(reads).toBe(before);
-    expect(s.logs).toHaveLength(JS_ERROR_MAX_CODES * JS_ERROR_DAILY_MAX);
+    // FE-1030-sugg ②：第 51 个被挡下时多记一条 js_error_codes_full
+    expect(s.logs).toHaveLength(JS_ERROR_MAX_CODES * JS_ERROR_DAILY_MAX + 1);
+    expect(s.logs.at(-1)).toEqual({ act: 'js_error_codes_full', code: String(JS_ERROR_MAX_CODES) });
   });
 });

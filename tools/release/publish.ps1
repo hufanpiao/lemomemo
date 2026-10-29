@@ -8,7 +8,8 @@
 
   做的事（按顺序，任何一步不过就停）：
     1. 发布前检查：tag 格式、在 main 上、是带说明的 tag、当前检出的就是这个 tag、工作区干净、VERSION 一致、
-       正式环境的公开配置文件在、工具锁文件在；git 的仓库配置和全局配置里没有 filter.*、core.attributesfile 之类的设置；
+       正式环境的公开配置文件在、工具锁文件在；git 的仓库配置和全局配置里没有 filter.*、core.attributesfile 之类的设置，
+       system 一级只有 Git for Windows 自带的四项 git-lfs 设置，全局属性文件为空，git 不读系统属性文件（GIT_ATTR_NOSYSTEM=1）；
     2. 备份：E:\柠檬记-备份\版本前\ 下已有这个 tag 的“发布前”备份且恢复测试通过，没有就调 build\backup.py 做一份；
     3. 构建：npm ci --ignore-scripts → 白名单 rebuild → npm run build -- --mode production → 体积预算 → 不能有 source map；
        算产物指纹，请你在 iPhone 上打开 GitHub 里这个 tag 的 release-build 摘要页核对（R-206：CI 只构建和测试）；
@@ -170,11 +171,16 @@ function Read-Secret([string]$label, [string]$where) {
     $script:TokensRead = $true
     $sec = Read-Host -AsSecureString '  粘贴到这里'
     Clear-Clip
-    if ($sec.Length -lt 8) { Fail "$label 太短，像是没粘贴上" }
+    # 太短就停：这个 SecureString 还没放进 $script:Secrets，finally 里的 Clear-Secrets 管不到它，这里先 Dispose（B1 接手清单 OPS-deploy-sugg ②）
+    if ($sec.Length -lt 8) { $sec.Dispose(); Fail "$label 太短，像是没粘贴上" }
     Ok "$label 已收到（剪贴板已清空）"
     return $sec
 }
 
+# 已知边界（B1 接手清单 OPS-deploy-sugg ②）：PtrToStringBSTR 会生成一份托管字符串（.NET 的 string），它不可变、清不了零，
+# 只能等垃圾回收时被覆盖（finally 里 [GC]::Collect() 只是尽量提早）；ZeroFreeBSTR 清零的只是中间那块非托管内存。
+# 设进环境变量、拼请求头都只能传 string，PowerShell 做不到不经过托管字符串，下面 Get-BearerHeader、Test-SecretPrefix 也一样。
+# 这份副本只在本进程内存里，进程结束就没了；所以发完要关掉这个 PowerShell 窗口。
 function Set-SecretEnv([string]$name, [Security.SecureString]$sec) {
     $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
     try {
@@ -469,6 +475,9 @@ function Assert-NoHiddenGitState {
 # filter.*（检出、status 时跑过滤程序）、include.* / includeif.*（再读一份配置）、core.worktree、core.attributesfile、core.hookspath、core.fsmonitor。
 # git config --local --list --name-only 本身不触发 fsmonitor；主流程最前面也已用 GIT_CONFIG_* 把 fsmonitor 关掉、把 hooksPath 指到空目录。
 # .git\info\attributes 不为空也停（里面可以给文件挂 filter）。
+# R-266：extensions.worktreeconfig 也停。开了它 git 还会读 .git\config.worktree（worktree 一级），--local --list 读不到那一级，
+# 里面的 filter.* / core.attributesfile 一样会让 git add、git status 跑外部程序。双保险：Assert-NoRiskyGlobalGitConfig 里 worktree 一级按 global 查。
+# （git 列出的键名是小写；-iin 不区分大小写，extensions.worktreeConfig 写法照样拦。）
 # core.hookspath 只放行项目规定的那一种（npm run hooks:install，提交前的密钥检查）：发布时不用先卸掉钩子再装回，免得忘了装回去。
 # 放行的依据是主流程最前面的覆盖：GIT_CONFIG_KEY_1=core.hooksPath 指到一个空的临时目录，本进程和子进程（wrangler、supabase）里的 git
 # 都不执行 .git\hooks\、.githooks\ 里的任何钩子（git status 写回索引时的 post-index-change 也不执行，B0 复查 M5）。
@@ -494,38 +503,94 @@ function Test-AllowedHooksPath {
 function Assert-NoRiskyGitConfig {
     $attr = Join-Path $RepoPath '.git\info\attributes'
     if ((Test-Path -LiteralPath $attr) -and (Get-Item -LiteralPath $attr).Length -gt 0) { Fail '.git\info\attributes 不是空的（里面可以给文件挂过滤程序），请先删掉再运行' }
+    # R-266：先按级查（worktree、global、system），config.worktree 里的过滤程序报出是 worktree 一级；再查 .git\config 的禁止名单（含 extensions.worktreeconfig）
+    Assert-NoRiskyGlobalGitConfig
     $out = Invoke-Git @('config', '--local', '--list', '--name-only')
     $bad = @($out -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object {
-            $_ -imatch '^(filter|include|includeif)\.' -or $_ -iin 'core.worktree', 'core.attributesfile', 'core.hookspath', 'core.fsmonitor'
+            $_ -imatch '^(filter|include|includeif)\.' -or $_ -iin 'core.worktree', 'core.attributesfile', 'core.hookspath', 'core.fsmonitor', 'extensions.worktreeconfig'
         } | Sort-Object -Unique)
     if ($bad -contains 'core.hookspath' -and (Test-AllowedHooksPath)) { $bad = @($bad | Where-Object { $_ -ne 'core.hookspath' }) }
     if ($bad.Count -gt 0) { Fail "仓库的 .git\config 里有发布时不许有的设置：$($bad -join '、')（会让 git 执行别的程序或读别处的配置）。请在发布用的副本里用 git config --local --unset 去掉（core.hookspath 发布完再设回），或重新 clone" }
-    Ok '.git\config 里没有过滤程序、include、hooksPath、fsmonitor 之类的设置，.git\info\attributes 为空'
-    Assert-NoRiskyGlobalGitConfig
+    Ok '.git\config 里没有过滤程序、include、hooksPath、fsmonitor、extensions.worktreeConfig 之类的设置，.git\info\attributes 为空'
 }
 
 # B1 接手清单 OPS-deploy ⑧：全局配置（~\.gitconfig，以及它 include 进来的文件）里的 filter.*、core.attributesfile 一样会被这个仓库的 git 用上：
-# 全局的属性文件给文件挂上 filter，检出、status 时就会跑全局配置里的过滤程序。所以用 git config --show-origin --list
-# （加 --show-scope 区分哪一级、--name-only 不取值）逐条看，global 一级有 filter.* 或 core.attributesfile 就停，并报出是哪个文件；
+# 全局的属性文件给文件挂上 filter，检出、status 时就会跑全局配置里的过滤程序。所以用 git config --show-scope --show-origin --list -z
+# 逐条看（-z：每项之间用 NUL 隔开，值里有换行也分得清），global 一级有 filter.* 或 core.attributesfile 就停，并报出是哪个文件；
 # include 进来的设置 git 会按所在的那一级列出，一并查到。没设 core.attributesfile 时 git 也会读默认的全局属性文件
 # （git var GIT_ATTR_GLOBAL，一般是 ~\.config\git\attributes），它不为空也停（和 .git\info\attributes 同一个道理）。
-# GIT_CONFIG_GLOBAL 之类改全局配置位置的环境变量，主流程最前面已经拦了。system 一级（Git for Windows 安装目录的 etc\gitconfig）不在这一条里。
+# GIT_CONFIG_GLOBAL 之类改全局配置位置的环境变量，主流程最前面已经拦了。
+# R-264：system 一级（Git for Windows 安装目录的 etc\gitconfig，以及它 include 的文件）同样会被用上。Git for Windows 自带四项 git-lfs 设置，
+# 只放行这四项，而且值要和 Git for Windows 默认写的一字不差（$script:AllowedSystemGitConfig，10-30 照本机 git 2.55.0.windows.5 的原值核对）；
+# 其余 filter.*（含子节大小写不同的 filter.LFS.*）和 core.attributesfile 照拦。
+# 这台电脑的系统配置不用改、也不要用管理员权限去改：不合格时按报错提示处理。
+# R-266：worktree 一级（extensions.worktreeConfig 开着时的 .git\config.worktree）按 global 一级处理：有 filter.* 或 core.attributesfile 就停，
+# 报错写明是 worktree 一级和哪个文件。command 一级（主流程用 GIT_CONFIG_COUNT 注入的 core.fsmonitor、core.hooksPath）、local 一级不在这里查。
+# GIT_CONFIG_SYSTEM（改 system 一级配置读哪个文件）不再在主流程最前面拦：这里查的就是 git 实际读到的那一份，子进程继承同一个设置。
+# R-265：系统属性文件（Git for Windows 安装目录的 etc\gitattributes，自带 diff=astextplain 那几行）本脚本不用：
+# 主流程第一次调 git 之前在本进程设 GIT_ATTR_NOSYSTEM=1（子进程继承，结束时清掉），git 就不读它。这里核对这个设置真的生效了：
+# 设了以后 git var GIT_ATTR_SYSTEM 应该退出码 1、没有输出；反而答出一个路径，说明 git 还会读它，就停。
+# git var GIT_ATTR_GLOBAL / GIT_ATTR_SYSTEM 从 git 2.42 起才有，失败就停（B1 接手清单 OPS-deploy-sugg ①，不再悄悄跳过）。
+$script:AllowedSystemGitConfig = [ordered]@{
+    'filter.lfs.clean'    = 'git-lfs clean -- %f'
+    'filter.lfs.smudge'   = 'git-lfs smudge -- %f'
+    'filter.lfs.process'  = 'git-lfs filter-process'
+    'filter.lfs.required' = 'true'
+}
+
+# git var 读属性文件的位置，失败就停并提示 git 版本。
+# GIT_ATTR_SYSTEM 例外（R-265）：主流程设了 GIT_ATTR_NOSYSTEM=1，正常就是退出码 1、没有输出（返回空）；答出路径反而要停
+function Get-GitAttrFile([string]$var) {
+    $p = Invoke-Git @('var', $var) -allowFail
+    $code = $LASTEXITCODE
+    if ($var -ceq 'GIT_ATTR_SYSTEM') {
+        if ($code -eq 1 -and -not $p) { return '' }
+        if ($code -eq 0) { Fail "本脚本设了 GIT_ATTR_NOSYSTEM=1，git 却仍答出系统属性文件 $p（git var GIT_ATTR_SYSTEM），说明 git 还会读它。没输入任何令牌。请在聊天里告诉运维" }
+    } elseif ($code -eq 0) { return $p }
+    $gv = Invoke-Git @('--version') -allowFail
+    Fail "git var $var 失败（退出码 $code，本机是 $gv）。git 2.42 以前没有这个变量，查不了属性文件：请先升级 Git for Windows（要 2.42 以上）再运行；版本够新还失败，看一眼 HOME、XDG_CONFIG_HOME 是不是设得不对"
+}
+
 function Assert-NoRiskyGlobalGitConfig {
-    $out = Invoke-Git @('config', '--show-scope', '--show-origin', '--list', '--name-only')
+    $out = Invoke-Git @('config', '--show-scope', '--show-origin', '--list', '-z')
+    $parts = $out -split "`0"
     $bad = @()
-    foreach ($l in ($out -split "`r?`n")) {
-        $c = $l -split "`t"
-        if ($c.Count -lt 3 -or $c[0] -ne 'global') { continue }
-        $name = $c[-1].Trim()
-        if ($name -imatch '^filter\.' -or $name -ieq 'core.attributesfile') { $bad += "$name（$($c[1] -replace '^file:', '')）" }
+    $wtBad = @()
+    $sysBad = @()
+    $sysOk = 0
+    for ($i = 0; $i + 2 -lt $parts.Count; $i += 3) {
+        $scope = $parts[$i].Trim()
+        $file = $parts[$i + 1] -replace '^file:', ''
+        # 名字和值之间是换行（没有值时只有名字）；Invoke-Git 把换行统一成了 CRLF
+        $kv = $parts[$i + 2] -split "`r?`n", 2
+        $name = $kv[0].Trim()
+        $value = if ($kv.Count -gt 1) { $kv[1] } else { $null }
+        if (-not ($name -imatch '^filter\.' -or $name -ieq 'core.attributesfile')) { continue }
+        if ($scope -ceq 'global') { $bad += "$name（$file）" }
+        elseif ($scope -ceq 'worktree') { $wtBad += "$name（$file）" }
+        elseif ($scope -ceq 'system') {
+            # [ordered] 表按键查找不区分大小写，名字要先区分大小写比一次（filter.LFS.clean 是另一个子节，不放行）
+            if (@($script:AllowedSystemGitConfig.Keys) -cnotcontains $name) { $sysBad += "$name（$file）" }
+            elseif ($value -cne $script:AllowedSystemGitConfig[$name]) { $sysBad += "$name 的值不是 Git for Windows 默认的「$($script:AllowedSystemGitConfig[$name])」（$file）" }
+            else { $sysOk++ }
+        }
     }
+    $wtBad = @($wtBad | Sort-Object -Unique)
+    if ($wtBad.Count -gt 0) { Fail "git 的 worktree 一级配置（.git\config.worktree 之类）里有发布时不许有的设置：$($wtBad -join '、')（会让 git 执行别的程序或读别处的属性文件；git config --local 读不到这一级）。请在发布用的副本里用 git config --worktree --unset 去掉，或重新 clone" }
     $bad = @($bad | Sort-Object -Unique)
     if ($bad.Count -gt 0) { Fail "git 的全局配置里有发布时不许有的设置：$($bad -join '、')（会让这个仓库的 git 执行别的程序或读别处的属性文件）。请先用 git config --global --unset 去掉（或从括号里那个文件删掉），发布完再加回" }
-    $attr = Invoke-Git @('var', 'GIT_ATTR_GLOBAL') -allowFail
-    if ($LASTEXITCODE -eq 0 -and $attr -and (Test-Path -LiteralPath $attr -PathType Leaf) -and (Get-Item -LiteralPath $attr -Force).Length -gt 0) {
+    $sysBad = @($sysBad | Sort-Object -Unique)
+    if ($sysBad.Count -gt 0) {
+        Fail "git 的 system 一级配置里有发布时不许有的设置：$($sysBad -join '、')（system 一级只放行 Git for Windows 自带的 filter.lfs.clean、filter.lfs.smudge、filter.lfs.process、filter.lfs.required 四项）。不要用管理员权限去改系统配置：请在聊天里告诉运维，按括号里那个文件查清是谁加的"
+    }
+    $attr = Get-GitAttrFile 'GIT_ATTR_GLOBAL'
+    if ($attr -and (Test-Path -LiteralPath $attr -PathType Leaf) -and (Get-Item -LiteralPath $attr -Force).Length -gt 0) {
         Fail "git 的全局属性文件 $attr 不是空的（里面可以给文件挂过滤程序）。请先移走，发布完再放回"
     }
+    $null = Get-GitAttrFile 'GIT_ATTR_SYSTEM'
+    Ok 'git 的 worktree 一级配置里没有 filter.*、core.attributesfile'
     Ok 'git 的全局配置里没有 filter.*、core.attributesfile，全局属性文件不存在或为空'
+    Ok "git 的 system 一级配置里只有 Git for Windows 自带的 git-lfs 设置（$sysOk 项，值都对），没有 core.attributesfile；git 不读系统属性文件（GIT_ATTR_NOSYSTEM=1 已生效）"
 }
 
 # 被 git 忽略的文件 git status 看不见，却会跟着正式部署上线（B0 复查 M2）：
@@ -598,7 +663,26 @@ function Get-DistHash([string]$dir) {
 # 用 node 直接跑 wrangler 包里的 bin\wrangler.js：npm 生成的 .bin\wrangler.cmd 随本机 npm 版本变，第 4 步核对依赖树哈希前已删掉（Assert-WranglerTree）。
 # -WithToken：这次要连 Cloudflare，只把 Cloudflare 令牌（和 Account ID）给这一个子进程（Invoke-WithSecrets）；不加时什么令牌都不给
 function Get-WranglerArgs([string[]]$argv) { return @($script:WranglerJs) + $argv + @('--env-file', $script:EmptyEnvFile) }
+
+# B1 接手清单 OPS-deploy-sugg ④：wrangler 自己往外发的请求尽量关掉。以 wrangler 4.150.0 的 wrangler-dist\cli.js 为准（10-30 查）：
+#   WRANGLER_SEND_METRICS=false、DO_NOT_TRACK=1：不发使用统计（resolveTelemetryStatus 先看 DO_NOT_TRACK，再看 WRANGLER_SEND_METRICS）；
+#   WRANGLER_SEND_ERROR_REPORTS=false：不发错误报告（默认就是 false，这里写明）；
+#   WRANGLER_HIDE_BANNER=true：不打印开头的版本横幅。npm 查新版本（registry.npmjs.org，不带令牌）主要就是打印横幅时做的
+#     （printWranglerBanner → updateCheck）；横幅关了，命令开头的弃用提示也一起不显示；
+#   WRANGLER_NO_SKILLS_UPDATE_PROMPTS=true：命令结束后不去 GitHub 查 skills 有没有更新（runSkillsUpdateFlow）。
+# 4.150.0 没有专门关掉“查新版本”的开关：配置里有它不认识的字段、兼容日期超过它支持的、命令出错时，它仍会去 npm 查一次（不带令牌、3 秒超时），是已知边界。
+# 不写日志文件（日志路径也指到临时目录，跟着一起删）；API 地址明确指向 Cloudflare 官方。finally 里统一清掉。
+$script:WranglerEnvNames = @('WRANGLER_SEND_METRICS', 'DO_NOT_TRACK', 'WRANGLER_SEND_ERROR_REPORTS', 'WRANGLER_HIDE_BANNER', 'WRANGLER_NO_SKILLS_UPDATE_PROMPTS', 'WRANGLER_WRITE_LOGS', 'WRANGLER_LOG_PATH')
+function Set-WranglerEnv {
+    $vals = [ordered]@{
+        WRANGLER_SEND_METRICS = 'false'; DO_NOT_TRACK = '1'; WRANGLER_SEND_ERROR_REPORTS = 'false'; WRANGLER_HIDE_BANNER = 'true'
+        WRANGLER_NO_SKILLS_UPDATE_PROMPTS = 'true'; WRANGLER_WRITE_LOGS = 'false'; WRANGLER_LOG_PATH = (Join-Path $script:WorkDir 'wrangler-logs')
+        CLOUDFLARE_API_BASE_URL = $script:PinnedEnv['CLOUDFLARE_API_BASE_URL']
+    }
+    foreach ($k in $vals.Keys) { [Environment]::SetEnvironmentVariable($k, $vals[$k], 'Process') }
+}
 function Run-Wrangler([string[]]$argv, [switch]$WithToken) {
+    Set-WranglerEnv
     $full = Get-WranglerArgs $argv
     if ($WithToken) { Invoke-WithSecrets @('CLOUDFLARE_API_TOKEN') { Run 'node' $full } } else { Run 'node' $full }
 }
@@ -662,6 +746,11 @@ function Assert-WebCopyUnchanged([string]$state) {
     Ok '临时目录里的网页仍是第 3 步核对过的产物'
 }
 
+# 临时工作目录（%TEMP%\lemo-publish-<guid>）：放网页副本、supabase.exe、wrangler 依赖树、空的 env 文件、wrangler 日志。
+# 已知边界（B1 接手清单 OPS-deploy-sugg ③）：目录权限继承 %TEMP%（默认只有本用户、SYSTEM 和管理员能进），不另设 ACL；
+# 同一用户下的别的进程能改这里的文件。脚本在部署前对网页副本、依赖树、supabase.exe 各做最后一次哈希核对，
+# 但核对完到 wrangler / supabase 真正读完文件之间仍有一小段时间，这段时间里同一用户的进程改了文件是查不出来的。
+# 防这一点要靠发布时这台电脑上不运行不信任的程序，脚本做不到。
 function New-WorkDir {
     if ($script:WorkDir) { return }
     $script:WorkDir = Join-Path $env:TEMP ("lemo-publish-" + [guid]::NewGuid().ToString('N'))
@@ -673,6 +762,7 @@ function New-WorkDir {
 # 输出只取名字，不打印；只给这一个 wrangler 子进程 Cloudflare 令牌
 function Assert-OpsSecrets {
     $full = Get-WranglerArgs @('secret', 'list', '--config', $script:OpsConfig, '--format', 'json')
+    Set-WranglerEnv
     Push-Location $RepoPath
     try {
         $out = Invoke-WithSecrets @('CLOUDFLARE_API_TOKEN') {
@@ -835,11 +925,8 @@ function Install-Tools {
     $script:WranglerDir = $wr
     Ok 'wrangler：按 tools\deploy\package-lock.json 装好（npm 已核对 integrity）'
     Assert-WranglerTree
-    # 不发统计、不写日志文件（日志路径也指到临时目录，跟着一起删）；API 地址明确指向 Cloudflare 官方
-    [Environment]::SetEnvironmentVariable('WRANGLER_SEND_METRICS', 'false', 'Process')
-    [Environment]::SetEnvironmentVariable('WRANGLER_WRITE_LOGS', 'false', 'Process')
-    [Environment]::SetEnvironmentVariable('WRANGLER_LOG_PATH', (Join-Path $script:WorkDir 'wrangler-logs'), 'Process')
-    [Environment]::SetEnvironmentVariable('CLOUDFLARE_API_BASE_URL', $script:PinnedEnv['CLOUDFLARE_API_BASE_URL'], 'Process')
+    # 不发统计、不查 skills 更新、不打印横幅、不写日志文件，API 地址明确指向 Cloudflare 官方（Set-WranglerEnv；每次跑 wrangler 前还会再设一次）
+    Set-WranglerEnv
     $script:EmptyEnvFile = Join-Path $script:WorkDir 'empty.env'
     New-Item -ItemType File -Path $script:EmptyEnvFile | Out-Null
 
@@ -1054,9 +1141,10 @@ try {
     # 执行任意程序；wrangler pages deploy 内部也会跑 git status（此时进程里已有令牌，那个程序会继承走）。
     # GIT_CONFIG_COUNT/KEY/VALUE 是命令行级配置，优先于仓库和全局配置，子进程（wrangler、supabase）也继承；finally 里清掉。
     # 窗口里预先有的 git 环境变量会改 git 读哪个仓库、哪份配置（GIT_CONFIG_PARAMETERS 还会盖过下面这一条），有就停。
+    # GIT_CONFIG_SYSTEM 不在这里拦（R-264）：Assert-NoRiskyGlobalGitConfig 查的就是它指的那份 system 一级配置。
     # 同时把 core.hooksPath 指到一个空的临时目录（B0 复查 M5）：git status 会把刷新后的索引写回去，写索引会触发 post-index-change 钩子，
     # 钩子放在 .git\hooks\ 或 .githooks\ 都会被执行；wrangler 内部跑 git status 时进程里已有令牌。指到空目录以后任何钩子都不执行。
-    $gitEnv = @('GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_EXEC_PATH', 'GIT_TEMPLATE_DIR') |
+    $gitEnv = @('GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_CONFIG_GLOBAL', 'GIT_EXEC_PATH', 'GIT_TEMPLATE_DIR') |
         Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }
     if (@($gitEnv).Count -gt 0) { Fail "这个窗口里有会改 git 行为的环境变量：$(@($gitEnv) -join '、')。请开一个新的 PowerShell 窗口再运行" }
     $script:NoHooksDir = Join-Path $env:TEMP ('lemo-nohooks-' + [guid]::NewGuid().ToString('N'))
@@ -1066,6 +1154,9 @@ try {
     [Environment]::SetEnvironmentVariable('GIT_CONFIG_VALUE_0', 'false', 'Process')
     [Environment]::SetEnvironmentVariable('GIT_CONFIG_KEY_1', 'core.hooksPath', 'Process')
     [Environment]::SetEnvironmentVariable('GIT_CONFIG_VALUE_1', $script:NoHooksDir, 'Process')
+    # R-265：git 不读系统属性文件（Git for Windows 安装目录的 etc\gitattributes）。窗口里预先有这个变量也一样，一律设成 1；
+    # 子进程（wrangler、supabase）继承，finally 里清掉。Assert-NoRiskyGlobalGitConfig 核对它真的生效了
+    [Environment]::SetEnvironmentVariable('GIT_ATTR_NOSYSTEM', '1', 'Process')
     Say "柠檬记正式发布：$Tag    （$(Get-Date -Format 'yyyy-MM-dd HH:mm')）"
     $info = Invoke-Checks
     Show-Plan
@@ -1095,7 +1186,7 @@ try {
     Clear-SecretEnv
     Clear-Secrets
     $script:CfAccountId = $null
-    foreach ($n in 'WRANGLER_SEND_METRICS', 'WRANGLER_WRITE_LOGS', 'WRANGLER_LOG_PATH', 'CLOUDFLARE_API_BASE_URL', 'SUPABASE_API_URL', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1') { [Environment]::SetEnvironmentVariable($n, $null, 'Process') }
+    foreach ($n in @($script:WranglerEnvNames) + @('CLOUDFLARE_API_BASE_URL', 'SUPABASE_API_URL', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1', 'GIT_ATTR_NOSYSTEM')) { [Environment]::SetEnvironmentVariable($n, $null, 'Process') }
     if ($script:NoHooksDir -and (Test-Path -LiteralPath $script:NoHooksDir)) { Remove-Item -LiteralPath $script:NoHooksDir -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:TokensRead) { Clear-Clip }
     # lemo-ops 打包演练时 wrangler 在 workers\lemo-ops 下建的 .wrangler（本来没有才删；已被 .gitignore 忽略）

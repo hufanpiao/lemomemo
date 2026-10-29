@@ -27,18 +27,21 @@ function opts(factory: IDBFactory): BootOptions {
 function fakeLeader(isLeader = true) {
   const posts: SyncMessage[] = [];
   let o: TabLeaderOptions | null = null;
+  /** 每次建 TabLeader 的参数（R-263-sugg ①：同步暂停后另开只听的那个） */
+  const made: TabLeaderOptions[] = [];
   const leader: TabLeader = {
     isLeader: () => isLeader,
     post: (m) => void posts.push(m),
     close: vi.fn(async () => undefined),
   };
-  /** 当主页时像真的一样马上 lead()（建引擎，onRemoved 才接得上） */
+  /** 当主页时像真的一样马上 lead()（建引擎，onRemoved 才接得上）；receive 只交给最新建的那个（旧的 close 时连频道一起关了） */
   const make = (x: TabLeaderOptions): TabLeader => {
     o = x;
-    if (isLeader) x.lead();
+    made.push(x);
+    if (isLeader && made.length === 1) x.lead();
     return leader;
   };
-  return { leader, posts, make, receive: (m: SyncMessage) => o?.onMessage(m) };
+  return { leader, posts, made, make, receive: (m: SyncMessage) => o?.onMessage(m) };
 }
 
 function setup(boot: BootResult, answer: () => Promise<AccountProbe>, session = { sid: 's1' as string | null, token: 'tok-1' }) {
@@ -200,5 +203,66 @@ describe('别的标签页发来冷静期 reset：跟着回登录页（R-263）',
     await new Promise((r) => setTimeout(r, 20));
     expect(s.d.goToAuth).not.toHaveBeenCalled();
     boot.switching = false;
+  });
+});
+
+describe('同步暂停后收到冷静期 reset：照样接手（R-263-sugg ①）', () => {
+  /** 限次触发进“同步暂停”：5 分钟内第二次 active */
+  async function paused() {
+    const boot = await coldStart(opts(fakeIndexedDB().factory));
+    const s = setup(boot, async () => ({ kind: 'active' }));
+    s.marks.set(ACTIVE_RELOAD_KEY, String(1_000_000 - 1000));
+    s.removed('account_disabled', 's1');
+    await vi.waitFor(() => expect(s.d.onSyncPaused).toHaveBeenCalledTimes(1));
+    return { boot, s };
+  }
+
+  it('暂停时让出主页后另开一个只听、不抢锁的（总当作不可见）；冷静期 reset 来了清库、回登录页，不删会话；连收两次只跳一次', async () => {
+    const { s } = await paused();
+    expect(s.fl.leader.close).toHaveBeenCalledTimes(1);
+    expect(s.fl.made).toHaveLength(2);
+    expect(s.fl.made[1]?.visibility?.isVisible()).toBe(false);
+    expect(s.fl.made[1]?.name).toBe(s.fl.made[0]?.name);
+    s.fl.receive({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
+    s.fl.receive({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
+    await vi.waitFor(() => expect(s.d.goToAuth).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.d.goToAuth).toHaveBeenCalledTimes(1);
+    expect(s.d.clearCacheStorage).toHaveBeenCalledTimes(1);
+    expect(s.d.clearLocalSessionIf).not.toHaveBeenCalled();
+    expect(s.d.setExitNotice).toHaveBeenCalledWith('pending_deletion', 's1');
+  });
+
+  it('改前反例的对照：暂停后收到别的原因（disabled）仍只记原因、不跳转', async () => {
+    const { s } = await paused();
+    s.fl.receive({ type: 'reset', notice: 'disabled', sid: 's1' });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.d.goToAuth).not.toHaveBeenCalled();
+    expect(s.d.clearCacheStorage).not.toHaveBeenCalled();
+  });
+
+  it('和 onRemoved 不重复：冷静期 reset 先到、探测随后回冷静期，只清一遍、只跳一次，本页不再广播', async () => {
+    const boot = await coldStart(opts(fakeIndexedDB().factory));
+    let answer: (v: { kind: 'pending_deletion'; purgeAfter: null }) => void = () => undefined;
+    const s = setup(boot, () => new Promise((r) => (answer = r)));
+    s.removed('account_disabled', 's1');   // 探测在路上
+    s.fl.receive({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
+    answer({ kind: 'pending_deletion', purgeAfter: null });
+    await vi.waitFor(() => expect(s.d.goToAuth).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.d.goToAuth).toHaveBeenCalledTimes(1);
+    expect(s.d.clearCacheStorage).toHaveBeenCalledTimes(1);
+    expect(s.fl.posts).toEqual([]);
+  });
+
+  it('本页先自己退出（session_revoked）、随后收到冷静期 reset：不再清第二遍、不再跳第二次', async () => {
+    const boot = await coldStart(opts(fakeIndexedDB().factory));
+    const s = setup(boot, async () => ({ kind: 'active' }));
+    s.removed('session_revoked', 's1');
+    s.fl.receive({ type: 'reset', notice: 'pending_deletion', sid: 's1' });
+    await vi.waitFor(() => expect(s.d.goToAuth).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.d.goToAuth).toHaveBeenCalledTimes(1);
+    expect(s.d.clearCacheStorage).toHaveBeenCalledTimes(1);
   });
 });

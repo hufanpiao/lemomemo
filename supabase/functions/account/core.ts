@@ -5,7 +5,8 @@
 // 四个 action（JWT；requireActiveUser 由 index.ts 注入成 authenticate）：
 //   status  {action}：登录后判断要不要显示恢复页（10-30 架构师：冷静期里别的 RPC 都回 account_disabled，客户端分不出）。
 //           冷静期放行；没有副作用：不写库、不计次数、不发信。管理员停用（含没有 profile）不当错误，回 200 {ok, status: 'disabled'}；
-//           会话失效、没登录等照 requireActiveUser 原样回（session_revoked、unauthorized、try_later）。
+//           管理员停用排在会话检查前面，停用且会话已吊销时回 disabled，不回 session_revoked（R-256 ③）；
+//           其余会话失效、没登录等照 requireActiveUser 原样回（session_revoked、unauthorized、try_later）。
 //           → {ok, status: 'active'} / {ok, status: 'pending_deletion', purge_after} / {ok, status: 'disabled'}
 //   delete  {action, confirm}：confirm 去掉首尾空白后等于“注销”或“탈퇴”（R-188）→ 管理员拒 → 每天 3 次（和 export 合计）
 //           → rpc account_request_deletion（一个事务：pending_deletions、停用、吊销全部会话；0.38 第 45 条）→ {ok, purge_after}
@@ -13,8 +14,6 @@
 //   restore {action}：和 status 一样在冷静期里放行（allowPendingDeletion）；amr 里 otp 在 10 分钟内 → 每天 5 次
 //           → rpc account_restore（service role 调 definer 函数，先锁 pending_deletions 行再判断，和 account-purge 的认领互斥；
 //           0.38 第 45 条）→ {ok} → 发“已恢复”。
-//   status  {action}：冷静期放行、没有副作用（不写库、不计次、不发信）→ {ok, status: active / pending_deletion（带 purge_after）/ disabled}；
-//           管理员停用排在会话检查前面，停用且会话已吊销时回 disabled，不回 session_revoked（R-256 ③）。
 //   export  {action, device_id?}（请求头可带 x-vault-token）：每天 3 次（和 delete 合计）→ 先写一条 logs（写不进就 try_later、不导出）
 //           → 按数据清单读本人各表（按主键往后翻页，每张表有行数上限，logs 另算）→ 边读边压缩成 gzip（内存里只留压缩后的块，
 //           原文总字节有上限）→ 直接回 gzip 的 JSON（attachment、no-store，不发下载链接）→ 响应之后发导出通知；

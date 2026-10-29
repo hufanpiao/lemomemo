@@ -211,10 +211,10 @@ describe('TC-B1-68 js_error', () => {
   });
 
   it('code 最长 64 字', () => {
-    // 白名单里最长的名字 + 最长的文件名 + 7 位行号 + 列号 = 78 字，截到 64
+    // 白名单里最长的名字 + 长文件名 + 7 位行号 + 列号 = 75 字：FE-1030-sugg ① 起截文件名（留 .js、补 ~），行列号原样
     const e = new DOMException('m', 'TransactionInactiveError');
     const code = jsErrorCode(e, { filename: `${ORIGIN}/app/assets/${'b'.repeat(37)}.js`, lineno: 1234567 }, ORIGIN);
-    expect(code).toBe(`TransactionInactiveError@${'b'.repeat(37)}.js:1234567:0`.slice(0, 64));
+    expect(code).toBe(`TransactionInactiveError@${'b'.repeat(25)}~.js:1234567:0`);
     expect(code).toHaveLength(64);
   });
 
@@ -243,11 +243,12 @@ describe('TC-B1-68 js_error', () => {
     expect(storage.data.has(JS_ERROR_KEY)).toBe(true);
   });
 
-  it('一天最多记 50 个不同的 code，再多的不记', () => {
+  it('一天最多记 50 个不同的 code，再多的不记（只多一条 js_error_codes_full，见 env-js-error-limit.test.ts）', () => {
     const s = setup();
     offs.push(s.off);
     for (let i = 1; i <= JS_ERROR_MAX_CODES + 5; i++) s.target.dispatchEvent(errorEvent(new TypeError(PROBE), `${ORIGIN}/app/assets/a.js`, i));
-    expect(s.logs).toHaveLength(JS_ERROR_MAX_CODES);
+    expect(s.logs.filter((l) => l.act === JS_ERROR_ACT)).toHaveLength(JS_ERROR_MAX_CODES);
+    expect(s.logs).toHaveLength(JS_ERROR_MAX_CODES + 1);
   });
 
   it('localStorage 读写抛错：退回内存计数，照样每天 5 条，不抛', () => {

@@ -3,14 +3,15 @@
 // public.profiles、app_config；不直连数据库（不 import _shared/db.ts，不在 6.2 的名单里），不碰 R2。
 // 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY（平台自带）；TURNSTILE_SECRET、RESEND_API_KEY、PROXY_SECRET（8.4）；
 //   SIGNUP_HASH_SECRET（邮箱、IP、验证码哈希的 HMAC 密钥）。
+//   TURNSTILE_SITEVERIFY_URL、RESEND_EMAILS_URL：只给本机和 e2e 换出站地址（INVITE-mailpit，10-30），线上不设；
+//   不设就用官方地址，值不合规整个函数回 500 misconfigured（规则见 outbound.ts）。
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { envKind } from '../_shared/env-kind.ts';
 import { cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { handle, type AuthAdmin, type Store, type TurnstileResult } from './core.ts';
+import { RESEND_EMAILS_URL, TURNSTILE_SITEVERIFY_URL, resolveOutboundUrl } from './outbound.ts';
 
-const TURNSTILE_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
-const RESEND_URL = 'https://api.resend.com/emails';
 const MAIL_FROM = '柠檬记 <noreply@lemomemo.com>';   // 5.6：发件人 noreply@lemomemo.com
 const NET_TIMEOUT_MS = 8000;
 
@@ -104,10 +105,10 @@ async function postWithTimeout(url: string, init: RequestInit): Promise<Response
   }
 }
 
-async function verifyTurnstile(secret: string, token: string, remoteIp: string | null): Promise<TurnstileResult> {
+async function verifyTurnstile(siteverifyUrl: string, secret: string, token: string, remoteIp: string | null): Promise<TurnstileResult> {
   const form = new URLSearchParams({ secret, response: token });
   if (remoteIp) form.set('remoteip', remoteIp);
-  const r = await postWithTimeout(TURNSTILE_URL, { method: 'POST', body: form });
+  const r = await postWithTimeout(siteverifyUrl, { method: 'POST', body: form });
   if (!r.ok) {
     await r.body?.cancel();
     throw new Error('turnstile_http');
@@ -119,8 +120,8 @@ async function verifyTurnstile(secret: string, token: string, remoteIp: string |
     action: typeof j.action === 'string' ? j.action : null,
   };
 }
-async function sendMail(apiKey: string, to: string, mail: { subject: string; text: string }): Promise<boolean> {
-  const r = await postWithTimeout(RESEND_URL, {
+async function sendMail(emailsUrl: string, apiKey: string, to: string, mail: { subject: string; text: string }): Promise<boolean> {
+  const r = await postWithTimeout(emailsUrl, {
     method: 'POST',
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({ from: MAIL_FROM, to: [to], subject: mail.subject, text: mail.text }),
@@ -140,16 +141,23 @@ Deno.serve((req) => {
     log('misconfigured');
     return new Response(JSON.stringify({ error: 'misconfigured' }), { status: 500, headers: { 'content-type': 'application/json' } });
   }
+  const env = envKind(url);
+  // 出站地址（outbound.ts）：没设用官方地址；不合规不悄悄回落，当没配好（configured: false → 500 misconfigured）
+  const siteverify = resolveOutboundUrl(Deno.env.get('TURNSTILE_SITEVERIFY_URL'), TURNSTILE_SITEVERIFY_URL, env);
+  const emails = resolveOutboundUrl(Deno.env.get('RESEND_EMAILS_URL'), RESEND_EMAILS_URL, env);
+  if (!siteverify.ok || !emails.ok) log('outbound_url_invalid');
+  const siteverifyUrl = siteverify.ok ? siteverify.url : TURNSTILE_SITEVERIFY_URL;
+  const emailsUrl = emails.ok ? emails.url : RESEND_EMAILS_URL;
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   return handle(req, {
     store: makeStore(admin),
     auth: makeAuth(admin),
-    env: envKind(url),
-    verifyTurnstile: (token, ip) => verifyTurnstile(turnstileSecret, token, ip),
-    sendMail: (to, mail) => sendMail(resendKey, to, mail),
+    env,
+    verifyTurnstile: (token, ip) => verifyTurnstile(siteverifyUrl, turnstileSecret, token, ip),
+    sendMail: (to, mail) => sendMail(emailsUrl, resendKey, to, mail),
     hashSecret: Deno.env.get('SIGNUP_HASH_SECRET'),
     proxySecret: Deno.env.get('PROXY_SECRET'),
-    configured: true,
+    configured: siteverify.ok && emails.ok,
     now: Date.now,
     log,
   });

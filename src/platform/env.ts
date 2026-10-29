@@ -103,13 +103,21 @@ export function installGate(nav: NavLike = navigator, media?: (q: string) => boo
 //     只看 “at ” 开头的行；对不上（先读了 stack 再改 message、stack 被整个换掉、name 为空时开头直接是消息）就不用 stack，
 //     行号、列号记 0（JSERR-sugg ⑤：消息里伪造的同源帧不会被当成出错位置）。
 //     Safari / Firefox 格式（fn@url:行:列）不带消息，一行都不跳（函数名里碰巧有“: 消息”也不跳，JSERR-sugg ⑥）
-//   - code 格式（10-30 起）：“错误类型@文件名:行号:列号”，取不到的记 0，最长 64 字；每天 5 条、50 个不同 code 都按这整串计
+//   - code 格式（10-30 起）：“错误类型@文件名:行号:列号”，取不到的记 0，最长 64 字；每天 5 条、50 个不同 code 都按这整串计。
+//     超长时（FE-1030-sugg ①）先截文件名：留扩展名，截掉扩展名前那段的末尾、补一个 ~ 标出截过（~ 不会出现在真文件名里）；
+//     还超就行号、列号都记 0。绝不截行号、列号本身（截掉末位的列号像个合法的小数字，会指错位置）
 // • 同一个 code 每台设备每天（本机日期）最多 JS_ERROR_DAILY_MAX 条，计数放 localStorage 的 JS_ERROR_KEY；
 //   一天里最多记 JS_ERROR_MAX_CODES 个不同的 code，再多的不记（防止一页错误刷满每人每天 2,000 条的日志额度）；
+//   50 个用完以后头一回有新 code 被挡下时，记一条 act = js_error_codes_full（code = 50，FE-1030-sugg ②），每台设备每天最多一条：
+//   记过没有存在同一份计数里（字段 f），跨页面、重新载入都只记一次；存储读写失败时同样退回这一页内存
 //   localStorage 读写失败时退回只在这一页内存里计数
 // • 记日志本身出错一律吞掉，不再触发新的 error 事件
 
 export const JS_ERROR_ACT = 'js_error';
+/** 今天 50 个不同的 code 用完了、又有新的被挡下（FE-1030-sugg ②） */
+export const JS_ERROR_FULL_ACT = 'js_error_codes_full';
+/** code 最长几个字 */
+export const JS_ERROR_CODE_MAX = 64;
 export const JS_ERROR_DAILY_MAX = 5;
 export const JS_ERROR_MAX_CODES = 50;
 export const JS_ERROR_KEY = 'lemo.jserr';
@@ -205,7 +213,30 @@ function posInt(n: unknown): number {
 }
 
 /**
- * 一个错误 → js_error 的 code：“错误类型@文件名:行号:列号”，最长 64 字。
+ * 拼 code 并保证不超过 JS_ERROR_CODE_MAX（FE-1030-sugg ①）：先截文件名（留扩展名，扩展名前那段截掉末尾、补 ~），
+ * 还超就行号、列号记 0；绝不截行号、列号的数字。按现在的白名单类型（最长 24 字）和文件名（≤ 46 字）第二步碰不到，留作兜底。
+ */
+export function fitJsErrorCode(type: string, file: string, line: number, col: number): string {
+  const whole = `${type}@${file}:${line}:${col}`;
+  if (whole.length <= JS_ERROR_CODE_MAX) return whole;
+  const dot = file.lastIndexOf('.');
+  const ext = dot > 0 ? file.slice(dot) : '';
+  const stem = dot > 0 ? file.slice(0, dot) : file;
+  const cut = (tail: string): string | null => {
+    // 扩展名前那段至少留 1 个字，再加 ~
+    const keep = JS_ERROR_CODE_MAX - type.length - 1 - tail.length - ext.length - 1;
+    return keep >= 1 ? `${type}@${stem.slice(0, keep)}~${ext}${tail}` : null;
+  };
+  const withPos = cut(`:${line}:${col}`);
+  if (withPos) return withPos;
+  const zero = cut(':0:0');
+  if (zero) return zero;
+  // 类型名本身就长到放不下：文件名也不要了
+  return `${type.slice(0, JS_ERROR_CODE_MAX - 6)}@~:0:0`;
+}
+
+/**
+ * 一个错误 → js_error 的 code：“错误类型@文件名:行号:列号”，最长 64 字（超长见 fitJsErrorCode）。
  * at 是 ErrorEvent 给的位置（filename、lineno、colno）；没有时看 stack。不含错误消息、URL 的路径和 query。
  */
 export function jsErrorCode(err: unknown, at: { filename?: string; lineno?: number; colno?: number } = {}, origin = ''): string {
@@ -227,7 +258,7 @@ export function jsErrorCode(err: unknown, at: { filename?: string; lineno?: numb
       }
     }
   }
-  return `${type}@${errorFile(url, origin)}:${line}:${col}`.slice(0, 64);
+  return fitJsErrorCode(type, errorFile(url, origin), line, col);
 }
 
 /** 本机日期 YYYY-MM-DD（“每天”按设备的日期算） */
@@ -240,6 +271,8 @@ function localDay(t: number): string {
 interface JsErrorCounts {
   d: string;
   c: Record<string, number>;
+  /** 今天记过 js_error_codes_full 了（FE-1030-sugg ②） */
+  f?: 1;
 }
 
 export interface JsErrorLogOptions {
@@ -252,8 +285,8 @@ export interface JsErrorLogOptions {
   storage?: Pick<Storage, 'getItem' | 'setItem'> | null;
 }
 
-/** js_error 只交 act 和 code（和 app/log-channel.ts 的 log 兼容） */
-export type JsErrorLog = (act: typeof JS_ERROR_ACT, f: { code: string }) => void;
+/** js_error、js_error_codes_full 只交 act 和 code（和 app/log-channel.ts 的 log 兼容） */
+export type JsErrorLog = (act: typeof JS_ERROR_ACT | typeof JS_ERROR_FULL_ACT, f: { code: string }) => void;
 
 /**
  * 注册客户端错误日志（main.tsx 建好日志通道后调一次）。返回注销函数（测试用）。
@@ -285,7 +318,9 @@ export function registerJsErrorLog(log: JsErrorLog, opts: JsErrorLogOptions = {}
       const text = storage()?.getItem(JS_ERROR_KEY);
       if (text) {
         const o = JSON.parse(text) as Partial<JsErrorCounts> | null;
-        if (o && typeof o.d === 'string' && typeof o.c === 'object' && o.c !== null) st = { d: o.d, c: { ...o.c } };
+        if (o && typeof o.d === 'string' && typeof o.c === 'object' && o.c !== null) {
+          st = o.f === 1 ? { d: o.d, c: { ...o.c }, f: 1 } : { d: o.d, c: { ...o.c } };
+        }
       }
     } catch {
       // 读不到：用内存里的
@@ -313,6 +348,12 @@ export function registerJsErrorLog(log: JsErrorLog, opts: JsErrorLogOptions = {}
       const n = typeof st.c[code] === 'number' ? (st.c[code] as number) : 0;
       if (n >= JS_ERROR_DAILY_MAX) return;
       if (n === 0 && Object.keys(st.c).length >= JS_ERROR_MAX_CODES) {
+        // 头一回挡下新 code：记一条“今天额度满了”，标记和计数存在一起，每天只记一次
+        if (st.f !== 1) {
+          st.f = 1;
+          save(st);
+          log(JS_ERROR_FULL_ACT, { code: String(JS_ERROR_MAX_CODES) });
+        }
         if (Object.values(st.c).every((v) => typeof v === 'number' && v >= JS_ERROR_DAILY_MAX)) fullDay = day;
         return;
       }

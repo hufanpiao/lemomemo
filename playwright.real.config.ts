@@ -7,7 +7,8 @@
 //   再用 wrangler pages dev 起 8789：/sb 的 SUPABASE_UPSTREAM 指 lemo-e2e 的 55321、SUPABASE_ANON_KEY 用取到的值，PROXY_SECRET 仍是假值；
 //   /files 的 R2 照旧指假 S3（tests/e2e/fake-backends.ts 的 9199；它顺带起的 9198 假 Supabase 这组用不到）
 // • reuseExistingServer 一律 false：8789、9199 被占着就直接失败，不会连上别人起的服务
-// • ⚠ 和无后端组（playwright.config.ts，8788）都写 dist/web：两组不能同时跑，后构建的会把先跑那组的产物换掉
+// • 产物写 dist/web-real（LEMO_WEB_OUT，接手清单 E2E-dist），wrangler 也从那里起：和无后端组（playwright.config.ts，dist/web）互不覆盖；
+//   CSP 的 ws 端口用 LEMO_WS_PORT 跟着 PORT 走
 // • ⚠ 失败时留下的 trace（test-results/**/trace.zip，CI 的 html 报告里也有）含本地 lemo-e2e 的 anon key（请求头、页面里的构建配置）
 //   和测试账号的会话令牌（localStorage、/sb 请求的 Authorization）。都是本地演示密钥和一次性测试账号，但 CI 上传报告、产物前要注意：
 //   不要公开上传，或者上传前删掉 trace（真后端组不截图、不录屏，就是为了少带这些）
@@ -18,6 +19,8 @@ import { statusEnv } from './tools/e2e/real-backend.mjs';
 
 const PORT = 8789;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
+/** 本组的产物目录（不和无后端组的 dist/web 共用） */
+const WEB_OUT = 'dist/web-real';
 
 /**
  * 主进程取一次写进环境变量；worker 重新加载本配置时已经有了，不再跑 supabase status。
@@ -74,7 +77,7 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
-      command: `node build/build_web.mjs --mode e2e-real && npx wrangler pages dev dist/web --ip 127.0.0.1 --port ${PORT} --compatibility-date 2026-10-01 ${BINDINGS}`,
+      command: `node build/build_web.mjs --mode e2e-real && npx wrangler pages dev ${WEB_OUT} --ip 127.0.0.1 --port ${PORT} --compatibility-date 2026-10-01 ${BINDINGS}`,
       url: `${ORIGIN}/app/`,
       reuseExistingServer: false,
       timeout: 180_000,
@@ -83,6 +86,8 @@ export default defineConfig({
         CI: process.env.CI ?? '',
         VITE_PUBLIC_SUPABASE_URL: `${ORIGIN}/sb`,
         VITE_PUBLIC_ANON_KEY: ANON,
+        LEMO_WEB_OUT: WEB_OUT,
+        LEMO_WS_PORT: String(PORT),
       },
     },
   ],

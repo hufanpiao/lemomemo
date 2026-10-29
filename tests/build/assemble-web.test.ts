@@ -1,8 +1,18 @@
 // dist/web/_headers 的拼接（B0 集成）：site/_headers（前端 B）+ src/_headers（前端 A），同一个地址不能叠出两条 CSP
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { buildEnvErrors, buildVersion, checkHeaders, MODES, parseHeaders, renderHeaders } from '../../build/assemble_web.mjs';
+import { join, resolve } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  buildEnvErrors,
+  buildVersion,
+  checkHeaders,
+  MODES,
+  parseHeaders,
+  renderHeaders,
+  WEB_OUT_DEFAULT,
+  webOutDir,
+  wsOrigin,
+} from '../../build/assemble_web.mjs';
 
 const root = join(import.meta.dirname, '..', '..');
 const app = readFileSync(join(root, 'src', '_headers'), 'utf8');
@@ -113,5 +123,110 @@ describe('buildVersion', () => {
     expect(buildVersion(root, { LEMO_BUILD_VERSION: `${base}-preview.12` })).toBe(`${base}-preview.12`);
     expect(() => buildVersion(root, { LEMO_BUILD_VERSION: '9.9.9' })).toThrow();
     expect(() => buildVersion(root, { LEMO_BUILD_VERSION: `${base}-beta` })).toThrow();
+  });
+});
+
+// 接手清单 E2E-dist：无后端组写 dist/web、真后端组写 dist/web-real，互不覆盖；LEMO_WEB_OUT 不设时一切照旧
+describe('输出目录（webOutDir、LEMO_WEB_OUT）', () => {
+  const read = (f: string) => readFileSync(join(root, f), 'utf8');
+  // vite.sw.config.ts 在加载时就算好 outDir，所以每次先 resetModules 再重新 import
+  const loaders = {
+    'vite.config.ts': () => import('../../vite.config.ts'),
+    'vite.sw.config.ts': () => import('../../vite.sw.config.ts'),
+  } as const;
+  const loadVite = async (f: keyof typeof loaders, env: Record<string, string>) => {
+    vi.resetModules();
+    for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v);
+    try {
+      const mod = (await loaders[f]()) as { default: unknown };
+      const cfg = typeof mod.default === 'function' ? (mod.default as (e: object) => unknown)({ mode: 'preview', command: 'build' }) : mod.default;
+      return resolve((cfg as { build: { outDir: string } }).build.outDir);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  };
+
+  it('LEMO_WEB_OUT 不设（或空白）时产物位置不变：dist/web，App 和 SW 都在 dist/web/app', async () => {
+    expect(webOutDir(root, {})).toBe(resolve(root, 'dist/web'));
+    expect(webOutDir(root, { LEMO_WEB_OUT: '  ' })).toBe(resolve(root, 'dist/web'));
+    expect(WEB_OUT_DEFAULT).toBe('dist/web');
+    expect(await loadVite('vite.config.ts', { LEMO_WEB_OUT: '' })).toBe(resolve(root, 'dist/web/app'));
+    expect(await loadVite('vite.sw.config.ts', { LEMO_WEB_OUT: '' })).toBe(resolve(root, 'dist/web/app'));
+  });
+
+  it('LEMO_WEB_OUT=dist/web-real 时 App 和 SW 都写到 dist/web-real/app', async () => {
+    expect(webOutDir(root, { LEMO_WEB_OUT: 'dist/web-real' })).toBe(resolve(root, 'dist/web-real'));
+    expect(webOutDir(root, { LEMO_WEB_OUT: String.raw`dist\web-real` })).toBe(resolve(root, 'dist/web-real'));
+    expect(await loadVite('vite.config.ts', { LEMO_WEB_OUT: 'dist/web-real' })).toBe(resolve(root, 'dist/web-real/app'));
+    expect(await loadVite('vite.sw.config.ts', { LEMO_WEB_OUT: 'dist/web-real' })).toBe(resolve(root, 'dist/web-real/app'));
+  });
+
+  it('只许 dist/web 或 dist/web-<小写字母数字>：仓库外、dist 本身、别的 dist 子目录一律拒', () => {
+    for (const bad of ['dist', 'dist/', '../web', '/tmp/web', 'C:/web', 'dist/web/../..', 'dist/vite-manifest', 'dist/web-', 'dist/web-Real', 'dist/web-real/app', 'web-real']) {
+      expect(() => webOutDir(root, { LEMO_WEB_OUT: bad }), bad).toThrow(/LEMO_WEB_OUT/);
+    }
+  });
+
+  it('production、preview 不许设 LEMO_WEB_OUT（发布和 CI 只认 dist/web）；本机模式可以', () => {
+    for (const mode of ['production', 'preview']) {
+      expect(buildEnvErrors(mode, { LEMO_WEB_OUT: 'dist/web-real' })[0], mode).toContain('LEMO_WEB_OUT');
+      expect(buildEnvErrors(mode, { LEMO_WEB_OUT: 'dist/web' }), mode).toEqual([]);
+    }
+    for (const mode of ['e2e', 'development', 'test']) expect(buildEnvErrors(mode, { LEMO_WEB_OUT: 'dist/web-real' }), mode).toEqual([]);
+  });
+
+  it('四处都走 webOutDir，不再写死 dist/web/app；真后端组构建到 dist/web-real 并从那里起；.gitignore 覆盖新目录', () => {
+    for (const f of ['vite.config.ts', 'vite.sw.config.ts', 'build/build_web.mjs']) {
+      const code = read(f).replace(/^\s*\/\/.*$/gm, '');
+      expect(code, f).not.toMatch(/['"]dist\/web(\/app)?['"]/);
+      expect(code, f).toContain('webOutDir');
+    }
+    const asm = read('build/assemble_web.mjs').replace(/^\s*\/\/.*$/gm, '');
+    expect(asm).not.toMatch(/resolve\(root, 'dist\/web'\)/);
+    const real = read('playwright.real.config.ts');
+    expect(real).toContain("const WEB_OUT = 'dist/web-real';");
+    expect(real).toContain('wrangler pages dev ${WEB_OUT} ');
+    expect(real).toMatch(/LEMO_WEB_OUT: WEB_OUT,/);
+    expect(real).toMatch(/LEMO_WS_PORT: String\(PORT\),/);
+    expect(real).not.toMatch(/pages dev dist\/web /);
+    // 无后端组照旧
+    expect(read('playwright.config.ts')).toMatch(/pages dev dist\/web /);
+    const ignore = read('.gitignore').split(/\r?\n/);
+    expect(ignore).toEqual(expect.arrayContaining(['dist/web/', 'dist/web-*/']));
+  });
+});
+
+describe('connect-src 的 ws 端口（wsOrigin、LEMO_WS_PORT）', () => {
+  it('不设时和原来一样：e2e、development、test 8788，e2e-real 8789', () => {
+    expect(wsOrigin('e2e', {})).toBe('ws://127.0.0.1:8788');
+    expect(wsOrigin('development', {})).toBe('ws://127.0.0.1:8788');
+    expect(wsOrigin('test', {})).toBe('ws://127.0.0.1:8788');
+    expect(wsOrigin('e2e-real', {})).toBe('ws://127.0.0.1:8789');
+  });
+
+  it('本机模式跟着 LEMO_WS_PORT 走（如无后端组跑在 8790）', () => {
+    const text = renderHeaders(app, site, 'e2e', { LEMO_WS_PORT: '8790' });
+    expect(text).toContain("connect-src 'self' ws://127.0.0.1:8790;");
+    expect(parseHeaders(text).flatMap((b) => b.lines).join('\n')).not.toContain('8788');
+    expect(wsOrigin('e2e-real', { LEMO_WS_PORT: '8791' })).toBe('ws://127.0.0.1:8791');
+  });
+
+  it('正式、预览写死，LEMO_WS_PORT 不起作用（正式 CSP 原本就有 wss://lemomemo.com，保持原样）', () => {
+    for (const [mode, ws] of [
+      ['production', 'wss://lemomemo.com'],
+      ['preview', 'wss://preview.lemomemo.com'],
+    ] as const) {
+      expect(wsOrigin(mode, { LEMO_WS_PORT: '8790' })).toBe(ws);
+      const text = renderHeaders(app, site, mode, { LEMO_WS_PORT: '8790' });
+      expect(text).toContain(`connect-src 'self' ${ws};`);
+      expect(text).not.toContain('8790');
+    }
+  });
+
+  it('LEMO_WS_PORT 不是 1024–65535 的整数就抛错；未知模式也抛错', () => {
+    for (const bad of ['abc', '80', '0', '65536', '8790x', '-1', '8790.5']) {
+      expect(() => wsOrigin('e2e', { LEMO_WS_PORT: bad }), bad).toThrow(/LEMO_WS_PORT/);
+    }
+    expect(() => wsOrigin('nope', {})).toThrow(/未知的构建模式/);
   });
 });

@@ -47,6 +47,9 @@ describe.skipIf(!DB_URL)('授权矩阵打本机真库（TC-B0-89 / C9；没设 I
 
   it('反证：给 authenticated 删 events，真库上只报一遍（C9：原来还多报一句“不该能 DELETE，实际能”）', async () => {
     const one = { ...m, cases: m.cases.filter((c) => c.relation === 'public.events'), rpcCases: [] };
+    // 下面的 grant 在事务外、自动提交：上一轮跑到一半进程被杀（finally 没跑到），这条授权会永久留在库里。
+    // 所以开头先 revoke 一次（幂等：没有这条授权时 revoke 什么也不做、不报错），保证从干净状态开始（BE-1030-sugg ①）
+    await conn?.unsafe('revoke delete on public.events from authenticated');
     await conn?.unsafe('grant delete on public.events to authenticated');
     try {
       const ps = grantProblems(await runGrantMatrix(db, one)).filter((p) => p.startsWith('TC-GRANT-'));

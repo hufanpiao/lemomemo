@@ -24,6 +24,12 @@
 // • 已经在走别的退出流程（watchAccount 发现会话没了或换了账号，boot.switching 已设）：不再清第二遍、不再跳第二次
 // • 收到 account_disabled 先探测再决定（R-256 ③ 后续）、active 的重新载入限次、别的标签页发来的退出原因怎么记：见 app/sync-disabled.ts
 // • 退出时删会话之前先广播 reset，带上退出原因和被拒的 sid（DISABLED-probe-later ②），别的标签页回登录页显示同一条提示
+// • 别的标签页发来冷静期 reset（R-263）：followCooling 清库、回登录页。“已在退出”另用 exiting 标记（R-263-sugg ①），不和
+//   removedHandled 共用：本页限次触发进了“同步暂停”（removedHandled 已设、没有退出）以后收到冷静期 reset 照样接手；
+//   leave、followCooling 都先看 exiting，连收两次只跳一次，和 onRemoved 之间也不会清两遍、跳两次。
+//   暂停时让出主页会连频道一起关（TabLeader.close），所以另开一个只听、不抢锁的 TabLeader，暂停期间的提醒照样收得到
+// • followCooling 不自己记退出原因（R-263-sugg ③，有意的）：原因靠前面的 noteExitFromOtherTab，sid 对不上（本页会话已换成别的）
+//   时不记，登录页就不提示；这不是漏了——SessionCheck 照样探测出冷静期、就地出恢复页
 import { wipeOnRemoved } from '../core/account.ts';
 import type { BootResult } from '../core/boot.ts';
 import { createSync, type Sync, type SyncOptions } from '../core/sync/engine.ts';
@@ -64,6 +70,8 @@ export interface WireSyncDeps extends SyncDisabledDeps {
 }
 
 const IDLE: SyncState = { syncing: false, realtime: 'down', lastPullAt: null, stopped: false };
+/** 只听不抢锁的 TabLeader 用：总当作不可见，就永远不排队拿锁（没有 Web Locks 时 TabLeader 自己当主页，lead 是空的，也不跑同步） */
+const NEVER_VISIBLE: NonNullable<TabLeaderOptions['visibility']> = { isVisible: () => false, onChange: () => () => undefined };
 
 /** 对外的 Sync：转给当前主页上的引擎（非主页时是空的）；订阅跨引擎保留 */
 function createFacade(current: () => Sync | null, close: () => Promise<void>) {
@@ -101,9 +109,13 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   if (boot.status !== 'ready' || boot.switching || !cache || !outbox) return null;
   const life = deps.lifecycle ?? browserLifecycle;
   let removedHandled = false;
+  /** 已经在退出（leave 或 followCooling 走过一次）：只走一次（R-263-sugg ①，见文件头） */
+  let exiting = false;
   let leader: TabLeader | null = null;
   /** 清本机、回登录页；sid：被拒那次请求发出前本机会话的 session_id */
   const leave = (notice: ExitNotice, sid: string | null): void => {
+    if (exiting) return;
+    exiting = true;
     // 先告诉别的标签页退出原因（DISABLED-probe-later ②）：赶在删会话（storage 事件 → 它们的 watchAccount 清库、回登录页）之前发，
     // 那边收到就 setExitNotice，回登录页时显示同一条提示。带上被拒的 sid：那边的会话已换成别的就不记
     leader?.post({ type: 'reset', notice, sid });
@@ -138,7 +150,7 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     if (code === 'account_disabled' && noLocalSession(deps, sid)) return leave('expired', null);
     if (code === 'account_disabled' && canProbe(deps)) {
       // 限次触发时让出同步主页（这一页的闸关着，占着锁别的标签页就都不同步了）
-      return void probeThenLeave(boot, deps, sid, leave, () => void leader?.close());
+      return void probeThenLeave(boot, deps, sid, leave, yieldLeader);
     }
     leave(exitNoticeOf(code), sid);
   };
@@ -201,7 +213,9 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
    * 退出原因上面 noteExitFromOtherTab 已记下；回登录页后 SessionCheck 探测出冷静期，就地出恢复页
    */
   const followCooling = (): void => {
-    if (removedHandled || boot.switching) return;
+    // 不看 removedHandled：同步暂停时它已设，照样要接手（R-263-sugg ①）
+    if (exiting || boot.switching) return;
+    exiting = true;
     removedHandled = true;
     deps.clearLogs?.();
     void wipeOnRemoved(boot, { clearCacheStorage: deps.clearCacheStorage, onRemoved: () => deps.goToAuth() });
@@ -233,11 +247,19 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     })().catch(() => undefined);
   });
 
-  leader = (deps.leader ?? createTabLeader)({
-    name: `lemo-sync:${boot.userId ?? ''}`,
-    lead,
-    onMessage,
-    ...(deps.log ? { log: deps.log } : {}),
-  });
+  const name = `lemo-sync:${boot.userId ?? ''}`;
+  const make = deps.leader ?? createTabLeader;
+  leader = make({ name, lead, onMessage, ...(deps.log ? { log: deps.log } : {}) });
+  /**
+   * 限次触发、同步暂停：让出主页（放锁、关频道），再开一个只听不抢锁的（页面总当作“不可见”，永远不排队），
+   * 暂停期间别的标签页的冷静期 reset 照样收得到（R-263-sugg ①）。wireSync 的 close 关的是当前这个
+   * 旧的 close 要等引擎 drain 完才关频道（最长约 20 秒），这段时间同一条消息新旧两个频道各收一次：onMessage 必须保持可以重复执行
+   */
+  function yieldLeader(): void {
+    const old = leader;
+    void old?.close();
+    if (exiting || boot.switching) return;
+    leader = make({ name, lead: () => () => Promise.resolve(), onMessage, visibility: NEVER_VISIBLE });
+  }
   return f.facade;
 }

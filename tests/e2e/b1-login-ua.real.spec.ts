@@ -7,19 +7,52 @@
 // TC-B1-16 写的是“桌面 Chromium、桌面 WebKit”：真后端组默认只跑 chromium，E2E_REAL_WEBKIT=1 时多一个 webkit project（Desktop Safari）。
 import { type Page } from '@playwright/test';
 import { expect, test } from './csp-fixture.ts';
-import { createAccount, otpFromMailpit, sessionKeyFor } from './real-backend.ts';
+import { REAL_ENV, assertLocalBackendUrl, createAccount, otpFromMailpit, sessionKeyFor } from './real-backend.ts';
 import { DESKTOP_CHROME, IPHONE, MAC_SAFARI, emailBox, emulate, fakeTurnstile } from './ua-emulation.ts';
+
+/** 填码后等跳回 App 的时间：第一次冷启动（wrangler 刚起、Functions 第一次编译）偶尔超过 5 秒（接手清单 E2E-flaky-ua） */
+const AFTER_CODE_TIMEOUT = 15_000;
+// 建账号 + 等信（最多 15 秒）+ 等跳转、等主界面（各最多 15 秒）会超过默认的 30 秒整条用例上限，这个文件放到 60 秒
+test.describe.configure({ timeout: 60_000 });
+
+/**
+ * Mailpit 里给这个邮箱的信的到达时间（新到旧，和 otpFromMailpit 取第一封的顺序一样），只给失败报错用：
+ * 判断是不是取错了信（比如取到的是上一次发的码）。只读时间和 ID 前 8 位，不读正文、不碰验证码
+ */
+async function mailpitTimes(email: string): Promise<string> {
+  try {
+    const base = assertLocalBackendUrl(process.env[REAL_ENV.mailpit] ?? '', REAL_ENV.mailpit);
+    const r = await fetch(new URL(`/api/v1/search?query=${encodeURIComponent(`to:"${email}"`)}`, base));
+    const j = (await r.json()) as { messages?: { ID: string; Created?: string }[] };
+    const list = j.messages ?? [];
+    if (!list.length) return '（一封也没有）';
+    return list.map((m, i) => `${i === 0 ? '[取的这封] ' : ''}${m.Created ?? '（没有时间）'}（ID ${m.ID.slice(0, 8)}）`).join('、');
+  } catch (e) {
+    return `（取不到：${e instanceof Error ? e.message : String(e)}）`;
+  }
+}
 
 /** 走一遍网页登录；返回本机会话里的 user_id（按 supabase-js 的键名读） */
 async function loginViaPage(page: Page, email: string): Promise<string | null> {
   await fakeTurnstile(page);
   await page.goto('/app/auth/');
   await emailBox(page).fill(email);
+  const sentAt = new Date().toISOString();
   await page.getByRole('button', { name: '发验证码' }).click();
   const code = await otpFromMailpit(email);
+  const gotAt = new Date().toISOString();
   await page.getByRole('textbox', { name: '邮箱里的 6 位验证码' }).fill(code);
-  await expect(page).toHaveURL(/\/app\/(#\/.*)?$/);
-  await expect(page.locator('main[data-feature]').first()).toBeVisible();
+  try {
+    await expect(page).toHaveURL(/\/app\/(#\/.*)?$/, { timeout: AFTER_CODE_TIMEOUT });
+    await expect(page.locator('main[data-feature]').first()).toBeVisible({ timeout: AFTER_CODE_TIMEOUT });
+  } catch (e) {
+    const mails = await mailpitTimes(email);
+    const why = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `填码后 ${AFTER_CODE_TIMEOUT / 1000} 秒内没回到 App（现在在 ${page.url()}）。` +
+        `点“发验证码”：${sentAt}；取到验证码：${gotAt}；Mailpit 里给这个邮箱的信（新到旧）：${mails}\n${why}`,
+    );
+  }
   const key = sessionKeyFor(new URL('/sb', page.url()).href);
   return page.evaluate((k) => {
     const raw = localStorage.getItem(k);

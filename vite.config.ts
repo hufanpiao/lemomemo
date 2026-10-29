@@ -1,9 +1,9 @@
 // Vite：App 主体、登录页 /app/auth/（15.6 第 4b 条，K4）和预览沙箱三个页面入口（SW 单独打包，见 vite.sw.config.ts）（架构 8.1）
-// base '/app/'，输出到 dist/web/app/；没有内联脚本和样式，modulepreload polyfill 关掉
+// base '/app/'，输出到 dist/web/app/（LEMO_WEB_OUT 可改输出目录，见 build/assemble_web.mjs 的 webOutDir）；没有内联脚本和样式，modulepreload polyfill 关掉
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
-import { buildVersion } from './build/assemble_web.mjs';
+import { buildVersion, webOutDir } from './build/assemble_web.mjs';
 
 const root = import.meta.dirname;
 // LEMO_BUILD_VERSION（deploy-preview 给的 X.Y.Z-preview.N）优先，否则 VERSION 文件；和 app/version.json 同一个来源
@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => {
       __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     },
     build: {
-      outDir: resolve(root, 'dist/web/app'),
+      outDir: resolve(webOutDir(root), 'app'),
       emptyOutDir: true,
       manifest: true,
       sourcemap: false,

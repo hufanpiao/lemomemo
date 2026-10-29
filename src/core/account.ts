@@ -277,6 +277,8 @@ export async function wipeOnRemoved(boot: BootResult, deps: RemovedDeps): Promis
   const wipeMs = deps.wipeMs ?? REMOVED_WIPE_MS;
   try {
     const cache = boot.cache;
+    // 超时后 clearAll 不取消、仍在后台跑，下面关库后它会以“库已关”之类的错误结束（SESS-1030-sugg ②）：这是预期的——
+    // capped 已经返回、没人等它的结果，错误被 capped 里的 then 接住不外抛；本机库照样靠按库名删库清掉，结果不受影响
     const cleared = !cache || cache.isClosed() || (await capped(() => cache.clearAll(), wipeMs));
     clearAllCollections();
     if (!cleared) {

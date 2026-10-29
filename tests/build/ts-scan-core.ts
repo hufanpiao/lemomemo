@@ -7,6 +7,7 @@ export type Scanned = { text: string; skel: string };
 const REGEX_AFTER_WORD = new Set(['return', 'typeof', 'instanceof', 'case', 'of', 'in', 'else', 'await', 'yield', 'void', 'throw', 'new', 'delete', 'do']);
 /** 这些词后面的 ( … ) 是控制语句的条件：闭括号之后开始的是语句，/ 是正则开头（if (x) /re/.test(s)；FN-cov-gaps，10-30） */
 const CONTROL_PAREN = new Set(['if', 'while', 'for', 'with']);
+// for await (…)：( 处 prevWord 是 await、它前一个词是 for（前面不是 .）也当控制语句条件括号（TSSCAN 复审建议，10-30）
 
 /** text：注释换成空格；skel：再把字符串、模板字面部分、正则字面量的内容换成空格（引号留着），用来找括号、调用 */
 export function scan(code: string): Scanned {
@@ -16,6 +17,8 @@ export function scan(code: string): Scanned {
   let prev = '', prevWord = '';
   /** prevWord 前一个非空白字符是不是 .（含 ?.、中间隔空白换行注释）：obj.for(k)、Symbol.for(k) 是方法调用不是控制语句（TSSCAN-sugg） */
   let wordAfterDot = false;
+  /** prevWord 前面紧挨着的那个词（中间只有空白、注释）和它前面是不是 .：认 for await (…) 用 */
+  let wordBefore = '', wordBeforeAfterDot = false;
   /** 每层 ( 是不是控制语句的条件括号（一直配对到它的 )） */
   const parens: boolean[] = [];
   const regexOk = () => prev === '' || '(,=:[!&|?{};+-*%<>~^'.includes(prev) || REGEX_AFTER_WORD.has(prevWord);
@@ -66,10 +69,14 @@ export function scan(code: string): Scanned {
       if (/[\w$]/.test(c)) {
         let j = i;
         while (j < n && /[\w$]/.test(code[j] ?? '')) j++;
+        if (prev === 'a') { wordBefore = prevWord; wordBeforeAfterDot = wordAfterDot; } else wordBefore = '';
         wordAfterDot = prev === '.'; prevWord = code.slice(i, j); prev = 'a'; i = j; continue;
       }
       if ((c === '+' || c === '-') && d === c) { prev = ')'; prevWord = ''; i += 2; continue; }
-      if (c === '(') parens.push(prev === 'a' && !wordAfterDot && CONTROL_PAREN.has(prevWord));
+      if (c === '(') {
+        const forAwait = prevWord === 'await' && wordBefore === 'for' && !wordBeforeAfterDot;
+        parens.push(prev === 'a' && !wordAfterDot && (CONTROL_PAREN.has(prevWord) || forAwait));
+      }
       // 控制语句条件的 ) 之后当语句开头（prev 设成 ;），别的 ) 之后照旧是除号
       if (c === ')' && parens.pop() === true) { prev = ';'; prevWord = ''; i++; continue; }
       if (inExpr && c === '{') depth++;

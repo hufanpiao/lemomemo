@@ -33,6 +33,7 @@ function deps(boot: Partial<BootResult> | null) {
       order.push(`logs:${userId ?? '*'}`);
     }),
     // account_disabled 先探测（consent-exit-probe.test.ts 测各种结果）；这里固定答“已停用”
+    broadcastReset: vi.fn(),
     resolveDisabled: vi.fn(async () => 'disabled' as const),
   };
   return { d, order };

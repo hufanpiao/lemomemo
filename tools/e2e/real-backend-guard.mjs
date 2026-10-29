@@ -18,6 +18,97 @@ export const FORBIDDEN_PORT_RANGES = [
   [54320, 54329],
   [58320, 58329],
 ];
+/**
+ * 假出站服务（INVITE-mailpit，10-30）：tools/e2e/fake-outbound-fn.mjs 复制成 lemo-e2e 里叫这个名字的边缘函数，
+ * 由同一个 edge runtime 的主服务在函数容器里的 127.0.0.1:8081 派发（supabase start 起的是 edge-runtime start --port=8081，
+ * 容器内部端口，不映射到宿主机，也不进上面的端口白名单——那张表管的是 config.toml 里绑到宿主机的端口，这里不放宽它）。
+ * invite-signup 的出站地址只认回环地址（supabase/functions/invite-signup/outbound.ts），所以假服务只能在函数容器自己里面。
+ */
+export const E2E_FAKE_FN = 'e2e-fake-outbound';
+export const E2E_FN_RUNTIME_PORT = 8081;
+export const E2E_FAKE_FN_ORIGIN = `http://127.0.0.1:${E2E_FN_RUNTIME_PORT}`;
+/** invite-signup 的两个出站地址变量在 e2e 里的值（一字不差；functionsEnvProblems 核对） */
+export const E2E_FAKE_OUTBOUND = {
+  TURNSTILE_SITEVERIFY_URL: `${E2E_FAKE_FN_ORIGIN}/${E2E_FAKE_FN}/siteverify`,
+  RESEND_EMAILS_URL: `${E2E_FAKE_FN_ORIGIN}/${E2E_FAKE_FN}/emails`,
+};
+/** 假 Resend 转发的目标：lemo-e2e 的 Mailpit 在容器网络里的主机名（端口 8025 是容器内部的，宿主机上是 55324） */
+export const E2E_MAILPIT_INTERNAL_HOST = 'supabase_inbucket_lemo-e2e';
+/** 函数出站代理：一律指容器里没人听的 127.0.0.1:9 */
+export const E2E_FN_PROXY = 'http://127.0.0.1:9';
+/**
+ * 函数出站 NO_PROXY 白名单（逐个主机名，不许通配）：npm 源、kong、库、Mailpit（假 Resend 要连）、本机回环（假出站服务在 127.0.0.1:8081）。
+ * 不放 host.docker.internal（E2E-guard-sugg2 ③，10-30）：函数要连的都不经它（假出站服务在 127.0.0.1、Mailpit 用容器主机名、
+ * supabase-js 走 kong），放着它，任何指 host.docker.internal:543xx 的请求都能绕开代理直连 lemomemo。说明见 real-backend.mjs 的 E2E_FUNCTIONS_ENV
+ */
+export const E2E_NO_PROXY_HOSTS = [
+  'registry.npmjs.org',
+  'kong',
+  'supabase_kong_lemo-e2e',
+  'supabase_db_lemo-e2e',
+  E2E_MAILPIT_INTERNAL_HOST,
+  'localhost',
+  '127.0.0.1',
+];
+
+/**
+ * 函数环境的键白名单和每个键允许的值（E2E-guard-sugg2 ①，10-30）：键名区分大小写，一字不差；
+ * fixed = 值必须正好是这个（假密钥照 real-backend.mjs 的 E2E_FUNCTIONS_ENV 抄一份写死，两边各写各的，改了一边护栏就拦）；
+ * hosts = 逗号分隔、每一项都得在这张表里（NO_PROXY）。
+ * @type {Record<string, { fixed?: string, hosts?: readonly string[], why: string }>}
+ */
+export const E2E_FN_ENV_RULES = {
+  PROXY_SECRET: { fixed: 'fake-proxy-secret-for-e2e-only', why: '假值，和 tests/e2e/fake-values.ts 的 FAKE_PROXY_SECRET 一致' },
+  RESEND_API_KEY: { fixed: 'fake-resend-key-for-e2e-only', why: '假值' },
+  TURNSTILE_SECRET: { fixed: 'fake-turnstile-secret-for-e2e-only', why: '假值' },
+  TURNSTILE_SITEVERIFY_URL: { fixed: E2E_FAKE_OUTBOUND.TURNSTILE_SITEVERIFY_URL, why: `假出站服务，函数容器里的 127.0.0.1:${E2E_FN_RUNTIME_PORT}` },
+  RESEND_EMAILS_URL: { fixed: E2E_FAKE_OUTBOUND.RESEND_EMAILS_URL, why: `假出站服务，函数容器里的 127.0.0.1:${E2E_FN_RUNTIME_PORT}` },
+  SIGNUP_HASH_SECRET: { fixed: 'fake-signup-hash-secret-for-e2e-only', why: '假值' },
+  CRON_SECRET: { fixed: 'fake-cron-secret-for-e2e-only', why: '假值' },
+  OPS_SECRET: { fixed: 'fake-ops-secret-for-e2e-only', why: '假值' },
+  HTTPS_PROXY: { fixed: E2E_FN_PROXY, why: '出站一律连不上' },
+  https_proxy: { fixed: E2E_FN_PROXY, why: '出站一律连不上' },
+  HTTP_PROXY: { fixed: E2E_FN_PROXY, why: '出站一律连不上' },
+  http_proxy: { fixed: E2E_FN_PROXY, why: '出站一律连不上' },
+  NO_PROXY: { hosts: E2E_NO_PROXY_HOSTS, why: 'E2E_NO_PROXY_HOSTS' },
+  no_proxy: { hosts: E2E_NO_PROXY_HOSTS, why: 'E2E_NO_PROXY_HOSTS' },
+};
+/** 大写、小写两种写法必须同时设、值一样（有的运行时只认其中一种） */
+const PROXY_PAIRS = [['HTTPS_PROXY', 'https_proxy'], ['HTTP_PROXY', 'http_proxy'], ['NO_PROXY', 'no_proxy']];
+
+/**
+ * 函数环境护栏（INVITE-mailpit，10-30；E2E-guard-sugg2 ① 收紧）：返回问题列表，空数组才放行（functionsEnvText 过不了就抛错，up 写不出 .env）。
+ *   • 键只许 E2E_FN_ENV_RULES 里的（区分大小写），多一个就拒——R2_ENDPOINT、ALL_PROXY、Https_Proxy 之类一律拒；也不许少一个（少了代理就直连外网）；
+ *   • 值按表核对：固定值一字不差（出站地址只许假出站服务 127.0.0.1:8081、代理只许 127.0.0.1:9、密钥只许那几个假值）；
+ *     NO_PROXY 每一项都得在 E2E_NO_PROXY_HOSTS 里（不许 *、空项、别的主机）；
+ *   • 代理变量大小写两种写法的值必须一样。
+ * @param {Record<string, string>} vars
+ */
+export function functionsEnvProblems(vars) {
+  const problems = [];
+  for (const [k, v] of Object.entries(vars)) {
+    const rule = Object.hasOwn(E2E_FN_ENV_RULES, k) ? E2E_FN_ENV_RULES[k] : undefined;
+    if (rule === undefined) {
+      const why = /^all_proxy$/i.test(k) ? '（ALL_PROXY 不许设，大小写都不行）' : '';
+      problems.push(`${k.slice(0, 60)}：函数环境的键只许 E2E_FN_ENV_RULES 里的${why}`);
+    } else if (rule.fixed !== undefined) {
+      if (v !== rule.fixed) problems.push(`${k} 必须正好是 ${rule.fixed}（${rule.why}）`);
+    } else {
+      const bad = v.split(',').filter((h) => !(rule.hosts ?? []).includes(h));
+      if (bad.length > 0) problems.push(`${k} 里有白名单外的主机：${bad.join('、').slice(0, 80)}`);
+    }
+  }
+  for (const k of Object.keys(E2E_FN_ENV_RULES)) {
+    if (!Object.hasOwn(vars, k)) problems.push(`${k}：缺了（函数环境的键一个不能少）`);
+  }
+  for (const [up, low] of PROXY_PAIRS) {
+    if (Object.hasOwn(vars, up) && Object.hasOwn(vars, low) && vars[up] !== vars[low]) {
+      problems.push(`${low} 和 ${up} 不一致（大小写两种写法的值必须一样）`);
+    }
+  }
+  return problems;
+}
+
 /** 要复制进 .e2e-sb/supabase/ 的东西（.env*、.temp、tests、snippets 不复制） */
 export const COPY_ITEMS = ['migrations', 'functions', 'seed.sql', 'templates', 'config.toml'];
 /** up 清空 .e2e-sb/supabase/ 时留着的（CLI 自己的状态） */
@@ -229,6 +320,7 @@ export function rewriteConfig(text) {
   const seen = new Set();
   let sawRedirect = false;
   let sawEmailSent = false;
+  let sawFakeFnJwt = false;
   const out = lines.map((l) => {
     if (l.kind !== 'key') return l.raw;
     const put = (v) => `${l.indent}${l.key}${l.eq}${v}${l.tail}`;
@@ -260,6 +352,10 @@ export function rewriteConfig(text) {
       sawEmailSent = true;
       return put(`${E2E_EMAIL_SENT}`);
     }
+    if (l.section === `functions.${E2E_FAKE_FN}` && l.key === 'verify_jwt') {
+      sawFakeFnJwt = true;
+      return put('false');
+    }
     return l.raw;
   });
   // 缺的项补上：小节在就插到小节标题下一行，小节不在就追加到文件末尾
@@ -270,6 +366,8 @@ export function rewriteConfig(text) {
   }
   if (!sawRedirect) missing.push({ section: 'auth', line: `additional_redirect_urls = ["${E2E_REDIRECT}"]` });
   if (!sawEmailSent) missing.push({ section: 'auth.rate_limit', line: `email_sent = ${E2E_EMAIL_SENT}` });
+  // 假出站服务（E2E_FAKE_FN）不验 JWT：invite-signup 发给它的请求头不是 JWT（Bearer 假 Resend 密钥 / 没有）；只有这一个函数
+  if (!sawFakeFnJwt) missing.push({ section: `functions.${E2E_FAKE_FN}`, line: 'verify_jwt = false' });
   for (const m of missing) {
     const at = out.findIndex((raw) => {
       const s = SECTION_RE.exec(raw.replace(/\r$/, ''));
@@ -280,6 +378,6 @@ export function rewriteConfig(text) {
   }
   const header =
     '# 由 tools/e2e/real-backend.mjs 从 supabase/config.toml 生成，只给 e2e 用，不要手改（每次 up 重新生成）。\n' +
-    '# 偏差：project_id = lemo-e2e、端口 553xx、inspector 8084、多一个 8789 回跳地址、email_sent 调高；仓库的 config.toml 不改。\n';
+    '# 偏差：project_id = lemo-e2e、端口 553xx、inspector 8084、多一个 8789 回跳地址、email_sent 调高、假出站服务 e2e-fake-outbound 不验 JWT；仓库的 config.toml 不改。\n';
   return header + out.join('\n');
 }

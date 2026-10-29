@@ -43,6 +43,23 @@ describe('FN-cov-gaps 余项（10-30）：控制语句条件 ) 之后的正则�
     }
   });
 
+  it('正例：for await (…) 的条件 ) 之后的 / 是正则（在 ( 处 prevWord 是 await、它前一个词是 for；TSSCAN 复审建议，10-30）', () => {
+    for (const head of ['for await (const x of xs)', 'for  await\n  (const x of xs)', 'for /* c */ await (const x of xs)']) {
+      expect(references(`${head} /'/.test(s); requireActiveUser(req);`, 'requireActiveUser'), head).toBe(true);
+      expect(references(`${head} /'/.test(s); // requireActiveUser(req)`, 'requireActiveUser'), head).toBe(false);
+    }
+    expect(assertsLiteral(inIt(`for await (const x of xs) /a'b/.test(s);\n${E}`), AD)).toBe(true);
+    // 已知认不出（不修，TSSCAN 复审建议）：尾点数字 “1.” 换行接 if（const n = 1.↵if (x) /re/.test(s)）——扫描器把 if 当成
+    // “.” 后面的属性名（同 obj.if(k)），条件 ) 之后的 / 当除号，正则内容不抹、后面的引号可能被当成字符串开头；
+    // 两个方向都可能认错（漏认，或把正则里的文字当成调用），仓库里现在没有这种写法，先记在这里
+  });
+
+  it('反例：await 前面不是 for（return await (x) / 2、obj.for await 不成立的写法、x.await (k)）照旧是除号', () => {
+    for (const head of ['return await (x)', 'const v = await (x)', 'const v = x.await(k)', 'const v = forx await (k)', 'const v = o.for await (k)']) {
+      expect(references(`${head} / 2; requireActiveUser(req); const m = q / 3;`, 'requireActiveUser'), head).toBe(true);
+    }
+  });
+
   it('正例：经变量间接调 skip（别名赋值、this.skip、解构改名、参数解构改名、skip.call / apply）都算跳过', () => {
     expect(why(`it('X', async (ctx) => { const s = ctx.skip; s(); ${E} });`)).toBe('运行时跳过：经变量 s 调了 skip');
     expect(why(`it('X', async (ctx) => { let s; s = ctx.skip; if (!db) s('没有库'); ${E} });`)).toBe('运行时跳过：经变量 s 调了 skip');

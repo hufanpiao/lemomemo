@@ -41,8 +41,12 @@ export const KV_ID = 'fedcba9876543210fedcba9876543210';
 export const OPS_SECRETS = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'OPS_SECRET', 'RESEND_API_KEY_OPS', 'ALERT_TO', 'ALERT_FROM'];
 export const secretListJson = (names: string[]) => JSON.stringify(names.map((name) => ({ name, type: 'secret_text' })));
 
-/** 演练台的状态（setup 填好；每个测试文件各有一份） */
-export const ctx = { dir: '', repo: '', backupRoot: '', fakeExe: '', fakeTgz: '', fakeJs: '', ver: '' };
+/** 演练台的状态（setup 填好；每个测试文件各有一份）。sysConfig：私有的 system 一级 git 配置（GIT_CONFIG_SYSTEM 默认指向它） */
+export const ctx = { dir: '', repo: '', backupRoot: '', fakeExe: '', fakeTgz: '', fakeJs: '', ver: '', sysConfig: '' };
+/** Git for Windows 自带的四项 git-lfs 设置（R-264 放行的就是这四项，值和本机 C:/Program Files/Git/etc/gitconfig 的原值一致） */
+export const LFS_SYSTEM_CONFIG = '[filter "lfs"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n\tprocess = git-lfs filter-process\n\trequired = true\n';
+/** publish.ps1 的 Set-WranglerEnv 给 wrangler 子进程设的（OPS-deploy-sugg ④） */
+export const WRANGLER_QUIET = 'WRANGLER_SEND_METRICS=false;DO_NOT_TRACK=1;WRANGLER_SEND_ERROR_REPORTS=false;WRANGLER_HIDE_BANNER=true;WRANGLER_NO_SKILLS_UPDATE_PROMPTS=true';
 
 const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
 const sha256 = (b: Buffer | string) => createHash('sha256').update(b).digest('hex');
@@ -100,7 +104,10 @@ public static class FakeTool {
     foreach (string k in keys) { if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable(k))) { env += (env == "" ? "" : ",") + k; } }
     string args = string.Join(" ", a);
     string extra = "CLOUDFLARE_API_BASE_URL=" + Environment.GetEnvironmentVariable("CLOUDFLARE_API_BASE_URL") + ";WRANGLER_WRITE_LOGS=" + Environment.GetEnvironmentVariable("WRANGLER_WRITE_LOGS") + ";SUPABASE_API_URL=" + Environment.GetEnvironmentVariable("SUPABASE_API_URL");
-    File.AppendAllText(Environment.GetEnvironmentVariable("LEMO_FAKE_LOG"), name + "\\t" + args + "\\t" + env + "\\t" + extra + "\\n");
+    string[] quietKeys = { "WRANGLER_SEND_METRICS", "DO_NOT_TRACK", "WRANGLER_SEND_ERROR_REPORTS", "WRANGLER_HIDE_BANNER", "WRANGLER_NO_SKILLS_UPDATE_PROMPTS" };
+    string quiet = "";
+    foreach (string k in quietKeys) { quiet += (quiet == "" ? "" : ";") + k + "=" + Environment.GetEnvironmentVariable(k); }
+    File.AppendAllText(Environment.GetEnvironmentVariable("LEMO_FAKE_LOG"), name + "\\t" + args + "\\t" + env + "\\t" + extra + "\\t" + quiet + "\\n");
     string at = Environment.GetEnvironmentVariable("LEMO_FAKE_TAMPER_AT");
     string what = Environment.GetEnvironmentVariable("LEMO_FAKE_TAMPER");
     if (!string.IsNullOrEmpty(at) && !string.IsNullOrEmpty(what) && args.Contains(at)) {
@@ -125,6 +132,8 @@ export function setup() {
   ctx.repo = join(dir, 'repo');
   ctx.backupRoot = join(dir, 'backup');
   ctx.fakeExe = join(dir, 'fake.exe');
+  ctx.sysConfig = join(dir, 'system.gitconfig');
+  writeFileSync(ctx.sysConfig, LFS_SYSTEM_CONFIG, 'utf8');
   psRun(writePs('build-fake.ps1', `Add-Type -OutputType ConsoleApplication -OutputAssembly ${q(ctx.fakeExe)} -TypeDefinition @'\n${FAKE_TOOL_CS}\n'@`));
   ctx.fakeJs = join(dir, 'fake-wrangler.js');
   writeFileSync(ctx.fakeJs, '// 假的 wrangler 入口：演练台的 node 函数把它转给同目录的 wrangler.exe\n', 'utf8');
@@ -178,7 +187,8 @@ export function teardown() {
   if (ctx.dir) rmSync(ctx.dir, { recursive: true, force: true });
 }
 
-export type Run = { code: number; out: string; log: string[]; calls: string[]; prompts: string[]; left: number; envLeft: string; temp: string; penv: string[] };
+/** secDisposed：最后一次 Read-Host -AsSecureString 返回的 SecureString 跑完后是否已 Dispose（yes / no；没读过令牌时为空） */
+export type Run = { code: number; out: string; log: string[]; calls: string[]; prompts: string[]; left: number; envLeft: string; temp: string; penv: string[]; secDisposed: string };
 export type RunOpts = {
   /** 假工具参数里含这一段就返回 1 */
   fail?: string;
@@ -193,6 +203,8 @@ export type RunOpts = {
   secrets?: string[];
   /** 假 npm ci 在 wrangler 依赖树里多放一个文件 */
   treeExtra?: boolean;
+  /** git var 这个变量时当作不认识（模拟 2.42 以前的 git：退出码 129） */
+  gitVarFail?: string;
 };
 
 export async function runScript(extra: string, inputs: string[], o: RunOpts = {}): Promise<Run> {
@@ -203,7 +215,9 @@ export async function runScript(extra: string, inputs: string[], o: RunOpts = {}
   // 本次运行私有的 TEMP（不依赖系统临时目录，几份全量同时跑也互不影响）
   const temp = join(dir, `temp-${id}`);
   mkdirSync(temp);
-  const env = { TEMP: temp, TMP: temp, ...(o.env ?? {}) };
+  // R-264：system 一级 git 配置默认用私有的那份（只有 Git for Windows 自带的四项 git-lfs），用例传空字符串就是用本机真的。
+  // 系统属性文件（R-265）默认用真的 git var：脚本设了 GIT_ATTR_NOSYSTEM=1，应答不出路径；用例设 LEMO_FAKE_ATTR_SYSTEM 模拟没生效
+  const env = { TEMP: temp, TMP: temp, GIT_CONFIG_SYSTEM: ctx.sysConfig, ...(o.env ?? {}) };
   const harness = writePs(
     `run-${id}.ps1`,
     `$ErrorActionPreference = 'Stop'
@@ -214,9 +228,21 @@ $env:LEMO_FAKE_TAMPER_AT = ${q(o.tamperAt ?? '')}
 $env:LEMO_FAKE_TAMPER = ${q(o.tamper ?? '')}
 $env:LEMO_FAKE_SECRETS = ${q(secretListJson(o.secrets ?? OPS_SECRETS))}
 $env:LEMO_FAKE_TREE_EXTRA = ${q(o.treeExtra ? '1' : '')}
+$env:LEMO_FAKE_GITVAR_FAIL = ${q(o.gitVarFail ?? '')}
 ${Object.entries(env).map(([k, v]) => `[Environment]::SetEnvironmentVariable(${q(k)}, ${q(v)}, 'Process')`).join('\n')}
 $T = [string][char]9
 function global:L([string]$s) { [IO.File]::AppendAllText($env:LEMO_FAKE_LOG, $s + [char]10) }
+# git 是真的，只有 git var 两种情形替换：LEMO_FAKE_GITVAR_FAIL 点名的变量当作不认识（退出码 129，像 2.42 以前的 git）；
+# LEMO_FAKE_ATTR_SYSTEM 不为空时 GIT_ATTR_SYSTEM 答这个路径、退出码 0（模拟 GIT_ATTR_NOSYSTEM 没生效）
+$global:RealGit = (Get-Command git -CommandType Application | Select-Object -First 1).Source
+function global:git {
+  $a = @($args)
+  $i = [Array]::IndexOf([object[]]$a, 'var')
+  $v = if ($i -ge 0 -and $i + 1 -lt $a.Count) { [string]$a[$i + 1] } else { '' }
+  if ($v -and $v -ceq $env:LEMO_FAKE_GITVAR_FAIL) { L ('gitvar-fail' + [char]9 + $v); $global:LASTEXITCODE = 129; return }
+  if ($v -ceq 'GIT_ATTR_SYSTEM' -and $env:LEMO_FAKE_ATTR_SYSTEM) { $env:LEMO_FAKE_ATTR_SYSTEM; $global:LASTEXITCODE = 0; return }
+  & $global:RealGit @a
+  $global:LASTEXITCODE = $LASTEXITCODE }
 # 本进程（脚本自己）此刻环境变量里有哪些令牌（只记名字）：读令牌、发请求时都应该是空的
 function global:PEnv([string]$where) { L ('penv' + $T + $where + $T + ((@(${TOKEN_ENV.map(q).join(', ')}) | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }) -join ',')) }
 function global:Get-ItemProperty { $null }
@@ -268,12 +294,16 @@ function global:Read-Host { param([switch]$AsSecureString, [Parameter(Position =
   PEnv ('prompt ' + $Prompt)
   if ($global:inputs.Count -eq 0) { throw ('test: Read-Host 多问了一次：' + $Prompt) }
   $v = $global:inputs.Dequeue()
-  if ($AsSecureString) { return (ConvertTo-SecureString $v -AsPlainText -Force) }
+  if ($AsSecureString) { $global:lastSec = ConvertTo-SecureString $v -AsPlainText -Force; return $global:lastSec }
   return $v }
+$global:lastSec = $null
 & ${q(SCRIPT)} -Tag ${q('v' + ver)} -RepoPath ${q(repo)} -BackupRoot ${q(backupRoot)} ${extra}
 $code = $LASTEXITCODE
 L ('left' + $T + $global:inputs.Count)
-$still = @('SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_BASE_URL', 'WRANGLER_WRITE_LOGS', 'WRANGLER_LOG_PATH', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1') | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }
+# Dispose 过的 SecureString 调 IsReadOnly() 会抛 ObjectDisposedException（Windows PowerShell 5.1 里读 Length 不抛，不能用）
+$disposed = if ($null -eq $global:lastSec) { '' } else { try { $null = $global:lastSec.IsReadOnly(); 'no' } catch { 'yes' } }
+L ('secdisposed' + $T + $disposed)
+$still = @('SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_BASE_URL', 'WRANGLER_WRITE_LOGS', 'WRANGLER_LOG_PATH', 'WRANGLER_SEND_METRICS', 'DO_NOT_TRACK', 'WRANGLER_SEND_ERROR_REPORTS', 'WRANGLER_HIDE_BANNER', 'WRANGLER_NO_SKILLS_UPDATE_PROMPTS', 'GIT_ATTR_NOSYSTEM', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1') | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }
 L ('envleft' + $T + ($still -join ','))
 exit $code`,
   );
@@ -290,14 +320,22 @@ exit $code`,
   const penv = lines.filter((l) => l.startsWith('penv\t'));
   const leftLine = lines.find((l) => l.startsWith('left\t'));
   const envLine = lines.find((l) => l.startsWith('envleft\t'));
-  return { code, out, log: lines, calls, prompts, penv, temp, left: leftLine ? Number(leftLine.split('\t')[1]) : -1, envLeft: envLine ? (envLine.split('\t')[1] ?? '') : '?' };
+  const secLine = lines.find((l) => l.startsWith('secdisposed\t'));
+  return {
+    code, out, log: lines, calls, prompts, penv, temp, left: leftLine ? Number(leftLine.split('\t')[1]) : -1, envLeft: envLine ? (envLine.split('\t')[1] ?? '') : '?',
+    secDisposed: secLine ? (secLine.split('\t')[1] ?? '') : '?',
+  };
 }
 
-// 每次调用 wrangler 都带 --env-file <空文件>，并且进程里 CLOUDFLARE_API_BASE_URL 是官方地址、不写日志文件
+// 每次调用 wrangler 都带 --env-file <空文件>，并且进程里 CLOUDFLARE_API_BASE_URL 是官方地址、不写日志文件；
+// 不发统计和错误报告、不打印横幅（不去 npm 查新版本）、不查 skills 更新（OPS-deploy-sugg ④）
 export function wranglerSafe(r: Run) {
-  for (const c of r.calls.filter((x) => x.startsWith('wrangler\t'))) {
+  const ws = r.calls.filter((x) => x.startsWith('wrangler\t'));
+  expect(ws.length).toBeGreaterThan(0);
+  for (const c of ws) {
     expect(c.split('\t')[1], c).toMatch(/ --env-file \S+empty\.env$/u);
     expect(c.split('\t')[3], c).toBe('CLOUDFLARE_API_BASE_URL=https://api.cloudflare.com/client/v4;WRANGLER_WRITE_LOGS=false;SUPABASE_API_URL=https://api.supabase.com');
+    expect(c.split('\t')[4], c).toBe(WRANGLER_QUIET);
   }
   // Supabase CLI 调用时管理接口地址是官方的
   for (const c of r.calls.filter((x) => x.startsWith('supabase\t'))) {

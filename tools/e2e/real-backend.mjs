@@ -49,23 +49,35 @@ import {
   checkEnv,
   workdirProblems,
   rewriteConfig,
+  functionsEnvProblems,
+  E2E_FAKE_FN,
+  E2E_FAKE_OUTBOUND,
+  E2E_FN_PROXY,
+  E2E_NO_PROXY_HOSTS,
 } from './real-backend-guard.mjs';
 
 /**
  * lemo-e2e 的边缘函数环境（第 6 步，10-30）：prepare 写到 .e2e-sb/supabase/functions/.env，supabase start 起的 edge runtime 默认读它。
  * 一律是一看就假的值，不碰真密钥；PROXY_SECRET 必须和 tests/e2e/fake-values.ts 的 FAKE_PROXY_SECRET 一样（单测核对），
  * 函数才信 /sb 转发层写的 x-proxy-secret。
- * 发信：account、invite-signup 把 Resend 的地址写死成 https://api.resend.com，假密钥也会真发请求、把测试邮箱带到外网——
+ * 发信：account、account-purge 把 Resend 的地址写死成 https://api.resend.com，假密钥也会真发请求、把测试邮箱带到外网——
  * 所以 HTTPS_PROXY、HTTP_PROXY（大小写两种）都指容器里没人听的 127.0.0.1:9，出站一律连不上，sendMail 回 false（函数照常走“没发出去”的分支）。
- * NO_PROXY 只放行（10-30 审查建议 1，按函数实际要连的来）：npm 源（edge runtime 启动时按 deno.lock 拉依赖，挡了函数起不来，10-30 实测 503）；
+ * invite-signup（INVITE-mailpit，10-30）：TURNSTILE_SITEVERIFY_URL、RESEND_EMAILS_URL 指同一个 edge runtime 里的假出站服务
+ * （tools/e2e/fake-outbound-fn.mjs，函数容器里的 127.0.0.1:8081/e2e-fake-outbound/…）：siteverify 总回成功，发信转进 lemo-e2e 的 Mailpit，
+ * 验证码信真的收得到；TURNSTILE_SECRET 设成假值（invite-signup 没有它就 misconfigured；[auth.captcha] 照旧本地关，GoTrue 不读它）。
+ * NO_PROXY 只放行（10-30 审查建议 1，按函数实际要连的来；E2E_NO_PROXY_HOSTS）：npm 源（edge runtime 启动时按 deno.lock 拉依赖，挡了函数起不来，10-30 实测 503）；
  * kong（容器里的 SUPABASE_URL = http://kong:8000，supabase-js 走它）、supabase_kong_lemo-e2e、supabase_db_lemo-e2e（SUPABASE_DB_URL 的主机，
- * postgres 协议本来不走代理，写上防万一）、localhost、127.0.0.1、host.docker.internal。TURNSTILE_SECRET 不设（[auth.captcha] 本地关）。
+ * postgres 协议本来不走代理，写上防万一）、supabase_inbucket_lemo-e2e（假 Resend 转 Mailpit）、localhost、127.0.0.1（假出站服务）；
+ * 不放 host.docker.internal（没人用，放着就能直连宿主机的 543xx，E2E-guard-sugg2 ③）。
+ * 写文件前过 functionsEnvProblems（real-backend-guard.mjs）：键只许 E2E_FN_ENV_RULES 里这些、一个不多一个不少，每个值都按那张表写死核对；
+ * 这里加键、改值都要同步改那张表（E2E-guard-sugg2 ①）。
  */
-const E2E_FN_PROXY = 'http://127.0.0.1:9';
-const E2E_FN_NO_PROXY = 'registry.npmjs.org,kong,supabase_kong_lemo-e2e,supabase_db_lemo-e2e,localhost,127.0.0.1,host.docker.internal';
+const E2E_FN_NO_PROXY = E2E_NO_PROXY_HOSTS.join(',');
 export const E2E_FUNCTIONS_ENV = {
   PROXY_SECRET: 'fake-proxy-secret-for-e2e-only',
   RESEND_API_KEY: 'fake-resend-key-for-e2e-only',
+  TURNSTILE_SECRET: 'fake-turnstile-secret-for-e2e-only',
+  ...E2E_FAKE_OUTBOUND,
   SIGNUP_HASH_SECRET: 'fake-signup-hash-secret-for-e2e-only',
   CRON_SECRET: 'fake-cron-secret-for-e2e-only',
   OPS_SECRET: 'fake-ops-secret-for-e2e-only',
@@ -85,6 +97,8 @@ export function functionsEnvText(vars = E2E_FUNCTIONS_ENV) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k) || /^supabase_/i.test(k)) throw new Error(`函数环境变量名不认：${k}`);
     if (!/^[A-Za-z0-9_:/.,-]+$/.test(v)) throw new Error(`函数环境变量 ${k} 的值有怪字符`);
   }
+  const problems = functionsEnvProblems(vars);
+  if (problems.length > 0) throw new Error(`函数环境护栏不放行：${problems.join('；')}`);
   return '# 由 tools/e2e/real-backend.mjs 生成，只给 lemo-e2e 的边缘函数用，全是假值；每次 up 重新生成\n' +
     Object.entries(vars).map(([k, v]) => `${k}=${v}\n`).join('');
 }
@@ -203,6 +217,9 @@ function prepare() {
   writeFileSync(CONFIG, rewriteConfig(readFileSync(join(ROOT, 'supabase', 'config.toml'), 'utf8')));
   // 仓库的 functions/.env* 上面已滤掉不拷；这里写 e2e 自己的假值（E2E_FUNCTIONS_ENV）
   writeFileSync(join(SB_DIR, 'functions', '.env'), functionsEnvText());
+  // 假出站服务（INVITE-mailpit）：只放进 e2e 副本，随 supabase start 的 edge runtime 起、down 停；config 副本里已给它 verify_jwt = false
+  mkdirSync(join(SB_DIR, 'functions', E2E_FAKE_FN), { recursive: true });
+  cpSync(join(ROOT, 'tools', 'e2e', 'fake-outbound-fn.mjs'), join(SB_DIR, 'functions', E2E_FAKE_FN, 'index.ts'));
 }
 
 /**
