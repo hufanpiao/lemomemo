@@ -111,8 +111,10 @@ Deno.test({ name: '② account export 真 store：readPage 按主键往后翻页
   await sql`insert into public.todos (id, user_id, title, created_at, updated_at) values (gen_random_uuid(), ${other}, 'not-mine', 1, 1)`;
   await sql`insert into public.settings (id, user_id, key, value) select gen_random_uuid(), ${e}, 'k' || g, '1'::jsonb from generate_series(1, 2000) g`;
   await sql`insert into public.logs (user_id, t, kind, act, src) select ${e}, g, 'run', 'x', 'store-it' from generate_series(1, 2300) g`;
+  // 期望顺序按列本身的类型排（和 readPage 的 gt、order 一致）：输出列别名不能叫 id——
+  //   Postgres 的 order by 裸名字先认输出列，`select id::text … order by id` 会按文本排（logs 的 1、10、100 排在 2 前面）
   const ids = async (table: 'todos' | 'settings') =>
-    (await sql<{ id: string }[]>`select id::text from ${sql(table)} where user_id = ${e} order by id`).map((r) => r.id);
+    (await sql<{ k: string }[]>`select id::text as k from ${sql(table)} where user_id = ${e} order by id`).map((r) => r.k);
   const wantTodos = await ids('todos');
   const wantSettings = await ids('settings');
   const r = await callAccount(await jwtOf(e), { action: 'export' });
@@ -133,7 +135,11 @@ Deno.test({ name: '② account export 真 store：readPage 按主键往后翻页
   await sleep(200);   // 让后台那段跑完（发信成功就不写日志）
   assertEquals((await sql`select 1 from public.logs where user_id = ${e} and act = 'export_mail_failed'`).length, 0, '导出通知发信失败');
   // logs：bigserial 主键，PostgREST 回数字；2300 条加导出前先写的那一条（act = export）
-  const wantLogs = (await sql<{ id: string }[]>`select id::text from public.logs where user_id = ${e} order by id`).map((x) => Number(x.id));
+  const wantLogs = (await sql<{ k: string }[]>`select id::text as k from public.logs where user_id = ${e} order by id`).map((x) => Number(x.k));
+  // 防退化：期望和导出都必须按数字严格递增（游标 gt 按 bigint 比，排序也得按 bigint；按文本排会在 9→10 这类位数变化处漏行或重复）
+  const ascending = (a: unknown[]) => a.every((x, i) => i === 0 || (a[i - 1] as number) < (x as number));
+  assert(ascending(wantLogs), 'logs 期望顺序不是按数字升序（别名又叫 id 了？）');
+  assert(ascending(got('logs')), 'logs 导出顺序不是按数字升序');
   assertEquals(got('logs').length, wantLogs.length);
   assertEquals(got('logs'), wantLogs, 'logs（数字主键）顺序或内容不对');
   assert(got('logs').every((x) => typeof x === 'number'), 'logs 的 id 不是数字');
