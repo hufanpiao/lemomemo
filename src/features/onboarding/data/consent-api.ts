@@ -7,6 +7,8 @@
 //   consent_policy_ver 有值且低于 min_consent_ver → updated（“隐私说明更新了”那一屏，另做）；其余（含 notice 认不出）→ none。
 // • 慢网（审查建议）：超过 slowMs 先回调 onSlow（界面保持忙碌、提示“还在保存”），超过 hardMs 才放弃、回 unsure（“不确定记下没有”）。
 //   record_consent 同一个人重复调结果一样，再点一次无害。
+// • 超过 hardMs 放弃时真正中断（接手清单 CONSENT-wire ⑧）：rpc 带 .abortSignal()，放弃的那一刻 abort；还在读 notice 时就放弃了的，读完也不再调 rpc。
+//   免得晚到的“同意”落在用户随后点的“不同意”之后（服务器按到达先后记，后到的说了算）。已经到了服务器的请求 abort 拦不住，这一点只能缩小窗口
 // • 打开 ai.enabled（15.5：同意后 ai.enabled = true）不在这里写：settings 走同步层，由接线方在 onDone(true) 里写（见交付说明）。
 // 错误只认码：session_revoked、unauthorized、401 → revoked；account_disabled → disabled；fetch 失败 → offline。
 import { withTimeout } from '../../../platform/sign-out.ts';
@@ -84,7 +86,7 @@ type Res<T = unknown> = PromiseLike<{ data: T | null; error: unknown }>;
 interface ConsentDb {
   from(table: 'app_config'): { select(cols: 'notice'): { eq(col: 'id', v: 1): { maybeSingle(): Res<{ notice: unknown }> } } };
   from(table: 'profiles'): { select(cols: 'consent_policy_ver'): { maybeSingle(): Res<{ consent_policy_ver: string | null }> } };
-  rpc(fn: 'record_consent', args: { policy_ver: string; revoke: boolean }): Res;
+  rpc(fn: 'record_consent', args: { policy_ver: string; revoke: boolean }): { abortSignal(signal: AbortSignal): Res };
 }
 const narrow = (db: Db): ConsentDb => db as unknown as ConsentDb;
 
@@ -112,6 +114,7 @@ export function createConsentApi(getDb: () => Promise<Db>, slowMs: number = CONS
   return {
     async record(agree, onSlow) {
       const slow = setTimeout(() => onSlow?.(), slowMs);
+      const ctl = new AbortController();
       try {
         return await withTimeout(async (): Promise<Result> => {
           try {
@@ -120,7 +123,8 @@ export function createConsentApi(getDb: () => Promise<Db>, slowMs: number = CONS
             if ('ok' in n) return n;
             const ver = noticeVer(n.notice, 'policy_ver');
             if (!ver) return ERR('no_policy');   // R-239：不调 RPC
-            const { error } = await db.rpc('record_consent', { policy_ver: ver, revoke: !agree });
+            if (ctl.signal.aborted) return ERR('unsure');   // 已经放弃了：不再发
+            const { error } = await db.rpc('record_consent', { policy_ver: ver, revoke: !agree }).abortSignal(ctl.signal);
             return error ? fail(error) : { ok: true, value: undefined };
           } catch (e) {
             return fail(e);
@@ -128,6 +132,8 @@ export function createConsentApi(getDb: () => Promise<Db>, slowMs: number = CONS
         }, hardMs, () => ERR('unsure'));
       } finally {
         clearTimeout(slow);
+        // 正常返回时请求已结束，abort 不起作用；超时放弃时中断还在路上的请求
+        ctl.abort();
       }
     },
 

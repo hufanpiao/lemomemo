@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const getSupabase = vi.hoisted(() => vi.fn(() => Promise.reject(new Error('no env'))));
-vi.mock('../supabase/client.ts', () => ({ getSupabase }));
+vi.mock('../supabase/client.ts', () => ({ getSupabase, onClientReady: () => () => undefined }));
 
 import {
   clearCacheStorage, clearLocalSession, onAuthUser, onSessionStorageChange, PRECACHE_PREFIX, readSessionEmail, readSessionUserId, sessionStorageKey, userIdOfSession,

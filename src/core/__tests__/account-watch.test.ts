@@ -1,5 +1,6 @@
 // 换账号的事件时机（架构 4.1、0.38 第 17 条；K6 审查 M1、M2、M3、L3）：SIGNED_IN、TOKEN_REFRESHED、别的标签页的 storage 事件、
-// 挂上监听后再比一次（补上 coldStart 期间漏掉的事件）；同步设闸；清完关库；清库失败即关；本机库打不开时也重来；被移除
+// 挂上监听后再比一次（补上 coldStart 期间漏掉的事件）；同步设闸；清完关库；清库失败即关；本机库打不开时也重来；被移除；
+// 本页的 SIGNED_OUT（K6-signedout，TC-B1-61 ②、TC-B1-83）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cacheOwner, claimCache, watchAccount, wipeOnRemoved, type WatchAccountDeps } from '../account.ts';
 import { coldStart, getBoot, resetBootForTest, type BootResult } from '../boot.ts';
@@ -19,6 +20,8 @@ interface Setup {
   deps: WatchAccountDeps;
   auth: Fire<string>;
   storage: Fire<string | null>;
+  /** 本页的 SIGNED_OUT（onAuthUser 的第二个回调；platform 已滤掉自己退出的） */
+  signedOut: () => void;
   /** coldStart 期间会话被改成了什么（挂上监听后再比一次时读到的值） */
   session: { id: string | null };
   fake: FakeIDBFactory;
@@ -42,11 +45,14 @@ async function setup(opts: { sessionAfterBoot?: string | null; openFails?: boole
     await boot.outbox?.refresh();
   }
   const session = { id: opts.sessionAfterBoot === undefined ? 'A' : opts.sessionAfterBoot };
-  const handlers: { auth: Fire<string>; storage: Fire<string | null> } = { auth: () => undefined, storage: () => undefined };
+  const handlers: { auth: Fire<string>; storage: Fire<string | null>; signedOut: () => void } = {
+    auth: () => undefined, storage: () => undefined, signedOut: () => undefined,
+  };
   const deps: WatchAccountDeps = {
     clearCacheStorage: vi.fn(() => Promise.resolve()),
-    onAuthUser: (fn) => {
+    onAuthUser: (fn, onSignedOut) => {
       handlers.auth = fn;
+      if (onSignedOut) handlers.signedOut = onSignedOut;
       return () => undefined;
     },
     onStorageUser: (fn) => {
@@ -55,12 +61,16 @@ async function setup(opts: { sessionAfterBoot?: string | null; openFails?: boole
     },
     currentUserId: () => session.id,
     onSignedOut: vi.fn(),
+    clearLogs: vi.fn(),
     onSwitched: vi.fn(),
     onFailed: vi.fn(),
     deleteDb: () => deleteCacheDb({ factory, waitMs: 50 }),
   };
   watchAccount(boot, deps);
-  return { boot, factory, deps, session, fake, reload, auth: (v) => handlers.auth(v), storage: (v) => handlers.storage(v) };
+  return {
+    boot, factory, deps, session, fake, reload,
+    auth: (v) => handlers.auth(v), storage: (v) => handlers.storage(v), signedOut: () => handlers.signedOut(),
+  };
 }
 
 beforeEach(() => {
@@ -218,5 +228,103 @@ describe('被移除（session_revoked、account_disabled）', () => {
     expect(onRemoved).toHaveBeenCalledTimes(1);
     expect(clearCaches).toHaveBeenCalledTimes(1);
     expect(cache?.isClosed()).toBe(true);
+  });
+});
+
+describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signedout）', () => {
+  it('和 SIGNED_IN 同一个监听：watchAccount 只调一次 onAuthUser，第二个回调就是 SIGNED_OUT', async () => {
+    const onAuthUser = vi.fn((_fn: (id: string) => void, _so?: () => void) => () => undefined);
+    const { boot } = await setup();
+    boot.cache?.close();
+    resetBootForTest();
+    const b2 = await coldStart({ userId: 'A', appVersion: '4.0.0', cacheOptions: { factory: fakeIndexedDB().factory }, listen426: false });
+    watchAccount(b2, {
+      clearCacheStorage: () => Promise.resolve(), onAuthUser, onStorageUser: () => () => undefined,
+      currentUserId: () => 'A', onSignedOut: vi.fn(), onSwitched: vi.fn(),
+    });
+    expect(onAuthUser).toHaveBeenCalledTimes(1);
+    expect(typeof onAuthUser.mock.calls[0]?.[1]).toBe('function');
+    b2.cache?.close();
+  });
+
+  it('不是自己退出：同步设闸 → 清空整库（含 outbox、草稿）→ 关库 → 按库名删库 → 清运行时缓存 → 清日志队列 → onSignedOut（removed）', async () => {
+    const { boot, deps, signedOut, session, fake, reload } = await setup();
+    session.id = null;   // supabase-js 发 SIGNED_OUT 前已删掉本机会话
+    expect(fake.dbs.has('planner-v4')).toBe(true);
+    expect(boot.outbox?.getStatus().pending).toBe(1);
+    signedOut();
+    // 同步设闸：还没 await 任何东西
+    expect(boot.switching).toBe(true);
+    expect(boot.outbox?.isSuspended()).toBe(true);
+    expect(deps.clearLogs).toHaveBeenCalledTimes(1);
+    expect(deps.onSignedOut).not.toHaveBeenCalled();   // 清完才走
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
+    expect(deps.onSignedOut).toHaveBeenCalledWith('removed');
+    expect(fake.dbs.has('planner-v4')).toBe(false);
+    expect(boot.cache?.isClosed()).toBe(true);
+    expect(deps.clearCacheStorage).toHaveBeenCalledTimes(1);
+    expect(deps.onSwitched).not.toHaveBeenCalled();
+    await flush();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('本机会话还读得到同一个账号（别的标签页刷新令牌写回）也按被移除处理', async () => {
+    const { deps, signedOut } = await setup();
+    signedOut();
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledWith('removed'));
+  });
+
+  it('删库、清缓存失败也照样回登录页', async () => {
+    const { deps, signedOut, session } = await setup();
+    session.id = null;
+    deps.deleteDb = () => Promise.reject(new Error('blocked'));
+    deps.clearCacheStorage = vi.fn(() => Promise.reject(new Error('x')));
+    deps.clearLogs = vi.fn(() => {
+      throw new Error('quota');
+    });
+    signedOut();
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledWith('removed'));
+  });
+
+  it('只处理一次：随后的 storage(null)、再一次 SIGNED_OUT 都不再清、不再跳', async () => {
+    const { deps, signedOut, storage, session } = await setup();
+    session.id = null;
+    signedOut();
+    storage(null);
+    signedOut();
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
+    await flush(20);
+    expect(deps.onSignedOut).toHaveBeenCalledTimes(1);
+    expect(deps.clearCacheStorage).toHaveBeenCalledTimes(1);
+  });
+
+  it('别的标签页先退出（storage null）再转来 SIGNED_OUT：按普通退出，不带“被移除”', async () => {
+    const { deps, signedOut, storage, session } = await setup();
+    session.id = null;
+    storage(null);
+    signedOut();
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
+    expect(deps.onSignedOut).toHaveBeenCalledWith();
+    expect(deps.clearLogs).not.toHaveBeenCalled();
+  });
+
+  it('已经在走别的退出流程（自己退出的 sealForExit、wipeOnRemoved 设过闸）：不再清第二遍、不跳', async () => {
+    const { boot, deps, signedOut, session } = await setup();
+    session.id = null;
+    boot.switching = true;
+    signedOut();
+    await flush(20);
+    expect(deps.onSignedOut).not.toHaveBeenCalled();
+    expect(deps.clearCacheStorage).not.toHaveBeenCalled();
+    expect(deps.clearLogs).not.toHaveBeenCalled();
+    expect(boot.cache?.isClosed()).toBe(false);
+  });
+
+  it('会话里已经是别的账号（别的标签页刚登录 B）：按换账号处理（清库、重新载入），不提示被移除', async () => {
+    const { deps, signedOut, session } = await setup();
+    session.id = 'B';
+    signedOut();
+    await vi.waitFor(() => expect(deps.onSwitched).toHaveBeenCalledTimes(1));
+    expect(deps.onSignedOut).not.toHaveBeenCalled();
   });
 });

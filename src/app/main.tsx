@@ -9,8 +9,12 @@
 // 4. 按 flags 挂功能入口，再渲染（先用缓存画），然后启动 K8 同步（sync-wiring.ts，主页顺带登记本会话的 devices 行、报时区）；本机库来自更新的版本时只渲染整屏提示 CacheTooNewScreen
 // 5.（在 render 之前）盯住换账号的另外三个时机：本页 SIGNED_IN、TOKEN_REFRESHED（supabase-js 空闲时才加载），别的标签页的 storage 事件；
 //    挂上后马上再读一次会话比一次，补上 1 到 5 之间漏掉的变化（K6 审查 M1）
+// 6.（mountFeatures 之后、渲染 App 之前，接手清单 CONSENT-wire ②）在线时先过告知页关口 ConsentGate（features/onboarding）：
+//    它问 noticeState()，first 先显示告知页（排在通知、麦克风说明之前），updated 留给“隐私说明更新了”那一屏（还没做，现在直接进 App），
+//    读失败、懒加载失败都不挡进 App。noticeState 在关口里调而不是在这里 await：A27 只许 app 经 index.ts 拿懒加载的组件，
+//    拿不到 data 层的函数；#root 本来是空的，关口回答之前不画 App，看起来和“等完再渲染”一样，同步也不用跟着等
 import '../platform/zod-jitless.ts';
-import { StrictMode } from 'react';
+import { StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles/tokens.css';
 import '../styles/skins/simple.css';
@@ -19,6 +23,7 @@ import '../styles/base.css';
 import { fromUiLocale, LOCALE_STORAGE_KEY, pickLocale, toUiLocale } from '../../shared/i18n/pick-locale.ts';
 import { watchAccount } from '../core/account.ts';
 import { coldStart, type BootResult } from '../core/boot.ts';
+import { ConsentGate } from '../features/onboarding/index.ts';
 import { deleteCacheDb } from '../core/cache.ts';
 import { createDeviceRegistrar } from '../core/device-reg.ts';
 import { createLogQueue, guardOwner } from '../core/log/queue.ts';
@@ -36,7 +41,7 @@ import { App } from './App.tsx';
 import { CacheTooNewFallback } from './CacheTooNewFallback.tsx';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { mountFeatures } from './features.ts';
-import { createLogChannel, outboxLog } from './log-channel.ts';
+import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
 import { wireSync } from './sync-wiring.ts';
 
 /** 界面语言（16.4）：缓存的 profiles.ui_locale → 本机选过的（pv-locale）→ 设备语言 → 中文；规则同 src/auth/main.tsx，多一层缓存的 profile */
@@ -63,6 +68,8 @@ async function start(): Promise<void> {
     // 没登录：库还在就按库名整库删掉（coldStart 的 signed_out 分支），未同步的修改一起丢（R-231）。
     // 不等删库，直接去登录页（登录页审查建议 2）：coldStart 在第一个 await 之前就同步发出了 deleteDatabase，跳转不影响它执行
     void coldStart({ userId: null }).catch(() => undefined);
+    // 日志上传队列一起清（架构 0.38 第 68 条 ⑤；K6-signedout 审查建议 1）：没有会话时哪个账号的都不该留
+    clearLogQueue(null);
     goToAuth();
     return;
   }
@@ -77,6 +84,8 @@ async function start(): Promise<void> {
     isOnline: () => browserLifecycle.isOnline(), onOnline: (fn) => browserLifecycle.onOnline(fn),
   });
   logs.setSink((e) => logQueue.add(e));
+  // 被移除、停用、注销冷静期、本页收到 SIGNED_OUT：停止上传并清掉这个账号的日志队列（架构 0.38 第 68 条）；watchAccount（K6-signedout）和 wireSync 共用
+  const clearLogs = logQueueCleaner(logQueue, userId);
   const boot = await coldStart({
     userId,
     outboxOptions: { log: outboxLog(logs.log) },
@@ -91,6 +100,7 @@ async function start(): Promise<void> {
   // 换账号监听在 render 之前挂（K6 复审 N4）：挂上时同步再比一次会话，coldStart 期间已经换了账号或退出就不渲染，直接走换账号流程
   watchAccount(boot, {
     clearCacheStorage,
+    clearLogs,
     onAuthUser,
     onStorageUser: (fn) => onSessionStorageChange(fn),
     currentUserId: () => readSessionUserId(),
@@ -107,6 +117,17 @@ async function start(): Promise<void> {
   // • 先注册 SW 再渲染（复审 S4）：“去更新”靠 SW，首次打开还没注册时会误报“更新失败”
   // • 懒加载失败、整屏组件出错：回退到不懒加载的静态提示（一句话＋刷新），不跳登录页（复审 S1、S2）
   let root = <App />;
+  if (boot.status !== 'version_too_new' && browserLifecycle.isOnline()) {
+    root = (
+      <ErrorBoundary fallback={<App />}>
+        <Suspense fallback={null}>
+          <ConsentGate>
+            <App />
+          </ConsentGate>
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
   if (boot.status === 'version_too_new') {
     if (!import.meta.env.DEV) await registerServiceWorker();
     const fallback = <CacheTooNewFallback onRefresh={reloadPage} />;
@@ -137,14 +158,7 @@ async function start(): Promise<void> {
   wireSync(boot, {
     transport, clearCacheStorage, clearLocalSession, goToAuth, setExitNotice, platform, log: logs.log,
     onLeader: (on) => logQueue.setLeader(on),
-    // 被移除、停用、注销冷静期：停止上传并清掉这个账号的日志队列（和退出登录一样）
-    // close 立刻生效（之后不记、不传、在途那一批传完也不写回），所以先同步清一次，不打乱 onRemoved 后面清本机、回登录页的顺序；
-    // 等在途那一批收尾后再清一次兜底
-    clearLogs: () => {
-      const closing = logQueue.close();
-      clearLogQueue(userId);
-      void closing.then(() => clearLogQueue(userId));
-    },
+    clearLogs,
     ...(device ? { deviceId: device.id, ensureDevice: device.ensure } : {}),
   });
 

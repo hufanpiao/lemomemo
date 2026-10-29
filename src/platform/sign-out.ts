@@ -20,10 +20,12 @@
 //   B2 的 SW：⑴ 只往已存在、owner 仓有 user_id 的库里写（遇到要新建库就中止），且推送带的 user_id 和 owner 一致才写，不一致丢掉（不能直接用 owner 的值，防串号）；
 //   ⑵ 开库后监听 versionchange、收到立刻关连接，否则 ⑤ 删库被挡、退出卡住；⑶ 退出、换账号时退掉推送订阅或由服务器换绑，旧账号的通知不再推来。
 //   ⑤ 删库以后 SW 写不进去。不靠“通知 SW 停写”：SW 随时被浏览器停掉重启，内存里的标记会丢
+// • 一开头先 markSelfSignOut()（K6-signedout）：之后 ④ signOut、① 删行时刷新令牌失败等引起的本页 SIGNED_OUT，
+//   会话层（session.ts 的 onAuthUser → core/account.ts 的 watchAccount）见到标记就不再按“被移除”重复处理
 // • localStorage 里的 install_id、pv-locale 不清；日志上传队列 lemo.logq.<user_id>（log-store.ts，架构 0.38 第 68 条）在 ② 清本机时一起清
 //   （读不到是谁时清全部 lemo.logq.*）
 import { clearLogQueue } from './log-store.ts';
-import { clearCacheStorage, clearLocalSession, readSessionUserId } from './session.ts';
+import { clearCacheStorage, clearLocalSession, markSelfSignOut, readSessionUserId } from './session.ts';
 
 /** 本机库名（= core/cache.ts 的 DB_NAME；platform 不引 core，测试守着两边一致） */
 export const LOCAL_DB_NAME = 'planner-v4';
@@ -148,6 +150,8 @@ export interface SignOutOptions {
   steps?: ExitSteps;
   /** 本机会话里的 user_id（晚到处理用；默认 session.ts 的 readSessionUserId） */
   readUserId?: () => string | null;
+  /** 打“自己退出”的标记（默认 session.ts 的 markSelfSignOut；测试换掉） */
+  markSelf?: () => void;
   timeoutMs?: number;
   wipeMs?: number;
   cachesMs?: number;
@@ -167,6 +171,8 @@ export async function signOutThisDevice(o: SignOutOptions): Promise<{ serverDone
   const steps = o.steps ?? defaultExitSteps;
   const readUserId = o.readUserId ?? (() => readSessionUserId());
   const timeoutMs = o.timeoutMs ?? SIGN_OUT_TIMEOUT_MS;
+  // 先打标记再发任何请求：① 删行也可能因刷新令牌失败引起 SIGNED_OUT
+  (o.markSelf ?? (() => markSelfSignOut()))();
   const before = readUserId();
   const onLate = (): void => {
     if (before !== null && readUserId() === before) dropSession(steps);

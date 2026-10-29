@@ -1,7 +1,9 @@
 -- settings 里 ai.vault、ai.enabled 不准客户端软删 / 撤销；notice 初值（R-239、R-238）；record_consent 一行都没写时报错
 -- （迁移 20261029210000_core_settings_ai_guard.sql；依赖 S1 批 20261029191000～20261029201000）
+-- 10-29 补安全补审建议（接手清单 SEC-210000-sugg ①②③⑤⑥）：upsert 撞已有行写 deleted_at、definer 帮手测 guard 的 INSERT 分支、
+--   抛错后向量和队列还在、相似 key 对照、一次性修正对脏行的效果；④ 在 16_consent_null_ver.test.sql
 begin;
-select plan(44);
+select plan(59);
 \ir _helpers.psql
 select tests.seed();   -- A、B 正常，C 停用
 -- D：有账号、有会话，但没有 profile 行；E：有 profile，用来模拟“检查之后、update 之前 profile 被改掉”
@@ -69,6 +71,20 @@ select is(tests.a($$update public.settings set deleted_at = 1 where id = '5f0000
   '对照：别的键（ui.font）照常能软删，guard 没有挡多');
 select is(tests.a($$update public.settings set undone = true where id = '5f000000-0000-4000-8000-000000000003'$$), 'ok',
   '对照：别的键照常能写 undone');
+-- SEC-210000-sugg ⑤：guard 和 consent.ts 都只认精确的 key。大小写不同（AI.vault）、末尾带空格（'ai.vault '）是别的键：
+--   guard 不挡（能写 true、能软删、能撤销），consent.ts 按 .in('key', ['ai.enabled', 'ai.vault']) 精确匹配也读不到它们
+select is(tests.a($$insert into public.settings (id, key, value) values
+  ('5e000000-0000-4000-8000-000000000001', 'AI.vault', 'true'),
+  ('5e000000-0000-4000-8000-000000000002', 'ai.vault ', 'true'),
+  ('5e000000-0000-4000-8000-000000000003', 'AI.ENABLED', 'true')$$), 'ok',
+  '对照：key 写成 AI.vault、''ai.vault ''（末尾带空格）、AI.ENABLED，值为 true 也能写入（不是 ai.vault，guard 和布尔约束都不管）');
+select is(tests.a($$update public.settings set deleted_at = 1 where id in ('5e000000-0000-4000-8000-000000000001', '5e000000-0000-4000-8000-000000000003')$$)
+       || '|' || tests.a($$update public.settings set undone = true where id = '5e000000-0000-4000-8000-000000000002'$$), 'ok|ok',
+  '对照：这几行能软删、能撤销（guard 只认精确 key）');
+select is((select string_agg(key || '=' || value::text || '|' || coalesce(deleted_at::text, 'null') || '|' || undone::text, ',' order by key)
+             from public.settings where user_id = 'aaaaaaaa-0000-4000-8000-000000000001' and key in ('ai.enabled', 'ai.vault')),
+  'ai.enabled=true|null|false,ai.vault=false|null|false',
+  '按 consent.ts 的精确匹配读：只有真正的 ai.vault（false）、ai.enabled（true）两行，相似 key 的行不影响同意判断');
 
 -- ===== ① a. 其他绕法：删行、insert 带列、upsert、改 key =====
 select ok(tests.a($$delete from public.settings where id = '5f000000-0000-4000-8000-000000000001'$$) like '42501%',
@@ -84,6 +100,13 @@ select ok(tests.a($$insert into public.settings (id, key, value) values ('5f0000
 select ok(tests.a($$insert into public.settings (id, key, value) values ('5f000000-0000-4000-8000-000000000007', 'ai.enabled', 'false')
   on conflict (user_id, key) do update set undone = true$$) like 'P0001 settings_key_immutable%',
   'upsert 撞上已有的 ai.enabled、do update set undone = true：settings_key_immutable');
+-- SEC-210000-sugg ①：upsert 撞上已有行、do update set deleted_at（上面两条是 undone）
+select ok(tests.a($$insert into public.settings (id, key, value) values ('5f000000-0000-4000-8000-000000000008', 'ai.vault', 'false')
+  on conflict (user_id, key) do update set deleted_at = 1$$) like 'P0001 vault_required%',
+  'upsert 撞上已有的 ai.vault、do update set deleted_at = 1：vault_required');
+select ok(tests.a($$insert into public.settings (id, key, value) values ('5f000000-0000-4000-8000-000000000009', 'ai.enabled', 'false')
+  on conflict (user_id, key) do update set deleted_at = 1$$) like 'P0001 settings_key_immutable%',
+  'upsert 撞上已有的 ai.enabled、do update set deleted_at = 1：settings_key_immutable');
 select ok(tests.a($$update public.settings set key = 'ai.vault' where id = '5f000000-0000-4000-8000-000000000003'$$) like '42501%',
   '把别的键（ui.font）的 key 改成 ai.vault：没有 key 列的更新授权（42501）');
 
@@ -141,6 +164,37 @@ select is(tests.st('5f000000-0000-4000-8000-000000000002') || '|' || (select (co
 select is(tests.try_as('authenticated', 'bbbbbbbb-0000-4000-8000-000000000002', format('select public.record_consent(%L, true)', tests.ver()), null, 'bbbbbbbb-5555-4000-8000-000000000002'),
   'ok', 'B（没有 ai.enabled 行）撤回：insert 新行，guard 不挡');
 
+-- ===== SEC-210000-sugg ②：guard 的 INSERT 分支（迁移第 49、50 行的 tg_op = 'INSERT'） =====
+-- 客户端没有 deleted_at、undone 的 insert 列授权（上面 42501 两条），走不到 guard；这里在测试事务里临时建一个
+--   postgres 属主的 security definer 帮手（同 record_consent_impl 的处境：定义者有全部列权限、请求角色仍是 authenticated），
+--   以 authenticated 身份调用它 insert 带 deleted_at 或 undone 的行，断言 guard 照样拦
+create function tests.definer_ins(p_key text, p_del bigint, p_undone boolean) returns void
+  language sql security definer set search_path = '' as $$
+  insert into public.settings (id, user_id, key, value, deleted_at, undone)
+  values (gen_random_uuid(), (select auth.uid()), p_key, 'false'::jsonb, p_del, p_undone)
+$$;
+alter function tests.definer_ins(text, bigint, boolean) owner to postgres;
+grant usage on schema tests to authenticated;
+grant execute on function tests.definer_ins(text, bigint, boolean) to authenticated;
+create function tests.b(p_sql text) returns text language sql as $$
+  select tests.try_as('authenticated', 'bbbbbbbb-0000-4000-8000-000000000002', p_sql, null, 'bbbbbbbb-5555-4000-8000-000000000002')
+$$;
+select ok(tests.b($$select tests.definer_ins('ai.vault', 1, false)$$) like 'P0001 vault_required%',
+  'definer 帮手以 authenticated 请求 insert 带 deleted_at 的 ai.vault：vault_required（INSERT 分支）');
+select ok(tests.b($$select tests.definer_ins('ai.vault', null, true)$$) like 'P0001 vault_required%',
+  'definer 帮手 insert undone = true 的 ai.vault：vault_required');
+select ok(tests.b($$select tests.definer_ins('ai.enabled', 1, false)$$) like 'P0001 settings_key_immutable%'
+      and tests.b($$select tests.definer_ins('ai.enabled', null, true)$$) like 'P0001 settings_key_immutable%',
+  'definer 帮手 insert 带 deleted_at 或 undone = true 的 ai.enabled：settings_key_immutable（guard 在唯一约束之前触发）');
+select is((select count(*)::int from public.settings where user_id = 'bbbbbbbb-0000-4000-8000-000000000002' and key in ('ai.vault', 'ai.enabled')
+             and (deleted_at is not null or undone)), 0,
+  '上面四次被拒都没留下软删或撤销的行');
+-- 写入要在下一句才看得见（同一句里的子查询用的是语句开始时的快照），所以分两句
+select is(tests.b($$select tests.definer_ins('ai.vault', null, false)$$), 'ok',
+  '对照：同一个帮手 insert 不带 deleted_at、undone 的 ai.vault = false 能写成功（证明上面是 guard 拦的，不是帮手本身写不进）');
+select is((select count(*)::int from public.settings where user_id = 'bbbbbbbb-0000-4000-8000-000000000002' and key = 'ai.vault' and deleted_at is null and not undone), 1,
+  '对照：B 的 ai.vault = false 已写入、活着');
+
 -- ===== ③ record_consent 一行都没写时报错 =====
 select ok(tests.try_as('authenticated', 'dddddddd-0000-4000-8000-000000000004', format('select public.record_consent(%L, false)', tests.ver()), null, 'dddddddd-5555-4000-8000-000000000004')
             like 'P0001 account_disabled%',
@@ -149,6 +203,15 @@ select is((select count(*)::int from public.profiles where user_id = 'dddddddd-0
         + (select count(*)::int from public.settings where user_id = 'dddddddd-0000-4000-8000-000000000004'), 0,
   '没有 profile 行：既没建 profile，也没写设置');
 -- 模拟“开头检查通过、update 时 profile 已不能写”（检查和 update 之间被停用）：测试事务里临时挂一个跳过 E 那一行的触发器
+-- ③：先给 E 种一条随手记的向量和重算队列，抛错后核对还在
+insert into public.notes (id, user_id, body, created_at, updated_at) values
+  ('40000000-0000-4000-8000-0000000000e5', 'eeeeeeee-0000-4000-8000-000000000005', 'n', 1, 1);
+insert into private.note_vectors (user_id, kind, source_id, note_id, model, content_hash, embedding) values
+  ('eeeeeeee-0000-4000-8000-000000000005', 'note', '40000000-0000-4000-8000-0000000000e5', '40000000-0000-4000-8000-0000000000e5', 'm', 'h',
+   ('[' || array_to_string(array_fill(0, array[768]), ',') || ']')::extensions.halfvec);
+insert into private.embed_queue (kind, source_id, user_id) values
+  ('note', '40000000-0000-4000-8000-0000000000e5', 'eeeeeeee-0000-4000-8000-000000000005')
+  on conflict do nothing;   -- 建随手记时 enqueue_embed 可能已经排进队列
 create function tests.skip_e() returns trigger language plpgsql as $$ begin return null; end $$;
 create trigger tests_skip_e before update on public.profiles for each row
   when (old.user_id = 'eeeeeeee-0000-4000-8000-000000000005') execute function tests.skip_e();
@@ -157,6 +220,31 @@ select ok(tests.try_as('authenticated', 'eeeeeeee-0000-4000-8000-000000000005', 
   'update profiles 一行都没更新：record_consent 报 account_disabled');
 select is((select count(*)::int from public.settings where user_id = 'eeeeeeee-0000-4000-8000-000000000005'), 0,
   '一行都没更新时抛错发生在写设置、删向量之前：撤回分支没写 ai.enabled');
+select is((select count(*)::int from private.note_vectors where user_id = 'eeeeeeee-0000-4000-8000-000000000005')
+       || '|' || (select count(*)::int from private.embed_queue where user_id = 'eeeeeeee-0000-4000-8000-000000000005'
+                    and source_id = '40000000-0000-4000-8000-0000000000e5'),
+  '1|1', 'SEC-210000-sugg ③：抛错之后 E 事先种下的向量和重算队列都还在（撤回分支的删除没执行）');
+
+-- ===== SEC-210000-sugg ⑥：一次性修正（迁移第 58–61 行）对脏行的效果 =====
+-- 迁移跑的时候库里没有脏行，修正语句等于没被测过。这里以测试的超级用户先造脏行（模拟服务器写过的软删 / 撤销），
+--   再逐字执行迁移第 58–61 行（改迁移这两句时同步改这里）：
+--   D：ai.vault = false 已软删、ai.enabled = true 只撤销（迁移注释里的例外：修正后变成 false）、ui.font 已软删（对照，不碰）；
+--   E：ai.vault = true 已撤销又软删（值不变，只救回）
+insert into public.settings (id, user_id, key, value, deleted_at, undone) values
+  ('5d000000-0000-4000-8000-000000000001', 'dddddddd-0000-4000-8000-000000000004', 'ai.vault', 'false', 5, false),
+  ('5d000000-0000-4000-8000-000000000002', 'dddddddd-0000-4000-8000-000000000004', 'ai.enabled', 'true', null, true),
+  ('5d000000-0000-4000-8000-000000000003', 'dddddddd-0000-4000-8000-000000000004', 'ui.font', '{"v": 1, "id": "system"}', 5, true),
+  ('5d000000-0000-4000-8000-000000000004', 'eeeeeeee-0000-4000-8000-000000000005', 'ai.vault', 'true', 6, true);
+update public.settings set deleted_at = null, undone = false
+ where key = 'ai.vault' and (deleted_at is not null or undone);
+update public.settings set value = 'false'::jsonb, deleted_at = null, undone = false
+ where key = 'ai.enabled' and (deleted_at is not null or undone);
+select is(tests.st('5d000000-0000-4000-8000-000000000001') || ',' || tests.st('5d000000-0000-4000-8000-000000000004'), 'null|false|false,null|false|true',
+  '一次性修正：软删、撤销的 ai.vault 救回成活着的行，值不变（false 仍是 false、true 仍是 true）');
+select is(tests.st('5d000000-0000-4000-8000-000000000002'), 'null|false|false',
+  '一次性修正：只撤销的 ai.enabled = true 救回时改成 false（方向是“关”）');
+select is(tests.st('5d000000-0000-4000-8000-000000000003'), '5|true|{"v": 1, "id": "system"}',
+  '一次性修正只动这两个键：软删、撤销的 ui.font 原样不动');
 
 select * from finish();
 rollback;

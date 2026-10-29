@@ -280,6 +280,23 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
   });
 });
 
+describe('signOutThisDevice 先打“自己退出”的标记（K6-signedout）', () => {
+  it('在删行、清库、signOut 之前打，只打一次（删行时刷新令牌失败引起的 SIGNED_OUT 也不按被移除处理）；默认用 markSelfSignOut', async () => {
+    const log: string[] = [];
+    await signOutThisDevice({
+      server: { deleteOwnDevice: async () => void log.push('row'), signOut: async () => (log.push('signout'), { serverDone: true }) },
+      steps: steps(log),
+      readUserId: () => 'u1',
+      markSelf: () => void log.push('mark'),
+    });
+    expect(log).toEqual(['mark', 'row', 'deleteDb', 'caches', 'signout', 'deleteDb']);
+    // 默认用 session.ts 的 markSelfSignOut
+    const spy = vi.spyOn(session, 'markSelfSignOut');
+    await signOutThisDevice({ server: { signOut: async () => ({ serverDone: true }) }, steps: steps([]), readUserId: () => 'u1' });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('signOutThisDevice 清日志上传队列（架构 0.38 第 68 条）', () => {
   afterEach(() => localStorage.clear());
 

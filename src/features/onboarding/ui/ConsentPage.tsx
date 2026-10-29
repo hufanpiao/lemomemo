@@ -4,7 +4,7 @@
 // • “同意 AI 处理”勾选框默认不勾（R-103）；没勾时“同意并继续”是 aria-disabled（仍可聚焦，读屏读得到为什么不能点），
 //   “先不同意，直接用”随时可点；两个按钮都调 record_consent，请求落定前两个都点不了；
 // • 失败留在本页、给一句提示，可以再点；no_policy（R-239）只给“继续使用”。
-// 还没接进路由（S1 合并批以后接，见交付说明）；ai.enabled 由接线方在 onDone(true) 里写
+// 接线（CONSENT-wire）：路由 #/onboarding 走 ui/ConsentRoute.tsx，启动关口走 ui/ConsentGate.tsx；ai.enabled 由接线方在 onDone(true) 里写（hooks/useConsentWiring.ts）
 import { useId } from 'react';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { useConsent, type ConsentApi, type ConsentErr } from '../hooks/useConsent.ts';

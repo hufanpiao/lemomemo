@@ -2,11 +2,13 @@
 // • 启动时不加载 supabase-js，直接读它存在 localStorage 里的会话，拿当前 user_id（离线也能读）
 // • 键名和 supabase-js 的默认值一致：`sb-<supabaseUrl 主机名第一段>-auth-token`（官网首页、E2E 也按这个名字找）
 // • 换账号的判断时机里，“别的标签页”走 storage 事件（onSessionStorageChange），“登录 / 刷新令牌”走 onAuthStateChange（onAuthUser）
+// • 本标签页的 SIGNED_OUT（刷新失败、被移除、被退出）也走这同一个 onAuthStateChange（onAuthUser 的第二个回调，接手清单 K6-signedout）；
+//   自己点“退出登录”的那一次由退出流程先 markSelfSignOut()，这里见到标记就不往上报（K8、各功能页不各自监听 SIGNED_OUT）
 // • Cache Storage 的清理也在这里（caches 只在 platform 用）：只删运行时缓存，SW 预缓存保留（0.38 第 36 条）
 // • clearLocalSession：signOut 失败时的兜底，同步删掉本机的 supabase 会话键
 // 只读 user.id、user.email 和令牌 payload 里的 session_id（sessionIdOfToken），不校验、不记录、不打印令牌
 import { buildInfo } from './env.ts';
-import { getSupabase } from './supabase/client.ts';
+import { getSupabase, onClientReady } from './supabase/client.ts';
 
 const KEY_RE = /^sb-.+-auth-token$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -132,33 +134,102 @@ export function whenIdle(fn: () => void): void {
 
 /**
  * 本页的登录、刷新令牌事件（onAuthStateChange 的 SIGNED_IN、TOKEN_REFRESHED）：回调会话里的 user_id。
- * supabase-js 等首屏画完、浏览器空闲时才懒加载（whenIdle，K6 审查 L6）；这之间的变化由 watchAccount 挂上后的再比一次补上。返回取消函数
+ * onSignedOut：同一个监听里的 SIGNED_OUT（刷新失败、被移除、被退出；也包括 supabase-js 从别的标签页转来的），
+ * 以及“INITIAL_SESSION 为 null 且本机会话键已经没了”（见 authEventHandler）；自己退出（isSelfSignOut()）的不回调。
+ * 全 App 只有这一处订阅 onAuthStateChange（K6-signedout）。
+ * • 订阅在客户端一建好时就同步挂上（supabase/client.ts 的 onClientReady，审查 M1）：谁先 getSupabase()（同步的 ensureSession 往往更早）都一样，
+ *   initialize 里刷新被拒发的 SIGNED_OUT 一定收得到
+ * • 没人用 supabase-js 时，等首屏画完、浏览器空闲才加载它（whenIdle，K6 审查 L6）。返回取消函数
  */
-export function onAuthUser(fn: (userId: string) => void): () => void {
+export function onAuthUser(fn: (userId: string) => void, onSignedOut?: () => void): () => void {
   let off: (() => void) | null = null;
   let cancelled = false;
-  whenIdle(() => {
+  const offReady = onClientReady((db) => {
     if (cancelled) return;
-    void subscribeAuth(fn).then((unsub) => {
-      if (cancelled) unsub?.();
-      else off = unsub;
-    });
+    const { data } = db.auth.onAuthStateChange(authEventHandler(fn, onSignedOut));
+    off = () => data.subscription.unsubscribe();
+  });
+  whenIdle(() => {
+    if (!cancelled) void getSupabase().catch(() => undefined);   // 没配环境变量（开发、测试）、分包加载失败：不订阅
   });
   return () => {
     cancelled = true;
+    offReady();
     off?.();
   };
 }
 
-async function subscribeAuth(fn: (userId: string) => void): Promise<(() => void) | null> {
-  return getSupabase()
-    .then((db) => {
-      const { data } = db.auth.onAuthStateChange((event, session) => {
-        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user.id) fn(session.user.id);
-      });
-      return () => data.subscription.unsubscribe();
-    })
-    .catch(() => null);   // 没配环境变量（开发、测试）、分包加载失败：不订阅
+/**
+ * onAuthStateChange 的事件分发（单独导出给测试；不加载 supabase-js）。
+ * INITIAL_SESSION 为 null 也当 SIGNED_OUT（审查 M1：订阅晚于 initialize 时只收得到它），但要本机会话键已经没了（sessionGone）：
+ * 离线冷启动、令牌又过期时 supabase-js 也给 INITIAL_SESSION null，那时会话键还在，不能当成被移除去清库（会丢没上传的改动）
+ */
+export function authEventHandler(
+  fn: (userId: string) => void,
+  onSignedOut?: () => void,
+  selfSignOut: () => boolean = () => isSelfSignOut(),
+  sessionGone: () => boolean = () => readSessionUserId() === null,
+): (event: string, session: { user: { id: string } } | null) => void {
+  return (event, session) => {
+    if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user.id) fn(session.user.id);
+    else if (!onSignedOut || selfSignOut()) return;
+    else if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && session === null && sessionGone())) onSignedOut();
+  };
+}
+
+// ───────── 自己退出的标记（K6-signedout）─────────
+// 退出流程（platform/sign-out.ts 的 signOutThisDevice、设置页被移除时的 onSessionLost）一开头调 markSelfSignOut()，
+// 之后它自己调 signOut 引起的 SIGNED_OUT 不再按“被移除”处理。
+// • 存 localStorage（各标签页共用）：supabase-js 会把本页的 SIGNED_OUT 转给别的标签页，别的标签页见到标记也不按“被移除”提示，
+//   那边由 storage 事件（会话变 null）走普通的“别的标签页退出了”。只存时间戳，不存账号
+// • 另记一份在本页内存里（localStorage 写不进时兜底）
+// • 只认 SELF_SIGN_OUT_TTL_MS 以内的：退出流程最坏约 19 秒，过期的标记读到时删掉，不会挡住以后真的被移除
+
+const SELF_SIGN_OUT_KEY = 'lemo.self_signout';
+/** 标记的有效期 */
+export const SELF_SIGN_OUT_TTL_MS = 60_000;
+let selfSignOutAt: number | null = null;
+
+function fresh(at: number, now: number): boolean {
+  return Number.isFinite(at) && now - at >= 0 && now - at < SELF_SIGN_OUT_TTL_MS;
+}
+
+/** 自己退出：在调 signOut（以及任何可能引起 SIGNED_OUT 的请求）之前调。不抛错 */
+export function markSelfSignOut(storage?: Storage, now: number = Date.now()): void {
+  selfSignOutAt = now;
+  try {
+    (storage ?? localStorage).setItem(SELF_SIGN_OUT_KEY, String(now));
+  } catch {
+    // 写不进：本页内存里那份照样管用
+  }
+}
+
+/**
+ * 只在本页内存里打标记，不写 localStorage（审查建议 4）：设置页自己处理“被移除”时用——那是真的被移除，
+ * 别的标签页收到转来的 SIGNED_OUT 仍要提示“被移除”
+ */
+export function markSelfSignOutThisTab(now: number = Date.now()): void {
+  selfSignOutAt = now;
+}
+
+/** 最近 SELF_SIGN_OUT_TTL_MS 内有没有自己退出（本页或别的标签页打的标记）；过期的顺手删掉 */
+export function isSelfSignOut(storage?: Storage, now: number = Date.now()): boolean {
+  if (selfSignOutAt !== null && fresh(selfSignOutAt, now)) return true;
+  try {
+    const s = storage ?? localStorage;
+    const v = s.getItem(SELF_SIGN_OUT_KEY);
+    if (v === null) return false;
+    if (fresh(Number(v), now)) return true;
+    s.removeItem(SELF_SIGN_OUT_KEY);
+  } catch {
+    // 读不到：按没有标记
+  }
+  return false;
+}
+
+/** 测试用：清掉本页内存里那份标记 */
+export function resetSelfSignOutForTest(): void {
+  selfSignOutAt = null;
 }
 
 /**
@@ -212,8 +283,14 @@ export function clearLocalSession(storage?: Storage, supabaseUrl: string = build
   }
 }
 
-/** 没登录：去登录页（不建本机库） */
-export function goToAuth(): void {
+/**
+ * 没登录：去登录页（不建本机库）。带 notice 时先记下退出原因（setExitNotice），登录页据此提示：
+ * watchAccount 收到本页的 SIGNED_OUT（不是自己退出）时调 goToAuth('removed')（K6-signedout）。
+ * 带 'removed' 时先删本机会话（审查建议 5）：服务器上已经作废，留着登录页会同时显示“当前已登录”和“被移除”
+ */
+export function goToAuth(notice?: ExitNotice): void {
+  if (notice === 'removed') clearLocalSession();
+  if (notice) setExitNotice(notice);
   location.replace('/app/auth/');
 }
 

@@ -9,6 +9,11 @@
 // • 闸（M2）：发现会话里的账号和本页启动时的账号不同，同步地设 boot.switching = true、outbox.suspend()（enqueue 拒收、next 返回 null、
 //   applyServer 等一律不做），再清库、关库、onSwitched()（默认重新载入）。K8 每发一项前、每处理一个响应前先看这道闸
 // • 会话没了（别的标签页退出）：设闸 → 清空整库 → 关本页连接 → 按库名删库 → 清运行时缓存 → onSignedOut（登录页审查：不留上一个账号的数据）
+// • 本页的 SIGNED_OUT（刷新失败、被移除、被退出，K6-signedout）：和 SIGNED_IN、TOKEN_REFRESHED 同一个监听（deps.onAuthUser 的第二个回调），
+//   自己点“退出登录”的那一次已由 platform 按标记滤掉；已经在走别的退出流程（boot.switching）也不管。
+//   其余按“被移除或被退出”：不删 devices（旧会话已失效）→ 设闸 → 清空整库 → 关库 → 按库名删库 → 清运行时缓存
+//   （SW 预缓存、install_id 不动）→ onSignedOut('removed')，登录页提示“这台设备已在别的设备上被移除……”。
+//   会话里已经是别的账号（别的标签页刚登录）就按换账号处理
 // • 失败即关（M3）：清库失败也关库，再 onFailed()（默认同 onSwitched：重新载入，冷启动会再清一次；再失败就按“本机库不可用”启动，不渲染缓存）
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { BootResult } from './boot.ts';
@@ -64,14 +69,22 @@ export async function ensureAccount(cache: Cache, userId: string, deps: EnsureAc
 }
 
 export interface WatchAccountDeps extends EnsureAccountDeps {
-  /** 本页的 SIGNED_IN、TOKEN_REFRESHED（platform/session.ts 的 onAuthUser） */
-  onAuthUser(fn: (userId: string) => void): () => void;
+  /**
+   * 本页的 SIGNED_IN、TOKEN_REFRESHED（platform/session.ts 的 onAuthUser）；同一个监听的 SIGNED_OUT 回调 onSignedOut
+   * （自己退出的已滤掉，K6-signedout）。K8、各功能页不另开 SIGNED_OUT 监听
+   */
+  onAuthUser(fn: (userId: string) => void, onSignedOut?: () => void): () => void;
   /** 别的标签页改了会话（platform/session.ts 的 onSessionStorageChange）；null 表示那边退出了 */
   onStorageUser(fn: (userId: string | null) => void): () => void;
   /** 现在会话里的 user_id（platform/session.ts 的 readSessionUserId）：挂上监听后马上再比一次（M1） */
   currentUserId(): string | null;
-  /** 会话没了（别的标签页退出）：本页已经清掉本机库以后调，去登录页 */
-  onSignedOut(): void;
+  /**
+   * 会话没了，本页已经清掉本机库以后调，去登录页：别的标签页退出时不带参数；
+   * 本页收到 SIGNED_OUT（被移除或被退出）时带 'removed'，登录页提示“已在别的设备上被移除”（platform/session.ts 的 goToAuth）
+   */
+  onSignedOut(reason?: 'removed'): void;
+  /** 被移除或被退出时停掉并清掉这个账号的日志上传队列（架构 0.38 第 68 条）；不填不清 */
+  clearLogs?(): void;
   /**
    * 会话没了时按库名删掉整个本机库（core/cache.ts 的 deleteCacheDb）；在本页连接关掉以后调，不会触发本页的 versionchange。
    * 不填只清空内容、关库（库文件留着，里面没有数据）
@@ -106,8 +119,34 @@ function closeCache(boot: BootResult): void {
 }
 
 /**
+ * 会话没了（别的标签页退出、本页被移除或被退出）：调用前已设闸、封存 → 清空整库（封存后照样能清）→ 先关本页连接
+ * （原因 'closed'，不触发 versionchange → 重新载入）→ 按库名删库 → 清运行时缓存。任何一步失败都照样往下走，永远 resolve
+ */
+async function wipeSignedOut(boot: BootResult, deps: Pick<WatchAccountDeps, 'deleteDb' | 'clearCacheStorage'>): Promise<void> {
+  const cache = boot.cache;
+  try {
+    if (cache && !cache.isClosed()) await cache.clearAll();
+  } catch {
+    // 清不掉就靠下面按库名删
+  }
+  closeCache(boot);
+  clearAllCollections();
+  try {
+    await deps.deleteDb?.();
+  } catch {
+    // 删不掉（别的标签页挡着）：内容已清空
+  }
+  try {
+    await deps.clearCacheStorage();
+  } catch {
+    // 运行时缓存清不掉不挡退出
+  }
+}
+
+/**
  * 盯住后三个时机（启动那一次在 coldStart 里），挂上后马上再比一次。
  * 一旦发现账号变了（或会话没了），只处理这一次：设闸 → 清库 → 关库 → onSwitched / onFailed（会话没了：设闸 → 清库 → 关库 → 删库 → onSignedOut）。
+ * 本页的 SIGNED_OUT（不是自己退出）也在这里接，和上面共用“只处理一次”（K6-signedout）。
  * 返回取消函数
  */
 export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => void {
@@ -117,30 +156,8 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
     handled = true;
     closeGate(boot);   // 同步设闸：从这一刻起不再发送、不再写回
     if (userId === null) {
-      // 别的标签页退出了（登录页审查）：本页可能已按这个账号开库、同步过，不能把数据留在硬盘上。
-      // 已设闸、封存 → 清空整库（封存后照样能清）→ 先关本页连接（原因 'closed'，不触发 versionchange → 重新载入）→ 按库名删库
-      // → 清运行时缓存 → onSignedOut。任何一步失败都照样往下走，最后一定 onSignedOut
-      const signOut = async (): Promise<void> => {
-        const cache = boot.cache;
-        try {
-          if (cache && !cache.isClosed()) await cache.clearAll();
-        } catch {
-          // 清不掉就靠下面按库名删
-        }
-        closeCache(boot);
-        clearAllCollections();
-        try {
-          await deps.deleteDb?.();
-        } catch {
-          // 删不掉（别的标签页挡着）：内容已清空
-        }
-        try {
-          await deps.clearCacheStorage();
-        } catch {
-          // 运行时缓存清不掉不挡退出
-        }
-      };
-      void signOut().finally(() => deps.onSignedOut());
+      // 别的标签页退出了（登录页审查）：本页可能已按这个账号开库、同步过，不能把数据留在硬盘上
+      void wipeSignedOut(boot, deps).finally(() => deps.onSignedOut());
       return;
     }
     const run = async (): Promise<void> => {
@@ -173,7 +190,24 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
       },
     );
   };
-  const offAuth = deps.onAuthUser((id) => check(id));
+  /** 本页的 SIGNED_OUT（不是自己退出，K6-signedout） */
+  const signedOutHere = (): void => {
+    if (handled || boot.switching) return;   // 已经在走换账号、被移除、自己退出等流程
+    const now = deps.currentUserId();
+    if (now !== null && now !== boot.userId) {
+      check(now);   // 别的标签页刚登录了别的账号：按换账号处理
+      return;
+    }
+    handled = true;
+    closeGate(boot);
+    try {
+      deps.clearLogs?.();
+    } catch {
+      // 日志队列清不掉不挡退出
+    }
+    void wipeSignedOut(boot, deps).finally(() => deps.onSignedOut('removed'));
+  };
+  const offAuth = deps.onAuthUser((id) => check(id), signedOutHere);
   const offStorage = deps.onStorageUser((id) => check(id));
   check(deps.currentUserId());
   return () => {

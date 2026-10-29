@@ -8,8 +8,11 @@
 //   会话放最后：中途被打断最坏是“有会话、没库”，下次打开能自愈。①③ 一共最多等 EXIT_TIMEOUT_MS（① 最多一半）；
 //   超时照样删本机会话，提示“服务器上的这次登录暂时没能吊销”。超时以后请求才回来、本机会话又是退出前那个 user_id
 //   （令牌刷新把旧会话写回）就再删一次。这些步骤在 platform/sign-out.ts，和登录页“退出并换账号”共用（K-signout-merge）
+// • 本页自己处理“会话没了”时也会调 signOut：先 markSelfSignOutThisTab()（只打本页内存里的），会话层的 SIGNED_OUT 监听见到标记不再重复处理（K6-signedout）。
+//   本页不另开 SIGNED_OUT 监听
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { deleteDbAgain, dropSession, SIGN_OUT_TIMEOUT_MS, signOutThisDevice, withTimeout, wipeThisDevice } from '../../../platform/sign-out.ts';
+import { markSelfSignOutThisTab } from '../../../platform/session.ts';
 import { defaultExitDeps, type ExitDeps } from '../data/local.ts';
 import type { SettingsApi } from '../data/settings-api.ts';
 
@@ -90,6 +93,9 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
     (kind: 'revoked' | 'signed_out') => {
       if (exiting.current) return;
       exiting.current = true;
+      // 下面后台调的 signOut 会引起本页的 SIGNED_OUT：先打标记，会话层不再按“被移除”重复处理（K6-signedout）。
+      // 只打本页的（审查建议 4）：这是真的被移除，别的标签页收到转来的 SIGNED_OUT 仍要提示“被移除”
+      markSelfSignOutThisTab();
       setNotice(kind);
       void track(
         (async () => {

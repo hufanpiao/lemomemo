@@ -8,8 +8,9 @@ type Reply = { data: unknown; error: unknown };
 const V = '2026-10-29';
 const NOTICE = { notice: { policy_ver: V, min_consent_ver: V } };
 
-function fakeDb(opts: { notice?: Reply; profile?: Reply; rpc?: Reply | 'hang' } = {}) {
+function fakeDb(opts: { notice?: Reply; profile?: Reply; rpc?: Reply | 'hang'; noticeDelayMs?: number } = {}) {
   const log: string[] = [];
+  const signals: AbortSignal[] = [];
   const db = {
     from(table: string) {
       return {
@@ -18,8 +19,12 @@ function fakeDb(opts: { notice?: Reply; profile?: Reply; rpc?: Reply | 'hang' } 
           const reply = table === 'app_config'
             ? opts.notice ?? { data: NOTICE, error: null }
             : opts.profile ?? { data: { consent_policy_ver: null }, error: null };
+          const later = async (): Promise<Reply> => {
+            if (opts.noticeDelayMs) await new Promise((r) => setTimeout(r, opts.noticeDelayMs));
+            return reply;
+          };
           return {
-            eq(c: string, v: unknown) { log.push(`eq ${c}=${String(v)}`); return { maybeSingle: async () => reply }; },
+            eq(c: string, v: unknown) { log.push(`eq ${c}=${String(v)}`); return { maybeSingle: later }; },
             maybeSingle: async () => reply,
           };
         },
@@ -28,10 +33,17 @@ function fakeDb(opts: { notice?: Reply; profile?: Reply; rpc?: Reply | 'hang' } 
     rpc(fn: string, args: unknown) {
       log.push(`rpc ${fn} ${JSON.stringify(args)}`);
       const r = opts.rpc ?? { data: null, error: null };
-      return r === 'hang' ? new Promise(() => undefined) : Promise.resolve(r);
+      return {
+        abortSignal(signal: AbortSignal) {
+          signals.push(signal);
+          if (r !== 'hang') return Promise.resolve(r);
+          // 挂住的请求：abort 时像 fetch 一样以 AbortError 结束
+          return new Promise((_, reject) => signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+        },
+      };
     },
   };
-  return { getDb: async () => db as unknown as Db, log };
+  return { getDb: async () => db as unknown as Db, log, signals };
 }
 
 describe('record：调 record_consent', () => {
@@ -96,6 +108,44 @@ describe('record：调 record_consent', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('CONSENT-wire ⑧：超过 hardMs 放弃时中断还在路上的 rpc（abortSignal 被 abort）', async () => {
+    vi.useFakeTimers();
+    try {
+      const { getDb, signals } = fakeDb({ rpc: 'hang' });
+      let done: unknown;
+      void createConsentApi(getDb, 1000, 5000).record(true).then((r) => { done = r; });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(signals).toHaveLength(1);
+      expect(signals[0]?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(done).toEqual({ ok: false, error: 'unsure' });
+      expect(signals[0]?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('CONSENT-wire ⑧：读 notice 时就已经放弃了：读完也不再调 rpc（不会晚到一条同意）', async () => {
+    vi.useFakeTimers();
+    try {
+      const { getDb, log } = fakeDb({ noticeDelayMs: 8000 });
+      let done: unknown;
+      void createConsentApi(getDb, 1000, 5000).record(true).then((r) => { done = r; });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(done).toEqual({ ok: false, error: 'unsure' });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(log.some((l) => l.startsWith('rpc'))).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('正常返回：rpc 也带了 abortSignal，返回后 abort 不影响结果', async () => {
+    const { getDb, signals } = fakeDb();
+    expect(await createConsentApi(getDb).record(false)).toEqual({ ok: true, value: undefined });
+    expect(signals).toHaveLength(1);
   });
 
   it('很快回来：不调 onSlow', async () => {

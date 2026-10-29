@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
+import { isSelfSignOut, resetSelfSignOutForTest } from '../../../platform/session.ts';
 import type { LocalSignOut } from '../data/settings-api.ts';
 import { zh } from '../i18n/zh.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';
@@ -16,6 +17,7 @@ vi.mock('../i18n/ko.ts', async () => {
 beforeEach(() => {
   uiStore.getState().setLocale('zh-CN');
   localStorage.clear();
+  resetSelfSignOutForTest();
   document.documentElement.lang = 'zh-CN';
 });
 afterEach(() => {
@@ -292,5 +294,31 @@ describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
     });
     expect(await screen.findByText(zh['settings.offlineOut.body'])).toBeTruthy();
     expect(text(screen.getByTestId('settings-signing-out'))).toBe('');
+  });
+});
+
+describe('自己调 signOut 之前先打“自己退出”的标记（K6-signedout：会话层的 SIGNED_OUT 监听见到就不再按“被移除”重复处理）', () => {
+  it('退出登录：删本机行之前就打了标记', async () => {
+    const { exit, order } = fakeExit();
+    const marked: boolean[] = [];
+    const api = fakeApi({ deleteOwnDevice: vi.fn(async () => void marked.push(isSelfSignOut())) }, order);
+    expect(isSelfSignOut()).toBe(false);
+    await renderPage(api, exit);
+    await clickSignOut();
+    await waitFor(() => expect(exit.goToAuth).toHaveBeenCalled());
+    expect(marked).toEqual([true]);
+  });
+
+  it('读列表回 revoked（本页自己处理被移除，后台调 signOut）：signOut 之前已打标记，只打本页的', async () => {
+    const { exit } = fakeExit();
+    const marked: boolean[] = [];
+    const api = fakeApi({
+      loadDevices: vi.fn(async () => fail('revoked')),
+      dropLocalSession: vi.fn(async () => (marked.push(isSelfSignOut()), { serverDone: true } satisfies LocalSignOut)),
+    });
+    render(<SettingsPage deps={{ api, exit, now }} />);
+    await screen.findByRole('dialog');
+    await waitFor(() => expect(marked).toEqual([true]));
+    expect(localStorage.getItem('lemo.self_signout')).toBeNull();   // 只打本页的（审查建议 4）
   });
 });
