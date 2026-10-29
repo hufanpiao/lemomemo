@@ -46,6 +46,9 @@
        白名单 KEY_TYPE_WHITELIST 绑节点（第八轮改稳：取值按“函数链 + 本函数里同样文本的第几处”，顶层声明按名字，参数按“函数链 + 参数名”），
        改前面的代码不误报，复制到别的函数对不上；命中后对象不能是 any / unknown，值不能是 any / unknown / 函数。
        10-29 共 19 条：字面量联合类型的参数键 7 处（协调方定保留），number 键收紧后新增的 12 处（待定）。
+       全局事件：addEventListener / dispatchEvent / removeEventListener 和 onunhandledrejection、onerror、onload、onbeforeunload、onunload
+       等全局事件属性（不带前缀或挂在 globalThis / self / window 上）都报。但事件对象的 e.currentTarget / e.target 如果来自全局事件，
+       指向的就是全局对象；通过本表没列出的途径拿到全局事件的事件对象时（例如别的库转手传进来），F7 看不出来，靠代码审查。
        已知堵不住、靠代码审查的：从本表没列出的途径拿到全局对象，且类型写得具体；any 值经函数参数、
        返回值流进类型具体的变量；白名单那几处的调用方传入断言出来的值；以及其他本表没有列出的反射写法。
     ② 远程模块和包一旦被 import，里面的代码照样能读环境变量，本脚本只看得到地址、看不到内容：

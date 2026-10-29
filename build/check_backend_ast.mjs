@@ -15,7 +15,8 @@
 //   ⑦ 方括号取值、解构计算键、Reflect / Object 按键取属性的键：用类型检查器判，规则见 KEY_TYPE_WHITELIST 上方（第五、六轮）；
 //      Reflect 只准直接调用，Object.getOwnPropertyDescriptors 禁用；检查器建不起来或取类型出错时报错、不放行。
 //   ⑧ 普通函数、对象字面量方法里不准用 this；Object.values / keys / entries / assign… 的参数、对象展开 { ...x } 的类型
-//      不准是 any、unknown、object、{}、EventTarget 这类（第七、八轮）；全局的 addEventListener / dispatchEvent / removeEventListener 禁用（第八轮）。
+//      不准是 any、unknown、object、{}、EventTarget 这类（第七、八轮）；全局的 addEventListener / dispatchEvent / removeEventListener 禁用（第八轮）；
+//      全局事件属性 onunhandledrejection、onerror、onload… 不带前缀或挂在全局对象上的，赋值、读取都禁用（第八轮低）。
 //   定位：拦住常见写法，其余靠代码审查（check_backend.py 文件头剩余风险①）。
 import ts from 'typescript';
 import { readFileSync } from 'node:fs';
@@ -117,6 +118,8 @@ const ENUM_FNS = new Set(['Object.values', 'Object.entries', 'Object.keys', 'Obj
 
 const norm = (s) => s.replace(/\s+/g, '');
 const EVENT_FNS = new Set(['addEventListener', 'dispatchEvent', 'removeEventListener']);
+/** 第八轮低：全局事件属性（赋值、读取都不准；不带前缀的、挂在 globalThis / self / window 上的） */
+const EVENT_PROPS = new Set(['onunhandledrejection', 'onrejectionhandled', 'onerror', 'onload', 'onbeforeunload', 'onunload', 'onmessage']);
 const ASSERT = (n) => ts.isAsExpression(n) || ts.isTypeAssertionExpression(n) || ts.isNonNullExpression(n) || ts.isSatisfiesExpression(n);
 const ARITH = new Set([ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken, ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken,
   ts.SyntaxKind.AsteriskAsteriskToken, ts.SyntaxKind.LessThanLessThanToken, ts.SyntaxKind.GreaterThanGreaterThanToken, ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
@@ -307,7 +310,12 @@ function makeKeyRules(checker) {
     if (ts.isConditionalExpression(e)) return argAnyish(e.whenTrue) || argAnyish(e.whenFalse);
     try { return vagueObj(typeOf(a)); } catch { return true; }
   };
-  return { keyProblem, whitelisted, staticFn, hasOwnGuarded, argAnyish };
+  /** 不带前缀的名字是不是指向全局（声明都在 TypeScript 自带的 lib 文件里，或者解析不到声明） */
+  const isGlobalName = (id) => {
+    const ds = resolve(id)?.declarations ?? [];
+    return ds.length === 0 || ds.every((d) => d.getSourceFile().hasNoDefaultLib || /[\\/]typescript[\\/]lib[\\/]/.test(d.getSourceFile().fileName));
+  };
+  return { keyProblem, whitelisted, staticFn, hasOwnGuarded, argAnyish, isGlobalName };
 }
 
 function analyse(path, rel, f7, fnRel, rules, program) {
@@ -507,6 +515,18 @@ function analyse(path, rel, f7, fnRel, rules, program) {
       while (o && (ts.isParenthesizedExpression(o) || ASSERT(o))) o = o.expression;
       if (!owner || (ts.isIdentifier(o) && (GLOBALS.has(o.text) || aliases.has(o.text)))) {
         bad(node, `全局的 ${name} 不准用（不带对象前缀、或 globalThis / self / window. 上的）：事件对象能带出全局对象；要监听请用具体对象的方法`);
+        return;
+      }
+    }
+    // 第八轮低：全局事件属性 onunhandledrejection、onerror、onload…——给它赋值就能拿到全局事件（事件对象带得出全局对象），读取也不准
+    if (EVENT_PROPS.has(name)) {
+      if (v === node && p && 'name' in p && p.name === node) return;   // 声明的名字本身（局部变量、参数、属性名）
+      const owner = v !== node ? v.expression : null;
+      let o = owner;
+      while (o && (ts.isParenthesizedExpression(o) || ASSERT(o))) o = o.expression;
+      const bare = !owner && (!rules || rules.isGlobalName(node));
+      if (bare || (o && ts.isIdentifier(o) && (GLOBALS.has(o.text) || aliases.has(o.text)))) {
+        bad(node, `全局事件属性 ${name} 不准用（不带对象前缀、或 globalThis / self / window. 上的，赋值、读取都算）：全局事件对象能带出全局对象`);
         return;
       }
     }

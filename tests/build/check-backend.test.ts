@@ -429,6 +429,13 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(errors.find((e) => e.line === 6)?.message).toContain('全局的 dispatchEvent');
   });
 
+  it('F7（代码审查第八轮低）：全局事件属性 onunhandledrejection、onerror、onload、onbeforeunload、onunload——不带前缀、globalThis / self 上的赋值和读取都报；具体对象上的、同名局部变量 / 参数 / 对象属性不报', () => {
+    const { code, errors } = run(sample('f7-event-props'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([2, 3, 4, 5, 6, 7, 8, 9].map((n) => `F7 supabase/functions/push-dispatch/index.ts:${n}`));
+    expect(errors.every((e) => e.message.includes('全局事件属性'))).toBe(true);
+  });
+
   it('F7（代码审查第八轮必改 ②）：Object.values / entries / assign 的参数、对象展开 { ...x } 的类型是 EventTarget、{}、object 报；类型具体的、对象字面量、条件展开字面量不报', () => {
     const { code, errors } = run(sample('f7-spread-vague'));
     expect(code).toBe(1);
