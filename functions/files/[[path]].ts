@@ -150,6 +150,9 @@ export function sigFrom(header: string | null, query: string): SigParts | null {
   return { purpose: 'ms', e, d: '', s };
 }
 
+/** “有效期超过上限”判断的时钟余量（秒），只放宽上限、不放宽过期 */
+export const CLOCK_SKEW_S = 5;
+
 async function handleGet(env: FilesEnv, deps: FilesDeps, request: Request, bucket: string, path: string, query: string, origin: string | null): Promise<[Response, string]> {
   if (!secretOk(env)) return [err(500, 'files_misconfigured', origin), 'get_misconfigured'];
   const q = sigFrom(request.headers.get(SIG_HEADER), query);
@@ -158,15 +161,16 @@ async function handleGet(env: FilesEnv, deps: FilesDeps, request: Request, bucke
   if (!(await verify(env.FILES_URL_SECRET, q.purpose, bucket, path, e, q.d, q.s))) return [err(403, 'bad_signature', origin), 'get_bad_signature'];
   const nowS = Math.floor(deps.now() / 1000);
   if (nowS > e) return [err(403, 'expired', origin), 'get_expired'];
-  // 签名对但有效期超过硬上限：不是我们签出来的（或者密钥泄露），一律拒
-  if (e - nowS > TTL.max) return [err(403, 'bad_signature', origin), 'get_ttl_over_max'];
+  // 签名对但有效期超过硬上限：不是我们签出来的（或者密钥泄露），一律拒。
+  // 多 CLOCK_SKEW_S 秒余量（多个边缘节点的时钟可能差几秒；安全审查低）；过期判断 nowS > e 不放宽
+  if (e - nowS > TTL.max + CLOCK_SKEW_S) return [err(403, 'bad_signature', origin), 'get_ttl_over_max'];
   const m = isClientBucket(bucket) ? matchPath(bucket, path) : null;
   if (!m) return [err(404, 'not_found', origin), 'get_bad_path'];
   // 按用途和类型再收紧一次（和 sign 用同一张有效期表 files-rules.ts 的 TTL）：超过这一项该有的时长就不是我们签的；
   // ms 只给 files 桶的 .pptx（ttlFor 回 null），签的时候已经拦了，这里再核一次
   const cap = ttlFor(m, q.purpose);
   if (cap === null) return [err(403, 'bad_signature', origin), 'get_bad_purpose'];
-  if (e - nowS > cap) return [err(403, 'bad_signature', origin), 'get_ttl_over_purpose'];
+  if (e - nowS > cap + CLOCK_SKEW_S) return [err(403, 'bad_signature', origin), 'get_ttl_over_purpose'];
 
   let obj;
   try {

@@ -179,6 +179,8 @@ describe('响应头：安全头和 CORS（5.10、15.6；TC-B0-59 的 /sb/ 部分
     expect(allow).toEqual([...ALLOW_HEADERS]);
     expect(allow).toContain('x-app-version');
     expect(allow).toContain('x-vault-token');
+    // B1 P-files-sig：x-files-sig 只在 /files 的预检放行，/sb 不放；它是请求头，也不进 Expose-Headers
+    expect([...allow, ...(r.headers.get('Access-Control-Expose-Headers') ?? '').split(', ')].map((x) => x.toLowerCase())).not.toContain('x-files-sig');
   });
 
   it('别的来源的预检：204 但没有 CORS 头', async () => {

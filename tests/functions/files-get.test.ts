@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { ttlFor } from '../../functions/_lib/files-rules.ts';
 import { contentDisposition, msUrl, objectUrl, sanitizeFilename, sigHeaderValue, sign, verify } from '../../functions/_lib/files-sign.ts';
-import { onRequest, parseRoute, sigFrom, type FilesEnv } from '../../functions/files/[[path]].ts';
+import { CLOCK_SKEW_S, onRequest, parseRoute, sigFrom, type FilesEnv } from '../../functions/files/[[path]].ts';
 import { AVATAR, B_IMG, BASE, ENV, EXE, getReq, IMG, PDF, PPTX, put, setup, signOne, signReq, T0, THUMB, type SignedItem } from './files-harness.ts';
 import { ID1, ID2, NOTE, UA, webp } from './files-fakes.ts';
 import { liveObjStore, OBJSTORE_LIVE } from '../shared/objstore-live.ts';
@@ -32,10 +32,11 @@ describe('GET 取对象（TC-B0-110、111、113；B1 P-files-sig：view、downlo
     expect(r.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(r.headers.get('Content-Security-Policy')).toBe("sandbox; default-src 'none'");
     expect(r.headers.get('Content-Disposition')).toBeNull();
-    s.c.advance(121);
+    s.c.advance(120); // B1 P-files-sig ①：120 秒边界，正好到期那一秒还能取，过 1 秒就 expired
+    expect((await s.call(getReq(it0))).status).toBe(200);
+    s.c.advance(1);
     const late = await s.call(getReq(it0));
-    expect(late.status).toBe(403);
-    expect(await late.json()).toEqual({ code: 'expired' });
+    expect([late.status, await late.json()]).toEqual([403, { code: 'expired' }]);
   });
 
   it('TC-B0-111：改桶、路径、p、e、d、s 任一个字符，签名搬进查询串，换掉 FILES_URL_SECRET → 全部 403 bad_signature', async () => {
@@ -74,8 +75,7 @@ describe('GET 取对象（TC-B0-110、111、113；B1 P-files-sig：view、downlo
       expect(((await r.json()) as { code: string }).code, JSON.stringify(t)).toBe('bad_signature');
     }
     const r2 = await s.call(getReq(it0), { ...ENV, FILES_URL_SECRET: 'another-fake-files-url-secret-0000000000' });
-    expect(r2.status).toBe(403);
-    expect(await r2.json()).toEqual({ code: 'bad_signature' });
+    expect([r2.status, await r2.json()]).toEqual([403, { code: 'bad_signature' }]);
     // 原签名仍然有效（证明上面是因为改动才失败）
     expect((await s.call(getReq(it0))).status).toBe(200);
   });
@@ -149,10 +149,10 @@ describe('GET 取对象（TC-B0-110、111、113；B1 P-files-sig：view、downlo
           ? new Request(msUrl(BASE, bucket, path, e, sg))
           : getReq({ url: objectUrl(BASE, bucket, path), sig: sigHeaderValue(purpose, e, d, sg) });
       };
-      const over = await s.call(await req(nowS + cap + 1));
+      const over = await s.call(await req(nowS + cap + CLOCK_SKEW_S + 1)); // 上限有 5 秒时钟余量
       expect([over.status, await over.json()], `${purpose} ${path}`).toEqual([403, { code: 'bad_signature' }]);
       // 对象没传：过了签名和有效期检查才会走到 404
-      expect((await s.call(await req(nowS + cap))).status, `${purpose} ${path}`).toBe(404);
+      expect((await s.call(await req(nowS + cap + CLOCK_SKEW_S))).status, `${purpose} ${path}`).toBe(404);
     }
     expect(s.logs.filter((l) => l.code === 'get_ttl_over_purpose')).toHaveLength(cases.length);
   });
@@ -177,8 +177,7 @@ describe('GET 取对象（TC-B0-110、111、113；B1 P-files-sig：view、downlo
     const e = T0 / 1000 + 60;
     const sig = await sign(ENV.FILES_URL_SECRET, 'view', 'images', IMG, e, '');
     const r = await s.call(getReq({ url: objectUrl(BASE, 'images', IMG), sig: sigHeaderValue('view', e, '', sig) }));
-    expect(r.status).toBe(404);
-    expect(await r.json()).toEqual({ code: 'not_found' });
+    expect([r.status, await r.json()]).toEqual([404, { code: 'not_found' }]);
   });
 
   it('TC-B0-113：下载文件名清理过（../、U+202E、CON、a:b），用 filename*=UTF-8', async () => {
@@ -263,6 +262,7 @@ describe('预检和杂项', () => {
     expect((ok.headers.get('Access-Control-Allow-Headers') ?? '').split(', ')).toContain('x-files-sig');
     const obj = await s.call(new Request(`${BASE}/files/v1/o/images/${IMG}`, { method: 'OPTIONS', headers: { Origin: EXE } }));
     expect(obj.headers.get('Access-Control-Allow-Methods')).toBe('GET, PUT, POST, OPTIONS');
+    expect((obj.headers.get('Access-Control-Allow-Headers') ?? '').split(', ')).toContain('x-files-sig'); // /sb 不放行见 sb-proxy.test.ts
     const no = await s.call(new Request(`${BASE}/files/v1/sign`, { method: 'OPTIONS', headers: { Origin: 'https://evil.example' } }));
     expect(no.headers.get('Access-Control-Allow-Origin')).toBeNull();
   });
