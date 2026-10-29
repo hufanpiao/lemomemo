@@ -371,7 +371,13 @@ isOneToOne: false
                 }
           }
           Functions: {
-            "account_usable":
+            "account_request_deletion":
+{ Args: { "p_user": string }; Returns: string
+                           },
+"account_restore":
+{ Args: { "p_user": string }; Returns: string
+                           },
+"account_usable":
 { Args: { "p_user": string }; Returns: boolean
                            },
 "admin_set_disabled":
@@ -407,6 +413,9 @@ isOneToOne: false
 { Args: { "p_tbl": string }; Returns: {
               "no_conflict": (string)[],"system_cols": (string)[]
             }[]
+                           },
+"take_rate":
+{ Args: { "p_key": string,"p_limit": number,"p_window_s": number }; Returns: boolean
                            }
           }
           Enums: {
