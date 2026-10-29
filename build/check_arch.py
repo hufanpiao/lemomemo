@@ -15,6 +15,11 @@
        （U+200B–U+200F、U+202A–U+202E、U+2060–U+2069、U+061C、U+2028、U+2029、U+180E、U+3164、U+115F、U+1160、U+FFA0、
        U+E0000–U+E007F、文件中间的 U+FEFF；U+00AD、U+FE00–U+FE0F 只在代码类扩展名里拦），要写成转义
        （B1 接手清单 LINT-bidi，防 Trojan Source；UTF-16 文件先解码再扫；--root 不在 git 里或 git 出错时整棵树扫）
+  BINIMPORT JS/TS 源码里 require（含 require.call/apply、require?.()、(0, require)()、createRequire 绑定的名字和
+       createRequire(…)() 连写）、import、import()、export … from、importScripts、new Worker 的目标路径不准以二进制扩展名结尾
+       （BIDI_BINARY_EXT 加 .node、.so、.dylib；Node 的 CJS 把不认识的扩展名当 JS 执行，二进制里藏的代码评审在 diff 里看不到）。
+       例外只有一种：src/ 下（Vite 打包）的 import / export … from / import() 引图片（png、jpg、jpeg、gif、webp、avif、ico、bmp）
+       并且带 ?url 或 ?inline 后缀（B1 接手清单 LINT-binimport；扫的文件同 BIDI）
 有错误时退出码 1，只有警告时 0。--root 给自测用（tests/arch-fixtures/check_arch/ 下的样例目录）。
 """
 import argparse
@@ -402,6 +407,201 @@ def check_bidi(root, errors):
                 errors.append(("BIDI", rel, line, f"原样出现看不见的控制字符 U+{cp:04X}（Trojan Source 一类），要写成转义 {esc}"))
 
 
+# BINIMPORT（B1 接手清单 LINT-binimport）：require / import 的目标不准是二进制扩展名。
+# NUL 在前 8000 字节的 .png 里写 JS，git 和 GitHub 当二进制、评审看不到内容，但 require('./x.png') 照样执行（BIDI 管不到）
+BINIMPORT_EXT = BIDI_BINARY_EXT + (".node", ".so", ".dylib")
+BINIMPORT_SRC_EXT = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
+# 例外：src/ 下由 Vite 打包的代码用 import 引图片，并且明写 ?url 或 ?inline（Vite 只给 URL 或 data URL，不执行）。
+# 带了查询串，Node 的 CJS 按文件名“x.png?url”找不到文件、ESM 遇到 .png 报未知扩展名，两边都不会把它当 JS 跑。
+# 不带后缀的 import logo from './x.png'、.bin、.wasm、require 一律不放行
+BINIMPORT_EXEMPT_RE = re.compile(r"^[^?#]*\.(?:png|jpe?g|gif|webp|avif|ico|bmp)\?(?:url|inline)$", re.IGNORECASE)
+# 只认代码里的写法：在“骨架”（注释、字符串内容、正则字面量换成空格，引号留着）上找，注释和字符串里的假 import 不报
+BINIMPORT_CALL_NAMES = ("require", "import", "importScripts", "Worker", "SharedWorker")
+# 名字后面接 ( 的几种调用：f(、f?.(、f.call(、f.apply(、(0, f)(（名字后紧跟 ) 再接 (）
+BINIMPORT_CALL_TAIL = r"\s*(?:\?\.\s*|\.\s*(?:call|apply)\s*(?:\?\.\s*)?|\)\s*)?\("
+# createRequire（ESM 里把 .png 当代码执行几乎只有这一条路）：import { createRequire as cr }、{ createRequire: cr } 的别名也算
+BINIMPORT_FACTORY_ALIAS_RE = re.compile(r"(?<![\w$])createRequire\s*(?:as\s+|:\s*)([\w$]+)")
+BINIMPORT_FROM_RE = re.compile(r"(?<![\w$.])(from|import)\s*(?=['\"`])")
+# 这些词后面的 / 是正则开头（其余词、) ] } 和后置 ++ -- 后面是除号），同 tests/build/ts-scan.ts
+_REGEX_AFTER_WORD = {"return", "typeof", "instanceof", "case", "of", "in", "else", "await", "yield", "void", "throw", "new", "delete", "do"}
+_JS_TOKEN = re.compile(
+    r"(?P<ws>\s+)|(?P<lc>//[^\n]*)|(?P<bc>/\*.*?(?:\*/|\Z))|(?P<str>'(?:\\.|[^'\\\n])*'?|\"(?:\\.|[^\"\\\n])*\"?)"
+    r"|(?P<word>[\w$]+)|(?P<inc>\+\+|--)|(?P<other>.)",
+    re.S,
+)
+
+
+def js_skeleton(code):
+    """返回 (skel, literals)：skel 和原文等长，注释、字符串内容、模板的字面部分、正则字面量换成空格（换行和引号留着，
+    模板 ${…} 里照代码扫）；literals 是 {开引号下标: 字面量原文（不含引号，模板含 ${…}）}。
+    字符串遇换行就断（未闭合的不吞后面的行）；正则字面量按前一个记号判断，同 tests/build/ts-scan.ts"""
+    n = len(code)
+    skel = list(code)
+    literals = {}
+    state = {"prev": "", "word": ""}
+
+    def blank(a, b):
+        for k in range(a, min(b, n)):
+            if skel[k] != "\n":
+                skel[k] = " "
+
+    def regex_ok():
+        p = state["prev"]
+        return p == "" or p in "(,=:[!&|?{};+-*%<>~^" or state["word"] in _REGEX_AFTER_WORD
+
+    def template(start):
+        j, lit = start + 1, start + 1
+        while j < n and code[j] != "`":
+            if code[j] == "\\":
+                j += 2
+                continue
+            if code.startswith("${", j):
+                blank(lit, j)
+                state["prev"], state["word"] = "{", ""
+                j = run(j + 2, True)
+                lit = j
+                continue
+            j += 1
+        blank(lit, j)
+        literals[start] = code[start + 1:min(j, n)]
+        return j + 1
+
+    def run(i, in_expr):
+        depth = 0
+        while i < n:
+            c = code[i]
+            if c == "`":
+                i = template(i)
+                state["prev"], state["word"] = "`", ""
+                continue
+            if c == "/" and not code.startswith("//", i) and not code.startswith("/*", i) and regex_ok():
+                j, cls = i + 1, False
+                while j < n and code[j] != "\n" and (cls or code[j] != "/"):
+                    if code[j] == "\\":
+                        j += 2
+                        continue
+                    if code[j] == "[":
+                        cls = True
+                    elif code[j] == "]":
+                        cls = False
+                    j += 1
+                blank(i + 1, j)
+                i = j + 1
+                state["prev"], state["word"] = ")", ""
+                continue
+            m = _JS_TOKEN.match(code, i)
+            kind, end = m.lastgroup, m.end()
+            if kind in ("lc", "bc"):
+                blank(i, end)
+            elif kind == "str":
+                closed = end - i >= 2 and code[end - 1] == c
+                literals[i] = code[i + 1:end - 1 if closed else end]
+                blank(i + 1, end - 1 if closed else end)
+                state["prev"], state["word"] = c, ""
+            elif kind == "word":
+                state["prev"], state["word"] = "a", m.group(0)
+            elif kind == "inc":
+                state["prev"], state["word"] = ")", ""
+            elif kind == "other":
+                if in_expr and c == "{":
+                    depth += 1
+                if in_expr and c == "}":
+                    if depth == 0:
+                        return i + 1
+                    depth -= 1
+                state["prev"], state["word"] = c, ""
+            i = end
+        return n
+
+    run(0, False)
+    return "".join(skel), literals
+
+
+def _match_close(skel, open_at):
+    """skel 里 open_at 处的 ( 对应的 )；括号不配对时退回这一行的行尾"""
+    pairs = {"(": ")", "[": "]", "{": "}"}
+    stack = []
+    for k in range(open_at, len(skel)):
+        ch = skel[k]
+        if ch in pairs:
+            stack.append(pairs[ch])
+        elif ch in ")]}":
+            if not stack or stack.pop() != ch:
+                break
+            if not stack:
+                return k
+    eol = skel.find("\n", open_at)
+    return len(skel) if eol < 0 else eol
+
+
+def binimport_ext(spec):
+    """目标路径以二进制扩展名结尾就返回扩展名。宁可多报：原文、去掉 ? 之后、去掉 # 之后、模板的 ${…} 换掉之后，任一种命中都算"""
+    variants = set()
+    for s in (spec, re.sub(r"\$\{[^`]*?\}", "x", spec)):
+        for cut in (s, s.split("?")[0], s.split("#")[0], s.split("?")[0].split("#")[0]):
+            variants.add(cut.strip().lower())
+    for v in variants:
+        for ext in BINIMPORT_EXT:
+            if v.endswith(ext):
+                return ext
+    return None
+
+
+def check_binimport(root, errors):
+    for rel, p in bidi_files(root):
+        if not rel.lower().endswith(BINIMPORT_SRC_EXT):
+            continue
+        code = p.read_bytes().decode("utf-8", errors="replace")
+        skel, literals = js_skeleton(code)
+        hits = []  # (开引号下标, 写法)
+
+        def in_parens(open_at, how):
+            # 括号里的所有字符串都看（拼接、三元、importScripts 多个参数都算）
+            close = _match_close(skel, open_at)
+            return [(at, how) for at in literals if open_at < at < close]
+
+        factories = {"createRequire"} | set(BINIMPORT_FACTORY_ALIAS_RE.findall(skel))
+        fact_alt = "|".join(re.escape(f) for f in sorted(factories))
+        # const/let/var r = createRequire(…) 以及 r = createRequire(…)：绑定出来的名字都当 require
+        # 允许 TS 类型注解（const r: NodeRequire = …；注解里可有 =>、泛型，所以用非贪婪、允许 =，只不跨 ; 和换行）
+        # 和 xxx. / xxx?. 前缀（module.createRequire、m.createRequire，和下面连写的认法一致）。
+        # 带注解的一遍可能把 “const x: T = a, r = createRequire(” 记成 x，再跑一遍不带注解的取并集，r 也收进来（只会多报）
+        prefix = r"(?:[\w$]+\s*\??\.\s*)*"
+        bound = set()
+        for annot in (r"\s*:[^;\n]*?", ""):
+            bound |= set(re.findall(rf"(?<![\w$.])([\w$]+){annot}\s*=\s*{prefix}(?:{fact_alt})\s*\(", skel))
+        bound -= set(BINIMPORT_CALL_NAMES)
+        names = {n: f"{n}()" for n in BINIMPORT_CALL_NAMES}
+        names.update({n: f"createRequire 得到的 {n}()" for n in bound})
+        call_re = re.compile(rf"(?<![\w$])({'|'.join(re.escape(n) for n in sorted(names))}){BINIMPORT_CALL_TAIL}")
+        for m in call_re.finditer(skel):
+            hits += in_parens(m.end() - 1, names[m.group(1)])
+        # createRequire(…)(…) 连写：看第二对括号
+        for m in re.finditer(rf"(?<![\w$])(?:{fact_alt})\s*\(", skel):
+            close = _match_close(skel, m.end() - 1)
+            nxt = re.compile(r"\s*(?:\?\.\s*)?\(").match(skel, close + 1)
+            if close < len(skel) and skel[close] == ")" and nxt:
+                hits += in_parens(nxt.end() - 1, "createRequire(…)()")
+        for m in BINIMPORT_FROM_RE.finditer(skel):
+            if m.end() in literals:
+                hits.append((m.end(), "import/export … from" if m.group(1) == "from" else "import"))
+        seen = set()
+        for at, how in sorted(hits):
+            if at in seen:
+                continue
+            seen.add(at)
+            spec = literals[at]
+            ext = binimport_ext(spec)
+            if not ext:
+                continue
+            vite_import = how in ("import()", "import/export … from", "import") and code[at] != "`"
+            if vite_import and rel.startswith("src/") and BINIMPORT_EXEMPT_RE.match(spec):
+                continue
+            errors.append(("BINIMPORT", rel, line_of(code, at),
+                           f"{how} 的目标是二进制扩展名 {ext}：{spec[:80]}（Node 的 CJS 把不认识的扩展名当 JS 执行，"
+                           f"二进制里藏的代码评审在 diff 里看不到；src/ 下 Vite 引图片要写 ?url 或 ?inline）"))
+
+
 def main(argv=None):
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
@@ -421,6 +621,7 @@ def main(argv=None):
     check_p142(root, errors)
     check_a24_disable(root, errors)
     check_bidi(root, errors)
+    check_binimport(root, errors)
 
     if args.json:
         as_dict = lambda r: {"rule": r[0], "file": r[1], "line": r[2], "message": r[3]}  # noqa: E731
