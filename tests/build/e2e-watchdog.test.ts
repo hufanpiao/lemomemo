@@ -1,21 +1,21 @@
 // e2e 不再挂死（接手清单 E2E-webkit-hang，需求记录 R-267 D2）：
 // • tools/e2e/run-watchdog.mjs：纯函数（平台→结束办法、阈值越界、只针对 pid、参数解析）；真跑一次——拉起一个不输出的 node 子进程
 //   （它再拉一个孙进程），阈值 2 秒，断言退出码 124、子孙都已不在；一直有输出（阈值 5 秒）的不结束；子进程自己退出时退出码原样带出；
-//   子进程已退出、孙进程攥着管道时不执行结束命令
+//   子进程已退出、孙进程攥着管道时：过了退出宽限就收尾（不等静默阈值），POSIX 收进程组、Windows 不结束任何进程；
+//   --debug、--ui、PWDEBUG 整个透传（接手清单 E2E-watchdog-sugg ①③④，10-30）
 // • tests/e2e/global-timeout.ts：E2E_GLOBAL_TIMEOUT_MS 上下限、两组默认值
 // • 两个配置真加载出来的 globalTimeout、真后端组 webkit 项目的 actionTimeout、navigationTimeout、workers
 // 子进程都经 tools/e2e/run-watchdog.mjs 起（node），登记在 vitest.config.ts 的 SLOW_NODE_TESTS；
-// 下面 child_process 的类型 import 让 tests/arch/coverage.test.ts 的 HEAVY 规则认得出本文件起子进程（两边一致，审查必改，10-30）。
+// tests/arch/coverage.test.ts 的 isHeavy 顺着相对引用跟进 tools/ 认出本文件起子进程（E2E-watchdog-sugg ②）。
 // 阈值按机器满载时也稳来定（审查员 48 个忙进程下 300 毫秒阈值 6 次挂 3 次）
-import type { ChildProcess } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Writable } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
 import type { PlaywrightTestConfig } from '@playwright/test';
 import {
-  DEFAULT_SILENCE_MS, SILENCE_ENV, SILENCE_EXIT_CODE, killPlan, killTree, parseArgs, portFree, resolveCommand, runWatchdog, silenceMs,
-  tickDecision,
+  DEFAULT_SILENCE_MS, EXIT_GRACE_MS, SILENCE_ENV, SILENCE_EXIT_CODE, interactiveFlag, killPlan, killTree, orphanPlan, parseArgs, portFree,
+  reapOrphans, resolveCommand, runWatchdog, silenceMs, tickDecision,
 } from '../../tools/e2e/run-watchdog.mjs';
 import {
   GLOBAL_TIMEOUT_ENV, NO_BACKEND_GLOBAL_TIMEOUT_MS, REAL_GLOBAL_TIMEOUT_MS, REAL_WEBKIT_GLOBAL_TIMEOUT_MS, globalTimeoutMs,
@@ -26,17 +26,11 @@ import { REAL_ENV } from '../e2e/real-backend.ts';
 const ROOT = join(import.meta.dirname, '..', '..');
 const read = (f: string) => readFileSync(join(ROOT, f), 'utf8');
 const SLOW = { timeout: 30_000 };
-/** 只用来让 HEAVY 规则和 SLOW_NODE_TESTS 对得上；子进程类型在这里没有别的用处 */
-export type SpawnedByWatchdog = Pick<ChildProcess, 'pid'>;
+type Tick = Parameters<typeof tickDecision>[0];
 
 function sink(): { stream: Writable; text: () => string } {
   let buf = '';
-  const stream = new Writable({
-    write(chunk: Buffer, _enc, cb) {
-      buf += chunk.toString();
-      cb();
-    },
-  });
+  const stream = new Writable({ write: (chunk: Buffer, _enc, cb) => void ((buf += chunk.toString()), cb()) });
   return { stream, text: () => buf };
 }
 
@@ -72,16 +66,39 @@ describe('run-watchdog 纯函数', () => {
     }
   });
 
-  it('计时器判定：没到阈值等；到了且子进程还活着才结束；子进程已退出（exitCode 或 signalCode 有值）只收尾、不结束', () => {
-    const base = { handled: false, pid: 4321, exitCode: null, signalCode: null, now: 10_000, last: 0, silenceMs: 5000 };
-    expect(tickDecision({ ...base, now: 4999 })).toBe('wait');
-    expect(tickDecision(base)).toBe('kill');
-    expect(tickDecision({ ...base, handled: true })).toBe('wait');
-    expect(tickDecision({ ...base, pid: undefined })).toBe('wait');
-    expect(tickDecision({ ...base, exitCode: 0 })).toBe('orphaned');
-    expect(tickDecision({ ...base, exitCode: 1 })).toBe('orphaned');
-    expect(tickDecision({ ...base, signalCode: 'SIGTERM' })).toBe('orphaned');
-    expect(tickDecision({ ...base, exitCode: 0, now: 100 })).toBe('wait');
+  it('计时器判定：没到阈值等；到了且子进程还活着才结束；子进程已退出只收尾、不结束；exit 后过了宽限还没 close 就判 orphaned、不等静默阈值', () => {
+    const base = { handled: false, pid: 4321, exitCode: null, signalCode: null, exitedAt: null, now: 10_000, last: 0, silenceMs: 5000, graceMs: 1000 };
+    // 退出宽限：一直有输出（last = now），只看宽限
+    const g = { ...base, exitCode: 0, last: 10_000, silenceMs: 360_000 };
+    const cases: [Tick, string][] = [
+      [{ ...base, now: 4999 }, 'wait'], [base, 'kill'], [{ ...base, handled: true }, 'wait'], [{ ...base, pid: undefined }, 'wait'],
+      [{ ...base, exitCode: 0 }, 'orphaned'], [{ ...base, exitCode: 1 }, 'orphaned'], [{ ...base, signalCode: 'SIGTERM' }, 'orphaned'],
+      [{ ...base, exitCode: 0, now: 100 }, 'wait'], [{ ...g, exitedAt: 9001 }, 'wait'], [{ ...g, exitedAt: 9000 }, 'orphaned'],
+      [{ ...g, exitCode: null, signalCode: 'SIGTERM', exitedAt: 1 }, 'orphaned'], [{ ...g, exitedAt: null }, 'wait'],
+      [{ ...g, exitCode: null, exitedAt: 1 }, 'wait'], [{ ...g, exitedAt: 1, handled: true }, 'wait'], [{ ...g, exitedAt: 1, pid: undefined }, 'wait'],
+    ];
+    for (const [t, want] of cases) expect(tickDecision(t), JSON.stringify(t)).toBe(want);
+    expect(EXIT_GRACE_MS).toBe(10_000);
+  });
+
+  it('orphaned 收残留：Windows 不结束任何进程；其他系统只打本次拉起的进程组 -pid；pid 不合法照样抛错', () => {
+    expect(orphanPlan('win32', 4321)).toEqual({ kind: 'none' });
+    expect(orphanPlan('linux', 4321)).toEqual({ kind: 'group', target: -4321, signal: 'SIGKILL' });
+    expect(orphanPlan('darwin', 7)).toEqual({ kind: 'group', target: -7, signal: 'SIGKILL' });
+    for (const pid of [0, -1, 1.5]) expect(() => orphanPlan('linux', pid), String(pid)).toThrow('pid 必须是正整数');
+    expect(reapOrphans({ pid: 4321, plat: 'win32' })).toBe('none');
+  });
+
+  it('调试、界面模式：--debug、--ui、--ui-host、--ui-port、PWDEBUG（非空非 0）认出来；别的不算', () => {
+    for (const a of ['--debug', '--ui', '--ui-port=8080', '--ui-host']) expect(interactiveFlag(['playwright', 'test', a, 'x'], {}), a).toBe(a);
+    for (const v of ['1', 'console']) expect(interactiveFlag(['playwright', 'test'], { PWDEBUG: v }), v).toBe('PWDEBUG');
+    for (const v of [undefined, '', '0']) expect(interactiveFlag(['playwright', 'test'], { PWDEBUG: v }), String(v)).toBeNull();
+    for (const a of ['--debugger', '--uix', '--headed', '-g', 'ui']) expect(interactiveFlag(['playwright', 'test', a], {}), a).toBeNull();
+  });
+
+  it('调试、界面模式带等号：--ui=true、--debug=1、--debug=inspector 认出来；=false、=0、--debugger=1 不算', () => {
+    for (const a of ['--ui=true', '--ui=1', '--debug=1', '--debug=inspector']) expect(interactiveFlag(['playwright', 'test', a], {}), a).toBe(a);
+    for (const a of ['--ui=false', '--debug=0', '--debugger=1', '--uix=true']) expect(interactiveFlag(['playwright', 'test', a], {}), a).toBeNull();
   });
 
   it('E2E_SILENCE_MS：默认 6 分钟，1～60 分钟之间，越界、非纯十进制抛错', () => {
@@ -96,10 +113,8 @@ describe('run-watchdog 纯函数', () => {
 
   it('参数：[--check-ports a,b] -- 命令…；没有 -- 或 -- 后面是空的拒；端口不合法拒', () => {
     expect(parseArgs(['--', 'playwright', 'test'])).toEqual({ checkPorts: [], command: ['playwright', 'test'] });
-    expect(parseArgs(['--check-ports', '8789,9197,9196', '--', 'playwright', 'test', '-c', 'x.ts', '--', 'y'])).toEqual({
-      checkPorts: [8789, 9197, 9196],
-      command: ['playwright', 'test', '-c', 'x.ts', '--', 'y'],
-    });
+    const want = { checkPorts: [8789, 9197, 9196], command: ['playwright', 'test', '-c', 'x.ts', '--', 'y'] };
+    expect(parseArgs(['--check-ports', '8789,9197,9196', '--', 'playwright', 'test', '-c', 'x.ts', '--', 'y'])).toEqual(want);
     expect(() => parseArgs(['playwright', 'test'])).toThrow('用法');
     expect(() => parseArgs(['--'])).toThrow('用法');
     expect(() => parseArgs(['--check-ports', '8789,abc', '--', 'x'])).toThrow('不合法的端口');
@@ -115,14 +130,10 @@ describe('run-watchdog 纯函数', () => {
   });
 
   it('源码：不按端口、进程名找或结束进程；package.json 的 e2e、e2e:real 都套了看门狗', () => {
-    const code = read('tools/e2e/run-watchdog.mjs')
-      .split('\n')
-      .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*'))
-      .join('\n');
-    for (const bad of ['netstat', 'lsof', 'fuser', 'Get-NetTCPConnection', 'Stop-Process', 'pkill', 'killall', '/IM']) {
-      expect(code, bad).not.toContain(bad);
-    }
-    // process.kill 只有两处：打自己拉起的进程组（killPlan 给的 -pid）和转发 Ctrl+C
+    const lines = read('tools/e2e/run-watchdog.mjs').split('\n');
+    const code = lines.filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n');
+    for (const bad of ['netstat', 'lsof', 'fuser', 'Get-NetTCPConnection', 'Stop-Process', 'pkill', 'killall', '/IM']) expect(code, bad).not.toContain(bad);
+    // process.kill 只有两处：打自己拉起的进程组（killPlan、orphanPlan 给的 -pid，都经 signalGroup）和转发 Ctrl+C
     expect([...code.matchAll(/process\.kill\(([^,]+),/g)].map((m) => m[1])).toEqual(['plan.target', '-child.pid']);
     const scripts = (JSON.parse(read('package.json')) as { scripts: Record<string, string> }).scripts;
     expect(scripts['e2e']).toBe('node tools/e2e/run-watchdog.mjs --check-ports 8788,9199,9198 -- playwright test');
@@ -147,14 +158,8 @@ describe('run-watchdog 真跑（起 node 子进程，只结束自己拉起的那
     let pidsAtKill: RegExpExecArray | null = null;
     let kills = 0;
     const code = await runWatchdog({
-      command: ['node', '-e', child],
-      silenceMs: 2000,
-      checkPorts: [1],
-      out: out.stream,
-      err: err.stream,
-      onSpawn: (pid) => {
-        spawned = pid;
-      },
+      command: ['node', '-e', child], silenceMs: 2000, checkPorts: [1], out: out.stream, err: err.stream,
+      onSpawn: (pid) => void (spawned = pid),
       kill: (k) => {
         kills++;
         pidsAtKill = /PIDS (\d+) (\d+)/.exec(out.text());
@@ -163,8 +168,7 @@ describe('run-watchdog 真跑（起 node 子进程，只结束自己拉起的那
     });
     expect(kills).toBe(1);
     expect(pidsAtKill, '结束前子进程没来得及打印 PIDS（机器太忙？）').not.toBeNull();
-    expect(code).toBe(SILENCE_EXIT_CODE);
-    expect(code).toBe(124);
+    expect([code, SILENCE_EXIT_CODE]).toEqual([124, 124]);
     const m = /PIDS (\d+) (\d+)/.exec(out.text());
     const pids = [Number(m?.[1]), Number(m?.[2])];
     expect(pids[0]).toBe(spawned);
@@ -177,15 +181,7 @@ describe('run-watchdog 真跑（起 node 子进程，只结束自己拉起的那
     const child = "let n = 0; const t = setInterval(() => { console.log('tick ' + n); if (++n === 16) clearInterval(t); }, 50);";
     const out = sink();
     let kills = 0;
-    const code = await runWatchdog({
-      command: ['node', '-e', child],
-      silenceMs: 5000,
-      out: out.stream,
-      err: sink().stream,
-      kill: () => {
-        kills++;
-      },
-    });
+    const code = await runWatchdog({ command: ['node', '-e', child], silenceMs: 5000, out: out.stream, err: sink().stream, kill: () => void kills++ });
     expect(kills).toBe(0);
     expect(code).toBe(0);
     expect(out.text()).toContain('tick 0');
@@ -194,49 +190,47 @@ describe('run-watchdog 真跑（起 node 子进程，只结束自己拉起的那
 
   it('子进程自己退出：退出码原样带出，标准错误也转发', SLOW, async () => {
     const err = sink();
-    const code = await runWatchdog({
-      command: ['node', '-e', "console.error('boom'); process.exit(3)"],
-      silenceMs: 60_000,
-      out: sink().stream,
-      err: err.stream,
-    });
+    const code = await runWatchdog({ command: ['node', '-e', "console.error('boom'); process.exit(3)"], silenceMs: 60_000, out: sink().stream, err: err.stream });
     expect(code).toBe(3);
     expect(err.text()).toContain('boom');
   });
 
-  it('子进程自己先退出、孙进程攥着输出管道：静默到了也不执行结束命令（pid 可能已被复用），断开管道照常收尾', SLOW, async () => {
-    // 孙进程继承子进程的标准输出、标准错误；15 秒后自己退出兜底，用例最后由本测试按它自己报的 pid 结束
+  it('子进程自己先退出、孙进程攥着输出管道：退出宽限 0.5 秒后就收尾（静默阈值 60 秒不用等），不执行 taskkill', SLOW, async () => {
+    // 孙进程继承子进程的标准输出、标准错误。Windows 上要 detached 才攥得住管道（不然子进程一退出 close 就到，实测）；
+    // POSIX 上不 detached，留在子进程的进程组里，看门狗按 orphanPlan 收这一组。15 秒后自己退出兜底，用例最后按它报的 pid 收拾
     const child = [
       "const { spawn } = require('node:child_process');",
-      "const g = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 15000)'], { stdio: ['ignore', 'inherit', 'inherit'] });",
+      "const g = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 15000)'],",
+      "  { stdio: ['ignore', 'inherit', 'inherit'], detached: process.platform === 'win32', windowsHide: true });",
       "console.log('PIDS ' + process.pid + ' ' + g.pid);",
       'process.exit(0);',
     ].join('\n');
     const out = sink();
     const err = sink();
     let kills = 0;
+    const reaps: ('none' | 'group')[] = [];
+    const t0 = Date.now();
     const code = await runWatchdog({
-      command: ['node', '-e', child],
-      silenceMs: 1500,
-      out: out.stream,
-      err: err.stream,
-      kill: () => {
-        kills++;
-      },
+      command: ['node', '-e', child], silenceMs: 60_000, exitGraceMs: 500, out: out.stream, err: err.stream, kill: () => void kills++,
+      reap: (k) => (reaps.push(reapOrphans(k)), reaps.at(-1) ?? 'none'),
     });
+    const elapsed = Date.now() - t0;
     const m = /PIDS (\d+) (\d+)/.exec(out.text());
     const grand = Number(m?.[2]);
+    const grandAliveAtReturn = grand > 0 && alive(grand);
     try {
       expect(m, '子进程没打印 PIDS').not.toBeNull();
-      // 两个平台都成立：不执行结束命令，退出码是子进程自己的 0。
-      // POSIX 上孙进程攥着管道，close 要等静默阈值到了由看门狗断开（打印“已自己退出”）；
-      // Windows 上子进程一退出 close 就到了，走不到那一支——那一支由上面 tickDecision 的纯函数用例覆盖
-      expect(kills).toBe(0);
-      expect(code).toBe(0);
+      expect(elapsed, `用了 ${elapsed} 毫秒`).toBeLessThan(15_000);
+      expect({ kills, code }).toEqual({ kills: 0, code: 0 });
       expect(err.text()).not.toContain('已结束本次拉起的进程树');
-      if (process.platform !== 'win32') {
-        expect(err.text()).toContain('已自己退出');
+      expect(err.text()).toContain('已自己退出，但退出后 0.5 秒还有子孙进程攥着输出');
+      expect(reaps).toEqual([process.platform === 'win32' ? 'none' : 'group']);
+      if (process.platform === 'win32') {
         expect(err.text()).toContain('看门狗不再结束任何进程');
+        expect(grandAliveAtReturn, 'Windows 上看门狗不该结束孙进程').toBe(true);
+      } else {
+        expect(err.text()).toContain(`已结束它留下的进程组（-${m?.[1]}`);
+        expect(await gone([grand])).toBe(true);
       }
     } finally {
       // 收拾本测试自己间接拉起的孙进程（只按它报出的 pid）
@@ -245,9 +239,11 @@ describe('run-watchdog 真跑（起 node 子进程，只结束自己拉起的那
     expect(await gone([grand])).toBe(true);
   });
 
-  it('CI 模式：不计静默，退出码原样带出', SLOW, async () => {
-    const code = await runWatchdog({ command: ['node', '-e', 'process.exit(5)'], silenceMs: 60_000, ci: true });
-    expect(code).toBe(5);
+  it('CI 模式、调试模式（命令带 --debug）：整个透传，不计静默，退出码原样带出；调试模式说明一句', SLOW, async () => {
+    expect(await runWatchdog({ command: ['node', '-e', 'process.exit(5)'], silenceMs: 60_000, ci: true })).toBe(5);
+    const err = sink();
+    expect(await runWatchdog({ command: ['node', '-e', 'process.exit(4)', '--', '--debug'], silenceMs: 60_000, env: {}, err: err.stream })).toBe(4);
+    expect(err.text()).toContain('--debug 是调试、界面模式，不计静默、不结束进程，原样透传');
   });
 
   it('portFree：有进程在听的端口报“没释放”，只连一下不做别的', SLOW, async () => {

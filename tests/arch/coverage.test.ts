@@ -2,7 +2,7 @@
 // 少一条就报“规则无违规样例”。按规则号核（读架构文档 2.3 的表），不按 ESLint 规则名核——
 // 同一个 ESLint 规则 id 下挂了好几条架构规则，删掉其中一条的全部样例，按规则名核是发现不了的（QA 改坏抽查 10）
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FIXTURES, loadFixtures, ROOT } from './fixture-header.ts';
 
@@ -96,17 +96,55 @@ const NODE_TEST_DIRS = ['shared', 'arch', 'build', 'functions', 'edge', 'data-ma
 /** 扫出来是重型、其实不起进程的：只用到辅助模块里的纯函数（写明理由；不再被扫出时要删掉） */
 const NOT_HEAVY: Readonly<Record<string, string>> = {
   'tests/build/run-compat.test.ts': '只用 tests/compat/run-compat.ts 的 parseArgs、missingSupabaseEnv，不起 vitest 子进程',
+  // 下面三个经 tools/e2e/real-backend.mjs（它的 up、check 等子命令用 spawnSync 起 supabase CLI、npm）被扫出，只用护栏、改写、取状态的纯函数
+  'tests/build/e2e-real-backend.test.ts': '只用 tools/e2e/real-backend.mjs 的护栏、config 改写等纯函数，不起子进程（文件头写明）',
+  'tests/build/e2e-real-backend-bypass.test.ts': '只用 tools/e2e/real-backend.mjs 的 checkGuard、rewriteConfig 等纯函数，不起子进程',
+  'tests/build/e2e-real-backend-env.test.ts': '只用 tools/e2e/real-backend.mjs 的 pickEnv、functionsEnvText 等纯函数，不起子进程',
 };
 
-/** 文件本身或它经相对路径引到的 tests/ 下辅助模块（递归）里有没有重型标记 */
+/** 会起子进程的导出（模块路径相对仓库根）：NOT_HEAVY 里的文件和它引的 tests/ 辅助模块都不许导入，也不许整体导入这些模块 */
+const SPAWNING_EXPORTS: Readonly<Record<string, readonly string[]>> = {
+  'tools/e2e/real-backend.mjs': ['statusEnv'], // 起 supabase CLI（spawnSync）；其余导出是纯函数、常量
+};
+
+/** file 及它经相对路径引到的 tests/ 辅助模块（递归）从 SPAWNING_EXPORTS 模块导入的禁用名；整体导入（* as、默认导入、import()）记 '*' */
+export function spawningImports(file: string, seen = new Set<string>()): string[] {
+  if (seen.has(file)) return [];
+  seen.add(file);
+  const out: string[] = [];
+  const src = readFileSync(file, 'utf8');
+  const found = [
+    ...[...src.matchAll(/\bimport\s+([^'";]*?)\s*from\s*'(\.{1,2}\/[^']+\.(?:ts|mjs))'/g)].map((m) => [m[1] ?? '', m[2] ?? ''] as const),
+    ...[...src.matchAll(/\bimport\(\s*'(\.{1,2}\/[^']+\.(?:ts|mjs))'/g)].map((m) => ['*', m[1] ?? ''] as const),
+  ];
+  for (const [clause, spec] of found) {
+    const dep = join(file, '..', spec);
+    const rel = dep.slice(ROOT.length + 1).replaceAll('\\', '/');
+    const banned = SPAWNING_EXPORTS[rel];
+    if (!banned) {
+      if (dep.startsWith(join(ROOT, 'tests') + sep) && !dep.endsWith('.test.ts') && existsSync(dep)) out.push(...spawningImports(dep, seen));
+      continue;
+    }
+    if (/^type\b/.test(clause)) continue; // 只导入类型，不会执行
+    if (clause.replace(/\{[^}]*\}/, '').replace(/,/g, '').trim() !== '') out.push(`${rel}:*`);
+    const names = (/\{([^}]*)\}/.exec(clause)?.[1] ?? '').split(',').map((n) => n.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0] ?? '');
+    out.push(...names.filter((n) => banned.includes(n)).map((n) => `${rel}:${n}`));
+  }
+  return out;
+}
+
+/** 顺着相对引用跟进的范围：tests/ 下的辅助模块、tools/ 下的脚本（.ts、.mjs；测试文件本身不跟） */
+const FOLLOW_DIRS = [join(ROOT, 'tests') + sep, join(ROOT, 'tools') + sep];
+
+/** 文件本身或它经相对路径引到的 tests/、tools/ 下模块（递归）里有没有重型标记（E2E-watchdog-sugg ②：跟进 tools/**\/*.mjs） */
 export function isHeavy(file: string, seen = new Set<string>()): boolean {
   if (seen.has(file)) return false;
   seen.add(file);
   const src = readFileSync(file, 'utf8');
   if (HEAVY.test(src)) return true;
-  for (const m of src.matchAll(/(?:from|import\()\s*'(\.{1,2}\/[^']+\.ts)'/g)) {
+  for (const m of src.matchAll(/(?:from|import\()\s*'(\.{1,2}\/[^']+\.(?:ts|mjs))'/g)) {
     const dep = join(file, '..', m[1] ?? '');
-    if (dep.startsWith(join(ROOT, 'tests')) && !dep.endsWith('.test.ts') && existsSync(dep) && isHeavy(dep, seen)) return true;
+    if (FOLLOW_DIRS.some((d) => dep.startsWith(d)) && !dep.endsWith('.test.ts') && existsSync(dep) && isHeavy(dep, seen)) return true;
   }
   return false;
 }
@@ -138,5 +176,20 @@ describe('Vitest 分组：重型测试都在 node-slow（vitest.config.ts 的 SL
     expect(isHeavy(join(ROOT, 'tests/build/login-token-tests-run.test.ts'))).toBe(true);
     expect(isHeavy(join(ROOT, 'tests/build/objstore-fake.test.ts'))).toBe(false);
     expect(isHeavy(join(ROOT, 'tests/data-manifest/objstore-cases.test.ts'))).toBe(false);
+  });
+
+  it('NOT_HEAVY 里的文件（连同它引的 tests/ 辅助模块）不导入会起子进程的导出（real-backend.mjs 的 statusEnv 等），也不整体导入', () => {
+    expect(Object.keys(NOT_HEAVY).flatMap((f) => spawningImports(join(ROOT, f)).map((x) => `${f} → ${x}`))).toEqual([]);
+    // 自证：playwright.real.config.ts 确实导入了 statusEnv，这里认得出
+    expect(spawningImports(join(ROOT, 'playwright.real.config.ts'))).toEqual(['tools/e2e/real-backend.mjs:statusEnv']);
+  });
+
+  it('自证：只经 tools/ 下 .mjs 起子进程的文件（e2e-watchdog 经 tools/e2e/run-watchdog.mjs）也认得出，它本身没有重型标记', () => {
+    const f = join(ROOT, 'tests/build/e2e-watchdog.test.ts');
+    expect(HEAVY.test(readFileSync(f, 'utf8'))).toBe(false);
+    expect(isHeavy(f)).toBe(true);
+    expect(isHeavy(join(ROOT, 'tools/e2e/run-watchdog.mjs'))).toBe(true);
+    // 引了 tools/ 但那边不起子进程的不算
+    expect(isHeavy(join(ROOT, 'tests/build/preview-login.test.ts'))).toBe(false);
   });
 });

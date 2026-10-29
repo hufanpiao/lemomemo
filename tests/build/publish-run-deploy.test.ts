@@ -15,6 +15,7 @@ import {
   ACCT, CF_TOKEN, ctx, DB_PW, git, has, noSecrets, OPS_SECRETS, PS, REF, root, runScript, SB_TOKEN, setup, teardown, WRANGLER_QUIET, wranglerSafe, type Run,
 } from './publish-run-harness.ts';
 import { manualBlock, runManualBlock } from './publish-run-manual.ts';
+import { EVIL_FILE, gitTry, guardRepoConfig, plantSameLength } from './publish-run-gitguard.ts';
 
 const FULL = ['一致', REF, SB_TOKEN, DB_PW, CF_TOKEN, ACCT, 'lemomemo', '确认推送'];
 const SB_DB = 'SUPABASE_ACCESS_TOKEN,SUPABASE_DB_PASSWORD';
@@ -268,6 +269,49 @@ describe.skipIf(!PS)('publish.ps1 OPS-deploy ②③⑤⑥⑦⑧（假仓库、�
     expect(r.log.find((l) => l.startsWith('error\t'))).toContain('这个副本里没有 tag v99.99.99');
     expect(r.log.some((l) => l.startsWith('npm\t') || l.startsWith('node\t'))).toBe(false);
   }, 60_000);
+
+  // R-269：同样长度改文件、再把修改时间改回去，git status 看不出来；脚本用临时索引逐个比内容，第 1 步就停
+  const CONTENT_OK = '被跟踪的文件逐个比过内容（不靠大小和修改时间），和检出的提交一致';
+  it('R-269 前提：同长度改 package.json 并还原修改时间，git status 为空（旧做法被骗过）', () => {
+    const restore = guardRepoConfig([EVIL_FILE]);
+    try {
+      const evil = plantSameLength();
+      expect(readFileSync(join(ctx.repo, EVIL_FILE), 'utf8')).toBe(evil);
+      expect(evil).not.toBe(git(['show', `HEAD:${EVIL_FILE}`]));
+      expect(gitTry(['status', '--porcelain', '--untracked-files=all']).out).toBe('');
+    } finally {
+      restore();
+    }
+  });
+  it('R-269 同长度改过、修改时间还原：第 1 步就停，只列文件名，临时索引删掉了，GIT_INDEX_FILE 没留下', async () => {
+    const restore = guardRepoConfig([EVIL_FILE]);
+    try {
+      plantSameLength();
+      const r = await runScript('-CheckOnly -Ops', []);
+      expect(r.code, r.out).toBe(1);
+      expect(r.out).toContain('工作区干净');
+      expect(r.out).toContain(`git status 却看不出来（大小、修改时间都没变）：${EVIL_FILE}。没输入任何令牌`);
+      expect(r.out).not.toContain(CONTENT_OK);
+      expect(r.calls).toEqual([]);
+      expect(r.envLeft).toBe('');
+      expect(readdirSync(r.temp).filter((f) => f.startsWith('lemo-index-'))).toEqual([]);
+    } finally {
+      restore();
+    }
+  }, 180_000);
+  it('R-269 正常仓库：逐个比内容通过（CRLF、.gitattributes 转换不误报），临时索引删掉了', async () => {
+    const r = await runScript('-CheckOnly -Ops', []);
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toContain(CONTENT_OK);
+    expect(r.envLeft).toBe('');
+    expect(readdirSync(r.temp).filter((f) => f.startsWith('lemo-index-'))).toEqual([]);
+  }, 180_000);
+  it('R-269 第 1 步和第 5 步都在 git status 之后逐个比内容（静态核对）', () => {
+    const ps = readFileSync(join(root, 'tools', 'release', 'publish.ps1'), 'utf8');
+    const body = (name: string) => ps.slice(ps.indexOf(`function ${name}`), ps.indexOf('\n}', ps.indexOf(`function ${name}`)));
+    for (const f of ['Invoke-Checks', 'Assert-StillClean']) expect(body(f), f).toMatch(/'status', '--porcelain'[\s\S]*\n\s*Assert-ContentMatchesHead\n/u);
+    expect(body('Assert-ContentMatchesHead')).toMatch(/SetEnvironmentVariable\('GIT_INDEX_FILE', \$idx[\s\S]*'read-tree', 'HEAD'[\s\S]*'diff-files'[\s\S]*finally[\s\S]*SetEnvironmentVariable\('GIT_INDEX_FILE', \$old/u);
+  });
 });
 
 // 手册命令里 Read-Host -AsSecureString 读完令牌，紧接着的下一件事就是清剪贴板（演练台的 Set-Clipboard 记一行 clip）

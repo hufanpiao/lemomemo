@@ -6,12 +6,12 @@
 // OPS-deploy-sugg ① git var 失败就停；
 // R266-sugg ② 属性来源：窗口里有 GIT_ATTR_SOURCE 就停（不回显值）；local、worktree、global、system 任一级有 attr.tree 就停（大小写都拦）。
 // 不连 Cloudflare、Supabase、GitHub，不真的部署。只在 Windows 上跑。
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ctx, git, LFS_SYSTEM_CONFIG, PS, runScript, setup, teardown } from './publish-run-harness.ts';
+import { ctx, git, LFS_SYSTEM_CONFIG, PS, root, runScript, setup, teardown } from './publish-run-harness.ts';
 import { realSystemIsLfsOnly } from './publish-run-manual.ts';
+import { EVIL_FILE, EVIL_MARK, gitIn, gitTry, guardRepoConfig, plantReplace, REPLACE_BASE } from './publish-run-gitguard.ts';
 
 describe.skipIf(!PS)('publish.ps1 git 各级配置与属性来源（假仓库、私有的 HOME、GIT_CONFIG_SYSTEM）', () => {
   beforeAll(setup, 300_000);
@@ -52,7 +52,7 @@ describe.skipIf(!PS)('publish.ps1 git 各级配置与属性来源（假仓库、
   ];
   for (const c of wtCases) {
     it(`R-266 worktree 一级${c.name}：${c.ok ? '不拦' : '第 1 步就停'}`, async () => {
-      const wtFile = join(ctx.repo, '.git', 'config.worktree');
+      const restore = guardRepoConfig();
       try {
         if (c.ext) git(['config', '--local', 'extensions.worktreeConfig', 'true']);
         for (const [k, v] of c.worktree) git(['config', '--worktree', k, v]);
@@ -66,8 +66,7 @@ describe.skipIf(!PS)('publish.ps1 git 各级配置与属性来源（假仓库、
         expect(r.calls).toEqual([]);
         expect(r.envLeft).toBe('');
       } finally {
-        rmSync(wtFile, { force: true });
-        if (c.ext) git(['config', '--local', '--unset', 'extensions.worktreeConfig']);
+        restore();
       }
     }, 180_000);
   }
@@ -169,31 +168,81 @@ describe.skipIf(!PS)('publish.ps1 git 各级配置与属性来源（假仓库、
     expect(r.envLeft).toBe('');
   }, 180_000);
 
+  // R266-sugg ⑤：GIT_CONFIG 只对 git config 命令生效（相当于 --file）。设了以后按级列出的是假文件里的项，local 一级的 attr.tree 看不见，
+  // 别的 git 命令（check-attr、status、add）照旧读真配置；--local --list 报错只是碰巧停下
+  it('R266-sugg ⑤ 前提：GIT_CONFIG 能骗过 git config --show-scope --list，git check-attr 照旧用真配置', () => {
+    const restore = guardRepoConfig();
+    try {
+      const blob = gitIn(['hash-object', '-w', '--stdin'], { input: 'zz-attr-probe.txt filter=evil\n' });
+      const tree = gitIn(['mktree'], { input: `100644 blob ${blob}\t.gitattributes\n` });
+      git(['config', '--local', 'attr.tree', tree]);
+      const fake = join(ctx.dir, `fake-${Math.random().toString(36).slice(2, 10)}.gitconfig`);
+      writeFileSync(fake, '[user]\n\tname = fake\n', 'utf8');
+      const env = { GIT_CONFIG: fake };
+      expect(gitIn(['config', '--show-scope', '--list'])).toContain(`local\tattr.tree=${tree}`);
+      const fooled = gitIn(['config', '--show-scope', '--list'], { env });
+      expect(fooled).toBe('command\tuser.name=fake');
+      expect(() => gitIn(['config', '--local', '--list', '--name-only'], { env })).toThrow('only one config file at a time');
+      expect(gitIn(['check-attr', 'filter', '--', 'zz-attr-probe.txt'], { env })).toBe('zz-attr-probe.txt: filter: evil');
+    } finally {
+      restore();
+    }
+  });
+
+  it('R266-sugg ⑤ 窗口里有 GIT_CONFIG：一开始就停，报出变量名、不回显值，一个工具都没调', async () => {
+    const value = join(ctx.dir, 'TEST_ONLY_git_config_value_7b1e.gitconfig');
+    writeFileSync(value, '[user]\n\tname = fake\n', 'utf8');
+    const r = await runScript('-CheckOnly -Ops', [], { env: { GIT_CONFIG: value } });
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toContain('这个窗口里有会改 git 行为的环境变量：GIT_CONFIG。');
+    expect(r.out).not.toContain('TEST_ONLY_git_config_value_7b1e');
+    expect(r.log.join('\n')).not.toContain('TEST_ONLY_git_config_value_7b1e');
+    // 是新加的那一道拦下的，不是 --local --list 报错碰巧停下
+    expect(r.out).not.toContain('only one config file at a time');
+    expect(r.out).not.toContain('git 的 worktree 一级配置里没有');
+    expect(r.calls).toEqual([]);
+    expect(r.envLeft).toBe('');
+  }, 180_000);
+
+  // R266-sugg ⑦：guardRepoConfig 的撤销函数连别的 git 版本可能留下的空节（大小写不同的节头也算）一起删掉，.git\config 和开始前一字不差
+  it('R266-sugg ⑦ 清理：.git\\config 里留下的空节 [Attr]、[extensions] 也删掉，和用例开始前一字不差', () => {
+    const cfg = join(ctx.repo, '.git', 'config');
+    const before = readFileSync(cfg, 'utf8');
+    const restore = guardRepoConfig();
+    try {
+      appendFileSync(cfg, '[Attr]\n[extensions]\n', 'utf8');
+      git(['config', '--local', 'extensions.worktreeConfig', 'true']);
+      git(['config', '--worktree', 'attr.tree', 'HEAD']);
+      expect(readFileSync(cfg, 'utf8')).not.toBe(before);
+    } finally {
+      restore();
+    }
+    expect(readFileSync(cfg, 'utf8')).toBe(before);
+  });
+
   // 各级配了 attr.tree（值用 HEAD：真能用的 tree-ish）。键名大小写不同的写法 git 列出来都是 attr.tree
   const AT_BAD = { worktree: 'git 的 worktree 一级配置（.git\\config.worktree 之类）里有发布时不许有的设置：attr.tree（', global: 'git 的全局配置里有发布时不许有的设置：attr.tree（', system: 'git 的 system 一级配置里有发布时不许有的设置：attr.tree（', local: '仓库的 .git\\config 里有发布时不许有的设置：attr.tree（' };
-  const atCases: { name: string; want: string; prep: (home: string, sys: string) => () => void }[] = [
-    { name: 'local 一级 attr.tree', want: AT_BAD.local, prep: () => { git(['config', '--local', 'attr.tree', 'HEAD']); return () => git(['config', '--local', '--unset', 'attr.tree']); } },
-    { name: 'local 一级 Attr.Tree（大小写不同）', want: AT_BAD.local, prep: () => { git(['config', '--local', 'Attr.Tree', 'HEAD']); return () => git(['config', '--local', '--unset', 'attr.tree']); } },
+  // R266-sugg ⑥：prep 放在 try 里面，中途出错也由 finally 里的 guardRepoConfig 统一按“有就删”清掉（global、system 两级写的是私有文件，不用清）
+  const atCases: { name: string; want: string; prep: (home: string, sys: string) => void }[] = [
+    { name: 'local 一级 attr.tree', want: AT_BAD.local, prep: () => git(['config', '--local', 'attr.tree', 'HEAD']) },
+    { name: 'local 一级 Attr.Tree（大小写不同）', want: AT_BAD.local, prep: () => git(['config', '--local', 'Attr.Tree', 'HEAD']) },
     {
       name: 'worktree 一级 attr.tree',
       want: AT_BAD.worktree,
       prep: () => {
         git(['config', '--local', 'extensions.worktreeConfig', 'true']);
         git(['config', '--worktree', 'attr.tree', 'HEAD']);
-        return () => {
-          rmSync(join(ctx.repo, '.git', 'config.worktree'), { force: true });
-          git(['config', '--local', '--unset', 'extensions.worktreeConfig']);
-        };
       },
     },
-    { name: 'global 一级 [ATTR] TREE（大小写不同）', want: AT_BAD.global, prep: (home) => { writeFileSync(join(home, '.gitconfig'), '[ATTR]\n\tTREE = HEAD\n', 'utf8'); return () => undefined; } },
-    { name: 'system 一级 [Attr] Tree（四项 filter.lfs.* 之外）', want: AT_BAD.system, prep: (_h, sys) => { writeFileSync(sys, LFS_SYSTEM_CONFIG + '[Attr]\n\tTree = HEAD\n', 'utf8'); return () => undefined; } },
+    { name: 'global 一级 [ATTR] TREE（大小写不同）', want: AT_BAD.global, prep: (home) => writeFileSync(join(home, '.gitconfig'), '[ATTR]\n\tTREE = HEAD\n', 'utf8') },
+    { name: 'system 一级 [Attr] Tree（四项 filter.lfs.* 之外）', want: AT_BAD.system, prep: (_h, sys) => writeFileSync(sys, LFS_SYSTEM_CONFIG + '[Attr]\n\tTree = HEAD\n', 'utf8') },
   ];
   for (const c of atCases) {
     it(`R266-sugg ② ${c.name}：第 1 步就停`, async () => {
       const { home, xdg, sys } = privateGitHome();
-      const undo = c.prep(home, sys);
+      const restore = guardRepoConfig();
       try {
+        c.prep(home, sys);
         // 前提成立：git 确实读到了这一项（键名统一成小写 attr.tree）
         const env = { HOME: home, XDG_CONFIG_HOME: xdg, GIT_CONFIG_SYSTEM: sys };
         expect(gitIn(['config', '--list', '--name-only'], { env }).split('\n'), '没读到 attr.tree').toContain('attr.tree');
@@ -203,10 +252,72 @@ describe.skipIf(!PS)('publish.ps1 git 各级配置与属性来源（假仓库、
         expect(r.calls).toEqual([]);
         expect(r.envLeft).toBe('');
       } finally {
-        undo();
+        restore();
       }
     }, 180_000);
   }
+
+  // R-268：git replace 用含 evil 的提交顶替 tag 的提交。旧做法（git status --porcelain、HEAD 对 tag）看不出来；
+  // 脚本设 GIT_NO_REPLACE_OBJECTS=1 以后 git status 看得出，第 1 步查 refs/replace/ 不为空就停
+  it('R-268 前提：设了 replace，git status 为空、HEAD 仍是 tag，工作区却是 evil；GIT_NO_REPLACE_OBJECTS=1 时 status 看得出', () => {
+    const restore = guardRepoConfig([EVIL_FILE]);
+    try {
+      plantReplace();
+      expect(gitTry(['status', '--porcelain', '--untracked-files=all']).out).toBe('');
+      expect(git(['rev-parse', 'HEAD'])).toBe(git(['rev-parse', `v${ctx.ver}^{commit}`]));
+      expect(readFileSync(join(ctx.repo, EVIL_FILE), 'utf8')).toContain(EVIL_MARK);
+      expect(gitIn(['status', '--porcelain'], { env: { GIT_NO_REPLACE_OBJECTS: '1' } })).toBe(`M  ${EVIL_FILE}`);
+    } finally {
+      restore();
+    }
+  });
+
+  it('R-268 仓库里有替换对象：第 1 步就停，写明有替换对象、要本人检查，一个工具都没调', async () => {
+    const restore = guardRepoConfig([EVIL_FILE]);
+    try {
+      plantReplace();
+      const r = await runScript('-CheckOnly -Ops', []);
+      expect(r.code, r.out).toBe(1);
+      expect(r.out).toContain(`仓库里有替换对象（git replace，能让改过的文件在 git status 里看起来是干净的）：refs/replace/${git(['rev-parse', 'HEAD'])}。`);
+      expect(r.out).toContain('请本人检查');
+      expect(r.out).not.toContain('工作区干净');
+      expect(r.calls).toEqual([]);
+      expect(r.envLeft).toBe('');
+    } finally {
+      restore();
+    }
+  }, 180_000);
+
+  it('R-268 窗口里有 GIT_REPLACE_REF_BASE（替换引用放在 refs/replace/ 以外）：一开始就停，不回显值', async () => {
+    const restore = guardRepoConfig([EVIL_FILE]);
+    try {
+      plantReplace(REPLACE_BASE);
+      expect(gitIn(['status', '--porcelain'], { env: { GIT_REPLACE_REF_BASE: REPLACE_BASE } }), '前提：换了目录也能骗过 status').toBe('');
+      const r = await runScript('-CheckOnly -Ops', [], { env: { GIT_REPLACE_REF_BASE: REPLACE_BASE } });
+      expect(r.code, r.out).toBe(1);
+      expect(r.out).toContain('这个窗口里有会改 git 行为的环境变量：GIT_REPLACE_REF_BASE。');
+      expect(r.out).not.toContain('lemo-test-replace');
+      expect(r.calls).toEqual([]);
+      expect(r.envLeft).toBe('');
+    } finally {
+      restore();
+    }
+  }, 180_000);
+
+  it('R-268 第 5 步（部署前那次核对）也查替换对象：Assert-StillClean 先跑 Assert-NoHiddenGitState，里面查 refs/replace/', () => {
+    const ps = readFileSync(join(root, 'tools', 'release', 'publish.ps1'), 'utf8');
+    const body = (name: string) => ps.slice(ps.indexOf(`function ${name}`), ps.indexOf('\n}', ps.indexOf(`function ${name}`)));
+    expect(body('Assert-StillClean')).toMatch(/Assert-NoHiddenGitState[\s\S]*'status', '--porcelain'/u);
+    expect(body('Assert-NoHiddenGitState')).toContain("Invoke-Git @('for-each-ref', '--format=%(refname)', 'refs/replace/')");
+    expect(ps).toContain("[Environment]::SetEnvironmentVariable('GIT_NO_REPLACE_OBJECTS', '1', 'Process')");
+  });
+
+  it('R-268 窗口里预先有 GIT_NO_REPLACE_OBJECTS=0：脚本照样设成 1，正常仓库能过，结束时清掉', async () => {
+    const r = await runScript('-CheckOnly -Ops', [], { env: { GIT_NO_REPLACE_OBJECTS: '0' } });
+    expect(r.code, r.out).toBe(0);
+    expect(r.out).toContain('没有替换对象（refs/replace/）');
+    expect(r.envLeft).toBe('');
+  }, 180_000);
 
   it('R266-sugg ② 正常仓库（没有 GIT_ATTR_SOURCE，各级都没有 attr.tree）：照常通过', async () => {
     const { home, xdg, sys } = privateGitHome();
@@ -217,6 +328,7 @@ describe.skipIf(!PS)('publish.ps1 git 各级配置与属性来源（假仓库、
       'git 的全局配置里没有 filter.*、core.attributesfile、attr.tree',
       '没有 core.attributesfile、attr.tree；git 不读系统属性文件',
       '.git\\config 里没有过滤程序、include、hooksPath、fsmonitor、extensions.worktreeConfig 之类的设置（也没有 attr.tree）',
+      '没有 assume-unchanged / skip-worktree 标记，没有稀疏检出，没有替换对象（refs/replace/）',
     ]) expect(r.out).toContain(w);
     expect(r.out).not.toContain('会改 git 行为的环境变量');
     expect(r.envLeft).toBe('');
@@ -231,11 +343,4 @@ function privateGitHome() {
   const sys = join(home, 'system.gitconfig');
   writeFileSync(sys, LFS_SYSTEM_CONFIG, 'utf8');
   return { home, xdg, sys };
-}
-
-// 在假仓库里跑 git，能喂 stdin、加环境变量（publish-run-harness.ts 的 git() 不带这两样）
-function gitIn(args: string[], o: { input?: string; env?: Record<string, string> } = {}): string {
-  const r = spawnSync('git', ['-c', 'core.autocrlf=false', ...args], { cwd: ctx.repo, encoding: 'utf8', input: o.input, env: { ...process.env, ...o.env } });
-  if (r.status !== 0) throw new Error(`git ${args.join(' ')}：${r.stderr}`);
-  return r.stdout.trim();
 }

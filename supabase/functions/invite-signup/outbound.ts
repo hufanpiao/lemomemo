@@ -14,9 +14,16 @@
 //      这些写法只看解析结果会混过去，所以解析通过后再对原文查一遍。
 //      注意：envKind 判成 local 的主机里有 kong（lemo-e2e 容器里 SUPABASE_URL 是 http://kong:8000），但出站地址写 kong 不认——
 //      envKind 只决定“是不是本机环境”，出站回环只有 127.0.0.1 和 localhost 两个。
+//      端口写成 0（:0、:00、:000）也拒：肯定连不上，是误配（INVITE-sugg 10-30）。
+// 原文里只要有空白或控制字符（首尾、中间都算：空格、\t、\n、\r、全角空格 U+3000、不换行空格 NBSP、U+0000–U+001F、U+007F）一律拒，
+//   不论官方地址还是回环地址、不论哪个环境（INVITE-sugg 10-30，主持人定的统一口径；全空白也在这条里拒）。
+//   new URL 会悄悄去掉首尾空白、删掉中间的 \t \n \r，不拦的话 http://127.0.0.1:80\t81/x 这种会被解析成 8081 混过去。
+// 官方地址只认一字不差：前后多空格、末尾带 \n / \r\n、大小写不同（HTTPS://api.resend.com/emails）都不算官方地址；
+//   它们也不是回环地址，所以各个环境都拒（线上本来就不该设这两个变量，拒了才看得出模板没填好）。
 // 其余一律拒：别的主机（含官方主机换了路径、多了斜杠）、localhost.example.com、带 user@、解析不了、别的协议、全空白。
 // 返回值里的 overridden：true 表示换成了回环地址（不是官方地址）。index.ts 看到任一个为 true 就记一次日志 outbound_url_overridden
-// （每个函数实例只记一次，只记日志码不记地址），线上万一出现这条就说明有人配了本该只在本机用的变量。
+// （每个函数实例只记一次，只记日志码不记地址）。overridden 只有本机环境才可能是 true，所以 outbound_url_overridden 只会在本机出现，
+// 用来确认本机确实换了地址；线上（正式、预览）配错时日志里出现的是 outbound_url_invalid，同时回 500，线上要看的是这一条。
 import type { EnvKind } from '../_shared/env-kind.ts';
 
 /** 官方地址（线上默认；改之前写死在 index.ts 里的就是这两个） */
@@ -29,16 +36,27 @@ export const LOOPBACK_HOSTS: readonly string[] = ['127.0.0.1', 'localhost'];
 /** 原文的主机部分必须字面写成 127.0.0.1 或 localhost（不分大小写），后面紧跟端口、路径、查询、片段或结尾（D5） */
 const LITERAL_LOOPBACK = /^https?:\/\/(?:127\.0\.0\.1|localhost)(?=[:/?#]|$)/i;
 
+/** 有没有空白（\s：含全角空格 U+3000、NBSP 等 Unicode 空白）或控制字符（U+0000–U+001F、U+007F）。控制字符不写进正则，免得触发 eslint no-control-regex */
+function hasSpaceOrControl(s: string): boolean {
+  if (/\s/.test(s)) return true;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c <= 0x1f || c === 0x7f) return true;
+  }
+  return false;
+}
+
 export type OutboundUrl = { ok: true; url: string; overridden: boolean } | { ok: false };
 
 /**
  * 取一个出站地址。raw 是环境变量原值（没设是 undefined），official 是官方地址，env 是 envKind(SUPABASE_URL)。
- * 没设或空串 → 官方地址；全空白 → {ok: false}；等于官方地址 → 官方地址；
+ * 没设或空串 → 官方地址；任何位置有空白或控制字符（含首尾空白、全空白）→ {ok: false}；等于官方地址 → 官方地址；
  * 本机环境下、原文字面写 127.0.0.1 或 localhost 的回环地址 → 规范化后的这个地址（overridden: true）；其余 → {ok: false}
  */
 export function resolveOutboundUrl(raw: string | undefined, official: string, env: EnvKind): OutboundUrl {
   if (raw === undefined || raw === '') return { ok: true, url: official, overridden: false };
-  if (raw.trim() === '') return { ok: false };
+  // 原文任何位置有空白或控制字符都拒（含首尾空白、全空白 D4）：new URL 会去掉首尾空白、删掉中间的 \t \n \r，不拦就会混过去（INVITE-sugg 10-30）
+  if (hasSpaceOrControl(raw)) return { ok: false };
   if (raw === official) return { ok: true, url: official, overridden: false };
   if (env !== 'local') return { ok: false };
   let u: URL;
@@ -54,5 +72,8 @@ export function resolveOutboundUrl(raw: string | undefined, official: string, en
   if (!LOOPBACK_HOSTS.includes(u.hostname.toLowerCase())) return { ok: false };
   // 解析通过后再查原文：127.1、2130706433、0x7f000001、全角、百分号编码、末尾带点这些解析后也是 127.0.0.1，原文不是字面写法就拒
   if (!LITERAL_LOOPBACK.test(raw)) return { ok: false };
+  // 端口 0 肯定连不上，属于误配，拒（INVITE-sugg 10-30）。0 不是任何协议的默认端口，所以 :0、:00、:000 解析后 port 都是 '0'
+  // （不会像 :80/:443 那样被规范成空串）；没写端口或写的是默认端口时 port 是 ''，照常放行
+  if (u.port === '0') return { ok: false };
   return { ok: true, url: u.href, overridden: true };
 }

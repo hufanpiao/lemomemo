@@ -2,6 +2,7 @@
 // index.ts 的接法（读哪两个变量、不合规时当没配好）是源码核对，要读文件，放在 tests/build/e2e-real-backend-env.test.ts（本目录是 Workers 类型）。
 // 口径：不设 / 空串 → 官方地址（和改之前一样）；全空白任何环境都拒（D4）；一字不差的官方地址任何环境都认；
 // 回环地址（原文字面写 127.0.0.1 或 localhost，localhost 不分大小写；http 或 https）只有本机环境认（D5）；
+// 原文任何位置有空白或控制字符（首尾、中间；空格、\t、\n、\r、U+3000、NBSP、U+0000–U+001F、U+007F）任何环境都拒，官方地址、回环地址一样；回环地址端口写成 0（:0、:00、:000）也拒；官方地址只认一字不差（前后空白、换行、大小写不同都拒，各环境一样）；
 // 其余一律拒（选的是“直接拒”：index.ts 回 500 misconfigured，不悄悄回落到官方地址）。
 import { describe, expect, it } from 'vitest';
 import {
@@ -37,6 +38,25 @@ describe('官方默认值（线上不设变量时和改之前完全一样）', (
   it.each(ENVS)('%s：设成一字不差的官方地址也认（就是官方地址）', (env) => {
     for (const official of OFFICIAL) expect(resolveOutboundUrl(official, official, env)).toEqual({ ok: true, url: official, overridden: false });
   });
+
+  it.each(ENVS)('%s：官方地址前后多了空白或换行，不算一字不差，拒', (env) => {
+    for (const official of OFFICIAL) {
+      for (const raw of [`${official}\n`, `${official}\r\n`, `${official} `, ` ${official}`]) {
+        expect(resolveOutboundUrl(raw, official, env), `${env} ${JSON.stringify(raw)}`).toEqual({ ok: false });
+      }
+    }
+  });
+
+  it.each(ENVS)('%s：官方地址大小写不同（HTTPS://、主机大写）不算一字不差，拒', (env) => {
+    for (const [raw, official] of [
+      ['HTTPS://api.resend.com/emails', RESEND_EMAILS_URL],
+      ['https://API.RESEND.COM/emails', RESEND_EMAILS_URL],
+      ['https://api.resend.com/EMAILS', RESEND_EMAILS_URL],
+      ['HTTPS://challenges.cloudflare.com/turnstile/v0/siteverify', TURNSTILE_SITEVERIFY_URL],
+    ] as const) {
+      expect(resolveOutboundUrl(raw, official, env), `${env} ${raw}`).toEqual({ ok: false });
+    }
+  });
 });
 
 describe('本机环境可以换成回环地址', () => {
@@ -61,6 +81,39 @@ describe('本机环境可以换成回环地址', () => {
     expect(resolveOutboundUrl(raw, TURNSTILE_SITEVERIFY_URL, 'local')).toEqual({ ok: true, url: raw, overridden: true });
   });
 
+  it.each(ENVS)('%s：回环地址首尾带空白（末尾 \\n、\\r\\n、空格，前面空格、\\t）一律拒', (env) => {
+    for (const base of ['http://127.0.0.1:8081/e2e-fake-outbound/siteverify', 'http://localhost:9000/emails']) {
+      expect(resolveOutboundUrl(base, TURNSTILE_SITEVERIFY_URL, 'local')).toEqual({ ok: true, url: base, overridden: true });
+      for (const raw of [`${base}\n`, `${base}\r\n`, `${base} `, ` ${base}`, `\t${base}`]) {
+        expect(new URL(raw).href, JSON.stringify(raw)).toBe(base);
+        expect(resolveOutboundUrl(raw, TURNSTILE_SITEVERIFY_URL, env), `${env} ${JSON.stringify(raw)}`).toEqual({ ok: false });
+      }
+    }
+  });
+
+  it.each([
+    'http://127.0.0.1:0/',
+    'http://localhost:0/x',
+    'http://127.0.0.1:00/',
+    'https://localhost:000',
+    'http://127.0.0.1:000/x',
+    'http://localhost:00/x',
+    'http://LOCALHOST:0/a',
+    'http://127.0.0.1:0?x=1',
+  ])('local：端口写成 0（%s）肯定连不上，误配，拒', (raw) => {
+    expect(new URL(raw).port).toBe('0');
+    expect(resolveOutboundUrl(raw, TURNSTILE_SITEVERIFY_URL, 'local')).toEqual({ ok: false });
+  });
+
+  it.each([
+    ['http://127.0.0.1:8081/e2e-fake-outbound/siteverify', 'http://127.0.0.1:8081/e2e-fake-outbound/siteverify'],
+    ['http://127.0.0.1:10/a', 'http://127.0.0.1:10/a'],
+    ['http://localhost:65535/a', 'http://localhost:65535/a'],
+    ['http://127.0.0.1:080/a', 'http://127.0.0.1/a'],
+  ])('local：非 0 端口（%s）照旧放行，不被端口 0 的规则误伤', (raw, url) => {
+    expect(resolveOutboundUrl(raw, TURNSTILE_SITEVERIFY_URL, 'local')).toEqual({ ok: true, url, overridden: true });
+  });
+
   it.each([
     ['127.1 简写', 'http://127.1:8081/a'],
     ['十进制整数', 'http://2130706433/x'],
@@ -77,6 +130,34 @@ describe('本机环境可以换成回环地址', () => {
 });
 
 describe('不合规一律拒（{ok: false}，index.ts 当没配好回 misconfigured）', () => {
+  it.each([
+    ['端口中间夹 \\t（解析后会变成 8081）', 'http://127.0.0.1:80\t81/x', 'http://127.0.0.1:8081/x'],
+    ['路径中间夹 \\n（解析后会被删掉）', 'http://127.0.0.1:8081/e\nx', 'http://127.0.0.1:8081/ex'],
+    ['端口后面夹 \\t（解析后会被删掉）', 'http://127.0.0.1:8081\t/x', 'http://127.0.0.1:8081/x'],
+    ['路径中间夹 \\r', 'http://localhost:9000/em\rails', 'http://localhost:9000/emails'],
+  ])('原文中间有空白或控制字符：%s，任何环境都拒', (_what, raw, parsed) => {
+    expect(new URL(raw).href).toBe(parsed);
+    for (const env of ENVS) expect(resolveOutboundUrl(raw, TURNSTILE_SITEVERIFY_URL, env), `${env} ${JSON.stringify(raw)}`).toEqual({ ok: false });
+  });
+
+  it.each([
+    ['全角空格 U+3000', '　'],
+    ['不换行空格 NBSP U+00A0', ' '],
+    ['普通空格', ' '],
+    ['NUL U+0000', '\u0000'],
+    ['ESC U+001B', '\u001b'],
+    ['DEL U+007F', '\u007f'],
+  ])('原文中间夹 %s：回环地址、官方地址都拒，任何环境', (_what, ch) => {
+    const cases = [
+      [`http://127.0.0.1:8081/e2e${ch}-fake-outbound/siteverify`, TURNSTILE_SITEVERIFY_URL],
+      [`http://localhost:9000/${ch}emails`, RESEND_EMAILS_URL],
+      [`https://api.resend.com/em${ch}ails`, RESEND_EMAILS_URL],
+    ] as const;
+    for (const [raw, official] of cases) {
+      for (const env of ENVS) expect(resolveOutboundUrl(raw, official, env), `${env} ${JSON.stringify(raw)}`).toEqual({ ok: false });
+    }
+  });
+
   it.each(['prod', 'preview'] as const)('%s：回环地址也拒（线上主机的 localhost 是平台内部服务）', (env) => {
     for (const raw of ['http://127.0.0.1:8081/e2e-fake-outbound/emails', 'http://localhost/emails', 'https://127.0.0.1/x']) {
       expect(resolveOutboundUrl(raw, RESEND_EMAILS_URL, env), raw).toEqual({ ok: false });

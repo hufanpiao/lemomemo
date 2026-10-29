@@ -303,7 +303,7 @@ L ('left' + $T + $global:inputs.Count)
 # Dispose 过的 SecureString 调 IsReadOnly() 会抛 ObjectDisposedException（Windows PowerShell 5.1 里读 Length 不抛，不能用）
 $disposed = if ($null -eq $global:lastSec) { '' } else { try { $null = $global:lastSec.IsReadOnly(); 'no' } catch { 'yes' } }
 L ('secdisposed' + $T + $disposed)
-$still = @('SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_BASE_URL', 'WRANGLER_WRITE_LOGS', 'WRANGLER_LOG_PATH', 'WRANGLER_SEND_METRICS', 'DO_NOT_TRACK', 'WRANGLER_SEND_ERROR_REPORTS', 'WRANGLER_HIDE_BANNER', 'WRANGLER_NO_SKILLS_UPDATE_PROMPTS', 'GIT_ATTR_NOSYSTEM', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1') | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }
+$still = @('SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD', 'CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_BASE_URL', 'WRANGLER_WRITE_LOGS', 'WRANGLER_LOG_PATH', 'WRANGLER_SEND_METRICS', 'DO_NOT_TRACK', 'WRANGLER_SEND_ERROR_REPORTS', 'WRANGLER_HIDE_BANNER', 'WRANGLER_NO_SKILLS_UPDATE_PROMPTS', 'GIT_ATTR_NOSYSTEM', 'GIT_NO_REPLACE_OBJECTS', 'GIT_INDEX_FILE','GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1') | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }
 L ('envleft' + $T + ($still -join ','))
 exit $code`,
   );

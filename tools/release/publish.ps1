@@ -278,6 +278,7 @@ function Invoke-Checks {
     $dirty = Invoke-Git @('status', '--porcelain', '--untracked-files=all')
     if ($dirty) { Fail "工作区有没提交的改动或多余文件：`n$dirty" }
     Ok '工作区干净'
+    Assert-ContentMatchesHead
 
     if ((Invoke-Git @('cat-file', '-t', "refs/tags/$Tag") -allowFail) -ne 'tag') { Fail "$Tag 不存在，或不是带说明的 tag（要用 git tag -a）" }
     $tagCommit = Invoke-Git @('rev-parse', "$Tag^{commit}")
@@ -444,6 +445,7 @@ function Assert-StillClean($info) {
     $dirty = Invoke-Git @('status', '--porcelain', '--untracked-files=all')
     if ($dirty) { Fail "第 1 步之后工作区多了改动或文件：`n$dirty" }
     if ((Invoke-Git @('rev-parse', 'HEAD')) -ne $info.Commit) { Fail "第 1 步之后 HEAD 变了，不再是 $Tag" }
+    Assert-ContentMatchesHead
     Ok "工作区仍干净，HEAD 仍是 $Tag"
     Assert-OpsPlan
     Assert-NoDotEnv
@@ -452,6 +454,35 @@ function Assert-StillClean($info) {
     Assert-NoIgnoredDeployFiles
     $names = @(Get-DeployFunctionNames)
     if (($names -join ',') -cne ($script:FunctionNames -join ',')) { Fail '第 1 步之后要部署的服务器函数名单变了' }
+}
+
+# R-269：git status 只在文件大小或修改时间变了时才重新比内容。同样长度改掉内容、再把修改时间改回去，status 就看不出来（不用碰 .git，
+# 同一用户下任何程序都做得到）。这里用本进程自己的临时索引（系统临时目录里、仓库外面）从 HEAD 重建一份：里面没有缓存的大小和时间，
+# update-index --refresh 只能逐个按 .gitattributes 和换行设置转换后算哈希（和 git status 同一套规则），diff-files 列出内容不一样的文件。
+# 10-30 实测：本仓库（* text=auto eol=lf，system 一级 core.autocrlf=true，1684 个文件，0.4 秒）列出的和 git status 的已跟踪改动完全一样，干净时没有误报。
+# GIT_INDEX_FILE 只在这三次调用里设，结束还原成原值（主流程开头“窗口里有 GIT_INDEX_FILE 就停”在这之前，不受影响）；临时索引用完就删。
+# 有差异就停，只列文件名（最多 10 个）。第 1 步（status 之后）和第 5 步（Assert-StillClean）各跑一次
+function Assert-ContentMatchesHead {
+    $tmp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+    $repoFull = [IO.Path]::GetFullPath($RepoPath).TrimEnd('\', '/') + '\'
+    if ($tmp.StartsWith($repoFull, [StringComparison]::OrdinalIgnoreCase)) { Fail "临时目录 $tmp 在仓库里面，不能在那里建临时索引。请把 TEMP 设回系统默认再运行" }
+    $idx = Join-Path $tmp ('lemo-index-' + [guid]::NewGuid().ToString('N'))
+    $old = [Environment]::GetEnvironmentVariable('GIT_INDEX_FILE', 'Process')
+    [Environment]::SetEnvironmentVariable('GIT_INDEX_FILE', $idx, 'Process')
+    try {
+        $null = Invoke-Git @('-c', 'core.splitIndex=false', 'read-tree', 'HEAD')
+        $null = Invoke-Git @('-c', 'core.ignoreStat=false', 'update-index', '-q', '--refresh') -allowFail
+        $diff = Invoke-Git @('-c', 'core.quotepath=false', 'diff-files', '--name-only')
+    } finally {
+        [Environment]::SetEnvironmentVariable('GIT_INDEX_FILE', $old, 'Process')
+        foreach ($f in @($idx, "$idx.lock")) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } }
+    }
+    if ($diff) {
+        $bad = @($diff -split "`r?`n")
+        $show = @($bad | Select-Object -First 10) -join '、'
+        Fail "有被 git 跟踪的文件内容和检出的提交不一样，git status 却看不出来（大小、修改时间都没变）：$show$(if ($bad.Count -gt 10) { " 等 $($bad.Count) 个" })。没输入任何令牌。请本人检查是谁改的，再用 git checkout 取回或重新 clone"
+    }
+    Ok '被跟踪的文件逐个比过内容（不靠大小和修改时间），和检出的提交一致'
 }
 
 # .git\index 里的 assume-unchanged（git ls-files -v 显示小写字母）和 skip-worktree（显示 S）标记，
@@ -468,7 +499,12 @@ function Assert-NoHiddenGitState {
     }
     if (Test-Path -LiteralPath (Join-Path $gitDir 'info\sparse-checkout')) { Fail '仓库开了稀疏检出（.git\info\sparse-checkout 存在），不能用来发布，请用普通的 git clone' }
     if ((Invoke-Git @('config', '--bool', '--get', 'core.sparseCheckout') -allowFail) -eq 'true') { Fail '仓库开了稀疏检出（core.sparseCheckout = true），不能用来发布，请用普通的 git clone' }
-    Ok '没有 assume-unchanged / skip-worktree 标记，没有稀疏检出'
+    # R-268：git replace 把 tag 的提交换成另一个提交（里面是改过的内容）以后，git status 为空、HEAD 和 tag^{commit} 仍相同，工作区却是改过的。
+    # 主流程已设 GIT_NO_REPLACE_OBJECTS=1（git 不用替换对象，status 能看出改动）；这里再查有没有替换对象，有就停（第 1 步和第 5 步各一次）。
+    # for-each-ref 只列引用，不受 GIT_NO_REPLACE_OBJECTS 影响；GIT_REPLACE_REF_BASE（换替换对象所在的目录）主流程最前面已经拦了
+    $repl = Invoke-Git @('for-each-ref', '--format=%(refname)', 'refs/replace/')
+    if ($repl) { Fail "仓库里有替换对象（git replace，能让改过的文件在 git status 里看起来是干净的）：$(($repl -split "`r?`n") -join '、')。没输入任何令牌。请本人检查是谁加的（git replace -l 列出），确认后用 git replace -d 删掉，或重新 clone" }
+    Ok '没有 assume-unchanged / skip-worktree 标记，没有稀疏检出，没有替换对象（refs/replace/）'
 }
 
 # .git\config 里这些设置会让 git 执行别的程序、读别处的配置或属性、换工作区（B0 复查 M4）：
@@ -521,7 +557,7 @@ function Assert-NoRiskyGitConfig {
 # 逐条看（-z：每项之间用 NUL 隔开，值里有换行也分得清），global 一级有 filter.* 或 core.attributesfile 就停，并报出是哪个文件；
 # include 进来的设置 git 会按所在的那一级列出，一并查到。没设 core.attributesfile 时 git 也会读默认的全局属性文件
 # （git var GIT_ATTR_GLOBAL，一般是 ~\.config\git\attributes），它不为空也停（和 .git\info\attributes 同一个道理）。
-# GIT_CONFIG_GLOBAL 之类改全局配置位置的环境变量，主流程最前面已经拦了。
+# GIT_CONFIG_GLOBAL 之类改全局配置位置的环境变量、只让 git config 改读别的文件的 GIT_CONFIG（R266-sugg ⑤），主流程最前面已经拦了。
 # R-264：system 一级（Git for Windows 安装目录的 etc\gitconfig，以及它 include 的文件）同样会被用上。Git for Windows 自带四项 git-lfs 设置，
 # 只放行这四项，而且值要和 Git for Windows 默认写的一字不差（$script:AllowedSystemGitConfig，10-30 照本机 git 2.55.0.windows.5 的原值核对）；
 # 其余 filter.*（含子节大小写不同的 filter.LFS.*）和 core.attributesfile 照拦。
@@ -1148,7 +1184,11 @@ try {
     # 同时把 core.hooksPath 指到一个空的临时目录（B0 复查 M5）：git status 会把刷新后的索引写回去，写索引会触发 post-index-change 钩子，
     # 钩子放在 .git\hooks\ 或 .githooks\ 都会被执行；wrangler 内部跑 git status 时进程里已有令牌。指到空目录以后任何钩子都不执行。
     # R266-sugg ②：GIT_ATTR_SOURCE 让 git 从任意一个 tree 读 .gitattributes（可以给文件挂 filter），也在这里拦；报错只写变量名，不回显值。
-    $gitEnv = @('GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_CONFIG_GLOBAL', 'GIT_EXEC_PATH', 'GIT_TEMPLATE_DIR', 'GIT_ATTR_SOURCE') |
+    # R266-sugg ⑤：GIT_CONFIG 只对 git config 命令生效（相当于给它加 --file）：设了以后 git config --show-scope --list、--get 读的是那份假文件，
+    # 按级检查（Assert-NoRiskyGlobalGitConfig）和 core.sparseCheckout 的检查都会被骗过，git status、git add 等照旧读真配置
+    # （git 2.55 实测；原先只是 --local --list 报 only one config file at a time 碰巧停下）。也在这里拦，同样不回显值。
+    # R-268：GIT_REPLACE_REF_BASE 换掉 git 找替换对象的目录（不在 refs/replace/ 下，for-each-ref refs/replace/ 就查不到），也在这里拦。
+    $gitEnv = @('GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT', 'GIT_CONFIG', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR', 'GIT_CONFIG_GLOBAL', 'GIT_EXEC_PATH', 'GIT_TEMPLATE_DIR', 'GIT_ATTR_SOURCE', 'GIT_REPLACE_REF_BASE') |
         Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }
     if (@($gitEnv).Count -gt 0) { Fail "这个窗口里有会改 git 行为的环境变量：$(@($gitEnv) -join '、')。请开一个新的 PowerShell 窗口再运行" }
     $script:NoHooksDir = Join-Path $env:TEMP ('lemo-nohooks-' + [guid]::NewGuid().ToString('N'))
@@ -1161,6 +1201,9 @@ try {
     # R-265：git 不读系统属性文件（Git for Windows 安装目录的 etc\gitattributes）。窗口里预先有这个变量也一样，一律设成 1；
     # 子进程（wrangler、supabase）继承，finally 里清掉。Assert-NoRiskyGlobalGitConfig 核对它真的生效了
     [Environment]::SetEnvironmentVariable('GIT_ATTR_NOSYSTEM', '1', 'Process')
+    # R-268：git 不用替换对象（git replace）。git 只看这个变量有没有设，不看值（实测 0、false 也算关掉）；窗口里预先有也一律设成 1。
+    # 子进程（wrangler、supabase）继承，finally 里清掉；core.useReplaceRefs=true 也盖不过它（git 2.55 实测）
+    [Environment]::SetEnvironmentVariable('GIT_NO_REPLACE_OBJECTS', '1', 'Process')
     Say "柠檬记正式发布：$Tag    （$(Get-Date -Format 'yyyy-MM-dd HH:mm')）"
     $info = Invoke-Checks
     Show-Plan
@@ -1190,7 +1233,7 @@ try {
     Clear-SecretEnv
     Clear-Secrets
     $script:CfAccountId = $null
-    foreach ($n in @($script:WranglerEnvNames) + @('CLOUDFLARE_API_BASE_URL', 'SUPABASE_API_URL', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1', 'GIT_ATTR_NOSYSTEM')) { [Environment]::SetEnvironmentVariable($n, $null, 'Process') }
+    foreach ($n in @($script:WranglerEnvNames) + @('CLOUDFLARE_API_BASE_URL', 'SUPABASE_API_URL', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1', 'GIT_ATTR_NOSYSTEM', 'GIT_NO_REPLACE_OBJECTS')) { [Environment]::SetEnvironmentVariable($n, $null, 'Process') }
     if ($script:NoHooksDir -and (Test-Path -LiteralPath $script:NoHooksDir)) { Remove-Item -LiteralPath $script:NoHooksDir -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:TokensRead) { Clear-Clip }
     # lemo-ops 打包演练时 wrangler 在 workers\lemo-ops 下建的 .wrangler（本来没有才删；已被 .gitignore 忽略）
