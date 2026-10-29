@@ -51,11 +51,11 @@ describe('routeOf', () => {
 });
 
 describe('excludedFromPrecache', () => {
-  it('sw.js、节假日、字体、source map、version.json 不进预缓存', () => {
-    for (const p of ['sw.js', 'holidays/cn/2026.json', 'fonts/a.woff2', 'assets/a.js.map', 'version.json', '.vite/manifest.json']) {
+  it('sw.js、节假日、字体、iOS 启动图、source map、version.json 不进预缓存', () => {
+    for (const p of ['sw.js', 'holidays/cn/2026.json', 'fonts/a.woff2', 'icons/startup/startup-1170x2532.png', 'assets/a.js.map', 'version.json', '.vite/manifest.json']) {
       expect(excludedFromPrecache(p), p).toBe(true);
     }
-    for (const p of ['index.html', 'assets/index-abc.js', 'assets/index-abc.css', 'manifest.webmanifest']) {
+    for (const p of ['index.html', 'assets/index-abc.js', 'assets/index-abc.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png']) {
       expect(excludedFromPrecache(p), p).toBe(false);
     }
   });

@@ -12,6 +12,7 @@ export function excluded(path) {
     path === 'sw.js' ||
     path.startsWith('holidays/') ||
     path.startsWith('fonts/') ||
+    path.startsWith('icons/startup/') ||
     path.startsWith('.vite/') ||
     path.endsWith('.map') ||
     path === 'version.json'

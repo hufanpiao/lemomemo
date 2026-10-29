@@ -35,12 +35,18 @@ export function routeOf(url: URL, method: string, mode: string, selfOrigin: stri
   return 'precache-or-network';
 }
 
-/** 预缓存清单里不放的文件（注入清单的脚本和测试共用） */
+/**
+ * 预缓存清单里不放的文件（注入清单的脚本和测试共用）。
+ * icons/startup/：iOS 启动图 12 张共约 13 MB，iOS 只在“添加到主屏幕”时按 media 取自己那一张、由系统保存，不经 SW，预缓存只会让每个用户白下；
+ * 添加时断网取不到，iOS 退回 manifest 的 background_color 纯色（R-232；架构 8.1 SW 缓存策略、0.38 第 63 条）
+ * “不经 SW”尚待实机清单 P1-07 第 4、5 步核对；结果相反时回来改这里和架构那两处
+ */
 export function excludedFromPrecache(path: string): boolean {
   return (
     path === 'sw.js' ||
     path.startsWith('holidays/') ||
     path.startsWith('fonts/') ||
+    path.startsWith('icons/startup/') ||
     path.startsWith('.vite/') ||
     path.endsWith('.map') ||
     path === 'version.json'
