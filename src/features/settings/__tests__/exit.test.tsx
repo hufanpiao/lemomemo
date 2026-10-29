@@ -30,7 +30,7 @@ describe('会话没了：提示后回登录页（0.29 续第 98 条、0.38 第 7
     render(<SettingsPage deps={{ api, exit, now }} />);
     const dlg = await screen.findByRole('dialog');
     expect(text(dlg)).toContain(zh['settings.revoked.body']);
-    await waitFor(() => expect(order).toEqual(['wipe', 'caches', 'session', 'signout']));
+    await waitFor(() => expect(order).toEqual(['wipe', 'caches', 'session', 'signout', 'deleteDb']));
     const go = await within(dlg).findByRole('button', { name: zh['settings.revoked.go'] });
     await act(async () => {
       fireEvent.click(go);
@@ -59,6 +59,7 @@ describe('会话没了：提示后回登录页（0.29 续第 98 条、0.38 第 7
     exit.wipe.mockImplementation(async () => {
       await gate.promise;
       order.push('wipe');
+      return true;
     });
     const api = fakeApi({ loadDevices: vi.fn(async () => fail('revoked')) }, order);
     render(<SettingsPage deps={{ api, exit, now, redirectMs: 1000 }} />);
@@ -130,7 +131,7 @@ describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
     await renderPage(api, exit);
     await clickSignOut();
     await waitFor(() => expect(exit.goToAuth).toHaveBeenCalled());
-    expect(order).toEqual(['row', 'wipe', 'caches', 'signout', 'session', 'auth']);
+    expect(order).toEqual(['row', 'wipe', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
     expect(api.deleteOwnDevice).toHaveBeenCalledWith('y');
   });
 
@@ -235,7 +236,7 @@ describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
       vi.advanceTimersByTime(4000);
     });
     await waitFor(() => expect(exit.goToAuth).toHaveBeenCalled());
-    expect(order).toEqual(['wipe', 'caches', 'signout', 'session', 'auth']);
+    expect(order).toEqual(['wipe', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
   });
 
   it('删本机行晚到（超时以后才回来）：不删本机会话，signOut 照常做；服务器没退成照样提示', async () => {

@@ -15,7 +15,7 @@ import {
   type AuthApi,
   type AuthErr,
 } from '../data/auth-api.ts';
-import type { LocalExitDeps } from '../data/local-exit.ts';
+import type { ExitSteps } from '../../../platform/sign-out.ts';
 import type { Captcha } from './useTurnstile.ts';
 
 export type { AuthErr };
@@ -45,8 +45,8 @@ export interface AuthFlowDeps {
   onDone?: () => void;
   /** 测试用：本机会话里的 user_id（默认 platform/session.ts 的 readSessionUserId） */
   readUserId?: () => string | null;
-  /** 测试用：退出后清本机的几步（默认 data/local-exit.ts） */
-  localExit?: LocalExitDeps;
+  /** 测试用：退出后清本机的几步（默认 platform/sign-out.ts 的 defaultExitSteps） */
+  localExit?: ExitSteps;
   /** 测试用：“退出并换账号”服务器那一半的总超时（默认 useSessionGate 的 SIGN_OUT_TIMEOUT_MS） */
   signOutTimeoutMs?: number;
 }

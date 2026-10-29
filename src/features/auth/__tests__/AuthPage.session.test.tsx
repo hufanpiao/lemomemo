@@ -1,4 +1,5 @@
 // 登录页·已登录先退出（安全审查 9、架构 0.38 第 35 条、4.1）：提示与两个按钮、退出三步的先后、总超时、晚到处理、抛异常兜底
+// 退出流程和设置页共用 platform/sign-out.ts（K-signout-merge）：先清本机库和缓存，再服务器退出，不是 ok 才兜底清会话（会话放最后）
 // 登录部分在 AuthPage.test.tsx，邀请注册在 AuthPage.invite.test.tsx；共用的假接口在 auth-page-harness.tsx，假 Turnstile 在 turnstile-fake.ts
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -51,11 +52,11 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
   });
 
   for (const [name, result, want] of [
-    ['服务器退出 ok：不用兜底', { ok: true as const, value: undefined }, ['signOutHere', 'deleteDb', 'clearCacheStorage']],
-    ['服务器退出断网：先兜底清本机会话', { ok: false as const, error: 'offline' as const }, ['signOutHere', 'clearLocalSession', 'deleteDb', 'clearCacheStorage']],
-    ['服务器退出出别的错：同样兜底', { ok: false as const, error: 'unknown' as const }, ['signOutHere', 'clearLocalSession', 'deleteDb', 'clearCacheStorage']],
+    ['服务器退出 ok：不用兜底', { ok: true as const, value: undefined }, ['deleteDb', 'clearCacheStorage', 'signOutHere', 'deleteDb']],
+    ['服务器退出断网：最后兜底清本机会话', { ok: false as const, error: 'offline' as const }, ['deleteDb', 'clearCacheStorage', 'signOutHere', 'clearLocalSession', 'deleteDb']],
+    ['服务器退出出别的错：同样兜底', { ok: false as const, error: 'unknown' as const }, ['deleteDb', 'clearCacheStorage', 'signOutHere', 'clearLocalSession', 'deleteDb']],
   ] as const) {
-    it(`“退出并换账号”：服务器退出 → 清本机库和缓存 → 才出登录表单（${name}）`, async () => {
+    it(`“退出并换账号”：清本机库和缓存 → 服务器退出 → 才出登录表单（${name}）`, async () => {
       const log: string[] = [];
       const api = fakeApi({
         signOutHere: vi.fn(async () => {
@@ -85,12 +86,12 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
       await act(async () => {
         await vi.advanceTimersByTimeAsync(SIGN_OUT_TIMEOUT_MS - 1);
       });
-      expect(log).toEqual([]);
+      expect(log).toEqual(['deleteDb', 'clearCacheStorage']);
       expect(screen.getByRole('button', { name: zh['auth.busy'] })).toHaveProperty('disabled', true);
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1);
       });
-      expect(log).toEqual(['clearLocalSession', 'deleteDb', 'clearCacheStorage']);
+      expect(log).toEqual(['deleteDb', 'clearCacheStorage', 'clearLocalSession', 'deleteDb']);
       expect(screen.getByLabelText(zh['auth.email.label'])).toBeTruthy();
     } finally {
       vi.useRealTimers();
@@ -110,7 +111,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: zh['auth.session.switch'] }));
       });
-      expect(log).toEqual(['clearLocalSession', 'deleteDb', 'clearCacheStorage']);
+      expect(log).toEqual(['deleteDb', 'clearCacheStorage', 'clearLocalSession', 'deleteDb']);
       expect(await screen.findByLabelText(zh['auth.email.label'])).toBeTruthy();
     });
   }
@@ -135,7 +136,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
         await act(async () => {
           await vi.advanceTimersByTimeAsync(SIGN_OUT_TIMEOUT_MS);
         });
-        expect(log).toEqual(['clearLocalSession', 'deleteDb', 'clearCacheStorage']);
+        expect(log).toEqual(['deleteDb', 'clearCacheStorage', 'clearLocalSession', 'deleteDb']);
         const main = document.querySelector('main[data-feature="auth"]') as HTMLElement;
         expect(main.dataset['step']).toBe('email');
 
@@ -145,7 +146,7 @@ describe('已登录的人打开登录页（安全审查 9、架构 0.38 第 35 �
           await vi.advanceTimersByTimeAsync(0);
         });
         expect(localExit.clearLocalSession).toHaveBeenCalledTimes(clears);
-        expect(localExit.deleteDb).toHaveBeenCalledTimes(1);
+        expect(localExit.deleteDb).toHaveBeenCalledTimes(2);
         expect(localExit.clearCacheStorage).toHaveBeenCalledTimes(1);
         expect((document.querySelector('main[data-feature="auth"]') as HTMLElement).dataset['step']).toBe('email');
         expect(screen.getByLabelText(zh['auth.email.label'])).toBeTruthy();

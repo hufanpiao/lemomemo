@@ -11,10 +11,10 @@
 // 错误只认码：session_revoked、unauthorized、401、刷新令牌失效 → revoked（0.38 第 7 条：一律当“没登录”）；
 //   本机根本没有会话（别的标签页正常退出了）→ signed_out，提示“已退出登录”，不说“被移除”
 import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
+import { withTimeout } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import type { DeviceRow } from './devices.ts';
 import { sessionIdOfToken } from './devices.ts';
-import { API_TIMEOUT_MS, withTimeout } from './timeout.ts';
 
 export type SettingsErr =
   /** 会话已被吊销或不在了：清空本机、提示“被移除”、回登录页 */
@@ -132,6 +132,9 @@ const fail = (e: unknown): Result<never> => ({
   ok: false,
   error: mapSettingsError(e),
 });
+
+/** 读列表、移除、退出其他设备、改语言最多等多久（appFetch 没有超时，网络卡住时请求可能几十秒不返回） */
+export const API_TIMEOUT_MS = 8000;
 
 const OFFLINE: Result<never> = { ok: false, error: 'offline' };
 

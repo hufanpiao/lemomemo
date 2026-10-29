@@ -4,7 +4,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Db } from '../../../platform/supabase/client.ts';
 import { createSettingsApi, mapSettingsError } from '../data/settings-api.ts';
-import { withTimeout } from '../data/timeout.ts';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -232,22 +231,5 @@ describe('createSettingsApi', () => {
       throw new Error('supabase_env_missing');
     }, vi.fn());
     expect(await api.loadDevices()).toEqual({ ok: false, error: 'unknown' });
-  });
-});
-
-describe('withTimeout', () => {
-  it('按时回来用原值；超时用 fallback，之后才回来时调一次 onLate；抛错用 fallback', async () => {
-    vi.useFakeTimers();
-    expect(await withTimeout(async () => 1, 100, () => 0)).toBe(1);
-    let release!: (v: number) => void;
-    const onLate = vi.fn();
-    const p = withTimeout(() => new Promise<number>((r) => (release = r)), 100, () => 0, onLate);
-    await vi.advanceTimersByTimeAsync(100);
-    expect(await p).toBe(0);
-    expect(onLate).not.toHaveBeenCalled();
-    release(5);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(onLate).toHaveBeenCalledTimes(1);
-    expect(await withTimeout(() => Promise.reject(new Error('x')), 100, () => -1)).toBe(-1);
   });
 });

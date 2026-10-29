@@ -78,7 +78,7 @@ function AccountSection({ busy, signingOut, onSignOut }: { busy: boolean; signin
       >
         {t('settings.account.signOut', {})}
       </Pressable>
-      {/* 点了退出到跳走最长约 16 秒（删行、signOut 共 8 秒，清本机库和缓存另有上限）：一直写着“正在退出…”；状态区常驻，读屏才会播报 */}
+      {/* 点了退出到跳走最长约 19 秒（删行、signOut 共 8 秒，清本机库、缓存、最后再删一次库另有上限）：一直写着“正在退出…”；状态区常驻，读屏才会播报 */}
       <p className={styles.status} role="status" data-testid="settings-signing-out">
         {signingOut ? t('settings.signingOut', {}) : ''}
       </p>

@@ -1,24 +1,18 @@
 // 设置页在本机做的事（B1 K9）：记住界面语言、退出时清空本机
 // • 语言（架构 2.4 第 4 条、16.4）：写 localStorage 的 pv-locale（App 和登录页启动时按它定语言），
 //   再写 cookie lemo_lang（官网首页 / 按它跳 /zh/ 或 /ko/，和首页页脚的手动切换同一写法）
-// • 退出本机、被移除、被退出（4.1、0.29 续第 98 条）：清空整个本机库和 Cache Storage，再清本机会话；
-//   localStorage 里的 install_id、pv-locale 不清；之后回登录页
-//   - 本机库：先 core/account 的 sealForExit 同步设闸（switching、outbox 暂停、库封存，不可解除；之后 K8 不再发送、
-//     ack / fail 不再写库，只有 clearAll 能写），再 core/boot 的 wipeLocal（clearAll + 清内存集合）；库已关闭、打不开、来自更新的版本时直接 indexedDB.deleteDatabase('planner-v4') 兜底；
-//     每一步都设上限（K9 第二轮 N1、N2：网络或别的标签页卡住时不能一直等）
-//   - 本机会话：先 auth.signOut({scope: 'local'})（settings-api），不是 ok 就用 platform/session.ts 的 clearLocalSession()
-//     删 sb-*-auth-token 和 sb-*-auth-token-code-verifier 兜底
+// • 退出本机、被移除、被退出（4.1、0.29 续第 98 条）：流程在 platform/sign-out.ts（和登录页共用，K-signout-merge）；
+//   这里只给主 App 才有的一步 wipe：先 core/account 的 sealForExit 同步设闸（switching、outbox 暂停、库封存，不可解除；
+//   之后 K8 不再发送、ack / fail 不再写库，只有 clearAll 能写），再 core/boot 的 wipeLocal（clearAll + 清内存集合）；
+//   库不能用（没启动、已关、打不开、来自更新的版本）时返回 false，由 platform 按库名删 planner-v4
+//   - 退出期间不能 reload（K-signout-merge 复审 M1）：按库名删库会给本页还开着的连接发 versionchange → core 关库 → 升级中心 reload，
+//     打断后面的 signOut，留下“有会话、没库”。所以 ① wipe 一开头 upgrade.holdBusy('sign_out')，退出期间不释放（最后 goToAuth 离开页面）；
+//     ② deleteDb 先 close() 本页连接（原因是 'closed'，不触发 reload）再删
 import { LANG_COOKIE, LOCALE_STORAGE_KEY, asLocale, type Locale, type UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { sealForExit } from '../../../core/account.ts';
 import { applyFreshConfig, getBoot, localUnsentCount, wipeLocal } from '../../../core/boot.ts';
-import { DB_NAME } from '../../../core/cache.ts';
-import { clearCacheStorage, clearLocalSession, goToAuth, readSessionUserId } from '../../../platform/session.ts';
-import { withTimeout } from './timeout.ts';
-
-/** 清本机库最多等多久（超时改走直接删库，删库本身另有 3 秒上限） */
-export const WIPE_TIMEOUT_MS = 3000;
-/** 清 Cache Storage 最多等多久 */
-export const CACHES_TIMEOUT_MS = 2000;
+import { goToAuth, readSessionUserId } from '../../../platform/session.ts';
+import { defaultExitSteps, deleteLocalDb, type ExitSteps } from '../../../platform/sign-out.ts';
 
 /** 本机记的语言；没记过、读不到（隐私模式）为 null */
 export function readLocalLocale(storage?: Storage): Locale | null {
@@ -58,31 +52,7 @@ export async function updateCachedLocale(ui: UiLocale): Promise<void> {
   }
 }
 
-/** 直接删本机库（库不能用时的兜底）；永远 resolve，最多等 waitMs（别的标签页还开着库时浏览器会等它关） */
-export function deleteLocalDb(factory: IDBFactory | undefined = globalThis.indexedDB, waitMs = 3000): Promise<void> {
-  if (!factory) return Promise.resolve();
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, waitMs);
-    const done = (): void => {
-      clearTimeout(timer);
-      resolve();
-    };
-    try {
-      const req = factory.deleteDatabase(DB_NAME);
-      req.onsuccess = done;
-      req.onerror = done;
-    } catch {
-      done();
-    }
-  });
-}
-
-export interface ExitDeps {
-  /** 清空本机库和内存集合 */
-  wipe(): Promise<void>;
-  clearCacheStorage(): Promise<void>;
-  /** 服务器退出不是 ok 时兜底删本机会话 */
-  clearLocalSession(): void;
+export interface ExitDeps extends ExitSteps {
   /** 本机会话里的 user_id（超时以后请求才回来时，判断旧会话有没有被写回） */
   readUserId(): string | null;
   /**
@@ -92,52 +62,42 @@ export interface ExitDeps {
    */
   pendingCount(): Promise<number | null>;
   goToAuth(): void;
+  /** 跳登录页失败时放开 wipe 占住的“忙”：库已因升级关掉的话，升级中心会自己重新载入页面 */
+  releaseHold?(): void;
 }
 
+/** wipe 里 holdBusy('sign_out') 的释放函数；退出期间不放，只在跳登录页失败时放 */
+let releaseBusy: (() => void) | null = null;
+
 export const defaultExitDeps: ExitDeps = {
+  ...defaultExitSteps,
   wipe: async () => {
     const boot = getBoot();
-    // 先同步设闸，再清（被移除、自己退出两条路都走这里）
-    if (boot) sealForExit(boot);
-    const cache = boot?.cache;
-    if (cache && !cache.isClosed() && boot.status === 'ready') {
-      await wipeLocal(cache);
-      return;
+    // 先占住“忙”、同步设闸，再清（被移除、自己退出两条路都走这里）；holdBusy 不释放
+    if (boot) {
+      releaseBusy = boot.upgrade.holdBusy('sign_out');
+      sealForExit(boot);
     }
-    // 没启动、库已关闭、打不开、来自更新的版本：整个库删掉
-    await deleteLocalDb();
+    const cache = boot?.cache;
+    if (!cache || cache.isClosed() || boot.status !== 'ready') return false;
+    await wipeLocal(cache);
+    return true;
   },
-  clearCacheStorage,
-  clearLocalSession: () => clearLocalSession(),
+  deleteDb: async () => {
+    try {
+      getBoot()?.cache?.close();
+    } catch {
+      // 已经关了
+    }
+    return deleteLocalDb();
+  },
   readUserId: () => readSessionUserId(),
   // 必须在 wipe（封存）之前调：封存以后 localUnsentCount 返回 null
   pendingCount: () => localUnsentCount(getBoot()),
   goToAuth,
+  releaseHold: () => {
+    const r = releaseBusy;
+    releaseBusy = null;
+    r?.();
+  },
 };
-
-/** 清空本机（库、Cache Storage）；某一步失败或超时不挡后面的步骤，永远 resolve */
-export async function wipeThisDevice(deps: Pick<ExitDeps, 'wipe' | 'clearCacheStorage'>, wipeMs = WIPE_TIMEOUT_MS, cachesMs = CACHES_TIMEOUT_MS): Promise<void> {
-  const wiped = await withTimeout(
-    async () => {
-      await deps.wipe();
-      return true;
-    },
-    wipeMs,
-    () => false,
-  );
-  if (!wiped) {
-    try {
-      await deleteLocalDb();
-    } catch {
-      // 同下
-    }
-  }
-  await withTimeout(
-    async () => {
-      await deps.clearCacheStorage();
-      return true;
-    },
-    cachesMs,
-    () => false,
-  );
-}

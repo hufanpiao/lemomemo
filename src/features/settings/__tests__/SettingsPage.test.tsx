@@ -82,7 +82,7 @@ describe('已登录设备', () => {
     expect(api.deleteOwnDevice).toHaveBeenCalledWith('y');
     expect(api.removeDevice).not.toHaveBeenCalled();
     // 会话放最后：中途被打断最坏是“有会话、没库”（跳转前再同步删一次本机会话）
-    expect(order).toEqual(['row', 'wipe', 'caches', 'signout', 'session', 'auth']);
+    expect(order).toEqual(['row', 'wipe', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
   });
 
   it('设备列表里点“退出这台设备”也先数没上传的：有 2 条时确认框写条数', async () => {
@@ -191,6 +191,27 @@ describe('导出、注销入口（K3 做，现在只放入口）和退出登录'
     expect(order).toEqual(['count']);
     await confirmWith(zh['settings.confirm.signOut.ok']);
     await waitFor(() => expect(exit.goToAuth).toHaveBeenCalled());
-    expect(order).toEqual(['count', 'row', 'wipe', 'caches', 'signout', 'session', 'auth']);
+    expect(order).toEqual(['count', 'row', 'wipe', 'caches', 'signout', 'deleteDb', 'session', 'auth']);
+  });
+
+  it('跳登录页抛错：“去登录”恢复可点、放开退出时占住的“忙”（页面能自己重新载入）；再点再跳', async () => {
+    const api = fakeApi({ loadDevices: vi.fn(async () => fail('revoked')) });
+    const { exit } = fakeExit();
+    exit.goToAuth.mockImplementationOnce(() => {
+      throw new Error('SecurityError');
+    });
+    render(<SettingsPage deps={{ api, exit, now }} />);
+    const dlg = await screen.findByRole('dialog');
+    const go = await within(dlg).findByRole('button', { name: zh['settings.revoked.go'] });
+    await act(async () => {
+      fireEvent.click(go);
+    });
+    await waitFor(() => expect(exit.goToAuth).toHaveBeenCalledTimes(1));
+    expect(exit.releaseHold).toHaveBeenCalledTimes(1);
+    expect((go as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(go);
+    });
+    await waitFor(() => expect(exit.goToAuth).toHaveBeenCalledTimes(2));
   });
 });

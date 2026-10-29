@@ -39,7 +39,8 @@ function fakeApi(over: Partial<SettingsApi> = {}) {
 }
 
 const exit: ExitDeps = {
-  wipe: vi.fn(async () => undefined),
+  wipe: vi.fn(async () => true),
+  deleteDb: vi.fn(async () => undefined),
   clearCacheStorage: vi.fn(async () => undefined),
   clearLocalSession: vi.fn(),
   readUserId: () => null,

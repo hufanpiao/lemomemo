@@ -47,12 +47,17 @@ export function fakeApi(over: Partial<SettingsApi> = {}, order: string[] = []): 
 export function fakeExit(pending: number | null = 0) {
   const order: string[] = [];
   const exit = {
-    wipe: vi.fn(async () => void order.push('wipe')),
+    wipe: vi.fn(async () => {
+      order.push('wipe');
+      return true;
+    }),
+    deleteDb: vi.fn(async () => void order.push('deleteDb')),
     clearCacheStorage: vi.fn(async () => void order.push('caches')),
     clearLocalSession: vi.fn(() => void order.push('session')),
     readUserId: vi.fn((): string | null => 'u1'),
     pendingCount: vi.fn(async () => pending),
     goToAuth: vi.fn(() => void order.push('auth')),
+    releaseHold: vi.fn(),
   } satisfies ExitDeps;
   return { exit, order };
 }
