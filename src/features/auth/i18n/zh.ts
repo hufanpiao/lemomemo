@@ -6,6 +6,10 @@ export const zh = {
   'auth.session.signedIn': '当前已登录，要换账号请先退出',
   'auth.session.switch': '退出并换账号',
   'auth.session.backToApp': '回到 App',
+  // 退出原因（K6 复审 A；被移除、被停用、注销冷静期清本机后回到这里）；被移除照架构 0.29 续第 98 条的原话；冷静期文案是占位，等产品定稿（R-192 ④）
+  'auth.exit.removed': '这台设备已在别的设备上被移除，请重新登录；还没上传的改动已丢弃。',
+  'auth.exit.disabled': '账号已停用，这台设备上的数据已清除。如有疑问请联系柠檬记的负责人。',
+  'auth.exit.pendingDeletion': '账号在注销冷静期，这台设备上的数据已清除。冷静期内用邮箱验证码登录，可以选择恢复账号。',
   'auth.email.label': '邮箱',
   'auth.email.invalid': '邮箱格式不对，请再看一下',
   'auth.email.send': '发验证码',

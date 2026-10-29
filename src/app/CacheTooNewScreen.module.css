@@ -1,0 +1,67 @@
+/* 本机库来自更新的版本的整屏提示（K6-ver-new）：盖住整个视口，不给继续使用 */
+.screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+}
+
+.title {
+  margin: 0 0 12px;
+  color: var(--text);
+  font-size: var(--fs-22);
+  line-height: 1.35;
+}
+
+.body {
+  margin: 0 0 24px;
+  color: var(--text-2);
+  font-size: var(--fs-15);
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.primary,
+.secondary {
+  min-height: var(--hit);
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-15);
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.primary[aria-disabled='true'] {
+  opacity: 0.6;
+}
+
+.secondary {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.status {
+  min-height: 1.5em;
+  margin: 12px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-align: center;
+}

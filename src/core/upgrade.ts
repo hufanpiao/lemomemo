@@ -146,7 +146,8 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
         return 'updating';
       }
       deps.attempt.set(null);
-      if (r === 'no_update' && state.syncBlocked) {
+      // 本机库来自更新的版本（too_new）时，没有新版本也要告诉用户（整屏提示上点了没反应不行）
+      if (r === 'no_update' && (state.syncBlocked || state.cache === 'too_new')) {
         deps.log?.('update_still_old');
         set({ update: 'still_old' });
         return 'still_old';
@@ -163,7 +164,7 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
       const attempted = deps.attempt.get();
       if (attempted === null) return;
       deps.attempt.set(null);
-      if (state.syncBlocked) {
+      if (state.syncBlocked || state.cache === 'too_new') {
         deps.log?.('update_still_old');
         set({ update: 'still_old' });
       }

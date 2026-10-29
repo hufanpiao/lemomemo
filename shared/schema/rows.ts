@@ -1,5 +1,6 @@
 // 各表“客户端可写列”的形状（架构 2.5）：outbox 入队前用严格版校验
-// B0 只做严格版：多一个列、类型不对都拒收。读网络数据用的宽容版（不认识的枚举换成 unknown 等，0.27 第 1 点）B1 再加
+// B0 只做严格版：多一个列、类型不对都拒收。读网络数据用的宽容版（不认识的枚举换成 unknown 等，0.27 第 1 点）B1 K7 加在 rows-read.ts，
+//   它从本文件自动放宽得到可写列；改了这里的列或枚举，rows-read.ts 跟着变，SCHEMA_V 照样加 1
 // 列名以 3.3 C 的列级授权和附录 A 为准；清单和 grant 由 D1 比对，本文件和 grant、清单由 tests/build/rows-grants.test.ts 比对（B0 集成）
 // 2026-10-28 B0 集成按 0001、0002 实际的列级授权核对过：events 补 notified_for、snooze_at；todos 补 due_time、remind_before_min、
 //   notified_for、snooze_at；加 devices；insert、update 两边的列不一样（例如 devices.platform 只能 insert、deleted_at 只能 update），

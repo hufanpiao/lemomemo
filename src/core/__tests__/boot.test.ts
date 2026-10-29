@@ -1,7 +1,7 @@
 // 离线冷启动（架构 4.1、0.27 第 1、4 点）：TC-B1-50（按缓存挂入口）、换账号清库、过期软删除、整表重拉、426 暂停延续、VersionError
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cacheOwner, claimCache } from '../account.ts';
-import { openCache } from '../cache.ts';
+import { deleteCacheDb, openCache } from '../cache.ts';
 import { applyFreshConfig, coldStart, enabledFlags, getBoot, LOCAL_PURGE_AFTER_MS, resetBootForTest, type BootOptions } from '../boot.ts';
 import { clearAllCollections, collection } from '../store.ts';
 import { fakeIndexedDB } from './idb-fake.ts';
@@ -115,6 +115,53 @@ describe('离线冷启动', () => {
     expect(b.status).toBe('signed_out');
     expect(b.cache).toBeNull();
     expect(fake.dbs.size).toBe(0);
+  });
+
+  it('别的标签页按库名删本机库：调 onCacheDeleted；不走升级的重新载入、不出“有新版本”的提示', async () => {
+    const { factory, fake } = fakeIndexedDB();
+    const onCacheDeleted = vi.fn();
+    const reload = vi.fn();
+    const b = await coldStart({
+      ...opts(factory),
+      onCacheDeleted,
+      upgradeDeps: { reload, swUpdate: () => Promise.resolve('no_update' as const), attempt: { get: () => null, set: () => undefined } },
+    });
+    const del = fake.deleteDatabase('planner-v4');
+    await new Promise<void>((r) => (del.onsuccess = () => r()));
+    expect(onCacheDeleted).toHaveBeenCalledTimes(1);
+    expect(b.cache?.isClosed()).toBe(true);
+    expect(b.upgrade.getState().cache).toBe('ok');
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('没登录、删库请求排在别的卡住的删库后面（永远不触发任何事件）：3 秒后按 blocked 返回，照样走到 signed_out，不会永远等着白屏', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const stuck = { deleteDatabase: () => ({}) } as unknown as IDBFactory;
+      expect(await Promise.race([deleteCacheDb({ factory: stuck, waitMs: 10 }), vi.advanceTimersByTimeAsync(10).then(() => 'late')])).toBe('blocked');
+      let done = false;
+      const p = coldStart(opts(stuck, { userId: null })).then((b) => {
+        done = true;
+        return b;
+      });
+      await vi.advanceTimersByTimeAsync(2999);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect((await p).status).toBe('signed_out');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('没登录但库还在（别的标签页退出时本页没来得及清）：按库名删掉，不留上一个账号的数据', async () => {
+    const { factory, fake } = fakeIndexedDB();
+    const a = await coldStart(opts(factory));
+    a.cache?.close();
+    resetBootForTest();
+    expect(fake.dbs.has('planner-v4')).toBe(true);
+    const b = await coldStart(opts(factory, { userId: null }));
+    expect(b.status).toBe('signed_out');
+    expect(fake.dbs.has('planner-v4')).toBe(false);
   });
 
   it('TC-B1-40：rows.ts 的 SCHEMA_V 变了 → 所有同步表整表重拉；K7 的待补拉 id 带出来', async () => {

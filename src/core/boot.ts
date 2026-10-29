@@ -16,7 +16,7 @@ import { onUpgradeRequired } from '../platform/http.ts';
 import { clearCacheStorage } from '../platform/session.ts';
 import { reloadPage, updateAttemptStore, updateServiceWorker } from '../platform/sw-register.ts';
 import { ensureAccount } from './account.ts';
-import { openCache, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
+import { deleteCacheDb, openCache, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
 import type { UpgradeReport } from './cache-migrations.ts';
 import { DRAFTS, OUTBOX, PENDING_ACTIONS, VAULT_DRAFTS } from './cache-schema.ts';
 import { createOutbox, type Outbox, type OutboxBootReport, type OutboxItem, type OutboxOptions } from './outbox.ts';
@@ -36,6 +36,11 @@ export interface BootOptions {
   now?: () => number;
   /** 测试用：换库名、换 IDBFactory、换迁移表 */
   cacheOptions?: OpenCacheOptions;
+  /**
+   * 本机库被别处按库名删掉（别的标签页退出登录，versionchange 的 newVersion 为 null）时调；main.tsx 传：
+   * 同步读一次会话，没有会话就回登录页，还有（别的标签页已经重新登录）就重新载入
+   */
+  onCacheDeleted?: () => void;
   outboxOptions?: Omit<OutboxOptions, 'appVersion' | 'now'>;
   /** 测试用：换掉重新载入、SW 更新、sessionStorage */
   upgradeDeps?: Partial<UpgradeDeps>;
@@ -181,7 +186,12 @@ export async function coldStart(opts: BootOptions): Promise<BootResult> {
   };
   current = result;
   if (!opts.userId) {
+    // 没有会话但库还在（别的标签页退出时本页没来得及清、或退出途中关掉了页面）：按库名删掉，不留上一个账号的数据（登录页审查）；
+    // 库里还没同步的修改一起丢（R-231 负责人已接受）。
+    // 版本比本 App 高的库（v99 一类、TC-B1-49 的 version_too_new）也照样删：TC-B1-49 管的是“有会话时不删、只提示更新”，
+    // 没有会话时库里的数据本来就该清掉，两者不矛盾
     result.status = 'signed_out';
+    await deleteCacheDb({ factory: opts.cacheOptions?.factory, name: opts.cacheOptions?.name });
     return result;
   }
   const userId = opts.userId;
@@ -200,6 +210,8 @@ export async function coldStart(opts: BootOptions): Promise<BootResult> {
       if (opened.reason === 'version_too_new') {
         result.status = 'version_too_new';
         upgrade.setCacheTooNew();
+        // 刚按过“去更新”而库仍比 App 新 → still_old，并清掉 lemo.update_attempt 标记（复审 S3）
+        upgrade.afterReloadCheck();
       }
       return result;
     }
@@ -256,11 +268,14 @@ async function loadCache(
   result.upgradeReport = report;
   cache.onClosed((reason) => {
     if (reason === 'versionchange') upgrade.onCacheVersionChange();
+    // 别处在删库（别的标签页退出登录）：不走升级的重新载入、不出“有新版本”提示，交给入口看会话（K6 复审 C）
+    if (reason === 'deleted') opts.onCacheDeleted?.();
   });
 
   // 换账号（4.1、0.38 第 17 条）：在读写任何东西之前比对 owner，不同就清空整库和运行时缓存，旧账号的 outbox 不发
   result.switchedUser = await ensureAccount(cache, userId, { clearCacheStorage: opts.clearCacheStorage ?? clearCacheStorage });
 
+  // 日志：仓库里还没有日志层（core/log），outbox 的 log（R-229 outbox_vault_shell_drop）暂不接；接上以后经 opts.outboxOptions.log 传进来（接手清单 K6-log）
   const outbox = createOutbox(cache, { ...opts.outboxOptions, appVersion, now });
   result.outbox = outbox;
   result.outboxReport = await outbox.boot();

@@ -71,8 +71,15 @@ export async function ackImpl(ctx: Ctx, opId: string, ack: AckResult): Promise<v
 export async function failImpl(ctx: Ctx, opId: string, failure: SendFailure): Promise<FailureKind> {
   const kind = classifyFailure(failure);
   if (ctx.isSuspended()) return kind;
+  if (kind === 'disabled') {
+    // 被停用、注销冷静期（4.3、4.3b、0.29 续第 131 条②）：和被移除一样设闸、不回滚、不重试，调用方清空本机、回登录页；
+    // 事件单独一类，登录页据 code 提示“已停用”或冷静期的恢复入口。不写库（随后整库清掉），所以不会碰上封存后的 CacheClosedError
+    ctx.suspend();
+    ctx.emit({ type: 'disabled', code: failure.code ?? 'account_disabled' });
+    return kind;
+  }
   if (kind === 'removed') {
-    // 被移除（session_revoked、account_disabled）：设闸、不回滚、不重试；调用方清空本机、回登录页（TC-B1-77 ⑤），队列随库一起丢
+    // 被移除（session_revoked）：设闸、不回滚、不重试；调用方清空本机、回登录页（TC-B1-77 ⑤），队列随库一起丢
     ctx.suspend();
     ctx.emit({ type: 'removed', code: failure.code ?? 'removed' });
     return kind;

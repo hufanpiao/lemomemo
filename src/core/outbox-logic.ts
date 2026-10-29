@@ -7,14 +7,25 @@ import { allTables, type Manifest } from './manifest.ts';
 import { OUTBOX_V } from './outbox-migrations.ts';
 import type { AckResult, EnqueueInput, FailureKind, OutboxItem, SendFailure } from './outbox-types.ts';
 
-/** 丢掉这一项、不重试的错误码（4.2 幂等：vault_required、settings_key_immutable；apply_patch 的 not_found，K6 审查 L2） */
-export const DROP_CODES: readonly string[] = ['vault_required', 'settings_key_immutable', 'not_found'];
+/**
+ * 丢掉这一项、不重试的错误码（4.2 幂等：vault_required、settings_key_immutable；apply_patch 的 not_found，K6 审查 L2；
+ * apply_patch 的参数检查 patch_table_not_allowed、patch_bad_args，架构 4.4.1、0.38 第 57 条）
+ */
+export const DROP_CODES: readonly string[] = ['vault_required', 'settings_key_immutable', 'not_found', 'patch_table_not_allowed', 'patch_bad_args'];
 /** 被移除、被停用：走“被移除”流程（TC-B1-77 ⑤），不当成令牌过期去刷新重发（K6 审查 L2） */
-export const REMOVED_CODES: readonly string[] = ['session_revoked', 'account_disabled'];
+export const REMOVED_CODES: readonly string[] = ['session_revoked'];
+/**
+ * 账号被停用（管理员停用 account_disabled；注销冷静期 account_pending_deletion，0.29 续第 131、134 条）：
+ * 和被移除一样清本机库、草稿和队列，回登录页（架构 4.3“注销”、4.3b、0.29 续第 131 条②）；登录页按错误码提示“已停用”或冷静期的恢复入口。
+ * 4.4.1 的“不丢队列”指 apply_patch 必须先查 account_disabled、不能把停用误判成 not_found 丢项，不是保留本机
+ */
+export const DISABLED_CODES: readonly string[] = ['account_disabled', 'account_pending_deletion'];
 /** 本机就能判定的永久错误（没有 HTTP 状态时） */
 const LOCAL_PERMANENT_CODES: readonly string[] = ['validation', 'invalid_row'];
 /** 令牌过期一类：刷新令牌后重发，不计 tries（TC-B1-82 ②） */
 const AUTH_CODES: readonly string[] = ['jwt_expired', 'PGRST301', 'PGRST303'];
+/** 不看 HTTP 状态、一律退避重试的码：55P03 = apply_patch 等不到行锁（lock_timeout 3 秒，整个调用已回滚，架构 4.4.1） */
+const TRANSIENT_CODES: readonly string[] = ['55P03'];
 
 /** 退避上限 5 分钟 */
 export const MAX_BACKOFF_MS = 5 * 60 * 1000;
@@ -24,9 +35,11 @@ export const MAX_OWN_REVS = 20;
 /** 失败归类（426 不算永久失败，0.27 第 1 点）；各类的处理见 outbox-types.ts 的 FailureKind。401 的重发次数由 K8 管 */
 export function classifyFailure(f: SendFailure): FailureKind {
   if (f.status === 426 || f.code === 'upgrade_required') return 'upgrade';
+  if (f.code !== undefined && DISABLED_CODES.includes(f.code)) return 'disabled';
   if (f.code !== undefined && REMOVED_CODES.includes(f.code)) return 'removed';
   if (f.code !== undefined && DROP_CODES.includes(f.code)) return 'drop';
   if (f.status === 401 || (f.code !== undefined && AUTH_CODES.includes(f.code))) return 'auth';
+  if (f.code !== undefined && TRANSIENT_CODES.includes(f.code)) return 'transient';
   if (f.network || f.status === undefined || f.status === 0) {
     return f.code !== undefined && LOCAL_PERMANENT_CODES.includes(f.code) ? 'permanent' : 'transient';
   }

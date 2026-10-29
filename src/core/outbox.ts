@@ -43,6 +43,7 @@ async function bootImpl(ctx: Ctx): Promise<OutboxBootReport> {
       if (m.changed) report.migrated++;
       if (item.state === 'inflight') {
         item.state = 'pending';
+        item.sent = true;   // 上次可能已上服务器：不再合并新修改（K8 三审，K6 遗留）
         report.reset++;
         dirty = true;
       }
@@ -78,16 +79,16 @@ async function enqueueImpl(ctx: Ctx, input: EnqueueInput): Promise<OutboxItem | 
     const mine = all.filter((i) => i.rec === rec).sort(bySeq);
 
     // insert 之后马上撤销：两项一起抵消，不发送
-    if (undo && mine[0]?.op === 'insert' && mine.every((i) => i.state === 'pending')) {
+    if (undo && mine[0]?.op === 'insert' && mine.every((i) => i.state === 'pending' && !i.sent)) {
       for (const i of mine) await t.delete(OUTBOX, i.op_id);
       view = await rewriteRow(t, table, id, row);
       cancelled = await cancelDependents(t, rec, scope);   // L10：依赖它的项一起抵消
       return;
     }
 
-    // 还没发出的 patch 合并（inflight 的不参与；带依赖的新项不合并，免得被提前）
+    // 还没发出的 patch 合并（inflight 的、发出去过的不参与：重发同一 op_id 会被服务器当重复，新修改就丢了；带依赖的新项不合并，免得被提前）
     const last = mine[mine.length - 1];
-    if (op === 'patch' && last?.op === 'patch' && last.state === 'pending' && last.v === ctx.currentV && !input.deps?.length) {
+    if (op === 'patch' && last?.op === 'patch' && last.state === 'pending' && !last.sent && last.v === ctx.currentV && !input.deps?.length) {
       result = { ...last, data: { ...last.data, ...input.data }, remind: last.remind || input.remind === true, client_ts: ts };
     } else {
       const serverRev = row?.server?.['rev'];
@@ -189,7 +190,7 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
         if (all.some((i) => i.state === 'inflight')) return null;
         const first = sendOrder(all, ctx.now(), ctx.currentV)[0];
         if (!first) return null;
-        const item: OutboxItem = { ...first, state: 'inflight' };
+        const item: OutboxItem = { ...first, state: 'inflight', sent: true };   // 发出去过：之后不再合并（K8 三审）
         await t.put(OUTBOX, item);
         return item;
       });
@@ -205,7 +206,7 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
     },
     async retryFailed(opIds) {
       if (suspended) return;
-      const targets = (await list()).filter((i) => i.state === 'failed' && (!opIds || opIds.includes(i.op_id)));
+      const targets = (await list()).filter((i) => i.state === 'failed' && i.error !== 'gone' && (!opIds || opIds.includes(i.op_id)));   // gone 不给普通重试（K8 审查：要“恢复并保留我的修改”另发 patch）
       for (const table of new Set(targets.map((i) => i.table))) {
         const mine = targets.filter((i) => i.table === table);
         await rewriteRecs(ctx, table, mine.map((i) => i.id), async (t) => {
@@ -217,6 +218,15 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
         });
       }
       await refresh();
+    },
+    async resetInflight(opId) {
+      if (suspended) return;
+      await cache.tx([OUTBOX], 'readwrite', async (t) => {   // 事务里读、事务里写
+        const items = opId === undefined ? await t.getAll<OutboxItem>(OUTBOX) : [await t.get<OutboxItem>(OUTBOX, opId)];
+        for (const i of items) {
+          if (i?.state === 'inflight') await t.put(OUTBOX, { ...i, state: 'pending', sent: true });
+        }
+      });
     },
     async clearBackoff() {
       if (suspended) return;
@@ -232,15 +242,26 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
       await refresh();
     },
     applyServer: async (table, rows) => {
-      if (!suspended) await applyServerRows(cache, table, rows);
+      if (suspended) return { skipped: [] };
+      const report = await applyServerRows(cache, table, rows, { log: opts.log });
+      // R-229 空壳会删掉这一行的队列项：重算状态
+      if (rows.some((r) => r.shell === true)) await refresh();
+      return report;
     },
-    async dropServer(table, ids) {
+    async dropServer(table, ids, expectRevs) {
       if (suspended) return;
       if (ids.length === 0) return;
       await rewriteRecs(ctx, table, ids, async (t) => {
         for (const id of ids) {
+          const items = await t.getAllByIndex<OutboxItem>(OUTBOX, 'rec', recKey(table, id));
+          if (expectRevs) {
+            // 整表重拉（K8）：写事务里复查，rev 变了（刚确认、刚拉到新的）或有 inflight 的项就不删
+            const row = await t.get<CachedRow>(table, id);
+            const rev = row?.server?.['rev'];
+            if (!row?.server || (typeof rev === 'number' ? rev : -1) !== expectRevs.get(id) || items.some((i) => i.state === 'inflight')) continue;
+          }
           await t.delete(table, id);
-          for (const i of await t.getAllByIndex<OutboxItem>(OUTBOX, 'rec', recKey(table, id))) await t.delete(OUTBOX, i.op_id);
+          for (const i of items) await t.delete(OUTBOX, i.op_id);
         }
       });
       await refresh();

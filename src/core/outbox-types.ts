@@ -4,6 +4,7 @@
 import type { OutboxPause, ServerRow } from './cache.ts';
 import type { Manifest } from './manifest.ts';
 import type { OutboxMigration } from './outbox-migrations.ts';
+import type { SendFailure } from '../../shared/schema/sync.ts';
 
 export type OutboxOp = 'insert' | 'patch';
 export type OutboxState = 'pending' | 'inflight' | 'failed';
@@ -46,6 +47,11 @@ export interface OutboxItem {
   remind: boolean;
   /** 依赖的记录：这些记录还在队列里时，本项不会排到它们前面（note_images → notes，从随手记转的待办 → 原随手记） */
   deps: RecRef[];
+  /**
+   * 发出去过（next() 交出时设上，之后复位、失败退回 pending 也一直带着）：服务器可能已按这个 op_id 应用过，
+   * 重发会被 applied_ops 当重复。所以 enqueue 不再往里合并新修改（另开新 op_id），撤销也不再和它抵消（K8 三审必改，探针 P7）
+   */
+  sent?: boolean;
   /** 永久失败的错误码（state = failed 时） */
   error: string | null;
 }
@@ -71,17 +77,8 @@ export interface AckResult {
   prev_rev: number | null;
 }
 
-/** 发送失败的信息（K8 从响应里取） */
-export interface SendFailure {
-  /** HTTP 状态；断网、超时不填 */
-  status?: number;
-  /** 响应体或 PostgREST 的错误码 */
-  code?: string;
-  /** 426 响应体里的 min（platform/http.ts 的 readUpgradeRequired） */
-  min?: string | null;
-  /** 断网、超时 */
-  network?: boolean;
-}
+/** 网络失败的结构：线上形状，定义在 shared/schema/sync.ts（架构 4.3b、0.38 第 58 条）；这里转出，原有引用不变 */
+export type { SendFailure } from '../../shared/schema/sync.ts';
 
 /**
  * 失败归类：
@@ -90,9 +87,11 @@ export interface SendFailure {
  * - transient：断网、5xx、429，退避重发；
  * - permanent：其他 4xx、校验失败，进“发送失败”区并回滚 view；
  * - drop：vault_required、settings_key_immutable、not_found（apply_patch 找不到这一行），丢掉这一项，调用方整表重拉；
- * - removed：session_revoked、account_disabled（被移除或被停用），队列设闸、发 removed 事件，调用方清空本机、回登录页
+ * - removed：session_revoked（被移除），队列设闸、发 removed 事件，调用方清空本机、回登录页；
+ * - disabled：account_disabled、account_pending_deletion（被停用、注销冷静期）：和 removed 一样队列设闸，发 disabled 事件，
+ *   调用方清空本机、回登录页，登录页提示“已停用”或冷静期的恢复入口（4.3、4.3b、0.29 续第 131 条②；R-192）
  */
-export type FailureKind = 'upgrade' | 'auth' | 'transient' | 'permanent' | 'drop' | 'removed';
+export type FailureKind = 'upgrade' | 'auth' | 'transient' | 'permanent' | 'drop' | 'removed' | 'disabled';
 
 /** 队列状态（界面：“有 N 条没同步上”、“有 N 条等更新后同步”、未同步提醒的小标记）；不变时引用不变 */
 export interface OutboxStatus {
@@ -112,8 +111,10 @@ export type OutboxEvent =
   | { type: 'rejected'; item: OutboxItem; code: string }
   /** 426：整个队列已暂停 */
   | { type: 'upgrade_required'; min: string | null }
-  /** 被移除（session_revoked、account_disabled）：队列已设闸；调用方清空本机（session.ts 的 clearLocalSession 兜底删会话）、回登录页 */
-  | { type: 'removed'; code: string };
+  /** 被移除（session_revoked）：队列已设闸；调用方清空本机（session.ts 的 clearLocalSession 兜底删会话）、回登录页 */
+  | { type: 'removed'; code: string }
+  /** 被停用（account_disabled）或注销冷静期（account_pending_deletion）：队列已设闸；调用方和 removed 一样清空本机、回登录页，按 code 提示 */
+  | { type: 'disabled'; code: string };
 
 /** 启动时整理队列的结果 */
 export interface OutboxBootReport {
@@ -134,6 +135,19 @@ export interface ServerRowInput {
   row: ServerRow;
   /** 带不认识的值：只读 */
   ro?: boolean;
+  /**
+   * R-229 的只读空壳（K7 宽容读取给出：隐私记行或判断不了、但整行坏了）：row 只有 id 和 flag 列，ro 一定为 true。
+   * applyServer 用它覆盖本机的 server 和 view、清掉明文，并记下门槛 shell_rev / shell_inclusive，之后没过门槛的行一律不收；
+   * 本机原来没有这一行就不建空壳（进 skipped）（K6）
+   */
+  shell?: true;
+  /**
+   * 只在 shell 时有：原始行的 rev（K7 只在它是有效正整数时给，否则 null）。K6 用它定空壳门槛：
+   * - 门槛来自 minRev：收 rev ≥ minRev 的行（同 rev 读得好的就是这一行本身，补拉、整表重拉要能收进来）；
+   * - minRev 为 null，拿本机旧 server 的 rev 补：收 rev 严格大于它的行（同 rev 就是本机原来那份带明文的旧行）。
+   * 两种都取时取更高的门槛，同一个 rev 时按“含等于”（来自原始行）。晚到的旧普通行都过不了门槛，不能把空壳盖掉、把明文带回来
+   */
+  minRev?: number | null;
 }
 
 /**
@@ -165,12 +179,21 @@ export interface Outbox {
   retryFailed(opIds?: readonly string[]): Promise<void>;
   /** 切到前台、上线：清掉退避等待，马上能发 */
   clearBackoff(): Promise<void>;
+  /**
+   * 把残留的 inflight 改回 pending（不动 tries；op_id 幂等，重发安全；项带着 sent，不再被合并）。给了 opId 只复位这一项。
+   * K8 用：引擎拿到主页身份 start() 时复位全部；放手（drain、停下）时只复位自己在途、没拿到回包的那一项。否则上一个主页 drain 超时、崩溃留下的 inflight 会让 next() 一直返回 null（4.3b）
+   */
+  resetInflight(opId?: string): Promise<void>;
   /** 解除 426 暂停（一般不用手调：新版启动时 boot() 自动解除） */
   resume(): Promise<void>;
   /** 服务器来的行：更新 server，再把还没确认的项叠上去得到 view（4.3 rebase）；比本机旧的 rev 忽略 */
-  applyServer(table: string, rows: readonly ServerRowInput[]): Promise<void>;
-  /** 服务器上已经硬删的行（墓碑、30 天清理）：删本机行和它还在队列里的项 */
-  dropServer(table: string, ids: readonly string[]): Promise<void>;
+  /** 返回这次没收的行（比本机旧、没过 R-229 空壳门槛、本机没有这一行的空壳）：K7 据此不动它们的待补拉 */
+  applyServer(table: string, rows: readonly ServerRowInput[]): Promise<{ skipped: string[] }>;
+  /**
+   * 服务器上已经硬删的行（墓碑、30 天清理）：删本机行和它还在队列里的项。
+   * 带 expectRevs（K8 整表重拉）：写事务里复查，server.rev 和给的不一样、或这一行有 inflight 的项就不删
+   */
+  dropServer(table: string, ids: readonly string[], expectRevs?: ReadonlyMap<string, number>): Promise<void>;
   list(): Promise<OutboxItem[]>;
   getStatus(): OutboxStatus;
   subscribe(listener: () => void): () => void;
@@ -193,6 +216,8 @@ export interface OutboxOptions {
   manifests?: readonly Manifest[];
   migrations?: readonly OutboxMigration[];
   currentV?: number;
+  /** 记日志（只有表名、id、条数，不记内容）：R-229 空壳丢掉队列项时（outbox-rows.ts 的 ShellDropLog）；日志层接上以前不传 */
+  log?: (e: { act: 'outbox_vault_shell_drop'; coll: string; id: string; dropped: number }) => void;
 }
 
 /** SW 记下的通知按键（0.29 续第 107 条；形状由 B2 的 SW 定，这里只认这几项） */

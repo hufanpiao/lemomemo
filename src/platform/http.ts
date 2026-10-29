@@ -1,5 +1,6 @@
 // 直接 fetch 的统一封装（架构 0.27 第 1 点）：和 supabase-js 一样带 X-App-Version
 // fetch 只准出现在 platform（A12）；功能要直接调函数时走这里，不自己 fetch
+import { clock } from './clock.ts';
 import { buildInfo } from './env.ts';
 
 export const APP_VERSION_HEADER = 'X-App-Version';
@@ -54,10 +55,21 @@ export function onUpgradeRequired(fn: UpgradeListener): () => void {
   };
 }
 
+/** 时钟偏差的样本（架构 4.3、TC-B1-31）：/sb/ 的响应读 Date 头喂给 clock；出错不影响请求 */
+function observeClock(input: RequestInfo | URL, res: Response): void {
+  try {
+    const url = res.url || (typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    clock.observeResponse(url, res.headers.get('Date'));
+  } catch {
+    // 读不到就跳过
+  }
+}
+
 /** 带版本头的 fetch；supabase-js 的 global.fetch 也用它。426 时通知 onUpgradeRequired 的订阅者（响应原样返回） */
 export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const headers = withAppVersion(init?.headers ?? (input instanceof Request ? input.headers : undefined));
   const res = await fetch(input, { ...init, headers });
+  observeClock(input, res);
   if (res.status === 426 || (res.status >= 400 && res.status < 500 && upgradeListeners.size > 0)) {
     const u = await readUpgradeRequired(res);
     if (u) for (const l of [...upgradeListeners]) l(u);

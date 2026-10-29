@@ -3,11 +3,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cacheOwner, claimCache, watchAccount, wipeOnRemoved, type WatchAccountDeps } from '../account.ts';
 import { coldStart, getBoot, resetBootForTest, type BootResult } from '../boot.ts';
+import { deleteCacheDb } from '../cache.ts';
 import { OutboxRejectError } from '../outbox.ts';
 import { clearAllCollections } from '../store.ts';
 import { count, freshCache, seedA } from './account-fixtures.ts';
 import { FakeObjectStore } from './idb-fake-tx.ts';
-import { fakeIndexedDB, flush } from './idb-fake.ts';
+import { fakeIndexedDB, flush, type FakeIDBFactory } from './idb-fake.ts';
 import { todo, uid } from './outbox-fixtures.ts';
 
 type Fire<T> = (v: T) => void;
@@ -20,17 +21,21 @@ interface Setup {
   storage: Fire<string | null>;
   /** coldStart 期间会话被改成了什么（挂上监听后再比一次时读到的值） */
   session: { id: string | null };
+  fake: FakeIDBFactory;
+  /** 升级中心的重新载入（versionchange → 重新载入；退出删库不能触发它） */
+  reload: ReturnType<typeof vi.fn>;
 }
 
 async function setup(opts: { sessionAfterBoot?: string | null; openFails?: boolean } = {}): Promise<Setup> {
-  const { factory } = fakeIndexedDB();
+  const { factory, fake } = fakeIndexedDB();
+  const reload = vi.fn();
   const boot = await coldStart({
     userId: 'A',
     appVersion: '4.0.0',
     cacheOptions: opts.openFails ? { factory: undefined as unknown as IDBFactory, name: 'x' } : { factory },
     listen426: false,
     clearCacheStorage: () => Promise.resolve(),
-    upgradeDeps: { reload: vi.fn(), swUpdate: () => Promise.resolve('no_update' as const), attempt: { get: () => null, set: () => undefined } },
+    upgradeDeps: { reload, swUpdate: () => Promise.resolve('no_update' as const), attempt: { get: () => null, set: () => undefined } },
   });
   if (boot.cache) {
     await seedA(boot.cache);
@@ -52,9 +57,10 @@ async function setup(opts: { sessionAfterBoot?: string | null; openFails?: boole
     onSignedOut: vi.fn(),
     onSwitched: vi.fn(),
     onFailed: vi.fn(),
+    deleteDb: () => deleteCacheDb({ factory, waitMs: 50 }),
   };
   watchAccount(boot, deps);
-  return { boot, factory, deps, session, auth: (v) => handlers.auth(v), storage: (v) => handlers.storage(v) };
+  return { boot, factory, deps, session, fake, reload, auth: (v) => handlers.auth(v), storage: (v) => handlers.storage(v) };
 }
 
 beforeEach(() => {
@@ -118,13 +124,45 @@ describe('watchAccount：登录、刷新令牌、别的标签页', () => {
     expect(boot.cache?.isClosed()).toBe(true);
   });
 
-  it('别的标签页退出了：设闸、去登录页，不清库（退出流程自己清）', async () => {
-    const { boot, deps, storage } = await setup();
+  it('别的标签页退出了：同步设闸；清空并关掉本页连接、按库名删库、清运行时缓存，再去登录页；不触发 versionchange → 重新载入', async () => {
+    const { boot, deps, storage, fake, reload } = await setup();
+    expect(fake.dbs.has('planner-v4')).toBe(true);
     storage(null);
     expect(boot.switching).toBe(true);
-    expect(deps.onSignedOut).toHaveBeenCalledTimes(1);
+    expect(deps.onSignedOut).not.toHaveBeenCalled();   // 清完才走
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
+    expect(fake.dbs.has('planner-v4')).toBe(false);
+    expect(boot.cache?.isClosed()).toBe(true);
+    expect(deps.clearCacheStorage).toHaveBeenCalledTimes(1);
     expect(deps.onSwitched).not.toHaveBeenCalled();
-    expect(await count(boot.cache as never)).toBe(4);
+    await flush();
+    expect(reload).not.toHaveBeenCalled();
+    expect(boot.upgrade.getState().cache).toBe('ok');
+  });
+
+  it('别的标签页退出、库被别的连接挡着删不掉：内容已清空，照样去登录页', async () => {
+    const { boot, deps, storage, fake } = await setup();
+    // 模拟另一个还开着库、不响应 versionchange 的标签页
+    const raw = fake.open('planner-v4');
+    await new Promise<void>((r) => (raw.onsuccess = () => r()));
+    storage(null);
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
+    expect(boot.cache?.isClosed()).toBe(true);
+    const stores = fake.dbs.get('planner-v4')?.stores;
+    expect(stores?.get('todos')?.records.size).toBe(0);
+    expect(stores?.get('outbox')?.records.size).toBe(0);
+    (raw.result as { close(): void }).close();
+    await flush();
+    expect(fake.dbs.has('planner-v4')).toBe(false);   // 挡着的关了，排队的删除接着完成
+  });
+
+  it('别的标签页退出、按库名删库的请求永远不触发事件：按时放弃（blocked），照样调到 onSignedOut', async () => {
+    const { boot, deps, storage } = await setup();
+    const stuck = { deleteDatabase: () => ({}) } as unknown as IDBFactory;
+    deps.deleteDb = () => deleteCacheDb({ factory: stuck, waitMs: 30 });
+    storage(null);
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
+    expect(boot.cache?.isClosed()).toBe(true);
   });
 
   it('M1：coldStart 期间别的标签页换成了 B（storage 事件发生在挂监听之前、漏掉了）：挂上后再比一次照样换', async () => {
@@ -134,9 +172,10 @@ describe('watchAccount：登录、刷新令牌、别的标签页', () => {
     expect(deps.clearCacheStorage).toHaveBeenCalledTimes(1);
   });
 
-  it('M1：coldStart 期间别的标签页退出了：挂上后再比一次，去登录页', async () => {
-    const { deps } = await setup({ sessionAfterBoot: null });
-    expect(deps.onSignedOut).toHaveBeenCalledTimes(1);
+  it('M1：coldStart 期间别的标签页退出了：挂上后再比一次，清库后去登录页', async () => {
+    const { deps, fake } = await setup({ sessionAfterBoot: null });
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
+    expect(fake.dbs.has('planner-v4')).toBe(false);
   });
 
   it('M3：换账号时清库抛错 → 关库、集合清空、onFailed（不当成成功）', async () => {

@@ -48,9 +48,10 @@ describe('M6：确认时中间夹了别的设备的写入', () => {
 });
 
 describe('L2：失败分类', () => {
-  it('session_revoked、account_disabled 走“被移除”；apply_patch 的 not_found 丢掉；令牌过期仍是 auth', () => {
+  it('session_revoked 走“被移除”；account_disabled 走“被停用”（4.4.1 照 4.3、不丢队列）；apply_patch 的 not_found 丢掉；令牌过期仍是 auth', () => {
     expect(classifyFailure({ status: 401, code: 'session_revoked' })).toBe('removed');
-    expect(classifyFailure({ status: 403, code: 'account_disabled' })).toBe('removed');
+    expect(classifyFailure({ status: 403, code: 'account_disabled' })).toBe('disabled');
+    expect(classifyFailure({ status: 400, code: 'account_disabled' })).toBe('disabled');
     expect(classifyFailure({ status: 404, code: 'not_found' })).toBe('drop');
     expect(classifyFailure({ status: 401, code: 'jwt_expired' })).toBe('auth');
   });
@@ -66,6 +67,23 @@ describe('L2：失败分类', () => {
     expect(await outbox.list()).toEqual([]);
     expect((await cache.getRow('todos', uid(1)))?.view?.['title']).toBe('待办1');
     expect(events).toEqual(['rejected']);
+  });
+});
+
+describe('account_disabled、account_pending_deletion：被停用、注销冷静期（4.3、4.3b、0.29 续第 131 条②）', () => {
+  it('归成 disabled：队列设闸停发、不回滚、不写库；只发 disabled 事件（带 code），清本机由调用方做（和 removed 同一套）', async () => {
+    expect(classifyFailure({ status: 403, code: 'account_pending_deletion' })).toBe('disabled');
+    const { cache, outbox } = await setup();
+    await seed(cache, 'todos', uid(1), todo(1), 5);
+    const events: string[] = [];
+    outbox.onEvent((e) => events.push(`${e.type}:${'code' in e ? e.code : ''}`));
+    await outbox.enqueue({ table: 'todos', id: uid(1), op: 'patch', data: { title: '停用前改的' } });
+    const a = await outbox.next();
+    expect(await outbox.fail(a?.op_id ?? '', { status: 403, code: 'account_pending_deletion' })).toBe('disabled');
+    expect(events).toEqual(['disabled:account_pending_deletion']);
+    expect(outbox.isSuspended()).toBe(true);
+    expect(await outbox.next()).toBeNull();
+    expect((await cache.getRow('todos', uid(1)))?.view?.['title']).toBe('停用前改的');   // 不回滚（随后整库清掉）
   });
 });
 

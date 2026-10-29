@@ -1,5 +1,6 @@
 // X-App-Version（架构 0.27 第 1 点）：supabase-js 的 global.headers 和直接 fetch 都带上，且调用方改不掉
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { clock } from '../clock.ts';
 import { APP_VERSION_HEADER, appFetch, onUpgradeRequired, readUpgradeRequired, withAppVersion } from '../http.ts';
 import { clientOptions } from '../supabase/client.ts';
 
@@ -81,5 +82,18 @@ describe('426 upgrade_required（0.27 第 1 点）', () => {
     await appFetch('https://example.invalid/x');
     expect(seen).not.toHaveBeenCalled();
     off();
+  });
+});
+
+describe('时钟偏差接线（接手清单 K8-clock、TC-B1-31）', () => {
+  it('appFetch 收到 /sb/ 的响应：Date 头喂给 clock（不是 /sb/ 的不算）', async () => {
+    const spy = vi.spyOn(clock, 'observeResponse');
+    const date = 'Thu, 29 Oct 2026 01:00:00 GMT';
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response('ok', { headers: { Date: date } })));
+    await appFetch('https://app.example.invalid/sb/rest/v1/todos');
+    await appFetch(new URL('https://app.example.invalid/functions/v1/x'));
+    expect(spy.mock.calls[0]).toEqual(['https://app.example.invalid/sb/rest/v1/todos', date]);
+    expect(spy.mock.calls[1]?.[0]).toBe('https://app.example.invalid/functions/v1/x');
+    spy.mockRestore();
   });
 });

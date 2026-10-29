@@ -166,3 +166,46 @@ export function clearLocalSession(storage?: Storage, supabaseUrl: string = build
 export function goToAuth(): void {
   location.replace('/app/auth/');
 }
+
+// ───────── 退出原因（K6 复审 A：被移除、被停用、注销冷静期清本机后回登录页，登录页据此提示）─────────
+// 存在本标签页的 sessionStorage（goToAuth 是同一个标签页跳转，跳过去还在）；只存原因，不存账号、邮箱等任何个人信息
+
+/** removed：会话被吊销（session_revoked）；disabled：账号被管理员停用（account_disabled）；pending_deletion：注销冷静期（account_pending_deletion，R-192） */
+export type ExitNotice = 'removed' | 'disabled' | 'pending_deletion';
+
+const EXIT_NOTICE_KEY = 'lemo.exit_notice';
+const EXIT_NOTICES: readonly ExitNotice[] = ['removed', 'disabled', 'pending_deletion'];
+
+/** 按服务器的错误码定退出原因（不认识的一律算 removed） */
+export function exitNoticeOf(code: string): ExitNotice {
+  if (code === 'account_disabled') return 'disabled';
+  if (code === 'account_pending_deletion') return 'pending_deletion';
+  return 'removed';
+}
+
+export function setExitNotice(n: ExitNotice, storage?: Storage): void {
+  try {
+    (storage ?? sessionStorage).setItem(EXIT_NOTICE_KEY, n);
+  } catch {
+    // 拿不到 sessionStorage：登录页就不提示原因
+  }
+}
+
+/** 登录页读（不删；渲染里读，StrictMode 调两次也一样）；值不认识按没有处理 */
+export function readExitNotice(storage?: Storage): ExitNotice | null {
+  try {
+    const v = (storage ?? sessionStorage).getItem(EXIT_NOTICE_KEY);
+    return EXIT_NOTICES.find((n) => n === v) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** 登录页显示过以后删掉（effect 里调），刷新登录页不再提示 */
+export function clearExitNotice(storage?: Storage): void {
+  try {
+    (storage ?? sessionStorage).removeItem(EXIT_NOTICE_KEY);
+  } catch {
+    // 同上
+  }
+}

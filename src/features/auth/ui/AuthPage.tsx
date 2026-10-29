@@ -4,6 +4,7 @@
 // - 其他（主屏幕版、电脑浏览器）：邮箱 → 6 位验证码；新邮箱多一步邀请码
 import { useEffect, useRef, useState } from 'react';
 import { installGate, type InstallGate } from '../../../platform/env.ts';
+import { clearExitNotice, readExitNotice, type ExitNotice } from '../../../platform/session.ts';
 import { useAuthFlow, type AuthFlowDeps } from '../hooks/useAuthFlow.ts';
 import { useAuthT } from '../hooks/useAuthT.ts';
 import { useSessionGate } from '../hooks/useSessionGate.ts';
@@ -51,6 +52,28 @@ function SessionCheck({ deps }: { deps: AuthFlowDeps | undefined }) {
   );
 }
 
+const EXIT_KEYS = {
+  removed: 'auth.exit.removed',
+  disabled: 'auth.exit.disabled',
+  pending_deletion: 'auth.exit.pendingDeletion',
+} as const satisfies Record<ExitNotice, string>;
+
+/**
+ * 退出原因（K6 复审 A）：主 App 被移除、被停用、注销冷静期时清本机后跳到这里，先说一句为什么；显示一次就删，刷新不再出现。
+ * 冷静期的恢复要登录以后才能做（服务器回 account_pending_deletion 才出“恢复账号”，0.29 续第 131 条④），这里只给提示
+ */
+function ExitNoticeLine() {
+  const t = useAuthT();
+  const [notice] = useState(() => readExitNotice());
+  useEffect(() => clearExitNotice(), []);
+  if (!notice) return null;
+  return (
+    <p className={styles.notice} role="alert" data-testid="auth-exit-notice" data-reason={notice}>
+      {t(EXIT_KEYS[notice], {})}
+    </p>
+  );
+}
+
 function LoginPanel({ deps }: { deps: AuthFlowDeps | undefined }) {
   const t = useAuthT();
   const box = useRef<HTMLDivElement>(null);
@@ -66,6 +89,7 @@ function LoginPanel({ deps }: { deps: AuthFlowDeps | undefined }) {
   return (
     <main className={styles.page} data-feature="auth" data-step={step} aria-busy={busy}>
       <h1 className={styles.title}>{t('auth.title', {})}</h1>
+      {step === 'email' && <ExitNoticeLine />}
       {step === 'email' && <p className={styles.lead}>{t('auth.lead', {})}</p>}
 
       {askEmail && (

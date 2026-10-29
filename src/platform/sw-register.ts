@@ -3,13 +3,23 @@
 export const SW_URL = '/app/sw.js';
 export const SW_SCOPE = '/app/';
 
-export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+/** 注册最多等这么久（K6 复审建议 3：本机库来自更新版本时入口要等注册完再渲染，注册一直不返回不能白屏） */
+export const SW_REGISTER_WAIT_MS = 3000;
+
+/** 注册 SW；不支持、失败或超过 waitMs 都返回 null（超时只是不再等，注册请求本身照常进行）。永远 resolve */
+export async function registerServiceWorker(waitMs: number = SW_REGISTER_WAIT_MS): Promise<ServiceWorkerRegistration | null> {
   if (!('serviceWorker' in navigator)) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), waitMs);
+  });
   try {
-    return await navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE });
+    return await Promise.race([navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE }), timeout]);
   } catch {
     // 注册失败不影响使用（只是没有离线）；B1 接上日志后记错误码
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

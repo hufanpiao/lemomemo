@@ -11,6 +11,7 @@
 import type { FeaturesConfig } from '../../shared/logic/flags.ts';
 import { cacheMigrations, DB_VERSION, runUpgrade, type CacheMigration, type UpgradeReport } from './cache-migrations.ts';
 import { cacheStores, DRAFTS, META, VAULT_DRAFTS, type StoreDef } from './cache-schema.ts';
+import { deleteLocalDb, type DeleteDbResult } from '../platform/sign-out.ts';
 
 export const DB_NAME = 'planner-v4';
 
@@ -31,6 +32,16 @@ export interface CachedRow<T extends ServerRow = ServerRow> {
    * 新入队的 patch 带上它当 own_revs；服务器的新行到了以后去掉不大于新 rev 的。由 outbox.ts 维护
    */
   own_revs?: number[];
+  /**
+   * R-229 空壳的门槛（outbox-rows.ts 的 applyServerRows 维护，不放进 server）：写空壳时从原始行的 minRev、本机旧 server 的 rev、
+   * 旧门槛里取最大的；之后这一行只收过了门槛的服务器行，免得晚到的旧普通行把明文带回来；正常行收进来以后清掉
+   */
+  shell_rev?: number;
+  /**
+   * 门槛含不含等于：门槛来自原始行的 minRev 时为 true（收 rev ≥ shell_rev：升级后整表重拉同 rev 的好行要能收进来，TC-B1-40）；
+   * 拿本机旧 rev 补的为 false（严格大于：同 rev 就是本机原来那份旧行）。和 shell_rev 同生同灭
+   */
+  shell_inclusive?: boolean;
 }
 
 /** 某张同步表的增量同步进度（K8 写） */
@@ -99,7 +110,8 @@ export interface CacheTx {
   clear(store: string): Promise<void>;
 }
 
-export type CacheCloseReason = 'versionchange' | 'closed';
+/** versionchange：别的标签页要升级库；deleted：别处在按库名删库（versionchange 的 newVersion 为 null，退出登录）；closed：自己调了 close */
+export type CacheCloseReason = 'versionchange' | 'deleted' | 'closed';
 
 /** tx 的选项 */
 export interface CacheTxOptions {
@@ -154,7 +166,7 @@ export interface Cache {
    * 每个回调最多等 2 秒；这时只有 drafts、vault_drafts 还能写。返回取消函数
    */
   onBeforeVersionClose(fn: () => Promise<void> | void): () => void;
-  /** 库关了（versionchange：别的标签页要升级；closed：自己调了 close） */
+  /** 库关了（versionchange：别的标签页要升级；deleted：别处在删库；closed：自己调了 close） */
   onClosed(fn: (reason: CacheCloseReason) => void): () => void;
   close(): void;
 }
@@ -216,12 +228,15 @@ function wrap(db: IDBDatabase, name: string, version: number, stores: readonly S
     for (const l of [...closedListeners]) l(reason);
   };
 
-  db.onversionchange = () => {
+  db.onversionchange = (ev: { newVersion?: number | null }) => {
     if (state !== 'open') return;
     state = 'closing';
+    // newVersion 为 null：别处在删库（别的标签页退出登录，K6 复审 C）——照样先跑“关库前”回调，但按 'deleted' 关，
+    // 不走升级的重新载入、不出“有新版本”的提示；由 boot 的 onCacheDeleted 看会话决定回登录页还是重新载入
+    const reason: CacheCloseReason = ev.newVersion === null ? 'deleted' : 'versionchange';
     const timeout = new Promise<void>((resolve) => setTimeout(resolve, VERSION_CLOSE_WAIT_MS));
     const flush = Promise.allSettled([...beforeClose].map((f) => Promise.resolve().then(f)));
-    void Promise.race([flush, timeout]).then(() => finishClose('versionchange'));
+    void Promise.race([flush, timeout]).then(() => finishClose(reason));
   };
 
   const tx: Cache['tx'] = async (names, mode, fn, opts) => {
@@ -324,6 +339,18 @@ function wrap(db: IDBDatabase, name: string, version: number, stores: readonly S
     },
     close: () => finishClose('closed'),
   };
+}
+
+export type DeleteCacheResult = DeleteDbResult;
+
+/**
+ * 按库名删掉整个本机库（会话没了时用：别的标签页退出、冷启动没有会话但库还在；登录页审查）。
+ * 实现只有一份：platform/sign-out.ts 的 deleteLocalDb（一开始就起总定时器，waitMs 到了返回 'blocked'，done 标志防重复 resolve；
+ * 排在另一个卡住的删库请求后面、什么事件都收不到时也会按时返回，不会让启动永远等着白屏）。删库请求本身留在浏览器里，挡着的关了就删。
+ * 调用方先关本页自己的连接（cache.close()，原因 'closed'），否则本页会收到 versionchange → 自动重新载入，形成循环。永远 resolve
+ */
+export function deleteCacheDb(opts: { factory?: IDBFactory | undefined; name?: string | undefined; waitMs?: number } = {}): Promise<DeleteCacheResult> {
+  return deleteLocalDb(opts.factory ?? (globalThis as { indexedDB?: IDBFactory }).indexedDB, opts.name ?? DB_NAME, opts.waitMs);
 }
 
 /** 打开本机库：按需建库、升级、跑迁移。永远 resolve，不 reject */

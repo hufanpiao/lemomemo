@@ -1,5 +1,6 @@
 // 测试用的最小 IndexedDB 替身（仓库没有 fake-indexeddb，不加依赖）：只实现 core/cache*.ts、outbox.ts 用到的部分
 // • open：建库、升级（onupgradeneeded + versionchange 事务）、VersionError、通知旧连接 onversionchange、blocked
+// • deleteDatabase：通知旧连接、等关、blocked，删掉
 // • 事务：范围重叠的按创建顺序串行（只读和只读可并行）、活动期检查、请求按顺序在宏任务里执行；没有新请求时自动提交；
 //   成功回调抛错就中止；中止时把涉及的仓恢复原样（升级事务中止时整库恢复）。细节见 idb-fake-tx.ts 的 FakeTransaction
 // • 仓：put / get / getAll / delete / clear / count、index(name).getAll(key)、createIndex / deleteIndex
@@ -124,6 +125,34 @@ export class FakeIDBFactory {
       const waitClosed = (blockedFired: boolean): void => {
         if (d.connections.size === 0) {
           proceed();
+          return;
+        }
+        if (!blockedFired) req.onblocked?.();
+        this.waiters.push(() => waitClosed(true));
+      };
+      tick(() => waitClosed(false));
+    });
+    return req;
+  }
+
+  /** 按库名删库：先通知还开着的连接 onversionchange（newVersion 为 null），等都关了再删；没关时先触发 blocked */
+  deleteDatabase(name: string): FakeOpenRequest {
+    const req = new FakeOpenRequest();
+    tick(() => {
+      const d = this.dbs.get(name);
+      const done = (): void => {
+        this.dbs.delete(name);
+        req.readyState = 'done';
+        req.onsuccess?.({ target: req });
+      };
+      if (!d) {
+        done();
+        return;
+      }
+      for (const c of [...d.connections]) c.onversionchange?.({ oldVersion: d.version, newVersion: null });
+      const waitClosed = (blockedFired: boolean): void => {
+        if (d.connections.size === 0) {
+          done();
           return;
         }
         if (!blockedFired) req.onblocked?.();

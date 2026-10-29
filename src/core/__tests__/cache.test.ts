@@ -191,6 +191,22 @@ describe('onversionchange（TC-B1-48 的本机库部分）', () => {
     b.close();
   });
 
+  it('别处按库名删库（versionchange 的 newVersion 为 null）：照样先跑关库前回调，按 deleted 关库（不是 versionchange），删除随后完成', async () => {
+    const { factory, fake } = fakeIndexedDB();
+    const a = mustOpen(await openCache({ factory }));
+    const closed = vi.fn();
+    const before = vi.fn();
+    a.onClosed(closed);
+    a.onBeforeVersionClose(before);
+    const del = fake.deleteDatabase('planner-v4');
+    await new Promise<void>((r) => (del.onsuccess = () => r()));
+    expect(before).toHaveBeenCalledTimes(1);
+    expect(closed).toHaveBeenCalledWith('deleted');
+    expect(closed).not.toHaveBeenCalledWith('versionchange');
+    expect(a.isClosed()).toBe(true);
+    expect(fake.dbs.has('planner-v4')).toBe(false);
+  });
+
   it('旧标签页一直不关（没监听）：新版本收到 blocked，关掉以后继续', async () => {
     const { factory, fake } = fakeIndexedDB();
     const old = mustOpen(await openCache({ factory }));

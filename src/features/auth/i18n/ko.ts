@@ -9,6 +9,9 @@ export const ko = {
   'auth.session.signedIn': '当前已登录，要换账号请先退出', // TODO(ko): 待韩文翻译，先放中文占位
   'auth.session.switch': '退出并换账号', // TODO(ko): 待韩文翻译，先放中文占位
   'auth.session.backToApp': '回到 App', // TODO(ko): 待韩文翻译，先放中文占位
+  'auth.exit.removed': '이 기기는 다른 기기에서 제거되었어요. 다시 로그인해 주세요. 아직 업로드되지 않은 변경 사항은 삭제되었어요.', // TODO(ko): 초안, 韩文审校待审（R-106；中文照架构 0.29 续第 98 条）
+  'auth.exit.disabled': '계정이 정지되어 이 기기의 데이터를 삭제했어요. 궁금한 점은 Lemo 담당자에게 문의해 주세요.', // TODO(ko): 초안, 韩文审校待审（R-106；App 名的韩文译法未定，先写 Lemo）
+  'auth.exit.pendingDeletion': '계정이 탈퇴 대기 중이라 이 기기의 데이터를 삭제했어요. 대기 기간 안에 이메일 인증 코드로 로그인하면 계정을 복구할 수 있어요.', // TODO(ko): 초안, 韩文审校待审（R-106；中文也是占位，R-192 ④）
   'auth.email.label': '邮箱', // TODO(ko): 待韩文翻译，先放中文占位
   'auth.email.invalid': '邮箱格式不对，请再看一下', // TODO(ko): 待韩文翻译，先放中文占位
   'auth.email.send': '发验证码', // TODO(ko): 待韩文翻译，先放中文占位

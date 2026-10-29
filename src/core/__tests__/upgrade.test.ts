@@ -131,4 +131,21 @@ describe('本机库被新版本要求关闭（TC-B1-48 的提示部分）', () =
     u.setCacheTooNew();
     expect(u.getState().cache).toBe('too_new');
   });
+
+  it('库来自更新的版本：按过“去更新”重新载入后库仍比 App 新 → still_old，并清掉标记（复审 S3）', () => {
+    const d = deps();
+    d.stored.v = '';
+    const u = createUpgradeCenter(d);
+    u.setCacheTooNew();
+    u.afterReloadCheck();
+    expect(u.getState().update).toBe('still_old');
+    expect(d.stored.v).toBeNull();
+  });
+
+  it('库来自更新的版本时按“更新”而没有新版本：still_old（整屏提示上不能点了没反应，K6-ver-new）', async () => {
+    const u = createUpgradeCenter(deps({ swUpdate: vi.fn(() => Promise.resolve<SwUpdateResult>('no_update')) }));
+    u.setCacheTooNew();
+    expect(await u.requestUpdate()).toBe('still_old');
+    expect(u.getState().update).toBe('still_old');
+  });
 });

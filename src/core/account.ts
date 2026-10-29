@@ -8,6 +8,7 @@
 //   watchAccount 挂上以后马上再读一次会话比一次，补上“启动读会话”到“挂上监听”之间漏掉的事件（M1）
 // • 闸（M2）：发现会话里的账号和本页启动时的账号不同，同步地设 boot.switching = true、outbox.suspend()（enqueue 拒收、next 返回 null、
 //   applyServer 等一律不做），再清库、关库、onSwitched()（默认重新载入）。K8 每发一项前、每处理一个响应前先看这道闸
+// • 会话没了（别的标签页退出）：设闸 → 清空整库 → 关本页连接 → 按库名删库 → 清运行时缓存 → onSignedOut（登录页审查：不留上一个账号的数据）
 // • 失败即关（M3）：清库失败也关库，再 onFailed()（默认同 onSwitched：重新载入，冷启动会再清一次；再失败就按“本机库不可用”启动，不渲染缓存）
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { BootResult } from './boot.ts';
@@ -69,8 +70,13 @@ export interface WatchAccountDeps extends EnsureAccountDeps {
   onStorageUser(fn: (userId: string | null) => void): () => void;
   /** 现在会话里的 user_id（platform/session.ts 的 readSessionUserId）：挂上监听后马上再比一次（M1） */
   currentUserId(): string | null;
-  /** 会话没了（别的标签页退出）：去登录页；本机库由退出流程清 */
+  /** 会话没了（别的标签页退出）：本页已经清掉本机库以后调，去登录页 */
   onSignedOut(): void;
+  /**
+   * 会话没了时按库名删掉整个本机库（core/cache.ts 的 deleteCacheDb）；在本页连接关掉以后调，不会触发本页的 versionchange。
+   * 不填只清空内容、关库（库文件留着，里面没有数据）
+   */
+  deleteDb?(): Promise<unknown>;
   /** 换了账号、已清空并关库：默认重新载入，让冷启动、功能开关、同步都按新账号从头来 */
   onSwitched(): void;
   /** 清库失败（已关库）：不填同 onSwitched（重新载入，冷启动会再清一次） */
@@ -101,7 +107,7 @@ function closeCache(boot: BootResult): void {
 
 /**
  * 盯住后三个时机（启动那一次在 coldStart 里），挂上后马上再比一次。
- * 一旦发现账号变了（或会话没了），只处理这一次：设闸 → 清库 → 关库 → onSwitched / onFailed（会话没了：设闸 → onSignedOut）。
+ * 一旦发现账号变了（或会话没了），只处理这一次：设闸 → 清库 → 关库 → onSwitched / onFailed（会话没了：设闸 → 清库 → 关库 → 删库 → onSignedOut）。
  * 返回取消函数
  */
 export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => void {
@@ -111,7 +117,30 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
     handled = true;
     closeGate(boot);   // 同步设闸：从这一刻起不再发送、不再写回
     if (userId === null) {
-      deps.onSignedOut();
+      // 别的标签页退出了（登录页审查）：本页可能已按这个账号开库、同步过，不能把数据留在硬盘上。
+      // 已设闸、封存 → 清空整库（封存后照样能清）→ 先关本页连接（原因 'closed'，不触发 versionchange → 重新载入）→ 按库名删库
+      // → 清运行时缓存 → onSignedOut。任何一步失败都照样往下走，最后一定 onSignedOut
+      const signOut = async (): Promise<void> => {
+        const cache = boot.cache;
+        try {
+          if (cache && !cache.isClosed()) await cache.clearAll();
+        } catch {
+          // 清不掉就靠下面按库名删
+        }
+        closeCache(boot);
+        clearAllCollections();
+        try {
+          await deps.deleteDb?.();
+        } catch {
+          // 删不掉（别的标签页挡着）：内容已清空
+        }
+        try {
+          await deps.clearCacheStorage();
+        } catch {
+          // 运行时缓存清不掉不挡退出
+        }
+      };
+      void signOut().finally(() => deps.onSignedOut());
       return;
     }
     const run = async (): Promise<void> => {
