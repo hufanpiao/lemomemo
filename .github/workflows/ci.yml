@@ -79,9 +79,63 @@ jobs:
             exit 1
           fi
 
+      - name: 算 Supabase 镜像缓存的 key（CLI 版本取自 tools/ci-tools.lock）
+        # 镜像标签由 CLI 版本决定，config.toml 决定起哪些服务；两者不变，要拉的镜像就不变
+        id: sb-images-key
+        run: |
+          cli="$(awk '$1 == "supabase" && $3 == "linux_amd64" { print $2 }' tools/ci-tools.lock)"
+          if [ -z "$cli" ]; then echo "::error::tools/ci-tools.lock 里没有 supabase linux_amd64 那一行"; exit 1; fi
+          echo "cli=$cli" >> "$GITHUB_OUTPUT"
+
+      - name: 取回缓存的 Supabase 镜像（避开 ECR Public 匿名拉取限流 toomanyrequests）
+        # 只用 Actions 自带缓存，不加 AWS 凭据；restore-keys 退到同一 CLI 版本的旧缓存（config.toml 改了时多数镜像仍可用，缺的照常去拉）
+        id: sb-images
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/supabase-images.tar
+          key: supabase-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.sb-images-key.outputs.cli }}-${{ hashFiles('supabase/config.toml') }}
+          restore-keys: |
+            supabase-images-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.sb-images-key.outputs.cli }}-
+
+      - name: 载入缓存的 Supabase 镜像（supabase start 见到本地已有的镜像就不再拉）
+        if: steps.sb-images.outputs.cache-matched-key != ''
+        # 缓存只为提速：tar 坏了、磁盘不够等载入失败只算这一步失败，supabase start 照常去拉；tar 由后面 always() 那步删
+        continue-on-error: true
+        env:
+          TAR: ${{ runner.temp }}/supabase-images.tar
+        run: |
+          docker load -i "$TAR"
+          rm -f "$TAR"
+
       - name: 启动本地 Supabase
         # studio 用不到，不起
         run: supabase start -x studio
+
+      - name: 把本次用到的 Supabase 镜像存成 tar（没有完全命中缓存时）
+        # 只存 supabase start 起的容器（名字以 supabase_ 开头）用到的镜像；后面起的 S3 替身不在内
+        # 缓存只为提速：存失败（磁盘不够、找不到容器等）只给警告，不让 db 任务变红
+        id: sb-save
+        if: steps.sb-images.outputs.cache-hit != 'true'
+        continue-on-error: true
+        env:
+          TAR: ${{ runner.temp }}/supabase-images.tar
+        run: |
+          mapfile -t imgs < <(docker ps --format '{{.Names}} {{.Image}}' | awk '$1 ~ /^supabase_/ { print $2 }' | sort -u)
+          if [ "${#imgs[@]}" -eq 0 ]; then echo "::warning::supabase start 之后没找到 supabase_ 开头的容器，这次不存镜像缓存"; exit 1; fi
+          printf '%s\n' "${imgs[@]}"
+          docker save -o "$TAR" "${imgs[@]}"
+          ls -lh "$TAR"
+
+      - name: 上传 Supabase 镜像缓存
+        if: steps.sb-images.outputs.cache-hit != 'true' && steps.sb-save.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/supabase-images.tar
+          key: ${{ steps.sb-images.outputs.cache-primary-key }}
+
+      - name: 删掉镜像 tar（几 GB，别占着磁盘）
+        if: always()
+        run: rm -f "${{ runner.temp }}/supabase-images.tar"
 
       - name: 起 S3 替身（代替 R2：LocalStack 按 digest 锁定，建 4 个桶，验 SigV4 path-style、If-None-Match 412、ListObjectsV2、DeleteObjects）
         # 架构 8.6、0.32 第 4 条；镜像和 digest 见 tools/ci-tools.lock（localstack / oci），docker-compose.objstore.yml 不一致就失败
@@ -132,12 +186,24 @@ jobs:
         run: node supabase/tests/auth/login-probe.mjs
 
       - name: 重新生成 shared/db.types.ts 并和仓库比对（架构 2.5）
+        # B1 接手清单 K-dbtypes 方案 ①：本机没有 supabase CLI，改了迁移以后由 CI 生成。用的是上面按 tools/ci-tools.lock 装的 CLI（版本锁定），
+        # 对的是刚 db reset 的同一个库；对不上就失败，并把生成结果作为产物 db-types-generated 上传（下一步），开发者下载覆盖 shared/db.types.ts 后提交
         run: |
-          supabase gen types typescript --local > "$RUNNER_TEMP/db.types.ts"
-          if ! diff -u shared/db.types.ts "$RUNNER_TEMP/db.types.ts"; then
-            echo "::error::shared/db.types.ts 和迁移对不上：本机跑 supabase gen types typescript --local 重新生成后提交"
+          mkdir -p "$RUNNER_TEMP/db-types"
+          supabase gen types typescript --local > "$RUNNER_TEMP/db-types/db.types.ts"
+          if ! diff -u shared/db.types.ts "$RUNNER_TEMP/db-types/db.types.ts"; then
+            echo "::error::shared/db.types.ts 和迁移对不上：下载本次运行的产物 db-types-generated，用里面的 db.types.ts 覆盖 shared/db.types.ts 后提交（有 supabase CLI 的机器也可本机 supabase gen types typescript --local 重新生成）"
             exit 1
           fi
+
+      - name: 类型对不上时上传生成的 db.types.ts（只是由迁移生成的类型，不含任何密钥）
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: db-types-generated
+          path: ${{ runner.temp }}/db-types/db.types.ts
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: RLS（pgTAP，supabase test db supabase/tests/rls）、D1（deno task d1）和 store-it（account、account-purge 真 store 打本机库）；后端
         # B0 集成：test:db = supabase test db supabase/tests/rls && deno task d1 && node supabase/tests/store-it/run.mjs；D1 比对不过不能合并

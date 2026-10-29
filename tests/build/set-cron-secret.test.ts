@@ -254,7 +254,8 @@ $fin = if ($tries.Count -eq 1 -and $tries[0].Finally) { $tries[0].Finally.Extent
     const r = await runScript({ failWrite: true });
     expect(r.code).toBe(1);
     expectClean(r);
-    expect(r.err).toContain('schema \\"vault\\" does not exist');
+    // 脚本从 JSON 正文里取出 message 再打印：5.1 和 pwsh 7 都是不带转义的原句
+    expect(r.err).toContain('schema "vault" does not exist');
     expect(r.err).toContain(RERUN);
     expect(r.sqls).toHaveLength(1);
     expect(r.reqs.some((x) => x.method === 'POST' && x.path.endsWith('/secrets'))).toBe(false);

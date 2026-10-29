@@ -210,7 +210,17 @@ function Invoke-Api([string]$method, [string]$uri, [hashtable]$headers, [string]
         if ($NoDetail) {
             $detail = '（不显示对方的说明：里面可能带着 CRON_SECRET）'
         } else {
-            try { $detail = $_.ErrorDetails.Message } catch { }
+            try { $detail = [string]$_.ErrorDetails.Message } catch { }
+            # 正文是 JSON 时只取 message / msg / error（pwsh 7 会把原文重新排版、引号转成 "）；解析不了就用原文
+            try {
+                $j = $detail | ConvertFrom-Json -ErrorAction Stop
+                if ($j -is [psobject]) {
+                    foreach ($k in 'message', 'msg', 'error') {
+                        $p = $j.PSObject.Properties[$k]
+                        if ($p -and $p.Value -is [string] -and $p.Value) { $detail = $p.Value; break }
+                    }
+                }
+            } catch { }
             if ($detail -and $detail.Length -gt 400) { $detail = $detail.Substring(0, 400) }
         }
         Fail "$method $([Uri]$uri | ForEach-Object { $_.Host + $_.AbsolutePath }) 失败（HTTP $code）：$detail"
