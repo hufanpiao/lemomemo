@@ -1,0 +1,187 @@
+/* 设置页骨架（B1 K9）：分组卡片照定稿线框 s13（.grp / .row / .gt / .sn）；只用令牌，颜色在 skins/*.css（A11）
+   按下回弹由 motion 的 Pressable 自带（含减少动态效果的覆盖），这里不写 transition、不动 transform */
+.page {
+  max-width: 560px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(env(safe-area-inset-top), 16px) 16px max(env(safe-area-inset-bottom), 24px);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  min-height: var(--hit);
+  margin-bottom: 8px;
+}
+
+.back {
+  justify-self: start;
+  color: var(--text);
+  font-size: var(--fs-15);
+  text-decoration: none;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-17);
+  font-weight: 600;
+}
+
+.gt {
+  margin: 16px 4px 6px;
+  outline-offset: 2px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-weight: 400;
+}
+
+.grp {
+  margin: 0;
+  padding: 0 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: var(--hit);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.tx {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-15);
+  overflow-wrap: anywhere;
+}
+
+.v {
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-align: right;
+}
+
+.meta {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 8px;
+  border-radius: var(--r-pill);
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-size: var(--fs-12);
+  vertical-align: middle;
+}
+
+.tagMuted {
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+
+.sn {
+  margin: 6px 4px 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+/* 中韩切换：两段的分段按钮，宽度随文字（韩文长 20–40%，不写死宽度，2.4 第 7 条） */
+.seg {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+}
+
+.segBtn {
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.segBtn[aria-pressed='true'] {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+.btn {
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.btn:disabled {
+  color: var(--text-2);
+}
+
+.danger {
+  color: var(--danger-text);
+}
+
+.wide {
+  width: 100%;
+  margin-top: 16px;
+  background: var(--panel);
+}
+
+.status {
+  margin: 8px 4px 0;
+  color: var(--text);
+  font-size: var(--fs-13);
+}
+
+.error {
+  margin: 8px 4px 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.primary {
+  min-height: var(--hit);
+  padding: 0 18px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-15);
+}
+
+.primaryDanger {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}

@@ -77,12 +77,19 @@ export interface WatchAccountDeps extends EnsureAccountDeps {
   onFailed?(): void;
 }
 
-/** 设闸（同步）：之后 outbox 一律拒绝、库封存（除了清空，新的写事务都抛 CacheClosedError），K8 不再发送、不再写回 */
-function closeGate(boot: BootResult): void {
+/**
+ * 同步设闸（换账号、被移除、本页退出登录共用）：boot.switching = true、outbox.suspend()、cache.seal()。
+ * 之后 outbox 一律拒绝（enqueue 拒收、next 为空、ack / fail 不写库），库封存（除了清空，新的写事务都抛 CacheClosedError），
+ * K8 不再发送、不再写回。不能解除：调用方接着 cache.clearAll()（封存后照样能清）、关库、离开页面。
+ * K9 设置页的退出流程：sealForExit(boot) → await boot.cache?.clearAll() → 清运行时缓存、删会话 → 去登录页
+ */
+export function sealForExit(boot: BootResult): void {
   boot.switching = true;
   boot.outbox?.suspend();
   boot.cache?.seal();
 }
+
+const closeGate = sealForExit;
 
 function closeCache(boot: BootResult): void {
   try {

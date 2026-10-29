@@ -18,7 +18,7 @@ import { reloadPage, updateAttemptStore, updateServiceWorker } from '../platform
 import { ensureAccount } from './account.ts';
 import { openCache, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
 import type { UpgradeReport } from './cache-migrations.ts';
-import { OUTBOX } from './cache-schema.ts';
+import { DRAFTS, OUTBOX, PENDING_ACTIONS, VAULT_DRAFTS } from './cache-schema.ts';
 import { createOutbox, type Outbox, type OutboxBootReport, type OutboxItem, type OutboxOptions } from './outbox.ts';
 import { rewriteRow } from './outbox-rows.ts';
 import { clearAllCollections, collection } from './store.ts';
@@ -109,6 +109,28 @@ export async function wipeLocal(cache: Cache): Promise<void> {
 
 let current: BootResult | null = null;
 let off426: (() => void) | null = null;
+
+/**
+ * 本机还没上传的东西有几条（K9 退出登录前提示“还有 N 条没同步，退出会丢掉”；A18 不许 vault 代码 import cache，所以由 core 数）：
+ * 先 outbox.refresh()，再数 outbox 的全部项（待发 + 正在发 + 发送失败）+ drafts + vault_drafts + pending_actions。
+ * 没启动、outbox 为 null、库已关、已封存、读失败，都返回 null（数不出来，调用方按“不确定”提示）
+ */
+export async function localUnsentCount(boot: BootResult | null = current): Promise<number | null> {
+  const cache = boot?.cache;
+  const outbox = boot?.outbox;
+  if (!cache || !outbox || cache.isClosed() || cache.isSealed()) return null;
+  try {
+    await outbox.refresh();
+    const stores = [OUTBOX, DRAFTS, VAULT_DRAFTS, PENDING_ACTIONS];
+    return await cache.tx(stores, 'readonly', async (t) => {
+      let n = 0;
+      for (const s of stores) n += (await t.getAll(s)).length;
+      return n;
+    });
+  } catch {
+    return null;
+  }
+}
 
 /** 最近一次 coldStart 的结果（K7、K8、UI hooks 从这里拿 cache、outbox、upgrade）；还没启动为 null */
 export function getBoot(): BootResult | null {
