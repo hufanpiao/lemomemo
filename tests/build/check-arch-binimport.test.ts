@@ -218,6 +218,20 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
     expect(where(errors)).toEqual(['lib/deep.js:2', 'lib/deep.js:3']);
   });
 
+  it('模板嵌套 2 万层：check_binimport 2 秒内跑完（字面量只存下标），最里层的 require 照报', () => {
+    const { seconds, errors } = timed(repo({ 'lib/deep.js': `// head\nconst s = ${'`${'.repeat(20_000)}require('./x.png')${'}`'.repeat(20_000)};\n` }));
+    expect(seconds).toBeLessThan(2);
+    expect(errors).toEqual(['lib/deep.js:2']);
+  });
+
+  it('目标字符串超过 4096 个字符：不核对扩展名、按可疑报；正好 4096 个字符的照常核对', () => {
+    const long = `./${'a'.repeat(4096)}.js`;
+    const exact = `./${'a'.repeat(4096 - 5)}.js`;
+    const { errors } = binimport(repo({ 'lib/long.js': lines(`require('${long}');`, `require('${exact}');`, '') }));
+    expect(where(errors)).toEqual(['lib/long.js:1']);
+    expect(errors[0]?.message).toContain('超过 4096');
+  });
+
   it('对照：不是 createRequire 绑定出来的同名函数调用、createRequire 本身的参数 → 不报', () => {
     const body = lines(
       "import { createRequire } from 'node:module';",

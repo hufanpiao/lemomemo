@@ -19,7 +19,7 @@
        createRequire(…)() 连写）、import、import()、export … from、importScripts、new Worker 的目标路径不准以二进制扩展名结尾
        （BIDI_BINARY_EXT 加 .node、.so、.dylib；Node 的 CJS 把不认识的扩展名当 JS 执行，二进制里藏的代码评审在 diff 里看不到）。
        例外只有一种：src/ 下（Vite 打包）的 import / export … from / import() 引图片（png、jpg、jpeg、gif、webp、avif、ico、bmp）
-       并且带 ?url 或 ?inline 后缀（B1 接手清单 LINT-binimport；扫的文件同 BIDI）
+       并且带 ?url 或 ?inline 后缀（B1 接手清单 LINT-binimport；扫的文件同 BIDI）；目标字符串超过 4096 个字符不核对、按可疑报
 有错误时退出码 1，只有警告时 0。--root 给自测用（tests/arch-fixtures/check_arch/ 下的样例目录）。
 """
 import argparse
@@ -411,6 +411,8 @@ def check_bidi(root, errors):
 # BINIMPORT（B1 接手清单 LINT-binimport）：require / import 的目标不准是二进制扩展名。
 # NUL 在前 8000 字节的 .png 里写 JS，git 和 GitHub 当二进制、评审看不到内容，但 require('./x.png') 照样执行（BIDI 管不到）
 BINIMPORT_EXT = BIDI_BINARY_EXT + (".node", ".so", ".dylib")
+# 目标字符串超过这个长度就不核对扩展名、直接按可疑报（Linux 的 PATH_MAX 是 4096，真实的模块路径不会更长）
+BINIMPORT_SPEC_MAX = 4096
 BINIMPORT_SRC_EXT = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
 # 例外：src/ 下由 Vite 打包的代码用 import 引图片，并且明写 ?url 或 ?inline（Vite 只给 URL 或 data URL，不执行）。
 # 带了查询串，Node 的 CJS 按文件名“x.png?url”找不到文件、ESM 遇到 .png 报未知扩展名，两边都不会把它当 JS 跑。
@@ -434,7 +436,8 @@ _JS_TOKEN = re.compile(
 
 def js_skeleton(code):
     """返回 (skel, literals)：skel 和原文等长，注释、字符串内容、模板的字面部分、正则字面量换成空格（换行和引号留着，
-    模板 ${…} 里照代码扫）；literals 是 {开引号下标: 字面量原文（不含引号，模板含 ${…}）}。
+    模板 ${…} 里照代码扫）；literals 是 {开引号下标: (起, 止)}，code[起:止] 是字面量原文（不含引号，模板含 ${…}）。
+    只存下标不存切片：模板层层嵌套时每层都含里面所有层，存切片的总长按层数平方增长（1 万层、50 KB 就有 2.5 亿字符）。
     字符串遇换行就断（未闭合的不吞后面的行）；正则字面量按前一个记号判断，同 tests/build/ts-scan.ts"""
     n = len(code)
     skel = list(code)
@@ -473,7 +476,7 @@ def js_skeleton(code):
                 i = j + 2
                 continue
             blank(lit, j)
-            literals[start] = code[start + 1:min(j, n)]
+            literals[start] = (start + 1, min(j, n))
             stack.pop()
             i = j + 1
             state["prev"], state["word"] = "`", ""
@@ -511,7 +514,7 @@ def js_skeleton(code):
             blank(i, end)
         elif kind == "str":
             closed = end - i >= 2 and code[end - 1] == c
-            literals[i] = code[i + 1:end - 1 if closed else end]
+            literals[i] = (i + 1, end - 1 if closed else end)
             blank(i + 1, end - 1 if closed else end)
             state["prev"], state["word"] = c, ""
         elif kind == "word":
@@ -640,14 +643,23 @@ def check_binimport(root, errors):
             if at in seen:
                 continue
             seen.add(at)
-            spec = literals[at]
+            a, b = literals[at]
+            line = bisect.bisect_right(newlines, at) + 1
+            if b - a > BINIMPORT_SPEC_MAX:
+                # 不切片、不核对，按可疑报：真实的模块路径不会这么长；逐个核对时层层嵌套的模板放进 require(…) 里，
+                # 每层都要切出含里面所有层的整段，耗时按层数平方增长（2 万层约 8 秒）
+                errors.append(("BINIMPORT", rel, line,
+                               f"{how} 的目标字符串长 {b - a} 个字符，超过 {BINIMPORT_SPEC_MAX}，不核对扩展名、按可疑报："
+                               f"{code[a:a + 80]}（真实的模块路径不会这么长，拆短或改成普通字符串）"))
+                continue
+            spec = code[a:b]  # 只给命中的字符串切原文，用完即丢
             ext = binimport_ext(spec)
             if not ext:
                 continue
             vite_import = how in ("import()", "import/export … from", "import") and code[at] != "`"
             if vite_import and rel.startswith("src/") and BINIMPORT_EXEMPT_RE.match(spec):
                 continue
-            errors.append(("BINIMPORT", rel, bisect.bisect_right(newlines, at) + 1,
+            errors.append(("BINIMPORT", rel, line,
                            f"{how} 的目标是二进制扩展名 {ext}：{spec[:80]}（Node 的 CJS 把不认识的扩展名当 JS 执行，"
                            f"二进制里藏的代码评审在 diff 里看不到；src/ 下 Vite 引图片要写 ?url 或 ?inline）"))
 
