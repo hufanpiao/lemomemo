@@ -1,5 +1,5 @@
 // 离线冷启动（架构 4.1“启动时先用缓存渲染”、0.27 第 1、4 点）：入口在渲染 App 之前调 coldStart()，不等网络
-// 1. 打开本机库（建库、升级、迁移；VersionError → 整屏提示，不删库；被挡住 → 提示关掉其他窗口）
+// 1. 打开本机库（建库、升级、迁移；VersionError → 整屏提示，不删库；被挡住 → 等 BLOCKED_PROMPT_DELAY_MS 仍没打开才提示关掉其他窗口）
 // 2. 换账号就清空整库（core/account.ts，比对和清空在一个事务里）；迁移失败时按 outbox 重建 view（M5）；
 //    清掉 deleted_at 早于 30 天的行（4.3 第①条的本机第二道）
 // 3. 把各同步仓的 view 灌进 core/store 的集合（界面先画上次的内容，顶部“正在同步…”由同步层管）
@@ -16,7 +16,7 @@ import { onUpgradeRequired } from '../platform/http.ts';
 import { clearCacheStorage } from '../platform/session.ts';
 import { reloadPage, updateAttemptStore, updateServiceWorker } from '../platform/sw-register.ts';
 import { ensureAccount } from './account.ts';
-import { deleteCacheDb, openCache, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
+import { deleteCacheDb, openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
 import type { UpgradeReport } from './cache-migrations.ts';
 import { DRAFTS, OUTBOX, PENDING_ACTIONS, VAULT_DRAFTS } from './cache-schema.ts';
 import { createOutbox, type Outbox, type OutboxBootReport, type OutboxItem, type OutboxOptions } from './outbox.ts';
@@ -26,6 +26,13 @@ import { createUpgradeCenter, type UpgradeCenter, type UpgradeDeps } from './upg
 
 /** 软删除的行在本机最多留 30 天（和服务器的 30 天清理同一规则） */
 export const LOCAL_PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * 升级本机库收到 blocked 后，等这么久仍没打开才提示“请关掉其他打开的柠檬记窗口”。
+ * 配合升级的标签页（监听了 onversionchange）先写草稿再关库，最多等 VERSION_CLOSE_WAIT_MS，这期间浏览器（chromium、webkit 实测）
+ * 会先报 1 次 blocked；马上提示会闪一下。多留 500 ms 余量；真有没配合的旧页一直占着库，到时照样提示
+ */
+export const BLOCKED_PROMPT_DELAY_MS = VERSION_CLOSE_WAIT_MS + 500;
 
 export interface BootOptions {
   /** 当前登录的账号（platform/session.ts 的 readSessionUserId，离线也能读）；没登录为 null：不建本机库，直接返回 signed_out */
@@ -114,6 +121,8 @@ export async function wipeLocal(cache: Cache): Promise<void> {
 
 let current: BootResult | null = null;
 let off426: (() => void) | null = null;
+/** 正在等的 blocked 提示计时器（打开成功、出错、重新 coldStart、resetBootForTest 时取消） */
+let cancelBlockedPrompt: (() => void) | null = null;
 
 /**
  * 本机还没上传的东西有几条（K9 退出登录前提示“还有 N 条没同步，退出会丢掉”；A18 不许 vault 代码 import cache，所以由 core 数）：
@@ -147,6 +156,7 @@ export function resetBootForTest(): void {
   current = null;
   off426?.();
   off426 = null;
+  cancelBlockedPrompt?.();
 }
 
 function defaultUpgradeDeps(appVersion: string, partial: Partial<UpgradeDeps> = {}): UpgradeDeps {
@@ -196,14 +206,28 @@ export async function coldStart(opts: BootOptions): Promise<BootResult> {
   }
   const userId = opts.userId;
   let opened: OpenCacheResult | null = null;
+  // blocked 不马上提示：等 BLOCKED_PROMPT_DELAY_MS 仍没打开才 setBlocked(true)（配合升级的页关库期间浏览器会先报一次 blocked）
+  cancelBlockedPrompt?.();
+  let blockedTimer: ReturnType<typeof setTimeout> | null = null;
+  const cancelThis = (): void => {
+    if (blockedTimer !== null) clearTimeout(blockedTimer);
+    blockedTimer = null;
+    if (cancelBlockedPrompt === cancelThis) cancelBlockedPrompt = null;
+  };
+  cancelBlockedPrompt = cancelThis;
   try {
     opened = await openCache({
       ...opts.cacheOptions,
       onBlocked: () => {
-        upgrade.setBlocked(true);
         opts.cacheOptions?.onBlocked?.();
+        if (blockedTimer !== null || cancelBlockedPrompt !== cancelThis) return;
+        blockedTimer = setTimeout(() => {
+          blockedTimer = null;
+          upgrade.setBlocked(true);
+        }, BLOCKED_PROMPT_DELAY_MS);
       },
     });
+    cancelThis();
     upgrade.setBlocked(false);
     if (!opened.ok) {
       result.error = opened.error;
@@ -219,6 +243,7 @@ export async function coldStart(opts: BootOptions): Promise<BootResult> {
     result.status = 'ready';
     return result;
   } catch (e) {
+    cancelThis();
     // 失败即关：不渲染半截的缓存
     if (opened?.ok) {
       try {

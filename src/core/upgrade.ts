@@ -7,6 +7,7 @@
 //   否则 cache = 'closed_for_upgrade'（“柠檬记有新版本 · 重新打开”），录音或编辑结束（busy 归零）时自动重新载入
 // • 本机库来自更新的版本（VersionError）：cache = 'too_new'，整屏提示“这台设备上的数据来自更新的版本，请更新柠檬记”
 // • 升级本机库被挡住（blocked）：blocked = true，提示“请关掉其他打开的柠檬记窗口”
+//   （boot.ts 收到 blocked 后等 BLOCKED_PROMPT_DELAY_MS 仍没打开才调 setBlocked(true)，配合升级的页关库期间不闪提示）
 // 纯 TS：不准 import React 和任何功能（A1）
 import { parseVersion, versionAtLeast } from '../../shared/core/version.ts';
 import type { SwUpdateResult } from '../platform/sw-register.ts';

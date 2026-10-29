@@ -201,7 +201,8 @@ export interface OpenCacheOptions {
   onBlocked?: () => void;
 }
 
-const VERSION_CLOSE_WAIT_MS = 2000;
+/** 收到 versionchange 后最多等多久（先写草稿、跑“关库前”回调）再关库；boot.ts 按它定 blocked 提示的延迟 */
+export const VERSION_CLOSE_WAIT_MS = 2000;
 
 function req<T>(r: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
