@@ -636,6 +636,10 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
       const { seconds } = timed(repo({ 'build/a.sh': `${unit.repeat(Math.floor(2_000_000 / unit.length))}\n` }));
       expect(seconds, unit).toBeLessThan(5);
     }
+    // 倍率：输入翻倍，线性约 2 倍、平方约 4 倍；不受机器快慢影响
+    const at = (n: number) => timed(repo({ 'build/a.sh': `${'node "a" '.repeat(Math.floor(n / 9))}\n` })).seconds;
+    const ratio = at(2_000_000) / at(1_000_000);
+    expect(ratio, `200 万字 / 100 万字耗时比 ${ratio.toFixed(2)}`).toBeLessThan(3);
   });
 
   it('②PowerShell 的命令名不分大小写：PWSH -FILE、PowerShell.EXE -File → 报', () => {
