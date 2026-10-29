@@ -7,7 +7,7 @@ import { coldStart, getBoot, resetBootForTest, type BootResult } from '../../../
 import { clearAllCollections } from '../../../core/store.ts';
 import { fakeIndexedDB } from '../../../core/__tests__/idb-fake.ts';
 import { seed, todo, uid } from '../../../core/__tests__/outbox-fixtures.ts';
-import { signOutThisDevice } from '../../../platform/sign-out.ts';
+import { DELETE_WAIT_MS, signOutThisDevice } from '../../../platform/sign-out.ts';
 import { defaultExitDeps } from '../data/local.ts';
 
 async function boot(factory: IDBFactory = fakeIndexedDB().factory, reload = vi.fn()): Promise<BootResult> {
@@ -61,6 +61,7 @@ afterEach(() => {
   getBoot()?.cache?.close();
   resetBootForTest();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('退出时清空本机（真 core）', () => {
@@ -131,16 +132,24 @@ describe('退出时清空本机（真 core）', () => {
     vi.spyOn(cache, 'clearAll').mockImplementation(() => new Promise<void>(() => undefined));
     // 浏览器的语义：close() 只是“请求关闭”，进行中的事务（卡住的 clearAll）做完以前连接还开着
     for (const c of idb.conns()) c.close = () => undefined;
+    // 两次删库都 blocked，各要等满 DELETE_WAIT_MS：用假时钟拨过去，不真等 6 秒（boot 用真时钟做完再切）
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const log: string[] = [];
-    const r = await signOutThisDevice({
+    let r: { serverDone: boolean } | undefined;
+    const running = signOutThisDevice({
       server: { signOut: async () => (log.push('signout'), { serverDone: true }) },
       steps: { ...defaultExitDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSession: () => void log.push('session') },
       readUserId: () => 'A',
       wipeMs: 50,
-    });
+    }).then((v) => (r = v));
+    // 第一次删库还在等：没到 DELETE_WAIT_MS 不算完
+    await vi.advanceTimersByTimeAsync(50 + DELETE_WAIT_MS - 1);
+    expect(r).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(DELETE_WAIT_MS + 1);
+    await running;
     expect(r).toEqual({ serverDone: true });
     expect(idb.deleted).toEqual([]);
     expect(log).toEqual(['caches', 'signout']);
     expect(reload).not.toHaveBeenCalled();
-  }, 15000);
+  });
 });
