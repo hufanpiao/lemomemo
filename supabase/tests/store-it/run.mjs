@@ -1,10 +1,10 @@
-// K3-store-it（B1 接手清单）：account、account-purge 两个 index.ts 的真 store 打本机真库的集成测试入口。
+// K3-store-it（B1 接手清单）：account、account-purge、invite-admin 三个 index.ts 的真 store 打本机真库的集成测试入口。
 // 用法（仓库根目录，本地 Supabase 已起：supabase start -x studio）：node supabase/tests/store-it/run.mjs
 // npm run test:db 的最后一段（CI 的 db 任务经它跑）。做三件事：
 //   ① 读 `supabase status -o json` 的 API_URL、DB_URL、ANON_KEY、SERVICE_ROLE_KEY（本地 CLI 的演示值，不打印）；
 //      地址不是 127.0.0.1 / localhost / [::1] 就拒绝（account-store.it.ts 开头还会再查一次）；
 //   ② 先跑 copy:shared（两个 index.ts 引 _shared/gen/）；
-//   ③ 带这几项跑 deno test supabase/tests/store-it/account-store.it.ts：网络只许 127.0.0.1，写只许 supabase/.temp/（残留清单）。
+//   ③ 带这几项跑 deno test supabase/tests/store-it/account-store.it.ts、invite-admin-store.it.ts：网络只许 127.0.0.1，写只许 supabase/.temp/（残留清单）。
 // 不用 shell：supabase 先按 PATH 找（CI），找不到就用 node 直接跑 node_modules/supabase/dist/supabase.js（本机 npx 装的）。
 // 结果用 process.exitCode 交出。
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -41,6 +41,7 @@ if (!s || !s.API_URL || !s.DB_URL || !s.SERVICE_ROLE_KEY || !s.ANON_KEY) {
   const r = spawnSync('deno', [
     'test', '--config', 'deno.json', '--allow-net=127.0.0.1,localhost', '--allow-env', '--allow-read=.', '--allow-write=supabase/.temp',
     'supabase/tests/store-it/account-store.it.ts',
+    'supabase/tests/store-it/invite-admin-store.it.ts',
   ], {
     cwd: root,
     stdio: 'inherit',

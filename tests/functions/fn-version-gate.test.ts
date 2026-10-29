@@ -4,6 +4,7 @@
 // ③ 低版本客户端逐个函数：旧版本请求 → 426（免查的除外），新版本 → 照常处理。
 //    account、account-purge、usage-report 只收 POST、函数侧免 POST，所以实际不查：直接调 handle，非 POST 是 405；
 //    invite-signup 的版本门在 core.ts 里（Turnstile、限流之后），直接调它的 handle；读配置经 minClientVersion 的缓存和超时（0.38 第 52 条）。
+//    invite-admin 的版本门也在 core.ts 里（鉴权、管理员之后），逐函数测试在 fn-version-gate-invite-admin.test.ts（本文件行数已满）。
 // supabase/functions/ 下每个函数都标了“查”或“免”的核对在 tests/build/fn-version-gate-coverage.test.ts（要读目录，归 Node 类型）。
 import { describe, expect, it, vi } from 'vitest';
 import {

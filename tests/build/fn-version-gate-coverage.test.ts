@@ -19,6 +19,7 @@ const FN_DIR = resolve(import.meta.dirname, '../../supabase/functions');
 /** 每个函数：'check' = 一律查；数组 = 免查的方法（其余方法照查） */
 const PLAN = new Map<string, 'check' | readonly string[]>([
   ['invite-signup', 'check'],       // K2：core.ts 的 start、verify 自己查（Turnstile、限流之后）
+  ['invite-admin', 'check'],        // TC-B1-01：core.ts 自己查（鉴权、管理员之后）
   ['account', ['POST']],            // K3：0.38 第 47 条，只免 POST
   ['account-purge', ['POST']],      // K3：pg_cron 带 x-cron-secret
   ['usage-report', ['POST']],       // K15：lemo-ops 带 x-ops-secret
@@ -167,10 +168,11 @@ describe('接入判断本身（K10 复审：正反例）', () => {
     expect(postOnlyHandle("function other(req: Request) { if (req.method !== 'POST') return 1; return 2; }\nexport async function handle(req: Request) { return ok(); }")).toBe(false);
   });
 
-  it('真仓库：account、account-purge、usage-report 只收 POST；invite-signup 在 core 里查', () => {
+  it('真仓库：account、account-purge、usage-report 只收 POST；invite-signup、invite-admin 在 core 里查', () => {
     const rd = (n: string, f: string) => readFileSync(join(FN_DIR, n, f), 'utf8');
     for (const n of ['account', 'account-purge', 'usage-report']) expect(postOnlyHandle(rd(n, 'core.ts')), n).toBe(true);
     expect(wiredInCore(rd('invite-signup', 'index.ts'), rd('invite-signup', 'core.ts'))).toBe(true);
+    expect(wiredInCore(rd('invite-admin', 'index.ts'), rd('invite-admin', 'core.ts'))).toBe(true);
   });
 });
 

@@ -1,6 +1,6 @@
--- 配置、约束、桶和每日清理：TC-B0-53、74、76、88、98；TC-B1-58、66、72、106 ①；0.27（features、min_client_version）；P-05；0.31 第 15、17 条（remind_queue、注销级联）
+-- 配置、约束、桶和每日清理：TC-B0-53、74、76、88、98；TC-B1-58、66、70、72、106 ①；0.27（features、min_client_version）；P-05；0.31 第 15、17 条（remind_queue、注销级联）
 begin;
-select plan(49);
+select plan(52);
 \ir _helpers.psql
 select tests.seed();
 
@@ -134,6 +134,15 @@ select is((select string_agg(key, ',') from private.counters where key like 'sig
 -- TC-B1-58
 select is((select string_agg(email_hash, ',') from private.pending_signups where email_hash like 'tc58-%'), 'tc58-valid',
   'TC-B1-58：过期的 pending_signups 被每日清理删掉，没过期的留着');
+
+-- ===== TC-B1-70：private.invites.note 最多 40 个字符（char_length 按码点数；invite-admin 用 service role 写） =====
+select ok(tests.try_as('service_role', null, $$insert into private.invites (code_hash, max_uses, used_count, expires_at, note)
+  values ('tc70-41', 1, 0, now() + interval '7 days', repeat('一', 40) || 'x')$$) like '23514%', 'TC-B1-70：备注 41 个码点：拒绝（23514）');
+select is(tests.try_as('service_role', null, $$insert into private.invites (code_hash, max_uses, used_count, expires_at, note)
+  values ('tc70-han', 1, 0, now() + interval '7 days', repeat('一', 40))$$), 'ok', 'TC-B1-70：备注 40 个汉字能写');
+select is(tests.try_as('service_role', null, $$insert into private.invites (code_hash, max_uses, used_count, expires_at, note)
+  values ('tc70-emoji', 1, 0, now() + interval '7 days', repeat(U&'\+01F600', 40))$$), 'ok',
+  'TC-B1-70：备注 40 个 emoji（40 个码点，UTF-16 是 80 个单元）能写');
 
 -- ===== TC-B1-106 ①：2500 行 30 天前软删除的行，每次运行只做一批（≤ 1000 行）：1000、1000、500，之后立即返回 0 =====
 -- 先把前面留下的可清理行清空（各项共用一个 1000 行预算），保证下面的返回值只来自这 2500 行
