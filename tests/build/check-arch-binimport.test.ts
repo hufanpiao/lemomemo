@@ -50,6 +50,19 @@ function binimport(root: string): { code: number; errors: Item[] } {
 const where = (errors: Item[]) => errors.map((e) => `${e.file}:${e.line}`);
 const lines = (...ls: string[]) => ls.join('\n');
 
+/** 只计 check_binimport 本身的耗时（不算 python 启动、模块加载）；errors 是“文件:行号”列表 */
+function timed(root: string): { seconds: number; errors: string[] } {
+  const script = [
+    'import importlib.util, json, pathlib, sys, time',
+    'spec = importlib.util.spec_from_file_location("check_arch", sys.argv[1])',
+    'mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)',
+    'errors = []; t = time.perf_counter(); mod.check_binimport(pathlib.Path(sys.argv[2]), errors)',
+    'print(json.dumps({"seconds": time.perf_counter() - t, "errors": [f"{e[1]}:{e[2]}" for e in errors]}))',
+  ].join('\n');
+  const args = ['-I', '-c', script, join(ROOT, 'build', 'check_arch.py'), root];
+  return JSON.parse(execFileSync('python', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })) as { seconds: number; errors: string[] };
+}
+
 describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
   it('四种写法各报一条：require、import … from、await import()、export * from；行号对，退出码 1', () => {
     const body = lines(
@@ -179,43 +192,30 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
       'lib/plain.js': `x={${kv}}\n`,
       'lib/with-cr.js': `x={${kv},c:createRequire(u),d:load=createRequire(u)}\n`,
     });
-    const script = [
-      'import importlib.util, pathlib, sys, time',
-      'spec = importlib.util.spec_from_file_location("check_arch", sys.argv[1])',
-      'mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)',
-      'errors = []; t = time.perf_counter()',
-      'mod.check_binimport(pathlib.Path(sys.argv[2]), errors)',
-      'print(time.perf_counter() - t)',
-    ].join('\n');
-    const seconds = Number(execFileSync('python', ['-I', '-c', script, join(ROOT, 'build', 'check_arch.py'), root], { encoding: 'utf8' }));
-    expect(seconds).toBeLessThan(5);
+    expect(timed(root).seconds).toBeLessThan(5);
   });
 
   it('括号配对一遍算完：1 万个未闭合的 require(、5 千层平衡嵌套的 require(…)，check_binimport 各 5 秒内跑完，结果照报', () => {
-    const unclosed = `${"require('./a.js', ".repeat(10_000)}'./z.png'\n`;
-    const nested = `${"require('./a.js', ".repeat(5_000)}'./z.png'${')'.repeat(5_000)};\n`;
-    const root = repo({ 'lib/unclosed.js': unclosed, 'lib/nested.js': nested });
-    const script = [
-      'import importlib.util, json, pathlib, sys, time',
-      'spec = importlib.util.spec_from_file_location("check_arch", sys.argv[1])',
-      'mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)',
-      'out = {}',
-      'for name in ("unclosed.js", "nested.js"):',
-      '    d = pathlib.Path(sys.argv[2]) / name.replace(".", "_"); (d / "lib").mkdir(parents=True)',
-      '    (d / "lib" / name).write_bytes((pathlib.Path(sys.argv[2]) / "lib" / name).read_bytes())',
-      '    errors = []; t = time.perf_counter(); mod.check_binimport(d, errors)',
-      '    out[name] = [time.perf_counter() - t, [f"{e[1]}:{e[2]}" for e in errors]]',
-      'print(json.dumps(out))',
-    ].join('\n');
-    const out = JSON.parse(execFileSync('python', ['-I', '-c', script, join(ROOT, 'build', 'check_arch.py'), root], { encoding: 'utf8' })) as Record<
-      string,
-      [number, string[]]
-    >;
-    expect(out['unclosed.js']?.[0]).toBeLessThan(5);
-    expect(out['nested.js']?.[0]).toBeLessThan(5);
     // 最里层的 './z.png' 在每一层 require 的括号里，只报一次
-    expect(out['unclosed.js']?.[1]).toEqual(['lib/unclosed.js:1']);
-    expect(out['nested.js']?.[1]).toEqual(['lib/nested.js:1']);
+    const unclosed = timed(repo({ 'lib/unclosed.js': `${"require('./a.js', ".repeat(10_000)}'./z.png'\n` }));
+    const nested = timed(repo({ 'lib/nested.js': `${"require('./a.js', ".repeat(5_000)}'./z.png'${')'.repeat(5_000)};\n` }));
+    expect(unclosed.seconds).toBeLessThan(5);
+    expect(nested.seconds).toBeLessThan(5);
+    expect(unclosed.errors).toEqual(['lib/unclosed.js:1']);
+    expect(nested.errors).toEqual(['lib/nested.js:1']);
+  });
+
+  it('4 万条报错的文件：check_binimport 5 秒内跑完，行号逐条对（每文件算一次换行位置再二分）', () => {
+    const { seconds, errors } = timed(repo({ 'lib/many.js': `// head\n${"require('./x.png');\n".repeat(40_000)}` }));
+    expect(seconds).toBeLessThan(5);
+    expect(errors).toEqual(Array.from({ length: 40_000 }, (_, i) => `lib/many.js:${i + 2}`));
+  });
+
+  it('模板 ${…} 嵌套 1000 层不崩（显式栈，不递归），最里层的 require 照报', () => {
+    const deep = `// head\nconst s = ${'`${'.repeat(1000)}require('./x.png')${'}`'.repeat(1000)};\nrequire('./y.bin');\n`;
+    const { code, errors } = binimport(repo({ 'lib/deep.js': deep }));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual(['lib/deep.js:2', 'lib/deep.js:3']);
   });
 
   it('对照：不是 createRequire 绑定出来的同名函数调用、createRequire 本身的参数 → 不报', () => {

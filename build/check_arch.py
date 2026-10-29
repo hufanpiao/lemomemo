@@ -450,71 +450,85 @@ def js_skeleton(code):
         p = state["prev"]
         return p == "" or p in "(,=:[!&|?{};+-*%<>~^" or state["word"] in _REGEX_AFTER_WORD
 
-    def template(start):
-        j, lit = start + 1, start + 1
-        while j < n and code[j] != "`":
-            if code[j] == "\\":
-                j += 2
-                continue
-            if code.startswith("${", j):
+    # 显式栈代替递归（模板 ${…} 里再套模板，嵌套几百层时递归会 RecursionError，整个 check_arch 崩掉）：
+    # 代码帧 ["c", 本层 { 的深度]、模板帧 ["t", 开反引号下标, 字面部分起点]；栈底是顶层代码，栈里多于一帧就是在 ${…} 里
+    stack = [["c", 0]]
+    i = 0
+    while stack:
+        top = stack[-1]
+        if top[0] == "t":
+            start, lit = top[1], top[2]
+            j = i
+            while j < n and code[j] != "`":
+                if code[j] == "\\":
+                    j += 2
+                    continue
+                if code.startswith("${", j):
+                    break
+                j += 1
+            if j < n and code.startswith("${", j):
                 blank(lit, j)
                 state["prev"], state["word"] = "{", ""
-                j = run(j + 2, True)
-                lit = j
+                stack.append(["c", 0])
+                i = j + 2
                 continue
-            j += 1
-        blank(lit, j)
-        literals[start] = code[start + 1:min(j, n)]
-        return j + 1
-
-    def run(i, in_expr):
-        depth = 0
-        while i < n:
-            c = code[i]
-            if c == "`":
-                i = template(i)
-                state["prev"], state["word"] = "`", ""
-                continue
-            if c == "/" and not code.startswith("//", i) and not code.startswith("/*", i) and regex_ok():
-                j, cls = i + 1, False
-                while j < n and code[j] != "\n" and (cls or code[j] != "/"):
-                    if code[j] == "\\":
-                        j += 2
-                        continue
-                    if code[j] == "[":
-                        cls = True
-                    elif code[j] == "]":
-                        cls = False
-                    j += 1
-                blank(i + 1, j)
-                i = j + 1
-                state["prev"], state["word"] = ")", ""
-                continue
-            m = _JS_TOKEN.match(code, i)
-            kind, end = m.lastgroup, m.end()
-            if kind in ("lc", "bc"):
-                blank(i, end)
-            elif kind == "str":
-                closed = end - i >= 2 and code[end - 1] == c
-                literals[i] = code[i + 1:end - 1 if closed else end]
-                blank(i + 1, end - 1 if closed else end)
-                state["prev"], state["word"] = c, ""
-            elif kind == "word":
-                state["prev"], state["word"] = "a", m.group(0)
-            elif kind == "inc":
-                state["prev"], state["word"] = ")", ""
-            elif kind == "other":
-                if in_expr and c == "{":
-                    depth += 1
-                if in_expr and c == "}":
-                    if depth == 0:
-                        return i + 1
-                    depth -= 1
-                state["prev"], state["word"] = c, ""
-            i = end
-        return n
-
-    run(0, False)
+            blank(lit, j)
+            literals[start] = code[start + 1:min(j, n)]
+            stack.pop()
+            i = j + 1
+            state["prev"], state["word"] = "`", ""
+            continue
+        in_expr = len(stack) > 1
+        if i >= n:
+            if not in_expr:
+                break
+            stack.pop()  # 文件在 ${…} 里结束：外层模板从文件尾接着收尾
+            stack[-1][2] = i = n
+            continue
+        c = code[i]
+        if c == "`":
+            stack.append(["t", i, i + 1])
+            i += 1
+            continue
+        if c == "/" and not code.startswith("//", i) and not code.startswith("/*", i) and regex_ok():
+            j, cls = i + 1, False
+            while j < n and code[j] != "\n" and (cls or code[j] != "/"):
+                if code[j] == "\\":
+                    j += 2
+                    continue
+                if code[j] == "[":
+                    cls = True
+                elif code[j] == "]":
+                    cls = False
+                j += 1
+            blank(i + 1, j)
+            i = j + 1
+            state["prev"], state["word"] = ")", ""
+            continue
+        m = _JS_TOKEN.match(code, i)
+        kind, end = m.lastgroup, m.end()
+        if kind in ("lc", "bc"):
+            blank(i, end)
+        elif kind == "str":
+            closed = end - i >= 2 and code[end - 1] == c
+            literals[i] = code[i + 1:end - 1 if closed else end]
+            blank(i + 1, end - 1 if closed else end)
+            state["prev"], state["word"] = c, ""
+        elif kind == "word":
+            state["prev"], state["word"] = "a", m.group(0)
+        elif kind == "inc":
+            state["prev"], state["word"] = ")", ""
+        elif kind == "other":
+            if in_expr and c == "{":
+                top[1] += 1
+            if in_expr and c == "}":
+                if top[1] == 0:
+                    stack.pop()  # ${…} 结束：回到外层模板，字面部分从 } 后面接着算
+                    stack[-1][2] = i = i + 1
+                    continue
+                top[1] -= 1
+            state["prev"], state["word"] = c, ""
+        i = end
     return "".join(skel), literals
 
 
@@ -618,6 +632,9 @@ def check_binimport(root, errors):
         for m in BINIMPORT_FROM_RE.finditer(skel):
             if m.end() in literals:
                 hits.append((m.end(), "import/export … from" if m.group(1) == "from" else "import"))
+        # 行号：每个文件只记一次换行位置，再二分（逐条 line_of 从文件头数换行，报错多时是“报错数 × 文件长度”）。
+        # 和 line_of 一样只数换行符：下标 at 之前有几个换行，行号就是几加一
+        newlines = [m.start() for m in re.finditer("\n", code)] if hits else []
         seen = set()
         for at, how in sorted(hits):
             if at in seen:
@@ -630,7 +647,7 @@ def check_binimport(root, errors):
             vite_import = how in ("import()", "import/export … from", "import") and code[at] != "`"
             if vite_import and rel.startswith("src/") and BINIMPORT_EXEMPT_RE.match(spec):
                 continue
-            errors.append(("BINIMPORT", rel, line_of(code, at),
+            errors.append(("BINIMPORT", rel, bisect.bisect_right(newlines, at) + 1,
                            f"{how} 的目标是二进制扩展名 {ext}：{spec[:80]}（Node 的 CJS 把不认识的扩展名当 JS 执行，"
                            f"二进制里藏的代码评审在 diff 里看不到；src/ 下 Vite 引图片要写 ?url 或 ?inline）"))
 
