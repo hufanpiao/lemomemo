@@ -1,10 +1,10 @@
 // usage-report 入口（架构第 6 节函数表、6.1）：给独立 Worker lemo-ops 调，鉴权是 x-ops-secret。
-// 经 supabase-js（service role）读 private.heartbeat、private.pending_deletions 和 rpc long_transactions（0.29 续第 52 条：经 schema('private')）；
-// 不直连数据库（不 import _shared/db.ts），不碰 R2。逻辑和测试见 core.ts、tests/functions/usage-report.test.ts。
-// 发信量（0.38 第 12 条，core.ts 的 authMail）暂不提供，返回体不带 auth_mail：auth_1h 定为读 auth.audit_log_entries
-// （要新的 private 函数和授权，S1 合并后接）；resend_24h 要有读权限的 Resend 密钥，以后再定。
+// 经 supabase-js（service role）读 private.heartbeat、private.pending_deletions 和 rpc long_transactions、auth_mail_counts
+// （0.29 续第 52 条：经 schema('private')）；不直连数据库（不 import _shared/db.ts），不碰 R2。逻辑和测试见 core.ts、tests/functions/usage-report.test.ts。
+// 发信量（0.38 第 12 条，core.ts 的 authMail）：auth_1h 取 rpc private.auth_mail_counts()（迁移 20261029230000，数 auth.audit_log_entries
+// 里的 user_recovery_requested）；resend_24h 要有读权限的 Resend 密钥，暂不接（不传，返回体里为 null）。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { handle, type UsageDb } from './core.ts';
+import { authMailFromRpc, handle, type UsageDb } from './core.ts';
 
 function makeDb(): UsageDb {
   const url = Deno.env.get('SUPABASE_URL');
@@ -26,6 +26,11 @@ function makeDb(): UsageDb {
       const { data, error } = await priv.rpc('long_transactions').abortSignal(signal);
       if (error) throw new Error('db');
       return Array.isArray(data) ? data.length : 0;
+    },
+    async authMail(signal) {
+      const { data, error } = await priv.rpc('auth_mail_counts').abortSignal(signal);
+      if (error) throw new Error('db');
+      return authMailFromRpc(data);
     },
   };
 }

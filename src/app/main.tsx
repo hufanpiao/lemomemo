@@ -11,10 +11,11 @@
 //    挂上后马上再读一次会话比一次，补上 1 到 5 之间漏掉的变化（K6 审查 M1）
 // 6.（mountFeatures 之后、渲染 App 之前，接手清单 CONSENT-wire ②）在线时先过告知页关口 ConsentGate（features/onboarding）：
 //    它问 noticeState()，first 先显示告知页（排在通知、麦克风说明之前），updated 留给“隐私说明更新了”那一屏（还没做，现在直接进 App），
-//    读失败、懒加载失败都不挡进 App。noticeState 在关口里调而不是在这里 await：A27 只许 app 经 index.ts 拿懒加载的组件，
-//    拿不到 data 层的函数；#root 本来是空的，关口回答之前不画 App，看起来和“等完再渲染”一样，同步也不用跟着等
+//    读失败、超过 3 秒（CONSENT-sugg ①）、懒加载失败都不挡进 App。noticeState 在关口里调而不是在这里 await：A27 只许 app 经 index.ts
+//    拿懒加载的组件，拿不到 data 层的函数；#root 本来是空的，关口回答之前不画 App，看起来和“等完再渲染”一样，同步也不用跟着等。
+//    选根（关口、离线、version_too_new）在 root.tsx（CONSENT-sugg ③⑥：错误边界只包关口，单独有测试）
 import '../platform/zod-jitless.ts';
-import { StrictMode, Suspense } from 'react';
+import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles/tokens.css';
 import '../styles/skins/simple.css';
@@ -23,7 +24,6 @@ import '../styles/base.css';
 import { fromUiLocale, LOCALE_STORAGE_KEY, pickLocale, toUiLocale } from '../../shared/i18n/pick-locale.ts';
 import { watchAccount } from '../core/account.ts';
 import { coldStart, type BootResult } from '../core/boot.ts';
-import { ConsentGate } from '../features/onboarding/index.ts';
 import { deleteCacheDb } from '../core/cache.ts';
 import { createDeviceRegistrar } from '../core/device-reg.ts';
 import { createLogQueue, guardOwner } from '../core/log/queue.ts';
@@ -35,13 +35,12 @@ import { uiStore } from '../kit/state/ui-store.ts';
 import { buildInfo } from '../platform/env.ts';
 import {
   clearCacheStorage, clearLocalSession, goToAuth, onAuthUser, onSessionStorageChange, readSessionId, readSessionUserId, setExitNotice,
+  takeLocalSession,
 } from '../platform/session.ts';
 import { registerServiceWorker, reloadPage } from '../platform/sw-register.ts';
-import { App } from './App.tsx';
-import { CacheTooNewFallback } from './CacheTooNewFallback.tsx';
-import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { mountFeatures } from './features.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
+import { startRoot } from './root.tsx';
 import { wireSync } from './sync-wiring.ts';
 
 /** 界面语言（16.4）：缓存的 profiles.ui_locale → 本机选过的（pv-locale）→ 设备语言 → 中文；规则同 src/auth/main.tsx，多一层缓存的 profile */
@@ -104,6 +103,8 @@ async function start(): Promise<void> {
     onAuthUser,
     onStorageUser: (fn) => onSessionStorageChange(fn),
     currentUserId: () => readSessionUserId(),
+    // 本页收到 SIGNED_OUT：判断会话归谁的同一刻就删本机会话，回登录页前只在会话还是那一个时再删（K6-signedout-sugg2 ①）
+    dropSession: () => takeLocalSession(),
     onSignedOut: goToAuth,
     // 别的标签页退出：本页关掉连接后按库名删库（登录页审查）
     deleteDb: () => deleteCacheDb(),
@@ -113,35 +114,12 @@ async function start(): Promise<void> {
   });
   if (boot.switching) return;
 
-  // 本机库来自更新的版本（TC-B1-49，K6-ver-new）：整屏提示“请更新 App”，只给“去更新 / 刷新”，不给继续使用；懒加载，不进主包
-  // • 先注册 SW 再渲染（复审 S4）：“去更新”靠 SW，首次打开还没注册时会误报“更新失败”
-  // • 懒加载失败、整屏组件出错：回退到不懒加载的静态提示（一句话＋刷新），不跳登录页（复审 S1、S2）
-  let root = <App />;
-  if (boot.status !== 'version_too_new' && browserLifecycle.isOnline()) {
-    root = (
-      <ErrorBoundary fallback={<App />}>
-        <Suspense fallback={null}>
-          <ConsentGate>
-            <App />
-          </ConsentGate>
-        </Suspense>
-      </ErrorBoundary>
-    );
-  }
-  if (boot.status === 'version_too_new') {
-    if (!import.meta.env.DEV) await registerServiceWorker();
-    const fallback = <CacheTooNewFallback onRefresh={reloadPage} />;
-    try {
-      const { CacheTooNewScreen } = await import('./CacheTooNewScreen.tsx');
-      root = (
-        <ErrorBoundary fallback={fallback}>
-          <CacheTooNewScreen upgrade={boot.upgrade} onRefresh={reloadPage} />
-        </ErrorBoundary>
-      );
-    } catch {
-      root = fallback;
-    }
-  }
+  // 选根（root.tsx）：在线先过告知页关口；本机库来自更新的版本（TC-B1-49，K6-ver-new）只渲染整屏提示（先注册 SW 再渲染，复审 S4）
+  const root = await startRoot(boot, {
+    online: browserLifecycle.isOnline(),
+    onRefresh: reloadPage,
+    ...(import.meta.env.DEV ? {} : { registerSw: registerServiceWorker }),
+  });
   createRoot(el).render(import.meta.env.DEV ? <StrictMode>{root}</StrictMode> : root);
 
   // 同步（K8）：只在 boot 正常时启动；被移除（同步引擎、outbox 的 removed 事件）只处理一次：清空本机、删本机会话、回登录页

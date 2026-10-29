@@ -1,7 +1,7 @@
 // usage-report 的单元测试（架构 6.1、0.29 续第 116、143 条）：TC-B1-94 ①、TC-B1-102 ⑤ 的 usage-report 部分。
 // 只测 core.ts（index.ts 只是把 supabase-js 接上），数据库由假对象代替。
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AUTH_MAIL_TIMEOUT_MS, DB_TIMEOUT_MS, handle, safeEqual, type Deps, type UsageDb } from '../../supabase/functions/usage-report/core.ts';
+import { AUTH_MAIL_TIMEOUT_MS, DB_TIMEOUT_MS, authMailFromRpc, handle, safeEqual, type Deps, type UsageDb } from '../../supabase/functions/usage-report/core.ts';
 
 const SECRET = 'test-ops-secret-xxxxxxxxxxxxxxxxxxxxxx';   // ≥ 32 字节
 const NOW = Date.parse('2026-10-29T12:00:00Z');
@@ -219,11 +219,41 @@ describe('发信量 auth_mail（架构 0.38 第 12 条；审查必改 1、2）',
     expect(b1['auth_mail']).toBeNull();
     expect(b1['heartbeats']).toHaveLength(1);
     expect(log.mock.calls).toEqual([['auth_mail:error']]);
-    for (const bad of [{ auth_1h: -1 }, { auth_1h: 1, resend_24h: 1.5 }, { sent_1h: 1 }]) {
+    for (const bad of [{ auth_1h: -1 }, { auth_1h: '1' }, { sent_1h: 1 }, { resend_24h: 3 }]) {
       const db = fakeDb({ authMail: async () => bad as never });
       expect((await body(await handle(req({ part: 'heartbeat' }), deps({ db, log }))))['auth_mail']).toBeNull();
     }
     expect(log).toHaveBeenLastCalledWith('auth_mail:bad_data');
+  });
+
+  it('只有 resend_24h 不对：只把它置 null、保留好的 auth_1h，另记 auth_mail:bad_resend（OPS-mail-src 复查建议）', async () => {
+    for (const d of [1.5, -2, '64', true, {}]) {
+      const log = vi.fn();
+      const db = fakeDb({ authMail: async () => ({ auth_1h: 21, resend_24h: d }) as never });
+      const r = await handle(req({ part: 'heartbeat' }), deps({ db, log }));
+      expect(r.status).toBe(200);
+      expect((await body(r))['auth_mail']).toEqual({ auth_1h: 21, resend_24h: null });
+      expect(log.mock.calls).toEqual([['auth_mail:bad_resend']]);
+    }
+    // auth_1h 也不对：整个为 null，只记 bad_data（不另记 bad_resend）
+    const log = vi.fn();
+    const db = fakeDb({ authMail: async () => ({ auth_1h: -1, resend_24h: 1.5 }) as never });
+    expect((await body(await handle(req({ part: 'heartbeat' }), deps({ db, log }))))['auth_mail']).toBeNull();
+    expect(log.mock.calls).toEqual([['auth_mail:bad_data']]);
+  });
+
+  it('index.ts 接 rpc auth_mail_counts：一行的数组只取 auth_1h，空数组、null、缺键交给校验判 bad_data（OPS-mail-src）', async () => {
+    expect(authMailFromRpc([{ auth_1h: 7, auth_24h: 30 }])).toEqual({ auth_1h: 7 });
+    expect(authMailFromRpc({ auth_1h: 2, auth_24h: 2 })).toEqual({ auth_1h: 2 });
+    for (const bad of [[], null, undefined, [{ auth_24h: 3 }], [null], 'x']) {
+      const log = vi.fn();
+      const db = fakeDb({ authMail: async () => authMailFromRpc(bad) });
+      expect((await body(await handle(req({ part: 'heartbeat' }), deps({ db, log }))))['auth_mail']).toBeNull();
+      expect(log.mock.calls).toEqual([['auth_mail:bad_data']]);
+    }
+    // 端到端：rpc 回 [{auth_1h: 21, auth_24h: 40}] → 返回体 auth_mail = {auth_1h: 21, resend_24h: null}，auth_24h 不转发
+    const db = fakeDb({ authMail: async () => authMailFromRpc([{ auth_1h: 21, auth_24h: 40 }]) });
+    expect((await body(await handle(req({ part: 'heartbeat' }), deps({ db }))))['auth_mail']).toEqual({ auth_1h: 21, resend_24h: null });
   });
 
   it('发信量读得慢：单独超时，auth_mail 为 null、记 auth_mail:timeout，心跳照常回 200；读取被中止，计时器不留', async () => {

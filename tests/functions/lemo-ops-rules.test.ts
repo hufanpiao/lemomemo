@@ -303,13 +303,36 @@ describe('发信量（架构 0.38 第 12 条、15.6 第 4d 条 ①）', () => {
     expect(w.inbox).toHaveLength(2);
   });
 
+  it('只有 resend_24h 不对：只把它置 null、保留好的 auth_1h，记 auth_mail:bad_resend；auth_1h 照常判（OPS-mail-src 复查建议）', async () => {
+    const base = { ok: true, heartbeats: [], pending_deletions: [], long_tx: 0 };
+    for (const d of [-2, 1.5, '70', true, {}]) {
+      const logs: string[] = [];
+      const r = parseHeartbeatReport({ ...base, auth_mail: { auth_1h: 21, resend_24h: d } }, (c) => logs.push(c));
+      expect(r?.auth_mail).toEqual({ auth_1h: 21, resend_24h: null });
+      expect(logs).toEqual(['auth_mail:bad_resend']);
+    }
+    // 好的不记日志；auth_1h 坏了整个为 null，不另记 bad_resend
+    const logs: string[] = [];
+    parseHeartbeatReport({ ...base, auth_mail: { auth_1h: 3, resend_24h: 4 } }, (c) => logs.push(c));
+    parseHeartbeatReport({ ...base, auth_mail: { auth_1h: -1, resend_24h: 'x' } }, (c) => logs.push(c));
+    expect(logs).toEqual([]);
+    // 端到端（经真的 usage-report core）：usage-report 先把坏的 resend_24h 置 null（它自己的日志记 auth_mail:bad_resend），
+    // lemo-ops 收到 {auth_1h: 30, resend_24h: null}：照常报“发得太多”，不报“读不到”
+    const w = world();
+    w.freshAll();
+    w.setAuthMail({ auth_1h: 30, resend_24h: -5 });
+    await w.tick();
+    expect(subj(w)).toEqual([HOUR]);
+    expect(w.logs).not.toContain('auth_mail:bad_resend');
+  });
+
   it('auth_mail 形状不对只降级成 null（报“读不到”），不让整份返回体解析失败；多出的键忽略', async () => {
     const base = { ok: true, heartbeats: [], pending_deletions: [], long_tx: 0 };
     expect(parseHeartbeatReport(base)?.auth_mail).toBeUndefined();
     expect(parseHeartbeatReport({ ...base, auth_mail: null })?.auth_mail).toBeNull();
     expect(parseHeartbeatReport({ ...base, auth_mail: { auth_1h: 1 } })?.auth_mail).toEqual({ auth_1h: 1, resend_24h: null });
     expect(parseHeartbeatReport({ ...base, auth_mail: { auth_1h: 1, resend_24h: 2, extra: 'x' }, extra_top: [1] })?.auth_mail).toEqual({ auth_1h: 1, resend_24h: 2 });
-    for (const bad of [{ auth_1h: '1' }, { auth_1h: -1 }, { auth_1h: 1.5 }, { auth_1h: 1, resend_24h: -2 }, { resend_24h: 2 }, { sent_1h: 1, sent_24h: 2 }, 5, []]) {
+    for (const bad of [{ auth_1h: '1' }, { auth_1h: -1 }, { auth_1h: 1.5 }, { auth_1h: -1, resend_24h: -2 }, { resend_24h: 2 }, { sent_1h: 1, sent_24h: 2 }, 5, []]) {
       const r = parseHeartbeatReport({ ...base, auth_mail: bad });
       expect(r).not.toBeNull();
       expect(r?.auth_mail).toBeNull();

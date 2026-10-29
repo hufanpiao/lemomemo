@@ -9,6 +9,7 @@
 -- 修法：判断改成 `p_ver is null or p_ver is distinct from (...)`，报同一个码 policy_ver_mismatch（客户端已认，重读 notice 再提交）。
 --   其余逐字照 20261029210000 版（开头三句检查、row_count 检查、撤回分支 on conflict 清 deleted_at / undone 都保留）。
 --   create or replace：属主和 0001 的执行权保留，这里不再 grant。以后再改这个函数，在比本文件更晚的迁移里整段照抄本文件的版本
+--   B4b-2 给同意分支加“恢复 skip 的图片和附件”时再 create or replace，必须带上 `p_ver is null or p_ver is distinct from (...)` 这一句（接手清单 SEC-220000-sugg ④）
 
 create or replace function private.record_consent_impl(p_ver text, p_revoke boolean default false) returns void
   language plpgsql security definer set search_path = '' as $$

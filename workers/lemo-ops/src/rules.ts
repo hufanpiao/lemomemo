@@ -119,8 +119,11 @@ function isCount(v: unknown): v is number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 0;
 }
 
-/** 校验返回体的形状；对不上返回 null（按“返回体解析不了”算调不通，TC-B1-94 ⑤） */
-export function parseHeartbeatReport(v: unknown): HeartbeatReport | null {
+/**
+ * 校验返回体的形状；对不上返回 null（按“返回体解析不了”算调不通，TC-B1-94 ⑤）。
+ * log：只记错误码（auth_mail 里只有 resend_24h 不对时记 auth_mail:bad_resend）
+ */
+export function parseHeartbeatReport(v: unknown, log?: (code: string) => void): HeartbeatReport | null {
   if (!isObj(v) || v['ok'] !== true) return null;
   const hb = v['heartbeats'];
   const pd = v['pending_deletions'];
@@ -145,15 +148,18 @@ export function parseHeartbeatReport(v: unknown): HeartbeatReport | null {
   const out: HeartbeatReport = { ok: true, heartbeats, pending_deletions: pending, long_tx: lt };
   if (alert !== undefined) out.alert = alert;
   // 发信量形状不对只降级成 null（报“读不到”），不让整份返回体判为解析不了（审查建议 3）
-  if ('auth_mail' in v) out.auth_mail = parseAuthMail(v['auth_mail']);
+  if ('auth_mail' in v) out.auth_mail = parseAuthMail(v['auth_mail'], log);
   return out;
 }
 
-function parseAuthMail(am: unknown): AuthMailReport | null {
+/** auth_1h 不对：整个降级成 null（报“读不到”）；只有 resend_24h 不对：只把它置 null、保留好的 auth_1h，记 auth_mail:bad_resend（OPS-mail-src 复查建议） */
+function parseAuthMail(am: unknown, log?: (code: string) => void): AuthMailReport | null {
   if (!isObj(am) || !isCount(am['auth_1h'])) return null;
   const d = am['resend_24h'];
   if (d === undefined || d === null) return { auth_1h: am['auth_1h'], resend_24h: null };
-  return isCount(d) ? { auth_1h: am['auth_1h'], resend_24h: d } : null;
+  if (isCount(d)) return { auth_1h: am['auth_1h'], resend_24h: d };
+  log?.('auth_mail:bad_resend');
+  return { auth_1h: am['auth_1h'], resend_24h: null };
 }
 
 /** 秒数写成“x 小时 y 分”这种给人看的样子 */

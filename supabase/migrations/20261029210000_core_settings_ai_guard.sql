@@ -54,7 +54,7 @@ begin
   return new;
 end $$;
 
--- ===== ① b. 一次性修正（以迁移角色执行，不过 guard） =====
+-- ===== ① b. 一次性修正（以迁移角色执行，不过 guard；supabase/tests/rls/15_settings_ai_guard.test.sql 的 SEC-210000-sugg ⑥ 逐字抄了下面两句，改这里要同步改那边） =====
 update public.settings set deleted_at = null, undone = false
  where key = 'ai.vault' and (deleted_at is not null or undone);
 update public.settings set value = 'false'::jsonb, deleted_at = null, undone = false

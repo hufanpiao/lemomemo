@@ -16,7 +16,7 @@
   },
   "tasks": {
     "test": "deno test --allow-read=. --allow-env=OBJSTORE_ENDPOINT,OBJSTORE_ACCESS_KEY_ID,OBJSTORE_SECRET_ACCESS_KEY,OBJSTORE_REGION,R2_BUCKET_PREFIX --allow-net=127.0.0.1:4566 tests/shared",
-    "check": "deno check supabase/functions/_shared/ supabase/functions/_preview/ shared/ build/check_data_manifest.ts",
+    "check": "deno check supabase/functions/_shared/ supabase/functions/_preview/ supabase/functions/account/ supabase/functions/account-purge/ supabase/functions/invite-admin/ supabase/functions/invite-signup/ supabase/functions/usage-report/ shared/ build/check_data_manifest.ts",
     "d1": "deno run --allow-net=127.0.0.1:54322 --allow-env=D1_DB_URL,PGHOST,PGPORT,PGUSERNAME,PGUSER,PGDATABASE,PGPASSWORD,PGMAX,PGSSL,PGIDLE_TIMEOUT,PGCONNECT_TIMEOUT,PGMAX_LIFETIME,PGMAX_PIPELINE,PGBACKOFF,PGKEEP_ALIVE,PGPREPARE,PGDEBUG,PGFETCH_TYPES,PGPUBLICATIONS,PGTARGET_SESSION_ATTRS,PGTARGETSESSIONATTRS --allow-read build/check_data_manifest.ts"
   }
 }

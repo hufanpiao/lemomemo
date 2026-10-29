@@ -30,6 +30,8 @@ describe('ESLint 架构规则（tests/arch-fixtures/eslint）', () => {
       'lemo/no-inline-color',
       'lemo/safe-href',
       'lemo/no-log-request',
+      'lemo/auth-events-in-session',
+      'lemo/settings-ai-write',
       'no-restricted-imports',
       'no-restricted-globals',
       'no-restricted-syntax',

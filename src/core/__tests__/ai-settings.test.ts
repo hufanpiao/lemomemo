@@ -3,7 +3,7 @@
 //   ai.vault 只能写 false；恢复（deleted_at → null、undone → false）放行；别的键照常能删
 // • writeAiSwitch：本机没有这一行就 insert，有就只 patch value；被删、被撤销过的顺带恢复；值一样不写
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { writeAiSwitch } from '../ai-settings.ts';
+import { writeAiSwitch, writeAiSwitchSettled } from '../ai-settings.ts';
 import { coldStart, getBoot, resetBootForTest, type BootOptions } from '../boot.ts';
 import { OutboxRejectError } from '../outbox.ts';
 import { clearAllCollections, collection } from '../store.ts';
@@ -129,5 +129,64 @@ describe('writeAiSwitch：只写 value（CONSENT-wire ③⑦）', () => {
 
   it('本机库不可用：返回 local_unavailable，不抛错', async () => {
     expect(await writeAiSwitch({ key: 'ai.enabled', value: true })).toEqual({ ok: false, reason: 'local_unavailable' });
+  });
+});
+
+describe('writeAiSwitchSettled：insert 撞唯一约束被拒后，等同步拉下服务器那一行再 patch（CONSENT-sugg ②）', () => {
+  /** 服务器上早就有的那一行（本机还没拉到） */
+  const serverRow = { id: ID(30), key: 'ai.enabled', value: false, rev: 5, deleted_at: null, undone: false, created_at: 1, updated_at: 1 };
+
+  /** 把 insert 那一项交给“服务器”，按 (user_id, key) 唯一约束拒掉 */
+  async function rejectInsert(b: Awaited<ReturnType<typeof boot>>, opId: string) {
+    const sent = await b.outbox?.next();
+    expect(sent?.op_id).toBe(opId);
+    await b.outbox?.fail(opId, { status: 409, code: '23505' });
+  }
+
+  it('被拒 → 同步拉下服务器那一行 → 按那一行 patch value = true；本机那行不再算数', async () => {
+    const b = await boot();
+    const r = await writeAiSwitchSettled({ key: 'ai.enabled', value: true }, { newId: () => ID(20) });
+    const opId = r.ok && r.item ? r.item.op_id : '';
+    await rejectInsert(b, opId);
+    expect(settings().get(ID(20))).toBeUndefined();   // 被拒的那一项已回滚
+    await b.outbox?.applyServer('settings', [{ row: serverRow }]);
+    await vi.waitFor(() => expect(settings().get(ID(30))?.value).toBe(true));
+    const patch = ((await b.outbox?.list()) ?? []).find((i) => i.op === 'patch');
+    expect(patch).toMatchObject({ table: 'settings', id: ID(30), data: { value: true } });
+  });
+
+  it('被拒时服务器那一行已经在本机集合里（同步抢先到了）：当场 patch', async () => {
+    const b = await boot();
+    const r = await writeAiSwitchSettled({ key: 'ai.enabled', value: true }, { newId: () => ID(21) });
+    await b.outbox?.applyServer('settings', [{ row: serverRow }]);
+    await rejectInsert(b, r.ok && r.item ? r.item.op_id : '');
+    await vi.waitFor(() => expect(settings().get(ID(30))?.value).toBe(true));
+  });
+
+  it('insert 没被拒（服务器上本来没有）：不写第二次', async () => {
+    const b = await boot();
+    await writeAiSwitchSettled({ key: 'ai.enabled', value: true }, { newId: () => ID(24) });
+    await b.outbox?.applyServer('settings', [{ row: serverRow }]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(((await b.outbox?.list()) ?? []).filter((i) => i.op === 'patch')).toEqual([]);
+  });
+
+  it('到点（settleMs）停止盯着：之后才被拒、才拉到那一行，都不再写', async () => {
+    const b = await boot();
+    const r = await writeAiSwitchSettled({ key: 'ai.enabled', value: true }, { newId: () => ID(22), settleMs: 20 });
+    await new Promise((res) => setTimeout(res, 40));
+    await rejectInsert(b, r.ok && r.item ? r.item.op_id : '');
+    await b.outbox?.applyServer('settings', [{ row: serverRow }]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(((await b.outbox?.list()) ?? []).filter((i) => i.op === 'patch')).toEqual([]);
+  });
+
+  it('本机已有那一行（patch）、本机库不可用：跟 writeAiSwitch 一样，不在后台盯', async () => {
+    expect(await writeAiSwitchSettled({ key: 'ai.enabled', value: true })).toEqual({ ok: false, reason: 'local_unavailable' });
+    const b = await boot();
+    await write.insert('settings', { id: ID(23), key: 'ai.enabled', value: false });
+    const r = await writeAiSwitchSettled({ key: 'ai.enabled', value: true });
+    expect(r.ok && r.item?.op).toBe('patch');
+    expect(b.outbox).toBeTruthy();
   });
 });

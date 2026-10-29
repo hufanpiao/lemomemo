@@ -82,7 +82,7 @@ export async function runHeartbeat(env: Env, fetchFn: FetchFn, now: number, log:
   if (!res.ok) {
     ev = evaluateUnreachable(res.reason);
   } else {
-    const report = parseHeartbeatReport(res.body);
+    const report = parseHeartbeatReport(res.body, log);
     if (!report) {
       ev = evaluateUnreachable('bad_body');
     } else {

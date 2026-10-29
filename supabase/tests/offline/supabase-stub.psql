@@ -19,6 +19,9 @@ create table auth.users (id uuid primary key, email text, encrypted_password var
 -- updated_at、refreshed_at 照真库的类型（refreshed_at 是不带时区的 timestamp）：B1 的 my_sessions_impl 用（0.29 续第 111 条）
 create table auth.sessions (id uuid primary key, user_id uuid references auth.users on delete cascade, created_at timestamptz default now(),
   updated_at timestamptz, refreshed_at timestamp);
+-- 列和类型照真库（10-29 本机 \d auth.audit_log_entries）：B1 的 private.auth_mail_counts() 读它（迁移 20261029230000，0.38 第 12 条）
+create table auth.audit_log_entries (instance_id uuid, id uuid primary key, payload json, created_at timestamptz,
+  ip_address varchar(64) not null default '');
 
 create function auth.jwt() returns jsonb language sql stable as $$
   select coalesce(nullif(current_setting('request.jwt.claim', true), ''), nullif(current_setting('request.jwt.claims', true), ''))::jsonb

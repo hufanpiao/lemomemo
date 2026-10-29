@@ -142,7 +142,7 @@ export function world() {
     setUsage(body: unknown) {
       usageBody = body;
     },
-    /** 发信量（0.38 第 12 条）：undefined = 没接（默认，和现在的 index.ts 一样）；'error' = 读出错；对象原样返回（可以故意给坏形状） */
+    /** 发信量（0.38 第 12 条）：undefined = 不提供读取器（默认；index.ts 已经接上 rpc auth_mail_counts，这里默认不接，测“没接”那几步）；'error' = 读出错；对象原样返回（可以故意给坏形状） */
     setAuthMail(v: { auth_1h: number; resend_24h?: number | null } | Record<string, unknown> | 'error' | undefined) {
       if (v === undefined) delete db.authMail;
       else

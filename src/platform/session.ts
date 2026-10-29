@@ -3,7 +3,9 @@
 // • 键名和 supabase-js 的默认值一致：`sb-<supabaseUrl 主机名第一段>-auth-token`（官网首页、E2E 也按这个名字找）
 // • 换账号的判断时机里，“别的标签页”走 storage 事件（onSessionStorageChange），“登录 / 刷新令牌”走 onAuthStateChange（onAuthUser）
 // • 本标签页的 SIGNED_OUT（刷新失败、被移除、被退出）也走这同一个 onAuthStateChange（onAuthUser 的第二个回调，接手清单 K6-signedout）；
-//   自己点“退出登录”的那一次由退出流程先 markSelfSignOut()，这里见到标记就不往上报（K8、各功能页不各自监听 SIGNED_OUT）
+//   自己点“退出登录”的那一次由退出流程先 markSelfSignOut()，这里见到标记就不往上报（K8、各功能页不各自监听 SIGNED_OUT）。
+//   全仓只有这个文件能写 onAuthStateChange、认 'SIGNED_OUT'：ESLint 规则 lemo/auth-events-in-session（架构 2.3 A30）
+// • 官网首页（site/）和 App 同源，能读写这里用的 localStorage 键（会话、lemo.self_signout）：首页不加第三方脚本（架构 2.0）
 // • Cache Storage 的清理也在这里（caches 只在 platform 用）：只删运行时缓存，SW 预缓存保留（0.38 第 36 条）
 // • clearLocalSession：signOut 失败时的兜底，同步删掉本机的 supabase 会话键
 // 只读 user.id、user.email 和令牌 payload 里的 session_id（sessionIdOfToken），不校验、不记录、不打印令牌
@@ -136,7 +138,7 @@ export function whenIdle(fn: () => void): void {
  * 本页的登录、刷新令牌事件（onAuthStateChange 的 SIGNED_IN、TOKEN_REFRESHED）：回调会话里的 user_id。
  * onSignedOut：同一个监听里的 SIGNED_OUT（刷新失败、被移除、被退出；也包括 supabase-js 从别的标签页转来的），
  * 以及“INITIAL_SESSION 为 null 且本机会话键已经没了”（见 authEventHandler）；自己退出（isSelfSignOut()）的不回调。
- * 全 App 只有这一处订阅 onAuthStateChange（K6-signedout）。
+ * 全 App 只有这一处订阅 onAuthStateChange（K6-signedout；ESLint lemo/auth-events-in-session 守着，架构 2.3 A30）。
  * • 订阅在客户端一建好时就同步挂上（supabase/client.ts 的 onClientReady，审查 M1）：谁先 getSupabase()（同步的 ensureSession 往往更早）都一样，
  *   initialize 里刷新被拒发的 SIGNED_OUT 一定收得到
  * • 没人用 supabase-js 时，等首屏画完、浏览器空闲才加载它（whenIdle，K6 审查 L6）。返回取消函数
@@ -159,20 +161,42 @@ export function onAuthUser(fn: (userId: string) => void, onSignedOut?: () => voi
   };
 }
 
+/** authEventHandler 的可换部分（测试用；默认都读 localStorage） */
+export interface AuthEventOptions {
+  /** 这次 SIGNED_OUT 是不是自己退出的（按本页最后见到的 session_id 核对标记）；默认 isSelfSignOut */
+  selfSignOut?: (sessionId: string | null) => boolean;
+  /** 本机会话键已经没了；默认 readSessionUserId() === null */
+  sessionGone?: () => boolean;
+  /** 挂上监听时本机会话的 session_id；默认同步读 readSessionId() */
+  initialSessionId?: string | null;
+  /** SIGNED_IN：新会话不是标记里那个就清掉标记；默认 forgetSelfSignOut */
+  onSignedIn?: (sessionId: string | null) => void;
+}
+
+/** onAuthStateChange 回调里用到的会话字段（supabase-js 的 Session 的子集） */
+export type AuthEventSession = { user: { id: string }; access_token?: unknown } | null;
+
 /**
  * onAuthStateChange 的事件分发（单独导出给测试；不加载 supabase-js）。
  * INITIAL_SESSION 为 null 也当 SIGNED_OUT（审查 M1：订阅晚于 initialize 时只收得到它），但要本机会话键已经没了（sessionGone）：
- * 离线冷启动、令牌又过期时 supabase-js 也给 INITIAL_SESSION null，那时会话键还在，不能当成被移除去清库（会丢没上传的改动）
+ * 离线冷启动、令牌又过期时 supabase-js 也给 INITIAL_SESSION null，那时会话键还在，不能当成被移除去清库（会丢没上传的改动）。
+ * 记住本页最后见到的 session_id（挂上时读一次，之后每个带会话的事件更新）：SIGNED_OUT 时拿它核对“自己退出”的标记，
+ * 只滤掉标记里那个会话的 SIGNED_OUT（K6-signedout-sugg ①）
  */
 export function authEventHandler(
   fn: (userId: string) => void,
   onSignedOut?: () => void,
-  selfSignOut: () => boolean = () => isSelfSignOut(),
-  sessionGone: () => boolean = () => readSessionUserId() === null,
-): (event: string, session: { user: { id: string } } | null) => void {
+  o: AuthEventOptions = {},
+): (event: string, session: AuthEventSession) => void {
+  const selfSignOut = o.selfSignOut ?? ((sid: string | null) => isSelfSignOut(undefined, undefined, sid));
+  const sessionGone = o.sessionGone ?? (() => readSessionUserId() === null);
+  const onSignedIn = o.onSignedIn ?? ((sid: string | null) => forgetSelfSignOut(sid));
+  let sid = o.initialSessionId !== undefined ? o.initialSessionId : readSessionId();
   return (event, session) => {
+    if (session) sid = sessionIdOfToken(session.access_token);
+    if (event === 'SIGNED_IN') onSignedIn(sid);
     if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user.id) fn(session.user.id);
-    else if (!onSignedOut || selfSignOut()) return;
+    else if (!onSignedOut || selfSignOut(sid)) return;
     else if (event === 'SIGNED_OUT' || (event === 'INITIAL_SESSION' && session === null && sessionGone())) onSignedOut();
   };
 }
@@ -181,24 +205,50 @@ export function authEventHandler(
 // 退出流程（platform/sign-out.ts 的 signOutThisDevice、设置页被移除时的 onSessionLost）一开头调 markSelfSignOut()，
 // 之后它自己调 signOut 引起的 SIGNED_OUT 不再按“被移除”处理。
 // • 存 localStorage（各标签页共用）：supabase-js 会把本页的 SIGNED_OUT 转给别的标签页，别的标签页见到标记也不按“被移除”提示，
-//   那边由 storage 事件（会话变 null）走普通的“别的标签页退出了”。只存时间戳，不存账号
+//   那边由 storage 事件（会话变 null）走普通的“别的标签页退出了”
+// • 存“时间戳 + 退出前的 session_id”（K6-signedout-sugg ①，JSON `{"at":…,"sid":…}`；不存账号、不存令牌）：
+//   只滤掉那个会话的 SIGNED_OUT——退出后马上在别处登录了新会话、新会话随即被移除，照样按“被移除”提示。
+//   有一边读不出 session_id（旧格式的纯时间戳、令牌坏了）时退回只看时间
+// • SIGNED_IN 时，新会话不是标记里那个就把标记清掉（forgetSelfSignOut）
 // • 另记一份在本页内存里（localStorage 写不进时兜底）
 // • 只认 SELF_SIGN_OUT_TTL_MS 以内的：退出流程最坏约 19 秒，过期的标记读到时删掉，不会挡住以后真的被移除
 
 const SELF_SIGN_OUT_KEY = 'lemo.self_signout';
 /** 标记的有效期 */
 export const SELF_SIGN_OUT_TTL_MS = 60_000;
-let selfSignOutAt: number | null = null;
+
+interface SelfMark {
+  at: number;
+  sid: string | null;
+}
+let selfMark: SelfMark | null = null;
 
 function fresh(at: number, now: number): boolean {
   return Number.isFinite(at) && now - at >= 0 && now - at < SELF_SIGN_OUT_TTL_MS;
 }
 
-/** 自己退出：在调 signOut（以及任何可能引起 SIGNED_OUT 的请求）之前调。不抛错 */
-export function markSelfSignOut(storage?: Storage, now: number = Date.now()): void {
-  selfSignOutAt = now;
+/** 标记和这个会话对得上：有一边不知道 session_id 时只看时间 */
+function sameSession(m: SelfMark, sid: string | null | undefined): boolean {
+  return sid === null || sid === undefined || m.sid === null || m.sid === sid;
+}
+
+/** 读 localStorage 里的标记；旧格式（纯时间戳）按 sid 未知；认不出返回 null */
+function parseMark(v: string): SelfMark | null {
+  if (/^\d+$/.test(v)) return { at: Number(v), sid: null };
   try {
-    (storage ?? localStorage).setItem(SELF_SIGN_OUT_KEY, String(now));
+    const o = JSON.parse(v) as { at?: unknown; sid?: unknown } | null;
+    if (typeof o?.at !== 'number') return null;
+    return { at: o.at, sid: typeof o.sid === 'string' && o.sid ? o.sid : null };
+  } catch {
+    return null;
+  }
+}
+
+/** 自己退出：在调 signOut（以及任何可能引起 SIGNED_OUT 的请求）之前调；sessionId 默认读本机会话的。不抛错 */
+export function markSelfSignOut(storage?: Storage, now: number = Date.now(), sessionId: string | null = readSessionId(storage)): void {
+  selfMark = { at: now, sid: sessionId };
+  try {
+    (storage ?? localStorage).setItem(SELF_SIGN_OUT_KEY, JSON.stringify(selfMark));
   } catch {
     // 写不进：本页内存里那份照样管用
   }
@@ -208,18 +258,22 @@ export function markSelfSignOut(storage?: Storage, now: number = Date.now()): vo
  * 只在本页内存里打标记，不写 localStorage（审查建议 4）：设置页自己处理“被移除”时用——那是真的被移除，
  * 别的标签页收到转来的 SIGNED_OUT 仍要提示“被移除”
  */
-export function markSelfSignOutThisTab(now: number = Date.now()): void {
-  selfSignOutAt = now;
+export function markSelfSignOutThisTab(now: number = Date.now(), sessionId: string | null = readSessionId()): void {
+  selfMark = { at: now, sid: sessionId };
 }
 
-/** 最近 SELF_SIGN_OUT_TTL_MS 内有没有自己退出（本页或别的标签页打的标记）；过期的顺手删掉 */
-export function isSelfSignOut(storage?: Storage, now: number = Date.now()): boolean {
-  if (selfSignOutAt !== null && fresh(selfSignOutAt, now)) return true;
+/**
+ * 最近 SELF_SIGN_OUT_TTL_MS 内有没有自己退出（本页或别的标签页打的标记）；给了 sessionId 时还要是同一个会话。
+ * 过期、认不出的标记顺手删掉；会话对不上的不删（它不归这个会话管）
+ */
+export function isSelfSignOut(storage?: Storage, now: number = Date.now(), sessionId?: string | null): boolean {
+  if (selfMark !== null && fresh(selfMark.at, now) && sameSession(selfMark, sessionId)) return true;
   try {
     const s = storage ?? localStorage;
     const v = s.getItem(SELF_SIGN_OUT_KEY);
     if (v === null) return false;
-    if (fresh(Number(v), now)) return true;
+    const m = parseMark(v);
+    if (m && fresh(m.at, now)) return sameSession(m, sessionId);
     s.removeItem(SELF_SIGN_OUT_KEY);
   } catch {
     // 读不到：按没有标记
@@ -227,9 +281,23 @@ export function isSelfSignOut(storage?: Storage, now: number = Date.now()): bool
   return false;
 }
 
+/** 本页见到 SIGNED_IN：登录的不是标记里那个会话（两边都知道 session_id 且不同）就清掉标记（本页内存和 localStorage）。不抛错 */
+export function forgetSelfSignOut(sessionId: string | null, storage?: Storage): void {
+  if (sessionId === null) return;
+  if (selfMark?.sid && selfMark.sid !== sessionId) selfMark = null;
+  try {
+    const s = storage ?? localStorage;
+    const v = s.getItem(SELF_SIGN_OUT_KEY);
+    const m = v === null ? null : parseMark(v);
+    if (m?.sid && m.sid !== sessionId) s.removeItem(SELF_SIGN_OUT_KEY);
+  } catch {
+    // 读不到：没有可清的
+  }
+}
+
 /** 测试用：清掉本页内存里那份标记 */
 export function resetSelfSignOutForTest(): void {
-  selfSignOutAt = null;
+  selfMark = null;
 }
 
 /**
@@ -284,13 +352,35 @@ export function clearLocalSession(storage?: Storage, supabaseUrl: string = build
 }
 
 /**
- * 没登录：去登录页（不建本机库）。带 notice 时先记下退出原因（setExitNotice），登录页据此提示：
- * watchAccount 收到本页的 SIGNED_OUT（不是自己退出）时调 goToAuth('removed')（K6-signedout）。
- * 带 'removed' 时先删本机会话（审查建议 5）：服务器上已经作废，留着登录页会同时显示“当前已登录”和“被移除”
+ * 拿走本机会话：同步读出 session_id 再删掉（clearLocalSession），返回删之前的 session_id（读不出为 null）。
+ * watchAccount 收到本页的 SIGNED_OUT 时用（K6-signedout-sugg2 ①）：和判断“会话里现在是谁”在同一个同步段里做，
+ * 之后清库那几秒里别的标签页登录的新会话不会被删。不抛错
  */
-export function goToAuth(notice?: ExitNotice): void {
-  if (notice === 'removed') clearLocalSession();
-  if (notice) setExitNotice(notice);
+export function takeLocalSession(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
+  const sid = readSessionId(storage, supabaseUrl);
+  clearLocalSession(storage, supabaseUrl);
+  return sid;
+}
+
+/** 本机会话还是 sessionId 那一个（按 access token 的 session_id 比；没有会话也算对得上，删了无害）才删。不抛错 */
+export function clearLocalSessionIf(sessionId: string | null, storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): void {
+  if (readSessionId(storage, supabaseUrl) === sessionId) clearLocalSession(storage, supabaseUrl);
+}
+
+/**
+ * 没登录：去登录页（不建本机库）。带 notice 时先记下退出原因（setExitNotice），登录页据此提示：
+ * watchAccount 收到本页的 SIGNED_OUT（不是自己退出）时调 goToAuth('removed', 删掉的那个 session_id)（K6-signedout）。
+ * 带 'removed' 时先删本机会话（审查建议 5）：服务器上已经作废，留着登录页会同时显示“当前已登录”和“被移除”。
+ * • 给了 deadSessionId（K6-signedout-sugg2 ①）：只在本机会话还是那一个时才删——清库那几秒里别的标签页刚登录的新会话不删；
+ *   不给（undefined）时照旧直接删
+ * • 已经记下了退出原因（disabled、pending_deletion 等，例如 K8 的 disabled 事件先记的）时，不拿 removed 覆盖（K6-signedout-sugg ⑤）
+ */
+export function goToAuth(notice?: ExitNotice, deadSessionId?: string | null): void {
+  if (notice === 'removed') {
+    if (deadSessionId === undefined) clearLocalSession();
+    else clearLocalSessionIf(deadSessionId);
+  }
+  if (notice && !(notice === 'removed' && readExitNotice() !== null)) setExitNotice(notice);
   location.replace('/app/auth/');
 }
 

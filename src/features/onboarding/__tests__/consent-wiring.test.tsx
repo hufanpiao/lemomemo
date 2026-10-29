@@ -1,13 +1,15 @@
 // 告知页接线（接手清单 CONSENT-wire ①～④；TC-B1-11 的单元一侧）：
-// • 启动关口 ConsentGate：first 先显示告知页、做完才画 App；updated、none、读失败都直接进 App；回答之前什么也不画
+// • 启动关口 ConsentGate：first 先显示告知页、做完才放行；updated、none、读失败都直接放行；回答之前什么也不画；
+//   超过关口自己的上限（CONSENT-sugg ①）按读失败放行，之后才回来的结果不管。App 由调用方在 onPass 之后画（src/app/root.tsx）
 // • 四个回调：同意 → 写 ai.enabled = true 后进 App；不同意 → 不写、进 App；会话不认 → 按“被移除”离开；停用 → 按“已停用”离开；
 //   R-239 跳过 → 进 App
 // • 路由 #/onboarding（ConsentRoute）：做完回今天页；关口做完时地址还在 #/onboarding 也换到今天页
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
-import type { ConsentApi, NoticeState, Result } from '../data/consent-api.ts';
-import type { ConsentWiringDeps } from '../hooks/useConsentWiring.ts';
+import { CONSENT_SLOW_MS, type ConsentApi, type NoticeState, type Result } from '../data/consent-api.ts';
+import { CONSENT_GATE_MS, type ConsentWiringDeps } from '../hooks/useConsentWiring.ts';
 import { zh } from '../i18n/zh.ts';
 import ConsentGate from '../ui/ConsentGate.tsx';
 import ConsentRoute from '../ui/ConsentRoute.tsx';
@@ -34,13 +36,20 @@ const APP = <p data-testid="the-app">app</p>;
 const first: Result<NoticeState> = { ok: true, value: 'first' };
 const consentShown = (): boolean => document.querySelector('[data-step="consent"]') !== null;
 
-async function renderGate(api: ConsentApi, deps: ConsentWiringDeps = wiring().deps) {
+/** 调用方的样子（同 src/app/root.tsx 的 GatedApp）：关口放行以后画 App */
+function Gated({ api, deps, limitMs, onPass }: { api: ConsentApi; deps: ConsentWiringDeps; limitMs?: number; onPass?: () => void }) {
+  const [passed, setPassed] = useState(false);
+  if (passed) return APP;
+  const pass = () => {
+    onPass?.();
+    setPassed(true);
+  };
+  return <ConsentGate api={api} wiring={deps} onPass={pass} {...(limitMs === undefined ? {} : { limitMs })} />;
+}
+
+async function renderGate(api: ConsentApi, deps: ConsentWiringDeps = wiring().deps, limitMs?: number, onPass?: () => void) {
   await act(async () => {
-    render(
-      <ConsentGate api={api} wiring={deps}>
-        {APP}
-      </ConsentGate>,
-    );
+    render(<Gated api={api} deps={deps} {...(limitMs === undefined ? {} : { limitMs })} {...(onPass ? { onPass } : {})} />);
   });
 }
 
@@ -92,6 +101,50 @@ describe('启动关口 ConsentGate（CONSENT-wire ②）', () => {
   it('noticeState 抛错：也不挡进 App', async () => {
     await renderGate(fakeApi('throw'));
     expect(screen.getByTestId('the-app')).toBeTruthy();
+  });
+
+  it('慢网（CONSENT-sugg ①）：noticeState 一直不回，到关口上限按读失败放行；放行只一次', async () => {
+    vi.useFakeTimers();
+    try {
+      const onPass = vi.fn();
+      await renderGate(fakeApi('hang'), wiring().deps, 3000, onPass);
+      expect(screen.queryByTestId('the-app')).toBeNull();
+      await act(async () => {
+        vi.advanceTimersByTime(2999);
+      });
+      expect(screen.queryByTestId('the-app')).toBeNull();
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(screen.getByTestId('the-app')).toBeTruthy();
+      expect(onPass).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('上限以后才回来的 first：不管（已经进 App，不再弹告知页）', async () => {
+    vi.useFakeTimers();
+    try {
+      let answer: (r: Result<NoticeState>) => void = () => undefined;
+      const api: ConsentApi = { record: vi.fn(), noticeState: vi.fn(() => new Promise<Result<NoticeState>>((r) => (answer = r))) };
+      await renderGate(api, wiring().deps, 3000);
+      await act(async () => {
+        vi.advanceTimersByTime(3000);
+      });
+      await act(async () => {
+        answer(first);
+      });
+      expect(screen.getByTestId('the-app')).toBeTruthy();
+      expect(consentShown()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('默认上限是 CONSENT_GATE_MS（3 秒，比 noticeState 自己的 8 秒短）', () => {
+    expect(CONSENT_GATE_MS).toBe(3000);
+    expect(CONSENT_GATE_MS).toBeLessThan(CONSENT_SLOW_MS);
   });
 
   it('同意（③）：record(true) 后写 ai.enabled = true，再进 App', async () => {

@@ -383,6 +383,11 @@ isOneToOne: false
 "admin_set_disabled":
 { Args: { "p_on": boolean,"p_user": string }; Returns: undefined
                            },
+"auth_mail_counts":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "auth_1h": number,"auth_24h": number
+            }[]
+                           },
 "cleanup_batch":
 { Args: { "p_limit"?: number }; Returns: number
                            },

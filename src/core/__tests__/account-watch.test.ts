@@ -320,6 +320,31 @@ describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signe
     expect(boot.cache?.isClosed()).toBe(false);
   });
 
+  it('复查建议 ①：dropSession 在判断会话之后、设闸之前同步调，删掉的 session_id 原样交给 onSignedOut；抛错时交 null', async () => {
+    const { deps, signedOut, session } = await setup();
+    session.id = null;
+    deps.dropSession = vi.fn(() => 's1');
+    signedOut();
+    expect(deps.dropSession).toHaveBeenCalledTimes(1);   // 同步：还没 await 任何东西
+    await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledWith('removed', 's1'));
+    const t2 = await setup();
+    t2.session.id = null;
+    t2.deps.dropSession = () => {
+      throw new Error('denied');
+    };
+    t2.signedOut();
+    await vi.waitFor(() => expect(t2.deps.onSignedOut).toHaveBeenCalledWith('removed', null));
+  });
+
+  it('换账号那条路（会话里已是 B）不调 dropSession：会话是 B 的，不能删', async () => {
+    const { deps, signedOut, session } = await setup();
+    session.id = 'B';
+    deps.dropSession = vi.fn(() => null);
+    signedOut();
+    await vi.waitFor(() => expect(deps.onSwitched).toHaveBeenCalledTimes(1));
+    expect(deps.dropSession).not.toHaveBeenCalled();
+  });
+
   it('会话里已经是别的账号（别的标签页刚登录 B）：按换账号处理（清库、重新载入），不提示被移除', async () => {
     const { deps, signedOut, session } = await setup();
     session.id = 'B';

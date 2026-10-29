@@ -533,6 +533,22 @@ export default tseslint.config(
     files: ['tests/shared/**/*.mjs'],
     languageOptions: { globals: { Deno: 'readonly' } },
   },
+  // A30（接手清单 K6-signedout-sugg ③）：onAuthStateChange、'SIGNED_OUT' 只准出现在 platform/session.ts；
+  // 扫 src、shared、官网 site 的 ts / tsx / js / mjs（官网和 App 同源），测试不管（要模拟事件）
+  {
+    files: ['src/**/*.{ts,tsx,js,mjs}', 'shared/**/*.{ts,js,mjs}', 'site/**/*.js'],
+    ignores: ['src/platform/session.ts', '**/__tests__/**'],
+    plugins: { lemo },
+    rules: { 'lemo/auth-events-in-session': 'error' },
+  },
+  // A31（接手清单 CONSENT-sugg ⑤）：功能代码不对 settings 写 deleted_at / undone，ai.enabled、ai.vault 只经 writeAiSwitch；
+  // 例外只有唯一写法 core/ai-settings.ts 和守门 core/write.ts
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/core/ai-settings.ts', 'src/core/write.ts', '**/__tests__/**'],
+    plugins: { lemo },
+    rules: { 'lemo/settings-ai-write': 'error' },
+  },
   {
     files: TS,
     rules: { '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }] },

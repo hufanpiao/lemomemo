@@ -21,14 +21,25 @@ export const AUTH_MAIL_TIMEOUT_MS = 2_000;
 
 /**
  * 发信量（架构 15.6 第 4d 条 ①、0.38 第 12 条），两个数口径和来源不同：
- * - `auth_1h`：过去 1 小时 **Supabase Auth（GoTrue）发出的验证码邮件**数。来源定为 `auth.audit_log_entries`
- *   （经一个只给 service_role 的 private 定义者函数读，S1 合并后再接）；
+ * - `auth_1h`：过去 1 小时 **Supabase Auth（GoTrue）发出的验证码邮件**数。来源是 `auth.audit_log_entries`
+ *   （经只给 service_role 的定义者函数 private.auth_mail_counts() 读，迁移 20261029230000；数哪些 action 见该迁移）；
  * - `resend_24h`：过去 24 小时 **经 Resend 发出的所有邮件合计**（验证码、invite-signup、注销通知、lemo-ops 告警都算），
  *   对照 Resend 每天 100 封的额度。要一把有读权限的 Resend 密钥，**暂不接**：缺省或 null 表示没接。
  */
 export interface AuthMailCounts {
   auth_1h: number;
   resend_24h?: number | null;
+}
+
+/**
+ * rpc private.auth_mail_counts() 的结果 → AuthMailCounts。函数 returns table，supabase-js 给一行的数组 [{auth_1h, auth_24h}]；
+ * 只取 auth_1h（auth_24h 给手动处理时看，lemo-ops 不用；resend_24h 不从这里来，不带）。
+ * 这里不判数字对不对：原样交给 pickAuthMail（不对记 auth_mail:bad_data）
+ */
+export function authMailFromRpc(data: unknown): AuthMailCounts {
+  const row: unknown = Array.isArray(data) ? data[0] : data;
+  const h = typeof row === 'object' && row !== null ? (row as Record<string, unknown>)['auth_1h'] : undefined;
+  return { auth_1h: h as number };
 }
 
 /** 各读取都必须尊重 signal（超时后中止） */
@@ -38,9 +49,10 @@ export interface UsageDb {
   /** private.long_transactions() 的行数（超过 4 分钟的事务，0.29 续第 141 条） */
   longTxCount(signal: AbortSignal): Promise<number>;
   /**
-   * 发信量（0.38 第 12 条，口径见 AuthMailCounts）。**还没接**：index.ts 暂不提供这一项，返回体里就没有 `auth_mail`，
-   * lemo-ops 不查这一件。接上以后：单独计时 AUTH_MAIL_TIMEOUT_MS；出错、超时、数字不对只让 `auth_mail` 为 null
-   * （日志记 auth_mail:error / auth_mail:timeout / auth_mail:bad_data），不连累心跳那几项。
+   * 发信量（0.38 第 12 条，口径见 AuthMailCounts）。index.ts 经 rpc private.auth_mail_counts() 提供（迁移 20261029230000）；
+   * 不提供时返回体里就没有 `auth_mail`，lemo-ops 不查这一件。单独计时 AUTH_MAIL_TIMEOUT_MS；出错、超时、auth_1h 不对只让 `auth_mail` 为 null
+   * （日志记 auth_mail:error / auth_mail:timeout / auth_mail:bad_data），只有 resend_24h 不对时只把它置 null（记 auth_mail:bad_resend），
+   * 不连累心跳那几项。
    */
   authMail?(signal: AbortSignal): Promise<AuthMailCounts>;
 }
@@ -100,12 +112,16 @@ interface AuthMailOut {
   resend_24h: number | null;
 }
 
-function pickAuthMail(r: unknown): AuthMailOut | null {
-  if (typeof r !== 'object' || r === null || Array.isArray(r)) return null;
+/**
+ * 校验读取器给的发信量。auth_1h 不对：整个 auth_mail 为 null（记 auth_mail:bad_data）；
+ * 只有 resend_24h 不对：只把它置 null、保留好的 auth_1h，另记 auth_mail:bad_resend（OPS-mail-src 复查建议）
+ */
+function pickAuthMail(r: unknown): { out: AuthMailOut | null; code?: string } {
+  if (typeof r !== 'object' || r === null || Array.isArray(r)) return { out: null, code: 'auth_mail:bad_data' };
   const { auth_1h: h, resend_24h: d } = r as Record<string, unknown>;
-  if (!isCount(h)) return null;
-  if (d === undefined || d === null) return { auth_1h: h, resend_24h: null };
-  return isCount(d) ? { auth_1h: h, resend_24h: d } : null;
+  if (!isCount(h)) return { out: null, code: 'auth_mail:bad_data' };
+  if (d === undefined || d === null) return { out: { auth_1h: h, resend_24h: null } };
+  return isCount(d) ? { out: { auth_1h: h, resend_24h: d } } : { out: { auth_1h: h, resend_24h: null }, code: 'auth_mail:bad_resend' };
 }
 
 const TIMED_OUT = Symbol('timeout');
@@ -137,8 +153,8 @@ function startAuthMail(read: (signal: AbortSignal) => Promise<AuthMailCounts>, m
         say('auth_mail:timeout');
         return null;
       }
-      const out = pickAuthMail(r);
-      if (out === null) say('auth_mail:bad_data');
+      const { out, code } = pickAuthMail(r);
+      if (code !== undefined) say(code);
       return out;
     } catch {
       say(timedOut ? 'auth_mail:timeout' : 'auth_mail:error');

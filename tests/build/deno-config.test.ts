@@ -1,7 +1,7 @@
 // deno.json 里钉的版本必须和 package.json 一样（架构 2.5：shared 前后端共用，版本不一致会两边校验结果不同）
 // supabase/functions/ 和 build/ 里写全的 npm:包@版本 也要和 package.json 一样（deno.json 的 nodeModulesDir=manual 用的是 node_modules 里那一份）
 // 进程时区也核对一下：test:tz 设的 TZ 真的生效了
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -153,6 +153,16 @@ describe('deno.json', () => {
   it('CI 用到的任务都在：test（ci.yml 的 deno task test）、check、d1', () => {
     expect(Object.keys(deno.tasks).sort()).toEqual(['check', 'd1', 'test']);
     expect(deno.tasks.check).toContain('supabase/functions/_shared/');
+    expect(deno.tasks.check).toContain('supabase/functions/_preview/');
+  });
+
+  it('每个服务器函数目录（含入口 index.ts）都在 deno task check 里（接手清单 OPS-mail-sugg ③：index.ts 的接线 tsc 不管，只能靠 deno check）', () => {
+    const fnRoot = join(root, 'supabase', 'functions');
+    const dirs = readdirSync(fnRoot).filter((d) => !d.startsWith('_') && statSync(join(fnRoot, d)).isDirectory());
+    expect(dirs.length).toBeGreaterThan(0);
+    for (const d of dirs) expect(existsSync(join(fnRoot, d, 'index.ts')), `supabase/functions/${d}/ 缺入口 index.ts`).toBe(true);
+    const args = (deno.tasks.check ?? '').split(/\s+/);
+    for (const d of dirs) expect(args, `supabase/functions/${d}/ 没进 deno task check`).toContain(`supabase/functions/${d}/`);
   });
 
   it('supabase/functions、build 里写全的 npm:包@版本 和 package.json 一致', () => {
