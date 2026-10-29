@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  ACCESS, ACCESS2, FINALLY, HASH, LEAK, OTP, PK, PRIVATE_FNS, PRIVATE_TABLES, PS, REFRESH, runScript, SAFE_POST, summary, UID, WHITE,
+  ACCESS, ACCESS2, FINALLY, HASH, LEAK, namesAfter, OTP, PK, PRIVATE_FNS, PRIVATE_TABLES, PS, REFRESH, runScript, SAFE_POST, summary, TRIGGER_FNS, UID, WHITE,
   type Opts, type RunResult,
 } from './login-token-fake.ts';
 
@@ -78,8 +78,11 @@ describe.skipIf(!PS)('login-token-tests.ps1 从头跑到尾', () => {
     expect(rpcBody('purge_deleted_impl')).toEqual({ p_items: [] });
     expect(rpcBody('record_consent_impl')).toEqual({ p_ver: 'lemo-probe-not-a-version', p_revoke: false });
     expect(rpcBody('files_authorize_impl').p_op).toBe('probe');
-    expect(rpcBody('report_tz_impl')).toEqual({ p_tz: 'Lemo/Not_A_Zone', p_device: '00000000-0000-0000-0000-000000000000', p_platform: 'web' });
-    expect(rpcBody('remove_device_impl')).toEqual({ p_device: '00000000-0000-0000-0000-000000000000' });
+    // report_tz_impl、remove_device_impl 在设备迁移（20261029192000）里：脚本只调迁移里有的函数，迁移还没进仓库时不会调，这两条就不核
+    if (PRIVATE_FNS.includes('report_tz_impl')) {
+      expect(rpcBody('report_tz_impl')).toEqual({ p_tz: 'Lemo/Not_A_Zone', p_device: '00000000-0000-0000-0000-000000000000', p_platform: 'web' });
+    }
+    if (PRIVATE_FNS.includes('remove_device_impl')) expect(rpcBody('remove_device_impl')).toEqual({ p_device: '00000000-0000-0000-0000-000000000000' });
     const adm = rpcs.find((x) => name(x) === 'admin_set_disabled');
     if (adm) expect(adm.path).toBe('/rest/v1/rpc/admin_set_disabled?p_user=00000000-0000-0000-0000-000000000000&p_on=false');
     // is_active：S1 登录后、刷新后各一次，P2 一次
@@ -133,23 +136,28 @@ describe.skipIf(!PS)('login-token-tests.ps1 从头跑到尾', () => {
     expect(s).toMatch(/\[通过\] P2 /);
     expect(s).toContain(`HTTP 403 42501 ×${PRIVATE_TABLES.length}`);
     expect(s).toMatch(/白名单函数 \d+ 个（[^）]*HTTP 404 PGRST202 ×2/);
-    expect(s).toContain('白名单里的触发器函数回 404（PostgREST 不暴露，正常）：touch、guard_note_image');
+    expect(namesAfter(s, '白名单里的触发器函数回 404（PostgREST 不暴露，正常）：')).toEqual([...trig].sort());
     expect(s).toMatch(/\[通过\] S1 /);
     expect(s).toMatch(/\[通过\] TC-B1-112 /);
     expectNoSecrets(r);
   }, 180_000);
 
   it('白名单里的非触发器函数回 404 PGRST202：P2 判不符合（预览缺迁移或没部署）并列出函数名，触发器函数不列', async () => {
-    const missing = ['not_password_session', 'report_tz_impl', 'remove_device_impl', 'my_sessions_impl'];
-    for (const n of missing) expect(WHITE.has(n), n).toBe(true);
+    // 从迁移里取：白名单里所有非触发器函数（is_active 除外，S1 要用它）。迁移进仓库多少就测多少，不写死还没进仓库的函数名
+    const missing = [...WHITE].filter((n) => PRIVATE_FNS.includes(n) && !TRIGGER_FNS.has(n) && n !== 'is_active').sort();
+    expect(missing.length).toBeGreaterThanOrEqual(3);
+    for (const n of ['purge_deleted_impl', 'files_authorize_impl']) expect(missing, n).toContain(n);   // POST 安全参数那条路也要走到
+    expect(TRIGGER_FNS.has('touch')).toBe(true);
     const r = await run({ errBodyStreamOnly: true, white404: ['touch', ...missing], secure: [OTP], plain: ['', 'y', '', '', 'y'] });
+    expect(r.err).toBe('');
     expect(r.code).toBe(0);
     const s = summary(r.out);
     expect(s).toMatch(/\[不符合\] P2 /);
     const cut = s.slice(s.indexOf('不符合的：'));
-    expect(cut).toContain(`白名单函数回 404 PGRST202（预览缺迁移或没部署）：${missing.join('、')}`);
+    expect(cut).toContain('白名单函数回 404 PGRST202（预览缺迁移或没部署）：');
+    expect(namesAfter(cut, '白名单函数回 404 PGRST202（预览缺迁移或没部署）：')).toEqual(missing);
     expect(cut).not.toMatch(/(^|[^_])touch/);
-    expect(s).toContain('白名单里的触发器函数回 404（PostgREST 不暴露，正常）：touch');
+    expect(namesAfter(s, '白名单里的触发器函数回 404（PostgREST 不暴露，正常）：')).toEqual(['touch']);
     expectNoSecrets(r);
   }, 180_000);
 

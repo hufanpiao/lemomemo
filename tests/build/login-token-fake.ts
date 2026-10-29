@@ -42,6 +42,10 @@ export const WHITE = new Set(
     .filter((m) => /\bauthenticated\b/i.test(m[2] ?? ''))
     .map((m) => m[1] ?? ''),
 );
+// 触发器函数（returns trigger）：PostgREST 不暴露，P2 里回 404 PGRST202 算正常
+export const TRIGGER_FNS = new Set(
+  [...migSql.matchAll(/create\s+(?:or\s+replace\s+)?function\s+private\.([a-z_][a-z0-9_]*)\s*\([^)]*\)\s*returns\s+trigger\b/gi)].map((m) => m[1] ?? ''),
+);
 export const SAFE_POST = ['purge_deleted_impl', 'record_consent_impl', 'files_authorize_impl', 'report_tz_impl', 'remove_device_impl'];
 
 export const UID = '11111111-2222-4333-8444-555555555555';
@@ -214,9 +218,12 @@ export async function runScript(dir: string, opts: Opts) {
   base = `http://127.0.0.1:${port}`;
   const opened = join(dir, `opened-${port}.txt`);
   // errBodyStreamOnly：包一层 Invoke-WebRequest，HTTP 出错时换成一个不带 ErrorDetails 的错误，错误体只放进 Response.GetResponseStream()
-  // （pwsh 7 带 SkipHttpErrorCheck 不抛，这层不起作用）
+  // 只在 Windows PowerShell 5.1 下包：pwsh 7 下脚本带 SkipHttpErrorCheck、HTTP 出错不抛，用不着这层；而且这层包在 pwsh 7（CI 的 ubuntu）下
+  // 会让正常请求也失败：CI（ubuntu 上的 pwsh 7）里这组用例报“还剩 0 个明文、1 个密文输入没用上”，正好是取不到预览站页面、
+  // 脚本改为连问 3 次 publishable key 把明文输入吃光后停下（具体是 $args 转发还是 StrictMode 下读 .Response 出错，本机没有 pwsh 没能复现）
   const streamOnly = opts.errBodyStreamOnly
-    ? `function global:Invoke-WebRequest {
+    ? `if ($PSVersionTable.PSVersion.Major -lt 7) {
+function global:Invoke-WebRequest {
   try { Microsoft.PowerShell.Utility\\Invoke-WebRequest @args }
   catch {
     $src = $_.Exception.Response
@@ -229,6 +236,7 @@ export async function runScript(dir: string, opts: Opts) {
     $ex | Add-Member -MemberType NoteProperty -Name Response -Value $fake
     throw (New-Object System.Management.Automation.ErrorRecord ($ex, 'test', [System.Management.Automation.ErrorCategory]::NotSpecified, $null))
   }
+}
 }
 `
     : '';
@@ -268,3 +276,11 @@ catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }`,
 }
 
 export const summary = (out: string) => out.slice(out.indexOf('==== 结果摘要'), out.indexOf('==== 摘要结束'));
+
+// 摘要里「标签：a、b、c」列出的函数名（排好序）。脚本按 $fnArgs（哈希表）的键顺序遍历函数：
+// pwsh 7（.NET Core）下字符串哈希每个进程随机，列出的顺序不固定，只比集合
+export function namesAfter(s: string, label: string): string[] {
+  const i = s.indexOf(label);
+  if (i < 0) return [];
+  return (s.slice(i + label.length).split(/[；。\s]/)[0] ?? '').split('、').filter(Boolean).sort();
+}
