@@ -146,6 +146,9 @@ try {
   // ④
   const a2 = await auth('/otp', { email: emailA, create_user: false });
   check(a2.status === 429, '④ 60 秒内第二次发码被拒', `${a2.status} ${a2.json?.error_code ?? ''}`);
+  // 前端靠原文区分“单个邮箱 60 秒”和“全站额度用完”（src/features/auth/data/auth-api.ts 的 RATE_LIMIT_MSG，两边要一致）
+  const a2msg = a2.json?.msg ?? a2.json?.message ?? a2.text ?? '';
+  check(/only request this after (\d+) seconds?/i.test(a2msg), '④ 限频原文能被前端的正则认出（only request this after N seconds）', a2msg);
 
   // ⑤ 有效期：拨回 601 秒 → 作废
   await backdate(uidA, 601);

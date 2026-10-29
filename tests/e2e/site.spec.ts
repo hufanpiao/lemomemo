@@ -2,6 +2,7 @@
 // Playwright，跑在 `wrangler pages dev dist/web`（带 _headers 和 Pages Functions），baseURL 由前端 A 的 playwright.config 给。
 // 2026-10-28 前端 B 在本机 wrangler pages dev 下手工按这几步走过一遍（见回报），Playwright 接好后自动跑。
 import { expect, test } from '@playwright/test';
+import { fakeSessionJson, sessionKeyFor } from './session-fixture.ts';
 
 test.describe('官网骨架', () => {
   test('16.4 第 8 条：在 /zh/ 页脚点“한국어” → 到 /ko/，之后访问 / 都到 /ko/', async ({ page, context }) => {
@@ -26,12 +27,15 @@ test.describe('官网骨架', () => {
     }
   });
 
-  test('16.3 ②：未登录停在首页；本机有登录信息时访问 / 跳进 /app/', async ({ page }) => {
+  test('16.3 ②：未登录停在首页；本机有登录信息时访问 / 跳进 /app/', async ({ page, baseURL }) => {
     await page.goto('/zh/');
     await expect(page).toHaveURL(/\/zh\/$/);
-    await page.evaluate(() => localStorage.setItem(`sb-${location.hostname.split('.')[0]}-auth-token`, '{}'));
+    // K6 起 App 只认带 uuid user.id 的会话（原来写 '{}' 会被 App 当成没登录、再跳 /app/auth/）：写一份形状正确的假会话
+    const key = sessionKeyFor(new URL('/sb', baseURL ?? 'http://127.0.0.1:8788').href);
+    await page.evaluate(([k, v]) => localStorage.setItem(k, v), [key, fakeSessionJson()] as const);
     await page.goto('/');
     await expect(page).toHaveURL(/\/app\/$/);
+    await expect(page.locator('main[data-feature="today"]')).toBeVisible();
   });
 
   test('16.3 ③：首页的网络请求里没有 supabase，也没有 /sb/；控制台没有 CSP 报错', async ({ page }) => {

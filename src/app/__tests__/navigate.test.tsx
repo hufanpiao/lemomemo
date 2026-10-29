@@ -1,5 +1,5 @@
 // UI-4 M-2（架构 17.2 第 3 点）：navigate() 在 View Transition 的回调里同步把新页面画完（flushSync），
-// 浏览器前进 / 后退（hashchange）走同一条路。用假的 startViewTransition 抓住回调，回调一返回就看 DOM
+// 浏览器前进 / 后退（hashchange）走同一条路。TC-B1-51：支持 View Transitions 时切页、不支持时直接切换（无报错），两条路都在这里。用假的 startViewTransition 抓住回调，回调一返回就看 DOM
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { navigate, useRoute } from '../router.ts';

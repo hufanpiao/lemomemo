@@ -1,0 +1,168 @@
+// 本机会话的轻量读取（架构 4.1 第 0.38 第 17 条、2.6 首屏不加载 supabase-js）
+// • 启动时不加载 supabase-js，直接读它存在 localStorage 里的会话，拿当前 user_id（离线也能读）
+// • 键名和 supabase-js 的默认值一致：`sb-<supabaseUrl 主机名第一段>-auth-token`（官网首页、E2E 也按这个名字找）
+// • 换账号的判断时机里，“别的标签页”走 storage 事件（onSessionStorageChange），“登录 / 刷新令牌”走 onAuthStateChange（onAuthUser）
+// • Cache Storage 的清理也在这里（caches 只在 platform 用）：只删运行时缓存，SW 预缓存保留（0.38 第 36 条）
+// • clearLocalSession：signOut 失败时的兜底，同步删掉本机的 supabase 会话键
+// 只读 user.id，不读、不打印令牌
+import { buildInfo } from './env.ts';
+import { getSupabase } from './supabase/client.ts';
+
+const KEY_RE = /^sb-.+-auth-token$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** supabase-js 默认的会话键；supabaseUrl 读不出主机名时返回 null（再按格式找） */
+export function sessionStorageKey(supabaseUrl: string = buildInfo.supabaseUrl): string | null {
+  try {
+    const host = new URL(supabaseUrl).hostname;
+    const first = host.split('.')[0];
+    return first ? `sb-${first}-auth-token` : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 会话键：supabaseUrl 能解析就只认那一个键（K6 审查 L8）；解析不出来（开发、测试没配环境变量）才按格式扫 */
+function findKey(storage: Storage, supabaseUrl: string): string | null {
+  const k = sessionStorageKey(supabaseUrl);
+  if (k) return storage.getItem(k) !== null ? k : null;
+  for (let i = 0; i < storage.length; i++) {
+    const name = storage.key(i);
+    if (name && KEY_RE.test(name)) return name;
+  }
+  return null;
+}
+
+/** 从会话 JSON 里取 user.id；格式不对返回 null */
+export function userIdOfSession(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const o = JSON.parse(raw) as { user?: { id?: unknown } } | null;
+    const id = o?.user?.id;
+    return typeof id === 'string' && UUID_RE.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 本机会话里的 user_id；没登录、读不到（隐私模式）、格式不对都返回 null */
+export function readSessionUserId(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
+  try {
+    const s = storage ?? localStorage;
+    const key = findKey(s, supabaseUrl);
+    return key ? userIdOfSession(s.getItem(key)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 别的标签页改了会话（登录、换账号、退出）：回调新的 user_id（没有会话为 null）。返回取消函数 */
+export function onSessionStorageChange(
+  fn: (userId: string | null) => void,
+  target: Window = window,
+  supabaseUrl: string = buildInfo.supabaseUrl,
+): () => void {
+  const key = sessionStorageKey(supabaseUrl);
+  const handler = (e: StorageEvent): void => {
+    if (e.key === null || (key ? e.key === key : KEY_RE.test(e.key))) fn(readSessionUserId(undefined, supabaseUrl));
+  };
+  target.addEventListener('storage', handler);
+  return () => target.removeEventListener('storage', handler);
+}
+
+/** 没有 requestIdleCallback（Safari）时等多久：首屏一般已经画完（requestAnimationFrame 只许 src/motion 用，A25） */
+const IDLE_FALLBACK_MS = 300;
+
+/** 等浏览器空闲：requestIdleCallback（最多等 2 秒）；没有时延后 IDLE_FALLBACK_MS */
+export function whenIdle(fn: () => void): void {
+  const w = globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+  if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(fn, { timeout: 2000 });
+  else setTimeout(fn, IDLE_FALLBACK_MS);
+}
+
+/**
+ * 本页的登录、刷新令牌事件（onAuthStateChange 的 SIGNED_IN、TOKEN_REFRESHED）：回调会话里的 user_id。
+ * supabase-js 等首屏画完、浏览器空闲时才懒加载（whenIdle，K6 审查 L6）；这之间的变化由 watchAccount 挂上后的再比一次补上。返回取消函数
+ */
+export function onAuthUser(fn: (userId: string) => void): () => void {
+  let off: (() => void) | null = null;
+  let cancelled = false;
+  whenIdle(() => {
+    if (cancelled) return;
+    void subscribeAuth(fn).then((unsub) => {
+      if (cancelled) unsub?.();
+      else off = unsub;
+    });
+  });
+  return () => {
+    cancelled = true;
+    off?.();
+  };
+}
+
+async function subscribeAuth(fn: (userId: string) => void): Promise<(() => void) | null> {
+  return getSupabase()
+    .then((db) => {
+      const { data } = db.auth.onAuthStateChange((event, session) => {
+        if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user.id) fn(session.user.id);
+      });
+      return () => data.subscription.unsubscribe();
+    })
+    .catch(() => null);   // 没配环境变量（开发、测试）、分包加载失败：不订阅
+}
+
+/**
+ * SW 预缓存的缓存名前缀（Workbox 默认 `workbox-precache-v2-<scope>`；src/sw/sw.ts 没改 cacheNames）。
+ * 预缓存只有 App 外壳（HTML、JS、CSS、字体、图标），不含账号数据；sw.ts 将来若改预缓存的名字，这里要一起改
+ */
+export const PRECACHE_PREFIX = 'workbox-precache';
+
+/**
+ * 清 Cache Storage 的运行时缓存（退出登录、换账号、被移除，4.1、0.38 第 36 条）：图片、附件、接口响应等可能带账号数据的缓存全删，
+ * SW 预缓存（PRECACHE_PREFIX 开头）保留——删了以后换账号重新载入时如果正好离线，外壳就打不开。不支持时什么也不做，不抛错
+ */
+export async function clearCacheStorage(): Promise<void> {
+  try {
+    if (typeof caches === 'undefined') return;
+    for (const k of await caches.keys()) {
+      if (!k.startsWith(PRECACHE_PREFIX)) await caches.delete(k);
+    }
+  } catch {
+    // 拿不到 caches（隐私模式等）：本机库已清
+  }
+}
+
+/**
+ * 同步删掉本机的 supabase 会话（signOut 的兜底：断网、令牌过期、supabase-js 分包加载失败时，保证本机不留会话）。
+ * 删 `sb-<ref>-auth-token` 和 `sb-<ref>-auth-token-code-verifier` 两个键，键名取法同 sessionStorageKey()；
+ * supabaseUrl 解析不出来时按格式删所有 `sb-*-auth-token`（及其 code-verifier）。不读、不记录令牌内容，不抛错
+ */
+export function clearLocalSession(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): void {
+  try {
+    const s = storage ?? localStorage;
+    const key = sessionStorageKey(supabaseUrl);
+    const keys: string[] = [];
+    if (key) keys.push(key);
+    else {
+      for (let i = 0; i < s.length; i++) {
+        const name = s.key(i);
+        if (name && KEY_RE.test(name)) keys.push(name);
+      }
+    }
+    for (const k of keys) {
+      try {
+        s.removeItem(k);
+        s.removeItem(`${k}-code-verifier`);
+      } catch {
+        // 单个键删不掉：接着删别的
+      }
+    }
+  } catch {
+    // 拿不到 localStorage（隐私模式等）：没有可删的
+  }
+}
+
+/** 没登录：去登录页（不建本机库） */
+export function goToAuth(): void {
+  location.replace('/app/auth/');
+}

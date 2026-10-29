@@ -1,4 +1,4 @@
-// Vite：App 主体和预览沙箱两个页面入口（SW 单独打包，见 vite.sw.config.ts）（架构 8.1）
+// Vite：App 主体、登录页 /app/auth/（15.6 第 4b 条，K4）和预览沙箱三个页面入口（SW 单独打包，见 vite.sw.config.ts）（架构 8.1）
 // base '/app/'，输出到 dist/web/app/；没有内联脚本和样式，modulepreload polyfill 关掉
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
@@ -15,6 +15,11 @@ export default defineConfig(({ mode }) => {
     for (const k of ['VITE_PUBLIC_SUPABASE_URL', 'VITE_PUBLIC_ANON_KEY']) {
       if (!process.env[k]) throw new Error(`production build needs ${k}`);
     }
+    // 登录页的 Turnstile 站点密钥（15.2 中 1 ①）：正式版必须给，而且不能是 Cloudflare 的测试密钥（1x/2x/3x + 20 个 0 + 两位字母）
+    // 本机、e2e、预览没给时由 src/platform/turnstile.ts 退回测试密钥做桩
+    const sitekey = (process.env.VITE_PUBLIC_TURNSTILE_SITE_KEY ?? '').trim(); // 先去掉首尾空白再判断（安全审查 6）
+    if (!sitekey) throw new Error('production build needs VITE_PUBLIC_TURNSTILE_SITE_KEY');
+    if (/^[1-3]x0{20}[A-Z]{2}$/.test(sitekey)) throw new Error('production build must not use a Turnstile test sitekey');
   }
   return {
     root: resolve(root, 'src'),
@@ -38,6 +43,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: {
           main: resolve(root, 'src/index.html'),
+          auth: resolve(root, 'src/auth/index.html'),
           preview: resolve(root, 'src/preview.html'),
         },
       },

@@ -3,6 +3,7 @@
 // crypto.subtle 都跑在 workerd 里。整条链路换成本地 Supabase + LocalStack（TC-B0-116）【待 Docker】，预览环境的 R2【待 R2】。
 import { randomUUID } from 'node:crypto';
 import { expect, test } from './csp-fixture.ts';
+import { seedFakeSession } from './session-fixture.ts';
 
 /** 1×1 的无损 webp（RIFF....WEBPVP8L） */
 const WEBP = Buffer.from('UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==', 'base64');
@@ -27,19 +28,23 @@ test.describe('/files/v1/*（本机假后端）', () => {
       data: { items: [{ bucket: 'images', path, purpose: 'view' }] },
     });
     expect(sign.status()).toBe(200);
-    const item = ((await sign.json()) as { items: { ok: boolean; url: string }[] }).items[0];
+    const item = ((await sign.json()) as { items: { ok: boolean; url: string; sig: string }[] }).items[0];
     expect(item?.ok).toBe(true);
+    // B1 P-files-sig：view 的地址不带查询串，签名放请求头 X-Files-Sig
     const url = new URL(item?.url ?? '');
-    expect([...url.searchParams.keys()].sort()).toEqual(['d', 'e', 's']);
+    expect(url.search).toBe('');
+    const sig = item?.sig ?? '';
+    expect(sig).toMatch(/^p=view&e=\d+&d=&s=/);
 
-    const got = await request.get(url.pathname + url.search);
+    expect((await request.get(url.pathname)).status()).toBe(403);
+    const got = await request.get(url.pathname, { headers: { 'X-Files-Sig': sig } });
     expect(got.status()).toBe(200);
     expect(got.headers()['content-type']).toBe('image/webp');
     expect(got.headers()['cache-control']).toContain('no-store');
     expect(got.headers()['x-content-type-options']).toBe('nosniff');
     expect(Buffer.compare(await got.body(), WEBP)).toBe(0);
 
-    const bad = await request.get(url.pathname + url.search.replace(/s=[^&]+/, 's=AAAA'));
+    const bad = await request.get(url.pathname, { headers: { 'X-Files-Sig': sig.replace(/s=[^&]+/, 's=AAAA') } });
     expect(bad.status()).toBe(403);
     expect(await bad.json()).toEqual({ code: 'bad_signature' });
   });
@@ -61,22 +66,28 @@ test.describe('/files/v1/*（本机假后端）', () => {
     expect(old.status()).toBe(426);
   });
 
-  test('App 页面里用签名链接显示图片：能显示，没有 CSP 报错', async ({ page, request, csp }) => {
+  test('App 页面里 fetch 带 X-Files-Sig 取图、转 blob: 地址显示：能显示，没有 CSP 报错', async ({ page, request, csp, baseURL }) => {
     const { path, auth } = ids();
     await request.put(`/files/v1/o/images/${path}`, { headers: { Authorization: auth, 'X-App-Version': '4.0.0', 'Content-Type': 'image/webp' }, data: WEBP });
     const sign = await request.post('/files/v1/sign', {
       headers: { Authorization: auth, 'Content-Type': 'application/json' },
       data: { items: [{ bucket: 'images', path, purpose: 'view' }] },
     });
-    const link = new URL(((await sign.json()) as { items: { url: string }[] }).items[0]?.url ?? '');
+    const it0 = ((await sign.json()) as { items: { url: string; sig: string }[] }).items[0];
+    const link = new URL(it0?.url ?? '');
+    // K6 起 /app/ 没有会话就跳 /app/auth/：先写假会话，确认停在 App 今天页再取图（不然 evaluate 会跑在登录页上，或撞上跳转）
+    await seedFakeSession(page.context(), baseURL);
     await page.goto('/app/');
-    const size = await page.evaluate(async (src) => {
+    await expect(page.locator('main[data-feature="today"]')).toBeVisible();
+    // 和 src/platform/files.ts 的 fetchBlob 一样：fetch 带请求头取字节，img 用 blob: 地址
+    const size = await page.evaluate(async ([src, sig]) => {
+      const res = await fetch(src, { headers: { 'X-Files-Sig': sig }, credentials: 'omit', cache: 'no-store' });
       const img = document.createElement('img');
-      img.src = src;
+      img.src = URL.createObjectURL(await res.blob());
       document.body.append(img);
       await img.decode();
       return [img.naturalWidth, img.naturalHeight];
-    }, link.pathname + link.search);
+    }, [link.pathname, it0?.sig ?? ''] as const);
     expect(size).toEqual([1, 1]);
     expect(await csp.violations()).toEqual([]);
   });

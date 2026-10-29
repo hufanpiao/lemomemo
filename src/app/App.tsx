@@ -3,7 +3,7 @@ import { lazy, Suspense } from 'react';
 import { useT } from '../kit/hooks/useT.ts';
 import { isProduction } from '../platform/env.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
-import { featureRoutes, type FeatureRoute } from './features.ts';
+import { featureRoutes, offRoutes, type FeatureRoute } from './features.ts';
 import { useRoute } from './router.ts';
 
 // CSP 试验页（B0 第一项验证）：只在非正式版里挂
@@ -20,13 +20,23 @@ function ErrorView() {
   );
 }
 
+/** 功能开关关着的页面（hash 直接打开时）：不是出错（K6 审查 L11） */
+function FeatureOffView() {
+  const t = useT();
+  return (
+    <p role="status" data-testid="feature-off">
+      {t('feature.off', {})}
+    </p>
+  );
+}
+
 export function App() {
   const route = useRoute();
   const hit = [...featureRoutes, ...devRoutes].find((r) => r.name === route.name);
   const Page = hit?.Page;
   return (
     <ErrorBoundary key={route.name} fallback={<ErrorView />}>
-      <Suspense fallback={null}>{Page ? <Page /> : <ErrorView />}</Suspense>
+      <Suspense fallback={null}>{Page ? <Page /> : offRoutes.has(route.name) ? <FeatureOffView /> : <ErrorView />}</Suspense>
     </ErrorBoundary>
   );
 }

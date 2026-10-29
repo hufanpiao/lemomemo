@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN" data-skin="simple" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Lemo" />
+    <!-- 在登录页上“添加到主屏幕”也装成 App 本体：manifest 的 start_url 是 /app/ -->
+    <link rel="manifest" href="/app/manifest.webmanifest" />
+    <link rel="icon" href="/app/icons/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/svg+xml" href="/app/icons/favicon.svg" />
+    <link rel="apple-touch-icon" href="/app/icons/apple-touch-icon.png" />
+    <title>柠檬记</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

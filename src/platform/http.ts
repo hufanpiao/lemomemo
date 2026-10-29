@@ -11,8 +11,56 @@ export function withAppVersion(init: HeadersInit | undefined, version: string = 
   return h;
 }
 
-/** 带版本头的 fetch；supabase-js 的 global.fetch 也用它 */
-export function appFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+/** 426 响应体（转发层 functions/sb/version-gate.ts 和函数的第二道检查，0.27 第 1 点）：{"code":"upgrade_required","min":"4.1.0"} */
+export interface UpgradeRequired {
+  code: 'upgrade_required';
+  /** 服务器要求的最低版本；响应体里没有或格式不对时为 null */
+  min: string | null;
+}
+
+const VERSION_RE = /^\d+\.\d+\.\d+$/;
+
+/**
+ * 读出“要求升级”：状态 426，或 4xx 的 JSON 体里 code = upgrade_required。不是就返回 null。
+ * 用 clone() 读，不影响调用方再读响应体
+ */
+export async function readUpgradeRequired(res: Response): Promise<UpgradeRequired | null> {
+  const is426 = res.status === 426;
+  const json = (res.headers.get('content-type') ?? '').includes('json');
+  if (!is426 && !(res.status >= 400 && res.status < 500 && json)) return null;
+  let body: unknown = null;
+  try {
+    body = await res.clone().json();
+  } catch {
+    body = null;
+  }
+  const o = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {};
+  if (!is426 && o['code'] !== 'upgrade_required') return null;
+  const min = typeof o['min'] === 'string' && VERSION_RE.test(o['min']) ? o['min'] : null;
+  return { code: 'upgrade_required', min };
+}
+
+type UpgradeListener = (u: UpgradeRequired) => void;
+const upgradeListeners = new Set<UpgradeListener>();
+
+/**
+ * 订阅“服务器要求升级”：经 appFetch 发出的请求（含 supabase-js 的 REST、Storage、Functions）收到 426 时通知。
+ * core/boot.ts 接到 core/upgrade.ts（挡同步、出横幅）。返回取消函数
+ */
+export function onUpgradeRequired(fn: UpgradeListener): () => void {
+  upgradeListeners.add(fn);
+  return () => {
+    upgradeListeners.delete(fn);
+  };
+}
+
+/** 带版本头的 fetch；supabase-js 的 global.fetch 也用它。426 时通知 onUpgradeRequired 的订阅者（响应原样返回） */
+export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const headers = withAppVersion(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-  return fetch(input, { ...init, headers });
+  const res = await fetch(input, { ...init, headers });
+  if (res.status === 426 || (res.status >= 400 && res.status < 500 && upgradeListeners.size > 0)) {
+    const u = await readUpgradeRequired(res);
+    if (u) for (const l of [...upgradeListeners]) l(u);
+  }
+  return res;
 }

@@ -1,0 +1,7 @@
+{
+  "说明": "TC-B1-47 违规样例：改了 outbox 的 keyPath，DB_VERSION 加了 1 但锁文件没重新生成",
+  "lock": "repo",
+  "db_version": "repo+1",
+  "patch": { "outbox": { "keyPath": "id" } },
+  "expect": "cache_schema_lock_stale"
+}

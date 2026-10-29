@@ -1,13 +1,16 @@
 // UI-4 第二轮 N-5（B1 接手清单 M3）：真的浏览器后退（page.goBack()），不是单测里 replaceState + 手动派 hashchange。
 // 确认后退只起一个 View Transition，而且回调一返回 DOM 已经是上一页（浏览器截“新画面”不会截到旧页面）。
 // 用 addInitScript 在页面脚本之前包住 document.startViewTransition：记次数、记回调返回时的 data-feature
-import { expect, test } from './csp-fixture.ts';
+// K6 起 /app/ 没有会话就跳 /app/auth/：整个文件用 session-fixture 写假会话
+import { expect, test } from './session-fixture.ts';
 
 declare global {
   interface Window {
     __vt?: { calls: number; seen: (string | null)[]; supported: boolean };
   }
 }
+
+test.use({ loggedIn: true });
 
 test('真后退（page.goBack）：只起一个 View Transition，回调里已经画完上一页', async ({ page }) => {
   await page.addInitScript(() => {

@@ -38,7 +38,15 @@
   Content-Security-Policy: default-src 'none'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'
   Cache-Control: no-cache
 
-# 登录页（15.6 第 4b 条，入口 B1 才建）：只有这里放行 Turnstile
+# 登录页（15.6 第 4b 条；入口 src/auth/index.html，B1 K4 建）：只有这里放行 Turnstile（script-src、frame-src 加 challenges.cloudflare.com）
+# 其余指令和 /app/* 那条一样，只是 frame-src 换成只放 Turnstile（登录页不嵌预览沙箱、不嵌 Office 预览）。断言见 tests/build/auth-headers.test.ts、tests/e2e/csp.spec.ts（T5）
 /app/auth/*
   ! Content-Security-Policy
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' {{WSS}}; worker-src 'self'; font-src 'self'; frame-src https://challenges.cloudflare.com; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self'; img-src 'self' blob: data:; connect-src 'self' {{WSS}}; worker-src 'self'; font-src 'self'; manifest-src 'self'; frame-src https://challenges.cloudflare.com; base-uri 'none'; form-action 'self'; object-src 'none'; frame-ancestors 'none'
+
+# 登录页的 HTML 不缓存（Pages 会把 /app/auth/index.html 308 到 /app/auth/，两条都写）
+/app/auth/
+  Cache-Control: no-cache
+
+/app/auth/index.html
+  Cache-Control: no-cache

@@ -33,6 +33,8 @@ const elements = [
   { type: 'motion', pattern: 'src/motion' },
   { type: 'styles', pattern: 'src/styles' },
   { type: 'app', pattern: 'src/app' },
+  // 登录页入口 /app/auth/（15.6 第 4b 条，K4）：和 app 一样是“入口层”，但只挂 auth 一个功能
+  { type: 'auth-entry', pattern: 'src/auth' },
 ];
 
 const same = (type) => ({ element: { type, captured: { feature: '{{from.element.captured.feature}}' } } });
@@ -123,13 +125,23 @@ const layerPolicies = [
       ],
     },
   },
+  // 登录页入口：只认 shared、platform、kit、styles 和功能 auth 的 index.ts（不碰 core、别的功能、app）
+  {
+    from: { element: { type: 'auth-entry' } },
+    allow: {
+      to: [
+        ...any('shared', 'platform', 'kit', 'styles', 'auth-entry'),
+        { element: { type: 'feature', captured: { feature: 'auth' }, fileInternalPath: 'index.ts' } },
+      ],
+    },
+  },
   // A19：sw 只认 shared 和自己（外部包另由 no-restricted-imports 限成 workbox-*）
   { from: { element: { type: 'sw' } }, allow: { to: any('shared', 'sw') } },
   { from: { element: { type: 'preview' } }, allow: { to: any('shared', 'preview', 'styles') } },
   // 0.32（1.3b、任务单 FA-2）：platform/files.ts（照片和附件的 /files/v1/*）业务代码只经功能的 data 层用；
   // 功能的 hooks、ui、根文件，kit、app 一律不准直接引（放在最后，覆盖上面对 platform 的放行）
   {
-    from: any('feature-hooks', 'feature-ui', 'feature', 'kit', 'kit-hooks', 'app'),
+    from: any('feature-hooks', 'feature-ui', 'feature', 'kit', 'kit-hooks', 'app', 'auth-entry'),
     disallow: { to: { element: { type: 'platform', fileInternalPath: 'files.ts' } } },
   },
 ];

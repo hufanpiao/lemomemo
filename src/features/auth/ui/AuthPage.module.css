@@ -1,0 +1,141 @@
+/* 登录页（/app/auth/）：只用令牌，颜色在 skins/*.css（A11）；没有动效，不用 transition */
+.page {
+  max-width: 420px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(env(safe-area-inset-top), 32px) 20px max(env(safe-area-inset-bottom), 24px);
+  background: var(--login-bg, var(--bg));
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: var(--fs-24);
+}
+
+.lead {
+  margin: 0 0 20px;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  font-size: var(--fs-13);
+  color: var(--text-2);
+}
+
+.input {
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--text);
+
+  /* iOS 小于 16px 会在聚焦时放大页面 */
+  font-size: var(--fs-16);
+}
+
+.input[readonly] {
+  color: var(--text-2);
+}
+
+.code {
+  font-family: var(--f-num);
+  font-size: var(--fs-22);
+  letter-spacing: 0.4em;
+}
+
+.primary {
+  min-height: var(--hit);
+  margin-top: 8px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-16);
+}
+
+.primary:disabled {
+  background: var(--step-off);
+  color: var(--text-2);
+}
+
+.link {
+  align-self: flex-start;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-14);
+  text-decoration: underline;
+}
+
+.link:disabled {
+  color: var(--text-2);
+  text-decoration: none;
+}
+
+.row {
+  display: flex;
+  gap: 20px;
+}
+
+.notice {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.sub {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.hint {
+  margin: 12px 0 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+.card {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--danger-bg);
+  color: var(--text);
+}
+
+.cardTitle {
+  margin: 0 0 4px;
+  font-size: var(--fs-15);
+  font-weight: 600;
+}
+
+.cardBody {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.captcha {
+  min-height: 65px;
+  margin-top: 20px;
+}
+
+.steps {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+
+.step {
+  margin-bottom: 8px;
+  font-size: var(--fs-15);
+}

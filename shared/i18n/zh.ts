@@ -9,6 +9,7 @@ export const zh = {
   'common.close': '关闭',
   'error.unknown': '出了点问题，请稍后再试',
   'error.offline': '现在没有网络',
+  'feature.off': '这个功能还没有开启',
   'update.required': '需要更新才能继续同步 · 你记下的内容都还在本机',
   'update.available': '柠檬记有新版本',
   'update.reopen': '重新打开',

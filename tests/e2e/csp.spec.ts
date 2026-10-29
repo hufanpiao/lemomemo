@@ -1,7 +1,8 @@
 // B0 第一项验证（架构 1.3、2.0、8.1）：带 CSP 的 wrangler pages dev 下，App 首页和 CSP 试验页没有任何 CSP 报错
 // 试验页 /app/#/dev-csp 只在非正式版构建里挂（src/app/dev/CspLab.tsx）
 // 结论写在 docs/07-开发日志/B0-验证-CSP下Radix与Motion.md
-import { expect, test } from './csp-fixture.ts';
+// K6 起 /app/ 没有会话就跳 /app/auth/：要打开 App 页面的两组用 session-fixture 写假会话（loggedIn）
+import { expect, test } from './session-fixture.ts';
 
 /** 一条形状正确的 /files 签名链接（0.32；本机没有 /files 的上游，只用来看 CSP 和 SW 怎么对待它） */
 const FILES_LINK =
@@ -58,6 +59,26 @@ test.describe('响应头', () => {
     }
   });
 
+  // T5（B1 接手清单）：TC-B0-59 加上 /app/auth/（入口 B1 K4 建）。只有这一页放行 Turnstile，其余和上面同样严
+  test('TC-B0-59 / T5：/app/auth/ 只有一条 CSP，script-src、frame-src 只多放 challenges.cloudflare.com', async ({ request }) => {
+    const res = await request.get('/app/auth/');
+    expect(res.status()).toBe(200);
+    const csp = res.headers()['content-security-policy'] ?? '';
+    const directives = csp.split(';').map((d) => d.trim());
+    expect(directives).toContain("script-src 'self' https://challenges.cloudflare.com");
+    expect(directives).toContain('frame-src https://challenges.cloudflare.com');
+    expect(directives).toContain("base-uri 'none'");
+    expect(directives).toContain("form-action 'self'");
+    expect(directives).toContain("frame-ancestors 'none'");
+    expect(directives).toContain("style-src 'self'");
+    expect(csp).not.toContain('unsafe-inline');
+    expect(csp).not.toContain('unsafe-eval');
+    expect(csp).not.toContain('view.officeapps.live.com');
+    expect(csp, '“! 头名”去掉了 /app/* 那条，不叠加').not.toContain(',');
+    expect(res.headers()['x-content-type-options']).toBe('nosniff');
+    expect(res.headers()['cache-control']).toBe('no-cache');
+  });
+
   test('/files 和网页同源（0.32）：connect-src、img-src 只要 self，不为它另开任何主机', async ({ request }) => {
     const csp = (await request.get('/app/')).headers()['content-security-policy'] ?? '';
     const directive = (name: string) => csp.split(';').map((d) => d.trim()).find((d) => d.startsWith(`${name} `)) ?? '';
@@ -74,6 +95,8 @@ test.describe('响应头', () => {
 });
 
 test.describe('带 CSP 打开页面', () => {
+  test.use({ loggedIn: true });
+
   test('App 首页（今天页）没有 CSP 报错', async ({ page }) => {
     await page.goto('/app/');
     await expect(page.locator('main[data-feature="today"]')).toBeVisible();
@@ -144,6 +167,8 @@ test.describe('带 CSP 打开页面', () => {
 });
 
 test.describe('Service Worker', () => {
+  test.use({ loggedIn: true });
+
   test('作用域是 /app/', async ({ page }) => {
     await page.goto('/app/');
     const scope = await page.evaluate(async () => (await navigator.serviceWorker.ready).scope);
