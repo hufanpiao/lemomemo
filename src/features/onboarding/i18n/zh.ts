@@ -1,0 +1,45 @@
+// 功能 onboarding 的词典·中文（架构 2.4）：告知与同意页（架构 15.5、R-103、R-115、R-240；视觉稿 皮肤视觉稿.html 的 PH.ainote、SENDV）
+// consent.privacy 必须和 R-115 的句子一字不差（15.5：官网、登录页、告知页、隐私说明都用这一句），测试逐字比对官网隐私说明
+export const zh = {
+  'consent.title': '要不要让谷歌 AI 帮你整理？',
+  'consent.lead': '同意后，柠檬记用谷歌的 Gemini 把录音转成文字、拆成几条、给随手记分类。',
+  // 视觉稿 PH.ainote 的六行清单（R-240）；“新”标签不加粗（R-138）
+  'consent.item.voice': '说话记事',
+  'consent.item.voice.d': '录音交给 AI 转成文字并拆分',
+  'consent.item.note': '打字和随手记',
+  'consent.item.note.d': '文字交给 AI 整理、分类',
+  'consent.item.media': '图片和附件',
+  'consent.item.media.d': '识别内容，用来按图片、按意思找',
+  'consent.item.plus': '用“＋”查找、总结',
+  'consent.item.plus.d': '说的话和被总结的记录片段',
+  'consent.item.cal': '日程和待办',
+  'consent.item.cal.d': '标题、备注、地点，用来按意思查找',
+  'consent.item.vault': '隐私记',
+  'consent.item.vault.d': '也交给 AI（同意后默认开，设置里可关）',
+  'consent.newTag': '新',
+  'consent.privacy': '其他用户看不到你记的东西。数据存在服务器上，运营者在技术上能访问；文字、录音、图片、附件和隐私记会交给谷歌 AI 处理，预览 PPT 时文件会交给微软，详见隐私说明。',
+  // 15.5 “紧接着”的一句（谷歌免费版条款、18 岁）
+  'consent.terms': '按谷歌免费版条款，这些内容可能被用来改进谷歌的产品，并可能经人工审阅。使用本服务须年满 18 岁。',
+  // 视觉稿 SENDV（15.5：单独一行列出会送哪些东西）
+  'consent.send.label': '会送出去的：',
+  'consent.send.body': '文字、录音、查找时说的话；日程和待办的标题、备注、地点（用来按意思查找）；图片的缩略图（证件照也会送）；文档的文件名和前 2000 字；隐私记解密后的文字；总结时被总结的记录片段。',
+  'consent.send.msLabel': '交给微软的：',
+  'consent.send.msBody': '预览 PPT 时的整个文件，包括隐私记里的 PPT（先解密再交）。',
+  'consent.check': '我同意把上面这些交给谷歌 AI 处理',
+  'consent.needCheck': '先勾选上面的同意，才能点“同意并继续”',
+  'consent.agree': '同意并继续',
+  'consent.decline': '先不同意，直接用',
+  'consent.declineNote': '不同意也能用：不送 AI，按本地规则整理，录音用手机自带识别。以后可在 设置 › 语音与 AI 打开',
+  'consent.privacyLink': '隐私说明',
+  'consent.termsLink': '使用条款',
+  'consent.busy': '请稍候…',
+  'consent.slow': '网络有点慢，还在保存…',
+  'consent.continue': '继续使用',
+  'consent.err.offline': '网络没连上，这一步还没记下。请联网后再点一次。',
+  'consent.err.version': '隐私说明刚更新过，请再点一次。',
+  'consent.err.tryLater': '服务器忙，请稍后再点一次。',
+  'consent.err.unknown': '这一步没记下，请再点一次。',
+  'consent.err.unsure': '网络太慢，不确定记下没有。请再点一次（重复点不会出错）。',
+  // R-239：notice 为空或认不出
+  'consent.err.noPolicy': '暂时没法保存你的选择，先不使用 AI，下次打开再问你。',
+} as const;
