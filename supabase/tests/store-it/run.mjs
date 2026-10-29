@@ -20,7 +20,7 @@ function readStatus() {
   for (const [cmd, args] of tries) {
     try {
       const out = execFileSync(cmd, args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-      return JSON.parse(out.slice(out.indexOf('{')));
+      return JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1));
     } catch { /* 换下一种 */ }
   }
   return null;

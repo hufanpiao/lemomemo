@@ -7,8 +7,21 @@
 // 纯测试里一连串 crypto.subtle 之类的异步往返要排队等调度，单跑 0.2 秒的用例也会拖过 5 秒；分开以后全量墙钟基本不变。
 // 新写的测试只要起子进程或用上面几种重型库，就要登记进 SLOW_NODE_TESTS；tests/arch/coverage.test.ts 会扫出漏登记的。
 // test:tz（build/run_tz_tests.mjs）把整套在三个时区各跑一遍
+import { readFileSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
 import { configDefaults, defineConfig } from 'vitest/config';
+
+/**
+ * 服务器函数源码写 npm:包@精确版本（Deno 的写法，部署时没有 import map）。node 项目里有测试直接 import 真 index.ts
+ * （tests/data-manifest/purge-runner.ts 的 TC-B0-117 真链路），按 supabase/functions/deno.json 的 imports 把这些说明符
+ * 精确匹配地别名到 node_modules 里的包（版本和 package.json 一致，tests/build/deno-config.test.ts 核对）。
+ * postgres 只有 _shared/db.ts 用（直连数据库的函数），node 里没有测试引它，不别名。
+ */
+export const DENO_NPM_ALIASES: { find: RegExp; replacement: string }[] = Object.entries(
+  (JSON.parse(readFileSync(new URL('./supabase/functions/deno.json', import.meta.url), 'utf8')) as { imports: Record<string, string> }).imports,
+)
+  .filter(([name, spec]) => name !== 'postgres' && spec.startsWith('npm:'))
+  .map(([name, spec]) => ({ find: new RegExp(`^${spec.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`), replacement: name }));
 
 /** node 项目里的重型测试文件：起子进程，或真跑 ESLint / stylelint / TypeScript / PGlite（路径相对仓库根目录） */
 export const SLOW_NODE_TESTS: readonly string[] = [
@@ -65,6 +78,7 @@ export default defineConfig({
           ],
           // 重型文件归 node-slow，这里排除，免得跑两遍
           exclude: [...configDefaults.exclude, ...SLOW_NODE_TESTS],
+          alias: DENO_NPM_ALIASES,
         },
       },
       {

@@ -147,7 +147,7 @@ jobs:
         # 架构 8.6、0.32 第 4 条；镜像和 digest 见 tools/ci-tools.lock（localstack / oci），docker-compose.objstore.yml 不一致就失败
         # 地址和测试凭据在本任务的 env（OBJSTORE_*、R2_ENDPOINT、R2_BUCKET_PREFIX），都不是密钥。
         # 现在打它的：下面两步（objstore.test.ts 的真替身组走 shared/objstore.ts、seed.mjs 两遍再计数）和 deno task test 里同一组；
-        # files-get、objstore-cases、purge-runner 三组 0.33 起改为 skipIf（有替身变量就必须真跑），已加进下面的严格模式；TC-B0-116、117 挪到 B4b-1、B1（B0 QA D-03）
+        # files-get、objstore-cases、purge-runner 三组 0.33 起改为 skipIf（有替身变量就必须真跑），已加进下面的严格模式；TC-B0-116 挪到 B4b-1（仍是 todo）、117 已在 B1 落地（B0 QA D-03）
         run: node build/objstore.mjs up
 
       - name: 打 S3 替身的变量都在（缺了就失败，不许让下面的测试悄悄跳过）
@@ -157,16 +157,28 @@ jobs:
           done
 
       - name: objstore 打真的 S3 替身（Vitest 严格模式：shared/objstore.ts 对 LocalStack；跳过、占位、没跑到都算失败；B0 代码审查中 2、QA D-04）
-        run: >-
-          node build/ci/vitest_strict.mjs
-          --must '条件写回 exists'
-          --must '四个 R2 桶：生成的 count 探针数得对'
-          --must '注销 runner：探针打真的 S3 替身'
-          --must 'files 打真的 S3 替身'
-          --allow-todo 'TC-B0-116 整条链路'
-          --allow-todo 'TC-B0-117 整条链路'
-          -- tests/shared/objstore.test.ts tests/data-manifest/objstore-cases.test.ts
-          tests/data-manifest/purge-runner.test.ts tests/functions/files-get.test.ts
+        # TC-B0-117（B1）：objstore-cases、purge-runner 两组真 account-purge 整条链路打本机 Supabase（上面已 supabase start，
+        # _shared/gen/ 已由 copy:shared 生成），S3 用仓库的 tests/shared/fake-s3.ts。连接和 store-it 一样只取 supabase status -o json 的
+        # API_URL、DB_URL 和两把本地演示钥匙（IT_*，不是密钥；不是本机地址测试自己拒绝）。TC-B0-116 仍是 todo（B4b-1）
+        run: |
+          st="$(supabase status -o json)"
+          # 和 store-it/run.mjs 一样只解析第一个 { 到最后一个 } 之间（前后可能有提示行）
+          get() { node -e 'const s=require("fs").readFileSync(0,"utf8");const v=JSON.parse(s.slice(s.indexOf("{"),s.lastIndexOf("}")+1))[process.argv[1]];process.stdout.write(typeof v==="string"?v:"")' "$1" <<<"$st"; }
+          IT_API_URL="$(get API_URL)"; IT_DB_URL="$(get DB_URL)"; IT_ANON_KEY="$(get ANON_KEY)"; IT_SERVICE_KEY="$(get SERVICE_ROLE_KEY)"
+          for v in IT_API_URL IT_DB_URL IT_ANON_KEY IT_SERVICE_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::supabase status 里没有 $v"; exit 1; fi
+          done
+          export IT_API_URL IT_DB_URL IT_ANON_KEY IT_SERVICE_KEY
+          node build/ci/vitest_strict.mjs \
+            --must '条件写回 exists' \
+            --must '四个 R2 桶：生成的 count 探针数得对' \
+            --must '注销 runner：探针打真的 S3 替身' \
+            --must 'files 打真的 S3 替身' \
+            --must 'TC-B0-117 真 account-purge 整条链路' \
+            --must 'TC-B0-117 真 account-purge：生成的探针前后数' \
+            --allow-todo 'TC-B0-116 整条链路' \
+            -- tests/shared/objstore.test.ts tests/data-manifest/objstore-cases.test.ts \
+            tests/data-manifest/purge-runner.test.ts tests/functions/files-get.test.ts
 
       - name: seed.mjs 往替身放 A、B 的测试对象，跑两遍（第二遍全部“已存在”），再 --check 计数（实测清单 L19）
         # 凭据是替身的固定测试值（seed.mjs 故意不用 R2_FN_* 这个名字，那是九个规定函数专用的）
