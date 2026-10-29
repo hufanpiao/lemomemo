@@ -44,7 +44,8 @@ const PLAN: Plan = new Map<string, Entry>([
   } }],
   ['invite-admin', { kind: 'jwt', covers: {
     'admin-disabled': { file: 'tests/functions/invite-admin.test.ts', title: 'TC-B1-01：停用的管理员（account_disabled）被拒' },
-    'no-profile': { file: 'tests/functions/invite-admin.test.ts', title: 'TC-B1-10：没有 profiles 行的账号调 create、list 回 403 account_disabled' },
+    // Docker 起真库才跑（store-it，同 account）：真 requireActiveUser + 真 account_usable；单测那条（tests/functions/invite-admin.test.ts 的 TC-B1-10）用的是假鉴权
+    'no-profile': { file: 'supabase/tests/store-it/invite-admin-store.it.ts', title: 'TC-B1-10：真 JWT、没有 profiles 行的账号调 invite-admin 回 403 account_disabled' },
   } }],
   ['account-purge', { kind: 'all-users', why: 'TC-B1-109：照常处理到期的冷静期账号，故意不用 account_usable；pg_cron 带 x-cron-secret' }],
   ['invite-signup', { kind: 'no-user', why: '架构第 6 节：匿名 + Turnstile，还没有账号' }],

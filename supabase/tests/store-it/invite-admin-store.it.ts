@@ -7,6 +7,8 @@
 //   ③ isAdmin、takeRate 经 schema('private')；
 //   ④ 经处理函数：真 JWT（magiclink 换来）→ 管理员发码 200，库里查不到明文码（整行转文本都搜不到），code_hash = 码的哈希；
 //      非管理员 403 not_admin，不写库、不计次数。
+//   ⑤ TC-B1-10：真 JWT、没有 profiles 行的账号（故意放进 private.admins）→ 真 requireActiveUser 先拦，403 account_disabled；
+//      不查 private.admins（截 fetch 看 PostgREST 请求）、不读请求体（bodyUsed 为 false）、不写 invites、不计次数。
 // 安全：只打本机（地址不是 127.0.0.1 / localhost / [::1] 就 throw）。开跑先清上次残留：ia-store-it-*@example.com 的用户、
 //   备注以 ia-store-it 开头的 invites、本测试用户的 counters 键；跑完照样清理。
 import postgres from 'postgres';
@@ -72,14 +74,15 @@ async function cleanup(ids: readonly string[]) {
   await sql`delete from private.invites where note like ${`${TAG}%`}`;
 }
 
-async function mkUser(tag: string, isAdmin: boolean): Promise<string> {
+/** withProfile = false：不插 profiles 行（TC-B1-10，同 harness.ts 的 mkUser） */
+async function mkUser(tag: string, isAdmin: boolean, withProfile = true): Promise<string> {
   const email = `ia-store-it-${tag}-${RUN}@example.com`;
   const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true });
   if (error || !data.user) throw new Error(`建用户失败：${error?.message}`);
   const id = data.user.id;
   ours.push(id);
   emails.set(id, email);
-  await sql`insert into public.profiles (user_id) values (${id}) on conflict (user_id) do nothing`;
+  if (withProfile) await sql`insert into public.profiles (user_id) values (${id}) on conflict (user_id) do nothing`;
   if (isAdmin) await sql`insert into private.admins (user_id) values (${id})`;
   return id;
 }
@@ -158,6 +161,45 @@ Deno.test({ name: '①②③ makeStore 打真库：insert / 23505 映射 / check
     assertEquals([await store.takeRate(key, 2, 86400), await store.takeRate(key, 2, 86400), await store.takeRate(key, 2, 86400)], [true, true, false]);
   } finally {
     await cleanup([a, b]);
+  }
+} });
+
+Deno.test({ name: 'TC-B1-10：真 JWT、没有 profiles 行的账号调 invite-admin 回 403 account_disabled', ...opts, async fn() {
+  //   真 requireActiveUser：account_usable 为 false、也不在冷静期 → 403 account_disabled。
+  //   这个人故意放进 private.admins：要是先查了管理员表再鉴权，create 会一路走到 200 并写库，下面的断言都会失败。
+  const np = await mkUser('noprofile', true, false);
+  try {
+    assertEquals((await sql`select 1 from public.profiles where user_id = ${np}`).length, 0, '前提：没有 profiles 行');
+    const jwt = await jwtOf(np);
+    const req = new Request('http://127.0.0.1/functions/v1/invite-admin', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${jwt}`, 'x-app-version': await appVersion() },
+      body: JSON.stringify({ action: 'create', note: `${TAG} noprofile` }),
+    });
+    // supabase-js 每次请求才取全局 fetch：处理函数运行期间记下它发出的每个地址
+    const urls: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (input: string | URL | Request, init?: RequestInit) => {
+      urls.push(input instanceof Request ? input.url : String(input));
+      return realFetch(input, init);
+    };
+    let res: Response;
+    try {
+      res = await handler(req);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    const status = res.status;
+    const body = (await res.json()) as Record<string, unknown>;
+    assertEquals(status, 403);
+    assertEquals(body.error, 'account_disabled');
+    assertEquals(req.bodyUsed, false, '鉴权没过就不该读请求体');
+    assert(urls.some((u) => u.includes('/auth/v1/user')), `截 fetch 没生效（没看到 getUser 请求）：${JSON.stringify(urls)}`);
+    assertEquals(urls.filter((u) => /\/rest\/v1\/admins(?:[?/]|$)/.test(u)).length, 0, `不该查管理员表：${JSON.stringify(urls)}`);
+    assertEquals((await sql`select 1 from private.invites where created_by = ${np}`).length, 0, '没写 invites');
+    assertEquals((await sql`select 1 from private.counters where key like ${`invite-admin:${np}:%`}`).length, 0, '没计次数');
+  } finally {
+    await cleanup([np]);
   }
 } });
 
