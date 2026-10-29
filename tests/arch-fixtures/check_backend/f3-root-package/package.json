@@ -1,0 +1,4 @@
+{
+  "name": "app",
+  "dependencies": { "s3": "npm:aws4fetch@1.0.20", "vendored": "file:./vendor/x", "zod": "^4.6.7" }
+}

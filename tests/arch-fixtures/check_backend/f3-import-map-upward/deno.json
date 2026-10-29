@@ -1,0 +1,1 @@
+{ "imports": { "rootdb": "./supabase/functions/_shared/db.ts" } }

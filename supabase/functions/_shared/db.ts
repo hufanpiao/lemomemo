@@ -2,10 +2,13 @@
 // 谁能 import 本文件、读哪个连接串由 CI 管（TC-B0-35，build/check_backend.py 的 F1、F2，名单写在那里）：vault、vault-file、account 用 fn_vault；
 // ai-embed、ai-media、note-search、ai-summarize、file-check 以及只验 pin_epoch 的 ai-parse、ai-voice、vault-image 用 fn_ai
 // 每次请求开一个连接、用完就关，不做连接池（Edge Function 是短进程）；走 Supavisor 事务模式，关掉预编译（prepare: false，待 B0 实测）
+// 角色写死在导出名里（B1 接手清单 S3 复审必改，乙方案）：withVaultUser / withVaultScan 用 fn_vault，withAiUser / withAiScan 用 fn_ai，
+//   不收角色参数——F2 按 import 了哪个导出名判断（改名导入看原名），角色名拼出来也没用；对本文件禁止 import * as、动态 import、export *（F7）。
+//   改导出名要同时改 build/check_backend.py 的 DB_EXPORTS
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json 一致，tests/build/deno-config.test.ts 核对）
 import postgres from 'npm:postgres@3.4.5';
 
-export type FnRole = 'fn_vault' | 'fn_ai';
+type FnRole = 'fn_vault' | 'fn_ai';   // 只在本文件里用，不导出
 export type Tx = postgres.TransactionSql;
 
 const URL_ENV: Record<FnRole, string> = { fn_vault: 'FN_VAULT_DB_URL', fn_ai: 'FN_AI_DB_URL' };
@@ -44,7 +47,7 @@ async function run<T>(role: FnRole, uid: string | null, fn: (tx: Tx) => Promise<
  * uid 只能来自 requireActiveUser 验过的 JWT，或 cron 从扫描视图拿到、已经 isUsable 过的 user_id。
  * SQL 一律用 tx`…${参数}` 的写法，不拼字符串。
  */
-export function withUser<T>(role: FnRole, uid: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+function withUser<T>(role: FnRole, uid: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   if (!UUID.test(uid)) throw new Error('bad_user_id');
   return run(role, uid, fn);
 }
@@ -53,6 +56,26 @@ export function withUser<T>(role: FnRole, uid: string, fn: (tx: Tx) => Promise<T
  * 跨用户扫描：不设 app.uid，基表上的策略一行都不放行，只能读 private.scan_* 四个视图（只有定位列）。
  * 扫出 user_id 以后，必须再按用户调 withUser 读内容。
  */
-export function withScan<T>(role: FnRole, fn: (tx: Tx) => Promise<T>): Promise<T> {
+function withScan<T>(role: FnRole, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return run(role, null, fn);
+}
+
+/** fn_vault 按用户开事务（见 withUser）：只给 vault、vault-file、account */
+export function withVaultUser<T>(uid: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return withUser('fn_vault', uid, fn);
+}
+
+/** fn_vault 跨用户扫描（见 withScan）：只给 vault、vault-file、account */
+export function withVaultScan<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return withScan('fn_vault', fn);
+}
+
+/** fn_ai 按用户开事务（见 withUser）：只给 fn_ai 名单里的函数 */
+export function withAiUser<T>(uid: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return withUser('fn_ai', uid, fn);
+}
+
+/** fn_ai 跨用户扫描（见 withScan）：只给 fn_ai 名单里的函数 */
+export function withAiScan<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return withScan('fn_ai', fn);
 }

@@ -7,7 +7,7 @@
 // 连接串只在这里读、只在这里解析：交给 postgres.js 和 _shared/db.ts，报告里只放 UrlFacts 那几个布尔值，不进响应、不打印。
 // 说明、调用方法、要在控制台看的点和下线步骤：docs/09-路线图/B0-P6数据库探测函数.md
 import postgres from 'npm:postgres@3.4.5';
-import { withScan, withUser } from '../../_shared/db.ts';
+import { withAiScan, withAiUser } from '../../_shared/db.ts';
 import { SUPABASE_ROOT_CA_PEM } from './ca.ts';
 import { handle, type Limiter } from './handler.ts';
 import { caFingerprint, connUrl, type ProbeDeps, type Query, type Session, type Tls, urlFacts } from './probe.ts';
@@ -46,8 +46,8 @@ function makeProbe(): ProbeDeps {
   return {
     url: facts,
     lemoProbePresent: Deno.env.get('LEMO_PROBE') !== undefined,
-    withUser: (uid, fn) => withUser('fn_ai', uid, (tx) => fn(asQuery(tx))),
-    withScan: (fn) => withScan('fn_ai', (tx) => fn(asQuery(tx))),
+    withUser: (uid, fn) => withAiUser(uid, (tx) => fn(asQuery(tx))),
+    withScan: (fn) => withAiScan((tx) => fn(asQuery(tx))),
     open,
     caFingerprint: fp,
     clock: () => performance.now(),
@@ -59,9 +59,9 @@ Deno.serve((req) =>
     supabaseUrl: Deno.env.get('SUPABASE_URL'),
     region: Deno.env.get('SB_REGION'),
     makeProbe,
-    // 跨实例的并发锁：在 withScan 的事务里拿事务级 advisory 锁，整次运行都在这个事务里，提交即放；键和 'embed:' 那组分开
+    // 跨实例的并发锁：在 withAiScan 的事务里拿事务级 advisory 锁，整次运行都在这个事务里，提交即放；键和 'embed:' 那组分开
     guard: (fn) =>
-      withScan('fn_ai', async (tx) => {
+      withAiScan(async (tx) => {
         const [r] = await tx`select pg_try_advisory_xact_lock(hashtext('lemo:db-probe')) as got`;
         if (r?.got !== true) return { got: false } as const;
         return { got: true, value: await fn() } as const;

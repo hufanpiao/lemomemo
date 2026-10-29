@@ -28,6 +28,9 @@ function run(root: string, extra: string[] = [], env: Record<string, string> = {
 const sample = (name: string) => join(FIXTURES, 'check_backend', name);
 /** 真名单已清空（r2-probe 10-28 下线）；F6 的样例按“名单里有 r2-probe”跑，证明名单里的照规则放行、名单外的照样拦 */
 const SAMPLE_PREVIEW = ['--sample-preview-funcs', 'r2-probe'];
+/** 真跑 python 扫描整个仓库、或一条里连跑几次的用例单独放宽超时（默认 5 秒；单跑真仓库就要 2～3.5 秒，机器忙时会超过 5 秒，CI 上偶发超时）。
+ *  其余用例只对一个迷你样例跑一次，单跑约 0.3～1.1 秒，留默认 */
+const SLOW_TIMEOUT = 60_000;
 const where = (errors: Item[]) => errors.map((e) => `${e.rule} ${e.file}:${e.line}`).sort();
 
 describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => {
@@ -148,7 +151,11 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
   it('F2、F3（审查中 2）：反引号的动态 import（模板字符串）也认得出来', () => {
     const { code, errors } = run(sample('f3-dyn-backtick'));
     expect(code).toBe(1);
-    expect(where(errors)).toEqual(['F2 supabase/functions/anniv-roll/index.ts:2', 'F3 supabase/functions/push-dispatch/index.ts:2']);
+    expect(where(errors)).toEqual([
+      'F2 supabase/functions/anniv-roll/index.ts:2',
+      'F3 supabase/functions/push-dispatch/index.ts:2',
+      'F7 supabase/functions/anniv-roll/index.ts:2', // B1 接手清单 S3 复审必改：动态 import _shared/db.ts 另报 F7
+    ].sort());
   });
 
   it('F3（S3，安全第二轮新低 1）：从 esm.sh、jsdelivr、esm.sh 的 alias 参数引 aws4fetch 也算；九个函数里的不报，名字只是带 aws4fetch 字样的别的包不报', () => {
@@ -210,7 +217,103 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     ]);
   });
 
-  it('F7（代码审查有条件通过 1）：Deno 改成白名单——Deno?.env、解构、globalThis 取 Deno、Reflect.get、拼接下标、标识符转义、存进变量、(globalThis as …)[…]、get 的参数不是纯字面量 → 错误；字面量的 get / has、Deno.serve、字符串和正则里的转义不报', () => {
+  it('F7（B1 接手清单 S3）：Deno.env.get / has、process.env[…] 的字面量里写转义（值是 R2_FN_…、FN_VAULT_DB_URL、SUPABASE_DB_URL，名字匹配看不见）→ 错误；不带转义的字面量不报', () => {
+    const { code, errors } = run(sample('f7-env-escape'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      'F7 supabase/functions/push-dispatch/index.ts:2',
+      'F7 supabase/functions/push-dispatch/index.ts:3',
+      'F7 supabase/functions/push-dispatch/index.ts:4',
+      'F7 supabase/functions/todo-remind/index.ts:3',
+    ]);
+    for (const e of errors) expect(e.message).toContain('不带转义');
+  });
+
+  it('F3（B1 接手清单 S3）：esm.sh 的 /*aws4fetch、百分号编码 %61ws4fetch、?deps= 里 + 分隔、v135 路径 → 错误；九个函数里的不报，名字只是带 aws4fetch 字样的别的包（解码后也一样）不报', () => {
+    const { code, errors } = run(sample('f3-aws4fetch-encoded'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([2, 3, 4, 5].map((n) => `F3 supabase/functions/push-dispatch/index.ts:${n}`));
+  });
+
+  it('F2、F3、F7（B1 接手清单 S3）：仓库根 deno.json、supabase/deno.jsonc 的别名，package.json "imports" 的子路径别名（整名、* 通配、条件对象的某一支）展开后照样查；imports 不是对象报 F7；名单里的函数经别名引 db.ts 不报', () => {
+    const { code, errors } = run(sample('f3-import-map-upward'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      'F2 supabase/functions/anniv-roll/index.ts:2',
+      'F2 supabase/functions/push-dispatch/index.ts:2',
+      'F3 supabase/functions/anniv-roll/index.ts:4',
+      'F3 supabase/functions/backup-daily/index.ts:2',
+      'F3 supabase/functions/todo-remind/index.ts:2',
+      'F7 supabase/functions/note-search/package.json:1',
+    ]);
+  });
+
+  it('F7（B1 接手清单 S3 返工，审查必改 1）：supabase/functions 下所有字符串、模板片段里的 \\x、\\u、八进制、续行、\\_ 这类转义 → 错误（角色名 fn\\x5fvault、URL_ENV 的值、disabled\\x5fat、SUPABASE_DB_URL 都藏不住）；\\n \\t \\0、反斜杠、引号 \\$ 不报', () => {
+    const { code, errors } = run(sample('f7-string-escape'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      'F7 supabase/functions/_shared/db.ts:3',
+      'F7 supabase/functions/ai-embed/index.ts:3',
+      ...[1, 2, 3, 4, 5, 6, 7, 11].map((n) => `F7 supabase/functions/push-dispatch/index.ts:${n}`),
+    ].sort());
+    for (const e of errors.filter((x) => x.line !== 1)) expect(e.message).toContain('不准写转义');
+    expect(errors.find((e) => e.line === 1)?.message).toContain('解析不了');
+  });
+
+  it('F3（B1 接手清单 S3 返工，审查必改 2）：import map 键里的 * 不是通配——lib*/ 照前缀匹配，lib*/dist/main.js 展开成 aws4fetch → 错误；libx/… 对不上不展开', () => {
+    const { code, errors } = run(sample('f3-import-map-star-key'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual(['F3 supabase/functions/push-dispatch/index.ts:2']);
+  });
+
+  it('F3（B1 接手清单 S3 返工，审查建议 3）：package.json imports 展开成裸包名后按依赖别名接着展开（#s → signer → npm:aws4fetch，#t 再多一层）→ 错误；九个函数里的不报', () => {
+    const { code, errors } = run(sample('f3-package-imports-chain'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual(['F3 supabase/functions/push-dispatch/index.ts:2', 'F3 supabase/functions/todo-remind/index.ts:2']);
+  });
+
+  it('F7（B1 接手清单 S3 返工，审查建议 4）：仓库根、supabase/、supabase/functions 下的 deno.json(c) 写 links、patch、workspace → 错误', () => {
+    const { code, errors } = run(sample('f7-deno-links'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual(['F7 deno.json:1', 'F7 supabase/deno.jsonc:1', 'F7 supabase/functions/deno.json:1']);
+    ['patch', 'workspace', 'links'].forEach((f, i) => expect(errors[i]?.message).toContain(`不准写 ${f}`));
+  });
+
+  it('F3、F7（B1 接手清单 S3 返工，审查建议 5）：仓库根 package.json 的 npm: 别名照样展开；file: 这类报 F7，报错注明它也作用于服务器函数；版本号写法不报', () => {
+    const { code, errors } = run(sample('f3-root-package'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual(['F3 supabase/functions/push-dispatch/index.ts:2', 'F7 package.json:1']);
+    expect(errors.find((e) => e.rule === 'F7')?.message).toContain('Deno 往上找 package.json');
+  });
+
+  it('F2、F7（B1 接手清单 S3 复审必改，乙方案）：db.ts 按角色分开导出，F2 按导入的导出名判断——收角色参数的旧 withScan（r1～r6：.source、fromCharCode、join、Object.keys 计算键、拼接、模板拼出 fn_vault）不准导入；改名导入看原名；经 _shared 转手也查；import * as、export *、动态 import 报 F7；默认导入报 F2；名单里的具名导入、type 导入不报', () => {
+    const { code, errors } = run(sample('f2-db-exports'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      ...['ai-embed', 'ai-media', 'ai-parse', 'ai-summarize', 'file-check', 'note-search'].map((f) => `F2 supabase/functions/${f}/index.ts:1`),
+      'F2 supabase/functions/ai-voice/index.ts:2',
+      'F2 supabase/functions/vault-file/index.ts:4',
+      'F2 supabase/functions/vault-image/index.ts:2',
+      'F7 supabase/functions/account/index.ts:2',
+      'F7 supabase/functions/vault-file/index.ts:2',
+      'F7 supabase/functions/vault/index.ts:2',
+    ].sort());
+    for (const f of ['ai-embed', 'ai-media', 'ai-parse', 'ai-summarize', 'file-check', 'note-search']) {
+      expect(errors.find((e) => e.file.includes(`/${f}/`))?.message).toContain('不准导入 withScan');
+    }
+    expect(errors.find((e) => e.file.includes('ai-voice'))?.message).toContain('fn_vault');
+    expect(errors.find((e) => e.file.includes('vault-image'))?.message).toContain('vault-helper.ts');
+    expect(errors.find((e) => e.file.includes('/account/'))?.message).toContain('import * as');
+  });
+
+  it('F7（B1 接手清单 S3 复审小改）：supabase/functions 下的 .tsx、.jsx 一律报（JSX 属性里的 HTML 实体 fn&#95;vault 会被解码，名字匹配看不见）', () => {
+    const { code, errors } = run(sample('f7-jsx-entity'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual(['F7 supabase/functions/push-dispatch/index.tsx:1', 'F7 supabase/functions/todo-remind/index.jsx:1']);
+    for (const e of errors) expect(e.message).toContain('.tsx、.jsx');
+  });
+
+  it('F7（代码审查有条件通过 1）：Deno 改成白名单——Deno?.env、解构、globalThis 取 Deno、Reflect.get、拼接下标、标识符转义、存进变量、(globalThis as …)[…]、get 的参数不是纯字面量 → 错误；字面量的 get / has、Deno.serve、正则里的转义、字符串里的 \\t 不报', () => {
     const { code, errors } = run(sample('f7-deno-whitelist'));
     expect(code).toBe(1);
     expect(where(errors)).toEqual([
@@ -235,7 +338,7 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(where(errors)).toEqual([2, 3, 4].map((n) => `F7 supabase/functions/push-dispatch/index.ts:${n}`));
   });
 
-  it('F2、F7（代码审查有条件通过 4）：.jsx、.cjs、.cts、.mjs、.mts 也是源码，import 边跟得过去；名单里的函数经 .jsx 引 db.ts 不报', () => {
+  it('F2、F7（代码审查有条件通过 4）：.jsx、.cjs、.cts、.mjs、.mts 也是源码，import 边跟得过去；名单里的函数经 .jsx 引 db.ts 不报 F2（但 .jsx、.tsx 文件本身从 S3 复审起报 F7）', () => {
     const { code, errors } = run(sample('f2-source-ext'));
     expect(code).toBe(1);
     expect(where(errors)).toEqual([
@@ -244,6 +347,10 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
       // 第四轮必改 4：supabase/functions 下不准有 .cjs、.cts（另报 F7）
       'F7 supabase/functions/push-dispatch/b.cjs:1',
       'F7 supabase/functions/push-dispatch/c.cts:1',
+      // B1 接手清单 S3 复审小改：supabase/functions 下不准有 .tsx、.jsx（另报 F7）
+      'F7 supabase/functions/_shared/x.jsx:1',
+      'F7 supabase/functions/push-dispatch/a.jsx:1',
+      'F7 supabase/functions/vault/h.jsx:1',
     ].sort());
   });
 
@@ -285,7 +392,8 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(where(errors)).toEqual([
       'F2 supabase/functions/push-dispatch/b11.d.mts:2',
       'F2 supabase/functions/push-dispatch/index.ts:7',
-      ...[2, 3, 5, 8, 10].map((n) => `F7 supabase/functions/push-dispatch/index.ts:${n}`),
+      // 第 7 行：B1 接手清单 S3 复审必改起，动态 import _shared/db.ts 另报 F7
+      ...[2, 3, 5, 7, 8, 10].map((n) => `F7 supabase/functions/push-dispatch/index.ts:${n}`),
     ].sort());
     expect(errors.some((e) => e.file.includes('todo-remind'))).toBe(false);
     expect(errors.find((e) => e.rule === 'F7' && e.line === 10)?.message).toContain('转义');
@@ -492,7 +600,7 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(keyErrors(padded)).toEqual([]);
     // 换个函数名：函数链对不上，两处 URL_ENV[role] 都报
     expect(keyErrors(src.replace(/\bconnect\b/g, 'connect2')).length).toBe(2);
-  });
+  }, SLOW_TIMEOUT);   // 一条里连跑 3 次 python（每次都建 TypeScript 类型检查器），见 SLOW_TIMEOUT
 
   it('F7（代码审查第六轮低 5）：类型检查器建不起来时每个 F7 文件报一条；取键类型抛异常时报错，都不放行', () => {
     const p = run(sample('f7-key-assert'), [], { CHECK_BACKEND_FAIL_PROGRAM: '1' });
@@ -598,5 +706,5 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
 
   it('真仓库：0 个错误', () => {
     expect(run(ROOT)).toEqual({ code: 0, errors: [] });
-  });
+  }, SLOW_TIMEOUT);   // 真跑 python 扫描整个仓库（supabase/functions 全部源码建类型检查器，另扫 functions/、src/、shared/、迁移），见 SLOW_TIMEOUT
 });

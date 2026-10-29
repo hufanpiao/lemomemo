@@ -568,9 +568,10 @@ describe('db-probe：和 _shared/db.ts、仓库其他地方对得上', () => {
     expect(read('supabase/functions/_shared/db.ts')).toContain("postgres(url, { ssl: 'require', prepare: false, max: 1, connect_timeout: 10, idle_timeout: 5 })");
     const idx = read('supabase/functions/_preview/db-probe/index.ts');
     expect(idx).toContain('const BASE = { prepare: false, max: 1, connect_timeout: 10, idle_timeout: 5 } as const;');
-    // withUser / withScan 一律经 _shared/db.ts、只用 fn_ai
-    expect(idx).toContain("withUser('fn_ai', uid,");
-    expect(idx).toContain("withScan('fn_ai',");
+    // withUser / withScan 一律经 _shared/db.ts、只用 fn_ai（角色写死在导出名里，B1 接手清单 S3 复审必改）
+    expect(idx).toContain('withAiUser(uid,');
+    expect(idx).toContain('withAiScan(');
+    expect(idx).not.toMatch(/withVault/);
     expect(idx).not.toMatch(/fn_vault|FN_VAULT_DB_URL|SUPABASE_DB_URL|console\./);
   });
 

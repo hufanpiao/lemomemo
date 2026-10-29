@@ -98,9 +98,9 @@ export interface ProbeDeps {
   url: UrlFacts;
   /** LEMO_PROBE 这个 secret 在不在（实测清单 P6 ⑦：控制台加、删一次，看函数下次启动读到的变化；值不读） */
   lemoProbePresent: boolean;
-  /** _shared/db.ts 的 withUser('fn_ai', uid, …) */
+  /** _shared/db.ts 的 withAiUser(uid, …)（fn_ai） */
   withUser<T>(uid: string, fn: (q: Query) => Promise<T>): Promise<T>;
-  /** _shared/db.ts 的 withScan('fn_ai', …) */
+  /** _shared/db.ts 的 withAiScan(…)（fn_ai） */
   withScan<T>(fn: (q: Query) => Promise<T>): Promise<T>;
   /** 自开一条连接（同 db.ts 的参数，只换 ssl） */
   open(tls: Tls): Session;
@@ -205,7 +205,7 @@ export async function runProbe(deps: ProbeDeps, opt: ProbeOptions) {
     lemo_probe_present: deps.lemoProbePresent,
   };
 
-  // ① withUser('fn_ai', A, …)：经 _shared/db.ts（ssl: 'require' + 连接串 sslmode=require），登录用户名 fn_ai.<ref>（P6 ⑥、⑧ 前一半）
+  // ① withAiUser(A, …)（fn_ai）：经 _shared/db.ts（ssl: 'require' + 连接串 sslmode=require），登录用户名 fn_ai.<ref>（P6 ⑥、⑧ 前一半）
   const userRead = await step(budget, clock, () =>
     deps.withUser(uid, async (q) => {
       const [r] = await q`select current_user::text as u,

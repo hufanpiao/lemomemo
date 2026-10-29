@@ -10,16 +10,29 @@
   F2  引到 _shared/db.ts（直接 import，或经别的 _shared 模块间接 import）的函数必须在 DB_FUNCS 里；
       函数自己的代码用 fn_vault / FN_VAULT_DB_URL 的只能是 VAULT_FUNCS，用 fn_ai / FN_AI_DB_URL 的只能是 AI_FUNCS；
       _shared 里只有 db.ts 能读这两个连接串。架构 6.2 表格、8.4、TC-B0-35
+      B1 接手清单 S3 复审必改（乙方案）：db.ts 不收角色参数，按角色分开导出（DB_EXPORTS：withVaultUser / withVaultScan 是 fn_vault，
+      withAiUser / withAiScan 是 fn_ai）；F2 按 import 了哪个导出名判断角色（改名导入看原名，经别的 _shared 模块转手也查），
+      导入别的名字、默认导入都报。原先只认源码里带引号的 'fn_vault'，角色名拼出来（.source、fromCharCode、join、拼接、模板）就看不见。
+      对 db.ts 的 import * as、export *、动态 import 报 F7（拿到模块对象就能用计算属性名取成员）
   F3  引到 objstore（_shared/objstore*.ts、_shared/gen/objstore*.ts）或直接 import aws4fetch、读 R2_* 的函数必须在 R2_FUNCS 里；
       服务器函数一律不准读 R2_FILES_* / R2_PULL_*（那是 Pages 和负责人本机的令牌）；_shared 里只有 objstore*.ts 能读 R2_*。
       架构第 6 节开头（0.32）、8.4、TC-B0-35（0.35 起；原 TC-B0-75）、S-B0 ⑦。aws4fetch 不论从哪儿引（npm:、esm.sh、jsdelivr、deno.land/x）都算。
       F2、F3、F6 的 import 都先过 import map：supabase/functions 下任何 deno.json、deno.jsonc、import_map.json，它们 importMap 字段指的文件，
       config.toml 里 [functions.x] import_map 指的文件——imports 和 scopes 的别名一律展开后再判断（所有 map 对所有文件都算，宁严勿漏）；
-      supabase/functions 下 package.json 的 npm: 依赖别名（"signer": "npm:aws4fetch@x"）也展开（代码审查有条件通过 6）
+      supabase/functions 下 package.json 的 npm: 依赖别名（"signer": "npm:aws4fetch@x"）也展开（代码审查有条件通过 6）；
+      B1 接手清单 S3 另加：supabase/ 和仓库根的 deno.json、deno.jsonc、import_map.json、package.json 也收（Deno 往上找配置）；
+      package.json 的 "imports" 子路径别名（"#db"、带 * 的通配、条件对象的每一支）也展开；
+      aws4fetch 先解开百分号编码再认，前面是任何非字母数字、_、- 的字符都算（esm.sh 的 /*aws4fetch、?deps=a+aws4fetch）；
+      10-29 审查返工：只有 package.json imports 的键认 * 通配，deno.json / import_map.json 的键里的 * 是普通字符（整名、前缀匹配）；
+      展开结果还是裸包名的接着展开（#s → signer → npm:aws4fetch），最多 EXPAND_DEPTH 层；deno.json(c) 写 links、patch、workspace 报 F7；
+      仓库根、supabase/ 的 package.json 不是版本号也不是 npm: 的依赖照样报 F7（宁严勿漏），报错里注明它也作用于服务器函数
       源码扩展名：.ts .tsx .mts .cts .js .jsx .mjs .cjs（含 .d.ts、.d.mts；代码审查有条件通过 4）。
       源码一律由 build/check_backend_ast.mjs 用 TypeScript 编译器 API 解析成 AST（代码审查第三轮必改 1）：注释区间、import 边、F7 都从 AST 来
   F7  越界检查的绕法（B0 安全第二轮新低 1、QA D-15、架构 0.34；代码审查有条件通过 1、2，第三轮必改 1、2）——全在 AST 上判断：
       Deno 只准 Deno.env.get('字面量')、Deno.env.has('字面量')、Deno.serve(…)（_shared/db.ts 另准 Deno.env.get(URL_ENV[role])）；
+      这里和 process.env['字面量'] 的字面量里不准有反斜杠转义（'\\x52\\x32_FN_…'、'FN_VAULT\\u005fDB_URL'，B1 接手清单 S3）；
+      10-29 审查返工后加严到全局：supabase/functions 下所有字符串、模板片段一律只准 \\n \\r \\t \\b \\f \\v \\0 \\\\ \\' \\" \\` \\$ 这几种转义
+      （角色名 'fn\\x5fvault'、db.ts 的 URL_ENV 值、'disabled\\x5fat' 都藏不住；check_backend_ast.mjs 的 badEscape）；
       process 只准默认导入的那个名字、process.env.名字、process.env['字面量']、process.别的属性；node:process 只准
       import process from 'node:process'；globalThis、self、window 只准跟 .标识符（不准当参数、存进变量、方括号、?.；
       Reflect.get、Object.getOwnPropertyDescriptor 的第一个参数是它们的单独说明；别名白名单只有 _shared/gen/objstore-net.ts 的 G）；
@@ -28,6 +41,7 @@
       第四轮另加：constructor、__proto__、getPrototypeOf、Worker、SharedWorker 一律禁用（标识符、属性名、值正好是这些名字的字符串都算）；
       方括号里的属性名是拼出来的（'De' + 'no'、带 ${} 的模板）报，方括号里不是字面量又马上调用的（x[k](…)）报；
       import 地址不准是 data: / blob:；supabase/functions 下不准有 .cjs、.cts 文件。
+      S3 复审另加：supabase/functions 下不准有 .tsx、.jsx 文件（JSX 属性里的 HTML 实体会被解码，见剩余风险③）。
       第五轮另加：不准 import 别的函数目录里的文件（只准 _shared/ 和本函数目录，否则“只准某几个函数读”的名单换个函数借用一下就绕开）；
       不准引 node:vm / node:child_process / node:worker_threads（能在本脚本看不见的地方执行代码、起进程）；
       方括号取值 x[k]、解构的计算键 { [k]: v } 的键类型只准 number 或字面量联合（用 TypeScript 类型检查器把 supabase/functions 建成一个 program 判断），
@@ -57,6 +71,9 @@
        现在的兜底：supabase/functions/deno.lock 锁住每个依赖（远程 URL、npm:、jsr:）的完整性哈希，加上 tests/build/deno-config.test.ts
        核对“源码里的 npm: 依赖都在锁里且和 deno.json 一致、jsr: 和不在出站白名单里的 https: 直接禁、supabase/ 下没有避开锁的配置”；
        新加依赖要走代码审查。
+    ③ JSX 属性里的 HTML 实体（<a b="fn&#95;vault" />，解析器解码成 fn_vault）F1～F7 都没查：字符串转义检查只看 JS 字符串和模板。
+       现在的处理：supabase/functions 下整个禁用 .tsx、.jsx（F7，B1 接手清单 S3 复审），服务器函数用不着 JSX；
+       哪天要放开 .tsx，得先给 JSX 属性和 JSX 文本补上实体检查
   F1  另：SIGNUP_HASH_SECRET 只准 invite-signup、account-purge 读（K2 安全审查，架构 8.4、0.38 第 24 条），Pages、App、shared 里也不准出现（F4）
   F5 disabled_at 只准出现在 _shared/auth.ts、account、account-purge（生成目录 _shared/gen/ 不算）。架构 0.29 续第 138 条④、TC-B0-97 ④
   F6  预览专用函数（supabase/functions/_preview/<函数名>/，只由 deploy-preview.yml 在产物里生成入口部署，正式发布不带）：
@@ -163,8 +180,20 @@ def parse_sources(items):
 
 OBJSTORE_SPEC = re.compile(r"(^|/)objstore[\w-]*(\.ts)?$")
 # aws4fetch 的各种来源（B0 安全第二轮新低 1）：aws4fetch、npm:aws4fetch@x、https://esm.sh/aws4fetch@x、jsdelivr 的 /npm/aws4fetch、
-# deno.land/x/aws4fetch、esm.sh 的 ?alias=x:aws4fetch / ?deps=aws4fetch@x —— 只要某一段以 aws4fetch 开头（后面不是字母数字和 -）就算
-AWS4FETCH_SPEC = re.compile(r"(^|[/:=,])aws4fetch(?![\w-])", re.IGNORECASE)
+# deno.land/x/aws4fetch、esm.sh 的 ?alias=x:aws4fetch / ?deps=aws4fetch@x —— 只要某一段以 aws4fetch 开头（后面不是字母数字和 -）就算。
+# B1 接手清单 S3 加严：前面只要不是字母数字、_、-（esm.sh 的 /*aws4fetch、?deps=a+aws4fetch 也算），而且先把百分号编码解开再判断
+# （https://esm.sh/%61ws4fetch 服务器解码后就是 aws4fetch）；not-aws4fetchx、aws4fetch-compat-shim 这类别的包照旧不算
+AWS4FETCH_SPEC = re.compile(r"(?<![\w-])aws4fetch(?![\w-])", re.IGNORECASE)
+
+
+def is_aws4fetch(spec):
+    """spec 是不是 aws4fetch（百分号编码反复解开，直到不再变化）"""
+    for _ in range(5):
+        dec = urllib.parse.unquote(spec)
+        if dec == spec:
+            break
+        spec = dec
+    return AWS4FETCH_SPEC.search(spec) is not None
 R2_NAME = re.compile(r"\bR2_[A-Z0-9_]+")
 VAULT_USE = re.compile(r"""\bFN_VAULT_DB_URL\b|['"`]fn_vault['"`]""")
 AI_USE = re.compile(r"""\bFN_AI_DB_URL\b|['"`]fn_ai['"`]""")
@@ -192,6 +221,9 @@ def load_import_maps(root, errors):
     todo = []
     if base.exists():
         todo += [p for p in sorted(base.rglob("*")) if p.is_file() and p.name in IMPORT_MAP_NAMES and "node_modules" not in p.parts]
+    # B1 接手清单 S3：Deno 从源码所在目录往上找配置，supabase/ 和仓库根的 deno.json、deno.jsonc、import_map.json 也会作用到函数
+    #   （仓库根 deno.json 就是 deno check supabase/functions 用的那份）——一起收
+    todo += [d / n for d in (root / "supabase", root) for n in IMPORT_MAP_NAMES if (d / n).is_file()]
     cfg = root / CONFIG_TOML
     if cfg.exists():
         try:
@@ -224,6 +256,12 @@ def load_import_maps(root, errors):
             continue
         if isinstance(data.get("importMap"), str):
             todo.append(p.parent / data["importMap"])
+        # B1 接手清单 S3 返工（审查建议 4）：deno.json 的 links、patch、workspace 能把别的目录（本地包、别的工作区成员）接进解析，
+        #   import 的 spec 看起来是 jsr: / npm: 包，实际载入的是仓库里任意目录的代码，本脚本跟不过去——一律报
+        if p.name.startswith("deno."):
+            bad_fields = [f for f in DENO_LINK_FIELDS if f in data]
+            if bad_fields:
+                errors.append(("F7", rel, 1, f"deno.json 不准写 {'、'.join(bad_fields)}（能把别的目录的代码接成 jsr: / npm: 包，import 的地址看不出实际载入什么，F2、F3 跟不过去）"))
         groups = [data.get("imports")] + list((data.get("scopes") or {}).values() if isinstance(data.get("scopes"), dict) else [])
         for g in groups:
             if g is None:
@@ -233,9 +271,31 @@ def load_import_maps(root, errors):
                 continue
             for k, v in g.items():
                 if isinstance(v, str):
-                    entries.append((k, v, p.parent))
+                    entries.append((k, v, p.parent, False))   # import map 的键只按整名、以 / 结尾的前缀匹配，* 不是通配
     entries += load_package_aliases(root, errors)
     return entries
+
+
+def _json_strings(v):
+    """package.json imports 的一项：字符串 → [它]；条件对象 → 每一支的字符串；null → []（不导出）；别的类型 → None"""
+    if v is None:
+        return []
+    if isinstance(v, str):
+        return [v]
+    if isinstance(v, dict):
+        out = []
+        for x in v.values():
+            sub = _json_strings(x)
+            if sub is None:
+                return None
+            out += sub
+        return out
+    return None
+
+
+DENO_LINK_FIELDS = ("links", "patch", "workspace")
+# 别名链式展开的层数上限（审查建议 3）
+EXPAND_DEPTH = 8
 
 
 PKG_DEP_FIELDS = ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
@@ -251,10 +311,28 @@ def load_package_aliases(root, errors):
     out = []
     if not base.exists():
         return out
-    for p in sorted(base.rglob("package.json")):
-        if not p.is_file() or "node_modules" in p.parts:
-            continue
+    # B1 接手清单 S3：和 import map 一样，supabase/ 和仓库根的 package.json 也往上作用到函数，一起收
+    pkgs = [p for p in sorted(base.rglob("package.json")) if p.is_file() and "node_modules" not in p.parts]
+    pkgs += [d / "package.json" for d in (root / "supabase", root) if (d / "package.json").is_file()]
+    for p in pkgs:
         rel = p.relative_to(root).as_posix()
+        # 审查建议 5：仓库根、supabase/ 的 package.json 报错时注明为什么也查它（它是 App 的，但 Deno 往上找 package.json，照样作用于服务器函数）
+        upper = "" if base in p.parents else "（这份 package.json 在 supabase/functions 外面，但 Deno 往上找 package.json，它照样作用于服务器函数）"
+        # package.json 的 "imports"（子路径别名，"#db": "./_shared/db.ts"、"#o/*": "./_shared/gen/*"，Deno 2 认）：
+        #   和 import map 一样展开；条件写法（{"deno": …, "default": …}）每一支都算
+        try:
+            imp = json.loads(p.read_text(encoding="utf-8")).get("imports")
+        except (ValueError, AttributeError):
+            imp = None   # 解析不了下面另报
+        if imp is not None:
+            if not isinstance(imp, dict):
+                errors.append(("F7", rel, 1, "package.json 的 imports 必须是对象，没法确认子路径别名指到哪儿"))
+            else:
+                for k, v in imp.items():
+                    leaves = _json_strings(v)
+                    if leaves is None:
+                        errors.append(("F7", rel, 1, f"package.json 的 imports.{k} 不是字符串或条件对象，没法确认指到哪儿"))
+                    out += [(k, t, p.parent, True) for t in leaves or []]   # 只有这里的键认 * 通配（Node 子路径 imports 的规则）
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
@@ -273,10 +351,10 @@ def load_package_aliases(root, errors):
                 if not isinstance(v, str):
                     errors.append(("F7", rel, 1, f"package.json 的 {field}.{k} 不是字符串，没法确认指到哪儿"))
                 elif v.startswith("npm:"):
-                    out.append((k, v, p.parent))
-                    out.append((k + "/", v + "/", p.parent))
+                    out.append((k, v, p.parent, False))
+                    out.append((k + "/", v + "/", p.parent, False))
                 elif not PKG_SEMVER.match(v):
-                    errors.append(("F7", rel, 1, f"package.json 的 {field}.{k} 是 “{v}”（不是版本号也不是 npm: 别名），没法确认指到哪儿"))
+                    errors.append(("F7", rel, 1, f"package.json 的 {field}.{k} 是 “{v}”（不是版本号也不是 npm: 别名），没法确认指到哪儿{upper}"))
     return out
 
 
@@ -380,9 +458,39 @@ class Fns:
         """spec 经 import map、package.json 别名展开后的结果：[(展开后的 spec, map 所在目录)]（不含原 spec；相对路径不展开）"""
         if spec.startswith("."):
             return []
+        # 审查建议 3：展开一层后结果还是裸包名（package.json imports 的 "#s": "signer"，signer 又是依赖别名）的，接着展开，
+        #   直到不再出新结果；最多 EXPAND_DEPTH 层（防环，环靠 seen 去重）
+        #   去重按 (spec, map 所在目录)（复审小改）：同一个 spec 由不同目录的 map 给出时，相对路径解析到的文件可能不同，每份都要留
+        out, seen, layer = [], set(), [spec]
+        for _ in range(EXPAND_DEPTH):
+            nxt = []
+            for cur in layer:
+                for got in self._expand_once(cur):
+                    if got not in seen and got[0] != spec:
+                        seen.add(got)
+                        out.append(got)
+                        if self.is_bare(got[0]):
+                            nxt.append(got[0])
+            if not nxt:
+                break
+            layer = nxt
+        return out
+
+    @classmethod
+    def is_bare(cls, spec):
+        """裸包名（不是本地路径、不带 npm: / https: 这类协议头）"""
+        return not cls.is_local(spec) and re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", spec) is None
+
+    def _expand_once(self, spec):
         out = []
-        for k, v, d in self.maps:
-            if spec == k or (k.endswith("/") and spec.startswith(k)):
+        for k, v, d, wild in self.maps:
+            if wild and "*" in k:
+                # 只有 package.json imports 认通配（"#o/*": "./_shared/gen/*"，B1 接手清单 S3）：* 匹配的那段代进右边的 *；
+                #   import map（deno.json、import_map.json）的键里的 * 只是普通字符，照整名、前缀匹配（审查必改 2）
+                pre, _, suf = k.partition("*")
+                if spec.startswith(pre) and spec.endswith(suf) and len(spec) >= len(pre) + len(suf):
+                    out.append((v.replace("*", spec[len(pre):len(spec) - len(suf)]), d))
+            elif spec == k or (k.endswith("/") and spec.startswith(k)):
                 out.append((v + spec[len(k):] if k.endswith("/") else v, d))
         return out
 
@@ -443,12 +551,51 @@ def is_db(rel):
     return rel == "_shared/db.ts"
 
 
+# B1 接手清单 S3 复审必改（乙方案）：_shared/db.ts 不再收角色参数，角色写死在导出名里；F2 按 import 了哪个导出名判断
+#   （改名导入看原名）。原先只认源码里带引号的 'fn_vault'，角色名拼出来（/fn_vault/.source、fromCharCode、join、'fn_' + 'vault'、
+#   模板、Object.keys 取计算键）就看不见。导出名的唯一出处是这里，db.ts 改导出要同时改这张表
+DB_EXPORTS = {"withVaultUser": "fn_vault", "withVaultScan": "fn_vault", "withAiUser": "fn_ai", "withAiScan": "fn_ai"}
+# 只准当类型导入的导出（编译后不存在）
+DB_TYPE_EXPORTS = frozenset({"Tx"})
+
+
+def db_refs(fns, rel):
+    """rel 对 _shared/db.ts 的引用（spec 先经 import map 展开）→ (roles {角色: 首个行号}, findings [(规则, 行号, 说明)])。
+    命名空间导入、export * 整个转手、动态 import 报 F7（拿到模块对象就能用计算属性名取成员，导出名看不出来）；
+    导入 DB_EXPORTS 以外的名字（含默认导入）报 F2"""
+    roles, out = {}, []
+    if is_db(rel):
+        return roles, out
+    base = (fns.base / rel).parent
+    for i in fns.ast[rel]["imports"]:
+        cands = [fns._local(i["spec"], base)] + [fns._local(m, d) for m, d in fns.expand(i["spec"])]
+        if "_shared/db.ts" not in cands or i["typeOnly"]:
+            continue
+        line, kind = i["line"], i["kind"]
+        if kind == "dynamic":
+            out.append(("F7", line, "不准动态 import _shared/db.ts：拿到的是整个模块对象，用计算属性名取成员，F2 看不出用的是哪个角色（只准 import { withAiUser … } 具名导入）"))
+        elif kind == "import" and i.get("namespace"):
+            out.append(("F7", line, "不准 import * as 引 _shared/db.ts：命名空间对象能用计算属性名取成员，F2 看不出用的是哪个角色（只准具名导入）"))
+        elif kind == "export" and i.get("star"):
+            out.append(("F7", line, "不准 export * 转手 _shared/db.ts：整个模块转出去，F2 看不出用的是哪个角色（只准具名转出）"))
+        if kind == "import" and i.get("defaultName"):
+            out.append(("F2", line, f"_shared/db.ts 没有默认导出，只准具名导入 {'、'.join(DB_EXPORTS)}"))
+        for n in i.get("names") or []:
+            if n["typeOnly"] or n["name"] in DB_TYPE_EXPORTS:
+                continue
+            if n["name"] in DB_EXPORTS:
+                roles.setdefault(DB_EXPORTS[n["name"]], line)
+            else:
+                out.append(("F2", line, f"_shared/db.ts 只准导入 {'、'.join(DB_EXPORTS)}（角色写死在名字里），不准导入 {n['name']}"))
+    return roles, out
+
+
 def is_objstore_file(rel):
     return re.match(r"^_shared/(gen/)?objstore[\w-]*\.ts$", rel) is not None
 
 
 def touches_objstore(files, specs):
-    return any(is_objstore_file(f) for f in files) or any(OBJSTORE_SPEC.search(s) or AWS4FETCH_SPEC.search(s) for s in specs)
+    return any(is_objstore_file(f) for f in files) or any(OBJSTORE_SPEC.search(s) or is_aws4fetch(s) for s in specs)
 
 
 # 词边界的 _preview：前面不是字母、数字、下划线（vault_preview 不算）
@@ -536,6 +683,9 @@ MODULE_SPECS = ("node:module", "module", "npm:module")
 RUNTIME_SPECS = tuple(f"{pre}{name}" for name in ("vm", "child_process", "worker_threads") for pre in ("node:", "", "npm:"))
 # 第四轮必改 4：CommonJS 在非严格模式下能用 this 拿到 globalThis，supabase/functions 下整个不准有
 CJS_EXT = (".cjs", ".cts")
+# 复审小改：JSX 属性里的 HTML 实体（<a b="fn&#95;vault" />）解析器会解码，F1～F5 的名字匹配和字符串转义检查都看不见；
+#   服务器函数用不着 JSX，supabase/functions 下整个不准有 .tsx、.jsx
+JSX_EXT = (".tsx", ".jsx")
 
 
 def import_findings(fns, rel):
@@ -569,6 +719,9 @@ def check_bypass(fns, errors):
         if rel.endswith(CJS_EXT):
             errors.append(("F7", path, 1, "supabase/functions 下不准有 .cjs、.cts 文件（Deno 2 会执行从 ESM 引进来的 CommonJS，"
                                           "里面 (function () { return this })() 就能拿到 globalThis，第四轮必改 4）"))
+        if rel.endswith(JSX_EXT):
+            errors.append(("F7", path, 1, "supabase/functions 下不准有 .tsx、.jsx 文件（JSX 属性里的 HTML 实体 &#95; 这类会被解码，"
+                                          "名字匹配和转义检查都看不见；服务器函数用不着 JSX，复审小改）"))
         if res.get("parseError"):
             errors.append(("F7", path, 1, f"解析不了（{res['parseError']}），没法确认里面读了什么、引了什么"))
         for f in res["findings"]:
@@ -577,6 +730,8 @@ def check_bypass(fns, errors):
             errors.append(("F7", path, line, msg))
         for line, msg in fns.local_findings(rel):
             errors.append(("F7", path, line, msg))
+        for rule, line, msg in db_refs(fns, rel)[1]:
+            errors.append((rule, path, line, msg))
         # 第五轮必改 1：不准 import 别的函数目录里的文件（只准 _shared/ 和本函数目录）。
         #   否则 SIGNUP_HASH_SECRET、fn_vault 这类“只准某几个函数读”的规则，换个函数 import 一下就绕开了
         for line, target, spec in fns.edges(rel):
@@ -592,6 +747,7 @@ def check_functions(root, errors):
     fns = Fns(root, errors)
     check_preview(fns, errors)
     check_bypass(fns, errors)
+    db_roles = {r: db_refs(fns, r)[0] for r in fns.code}   # 每个文件从 db.ts 导入的角色（复审必改，乙方案）
     for rel, code in fns.code.items():
         path = f"{FN_ROOT}/{rel}"
         fn = owner(rel)
@@ -603,6 +759,7 @@ def check_functions(root, errors):
         db_ok = fn in (PREVIEW_AI_FUNCS if is_preview(rel) else DB_FUNCS)
         vault_ok = (not is_preview(rel)) and fn in VAULT_FUNCS
         ai_ok = fn in (PREVIEW_AI_FUNCS if is_preview(rel) else AI_FUNCS)
+        role_ok = {"fn_vault": vault_ok, "fn_ai": ai_ok}
 
         # F1
         for m in re.finditer(r"\bSUPABASE_DB_URL\b", code):
@@ -645,6 +802,17 @@ def check_functions(root, errors):
                 errors.append(("F2", path, line, f"{fn} 不在能直连数据库的名单里，却引到 _shared/db.ts{via}（名单见架构 6.2）"))
             if not r2_ok and touches_objstore(files, specs):
                 errors.append(("F3", path, line, f"{fn} 不在能用 R2 的九个函数里，却引到对象存储（objstore / aws4fetch）{via}（名单见架构第 6 节开头）"))
+            # 复审必改（乙方案）：经别的 _shared 模块间接用到的 db.ts 导出名，也按角色查
+            if target and not is_db(target):
+                for role in sorted({r for f in files for r in db_roles[f]}):
+                    if not role_ok[role]:
+                        errors.append(("F2", path, line, f"{fn} 不能用 {role}，却经 {target} 用到 _shared/db.ts 的 {role} 导出（名单见架构 6.2）"))
+
+        # 复审必改（乙方案）：自己 import 了 db.ts 的哪个导出名，就是用哪个角色（改名导入看原名）
+        for role, line in sorted(db_roles[rel].items()):
+            if not role_ok[role]:
+                names = "、".join(k for k, v in DB_EXPORTS.items() if v == role)
+                errors.append(("F2", path, line, f"{fn} 不能用 {role}，却从 _shared/db.ts 导入了 {names} 里的函数（名单见架构 6.2）"))
 
         # 函数自己的代码：角色和变量
         for m in VAULT_USE.finditer(code):
@@ -686,7 +854,7 @@ def check_pages(root, errors):
             if top != "functions" or files_scope(rel):
                 continue
             for line, spec, _ in imports(res):
-                if OBJSTORE_SPEC.search(spec) or AWS4FETCH_SPEC.search(spec):
+                if OBJSTORE_SPEC.search(spec) or is_aws4fetch(spec):
                     errors.append(("F4", rel, line, f"Pages Functions 里只有 /files 能用对象存储（{spec}）"))
             for m in R2_NAME.finditer(code):
                 if not PAGES_FORBIDDEN.match(m.group(0)):

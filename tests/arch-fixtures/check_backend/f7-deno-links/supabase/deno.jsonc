@@ -1,0 +1,2 @@
+// 违规 F7（B1 接手清单 S3 返工，审查建议 4）：workspace
+{ "workspace": ["./functions", "../vendor/signer"] }

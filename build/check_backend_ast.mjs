@@ -6,6 +6,7 @@
 // findings 是 F7 的结论，全部在 AST 上判断（f7 为 true 的文件才查，也就是 supabase/functions 下的源码）：
 //   ① Deno 只准 Deno.env.get('字面量') / Deno.env.has('字面量') / Deno.serve(…)（_shared/db.ts 另准 Deno.env.get(URL_ENV[role])）；
 //   ② process 只准默认导入的那个名字、process.env.名字、process.env['字面量']、process.别的属性；
+//      ①② 的字面量里不准有反斜杠转义（'\x52\x32_FN_…' 这类，B1 接手清单 S3：值和源码原文不同，名字匹配看不见）；
 //   ③ globalThis、self、window 只准跟 .标识符（不准当参数、不准存进变量、不准方括号、不准 ?.）；Reflect.get、
 //      Object.getOwnPropertyDescriptor 的第一个参数是它们的单独说明；唯一例外见 GLOBAL_ALIASES；
 //   ④ 禁用 eval、Function、require、createRequire、constructor、__proto__、getPrototypeOf、Worker、SharedWorker（不论怎么调用、是不是属性名，
@@ -33,6 +34,17 @@ const BANNED_PROTO = new Set(['constructor', '__proto__', 'getPrototypeOf', 'Wor
 //   eval、Function、require 不进这张表：'require' 是 postgres 的 ssl 选项（_shared/db.ts），它们作为属性名只在 globalThis 上有用，globalThis 的方括号已禁
 const BAD_STRINGS = new Set(['Deno', 'process', 'globalThis', ...BANNED_PROTO]);
 
+/** 原文里第一处不准的转义（见 checkF7 开头），没有返回 null */
+const OK_ESC = new Set(['n', 'r', 't', 'b', 'f', 'v', '0', '\\', "'", '"', '`', '$']);
+const badEscape = (raw) => {
+  for (let i = 0; i < raw.length; i += 1) {
+    if (raw[i] !== '\\') continue;
+    const c = raw[i + 1] ?? '';
+    if (!OK_ESC.has(c) || (c === '0' && /[0-9]/.test(raw[i + 2] ?? ''))) return raw.slice(i, i + 2);
+    i += 1;
+  }
+  return null;
+};
 const kindOf = (p) => (/\.tsx$/.test(p) ? ts.ScriptKind.TSX : /\.jsx$/.test(p) ? ts.ScriptKind.JSX : /\.(c|m)?js$/.test(p) ? ts.ScriptKind.JS : ts.ScriptKind.TS);
 const isLit = (n) => !!n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n));
 const isName = (n, name) => !!n && ts.isIdentifier(n) && n.text === name;
@@ -363,9 +375,17 @@ function analyse(path, rel, f7, fnRel, rules, program) {
       imports.push({
         line: lineOf(node.getStart(sf)), spec: node.moduleSpecifier.text, kind: 'import', typeOnly: !!c?.isTypeOnly,
         defaultName: c?.name?.text ?? null, named: !!nb && ts.isNamedImports(nb), namespace: !!nb && ts.isNamespaceImport(nb), bare: !c,
+        // B1 接手清单 S3 复审必改（F2 按导出名判断角色）：每个具名绑定的原名（改名导入看 propertyName）、是不是 type 导入
+        names: nb && ts.isNamedImports(nb) ? nb.elements.map((e) => ({ name: (e.propertyName ?? e.name).text, typeOnly: !!c?.isTypeOnly || e.isTypeOnly })) : [],
       });
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && isLit(node.moduleSpecifier)) {
-      imports.push({ line: lineOf(node.getStart(sf)), spec: node.moduleSpecifier.text, kind: 'export', typeOnly: node.isTypeOnly });
+      const ec = node.exportClause;
+      imports.push({
+        line: lineOf(node.getStart(sf)), spec: node.moduleSpecifier.text, kind: 'export', typeOnly: node.isTypeOnly,
+        // export * from / export * as ns from：整个模块转手出去（同上，F2 看不出转出去的是哪个导出）
+        star: !ec || ts.isNamespaceExport(ec),
+        names: ec && ts.isNamedExports(ec) ? ec.elements.map((e) => ({ name: (e.propertyName ?? e.name).text, typeOnly: node.isTypeOnly || e.isTypeOnly })) : [],
+      });
     } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && isLit(node.moduleReference.expression)) {
       imports.push({ line: lineOf(node.getStart(sf)), spec: node.moduleReference.expression.text, kind: 'require', typeOnly: node.isTypeOnly });
       if (f7) bad(node, 'import x = require(…) 不准用（require 一律禁用）');
@@ -379,7 +399,20 @@ function analyse(path, rel, f7, fnRel, rules, program) {
     ts.forEachChild(node, visit);
   };
 
+  /** B1 接手清单 S3（拼接环境变量名）：字面量的源码原文（去掉两边引号）和它的值一字不差，也就是里面没有反斜杠转义。
+   *  Deno.env.get('\x52\x32_FN_…')、'FN_VAULT\u005fDB_URL' 这类值和原文不同，F1～F3 在源码文本上做的名字匹配看不见 */
+  const rawIsValue = (n) => text.slice(n.getStart(sf) + 1, n.end - 1) === n.text;
+
   const checkF7 = (node) => {
+    // B1 接手清单 S3 返工（10-29 审查必改 1）：字符串字面量、模板片段里一律不准写会改变名字的转义——
+    //   \x、\u、八进制（\1～\7、\0 后跟数字）、续行（\ 换行）、以及 \_ \a 这类“原样转义”。只准 \n \r \t \b \f \v \0 \\ \' \" \` \$，
+    //   这些转出来的都不是名字里能有的字符。否则 withScan('fn\x5fvault')、URL_ENV 的值写成 '\x52\x32_FN_…'、'disabled\x5fat'
+    //   都能让 F1～F5 在源码文本上的名字匹配看不见
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
+      const raw = text.slice(node.getStart(sf), node.end);
+      const m = badEscape(raw);
+      if (m) bad(node, `字符串里不准写转义 ${m.replace(/[\r\n]/, '换行')}（只准 \\n \\r \\t \\b \\f \\v \\0 \\\\ \\' \\" \\\` \\$）：\\x、\\u、八进制、续行、\\_ 这类写法让值和源码原文不同，F1～F5 的名字匹配看不见`);
+    }
     if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && BAD_STRINGS.has(node.text)) {
       bad(node, `字符串 '${node.text}' 不准出现（拿来当属性名就能绕开 Deno、process、globalThis 的检查）`);
       return;
@@ -491,11 +524,11 @@ function analyse(path, rel, f7, fnRel, rules, program) {
         const call = m && ts.isCallExpression(m.parent) && m.parent.expression === m && !m.parent.questionDotToken ? m.parent : undefined;
         if (call && (m.name.text === 'get' || m.name.text === 'has') && call.arguments.length === 1) {
           const a = call.arguments[0];
-          if (isLit(a)) return;
+          if (isLit(a) && rawIsValue(a)) return;
           if (fnRel === '_shared/db.ts' && m.name.text === 'get' && ts.isElementAccessExpression(a) && isName(a.expression, 'URL_ENV') && isName(a.argumentExpression, 'role')) return;
         }
       }
-      bad(node, "Deno 只准写 Deno.env.get('名字') / Deno.env.has('名字')（一个字面量）或 Deno.serve(…)：Deno?.env、解构、存进变量、当参数传、方括号取值、toObject() 都看不出读的是哪个 secret，F1～F3 查不了");
+      bad(node, "Deno 只准写 Deno.env.get('名字') / Deno.env.has('名字')（一个不带转义的字面量）或 Deno.serve(…)：Deno?.env、解构、存进变量、当参数传、方括号取值、toObject() 都看不出读的是哪个 secret，F1～F3 查不了");
       return;
     }
     if (name === 'process') {
@@ -505,9 +538,9 @@ function analyse(path, rel, f7, fnRel, rules, program) {
       if (d) {
         const pp = d.parent;
         if (ts.isPropertyAccessExpression(pp) && pp.expression === d && !pp.questionDotToken) return;   // process.env.名字
-        if (ts.isElementAccessExpression(pp) && pp.expression === d && !pp.questionDotToken && isLit(pp.argumentExpression)) return;   // process.env['名字']
+        if (ts.isElementAccessExpression(pp) && pp.expression === d && !pp.questionDotToken && isLit(pp.argumentExpression) && rawIsValue(pp.argumentExpression)) return;   // process.env['名字']（不带转义，见 rawIsValue）
       }
-      bad(node, "process 只准写 process.env.名字、process.env['名字']（字面量）或 process.别的属性：process?.env、解构、存进变量、当参数传、方括号取值、整个拿走都看不出读的是哪个 secret，F1～F3 查不了");
+      bad(node, "process 只准写 process.env.名字、process.env['名字']（不带转义的字面量）或 process.别的属性：process?.env、解构、存进变量、当参数传、方括号取值、整个拿走都看不出读的是哪个 secret，F1～F3 查不了");
       return;
     }
     // 第八轮必改 ①：全局的事件监听 / 派发（不带对象前缀，或挂在 globalThis / self / window 上）一律禁用——事件对象能带出全局对象

@@ -1,0 +1,7 @@
+{
+  "imports": {
+    "#db": "./_shared/db.ts",
+    "#gen/*": "./_shared/gen/obj*.ts",
+    "#sign": { "deno": "npm:aws4fetch@1.0.20", "default": "./_shared/none.ts" }
+  }
+}
