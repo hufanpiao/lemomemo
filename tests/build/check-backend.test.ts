@@ -28,8 +28,8 @@ function run(root: string, extra: string[] = [], env: Record<string, string> = {
 const sample = (name: string) => join(FIXTURES, 'check_backend', name);
 /** 真名单已清空（r2-probe 10-28 下线）；F6 的样例按“名单里有 r2-probe”跑，证明名单里的照规则放行、名单外的照样拦 */
 const SAMPLE_PREVIEW = ['--sample-preview-funcs', 'r2-probe'];
-/** 真跑 python 扫描整个仓库、或一条里连跑几次的用例单独放宽超时（默认 5 秒；单跑真仓库就要 2～3.5 秒，机器忙时会超过 5 秒，CI 上偶发超时）。
- *  其余用例只对一个迷你样例跑一次，单跑约 0.3～1.1 秒，留默认 */
+/** 本文件在 Vitest 的 node-slow 项目里（vitest.config.ts 的 SLOW_NODE_TESTS），每条用例默认已是 30 秒（迷你样例单跑约 0.3～1.7 秒）。
+ *  真跑 python 扫描整个仓库、或一条里连跑 3 次的两条用例工作量是别的几倍（单跑 2～3.5 秒），再单独放到 60 秒 */
 const SLOW_TIMEOUT = 60_000;
 const where = (errors: Item[]) => errors.map((e) => `${e.rule} ${e.file}:${e.line}`).sort();
 

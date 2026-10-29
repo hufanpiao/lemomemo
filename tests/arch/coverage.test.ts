@@ -87,3 +87,56 @@ describe('架构 2.3：每条规则都有违规样例（按规则号核）', () 
     expect(existsSync(join(FIXTURES, 'check_size', 'w3-over-budget', 'manifest.json'))).toBe(true);
   });
 });
+
+// Vitest 的 node / node-slow 分组（vitest.config.ts）：起子进程、真跑 ESLint / stylelint / TypeScript / PGlite 的测试文件
+// 必须登记在 SLOW_NODE_TESTS（30 秒超时、限并发）；漏登记就留在 node 里按 5 秒算，机器一忙就偶发超时
+// 只认 import 语句（静态 from、动态 import()）里的模块名，注释和普通字符串里提到不算
+const HEAVY = /(?:from\s*|import\(\s*)['"](?:node:child_process|eslint|stylelint|typescript|@electric-sql\/pglite[^'"]*)['"]/;
+const NODE_TEST_DIRS = ['shared', 'arch', 'build', 'functions', 'edge', 'data-manifest'];
+/** 扫出来是重型、其实不起进程的：只用到辅助模块里的纯函数（写明理由；不再被扫出时要删掉） */
+const NOT_HEAVY: Readonly<Record<string, string>> = {
+  'tests/build/run-compat.test.ts': '只用 tests/compat/run-compat.ts 的 parseArgs、missingSupabaseEnv，不起 vitest 子进程',
+};
+
+/** 文件本身或它经相对路径引到的 tests/ 下辅助模块（递归）里有没有重型标记 */
+export function isHeavy(file: string, seen = new Set<string>()): boolean {
+  if (seen.has(file)) return false;
+  seen.add(file);
+  const src = readFileSync(file, 'utf8');
+  if (HEAVY.test(src)) return true;
+  for (const m of src.matchAll(/(?:from|import\()\s*'(\.{1,2}\/[^']+\.ts)'/g)) {
+    const dep = join(file, '..', m[1] ?? '');
+    if (dep.startsWith(join(ROOT, 'tests')) && !dep.endsWith('.test.ts') && existsSync(dep) && isHeavy(dep, seen)) return true;
+  }
+  return false;
+}
+
+function nodeTestFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith('.test.ts')) out.push(p.slice(ROOT.length + 1).replaceAll('\\', '/'));
+    }
+  };
+  for (const d of NODE_TEST_DIRS) walk(join(ROOT, 'tests', d));
+  return out.sort();
+}
+
+describe('Vitest 分组：重型测试都在 node-slow（vitest.config.ts 的 SLOW_NODE_TESTS）', () => {
+  it('起子进程或用 ESLint / stylelint / TypeScript / PGlite 的测试文件都登记了；登记的都还是重型的、文件都在', async () => {
+    const { SLOW_NODE_TESTS } = await import('../../vitest.config.ts');
+    const flagged = nodeTestFiles().filter((f) => isHeavy(join(ROOT, f)));
+    expect(Object.keys(NOT_HEAVY).filter((f) => !flagged.includes(f))).toEqual([]);
+    const heavy = flagged.filter((f) => !(f in NOT_HEAVY));
+    expect(heavy.filter((f) => !SLOW_NODE_TESTS.includes(f))).toEqual([]);
+    expect(SLOW_NODE_TESTS.filter((f) => !heavy.includes(f))).toEqual([]);
+  });
+
+  it('自证：只经辅助模块起子进程的文件（login-token-tests-run 经 login-token-fake）也认得出；纯逻辑的不算', () => {
+    expect(isHeavy(join(ROOT, 'tests/build/login-token-tests-run.test.ts'))).toBe(true);
+    expect(isHeavy(join(ROOT, 'tests/build/objstore-fake.test.ts'))).toBe(false);
+    expect(isHeavy(join(ROOT, 'tests/data-manifest/objstore-cases.test.ts'))).toBe(false);
+  });
+});

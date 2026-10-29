@@ -3,7 +3,7 @@
 // SigV4 自己独立验一遍（不用 aws4fetch），签错了回 403 SignatureDoesNotMatch——这样能测出签名、路径编码的毛病；
 // DeleteObjects 核对 Content-MD5（用 node:crypto 算，和 shared 里自写的 MD5 互相印证）。
 // Node（vitest）和 Deno（deno test tests/shared）都能跑；tests/e2e/fake-backends.ts 把它挂到真的 HTTP 端口上给 wrangler 用。
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 export interface FakeObject {
   body: Uint8Array;
@@ -43,16 +43,10 @@ export interface FakeS3 {
   failNext: number | null;
 }
 
-const enc = new TextEncoder();
-
-function hex(buf: ArrayBuffer): string {
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function hmac(key: ArrayBuffer | Uint8Array, s: string): Promise<ArrayBuffer> {
-  const k = await crypto.subtle.importKey('raw', key as BufferSource, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  return crypto.subtle.sign('HMAC', k, enc.encode(s));
-}
+// 验签用 node:crypto 的同步 HMAC、SHA-256：原来每个请求要 1 次 digest + 5 次 importKey + 5 次 sign，共 11 次 crypto.subtle 异步往返
+// （每次都排进 libuv 线程池再回事件循环），机器忙时每次往返都要等调度，一条造几十个对象的用例会从 0.3 秒拖到 5 秒以上超时。
+// 同步算结果完全一样，也仍然独立于 shared/objstore.ts 用的 aws4fetch
+const hmac = (key: Uint8Array | string, s: string): Uint8Array => createHmac('sha256', key).update(s, 'utf8').digest();
 
 function rfc3986(s: string): string {
   return encodeURIComponent(s).replace(/[!'()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
@@ -98,12 +92,12 @@ async function verifySig(req: Request, opts: FakeS3Options): Promise<boolean> {
   const payload = req.headers.get('x-amz-content-sha256') ?? '';
   const canonical = [req.method, canonPath, canonQuery, canonHeaders + '\n', signedHeaders, payload].join('\n');
   const scope = `${date}/${region}/s3/aws4_request`;
-  const sts = ['AWS4-HMAC-SHA256', amzDate, scope, hex(await crypto.subtle.digest('SHA-256', enc.encode(canonical)))].join('\n');
-  let k = await hmac(enc.encode('AWS4' + opts.secretAccessKey), date ?? '');
-  k = await hmac(k, region ?? '');
-  k = await hmac(k, 's3');
-  k = await hmac(k, 'aws4_request');
-  return hex(await hmac(k, sts)) === sig;
+  const sts = ['AWS4-HMAC-SHA256', amzDate, scope, createHash('sha256').update(canonical, 'utf8').digest('hex')].join('\n');
+  let k = hmac('AWS4' + opts.secretAccessKey, date ?? '');
+  k = hmac(k, region ?? '');
+  k = hmac(k, 's3');
+  k = hmac(k, 'aws4_request');
+  return createHmac('sha256', k).update(sts, 'utf8').digest('hex') === sig;
 }
 
 function xmlErr(status: number, code: string): Response {
