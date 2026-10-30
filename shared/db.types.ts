@@ -455,6 +455,9 @@ isOneToOne: false
               "no_conflict": (string)[],"system_cols": (string)[]
             }[]
                            },
+"tags_ok":
+{ Args: { "p": (string)[] }; Returns: boolean
+                           },
 "take_rate":
 { Args: { "p_key": string,"p_limit": number,"p_window_s": number }; Returns: boolean
                            }
