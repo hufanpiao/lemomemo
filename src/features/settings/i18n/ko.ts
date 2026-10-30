@@ -14,7 +14,7 @@ export const ko = {
   'settings.lang.zh': '中文',
   'settings.lang.ko': '한국어',
   'settings.lang.note': '언어를 바꾸면 레모 화면이 바로 바뀌고, 알림과 메일도 이 언어로 보내 드려요.', // R-106 B1 第一遍已审（10-30）
-  'settings.lang.syncFailed': '이 기기에서는 바꿨지만 계정에 동기화하지 못했어요. 인터넷에 연결한 뒤 한 번 더 바꿔 주세요', // R-106 B1 第一遍已审（10-30）
+  'settings.lang.syncFailed': '이 기기에서는 바꿨지만 계정에 동기화하지 못했어요. 인터넷에 연결한 뒤 언어를 다시 선택해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见 K-15 改过：“한 번 더 바꿔”容易读成换成别的语言
 
   'settings.devices.title': '로그인한 기기', // R-106 B1 第一遍已审（10-30）
   'settings.devices.loading': '기기 목록을 불러오는 중…', // R-106 B1 第一遍已审（10-30）
@@ -29,7 +29,7 @@ export const ko = {
   'settings.devices.remove': '제거', // R-106 B1 第一遍已审（10-30）；移除照 auth.exit.removed 用 제거
   'settings.devices.removeThis': '로그아웃', // R-106 B1 第一遍已审（10-30）；按钮只写 로그아웃，读屏标签另带“（设备名）”（DevicesSection.tsx）
   'settings.devices.residual': '제거해도 그 기기는 최대 10분 동안 내 데이터를 읽고 쓸 수 있고, 그 뒤에 로그인 화면으로 돌아가요.', // R-106 B1 第一遍已审（10-30）
-  'settings.devices.orphans': '기기 기록이 없는 로그인이 {n}건 더 있어요 (최근 {date})', // R-106 B1 第一遍已审（10-30）
+  'settings.devices.orphans': '기기 기록이 없는 로그인이 {n}건 더 있어요 (마지막 로그인 {date})', // R-106 B1 第一遍已审（10-31），按审校意见 K-14 改过：和 lastSeen 的“최근 사용”区分
   'settings.devices.signOutOthers': '다른 모든 기기에서 로그아웃', // R-106 B1 第一遍已审（10-30）；按钮；中文 8 字→韩文 15 字；auth.session.serverPending、settings.offlineOut.body 引号里引用这一句
   'settings.devices.signOutOthersDone': '다른 모든 기기에서 로그아웃했어요. 그 기기들은 늦어도 10분 안에 로그인 화면으로 돌아가요', // R-106 B1 第一遍已审（10-30）
   'settings.devices.removed': '“{name}” 기기를 제거했어요', // R-106 B1 第一遍已审（10-30）；加“기기를”避开 을/를 随名字末字变化
@@ -57,34 +57,34 @@ export const ko = {
   'settings.confirm.signOut.ok': '그래도 로그아웃', // R-106 B1 第一遍已审（10-30）
 
   'settings.account.title': '계정', // R-106 B1 第一遍已审（10-30）
-  'settings.account.email': '현재 로그인한 이메일: ', // TODO(ko) R-275 读屏标签，待审校
+  'settings.account.email': '현재 로그인한 이메일: ', // R-106 B1 第一遍已审（10-31）；R-275 读屏标签，末尾空格保留
   'settings.account.export': '모든 데이터 내보내기', // R-106 B1 第一遍已审（10-30）
-  'settings.account.delete': '회원 탈퇴', // R-106 B1 第一遍已审（10-30）；注销账号，회원 탈퇴 待负责人确认
+  'settings.account.delete': '회원 탈퇴', // R-106 B1 第一遍已审（10-30）；注销账号，회원 탈퇴 负责人 10-30 已定
   'settings.account.signOut': '로그아웃', // R-106 B1 第一遍已审（10-30）
-  'settings.account.rateLimited': '내보내기와 회원 탈퇴는 합쳐서 하루 3번까지 할 수 있어요. 오늘 횟수를 다 썼으니 내일 다시 시도해 주세요', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 设置页导出、注销批新写，待审校
+  'settings.account.rateLimited': '내보내기와 회원 탈퇴는 합쳐서 하루 3번까지 할 수 있어요. 오늘 횟수를 다 썼으니 내일 다시 시도해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见改过
 
-  'settings.data.title': '데이터', // R-106 B1 第一遍已审（10-30）；10-30 设置页导出、注销批新写，待审校
-  'settings.export.hint': '백업 파일 하나로 저장해요', // R-106 B1 第一遍已审（10-30）；10-30 设置页导出、注销批新写，待审校
-  'settings.export.offline': '인터넷에 연결해야 내보낼 수 있어요', // R-106 B1 第一遍已审（10-30）；10-30 设置页导出、注销批新写，待审校
-  'settings.export.busy': '내보내는 중… 데이터가 많으면 시간이 조금 걸려요', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 设置页导出、注销批新写，待审校
-  'settings.export.done': '내보냈어요. 이메일로 알림을 보내 드렸어요', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 设置页导出、注销批新写，待审校
-  'settings.export.notSaved': '내보냈지만 파일이 아직 저장되지 않았어요', // R-106 B1 第一遍已审（10-30）；10-30 设置页导出、注销批新写，待审校
-  'settings.export.vaultOmitted': '잠금을 풀지 않아서 비밀 메모는 내보내지 않았어요', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 设置页导出、注销批新写，待审校
-  'settings.export.saveAgain': '다시 저장', // R-106 B1 第一遍已审（10-30）；10-30 设置页导出、注销批新写，待审校
+  'settings.data.title': '데이터', // R-106 B1 第一遍已审（10-31）
+  'settings.export.hint': '백업 파일 하나로 저장해요', // R-106 B1 第一遍已审（10-31）
+  'settings.export.offline': '인터넷에 연결해야 내보낼 수 있어요', // R-106 B1 第一遍已审（10-31）
+  'settings.export.busy': '내보내는 중… 데이터가 많으면 시간이 조금 걸려요', // R-106 B1 第一遍已审（10-31），按审校意见改过
+  'settings.export.done': '내보냈어요. 이메일로 알림을 보내 드렸어요', // R-106 B1 第一遍已审（10-31），按审校意见改过
+  'settings.export.notSaved': '내보냈지만 파일이 아직 저장되지 않았어요', // R-106 B1 第一遍已审（10-31）
+  'settings.export.vaultOmitted': '잠금을 풀지 않아서 비밀 메모는 내보내지 않았어요', // R-106 B1 第一遍已审（10-31），按审校意见改过
+  'settings.export.saveAgain': '다시 저장', // R-106 B1 第一遍已审（10-31）
 
-  'settings.delete.back': '설정', // R-106 B1 第一遍已审（10-30）；10-30 设置页导出、注销批新写，待审校；照 settings.title
-  'settings.delete.body.what': '탈퇴하면 레모에 기록한 모든 내용과 사진, 첨부파일, 설정, 그리고 서버에 있는 백업까지 모두 삭제돼요.', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 设置页导出、注销批新写，待审校
-  'settings.delete.body.cooling': '신청하면 7일 동안 탈퇴 대기 기간이 시작돼요. 그동안 계정은 사용 중지되고, 모든 기기에서 로그아웃돼요. {date} 전에 이메일 인증 코드로 로그인하면 계정을 복구할 수 있어요.', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 设置页导出、注销批新写，待审校
-  'settings.delete.body.final': '7일이 지나면 완전히 삭제되어 복구할 수 없어요.', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 设置页导出、注销批新写，待审校
-  'settings.delete.body.mail': '회원 탈퇴 안내는 이메일로만 보내 드려요. 스팸함도 확인해 주세요.', // R-106 B1 第一遍已审（10-30）；10-30 设置页导出、注销批新写，待审校
-  'settings.delete.unsent': '아직 동기화되지 않은 변경 사항이 {n}개 있어요. 탈퇴하면 사라져요', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 设置页导出、注销批新写，待审校
-  'settings.delete.unsentUnknown': '아직 동기화되지 않은 변경 사항이 있을 수 있어요. 탈퇴하면 사라져요', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 设置页导出、注销批新写，待审校
-  'settings.delete.label': '확인을 위해 “{word}”라고 입력해 주세요', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 设置页导出、注销批新写，待审校
-  'settings.delete.word': '탈퇴', // R-106 B1 第一遍已审（10-30）；10-30 设置页导出、注销批新写，待审校；服务器只认“注销”“탈퇴”（R-188），改这个词要先改 account 函数
-  'settings.delete.submit': '회원 탈퇴', // R-106 B1 第一遍已审（10-30）；10-30 设置页导出、注销批新写，待审校；同 settings.account.delete
-  'settings.delete.busy': '탈퇴 처리 중… 이 기기의 데이터를 지우고 있어요', // R-106 B1 第一遍已审（10-30）；10-30 设置页导出、注销批新写，待审校
-  'settings.delete.confirmRequired': '“{word}”라고 정확히 입력해 주세요', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 设置页导出、注销批新写，待审校
-  'settings.delete.admin': '관리자 계정은 콘솔에서 처리해 주세요', // R-106 B1 第一遍已审（10-30）；10-30 设置页导出、注销批新写，待审校
+  'settings.delete.back': '설정', // R-106 B1 第一遍已审（10-31）；照 settings.title
+  'settings.delete.body.what': '탈퇴하면 레모에 기록한 모든 내용과 사진, 첨부파일, 설정, 그리고 서버에 있는 백업까지 모두 삭제돼요.', // R-106 B1 第一遍已审（10-31），按审校意见改过
+  'settings.delete.body.cooling': '신청하면 7일간의 탈퇴 대기 기간이 시작돼요. 그동안 계정은 사용 중지되고, 모든 기기에서 로그아웃돼요. {date} 전에 이메일 인증 코드로 로그인하면 계정을 복구할 수 있어요.', // R-106 B1 第一遍已审（10-31），按审校意见 K-09 改过：“7일간의”修饰名词；10-30 设置页导出、注销批新写
+  'settings.delete.body.final': '7일이 지나면 완전히 삭제되어 복구할 수 없어요.', // R-106 B1 第一遍已审（10-31），按审校意见改过
+  'settings.delete.body.mail': '회원 탈퇴 안내는 이메일로만 보내 드려요. 스팸함도 확인해 주세요.', // R-106 B1 第一遍已审（10-31）
+  'settings.delete.unsent': '아직 동기화되지 않은 변경 사항이 {n}개 있어요. 탈퇴하면 사라져요', // R-106 B1 第一遍已审（10-31），按审校意见改过
+  'settings.delete.unsentUnknown': '아직 동기화되지 않은 변경 사항이 있을 수 있어요. 탈퇴하면 사라져요', // R-106 B1 第一遍已审（10-31），按审校意见改过
+  'settings.delete.label': '확인을 위해 “{word}”라고 입력해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见改过
+  'settings.delete.word': '탈퇴', // R-106 B1 第一遍已审（10-31）；服务器只认“注销”“탈퇴”（R-188），改这个词要先改 account 函数
+  'settings.delete.submit': '회원 탈퇴', // R-106 B1 第一遍已审（10-31）；同 settings.account.delete
+  'settings.delete.busy': '탈퇴 처리 중… 이 기기의 데이터를 지우고 있어요', // R-106 B1 第一遍已审（10-31）
+  'settings.delete.confirmRequired': '“{word}”라고 정확히 입력해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见改过
+  'settings.delete.admin': '관리자 계정은 콘솔에서 처리해 주세요', // R-106 B1 第一遍已审（10-31）
   'settings.busy': '잠시만요…', // R-106 B1 第一遍已审（10-30）；照 onboarding consent.busy
   'settings.signingOut': '로그아웃하는 중… 이 기기의 데이터를 지우고 있어요. 인터넷이 느리면 10초 넘게 걸릴 수도 있어요.', // R-106 B1 第一遍已审（10-30）
   'settings.cancel': '취소', // R-106 B1 第一遍已审（10-30）；照 shared common.cancel
@@ -101,11 +101,11 @@ export const ko = {
   'settings.offlineOut.title': '이 기기에서 로그아웃했어요', // R-106 B1 第一遍已审（10-30）
   'settings.offlineOut.body': '서버에 남은 이번 로그인은 아직 끊지 못했지만, 이 기기의 데이터는 모두 지웠어요. 나중에 다른 기기에서 “다른 모든 기기에서 로그아웃”으로 정리할 수 있어요.', // R-106 B1 第一遍已审（10-30）；措辞照 auth.session.serverPending（已审）
 
-  'settings.recentExport.title': '최근 내보내기', // R-106 B1 第一遍已审（10-30）；10-30 最近的导出批新写，待审校
-  'settings.recentExport.none': '최근 90일 동안 내보낸 적이 없어요', // R-106 B1 第一遍已审（10-30）；10-30 最近的导出批新写，待审校
-  'settings.recentExport.mailFailed': '“알림 메일 발송 실패”로 표시된 내보내기는 알림 메일이 가지 않았어요. 본인이 내보낸 게 아니라면 위의 “다른 모든 기기에서 로그아웃”을 바로 눌러 주세요.', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 最近的导出批新写，待审校；10-30 改成列表后改写（本批自己的行）；按钮名照 settings.devices.signOutOthers
-  'settings.recentExport.mailMark': '알림 메일 발송 실패', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 最近的导出批新写，待审校
-  'settings.recentExport.removedDevice': '제거된 기기', // R-106 B1 第一遍已审（10-30）；10-30 最近的导出批新写，待审校；移除照 settings.devices.remove 用 제거
-  'settings.recentExport.unknownDevice': '알 수 없는 기기', // R-106 B1 第一遍已审（10-30）；10-30 最近的导出批新写，待审校
-  'settings.recentExport.showAll': '모두 보기 ({n}건)', // R-106 B1 第一遍已审（10-30），按审校意见改过；10-30 最近的导出批新写，待审校
+  'settings.recentExport.title': '최근 내보내기', // R-106 B1 第一遍已审（10-31）
+  'settings.recentExport.none': '최근 90일 동안 내보낸 적이 없어요', // R-106 B1 第一遍已审（10-31）
+  'settings.recentExport.mailFailed': '“알림 메일 발송 실패”로 표시된 내보내기는 알림 메일이 가지 않았어요. 본인이 내보낸 게 아니라면 위의 “다른 모든 기기에서 로그아웃”을 바로 눌러 주세요.', // R-106 B1 第一遍已审（10-31），按审校意见改过；10-30 改成列表后改写（本批自己的行）；按钮名照 settings.devices.signOutOthers
+  'settings.recentExport.mailMark': '알림 메일 발송 실패', // R-106 B1 第一遍已审（10-31），按审校意见改过
+  'settings.recentExport.removedDevice': '제거된 기기', // R-106 B1 第一遍已审（10-31）；移除照 settings.devices.remove 用 제거
+  'settings.recentExport.unknownDevice': '알 수 없는 기기', // R-106 B1 第一遍已审（10-31）
+  'settings.recentExport.showAll': '모두 보기 ({n}건)', // R-106 B1 第一遍已审（10-31），按审校意见改过
 } as const satisfies Record<keyof typeof zh, string>;

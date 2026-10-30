@@ -34,13 +34,13 @@ export const ko = {
   'consent.privacyLink': '개인정보 처리 안내', // 视觉稿、官网
   'consent.termsLink': '이용약관', // 视觉稿、官网
   'consent.busy': '잠시만요…', // R-106 B1 第一遍已审（10-29）
-  'consent.slow': '네트워크가 좀 느려서 아직 저장하고 있어요…', // R-106 B1 第一遍已审（10-29）
+  'consent.slow': '인터넷이 좀 느려서 아직 저장하고 있어요…', // R-106 B1 第一遍已审（10-31），按审校意见 K-05 改过：网络统一成 인터넷
   'consent.continue': '계속 쓰기', // R-106 B1 第一遍已审（10-29）
-  'consent.err.offline': '네트워크에 연결되지 않아 아직 저장하지 못했어요. 연결되면 다시 한번 눌러 주세요.', // R-106 B1 第一遍已审（10-29）
+  'consent.err.offline': '인터넷에 연결되어 있지 않아 아직 저장하지 못했어요. 연결되면 다시 한번 눌러 주세요.', // R-106 B1 第一遍已审（10-31），按审校意见 K-05 改过
   'consent.err.version': '개인정보 처리 안내가 방금 바뀌었어요. 다시 한번 눌러 주세요.', // R-106 B1 第一遍已审（10-29）
   'consent.err.tryLater': '서버가 바빠요. 잠시 뒤 다시 눌러 주세요.', // R-106 B1 第一遍已审（10-29）
   'consent.err.unknown': '저장하지 못했어요. 다시 한번 눌러 주세요.', // R-106 B1 第一遍已审（10-29）
-  'consent.err.unsure': '네트워크가 너무 느려서 저장됐는지 확인하지 못했어요. 다시 한번 눌러 주세요 (여러 번 눌러도 괜찮아요).', // R-106 B1 第一遍已审（10-29）
+  'consent.err.unsure': '인터넷이 너무 느려서 저장됐는지 확인하지 못했어요. 다시 한번 눌러 주세요(여러 번 눌러도 괜찮아요).', // R-106 B1 第一遍已审（10-31），按审校意见 K-05 改过
   'consent.err.noPolicy': '지금은 선택을 저장할 수 없어서 우선 AI는 쓰지 않을게요. 다음에 앱을 열 때 다시 물어볼게요.', // R-106 B1 第一遍已审（10-29）
   // 视觉稿 PH.privupdko（CONSENT-updated）；稿里没画“不同意”那行小字，declineNote 是自译
   'consent.update.title': '개인정보 처리 안내가 바뀌었어요', // 视觉稿
@@ -51,5 +51,5 @@ export const ko = {
   'consent.update.item.ppt': 'PPT 미리보기', // 视觉稿
   'consent.update.item.ppt.d': '파일이 마이크로소프트로 가요 (비밀 메모의 PPT 포함)', // 视觉稿
   'consent.update.check': '바뀐 내용에 동의해요', // 视觉稿
-  'consent.update.declineNote': '동의하지 않으면 AI 기능은 우선 꺼져요. 기기 규칙으로 정리하고 키워드로만 찾아요. 나중에 설정 › 음성과 AI에서 켤 수 있어요', // TODO(ko) 自译待审（R-106）
+  'consent.update.declineNote': '동의하지 않으면 AI 기능은 우선 꺼져요. 기기 규칙으로 정리하고 키워드로만 찾아요. 나중에 설정 › 음성과 AI에서 켤 수 있어요', // R-106 B1 第一遍已审（10-31）；自译（视觉稿没画这行）
 } as const satisfies Record<keyof typeof zh, string>;

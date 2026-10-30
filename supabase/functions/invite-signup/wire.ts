@@ -91,7 +91,8 @@ export function signupMail(loc: Locale, otp: string): { subject: string; text: s
   if (loc === 'ko-KR') {
     return {
       subject: `레모 가입 인증 코드 ${otp}`,
-      text: `레모 가입 인증 코드: ${otp}\n\n10분 안에 입력해 주세요. 본인이 요청하지 않았다면 이 메일을 무시하세요.`,
+      // R-106 B1 第一遍已审（10-31），按审校意见 K-04 改过：和登录验证码邮件 otp.html 的两句一字不差
+      text: `레모 가입 인증 코드: ${otp}\n\n10분 동안 유효해요. 직접 요청하지 않았다면 이 메일은 무시해 주세요.`,
     };
   }
   return {
