@@ -15,12 +15,14 @@
   min-height: 0;
 }
 
+/* 设置和注销账号两屏的顶栏：同一个 view-transition-name，切换时先淡出再淡入（base.css 的 page-head），标题不叠在一起 */
 .top {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   min-height: var(--hit);
   margin-bottom: 8px;
+  view-transition-name: page-head;
 }
 
 .back {
@@ -79,6 +81,7 @@
   min-width: 0;
   margin: 0;
   font-size: var(--fs-15);
+  font-weight: inherit;
   overflow-wrap: anywhere;
 }
 
@@ -277,6 +280,28 @@
 
 .rowBtn:disabled {
   color: var(--text-2);
+}
+
+/* 整行宽、字靠左的行按钮按下不缩放，改成变淡（负责人 10-31：点“注销账号”这四个字跳一下）：
+   scale(0.97) 绕整行中心缩，左边的字被拉向右约 5px；点下去正好起页面切换，旧画面截在缩着的那一刻、淡出时一直定格 */
+.row .rowBtn {
+  transition: opacity var(--dur-press) var(--ease-out);
+}
+
+.row .rowBtn[data-state="pressed"] {
+  transform: none;
+  opacity: var(--press-dim);
+}
+
+/* 减少动态效果：变淡也直接切换（和 Pressable 的减少动态效果分支一致）；上面的 .row .rowBtn 权重比 Pressable 的 .pressable 高，要在这里自己关 */
+@media (prefers-reduced-motion: reduce) {
+  .row .rowBtn {
+    transition: none;
+  }
+}
+
+:global(:root[data-rm="1"]) .row .rowBtn {
+  transition: none;
 }
 
 .line {

@@ -72,9 +72,71 @@ html.scroll-locked body {
    不用浏览器默认的 0.25s ease。--ease-standard 只留给页面切换。
    减少动态效果时 motion 的 transition() 直接切换、不起 View Transition，走不到这里 */
 ::view-transition-old(root),
-::view-transition-new(root) {
+::view-transition-new(root),
+::view-transition-old(page-head),
+::view-transition-new(page-head) {
   animation-duration: var(--dur-sheet);
   animation-timing-function: var(--ease-standard);
+}
+
+/* 页面顶栏（view-transition-name: page-head，目前是设置和注销账号两屏）：切换前后都有顶栏时先淡出、再淡入，不同时叠着。
+   同时叠着的话，居中的旧标题“设置”会压在新标题“注销账号”中间，看着像这四个字跳了一下（负责人 10-31 iPhone 主屏幕版实测）。
+   时长和整页一样是 --dur-sheet（A24 只准用令牌），先后靠关键帧的百分比：旧的前 40% 淡完，新的 40% 以后才淡入。
+   Chromium 不认 :not(:only-child)，所以默认就是先出后入；只有一边有顶栏（今天 ↔ 设置）时用下面单独的 :only-child 换回整段淡入淡出 */
+
+/* 顶栏的组不滑位置（浏览器默认 0.25s ease 从旧位置移到新位置）：设置页往下滚过再进注销页，新旧顶栏位置不同，会再“动一下”；只淡入淡出 */
+::view-transition-group(page-head) {
+  animation: none;
+}
+
+::view-transition-old(page-head) {
+  animation-name: lemo-head-out;
+}
+
+::view-transition-new(page-head) {
+  animation-name: lemo-head-in;
+}
+
+::view-transition-old(page-head):only-child {
+  animation-name: lemo-fade-out;
+}
+
+::view-transition-new(page-head):only-child {
+  animation-name: lemo-fade-in;
+}
+
+@keyframes lemo-head-out {
+  0% {
+    opacity: 1;
+  }
+
+  40%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes lemo-head-in {
+  0%,
+  40% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes lemo-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes lemo-fade-in {
+  from {
+    opacity: 0;
+  }
 }
 
 :focus-visible {
