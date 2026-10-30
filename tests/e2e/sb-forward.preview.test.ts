@@ -31,6 +31,20 @@ const softDelete = (key: string) =>
     body: JSON.stringify({ deleted_at: Date.now() }),
   });
 
+interface RealtimePayload {
+  status?: string;
+  extension?: string;
+  message?: unknown;
+  response?: unknown;
+}
+
+/** 服务器回的说明原文：去掉令牌和 key 再截短，免得进报告 */
+function serverText(v: unknown): string {
+  let t = typeof v === 'string' ? v : JSON.stringify(v ?? null);
+  for (const secret of [JWT, ANON]) if (secret) t = t.split(secret).join('[已隐去]');
+  return t.slice(0, 300);
+}
+
 function sb(path: string, init: RequestInit = {}, auth = true): Promise<Response> {
   const h = new Headers(init.headers);
   h.set('apikey', ANON);
@@ -118,9 +132,13 @@ describe.skipIf(!ready)('【待预览环境】/sb/* 转发', () => {
     const ws = new WebSocket(wsUrl);
     const topic = 'realtime:e2e-sb-forward';
     const key = `e2e.realtime.${Date.now()}`;
+    // 收到过的事件名（只记名字，不记 payload），超时或出错时附在错误里，看得出卡在哪一步
+    const seen: string[] = [];
+    const fail = (why: string) => new Error(`${why}（收到过：${seen.join(',') || '无'}）`);
     const got = new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('realtime_timeout')), 20_000);
-      ws.addEventListener('error', () => reject(new Error('ws_error')));
+      const timer = setTimeout(() => reject(fail('realtime_timeout')), 20_000);
+      ws.addEventListener('error', () => reject(fail('ws_error')));
+      ws.addEventListener('close', (ev) => reject(fail(`ws_closed_${ev.code}`)));
       ws.addEventListener('open', () => {
         ws.send(
           JSON.stringify({
@@ -134,17 +152,30 @@ describe.skipIf(!ready)('【待预览环境】/sb/* 转发', () => {
           }),
         );
       });
+      let inserted = false;
+      const insert = () => {
+        if (inserted) return;
+        inserted = true;
+        // 订阅仍按 user_id=eq.UID 过滤（读列不受 insert 列授权限制）；写入不带 user_id
+        void sb('/rest/v1/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settingsRow(key, {})),
+        }).then((w) => {
+          if (w.status !== 201) reject(fail(`realtime_insert_${w.status}`)); // 写不进去就直说，不干等到超时
+        }, reject);
+      };
       ws.addEventListener('message', (ev) => {
-        const msg = JSON.parse(String(ev.data)) as { event: string; payload?: { status?: string } };
-        if (msg.event === 'phx_reply' && msg.payload?.status === 'ok') {
-          // 订阅仍按 user_id=eq.UID 过滤（读列不受 insert 列授权限制）；写入不带 user_id
-          void sb('/rest/v1/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(settingsRow(key, {})),
-          }).then((w) => {
-            if (w.status !== 201) reject(new Error(`realtime_insert_${w.status}`)); // 写不进去就直说，不干等到超时
-          }, reject);
+        const msg = JSON.parse(String(ev.data)) as { event: string; payload?: RealtimePayload };
+        seen.push(msg.event);
+        const p = msg.payload;
+        if (msg.event === 'phx_reply' && p?.status !== undefined && p.status !== 'ok') {
+          reject(fail(`realtime_join_${p.status}：${serverText(p.response)}`));
+        }
+        // phx_reply ok 只是加入了频道；postgres_changes 要等服务器另发 system ok（Subscribed to PostgreSQL）才真正订阅好，之前写的会漏掉
+        if (msg.event === 'system') {
+          if (p?.status !== 'ok') reject(fail(`realtime_system_${p?.status ?? '无状态'}：${serverText(p?.message)}`));
+          else if (p.extension === 'postgres_changes') insert();
         }
         if (msg.event === 'postgres_changes') {
           clearTimeout(timer);
