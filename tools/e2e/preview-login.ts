@@ -21,8 +21,9 @@
 //   • 种子加管理员：node tools/e2e/preview-login.ts --admin <e2e-admin@lemomemo.test>（同样只认预览 ref；不写 GITHUB_OUTPUT）。
 //       写库靠后端迁移 grant insert on private.admins to service_role（安全说明-v4 S-6、架构设计-v4 决定第 1 条）；写失败报 admin_write_failed。
 //   • 只查护栏：环境变量 PREVIEW_LOGIN_GUARD_ONLY=1（负责人本机经 tools/keys/login-token-tests.ps1 -Only P6 实跑反例，B1 验收 P6）：
-//       只认普通登录，只跑 checkGuards，绝不调 generateLink、不要 GITHUB_OUTPUT；被拦时报错后再打印“未签发（只查护栏模式）”，
-//       护栏全过也不签发、退出码 3（反例本该被拦）。
+//       认普通登录和 --admin（不认 --as-admin），只跑 checkGuards（--admin 时先查名单不为空、按 'grant' 查），绝不调 generateLink、
+//       绝不写 admins、不要 GITHUB_OUTPUT；被拦时报错后再打印“未签发（只查护栏模式）”，护栏全过也不签发、不写库、退出码 3（反例本该被拦）。
+//       --admin 这一种是 TC-B1-75 ④ 的负责人反例（P6-⑤、P6-⑥）用的。
 
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -255,7 +256,14 @@ export async function main(
     if (!key) throw new PrepError('bad_args', '没有 E2E_PREVIEW_SERVICE_KEY');
     const url = `https://${PREVIEW_REF}.supabase.co`;
     if (guardOnly) {
-      if (flag) throw new PrepError('bad_args', '只查护栏模式只用于普通登录，不和 --admin、--as-admin 一起用');
+      if (flag === '--as-admin') throw new PrepError('bad_args', '只查护栏模式只用于普通登录和 --admin，不和 --as-admin 一起用');
+      if (flag === '--admin') {
+        // --admin 的护栏和 grantAdmin 同一套（名单为空先拒、checkGuards 'grant'），只是绝不调 insertAdmin
+        requireOwnerList(env.PREVIEW_OWNER_EMAILS);
+        await checkGuards(email, await io.makeClient(url, key), env.PREVIEW_OWNER_EMAILS, 'grant');
+        io.out('护栏全过（只查护栏模式，未写 admins）\n');
+        return 3;
+      }
       await checkGuards(email, await io.makeClient(url, key), env.PREVIEW_OWNER_EMAILS, 'login');
       io.out('护栏全过（只查护栏模式，未签发）\n');
       return 3;

@@ -52,7 +52,12 @@
                                  P6-②  负责人验收邮箱本身 → 真实邮箱总是先被 ① 的「只认 .test」拦下（not_test_email），到不了 owner_email；
                                  P6-②b 另把 e2e-owner-probe@lemomemo.test 加进这次的 PREVIEW_OWNER_EMAILS → owner_email（证这一道）；
                                  P6-③  管理员邮箱 → 跳过：预览 private.admins 现在 0 行，单测 preview-login.test.ts 第 67 行覆盖（不为此往预览写 admins）；
-                                 P6-④  e2e-nobody@lemomemo.test → no_such_user；跑前跑后各用 service key 查一次 auth.users 总数，必须不变（没有建号）。
+                                 P6-④  e2e-nobody@lemomemo.test → no_such_user；跑前跑后各用 service key 查一次 auth.users 总数，必须不变（没有建号）；
+                                 P6-⑤  --admin 负责人验收邮箱 → not_test_email（TC-B1-75 ④ 的反例；--admin 同样走只查护栏模式，绝不写 admins）；
+                                 P6-⑥  --admin e2e-owner-probe@lemomemo.test（已在这次的 PREVIEW_OWNER_EMAILS 里）→ owner_email；
+                                       P6 开始时和 P6-⑥ 之后各用 service key 只读查一次 private.admins 条数（Content-Range，不显示行），必须不变。
+                                       不在预览里造“负责人在 admins 里”：护栏先查 .test、再查负责人名单，然后才读 admins，那种状态不影响结果，
+                                       单测 preview-login-admin.test.ts 和本机真后端用例 tests/build/preview-login-admin.real.test.ts 覆盖。
                                不登录测试账号：只跑 P6 时不发验证码、不调 verify。
     P8（可选，要 -P8Function） 实测清单 P8：调一个只调 requireActiveUser 的测试函数，中间由负责人在 SQL Editor 依次做「停用 / 注销冷静期 /
                                查会话变慢 / 吊销会话」并恢复，依次应为 200、403 account_disabled、403 account_pending_deletion（带 purge_after）、
@@ -759,6 +764,16 @@ function P6-UserTotal([string]$key) {
     if ($r.Status -ne 200 -or $t -notmatch '\A\d+\z') { return [pscustomobject]@{ Total = $null; Desc = (D $r) } }
     return [pscustomobject]@{ Total = [long]$t; Desc = (D $r) }
 }
+# private.admins 的条数（PostgREST 的 Content-Range，Prefer: count=exact；只读、limit=1、不显示任何行）；查不了返回 $null
+function P6-AdminCount([string]$key) {
+    $h = @{ apikey = $key; 'Accept-Profile' = 'private'; Prefer = 'count=exact' }
+    if ($key.StartsWith('eyJ')) { $h.Authorization = "Bearer $key" }
+    $r = Invoke-Http GET "$SupabaseBase/rest/v1/admins?select=user_id&limit=1" $h $null ''
+    $cr = Hdr $r 'content-range'
+    $m = [regex]::Match($cr, '/(\d+)\z')
+    if (($r.Status -ne 200 -and $r.Status -ne 206) -or -not $m.Success) { return [pscustomobject]@{ Total = $null; Desc = (D $r) } }
+    return [pscustomobject]@{ Total = [long]$m.Groups[1].Value; Desc = (D $r) }
+}
 function Run-P6 {
     Step 'P6：tools/e2e/preview-login.ts 的反例（只查护栏模式：不签发验证码、不建号、不写库）'
     $key = $null; $owner = $null; $env6 = $null
@@ -779,6 +794,7 @@ function Run-P6 {
         $u0 = P6-UserTotal $key
         if ($null -eq $u0.Total) { Rec 'P6' '不符合' 'preview-login 反例' "用这个 service key 查不了预览的 auth.users 总数（$($u0.Desc)）：key 不对，或者不是预览项目的；没有跑"; return }
         Ok "service key 能用（预览 auth.users 现有 $($u0.Total) 个账号）"
+        $a0 = P6-AdminCount $key   # P6 开始时和 P6-⑥ 之后各查一次 admins 条数，必须不变（查不了就在 P6-⑥ 记不符合）
         $probe = 'e2e-owner-probe@lemomemo.test'
         $ownerIsTest = $owner -match '@lemomemo\.test\z'
         $env6 = @{
@@ -792,11 +808,19 @@ function Run-P6 {
                Code = $(if ($ownerIsTest) { 'owner_email' } else { 'not_test_email' })
                Note = $(if ($ownerIsTest) { '' } else { '真实邮箱总是先被 ① 的“只认 .test”拦下，到不了 owner_email 那一道，所以另加 P6-②b 证 owner_email' }) },
             @{ Id = 'P6-②b'; What = ".test 邮箱放进 PREVIEW_OWNER_EMAILS（$probe）→ owner_email"; Email = $probe; Code = 'owner_email'; Note = '' },
-            @{ Id = 'P6-④'; What = '不存在的账号（e2e-nobody@lemomemo.test）→ no_such_user'; Email = 'e2e-nobody@lemomemo.test'; Code = 'no_such_user'; Note = '' }
+            @{ Id = 'P6-④'; What = '不存在的账号（e2e-nobody@lemomemo.test）→ no_such_user'; Email = 'e2e-nobody@lemomemo.test'; Code = 'no_such_user'; Note = '' },
+            # TC-B1-75 ④ 的反例：--admin 也走只查护栏模式（preview-login.ts 绝不调 insertAdmin）。不在预览里造“负责人在 admins 里”：
+            # 护栏先查 .test、再查负责人名单，然后才读 admins，admins 里有没有负责人不影响结果（单测 preview-login-admin.test.ts 覆盖那种状态）
+            @{ Id = 'P6-⑤'; Admin = $true; What = '--admin 负责人验收邮箱 → not_test_email'; Email = $owner; Code = 'not_test_email'
+               Note = $(if ($ownerIsTest) { '你输入的负责人邮箱本身以 .test 结尾，这一条必然报 owner_email、记“不符合”：这是预期的，不是脚本或护栏出了问题；owner_email 那一道看 P6-⑥' } else { '' }) },
+            @{ Id = 'P6-⑥'; Admin = $true; What = "--admin 放进 PREVIEW_OWNER_EMAILS 的 .test 邮箱（$probe）→ owner_email"; Email = $probe; Code = 'owner_email'; Note = '' }
         )
         foreach ($c in $cases) {
             if ($c.Id -eq 'P6-④') { Rec 'P6-③' '跳过' 'private.admins 里的邮箱 → admin_email' '跳过：预览没有管理员（private.admins 现在 0 行），单测 preview-login.test.ts 第 67 行覆盖；按主持人要求不为此往预览写 admins' }
-            $r = Run-Node 'preview-login' @('tools/e2e/preview-login.ts', $c.Email) $env6 120
+            $argv = @('tools/e2e/preview-login.ts')
+            if ($c.ContainsKey('Admin') -and $c.Admin) { $argv += '--admin' }
+            $argv += $c.Email
+            $r = Run-Node 'preview-login' $argv $env6 120
             Show-ChildOut $r.Out
             $hasCode = $r.Out.Contains("错误（$($c.Code)）")
             $noSign = $r.Out.Contains('未签发（只查护栏模式）') -and -not $r.Out.Contains('护栏全过') -and -not $r.Out.Contains('已为')
@@ -812,6 +836,15 @@ function Run-P6 {
                 if (-not $same) {
                     $ok = $false
                     if ($null -ne $u1.Total) { $parts += '总数变了：可能建了号，请马上到 Supabase › Authentication › Users 查 e2e-nobody@lemomemo.test，有就删掉，并告诉后端' }
+                }
+            }
+            if ($c.Id -eq 'P6-⑥') {
+                $a1 = P6-AdminCount $key
+                $same = $null -ne $a0.Total -and $null -ne $a1.Total -and $a1.Total -eq $a0.Total
+                $parts += "private.admins 条数 跑前 $(if ($null -ne $a0.Total) { $a0.Total } else { '查不了（' + $a0.Desc + '）' })、跑后 $(if ($null -ne $a1.Total) { $a1.Total } else { '查不了（' + $a1.Desc + '）' })"
+                if (-not $same) {
+                    $ok = $false
+                    if ($null -ne $a0.Total -and $null -ne $a1.Total) { $parts += '条数变了：可能写了 admins，请马上在 SQL Editor 查 select user_id from private.admins，告诉后端' }
                 }
             }
             if ($c.Note) { $parts += $c.Note }

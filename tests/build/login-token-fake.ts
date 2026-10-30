@@ -7,6 +7,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import { p6Route } from './login-token-fake-p6.ts';
 
 export const root = join(import.meta.dirname, '..', '..');
 export const SCRIPT = join(root, 'tools', 'keys', 'login-token-tests.ps1');
@@ -84,6 +85,7 @@ export type Opts = {
   all?: boolean;              // 不加默认的 -Only（跑全部项目，含 P5、P9）
   verify429?: boolean;        // /auth/v1/verify 一律回 429（限流）
   userTotals?: number[];      // P6：GET /auth/v1/admin/users 依次报的 x-total-count（默认一直是 7；最后一个用到底）
+  adminTotals?: (number | null)[];   // P6：GET /rest/v1/admins（Accept-Profile: private）依次报的 Content-Range 总数（默认一直是 0；null = 回 500）
   plain: string[];            // Read-Host（明文）依次的回答
   secure: string[];           // Read-Host -AsSecureString 依次的回答
   args?: string;              // 额外参数
@@ -116,7 +118,7 @@ export async function runScript(dir: string, opts: Opts) {
     return e !== undefined && Date.now() / 1000 > e + (opts.p5Grace ?? 2);
   };
   const logouts: { auth: string; status: number }[] = [];
-  let userListCalls = 0;
+  const p6Calls = { users: 0, admins: 0 };
   const P8_SEQ: [number, unknown][] = [
     [200, { ok: true }],
     [403, { error: 'account_disabled' }],
@@ -148,13 +150,9 @@ export async function runScript(dir: string, opts: Opts) {
       if (req.method === 'GET' && p === '/app/') return send(res, 200, '<html><script type="module" crossorigin src="/app/assets/index-abc.js"></script></html>', { 'content-type': 'text/html' });
       if (req.method === 'GET' && p === '/app/assets/index-abc.js') return send(res, 200, opts.noKeyOnSite ? 'const x=1;' : `const k="${PK}";`, { 'content-type': 'text/javascript' });
       // Auth
-      // P6：GoTrue 管理端列账号（service key 走 apikey 头），只报总数
-      if (req.method === 'GET' && p === '/auth/v1/admin/users?page=1&per_page=1') {
-        if (req.headers.apikey !== SERVICE) return send(res, 401, { code: 401, error_code: 'bad_jwt' });
-        const totals = opts.userTotals ?? [7];
-        const t = totals[Math.min(userListCalls++, totals.length - 1)] ?? 7;
-        return send(res, 200, { users: [{ id: UID }] }, { 'x-total-count': String(t) });
-      }
+      // P6：GoTrue 管理端数账号、PostgREST 数 private.admins（只认 service key；login-token-fake-p6.ts）
+      const p6 = p6Route(req, p, opts, SERVICE, UID, p6Calls);
+      if (p6) return send(res, ...p6);
       if (p.startsWith('/auth/v1/')) {
         if (req.headers.apikey !== PK) return send(res, 401, { message: 'no apikey' });
         if (req.method === 'POST' && p === '/auth/v1/otp') return opts.captcha ? send(res, 400, { code: 400, error_code: 'captcha_failed' }) : send(res, 200, {});

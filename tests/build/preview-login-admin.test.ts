@@ -181,6 +181,42 @@ describe('命令行 --admin', () => {
     expect(t.f.calls.insert).toEqual([]);
   });
 
+  // 只查护栏模式下的 --admin（PREVIEW_LOGIN_GUARD_ONLY=1；login-token-tests.ps1 -Only P6 的 P6-⑤、P6-⑥，TC-B1-75 ④）：同一套护栏，绝不写 admins
+  const guardEnv = (over: Record<string, string | undefined> = {}) => env({ PREVIEW_LOGIN_GUARD_ONLY: '1', GITHUB_OUTPUT: undefined, ...over });
+  it('只查护栏 --admin：负责人真实邮箱 → not_test_email；负责人 .test 邮箱（已在 admins 里）→ owner_email；不存在 → no_such_user；都退出 1、打印“未签发”、不写库', async () => {
+    const cases: [string, string, FakeOpts][] = [
+      [OWNER_REAL, 'not_test_email', {}],
+      [OWNER_TEST, 'owner_email', { admins: { [ADMIN_ID]: OWNER_TEST } }],
+      [OWNER_TEST, 'owner_email', {}],
+      ['e2e-404@lemomemo.test', 'no_such_user', {}],
+    ];
+    for (const [email, code, opts] of cases) {
+      const t = io(opts);
+      expect(await main(['--admin', email], guardEnv(), t.io), email).toBe(1);
+      const out = t.out.join('');
+      expect(out, email).toContain(`错误（${code}）`);
+      expect(out, email).toContain('未签发（只查护栏模式）');
+      expect(out).not.toContain(FAKE_KEY);
+      expect(t.f.calls.insert).toEqual([]);
+      expect(t.f.calls.generate).toEqual([]);
+      expect(t.appended).toEqual([]);
+    }
+  });
+
+  it('只查护栏 --admin：护栏全过（还不是管理员、已是管理员）都退出 3、不写 admins；名单为空照样先拒、不建客户端', async () => {
+    for (const email of ['e2e-1@lemomemo.test', 'e2e-admin@lemomemo.test']) {
+      const t = io();
+      expect(await main(['--admin', email], guardEnv(), t.io), email).toBe(3);
+      expect(t.out.join('')).toContain('护栏全过（只查护栏模式，未写 admins）');
+      expect(t.f.calls.insert).toEqual([]);
+      expect(t.f.calls.generate).toEqual([]);
+    }
+    const u = io();
+    expect(await main(['--admin', 'e2e-1@lemomemo.test'], guardEnv({ PREVIEW_OWNER_EMAILS: '' }), u.io)).toBe(1);
+    expect(u.out.join('')).toContain('no_owner_list');
+    expect(u.made()).toBe(0);
+  });
+
   it('PREVIEW_OWNER_EMAILS 为空或没设：退出码 1、不建客户端', async () => {
     for (const owners of ['', undefined]) {
       const t = io();

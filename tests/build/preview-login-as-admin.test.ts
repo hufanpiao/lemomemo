@@ -176,18 +176,17 @@ describe('命令行 --as-admin', () => {
     }
   });
 
-  it('只查护栏：护栏全过也不签发，退出码 3；不和 --admin、--as-admin 一起用（不建客户端）；不设这个变量时照旧要 GITHUB_OUTPUT', async () => {
+  it('只查护栏：护栏全过也不签发，退出码 3；不和 --as-admin 一起用（不建客户端）；不设这个变量时照旧要 GITHUB_OUTPUT', async () => {
     const t = io();
     expect(await main(['e2e-1@lemomemo.test'], guardEnv, t.io)).toBe(3);
     expect(t.out.join('')).toContain('护栏全过（只查护栏模式，未签发）');
     expect(t.f.calls.generate).toEqual([]);
-    for (const flag of ['--admin', '--as-admin']) {
-      const u = io();
-      expect(await main([flag, ADMIN], guardEnv, u.io)).toBe(1);
-      expect(u.out.join('')).toContain('错误（bad_args）');
-      expect(u.made()).toBe(0);
-      expect(u.f.calls.insert).toEqual([]);
-    }
+    // --admin 在只查护栏模式下另有用例（preview-login-admin.test.ts），这里只看 --as-admin 仍被拒
+    const u = io();
+    expect(await main(['--as-admin', ADMIN], guardEnv, u.io)).toBe(1);
+    expect(u.out.join('')).toContain('错误（bad_args）');
+    expect(u.made()).toBe(0);
+    expect(u.f.calls.insert).toEqual([]);
     const v = io();
     expect(await main(['e2e-1@lemomemo.test'], env({ GITHUB_OUTPUT: undefined, PREVIEW_LOGIN_GUARD_ONLY: '0' }), v.io)).toBe(1);
     expect(v.out.join('')).toContain('错误（no_output）');
