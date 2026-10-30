@@ -93,8 +93,23 @@ export const EXPORT_NONE_BUCKETS = ['vault-images', 'vault-files'];
 /** public 里只准有这九个 RPC（3.3 D；0.32 加 files_authorize，只给 /files 函数用），一律 security invoker、只授给 authenticated */
 export const PUBLIC_RPCS = ['apply_patch', 'report_tz', 'claim_endpoint', 'remove_device', 'my_ai_usage', 'record_consent', 'my_sessions', 'purge_deleted', 'files_authorize'];
 
-/** 必须有的约束（复合外键、unique (id, user_id)；0.29 续第 81 条、低 3）：表 → pg_get_constraintdef 要匹配的正则 */
-export const REQUIRED_CONSTRAINTS: [string, RegExp][] = [
+/** 把一段 SQL 原文变成整段精确匹配的正则：特殊字符转义，空白处允许任意空白（pg_get_constraintdef 的换行、缩进因版本而异） */
+const exactSql = (sql: string) => new RegExp(`^${sql.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*')}$`);
+const NOTICE_VER_RE = "'^[0-9]{4}-[0-9]{2}-[0-9]{2}(-[1-9][0-9]?)?$'::text";
+const noticeVerKey = (k: string) => `(("left"((notice ->> '${k}'::text), 10) || lpad(substr((notice ->> '${k}'::text), 12), 2, '0'::text)) COLLATE "C")`;
+/** R-273（迁移 20261030130000_core_notice_ver_order.sql）：app_config_notice_ver_order 的 pg_get_constraintdef 原文（离线 PGlite 实测）。
+ *  整段精确匹配：比较符换掉、只比日期不比后缀、去掉格式守卫、改成字符串比（不补两位）等“改宽”都对不上，D1 报“缺约束”。
+ *  改约束时在比 20261030130000 更晚的迁移里整段照写，并同步改这里；反例见 supabase/tests/d1-fixtures/29_notice_ver_order_loose.psql、
+ *  tests/build/d1-notice-ver-order.test.ts */
+export const NOTICE_VER_ORDER_DEF = `CHECK ( CASE
+  WHEN (((notice ->> 'min_consent_ver'::text) ~ ${NOTICE_VER_RE}) AND ((notice ->> 'policy_ver'::text) ~ ${NOTICE_VER_RE}))
+  THEN (${noticeVerKey('min_consent_ver')} <= ${noticeVerKey('policy_ver')})
+  ELSE NULL::boolean END)`;
+
+/** 必须有的约束（复合外键、unique (id, user_id)；0.29 续第 81 条、低 3）：表 → pg_get_constraintdef 要匹配的正则；
+ *  第三项可选，缺约束时报这个可读名字（不写就报正则原文） */
+export const REQUIRED_CONSTRAINTS: [string, RegExp, string?][] = [
+  ['public.app_config', exactSql(NOTICE_VER_ORDER_DEF), 'app_config_notice_ver_order（R-273：min_consent_ver 不能晚于 policy_ver）'],
   ['public.events', /^UNIQUE \(id, user_id\)$/],
   ['public.todos', /^UNIQUE \(id, user_id\)$/],
   ['public.categories', /^UNIQUE \(id, user_id\)$/],

@@ -287,9 +287,9 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   for (const f of featKeys) if (!flags.has(f)) bad(`app_config.features 的默认值里有清单之外的键 ${f}`);
 
   // ---------- 11. 必须有的约束 ----------
-  for (const [t, re] of REQUIRED_CONSTRAINTS) {
+  for (const [t, re, label] of REQUIRED_CONSTRAINTS) {
     const [s, n] = t.split('.');
-    if (!cons.some((r) => r.s === s && r.t === n && re.test(r.d))) bad(`${t} 缺约束 ${re.source}`);
+    if (!cons.some((r) => r.s === s && r.t === n && re.test(r.d))) bad(`${t} 缺约束 ${label ?? re.source}`);   // label：正则太长时报可读名字
   }
 
   // ---------- 11b. 注销：onAccountDelete、userLookup 和外键、约束一致（架构 0.31 第 15、17 条；数据字典第 12 节） ----------

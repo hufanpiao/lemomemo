@@ -6,8 +6,8 @@ import { fmtDate } from '../../../../shared/i18n/fmt.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
-import type { DeviceView, useDevices } from '../hooks/useDevices.ts';
-import { useSettingsT } from '../hooks/useSettingsT.ts';
+import type { DeviceNotice, DeviceView, useDevices } from '../hooks/useDevices.ts';
+import { useSettingsT, type SettingsMsgKey } from '../hooks/useSettingsT.ts';
 import { ConfirmDialog } from './ConfirmDialog.tsx';
 import styles from './SettingsPage.module.css';
 
@@ -152,21 +152,36 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
   );
 }
 
+type DeviceErr = Extract<DeviceNotice, { kind: 'error' }>['error'];
+
+/**
+ * 设备操作失败时提示哪一句。穷尽 switch、不写 default（R272-sugg ④，架构 0.29 续第 119 条②）：
+ * try_later 单独一支“服务器忙，稍后再试”（临时故障，只提示、不清本机）；加了新码不补分支就编译不过
+ */
+export function deviceErrKey(e: DeviceErr): Extract<SettingsMsgKey, `settings.err.${string}`> {
+  switch (e) {
+    case 'offline':
+      return 'settings.err.offline';
+    case 'try_later':
+      return 'settings.err.tryLater';
+    case 'account_disabled':
+      return 'settings.err.accountDisabled';
+    case 'revoked':
+    case 'signed_out':
+    case 'is_current_device':
+    case 'device_not_found':
+    case 'unknown':
+      return 'settings.err.unknown';
+  }
+}
+
 function DeviceNoticeView({ notice }: { notice: Devices['notice'] }) {
   const t = useSettingsT();
   if (!notice) return null;
   if (notice.kind === 'error') {
-    const key =
-      notice.error === 'offline'
-        ? 'settings.err.offline'
-        : notice.error === 'try_later'
-          ? 'settings.err.tryLater'
-          : notice.error === 'account_disabled'
-            ? 'settings.err.accountDisabled'
-            : 'settings.err.unknown';
     return (
       <p className={styles.error} role="alert">
-        {t(key, {})}
+        {t(deviceErrKey(notice.error), {})}
       </p>
     );
   }

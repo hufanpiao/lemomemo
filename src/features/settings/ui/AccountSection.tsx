@@ -11,11 +11,15 @@ import styles from './SettingsPage.module.css';
 
 type T = ReturnType<typeof useSettingsT>;
 
-/** 导出、注销失败时的那一句（会话没了、停用、冷静期另走离开本机，不显示） */
+/**
+ * 导出、注销失败时的那一句（会话没了、停用、冷静期另走离开本机，不显示）。
+ * 穷尽 switch、不写 default（R272-sugg ④，架构 0.29 续第 119 条②）：try_later 单独一支“服务器忙，稍后再试”；加了新码不补分支就编译不过
+ */
 export function accountErrText(e: AccountErr, t: T): string {
   switch (e) {
     case 'rate_limited':
       return t('settings.account.rateLimited', {});
+    // 临时故障：只提示，不清本机、不回登录页（TC-B1-90）
     case 'try_later':
       return t('settings.err.tryLater', {});
     case 'offline':
@@ -26,7 +30,10 @@ export function accountErrText(e: AccountErr, t: T): string {
       return t('settings.delete.admin', {});
     case 'account_disabled':
       return t('settings.err.accountDisabled', {});
-    default:
+    case 'revoked':
+    case 'signed_out':
+    case 'pending_deletion':
+    case 'unknown':
       return t('settings.err.unknown', {});
   }
 }
