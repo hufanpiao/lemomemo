@@ -51,6 +51,7 @@ dist/vite-manifest/
 coverage/
 playwright-report/
 test-results/
+test-results-real/
 .vite/
 
 # Tauri（exe）的 Rust 编译产物

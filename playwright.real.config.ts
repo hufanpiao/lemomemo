@@ -64,6 +64,8 @@ const BINDINGS = Object.entries({ ...e2eBindings(FAKE), SUPABASE_UPSTREAM: UPSTR
 
 export default defineConfig({
   testDir: 'tests/e2e',
+  // 输出目录和无后端组（默认 test-results/）分开：Playwright 开跑先清空输出目录，两组同时跑会删掉对方的 trace（E2E-parallel，10-31 实测 12 条 ENOENT）
+  outputDir: 'test-results-real',
   testMatch: '**/*.real.spec.ts',
   // 同一个专用库、每条用例自己建账号，互不干扰；但 wrangler 只有一个，并发别太高
   fullyParallel: true,
