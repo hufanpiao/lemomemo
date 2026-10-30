@@ -30,6 +30,25 @@ body {
   font-size: var(--fs-15);
 }
 
+/* 顶部状态栏底色条（负责人 10-30 在 iPhone 主屏幕版发现）：主屏幕版状态栏透明，往上滚的内容会从时间、信号图标底下穿过去。
+   全局盖一条页面背景、高 var(--safe-top)；有版本横幅时 --safe-top 为 0，这条也变 0 高，由横幅占位。
+   背景默认 --bg（深色皮肤跟着变）；背景不是纯色的页面（登录页的 --login-bg 渐变）在根节点设 --safe-top-bg，
+   这里按整屏大小画（background-size 100vw 100vh，从屏幕左上角起），露出来的正好是页面那张固定渐变最上面一截，不切光晕。
+   层级 1：压住页面内容（页面都不写 z-index）；弹层（kit Dialog 的 .scrim、.content 是 70）、版本横幅（50）、整屏提示（100）、
+   启动画面都在它上面——注意弹层必须写正的 z-index：position: fixed 而 z-index 为 auto 的元素画在第 0 层，会被这条盖住。不挡点击 */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  height: var(--safe-top);
+  background: var(--safe-top-bg, var(--bg));
+  background-size: 100vw 100vh;
+  pointer-events: none;
+}
+
 :lang(ko) body,
 body:lang(ko) {
   font-family: var(--f-ko);

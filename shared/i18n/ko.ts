@@ -4,6 +4,7 @@ import type { SharedMsgKey } from './i18n.ts';
 
 export const ko = {
   'app.name': '레모',
+  'app.settings': '설정', // 同 settings.title（R-106 B1 第一遍已审）；B0 占位页上的设置入口（PLACEHOLDER-settings-link，B2 换真页面时去掉）
   'common.ok': '확인',
   'common.cancel': '취소',
   'common.retry': '다시 시도',

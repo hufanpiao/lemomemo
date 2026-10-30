@@ -3,8 +3,27 @@
   max-width: 420px;
   min-height: 100dvh;
   margin: 0 auto;
-  padding: max(env(safe-area-inset-top), 32px) 20px max(env(safe-area-inset-bottom), 24px);
+  padding: max(var(--safe-top), 32px) 20px max(env(safe-area-inset-bottom), 24px);
+}
+
+/* 背景渐变 --login-bg 固定在屏幕上（不随内容滚）：页面能滚（安装引导四步、邀请码、错误卡片），顶部安全区底色条（base.css body::before）
+   要画同一张渐变才接得上——底色条按整屏大小画，这里也按整屏高、从屏幕顶上起画；手机上宽度就是整屏，电脑上仍是中间 420px 一栏。
+   前提：html 不能设背景；登录页外层不能加 transform、filter、contain，否则 z-index -1 这层看不见或不再固定在屏幕上 */
+.page::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  z-index: -1;
+  width: min(100%, 420px);
   background: var(--login-bg, var(--bg));
+  transform: translateX(-50%);
+}
+
+/* 告诉底色条用登录页这张渐变（底色条在 body 上，只能从根节点继承） */
+:global(:root):has(.page) {
+  --safe-top-bg: var(--login-bg, var(--bg));
 }
 
 .title {

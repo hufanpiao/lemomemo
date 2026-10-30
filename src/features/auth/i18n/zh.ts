@@ -32,7 +32,9 @@ export const zh = {
   'auth.code.checkSpam': '没收到？记得看看垃圾邮件',
   'auth.invite.notRegistered': '这个邮箱还没注册，需要邀请码',
   'auth.invite.label': '邀请码',
-  'auth.invite.format': '邀请码是 12 位字母和数字',
+  'auth.invite.format': '邀请码是 12 位字母和数字，不含 0、1、I、O',
+  // 10-30 预览注册事故：输进字母表里没有的 0、1、I、O 时，输入框下当场提示（不自动替换）
+  'auth.invite.confusable': '邀请码里没有 0、1、I、O，请再看一眼',
   'auth.invite.noCode': '没有邀请码？请向柠檬记的负责人要一个',
   'auth.invite.next': '下一步',
   'auth.invite.sent': '邀请码有效的话，6 位验证码会发到这个邮箱',

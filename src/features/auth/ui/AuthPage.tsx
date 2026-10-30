@@ -244,8 +244,14 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
                 spellCheck={false}
                 enterKeyHint="go"
                 value={invite}
+                aria-describedby="auth-invite-tip"
+                aria-invalid={flow.inviteConfusable || undefined}
                 onChange={(e) => flow.setInvite(e.target.value)}
               />
+              {/* 读屏：提示区一直挂着、平时是空的，只换里面的文字（新插入的 role=status 有的读屏不念） */}
+              <div id="auth-invite-tip" role="status" data-testid="auth-invite-confusable">
+                {flow.inviteConfusable && <p className={styles.hint}>{t('auth.invite.confusable', {})}</p>}
+              </div>
               <p className={styles.sub}>{t('auth.invite.noCode', {})}</p>
             </>
           )}
@@ -264,7 +270,8 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
 
       {askCode && <CodeStep flow={flow} />}
 
-      {hint && !gated && (
+      {/* 有易混提示时不再叠“邀请码是 12 位…”那句：只显示一句 */}
+      {hint && !gated && !(hint === 'invite_format' && flow.inviteConfusable) && (
         <p className={styles.hint} role="alert" data-testid="auth-hint">
           {t(hint === 'email_format' ? 'auth.email.invalid' : hint === 'invite_format' ? 'auth.invite.format' : 'auth.captcha.wait', {})}
         </p>

@@ -1,12 +1,16 @@
+/* 层级 70：在顶部安全区底色条（base.css body::before，1）和版本横幅（50）之上，整屏提示（100）之下；
+   遮罩和内容同一层，内容在 DOM 里排在后面，所以画在遮罩上面 */
 .scrim {
   position: fixed;
   inset: 0;
+  z-index: 70;
   background: var(--scrim);
   transition: opacity var(--dur-ui) var(--ease-out);
 }
 
 .content {
   position: fixed;
+  z-index: 70;
   left: 16px;
   right: 16px;
   bottom: 16px;

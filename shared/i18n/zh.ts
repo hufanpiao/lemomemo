@@ -3,6 +3,8 @@
 // as const：值保留字面量类型，t() 才能按占位符推导参数
 export const zh = {
   'app.name': '柠檬记',
+  // B0 占位页上的设置入口（PLACEHOLDER-settings-link，B2 换真页面时去掉）；和 settings.title 同词，kit 用不了功能的词典所以放这里
+  'app.settings': '设置',
   'common.ok': '好',
   'common.cancel': '取消',
   'common.retry': '重试',

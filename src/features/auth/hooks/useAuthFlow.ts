@@ -9,6 +9,7 @@ import { getSupabase } from '../../../platform/supabase/client.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import {
   createAuthApi,
+  inviteHasConfusable,
   isEmail,
   isInviteFormat,
   normalizeInvite,
@@ -244,5 +245,7 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}, probe?: (
   }, []);
 
   const state: AuthFlowState = { step, email, invite, code, busy, error, hint, cooldown };
-  return { state, enterApp, setEmail, setInvite, setCode: setCodeInput, sendCode, sendInvite, resend, backToEmail, dismissError };
+  // inviteConfusable：邀请码里输进了 0、1、I、O（字母表里没有），界面在输入框下当场提示（10-30 预览注册事故）
+  const inviteConfusable = inviteHasConfusable(invite);
+  return { state, inviteConfusable, enterApp, setEmail, setInvite, setCode: setCodeInput, sendCode, sendInvite, resend, backToEmail, dismissError };
 }

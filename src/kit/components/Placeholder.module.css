@@ -13,3 +13,14 @@
   font-family: var(--f-mono);
   font-size: var(--fs-13);
 }
+
+/* 设置入口（PLACEHOLDER-settings-link）：字色字号同设置页的返回链接（SettingsPage.module.css .back），触控区至少 44px */
+.settings {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--hit);
+  margin-top: 16px;
+  color: var(--text);
+  font-size: var(--fs-15);
+  text-decoration: none;
+}

@@ -252,15 +252,25 @@ export function isEmail(s: string): boolean {
 }
 
 /**
- * 邀请码：12 位（5.6；字母表 32 个字符、去掉易混字符，由 invite-admin 定）。
- * 前端只挡位数和明显不是字母数字的输入，不按字母表细查（以服务器为准，免得两边字母表不一致时误拦）；
- * 去掉空格和横线、转大写
+ * 邀请码：12 位，32 个字符的字母表（5.6、15.3 第 8 条：A–Z 去掉 I、O，加 2–9）。
+ * 和服务端 supabase/functions/_shared/invite-code.ts 的 INVITE_ALPHABET、INVITE_LEN 同一份——那份是 Deno 源码，前端不直接 import，
+ * 复制在这里，由 __tests__/invite-format.test.ts 读服务端源码比对守住。
+ * 前端按字母表校验（10-30 负责人预览注册：输错一个字符，invite-signup 按设计悄悄回 {ok} 不发信，前端得先挡住）
  */
+export const INVITE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const INVITE_LEN = 12;
+const INVITE_RE = new RegExp(`^[${INVITE_ALPHABET}]{${INVITE_LEN}}$`);
+
+/** 去掉空格和横线、转大写（和服务端 normalizeInviteCode 同一个规则）；不替换任何字符 */
 export function normalizeInvite(s: string): string {
   return s.replace(/[\s-]/g, '').toUpperCase();
 }
 export function isInviteFormat(s: string): boolean {
-  return /^[A-Z0-9]{12}$/.test(normalizeInvite(s));
+  return INVITE_RE.test(normalizeInvite(s));
+}
+/** 输进了字母表里没有的易混字符 0、1、I、O（大小写都算）：输入框下当场提示，不自动替换 */
+export function inviteHasConfusable(s: string): boolean {
+  return /[01IO]/.test(normalizeInvite(s));
 }
 
 /** 6 位验证码：只留数字 */
