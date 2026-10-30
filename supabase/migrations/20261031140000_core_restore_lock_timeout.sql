@@ -1,0 +1,13 @@
+-- 20261031140000_core_restore_lock_timeout.sql：account_restore 也加函数级 lock_timeout = 5s（接手清单 LOCK-restore；
+-- 接着 20261031130000_core_fn_lock_timeout.sql 的四个函数，理由相同）。
+-- account_restore 一个事务里 for update 锁 pending_deletions、profiles 两行，再删 pending_deletions、清 profiles 两列；
+--   account-purge 认领这一行时也锁 pending_deletions，两边互斥（0.29 续第 131、134、138 条）。等锁超过 5 秒报 55P03、整句回滚，
+--   什么都没改（还在冷静期里，没恢复），account 的 store.restore 经 must() 抛 Error('db') → 503 try_later，restore 当天次数不退
+--   （0.47 第 22 条同口径）；用户重试即可，purge 已经开始的话下次会拿到 restore_too_late。
+-- lock_timeout 是每次等锁各算 5 秒：两处锁最坏累计 10 秒，可能碰上 Edge 侧 10 秒的超时而晚到提交；和 account_request_deletion 一样，
+--   由前端 T4（try_later 后查 status）兜住。
+-- lemo-e2e 实测（10-31）：一个用户申请注销后，会话一 for update 锁住他的 pending_deletions 行、睡 9 秒；会话二调 account_restore，
+--   5001 ms 后报 ERROR 55P03（while locking tuple … in relation "pending_deletions"）；之后 pending 行还在、disabled_reason 仍是 deletion，
+--   锁放开后再调一次回 ok。
+-- D1 第 6 节名单（build/d1/fn-lock-timeout.ts）加了 account_restore；pgTAP 25_fn_lock_timeout.test.sql 一并核对。
+alter function private.account_restore(uuid) set lock_timeout = '5s';

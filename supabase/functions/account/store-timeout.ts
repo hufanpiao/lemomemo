@@ -7,29 +7,19 @@
 //   export-part.ts（try_later、不退分片数）、core.ts（delete、restore try_later、不退次数）。
 // T3：超时只记 store_timeout:<方法名>，不带参数（参数里有 user_id、export_id、计数键）。
 // 每个方法逐个写出来（不用方括号按名字取，check_backend F7）；返回值标成 AccountStore，少包一个方法类型检查就报。
+// 计时、abort、StoreTimeout 都用 _shared/store-timeout.ts 那一份（INVITE-store-timeout 去重，全仓只有一个 StoreTimeout 类），这里重新导出。
 // 和 core.ts 同样的约束：不 import npm 包、不碰 Deno 全局，Vitest 直接测。
 
+import { STORE_TIMEOUT_MS, StoreTimeout, storeTimer, type StoreTimeoutOpts as BaseOpts } from '../_shared/store-timeout.ts';
 import type { AccountStore } from './common.ts';
 
-export const STORE_TIMEOUT_MS = 10_000;
+export { STORE_TIMEOUT_MS, StoreTimeout };
 /** export_size_over 单独一档：20 秒（> EXPORT_LIMITS.sizeCheckBudgetMs 15 秒） */
 export const STORE_SIZE_TIMEOUT_MS = 20_000;
 
-/** store 调用超时：只带方法名（T3） */
-export class StoreTimeout extends Error {
-  readonly method: string;
-  constructor(method: string) {
-    super('store_timeout');
-    this.method = method;
-  }
-}
-
-export interface StoreTimeoutOpts {
-  /** 默认档（毫秒），测试换小值 */
-  ms?: number;
+export interface StoreTimeoutOpts extends BaseOpts {
   /** export_size_over 那一档（毫秒），测试换小值 */
   sizeMs?: number;
-  log?: ((code: string) => void) | undefined;
 }
 
 /**
@@ -38,30 +28,15 @@ export interface StoreTimeoutOpts {
  * 中止的只是 HTTP 请求，库里的语句可能稍后仍提交（架构第 22 条“已知取舍”）
  */
 export function withStoreTimeouts(make: (signal: AbortSignal) => AccountStore, opts: StoreTimeoutOpts = {}): AccountStore {
-  const base = opts.ms ?? STORE_TIMEOUT_MS;
-  const sizeMs = opts.sizeMs ?? STORE_SIZE_TIMEOUT_MS;
-  function run<R>(method: string, ms: number, f: (s: AccountStore) => Promise<R>): Promise<R> {
-    const ctl = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        ctl.abort();
-        opts.log?.(`store_timeout:${method}`);
-        reject(new StoreTimeout(method));
-      }, ms);
-    });
-    const work = Promise.resolve().then(() => f(make(ctl.signal)));
-    work.catch(() => {});   // 超时先赢以后底下再报错（abort 引起的）不算未处理
-    return Promise.race([work, timeout]).finally(() => { if (timer !== undefined) clearTimeout(timer); });
-  }
-  const t = <R>(method: string, f: (s: AccountStore) => Promise<R>) => run(method, base, f);
+  const t = storeTimer(make, { ms: opts.ms ?? STORE_TIMEOUT_MS, log: opts.log });
+  const tSize = storeTimer(make, { ms: opts.sizeMs ?? STORE_SIZE_TIMEOUT_MS, log: opts.log });
   return {
     isAdmin: (u) => t('isAdmin', (s) => s.isAdmin(u)),
     takeRate: (k, l, w) => t('takeRate', (s) => s.takeRate(k, l, w)),
     refundRate: (k) => t('refundRate', (s) => s.refundRate(k)),
     peekRate: (k) => t('peekRate', (s) => s.peekRate(k)),
     deleteCounterKey: (k) => t('deleteCounterKey', (s) => s.deleteCounterKey(k)),
-    exportSizeOver: (u, m, l, b) => run('exportSizeOver', sizeMs, (s) => s.exportSizeOver(u, m, l, b)),
+    exportSizeOver: (u, m, l, b) => tSize('exportSizeOver', (s) => s.exportSizeOver(u, m, l, b)),
     exportJobStart: (u, e, m, sid) => t('exportJobStart', (s) => s.exportJobStart(u, e, m, sid)),
     exportJobTake: (u, e, m, sid, max, ttl) => t('exportJobTake', (s) => s.exportJobTake(u, e, m, sid, max, ttl)),
     requestDeletion: (u) => t('requestDeletion', (s) => s.requestDeletion(u)),

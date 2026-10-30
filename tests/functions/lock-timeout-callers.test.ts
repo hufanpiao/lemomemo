@@ -139,15 +139,29 @@ describe('account delete、restore：55P03', () => {
     expect(t.db.count(keys.restore(A, t.db.clock.ms))).toBe(0);
     expect(t.db.pending.has(A)).toBe(true);
   });
+
+  it('account_restore 等锁超时（LOCK-restore，迁移 20261031140000）：try_later，还在冷静期里（pending 行在、没恢复），restore 当天次数不退', async () => {
+    const t = setup(rpc('restore'));
+    t.db.requestDeletion(A);
+    for (const id of [...t.db.revoked.keys()]) { t.db.revoked.delete(id); t.db.sessions.set(id, A); }
+    await expectTryLater(await callAccount(t.db, t.box, { action: 'restore' }, t.over));
+    expect(t.db.pending.has(A)).toBe(true);
+    expect(t.db.profiles.get(A)?.disabled_at).not.toBeNull();
+    expect(t.db.count(keys.restore(A, t.db.clock.ms))).toBe(1);
+    expect(t.calls).not.toContain('refundRate');
+    expect(t.logs).toEqual(['db_error']);
+    expect(t.box).toEqual([]);
+  });
 });
 
 describe('invite-signup、invite-admin：take_rate 55P03', () => {
   it.each([
-    ['start 第 1 道（ip）', 'start', 0],
-    ['start 第 2 道（mail）', 'start', 1],
-    ['start 第 3 道（global）', 'start', 2],
-    ['verify（verify-ip）', 'verify', 0],
-  ] as const)('invite-signup %s 等锁超时：503 try_later，日志只有 db_error，不发信、邀请码没占用', async (_n, step, nth) => {
+    ['start 第 1 道（ip）', 'start', 0, 503],
+    ['start 第 2 道（mail）', 'start', 1, 503],
+    // 第 3 道在码有效之后：回 {ok}，和码无效一样，不泄露码对不对（INVITE-store-timeout）
+    ['start 第 3 道（global）', 'start', 2, 200],
+    ['verify（verify-ip）', 'verify', 0, 503],
+  ] as const)('invite-signup %s 等锁超时：回 %i（503 是 try_later），日志只有 db_error，不发信、邀请码没占用', async (_n, step, nth, status) => {
     const w = await world();
     if (step === 'verify') expect((await signupCall(w, startBody('a@example.com'))).status).toBe(200);
     const mailsBefore = w.mails.length;
@@ -156,7 +170,7 @@ describe('invite-signup、invite-admin：take_rate 55P03', () => {
     let i = 0;
     w.store.takeRate = async (k: string, l: number) => { if (i++ === nth) throw lockErr(); return real(k, l); };
     const r = await signupCall(w, step === 'start' ? startBody('b@example.com') : verifyBody('a@example.com'));
-    expect(r).toEqual({ status: 503, text: TRY_LATER });
+    expect(r).toEqual(status === 503 ? { status, text: TRY_LATER } : { status, text: JSON.stringify({ ok: true }) });
     expect(w.logs).toEqual(['db_error']);
     expect(w.mails.length).toBe(mailsBefore);
     expect([...w.store.invites.values()].every((x) => x.used_count === 0)).toBe(true);

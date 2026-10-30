@@ -10,6 +10,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 import { envKind } from '../_shared/env-kind.ts';
 import { cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { handle, type AuthAdmin, type Store, type TurnstileResult } from './core.ts';
+import { withStoreTimeouts } from './store-timeout.ts';
 import { RESEND_EMAILS_URL, TURNSTILE_SITEVERIFY_URL, resolveOutboundUrl } from './outbound.ts';
 
 const MAIL_FROM = '柠檬记 <noreply@lemomemo.com>';   // 5.6：发件人 noreply@lemomemo.com
@@ -25,40 +26,41 @@ function must<T>(r: { data: T; error: unknown }): T {
   return r.data;
 }
 
-function makeStore(admin: Admin): Store {
+// 每次 store 调用由 store-timeout.ts 新建一个 signal 交进来，各查询挂 .abortSignal(signal)，超时就中止（INVITE-store-timeout）
+function makeStore(admin: Admin, signal: AbortSignal): Store {
   const priv = admin.schema('private');
   return {
     async takeRate(key, limit, windowS) {
-      const data = must(await priv.rpc('take_rate', { p_key: key, p_limit: limit, p_window_s: windowS }));
+      const data = must(await priv.rpc('take_rate', { p_key: key, p_limit: limit, p_window_s: windowS }).abortSignal(signal));
       if (typeof data !== 'boolean') throw new Error('db');
       return data;
     },
     async getInvite(codeHash) {
-      return must(await priv.from('invites').select('max_uses, used_count, expires_at').eq('code_hash', codeHash).maybeSingle());
+      return must(await priv.from('invites').select('max_uses, used_count, expires_at').eq('code_hash', codeHash).abortSignal(signal).maybeSingle());
     },
     async casInviteUsed(codeHash, from, to, notExpiredAt) {
       let q = priv.from('invites').update({ used_count: to }).eq('code_hash', codeHash).eq('used_count', from);
       if (notExpiredAt) q = q.gt('expires_at', notExpiredAt);
-      const rows = must(await q.select('code_hash'));
+      const rows = must(await q.select('code_hash').abortSignal(signal));
       return Array.isArray(rows) && rows.length === 1;
     },
     async putPending(emailHash, row) {
-      must(await priv.from('pending_signups').upsert({ email_hash: emailHash, ...row }, { onConflict: 'email_hash' }));
+      must(await priv.from('pending_signups').upsert({ email_hash: emailHash, ...row }, { onConflict: 'email_hash' }).abortSignal(signal));
     },
     async getPending(emailHash) {
-      return must(await priv.from('pending_signups').select('otp_hash, tries, expires_at').eq('email_hash', emailHash).maybeSingle());
+      return must(await priv.from('pending_signups').select('otp_hash, tries, expires_at').eq('email_hash', emailHash).abortSignal(signal).maybeSingle());
     },
     async casPendingTries(emailHash, from, to, otpHash) {
       const rows = must(await priv.from('pending_signups').update({ tries: to })
-        .eq('email_hash', emailHash).eq('tries', from).eq('otp_hash', otpHash).select('email_hash'));
+        .eq('email_hash', emailHash).eq('tries', from).eq('otp_hash', otpHash).select('email_hash').abortSignal(signal));
       return Array.isArray(rows) && rows.length === 1;
     },
     async deletePending(emailHash, otpHash) {
-      const q = priv.from('pending_signups').delete().eq('email_hash', emailHash);
+      const q = priv.from('pending_signups').delete().eq('email_hash', emailHash).abortSignal(signal);
       must(await (otpHash === undefined ? q : q.eq('otp_hash', otpHash)));
     },
     async insertProfile(userId, locale) {
-      must(await admin.from('profiles').insert({ user_id: userId, ui_locale: locale }));
+      must(await admin.from('profiles').insert({ user_id: userId, ui_locale: locale }).abortSignal(signal));
     },
     // 架构 0.38 第 52 条：经函数侧版本门的缓存读（超时 1.5 秒、成功缓存 60 秒、失败缓存 10 秒放行，只记 gate_config_*）
     minClientVersion() {
@@ -157,7 +159,7 @@ Deno.serve((req) => {
   const emailsUrl = emails.ok ? emails.url : RESEND_EMAILS_URL;
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   return handle(req, {
-    store: makeStore(admin),
+    store: withStoreTimeouts((signal) => makeStore(admin, signal), { log }),
     auth: makeAuth(admin),
     env,
     verifyTurnstile: (token, ip) => verifyTurnstile(siteverifyUrl, turnstileSecret, token, ip),

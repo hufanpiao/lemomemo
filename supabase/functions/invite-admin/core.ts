@@ -11,6 +11,7 @@
 // 日志只记错误码（A23）：不打印请求头、请求体、邀请码、备注。
 
 import { inviteCodeHash, randomInviteCode } from '../_shared/invite-code.ts';
+import { StoreTimeout } from '../_shared/store-timeout.ts';
 import { blockedMin, upgradeRequiredResponse } from '../_shared/version-gate-core.ts';
 
 // ---------------- 常量（出处见行尾） ----------------
@@ -196,9 +197,9 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     if (body.action === 'create') return await create(body, userId, deps);
     if (body.action === 'list') return await list(userId, deps);
     return err(400, 'bad_request');
-  } catch {
-    // 错误对象可能带连接信息、SQL，不打印
-    deps.log?.('db_error');
+  } catch (e) {
+    // 错误对象可能带连接信息、SQL，不打印；超时在 store-timeout 已记 store_timeout:<方法名>，不再记 db_error
+    if (!(e instanceof StoreTimeout)) deps.log?.('db_error');
     return err(503, 'try_later');
   }
 }

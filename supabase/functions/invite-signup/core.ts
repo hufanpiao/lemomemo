@@ -20,6 +20,7 @@
 import { emailHash, ipHash } from '../_shared/email-hash.ts';
 import { inviteCodeHash, isInviteCode, normalizeInviteCode } from '../_shared/invite-code.ts';
 import { rateIp, readProxyHeaders, safeEqual } from '../_shared/proxy-headers.ts';
+import { StoreTimeout } from '../_shared/store-timeout.ts';
 import { blockedMin, upgradeRequiredResponse } from '../_shared/version-gate-core.ts';
 import type { CreateUserResult, Deps, Env, InviteRow, PendingRow, Store, TurnstileResult } from './types.ts';
 import {
@@ -112,15 +113,21 @@ async function start(req: Request, b: StartBody, deps: Deps, secret: string): Pr
 
   // ⑤ 全站每天 50 封：只数真正要发的信（K2 安全审查 P4：错码刷不掉全站额度）。码无效时不到这一步，回的同样是 {ok}，不泄露码对不对。
   //    这一道在发信之前计数，发信失败的那一封也算（宁可少发，不多发）
-  if (!(await store.takeRate(keys.global(now), LIMIT_GLOBAL_PER_DAY, DAY_S))) { log?.('rate_global'); return ok; }
-
-  // ⑥ 生成验证码（只存哈希，和邀请码绑定）并发信
+  // ⑤⑥ 出错或超时（INVITE-store-timeout）也回 {ok}、不发信：到这里已经知道码有效，回 try_later 就等于告诉对方“码是对的”。
+  //    只记 db_error（超时由 store-timeout 记 store_timeout:<方法名>）；用户收不到信，过一会儿重新点发送即可
   const otp = String((deps.randomOtp ?? secureOtp)()).padStart(6, '0');
-  await store.putPending(eh, {
-    otp_hash: await otpHash(secret, eh, codeHash, otp),
-    tries: 0,
-    expires_at: new Date(now + OTP_TTL_S * 1000).toISOString(),
-  });
+  try {
+    if (!(await store.takeRate(keys.global(now), LIMIT_GLOBAL_PER_DAY, DAY_S))) { log?.('rate_global'); return ok; }
+    // ⑥ 生成验证码（只存哈希，和邀请码绑定）并发信
+    await store.putPending(eh, {
+      otp_hash: await otpHash(secret, eh, codeHash, otp),
+      tries: 0,
+      expires_at: new Date(now + OTP_TTL_S * 1000).toISOString(),
+    });
+  } catch (e) {
+    if (!(e instanceof StoreTimeout)) log?.('db_error');
+    return ok;
+  }
   const sent = await deps.sendMail(b.email, signupMail(b.locale, otp)).catch(() => false);
   if (!sent) log?.('mail_failed');
   return ok;
@@ -148,6 +155,8 @@ async function claimInvite(store: Store, codeHash: string, now: number): Promise
  * 已知会丢码的两种情况（K2 安全审查低 7，有意接受，码由负责人重发）：
  *   ① 比较并交换连续冲突超过重试次数（同一个码同时有多人在注册，极少见），记 release_conflict；
  *   ② 函数在占码之后、退码之前超时或被平台杀掉，退码这一步根本没跑，码就一直算“用过一次”。
+ *   ③ 占码那一下 casInviteUsed 超时（INVITE-store-timeout，10 秒）而语句晚到提交：函数已经回了 try_later、不会去退，
+ *      码却算“用过一次”；不能超时就退（不知道到底提交没有，退了可能多出一次）。
  */
 async function releaseInvite(deps: Deps, codeHash: string): Promise<void> {
   try {
@@ -301,8 +310,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     return err(400, 'bad_request');
   } catch (e) {
     if (e instanceof Fail) return err(e.status, e.code);
-    // 错误对象可能带连接信息、SQL，不打印
-    deps.log?.('db_error');
+    // 错误对象可能带连接信息、SQL，不打印；超时在 store-timeout 已记 store_timeout:<方法名>，不再记 db_error
+    if (!(e instanceof StoreTimeout)) deps.log?.('db_error');
     return err(503, 'try_later');
   }
 }

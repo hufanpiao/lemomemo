@@ -1,6 +1,9 @@
--- expect: private.take_rate 的函数级 lock_timeout 应为 5s（迁移 20261031130000；现在：没设）
--- expect: private.account_request_deletion 的函数级 lock_timeout 应为 5s（迁移 20261031130000；现在：lock_timeout=1min）
--- 安全审查第 22 条建议 ②（迁移 20261031130000_core_fn_lock_timeout.sql）：四个写计数、写账号状态的函数带函数级 lock_timeout = 5s。
+-- expect: private.take_rate 的函数级 lock_timeout 应为 5s（迁移 20261031130000、20261031140000；现在：没设）
+-- expect: private.account_request_deletion 的函数级 lock_timeout 应为 5s（迁移 20261031130000、20261031140000；现在：lock_timeout=1min）
+-- expect: private.account_restore 的函数级 lock_timeout 应为 5s（迁移 20261031130000、20261031140000；现在：没设）
+-- 安全审查第 22 条建议 ②（迁移 20261031130000_core_fn_lock_timeout.sql）：四个写计数、写账号状态的函数带函数级 lock_timeout = 5s，
+--   20261031140000 再加 account_restore。
 --   后来的迁移 reset 掉、或改成别的值，D1 第 6 节必须报出（build/d1/fn-lock-timeout.ts）。
 alter function private.take_rate(text, int, int) reset lock_timeout;
 alter function private.account_request_deletion(uuid) set lock_timeout = '1min';
+alter function private.account_restore(uuid) reset lock_timeout;
