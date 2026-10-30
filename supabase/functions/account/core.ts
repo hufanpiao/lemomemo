@@ -22,6 +22,7 @@
 //           建任务、写 logs 失败退回当天这一次（每天最多退 3 次），并尽力删掉已建的任务行（N2）。
 //     part  {action, step: 'part', export_id, cursor}：先扣每天分片数 export-part（72，超了 429）→ 校验 export_id 和游标（400）
 //           → 定模式 → export_job_take（别的会话、别的用户、模式不一致、过期 410 export_expired；超 36 片 413 export_too_large）
+//           → logs 里有本人这个 export_id 的发起记录（没有也 410，0.47 第 22 条 T2）
 //           → 从游标处按主键翻页读（第一页 50 行，之后按平均行宽自适应），每写一行查一次本片 16 MB 预算 → 回这一片单独的 gzip 成员，
 //           下一个游标在响应头 x-lemo-export-next（取完为 done）；最后一片写 logs export_done（片数、gzip 字节合计）。
 //           读到别人的行、超行数、主键不前进等数据导致的失败只记 export_<码>、回 try_later。
@@ -31,6 +32,7 @@
 // 错误码以 shared/schema/account.ts 的 accountErrorCode 为准（0.38 第 48 条），另有各函数共用的 bad_request、method_not_allowed。
 // 日志只记错误码（A23）：不打印请求头、请求体、邮箱、JWT、vault_token。响应体不打印（导出内容）。
 // 版本门：account 在免查名单里（0.38 第 47 条：只免 POST），函数里不查 X-App-Version。
+// store 调用一律带超时（store-timeout.ts，0.47 第 22 条）：超时都回 try_later；start 扣了次数之后的超时退回（export.ts 的 fail），delete、restore 不退。
 //
 // 文件拆分（ACCOUNT-sugg ①，max-lines）：common.ts 放共用的常量、类型、响应和计数键、发信小工具；status.ts 放 status；
 //   export.ts 放 export 的 start 和挑表、隐私记过滤、通知；export-part.ts 放 part（游标、翻页、gzip）。这里留入口、delete、restore，并把三个文件的导出原样转出——
@@ -41,11 +43,13 @@ import { ACCOUNT_DAILY_LIMIT, type ActiveUser, DAY_S, DbError, type Deps, err, j
 import { partExport } from './export-part.ts';
 import { startExport } from './export.ts';
 import { status, statusDisabled } from './status.ts';
+import { StoreTimeout } from './store-timeout.ts';
 
 export * from './common.ts';
 export * from './export.ts';
 export * from './export-part.ts';
 export * from './status.ts';
+export * from './store-timeout.ts';
 
 // ---------------- 常量（出处见行尾） ----------------
 export const RESTORE_DAILY_LIMIT = 5;          // 每人每天 5 次（第 131 条④、附录 A restore:<user_id>:<UTC 日期>）
@@ -164,9 +168,9 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     if (body.step === 'start') return await startExport(req, body, auth.user, deps);
     if (body.step === 'part') return await partExport(req, body, auth.user, deps);
     return err(400, 'bad_request');
-  } catch {
-    // 错误对象可能带连接信息、SQL，不打印
-    deps.log?.('db_error');
+  } catch (e) {
+    // 错误对象可能带连接信息、SQL，不打印；超时在 store-timeout.ts 已记 store_timeout:<方法名>，不再记 db_error
+    if (!(e instanceof StoreTimeout)) deps.log?.('db_error');
     return err(503, 'try_later');
   }
 }

@@ -91,7 +91,12 @@ describe('export-load-preview 护栏', () => {
   });
 
   it('源码：调 account 只带用户 jwt；失败不带响应体', () => {
-    expect(SRC).toMatch(/runExport\(`\$\{T\.base\}\/functions\/v1\/account`, \{ authorization: `Bearer \$\{jwt\}` \}, \{ fetch: f \}\)/);
+    // 第三个参数只放带超时的 fetch 和每片前的中断检查，不带任何头
+    expect(SRC).toMatch(/runExport\(`\$\{T\.base\}\/functions\/v1\/account`, \{ authorization: `Bearer \$\{jwt\}` \}, \{\s*fetch: \(u, i\) => f\(u, \{ \.\.\.i, signal: AbortSignal\.timeout\(PART_TIMEOUT_MS\) \}\),[^\n]*\n\s*beforePart: /);
+    // 每个请求都有超时（代码审查）：REST、Auth 60 秒；导出每片 180 秒，大于函数 150 秒墙钟
+    expect(SRC).toMatch(/await f\(T\.base \+ path, \{ \.\.\.init, signal: AbortSignal\.timeout\(REQ_TIMEOUT_MS\),/);
+    expect(SRC).toMatch(/export const REQ_TIMEOUT_MS = 60_000;/);
+    expect(SRC).toMatch(/export const PART_TIMEOUT_MS = 180_000;/);
     expect(SRC).not.toMatch(/console\.(log|error)\([^)]*(text|body|key|jwt)/);
     expect(SRC).not.toMatch(/E2E_PREVIEW_SERVICE_KEY[^\n]*console/);
   });

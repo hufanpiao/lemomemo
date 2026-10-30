@@ -95,6 +95,7 @@ const EXIT_KEYS = {
   pending_deletion: 'auth.exit.pendingDeletion',
   disabled_unsure: 'auth.exit.disabledUnsure',
   expired: 'auth.exit.expired',
+  deletion_unsure: 'auth.exit.deletionUnsure',
 } as const satisfies Record<ExitNotice, string>;
 
 /**

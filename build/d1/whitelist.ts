@@ -103,6 +103,18 @@ export const EXPORT_NONE_BUCKETS = ['vault-images', 'vault-files'];
 /** public 里只准有这九个 RPC（3.3 D；0.32 加 files_authorize，只给 /files 函数用），一律 security invoker、只授给 authenticated */
 export const PUBLIC_RPCS = ['apply_patch', 'report_tz', 'claim_endpoint', 'remove_device', 'my_ai_usage', 'record_consent', 'my_sessions', 'purge_deleted', 'files_authorize'];
 
+/**
+ * 必须有的索引（D1 第 7 节）：public 下的索引名 → 理由 + pg_indexes.indexdef 原文（离线 PGlite 实测）。整段比对：
+ * 名字在但少了列、换了列序、改成部分索引也报。反例 supabase/tests/d1-fixtures/35、36
+ */
+export const REQUIRED_INDEXES: Readonly<Record<string, { why: string; def: string }>> = {
+  logs_account_export_idx: {
+    why: '0.47 第 22 条 T2：part 取片前查本人 export 发起记录',
+    // 普通索引、不是部分索引：PostgREST 传参数，通用计划用不上部分索引（迁移 20261031120000 文件头的实测）
+    def: 'CREATE INDEX logs_account_export_idx ON public.logs USING btree (user_id, act, src, code)',
+  },
+};
+
 /** 把一段 SQL 原文变成整段精确匹配的正则：特殊字符转义，空白处允许任意空白（pg_get_constraintdef 的换行、缩进因版本而异） */
 const exactSql = (sql: string) => new RegExp(`^${sql.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*')}$`);
 const NOTICE_VER_RE = "'^[0-9]{4}-[0-9]{2}-[0-9]{2}(-[1-9][0-9]?)?$'::text";

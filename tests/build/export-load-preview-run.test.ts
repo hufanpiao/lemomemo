@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { errText, HAND_OVER, run, targetOk } from '../../tools/e2e/export-load-preview.mjs';
+import { errText, HAND_OVER, NOT_CLEANED, run, targetOk } from '../../tools/e2e/export-load-preview.mjs';
 import { EXPORT_TABLES, NEXT } from '../../tools/e2e/export-load-lib.mjs';
 import { PREVIEW_REF, TEST_EMAIL } from '../../tools/e2e/export-load-preview-guards.mjs';
 
@@ -20,12 +20,14 @@ const PREVIEW = { base: `https://${PREVIEW_REF}.supabase.co`, key: MARK.key, lab
 interface Opts {
   dbBytes?: number; createdAt?: string; emailExists?: boolean; fetchedEmail?: string; admins?: string[]; seedFailAt?: string;
   deleteFails?: boolean; badLinkJson?: boolean; user?: { id: string; email: string; created_at: string }; onSeed?: (t: string) => void;
+  /** account 一共回几片（默认 1）；onPart 在第 n 片（从 1 数）请求到达时调 */
+  parts?: number; onPart?: (n: number) => void;
 }
 
 /** 内存里的替身后端：只认脚本会调的那几个接口；calls 记“方法 路径”，fnAuth 记调 account 时带的头 */
 function fakeBackend(o: Opts = {}) {
   const st = {
-    calls: [] as string[], fnHeaders: [] as Record<string, string>[], email: '', rows: {} as Record<string, unknown[]>, countersGone: false,
+    calls: [] as string[], fnHeaders: [] as Record<string, string>[], email: '', rows: {} as Record<string, unknown[]>, countersGone: false, partCalls: 0,
     user: (o.user ?? null) as { id: string; email: string; created_at: string } | null,
   };
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -33,7 +35,7 @@ function fakeBackend(o: Opts = {}) {
     const u = new URL(url);
     const m = init.method ?? 'GET';
     const p = u.pathname;
-    st.calls.push(`${m} ${p}`);
+    st.calls.push(`${m} ${p}`); if (!(init.signal instanceof AbortSignal)) st.calls.push('NO_SIGNAL');   // 每个请求都要带超时
     const body = typeof init.body === 'string' ? init.body : '';
     if (p === '/rest/v1/rpc/db_size_bytes') return json(200, [{ bytes: o.dbBytes ?? 100 * MB, at: DB_AT }]);
     if (p === '/auth/v1/admin/users' && m === 'POST') {
@@ -72,6 +74,8 @@ function fakeBackend(o: Opts = {}) {
       st.fnHeaders.push(Object.fromEntries(new Headers(init.headers).entries()));
       const b = JSON.parse(body) as { step: string };
       if (b.step === 'start') return json(200, { ok: true, export_id: EID, exported_at: '2026-10-31T01:00:05.000Z' });
+      const n = (st.partCalls += 1); o.onPart?.(n);
+      if (n < (o.parts ?? 1)) return new Response(gzipSync('{'), { status: 200, headers: { [NEXT]: `c${n}`,'content-type': 'application/gzip' } });
       const tables: Record<string, unknown[]> = Object.fromEntries(EXPORT_TABLES.map((t) => [t, (st.rows[t] ?? []).map((r) => ({ ...(r as object), marker: MARK.row }))]));
       tables.logs = [...(tables.logs ?? []), { user_id: UID, act: 'export', code: MARK.row }];
       const doc = { format: 'lemomemo-export', version: 1, exported_at: '2026-10-31T01:00:05.000Z', user_id: UID, vault: 'omitted', tables };
@@ -85,8 +89,7 @@ function fakeBackend(o: Opts = {}) {
 /** 跑一次 run()，输出收进 lines（信号处理不登记；信号单独一条用例测） */
 async function go(args: string[], o: Opts = {}, extra: { env?: Record<string, string>; target?: unknown } = {}) {
   const be = fakeBackend(o);
-  const lines: string[] = [];
-  const exits: number[] = [];
+  const lines: string[] = [], exits: number[] = [];
   const code = await run({
     args, env: extra.env ?? {}, fetch: be.fetch, write: (s: string) => lines.push(s), exit: (c: number) => exits.push(c),
     onSignal: () => {}, target: async () => extra.target ?? PREVIEW,
@@ -140,6 +143,7 @@ describe('export-load-preview run()：TC-B1-141', () => {
       expect(readFileSync(join(root, 'tools', 'e2e', f), 'utf8')).not.toMatch(/node:fs|node:os|writeFile|createWriteStream|appendFile/);
     }
     expect(r.code).toBe(0);
+    expect(r.be.st.calls).not.toContain('NO_SIGNAL');   // REST、Auth、account 每个请求都带 AbortSignal 超时
     expect(r.lines[0]).toBe(JSON.stringify({ created: UID }));   // D2 第 1 点：建号后第一行就是 id
     for (const v of [...Object.values(MARK), r.be.st.email]) expect(r.out).not.toContain(v);
     expect(r.out).not.toMatch(/Bearer|apikey|hashed_token|access_token/);
@@ -222,13 +226,12 @@ describe('export-load-preview run()：TC-B1-141', () => {
 
 describe('export-load-preview run()：安全审查 D2、E4', () => {
   /** 带信号登记的跑法：handlers 是当前挂着的监听，seen 记下所有登记过的处理函数（摘掉后也留着，用来验证“摘掉后不再响应”） */
-  async function goSignals(o: Opts, fire: (h: Map<string, () => void>) => void = () => {}) {
-    const handlers = new Map<string, () => void>();
-    const seen = new Map<string, () => void>();
+  async function goSignals(o: Opts, fire: (h: Map<string, () => void>) => void = () => {}, where: 'seed' | 'part' = 'seed') {
+    const handlers = new Map<string, () => void>(), seen = new Map<string, () => void>();
     let fired = false;
-    const be = fakeBackend({ ...o, onSeed: () => { if (!fired) { fired = true; fire(handlers); } } });
-    const lines: string[] = [];
-    const exits: number[] = [];
+    const once = () => { if (!fired) { fired = true; fire(handlers); } };
+    const be = fakeBackend(where === 'seed' ? { ...o, onSeed: once } : { ...o, onPart: once });
+    const lines: string[] = [], exits: number[] = [];
     const code = await run({
       args: SMALL, env: {}, fetch: be.fetch, write: (s: string) => lines.push(s), exit: (c: number) => exits.push(c),
       onSignal: (s: string, fn: () => void) => { handlers.set(s, fn); seen.set(s, fn); return () => { if (handlers.get(s) === fn) handlers.delete(s); }; },
@@ -255,10 +258,23 @@ describe('export-load-preview run()：安全审查 D2、E4', () => {
     expect(r.handlers.size).toBe(0);   // 返回前监听已摘掉
   });
 
-  it('D2 第 2 点：清理时再来一次信号是逃生口，直接 exit 130；清理照样只跑一次', async () => {
+  it('D2 第 2 点：再来一次信号是逃生口：先打一行 interrupted_twice（带 id、写明没有清理），再 exit 130', async () => {
     const r = await goSignals({}, (h) => { h.get('SIGINT')?.(); h.get('SIGTERM')?.(); });
     expect(r.exits).toEqual([130]);
+    const twice = JSON.stringify({ interrupted_twice: UID, cleanup: 'not_done', handOver: NOT_CLEANED });
+    const ci = r.lines.indexOf(JSON.stringify({ created: UID }));
+    expect([ci > -1, ci < r.lines.indexOf(twice)]).toEqual([true, true]);   // 替身 exit 不真退出，后面照常清理一次
     expect(r.be.st.calls.filter((c) => c === `DELETE /auth/v1/admin/users/${UID}`)).toHaveLength(1);
+  });
+
+  it('代码审查：导出中途收到信号，先停导出（不再取下一片）再清理，清理之后没有任何 account 请求', async () => {
+    const r = await goSignals({ parts: 3 }, (h) => h.get('SIGINT')?.(), 'part');
+    expect(r.code).toBe(130);
+    expect(r.exits).toEqual([]);
+    expect(r.be.st.partCalls).toBe(1);   // 第 1 片已在路上照常收完，第 2 片不再请求
+    expect(r.be.st.calls.indexOf(`DELETE /auth/v1/admin/users/${UID}`)).toBeGreaterThan(r.be.st.calls.lastIndexOf('POST /functions/v1/account'));
+    expect(r.be.st.calls.filter((c) => c === 'DELETE /rest/v1/counters')).toHaveLength(1);
+    expect(JSON.parse(r.reports()[0] ?? '{}')).toMatchObject({ error: 'interrupted SIGINT', cleanup: { userGone: true } });
   });
 
   it.each([

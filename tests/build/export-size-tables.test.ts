@@ -28,6 +28,12 @@ describe('export_size_over 的表清单（Q3）', () => {
     expect(conds).toEqual(want);
   });
 
+  it('量测脚本 tools/e2e/export-load-lib.mjs 的 EXPORT_TABLES（行数核对、清理核对用）和 exportTablesOf(allManifests) 一字不差', async () => {
+    // 清单加表时脚本那份写死的名单忘了改，会少核对一张表（第四大项小建议）
+    const { EXPORT_TABLES } = await import('../../tools/e2e/export-load-lib.mjs');
+    expect([...EXPORT_TABLES]).toEqual(TABLES.map((t) => t.name));
+  });
+
   it('不写函数上的 set statement_timeout（Q2：不会给正在跑的语句重新计时），超时在循环里自己比时钟', () => {
     expect(body).not.toMatch(/set\s+statement_timeout/i);
     expect(body).toMatch(/clock_timestamp\(\) - t0 >= budget/);

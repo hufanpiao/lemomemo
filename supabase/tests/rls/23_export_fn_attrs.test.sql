@@ -1,5 +1,5 @@
 -- B1 迁移 20261031100000_core_export_jobs.sql 四个函数的属性（pg_proc 断言）：TC-B1-131 ②、TC-B1-143 ②（B1 QA 报告 6.2 节的缺口）。
--- 21_export_jobs.test.sql 测行为；这里只查定义：security invoker、search_path = ''、没有 statement_timeout、语言、签名和返回类型、
+-- 21_export_jobs.test.sql 测行为；这里只查定义：security invoker、search_path = ''（建任务、取片两个另有 lock_timeout = 5s）、没有 statement_timeout、语言、签名和返回类型、
 -- 执行权（anon、authenticated 没有，service_role 有，不给 PUBLIC）、export_size_over 的动态 SQL 只经 format('… public.%I …') 拼表名。
 -- grant 行和 3.3 C、附录 A 授权汇总的逐行比对由 check_backend.py M4 做，不在这里重复。
 begin;
@@ -21,11 +21,11 @@ select is((select string_agg(proname || '(' || args || ') -> ' || result, ' | ' 
   || ' | export_size_over(p_user uuid, p_mode text, p_limit bigint, p_budget_ms integer) -> bigint',
   '签名和返回类型：export_size_over 是 (p_user, p_mode, p_limit, p_budget_ms) returns bigint，没有 p_tables');
 
--- ② security invoker、search_path = ''、没有别的函数级设置（含 statement_timeout）
+-- ② security invoker、search_path = ''；export_job_start、export_job_take 另有 lock_timeout = 5s（迁移 20261031130000），没有别的函数级设置（含 statement_timeout）
 select is((select string_agg(proname, ',' order by proname) from f where prosecdef), null, '四个函数都是 security invoker（没有一个 definer）');
 select is((select string_agg(proname || ':' || coalesce(pg_catalog.array_to_string(proconfig, ';'), '-'), ',' order by proname) from f),
-  'db_size_bytes:search_path="",export_job_start:search_path="",export_job_take:search_path="",export_size_over:search_path=""',
-  '四个函数的函数级设置只有 search_path = ''''（没有 set statement_timeout）');
+  'db_size_bytes:search_path="",export_job_start:search_path="";lock_timeout=5s,export_job_take:search_path="";lock_timeout=5s,export_size_over:search_path=""',
+  '函数级设置：四个都有 search_path = ''''，export_job_start、export_job_take 另有 lock_timeout = 5s（20261031130000），db_size_bytes、export_size_over 只有 search_path；都没有 set statement_timeout');
 select is((select string_agg(proname, ',' order by proname) from f where prosrc ~* 'statement_timeout'), null,
   '函数体里也没有 statement_timeout（Q2：超时靠 p_budget_ms 比 clock_timestamp）');
 

@@ -1,0 +1,5 @@
+-- expect: 索引 public.logs_account_export_idx 的定义不对（0.47 第 22 条 T2：part 取片前查本人 export 发起记录）
+-- 架构 0.47 第 22 条 T2：同名索引改成部分索引 (user_id, code) where act = 'export' and src = 'account'，D1 第 7 节按定义原文比对必须报出。
+--   部分索引在 PostgREST 的参数化通用计划下用不上（迁移 20261031120000 文件头），名字还在也不算过。
+drop index public.logs_account_export_idx;
+create index logs_account_export_idx on public.logs (user_id, code) where act = 'export' and src = 'account';

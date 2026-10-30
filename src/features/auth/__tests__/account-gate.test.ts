@@ -158,7 +158,68 @@ describe('restore 的错误码（架构第 6 节错误码表）', () => {
     const bad = fakeDb(async () => ({ data: null, error: httpErr(401, { error: 'reauth_required' }) }));
     expect(await createAccountGateApi(bad.getDb).restore()).toEqual({ ok: false, error: 'reauth_required' });
     const hang = fakeDb(() => new Promise(() => undefined));
-    expect(await createAccountGateApi(hang.getDb, { restoreTimeoutMs: 5 }).restore()).toEqual({ ok: false, error: 'try_later' });
+    expect(await createAccountGateApi(hang.getDb, { restoreTimeoutMs: 5, statusTimeoutMs: 5 }).restore()).toEqual({ ok: false, error: 'try_later' });
+  });
+
+  describe('restore 回 try_later 先查 status（0.47 第 22 条 T4）', () => {
+    /** restore 按 restoreRes 回，status 按 statusRes 回 */
+    function gate(restoreRes: () => Promise<{ data: unknown; error: unknown }>, statusRes: () => Promise<{ data: unknown; error: unknown }>) {
+      const f = fakeDb(async (_fn, o) => ((o.body as { action: string }).action === 'restore' ? restoreRes() : statusRes()));
+      return { ...f, api: createAccountGateApi(f.getDb, { restoreTimeoutMs: 20, statusTimeoutMs: 20, readSession: () => ({ sid: 's-1', token: 'tok-1' }) }) };
+    }
+    const busy = async () => ({ data: null, error: httpErr(503, { error: 'try_later' }) });
+    const st = (body: unknown) => async () => ({ data: body, error: null });
+
+    it('status 回 active：其实已经恢复，按成功', async () => {
+      const { api, db } = gate(busy, st({ ok: true, status: 'active' }));
+      expect(await api.restore()).toEqual({ ok: true });
+      // 用发 restore 那个会话现在的令牌去查
+      expect(db.functions.invoke).toHaveBeenNthCalledWith(2, 'account', { body: { action: 'status' }, headers: { Authorization: 'Bearer tok-1' } });
+    });
+
+    it('超时同样先查；active 按成功', async () => {
+      const { api } = gate(() => new Promise(() => undefined), st({ ok: true, status: 'active' }));
+      expect(await api.restore()).toEqual({ ok: true });
+    });
+
+    it('仍是冷静期、停用、查不出（报错、认不出、超时）：照旧 try_later', async () => {
+      const cases = [
+        st({ ok: true, status: 'pending_deletion', purge_after: '2026-11-05T05:30:00.000Z' }),
+        st({ ok: true, status: 'disabled' }),
+        st({ ok: false }),
+        busy,
+        async () => ({ data: null, error: { name: 'FunctionsFetchError' } }),
+        () => new Promise<{ data: unknown; error: unknown }>(() => undefined),
+      ];
+      for (const [i, s] of cases.entries()) {
+        expect(await gate(busy, s).api.restore(), String(i)).toEqual({ ok: false, error: 'try_later' });
+      }
+    });
+
+    it('代码审查必改：等 restore 期间本机会话换了人、没了、读不到令牌，或发请求前就没有会话：不查 status，照旧 try_later', async () => {
+      const sessions: Array<[{ sid: string | null; token: string | null }, { sid: string | null; token: string | null }]> = [
+        [{ sid: 's-1', token: 'tok-1' }, { sid: 's-2', token: 'tok-2' }],
+        [{ sid: 's-1', token: 'tok-1' }, { sid: null, token: null }],
+        [{ sid: 's-1', token: 'tok-1' }, { sid: 's-1', token: null }],
+        [{ sid: null, token: null }, { sid: null, token: null }],
+      ];
+      for (const [i, [before, after]] of sessions.entries()) {
+        const reads = [before, after];
+        const f = fakeDb(async (_fn, o) =>
+          (o.body as { action: string }).action === 'restore' ? { data: null, error: httpErr(503, { error: 'try_later' }) } : { data: { ok: true, status: 'active' }, error: null });
+        const api = createAccountGateApi(f.getDb, { restoreTimeoutMs: 20, statusTimeoutMs: 20, readSession: () => reads.shift() ?? after });
+        expect(await api.restore(), String(i)).toEqual({ ok: false, error: 'try_later' });
+        expect(f.db.functions.invoke, String(i)).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it('别的失败（rate_limited、offline、reauth_required）不查 status', async () => {
+      for (const err of [httpErr(429, { error: 'rate_limited' }), { name: 'FunctionsFetchError' }, httpErr(401, { error: 'reauth_required' })]) {
+        const { api, db } = gate(async () => ({ data: null, error: err }), st({ ok: true, status: 'active' }));
+        expect((await api.restore()).ok).toBe(false);
+        expect(db.functions.invoke).toHaveBeenCalledTimes(1);
+      }
+    });
   });
 
   it('signOutLocal 只用 scope local；prior 的会话已被换掉时不调 supabase-js', async () => {

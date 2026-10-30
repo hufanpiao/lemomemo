@@ -145,7 +145,7 @@ export async function startExport(req: Request, body: Record<string, unknown>, u
     await sizeLog(deps, 'export_size_rate_limited', user.userId, t0);
     return err(429, 'rate_limited');
   }
-  // ③ 大小预检（0.47 第 18 条）：超了 413、超时或忙或出错 try_later，都不扣导出次数、不建任务、不写 logs、不发信；回应里不带估算值
+  // ③ 大小预检（0.47 第 18 条；store 超时这一档 20 秒，见 store-timeout.ts）：超了 413、超时或忙或出错 try_later，都不扣导出次数、不建任务、不写 logs、不发信；回应里不带估算值
   let size: number;
   try {
     size = await store.exportSizeOver(user.userId, mode, lim.maxTotalRawBytes, lim.sizeCheckBudgetMs);
@@ -168,7 +168,8 @@ export async function startExport(req: Request, body: Record<string, unknown>, u
     return err(413, 'export_too_large');
   }
 
-  // ④ 扣当天次数（和 delete 合计 3 次）
+  // ④ 扣当天次数（和 delete 合计 3 次）。这一步本身超时或出错按“没扣”处理（0.47 第 22 条 T1）：抛给 core.ts 回 try_later、不退回——
+  //   不知道扣没扣上，退了可能多退；只有拿到 true 之后的步骤失败才走 fail() 退回
   if (!(await store.takeRate(rateKey, ACCOUNT_DAILY_LIMIT, DAY_S))) return err(429, 'rate_limited');
   // 扣了以后建任务、写 logs 失败（临时性）退回这一次（K3 安全审查必改 2），并尽力删掉已建的任务行（N2）；退回每天也有上限（K3 复审低 2）
   const exportId = (deps.newId ?? (() => crypto.randomUUID()))();
@@ -179,6 +180,7 @@ export async function startExport(req: Request, body: Record<string, unknown>, u
     deps.log?.(code);
     if (keepJob) deps.log?.('export_job_exists');
     else await store.deleteCounterKey(jobKey).catch(() => deps.log?.('export_job_delete_failed'));
+    // export-refund 的扣数超时也当“不退”（T1 同理）；退回本身超时只记日志
     try {
       if (await store.takeRate(keys.exportRefund(user.userId, t0), EXPORT_REFUND_DAILY_LIMIT, DAY_S)) await store.refundRate(rateKey);
       else deps.log?.('export_refund_capped');

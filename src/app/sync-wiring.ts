@@ -38,7 +38,7 @@ import { reloadCollections } from '../core/sync/reload.ts';
 import { createTzReporter, type TzReporter } from '../core/sync/report-tz.ts';
 import type { SyncState, SyncTransport } from '../core/sync/types.ts';
 import { browserLifecycle, onUserActivity, type Lifecycle } from '../platform/net.ts';
-import { exitNoticeOf, type ExitNotice } from '../platform/session.ts';
+import { exitNoticeOf, readExitNotice, type ExitNotice } from '../platform/session.ts';
 import { canProbe, currentSid, noLocalSession, noteExitFromOtherTab, probeThenLeave, type SyncDisabledDeps } from './sync-disabled.ts';
 import { createTabLeader, type SyncMessage, type TabLeader, type TabLeaderOptions } from '../platform/tab-leader.ts';
 
@@ -53,6 +53,8 @@ export interface WireSyncDeps extends SyncDisabledDeps {
   clearLocalSessionIf(sessionId: string | null): void;
   /** platform/session.ts 的 goToAuth */
   goToAuth(): void;
+  /** 测试用：读已记下的退出原因（默认 platform/session.ts 的 readExitNotice） */
+  readExitNotice?: () => ExitNotice | null;
   /** 本会话的 devices 行 id（登录流程登记设备后才有）；不给或返回 null 时不报时区 */
   deviceId?: () => string | null;
   /** 登记或复用本会话的 devices 行、按天刷新 last_seen_at（core/device-reg.ts 的 ensure）；只在主页调（拿到锁、用户操作、恢复网络） */
@@ -135,7 +137,9 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
         // 被移除只作废了那一个会话：本机已是别的标签页刚登录的另一个会话（同账号或别的账号）时不再提示“被移除”，
         // 免得登录页一边显示“当前已登录”一边说这台设备被移除了（K6-sugg5 ④(c)）。停用、冷静期是账号层面的，照记
         const now = currentSid(deps);
-        if (notice !== 'removed' || now === null || now === sid) deps.setExitNotice(notice, sid);
+        // removed 不覆盖已记下的原因（同 goToAuth 的规则 K6-signedout-sugg ⑤）：例如设置页申请注销后确认不了，已记下 deletion_unsure（代码复查必改）
+        const kept = notice === 'removed' && (deps.readExitNotice ?? readExitNotice)() !== null;
+        if (!kept && (notice !== 'removed' || now === null || now === sid)) deps.setExitNotice(notice, sid);
         drop();
         deps.goToAuth();
       },

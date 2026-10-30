@@ -1,5 +1,6 @@
 // account 的 export action 的 part 一步：取一片（架构 0.47 续 ①“取一片”“游标”“响应”，0.47 第 18、19 条；安全审查 M2、M3、S1、S2、Q5）。
-// 顺序固定：扣每天分片数 → 校验 export_id 和游标 → 定模式 → export_job_take → 从游标处按主键翻页读、每写一行查一次本片预算。
+// 顺序固定：扣每天分片数 → 校验 export_id 和游标 → 定模式 → export_job_take → 查 logs 有发起记录（0.47 第 22 条 T2，没有 410）
+//   → 从游标处按主键翻页读、每写一行查一次本片预算。store 调用超时（store-timeout.ts）一律 try_later，已占的分片数不退。
 // 每片是一个单独的 gzip 成员（不带 Content-Encoding），下一个游标放响应头 x-lemo-export-next（取完是 done）。对外经 core.ts 转出。
 // 和 core.ts 同样的约束：不 import npm 包、不碰 Deno 全局，Vitest 直接测。
 
@@ -304,7 +305,10 @@ export async function partExport(req: Request, body: Record<string, unknown>, us
   if (take.verdict === 'too_many') return err(413, 'export_too_large');
   const startedAt = take.startedAt === null ? Number.NaN : Date.parse(take.startedAt);
   if (!Number.isFinite(startedAt)) throw new Error('bad_job_take');
-  // ⑤ 读、写、压缩
+  // ⑤ 取片的前提是发起已记录在案（0.47 第 22 条 T2）：start 里建任务那句超时、次数已退回，但语句晚到提交了，任务行在、logs 没有记录——
+  //   这种任务不能取片。每片都查（游标是客户端带的，只查第一片可以被跳过）；回应和别的 410 一字不差，不泄露任务存在
+  if (!(await store.exportStarted(user.userId, exportId))) return err(410, 'export_expired');
+  // ⑥ 读、写、压缩
   let out: PartOut;
   try {
     out = await buildPart(deps, user.userId, mode, cur, startedAt, lim);
@@ -318,7 +322,7 @@ export async function partExport(req: Request, body: Record<string, unknown>, us
     deps.log?.('export_cursor_too_long');
     return err(503, 'try_later');
   }
-  // ⑥ 最后一片：记 export_done（片数取自任务行；字节 = 之前各片 + 这一片）；写不进只记错误码，数据照常回。
+  // ⑦ 最后一片：记 export_done（片数取自任务行；字节 = 之前各片 + 这一片）；写不进只记错误码，数据照常回。
   //   同一个最后游标重复请求（回应丢了、客户端重试）只记第一次（代码审查 E1）；查不了就照写（宁可多一条，不让“最近的导出”误标未完成）
   if (out.next === 'done') {
     const logged = await store.exportDoneLogged(user.userId, exportId).catch(() => { deps.log?.('export_done_check_failed'); return false; });

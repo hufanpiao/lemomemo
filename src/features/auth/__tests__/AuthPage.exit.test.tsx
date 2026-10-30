@@ -14,6 +14,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('登录页：退出原因', () => {
+  it('deletion_unsure（申请注销后确认不了，安全审查 H1）：显示 auth.exit.deletionUnsure，不出现冷静期文字', async () => {
+    setExitNotice('deletion_unsure');
+    await renderPage(fakeApi());
+    const line = screen.getByTestId('auth-exit-notice');
+    expect(line.getAttribute('data-reason')).toBe('deletion_unsure');
+    expect(line.textContent).toBe(zh['auth.exit.deletionUnsure']);
+    expect(line.textContent).not.toContain('冷静期');
+  });
+
   it.each([
     ['account_disabled', 'disabled', 'auth.exit.disabled'],
     ['account_pending_deletion', 'pending_deletion', 'auth.exit.pendingDeletion'],

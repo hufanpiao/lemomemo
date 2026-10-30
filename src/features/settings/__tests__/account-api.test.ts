@@ -173,6 +173,54 @@ describe('requestDeletion', () => {
       expect(await a.requestDeletion('注销')).toEqual({ ok: false, error: code, sid: 's-1' });
     }
   });
+
+  describe('回 try_later 先查真实状态（0.47 第 22 条 T4）', () => {
+    const busy = async () => json(503, { error: 'try_later' });
+
+    it('已经办成（冷静期、会话已被吊销）：按成功，带回 purge_after（查不到为 null）和这次的会话', async () => {
+      const check = vi.fn(async (_sid: string | null) => ({ kind: 'done' as const, purgeAfter: '2026-11-06T15:30:00Z' }));
+      const { a } = api(busy, db(), { checkDeletion: check });
+      expect(await a.requestDeletion('注销')).toEqual({ ok: true, value: { purgeAfter: '2026-11-06T15:30:00Z', sid: 's-1' } });
+      expect(check).toHaveBeenCalledWith('s-1');
+      const { a: b } = api(busy, db(), { checkDeletion: async () => ({ kind: 'done' as const, purgeAfter: null }) });
+      expect(await b.requestDeletion('注销')).toEqual({ ok: true, value: { purgeAfter: null, sid: 's-1' } });
+    });
+
+    it('确认不了（status 只查到会话已失效，H1）：按离开处理但带 unsure，离开时提示 deletion_unsure', async () => {
+      const { a } = api(busy, db(), { checkDeletion: async () => ({ kind: 'unsure' as const }) });
+      expect(await a.requestDeletion('注销')).toEqual({ ok: true, value: { purgeAfter: null, sid: 's-1', unsure: true } });
+    });
+
+    it('没办成、判断不了：照旧 try_later；停用：account_disabled', async () => {
+      for (const kind of ['not_done', 'unknown'] as const) {
+        const { a } = api(busy, db(), { checkDeletion: async () => ({ kind }) });
+        expect(await a.requestDeletion('注销'), kind).toEqual({ ok: false, error: 'try_later', sid: 's-1' });
+      }
+      const { a } = api(busy, db(), { checkDeletion: async () => ({ kind: 'disabled' as const }) });
+      expect(await a.requestDeletion('注销')).toEqual({ ok: false, error: 'account_disabled', sid: 's-1' });
+    });
+
+    it('超时（到点按 try_later）同样先查', async () => {
+      const check = vi.fn(async () => ({ kind: 'done' as const, purgeAfter: null }));
+      const hang = (_u: string, init: RequestInit) =>
+        new Promise<Response>((_r, rej) => init.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError'))));
+      const { a } = api(hang, db(), { deleteTimeoutMs: 20, checkDeletion: check });
+      expect(await a.requestDeletion('注销')).toEqual({ ok: true, value: { purgeAfter: null, sid: 's-1' } });
+      expect(check).toHaveBeenCalledTimes(1);
+    });
+
+    it('别的失败（rate_limited、offline 等）不查', async () => {
+      const check = vi.fn(async () => ({ kind: 'done' as const, purgeAfter: null }));
+      const { a } = api(async () => json(429, { error: 'rate_limited' }), db(), { checkDeletion: check });
+      expect(await a.requestDeletion('注销')).toEqual({ ok: false, error: 'rate_limited', sid: 's-1' });
+      expect(check).not.toHaveBeenCalled();
+    });
+
+    it('默认核对：db 没有 functions（查不了）时按判断不了，照旧 try_later', async () => {
+      const { a } = api(busy);
+      expect(await a.requestDeletion('注销')).toEqual({ ok: false, error: 'try_later', sid: 's-1' });
+    });
+  });
 });
 
 describe('辅助', () => {

@@ -114,6 +114,11 @@ export interface AccountStore {
   /** 本人这次导出（code = export_id）是不是已经记过 export_done（最后一片重复请求时不再写第二条，代码审查 E1） */
   exportDoneLogged(userId: string, exportId: string): Promise<boolean>;
   /**
+   * 本人这次导出有没有发起记录（logs：user_id = 本人、act = 'export'、src = 'account'、code = export_id；架构 0.47 第 22 条 T2）。
+   * part 在 export_job_take 回 ok 之后、读数据之前查，没有就 410；走索引 logs_account_export_idx (user_id, act, src, code)
+   */
+  exportStarted(userId: string, exportId: string): Promise<boolean>;
+  /**
    * 读本人一张表的一页：where user_id = $userId [and keyCol > after] order by keyCol limit $limit。
    * 按主键往后翻页（K3 安全审查低 7），不用 offset；service role 绕过 RLS，所以这里必须带 user_id 条件
    */

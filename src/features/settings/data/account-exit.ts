@@ -19,11 +19,14 @@ import { wipeOnRemoved } from '../../../core/account.ts';
 import { getBoot, type BootResult } from '../../../core/boot.ts';
 import { clearLogQueue } from '../../../platform/log-store.ts';
 import { exitForDisabled, type ProbedExit } from '../../../platform/account-status.ts';
-import { clearCacheStorage, clearLocalSessionIf, goToAuth, type ExitNotice } from '../../../platform/session.ts';
+import { clearCacheStorage, clearLocalSessionIf, goToAuth, setExitNotice, type ExitNotice } from '../../../platform/session.ts';
 import { postSyncMessage, syncChannelName } from '../../../platform/tab-leader.ts';
 
-/** 回登录页时的提示：冷静期（auth.exit.pendingDeletion）、已停用（auth.exit.disabled）或探测不出（auth.exit.disabledUnsure） */
-export type AccountLeaveNotice = 'pending_deletion' | 'disabled' | 'disabled_unsure';
+/**
+ * 回登录页时的提示：冷静期（auth.exit.pendingDeletion）、已停用（auth.exit.disabled）、探测不出（auth.exit.disabledUnsure）、
+ * 申请注销后确认不了办没办成（auth.exit.deletionUnsure，T4 / 安全审查 H1，见 deletion-check.ts）
+ */
+export type AccountLeaveNotice = 'pending_deletion' | 'disabled' | 'disabled_unsure' | 'deletion_unsure';
 
 export interface AccountLeaveDeps {
   getBoot(): BootResult | null;
@@ -38,6 +41,8 @@ export interface AccountLeaveDeps {
   broadcastReset(userId: string, exit?: { notice: ExitNotice; sid: string | null }): void;
   clearLocalSessionIf(sessionId: string | null): void;
   goToAuth(notice: AccountLeaveNotice): void;
+  /** 只记下退出原因、不跳转（platform/session.ts 的 setExitNotice）；见 createLeaveAccount 里 deletion_unsure 的那一段 */
+  setNotice?(notice: AccountLeaveNotice, sid: string | null): void;
 }
 
 export const defaultAccountLeaveDeps: AccountLeaveDeps = {
@@ -48,6 +53,7 @@ export const defaultAccountLeaveDeps: AccountLeaveDeps = {
   broadcastReset: (userId, exit) => postSyncMessage(syncChannelName(userId), { type: 'reset', ...(exit ?? {}) }),
   clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
   goToAuth: (notice) => goToAuth(notice),
+  setNotice: (notice, sid) => setExitNotice(notice, undefined, { sid }),
 };
 
 export type LeaveAccount = (notice: AccountLeaveNotice, sid: string | null, o?: { revoked?: boolean }) => Promise<void>;
@@ -60,7 +66,14 @@ export function createLeaveAccount(deps: AccountLeaveDeps = defaultAccountLeaveD
     // 冷静期且会话没被服务器吊销：不删会话（见文件头 R-262）
     const keepSession = notice === 'pending_deletion' && !o?.revoked;
     const boot = deps.getBoot();
-    if (boot?.switching) return Promise.resolve();
+    if (boot?.switching) {
+      // 已经在走别的退出流程，不清第二遍。唯一的例外是 deletion_unsure：申请注销后查状态时 getSession 刷新令牌失败，
+      // 本页先收到 SIGNED_OUT（core/account.ts 的 watchAccount → signedOutHere 同步设闸），那一路清完会 goToAuth('removed')。
+      // 这里先记下 deletion_unsure，goToAuth('removed') 见已有原因就不覆盖（platform/session.ts），登录页显示“没能确认注销”而不是“被移除”
+      // 只在闸是“会话没了”那一路设的时候记（boot.sessionGone，代码审查建议 1）：换账号、别的退出流程不记
+      if (notice === 'deletion_unsure' && boot.sessionGone) deps.setNotice?.(notice, sid);
+      return Promise.resolve();
+    }
     leaving = true;
     const userId = boot ? boot.userId : null;
     const drop = (): void => {

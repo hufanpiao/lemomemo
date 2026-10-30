@@ -23,10 +23,13 @@
 //   ⑥ 清理在 finally 里（造数、导出中途失败也清），删之前逐条核对：按 id 取回的邮箱和本次建的完全相等、以 @lemomemo.test 结尾、不在 private.admins、
 //      不在 PREVIEW_OWNER_EMAILS（没设就记“跳过”）、created_at ≥ 运行开始时刻（两边都是数据库时间）；全过才 deleteUser，再删 counters 里 %:<id>:% 的键，
 //      然后核对 11 张表本人行数都是 0、账号不存在、再记一次库大小。核对不过或删除失败时 report.cleanup 带 id 和“交主持人”的提示（D2 第 3 点）；
-//      收到 SIGINT（Ctrl+C）、SIGTERM、SIGHUP（Windows 关窗口）也走同一段核对和清理再退出，清理只跑一次（D2 第 2 点）；
+//      收到 SIGINT（Ctrl+C）、SIGTERM、SIGHUP（Windows 关窗口）也走同一段核对和清理再退出，清理只跑一次（D2 第 2 点）：
+//      第一次 Ctrl+C 后，已发出的那一个请求（造数的那一批、导出的那一片）会跑完，最多晚一批 / 一片停下，停下以后才清理；
+//      第二次 Ctrl+C 是卡住时的逃生口：打一行 {"interrupted_twice": id, "cleanup": "not_done", …} 直接退出，没有清理，要按这个 id 跑 --cleanup；
+//      每个请求都有超时（REST、Auth 60 秒，导出每片 180 秒，大于函数 150 秒墙钟），网络卡住不会一直挂着；
 //   ⑦ 只打印条数、字节数、毫秒数和错误码：不打印行内容、响应体、令牌、邮箱以外的身份信息；不认识的异常只记 e.name（安全审查 E4）。
 // 主体在 run()，fetch、输出、信号、退出都可注入（单测用替身跑整条流程，TC-B1-141）；直接执行本文件时用真的。
-/* global fetch -- Node 24 的全局 */
+/* global fetch, AbortSignal -- Node 24 的全局 */
 import process from 'node:process';
 import { pathToFileURL, URL } from 'node:url';
 import { EXPORT_TABLES, runExport, summary } from './export-load-lib.mjs';
@@ -34,6 +37,11 @@ import { cleanupGuard, cleanupSince, MAX_DB_BYTES, ownerList, parseArgs, PREVIEW
 
 const BATCH = 1000;
 export const HAND_OVER = '核对不过或删除失败，没删干净：把 id 交主持人，按 docs/06-测试/B1-预览导出实测-负责人跑法.md 用 --cleanup 补删';
+/** 第二次中断：直接退出，什么都没清理 */
+export const NOT_CLEANED = '第二次中断，直接退出，没有清理：账号和造的数据都还在。用这个 id 按 docs/06-测试/B1-预览导出实测-负责人跑法.md 跑 --cleanup 补删，超过 24 小时交主持人';
+/** 每个请求的超时：REST、Auth 60 秒；导出每片 180 秒（大于函数 150 秒墙钟，代码审查） */
+export const REQ_TIMEOUT_MS = 60_000;
+export const PART_TIMEOUT_MS = 180_000;
 
 /** 失败只带路径和状态码（不带响应体、不带密钥） */
 class StepError extends Error {
@@ -86,7 +94,7 @@ export async function run(deps) {
   if (!targetOk(T, a.local)) { print({ error: 'bad_ref' }); return 2; }   // ①：一个请求都不发
   const svc = { apikey: T.key, authorization: `Bearer ${T.key}` };
   const req = async (step, path, init = {}, extra = {}) => {
-    const r = await f(T.base + path, { ...init, headers: { ...svc, 'content-type': 'application/json', ...extra } });
+    const r = await f(T.base + path, { ...init, signal: AbortSignal.timeout(REQ_TIMEOUT_MS), headers: { ...svc, 'content-type': 'application/json', ...extra } });
     const text = await r.text();
     if (!r.ok) {
       let code = null;
@@ -170,26 +178,27 @@ export async function run(deps) {
   write(JSON.stringify({ created: uid }));   // D2 第 1 点：中途被打断也知道补删哪个
 
   let failed = false;
-  // 清理只跑一次：finally 和信号处理共用同一个 promise
+  // 清理只跑一次（finally 里调；多处调也只跑一次）
   let cleaning = null;
   const cleanupOnce = () => (cleaning ??= cleanup(uid, email, runAt).then((r) => {
     report.cleanup = r.out;
     if (!r.ok) failed = true;
   }));
   // D2 第 2 点：Ctrl+C、kill、Windows 关窗口（SIGHUP）也走同一段核对和清理。
-  // 第一次信号只做标记并立刻开始清理，主流程在下一个检查点停下，等清理完由下面统一打印、返回 130（入口设 exitCode，不调 process.exit）；
-  // 第二次信号是卡住时的逃生口，直接 exit(130)。run() 返回前把监听全部摘掉，正常结束后再按 Ctrl+C 不会重打报告、改退出码。
+  // 第一次信号只做标记：主流程在下一个检查点停下（造数的下一批前、拿会话前、调导出前、导出的下一片前），再由 finally 清理、统一打印、
+  //   返回 130（入口设 exitCode，不调 process.exit）。先停导出再清理：清理删完计数后不会再有一片请求把 export-part 键写回来（代码审查）。
+  // 第二次信号是卡住时的逃生口：先打一行 {"interrupted_twice": id, "cleanup": "not_done", …}（没有清理，补删要用这个 id），再 exit(130)。
+  // run() 返回前把监听全部摘掉，正常结束后再按 Ctrl+C 不会重打报告、改退出码。
   let interrupted = false;
   let done = false;
   const offs = [];
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     const off = deps.onSignal(sig, () => {
       if (done) return;   // 已经收尾：就算监听没摘干净也不再有动静
-      if (interrupted) { deps.exit(130); return; }
+      if (interrupted) { write(JSON.stringify({ interrupted_twice: uid, cleanup: 'not_done', handOver: NOT_CLEANED })); deps.exit(130); return; }
       interrupted = true;
       report.error = `interrupted ${sig}`;
       failed = true;
-      cleanupOnce().catch(() => {});
     });
     if (typeof off === 'function') offs.push(off);
   }
@@ -223,7 +232,10 @@ export async function run(deps) {
 
     // ② 调函数只带用户 jwt
     if (interrupted) throw new StepError('interrupted', 0);
-    const r = await runExport(`${T.base}/functions/v1/account`, { authorization: `Bearer ${jwt}` }, { fetch: f });
+    const r = await runExport(`${T.base}/functions/v1/account`, { authorization: `Bearer ${jwt}` }, {
+      fetch: (u, i) => f(u, { ...i, signal: AbortSignal.timeout(PART_TIMEOUT_MS) }),   // start 和每片各自计时
+      beforePart: () => { if (interrupted) throw new StepError('interrupted', 0); },   // 每片之前查：先停导出，再由 finally 清理
+    });
     const { perPart, ...sum } = summary(r);
     Object.assign(report, sum, { perPart });
     report.dbAfterExportMB = mb(await dbSize());   // ③ 跑完记一次

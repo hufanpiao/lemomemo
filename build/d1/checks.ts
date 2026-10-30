@@ -8,6 +8,8 @@ import { textColProblems } from './text-bounds.ts';
 import { GUARD_NO_PASSWORD, checkAuthUsersTriggers, checkGuardNoPassword, type GuardRow } from './auth-guard.ts';
 import { quotaWhenProblems } from './quota-when.ts';
 import { cronHardcodedSecret } from './cron-secret.ts';
+import { requiredIndexProblems } from './required-indexes.ts';
+import { lockTimeoutProblems } from './fn-lock-timeout.ts';
 
 export type Row = Record<string, unknown>;
 /** 查询函数：T 是这条 SQL 结果行的形状（调用处按 select 的列写明；数据库给的值不做运行时校验） */
@@ -171,9 +173,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
       has_function_privilege('fn_ai', p.oid, 'EXECUTE') as fn_ai, n.nspname as s
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('public', 'private')`);
   // TC-B0-92（0.29 续第 117 条）：public、private 里每个 security definer 函数都带 search_path=""（只看 pg_proc.proconfig，不看源码）
-  for (const f of fns.filter((f) => f.definer)) {
-    if (!(f.config ?? []).includes('search_path=""')) bad(`${f.s}.${f.f} 是 security definer，没设 search_path = ''（proconfig：${(f.config ?? []).join(', ') || '空'}）`);
-  }
+  for (const f of fns.filter((f) => f.definer && !(f.config ?? []).includes('search_path=""'))) bad(`${f.s}.${f.f} 是 security definer，没设 search_path = ''（proconfig：${(f.config ?? []).join(', ') || '空'}）`);
   for (const f of fns.filter((f) => f.s === 'private')) {
     if (f.pub) bad(`private.${f.f} 给了 PUBLIC 执行权`);
     if (f.owner !== 'postgres') bad(`private.${f.f} 的属主是 ${f.owner}，不是 postgres`);
@@ -183,6 +183,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
       if (!f[role] && FUNCTION_EXEC[role].includes(f.f)) bad(`private.${f.f} 在白名单里，却没给 ${role} 执行权`);
     }
   }
+  for (const p of lockTimeoutProblems(fns)) bad(p);   // 四个写计数、写账号状态的函数带 lock_timeout=5s（迁移 20261031130000）
   for (const f of fns.filter((f) => f.s === 'public')) {
     if (!PUBLIC_RPCS.includes(f.f)) bad(`public.${f.f} 不在 3.3 D 的九个 RPC 里`);
     if (f.definer) bad(`public.${f.f} 是 security definer（public 里一律 invoker）`);
@@ -198,7 +199,8 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   }
 
   // ---------- 7. 同步表：synced_at 和索引；软删除；触发器 ----------
-  const idx = await q<{ t: string; d: string }>(`select tablename as t, indexdef as d from pg_indexes where schemaname = 'public'`);
+  const idx = await q<{ t: string; n: string; d: string }>(`select tablename as t, indexname as n, indexdef as d from pg_indexes where schemaname = 'public'`);
+  for (const p of requiredIndexProblems(idx)) bad(p);   // 必须有的索引（0.47 第 22 条 T2 的 logs_account_export_idx）
   const trig = await q<{ s: string; t: string; f: string; name: string; cols: string[] }>(`select n.nspname as s, c.relname as t, p.proname as f, t.tgname as name,
       array(select a.attname::text from unnest(t.tgattr::int2[]) k join pg_attribute a on a.attrelid = t.tgrelid and a.attnum = k) as cols
     from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace join pg_proc p on p.oid = t.tgfoid

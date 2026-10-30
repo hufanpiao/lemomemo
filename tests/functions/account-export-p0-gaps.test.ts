@@ -47,14 +47,15 @@ describe('TC-B1-132 ⑦：②～⑥ 五种 410 的状态码、响应体、响应
 
 // ---------------- 133 ③⑤⑦ ----------------
 describe('TC-B1-133 ③：part 的第一个数据库动作就是扣每天分片总数', () => {
-  it('正常一片：authenticate → takeRate(export-part) → exportJobTake → readPage…；坏游标、坏 export_id 只扣了这一下', async () => {
+  it('正常一片：authenticate → takeRate(export-part) → exportJobTake → exportStarted → readPage…；坏游标、坏 export_id 只扣了这一下', async () => {
     const { db, box } = setup();
     const id = await startId(db, box);
     const seq: string[] = [];
     expect((await part(db, box, id, null, tracing(db, box, seq))).status).toBe(200);
     expect(seq.slice(0, 3)).toEqual(['authenticate', 'takeRate:export-part', 'exportJobTake']);
-    expect(seq.slice(3).every((s) => s === 'readPage' || s === 'exportDoneLogged' || s === 'insertLog:export_done')).toBe(true);
-    expect(seq).toContain('readPage');
+    expect(seq[3]).toBe('exportStarted');   // 0.47 第 22 条 T2：查到发起记录才读数据
+    expect(seq[4]).toBe('readPage');
+    expect(seq.slice(5).every((s) => s === 'readPage' || s === 'exportDoneLogged' || s === 'insertLog:export_done')).toBe(true);
     for (const [eid, cursor] of [[id, 'bad!'], [id, 'A'.repeat(600)], ['not-a-uuid', null]] as const) {
       seq.length = 0;
       expect((await part(db, box, eid, cursor, tracing(db, box, seq))).status).toBe(400);
@@ -68,7 +69,7 @@ describe('TC-B1-133 ③：part 的第一个数据库动作就是扣每天分片�
     const seq: string[] = [];
     const id = await startId(db, box, { ...SMALL, verifyVaultToken: async () => 'ok' }, { 'x-vault-token': 'tok' });
     expect((await part(db, box, id, null, { ...SMALL, ...tracing(db, box, seq, true) }, { 'x-vault-token': 'tok' })).status).toBe(200);
-    expect(seq.slice(0, 4)).toEqual(['authenticate', 'takeRate:export-part', 'verifyVaultToken', 'exportJobTake']);
+    expect(seq.slice(0, 6)).toEqual(['authenticate', 'takeRate:export-part', 'verifyVaultToken', 'exportJobTake', 'exportStarted', 'readPage']);
     seq.length = 0;
     expect((await part(db, box, uid('99999999', 1), null, tracing(db, box, seq))).status).toBe(410);
     expect(seq).toEqual(['authenticate', 'takeRate:export-part', 'exportJobTake']);
@@ -76,6 +77,23 @@ describe('TC-B1-133 ③：part 的第一个数据库动作就是扣每天分片�
     const r = await part(db, box, id, null, { exportLimits: { ...SMALL.exportLimits, maxParts: 1 }, ...tracing(db, box, seq, true) }, { 'x-vault-token': 'tok' });
     expect(r.status).toBe(413);
     expect(seq).toEqual(['authenticate', 'takeRate:export-part', 'verifyVaultToken', 'exportJobTake']);
+  });
+
+  it('查不到发起记录（exportStarted 回 false，0.47 第 22 条 T2）：410 和别的 410 一字不差，不读数据，只扣了这一次分片数', async () => {
+    const { db, box, clock } = setup();
+    db.tables.set('todos', todos(60));
+    const id = await startId(db, box, SMALL);
+    const other = await snapshot(await part(db, box, uid('99999999', 1), null, SMALL));   // 不存在的 export_id 那种 410
+    const before = { parts: db.count(keys.exportPart(A, clock.ms)), account: db.count(keys.account(A, clock.ms)), reads: db.pageReads.length };
+    const seq: string[] = [];
+    const t = tracing(db, box, seq);
+    const r = await part(db, box, id, null, { ...SMALL, ...t, store: { ...t.store, exportStarted: async (u, e) => { seq.push('exportStarted'); return u === A && e === id ? false : true; } } });
+    expect(await snapshot(r)).toEqual(other);
+    expect(seq).toEqual(['authenticate', 'takeRate:export-part', 'exportJobTake', 'exportStarted']);
+    expect(db.pageReads.length).toBe(before.reads);
+    expect(db.count(keys.exportPart(A, clock.ms))).toBe(before.parts + 1);
+    expect(db.count(keys.account(A, clock.ms))).toBe(before.account);
+    expect(db.logs.filter((l) => l.act === 'export_done')).toEqual([]);
   });
 
   it('超了每天分片总数：429，不碰任务行、不读数据（第二个动作都没有）', async () => {

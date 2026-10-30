@@ -43,7 +43,8 @@ export class FakeDb {
   pendingSignups = new Set<string>();                 // email_hash
   deleted = new Set<string>();                        // private.deleted_accounts
   heartbeat: Record<string, number> | null = null;
-  logs: { id: number; user_id: string; act: string; device: string | null; t: number; code?: string; fields?: string[] }[] = [];
+  /** src：account 自己写的是 'account'；测试直接塞的行可以不带（当作客户端上传的日志） */
+  logs: { id: number; user_id: string; act: string; device: string | null; t: number; src?: string; code?: string; fields?: string[] }[] = [];
   private logSeq = 0;
   devices = new Map<string, { user_id: string; label: string | null }>();
   tables = new Map<string, Record<string, unknown>[]>();   // 导出读的 public 表
@@ -151,16 +152,17 @@ export class FakeDb {
     return { verdict: hit[1] + 1 > max ? ('too_many' as const) : ('ok' as const), startedAt: new Date(Number(hit[0].split('|')[1])).toISOString(), parts: hit[1] + 1 };
   }
 
+  /** logs 里有没有本人 src = 'account' 的这条（act、code 都对上） */
+  hasAccountLog(u: string, act: string, code: string): boolean { return this.logs.some((l) => l.user_id === u && l.src === 'account' && l.act === act && l.code === code); }
+
   accountStore(): AccountStore {
     return {
       isAdmin: async (u) => { this.guard('isAdmin'); return this.admins.has(u); },
       takeRate: async (k, l, w) => { this.guard('takeRate'); return this.takeRate(k, l, w); },
       refundRate: async (k) => {
         this.guard('refundRate');
-        const ws = [...this.counters.keys()].filter((x) => x.split('|')[0] === k).sort((x, y) => Number(x.split('|')[1]) - Number(y.split('|')[1]));
-        const last = ws[ws.length - 1];
-        const n = last === undefined ? 0 : (this.counters.get(last) ?? 0);
-        if (last !== undefined && n > 0) this.counters.set(last, n - 1);
+        const last = this.rows(k).at(-1);   // 最新窗口那一行，count 减 1（不减到 0 以下）
+        if (last && last[1] > 0) this.counters.set(last[0], last[1] - 1);
       },
       peekRate: async (k) => { this.guard('peekRate'); return this.count(k); },
       deleteCounterKey: async (k) => { this.guard('deleteCounterKey'); for (const [x] of this.rows(k)) this.counters.delete(x); },
@@ -174,9 +176,11 @@ export class FakeDb {
       insertLog: async (u, row) => {
         this.guard(`insertLog:${row.act}`);
         const extra = { ...(row.code === undefined ? {} : { code: row.code }), ...(row.fields === undefined ? {} : { fields: row.fields }) };
-        this.logs.push({ id: ++this.logSeq, user_id: u, act: row.act, device: row.device, t: row.t, ...extra });
+        this.logs.push({ id: ++this.logSeq, user_id: u, act: row.act, device: row.device, t: row.t, src: row.src, ...extra });
       },
-      exportDoneLogged: async (u, code) => { this.guard('exportDoneLogged'); return this.logs.some((l) => l.user_id === u && l.act === 'export_done' && l.code === code); },
+      // 和真 store 一样按 user_id、src = 'account'、act、code 四个条件查（客户端自己传的同名 act 不算）
+      exportDoneLogged: async (u, code) => { this.guard('exportDoneLogged'); return this.hasAccountLog(u, 'export_done', code); },
+      exportStarted: async (u, code) => { this.guard('exportStarted'); return this.hasAccountLog(u, 'export', code); },
       // = select * from <t> where user_id = u [and keyCol > after] order by keyCol limit n（和 PostgREST 一样按主键往后翻）
       readPage: async (t, keyCol, u, after, limit) => {
         this.guard('readPage');

@@ -7,7 +7,7 @@
 //     Content-Encoding），下一个游标在响应头 x-lemo-export-next（写完为 done，≤ 512 字节）。各片怎么拼、重试、继续见 export-run.ts
 //   回包是二进制：supabase-js 的 functions.invoke 按 content-type 把它当文本读会坏，所以直接经 platform/http 的 appFetch 调
 //   <supabaseUrl>/functions/v1/account，自己带 apikey 和这次会话的 access token。B1 不带 x-vault-token（隐私记 B5 才有）
-// • delete {action:'delete', confirm}：成功 {ok, purge_after}
+// • delete {action:'delete', confirm}：成功 {ok, purge_after}；回 try_later 时先查 status 再定（0.47 第 22 条 T4，data/deletion-check.ts）
 // • 错误只认 {error: <码>}（shared/schema/account.ts 的 ACCOUNT_ERROR_CODES，另加共用的 session_revoked、unauthorized，
 //   export_expired、export_too_large 也在这张共享表里）；vault_locked、vault_relock（B5 才会出现）合成 vault_locked，提示先用通用的一句。
 //   断网 → offline；超时（start 20 秒、每片 60 秒、delete 20 秒，算到包体读完）→ try_later；
@@ -18,6 +18,7 @@ import { buildInfo } from '../../../platform/env.ts';
 import { appFetch } from '../../../platform/http.ts';
 import { readSessionId, sessionIdOfToken } from '../../../platform/session.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
+import { checkDeletion, type DeletionCheck } from './deletion-check.ts';
 import { mapSettingsError } from './settings-api.ts';
 
 export type AccountErr =
@@ -80,6 +81,8 @@ export interface DeletionDone {
   purgeAfter: string | null;
   /** 发请求用的会话（服务器已吊销它）；离开本机时只删它 */
   sid: string | null;
+  /** try_later 后查状态只查到会话已失效、确认不了办没办成（T4 / 安全审查 H1）：离开时提示 deletion_unsure，不说冷静期 */
+  unsure?: true;
 }
 
 export interface AccountApi {
@@ -158,6 +161,8 @@ export interface AccountApiOptions {
   exportStartTimeoutMs?: number;
   exportPartTimeoutMs?: number;
   deleteTimeoutMs?: number;
+  /** 测试用：换掉注销回 try_later 后的状态核对（默认 deletion-check.ts 的 checkDeletion） */
+  checkDeletion?: (sid: string | null) => Promise<DeletionCheck>;
 }
 
 export function createAccountApi(getDb: () => Promise<Db>, o: AccountApiOptions = {}): AccountApi {
@@ -292,7 +297,14 @@ export function createAccountApi(getDb: () => Promise<Db>, o: AccountApiOptions 
           return null;   // 2xx 已经说明申请成功
         }
       });
-      return r.ok ? { ok: true, value: { purgeAfter: r.value.data, sid: r.value.sid } } : r;
+      if (r.ok) return { ok: true, value: { purgeAfter: r.value.data, sid: r.value.sid } };
+      if (r.error !== 'try_later') return r;
+      // 超时或服务器忙：可能其实已经办成，先查真实状态（T4）；冷静期按成功、会话已失效按“确认不了”离开、停用交给停用流程，其余照旧稍后再试
+      const c = await (o.checkDeletion ?? ((sid) => checkDeletion(getDb, sid)))(r.sid);
+      if (c.kind === 'done') return { ok: true, value: { purgeAfter: c.purgeAfter, sid: r.sid } };
+      if (c.kind === 'unsure') return { ok: true, value: { purgeAfter: null, sid: r.sid, unsure: true } };
+      if (c.kind === 'disabled') return { ok: false, error: 'account_disabled', sid: r.sid };
+      return r;
     },
   };
 }

@@ -19,12 +19,13 @@ import {
   statusError,
   type AccountStatus,
 } from '../../../platform/account-status.ts';
+import { readSessionAccessToken, readSessionId } from '../../../platform/session.ts';
 import { budgetLeft, logoutReplaced, sessionReplaced, withTimeout, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 
 // status 的判断（parseStatus、statusError）和调用（probeAccountStatus）在 platform/account-status.ts，主 App 收到 account_disabled 时也用它
 export { ACCOUNT_FN, parseStatus, STATUS_TIMEOUT_MS, statusError, type AccountStatus };
-/** restore 最多等多久（到点按 try_later；服务器可能已经恢复，再点一次会回 not_pending → 进 App） */
+/** restore 最多等多久（到点按 try_later，再查一次 status 确认是不是其实已经恢复，见 restore 的 T4 一段） */
 export const RESTORE_TIMEOUT_MS = 20_000;
 
 export type RestoreErr =
@@ -89,6 +90,16 @@ export async function restoreError(e: unknown): Promise<RestoreErr> {
 export interface AccountGateOptions {
   statusTimeoutMs?: number;
   restoreTimeoutMs?: number;
+  /** 测试用：本机存着的会话（默认 platform/session.ts 的 readSessionId、readSessionAccessToken；只读存储，不刷新令牌） */
+  readSession?: () => { sid: string | null; token: string | null };
+}
+
+function readLocalSession(): { sid: string | null; token: string | null } {
+  try {
+    return { sid: readSessionId(), token: readSessionAccessToken() };
+  } catch {
+    return { sid: null, token: null };
+  }
 }
 
 export function createAccountGateApi(getDb: () => Promise<Db>, o: AccountGateOptions = {}): AccountGateApi {
@@ -96,8 +107,11 @@ export function createAccountGateApi(getDb: () => Promise<Db>, o: AccountGateOpt
   return {
     status: () => probeAccountStatus({ getDb, timeoutMs: o.statusTimeoutMs ?? STATUS_TIMEOUT_MS }),
 
-    restore: () =>
-      withTimeout(
+    restore: async () => {
+      // 发请求前记下这次用的会话（代码审查必改）：restore 最多等 20 秒，期间别的标签页可能换登了别人，查 status 只能用同一个会话
+      const read = o.readSession ?? readLocalSession;
+      const before = read().sid;
+      const r = await withTimeout(
         async (): Promise<RestoreResult> => {
           try {
             const { error } = await call('restore');
@@ -107,8 +121,17 @@ export function createAccountGateApi(getDb: () => Promise<Db>, o: AccountGateOpt
           }
         },
         o.restoreTimeoutMs ?? RESTORE_TIMEOUT_MS,
-        () => ({ ok: false, error: 'try_later' }),
-      ),
+        (): RestoreResult => ({ ok: false, error: 'try_later' }),
+      );
+      // 0.47 第 22 条 T4：try_later（含超时）可能其实已经恢复了，先查一次 status：active 按恢复成功；
+      // 仍是冷静期、停用或查不出（unknown）照旧 try_later（停用留给下次登录时的 status 处理，这里不猜）
+      // 本机会话已不是发请求的那一个（换了人、没了）或读不到令牌：不查，照旧 try_later；是同一个就用它现在的令牌（可能已刷新，session_id 不变）去查
+      if (r.ok || r.error !== 'try_later' || before === null) return r;
+      const now = read();
+      if (now.sid !== before || !now.token) return r;
+      const s = await probeAccountStatus({ getDb, token: now.token, timeoutMs: o.statusTimeoutMs ?? STATUS_TIMEOUT_MS });
+      return s.kind === 'active' ? { ok: true } : r;
+    },
 
     signOutLocal: async (prior) => {
       const t0 = Date.now();

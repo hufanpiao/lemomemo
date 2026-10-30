@@ -81,6 +81,13 @@ export interface BootResult {
    * 之后马上关库、重新载入。outbox 同时 suspend()
    */
   switching: boolean;
+  /**
+   * 设闸是因为本机会话没了：本页的 SIGNED_OUT、别的标签页退出（watchAccount 设闸时同步标上），以及被移除、停用、冷静期、注销后离开
+   * （core/account.ts 的 wipeOnRemoved 标上）。只有换账号不标。
+   * 设置页申请注销后确认不了办没办成时，只有闸是这一路设的才另记 deletion_unsure（features/settings/data/account-exit.ts），
+   * 免得换账号时这条原因在 sessionStorage 留着、后来正常退出时冒出来（代码审查建议 1）
+   */
+  sessionGone?: boolean;
   cache: Cache | null;
   outbox: Outbox | null;
   upgrade: UpgradeCenter;

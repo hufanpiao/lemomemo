@@ -2,6 +2,7 @@
 import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import type { AccountApi, AccountResult, ExportFile, ExportPart } from '../data/account-api.ts';
+import type { AccountLeaveNotice } from '../data/account-exit.ts';
 import type { RecentExportResult } from '../data/recent-exports.ts';
 import type { SettingsDeps } from '../hooks/useSettingsPage.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';
@@ -37,7 +38,7 @@ export function setup(o: { account?: ReturnType<typeof fakeAccount>; resolveDisa
   const api = fakeApi();
   const { exit, order } = fakeExit('pending' in o ? (o.pending ?? null) : 0);
   const account = o.account ?? fakeAccount();
-  const leave = vi.fn(async (_n: 'pending_deletion' | 'disabled' | 'disabled_unsure', _sid: string | null) => void order.push('leave'));
+  const leave = vi.fn(async (_n: AccountLeaveNotice, _sid: string | null) => void order.push('leave'));
   const save = vi.fn(o.save ?? (async () => 'downloaded' as const));
   const readDeviceId = vi.fn(async () => 'dev-1');
   const recentExports = { list: vi.fn(o.recent ?? (async (): Promise<RecentExportResult> => ({ kind: 'none' }))) };

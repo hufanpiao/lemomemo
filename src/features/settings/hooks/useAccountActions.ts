@@ -78,7 +78,8 @@ export function useDeleteAccount(d: Pick<AccountActionDeps, 'api' | 'leave' | 'o
         // 保持“正在注销”直到跳走（running 不放开，不能再提交）
         // R-263 定的例外：R-262（冷静期不删会话）的前提是“探测出冷静期说明被拒那次的会话还活着”，这一路不成立——
         // 服务器在申请注销的同一事务里已吊销全部会话（supabase/functions/account/core.ts ④），留着只会让登录页探测出“会话失效”，所以照旧删
-        await d.leave('pending_deletion', r.value.sid, { revoked: true });
+        // 查状态只查到会话已失效（T4 / 安全审查 H1）：提示“没能确认注销是否已经办好”，会话照删
+        await d.leave(r.value.unsure ? 'deletion_unsure' : 'pending_deletion', r.value.sid, { revoked: true });
         return;
       }
       running.current = false;

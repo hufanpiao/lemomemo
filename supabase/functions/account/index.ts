@@ -4,7 +4,8 @@
 //   读 private.admins、public.profiles、public.devices，写 public.logs，读 export: json 的 public 表；
 //   导出失败时退回当天的一次：读、改 private.counters（比较并交换）；Auth 管理接口 getUserById。
 //   导出分片（0.47 续 ①）：rpc private.export_size_over / export_job_start / export_job_take（20261031100000）；
-//   读 counters（预检前只读查当天次数）、删 counters 的任务行（start 退回时，N2）。
+//   读 counters（预检前只读查当天次数）、删 counters 的任务行（start 退回时，N2）；part 取片前读 logs 的发起记录（0.47 第 22 条 T2）。
+// store 的每次调用都带超时（store-timeout.ts：默认 10 秒，export_size_over 20 秒；0.47 第 22 条）。
 // restore、delete 用 service role 调 definer 函数（0.38 第 45 条），不用 fn_vault。
 // 现在不直连数据库、不碰 R2（第 6 节名单里 account 可以用 fn_vault 和 R2，B5 接隐私记导出时再看要不要）。
 // 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY（平台自带）；RESEND_API_KEY、PROXY_SECRET（8.4）。
@@ -14,7 +15,7 @@ import { AuthError, requireActiveUser } from '../_shared/auth.ts';
 import { allManifests } from '../_shared/gen/manifests/index.ts';
 import { ACCOUNT_ERROR_CODES } from '../_shared/gen/schema/account.ts';
 import { skipTestRecipients, type Mail } from '../_shared/account-mail.ts';
-import { ACCOUNT_ERRS, DbError, exportTablesOf, handle, memProbeFor, type AccountStore } from './core.ts';
+import { ACCOUNT_ERRS, DbError, exportTablesOf, handle, memProbeFor, withStoreTimeouts, type AccountStore } from './core.ts';
 import { NO_STORE } from './common.ts';
 
 const RESEND_URL = 'https://api.resend.com/emails';
@@ -33,15 +34,16 @@ function must<T>(r: { data: T; error: unknown }): T {
   return r.data;
 }
 
-function makeStore(admin: Admin): AccountStore {
+/** signal：这一次调用的超时（store-timeout.ts 每次调用新建一个 AbortController）；每条查询都挂上 .abortSignal(signal) */
+function makeStore(admin: Admin, signal: AbortSignal): AccountStore {
   const priv = admin.schema('private');
   return {
     async isAdmin(userId) {
-      const row = must(await priv.from('admins').select('user_id').eq('user_id', userId).maybeSingle());
+      const row = must(await priv.from('admins').select('user_id').eq('user_id', userId).abortSignal(signal).maybeSingle());
       return row !== null;
     },
     async takeRate(key, limit, windowS) {
-      const data = must(await priv.rpc('take_rate', { p_key: key, p_limit: limit, p_window_s: windowS }));
+      const data = must(await priv.rpc('take_rate', { p_key: key, p_limit: limit, p_window_s: windowS }).abortSignal(signal));
       if (typeof data !== 'boolean') throw new Error('db');
       return data;
     },
@@ -50,10 +52,10 @@ function makeStore(admin: Admin): AccountStore {
       const counters = () => priv.from('counters');
       for (let i = 0; i < 3; i++) {
         const row = must(await counters().select('window_start, count').eq('key', key).order('window_start', { ascending: false }).limit(1)
-          .maybeSingle()) as { window_start: string; count: number } | null;
+          .abortSignal(signal).maybeSingle()) as { window_start: string; count: number } | null;
         if (!row || typeof row.count !== 'number' || row.count <= 0) return;
         const upd = must(await counters().update({ count: row.count - 1 }).eq('key', key).eq('window_start', row.window_start)
-          .eq('count', row.count).select('key'));
+          .eq('count', row.count).select('key').abortSignal(signal));
         if (Array.isArray(upd) && upd.length === 1) return;
       }
       throw new Error('refund_contended');
@@ -61,20 +63,20 @@ function makeStore(admin: Admin): AccountStore {
     async peekRate(key) {
       // 只读：这个键最新窗口的 count（start 预检前查当天导出次数，0.47 第 19 条 Q1）
       const row = must(await priv.from('counters').select('count').eq('key', key).order('window_start', { ascending: false }).limit(1)
-        .maybeSingle()) as { count: number } | null;
+        .abortSignal(signal).maybeSingle()) as { count: number } | null;
       if (row !== null && typeof row.count !== 'number') throw new Error('db');
       return row?.count ?? 0;
     },
     async deleteCounterKey(key) {
-      must(await priv.from('counters').delete().eq('key', key));
+      must(await priv.from('counters').delete().eq('key', key).abortSignal(signal));
     },
     async exportSizeOver(userId, mode, limit, budgetMs) {
-      const data = must(await priv.rpc('export_size_over', { p_user: userId, p_mode: mode, p_limit: limit, p_budget_ms: budgetMs }));
+      const data = must(await priv.rpc('export_size_over', { p_user: userId, p_mode: mode, p_limit: limit, p_budget_ms: budgetMs }).abortSignal(signal));
       if (typeof data !== 'number' || !Number.isSafeInteger(data)) throw new Error('db');
       return data;
     },
     async exportJobStart(userId, exportId, mode, sessionId) {
-      const { data, error } = await priv.rpc('export_job_start', { p_user: userId, p_export_id: exportId, p_mode: mode, p_session: sessionId });
+      const { data, error } = await priv.rpc('export_job_start', { p_user: userId, p_export_id: exportId, p_mode: mode, p_session: sessionId }).abortSignal(signal);
       if (error) {
         // 同名任务行已存在（迁移里 raise 'export_job_exists' using errcode 23505）：单独报出来，export.ts 的 fail() 不删那一行（TC-B1-138 ⑥）
         const e = error as { code?: unknown; message?: unknown };
@@ -87,7 +89,7 @@ function makeStore(admin: Admin): AccountStore {
     async exportJobTake(userId, exportId, mode, sessionId, maxParts, ttlS) {
       const rows = must(await priv.rpc('export_job_take', {
         p_user: userId, p_export_id: exportId, p_mode: mode, p_session: sessionId, p_max: maxParts, p_ttl_s: ttlS,
-      })) as unknown;
+      }).abortSignal(signal)) as unknown;
       const row = Array.isArray(rows) && rows.length === 1 ? (rows[0] as { verdict?: unknown; started_at?: unknown; parts?: unknown }) : null;
       if (!row || (row.verdict !== 'ok' && row.verdict !== 'expired' && row.verdict !== 'too_many')) throw new Error('db');
       return {
@@ -97,7 +99,7 @@ function makeStore(admin: Admin): AccountStore {
       };
     },
     async requestDeletion(userId) {
-      const { data, error } = await priv.rpc('account_request_deletion', { p_user: userId });
+      const { data, error } = await priv.rpc('account_request_deletion', { p_user: userId }).abortSignal(signal);
       if (error) {
         const msg = (error as { message?: unknown }).message;
         if (typeof msg === 'string' && RPC_CODES.has(msg)) throw new DbError(msg);
@@ -107,30 +109,36 @@ function makeStore(admin: Admin): AccountStore {
       return data;
     },
     async restore(userId) {
-      const data = must(await priv.rpc('account_restore', { p_user: userId }));
+      const data = must(await priv.rpc('account_restore', { p_user: userId }).abortSignal(signal));
       if (typeof data !== 'string') throw new Error('db');
       return data;
     },
     async profile(userId) {
-      return must(await admin.from('profiles').select('ui_locale, current_tz').eq('user_id', userId).maybeSingle());
+      return must(await admin.from('profiles').select('ui_locale, current_tz').eq('user_id', userId).abortSignal(signal).maybeSingle());
     },
     async deviceLabel(userId, deviceId) {
-      const row = must(await admin.from('devices').select('label').eq('id', deviceId).eq('user_id', userId).maybeSingle()) as { label: string | null } | null;
+      const row = must(await admin.from('devices').select('label').eq('id', deviceId).eq('user_id', userId).abortSignal(signal).maybeSingle()) as { label: string | null } | null;
       return row?.label ?? null;
     },
     async insertLog(userId, row) {
-      must(await admin.from('logs').insert({ user_id: userId, ...row }));
+      must(await admin.from('logs').insert({ user_id: userId, ...row }).abortSignal(signal));
     },
     async exportDoneLogged(userId, exportId) {
       const rows = must(await admin.from('logs').select('id').eq('user_id', userId).eq('src', 'account').eq('act', 'export_done')
-        .eq('code', exportId).limit(1));
+        .eq('code', exportId).limit(1).abortSignal(signal));
+      return Array.isArray(rows) && rows.length > 0;
+    },
+    async exportStarted(userId, exportId) {
+      // 0.47 第 22 条 T2：四个条件都在索引 logs_account_export_idx (user_id, act, src, code) 里（PostgREST 参数化的通用计划也用得上）
+      const rows = must(await admin.from('logs').select('id').eq('user_id', userId).eq('act', 'export').eq('src', 'account')
+        .eq('code', exportId).limit(1).abortSignal(signal));
       return Array.isArray(rows) && rows.length > 0;
     },
     async readPage(table, keyCol, userId, after, limit) {
       // 按主键往后翻页（gt），不用 offset；keyCol 由 core.ts 的 exportTablesOf 给（profiles 是 user_id，其余是 id）
       const base = admin.from(table).select('*').eq('user_id', userId);
       const q = after === null ? base : base.gt(keyCol, after);
-      const rows = must(await q.order(keyCol, { ascending: true }).limit(limit));
+      const rows = must(await q.order(keyCol, { ascending: true }).limit(limit).abortSignal(signal));
       return Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
     },
   };
@@ -200,7 +208,8 @@ Deno.serve((req) => {
         throw e;
       }
     },
-    store: makeStore(admin),
+    // 每个方法默认 10 秒、export_size_over 20 秒超时（0.47 第 22 条），超时只记 store_timeout:<方法名>
+    store: withStoreTimeouts((signal) => makeStore(admin, signal), { log }),
     async userEmail(userId) {
       const { data, error } = await admin.auth.admin.getUserById(userId);
       if (error) throw new Error('auth');

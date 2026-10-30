@@ -162,6 +162,7 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
   const check = (userId: string | null): void => {
     if (handled || userId === boot.userId) return;   // 同一个账号（刷新令牌）：什么也不做
     handled = true;
+    if (userId === null) boot.sessionGone = true;   // 会话没了（别的标签页退出），见 BootResult.sessionGone
     closeGate(boot);   // 同步设闸：从这一刻起不再发送、不再写回
     if (userId === null) {
       // 别的标签页退出了（登录页审查）：本页可能已按这个账号开库、同步过，不能把数据留在硬盘上
@@ -217,6 +218,7 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
     // （K6-signout-lib），回登录页前按它再删一次（晚到的刷新把它写回时）
     dead ??= lastSessionId;
     handled = true;
+    boot.sessionGone = true;   // 本页的 SIGNED_OUT：会话没了，见 BootResult.sessionGone
     closeGate(boot);
     try {
       deps.clearLogs?.();
@@ -273,6 +275,9 @@ function capped(run: () => Promise<unknown>, ms: number): Promise<boolean> {
  * 清运行时缓存卡住不等。任何情况都照样关库、onRemoved（回登录页），最坏约 REMOVED_WIPE_MS × 2 + REMOVED_CACHES_MS
  */
 export async function wipeOnRemoved(boot: BootResult, deps: RemovedDeps): Promise<void> {
+  // 被移除（会话被吊销）、停用、冷静期、注销后离开都走这里：都按“会话没了”标上（BootResult.sessionGone，代码复查必改）——
+  // 注销其实已办成时同步常先收到 session_revoked 走到这里，设置页随后的 leave('deletion_unsure') 要能记下原因
+  boot.sessionGone = true;
   closeGate(boot);
   const wipeMs = deps.wipeMs ?? REMOVED_WIPE_MS;
   try {
