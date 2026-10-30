@@ -1,0 +1,14 @@
+# OSV-Scanner 忽略清单（.github/workflows/unit.yml 的 OSV-Scanner 一步读这个文件）。
+# 规则：只放确认不受影响的条目，写清原因和复查日期，由安全审查员会签；到期自动失效，到期前复查。
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2026-11-30
+reason = """minimatch 的 globparts 放大会导致拒绝服务（影响 11.0.1 以下）。\
+命中的是 package-lock.json 里的 node_modules/minimatch 3.1.5（eslint、@eslint/config-array、@eslint/eslintrc、eslint-plugin-react、eslint-plugin-jsx-a11y 引入）\
+和 @typescript-eslint/typescript-estree 下的 minimatch 10.2.6，两处都是 dev 依赖，只在开发和 CI 的 lint 时用。\
+已核对：dist/ 的产物里没有 minimatch，supabase/functions/deno.lock、tools/deploy/package-lock.json 里也没有，仓库里没有 Cargo.lock。\
+匹配模式全部来自仓库自己的 lint 配置，不接受外部输入，不受影响。\
+不用 npm overrides 强行升到 11：eslint 一系依赖 3.x 的接口，跨大版本升级可能让 lint 静默失效，等上游升级。\
+复查日期：2026-11-30（到期前看 eslint、typescript-eslint 是否已升到修复版本，升了就删掉这一条）。\
+会签：安全审查员 10-31。"""
