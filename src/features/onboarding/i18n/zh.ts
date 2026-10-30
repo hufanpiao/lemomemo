@@ -1,4 +1,4 @@
-// 功能 onboarding 的词典·中文（架构 2.4）：告知与同意页（架构 15.5、R-103、R-115、R-240；视觉稿 皮肤视觉稿.html 的 PH.ainote、SENDV）
+// 功能 onboarding 的词典·中文（架构 2.4）：告知与同意页（架构 15.5、R-103、R-115、R-240；视觉稿 皮肤视觉稿.html 的 PH.ainote、PH.privupd、SENDV）
 // consent.privacy 必须和 R-115 的句子一字不差（15.5：官网、登录页、告知页、隐私说明都用这一句），测试逐字比对官网隐私说明
 export const zh = {
   'consent.title': '要不要让谷歌 AI 帮你整理？',
@@ -42,4 +42,14 @@ export const zh = {
   'consent.err.unsure': '网络太慢，不确定记下没有。请再点一次（重复点不会出错）。',
   // R-239：notice 为空或认不出
   'consent.err.noPolicy': '暂时没法保存你的选择，先不使用 AI，下次打开再问你。',
+  // 视觉稿 PH.privupd（接手清单 CONSENT-updated）：“隐私说明更新了”那一屏；四行的标题复用 consent.item.*，按钮复用 consent.agree、consent.decline
+  'consent.update.title': '隐私说明更新了',
+  'consent.update.lead': '这次多了几样会交给第三方的东西，看完再继续',
+  'consent.update.item.media.d': '也交给谷歌 AI 识别，用来按图片、按意思找',
+  'consent.update.item.plus.d': '说的话和被总结的记录片段交给谷歌 AI',
+  'consent.update.item.cal.d': '标题、备注、地点交给谷歌 AI，用来按意思查找',
+  'consent.update.item.ppt': '预览 PPT',
+  'consent.update.item.ppt.d': '文件交给微软的在线预览，包括隐私记里的 PPT',
+  'consent.update.check': '我同意更新后的内容',
+  'consent.update.declineNote': '不同意：AI 功能先停用，按本地规则整理、只按关键词找；以后可在 设置 › 语音与 AI 打开',
 } as const;

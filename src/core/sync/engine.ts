@@ -243,6 +243,9 @@ export function createSync(boot: BootResult, opts: SyncOptions): Sync {
   const wake = (withConfig: boolean): void => {
     if (stopped || draining) return;
     if (withConfig) round.withConfig = true;
+    // 故意把所有 pending 的 next_at 清成 0，包括 try_later 退避中的项（R272-sugg ①）：所有临时故障一致处理；
+    // 只由用户切回前台或网络恢复触发（用户频繁切换标签页时每次切回都会马上重试一次），重试频率取决于用户操作、
+    // 不会自行循环。meta 的 try_later_streak 不清：每撞一次 try_later，streak 加一、之后等得更久
     void run(() => outbox.clearBackoff());
     void kickSend();
     void pullAll();

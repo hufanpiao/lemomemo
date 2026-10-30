@@ -26,7 +26,10 @@ export interface Ctx {
  * 连续 try_later 次数（TC-B1-90，续第 119 条②）：队列级，存在 meta 的 try_later_streak。
  * 和这一项的 next_at 在同一个 readwrite 事务里读、改、写（仓 OUTBOX + META）：同源的多个标签页对同一个仓的 readwrite
  * 事务由 IndexedDB 排队执行，不会两边读到同一个旧值再各写一次。万一某种情况下计数还是丢了（比如别的标签页刚好清零），
- * 最坏是节奏从 5 秒重新数，不会比 5 秒更快重试（tryLaterBackoffMs 最少 5 秒）
+ * 最坏是节奏从 5 秒重新数，不会比 5 秒更快重试（tryLaterBackoffMs 最少 5 秒）。
+ * 取舍（R272-sugg ③）：streak 是队列级的，而 sendOrder 按记录分别挡住（这条在退避，别的记录照样能发）。队列里有多条
+ * 不同记录时，同一阵忙里每条各撞一次 try_later 都会让 streak 加一，比“按轮次”涨得快；结果只是之后等得更久，
+ * 退避本身不会因此缩短，可以接受（wake 清退避另算：那由用户操作触发，见 engine.ts）
  */
 const STREAK = 'try_later_streak';
 

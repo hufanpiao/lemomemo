@@ -4,6 +4,8 @@
 // • “同意 AI 处理”勾选框默认不勾（R-103）；没勾时“同意并继续”是 aria-disabled（仍可聚焦，读屏读得到为什么不能点），
 //   “先不同意，直接用”随时可点；两个按钮都调 record_consent，请求落定前两个都点不了；
 // • 失败留在本页、给一句提示，可以再点；no_policy（R-239）只给“继续使用”。
+// variant="updated"：“隐私说明更新了”那一屏（接手清单 CONSENT-updated；视觉稿 PH.privupd、PH.privupdko）——同一套勾选、按钮和 record_consent，
+//   换标题、四行“这次多了什么”、勾选句和“不同意”小字；R-115 句照旧，不放首次那句条款（稿里没有）；data-step="policy-update"
 // 接线（CONSENT-wire）：路由 #/onboarding 走 ui/ConsentRoute.tsx，启动关口走 ui/ConsentGate.tsx；ai.enabled 由接线方在 onDone(true) 里写（hooks/useConsentWiring.ts）
 import { useId } from 'react';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -21,6 +23,8 @@ export interface ConsentPageProps {
   onDisabled: (sid: string | null) => void;
   /** R-239：这次没法保存选择，先不使用 AI 进 App，下次打开再问 */
   onSkip: () => void;
+  /** first：首次告知页（默认）；updated：隐私说明更新了（noticeState 回 updated） */
+  variant?: 'first' | 'updated';
 }
 
 const ERR_KEY: Record<Exclude<ConsentErr, 'revoked' | 'disabled'>, OnboardingMsgKey> = {
@@ -41,8 +45,28 @@ const ITEMS = [
   ['consent.item.vault', 'consent.item.vault.d', false],
 ] as const satisfies readonly (readonly [OnboardingMsgKey, OnboardingMsgKey, boolean])[];
 
-export default function ConsentPage({ api, onDone, onRevoked, onDisabled, onSkip }: ConsentPageProps) {
+// PH.privupd：只列这次多出来的四样（“新”标签同上）
+const UPDATE_ITEMS = [
+  ['consent.item.media', 'consent.update.item.media.d', true],
+  ['consent.item.plus', 'consent.update.item.plus.d', false],
+  ['consent.item.cal', 'consent.update.item.cal.d', true],
+  ['consent.update.item.ppt', 'consent.update.item.ppt.d', false],
+] as const satisfies readonly (readonly [OnboardingMsgKey, OnboardingMsgKey, boolean])[];
+
+const COPY = {
+  first: {
+    step: 'consent', title: 'consent.title', lead: 'consent.lead', items: ITEMS, terms: true,
+    check: 'consent.check', declineNote: 'consent.declineNote',
+  },
+  updated: {
+    step: 'policy-update', title: 'consent.update.title', lead: 'consent.update.lead', items: UPDATE_ITEMS, terms: false,
+    check: 'consent.update.check', declineNote: 'consent.update.declineNote',
+  },
+} as const;
+
+export default function ConsentPage({ api, onDone, onRevoked, onDisabled, onSkip, variant = 'first' }: ConsentPageProps) {
   const t = useOnboardingT();
+  const c = COPY[variant];
   const ko = useUi((s) => s.locale) === 'ko-KR';
   const checkId = useId();
   const needId = useId();
@@ -52,12 +76,12 @@ export default function ConsentPage({ api, onDone, onRevoked, onDisabled, onSkip
   const sep = ko ? ' ' : '';
 
   return (
-    <main className={styles.page} data-feature="onboarding" data-step="consent" aria-busy={busy}>
-      <h1 className={styles.title}>{t('consent.title', {})}</h1>
-      <p className={styles.lead}>{t('consent.lead', {})}</p>
+    <main className={styles.page} data-feature="onboarding" data-step={c.step} aria-busy={busy}>
+      <h1 className={styles.title}>{t(c.title, {})}</h1>
+      <p className={styles.lead}>{t(c.lead, {})}</p>
 
       <ul className={styles.items} data-testid="consent-items">
-        {ITEMS.map(([k, d, isNew]) => (
+        {c.items.map(([k, d, isNew]) => (
           <li key={k} className={styles.item}>
             <span className={styles.itemTitle}>
               {t(k, {})}
@@ -72,7 +96,7 @@ export default function ConsentPage({ api, onDone, onRevoked, onDisabled, onSkip
         <p className={styles.privacy} data-testid="consent-privacy">
           {t('consent.privacy', {})}
         </p>
-        <p className={styles.terms}>{t('consent.terms', {})}</p>
+        {c.terms && <p className={styles.terms}>{t('consent.terms', {})}</p>}
       </section>
 
       <section className={styles.panel} data-testid="consent-send">
@@ -96,7 +120,7 @@ export default function ConsentPage({ api, onDone, onRevoked, onDisabled, onSkip
           disabled={busy || blocked}
           onChange={(e) => setChecked(e.currentTarget.checked)}
         />
-        <label htmlFor={checkId}>{t('consent.check', {})}</label>
+        <label htmlFor={checkId}>{t(c.check, {})}</label>
       </div>
 
       {err && err !== 'revoked' && err !== 'disabled' && (
@@ -134,7 +158,7 @@ export default function ConsentPage({ api, onDone, onRevoked, onDisabled, onSkip
           <button className={styles.secondary} type="button" disabled={busy} onClick={() => void submit(false)}>
             {t('consent.decline', {})}
           </button>
-          <p className={styles.note}>{t('consent.declineNote', {})}</p>
+          <p className={styles.note}>{t(c.declineNote, {})}</p>
         </>
       )}
 

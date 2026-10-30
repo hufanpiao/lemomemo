@@ -125,4 +125,39 @@ describe('TC-B1-90：队列收到 try_later', () => {
       expect(await cache.getMeta('try_later_streak')).toBe(1);
     }
   });
+
+  // R272-sugg ②：其余各支对 streak 的处理逐支锁住（先在 meta 里放 3，再发一次失败，看 streak 有没有被动）
+  const cleared: Array<[string, { status?: number; code?: string }, string]> = [
+    ['426 要升级', { status: 426, code: 'upgrade_required' }, 'upgrade'],
+    ['401 令牌过期', { status: 401 }, 'auth'],
+    ['永久失败（其他 4xx）', { status: 400, code: 'bad_input' }, 'permanent'],
+    ['丢掉（not_found）', { status: 400, code: 'not_found' }, 'drop'],
+  ];
+  for (const [name, f, kind] of cleared) {
+    it(`收到${name}：服务器回了别的，连续次数清零`, async () => {
+      const { cache, outbox } = await twoPending();
+      await cache.setMeta('try_later_streak', 3);
+      const a = await outbox.next();
+      expect(await outbox.fail(a?.op_id ?? '', { ...f, sid: null })).toBe(kind);
+      expect(await cache.getMeta('try_later_streak')).toBeUndefined();
+      if (kind === 'drop') expect(await byId(outbox, uid(1))).toBeUndefined();   // 这一项确实丢掉了
+    });
+  }
+
+  const untouched: Array<[string, { status?: number; code?: string }, string]> = [
+    ['被停用（account_disabled）', { status: 403, code: 'account_disabled' }, 'disabled'],
+    ['注销冷静期（account_pending_deletion）', { status: 403, code: 'account_pending_deletion' }, 'disabled'],
+    ['被移除（session_revoked）', { status: 401, code: 'session_revoked' }, 'removed'],
+  ];
+  for (const [name, f, kind] of untouched) {
+    it(`收到${name}：设闸，不碰连续次数（随后整库清掉）`, async () => {
+      const { cache, outbox } = await twoPending();
+      await cache.setMeta('try_later_streak', 3);
+      const a = await outbox.next();
+      expect(await outbox.fail(a?.op_id ?? '', { ...f, sid: null })).toBe(kind);
+      expect(outbox.isSuspended()).toBe(true);
+      expect(await outbox.next()).toBeNull();   // 设闸后不再发送
+      expect(await cache.getMeta('try_later_streak')).toBe(3);
+    });
+  }
 });

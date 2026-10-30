@@ -1,5 +1,5 @@
 // 告知页接线（接手清单 CONSENT-wire ①～④；TC-B1-11 的单元一侧）：
-// • 启动关口 ConsentGate：first 先显示告知页、做完才放行；updated、none、读失败都直接放行；回答之前什么也不画；
+// • 启动关口 ConsentGate：first 先显示告知页、做完才放行（updated 先显示更新页，见 consent-update.test.tsx）；none、读失败都直接放行；回答之前什么也不画；
 //   超过关口自己的上限（CONSENT-sugg ①）按读失败放行，之后才回来的结果不管。App 由调用方在 onPass 之后画（src/app/root.tsx）
 // • 四个回调：同意 → 写 ai.enabled = true 后进 App；不同意 → 不写、进 App；会话不认 → 按“被移除”离开；停用 → 按“已停用”离开；
 //   R-239 跳过 → 进 App
@@ -88,7 +88,6 @@ describe('启动关口 ConsentGate（CONSENT-wire ②）', () => {
   });
 
   const pass: [string, Result<NoticeState>][] = [
-    ['updated（“隐私说明更新了”那一屏还没做）', { ok: true, value: 'updated' }],
     ['none', { ok: true, value: 'none' }],
     ['读失败（断网）', { ok: false, error: 'offline' }],
   ];

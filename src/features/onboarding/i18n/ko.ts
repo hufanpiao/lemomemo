@@ -1,5 +1,5 @@
 // 功能 onboarding 的词典·韩文（架构 2.4）
-// 出处：consent.privacy 照官网 site/ko/privacy.html 的 R-115 韩文句；标“视觉稿”的照 皮肤视觉稿.html 的 PH.ainoteko、SENDV(1)（R-240）；
+// 出处：consent.privacy 照官网 site/ko/privacy.html 的 R-115 韩文句；标“视觉稿”的照 皮肤视觉稿.html 的 PH.ainoteko、PH.privupdko、SENDV(1)（R-240）；
 // 视觉稿里没有的几行是自译，已过 R-106 B1 第一遍审校（10-29，标“R-106 B1 第一遍已审”）；以后新加的自译行先标 TODO(ko)，审过再换标记
 // satisfies Record<keyof typeof zh, string>：少一个键、多一个键都编译不过
 import type { zh } from './zh.ts';
@@ -42,4 +42,14 @@ export const ko = {
   'consent.err.unknown': '저장하지 못했어요. 다시 한번 눌러 주세요.', // R-106 B1 第一遍已审（10-29）
   'consent.err.unsure': '네트워크가 너무 느려서 저장됐는지 확인하지 못했어요. 다시 한번 눌러 주세요 (여러 번 눌러도 괜찮아요).', // R-106 B1 第一遍已审（10-29）
   'consent.err.noPolicy': '지금은 선택을 저장할 수 없어서 우선 AI는 쓰지 않을게요. 다음에 앱을 열 때 다시 물어볼게요.', // R-106 B1 第一遍已审（10-29）
+  // 视觉稿 PH.privupdko（CONSENT-updated）；稿里没画“不同意”那行小字，declineNote 是自译
+  'consent.update.title': '개인정보 처리 안내가 바뀌었어요', // 视觉稿
+  'consent.update.lead': '계속 쓰려면 바뀐 내용을 확인해 주세요', // 视觉稿
+  'consent.update.item.media.d': '구글 AI가 내용을 인식해요 (사진으로 찾기, 의미로 찾기)', // 视觉稿
+  'consent.update.item.plus.d': '한 말과 요약할 기록 일부가 구글 AI로 가요', // 视觉稿
+  'consent.update.item.cal.d': '제목·메모·장소가 구글 AI로 가요 (의미로 찾기)', // 视觉稿
+  'consent.update.item.ppt': 'PPT 미리보기', // 视觉稿
+  'consent.update.item.ppt.d': '파일이 마이크로소프트로 가요 (비밀 메모의 PPT 포함)', // 视觉稿
+  'consent.update.check': '바뀐 내용에 동의해요', // 视觉稿
+  'consent.update.declineNote': '동의하지 않으면 AI 기능은 우선 꺼져요. 기기 규칙으로 정리하고 키워드로만 찾아요. 나중에 설정 › 음성과 AI에서 켤 수 있어요', // TODO(ko) 自译待审（R-106）
 } as const satisfies Record<keyof typeof zh, string>;

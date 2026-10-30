@@ -1,7 +1,8 @@
 // 启动时的告知页关口（接手清单 CONSENT-wire ②；架构 15.5、0.40 R-239）：main.tsx 在线时先画它，放行（onPass）以后才画 App
 // • 先问一次 noticeState()，结果回来以前什么也不画（#root 本来就是空的，和“等完再渲染”看起来一样，同步照常启动）
 // • first：先显示告知页（排在以后的通知说明、麦克风说明之前，那几屏也挂在这个关口后面）；做完再放行
-// • updated：留给“隐私说明更新了”那一屏（还没做），现在直接放行
+// • updated（看过的版本低于 notice.min_consent_ver）：先显示“隐私说明更新了”那一屏（ConsentPage variant="updated"，CONSENT-updated），做完再放行；
+//   同意、不同意都走同一个 record_consent，把 consent_policy_ver 写成当前版本（服务器 RPC 不变）
 // • none、读失败（断网、超时、出错）：直接放行，不挡
 // • 关口自己的上限 CONSENT_GATE_MS（CONSENT-sugg ①）：慢网时最多空白这么久，到点按读失败放行；之后才回来的结果不管（下次打开再问）。
 //   调用方给了 startedAt（src/app/root.tsx 的 GatedApp，K6-sugg3 ④）时从那一刻算起：分包加载用掉的时间扣掉，只等剩下的；
@@ -45,10 +46,10 @@ export default function ConsentGate({
     setDone(true);
   }, []);
   const handlers = useConsentHandlers(finish, wiring);
-  const showConsent = notice === 'first' && !done;
+  const showConsent = (notice === 'first' || notice === 'updated') && !done;
   const pass = notice !== 'pending' && !showConsent;
   useEffect(() => {
     if (pass) onPass();
   }, [pass, onPass]);
-  return showConsent ? <ConsentPage api={api} {...handlers} /> : null;
+  return showConsent ? <ConsentPage api={api} variant={notice === 'updated' ? 'updated' : 'first'} {...handlers} /> : null;
 }
