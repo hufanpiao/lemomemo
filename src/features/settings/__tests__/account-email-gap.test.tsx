@@ -128,6 +128,13 @@ describe('设置页组间距', () => {
     expect(2 * Number(pad) + Number(btnH)).toBeLessThanOrEqual(44);
   });
 
+  it('R-277：页面最底下的“退出登录”另加 .signOut 撑到 44，写在 .btn 之后才压得住 38', () => {
+    expect(block('.signOut')).toMatch(/min-height: var\(--hit\);/);
+    expect(css.indexOf('\n.signOut {')).toBeGreaterThan(css.indexOf('\n.btn {'));
+    const tsx = readFileSync('src/features/settings/ui/SettingsPage.tsx', 'utf8');
+    expect(tsx).toMatch(/styles\.signOut/);
+  });
+
   it('R-276：分段按钮看得见 36；.btn 和确认弹窗的 .primary 看得见 38；三者都用 ::after 把点击区扩到 44', () => {
     expect(block('.segBtn')).toMatch(/position: relative;/);
     const btn = block('.btn');

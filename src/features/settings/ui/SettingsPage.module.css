@@ -207,6 +207,11 @@
   background: var(--panel);
 }
 
+/* R-277（负责人 10-30）：页面最底下的“退出登录”和“注销账号”那一行一样高 44；“退出其他所有设备”等其余 .btn 仍看得见 38 */
+.signOut {
+  min-height: var(--hit);
+}
+
 .status {
   margin: 8px 4px 0;
   color: var(--text);

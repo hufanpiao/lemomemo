@@ -93,7 +93,7 @@ test.describe('设置页骨架', () => {
 
   // R-276（负责人 10-30）：单行行整行高 44；按钮（.btn）看得见 38，点击区由 ::after 扩到 44——
   // 在按钮上下边框外 2px 用 elementFromPoint 点，命中的仍是按钮本身。e2e 构建读不到设备，账号组里是“重试”按钮（.btn）
-  test('R-276 实测：单行行高 44；“重试”“退出登录”看得见 38，上下边框外 2px 仍点到按钮本身', async ({ page }) => {
+  test('R-276/R-277 实测：单行行高 44；“重试”看得见 38、上下边框外 2px 仍点到按钮本身；“退出登录”和注销那行一样高 44', async ({ page }) => {
     await page.goto(SETTINGS);
     const main = settingsMain(page);
     await expect(main).toBeVisible();
@@ -109,7 +109,11 @@ test.describe('设置页骨架', () => {
       expect(Math.round(h)).toBe(44);
     }
 
-    const buttons = [main.getByRole('alert').getByRole('button', { name: '重试' }), main.getByTestId('settings-signout')];
+    // R-277（负责人 10-30）：“退出登录”整行高 44，和“注销账号”那行一样
+    const so = await main.getByTestId('settings-signout').evaluate((el) => el.getBoundingClientRect().height);
+    expect(Math.round(so)).toBe(44);
+
+    const buttons = [main.getByRole('alert').getByRole('button', { name: '重试' })];
     for (const btn of buttons) {
       const r = await btn.evaluate((el) => {
         el.scrollIntoView({ block: 'center' });

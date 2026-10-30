@@ -70,3 +70,13 @@ describe('错误码 → 提示（R272-sugg ④）', () => {
     expect(deviceErrKey(e as SettingsErr)).toBe(key);
   });
 });
+
+// 明早清单第 27 条（负责人 10-30）：退出时的提示说“可能要十几秒”，不说“最多”；韩文本来就是“걸릴 수도 있어요”（可能），不用“최대”
+describe('退出登录提示的时长说法', () => {
+  it('中文“可能要十几秒”、不含“最多”；韩文“10초 넘게 걸릴 수도 있어요”、不含“최대”', () => {
+    expect(zh['settings.signingOut']).toContain('可能要十几秒');
+    expect(zh['settings.signingOut']).not.toContain('最多');
+    expect(ko['settings.signingOut']).toContain('10초 넘게 걸릴 수도 있어요');
+    expect(ko['settings.signingOut']).not.toContain('최대');
+  });
+});

@@ -23,7 +23,7 @@ function SignOutRow({ busy, signingOut, onSignOut }: { busy: boolean; signingOut
   return (
     <div className={styles.bottom}>
       <Pressable
-        className={`${styles.btn} ${styles.wide}`}
+        className={`${styles.btn} ${styles.wide} ${styles.signOut}`}
         disabled={busy || signingOut}
         aria-busy={signingOut}
         onClick={onSignOut}
