@@ -2,9 +2,10 @@
 // 分组顺序只看 data/sections.ts 的固定表：账号（已登录设备、退出其他所有设备、注销入口）→ 界面语言 → 数据（导出全部）；
 // 其余分组（皮肤、提醒与通知、语音与 AI、隐私记、时区……）由各功能在后面的批次按表里的位置接进来。
 // “退出登录”不是分组：页面最底下单独一行，永远在所有分组之后。
-// 注销账号是本页里的另一屏（view = 'delete'），离开本机的提示框两屏都在
+// 注销账号是本页里的另一屏，有自己的地址 #/settings/delete（负责人 10-30：注销页左滑应该回设置、不是回今天）：
+// 点入口 push 一条历史，侧滑、浏览器后退、左上角“‹ 返回”都退回设置；离开本机的提示框两屏都在
 import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { hrefOf } from '../../../app/router.ts';
+import { goBack, hrefOf, navigate, replaceRoute, useRoute } from '../../../app/router.ts';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { orderSections, useSettingsPage, type ExitNotice, type SettingsDeps, type SettingsSectionId } from '../hooks/useSettingsPage.ts';
@@ -96,7 +97,21 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   const [exportTick, setExportTick] = useState(0);
   const recent = useRecentExport(recentExports, exportTick);
   const [ask, setAsk] = useState<Ask>(null);
-  const [view, setView] = useState<'home' | 'delete'>('home');
+  const view = useRoute().params[0] === 'delete' ? 'delete' : 'home';
+  /** 注销页是从本页点进去的（历史里上一条就是设置）：返回时退一步；直接打开 #/settings/delete 时没有这一条，原地换成设置（不多压一条） */
+  const pushedDelete = useRef(false);
+  const openDelete = (): void => {
+    pushedDelete.current = true;
+    void navigate('settings', 'delete');
+  };
+  const backFromDelete = (): void => {
+    if (!pushedDelete.current) {
+      void replaceRoute('settings');
+      return;
+    }
+    pushedDelete.current = false;
+    goBack();
+  };
   const nowFn = deps?.now ?? Date.now;
   const counting = useRef(false);
 
@@ -122,7 +137,7 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
         recent={recent}
         email={page.email}
         onExitHere={() => void askSignOut('device')}
-        onDelete={() => setView('delete')}
+        onDelete={openDelete}
       />
     ),
     language: <LanguageSection locale={locale} />,
@@ -131,7 +146,7 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   return (
     <main className={styles.page} data-feature="settings" aria-busy={devices.busy !== null}>
       {view === 'delete' ? (
-        <DeleteAccountView account={account} pendingCount={exit.pendingCount} now={nowFn} onBack={() => setView('home')} />
+        <DeleteAccountView account={account} pendingCount={exit.pendingCount} now={nowFn} onBack={backFromDelete} />
       ) : (
         <>
           <header className={styles.top}>

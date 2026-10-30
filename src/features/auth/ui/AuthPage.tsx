@@ -151,7 +151,8 @@ function CodeStep({ flow }: { flow: ReturnType<typeof useAuthFlow> }) {
         <button className={styles.link} type="button" disabled={busy || cooldown > 0} onClick={() => void flow.resend()}>
           {cooldown > 0 ? t('auth.code.resendIn', { s: cooldown }) : t('auth.code.resend', {})}
         </button>
-        <button className={styles.link} type="button" onClick={flow.backToEmail}>
+        {/* 校验期间不能换（和验证码框一样灰）：校验成功时会话已写进本机，换邮箱会留在第一步、本机却已登录（复审必改 10-30） */}
+        <button className={styles.link} type="button" disabled={busy} onClick={flow.backToEmail}>
           {t('auth.code.changeEmail', {})}
         </button>
       </div>
@@ -224,7 +225,6 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
             enterKeyHint="go"
             placeholder="name@example.com"
             value={email}
-            readOnly={step === 'invite'}
             onChange={(e) => flow.setEmail(e.target.value)}
           />
           {step === 'invite' && (

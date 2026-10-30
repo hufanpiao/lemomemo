@@ -119,3 +119,20 @@ export function navigate(name: RouteName, ...params: string[]): Promise<void> {
     window.history.pushState(null, '', href);
   });
 }
+
+/** 同 navigate，但替换当前这条历史、不新压一条（直接打开的子页点“返回”回上一级时用，免得历史里叠一条子页） */
+export function replaceRoute(name: RouteName, ...params: string[]): Promise<void> {
+  const href = hrefOf(name, ...params);
+  if (window.location.hash === href) return Promise.resolve();
+  return commit(() => {
+    window.history.replaceState(null, '', href);
+  });
+}
+
+/**
+ * 退回上一条历史（和 iPhone 左边缘侧滑、浏览器后退同一条路）：页内子页（设置 › 注销账号）的“‹ 返回”用它，
+ * 不再 push 一条“设置”，免得历史里叠出“设置、注销、设置”，侧滑又滑回注销页
+ */
+export function goBack(): void {
+  window.history.back();
+}

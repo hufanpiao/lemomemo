@@ -149,10 +149,11 @@
   background: var(--panel-2);
 }
 
-/* R-276：看得见的 36 高，外框 3 + 36 + 3 = 42（≤ 44，不撑高 44 的行）；点击区由 .btn 下面那条 ::after 扩到 44 */
+/* R-282（负责人 10-30 选“再小一点”）：外框看得见的高度和本页其他按钮一样 38 = 3 + 32 + 3，在 44 高的行里上下各留 3；
+   选中块 32、圆角跟着高度（pill）；点击区由 .btn 下面那条 ::after 扩到 44（不超出 44 的行，左右两个不重叠） */
 .segBtn {
   position: relative;
-  min-height: 36px;
+  min-height: 32px;
   padding: 0 14px;
   border: 0;
   border-radius: var(--r-pill);

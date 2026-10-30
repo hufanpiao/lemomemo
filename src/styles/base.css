@@ -12,13 +12,21 @@ html {
 }
 
 /* 页面顶部要留的安全区（架构师 10-30 第 7 点）：顶部有版本横幅时（UpdateBanner 在根节点设 data-top-banner）由横幅占安全区，
-   页面不再留。页面顶部的 padding 写 var(--safe-top)，不直接写 env(safe-area-inset-top) */
+   页面不再留。页面顶部的 padding 写 var(--safe-top)，不直接写 env(safe-area-inset-top)；要安全区本身（不管有没有横幅）用 var(--inset-top） */
 :root {
-  --safe-top: env(safe-area-inset-top);
+  --inset-top: env(safe-area-inset-top);
+  --safe-top: var(--inset-top);
 }
 
 :root[data-top-banner] {
   --safe-top: 0px;
+}
+
+/* 版本横幅固定在顶部（R-281，负责人 10-30 17:2x“有新版本这个提醒应该固定在上面”）：横幅 position: fixed、紧贴安全区下沿，
+   滚动、下拉回弹都不动；它不在文档流里，由 #root 让出它的高度（UpdateBanner 量好写进 --banner-h），关掉横幅一起收回。
+   页面自己的 var(--safe-top) 仍是 0，页面顶部内边距和横幅在文档流里时一样（设置页底部那条 min-height: 0 不用改） */
+:root[data-top-banner] #root {
+  padding-top: calc(var(--inset-top) + var(--banner-h, 0px));
 }
 
 body {
@@ -31,7 +39,7 @@ body {
 }
 
 /* 顶部状态栏底色条（负责人 10-30 在 iPhone 主屏幕版发现）：主屏幕版状态栏透明，往上滚的内容会从时间、信号图标底下穿过去。
-   全局盖一条页面背景、高 var(--safe-top)；有版本横幅时 --safe-top 为 0，这条也变 0 高，由横幅占位。
+   全局盖一条页面背景、高 var(--inset-top)（安全区本身）；有版本横幅时照样在，横幅固定在它下面（R-281）。
    背景默认 --bg（深色皮肤跟着变）；背景不是纯色的页面（登录页的 --login-bg 渐变）在根节点设 --safe-top-bg，
    这里按整屏大小画（background-size 100vw 100vh，从屏幕左上角起），露出来的正好是页面那张固定渐变最上面一截，不切光晕。
    层级 1：压住页面内容（页面都不写 z-index）；弹层（kit Dialog 的 .scrim、.content 是 70）、版本横幅（50）、整屏提示（100）、
@@ -43,7 +51,7 @@ body::before {
   right: 0;
   left: 0;
   z-index: 1;
-  height: var(--safe-top);
+  height: var(--inset-top);
   background: var(--safe-top-bg, var(--bg));
   background-size: 100vw 100vh;
   pointer-events: none;

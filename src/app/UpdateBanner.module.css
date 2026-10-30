@@ -1,14 +1,21 @@
-/* 顶部版本横幅（UpdateBanner.tsx）：贴在页面最上面、跟着滚动不走，不盖住内容（挡同步、不挡查看和记录）。没有动效 */
+/* 顶部版本横幅（UpdateBanner.tsx）：固定在顶部、紧贴安全区下沿（R-281），页面滚动、iOS 下拉回弹、上滑都不跟着动；
+   不盖住内容：它的高度由 #root 让出来（base.css，--banner-h 由 UpdateBanner 量），挡同步、不挡查看和记录。没有动效。
+   底色用页面底色 --bg、靠下边线和页面分开：iOS 26 主屏幕版的状态栏取“贴着顶边的固定元素”的颜色，
+   横幅用 --panel（白）时状态栏那条跟着变白、和灰色页面接不上（负责人 10-30 17:24 截图 ②） */
 .banner {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  top: var(--inset-top);
+  right: 0;
+  left: 0;
   z-index: 50;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: max(env(safe-area-inset-top), 10px) 16px 10px;
+
+  /* 横屏时左右避开刘海、圆角（审查建议 10-30） */
+  padding: 10px max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
   border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  background: var(--bg);
   color: var(--text);
 }
 

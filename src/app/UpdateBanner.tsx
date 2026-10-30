@@ -9,12 +9,13 @@
 // （排在 2 和 3 之间）同步暂停（sync_paused）：主 App 收到 account_disabled、探测说账号正常，但 5 分钟内已重新载入过一次
 //    （app/sync-disabled.ts 限次，复审建议 10-30）：“同步暂停，请稍后重新打开 · 重新打开”，不给关；录音、编辑在进行时先不出；
 //    状态在 kit/state/ui-store 的 banners
-// 横幅出现时在根节点（<html>）设 data-top-banner：横幅占顶部安全区，页面的 var(--safe-top) 变成 0（base.css，10-30 第 7 点）
+// 横幅出现时在根节点（<html>）设 data-top-banner：页面的 var(--safe-top) 变成 0（base.css，10-30 第 7 点）；
+// 横幅固定在顶部、紧贴安全区下沿（R-281），量出自己的高度写进 <html> 的 --banner-h，#root 按它让出位置，横幅没了一起去掉
 // “更新”“重新打开（新版本）”都走 upgrade.requestUpdate()（拉新 SW、接管后重新载入）；进度、失败、仍不够新用 role="status" 播报。
 // 只画在 App 里、和页面同一个 Suspense 里（App.tsx）：告知页关口、启动画面期间不出，页面分包到了才和页面一起画；
 // 在页面的错误边界外面（10-30 第 6 点）：页面出错时横幅还在。
 // 按钮用普通 <button>，不用 motion 的 Pressable：横幅静态进首屏，motion 的汇总出口会把动效库一起拉进首屏（审查必改 1，首屏预算 W3）
-import { useLayoutEffect, useSyncExternalStore } from 'react';
+import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import type { Outbox, OutboxStatus } from '../core/outbox-types.ts';
 import type { UpgradeCenter, UpgradeState } from '../core/upgrade.ts';
 import { useT } from '../kit/hooks/useT.ts';
@@ -52,12 +53,27 @@ export function UpdateBanner({ upgrade, outbox, onReload }: UpdateBannerProps) {
   const queue = useSyncExternalStore(outbox ? outbox.subscribe : noSubscribe, outbox ? outbox.getStatus : () => EMPTY_STATUS);
   const syncPaused = useUi((s) => s.banners.some((b) => b.kind === 'sync-paused'));
   const kind = bannerKind(state, syncPaused);
+  const box = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (!kind) return undefined;
     const root = document.documentElement;
     root.dataset['topBanner'] = kind;
     return () => {
       delete root.dataset['topBanner'];
+    };
+  }, [kind]);
+  // 横幅高度随文字行数、播报行变：画出来就量一次（布局阶段，首帧就让出位置），之后跟着 ResizeObserver 改
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!kind || !el) return undefined;
+    const root = document.documentElement;
+    const measure = (): void => root.style.setProperty('--banner-h', `${el.offsetHeight}px`);
+    measure();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => {
+      ro?.disconnect();
+      root.style.removeProperty('--banner-h');
     };
   }, [kind]);
   if (!kind) return null;
@@ -89,7 +105,7 @@ export function UpdateBanner({ upgrade, outbox, onReload }: UpdateBannerProps) {
   const reloadOnly = kind === 'closed' || kind === 'sync_paused';
   const button = kind === 'required' ? t('update.update', {}) : t('update.reopen', {});
   return (
-    <div className={styles.banner} data-testid="update-banner" data-kind={kind}>
+    <div ref={box} className={styles.banner} data-testid="update-banner" data-kind={kind}>
       <div className={styles.text}>
         <p className={styles.main}>{text}</p>
         {kind === 'required' && queue.pending > 0 ? <p className={styles.sub}>{t('update.queued', { n: queue.pending })}</p> : null}

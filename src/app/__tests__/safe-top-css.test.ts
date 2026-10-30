@@ -22,12 +22,13 @@ function cssFiles(dir: string): string[] {
 }
 
 describe('顶部安全区底色条', () => {
-  it('base.css：body::before 固定在顶部，高 var(--safe-top)，背景默认 --bg、页面可用 --safe-top-bg 换，按整屏大小画，不挡点击', () => {
+  it('base.css：body::before 固定在顶部，高 var(--inset-top)（安全区本身，有没有横幅都在），背景默认 --bg、页面可用 --safe-top-bg 换，按整屏大小画，不挡点击', () => {
     const b = block(base, 'body::before');
     expect(b).toMatch(/content: '';/);
     expect(b).toMatch(/position: fixed;/);
     expect(b).toMatch(/top: 0;/);
-    expect(b).toMatch(/height: var\(--safe-top\);/);
+    expect(b).toMatch(/height: var\(--inset-top\);/);
+    expect(block(base, ':root')).toMatch(/--inset-top: env\(safe-area-inset-top\);\s*--safe-top: var\(--inset-top\);/);
     expect(b).toMatch(/background: var\(--safe-top-bg, var\(--bg\)\);/);
     expect(b).toMatch(/background-size: 100vw 100vh;/);
     expect(b).toMatch(/pointer-events: none;/);
@@ -70,8 +71,19 @@ describe('顶部安全区底色条', () => {
     expect(css).not.toMatch(/--safe-top-bg/);
   });
 
-  it('有版本横幅时 --safe-top 为 0（底色条跟着变 0 高，由横幅占位）', () => {
+  it('有版本横幅时页面的 --safe-top 为 0，#root 让出安全区加横幅高度（R-281：横幅固定在安全区下沿）', () => {
     expect(block(base, ':root[data-top-banner]')).toMatch(/--safe-top: 0px;/);
+    expect(block(base, ':root[data-top-banner] #root')).toMatch(/padding-top: calc\(var\(--inset-top\) \+ var\(--banner-h, 0px\)\);/);
+  });
+
+  it('版本横幅固定在顶部、紧贴安全区下沿，底色是页面底色（状态栏取它的颜色，R-281）', () => {
+    const b = block(readFileSync('src/app/UpdateBanner.module.css', 'utf8'), '.banner');
+    expect(b).toMatch(/position: fixed;/);
+    expect(b).toMatch(/top: var\(--inset-top\);/);
+    expect(b).toMatch(/right: 0;\s*left: 0;/);
+    expect(b).toMatch(/background: var\(--bg\);/);
+    expect(b).toMatch(/padding: 10px max\(16px, env\(safe-area-inset-right\)\) 10px max\(16px, env\(safe-area-inset-left\)\);/);
+    expect(b).not.toMatch(/sticky|safe-area-inset-top/);
   });
 
   it('告知页、登录页顶部写 var(--safe-top)', () => {
@@ -80,9 +92,8 @@ describe('顶部安全区底色条', () => {
     }
   });
 
-  it('src 下除了版本横幅，没有 CSS 直接写 env(safe-area-inset-top)', () => {
+  it('src 下除了 base.css，没有 CSS 直接写 env(safe-area-inset-top)', () => {
     const bad = cssFiles('src')
-      .filter((f) => !f.replaceAll('\\', '/').endsWith('src/app/UpdateBanner.module.css'))
       .filter((f) => !f.replaceAll('\\', '/').endsWith('src/styles/base.css'))
       .filter((f) => readFileSync(f, 'utf8').includes('env(safe-area-inset-top)'));
     expect(bad).toEqual([]);

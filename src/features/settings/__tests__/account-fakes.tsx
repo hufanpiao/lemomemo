@@ -17,7 +17,9 @@ export function fakeAccount(over: Partial<AccountApi> = {}) {
   };
 }
 
-export function setup(o: { account?: ReturnType<typeof fakeAccount>; resolveDisabled?: SettingsDeps['resolveDisabled']; pending?: number | null; save?: () => Promise<'shared' | 'downloaded' | 'cancelled' | 'needs_tap'>; recent?: () => Promise<RecentExportResult> } = {}) {
+export function setup(o: { account?: ReturnType<typeof fakeAccount>; resolveDisabled?: SettingsDeps['resolveDisabled']; pending?: number | null; save?: () => Promise<'shared' | 'downloaded' | 'cancelled' | 'needs_tap'>; recent?: () => Promise<RecentExportResult>; hash?: string } = {}) {
+  // 注销页有自己的地址（#/settings/delete）：每次从设置首页开始，上一条用例留下的地址不带过来
+  window.history.replaceState(null, '', o.hash ?? '#/settings');
   const api = fakeApi();
   const { exit, order } = fakeExit('pending' in o ? (o.pending ?? null) : 0);
   const account = o.account ?? fakeAccount();

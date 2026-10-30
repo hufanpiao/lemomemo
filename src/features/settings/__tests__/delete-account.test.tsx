@@ -42,12 +42,37 @@ describe('注销账号（设置 › 账号 › 注销账号）', () => {
     expect(within(page).getAllByRole('textbox')).toHaveLength(1);
     expect(within(page).getByLabelText('请输入“注销”确认')).toBe(input());
     expect(text(submitBtn())).toBe('注销账号');
-    // 返回设置首页
+    // 返回设置首页（退回上一条历史，不再 push 一条“设置”）
     await act(async () => {
       fireEvent.click(screen.getByTestId('settings-delete-back'));
     });
-    expect(screen.queryByTestId('settings-delete')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('settings-delete')).toBeNull());
     expect(screen.getByTestId('settings-export')).toBeTruthy();
+    expect(window.location.hash).toBe('#/settings');
+  });
+
+  it('注销页有自己的地址（负责人 10-30“注销页左滑应该回设置”）：点入口 push #/settings/delete，侧滑（history.back）回设置首页', async () => {
+    setup();
+    await openDelete();
+    expect(window.location.hash).toBe('#/settings/delete');
+    await act(async () => {
+      window.history.back();
+    });
+    await waitFor(() => expect(screen.queryByTestId('settings-delete')).toBeNull());
+    expect(window.location.hash).toBe('#/settings');
+    expect(screen.getByTestId('settings-delete-entry')).toBeTruthy();
+  });
+
+  it('直接打开 #/settings/delete（没有从设置点进来）：显示注销页；“‹ 返回”原地换成设置首页、不多压一条历史', async () => {
+    setup({ hash: '#/settings/delete' });
+    const before = window.history.length;
+    await screen.findByTestId('settings-delete');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('settings-delete-back'));
+    });
+    await waitFor(() => expect(window.location.hash).toBe('#/settings'));
+    expect(screen.queryByTestId('settings-delete')).toBeNull();
+    expect(window.history.length).toBe(before);
   });
 
   it('有没上传的：提示“还有 N 条改动没上传，注销后会丢弃”（和退出登录确认框同一个计数）；0 条不提示；数不出来写“可能有”', async () => {

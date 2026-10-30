@@ -21,6 +21,14 @@
   transform: translateX(-50%);
 }
 
+/* 手机上渐变铺满整屏宽（负责人 10-30 17:35 截图：iPhone 17 Pro Max 宽 440，超过 420，左右各露出约 10 的灰边）；
+   只有电脑这类宽屏才是中间 420 一栏 */
+@media (width <= 600px) {
+  .page::before {
+    width: 100%;
+  }
+}
+
 /* 告诉底色条用登录页这张渐变（底色条在 body 上，只能从根节点继承） */
 :global(:root):has(.page) {
   --safe-top-bg: var(--login-bg, var(--bg));

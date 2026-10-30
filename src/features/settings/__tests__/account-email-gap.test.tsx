@@ -119,13 +119,14 @@ describe('设置页组间距', () => {
     expect(block('.tx')).toMatch(/margin: 0;/);
   });
 
-  it('R-276：分段控件外框（.seg 上下内边距 + .segBtn 高）≤ 44，不撑高 44 的行；数从 CSS 源码里取', () => {
+  it('R-276/R-282：分段控件外框（.seg 上下内边距 + .segBtn 高）看得见 38、和本页其他按钮一样，在 44 的行里上下各留 3；数从 CSS 源码里取', () => {
     const pad = /padding: (\d+)px;/.exec(block('.seg'))?.[1];
     const btnH = /min-height: (\d+)px;/.exec(block('.segBtn'))?.[1];
     expect(pad).toBeDefined();
     expect(btnH).toBeDefined();
-    expect(Number(btnH)).toBe(36);
-    expect(2 * Number(pad) + Number(btnH)).toBeLessThanOrEqual(44);
+    expect(Number(btnH)).toBe(32);
+    expect(2 * Number(pad) + Number(btnH)).toBe(38);
+    expect((44 - (2 * Number(pad) + Number(btnH))) / 2).toBe(3);
   });
 
   it('R-277：页面最底下的“退出登录”另加 .signOut 撑到 44，写在 .btn 之后才压得住 38', () => {

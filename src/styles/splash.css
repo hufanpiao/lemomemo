@@ -175,33 +175,38 @@
 }
 
 /* 状态栏那一条（负责人 10-30 iPhone 截图“上面没拉到顶”，选“状态栏染成渐变顶色”）：主屏幕版网页从状态栏下沿开始，
-   状态栏由 iOS 用页面底色填（平时是 --bg 灰）。启动画面还在（含淡出途中）时，把页面底色换成启动画面最上面一行的平均色，
-   和渐变接成一片；启动画面被 hideSplash() 移除后 :has 不再命中，自动回到 --bg。body::before 的顶部底色条一起换（--safe-top-bg）。
-   颜色取自启动图 1% 屏高那一行的平均值（build/export_splash.py 的产物），深色取 splash-dark.png 第一行平均值 */
-html:has(#lemo-splash),
-html:has(#lemo-splash) body {
-  /* stylelint-disable-next-line color-no-hex -- 启动画面最上面一行的平均色（浅色），见上 */
-  background: #F0ECD0;
+   状态栏由 iOS 用页面底色填（平时是 --bg 灰）。启动画面还在（含淡出途中）时，把页面底色换成启动画面顶边正中的颜色，
+   和渐变接成一片；body::before 的顶部底色条一起换（--safe-top-bg）。
+   淡出一开始（hideSplash() 加 .is-leaving）就不再命中、回到 --bg：不然淡出途中和移除后那一帧，透明的占位页底下露出的是整屏淡黄
+   （负责人 10-30 17:27 截图“启动时好像多了一帧这个”）；淡出途中露出来的就是正常的灰色页面，状态栏同时回到页面底色。
+   负责人 10-30 定（R-280）“取色器取中间值，做到一部分衔接无色差”：状态栏只能是一个颜色（iOS 填的，不是网页画布），取顶边正中，
+   中间那一段和启动图无色差、两边略有差。浅色 #F0EDD3 是负责人 17:24 真机截图顶边下 2～10px 正中实测值
+   （产物 startup-1320x2868.png 第 0～2 行正中 ±2% 宽平均是 (240,238,214)，和真机差 3，按真机）；
+   深色 #232423 取 splash-dark.png 第 0～2 行正中 ±2% 宽的平均值 */
+html:has(#lemo-splash:not(.is-leaving)),
+html:has(#lemo-splash:not(.is-leaving)) body {
+  /* stylelint-disable-next-line color-no-hex -- 启动画面顶边正中的颜色（浅色），见上 */
+  background: #F0EDD3;
   /* stylelint-disable-next-line color-no-hex -- 同上 */
-  --safe-top-bg: #F0ECD0;
+  --safe-top-bg: #F0EDD3;
 }
 
 @media (prefers-color-scheme: dark) {
-  html:has(#lemo-splash),
-  html:has(#lemo-splash) body {
-    /* stylelint-disable-next-line color-no-hex -- 启动画面深色底最上面一行的平均色，见上 */
-    background: #272823;
+  html:has(#lemo-splash:not(.is-leaving)),
+  html:has(#lemo-splash:not(.is-leaving)) body {
+    /* stylelint-disable-next-line color-no-hex -- 启动画面深色底顶边正中的颜色，见上 */
+    background: #232423;
     /* stylelint-disable-next-line color-no-hex -- 同上 */
-    --safe-top-bg: #272823;
+    --safe-top-bg: #232423;
   }
 }
 
 /* iPhone 主屏幕版深色：第一帧跟浅色启动图一致，再和浅色那一层同步暗下来（同一组时长、曲线） */
 @media (prefers-color-scheme: dark) and (display-mode: standalone) and (hover: none) and (pointer: coarse) {
-  html:has(#lemo-splash),
-  html:has(#lemo-splash) body {
+  html:has(#lemo-splash:not(.is-leaving)),
+  html:has(#lemo-splash:not(.is-leaving)) body {
     /* stylelint-disable-next-line color-no-hex -- 浅色顶色，见上 */
-    background: #F0ECD0;
+    background: #F0EDD3;
     animation: lemo-splash-top-to-dark var(--dur-splash-dark) var(--ease-standard) var(--dur-splash-still) forwards;
   }
 }
@@ -209,7 +214,7 @@ html:has(#lemo-splash) body {
 @keyframes lemo-splash-top-to-dark {
   to {
     /* stylelint-disable-next-line color-no-hex -- 深色顶色，见上 */
-    background-color: #272823;
+    background-color: #232423;
   }
 }
 

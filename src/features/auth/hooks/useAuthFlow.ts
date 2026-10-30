@@ -4,7 +4,7 @@
 // 拿到会话以后、跳进 /app/ 之前先探测账号状态（R-256 ③、R-258，useAccountGate 的 check('login') 经 probe 传进来）：
 //   冷静期、停用、探测不出（unknown）时不跳，由登录页原地显示恢复页、“账号已停用”或“暂时无法确认账号状态”；active 才进 App
 // 错误各自一张卡片；发得太频繁、刚发过码都有 60 秒倒计时（Supabase：同一邮箱 60 秒一次）
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import {
@@ -69,6 +69,36 @@ export interface AuthFlowDeps {
 }
 
 const defaultApi = (): AuthApi => createAuthApi(getSupabase);
+
+/** 重发倒计时：只在有倒计时的时候每秒刷新一次；waitS 是服务器限频原文里的 N 秒（K4 复审低 3），没有就按 60 秒 */
+function useCooldown(now: () => number) {
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [tick, setTick] = useState(() => now());
+  useEffect(() => {
+    if (cooldownUntil <= tick) return undefined;
+    const id = setInterval(() => setTick(now()), 1000);
+    return () => clearInterval(id);
+  }, [cooldownUntil, tick, now]);
+  const startCooldown = useCallback(
+    (waitS?: number) => {
+      const t = now();
+      setTick(t);
+      setCooldownUntil(t + (waitS === undefined ? RESEND_MS : waitS * 1000));
+    },
+    [now],
+  );
+  return { cooldownUntil, cooldown: Math.max(0, Math.ceil((cooldownUntil - tick) / 1000)), startCooldown };
+}
+
+/**
+ * 请求序号（审查必改 10-30）：每次发码、发邀请、校验都取一个号；改邮箱、“换一个邮箱”时作废（号加一）。
+ * 请求回来号对不上就整个丢掉——不然邀请码那一步按了“下一步”、没回来就改邮箱，旧请求回来会把界面推到验证码那一步、开始倒计时，
+ * 验证码却发到了旧邮箱；第一步发码等待时改邮箱，回来的“还没注册”也会显示在新邮箱上
+ */
+function useRequestSeq() {
+  const seq = useRef(0);
+  return useMemo(() => ({ next: () => ++seq.current, stale: (n: number) => n !== seq.current, drop: () => void ++seq.current }), []);
+}
 const goApp = () => location.replace('/app/');
 
 /**
@@ -88,25 +118,8 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}, probe?: (
   const [error, setError] = useState<AuthErr | null>(null);
   const [hint, setHint] = useState<AuthFlowState['hint']>(null);
   const [sentAt, setSentAt] = useState(0);
-  const [cooldownUntil, setCooldownUntil] = useState(0);
-  const [tick, setTick] = useState(() => now());
-  // 倒计时：只在有倒计时的时候每秒刷新一次
-  useEffect(() => {
-    if (cooldownUntil <= tick) return undefined;
-    const id = setInterval(() => setTick(now()), 1000);
-    return () => clearInterval(id);
-  }, [cooldownUntil, tick, now]);
-  const cooldown = Math.max(0, Math.ceil((cooldownUntil - tick) / 1000));
-
-  /** 开始倒计时；waitS 是服务器限频原文里的 N 秒（K4 复审低 3），没有就按 60 秒 */
-  const startCooldown = useCallback(
-    (waitS?: number) => {
-      const t = now();
-      setTick(t);
-      setCooldownUntil(t + (waitS === undefined ? RESEND_MS : waitS * 1000));
-    },
-    [now],
-  );
+  const { cooldownUntil, cooldown, startCooldown } = useCooldown(now);
+  const req = useRequestSeq();
 
   /** 拿一个人机验证令牌；还没有就提示等一下 */
   const takeCaptcha = useCallback((): string | null => {
@@ -130,8 +143,10 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}, probe?: (
     if (cooldownUntil > now()) return; // 按真实时钟判断，不用每秒刷新的显示值
     const token = takeCaptcha();
     if (!token) return;
+    const n = req.next();
     setBusy(true);
     const r = await api.sendCode(email.trim(), token);
+    if (req.stale(n)) return; // 等待时改了邮箱：结果作废（busy 已由作废的那一下放开）
     setBusy(false);
     if (r.ok) {
       setSentAt(now());
@@ -146,7 +161,7 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}, probe?: (
     }
     if (r.error === 'rate_limited') startCooldown(r.waitS);
     setError(r.error);
-  }, [api, email, cooldownUntil, takeCaptcha, now, startCooldown]);
+  }, [api, email, cooldownUntil, takeCaptcha, now, startCooldown, req]);
 
   const sendInvite = useCallback(async () => {
     setError(null);
@@ -158,8 +173,10 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}, probe?: (
     if (cooldownUntil > now()) return; // 按真实时钟判断，不用每秒刷新的显示值
     const token = takeCaptcha();
     if (!token) return;
+    const n = req.next();
     setBusy(true);
     const r = await api.inviteStart({ email: email.trim(), code: normalizeInvite(invite), captchaToken: token, locale });
+    if (req.stale(n)) return;
     setBusy(false);
     if (r.ok) {
       // 5.6：码对不对都回同样的 {ok}，界面也只说“邀请码有效的话，验证码会发到这个邮箱”
@@ -171,17 +188,20 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}, probe?: (
     }
     // start 只会回 captcha_failed、try_later（架构 0.38 第 27 条），没有限频卡片
     setError(r.error);
-  }, [api, email, invite, cooldownUntil, takeCaptcha, locale, now, startCooldown]);
+  }, [api, email, invite, cooldownUntil, takeCaptcha, locale, now, startCooldown, req]);
 
   const verify = useCallback(
     async (otp: string) => {
       setError(null);
+      const n = req.next();
       setBusy(true);
       const r =
         step === 'invite-code'
           ? await api.inviteVerify({ email: email.trim(), code: normalizeInvite(invite), emailOtp: otp, locale })
           : await api.verifyCode(email.trim(), otp);
       // 拿到会话以后先探测（R-256 ③、R-258），探测完才放开 busy；冷静期、停用、探测不出时不跳
+      // 校验途中作废了（双保险，界面上校验时“换一个邮箱”是灰的）：失败的结果丢掉；成功时会话已写进本机，照常探测、进 App
+      if (!r.ok && req.stale(n)) return;
       const go = r.ok && (!probe || (await probe()));
       setBusy(false);
       if (r.ok) {
@@ -201,7 +221,7 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}, probe?: (
       }
       setError(splitCodeError(r.error, sentAt, now()));
     },
-    [api, step, email, invite, locale, sentAt, now, enterApp, probe],
+    [api, step, email, invite, locale, sentAt, now, enterApp, probe, req],
   );
 
   /** 验证码输入：只留数字，填满 6 位自动提交（5.9“键盘弹起”） */
@@ -218,12 +238,14 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}, probe?: (
   const resend = useCallback(() => (step === 'invite-code' ? sendInvite() : sendCode()), [step, sendInvite, sendCode]);
 
   const backToEmail = useCallback(() => {
+    req.drop();
+    setBusy(false);
     setStep('email');
     setCode('');
     setInviteRaw('');
     setError(null);
     setHint(null);
-  }, []);
+  }, [req]);
 
   /** 卡片上的“重新输入”：清掉错误和输入框，留在这一屏 */
   const dismissError = useCallback(() => {
@@ -235,10 +257,12 @@ export function useAuthFlow(captcha: Captcha, deps: AuthFlowDeps = {}, probe?: (
     }
   }, [error]);
 
+  /** 改邮箱：还在路上的发码请求作废（序号加一）；在邀请码那一步改（负责人 10-30 17:35“邮箱输错以后无法修改”）还要回填邮箱那一步、邀请码清空 */
   const setEmail = useCallback((v: string) => {
+    if (step === 'invite' || busy) backToEmail();
     setEmailRaw(v);
     setHint(null);
-  }, []);
+  }, [step, busy, backToEmail]);
   const setInvite = useCallback((v: string) => {
     setInviteRaw(v);
     setHint(null);

@@ -105,19 +105,31 @@ describe('竖条的颜色', () => {
 
 describe('状态栏那一条（R-278，负责人 10-30）', () => {
   it('启动画面在的时候 html、body 底色和 --safe-top-bg 换成渐变顶色，深色换深色顶色', () => {
-    expect(cssNoComments).toMatch(/html:has\(#lemo-splash\),\s*html:has\(#lemo-splash\) body \{\s*background: #F0ECD0;\s*--safe-top-bg: #F0ECD0;/);
-    expect(cssNoComments).toMatch(/background: #272823;\s*--safe-top-bg: #272823;/);
+    expect(cssNoComments).toMatch(
+      /html:has\(#lemo-splash:not\(\.is-leaving\)\),\s*html:has\(#lemo-splash:not\(\.is-leaving\)\) body \{\s*background: #F0EDD3;\s*--safe-top-bg: #F0EDD3;/,
+    );
+    expect(cssNoComments).toMatch(/background: #232423;\s*--safe-top-bg: #232423;/);
+  });
+  it('淡出一开始（.is-leaving）就回到页面底色：每处启动顶色的选择器都排除 .is-leaving，淡出途中不闪整屏淡黄（10-30 17:27）', () => {
+    const sels = [...cssNoComments.matchAll(/html:has\(#lemo-splash[^)]*\)+/g)].map((m) => m[0]);
+    expect(sels.length).toBeGreaterThanOrEqual(6);
+    for (const sel of sels) expect(sel).toBe('html:has(#lemo-splash:not(.is-leaving))');
   });
   it('iPhone 主屏幕版深色：顶色和浅色那一层同一组时长、曲线一起暗下来', () => {
     expect(cssNoComments).toMatch(/animation: lemo-splash-top-to-dark var\(--dur-splash-dark\) var\(--ease-standard\) var\(--dur-splash-still\) forwards;/);
-    expect(cssNoComments).toMatch(/@keyframes lemo-splash-top-to-dark \{\s*to \{\s*background-color: #272823;/);
+    expect(cssNoComments).toMatch(/@keyframes lemo-splash-top-to-dark \{\s*to \{\s*background-color: #232423;/);
   });
-  it('顶色取自启动图最上面一截的平均色（误差 6 以内）', () => {
-    // 启动图 1320×2868 第 28 行（1% 屏高）横向平均值：build/export_splash.py 产物；改了启动图要回来改 splash.css 的顶色
+  // R-280（负责人 10-30“取色器取中间值，做到一部分衔接无色差”）：状态栏是 iOS 填的一个纯色，取启动图顶边正中的颜色。
+  // 来源：浅色——负责人 17:24 真机截图（1320×2868）顶边下 2～10px 正中 (240,237,211)；
+  //   build/export_splash.py 产物 src/public/icons/startup/startup-1320x2868.png 第 0～2 行、正中 ±2% 宽平均 (240,238,214)，差 3，按真机；
+  //   深色——src/styles/splash/splash-dark.png 第 0～2 行、正中 ±2% 宽平均 (35,36,35)。改了启动图要回来重取
+  it('顶色是启动图顶边正中的颜色：浅色等于真机实测、和产物差 ≤ 3；深色和产物差 ≤ 2', () => {
     const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-    const [r, g, b] = hex('#F0ECD0');
-    const pairs: [number | undefined, number][] = [[r, 239], [g, 236], [b, 208]];
-    for (const [x, y] of pairs) expect(Math.abs((x ?? -99) - y)).toBeLessThanOrEqual(6);
+    const near = (h: string, want: number[], tol: number) => hex(h).forEach((x, i) => expect(Math.abs(x - (want[i] ?? -99))).toBeLessThanOrEqual(tol));
+    expect(hex('#F0EDD3')).toEqual([240, 237, 211]);
+    near('#F0EDD3', [240, 238, 214], 3);
+    near('#232423', [35, 36, 35], 2);
+    expect(cssNoComments).not.toMatch(/#F0ECD0|#272823/);
   });
 });
 

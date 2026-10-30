@@ -93,7 +93,7 @@ test.describe('设置页骨架', () => {
 
   // R-276（负责人 10-30）：单行行整行高 44；按钮（.btn）看得见 38，点击区由 ::after 扩到 44——
   // 在按钮上下边框外 2px 用 elementFromPoint 点，命中的仍是按钮本身。e2e 构建读不到设备，账号组里是“重试”按钮（.btn）
-  test('R-276/R-277 实测：单行行高 44；“重试”看得见 38、上下边框外 2px 仍点到按钮本身；“退出登录”和注销那行一样高 44', async ({ page }) => {
+  test('R-276/R-277/R-282 实测：单行行高 44；“重试”看得见 38、上下边框外 2px 仍点到按钮本身；“退出登录”和注销那行一样高 44；语言切换框看得见 38', async ({ page }) => {
     await page.goto(SETTINGS);
     const main = settingsMain(page);
     await expect(main).toBeVisible();
@@ -126,5 +126,58 @@ test.describe('设置页骨架', () => {
       expect(r.up).toBe(true);
       expect(r.down).toBe(true);
     }
+    // R-282（负责人 10-30 选“再小一点”）：语言切换框看得见 38、在 44 的行里上下各留 3；两个选项的点按范围仍是整行 44
+    const seg = await main.getByTestId('settings-lang').evaluate((el) => {
+      const row = el.closest('li')?.getBoundingClientRect();
+      const b = el.getBoundingClientRect();
+      const btns = [...el.querySelectorAll('button')];
+      const hit = btns.map((btn) => {
+        const r = btn.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const own = (y: number): boolean => el.ownerDocument.elementFromPoint(cx, y)?.closest('button') === btn;
+        return { h: r.height, up: own(b.top - 2), down: own(b.bottom + 2) };
+      });
+      return { h: b.height, top: b.top - (row?.top ?? NaN), bottom: (row?.bottom ?? NaN) - b.bottom, hit };
+    });
+    expect(Math.round(seg.h)).toBe(38);
+    expect(Math.round(seg.top)).toBe(3);
+    expect(Math.round(seg.bottom)).toBe(3);
+    expect(seg.hit).toHaveLength(2);
+    for (const b of seg.hit) {
+      expect(Math.round(b.h)).toBe(32);
+      expect(b.up).toBe(true);
+      expect(b.down).toBe(true);
+    }
+  });
+
+  // 负责人 10-30（iPhone 主屏幕版）：“注销账号点进去后左滑应该是回到设置里面的页面，而不是主页”。
+  // 注销页原来是设置页里的本地状态、没有历史记录，侧滑（浏览器后退）直接退回今天；现在有自己的地址 #/settings/delete
+  test('今天 → 设置 → 注销账号：后退一次回设置、再后退回今天；注销页“‹ 返回”同样回设置、不多压一条历史', async ({ page }) => {
+    await page.goto('/app/#/today');
+    await page.getByRole('link', { name: /设置/ }).click();
+    await expect(settingsMain(page)).toBeVisible();
+    await expect(page).toHaveURL(/#\/settings$/);
+    await page.getByTestId('settings-delete-entry').click();
+    await expect(page.getByTestId('settings-delete')).toBeVisible();
+    await expect(page).toHaveURL(/#\/settings\/delete$/);
+
+    await page.goBack();
+    await expect(page).toHaveURL(/#\/settings$/);
+    await expect(page.getByTestId('settings-delete')).toHaveCount(0);
+    await expect(page.getByTestId('settings-delete-entry')).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/#\/today$/);
+    await expect(page.locator('main[data-feature="today"]')).toBeVisible();
+
+    // 左上角“‹ 返回”：退回设置；之后再后退一次就是今天（说明返回没有 push 新的一条）
+    await page.goForward();
+    await expect(settingsMain(page)).toBeVisible();
+    await page.getByTestId('settings-delete-entry').click();
+    await expect(page.getByTestId('settings-delete')).toBeVisible();
+    await page.getByTestId('settings-delete-back').click();
+    await expect(page).toHaveURL(/#\/settings$/);
+    await expect(page.getByTestId('settings-delete-entry')).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/#\/today$/);
   });
 });
