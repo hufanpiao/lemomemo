@@ -103,6 +103,24 @@ describe('竖条的颜色', () => {
   });
 });
 
+describe('状态栏那一条（R-278，负责人 10-30）', () => {
+  it('启动画面在的时候 html、body 底色和 --safe-top-bg 换成渐变顶色，深色换深色顶色', () => {
+    expect(cssNoComments).toMatch(/html:has\(#lemo-splash\),\s*html:has\(#lemo-splash\) body \{\s*background: #F0ECD0;\s*--safe-top-bg: #F0ECD0;/);
+    expect(cssNoComments).toMatch(/background: #272823;\s*--safe-top-bg: #272823;/);
+  });
+  it('iPhone 主屏幕版深色：顶色和浅色那一层同一组时长、曲线一起暗下来', () => {
+    expect(cssNoComments).toMatch(/animation: lemo-splash-top-to-dark var\(--dur-splash-dark\) var\(--ease-standard\) var\(--dur-splash-still\) forwards;/);
+    expect(cssNoComments).toMatch(/@keyframes lemo-splash-top-to-dark \{\s*to \{\s*background-color: #272823;/);
+  });
+  it('顶色取自启动图最上面一截的平均色（误差 6 以内）', () => {
+    // 启动图 1320×2868 第 28 行（1% 屏高）横向平均值：build/export_splash.py 产物；改了启动图要回来改 splash.css 的顶色
+    const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const [r, g, b] = hex('#F0ECD0');
+    const pairs: [number | undefined, number][] = [[r, 239], [g, 236], [b, 208]];
+    for (const [x, y] of pairs) expect(Math.abs((x ?? -99) - y)).toBeLessThanOrEqual(6);
+  });
+});
+
 describe('构建产物里的媒体查询（build/check_splash_css.mjs；审查必改 1）', () => {
   it('源码电脑版式用 (orientation: landscape)，不用 aspect-ratio', () => {
     expect(cssNoComments).toContain('@media (orientation: landscape) {');

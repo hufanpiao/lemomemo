@@ -174,6 +174,45 @@
   }
 }
 
+/* 状态栏那一条（负责人 10-30 iPhone 截图“上面没拉到顶”，选“状态栏染成渐变顶色”）：主屏幕版网页从状态栏下沿开始，
+   状态栏由 iOS 用页面底色填（平时是 --bg 灰）。启动画面还在（含淡出途中）时，把页面底色换成启动画面最上面一行的平均色，
+   和渐变接成一片；启动画面被 hideSplash() 移除后 :has 不再命中，自动回到 --bg。body::before 的顶部底色条一起换（--safe-top-bg）。
+   颜色取自启动图 1% 屏高那一行的平均值（build/export_splash.py 的产物），深色取 splash-dark.png 第一行平均值 */
+html:has(#lemo-splash),
+html:has(#lemo-splash) body {
+  /* stylelint-disable-next-line color-no-hex -- 启动画面最上面一行的平均色（浅色），见上 */
+  background: #F0ECD0;
+  /* stylelint-disable-next-line color-no-hex -- 同上 */
+  --safe-top-bg: #F0ECD0;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:has(#lemo-splash),
+  html:has(#lemo-splash) body {
+    /* stylelint-disable-next-line color-no-hex -- 启动画面深色底最上面一行的平均色，见上 */
+    background: #272823;
+    /* stylelint-disable-next-line color-no-hex -- 同上 */
+    --safe-top-bg: #272823;
+  }
+}
+
+/* iPhone 主屏幕版深色：第一帧跟浅色启动图一致，再和浅色那一层同步暗下来（同一组时长、曲线） */
+@media (prefers-color-scheme: dark) and (display-mode: standalone) and (hover: none) and (pointer: coarse) {
+  html:has(#lemo-splash),
+  html:has(#lemo-splash) body {
+    /* stylelint-disable-next-line color-no-hex -- 浅色顶色，见上 */
+    background: #F0ECD0;
+    animation: lemo-splash-top-to-dark var(--dur-splash-dark) var(--ease-standard) var(--dur-splash-still) forwards;
+  }
+}
+
+@keyframes lemo-splash-top-to-dark {
+  to {
+    /* stylelint-disable-next-line color-no-hex -- 深色顶色，见上 */
+    background-color: #272823;
+  }
+}
+
 /* 深色：电脑和浏览器没有 iOS 启动图，第一帧直接是深色版 */
 @media (prefers-color-scheme: dark) {
   .lemo-splash-d {
