@@ -47,6 +47,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      # tests/build/deno-frozen-lock.test.ts 要真跑 deno install --frozen（接手清单 DENO-lock-ci）；SHA 和版本与 ci.yml 逐字相同，那个测试会核对
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          # 和本机同一版（架构 8.6：Deno 锁具体版本，本机和 CI 一致；本机 deno --version 为 2.9.8）
+          deno-version: 2.9.8
+
       - name: wrangler 两处版本一致（package.json 给 E2E、tools/deploy 给部署，含两份锁文件；架构 0.31 第 26 条）
         # 只读 JSON，不安装；不一致就失败，两处一起升
         run: python -I build/ci/check_wrangler_version.py
@@ -73,6 +79,9 @@ jobs:
 
       - name: 单元和组件测试（UTC、首尔、洛杉矶三个时区各一遍，架构第 9 节 H2）
         # 前端 A 的 test 脚本如果已经自己按三个时区跑，这里改成只跑一遍
+        # LEMO_REQUIRE_DENO=1：deno-frozen-lock.test.ts 找不到 deno 就失败，不再 skipIf 悄悄跳过
+        env:
+          LEMO_REQUIRE_DENO: '1'
         run: |
           for tz in UTC Asia/Seoul America/Los_Angeles; do
             echo "::group::TZ=$tz"
