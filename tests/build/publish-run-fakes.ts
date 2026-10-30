@@ -4,6 +4,7 @@
 //   参数里含 LEMO_FAKE_FAIL 时返回 1。
 // - fakeFunctions：演练窗口里先定义好的 PowerShell 函数——git（只替换 git var 两种情形）、Invoke-WebRequest、Invoke-RestMethod、
 //   npm.cmd、node、Read-Host（从队列取假值，多问一次就失败）等，覆盖掉同名命令，publish.ps1 调到的就是它们。
+//   node 跑 build\ci\check_deno_drift.mjs 时不连 npm，按 LEMO_FAKE_DRIFT（第几次返回 1）给退出码，默认都是 0。
 // 不是测试文件，不起子进程。
 
 /** 令牌相关的环境变量名（演练不传给子进程，假工具只记有没有值） */
@@ -52,7 +53,7 @@ public static class FakeTool {
 /** 演练窗口里覆盖同名命令的 PowerShell 函数；inputs 是 Read-Host 依次返回的假值 */
 export function fakeFunctions(p: { fakeTgz: string; fakeExe: string; fakeJs: string; ver: string; inputs: string[] }): string {
   const { fakeTgz, fakeExe, fakeJs, ver, inputs } = p;
-  return `$T = [string][char]9
+  return `$global:T = [string][char]9
 function global:L([string]$s) { [IO.File]::AppendAllText($env:LEMO_FAKE_LOG, $s + [char]10) }
 # git 是真的，只有 git var 两种情形替换：LEMO_FAKE_GITVAR_FAIL 点名的变量当作不认识（退出码 129，像 2.42 以前的 git）；
 # LEMO_FAKE_ATTR_SYSTEM 不为空时 GIT_ATTR_SYSTEM 答这个路径、退出码 0（模拟 GIT_ATTR_NOSYSTEM 没生效）
@@ -66,25 +67,25 @@ function global:git {
   & $global:RealGit @a
   $global:LASTEXITCODE = $LASTEXITCODE }
 # 本进程（脚本自己）此刻环境变量里有哪些令牌（只记名字）：读令牌、发请求时都应该是空的
-function global:PEnv([string]$where) { L ('penv' + $T + $where + $T + ((@(${TOKEN_ENV.map(q).join(', ')}) | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }) -join ',')) }
+function global:PEnv([string]$where) { L ('penv' + $global:T + $where + $global:T + ((@(${TOKEN_ENV.map(q).join(', ')}) | Where-Object { [Environment]::GetEnvironmentVariable($_, 'Process') }) -join ',')) }
 function global:Get-ItemProperty { $null }
 function global:Set-Clipboard { }
 function global:Add-Type { throw 'test: Add-Type 已屏蔽' }
 function global:Invoke-WebRequest { param([string]$Uri, [string]$OutFile, [switch]$UseBasicParsing)
-  L ('download' + $T + $Uri); Copy-Item -LiteralPath ${q(fakeTgz)} -Destination $OutFile }
+  L ('download' + $global:T + $Uri); Copy-Item -LiteralPath ${q(fakeTgz)} -Destination $OutFile }
 function global:Invoke-RestMethod { param([string]$Uri, $Headers, $MaximumRedirection)
   PEnv ('rest ' + $Uri)
   if ($Uri -like 'https://api.cloudflare.com/client/v4/accounts/*/workers/scripts') {
-    L ('cf' + $T + $Uri + $T + ([string]$Headers.Authorization).StartsWith('Bearer ') + $T + $MaximumRedirection)
+    L ('cf' + $global:T + $Uri + $global:T + ([string]$Headers.Authorization).StartsWith('Bearer ') + $global:T + $MaximumRedirection)
     if ($env:LEMO_FAKE_CF_DENY) { throw 'test: 403 Forbidden' }
     return [pscustomobject]@{ success = $true; result = @() } }
   if ($Uri -like 'https://api.supabase.com/v1/projects/*') {
-    L ('api' + $T + $Uri + $T + ([string]$Headers.Authorization).StartsWith('Bearer sbp_'))
+    L ('api' + $global:T + $Uri + $global:T + ([string]$Headers.Authorization).StartsWith('Bearer sbp_'))
     return [pscustomobject]@{ name = 'lemomemo'; region = 'ap-northeast-2'; status = 'ACTIVE_HEALTHY' } }
-  if ($Uri -like '*/app/version.json') { L ('version' + $T + $Uri); return [pscustomobject]@{ version = ${q(ver)} } }
+  if ($Uri -like '*/app/version.json') { L ('version' + $global:T + $Uri); return [pscustomobject]@{ version = ${q(ver)} } }
   throw ('test: 没想到的请求 ' + $Uri) }
 function global:npm.cmd {
-  $a = @($args); L ('npm' + $T + ($a -join ' ') + $T + (Get-Location).Path)
+  $a = @($args); L ('npm' + $global:T + ($a -join ' ') + $global:T + (Get-Location).Path)
   if ($a[0] -eq 'ci' -and (Test-Path 'package.json') -and ((Get-Content 'package.json' -Raw) -match 'lemo-deploy-tools')) {
     $nm = Join-Path (Get-Location).Path 'node_modules'
     $bin = Join-Path $nm 'wrangler\\bin'
@@ -100,6 +101,7 @@ function global:npm.cmd {
     Set-Content -LiteralPath 'dist\\web\\app\\version.json' -Value '{}' -Encoding Ascii }
   $global:LASTEXITCODE = 0 }
 # node 跑临时目录里的 wrangler\\bin\\wrangler.js 时转给同目录的假 wrangler.exe（真的子进程，日志里记它拿到了哪些令牌）；其余只记日志
+$global:driftCalls = 0
 function global:node {
   $a = @($args)
   if ($a.Count -gt 0 -and ([string]$a[0]).EndsWith('\\wrangler\\bin\\wrangler.js')) {
@@ -108,11 +110,18 @@ function global:node {
     & $exe @rest
     $global:LASTEXITCODE = $LASTEXITCODE
     return }
-  L ('node' + $T + ($a -join ' ')); $global:LASTEXITCODE = 0 }
+  L ('node' + $global:T + ($a -join ' '))
+  # 部署前查 npm 漂移（build\\ci\\check_deno_drift.mjs）：LEMO_FAKE_DRIFT 是 1 时第一次就返回 1，是 2 时第二次（输令牌前的复查）才返回 1。
+  # 计数变量在上面先设成 0：publish.ps1 开了 Set-StrictMode，读没设过的变量会报错
+  if ($a.Count -gt 0 -and ([string]$a[0]).EndsWith('check_deno_drift.mjs')) {
+    $global:driftCalls = 1 + [int]$global:driftCalls
+    $global:LASTEXITCODE = if ($env:LEMO_FAKE_DRIFT -eq [string]$global:driftCalls) { 1 } else { 0 }
+    return }
+  $global:LASTEXITCODE = 0 }
 $global:inputs = New-Object System.Collections.Queue
 ${inputs.map((v) => `$global:inputs.Enqueue(${q(v)})`).join('\n')}
 function global:Read-Host { param([switch]$AsSecureString, [Parameter(Position = 0)][string]$Prompt)
-  L ('prompt' + $T + $Prompt)
+  L ('prompt' + $global:T + $Prompt)
   PEnv ('prompt ' + $Prompt)
   if ($global:inputs.Count -eq 0) { throw ('test: Read-Host 多问了一次：' + $Prompt) }
   $v = $global:inputs.Dequeue()

@@ -100,7 +100,8 @@ jobs:
         # 变量拼出来的动态 import Deno 看不见：gen/ 由上一步 copy_shared 拦，其余源码由下面一步的 check_backend F7 和 unit 的 tests/build/deno-config.test.ts 拦。
         # --no-check：类型检查在 ci.yml 的 deno task check 里做。
         # 只装进 Deno 全局缓存，不建 node_modules；Deno 默认不跑 npm 的安装脚本。
-        # 这里只证明“仓库里的源码和锁对得上”；部署（functions deploy --use-api）读不读这份锁待第一次预览部署函数时实测（接手清单 P-deno-lock）
+        # 这里只证明“仓库里的源码和锁对得上”；部署（functions deploy --use-api）不读这份锁：只上传入口可达的源码，
+        # deno.json、deno.lock 都不上传，服务器端按 npm:包@精确版本 自己取包（10-31 实测，验收清单 D2、接手清单 P-deno-lock）
         working-directory: supabase/functions
         shell: bash
         run: |
@@ -224,6 +225,14 @@ jobs:
         with:
           name: preview-bundle
           path: .
+
+      - name: 部署前查 npm 漂移（服务器端打包不读 deno.lock，间接依赖按范围取最高版；架构 0.33 第 7 条）
+        # 10-31 实测：functions deploy --use-api 只上传源码、不上传 deno.lock，服务器按 npm:包@版本 自己取包；
+        # 间接依赖（例如 storage-js → iceberg-js ^0.8.1）范围内一出新版，线上打进去的就和锁里核过的不同。
+        # 这一步用产物里的 supabase/functions/deno.lock，逐条算 npm 上范围内最高的正式版，和锁不一样、或查不了 registry 都失败。
+        # 放在下载产物之后、恢复暂停和 db push 之前（安全审查 S2）：失败时预览项目、数据库、函数、网页都还没动。
+        # 只读、只发 GET 到 registry.npmjs.org，不带任何令牌；脚本只用 Node 自带的 fetch（build/ci 在稀疏检出里）
+        run: node build/ci/check_deno_drift.mjs --lock supabase/functions/deno.lock
 
       - name: 预览项目暂停了就恢复（架构 8.3、M13）
         env:

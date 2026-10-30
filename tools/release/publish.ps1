@@ -332,6 +332,7 @@ function Invoke-Checks {
     try { & python -I 'build\check_backend.py' | Out-Host; $code = $LASTEXITCODE } finally { Pop-Location }
     if ($code -ne 0) { Fail '后端越界检查没通过（python -I build\check_backend.py），先修好再发布' }
     Ok "后端越界检查通过（Python $pyVer）"
+    Assert-NoNpmDrift
     Push-Location $RepoPath
     try { $names = & python -I 'build\check_backend.py' '--print-preview-funcs'; $code = $LASTEXITCODE } finally { Pop-Location }
     if ($code -ne 0) { Fail '读不出预览专用函数的名单（python -I build\check_backend.py --print-preview-funcs）' }
@@ -847,6 +848,17 @@ function Assert-WorkersAccess {
     Ok 'Cloudflare 令牌有 Workers 权限（只读预检）'
 }
 
+# 部署前查 npm 漂移（架构 0.33 第 7 条方案 C）：functions deploy --use-api 不读 deno.lock，间接依赖按范围取 npm 上最高版，
+# npm 上一出新版，线上打进去的就和锁里核过的不同。脚本只读锁、只向 registry.npmjs.org 发 GET；有漂移或查不了 registry 就停。
+# 和 Assert-NoPreviewFunctions 一样查两次：第 1 步一次；第 4 步装完工具、第 5 步输入令牌之前再查一次（缩短到部署的间隔）。
+# 不在第 6 步 db push 前查：第 5 步起进程里已有令牌，不让带令牌的进程跑仓库里的脚本（见第 1 步预览专用函数名单那段）
+function Assert-NoNpmDrift {
+    Push-Location $RepoPath
+    try { & node 'build\ci\check_deno_drift.mjs' | Out-Host; $code = $LASTEXITCODE } finally { Pop-Location }
+    if ($code -ne 0) { Fail '部署前 npm 漂移检查没通过（node build\ci\check_deno_drift.mjs）：线上打包会取到和 deno.lock 不同的包。还没输入令牌、还没改库，看清新版本再定怎么处理' }
+    Ok '部署前 npm 漂移检查通过（锁里的版本就是线上打包会取到的版本）'
+}
+
 # 正式环境不能带上预览专用函数（架构 6.2 末尾预览专用一行，check_backend F6；B0 审查中 2）：
 # supabase\functions\ 下不能有和名单同名的目录（入口只许 deploy-preview.yml 在预览产物里生成），
 # supabase\config.toml 里不能出现 _preview，也不能声明 [functions.<预览专用函数名>]（CLI 会部署配置里声明的函数）。
@@ -1226,6 +1238,7 @@ try {
     if ($script:DoWeb) { Invoke-Build $info } else { Step '3. 构建正式产物'; Ok '-Only functions：跳过（不部署网页）' }
     Install-Tools
     Assert-NoPreviewFunctions
+    Assert-NoNpmDrift
     if ($DryRun) { Say ''; Say '演练（-DryRun）到此结束：没有输入令牌，没有部署任何东西。'; return }
     Invoke-Deploy $info
     Step '完成'

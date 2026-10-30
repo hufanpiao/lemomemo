@@ -103,6 +103,23 @@ describe.skipIf(!PS)('publish.ps1 从头跑到尾（假仓库、假工具、假�
     noSecrets(r);
   }, 180_000);
 
+  // 部署前查 npm 漂移（架构 0.33 第 7 条方案 C，安全审查 S3、S4）：第 1 步查一次，装完工具、输令牌之前再查一次；
+  // 任何一次没过都在输令牌之前停下：不问令牌（假 Read-Host 记下的提示里没有“粘贴到这里”）、不调 supabase / wrangler
+  it.each([
+    ['第 1 步', '1', 1],
+    ['输令牌前的复查', '2', 2],
+  ])('npm 漂移检查没过（%s）：Fail 说清楚，不问令牌、不改库', async (_when, drift, calls) => {
+    const r = await runScript('-Ops', ['一致', REF, SB_TOKEN, DB_PW, CF_TOKEN, ACCT, 'lemomemo', '确认推送'], { env: { LEMO_FAKE_DRIFT: drift } });
+    expect(r.code, r.out).not.toBe(0);
+    expect(r.out).toContain('部署前 npm 漂移检查没通过（node build\\ci\\check_deno_drift.mjs）');
+    expect(r.out).toContain('还没输入令牌、还没改库');
+    expect(r.log.filter((l) => /^node\t.*check_deno_drift\.mjs/.test(l)), r.log.join('\n')).toHaveLength(calls);
+    expect(r.prompts.some((p) => p.includes('粘贴到这里')), r.prompts.join('\n')).toBe(false);
+    // 除了第 4 步 lemo-ops 的打包演练（--dry-run），不调任何部署工具：没 link、没 db push、没部署
+    expect(r.calls.filter((c) => !c.includes('--dry-run')), r.calls.join('\n')).toEqual([]);
+    noSecrets(r);
+  }, 180_000);
+
   it('回滚 -Only functions -Ops（假令牌）：不 link、不 db push、不部署 Pages、不要数据库密码；函数后紧接着 lemo-ops', async () => {
     const r = await runScript('-Only functions -Ops', [REF, SB_TOKEN, CF_TOKEN, ACCT, 'lemomemo']);
     expect(r.code, r.out).toBe(0);
