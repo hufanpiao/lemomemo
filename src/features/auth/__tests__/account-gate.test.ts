@@ -2,6 +2,8 @@
 // 手写的 status 判断和 shared/schema/account.ts 的 accountStatusResponse 对得上；四种探测结果；restore 的错误码；日期按 fmtWhen 口径
 import { describe, expect, it, vi } from 'vitest';
 import { accountStatusResponse } from '../../../../shared/schema/account.ts';
+import { apiError } from '../../../../shared/schema/api.ts';
+import { httpError } from '../../../platform/account-status.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import { createAccountGateApi, parseStatus, purgeWhen, restoreError } from '../data/account-gate.ts';
 import { ko } from '../i18n/ko.ts';
@@ -56,6 +58,35 @@ describe('parseStatus：和 accountStatusResponse（zod）一致', () => {
   });
 });
 
+describe('httpError 的错误码：和 apiError（zod）一致（REVIEW-1030-be-sugg ①；登录页不带 zod，所以手写、在这里对照）', () => {
+  const samples: [string, string][] = [
+    ['正常码', JSON.stringify({ error: 'restore_too_late' })],
+    ['空串', JSON.stringify({ error: '' })],
+    ['65 字', JSON.stringify({ error: 'x'.repeat(65) })],
+    ['正好 64 个 x', JSON.stringify({ error: 'x'.repeat(64) })],
+    // 66 个 UTF-16 码元、33 个码位：zod 4 按码位数，算 33 个，通过
+    ['33 个 emoji', JSON.stringify({ error: '\u{1F600}'.repeat(33) })],
+    ['只有 1 个字', JSON.stringify({ error: 'x' })],
+    ['不是字符串', JSON.stringify({ error: 5 })],
+    ['老写法 {code}', JSON.stringify({ code: 'restore_too_late' })],
+    ['带 purge_after', JSON.stringify({ error: 'account_pending_deletion', purge_after: '2026-11-05T05:30:00Z' })],
+    ['不是 JSON', '<html>bad gateway</html>'],
+  ];
+  for (const [name, text] of samples) {
+    it(name, async () => {
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        parsed = null;
+      }
+      const z = apiError.safeParse(parsed);
+      const h = await httpError({ name: 'FunctionsHttpError', context: new Response(text, { status: 400 }) });
+      expect(h?.code).toBe(z.success ? z.data.error : '');
+    });
+  }
+});
+
 describe('createAccountGateApi.status：四种探测结果', () => {
   it('调 account {action:"status"}；active、pending_deletion（带 purge_after）、disabled 原样认出', async () => {
     for (const [data, want] of [
@@ -107,6 +138,15 @@ describe('restore 的错误码（架构第 6 节错误码表）', () => {
     expect(await restoreError(httpErr(503, 'x'))).toBe('try_later');
     expect(await restoreError(httpErr(400, { error: 'constructor' }))).toBe('unknown');
     expect(await restoreError({ name: 'FunctionsFetchError' })).toBe('offline');
+  });
+
+  it('错误码按 apiError 的口径（REVIEW-1030-be-sugg ①）：空串、不是字符串、超长、老写法 {code} 都不算码', async () => {
+    // 10-30 主持人定：401 加超长 error（超过 64 字，只可能是坏响应）按“没有 error 字段”算，归 reauth_required（原来是 unknown）
+    expect(await restoreError(httpErr(401, { error: 'x'.repeat(65) }))).toBe('reauth_required');
+    // 下面三条改前改后一致
+    expect(await restoreError(httpErr(401, { error: '' }))).toBe('reauth_required');
+    expect(await restoreError(httpErr(401, { error: 5 }))).toBe('reauth_required');
+    expect(await restoreError(httpErr(409, { code: 'restore_too_late' }))).toBe('unknown');
   });
 
   it('createAccountGateApi.restore：调 {action:"restore"}；成功 ok；超时按 try_later', async () => {

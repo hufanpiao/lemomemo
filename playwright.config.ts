@@ -2,17 +2,25 @@
 // 先按 e2e 模式构建（connect-src 里的 ws 指向本机 8788），再用项目里的 wrangler（devDependency）起服务
 // /files、/sb 函数的环境变量用 --binding 指向本机假后端（tests/e2e/fake-backends.ts：S3 替身 + 假 Supabase；值全是假的，见 fake-values.ts）
 // 和真后端组（playwright.real.config.ts）能同时跑（接手清单 E2E-parallel，R-267 D1）：假后端默认 9199、9198（真后端组 9197、9196），
-// 产物 dist/web（真后端组 dist/web-real），wrangler 本地状态 .wrangler/state-e2e、调试端口 9230（真后端组 state-e2e-real、9231）
+// 产物 dist/web（真后端组 dist/web-real；设了 LEMO_WEB_OUT 按 build_web 同一条规则改，构建和 wrangler 用同一个目录），
+// wrangler 本地状态 .wrangler/state-e2e、调试端口 9230（真后端组 state-e2e-real、9231）
 // globalTimeout 默认 20 分钟，E2E_GLOBAL_TIMEOUT_MS 可改（tests/e2e/global-timeout.ts，E2E-webkit-hang）
+import { relative } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
+import { webOutDir } from './build/assemble_web.mjs';
 import { DEFAULT_FAKE_PORTS, FAKE_PORT_ENV, e2eBindings, fakePorts } from './tests/e2e/fake-values.ts';
 import { NO_BACKEND_GLOBAL_TIMEOUT_MS, globalTimeoutMs } from './tests/e2e/global-timeout.ts';
 
 const PORT = 8788;
+/** 产物目录（相对仓库根，正斜杠）：和 build_web 同一条规则（build/assemble_web.mjs 的 webOutDir），默认 dist/web */
+const WEB_OUT = relative(import.meta.dirname, webOutDir(import.meta.dirname, process.env)).replaceAll('\\', '/');
 const FAKE = fakePorts(process.env, DEFAULT_FAKE_PORTS);
 /**
  * 本机默认复用已经在跑的假后端和 wrangler（CI 不复用）。设了 LEMO_E2E_FAKE_S3_PORT 或 LEMO_E2E_FAKE_SB_PORT 时一律不复用：
  * 8788 上那个旧 wrangler 的 binding 还指着默认的 9199、9198，复用了等于端口覆盖没生效（审查建议，10-30）
+ * 复用时不重新构建，也不管 8788 上跑的是哪份产物：globalSetup（tests/e2e/dist-fingerprint.ts）先拿服务上的 /app/ 首页和本机
+ * <WEB_OUT>/app/index.html 逐字比对（引的都是带哈希的文件名，等于产物指纹），对不上直接失败。
+ * ⚠ 仍查不出：服务和本机是同一份 dist、但 dist 比 src 旧——改了 src 要先 npm run build -- --mode e2e，或关掉 8788 上的服务（E2E-guard-sugg2 ④）
  */
 const FAKE_PORTS_OVERRIDDEN = Boolean(process.env[FAKE_PORT_ENV.s3] || process.env[FAKE_PORT_ENV.supabase]);
 const REUSE = process.env.CI !== 'true' && !FAKE_PORTS_OVERRIDDEN;
@@ -28,6 +36,8 @@ export default defineConfig({
   testIgnore: '**/*.real.spec.ts',
   fullyParallel: true,
   globalTimeout: globalTimeoutMs(process.env, NO_BACKEND_GLOBAL_TIMEOUT_MS),
+  // 复用服务时核对产物指纹（见上面 REUSE 的说明）；新起的服务刚构建完，两边本来就一样
+  globalSetup: './tests/e2e/dist-fingerprint.ts',
   forbidOnly: process.env.CI === 'true',
   retries: process.env.CI === 'true' ? 1 : 0,
   reporter: process.env.CI === 'true' ? [['list'], ['html', { open: 'never' }]] : 'list',
@@ -48,7 +58,7 @@ export default defineConfig({
       env: { [FAKE_PORT_ENV.s3]: String(FAKE.s3), [FAKE_PORT_ENV.supabase]: String(FAKE.supabase) },
     },
     {
-      command: `npm run build -- --mode e2e && npx wrangler pages dev dist/web --ip 127.0.0.1 --port ${PORT} --compatibility-date 2026-10-01 --persist-to .wrangler/state-e2e --inspector-port 9230 ${BINDINGS}`,
+      command: `npm run build -- --mode e2e && npx wrangler pages dev ${WEB_OUT} --ip 127.0.0.1 --port ${PORT} --compatibility-date 2026-10-01 --persist-to .wrangler/state-e2e --inspector-port 9230 ${BINDINGS}`,
       url: `http://127.0.0.1:${PORT}/app/`,
       reuseExistingServer: REUSE,
       timeout: 180_000,

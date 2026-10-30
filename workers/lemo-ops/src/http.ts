@@ -19,10 +19,10 @@ export interface OpsConfig {
   alertFrom: string;
 }
 
-class Timeout extends Error {}
+export class Timeout extends Error {}
 
-/** fetch 并读完响应体，整体限时；超时中止请求 */
-async function fetchText(fetchFn: FetchFn, url: string, init: RequestInit, ms: number): Promise<{ status: number; text: string }> {
+/** fetch 并读完响应体，整体限时；超时中止请求（version.ts 也用） */
+export async function fetchText(fetchFn: FetchFn, url: string, init: RequestInit, ms: number): Promise<{ status: number; text: string }> {
   const ctl = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const limit = new Promise<never>((_, reject) => {

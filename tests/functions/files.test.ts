@@ -114,6 +114,7 @@ describe('PUT 上传（TC-B0-106～109、115）', () => {
     const r = await s.call(put(IMG, webp(100), { bucket: 'vault-images' }));
     expect(r.status).toBe(403);
     expect(await r.json()).toEqual({ code: 'forbidden', reason: 'bad_bucket' });
+    expect(r.headers.get('Cache-Control')).toBe('private, no-store'); // REVIEW-1030-be-sugg ②：err() 的 403 也不进缓存（200 的在上面）
     const bp = await s.call(put(`${UA}/${NOTE}/${ID1}.png`, webp(100), { bucket: 'images' }));
     expect(bp.status).toBe(400);
     expect(s.authz.calls).toHaveLength(0);

@@ -15,6 +15,7 @@ import type { GeneratedCase } from './sql.ts';
 import type { Manifest } from './types.ts';
 import { headBuckets, isLoopback, type LiveS3, realS3Backend, type S3Call, s3Route, sweepRealPrefixes } from './live-s3.ts';
 import { LIVE_LOCK, takeLiveLock } from './live-lock.ts';
+import { assertHeartbeatRestored, unwrapHeartbeatDetail } from './heartbeat-restore.ts';
 
 /** 注销的两步动作：离线是替身，真替身是调本地 Supabase 的函数 */
 export interface PurgeActs {
@@ -321,8 +322,8 @@ export async function startLivePurge(cfg: LiveSupabase, s3: LiveS3): Promise<Liv
     }
     await wipe(leftovers);
     heartbeat = (await sql<{ at: Date; detail: unknown }[]>`select at, detail from private.heartbeat where name = 'account-purge'`)[0] ?? null;
-    // 兜底：以前 close 的写法每跑一轮把 detail 多包一层 JSON 字符串（account-purge 写的本是对象）；读到 string 就一层层解开，close 时按原样写回（只碰 account-purge 这一行）
-    while (heartbeat && typeof heartbeat.detail === 'string') heartbeat.detail = JSON.parse(heartbeat.detail) as unknown;
+    // 兜底：以前 close 的写法每跑一轮把 detail 多包一层 JSON 字符串；读到 string 就一层层解开（有层数上限、解不开就停），close 时按原样写回（只碰 account-purge 这一行）
+    if (heartbeat) heartbeat.detail = unwrapHeartbeatDetail(heartbeat.detail);
   } catch (e) {
     restore();
     await release();
@@ -384,10 +385,11 @@ export async function startLivePurge(cfg: LiveSupabase, s3: LiveS3): Promise<Liv
         await Promise.allSettled(bg); // 后台发信全部结束（期间 Resend 仍被拦）再往下
         const s3Err = await cleanS3(ours).then(() => null, (e: unknown) => e);
         await wipe(ours);
-        // sql.json 只序列化一次；以前先 JSON.stringify 再交给 ::jsonb 参数，postgres.js 又序列化一遍，每轮多包一层字符串，越跑越长直到 RangeError
+        // sql.json 只序列化一次；以前先 JSON.stringify 再交给 ::jsonb 参数，postgres.js 又序列化一遍，每轮多包一层字符串，越跑越长直到 RangeError。
+        // detail 是 null 时写 SQL NULL：jsonb 'null' 读出来也是 null，还原后会变成 SQL NULL（分不清，见 heartbeat-restore.ts）
         const back = heartbeat && await sql<{ t: string | null }[]>`update private.heartbeat set at = ${heartbeat.at}, detail = ${heartbeat.detail === null ? null : sql.json(heartbeat.detail as Parameters<typeof sql.json>[0])} where name = 'account-purge' returning jsonb_typeof(detail) as t`;
         if (!heartbeat) await sql`delete from private.heartbeat where name = 'account-purge'`;
-        else if (heartbeat.detail !== null && back?.[0]?.t !== 'object') throw new Error(`live purge：还原 account-purge 心跳后 detail 是 ${back?.[0]?.t}，应为 object（被包成字符串了）`);
+        else assertHeartbeatRestored(back ?? [], heartbeat.detail);   // 改到 0 行单独报“心跳行不见了”；还原后的类型要和原值一致
         if (s3Err) throw new Error(`live purge：收尾清 LocalStack 里的测试对象失败：${(s3Err as Error).message}`);
       } finally {
         restore();

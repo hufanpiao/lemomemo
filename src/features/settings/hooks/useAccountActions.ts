@@ -35,9 +35,13 @@ export function handleAccountLoss(f: AccountFailure, d: LossDeps, onStay?: () =>
   else if (f.error === 'signed_out') d.onSignedOut(f.sid);
   else if (f.error === 'account_disabled') {
     const ld: DisabledLeaveDeps = { leave: d.leave, onRevoked: d.onRevoked, ...(d.resolveDisabled ? { resolve: d.resolveDisabled } : {}) };
-    void leaveForDisabled(f.sid, ld, 'disabled').then((left) => {
-      if (!left) onStay?.();
-    });
+    // 探测或离开抛错也当没离开（同 useSettingsPage）：不留未处理的 reject，导出按钮也不会一直停在“忙”
+    void leaveForDisabled(f.sid, ld, 'disabled').then(
+      (left) => {
+        if (!left) onStay?.();
+      },
+      () => onStay?.(),
+    );
   }
   else if (f.error === 'pending_deletion') void d.leave('pending_deletion', f.sid);
   else return false;

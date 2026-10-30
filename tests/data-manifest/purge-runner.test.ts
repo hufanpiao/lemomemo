@@ -9,6 +9,7 @@ import { generate } from './generate.ts';
 import {
   LIVE_S3_KEY, LIVE_S3_SECRET, LIVE_TIMEOUT_MS, liveSupabase, type LivePurge, memoryPurgeActs, type PurgeActs, purgeCases, runPurgeCases, startLivePurge,
 } from './purge-runner.ts';
+import { assertHeartbeatRestored, HEARTBEAT_UNWRAP_MAX, unwrapHeartbeatDetail } from './heartbeat-restore.ts';
 import { type LiveS3, liveSkipReason, realS3Backend } from './live-s3.ts';
 import { createFakeS3 } from '../shared/fake-s3.ts';
 import type { ObjStore } from '../../shared/objstore.ts';
@@ -79,6 +80,42 @@ describe('注销 runner（离线：内存替身）', () => {
     store.failOnce('deleteMany');
     await store.put('images', `${SEED_USERS.a}/x`, new Uint8Array([1]), { contentType: 'image/webp' });
     await expect(acts.accountPurge(SEED_USERS.a)).rejects.toThrow('objstore_network');
+  });
+});
+
+// TC-B0-117 真链路记下、还原 account-purge 心跳的两个纯函数（heartbeat-restore.ts，TESTCLEAN 复审建议，10-30）
+describe('心跳 detail 的解包和还原核对', () => {
+  it('解包：对象原样；多包几层的字符串一层层解开；解不开的普通字符串停在那一层；超过层数上限抛错', () => {
+    const obj = { purged: 1, failed: 0 };
+    expect(unwrapHeartbeatDetail(obj)).toBe(obj);
+    expect(unwrapHeartbeatDetail(null)).toBeNull();
+    let wrapped: unknown = obj;
+    for (let i = 0; i < 5; i++) wrapped = JSON.stringify(wrapped);
+    expect(unwrapHeartbeatDetail(wrapped)).toEqual(obj);
+    expect(unwrapHeartbeatDetail('not json {')).toBe('not json {');
+    expect(unwrapHeartbeatDetail(JSON.stringify('plain'))).toBe('plain');
+    let deep: unknown = obj;
+    for (let i = 0; i <= HEARTBEAT_UNWRAP_MAX; i++) deep = JSON.stringify(deep);
+    expect(() => unwrapHeartbeatDetail(deep)).toThrow(`超过 ${HEARTBEAT_UNWRAP_MAX} 层`);
+    expect(() => unwrapHeartbeatDetail(JSON.stringify(JSON.stringify(obj)), 1)).toThrow('超过 1 层');
+    expect(unwrapHeartbeatDetail(JSON.stringify(obj), 1)).toEqual(obj);
+  });
+
+  it('还原核对：改到 0 行单独报“心跳行不见了”；原来是对象、还原后不是 object 报“被包成字符串”；原来是 null（含 jsonb \'null\'）写成 SQL NULL 不报', () => {
+    expect(() => assertHeartbeatRestored([], { a: 1 })).toThrow('心跳行不见了');
+    expect(() => assertHeartbeatRestored([], null)).toThrow('心跳行不见了');
+    expect(() => assertHeartbeatRestored([{ t: 'string' }], { a: 1 })).toThrow('被包成字符串了');
+    expect(() => assertHeartbeatRestored([{ t: 'object' }], { a: 1 })).not.toThrow();
+    expect(() => assertHeartbeatRestored([{ t: null }], null)).not.toThrow();
+  });
+
+  it('还原核对按原值类型：原本就是 jsonb 字符串的（解包解不开、原样返回）还原后是 string 不报；数组、数字照类型核对；原值是字符串还原成 object 也报', () => {
+    const raw = unwrapHeartbeatDetail('not json {');
+    expect(() => assertHeartbeatRestored([{ t: 'string' }], raw)).not.toThrow();
+    expect(() => assertHeartbeatRestored([{ t: 'array' }], [1, 2])).not.toThrow();
+    expect(() => assertHeartbeatRestored([{ t: 'number' }], 3)).not.toThrow();
+    expect(() => assertHeartbeatRestored([{ t: 'string' }], [1, 2])).toThrow('原值是 array（被包成字符串了）');
+    expect(() => assertHeartbeatRestored([{ t: 'object' }], raw)).toThrow('原值是 string（类型对不上）');
   });
 });
 

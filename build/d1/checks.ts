@@ -5,6 +5,7 @@ import type { Manifest, ManifestTable } from '../../shared/schema/manifest.ts';
 import { CLIENT_FILE_BUCKETS } from '../../shared/manifests/_common.ts';
 import { COLUMN_GRANTS, CRON_WITHOUT_USABLE, EXPORT_NONE_BUCKETS, EXPORT_NONE_TABLES, FUNCTION_EXEC, PUBLIC_RPCS, REQUIRED_CONSTRAINTS, TABLE_GRANTS } from './whitelist.ts';
 import { GUARD_NO_PASSWORD, checkAuthUsersTriggers, checkGuardNoPassword, type GuardRow } from './auth-guard.ts';
+import { quotaWhenProblems } from './quota-when.ts';
 
 export type Row = Record<string, unknown>;
 /** 查询函数：T 是这条 SQL 结果行的形状（调用处按 select 的列写明；数据库给的值不做运行时校验） */
@@ -211,6 +212,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   if (!eq(trigTables('touch'), touchWant)) bad(`touch() 挂的表和写了 systemCols 的表不一致：${diff(touchWant, trigTables('touch'))}`);
   const quotaWant = [...syncTables, 'public.logs'];
   if (!eq(trigTables('row_quota'), quotaWant)) bad(`row_quota() 挂的表：${diff(quotaWant, trigTables('row_quota'))}`);
+  for (const p of await quotaWhenProblems(q)) bad(p);   // R-271：配额触发器不准放宽，settings 只放行 ai.enabled、ai.vault（quota-when.ts）
   // 0.36 第 1 条 ①（TC-B0-121，B1 接手清单 S6）：auth.users 上的 users_guard_no_password 在、平时触发（tgenabled = 'O' 或 'A'）、
   //   before insert or update for each row、不是 update of 列、没有 WHEN 条件（0001 原样的除外）、调 private.guard_no_password() 且函数体置空密码。
   //   被删、被 disable（或改成只在 replica 下触发）、加条件、换函数体都报（代码审查有条件通过 5、7）

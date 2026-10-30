@@ -3,13 +3,17 @@
 // 前端 getSupabase() 抛 supabase_env_missing、拿不到 supabase-js，于是走“兜底清本机会话”“读不出来、重试”那些路。
 // 谁要是给 e2e 构建配上了 /sb 的 supabaseUrl（比如 npm run e2e:real:up 的专用后端构建混进了这一组），这几条先红，别让那些用例悄悄测错了路。
 //   ① 8788 上实际发出去的 JS 里，buildInfo 的 supabaseUrl 是空字符串，也没有任何以 /sb 结尾的绝对地址；
-//      逐个从服务器取 dist/web/app/assets/ 里的文件：取不到就是 8788 上跑的是旧构建（reuseExistingServer 复用了别的服务）
+//      逐个从服务器取 <产物目录>/app/assets/ 里的文件：取不到就是 8788 上跑的是旧构建（reuseExistingServer 复用了别的服务）。
+//      产物目录和 build_web 同一条规则（build/assemble_web.mjs 的 webOutDir）：LEMO_WEB_OUT 没设是 dist/web，设了只许 dist/web-<名字>
 //   ② 带假会话打开设置页（要读设备列表、会去调 getSupabase）：设备列表显示读不出来，一个 /sb/ 请求都没有发出去（context 级监听，含 Service Worker）
 import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
+import { webOutDir } from '../../build/assemble_web.mjs';
 import { expect, test } from './session-fixture.ts';
 
-const ASSETS_DIR = join(import.meta.dirname, '../../dist/web/app/assets');
+const ROOT = join(import.meta.dirname, '../..');
+const ASSETS_DIR = join(webOutDir(ROOT, process.env), 'app', 'assets');
+const ASSETS_REL = relative(ROOT, ASSETS_DIR).replaceAll('\\', '/');
 /** buildInfo 编译后的样子：supabaseUrl:`…`（也认 "…"、'…'，换压缩器也找得到） */
 const SUPABASE_URL_RE = /supabaseUrl:(`[^`]*`|"[^"]*"|'[^']*')/g;
 /** 任何以 /sb 结尾的绝对地址字面量 */
@@ -19,7 +23,7 @@ test.describe('无后端组的前提', () => {
   test('e2e 构建没编进 /sb 的 supabaseUrl：buildInfo.supabaseUrl 是空字符串，JS 里没有以 /sb 结尾的绝对地址', async ({ request, browserName }) => {
     test.skip(browserName !== 'chromium', '查的是构建产物，不分浏览器');
     const files = readdirSync(ASSETS_DIR).filter((f) => f.endsWith('.js'));
-    expect(files.length, 'dist/web/app/assets 里要有 JS（playwright.config 的 webServer 先构建）').toBeGreaterThan(0);
+    expect(files.length, `${ASSETS_REL} 里要有 JS（playwright.config 的 webServer 先构建）`).toBeGreaterThan(0);
     const literals: string[] = [];
     for (const f of files) {
       const r = await request.get(`/app/assets/${f}`);

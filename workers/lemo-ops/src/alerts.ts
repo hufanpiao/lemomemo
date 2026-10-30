@@ -229,8 +229,9 @@ export function plan(
           : { since: now, lastSent: null, title: issue.title, notified: false, okRounds: 0, activeRounds: 1 };
         state.issues[issue.key] = entry;
         // 冷却中：只出现 1 轮的只记下；连续出现 2 轮及以上马上发“又出现了”（K15 复审必改）
+        // issue.minRounds：这件事自己的宽限期，连续出现够轮数才第一次发（R-270）；两者取大
         const cooling = (state.cooldown[issue.key] ?? 0) > now;
-        if (cooling && (entry.activeRounds ?? 0) < AGAIN_ROUNDS) continue;
+        if ((entry.activeRounds ?? 0) < Math.max(cooling ? AGAIN_ROUNDS : 1, issue.minRounds ?? 1)) continue;
         const mail = alertMail(cooling ? 'again' : 'alert', issue, entry.since, now);
         if (queue(mail, (s) => void (s.issues[issue.key] = { ...entry, notified: false, lastSent: null }))) {
           entry.notified = true;

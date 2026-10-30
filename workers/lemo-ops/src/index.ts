@@ -12,6 +12,7 @@ import {
   parseUsageItems,
   type Evaluation,
 } from './rules.ts';
+import { evaluateVersion, fetchSiteVersion, type VersionMetadata } from './version.ts';
 
 export const CRON_HEARTBEAT = '*/15 * * * *';
 /** 每天 UTC 00:07（首尔 09:07）；错开整点，免得和 15 分钟那一轮同时读写 KV 状态 */
@@ -29,6 +30,8 @@ export interface Env {
   REQUIRED_HEARTBEATS?: string;
   /** "on" 时每天查 usage-report {part: usage}（B7 usage 部分做好后再开）；其他值只保活 */
   USAGE_CHECK?: string;
+  /** wrangler.toml 的 [version_metadata]：这次部署的 tag（R-270 和线上 version.json 比对）；不是密钥 */
+  CF_VERSION_METADATA?: VersionMetadata;
 }
 
 const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'OPS_SECRET', 'RESEND_API_KEY_OPS', 'ALERT_TO', 'ALERT_FROM'] as const;
@@ -73,11 +76,12 @@ function hourOf(ms: number): string {
   return `${d.slice(0, 4)}${d.slice(5, 7)}${d.slice(8, 10)}T${d.slice(11, 13)}`;
 }
 
-/** 每 15 分钟：心跳、冷静期删除、长事务、清理慢批、推送失败比例、钩子出错、验证码发信量（usage-report 带了才查），以及“监控连不上服务器” */
+/** 每 15 分钟：心跳、冷静期删除、长事务、清理慢批、推送失败比例、钩子出错、验证码发信量（usage-report 带了才查）、“监控连不上服务器”，以及线上网页版本比对（R-270） */
 export async function runHeartbeat(env: Env, fetchFn: FetchFn, now: number, log: LogFn = consoleLog): Promise<RunResult> {
   const cfg = readConfig(env);
   const send = (m: Mail) => sendMail(fetchFn, cfg, m.subject, m.text);
-  const res = await callUsageReport(fetchFn, cfg, 'heartbeat');
+  // usage-report 和线上 version.json（R-270）同时取：两个都自己兜住错误（不会 reject），一个慢或失败不影响另一个
+  const [res, site] = await Promise.all([callUsageReport(fetchFn, cfg, 'heartbeat'), fetchSiteVersion(fetchFn, now)]);
   let ev: Evaluation;
   if (!res.ok) {
     ev = evaluateUnreachable(res.reason);
@@ -91,7 +95,9 @@ export async function runHeartbeat(env: Env, fetchFn: FetchFn, now: number, log:
       if (report.alert === true) ev.hookHour = hourOf(now);
     }
   }
-  return { sent: await runAlerts(env.OPS_STATE, 'heartbeat', [ev], now, send, log) };
+  // 线上网页版本和自己的 tag 比对（R-270）：和上面互不影响，连续 2 轮对不上才发
+  const versionEv = evaluateVersion(env.CF_VERSION_METADATA, site);
+  return { sent: await runAlerts(env.OPS_STATE, 'heartbeat', [ev, versionEv], now, send, log) };
 }
 
 /** 每天一次：保活（真查一次数据库）；USAGE_CHECK=on 时另查用量 */

@@ -8,6 +8,7 @@ const DOWN = '【柠檬记监控】监控连不上服务器';
 import { parseHeartbeatReport } from '../../workers/lemo-ops/src/rules.ts';
 import { DB_TIMEOUT_MS } from '../../supabase/functions/usage-report/core.ts';
 import { USAGE_REPORT_TIMEOUT_MS } from '../../workers/lemo-ops/src/http.ts';
+import { SITE_ORIGIN, VERSION_JSON_PATH } from '../../workers/lemo-ops/src/version.ts';
 import { H, M, world } from './lemo-ops-harness.ts';
 
 const fakeTimers = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -77,6 +78,8 @@ describe('TC-B1-94 ②～④：连不上数据库 → 告警一次、6 小时内
     const w = world();
     w.setMode('db_slow');
     const p = w.tick();
+    // 同时在取的 version.json（R-270）也有一个 10 秒计时器：先等它读完、计时器清掉（w.siteDone），再等剩下两个
+    await w.siteDone;
     await waitForTimers(2);   // lemo-ops 调 usage-report 的 10 秒 + usage-report 查库的 5 秒
     await vi.advanceTimersByTimeAsync(DB_TIMEOUT_MS);
     await p;
@@ -143,7 +146,9 @@ describe('TC-B1-94 ⑤：另外三种调不通都发告警（外加网络错误�
     const w = world();
     w.setMode('hang');
     const p = w.tick();
+    await w.siteDone;         // version.json（R-270）读完、它的计时器已清掉
     await waitForTimers(1);   // lemo-ops 调 usage-report 的 10 秒（hang 模式不进 usage-report）
+    expect(vi.getTimerCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(USAGE_REPORT_TIMEOUT_MS - 1);
     expect(w.inbox).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1);
@@ -178,7 +183,8 @@ describe('TC-B1-94 ⑤：另外三种调不通都发告警（外加网络错误�
     const w = world();
     w.freshAll();
     await w.tick();
-    expect(w.calls).toEqual(['POST https://ref.supabase.co/functions/v1/usage-report']);
+    // 第二个是 R-270 的线上版本比对（只读公开的 version.json，不带任何密钥；见 lemo-ops-version.test.ts）
+    expect(w.calls).toEqual(['POST https://ref.supabase.co/functions/v1/usage-report', `GET ${SITE_ORIGIN}${VERSION_JSON_PATH}?t=${w.now}`]);
   });
 });
 

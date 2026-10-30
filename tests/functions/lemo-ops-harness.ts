@@ -2,6 +2,7 @@
 // 假 fetch 把 /functions/v1/usage-report 接到真的 usage-report/core.ts（数据库用假对象），Resend 收件箱用数组代替，KV 用内存 Map。
 import { handle, type UsageDb } from '../../supabase/functions/usage-report/core.ts';
 import { runDaily, runHeartbeat, runScheduled, type Env } from '../../workers/lemo-ops/src/index.ts';
+import { SITE_ORIGIN, VERSION_JSON_PATH } from '../../workers/lemo-ops/src/version.ts';
 
 export const M = 60_000;
 export const H = 60 * M;
@@ -33,6 +34,13 @@ export function world() {
   const calls: string[] = [];
   const logs: string[] = [];
   let kvBroken = false;
+  /** 线上 version.json（R-270）：字符串 = 返回 {version: 它}；其他是故障模式；body:… 原样返回这段文字 */
+  let site: string | { fail: 'http503' | 'hang' | 'network' } | { body: string } = '4.0.0';
+  let siteInit: RequestInit | undefined;
+  /** 最近一次 version.json 请求“已经读完”：响应体读完（或请求抛错）后，再让出一次事件循环才 resolve，
+   *  这时 lemo-ops 的 fetchText 已经走完 finally、清掉了它的 10 秒计时器（hang 模式永不 resolve）。
+   *  setImmediate 不交给假时钟（测试只假 setTimeout / clearTimeout），所以和假时钟无关 */
+  let siteDone: Promise<void> = Promise.resolve();
 
   const db: UsageDb = {
     async heartbeats() {
@@ -73,6 +81,32 @@ export function world() {
     if (url === 'https://ref.supabase.co/rest/v1/app_config?select=min_client_version') {
       return new Response(keepaliveStatus === 200 ? '[{"min_client_version":"4.0.0"}]' : 'err', { status: keepaliveStatus });
     }
+    if (url.startsWith(`${SITE_ORIGIN}${VERSION_JSON_PATH}?t=`)) {
+      siteInit = init;
+      let finish = () => {};
+      siteDone = new Promise<void>((r) => (finish = () => void setImmediate(r)));
+      /** 响应体读完才算完 */
+      const reply = (body: string, status: number) => {
+        const res = new Response(body, { status });
+        const read = res.text.bind(res);
+        res.text = async () => {
+          try {
+            return await read();
+          } finally {
+            finish();
+          }
+        };
+        return res;
+      };
+      if (typeof site === 'string') return reply(JSON.stringify({ version: site }), 200);
+      if ('body' in site) return reply(site.body, 200);
+      if (site.fail === 'network') {
+        finish();
+        throw new TypeError('fetch failed');
+      }
+      if (site.fail === 'http503') return reply('busy', 503);
+      return new Promise((_, reject) => init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+    }
     throw new Error(`没想到的请求：${url}`);
   };
 
@@ -91,6 +125,7 @@ export function world() {
     ALERT_TO: 'owner@example.test',
     ALERT_FROM: '柠檬记监控 <ops@example.test>',
     REQUIRED_HEARTBEATS: '',
+    CF_VERSION_METADATA: { id: 'ver-id', tag: 'v4.0.0', timestamp: '2026-10-28T23:00:00Z' },
   };
 
   /** 所有已上线的心跳都设成“刚写过” */
@@ -152,6 +187,15 @@ export function world() {
         };
     },
     logs,
+    setSite(v: typeof site) {
+      site = v;
+    },
+    get siteInit() {
+      return siteInit;
+    },
+    get siteDone() {
+      return siteDone;
+    },
     setKvBroken(v: boolean) {
       kvBroken = v;
     },

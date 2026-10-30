@@ -26,6 +26,12 @@ enabled = true
 [observability.traces]
 enabled = false
 
+# R-270：把这次部署的版本信息（publish.ps1 -Ops 的 wrangler deploy --tag <tag>）交给 Worker，
+# 每 15 分钟和线上 /app/version.json 比对（src/version.ts）。只是只读的元数据，不是密钥、不加任何权限
+# （写法依据 wrangler 4.150.0 自带的 config-schema.json：version_metadata.binding）
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
 [vars]
 # 没有心跳行也要告警的 cron 函数（逗号分隔）。哪个函数上了线就把它加进来；没上线的不写，免得天天告警
 REQUIRED_HEARTBEATS = ""

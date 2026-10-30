@@ -3,7 +3,7 @@
 -- “设置 › 账号 › 最近的导出”只认 src = 'account' 的行（account 函数经 service role 写）；客户端能写的话就能伪造导出记录
 -- 原有条件照旧：本人、账号可用（停用的 C 写不进）；别的 src、src 为 null 照常能写；service role 写 src = 'account' 照常成功
 begin;
-select plan(16);
+select plan(24);
 \ir _helpers.psql
 select tests.seed();   -- A、B 正常，C 停用
 
@@ -64,38 +64,51 @@ select ok((select position('(lower(regexp_replace(NORMALIZE(src, NFKC), ''[^[:al
              from pg_policies where schemaname = 'public' and tablename = 'logs' and policyname = 'ins'),
   '守门：ins 的 with check 里还留着“规范化以后的 src IS DISTINCT FROM ''account''”（重写这个策略时不准丢，R-259、R259-sugg ①）');
 -- 上一条只查子串：with check (true or src is distinct from 'account') 留着原文、逻辑却坏了（TESTCLEAN-sugg ①）。
--- 再按顶层切开：顶层（括号外、引号外）不许有 OR，src 那一条要是顶层 AND 里单独的一项——… and (true or src …) 这种套一层的也过不了
+-- 再按顶层切开：顶层（括号外、引号外）不许有 OR，src 那一条要是顶层 AND 里单独的一项——… and (true or src …) 这种套一层的也过不了。
+-- 引号有两种：'…' 字符串（'' 转义）和 "…" 标识符（"" 转义）；q、w 分别记在不在里面，引号里的括号、AND、OR 都不算，两种引号互不打开对方
 create function tests.top_and(p text) returns text[] language plpgsql as $$
-declare s text := btrim(p); n int; i int; d int; q boolean; c text; parts text[] := '{}'; st int := 1; wrapped boolean;
+declare s text := btrim(p); n int; i int; d int; q boolean; w boolean; c text; parts text[] := '{}'; st int := 1; wrapped boolean;
 begin
   loop   -- 剥掉包住整个表达式的外层括号（pg_get_expr 会给整体加一层）
     n := length(s);
     exit when n < 2 or left(s, 1) <> '(' or right(s, 1) <> ')';
-    d := 0; q := false; wrapped := true; i := 1;
+    d := 0; q := false; w := false; wrapped := true; i := 1;
     while i <= n loop
       c := substr(s, i, 1);
-      if c = '''' then q := not q;
-      elsif not q and c = '(' then d := d + 1;
-      elsif not q and c = ')' then d := d - 1; if d = 0 and i < n then wrapped := false; exit; end if;
+      if c = '''' and not w then q := not q;
+      elsif c = '"' and not q then w := not w;
+      elsif not q and not w and c = '(' then d := d + 1;
+      elsif not q and not w and c = ')' then d := d - 1; if d = 0 and i < n then wrapped := false; exit; end if;
       end if;
       i := i + 1;
     end loop;
     exit when not wrapped;
     s := btrim(substr(s, 2, n - 2));
   end loop;
-  n := length(s); d := 0; q := false; i := 1;
+  n := length(s); d := 0; q := false; w := false; i := 1;
   while i <= n loop
     c := substr(s, i, 1);
-    if c = '''' then q := not q;
-    elsif not q and c = '(' then d := d + 1;
-    elsif not q and c = ')' then d := d - 1;
-    elsif not q and d = 0 and upper(substr(s, i, 4)) = ' OR ' then return null;   -- 顶层有 OR
-    elsif not q and d = 0 and upper(substr(s, i, 5)) = ' AND ' then parts := parts || btrim(substr(s, st, i - st)); st := i + 5; i := i + 4;
+    if c = '''' and not w then q := not q;
+    elsif c = '"' and not q then w := not w;
+    elsif q or w then null;   -- 引号里的一律不看
+    elsif c = '(' then d := d + 1;
+    elsif c = ')' then d := d - 1;
+    elsif d = 0 and upper(substr(s, i, 4)) = ' OR ' then return null;   -- 顶层有 OR
+    elsif d = 0 and upper(substr(s, i, 5)) = ' AND ' then parts := parts || btrim(substr(s, st, i - st)); st := i + 5; i := i + 4;
     end if;
     i := i + 1;
   end loop;
   return parts || btrim(substr(s, st));
 end $$;
+-- top_and 自己的正反例（TESTCLEAN 复审建议）：双引号标识符里的 or / and / 括号不算，引号外的照算；两种引号互不打开对方
+select is(tests.top_and('"a or b" = 1 and c'), array['"a or b" = 1', 'c'], 'top_and 正例：双引号标识符里的 or 不算顶层 OR，照样按顶层 AND 切开');
+select is(tests.top_and('"a and b" = 1'), array['"a and b" = 1'], 'top_and 正例：双引号标识符里的 and 不切');
+select is(tests.top_and('"x (" = 1 and c'), array['"x (" = 1', 'c'], 'top_and 正例：双引号标识符里的括号不改层数');
+select is(tests.top_and('("a)" = 1 and c)'), array['"a)" = 1', 'c'], 'top_and 正例：外层括号照剥，标识符里的 ) 不算');
+select is(tests.top_and('"q""r" = 1 and c'), array['"q""r" = 1', 'c'], 'top_and 正例：标识符里的 "" 转义不打乱');
+select ok(tests.top_and('"a" = 1 or c') is null, 'top_and 反例：标识符外的顶层 OR 照报（返回 null）');
+select ok(tests.top_and('''x "'' = 1 or c') is null, 'top_and 反例：单引号字符串里的 " 不开标识符，后面的顶层 OR 照报');
+select ok(tests.top_and('"y''" = 1 or c') is null, 'top_and 反例：标识符里的单引号不开字符串，后面的顶层 OR 照报');
 select ok(coalesce((select '(lower(regexp_replace(NORMALIZE(src, NFKC), ''[^[:alnum:]]''::text, ''''::text, ''g''::text)) IS DISTINCT FROM ''account''::text)' = any(tests.top_and(with_check))
              from pg_policies where schemaname = 'public' and tablename = 'logs' and policyname = 'ins'), false),
   '守门：ins 的 with check 顶层没有 OR，规范化以后的 src 条件是顶层 AND 里单独的一项（true or …、… and (x or src …) 都过不了）');

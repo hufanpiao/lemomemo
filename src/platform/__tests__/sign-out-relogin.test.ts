@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { APP_VERSION_HEADER } from '../http.ts';
 import { readSessionId } from '../session.ts';
-import { logoutReplaced, logoutWithToken, sessionReplaced, signOutThisDevice, type ExitSteps, type PriorSession } from '../sign-out.ts';
+import { budgetLeft, logoutReplaced, logoutWithToken, sessionReplaced, signOutThisDevice, type ExitSteps, type PriorSession } from '../sign-out.ts';
 
 const KEY = 'sb-lemotest-auth-token';
 const tok = (sid: string): string => `h.${btoa(JSON.stringify({ session_id: sid })).replace(/=+$/, '')}.s`;
@@ -176,5 +176,16 @@ describe('④ 把 prior 交给 server.signOut', () => {
     expect(prior?.token).toBe(tok('s1'));
     expect(prior?.budgetMs).toBeGreaterThan(7000);
     expect(prior?.budgetMs).toBeLessThanOrEqual(8000);
+  });
+});
+
+describe('budgetLeft（K6-signout-lib 复审建议 ②；REVIEW-1030-fe-sugg ①）', () => {
+  it('预算扣掉已用时间；已用超过预算、正好等于预算都返回 0，不会是负数', () => {
+    expect(budgetLeft(5000, 1000, 3000)).toBe(3000);
+    expect(budgetLeft(5000, 1000, 6000)).toBe(0);
+    expect(budgetLeft(5000, 1000, 9000)).toBe(0);
+  });
+  it('时钟往回拨（now 早于 t0）：已用按 0 算，返回整个预算', () => {
+    expect(budgetLeft(5000, 1000, 500)).toBe(5000);
   });
 });

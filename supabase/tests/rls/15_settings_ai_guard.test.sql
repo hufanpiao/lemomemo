@@ -2,8 +2,10 @@
 -- （迁移 20261029210000_core_settings_ai_guard.sql；依赖 S1 批 20261029191000～20261029201000）
 -- 10-29 补安全补审建议（接手清单 SEC-210000-sugg ①②③⑤⑥）：upsert 撞已有行写 deleted_at、definer 帮手测 guard 的 INSERT 分支、
 --   抛错后向量和队列还在、相似 key 对照、一次性修正对脏行的效果；④ 在 16_consent_null_ver.test.sql
+-- 10-30 R-271（SEC-210000-sugg ⑧，迁移 20261030120000_core_settings_quota_ai_keys.sql）：settings 满 2 万行时撤回、同意照样成功（四种撤回情况），
+--   ai.foo、ui.theme、大小写不同的 AI.enabled 满额照样报 quota；plan 59 → 77
 begin;
-select plan(59);
+select plan(77);
 \ir _helpers.psql
 select tests.seed();   -- A、B 正常，C 停用
 -- D：有账号、有会话，但没有 profile 行；E：有 profile，用来模拟“检查之后、update 之前 profile 被改掉”
@@ -245,6 +247,57 @@ select is(tests.st('5d000000-0000-4000-8000-000000000002'), 'null|false|false',
   '一次性修正：只撤销的 ai.enabled = true 救回时改成 false（方向是“关”）');
 select is(tests.st('5d000000-0000-4000-8000-000000000003'), '5|true|{"v": 1, "id": "system"}',
   '一次性修正只动这两个键：软删、撤销的 ui.font 原样不动');
+
+-- ===== R-271（SEC-210000-sugg ⑧）：settings 满额时撤回 / 同意照样成功；只放行 ai.enabled、ai.vault 两个精确的键 =====
+-- 改之前：settings_quota 是 before insert 触发器，insert … on conflict 也先触发它，满 2 万行时撤回回 quota、整个调用回滚（同意却能成功）。
+-- F：新账号，以测试的超级用户铺 19999 行普通键（迁移角色不计配额），之后也以超级用户调状态；F 自己的写入都走 authenticated
+insert into auth.users (id, email) values ('f1f1f1f1-0000-4000-8000-000000000006', 'f@test.local');
+insert into public.profiles (user_id) values ('f1f1f1f1-0000-4000-8000-000000000006');
+insert into auth.sessions (id, user_id) values ('f1f1f1f1-5555-4000-8000-000000000006', 'f1f1f1f1-0000-4000-8000-000000000006');
+create function tests.f(p_sql text) returns text language sql as $$
+  select tests.try_as('authenticated', 'f1f1f1f1-0000-4000-8000-000000000006', p_sql, null, 'f1f1f1f1-5555-4000-8000-000000000006')
+$$;
+-- 是否已同意 | ai.enabled 的值（没有这一行写 none）| F 的 settings 行数
+create function tests.fst() returns text language sql as $$
+  select (select (consent_ai_at is not null)::text from public.profiles where user_id = 'f1f1f1f1-0000-4000-8000-000000000006')
+    || '|' || coalesce((select value::text from public.settings where user_id = 'f1f1f1f1-0000-4000-8000-000000000006' and key = 'ai.enabled'), 'none')
+    || '|' || (select count(*) from public.settings where user_id = 'f1f1f1f1-0000-4000-8000-000000000006')::text
+$$;
+insert into public.settings (id, user_id, key, value)
+  select gen_random_uuid(), 'f1f1f1f1-0000-4000-8000-000000000006', 'qa.k' || g, 'true'::jsonb from generate_series(1, 19999) g;
+
+-- 情况一：19999 行，撤回写进第 2 万行
+select is(tests.f(format('select public.record_consent(%L, true)', tests.ver())), 'ok', 'R-271 ①：19999 行时撤回：ok');
+select is(tests.fst(), 'false|false|20000', 'R-271 ①：撤回写了 ai.enabled = false，正好占掉第 2 万行');
+-- 情况四：已满 2 万行、ai.enabled 行已在（on conflict 那条路）：再同意、再撤回
+select is(tests.f(format('select public.record_consent(%L, false)', tests.ver())), 'ok', 'R-271 ④：满额时同意：ok（同意分支不写 settings）');
+select is(tests.f(format('select public.record_consent(%L, true)', tests.ver())), 'ok',
+  'R-271 ④：满额、ai.enabled 行已在时再撤回：ok（insert … on conflict 先触发 before insert，改之前这里回 quota）');
+select is(tests.fst(), 'false|false|20000', 'R-271 ④：撤回生效（同意已清、ai.enabled = false），行数不变');
+-- 情况三：满 2 万行，其中 ai.enabled = true（客户端打开过 AI）
+update public.settings set value = 'true'::jsonb where user_id = 'f1f1f1f1-0000-4000-8000-000000000006' and key = 'ai.enabled';
+select is(tests.f(format('select public.record_consent(%L, false)', tests.ver())), 'ok', 'R-271 ③：满额、ai.enabled = true 时同意：ok');
+select is(tests.f(format('select public.record_consent(%L, true)', tests.ver())), 'ok', 'R-271 ③：满额、ai.enabled = true 时撤回：ok');
+select is(tests.fst(), 'false|false|20000', 'R-271 ③：撤回把 ai.enabled 改成 false、清掉同意');
+-- 情况二：满 2 万行，没有 ai.enabled 行（撤回要新插一行，成为第 20001 行）
+delete from public.settings where user_id = 'f1f1f1f1-0000-4000-8000-000000000006' and key = 'ai.enabled';
+insert into public.settings (id, user_id, key, value) values (gen_random_uuid(), 'f1f1f1f1-0000-4000-8000-000000000006', 'qa.k20000', 'true');
+select is(tests.fst(), 'false|none|20000', 'R-271 ②：铺好：2 万行普通键，没有 ai.enabled');
+select is(tests.f(format('select public.record_consent(%L, false)', tests.ver())), 'ok', 'R-271 ②：满额时同意：ok');
+select is(tests.fst(), 'true|none|20000', 'R-271 ②：同意记下了');
+select is(tests.f(format('select public.record_consent(%L, true)', tests.ver())), 'ok', 'R-271 ②：满额、没有 ai.enabled 行时撤回：ok');
+select is(tests.fst(), 'false|false|20001', 'R-271 ②：撤回新插了 ai.enabled = false（第 20001 行），同意已清');
+-- 只放行两个精确的键：别的 ai.* 键、普通键、大小写不同的写法满额照样报 quota；ai.vault = false 放行
+select ok(tests.f($$insert into public.settings (id, key, value) values (gen_random_uuid(), 'ai.foo', 'true')$$) like 'P0001 quota%',
+  'R-271：满额时插 ai.foo：quota（不按 ai.* 前缀放宽）');
+select ok(tests.f($$insert into public.settings (id, key, value) values (gen_random_uuid(), 'ui.theme', '"dark"')$$) like 'P0001 quota%',
+  'R-271：满额时插 ui.theme：quota');
+select ok(tests.f($$insert into public.settings (id, key, value) values (gen_random_uuid(), 'AI.enabled', 'false')$$) like 'P0001 quota%',
+  'R-271：满额时插 AI.enabled（大小写不同，是别的键）：quota');
+select is(tests.f($$insert into public.settings (id, key, value) values (gen_random_uuid(), 'ai.vault', 'false')$$), 'ok',
+  'R-271：满额时关隐私记 AI（插 ai.vault = false）：ok');
+select is((select count(*)::int from public.settings where user_id = 'f1f1f1f1-0000-4000-8000-000000000006'), 20002,
+  'R-271：三次被拒都没写进去，只多了 ai.vault 一行（每人最多比上限多 2 行）');
 
 select * from finish();
 rollback;

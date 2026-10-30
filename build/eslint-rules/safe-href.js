@@ -10,9 +10,19 @@
 //   只导入不用、转出口给别人用的也拦得住。纯类型导入（import type）编译后不存在，不管
 // A26-spread：原生元素上的展开属性也查。对象字面量逐个键查；键名算不出来（计算键、嵌套展开）或展开的是变量（{...props}），
 //   静态看不出有没有 href，一律报
+// A26-template（FE-1030-sugg ④）：动态 import 的来源写成模板串也查——不带插值的按字面量查；带插值、又可能指向
+//   shared/logic/link 或 src/app/router 的（把插值当任意文字，能拼出指向它们的相对路径），静态核对不了，直接报 importDynamic。
+//   “可能指向”要满足其一：静态部分里写出了 link 或 router；或者第一段插值前的前缀已经落在 shared/logic/、src/app/ 目录里
+// A26-scheme（A26-old-gaps ④）：链接类属性写成常量（字符串、不带插值的模板串）也过一遍协议：先照浏览器的做法去掉首尾的
+//   控制字符和空格、删掉中间的制表符和换行，再看开头：
+//   · 带 scheme 的照 shared/logic/link.ts 的 safeHref 判：new URL 解析不了、协议不是 http、https、tel、mailto、
+//     带用户名或密码（https://lemomemo.com@evil.com）的都报 badScheme；
+//   · 以 //、\\、/\ 开头的协议相对地址报（会去别的站；safeHref 不带 base 解析，本来也不放行）；
+//   · 别的相对地址（/app/x、?q=1、#a、./a.png）照 A26 原来的口径当常量放行——只有这一处比 safeHref 宽
+//     （safeHref 管的是用户输入的文字，相对地址一律不认）
 // 属性名比较不分大小写（HREF、formaction、srcset、xlink:HREF 都算）：React 只拦写法完全正确的 href、formAction，
 //   别的大小写原样落到 DOM，浏览器照样当链接用
-import { dirname, extname, resolve } from 'node:path';
+import { dirname, extname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** 链接类属性：全小写、去掉冒号后比较（src/motion/Pressable.tsx 的 LINK_KEYS 是同一张表，两边一起改） */
@@ -53,6 +63,113 @@ function wrongSafeSpelling(src, fromFile) {
   return bare !== src || extname(abs) !== '.ts';
 }
 
+/** 常量链接允许的协议（shared/logic/link.ts 的 ALLOWED 是同一张表，两边一起改） */
+const ALLOWED_SCHEMES = new Set(['http', 'https', 'tel', 'mailto']);
+
+/** 照 URL 标准预处理：去掉首尾码位 ≤ 0x20 的字符，删掉中间的 \t、\n、\r */
+function stripLikeUrlParser(text) {
+  let a = 0;
+  let b = text.length;
+  while (a < b && text.charCodeAt(a) <= 0x20) a += 1;
+  while (b > a && text.charCodeAt(b - 1) <= 0x20) b -= 1;
+  let out = '';
+  for (const ch of text.slice(a, b)) if (ch !== '\t' && ch !== '\n' && ch !== '\r') out += ch;
+  return out;
+}
+
+/** 常量链接不安全的原因；安全（相对地址，或带 scheme 且过得了 safeHref 的规则）返回 undefined */
+function badScheme(text) {
+  // 浏览器解析 URL 时：去掉首尾的 C0 控制字符和空格，删掉所有制表符和换行（java\tscript: 照样是 javascript:）
+  const s = stripLikeUrlParser(text);
+  // 协议相对地址：浏览器把 \ 当 / 看，//、\\、/\、\/ 开头都会去别的主机
+  if (/^[/\\]{2}/.test(s)) return '协议相对地址（//…）';
+  const m = /^([a-z][a-z0-9+.-]*):/i.exec(s);
+  if (!m) return undefined;
+  // 带 scheme：和 safeHref 同一套判断（new URL 解析、协议白名单、不带用户名和密码）
+  let url;
+  try {
+    url = new URL(s);
+  } catch {
+    return '解析不了的地址';
+  }
+  if (!ALLOWED_SCHEMES.has(url.protocol.slice(0, -1))) return `协议 ${url.protocol}`;
+  if (url.username !== '' || url.password !== '') return '带用户名或密码的地址';
+  return undefined;
+}
+
+/** srcset 是逗号分开的多个“地址 宽度”，每个地址都查；别的属性整串查 */
+function badSchemeOf(attr, text) {
+  if (attr.toLowerCase() !== 'srcset') return badScheme(text);
+  for (const part of text.split(',')) {
+    const bad = badScheme(part.trim().split(/\s+/)[0] ?? '');
+    if (bad !== undefined) return bad;
+  }
+  return undefined;
+}
+
+/** 字符串字面量、不带插值的模板串 → 它的值；别的返回 undefined */
+function staticString(expr) {
+  if (!expr) return undefined;
+  if (expr.type === 'Literal' && typeof expr.value === 'string') return expr.value;
+  if (expr.type === 'TemplateLiteral' && expr.expressions.length === 0) return expr.quasis[0].value.cooked ?? undefined;
+  return undefined;
+}
+
+const escapeRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** link、router 所在的目录（canon 过） */
+const SAFE_DIRS = [...SAFE_SOURCES.values()].map((rel) => canon(dirname(resolve(ROOT, rel))));
+
+/**
+ * 模板串第一段插值前的静态前缀，按目录部分（最后一个 / 之前）解析后是不是已经落在 shared/logic/ 或 src/app/ 里（含子目录）。
+ * 落在里面的，插值拼成什么都可能指向 link、router（${'li' + 'nk'} 这类拼接认不出字面），照样套相对路径去查
+ */
+function prefixInSafeDir(prefix, fromFile) {
+  if (!prefix.startsWith('.')) return false;
+  const cut = prefix.lastIndexOf('/');
+  const dir = canon(resolve(dirname(fromFile), cut < 0 ? '.' : prefix.slice(0, cut + 1)));
+  return SAFE_DIRS.some((d) => dir === d || dir.startsWith(`${d}/`));
+}
+
+/**
+ * 带插值的模板串来源会不会指向 link / router：插值里是字符串常量的照常量拼进去，别的插值当任意文字；? 或 # 以后是查询串、不管。
+ * 静态部分里要真的出现 link 或 router（整段都是插值的 import(`${x}`) 看不出指向哪里，和 import(变量) 一样不管，
+ * 免得 import(`./${lang}.ts`) 这类普通加载器被误报），再拿“从本文件到 link、router 的相对路径”
+ * （带或不带 ./、各种脚本扩展名）去套，能套上就算
+ */
+function templateMayPointToSafe(tpl, fromFile) {
+  const parts = [''];
+  let cut = false;
+  const push = (text) => {
+    const at = text.search(/[?#]/);
+    parts[parts.length - 1] += at < 0 ? text : text.slice(0, at);
+    if (at >= 0) cut = true;
+  };
+  tpl.quasis.forEach((q, i) => {
+    if (cut) return;
+    push(q.value.cooked ?? q.value.raw);
+    const e = tpl.expressions[i];
+    if (cut || !e) return;
+    const known = staticString(e);
+    if (known !== undefined) push(known);
+    else parts.push('');
+  });
+  if (!/link|router/i.test(parts.join('')) && !(parts.length > 1 && prefixInSafeDir(parts[0], fromFile))) return false;
+  const rx = new RegExp(`^${parts.map(escapeRe).join('.*')}$`, process.platform === 'win32' ? 'is' : 's');
+  const from = dirname(fromFile);
+  for (const target of SAFE_SOURCES.values()) {
+    let rel = relative(from, resolve(ROOT, target)).replace(/\\/g, '/');
+    if (!rel.startsWith('.')) rel = `./${rel}`;
+    const forms = rel.startsWith('../') ? [rel, `./${rel}`] : [rel];
+    for (const f of forms) {
+      for (const ext of ['', '.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']) {
+        if (rx.test(f + ext)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 function attrName(n) {
   if (n.type === 'JSXIdentifier') return n.name;
   if (n.type === 'JSXNamespacedName') return `${n.namespace.name}:${n.name.name}`;
@@ -80,6 +197,8 @@ export default {
     messages: {
       unsafe: 'A26：<{{el}}> 的 {{attr}} 只能是字符串常量、hrefOf() 或 safeHref() 的返回值（safeHref 要从 shared/logic/link.ts 导入，hrefOf 要从 src/app/router.ts 导入）',
       importExt: 'A26：从 {{src}} 导入 safeHref / hrefOf 要写全 .ts 后缀（架构 2.5；不带扩展名、.js、.mjs、.tsx 等写法时 Vite 可能加载同名的冒牌文件）',
+      importDynamic: 'A26：动态 import 的模板串来源带插值、可能指向 shared/logic/link 或 src/app/router，静态核对不了扩展名（架构 2.5）；请写成固定的 “….ts” 字符串',
+      badScheme: 'A26：<{{el}}> 的 {{attr}} 常量链接不安全：{{why}}（常量只准相对地址，或 http、https、tel、mailto 且不带用户名和密码，和 safeHref 一致）',
       unsafeSpread: 'A26：<{{el}}> 上的展开属性看不出有没有 href、src 等链接属性；原生元素上请直接写属性，链接值只能是字符串常量、hrefOf() 或 safeHref() 的返回值',
     },
   },
@@ -134,16 +253,30 @@ export default {
     }
 
     function isSafe(expr) {
-      if (expr.type === 'Literal' && typeof expr.value === 'string') return true;
-      if (expr.type === 'TemplateLiteral' && expr.expressions.length === 0) return true;
+      if (staticString(expr) !== undefined) return true;
       if (expr.type === 'CallExpression') return isSafeCallee(expr.callee);
       return false;
     }
 
-    /** 导入、转出口、动态 import 的来源写法（A26-import-ext） */
+    /** 导入、转出口、动态 import 的来源写法（A26-import-ext；模板串见 A26-template） */
     function checkSource(source, typeOnly) {
-      if (typeOnly || !source || source.type !== 'Literal') return;
-      if (wrongSafeSpelling(source.value, filename)) context.report({ node: source, messageId: 'importExt', data: { src: String(source.value) } });
+      if (typeOnly || !source) return;
+      const text = staticString(source);
+      if (text !== undefined) {
+        if (wrongSafeSpelling(text, filename)) context.report({ node: source, messageId: 'importExt', data: { src: text } });
+        return;
+      }
+      if (source.type === 'TemplateLiteral' && templateMayPointToSafe(source, filename)) {
+        context.report({ node: source, messageId: 'importDynamic' });
+      }
+    }
+
+    /** 常量链接的协议（A26-scheme）；value 是常量时查，不是常量不管（由 isSafe 那一路管） */
+    function checkScheme(node, el, attr, value) {
+      const text = staticString(value);
+      if (text === undefined) return;
+      const why = badSchemeOf(attr, text);
+      if (why !== undefined) context.report({ node, messageId: 'badScheme', data: { el, attr, why } });
     }
 
     return {
@@ -165,8 +298,15 @@ export default {
         const el = isNativeElement(node.parent);
         if (!el) return;
         const v = node.value;
-        if (!v || v.type === 'Literal') return;
-        if (v.type === 'JSXExpressionContainer' && isSafe(v.expression)) return;
+        if (!v) return;
+        if (v.type === 'Literal') {
+          checkScheme(node, el, attr, v);
+          return;
+        }
+        if (v.type === 'JSXExpressionContainer' && isSafe(v.expression)) {
+          checkScheme(node, el, attr, v.expression);
+          return;
+        }
         context.report({ node, messageId: 'unsafe', data: { el, attr } });
       },
       JSXSpreadAttribute(node) {
@@ -184,7 +324,10 @@ export default {
             continue;
           }
           if (!isUrlAttr(key)) continue;
-          if (p.value && isSafe(p.value)) continue;
+          if (p.value && isSafe(p.value)) {
+            checkScheme(p, el, key, p.value);
+            continue;
+          }
           context.report({ node: p, messageId: 'unsafe', data: { el, attr: key } });
         }
       },

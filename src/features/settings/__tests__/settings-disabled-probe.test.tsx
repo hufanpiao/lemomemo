@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import type { ProbedExit } from '../../../platform/account-status.ts';
 import { leaveForDisabled } from '../data/account-exit.ts';
+import { handleAccountLoss } from '../hooks/useAccountActions.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';
@@ -130,5 +131,41 @@ describe('导出（account-api）收到 account_disabled', () => {
     });
     await waitFor(() => expect(leave).toHaveBeenCalledWith('pending_deletion', 's-me'));
     expect(screen.queryByText(zh['settings.err.accountDisabled'])).toBeNull();
+  });
+
+  it('探测抛错（REVIEW-1030-fe-sugg ②）：handleAccountLoss 调 onStay，不留 unhandledrejection', async () => {
+    const unhandled: unknown[] = [];
+    const onNode = (why: unknown) => unhandled.push(why);
+    const onWin = (ev: PromiseRejectionEvent) => unhandled.push(ev.reason);
+    process.on('unhandledRejection', onNode);
+    window.addEventListener('unhandledrejection', onWin);
+    try {
+      const onStay = vi.fn();
+      const leave = vi.fn(async () => undefined);
+      const handled = handleAccountLoss(
+        { ok: false, error: 'account_disabled', sid: 's-me' },
+        { leave, onRevoked: vi.fn(), onSignedOut: vi.fn(), resolveDisabled: () => Promise.reject(new Error('probe boom')) },
+        onStay,
+      );
+      expect(handled).toBe(true);
+      await waitFor(() => expect(onStay).toHaveBeenCalledTimes(1));
+      // 多等一轮宏任务，让未处理的 reject 有机会报出来
+      await new Promise((r) => setTimeout(r, 0));
+      expect(unhandled).toEqual([]);
+      expect(leave).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', onNode);
+      window.removeEventListener('unhandledrejection', onWin);
+    }
+  });
+
+  it('探测抛错：导出按钮不停在“忙”，照常显示通用错误', async () => {
+    const account = fakeAccount({ exportAll: vi.fn(async () => ({ ok: false as const, error: 'account_disabled' as const, sid: 's-me' })) });
+    const { leave } = setup({ account, resolveDisabled: () => Promise.reject(new Error('probe boom')) });
+    await act(async () => {
+      fireEvent.click(exportBtn());
+    });
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain(zh['settings.err.unknown']));
+    expect(leave).not.toHaveBeenCalled();
   });
 });

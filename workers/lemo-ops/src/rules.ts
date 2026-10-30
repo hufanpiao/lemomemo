@@ -9,6 +9,8 @@ export interface Issue {
   title: string;
   /** 邮件正文的几行：只写名字、时长、个数，不写用户内容、不写 user_id、不写 SQL */
   lines: string[];
+  /** 连续出现几轮才第一次发（宽限期；不写按 1）。R-270 线上版本比对用 2：发布中途、一次性网络抖动不报 */
+  minRounds?: number;
 }
 
 /**

@@ -2,7 +2,8 @@
 // 登录页（features/auth/data/account-gate.ts）和主 App（app/sync-wiring.ts）共用这一份，不各写各的。
 // • 手写判断、不引 zod：登录页的严格 CSP 下 zod 4 的 allowsEval 探测报 eval 违规，首屏也不该为一处校验带进 zod；
 //   只借 shared/schema/account.ts 的类型（import type，打包时擦掉），和 accountStatusResponse 的一致性由
-//   features/auth/__tests__/account-gate.test.ts 用 zod 对照守着
+//   features/auth/__tests__/account-gate.test.ts 用 zod 对照守着。httpError 读错误码同理：手写的对应 shared/schema/api.ts 的
+//   apiError（error 是 1～64 个码位的字符串才算），一致性由 account-gate.test.ts 的 apiError 对照用例守着（REVIEW-1030-be-sugg ①）
 // • 经 supabase-js 的 functions.invoke 调（X-App-Version 由客户端带上）。token 给了就用它（Authorization: Bearer），
 //   主 App 用被拒那次请求的会话令牌，免得探测时本机会话已被别的标签页换成别人、查到别人的状态
 // • status：冷静期放行、不写库、不计次数（服务器）。回包 200 {ok, status}；管理员停用回 200 status:'disabled'（不是 403），
@@ -66,8 +67,11 @@ export async function httpError(e: unknown): Promise<{ status: number; code: str
   } catch {
     body = null;
   }
+  // 同 apiError：error 是 1～64 个码位的字符串才当错误码（按码位数，和 zod 4 的 min、max 一致：emoji 算 1 个，不按 UTF-16 码元算 2 个），
+  // 别的（缺、空串、不是字符串、超长、老写法 {code}）都是 ''
   const code = body?.['error'];
-  return { status: ctx.status, code: typeof code === 'string' ? code : '', body };
+  const n = typeof code === 'string' ? [...code].length : 0;
+  return { status: ctx.status, code: typeof code === 'string' && n >= 1 && n <= 64 ? code : '', body };
 }
 
 /** status 的错误 → AccountStatus：万一回的是 403 account_disabled / account_pending_deletion 也认，其余 unknown */
