@@ -108,7 +108,7 @@ sms_sent = 30
 anonymous_users = 30
 token_refresh = 150
 sign_in_sign_ups = 30
-token_verifications = 30
+token_verifications = 10
 web3 = 30
 
 # 15.6 总表：CAPTCHA 开，Cloudflare Turnstile（15.2 中 1 ①）。

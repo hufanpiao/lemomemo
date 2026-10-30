@@ -90,4 +90,37 @@ test.describe('设置页骨架', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
     expect(await pressedLocale(page)).toBe('zh');
   });
+
+  // R-276（负责人 10-30）：单行行整行高 44；按钮（.btn）看得见 38，点击区由 ::after 扩到 44——
+  // 在按钮上下边框外 2px 用 elementFromPoint 点，命中的仍是按钮本身。e2e 构建读不到设备，账号组里是“重试”按钮（.btn）
+  test('R-276 实测：单行行高 44；“重试”“退出登录”看得见 38，上下边框外 2px 仍点到按钮本身', async ({ page }) => {
+    await page.goto(SETTINGS);
+    const main = settingsMain(page);
+    await expect(main).toBeVisible();
+    await expect(page.getByRole('alert').first()).toBeVisible();
+
+    const rows = [
+      main.getByTestId('settings-delete-entry').locator('xpath=ancestor::li[1]'),
+      main.getByTestId('settings-lang').locator('xpath=ancestor::li[1]'),
+      main.getByTestId('settings-export').locator('xpath=ancestor::li[1]'),
+    ];
+    for (const row of rows) {
+      const h = await row.evaluate((el) => el.getBoundingClientRect().height);
+      expect(Math.round(h)).toBe(44);
+    }
+
+    const buttons = [main.getByRole('alert').getByRole('button', { name: '重试' }), main.getByTestId('settings-signout')];
+    for (const btn of buttons) {
+      const r = await btn.evaluate((el) => {
+        el.scrollIntoView({ block: 'center' });
+        const b = el.getBoundingClientRect();
+        const cx = b.left + b.width / 2;
+        const own = (y: number): boolean => el.ownerDocument.elementFromPoint(cx, y)?.closest('button') === el;
+        return { h: b.height, up: own(b.top - 2), down: own(b.bottom + 2) };
+      });
+      expect(Math.round(r.h)).toBe(38);
+      expect(r.up).toBe(true);
+      expect(r.down).toBe(true);
+    }
+  });
 });

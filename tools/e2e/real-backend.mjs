@@ -19,6 +19,8 @@
 //   • [auth] additional_redirect_urls 加上 http://127.0.0.1:8789/app/（e2e 的 wrangler pages dev 端口）；
 //   • [auth.rate_limit] email_sent 从 30 调到 1000：e2e 一轮要发很多封验证码（都进 Mailpit），按线上的每小时 30 封会被限流。
 //     这一条只为测试能跑，线上和仓库 config 照旧是 30（架构 15.6 总表）。
+//   • [auth.rate_limit] token_verifications 从 10 调到 1000（10-30 起仓库和线上两个项目都是 10，负责人同意）：各 spec 经
+//     /sb/auth/v1/verify 登录一轮约 13 次以上，全从 127.0.0.1 来、fullyParallel，按 10 会被限流。同样只为测试能跑，仓库 config 不改。
 //
 // 护栏（纯函数，tests/build/e2e-real-backend.test.ts 单测），up、env、check、down 都先过，过不了一个 supabase 命令都不跑：
 //   • checkGuard（config.toml，白名单）：project_id 必须严格等于 "lemo-e2e"（CLI 会去掉开头的 _ . -，" lemomemo"、"_lemomemo" 之类都拒）；

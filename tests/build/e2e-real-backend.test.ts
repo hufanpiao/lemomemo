@@ -7,6 +7,7 @@ import {
   checkEnv,
   checkGuard,
   E2E_EMAIL_SENT,
+  E2E_TOKEN_VERIFICATIONS,
   entryKind,
   E2E_PROJECT_ID,
   E2E_REDIRECT,
@@ -203,10 +204,14 @@ describe('config 改写 rewriteConfig（用仓库真的 supabase/config.toml）'
     expect(urls).toEqual(['http://localhost:5173/app/', 'http://127.0.0.1:8788/app/', E2E_REDIRECT]);
   });
 
-  it('[auth.rate_limit] email_sent 调高，其他限流不动', () => {
+  it('[auth.rate_limit] email_sent、token_verifications 调高（仓库原值 30、10），其他限流不动', () => {
+    expect(readLinesOf(repoToml, 'auth.rate_limit').get('token_verifications')).toBe('10');
     const rl = readLinesOf(e2eToml, 'auth.rate_limit');
     expect(rl.get('email_sent')).toBe(String(E2E_EMAIL_SENT));
-    expect(rl.get('token_verifications')).toBe('30');
+    expect(rl.get('token_verifications')).toBe(String(E2E_TOKEN_VERIFICATIONS));
+    expect(E2E_TOKEN_VERIFICATIONS).toBeGreaterThanOrEqual(100);
+    for (const k of ['sms_sent', 'anonymous_users', 'token_refresh', 'sign_in_sign_ups', 'web3']) expect(rl.get(k), k).toBe(readLinesOf(repoToml, 'auth.rate_limit').get(k));
+    expect(e2eToml).toContain('token_verifications 调高');
   });
 
   it('其他设置原样保留（抽查 jwt_expiry、enable_signup、max_frequency、content_path）', () => {
@@ -226,6 +231,7 @@ describe('config 改写 rewriteConfig（用仓库真的 supabase/config.toml）'
     expect(checkGuard(out)).toEqual([]);
     expect(readLinesOf(out, 'api').get('port')).toBe('55321');
     expect(readLinesOf(out, 'auth.rate_limit').get('email_sent')).toBe(String(E2E_EMAIL_SENT));
+    expect(readLinesOf(out, 'auth.rate_limit').get('token_verifications')).toBe(String(E2E_TOKEN_VERIFICATIONS));
   });
 
   it('表里没有的 543xx 端口项也挪进 553xx', () => {

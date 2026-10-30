@@ -10,6 +10,11 @@ export const E2E_PROJECT_ID = 'lemo-e2e';
 export const E2E_REDIRECT = 'http://127.0.0.1:8789/app/';
 /** e2e 专用：调高发信上限（仓库 config 是 30，见文件头） */
 export const E2E_EMAIL_SENT = 1000;
+/**
+ * e2e 专用：调高验证码校验上限（仓库 config 10-30 起是 10，线上两个项目同样是 10）。
+ * 各 spec 经 /sb/auth/v1/verify 登录一轮约 13 次以上，全从 127.0.0.1 来、fullyParallel，按 10 会被限流
+ */
+export const E2E_TOKEN_VERIFICATIONS = 1000;
 /** 端口白名单：55320～55329，外加 edge runtime 的 inspector 8084 */
 export const ALLOWED_PORT_RANGE = [55320, 55329];
 export const ALLOWED_EXTRA_PORTS = [8084];
@@ -320,6 +325,7 @@ export function rewriteConfig(text) {
   const seen = new Set();
   let sawRedirect = false;
   let sawEmailSent = false;
+  let sawTokenVer = false;
   let sawFakeFnJwt = false;
   const out = lines.map((l) => {
     if (l.kind !== 'key') return l.raw;
@@ -352,6 +358,10 @@ export function rewriteConfig(text) {
       sawEmailSent = true;
       return put(`${E2E_EMAIL_SENT}`);
     }
+    if (l.section === 'auth.rate_limit' && l.key === 'token_verifications') {
+      sawTokenVer = true;
+      return put(`${E2E_TOKEN_VERIFICATIONS}`);
+    }
     if (l.section === `functions.${E2E_FAKE_FN}` && l.key === 'verify_jwt') {
       sawFakeFnJwt = true;
       return put('false');
@@ -366,6 +376,7 @@ export function rewriteConfig(text) {
   }
   if (!sawRedirect) missing.push({ section: 'auth', line: `additional_redirect_urls = ["${E2E_REDIRECT}"]` });
   if (!sawEmailSent) missing.push({ section: 'auth.rate_limit', line: `email_sent = ${E2E_EMAIL_SENT}` });
+  if (!sawTokenVer) missing.push({ section: 'auth.rate_limit', line: `token_verifications = ${E2E_TOKEN_VERIFICATIONS}` });
   // 假出站服务（E2E_FAKE_FN）不验 JWT：invite-signup 发给它的请求头不是 JWT（Bearer 假 Resend 密钥 / 没有）；只有这一个函数
   if (!sawFakeFnJwt) missing.push({ section: `functions.${E2E_FAKE_FN}`, line: 'verify_jwt = false' });
   for (const m of missing) {
@@ -378,6 +389,6 @@ export function rewriteConfig(text) {
   }
   const header =
     '# 由 tools/e2e/real-backend.mjs 从 supabase/config.toml 生成，只给 e2e 用，不要手改（每次 up 重新生成）。\n' +
-    '# 偏差：project_id = lemo-e2e、端口 553xx、inspector 8084、多一个 8789 回跳地址、email_sent 调高、假出站服务 e2e-fake-outbound 不验 JWT；仓库的 config.toml 不改。\n';
+    '# 偏差：project_id = lemo-e2e、端口 553xx、inspector 8084、多一个 8789 回跳地址、email_sent 调高、token_verifications 调高（仓库和线上是 10，e2e 一轮经 verify 登录十几次、全从 127.0.0.1 来，会被限流）、假出站服务 e2e-fake-outbound 不验 JWT；仓库的 config.toml 不改。\n';
   return header + out.join('\n');
 }

@@ -109,6 +109,47 @@ describe('设置页组间距', () => {
     expect(block('.status:empty')).toMatch(/margin-top: 0;/);
   });
 
+  it('R-276：单行 .row 整行高 44、不加上下内边距；两行内容（带 .meta）的行上下 8px；行里的 .rowBtn 仍 44 撑满整行', () => {
+    const row = block('.row');
+    expect(row).toMatch(/min-height: var\(--hit\);/);
+    expect(row).toMatch(/padding: 0;/);
+    expect(block('.row:has(> .meta)')).toMatch(/padding: 8px 0;/);
+    expect(block('.rowBtn')).toMatch(/min-height: var\(--hit\);/);
+    // 行里的标题（“界面语言”是 h2）去掉默认外边距，不把 44 的行撑高
+    expect(block('.tx')).toMatch(/margin: 0;/);
+  });
+
+  it('R-276：分段控件外框（.seg 上下内边距 + .segBtn 高）≤ 44，不撑高 44 的行；数从 CSS 源码里取', () => {
+    const pad = /padding: (\d+)px;/.exec(block('.seg'))?.[1];
+    const btnH = /min-height: (\d+)px;/.exec(block('.segBtn'))?.[1];
+    expect(pad).toBeDefined();
+    expect(btnH).toBeDefined();
+    expect(Number(btnH)).toBe(36);
+    expect(2 * Number(pad) + Number(btnH)).toBeLessThanOrEqual(44);
+  });
+
+  it('R-276：分段按钮看得见 36；.btn 和确认弹窗的 .primary 看得见 38；三者都用 ::after 把点击区扩到 44', () => {
+    expect(block('.segBtn')).toMatch(/position: relative;/);
+    const btn = block('.btn');
+    expect(btn).toMatch(/min-height: 38px;/);
+    expect(btn).toMatch(/position: relative;/);
+    expect(btn).toMatch(/font-size: var\(--fs-14\);/);
+    // 确认弹窗的确认按钮和“取消”一样高（负责人 10-30）；本模块的 .primary 只在设置里用，字号不变
+    const primary = block('.primary');
+    expect(primary).toMatch(/min-height: 38px;/);
+    expect(primary).toMatch(/position: relative;/);
+    expect(primary).toMatch(/font-size: var\(--fs-15\);/);
+    // 扩点击区：三个选择器共用一条规则，写法同皮肤视觉稿第 133 行
+    const at = css.indexOf('\n.btn::after,\n.segBtn::after,\n.primary::after {');
+    expect(at).toBeGreaterThan(0);
+    const after = css.slice(at, css.indexOf('}', at));
+    expect(after).toMatch(/content: '';/);
+    expect(after).toMatch(/position: absolute;/);
+    expect(after).toMatch(/width: max\(100%, var\(--hit\)\);/);
+    expect(after).toMatch(/height: max\(100%, var\(--hit\)\);/);
+    expect(after).toMatch(/transform: translate\(-50%, -50%\);/);
+  });
+
   it('CSS：邮箱那一行是正文色、正文（15）的次一级 14，和灰色 13 的组标题分开；长邮箱任意处换行；读屏标签视觉上隐藏', async () => {
     const e = block('.email');
     expect(e).toMatch(/color: var\(--text\);/);

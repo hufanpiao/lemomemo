@@ -52,23 +52,32 @@
   list-style: none;
 }
 
+/* R-276（负责人 10-30，改视觉稿“设置行 50”）：单行整行高 44、不加上下内边距；行里的 .rowBtn 44 撑满整行，可点区不变 */
 .row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 10px;
   min-height: var(--hit);
-  padding: 10px 0;
+  padding: 0;
   border-bottom: 1px solid var(--line);
+}
+
+/* 两行内容的行（下面带一行灰字 .meta：已登录设备、导出邮件没发出的那条）：上下各 8px，
+   不然按钮贴卡片上沿、灰字压到下边圆角（R-276 实测）。单行的行不受影响，仍是 44 */
+.row:has(> .meta) {
+  padding: 8px 0;
 }
 
 .row:last-child {
   border-bottom: 0;
 }
 
+/* margin 0：“界面语言”的 .tx 是 h2，默认上下外边距会把 44 的行撑高（韩文实测 44.9，R-276） */
 .tx {
   flex: 1 1 auto;
   min-width: 0;
+  margin: 0;
   font-size: var(--fs-15);
   overflow-wrap: anywhere;
 }
@@ -140,8 +149,10 @@
   background: var(--panel-2);
 }
 
+/* R-276：看得见的 36 高，外框 3 + 36 + 3 = 42（≤ 44，不撑高 44 的行）；点击区由 .btn 下面那条 ::after 扩到 44 */
 .segBtn {
-  min-height: var(--hit);
+  position: relative;
+  min-height: 36px;
   padding: 0 14px;
   border: 0;
   border-radius: var(--r-pill);
@@ -156,14 +167,30 @@
   font-weight: 600;
 }
 
+/* R-276：看得见的 38 高；点击区由 ::after 扩到 44（上下各 3px），字号不变 */
 .btn {
-  min-height: var(--hit);
+  position: relative;
+  min-height: 38px;
   padding: 0 14px;
   border: 0;
   border-radius: var(--r-pill);
   background: var(--panel-2);
   color: var(--text);
   font-size: var(--fs-14);
+}
+
+/* 扩点击区（令牌 --hit 的写法，同皮肤视觉稿第 133 行）：不可见的伪元素以按钮中心向外扩到至少 44×44；
+   按钮本身比 44 宽的方向不扩，所以并排的分段按钮、相邻按钮的点击区不会互相盖住 */
+.btn::after,
+.segBtn::after,
+.primary::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
 }
 
 .btn:disabled {
@@ -204,8 +231,11 @@
   margin-top: 8px;
 }
 
+/* R-276（负责人 10-30）：和弹窗里的“取消”（.btn）一样看得见 38，点击区由上面的 ::after 扩到 44；
+   本模块的 .primary 只在设置里用：确认弹窗、离开本机的提示框、注销页的提交按钮 */
 .primary {
-  min-height: var(--hit);
+  position: relative;
+  min-height: 38px;
   padding: 0 18px;
   border: 0;
   border-radius: var(--r-pill);
