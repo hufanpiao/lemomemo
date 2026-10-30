@@ -9,6 +9,7 @@ import {
   sendOrder,
   validateWrite,
 } from '../outbox.ts';
+import { isTryLater, tryLaterBackoffMs } from '../outbox-logic.ts';
 import { mk, todo, uid } from './outbox-fixtures.ts';
 
 describe('纯函数', () => {
@@ -94,5 +95,35 @@ describe('纯函数', () => {
     expect(validateWrite({ table: 'todos', id: uid(1), op: 'patch', data: { undone: true } })).toBeNull();
     expect(validateWrite({ table: 'categories', id: 'c', op: 'patch', data: { pushed_for: 1 } })).toBe('column_not_writable:pushed_for');
     expect(validateWrite({ table: 'logs', id: 'l', op: 'insert', data: { id: 'l' } })).toBe('table_not_synced');
+  });
+});
+
+// TC-B1-90（架构 0.29 续第 110 条①、续第 119 条②）：客户端收到 try_later 只退避重试。
+// 服务器回的形状：Edge Function 的 requireActiveUser 在 session_alive 出错或超时时回 503 {error: 'try_later'}
+// （supabase/tests/offline/auth-check.mjs 第 46、47 行，错误体是 shared/schema/api.ts 的 apiError）；
+// 走 PostgREST 时，PL/pgSQL 的 raise exception 'try_later' 是 HTTP 400，sync-transport.ts 的 toFailure 从 message 取出 code: 'try_later'。
+// 两种形状都按 code 认，不看状态码，免得 400 落进“其他 4xx 永久失败”。现在 apply_patch 不调 session_alive，这一支是按架构预先守住的
+describe('TC-B1-90：try_later 只退避重试', () => {
+  it('不管 503 还是 400，try_later 都算临时故障（不进“其他 4xx”的 permanent，也不是 removed）', () => {
+    expect(classifyFailure({ status: 503, code: 'try_later' })).toBe('transient');
+    expect(classifyFailure({ status: 400, code: 'try_later' })).toBe('transient');
+    expect(isTryLater({ status: 503, code: 'try_later' })).toBe(true);
+    expect(isTryLater({ status: 400, code: 'try_later' })).toBe(true);
+  });
+
+  it('退避按连续 try_later 的次数：5 秒、30 秒、2 分钟，之后每 5 分钟', () => {
+    expect([1, 2, 3, 4, 5, 50].map(tryLaterBackoffMs)).toEqual([5_000, 30_000, 120_000, 300_000, 300_000, 300_000]);
+    // 0 或负数按第一次算，不会是 0 秒（防止无限快速重试）
+    expect(tryLaterBackoffMs(0)).toBe(5_000);
+  });
+
+  it('对照：别的 503、5xx、429、断网照旧（不是 try_later，退避 2、4、8 秒……最长 5 分钟）', () => {
+    for (const f of [{ status: 503 }, { status: 503, code: 'db_unreachable' }, { status: 500 }, { status: 429 }, { network: true }]) {
+      expect(classifyFailure(f)).toBe('transient');
+      expect(isTryLater(f)).toBe(false);
+    }
+    expect([1, 2, 3, 9].map(backoffMs)).toEqual([2000, 4000, 8000, MAX_BACKOFF_MS]);
+    // 其他 4xx 照旧永久失败
+    expect(classifyFailure({ status: 400, code: 'something_else' })).toBe('permanent');
   });
 });

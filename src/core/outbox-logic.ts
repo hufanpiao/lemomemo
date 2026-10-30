@@ -32,9 +32,27 @@ export const MAX_BACKOFF_MS = 5 * 60 * 1000;
 /** own_revs 最多 20 个 */
 export const MAX_OWN_REVS = 20;
 
+/**
+ * 服务器忙（TC-B1-90；架构 0.29 续第 110 条①、续第 119 条②）：Edge Function 回 503 {error: 'try_later'}；
+ * 走 PostgREST 时 raise exception 'try_later' 是 400、code 由传输层从 message 取出。只看 code，不看状态码。
+ * 注意：现在 try_later 实际到不了队列——队列只经 PostgREST 调 apply_patch，apply_patch 不调 session_alive，
+ * 数据库里也没有抛 try_later 的地方；这一支是按架构续第 119 条②预先守住的（R-272）。退避和计数见 outbox-send.ts
+ */
+export const TRY_LATER = 'try_later';
+export const isTryLater = (f: SendFailure): boolean => f.code === TRY_LATER;
+
+/** 连续第 n 次收到 try_later 以后等多久：5 秒、30 秒、2 分钟，之后每 5 分钟（续第 119 条②）；n ≤ 0 按第一次算 */
+const TRY_LATER_STEPS_MS: readonly number[] = [5_000, 30_000, 120_000, MAX_BACKOFF_MS];
+export function tryLaterBackoffMs(n: number): number {
+  const i = Math.min(Math.max(n, 1), TRY_LATER_STEPS_MS.length) - 1;
+  return TRY_LATER_STEPS_MS[i] ?? MAX_BACKOFF_MS;
+}
+
 /** 失败归类（426 不算永久失败，0.27 第 1 点）；各类的处理见 outbox-types.ts 的 FailureKind。401 的重发次数由 K8 管 */
 export function classifyFailure(f: SendFailure): FailureKind {
   if (f.status === 426 || f.code === 'upgrade_required') return 'upgrade';
+  // try_later 是临时故障，排在 4xx 判断之前：经 PostgREST 来的是 400，不能落进“其他 4xx 永久失败”（续第 119 条②）
+  if (isTryLater(f)) return 'transient';
   if (f.code !== undefined && DISABLED_CODES.includes(f.code)) return 'disabled';
   if (f.code !== undefined && REMOVED_CODES.includes(f.code)) return 'removed';
   if (f.code !== undefined && DROP_CODES.includes(f.code)) return 'drop';

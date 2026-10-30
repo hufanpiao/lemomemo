@@ -192,7 +192,10 @@ describe('TC-B1-102 ⑤：“冷静期中的账号”列出 purge_started_at', (
   });
 });
 
-describe('发信量 auth_mail（架构 0.38 第 12 条；审查必改 1、2）', () => {
+// TC-B1-119 ⑤（usage-report 侧）：没提供读取器、提供了、读出错或数字不对、读得慢四条；规则那几步在 lemo-ops-mail-volume.test.ts
+// 另外三条：“只有 resend_24h 不对……”是 TC-B1-120 ⑦；“index.ts 接 rpc auth_mail_counts……”是 TC-B1-120 ⑨；
+// “整轮已回 503 后……不再补记”不对应单独用例，是实现细节
+describe('发信量 auth_mail（TC-B1-119 ⑤；架构 0.38 第 12 条；审查必改 1、2）', () => {
   const body = async (r: Response) => (await r.json()) as Record<string, unknown>;
 
   it('没提供读取器（还没接）：返回体不带 auth_mail', async () => {

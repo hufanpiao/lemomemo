@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest';
 import { AUTH_MAIL_HOUR_LIMIT, evaluateAuthMail, parseHeartbeatReport } from '../../workers/lemo-ops/src/rules.ts';
 import { M, world } from './lemo-ops-harness.ts';
 
-describe('发信量（架构 0.38 第 12 条、15.6 第 4d 条 ①）', () => {
+// TC-B1-119（验证码发信量告警）各步：①⑨ 阈值；② ③ 验证码 30 封；④ 没接；⑥ 读不到；⑦ 监控连不上；⑧ 形状不对；
+// ⑨ Resend 超过 70%；⑩ 两件同时；⑪ 没接以后。⑤ 在 tests/functions/usage-report.test.ts 的“发信量 auth_mail”
+// 另有 TC-B1-120 ⑧（lemo-ops 侧：Resend 数字坏了、resend_unreadable）的 6 条：从“只有 resend_24h 不对”到“真的没接”；
+// 其中“resend_unreadable 是 "false"、null 等……”“resend_unreadable 和合法的 resend_24h 同时出现……”两条是 ⑧ 里“已标 resend_unreadable 的”边界补充
+describe('发信量（TC-B1-119；架构 0.38 第 12 条、15.6 第 4d 条 ①）', () => {
   const subj = (w: ReturnType<typeof world>) => w.inbox.map((m) => m.subject);
   /** 往后走一轮（15 分钟），心跳都设成刚写过 */
   const step = async (w: ReturnType<typeof world>, n = 1) => {

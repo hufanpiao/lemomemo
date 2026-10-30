@@ -1,8 +1,9 @@
 // 离线写入队列的“发送结果”两步：ack（确认后推进、更新本机的 server 副本）和 fail（五类失败 + 被移除）。outbox.ts 用
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { Cache, CachedRow, ServerRow } from './cache.ts';
-import { OUTBOX } from './cache-schema.ts';
-import { advanceAfterAck, backoffMs, classifyFailure, MAX_OWN_REVS } from './outbox-logic.ts';
+import { META, OUTBOX } from './cache-schema.ts';
+import type { CacheTx } from './cache.ts';
+import { advanceAfterAck, backoffMs, classifyFailure, isTryLater, MAX_OWN_REVS, tryLaterBackoffMs } from './outbox-logic.ts';
 import { notify, rewriteRow } from './outbox-rows.ts';
 import type { AckResult, FailureKind, OutboxEvent, OutboxItem, OutboxOptions, SentFailure } from './outbox-types.ts';
 
@@ -21,6 +22,25 @@ export interface Ctx {
   suspend: () => void;
 }
 
+/**
+ * 连续 try_later 次数（TC-B1-90，续第 119 条②）：队列级，存在 meta 的 try_later_streak。
+ * 和这一项的 next_at 在同一个 readwrite 事务里读、改、写（仓 OUTBOX + META）：同源的多个标签页对同一个仓的 readwrite
+ * 事务由 IndexedDB 排队执行，不会两边读到同一个旧值再各写一次。万一某种情况下计数还是丢了（比如别的标签页刚好清零），
+ * 最坏是节奏从 5 秒重新数，不会比 5 秒更快重试（tryLaterBackoffMs 最少 5 秒）
+ */
+const STREAK = 'try_later_streak';
+
+async function readStreak(t: CacheTx): Promise<number> {
+  const v = (await t.get<{ key: string; value: unknown }>(META, STREAK))?.value;
+  // 缺键或值不合法（不是非负整数）当 0
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : 0;
+}
+
+/** 清零（发送成功、收到别的失败）：没有这个键就不写，免得每次确认都多写一次 */
+async function clearStreak(t: CacheTx): Promise<void> {
+  if ((await t.get(META, STREAK)) !== undefined) await t.delete(META, STREAK);
+}
+
 /** forked：title、body 另存成了冲突副本，服务器这一行没改这两列；其余列照常改了 */
 const FORK_COLUMNS: readonly string[] = ['title', 'body'];
 
@@ -35,9 +55,10 @@ export async function ackImpl(ctx: Ctx, opId: string, ack: AckResult): Promise<v
   if (!found || ctx.isSuspended()) return;
   const { table, id } = found;
   let view: ServerRow | null = null;
-  await ctx.cache.tx([table, OUTBOX], 'readwrite', async (t) => {
+  await ctx.cache.tx([table, OUTBOX, META], 'readwrite', async (t) => {
     const sent = await t.get<OutboxItem>(OUTBOX, opId);
     if (!sent) return;
+    await clearStreak(t);   // 发送成功：连续 try_later 断了
     await t.delete(OUTBOX, opId);
     for (const i of advanceAfterAck(await t.getAllByIndex<OutboxItem>(OUTBOX, 'rec', sent.rec), sent, ack)) await t.put(OUTBOX, i);
 
@@ -94,9 +115,18 @@ export async function failImpl(ctx: Ctx, opId: string, failure: SentFailure): Pr
   const { table, id } = found;
   if (kind === 'upgrade' || kind === 'auth' || kind === 'transient') {
     if (ctx.isSuspended()) return kind;
-    const wrote = await ctx.cache.tx([OUTBOX], 'readwrite', async (t) => {
+    const later = isTryLater(failure);
+    const wrote = await ctx.cache.tx([OUTBOX, META], 'readwrite', async (t) => {
       const cur = await t.get<OutboxItem>(OUTBOX, opId);
       if (!cur) return false;
+      if (later) {
+        // try_later（TC-B1-90）：留 pending、不计 tries，按连续次数退避 5 秒、30 秒、2 分钟、之后每 5 分钟
+        const streak = (await readStreak(t)) + 1;
+        await t.put(META, { key: STREAK, value: streak });
+        await t.put(OUTBOX, { ...cur, state: 'pending', next_at: ctx.now() + tryLaterBackoffMs(streak) });
+        return true;
+      }
+      await clearStreak(t);   // 别的回应（5xx、429、断网、426、401）：连续 try_later 断了
       const tries = kind === 'transient' ? cur.tries + 1 : cur.tries;
       const next_at = kind === 'transient' ? ctx.now() + backoffMs(tries) : cur.next_at;
       await t.put(OUTBOX, { ...cur, state: 'pending', tries, next_at });
@@ -119,9 +149,10 @@ export async function failImpl(ctx: Ctx, opId: string, failure: SentFailure): Pr
   let view: ServerRow | null = null;
   let before: OutboxItem | null = null;
   let failed: OutboxItem | null = null;
-  await ctx.cache.tx([table, OUTBOX], 'readwrite', async (t) => {
+  await ctx.cache.tx([table, OUTBOX, META], 'readwrite', async (t) => {
     const cur = await t.get<OutboxItem>(OUTBOX, opId);
     if (!cur) return;
+    await clearStreak(t);   // 永久失败、丢掉：服务器回了别的，连续 try_later 断了
     before = cur;
     if (kind === 'drop') await t.delete(OUTBOX, opId);
     else {

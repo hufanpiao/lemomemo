@@ -97,6 +97,8 @@ export interface MetaMap {
   outbox_pause: OutboxPause;
   /** 本会话的 devices 行（core/device-reg.ts；0.38 第 62 条④）：退出、换账号、被移除时随整库清掉 */
   device: DeviceMeta;
+  /** 队列连续收到 try_later 的次数（TC-B1-90，续第 119 条②；core/outbox-send.ts 读写，发送成功或别的失败时删掉） */
+  try_later_streak: number;
   /** 各表的同步游标（K8） */
   [k: `cursor:${string}`]: SyncCursor;
   /** 各表“待补拉”的 id（K7：一行解析不了时记下，下次启动单独补拉） */
