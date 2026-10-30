@@ -91,6 +91,12 @@
 Pages Functions（functions/）和 App、shared：
   F4  functions/ 里只有 /files（functions/files/**、functions/_lib/files-*.ts）能 import shared/objstore*.ts、aws4fetch，读 R2_*；
       functions/、src/、shared/ 一律不准出现 R2_FN_*、R2_PULL_*、SUPABASE_DB_URL、FN_VAULT_DB_URL、FN_AI_DB_URL。架构 0.32 第 4 条、8.4
+写 private.admins（安全说明 S-6 守则 ②，R-279；迁移 20261030140000 给了 service_role insert）：
+  F8  supabase/functions、workers、tools 下，只有 tools/e2e/preview-login.ts、tools/e2e/preview-login-adapt.ts 能写 admins：
+      别处出现 supabase-js 的 .from('admins')（或 'private.admins'，含 .schema('private').from('admins')）后面同一句链式调用
+      .insert / .update / .upsert / .delete，或 SQL 文本里 insert into / update / delete from / merge into private.admins，都报。
+      源码（.ts .mjs 等）用 AST 去掉注释后查（字符串里的 SQL 照查）；.sql .psql .ps1 .psm1 .py .sh 按原文查（注释也算，宁严勿漏）。
+      只读（.select、select … from private.admins）不报。表名拼出来、存进变量再 .from(变量) 这类写法查不到，靠代码审查
 迁移（supabase/migrations/*.sql）：
   M1  security definer 函数必须写 set search_path = ''（create function 和 alter function 都查，属性写在函数体前后都认）。
       架构 0.29 续第 117 条、TC-B0-92
@@ -873,6 +879,48 @@ def check_pages(root, errors):
                     errors.append(("F4", rel, line_of(code, m.start()), f"Pages Functions 里只有 /files 能读 {m.group(0)}"))
 
 
+# ---------------- F8：写 private.admins（安全说明 S-6 守则 ②，R-279） ----------------
+ADMINS_WRITE_OK = frozenset({"tools/e2e/preview-login.ts", "tools/e2e/preview-login-adapt.ts"})
+ADMINS_SCOPES = ("supabase/functions", "workers", "tools")
+ADMINS_TEXT_EXT = (".sql", ".psql", ".ps1", ".psm1", ".py", ".sh")
+ADMINS_FROM = re.compile(r"\.\s*from\s*\(\s*(['\"`])(?:private\.)?admins\1\s*\)")
+ADMINS_CHAIN_WRITE = re.compile(r"\.\s*(insert|update|upsert|delete)\s*\(")
+ADMINS_SQL = re.compile(r"\b(insert\s+into|update|delete\s+from|merge\s+into)\s+(?:only\s+)?\"?private\"?\s*\.\s*\"?admins\"?(?![\w$])", re.IGNORECASE)
+ADMINS_MSG = "private.admins 只准 tools/e2e/preview-login.ts、preview-login-adapt.ts 写（--admin 给 .test 测试账号加管理员；安全说明 S-6 守则 ②、R-279）"
+
+
+def admins_texts(root):
+    """F8 要查的文件：[(相对仓库根的路径, 文本, 解析错误或 None)]。源码走 AST（注释已去掉），其余按原文"""
+    out = []
+    for top in ADMINS_SCOPES:
+        base = root / top
+        if not base.exists():
+            continue
+        for rel, res in iter_code(root, top):
+            out.append((rel, res["code"], res.get("parseError")))
+        for p in sorted(base.rglob("*")):
+            if p.is_file() and p.suffix.lower() in ADMINS_TEXT_EXT and "node_modules" not in p.parts:
+                out.append((p.relative_to(root).as_posix(), p.read_text(encoding="utf-8", errors="replace"), None))
+    return out
+
+
+def check_admins_writes(root, errors):
+    for rel, code, perr in admins_texts(root):
+        if rel in ADMINS_WRITE_OK:
+            continue
+        if perr and not rel.startswith(f"{FN_ROOT}/"):   # supabase/functions 下的 F7 已经报过解析不了，不重复报
+            errors.append(("F8", rel, 1, f"解析不了（{perr}），没法确认里面不写 private.admins"))
+        for m in ADMINS_FROM.finditer(code):
+            # 同一句：到下一个分号或空行为止（最多 800 个字符），链式调用跨行也算
+            rest = code[m.end():m.end() + 800]
+            stop = min([i for i in (rest.find(";"), rest.find("\n\n")) if i >= 0] or [len(rest)])
+            w = ADMINS_CHAIN_WRITE.search(rest[:stop])
+            if w:
+                errors.append(("F8", rel, line_of(code, m.start()), f"{ADMINS_MSG}；这里 .from('admins') 后面调了 .{w.group(1)}()"))
+        for m in ADMINS_SQL.finditer(code):
+            errors.append(("F8", rel, line_of(code, m.start()), f"{ADMINS_MSG}；这里的 SQL 写了 {' '.join(m.group(1).split()).lower()} private.admins"))
+
+
 # ---------------- 迁移 ----------------
 
 def sql_statements(raw):
@@ -1297,6 +1345,7 @@ def main(argv=None):
     errors = []
     check_functions(root, errors)
     check_pages(root, errors)
+    check_admins_writes(root, errors)
     check_migrations(root, errors)
     errors = sorted(set(errors), key=lambda e: (e[1], e[2], e[0], e[3]))
     # 同一处同一条规则只报一次

@@ -71,6 +71,21 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(where(errors)).toEqual(['F5 supabase/functions/push-dispatch/index.ts:2']);
   });
 
+  it('F8（安全说明 S-6 守则 ②，R-279）：preview-login.ts、preview-login-adapt.ts 以外写 private.admins（链式 insert / upsert / delete、SQL 文本）→ 错误；只读、别的表、注释不算', () => {
+    const { code, errors } = run(sample('f8-admins-write'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      'F8 supabase/functions/invite-admin/index.ts:4', // priv.from(`admins`).delete()
+      'F8 tools/e2e/seed-other.ts:4', // .schema('private').from('admins').insert()
+      'F8 tools/e2e/seed-other.ts:6', // 跨行的 .from("admins") … .upsert()
+      'F8 tools/keys/fix.ps1:2', // .ps1 里 delete from private.admins
+      'F8 workers/lemo-ops/src/ops.ts:2', // 字符串里 INSERT INTO private.admins（不分大小写）
+      'F8 workers/lemo-ops/src/ops.ts:4', // update "private"."admins"
+    ]);
+    expect(errors.every((e) => e.message.includes('安全说明 S-6 守则 ②'))).toBe(true);
+    expect(errors.find((e) => e.file.endsWith('invite-admin/index.ts'))?.message).toContain('.delete()');
+  });
+
   it('F6（架构 6.2 末尾预览专用一行，B0 P12）：_preview/ 下不在名单的目录、散放的文件；_shared 和正式函数引 _preview/；顶层同名入口进了仓库 → 错误；r2-probe 本身用 R2 不报', () => {
     const { code, errors } = run(sample('f6-preview-only'), SAMPLE_PREVIEW);
     expect(code).toBe(1);

@@ -19,6 +19,18 @@ const UID = env.PREVIEW_USER_ID ?? '';
 const ready = !!(BASE && ANON && JWT && UID);
 const VERSION = '4.0.0-preview.0';
 
+/** settings 只授权 insert (id, key, value)、update (value, deleted_at, undone)（0001 第 278、279 行）：
+ *  user_id 由列默认值 auth.uid() 填，body 里带了就是 permission denied（403）；id 没有默认值，按客户端写法用 crypto.randomUUID() */
+const settingsRow = (key: string, value: unknown) => ({ id: crypto.randomUUID(), key, value });
+
+/** 收尾软删：只改 deleted_at（bigint，毫秒时间戳，和客户端一致；ISO 字符串写不进 bigint） */
+const softDelete = (key: string) =>
+  sb(`/rest/v1/settings?key=eq.${encodeURIComponent(key)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deleted_at: Date.now() }),
+  });
+
 function sb(path: string, init: RequestInit = {}, auth = true): Promise<Response> {
   const h = new Headers(init.headers);
   h.set('apikey', ANON);
@@ -42,17 +54,13 @@ describe.skipIf(!ready)('【待预览环境】/sb/* 转发', () => {
     const w = await sb('/rest/v1/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
-      body: JSON.stringify({ user_id: UID, key, value: { ok: true } }),
+      body: JSON.stringify(settingsRow(key, { ok: true })),
     });
     expect(w.status).toBe(201);
-    const r = await sb(`/rest/v1/settings?select=key&key=eq.${encodeURIComponent(key)}`);
-    expect(await r.json()).toEqual([{ key }]);
+    const r = await sb(`/rest/v1/settings?select=key,user_id&key=eq.${encodeURIComponent(key)}`);
+    expect(await r.json()).toEqual([{ key, user_id: UID }]); // user_id 由默认值 auth.uid() 填成本账号
     // 收尾：软删除（客户端没有 DELETE 授权，0.29 续第 121 条）
-    await sb(`/rest/v1/settings?key=eq.${encodeURIComponent(key)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deleted_at: new Date().toISOString() }),
-    });
+    expect((await softDelete(key)).status).toBe(204);
   });
 
   it('TC-B0-46（线上）：写入不带版本头 → 426，带 CORS 和安全头', async () => {
@@ -109,6 +117,7 @@ describe.skipIf(!ready)('【待预览环境】/sb/* 转发', () => {
     const wsUrl = `${BASE.replace(/^http/, 'ws')}/sb/realtime/v1/websocket?apikey=${encodeURIComponent(ANON)}&vsn=1.0.0`;
     const ws = new WebSocket(wsUrl);
     const topic = 'realtime:e2e-sb-forward';
+    const key = `e2e.realtime.${Date.now()}`;
     const got = new Promise<string>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('realtime_timeout')), 20_000);
       ws.addEventListener('error', () => reject(new Error('ws_error')));
@@ -128,11 +137,14 @@ describe.skipIf(!ready)('【待预览环境】/sb/* 转发', () => {
       ws.addEventListener('message', (ev) => {
         const msg = JSON.parse(String(ev.data)) as { event: string; payload?: { status?: string } };
         if (msg.event === 'phx_reply' && msg.payload?.status === 'ok') {
+          // 订阅仍按 user_id=eq.UID 过滤（读列不受 insert 列授权限制）；写入不带 user_id
           void sb('/rest/v1/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: UID, key: `e2e.realtime.${Date.now()}`, value: {} }),
-          });
+            body: JSON.stringify(settingsRow(key, {})),
+          }).then((w) => {
+            if (w.status !== 201) reject(new Error(`realtime_insert_${w.status}`)); // 写不进去就直说，不干等到超时
+          }, reject);
         }
         if (msg.event === 'postgres_changes') {
           clearTimeout(timer);
@@ -144,6 +156,7 @@ describe.skipIf(!ready)('【待预览环境】/sb/* 转发', () => {
       expect(await got).toBe('postgres_changes');
     } finally {
       ws.close();
+      await softDelete(key); // 收尾；没写进去时 PATCH 不命中任何行，也无妨
     }
   }, 30_000);
 });

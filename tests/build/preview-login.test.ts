@@ -8,64 +8,10 @@ import {
   MAX_PAGES,
   parseOwnerEmails,
   PER_PAGE,
-  PrepError,
   prepareLogin,
   PREVIEW_REF,
 } from '../../tools/e2e/preview-login.ts';
-
-const ADMIN_ID = '00000000-0000-4000-8000-000000000001';
-const OTP = '123456';
-const LINK = 'https://x.supabase.co/auth/v1/verify?token=hash-abc&type=magiclink';
-const FAKE_KEY = 'fake-service-key-不是真的';
-const PROD_REF = 'uvlnwawwsdfihziaielj';
-
-interface FakeOpts {
-  admins?: Record<string, string | null>; // user_id → email（null：没有邮箱的管理员）
-  adminsCount?: number | null; // 默认等于 admins 条数
-  adminsError?: boolean;
-  userLookupError?: boolean;
-  users?: (string | null)[]; // auth.users 的邮箱；默认几个种子账号
-  listError?: boolean;
-  gen?: { properties: Record<string, string> | null; error: boolean };
-}
-
-const SEED = ['e2e-1@lemomemo.test', 'e2e-2@lemomemo.test', 'e2e-admin@lemomemo.test', 'e2e-k@lemomemo.test'];
-
-function fakeClient(o: FakeOpts = {}) {
-  const calls = { generate: [] as string[], adminsRead: 0, pages: [] as number[] };
-  const admins = o.admins ?? { [ADMIN_ID]: 'e2e-admin@lemomemo.test' };
-  const users = o.users ?? SEED;
-  const client: AdminOps = {
-    adminIds: async () => {
-      calls.adminsRead++;
-      if (o.adminsError) return { ids: null, count: null, error: true };
-      const ids = Object.keys(admins);
-      return { ids, count: o.adminsCount === undefined ? ids.length : o.adminsCount, error: false };
-    },
-    userEmail: async (id) =>
-      o.userLookupError ? { found: false, email: null, error: true } : { found: id in admins, email: admins[id] ?? null, error: false },
-    listEmails: async (page, perPage) => {
-      calls.pages.push(page);
-      if (o.listError) return { emails: null, error: true };
-      return { emails: users.slice((page - 1) * perPage, page * perPage), error: false };
-    },
-    generateLink: async (email) => {
-      calls.generate.push(email);
-      return o.gen ?? { properties: { email_otp: OTP, action_link: LINK, hashed_token: 'hash-abc' }, error: false };
-    },
-  };
-  return { client, calls };
-}
-
-async function rejects(p: Promise<unknown>): Promise<PrepError> {
-  try {
-    await p;
-  } catch (e) {
-    if (e instanceof PrepError) return e;
-    throw e;
-  }
-  throw new Error('应该报错却通过了');
-}
+import { ADMIN_ID, FAKE_KEY, fakeClient, type FakeOpts, LINK, OTP, PROD_REF, rejects } from './preview-login-fakes.ts';
 
 const prep = (email: string, client: AdminOps, ownerEmails = '', mask: (s: string) => void = () => {}) =>
   prepareLogin({ email, client, ownerEmails, mask });
@@ -158,17 +104,46 @@ describe('prepareLogin 护栏', () => {
     expect(b.calls.pages).toEqual([1, 2]);
   });
 
-  it('分页边界：刚好满一页、下一页为空 → no_such_user；50 个整页都没找到 → users_unreadable', async () => {
+  it('分页边界：刚好满一页、nextPage 为 null → 不再翻、no_such_user；50 页之后还有下一页 → users_unreadable', async () => {
     const page = Array.from({ length: PER_PAGE }, (_, i) => `seed-${i}@lemomemo.test`);
     const a = fakeClient({ users: page });
     expect((await rejects(prep('e2e-1@lemomemo.test', a.client))).code).toBe('no_such_user');
-    expect(a.calls.pages).toEqual([1, 2]);
+    expect(a.calls.pages).toEqual([1]);
     expect(a.calls.generate).toHaveLength(0);
-    const many = Array.from({ length: PER_PAGE * MAX_PAGES }, (_, i) => `seed-${i}@lemomemo.test`);
+    const many = Array.from({ length: PER_PAGE * MAX_PAGES + 1 }, (_, i) => `seed-${i}@lemomemo.test`);
     const b = fakeClient({ users: many });
     expect((await rejects(prep('e2e-1@lemomemo.test', b.client))).code).toBe('users_unreadable');
     expect(b.calls.pages).toHaveLength(MAX_PAGES);
     expect(b.calls.generate).toHaveLength(0);
+  });
+
+  it('最后一页按 nextPage 判断：nextPage 为 null 就停（这页不满、total 也对得上）', async () => {
+    const filler = Array.from({ length: 10 }, (_, i) => `seed-${i}@lemomemo.test`);
+    const a = fakeClient({ users: filler });
+    expect((await rejects(prep('e2e-1@lemomemo.test', a.client))).code).toBe('no_such_user');
+    expect(a.calls.pages).toEqual([1]);
+  });
+
+  it('服务端把每页条数压小（第一页既少于请求的 PER_PAGE、又少于 total）→ users_unreadable，不签发', async () => {
+    const users = [...Array.from({ length: 30 }, (_, i) => `seed-${i}@lemomemo.test`), 'e2e-1@lemomemo.test'];
+    const { client, calls } = fakeClient({ users, pageCap: 20 });
+    expect((await rejects(prep('e2e-1@lemomemo.test', client))).code).toBe('users_unreadable');
+    expect(calls.pages).toEqual([1]);
+    expect(calls.generate).toHaveLength(0);
+  });
+
+  it('翻完了（nextPage 为 null）条数还少于 total → users_unreadable；total 为 0（没有 Link 头）照常按最后一页处理', async () => {
+    const full = Array.from({ length: PER_PAGE }, (_, i) => `seed-${i}@lemomemo.test`);
+    const short = fakeClient({ users: full, total: PER_PAGE + 5 });
+    expect((await rejects(prep('e2e-1@lemomemo.test', short.client))).code).toBe('users_unreadable');
+    expect(short.calls.generate).toHaveLength(0);
+    const bare = fakeClient({ users: ['e2e-2@lemomemo.test'], total: 0 });
+    expect((await rejects(prep('e2e-1@lemomemo.test', bare.client))).code).toBe('no_such_user');
+    // 没有分页信息却正好满一页：后面可能还有，不能断定账号不存在
+    const fullBare = fakeClient({ users: full, total: 0 });
+    expect((await rejects(prep('e2e-1@lemomemo.test', fullBare.client))).code).toBe('users_unreadable');
+    expect(fullBare.calls.pages).toEqual([1]);
+    expect(fullBare.calls.generate).toHaveLength(0);
   });
 
   it('查账号是否存在时严格比较：库里只有 e2e-①@lemomemo.test，查 e2e-1@lemomemo.test 报 no_such_user', async () => {

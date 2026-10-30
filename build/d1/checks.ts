@@ -115,7 +115,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   const tg = await q<{ s: string; t: string; g: string; p: string }>(`select table_schema as s, table_name as t, grantee as g, privilege_type as p from information_schema.role_table_grants
     where grantee in ('anon', 'authenticated', 'service_role', 'fn_vault', 'fn_ai')`);
   const cg = await q<{ s: string; t: string; c: string; g: string; p: string }>(`select table_schema as s, table_name as t, column_name as c, grantee as g, privilege_type as p from information_schema.column_privileges
-    where grantee in ('anon', 'authenticated', 'fn_vault', 'fn_ai')`);
+    where grantee in ('anon', 'authenticated', 'service_role', 'fn_vault', 'fn_ai')`);
   const tableLevel = (g: string, s: string, t: string) => tg.filter((r) => r.g === g && r.s === s && r.t === t).map((r) => r.p);
   const colLevel = (g: string, s: string, t: string, p: string) => cg.filter((r) => r.g === g && r.s === s && r.t === t && r.p === p).map((r) => r.c);
   for (const t of tables.filter((t) => t.schema === 'public' && has(t))) {
@@ -140,6 +140,10 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     const haveRows = tg.filter((r) => r.g === role && (role !== 'service_role' || r.s === 'private'));
     const have = haveRows.map((r) => `${r.s}.${r.t}:${r.p}`);
     if (!eq(have, want)) bad(`${role} 的表级授权和白名单不一致：${diff(want, have)}`);
+    // private 下 service_role 不该有单独按列给的授权（3.3 C 只有表级；S-6 守则 ①：admins 只给 select、insert，
+    // 按列给 update、references 也算越权）。column_privileges 也列表级授权推出的列，所以只看表级推不出的那些
+    const extra = role !== 'service_role' ? [] : cg.filter((r) => r.g === role && r.s === 'private' && !have.includes(`${r.s}.${r.t}:${r.p}`)).map((r) => `${r.s}.${r.t}:${r.p}:${r.c}`);
+    if (extra.length) bad(`service_role 在 private 下有表级授权推不出的列级授权（3.3 C 只给表级）：${[...new Set(extra)].sort().join(', ')}`);
     if (role === 'service_role') continue;
     const wantCols = Object.entries(COLUMN_GRANTS[role]).flatMap(([k, cs]) => cs.map((c) => `${k}:${c}`));
     const haveCols = cg.filter((r) => r.g === role && !have.includes(`${r.s}.${r.t}:${r.p}`)).map((r) => `${r.s}.${r.t}:${r.p}:${r.c}`);

@@ -1,6 +1,6 @@
 -- 角色属性和授权白名单：TC-B0-33、34、69、70、77、78、81、86、87、95（表级 DELETE）；3.3 C、6.2
 begin;
-select plan(41);
+select plan(43);
 \ir _helpers.psql
 select tests.seed();
 
@@ -40,10 +40,16 @@ select is((select count(*)::int from information_schema.column_privileges where 
 -- service_role 对 private 的表级授权和 3.3 C 白名单逐项相等
 select is((select string_agg(table_name || ':' || privilege_type, ',' order by table_name, privilege_type) from information_schema.role_table_grants
   where table_schema = 'private' and grantee = 'service_role'),
-  'admins:SELECT,ai_state:INSERT,ai_state:SELECT,ai_state:UPDATE,counters:DELETE,counters:INSERT,counters:SELECT,counters:UPDATE,deleted_accounts:INSERT,deleted_accounts:SELECT,'
+  'admins:INSERT,admins:SELECT,ai_state:INSERT,ai_state:SELECT,ai_state:UPDATE,counters:DELETE,counters:INSERT,counters:SELECT,counters:UPDATE,deleted_accounts:INSERT,deleted_accounts:SELECT,'
   || 'heartbeat:INSERT,heartbeat:SELECT,heartbeat:UPDATE,invites:INSERT,invites:SELECT,invites:UPDATE,pending_deletions:DELETE,pending_deletions:INSERT,pending_deletions:SELECT,pending_deletions:UPDATE,'
   || 'pending_signups:DELETE,pending_signups:INSERT,pending_signups:SELECT,pending_signups:UPDATE,remind_queue:DELETE,remind_queue:INSERT,remind_queue:SELECT,user_limits:SELECT',
   'service_role 对 private 的授权 = 3.3 C 白名单');
+-- 安全说明 S-6 守则 ①⑤（R-279，20261030140000）：service_role 对 private.admins 只有 select 和 insert（insert 只给 preview-login --admin）
+select is((select string_agg(p.priv, ',' order by p.priv) from (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) p(priv)
+  where has_table_privilege('service_role', 'private.admins', p.priv)), 'INSERT,SELECT',
+  'service_role 对 private.admins 只有 select 和 insert（S-6：不给 update、delete）');
+select ok(not has_any_column_privilege('service_role', 'private.admins', 'UPDATE') and not has_any_column_privilege('service_role', 'private.admins', 'REFERENCES'),
+  'service_role 对 private.admins 也没有按列给的 update、references（S-6 守则 ①）');
 
 -- fn_vault、fn_ai 的表级授权 = 6.2 逐表清单（列级的另由 D1 核对）
 select is((select string_agg(table_schema || '.' || table_name || ':' || privilege_type, ',' order by table_schema, table_name, privilege_type)

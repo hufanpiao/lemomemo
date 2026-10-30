@@ -9,7 +9,8 @@ export type ColumnGrants = Record<string, string[]>;
 export const TABLE_GRANTS: Record<'service_role' | 'fn_vault' | 'fn_ai', TableGrants> = {
   // service_role 只核对 private（public 上 Supabase 默认给了全部表级权限，第 86 条不收窄）
   service_role: {
-    'private.admins': ['SELECT'],
+    // INSERT：20261030140000，只给 tools/e2e/preview-login.ts --admin 写 .test 管理员行（R-279，安全说明 S-6）；不给 UPDATE、DELETE
+    'private.admins': ['SELECT', 'INSERT'],
     'private.invites': ['SELECT', 'INSERT', 'UPDATE'],
     'private.pending_signups': ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
     'private.deleted_accounts': ['SELECT', 'INSERT'],

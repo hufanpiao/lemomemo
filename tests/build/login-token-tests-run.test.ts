@@ -342,4 +342,5 @@ describe.skipIf(!PS)('login-token-tests.ps1 从头跑到尾', () => {
     expect(r.reqs.some((x) => x.path.startsWith('/auth/v1/logout'))).toBe(false);
     for (const v of ['111111', '222222', '333333']) expect(r.out.includes(v)).toBe(false);
   }, 60_000);
+
 });

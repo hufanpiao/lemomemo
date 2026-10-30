@@ -52,7 +52,8 @@ export const UID = '11111111-2222-4333-8444-555555555555';
 const SID = '99999999-8888-4777-8666-555555555555';
 const b64u = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const AMR = [{ method: 'otp', timestamp: 1761700000 }];
-const mkTok = (note: string, amr: unknown) => `${b64u({ alg: 'HS256' })}.${b64u({ sub: UID, session_id: SID, role: 'authenticated', amr, note })}.c2lnVEVTVE9OTFk`;
+const mkTok = (note: string, amr: unknown, exp?: number) =>
+  `${b64u({ alg: 'HS256' })}.${b64u({ sub: UID, session_id: SID, role: 'authenticated', amr, note, ...(exp ? { exp } : {}) })}.c2lnVEVTVE9OTFk`;
 export const ACCESS = mkTok('TESTONLYACCESS', AMR);
 export const ACCESS2 = mkTok('TESTONLYACCESS2', AMR);
 export const REFRESH = 'TESTONLYrefresh-token-zz';
@@ -76,6 +77,10 @@ export type Opts = {
   errBodyStreamOnly?: boolean; // 模拟 PS 5.1：HTTP 出错时 ErrorDetails 为空，错误体只能从 $_.Exception.Response.GetResponseStream() 读到
   white404?: string[];        // 这些白名单函数回 404 PGRST202（触发器函数 PostgREST 不暴露；或预览缺迁移）
   inactive?: boolean;         // private.is_active 回 false（测试账号没有 profile 行）
+  expIn?: number;             // 每把访问令牌（登录、每次刷新各发一把）带 exp = 发出时 + expIn 秒；过了 exp + p5Grace 秒，REST 回 401 PGRST303、logout 回 401
+  p5Grace?: number;           // 过期后还放行几秒（默认 2）
+  all?: boolean;              // 不加默认的 -Only（跑全部项目，含 P5、P9）
+  verify429?: boolean;        // /auth/v1/verify 一律回 429（限流）
   plain: string[];            // Read-Host（明文）依次的回答
   secure: string[];           // Read-Host -AsSecureString 依次的回答
   args?: string;              // 额外参数
@@ -89,9 +94,25 @@ export async function runScript(dir: string, opts: Opts) {
   let msSigns = 0;
   let p8 = 0;
   let refreshes = 0;
-  // 这次运行实际发出去的两把访问令牌：amr 为字符串形状时另做一套
+  // 这次运行实际发出去的访问令牌：amr 为字符串形状时另做一套。不带 expIn 时登录发 tokA、刷新一律发 tokB；
+  // 带 expIn 时每次都发一把新的（exp = 发出时 + expIn 秒），记在 toks 里
   const tokA = opts.amrStrings ? mkTok('TESTONLYACCESS_S', opts.amrStrings) : ACCESS;
   const tokB = opts.amrStrings ? mkTok('TESTONLYACCESS2_S', opts.amrStrings) : ACCESS2;
+  const toks = new Map<string, number | undefined>([[tokA, undefined], [tokB, undefined]]);
+  let mints = 0;
+  const mint = (first: boolean) => {
+    if (!opts.expIn) return first ? tokA : tokB;
+    mints++;
+    const e = Math.floor(Date.now() / 1000) + opts.expIn;
+    const t = mkTok(`TESTONLYACCESS_E${mints}`, opts.amrStrings ?? AMR, e);
+    toks.set(t, e);
+    return t;
+  };
+  const expired = (t: string) => {
+    const e = toks.get(t);
+    return e !== undefined && Date.now() / 1000 > e + (opts.p5Grace ?? 2);
+  };
+  const logouts: { auth: string; status: number }[] = [];
   const P8_SEQ: [number, unknown][] = [
     [200, { ok: true }],
     [403, { error: 'account_disabled' }],
@@ -115,7 +136,9 @@ export async function runScript(dir: string, opts: Opts) {
       const auth = String(req.headers.authorization ?? '');
       reqs.push({ method: req.method ?? '', path: url, auth, headers: req.headers, body });
       const json = () => JSON.parse(body.toString('utf8') || '{}');
-      const okUser = auth === `Bearer ${tokA}` || auth === `Bearer ${tokB}`;
+      const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+      const known = (!opts.expIn || mints > 0) && toks.has(bearer);
+      const okUser = known && !expired(bearer);
       const p = url.startsWith('/sb/auth/') ? url.slice(3) : url;
       // 网站
       if (req.method === 'GET' && p === '/app/') return send(res, 200, '<html><script type="module" crossorigin src="/app/assets/index-abc.js"></script></html>', { 'content-type': 'text/html' });
@@ -125,18 +148,19 @@ export async function runScript(dir: string, opts: Opts) {
         if (req.headers.apikey !== PK) return send(res, 401, { message: 'no apikey' });
         if (req.method === 'POST' && p === '/auth/v1/otp') return opts.captcha ? send(res, 400, { code: 400, error_code: 'captcha_failed' }) : send(res, 200, {});
         if (req.method === 'POST' && p === '/auth/v1/verify') {
+          if (opts.verify429) return send(res, 429, { code: 429, error_code: 'over_request_rate_limit' });
           const v = json();
           if (v.token_hash !== undefined) {
             // 只收 { type, token_hash } 两个字段：不带 token、email
             const okHash = v.token_hash === HASH && Object.keys(v).length === 2 && (v.type === 'magiclink' || (v.type === 'email' && !opts.hashMagicOnly));
-            return okHash ? send(res, 200, { access_token: tokA, refresh_token: REFRESH, expires_in: 600, user: { id: UID } }) : send(res, 403, { code: 403, error_code: 'otp_expired' });
+            return okHash ? send(res, 200, { access_token: mint(true), refresh_token: REFRESH, expires_in: 600, user: { id: UID } }) : send(res, 403, { code: 403, error_code: 'otp_expired' });
           }
-          return v.token === OTP && v.type === 'email' ? send(res, 200, { access_token: tokA, refresh_token: REFRESH, expires_in: 600, user: { id: UID } }) : send(res, 403, { code: 403, error_code: 'otp_expired' });
+          return v.token === OTP && v.type === 'email' ? send(res, 200, { access_token: mint(true), refresh_token: REFRESH, expires_in: 600, user: { id: UID } }) : send(res, 403, { code: 403, error_code: 'otp_expired' });
         }
         if (req.method === 'POST' && p === '/auth/v1/token?grant_type=refresh_token') {
           if (opts.refreshFailAfterP8 !== undefined && p8 >= opts.refreshFailAfterP8) return send(res, 400, { code: 400, error_code: 'refresh_token_not_found' });
           refreshes++;
-          return send(res, 200, { access_token: tokB, refresh_token: `${REFRESH}${refreshes}` });
+          return send(res, 200, { access_token: mint(false), refresh_token: `${REFRESH}${refreshes}` });
         }
         if (req.method === 'POST' && p === '/auth/v1/token?grant_type=password') {
           if (opts.pwLogin === 'ok') return send(res, 200, { access_token: LEAK, refresh_token: 'TESTONLYleakrefresh' });
@@ -149,12 +173,23 @@ export async function runScript(dir: string, opts: Opts) {
           return send(res, 200, { id: UID });
         }
         if (req.method === 'GET' && p === '/auth/v1/user') return okUser ? send(res, 200, { id: UID }) : send(res, 401, { error_code: 'bad_jwt' });
-        if (req.method === 'POST' && p === '/auth/v1/logout?scope=local') return opts.logoutFail ? send(res, 500, { code: 500, error_code: 'unexpected_failure' }) : send(res, 204, undefined);
+        if (req.method === 'POST' && p === '/auth/v1/logout?scope=local') {
+          // 和 GoTrue 一样：过期的令牌退不了（401 bad_jwt），会话不作废
+          const st = opts.logoutFail ? 500 : toks.has(bearer) && expired(bearer) ? 401 : 204;
+          logouts.push({ auth, status: st });
+          if (st === 500) return send(res, 500, { code: 500, error_code: 'unexpected_failure' });
+          if (st === 401) return send(res, 401, { code: 401, error_code: 'bad_jwt', msg: 'invalid JWT: token is expired' });
+          return send(res, 204, undefined);
+        }
         return send(res, 404, { message: 'not found' });
       }
       // REST
       if (p.startsWith('/rest/v1/')) {
+        // 过了 exp + 余量：和 PostgREST 一样回 401 PGRST303
+        if (req.headers.apikey === PK && known && expired(bearer)) return send(res, 401, { code: 'PGRST303', message: 'JWT expired' });
         if (req.headers.apikey !== PK || !okUser) return send(res, 401, { code: '42501' });
+        // P5：只读 settings 的 user_id
+        if (req.method === 'GET' && p === '/rest/v1/settings?select=user_id&limit=1') return send(res, 200, []);
         const m = /^\/rest\/v1\/rpc\/([a-z_0-9]+)(\?.*)?$/.exec(p);
         if (m) {
           const name = m[1] ?? '';
@@ -261,7 +296,7 @@ function global:Read-Host { param([switch]$AsSecureString, [Parameter(Position =
     return (ConvertTo-SecureString ([string]$global:secure.Dequeue()) -AsPlainText -Force) }
   if ($global:plain.Count -eq 0) { throw "test: 明文输入用完了（$Prompt）" }
   return [string]$global:plain.Dequeue() }
-try { & ${q(SCRIPT)} -SupabaseBase '${base}' -SiteBase '${base}' -MsRemainSeconds 298 ${opts.args ?? ''}; if ($global:plain.Count -or $global:secure.Count) { [Console]::Error.WriteLine("test: 还剩 $($global:plain.Count) 个明文、$($global:secure.Count) 个密文输入没用上"); exit 2 }; exit 0 }
+try { & ${q(SCRIPT)} -SupabaseBase '${base}' -SiteBase '${base}' -MsRemainSeconds 298 ${opts.all || opts.args?.includes('-Only') ? '' : "-Only 'S1,P2,R2,TC-B1-112,P8' "}${opts.args ?? ''}; if ($global:plain.Count -or $global:secure.Count) { [Console]::Error.WriteLine("test: 还剩 $($global:plain.Count) 个明文、$($global:secure.Count) 个密文输入没用上"); exit 2 }; exit 0 }
 catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }`,
   );
   const child = spawn(PS ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', harness], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -272,7 +307,7 @@ catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }`,
   const code = await new Promise<number | null>((ok) => child.on('close', ok));
   await new Promise<void>((ok) => server.close(() => ok()));
   const opens = existsSync(opened) ? readFileSync(opened, 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean) : [];
-  return { code, out, err, reqs, objects, passwords, opens, p8, refreshes, tokens: [tokA, tokB] };
+  return { code, out, err, reqs, objects, passwords, opens, p8, refreshes, tokens: [...toks.keys()], logouts };
 }
 
 export const summary = (out: string) => out.slice(out.indexOf('==== 结果摘要'), out.indexOf('==== 摘要结束'));

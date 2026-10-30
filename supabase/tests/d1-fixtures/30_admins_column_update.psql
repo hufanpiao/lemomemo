@@ -1,0 +1,6 @@
+-- expect: service_role 在 private 下有表级授权推不出的列级授权（3.3 C 只给表级）：private.admins:UPDATE:user_id
+-- 安全说明 S-6 守则 ①（R-279，迁移 20261030140000_core_admins_insert_service_role.sql）：service_role 对 private.admins 只给 select、insert。
+--   有人按列补一句 update，表级比对看不见（role_table_grants 里没有 UPDATE），service key 泄露时就能把任意账号改成管理员。
+--   D1（build/d1/checks.ts 第 5 节，service_role 的列级授权）必须报出；03_roles_grants.test.sql 另有 has_any_column_privilege 断言。
+--   运行情况：10-30 只在离线 PGlite（npm run test:db:offline）上跑过
+grant update (user_id) on private.admins to service_role;
