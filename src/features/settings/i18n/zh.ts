@@ -52,6 +52,8 @@ export const zh = {
   'settings.confirm.signOut.ok': '仍然退出',
 
   'settings.account.title': '账号',
+  // R-275：账号标题下那一行邮箱前、只给读屏读的标签（屏幕上只显示邮箱本身）
+  'settings.account.email': '当前登录邮箱：',
   'settings.account.export': '导出全部数据',
   'settings.account.delete': '注销账号',
   'settings.account.signOut': '退出登录',

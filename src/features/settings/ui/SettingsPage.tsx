@@ -117,7 +117,13 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   const bumpExport = useCallback(() => setExportTick((n) => n + 1), []);
   const sections: Partial<Record<SettingsSectionId, ReactNode>> = {
     account: (
-      <AccountSection devices={devices} recent={recent} onExitHere={() => void askSignOut('device')} onDelete={() => setView('delete')} />
+      <AccountSection
+        devices={devices}
+        recent={recent}
+        email={page.email}
+        onExitHere={() => void askSignOut('device')}
+        onDelete={() => setView('delete')}
+      />
     ),
     language: <LanguageSection locale={locale} />,
     data: <DataSection account={account} onExported={bumpExport} />,
@@ -134,11 +140,13 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
             </a>
             <h1 className={styles.title}>{t('settings.title', {})}</h1>
           </header>
-          {orderSections(sections).map(([id, node]) => (
-            <div key={id} data-section-slot={id}>
-              {node}
-            </div>
-          ))}
+          <div className={styles.groups}>
+            {orderSections(sections).map(([id, node]) => (
+              <div key={id} className={styles.slot} data-section-slot={id}>
+                {node}
+              </div>
+            ))}
+          </div>
           <SignOutRow busy={devices.busy !== null} signingOut={exit.signingOut} onSignOut={() => void askSignOut('account')} />
         </>
       )}

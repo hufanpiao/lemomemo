@@ -1,4 +1,4 @@
-// 设置 › 账号（R-256 ①，排第一）：已登录设备、退出其他所有设备（DevicesSection）、注销入口。
+// 设置 › 账号（R-256 ①，排第一）：组标题下一行当前登录邮箱（R-275，只显示；读不到不显示），已登录设备、退出其他所有设备（DevicesSection）、注销入口。
 // “最近的导出”（R-256 ②）在设备列表和注销入口之间；“退出登录”不在这里，在页面最底下单独一行
 import type { AccountErr } from '../hooks/useAccountActions.ts';
 import type { useDevices } from '../hooks/useDevices.ts';
@@ -39,14 +39,27 @@ export function accountErrText(e: AccountErr, t: T): string {
 }
 
 export function AccountSection({
-  devices, recent, onExitHere, onDelete,
-}: { devices: ReturnType<typeof useDevices>; recent: RecentExportState; onExitHere(): void; onDelete(): void }) {
+  devices, recent, email, onExitHere, onDelete,
+}: {
+  devices: ReturnType<typeof useDevices>;
+  recent: RecentExportState;
+  /** 当前登录邮箱（R-275，经 useSettingsPage 读本机会话）；null 时这一行不显示 */
+  email: string | null;
+  onExitHere(): void;
+  onDelete(): void;
+}) {
   const t = useSettingsT();
   return (
     <section aria-labelledby="settings-account-title" data-section="account">
       <h2 id="settings-account-title" className={styles.gt}>
         {t('settings.account.title', {})}
       </h2>
+      {email ? (
+        <p className={styles.email} data-testid="settings-account-email">
+          <span className={styles.srOnly}>{t('settings.account.email', {})}</span>
+          {email}
+        </p>
+      ) : null}
       <DevicesSection devices={devices} onExitHere={onExitHere} />
       <RecentExport state={recent} devices={devices.state} />
       <ul className={`${styles.grp} ${styles.gap}`}>

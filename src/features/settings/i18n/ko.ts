@@ -57,6 +57,7 @@ export const ko = {
   'settings.confirm.signOut.ok': '그래도 로그아웃', // R-106 B1 第一遍已审（10-30）
 
   'settings.account.title': '계정', // R-106 B1 第一遍已审（10-30）
+  'settings.account.email': '현재 로그인한 이메일: ', // TODO(ko) R-275 读屏标签，待审校
   'settings.account.export': '모든 데이터 내보내기', // R-106 B1 第一遍已审（10-30）
   'settings.account.delete': '회원 탈퇴', // R-106 B1 第一遍已审（10-30）；注销账号，회원 탈퇴 待负责人确认
   'settings.account.signOut': '로그아웃', // R-106 B1 第一遍已审（10-30）

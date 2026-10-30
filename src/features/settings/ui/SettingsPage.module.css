@@ -109,6 +109,28 @@
   font-size: var(--fs-12-5);
 }
 
+/* 各组的外层（负责人 10-30 14:55：注销卡片和“界面语言”卡片紧贴）：组和组之间一律 gap 16px，不靠外边距合并。
+   上内边距 8px + 顶部 .top 的下边距 8px = “设置”标题到第一组 16px（和以前一样） */
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 8px;
+}
+
+/* 组里第一个组标题不再自带上边距（间距由 .groups 的 gap 给）；组里后面的小标题（已登录设备、最近的导出）照旧 16px */
+.slot > section > .gt:first-child {
+  margin-top: 0;
+}
+
+/* 设置 › 账号标题下的当前登录邮箱（R-275）：正文色、正文（15）的次一级 14，和灰色小号的组标题分开；长邮箱在任意位置换行，不撑破卡片宽度 */
+.email {
+  margin: 0 4px;
+  color: var(--text);
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+}
+
 /* 中韩切换：两段的分段按钮，宽度随文字（韩文长 20–40%，不写死宽度，2.4 第 7 条） */
 .seg {
   display: inline-flex;
@@ -162,6 +184,11 @@
   margin: 8px 4px 0;
   color: var(--text);
   font-size: var(--fs-13);
+}
+
+/* 常驻的读屏播报区（导出状态）平时是空的：不占 8px。各组装进 flex 容器后外边距不再穿出组外合并，不写这条组底会多出 8px */
+.status:empty {
+  margin-top: 0;
 }
 
 .error {
@@ -235,7 +262,7 @@
   font-size: var(--fs-15);
 }
 
-/* 只给读屏的标题 */
+/* 只给读屏的文字（注销页的标题、账号标题下邮箱前的“当前登录邮箱”） */
 .srOnly {
   position: absolute;
   width: 1px;

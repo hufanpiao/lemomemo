@@ -2,6 +2,7 @@
 // 测试经 deps 换掉接口、清本机和跳转、时钟
 import { useCallback, useMemo, useRef } from 'react';
 import { saveFile } from '../../../platform/save-file.ts';
+import { readSessionEmail } from '../../../platform/session.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { createAccountApi, EXPORT_MIME, type AccountApi, type ExportFile } from '../data/account-api.ts';
 import { createLeaveAccount, leaveForDisabled, type DisabledLeaveDeps, type LeaveAccount } from '../data/account-exit.ts';
@@ -38,6 +39,8 @@ export interface SettingsDeps {
   exitTimeoutMs?: number;
   /** 跳登录页前最多等清理多久 */
   leaveWaitMs?: number;
+  /** 设置 › 账号标题下的当前登录邮箱（R-275；默认 platform/session.ts 的 readSessionEmail，只读本机会话、不联网；读不到为 null，这一行不显示） */
+  readEmail?: () => string | null;
   /** 测试用：换掉 account_disabled 的探测（默认 platform/account-status.ts 的 exitForDisabled） */
   resolveDisabled?: DisabledLeaveDeps['resolve'];
 }
@@ -100,5 +103,13 @@ export function useSettingsPage(deps: SettingsDeps = {}) {
     () => deps.recentExports ?? createRecentExportsApi(getSupabase, deps.now ? { now: deps.now } : {}),
     [deps.recentExports, deps.now],
   );
-  return { exit, devices, locale, account, recentExports };
+  const readEmail = deps.readEmail ?? readSessionEmail;
+  const email = useMemo(() => {
+    try {
+      return readEmail();
+    } catch {
+      return null;
+    }
+  }, [readEmail]);
+  return { exit, devices, locale, account, recentExports, email };
 }
