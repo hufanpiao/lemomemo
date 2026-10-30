@@ -3,11 +3,11 @@
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
-import type { ExportFile } from '../data/account-api.ts';
+import type { AccountResult, ExportPart, ExportStarted } from '../data/account-api.ts';
 import type { RecentExportResult } from '../data/recent-exports.ts';
 import { zh } from '../i18n/zh.ts';
 import { fmtWhen } from '../ui/DevicesSection.tsx';
-import { exportBtn, FILE, fakeAccount, setOnline, setup } from './account-fakes.tsx';
+import { EXPORT_ID, exportBtn, FILE, fakeAccount, gzLike, setOnline, setup } from './account-fakes.tsx';
 import { deferred, text } from './fakes.tsx';
 
 beforeEach(() => {
@@ -34,8 +34,8 @@ describe('最近的导出（设置 › 账号）', () => {
       recent: async () => ({
         kind: 'ready',
         list: [
-          { at: T, device: 'y', mailFailed: false },
-          { at: T - H, device: 'x', mailFailed: false },
+          { at: T, device: 'y', mailFailed: false, incomplete: false },
+          { at: T - H, device: 'x', mailFailed: false, incomplete: false },
         ],
       }),
     });
@@ -59,8 +59,8 @@ describe('最近的导出（设置 › 账号）', () => {
       recent: async () => ({
         kind: 'ready',
         list: [
-          { at: T, device: 'gone-device', mailFailed: false },
-          { at: T - H, device: null, mailFailed: false },
+          { at: T, device: 'gone-device', mailFailed: false, incomplete: false },
+          { at: T - H, device: null, mailFailed: false, incomplete: false },
         ],
       }),
     });
@@ -74,9 +74,9 @@ describe('最近的导出（设置 › 账号）', () => {
       recent: async () => ({
         kind: 'ready',
         list: [
-          { at: T, device: 'y', mailFailed: true },
-          { at: T - H, device: 'y', mailFailed: false },
-          { at: T - 2 * H, device: 'x', mailFailed: true },
+          { at: T, device: 'y', mailFailed: true, incomplete: false },
+          { at: T - H, device: 'y', mailFailed: false, incomplete: false },
+          { at: T - 2 * H, device: 'x', mailFailed: true, incomplete: false },
         ],
       }),
     });
@@ -90,7 +90,7 @@ describe('最近的导出（设置 › 账号）', () => {
   });
 
   it('超过默认条数：先显示最近 5 条，给“显示全部（共 N 条）”；点了列出全部、按钮消失', async () => {
-    const list = Array.from({ length: 8 }, (_v, i) => ({ at: T - i * H, device: 'y', mailFailed: false }));
+    const list = Array.from({ length: 8 }, (_v, i) => ({ at: T - i * H, device: 'y', mailFailed: false, incomplete: false }));
     setup({ recent: async () => ({ kind: 'ready', list }) });
     await ready();
     expect(rows()).toHaveLength(5);
@@ -106,7 +106,7 @@ describe('最近的导出（设置 › 账号）', () => {
   });
 
   it('5 条以内不给“显示全部”', async () => {
-    setup({ recent: async () => ({ kind: 'ready', list: [{ at: T, device: 'y', mailFailed: false }] }) });
+    setup({ recent: async () => ({ kind: 'ready', list: [{ at: T, device: 'y', mailFailed: false, incomplete: false }] }) });
     await ready();
     expect(rows()).toHaveLength(1);
     expect(screen.queryByTestId('settings-recent-export-all')).toBeNull();
@@ -133,13 +133,17 @@ describe('最近的导出（设置 › 账号）', () => {
     }
   });
 
-  it('本页导出成功后重读一次', async () => {
-    const { recentExports } = setup();
+  it('本页导出：服务器记下（start 成功）后重读一次，文件取完后再读一次（0.47：没取完的那条先标“未完成”）', async () => {
+    const part = deferred<AccountResult<ExportPart>>();
+    const account = fakeAccount({ takePart: vi.fn(() => part.promise) });
+    const { recentExports } = setup({ account });
     await waitFor(() => expect(recentExports.list).toHaveBeenCalledTimes(1));
     await act(async () => {
       fireEvent.click(exportBtn());
     });
     await waitFor(() => expect(recentExports.list).toHaveBeenCalledTimes(2));
+    await act(async () => part.resolve({ ok: true, value: { blob: gzLike(), next: null, disposition: null, contentLength: null, contentEncoding: null } }));
+    await waitFor(() => expect(recentExports.list).toHaveBeenCalledTimes(3));
   });
 });
 
@@ -155,25 +159,26 @@ describe('导出全部（设置 › 数据）', () => {
   });
 
   it('导出中按钮忙；成功后存文件，提示“通知邮件已发到你的邮箱”和“隐私记没有导出（没解锁）”；device_id 取本机 meta', async () => {
-    const gate = deferred<{ ok: true; value: ExportFile }>();
-    const account = fakeAccount({ exportAll: vi.fn(() => gate.promise) });
+    const gate = deferred<{ ok: true; value: ExportStarted }>();
+    const account = fakeAccount({ startExport: vi.fn(() => gate.promise) });
     const { save, readDeviceId } = setup({ account });
     await act(async () => {
       fireEvent.click(exportBtn());
     });
     expect(readDeviceId).toHaveBeenCalled();
-    expect(account.exportAll).toHaveBeenCalledWith('dev-1');
+    expect(account.startExport).toHaveBeenCalledWith('dev-1');
     expect(exportBtn().disabled).toBe(true);
     expect(exportBtn().getAttribute('aria-busy')).toBe('true');
     expect(text(screen.getByTestId('settings-export-status'))).toContain(zh['settings.export.busy']);
     // 忙的时候再点不会再导一次
     fireEvent.click(exportBtn());
-    await act(async () => gate.resolve({ ok: true, value: FILE }));
-    expect(save).toHaveBeenCalledWith(FILE);
+    await act(async () => gate.resolve({ ok: true, value: { exportId: EXPORT_ID, exportedAt: '2026-10-29T03:00:00.000Z', sid: 's-me' } }));
+    expect(account.takePart).toHaveBeenCalledWith(EXPORT_ID, null, 's-me');
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ name: FILE.name, vaultOmitted: true }));
     const status = text(screen.getByTestId('settings-export-status'));
     expect(status).toContain(zh['settings.export.done']);
     expect(status).toContain(zh['settings.export.vaultOmitted']);
-    expect(account.exportAll).toHaveBeenCalledTimes(1);
+    expect(account.startExport).toHaveBeenCalledTimes(1);
     expect(exportBtn().disabled).toBe(false);
   });
 
@@ -188,7 +193,7 @@ describe('导出全部（设置 › 数据）', () => {
       fireEvent.click(screen.getByTestId('settings-export-again'));
     });
     expect(save).toHaveBeenCalledTimes(2);
-    expect(account.exportAll).toHaveBeenCalledTimes(1);
+    expect(account.startExport).toHaveBeenCalledTimes(1);
     expect(text(screen.getByTestId('settings-export-status'))).toContain(zh['settings.export.done']);
   });
 
@@ -206,7 +211,7 @@ describe('导出全部（设置 › 数据）', () => {
       fireEvent.click(screen.getByTestId('settings-export-again'));
     });
     expect(save).toHaveBeenCalledTimes(2);
-    expect(account.exportAll).toHaveBeenCalledTimes(1);
+    expect(account.startExport).toHaveBeenCalledTimes(1);
     expect(text(screen.getByTestId('settings-export-status'))).toContain(zh['settings.export.done']);
   });
 
@@ -237,7 +242,7 @@ describe('导出全部（设置 › 数据）', () => {
       ['try_later', zh['settings.err.tryLater']],
       ['unknown', zh['settings.err.unknown']],
     ] as const) {
-      const account = fakeAccount({ exportAll: vi.fn(async () => ({ ok: false as const, error, sid: 's-me' })) });
+      const account = fakeAccount({ startExport: vi.fn(async () => ({ ok: false as const, error, sid: 's-me' })) });
       const { exit, leave } = setup({ account });
       await act(async () => {
         fireEvent.click(exportBtn());
@@ -250,7 +255,7 @@ describe('导出全部（设置 › 数据）', () => {
   });
 
   it('session_revoked：走现有的“被移除”流程（清本机、提示、去登录）；停用、冷静期：清本机回登录页带原因', async () => {
-    const revoked = fakeAccount({ exportAll: vi.fn(async () => ({ ok: false as const, error: 'revoked' as const, sid: 's-me' })) });
+    const revoked = fakeAccount({ startExport: vi.fn(async () => ({ ok: false as const, error: 'revoked' as const, sid: 's-me' })) });
     const a = setup({ account: revoked });
     await act(async () => {
       fireEvent.click(exportBtn());
@@ -262,7 +267,7 @@ describe('导出全部（设置 › 数据）', () => {
     cleanup();
 
     for (const [error, notice] of [['pending_deletion', 'pending_deletion'], ['account_disabled', 'disabled']] as const) {
-      const account = fakeAccount({ exportAll: vi.fn(async () => ({ ok: false as const, error, sid: 's-me' })) });
+      const account = fakeAccount({ startExport: vi.fn(async () => ({ ok: false as const, error, sid: 's-me' })) });
       const { leave } = setup({ account });
       await act(async () => {
         fireEvent.click(exportBtn());

@@ -68,6 +68,17 @@ export const zh = {
   'settings.export.notSaved': '已导出，但文件还没存下来',
   'settings.export.vaultOmitted': '隐私记没有导出（没解锁）',
   'settings.export.saveAgain': '再存一次',
+  // 0.47 续 ④ 第 4 点（10-31 导出分片）：进度、中断、过期、数据异常、当天分片用完；按钮旁常驻两句
+  'settings.export.progress': '正在导出…已取回 {mb} MB',
+  'settings.export.paused': '导出中断了。1 小时内在这台设备上点“继续”可以接着导，不另算次数',
+  'settings.export.resume': '继续',
+  'settings.export.expired': '这次导出已过期，请重新导出（会算一次）',
+  'settings.export.tooLarge': '数据量超出上限，导不出来，请联系柠檬记的负责人',
+  // 0.47 续 ①“超大账号”、④ 第 4 点追加：start 大小预检拒了（原文估算超 480 MB，不扣次数）
+  'settings.export.tooLargeStart': '你的数据量超过一次导出的上限，暂时导不出来，请联系柠檬记的负责人',
+  'settings.export.partsUsedUp': '今天导出的次数用完了，明天再试',
+  'settings.export.quota': '导出和注销每天合计最多 3 次，每点一次“导出全部数据”算一次',
+  'settings.export.wifi': '数据多时文件可能有几十 MB，建议连 Wi-Fi',
 
   // 设置 › 账号 › 最近的导出（R-256 ②；架构 0.29 续第 96 条③）
   'settings.recentExport.title': '最近的导出',
@@ -77,6 +88,8 @@ export const zh = {
   'settings.recentExport.removedDevice': '已移除的设备',
   'settings.recentExport.unknownDevice': '未知设备',
   'settings.recentExport.showAll': '显示全部（共 {n} 条）',
+  // 0.47 续 ③ 第 2 点：记了 export、没配上 export_done 的那次
+  'settings.recentExport.incomplete': '未完成',
 
   // 设置 › 账号 › 注销账号（R-188、R-192、R-256；功能说明第 30 项；架构 0.29 续第 129、131、137 条）
   'settings.delete.back': '设置',

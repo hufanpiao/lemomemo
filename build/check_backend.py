@@ -32,7 +32,7 @@
       源码扩展名：.ts .tsx .mts .cts .js .jsx .mjs .cjs（含 .d.ts、.d.mts；代码审查有条件通过 4）。
       源码一律由 build/check_backend_ast.mjs 用 TypeScript 编译器 API 解析成 AST（代码审查第三轮必改 1）：注释区间、import 边、F7 都从 AST 来
   F7  越界检查的绕法（B0 安全第二轮新低 1、QA D-15、架构 0.34；代码审查有条件通过 1、2，第三轮必改 1、2）——全在 AST 上判断：
-      Deno 只准 Deno.env.get('字面量')、Deno.env.has('字面量')、Deno.serve(…)（_shared/db.ts 另准 Deno.env.get(URL_ENV[role])）；
+      Deno 只准 Deno.env.get('字面量')、Deno.env.has('字面量')、Deno.serve(…)、不带参数的 Deno.memoryUsage()（_shared/db.ts 另准 Deno.env.get(URL_ENV[role])）；
       这里和 process.env['字面量'] 的字面量里不准有反斜杠转义（'\\x52\\x32_FN_…'、'FN_VAULT\\u005fDB_URL'，B1 接手清单 S3）；
       10-29 审查返工后加严到全局：supabase/functions 下所有字符串、模板片段一律只准 \\n \\r \\t \\b \\f \\v \\0 \\\\ \\' \\" \\` \\$ 这几种转义
       （角色名 'fn\\x5fvault'、db.ts 的 URL_ENV 值、'disabled\\x5fat' 都藏不住；check_backend_ast.mjs 的 badEscape）；

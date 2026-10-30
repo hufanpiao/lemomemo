@@ -123,19 +123,21 @@ if (!only || only === 'd1') {
     log(`✔ /files 规则表核对自测：样例通过；手改一个字报“${badSample[0]}”；函数在、规则表不在报错；和生成器输出差一个字报错`);
   else fail(`/files 规则表核对自测不对：样例 ${okSample.join('|') || '通过'}；手改 ${badSample.length}；缺文件 ${noGen.length}；差一字 ${drift.length}`);
 
-  // 违规样例：每个样例在事务里改一处，D1 必须报出 expect 那句，然后回滚
+  // 违规样例：每个样例在事务里改一处（或同一类的几处），D1 必须报出每一行 expect 那句，然后回滚
   const fxDir = join(root, 'supabase/tests/d1-fixtures');
   const fxFiles = readdirSync(fxDir).filter((f) => f.endsWith('.psql')).sort();
   if (fxFiles.length === 0) fail('supabase/tests/d1-fixtures/ 里没有违规样例（.psql）');
   for (const f of fxFiles) {
     const sql = readFileSync(join(fxDir, f), 'utf8');
-    const expect = /^-- expect: (.+)$/m.exec(sql)?.[1]?.trim();
+    const expects = [...sql.matchAll(/^-- expect: (.+)$/gm)].map((m) => m[1].trim()).filter(Boolean);
     await db.exec('begin');
     try {
       await db.exec(sql);
       const ps = await runD1(q, allManifests);
-      if (expect && ps.some((p) => p.includes(expect))) log(`✔ D1 违规样例 ${f}：报出“${ps.find((p) => p.includes(expect))}”`);
-      else fail(`D1 违规样例 ${f}：没报出“${expect}”（实际：${ps.join(' | ') || '无'}）`);
+      const miss = expects.filter((e) => !ps.some((p) => p.includes(e)));
+      if (expects.length > 0 && miss.length === 0) {
+        for (const e of expects) log(`✔ D1 违规样例 ${f}：报出“${ps.find((p) => p.includes(e))}”`);
+      } else fail(`D1 违规样例 ${f}：没报出“${expects.length ? miss.join('”“') : '（样例里没写 expect）'}”（实际：${ps.join(' | ') || '无'}）`);
     } catch (e) { fail(`D1 违规样例 ${f} 执行出错：${e.message}`); }
     await db.exec('rollback');
   }

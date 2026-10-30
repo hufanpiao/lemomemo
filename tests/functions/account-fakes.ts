@@ -2,7 +2,7 @@
 // 两个函数的 core.ts 都接它，所以“申请 → 冷静期 → 彻底删除”能在一个进程里串起来（TC-B1-98、101、107、TC-B0-117）。
 // 语义以 SQL 为准（supabase/tests/rls/11_account_deletion.test.sql 测真函数），这里只照着做，不另发明规则。
 import type { AccountStore, ActiveUser, AuthResult, Deps as AccountDeps } from '../../supabase/functions/account/core.ts';
-import { DbError, handle } from '../../supabase/functions/account/core.ts';
+import { DbError, handle, keys } from '../../supabase/functions/account/core.ts';
 import type { Backups, Deps as PurgeDeps, PurgeStore, R2 } from '../../supabase/functions/account-purge/core.ts';
 import { BackupsSubdirError } from '../../supabase/functions/account-purge/core.ts';
 import type { Mail } from '../../supabase/functions/_shared/account-mail.ts';
@@ -43,14 +43,16 @@ export class FakeDb {
   pendingSignups = new Set<string>();                 // email_hash
   deleted = new Set<string>();                        // private.deleted_accounts
   heartbeat: Record<string, number> | null = null;
-  logs: { id: number; user_id: string; act: string; device: string | null; t: number; code?: string }[] = [];
+  logs: { id: number; user_id: string; act: string; device: string | null; t: number; code?: string; fields?: string[] }[] = [];
   private logSeq = 0;
   devices = new Map<string, { user_id: string; label: string | null }>();
   tables = new Map<string, Record<string, unknown>[]>();   // 导出读的 public 表
   /** readPage 每次调用的（表、after），测试核对按主键翻页 */
-  pageReads: { table: string; after: string | number | null }[] = [];
+  pageReads: { table: string; after: string | number | null; limit: number }[] = [];
   /** 故障注入：方法名 → 抛错 */
   fail = new Set<string>();
+  /** export_size_over 被调的次数；sizeResult 不为 null 时直接返回它（-1 超时、-2 忙、或一个估算值） */
+  sizeCalls = 0; sizeResult: number | null = null;
   /** account-purge 的 stillClaimed 被调时先跑一下（模拟“写 deleted_accounts 前这一行被删”） */
   beforeStillClaimed: (() => void) | null = null;
 
@@ -117,6 +119,38 @@ export class FakeDb {
     return 'ok';
   }
 
+  /** counters 里这个键的各行（窗口 → count），按窗口从早到晚 */
+  private rows(key: string): [string, number][] {
+    return [...this.counters].filter(([k]) => k.split('|')[0] === key).sort((x, y) => Number(x[0].split('|')[1]) - Number(y[0].split('|')[1]));
+  }
+  count(key: string): number { return this.rows(key).at(-1)?.[1] ?? 0; }   // 这个键最新窗口的 count（没有是 0）
+
+  /** = private.export_size_over：本人各表（tables 和 logs）每行 JSON 字节累加，超 limit 就返回；omitted 不算隐私记行（同 vaultRows.flag） */
+  exportSizeOver(uid: string, mode: string, limit: number): number {
+    this.sizeCalls += 1;
+    if (this.sizeResult !== null) return this.sizeResult;
+    let total = 0;
+    for (const r of [...[...this.tables.values()].flat(), ...this.logs] as Record<string, unknown>[]) {
+      if (r.user_id !== uid || (mode === 'omitted' && (r.is_private === true || r.is_vault === true || r.bucket === 'vault-images'))) continue;
+      total += new TextEncoder().encode(JSON.stringify(r)).byteLength;
+      if (total > limit) return total;
+    }
+    return total;
+  }
+
+  /** = private.export_job_start / export_job_take：window = 开始时刻（毫秒），count = 已取片数；开始未满 ttl 秒的才 +1 */
+  exportJobStart(uid: string, eid: string, mode: 'omitted' | 'cipher', sid: string): string {
+    const k = keys.exportJob(uid, eid, mode, sid); if (this.rows(k).length) throw new DbError('export_job_exists');   // 同真 Store：23505 报成 export_job_exists
+    this.counters.set(`${k}|${this.clock.ms}`, 0);
+    return new Date(this.clock.ms).toISOString();
+  }
+  exportJobTake(uid: string, eid: string, mode: 'omitted' | 'cipher', sid: string, max: number, ttlS: number) {
+    const hit = this.rows(keys.exportJob(uid, eid, mode, sid)).find(([w]) => Number(w.split('|')[1]) > this.clock.ms - ttlS * 1000);
+    if (!hit) return { verdict: 'expired' as const, startedAt: null, parts: null };
+    this.counters.set(hit[0], hit[1] + 1);
+    return { verdict: hit[1] + 1 > max ? ('too_many' as const) : ('ok' as const), startedAt: new Date(Number(hit[0].split('|')[1])).toISOString(), parts: hit[1] + 1 };
+  }
+
   accountStore(): AccountStore {
     return {
       isAdmin: async (u) => { this.guard('isAdmin'); return this.admins.has(u); },
@@ -128,18 +162,25 @@ export class FakeDb {
         const n = last === undefined ? 0 : (this.counters.get(last) ?? 0);
         if (last !== undefined && n > 0) this.counters.set(last, n - 1);
       },
+      peekRate: async (k) => { this.guard('peekRate'); return this.count(k); },
+      deleteCounterKey: async (k) => { this.guard('deleteCounterKey'); for (const [x] of this.rows(k)) this.counters.delete(x); },
+      exportSizeOver: async (u, m, l) => { this.guard('exportSizeOver'); return this.exportSizeOver(u, m, l); },
+      exportJobStart: async (u, e, m, sid) => { this.guard('exportJobStart'); return this.exportJobStart(u, e, m, sid); },
+      exportJobTake: async (u, e, m, sid, max, ttl) => { this.guard('exportJobTake'); return this.exportJobTake(u, e, m, sid, max, ttl); },
       requestDeletion: async (u) => { this.guard('requestDeletion'); return this.requestDeletion(u); },
       restore: async (u) => { this.guard('restore'); return this.restore(u); },
       profile: async (u) => { const p = this.profiles.get(u); return p ? { ui_locale: p.ui_locale, current_tz: p.current_tz } : null; },
       deviceLabel: async (u, d) => { const v = this.devices.get(d); return v && v.user_id === u ? v.label : null; },
       insertLog: async (u, row) => {
         this.guard(`insertLog:${row.act}`);
-        this.logs.push({ id: ++this.logSeq, user_id: u, act: row.act, device: row.device, t: row.t, ...(row.code === undefined ? {} : { code: row.code }) });
+        const extra = { ...(row.code === undefined ? {} : { code: row.code }), ...(row.fields === undefined ? {} : { fields: row.fields }) };
+        this.logs.push({ id: ++this.logSeq, user_id: u, act: row.act, device: row.device, t: row.t, ...extra });
       },
+      exportDoneLogged: async (u, code) => { this.guard('exportDoneLogged'); return this.logs.some((l) => l.user_id === u && l.act === 'export_done' && l.code === code); },
       // = select * from <t> where user_id = u [and keyCol > after] order by keyCol limit n（和 PostgREST 一样按主键往后翻）
       readPage: async (t, keyCol, u, after, limit) => {
         this.guard('readPage');
-        this.pageReads.push({ table: t, after });
+        this.pageReads.push({ table: t, after, limit });
         const src: Record<string, unknown>[] = t === 'logs' ? this.logs.map((l) => ({ ...l })) : (this.tables.get(t) ?? []);
         const key = (r: Record<string, unknown>) => r[keyCol] as string | number;
         return src.filter((r) => r.user_id === u && (after === null || key(r) > after))

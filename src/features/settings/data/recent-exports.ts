@@ -2,8 +2,11 @@
 // • 怎么读：logs 的 RLS 给本人 select（0001_core.sql：policy sel，grant select to authenticated），account 函数没有列导出记录的 action，
 //   所以直接经 PostgREST 读本人的 logs 行（supabase-js 的 from('logs')，不另拉依赖；设置页本来就是懒加载分包）。
 //   不走 account-api 的 send()：那是 POST account 函数的，服务器上没有对应的动作，supabase/ 这批也不能改
-// • 只读 src = 'account'、kind = 'run'、act 为 export 或 export_mail_failed、最近 90 天（logs 保留期，客户端也按 90 天过滤）的行，
-//   按 t 倒序最多 RECENT_EXPORT_LIMIT 条：export 每天最多 3 次，90 天最多 270 条，加上同样多的 export_mail_failed，540 条一定够
+// • 只读 src = 'account'、kind = 'run'、act 为 export、export_done 或 export_mail_failed、最近 90 天（logs 保留期，客户端也按 90 天过滤）的行，
+//   按 t 倒序最多 RECENT_EXPORT_LIMIT 条：export 每天最多 3 次，90 天最多 270 条，加上同样多的 export_done、export_mail_failed，810 条，取 900
+// • 未完成（0.47 第 7 条、0.47 续 ③ 第 2 点）：分片导出起，export 行的 code 是那次的 export_id，取完最后一片服务器再写一条
+//   export_done（code 相同）。export 行有 code、90 天里配不上 export_done 的标“未完成”（还在取、中断了、过期了都算）；
+//   分片以前的 export 行没有 code，不标
 // • 配对（数据字典 4.6，10-30 起）：export_mail_failed 行的 code = 对应 export 行 t 的 ISO 字符串，两行按 device + code 配对
 //   （user_id 由 RLS 保证是本人）。列出 90 天里全部 export（架构 0.29 续第 96 条③），按时间倒序；
 //   配上 export_mail_failed 的那几条标“通知邮件没发出去”。设备名不另查 devices，由界面用设置页已读到的设备列表对上
@@ -15,7 +18,7 @@
 import type { Db } from '../../../platform/supabase/client.ts';
 
 export const RECENT_EXPORT_DAYS = 90;
-export const RECENT_EXPORT_LIMIT = 600;
+export const RECENT_EXPORT_LIMIT = 900;
 export const RECENT_EXPORT_TIMEOUT_MS = 8000;
 /** 比现在晚这么多以上的行当伪造的丢掉（容得下几分钟的时钟误差） */
 export const RECENT_EXPORT_FUTURE_SKEW_MS = 5 * 60_000;
@@ -37,6 +40,8 @@ export interface ExportEntry {
   device: string | null;
   /** 那次的通知邮件没发出去（配上了 export_mail_failed） */
   mailFailed: boolean;
+  /** 记了导出、没配上 export_done（文件没取完） */
+  incomplete: boolean;
 }
 
 /** ready：按时间倒序的全部导出（至少一条）；none：90 天里没有导出记录；hidden：读不出来，不显示 */
@@ -53,19 +58,24 @@ const isoOf = (ms: number): string | null => {
 const devKey = (d: string | null): string => (d ?? '').toLowerCase();
 
 /**
- * 90 天里的全部导出，按时间倒序；每条配上它的发信失败行（device + code，code = 那条 export 的 t 的 ISO）。
+ * 90 天里的全部导出，按时间倒序；每条配上它的发信失败行（device + code，code = 那条 export 的 t 的 ISO）和完成行（export_done，code = export_id）。
  * since 之前的不算（服务器清理晚一天也不显示 91 天前的）；until 之后的（时间在将来，见文件头 R-259）两种行都丢掉
  */
 export function listExports(rows: readonly ExportLogRow[], since: number, until = Infinity): ExportEntry[] {
   const kept = rows.filter((r) => Number.isFinite(r.t) && r.t <= until);
   const failed = new Set<string>();
-  for (const r of kept) if (r.act === 'export_mail_failed' && r.code) failed.add(`${devKey(r.device)}|${r.code}`);
+  const done = new Set<string>();
+  for (const r of kept) {
+    if (r.act === 'export_mail_failed' && r.code) failed.add(`${devKey(r.device)}|${r.code}`);
+    if (r.act === 'export_done' && r.code) done.add(r.code.toLowerCase());
+  }
   const out: ExportEntry[] = [];
   for (const r of kept) {
     if (r.act !== 'export' || r.t < since) continue;
     const iso = isoOf(r.t);
     const device = r.device ? r.device.toLowerCase() : null;
-    out.push({ at: r.t, device, mailFailed: iso !== null && failed.has(`${devKey(device)}|${iso}`) });
+    const incomplete = !!r.code && !done.has(r.code.toLowerCase());
+    out.push({ at: r.t, device, mailFailed: iso !== null && failed.has(`${devKey(device)}|${iso}`), incomplete });
   }
   return out.sort((x, y) => y.at - x.at);
 }
@@ -128,7 +138,7 @@ export function createRecentExportsApi(
             .select('t,device,act,code')
             .eq('src', 'account')
             .eq('kind', 'run')
-            .in('act', ['export', 'export_mail_failed'])
+            .in('act', ['export', 'export_done', 'export_mail_failed'])
             .gte('t', since)
             .lte('t', until)
             .order('t', { ascending: false })

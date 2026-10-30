@@ -4,7 +4,7 @@
 //   输出：{ "<rel>": { "code": 去掉注释的源码（和原文等长、换行不变）, "imports": [...], "findings": [{ "line", "message" }], "parseError": 文字或 null } }
 // code 只把 AST 的注释区间换成空格（注释位置由解析器给出，正则、模板字符串、JSX 文本都不会被误当成注释），F1～F6 的名字匹配在它上面做。
 // findings 是 F7 的结论，全部在 AST 上判断（f7 为 true 的文件才查，也就是 supabase/functions 下的源码）：
-//   ① Deno 只准 Deno.env.get('字面量') / Deno.env.has('字面量') / Deno.serve(…)（_shared/db.ts 另准 Deno.env.get(URL_ENV[role])）；
+//   ① Deno 只准 Deno.env.get('字面量') / Deno.env.has('字面量') / Deno.serve(…) / Deno.memoryUsage()（_shared/db.ts 另准 Deno.env.get(URL_ENV[role])）；
 //   ② process 只准默认导入的那个名字、process.env.名字、process.env['字面量']、process.别的属性；
 //      ①② 的字面量里不准有反斜杠转义（'\x52\x32_FN_…' 这类，B1 接手清单 S3：值和源码原文不同，名字匹配看不见）；
 //   ③ globalThis、self、window 只准跟 .标识符（不准当参数、不准存进变量、不准方括号、不准 ?.）；Reflect.get、
@@ -519,6 +519,8 @@ function analyse(path, rel, f7, fnRel, rules, program) {
     if (name === 'Deno') {
       const env = dotAfter(v);
       if (env && env.name.text === 'serve' && ts.isCallExpression(env.parent) && env.parent.expression === env) return;
+      // 导出内存探针（架构 0.47 第 21 条）：只认直接调用、不带参数的 Deno.memoryUsage()，它不读任何 secret
+      if (env && env.name.text === 'memoryUsage' && ts.isCallExpression(env.parent) && env.parent.expression === env && env.parent.arguments.length === 0) return;
       if (env && env.name.text === 'env') {
         const m = dotAfter(env);
         const call = m && ts.isCallExpression(m.parent) && m.parent.expression === m && !m.parent.questionDotToken ? m.parent : undefined;
@@ -528,7 +530,7 @@ function analyse(path, rel, f7, fnRel, rules, program) {
           if (fnRel === '_shared/db.ts' && m.name.text === 'get' && ts.isElementAccessExpression(a) && isName(a.expression, 'URL_ENV') && isName(a.argumentExpression, 'role')) return;
         }
       }
-      bad(node, "Deno 只准写 Deno.env.get('名字') / Deno.env.has('名字')（一个不带转义的字面量）或 Deno.serve(…)：Deno?.env、解构、存进变量、当参数传、方括号取值、toObject() 都看不出读的是哪个 secret，F1～F3 查不了");
+      bad(node, "Deno 只准写 Deno.env.get('名字') / Deno.env.has('名字')（一个不带转义的字面量）、Deno.serve(…) 或 Deno.memoryUsage()：Deno?.env、解构、存进变量、当参数传、方括号取值、toObject() 都看不出读的是哪个 secret，F1～F3 查不了");
       return;
     }
     if (name === 'process') {

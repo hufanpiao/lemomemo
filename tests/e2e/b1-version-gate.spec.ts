@@ -14,7 +14,7 @@ const OLD = '3.9.0';
 async function callFn(request: APIRequestContext, fn: string, version: string): Promise<APIResponse> {
   return request.post(`/sb/functions/v1/${fn}`, {
     headers: { 'X-App-Version': version, 'Content-Type': 'application/json' },
-    data: { action: 'export' },
+    data: { action: 'export', step: 'start' },
   });
 }
 

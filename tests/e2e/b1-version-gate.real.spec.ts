@@ -36,12 +36,17 @@ test.describe('TC-B1-63 低版本客户端经 /sb 调 account（真函数）', (
     const acc = await createAccount();
     await loginViaOtp(page, acc.email);
 
-    const exp = await fnInPage(page, 'account', { action: 'export' }, { version: OLD });
-    expect(exp.status, `export：${JSON.stringify(exp.json)}`).toBe(200);
+    // 导出分两步（架构 0.47 续 ①）：start 回 export_id，part 取第一片（新账号数据少，一片就是整份）
+    const exSt = await fnInPage(page, 'account', { action: 'export', step: 'start' }, { version: OLD });
+    expect(exSt.status, `export start：${JSON.stringify(exSt.json)}`).toBe(200);
+    const exportId = (exSt.json as { export_id?: unknown } | null)?.export_id;
+    expect(typeof exportId).toBe('string');
+    const exp = await fnInPage(page, 'account', { action: 'export', step: 'part', export_id: exportId, cursor: null }, { version: OLD });
+    expect(exp.status, `export part：${JSON.stringify(exp.json)}`).toBe(200);
     expect(exp.contentType).toMatch(/^application\/gzip/);
     expect(exp.exportHead).toEqual({ format: 'lemomemo-export', version: 1, user_id: acc.userId, vault: 'omitted' });
     // 通知信真的没发出去（审查建议 1 的直接证据）：account 在响应之后发信，失败就往 public.logs 记一条 act = export_mail_failed
-    //   （supabase/functions/account/core.ts 的 exportData ⑤）。发信是后台做的，轮询等它落库
+    //   （supabase/functions/account/export.ts 的 startExport ⑦）。发信是后台做的，轮询等它落库
     await expect.poll(() => mailFailedLogs(acc.userId), { timeout: 15_000 }).toEqual([{ act: 'export_mail_failed', src: 'account' }]);
 
     const del = await fnInPage(page, 'account', { action: 'delete', confirm: '注销' }, { version: OLD });

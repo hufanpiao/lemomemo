@@ -41,7 +41,8 @@ export const eventsWrite = z
     title: z.string().min(1).max(160),
     date: dateStr,
     time: hm.nullable(),
-    tz: z.string().min(1).nullable(),
+    // 和迁移 20261031110000 的 events_tz_fmt 一致：≤ 64 字、只许字母数字和 _ + / -（IANA 时区名都在里面）
+    tz: z.string().min(1).max(64).regex(/^[A-Za-z0-9_+/-]+$/).nullable(),
     duration_min: z.number().int().min(1).max(1440),
     project: z.string().max(40),
     note: z.string().max(2000),
@@ -102,7 +103,8 @@ export const devicesWrite = z.strictObject({
   id: uuid,
   label: z.string().max(80).nullable(),
   platform: z.enum(['ios', 'windows', 'web', 'tauri']),
-  app_version: z.string().max(40).nullable(),
+  // 和迁移 20261031110000 的 devices_app_version_fmt 一致：1～40 个字母数字和 . + -
+  app_version: z.string().regex(/^[0-9A-Za-z.+-]{1,40}$/).nullable(),
   last_seen_at: z.iso.datetime({ offset: true }).nullable(),
   install_id: uuid.nullable(),
   deleted_at: epochMs.nullable(),

@@ -88,6 +88,39 @@ describe('rows 严格版', () => {
     expect(devicesWrite.safeParse({ ...dev, deleted_at: null, undone: false }).success).toBe(true);
   });
 
+  it('devices.app_version 与迁移 devices_app_version_fmt 一致：1～40 个字母数字和 . + -', () => {
+    const dev = { id: ID, label: null, platform: 'web', app_version: '4.0.0', last_seen_at: null, install_id: ID };
+    const full = { ...dev, deleted_at: null, undone: false };
+    // buildVersion 的两种输出、以及 null 都要过
+    for (const v of ['4.0.0', '4.0.0-preview.12', '4.1.0+build.7', 'x'.repeat(40), null]) {
+      expect(devicesWrite.safeParse({ ...full, app_version: v }).success, String(v)).toBe(true);
+      expect(insertSchema('devices').safeParse({ ...dev, app_version: v }).success, String(v)).toBe(true);
+    }
+    for (const v of ['', '4.0.0 beta', '4.0.0/1', '版本4', '4_0_0', 'x'.repeat(41)]) {
+      expect(devicesWrite.safeParse({ ...full, app_version: v }).success, v).toBe(false);
+      expect(insertSchema('devices').safeParse({ ...dev, app_version: v }).success, v).toBe(false);
+    }
+  });
+
+  it('events.tz 与迁移 events_tz_fmt 一致：≤ 64 字、只许字母数字和 _ + / -', () => {
+    const { deleted_at: _d, undone: _u, ...ins } = event;
+    for (const tz of ['Asia/Seoul', 'America/Argentina/Buenos_Aires', 'America/Port-au-Prince', 'Etc/GMT+9', 'Etc/GMT-14', 'UTC', 'a'.repeat(64)]) {
+      expect(eventsWrite.safeParse({ ...event, tz }).success, tz).toBe(true);
+      expect(insertSchema('events').safeParse({ ...ins, tz }).success, tz).toBe(true);
+    }
+    for (const tz of ['', 'Asia/ Seoul', 'Asia.Seoul', '亚洲/首尔', 'UTC;drop', 'a'.repeat(65)]) {
+      expect(eventsWrite.safeParse({ ...event, tz }).success, tz).toBe(false);
+      expect(insertSchema('events').safeParse({ ...ins, tz }).success, tz).toBe(false);
+    }
+  });
+
+  it('本机 Intl 认得的 IANA 时区名都过得了 tz 校验', () => {
+    const zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : ['Asia/Seoul'];
+    const bad = zones.filter((tz) => !eventsWrite.safeParse({ ...event, tz }).success);
+    expect(bad).toEqual([]);
+    expect(eventsWrite.safeParse({ ...event, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }).success).toBe(true);
+  });
+
   it('profiles 客户端不能 insert', () => {
     expect(() => insertSchema('profiles')).toThrow('insert_not_allowed:profiles');
   });

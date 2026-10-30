@@ -53,19 +53,19 @@ insert into public.note_files (id, user_id, note_id, kind, path, has_thumb, is_v
                                check_status, deleted_at, created_at, updated_at) values
   ('f0000000-0000-4000-8000-0000000000a1', 'aaaaaaaa-0000-4000-8000-000000000001', '40000000-0000-4000-8000-0000000000a1', 'pdf',
    'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/f0000000-0000-4000-8000-0000000000a1.pdf', false, false,
-   'ok.pdf', null, null, null, 'application/pdf', 1, 'x', 'ok', null, 1, 1),
+   'ok.pdf', null, null, null, 'application/pdf', 1, repeat('0', 64), 'ok', null, 1, 1),
   ('f0000000-0000-4000-8000-0000000000a2', 'aaaaaaaa-0000-4000-8000-000000000001', '40000000-0000-4000-8000-0000000000a1', 'pdf',
    'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/f0000000-0000-4000-8000-0000000000a2.pdf', false, true,
-   null, '\x00', '\x00', 1, 'application/pdf', 1, 'x', 'pending', null, 1, 1),
+   null, '\x00', '\x00', 1, 'application/pdf', 1, repeat('0', 64), 'pending', null, 1, 1),
   ('f0000000-0000-4000-8000-0000000000a3', 'aaaaaaaa-0000-4000-8000-000000000001', '40000000-0000-4000-8000-0000000000a1', 'pdf',
    'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/f0000000-0000-4000-8000-0000000000a3.pdf', false, false,
-   'del.pdf', null, null, null, 'application/pdf', 1, 'x', 'pending', 1, 1, 1),
+   'del.pdf', null, null, null, 'application/pdf', 1, repeat('0', 64), 'pending', 1, 1, 1),
   ('f0000000-0000-4000-8000-0000000000a4', 'aaaaaaaa-0000-4000-8000-000000000001', '40000000-0000-4000-8000-0000000000a1', 'pptx',
    'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/f0000000-0000-4000-8000-0000000000a4.pptx', true, false,
-   'p.pptx', null, null, null, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 1, 'x', 'pending', null, 1, 1),
+   'p.pptx', null, null, null, 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 1, repeat('0', 64), 'pending', null, 1, 1),
   ('f0000000-0000-4000-8000-0000000000a5', 'aaaaaaaa-0000-4000-8000-000000000001', '40000000-0000-4000-8000-0000000000a1', 'pdf',
    'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/f0000000-0000-4000-8000-0000000000a5.pdf', false, false,
-   'rej.pdf', null, null, null, 'application/pdf', 1, 'x', 'rejected', null, 1, 1);
+   'rej.pdf', null, null, null, 'application/pdf', 1, repeat('0', 64), 'rejected', null, 1, 1);
 
 -- ===== 授权（3.3 C、D） =====
 select ok(has_function_privilege('authenticated', 'public.files_authorize(text, jsonb)', 'EXECUTE')

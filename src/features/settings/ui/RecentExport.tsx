@@ -1,5 +1,5 @@
 // 设置 › 账号 › 最近的导出（R-256 ②；架构 0.29 续第 96 条③）：列出 90 天里全部导出，按时间倒序。
-// • 每行：日期和时刻（fmtWhen）、设备名、邮件没发出去时标“通知邮件没发出去”（发出去了不写）
+// • 每行：日期和时刻（fmtWhen）、设备名、文件没取完时标“未完成”（0.47 续 ③ 第 2 点）、邮件没发出去时标“通知邮件没发出去”（发出去了不写）
 // • 设备名不另查 devices 表：用设置页已读到的设备列表（DevicesSection 那份），按 logs.device 对上 devices.id；
 //   本机加“本机”标签（复用 settings.devices.thisDevice）；列表里没有这一台（已移除）写“已移除的设备”；
 //   导出时没带设备号、或设备列表还没读出来（分不清是不是已移除）写“未知设备”
@@ -53,6 +53,11 @@ export function RecentExport({ state, devices }: { state: RecentExportState; dev
                   {dev.name}
                   {dev.isCurrent ? <span className={styles.tag}>{t('settings.devices.thisDevice', {})}</span> : null}
                 </span>
+                {e.incomplete ? (
+                  <p className={styles.meta} data-testid="settings-recent-export-incomplete">
+                    {t('settings.recentExport.incomplete', {})}
+                  </p>
+                ) : null}
                 {e.mailFailed ? (
                   <p className={`${styles.meta} ${styles.danger}`} data-testid="settings-recent-export-mark">
                     {t('settings.recentExport.mailMark', {})}

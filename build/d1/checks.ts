@@ -3,9 +3,11 @@
 // 返回问题列表，空 = 通过
 import type { Manifest, ManifestTable } from '../../shared/schema/manifest.ts';
 import { CLIENT_FILE_BUCKETS } from '../../shared/manifests/_common.ts';
-import { COLUMN_GRANTS, CRON_WITHOUT_USABLE, EXPORT_NONE_BUCKETS, EXPORT_NONE_TABLES, FUNCTION_EXEC, PUBLIC_RPCS, REQUIRED_CONSTRAINTS, TABLE_GRANTS } from './whitelist.ts';
+import { COLUMN_GRANTS, CRON_WITHOUT_USABLE, EXPORT_NONE_BUCKETS, EXPORT_NONE_TABLES, FUNCTION_EXEC, PUBLIC_RPCS, REQUIRED_CONSTRAINTS, TABLE_GRANTS, TEXT_COLS_UNBOUNDED } from './whitelist.ts';
+import { textColProblems } from './text-bounds.ts';
 import { GUARD_NO_PASSWORD, checkAuthUsersTriggers, checkGuardNoPassword, type GuardRow } from './auth-guard.ts';
 import { quotaWhenProblems } from './quota-when.ts';
+import { cronHardcodedSecret } from './cron-secret.ts';
 
 export type Row = Record<string, unknown>;
 /** 查询函数：T 是这条 SQL 结果行的形状（调用处按 select 的列写明；数据库给的值不做运行时校验） */
@@ -296,6 +298,10 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     if (!cons.some((r) => r.s === s && r.t === n && re.test(r.d))) bad(`${t} 缺约束 ${label ?? re.source}`);   // label：正则太长时报可读名字
   }
 
+  // ---------- 11c. 同步表里客户端可写的 text、text[]、jsonb 列都要有长度或取值约束（架构 0.47 第 20 条 ③；TC-B1-147） ----------
+  const syncPublic = tables.filter((t) => t.sync === true && t.schema === 'public').map((t) => t.name);
+  for (const p of await textColProblems(q, syncPublic, cons, TEXT_COLS_UNBOUNDED)) bad(p);   // 查询和判定在 text-bounds.ts
+
   // ---------- 11b. 注销：onAccountDelete、userLookup 和外键、约束一致（架构 0.31 第 15、17 条；数据字典第 12 节） ----------
   const fksOf = (s: string, t: string) => cons.filter((r) => r.s === s && r.t === t && r.d.startsWith('FOREIGN KEY')).map((r) => r.d);
   const authFk = (col: string) => new RegExp(`^FOREIGN KEY \\(${col}\\) REFERENCES auth\\.users\\(id\\)( ON DELETE (CASCADE|SET NULL))?$`);
@@ -353,14 +359,3 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   return out;
 }
 
-/**
- * cron 命令里像密钥的长串（0.38 第 46 条：命令里不能写死 ≥ 32 个字符的十六进制或 base64 串）：
- * 连续 32 个以上的 [A-Za-z0-9+/=_-]，同时有字母和数字（十六进制、base64、base64url 的随机值几乎一定两样都有；
- * 只有字母和下划线的长标识符不算）。返回第一个命中的串，没有返回 null
- */
-export function cronHardcodedSecret(command: string): string | null {
-  for (const m of command.matchAll(/[A-Za-z0-9+/=_-]{32,}/g)) {
-    if (/[0-9]/.test(m[0]) && /[A-Za-z]/.test(m[0])) return m[0];
-  }
-  return null;
-}

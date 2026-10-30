@@ -16,7 +16,7 @@ import { deviceErrKey } from '../ui/DevicesSection.tsx';
 const keyOf = ((k: string) => k) as unknown as Parameters<typeof accountErrText>[1];
 
 /** 两张表的值只能是实际用到的前缀（照 deviceErrKey 的 Extract 写法）：前缀写错，编译期就报 */
-type AccountErrKey = Extract<SettingsMsgKey, `settings.err.${string}` | `settings.delete.${string}` | `settings.account.${string}`>;
+type AccountErrKey = Extract<SettingsMsgKey, `settings.err.${string}` | `settings.delete.${string}` | `settings.account.${string}` | `settings.export.${string}`>;
 type DeviceErrKey = Extract<SettingsMsgKey, `settings.err.${string}`>;
 
 const ACCOUNT = {
@@ -29,6 +29,10 @@ const ACCOUNT = {
   rate_limited: 'settings.account.rateLimited',
   confirm_required: 'settings.delete.confirmRequired',
   admin_cannot_delete: 'settings.delete.admin',
+  export_expired: 'settings.export.expired',
+  export_too_large: 'settings.export.tooLarge',
+  bad_response: 'settings.err.unknown',
+  vault_locked: 'settings.err.unknown',
   unknown: 'settings.err.unknown',
 } as const satisfies Record<AccountErr, AccountErrKey>;
 

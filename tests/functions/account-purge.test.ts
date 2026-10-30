@@ -45,6 +45,14 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
     w.db.counters.set(`tzphone:${A}:last|1`, 1);
     w.db.counters.set(`ai:${B}:20261029|1`, 4);
     w.db.counters.set('signup-ip:ip:abc|1', 1);
+    // 导出分片的键（0.47 第 13、14、19 条）：任务键第三段用点分隔，第二段仍是 user_id，按第二段删时一并删掉
+    const JOB_E = 'eeeeeeee-0000-4000-8000-0000000000e1';
+    const SID = 'aaaaaaaa-5555-4000-8000-000000000001';
+    w.db.counters.set(`export-job:${A}:${JOB_E}.omitted.${SID}|1`, 3);
+    w.db.counters.set(`export-part:${A}:20261029|1`, 5);
+    w.db.counters.set(`export-size:${A}:20261029|1`, 2);
+    w.db.counters.set(`export-job:${B}:${JOB_E}.omitted.${SID}|1`, 1);
+    w.db.counters.set(`export-part:${B}:20261029|1`, 1);
     await requestDeletion(w, A);
 
     // 冷静期第 6 天：什么都不删（TC-B1-99 ⑦：counters 里 A 的键保留）
@@ -79,6 +87,9 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
     expect([...w.db.counters.keys()].some((k) => k.includes(A))).toBe(false);
     expect(w.db.counters.has(`ai:${B}:20261029|1`)).toBe(true);
     expect(w.db.counters.has('signup-ip:ip:abc|1')).toBe(true);
+    expect([...w.db.counters.keys()].filter((k) => /^export-(job|part|size):/.test(k) && k.includes(A))).toEqual([]);   // export-job:、export-part:、export-size: 都删了
+    expect(w.db.counters.has(`export-job:${B}:${JOB_E}.omitted.${SID}|1`)).toBe(true);
+    expect(w.db.counters.has(`export-part:${B}:20261029|1`)).toBe(true);
     // deleted_accounts 写了，账号和 pending_deletions、profiles、revoked_sessions 都没了
     expect(w.db.deleted.has(A)).toBe(true);
     expect(w.db.users.has(A)).toBe(false);
@@ -224,5 +235,33 @@ describe('TC-B1-102：一个失败不影响别人，第二天重试', () => {
     const r = await runPurge(w, { deleteUser: async () => { w.db.users.delete(A); } });   // 假装删了、其实没级联
     expect(r.body).toMatchObject({ purged: 0, failed: 1 });
     expect(r.logs).toContain('verify_failed:aaaaaaaa');
+  });
+});
+
+// 安全审查“预览实测脚本”D1：@lemomemo.test 的测试账号不真的发信（account、account-purge 的 index.ts 都套这一层）
+describe('skipTestRecipients：测试邮箱跳过发信、记 mail_skipped_test', async () => {
+  const { isTestRecipient, skipTestRecipients } = await import('../../supabase/functions/_shared/account-mail.ts');
+  const mail = { subject: 's', text: 't' };
+
+  it('只认 @lemomemo.test 结尾（不分大小写、去掉首尾空白）', () => {
+    expect(['e2e-export-1@lemomemo.test', 'A@LEMOMEMO.TEST', ' x@lemomemo.test '].map(isTestRecipient)).toEqual([true, true, true]);
+    expect(['x@lemomemo.com', 'x@lemomemo.test.com', 'x@a.lemomemo.test.evil', 'lemomemo.test@gmail.com', 'x@test'].map(isTestRecipient)).toEqual([false, false, false, false, false]);
+  });
+
+  it('测试邮箱：不调真发信、回 false、只记 mail_skipped_test（不带邮箱）', async () => {
+    const sent: string[] = [];
+    const logs: string[] = [];
+    const send = skipTestRecipients(async (to) => { sent.push(to); return true; }, (c) => logs.push(c));
+    expect(await send('e2e-export-1@lemomemo.test', mail)).toBe(false);
+    expect(sent).toEqual([]);
+    expect(logs).toEqual(['mail_skipped_test']);
+  });
+
+  it('真实邮箱：照常发、原样回结果、不记日志', async () => {
+    const logs: string[] = [];
+    const send = skipTestRecipients(async () => true, (c) => logs.push(c));
+    expect(await send('someone@example.com', mail)).toBe(true);
+    expect(await skipTestRecipients(async () => false, (c) => logs.push(c))('someone@example.com', mail)).toBe(false);
+    expect(logs).toEqual([]);
   });
 });

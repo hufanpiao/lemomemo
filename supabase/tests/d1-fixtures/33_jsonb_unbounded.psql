@@ -1,0 +1,4 @@
+-- expect: public.events.qa_probe：客户端可写的文本列没有长度或取值约束
+-- TC-B1-147 ②：同步表加一个客户端可写、只有“非空”这种不限长度的 check 的 jsonb 列（只是被提到不算约束）
+alter table public.events add column qa_probe jsonb check (qa_probe is not null);
+grant insert (qa_probe) on public.events to authenticated;

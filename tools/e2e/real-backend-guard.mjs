@@ -77,6 +77,7 @@ export const E2E_FN_ENV_RULES = {
   http_proxy: { fixed: E2E_FN_PROXY, why: '出站一律连不上' },
   NO_PROXY: { hosts: E2E_NO_PROXY_HOSTS, why: 'E2E_NO_PROXY_HOSTS' },
   no_proxy: { hosts: E2E_NO_PROXY_HOSTS, why: 'E2E_NO_PROXY_HOSTS' },
+  EXPORT_MEM_PROBE: { fixed: '1', why: '导出内存探针（架构 0.47 第 21 条）；account 还要 envKind 判定为本机才开' },
 };
 /** 大写、小写两种写法必须同时设、值一样（有的运行时只认其中一种） */
 const PROXY_PAIRS = [['HTTPS_PROXY', 'https_proxy'], ['HTTP_PROXY', 'http_proxy'], ['NO_PROXY', 'no_proxy']];

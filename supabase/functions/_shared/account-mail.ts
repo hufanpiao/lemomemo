@@ -14,6 +14,23 @@ export interface Mail {
 
 const FALLBACK_TZ = 'Asia/Seoul';
 
+/**
+ * 测试账号（@lemomemo.test）不真的发信（安全审查“预览实测脚本”D1）：.test 收不到，真发会变成退信、算进 lemomemo.com 的退信率。
+ * 真实用户不可能有 .test 邮箱，对正式环境没有影响。跳过时只记 mail_skipped_test（不带邮箱），回 false，
+ * 调用方照“没发出去”的现有规则处理（导出通知另写一条 export_mail_failed 等）。account、account-purge 共用。
+ */
+export function isTestRecipient(to: string): boolean {
+  return /@lemomemo\.test$/i.test(to.trim());
+}
+export function skipTestRecipients(
+  send: (to: string, mail: Mail) => Promise<boolean>, log: (code: string) => void,
+): (to: string, mail: Mail) => Promise<boolean> {
+  return (to, mail) => {
+    if (isTestRecipient(to)) { log('mail_skipped_test'); return Promise.resolve(false); }
+    return send(to, mail);
+  };
+}
+
 export function mailLocale(v: unknown): MailLocale {
   return v === 'ko-KR' ? 'ko-KR' : 'zh-CN';
 }

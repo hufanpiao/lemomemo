@@ -391,8 +391,24 @@ isOneToOne: false
 "cleanup_batch":
 { Args: { "p_limit"?: number }; Returns: number
                            },
+"db_size_bytes":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "at": string,"bytes": number
+            }[]
+                           },
 "enqueue_floating":
 { Args: { "p_user": string }; Returns: undefined
+                           },
+"export_job_start":
+{ Args: { "p_export_id": string,"p_mode": string,"p_session": string,"p_user": string }; Returns: string
+                           },
+"export_job_take":
+{ Args: { "p_export_id": string,"p_max": number,"p_mode": string,"p_session": string,"p_ttl_s": number,"p_user": string }; Returns: {
+              "parts": number,"started_at": string,"verdict": string
+            }[]
+                           },
+"export_size_over":
+{ Args: { "p_budget_ms": number,"p_limit": number,"p_mode": string,"p_user": string }; Returns: number
                            },
 "files_authorize_impl":
 { Args: { "p_items": Json,"p_op": string }; Returns: Json

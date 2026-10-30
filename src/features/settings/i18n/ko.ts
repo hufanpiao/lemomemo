@@ -71,6 +71,15 @@ export const ko = {
   'settings.export.notSaved': '내보냈지만 파일이 아직 저장되지 않았어요', // R-106 B1 第一遍已审（10-31）
   'settings.export.vaultOmitted': '잠금을 풀지 않아서 비밀 메모는 내보내지 않았어요', // R-106 B1 第一遍已审（10-31），按审校意见改过
   'settings.export.saveAgain': '다시 저장', // R-106 B1 第一遍已审（10-31）
+  'settings.export.progress': '내보내는 중… {mb} MB 받았어요', // R-106 B1 第一遍已审（10-31），按审校意见 K-32 改过；10-31 导出分片新加（0.47 续 ④ 第 4 点）
+  'settings.export.paused': '내보내기가 중단됐어요. 1시간 안에 이 기기에서 “계속”을 누르면 이어서 내보낼 수 있어요. 이때는 횟수가 따로 계산되지 않아요', // R-106 B1 第一遍已审（10-31），按审校意见 K-33 改过；10-31 导出分片新加（0.47 续 ④ 第 4 点）
+  'settings.export.resume': '계속', // R-106 B1 第一遍已审（10-31）；10-31 导出分片新加（0.47 续 ④ 第 4 点）
+  'settings.export.expired': '이번 내보내기는 만료됐어요. 다시 내보내 주세요. 다시 내보내면 횟수가 1번 계산돼요', // R-106 B1 第一遍已审（10-31），按审校意见 K-35 改过；10-31 导出分片新加（0.47 续 ④ 第 4 点）
+  'settings.export.tooLarge': '데이터 양이 한도를 넘어서 내보낼 수 없어요. 레모 운영자에게 문의해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见 K-36 改过；10-31 导出分片新加（0.47 续 ④ 第 4 点）
+  'settings.export.tooLargeStart': '데이터 양이 1회 내보내기 한도를 넘어서 지금은 내보낼 수 없어요. 레모 운영자에게 문의해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见 K-41 改过；10-31 start 大小预检新加（0.47 续 ①“超大账号”、④ 第 4 点）
+  'settings.export.partsUsedUp': '오늘 내보낼 수 있는 횟수를 다 썼어요. 내일 다시 시도해 주세요', // R-106 B1 第一遍已审（10-31）；10-31 导出分片新加（0.47 续 ④ 第 4 点）
+  'settings.export.quota': '내보내기와 회원 탈퇴는 합쳐서 하루 3번까지 할 수 있어요. “모든 데이터 내보내기”를 누를 때마다 1번씩 계산돼요', // R-106 B1 第一遍已审（10-31），按审校意见 K-38 改过；10-31 导出分片新加（0.47 续 ④ 第 4 点）
+  'settings.export.wifi': '데이터가 많으면 파일이 수십 MB가 될 수 있어요. Wi-Fi에 연결하는 걸 추천해요', // R-106 B1 第一遍已审（10-31）；K-39 可不改，按主持人定不改；10-31 导出分片新加（0.47 续 ④ 第 4 点）
 
   'settings.delete.back': '설정', // R-106 B1 第一遍已审（10-31）；照 settings.title
   'settings.delete.body.what': '탈퇴하면 레모에 기록한 모든 내용과 사진, 첨부파일, 설정, 그리고 서버에 있는 백업까지 모두 삭제돼요.', // R-106 B1 第一遍已审（10-31），按审校意见改过
@@ -108,4 +117,5 @@ export const ko = {
   'settings.recentExport.removedDevice': '제거된 기기', // R-106 B1 第一遍已审（10-31）；移除照 settings.devices.remove 用 제거
   'settings.recentExport.unknownDevice': '알 수 없는 기기', // R-106 B1 第一遍已审（10-31）
   'settings.recentExport.showAll': '모두 보기 ({n}건)', // R-106 B1 第一遍已审（10-31），按审校意见改过
+  'settings.recentExport.incomplete': '완료되지 않음', // R-106 B1 第一遍已审（10-31）；10-31 导出分片新加（0.47 续 ④ 第 4 点）
 } as const satisfies Record<keyof typeof zh, string>;

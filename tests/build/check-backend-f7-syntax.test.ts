@@ -6,11 +6,12 @@ import { describe, expect, it } from 'vitest';
 import { run, sample, where } from './check-backend-harness.ts';
 
 describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => {
-  it('F7（代码审查有条件通过 1）：Deno 改成白名单——Deno?.env、解构、globalThis 取 Deno、Reflect.get、拼接下标、标识符转义、存进变量、(globalThis as …)[…]、get 的参数不是纯字面量 → 错误；字面量的 get / has、Deno.serve、正则里的转义、字符串里的 \\t 不报', () => {
+  it('F7（代码审查有条件通过 1）：Deno 改成白名单——Deno?.env、解构、globalThis 取 Deno、Reflect.get、拼接下标、标识符转义、存进变量、(globalThis as …)[…]、get 的参数不是纯字面量 → 错误；字面量的 get / has、Deno.serve、不带参数的 Deno.memoryUsage()、正则里的转义、字符串里的 \\t 不报', () => {
     const { code, errors } = run(sample('f7-deno-whitelist'));
     expect(code).toBe(1);
     expect(where(errors)).toEqual([
-      ...[2, 3, 5, 6, 7, 8, 9, 10, 11].map((n) => `F7 supabase/functions/push-dispatch/index.ts:${n}`),
+      // 13、14：Deno.memoryUsage 不调用、带参数都拒；12 行直接调用不带参数放行（架构 0.47 第 21 条导出内存探针）
+      ...[2, 3, 5, 6, 7, 8, 9, 10, 11, 13, 14].map((n) => `F7 supabase/functions/push-dispatch/index.ts:${n}`),
       'F7 supabase/functions/todo-remind/index.ts:2',
     ].sort());
     expect(errors.find((e) => e.line === 10)?.message).toContain('只准跟 .标识符');

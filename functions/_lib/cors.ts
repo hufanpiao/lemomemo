@@ -41,8 +41,12 @@ export const ALLOW_HEADERS: readonly string[] = [
  */
 export const FILES_ALLOW_HEADERS: readonly string[] = [...ALLOW_HEADERS, 'x-files-sig'];
 
-/** 暴露的响应头：时钟偏差读 Date，计数和分页读 Content-Range（5.10）；/files 上传回的 ETag（0.32，14.2 第 11 点） */
-export const EXPOSE_HEADERS: readonly string[] = ['Date', 'Content-Range', 'Content-Length', 'X-Supabase-Api-Version', 'ETag'];
+/**
+ * 暴露的响应头：时钟偏差读 Date，计数和分页读 Content-Range（5.10）；/files 上传回的 ETag（0.32，14.2 第 11 点）；
+ * account 导出分片的下一个游标 x-lemo-export-next（0.47 续 ①：电脑版 exe 跨域，applyCors 会换掉上游的 CORS 头，只能在这里加）；
+ * Content-Encoding 给导出逐片校验判断中间层是否加了压缩（安全复核 K3）
+ */
+export const EXPOSE_HEADERS: readonly string[] = ['Date', 'Content-Range', 'Content-Length', 'Content-Encoding', 'X-Supabase-Api-Version', 'ETag', 'x-lemo-export-next'];
 
 export function isAllowedOrigin(origin: string | null): boolean {
   return origin === EXE_ORIGIN;

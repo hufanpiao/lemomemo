@@ -112,7 +112,7 @@ describe('account delete（申请注销）', () => {
 
   it('TC-B1-65 ③：export、delete 合计每天 3 次：第 4 次 rate_limited，不进冷静期', async () => {
     const { db, box } = setup();
-    for (let i = 0; i < ACCOUNT_DAILY_LIMIT; i++) expect((await call(db, box, { action: 'export' })).status).toBe(200);
+    for (let i = 0; i < ACCOUNT_DAILY_LIMIT; i++) expect((await call(db, box, { action: 'export', step: 'start' })).status).toBe(200);
     const r = await call(db, box, { action: 'delete', confirm: '注销' });
     expect(r.status).toBe(429);
     expect(await r.json()).toEqual({ error: 'rate_limited' });
@@ -226,7 +226,7 @@ describe('account restore（冷静期里恢复）', () => {
 
   it('TC-B1-100 ⑧、99 ②：冷静期里 export 回 account_pending_deletion（只有 restore 放行），不写 logs', async () => {
     const { db, box } = await pendingA();
-    const r = await call(db, box, { action: 'export' }, { session: 'aaaaaaaa-s9' });
+    const r = await call(db, box, { action: 'export', step: 'start' }, { session: 'aaaaaaaa-s9' });
     expect(r.status).toBe(403);
     expect(await r.json()).toMatchObject({ error: 'account_pending_deletion' });
     expect(db.logs).toEqual([]);
@@ -234,9 +234,9 @@ describe('account restore（冷静期里恢复）', () => {
 });
 
 describe('account 的错误码（0.38 第 48 条：shared/schema/account.ts 的 accountErrorCode，前后端共用）', () => {
-  it('core.ts 的 11 个码和 shared/schema/account.ts 一字不差、顺序一致（架构第 6 节那张表的顺序）', () => {
+  it('core.ts 的 13 个码（0.47 加 export_expired、export_too_large）和 shared/schema/account.ts 一字不差、顺序一致（架构第 6 节那张表的顺序）', () => {
     expect([...ACCOUNT_ERRS]).toEqual([...ACCOUNT_ERROR_CODES]);
-    expect(ACCOUNT_ERROR_CODES).toHaveLength(11);
+    expect(ACCOUNT_ERROR_CODES).toHaveLength(13);
     for (const c of ACCOUNT_ERRS) expect(accountErrorCode.safeParse(c).success, c).toBe(true);
     expect(accountErrorCode.safeParse('bad_request').success).toBe(false);   // 各函数共用的码不在 account 的表里
   });
@@ -247,7 +247,7 @@ describe('account 的错误码（0.38 第 48 条：shared/schema/account.ts 的 
     const grab = async (r: Response) => { const b = (await r.json()) as { error?: string }; if (b.error) seen.add(b.error); };
     await grab(await call(db, box, { action: 'delete', confirm: 'x' }));
     await grab(await call(db, box, { action: 'restore' }));
-    await grab(await call(db, box, { action: 'export' }, {}, { 'x-vault-token': 'tok' }));
+    await grab(await call(db, box, { action: 'export', step: 'start' }, {}, { 'x-vault-token': 'tok' }));
     await grab(await call(db, box, { action: 'nope' }));
     db.admins.add(A);
     await grab(await call(db, box, { action: 'delete', confirm: '注销' }));

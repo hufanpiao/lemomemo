@@ -28,23 +28,38 @@ const mailFail = (t: number, of: number, device: string | null = 'd1'): ExportLo
 describe('listExports', () => {
   it('多条：列出全部 export，按时间倒序（不管读回来的先后），每条带设备号；邮件都发出去时都不标', () => {
     expect(listExports([exp(T3, 'd2'), exp(T2), exp(T1)], SINCE)).toEqual([
-      { at: T2, device: 'd1', mailFailed: false },
-      { at: T1, device: 'd1', mailFailed: false },
-      { at: T3, device: 'd2', mailFailed: false },
+      { at: T2, device: 'd1', mailFailed: false, incomplete: false },
+      { at: T1, device: 'd1', mailFailed: false, incomplete: false },
+      { at: T3, device: 'd2', mailFailed: false, incomplete: false },
     ]);
   });
 
   it('邮件失败的：只有配上的那一条标出来（同一台设备连着两次，按 code 分得开）', () => {
     expect(listExports([exp(T2), exp(T1), mailFail(T1 + 5000, T1)], SINCE)).toEqual([
-      { at: T2, device: 'd1', mailFailed: false },
-      { at: T1, device: 'd1', mailFailed: true },
+      { at: T2, device: 'd1', mailFailed: false, incomplete: false },
+      { at: T1, device: 'd1', mailFailed: true, incomplete: false },
     ]);
   });
 
   it('device 也要对上：别的设备的失败行不算；两边都没有设备号也能配上；设备号大小写不同也算同一台', () => {
     expect(listExports([exp(T2, 'd1'), mailFail(T2 + 1, T2, 'd2')], SINCE)[0]?.mailFailed).toBe(false);
-    expect(listExports([exp(T2, null), mailFail(T2 + 1, T2, null)], SINCE)).toEqual([{ at: T2, device: null, mailFailed: true }]);
-    expect(listExports([exp(T2, 'ABC'), mailFail(T2 + 1, T2, 'abc')], SINCE)).toEqual([{ at: T2, device: 'abc', mailFailed: true }]);
+    expect(listExports([exp(T2, null), mailFail(T2 + 1, T2, null)], SINCE)).toEqual([{ at: T2, device: null, mailFailed: true, incomplete: false }]);
+    expect(listExports([exp(T2, 'ABC'), mailFail(T2 + 1, T2, 'abc')], SINCE)).toEqual([{ at: T2, device: 'abc', mailFailed: true, incomplete: false }]);
+  });
+
+  it('未完成（0.47）：export 带 export_id、配不上 export_done 的标出来；配上的不标；分片以前没有 code 的不标；export_done 单独一行不列', () => {
+    const A = '9b2e4c6a-0000-4000-8000-0000000000aa';
+    const B = '9b2e4c6a-0000-4000-8000-0000000000bb';
+    const job = (t: number, code: string): ExportLogRow => ({ t, device: 'd1', act: 'export', code });
+    const done = (t: number, code: string): ExportLogRow => ({ t, device: 'd1', act: 'export_done', code });
+    expect(listExports([job(T2, A), job(T1, B), done(T1 + 60_000, B.toUpperCase()), exp(T3)], SINCE)).toEqual([
+      { at: T2, device: 'd1', mailFailed: false, incomplete: true },
+      { at: T1, device: 'd1', mailFailed: false, incomplete: false },
+      { at: T3, device: 'd1', mailFailed: false, incomplete: false },
+    ]);
+    // 完成行时间在将来（伪造）不算
+    expect(listExports([job(T1, A), done(UNTIL + 1, A)], SINCE, UNTIL)[0]?.incomplete).toBe(true);
+    expect(listExports([done(T1, A)], SINCE)).toEqual([]);
   });
 
   it('没有记录的：空、只有失败行、只有 90 天以前的 export 都是空列表', () => {
@@ -54,9 +69,9 @@ describe('listExports', () => {
   });
 
   it('时间在将来的行丢掉（R-259 减轻措施）：晚于 现在 + 5 分钟 的 export 不列、失败行不配；5 分钟以内的照常', () => {
-    expect(listExports([exp(UNTIL + 1), exp(T1)], SINCE, UNTIL)).toEqual([{ at: T1, device: 'd1', mailFailed: false }]);
-    expect(listExports([exp(T1), mailFail(UNTIL + 1, T1)], SINCE, UNTIL)).toEqual([{ at: T1, device: 'd1', mailFailed: false }]);
-    expect(listExports([exp(UNTIL), mailFail(UNTIL, UNTIL)], SINCE, UNTIL)).toEqual([{ at: UNTIL, device: 'd1', mailFailed: true }]);
+    expect(listExports([exp(UNTIL + 1), exp(T1)], SINCE, UNTIL)).toEqual([{ at: T1, device: 'd1', mailFailed: false, incomplete: false }]);
+    expect(listExports([exp(T1), mailFail(UNTIL + 1, T1)], SINCE, UNTIL)).toEqual([{ at: T1, device: 'd1', mailFailed: false, incomplete: false }]);
+    expect(listExports([exp(UNTIL), mailFail(UNTIL, UNTIL)], SINCE, UNTIL)).toEqual([{ at: UNTIL, device: 'd1', mailFailed: true, incomplete: false }]);
   });
 });
 
@@ -79,14 +94,14 @@ function fakeDb(result: { data: unknown; error: unknown } | (() => Promise<never
 }
 
 describe('createRecentExportsApi', () => {
-  it('经 RLS 读本人的 logs：src = account、kind = run、两种 act、最近 90 天且不晚于 现在 + 5 分钟、按 t 倒序；有记录就是 ready', async () => {
+  it('经 RLS 读本人的 logs：src = account、kind = run、三种 act、最近 90 天且不晚于 现在 + 5 分钟、按 t 倒序；有记录就是 ready', async () => {
     const { db, calls } = fakeDb({ data: [exp(UNTIL + 60_000), mailFail(T2 + 1, T2), exp(T2), exp(T1)], error: null });
     const api = createRecentExportsApi(async () => db, { now: () => NOW });
     expect(await api.list()).toEqual({
       kind: 'ready',
       list: [
-        { at: T2, device: 'd1', mailFailed: true },
-        { at: T1, device: 'd1', mailFailed: false },
+        { at: T2, device: 'd1', mailFailed: true, incomplete: false },
+        { at: T1, device: 'd1', mailFailed: false, incomplete: false },
       ],
     });
     expect(calls).toEqual([
@@ -94,11 +109,11 @@ describe('createRecentExportsApi', () => {
       ['select', 't,device,act,code'],
       ['eq', 'src', 'account'],
       ['eq', 'kind', 'run'],
-      ['in', 'act', ['export', 'export_mail_failed']],
+      ['in', 'act', ['export', 'export_done', 'export_mail_failed']],
       ['gte', 't', SINCE],
       ['lte', 't', UNTIL],
       ['order', 't', { ascending: false }],
-      ['limit', 600],
+      ['limit', 900],
     ]);
   });
 
@@ -107,7 +122,7 @@ describe('createRecentExportsApi', () => {
     const s = fakeDb({ data: [{ t: String(T1), device: 'd1', act: 'export', code: null }], error: null });
     expect(await createRecentExportsApi(async () => s.db, { now: () => NOW }).list()).toEqual({
       kind: 'ready',
-      list: [{ at: T1, device: 'd1', mailFailed: false }],
+      list: [{ at: T1, device: 'd1', mailFailed: false, incomplete: false }],
     });
   });
 

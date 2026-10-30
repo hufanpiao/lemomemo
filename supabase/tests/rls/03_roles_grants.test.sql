@@ -79,15 +79,15 @@ select is((select count(*)::int from pg_proc p where p.pronamespace = 'private':
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
   'devices_session_guard,enqueue_anniv_defaults,enqueue_embed,enqueue_remind,files_authorize_impl,guard_note_file,guard_note_image,guard_token_revoke,is_active,'
-  || 'my_sessions_impl,not_password_session,purge_deleted_impl,record_consent_impl,remove_device_impl,report_tz_impl,row_quota,table_meta_of,touch,vault_ai_off',
-  'authenticated 能执行的 private 函数 = 白名单（B1 迁移 20261029192000 建了 report_tz_impl、remove_device_impl、my_sessions_impl；claim_endpoint_impl B2、my_ai_usage_impl B3）');
+  || 'my_sessions_impl,not_password_session,purge_deleted_impl,record_consent_impl,remove_device_impl,report_tz_impl,row_quota,table_meta_of,tags_ok,touch,vault_ai_off',
+  'authenticated 能执行的 private 函数 = 白名单（tags_ok 是 B1 迁移 20261031110000 建的，notes.tags 的 check 用；B1 迁移 20261029192000 建了 report_tz_impl、remove_device_impl、my_sessions_impl；claim_endpoint_impl B2、my_ai_usage_impl B3）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')), null, 'anon 不能执行任何 private 函数');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('service_role', p.oid, 'EXECUTE')),
-  'account_request_deletion,account_restore,account_usable,auth_mail_counts,long_transactions,rebind_device_impl,session_alive,take_rate', 'service_role 能执行的 private 函数 = 白名单（auth_mail_counts 是 B1 迁移 20261029230000 建的；rebind_device_impl 是 B1 迁移 20261029192000 建的；take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
+  'account_request_deletion,account_restore,account_usable,auth_mail_counts,db_size_bytes,export_job_start,export_job_take,export_size_over,long_transactions,rebind_device_impl,session_alive,tags_ok,take_rate', 'service_role 能执行的 private 函数 = 白名单（tags_ok 是 B1 迁移 20261031110000 建的；db_size_bytes、export_job_start、export_job_take、export_size_over 是 B1 迁移 20261031100000 建的；auth_mail_counts 是 B1 迁移 20261029230000 建的；rebind_device_impl 是 B1 迁移 20261029192000 建的；take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
-  where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_vault', p.oid, 'EXECUTE')), 'purge_vault_impl', 'fn_vault 只能执行 purge_vault_impl');
+  where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_vault', p.oid, 'EXECUTE')), 'purge_vault_impl,tags_ok', 'fn_vault 只能执行 purge_vault_impl 和 tags_ok（B1 迁移 20261031110000，notes.tags 的 check 用）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_ai', p.oid, 'EXECUTE')), null, 'fn_ai 不能执行任何 private 函数');
 select is((select string_agg(p.proname || ':' || p.prosecdef, ',' order by p.proname) from pg_proc p where p.pronamespace = 'public'::regnamespace),
@@ -127,7 +127,7 @@ insert into public.notes (id, user_id, body, created_at, updated_at) values
   ('40000000-0000-4000-8000-0000000000b1', 'bbbbbbbb-0000-4000-8000-000000000002', 'B', 1, 1);
 insert into public.note_files (id, user_id, note_id, kind, path, name, mime, bytes, sha256, text_excerpt, created_at, updated_at) values
   ('f0000000-0000-4000-8000-0000000000b1', 'bbbbbbbb-0000-4000-8000-000000000002', '40000000-0000-4000-8000-0000000000b1', 'pdf',
-   'bbbbbbbb-0000-4000-8000-000000000002/40000000-0000-4000-8000-0000000000b1/f0000000-0000-4000-8000-0000000000b1.pdf', 'b-secret.pdf', 'application/pdf', 1, 'x', 'B 的正文', 1, 1);
+   'bbbbbbbb-0000-4000-8000-000000000002/40000000-0000-4000-8000-0000000000b1/f0000000-0000-4000-8000-0000000000b1.pdf', 'b-secret.pdf', 'application/pdf', 1, repeat('0', 64), 'B 的正文', 1, 1);
 -- TC-B0-34：漏写 where user_id 也只看到本人
 select is(tests.rows_as('fn_ai', null, $$select count(*) as n from private.user_limits$$, 'aaaaaaaa-0000-4000-8000-000000000001'), '[{"n": 1}]'::jsonb,
   'fn_ai 漏写 where：只看到 A 的一行');

@@ -30,9 +30,16 @@ export function accountErrText(e: AccountErr, t: T): string {
       return t('settings.delete.admin', {});
     case 'account_disabled':
       return t('settings.err.accountDisabled', {});
+    // 导出分片（0.47 续 ④ 第 4 点）
+    case 'export_expired':
+      return t('settings.export.expired', {});
+    case 'export_too_large':
+      return t('settings.export.tooLarge', {});
     case 'revoked':
     case 'signed_out':
     case 'pending_deletion':
+    case 'bad_response':
+    case 'vault_locked':
     case 'unknown':
       return t('settings.err.unknown', {});
   }

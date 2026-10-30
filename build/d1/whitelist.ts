@@ -67,13 +67,22 @@ export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
   },
 };
 
+/**
+ * 同步表里客户端可写、却没有长度或取值约束的文本列的豁免名单（D1 第 11c 节，架构 0.47 第 20 条 ③，TC-B1-147）。每项必须写理由；
+ * 加了约束以后 D1 会报“从白名单删掉”。fv、repeat 这类不给客户端写的列本来就不在检查范围里（只查 authenticated 有 insert / update 授权的列）。
+ * 10-31 D1 查出的 9 列已按架构 0.47 第 20 条补全部加约束（迁移 20261031110000），现在名单为空
+ */
+export const TEXT_COLS_UNBOUNDED: Readonly<Record<string, string>> = {};
+
 /** private 函数的执行权（3.3 C）。B1 起才建的函数也列在这里：没建时 D1 不报，建了却没授权或授多了才报 */
 export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault' | 'fn_ai', string[]> = {
   authenticated: ['is_active', 'not_password_session', 'report_tz_impl', 'claim_endpoint_impl', 'my_ai_usage_impl', 'record_consent_impl', 'remove_device_impl',
     'devices_session_guard', 'purge_deleted_impl', 'my_sessions_impl', 'touch', 'enqueue_remind', 'row_quota', 'guard_token_revoke',
-    'table_meta_of', 'guard_note_image', 'guard_note_file', 'files_authorize_impl', 'enqueue_anniv_defaults', 'enqueue_embed', 'vault_ai_off'],
-  service_role: ['take_rate', 'session_alive', 'rebind_device_impl', 'long_transactions', 'auth_mail_counts', 'account_usable', 'account_request_deletion', 'account_restore'],
-  fn_vault: ['purge_vault_impl'],
+    'table_meta_of', 'guard_note_image', 'guard_note_file', 'files_authorize_impl', 'enqueue_anniv_defaults', 'enqueue_embed', 'vault_ai_off',
+    'tags_ok'],   // tags_ok：B1 迁移 20261031110000，notes.tags 的 check 约束用（写 notes 的三种角色都要能执行）
+  service_role: ['take_rate', 'session_alive', 'rebind_device_impl', 'long_transactions', 'auth_mail_counts', 'account_usable', 'account_request_deletion', 'account_restore',
+    'export_job_start', 'export_job_take', 'db_size_bytes', 'export_size_over', 'tags_ok'],
+  fn_vault: ['purge_vault_impl', 'tags_ok'],
   fn_ai: [],
 };
 

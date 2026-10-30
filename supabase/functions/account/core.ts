@@ -14,30 +14,37 @@
 //   restore {action}：和 status 一样在冷静期里放行（allowPendingDeletion）；amr 里 otp 在 10 分钟内 → 每天 5 次
 //           → rpc account_restore（service role 调 definer 函数，先锁 pending_deletions 行再判断，和 account-purge 的认领互斥；
 //           0.38 第 45 条）→ {ok} → 发“已恢复”。
-//   export  {action, device_id?}（请求头可带 x-vault-token）：每天 3 次（和 delete 合计）→ 先写一条 logs（写不进就 try_later、不导出）
-//           → 按数据清单读本人各表（按主键往后翻页，每张表有行数上限，logs 另算）→ 边读边压缩成 gzip（内存里只留压缩后的块，
-//           原文总字节有上限）→ 直接回 gzip 的 JSON（attachment、no-store，不发下载链接）→ 响应之后发导出通知；
-//           发信失败另记一条 logs（act = export_mail_failed，code = 对应 export 那一行的 t 的 ISO 字符串，两行靠它配对），不当作“没导出”。
-//           计次以后的失败都回 try_later；写不进 logs、数据库出错这类临时性失败把当天这一次退回去（K3 安全审查必改 2），
-//           数据本身导致的（超行数、超字节、读到别人的行等）照常扣次数（K3 复审 B）。
-//           没带 vault_token：包里不放隐私记的任何行，顶层 "vault": "omitted"；带了但无效或过期整个请求被拒（vault_locked / vault_relock）；
-//           带了有效的：隐私记行只放密文列（R-184 选 a）；vault-images、vault-files 两个桶不进导出（export: none）。
-//           清单 exportOmitCols 里的列不进包（devices 的推送订阅密钥和会话 id）。
+//   export  分两步（架构 0.47 续 ①，0.47 第 4～19 条；一次调用只做一片，免得满载账号撞上每次 2 秒 CPU）：
+//     start {action, step: 'start', device_id?}（可带 x-vault-token）：定模式 → 只读查当天次数（已满 429）→ 预检限流 export-size（每天 6 次）
+//           → 大小预检 export_size_over（全库一次一个；超 480 MB 回 413 export_too_large，超时、忙、出错回 try_later，都不扣导出次数、
+//           不写 logs、不发信，只记函数日志）→ 扣当天次数（和 delete 合计 3 次）→ export_job_start 建任务（键带会话）→ 写 logs export
+//           （code = export_id）→ 响应之后发导出通知 → {ok, export_id, exported_at}。不读用户数据。
+//           建任务、写 logs 失败退回当天这一次（每天最多退 3 次），并尽力删掉已建的任务行（N2）。
+//     part  {action, step: 'part', export_id, cursor}：先扣每天分片数 export-part（72，超了 429）→ 校验 export_id 和游标（400）
+//           → 定模式 → export_job_take（别的会话、别的用户、模式不一致、过期 410 export_expired；超 36 片 413 export_too_large）
+//           → 从游标处按主键翻页读（第一页 50 行，之后按平均行宽自适应），每写一行查一次本片 16 MB 预算 → 回这一片单独的 gzip 成员，
+//           下一个游标在响应头 x-lemo-export-next（取完为 done）；最后一片写 logs export_done（片数、gzip 字节合计）。
+//           读到别人的行、超行数、主键不前进等数据导致的失败只记 export_<码>、回 try_later。
+//     没带 vault_token：包里不放隐私记的任何行，顶层 "vault": "omitted"；带了但无效或过期整个请求被拒（vault_locked / vault_relock）；
+//     带了有效的：隐私记行只放密文列（R-184 选 a）；vault-images、vault-files 两个桶不进导出（export: none）。
+//     清单 exportOmitCols 里的列不进包（devices 的推送订阅密钥和会话 id）。
 // 错误码以 shared/schema/account.ts 的 accountErrorCode 为准（0.38 第 48 条），另有各函数共用的 bad_request、method_not_allowed。
 // 日志只记错误码（A23）：不打印请求头、请求体、邮箱、JWT、vault_token。响应体不打印（导出内容）。
 // 版本门：account 在免查名单里（0.38 第 47 条：只免 POST），函数里不查 X-App-Version。
 //
 // 文件拆分（ACCOUNT-sugg ①，max-lines）：common.ts 放共用的常量、类型、响应和计数键、发信小工具；status.ts 放 status；
-//   export.ts 放 export（挑表、翻页、gzip、通知）。这里留入口、delete、restore，并把三个文件的导出原样转出——
+//   export.ts 放 export 的 start 和挑表、隐私记过滤、通知；export-part.ts 放 part（游标、翻页、gzip）。这里留入口、delete、restore，并把三个文件的导出原样转出——
 //   index.ts、测试照旧只从 core.ts 引用。
 
 import { deletionRequestedMail, restoredMail } from '../_shared/account-mail.ts';
 import { ACCOUNT_DAILY_LIMIT, type ActiveUser, DAY_S, DbError, type Deps, err, json, keys, mailLater } from './common.ts';
-import { exportData } from './export.ts';
+import { partExport } from './export-part.ts';
+import { startExport } from './export.ts';
 import { status, statusDisabled } from './status.ts';
 
 export * from './common.ts';
 export * from './export.ts';
+export * from './export-part.ts';
 export * from './status.ts';
 
 // ---------------- 常量（出处见行尾） ----------------
@@ -153,7 +160,10 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     if (action === 'status') return status(auth.user);
     if (action === 'delete') return await del(body, auth.user, deps);
     if (action === 'restore') return await restore(auth.user, deps);
-    return await exportData(req, body, auth.user, deps);
+    // export 分两步（0.47 续 ①）：start 建任务、part 取一片；没写 step 或写错一律 bad_request
+    if (body.step === 'start') return await startExport(req, body, auth.user, deps);
+    if (body.step === 'part') return await partExport(req, body, auth.user, deps);
+    return err(400, 'bad_request');
   } catch {
     // 错误对象可能带连接信息、SQL，不打印
     deps.log?.('db_error');

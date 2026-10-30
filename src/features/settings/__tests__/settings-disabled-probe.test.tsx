@@ -109,7 +109,7 @@ describe('设备列表、改语言同一时刻只探测一次（第六轮审查�
 
 describe('导出（account-api）收到 account_disabled', () => {
   it('探测说账号正常：不离开，照常显示这次的错误；探测带 fallback disabled', async () => {
-    const account = fakeAccount({ exportAll: vi.fn(async () => ({ ok: false as const, error: 'account_disabled' as const, sid: 's-me' })) });
+    const account = fakeAccount({ startExport: vi.fn(async () => ({ ok: false as const, error: 'account_disabled' as const, sid: 's-me' })) });
     const resolveDisabled = vi.fn(async () => 'active' as const);
     const { leave } = setup({ account, resolveDisabled });
     await act(async () => {
@@ -124,7 +124,7 @@ describe('导出（account-api）收到 account_disabled', () => {
   });
 
   it('探测出冷静期：按冷静期离开（不再一律说“已停用”）', async () => {
-    const account = fakeAccount({ exportAll: vi.fn(async () => ({ ok: false as const, error: 'account_disabled' as const, sid: 's-me' })) });
+    const account = fakeAccount({ startExport: vi.fn(async () => ({ ok: false as const, error: 'account_disabled' as const, sid: 's-me' })) });
     const { leave } = setup({ account, resolveDisabled: async () => 'pending_deletion' });
     await act(async () => {
       fireEvent.click(exportBtn());
@@ -160,7 +160,7 @@ describe('导出（account-api）收到 account_disabled', () => {
   });
 
   it('探测抛错：导出按钮不停在“忙”，照常显示通用错误', async () => {
-    const account = fakeAccount({ exportAll: vi.fn(async () => ({ ok: false as const, error: 'account_disabled' as const, sid: 's-me' })) });
+    const account = fakeAccount({ startExport: vi.fn(async () => ({ ok: false as const, error: 'account_disabled' as const, sid: 's-me' })) });
     const { leave } = setup({ account, resolveDisabled: () => Promise.reject(new Error('probe boom')) });
     await act(async () => {
       fireEvent.click(exportBtn());

@@ -8,7 +8,8 @@
 //   • 登录：admin 接口建用户（不设密码）→ generateLink 取 magiclink 的 token_hash → verifyOtp 换真 JWT（不发信、不占发信额度）。
 // 覆盖接手清单 ①～⑤：
 //   ① PostgREST 的 or 过滤串在真库筛出的行对：没认领、认领超过 1 小时的删，认领 10 分钟的、没到期的不动；
-//   ② readPage 按主键往后翻页：2500 行（跨三页）、正好 2000 行（两整页）、数字主键的 logs，都不漏不重、顺序和库里一致；
+//   ② account export 两步（start → part → done，account-export-cases.ts）：readPage 按主键往后翻页（2500 行、正好 2000 行、数字主键的 logs）
+//      不漏不重；四个计数和 logs 两条；真 rpc 返回形状；预检锁被占时 try_later；冷静期 start、part 都被拦；
 //   ③ deleted_accounts 的 upsert ignoreDuplicates 不覆盖已有行；
 //   ④ deleteUser 以后 profiles、pending_deletions 为 0 行，函数判 purged；导出的 makeStore 直接测 remainingRows（没删的 2、随机 uuid 0）；
 //   ⑤ TC-B1-108 ② 竞态：两个真连接——一个事务里 account_restore 持 for update 锁，认领 update 经 PostgREST 等锁（pg_blocking_pids 为证），
@@ -23,6 +24,7 @@
 import {
   assert, one, assertEquals, sleep, EMAIL_LIKE, BACKUP_DATE, START, mails, fakeS3, s3Server, s3Put, s3Has, purgeMod, sql, admin, ours, emails, writeLedger, purgeTraces, healLeftovers, mkUser, pending, runPurge, callAccount, userExists, today, counter, jwtOf, releaseLock,
 } from './harness.ts';
+import { registerExportTests } from './account-export-cases.ts';
 
 const opts = { sanitizeOps: false, sanitizeResources: false };
 
@@ -104,48 +106,8 @@ Deno.test({ name: '①③④ account-purge 真 store：or 过滤选对人；R2�
   }
 } });
 
-Deno.test({ name: '② account export 真 store：readPage 按主键往后翻页——2500 行、正好 2000 行、数字主键的 logs，都不漏不重', ...opts, async fn() {
-  const e = await mkUser('export');
-  const other = await mkUser('other');
-  await sql`insert into public.todos (id, user_id, title, created_at, updated_at)
-    select gen_random_uuid(), ${e}, 't' || g, 1, 1 from generate_series(1, 2500) g`;
-  await sql`insert into public.todos (id, user_id, title, created_at, updated_at) values (gen_random_uuid(), ${other}, 'not-mine', 1, 1)`;
-  await sql`insert into public.settings (id, user_id, key, value) select gen_random_uuid(), ${e}, 'k' || g, '1'::jsonb from generate_series(1, 2000) g`;
-  await sql`insert into public.logs (user_id, t, kind, act, src) select ${e}, g, 'run', 'x', 'store-it' from generate_series(1, 2300) g`;
-  // 期望顺序按列本身的类型排（和 readPage 的 gt、order 一致）：输出列别名不能叫 id——
-  //   Postgres 的 order by 裸名字先认输出列，`select id::text … order by id` 会按文本排（logs 的 1、10、100 排在 2 前面）
-  const ids = async (table: 'todos' | 'settings') =>
-    (await sql<{ k: string }[]>`select id::text as k from ${sql(table)} where user_id = ${e} order by id`).map((r) => r.k);
-  const wantTodos = await ids('todos');
-  const wantSettings = await ids('settings');
-  const r = await callAccount(await jwtOf(e), { action: 'export' });
-  assertEquals(r.status, 200, JSON.stringify(r.json));
-  const doc = JSON.parse(await new Response(r.res.body?.pipeThrough(new DecompressionStream('gzip'))).text()) as {
-    tables: Record<string, { id: string | number; user_id: string }[]>;
-  };
-  const got = (t: string) => (doc.tables[t] ?? []).map((x) => x.id);
-  assertEquals(got('todos').length, 2500);
-  assertEquals(got('todos'), wantTodos, 'todos（跨三页）顺序或内容不对');
-  assertEquals(got('settings').length, 2000);
-  assertEquals(got('settings'), wantSettings, 'settings（正好两整页）顺序或内容不对');
-  // 导出通知（第 96 条依赖的安全手段）真发出去了：响应之后后台发信，轮询 Resend 替身收到 e 的邮箱（最多 5 秒），
-  //   且没有 export_mail_failed（发信失败才写那一条）
-  const mailTo = emails.get(e) ?? '?';
-  for (let i = 0; i < 50 && !mails.includes(mailTo); i++) await sleep(100);
-  assert(mails.includes(mailTo), '5 秒内没有给导出的人发通知信');
-  await sleep(200);   // 让后台那段跑完（发信成功就不写日志）
-  assertEquals((await sql`select 1 from public.logs where user_id = ${e} and act = 'export_mail_failed'`).length, 0, '导出通知发信失败');
-  // logs：bigserial 主键，PostgREST 回数字；2300 条加导出前先写的那一条（act = export）
-  const wantLogs = (await sql<{ k: string }[]>`select id::text as k from public.logs where user_id = ${e} order by id`).map((x) => Number(x.k));
-  // 防退化：期望和导出都必须按数字严格递增（游标 gt 按 bigint 比，排序也得按 bigint；按文本排会在 9→10 这类位数变化处漏行或重复）
-  const ascending = (a: unknown[]) => a.every((x, i) => i === 0 || (a[i - 1] as number) < (x as number));
-  assert(ascending(wantLogs), 'logs 期望顺序不是按数字升序（别名又叫 id 了？）');
-  assert(ascending(got('logs')), 'logs 导出顺序不是按数字升序');
-  assertEquals(got('logs').length, wantLogs.length);
-  assertEquals(got('logs'), wantLogs, 'logs（数字主键）顺序或内容不对');
-  assert(got('logs').every((x) => typeof x === 'number'), 'logs 的 id 不是数字');
-  assert(Object.values(doc.tables).flat().every((x) => x.user_id === e), '包里有别人的行');
-} });
+// ② account export 两步协议（start → part）：用例在 account-export-cases.ts，排在“开跑”清残留之后注册
+registerExportTests({ ...opts });
 
 Deno.test({ name: '⑤ TC-B1-108 ② 真库竞态：restore 持 for update 锁，认领 update 等锁，restore 提交后认领 0 行', ...opts, async fn() {
   const r = await mkUser('race');
@@ -284,11 +246,13 @@ Deno.test({ name: 'account 真 store：refundRate 在真 counters 上比较并�
     const jwt = await jwtOf(f);
     const acc = `account:${f}:${today()}`, ref = `export-refund:${f}:${today()}`;
     for (let i = 1; i <= 3; i++) {
-      const r = await callAccount(jwt, { action: 'export' });
+      const r = await callAccount(jwt, { action: 'export', step: 'start' });
       assertEquals([r.status, r.json], [503, { error: 'try_later' }]);
       assertEquals([await counter(acc), await counter(ref)], [0, i], `第 ${i} 次：导出计数没退回到 0`);
+      // N2：写 logs 失败退回时，本次已建的任务行也删掉了（真库上 delete … where key = 键）
+      assertEquals((await sql`select 1 from private.counters where key like ${`export-job:${f}:%`}`).length, 0, `第 ${i} 次：任务行没删掉`);
     }
-    const r4 = await callAccount(jwt, { action: 'export' });
+    const r4 = await callAccount(jwt, { action: 'export', step: 'start' });
     assertEquals(r4.status, 503);
     assertEquals([await counter(acc), await counter(ref)], [1, 4], '第 4 次应该照常扣');
   } finally {

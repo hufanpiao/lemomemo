@@ -9,3 +9,6 @@ export const a6 = Deno.\u0065nv.toObject();
 const D = Deno; export const a7 = D.env.toObject();
 export const a8 = (globalThis as Record<string, { env: { toObject(): unknown } }>)['De' + 'no'];
 export const a9 = Deno.env.get('X'.concat('Y'));
+export const m1 = Deno.memoryUsage();
+export const m2 = Deno.memoryUsage;
+export const m3 = Deno.memoryUsage(1);

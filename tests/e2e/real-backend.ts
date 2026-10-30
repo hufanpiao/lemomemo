@@ -102,6 +102,18 @@ async function admin(path: string, init: { method: string; body?: unknown; prefe
   return fetch(url, { method: init.method, headers, ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }) });
 }
 
+/**
+ * 用 service role 往 lemo-e2e 的 public 表直接插合成数据（造数；10-31 导出分片 E2E 加）：按 batch 条一批 POST，不回行。
+ * 表名只收小写字母和下划线；出错只报状态码和错误码
+ */
+export async function adminInsert(table: string, rows: readonly Record<string, unknown>[], batch = 50): Promise<void> {
+  if (!/^[a-z_]+$/.test(table)) throw new Error(`表名不认：${table}`);
+  for (let i = 0; i < rows.length; i += batch) {
+    const r = await admin(`/rest/v1/${table}`, { method: 'POST', body: rows.slice(i, i + batch), prefer: 'return=minimal' });
+    if (r.status !== 201) throw new Error(await failMsg(`往 ${table} 造数`, r));
+  }
+}
+
 /** 出错时只报状态码和服务器的错误码字段，不带响应全文（免得把令牌、链接带进日志） */
 async function failMsg(what: string, r: Response): Promise<string> {
   let code = '';
@@ -293,6 +305,7 @@ export async function fnInPage(page: Page, fn: string, body: unknown, opts: { ve
       });
       const contentType = r.headers.get('content-type') ?? '';
       if (contentType.startsWith('application/gzip')) {
+        // DecompressionStream 只解单个 gzip 成员，只适用单片（导出分片后多片拼成的多成员 gzip 只会解出第一段）
         const text = await new Response(r.body?.pipeThrough(new DecompressionStream('gzip')) ?? null).text();
         const all = JSON.parse(text) as Record<string, unknown>;
         return { status: r.status, contentType, json: null, exportHead: { format: all['format'], version: all['version'], user_id: all['user_id'], vault: all['vault'] } };

@@ -20,7 +20,7 @@ select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', 
   insert into public.note_images (id, note_id, bucket, path, bytes) values ('1e000000-0000-4000-8000-00000000000a', '40000000-0000-4000-8000-00000000000a', 'images',
     'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-00000000000a/1e000000-0000-4000-8000-00000000000a.webp', 100);
   insert into public.note_files (id, note_id, kind, path, name, mime, bytes, sha256, created_at, updated_at) values ('f0000000-0000-4000-8000-00000000000a', '40000000-0000-4000-8000-00000000000a', 'pdf',
-    'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-00000000000a/f0000000-0000-4000-8000-00000000000a.pdf', 'a.pdf', 'application/pdf', 100, 'x', 1, 1);
+    'aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-00000000000a/f0000000-0000-4000-8000-00000000000a.pdf', 'a.pdf', 'application/pdf', 100, repeat('0', 64), 1, 1);
 $$), 'ok', 'A 能给自己的随手记加图片和附件');
 select is(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$
   insert into public.devices (id, platform) values ('de000000-0000-4000-8000-00000000000a', 'web')$$,

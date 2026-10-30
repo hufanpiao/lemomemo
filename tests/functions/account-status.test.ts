@@ -46,7 +46,7 @@ describe('account status（登录页判断要不要显示恢复页；10-30 架�
     expect(box).toEqual([]);
     expect(db.pending.has(A)).toBe(true);
     // 别的动作照旧被拦（只有 restore、status 放行）
-    const e = await call(db, box, { action: 'export' }, { session: 'aaaaaaaa-s9' });
+    const e = await call(db, box, { action: 'export', step: 'start' }, { session: 'aaaaaaaa-s9' });
     expect(await e.json()).toMatchObject({ error: 'account_pending_deletion' });
   });
 
@@ -90,8 +90,8 @@ describe('account status（登录页判断要不要显示恢复页；10-30 架�
     const { db, box } = setup();
     for (let i = 0; i < 10; i++) expect((await statusOf(db, box)).status).toBe(200);
     expect(db.counters.size).toBe(0);
-    for (let i = 0; i < ACCOUNT_DAILY_LIMIT; i++) expect((await call(db, box, { action: 'export' })).status).toBe(200);
-    expect((await call(db, box, { action: 'export' })).status).toBe(429);
+    for (let i = 0; i < ACCOUNT_DAILY_LIMIT; i++) expect((await call(db, box, { action: 'export', step: 'start' })).status).toBe(200);
+    expect((await call(db, box, { action: 'export', step: 'start' })).status).toBe(429);
     expect(db.logs.map((l) => l.act)).toEqual(['export', 'export', 'export']);   // status 一条都没写
   });
 

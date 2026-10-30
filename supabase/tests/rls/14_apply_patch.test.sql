@@ -147,7 +147,7 @@ insert into public.note_images (id, user_id, note_id, bucket, path, bytes) value
 insert into public.note_files (id, user_id, note_id, kind, path, is_vault, name, mime, bytes, sha256, name_enc, dek_enc, enc_key_id, created_at, updated_at) values
   ('a2000000-0000-4000-8000-0000000000f1', 'aaaaaaaa-0000-4000-8000-000000000001', 'a0000000-0000-4000-8000-0000000000f1', 'pdf',
    'aaaaaaaa-0000-4000-8000-000000000001/a0000000-0000-4000-8000-0000000000f1/a2000000-0000-4000-8000-0000000000f1.pdf', true, null,
-   'application/pdf', 10, 'hmac', '\x01', '\x02', 1, 0, 0);
+   'application/pdf', 10, repeat('0', 64), '\x01', '\x02', 1, 0, 0);
 select is(tests.ap('aaaaaaaa-0000-4000-8000-000000000001', 'note_images', 'a1000000-0000-4000-8000-0000000000f1', '{"deleted_at": 1}', 1, 'a0c00000-0000-4000-8000-000000000001') ->> 'status',
   'not_found', 'not_found：本人的隐私记图片行（bucket = vault-images）不能经 apply_patch 软删');
 select is(tests.ap('aaaaaaaa-0000-4000-8000-000000000001', 'note_files', 'a2000000-0000-4000-8000-0000000000f1', '{"deleted_at": 1}', 1, 'a0c00000-0000-4000-8000-000000000002') ->> 'status',

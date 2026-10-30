@@ -100,6 +100,8 @@ const NOT_HEAVY: Readonly<Record<string, string>> = {
   'tests/build/e2e-real-backend.test.ts': '只用 tools/e2e/real-backend.mjs 的护栏、config 改写等纯函数，不起子进程（文件头写明）',
   'tests/build/e2e-real-backend-bypass.test.ts': '只用 tools/e2e/real-backend.mjs 的 checkGuard、rewriteConfig 等纯函数，不起子进程',
   'tests/build/e2e-real-backend-env.test.ts': '只用 tools/e2e/real-backend.mjs 的 pickEnv、functionsEnvText 等纯函数，不起子进程',
+  // export-load-preview.mjs 只在 --rehearse-local 且没注入 target 时才动态 import real-backend.mjs（statusEnv 起 supabase CLI）
+  'tests/build/export-load-preview-run.test.ts': '只调 export-load-preview.mjs 的 run()：一律注入 target（或走预览模式没设密钥的分支），不调 statusEnv、不起子进程',
 };
 
 /** 会起子进程的导出（模块路径相对仓库根）：NOT_HEAVY 里的文件和它引的 tests/ 辅助模块都不许导入，也不许整体导入这些模块 */

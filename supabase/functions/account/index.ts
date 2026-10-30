@@ -3,6 +3,8 @@
 // status 只用 requireActiveUser（冷静期放行，不碰 store）；其余经 supabase-js（service role）：rpc private.account_request_deletion / account_restore / take_rate（20261029150000、20261029130000），
 //   读 private.admins、public.profiles、public.devices，写 public.logs，读 export: json 的 public 表；
 //   导出失败时退回当天的一次：读、改 private.counters（比较并交换）；Auth 管理接口 getUserById。
+//   导出分片（0.47 续 ①）：rpc private.export_size_over / export_job_start / export_job_take（20261031100000）；
+//   读 counters（预检前只读查当天次数）、删 counters 的任务行（start 退回时，N2）。
 // restore、delete 用 service role 调 definer 函数（0.38 第 45 条），不用 fn_vault。
 // 现在不直连数据库、不碰 R2（第 6 节名单里 account 可以用 fn_vault 和 R2，B5 接隐私记导出时再看要不要）。
 // 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY（平台自带）；RESEND_API_KEY、PROXY_SECRET（8.4）。
@@ -11,8 +13,9 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 import { AuthError, requireActiveUser } from '../_shared/auth.ts';
 import { allManifests } from '../_shared/gen/manifests/index.ts';
 import { ACCOUNT_ERROR_CODES } from '../_shared/gen/schema/account.ts';
-import type { Mail } from '../_shared/account-mail.ts';
-import { ACCOUNT_ERRS, DbError, exportTablesOf, handle, type AccountStore } from './core.ts';
+import { skipTestRecipients, type Mail } from '../_shared/account-mail.ts';
+import { ACCOUNT_ERRS, DbError, exportTablesOf, handle, memProbeFor, type AccountStore } from './core.ts';
+import { NO_STORE } from './common.ts';
 
 const RESEND_URL = 'https://api.resend.com/emails';
 const MAIL_FROM = '柠檬记 <noreply@lemomemo.com>';   // 5.6：发件人 noreply@lemomemo.com（和 invite-signup 同一个）
@@ -55,6 +58,44 @@ function makeStore(admin: Admin): AccountStore {
       }
       throw new Error('refund_contended');
     },
+    async peekRate(key) {
+      // 只读：这个键最新窗口的 count（start 预检前查当天导出次数，0.47 第 19 条 Q1）
+      const row = must(await priv.from('counters').select('count').eq('key', key).order('window_start', { ascending: false }).limit(1)
+        .maybeSingle()) as { count: number } | null;
+      if (row !== null && typeof row.count !== 'number') throw new Error('db');
+      return row?.count ?? 0;
+    },
+    async deleteCounterKey(key) {
+      must(await priv.from('counters').delete().eq('key', key));
+    },
+    async exportSizeOver(userId, mode, limit, budgetMs) {
+      const data = must(await priv.rpc('export_size_over', { p_user: userId, p_mode: mode, p_limit: limit, p_budget_ms: budgetMs }));
+      if (typeof data !== 'number' || !Number.isSafeInteger(data)) throw new Error('db');
+      return data;
+    },
+    async exportJobStart(userId, exportId, mode, sessionId) {
+      const { data, error } = await priv.rpc('export_job_start', { p_user: userId, p_export_id: exportId, p_mode: mode, p_session: sessionId });
+      if (error) {
+        // 同名任务行已存在（迁移里 raise 'export_job_exists' using errcode 23505）：单独报出来，export.ts 的 fail() 不删那一行（TC-B1-138 ⑥）
+        const e = error as { code?: unknown; message?: unknown };
+        if (e.code === '23505' || e.message === 'export_job_exists') throw new DbError('export_job_exists');
+        throw new Error('db');
+      }
+      if (typeof data !== 'string') throw new Error('db');
+      return data;
+    },
+    async exportJobTake(userId, exportId, mode, sessionId, maxParts, ttlS) {
+      const rows = must(await priv.rpc('export_job_take', {
+        p_user: userId, p_export_id: exportId, p_mode: mode, p_session: sessionId, p_max: maxParts, p_ttl_s: ttlS,
+      })) as unknown;
+      const row = Array.isArray(rows) && rows.length === 1 ? (rows[0] as { verdict?: unknown; started_at?: unknown; parts?: unknown }) : null;
+      if (!row || (row.verdict !== 'ok' && row.verdict !== 'expired' && row.verdict !== 'too_many')) throw new Error('db');
+      return {
+        verdict: row.verdict,
+        startedAt: typeof row.started_at === 'string' ? row.started_at : null,
+        parts: typeof row.parts === 'number' ? row.parts : null,
+      };
+    },
     async requestDeletion(userId) {
       const { data, error } = await priv.rpc('account_request_deletion', { p_user: userId });
       if (error) {
@@ -79,6 +120,11 @@ function makeStore(admin: Admin): AccountStore {
     },
     async insertLog(userId, row) {
       must(await admin.from('logs').insert({ user_id: userId, ...row }));
+    },
+    async exportDoneLogged(userId, exportId) {
+      const rows = must(await admin.from('logs').select('id').eq('user_id', userId).eq('src', 'account').eq('act', 'export_done')
+        .eq('code', exportId).limit(1));
+      return Array.isArray(rows) && rows.length > 0;
     },
     async readPage(table, keyCol, userId, after, limit) {
       // 按主键往后翻页（gt），不用 offset；keyCol 由 core.ts 的 exportTablesOf 给（profiles 是 user_id，其余是 id）
@@ -120,6 +166,17 @@ function background(p: Promise<unknown>): void {
 }
 
 const log = (code: string) => console.error(`account: ${code}`);
+// 导出内存探针：EXPORT_MEM_PROBE=1 且本机才开；线上误设只在模块加载时记一次 mem_probe_ignored（安全审查 K1）
+const memProbe = memProbeFor(Deno.env.get('EXPORT_MEM_PROBE'), Deno.env.get('SUPABASE_URL'), () => {
+  const m = Deno.memoryUsage();
+  return { heap: m.heapUsed, total: m.heapUsed + m.external };
+}, log);
+
+/** 函数日志里认人用的 user_id 哈希（sha256 前 16 位十六进制，0.47 第 19 条 Q4）：日志里不出现 user_id 原文 */
+async function userHash(userId: string): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(userId)));
+  return [...d.slice(0, 8)].map((x) => x.toString(16).padStart(2, '0')).join('');
+}
 const EXPORT_TABLES = exportTablesOf(allManifests);
 // 错误码以 shared/schema/account.ts 为准（0.38 第 48 条）；core.ts 自己那份对不上就记日志（单测已核对，这里防生成目录过期）
 //   整串比较、不按下标取：CI 的 unit 任务跑 check_backend 前不生成 gen/，类型推不出来时 F7 不认回调参数当下标（错误码里没有逗号）
@@ -131,7 +188,7 @@ Deno.serve((req) => {
   const resendKey = Deno.env.get('RESEND_API_KEY');
   if (!url || !key || !resendKey) {
     log('misconfigured');
-    return new Response(JSON.stringify({ error: 'misconfigured' }), { status: 500, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify({ error: 'misconfigured' }), { status: 500, headers: { 'content-type': 'application/json', ...NO_STORE } });
   }
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   return handle(req, {
@@ -149,11 +206,13 @@ Deno.serve((req) => {
       if (error) throw new Error('auth');
       return data.user?.email ?? null;
     },
-    sendMail: (to, mail) => sendMail(resendKey, to, mail),
+    sendMail: skipTestRecipients((to, mail) => sendMail(resendKey, to, mail), log),   // @lemomemo.test 不真发（安全审查 D1）
     // 隐私记的令牌（vault_token）由 B5 的 vault 函数签发、_shared/vault-token.ts 验（6.2 A2）；B1 还没有这两样，
     // 所以现在没有任何有效令牌：带了令牌的导出一律回 vault_locked（不静默少一块），B5 接上 verifyVaultToken。
     verifyVaultToken: async () => 'vault_locked',
     exportTables: EXPORT_TABLES,
+    userHash,
+    memProbe,
     proxySecret: Deno.env.get('PROXY_SECRET'),
     background,
     now: Date.now,

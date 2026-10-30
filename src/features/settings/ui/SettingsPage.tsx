@@ -9,6 +9,7 @@ import { goBack, hrefOf, navigate, replaceRoute, useRoute } from '../../../app/r
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { orderSections, useSettingsPage, type ExitNotice, type SettingsDeps, type SettingsSectionId } from '../hooks/useSettingsPage.ts';
+import { useExport } from '../hooks/useExport.ts';
 import { useRecentExport } from '../hooks/useRecentExport.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
 import { AccountSection } from './AccountSection.tsx';
@@ -130,6 +131,9 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
     else setAsk({ n, from });
   };
   const bumpExport = useCallback(() => setExportTick((n) => n + 1), []);
+  /** 导出任务挂在整页上（不挂在 DataSection）：进注销页再回来，取片照常进行、中断的仍能“继续”（前端审查建议 1）。
+   *  仍只在内存；离开设置页（整页卸载）就没了，回来只能重新导出 */
+  const exportTask = useExport(account, bumpExport);
   const sections: Partial<Record<SettingsSectionId, ReactNode>> = {
     account: (
       <AccountSection
@@ -141,7 +145,7 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
       />
     ),
     language: <LanguageSection locale={locale} />,
-    data: <DataSection account={account} onExported={bumpExport} />,
+    data: <DataSection task={exportTask} />,
   };
   return (
     <main className={styles.page} data-feature="settings" aria-busy={devices.busy !== null}>

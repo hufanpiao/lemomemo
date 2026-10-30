@@ -240,6 +240,18 @@
   margin-top: 8px;
 }
 
+/* 导出中断后的“继续”“取消”（0.47 续 ④ 第 4 点）：跟着上面的说明左对齐，不是弹窗底部那种靠右 */
+.exportActions {
+  display: flex;
+  gap: 10px;
+  margin: 8px 4px 0;
+}
+
+/* “已取回 N MB”的数字等宽：一片一变时整行不左右跳（不加动效，见 DataSection.tsx 文件头） */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
 /* R-276（负责人 10-30）：和弹窗里的“取消”（.btn）一样看得见 38，点击区由上面的 ::after 扩到 44；
    本模块的 .primary 只在设置里用：确认弹窗、离开本机的提示框、注销页的提交按钮 */
 .primary {

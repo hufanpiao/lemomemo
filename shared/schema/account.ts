@@ -15,7 +15,9 @@ export const ACCOUNT_ERROR_CODES = [
   'account_pending_deletion',  // 403  冷静期里调 restore 以外的动作
   'vault_locked',              // 401  export 带的 vault_token 无效、为空或过期
   'vault_relock',              // 401  export 带的 vault_token 的 pin_epoch 过时
-  'try_later',                 // 503  数据库、写日志等暂时不通
+  'try_later',                 // 503  数据库、写日志等暂时不通；导出大小预检超时或忙
+  'export_expired',            // 410  export part：任务不存在、过期（开始满 1 小时）、别的会话、别的用户、模式不一致（0.47 续 ①）
+  'export_too_large',          // 413  export start：大小预检超 480 MB；part：超过一个任务的分片上限 36（0.47 第 18 条）
 ] as const;
 
 export const accountErrorCode = z.enum(ACCOUNT_ERROR_CODES);

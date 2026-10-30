@@ -89,6 +89,8 @@ export const E2E_FUNCTIONS_ENV = {
   http_proxy: E2E_FN_PROXY,
   NO_PROXY: E2E_FN_NO_PROXY,
   no_proxy: E2E_FN_NO_PROXY,
+  // 导出内存探针（架构 0.47 第 21 条）：account 只在 envKind 判定为本机时才认它
+  EXPORT_MEM_PROBE: '1',
 };
 /**
  * 写成 env 文件：一行一个 KEY=VALUE，值不带引号（上面的值里都没有空格、引号、#；NO_PROXY 用逗号分隔）

@@ -3,9 +3,9 @@
 -- 10-29 补安全补审建议（接手清单 SEC-210000-sugg ①②③⑤⑥）：upsert 撞已有行写 deleted_at、definer 帮手测 guard 的 INSERT 分支、
 --   抛错后向量和队列还在、相似 key 对照、一次性修正对脏行的效果；④ 在 16_consent_null_ver.test.sql
 -- 10-30 R-271（SEC-210000-sugg ⑧，迁移 20261030120000_core_settings_quota_ai_keys.sql）：settings 满 2 万行时撤回、同意照样成功（四种撤回情况），
---   ai.foo、ui.theme、大小写不同的 AI.enabled 满额照样报 quota；plan 59 → 77
+--   ai.foo、ui.theme、大小写不同的 AI.enabled 满额照样报 quota；plan 59 → 77；10-31 settings_key_fmt 加一条被拒 → 78
 begin;
-select plan(77);
+select plan(78);
 \ir _helpers.psql
 select tests.seed();   -- A、B 正常，C 停用
 -- D：有账号、有会话，但没有 profile 行；E：有 profile，用来模拟“检查之后、update 之前 profile 被改掉”
@@ -73,13 +73,19 @@ select is(tests.a($$update public.settings set deleted_at = 1 where id = '5f0000
   '对照：别的键（ui.font）照常能软删，guard 没有挡多');
 select is(tests.a($$update public.settings set undone = true where id = '5f000000-0000-4000-8000-000000000003'$$), 'ok',
   '对照：别的键照常能写 undone');
--- SEC-210000-sugg ⑤：guard 和 consent.ts 都只认精确的 key。大小写不同（AI.vault）、末尾带空格（'ai.vault '）是别的键：
---   guard 不挡（能写 true、能软删、能撤销），consent.ts 按 .in('key', ['ai.enabled', 'ai.vault']) 精确匹配也读不到它们
+-- SEC-210000-sugg ⑤：guard 和 consent.ts 都只认精确的 key。
+--   10-31 起 settings_key_fmt（迁移 20261031110000，架构 0.47 第 20 条补）只收小写点分的键：大小写不同（AI.vault）、末尾带空格（'ai.vault '）直接被拒
+select is(left(tests.a($$insert into public.settings (id, key, value) values ('5e000000-0000-4000-8000-0000000000e1', 'AI.vault', 'true')$$), 5)
+       || '|' || left(tests.a($$insert into public.settings (id, key, value) values ('5e000000-0000-4000-8000-0000000000e2', 'ai.vault ', 'true')$$), 5)
+       || '|' || left(tests.a($$insert into public.settings (id, key, value) values ('5e000000-0000-4000-8000-0000000000e3', 'AI.ENABLED', 'true')$$), 5),
+  '23514|23514|23514', 'settings_key_fmt：key 写成 AI.vault、''ai.vault ''（末尾带空格）、AI.ENABLED 都被拒（23514）');
+--   格式合规、但不是精确 ai.vault / ai.enabled 的键是别的键：guard 不挡（能写 true、能软删、能撤销），
+--   consent.ts 按 .in('key', ['ai.enabled', 'ai.vault']) 精确匹配也读不到它们
 select is(tests.a($$insert into public.settings (id, key, value) values
-  ('5e000000-0000-4000-8000-000000000001', 'AI.vault', 'true'),
-  ('5e000000-0000-4000-8000-000000000002', 'ai.vault ', 'true'),
-  ('5e000000-0000-4000-8000-000000000003', 'AI.ENABLED', 'true')$$), 'ok',
-  '对照：key 写成 AI.vault、''ai.vault ''（末尾带空格）、AI.ENABLED，值为 true 也能写入（不是 ai.vault，guard 和布尔约束都不管）');
+  ('5e000000-0000-4000-8000-000000000001', 'ai.vault_old', 'true'),
+  ('5e000000-0000-4000-8000-000000000002', 'ai.vault-x', 'true'),
+  ('5e000000-0000-4000-8000-000000000003', 'ai.enabled2', 'true')$$), 'ok',
+  '对照：key 写成 ai.vault_old、ai.vault-x、ai.enabled2，值为 true 也能写入（不是 ai.vault，guard 和布尔约束都不管）');
 select is(tests.a($$update public.settings set deleted_at = 1 where id in ('5e000000-0000-4000-8000-000000000001', '5e000000-0000-4000-8000-000000000003')$$)
        || '|' || tests.a($$update public.settings set undone = true where id = '5e000000-0000-4000-8000-000000000002'$$), 'ok|ok',
   '对照：这几行能软删、能撤销（guard 只认精确 key）');
