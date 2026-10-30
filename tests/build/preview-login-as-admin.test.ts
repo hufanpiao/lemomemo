@@ -151,4 +151,46 @@ describe('命令行 --as-admin', () => {
       expect(t.made()).toBe(0);
     }
   });
+
+  // 只查护栏模式（PREVIEW_LOGIN_GUARD_ONLY=1，tools/keys/login-token-tests.ps1 -Only P6 用）：不要 GITHUB_OUTPUT，绝不调 generateLink
+  const guardEnv = env({ PREVIEW_LOGIN_GUARD_ONLY: '1', GITHUB_OUTPUT: undefined, E2E_ADMIN_EMAIL: undefined });
+  it('只查护栏：真实邮箱、负责人 .test 邮箱、管理员、不存在的账号 → 退出码 1、对应错误码、打印“未签发”，不调 generateLink、不写输出', async () => {
+    const cases: [string, string][] = [
+      ['someone@gmail.com', 'not_test_email'],
+      ['owner.real@gmail.com', 'not_test_email'], // 负责人的真实邮箱先被“只认 .test”拦下
+      [OWNER_TEST, 'owner_email'],
+      [ADMIN, 'admin_email'],
+      ['e2e-nobody@lemomemo.test', 'no_such_user'],
+    ];
+    for (const [email, code] of cases) {
+      const t = io();
+      expect(await main([email], guardEnv, t.io), email).toBe(1);
+      const out = t.out.join('');
+      expect(out, email).toContain(`错误（${code}）`);
+      expect(out, email).toContain('未签发（只查护栏模式）');
+      expect(out).not.toContain(FAKE_KEY);
+      expect(out).not.toContain('email_otp');
+      expect(t.f.calls.generate).toEqual([]);
+      expect(t.f.calls.insert).toEqual([]);
+      expect(t.appended).toEqual([]);
+    }
+  });
+
+  it('只查护栏：护栏全过也不签发，退出码 3；不和 --admin、--as-admin 一起用（不建客户端）；不设这个变量时照旧要 GITHUB_OUTPUT', async () => {
+    const t = io();
+    expect(await main(['e2e-1@lemomemo.test'], guardEnv, t.io)).toBe(3);
+    expect(t.out.join('')).toContain('护栏全过（只查护栏模式，未签发）');
+    expect(t.f.calls.generate).toEqual([]);
+    for (const flag of ['--admin', '--as-admin']) {
+      const u = io();
+      expect(await main([flag, ADMIN], guardEnv, u.io)).toBe(1);
+      expect(u.out.join('')).toContain('错误（bad_args）');
+      expect(u.made()).toBe(0);
+      expect(u.f.calls.insert).toEqual([]);
+    }
+    const v = io();
+    expect(await main(['e2e-1@lemomemo.test'], env({ GITHUB_OUTPUT: undefined, PREVIEW_LOGIN_GUARD_ONLY: '0' }), v.io)).toBe(1);
+    expect(v.out.join('')).toContain('错误（no_output）');
+    expect(v.out.join('')).not.toContain('未签发（只查护栏模式）');
+  });
 });

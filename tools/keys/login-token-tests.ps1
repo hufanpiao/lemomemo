@@ -43,6 +43,17 @@
                                和用户 id 后再显示；超时就连同子进程树一起结束（taskkill /T /F）。
                                注意：sb-forward.preview.test.ts 会经 API 往测试账号的 settings 写行：「写一条再读回」那条测完软删；
                                realtime 那条写的 e2e.realtime.<时间戳> 也在 finally 里软删（只改 deleted_at）。
+    P6（只在 -Only 里点名才跑）B1 预览验收清单 P6 剩下的反例：在本机用 node 跑 tools/e2e/preview-login.ts 的「只查护栏模式」
+                               （环境变量 PREVIEW_LOGIN_GUARD_ONLY=1：只跑护栏，绝不调 generateLink、不建号、不写库）。
+                               预览项目的 service key 由负责人本人粘贴（屏幕不显示），只放进子进程的环境变量 E2E_PREVIEW_SERVICE_KEY；
+                               PREVIEW_SUPABASE_PROJECT_REF 固定 yoeqwhygehbaftkppati；PREVIEW_OWNER_EMAILS 由负责人输入自己的验收邮箱（不写进仓库）。
+                               每条都核：退出码 1、预期的错误码、打印了「未签发（只查护栏模式）」、输出里没有 key 和 email_otp：
+                                 P6-①  someone@gmail.com → not_test_email；
+                                 P6-②  负责人验收邮箱本身 → 真实邮箱总是先被 ① 的「只认 .test」拦下（not_test_email），到不了 owner_email；
+                                 P6-②b 另把 e2e-owner-probe@lemomemo.test 加进这次的 PREVIEW_OWNER_EMAILS → owner_email（证这一道）；
+                                 P6-③  管理员邮箱 → 跳过：预览 private.admins 现在 0 行，单测 preview-login.test.ts 第 67 行覆盖（不为此往预览写 admins）；
+                                 P6-④  e2e-nobody@lemomemo.test → no_such_user；跑前跑后各用 service key 查一次 auth.users 总数，必须不变（没有建号）。
+                               不登录测试账号：只跑 P6 时不发验证码、不调 verify。
     P8（可选，要 -P8Function） 实测清单 P8：调一个只调 requireActiveUser 的测试函数，中间由负责人在 SQL Editor 依次做「停用 / 注销冷静期 /
                                查会话变慢 / 吊销会话」并恢复，依次应为 200、403 account_disabled、403 account_pending_deletion（带 purge_after）、
                                503 try_later、401 session_revoked。预览上还没有这个测试函数时整项记「跳过」。
@@ -87,14 +98,19 @@
   预览上只调 requireActiveUser 的测试函数名（小写字母、数字、-）；不给则 P8 记「跳过」。
 
 .PARAMETER Only
-  只跑这几项，逗号分隔、不带空格：S1、P2、R2、TC-B1-112、P8、P5、P9（R2 = R2-9、R2-2、R2-3、R2-6 四项）。不给 = 全部。
-  只选 S1、P2、P5、P9 时不用在 SQL Editor 执行预览库检查（不用在 SQL Editor 改库；P9 会经 API 往测试账号的 settings 写行，见上）。
+  只跑这几项，逗号分隔、不带空格：S1、P2、R2、TC-B1-112、P8、P5、P9、P6（R2 = R2-9、R2-2、R2-3、R2-6 四项）。
+  不给 = 除 P6 以外的全部（P6 要粘预览 service key，只在这里点名才跑）。
+  只选 S1、P2、P5、P9、P6 时不用在 SQL Editor 执行预览库检查（不用在 SQL Editor 改库；P9 会经 API 往测试账号的 settings 写行，见上）；
+  只选 P6 时也不登录测试账号。
 
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File "D:\claude code\柠檬记APP\tools\keys\login-token-tests.ps1"
 
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File "D:\claude code\柠檬记APP\tools\keys\login-token-tests.ps1" -Only P5,P9
+
+.EXAMPLE
+  powershell -NoProfile -ExecutionPolicy Bypass -File "D:\claude code\柠檬记APP\tools\keys\login-token-tests.ps1" -Only P6
 #>
 [CmdletBinding()]
 param(
@@ -102,7 +118,7 @@ param(
     [string]$PptxPath = '',
     [ValidatePattern('\A([a-z0-9-]{1,40})?\z')][string]$P8Function = '',
     # 只跑这几项，逗号分隔（-File 运行时数组参数会被当成一个字符串，所以这里收字符串、脚本里自己拆）；不给 = 全部
-    [ValidatePattern('\A((S1|P2|R2|TC-B1-112|P8|P5|P9)(,(S1|P2|R2|TC-B1-112|P8|P5|P9))*)?\z')][string]$Only = '',
+    [ValidatePattern('\A((S1|P2|R2|TC-B1-112|P8|P5|P9|P6)(,(S1|P2|R2|TC-B1-112|P8|P5|P9|P6))*)?\z')][string]$Only = '',
     # 以下只给测试用（tests/build/login-token-tests-run.test.ts）：把接口指向本机假服务。只接受官方地址或 http://127.0.0.1:端口（\A…\z 整串匹配），
     # 本机地址还要另设环境变量 LEMO_TEST_API=1 才生效；令牌不会被发到别的主机
     [Parameter(DontShow = $true)][ValidatePattern('\A(https://yoeqwhygehbaftkppati\.supabase\.co|http://127\.0\.0\.1:\d{1,5})\z')][string]$SupabaseBase = 'https://yoeqwhygehbaftkppati.supabase.co',
@@ -112,7 +128,7 @@ param(
     [Parameter(DontShow = $true)][ValidateRange(0, 540)][int]$RefreshAfterSeconds = 420,
     # 只给测试用：P5 在令牌过期后第几秒各打一次（正式运行 10、40，逗号分隔）
     [Parameter(DontShow = $true)][ValidatePattern('\A\d{1,3}(,\d{1,3})*\z')][string]$P5Offsets = '10,40',
-    # 只给测试用：P9 用这个 .mjs 代替 vitest、playwright（本机假运行器，收到的参数第一项是 vitest 或 playwright）
+    # 只给测试用：P9、P6 用这个 .mjs 代替 vitest、playwright、preview-login（本机假运行器，收到的参数第一项是 vitest、playwright 或 preview-login）
     [Parameter(DontShow = $true)][string]$P9Runner = '',
     # 只给测试用：离 P5 第一次测量还剩多少秒以上，才在等的时候先跑 P9 的 vitest（正式运行 360：vitest 超时 300 秒再留 60 秒）
     [Parameter(DontShow = $true)][ValidateRange(0, 3600)][int]$P9SbBudget = 360
@@ -150,6 +166,9 @@ if (($P5Offsets -ne '10,40' -or $P9Runner -or $P9SbBudget -ne 360) -and $env:LEM
 # 要跑哪几项：-Only 不给就全跑
 $script:onlyIds = @($Only.Split(',') | Where-Object { $_ })
 function Want([string]$id) { return ($script:onlyIds.Count -eq 0 -or $script:onlyIds -contains $id) }
+# P6 要粘预览 service key：只有 -Only 里点名才跑；只跑 P6 时不登录测试账号
+$script:wantP6 = $script:onlyIds -contains 'P6'
+$script:needLogin = @(@('S1', 'P2', 'R2', 'TC-B1-112', 'P8', 'P5', 'P9') | Where-Object { Want $_ }).Count -gt 0
 # 这一轮里 /auth/v1/verify 最多调几次（预览项目 verify 限流：每 IP 每 5 分钟 10 次；一轮控制在 4 次以内，留出重跑的余地）
 $script:verifyMax = 4
 $script:verifyCalls = 0
@@ -676,13 +695,18 @@ function Run-Node([string]$kind, [string[]]$nodeArgs, [hashtable]$envs, [int]$ti
         try { $proc.Kill() } catch { }
     }
     $proc.WaitForExit()
-    $text = Hide-Secrets ([string]$o.Result + "`n" + [string]$e.Result)
+    $rawAll = [string]$o.Result + "`n" + [string]$e.Result
+    # 遮之前先查：子进程原样打印了内存里的秘密（key、令牌、负责人邮箱…）或 email_otp、::add-mask::（签发了验证码）
+    $leak = @($script:secretVals | Where-Object { $_ -and $rawAll.Contains($_) }).Count -gt 0
+    $otpSeen = $rawAll -match '(?i)email_otp|::add-mask::'
+    $text = Hide-Secrets $rawAll
+    $rawAll = $null
     # 再兜一层：任何 JWT 样式的串都遮住（子进程可能打印别的令牌）；用户 id 不分大小写替换
     $text = [regex]::Replace($text, 'eyJ[\w-]{10,}(\.[\w-]+){0,2}', '***')
     if ($script:uid) { $text = [regex]::Replace($text, [regex]::Escape($script:uid), '<测试账号>', [Text.RegularExpressions.RegexOptions]::IgnoreCase) }
     $code = $proc.ExitCode
     $proc.Dispose()
-    return [pscustomobject]@{ Code = $code; Out = $text; TimedOut = $timedOut }
+    return [pscustomobject]@{ Code = $code; Out = $text; TimedOut = $timedOut; Leak = $leak; OtpSeen = $otpSeen }
 }
 function Count-Of([string]$text, [string]$word) {
     $m = [regex]::Match($text, '(\d+)\s+' + $word)
@@ -725,6 +749,78 @@ function Run-P9Csp {
     } catch { Rec 'P9-csp' '不符合' 'csp.spec.ts 预览部分' "中途出错：$($_.Exception.Message)" }
 }
 
+# ─────────── P6：preview-login.ts 的反例（只查护栏模式；B1 验收清单 P6） ───────────
+# auth.users 的总数（GoTrue 管理端的 x-total-count）；查不了返回 $null
+function P6-UserTotal([string]$key) {
+    $h = @{ apikey = $key }
+    if ($key.StartsWith('eyJ')) { $h.Authorization = "Bearer $key" }   # 旧格式 service_role JWT 还要带 Authorization；新格式 sb_secret_ 只认 apikey
+    $r = Invoke-Http GET "$SupabaseBase/auth/v1/admin/users?page=1&per_page=1" $h $null ''
+    $t = Hdr $r 'x-total-count'
+    if ($r.Status -ne 200 -or $t -notmatch '\A\d+\z') { return [pscustomobject]@{ Total = $null; Desc = (D $r) } }
+    return [pscustomobject]@{ Total = [long]$t; Desc = (D $r) }
+}
+function Run-P6 {
+    Step 'P6：tools/e2e/preview-login.ts 的反例（只查护栏模式：不签发验证码、不建号、不写库）'
+    $key = $null; $owner = $null; $env6 = $null
+    try {
+        Say '  要用预览项目的 service key：Supabase › lemomemo-preview › Project Settings › API Keys › Secret keys（sb_secret_ 开头；旧的 service_role JWT 也行）'
+        Say '  只放进这次 node 子进程的环境变量 E2E_PREVIEW_SERVICE_KEY，不显示、不写文件、不进命令行；脚本结束时清掉'
+        $sec = Read-Host -AsSecureString '  粘贴预览项目的 service key（屏幕上不显示，粘贴后回车）'
+        Clear-Clip
+        $key = (To-Plain $sec).Trim()
+        $sec.Dispose(); $sec = $null
+        Add-Secret $key
+        if ($key -notmatch '\A(sb_secret_[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\z') {
+            Rec 'P6' '不符合' 'preview-login 反例' "service key 格式不对（收到 $($key.Length) 个字符，要 sb_secret_ 开头或 JWT），没有跑"; return
+        }
+        $owner = ([string](Read-Host '  输入你的负责人验收邮箱（就是 PREVIEW_OWNER_EMAILS 的值；只用在这次运行，不写进仓库，结果里也遮住）')).Trim().ToLowerInvariant()
+        if ($owner -notmatch '\A[^@\s,;]+@[^@\s,;]+\.[a-z]{2,}\z') { Rec 'P6' '不符合' 'preview-login 反例' "负责人验收邮箱的格式不对（收到 $($owner.Length) 个字符），没有跑"; return }
+        Add-Secret $owner
+        $u0 = P6-UserTotal $key
+        if ($null -eq $u0.Total) { Rec 'P6' '不符合' 'preview-login 反例' "用这个 service key 查不了预览的 auth.users 总数（$($u0.Desc)）：key 不对，或者不是预览项目的；没有跑"; return }
+        Ok "service key 能用（预览 auth.users 现有 $($u0.Total) 个账号）"
+        $probe = 'e2e-owner-probe@lemomemo.test'
+        $ownerIsTest = $owner -match '@lemomemo\.test\z'
+        $env6 = @{
+            E2E_PREVIEW_SERVICE_KEY = $key; PREVIEW_SUPABASE_PROJECT_REF = 'yoeqwhygehbaftkppati'; PREVIEW_OWNER_EMAILS = "$owner,$probe"
+            PREVIEW_LOGIN_GUARD_ONLY = '1'; GITHUB_OUTPUT = ''; E2E_ADMIN_EMAIL = ''
+        }
+        $cases = @(
+            @{ Id = 'P6-①'; What = '真实邮箱（someone@gmail.com）→ not_test_email'; Email = 'someone@gmail.com'; Code = 'not_test_email'; Note = '' },
+            @{ Id = 'P6-②'; Email = $owner
+               What = "负责人验收邮箱本身 → $(if ($ownerIsTest) { 'owner_email' } else { 'not_test_email' })"
+               Code = $(if ($ownerIsTest) { 'owner_email' } else { 'not_test_email' })
+               Note = $(if ($ownerIsTest) { '' } else { '真实邮箱总是先被 ① 的“只认 .test”拦下，到不了 owner_email 那一道，所以另加 P6-②b 证 owner_email' }) },
+            @{ Id = 'P6-②b'; What = ".test 邮箱放进 PREVIEW_OWNER_EMAILS（$probe）→ owner_email"; Email = $probe; Code = 'owner_email'; Note = '' },
+            @{ Id = 'P6-④'; What = '不存在的账号（e2e-nobody@lemomemo.test）→ no_such_user'; Email = 'e2e-nobody@lemomemo.test'; Code = 'no_such_user'; Note = '' }
+        )
+        foreach ($c in $cases) {
+            if ($c.Id -eq 'P6-④') { Rec 'P6-③' '跳过' 'private.admins 里的邮箱 → admin_email' '跳过：预览没有管理员（private.admins 现在 0 行），单测 preview-login.test.ts 第 67 行覆盖；按主持人要求不为此往预览写 admins' }
+            $r = Run-Node 'preview-login' @('tools/e2e/preview-login.ts', $c.Email) $env6 120
+            Show-ChildOut $r.Out
+            $hasCode = $r.Out.Contains("错误（$($c.Code)）")
+            $noSign = $r.Out.Contains('未签发（只查护栏模式）') -and -not $r.Out.Contains('护栏全过') -and -not $r.Out.Contains('已为')
+            $parts = @("退出码 $($r.Code)$(if ($r.TimedOut) { '（超过 2 分钟被停下）' })",
+                "错误码 $(if ($hasCode) { $c.Code } else { '不是 ' + $c.Code })",
+                "未签发标记 $(if ($noSign) { '有' } else { '没有' })",
+                "输出里 $(if ($r.Leak) { '出现了 key 或负责人邮箱' } else { '没有 key' })、$(if ($r.OtpSeen) { '出现了 email_otp' } else { '没有 email_otp' })")
+            $ok = $r.Code -eq 1 -and $hasCode -and $noSign -and -not $r.Leak -and -not $r.OtpSeen -and -not $r.TimedOut
+            if ($c.Id -eq 'P6-④') {
+                $u1 = P6-UserTotal $key
+                $same = $null -ne $u1.Total -and $u1.Total -eq $u0.Total
+                $parts += "auth.users 总数 跑前 $($u0.Total)、跑后 $(if ($null -ne $u1.Total) { $u1.Total } else { '查不了（' + $u1.Desc + '）' })"
+                if (-not $same) {
+                    $ok = $false
+                    if ($null -ne $u1.Total) { $parts += '总数变了：可能建了号，请马上到 Supabase › Authentication › Users 查 e2e-nobody@lemomemo.test，有就删掉，并告诉后端' }
+                }
+            }
+            if ($c.Note) { $parts += $c.Note }
+            Rec $c.Id $(if ($ok) { '通过' } else { '不符合' }) $c.What ($parts -join '；')
+        }
+    } catch { Rec 'P6' '不符合' 'preview-login 反例' "中途出错：$($_.Exception.Message)" }
+    finally { $key = $null; $owner = $null; $env6 = $null; $sec = $null }
+}
+
 # ───────────────────────── 主流程 ─────────────────────────
 $noteId = $null; $made = $script:made
 $version = $null; $viaMagic = $false; $viaLink = $false
@@ -750,6 +846,10 @@ try {
     $migDir = Join-Path $PSScriptRoot '..\..\supabase\migrations'
     $sqlText = (@(Get-ChildItem -Path $migDir -Filter '*.sql' | Sort-Object Name | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n")
     Ok "版本 $version；读了 supabase/migrations 里的迁移（用来列 private 的表和函数）"
+
+    # P6 不用测试账号的令牌：放在登录之前；只跑 P6 时到这里就结束（不发验证码、不调 verify），finally 照常出摘要
+    if ($script:wantP6) { Run-P6 }
+    if (-not $script:needLogin) { Say '  这次只跑 P6，不登录测试账号'; return }
 
     Step '取 publishable key（公开值）'
     $script:pk = Find-PublishableKey

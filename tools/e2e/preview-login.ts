@@ -20,6 +20,9 @@
 //       而且 private.admins 里恰好只有这一个管理员（查不清或多出别的就拒）；PREVIEW_OWNER_EMAILS 为空也拒；其余护栏、::add-mask:: 照旧。
 //   • 种子加管理员：node tools/e2e/preview-login.ts --admin <e2e-admin@lemomemo.test>（同样只认预览 ref；不写 GITHUB_OUTPUT）。
 //       写库靠后端迁移 grant insert on private.admins to service_role（安全说明-v4 S-6、架构设计-v4 决定第 1 条）；写失败报 admin_write_failed。
+//   • 只查护栏：环境变量 PREVIEW_LOGIN_GUARD_ONLY=1（负责人本机经 tools/keys/login-token-tests.ps1 -Only P6 实跑反例，B1 验收 P6）：
+//       只认普通登录，只跑 checkGuards，绝不调 generateLink、不要 GITHUB_OUTPUT；被拦时报错后再打印“未签发（只查护栏模式）”，
+//       护栏全过也不签发、退出码 3（反例本该被拦）。
 
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -238,6 +241,7 @@ export async function main(
     makeClient: (url: string, key: string) => Promise<AdminOps>;
   },
 ): Promise<number> {
+  const guardOnly = env.PREVIEW_LOGIN_GUARD_ONLY === '1';
   try {
     const flag = argv[0] !== undefined && FLAGS.has(argv[0]) ? argv[0] : null;
     const args = flag ? argv.slice(1) : argv;
@@ -250,6 +254,12 @@ export async function main(
     if (ref !== PREVIEW_REF) throw new PrepError('bad_ref', 'PREVIEW_SUPABASE_PROJECT_REF 不是预览项目，这一步只在预览项目跑');
     if (!key) throw new PrepError('bad_args', '没有 E2E_PREVIEW_SERVICE_KEY');
     const url = `https://${PREVIEW_REF}.supabase.co`;
+    if (guardOnly) {
+      if (flag) throw new PrepError('bad_args', '只查护栏模式只用于普通登录，不和 --admin、--as-admin 一起用');
+      await checkGuards(email, await io.makeClient(url, key), env.PREVIEW_OWNER_EMAILS, 'login');
+      io.out('护栏全过（只查护栏模式，未签发）\n');
+      return 3;
+    }
     if (flag === '--admin') {
       // 种子加管理员：不取验证码、不写 GITHUB_OUTPUT；名单为空在建客户端之前就拒
       requireOwnerList(env.PREVIEW_OWNER_EMAILS);
@@ -274,6 +284,7 @@ export async function main(
   } catch (err) {
     if (err instanceof PrepError) io.out(`错误（${err.code}）：${err.message}\n`);
     else io.out('错误：准备步骤意外失败（详情不打印，免得带出秘密值）\n');
+    if (guardOnly) io.out('未签发（只查护栏模式）\n');
     return 1;
   }
 }

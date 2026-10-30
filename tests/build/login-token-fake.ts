@@ -60,6 +60,8 @@ export const REFRESH = 'TESTONLYrefresh-token-zz';
 export const LEAK = 'TESTONLYleaked-password-session-token';
 export const OTP = '864209';
 export const PK = 'sb_publishable_TESTONLYpublishablekey123456';
+// P6 用的假 service key（只认 apikey 头，和新格式 sb_secret_ 一样）
+export const SERVICE = 'sb_secret_TESTONLYservicekey1234567890ab';
 // 登录链接里的 token（哈希）：默认邮件模板只有链接、没有 6 位码时，脚本取出它按 token_hash 换会话。
 // 和真实 GoTrue 一致：链接里是 pkce_ 前缀加哈希，verify 只认去掉前缀的哈希（HASH）
 export const HASH = 'TESTONLY0123456789abcdef0123456789abcdef0123456789abcdef';
@@ -81,6 +83,7 @@ export type Opts = {
   p5Grace?: number;           // 过期后还放行几秒（默认 2）
   all?: boolean;              // 不加默认的 -Only（跑全部项目，含 P5、P9）
   verify429?: boolean;        // /auth/v1/verify 一律回 429（限流）
+  userTotals?: number[];      // P6：GET /auth/v1/admin/users 依次报的 x-total-count（默认一直是 7；最后一个用到底）
   plain: string[];            // Read-Host（明文）依次的回答
   secure: string[];           // Read-Host -AsSecureString 依次的回答
   args?: string;              // 额外参数
@@ -113,6 +116,7 @@ export async function runScript(dir: string, opts: Opts) {
     return e !== undefined && Date.now() / 1000 > e + (opts.p5Grace ?? 2);
   };
   const logouts: { auth: string; status: number }[] = [];
+  let userListCalls = 0;
   const P8_SEQ: [number, unknown][] = [
     [200, { ok: true }],
     [403, { error: 'account_disabled' }],
@@ -144,6 +148,13 @@ export async function runScript(dir: string, opts: Opts) {
       if (req.method === 'GET' && p === '/app/') return send(res, 200, '<html><script type="module" crossorigin src="/app/assets/index-abc.js"></script></html>', { 'content-type': 'text/html' });
       if (req.method === 'GET' && p === '/app/assets/index-abc.js') return send(res, 200, opts.noKeyOnSite ? 'const x=1;' : `const k="${PK}";`, { 'content-type': 'text/javascript' });
       // Auth
+      // P6：GoTrue 管理端列账号（service key 走 apikey 头），只报总数
+      if (req.method === 'GET' && p === '/auth/v1/admin/users?page=1&per_page=1') {
+        if (req.headers.apikey !== SERVICE) return send(res, 401, { code: 401, error_code: 'bad_jwt' });
+        const totals = opts.userTotals ?? [7];
+        const t = totals[Math.min(userListCalls++, totals.length - 1)] ?? 7;
+        return send(res, 200, { users: [{ id: UID }] }, { 'x-total-count': String(t) });
+      }
       if (p.startsWith('/auth/v1/')) {
         if (req.headers.apikey !== PK) return send(res, 401, { message: 'no apikey' });
         if (req.method === 'POST' && p === '/auth/v1/otp') return opts.captcha ? send(res, 400, { code: 400, error_code: 'captcha_failed' }) : send(res, 200, {});

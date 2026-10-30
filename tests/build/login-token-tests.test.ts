@@ -3,6 +3,7 @@
 //    每个 Invoke-WebRequest / Invoke-RestMethod 都带 -MaximumRedirection 0
 // ② Hide-Secrets：纯数字的验证码只换整词，令牌照常整串换
 // ③ 运行方式：没设 LEMO_TEST_API=1 时 -SupabaseBase 被拒；点源、在窗口里用 & 调用被拒（只许 -File）；都在发任何请求之前
+// ⑤ -Only P6（用例在 login-token-p6-cases.ts）：经假运行器 login-token-p6-runner.mjs 跑真的 preview-login.ts main()（假管理端客户端），四条反例、账号总数、泄露判断
 // ④ 经假服务真跑（login-token-fake.ts）：verify 上限 4 次、429 即停；-Only P5,P9（P5 过期余量、测量迟到、P9 经假运行器）；人机验证干跑和粘链接；不带 -Only 的完整顺序
 // 需要 Windows PowerShell（Windows 上）或 pwsh（其他系统）；都没有就整组跳过
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -10,6 +11,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { describeP6 } from './login-token-p6-cases.ts';
 import { ACCESS, ACCESS2, FINALLY, HASH, LEAK, OTP, PK, PS, q, REFRESH, runScript, SCRIPT, summary, UID, writePs, type Opts, type RunResult } from './login-token-fake.ts';
 
 let dir = '';
@@ -299,3 +301,7 @@ else console.log('  1 passed (2.1s)');
     expectNoSecrets(r);
   }, 240_000);
 });
+
+
+// -Only P6 的两条用例在 login-token-p6-cases.ts（本文件超 300 行，按 W1 拆出去；仍在本文件的进程里跑）
+describeP6();
