@@ -5,7 +5,8 @@
 //   deno install --frozen --no-check --entrypoint <全部源码>
 // 这两行和 find 的扩展名清单是从 ci.yml 抄的：第一组测试直接读 ci.yml 逐字核对（不需要 deno），ci.yml 改了这里就报，
 //   再把读到的内容去掉一行，证明核对真的会失败。runCi()、entries() 用的就是这里核对过的命令和扩展名。
-// 正例：往源码里塞一个锁里没有的 zod 版本——从 Deno 缓存的 zod registry.json（路径由 deno info --json 的 npmCache 给）里挑一个
+// 正例：往源码里塞一个锁里没有的 zod 版本——从 Deno 缓存的 zod registry.json（路径由 deno info --json 的 npmCache 给），
+//   缓存里没有就联网取 registry.npmjs.org/zod 的版本列表（10-31：已有 tarball 时预热不落 registry.json，CI 第二十九批踩到），从中挑一个
 //   已发布的正式版，不等于锁定版本、锁里也没有：优先同一大版本里比锁定版本小的最大那个（现在锁 4.6.7 → 挑 4.6.6），没有就取其余最大的
 //   → 第二行退出码不是 0、输出里有 “lockfile is out of date”；只跑第一行查不出来（它只核 deno.json 和 deno.lock），所以第二行不能省。
 // 反例：换成锁里有的版本（deno.json 里 zod 那一项）→ 两行都通过。两种情况跑完 deno.json、deno.lock 一个字节都不变。
@@ -13,7 +14,7 @@
 //   开关打开却没有 deno 就失败，不再悄悄跳过（接手清单 DENO-lock-ci）。第一组另外核对 unit.yml 的这两处没被删、版本和 ci.yml 一致。
 // 会起子进程（node、deno），在 vitest.config.ts 的 SLOW_NODE_TESTS 里登记。
 // 联网：用 Deno 默认的全局缓存（不另设 DENO_DIR）。判“锁过期”不用联网的前提是缓存里已有 zod 的注册表元数据——beforeAll 先在临时目录
-//   跑一遍第一行（空缓存时联网取锁里的包，顺带取下 zod 整个包的元数据，即上面那份 registry.json，列着全部已发布版本；CI 的新机器靠这一步）。正例特意选同一个包的锁外版本：
+//   跑一遍第一行（空缓存时联网取锁里的包，通常顺带存下 zod 的 registry.json；不一定存，所以挑版本时缓存没有就联网取）。正例特意选同一个包的锁外版本：
 //   换成 left-pad 这类缓存里没有的包，Deno 要先去 npm 注册表取元数据，断网时报的是网络错误，到不了“锁过期”那一步。
 //   审查员在断网加隔离缓存（只预热过 zod）的条件下实测过 zod@4.6.6，报 “The lockfile is out of date”。用完删掉临时目录。
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
@@ -191,20 +192,41 @@ const lockFiles = () => [readFileSync(join(fn, 'deno.json'), 'utf8'), readFileSy
 /** 锁里有没有这个 zod 版本（npm:zod@x.y.z 的映射或 zod@x.y.z 的包条目；4.6.1 不会误中 4.6.10） */
 const lockHasZod = (lock: string, v: string) => new RegExp(`zod@${v.replace(/\./g, '\\.')}(?![\\d.])`).test(lock);
 
-/** Deno 缓存里 zod 的 registry.json 中挑一个已发布、不等于锁定版本、锁里也没有的正式版；挑不到就抛出带处理办法的错误 */
-function pickOutsideZod(locked: string, lock: string): string {
+type Versions = Record<string, { deprecated?: string }>;
+const ZOD_REGISTRY = 'https://registry.npmjs.org/zod';
+
+/** zod 的已发布版本：先读 Deno 缓存（路径取 deno info --json 的 npmCache，不推算）里的 registry.json；
+ *  没有就联网取 npm 注册表的版本列表（缩略元数据，含 deprecated）。10-31 Linux 实测：缓存里已有 tarball 时
+ *  deno install --frozen 会重下元数据却不落 registry.json，CI 第二十九批就是这样读不到的，所以缓存只当捷径 */
+async function zodVersions(): Promise<{ versions: Versions; from: string }> {
   const info = spawnSync('deno', ['info', '--json'], { encoding: 'utf8', env: ENV });
   const npmCache = info.status === 0 ? (JSON.parse(info.stdout) as { npmCache?: string }).npmCache : undefined;
   if (!npmCache) throw new Error(`deno info --json 没给出 npmCache（退出码 ${info.status}）：${text(info)}`);
   const file = join(npmCache, 'registry.npmjs.org', 'zod', 'registry.json');
-  let versions: Record<string, { deprecated?: string }> = {};
+  let cacheNote = '';
   try {
-    versions = (JSON.parse(readFileSync(file, 'utf8')) as { versions?: typeof versions }).versions ?? {};
+    const versions = (JSON.parse(readFileSync(file, 'utf8')) as { versions?: Versions }).versions ?? {};
+    if (Object.keys(versions).length > 0) return { versions, from: file };
+    cacheNote = `${file} 里没有 versions`;
   } catch (e) {
-    throw new Error(`读不到 Deno 缓存里 zod 的元数据 ${file}（${String(e)}）。处理：联网后在仓库根跑一次 deno task check，把 zod 的注册表元数据缓存下来再跑本测试`);
+    cacheNote = `${file} 读不到（${String(e)}）`;
   }
+  try {
+    const res = await fetch(ZOD_REGISTRY, { headers: { accept: 'application/vnd.npm.install-v1+json' }, signal: AbortSignal.timeout(60_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const versions = ((await res.json()) as { versions?: Versions }).versions ?? {};
+    if (Object.keys(versions).length === 0) throw new Error('返回里没有 versions');
+    return { versions, from: ZOD_REGISTRY };
+  } catch (e) {
+    throw new Error(`联网取 zod 版本列表失败：${ZOD_REGISTRY}（${String(e)}）；缓存也用不上：${cacheNote}。处理：联网后重跑本测试`);
+  }
+}
+
+/** 从 zod 的已发布版本里挑一个不等于锁定版本、锁里也没有的正式版；挑不到就抛出带处理办法的错误 */
+async function pickOutsideZod(locked: string, lock: string): Promise<string> {
+  const { versions, from } = await zodVersions();
   const pick = chooseOutside(versions, locked, lock);
-  if (!pick) throw new Error(`${file} 里除了锁定的 ${locked} 没有别的可用正式版（共 ${Object.keys(versions).length} 个版本）。处理：联网后在仓库根跑 deno task check 刷新 zod 的元数据再跑；仍挑不到就说明 zod 只发过这一个正式版，改用别的已缓存包做探针`);
+  if (!pick) throw new Error(`${from} 里除了锁定的 ${locked} 没有别的可用正式版（共 ${Object.keys(versions).length} 个版本）。zod 只发过这一个正式版时，改用别的包做探针`);
   return pick;
 }
 
@@ -269,10 +291,10 @@ describe.skipIf(!HAS_DENO)('服务器函数的依赖锁：deno install --frozen 
     if (dir) rmSync(dir, { recursive: true, force: true });
   });
 
-  it('锁外的 zod（从缓存的 registry.json 挑一个已发布的别的版本）：第二行（--entrypoint）退出码不是 0，报 lockfile is out of date；第一行查不出；锁文件不变', () => {
+  it('锁外的 zod（从缓存的 registry.json、没有就联网取的版本列表里挑一个已发布的别的版本）：第二行（--entrypoint）退出码不是 0，报 lockfile is out of date；第一行查不出；锁文件不变', async () => {
     const locked = /^npm:zod@(\d+\.\d+\.\d+)$/.exec(zodSpec())?.[1];
     expect(locked, `deno.json 的 zod 不是 npm:zod@x.y.z：${zodSpec()}`).toBeTruthy();
-    const outside = pickOutsideZod(locked ?? '', lockFiles()[1] ?? '');
+    const outside = await pickOutsideZod(locked ?? '', lockFiles()[1] ?? '');
     expect(outside).not.toBe(locked);
     // 前提：锁里确实没有这个版本（npm:zod@x.y.z 的映射、zod@x.y.z 的包条目都没有）
     expect(lockHasZod(lockFiles()[1] ?? '', outside), `锁里不该有 zod@${outside}`).toBe(false);

@@ -1,5 +1,6 @@
 // LINT-binimport（build/check_arch.py BINIMPORT）：耗时上限与健壮性——超长行、深嵌套、大量报错、长空白、取词都不退化成平方
 // 从 check-arch-binimport.test.ts 按主题拆出（10-30，W1 超行），用例原样不变
+// 倍率用例（10-31，第二十八批 CI 比值 3.05 抖动）：预热一次，两个规模交替各量 3 次取最小值再算比值，阈值 3 不变
 // 共用的拼仓库、跑 check_arch、计时在 check-arch-binimport-harness.ts；每条用例在临时目录现拼一棵迷你仓库（不是 git 仓库，check_arch 整棵树扫）
 import { afterEach, describe, expect, it } from 'vitest';
 import { binimport, cleanupDirs, repo, timed, where } from './check-arch-binimport-harness.ts';
@@ -78,15 +79,26 @@ describe('build/check_arch.py BINIMPORT（LINT-binimport）', () => {
     }
   });
 
-  it('②取词耗时：200 万字单行的 node "a" 重复、未闭合引号、\\" 三种，check_binimport 各 5 秒内跑完（行尾按换行位置二分，find 限在行内；本机约 1 秒、CI 约 2.1 秒，平方写法本机约 5.3 秒、CI 10 秒以上）', () => {
+  it('②取词耗时：200 万字单行的 node "a" 重复、未闭合引号、\\" 三种，check_binimport 各 5 秒内跑完（行尾按换行位置二分，find 限在行内；本机约 1 秒、CI 约 2.1 秒，平方写法本机约 5.3 秒、CI 10 秒以上）；200 万字 / 100 万字耗时比 < 3（预热一次后各量 3 次取最小再比）', () => {
     const B = '\\';
     for (const unit of ['node "a" ', 'node "a ', `node ${B}"a `]) {
       const { seconds } = timed(repo({ 'build/a.sh': `${unit.repeat(Math.floor(2_000_000 / unit.length))}\n` }));
       expect(seconds, unit).toBeLessThan(5);
     }
-    // 倍率：输入翻倍，线性约 2 倍、平方约 4 倍；不受机器快慢影响
-    const at = (n: number) => timed(repo({ 'build/a.sh': `${'node "a" '.repeat(Math.floor(n / 9))}\n` })).seconds;
-    const ratio = at(2_000_000) / at(1_000_000);
-    expect(ratio, `200 万字 / 100 万字耗时比 ${ratio.toFixed(2)}`).toBeLessThan(3);
-  });
+    // 倍率：输入翻倍，线性约 2 倍、平方约 4 倍；不受机器快慢影响。阈值 3 取两者正中，不变
+    // 抗抖动：两个规模的仓库各拼一次，先空跑一次预热，再交替各量 3 次取最小值（最小值最接近真实耗时，CI 偶发的慢一次被剔掉）
+    const root = (n: number) => repo({ 'build/a.sh': `${'node "a" '.repeat(Math.floor(n / 9))}\n` });
+    const big = root(2_000_000);
+    const small = root(1_000_000);
+    timed(small);
+    const runs: Record<'big' | 'small', number[]> = { big: [], small: [] };
+    for (let i = 0; i < 3; i++) {
+      runs.small.push(timed(small).seconds);
+      runs.big.push(timed(big).seconds);
+    }
+    const ratio = Math.min(...runs.big) / Math.min(...runs.small);
+    const detail = `200 万字 / 100 万字耗时比 ${ratio.toFixed(2)}（各 3 次取最小；200 万字 ${runs.big.map((s) => s.toFixed(2)).join('/')} 秒，100 万字 ${runs.small.map((s) => s.toFixed(2)).join('/')} 秒）`;
+    expect(ratio, detail).toBeLessThan(3);
+    // 这条跑 10 次 check_binimport（本机约 10 秒、CI 约 20 秒），不吃默认的 30 秒，单独给 90 秒
+  }, 90_000);
 });
