@@ -38,7 +38,7 @@ export const ko = {
 
   'settings.platform.ios': 'iPhone', // TODO(ko): R-106 B1 第一遍已审（10-30），韩文界面也写 iPhone；值没有谚文，测试要求保留 TODO(ko)
   'settings.platform.windows': 'Windows PC', // TODO(ko): R-106 B1 第一遍已审（10-30）；值没有谚文，测试要求保留 TODO(ko)
-  'settings.platform.tauri': 'PC 버전', // R-106 B1 第一遍已审（10-30）；“电脑版”，PC 버전 待负责人确认
+  'settings.platform.tauri': 'PC 앱', // R-106 B1 第一遍已审（10-30）；“电脑版”统一叫“PC 앱”，负责人 10-30 定（明早清单第 25 条）
   'settings.platform.web': '웹', // R-106 B1 第一遍已审（10-30）
   'settings.platform.unknown': '알 수 없는 기기', // R-106 B1 第一遍已审（10-30）
 

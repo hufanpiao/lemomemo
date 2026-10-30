@@ -19,6 +19,9 @@ describe('iPhone / iPad 非主屏幕拦截（TC-B1-17、R-225）', () => {
     render(<AuthPage gate="install" />);
     expect(screen.getByTestId('auth-install-guide')).toBeTruthy();
     expect(screen.getByText(zh['auth.ios.step2'])).toBeTruthy();
+    // 四步：分享 → 添加到主屏幕 → 点右上角“添加”（负责人 10-30 定，明早清单第 26 条）→ 回主屏幕打开
+    const steps = [...screen.getByTestId('auth-install-guide').querySelectorAll('ol > li')].map((li) => li.textContent);
+    expect(steps).toEqual([zh['auth.ios.step1'], zh['auth.ios.step2'], '点右上角的“添加”', zh['auth.ios.step4']]);
     expect(screen.queryByLabelText(zh['auth.email.label'])).toBeNull();
     expect(screen.queryByTestId('auth-open-in-safari')).toBeNull();
     // 安全审查低 3：照顾 Gmail 这类 App 里内嵌的 SFSafariViewController（UA 和 Safari 一样）
@@ -42,6 +45,11 @@ describe('已有用户：邮箱验证码登录', () => {
     await typeEmailAndSend(' me@example.com ');
     expect(api.sendCode).toHaveBeenCalledWith('me@example.com', 'tok-1');
     expect(screen.getByText(zh['auth.code.sentTo'].replace('{email}', 'me@example.com'))).toBeTruthy();
+    // 负责人 10-30 定：验证码框下方一行小字提醒看垃圾邮件
+    const spam = screen.getByTestId('auth-code-spam');
+    expect(spam.textContent).toBe('没收到？记得看看垃圾邮件');
+    const input = screen.getByLabelText(zh['auth.code.label']);
+    expect(input.compareDocumentPosition(spam) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // 刚发过：60 秒倒计时
     expect(screen.getByRole('button', { name: zh['auth.code.resendIn'].replace('{s}', '60') })).toHaveProperty('disabled', true);
     await act(async () => {

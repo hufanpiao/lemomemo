@@ -109,7 +109,7 @@ async function start(): Promise<void> {
     // 升级中心的错误码（update_failed、update_takeover_timeout、upgrade_busy_expired 等，PROBE-sugg2 ③）进同一条日志通道；
     // 同一个 act 每天最多 5 条，计数在 localStorage lemo.upglog（B 组审查建议 1）
     upgradeDeps: { log: (act, code) => logs.log(act, code ? { code } : undefined), logCounts: upgradeLogCountStore },
-    // 升级本机库被别的标签页挡住：coldStart 还在等库打开时整屏提示“请关掉其他打开的柠檬记窗口”，库打开后自动消失（root.tsx，架构师 10-30 第 8 点）。
+    // 升级本机库被别的标签页挡住：coldStart 还在等库打开时整屏提示（文案见 update.blocked.title），库打开后自动消失（root.tsx，架构师 10-30 第 8 点）。
     // 这时 profile 还没读出来：blocked 第一次为 true、整屏提示画出来之前才按本机选过的语言和设备语言定一次界面语言（BANNER-sugg ③；
     // 没被挡住就不定，下面 applyLocale(boot) 按缓存的 profile 定；已经按 profile 定过就不再覆盖）
     onUpgradeCenter: (u) => {

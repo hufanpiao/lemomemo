@@ -130,7 +130,7 @@ function painted(el: Element): boolean {
 
 /**
  * 升级本机库被别的标签页挡住（TC-B1-48 的 blocked；架构师 10-30 第 8 点）：upgrade.blocked 变成 true 时整屏提示
- * “请关掉其他打开的柠檬记窗口”。这时 coldStart 还在等库打开，#root 还没 createRoot，所以另挂一个容器（body 下的
+ * （文案见 update.blocked.title）。这时 coldStart 还在等库打开，#root 还没 createRoot，所以另挂一个容器（body 下的
  * #lemo-blocked）和它自己的根；画出来的下一帧收起启动画面（SplashRelease）。
  * blocked 变回 false（库打开了）以后不马上卸（BANNER-sugg ①：启动画面已经收起，马上卸会空白一小段）：
  * 等 #root 画出东西的下一帧再卸、删容器；页面里没有 #root 就马上卸；最多等 BLOCKED_RELEASE_MAX_MS。等的时候又 blocked 了就接着显示。

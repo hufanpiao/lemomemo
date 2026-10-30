@@ -55,6 +55,10 @@ describe('新邮箱：邀请码注册（TC-B1-62、5.6）', () => {
     expect(screen.getByText(zh['auth.invite.sent'])).toBeTruthy();
     // 0.38 第 27 条：start 限流、码错、发信失败都回 {ok}，只能提示没收到怎么办
     expect(screen.getByText(zh['auth.invite.noMail'])).toBeTruthy();
+    // 负责人 10-30 定（明早清单第 26 条）：没收到时先提醒看垃圾邮件
+    expect(zh['auth.invite.noMail']).toContain('垃圾邮件');
+    // 邀请这一屏已经有上面那句，不再叠加老邮箱那行小字
+    expect(screen.queryByTestId('auth-code-spam')).toBeNull();
 
     await act(async () => {
       fireEvent.change(screen.getByLabelText(zh['auth.code.label']), { target: { value: '654321' } });

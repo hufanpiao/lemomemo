@@ -28,13 +28,16 @@ export const zh = {
   'auth.code.resend': '重新发送',
   'auth.code.resendIn': '{s} 秒后可以重新发送',
   'auth.code.changeEmail': '换一个邮箱',
+  // 负责人 10-30 定：老邮箱登录的验证码框下方一行小字（邀请那一屏用 auth.invite.noMail，不叠加）
+  'auth.code.checkSpam': '没收到？记得看看垃圾邮件',
   'auth.invite.notRegistered': '这个邮箱还没注册，需要邀请码',
   'auth.invite.label': '邀请码',
   'auth.invite.format': '邀请码是 12 位字母和数字',
   'auth.invite.noCode': '没有邀请码？请向柠檬记的负责人要一个',
   'auth.invite.next': '下一步',
   'auth.invite.sent': '邀请码有效的话，6 位验证码会发到这个邮箱',
-  'auth.invite.noMail': '几分钟内没收到，请稍后再试或联系负责人。',
+  // 负责人 10-30 定（明早清单第 26 条）：先提醒看垃圾邮件
+  'auth.invite.noMail': '几分钟内没收到，记得看看垃圾邮件；还是没有，请稍后再试或联系负责人。',
   'auth.busy': '请稍候…',
   'auth.done': '登录好了，正在打开柠檬记…',
   'auth.err.codeWrong.title': '验证码不对',
@@ -70,7 +73,9 @@ export const zh = {
   'auth.ios.why': '放到主屏幕以后，到点的提醒才能在手机上响。',
   'auth.ios.step1': '点 Safari 的“分享”（可能在“⋯”里）',
   'auth.ios.step2': '在弹出的菜单里找到“添加到主屏幕”',
-  'auth.ios.step3': '回到主屏幕，点“Lemo”的图标打开，再登录',
+  // step3 负责人 10-30 加（明早清单第 26 条）：“添加到主屏幕”后还要点右上角的“添加”才算完成；原第三步顺延成 step4
+  'auth.ios.step3': '点右上角的“添加”',
+  'auth.ios.step4': '回到主屏幕，点“Lemo”的图标打开，再登录',
   'auth.ios.noShare': '看不到分享按钮时，先点“在 Safari 中打开”。',
   'auth.ios.note': '这个页面不能登录。请从主屏幕上的图标打开，再登录，这样只用登一次。',
   // 注销冷静期的恢复页（R-256 ③、架构 0.29 续第 131 条④ 原文；{when} 是 purge_after 按本机时区的“日期 时刻”，口径同邮件 fmtWhen）

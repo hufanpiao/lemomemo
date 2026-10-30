@@ -8,7 +8,7 @@
 //   否则 cache = 'closed_for_upgrade'（“柠檬记有新版本 · 重新打开”），录音或编辑结束（busy 归零）时自动重新载入
 // • SW 在后台装好了新版本（8.1）：swReady = true，界面顶部提示“有新版本 · 重新打开”，不强制刷新；按了才 requestUpdate()
 // • 本机库来自更新的版本（VersionError）：cache = 'too_new'，整屏提示“这台设备上的数据来自更新的版本，请更新柠檬记”
-// • 升级本机库被挡住（blocked）：blocked = true，提示“请关掉其他打开的柠檬记窗口”
+// • 升级本机库被挡住（blocked）：blocked = true，提示（文案见 update.blocked.title）
 //   （boot.ts 收到 blocked 后等 BLOCKED_PROMPT_DELAY_MS 仍没打开才调 setBlocked(true)，配合升级的页关库期间不闪提示）
 // • busy 兜底（PROBE-sugg2 ③、BANNER-sugg ⑥）：单个 busy 令牌超过 BUSY_MAX_MS（30 分钟）自动作废、记 upgrade_busy_expired，
 //   免得哪里漏了释放，required、new_version、sync_paused 三种横幅一直不出、reloadPending 一直挂着。

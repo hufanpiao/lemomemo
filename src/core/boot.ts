@@ -28,7 +28,7 @@ import { createUpgradeCenter, type UpgradeCenter, type UpgradeDeps } from './upg
 export const LOCAL_PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * 升级本机库收到 blocked 后，等这么久仍没打开才提示“请关掉其他打开的柠檬记窗口”。
+ * 升级本机库收到 blocked 后，等这么久仍没打开才提示（文案见 update.blocked.title）。
  * 配合升级的标签页（监听了 onversionchange）先写草稿再关库，最多等 VERSION_CLOSE_WAIT_MS，这期间浏览器（chromium、webkit 实测）
  * 会先报 1 次 blocked；马上提示会闪一下。多留 500 ms 余量；真有没配合的旧页一直占着库，到时照样提示
  */
@@ -56,7 +56,7 @@ export interface BootOptions {
   /** 默认 true：经 platform/http.ts 订阅所有请求的 426 */
   listen426?: boolean;
   /**
-   * 升级中心一建好就同步调（在开库之前）：main.tsx 用它盯 blocked（“请关掉其他打开的柠檬记窗口”整屏提示）——
+   * 升级中心一建好就同步调（在开库之前）：main.tsx 用它盯 blocked（整屏提示，文案见 update.blocked.title）——
    * 被挡住时 coldStart 还在等库打开，App 还没画（架构师 10-30 第 8 点）
    */
   onUpgradeCenter?: (upgrade: UpgradeCenter) => void;

@@ -5,7 +5,8 @@
 import { useAuthT } from '../hooks/useAuthT.ts';
 import styles from './AuthPage.module.css';
 
-const STEPS = ['auth.ios.step1', 'auth.ios.step2', 'auth.ios.step3'] as const;
+// 第三步“点右上角的‘添加’”负责人 10-30 加（明早清单第 26 条）
+const STEPS = ['auth.ios.step1', 'auth.ios.step2', 'auth.ios.step3', 'auth.ios.step4'] as const;
 
 export function InstallGuide({ openInSafari = false }: { openInSafari?: boolean }) {
   const t = useAuthT();

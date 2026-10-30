@@ -115,6 +115,50 @@ function ExitNoticeLine() {
 
 const GATE_EXIT_KEYS = { reauth: 'auth.restore.reauth', kept: 'auth.exit.pendingDeletion' } as const satisfies Record<GateExit, string>;
 
+/** 验证码那一屏（老邮箱、邀请两种）：发到哪里、没收到怎么办、6 位验证码框、重新发送、换一个邮箱（从 LoginPanel 拆出来，免得超行数） */
+function CodeStep({ flow }: { flow: ReturnType<typeof useAuthFlow> }) {
+  const t = useAuthT();
+  const { step, email, code, busy, cooldown } = flow.state;
+  return (
+    <div className={styles.form}>
+      <p className={styles.lead}>
+        {step === 'invite-code' ? t('auth.invite.sent', {}) : t('auth.code.sentTo', { email: email.trim() })}
+      </p>
+      {/* 架构 0.38 第 27 条：start 被限流、码不对、发信失败都回 {ok}，界面分不出来，只能提示没收到怎么办 */}
+      {step === 'invite-code' && <p className={styles.lead}>{t('auth.invite.noMail', {})}</p>}
+      <label className={styles.label} htmlFor="auth-code">
+        {t('auth.code.label', {})}
+      </label>
+      <input
+        id="auth-code"
+        className={`${styles.input} ${styles.code}`}
+        name="code"
+        autoComplete="one-time-code"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        maxLength={6}
+        value={code}
+        disabled={busy}
+        onChange={(e) => flow.setCode(e.target.value)}
+      />
+      {/* 负责人 10-30 定：老邮箱登录在验证码框下方提醒看垃圾邮件；邀请那一屏上面已有 auth.invite.noMail，不叠加 */}
+      {step !== 'invite-code' && (
+        <p className={styles.sub} data-testid="auth-code-spam">
+          {t('auth.code.checkSpam', {})}
+        </p>
+      )}
+      <div className={styles.row}>
+        <button className={styles.link} type="button" disabled={busy || cooldown > 0} onClick={() => void flow.resend()}>
+          {cooldown > 0 ? t('auth.code.resendIn', { s: cooldown }) : t('auth.code.resend', {})}
+        </button>
+        <button className={styles.link} type="button" onClick={flow.backToEmail}>
+          {t('auth.code.changeEmail', {})}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * serverPending：刚“退出并换账号”、服务器上的那次登录没吊销成（本机已清空），填邮箱那一步提示一次。
  * gateExit：SessionCheck 的恢复页刚退出了本会话（要重新收码、或选了保持注销），填邮箱那一步提示一次
@@ -130,7 +174,7 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
   const [action, setAction] = useState<TurnstileAction>('login');
   const captcha = useTurnstile(box, true, action);
   const flow = useAuthFlow(captcha, deps, probe);
-  const { step, email, invite, code, busy, error, hint, cooldown } = flow.state;
+  const { step, email, invite, busy, error, hint, cooldown } = flow.state;
   useEffect(() => setAction(step === 'invite' || step === 'invite-code' ? 'invite_start' : 'login'), [step]);
   const { backToEmail } = flow;
   useEffect(() => {
@@ -218,38 +262,7 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
         </form>
       )}
 
-      {askCode && (
-        <div className={styles.form}>
-          <p className={styles.lead}>
-            {step === 'invite-code' ? t('auth.invite.sent', {}) : t('auth.code.sentTo', { email: email.trim() })}
-          </p>
-          {/* 架构 0.38 第 27 条：start 被限流、码不对、发信失败都回 {ok}，界面分不出来，只能提示没收到怎么办 */}
-          {step === 'invite-code' && <p className={styles.lead}>{t('auth.invite.noMail', {})}</p>}
-          <label className={styles.label} htmlFor="auth-code">
-            {t('auth.code.label', {})}
-          </label>
-          <input
-            id="auth-code"
-            className={`${styles.input} ${styles.code}`}
-            name="code"
-            autoComplete="one-time-code"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            maxLength={6}
-            value={code}
-            disabled={busy}
-            onChange={(e) => flow.setCode(e.target.value)}
-          />
-          <div className={styles.row}>
-            <button className={styles.link} type="button" disabled={busy || cooldown > 0} onClick={() => void flow.resend()}>
-              {cooldown > 0 ? t('auth.code.resendIn', { s: cooldown }) : t('auth.code.resend', {})}
-            </button>
-            <button className={styles.link} type="button" onClick={flow.backToEmail}>
-              {t('auth.code.changeEmail', {})}
-            </button>
-          </div>
-        </div>
-      )}
+      {askCode && <CodeStep flow={flow} />}
 
       {hint && !gated && (
         <p className={styles.hint} role="alert" data-testid="auth-hint">

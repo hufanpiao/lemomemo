@@ -1,5 +1,5 @@
 // 升级本机库被别的标签页挡住（TC-B1-48 的 blocked；架构师 10-30 第 8 点）：coldStart 还在等库打开时整屏提示
-// “请关掉其他打开的柠檬记窗口”，画出来后收起启动画面；库打开（blocked 变回 false）后自动消失
+// “请关掉其他打开的柠檬记窗口或标签页”（负责人 10-30 定，明早清单第 25 条），画出来后收起启动画面；库打开（blocked 变回 false）后自动消失
 import { act, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createUpgradeCenter } from '../../core/upgrade.ts';
@@ -27,8 +27,8 @@ describe('watchCacheBlocked', () => {
     await act(async () => u.setBlocked(true));
     const box = document.querySelector('[data-testid="cache-blocked"]');
     expect(box?.getAttribute('role')).toBe('alert');
-    expect(box?.textContent).toContain('请关掉其他打开的柠檬记窗口');
-    expect(document.getElementById('cache-blocked-body')?.textContent).toContain('关掉以后这里会自动接着打开');
+    expect(box?.textContent).toContain('请关掉其他打开的柠檬记窗口或标签页');
+    expect(document.getElementById('cache-blocked-body')?.textContent).toContain('别的窗口或标签页还在用旧版本，关掉以后这里会自动接着打开');
     expect(hideSplash).toHaveBeenCalled();
 
     await act(async () => u.setBlocked(false));

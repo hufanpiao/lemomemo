@@ -212,7 +212,7 @@ export interface OpenCacheOptions {
   migrations?: readonly CacheMigration[];
   /** 默认 globalThis.indexedDB */
   factory?: IDBFactory;
-  /** 升级被别的标签页挡住（blocked）：提示“请关掉其他打开的柠檬记窗口”；挡住的标签页关掉以后 open 会继续 */
+  /** 升级被别的标签页挡住（blocked）：提示（文案见 update.blocked.title）；挡住的标签页关掉以后 open 会继续 */
   onBlocked?: () => void;
 }
 

@@ -1,4 +1,4 @@
-// 升级本机库被挡住（blocked）：boot.ts 收到 blocked 后等 BLOCKED_PROMPT_DELAY_MS 仍没打开才提示“请关掉其他打开的柠檬记窗口”
+// 升级本机库被挡住（blocked）：boot.ts 收到 blocked 后等 BLOCKED_PROMPT_DELAY_MS 仍没打开才提示（文案见 update.blocked.title）
 // （TC-B1-48 真浏览器实测：配合升级的标签页先写草稿再关库期间，chromium、webkit 都会先报 1 次 blocked，马上提示会闪一下）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { claimCache } from '../account.ts';
