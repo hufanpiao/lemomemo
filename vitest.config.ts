@@ -53,6 +53,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/publish-run-gitsafety.test.ts', // PowerShell、git clone（发布脚本演练：hookspath、签名、替换对象、逐个比内容，经 publish-run-harness.ts）
   'tests/build/publish-run-worktree.test.ts', // PowerShell、git clone（发布脚本演练：git 各级配置与属性来源，经 publish-run-harness.ts）
   'tests/build/set-cron-secret.test.ts', // PowerShell（有 docker 时还起容器）
+  'tests/build/set-signup-secrets.test.ts', // PowerShell
   'tests/build/set-fn-role-passwords.test.ts', // PowerShell、python
   'tests/build/set-fn-role-passwords-run.test.ts', // PowerShell
   'tests/data-manifest/generate.test.ts', // PGlite 跑全部迁移
