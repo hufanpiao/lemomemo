@@ -6,6 +6,8 @@ export const load = (lang: string) => [
   import(`../../../../shared/logic/link.ts`),
   import(`./locales/${lang}.ts`),
   import(`./${lang}.ts`),
+  // 第十一批：插值在目录那一级，但前缀锁在本目录下（./locales/*/*），配不到 link、router
+  import(`./locales/${lang}/${lang}.ts`),
 ];
 export const Ok = () => (
   <>

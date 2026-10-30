@@ -12,7 +12,7 @@
 //   静态看不出有没有 href，一律报
 // A26-template（FE-1030-sugg ④）：动态 import 的来源写成模板串也查——不带插值的按字面量查；带插值、又可能指向
 //   shared/logic/link 或 src/app/router 的（把插值当任意文字，能拼出指向它们的相对路径），静态核对不了，直接报 importDynamic。
-//   “可能指向”要满足其一：静态部分里写出了 link 或 router；或者第一段插值前的前缀已经落在 shared/logic/、src/app/ 目录里
+//   ./、../ 开头的照 Vite 的规则把插值当任意一段目录或文件名去配（目录那一级的插值也算）；别的写法静态部分里要写出 link 或 router
 // A26-scheme（A26-old-gaps ④）：链接类属性写成常量（字符串、不带插值的模板串）也过一遍协议：先照浏览器的做法去掉首尾的
 //   控制字符和空格、删掉中间的制表符和换行，再看开头：
 //   · 带 scheme 的照 shared/logic/link.ts 的 safeHref 判：new URL 解析不了、协议不是 http、https、tel、mailto、
@@ -97,12 +97,28 @@ function badScheme(text) {
   return undefined;
 }
 
-/** srcset 是逗号分开的多个“地址 宽度”，每个地址都查；别的属性整串查 */
+/**
+ * 常量链接哪一段不安全：{ why, at, len }（at、len 是在常量文字里的位置），安全返回 undefined。
+ * srcset 是逗号分开的多个“地址 宽度”，每个地址都查；遇到 data: 时，从它开始到串尾整串当一个 data URL
+ * （data URL 里本来就有逗号，按逗号拆会把它拆碎，报出的位置和原因都不准）。别的属性整串查
+ */
 function badSchemeOf(attr, text) {
-  if (attr.toLowerCase() !== 'srcset') return badScheme(text);
+  if (attr.toLowerCase() !== 'srcset') {
+    const why = badScheme(text);
+    return why === undefined ? undefined : { why, at: 0, len: text.length };
+  }
+  let pos = 0;
   for (const part of text.split(',')) {
-    const bad = badScheme(part.trim().split(/\s+/)[0] ?? '');
-    if (bad !== undefined) return bad;
+    const at = pos + (part.length - part.trimStart().length);
+    const url = part.trim().split(/\s+/)[0] ?? '';
+    if (/^data:/i.test(stripLikeUrlParser(url))) {
+      const whole = text.slice(at);
+      const why = badScheme(whole);
+      return why === undefined ? undefined : { why: `${why}（srcset 里的 data: 地址，从这里到结尾整串算一个 URL）`, at, len: whole.length };
+    }
+    const why = badScheme(url);
+    if (why !== undefined) return { why, at, len: url.length };
+    pos += part.length + 1;
   }
   return undefined;
 }
@@ -117,25 +133,16 @@ function staticString(expr) {
 
 const escapeRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** link、router 所在的目录（canon 过） */
-const SAFE_DIRS = [...SAFE_SOURCES.values()].map((rel) => canon(dirname(resolve(ROOT, rel))));
+/** Vite 把相对路径模板串里的插值当 glob 的 *：只配一段目录或文件名（不跨 /，也不是 . 或 ..） */
+const SEGMENT_WILDCARD = '(?!\\.\\.?(?:/|$))[^/]*';
 
 /**
- * 模板串第一段插值前的静态前缀，按目录部分（最后一个 / 之前）解析后是不是已经落在 shared/logic/ 或 src/app/ 里（含子目录）。
- * 落在里面的，插值拼成什么都可能指向 link、router（${'li' + 'nk'} 这类拼接认不出字面），照样套相对路径去查
- */
-function prefixInSafeDir(prefix, fromFile) {
-  if (!prefix.startsWith('.')) return false;
-  const cut = prefix.lastIndexOf('/');
-  const dir = canon(resolve(dirname(fromFile), cut < 0 ? '.' : prefix.slice(0, cut + 1)));
-  return SAFE_DIRS.some((d) => dir === d || dir.startsWith(`${d}/`));
-}
-
-/**
- * 带插值的模板串来源会不会指向 link / router：插值里是字符串常量的照常量拼进去，别的插值当任意文字；? 或 # 以后是查询串、不管。
- * 静态部分里要真的出现 link 或 router（整段都是插值的 import(`${x}`) 看不出指向哪里，和 import(变量) 一样不管，
- * 免得 import(`./${lang}.ts`) 这类普通加载器被误报），再拿“从本文件到 link、router 的相对路径”
- * （带或不带 ./、各种脚本扩展名）去套，能套上就算
+ * 带插值的模板串来源会不会指向 link / router：插值里是字符串常量的照常量拼进去；? 或 # 以后是查询串、不管。
+ * - 以 ./ 或 ../ 开头的（Vite 按 glob 展开，见 @rollup/plugin-dynamic-import-vars）：别的插值当任意一段目录或文件名，
+ *   拼出的通配路径能套上“从本文件到 link、router 的相对路径”（带或不带 ./、各种脚本扩展名）就算。
+ *   ../../../${a}/${x} 能配到 ../../../app/router.ts，报；./${lang}.ts、./locales/${lang}.ts 只配本目录，不报
+ * - 不以 . 开头的（${base}/app/router.ts，Vite 不展开，运行时是什么都可能）：插值当任意文字；静态部分里要写出
+ *   link 或 router 才算（整段都是插值的 import(`${x}`) 看不出指向哪里，和 import(变量) 一样不管）
  */
 function templateMayPointToSafe(tpl, fromFile) {
   const parts = [''];
@@ -154,8 +161,10 @@ function templateMayPointToSafe(tpl, fromFile) {
     if (known !== undefined) push(known);
     else parts.push('');
   });
-  if (!/link|router/i.test(parts.join('')) && !(parts.length > 1 && prefixInSafeDir(parts[0], fromFile))) return false;
-  const rx = new RegExp(`^${parts.map(escapeRe).join('.*')}$`, process.platform === 'win32' ? 'is' : 's');
+  const relativeGlob = parts[0].startsWith('./') || parts[0].startsWith('../');
+  if (!relativeGlob && !/link|router/i.test(parts.join(''))) return false;
+  const wildcard = relativeGlob ? SEGMENT_WILDCARD : '.*';
+  const rx = new RegExp(`^${parts.map(escapeRe).join(wildcard)}$`, process.platform === 'win32' ? 'is' : 's');
   const from = dirname(fromFile);
   for (const target of SAFE_SOURCES.values()) {
     let rel = relative(from, resolve(ROOT, target)).replace(/\\/g, '/');
@@ -275,8 +284,16 @@ export default {
     function checkScheme(node, el, attr, value) {
       const text = staticString(value);
       if (text === undefined) return;
-      const why = badSchemeOf(attr, text);
-      if (why !== undefined) context.report({ node, messageId: 'badScheme', data: { el, attr, why } });
+      const bad = badSchemeOf(attr, text);
+      if (bad === undefined) return;
+      const data = { el, attr, why: bad.why };
+      // srcset：字面量原样写在一行里（没有转义、实体）时，直接报到出问题的那一段上
+      const raw = value.type === 'Literal' && typeof value.raw === 'string' ? value.raw.slice(1, -1) : undefined;
+      if (attr.toLowerCase() === 'srcset' && raw === text && !text.includes('\n') && value.loc) {
+        const { line, column } = value.loc.start;
+        const loc = { start: { line, column: column + 1 + bad.at }, end: { line, column: column + 1 + bad.at + bad.len } };
+        context.report({ loc, messageId: 'badScheme', data });
+      } else context.report({ node, messageId: 'badScheme', data });
     }
 
     return {

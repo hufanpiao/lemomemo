@@ -1,4 +1,4 @@
-// arch-fixture: path=src/features/notes/ui/Bad.tsx expect=lemo/safe-href message=常量链接不安全 rule=A26 count=14
+// arch-fixture: path=src/features/notes/ui/Bad.tsx expect=lemo/safe-href message=常量链接不安全 rule=A26 count=15
 // 违规（A26-old-gaps ④）：链接类属性写成常量也要过协议检查，只准相对地址和 http、https、tel、mailto；
 // 大小写、开头空格、中间的制表符（JSX 里 &#9; 会解码成制表符，浏览器解析 URL 时删掉）都照浏览器的做法处理。
 // 第十批审查建议：和 safeHref 一致，另挡协议相对地址（//、\\、/\ 开头，会去别的站）和带用户名、密码的地址
@@ -18,5 +18,7 @@ export const Bad = () => (
     <a href="https://lemomemo.com@evil.example/">i</a>
     <a href="https://user:pw@lemomemo.com/">j</a>
     <img alt="" src="https://lemomemo.com@evil.example/a.png" />
+    {/* 第十一批：srcset 里的 data: 地址本身带逗号，从它开始到结尾整串当一个 data URL 报 */}
+    <img alt="" srcSet="ok.png 1x, data:image/svg+xml,a,b 2x" />
   </>
 );

@@ -1,7 +1,9 @@
 // tests/build/ts-scan.ts 扫描器的正反例续篇（FN-cov-gaps 余项，10-30）：控制语句条件 ) 之后的正则、经变量间接调 skip。
+// 末尾另有 ts-scan-core 的 matchOpen、enclosingOpen 直接单测（OPS-logcalls-gap 用到，11 批）。
 // 从 ts-scan.test.ts 分出来免超 max-lines；原则同那边：认不出的写法宁可当“没覆盖”，不能当“覆盖了”。
 import { describe, expect, it } from 'vitest';
 import { assertsLiteral, references, testCases, type TestCase } from './ts-scan.ts';
+import { enclosingOpen, matchClose, matchOpen, scan } from './ts-scan-core.ts';
 
 const AD = 'account_disabled';
 const one = (code: string) => testCases(code)[0] as TestCase;
@@ -85,5 +87,59 @@ describe('FN-cov-gaps 余项（10-30）：控制语句条件 ) 之后的正则�
     ]) {
       expect(why(`it('X', async (ctx) => {\n${body}\n});`), body).toBeNull();
     }
+  });
+});
+
+describe('ts-scan-core：matchOpen（反向配对）、enclosingOpen（最内层开括号）', () => {
+  /** 在骨架里找第 n 个（从 0 数）ch 的下标 */
+  const nth = (s: string, ch: string, n = 0) => { let k = -1; for (let i = 0; i <= n; i++) k = s.indexOf(ch, k + 1); return k; };
+
+  it('matchOpen：嵌套 ( [ { 配对，和 matchClose 互为反向', () => {
+    const { skel } = scan('f(a, [b, { c: g(d) }], (e))');
+    for (const [open, close] of [['(', ')'], ['[', ']'], ['{', '}']] as const) {
+      const o = skel.indexOf(open);
+      const c = matchClose(skel, o);
+      expect(skel[c]).toBe(close);
+      expect(matchOpen(skel, c)).toBe(o);
+    }
+    expect(matchOpen(skel, skel.length - 1)).toBe(1);   // 最外层 ) 回到 f 后面的 (
+    expect(matchOpen(skel, nth(skel, ')', 0))).toBe(nth(skel, '(', 1));   // g(d) 的 )
+  });
+
+  it('matchOpen：字符串、模板字面部分、注释、正则里的括号骨架已去掉，不参与配对', () => {
+    const code = "f(')', \"(\", `[${x}]`, /\\(/, /* ( */ y) // )";
+    const { skel } = scan(code);
+    const close = nth(skel, ')', skel.split(')').length - 2);   // 骨架里最后一个 )：f 的闭括号
+    expect(close).toBe(code.lastIndexOf('y') + 1);
+    expect(matchOpen(skel, close)).toBe(1);
+    // 模板里 ${x} 是代码：它的 { } 留在骨架里，照样配对
+    const lb = skel.indexOf('{');
+    expect(matchOpen(skel, matchClose(skel, lb))).toBe(lb);
+  });
+
+  it('matchOpen：找不到回 -1（多出来的闭括号、括号种类不配、起点不是闭括号也不配）', () => {
+    expect(matchOpen(scan('a)').skel, 1)).toBe(-1);
+    expect(matchOpen(scan('[a)').skel, 2)).toBe(-1);
+    expect(matchOpen(scan('(a]').skel, 2)).toBe(-1);
+    expect(matchOpen(scan("'('").skel, 1)).toBe(-1);   // 字符串里的 ( 在骨架里是空格
+  });
+
+  it('enclosingOpen：最内层开括号；跳过已配对的兄弟括号；顶层回 -1', () => {
+    const code = 'f(a, g(b), [c, { d: e }])';
+    const { skel } = scan(code);
+    expect(enclosingOpen(skel, code.indexOf('a'))).toBe(1);
+    expect(enclosingOpen(skel, code.indexOf('b'))).toBe(code.indexOf('g') + 1);
+    expect(enclosingOpen(skel, code.indexOf('c'))).toBe(code.indexOf('['));   // 前面的 g(b) 已配对，跳过
+    expect(enclosingOpen(skel, code.indexOf('e'))).toBe(code.indexOf('{'));
+    expect(enclosingOpen(skel, 0)).toBe(-1);
+    expect(enclosingOpen(scan('a; b').skel, 3)).toBe(-1);
+  });
+
+  it('enclosingOpen：字符串、注释里的括号不算（骨架已去掉）', () => {
+    const code = "f(x, ')', /* ( */ \"[\", y)";
+    const { skel } = scan(code);
+    expect(enclosingOpen(skel, code.indexOf('y'))).toBe(1);
+    expect(enclosingOpen(scan("'(' + z").skel, 6)).toBe(-1);
+    expect(enclosingOpen(scan('// (\nz').skel, 5)).toBe(-1);
   });
 });

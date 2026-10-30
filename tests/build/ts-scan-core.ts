@@ -103,6 +103,29 @@ export function matchClose(skel: string, open: number): number {
   return -1;
 }
 
+/** skel 里 close 处的 ) ] } 往回对应的开括号下标；找不到回 -1（matchClose 的反向） */
+export function matchOpen(skel: string, close: number): number {
+  const pairs: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
+  const stack: string[] = [];
+  for (let k = close; k >= 0; k--) {
+    const ch = skel[k] ?? '';
+    if (ch in pairs) stack.push(pairs[ch] ?? '');
+    else if (ch === '(' || ch === '[' || ch === '{') { if (stack.pop() !== ch) return -1; if (stack.length === 0) return k; }
+  }
+  return -1;
+}
+
+/** 包住 at 的最内层开括号 ( [ { 的下标；在顶层回 -1 */
+export function enclosingOpen(skel: string, at: number): number {
+  let depth = 0;
+  for (let k = at - 1; k >= 0; k--) {
+    const ch = skel[k] ?? '';
+    if (ch === ')' || ch === ']' || ch === '}') depth++;
+    else if (ch === '(' || ch === '[' || ch === '{') { if (depth === 0) return k; depth--; }
+  }
+  return -1;
+}
+
 /** 括号 open..close 之间按顶层逗号切开：[起, 止) 列表 */
 export function splitTop(skel: string, open: number, close: number): [number, number][] {
   const out: [number, number][] = [];

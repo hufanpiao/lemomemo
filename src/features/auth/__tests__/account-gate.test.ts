@@ -66,6 +66,8 @@ describe('httpError 的错误码：和 apiError（zod）一致（REVIEW-1030-be-
     ['正好 64 个 x', JSON.stringify({ error: 'x'.repeat(64) })],
     // 66 个 UTF-16 码元、33 个码位：zod 4 按码位数，算 33 个，通过
     ['33 个 emoji', JSON.stringify({ error: '\u{1F600}'.repeat(33) })],
+    // 130 个码元、65 个码位：超过 64，两边都不通过
+    ['65 个 emoji', JSON.stringify({ error: '\u{1F600}'.repeat(65) })],
     ['只有 1 个字', JSON.stringify({ error: 'x' })],
     ['不是字符串', JSON.stringify({ error: 5 })],
     ['老写法 {code}', JSON.stringify({ code: 'restore_too_late' })],
