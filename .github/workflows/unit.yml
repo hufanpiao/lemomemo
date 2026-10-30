@@ -80,8 +80,12 @@ jobs:
       - name: 单元和组件测试（UTC、首尔、洛杉矶三个时区各一遍，架构第 9 节 H2）
         # 前端 A 的 test 脚本如果已经自己按三个时区跑，这里改成只跑一遍
         # LEMO_REQUIRE_DENO=1：deno-frozen-lock.test.ts 找不到 deno 就失败，不再 skipIf 悄悄跳过
+        # POWERSHELL_*：关掉 pwsh 启动时的后台遥测和更新检查；10-31 c935906 这一步 pwsh（.NET 10）
+        # 在后台加载程序集时崩溃（FileLoadException，退出码 null），login-token-tests-run 一组 10 条因此失败
         env:
           LEMO_REQUIRE_DENO: '1'
+          POWERSHELL_TELEMETRY_OPTOUT: '1'
+          POWERSHELL_UPDATECHECK: 'Off'
         run: |
           for tz in UTC Asia/Seoul America/Los_Angeles; do
             echo "::group::TZ=$tz"
