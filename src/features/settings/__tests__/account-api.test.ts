@@ -33,6 +33,12 @@ const gz = (bytes: number[], next: string | null, more: Record<string, string> =
   });
 
 describe('startExport（0.47 续 ①）', () => {
+  it('回 546（WORKER_LIMIT，正文没有 error）→ try_later，只发一次请求，不在这一层重发（TC-B1-126 ⑤、137 ①）', async () => {
+    const { a, f } = api(async () => json(546, { code: 'WORKER_LIMIT', message: 'Function failed due to not having enough compute resources' }));
+    expect(await a.startExport(null)).toEqual({ ok: false, error: 'try_later', sid: 's-1' });
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
   it('发 {action: export, step: start, device_id}，带这次会话的令牌和 apikey，不带隐私记令牌；回 export_id、exported_at 和这次的会话', async () => {
     const { a, f } = api(async () => json(200, { ok: true, export_id: EID, exported_at: '2026-10-30T15:30:00.123Z' }));
     expect(await a.startExport('3f0c1d2e-0000-4000-8000-000000000001')).toEqual({
