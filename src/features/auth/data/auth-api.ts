@@ -5,6 +5,7 @@
 // - verifyOtp 先不带 captchaToken（官方文档只写发码和注册要；B1 实测 TC-B1-08，要的话在这里补）
 // 只认错误码，不把服务器原文显示给用户
 import type { ApiError } from '../../../../shared/schema/api.ts';
+import { isEntryErrorCode, type EntryErrorCode } from '../../../../shared/schema/entry-codes.ts';
 import { budgetLeft, logoutReplaced, sessionReplaced, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import { readStoredAccessToken } from './local-exit.ts';
@@ -105,7 +106,18 @@ const INVITE_ERRORS: Readonly<Record<string, AuthErr>> = {
   email_exists: 'email_exists',
   link_failed: 'registered_login',
   try_later: 'try_later',
+};
+
+/**
+ * 入口共用码（shared/schema/entry-codes.ts）在邀请注册怎么落：请求不对、配置错误显示“出错”；
+ * null = 不在这里认，照旧按 HTTP 状态走（invite-signup 不要会话，unauthorized、session_revoked 实际不会出现；upgrade_required 由版本门统一处理）
+ */
+export const INVITE_ENTRY: Readonly<Record<EntryErrorCode, AuthErr | null>> = {
   bad_request: 'unknown',
+  method_not_allowed: null,
+  unauthorized: null,
+  session_revoked: null,
+  upgrade_required: null,
   misconfigured: 'unknown',
 };
 
@@ -125,7 +137,7 @@ async function inviteError(e: unknown, step: 'start' | 'verify'): Promise<AuthEr
       const body = (await ctx.clone().json()) as Partial<Record<keyof ApiError, unknown>> | null;
       // 只查表自己的键：error 是 constructor、toString 之类时不能取到 Object.prototype 上的函数（K2 复审低 1）
       const code = str(body?.error);
-      const mapped = Object.hasOwn(INVITE_ERRORS, code) ? INVITE_ERRORS[code] : undefined;
+      const mapped = isEntryErrorCode(code) ? INVITE_ENTRY[code] : Object.hasOwn(INVITE_ERRORS, code) ? INVITE_ERRORS[code] : undefined;
       if (mapped) return mapped;
     } catch {
       // 响应体不是 JSON：按下面的规则

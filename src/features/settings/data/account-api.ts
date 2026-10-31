@@ -14,6 +14,7 @@
 //   546（WORKER_LIMIT）、500、502、504 和读不出码的 5xx 也当 try_later（0.47 第 8 条、续 ③ 第 3 点）
 // • 失败一律带上这次请求用的会话的 session_id（sid；同 settings-api，接手清单 K6-sugg4 ①）：会话没了、账号停用、冷静期离开本机时只删它
 import { accountErrorCode } from '../../../../shared/schema/account.ts';
+import { isEntryErrorCode, type EntryErrorCode } from '../../../../shared/schema/entry-codes.ts';
 import { buildInfo } from '../../../platform/env.ts';
 import { appFetch } from '../../../platform/http.ts';
 import { readSessionId, sessionIdOfToken } from '../../../platform/session.ts';
@@ -110,12 +111,25 @@ function byStatus(status: number): AccountErr {
   return 'unknown';
 }
 
+/**
+ * 入口共用码（shared/schema/entry-codes.ts）在设置页怎么落：
+ * - 会话已吊销、没登录 → revoked（走“被移除”）
+ * - 配置错误（500 {error:'misconfigured'}）→ unknown：显示“出错”，不按 500 当稍后再试（和邀请注册、登录页 restore 同口径，10-31 代码审查建议）
+ * - null：不在这里认，照旧按 HTTP 状态走（byStatus）
+ */
+export const ACCOUNT_ENTRY: Readonly<Record<EntryErrorCode, AccountErr | null>> = {
+  bad_request: null,
+  method_not_allowed: null,
+  unauthorized: 'revoked',
+  session_revoked: 'revoked',
+  upgrade_required: null,
+  misconfigured: 'unknown',
+};
+
 /** 服务器回的码 → 界面的错误 */
 export function mapAccountCode(code: unknown, status: number): AccountErr {
-  if (code === 'session_revoked' || code === 'unauthorized') return 'revoked';
-  // 入口的配置错误（supabase/functions/account/index.ts 回 500 {error:'misconfigured'}，不在共享码表）：显示“出错”，不按 500 当稍后再试
-  // （和邀请注册、登录页 restore 同口径，10-31 代码审查建议）
-  if (code === 'misconfigured') return 'unknown';
+  const entry = isEntryErrorCode(code) ? ACCOUNT_ENTRY[code] : null;
+  if (entry) return entry;
   const c = accountErrorCode.safeParse(code);
   if (c.success) {
     switch (c.data) {

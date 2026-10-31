@@ -19,6 +19,7 @@ import {
   statusError,
   type AccountStatus,
 } from '../../../platform/account-status.ts';
+import { isEntryErrorCode, type EntryErrorCode } from '../../../../shared/schema/entry-codes.ts';
 import { readSessionAccessToken, readSessionId } from '../../../platform/session.ts';
 import { budgetLeft, logoutReplaced, sessionReplaced, withTimeout, type PriorSession } from '../../../platform/sign-out.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
@@ -68,10 +69,20 @@ const RESTORE_CODES: Readonly<Record<string, RestoreErr>> = {
   account_disabled: 'account_disabled',
   not_pending: 'not_pending',
   try_later: 'try_later',
-  // 会话已吊销、没登录：这个会话恢复不了，和 reauth_required 一样删掉它重新收码
-  session_revoked: 'reauth_required',
+};
+
+/**
+ * 入口共用码（shared/schema/entry-codes.ts）在 restore 怎么落：
+ * - 会话已吊销、没登录：这个会话恢复不了，和 reauth_required 一样删掉它重新收码
+ * - 配置错误（500）：显示“出错”，不按 5xx 当稍后再试（和邀请注册一致，10-31 代码审查建议）
+ * - null：不在这里认，照旧按 HTTP 状态走（下面 restoreError 的 401、429、5xx 规则）
+ */
+export const RESTORE_ENTRY: Readonly<Record<EntryErrorCode, RestoreErr | null>> = {
+  bad_request: null,
+  method_not_allowed: null,
   unauthorized: 'reauth_required',
-  // 入口的配置错误（500）：显示“出错”，不按 5xx 当稍后再试（和 invite 的 INVITE_ERRORS 一致，10-31 代码审查建议）
+  session_revoked: 'reauth_required',
+  upgrade_required: null,
   misconfigured: 'unknown',
 };
 
@@ -79,6 +90,8 @@ const RESTORE_CODES: Readonly<Record<string, RestoreErr>> = {
 export async function restoreError(e: unknown): Promise<RestoreErr> {
   const h = await httpError(e);
   if (h) {
+    const entry = isEntryErrorCode(h.code) ? RESTORE_ENTRY[h.code] : null;
+    if (entry) return entry;
     if (Object.hasOwn(RESTORE_CODES, h.code)) return RESTORE_CODES[h.code] ?? 'unknown';
     // 401 且回包没有 error 字段（网关、令牌过期等）：这个会话用不了，同 reauth_required（审查建议 1）
     if (h.status === 401 && h.code === '') return 'reauth_required';
