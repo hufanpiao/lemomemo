@@ -17,7 +17,7 @@ const OK = JSON.stringify({ ok: true });
 /** 格式对、库里没有的码 */
 const NO_SUCH_CODE = 'QRST2345UVWX';
 
-const SIGNUP_METHODS = ['takeRate', 'getInvite', 'casInviteUsed', 'putPending', 'getPending', 'casPendingTries', 'deletePending', 'insertProfile', 'minClientVersion'] as const;
+const SIGNUP_METHODS = ['takeRate', 'getInvite', 'claimInvite', 'releaseInvite', 'putPending', 'getPending', 'casPendingTries', 'deletePending', 'insertProfile', 'minClientVersion'] as const;
 const ADMIN_METHODS = ['isAdmin', 'takeRate', 'insertInvite', 'listInvites', 'minClientVersion'] as const;
 
 type Hang = (m: string, args: unknown[]) => boolean;
@@ -61,6 +61,19 @@ describe('_shared/store-timeout.ts', () => {
     expect(await t('ok', (s) => s.ok())).toBe(1);
     await expect(t('bad', (s) => s.bad())).rejects.toThrow('db');
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('until：已过截止时刻不调底下、直接抛 StoreTimeout；剩余比 ms 短时按剩余算', async () => {
+    let made = 0;
+    const logs: string[] = [];
+    const past = storeTimer(() => { made++; return { hang: () => new Promise<never>(() => {}) }; }, { ms: 10_000, until: Date.now() - 1, log: (c) => logs.push(c) });
+    await expect(past('getPending', (s) => s.hang())).rejects.toBeInstanceOf(StoreTimeout);
+    expect(made).toBe(0);
+    expect(logs).toEqual(['store_timeout:getPending']);
+    const t0 = Date.now();
+    const soon = storeTimer(() => ({ hang: () => new Promise<never>(() => {}) }), { ms: 10_000, until: Date.now() + MS });
+    await expect(soon('x', (s) => s.hang())).rejects.toBeInstanceOf(StoreTimeout);
+    expect(Date.now() - t0).toBeLessThan(1000);
   });
 
   it('两边的包装包住了各自 store 的全部方法', async () => {
@@ -121,7 +134,7 @@ describe('invite-signup start 超时：不泄露码有没有效', () => {
 });
 
 describe('invite-signup verify 超时', () => {
-  it.each(['getPending', 'casPendingTries', 'getInvite', 'casInviteUsed'])('%s 卡住：try_later，不建用户，日志只有方法名', async (m) => {
+  it.each(['getPending', 'casPendingTries', 'claimInvite'])('%s 卡住：try_later，不建用户，日志只有方法名', async (m) => {
     let armed = false;   // start 照常走完，verify 才开始卡
     const w = await signupWorld((x) => armed && x === m);
     expect((await signupCall(w, startBody('a@example.com'))).status).toBe(200);

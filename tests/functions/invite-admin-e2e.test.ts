@@ -16,20 +16,22 @@ describe('端到端：invite-admin 发出的码交给 invite-signup 能注册成
     // invite-signup 的假库：invites 直接读 invite-admin 写的那张（同一个 Map，按 code_hash）
     const pending = new Map<string, PendingRow>();
     const mails: string[] = [];
-    let users = 0;
     const store: SignupStore = {
       takeRate: async () => true,
       getInvite: async (h) => {
         const r = admin.invites.get(h);
         return r ? ({ max_uses: r.max_uses, used_count: r.used_count, expires_at: r.expires_at } satisfies InviteRow) : null;
       },
-      casInviteUsed: async (h, from, to, notExpiredAt) => {
+      // 占码、退码照迁移 20261031150000 的 invite_claim、invite_release（这里只走成功的一条路）
+      claimInvite: async (eh, otpHash, h, notExpiredAt) => {
+        const p = pending.get(eh);
+        if (!p || p.otp_hash !== otpHash) return 'no_pending';
         const r = admin.invites.get(h);
-        if (!r || r.used_count !== from) return false;
-        if (notExpiredAt && !(Date.parse(r.expires_at) > Date.parse(notExpiredAt))) return false;
-        r.used_count = to;
-        return true;
+        if (!r || r.used_count >= r.max_uses || !(Date.parse(r.expires_at) > Date.parse(notExpiredAt))) return 'invalid';
+        r.used_count += 1;
+        return 'ok';
       },
+      releaseInvite: async () => false,
       putPending: async (eh, row) => { pending.set(eh, { ...row }); },
       getPending: async (eh) => { const r = pending.get(eh); return r ? { ...r } : null; },
       casPendingTries: async (eh, from, to, otpHash) => {
@@ -39,13 +41,14 @@ describe('端到端：invite-admin 发出的码交给 invite-signup 能注册成
         return true;
       },
       deletePending: async (eh) => { pending.delete(eh); },
-      insertProfile: async () => {},
+      insertProfile: async () => true,
       minClientVersion: async () => null,
     };
     const signupDeps: SignupDeps = {
       store,
       auth: {
-        createUser: async () => ({ ok: true, userId: `cccccccc-0000-4000-8000-00000000000${++users}` }),
+        createUser: async (id) => ({ ok: true, userId: id }),
+        userExists: async () => false,
         deleteUser: async () => {},
         magiclinkTokenHash: async () => 'token-hash-e2e',
       },

@@ -81,7 +81,8 @@ export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault'
     'table_meta_of', 'guard_note_image', 'guard_note_file', 'files_authorize_impl', 'enqueue_anniv_defaults', 'enqueue_embed', 'vault_ai_off',
     'tags_ok'],   // tags_ok：B1 迁移 20261031110000，notes.tags 的 check 约束用（写 notes 的三种角色都要能执行）
   service_role: ['take_rate', 'session_alive', 'rebind_device_impl', 'long_transactions', 'auth_mail_counts', 'account_usable', 'account_request_deletion', 'account_restore',
-    'export_job_start', 'export_job_take', 'db_size_bytes', 'export_size_over', 'tags_ok'],
+    'export_job_start', 'export_job_take', 'db_size_bytes', 'export_size_over', 'tags_ok',
+    'invite_claim', 'invite_release'],   // B1 迁移 20261031150000（INVITE-late-commit）
   fn_vault: ['purge_vault_impl', 'tags_ok'],
   fn_ai: [],
 };

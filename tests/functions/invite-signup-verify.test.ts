@@ -137,7 +137,7 @@ describe('TC-B1-04：验证码没过不建用户；createUser 失败退回邀请
     expect(r.status).toBe(200);
     const id = w.auth.users.get('a@example.com');
     expect(JSON.parse(r.text)).toEqual({ token_hash: `th-${id}` });
-    expect(w.auth.created).toEqual([{ email: 'a@example.com', locale: 'ko-KR', args: 2 }]);
+    expect(w.auth.created).toEqual([{ email: 'a@example.com', locale: 'ko-KR', args: 3 }]);
     expect(w.store.profiles).toEqual([{ userId: id, locale: 'ko-KR' }]);
     expect(w.store.pending.size).toBe(0);
   });

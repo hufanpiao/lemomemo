@@ -273,13 +273,13 @@ describe('invite-signup（要查；版本门在 core.ts 的 Turnstile、限流�
   const PROXY = 'test-proxy-secret';
   function deps(min: string | null): InviteDeps {
     const store: InviteStore = {
-      takeRate: async () => true, getInvite: async () => null, casInviteUsed: async () => false, putPending: async () => {},
-      getPending: async () => null, casPendingTries: async () => false, deletePending: async () => {}, insertProfile: async () => {},
+      takeRate: async () => true, getInvite: async () => null, claimInvite: async () => 'invalid', releaseInvite: async () => false, putPending: async () => {},
+      getPending: async () => null, casPendingTries: async () => false, deletePending: async () => {}, insertProfile: async () => true,
       minClientVersion: async () => min,
     };
     return {
       store,
-      auth: { createUser: async () => ({ ok: false, exists: false }), deleteUser: async () => {}, magiclinkTokenHash: async () => null },
+      auth: { createUser: async () => ({ ok: false, exists: false }), userExists: async () => false, deleteUser: async () => {}, magiclinkTokenHash: async () => null },
       env: 'prod', verifyTurnstile: async () => ({ success: true, hostname: 'lemomemo.com', action: 'invite_start' }),
       sendMail: async () => true, hashSecret: 'test-hash-secret', proxySecret: PROXY, configured: true,
       now: () => Date.parse('2026-10-29T12:00:00Z'),

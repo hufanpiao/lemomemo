@@ -1,5 +1,5 @@
-// D1 第 6 节：服务器函数用的五个函数必须带函数级 lock_timeout = 5s（迁移 20261031130000 的四个，安全审查第 22 条建议 ②；
-// 20261031140000 加 account_restore，接手清单 LOCK-restore）。
+// D1 第 6 节：服务器函数用的七个函数必须带函数级 lock_timeout = 5s（迁移 20261031130000 的四个，安全审查第 22 条建议 ②；
+// 20261031140000 加 account_restore，接手清单 LOCK-restore；20261031150000 的 invite_claim、invite_release 建函数时就带）。
 // 纯函数：入参是 checks.ts 查出的 private 函数（名字、proconfig），单测 tests/build/d1-fn-lock-timeout.test.ts，
 // 反例 supabase/tests/d1-fixtures/37_fn_lock_timeout_reset.psql。
 
@@ -10,6 +10,8 @@ export const LOCK_TIMEOUT_FNS: Readonly<Record<string, string>> = {
   export_job_take: 'lock_timeout=5s',
   account_request_deletion: 'lock_timeout=5s',
   account_restore: 'lock_timeout=5s',   // 迁移 20261031140000
+  invite_claim: 'lock_timeout=5s',      // 迁移 20261031150000（建函数时就带）
+  invite_release: 'lock_timeout=5s',
 };
 
 export interface FnConfigRow { s: string; f: string; config: string[] | null }
@@ -24,7 +26,7 @@ export function lockTimeoutProblems(fns: readonly FnConfigRow[], want: Readonly<
     for (const r of rows) {
       const lt = (r.config ?? []).filter((c) => c.startsWith('lock_timeout='));
       if (lt.length !== 1 || lt[0] !== setting) {
-        out.push(`private.${name} 的函数级 lock_timeout 应为 ${setting.slice('lock_timeout='.length)}（迁移 20261031130000、20261031140000；现在：${lt.join(', ') || '没设'}）`);
+        out.push(`private.${name} 的函数级 lock_timeout 应为 ${setting.slice('lock_timeout='.length)}（迁移 20261031130000～20261031150000；现在：${lt.join(', ') || '没设'}）`);
       }
     }
   }

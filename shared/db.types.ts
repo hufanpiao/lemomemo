@@ -159,14 +159,14 @@ isOneToOne: false
                   ]
                 },"pending_signups": {
                   Row: {
-                    "email_hash": string,"expires_at": string,"otp_hash": string,"tries": number
+                    "claimed_code": string | null,"email_hash": string,"expires_at": string,"otp_hash": string,"tries": number
                   }
                   ComputedFields: never
                   Insert: {
-                    "email_hash": string,"expires_at": string,"otp_hash": string,"tries"?: number
+                    "claimed_code"?: string | null,"email_hash": string,"expires_at": string,"otp_hash": string,"tries"?: number
                   }
                   Update: {
-                    "email_hash"?: string,"expires_at"?: string,"otp_hash"?: string,"tries"?: number
+                    "claimed_code"?: string | null,"email_hash"?: string,"expires_at"?: string,"otp_hash"?: string,"tries"?: number
                   }
                   Relationships: [
                     
@@ -412,6 +412,12 @@ isOneToOne: false
                            },
 "files_authorize_impl":
 { Args: { "p_items": Json,"p_op": string }; Returns: Json
+                           },
+"invite_claim":
+{ Args: { "p_code_hash": string,"p_email_hash": string,"p_now": string,"p_otp_hash": string }; Returns: string
+                           },
+"invite_release":
+{ Args: { "p_code_hash": string,"p_email_hash": string }; Returns: boolean
                            },
 "is_active":
 { Args: Record<PropertyKey, never>; Returns: boolean

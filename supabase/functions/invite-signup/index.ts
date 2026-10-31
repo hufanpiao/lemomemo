@@ -10,7 +10,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 import { envKind } from '../_shared/env-kind.ts';
 import { cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { handle, type AuthAdmin, type Store, type TurnstileResult } from './core.ts';
-import { withStoreTimeouts } from './store-timeout.ts';
+import { REQUEST_BUDGET_MS, withAuthTimeouts, withStoreTimeouts } from './store-timeout.ts';
 import { RESEND_EMAILS_URL, TURNSTILE_SITEVERIFY_URL, resolveOutboundUrl } from './outbound.ts';
 
 const MAIL_FROM = '柠檬记 <noreply@lemomemo.com>';   // 5.6：发件人 noreply@lemomemo.com
@@ -38,17 +38,24 @@ function makeStore(admin: Admin, signal: AbortSignal): Store {
     async getInvite(codeHash) {
       return must(await priv.from('invites').select('max_uses, used_count, expires_at').eq('code_hash', codeHash).abortSignal(signal).maybeSingle());
     },
-    async casInviteUsed(codeHash, from, to, notExpiredAt) {
-      let q = priv.from('invites').update({ used_count: to }).eq('code_hash', codeHash).eq('used_count', from);
-      if (notExpiredAt) q = q.gt('expires_at', notExpiredAt);
-      const rows = must(await q.select('code_hash').abortSignal(signal));
-      return Array.isArray(rows) && rows.length === 1;
+    // 迁移 20261031150000（INVITE-late-commit）：占码、退码和 pending 的 claimed_code 一个事务
+    async claimInvite(emailHash, otpHash, codeHash, notExpiredAt) {
+      const data = must(await priv.rpc('invite_claim', { p_email_hash: emailHash, p_otp_hash: otpHash, p_code_hash: codeHash, p_now: notExpiredAt }).abortSignal(signal));
+      if (data !== 'ok' && data !== 'reused' && data !== 'invalid' && data !== 'no_pending') throw new Error('db');
+      return data;
+    },
+    async releaseInvite(emailHash, codeHash) {
+      const data = must(await priv.rpc('invite_release', { p_email_hash: emailHash, p_code_hash: codeHash }).abortSignal(signal));
+      if (typeof data !== 'boolean') throw new Error('db');
+      return data;
     },
     async putPending(emailHash, row) {
-      must(await priv.from('pending_signups').upsert({ email_hash: emailHash, ...row }, { onConflict: 'email_hash' }).abortSignal(signal));
+      // 只写这四列：claimed_code 不在里面，upsert 时原值保留（迁移 20261031150000，“已占”跟邮箱 + 码走，不跟验证码版本走）
+      must(await priv.from('pending_signups').upsert({ email_hash: emailHash, otp_hash: row.otp_hash, tries: row.tries, expires_at: row.expires_at },
+        { onConflict: 'email_hash' }).abortSignal(signal));
     },
     async getPending(emailHash) {
-      return must(await priv.from('pending_signups').select('otp_hash, tries, expires_at').eq('email_hash', emailHash).abortSignal(signal).maybeSingle());
+      return must(await priv.from('pending_signups').select('otp_hash, tries, expires_at, claimed_code').eq('email_hash', emailHash).abortSignal(signal).maybeSingle());
     },
     async casPendingTries(emailHash, from, to, otpHash) {
       const rows = must(await priv.from('pending_signups').update({ tries: to })
@@ -60,7 +67,10 @@ function makeStore(admin: Admin, signal: AbortSignal): Store {
       must(await (otpHash === undefined ? q : q.eq('otp_hash', otpHash)));
     },
     async insertProfile(userId, locale) {
-      must(await admin.from('profiles').insert({ user_id: userId, ui_locale: locale }).abortSignal(signal));
+      // 已有就不动（ON CONFLICT DO NOTHING）：认领上一次超时晚到建出的用户时，profile 可能上一次已经建了（INVITE-auth-timeout）。
+      // 带 select（service_role 有 profiles 的 select）：DO NOTHING 只回真插进去的行，空数组 = 已经有了（认领的是注册完的账号，core.ts 判 email_exists）
+      const rows = must(await admin.from('profiles').upsert({ user_id: userId, ui_locale: locale }, { onConflict: 'user_id', ignoreDuplicates: true }).select('user_id').abortSignal(signal)) as unknown[] | null;
+      return (rows ?? []).length > 0;
     },
     // 架构 0.38 第 52 条：经函数侧版本门的缓存读（超时 1.5 秒、成功缓存 60 秒、失败缓存 10 秒放行，只记 gate_config_*）
     minClientVersion() {
@@ -74,9 +84,9 @@ function makeStore(admin: Admin, signal: AbortSignal): Store {
 
 function makeAuth(admin: Admin): AuthAdmin {
   return {
-    async createUser(email, locale) {
-      // 不传 password：账号不许有密码（0.36；auth.users 上的 users_guard_no_password 触发器兜底）
-      const { data, error } = await admin.auth.admin.createUser({ email, email_confirm: true, user_metadata: { locale } });
+    async createUser(id, email, locale) {
+      // 不传 password：账号不许有密码（0.36；auth.users 上的 users_guard_no_password 触发器兜底）。id 由 core 派生（INVITE-auth-timeout）
+      const { data, error } = await admin.auth.admin.createUser({ id, email, email_confirm: true, user_metadata: { locale } });
       if (error || !data.user) {
         const e = error as { code?: unknown; status?: unknown; message?: unknown } | null;
         const exists = e?.code === 'email_exists' || e?.code === 'user_already_exists'
@@ -84,6 +94,13 @@ function makeAuth(admin: Admin): AuthAdmin {
         return { ok: false, exists };
       }
       return { ok: true, userId: data.user.id };
+    },
+    async userExists(id) {
+      const { data, error } = await admin.auth.admin.getUserById(id);
+      if (data?.user) return true;
+      const e = error as { status?: unknown } | null;
+      if (e?.status === 404) return false;   // 没有这个用户
+      throw new Error('auth');
     },
     async deleteUser(userId) {
       const { error } = await admin.auth.admin.deleteUser(userId);
@@ -158,9 +175,10 @@ Deno.serve((req) => {
   const siteverifyUrl = siteverify.ok ? siteverify.url : TURNSTILE_SITEVERIFY_URL;
   const emailsUrl = emails.ok ? emails.url : RESEND_EMAILS_URL;
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const until = Date.now() + REQUEST_BUDGET_MS;   // 这次请求的 store、Auth 调用共用一份 100 秒预算
   return handle(req, {
-    store: withStoreTimeouts((signal) => makeStore(admin, signal), { log }),
-    auth: makeAuth(admin),
+    store: withStoreTimeouts((signal) => makeStore(admin, signal), { log, until }),
+    auth: withAuthTimeouts(makeAuth(admin), { log, until }),
     env,
     verifyTurnstile: (token, ip) => verifyTurnstile(siteverifyUrl, turnstileSecret, token, ip),
     sendMail: (to, mail) => sendMail(emailsUrl, resendKey, to, mail),

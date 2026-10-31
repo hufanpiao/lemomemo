@@ -21,6 +21,13 @@ export interface StoreTimeoutOpts {
   /** 超时（毫秒），测试换小值 */
   ms?: number;
   log?: ((code: string) => void) | undefined;
+  /** 日志前缀，默认 store_timeout；Auth 管理接口用 auth_timeout（INVITE-auth-timeout） */
+  prefix?: string;
+  /**
+   * 整个请求的截止时刻（Date.now() 口径的毫秒）。每次调用的超时取 min(ms, 剩余)；已经没有剩余就不调底下、直接抛 StoreTimeout。
+   * invite-signup 用它把一次请求里串起来的多个 10 秒超时压在墙钟以内（代码审查 (a)，见 invite-signup/store-timeout.ts 的 REQUEST_BUDGET_MS）
+   */
+  until?: number;
 }
 
 /**
@@ -30,14 +37,19 @@ export interface StoreTimeoutOpts {
 export function storeTimer<S>(make: (signal: AbortSignal) => S, opts: StoreTimeoutOpts = {}) {
   const ms = opts.ms ?? STORE_TIMEOUT_MS;
   return function t<R>(method: string, f: (s: S) => Promise<R>): Promise<R> {
+    const left = opts.until === undefined ? ms : Math.min(ms, opts.until - Date.now());
+    if (left <= 0) {
+      opts.log?.(`${opts.prefix ?? 'store_timeout'}:${method}`);
+      return Promise.reject(new StoreTimeout(method));
+    }
     const ctl = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         ctl.abort();
-        opts.log?.(`store_timeout:${method}`);
+        opts.log?.(`${opts.prefix ?? 'store_timeout'}:${method}`);
         reject(new StoreTimeout(method));
-      }, ms);
+      }, left);
     });
     const work = Promise.resolve().then(() => f(make(ctl.signal)));
     work.catch(() => {});   // 超时先赢以后底下再报错（abort 引起的）不算未处理

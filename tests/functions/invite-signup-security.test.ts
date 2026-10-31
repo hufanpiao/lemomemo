@@ -2,7 +2,7 @@
 // 只测 core.ts，假库、假 Auth 见 invite-signup-harness.ts。
 import { describe, expect, it, vi } from 'vitest';
 import {
-  keys, LIMIT_GLOBAL_PER_DAY, LIMIT_IP_PER_HOUR, LIMIT_MAIL_PER_HOUR, LIMIT_VERIFY_IP_PER_HOUR, OTP_MAX_TRIES, UNTRUSTED_IP_BUCKET,
+  keys, signupUserId, LIMIT_GLOBAL_PER_DAY, LIMIT_IP_PER_HOUR, LIMIT_MAIL_PER_HOUR, LIMIT_VERIFY_IP_PER_HOUR, OTP_MAX_TRIES, UNTRUSTED_IP_BUCKET,
   type PendingRow, type TurnstileResult,
 } from '../../supabase/functions/invite-signup/core.ts';
 import { emailHash } from '../../supabase/functions/_shared/email-hash.ts';
@@ -167,7 +167,8 @@ describe('K2 安全审查回归（P1～P5、低 2～6）', () => {
     const r = await call(w, verifyBody('o@example.com'));
     expect(r).toEqual({ status: 503, text: '{"error":"try_later"}' });
     // 只记 user_id 的前 8 位（架构 0.38）
-    expect(w.logs).toContain('orphan_user:aaaaaaaa');
+    expect(w.logs).toContain(`orphan_user:${w.auth.ids[0]?.slice(0, 8)}`);
+    expect(w.logs.filter((l) => l.startsWith('orphan_user:')).every((l) => /^orphan_user:[0-9a-f]{8}$/.test(l))).toBe(true);
     expect(w.logs.join('\n')).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
     expect(w.store.invites.get(await inviteCodeHash(CODE))?.used_count).toBe(1);
   });
@@ -221,5 +222,21 @@ describe('K2 安全审查回归（P1～P5、低 2～6）', () => {
     const r = await call(w, startBody('a@example.com', CODE, { captchaToken: 'bad-token' }), { ...viaProxy('203.0.113.7'), 'x-app-version': '1.0.0' });
     expect(JSON.parse(r.text)).toEqual({ error: 'captcha_failed' });
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+// INVITE-auth-timeout 的用户 id 派生（代码审查增量复核 1 起由邮箱哈希 + 码哈希派生；从 invite-late-commit.test.ts 挪来）
+describe('signupUserId', () => {
+  it('由邮箱哈希 + 码哈希派生：同一邮箱同一个码同一个 id（与验证码无关）；换邮箱、换码、换密钥都换；是 UUID v4 格式', async () => {
+    const eh = 'a'.repeat(64);
+    const ch = 'c'.repeat(64);
+    const a = await signupUserId('s1', eh, ch);
+    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(await signupUserId('s1', eh, ch)).toBe(a);
+    expect(await signupUserId('s1', 'b'.repeat(64), ch)).not.toBe(a);
+    expect(await signupUserId('s1', eh, 'd'.repeat(64))).not.toBe(a);
+    expect(await signupUserId('s2', eh, ch)).not.toBe(a);
+    // 派生只吃哈希：签名就是 (secret, eh, codeHash)，调用处传的是 email_hash、code_hash（core.ts verify）
+    expect(signupUserId.length).toBe(3);
   });
 });

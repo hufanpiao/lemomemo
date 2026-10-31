@@ -1,10 +1,11 @@
 // tests/functions/invite-signup*.test.ts 共用（B1 第九批从 invite-signup.test.ts 拆出）：常量、假 invites / pending_signups / counters、假 Auth、
-// world()、造请求和调用 handle 的小工具。假库的比较并交换和真 UPDATE … WHERE 同一个语义，take_rate 和迁移同一个口径（先计数再判断）。
-import { vi } from 'vitest';
+// world()、造请求和调用 handle 的小工具。假库的比较并交换和真 UPDATE … WHERE 同一个语义，占码、退码照迁移 20261031150000 的两个函数，take_rate 和迁移同一个口径（先计数再判断）。
+import { expect, vi } from 'vitest';
 import {
   handle, type AuthAdmin, type Deps, type InviteRow, type PendingRow, type Store, type TurnstileResult,
 } from '../../supabase/functions/invite-signup/core.ts';
 import { inviteCodeHash } from '../../supabase/functions/_shared/invite-code.ts';
+import { withAuthTimeouts, withStoreTimeouts } from '../../supabase/functions/invite-signup/store-timeout.ts';
 
 export const NOW = Date.parse('2026-10-29T12:00:00Z');
 export const SECRET = 'test-hash-secret';
@@ -32,16 +33,34 @@ export class FakeStore implements Store {
     return n <= limit;
   }
   async getInvite(h: string) { await this.tick(); const r = this.invites.get(h); return r ? { ...r } : null; }
-  async casInviteUsed(h: string, from: number, to: number, notExpiredAt: string | null) {
+  /** pending_signups.claimed_code（迁移 20261031150000）：邮箱哈希 → 已占的 code_hash；putPending 不碰它（和 upsert 不带这一列一样） */
+  claimed = new Map<string, string>();
+  /** 照 private.invite_claim：锁住这一版 pending，已占这个码回 reused；换了码先退旧码、回 reused；没占就原子 +1、记下、回 ok */
+  async claimInvite(eh: string, otpHash: string, h: string, notExpiredAt: string) {
     await this.tick();
+    const p = this.pending.get(eh);
+    if (!p || p.otp_hash !== otpHash) return 'no_pending' as const;
+    const c = this.claimed.get(eh);
+    if (c === h) return 'reused' as const;
     const r = this.invites.get(h);
-    if (!r || r.used_count !== from) return false;
-    if (notExpiredAt && !(r.expires_at && Date.parse(r.expires_at) > Date.parse(notExpiredAt))) return false;
-    r.used_count = to;
+    if (!r || r.max_uses === null || r.used_count === null || r.expires_at === null) return 'invalid' as const;
+    if (!(Date.parse(r.expires_at) > Date.parse(notExpiredAt)) || r.used_count >= r.max_uses) return 'invalid' as const;
+    r.used_count += 1;
+    if (c !== undefined) { const old = this.invites.get(c); if (old && old.used_count !== null && old.used_count > 0) old.used_count -= 1; }
+    this.claimed.set(eh, h);
+    return c === undefined ? 'ok' as const : 'reused' as const;
+  }
+  /** 照 private.invite_release：claimed_code 正是这个码才减一并清掉 */
+  async releaseInvite(eh: string, h: string) {
+    await this.tick();
+    if (this.claimed.get(eh) !== h) return false;
+    this.claimed.delete(eh);
+    const r = this.invites.get(h);
+    if (r && r.used_count !== null && r.used_count > 0) r.used_count -= 1;
     return true;
   }
-  async putPending(eh: string, row: PendingRow) { this.pending.set(eh, { ...row }); }
-  async getPending(eh: string) { await this.tick(); const r = this.pending.get(eh); return r ? { ...r } : null; }
+  async putPending(eh: string, row: PendingRow) { const { claimed_code: _c, ...rest } = row; this.pending.set(eh, rest); }
+  async getPending(eh: string): Promise<PendingRow | null> { await this.tick(); const r = this.pending.get(eh); return r ? { ...r, claimed_code: this.claimed.get(eh) ?? null } : null; }
   async casPendingTries(eh: string, from: number, to: number, otpHash: string) {
     await this.tick();
     const r = this.pending.get(eh);
@@ -55,10 +74,13 @@ export class FakeStore implements Store {
     this.beforeDelete?.();
     if (otpHash !== undefined && this.pending.get(eh)?.otp_hash !== otpHash) return;
     this.pending.delete(eh);
+    this.claimed.delete(eh);
   }
   async insertProfile(userId: string, locale: 'zh-CN' | 'ko-KR') {
     if (this.failProfile) throw new Error('db');
+    if (this.profiles.some((x) => x.userId === userId)) return false;   // 已有就不动（upsert ignoreDuplicates），回 false
     this.profiles.push({ userId, locale });
+    return true;
   }
   async minClientVersion() { return this.minVersion; }
 }
@@ -67,16 +89,23 @@ export class FakeAuth implements AuthAdmin {
   users = new Map<string, string>();   // email → id
   failCreate = false;
   failLink = false;
+  /** userExists 抛错 */
+  failExists = false;
   created: { email: string; locale: string; args: number }[] = [];
   deleted: string[] = [];
-  n = 0;
-  async createUser(email: string, locale: 'zh-CN' | 'ko-KR', ...rest: unknown[]) {
-    this.created.push({ email, locale, args: 2 + rest.length });
+  /** createUser 收到的 id（core 按验证码派生） */
+  ids: string[] = [];
+  async createUser(id: string, email: string, locale: 'zh-CN' | 'ko-KR', ...rest: unknown[]) {
+    this.created.push({ email, locale, args: 3 + rest.length });
+    this.ids.push(id);
     if (this.failCreate) return { ok: false as const, exists: false };
     if (this.users.has(email)) return { ok: false as const, exists: true };
-    const id = `aaaaaaaa-0000-4000-8000-${String(++this.n).padStart(12, '0')}`;
     this.users.set(email, id);
     return { ok: true as const, userId: id };
+  }
+  async userExists(id: string) {
+    if (this.failExists) throw new Error('auth');
+    return [...this.users.values()].includes(id);
   }
   failDelete = false;
   async deleteUser(id: string) {
@@ -123,3 +152,41 @@ export async function call(w: World, body: unknown, headers: Record<string, stri
   const r = await handle(req(body, headers), w.deps);
   return { status: r.status, text: await r.text() };
 }
+
+// ---------- invite-late-commit.test.ts 用：超时包装下的“卡住”桩（从那边挪来，免得超 300 行） ----------
+const MS = 20;
+export const TRY_LATER = { status: 503, text: JSON.stringify({ error: 'try_later' }) };
+export const STORE_METHODS = ['takeRate', 'getInvite', 'claimInvite', 'releaseInvite', 'putPending', 'getPending', 'casPendingTries', 'deletePending', 'insertProfile', 'minClientVersion'];
+export const AUTH_METHODS = ['createUser', 'userExists', 'deleteUser', 'magiclinkTokenHash'];
+
+export type Mode = 'before' | 'after' | false;
+export type Hang = (m: string) => Mode;
+
+export function hanging<S>(base: S, names: readonly string[], hang: () => Hang): S {
+  const b = base as object;
+  return Object.fromEntries(names.map((m) => [m, async (...a: unknown[]) => {
+    const f = Reflect.get(b, m) as (...x: unknown[]) => Promise<unknown>;
+    const h = hang()(m);
+    if (h === 'after') await Reflect.apply(f, base, a);
+    if (h) return new Promise(() => {});
+    return Reflect.apply(f, base, a);
+  }])) as S;
+}
+
+/** world 的 store、auth 套超时；setHang 随时换卡哪一步（不卡就是 () => false） */
+export async function setup() {
+  const w = await world();
+  let hang: Hang = () => false;
+  const log = (c: string) => w.logs.push(c);
+  w.deps.store = withStoreTimeouts(() => hanging<Store>(w.store, STORE_METHODS, () => hang), { ms: MS, log });
+  w.deps.auth = withAuthTimeouts(hanging<AuthAdmin>(w.auth, AUTH_METHODS, () => hang), { ms: MS, log });
+  return { w, setHang: (h: Hang) => { hang = h; } };
+}
+
+/** 不套超时先走一遍 start（发出验证码） */
+export async function handleStart(w: World) {
+  expect((await call(w, startBody('a@example.com'))).status).toBe(200);
+}
+
+export const used = async (w: World, code = CODE) => w.store.invites.get(await inviteCodeHash(code))?.used_count;
+export const only = (name: string, mode: Mode): Hang => (m) => (m === name ? mode : false);

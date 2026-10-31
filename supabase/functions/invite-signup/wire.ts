@@ -56,6 +56,29 @@ export function otpHash(secret: string, eh: string, codeHash: string, otp: strin
   return hmacHex(secret, `otp:${eh}:${codeHash}:${otp}`);
 }
 
+/**
+ * 这次注册要建的用户 id（INVITE-auth-timeout）：由“邮箱哈希 + 邀请码哈希”经 HMAC（SIGNUP_HASH_SECRET）派生，按 UUID v4 设版本位和变体位。
+ * 输入只有 email_hash（本身是 HMAC）和 code_hash（码的 SHA-256），不含明文邮箱、明文码；没有密钥算不出来。
+ * 同一邮箱、同一个码重试时 id 不变——**不跟验证码版本走**（代码审查增量复核 1）：上一次 createUser 超时却晚到建出来的用户，
+ *   重新发码、用新验证码再验时，createUser 回“已存在”也能按 id 查到、认作自己的；换了别的码才换 id（core.ts 的 orphan_suspect 只剩这一种）。
+ * 别人早就注册的同一邮箱 id 不同，查不到，照旧 email_exists。同一邮箱用同一个多次码再注册、撞上自己已注册完的账号时 id 相同、查得到，
+ *   由 verify 按“profile 已有”判成 email_exists（见 core.ts）。
+ * **前提（安全复核建议，tests/build/invite-id-reuse-guard.test.ts 固定住）**：id 是确定的，同邮箱 + 同码永远同一个 id。
+ *   账号注销清除后若同邮箱同码还能再注册，就会复用旧 id（private.deleted_accounts 永久留着旧 id，备份里有旧数据）。现在靠两点挡住：
+ *   ① 码只能用 1 次（invite-admin 的 INVITE_MAX_USES = 1，注册成功后码就用满）；
+ *   ② 码有效期（INVITE_TTL_S = 7 天）≤ 注销冷静期（account_request_deletion 写死 7 天）：注册不早于建码，清除不早于注册 + 7 天，
+ *      所以清除时码一定已过期——即使负责人手工建了多次码，只要有效期不超过 7 天也挡得住。
+ *   **将来放开多次码并延长有效期、或把有效期调到超过冷静期，必须先改派生**：给 pending_signups 加一个首次发码时生成、
+ *   重新发码时保留的随机数，参与派生（signup-uid:eh:codeHash:随机数），让注销后的再注册拿不到旧 id。
+ */
+export async function signupUserId(secret: string, eh: string, codeHash: string): Promise<string> {
+  const h = (await hmacHex(secret, `signup-uid:${eh}:${codeHash}`)).slice(0, 32).split('');
+  h[12] = '4';
+  h[16] = ((parseInt(h[16] ?? '0', 16) & 0x3) | 0x8).toString(16);
+  const s = h.join('');
+  return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20, 32)}`;
+}
+
 // ---------------- 请求体 ----------------
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

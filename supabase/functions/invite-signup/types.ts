@@ -32,7 +32,12 @@ export interface PendingRow {
   otp_hash: string;
   tries: number;
   expires_at: string;
+  /** 这个邮箱已占的 code_hash（迁移 20261031150000）；只读，putPending 不写它（upsert 不带这一列，原值保留） */
+  claimed_code?: string | null;
 }
+
+/** ok：这次新占；reused：这个邮箱之前已经占过（同一个码沿用，或换码时旧码已退、新码占上） */
+export type ClaimResult = 'ok' | 'reused' | 'invalid' | 'no_pending';
 
 /** 数据库（index.ts 用 service role 的 supabase-js 实现，private 表经 schema('private')）。出错一律抛错 */
 export interface Store {
@@ -41,11 +46,13 @@ export interface Store {
   /** 只读 max_uses、used_count、expires_at（不读 created_by、note） */
   getInvite(codeHash: string): Promise<InviteRow | null>;
   /**
-   * 比较并交换：update private.invites set used_count = to where code_hash = $1 and used_count = from
-   *   [and expires_at > notExpiredAt]，返回是否恰好改到 1 行。单条 UPDATE，并发时只有一个能从 from 改成功。
+   * private.invite_claim（迁移 20261031150000，INVITE-late-commit）：锁住这个邮箱、这一版验证码的 pending 行，
+   * 已占过这个码回 reused 不再加；换码回 reused（旧码退、新码占）；没占过就原子 used_count + 1、记下 claimed_code、回 ok。用完、过期、不存在回 invalid；pending 没了或换了版回 no_pending
    */
-  casInviteUsed(codeHash: string, from: number, to: number, notExpiredAt: string | null): Promise<boolean>;
-  /** upsert private.pending_signups（同一邮箱重新发码就覆盖：新验证码、tries 归 0） */
+  claimInvite(emailHash: string, otpHash: string, codeHash: string, notExpiredAt: string): Promise<ClaimResult>;
+  /** private.invite_release：这个邮箱的 claimed_code 正是这个码才减一并清掉；true = 退了 */
+  releaseInvite(emailHash: string, codeHash: string): Promise<boolean>;
+  /** upsert private.pending_signups（同一邮箱重新发码就覆盖：新验证码、tries 归 0；claimed_code 不在写入的列里，原值保留） */
   putPending(emailHash: string, row: PendingRow): Promise<void>;
   getPending(emailHash: string): Promise<PendingRow | null>;
   /**
@@ -58,8 +65,10 @@ export interface Store {
    * 带 otpHash 时只删读到的那一版：读完以后用户重新点了 start 拿到新码，新码不会被误删（第三轮复审）
    */
   deletePending(emailHash: string, otpHash?: string): Promise<void>;
-  /** insert public.profiles (user_id, ui_locale) */
-  insertProfile(userId: string, locale: Locale): Promise<void>;
+  /**
+   * insert public.profiles (user_id, ui_locale) on conflict do nothing。返回 true = 这一次插进去了；false = 已经有了（认领的用户已是注册完的账号）
+   */
+  insertProfile(userId: string, locale: Locale): Promise<boolean>;
   /** app_config.min_client_version；读不到返回 null（放行，和转发层同一口径） */
   minClientVersion(): Promise<string | null>;
 }
@@ -68,8 +77,13 @@ export type CreateUserResult = { ok: true; userId: string } | { ok: false; exist
 
 /** GoTrue 管理接口（service role） */
 export interface AuthAdmin {
-  /** auth.admin.createUser({email, email_confirm: true, user_metadata: {locale}})——不传 password（账号不许有密码，0.36） */
-  createUser(email: string, locale: Locale): Promise<CreateUserResult>;
+  /**
+   * auth.admin.createUser({id, email, email_confirm: true, user_metadata: {locale}})——不传 password（账号不许有密码，0.36）。
+   * id 由 core 按邮箱哈希 + 邀请码哈希派生（wire.ts 的 signupUserId，INVITE-auth-timeout）：超时晚到建出来的用户，重试（含重新发码后）时能认出是自己这一次建的
+   */
+  createUser(id: string, email: string, locale: Locale): Promise<CreateUserResult>;
+  /** auth.admin.getUserById(id)：有这个用户 true、没有 false；出错抛错 */
+  userExists(id: string): Promise<boolean>;
   deleteUser(userId: string): Promise<void>;
   /** auth.admin.generateLink({type: 'magiclink', email}) 的 properties.hashed_token；失败返回 null */
   magiclinkTokenHash(email: string): Promise<string | null>;
