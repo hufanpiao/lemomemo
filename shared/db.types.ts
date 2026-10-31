@@ -435,6 +435,11 @@ isOneToOne: false
 "not_password_session":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
+"orphan_auth_users":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "latest_at": string,"orphans": number
+            }[]
+                           },
 "purge_deleted_impl":
 { Args: { "p_items"?: Json }; Returns: number
                            },

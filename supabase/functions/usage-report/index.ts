@@ -3,8 +3,9 @@
 // （0.29 续第 52 条：经 schema('private')）；不直连数据库（不 import _shared/db.ts），不碰 R2。逻辑和测试见 core.ts、tests/functions/usage-report.test.ts。
 // 发信量（0.38 第 12 条，core.ts 的 authMail）：auth_1h 取 rpc private.auth_mail_counts()（迁移 20261029230000，数 auth.audit_log_entries
 // 里的 user_recovery_requested）；resend_24h 要有读权限的 Resend 密钥，暂不接（不传，返回体里为 null）。
+// 没有 profile 的 auth 用户（ORPHAN-alert，core.ts 的 orphanUsers）：rpc private.orphan_auth_users()（迁移 20261031160000）。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { authMailFromRpc, handle, type UsageDb } from './core.ts';
+import { authMailFromRpc, handle, orphansFromRpc, type UsageDb } from './core.ts';
 
 function makeDb(): UsageDb {
   const url = Deno.env.get('SUPABASE_URL');
@@ -31,6 +32,11 @@ function makeDb(): UsageDb {
       const { data, error } = await priv.rpc('auth_mail_counts').abortSignal(signal);
       if (error) throw new Error('db');
       return authMailFromRpc(data);
+    },
+    async orphanUsers(signal) {
+      const { data, error } = await priv.rpc('orphan_auth_users').abortSignal(signal);
+      if (error) throw new Error('db');
+      return orphansFromRpc(data);
     },
   };
 }

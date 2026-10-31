@@ -42,6 +42,26 @@ export function authMailFromRpc(data: unknown): AuthMailCounts {
   return { auth_1h: h as number };
 }
 
+/** 孤儿 auth 用户读取单独计时（同 AUTH_MAIL_TIMEOUT_MS）：到点 orphan_users 给 null，心跳那几项照常回 200 */
+export const ORPHAN_TIMEOUT_MS = 2_000;
+
+/**
+ * 没有 profile 的 auth 用户（接手清单 ORPHAN-alert；架构 0.38 第 29 条）：rpc private.orphan_auth_users()（迁移 20261031160000）
+ * 数“建号超过 10 分钟、public.profiles 没有行”的 auth 用户，覆盖 invite-signup 的 orphan_user、orphan_suspect 两种孤儿。
+ * count：个数；latest_at：最近一个的建号时刻（没有孤儿时为 null）。不带 id、邮箱
+ */
+export interface OrphanCounts {
+  count: number;
+  latest_at: string | null;
+}
+
+/** rpc private.orphan_auth_users() 的结果（returns table，一行的数组 [{orphans, latest_at}]）→ OrphanCounts；不判对错，交给 pickOrphans */
+export function orphansFromRpc(data: unknown): OrphanCounts {
+  const row: unknown = Array.isArray(data) ? data[0] : data;
+  const r = typeof row === 'object' && row !== null ? (row as Record<string, unknown>) : {};
+  return { count: r['orphans'] as number, latest_at: r['latest_at'] as string | null };
+}
+
 /** 各读取都必须尊重 signal（超时后中止） */
 export interface UsageDb {
   heartbeats(signal: AbortSignal): Promise<HeartbeatRow[]>;
@@ -55,6 +75,12 @@ export interface UsageDb {
    * （记 auth_mail:bad_resend；和“没接”的 null 分开，OPS-mail-sugg ②），不连累心跳那几项。
    */
   authMail?(signal: AbortSignal): Promise<AuthMailCounts>;
+  /**
+   * 没有 profile 的 auth 用户（ORPHAN-alert，口径见 OrphanCounts）。index.ts 经 rpc private.orphan_auth_users() 提供；
+   * 不提供时返回体里没有 `orphan_users`，lemo-ops 不查。和 authMail 一个做法：单独计时 ORPHAN_TIMEOUT_MS，出错、超时、数字不对
+   * 只让 `orphan_users` 为 null（日志记 orphans:error / orphans:timeout / orphans:bad_data），不连累心跳那几项
+   */
+  orphanUsers?(signal: AbortSignal): Promise<OrphanCounts>;
 }
 
 export interface Deps {
@@ -65,6 +91,8 @@ export interface Deps {
   timeoutMs?: number;
   /** 发信量读取的单独超时（测试用；默认 AUTH_MAIL_TIMEOUT_MS） */
   authMailTimeoutMs?: number;
+  /** 孤儿用户读取的单独超时（测试用；默认 ORPHAN_TIMEOUT_MS） */
+  orphanTimeoutMs?: number;
   log?: (code: string) => void;
 }
 
@@ -129,10 +157,17 @@ function pickAuthMail(r: unknown): { out: AuthMailOut | null; code?: string } {
 const TIMED_OUT = Symbol('timeout');
 
 /**
- * 开始读发信量，单独计时：done 一定 resolve（出错、超时、数字不对都给 null，只记错误码）。
+ * 开始一项旁路读取（发信量、孤儿用户），单独计时：done 一定 resolve（出错、超时、数字不对都给 null，只记错误码 `${tag}:…`）。
+ * pick 校验读到的值：out 为 null 表示不对，code 是要记的错误码。
  * stop()：整轮已经失败（503 / 500）时调用，中止读取、清掉计时器，之后不再记任何日志。
  */
-function startAuthMail(read: (signal: AbortSignal) => Promise<AuthMailCounts>, ms: number, log?: (code: string) => void) {
+function startSide<R, O>(
+  read: (signal: AbortSignal) => Promise<R>,
+  ms: number,
+  tag: string,
+  pick: (r: unknown) => { out: O | null; code?: string },
+  log?: (code: string) => void,
+) {
   const ctl = new AbortController();
   let quiet = false;
   let timedOut = false;
@@ -148,18 +183,18 @@ function startAuthMail(read: (signal: AbortSignal) => Promise<AuthMailCounts>, m
       ctl.abort();
     }, ms);
   });
-  const done = (async (): Promise<AuthMailOut | null> => {
+  const done = (async (): Promise<O | null> => {
     try {
       const r: unknown = await Promise.race([read(ctl.signal), timeout]);
       if (r === TIMED_OUT) {
-        say('auth_mail:timeout');
+        say(`${tag}:timeout`);
         return null;
       }
-      const { out, code } = pickAuthMail(r);
+      const { out, code } = pick(r);
       if (code !== undefined) say(code);
       return out;
     } catch {
-      say(timedOut ? 'auth_mail:timeout' : 'auth_mail:error');
+      say(timedOut ? `${tag}:timeout` : `${tag}:error`);
       return null;
     } finally {
       if (timer !== undefined) clearTimeout(timer);
@@ -174,6 +209,26 @@ function startAuthMail(read: (signal: AbortSignal) => Promise<AuthMailCounts>, m
     },
   };
 }
+/** 返回体里的 orphan_users：个数和最近一个距今多少秒（没有孤儿时为 null；和心跳一样只报“距今多少秒”） */
+interface OrphanOut {
+  count: number;
+  latest_age_s: number | null;
+}
+
+/** 校验孤儿读数：count 不是非负整数、latest_at 解析不了、有孤儿却没有时刻 → null（记 orphans:bad_data） */
+function pickOrphans(now: () => number) {
+  return (r: unknown): { out: OrphanOut | null; code?: string } => {
+    const bad = { out: null, code: 'orphans:bad_data' };
+    if (typeof r !== 'object' || r === null || Array.isArray(r)) return bad;
+    const { count: n, latest_at: at } = r as Record<string, unknown>;
+    if (!isCount(n)) return bad;
+    if (at === null || at === undefined) return n === 0 ? { out: { count: 0, latest_age_s: null } } : bad;
+    const t = typeof at === 'string' ? Date.parse(at) : NaN;
+    if (!Number.isFinite(t)) return bad;
+    return { out: { count: n, latest_age_s: Math.round((now() - t) / 1000) } };
+  };
+}
+
 /** 数据库里的时间戳解析不了：是数据问题、不是连不上数据库，单独给错误码 */
 class BadData extends Error {}
 
@@ -206,7 +261,12 @@ async function heartbeatPart(deps: Deps & { db: UsageDb }): Promise<Response> {
   const db = deps.db;
   const authMail = db.authMail;
   // 发信量不进整轮的 5 秒 race：单独计时，慢了、坏了只让 auth_mail 为 null（审查必改 1）
-  const mail = authMail ? startAuthMail((s) => authMail.call(db, s), deps.authMailTimeoutMs ?? AUTH_MAIL_TIMEOUT_MS, deps.log) : null;
+  const mail = authMail ? startSide((s) => authMail.call(db, s), deps.authMailTimeoutMs ?? AUTH_MAIL_TIMEOUT_MS, 'auth_mail', pickAuthMail, deps.log) : null;
+  // 孤儿用户（ORPHAN-alert）同一个做法：单独计时，慢了、坏了只让 orphan_users 为 null
+  const orphanUsers = db.orphanUsers;
+  const orphans = orphanUsers
+    ? startSide((s) => orphanUsers.call(db, s), deps.orphanTimeoutMs ?? ORPHAN_TIMEOUT_MS, 'orphans', pickOrphans(deps.now), deps.log)
+    : null;
   try {
     const [hb, pd, lt] = await Promise.race([
       Promise.all([db.heartbeats(ctl.signal), db.pendingDeletions(ctl.signal), db.longTxCount(ctl.signal)]),
@@ -214,6 +274,7 @@ async function heartbeatPart(deps: Deps & { db: UsageDb }): Promise<Response> {
     ]);
     if (timer !== undefined) clearTimeout(timer);
     const am = mail ? await mail.done : undefined;
+    const ou = orphans ? await orphans.done : undefined;
     const now = deps.now();
     return json(200, {
       ok: true,
@@ -228,9 +289,12 @@ async function heartbeatPart(deps: Deps & { db: UsageDb }): Promise<Response> {
       long_tx: lt,
       // 没接数据源时不出这个键（lemo-ops 据此不查、也不报“已恢复”）；接了但这一轮读不到是 null
       ...(am === undefined ? {} : { auth_mail: am }),
+      // 没有 profile 的 auth 用户（ORPHAN-alert）：同上，没接不出这个键，接了读不到是 null
+      ...(ou === undefined ? {} : { orphan_users: ou }),
     });
   } catch (e) {
-    mail?.stop();   // 整轮已失败：不再补记 auth_mail 的日志
+    mail?.stop();   // 整轮已失败：不再补记 auth_mail、orphans 的日志
+    orphans?.stop();
     if (e instanceof BadData) {
       deps.log?.('bad_data:timestamp');
       return json(500, { error: 'bad_data' });

@@ -368,3 +368,4 @@ QA 这次本机跑了三样，**都不连任何本地 Supabase 容器、没跑 e
 | 2026-10-31 | 测试用例 v4 新增 TC-B1-151（占码晚到提交，P1）、TC-B1-152（邀请注册 Auth 接口超时，P0），两位审查员已复核通过，代码未提交；后端建议项要改的两处（重新发码照常发信、verify 约 100 秒总截止）在期望里按新口径写，标“待后端建议项完成后核对”。第 18 节 P0 实数 285 → 286，L-9 同步。**结论维持“不签”** |
 | 2026-10-31 | 3dcdc75 CI 三项全绿（unit run 41147159052，OSV 已过）：TC-B1-149 ⑥～⑨ 改为“CI 通过（024e802 代码 + 3dcdc75 的 unit）”。TC-B1-152 的 `signupUserId` 派生规则和“晚到建出 → 重新发码 → 新验证码 verify → 认领成功”按后端新口径改写，待后端改完后核对。**结论维持“不签”** |
 | 2026-10-31 | 测试用例 v4 的 TC-B1-151、152 按后端已改完的 INVITE 新口径核对改写（后端已按新口径改完，审查中，待提交后 CI 确认）：派生 id 改由邮箱哈希 + 码哈希派生；profile 早已存在回 409 `email_exists`、不签 magiclink；请求总预算 100 秒；QA 复跑 `invite-late-commit`、`invite-signup-security` 42 条全过。**结论维持“不签”** |
+| 2026-10-31 | 测试用例 v4 新增 TC-B1-153（ORPHAN-alert：没有 profile 的 auth 用户计数、心跳带 `orphan_users`、lemo-ops 告警，P1），开发中，待审查与 CI；QA 复跑 `usage-report-orphan`、`lemo-ops-orphan` 12 条全过，pgTAP 27 没复跑。73bf32a（INVITE）CI 在跑，绿了再把 TC-B1-151、152 改 CI 通过。**结论维持“不签”** |

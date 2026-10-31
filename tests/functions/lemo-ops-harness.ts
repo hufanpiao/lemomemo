@@ -186,6 +186,15 @@ export function world() {
           return v as { auth_1h: number };   // 坏形状也原样给出去，测 usage-report 的降级
         };
     },
+    /** 没有 profile 的 auth 用户（ORPHAN-alert）：undefined = 不提供读取器（默认，测“没接”）；'error' = 读出错；对象原样返回（可以故意给坏形状） */
+    setOrphans(v: { count: number; latest_at: string | null } | Record<string, unknown> | 'error' | undefined) {
+      if (v === undefined) delete db.orphanUsers;
+      else
+        db.orphanUsers = async () => {
+          if (v === 'error') throw new Error('auth.users down');
+          return v as { count: number; latest_at: string | null };
+        };
+    },
     logs,
     setSite(v: typeof site) {
       site = v;

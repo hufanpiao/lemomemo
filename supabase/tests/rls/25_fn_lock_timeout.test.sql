@@ -1,5 +1,6 @@
 -- 迁移 20261031130000_core_fn_lock_timeout.sql：四个写计数、写账号状态的函数带函数级 lock_timeout = 5s（安全审查第 22 条建议 ②）；
--- 20261031140000_core_restore_lock_timeout.sql 再加 account_restore（LOCK-restore）。
+-- 20261031140000_core_restore_lock_timeout.sql 再加 account_restore（LOCK-restore）；20261031160000 的 orphan_auth_users 建函数时就带（ORPHAN-alert）。
+-- invite_claim、invite_release 的属性在 26_invite_claim 查。
 -- 只查定义（pg_proc.proconfig）：PGlite 单连接造不出两个会话抢锁，55P03 的真库实测见迁移文件头；
 -- 调用方遇到报错一律回 try_later 由 tests/functions/lock-timeout-callers.test.ts 证明。
 begin;
@@ -8,10 +9,10 @@ select plan(4);
 select is((select string_agg(p.proname || ':' || pg_catalog.array_to_string(p.proconfig, ';'), ',' order by p.proname)
              from pg_catalog.pg_proc p
             where p.pronamespace = 'private'::regnamespace
-              and p.proname in ('take_rate', 'export_job_start', 'export_job_take', 'account_request_deletion', 'account_restore')),
+              and p.proname in ('take_rate', 'export_job_start', 'export_job_take', 'account_request_deletion', 'account_restore', 'orphan_auth_users')),
   'account_request_deletion:search_path="";lock_timeout=5s,account_restore:search_path="";lock_timeout=5s,export_job_start:search_path="";lock_timeout=5s,'
-  || 'export_job_take:search_path="";lock_timeout=5s,take_rate:search_path="";lock_timeout=5s',
-  '五个函数的函数级设置是 search_path = '''' 加 lock_timeout = 5s，各只有一个签名');
+  || 'export_job_take:search_path="";lock_timeout=5s,orphan_auth_users:search_path="";lock_timeout=5s,take_rate:search_path="";lock_timeout=5s',
+  '六个函数的函数级设置是 search_path = '''' 加 lock_timeout = 5s，各只有一个签名');
 
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_catalog.pg_proc p
             where p.pronamespace = 'private'::regnamespace

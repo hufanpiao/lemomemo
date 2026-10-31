@@ -2,6 +2,12 @@
 // 只做纯计算：把 usage-report 的返回变成“现在有哪些事”，不发信、不读写状态（发信和去重在 alerts.ts）。
 // usage-report 只报“距今多少秒”，阈值只写在这里一处。
 
+import { evaluateOrphans, parseOrphans, SCOPE_ORPHAN, type OrphanReport } from './orphans.ts';
+import { fmtAge } from './stamp.ts';
+
+export { fmtAge };
+export { evaluateOrphans, ORPHAN_UNREADABLE, ORPHAN_USERS, SCOPE_ORPHAN, type OrphanReport } from './orphans.ts';
+
 /** 一件要告警的事。key 用来去重：同一个 key 6 小时内只发一次，消失后发“已恢复” */
 export interface Issue {
   key: string;
@@ -109,6 +115,8 @@ export interface HeartbeatReport {
   long_tx: number;
   /** 验证码邮件数（0.38 第 12 条）：没有这个键 = 数据来源还没接，不查；null = 这一轮读不到 */
   auth_mail?: AuthMailReport | null;
+  /** 没有 profile 的 auth 用户（0.38 第 29 条）：没有这个键 = 还没接，不查；null = 这一轮读不到 */
+  orphan_users?: OrphanReport | null;
   /** 钩子出错告警（只在第三条路启用时由 usage-report 给出；0.29 续第 115 条）；同一小时最多一次 true，去重在服务器 */
   alert?: boolean;
 }
@@ -155,6 +163,8 @@ export function parseHeartbeatReport(v: unknown, log?: (code: string) => void): 
   if (alert !== undefined) out.alert = alert;
   // 发信量形状不对只降级成 null（报“读不到”），不让整份返回体判为解析不了（审查建议 3）
   if ('auth_mail' in v) out.auth_mail = parseAuthMail(v['auth_mail'], log);
+  // 孤儿用户同一个做法：形状不对只降级成 null（报“读不到”），不连累整份返回体
+  if ('orphan_users' in v) out.orphan_users = parseOrphans(v['orphan_users']);
   return out;
 }
 
@@ -176,16 +186,6 @@ function parseAuthMail(am: unknown, log?: (code: string) => void): AuthMailRepor
   if (isCount(d)) return { auth_1h: h, resend_24h: d };
   log?.('auth_mail:bad_resend');
   return { auth_1h: h, resend_24h: null, resend_unreadable: true };
-}
-
-/** 秒数写成“x 小时 y 分”这种给人看的样子 */
-export function fmtAge(s: number): string {
-  const total = Math.max(0, Math.floor(s / 60));
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  if (h >= 48) return `${Math.floor(h / 24)} 天 ${h % 24} 小时`;
-  if (h > 0) return `${h} 小时 ${m} 分`;
-  return `${m} 分`;
 }
 
 export const SCOPE_UNREACHABLE = 'unreachable';
@@ -321,15 +321,25 @@ export function evaluateHeartbeat(r: HeartbeatReport, required: readonly string[
     }
   }
 
+  const scopes = [...HEARTBEAT_SCOPES];
   // 验证码发信量：usage-report 没带 auth_mail（数据来源还没接，或接了又撤掉）时不查，留下的状态悄悄删掉
   if (r.auth_mail === undefined) {
     drop.push(SCOPE_AUTH_MAIL);
-    return { active, scopes: HEARTBEAT_SCOPES, drop };
+  } else {
+    const mail = evaluateAuthMail(r.auth_mail);
+    active.push(...mail.active);
+    drop.push(...(mail.drop ?? []));
+    scopes.push(...mail.scopes);
   }
-  const mail = evaluateAuthMail(r.auth_mail);
-  active.push(...mail.active);
-  drop.push(...(mail.drop ?? []));
-  return { active, scopes: [...HEARTBEAT_SCOPES, ...mail.scopes], drop };
+  // 没有 profile 的 auth 用户（ORPHAN-alert）：同上，没带 orphan_users 时不查、留下的状态悄悄删掉
+  if (r.orphan_users === undefined) {
+    drop.push(SCOPE_ORPHAN);
+  } else {
+    const orphans = evaluateOrphans(r.orphan_users);
+    active.push(...orphans.active);
+    scopes.push(...orphans.scopes);
+  }
+  return { active, scopes, drop };
 }
 
 // ---------- 调不通（TC-B1-94 ①②⑤） ----------
