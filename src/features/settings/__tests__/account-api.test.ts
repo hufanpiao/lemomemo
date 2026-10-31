@@ -223,6 +223,20 @@ describe('requestDeletion', () => {
   });
 });
 
+describe('misconfigured（入口配置错误，500，不在共享码表；10-31 代码审查建议）', () => {
+  it('映射成 unknown（显示“出错”），不按 500 当稍后再试', () => {
+    expect(mapAccountCode('misconfigured', 500)).toBe('unknown');
+    expect(mapAccountCode(null, 500)).toBe('try_later');
+  });
+
+  it('注销收到它：回 unknown，不去查状态', async () => {
+    const check = vi.fn(async () => ({ kind: 'done' as const, purgeAfter: null }));
+    const { a } = api(async () => json(500, { error: 'misconfigured' }), db(), { checkDeletion: check });
+    expect(await a.requestDeletion('注销')).toEqual({ ok: false, error: 'unknown', sid: 's-1' });
+    expect(check).not.toHaveBeenCalled();
+  });
+});
+
 describe('辅助', () => {
   it('和共享的 ACCOUNT_ERROR_CODES（13 个）逐个对齐：每个码都有去处，restore 才有的三个是 unknown', () => {
     const want: Record<(typeof ACCOUNT_ERROR_CODES)[number], string> = {

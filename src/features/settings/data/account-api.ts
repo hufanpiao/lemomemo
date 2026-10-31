@@ -113,6 +113,9 @@ function byStatus(status: number): AccountErr {
 /** 服务器回的码 → 界面的错误 */
 export function mapAccountCode(code: unknown, status: number): AccountErr {
   if (code === 'session_revoked' || code === 'unauthorized') return 'revoked';
+  // 入口的配置错误（supabase/functions/account/index.ts 回 500 {error:'misconfigured'}，不在共享码表）：显示“出错”，不按 500 当稍后再试
+  // （和邀请注册、登录页 restore 同口径，10-31 代码审查建议）
+  if (code === 'misconfigured') return 'unknown';
   const c = accountErrorCode.safeParse(code);
   if (c.success) {
     switch (c.data) {

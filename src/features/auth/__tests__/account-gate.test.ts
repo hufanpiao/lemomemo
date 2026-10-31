@@ -138,6 +138,14 @@ describe('restore 的错误码（架构第 6 节错误码表）', () => {
     expect(await restoreError(httpErr(401, {}))).toBe('reauth_required');
     expect(await restoreError(httpErr(401, 'not json'))).toBe('reauth_required');
     expect(await restoreError(httpErr(503, 'x'))).toBe('try_later');
+    // 10-31 后端核对：5xx 读不出表里的码一律 try_later（原来只认 503），和邀请注册同口径；表里的码照旧优先
+    const raw = (status: number, body: string) => ({ name: 'FunctionsHttpError', context: new Response(body, { status }) });
+    expect(await restoreError(raw(546, '{"code":"WORKER_LIMIT"}'))).toBe('try_later');
+    expect(await restoreError(raw(504, ''))).toBe('try_later');
+    expect(await restoreError(raw(502, '<html>502 Bad Gateway</html>'))).toBe('try_later');
+    expect(await restoreError(httpErr(500, { error: 'account_disabled' }))).toBe('account_disabled');
+    // 入口配置错误：显示“出错”，不当稍后再试
+    expect(await restoreError(httpErr(500, { error: 'misconfigured' }))).toBe('unknown');
     expect(await restoreError(httpErr(400, { error: 'constructor' }))).toBe('unknown');
     expect(await restoreError({ name: 'FunctionsFetchError' })).toBe('offline');
   });
@@ -175,6 +183,22 @@ describe('restore 的错误码（架构第 6 节错误码表）', () => {
       expect(await api.restore()).toEqual({ ok: true });
       // 用发 restore 那个会话现在的令牌去查
       expect(db.functions.invoke).toHaveBeenNthCalledWith(2, 'account', { body: { action: 'status' }, headers: { Authorization: 'Bearer tok-1' } });
+    });
+
+    it('组合：restore 回 546（资源超限，读不出码）→ 按 try_later 去查 status → active → 按恢复成功', async () => {
+      const worker = async () => ({
+        data: null,
+        error: { name: 'FunctionsHttpError', context: new Response('{"code":"WORKER_LIMIT"}', { status: 546 }) },
+      });
+      const { api, db } = gate(worker, st({ ok: true, status: 'active' }));
+      expect(await api.restore()).toEqual({ ok: true });
+      expect(db.functions.invoke).toHaveBeenCalledTimes(2);
+    });
+
+    it('misconfigured（500）不当稍后再试：显示“出错”，不查 status', async () => {
+      const { api, db } = gate(async () => ({ data: null, error: httpErr(500, { error: 'misconfigured' }) }), st({ ok: true, status: 'active' }));
+      expect(await api.restore()).toEqual({ ok: false, error: 'unknown' });
+      expect(db.functions.invoke).toHaveBeenCalledTimes(1);
     });
 
     it('超时同样先查；active 按成功', async () => {

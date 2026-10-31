@@ -113,7 +113,9 @@ const INVITE_ERRORS: Readonly<Record<string, AuthErr>> = {
  * FunctionsHttpError 的 context 是原始 Response，错误码在响应体的 error 字段里（shared/schema/api.ts 的 apiError，0.38 第 54 条）。
  * 只借它的类型、不在登录页引 zod 做运行时校验：字段不是字符串时按空码处理。
  * 429 只会出现在 verify（架构 0.38 第 27 条：start 被限流也回 {ok}）→ verify_limited“试得太频繁”；
- * start 万一收到 429（网关之类），不出“太频繁”，按 try_later 让人稍后重试
+ * start 万一收到 429（网关之类），不出“太频繁”，按 try_later 让人稍后重试。
+ * 5xx 且响应体读不出表里的码（Edge 546 资源超限、504 网关超时、网关回 HTML 的 502 等）→ try_later：FunctionsHttpError 没有 status 字段，
+ * 交给 mapAuthError 只会落成 unknown（10-31 后端核对）。表里有的码照旧优先，例如 502 {error:'link_failed'} 仍是 registered_login
  */
 async function inviteError(e: unknown, step: 'start' | 'verify'): Promise<AuthErr> {
   const ctx = typeof e === 'object' && e !== null ? (e as { context?: unknown }).context : undefined;
@@ -126,8 +128,9 @@ async function inviteError(e: unknown, step: 'start' | 'verify'): Promise<AuthEr
       const mapped = Object.hasOwn(INVITE_ERRORS, code) ? INVITE_ERRORS[code] : undefined;
       if (mapped) return mapped;
     } catch {
-      // 响应体不是 JSON：按下面的通用规则
+      // 响应体不是 JSON：按下面的规则
     }
+    if (ctx.status >= 500 && ctx.status <= 599) return 'try_later';
   }
   return mapAuthError(e);
 }

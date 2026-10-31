@@ -71,6 +71,8 @@ const RESTORE_CODES: Readonly<Record<string, RestoreErr>> = {
   // 会话已吊销、没登录：这个会话恢复不了，和 reauth_required 一样删掉它重新收码
   session_revoked: 'reauth_required',
   unauthorized: 'reauth_required',
+  // 入口的配置错误（500）：显示“出错”，不按 5xx 当稍后再试（和 invite 的 INVITE_ERRORS 一致，10-31 代码审查建议）
+  misconfigured: 'unknown',
 };
 
 /** restore 的错误 → RestoreErr */
@@ -81,7 +83,8 @@ export async function restoreError(e: unknown): Promise<RestoreErr> {
     // 401 且回包没有 error 字段（网关、令牌过期等）：这个会话用不了，同 reauth_required（审查建议 1）
     if (h.status === 401 && h.code === '') return 'reauth_required';
     if (h.status === 429) return 'rate_limited';
-    if (h.status === 503) return 'try_later';
+    // 5xx 读不出表里的码（546 资源超限、504、网关回 HTML 的 502 等）→ try_later（10-31 后端核对，和 invite 的 inviteError 同口径；原来只认 503）
+    if (h.status >= 500 && h.status <= 599) return 'try_later';
     return 'unknown';
   }
   return isOffline(e) ? 'offline' : 'unknown';

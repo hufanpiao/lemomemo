@@ -161,6 +161,26 @@ describe('createAuthApi', () => {
     }
   });
 
+  it('5xx 读不出表里的码（10-31 后端核对）：546、504、HTML 的 502、没有 error 的 JSON 500 → try_later；502 link_failed 仍是 registered_login', async () => {
+    for (const [body, status, want] of [
+      ['{"code":"WORKER_LIMIT","message":"Function failed due to not having enough compute resources"}', 546, 'try_later'],
+      ['', 504, 'try_later'],
+      ['<html><body><h1>502 Bad Gateway</h1></body></html>', 502, 'try_later'],
+      ['{}', 500, 'try_later'],
+      ['{"error":"link_failed"}', 502, 'registered_login'],
+    ] as const) {
+      for (const step of ['start', 'verify'] as const) {
+        const ctx = new Response(body, { status, headers: { 'content-type': body.startsWith('<') ? 'text/html' : 'application/json' } });
+        const { api } = fakeDb({ invoke: { data: null, error: { name: 'FunctionsHttpError', context: ctx } } });
+        const r =
+          step === 'start'
+            ? await api.inviteStart({ email: 'n@b.co', code: 'ABCDEFGHJKLM', captchaToken: 'tok', locale: 'zh-CN' })
+            : await api.inviteVerify({ email: 'n@b.co', code: 'ABCDEFGHJKLM', emailOtp: '1', locale: 'zh-CN' });
+        expect(r, `${step} ${status} ${body.slice(0, 20)}`).toEqual({ ok: false, error: want });
+      }
+    }
+  });
+
   it('邀请 verify：账号建好了但 token_hash 换不到会话 → registered_login（安全审查低 4）', async () => {
     const a = fakeDb({ invoke: { data: { token_hash: 'th' }, error: null }, verifyOtp: { data: { session: null }, error: { code: 'otp_expired' } } });
     expect(await a.api.inviteVerify({ email: 'n@b.co', code: 'ABCDEFGHJKLM', emailOtp: '1', locale: 'zh-CN' })).toEqual({ ok: false, error: 'registered_login' });
