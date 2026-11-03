@@ -11,6 +11,7 @@ export type P6Totals = {
   adminTotals?: (number | null)[] | undefined;
   p6aNoUser?: boolean | undefined;            // P6A：预览里还没有 e2e-admin@lemomemo.test
   p6aMember?: (number | null)[] | undefined;  // P6A：e2e-admin 在 admins 里的行数，依次报（默认一直是 0）
+  p6aGateway401?: boolean | string | undefined; // P6A：找账号那一页回网关样式的 401（只有 message，没有错误码）；给字符串就用它当 message
 };
 export type P6Reply = [status: number, body: unknown, headers?: Record<string, string>];
 export const P6A_EMAIL = 'e2e-admin@lemomemo.test';
@@ -34,7 +35,15 @@ export function p6Route(
   const member = p === `/rest/v1/admins?select=user_id&user_id=eq.${P6A_UID}&limit=1`;
   // 只管这几条精确路径（P2 用登录令牌读 /rest/v1/admins?select=*… 走 login-token-fake.ts 自己的路由）
   if (!(p === '/auth/v1/admin/users?page=1&per_page=1' || page || total || member)) return null;
+  // 照 Supabase 的做法：浏览器样式的 User-Agent（含 Mozilla，PS 5.1 Invoke-WebRequest 的默认 UA 就是）带 sb_secret_ 一律 401，正文只有 message
+  // （https://supabase.com/docs/guides/api/api-keys；11-03 负责人跑 -Only P6A 实际遇到）
+  if (/mozilla/i.test(String(req.headers['user-agent'] ?? '')) && String(req.headers.apikey ?? '').startsWith('sb_secret_')) {
+    return [401, { message: 'secret API key used from a browser' }];
+  }
   if (req.headers.apikey !== service) return [401, { code: 401, error_code: 'bad_jwt' }];
+  if (page && o.p6aGateway401) {
+    return [401, { message: typeof o.p6aGateway401 === 'string' ? o.p6aGateway401 : 'Invalid API key', hint: 'Double check your API key.' }];
+  }
   if ((total || member) && req.headers['accept-profile'] !== 'private') return [401, { code: '42501' }];
   if (p === '/auth/v1/admin/users?page=1&per_page=1') {
     const t = pick(o.userTotals ?? [], counts.users++, 7);

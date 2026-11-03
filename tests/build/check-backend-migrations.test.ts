@@ -100,7 +100,10 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     // 没报的：fn-slash、fn-format、fn-multiline（认出来了）、fn-old（已 unschedule）、fn-test-only、fn-comment-only、_shared（不算验了）、块注释里的 ghost 任务；
     // fn-keep：$$it's …$$ 纯文本单引号配不平，整段当纯文本，后面注释里的 cron.unschedule('keep-job') 不算（以前会被吞进字符串、当真 unschedule，误报 ③④）；
     // fn-named：具名参数 job_name := 认不出任务名，schedule 按不带任务名一直算数，unschedule(job_name := …) 不起作用（固定当前行为）
-    for (const quiet of ['fn-slash', 'fn-format', 'fn-multiline', 'fn-old', 'fn-test-only', 'fn-comment-only', '_shared', 'fn-keep', 'fn-named']) {
+    // fn-notice：raise notice / 字符串里写着 cron.unschedule('notice-job') 的文本不当真停掉任务（F9-cron-string-literal ②）；
+    // fn-strcmd：命令参数本身是单引号字符串，抹字符串内容只用于找调用，里面的写死地址照认；
+    // fn-estr：任务名写成 E'e\'job'，认得出，unschedule(E'e\'job') 停掉后不再要求关 verify_jwt（F9-cron-string-literal ①；以前会报 F9 ①）
+    for (const quiet of ['fn-slash', 'fn-format', 'fn-multiline', 'fn-old', 'fn-test-only', 'fn-comment-only', '_shared', 'fn-keep', 'fn-named', 'fn-notice', 'fn-strcmd', 'fn-estr']) {
       expect(errors.some((e) => e.file.includes(`/${quiet}/`) || e.message.includes(`${quiet} `) || e.message.includes(`functions.${quiet}]`)), quiet).toBe(false);
     }
   });

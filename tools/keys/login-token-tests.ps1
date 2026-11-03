@@ -172,7 +172,9 @@ $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$ScriptVersion = '3'
+$ScriptVersion = '4'
+# 所有请求统一用的 User-Agent：不能像浏览器（不含 Mozilla），否则 Supabase 拒 sb_secret_（见 Invoke-Http 的注释）
+$script:ToolUA = 'lemomemo-tools/4.0 (PowerShell)'
 if (($SupabaseBase -ne 'https://yoeqwhygehbaftkppati.supabase.co' -or $SiteBase -ne 'https://preview.lemomemo.com') -and $env:LEMO_TEST_API -ne '1') {
     throw '已停止：-SupabaseBase、-SiteBase 只给测试用，正式运行不要带这两个参数'
 }
@@ -338,7 +340,11 @@ function Decode-JwtPayload([string]$jwt) {
 # 不在这里打印任何东西：调用处只打印状态码和错误码（Code：GoTrue 的 error_code、PostgREST 和 /files 的 code、函数的 error）
 function Invoke-Http([string]$method, [string]$uri, [hashtable]$headers, $body, [string]$contentType) {
     if ($null -eq $headers) { $headers = @{} }
-    $p = @{ Method = $method; Uri = $uri; Headers = $headers; TimeoutSec = 300; ErrorAction = 'Stop' }
+    # 显式设一个非浏览器的 User-Agent（11-03 负责人跑 -Only P6A 两次 401）：PS 5.1 的 Invoke-WebRequest 默认 UA 是
+    # “Mozilla/5.0 (Windows NT; …) WindowsPowerShell/5.1”，Supabase 按 User-Agent 认出“浏览器”就拒新格式 secret key（sb_secret_）、回 HTTP 401。
+    # 出处：https://supabase.com/docs/guides/api/api-keys （“A secret key doesn't work in a browser. Supabase matches on the User-Agent header and returns HTTP 401”）。
+    # 同一页要求 publishable / secret key 放在 apikey 头、不放 Authorization: Bearer（它们不是 JWT），所以 sb_secret_ 只带 apikey，不另加 Bearer
+    $p = @{ Method = $method; Uri = $uri; Headers = $headers; TimeoutSec = 300; ErrorAction = 'Stop'; UserAgent = $script:ToolUA }
     if ($null -ne $body) {
         if ($body -is [string]) {
             $p.Body = [Text.Encoding]::UTF8.GetBytes($body)
@@ -391,7 +397,10 @@ function Invoke-Http([string]$method, [string]$uri, [hashtable]$headers, $body, 
         if ($null -ne $v -and "$v" -ne '' -and ($v -is [string] -or $v -is [int] -or $v -is [long])) { $code = [string]$v; break }
     }
     $reason = [string](Get-Prop $json 'reason')
-    return [pscustomobject]@{ Status = $status; Headers = $hdr; Bytes = $bytes; Text = $text; Json = $json; Code = $code; Reason = $reason }
+    # 网关（Kong）的拒绝只有 message（如 401 {"message":"Invalid API key"}），没有错误码：没有 Code 时留着 message，D 里显示
+    $msg = ''
+    if (-not $code) { $mv = Get-Prop $json 'message'; if ($mv -is [string]) { $msg = $mv } }
+    return [pscustomobject]@{ Status = $status; Headers = $hdr; Bytes = $bytes; Text = $text; Json = $json; Code = $code; Reason = $reason; Msg = $msg }
 }
 
 function Hdr($resp, [string]$name) {
@@ -405,6 +414,22 @@ function D($resp) {
     $s = "HTTP $($resp.Status)"
     if ($resp.Code) { $s += " $($resp.Code)" }
     if ($resp.Reason) { $s += "/$($resp.Reason)" }
+    # 没有错误码时带上网关正文的 message，同类 401 一眼看得出原因。顺序不能换（安全审查 11-03）：
+    #   ① 去控制字符和 Unicode 双向控制符（U+200E、U+200F、U+202A～U+202E、U+2066～U+2069）；
+    #   ② 先按名单遮（Hide-Secrets：key、负责人邮箱、账号 id…）——截断以后前半段对不上名单就会漏出；
+    #   ③ 再按样式遮：sb_secret_… / sb_publishable_…、JWT 样式 eyJ…、UUID、邮箱样式串一律换成 ***；
+    #   ④ 最后才截到 80 字
+    $m = Get-Prop $resp 'Msg'
+    if (-not $resp.Code -and $m) {
+        $m = [regex]::Replace([string]$m, '[\x00-\x1f\x7f\u200e\u200f\u202a-\u202e\u2066-\u2069]', ' ').Trim()
+        $m = Hide-Secrets $m
+        $m = [regex]::Replace($m, '(?i)sb_(secret|publishable)_[A-Za-z0-9_-]*', '***')
+        $m = [regex]::Replace($m, 'eyJ[\w-]*(\.[\w-]*){0,2}', '***')
+        $m = [regex]::Replace($m, '(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '***')
+        $m = [regex]::Replace($m, '[^\s@<>()（）]+@[^\s@<>()（）]+\.[A-Za-z]{2,}', '***')
+        if ($m.Length -gt 80) { $m = $m.Substring(0, 80) + '…' }
+        $s += "（$m）"
+    }
     return $s
 }
 

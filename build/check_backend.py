@@ -104,7 +104,12 @@ Pages Functions（functions/）和 App、shared：
       （剩下的局限：$$ 里纯文本恰好带偶数个单引号、又写着 net.http_post / cron.unschedule 的，仍会当 SQL 认）；
       按迁移文件名顺序取每个任务最后一次 cron.schedule / cron.unschedule，unschedule 掉的任务调的函数不算（F9-reverse-check ②）；
       任务名只认按位置写的字符串字面量：具名参数（cron.schedule(job_name := 'x', …)、cron.unschedule(job_name := 'x')）认不出任务名，
-      这样的 schedule 按不带任务名算、一直算数，这样的 unschedule 不起作用（宁严勿漏））——
+      这样的 schedule 按不带任务名算、一直算数，这样的 unschedule 不起作用（宁严勿漏）；任务名写成 E'…' 的也认（反斜杠转义取下一个字符）；
+      找 cron.schedule / cron.unschedule 调用时，单引号字符串（含 E'…'，也含判为 SQL 的 $$ 段里的）内容先抹成空格，
+      raise notice '… cron.unschedule(''x'') …' 这类字符串里的字不当真调用；任务名、命令、地址仍从没抹的原文取，
+      命令参数本身是单引号字符串时里面的地址照认，字符串里写着的 cron.schedule 的地址按 schedule 之外的调用一直算数（F9-cron-string-literal）；
+      但命令写成单引号字符串、地址用 vault 写法时（原文是双写引号 ''functions_url'') || ''/<名>''），CRON_FN_URL 认不出，
+      只认写死的 /functions/v1/<名>；认不出时由 ④ 反向兜底报出（前提是该函数验了 x-cron-secret），不会静默放过）——
       ① 必须在 supabase/config.toml 写 [functions.<名>] verify_jwt = false（cron 只带 x-cron-secret，不带 Authorization；
          functions deploy 和本地 edge runtime 都按这里的 verify_jwt，默认开着）；
       ② 函数目录里的非测试源码（*.test.* / *_test.* / *.spec.*、tests/ 目录不算）用 AST 去掉注释后，必须有带引号的 'x-cron-secret'
@@ -903,9 +908,38 @@ def _call_args(code, open_paren):
 
 
 def _str_literal(s):
-    """参数是一个单引号字符串字面量时返回它的值，否则 None"""
+    """参数是一个单引号字符串字面量时返回它的值，否则 None。
+    认 '…'（'' 转义）和 E'…'（另认反斜杠转义：\\x 取 x，\\n 这类控制字符写法不展开——任务名里用不到，认偏了也只会多报）"""
     m = re.fullmatch(r"\s*'((?:[^']|'')*)'\s*", s)
-    return m.group(1).replace("''", "'") if m else None
+    if m:
+        return m.group(1).replace("''", "'")
+    m = re.fullmatch(r"\s*[Ee]'((?:[^'\\]|''|\\.)*)'\s*", s, re.DOTALL)
+    if m:
+        return re.sub(r"''|\\(.)", lambda x: x.group(1) or "'", m.group(1), flags=re.DOTALL)
+    return None
+
+
+def _blank_sql_strings(code):
+    """（已去注释的）code 里单引号字符串（含 E'…'）的内容换成空格，引号、长度、换行都留着；双引号标识符跳过；
+    $tag$ 段已由 _strip_sql_comments 判过（SQL 的照留、纯文本的已换空格），这里当透明，里面的字符串同样抹掉。
+    只用来找 cron.schedule / cron.unschedule 调用和切参数（F9-cron-string-literal ②）：raise notice '… cron.unschedule(''x'') …'
+    这类字符串里的字不当真调用；任务名和命令（net.http_post、地址）仍从没抹的 code 里取，命令参数本身是字符串也照认"""
+    out = list(code)
+    i, n = 0, len(code)
+    while i < n:
+        c = code[i]
+        if c == "'":
+            j = _skip_sql_string(code, i)
+            for k in range(i + 1, min(j - 1, n)):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = j
+        elif c == '"':
+            j = code.find('"', i + 1)
+            i = n if j < 0 else j + 1
+        else:
+            i += 1
+    return "".join(out)
 
 
 def cron_functions(root):
@@ -923,10 +957,11 @@ def cron_functions(root):
     for f in sorted(mig.glob("*.sql")):
         code = _strip_sql_comments(f.read_text(encoding="utf-8"))
         path = f"supabase/migrations/{f.name}"
+        masked = _blank_sql_strings(code)   # 找调用、切参数用抹掉字符串内容的；任务名、命令、地址从 code 取（位置一一对应）
         spans = []
-        for m in CRON_CALL.finditer(code):
+        for m in CRON_CALL.finditer(masked):
             kind = m.group(1).lower()
-            end, args = _call_args(code, m.end() - 1)
+            end, args = _call_args(masked, m.end() - 1)
             if kind == "unschedule":
                 job = _str_literal(code[args[0][0]:args[0][1]]) if len(args) == 1 else None
                 if job is not None:

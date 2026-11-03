@@ -88,6 +88,7 @@ export type Opts = {
   adminTotals?: (number | null)[];   // P6：GET /rest/v1/admins（Accept-Profile: private）依次报的 Content-Range 总数（默认一直是 0；null = 回 500）
   p6aNoUser?: boolean;               // P6A：预览里还没有 e2e-admin@lemomemo.test（login-token-fake-p6.ts）
   p6aMember?: (number | null)[];     // P6A：e2e-admin 在 admins 里的行数，依次报（默认一直是 0；null = 回 500）
+  p6aGateway401?: boolean | string;  // P6A：找账号那一页回网关样式的 401 {"message":"Invalid API key"}；字符串 = 用它当 message
   plain: string[];            // Read-Host（明文）依次的回答
   secure: string[];           // Read-Host -AsSecureString 依次的回答
   args?: string;              // 额外参数

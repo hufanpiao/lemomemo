@@ -26,3 +26,15 @@ verify_jwt = false
 # 对照：具名参数认不出任务名，按不带任务名算数（unschedule(job_name := …) 不起作用）→ 关校验不报
 [functions.fn-named]
 verify_jwt = false
+
+# 对照：字符串里写着 cron.unschedule('notice-job') 的文本不算 → 仍是 cron 调的，关校验不报
+[functions.fn-notice]
+verify_jwt = false
+
+# 对照：命令参数是单引号字符串，里面的地址照认 → cron 调的，关校验不报
+[functions.fn-strcmd]
+verify_jwt = false
+
+# 对照：E 串任务名认得出，已 unschedule → 开着校验不报
+[functions.fn-estr]
+verify_jwt = true
