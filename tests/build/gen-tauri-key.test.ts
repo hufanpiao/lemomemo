@@ -20,6 +20,9 @@ import { dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PS, q, root, writePs } from './login-token-fake.ts';
 
+// 只在 Windows 上真跑：脚本只给负责人在 Windows 上用；Linux 上的 pwsh 编不了假签名工具（Add-Type 不支持 ConsoleApplication，65af126 的 unit 因此失败）
+const RUN = Boolean(PS) && process.platform === 'win32';
+
 const SCRIPT = join(root, 'tools', 'keys', 'gen-tauri-key.ps1');
 const FINALLY = '已清剪贴板、清掉内存里的变量';
 const FINALLY_UNTOUCHED = '没放过私钥，剪贴板没动过';
@@ -63,7 +66,7 @@ const cleanEnv = (): NodeJS.ProcessEnv => {
 };
 
 beforeAll(() => {
-  if (!PS) return;
+  if (!RUN || !PS) return;
   dir = mkdtempSync(join(tmpdir(), 'lemo-gen-tauri-key-'));
   mkdirSync(join(dir, 'bin'));
   fakeExe = join(dir, 'bin', 'cargo-tauri.exe');
@@ -281,7 +284,7 @@ describe('gen-tauri-key.ps1 静态检查（不运行）', () => {
   });
 });
 
-describe.skipIf(!PS)('gen-tauri-key.ps1 跑起来（假签名工具）', () => {
+describe.skipIf(!RUN)('gen-tauri-key.ps1 跑起来（假签名工具）', () => {
   it('预览：私钥只进剪贴板一次、核对粘贴通过、打印公钥，不写 U 盘', () => {
     const r = runScript();
     expect(r.code, r.err).toBe(0);
@@ -525,7 +528,7 @@ describe.skipIf(!PS)('gen-tauri-key.ps1 跑起来（假签名工具）', () => {
   });
 });
 
-describe.skipIf(!PS)('gen-tauri-key.ps1 拒绝的运行方式（都停在主流程之前，不碰剪贴板）', () => {
+describe.skipIf(!RUN)('gen-tauri-key.ps1 拒绝的运行方式（都停在主流程之前，不碰剪贴板）', () => {
   const ps = (args: string[], env: NodeJS.ProcessEnv = cleanEnv()) =>
     spawnSync(PS ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', ...args], { encoding: 'utf8', env });
 
