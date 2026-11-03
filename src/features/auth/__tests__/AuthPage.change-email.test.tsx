@@ -15,7 +15,7 @@ afterEach(cleanup);
 
 const emailBox = (): HTMLInputElement => screen.getByLabelText(zh['auth.email.label']) as HTMLInputElement;
 const notRegisteredFirst = () =>
-  vi.fn(async (email: string) => (email === 'hufanp@gamil.com' ? { ok: false as const, error: 'not_registered' as const } : { ok: true as const, value: undefined }));
+  vi.fn(async (email: string) => (email === 'owner.sample@gamil.com' ? { ok: false as const, error: 'not_registered' as const } : { ok: true as const, value: undefined }));
 
 async function send(): Promise<void> {
   await act(async () => {
@@ -27,7 +27,7 @@ describe('换一个邮箱', () => {
   it('邀请码那一步点“换一个邮箱”：回填邮箱那一步，邮箱框能改、保留原值，邀请码清空；改对了按“发验证码”重新查注册', async () => {
     const api = fakeApi({ sendCode: notRegisteredFirst() });
     await renderPage(api);
-    await typeEmailAndSend('hufanp@gamil.com');
+    await typeEmailAndSend('owner.sample@gamil.com');
     expect(screen.getByTestId('auth-not-registered')).toBeTruthy();
     fireEvent.change(screen.getByLabelText(zh['auth.invite.label']), { target: { value: 'ABCD' } });
     await act(async () => {
@@ -36,10 +36,10 @@ describe('换一个邮箱', () => {
     expect(screen.queryByTestId('auth-not-registered')).toBeNull();
     expect(screen.queryByLabelText(zh['auth.invite.label'])).toBeNull();
     expect(emailBox().readOnly).toBe(false);
-    expect(emailBox().value).toBe('hufanp@gamil.com');
-    fireEvent.change(emailBox(), { target: { value: 'hufanp@gmail.com' } });
+    expect(emailBox().value).toBe('owner.sample@gamil.com');
+    fireEvent.change(emailBox(), { target: { value: 'owner.sample@gmail.com' } });
     await send();
-    expect(api.sendCode).toHaveBeenLastCalledWith('hufanp@gmail.com', expect.any(String));
+    expect(api.sendCode).toHaveBeenLastCalledWith('owner.sample@gmail.com', expect.any(String));
     expect(screen.getByLabelText(zh['auth.code.label'])).toBeTruthy();
     // 回到登录：小窗按 action 'login' 重画、给新令牌
     expect(turnstile.actions.at(-1)).toBe('login');
@@ -48,15 +48,15 @@ describe('换一个邮箱', () => {
   it('邀请码那一步直接点邮箱框改字：邮箱框能改，改了就回填邮箱那一步（邀请码框收起、清空），按“发验证码”重新查注册', async () => {
     const api = fakeApi({ sendCode: notRegisteredFirst() });
     await renderPage(api);
-    await typeEmailAndSend('hufanp@gamil.com');
+    await typeEmailAndSend('owner.sample@gamil.com');
     expect(emailBox().readOnly).toBe(false);
     fireEvent.change(screen.getByLabelText(zh['auth.invite.label']), { target: { value: 'ABCD' } });
-    fireEvent.change(emailBox(), { target: { value: 'hufanp@gmail.com' } });
+    fireEvent.change(emailBox(), { target: { value: 'owner.sample@gmail.com' } });
     expect(screen.queryByTestId('auth-not-registered')).toBeNull();
     expect(screen.queryByLabelText(zh['auth.invite.label'])).toBeNull();
-    expect(emailBox().value).toBe('hufanp@gmail.com');
+    expect(emailBox().value).toBe('owner.sample@gmail.com');
     await send();
-    expect(api.sendCode).toHaveBeenLastCalledWith('hufanp@gmail.com', expect.any(String));
+    expect(api.sendCode).toHaveBeenLastCalledWith('owner.sample@gmail.com', expect.any(String));
   });
 
   it('验证码那一步点“换一个邮箱”：回填邮箱那一步，邮箱框能改、保留原值', async () => {
@@ -82,19 +82,19 @@ describe('换一个邮箱', () => {
     const started = hold<{ ok: true; value: undefined }>();
     const api = fakeApi({ sendCode: notRegisteredFirst(), inviteStart: vi.fn(() => started.p) });
     await renderPage(api);
-    await typeEmailAndSend('hufanp@gamil.com');
+    await typeEmailAndSend('owner.sample@gamil.com');
     fireEvent.change(screen.getByLabelText(zh['auth.invite.label']), { target: { value: 'ABCDEFGHJKMN' } });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: zh['auth.invite.next'] }));
     });
     expect(api.inviteStart).toHaveBeenCalledTimes(1);
-    fireEvent.change(emailBox(), { target: { value: 'hufanp@gmail.com' } });
+    fireEvent.change(emailBox(), { target: { value: 'owner.sample@gmail.com' } });
     await act(async () => {
       started.release({ ok: true, value: undefined });
     });
     expect(screen.queryByLabelText(zh['auth.code.label'])).toBeNull();
     expect(screen.queryByText(zh['auth.invite.sent'])).toBeNull();
-    expect(emailBox().value).toBe('hufanp@gmail.com');
+    expect(emailBox().value).toBe('owner.sample@gmail.com');
     // 没开始倒计时：按钮还是“发验证码”、能按
     const btn = screen.getByRole('button', { name: zh['auth.email.send'] }) as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
@@ -104,7 +104,7 @@ describe('换一个邮箱', () => {
     const started = hold<{ ok: true; value: undefined }>();
     const api = fakeApi({ sendCode: notRegisteredFirst(), inviteStart: vi.fn(() => started.p) });
     await renderPage(api);
-    await typeEmailAndSend('hufanp@gamil.com');
+    await typeEmailAndSend('owner.sample@gamil.com');
     fireEvent.change(screen.getByLabelText(zh['auth.invite.label']), { target: { value: 'ABCDEFGHJKMN' } });
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: zh['auth.invite.next'] }));
@@ -126,15 +126,15 @@ describe('换一个邮箱', () => {
       const sent = hold<typeof result>();
       const api = fakeApi({ sendCode: vi.fn(() => sent.p) });
       await renderPage(api);
-      await typeEmailAndSend('hufanp@gamil.com');
+      await typeEmailAndSend('owner.sample@gamil.com');
       expect(api.sendCode).toHaveBeenCalledTimes(1);
-      fireEvent.change(emailBox(), { target: { value: 'hufanp@gmail.com' } });
+      fireEvent.change(emailBox(), { target: { value: 'owner.sample@gmail.com' } });
       await act(async () => {
         sent.release(result);
       });
       expect(screen.queryByTestId('auth-not-registered')).toBeNull();
       expect(screen.queryByLabelText(zh['auth.code.label'])).toBeNull();
-      expect(emailBox().value).toBe('hufanp@gmail.com');
+      expect(emailBox().value).toBe('owner.sample@gmail.com');
       expect((screen.getByRole('button', { name: zh['auth.email.send'] }) as HTMLButtonElement).disabled).toBe(false);
     }
   });
