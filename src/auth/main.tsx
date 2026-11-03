@@ -12,9 +12,10 @@ import '../styles/base.css';
 import { LOCALE_STORAGE_KEY, pickLocale } from '../../shared/i18n/pick-locale.ts';
 import { AuthPage } from '../features/auth/index.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
+import { applyDocLocale } from '../platform/doc-locale.ts';
 import { buildInfo } from '../platform/env.ts';
 
-/** 界面语言：本机选过的（pv-locale）→ 设备语言 → 中文（16.4） */
+/** 界面语言：本机选过的（pv-locale）→ 设备语言 → 中文（16.4）；页面标题跟着换（K-16：韩文“레모”） */
 function savedLocale(): string | null {
   try {
     return localStorage.getItem(LOCALE_STORAGE_KEY);
@@ -24,7 +25,7 @@ function savedLocale(): string | null {
 }
 const locale = pickLocale(savedLocale(), navigator.languages) === 'ko' ? 'ko-KR' : 'zh-CN';
 uiStore.getState().setLocale(locale);
-document.documentElement.lang = locale;
+applyDocLocale(locale);
 
 const el = document.getElementById('root');
 if (!el) throw new Error('root_missing');

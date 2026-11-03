@@ -37,6 +37,12 @@ describe('manifest.webmanifest', () => {
     expect(manifest['display']).toBe('standalone');
   });
 
+  it('名字：name、short_name、主屏幕名都是“Lemo”（ADR-013 第 6 条 R-88；name 由 B1 韩文审校 K-16 定，第 48 条）', () => {
+    expect(manifest['name']).toBe('Lemo');
+    expect(manifest['short_name']).toBe('Lemo');
+    expect(indexHtml).toContain('<meta name="apple-mobile-web-app-title" content="Lemo" />');
+  });
+
   it('颜色按导出清单：theme_color 柠檬黄、background_color 取启动画面中间那片黄光', () => {
     expect(manifest['theme_color']).toBe('#F2DF4A');
     expect(manifest['background_color']).toBe('#F0E289');

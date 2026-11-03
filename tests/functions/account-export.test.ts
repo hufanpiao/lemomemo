@@ -163,6 +163,21 @@ describe('account export start：大小预检和它前面的三道闸（0.47 第
     expect(logs.join()).not.toContain(A);
   });
 
+  it('超大账号被拒（明早清单第 49 条 ⑦ 选甲）不占当天额度：拒两次以后，当天 3 次照样都能用，第 4 次才 429', async () => {
+    // 两个额度分开锁住：被拒的预检计入每天 6 次的 export-size，不计入用户看到的 3 次（keys.account，导出和注销合计）
+    const { db, box } = setup();
+    db.sizeResult = EXPORT_LIMITS.maxTotalRawBytes + 1;
+    for (let i = 0; i < 2; i++) expect((await start(db, box)).status).toBe(413);
+    expect(db.count(keys.account(A, T0))).toBe(0);      // 不占当天 3 次
+    expect(db.count(keys.exportSize(A, T0))).toBe(2);   // 占预检次数
+    db.sizeResult = 1;
+    for (let i = 0; i < ACCOUNT_DAILY_LIMIT; i++) expect((await start(db, box)).status).toBe(200);
+    expect(db.count(keys.account(A, T0))).toBe(ACCOUNT_DAILY_LIMIT);
+    expect((await start(db, box)).status).toBe(429);
+    // 第 4 次的 429 是当天次数那道闸（只读查，在扣预检次数之前）给的：预检次数停在 2 + 3 = 5，没到 6
+    expect(db.count(keys.exportSize(A, T0))).toBe(5);
+  });
+
   it('正好 480 MB 放行；预检按导出模式：没解锁时隐私记行不算', async () => {
     const { db, box } = setup();
     db.sizeResult = EXPORT_LIMITS.maxTotalRawBytes;

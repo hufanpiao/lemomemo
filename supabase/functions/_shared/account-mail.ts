@@ -4,7 +4,8 @@
 //   时刻按本人时区（profiles.current_tz）写；导出通知只写时间、设备名、地区，不写导出了什么（第 96 条①）。
 // 不 import npm 包、不读环境变量、不碰 Deno 全局（只用 Intl），Vitest 直接测；deno check 也查这一份。
 // 韩文文案：词典里还没有这几条（shared/i18n 没有注销相关的键），先写在这里。已过 R-106 B1 第一遍审校（10-31）；
-//   审校建议 5 封改成 해요체并顺带改“회원 탈퇴”、引号、“열어”（docs/03-评审/B1/B1-韩文审校-第一遍.md K-01a～e），等负责人定口吻（明早清单第 48 条），现文未动。
+//   负责人定（明早清单第 48 条，11-03）：5 封一律 해요체，与全 App 同一口吻；“회원 탈퇴”、“…”引号、“열어”按审校改
+//   （docs/03-评审/B1/B1-韩文审校-第一遍.md K-01a～e）。
 
 export type MailLocale = 'zh-CN' | 'ko-KR';
 export interface Mail {
@@ -68,10 +69,10 @@ export function deletionRequestedMail(loc: MailLocale, purgeAfterMs: number, tz:
   const when = fmtWhen(purgeAfterMs, tz, loc);
   if (loc === 'ko-KR') {
     return {
-      subject: '레모 계정 탈퇴가 신청되었습니다',
-      text: `레모 계정 탈퇴가 신청되었습니다. ${when}에 계정과 모든 데이터가 완전히 삭제됩니다.\n\n`
-        + '본인이 신청하지 않았다면 그 전에 레모 앱을 열고 로그인한 뒤 "계정 복구"를 눌러 주세요.\n'
-        + '탈퇴 관련 안내는 이 메일로만 보내 드립니다. 스팸함도 확인해 주세요.',
+      subject: '레모 회원 탈퇴가 신청됐어요',
+      text: `레모 회원 탈퇴가 신청됐어요. ${when}에 계정과 모든 데이터가 완전히 삭제돼요.\n\n`
+        + '본인이 신청하지 않았다면 그전에 레모 앱을 열어 로그인한 뒤 “계정 복구”를 눌러 주세요.\n'
+        + '회원 탈퇴 안내는 이메일로만 보내 드려요. 스팸함도 확인해 주세요.',
     };
   }
   return {
@@ -87,9 +88,9 @@ export function deletionReminderMail(loc: MailLocale, purgeAfterMs: number, tz: 
   const when = fmtWhen(purgeAfterMs, tz, loc);
   if (loc === 'ko-KR') {
     return {
-      subject: '레모 계정이 곧 완전히 삭제됩니다',
-      text: `레모 계정이 ${when}에 완전히 삭제됩니다.\n\n`
-        + '본인이 신청하지 않았다면 레모 앱을 열고 로그인한 뒤 "계정 복구"를 선택해 주세요.',
+      subject: '레모 계정이 곧 완전히 삭제돼요',
+      text: `레모 계정이 ${when}에 완전히 삭제돼요.\n\n`
+        + '본인이 신청하지 않았다면 레모 앱을 열어 로그인한 뒤 “계정 복구”를 눌러 주세요.',
     };
   }
   return {
@@ -103,8 +104,8 @@ export function deletionReminderMail(loc: MailLocale, purgeAfterMs: number, tz: 
 export function deletionDoneMail(loc: MailLocale): Mail {
   if (loc === 'ko-KR') {
     return {
-      subject: '레모 계정이 삭제되었습니다',
-      text: '레모 계정이 탈퇴 처리되었고, 계정의 데이터와 서버 백업이 모두 삭제되었습니다.\n\n그동안 레모를 사용해 주셔서 감사합니다.',
+      subject: '레모 회원 탈퇴가 완료됐어요',
+      text: '레모 회원 탈퇴가 완료되어 계정의 데이터와 서버 백업을 모두 삭제했어요.\n\n그동안 레모를 써 주셔서 감사해요.',
     };
   }
   return {
@@ -117,9 +118,9 @@ export function deletionDoneMail(loc: MailLocale): Mail {
 export function restoredMail(loc: MailLocale): Mail {
   if (loc === 'ko-KR') {
     return {
-      subject: '레모 계정이 복구되었습니다',
-      text: '레모 계정 탈퇴 신청이 취소되어 계정이 복구되었습니다.\n\n'
-        + '본인이 복구하지 않았다면 레모 앱을 열고 로그인한 뒤 설정에서 "다른 모든 기기에서 로그아웃"을 눌러 주세요.',
+      subject: '레모 계정이 복구됐어요',
+      text: '회원 탈퇴 신청이 취소되어 레모 계정이 복구됐어요.\n\n'
+        + '본인이 복구하지 않았다면 레모 앱을 열어 로그인한 뒤 설정에서 “다른 모든 기기에서 로그아웃”을 눌러 주세요.',
     };
   }
   return {
@@ -147,9 +148,9 @@ export function exportMail(loc: MailLocale, atMs: number, tz: unknown, device: s
   if (loc === 'ko-KR') {
     const dev = device ?? '알 수 없는 기기';
     return {
-      subject: '레모 데이터가 내보내졌습니다',
-      text: `레모 데이터가 내보내졌습니다.\n\n시간: ${when}\n기기: ${dev}\n지역: ${where}\n\n`
-        + '본인이 한 것이 아니라면 지금 바로 레모 앱의 설정에서 "다른 모든 기기에서 로그아웃"을 눌러 주세요.',
+      subject: '방금 레모 데이터를 내보냈어요',
+      text: `방금 레모 데이터 내보내기가 실행됐어요.\n\n시간: ${when}\n기기: ${dev}\n지역: ${where}\n\n`
+        + '본인이 내보낸 것이 아니라면 지금 바로 레모 앱을 열어 설정에서 “다른 모든 기기에서 로그아웃”을 눌러 주세요.',
     };
   }
   const dev = device ?? '未知设备';

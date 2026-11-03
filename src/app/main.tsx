@@ -48,6 +48,7 @@ import { mountFeatures } from './features.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
 import { startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
 import { wireSync } from './sync-wiring.ts';
+import { applyDocLocale } from '../platform/doc-locale.ts';
 
 /** 界面语言（16.4）：缓存的 profiles.ui_locale → 本机选过的（pv-locale）→ 设备语言 → 中文；规则同 src/auth/main.tsx，多一层缓存的 profile */
 function applyLocale(boot: Pick<BootResult, 'profile'>): void {
@@ -60,7 +61,7 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
   }
   const uiLocale = toUiLocale(pickLocale(fromUiLocale(typeof cachedUi === 'string' ? cachedUi : null) ?? savedLocal, navigator.languages));
   uiStore.getState().setLocale(uiLocale);
-  document.documentElement.lang = uiLocale;
+  applyDocLocale(uiLocale);
 }
 
 // 启动画面最晚 5 秒收起：从入口模块开始执行算起（关口、冷启动、分包加载哪一步卡住都不再盖着）

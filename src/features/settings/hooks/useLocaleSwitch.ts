@@ -4,16 +4,17 @@
 import { useCallback, useState } from 'react';
 import { toUiLocale, type Locale } from '../../../../shared/i18n/pick-locale.ts';
 import { uiStore, useUi } from '../../../kit/state/ui-store.ts';
+import { applyDocLocale } from '../../../platform/doc-locale.ts';
 import { updateCachedLocale, writeLocalLocale } from '../data/local.ts';
 import type { SettingsApi } from '../data/settings-api.ts';
 
 export type LocaleSyncState = 'idle' | 'saving' | 'failed';
 
-/** 把语言用到这一页（ui-store、<html lang>）并记在本机（pv-locale、cookie、缓存的 profile）；刷新后由入口按它恢复 */
+/** 把语言用到这一页（ui-store、<html lang>、页面标题）并记在本机（pv-locale、cookie、缓存的 profile）；刷新后由入口按它恢复 */
 export function applyLocale(locale: Locale): void {
   const ui = toUiLocale(locale);
   uiStore.getState().setLocale(ui);
-  document.documentElement.lang = ui;
+  applyDocLocale(ui);
   writeLocalLocale(locale);
   void updateCachedLocale(ui);
 }
