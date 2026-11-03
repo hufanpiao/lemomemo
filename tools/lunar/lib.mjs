@@ -77,7 +77,7 @@ export function encodeMonths(months) {
   return { first, years };
 }
 
-/** encodeMonths 的逆运算（lunar-data.ts 里的 decode 和它是同一逻辑，tests/build/lunar-tools.test.ts 核对往返） */
+/** encodeMonths 的逆运算（tests/build/lunar-tools.test.ts 核对往返、lunar-hko.test.ts 用它解码 lunar-data.ts 抽查；运行时解码器落地时要和它同一逻辑） */
 export function decodeYears({ first, years }) {
   const out = [];
   years.forEach(([ny, bits], k) => {
@@ -137,12 +137,17 @@ export function encodeTerms(list) {
   return { first, years };
 }
 
-/** 生成 lunar-data.ts 的源码（只放数据和一个解码函数，不 import 别的模块，单独 chunk） */
+/** 生成 lunar-data.ts 的源码（只放数据和类型，不 import 别的模块，单独 chunk；解码由运行时解码器做） */
 export function renderDataTs({ cn, kr, termsCn, termsKr, generatedFrom }) {
   const arr = (v) => JSON.stringify(v);
+  const EMPTY = { first: 0, years: [] };   // 某国还没有数据：空表（years 为空 = 运行时按“没有该国农历”处理）
+  kr = kr ?? EMPTY;
+  termsKr = termsKr ?? EMPTY;
+  const span = (t) => (t.years.length > 0 ? `${t.first}～${t.first + t.years.length - 1}` : '暂无数据');
   return `// 自动生成，不要手改：node tools/lunar/build.mjs（来源：${generatedFrom}）
 // 农历月表（中国：香港天文台；韩国：KASI）和 24 节气。编码见 tools/lunar/lib.mjs 文件头：每年 [正月初一相对 1970-01-01 的天数, 大小月和闰月位]；
 // 节气每年 24 个相对当年 1 月 1 日的天数（从小寒起）。只在日历页、今天页显示农历时按需加载（架构 2.6）
+// 覆盖范围：中国农历年 ${span(cn)}、节气公历年 ${span(termsCn)}；韩国农历年 ${span(kr)}、节气 ${span(termsKr)}。years 为空的表 = 没有该国数据，不要回退成别国
 export interface LunarTable { first: number; years: readonly (readonly [number, number])[] }
 export interface TermTable { first: number; years: readonly (readonly number[])[] }
 export const LUNAR_CN: LunarTable = { first: ${cn.first}, years: ${arr(cn.years)} };

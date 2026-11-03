@@ -103,6 +103,9 @@ jobs:
       - name: 官网检查（首页不出现 supabase、页面成对、CSP 和 Functions 一致）
         run: npm run check:site
 
+      - name: 农历数据检查（lunar-data.ts 和 sources、sources 和香港天文台原始历表一致）
+        run: npm run check:lunar
+
       - name: 构建（preview 模式，不带任何环境的真实地址；含官网和拼好的 _headers）
         run: npm run build -- --mode preview
 

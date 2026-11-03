@@ -1,5 +1,5 @@
 // tools/lunar/lib.mjs 骨架的单测（B2 BE-5、第一天派工表第 7 行）：用合成数据（不是真实历表）核对编码往返、结构校验、两国逐月比对、节气编码。
-// 真实数据到了以后另加“已知年份抽查”（比如几个已知的春节、闰月年），由 build.mjs --check 进 CI
+// 真实数据（香港天文台）的已知年份抽查在 tests/build/lunar-hko.test.ts；build.mjs --check 由 npm run check:lunar 进 CI（unit.yml）
 import { describe, expect, it } from 'vitest';
 import { compareCountries, dateOf, dayNum, decodeYears, encodeMonths, encodeTerms, validateMonths } from '../../tools/lunar/lib.mjs';
 
