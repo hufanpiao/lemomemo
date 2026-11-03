@@ -169,7 +169,8 @@ jobs:
 
       - name: OSV-Scanner（package-lock、deno.lock、Cargo.lock）
         # 有漏洞就失败；确认不受影响的，写进 osv-scanner.toml 并注明原因和复查日期，由安全审查员会签
-        run: osv-scanner scan source --recursive .
+        # 显式指定 --config：不指定时 OSV 只认锁文件同目录下的 osv-scanner.toml，子目录里的 Cargo.lock 读不到根目录的豁免（11-03 unit 失败的原因）
+        run: osv-scanner scan source --recursive --config osv-scanner.toml .
 
   workflow-lint:
     name: 工作流检查（actionlint ＋ shellcheck）
