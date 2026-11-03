@@ -139,10 +139,10 @@ async function runOne(db: GrantDb, c: GrantCase, cols: readonly string[]): Promi
  * 还没建、按计划在后面批次新迁移里才建的 public RPC（架构设计-v4 0.31 第 23 条确认改标注、0.33 第 3 条；
  * B0 批次的迁移建了 record_consent、purge_deleted（0001）和 files_authorize（0004）；
  * B1 迁移 20261029192000_core_devices_sessions.sql 建了 report_tz、remove_device、my_sessions，20261029200000_core_apply_patch.sql 建了 apply_patch）。
+ * B2 迁移 20261103110000_core_claim_endpoint.sql 建了 claim_endpoint。
  * 只有这里列出的没建算正常；九个里别的没建一律报错。哪一个建好了就从这里删掉。
  */
 export const RPCS_BUILT_LATER: Readonly<Record<string, 'B1' | 'B2' | 'B3'>> = {
-  claim_endpoint: 'B2', // B2 新迁移，配 private.claim_endpoint_impl（0.31 第 23 条）
   my_ai_usage: 'B3', // B3 新迁移，配 private.my_ai_usage_impl（0.31 第 23 条）
 };
 

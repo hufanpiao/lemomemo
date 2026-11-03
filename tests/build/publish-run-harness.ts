@@ -163,6 +163,8 @@ export type RunOpts = {
   /** 假工具参数里含 tamperAt 时改一处文件：web（临时目录里的网页）、tree（wrangler 依赖树）或绝对路径；git:<参数> 则跑一次真 git（R-268 第 5 步用） */
   tamperAt?: string;
   tamper?: string;
+  /** 正式项目 Edge Function secrets 的名字（默认 CRON_SECRET、OPS_SECRET）；'deny' = 接口回 403（令牌没有 Edge Function Secrets 只读）。B2 安全审查 D1-S3 */
+  fnSecrets?: string[] | 'deny';
   /** wrangler secret list 打印的名单（默认六个都在） */
   secrets?: string[];
   /** 假 npm ci 在 wrangler 依赖树里多放一个文件 */
@@ -190,6 +192,8 @@ export async function runScript(extra: string, inputs: string[], o: RunOpts = {}
 $env:LEMO_FAKE_LOG = ${q(log)}
 $env:LEMO_FAKE_FAIL = ${q(o.fail ?? '')}
 $env:LEMO_FAKE_CF_DENY = ${q(o.cfDeny ? '1' : '')}
+$env:LEMO_FAKE_FN_SECRETS = ${q(o.fnSecrets === 'deny' ? '' : (o.fnSecrets ?? ['CRON_SECRET', 'OPS_SECRET']).join(','))}
+$env:LEMO_FAKE_FN_SECRETS_DENY = ${q(o.fnSecrets === 'deny' ? '1' : '')}
 $env:LEMO_FAKE_TAMPER_AT = ${q(o.tamperAt ?? '')}
 $env:LEMO_FAKE_TAMPER = ${q(o.tamper ?? '')}
 $env:LEMO_FAKE_SECRETS = ${q(secretListJson(o.secrets ?? OPS_SECRETS))}

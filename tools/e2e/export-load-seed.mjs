@@ -39,7 +39,7 @@ insert into public.settings (id, user_id, key, value)
   select gen_random_uuid(), '${uid}', 'load.' || g, to_jsonb(pg_temp.p('setVal', g)) from generate_series(1, ${SYNC}) g;
 insert into public.devices (id, user_id, label, platform, push_endpoint, p256dh, auth, app_version, last_seen_at, install_id)
   select gen_random_uuid(), '${uid}', pg_temp.p('devLabel', g), 'web',
-    ${MAX ? `'https://fcm.googleapis.com/fcm/send/' || pg_temp.az(140) || g` : 'null'}, ${MAX ? 'pg_temp.az(87)' : 'null'}, ${MAX ? 'pg_temp.az(22)' : 'null'},
+    ${MAX ? `'https://fcm.googleapis.com/fcm/send/' || pg_temp.az(140) || g` : 'null'}, ${MAX ? "'BA' || pg_temp.az(84) || 'A'" : 'null'}, ${MAX ? "pg_temp.az(21) || 'g'" : 'null'},
     '4.0.0', now(), gen_random_uuid() from generate_series(1, ${SYNC}) g;
 insert into public.events (id, user_id, title, date, time, tz, project, note, raw_text, location, short, created_at, updated_at)
   select gen_random_uuid(), '${uid}', pg_temp.p('evTitle', g), date '2026-01-01' + (g % 700)::int, '09:30', 'Asia/Seoul',

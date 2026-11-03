@@ -50,6 +50,27 @@ describe('build/check_arch.py（tests/arch-fixtures/check_arch）', () => {
     }
   });
 
+  // 架构 0.51 第 2 条：VAPID 私钥是一行 JWK，值本身漏进源码或产物要认得出（kty 前后 300 个字符内有 43 个字符的 d）
+  // B2 代码审查 S1：JWK 整串放在一个字符串里、引号转义成 \"（"{\"kty\":\"EC\",…\"d\":\"…\"}"）也要认得出
+  it('A14：JWK 私钥 → 源码对象字面量（不带引号、冒号前后有空格、单引号）、dist 里压缩的 JSON、转义写法的字符串各报一条', () => {
+    for (const [name, where] of [
+      ['a14-jwk-src', 'A14 src/core/bad.ts:7'],
+      ['a14-jwk-dist', 'A14 dist/web/assets/index-fake.js:2'],
+      ['a14-jwk-escaped', 'A14 src/core/bad.ts:2'],
+    ] as const) {
+      const { code, report } = run(sample(name));
+      expect(code, name).toBe(1);
+      expect(report.errors.map((e) => `${e.rule} ${e.file}:${e.line}`), name).toEqual([where]);
+      expect(report.errors[0]?.message, name).toContain('JWK 私钥');
+    }
+  });
+
+  it('A14 对照：只有公钥（含转义写法）、kid/id 里含 d、d 不是 43 个字符、d 离 kty 超过 300 个字符 → 不报', () => {
+    const { code, report } = run(sample('a14-jwk-public-ok'));
+    expect(report.errors).toEqual([]);
+    expect(code).toBe(0);
+  });
+
   it('A14：import.meta.env 读了非 VITE_PUBLIC_* → 错误', () => {
     const { code, report } = run(sample('a14-env'));
     expect(code).toBe(1);

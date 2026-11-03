@@ -1,0 +1,129 @@
+// 推送负载 v1（架构 0.53 第 4 条、5.3“推送负载 v1”；B2 安全审查“六之三”、BE1-S2；代码审查 BE-1 M3、S1～S3）。push-dispatch、push-test 都只经
+// buildPayload 组装，不手拼 JSON。输入按 type 分成三种（联合类型），输出只有这几个字段：
+//   remind  { v: 1, type, user_id, kind, id, due_at, title?, body?, snooze?: { label, minutes } }
+//   resolve { v: 1, type, user_id, kind, id, due_at }          不带标题、正文、snooze（SW 用本地固定文案）
+//   test    { v: 1, type, user_id }                            正好三个键
+//   • 永远没有地址、图片之类的字段（类型上就没有，运行时多给的键一律丢掉）；
+//   • user_id 必带：SW 拿它和本机 owner 比对，对不上只显示 App 名（M9、FE-1）；
+//   • 先校验（S3）：user_id、id 是小写 UUID，kind 认识，due_at 是正的安全整数；不合格抛 PushPayloadError，这一条记 push_failed、不影响别的；
+//   • 文字（title、body、snooze.label）先把 C0 控制字符（U+0000～U+001F）换成空格（S1），再按码点截：title、body 各 ≤ 300、label ≤ 40，
+//     都含末尾的“…”，和 SW src/sw/push.ts 的 TEXT_MAX、LABEL_MAX、clipText 一致；snooze.minutes 不是 1～1440 的整数就整个不带 snooze（S2，SW 同样处理）；
+//   • 整份 UTF-8 JSON ≤ 3071 字节，加 1 字节分隔放进 3072 一档（ece.ts PAD_TIERS）；放不下按 5.3 先再截 title、还不够再截 body
+//     （先截哪个等负责人定，明早清单第 71 条）；title 至少留 20 个码点、不截成没有（S1）；截完还放不下抛 PushCryptoError('payload_too_large')。
+// 通知的 tag 是 kind:id:due_at，整页提醒地址 /app/#/remind/<kind>/<id>?due=<due_at>，都由前端按这几个字段拼，负载里不放。
+// 不 import npm 包、不碰 Deno 全局；Node 和 Deno 都能跑。
+import { PAD_TIERS, PushCryptoError } from './ece.ts';
+
+export type PayloadType = 'remind' | 'resolve' | 'test';
+export type PayloadKind = 'event' | 'todo' | 'anniv';
+
+/** 指向一次提醒的几项（remind、resolve 共有） */
+interface ItemRef {
+  user_id: string;
+  kind: PayloadKind;
+  id: string;
+  /** 这一次提醒对应的时刻（毫秒），和 tag、整页提醒地址里的 due 一致 */
+  due_at: number;
+}
+export interface RemindPayloadInput extends ItemRef {
+  type: 'remind';
+  /** 只在用户开着 push_show_title 时给 */
+  title?: string | null;
+  body?: string | null;
+  snooze?: { label: string; minutes: number } | null;
+}
+export interface ResolvePayloadInput extends ItemRef {
+  type: 'resolve';
+}
+export interface TestPayloadInput {
+  type: 'test';
+  user_id: string;
+}
+export type PayloadInput = RemindPayloadInput | ResolvePayloadInput | TestPayloadInput;
+
+/** 负载字段本身不合格（S3）：调用方记 push_failed，只写这个原因码 */
+export class PushPayloadError extends Error {
+  readonly code = 'bad_payload' as const;
+  constructor() {
+    super('bad_payload');
+  }
+}
+
+/** 明文最多多少字节（最大一档减去 1 字节分隔） */
+export const MAX_PAYLOAD_BYTES = (PAD_TIERS[PAD_TIERS.length - 1] ?? 3072) - 1;
+/** 标题、正文的长度上限（按码点数，Array.from 计，含截断时末尾的“…”）：架构 5.3（0.53）各 300 字，和 SW 的 TEXT_MAX 同一个数 */
+export const TITLE_MAX = 300;
+export const BODY_MAX = 300;
+/** 推迟按键文字上限，和 SW 的 LABEL_MAX 一致 */
+export const LABEL_MAX = 40;
+/** 推迟分钟数 1～1440，和 SW 的 SNOOZE_MAX_MIN 一致 */
+export const SNOOZE_MAX_MIN = 1440;
+/** 按字节再截标题时至少留的码点数（S1：不截成没有，锁屏上还认得出是哪件事） */
+export const TITLE_MIN_KEEP = 20;
+const ELLIPSIS = '…';
+const KINDS: ReadonlySet<string> = new Set<PayloadKind>(['event', 'todo', 'anniv']);
+// 小写 UUID，和 SW 的 UUID_RE 同一条
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const te = new TextEncoder();
+
+function encode(o: Record<string, unknown>): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(te.encode(JSON.stringify(o)));
+}
+
+/** C0 控制字符（U+0000～U+001F）换成空格：通知里本来显示不出来，转义后每个占 6 字节 */
+function noC0(s: string): string {
+  let out = '';
+  for (const ch of s) out += ch.charCodeAt(0) < 0x20 ? ' ' : ch;
+  return out;
+}
+
+/** 按字符（码点）截到连省略号在内最多 n 个（和 SW 的 clipText 同一算法） */
+function cut(s: string, n: number): string {
+  const cps = Array.from(s);
+  return cps.length <= n ? s : cps.slice(0, Math.max(0, n - 1)).join('') + ELLIPSIS;
+}
+
+const text = (v: unknown, max: number): string | null => (typeof v === 'string' && v !== '' ? cut(noC0(v), max) : null);
+const isUuid = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
+const isDueAt = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0;
+const isSnoozeMin = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= SNOOZE_MAX_MIN;
+
+/** 组装并编码；返回 UTF-8 字节（交给 ece.ts 的 encryptPush）。字段不合格抛 PushPayloadError，放不下抛 PushCryptoError('payload_too_large') */
+export function buildPayload(p: PayloadInput): Uint8Array<ArrayBuffer> {
+  if (!isUuid(p.user_id)) throw new PushPayloadError();
+  if (p.type === 'test') return encode({ v: 1, type: 'test', user_id: p.user_id });
+  if ((p.type !== 'remind' && p.type !== 'resolve') || !KINDS.has(p.kind) || !isUuid(p.id) || !isDueAt(p.due_at)) throw new PushPayloadError();
+  const base: Record<string, unknown> = { v: 1, type: p.type, user_id: p.user_id, kind: p.kind, id: p.id, due_at: p.due_at };
+  if (p.type === 'resolve') return encode(base);
+
+  let title = text(p.title, TITLE_MAX);
+  let body = text(p.body, BODY_MAX);
+  const sl = p.snooze ? text(p.snooze.label, LABEL_MAX) : null;
+  const snooze = p.snooze && sl !== null && isSnoozeMin(p.snooze.minutes) ? { label: sl, minutes: p.snooze.minutes } : null;
+  const make = () => {
+    const o: Record<string, unknown> = { ...base };
+    if (title !== null) o.title = title;
+    if (body !== null) o.body = body;
+    if (snooze !== null) o.snooze = snooze;
+    return encode(o);
+  };
+  let out = make();
+  // 按架构 5.3 先截 title（至少留 TITLE_MIN_KEEP 个码点）、再截 body；每次按超出的字节数估一个字符数往下截（一个字符最多 6 字节，按 4 估、多跑几轮）
+  for (const which of ['title', 'body'] as const) {
+    const floor = which === 'title' ? TITLE_MIN_KEEP : 2;
+    for (let guard = 0; out.length > MAX_PAYLOAD_BYTES && guard < 64; guard++) {
+      const cur = which === 'body' ? body : title;
+      if (cur === null) break;
+      const n = Array.from(cur).length;
+      if (n <= floor && which === 'title') break;
+      const over = out.length - MAX_PAYLOAD_BYTES;
+      const keep = Math.max(floor, n - Math.max(1, Math.ceil(over / 4)));
+      const next = which === 'body' && keep <= floor && n <= floor ? null : cut(cur, Math.min(keep, n - 1));
+      if (which === 'body') body = next;
+      else title = next;
+      out = make();
+    }
+  }
+  if (out.length > MAX_PAYLOAD_BYTES) throw new PushCryptoError('payload_too_large');
+  return out;
+}

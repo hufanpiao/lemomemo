@@ -23,6 +23,7 @@ const PLAN = new Map<string, 'check' | readonly string[]>([
   ['account', ['POST']],            // K3：0.38 第 47 条，只免 POST
   ['account-purge', ['POST']],      // K3：pg_cron 带 x-cron-secret
   ['usage-report', ['POST']],       // K15：lemo-ops 带 x-ops-secret
+  ['push-dispatch', ['POST']],      // B2：pg_cron 带 x-cron-secret（B2 安全审查 D1-S6）
 ]);
 
 /** 接入代码等审查通过再加的目录；接上以后从这里删掉（K10 安全审查后：invite-signup 已接，account 只收 POST、不接） */

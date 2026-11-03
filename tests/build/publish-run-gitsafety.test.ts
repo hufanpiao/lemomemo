@@ -3,11 +3,12 @@
 //   log.showSignature=false（子进程继承），pages deploy 显式传 --commit-message（wrangler 不再跑 git show -s --format=%B）；
 // R-268 复审：第 5 步的替换对象检查真跑一次（假 wrangler 在 --dry-run 时执行 git replace）；
 // R-269 复审：第 6 步部署服务器函数之前、部署 lemo-ops 之前各逐个比一次内容（真跑：中途改一个被跟踪的文件），另有静态核对。
+// B2 安全审查 D1-S3、1.5 第 ③ 点：线上 Edge Function secrets 里有 PUSH_SERVICE_OVERRIDE_URL 或 LEMO_LOCAL_PUSH_STUB 就停在改库之前（令牌读不了名单、名单为空也停；响应体不进屏幕和异常信息）。
 // 不连 Cloudflare、Supabase、GitHub，不真的部署。只在 Windows 上跑。
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ACCT, CF_TOKEN, ctx, DB_PW, git, has, PS, REF, root, runScript, SB_TOKEN, setup, teardown } from './publish-run-harness.ts';
+import { ACCT, CF_TOKEN, ctx, DB_PW, git, has, noSecrets, PS, REF, root, runScript, SB_TOKEN, setup, teardown } from './publish-run-harness.ts';
 import { q } from './publish-run-fakes.ts';
 import { gitIn, guardRepoConfig } from './publish-run-gitguard.ts';
 
@@ -168,4 +169,32 @@ describe.skipIf(!PS)('publish.ps1 签名边界、第 5 步替换对象、第 6 �
     expect(checks[1]).toBeLessThan(ops);
     expect(ps).toContain('Windows 上按 TMP 优先，其次 TEMP');
   });
+
+  // B2 安全审查 D1-S3、1.5 第 ③ 点（主流程里的位置和请求头在 publish-run.test.ts 的 -Ops 完整发布那条）：线上设了 PUSH_SERVICE_OVERRIDE_URL 或 LEMO_LOCAL_PUSH_STUB（只许本机用）就停在改库之前，只报名字；令牌读不了名单（403，不许跳过）、名单为空也停；fake 的 403 异常里带着 TESTONLYdigest，核对它不进屏幕
+  it.each([
+    ['线上有 PUSH_SERVICE_OVERRIDE_URL', ['CRON_SECRET', 'PUSH_SERVICE_OVERRIDE_URL', 'OPS_SECRET'] as string[] | 'deny', '正式项目的 Edge Function secrets 里有 PUSH_SERVICE_OVERRIDE_URL（'],
+    ['线上有 LEMO_LOCAL_PUSH_STUB（D1-8）', ['CRON_SECRET', 'LEMO_LOCAL_PUSH_STUB'] as string[] | 'deny', '正式项目的 Edge Function secrets 里有 LEMO_LOCAL_PUSH_STUB（'],
+    ['两个都有：只报名字', ['LEMO_LOCAL_PUSH_STUB', 'PUSH_SERVICE_OVERRIDE_URL'] as string[] | 'deny', '里有 PUSH_SERVICE_OVERRIDE_URL、LEMO_LOCAL_PUSH_STUB（'],
+    ['令牌没有 Edge Function Secrets 只读', 'deny' as string[] | 'deny', '正式 Supabase 令牌要有 Edge Function Secrets 只读'],
+    ['名单是空的', [] as string[] | 'deny', '正式项目的 secrets 名单是空的或读不懂'],
+  ])('%s：停在改库之前，不 link、不部署', async (_name, fnSecrets, want) => {
+    const r = await runScript('-Ops', FULL, { fnSecrets });
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toContain(want);
+    expect(r.out).toContain('还没改库');
+    expect(has(r, /^supabase\t/u)).toBe(false);
+    expect(r.calls.filter((c) => !c.includes('--dry-run')), r.calls.join('\n')).toEqual([]);
+    expect(r.log.some((l) => l.startsWith('cf\t'))).toBe(false);
+    expect(r.out).not.toContain('TESTONLYdigest');
+    expect(r.envLeft).toBe('');
+    noSecrets(r);
+  }, 180_000);
+
+  it('-Only functions 也查线上的 PUSH_SERVICE_OVERRIDE_URL', async () => {
+    const r = await runScript('-Only functions -Ops', [REF, SB_TOKEN, CF_TOKEN, ACCT, 'lemomemo'], { fnSecrets: ['PUSH_SERVICE_OVERRIDE_URL'] });
+    expect(r.code, r.out).toBe(1);
+    expect(r.out).toContain('PUSH_SERVICE_OVERRIDE_URL');
+    expect(has(r, /^supabase\tfunctions /u)).toBe(false);
+    noSecrets(r);
+  }, 180_000);
 });

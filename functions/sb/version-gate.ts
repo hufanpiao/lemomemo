@@ -52,6 +52,19 @@ export const EXEMPT_RULES: readonly ExemptRule[] = [
     match: 'exact',
     why: '只读 AI 用量；supabase-js rpc() 默认 POST（R-237，架构 0.39；函数 B3 才建）',
   },
+  // B2（S-B2 P0，架构 0.49 第 2 条、第 75 条）：后端提改动，前端 B 会审
+  {
+    method: 'DELETE',
+    path: '/rest/v1/devices',
+    match: 'exact',
+    why: '退出登录时删本机这台的 devices 行（连带推送订阅），旧版也要能做（第 75 条；行级权限照旧由 RLS 管）',
+  },
+  {
+    method: 'POST',
+    path: '/rest/v1/rpc/claim_endpoint',
+    match: 'exact',
+    why: '换账号后认领推送订阅，旧版也要能做，免得推送发错人（0.49 第 2 条，M9，TC-B1-22、81）',
+  },
 ];
 
 export interface ExemptFunction {

@@ -47,9 +47,29 @@ export async function fetchText(fetchFn: FetchFn, url: string, init: RequestInit
 export type CallResult = { ok: true; body: unknown } | { ok: false; reason: UnreachableReason };
 
 /**
+ * 401 是谁回的（B2 架构审 D2 ①）：
+ * - 网关：返回体里有 UNAUTHORIZED_*（例如 {"code":"UNAUTHORIZED_NO_AUTH_HEADER",…}）——函数根本没收到请求，多半是 usage-report 的
+ *   verify_jwt 没关、或 key 不对；
+ * - 函数自己：{"error":"unauthorized"}——x-ops-secret 对不上；
+ * - 两样都不像：照旧 http_401。
+ * 只看返回体里的这两个标记，不把返回体写进邮件或日志（A23）。
+ */
+export function classify401(text: string, body: unknown): UnreachableReason {
+  if (typeof body === 'object' && body !== null && !Array.isArray(body)) {
+    const b = body as { code?: unknown; error?: unknown; message?: unknown };
+    for (const v of [b.code, b.error, b.message]) if (typeof v === 'string' && /^UNAUTHORIZED_[A-Z0-9_]*$/.test(v)) return 'gateway_401';
+    if (b.error === 'unauthorized') return 'fn_401';
+  }
+  if (/\bUNAUTHORIZED_[A-Z0-9_]+\b/.test(text)) return 'gateway_401';
+  return 'http_401';
+}
+
+/**
  * 调 usage-report。非 200、超时、网络错误、返回体不是 JSON 一律算“调不通”（0.29 续第 116 条②）；
- * 503 且 error 是 db_unreachable 的单独标出（邮件写“服务器连不上数据库”）。
- * Authorization 带 anon key：Supabase 网关默认要 JWT 才转给函数；真正的鉴权是 x-ops-secret。
+ * 503 且 error 是 db_unreachable 的单独标出（邮件写“服务器连不上数据库”）；401 按 classify401 分成网关拒绝和函数拒绝。
+ * B2 架构审 D2 做法 ②：usage-report 关了网关的 JWT 校验（verify_jwt = false），只靠 x-ops-secret（函数里常量时间比对），
+ * 所以**不再带 anon Bearer**（Authorization 头一律不发），不依赖 anon key 的格式。apikey 头照旧带上（网关不认它也不影响），
+ * 待函数和 config.toml 落地后核对：线上不带 apikey 是否同样能到函数，能的话这一行也删掉。
  */
 export async function callUsageReport(fetchFn: FetchFn, cfg: OpsConfig, part: 'heartbeat' | 'usage', ms = USAGE_REPORT_TIMEOUT_MS): Promise<CallResult> {
   let r: { status: number; text: string };
@@ -63,7 +83,6 @@ export async function callUsageReport(fetchFn: FetchFn, cfg: OpsConfig, part: 'h
           'content-type': 'application/json',
           'x-ops-secret': cfg.opsSecret,
           apikey: cfg.anonKey,
-          authorization: `Bearer ${cfg.anonKey}`,
         },
         body: JSON.stringify({ part }),
       },
@@ -84,6 +103,7 @@ export async function callUsageReport(fetchFn: FetchFn, cfg: OpsConfig, part: 'h
   if (r.status === 500 && typeof body === 'object' && body !== null && (body as { error?: unknown }).error === 'bad_data') {
     return { ok: false, reason: 'bad_data' };
   }
+  if (r.status === 401) return { ok: false, reason: classify401(r.text, body) };
   if (r.status !== 200) return { ok: false, reason: `http_${r.status}` };
   if (body === undefined) return { ok: false, reason: 'bad_body' };
   return { ok: true, body };

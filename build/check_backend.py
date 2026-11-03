@@ -120,6 +120,14 @@ Pages Functions（functions/）和 App、shared：
          用户调的函数（account、invite-admin 等）不准关，网关那道 JWT 校验留着；
       ④ 反向兜底（F9-reverse-check ①）：函数目录里的非测试源码（同 ②）验了带引号的 'x-cron-secret'，迁移里却认不出 cron 调它
          （concat() 拼、拼进变量等写法认不出，或者没有 cron / 已 unschedule）→ 报在这个函数的 index.ts；_shared 等共用模块、预览专用函数不算
+      ⑤ 服务器密钥名单（B2 安全审查 D2-1～D2-4）：SERVER_SECRET_FUNCTIONS 写死 {usage-report: x-ops-secret}（tests/build/check-backend-f9-server.test.ts 钉住）。
+         名单里的函数准关、也必须关 verify_jwt；它自己目录的非测试源码（去注释）里要读这个头（headers.get('<头>')）、对它调 safeEqual(，
+         不能把它和别的值用 === == !== != 比（和 ''、null、undefined 判空除外）；名单外不是 cron 调的一律不准关（同 ③）。
+         D2-S1：SERVER_SECRET_ENVS 的密钥变量（OPS_SECRET）只准对应函数自己的文件读，别处读报 F1
+  F10 host.docker.internal 只准出现在 supabase/functions/_shared/push/stub.ts（推送替身判断）和 tests/ 里（B2 安全审查 1.5 第 ② 点 D1-8）：
+      扫仓库的代码和配置，JS / TS 去注释后查，别的按原文查；docs/、tests/、node_modules/、.e2e-sb/ 等不扫，.env* 不是代码不扫；
+      supabase/functions/ 下的 tests/、__tests__/ 目录照扫（BE1-S3）；build/gen_push_endpoints.py 按精确路径放行（安全审查六之四）
+      函数目录里按文件名放过的测试文件（*.test.ts 等）不准被非测试文件引用：import … from、export … from、字面量 import('…') 都报（六之四补）
 迁移（supabase/migrations/*.sql）：
   M1  security definer 函数必须写 set search_path = ''（create function 和 alter function 都查，属性写在函数体前后都认）。
       架构 0.29 续第 117 条、TC-B0-92
@@ -990,6 +998,39 @@ def cron_functions(root):
 CRON_SECRET_LITERAL = re.compile(r"""['"`]x-cron-secret['"`]""", re.IGNORECASE)
 TEST_SOURCE_NAME = re.compile(r"[._](test|spec)\.[^/]+$", re.IGNORECASE)
 
+# F9 ③ 的另一半（B2 安全审查 D2-1）：不是 cron 调、但靠服务器密钥头鉴权的函数（lemo-ops 调 usage-report），准关 verify_jwt。
+#   名单写死在这里，不从环境变量或配置文件读；完整内容由 tests/build/check-backend-f9-server.test.ts 钉住，
+#   往名单加函数要同时改那条单测（diff 里一眼看得到，必须过代码审查和安全审查）
+SERVER_SECRET_FUNCTIONS = {"usage-report": "x-ops-secret"}
+# D2-S1：名单里每个函数对应的密钥变量只准这个函数自己的文件读（照 F1 对 SIGNUP_HASH_SECRET 的写法）
+SERVER_SECRET_ENVS = {"usage-report": "OPS_SECRET"}
+# 和头比较时允许的另一边（只是判空，不是比密钥）：''、""、``、null、undefined
+_EMPTY_OPERAND = re.compile(r"""^(?:''|""|``|null|undefined)$""")
+
+
+def _server_secret_problems(code, header):
+    """D2-2：在函数自己目录的非测试源码（已去注释）里，① 读这个头（.headers.get('<头>')，头名带引号、不分大小写）、
+    ② 对它调 safeEqual(（把读出来的变量或 headers.get(…) 本身当参数）、③ 没有把它和别的值用 === == !== != 比较（和 ''、null、undefined 判空除外）。
+    返回问题列表（空 = 通过）。静态检查证明不了一定对，函数单测兜底（没带头、错值、空值都回 401 且不读库，TC-B2-86 ②③）"""
+    h = re.escape(header)
+    get = rf"""\.\s*headers\s*\.\s*get\s*\(\s*(?:'{h}'|"{h}"|`{h}`)\s*\)"""
+    if not re.search(get, code, re.IGNORECASE):
+        return [f"没有读这个头（要有 headers.get('{header}')）"]
+    names = set(re.findall(rf"""\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*[^;]*?{get}""", code, re.IGNORECASE))
+    operands = [re.escape(n) + r"\b" for n in sorted(names)] + [r"[\w$.]*" + get]
+    probs = []
+    called = any(re.search(rf"""\bsafeEqual\s*\(\s*(?:{o})\s*,|\bsafeEqual\s*\([^,()]+,\s*(?:{o})\s*\)""", code, re.IGNORECASE) for o in operands)
+    if not called:
+        probs.append(f"没有对 {header} 调 safeEqual(（只出现头名、或用别的方式比都不算常量时间比对）")
+    for o in operands:
+        for m in re.finditer(rf"""(?<![\w$.])(?:{o})\s*(===|!==|==|!=)\s*(''|""|``|[\w$.]+)""", code, re.IGNORECASE):
+            if not _EMPTY_OPERAND.match(m.group(2)):
+                probs.append(f"把 {header} 和别的值用 {m.group(1)} 比较（只准经 safeEqual 定长比较）")
+        for m in re.finditer(rf"""(''|""|``|[\w$.\])]+)\s*(===|!==|==|!=)\s*(?:{o})""", code, re.IGNORECASE):
+            if not _EMPTY_OPERAND.match(m.group(1)):
+                probs.append(f"把 {header} 和别的值用 {m.group(2)} 比较（只准经 safeEqual 定长比较）")
+    return probs
+
 
 def _fn_decl_line(lines, name):
     """config.toml 里声明函数 name 的行号：[functions.name] 段头、[functions] 下的 name.xxx / name = {…}，键名可带引号；
@@ -1048,14 +1089,105 @@ def check_cron_verify_jwt(root, errors, sources):
                            f"{fn} 验了 x-cron-secret，但迁移里认不出有 cron（net.http_post）调它：URL 写法认不出或者没有 cron。"
                            "认得出的写法：… 'functions_url') || '/<名>'、写死的 /functions/v1/<名>、format('%s/<名>', …)；"
                            "不是 cron 调的函数就别验这个头（也别关 verify_jwt）"))
+    # D2-2：SERVER_SECRET_FUNCTIONS 里的函数（目录在的）必须关 verify_jwt，并且按调用对名单写的头做常量时间比对
+    for name, header in sorted(SERVER_SECRET_FUNCTIONS.items()):
+        if not (root / FN_ROOT / name).is_dir():
+            continue
+        conf = fns.get(name)
+        if not (isinstance(conf, dict) and conf.get("verify_jwt") is False):
+            errors.append(("F9", CONFIG_TOML, _fn_decl_line(lines, name) if conf is not None else 1,
+                           f"{name} 在 SERVER_SECRET_FUNCTIONS 里（靠 {header} 鉴权），supabase/config.toml 却没写 [functions.{name}] verify_jwt = false："
+                           "名单和配置要对得上（B2 安全审查 D2-2）"))
+        own = [(rel, code) for rel, code in sorted(sources.code.items()) if rel.split("/")[0] == name and not _is_test_source(rel)]
+        src = "\n".join(code for _, code in own)
+        hit = next(((rel, code) for rel, code in own if re.search(re.escape(header), code, re.IGNORECASE)), None)
+        rel, code = hit if hit else (f"{name}/index.ts", "")
+        line = line_of(code, re.search(re.escape(header), code, re.IGNORECASE).start()) if hit else 1
+        probs = list(dict.fromkeys(_server_secret_problems(src, header)))   # 同一处只报一条（去重按位置），几个问题合在一起说
+        if probs:
+            errors.append(("F9", f"{FN_ROOT}/{rel}", line, f"{name} 在 SERVER_SECRET_FUNCTIONS 里，网关不验 JWT，鉴权全靠 {header}：{'；'.join(probs)}（B2 安全审查 D2-2）"))
     for name, conf in fns.items():
         # 预览专用函数归 F6 管；supabase/functions/ 下没有同名目录的（只写了配置、没有函数）设了也不起作用，F6 另查键名，这里不重复报
         if name in PREVIEW_FUNCS or not (root / FN_ROOT / name).is_dir() or not isinstance(conf, dict) or conf.get("verify_jwt") is not False:
             continue
+        if name in SERVER_SECRET_FUNCTIONS:
+            continue   # D2-1 名单里的，上面按 D2-2 查过
         if name not in crons:
             errors.append(("F9", CONFIG_TOML, _fn_decl_line(lines, name),
-                           f"[functions.{name}] verify_jwt = false，但迁移里没有 cron 调它：只有 cron 调的函数（自己验 x-cron-secret）才准关网关的 JWT 校验，"
-                           "用户调的函数要留着这道校验"))
+                           f"[functions.{name}] verify_jwt = false，但迁移里没有 cron 调它，也不在 SERVER_SECRET_FUNCTIONS 里：只有 cron 调的函数（自己验 x-cron-secret）"
+                           "和名单里靠服务器密钥头鉴权的函数才准关网关的 JWT 校验，用户调的函数要留着这道校验"))
+
+
+# F10（B2 安全审查 1.5 第 ② 点 D1-8）：host.docker.internal 只准出现在推送替身判断模块和 tests/ 里，免得被抄进别的出站白名单。
+#   扫仓库里的代码和配置；JS / TS 用 AST 去掉注释后查（db.ts、e2e 守卫里“不放 host.docker.internal”的说明不算），别的文件按原文查（注释也算）；
+#   docs/、node_modules/、.git/、tests/ 目录和 .e2e-sb/（E2E 复制出来的 supabase 副本）、构建和报告产物不扫，本脚本自己（写着规则）不扫；
+#   但 supabase/functions/ 下的 tests/、__tests__/ 目录照扫（BE1-S3：函数目录里的文件可能被 import 进部署产物，不能靠目录名放过）；
+#   .env* 这类本机环境文件不是代码，不扫（替身地址就写在 supabase/.env.local）
+DOCKER_HOST = re.compile(r"host\.docker\.internal", re.IGNORECASE)
+# build/gen_push_endpoints.py：测试开发的测试向量生成脚本，host.docker.internal 是“必须被拒”的不合格样例，产物落在 tests/fixtures/，
+#   不是出站代码。安全审查“六之四”同意按精确路径放行，条件是它不联网、不被别处 import（tests/build/check-backend-f9-server.test.ts 断言它不 import
+#   urllib、http、socket、requests、subprocess）。以后它要联网或被别处 import，就挪进 tests/，并从这个名单里删掉。
+DOCKER_HOST_OK = frozenset({"supabase/functions/_shared/push/stub.ts", "build/gen_push_endpoints.py"})
+DOCKER_HOST_SELF = frozenset({"build/check_backend.py"})
+DOCKER_HOST_EXT = frozenset({".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".psql", ".toml", ".json", ".jsonc",
+                             ".yml", ".yaml", ".ps1", ".psm1", ".py", ".sh"})
+DOCKER_HOST_SKIP_DIRS = frozenset({"node_modules", ".git", "docs", "tests", "__tests__", "dist", ".temp", ".branches", "__pycache__", ".wrangler",
+                                   ".e2e-sb", ".claude", "playwright-report", "test-results"})
+DOCKER_HOST_JS = frozenset({".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"})
+DOCKER_HOST_FN_ROOT = "supabase/functions/"
+DOCKER_HOST_TEST_DIRS = frozenset({"tests", "__tests__"})
+
+
+def _docker_host_skip_file(rel):
+    """F10 不扫的测试文件：supabase/functions/ 下只按文件名（*.test.* 等）认，tests/、__tests__/ 目录不算（BE1-S3）；别处照 _is_test_source"""
+    if rel.startswith(DOCKER_HOST_FN_ROOT):
+        return bool(TEST_SOURCE_NAME.search(rel.rsplit("/", 1)[-1]))
+    return _is_test_source(rel)
+
+
+def check_docker_host(root, errors):
+    hits = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        reldir = pathlib.Path(dirpath).relative_to(root).as_posix() + "/"
+        in_fn = reldir.startswith(DOCKER_HOST_FN_ROOT)
+        dirnames[:] = [d for d in dirnames if d not in DOCKER_HOST_SKIP_DIRS or (in_fn and d in DOCKER_HOST_TEST_DIRS)]
+        for fname in filenames:
+            full = pathlib.Path(dirpath) / fname
+            if full.suffix.lower() not in DOCKER_HOST_EXT:
+                continue
+            rel = full.relative_to(root).as_posix()
+            if rel in DOCKER_HOST_OK or rel in DOCKER_HOST_SELF or _docker_host_skip_file(rel):
+                continue
+            try:
+                text = full.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            if DOCKER_HOST.search(text):
+                hits.append((rel, full, text))
+    js = [(rel, full) for rel, full, _ in hits if full.suffix.lower() in DOCKER_HOST_JS]
+    parsed = parse_sources([(rel, full, False, None) for rel, full in js])
+    for rel, full, text in hits:
+        code = parsed[rel]["code"] if rel in parsed else text   # 去注释后长度、换行不变（和 F8 同一套），行号照算
+        for m in DOCKER_HOST.finditer(code):
+            errors.append(("F10", rel, line_of(code, m.start()),
+                           "host.docker.internal 只准出现在 supabase/functions/_shared/push/stub.ts（推送替身判断）和 tests/ 里；supabase/functions/ 下的 tests/、__tests__/ 不算（B2 安全审查 1.5 第 ② 点 D1-8、BE1-S3）"))
+
+
+def check_test_imports(fns, errors):
+    """F10 补（安全审查六之四补）：supabase/functions/ 下按文件名放过的测试文件（*.test.ts 等）不准被非测试文件引用——
+    引了就会跟着部署出去，F10 对测试文件放过的内容（host.docker.internal 之类）也就跟着出去了。
+    认三种写法：import … from、export … from、字符串字面量的 import('…')（spec 先经 import map 展开，类型 import 编译后不存在、不算）；
+    不是字面量的动态 import( ) 看不出引的是什么，F7 ⑥ 已经一律报错，这里不重复报"""
+    for rel in sorted(fns.code):
+        if TEST_SOURCE_NAME.search(rel.rsplit("/", 1)[-1]):
+            continue
+        seen = set()
+        for line, target, _spec in fns.edges(rel):
+            if target is None or not TEST_SOURCE_NAME.search(target.rsplit("/", 1)[-1]) or (line, target) in seen:
+                continue
+            seen.add((line, target))
+            errors.append(("F10", f"{FN_ROOT}/{rel}", line,
+                           f"非测试文件不准引用测试文件 {FN_ROOT}/{target}（会跟着部署出去；测试文件里放过的 host.docker.internal 等也就出去了，安全审查六之四补）"))
 
 
 def check_functions(root, errors):
@@ -1065,6 +1197,7 @@ def check_functions(root, errors):
     check_cron_verify_jwt(root, errors, fns)
     check_preview(fns, errors)
     check_bypass(fns, errors)
+    check_test_imports(fns, errors)
     db_roles = {r: db_refs(fns, r)[0] for r in fns.code}   # 每个文件从 db.ts 导入的角色（复审必改，乙方案）
     for rel, code in fns.code.items():
         path = f"{FN_ROOT}/{rel}"
@@ -1087,6 +1220,12 @@ def check_functions(root, errors):
         if is_preview(rel) or fn not in SIGNUP_SECRET_FUNCS:
             for m in SIGNUP_SECRET.finditer(code):
                 errors.append(("F1", path, line_of(code, m.start()), f"SIGNUP_HASH_SECRET 只准 {'、'.join(sorted(SIGNUP_SECRET_FUNCS))} 读（架构 8.4、0.38 第 24 条），{fn or '共用模块'} 不准读"))
+
+        # F1（B2 安全审查 D2-S1）：SERVER_SECRET_ENVS 的密钥变量（OPS_SECRET）只准对应函数自己的文件读；共用模块、预览专用函数、别的函数都不准
+        for owner_fn, env_name in sorted(SERVER_SECRET_ENVS.items()):
+            if is_preview(rel) or fn != owner_fn:
+                for m in re.finditer(rf"\b{re.escape(env_name)}\b", code):
+                    errors.append(("F1", path, line_of(code, m.start()), f"{env_name} 只准 {owner_fn} 读（B2 安全审查 D2-S1），{fn or '共用模块'} 不准读"))
 
         # F5
         if not gen and not rel.startswith(DISABLED_AT_OK):
@@ -1645,6 +1784,7 @@ def main(argv=None):
 
     errors = []
     check_functions(root, errors)
+    check_docker_host(root, errors)
     check_pages(root, errors)
     check_admins_writes(root, errors)
     check_migrations(root, errors)

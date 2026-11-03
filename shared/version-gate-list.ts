@@ -24,6 +24,8 @@ export const FUNCTION_VERSION_EXEMPTIONS: readonly FunctionExemption[] = [
   { name: 'account', methods: ['POST'], caller: 'client', why: 'export-delete-restore-status-on-old-clients' },
   // pg_cron 经 pg_net 调，带 x-cron-secret，没有客户端版本；免查只免版本，鉴权照旧由 x-cron-secret 管
   { name: 'account-purge', methods: ['POST'], caller: 'server', why: 'cron-x-cron-secret' },
+  // B2：push-dispatch 同样是 pg_cron 每分钟调、带 x-cron-secret（B2 安全审查 D1-S6）
+  { name: 'push-dispatch', methods: ['POST'], caller: 'server', why: 'cron-x-cron-secret' },
   // lemo-ops 调，带 x-ops-secret，没有客户端版本；鉴权照旧由 x-ops-secret 管
   { name: 'usage-report', methods: ['POST'], caller: 'server', why: 'ops-x-ops-secret' },
 ];

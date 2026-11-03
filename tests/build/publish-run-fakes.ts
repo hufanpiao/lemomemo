@@ -79,6 +79,11 @@ function global:Invoke-RestMethod { param([string]$Uri, $Headers, $MaximumRedire
     L ('cf' + $global:T + $Uri + $global:T + ([string]$Headers.Authorization).StartsWith('Bearer ') + $global:T + $MaximumRedirection)
     if ($env:LEMO_FAKE_CF_DENY) { throw 'test: 403 Forbidden' }
     return [pscustomobject]@{ success = $true; result = @() } }
+  # 正式项目的 Edge Function secrets 名单（B2 安全审查 D1-S3）：LEMO_FAKE_FN_SECRETS 逗号分隔；LEMO_FAKE_FN_SECRETS_DENY 时回 403。值一律是摘要，脚本只能取名字
+  if ($Uri -like 'https://api.supabase.com/v1/projects/*/secrets') {
+    L ('fnsecrets' + $global:T + $Uri + $global:T + ([string]$Headers.Authorization).StartsWith('Bearer sbp_') + $global:T + $MaximumRedirection)
+    if ($env:LEMO_FAKE_FN_SECRETS_DENY) { throw 'test: 403 Forbidden {"value":"TESTONLYdigest"}' }
+    return @(([string]$env:LEMO_FAKE_FN_SECRETS).Split(',') | Where-Object { $_ } | ForEach-Object { [pscustomobject]@{ name = $_; value = 'TESTONLYdigest' } }) }
   if ($Uri -like 'https://api.supabase.com/v1/projects/*') {
     L ('api' + $global:T + $Uri + $global:T + ([string]$Headers.Authorization).StartsWith('Bearer sbp_'))
     return [pscustomobject]@{ name = 'lemomemo'; region = 'ap-northeast-2'; status = 'ACTIVE_HEALTHY' } }

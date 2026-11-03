@@ -1,0 +1,14 @@
+[api]
+enabled = true
+
+# D2-3 ②：名单里的 usage-report 关了校验，但比对用的是 !==（不是 safeEqual）
+[functions.usage-report]
+verify_jwt = false
+
+# D2-3 ①：名单外、又不是 cron 调的函数关了校验（哪怕它自己用 safeEqual 验了 x-ops-secret 也不行）
+[functions.ops-extra]
+verify_jwt = false
+
+# D2-3 ③：用户调的函数关了校验
+[functions.account]
+verify_jwt = false

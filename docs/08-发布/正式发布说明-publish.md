@@ -59,7 +59,7 @@ VITE_PUBLIC_TURNSTILE_SITE_KEY=<Turnstile 站点密钥（Site Key，公开的那
 ```
 
 **发布当天临时生成（R-220，取代原来“令牌怎么从 iPhone 到电脑上”的待选项）**：正式令牌不长期保存，每次发布前在这台电脑的浏览器里当场生成，复制后直接粘贴进脚本，不经过手机：
-1. 正式 Supabase 令牌：Supabase › Account › Access Tokens › 生成新令牌（不要选 legacy），资源范围只勾正式项目，权限照[环境清单](环境清单-v4.md)第四节，**到期 1 天**；
+1. 正式 Supabase 令牌：Supabase › Account › Access Tokens › 生成新令牌（不要选 legacy），资源范围只勾正式项目，权限照[环境清单](环境清单-v4.md)第四节，**到期 1 天**。权限清单（以环境清单为准）：Edge Functions 读写、Migrations 读写、API Keys 只读、API Key Secrets 只读、Connection Pooling 只读、Project Settings 只读、**Edge Function Secrets 只读**（11-03 新加：脚本发布前只读核对线上没有推送替身变量 `PUSH_SERVICE_OVERRIDE_URL`、`LEMO_LOCAL_PUSH_STUB`，只看名字；少了这一项脚本会停在改库之前），其余不给；
 2. 正式数据库密码：正式项目 › Project Settings › Database › 重设数据库密码（Reset database password），生成一个新的；
 3. 正式 Cloudflare 令牌：Cloudflare › 我的个人资料 › API 令牌 › 创建自定义令牌，权限照环境清单第四节（Pages: Edit ＋ Workers Scripts: Edit），TTL 结束日期选**明天**；
 4. 发布完（不论成功失败）：回到这两页把两把令牌删掉（数据库密码不用再改，下次发布再重设）。
@@ -88,7 +88,7 @@ VITE_PUBLIC_TURNSTILE_SITE_KEY=<Turnstile 站点密钥（Site Key，公开的那
    - 输入正式项目的 Project ref（不是密钥）；
    - 按提示依次粘贴三样（屏幕不显示，每样粘完清剪贴板）：正式 Supabase 令牌、正式数据库密码、正式 Cloudflare 令牌（要有 Pages: Edit ＋ Workers Scripts: Edit）；
    - 输入 Cloudflare Account ID（不是密钥）；
-   - 核对项目名并输入它；脚本先只读核对 Cloudflare 令牌有 Workers 权限（没有就停，此时还没改库）；看迁移演练、输入“确认推送”；
+   - 核对项目名并输入它；脚本先只读核对正式项目的 secrets 名单里没有推送替身变量（有就停，只报名字；令牌缺 Edge Function Secrets 只读也停，此时还没改库），再只读核对 Cloudflare 令牌有 Workers 权限（没有就停，此时还没改库）；看迁移演练、输入“确认推送”；
    - 自动部署函数、紧接着部署 lemo-ops、再部署网页，最后核对 `https://lemomemo.com/app/version.json`。
 5. 看到“完成”以后关掉这个 PowerShell 窗口，**马上删掉这次临时生成的两把令牌**（第三节末尾第 4 条）。
 6. 在聊天里告诉主持人“发布完成”和屏幕上的产物指纹（指纹不是密钥），主持人记进[发布记录](发布记录.md)。

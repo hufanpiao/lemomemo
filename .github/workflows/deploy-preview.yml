@@ -77,6 +77,39 @@ jobs:
           # 和 ci.yml、本机同一版（架构 8.6）
           deno-version: 2.9.8
 
+      - name: VAPID 公钥核对（B2 O-2：仓库变量 PREVIEW_VAPID_PUBLIC_KEY → VITE_PUBLIC_VAPID_KEY）
+        # 公钥由负责人运行 tools/keys/set-vapid-keys.ps1 -Target preview 打印出来、填进仓库变量（docs/00-团队/负责人-VAPID密钥-步骤.md）。
+        # 格式：0x04‖x‖y 的 base64url，87 个字符，以 B 开头、第二个字符在 A～P（首字节 0x04），最后一个字符只能是 AEIMQUYcgkosw048 之一；
+        # 和 D1-7 的 p256dh、set-vapid-keys.ps1、tests/build/set-vapid-keys.test.ts 同一写法（安全审查 O1-S4）。
+        # 不管开关怎样：填了但格式不对就失败（防止把私钥 JWK 误填进来、被编进网页）；出错时不回显变量的值。
+        # 开关 VAPID_KEY_REQUIRED（写在本文件里，改它要提交、过代码审查）：
+        #   'false'：为空只出警告、照常构建（网页里没有公钥，订阅推送那一步会失败，其他功能照常）——负责人填好变量之前用这个，
+        #            免得合进主干后每次预览构建都失败；
+        #   'true' ：为空就构建失败。负责人填好 PREVIEW_VAPID_PUBLIC_KEY、告诉主持人后，由 AI 当批改成 'true'
+        #            （步骤文档最后一步；B2 任务单 O-2：改成 'true' 之前 B2 不能收尾，代码审查 M3）。
+        env:
+          VAPID_PUBLIC_KEY: ${{ vars.PREVIEW_VAPID_PUBLIC_KEY }}
+          VAPID_KEY_REQUIRED: 'false'
+        shell: bash
+        run: |
+          if [ -z "$VAPID_PUBLIC_KEY" ]; then
+            if [ "$VAPID_KEY_REQUIRED" = "true" ]; then
+              echo "::error::仓库变量 PREVIEW_VAPID_PUBLIC_KEY 是空的：负责人照 docs/00-团队/负责人-VAPID密钥-步骤.md 运行 set-vapid-keys.ps1 -Target preview，把打印的公钥填进去"
+              exit 1
+            fi
+            echo "::warning::仓库变量 PREVIEW_VAPID_PUBLIC_KEY 还没填：这次预览构建不带 VAPID 公钥，推送订阅用不了（开关 VAPID_KEY_REQUIRED 还是 false）"
+            echo "VAPID 公钥：没填（开关关着，照常构建）" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          case "$VAPID_PUBLIC_KEY" in
+            *'{'*|*'"'*|*kty*) echo "::error::PREVIEW_VAPID_PUBLIC_KEY 看起来是私钥 JWK，不是公钥：立刻到仓库 Variables 删掉它，并重跑 set-vapid-keys.ps1 换一对钥匙（私钥已经暴露）"; exit 1 ;;
+          esac
+          if ! [[ "$VAPID_PUBLIC_KEY" =~ ^B[A-P][A-Za-z0-9_-]{84}[AEIMQUYcgkosw048]$ ]]; then
+            echo "::error::PREVIEW_VAPID_PUBLIC_KEY 格式不对（应为 87 个字符的 base64url、以 B 开头；现在 ${#VAPID_PUBLIC_KEY} 个字符）：照 set-vapid-keys.ps1 打印的那一行重新填，不要带空格和换行"
+            exit 1
+          fi
+          echo "VAPID 公钥：已填（87 个字符，格式对）" >> "$GITHUB_STEP_SUMMARY"
+
       - name: 构建（preview 模式）
         env:
           # 只有 VITE_PUBLIC_ 前缀进前端（架构 8.1、A14）；这几个都是公开值，放在 repository variables
@@ -88,6 +121,10 @@ jobs:
           # 带 -preview.N 的完整版本号；vite.config 和 app/version.json 都读它（build/assemble_web.mjs 的 buildVersion，B0 集成确认）
           LEMO_BUILD_VERSION: ${{ steps.ver.outputs.version }}
         run: npm run build -- --mode preview
+
+      - name: check_arch 扫预览产物（A14 连 dist/web 一起扫：VAPID_PRIVATE、各种密钥特征不能进网页；B2 O-2）
+        # 预览构建注入了真的公开值（anon key、VAPID 公钥），这一步确认编进网页的没有私钥一类的东西；和 release-build、unit 的同一条命令
+        run: python3 -I build/check_arch.py
 
       - name: 复制 shared 给服务器函数（架构 2.5）
         # B0 集成：改用 build/copy_shared.mjs —— 'zod' 改写成 npm:zod@<版本>（函数部署时没有 import map），相对 import 必须带 .ts
@@ -257,6 +294,48 @@ jobs:
           done
           echo "::error::预览项目 10 分钟内没恢复到 ACTIVE_HEALTHY（现在是 $status）"
           exit 1
+
+      - name: 推送替身变量核对（B2 安全审查 D1-S3、1.5 第 ④ 点：线上不能有 PUSH_SERVICE_OVERRIDE_URL、LEMO_LOCAL_PUSH_STUB）
+        # 这两个变量只许本机用；预览设了，push-dispatch 每轮回 500 misconfigured、一条推送都不发（函数一侧已 fail-closed，这里是第二道保险）。
+        # 读 GET /v1/projects/{ref}/secrets：响应里带各 secret 的 value（明文还是摘要待实测，环境清单第四节），
+        # 只放在 shell 变量里，当场用 jq 只取 name、随即 unset；不打印、不写文件、出错不回显响应体。令牌经 stdin 交给 curl。
+        # 响应体用 printf 走管道交给 jq，不用 <<<（bash 遇到大的输入可能经临时文件传，安全审查 O1-S8），完全不碰磁盘。
+        # 现在的预览令牌没有 Edge Function Secrets 只读（环境清单第四节：下次重建时加），所以：
+        #   200：查，看到两个名字之一就失败（只报名字）；
+        #   401 / 403（没权限）：只在 GITHUB_STEP_SUMMARY 写一行“未核对”，部署不失败；
+        #   其他状态码：失败（照“读不到就停”）。
+        # 预览令牌重建、加上 Edge Function Secrets 只读以后，把 401 / 403 那一支改成失败（exit 1），没权限就不部署。
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.PREVIEW_SUPABASE_ACCESS_TOKEN }}
+        run: |
+          resp="$(printf 'header = "Authorization: Bearer %s"\n' "$SUPABASE_ACCESS_TOKEN" |
+            curl --config - --silent --show-error --proto '=https' --max-redirs 0 \
+              -w '\n%{http_code}' "https://api.supabase.com/v1/projects/$PROJECT_REF/secrets")" || { echo "::error::读 secrets 名单时网络出错"; exit 1; }
+          code="${resp##*$'\n'}"
+          body="${resp%$'\n'*}"
+          resp=""
+          case "$code" in
+            200) ;;
+            401|403)
+              body=""
+              echo "未核对推送替身变量（令牌缺 Edge Function Secrets 只读）" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 0 ;;
+            *)
+              body=""
+              echo "::error::读 secrets 名单失败（HTTP $code），不显示响应内容"; exit 1 ;;
+          esac
+          names="$(printf '%s' "$body" | jq -r 'if type == "array" then .[] | .name // empty else error("not array") end' 2>/dev/null)" || { body=""; echo "::error::secrets 名单读不懂（不是 JSON 数组）"; exit 1; }
+          body=""
+          if [ -z "$names" ]; then echo "::error::secrets 名单是空的"; exit 1; fi
+          hit=""
+          for n in PUSH_SERVICE_OVERRIDE_URL LEMO_LOCAL_PUSH_STUB; do
+            if grep -qxF "$n" <<<"$names"; then hit="$hit $n"; fi
+          done
+          if [ -n "$hit" ]; then
+            echo "::error::预览的 Edge Function secrets 里有推送替身变量：${hit# }（只许本机用）。到 Supabase › lemomemo-preview › Edge Functions › Secrets 删掉再重跑"
+            exit 1
+          fi
+          echo "推送替身变量：已核对，没有（只看名字）" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: 数据库迁移（db push）
         env:

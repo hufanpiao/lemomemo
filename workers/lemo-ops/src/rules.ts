@@ -53,10 +53,16 @@ export const HEARTBEAT_LIMITS: Readonly<Record<string, { limitS: number; label: 
 };
 
 /**
- * push-dispatch 写心跳时 detail 的字段（架构 6.1 末条“推送失败”，这里定下来）：{ sent: 本轮成功条数, failed: 本轮失败条数 }。
- * 一轮里失败超过一半（failed × 2 > sent + failed，且总数大于 0）就告警。usage-report 只转发白名单里的数字字段。
+ * push-dispatch 写心跳时 detail 的字段（架构 6.1 末条“推送失败”；B2 架构审 D3 第 4 点加 claimed）：
+ * { claimed: 本轮认领条数, sent: 本轮成功条数, failed: 本轮失败条数 }。usage-report 只转发白名单里的数字字段。
+ * 判断（同一条规则“推送一轮里超过一半失败”，见 evaluatePush）：
+ * - 有 claimed：没发成的 = claimed − sent（含 failed，也含认领了、没发出去就崩了的，“最多一次”漏掉的那种）；
+ *   没发成的 × 2 > claimed（且 claimed > 0）就告警；
+ * - 没有 claimed（旧版函数，或 usage-report 白名单还没加 claimed）：照旧 failed × 2 > sent + failed。
+ * 待函数落地后核对：push-dispatch 实际写的字段名、claimed 是否含 budget_hit 时没认领的剩余条数（按任务单不含）；
+ * usage-report 的 DETAIL_FIELDS 要加 'claimed'（归后端），没加之前这里只能走旧口径。
  */
-export const PUSH_DETAIL_FIELDS = ['sent', 'failed'] as const;
+export const PUSH_DETAIL_FIELDS = ['claimed', 'sent', 'failed'] as const;
 
 /** 冷静期到期超过 1 天还没开始删（0.29 续第 143 条；TC-B1-102 ③） */
 export const PURGE_OVERDUE_S = 24 * HOUR;
@@ -191,7 +197,8 @@ function parseAuthMail(am: unknown, log?: (code: string) => void): AuthMailRepor
 export const SCOPE_UNREACHABLE = 'unreachable';
 /** 15 分钟一轮的心跳检查查过的 key 前缀（调通时） */
 export const SCOPE_BAD_DATA = 'bad-data';
-export const HEARTBEAT_SCOPES = [SCOPE_UNREACHABLE, SCOPE_BAD_DATA, 'hb:', 'purge:', 'longtx', 'cleanup-slow', 'push-failed'];
+/** push-bad-data：push-dispatch 心跳里 claimed 比 sent 还小（函数写心跳的口径错了），单独一件事，不和“失败过半”混（B2 代码审查 S5） */
+export const HEARTBEAT_SCOPES = [SCOPE_UNREACHABLE, SCOPE_BAD_DATA, 'hb:', 'purge:', 'longtx', 'cleanup-slow', 'push-failed', 'push-bad-data'];
 /** 发信量的四件事；usage-report 不带 auth_mail（没接）时整组悄悄删掉 */
 export const SCOPE_AUTH_MAIL = 'mail:';
 export const MAIL_UNREADABLE = 'mail:unreadable';
@@ -312,14 +319,8 @@ export function evaluateHeartbeat(r: HeartbeatReport, required: readonly string[
 
   // 推送失败比例只看心跳里最近那一轮（push-dispatch 每分钟一轮，lemo-ops 15 分钟才抽一次，中间 14 轮看不到）：
   // 这是抽样，偶发的一轮失败多半抽不到；持续失败才会被连续抽中。要看全量得让 push-dispatch 在 detail 里累计，B2 再定（K15 复审低 4）
-  const push = byName.get('push-dispatch');
-  if (push && isObj(push.detail) && isNum(push.detail['sent']) && isNum(push.detail['failed'])) {
-    const sent = push.detail['sent'];
-    const failed = push.detail['failed'];
-    if (sent + failed > 0 && failed * 2 > sent + failed) {
-      active.push({ key: 'push-failed', title: '推送一轮里超过一半失败', lines: [`最近一轮成功 ${sent} 条、失败 ${failed} 条。`] });
-    }
-  }
+  const pushIssue = evaluatePush(byName.get('push-dispatch')?.detail);
+  if (pushIssue) active.push(pushIssue);
 
   const scopes = [...HEARTBEAT_SCOPES];
   // 验证码发信量：usage-report 没带 auth_mail（数据来源还没接，或接了又撤掉）时不查，留下的状态悄悄删掉
@@ -342,9 +343,35 @@ export function evaluateHeartbeat(r: HeartbeatReport, required: readonly string[
   return { active, scopes, drop };
 }
 
+/** 推送失败比例的判断（口径见 PUSH_DETAIL_FIELDS 的注释）；没问题或 detail 不全返回 null；claimed < sent 返回“推送心跳数据异常” */
+export function evaluatePush(detail: unknown): Issue | null {
+  if (!isObj(detail) || !isCount(detail['sent'])) return null;
+  const sent = detail['sent'];
+  const claimed = detail['claimed'];
+  const failed = detail['failed'];
+  if (isCount(claimed)) {
+    // claimed 比 sent 还小是函数写错了：不判失败比例（不能因为坏数据报“推送失败”），但也不吞掉，单独报一件“推送心跳数据异常”（B2 代码审查 S5）
+    // claimed 为 0 时 sent 也只能是 0，下面“没发成过半”判不成立，照旧不报
+    if (claimed < sent) return { key: 'push-bad-data', title: '推送心跳数据异常', lines: [`push-dispatch 最近一轮的心跳写着认领 ${claimed} 条、成功 ${sent} 条：成功比认领还多，是函数写心跳的口径错了，这一轮的失败比例没法判。请看 push-dispatch 写心跳（claimed、sent、failed）的代码和函数日志。`] };
+    const notSent = claimed - sent;
+    if (notSent * 2 <= claimed) return null;
+    const lost = isCount(failed) && failed <= notSent ? notSent - failed : null;
+    const lines = [`最近一轮认领 ${claimed} 条、成功 ${sent} 条、没发成 ${notSent} 条${isCount(failed) ? `（其中推送服务回失败 ${failed} 条）` : ''}。`];
+    if (lost !== null && lost > 0) lines.push(`有 ${lost} 条认领了却没发出（函数中途出错，按“最多一次”不再推，App 里“错过的提醒”会显示）。请看 push-dispatch 的函数日志。`);
+    lines.push('刚换过 VAPID 钥匙时，一段时间里推送服务回 401/403 是预期内的（旧订阅要等 App 打开后重订），见负责人-VAPID密钥-步骤。');
+    return { key: 'push-failed', title: '推送一轮里超过一半失败', lines };
+  }
+  if (!isCount(failed)) return null;
+  if (sent + failed > 0 && failed * 2 > sent + failed) {
+    return { key: 'push-failed', title: '推送一轮里超过一半失败', lines: [`最近一轮成功 ${sent} 条、失败 ${failed} 条。`] };
+  }
+  return null;
+}
+
 // ---------- 调不通（TC-B1-94 ①②⑤） ----------
 
-export type UnreachableReason = 'db_unreachable' | 'bad_data' | 'timeout' | 'network' | 'bad_body' | `http_${number}`;
+/** gateway_401 / fn_401：B2 架构审 D2 ①，网关回的 401 和 usage-report 自己回的 401 分开报（http.ts 的 classify401） */
+export type UnreachableReason = 'db_unreachable' | 'bad_data' | 'timeout' | 'network' | 'bad_body' | 'gateway_401' | 'fn_401' | `http_${number}`;
 
 /** 两种调不通（连不上数据库、usage-report 本身调不通）共用一个标题，原因写在正文（审查必改 1：换原因不算新的一件事） */
 export const UNREACHABLE_TITLE = '监控连不上服务器';
@@ -365,6 +392,8 @@ export function evaluateUnreachable(reason: UnreachableReason): Evaluation {
     timeout: '原因：调 usage-report 超时（Supabase 暂停、网络问题或函数卡住）。',
     network: '原因：调 usage-report 网络出错（连不上 Supabase）。',
     bad_body: '原因：usage-report 回了 200，但返回体解析不了。',
+    gateway_401: '原因：网关拒绝，查 verify_jwt 或 key（Supabase 网关回 401 UNAUTHORIZED_*，请求没到 usage-report：看 supabase/config.toml 里 [functions.usage-report] 是不是 verify_jwt = false、线上是否已按它部署）。',
+    fn_401: '原因：usage-report 自己回 401（x-ops-secret 对不上）：核对 lemo-ops 的 OPS_SECRET 和 Supabase 函数 secrets 里的 OPS_SECRET 是不是同一个值。',
   };
   const line = why[reason] ?? `原因：usage-report 回 ${reason.slice(5)}。`;
   return { active: [{ key: SCOPE_UNREACHABLE, title, lines: [line] }], scopes: [SCOPE_UNREACHABLE] };

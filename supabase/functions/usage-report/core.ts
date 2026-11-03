@@ -106,8 +106,12 @@ function json(status: number, body: unknown): Response {
 /** OPS_SECRET 至少 32 字节（UTF-8），短了按没配置好处理 */
 export const MIN_SECRET_BYTES = 32;
 
-/** heartbeat.detail 只转发这些数字字段（cleanup 的 rows、ms；push-dispatch 的 sent、failed；account-purge 的 purged），其余一律丢掉 */
-export const DETAIL_FIELDS = ['rows', 'ms', 'sent', 'failed', 'purged'] as const;
+/**
+ * heartbeat.detail 只转发这些字段，其余一律丢掉：数字字段（cleanup 的 rows、ms；push-dispatch 的 claimed、sent、failed；account-purge 的 purged）、
+ * 布尔字段（push-dispatch 的 budget_hit）。claimed、budget_hit 是 B2 加的（安全审查 D2-S2：只加数字和布尔，不加别的；O-3 “claimed 与 sent 之差”要用）
+ */
+export const DETAIL_FIELDS = ['rows', 'ms', 'claimed', 'sent', 'failed', 'purged'] as const;
+export const DETAIL_BOOL_FIELDS = ['budget_hit'] as const;
 
 type TimingSafeEqual = (a: ArrayBuffer | ArrayBufferView, b: ArrayBuffer | ArrayBufferView) => boolean;
 
@@ -238,12 +242,16 @@ function ageS(now: number, iso: string): number {
   return Math.round((now - t) / 1000);
 }
 
-function pickDetail(detail: unknown): Record<string, number> | null {
+function pickDetail(detail: unknown): Record<string, number | boolean> | null {
   if (typeof detail !== 'object' || detail === null || Array.isArray(detail)) return null;
-  const out: Record<string, number> = {};
+  const out: Record<string, number | boolean> = {};
   for (const k of DETAIL_FIELDS) {
     const v = (detail as Record<string, unknown>)[k];
     if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+  }
+  for (const k of DETAIL_BOOL_FIELDS) {
+    const v = (detail as Record<string, unknown>)[k];
+    if (typeof v === 'boolean') out[k] = v;
   }
   return Object.keys(out).length > 0 ? out : null;
 }

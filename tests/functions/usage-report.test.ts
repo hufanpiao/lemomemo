@@ -173,6 +173,18 @@ describe('TC-B1-94 ①：查数据库出错或超时回 503 db_unreachable', () 
     const b = (await (await handle(req({ part: 'heartbeat' }), deps({ db }))).json()) as { heartbeats: Array<{ detail: unknown }> };
     expect(b.heartbeats.map((h) => h.detail)).toEqual([{ sent: 3, failed: 5 }, null, null]);
   });
+
+  it('B2（安全审查 D2-S2）：push-dispatch 的 claimed（数字）、budget_hit（布尔）也转发；类型不对的照样丢', async () => {
+    const db = fakeDb({
+      heartbeats: async () => [
+        { name: 'push-dispatch', at: iso(M), detail: { claimed: 10, sent: 4, failed: 6, budget_hit: true, extra: 1 } },
+        { name: 'push-dispatch', at: iso(M), detail: { claimed: '10', budget_hit: 'true', sent: 0 } },
+        { name: 'push-dispatch', at: iso(M), detail: { budget_hit: false } },
+      ],
+    });
+    const b = (await (await handle(req({ part: 'heartbeat' }), deps({ db }))).json()) as { heartbeats: Array<{ detail: unknown }> };
+    expect(b.heartbeats.map((h) => h.detail)).toEqual([{ claimed: 10, sent: 4, failed: 6, budget_hit: true }, { sent: 0 }, { budget_hit: false }]);
+  });
 });
 
 describe('TC-B1-102 ⑤：“冷静期中的账号”列出 purge_started_at', () => {

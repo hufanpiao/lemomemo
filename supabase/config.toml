@@ -187,9 +187,19 @@ deno_version = 2
 # 网关的 JWT 校验（verify_jwt）默认开着，`supabase functions deploy`（预览、正式）和本地 edge runtime 都按这里的设置。
 # 只给 pg_cron 调的函数关掉：cron 的 net.http_post 只带 x-cron-secret、x-region，不带 Authorization，开着就被网关回
 # 401 UNAUTHORIZED_NO_AUTH_HEADER、函数根本调不到（11-03 预览 account-purge 实况，接手清单 PURGE-verify-jwt）；
-# 关了以后鉴权全靠函数自己定长比较 x-cron-secret。用户调的函数（account、invite-admin、invite-signup）和 lemo-ops 调的
-# usage-report 都留着默认的校验。规则由 build/check_backend.py F9 固定：cron 调的必须关、关了的必须是 cron 调的。
+# 关了以后鉴权全靠函数自己定长比较 x-cron-secret。用户调的函数（account、invite-admin、invite-signup）留着默认的校验。
+# 规则由 build/check_backend.py F9 固定：cron 调的必须关；另外只有 F9 里写死的 SERVER_SECRET_FUNCTIONS（usage-report → x-ops-secret）
+# 准关、也必须关；别的一律不准关。本批结束时 verify_jwt = false 只有 account-purge、usage-report、push-dispatch 三个（B2 安全审查 D2-4）。
 [functions.account-purge]
+verify_jwt = false
+
+# B2：push-dispatch 每分钟由 pg_cron 调（迁移 20261103120000），同样只带 x-cron-secret（架构 5.3、0.49；B2 任务单 BE-1 ②、M2）
+[functions.push-dispatch]
+verify_jwt = false
+
+# B2（安全审查 D2）：usage-report 由独立 Worker lemo-ops 调，鉴权是 x-ops-secret（函数里 safeEqual 定长比较）；
+# 网关那道 JWT 校验只认公开的 anon key，对它起不到鉴权作用，关掉后未鉴权的请求只多算一次调用（和 account-purge 一样）
+[functions.usage-report]
 verify_jwt = false
 
 [analytics]

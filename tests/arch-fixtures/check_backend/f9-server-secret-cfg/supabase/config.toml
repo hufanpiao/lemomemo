@@ -1,0 +1,6 @@
+[api]
+enabled = true
+
+# D2-2：usage-report 在名单里，这里却没关校验（写明 true）
+[functions.usage-report]
+verify_jwt = true

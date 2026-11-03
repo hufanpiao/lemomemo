@@ -40,6 +40,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/check-backend-f7-keys.test.ts', // python build/check_backend.py（F7 类型检查器判键类型）
   'tests/build/check-backend-f7-syntax.test.ts', // python build/check_backend.py（F7 语法层白名单）
   'tests/build/check-backend-migrations.test.ts', // python build/check_backend.py（M1～M6 迁移写法）
+  'tests/build/check-backend-f9-server.test.ts', // python build/check_backend.py（F9 服务器密钥名单、F10，B2）
   'tests/build/check-size.test.ts', // 另起 node 跑 build/check_size.mjs
   'tests/build/deno-frozen-lock.test.ts', // node（copy_shared）、deno install --frozen（服务器函数依赖锁真拦得住锁外依赖）
   'tests/build/e2e-watchdog.test.ts', // 经 tools/e2e/run-watchdog.mjs 起 node（E2E-webkit-hang 看门狗真跑）
@@ -54,6 +55,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/publish-run-worktree.test.ts', // PowerShell、git clone（发布脚本演练：git 各级配置与属性来源，经 publish-run-harness.ts）
   'tests/build/set-cron-secret.test.ts', // PowerShell（有 docker 时还起容器）
   'tests/build/set-signup-secrets.test.ts', // PowerShell
+  'tests/build/set-vapid-keys.test.ts', // PowerShell（本机假服务，B2 O-1）
   'tests/build/set-fn-role-passwords.test.ts', // PowerShell、python
   'tests/build/set-fn-role-passwords-run.test.ts', // PowerShell
   'tests/data-manifest/generate.test.ts', // PGlite 跑全部迁移

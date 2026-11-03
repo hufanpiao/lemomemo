@@ -46,6 +46,27 @@ SECRET_PATTERNS = [
     ("私钥", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY")),
     ("VAPID_PRIVATE", re.compile(r"VAPID_PRIVATE")),
 ]
+# A14 的 JWK 私钥特征（架构 0.51 第 2 条、2.3 A14）：VAPID 私钥 0.50 起是一行 JWK，值本身漏进源码或产物时只认变量名认不出。
+# 同一个对象里（kty 键前后 300 个字符以内）有 d 键、且值是 43 个 base64url 字符（32 字节，P-256 私钥）就报。
+# 键名带不带引号、单双引号、冒号前后有没有空格都认（源码对象字面量、压缩过的 JSON）。只有公钥（kty、x、y，没有 d）不报。
+# 键名前面不能紧跟标识符字符：id、kid 之类不会被当成 d；值后面紧跟引号，正好 43 个字符
+# 转义写法也认：JWK 整串放在一个 JSON 字符串里时引号变成 \"（"{\"kty\":\"EC\",…\"d\":\"…\"}"），键名和值前后都允许 \"（B2 代码审查 S1）
+JWK_KTY_RE = re.compile(r"""(?:(?<![A-Za-z0-9_$])kty|\\?"kty\\?"|'kty')\s*:""")
+JWK_D_RE = re.compile(r"""(?:(?<![A-Za-z0-9_$"'])d|\\?"d\\?"|'d')\s*:\s*\\?["'][A-Za-z0-9_-]{43}\\?["']""")
+JWK_WINDOW = 300
+
+
+def find_jwk_private(text):
+    """返回第一处 JWK 私钥 d 的位置（没有返回 None）"""
+    for m in JWK_KTY_RE.finditer(text):
+        lo = max(0, m.start() - JWK_WINDOW)
+        hi = min(len(text), m.end() + JWK_WINDOW)
+        d = JWK_D_RE.search(text, lo, hi)
+        if d:
+            return d.start()
+    return None
+
+
 ENV_OK = {"MODE", "DEV", "PROD", "BASE_URL", "SSR"}
 ENV_RE = re.compile(r"import\.meta\.env\.([A-Za-z_][A-Za-z0-9_]*)")
 ENV_INDEX_RE = re.compile(r"import\.meta\.env\s*\[")
@@ -128,6 +149,10 @@ def check_a14(root, errors):
                 if m:
                     line = text.count("\n", 0, m.start()) + 1
                     errors.append(("A14", rel, line, f"疑似密钥特征：{name}"))
+            pos = find_jwk_private(text)
+            if pos is not None:
+                line = text.count("\n", 0, pos) + 1
+                errors.append(("A14", rel, line, "疑似密钥特征：JWK 私钥（kty 附近有 43 个字符的 d）"))
             if top == "dist/web":
                 continue
             for m in ENV_RE.finditer(text):

@@ -93,10 +93,10 @@ describe('执行：PGlite 上跑完全部迁移之后的真授权（离线）', 
     const r = await runGrantMatrix(db, m);
     expect(grantProblems(r)).toEqual([]);
     expect(r.outcomes).toHaveLength(m.cases.length);
-    // 九个里 B0 迁移建了 3 个、B1 迁移 20261029192000 建了 3 个、20261029200000 建了 apply_patch，其余随 B2、B3 建，没建的不算少（架构 0.33 第 3 条）
+    // 九个里 B0 迁移建了 3 个、B1 迁移 20261029192000 建了 3 个、20261029200000 建了 apply_patch，B2 迁移 20261103110000 建了 claim_endpoint，其余随 B3 建，没建的不算少（架构 0.33 第 3 条）
     expect([...new Set(r.rpc.filter((x) => !x.missing).map((x) => x.id.split('-')[3]))].sort()).toEqual(
-      ['apply_patch', 'files_authorize', 'my_sessions', 'purge_deleted', 'record_consent', 'remove_device', 'report_tz']);
-    // 暂缺的正好是“后面批次才建”名单里的两个（claim_endpoint、my_ai_usage），名单本身也都在九个里
+      ['apply_patch', 'claim_endpoint', 'files_authorize', 'my_sessions', 'purge_deleted', 'record_consent', 'remove_device', 'report_tz']);
+    // 暂缺的正好是“后面批次才建”名单里的（B2 建了 claim_endpoint 以后只剩 my_ai_usage），名单本身也都在九个里
     expect([...new Set(r.rpc.filter((x) => x.missing).map((x) => x.id.split('-')[3]))].sort()).toEqual(Object.keys(RPCS_BUILT_LATER).sort());
     expect(Object.keys(RPCS_BUILT_LATER).filter((f) => !WL.PUBLIC_RPCS.includes(f))).toEqual([]);
     // 正例真的执行成功了（不是什么都 42501）

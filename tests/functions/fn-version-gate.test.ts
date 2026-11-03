@@ -86,11 +86,12 @@ describe('免查名单：同一份来源', () => {
       .toEqual(client.map((f) => ({ name: f.name, methods: [...f.methods] })));
   });
 
-  it('0.38 第 47 条：account 只免 POST；account-purge、usage-report 只免 POST（服务器调用）；invite-signup 不免', () => {
+  it('0.38 第 47 条：account 只免 POST；account-purge、push-dispatch、usage-report 只免 POST（服务器调用）；invite-signup 不免', () => {
     const plan = FUNCTION_VERSION_EXEMPTIONS.map((f) => [f.name, [...f.methods], f.caller]);
     expect(plan).toEqual([
       ['account', ['POST'], 'client'],
       ['account-purge', ['POST'], 'server'],
+      ['push-dispatch', ['POST'], 'server'],   // B2：pg_cron 带 x-cron-secret（D1-S6）
       ['usage-report', ['POST'], 'server'],
     ]);
     expect(isFunctionExempt(FUNCTION_VERSION_EXEMPTIONS, 'invite-signup', 'POST')).toBe(false);

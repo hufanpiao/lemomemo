@@ -97,6 +97,13 @@ describe.skipIf(!PS)('publish.ps1 从头跑到尾（假仓库、假工具、假�
     expect(ops.split('\t')[2]).toContain('CLOUDFLARE_API_TOKEN');
     expect(ops.split('\t')[2]).toContain('CLOUDFLARE_ACCOUNT_ID');
     expect(r.log.some((l) => l.startsWith('api\t') && l.endsWith('\tTrue'))).toBe(true);
+    // B2 安全审查 D1-S3：改库之前只读核对正式项目的 secrets 名单（带令牌、不跟随重定向），在 Workers 预检和 link 之前
+    const fsAt = r.log.findIndex((l) => l.startsWith('fnsecrets\t'));
+    expect(fsAt).toBeGreaterThan(-1);
+    expect(r.log[fsAt]).toBe(`fnsecrets\thttps://api.supabase.com/v1/projects/${REF}/secrets\tTrue\t0`);
+    expect(fsAt).toBeLessThan(cfAt);
+    expect(r.out).toContain('正式项目的 secrets 里没有推送替身变量（PUSH_SERVICE_OVERRIDE_URL、LEMO_LOCAL_PUSH_STUB');
+    expect(r.out).not.toContain('TESTONLYdigest');
     expect(r.out).toContain('lemo-ops 部署完成');
     expect(r.out).toContain(`线上已是 ${ctx.ver}`);
     expect(r.out).toContain('已清掉本窗口里的令牌');

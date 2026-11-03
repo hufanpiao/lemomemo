@@ -78,9 +78,9 @@ select is((select count(*)::int from pg_proc p where p.pronamespace = 'private':
   'private 每个函数的属主都是 postgres');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
-  'devices_session_guard,enqueue_anniv_defaults,enqueue_embed,enqueue_remind,files_authorize_impl,guard_note_file,guard_note_image,guard_token_revoke,is_active,'
+  'claim_endpoint_impl,devices_session_guard,enqueue_anniv_defaults,enqueue_embed,enqueue_remind,files_authorize_impl,guard_note_file,guard_note_image,guard_token_revoke,is_active,'
   || 'my_sessions_impl,not_password_session,purge_deleted_impl,record_consent_impl,remove_device_impl,report_tz_impl,row_quota,table_meta_of,tags_ok,touch,vault_ai_off',
-  'authenticated 能执行的 private 函数 = 白名单（tags_ok 是 B1 迁移 20261031110000 建的，notes.tags 的 check 用；B1 迁移 20261029192000 建了 report_tz_impl、remove_device_impl、my_sessions_impl；claim_endpoint_impl B2、my_ai_usage_impl B3）');
+  'authenticated 能执行的 private 函数 = 白名单（tags_ok 是 B1 迁移 20261031110000 建的，notes.tags 的 check 用；B1 迁移 20261029192000 建了 report_tz_impl、remove_device_impl、my_sessions_impl；claim_endpoint_impl 是 B2 迁移 20261103110000 建的；my_ai_usage_impl B3）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')), null, 'anon 不能执行任何 private 函数');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
@@ -91,8 +91,8 @@ select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_ai', p.oid, 'EXECUTE')), null, 'fn_ai 不能执行任何 private 函数');
 select is((select string_agg(p.proname || ':' || p.prosecdef, ',' order by p.proname) from pg_proc p where p.pronamespace = 'public'::regnamespace),
-  'apply_patch:false,files_authorize:false,my_sessions:false,purge_deleted:false,record_consent:false,remove_device:false,report_tz:false',
-  'public 里只有这七个 RPC，都是 security invoker（B1 迁移 20261029192000 加了 report_tz、remove_device、my_sessions，20261029200000 加了 apply_patch；claim_endpoint B2、my_ai_usage B3）');
+  'apply_patch:false,claim_endpoint:false,files_authorize:false,my_sessions:false,purge_deleted:false,record_consent:false,remove_device:false,report_tz:false',
+  'public 里只有这八个 RPC，都是 security invoker（B1 迁移 20261029192000 加了 report_tz、remove_device、my_sessions，20261029200000 加了 apply_patch；B2 迁移 20261103110000 加了 claim_endpoint；my_ai_usage B3）');
 select ok(not has_function_privilege('anon', 'public.purge_deleted(jsonb)', 'EXECUTE') and not has_function_privilege('anon', 'public.record_consent(text, boolean)', 'EXECUTE')
   and not has_function_privilege('service_role', 'public.purge_deleted(jsonb)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.files_authorize(text, jsonb)', 'EXECUTE')

@@ -138,3 +138,85 @@ M1～M3 改完即签。做得好的地方：
 提醒一件事（不挡合并）：`DELETE /rest/v1/devices` 不管带什么过滤条件都免查。版本门本来就不是权限措施，能删哪几行由 RLS 管，只能删自己的行。按现在的约定，客户端只按 `id=eq.<本机>` 删，没问题；以后要是有人写出不带过滤的 DELETE，版本门不会拦。前端 A 写退出流程时请注意只删本机这一行。
 
 跑过的测试：`tests/functions/version-gate-b2.test.ts`、`tests/functions/version-gate.test.ts`，加上上面那个临时用例，共 105 条全过。
+
+## 复核（11-03）
+
+复核人：代码审查员（同一人，只读）。对象：后端按 M1～M3、S1～S11 交回的工作区改动（未 git add）。先逐条核对上一轮的意见，再按同一尺度打分。
+
+### 结论：签，9 / 10
+
+M1～M3 都已解决。M2 的写法和我上一轮的建议不同，我核过，认为后端的写法更对（见下）。还剩两件，都不挡签字：
+- 一件新问题：`tsconfig.functions` 又失败了，但来源是前端 B 的新测试，不是后端；
+- 一条新建议 R1。
+
+### 逐条核对
+
+| # | 上一轮意见 | 现在 | 怎么核的 |
+|---|---|---|---|
+| M1 | typecheck 失败，12 个错误在 `_shared/auth.ts` | **解决** | `push-dispatch-usable.test.ts` 改成 `await import(AUTH_PATH)`；`_shared/auth.ts` 不再报错。五个 tsconfig 单独跑：app、sw、shared、node 都是 0；**functions 还有 33 个错**，全部来自前端 B 新加的 `tests/functions/cors-supabase-js-headers.test.ts`（它把 `src/platform/env.ts`、`auth-storage.ts` 带进了 Workers 的 tsconfig，见下面 N1），和后端无关 |
+| M2 | 重算会吞掉“稍后” | **解决（接受偏离）** | 见下面“M2 偏离评估”；脚本 `cr-be1/snooze2.mts` 跑了七个场景 |
+| M3 | test 负载多带了字段 | **解决** | 输入分成三种类型；`test` 输出只有 `{v, type, user_id}`，运行时多给的键丢掉；新测试断言正好三个键 |
+| S1 | 截断顺序 | **部分做**（按主持人的安排） | C0 控制字符换成空格（`noC0`）、标题至少留 20 个码点，都已落地。截断顺序等明早清单第 71 条，没改，符合安排 |
+| S2 | snooze 没在服务器校验 | **解决** | label 换掉 C0 后截到 40 个码点；minutes 不是 1～1440 的整数就整个不带 snooze，和 SW 一致 |
+| S3 | 基础字段没校验 | **解决** | `PushPayloadError('bad_payload')`：校验小写 UUID、kind、正的安全整数 |
+| S4 | drain 注释 | **解决** | 注释写明“最多多读一块” |
+| S5 | 测试入口没有源码检查 | **解决** | `tests/build/push-fixed-key-guard.test.ts`：`tests/` 以外只有 `ece.ts` 的定义行出现这个名字，另有“扫到了源码”的防空断言 |
+| S6 | 软删的占用行 | **解决** | 第 e 步改成“没软删、而且会话还在”才回 `endpoint_in_use`，否则直接删；pgTAP 从 56 条增到 59 条，全过 |
+| S7 | `device_not_found` 没写进接口 | **解决** | 任务单“接口先定”第 1 条、架构 3.3 D（0.54）都写了，并要求启动流程先建好本会话的 devices 行 |
+| S8 | 文档没写 `push_keys_ok` | **解决** | 架构 3.3 C 补了 0.54 一条：不授权、不进白名单，附录 A 同 |
+| S9 | F10 放行生成脚本 | **解决** | 安全审查“六之四”有条件同意；条件“不联网、不被别处 import”由 `check-backend-f9-server.test.ts` 断言，注释写明以后要联网或被别处 import 就挪进 `tests/` |
+| S10 | `vapidOnce` 只按私钥长度判断 | **解决** | 改成三个变量整串比较（只在内存里） |
+| S11 | topic 没校验 | **解决** | `^[A-Za-z0-9_-]{1,32}$`，不合格不发、算 `failed`（`send.ts:64-78`） |
+| S12 | version-gate 会审、冒烟集 | **解决** | 前端 B 已会审并签名；主持人核实 TC-B2-27 已标 ★，在自动冒烟里 |
+| S13 | Form.tsx 的 lint 错误 | **解决** | `npm run lint` 现在 0 个错误、11 个警告，警告都不在后端文件里 |
+
+另外两项自述也核了：
+- **BE1-S1**：`vapid.ts` 的 `SUBJECT` 和 `set-vapid-keys.ps1:95` 的 `$SubjectRe` 是同一条正则（JS 的 `^…$` 写成 `\A…\z`，用区分大小写的 `-cnotmatch`）；只收小写 https 和 mailto，不带端口、不许空白。
+- **F10 的 BE1-S3**：`supabase/functions/` 下的 `tests/`、`__tests__/` 也扫了，`f10-fn-tests-dir`、`f10-fn-tests-dir-ok` 两个样例都有。
+
+### M2 偏离评估：接受
+
+后端的规则：**传没传 `prevRemindAt`** 决定回落不回落，而不是我建议的“它等于算出的值才不回落”。传了时，原来已经回落到截止时刻的保持截止时刻，否则返回算出的（已过的）时刻。
+
+后端的理由成立。我在 `snooze2.mts` 里跑了这几个场景：
+
+| 场景 | 结果 |
+|---|---|
+| 09:00 新建 | 16:00 |
+| 16:00 推过，16:02 按“稍后”后重算（传 16:00） | 16:00，`due_at = 16:11`，稍后照常响 |
+| 16:30 新建（不传） | 17:00 |
+| 16:30 新建后，16:40 按“稍后”重算（传 17:00） | 17:00 |
+| 16:05 打勾后又取消（传 null） | 16:00。`pushed_for` 已经是 16:00，不会多推；按我原来的写法，null 不等于 16:00，会回落到 17:00、多出一次提醒 |
+
+所以“看传没传”比“比值”更准。任务单“接口先定”第 4 条、架构 0.54 第 2 条的文字和 `remind.ts:62-96` 的实现一致；remind 的三个时区用例从 48 条增到 65 条，都过。
+
+**R1（新建议，不挡签字）**：这个参数是可选的，**漏传就退回旧行为**（`snooze2.mts` 的场景 F：16:02 重算得 17:00，稍后又被吞掉）。最容易漏的是 BE-2 第 0 步，以及 FA-2 里不改时刻的保存路径。建议二选一：
+- 把参数改成必填（比如 `prev: number | null | 'fresh'`，新建、改了时刻时显式传 `'fresh'`），由类型系统逼着每个调用点表态；
+- 至少在 BE-2 的 push-dispatch 测试里加一条：第 0 步重算时传了原来的 `remind_at`；FA-2 的代码审查也查一遍各个保存路径。
+
+另有一处残余情况，接受，记一笔：今后的旧版客户端改了截止日期，但它不懂 `due_time`、没按“不传”的方式重算，这一行就拿不到“截止时刻回落”。
+
+### 新发现
+
+- **N1（转前端 B，不属于后端）**：`npx tsc -p tsconfig.functions.json` 有 33 个错误，都来自 `tests/functions/cors-supabase-js-headers.test.ts`（B6-exe F5 ①）。它 import 了 `src/platform/env.ts`、`src/platform/supabase/auth-storage.ts`，这些文件要 Vite 的 `import.meta.env`、`__APP_VERSION__` 和 DOM 类型，Workers 的 tsconfig 里没有。所以 `npm run typecheck` 整体仍然失败。改法照 M1：动态加载，或者把这个测试挪到 app 或 node 的 tsconfig 能覆盖的目录。
+
+### 复核时跑的测试
+
+- 五个 tsconfig 单独跑：app、sw、shared、node 都是 0；functions 有 33 个错，都来自 N1，后端文件 0 个
+- `npm run lint`：0 个错误，11 个警告（都不在后端文件里）
+- `python -I build/check_backend.py`：0 个错误
+- `npm run test:db:offline`：全过，其中 `28_claim_endpoint` 59 条、`29_push_endpoint_vectors` 231 条
+- `deno task test`：285 过、0 失败、1 忽略
+- 相关 vitest（上一轮那一套，加上 `push-fixed-key-guard`、`set-vapid-keys`）：27 个文件，409 过、11 跳过
+- `node build/run_tz_tests.mjs --project node tests/shared/remind.test.ts tests/shared/push`：三个时区各 65 条，全过
+- `npm run check:gate` 通过；`node build/gen_push_vectors.mjs --check` 一致
+- 实验脚本 `C:\Users\hoobey\AppData\Local\Temp\claude\D--claude-code\377a2f6c-6055-4a6d-a7cc-507392afac21\scratchpad\cr-be1\snooze2.mts`（M2 七个场景）
+- 没跑：`npm run test:db`（要 Docker）；没有连任何真实服务
+
+### 复核后的采纳情况（主持人，11-03）
+
+- N1：交前端 B，并进 F5 那一批的必改项（`cors-supabase-js-headers.test.ts` 改成动态加载，或挪到别的目录；5 个 tsconfig 都要 0 错误）。
+- R1：选第二种做法。参数仍是可选的，不再改签名，免得前端 A 已经标了 TODO 的地方又要跟着改。补两道防线：
+  - BE-2 第 0 步的测试钉住“传了这一行原来的 remind_at”，并补一条漏传就失败的用例；这一条已经并进 BE-2 的条件清单。
+  - 审查前端 A 的 FA-2 时，把各条保存路径逐一查一遍：不改时刻的保存必须传 prevRemindAt。主持人派 FA-2 后续审查时写进说明。
+- 提交：BE-1 和运维 O-1 合成一批。`build/check_backend.py` 只暂存后端那几段，前端 B 的 F11 那段留到它的批次。

@@ -24,7 +24,7 @@
        完整发布是 Supabase 令牌、数据库密码、Cloudflare 令牌三样；-Only functions -Ops 是 Supabase 令牌和 Cloudflare 令牌两样；
        -Only functions 不带 -Ops 只要 Supabase 令牌。加 -Ops 时改库之前先只读核对 Cloudflare 令牌有 Workers 权限、
        wrangler secret list 列出的 lemo-ops 密钥六个都在；
-    6. 正式项目状态 → db push（先演练给你看，你输入“确认推送”才真推）→ functions deploy →（加 -Ops 时）lemo-ops → pages deploy；
+    6. 正式项目状态 → 只读核对 secrets 名单里没有 PUSH_SERVICE_OVERRIDE_URL、LEMO_LOCAL_PUSH_STUB（B2 安全审查 D1-S3，令牌要有 Edge Function Secrets 只读）→ db push（先演练给你看，你输入“确认推送”才真推）→ functions deploy →（加 -Ops 时）lemo-ops → pages deploy；
     7. 核对 https://lemomemo.com/app/version.json；
     8. 不论成功失败：清掉本进程里的令牌、剪贴板、临时目录和 supabase link 的本地文件。
 
@@ -848,6 +848,34 @@ function Assert-WorkersAccess {
     Ok 'Cloudflare 令牌有 Workers 权限（只读预检）'
 }
 
+# 改库之前只读核对正式项目的 Edge Function secrets 里没有推送替身变量（B2 安全审查 D1-S3、1.5 第 ③ 点；D1-8）：
+# PUSH_SERVICE_OVERRIDE_URL、LEMO_LOCAL_PUSH_STUB 只许本机用；线上设了，push-dispatch 每一轮都回 500 misconfigured、一条推送都不发。
+# 在这里拦，不必等到第一次 cron 回 500 才发现。只发到固定的 api.supabase.com，不跟随跳转。
+# 列表接口的响应里带着各 secret 的 value（明文还是摘要待第一次预览实测，环境清单第四节）：当场只留名字列表，响应对象立即置空；
+# 不打印、不用 Write-Verbose / Write-Debug（请求本身也显式关掉 -Verbose），不落盘；出错时异常信息里只有 HTTP 状态码，不带响应体。
+# 令牌缺 Edge Function Secrets 只读（403）时停在改库之前，不许降级成“跳过检查、继续发布”（1.5 第 ③ 点第 4 条）
+$script:PushStubNames = @('PUSH_SERVICE_OVERRIDE_URL', 'LEMO_LOCAL_PUSH_STUB')
+function Assert-NoPushStub([string]$ref) {
+    $hdr = Get-BearerHeader 'SUPABASE_ACCESS_TOKEN'
+    $code = ''
+    $r = $null
+    try { $r = Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/$ref/secrets" -Headers $hdr -MaximumRedirection 0 -Verbose:$false } catch {
+        $hdr = $null; $r = $null
+        try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+        $Error.Clear()   # 异常记录里可能带着对方的响应体，不留在 $Error 里
+        Fail "读不了正式项目的 secrets 名单（HTTP $code）：正式 Supabase 令牌要有 Edge Function Secrets 只读（环境清单第四节）。还没改库，换一把令牌重新运行"
+    }
+    $hdr = $null
+    $names = @(@($r | ForEach-Object { $_ }) | ForEach-Object { if ($null -ne $_ -and $_.PSObject.Properties.Name -contains 'name') { [string]$_.name } })
+    $r = $null
+    if ($names.Count -eq 0) { Fail '正式项目的 secrets 名单是空的或读不懂（至少应有 CRON_SECRET 等）。还没改库，请在聊天里告诉运维' }
+    $hit = @($script:PushStubNames | Where-Object { $names -ccontains $_ })
+    if ($hit.Count -gt 0) {
+        Fail "正式项目的 Edge Function secrets 里有 $($hit -join '、')（只许本机用，线上设了推送全部停发）。还没改库。到 Supabase › 正式项目 › Edge Functions › Secrets 删掉，再原样重跑"
+    }
+    Ok "正式项目的 secrets 里没有推送替身变量（$($script:PushStubNames -join '、')；只读核对，只看名字，共 $($names.Count) 个）"
+}
+
 # 部署前查 npm 漂移（架构 0.33 第 7 条方案 C）：functions deploy --use-api 不读 deno.lock，间接依赖按范围取 npm 上最高版，
 # npm 上一出新版，线上打进去的就和锁里核过的不同。脚本只读锁、只向 registry.npmjs.org 发 GET；有漂移或查不了 registry 就停。
 # 和 Assert-NoPreviewFunctions 一样查两次：第 1 步一次；第 4 步装完工具、第 5 步输入令牌之前再查一次（缩短到部署的间隔）。
@@ -936,7 +964,7 @@ function Invoke-Build($info) {
     } finally { Pop-Location }
     Say ''
     Say "  请在 iPhone 上打开：GitHub › 仓库 › Actions › release-build › $Tag 那一次 › Summary，"
-    Say '  核对“文件数”和“总指纹”和上面完全一样。'
+    Say '  找标题是“正式产物指纹”的那一段，核对它的“文件数”和“总指纹”和上面完全一样（同一页下面“整包核对”那几段现在不用核）。'
     Ask-Exact '  一样就输入“一致”回车（不一样直接回车，发布停止）' '一致'
     Ok '产物和 CI 构建的一致'
 
@@ -997,7 +1025,7 @@ function Install-Tools {
     }
 }
 
-# ==== 安全窗口检查：开始（tools/keys/new-proxy-secret.ps1、set-r2-tokens.ps1、set-fn-role-passwords.ps1、login-token-tests.ps1、set-cron-secret.ps1、set-signup-secrets.ps1、tools/release/publish.ps1 七处逐字相同，tests/build/keys-guard-sync.test.ts 核对；改一处七处一起改）====
+# ==== 安全窗口检查：开始（tools/keys/new-proxy-secret.ps1、set-r2-tokens.ps1、set-fn-role-passwords.ps1、login-token-tests.ps1、set-cron-secret.ps1、set-signup-secrets.ps1、set-vapid-keys.ps1、tools/release/publish.ps1 八处逐字相同，tests/build/keys-guard-sync.test.ts 核对；改一处八处一起改）====
 # B0 安全审查低 5：Claude 不只叫 claude*。npm 装的 Claude Code、IDE 扩展里的都可能是 node.exe，所以再按命令行查一遍 node 进程。
 # 只看命令行里有没有 claude-code / @anthropic-ai，不打印命令行内容（只报进程号）。查不了命令行（例如管理员权限启动的 node）就按“可能在运行”处理。
 function Test-PolicyOn([string]$key, [string]$name) {
@@ -1105,6 +1133,8 @@ function Invoke-Deploy($info) {
     if ($proj.status -ne 'ACTIVE_HEALTHY') { Fail "正式项目状态是 $($proj.status)，不是 ACTIVE_HEALTHY" }
     Ok "正式项目：$($proj.name)（首尔，运行正常）"
     Ask-Exact "  确认要发布到上面这个项目就输入项目名「$($proj.name)」" $proj.name
+    # 改库之前：线上不能有推送替身地址（B2 安全审查 D1-S3）
+    Assert-NoPushStub $ref
     # 改库之前先确认 Cloudflare 令牌能部署 lemo-ops、lemo-ops 的六个密钥都设好了，免得迁移推了、函数换了，才发现令牌权限不够或密钥没设
     if ($script:DoOps) {
         Assert-WorkersAccess

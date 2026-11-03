@@ -53,6 +53,11 @@ const PLAN: Plan = new Map<string, Entry>([
   ['account-purge', { kind: 'all-users', why: 'TC-B1-109：照常处理到期的冷静期账号，故意不用 account_usable；pg_cron 带 x-cron-secret' }],
   ['invite-signup', { kind: 'no-user', why: '架构第 6 节：匿名 + Turnstile，还没有账号' }],
   ['usage-report', { kind: 'no-user', why: '架构第 6 节：x-ops-secret，只出全站统计' }],
+  // B2：pg_cron 带 x-cron-secret，按用户发送前经 _shared/auth.ts 的 isUsable（filterUsable）
+  ['push-dispatch', { kind: 'usable', covers: {
+    'admin-disabled': { file: 'tests/functions/push-dispatch-usable.test.ts', title: 'TC-B1-109 push-dispatch：管理员停用（disabled_at 有值）的账号跳过' },
+    'pending-deletion': { file: 'tests/functions/push-dispatch-usable.test.ts', title: 'TC-B1-109 push-dispatch：注销冷静期（disabled_reason = deletion）的账号跳过' },
+  } }],
 ]);
 
 /** 架构第 6 节函数表的鉴权列、TC-B1-109 的函数清单：这些函数一旦建目录，PLAN 里的类别必须是这里写的（以后各批自动对上） */
