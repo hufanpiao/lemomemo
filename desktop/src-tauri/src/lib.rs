@@ -1,16 +1,18 @@
 //! 柠檬记电脑版外壳（B6-exe；架构 5.10、14.2、15.6、0.48）。
 //!
 //! 三个窗口都在这里创建（tauri.conf.json 的 app.windows 为空），每个窗口：
-//! • 顶层导航按窗口限制（policy::navigation_allowed），不许开新窗口；
+//! • 顶层导航按窗口限制（policy::navigation_allowed），不许开新窗口；main 里被拦下的链接限速后转交系统（导航、新窗口都只放 https；
+//!   mailto、tel 和 http 只走页面调的 open_external，也限速）；
 //! • 只能调 capabilities/<窗口>.json 给的命令，命令里再按窗口 label 核一遍（双保险）；
 //! • 权限请求只给 main 的本地页面放行通知，其余一律拒绝。
 //! 窗口分工：main 是 App 本体（托盘、自启、单实例、热键都围着它）；auth 是登录小窗口（Turnstile 只在这里）；
-//! quick-add 是 Ctrl+Alt+空格 唤出的快速记录框。
+//! quick-add 是热键唤出的快速记录框：默认 Ctrl+Shift+空格，设置里能改（R-297，hotkey.rs、hotkey_get / hotkey_set）。
 
 pub mod commands;
 pub mod credman;
 mod manifest_check;
 pub mod env;
+pub mod hotkey;
 pub mod policy;
 pub mod session;
 pub mod updater;
@@ -21,16 +23,66 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::webview::{NewWindowResponse, PermissionKind, PermissionResponse};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State, Webview, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 type Sessions = session::SessionStore<credman::PlatformStore>;
+
+/// 现在用的快速记录热键和它有没有注册上（R-297）。热键回调、hotkey_get、hotkey_set 都读写第一个字段。
+/// 第一个字段是 std Mutex，**只许在锁里读写值，不许拿着它调 register / unregister**（安全审查 B-1）：插件 2.4.1 的
+/// register、unregister 是 run_on_main_thread 加 rx.recv() 阻塞等主线程，而 WM_HOTKEY 回调在主线程里调 is_current() 要同一把锁，
+/// 拿着锁去注册时正好按下热键，整个 App 会卡死。所以锁只在 snapshot()、store()、status() 里各拿一下就放；
+/// 主线程上的 is_current()（热键回调用）只 try_lock()，拿不到就当没按，回调里绝不阻塞等锁（代码审查 B-1）。
+/// 第二个字段是异步锁，只用来让并发的两次 hotkey_set 排队（它不在主线程上拿，不会和回调互等）
+struct QuickAddHotkey(std::sync::Mutex<(hotkey::Hotkey, bool)>, tauri::async_runtime::Mutex<()>);
+
+impl QuickAddHotkey {
+    fn new(hk: hotkey::Hotkey, registered: bool) -> Self {
+        Self(std::sync::Mutex::new((hk, registered)), tauri::async_runtime::Mutex::new(()))
+    }
+
+    /// 锁里只读一份副本出来，出了函数锁就放了
+    fn snapshot(&self) -> Option<(hotkey::Hotkey, bool)> {
+        self.0.lock().ok().map(|g| g.clone())
+    }
+
+    /// 锁里只写值
+    fn store(&self, hk: hotkey::Hotkey, registered: bool) {
+        if let Ok(mut g) = self.0.lock() {
+            *g = (hk, registered);
+        }
+    }
+
+    /// 热键回调在主线程里调：只 try_lock()，锁正被别处短暂拿着（或中毒）就当这次没按，不阻塞主线程
+    fn is_current(&self, s: &Shortcut) -> bool {
+        self.0.try_lock().map(|g| g.0.shortcut() == *s).unwrap_or(false)
+    }
+
+    fn status(&self) -> hotkey::HotkeyStatus {
+        match self.0.lock() {
+            Ok(g) => hotkey::HotkeyStatus::of(&g.0, g.1),
+            Err(_) => hotkey::HotkeyStatus::of(&hotkey::Hotkey::default_key(), false),
+        }
+    }
+}
+
+/// 热键存档的路径（应用配置目录下的 quick-add-hotkey.txt）
+fn hotkey_file<R: Runtime>(app: &AppHandle<R>) -> Option<std::path::PathBuf> {
+    app.path().app_config_dir().ok().map(|d| d.join(hotkey::FILE))
+}
 
 /// 开机自启时带的参数：带它启动时主窗口先藏在托盘里
 const AUTOSTART_ARG: &str = "--autostart";
 /// quick-add 交给 main 的内容最长多少字符（解析在页面里做，这里只防超大载荷）
 const QUICK_ADD_MAX_CHARS: usize = 2000;
-/// 新窗口外链转交系统浏览器的限速：1 秒最多 1 次（X-S2）
-static NEW_WINDOW_LIMIT: std::sync::Mutex<policy::RateLimit> = std::sync::Mutex::new(policy::RateLimit::new(1000));
+/// 链接转交系统的限速：1 秒最多 1 次（X-S2）；按单调时钟算（X-S9）。顶层导航、新窗口各用一个（F5-5：
+/// 免得 iframe 不停调 window.open 把用户正常点的链接挤掉）
+static NAV_LINK_LIMIT: std::sync::Mutex<policy::RateLimit> =
+    std::sync::Mutex::new(policy::RateLimit::new(std::time::Duration::from_millis(1000)));
+static NEW_WINDOW_LIMIT: std::sync::Mutex<policy::RateLimit> =
+    std::sync::Mutex::new(policy::RateLimit::new(std::time::Duration::from_millis(1000)));
+/// open_external 的限速（安全审查 B-3）：1 秒最多 1 次，超出返回 rate_limited；和上面两个分开，互不挤占
+static OPEN_EXTERNAL_LIMIT: std::sync::Mutex<policy::RateLimit> =
+    std::sync::Mutex::new(policy::RateLimit::new(std::time::Duration::from_millis(1000)));
 
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
@@ -67,11 +119,72 @@ async fn session_remove<R: Runtime>(webview: Webview<R>, store: State<'_, Sessio
     store.remove(&key)
 }
 
+/// 快速记录热键现在是什么、有没有注册上（设置页打开时调；registered 为 false 时提示“热键被占用”）
+#[tauri::command]
+async fn hotkey_get<R: Runtime>(webview: Webview<R>, state: State<'_, QuickAddHotkey>) -> Result<hotkey::HotkeyStatus, String> {
+    require(&webview, &[Win::Main])?;
+    Ok(state.status())
+}
+
+/// 改快速记录热键（R-297）。写法不对 → hotkey_invalid；被别的程序占了 → hotkey_in_use（旧的照样注册回去，存档不动）；
+/// 注册上了但存档写不进去 → Err(hotkey_save_failed)。注意这是“半成功”：**热键已经换成新的、旧的已注销**，
+/// 状态里记的也是新的，只是下次启动会回到旧存档（代码审查建议 ④ 选了“文档写明”，不改返回形状：前端 A 的
+/// useQuickAddHotkey 收到 save_failed 会重读 hotkey_get，显示现在生效的新热键并提示没保存下来）。成功返回新状态
+#[tauri::command]
+async fn hotkey_set<R: Runtime>(
+    webview: Webview<R>,
+    app: AppHandle<R>,
+    state: State<'_, QuickAddHotkey>,
+    accelerator: String,
+) -> Result<hotkey::HotkeyStatus, String> {
+    require(&webview, &[Win::Main])?;
+    let new = hotkey::parse(&accelerator).map_err(String::from)?;
+    // 两次 hotkey_set 并发时排队（异步锁，不在主线程上拿）
+    let _serial = state.1.lock().await;
+    let (old, old_registered) = state.snapshot().ok_or_else(|| "hotkey_state_poisoned".to_string())?;
+    if old == new && old_registered {
+        return Ok(hotkey::HotkeyStatus::of(&old, true));
+    }
+    // 下面的 register / unregister 都在 std 锁外面调（B-1）：它们要等主线程，主线程上的热键回调要拿 std 锁
+    let gs = app.global_shortcut();
+    if old_registered {
+        let _ = gs.unregister(old.shortcut());
+    }
+    if gs.register(new.shortcut()).is_err() {
+        // 被占了：旧的注册回去（旧的本来就没注册上时不动），存档不动
+        let back = old_registered && gs.register(old.shortcut()).is_ok();
+        state.store(old, back);
+        return Err(hotkey::ERR_IN_USE.into());
+    }
+    state.store(new.clone(), true);
+    let saved = hotkey_file(&app).and_then(|p| {
+        std::fs::create_dir_all(p.parent()?).ok()?;
+        std::fs::write(&p, format!("{}\n", new.text)).ok()
+    });
+    if saved.is_none() {
+        return Err(hotkey::ERR_SAVE.into());
+    }
+    Ok(hotkey::HotkeyStatus::of(&new, true))
+}
+
 #[tauri::command]
 async fn open_external<R: Runtime>(webview: Webview<R>, url: String) -> Result<(), String> {
     require(&webview, &[Win::Main])?;
+    // 先校验再限速：写法不对的不占名额
     let url = policy::external_url(&url).map_err(String::from)?;
-    shell_open(&url)
+    // 1 秒最多 1 次（安全审查 B-3）：页面脚本连调也只能每秒拉起一次系统程序
+    let ok = OPEN_EXTERNAL_LIMIT.lock().map(|mut l| l.allow(std::time::Instant::now())).unwrap_or(false);
+    if !ok {
+        return Err("rate_limited".into());
+    }
+    // 和 hand_link_to_system 一样另起线程打开：ShellExecute 可能要等协议处理程序，不占着命令线程池。
+    // 打开失败只能记日志，页面拿不到（以前能拿到 shell_open_failed，目前页面也没用它）
+    std::thread::spawn(move || {
+        if let Err(e) = shell_open(&url) {
+            eprintln!("外链打开失败：{e}");
+        }
+    });
+    Ok(())
 }
 
 // 建窗口、关窗口的命令必须是 async：Windows 上在同步命令里建窗口会卡死（Tauri 已知问题，实测复现过）
@@ -147,12 +260,41 @@ async fn quick_add_hide<R: Runtime>(webview: Webview<R>, app: AppHandle<R>) -> R
 
 // ───────────── 系统浏览器 ─────────────
 
-/// 用系统默认程序打开已校验过的网址（调用前必须过 policy::external_url，或是 env.rs 里写死的地址）
+/// 本线程的 COM 初始化，离开作用域时配对 CoUninitialize（只在这次 CoInitializeEx 成功时才配对）。
+/// 第二个字段让它既不是 Send 也不是 Sync：编译器保证它不跨线程（CoUninitialize 必须在初始化的那个线程上调；代码审查 S7）
+#[cfg(windows)]
+struct ComGuard(bool, std::marker::PhantomData<*const ()>);
+
+#[cfg(windows)]
+impl ComGuard {
+    fn sta() -> Self {
+        use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE};
+        // SAFETY：保留参数传 None；S_OK、S_FALSE（本线程已初始化过）都要配对 CoUninitialize；
+        // RPC_E_CHANGED_MODE（本线程已是 MTA）不配对，ShellExecute 照样能用
+        let hr = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) };
+        Self(hr.is_ok(), std::marker::PhantomData)
+    }
+}
+
+#[cfg(windows)]
+impl Drop for ComGuard {
+    fn drop(&mut self) {
+        if self.0 {
+            // SAFETY：和 sta() 里成功的那次 CoInitializeEx 配对，同一线程（ComGuard 不是 Send，编译器保证不跨线程）
+            unsafe { windows::Win32::System::Com::CoUninitialize() };
+        }
+    }
+}
+
+/// 用系统默认程序打开已校验过的网址（调用前必须过 policy::external_url，或是 env.rs 里写死的地址）。
+/// ShellExecuteW 要求调用线程先初始化 COM（微软文档：有的协议处理程序靠 COM 拉起）；open_external 是 async 命令，
+/// 跑在 tokio 线程池里，线程没初始化过，所以每次调用前在本线程初始化成 STA、用完配对释放（复核 N3）
 #[cfg(windows)]
 fn shell_open(url: &str) -> Result<(), String> {
     use windows::core::{w, HSTRING};
     use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let _com = ComGuard::sta();
     let target = HSTRING::from(url);
     // SAFETY：只传以 0 结尾的宽字符串；返回值 > 32 表示成功（ShellExecute 的约定）
     let r = unsafe { ShellExecuteW(None, w!("open"), &target, None, None, SW_SHOWNORMAL) };
@@ -166,6 +308,23 @@ fn shell_open(url: &str) -> Result<(), String> {
 #[cfg(not(windows))]
 fn shell_open(_url: &str) -> Result<(), String> {
     Err("unsupported_platform".into())
+}
+
+/// 被壳子拦下的链接转交系统：协议按路径限（policy::link_external_url：导航、新窗口都只放 https；mailto、tel、http 只走 open_external），
+/// 每条路径 1 秒最多 1 次，超出的直接丢掉、不记地址。
+/// 导航、新窗口回调跑在界面线程上，ShellExecute 可能要等协议处理程序，所以另起一个线程去打开（线程里自己初始化 COM）
+fn hand_link_to_system(raw: &str, path: policy::LinkPath) {
+    let Some(u) = policy::link_external_url(raw, path) else { return };
+    let limit = match path {
+        policy::LinkPath::Navigation => &NAV_LINK_LIMIT,
+        policy::LinkPath::NewWindow => &NEW_WINDOW_LIMIT,
+    };
+    let ok = limit.lock().map(|mut l| l.allow(std::time::Instant::now())).unwrap_or(false);
+    if ok {
+        std::thread::spawn(move || {
+            let _ = shell_open(&u);
+        });
+    }
 }
 
 // ───────────── 窗口 ─────────────
@@ -201,17 +360,22 @@ fn build_window<R: Runtime>(app: &AppHandle<R>, win: Win, visible: bool) -> taur
         .center()
         // 拖进来的文件交给页面自己的拖放处理（附件上传），不让 WebView2 当成导航打开
         .disable_drag_drop_handler()
-        .on_navigation(move |url| policy::navigation_allowed(win, url))
-        .on_new_window(move |url, _features| {
-            // 一律不开新窗口；main 里 target=_blank 的外链只放 http、https，限速后交系统浏览器（X-S2）。
-            // 超出限速的直接丢掉，不记地址
+        .on_navigation(move |url| {
+            // 入口页以外的顶层导航一律取消；main 里点了不带 target 的 https 外链时，取消的同时限速转交系统。
+            // 导航只放 https，mailto、tel、http 只走页面调的 open_external（复核采纳：只留一个入口）
+            if policy::navigation_allowed(win, url) {
+                return true;
+            }
             if win == Win::Main {
-                if let Some(u) = policy::new_window_external_url(url.as_str()) {
-                    let ok = NEW_WINDOW_LIMIT.lock().map(|mut l| l.allow(now_ms())).unwrap_or(false);
-                    if ok {
-                        let _ = shell_open(&u);
-                    }
-                }
+                hand_link_to_system(url.as_str(), policy::LinkPath::Navigation);
+            }
+            false
+        })
+        .on_new_window(move |url, _features| {
+            // 一律不开新窗口；main 里 target=_blank 的链接（前端 A 的 LocationText 用 target=_blank、rel=noopener noreferrer）
+            // 只放 https，限速后转交系统；mailto、tel 不从这里走（F5-5：iframe 的 window.open 不用点就能触发）。其余窗口的一律丢掉
+            if win == Win::Main {
+                hand_link_to_system(url.as_str(), policy::LinkPath::NewWindow);
             }
             NewWindowResponse::Deny
         })
@@ -366,8 +530,6 @@ fn alert(title: &str, text: &str) {
 fn alert(_title: &str, _text: &str) {}
 
 pub fn run() {
-    let quick_add_key = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::Space);
-
     tauri::Builder::default()
         // 单实例必须第一个注册：第二次启动时唤出已有的主窗口
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -379,14 +541,15 @@ pub fn run() {
         ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(move |app, shortcut, event| {
-                    if shortcut == &quick_add_key && event.state() == ShortcutState::Pressed {
+                .with_handler(|app, shortcut, event| {
+                    if event.state() == ShortcutState::Pressed && app.state::<QuickAddHotkey>().is_current(shortcut) {
                         toggle_quick_add(app);
                     }
                 })
                 .build(),
         )
         .manage::<Sessions>(session::SessionStore::new(credman::platform_store(), env::ENV.session_keys))
+        .manage(QuickAddHotkey::new(hotkey::Hotkey::default_key(), false))
         .setup(move |app| {
             if let Err(why) = check_env(app) {
                 env_check_failed(app, &why);
@@ -394,10 +557,18 @@ pub fn run() {
             let autostarted = std::env::args().any(|a| a == AUTOSTART_ARG);
             build_window(app.handle(), Win::Main, !autostarted)?;
             setup_tray(app)?;
-            // 热键被别的程序占了不影响启动，只是没有快速记录
-            if let Err(e) = app.global_shortcut().register(quick_add_key) {
-                eprintln!("快速记录热键注册失败：{e}");
-            }
+            // 热键按存档注册（没有存档、写法不对用默认 Ctrl+Shift+空格，R-297）。被别的程序占了不影响启动，
+            // 只是没有快速记录；registered 记成 false，设置页打开时据此提示“热键被占用”
+            let saved = hotkey_file(app.handle()).and_then(|p| std::fs::read_to_string(p).ok());
+            let hk = hotkey::from_saved(saved.as_deref());
+            let ok = match app.global_shortcut().register(hk.shortcut()) {
+                Ok(()) => true,
+                Err(e) => {
+                    eprintln!("快速记录热键 {} 注册失败：{e}", hk.text);
+                    false
+                }
+            };
+            app.state::<QuickAddHotkey>().store(hk, ok);
             updater::init(app);
             Ok(())
         })
@@ -428,7 +599,9 @@ pub fn run() {
             quick_add_submit,
             quick_add_hide,
             main_show,
-            app_update
+            app_update,
+            hotkey_get,
+            hotkey_set
         ])
         .run(tauri::generate_context!())
         .expect("柠檬记启动失败");

@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildWeek, type PhoneDay, type DeskDay } from '../../../shared/logic/calendar/week-view.ts';
 import { dayEntries } from '../../../shared/logic/calendar/cal-items.ts';
-import { ev, timed, todo } from './fixtures.ts';
+import { ev, timed, todo, unsynced } from './fixtures.ts';
 
 const SEOUL = 'Asia/Seoul';
 const LA = 'America/Los_Angeles';
@@ -290,5 +290,22 @@ describe('待办（和前端 A 对过的接口：手机 todos、电脑并进全�
   it('待办截止日是浮动日期，换设备时区也不挪天', () => {
     const d = dayOf(buildWeek(WEEK, { events: [], todos }, { ...phone, tz: LA }), '2026-10-20');
     expect(d.todos.map((e) => e.itemId)).toEqual(['t0', 't1']);
+  });
+});
+
+describe('删除、撤销的判断（前端 A 会审：和月历同一条 isLiveRow）', () => {
+  it('没有 deleted_at、undone 两列的本机新行照样上周视图；撤销的日程、待办不上', () => {
+    const fresh = unsynced(timed('fresh', '2026-10-20', '09:00', SEOUL));
+    expect('deleted_at' in fresh || 'undone' in fresh).toBe(false);
+    const items = {
+      events: [fresh, timed('gone', '2026-10-20', '11:00', SEOUL, 60, { undone: true })],
+      todos: [todo({ id: 'td-undone', due: '2026-10-20', undone: true }), todo({ id: 'td', due: '2026-10-20' })],
+    };
+    const p = dayOf(buildWeek(WEEK, items, phone), '2026-10-20');
+    expect(p.blocks.map((b) => b.itemId)).toEqual(['fresh']);
+    expect(p.todos.map((e) => e.itemId)).toEqual(['td']);
+    const d = dayOf(buildWeek(WEEK, items, desk), '2026-10-20');
+    expect(d.blocks.map((b) => b.itemId)).toEqual(['fresh']);
+    expect(d.allDay.itemIds).toEqual(['td']);
   });
 });

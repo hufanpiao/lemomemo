@@ -10,6 +10,9 @@ pub const COMMANDS: &[&str] = &[
     "auth_window_open",
     "main_show",
     "app_update",
+    // main：快速记录热键（R-297，设置页读、改）
+    "hotkey_get",
+    "hotkey_set",
     // auth：写会话后通知 main 并关掉自己；“用邀请码注册”（不带载荷，地址写死在 Rust）
     "auth_done",
     "auth_open_signup",

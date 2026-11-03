@@ -1,0 +1,489 @@
+{
+  "$comment": "check_contrast.py 的清单（架构 8.1、B6-exe 任务单 F12）。每项在每套皮肤（src/styles/skins/*.css 的 data-skin × data-theme）都算一遍；modes 只限浅色或深色。bg 可以是数组（多层，第一个在最上面）。只收有出处的颜色对，source 写出处；令牌里没有、出处说不清的不收（见回报）。",
+  "thresholds": {
+    "text": {
+      "min": 4.5,
+      "what": "正文、次要文字",
+      "source": "架构 8.1；皮肤视觉稿“对比度实测”；ADR-008 第 5 条"
+    },
+    "nontext": {
+      "min": 3,
+      "what": "大字、图标、选中块边界等非文字",
+      "source": "架构 8.1；皮肤视觉稿“对比度实测”"
+    }
+  },
+  "backdrops": {
+    "$comment": "半透明背景的最坏底色（架构 8.1）：浅色半透明取墨黑和最深的项目色；深色半透明取白色卡片、柠檬黄和最亮的项目色。项目色取本套的 --p1～--p6（色块）",
+    "light": {
+      "colors": [
+        "#141518"
+      ],
+      "projectTokens": [
+        "--p1",
+        "--p2",
+        "--p3",
+        "--p4",
+        "--p5",
+        "--p6"
+      ],
+      "pick": "darkest"
+    },
+    "dark": {
+      "colors": [
+        "#FFFFFF",
+        "#F2DF4A"
+      ],
+      "projectTokens": [
+        "--p1",
+        "--p2",
+        "--p3",
+        "--p4",
+        "--p5",
+        "--p6"
+      ],
+      "pick": "brightest"
+    }
+  },
+  "pairs": [
+    {
+      "id": "text-panel",
+      "what": "正文 / 面板",
+      "fg": "--text",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "text-login",
+      "what": "正文 / 登录页与官网首屏背景",
+      "fg": "--text",
+      "bg": "--login-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "text2-login",
+      "what": "次要文字 / 登录页与官网首屏背景",
+      "fg": "--text-2",
+      "bg": "--login-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "ok-panel",
+      "what": "“邀请码已提交”提示 / 面板",
+      "fg": "--ok-text",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "text-screen",
+      "what": "正文 / 画面底色（日期大标题下的小字也在底色上）",
+      "fg": "--text",
+      "bg": "--scr-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "text2-panel",
+      "what": "次要文字 / 面板",
+      "fg": "--text-2",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "text2-screen",
+      "what": "次要文字 / 画面底色",
+      "fg": "--text-2",
+      "bg": "--scr-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "text2-panel2",
+      "what": "次要文字 / 浅底块（输入框、未选中胶囊）",
+      "fg": "--text-2",
+      "bg": "--panel-2",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "on-accent",
+      "what": "主按钮文字 / 柠檬黄",
+      "fg": "--on-accent",
+      "bg": "--accent",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "late-red",
+      "what": "“没赶上”红字 / 画面底色（透明卡）",
+      "fg": "--danger-text",
+      "bg": "--scr-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1（R-76，基准最低 4.55）"
+    },
+    {
+      "id": "k-title",
+      "what": "“现在”卡标题 / 卡片",
+      "fg": "--k-fg",
+      "bg": "--k-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；令牌分组“现在”卡（R-131）"
+    },
+    {
+      "id": "k-small",
+      "what": "“现在”卡小字 / 卡片",
+      "fg": "--k-fg2",
+      "bg": "--k-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；令牌分组“现在”卡（R-131）"
+    },
+    {
+      "id": "nav-active",
+      "what": "导航文字（选中）/ 选中块（电脑侧栏仍用 --nav-active-*）",
+      "fg": "--nav-active-fg",
+      "bg": "--nav-active-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 0.26 R-143 行"
+    },
+    {
+      "id": "toast",
+      "what": "提示条文字 / 提示条（半透明按最坏底色）",
+      "fg": "--toast-fg",
+      "bg": "--toast-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1（R-122、R-147）；TC-B2-53、54"
+    },
+    {
+      "id": "toast-small",
+      "what": "提示条小字 / 提示条（半透明按最坏底色）",
+      "fg": "--toast-fg2",
+      "bg": "--toast-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1（R-147）；TC-B2-53、54"
+    },
+    {
+      "id": "toast-solid",
+      "what": "提示条文字 / 实色后备值",
+      "fg": "--toast-fg",
+      "bg": "--float-solid",
+      "kind": "text",
+      "source": "架构 8.1（实色后备值另算一遍）"
+    },
+    {
+      "id": "toast-small-solid",
+      "what": "提示条小字 / 实色后备值",
+      "fg": "--toast-fg2",
+      "bg": "--float-solid",
+      "kind": "text",
+      "source": "架构 8.1（实色后备值另算一遍）"
+    },
+    {
+      "id": "sheet-text",
+      "what": "弹层、录音面板正文 / 弹层",
+      "fg": "--text",
+      "bg": "--sheet-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1（磨砂玻璃面板 --glass-bg 按最坏底色）"
+    },
+    {
+      "id": "sheet-text2",
+      "what": "弹层次要文字 / 弹层",
+      "fg": "--text-2",
+      "bg": "--sheet-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1"
+    },
+    {
+      "id": "abar",
+      "what": "提醒按钮条文字 / 按钮条（半透明按最坏底色）",
+      "fg": "--abar-fg",
+      "bg": "--abar-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1（R-89、R-122）；TC-B2-54"
+    },
+    {
+      "id": "abar-solid",
+      "what": "提醒按钮条文字 / 实色后备值",
+      "fg": "--abar-fg",
+      "bg": "--float-solid",
+      "kind": "text",
+      "source": "架构 8.1（实色后备值另算一遍）"
+    },
+    {
+      "id": "nowpill",
+      "what": "时间河“现在”时间 / 胶囊",
+      "fg": "--nowpill-fg",
+      "bg": "--nowpill-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "chip-on",
+      "what": "选中胶囊文字 / 选中胶囊",
+      "fg": "--chip-on-fg",
+      "bg": "--chip-on-bg",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "glass-solid-text",
+      "what": "玻璃实色后备值上的正文",
+      "fg": "--text",
+      "bg": "--glass-solid",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 8.1"
+    },
+    {
+      "id": "on-p1",
+      "what": "项目色块 1 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107）",
+      "fg": "--on-p",
+      "bg": "--p1",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "on-p2",
+      "what": "项目色块 2 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107）",
+      "fg": "--on-p",
+      "bg": "--p2",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "on-p3",
+      "what": "项目色块 3 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107）",
+      "fg": "--on-p",
+      "bg": "--p3",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "on-p4",
+      "what": "项目色块 4 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107）",
+      "fg": "--on-p",
+      "bg": "--p4",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "on-p5",
+      "what": "项目色块 5 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107）",
+      "fg": "--on-p",
+      "bg": "--p5",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "on-p6",
+      "what": "项目色块 6 上的深色字（月历色块标签、周视图简称同一套，R-100、R-107）",
+      "fg": "--on-p",
+      "bg": "--p6",
+      "kind": "text",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“对比度”"
+    },
+    {
+      "id": "g-halo",
+      "what": "底栏的字 / 柔光（液态玻璃，R-154）",
+      "fg": "--g-fg",
+      "bg": "--g-halo",
+      "kind": "text",
+      "source": "架构 8.1（R-154）；TC-B2-48"
+    },
+    {
+      "id": "g-solid",
+      "what": "底栏的字 / 减少透明效果时的实色",
+      "fg": "--g-fg",
+      "bg": "--glass-solid",
+      "kind": "text",
+      "source": "架构 8.1（“减少透明效果”时按 --glass-solid 算）"
+    },
+    {
+      "id": "swipe-btn-light",
+      "what": "左滑“推迟”“转成待办”/ 按钮底（浅色）",
+      "fg": "--text",
+      "bg": "--panel-2",
+      "kind": "text",
+      "source": "TC-B2-62（R-171、R-172）",
+      "modes": [
+        "light"
+      ]
+    },
+    {
+      "id": "swipe-btn-dark",
+      "what": "左滑“推迟”“转成待办”/ 按钮底（深色）",
+      "fg": "--panel",
+      "bg": "--text-2",
+      "kind": "text",
+      "source": "TC-B2-62（R-171、R-172）",
+      "modes": [
+        "dark"
+      ]
+    },
+    {
+      "id": "swipe-delete",
+      "what": "左滑“删除”/ 按钮底",
+      "fg": "--danger-text",
+      "bg": "--danger-bg",
+      "kind": "text",
+      "source": "TC-B2-62（R-171、R-172）"
+    },
+    {
+      "id": "fab",
+      "what": "“＋”图标 / “＋”按钮",
+      "fg": "--fab-fg",
+      "bg": "--fab-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p1s-panel",
+      "what": "项目标记 1（竖条、圆圈）/ 面板",
+      "fg": "--p1s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "p2s-panel",
+      "what": "项目标记 2（竖条、圆圈）/ 面板",
+      "fg": "--p2s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "p3s-panel",
+      "what": "项目标记 3（竖条、圆圈）/ 面板",
+      "fg": "--p3s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "p4s-panel",
+      "what": "项目标记 4（竖条、圆圈）/ 面板",
+      "fg": "--p4s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "p5s-panel",
+      "what": "项目标记 5（竖条、圆圈）/ 面板",
+      "fg": "--p5s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "p6s-panel",
+      "what": "项目标记 6（竖条、圆圈）/ 面板",
+      "fg": "--p6s",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
+    },
+    {
+      "id": "p1s-screen",
+      "what": "项目标记 1（平铺在底色、玻璃渐变上）",
+      "fg": "--p1s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p2s-screen",
+      "what": "项目标记 2（平铺在底色、玻璃渐变上）",
+      "fg": "--p2s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p3s-screen",
+      "what": "项目标记 3（平铺在底色、玻璃渐变上）",
+      "fg": "--p3s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p4s-screen",
+      "what": "项目标记 4（平铺在底色、玻璃渐变上）",
+      "fg": "--p4s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p5s-screen",
+      "what": "项目标记 5（平铺在底色、玻璃渐变上）",
+      "fg": "--p5s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "p6s-screen",
+      "what": "项目标记 6（平铺在底色、玻璃渐变上）",
+      "fg": "--p6s",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”"
+    },
+    {
+      "id": "anniv-line",
+      "what": "纪念日菱形边框（var(--text)）/ 画面底色",
+      "fg": "--text",
+      "bg": "--scr-bg",
+      "kind": "nontext",
+      "source": "皮肤视觉稿“对比度实测”（边框是 var(--text)）；架构 8.1（R-77、R-105；8.1 写的 --anniv-line 在令牌里没有）"
+    },
+    {
+      "id": "g-tint-floor",
+      "what": "底栏的字 / 玻璃本身（--g-tint 叠在最坏底色上，不算柔光）",
+      "fg": "--g-fg",
+      "bg": "--g-tint",
+      "kind": "nontext",
+      "source": "架构 8.1（0.29 第 30 条下限 3:1）；TC-B2-60"
+    },
+    {
+      "id": "g-fg-on-halo",
+      "what": "底栏选中项的字 / 柔光（--g-fg-on 对 --g-halo）",
+      "fg": "--g-fg-on",
+      "bg": "--g-halo",
+      "kind": "text",
+      "source": "架构 8.1 第 4252 行附近（按 --g-tint 叠在最坏底色上算栏上的字 --g-fg 和选中项 --g-fg-on，R-154 起按 --g-fg 对 --g-halo 算）；皮肤视觉稿 .tabbar .tab.on"
+    },
+    {
+      "id": "g-fg-on-floor",
+      "what": "底栏选中项的字 / 玻璃本身（--g-tint 叠在最坏底色上，不算柔光）",
+      "fg": "--g-fg-on",
+      "bg": "--g-tint",
+      "kind": "nontext",
+      "source": "架构 8.1 第 4252 行附近；0.29 第 30 条下限 3:1（选中项算不算下限、按液滴还是按玻璃算待架构定，先按玻璃收，代码审查 M3、S6）"
+    },
+    {
+      "id": "g-ad-floor",
+      "what": "自动深浅（data-ad=\"dark\"）底栏的字 / 深色玻璃（--g-ad-tint 叠在最坏底色上）",
+      "fg": "--g-ad-fg",
+      "bg": "--g-ad-tint",
+      "kind": "nontext",
+      "modes": ["light"],
+      "source": "架构 0.27 液态玻璃“对比度”第 855 行附近（深色玻璃 data-ad=\"dark\" 那组 --g-* 叠在最浅底色上）；第 844 行：深色主题不做自动深浅，只算浅色"
+    },
+    {
+      "id": "g-ad-halo",
+      "what": "自动深浅（data-ad=\"dark\"）底栏的字 / 柔光（令牌没有 ad 柔光，暂按 --g-halo 算）",
+      "fg": "--g-ad-fg",
+      "bg": "--g-halo",
+      "kind": "text",
+      "modes": ["light"],
+      "source": "架构 0.27 第 855 行附近；令牌里没有 --g-ad-halo（第 830、886 行：data-ad 的令牌在 B2 前补齐），代码审查 M3"
+    }
+  ]
+}

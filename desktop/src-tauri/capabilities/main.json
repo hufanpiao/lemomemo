@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "主窗口：会话三件、外链、开登录小窗口、开机自启开关、收 auth:done 和 quick-add:submit 事件。只给本地页面，不开 remote。",
+  "description": "主窗口：会话三件、外链、开登录小窗口、开机自启开关、快速记录热键读改、收 auth:done 和 quick-add:submit 事件。只给本地页面，不开 remote。",
   "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
@@ -13,6 +13,8 @@
     "allow-auth-window-open",
     "allow-main-show",
     "allow-app-update",
+    "allow-hotkey-get",
+    "allow-hotkey-set",
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled"

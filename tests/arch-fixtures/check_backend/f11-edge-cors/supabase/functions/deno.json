@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "cors-alias": "npm:@supabase/supabase-js@2/cors"
+  }
+}

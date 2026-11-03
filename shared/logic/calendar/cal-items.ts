@@ -11,12 +11,24 @@ import { displayShort } from '../short.ts';
 // 项目色挪到 shared/logic/project-color.ts（前端 A 会审 ①），这里转出保持原来的引用路径能用
 export { PROJECT_COLORS, projectColorIndex, type ProjectColor } from '../project-color.ts';
 
+/**
+ * 删除、撤销两列：insert 不放（只能 update，shared/schema/rows.ts），本机新建、还没同步的行里可能根本没有这两列，
+ * 所以是可选的；没有 deleted_at 等于没删，没有 undone 等于没撤销（前端 A 会审：和 today-model 的 isLive 一致）
+ */
+interface Tombstone {
+  readonly deleted_at?: EventWrite['deleted_at'] | undefined;
+  readonly undone?: boolean | undefined;
+}
 /** 月历、周视图用到的日程列（本机缓存里的行直接传进来即可） */
-export type CalEvent = Readonly<
-  Pick<EventWrite, 'id' | 'title' | 'short' | 'project' | 'date' | 'time' | 'tz' | 'duration_min' | 'created_at' | 'deleted_at'>
->;
+export type CalEvent = Readonly<Pick<EventWrite, 'id' | 'title' | 'short' | 'project' | 'date' | 'time' | 'tz' | 'duration_min' | 'created_at'>> &
+  Tombstone;
 /** 月历用到的待办列 */
-export type CalTodo = Readonly<Pick<TodoWrite, 'id' | 'title' | 'short' | 'project' | 'due' | 'done' | 'created_at' | 'deleted_at'>>;
+export type CalTodo = Readonly<Pick<TodoWrite, 'id' | 'title' | 'short' | 'project' | 'due' | 'done' | 'created_at'>> & Tombstone;
+
+/** 这一行还在不在：没删（deleted_at 为 null 或没有这一列）、也没撤销（undone 不是 true）。月历、单日列表、周视图共用 */
+export function isLiveRow(r: Tombstone): boolean {
+  return (r.deleted_at ?? null) === null && r.undone !== true;
+}
 
 /** 月历、单日列表的输入 */
 export interface CalItems {
@@ -145,11 +157,11 @@ export function todoEntry(td: CalTodo): DayEntry {
 }
 
 /**
- * 待办放在哪一天：截止日原样（浮动，不换算时区）；删掉的、已完成的、没有截止日的不上日历，返回 null。
+ * 待办放在哪一天：截止日原样（浮动，不换算时区）；删掉的、撤销的、已完成的、没有截止日的不上日历，返回 null。
  * 月历、单日列表、周视图共用这一条，规则只在这里改。
  */
 export function todoDate(td: CalTodo): string | null {
-  if (td.deleted_at !== null || td.done || td.due === null) return null;
+  if (!isLiveRow(td) || td.done || td.due === null) return null;
   return td.due;
 }
 
@@ -160,14 +172,14 @@ export function nearRange(date: string, from: DateStr, to: DateStr, spillBefore:
 
 /**
  * from～to（含两头）每一天有哪几件事，已按 compareEntries 排好。
- * 算进去的：没删掉的日程（固定时刻按设备时区换算后的日期）、截止日在范围里且未完成的待办。
+ * 算进去的：没删掉、没撤销的日程（固定时刻按设备时区换算后的日期）、截止日在范围里且未完成的待办（isLiveRow）。
  * 月历的 buildMonth 和单日列表的 dayEntries 共用这一套。
  */
 export function collectEntries(items: CalItems, from: DateStr, to: DateStr, tz: Tz): Map<DateStr, DayEntry[]> {
   const out = new Map<DateStr, DayEntry[]>();
   for (let d = from; d <= to; d = addDays(d, 1)) out.set(d, []);
   for (const ev of items.events) {
-    if (ev.deleted_at !== null || !nearRange(ev.date, from, to, TZ_SPILL_DAYS, TZ_SPILL_DAYS)) continue;
+    if (!isLiveRow(ev) || !nearRange(ev.date, from, to, TZ_SPILL_DAYS, TZ_SPILL_DAYS)) continue;
     const p = placeEvent(ev, tz);
     if (p) out.get(p.date)?.push(eventEntry(ev, p));
   }

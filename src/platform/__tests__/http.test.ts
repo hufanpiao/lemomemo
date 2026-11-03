@@ -1,7 +1,7 @@
 // X-App-Version（架构 0.27 第 1 点）：supabase-js 的 global.headers 和直接 fetch 都带上，且调用方改不掉
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clock } from '../clock.ts';
-import { APP_VERSION_HEADER, appFetch, onUpgradeRequired, readUpgradeRequired, withAppVersion } from '../http.ts';
+import { APP_VERSION_HEADER, appFetch, isNetworkUnreadable, NetworkUnreadableError, onUpgradeRequired, readUpgradeRequired, withAppVersion } from '../http.ts';
 import { clientOptions } from '../supabase/client.ts';
 
 afterEach(() => {
@@ -95,5 +95,54 @@ describe('时钟偏差接线（接手清单 K8-clock、TC-B1-31）', () => {
     expect(spy.mock.calls[0]).toEqual(['https://app.example.invalid/sb/rest/v1/todos', date]);
     expect(spy.mock.calls[1]?.[0]).toBe('https://app.example.invalid/functions/v1/x');
     spy.mockRestore();
+  });
+});
+
+describe('F5 ⑤：读不出原因的网络错误按断网处理（Cloudflare 超额错误页不带 CORS 头）', () => {
+  it('fetch 抛 TypeError（exe 里被 CORS 挡下的错误页、断网）：换成 NetworkUnreadableError，仍是 TypeError、消息以 Failed to fetch 开头', async () => {
+    const raw = new TypeError('Failed to fetch');
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(raw)));
+    const e: unknown = await appFetch('https://lemomemo.com/sb/rest/v1/todos').catch((x: unknown) => x);
+    expect(isNetworkUnreadable(e)).toBe(true);
+    expect(e).toBeInstanceOf(TypeError);
+    expect((e as Error).name).toBe('TypeError');
+    expect((e as Error).message).toMatch(/^Failed to fetch/);
+    expect((e as Error).cause).toBe(raw);
+    // 各处的断网判断都认得出来（consent-api、settings-api、sync-transport 的 FETCH_FAILED 写法）
+    expect(/failed to fetch|load failed|networkerror|network request failed|network error/i.test((e as Error).message)).toBe(true);
+  });
+
+  it('别的写法的失败（Safari 的 Load failed、非 Error 的值）也一样', async () => {
+    for (const raw of [new TypeError('Load failed'), 'weird', null]) {
+      vi.stubGlobal('fetch', vi.fn(() => Promise.reject(raw)));
+      await expect(appFetch('https://x.invalid/')).rejects.toBeInstanceOf(NetworkUnreadableError);
+    }
+  });
+
+  it('status 0 的响应（opaque、Response.error()）当作读不出原因', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(Response.error())));
+    await expect(appFetch('https://x.invalid/')).rejects.toBeInstanceOf(NetworkUnreadableError);
+  });
+
+  it('调用方取消、超时原样抛出，不改成网络错误', async () => {
+    for (const name of ['AbortError', 'TimeoutError']) {
+      const raw = new DOMException('stop', name);
+      vi.stubGlobal('fetch', vi.fn(() => Promise.reject(raw)));
+      await expect(appFetch('https://x.invalid/')).rejects.toBe(raw);
+    }
+  });
+
+  it('读得出来的错误照旧原样返回（5xx、429 的错误页由 outbox 按 transient 退避，不在这里改）', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('<html>1027</html>', { status: 503, headers: { 'content-type': 'text/html' } }))));
+    expect((await appFetch('https://x.invalid/')).status).toBe(503);
+  });
+
+  it('postgrest 经 appFetch 收到这种错误：回 status 0，sync-transport 认成 network（和断网同一条路）', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))));
+    const { PostgrestClient } = await import('@supabase/postgrest-js');
+    const { toFailure } = await import('../supabase/sync-transport.ts');
+    const r = await new PostgrestClient('https://lemomemo.com/sb/rest/v1', { fetch: appFetch }).from('todos').select('*').retry(false); // GET 默认会自己重试 3 次（1、2、4 秒），这里只看结果
+    expect(r.status).toBe(0);
+    expect(toFailure(r.error, r.status)).toEqual({ network: true });
   });
 });

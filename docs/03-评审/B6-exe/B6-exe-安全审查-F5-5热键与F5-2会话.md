@@ -50,3 +50,25 @@ exe 里会话 token 不落 localStorage；凭据管理器失败时关着失败�
 - B-1～B-3 交前端 B 必改；“顶层导航只放 https”采纳，注释按修正后的理由写。B-2 规则按审查推荐定，在明早清单知会负责人。
 - A-1 交前端 A 必改，两条建议一起做；ConsentPage 交前端 A。
 - 改完由本审查员只看改动、复核。
+
+## 复核（11-03，同一审查员）：前端 B 改动
+
+**结论：通过，没有剩余必改。** cargo test 48 过 1 忽略；stage-web 27 条；desktop-hotkey、native-bridge、safe-link 49 条全过。
+- B-1：值锁与 async 排队锁分开，register/unregister 在锁外，回调 `try_lock()`，不再互等；失败注册回旧热键、存档不动。
+- B-2：Rust `parse` 与前端 `hotkeyFromKeyboardEvent` 同一规则，单 Ctrl、单 Alt 一律 `hotkey_invalid`；只带 Win 仍可，系统占用的返回 `hotkey_in_use`。
+- B-3：先核窗口、再 `external_url`、再独立 `OPEN_EXTERNAL_LIMIT`、再另起线程；写法不对的网址不占名额；结构核对钉住。
+- 顶层导航只放 https，注释口径正确。
+- B-M2：字节上复刻 infer 规则，`20 FE FF <?xml`、`FF FE 3C 00` 都拒，比 infer 更保守。
+建议（不阻塞）：① `Ctrl+Shift+C/V/T/N` 仍可设，会抢别的程序常用键，可加小黑名单或在设置页提示——可用性问题，请负责人定（明早清单第 78 条）；② `hotkey_set` 在 async 命令里调阻塞的 `register`，以后可改 `spawn_blocking`。
+前端 A 的 A-1 改完另送。
+
+## 前端 A 复核（11-03，同一审查员）
+
+**结论：有条件通过，剩 1 条必改。**
+- 必改：`native-bridge.ts` 的 `sitePageUrl` 只拦 `//` 开头，URL 解析把 `\` 当 `/`、去掉制表符换行，`/\evil.com`、`/\t/evil.com` 都会拼成 `https://evil.com/`。现调用方只传常量，暂不可利用。改：拼后核 origin 与官网一致，路径限 `^/[A-Za-z0-9/_-]*$`，补三个反例。
+- 已核过：A-1 标记只存 "1"、删成才撤、失败不重载、启动顺序正确，伪造标记最多让用户退出一次；readStoredAccessToken 读 sessionStore()；旧 sb-*-auth-token 键在装上后删除；热键设置页只在 exe 显示；SW“完成”只对待办、走 K-sw-seal 规则，“知道了”只关通知；clipText 过滤 C0、DEL、C1、双向控制符。
+- 建议：① 登录小窗口不要写待删除标记；② clipText 再加 U+200E、U+200F、U+061C、U+2028、U+2029、U+FEFF，与后端 payload.ts 同步；③ hasDropMark 在 localStorage 不可用时返回 false，写进注释。
+- 顺带发现：后端 push-dispatch 那批 17 条测试当前失败（正在改），已转后端。
+- 跑过：相关 60 个文件 1107 条通过。只读。
+
+**采纳（主持人，11-03）**：必改和建议 ①、③ 交前端 A；建议 ② 前端 A 与后端同步改。

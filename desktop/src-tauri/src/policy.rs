@@ -4,6 +4,7 @@
 //! 纯函数，单测覆盖。
 
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::time::{Duration, Instant};
 use url::{Host, Url};
 
 /// 本地页面的来源：Windows 上 Tauri 2 的默认来源，不开 useHttpsScheme（0.48 第 3 条，以后不改）
@@ -162,30 +163,57 @@ pub fn external_url(raw: &str) -> Result<String, &'static str> {
     Ok(url.into())
 }
 
-/// 新窗口（window.open、target=_blank）转交系统浏览器时只放 http、https（安全审查 X-S2：
-/// mailto、tel 会拉起别的程序，只能经页面点击后调 open_external）
-pub fn new_window_external_url(raw: &str) -> Option<String> {
-    let u = external_url(raw).ok()?;
-    (u.starts_with("http://") || u.starts_with("https://")).then_some(u)
+/// 页面里的链接没经过 open_external、被壳子拦下的两条路径
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LinkPath {
+    /// main 顶层导航到外部地址（不带 target 的 <a>）
+    Navigation,
+    /// main 里 target=_blank、window.open 要开新窗口
+    NewWindow,
 }
 
-/// 新窗口外链的限速：两次之间至少隔 `min_gap_ms`，超出的直接丢掉（X-S2）
+/// 被拦下的链接转交系统时放行哪些协议。先过 external_url 全套检查（mailto 参数白名单、不许本机和局域网、
+/// 不许带用户名密码），再按路径限协议。两条路径现在都只放 https（安全审查 F5-5、复核采纳）：
+/// • 新窗口：第三方 iframe（officeapps）调 window.open('mailto:…') 不用用户点过，放开就能每秒拉起一次邮件、电话程序；
+/// • 顶层导航：mailto、tel、http 也不放，**只留 open_external 一个入口**（页面在点击处理里调，R-301）。
+///   作用是入口只有一个、规则只在一处管，**不是“保证用户点过”**——open_external 同样看不到用户激活，靠的是它自己的限速
+///   （OPEN_EXTERNAL_LIMIT，B-3）。前端 A 的 LocationText 遇到 mailto、tel、http 要在点击处理里调 open_external。
+/// 两条路径都不要求用户点过，调用方必须限速（RateLimit），而且各用各的限速器
+pub fn link_external_url(raw: &str, path: LinkPath) -> Option<String> {
+    let u = external_url(raw).ok()?;
+    let scheme = u.split(':').next()?;
+    let allowed: &[&str] = match path {
+        LinkPath::Navigation => &NAV_LINK_SCHEMES,
+        LinkPath::NewWindow => &NEW_WINDOW_SCHEMES,
+    };
+    allowed.contains(&scheme).then_some(u)
+}
+
+/// 顶层导航被拦下时转交系统的协议（复核采纳：只留 https，mailto、tel 只走 open_external）
+const NAV_LINK_SCHEMES: [&str; 1] = ["https"];
+/// 新窗口转交系统的协议（F5-5）
+const NEW_WINDOW_SCHEMES: [&str; 1] = ["https"];
+
+/// 拉起系统程序的限速：lib.rs 里有三个各自独立的限速器——顶层导航 NAV_LINK_LIMIT、新窗口 NEW_WINDOW_LIMIT、
+/// 页面调的 open_external 用 OPEN_EXTERNAL_LIMIT（B-3），互不挤占。两次之间至少隔 `min_gap`，超出的直接丢掉（X-S2）。
+/// 用单调时钟 Instant，不用系统时间：系统时间往回调以后，按系统时间算会一直被丢掉，直到时间追上上一次（复核 X-S9）
 pub struct RateLimit {
-    min_gap_ms: u64,
-    last_ms: Option<u64>,
+    min_gap: Duration,
+    last: Option<Instant>,
 }
 
 impl RateLimit {
-    pub const fn new(min_gap_ms: u64) -> Self {
-        Self { min_gap_ms, last_ms: None }
+    pub const fn new(min_gap: Duration) -> Self {
+        Self { min_gap, last: None }
     }
 
-    /// now_ms 时刻这一次放不放行（放行时记下时刻）
-    pub fn allow(&mut self, now_ms: u64) -> bool {
-        match self.last_ms {
-            Some(last) if now_ms.saturating_sub(last) < self.min_gap_ms => false,
+    /// now 时刻这一次放不放行（放行时记下时刻）；now 由调用方传 Instant::now()，测试里传构造好的时刻
+    pub fn allow(&mut self, now: Instant) -> bool {
+        match self.last {
+            // Instant 单调不减；万一调用方传了更早的时刻，saturating_duration_since 记 0，照样不放行
+            Some(last) if now.saturating_duration_since(last) < self.min_gap => false,
             _ => {
-                self.last_ms = Some(now_ms);
+                self.last = Some(now);
                 true
             }
         }
@@ -369,25 +397,141 @@ mod tests {
     }
 
     #[test]
-    fn 新窗口外链只放_http_https() {
-        assert_eq!(new_window_external_url("https://example.com/a").as_deref(), Some("https://example.com/a"));
-        assert!(new_window_external_url("http://example.com/").is_some());
-        assert_eq!(new_window_external_url("mailto:a@b.test"), None);
-        assert_eq!(new_window_external_url("tel:+821012345678"), None);
-        assert_eq!(new_window_external_url("javascript:alert(1)"), None);
-        assert_eq!(new_window_external_url("http://tauri.localhost/app/index.html"), None);
+    fn 顶层导航转交只放_https() {
+        let nav = |s: &str| link_external_url(s, LinkPath::Navigation);
+        assert_eq!(nav("https://example.com/a").as_deref(), Some("https://example.com/a"));
+        assert_eq!(nav(" HTTPS://Example.com/b ").as_deref(), Some("https://example.com/b"));
+        // mailto、tel、http 只走 open_external（复核采纳、R-301）；其余协议、本机地址、带用户名密码的照旧拒绝
+        for s in [
+            "mailto:a@b.test?subject=hi",
+            "tel:+821012345678",
+            "http://example.com/",
+            "javascript:alert(1)",
+            "file:///C:/Windows/win.ini",
+            "ms-settings:privacy",
+            "sms:+821012345678",
+            "https://tauri.localhost/app/index.html",
+            "https://192.168.0.1/",
+            "https://u:p@example.com/",
+            "mailto:a@b.test?attach=C:/x.txt",
+            "about:blank",
+        ] {
+            assert_eq!(nav(s), None, "{s}");
+        }
+    }
+
+    #[test]
+    fn 新窗口转交只放_https() {
+        // F5-5：iframe 里的 window.open('mailto:…') 不用点就能触发，新窗口不放 mailto、tel
+        let nw = |s: &str| link_external_url(s, LinkPath::NewWindow);
+        assert_eq!(nw("https://example.com/a").as_deref(), Some("https://example.com/a"));
+        for s in ["mailto:a@b.test", "tel:+821012345678", "http://example.com/", "javascript:alert(1)", "https://127.0.0.1/"] {
+            assert_eq!(nw(s), None, "{s}");
+        }
+    }
+
+    #[test]
+    fn 导航和新窗口两条路径都经_link_external_url_和各自的限速器() {
+        // 结构核对：main 被拦下的顶层导航按 LinkPath::Navigation、target=_blank 新窗口按 LinkPath::NewWindow 调 hand_link_to_system，
+        // 它先过 link_external_url 再按路径挑限速器（两个，F5-5），新窗口一律 Deny
+        let lib = include_str!("lib.rs");
+        let nav = &lib[lib.find(".on_navigation(").unwrap()..lib.find(".on_new_window(").unwrap()];
+        assert!(nav.contains("navigation_allowed(win, url)") && nav.contains("LinkPath::Navigation"), "{nav}");
+        let nw = &lib[lib.find(".on_new_window(").unwrap()..lib.find(".on_permission_request(").unwrap()];
+        assert!(nw.contains("LinkPath::NewWindow") && nw.contains("NewWindowResponse::Deny") && !nw.contains("Allow"), "{nw}");
+        assert!(!nw.contains("LinkPath::Navigation") && !nav.contains("LinkPath::NewWindow"));
+        assert!(lib.contains("LinkPath::Navigation => &NAV_LINK_LIMIT") && lib.contains("LinkPath::NewWindow => &NEW_WINDOW_LIMIT"));
+        let h = &lib[lib.find("fn hand_link_to_system").unwrap()..];
+        let h = &h[..h.find("\n}\n").unwrap()];
+        let (check, limit, open) = (h.find("link_external_url(").unwrap(), h.find("limit.lock()").unwrap(), h.find("shell_open(").unwrap());
+        assert!(check < limit && limit < open, "{h}");
+    }
+
+    #[test]
+    fn open_external_先校验再限速_另起线程打开() {
+        // 安全审查 B-3：open_external 用自己的限速器（和导航、新窗口分开），超出返回 rate_limited，shell_open 在新线程里调
+        let lib = include_str!("lib.rs");
+        let f = &lib[lib.find("async fn open_external").unwrap()..];
+        let f = &f[..f.find("\n}\n").unwrap()];
+        let (check, limit, rl, spawn, open) = (
+            f.find("policy::external_url(").unwrap(),
+            f.find("OPEN_EXTERNAL_LIMIT.lock()").unwrap(),
+            f.find("\"rate_limited\"").unwrap(),
+            f.find("std::thread::spawn").unwrap(),
+            f.find("shell_open(").unwrap(),
+        );
+        assert!(check < limit && limit < rl && rl < spawn && spawn < open, "{f}");
+        assert!(!f.contains("NAV_LINK_LIMIT") && !f.contains("NEW_WINDOW_LIMIT"));
+        let line = f.lines().find(|l| l.contains("OPEN_EXTERNAL_LIMIT.lock()")).unwrap();
+        assert!(line.contains("Instant::now()"), "{line}");
+        // open_external 照旧放 http、https、mailto、tel（R-301）
+        for s in ["http://example.com/", "https://example.com/", "mailto:a@b.test", "tel:+821012345678"] {
+            assert!(external_url(s).is_ok(), "{s}");
+        }
+    }
+
+    #[test]
+    fn 热键回调里不阻塞等锁() {
+        // 代码审查 B-1：主线程上的热键回调（with_handler 闭包和它调的 is_current）里不许出现 .lock()，只许 try_lock()
+        let lib = include_str!("lib.rs");
+        let h = &lib[lib.find(".with_handler(").unwrap()..];
+        let h = &h[..h.find(".build()").unwrap()];
+        assert!(h.contains("is_current(") && !h.contains(".lock()"), "{h}");
+        let f = &lib[lib.find("fn is_current(").unwrap()..];
+        let f = &f[..f.find("\n    }\n").unwrap()];
+        assert!(f.contains(".try_lock()") && !f.contains(".lock()"), "{f}");
+        // 三个限速器各不相同
+        for name in ["NAV_LINK_LIMIT", "NEW_WINDOW_LIMIT", "OPEN_EXTERNAL_LIMIT"] {
+            assert_eq!(lib.matches(&format!("static {name}:")).count(), 1, "{name}");
+        }
+    }
+
+    #[test]
+    fn hotkey_set_不拿着状态锁调注册() {
+        // 安全审查 B-1：std 锁只在 snapshot / store / is_current / status 里拿；hotkey_set 里不直接 .0.lock()，
+        // register / unregister 都在 snapshot() 之后、store() 之前（锁外），并发调用靠异步锁 .1.lock().await 排队
+        let lib = include_str!("lib.rs");
+        let f = &lib[lib.find("async fn hotkey_set").unwrap()..];
+        let f = &f[..f.find("\n}\n").unwrap()];
+        assert!(!f.contains(".0.lock()"), "{f}");
+        let serial = f.find("state.1.lock().await").unwrap();
+        let snap = f.find("state.snapshot()").unwrap();
+        let first_reg = f.find("gs.unregister(").unwrap().min(f.find("gs.register(").unwrap());
+        let first_store = f.find("state.store(").unwrap();
+        assert!(serial < snap && snap < first_reg && first_reg < first_store, "{f}");
+        // 拿 std 锁的几个小函数里都不调注册
+        let imp = &lib[lib.find("impl QuickAddHotkey").unwrap()..];
+        let imp = &imp[..imp.find("\n}\n").unwrap()];
+        assert!(!imp.contains("register(") && !imp.contains("global_shortcut"), "{imp}");
+        // 启动时也是先注册、再 store
+        let setup = &lib[lib.find("let hk = hotkey::from_saved(").unwrap()..];
+        assert!(setup.find("register(hk.shortcut())").unwrap() < setup.find(".store(hk, ok)").unwrap());
     }
 
     #[test]
     fn 限速_一秒最多一次() {
-        let mut r = RateLimit::new(1000);
-        assert!(r.allow(10_000));
-        assert!(!r.allow(10_500));
-        assert!(!r.allow(10_999));
-        assert!(r.allow(11_000));
-        assert!(!r.allow(11_001));
-        // 时钟往回走也不放行（saturating_sub 记 0）
-        assert!(!r.allow(5_000));
+        let t0 = Instant::now();
+        let ms = |n: u64| t0 + Duration::from_millis(n);
+        let mut r = RateLimit::new(Duration::from_millis(1000));
+        assert!(r.allow(ms(10_000)));
+        assert!(!r.allow(ms(10_500)));
+        assert!(!r.allow(ms(10_999)));
+        assert!(r.allow(ms(11_000)));
+        assert!(!r.allow(ms(11_001)));
+        // 传了更早的时刻也不放行（saturating_duration_since 记 0）
+        assert!(!r.allow(ms(5_000)));
+        assert!(r.allow(ms(12_000)));
+    }
+
+    #[test]
+    fn 限速_不看系统时间() {
+        // X-S9：RateLimit 只收 Instant，签名上就拿不到系统时间；源码里也不许出现 SystemTime
+        let src = include_str!("policy.rs");
+        let body = &src[src.find("pub struct RateLimit").unwrap()..src.find("#[cfg(test)]").unwrap()];
+        assert!(!body.contains(concat!("System", "Time")));
+        let lib = include_str!("lib.rs");
+        let line = lib.lines().find(|l| l.contains("limit.lock()")).unwrap();
+        assert!(line.contains("Instant::now()"), "{line}");
     }
 
     #[test]

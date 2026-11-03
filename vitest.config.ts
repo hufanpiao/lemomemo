@@ -36,6 +36,8 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/check-arch-binimport-scanner.test.ts', // python build/check_arch.py（LINT-binimport：骨架扫描器、createRequire）
   'tests/build/check-arch-binimport-source.test.ts', // python build/check_arch.py（LINT-binimport：点号 source、反斜杠续行）
   'tests/build/check-backend.test.ts', // python build/check_backend.py（建 TypeScript 类型检查器）
+  'tests/build/check-backend-f11-cors.test.ts', // python build/check_backend.py（F11 样例）
+  'tests/build/check-contrast.test.ts', // python build/check_contrast.py（F12）
   'tests/build/check-backend-alias.test.ts', // python build/check_backend.py（F2、F3、F7 别名展开）
   'tests/build/check-backend-f7-keys.test.ts', // python build/check_backend.py（F7 类型检查器判键类型）
   'tests/build/check-backend-f7-syntax.test.ts', // python build/check_backend.py（F7 语法层白名单）

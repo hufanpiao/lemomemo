@@ -67,3 +67,30 @@
 **跑过**：两个测试文件 42 条通过、2 条跳过；eslint、actionlint 0 问题；`--package` 无安装包时退出码 1；参数混用退出码 2。没有跑 gen-tauri-key.test.ts，没有写文件。
 
 **采纳（主持人，11-03）**：两条遗留记入 B6-exe 收尾核对；unit 工作流是否跑这条测试由主持人核对。
+
+## 复核二（11-03，同一审查员）：release-build.yml 的 VAPID 公钥格式核对（接手清单 VAPID-prod-format）
+
+**结论：有条件签，8 / 10**，改完 M1 可签 9。
+
+| # | 问题 | 位置 | 改法 |
+|---|---|---|---|
+| M1 | `case … *kty*` 排在格式核对前面。本机生成 20000 把真 P-256 公钥，5 把（约 0.025%）恰好含 `kty`，合格也会被当成私钥 JWK 拦下，并提示“私钥已暴露、立刻换钥匙” | release-build.yml 第 86～106 行；deploy-preview.yml 的 B2 O-2 同一写法 | 先正则核格式，通过即放行；不通过时才判断 JWK（`{`、`"`、`kty`）；补“合格且含 kty”正例 |
+
+建议：① 注释改成“脚本输出里不回显”（Actions 会把步骤 `env:` 打进日志折叠头）；② 补只带 `"`、只带 `{` 的用例；③ 脚本开头 `LC_ALL=C`。
+
+核对通过：正则推导（65 字节未压缩点 → 87 字符，首字符 B、第二字符 A～P、末位下标为 4 的倍数），20000 把真公钥全匹配；各类失败即停、只报长度不回显；位置紧挨构建、同任务、无 if、无 continue-on-error，变量与构建注入同源；没有 secrets、没有 `${{ }}` 进 run；SLOW_NODE_TESTS 三行写法一致。
+
+跑过：release-vapid-check、workflow-permissions、coverage 41 过 2 跳；actionlint、eslint 0 问题。
+
+**采纳（主持人，11-03）**：M1 交运维，release-build.yml、deploy-preview.yml 两处一起改；建议 ①～③ 一起做。
+
+## 复核三（11-03，同一审查员，只看 VAPID 改动）
+
+**结论：签，9 / 10。** M1 和建议 ①～③ 都已解决，没有剩余必改。
+
+- M1：两个工作流都先用正则核格式，合格就写 Summary 并 `exit 0`；不合格才判 JWK（`{`、`"`、`kty`），再判 43 字符（可能是私钥的 d），其余报格式不对。正例覆盖中间带 `kty`、开头 `BAkty` 的合格值。
+- ① 注释改成“脚本输出里不回显”，写明 Run 表头会展开 `env:`。② 只带 `"`、只带 `{`、43 字符反例和 42、44 字符对照都有。③ `export LC_ALL=C` 是第一条非注释语句，有测试锁住。
+- deploy-preview 开关：true 时变量为空失败，false 时只警告，两种都有测试。核对步骤紧挨构建、同任务、无 if、无 continue-on-error，变量与构建注入同源。
+- 建议（不挡签）：登记册、接手清单里的旧文件名 `release-vapid-check.test.ts` 改成新名。**主持人已改。**
+
+**跑过**：vapid-public-key-check、workflow-permissions、coverage 48 过 2 跳；actionlint、eslint 0 问题。只读。

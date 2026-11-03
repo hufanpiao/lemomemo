@@ -7,7 +7,7 @@
 //   截完不够最小长度的右端对齐当天末尾、往左补足；显示区间有交叠的归一组，组内上排空着放上排（row 0），
 //   否则下排空着放下排（row 1），两排都占着的不画、记进这一组的 more；组里有两排时 rows = 2，否则 1；
 // • 电脑（layout 'desk'，时间轴纵向，相当于 minBlockPx = 0）：按真实时长画，重叠的并排分列，块带 column、columns。
-// • 待办（和前端 A 对过的接口）：规则和月历一样（todoDate：删掉的、已完成的、没有截止日的不放，截止日是浮动日期不换算），
+// • 待办（和前端 A 对过的接口）：规则和月历一样（todoDate：删掉的、撤销的、已完成的、没有截止日的不放，截止日是浮动日期不换算），
 //   手机放进当天的 todos（kind 'todo'，泳道上画空心圆），电脑并进 allDay 那一行（排在全天日程后面）。纯函数。
 import { addDays, minOfDay, msAt, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
@@ -16,6 +16,7 @@ import {
   assertTz,
   compareEntries,
   eventEntry,
+  isLiveRow,
   nearRange,
   placeEvent,
   todoDate,
@@ -162,7 +163,7 @@ function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets
   if (first === undefined || last === undefined) return { allDay, timed, todos };
   for (const ev of items.events) {
     // 预筛（代码审查 A）：除了换算时区可能差的天数，前面再多留 1 天——前一天开始、跨午夜进到这一周的那一段也要算
-    if (ev.deleted_at !== null || !nearRange(ev.date, first, last, TZ_SPILL_DAYS + 1, TZ_SPILL_DAYS)) continue;
+    if (!isLiveRow(ev) || !nearRange(ev.date, first, last, TZ_SPILL_DAYS + 1, TZ_SPILL_DAYS)) continue;
     const p = placeEvent(ev, tz);
     if (!p) continue;
     const entry = eventEntry(ev, p);

@@ -128,6 +128,12 @@ Pages Functions（functions/）和 App、shared：
       扫仓库的代码和配置，JS / TS 去注释后查，别的按原文查；docs/、tests/、node_modules/、.e2e-sb/ 等不扫，.env* 不是代码不扫；
       supabase/functions/ 下的 tests/、__tests__/ 目录照扫（BE1-S3）；build/gen_push_endpoints.py 按精确路径放行（安全审查六之四）
       函数目录里按文件名放过的测试文件（*.test.ts 等）不准被非测试文件引用：import … from、export … from、字面量 import('…') 都报（六之四补）
+  F11 supabase/functions/ 下不准出现 Access-Control-Allow-Origin（B6-exe F5 ④，Q-A3：CORS 只在转发层 functions/_lib/cors.ts 做，
+      Edge Functions 不加——exe 经 /sb/* 转发调函数，applyCors 会换掉上游的 CORS 头，函数自己加了等于多开一道口子）：
+      不分大小写，查 allow-origin 字样；也不准 import 自带 CORS 头的库（@supabase/supabase-js/cors、hono/cors、cors，含 npm: / jsr: / esm.sh 写法，
+      import map 里的别名也查，审查 M2）；JS / TS 去注释后查，别的文件（.toml .json .sql 等）按原文查；测试源码只按文件名（*.test.* 等）认，
+      tests/、__tests__/、dist/ 目录照扫，只跳过 node_modules（BE1-S3 同一口径，F5-4）；读不出 UTF-8 的文件报错不跳过；
+      只防无意写入，字符串拼接这类有意绕过靠审查
 迁移（supabase/migrations/*.sql）：
   M1  security definer 函数必须写 set search_path = ''（create function 和 alter function 都查，属性写在函数体前后都认）。
       架构 0.29 续第 117 条、TC-B0-92
@@ -1173,6 +1179,96 @@ def check_docker_host(root, errors):
                            "host.docker.internal 只准出现在 supabase/functions/_shared/push/stub.ts（推送替身判断）和 tests/ 里；supabase/functions/ 下的 tests/、__tests__/ 不算（B2 安全审查 1.5 第 ② 点 D1-8、BE1-S3）"))
 
 
+# F11（B6-exe F5 ④，架构 5.10、Q-A3）：CORS 只在转发层做，supabase/functions/ 下不准出现 Access-Control-Allow-Origin，也不准 import 自带 CORS 头的库。
+# 只防无意写入：字符串拼接（'Access-Control-' + 'Allow-Origin'）、模板串、join 这类有意绕过静态查不出，靠代码审查；
+# 经 /sb 转发时 applyCors 先删掉上游全部 Access-Control-*，是另一道防线。
+# 本规则自己的常量（不借 F10 的 DOCKER_HOST_*：F10 归后端，两边不互相改对方的规则）
+# 匹配放宽到 allow-origin（不分大小写，安全审查建议 1）：'Access-Control-' + 'Allow-Origin' 这种拼法也能多拦一种
+ACAO = re.compile(r"allow-origin", re.IGNORECASE)
+EDGE_CORS_EXT = frozenset({".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".psql", ".toml", ".json", ".jsonc",
+                           ".yml", ".yaml", ".ps1", ".psm1", ".py", ".sh"})
+EDGE_CORS_JS = frozenset({".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"})
+# supabase/functions/ 下只跳过 node_modules；tests/、__tests__/、dist/ 照扫（BE1-S3 同一口径：被 index.ts import 以后会进部署产物；F5-4）
+EDGE_CORS_SKIP_DIRS = frozenset({"node_modules"})
+# 自带 CORS 头的库（审查 M2）：@supabase/supabase-js/cors（2.118 起有这个子路径，里面带 Access-Control-Allow-Origin: *）、hono/cors、npm 的 cors。
+# 认 npm:、jsr:、esm.sh、jsdelivr、deno.land 等写法和带版本号的写法：包名前面不是字母数字、_、-、.，包名后面可以跟 @版本，再跟 /cors（或包名本身就是 cors）。
+# 先把百分号编码解开（同 is_aws4fetch）
+CORS_LIB_SPEC = re.compile(
+    # supabase-js 的 cors 子路径：包名后面任意几层目录（dist/、dist/module/、esm.sh 的 es2022/、denonext/ 之类），
+    # 文件名 cors 带任意后缀（.mjs、.cjs、.js、.min.mjs…）（复核 R1、代码审查建议 ①）；corsless.mjs、cors-x.js 不算
+    r"(?<![\w.-])@supabase/supabase-js(?:@[^/?#]*)?/(?:[^?#]*/)?cors(?:\.[\w.]+)?(?:[/?#]|$)"
+    # hono 包下任意一层的 cors（hono/cors、deno.land/x/hono/middleware/cors/index.ts）
+    r"|(?<![\w.@-])hono(?:@[^/?#]*)?(?:/[^?#]*)?/cors(?:[/?#.]|$)"
+    r"|^cors(?:@[^/?#]*)?(?:[/?#]|$)",
+    re.IGNORECASE,
+)
+# import map 里把别名指到这些库（"x": "npm:@supabase/supabase-js@2/cors"）也算：.json / .jsonc 里按字符串值查
+JSON_STRING = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+
+def is_cors_lib(spec):
+    """spec 是不是自带 CORS 头的库；./cors.ts、../_shared/cors.ts 这类本地文件不算"""
+    for _ in range(5):
+        dec = urllib.parse.unquote(spec)
+        if dec == spec:
+            break
+        spec = dec
+    s = spec.strip()
+    if s.startswith((".", "/")):
+        return False   # 相对路径、绝对路径是本仓库自己的文件，不是库（内容由上面 allow-origin 那一项查）
+    s = re.sub(r"^(npm|jsr|node):", "", s, flags=re.IGNORECASE)
+    # https://esm.sh/cors@2、https://cdn.jsdelivr.net/npm/cors、https://deno.land/x/cors：去掉主机和 npm/、x/ 这一段，剩下的从开头比
+    s = re.sub(r"^https?://[^/]+/", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"^(npm|x|v\d+)/", "", s, flags=re.IGNORECASE)
+    return CORS_LIB_SPEC.search(s) is not None
+
+
+F11_MSG_ACAO = ("supabase/functions/ 下不准出现 Access-Control-Allow-Origin（含 allow-origin 字样）：CORS 只在转发层 functions/_lib/cors.ts 做，"
+                "Edge Functions 不加（架构 5.10、Q-A3；B6-exe F5 ④）")
+F11_MSG_LIB = ("supabase/functions/ 下不准 import 自带 CORS 头的库（@supabase/supabase-js/cors、hono/cors、cors）：CORS 只在转发层 "
+               "functions/_lib/cors.ts 做，Edge Functions 不加（架构 5.10、Q-A3；B6-exe F5 ④、审查 M2）")
+
+
+def check_edge_cors(root, errors):
+    base = root / FN_ROOT
+    if not base.is_dir():
+        return
+    files = []
+    for dirpath, dirnames, filenames in os.walk(base):
+        dirnames[:] = sorted(d for d in dirnames if d not in EDGE_CORS_SKIP_DIRS)
+        for fname in sorted(filenames):
+            full = pathlib.Path(dirpath) / fname
+            if full.suffix.lower() not in EDGE_CORS_EXT:
+                continue
+            rel = full.relative_to(root).as_posix()
+            # 测试源码只按文件名认（*.test.* 等），tests/ 目录不算（BE1-S3、F5-4）
+            if TEST_SOURCE_NAME.search(fname):
+                continue
+            try:
+                text = full.read_bytes().decode("utf-8")
+            except OSError as e:
+                errors.append(("F11", rel, 1, f"读不了这个文件，F11 检查不了：{e}"))
+                continue
+            except UnicodeDecodeError:
+                errors.append(("F11", rel, 1, "不是合法的 UTF-8，F11 检查不了（审查 S6：读不出来就报，不跳过）"))
+                continue
+            files.append((rel, full, text))
+    js = [(rel, full) for rel, full, _ in files if full.suffix.lower() in EDGE_CORS_JS]
+    parsed = parse_sources([(rel, full, False, None) for rel, full in js])
+    for rel, full, text in files:
+        code = parsed[rel]["code"] if rel in parsed else text   # 去注释后长度、换行不变，行号照算
+        for m in ACAO.finditer(code):
+            errors.append(("F11", rel, line_of(code, m.start()), F11_MSG_ACAO))
+        if rel in parsed:
+            for line, spec, _type_only in imports(parsed[rel]):
+                if is_cors_lib(spec):
+                    errors.append(("F11", rel, line, F11_MSG_LIB))
+        elif full.suffix.lower() in (".json", ".jsonc"):
+            for m in JSON_STRING.finditer(text):
+                if is_cors_lib(m.group(1)):
+                    errors.append(("F11", rel, line_of(text, m.start()), F11_MSG_LIB))
+
+
 def check_test_imports(fns, errors):
     """F10 补（安全审查六之四补）：supabase/functions/ 下按文件名放过的测试文件（*.test.ts 等）不准被非测试文件引用——
     引了就会跟着部署出去，F10 对测试文件放过的内容（host.docker.internal 之类）也就跟着出去了。
@@ -1785,6 +1881,7 @@ def main(argv=None):
     errors = []
     check_functions(root, errors)
     check_docker_host(root, errors)
+    check_edge_cors(root, errors)
     check_pages(root, errors)
     check_admins_writes(root, errors)
     check_migrations(root, errors)

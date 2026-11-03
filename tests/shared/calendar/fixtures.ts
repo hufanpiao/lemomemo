@@ -32,3 +32,11 @@ export function todo(p: Partial<CalTodo> & Pick<CalTodo, 'id'>): CalTodo {
 export function timed(id: string, date: string, time: string, tz: string, duration = 60, extra: Partial<CalEvent> = {}): CalEvent {
   return ev({ id, date, time, tz, duration_min: duration, ...extra });
 }
+
+/** 本机新建、还没同步的行：insert 不放 deleted_at、undone，这两列根本不存在（月历、周视图测试共用） */
+export function unsynced<T extends object>(row: T): T {
+  const c = { ...row } as unknown as Record<string, unknown>;
+  delete c['deleted_at'];
+  delete c['undone'];
+  return c as unknown as T;
+}

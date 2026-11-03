@@ -24,9 +24,10 @@ export const ALLOW_HEADERS: readonly string[] = [
   'range',
   'accept-profile',
   'content-profile',
-  // storage-js 上传
-  'x-upsert',
-  'cache-control',
+  // postgrest-js 2.118 的 GET / HEAD 在 fetch 失败或回 503、520 时自己重试，重试那次带 X-Retry-Count（B6-exe F5 ① 抓包发现，5.10 表里原来没有）；
+  // 不放行的话 exe 里每次重试都卡在预检，等于没有重试
+  'x-retry-count',
+  // （storage-js 上传的 x-upsert、cache-control：0.32 起上传走 /files/*，不再经 storage-js，B6-exe F5 ② 已删）
   // 我们自己的
   'x-app-version',
   'x-now',
@@ -46,7 +47,17 @@ export const FILES_ALLOW_HEADERS: readonly string[] = [...ALLOW_HEADERS, 'x-file
  * account 导出分片的下一个游标 x-lemo-export-next（0.47 续 ①：电脑版 exe 跨域，applyCors 会换掉上游的 CORS 头，只能在这里加）；
  * Content-Encoding 给导出逐片校验判断中间层是否加了压缩（安全复核 K3）
  */
-export const EXPOSE_HEADERS: readonly string[] = ['Date', 'Content-Range', 'Content-Length', 'Content-Encoding', 'X-Supabase-Api-Version', 'ETag', 'x-lemo-export-next'];
+export const EXPOSE_HEADERS: readonly string[] = [
+  'Date',
+  'Content-Range',
+  'Content-Length',
+  'Content-Encoding',
+  'X-Supabase-Api-Version',
+  'ETag',
+  'x-lemo-export-next',
+  // postgrest-js 重试前读 Retry-After 定等多久（B6-exe F5 ① 抓包发现）；读不到就按它自己的 1、2、4 秒
+  'Retry-After',
+];
 
 export function isAllowedOrigin(origin: string | null): boolean {
   return origin === EXE_ORIGIN;

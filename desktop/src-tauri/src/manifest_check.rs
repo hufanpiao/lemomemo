@@ -18,7 +18,9 @@ mod tests {
     /// 每个命令只给哪些窗口
     fn expected_windows(cmd: &str) -> &'static [&'static str] {
         match cmd {
-            "session_get" | "session_remove" | "open_external" | "auth_window_open" | "main_show" | "app_update" => &["main"],
+            "session_get" | "session_remove" | "open_external" | "auth_window_open" | "main_show" | "app_update" | "hotkey_get" | "hotkey_set" => {
+                &["main"]
+            }
             "session_set" => &["main", "auth"],
             "auth_done" | "auth_open_signup" => &["auth"],
             "quick_add_submit" | "quick_add_hide" => &["quick-add"],

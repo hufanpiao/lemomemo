@@ -48,3 +48,23 @@ vitest 14 个文件 190 条全过；tsc app、node 0 错误；eslint 18 个文�
 - B-M1、B-M2 交前端 B 必改；建议 1～4 一起改；建议 5 交前端 A（设置页归他）；建议 6 在设置页提示里一并处理。
 - A-M1 交前端 A 必改（与安全审查 A-1 合并）；建议 1～4 一起改，建议 5 能做就做。
 - 改完由本审查员只看改动、复核签字。
+
+## 复核（11-03，同一审查员）：前端 B 改动
+
+**结论：签，9 / 10，没有剩余必改。**
+- B-M1：值锁 + async 排队锁；`hotkey_set` 锁外注册；回调 `is_current` 只用 `try_lock()`；两条结构测试确实钉住（回调里无 `.lock()`、hotkey_set 顺序与启动顺序）。代价：回调撞上 `hotkey_get` 短暂拿锁时这次按键算没按，可接受。
+- B-M2：字节上循环去空白和三种 BOM，首字节 `<` 即拒，比 infer 0.22 更严；实测 `20 FE FF <?xml`、`FF FE <?xml`、`EF BB BF 0A <` 都拒，`a<b` 放行。
+- open_external 先校验、再独立限速、再另起线程，结构测试钉住；导航只 https；单 Ctrl/单 Alt 规则两边一致；R1 正则放宽后不误报；save_failed 文档已写明。
+建议：① lib.rs 约 313 行、364～365 行过时注释；② policy.rs 约 444～446 行字符串仍直接写换行；③ Win+Space 是输入法系统热键，可在 parse 里拒掉。
+跑过：cargo test 两套各 48 过 1 忽略；stage-web 27/27；相关 vitest 27/27；check_backend 0 错误。
+**采纳（主持人，11-03）**：三条建议交前端 B 一起改。
+
+## 前端 A 复审（11-03，同一审查员，只看改动）
+
+**结论：签，8.5 / 10，没有剩余必改。**
+- A-M1 已解决：exe 里 goToAuth 等删除结果（最多 3 秒），只有 ok 才重载，失败或超时显示“退出没完成”；晚到的成功自动重载；重试删成才撤标记；启动先 installDesktopSession、再 settleDropAtStartup、再读会话；标记值只是 "1"；返回值改 Promise<boolean>，无循环依赖。
+- 建议 1～5 通过：invalidate 竞态、JSDoc、claim-params.ts、installDesktopSession 失败记原因码并挂整屏、session.ts 部分拆分理由成立。ConsentPage 在 exe 里拼官网 https 地址走 open_external。
+- 建议（不阻塞）：① 待删除标记会被 supabase-js 内部删除带出来，登录小窗口删失败后主窗口会删掉新会话——只让显式退出写标记；② 整屏提示给 #root 加 inert 并移焦点；③ localDone 注释写明只代表兜底删除；④ exit.test.tsx 301 行。
+- 跑过：相关 vitest 1189 条全过；tsc app 0 错误；eslint 0 错误 1 警告。
+
+**采纳（主持人，11-03）**：建议 ①～④ 交前端 A。
