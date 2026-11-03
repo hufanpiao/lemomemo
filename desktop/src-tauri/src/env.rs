@@ -31,14 +31,15 @@ pub const ENV: EnvSpec = EnvSpec {
     session_keys: &["sb-lemomemo-auth-token", "sb-lemomemo-auth-token-user"],
 };
 
-// 预览 Pages 项目名还没定稿，更新地址先占位（F7 时由运维按 Q-A1 填真名）；预览版现在不开更新，所以不影响运行
+// 预览更新地址：预览 Pages 项目 lemomemo-preview（环境清单-v4 第一节“Cloudflare Pages 项目”一行）的 desktop 分支固定别名（Q-A1、R-292）；
+// 和 desktop.yml 用的仓库变量 PREVIEW_PAGES_PROJECT（负责人 B0 网页操作清单：值 lemomemo-preview）对得上。项目改名要两边一起改
 #[cfg(feature = "preview")]
 pub const ENV: EnvSpec = EnvSpec {
     name: "preview",
     identifier: "com.lemomemo.app.preview",
     site_origin: "https://preview.lemomemo.com",
     signup_url: "https://preview.lemomemo.com/app/auth/",
-    update_url: "https://desktop.PREVIEW-PAGES-PROJECT.pages.dev/latest.json",
+    update_url: "https://desktop.lemomemo-preview.pages.dev/latest.json",
     session_keys: &["sb-preview-auth-token", "sb-preview-auth-token-user"],
 };
 
@@ -70,7 +71,12 @@ mod tests {
             assert!(ENV.signup_url.starts_with("https://preview.lemomemo.com/"));
             assert!(ENV.session_keys.iter().all(|k| k.starts_with("sb-preview-")));
             assert!(ENV.identifier.ends_with(".preview"));
+            assert_eq!(ENV.update_url, "https://desktop.lemomemo-preview.pages.dev/latest.json");
         }
+        #[cfg(not(feature = "preview"))]
+        assert_eq!(ENV.update_url, "https://lemomemo.com/desktop/latest.json");
+        // 两套都不许留占位
+        assert!(!ENV.update_url.contains("PREVIEW-PAGES-PROJECT"));
         assert!(ENV.signup_url.starts_with(ENV.site_origin));
     }
 

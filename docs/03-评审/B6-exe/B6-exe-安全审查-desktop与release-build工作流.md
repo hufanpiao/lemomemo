@@ -180,3 +180,86 @@
 - S-9：改用 GitHub Environments 属于仓库安全配置，要负责人在聊天里同意，现在不动；环境清单里过时的说法先改准确。
 - S-10：前端 B 已排定 11-04 21:20（首尔时间）以后装 `@tauri-apps/cli@2.12.4`；在此之前打 tag 会失败，属预期。
 - 其余建议交运维本批一起改。许可证名单的处理和代码审查 S3 一样：保留，改注释。
+
+## 复核（11-03）
+
+**结论：签。** W-1～W-4 全部解决；建议里除了等到期再做的、明确不改的、运维还在补的几项，其余都已落地。用的是上一轮的尺度：要签名、要分发的 exe，能不能从这两个工作流出。只读复核，另外按主持人要求在 `osv-scanner.toml` 的三条新豁免上签了会签（见末尾）；没有推送、没有触发工作流、没有连线上服务、没有读任何密钥值。
+
+这个结论只管流水线。外壳审查里的 X-5、X-6、X-S3（真机核对 iframe 通知权限）照旧按原记录办，发布前必须做完。
+
+### 必改逐条复查
+
+| 编号 | 结果 | 依据 |
+|---|---|---|
+| W-1 | **已解决** | desktop 任务在“暂存页面”之前跑 `node --test desktop/src-tauri/scripts/stage-web.test.mjs`；unit.yml 也加了同一步，平时的提交就能发现回归。本机跑 16 项全过 |
+| W-2 | **已解决**（用的是首选改法） | desktop.yml 加了 `workflow_call` 输入 `web_artifact`、`expect_env`；release-build 的 `desktop` 任务 `needs: build`，传入 `release-${{ github.ref_name }}`、`production`。web 任务在被调用时不构建页面，并且校验三件事：`expect_env` 必须是 production、tag 算出来的环境也必须是 production、`web_artifact` 必须严格等于 `release-$TAG`。desktop 任务下载的正是 `release-<tag>`，装进 exe 的页面就是上线的网页，也是负责人核过指纹的那一份。直接用 push 触发时只接受预览 tag。输入走 `env:` 进 shell，没有注入面 |
+| W-3 | **已解决** | 指纹不再走产物存储：desktop 任务把 `web_hash`、`exe_name`、`exe_sha256`、`latest_sha256` 设成任务输出，经 `on.workflow_call.outputs` 交出来；build 任务输出 `web_hash`。bundle 先校验格式（64 位十六进制，安装包名用正则，防路径穿越），再核对：① 下载的网页、build 任务、desktop 任务三方总指纹一致；② exe 产物里恰好只有 3 个文件；③ 安装包和 latest.json 的 SHA-256 和 desktop 任务的输出一致；最后再核一遍产物自带的 SHA256SUMS。Summary 分三段，每段标题写明负责人什么时候核哪一段。剩下的风险：如果 desktop 任务本身被攻破，它可以让任务输出和产物前后一致。这一点靠 W-4 和整条流水线不碰机密来兜，属于可以接受的根信任 |
+| W-4 | **已解决** | 新加 `audit` 任务（ubuntu-24.04，`contents: read`，不上传任何产物）：只在这个任务里 `cargo install --locked` 编 cargo-audit、cargo-deny，然后跑 `cargo audit` 和 `cargo deny`。desktop 任务 `needs: [web, audit]`，出安装包的 Windows 机器上不再编这两个工具。和 8.3 第 ⑤ 条的偏离已写进环境清单第七节第 12 条。`cargo audit` 改成带 `--target-os windows --target-arch x86_64`：这个参数只滤掉公告里**自己写明**只影响其他平台的条目，不限平台的漏洞照样会让这一步失败，所以没有放松。本机复跑结果和不带参数时一样（0 个漏洞，5 条警告） |
+
+### 建议逐条复查
+
+| 编号 | 结果 |
+|---|---|
+| S-1 | **已改**：`runs-on: windows-2025` |
+| S-2 | **已改**：desktop.yml 的 web 任务和 release-build 的 build 任务都用 `fetch-depth: 0` 拉全历史，再跑 `git merge-base --is-ancestor "$GITHUB_SHA" origin/main`；build 任务里这一步在构建、上传之前 |
+| S-3 | **前一半已改**：`PREVIEW_PAGES_PROJECT` 按 `^[a-z0-9][a-z0-9-]{0,57}$` 校验。**后一半运维还在补**：`desktop_scan.mjs` 拿 latest.json 的地址和 `update_url` 比主机。补完交代码审查核对即可，不影响本次结论；publish.ps1 `-Desktop` 落地时签名前也核一次主机，这一条照旧挂在 F10 |
+| S-4 | **按主持人决定保留名单、改了注释**（写明名单是允许范围，不要求每项都出现）。可以接受 |
+| S-5 | **已改**：glib 那三条豁免保留，理由里改成“OSV 不分平台、扫整个 Cargo.lock，不删除；2026-11-30 复查” |
+| S-6 | 是 11-30 复查时要做的事，现在不用改；到时用 `unmaintained = "all"` 本机跑一次并记下结果 |
+| S-7 | **没改**（`cache: npm` 还在）。npm ci 按 integrity 校验，是可选加固，不卡 |
+| S-8 | **已加** `tests/build/workflow-permissions.test.ts`：检查两个工作流顶层 `permissions: {}`、每个任务只给 `contents: read`、`permissions` 出现的次数（防止藏在步骤里）、不能用 `secrets.`、`secrets: inherit`、`id-token`、任何 `: write`、`read-all`/`write-all`、`environment:`、`pull_request_target`/`workflow_run`、第三方 action 必须钉 SHA；还钉住了 release-build 调 desktop.yml 时传的两项输入、`needs: build`，以及 desktop.yml 只有预览 tag 和 `workflow_call` 两个触发。每一种违规都有合成样例证明拦得住。在 vitest 的 node 项目里（include 有 `tests/build/**`），unit 会跑到。本机和 desktop-scan.test.ts 一起跑，2 个文件 23 项全过。运维说的类型警告还在修，不影响守护效果 |
+| S-9 | 按主持人决定现在不动 Environments；环境清单里“免费版私有仓库没有 Environments”的说法已在第一、四、五节改准确 |
+| S-10 | 已知、属预期：`@tauri-apps/cli` 排在 11-04 装，在那之前打 tag 会在“安装依赖”一步失败（fail-closed）。两个工作流的文件头都写了 |
+
+### 重写后另外看的几点（没有新的必改）
+
+- 权限、机密没有回退：三个任务加上 build、bundle 都只给 `contents: read`，整条链不引用任何机密（S-8 的测试也钉住了这一点）。
+- 新加的 `inputs.*`、任务输出进 shell 都走 `env:`；bundle 用到的任务输出都先校验格式再用。
+- 顺序没问题：`ci-guard workflows` 和 stage-web 测试仍在暂存页面之前；页面总指纹在暂存之前算（暂存只是另拷一份去注入 CSP，不改 `dist/web`）；`ci-guard permissions` 仍在 `tauri build` 之后。
+- 文件头写明不加工作流级 concurrency（理由是被调用时组名会撞上），这个说明对。
+- publish.ps1 第 967 行只改了提示文字，告诉负责人现在只核“正式产物指纹”一段。和 release-build Summary 的三段标题对得上。
+
+### 本机复核记录
+
+| 命令 | 结果 |
+|---|---|
+| `actionlint -shellcheck=… .github/workflows/*.yml`（1.7.12 + shellcheck 0.11.0） | 5 个文件 0 报错 |
+| `node desktop/src-tauri/scripts/ci-guard.mjs workflows` / `permissions` | 都通过，退出码 0 |
+| `node --test desktop/src-tauri/scripts/stage-web.test.mjs` | 16 项全过 |
+| `npx vitest run tests/build/workflow-permissions.test.ts tests/build/desktop-scan.test.ts` | 2 个文件 23 项全过 |
+| `cargo audit --no-fetch --target-os windows --target-arch x86_64` | 0 个漏洞，5 条警告，和不带参数时一样 |
+| `cargo deny --offline --locked check advisories bans licenses sources` | 四项都 ok |
+| 解析 Cargo.lock：依赖 zbus 的包、探针锁文件里有没有这几个包 | 依赖 zbus 的只有 tauri-plugin-single-instance 2.5.4；探针的 Cargo.lock 里没有 zbus、zvariant、zbus_names、zvariant_derive |
+| 本机 registry 里 tauri-plugin-single-instance 2.5.4 的 Cargo.toml | `[target.'cfg(target_os = "linux")'.dependencies.zbus]`，只在 Linux 上依赖 |
+| `python -I -c "import tomllib; …"` 解析 osv-scanner.toml | 7 条豁免都能解析，`ignoreUntil` 都是 2026-11-30 |
+
+### osv-scanner.toml 三条新豁免的会签
+
+RUSTSEC-2026-0370（zvariant 5.15.1）、RUSTSEC-2026-0371（zbus_names 4.3.5）、RUSTSEC-2026-0372（zvariant_derive 5.15.1）：**同意，已在 `osv-scanner.toml` 签名**（把“会签：待安全审查员”改成了“会签：安全审查员 11-03”，并附上复核依据）。
+
+理由：
+- 三条都是“没人维护”类公告，不是漏洞。
+- 引入路径和运维说的一致：Cargo.lock 里只有 tauri-plugin-single-instance 2.5.4 依赖 zbus 5.19.0，插件只在 `cfg(target_os = "linux")` 下依赖它；按 Windows 目标 `cargo tree -i` 这四个包都是 `nothing to print`，`-i webview2-com` 正常打印。正式外壳只出 Windows 版，exe 里没有这几个包。
+- 只能在 OSV 里豁免：OSV 不分平台。
+- 期限 2026-11-30，和 glib 那三条一起复查。复查时如果这三个包进了 Windows 依赖树，或者出了漏洞类公告，这几条豁免作废。
+
+- 2026-11-03：安全审查员复核。W-1～W-4 全部解决，结论由“有条件签”改为“签”。S-3 后一半（desktop_scan 比主机）和 S-8 测试的类型警告运维还在补，交代码审查核对，不影响结论。会签 osv-scanner.toml 的 RUSTSEC-2026-0370、0371、0372 三条。
+
+### 复核补充（11-03，S-3 后一半和 desktop.yml 新加的一步）
+
+主持人通知运维已补完 S-3 后一半，所以补看这一部分。**结论不变：签。** S-3 两半都已解决。
+
+- **`build/ci/desktop_scan.mjs` 的 `checkLatest`：通过。** 基准取自 `env.rs` 本环境的 `update_url`（去掉 `/latest.json`）。下面几条都会让它失败：
+  - 不同源：主机、协议、端口任何一样不同；
+  - 地址不是原样以 `<基准>/` 开头（端口写法、大小写、编码之类的变形都会被拦）；
+  - 文件名不满足 `^[A-Za-z0-9._-]+-setup\.exe$`；
+  - 带查询串或片段；
+  - `platforms` 不是恰好只有一个 `windows-x86_64`；
+  - version 格式不对，或者和环境对不上。
+
+  我用 12 个对抗样例本机探了一遍（脚本在草稿目录的 `probe-latest.mjs`），下面这些全被拦下：`:443` 端口、主机大写、`..%2F`、`../`、反斜杠、`http://`、只带 `?`、只带 `#`、子目录、正式环境配预览版本号。能通过的只有正例和 `.-setup.exe` 这类同目录下的文件名，无害。加上运维测试里已有的反例（别的 Pages 项目、`pages.dev@evil.example` 用户名伪装、跨环境、多出 darwin），覆盖够了。
+- **desktop.yml 新加的一步：可以接受，而且应该加。** 这一步虽然超出原来交代的范围，但它让比对真的在 CI 里跑，不只停在单测里。它跑 `node build/ci/desktop_scan.mjs --env "$LEMO_ENV" --latest out/latest.json`，位置在生成 latest.json 之后、上传产物之前，失败就不出产物。参数走 `env:`；actionlint 加 shellcheck 0 报错。这一步还顺带堵上了一处：工作流里用 `vars.PREVIEW_PAGES_PROJECT` 拼出来的预览地址，以前没有和 `env.rs` 里写死的预览更新地址比过，现在两者对不上就会失败。
+- **S-8 测试的类型警告：** 我单独按 `--strict` 用 tsc 检查 `tests/build/workflow-permissions.test.ts`，没有报错。vitest 跑 `workflow-permissions.test.ts`、`desktop-scan.test.ts` 两个文件，23 项全过。
+- publish.ps1 `-Desktop` 落地时，签名前也要再核一次地址的主机。这一条照旧挂在 F10，到时候我审。
+
+- 2026-11-03：安全审查员复核补充。看了 `checkLatest` 和 desktop.yml 新加的 `--latest` 一步，S-3 后一半已解决；S-8 测试的类型检查无报错。结论仍是签。

@@ -83,3 +83,68 @@
 - S5：在 desktop.yml 写注释说明，现在不加工作流级 concurrency。
 - 等安全审查的结论回来后，和这些意见合在一起交给运维，避免审查期间文件变动。
 - 任务说明里写错了 ci-guard.mjs 的路径（实际在 `desktop/src-tauri/scripts/`），这是主持人的笔误，已知悉。
+
+## 复核（11-03）
+
+复核人：代码审查员（和上一轮同一人，同一尺度）。复核范围：`.github/workflows/desktop.yml`（重写，含后补的 `--latest` 一步）、`release-build.yml`、`unit.yml`、`desktop/src-tauri/deny.toml`（只改了注释）、`osv-scanner.toml`（新加三条）、`tools/release/publish.ps1` 第 967 行、`docs/08-发布/环境清单-v4.md` 第 211 行、新文件 `tests/build/workflow-permissions.test.ts`、`build/ci/desktop_scan.mjs` 的 `checkLatest` 和 `tests/build/desktop-scan.test.ts` 新加的 2 条测试，以及架构 0.54 第 3 条和 8.3 表的两行。
+
+### 结论
+
+**签，9 / 10**（上一轮有条件签 8 / 10）。M1 已按复用方案解决，S1～S8 全部落实或按主持人的决定处理，这次没有新的必改。扣的 1 分在下面“遗留”两条：架构 8.3 表 desktop.yml 行的旧文字没有划掉；隐藏文件会让三方比对误报失败（失败只会停下，不会放错东西过去）。
+
+### 逐条核对上一轮意见
+
+| # | 上一轮意见 | 现在 | 结论 |
+|---|---|---|---|
+| M1 | exe 里的页面和上线网页没有核对 | 正式 tag：release-build 的 `desktop` 任务写了 `needs: build`，传 `web_artifact: release-<tag>`、`expect_env: production`；desktop.yml 的 web 任务在被调用时不构建页面，并核对 `web_artifact == "release-$TAG"`；desktop 任务直接下载 `release-<tag>` 装进 exe。另外加了三方比对：build 任务算的、desktop 装进 exe 前算的、bundle 下载后算的页面总指纹必须相同（`release-build.yml:188-193`）。本机在 Git Bash 下验证了 `sed` 能从 `dist_hash.py` 的 UTF-8 输出里取出 64 位指纹，`LC_ALL=C` 下也取得到 | **已解决**，而且比首选方案更彻底：exe 里装的就是同一份产物 |
+| S1 | 缺 Tauri CLI 的检查太晚 | 挪到了 desktop 任务的第一步（`desktop.yml:256-263`）；cargo-audit、cargo-deny 也搬去了单独的 audit 任务；两个文件头注释都写了“4.0.0 正式 tag 前必须已有 `@tauri-apps/cli`” | 已解决 |
+| S2 | 一页 Summary 上有四段指纹，不知道核哪段 | build 段标题写明“负责人现在核这一段”；bundle 分 ①②③ 三段，每段写明什么时候核、现在核不核；desktop 段按环境写不同的标题；publish.ps1 第 967 行改成点名“正式产物指纹”那一段 | 已解决 |
+| S3 | 许可证名单和注释对不上 | 按主持人的决定只改了注释（`deny.toml:41-42`），名单不变；本机跑仍是 3 条 `license-not-encountered` 警告，和新注释一致 | 已按决定处理 |
+| S4 | cargo audit 不分平台 | 改成 `cargo audit --target-os windows --target-arch x86_64`；注释如实写了这两个参数只按公告自己标注的平台过滤、不按依赖树过滤，Linux 链上将来出漏洞时还会失败，那时请安全审查员会签再处理。本机实跑：退出码 0，5 条警告照样列出 | 已解决（口径写清楚了，我能接受） |
+| S5 | 以后加 concurrency 会冲突 | 两个文件头注释都写了，现在都没有 concurrency | 已解决 |
+| S6 | 被调用时没有锁定环境 | 被调用时 `expect_env` 必须是 production，tag 算出来的也必须是 production；直接触发时只接受预览（`desktop.yml:106-124`），两种触发互不串 | 已解决 |
+| S7 | `windows-latest` | 改成 `windows-2025` | 已解决 |
+| S8 | 头注释过时、预编译工具、架构没写 workflow_call | ① release-build 头注释重写；② 继续 `cargo install --locked` 从源码编，但只在 audit 任务里编，不和出安装包的任务共用机器（W-4），对 8.3 第 ⑤ 条的偏离写进了头注释和环境清单；③ 架构 0.54 第 3 条和 8.3 表的两行已补 | 已解决；③ 有一处小尾巴，见遗留 1 |
+
+### 这次新加的部分
+
+- **权限和机密**：desktop.yml 三个任务（web、audit、desktop）、release-build 三个任务都只有 `contents: read`，顶层都是 `{}`；没有 `secrets.`、没有 `secrets: inherit`。workflow_call 的输入只是 `web_artifact`、`expect_env` 两个字符串，经 `env:` 进 shell，没有直接写进 `run:`；输出是指纹和文件名，bundle 用之前都按 64 位十六进制和 `^lemomemo_X.Y.Z_x64-setup\.exe$` 校验过格式。
+- **tag 必须在 main 上**（安全审查 S-2）：build 任务和 desktop.yml 的 web 任务都用 `fetch-depth: 0` 检出，再跑 `git merge-base --is-ancestor "$GITHUB_SHA" origin/main`。写法正确，checkout 全量拉取时有 `origin/main`。
+- **bundle 交叉比对**：exe 产物必须恰好是安装包、`latest.json`、`SHA256SUMS` 三个文件，SHA-256 和 desktop 任务的输出相同，产物自带的 SHA256SUMS 再 `--strict -c` 一遍。不只信产物自己带的清单，这一点对。
+- **`latest.json` 主机比对**（S-3，后补的 `desktop.yml:375-376`）：位置在“整理产物”之后、“写 Summary”之前，没有这一步 CI 不会跑这个比对，这次补上是必要的。`checkLatest` 按 `URL` 解析后比 origin，用户名伪装（`…pages.dev@evil.example`）、换目录、带查询串、跨环境、多出平台都能拦住。本机命令行实跑：正式草稿配 `--env production` 通过，配 `--env preview` 报主机不对、版本不对，退出码 1。这一步还顺带兜住了另一种情况：仓库变量 `PREVIEW_PAGES_PROJECT` 和 `env.rs` 里写死的 `lemomemo-preview` 不一致时，预览包在这里就会失败。
+- **audit 任务放在 ubuntu 上**：`deny.toml` 的 `[graph] targets` 指定了 Windows，`cargo metadata` 不需要装 Windows 目标，放在 ubuntu 上是对的。
+- **`workflow-permissions.test.ts`**：逐行查顶层 `{}`、每个任务只有 `contents: read`、`permissions` 出现的次数、没有 secrets / id-token / write / environment / 危险的触发方式、action 都钉了 SHA；另外核对 release-build 调用时传的两个值、desktop.yml 只有两种触发。合成反例 10 条都能拦住。`top[0]?.`、`block[0]?.` 已经改好，`tsc -p tsconfig.node.json` 没有报错。
+- **unit.yml**：平时的提交也跑 `stage-web.test.mjs`（W-1），desktop 任务编 exe 之前再跑一遍。
+- **osv-scanner.toml**：新加 zbus 一系三条，理由里的引入路径和我上一轮 `cargo tree` 的结果一致；“会签：待安全审查员”这一栏不归我签。
+- **publish.ps1**：本次只审第 967 行的提示文字，改得对。这个文件同时还有 `Assert-NoPushStub`（B2 D1-S3）的改动，不在这次的范围里，我没审。
+
+### 遗留（不卡签字）
+
+1. **架构 8.3 表 desktop.yml 那一行的旧文字没有划掉**（`架构设计-v4.md` 第 4298 行）。0.54 那段是追加在后面的，前面还写着“① 构建页面 `vite build --mode production`；② 编译（windows-latest）：`cargo audit` / `cargo deny check` → …”，和现在的实现（正式版不另外构建页面、审计在 ubuntu 的 audit 任务、windows-2025）互相矛盾。请架构师把旧写法用删除线划掉，或者改成“见 0.54”。
+2. **隐藏文件会让三方比对误报失败**。build 任务的指纹是对本地的 `dist/web` 算的，`upload-artifact` 默认不上传以点开头的文件；以后 `dist/web` 里一旦出现 `.well-known/` 之类的目录，bundle 的三方比对就会对不上而失败。失败只会停下，不会把错的东西放过去，而且现在 `public/` 里没有隐藏文件。建议到时候在 build 任务里检查“`dist/web` 下不许有以点开头的文件”，或者在上传那一步写上 `include-hidden-files`，并注明原因。
+3. **小处**：`checkLatest` 只检查文件名形如 `*-setup.exe`，没有检查它和这次的版本号是否一致。现在 bundle 用 `exe_name` 的正则兜住了正式版；预览版没有 bundle，可以考虑让 `--latest` 再收一个期望的文件名。不急。
+
+### 复核时跑的测试
+
+草稿目录：`C:\Users\hoobey\AppData\Local\Temp\claude\D--claude-code\377a2f6c-6055-4a6d-a7cc-507392afac21\scratchpad\cr-desktop-wf\`
+
+| 跑了什么 | 结果 |
+|---|---|
+| `actionlint`（全部工作流，含 shellcheck；在 `--latest` 那一步加上之后又跑了一遍） | 0 个问题，两次退出码都是 0 |
+| `node desktop/src-tauri/scripts/ci-guard.mjs workflows` | 通过（workflows 5 个） |
+| `node --test desktop/src-tauri/scripts/stage-web.test.mjs` | 16 / 16 通过 |
+| `npx vitest run tests/build/workflow-permissions.test.ts tests/build/desktop-scan.test.ts tests/build/deno-frozen-lock.test.ts tests/build/db-types-ci.test.ts` | 4 个文件 41 条全过；补测试之后又单跑了 workflow-permissions、desktop-scan 两个文件，2 个文件 23 条全过 |
+| `npx tsc -p tsconfig.node.json --noEmit` | 没有报错 |
+| `cargo audit --target-os windows --target-arch x86_64`（`desktop/src-tauri`） | 退出码 0，`5 allowed warnings` |
+| `cargo deny --locked check advisories bans licenses sources` | `advisories ok, bans ok, licenses ok, sources ok`，3 条 `license-not-encountered` 警告（主持人已接受） |
+| `node build/ci/desktop_scan.mjs --env production\|preview --latest <草稿>`（`latest/ok.json`） | 正式环境通过；配预览环境时报主机和版本不对，退出码 1 |
+| 在 Git Bash 和 `LC_ALL=C` 下用 `sed` 从 `dist_hash.py` 的输出取总指纹 | 都能取到 64 位指纹 |
+
+没有推送、没有触发任何工作流、没有连真实服务，cargo audit 和 cargo deny 只联网取了 RustSec 公告库。
+
+### 复核后的采纳情况（主持人，11-03）
+
+- 遗留 1：已改。架构 8.3 表 release-build.yml、desktop.yml 两行的开头注明“旧写法已被本格末尾的 0.54 一段取代”。
+- 遗留 2（upload-artifact 默认不上传以点开头的文件）、遗留 3（预览 latest.json 没核对安装包文件名和版本号是否一致）：交运维，F10 做完以后一起改。
+- publish.ps1 的 Assert-NoPushStub 属于 B2 运维 O-1，已在 B2-代码审查-运维O1至O3.md 审过、签了 9 分，和本记录无关。
+- osv-scanner.toml 的三条豁免等安全审查会签。

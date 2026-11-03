@@ -77,6 +77,10 @@ jobs:
         # 违规样例在 tests/arch-fixtures/check_backend/，由下一步的 Vitest（tests/build/check-backend.test.ts）证明拦得住
         run: python -I build/check_backend.py
 
+      - name: 电脑版页面暂存脚本的回归测试（stage-web.mjs、ci-guard.mjs；node --test，B6-exe 安全审查 W-1）
+        # desktop.yml 编 exe 前也跑一遍；这里让平时的提交就能发现回归，不用等打 tag
+        run: node --test desktop/src-tauri/scripts/stage-web.test.mjs
+
       - name: 单元和组件测试（UTC、首尔、洛杉矶三个时区各一遍，架构第 9 节 H2）
         # 前端 A 的 test 脚本如果已经自己按三个时区跑，这里改成只跑一遍
         # LEMO_REQUIRE_DENO=1：deno-frozen-lock.test.ts 找不到 deno 就失败，不再 skipIf 悄悄跳过

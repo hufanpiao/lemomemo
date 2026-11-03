@@ -1,0 +1,416 @@
+# desktop：编电脑版 exe，只出未签名的安装包和 latest.json 草稿（B6-exe F9；架构 8.3 desktop.yml 行、8.5、0.48、0.53；R-206）
+#
+# 两种触发：
+#   · 预览 tag vX.Y.Z-preview.N：直接触发本工作流，web 任务自己按 --mode preview 构建页面，编预览版
+#     （--features preview + tauri.preview.conf.json），SHA256SUMS、总指纹和提交 SHA 写进本次运行的 Summary（预览 tag 不触发 release-build）；
+#   · 正式 tag vX.Y.Z：**不直接触发**，由 release-build.yml 以 workflow_call 调用（输入 web_artifact = release-<tag>、expect_env = production）。
+#     这时 web 任务不构建页面，desktop 任务直接下载 release-build 的 build 任务上传的 release-<tag> 装进 exe——
+#     装进 exe 的页面和上线的网页、负责人在 iPhone 上核过指纹的是**同一份产物**（代码审查 M1、安全审查 W-2）。
+#     被调用时 github.ref_name 仍是那个正式 tag；被调用时只接受正式环境（代码审查 S6）。
+#     页面总指纹、安装包和 latest.json 的 SHA-256 经 workflow_call outputs 交给 release-build 的 bundle 交叉比对（安全审查 W-3）。
+# 三个任务（第三轮安全 X3；R-206 起没有签名任务），都只给 contents: read，都不引用任何 secrets：
+#   ① web（ubuntu）：按 tag 定环境、核对 tag 对应的提交在 main 上；预览时构建页面、A14 扫产物、上传 desktop-web-<tag>；
+#   ② audit（ubuntu）：cargo audit、cargo deny，从源码编这两个检查工具，不上传任何产物（安全审查 W-4：检查工具不和出安装包的任务共用机器）；
+#   ③ desktop（windows，needs web、audit）：装依赖、查 Tauri CLI → ci-guard 查流水线 → stage-web 回归测试 → 下载页面、算页面总指纹
+#      → VERSION 同步进 tauri.conf.json（8.5）→ 暂存页面（stage-web.mjs，核对接口地址属于本环境）→ cargo test（两套 feature，
+#      含写凭据管理器的 ignored 用例）→ tauri build（只打 NSIS，cargo --locked）→ ci-guard 查权限文件 → exe 环境核对和反向搜索（F8）
+#      → 出 SHA256SUMS、写 Summary、上传 desktop-<env>-<tag>。
+# CI 里没有任何签名私钥、updater 私钥；签名由负责人本机 publish.ps1 下载本工作流的产物、核对后做（8.3a、F10）。
+# 页面暂存脚本有一个“跳过环境核对”的本地冒烟参数，流水线里一律不许出现（X-4）；ci-guard.mjs workflows 一步会查所有工作流文件。
+# 不要加工作流级 concurrency（代码审查 S5）：被 release-build 调用时，本文件里的 github.workflow 是调用方的 release-build、github.ref 也相同，
+# 两边各加一个同名的组会互相排队或取消；真要加，只加在任务级，组名带固定前缀 desktop-。
+# 4.0.0 正式 tag 之前 package.json 必须已经有 @tauri-apps/cli（前端 B），否则 desktop 任务按设计失败、release-build 整体是红的
+# （release-build 的 build 任务和 release-<tag> 照常出，publish.ps1 现在只用它；代码审查 S1）。
+name: desktop
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+-preview.[0-9]+'
+  # 正式 tag：由 release-build.yml 调用（不另开 push 触发，免得编两遍）
+  workflow_call:
+    inputs:
+      web_artifact:
+        description: 装进 exe 的页面产物名（release-build 传 release-<tag>）
+        type: string
+        required: true
+      expect_env:
+        description: 期望的环境；被调用时只接受 production
+        type: string
+        required: true
+    outputs:
+      web_hash:
+        description: 装进 exe 的页面（dist/web）的总指纹（build/ci/dist_hash.py）
+        value: ${{ jobs.desktop.outputs.web_hash }}
+      exe_name:
+        description: 安装包文件名
+        value: ${{ jobs.desktop.outputs.exe_name }}
+      exe_sha256:
+        description: 安装包的 SHA-256
+        value: ${{ jobs.desktop.outputs.exe_sha256 }}
+      latest_sha256:
+        description: latest.json 草稿的 SHA-256
+        value: ${{ jobs.desktop.outputs.latest_sha256 }}
+
+permissions: {}
+
+env:
+  NODE_VERSION: '24'
+  FORCE_COLOR: '0'
+  # Rust 版本（架构 8.6：stable，和本机同一版；11-03 主持人定：不建 rust-toolchain.toml，就锁在这里）
+  RUST_VERSION: '1.99.1'
+  # 依赖审计工具（8.3 第 ② 条）；只用发布满两周的版本：cargo-audit 0.22.2（2026-06-05）、cargo-deny 0.20.2（2026-07-09）。
+  # 只在 audit 任务里 cargo install --locked 从源码编（偏离 8.3 第 ⑤ 条“按 tools/ci-tools.lock 锁哈希”，环境清单第七节写明；
+  # 改用预编译包时先写进 tools/ci-tools.lock 钉住哈希）
+  CARGO_AUDIT_VERSION: '0.22.2'
+  CARGO_DENY_VERSION: '0.20.2'
+
+jobs:
+  web:
+    name: 定环境、核对提交；预览时构建页面（无密钥）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      env: ${{ steps.which.outputs.env }}
+      version: ${{ steps.which.outputs.version }}
+      artifact: ${{ steps.which.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # 要拿到 origin/main 判断 tag 对应的提交在不在 main 上
+          fetch-depth: 0
+
+      - name: 按 tag 定环境和版本号（tag 必须和 VERSION 对得上，8.5；被调用时只接受正式环境）
+        id: which
+        env:
+          TAG: ${{ github.ref_name }}
+          CALLED_ENV: ${{ inputs.expect_env }}
+          WEB_ARTIFACT: ${{ inputs.web_artifact }}
+        run: |
+          base="$(tr -d ' \r\n' < VERSION)"
+          if ! [[ "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::VERSION 文件的内容不是 X.Y.Z：$base"
+            exit 1
+          fi
+          if [ "$TAG" = "v$base" ]; then
+            env=production; version="$base"
+          elif [[ "$TAG" == "v$base-preview."* && "${TAG#"v$base-preview."}" =~ ^[0-9]+$ ]]; then
+            env=preview; version="${TAG#v}"
+          else
+            echo "::error::tag 是 $TAG，VERSION 文件是 $base：正式 tag 应为 v$base，预览 tag 应为 v$base-preview.N"
+            exit 1
+          fi
+          if [ -n "$CALLED_ENV" ]; then
+            # workflow_call：只接受正式环境，页面只用调用方传来的 release-<tag>
+            if [ "$CALLED_ENV" != production ] || [ "$env" != production ]; then
+              echo "::error::被调用时只接受正式环境：expect_env=$CALLED_ENV，tag 算出来是 $env"
+              exit 1
+            fi
+            if [ "$WEB_ARTIFACT" != "release-$TAG" ]; then
+              echo "::error::web_artifact 应为 release-$TAG，收到 $WEB_ARTIFACT"
+              exit 1
+            fi
+            artifact="$WEB_ARTIFACT"
+          else
+            # 直接触发（push 预览 tag）：只接受预览环境
+            if [ "$env" != preview ]; then
+              echo "::error::直接触发时只接受预览 tag；正式 tag 由 release-build 调用"
+              exit 1
+            fi
+            artifact="desktop-web-$TAG"
+          fi
+          {
+            echo "env=$env"
+            echo "version=$version"
+            echo "artifact=$artifact"
+          } >> "$GITHUB_OUTPUT"
+          echo "环境：$env，版本：$version，页面产物：$artifact" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: tag 对应的提交必须在 main 上（安全审查 S-2：没合并、没审过的提交打 tag 不出包）
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::提交 $GITHUB_SHA 不在 main 上：只许在 main 已有的提交上打 tag"
+            exit 1
+          fi
+          echo "提交 $GITHUB_SHA 在 main 上"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.which.outputs.env == 'preview'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 安装依赖（不跑任何安装脚本）
+        if: steps.which.outputs.env == 'preview'
+        run: |
+          npm ci --ignore-scripts
+          bash build/ci/rebuild-allowlist.sh
+
+      - name: 构建页面（预览：preview 模式，和 deploy-preview 同一套变量）
+        if: steps.which.outputs.env == 'preview'
+        env:
+          VITE_PUBLIC_ENV: preview
+          VITE_PUBLIC_SUPABASE_URL: ${{ vars.PREVIEW_SITE_ORIGIN }}/sb
+          VITE_PUBLIC_ANON_KEY: ${{ vars.PREVIEW_SUPABASE_ANON_KEY }}
+          VITE_PUBLIC_VAPID_KEY: ${{ vars.PREVIEW_VAPID_PUBLIC_KEY }}
+          VITE_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.PREVIEW_TURNSTILE_SITE_KEY }}
+          # 带 -preview.N 的完整版本号（和 deploy-preview 一样由 build_web 读）
+          LEMO_BUILD_VERSION: ${{ steps.which.outputs.version }}
+          SITE_ORIGIN: ${{ vars.PREVIEW_SITE_ORIGIN }}
+        run: |
+          # exe 不订阅网页推送（5.10），VAPID 公钥可以空着；其余两项和接口地址必须有
+          for v in SITE_ORIGIN VITE_PUBLIC_ANON_KEY VITE_PUBLIC_TURNSTILE_SITE_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::$v 是空的：去仓库 Variables 填 PREVIEW_ 开头的那几项"; exit 1; fi
+          done
+          npm run build -- --mode preview
+
+      - name: check_arch 扫产物（A14：密钥特征、JWK 私钥不能进页面）
+        if: steps.which.outputs.env == 'preview'
+        run: python3 -I build/check_arch.py
+
+      - name: 页面里不能有 source map（和 release-build 同一条）
+        if: steps.which.outputs.env == 'preview'
+        run: |
+          if find dist/web -name '*.map' | grep -q . || grep -rl 'sourceMappingURL' dist/web --include='*.js' | grep -q .; then
+            echo "::error::dist/web 里有 source map"
+            exit 1
+          fi
+
+      - name: 上传页面给编译任务
+        if: steps.which.outputs.env == 'preview'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.which.outputs.artifact }}
+          path: dist/web/
+          if-no-files-found: error
+          retention-days: 7
+
+  audit:
+    name: Rust 依赖审计（cargo audit、cargo deny；不出产物）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Rust 工具链（锁版本）
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+          rustc --version
+          cargo --version
+
+      - name: 安装 cargo-audit、cargo-deny（锁版本，--locked；只在这个任务里编）
+        run: |
+          cargo install --locked cargo-audit --version "$CARGO_AUDIT_VERSION"
+          cargo install --locked cargo-deny --version "$CARGO_DENY_VERSION"
+          cargo audit --version
+          cargo deny --version
+
+      - name: cargo audit（有漏洞就失败；只看标注了 Windows x86_64 或不限平台的公告）
+        # --target-os/--target-arch 只按公告自己标注的平台过滤，不按依赖树过滤：Linux 依赖链上那 5 条警告照样列出（deny.toml 注释）。
+        # Linux 链上将来出真正的漏洞（vulnerability）时，这一步会失败；那时按 cargo tree --target x86_64-pc-windows-msvc 的结果
+        # 请安全审查员会签再处理（漏洞不在 deny.toml 豁免，代码审查 S4）
+        working-directory: desktop/src-tauri
+        run: cargo audit --target-os windows --target-arch x86_64
+
+      - name: cargo deny（advisories、bans、licenses、sources；配置见 deny.toml，只按 Windows 依赖树判断）
+        working-directory: desktop/src-tauri
+        run: cargo deny --locked check advisories bans licenses sources
+
+  desktop:
+    name: 编译 exe（windows，无密钥，只出未签名包）
+    needs: [web, audit]
+    # 钉住镜像版本（代码审查 S7、安全审查 S-1）：镜像升级时 MSVC、Windows SDK 会变，升级作为一次显式改动
+    runs-on: windows-2025
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      LEMO_ENV: ${{ needs.web.outputs.env }}
+      LEMO_VERSION: ${{ needs.web.outputs.version }}
+    outputs:
+      web_hash: ${{ steps.webhash.outputs.total }}
+      exe_name: ${{ steps.pkg.outputs.exe_name }}
+      exe_sha256: ${{ steps.pkg.outputs.exe_sha256 }}
+      latest_sha256: ${{ steps.pkg.outputs.latest_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 安装依赖并确认 Tauri CLI 在（不跑任何安装脚本；放在最前面，缺了马上失败，代码审查 S1）
+        run: |
+          npm ci --ignore-scripts
+          bash build/ci/rebuild-allowlist.sh
+          if ! npx --no-install tauri --version; then
+            echo "::error::找不到 Tauri CLI：package.json 里还没有 @tauri-apps/cli（架构 8.6，前端加，精确版本）"
+            exit 1
+          fi
+
+      - name: 流水线里不许出现跳过环境核对的参数（安全审查 X-4，编译前）
+        run: node desktop/src-tauri/scripts/ci-guard.mjs workflows
+
+      - name: stage-web 回归测试（CSP 注入、页面名单、CI 里拒绝跳过核对、ci-guard 的扫描；安全审查 W-1，暂存页面之前）
+        run: node --test desktop/src-tauri/scripts/stage-web.test.mjs
+
+      - name: 下载页面（预览：本工作流 web 任务的产物；正式：release-build 的 release-<tag>）
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.web.outputs.artifact }}
+          path: dist/web/
+
+      - name: 页面总指纹（交给 release-build 的 bundle 比对；正式时应和 build 任务的“正式产物指纹”相同）
+        id: webhash
+        run: |
+          out="$(python -I build/ci/dist_hash.py dist/web)"
+          echo "$out"
+          total="$(printf '%s\n' "$out" | sed -n 's/^总指纹：\([0-9a-f]\{64\}\)$/\1/p')"
+          if [ -z "$total" ]; then echo "::error::算不出页面总指纹"; exit 1; fi
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+
+      - name: Rust 工具链（锁版本，MSVC）
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal --target x86_64-pc-windows-msvc
+          rustup default "$RUST_VERSION"
+          rustc --version
+          cargo --version
+
+      - name: 把版本号同步进 tauri.conf.json（8.5；预览是 X.Y.Z-preview.N，只打 NSIS 所以可以带预发布段）
+        run: |
+          node -e '
+            const fs = require("fs");
+            const f = "desktop/src-tauri/tauri.conf.json";
+            const j = JSON.parse(fs.readFileSync(f, "utf8"));
+            j.version = process.argv[1];
+            if (JSON.stringify(j.bundle && j.bundle.targets) !== JSON.stringify(["nsis"])) { console.error("tauri.conf.json 的 bundle.targets 必须只有 nsis（0.48 第 8 条）"); process.exit(1); }
+            fs.writeFileSync(f, JSON.stringify(j, null, 2) + "\n");
+            console.log("tauri.conf.json version = " + j.version);
+          ' "$LEMO_VERSION"
+          if grep -q '"version"' desktop/src-tauri/tauri.preview.conf.json; then
+            echo "::error::tauri.preview.conf.json 里不能另写 version（版本号只从 VERSION 同步）"
+            exit 1
+          fi
+
+      - name: 暂存页面并核对环境（stage-web.mjs：两个方向查接口地址、注入页面 CSP、写 desktop-env.json）
+        run: node desktop/src-tauri/scripts/stage-web.mjs --env "$LEMO_ENV"
+
+      - name: 单元测试（正式、预览两套 feature 都编；--include-ignored 会真的写一遍凭据管理器）
+        working-directory: desktop/src-tauri
+        run: |
+          cargo test --locked -- --include-ignored
+          cargo test --locked --features preview -- --include-ignored
+
+      - name: 编译安装包（tauri build，只打 NSIS，cargo --locked；不签名）
+        working-directory: desktop/src-tauri
+        run: |
+          if [ "$LEMO_ENV" = preview ]; then
+            npx --no-install tauri build --ci --bundles nsis --config tauri.preview.conf.json --features preview -- --locked
+          else
+            npx --no-install tauri build --ci --bundles nsis -- --locked
+          fi
+
+      - name: 权限文件和提交的一致（安全审查 X-3，编译后）
+        run: node desktop/src-tauri/scripts/ci-guard.mjs permissions
+
+      - name: exe 环境核对和反向搜索（F8、A14：本环境的值都在，另一套环境的地址、标识、会话键、更新地址、公钥一个都不能有）
+        run: |
+          if [ "$LEMO_ENV" = preview ]; then exe=desktop/src-tauri/target/release/lemomemo-preview.exe; else exe=desktop/src-tauri/target/release/lemomemo.exe; fi
+          if [ ! -f "$exe" ]; then echo "::error::没找到编出来的 $exe"; exit 1; fi
+          node build/ci/desktop_scan.mjs --env "$LEMO_ENV" "$exe"
+
+      - name: 整理产物：未签名安装包、latest.json 草稿、SHA256SUMS
+        id: pkg
+        env:
+          PREVIEW_PAGES_PROJECT: ${{ vars.PREVIEW_PAGES_PROJECT }}
+        run: |
+          shopt -s nullglob
+          bundle=desktop/src-tauri/target/release/bundle
+          setups=("$bundle"/nsis/*-setup.exe)
+          if [ "${#setups[@]}" -ne 1 ]; then echo "::error::NSIS 安装包应该正好 1 个，现在 ${#setups[@]} 个"; exit 1; fi
+          others=("$bundle"/msi/* "$bundle"/nsis/*.sig "$bundle"/nsis/*.zip)
+          if [ "${#others[@]}" -ne 0 ]; then echo "::error::只许出 NSIS 安装包，不许有 MSI、.sig、更新包：${others[*]}"; exit 1; fi
+          if [ "$LEMO_ENV" = preview ]; then
+            # Pages 项目名只许小写字母、数字、连字符（安全审查 S-3），防止拼出别的主机
+            if ! [[ "$PREVIEW_PAGES_PROJECT" =~ ^[a-z0-9][a-z0-9-]{0,57}$ ]]; then
+              echo "::error::仓库变量 PREVIEW_PAGES_PROJECT 是空的或格式不对（只许小写字母、数字、连字符，1～58 个字符）"
+              exit 1
+            fi
+            name="lemomemo-preview_${LEMO_VERSION}_x64-setup.exe"
+            base="https://desktop.${PREVIEW_PAGES_PROJECT}.pages.dev"
+          else
+            name="lemomemo_${LEMO_VERSION}_x64-setup.exe"
+            base="https://lemomemo.com/desktop"
+          fi
+          mkdir -p out
+          cp "${setups[0]}" "out/$name"
+          # latest.json 草稿：signature 留空，由负责人本机 publish.ps1 签名后填（F10）；pub_date 用提交时间，重跑结果不变
+          node -e '
+            const [version, url, date] = process.argv.slice(1);
+            const j = { version, notes: "", pub_date: date, platforms: { "windows-x86_64": { signature: "", url } } };
+            require("fs").writeFileSync("out/latest.json", JSON.stringify(j, null, 2) + "\n");
+          ' "$LEMO_VERSION" "$base/$name" "$(git log -1 --format=%cI)"
+          ( cd out && sha256sum -b -- "$name" latest.json | sed 's/ \*/  /' > SHA256SUMS )
+          cat out/SHA256SUMS
+          {
+            echo "exe_name=$name"
+            echo "exe_sha256=$(sha256sum -b -- "out/$name" | cut -d' ' -f1)"
+            echo "latest_sha256=$(sha256sum -b -- out/latest.json | cut -d' ' -f1)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: latest.json 的下载地址和 env.rs 的 update_url 同源、同目录（安全审查 S-3）
+        run: node build/ci/desktop_scan.mjs --env "$LEMO_ENV" --latest out/latest.json
+
+      - name: 指纹写进 Summary（预览：负责人核这一段；正式：只供对照，负责人按 release-build 的说明核）
+        env:
+          TAG: ${{ github.ref_name }}
+          WEB_HASH: ${{ steps.webhash.outputs.total }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/hash"
+          cp out/*-setup.exe out/latest.json "$RUNNER_TEMP/hash/"
+          if [ "$LEMO_ENV" = preview ]; then
+            title="## $TAG 电脑版预览（未签名）：负责人核这一段（F10 起 publish.ps1 下载预览包后核对的就是这里）"
+          else
+            title="## $TAG 电脑版正式（未签名）：只供对照，负责人请按同一页「整包核对」那几段的标题核"
+          fi
+          {
+            echo "$title"
+            echo
+            echo "装进 exe 的页面总指纹：$WEB_HASH"
+            echo
+            echo 'SHA256SUMS：'
+            echo
+            echo '```'
+            cat out/SHA256SUMS
+            echo '```'
+            echo
+            echo '总指纹（安装包和 latest.json，build/ci/dist_hash.py）：'
+            echo
+            echo '```'
+            python -I build/ci/dist_hash.py "$RUNNER_TEMP/hash"
+            echo '```'
+            echo
+            echo "提交：$GITHUB_SHA"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传未签名产物（publish.ps1 下载、核对、签名的就是这一份；保留 90 天）
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-${{ needs.web.outputs.env }}-${{ github.ref_name }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 90

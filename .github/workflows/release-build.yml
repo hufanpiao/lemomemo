@@ -3,8 +3,19 @@
 # 正式发布由负责人在自己电脑上运行 tools/release/publish.ps1，部署的就是本工作流上传的产物（架构 0.31 第 24 条定方案 A、8.3a 第 2、3 步）：
 # publish.ps1 不在本机重新构建、不跑 npm，只用一把只读令牌经 GitHub REST API 下载这个 tag 的产物 zip，
 # 逐个文件按 SHA256SUMS 核对，再算总指纹；负责人用 iPhone 打开本次运行的 Summary 页，和总指纹、提交 SHA 对一遍，一致才继续。
-# 现状（B0）：本文件还只上传 dist/web 并在 Summary 写总指纹；SHA256SUMS、函数和迁移文件的打包，
-# 以及 publish.ps1 从“本机构建”改成“下载 + 核对”，都在 B6-exe 期间做、B7a 前审查冻结（0.31 第 24 条，B0 安全审查中 2）。
+# 三个任务：
+#   ① build：tag 和 VERSION 一致、tag 对应的提交在 main 上，跑检查、构建 dist/web，上传 release-<tag>（publish.ps1 现在下载部署的就是它），
+#      Summary 写“正式产物指纹”（负责人现在核这一段），页面总指纹作为任务输出交给 bundle；
+#   ② desktop（B6-exe F9）：needs build，以 workflow_call 调用 desktop.yml，输入 web_artifact = release-<tag>、expect_env = production——
+#      正式 tag 走 workflow_call、复用 release-<tag> 装进 exe，desktop.yml 不再另外构建网页（代码审查 M1、安全审查 W-2）；
+#      输出页面总指纹、安装包和 latest.json 的 SHA-256；
+#   ③ bundle：把 release-<tag> 和 desktop-production-<tag> 放进同一个整包，用 build、desktop 两个任务的输出交叉比对
+#      （页面总指纹三方一致、安装包和 latest.json 的 SHA-256 和 desktop 任务算的一致，不只信产物自带的 SHA256SUMS，安全审查 W-3），
+#      再出整包 SHA256SUMS 和总指纹，Summary 分三段写（网页总指纹 / exe SHA-256 / 整包总指纹，标题写明负责人什么时候核哪一段），
+#      上传 release-bundle-<tag>。
+# 还没做的：publish.ps1 改成下载整包、给 exe 签名（F10、F11）；函数和迁移文件进整包（随 F11 一起做，B7a 前审查冻结，0.31 第 24 条）。
+# 4.0.0 正式 tag 之前 package.json 必须已经有 @tauri-apps/cli（前端 B），否则 desktop、bundle 失败（build 和 release-<tag> 照常出）。
+# 不要加工作流级 concurrency：desktop.yml 被调用时 github.workflow、github.ref 和这里相同，同名组会互相排队或取消（代码审查 S5）。
 #
 # 不引用任何 secrets。正式环境的公开配置放在 repository variables（PROD_ 开头，都是公开值）。
 name: release-build
@@ -26,10 +37,14 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    outputs:
+      web_hash: ${{ steps.hash.outputs.total }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # 要拿到 origin/main 判断 tag 对应的提交在不在 main 上
+          fetch-depth: 0
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -45,6 +60,14 @@ jobs:
             echo "::error::tag 是 $TAG，VERSION 文件是 $base，对不上"
             exit 1
           fi
+
+      - name: tag 对应的提交必须在 main 上（安全审查 S-2：没合并、没审过的提交打 tag 不出包）
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::提交 $GITHUB_SHA 不在 main 上：只许在 main 已有的提交上打 tag"
+            exit 1
+          fi
+          echo "提交 $GITHUB_SHA 在 main 上"
 
       - name: 安装依赖（不跑任何安装脚本）
         run: |
@@ -83,24 +106,149 @@ jobs:
             exit 1
           fi
 
-      - name: 产物指纹（负责人发布时在 iPhone 上看这一段，和 publish.ps1 下载核对后显示的核对）
+      - name: 产物指纹（负责人现在发布时在 iPhone 上核这一段，和 publish.ps1 下载核对后显示的核对）
+        id: hash
         env:
           TAG: ${{ github.ref_name }}
         run: |
+          out="$(python3 -I build/ci/dist_hash.py dist/web)"
+          total="$(printf '%s\n' "$out" | sed -n 's/^总指纹：\([0-9a-f]\{64\}\)$/\1/p')"
+          if [ -z "$total" ]; then echo "::error::算不出页面总指纹"; exit 1; fi
+          echo "total=$total" >> "$GITHUB_OUTPUT"
           {
-            echo "## $TAG 正式产物指纹"
+            echo "## $TAG 正式产物指纹（负责人现在核这一段：publish.ps1 部署的网页）"
             echo
             echo '```'
-            python3 -I build/ci/dist_hash.py dist/web
+            echo "$out"
             echo '```'
             echo
             echo "提交：$GITHUB_SHA"
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
 
       - name: 上传产物（publish.ps1 下载部署的就是这一份，方案 A；保留 90 天）
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-${{ github.ref_name }}
           path: dist/web/
+          if-no-files-found: error
+          retention-days: 90
+
+  desktop:
+    name: 正式版 exe（调用 desktop.yml，装 release-<tag> 的页面，无密钥、不签名）
+    needs: build
+    uses: ./.github/workflows/desktop.yml
+    with:
+      web_artifact: release-${{ github.ref_name }}
+      expect_env: production
+    permissions:
+      contents: read
+
+  bundle:
+    name: 整包交叉比对、SHA256SUMS 和总指纹（网页 + exe）
+    needs: [build, desktop]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 下载网页产物
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-${{ github.ref_name }}
+          path: bundle/web/
+
+      - name: 下载 exe 产物（未签名安装包、latest.json 草稿、SHA256SUMS）
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: desktop-production-${{ github.ref_name }}
+          path: bundle/desktop/
+
+      - name: 交叉比对（安全审查 W-3：用 build、desktop 两个任务的输出核对，不只信产物自带的 SHA256SUMS）
+        id: check
+        env:
+          BUILD_WEB_HASH: ${{ needs.build.outputs.web_hash }}
+          DESKTOP_WEB_HASH: ${{ needs.desktop.outputs.web_hash }}
+          EXE_NAME: ${{ needs.desktop.outputs.exe_name }}
+          EXE_SHA256: ${{ needs.desktop.outputs.exe_sha256 }}
+          LATEST_SHA256: ${{ needs.desktop.outputs.latest_sha256 }}
+        run: |
+          hex='^[0-9a-f]{64}$'
+          for v in BUILD_WEB_HASH DESKTOP_WEB_HASH EXE_SHA256 LATEST_SHA256; do
+            if ! [[ "${!v}" =~ $hex ]]; then echo "::error::$v 不是 64 位十六进制：${!v}"; exit 1; fi
+          done
+          if ! [[ "$EXE_NAME" =~ ^lemomemo_[0-9]+\.[0-9]+\.[0-9]+_x64-setup\.exe$ ]]; then
+            echo "::error::安装包文件名不对：$EXE_NAME"
+            exit 1
+          fi
+          # ① 页面：下载下来的 release-<tag>、build 任务算的、desktop 任务装进 exe 前算的，三者同一个总指纹
+          web="$(python3 -I build/ci/dist_hash.py bundle/web | sed -n 's/^总指纹：\([0-9a-f]\{64\}\)$/\1/p')"
+          if [ "$web" != "$BUILD_WEB_HASH" ] || [ "$web" != "$DESKTOP_WEB_HASH" ]; then
+            echo "::error::页面总指纹对不上：下载的 $web，build 任务 $BUILD_WEB_HASH，desktop 任务 $DESKTOP_WEB_HASH"
+            exit 1
+          fi
+          # ② exe 产物：文件恰好是安装包、latest.json、SHA256SUMS 三个；SHA-256 和 desktop 任务算的一致
+          actual="$(cd bundle/desktop && find . -type f -printf '%P\n' | LC_ALL=C sort)"
+          expected="$(printf '%s\n' "$EXE_NAME" SHA256SUMS latest.json | LC_ALL=C sort)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::exe 产物里的文件不对，应为：$expected，实际：$actual"
+            exit 1
+          fi
+          got_exe="$(sha256sum -b -- "bundle/desktop/$EXE_NAME" | cut -d' ' -f1)"
+          got_latest="$(sha256sum -b -- bundle/desktop/latest.json | cut -d' ' -f1)"
+          if [ "$got_exe" != "$EXE_SHA256" ] || [ "$got_latest" != "$LATEST_SHA256" ]; then
+            echo "::error::exe 产物的 SHA-256 和 desktop 任务算的对不上"
+            exit 1
+          fi
+          # 产物自带的 SHA256SUMS 也要对（多一道），核完删掉，整包另出一份
+          ( cd bundle/desktop && sha256sum --strict -c SHA256SUMS )
+          rm bundle/desktop/SHA256SUMS
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "交叉比对通过"
+
+      - name: 整包 SHA256SUMS 和总指纹，Summary 分三段写（总指纹不含 SHA256SUMS 本身）
+        env:
+          TAG: ${{ github.ref_name }}
+          WEB_HASH: ${{ steps.check.outputs.web }}
+          EXE_NAME: ${{ needs.desktop.outputs.exe_name }}
+          EXE_SHA256: ${{ needs.desktop.outputs.exe_sha256 }}
+          LATEST_SHA256: ${{ needs.desktop.outputs.latest_sha256 }}
+        run: |
+          cd bundle
+          find . -type f -printf '%P\n' | LC_ALL=C sort | while IFS= read -r f; do sha256sum -b -- "$f"; done | sed 's/ \*/  /' > "$RUNNER_TEMP/SHA256SUMS"
+          total="$(python3 -I ../build/ci/dist_hash.py .)"
+          mv "$RUNNER_TEMP/SHA256SUMS" SHA256SUMS
+          {
+            echo "## $TAG 整包核对 ①：网页总指纹（和上面「正式产物指纹」是同一个值，build、desktop、下载三方比对已通过；现在不用另外核）"
+            echo
+            echo '```'
+            echo "总指纹：$WEB_HASH"
+            echo '```'
+            echo
+            echo "## $TAG 整包核对 ②：电脑版安装包 SHA-256（未签名；F10 起负责人签名前核这一段，现在不用核）"
+            echo
+            echo '```'
+            echo "$EXE_SHA256  desktop/$EXE_NAME"
+            echo "$LATEST_SHA256  desktop/latest.json"
+            echo '```'
+            echo
+            echo "## $TAG 整包核对 ③：整包总指纹（网页 + exe；F11 起 publish.ps1 下载整包后核这一段，现在不用核）"
+            echo
+            echo '```'
+            echo "$total"
+            echo '```'
+            echo
+            echo "清单见整包里的 SHA256SUMS。提交：$GITHUB_SHA"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传整包（保留 90 天）
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-bundle-${{ github.ref_name }}
+          path: bundle/
           if-no-files-found: error
           retention-days: 90
