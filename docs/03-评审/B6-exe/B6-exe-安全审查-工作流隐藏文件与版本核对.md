@@ -35,3 +35,14 @@
 - A-1：交运维，补静态断言，和代码审查的意见一起改。
 - A-2、A-3：交运维，可以顺手做。
 - A-4：记作遗留，放到 B6-exe 收尾时再看。
+
+## 复核（11-03，同一审查员）
+
+**结论：通过，没有必改。**
+- A-1：版本证明挪进 `desktop_scan.mjs --package`，原名整名相等；静态测试钉住先 `--package` 再 `cp`、只有一个 `name=`、不另拼前缀、不许 `continue-on-error`；失败时退出码 1、标准输出空，bash `-e` 让这一步失败。
+- A-2：产品名取自合并后的配置，整名等于 `<产品名>_<版本>_x64-setup.exe`；有 `tauri.windows.conf.json` 就失败；文件名只在 `setupName` 拼。
+- A-3：out 目录只许安装包、latest.json、SHA256SUMS 三样。
+- 注入、权限、日志：没有新的 `${{ }}` 进 run；`LEMO_VERSION` 已校验格式；报错只打印文件名。
+- 待实测：第一次真跑 desktop.yml 时核对“柠檬记 预览”安装包原名。A-4 仍按原定放到 B6-exe 收尾。
+
+**跑过**：workflow-permissions、desktop-scan 42 通过、2 跳过。只读。

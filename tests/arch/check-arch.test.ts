@@ -65,6 +65,18 @@ describe('build/check_arch.py（tests/arch-fixtures/check_arch）', () => {
     }
   });
 
+  // 11-03 deploy-preview 失败：仓库变量 PREVIEW_SUPABASE_ANON_KEY 是 sb_publishable_…（公开值），构建后 check_arch 把它当密钥报了
+  it('A14：dist/web 里的 sb_publishable_ 是公开值不报；dist 里的 sb_secret_（含和 publishable 同一文件）、源码里写死的 sb_publishable_ 照旧报', () => {
+    const { code, report } = run(sample('a14-publishable-dist'));
+    expect(code).toBe(1);
+    expect(report.errors.map((e) => `${e.rule} ${e.file}:${e.line}`).sort()).toEqual([
+      'A14 dist/web/assets/index-mixed.js:2',
+      'A14 dist/web/assets/index-mixed.js:2',
+      'A14 dist/web/assets/index-secret.js:2',
+      'A14 src/core/bad.ts:2',
+    ]);
+  });
+
   it('A14 对照：只有公钥（含转义写法）、kid/id 里含 d、d 不是 43 个字符、d 离 kty 超过 300 个字符 → 不报', () => {
     const { code, report } = run(sample('a14-jwk-public-ok'));
     expect(report.errors).toEqual([]);

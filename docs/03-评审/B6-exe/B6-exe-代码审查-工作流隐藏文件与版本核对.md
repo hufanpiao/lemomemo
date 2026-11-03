@@ -47,3 +47,23 @@
 - 建议 1、2、5 交运维一起改；建议 3 和安全审查 A-2 合并，一起改；建议 4 可以顺手做。
 - 安全审查的 A-1 和 M2 是同一件事，A-3 一起做。
 - 改完由本审查员只看改动、复核签字。
+
+## 复核（11-03，同一审查员，只看改动）
+
+**结论：签，9 / 10。** M1～M3 都解决了，建议 1～5 也都做了，没有新的必改。
+
+| # | 结论 | 核对情况 |
+|---|---|---|
+| M1 | 已解决 | `steps()` 先按任务切开再切步骤；`checkUploads` 要求上一步 `all[i-1]` 在同一任务里，含 `find -L <path> -name '.*'`、有单独一行 `exit 1`、没有 `continue-on-error`、if 条件相同。合成样例 5 种（中间夹一步、跨任务、没有 `exit 1`、带 `continue-on-error`、不带 `-L`）都拦下；两个真实工作流的 4 处上传都通过 |
+| M2 | 已解决，比要求更好 | 比较挪进 `desktop_scan.mjs --package`：`checkPackage` 要求原名整名等于“合并后的 productName_版本_x64-setup.exe”，并核对编译配置的 version；上传文件名只从这条命令的输出取，前缀只在 `setupName` 写一处。正反例和命令行测试都有；静态测试锁住先 `--package` 再 `cp`。本机 `bash -eo pipefail` 实测核对失败时直接退出，`cp` 不执行 |
+| M3 | 已解决 | `checkLatest` 要求下载文件名整名等于 `setupName(env, version)`，反例覆盖 `preview.30`、前缀不对、`14.0.0`；out 目录只许有安装包、latest.json、SHA256SUMS 三个文件 |
+
+建议 1～5：`find -L`（符号链接行为测试只在 Linux 跑）；有 `tauri.windows.conf.json` 就失败；整名相等；文件列表先打日志、`::error::` 只写个数；从 desktop.yml 取出检查脚本在临时目录真跑。
+
+**遗留（不挡签字）**
+- Tauri 给 NSIS 安装包起名是否原样保留中文和空格（“柠檬记 预览_…”），本机证明不了；猜错的话 CI 在“整理产物”失败，不会放出错包。运维在第一次预览 tag 运行后核一眼原名。
+- 带换行文件名、符号链接两条行为测试在 Windows 上跳过，要确认 unit 工作流（ubuntu）会跑 `tests/build/workflow-permissions.test.ts`。
+
+**跑过**：两个测试文件 42 条通过、2 条跳过；eslint、actionlint 0 问题；`--package` 无安装包时退出码 1；参数混用退出码 2。没有跑 gen-tauri-key.test.ts，没有写文件。
+
+**采纳（主持人，11-03）**：两条遗留记入 B6-exe 收尾核对；unit 工作流是否跑这条测试由主持人核对。

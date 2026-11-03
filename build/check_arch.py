@@ -1,7 +1,7 @@
 """架构检查里 ESLint、Stylelint、tsc 管不到的几条（架构 2.3）。
 
 用法：python -I build/check_arch.py [--root 目录] [--json]
-  A14  src、shared、dist/web 里不能有密钥特征（sb_secret_、sb_publishable_、sbp_ 要前缀后紧跟至少 20 个密钥字符才算）；import.meta.env 只能读 VITE_PUBLIC_* 和 Vite 自带的 MODE/DEV/PROD/BASE_URL/SSR
+  A14  src、shared、dist/web 里不能有密钥特征（sb_secret_、sb_publishable_、sbp_ 要前缀后紧跟至少 20 个密钥字符才算；sb_publishable_ 是公开值，dist/web 里不报）；import.meta.env 只能读 VITE_PUBLIC_* 和 Vite 自带的 MODE/DEV/PROD/BASE_URL/SSR
   A20  TS/TSX 的字符串和 JSX 文本里不能有汉字、谚文（注释不算）；例外见 A20_EXEMPT
   A19  SW 只走网络的路径（15.3 第 1 条）：src/sw/routes.ts 的 NETWORK_ONLY_PREFIXES 必须有 '/sb'、'/files'；
        sw 的其他文件里不准再写 /sb、/files 的路径（不能给它们另挂 Workbox 路由或缓存）
@@ -46,6 +46,10 @@ SECRET_PATTERNS = [
     ("私钥", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY")),
     ("VAPID_PRIVATE", re.compile(r"VAPID_PRIVATE")),
 ]
+# dist/web 里放行的特征：publishable key 本来就是公开值，预览、正式构建经 VITE_PUBLIC_ANON_KEY 有意编进网页
+# （环境清单“anon / publishable key（公开）”；线上预览站页面脚本里就有）。src、shared 里照旧报：密钥不许写死在源码里，只许走环境变量。
+# 12ba238 起 deploy-preview 在构建后跑 check_arch，仓库变量填的是 sb_publishable_…，这条误报让预览构建失败（11-03 运维排查）。
+DIST_PUBLIC_OK = {"sb_publishable_ 密钥"}
 # A14 的 JWK 私钥特征（架构 0.51 第 2 条、2.3 A14）：VAPID 私钥 0.50 起是一行 JWK，值本身漏进源码或产物时只认变量名认不出。
 # 同一个对象里（kty 键前后 300 个字符以内）有 d 键、且值是 43 个 base64url 字符（32 字节，P-256 私钥）就报。
 # 键名带不带引号、单双引号、冒号前后有没有空格都认（源码对象字面量、压缩过的 JSON）。只有公钥（kty、x、y，没有 d）不报。
@@ -145,6 +149,8 @@ def check_a14(root, errors):
             rel = p.relative_to(root).as_posix()
             text = p.read_text(encoding="utf-8", errors="replace")
             for name, rx in SECRET_PATTERNS:
+                if top == "dist/web" and name in DIST_PUBLIC_OK:
+                    continue
                 m = rx.search(text)
                 if m:
                     line = text.count("\n", 0, m.start()) + 1
