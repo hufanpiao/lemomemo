@@ -388,6 +388,9 @@ isOneToOne: false
               "auth_1h": number,"auth_24h": number
             }[]
                            },
+"claim_endpoint_impl":
+{ Args: { "p_auth": string,"p_endpoint": string,"p_label": string,"p_p256dh": string,"p_platform": string }; Returns: Json
+                           },
 "cleanup_batch":
 { Args: { "p_limit"?: number }; Returns: number
                            },
@@ -445,6 +448,12 @@ isOneToOne: false
                            },
 "purge_vault_impl":
 { Args: { "p_items"?: Json,"p_user": string }; Returns: number
+                           },
+"push_endpoint_ok":
+{ Args: { "p": string }; Returns: boolean
+                           },
+"push_keys_ok":
+{ Args: { "auth": string,"p256dh": string }; Returns: boolean
                            },
 "rebind_device_impl":
 { Args: { "p_device": string,"p_new_session": string,"p_old_session": string,"p_user": string }; Returns: undefined
@@ -717,6 +726,9 @@ isOneToOne: false
           Functions: {
             "apply_patch":
 { Args: { "p_base_rev": number,"p_id": string,"p_op_id": string,"p_own_revs"?: (number)[],"p_patch": Json,"p_table": string }; Returns: Json
+                           },
+"claim_endpoint":
+{ Args: { "auth": string,"endpoint": string,"label": string,"p256dh": string,"platform": string }; Returns: Json
                            },
 "files_authorize":
 { Args: { "p_items": Json,"p_op": string }; Returns: Json

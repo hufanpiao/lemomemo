@@ -1,0 +1,74 @@
+# B6-exe 代码审查：F10 签名密钥脚本
+
+日期：2026-11-03　审查：代码审查员　被审：运维　记录：主持人照审查员回报落盘（审查员只读，没有写文件）
+
+被审文件：`tools/keys/gen-tauri-key.ps1`、`tests/build/gen-tauri-key.test.ts`、`tests/build/gen-tauri-key-fake-signer.cs`、`tests/build/keys-guard-sync.test.ts`、`vitest.config.ts`（SLOW_NODE_TESTS 新加的一行）、`docs/00-团队/负责人-Tauri签名密钥-步骤.md`、`docs/00-团队/负责人-VAPID密钥-步骤.md`（“小写”的说法）
+
+## 结论：有条件签，7 / 10
+
+M1～M4 改完即签，不用整轮复审：M1、M3、M4 看补的代码和测试，M2 复查改过的几行文字。私钥不上屏、剪贴板顺序、finally 清理、子进程接法写得扎实。扣分主要在两处：“私钥必须是加密的”这项判断，对真签名工具拦不住空密码；U 盘检查在测试里整段被绕过了。
+
+## 必改
+
+| # | 问题 | 位置 | 改法 |
+|---|---|---|---|
+| M1 | **空密码拦不住**。tauri-cli 的 `generate_key` 一律调 `generate_encrypted_keypair(password)`。rust-minisign 在里面无条件设 `kdf_alg = Sc`，再无条件加密，中间没有空值判断。所以直接按回车，得到的仍是 `EdScB2`，第 260 行的 `Ed\0\0B2` 分支永远走不到，屏幕上还会显示“私钥是加密的”。假签名工具的 `plain` 模式模拟的是真工具不会给出的输出 | `gen-tauri-key.ps1:255-262`、`:355-363`；`gen-tauri-key-fake-signer.cs:42`；`gen-tauri-key.test.ts:248-254`；步骤文档 `:75`；脚本帮助 `:11` | ① `$rawOut` 里有一行去掉空白后 `-ceq '<empty>'`，就 Fail“密码是空的”，`Ed\0\0B2` 判断保留兜底；② 这行输出和版本有关，签名工具选定时用 `-Practice` 实测“两次都直接回车”，结果写进选型说明；③ 假签名工具加 `empty` 模式（输出 `<empty>`，盒子是 `EdScB2`），断言会停、不进剪贴板，`plain` 模式注释写明是“兼容工具兜底”；④ 帮助块、第 246 行注释、步骤文档第 75 行改成“Sc 只说明格式是加密盒，不能证明密码不为空” |
+| M2 | **“在 iPhone 上存”做不到**：电脑和 iPhone 之间没有共用剪贴板，核对那一步从 iPhone 复制的内容也到不了电脑。负责人平时主要用 iPhone，很可能照着文字去拿手机 | `gen-tauri-key.ps1:390`；步骤文档 `:29`、`:41-47` | 改成在**这台电脑**的浏览器里打开 passwords.google.com，删掉 iPhone 的说法；可以补一句“存好以后在 iPhone 上能看到同一条” |
+| M3 | **U 盘检查在测试里整段被绕过**：`-UsbRootForTest` 让 `Get-UsbDir` 第一行就返回，可移动磁盘、不是系统盘、找不到盘这三条一条都没跑过 | `gen-tauri-key.ps1:236`；`gen-tauri-key.test.ts:94`、`:111` | 测试开关只换最后返回的目录；外壳里的 `Get-CimInstance` 返回可配置的 `DriveType`；补三条用例：DriveType 3、等于系统盘、找不到盘都被拒，都断言签名工具没运行 |
+| M4 | **私钥在剪贴板里时出异常，没有测试证明 finally 会清空**：按回车那一步的 `Read-Host` 从来没有抛过异常（比如负责人按 Ctrl+C）。代码本身是对的 | `gen-tauri-key.test.ts:120-122` | 外壳的 `Read-Host` 加开关，在按回车那一步抛异常；断言 `clip:SK` 之后最后一条是 `clip: `，屏幕上有 `FINALLY`、没有私钥 |
+
+## 建议
+
+- S1：第 192 行测试的标题写着“子进程拿不到 TAURI_SIGNING_* 和 CI”，实际只证明了开头的检查拦得住；第 282～284 行一次都没跑到。改标题，或注明这段是兜底、测不到。
+- S2：第 331 行测试（用仓库里真正的锁文件跑）有 Claude 在跑时永远停在 Claude 检查，没核对“锁文件里还没有 tauri-signer 这一行”。另加纯文本断言，或删掉这条。
+- S3：写 U 盘改用 `CreateNew`，写完 `Flush($true)` 再读回（同安全审查 M5）。
+- S4：哈希核对和启动之间有空隙，核对时拿着 `FileShare.Read` 句柄到子进程结束（同安全审查 S4）。
+- S5：剪贴板加排除格式（同安全审查 S1）。
+- S6：拿公钥说明行里的 key id 和算出来的 key id 比，不一致就停。
+- S7：练习模式显示的“公钥开头 16 个字符”对每把公钥都一样（就是“untrusted comment”的 base64），改成显示 key id。
+- S8：Google 密码管理器存不存得下三百多个字符，没有实测过（同安全审查 S9）。
+- S9：步骤文档补一句：直接点窗口右上角 × 关掉时 finally 不会执行，剪贴板里可能还留着私钥，要关先按 Ctrl+C。
+- S10：测试里的 `Clear-Clip` 会真的调 `ClearHistory()`，清掉跑测试那台电脑的剪贴板历史（同安全审查 M4）。
+- S11：官方发布的是 zip，锁文件规则要求哈希抄自官方，脚本核的却是 exe，选型时要定下怎么处理。
+
+## 逐项核对通过
+
+1. **私钥不外漏**：不进命令行参数（静态测试锁住，假签名工具也断言了收到的参数）；只写 U 盘那两个文件，没有临时文件；标准输出整段收进内存，报错一律遮盖；PSReadLine 历史已关；拒绝点源和 `&` 调用；finally 把变量置空、清 `$Error`。
+2. **剪贴板顺序**：放私钥 → 按回车 → 清空 → 粘回核对（SecureString）→ 清空 → 比较，最多 3 次；比较前去掉空白和零宽字符，用 `-ceq`。
+3. **U 盘检查（代码本身）**：只接受 `F:` 这种写法，`F:\`、UNC 路径、相对路径都过不了参数校验；subst 盘映射到 C: 下会被拒；网络盘被拒；拒绝覆盖这一步在运行签名工具之前。
+4. **锁文件核对**：文件名不区分大小写，符合 NTFS；哈希转小写比较；扩展名必须是 `.exe`；读法和 `publish.ps1` 一致。
+5. **私钥盒格式**：Ed / Sc / B2、盐、opslimit、memlimit、加密部分共 158 字节，理解都对；公钥盒 42 字节；tauri 外面多包一层 base64，脚本解两层，正确。问题只在空密码（M1）。
+6. **子进程接法**：先 `ReadToEndAsync` 再 `WaitForExit`，不会死锁；rpassword 走控制台设备，不走标准流，重定向不影响问密码；能不能实际问出密码，以 `-Practice` 实测为准。
+7. **测试**：静态检查有效；从头跑到尾的各种场景都是真跑、真断言。不足见 M1、M3、M4、S1、S2。
+8. **兼容 PowerShell 5.1**、BOM、只有 LF。
+9. **keys-guard-sync**：第 9 个脚本已收进；Assert-NoClaude 的例外写得精确。
+10. **vitest.config.ts**：放进 SLOW_NODE_TESTS 是对的。
+11. **VAPID 步骤文档第 63 行**：和 `set-vapid-keys.ps1:95` 的 `$SubjectRe` 逐项一致。
+12. **任务单 F10 第 ① 种做法、R4、架构 0.48 第 10、13 条**：都做到了。
+
+## 跑过的测试
+
+- `npx vitest run tests/build/gen-tauri-key.test.ts tests/build/keys-guard-sync.test.ts`：22 条全过（11.9 秒）。**注意**：这一轮跑了会真正启动 PowerShell 的用例，按安全审查 M4 的说法，可能已经清掉过本机的剪贴板历史。
+- `tests/build/ps1-static.test.ts`：3 条通过；eslint 0 错误。
+- tsc：9 个错误，都在前端 A 的 `src/features/todos/__tests__/todo-edit.test.ts`（TS2554），和这次审查的文件无关。
+- 只读了公开源码网页，没有下载或运行任何东西，没有生成密钥。
+
+## 采纳情况（主持人，11-03）
+
+- M1～M4 全部交运维必改，和安全审查的 M1～M5 合成一批。
+- S1、S2、S6、S7、S9 交运维一起改；S3～S5、S8、S10 和安全审查重复，按安全审查那份改；S11 按安全审查的推荐锁 exe、zip 也记下。
+- 改完由本审查员只看改动、复核签字。
+
+## 补充回报（11-03，主持人叫停之后）
+
+**已经跑过全部用例**：15:41 跑了一次完整的 gen-tauri-key 和 keys-guard-sync，22 条全过。按代码推断，这次运行碰到了开发机真的剪贴板：每条走进 try 的用例，都会在 finally 里调一次 WinRT 的 `ClearHistory()`，约 15 次，清掉了**剪贴板历史**；“-File 正常运行”那条（`:331`）没有外壳，调了真的 `Set-Clipboard -Value ' '`、Forms 的 `Clipboard::Clear()` 和 `ClearHistory()`，**剪贴板内容**也被清空。没有私钥参与，丢掉的只是开发机原来剪贴板里的东西。之后只跑了静态部分（7 条通过，15 条跳过）。
+
+**新增必改 M5**：测试会清掉开发机真的剪贴板和历史；正式运行时，开头检查没过也会清掉负责人自己的剪贴板（`gen-tauri-key.ps1:121-129`、`:426-428`；`gen-tauri-key.test.ts:112`、`:331-339`）。改法：
+1. 加 `$script:clipUsed` 标记，放私钥之前设为真；finally 只在它为真时调 `Clear-Clip`。
+2. 测试模式下，`Clear-Clip` 只调 `Set-Clipboard`（外壳里是假的），跳过 Forms 和 WinRT 两步；静态测试另外锁住，正式运行时这三步都在。
+3. 删掉 `:331` 那条，改成纯文本断言：锁文件里没有 `tauri-signer` 这一行。要保留，必须先做到第 1 点，并断言它没进剪贴板。
+4. 加一条用例：开头检查没过时，事件列表里没有任何 `clip:` 记录。
+
+M5 改了以后，S10 不用单独做。结论不变：有条件签，7 / 10，M1～M5 改完即签。
+
+**采纳**：M5 和安全审查 M4 合并交运维（主持人，11-03）。
