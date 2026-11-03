@@ -94,3 +94,13 @@
 - 建议（不挡签）：登记册、接手清单里的旧文件名 `release-vapid-check.test.ts` 改成新名。**主持人已改。**
 
 **跑过**：vapid-public-key-check、workflow-permissions、coverage 48 过 2 跳；actionlint、eslint 0 问题。只读。
+
+## 复核四（11-03，同一审查员）：deploy-preview 的 VAPID_KEY_REQUIRED 改成 'true'
+
+**结论：签，9 / 10。** 负责人 11-03 已运行 `set-vapid-keys.ps1 -Target preview`（接口返回：摘要），公钥已填进 `PREVIEW_VAPID_PUBLIC_KEY`。第 92 行改成 `'true'` 与 B2 O-2、步骤文档一致；vapid-public-key-check 12 条通过，actionlint 0 问题。
+
+建议：① 加静态断言锁住开关是 'true'；② 注释补“11-03 已改为 'true'，不要改回”；③ 第 102 行警告只在 false 时打出，不用动；④ 同一批重跑一次 deploy-preview。
+
+**采纳（主持人，11-03）**：① 已加（`开关 VAPID_KEY_REQUIRED 是 true` 一条，实测改回 'false' 时报错，13 条通过）；② 已补；③ 不动；④ 运维批推上 main 后 deploy-preview 自动运行，即是重跑。
+
+- 【11-03 主持人核对】unit.yml（ubuntu-24.04）第 96 行在三个时区下跑 `npm test`（vitest 全量），包含 `tests/build/workflow-permissions.test.ts`，带换行文件名、符号链接两条行为测试在 CI 上会跑。这条遗留已解决。

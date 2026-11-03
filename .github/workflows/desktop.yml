@@ -179,6 +179,19 @@ jobs:
             exit 1
           fi
 
+      - name: 要上传的 dist/web 里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉）
+        if: steps.which.outputs.env == 'preview'
+        run: |
+          # -L：跟进符号链接查（upload-artifact 会跟进链接上传）；链接成环等 find 出错时，bash -e 让这一步失败
+          hidden="$(find -L dist/web -name '.*' -print)"
+          if [ -n "$hidden" ]; then
+            echo '点开头的文件或目录（每行一个，以 dist/web/ 开头）：'
+            printf '%s\n' "$hidden"
+            count="$(find -L dist/web -name '.*' -print0 | tr -cd '\0' | wc -c)"
+            echo "::error::dist/web 里有 $count 个点开头的文件或目录，upload-artifact 默认不传（include-hidden-files 默认 false），上传后会少文件；列表见上面的日志"
+            exit 1
+          fi
+
       - name: 上传页面给编译任务
         if: steps.which.outputs.env == 'preview'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -350,12 +363,14 @@ jobs:
               echo "::error::仓库变量 PREVIEW_PAGES_PROJECT 是空的或格式不对（只许小写字母、数字、连字符，1～58 个字符）"
               exit 1
             fi
-            name="lemomemo-preview_${LEMO_VERSION}_x64-setup.exe"
             base="https://desktop.${PREVIEW_PAGES_PROJECT}.pages.dev"
           else
-            name="lemomemo_${LEMO_VERSION}_x64-setup.exe"
             base="https://lemomemo.com/desktop"
           fi
+          # 安装包原名必须整名等于“合并后的 productName_这次的版本_x64-setup.exe”（Tauri 按合并后的配置起名），
+          # 证明编进 exe 的版本和 latest.json 写的是同一个；通过才打印上传用的文件名（前缀只在 desktop_scan.mjs 的 setupName 写一处）。
+          # 工作流审查 M2、安全审查 A-1、A-2；不通过时 node 退出码非 0，bash -e 让这一步失败，下面的 cp 不会执行
+          name="$(node build/ci/desktop_scan.mjs --env "$LEMO_ENV" --package "$bundle/nsis" --version "$LEMO_VERSION")"
           mkdir -p out
           cp "${setups[0]}" "out/$name"
           # latest.json 草稿：signature 留空，由负责人本机 publish.ps1 签名后填（F10）；pub_date 用提交时间，重跑结果不变
@@ -372,7 +387,7 @@ jobs:
             echo "latest_sha256=$(sha256sum -b -- out/latest.json | cut -d' ' -f1)"
           } >> "$GITHUB_OUTPUT"
 
-      - name: latest.json 的下载地址和 env.rs 的 update_url 同源、同目录（安全审查 S-3）
+      - name: latest.json 核对：下载地址和 env.rs 的 update_url 同源、同目录（安全审查 S-3），版本号和编译配置一致，文件名是按版本号拼的整名，out 里只有三样文件
         run: node build/ci/desktop_scan.mjs --env "$LEMO_ENV" --latest out/latest.json
 
       - name: 指纹写进 Summary（预览：负责人核这一段；正式：只供对照，负责人按 release-build 的说明核）
@@ -406,6 +421,18 @@ jobs:
             echo
             echo "提交：$GITHUB_SHA"
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 要上传的 out 里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉）
+        run: |
+          # -L：跟进符号链接查（upload-artifact 会跟进链接上传）；链接成环等 find 出错时，bash -e 让这一步失败
+          hidden="$(find -L out -name '.*' -print)"
+          if [ -n "$hidden" ]; then
+            echo '点开头的文件或目录（每行一个，以 out/ 开头）：'
+            printf '%s\n' "$hidden"
+            count="$(find -L out -name '.*' -print0 | tr -cd '\0' | wc -c)"
+            echo "::error::out 里有 $count 个点开头的文件或目录，upload-artifact 默认不传（include-hidden-files 默认 false），上传后会少文件；列表见上面的日志"
+            exit 1
+          fi
 
       - name: 上传未签名产物（publish.ps1 下载、核对、签名的就是这一份；保留 90 天）
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

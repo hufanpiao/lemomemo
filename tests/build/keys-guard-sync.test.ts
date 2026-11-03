@@ -1,6 +1,6 @@
-// 处理密钥的 PowerShell 脚本开头的“安全窗口检查”必须逐字相同（B0 安全审查低 5、中 2 第 4 点）。现在共八个：
+// 处理密钥的 PowerShell 脚本开头的“安全窗口检查”必须逐字相同（B0 安全审查低 5、中 2 第 4 点）。现在共九个：
 // tools/keys 下的 new-proxy-secret.ps1、set-r2-tokens.ps1、set-fn-role-passwords.ps1、login-token-tests.ps1、set-cron-secret.ps1、
-// set-signup-secrets.ps1、set-vapid-keys.ps1（B2 O-1），以及 tools/release/publish.ps1（列表见下面的 FILES）：
+// set-signup-secrets.ps1、set-vapid-keys.ps1（B2 O-1）、gen-tauri-key.ps1（B6-exe F10），以及 tools/release/publish.ps1（列表见下面的 FILES）：
 // 改了一处忘了别的，就会有脚本漏查（例如只按进程名 claude* 判断，漏掉以 node 运行的 Claude）
 // 只读文本，不运行脚本
 import { readFileSync } from 'node:fs';
@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const root = join(import.meta.dirname, '..', '..');
-const FILES = ['tools/keys/new-proxy-secret.ps1', 'tools/keys/set-r2-tokens.ps1', 'tools/keys/set-fn-role-passwords.ps1', 'tools/release/publish.ps1', 'tools/keys/login-token-tests.ps1', 'tools/keys/set-cron-secret.ps1', 'tools/keys/set-signup-secrets.ps1', 'tools/keys/set-vapid-keys.ps1'];
+const FILES = ['tools/keys/new-proxy-secret.ps1', 'tools/keys/set-r2-tokens.ps1', 'tools/keys/set-fn-role-passwords.ps1', 'tools/release/publish.ps1', 'tools/keys/login-token-tests.ps1', 'tools/keys/set-cron-secret.ps1', 'tools/keys/set-signup-secrets.ps1', 'tools/keys/set-vapid-keys.ps1', 'tools/keys/gen-tauri-key.ps1'];
 const BEGIN = '# ==== 安全窗口检查：开始';
 const END = '# ==== 安全窗口检查：结束 ====';
 
@@ -35,7 +35,7 @@ describe('密钥脚本的安全窗口检查', () => {
     }
   });
 
-  // 10-29 负责人定（R-223）：撤掉“不能有 Claude 在运行”的检查，只剩防录屏
+  // 10-29 负责人定（R-223）：撤掉“不能有 Claude 在运行”的检查，只剩防录屏；11-03 R-298：gen-tauri-key.ps1 也一样，所有脚本都不调用
   it('每个脚本都真的调用了防录屏检查', () => {
     for (const f of FILES) {
       const text = readFileSync(join(root, f), 'utf8');

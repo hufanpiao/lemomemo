@@ -1,15 +1,18 @@
 // build/ci/desktop_scan.mjs 的测试（B6-exe F8、F9、A14）：desktop.yml 编完以后核对 exe 的环境，反向搜另一套环境的值。
 // 用合成的“二进制”（字符串首尾相连、不带分隔符，和 Rust 的常量在 exe 里的放法一样），不需要真的编 exe。
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkLatest, parseEnvRs, rulesFor, scan } from '../../build/ci/desktop_scan.mjs';
+import { builtVersion, checkLatest, checkPackage, parseEnvRs, rulesFor, scan, setupName } from '../../build/ci/desktop_scan.mjs';
 
 type Spec = { name: string; identifier: string; site_origin: string; update_url: string; session_keys: string[] };
 type Envs = Record<'production' | 'preview', Spec>;
 type Result = { missing: string[]; found: string[] };
 
 const ROOT = join(import.meta.dirname, '..', '..');
+const SCAN = join(ROOT, 'build', 'ci', 'desktop_scan.mjs');
 const envs = parseEnvRs(readFileSync(join(ROOT, 'desktop', 'src-tauri', 'src', 'env.rs'), 'utf8')) as Envs;
 const values = (s: Spec) => [s.site_origin, s.identifier, ...s.session_keys, s.update_url];
 /** 模拟 exe：一段垃圾字节 + 首尾相连的字符串常量 */
@@ -82,5 +85,98 @@ describe('desktop_scan.mjs', () => {
     expect(p('4.0.0', 'https://lemomemo.com/desktop/lemomemo_4.0.0_x64-setup.exe')).toMatch(/主机.*version 4\.0\.0 和环境 preview 对不上/);
     const two = { ...draft('4.0.0-preview.3', 'https://desktop.lemomemo-preview.pages.dev/a_x64-setup.exe'), platforms: { 'windows-x86_64': { signature: '', url: 'https://desktop.lemomemo-preview.pages.dev/a_x64-setup.exe' }, 'darwin-aarch64': { signature: '', url: 'https://evil.example/a' } } };
     expect((checkLatest(two, envs.preview) as string[]).join('；')).toMatch(/只许 windows-x86_64/);
+  });
+
+  // 版本号和编译配置一致、下载地址的文件名就是要上传的安装包（预览 latest.json 遗留项）
+  const PV = 'https://desktop.lemomemo-preview.pages.dev/';
+  const okName = 'lemomemo-preview_4.0.0-preview.3_x64-setup.exe';
+  const files = [okName, 'latest.json', 'SHA256SUMS'];
+  it('latest.json 正例：版本号和编译配置一致、文件名是目录里唯一的安装包', () => {
+    expect(checkLatest(draft('4.0.0-preview.3', PV + okName), envs.preview, { version: '4.0.0-preview.3', files })).toEqual([]);
+  });
+
+  it('latest.json 反例：版本号和配置不一样、文件名和要上传的安装包不一样、目录里没有或有两个安装包', () => {
+    const c = (v: string, u: string, o: { version?: string; files?: string[] }) => (checkLatest(draft(v, PV + u), envs.preview, o) as string[]).join('；');
+    expect(c('4.0.0-preview.3', okName, { version: '4.0.0-preview.4', files })).toMatch(/和这次编译用的配置（4\.0\.0-preview\.4）不一样/);
+    expect(c('4.0.0-preview.3', 'lemomemo-preview_4.0.0-preview.2_x64-setup.exe', { files })).toMatch(/和要上传的安装包 .* 不一样/);
+    expect(c('4.0.0-preview.3', okName, { files: ['latest.json'] })).toMatch(/正好 1 个，现在 0 个/);
+    expect(c('4.0.0-preview.3', okName, { files: [...files, 'old_x64-setup.exe'] })).toMatch(/正好 1 个，现在 2 个/);
+  });
+
+  it('latest.json 反例：版本号对、文件名里的版本号不对；前缀不对（工作流审查 M3）', () => {
+    const c = (v: string, u: string) => (checkLatest(draft(v, PV + u), envs.preview, { version: v, files: [u, 'latest.json', 'SHA256SUMS'] }) as string[]).join('；');
+    expect(c('4.0.0-preview.3', 'lemomemo-preview_4.0.0-preview.30_x64-setup.exe')).toMatch(/不是 lemomemo-preview_4\.0\.0-preview\.3_x64-setup\.exe/);
+    expect(c('4.0.0-preview.3', 'lemomemo_4.0.0-preview.3_x64-setup.exe')).toMatch(/不是 lemomemo-preview_4\.0\.0-preview\.3_x64-setup\.exe/);
+    const p = (checkLatest(draft('4.0.0', 'https://lemomemo.com/desktop/lemomemo_14.0.0_x64-setup.exe'), envs.production) as string[]).join('；');
+    expect(p).toMatch(/不是 lemomemo_4\.0\.0_x64-setup\.exe/);
+    expect(setupName('production', '4.0.0')).toBe('lemomemo_4.0.0_x64-setup.exe');
+    expect(setupName('preview', '4.0.0-preview.3')).toBe(okName);
+  });
+
+  it('latest.json 反例：out 目录里多了别的文件、缺 SHA256SUMS（安全审查 A-3）', () => {
+    const c = (fs: string[]) => (checkLatest(draft('4.0.0-preview.3', PV + okName), envs.preview, { version: '4.0.0-preview.3', files: fs }) as string[]).join('；');
+    expect(c([...files, 'notes.txt'])).toMatch(/只许有安装包、latest\.json、SHA256SUMS 三样，多了：notes\.txt/);
+    expect(c([okName, 'latest.json'])).toMatch(/缺 SHA256SUMS/);
+  });
+
+  // readConf：文件不存在返回 undefined（和 desktop_scan.mjs 的默认读法一样）
+  const conf =
+    (prev: object | undefined, more: Record<string, object> = {}) =>
+    (f: string) =>
+      f === 'tauri.conf.json' ? { version: '4.0.0-preview.3', productName: '柠檬记' } : f === 'tauri.preview.conf.json' ? prev : more[f];
+  it('builtVersion：预览配置没写 version 时用 tauri.conf.json 的；写了就用它；仓库里的预览配置确实没写', () => {
+    expect(builtVersion('preview', conf({}))).toBe('4.0.0-preview.3');
+    expect(builtVersion('preview', conf({ version: '9.9.9' }))).toBe('9.9.9');
+    expect(builtVersion('production', conf({ version: '9.9.9' }))).toBe('4.0.0-preview.3');
+    const real = JSON.parse(readFileSync(join(ROOT, 'desktop', 'src-tauri', 'tauri.preview.conf.json'), 'utf8')) as Record<string, unknown>;
+    expect('version' in real).toBe(false);
+  });
+
+  it('builtVersion：有 tauri.windows.conf.json 就失败；仓库里确实没有（代码审查建议 2）', () => {
+    expect(() => builtVersion('production', conf({}, { 'tauri.windows.conf.json': {} }))).toThrow(/tauri\.windows\.conf\.json/);
+    expect(existsSync(join(ROOT, 'desktop', 'src-tauri', 'tauri.windows.conf.json'))).toBe(false);
+    expect(builtVersion('production')).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  // NSIS 安装包原名整名核对（desktop.yml 整理产物那一步调 --package；工作流审查 M2、安全审查 A-1、A-2）
+  const PNAME = '柠檬记 预览';
+  it('checkPackage 正例：原名整名等于“产品名_版本_x64-setup.exe”（正式、预览，带中文和空格）', () => {
+    expect(checkPackage('preview', [`${PNAME}_4.0.0-preview.3_x64-setup.exe`], '4.0.0-preview.3', conf({ productName: PNAME }))).toEqual([]);
+    expect(checkPackage('production', ['柠檬记_4.0.0-preview.3_x64-setup.exe'], '4.0.0-preview.3', conf({ productName: PNAME }))).toEqual([]);
+  });
+
+  it('checkPackage 反例：版本号前缀相同但不一样、产品名不对、配置版本不是这次的、个数不对、有 Windows 配置', () => {
+    const c = (files: string[], ver: string, cf = conf({ productName: PNAME })) => checkPackage('preview', files, ver, cf).join('；');
+    expect(c([`${PNAME}_4.0.0-preview.30_x64-setup.exe`], '4.0.0-preview.3')).toMatch(/安装包原名 .* 不是 柠檬记 预览_4\.0\.0-preview\.3_x64-setup\.exe/);
+    expect(c([`x${PNAME}_4.0.0-preview.3_x64-setup.exe`], '4.0.0-preview.3')).toMatch(/安装包原名/);
+    expect(c(['柠檬记_4.0.0-preview.3_x64-setup.exe'], '4.0.0-preview.3')).toMatch(/安装包原名/);
+    expect(c([`${PNAME}_4.0.0-preview.4_x64-setup.exe`], '4.0.0-preview.4')).toMatch(/编译配置里的 version 4\.0\.0-preview\.3 不是这次的版本 4\.0\.0-preview\.4/);
+    expect(c([], '4.0.0-preview.3')).toMatch(/正好 1 个，现在 0 个/);
+    expect(c(['a_x64-setup.exe', 'b_x64-setup.exe'], '4.0.0-preview.3')).toMatch(/正好 1 个，现在 2 个/);
+    expect(c([`${PNAME}_4.0.0-preview.3_x64-setup.exe`], '4.0.0-preview.3', conf({ productName: PNAME }, { 'tauri.windows.conf.json': {} }))).toMatch(/tauri\.windows\.conf\.json/);
+  });
+
+  it('--package 命令行：通过时标准输出只有上传用的文件名；不通过退出码 1、标准输出为空', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lemo-scan-pkg-'));
+    try {
+      const v = builtVersion('preview');
+      const ok = join(d, 'ok');
+      mkdirSync(ok);
+      writeFileSync(join(ok, `${PNAME}_${v}_x64-setup.exe`), 'x');
+      const r = spawnSync(process.execPath, [SCAN, '--env', 'preview', '--package', ok, '--version', v], { encoding: 'utf8' });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toBe(`${setupName('preview', v)}\n`);
+      const bad = join(d, 'bad');
+      mkdirSync(bad);
+      writeFileSync(join(bad, `${PNAME}_${v}0_x64-setup.exe`), 'x');
+      const r2 = spawnSync(process.execPath, [SCAN, '--env', 'preview', '--package', bad, '--version', v], { encoding: 'utf8' });
+      expect(r2.status).toBe(1);
+      expect(r2.stdout).toBe('');
+      expect(r2.stderr).toMatch(/安装包原名/);
+      const r3 = spawnSync(process.execPath, [SCAN, '--env', 'preview', '--package', ok], { encoding: 'utf8' });
+      expect(r3.status).toBe(2);
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
   });
 });

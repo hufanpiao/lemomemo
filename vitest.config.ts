@@ -58,6 +58,10 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/set-cron-secret.test.ts', // PowerShell（有 docker 时还起容器）
   'tests/build/set-signup-secrets.test.ts', // PowerShell
   'tests/build/set-vapid-keys.test.ts', // PowerShell（本机假服务，B2 O-1）
+  'tests/build/gen-tauri-key.test.ts', // PowerShell（编假签名工具、跑脚本，B6-exe F10）
+  'tests/build/desktop-scan.test.ts', // 另起 node 跑 build/ci/desktop_scan.mjs（B6-exe F8、F9）
+  'tests/build/workflow-permissions.test.ts', // bash 跑合成的工作流检查脚本（B6-exe S-8）
+  'tests/build/vapid-public-key-check.test.ts', // bash 跑 release-build、deploy-preview 的 VAPID 公钥核对（VAPID-prod-format、B2 O-2）
   'tests/build/set-fn-role-passwords.test.ts', // PowerShell、python
   'tests/build/set-fn-role-passwords-run.test.ts', // PowerShell
   'tests/data-manifest/generate.test.ts', // PGlite 跑全部迁移

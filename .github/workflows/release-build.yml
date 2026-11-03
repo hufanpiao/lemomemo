@@ -83,6 +83,37 @@ jobs:
           python3 -I build/check_backend.py
           npm test
 
+      - name: VAPID 公钥核对（接手清单 VAPID-prod-format：仓库变量 PROD_VAPID_PUBLIC_KEY → VITE_PUBLIC_VAPID_KEY）
+        # 和 deploy-preview.yml 的“VAPID 公钥核对”（B2 O-2）同一写法，正式构建没有开关：为空、格式不对、像私钥 JWK 都失败。
+        # 格式：0x04‖x‖y 的 base64url，87 个字符，以 B 开头、第二个字符在 A～P（首字节 0x04），最后一个字符只能是 AEIMQUYcgkosw048 之一
+        # （set-vapid-keys.ps1、tests/build/set-vapid-keys.test.ts 同一写法）。脚本输出里不回显变量的值。注意 GitHub 会在步骤日志的 Run 表头展开 env: 的值，vars 不遮：公钥本身是公开值，但误填进来的私钥 JWK 也会照样进日志，所以误填后一律按私钥已暴露处理、换钥匙。格式不对时只报长度。
+        env:
+          VAPID_PUBLIC_KEY: ${{ vars.PROD_VAPID_PUBLIC_KEY }}
+        shell: bash
+        run: |
+          # 正则的字符区间按字节比较，不受运行环境的语言设置影响（代码审查复核建议 ③）
+          export LC_ALL=C
+          if [ -z "$VAPID_PUBLIC_KEY" ]; then
+            echo "::error::仓库变量 PROD_VAPID_PUBLIC_KEY 是空的：负责人照 docs/00-团队/负责人-VAPID密钥-步骤.md 运行 set-vapid-keys.ps1 -Target prod，把打印的公钥填进去"
+            exit 1
+          fi
+          # 先核格式（B2 代码审查复核 M1）：真 P-256 公钥的 base64url 里也可能恰好含 kty（实测约 0.025%），格式合格就放行；
+          # 不合格时才看像不像私钥 JWK（有 {、"、kty），像就按私钥已暴露处理，否则只报格式不对
+          if [[ "$VAPID_PUBLIC_KEY" =~ ^B[A-P][A-Za-z0-9_-]{84}[AEIMQUYcgkosw048]$ ]]; then
+            echo "VAPID 公钥：已填（87 个字符，格式对）" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          case "$VAPID_PUBLIC_KEY" in
+            *'{'*|*'"'*|*kty*) echo "::error::PROD_VAPID_PUBLIC_KEY 看起来是私钥 JWK，不是公钥：立刻到仓库 Variables 删掉它，并重跑 set-vapid-keys.ps1 换一对钥匙（私钥已经暴露）"; exit 1 ;;
+          esac
+          # 正好 43 个字符：P-256 私钥 d 的 base64url 长度（安全复核建议），按私钥已经暴露处理
+          if [ "${#VAPID_PUBLIC_KEY}" -eq 43 ]; then
+            echo "::error::PROD_VAPID_PUBLIC_KEY 只有 43 个字符：这可能是私钥的 d，按私钥已经暴露处理：立刻到仓库 Variables 删掉它，并重跑 set-vapid-keys.ps1 换一对钥匙"
+            exit 1
+          fi
+          echo "::error::PROD_VAPID_PUBLIC_KEY 格式不对（应为 87 个字符的 base64url、以 B 开头；现在 ${#VAPID_PUBLIC_KEY} 个字符）：照 set-vapid-keys.ps1 打印的那一行重新填，不要带空格和换行"
+          exit 1
+
       - name: 构建（production 模式）
         env:
           VITE_PUBLIC_ENV: production
@@ -125,6 +156,17 @@ jobs:
             echo "提交：$GITHUB_SHA"
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: 要上传的 dist/web 里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉）
+        run: |
+          # -L：跟进符号链接查（upload-artifact 会跟进链接上传）；链接成环等 find 出错时，bash -e 让这一步失败
+          hidden="$(find -L dist/web -name '.*' -print)"
+          if [ -n "$hidden" ]; then
+            echo '点开头的文件或目录（每行一个，以 dist/web/ 开头）：'
+            printf '%s\n' "$hidden"
+            count="$(find -L dist/web -name '.*' -print0 | tr -cd '\0' | wc -c)"
+            echo "::error::dist/web 里有 $count 个点开头的文件或目录，upload-artifact 默认不传（include-hidden-files 默认 false），上传后会少文件；列表见上面的日志"
+            exit 1
+          fi
 
       - name: 上传产物（publish.ps1 下载部署的就是这一份，方案 A；保留 90 天）
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -244,6 +286,18 @@ jobs:
             echo
             echo "清单见整包里的 SHA256SUMS。提交：$GITHUB_SHA"
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: 要上传的 bundle 里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉）
+        run: |
+          # -L：跟进符号链接查（upload-artifact 会跟进链接上传）；链接成环等 find 出错时，bash -e 让这一步失败
+          hidden="$(find -L bundle -name '.*' -print)"
+          if [ -n "$hidden" ]; then
+            echo '点开头的文件或目录（每行一个，以 bundle/ 开头）：'
+            printf '%s\n' "$hidden"
+            count="$(find -L bundle -name '.*' -print0 | tr -cd '\0' | wc -c)"
+            echo "::error::bundle 里有 $count 个点开头的文件或目录，upload-artifact 默认不传（include-hidden-files 默认 false），上传后会少文件；列表见上面的日志"
+            exit 1
+          fi
 
       - name: 上传整包（保留 90 天）
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
