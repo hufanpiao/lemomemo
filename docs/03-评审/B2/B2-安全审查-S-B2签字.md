@@ -331,6 +331,225 @@ TC-B2-80 另加两条：push-test 对不合格端点只回 `bad_endpoint`、不�
 
 ---
 
+## 六之二、O-1 正式审查和 S3（11-03）
+
+### O-1：`tools/keys/set-vapid-keys.ps1`、`tests/build/set-vapid-keys.test.ts`、`docs/00-团队/负责人-VAPID密钥-步骤.md`
+
+**结论：通过，可以交负责人运行 `-Target preview`。没有必改项。** 正式那次（`-Target prod`，B7a 前）有两个前提，见 O1-P1、O1-P2。
+
+逐项核对任务单 O-1 和本记录 C 节的要求：
+
+| 要求 | 核对结果 |
+|---|---|
+| 不经 AI | 私钥在负责人本机的 PowerShell 子进程里生成，屏幕上只显示“已写入”和名字。令牌用 `Read-Host -AsSecureString` 读，不回显。终端里没有任何私钥或令牌可读。R-223 定了不查 Claude 是否在运行，这一点不影响结论 |
+| 不进参数 | 只有 `-Target`、`-Subject`（公开值）和测试用的 `-ApiBase`。不用 `supabase secrets set`。写入走 HTTPS 请求正文 |
+| 不落盘 | 没有 `Out-File`、`Set-Content`、临时文件，测试的静态检查查过。.NET `ECDsa.Create(curve)` 和 `ImportParameters` 用的都是 CNG 的临时密钥，不进密钥库。页面文件这一层控制不了，作为剩余风险接受 |
+| 不进历史 | 只许用 `-File` 运行，点源和 `&` 都拒。子进程里用 `SaveNothing`。父窗口的历史只记下命令行，里面没有值 |
+| 不上剪贴板 | 脚本只往剪贴板写空格（静态检查：`Set-Clipboard` 只有 `-Value ' '` 一处）。粘贴令牌后清剪贴板、清历史，开头检查剪贴板历史是否关着 |
+| 不另存（R-282） | 不提示另存，测试断言文中没有“Google”和“密码管理器” |
+| C-8 私钥格式 | 一行 JWK，d、x、y 各 32 字节，格式用整串正则校验 |
+| C-9 成对 | 写入前自检，写入 `VAPID_PUBLIC_KEY` 供函数侧启动时比对；测试里用 Node 独立核对成对 |
+
+运维自己提的六个点：
+
+1. **`$jwk`、`$dB64` 是字符串，没法清零：接受。** 脚本只能用 `-File` 运行，私钥只活在一个很快就退出的子进程里，进程退出后内存就释放了，开着的父窗口从来没拿到过私钥。`D` 的字节数组已经清零，可以清的都清了。步骤文档里“最后关窗口”那句留着。
+2. **Hide-Secrets 的名单（`jwk`、`dB64`、`sbTok`）：够用。** 写 secrets 的请求正文里，JWK 会被 JSON 转义，`"` 变成 `\"`，所以整串 `$jwk` 匹配不上。但 `d` 是 base64url，转义以后照原样出现，`dB64` 能把它盖住。测试也覆盖了“400 时回显请求正文”的情况。`dB64` 在 POST 返回以后才置空，所以 POST 出错时它还在，遮得住。建议把 `body` 也加进名单（O1-S1）。
+3. **只有写 secrets 那一次用了 `-NoDetail`：同意。** 其他几次请求的正文里没有私钥，令牌在请求头里，`Hide-Secrets` 会把它换成 `***`。
+4. **自检用的是 CNG 导入：可靠。** 不管 CNG 导入时核不核对 Q 和 D，签名只用 D，验签只用 x、y，两者不成对就一定验不过。改一个字节以后必须验不过，这一条也能挡住“验签恒为真”的错误。
+5. **三项在同一个请求里写入：同意。** 平台不一定保证这个请求是原子的，但就算只写进去一部分，函数侧 C-9 启动自检也会对不上，回 500、一条都不发，是 fail-closed 的。写完还核对了原有的 secrets 一个没少。
+6. **临时令牌两项权限（Edge Function Secrets 读写、Project Settings 只读）：同意，已经是最小。** 这把令牌也能**读**和删除这个项目所有的函数 secrets，所以 1 天到期、用完先删，再关窗口，这几条都要照做。建议在文档的“剩下的风险”里写明“也能读”（O1-S2）。
+
+正式运行（`-Target prod`）之前的两个前提：
+- **O1-P1**：预览跑完以后，确认两件事并写进环境清单。一是令牌页面上的权限名和文档写的一样。二是 `GET /secrets` 返回的 `value` 是明文还是摘要（即 1.5 第 ③ 点第 3 条）。核实的办法见 O1-S3。
+- **O1-P2**：预览上已经有过一次真实推送，并且 C-9 自检在函数侧通过了，日志里没有 `vapid_keypair_mismatch`。
+
+建议项（不卡交付）：
+- **O1-S1**：Hide-Secrets 名单加上 `body`。
+- **O1-S2**：步骤文档的“剩下的风险”改成“临时令牌能**读**、改、删这个项目的所有函数 secrets，跑完马上删”。
+- **O1-S3**：写完以后，只拿两个**公开值** `VAPID_PUBLIC_KEY`、`VAPID_SUBJECT` 去和接口返回的 `value` 比：
+  - 和原值相等，就是明文；
+  - 等于 SHA-256 十六进制，就是摘要；
+  - 都不是，就是不清楚。
+
+  屏幕上只打印“接口返回：明文 / 摘要 / 不清楚”，不打印任何值；私钥那一项不参与比较。这样第一次跑预览时，O1-P1 的问题就有答案了。
+- **O1-S4**：公钥的格式正则跟 D1-7 对齐，写成 `\AB[A-P][A-Za-z0-9_-]{84}[AEIMQUYcgkosw048]\z`。脚本第 342 行、deploy-preview 第 105 行、测试第 186 行三处同改。.NET 生成的点首字节一定是 0x04，所以现在不会出错，只是三处写法要一致。
+- **O1-S5**：`-Subject` 的 `ValidatePattern` 在 PowerShell 里默认不分大小写，`HTTPS://`、`MAILTO:` 也能过。建议在脚本里再加一道 `-cmatch`，只收小写的 `https://` 和 `mailto:`。
+- **O1-S6**：`LEMO_TEST_API=1` 时，会放宽“`&` 调用被拒”这一条。建议在 `LEMO_TEST_API=1` 而 `-ApiBase` 又是官方地址时直接停，这样测试模式就不可能对着真接口跑。
+- **O1-S7**：加一句 `$VerbosePreference = 'SilentlyContinue'; $DebugPreference = 'SilentlyContinue'`，或者给每个 `Invoke-RestMethod` 带上 `-Verbose:$false`，跟 `publish.ps1` 的写法一样。这样负责人误带 `-Verbose` 时，也不会多打印出东西。
+
+**顺带看的两处（照 1.5 第 ③、④ 点做的）：都符合要求。**
+- `publish.ps1` 的 `Assert-NoPushStub`：
+  - 位置在核对项目名、输入项目名确认之后，改库之前；
+  - 接口地址固定是 `api.supabase.com`，不跟随跳转，带 `-Verbose:$false`；
+  - 只取 `name`，响应对象读完就置空；名单为空也停；名字用 `-ccontains`，区分大小写；
+  - 出错时清 `$Error`，只报状态码；403 时停下，不降级。
+- deploy-preview 的“推送替身变量核对”：
+  - 令牌经 stdin 交给 curl，只走 https，不跟随跳转；
+  - 只有 200 才去查；401、403 只写摘要、不让部署失败，其他状态码失败，正是 1.5 第 ④ 点定的做法；
+  - jq 的报错丢掉，读完就清空 body，命中时只报名字。
+  - 另一步“VAPID 公钥核对”：看起来像 JWK 的值会被拦下，并且提示换钥匙，这个做法好。
+  - 小建议 **O1-S8**：bash 的 `<<<` 遇到大的输入，可能经临时文件传过去。runner 是一次性的，风险很低，但可以改成 `printf '%s' "$body" | jq …`，这样响应体完全不碰磁盘。
+
+**11-03 复核 O1-S1～S8 的落地情况**：八条都已落地，没有引出新问题。S1 遮挡名单加了 `body`；S2 步骤文档写明令牌“能读、改、删”；S3 只比两个公开值，屏幕只打印“明文 / 摘要 / 不清楚”三者之一，`$after` 用完就置空，`finally` 里也置空；S4 三处公钥正则都对齐到 `B[A-P]…`；S5 用 `-cmatch` 校验，和后端一致；S6 测试开关对着官方地址会直接停下，而且放在 `byFile` 检查之前；S7 固定了 Verbose、Debug 偏好；S8 改成 `printf` 管道，第 332 行剩下的 `<<<"$names"` 只处理名字，可以接受。O1-P1、O1-P2 已写进步骤文档第 98～103 行和环境清单（第 40 行、第 160～162 行）。另有一个小点，不算问题：写入后 `dB64` 已经置空，之后 `Hide-Secrets` 遮不到私钥原值，但这一段的报错本来就不带值，可以接受。
+
+### S3：CI 在 Linux 上怎样连到推送替身
+
+**选 A：替身在 127.0.0.1 之外，再绑一个 Docker 网桥网关地址。B、C 不选。D 只作为 A 实测不通时的退路，并且只用在 TC-B2-81～83 上。**
+
+- **为什么选 A**：
+  - 函数一侧什么都不用改。D1-8 的替身地址仍然只收 `127.0.0.1`、`localhost`、`host.docker.internal`。
+  - 新增的暴露面只有一个：一个私有网桥地址上的测试端口，从外面路由不到，CI runner 又是一次性的。
+  - 替身收到的只有 seed 里的假 VAPID 钥匙和测试数据，没有可泄露的东西。
+- **为什么不选 B**：socat 转发同样要监听网桥地址，暴露面和 A 一样，却多了一个进程和一个外部依赖，转发不通时也更难查。
+- **为什么不选 C**：替身的地址会变成容器别名，函数侧的替身白名单就得再加一个主机名，等于为了测试放宽线上代码。另外，测试要随时改替身的行为（拖慢多久、回什么状态码），替身放在容器里还得再开一条控制通道。
+- **为什么不选 D**：TC-B2-80（P1）里的“3xx 不跟随”和替身判断，以及 TC-B2-81～83 的整链，都是 S-B2 签字要的证据，CI 不能长期不跑。
+- **A 的条件**（运维实现，Docker 开着时实测一次，把结果写进 TC-B2-80 的记录）：
+  1. 只在 `CI=true` 并且是 Linux 的时候才绑网桥地址。本机 Windows 和 macOS 的 Docker Desktop 照旧只听 `127.0.0.1`，那边 `host.docker.internal` 本来就能转到宿主机的回环地址。
+  2. 要绑的地址必须**同时**满足三条，有一条不满足就不绑，相关用例直接失败，不悄悄跳过：
+     - 是 `docker network inspect bridge` 读出来的网关地址；
+     - 在 edge runtime 容器里 `getent hosts host.docker.internal` 解析出来，也正好是这个地址；
+     - 属于私有网段（`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`），并且不是 `0.0.0.0`、不是 `::`。
+  3. 端口随机分配，≥ 1024，只在测试期间监听，测完就关。替身只接受来自回环地址和 Docker 各网络子网的连接，其他来源一律断开（小成本的第二道保险）。
+  4. 替身代码里不许出现 `0.0.0.0` 和 `::`。测试开发在替身的单测里断言实际监听的地址，只能是 `127.0.0.1` 和上面那个网关地址。
+  5. 退路：如果 A 实测不通，要回到安全审查再定，不能直接改用 0.0.0.0。在重新定之前，按 D 做：只把 TC-B2-81～83 标成“只在本机 Docker Desktop 上跑”；TC-B2-80 的替身判断和 3xx 部分改成进程内注入，在 CI 里照跑。
+
+## 六之三、前端 A 第 8、9 行里涉及安全的部分（11-03，只读审）
+
+范围：`src/sw/sw.ts`、`src/sw/push.ts`、`src/sw/pending.ts`、`src/platform/push.ts`、`src/platform/env.ts`（`isTauri`）、`src/core/pending-actions.ts`、`src/core/boot.ts`（启动时的 prune）、`tests/build/sw-no-user-data.test.ts`，另外顺带看了 `tests/build/sw-pending.test.ts`、`tests/build/sw-push.test.ts`。看的是 `git diff` 和新文件，测试没有跑。
+
+**结论：有条件通过。** 下面两件做得对：
+- K-sw-seal 的 ⑴⑵ 都写对了：开库不带版本号；库不存在就中止升级，不留下新库；读 owner 和写入在同一个 readwrite 事务里，owner 不一致就丢；收到 versionchange 立刻关，写完也关；pending 里只存 id、表名、按键和时间。这几点都有行为测试。
+- 跳转地址的前缀写死了，不会变成开放跳转。
+
+但还有两处漏洞：一是锁屏和通知中心在账号切换或退出以后，仍可能显示上一个账号的标题；二是从通知数据回到整页提醒时，参数没有再校验。另外 sw-no-user-data 放宽以后，有一处说明写错了路径。下面四件按顺序回答。
+
+### 1. 用户数据会不会进 SW 缓存，锁屏能看到什么
+
+- **SW 缓存：不会进。** 运行时缓存仍只有三个公共缓存；测试从“不准 `caches.open`”收紧成不准出现任何 `caches.` 调用；`/sb/*`、`/files/*` 照旧直连。SW 不读 localStorage、不带 Authorization，测试钉住了。
+- **锁屏和通知中心：SW 原样显示负载里的 `title`、`body`。** 隐藏标题（“15:00 有 1 项日程”）全靠服务器按 `push_show_title` 和 `remind.show_title` 生成。SW 这一层没有兜底，所以哪怕只是服务器 bug，或者是一条 resolve、test 推送带了标题，都会显示在锁屏上。→ 建议 FE-S1。
+- 通知只用固定的图标，不从负载里取图片和地址，也没有 HTML，系统按纯文本显示，不存在注入。
+- 负载解不开时，只显示 App 名，这一点对。
+- **明早清单第 62 条，从安全角度看**：
+  - ① 把“日程”和“待办”分开写：锁屏多暴露的只是条目的类别，可以接受。
+  - ② 通知上加“完成”按钮：可以接受，条件是它和“推迟”走同一条 pending 路径（owner 一致、24 小时、页面转成 outbox 前再校验），并且完成以后能撤销。iPhone 的网页推送本来就不显示按钮，只影响 Edge。
+
+### 2. 账号隔离
+
+- **pending 不会串号。** SW 一侧比对 owner，页面启动时 `prunePendingActions` 删掉别人的、超过 24 小时的、形状不对的；`ensureAccount` 换账号时整库清空，三层都在。
+- **通知可能串号：必改 FE-1、FE-2。** 服务器一侧靠两件事断开旧账号的推送：退出时删本会话的 devices 行，新账号用 claim_endpoint 换绑。问题有两个：
+  - 退出时如果 `DELETE devices` 没发出去（比如离线），旧账号的推送会继续到达这台设备，SW 照样把旧账号的标题显示在锁屏上。这时设备上可能已经没有人登录，或者已经是另一个账号。
+  - 退出以后，通知中心里已经显示的旧通知还留着标题。
+
+  另外，`unsubscribePush` 写好了，但仓库里还没有任何地方调用它。
+
+### 3. 点开通知后跳转的地址能不能被负载带偏
+
+- **不会变成开放跳转。** `reminderUrl` 的前缀固定是 `/app/#/remind/`，再经 `new URL(url, sw.location.origin)` 处理，结果永远是同源地址；负载里没有地址字段，SW 也从不打开负载给的地址。
+- **但 hash 路由里的参数没有再校验：必改 FE-3。** `parsePushPayload` 对 uid、id 做了 UUID 校验，但点击时走的是 `dataOf`，它从通知的 data 读回来时只校验了类型。如果有一条通知不是经 `parsePushPayload` 生成的（比如页面自己调 `showNotification`，或者以后加的代码），`id` 可以带上 `/`、`?`、`&`、`#`，从而改写整页提醒路由的参数。
+
+### 4. sw-no-user-data 放宽以后还守不守得住原来的意图
+
+**基本守得住。** IndexedDB 只准在 `pending.ts` 里碰，开库方式、owner 比对、只写一个仓、写完关库都钉在源码上；引入的模块有白名单；事件只多了 push、notificationclick、notificationclose 三个。缺三处，见 FE-4：
+- 说明里写的行为测试路径不对：写的是 `src/sw/__tests__/pending.test.ts`，实际在 `tests/build/sw-pending.test.ts`、`tests/build/sw-push.test.ts`。
+- 没有钉住“写进 pending 的记录只有那 6 个字段”。
+- 没有钉住“SW 只打开 `reminderUrl` 或 `/app/`”。
+
+还有一点：原来“退出以后 SW 一侧不留用户数据”这个意图，现在多了系统通知中心这一处存放的地方。这一处由 FE-2 兜。
+
+### 必改
+
+| # | 必改 | 落在哪 |
+|---|---|---|
+| **FE-1** | **SW 显示通知之前先核对账号**：用 `pending.ts` 现有的 `openExisting` 只读打开库、读 owner，只有当负载里的 `uid` 和 owner 一致时，才显示负载里的 `title`、`body` 和推迟按键。另外三种情况（没有库、没有 owner、owner 不一致）都改成显示兜底通知：只写 App 名，不带按键，tag 照旧，这样同一条的 resolve 还能替换掉它。读库失败也按兜底处理。不建库、不写任何东西，读完就关。要补测试：owner 一致时显示标题；不一致、没有库时只显示 App 名；不留下新库 | `src/sw/push.ts`、`tests/build/sw-push.test.ts` |
+| **FE-2** | **退出流程把浏览器这一侧也断开**：在 K9 退出的 `sealForExit` 之后、删库之前，依次做：① `getNotifications()` 关掉本 App 所有已显示的通知（不支持就跳过）；② `unsubscribePush()` 退订，尽力而为，失败不阻塞退出；它返回的 endpoint 只交给服务器删 devices 行，不写日志。被移除、注销、换账号这几条路径也照这样做。要有一条测试证明退出路径调用了这两步 | FA-1 / FA-4 的退出流程（`core/account.ts` 一侧） |
+| **FE-3** | **`dataOf` 和负载用同一套校验**：`uid`、`id` 必须是 UUID，`due_at` 必须是正的安全整数，有一项不合格就返回 null，按“不是我们的通知”只打开 `/app/`。FA-4 的整页提醒路由在页面一侧也要自己再校验 `kind`、`id`、`due`，不认任何 `next`、`redirect`、`url` 这类参数。要钉一条测试：`reminderUrl` 的输出匹配 `^/app/#/remind/(event|todo|anniv)/<uuid>\?due=[1-9][0-9]*$` | `src/sw/push.ts`、FA-4 的路由 |
+| **FE-4** | **sw-no-user-data 补三处**：① 改正说明里的测试路径；② 静态断言 `push.ts` 调 `writePendingAction` 时传的对象只有 `id`、`user_id`、`row_table`、`row_id`、`action`、`created_at` 这 6 个字段，不出现 `title`、`body`；③ 静态断言 `openWindow` 和 `navigate` 的参数只能来自 `reminderUrl(...)` 或 `'/app/'`，负载里永远不加地址字段 | `tests/build/sw-no-user-data.test.ts` |
+
+### 建议
+
+- **FE-S1**：resolve 和 test 两类通知，SW 不用负载里的标题，改用本地词典里的固定文案（SW 已经能用 `t()`，词典要补中文、韩文两条）。这样就算服务器出错，这两类通知也不会把条目内容带上锁屏。
+- **FE-S2**：`keepPendingAction` 再加一条，`created_at` 晚于“现在 + 5 分钟”的也不留，免得时间写到将来的项永远不过期。
+- **FE-S3**：FA-4 的 `toEnqueue` 转 outbox 之前，按 SW 的规则再校验一遍：`row_table` 是那三个表之一，`row_id` 是 UUID，分钟数在 1～1440，`due_at` 是整数。
+- **FE-S4**：iPhone 真机（P2）顺带看一件事：中止“新建库”的升级以后，Safari 会不会留下一个空库。如果会留，FE-1 会把它当成“没有 owner”，显示兜底通知；页面启动时 owner 为空，会按正常流程认领账号，所以两种结果都能接受，记下来就行。
+- **FE-S5**：`isTauri` 只看 window 上的全局变量，网页脚本可以伪造它，但伪造的后果只是让自己订不了推送，属于自害，可以接受。服务器一侧任何判断都不能依赖它（D1-5 已经写了按端点主机判断，不看客户端声明）。
+- **FE-S6**：通知 data 里的 `uid` 会留在系统的通知存储里，它不显示出来，是一个不透明的 id，接受。
+
+### 后端要和前端对齐的两件（推送负载 v1）
+
+- 负载里永远不放地址和图片字段。resolve、test 两类不带条目标题（架构审第四节第 3 点）。`uid` 只给 SW 比对 owner 用。
+- `body` 照第四节一起补齐。SW 的 300 字上限只是兜底；服务器在 notify-text 里截断以后，负载必须能放进 3072 字节那一档。
+
+### 11-03 复核（前端 A 按 FE-1～FE-4、FE-S1～S3 改完以后，只读）
+
+**结论：FE-1～FE-4 都通过；FE-S1、FE-S2、FE-S3 也都落地了。剩下的是 FA-4 路由一侧的再校验（前端 A 已经归到 FA-4），它保留为 FA-4 ③ 的打勾条件。**
+
+- **FE-1 通过**：`handlePush` 先用 `readSwOwner` 只读核对（不带版本号开库；库不存在就中止升级，不建库；读完就关）。只有 owner 和负载的 `user_id` 一致，才显示标题、正文和按键。没有库、没有 owner、不一致、读库出错，一律只显示 App 名，不带 data，tag 照旧；resolve 也照样关旧通知，换成静默的兜底通知。`sw-push.test.ts` 覆盖了这几种情况，也覆盖了“不留下新库”。
+- **FE-2 通过**：`disconnectBrowserPush` 先关掉所有已显示的通知（不支持就跳过），再退订；整体最多等 2 秒，出错、超时都不抛；endpoint 不记录、不交出去。删 devices 行照旧由退出流程按会话做，这样和原来的口径一致。四条路径都有测试，并且钉住了“断开在删库之前”：`wipeThisDevice`（设置页退出、被移除、登录页“退出并换账号”）、`ensureAccount` 换账号、`watchAccount`（会话没了、换了账号）、`wipeOnRemoved`。两份测试在 `src/core/__tests__/account-push.test.ts`、`src/platform/__tests__/sign-out-push.test.ts`，不在 tests/build 下。还有两点：
+  - exe 里 `disconnectBrowserPush` 什么都不做，exe 的本机通知由 B6-exe 外壳审查的 X-5 负责；
+  - 换账号以后旧订阅会被退订，新账号如果开着提醒，要重新订阅。这是功能上的事，请前端 A 确认启动流程会按新账号的设置重新订阅。
+- **FE-3 通过**：`itemRefOf` 由负载和 `dataOf` 共用（`user_id`、`id` 必须是 UUID，`kind` 必须认识，`due_at` 必须是正的安全整数），不合格就只打开 `/app/`。地址和 tag 收口到 `shared/logic/remind-route.ts`，只留一份，这个文件不 import 别的文件。`native-bridge-url.test.ts` 钉了 FE-3 正则，也有反例：大写 UUID、外来主机、多带参数、`//` 开头。**FA-4 的整页提醒路由还没有在页面一侧再校验 `kind`、`id`、`due`，也还没有拒绝 `next`、`redirect`、`url` 这类参数**，这一条留到 FA-4 ③ 时打勾。exe 的 `openReminder` 也走这条路由，所以一并靠它兜住。
+- **FE-4 通过**：说明里的路径改对了；`indexedDB` 在 SW 其他文件里按出现次数核对，并且有别名、解构绕写的反例；写进 pending 的对象按顶层键核对，只有 6 个字段；`openWindow`、`navigate` 的调用点都是固定的，`url` 只来自 `reminderUrl(d.kind, d.id, d.due_at)` 或 `APP_HOME = '/app/'`。
+- **FE-S1、FE-S2、FE-S3 落地**：resolve、test 两类通知改用本地词典（`push.resolved`、`push.test`）；`keepPendingAction` 拒收时间晚于“现在 + 5 分钟”的项；转进 outbox 之前先校验形状（三张表、UUID、1～1440 分钟、正的安全整数）。
+
+## 六之四、BE-1 实现审查（11-03，只读）
+
+范围：迁移 20261103100000、110000、120000，`supabase/functions/_shared/push/*.ts`，`push-dispatch/`，`config.toml`，`check_backend.py` 的 F9 ③ 和 F10。只读代码和测试源码，没有跑测试。另有代码审查员在并行审同一批代码。
+
+**结论：通过，没有必改项。D1-1～D1-8、D2-1～D2-4 和 1.5 节在这一批里都落实了。push-dispatch 现在还是骨架：真正的发送循环在 BE-2，下面“留给 BE-2 的条件”要在那时打勾。`gen_push_endpoints.py` 进 F10 放行名单，同意，但有条件（见第 5 点）。**
+
+**1. 端点白名单两边一致（D1-1～D1-3、1.5 第 ①）：落实。**
+- SQL `private.push_endpoint_ok` 和 TS `checkEndpoint` 的检查顺序相同：纯可见 ASCII → 长度 ≤ 2048 → 整串正则 → 禁 `%2[eE]` → 路径点段 → 主机白名单（两个固定主机，加上 Apple、WNS 的一级子域，并排除 `xn--`）。
+- 整串正则由 `PATH_RULE` 一份常量生成。SQL 照抄，`push-path-rule-sync.test.ts` 逐字核对；`\?` 写成 `[?]`，意思不变。
+- 两边都不用 `/i`、`~*`、`lower()`。
+- `tests/fixtures/push-endpoints.json` 两边各跑一遍：pgTAP 有 146 条端点向量和 83 条密钥向量。跳过的 1 条是 PG 的 text 存不了的值，可以接受。“只在发送时拒”的公钥单列 3 条。
+- TS 多做一步 WHATWG 核对（`href`、`hostname`、端口、用户名密码、协议），原样用原串发送，`origin` 只取 `u.origin`。
+- p256dh、auth 在 devices 约束、`push_keys_ok`、TS 三处用同一条正则（D1-7）。SQL 先用 `case` 挡住正则不过的值，再解码，不会因解码抛错；TS 解码后核对 65 字节、首字节 0x04 和 16 字节。
+
+**2. VAPID 自检：落实。**
+- 三个变量没设或是空串，都回 `vapid_missing`；JWK 坏了回 `vapid_bad_key`；`d` 和 `x`、`y` 签名验签不过，或者和 `VAPID_PUBLIC_KEY` 逐字节不一致，都回 `vapid_keypair_mismatch`；自检过程中抛异常也按坏钥匙算。
+- 以上情况在 `handle` 里一律回 500 `misconfigured`，日志只记 `misconfigured:<原因码>`。这一步放在 `x-cron-secret` 鉴权之后，没带对密钥的调用方看不出函数配没配好，也不会白白耗掉签名的 CPU。TC-B2-88 等用例在 `tests/edge/push-dispatch.test.ts` 里。
+- 私钥 `extractable: false`。JWT 按 origin 缓存，`aud` 等于真实端点的 origin，有效期 12 小时，剩余不到 1 小时就重签（C-7、C-8、C-9、D1-6）。
+
+**3. 替身判断：落实（D1-8）。**
+- `isLocalStubEnv` 要同时满足两条：`SUPABASE_URL` 是 `http`，主机为 kong、127.0.0.1、localhost 之一；并且开关正好等于 `'1'`。
+- 线上只要 `PUSH_SERVICE_OVERRIDE_URL` 不是空串（只有空格也算），就回 500 `misconfigured:override`。本机的地址也要过 1.5 的原串正则，端口在 1024～65535 之间。
+- 设了替身以后，`deliver` 照旧先查端点和密钥；`aud` 仍按真实端点签；真实端点一次都不连。
+- 测试覆盖了 1.5 列的全部情况，包括 `.evil.com`、IP、https、80 端口和 302。
+
+**4. 发送（D1-4、第五节第 5 条）：落实。**
+- `redirect: 'manual'`；`opaqueredirect`、状态 0、任何 3xx 都归为 `redirect`，不读 `Location`。
+- `AbortSignal.timeout(5000)`，`credentials: 'omit'`，除 VAPID 以外不带别的凭据。
+- 响应体读到 1 KB 就 `cancel()`，内容不记录。
+- 结果只给枚举，日志只记原因码。
+- 每条都新生成 ECDH 临时密钥和 salt。固定向量入口 `encryptWithFixedKeysForTest` 不在发送路径上。补齐用 1024 / 2048 / 3072 三档。
+
+**5. 负载、F9、F10：**
+- **负载：落实。** 只能经 `buildPayload` 组装。类型上就没有地址、图片字段；resolve、test 不带 `title`、`body`、`snooze`；`user_id` 必带；`title`、`body` 各 ≤ 300 字，整份 ≤ 3071 字节。
+- **F9 ③（D2-1～D2-4）：落实。** `SERVER_SECRET_FUNCTIONS` 写死，有单测钉住；`config.toml` 里 `verify_jwt = false` 只有 account-purge、push-dispatch、usage-report 三个。push-dispatch 已进 version-gate 免查名单（D1-S6）。
+- **claim_endpoint 的会话检查和授权：落实。**
+  - 顺序：`not_password_session` → `account_usable` → `session_alive`，然后才校验；校验不过整次拒绝，一行不动。
+  - `endpoint_not_allowed`、`bad_push_keys` 都用 22023，不带 detail、hint，也不带原串（D1-S4）。
+  - `public.claim_endpoint` 只授 authenticated，并撤掉了 public、anon、service_role 的执行权；两个校验函数不授任何角色执行权。
+- **`build/gen_push_endpoints.py` 进 F10 放行名单：同意。** 它只生成测试向量，`host.docker.internal` 在里面是“必须被拒”的样例；它只 import json、base64、os、random 和 cryptography，不联网，产物落在 `tests/fixtures/`。放行按精确路径，不放整个 `build/`，这一点对。条件：在 `check-backend` 的测试里加一条断言，这个脚本不 import `urllib`、`http`、`socket`、`requests`、`subprocess`。以后它开始联网或者被别处 import，就挪进 `tests/`，并从名单里删掉。
+
+**留给 BE-2 的条件（③ 时打勾）**
+
+- 发送循环只用 `deliver`：
+  - `bad_endpoint`、`bad_keys`：三列置空，记 `push_bad_endpoint`，code 只写原因码；
+  - `gone`：删订阅；
+  - `vapid_rejected`：只加 `push_fail_count`，不删订阅；
+  - `*.push.apple.com`（`apple` 为真）一律不发 resolve；
+  - 日志和心跳都不带地址、标题、响应内容。
+- push-test 也只调 `deliver`，只回枚举（D1-5）。
+- 心跳新加的 `claimed`、`budget_hit` 记得进 usage-report 的转发字段（D2-S2）。
+
+**建议（不卡）**
+
+- **BE1-S1**：`vapid.ts` 的 `SUBJECT` 现在允许主机有大写，路径字符也比较宽。可以收紧到和 O-1 脚本、R-283 一致：`https://` 后面只许小写主机、不带端口，或者 `mailto:`。脚本已经拦了一道，所以不卡。
+- **BE1-S2**：test 类负载现在也带了 `kind`、`id`、`due_at`（SW 不用）。建议按负载 v1 只发 `{v, type, user_id}`，多一个字段就多一处暴露。
+- **BE1-S3**：F10 在任何层级遇到名为 `tests`、`__tests__` 的目录都跳过。如果 `supabase/functions/<名>/tests/` 下的文件被函数 import，它们会跟着部署出去。建议在 `supabase/functions/` 下不跳过这两类目录，或者只跳过仓库根目录的 `tests/`。
+- **BE1-S4**：`drain` 是按块读的，单块可能超过 1 KB。块的大小有网络缓冲兜着，可以接受；注释里可以写成“读到超过 1 KB 的那一块为止”。
+
 ## 七、③ 正式审查要逐项打勾的内容（本版先列出，不打勾）
 
 | 项 | 级别 | 证据要求 | 结果 |
@@ -345,7 +564,8 @@ TC-B2-80 另加两条：push-test 对不合格端点只回 `bad_endpoint`、不�
 | Web Push 自实现（第三节 C-1～C-10） | P1 | — | 待审 |
 | 正文补齐（第四节） | P1 | — | 待审 |
 | TZ-invalid-b2（D7） | — | BE-2 代码审查时定 | 待审 |
-| O-1 VAPID 脚本（不经 AI、不进参数、不落盘；JWK 格式） | — | O-1 初稿 | 待审 |
+| 前端 SW 推送和 pending（第六之三节 FE-1～FE-4） | P1 | 四条必改的代码和测试 | 待审 |
+| O-1 VAPID 脚本（不经 AI、不进参数、不落盘；JWK 格式） | — | O-1 初稿 | **11-03 已审：通过，预览可运行**（第六之二节）；正式运行前满足 O1-P1、O1-P2 |
 | 风险接受：usage-report、push-dispatch 未鉴权的请求能进函数、算一次调用（和 account-purge 一样） | — | 写明即可 | 待审 |
 
 ## 签字
@@ -360,3 +580,9 @@ TC-B2-80 另加两条：push-test 对不合格端点只回 `bad_endpoint`、不�
 
 - 2026-11-03：第一版，开工前审 D1、D2（结论都是有条件通过；必改 D1-1～D1-6、D2-1～D2-5）；按主持人补充加了 Web Push 自实现密码学的审查要点（C-1～C-11）和补齐方案（改成 1 / 2 / 3 KB）；签字栏留空。只新建了这一个文件，没改别的文件，没有登记文件登记册（主持人登记）。
 - 2026-11-03：补 1.5 节，定了四件事：① 路径和查询串改用收窄的字符集，两边都禁止 `%2e` 和点段（D1-1 第 ③ 步的路径写法作废）；② 替身允许用 `host.docker.internal`，判断本机要同时满足两条（D1-8）；③ 同意正式发布令牌加 Edge Function Secrets 只读，附五个条件；④ 预览令牌也同意加，但不单独重建，下次重建时一并加，在那之前检查只写摘要、不让部署失败。D1-S1 升为必改 D1-7；样例清单补第 40～44 条和合格组。
+- 2026-11-03：按代码审查 S9，D1-7 定了最终写法：p256dh 加了第二个字符和末字符的限制，auth 加了末字符的限制。
+- 2026-11-03：加第六之二节：O-1 正式审查通过，预览可以运行，没有必改项；正式运行前要满足 O1-P1、O1-P2，另有建议 O1-S1～S8；`Assert-NoPushStub` 和 deploy-preview 的两步核过，都符合要求；S3 选 A（绑网桥网关地址，附五个条件），B、C 不选，D 只作退路。
+- 2026-11-03：加第六之三节：只读审了前端 A 第 8、9 行里涉及安全的部分，结论有条件通过；必改 FE-1～FE-4（推送显示前核对 owner、退出时关通知并退订、`dataOf` 再校验、sw-no-user-data 补三处），另有建议 FE-S1～S6。
+- 2026-11-03：六之二节补一行，复核 O1-S1～S8 的落地情况：都已落地，没有引出新问题；O1-P1、O1-P2 已写进步骤文档和环境清单。
+- 2026-11-03：六之三节补“11-03 复核”：FE-1～FE-4 通过，FE-S1～FE-S3 落地；FA-4 路由一侧的再校验留到 FA-4 ③ 打勾；exe 的本机通知归 B6-exe 外壳审查的 X-5。
+- 2026-11-03：加第六之四节：只读审 BE-1 实现，结论通过、没有必改项；D1-1～D1-8、D2-1～D2-4、1.5 节都已落实；列了留给 BE-2 的条件和建议 BE1-S1～S4；同意 build/gen_push_endpoints.py 进 F10 放行名单（附条件）。
