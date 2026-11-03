@@ -30,6 +30,16 @@ export const ko = {
   'app.crashed.title': '앗, 멈췄어요', // R-106 B1 第一遍已审（10-30）；App 顶层出错的整屏兜底（K6-sugg3 ⑥）
   'app.crashed.refresh': '새로고침', // R-106 B1 第一遍已审（10-30）；和 update.tooNew.refresh 统一成 새로고침
   'remind.push.event': '{time} {title}', // R-106 B1 第一遍已审（10-31）
+  'remind.push.todoDue': '{time} 마감', // REVIEW(ko)
+  'remind.push.hidden': '{time}에 일정 1개가 있어요', // REVIEW(ko)
+  'remind.push.hiddenTodo': '{time}에 할 일 1개가 있어요', // REVIEW(ko)
+  'remind.push.hiddenAnniv': '{time}에 기념일 1개가 있어요', // REVIEW(ko)
+  'remind.push.action.snooze': '미루기', // REVIEW(ko)
+  'remind.push.action.done': '완료', // REVIEW(ko)
+  'remind.push.action.ack': '확인', // REVIEW(ko)
+  'remind.push.fromClaude': 'Claude에서 · {text}', // REVIEW(ko)
+  'push.resolved': '다른 기기에서 처리했어요', // REVIEW(ko)
+  'push.test': '테스트 알림이에요. 푸시가 잘 연결됐어요', // REVIEW(ko)
   'fmt.monthDay': '{m}월 {d}일', // R-106 B1 第一遍已审（10-31）
   'fmt.monthDayWeek': '{m}월 {d}일 ({w})', // R-106 B1 第一遍已审（10-31）
   'fmt.wd.0': '일', // R-106 B1 第一遍已审（10-31）
@@ -41,4 +51,12 @@ export const ko = {
   'fmt.wd.6': '토', // R-106 B1 第一遍已审（10-31）
   'update.syncPaused': '동기화를 잠시 멈췄어요. 조금 뒤에 다시 열어 주세요', // R-106 B1 第一遍已审（10-31），按审校意见 K-08 改过：一句里两个“잠시”；同 zh：探测说账号正常但 5 分钟内已重新载入过，同步暂停（10-30）
   'update.stalled': '새 버전이 아직 준비되지 않았어요 · 잠시 후 다시 시도해 주세요', // R-106 B1 第一遍已审（10-31）；同 zh：查到新版本但 30 秒内没接管（BANNER-sugg ⑤，10-30）
+  'exit.incomplete.title': '로그아웃이 끝나지 않았어요', // REVIEW(ko)；同 zh：exe 里退出时本机会话没删掉（A-1）
+  'exit.incomplete.body': '이 컴퓨터의 로그인 정보가 지워지지 않았어요. “다시 시도”를 눌러 한 번 더 지워 주세요. 지워지기 전에는 로그인된 화면으로 돌아가지 않아요.', // REVIEW(ko)
+  'exit.incomplete.retry': '다시 시도', // REVIEW(ko)
+  'exit.incomplete.busy': '지우는 중…', // REVIEW(ko)
+  'exit.incomplete.failed': '아직 지우지 못했어요. 잠시 후 다시 시도하거나 레모를 다시 열어 주세요', // REVIEW(ko)
+  'exit.unavailable.title': '이 컴퓨터의 로그인 정보를 읽지 못했어요', // REVIEW(ko)；同 zh：installDesktopSession 失败（代码审查建议 4）
+  'exit.unavailable.body': '레모를 다시 열어 주세요. 그래도 안 되면 컴퓨터를 다시 시작한 뒤 시도해 주세요.', // REVIEW(ko)
+  'exit.unavailable.reopen': '다시 열기', // REVIEW(ko)
 } as const satisfies Record<SharedMsgKey, string>;

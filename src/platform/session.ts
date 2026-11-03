@@ -9,9 +9,14 @@
 // • Cache Storage 的清理也在这里（caches 只在 platform 用）：只删运行时缓存，SW 预缓存保留（0.38 第 36 条）
 // • 删本机会话分两个函数（接手清单 K6-sugg4 ②）：clearLocalSessionIf(sid) 只删“还是那一个”的会话（sid 必填，退出流程一律用它）；
 //   clearAnyLocalSession() 不管是谁的都删（名字里写明，只给 takeLocalSession 和测试用）。不再有“给不给参数决定删不删”的写法
+// • 会话键存在哪由 session-store.ts 定（网页版 localStorage，exe 是凭据管理器，F5-2 / N1）：会话的读和删都经 sessionStore()；
+//   “自己退出”的标记、退出原因不是会话，照旧在 localStorage
 // 只读 user.id、user.email 和令牌 payload 里的 session_id（sessionIdOfToken），不校验、不记录、不打印令牌
-import { buildInfo } from './env.ts';
+import { buildInfo, isTauri } from './env.ts';
 import { readExitNotice, setExitNotice, type ExitNotice } from './exit-notice.ts';
+import { openAuth } from './native-bridge.ts';
+import { collectRemovals, sessionDropState, sessionRemovalsSettled, sessionStore, showExitIncomplete } from './session-store.ts';
+import { reloadPage } from './sw-register.ts';
 import { getSupabase, onClientReady } from './supabase/client.ts';
 
 const KEY_RE = /^sb-.+-auth-token$/;
@@ -54,7 +59,7 @@ export function userIdOfSession(raw: string | null): string | null {
 /** 本机会话里的 user_id；没登录、读不到（隐私模式）、格式不对都返回 null */
 export function readSessionUserId(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
   try {
-    const s = storage ?? localStorage;
+    const s = storage ?? sessionStore();
     const key = findKey(s, supabaseUrl);
     return key ? userIdOfSession(s.getItem(key)) : null;
   } catch {
@@ -68,7 +73,7 @@ export function readSessionUserId(storage?: Storage, supabaseUrl: string = build
  */
 export function readSessionEmail(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
   try {
-    const s = storage ?? localStorage;
+    const s = storage ?? sessionStore();
     const key = findKey(s, supabaseUrl);
     const raw = key ? s.getItem(key) : null;
     if (!raw) return null;
@@ -104,7 +109,7 @@ export function sessionIdOfToken(token: unknown): string | null {
  */
 export function readSessionAccessToken(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
   try {
-    const s = storage ?? localStorage;
+    const s = storage ?? sessionStore();
     const key = findKey(s, supabaseUrl);
     const raw = key ? s.getItem(key) : null;
     if (!raw) return null;
@@ -374,32 +379,37 @@ export async function clearCacheStorage(): Promise<void> {
  * `-user`（K6-sugg4 ⑥）：supabase-js 2.118 的 auth-js 在配了 userStorage、或以前配过时把 user 单独存在 `<storageKey>-user`
  * （node_modules/@supabase/auth-js/dist/module/GoTrueClient.js 的 _removeSession 也删它）；本项目没配 userStorage，一般不存在，删了无害。
  * PKCE 的分流程键（`<storageKey>-code-verifier-<flowId>` 一类，lib/helpers.js 的 removeAllPKCEVerifiers）不在这里删：本项目登录走邮箱验证码，不用 PKCE。
- * 不读、不记录令牌内容，不抛错
+ * 不读、不记录令牌内容，不抛错。删除马上生效（之后同步读就读不到）；返回的 Promise 说删没删成：网页版马上 resolve，
+ * exe 里等发给 Rust 的 session_remove 都回来，有一个失败就是 false（F5-2 ③）
  */
-export function clearAnyLocalSession(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): void {
-  try {
-    const s = storage ?? localStorage;
-    const key = sessionStorageKey(supabaseUrl);
-    const keys: string[] = [];
-    if (key) keys.push(key);
-    else {
-      for (let i = 0; i < s.length; i++) {
-        const name = s.key(i);
-        if (name && KEY_RE.test(name)) keys.push(name);
+export function clearAnyLocalSession(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): Promise<boolean> {
+  return collectRemovals(() => {
+    let ok = true;
+    try {
+      const s = storage ?? sessionStore();
+      const key = sessionStorageKey(supabaseUrl);
+      const keys: string[] = [];
+      if (key) keys.push(key);
+      else {
+        for (let i = 0; i < s.length; i++) {
+          const name = s.key(i);
+          if (name && KEY_RE.test(name)) keys.push(name);
+        }
       }
-    }
-    for (const k of keys) {
-      try {
-        s.removeItem(k);
-        s.removeItem(`${k}-code-verifier`);
-        s.removeItem(`${k}-user`);
-      } catch {
-        // 单个键删不掉：接着删别的
+      for (const k of keys) {
+        for (const name of [k, `${k}-code-verifier`, `${k}-user`]) {
+          try {
+            s.removeItem(name);
+          } catch {
+            ok = false;   // 单个键删不掉：接着删别的，结果报失败
+          }
+        }
       }
+    } catch {
+      // 拿不到存储（隐私模式等）：没有可删的
     }
-  } catch {
-    // 拿不到 localStorage（隐私模式等）：没有可删的
-  }
+    return ok;
+  });
 }
 
 /**
@@ -411,16 +421,18 @@ export function clearAnyLocalSession(storage?: Storage, supabaseUrl: string = bu
  */
 export function takeLocalSession(storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): string | null {
   const sid = readSessionId(storage, supabaseUrl);
-  clearAnyLocalSession(storage, supabaseUrl);
+  void clearAnyLocalSession(storage, supabaseUrl);
   return sid;
 }
 
 /**
  * 本机会话还是 sessionId 那一个（按 access token 的 session_id 比；没有会话也算对得上，删了无害）才删。
- * sessionId 必填（K6-sugg4 ②）：null 表示“那时本机没有会话 / 读不出”，这时只在本机仍没有会话时删（等于不删别人的）。不抛错
+ * sessionId 必填（K6-sugg4 ②）：null 表示“那时本机没有会话 / 读不出”，这时只在本机仍没有会话时删（等于不删别人的）。不抛错。
+ * 返回值同 clearAnyLocalSession（exe 里删凭据管理器失败为 false，F5-2 ③）；不删时为 true
  */
-export function clearLocalSessionIf(sessionId: string | null, storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): void {
-  if (readSessionId(storage, supabaseUrl) === sessionId) clearAnyLocalSession(storage, supabaseUrl);
+export function clearLocalSessionIf(sessionId: string | null, storage?: Storage, supabaseUrl: string = buildInfo.supabaseUrl): Promise<boolean> {
+  if (readSessionId(storage, supabaseUrl) === sessionId) return clearAnyLocalSession(storage, supabaseUrl);
+  return Promise.resolve(true);   // 不是那一个：不删，也没有失败
 }
 
 /**
@@ -435,7 +447,7 @@ export function mayRemoveSessionKey(key: string, sessionId: string | null, stora
     const main = sessionStorageKey(supabaseUrl);
     const related = main ? key === main || key.startsWith(`${main}-`) : /^sb-.+-auth-token(-.*)?$/.test(key);
     if (!related) return true;
-    const s = storage ?? localStorage;
+    const s = storage ?? sessionStore();
     return findKey(s, supabaseUrl) === null || readSessionId(s, supabaseUrl) === sessionId;
   } catch {
     return true;
@@ -452,9 +464,33 @@ export function mayRemoveSessionKey(key: string, sessionId: string | null, stora
  */
 export function goToAuth(...args: GoToAuthArgs): void {
   const [notice] = args;
-  if (args[0] === 'removed') clearLocalSessionIf(args[1]);
+  if (args[0] === 'removed') void clearLocalSessionIf(args[1]);
   if (notice && !(notice === 'removed' && readExitNotice() !== null)) setExitNotice(notice);
-  location.replace('/app/auth/');
+  // exe 里账号的界面已经画出来过（FA2-3）：主窗口不会因为开登录小窗口而卸载，编辑页保留的输入、内存里的集合会一直显示着。
+  // 等会话真删掉（发给 Rust 的删除回来，最多 3 秒）再整页重新载入；重新启动时没有会话，只开登录小窗口
+  // 删不掉（A-1）：不重新载入（会带着会话回到已登录界面），改显示“退出没完成，点重试”；之后删成了（晚到的成功、或点了重试）再重新载入
+  if (isTauri() && accountUiShown) {
+    void sessionRemovalsSettled().then(() => {
+      if (sessionDropState() === 'ok') reloadPage();
+      else showExitIncomplete();
+    });
+    return;
+  }
+  // 网页版 location.replace('/app/auth/')；exe 的主窗口不许导航到登录页，改开登录小窗口（native-bridge.ts 的 openAuth，exe 代码审查 S8）
+  void openAuth();
+}
+
+let accountUiShown = false;
+
+
+/** main 入口画出账号的界面以后调一次（FA2-3：exe 里之后的 goToAuth 先整页重新载入） */
+export function markAccountUiShown(): void {
+  accountUiShown = true;
+}
+
+/** 测试用 */
+export function resetAccountUiShownForTest(): void {
+  accountUiShown = false;
 }
 
 /** goToAuth 的参数：不带原因；带 disabled / pending_deletion；带 removed 时必须给删掉的那个 session_id（K6-sugg4 ②） */

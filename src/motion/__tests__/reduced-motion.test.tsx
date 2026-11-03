@@ -234,3 +234,18 @@ describe('17.4 B1（UI-4 M-1）：非 React 的 animateIn、press 和组件表�
     expect(pOpts?.duration).toBe(dur.press * 1000 * 2);
   });
 });
+
+describe('弹层的遮罩和内容（Dialog.tsx，UI-4 L-2）', () => {
+  it('Dialog 用的两种（UI-4 L-2）时长：内容 --dur-sheet、遮罩 --dur-ui；减少动态效果时两者都减半（接手清单 M4）', () => {
+    expect(appearMotion('sheet', false).transition.duration).toBe(dur.sheet);
+    expect(appearMotion('scrim', false).transition.duration).toBe(dur.ui);
+    expect(appearMotion('sheet', true).transition.duration).toBe(dur.sheet / 2);
+    expect(appearMotion('scrim', true).transition.duration).toBe(dur.ui / 2);
+    // 遮罩只淡入淡出，起止的 transform 一样（不动位置）
+    const s = appearMotion('scrim', false);
+    expect(s.initial.opacity).toBe(0);
+    expect(s.animate.opacity).toBe(1);
+    expect((s.animate as { transform?: string }).transform).toBe('translateY(0px) scale(1)');
+    expect(s.initial).toMatchObject({ transform: 'translateY(0px) scale(1)' });
+  });
+});

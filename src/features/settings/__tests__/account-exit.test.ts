@@ -19,7 +19,7 @@ function deps(boot: Partial<BootResult> | null = { switching: false, userId: 'u1
     clearLogs: vi.fn((u: string | null) => void order.push(`logs:${u}`)),
     broadcastReset: vi.fn((u: string, exit?: { notice: string; sid: string | null }) =>
       void order.push(exit ? `reset:${u}:${exit.notice}:${exit.sid ?? 'null'}` : `reset:${u}`)),
-    clearLocalSessionIf: vi.fn((sid: string | null) => void order.push(`session:${sid}`)),
+    clearLocalSessionIf: vi.fn(async (sid: string | null) => { order.push(`session:${sid}`); return true; }),
     goToAuth: vi.fn((n: string) => void order.push(`auth:${n}`)),
   } satisfies AccountLeaveDeps;
   return { d, order };

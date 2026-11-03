@@ -2,7 +2,7 @@
 // Node（vitest）和 Deno（deno task test）各跑一遍；Deno 的 expect 替身只有少数几个断言，这里只用 toBe、toEqual、toHaveLength 这类
 import { describe, expect, it } from 'vitest';
 import {
-  BODY_MAX, buildPayload, LABEL_MAX, MAX_PAYLOAD_BYTES, PushPayloadError, TITLE_MAX, TITLE_MIN_KEEP, type PayloadInput, type RemindPayloadInput,
+  BODY_MAX, buildPayload, isStrippedChar, LABEL_MAX, MAX_PAYLOAD_BYTES, PushPayloadError, TITLE_MAX, TITLE_MIN_KEEP, type PayloadInput, type RemindPayloadInput,
 } from '../../../supabase/functions/_shared/push/payload.ts';
 import { padRecord } from '../../../supabase/functions/_shared/push/ece.ts';
 
@@ -72,11 +72,14 @@ describe('文字：C0 控制字符换空格、按码点截（S1、S2；和 SW �
     const q = remind({ title: '柠'.repeat(300), body: '🍋'.repeat(301) });
     expect([q.title, q.body]).toEqual(['柠'.repeat(300), '🍋'.repeat(299) + '…']);
   });
-  it('C0 控制字符（U+0000～U+001F，含换行、制表）换成空格；U+007F 不动', () => {
-    const c0 = String.fromCharCode(0) + 'a' + String.fromCharCode(10) + 'b' + String.fromCharCode(9) + 'c' + String.fromCharCode(31) + String.fromCharCode(127);
-    const p = remind({ title: c0, body: c0, snooze: { label: c0, minutes: 5 } });
-    const want = ' a b c ' + String.fromCharCode(127);
-    expect([p.title, p.body, (p.snooze as { label: string }).label]).toEqual([want, want, want]);
+  it('控制字符换成空格：C0（含换行、制表）、U+007F、C1、双向控制符、方向标记、行段分隔、U+FEFF（安全审查建议 ②，和 SW clipText 同一套）；相邻的普通字符不动', () => {
+    const bad = [0, 10, 9, 31, 0x7f, 0x80, 0x85, 0x9f, 0x202a, 0x202e, 0x2066, 0x2069, 0x200e, 0x200f, 0x061c, 0x2028, 0x2029, 0xfeff];
+    for (const cp of bad) expect(isStrippedChar(cp), cp.toString(16)).toBe(true);
+    for (const cp of [0x20, 0x7e, 0xa0, 0x200b, 0x200d, 0x2065, 0x206a, 0x202f, 0x2027, 0xfefe, 0x1f34b]) expect(isStrippedChar(cp), cp.toString(16)).toBe(false);
+    const raw = bad.map((cp) => 'a' + String.fromCodePoint(cp)).join('') + '🍋';
+    const want = 'a '.repeat(bad.length) + '🍋';
+    const p = remind({ title: raw, body: raw, snooze: { label: 'x' + String.fromCodePoint(0x202e) + 'y', minutes: 5 } });
+    expect([p.title, p.body, (p.snooze as { label: string }).label]).toEqual([want, want, 'x y']);
   });
   it('S2：snooze.minutes 不是 1～1440 的整数、label 为空：整个不带 snooze（SW 同样处理）；1 和 1440 照收', () => {
     for (const minutes of [0, -5, 1441, 2.5, Number.NaN]) expect('snooze' in remind({ snooze: { label: 'x', minutes } })).toBe(false);
@@ -93,18 +96,36 @@ describe('整份 ≤ 3071 字节（放进 3072 一档）', () => {
     const p = parse(b);
     expect([p.title, p.body]).toEqual(['🍋'.repeat(300), '🍊'.repeat(299) + '…']);
   });
-  it('超过 3071（落单的代理项转义成 6 字节）：先再截 title（至少留 20 个码点、不截成没有）；有 300 字上限后截 title 就够，body 不动', () => {
+  it('超过 3071（落单的代理项转义成 6 字节）：先截 body，title 保住（R-294，负责人 11-03 定；取代原来的先截 title）', () => {
     const lone = String.fromCharCode(0xd800);   // JSON.stringify 把落单的代理项写成 6 字节的转义
-    const b = buildPayload({ ...REF, type: 'remind', title: lone.repeat(300), body: lone.repeat(300), snooze: { label: lone.repeat(40), minutes: 10 } });
+    const b = buildPayload({ ...REF, type: 'remind', title: lone.repeat(300), body: lone.repeat(300), snooze: { label: lone.repeat(40), minutes: 10 },
+      done: { label: lone.repeat(40) } });
     expect(b.length <= MAX_PAYLOAD_BYTES).toBe(true);
     expect(padRecord(b).length).toBe(3072);
     const p = parse(b);
-    expect(String(p.title).endsWith('…')).toBe(true);
-    expect(cps(p.title) < 300).toBe(true);
-    expect(cps(p.title) > TITLE_MIN_KEEP - 1).toBe(true);
-    expect(p.body).toBe(lone.repeat(300));
-    // 最坏情况：title 只剩 20（120 字节）+ body 1800 + label 240 + 其余字段约 250，不到 3071，所以按字节截 body 只是兜底
-    expect(20 * 6 + 300 * 6 + 40 * 6 + 250 < MAX_PAYLOAD_BYTES).toBe(true);
+    expect(p.title).toBe(lone.repeat(300));
+    expect(String(p.body).endsWith('…')).toBe(true);
+    expect(cps(p.body) < 300).toBe(true);
+    // 最坏情况：title 300（1800 字节）+ 两个 label 480 + 其余字段约 250，不到 3071，所以 title 在现有上限下不会被截；按字节截 title（留 ≥ 20）只是兜底
+    expect(300 * 6 + 40 * 6 * 2 + 250 < MAX_PAYLOAD_BYTES).toBe(true);
+    expect(TITLE_MIN_KEEP).toBe(20);
+  });
+  it('R-294：“完成”按钮 done: { label }，和 snooze 一样去控制字符、≤ 40 码点；label 为空不带；resolve 不带', () => {
+    expect(remind({ done: { label: '完成' } }).done).toEqual({ label: '完成' });
+    expect(remind({ done: { label: '完'.repeat(41) } }).done).toEqual({ label: '完'.repeat(39) + '…' });
+    expect('done' in remind({ done: { label: '' } })).toBe(false);
+    const extra = { ...REF, type: 'resolve', done: { label: '完成' } } as unknown as PayloadInput;
+    expect('done' in parse(buildPayload(extra))).toBe(false);
+  });
+  it('R-308：“知道了”按钮 ack: { label } 只给日程、纪念日；done 只给待办；传错类型的那个一律丢；resolve 都不带', () => {
+    expect(remind({ ack: { label: '知道了' } }).ack).toBe(undefined);
+    const ev = { ...REF, kind: 'event' as const };
+    const p = parse(buildPayload({ ...ev, type: 'remind', snooze: { label: '推迟', minutes: 10 }, done: { label: '完成' }, ack: { label: '知道了' } }));
+    expect(p.ack).toEqual({ label: '知道了' });
+    expect('done' in p).toBe(false);
+    expect(parse(buildPayload({ ...REF, kind: 'anniv', type: 'remind', ack: { label: '知'.repeat(41) } })).ack).toEqual({ label: '知'.repeat(39) + '…' });
+    expect('ack' in parse(buildPayload({ ...ev, type: 'remind', ack: { label: '' } }))).toBe(false);
+    expect('ack' in parse(buildPayload({ ...ev, type: 'resolve', ack: { label: '知道了' } } as unknown as PayloadInput))).toBe(false);
   });
 });
 

@@ -1,7 +1,7 @@
 // 设备判断（架构 5.9、TC-B1-17、R-225）：iPhone、iPad 上凡是不在主屏幕模式运行的，一律只给“添加到主屏幕”教程；
 // 不是 Safari 时另提示“请在 Safari 里打开本页”；电脑浏览器、安卓照常登录
 import { describe, expect, it } from 'vitest';
-import { installGate, isAppleMobile, isIOSSafari, isStandalone, mustInstallFirst, type NavLike } from '../env.ts';
+import { installGate, isAppleMobile, isIOSSafari, isStandalone, isTauri, mustInstallFirst, runtimeOf, type NavLike } from '../env.ts';
 
 const UA = {
   iphoneSafari:
@@ -97,5 +97,18 @@ describe('mustInstallFirst / installGate（TC-B1-17、R-225）', () => {
       expect(mustInstallFirst(nav(ua), noMedia), ua).toBe(false);
       expect(installGate(nav(ua), noMedia), ua).toBe('login');
     }
+  });
+});
+
+// B2 架构审 D4 第 1 点：运行环境的判断只在 env.ts 一处，device-info、sw-register 共用
+describe('runtimeOf / isTauri（exe 判断）', () => {
+  it('window 上有 __TAURI_INTERNALS__（Tauri v2）或 __TAURI__（withGlobalTauri）是 tauri；都没有是 web', () => {
+    expect(runtimeOf({ __TAURI_INTERNALS__: {} })).toBe('tauri');
+    expect(runtimeOf({ __TAURI__: {} })).toBe('tauri');
+    expect(runtimeOf({})).toBe('web');
+    expect(isTauri({ __TAURI_INTERNALS__: {} })).toBe(true);
+    expect(isTauri({})).toBe(false);
+    // 默认读 globalThis：jsdom 里没有 Tauri
+    expect(runtimeOf()).toBe('web');
   });
 });

@@ -229,10 +229,17 @@ export interface OutboxOptions {
   log?: (e: { act: 'outbox_vault_shell_drop'; coll: string; id: string; dropped: number }) => void;
 }
 
-/** SW 记下的通知按键（0.29 续第 107 条；形状由 B2 的 SW 定，这里只认这几项） */
+/**
+ * SW 记下的通知按键（0.29 续第 107 条②：{id, user_id, row_table, row_id, action, created_at}；B2 起由 src/sw/pending.ts 写，
+ * 两边的形状由 tests/build/sw-pending.test.ts 核对）。user_id 是推送里带的、且已和库的 owner 核对过（K-sw-seal ⑴）；
+ * action 有 {type: 'snooze', minutes, due_at} 和 {type: 'done', due_at}（只待办，R-294），转 outbox 的逻辑在提醒功能里（FA-4），这里不解释它
+ */
 export interface PendingAction {
   id: string;
   user_id: string;
+  /** events / todos / anniversaries */
+  row_table: string;
+  row_id: string;
   /** epoch ms */
   created_at: number;
   action: unknown;

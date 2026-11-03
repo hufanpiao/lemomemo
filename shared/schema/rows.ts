@@ -14,6 +14,13 @@ const uuid = z.uuid();
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const hm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const epochMs = z.number().int().nonnegative();
+/**
+ * snooze_at 的上限：2100-01-01 00:00 UTC（含）。和迁移 20261103140000_core_remind_due.sql 第 ③ 条的约束
+ * events_snooze_at_range、todos_snooze_at_range、anniversaries_snooze_at_range（“为空，或 0～4102444800000”）一致，
+ * 客户端不写出数据库会拒的值（后端 BE-2）。只管 snooze_at，epochMs 的其他列不变
+ */
+export const SNOOZE_AT_MAX = 4102444800000;
+const snoozeAt = epochMs.max(SNOOZE_AT_MAX).nullable();
 
 /** profiles：客户端只能改这三列（3.3） */
 export const profilesWrite = z.strictObject({
@@ -56,7 +63,7 @@ export const eventsWrite = z
     remind_min: z.union([z.literal(0), z.literal(15), z.literal(30), z.literal(60), z.literal(1440)]).nullable(),
     remind_days: z.union([z.literal(0), z.literal(1)]).nullable(),
     notified_for: epochMs.nullable(),
-    snooze_at: epochMs.nullable(),
+    snooze_at: snoozeAt,
     deleted_at: epochMs.nullable(),
     undone: z.boolean(),
     created_at: epochMs,
@@ -89,7 +96,7 @@ export const todosWrite = z.strictObject({
   remind_before_min: z.union([z.literal(0), z.literal(10), z.literal(30), z.literal(60), z.literal(120), z.literal(1440)]).nullable(),
   push_show_title: z.boolean().nullable(),
   notified_for: epochMs.nullable(),
-  snooze_at: epochMs.nullable(),
+  snooze_at: snoozeAt,
   deleted_at: epochMs.nullable(),
   undone: z.boolean(),
   created_at: epochMs,

@@ -59,8 +59,10 @@ export const HEARTBEAT_LIMITS: Readonly<Record<string, { limitS: number; label: 
  * - 有 claimed：没发成的 = claimed − sent（含 failed，也含认领了、没发出去就崩了的，“最多一次”漏掉的那种）；
  *   没发成的 × 2 > claimed（且 claimed > 0）就告警；
  * - 没有 claimed（旧版函数，或 usage-report 白名单还没加 claimed）：照旧 failed × 2 > sent + failed。
- * 待函数落地后核对：push-dispatch 实际写的字段名、claimed 是否含 budget_hit 时没认领的剩余条数（按任务单不含）；
- * usage-report 的 DETAIL_FIELDS 要加 'claimed'（归后端），没加之前这里只能走旧口径。
+ * 11-03 已核对（push-dispatch 落地后）：core.ts 写心跳的 detail 正好是 claimed、sent、failed（另有 budget_hit）；
+ * claimed 只数真认领成功的条目，预算或条数到了没来得及认领的记在 left（只回在响应里、不进心跳），不含在 claimed 里；
+ * usage-report 的 DETAIL_FIELDS 已含 'claimed'（budget_hit 在 DETAIL_BOOL_FIELDS）。
+ * 测试：tests/edge/push-dispatch.test.ts 末尾一条，用 handle 真写出的心跳经 usage-report 白名单转发后喂 evaluatePush。
  */
 export const PUSH_DETAIL_FIELDS = ['claimed', 'sent', 'failed'] as const;
 

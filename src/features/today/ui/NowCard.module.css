@@ -1,0 +1,153 @@
+/* “现在”卡（方案 K 小时间尺）：只用令牌（A11）；颜色令牌 --k-* 由皮肤给（简洁：普通卡片底；玻璃：柠檬黄 / 深橄榄渐变底） */
+.card {
+  margin: 0 0 16px;
+  padding: 14px 16px 10px;
+  border-radius: 14px;
+  background: var(--k-bg);
+  color: var(--k-fg);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-12-5);
+  color: var(--k-fg2);
+}
+
+.labelLive,
+.labelIdle {
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-12);
+}
+
+.labelLive {
+  background: var(--klv-bg);
+  color: var(--klv-fg);
+}
+
+.labelIdle {
+  border: 1px solid currentcolor;
+}
+
+.nowText {
+  font-family: var(--f-num);
+}
+
+.left {
+  margin-left: auto;
+}
+
+/* 标题 17px 半粗，一行，放不下用省略号；只有“进行中”那一件加粗（R-134） */
+.title,
+.titleLive {
+  margin: 6px 0 0;
+  overflow: hidden;
+  font-size: var(--fs-17);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titleLive {
+  font-weight: 600;
+}
+
+.sub {
+  margin: 4px 0 0;
+  color: var(--k-fg2);
+  font-size: var(--fs-12-5);
+}
+
+.quiet {
+  margin: 0;
+  font-size: var(--fs-15);
+}
+
+.ruler {
+  position: relative;
+  height: 46px;
+  margin: 10px 0 0;
+}
+
+.trk {
+  position: absolute;
+  top: 13px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--k-trk);
+}
+
+.seg {
+  position: absolute;
+  top: 4px;
+  height: 20px;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+/* 被窗口截断的一端直角（视觉稿：不画圆角、不渐隐） */
+.cl {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.cr {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.cur {
+  background: var(--k-cur);
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--k-done);
+}
+
+.nxt {
+  border-left: 3px solid var(--p1);
+  background: var(--k-nxt-bg);
+}
+
+.lb {
+  display: block;
+  padding: 0 4px;
+  overflow: hidden;
+  font-size: var(--fs-11);
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mark {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 28px;
+  margin-left: -1px;
+  background: var(--k-mark);
+}
+
+/* 刻度只标整点，11px（负责人：不要调大）；第一个、最后一个贴边对齐 */
+.tick {
+  position: absolute;
+  top: 31px;
+  font-family: var(--f-num);
+  font-size: var(--fs-11);
+  color: var(--k-fg2);
+  transform: translateX(-50%);
+}
+
+.tl {
+  transform: none;
+}
+
+.tr {
+  transform: translateX(-100%);
+}

@@ -14,7 +14,14 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const FN_DIR = join(ROOT, 'supabase', 'functions');
-const AI_HINT = /_shared\/ai\/|googleapis\.com|@google\/genai|@google\/generative-ai|@ai-sdk\/google|GEMINI_[A-Z_]*|GOOGLE_API_KEY/;
+// googleapis.com 不算主机正好是 fcm.googleapis.com 的（Web Push 的 FCM 端点白名单，_shared/push/endpoint.ts；B2 BE-2 起 push-dispatch 经 deliver 引到它）；
+// 前面再连着字母、数字、点、横线的（如 x-fcm.googleapis.com、a.fcm.googleapis.com）照算
+// B2 安全审查建议 ④：googleapis.com 一段忽略大小写（主机名不分大小写）；另加一条不受 fcm 豁免、忽略大小写的谷歌 AI 主机
+//   （generativelanguage、aiplatform），路径或用户名里混进 fcm.googleapis.com 也照样算碰到 AI
+const AI_HINT_CS = /_shared\/ai\/|@google\/genai|@google\/generative-ai|@ai-sdk\/google|GEMINI_[A-Z_]*|GOOGLE_API_KEY/;
+const AI_GOOGLEAPIS = /(?<!(?<![\w.-])fcm\.)googleapis\.com/i;
+const AI_HOST = /(generativelanguage|aiplatform)\.googleapis\.com/i;
+const AI_HINT = { test: (s: string): boolean => AI_HINT_CS.test(s) || AI_GOOGLEAPIS.test(s) || AI_HOST.test(s) };
 const IMPORTS_AI_ALLOWED = /import\s*\{[^}]*\baiAllowed\b[^}]*\}\s*from\s*['"][^'"]*_shared\/consent\.ts['"]/;
 const SPEC = /(?:\bfrom\s*|\bimport\s*\(?\s*)['"]([^'"]+)['"]/g;
 const SRC = /\.(ts|tsx|mts|js|mjs)$/;
@@ -120,9 +127,17 @@ describe('TC-B1-15：调 AI 的函数都先过 aiAllowed', () => {
       write('ai-good/index.ts', `${GATE}import { go } from '../_shared/summarize.ts';\nif (await aiAllowed(admin, uid)) go();\n`);
       write('ai-good-split/index.ts', `${GATE}import './handler.ts';\n`);
       write('ai-good-split/handler.ts', "import { aiAllowed } from '../_shared/consent.ts';\nconst u = 'https://generativelanguage.googleapis.com/x';\nif (await aiAllowed(a, b)) fetch(u);\n");
+      write('_shared/push-ep.ts', "export const HOSTS = ['fcm.googleapis.com', 'updates.push.services.mozilla.com'];\nexport const FCM = 'https://fcm.googleapis.com/fcm/send/';\n");
+      write('push-ok/index.ts', "import { HOSTS } from '../_shared/push-ep.ts';\nHOSTS;\n");
+      write('ai-fcm-lookalike/index.ts', "const u = 'https://x-fcm.googleapis.com/v1';\nconst v = 'https://a.fcm.googleapis.com/v1';\n");
+      // 安全审查建议 ④ 的三个反例：真 AI 地址的路径里带 fcm 主机、大写主机、用户名混淆；大写的 FCM 端点仍豁免
+      write('ai-path-fcm/index.ts', "const u = 'https://generativelanguage.googleapis.com/v1/fcm.googleapis.com/x';\n");
+      write('ai-upper/index.ts', "const u = 'https://GenerativeLanguage.GOOGLEAPIS.COM/v1beta/models';\n");
+      write('ai-userinfo/index.ts', "const u = 'https://fcm.googleapis.com:x@aiplatform.googleapis.com/v1';\n");
+      write('push-upper-ok/index.ts', "const u = 'https://FCM.GOOGLEAPIS.COM/fcm/send/';\n");
       write('plain/index.ts', "import { x } from '../_shared/plain.ts';\nconst s = 'http://example.com//not-a-comment';\n");
       write('_preview/ai-eval/index.ts', "import { go } from '../../_shared/summarize.ts';\ngo();\n");
-      expect(ungated(tmp)).toEqual(['ai-comment-only', 'ai-direct', 'ai-import-only', 'ai-indirect', 'ai-key', 'ai-sdk']);
+      expect(ungated(tmp)).toEqual(['ai-comment-only', 'ai-direct', 'ai-fcm-lookalike', 'ai-import-only', 'ai-indirect', 'ai-key', 'ai-path-fcm', 'ai-sdk', 'ai-upper', 'ai-userinfo']);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

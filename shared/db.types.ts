@@ -461,6 +461,21 @@ isOneToOne: false
 "record_consent_impl":
 { Args: { "p_revoke"?: boolean,"p_ver": string }; Returns: undefined
                            },
+"remind_due":
+{ Args: { "p_hi": number,"p_limit": number,"p_lo": number,"p_per_user": number }; Returns: {
+              "due_at": number,"id": string,"table_name": string,"user_id": string
+            }[]
+                           },
+"remind_pushed":
+{ Args: { "p_hi": number,"p_limit": number,"p_lo": number,"p_per_user": number }; Returns: {
+              "id": string,"pushed_for": number,"table_name": string,"user_id": string
+            }[]
+                           },
+"remind_queue_pop":
+{ Args: { "p_limit": number }; Returns: {
+              "id": string,"table_name": string,"user_id": string
+            }[]
+                           },
 "remove_device_impl":
 { Args: { "p_device": string }; Returns: undefined
                            },

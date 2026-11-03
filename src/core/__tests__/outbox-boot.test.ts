@@ -1,6 +1,6 @@
 // 离线队列带版本（TC-B1-41）和 pending_actions（0.29 续第 107 条）
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createOutbox, drainPendingActions } from '../outbox.ts';
+import { createOutbox, drainPendingActions, isValidPendingAction, keepPendingAction, prunePendingActions } from '../outbox.ts';
 import { migrateOutboxItem } from '../outbox-migrations.ts';
 import { clearAllCollections } from '../store.ts';
 import { clock, mk, seed, setup, todo, uid } from './outbox-fixtures.ts';
@@ -54,22 +54,86 @@ describe('队列带版本（TC-B1-41）', () => {
 });
 
 describe('pending_actions（0.29 续第 107 条）', () => {
-  it('别的账号的、超过 24 小时的丢掉，其余转进 outbox', async () => {
+  const H = 3600_000;
+  /** SW 写的那种项（src/sw/pending.ts 的 SwPendingAction） */
+  const pa = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    user_id: 'me',
+    row_table: 'todos',
+    row_id: uid(1),
+    action: { type: 'snooze', minutes: 10, due_at: 1_000_000 },
+    created_at: clock.t - H,
+    ...over,
+  });
+  const put = async (cache: Awaited<ReturnType<typeof setup>>['cache'], rows: Record<string, unknown>[]) =>
+    cache.tx(['pending_actions'], 'readwrite', async (t) => {
+      for (const r of rows) await t.put('pending_actions', r);
+    });
+  const left = async (cache: Awaited<ReturnType<typeof setup>>['cache']) =>
+    (await cache.tx(['pending_actions'], 'readonly', (t) => t.getAll<{ id: string }>('pending_actions'))).map((a) => a.id).sort();
+
+  it('别的账号的、超过 24 小时的丢掉，其余（已校验过形状）转进 outbox', async () => {
     const { cache, outbox } = await setup();
     await seed(cache, 'todos', uid(1), todo(1));
-    const H = 3600_000;
-    await cache.tx(['pending_actions'], 'readwrite', async (t) => {
-      await t.put('pending_actions', { id: 'p1', user_id: 'me', created_at: clock.t - H, action: { done: uid(1) } });
-      await t.put('pending_actions', { id: 'p2', user_id: 'other', created_at: clock.t, action: { done: uid(1) } });
-      await t.put('pending_actions', { id: 'p3', user_id: 'me', created_at: clock.t - 25 * H, action: { done: uid(1) } });
-    });
+    await put(cache, [pa('p1'), pa('p2', { user_id: 'other', created_at: clock.t }), pa('p3', { created_at: clock.t - 25 * H })]);
+    const seen: unknown[] = [];
     const n = await drainPendingActions(cache, outbox, {
       userId: 'me',
       now: clock.t,
-      toEnqueue: (a) => ({ table: 'todos', id: (a.action as { done: string }).done, op: 'patch', data: { done: true } }),
+      toEnqueue: (a) => {
+        seen.push(a);
+        return { table: 'todos', id: a.row_id, op: 'patch', data: { done: true } };
+      },
     });
     expect(n).toBe(1);
-    expect(await cache.tx(['pending_actions'], 'readonly', (t) => t.getAll('pending_actions'))).toEqual([]);
+    expect(seen).toEqual([pa('p1')]);
+    expect(await left(cache)).toEqual([]);
     expect((await outbox.list())[0]).toMatchObject({ data: { done: true } });
+  });
+
+  it('形状不对的不交给 toEnqueue（安全审查 FE-S3），照样删掉', async () => {
+    const { cache, outbox } = await setup();
+    await put(cache, [pa('bad-table', { row_table: 'profiles' }), pa('bad-row', { row_id: '../x' }), pa('bad-min', { action: { type: 'snooze', minutes: 0, due_at: 1 } })]);
+    let calls = 0;
+    const n = await drainPendingActions(cache, outbox, {
+      userId: 'me',
+      now: clock.t,
+      toEnqueue: () => {
+        calls++;
+        return null;
+      },
+    });
+    expect([n, calls]).toEqual([0, 0]);
+    expect(await left(cache)).toEqual([]);
+  });
+
+  it('prunePendingActions（启动时先清）：别的账号的、超过 24 小时的、时间在将来的、形状不对的删掉', async () => {
+    const { cache } = await setup();
+    await put(cache, [
+      pa('keep', { created_at: clock.t - 23 * H }),
+      pa('edge', { created_at: clock.t - 24 * H }),
+      pa('soon', { created_at: clock.t + 5 * 60_000 }),
+      pa('future', { created_at: clock.t + 5 * 60_000 + 1 }),
+      pa('other', { user_id: 'other', created_at: clock.t }),
+      pa('old', { created_at: clock.t - 24 * H - 1 }),
+      pa('bad-time', { created_at: 'x' }),
+      pa('bad-table', { row_table: 'events_v2' }),
+      pa('bad-row', { row_id: 'not-a-uuid' }),
+      pa('bad-type', { action: { type: 'ack', due_at: 1 } }),   // “知道了”不写库，不是合法的 pending
+      pa('bad-due', { action: { type: 'snooze', minutes: 10, due_at: 1.5 } }),
+      pa('no-action', { action: undefined }),
+      { id: 'noowner', created_at: clock.t, action: {} },
+    ]);
+    expect(await prunePendingActions(cache, { userId: 'me', now: clock.t })).toBe(10);
+    expect(await left(cache)).toEqual(['edge', 'keep', 'soon']);
+    expect(await prunePendingActions(cache, { userId: 'me', now: clock.t })).toBe(0);
+  });
+
+  it('keepPendingAction / isValidPendingAction：不是对象、字段缺、时间不是有限数都不留', () => {
+    expect(keepPendingAction(null, 'me', 0)).toBe(false);
+    expect(keepPendingAction({ ...pa('x'), created_at: Number.NaN }, 'me', clock.t)).toBe(false);
+    expect(keepPendingAction(pa('x'), 'me', clock.t)).toBe(true);
+    expect(isValidPendingAction({ ...pa('x'), id: '' })).toBe(false);
+    for (const t of ['events', 'todos', 'anniversaries']) expect(isValidPendingAction(pa('x', { row_table: t }))).toBe(true);
   });
 });

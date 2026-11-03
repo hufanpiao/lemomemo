@@ -10,6 +10,7 @@ import { createRecentExportsApi, type RecentExportsApi } from '../data/recent-ex
 import { defaultExitDeps, readLocalDeviceId } from '../data/local.ts';
 import { createSettingsApi, type SettingsApi } from '../data/settings-api.ts';
 import type { AccountActionDeps } from './useAccountActions.ts';
+import type { HotkeyApi } from './useQuickAddHotkey.ts';
 import { useDevices } from './useDevices.ts';
 import { useLocaleSwitch } from './useLocaleSwitch.ts';
 import { useSessionExit, type ExitDeps } from './useSessionExit.ts';
@@ -19,6 +20,8 @@ export { orderSections, type SettingsSectionId } from '../data/sections.ts';
 export type { ExitDeps, ExitNotice } from './useSessionExit.ts';
 
 export interface SettingsDeps {
+  /** R-297 快速记录热键（默认 platform/desktop-hotkey.ts；要传稳定的对象） */
+  hotkey?: HotkeyApi;
   api?: SettingsApi;
   exit?: ExitDeps;
   /** account 函数（导出、注销） */

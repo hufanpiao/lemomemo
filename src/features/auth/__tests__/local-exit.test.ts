@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { DB_NAME } from '../../../core/cache.ts';
 import { LOCAL_DB_NAME } from '../../../platform/sign-out.ts';
+import { resetSessionBackendForTest, setSessionBackend } from '../../../platform/session-store.ts';
 import { readStoredAccessToken } from '../data/local-exit.ts';
 
 function memStorage(init: Record<string, string>): Storage {
@@ -29,5 +30,16 @@ describe('本机会话', () => {
     expect(readStoredAccessToken(memStorage({ 'sb-127-auth-token': JSON.stringify({ access_token: 'a.b.c' }) }))).toBe('a.b.c');
     expect(readStoredAccessToken(memStorage({ 'sb-127-auth-token': 'not json' }))).toBeNull();
     expect(readStoredAccessToken(memStorage({ other: JSON.stringify({ access_token: 'x' }) }))).toBeNull();
+    // 不传：经 sessionStore()；exe 里读凭据管理器的镜像，不读 localStorage
+    localStorage.setItem('sb-127-auth-token', JSON.stringify({ access_token: 'in.local.storage' }));
+    expect(readStoredAccessToken()).toBe('in.local.storage');
+    setSessionBackend({ getItem: async () => null, setItem: async () => undefined, removeItem: async () => undefined },
+      memStorage({ 'sb-127-auth-token': JSON.stringify({ access_token: 'in.rust' }) }));
+    try {
+      expect(readStoredAccessToken()).toBe('in.rust');
+    } finally {
+      resetSessionBackendForTest();
+      localStorage.clear();
+    }
   });
 });

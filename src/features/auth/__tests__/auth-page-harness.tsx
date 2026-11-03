@@ -74,7 +74,7 @@ export async function toInviteCode(api: AuthApi) {
 /** 恢复页测试共用：记下本机清理每一步（readSessionId 固定回 s1） */
 export function exitSpy(log: string[]) {
   return {
-    clearLocalSessionIf: vi.fn((sid: string | null) => void log.push(`clearLocalSessionIf:${sid}`)),
+    clearLocalSessionIf: vi.fn(async (sid: string | null) => { log.push(`clearLocalSessionIf:${sid}`); return true; }),
     readSessionId: () => 's1',
     deleteDb: vi.fn(async () => {
       log.push('deleteDb');

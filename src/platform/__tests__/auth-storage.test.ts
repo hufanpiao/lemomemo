@@ -33,7 +33,7 @@ const removeLikeAuthJs = (): void => {
 const fakeSteps = (): ExitSteps => ({
   deleteDb: async () => undefined,
   clearCacheStorage: async () => undefined,
-  clearLocalSessionIf: () => undefined,
+  clearLocalSessionIf: () => Promise.resolve(true),
   readSessionId: () => readSessionId(),
 });
 
@@ -170,10 +170,10 @@ describe('signOutThisDevice 期间挂保护（④ 用 auth-js 的删法模拟）
           };
         }),
     };
-    const steps = { ...fakeSteps(), clearLocalSessionIf: vi.fn() };
+    const steps = { ...fakeSteps(), clearLocalSessionIf: vi.fn(async () => true) };
     const p = signOutThisDevice({ server, steps, markSelf: () => undefined, timeoutMs: 1000 });
     await vi.advanceTimersByTimeAsync(1000);
-    expect(await p).toEqual({ serverDone: false });
+    expect(await p).toMatchObject({ serverDone: false });
     expect(isRemovalGuarded()).toBe(true);
     put('s2');
     finish();

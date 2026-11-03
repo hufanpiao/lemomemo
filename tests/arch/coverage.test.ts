@@ -35,6 +35,8 @@ export function violationSamples(): Map<string, string[]> {
   }
   // check_backend：A28 是 F1～F3 三项（架构 2.3 A28 ①②③）；F4、F5、F6、M1～M6 同一脚本另查、不另编 A 号，不映射
   for (const d of readdirSync(join(FIXTURES, 'check_backend'))) if (/^f[1-3]-/.test(d)) add('A28', `check_backend/${d}`);
+  // F9 架构 0.50 起单列进 2.3（0.49 第 7 条、D2-3）：样例是 check_backend 的 f9-*
+  for (const d of readdirSync(join(FIXTURES, 'check_backend'))) if (/^f9-/.test(d)) add('F9', `check_backend/${d}`);
   for (const f of readdirSync(join(ROOT, 'supabase', 'tests', 'd1-fixtures'))) if (f.endsWith('.psql')) add('D1', `d1-fixtures/${f}`);
   for (const d of readdirSync(join(FIXTURES, 'check_size'))) if (d.startsWith('w3-')) add('W3', `check_size/${d}`);
   return out;

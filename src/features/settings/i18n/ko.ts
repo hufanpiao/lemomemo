@@ -98,6 +98,7 @@ export const ko = {
   'settings.signingOut': '로그아웃하는 중… 이 기기의 데이터를 지우고 있어요. 인터넷이 느리면 10초 넘게 걸릴 수도 있어요.', // R-106 B1 第一遍已审（10-30）
   'settings.cancel': '취소', // R-106 B1 第一遍已审（10-30）；照 shared common.cancel
   'settings.err.offline': '지금 인터넷에 연결되어 있지 않아요. 연결한 뒤 다시 시도해 주세요', // R-106 B1 第一遍已审（10-30）；前半照 shared error.offline
+  'settings.err.unreachable': '지금 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)：新句，前半照 shared error.offline 的语气，后半照 settings.err.tryLater
   'settings.err.tryLater': '서버가 바빠요. 잠시 후 다시 시도해 주세요', // R-106 B1 第一遍已审（10-30）；前半照 onboarding consent.err.tryLater
   'settings.err.unknown': '문제가 생겼어요. 잠시 후 다시 시도해 주세요', // R-106 B1 第一遍已审（10-30）；照 shared error.unknown
   'settings.err.accountDisabled': '이 계정은 사용 중지됐어요. 탈퇴를 신청한 뒤 7일 안에 다시 로그인하면 복구할 수 있어요.', // R-106 B1 第一遍已审（10-30）
@@ -118,4 +119,21 @@ export const ko = {
   'settings.recentExport.unknownDevice': '알 수 없는 기기', // R-106 B1 第一遍已审（10-31）
   'settings.recentExport.showAll': '모두 보기 ({n}건)', // R-106 B1 第一遍已审（10-31），按审校意见改过
   'settings.recentExport.incomplete': '완료되지 않음', // R-106 B1 第一遍已审（10-31）；10-31 导出分片新加（0.47 续 ④ 第 4 点）
+  // 设置 › 电脑 › 快速记录热键（R-297）
+  'settings.desktop.title': '컴퓨터', // REVIEW(ko)
+  'settings.hotkey.title': '빠른 기록 단축키', // REVIEW(ko)
+  'settings.hotkey.space': '스페이스', // REVIEW(ko)
+  'settings.hotkey.change': '변경', // REVIEW(ko)
+  'settings.hotkey.reset': '기본값으로', // REVIEW(ko)
+  'settings.hotkey.press': '새 단축키를 눌러 주세요… (Esc로 취소)', // REVIEW(ko)
+  'settings.hotkey.note': '어떤 프로그램에서든 이 단축키를 누르면 빠른 기록 창이 열려요. 이 조합은 시스템 전체에서 레모가 쓰게 되어 다른 프로그램에서는 원래 기능이 동작하지 않으니, 자주 쓰는 조합은 피해 주세요. Ctrl이나 Alt 하나만 쓰는 조합은 안 되고 Shift, Win 또는 다른 보조 키를 함께 써야 해요.', // REVIEW(ko)；明早清单第 78 条：Ctrl+Shift+C 这类不拦，只提示会占用
+  'settings.hotkey.unregistered': '단축키가 이미 사용 중이에요. 다른 프로그램이 이 조합을 쓰고 있으니 다른 조합으로 바꿔 주세요.', // REVIEW(ko)
+  'settings.hotkey.err.inUse': '단축키가 이미 사용 중이에요. 다른 프로그램이 이 조합을 쓰고 있어요. 원래 단축키는 그대로 쓸 수 있어요.', // REVIEW(ko)
+  'settings.hotkey.err.invalid': '이 조합은 쓸 수 없어요. 다른 조합으로 바꿔 주세요.', // REVIEW(ko)
+  'settings.hotkey.err.combo': '보조 키를 누른 채로 문자, 숫자, F1~F12 또는 스페이스를 눌러 주세요. Ctrl이나 Alt 하나만으로는 안 되고 Shift, Win 또는 다른 보조 키를 함께 눌러야 해요(예: Ctrl + Shift + 스페이스). Win 하나만은 괜찮아요.', // REVIEW(ko)
+  'settings.hotkey.err.saveFailed': '새 단축키는 지금 바로 쓸 수 있지만 저장하지 못했어요. 레모를 다시 열면 원래 단축키로 돌아가요.', // REVIEW(ko)
+  'settings.hotkey.err.failed': '바꾸지 못했어요. 잠시 후 다시 시도해 주세요.', // REVIEW(ko)
+  // 설정 › 정보：음력·절기 데이터 출처（R-299、R-306、R-309）
+  'settings.about.title': '정보', // REVIEW(ko)；设置 › 关于（R-306 注明农历出处）
+  'settings.about.lunarCredit': '음력 및 절기 데이터: 홍콩 천문대', // REVIEW(ko)
 } as const satisfies Record<keyof typeof zh, string>;

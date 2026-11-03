@@ -1,13 +1,17 @@
 // push-dispatch 只给可用账号发（TC-B1-109 的 push-dispatch 部分；架构 0.29 续第 138 条④）。
 // 放在 tests/functions：要 import _shared/auth.ts（npm: 类型），tsconfig.node 不认；push-dispatch 其余用例用了 node 替身，在 tests/edge/push-dispatch.test.ts
 import { describe, expect, it } from 'vitest';
-import { filterUsable } from '../../supabase/functions/push-dispatch/core.ts';
 
 // _shared/auth.ts 顶上有 `import type … from 'npm:…'`（只有 Deno 认）：路径放在变量里动态加载，tsc（tsconfig.functions、tsconfig.node）不去解析它；
 // Vitest 运行时类型导入会被去掉，能直接加载（写法同 tests/functions/account-export-p0-auth.test.ts）
 type IsUsable = (admin: unknown, userId: string) => Promise<{ ok: boolean }>;
 const AUTH_PATH = '../../supabase/functions/_shared/auth.ts';
 const { isUsable } = (await import(/* @vite-ignore */ AUTH_PATH)) as { isUsable: IsUsable };
+// push-dispatch 的 core.ts / round.ts（BE-2 起）引 _shared/push 的实现（Web Crypto、Deno 的 RequestInit），Workers 类型的 tsconfig.functions
+// 编译不了它们：同样按变量路径动态加载
+type FilterUsable = (ids: readonly string[], isUsable: (u: string) => Promise<boolean>) => Promise<string[]>;
+const ROUND_PATH = '../../supabase/functions/push-dispatch/round.ts';
+const { filterUsable } = (await import(/* @vite-ignore */ ROUND_PATH)) as { filterUsable: FilterUsable };
 
 // TC-B1-109 的 push-dispatch 部分（tests/build/fn-account-disabled-coverage.test.ts 的 PLAN 引用这两条的标题）：
 // 走真的 _shared/auth.ts isUsable（index.ts 也是这样接的），数据库换成按 private.account_usable 语义回答的假客户端

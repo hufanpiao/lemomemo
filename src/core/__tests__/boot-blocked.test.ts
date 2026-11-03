@@ -2,10 +2,11 @@
 // （TC-B1-48 真浏览器实测：配合升级的标签页先写草稿再关库期间，chromium、webkit 都会先报 1 次 blocked，马上提示会闪一下）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { claimCache } from '../account.ts';
+import { DB_VERSION } from '../cache-migrations.ts';
 import { openCache, VERSION_CLOSE_WAIT_MS } from '../cache.ts';
 import { BLOCKED_PROMPT_DELAY_MS, coldStart, getBoot, resetBootForTest, type BootOptions } from '../boot.ts';
 import { clearAllCollections } from '../store.ts';
-import { fakeIndexedDB } from './idb-fake.ts';
+import { fakeIndexedDB, nextDbVersion } from './idb-fake.ts';
 
 function opts(factory: IDBFactory, over: Partial<BootOptions> = {}): BootOptions {
   return {
@@ -29,7 +30,7 @@ afterEach(() => {
 });
 
 describe('升级本机库被挡住（blocked）：延迟 BLOCKED_PROMPT_DELAY_MS 才提示', () => {
-  const V2 = { version: 2, migrations: [{ to: 2, up: () => undefined }] };
+  const V2 = nextDbVersion();
 
   /** 推进假的 setTimeout（每 50 ms 一步），中间让真的 setImmediate（假 IDB 的宏任务）跑几轮 */
   async function step(ms: number): Promise<void> {
@@ -112,7 +113,7 @@ describe('升级本机库被挡住（blocked）：延迟 BLOCKED_PROMPT_DELAY_MS
     await claimCache(seeded.cache, 'u1');
     seeded.cache.close();
     // 旧页：不设 onversionchange
-    const oldReq = fake.open('planner-v4', 1);
+    const oldReq = fake.open('planner-v4', DB_VERSION);
     await step(50);
     const oldDb = oldReq.result as unknown as { close(): void };
     const { p, history } = startBoot(opts(factory, { cacheOptions: { factory, ...V2 } }));
@@ -133,7 +134,7 @@ describe('升级本机库被挡住（blocked）：延迟 BLOCKED_PROMPT_DELAY_MS
     if (!seeded.ok) throw new Error('open');
     await claimCache(seeded.cache, 'u1');
     seeded.cache.close();
-    const oldReq = fake.open('planner-v4', 1);
+    const oldReq = fake.open('planner-v4', DB_VERSION);
     await step(50);
     const { p, history } = startBoot(opts(factory, { cacheOptions: { factory, ...V2 } }));
     await step(1000);

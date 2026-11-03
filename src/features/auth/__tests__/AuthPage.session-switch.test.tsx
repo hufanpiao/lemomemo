@@ -19,7 +19,7 @@ const OTHER = '0e2e0000-0000-4000-8000-000000000002';
 /** 本机清理的替身（记先后） */
 function exitSpy(log: string[]) {
   return {
-    clearLocalSessionIf: vi.fn((_sid: string | null) => void log.push('clearLocalSession')),
+    clearLocalSessionIf: vi.fn(async (_sid: string | null) => { log.push('clearLocalSession'); return true; }),
     readSessionId: () => 's1',
     deleteDb: vi.fn(async () => {
       log.push('deleteDb');

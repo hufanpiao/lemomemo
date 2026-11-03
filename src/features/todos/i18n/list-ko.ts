@@ -1,0 +1,32 @@
+// 功能 todos 的词典·韩文：待办列表页；键和 list-zh.ts 一一对应，逐行待 AI 韩文审校（R-106）
+import type { listZh } from './list-zh.ts';
+
+export const listKo: Readonly<Record<keyof typeof listZh, string>> = {
+  'list.title': '할 일', // REVIEW(ko)
+  'list.new': '새 할 일', // REVIEW(ko)
+  'list.all': '전체', // REVIEW(ko)
+  'list.filter': '프로젝트별 보기', // REVIEW(ko)
+  'list.g.late': '기한 지남', // REVIEW(ko)
+  'list.g.today': '오늘', // REVIEW(ko)
+  'list.g.tomorrow': '내일', // REVIEW(ko)
+  'list.g.later': '나중에', // REVIEW(ko)
+  'list.g.nodate': '날짜 없음', // REVIEW(ko)
+  'list.g.done': '완료', // REVIEW(ko)
+  'list.empty': '아직 할 일이 없어요', // REVIEW(ko)
+  'list.tag.late': '{n}일 지남', // REVIEW(ko)
+  'list.tag.passed': '{t} 지남', // REVIEW(ko)
+  'list.tag.today': '오늘 마감', // REVIEW(ko)
+  'list.tag.todayAt': '오늘 {t} 마감', // REVIEW(ko)
+  'list.tag.tomorrow': '내일 마감', // REVIEW(ko)
+  'list.tag.tomorrowAt': '내일 {t} 마감', // REVIEW(ko)
+  'list.tag.date': '{date} 마감', // REVIEW(ko)
+  'list.tag.dateAt': '{date} {t} 마감', // REVIEW(ko)
+  'list.important': '중요', // REVIEW(ko)
+  'list.done': '완료', // REVIEW(ko)
+  'list.undoDone': '완료 취소', // REVIEW(ko)
+  'list.delete': '삭제', // REVIEW(ko)
+  'list.deleted': '삭제했어요', // REVIEW(ko)
+  'list.undo': '실행 취소', // REVIEW(ko)
+  'list.err.save': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
+  'list.err.readonly': '새 버전으로 업데이트해야 수정할 수 있어요', // REVIEW(ko)
+};

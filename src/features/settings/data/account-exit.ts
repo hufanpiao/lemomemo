@@ -39,7 +39,8 @@ export interface AccountLeaveDeps {
    * 不给是清完库那一条（本机库已清，整份重读）
    */
   broadcastReset(userId: string, exit?: { notice: ExitNotice; sid: string | null }): void;
-  clearLocalSessionIf(sessionId: string | null): void;
+  // 返回删没删成（A-1）。这里不看返回值：之后的 goToAuth 按 session-store 的删除状态决定重新载入还是显示“退出没完成，点重试”
+  clearLocalSessionIf(sessionId: string | null): Promise<boolean>;
   goToAuth(notice: AccountLeaveNotice): void;
   /** 只记下退出原因、不跳转（platform/session.ts 的 setExitNotice）；见 createLeaveAccount 里 deletion_unsure 的那一段 */
   setNotice?(notice: AccountLeaveNotice, sid: string | null): void;
@@ -79,7 +80,7 @@ export function createLeaveAccount(deps: AccountLeaveDeps = defaultAccountLeaveD
     const drop = (): void => {
       if (keepSession) return;
       try {
-        deps.clearLocalSessionIf(sid);
+        void deps.clearLocalSessionIf(sid);
       } catch {
         // 存储不可用：本来也存不下会话
       }

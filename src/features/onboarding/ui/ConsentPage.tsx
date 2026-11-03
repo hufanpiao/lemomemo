@@ -6,10 +6,12 @@
 // • 失败留在本页、给一句提示，可以再点；no_policy（R-239）只给“继续使用”。
 // variant="updated"：“隐私说明更新了”那一屏（接手清单 CONSENT-updated；视觉稿 PH.privupd、PH.privupdko）——同一套勾选、按钮和 record_consent，
 //   换标题、四行“这次多了什么”、勾选句和“不同意”小字；R-115 句照旧，不放首次那句条款（稿里没有）；data-step="policy-update"
+// 底部隐私说明、条款链接：网页版新窗口打开；exe 里新窗口只放 https，相对地址打不开，点击时拼成本站绝对地址交给系统浏览器（kit/hooks/useOpenLink.ts）
 // 接线（CONSENT-wire）：路由 #/onboarding 走 ui/ConsentRoute.tsx，启动关口走 ui/ConsentGate.tsx；ai.enabled 由接线方在 onDone(true) 里写（hooks/useConsentWiring.ts）
 import { useId } from 'react';
+import { sitePageClickHandler } from '../../../kit/hooks/useOpenLink.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { useConsent, type ConsentApi, type ConsentErr } from '../hooks/useConsent.ts';
+import { onlineNow, useConsent, type ConsentApi, type ConsentErr } from '../hooks/useConsent.ts';
 import { useOnboardingT, type OnboardingMsgKey } from '../hooks/useOnboardingT.ts';
 import styles from './ConsentPage.module.css';
 
@@ -125,7 +127,7 @@ export default function ConsentPage({ api, onDone, onRevoked, onDisabled, onSkip
 
       {err && err !== 'revoked' && err !== 'disabled' && (
         <p className={styles.hint} role="alert" data-testid="consent-error" data-error={err}>
-          {t(ERR_KEY[err], {})}
+          {t(err === 'offline' && onlineNow() ? 'consent.err.unreachable' : ERR_KEY[err], {})}
         </p>
       )}
       {slow && (
@@ -165,13 +167,13 @@ export default function ConsentPage({ api, onDone, onRevoked, onDisabled, onSkip
       <p className={styles.links}>
         {ko ? (
           <>
-            <a href="/ko/privacy" target="_blank" rel="noopener noreferrer">{t('consent.privacyLink', {})}</a>
-            <a href="/ko/terms" target="_blank" rel="noopener noreferrer">{t('consent.termsLink', {})}</a>
+            <a href="/ko/privacy" target="_blank" rel="noopener noreferrer" onClick={sitePageClickHandler('/ko/privacy')}>{t('consent.privacyLink', {})}</a>
+            <a href="/ko/terms" target="_blank" rel="noopener noreferrer" onClick={sitePageClickHandler('/ko/terms')}>{t('consent.termsLink', {})}</a>
           </>
         ) : (
           <>
-            <a href="/zh/privacy" target="_blank" rel="noopener noreferrer">{t('consent.privacyLink', {})}</a>
-            <a href="/zh/terms" target="_blank" rel="noopener noreferrer">{t('consent.termsLink', {})}</a>
+            <a href="/zh/privacy" target="_blank" rel="noopener noreferrer" onClick={sitePageClickHandler('/zh/privacy')}>{t('consent.privacyLink', {})}</a>
+            <a href="/zh/terms" target="_blank" rel="noopener noreferrer" onClick={sitePageClickHandler('/zh/terms')}>{t('consent.termsLink', {})}</a>
           </>
         )}
       </p>

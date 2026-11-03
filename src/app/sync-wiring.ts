@@ -50,7 +50,8 @@ export interface WireSyncDeps extends SyncDisabledDeps {
   /** platform/session.ts 的 clearCacheStorage（只删运行时缓存） */
   clearCacheStorage(): Promise<void>;
   /** platform/session.ts 的 clearLocalSessionIf：本机会话还是被拒那次请求用的会话才删（收到事件时、回登录页前各一次） */
-  clearLocalSessionIf(sessionId: string | null): void;
+  // 返回删没删成（A-1）。这里不看返回值：之后的 goToAuth 按 session-store 的删除状态决定重新载入还是显示“退出没完成，点重试”
+  clearLocalSessionIf(sessionId: string | null): Promise<boolean>;
   /** platform/session.ts 的 goToAuth */
   goToAuth(): void;
   /** 测试用：读已记下的退出原因（默认 platform/session.ts 的 readExitNotice） */
@@ -124,7 +125,7 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     const drop = (): void => {
       if (notice === 'pending_deletion') return;
       try {
-        deps.clearLocalSessionIf(sid);
+        void deps.clearLocalSessionIf(sid);
       } catch {
         // 存储不可用：本来也存不下会话
       }

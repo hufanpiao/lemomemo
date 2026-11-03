@@ -48,7 +48,8 @@ describe('Stylelint 架构规则（tests/arch-fixtures/stylelint）', () => {
     for (const block of [pressedInMedia, rm]) {
       expect(block).toMatch(/transform: none;/);
       expect(block).toMatch(/opacity: var\(--press-dim\);/);
-      expect(block).not.toMatch(/transition/);
+      // 不加过渡：要么不写 transition，要么写 transition: none（C3 起 Pressable 的基础类带 transform 过渡，这里显式关掉）
+      expect(block).not.toMatch(/transition:(?! none;)/);
     }
   });
 

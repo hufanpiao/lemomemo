@@ -1,7 +1,7 @@
 // shared/schema（架构 2.5）：严格版多一列、类型不对都拒收；有时刻必须有时区
 import { describe, expect, it } from 'vitest';
 import { apiError, upgradeRequired } from '../../shared/schema/api.ts';
-import { devicesWrite, eventsWrite, insertSchema, patchSchema, profilesWrite, rowsWrite, todosWrite } from '../../shared/schema/rows.ts';
+import { devicesWrite, eventsWrite, insertSchema, patchSchema, profilesWrite, rowsWrite, SNOOZE_AT_MAX, todosWrite } from '../../shared/schema/rows.ts';
 
 const ID = '0f8fad5b-d9cb-469f-a165-70867728950e';
 
@@ -119,6 +119,19 @@ describe('rows 严格版', () => {
     const bad = zones.filter((tz) => !eventsWrite.safeParse({ ...event, tz }).success);
     expect(bad).toEqual([]);
     expect(eventsWrite.safeParse({ ...event, tz: Intl.DateTimeFormat().resolvedOptions().timeZone }).success).toBe(true);
+  });
+
+  it('snooze_at 和数据库约束一致（迁移 20261103140000 ③：为空，或 0～4102444800000）：边界通过，+1、负数拒；只限 snooze_at', () => {
+    expect(SNOOZE_AT_MAX).toBe(Date.UTC(2100, 0, 1));
+    for (const t of ['events', 'todos'] as const) {
+      const p = patchSchema(t);
+      for (const v of [null, 0, 1700000000000, 4102444800000]) expect(p.safeParse({ snooze_at: v }).success, `${t} ${v}`).toBe(true);
+      for (const v of [4102444800001, -1, 1.5]) expect(p.safeParse({ snooze_at: v }).success, `${t} ${v}`).toBe(false);
+      // 别的毫秒列不受这个上限影响
+      expect(p.safeParse({ notified_for: 4102444800001, updated_at: 4102444800001 }).success, t).toBe(true);
+    }
+    expect(eventsWrite.safeParse({ ...event, snooze_at: SNOOZE_AT_MAX }).success).toBe(true);
+    expect(eventsWrite.safeParse({ ...event, snooze_at: SNOOZE_AT_MAX + 1 }).success).toBe(false);
   });
 
   it('profiles 客户端不能 insert', () => {

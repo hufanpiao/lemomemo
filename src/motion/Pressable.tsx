@@ -25,6 +25,8 @@ export function Pressable(props: PressableProps) {
       type={type === 'submit' || type === 'reset' ? type : 'button'}
       className={className ? `${styles.pressable} ${className}` : styles.pressable}
       data-state={pressed ? 'pressed' : 'idle'}
+      // 切页前 motion 的 transition() 按这个标记找到所有 Pressable，打 data-snap 瞬间复位（UI-4 C3，见 Pressable.module.css）
+      data-pressable=""
       onPointerDown={(e) => {
         setPressed(true);
         onPointerDown?.(e);

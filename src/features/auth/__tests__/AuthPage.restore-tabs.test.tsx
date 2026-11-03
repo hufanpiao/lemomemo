@@ -33,7 +33,7 @@ function setup(status: () => Promise<AccountStatus>, restore?: () => Promise<Res
     return { serverDone: true };
   });
   const localExit = {
-    clearLocalSessionIf: vi.fn((sid: string | null) => void log.push(`clearLocalSessionIf:${sid}`)),
+    clearLocalSessionIf: vi.fn(async (sid: string | null) => { log.push(`clearLocalSessionIf:${sid}`); return true; }),
     readSessionId: () => cur.sid,
     deleteDb: vi.fn(async () => {
       log.push('deleteDb');

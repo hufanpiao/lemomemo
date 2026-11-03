@@ -2,9 +2,9 @@
 // 用 __tests__/idb-fake.ts 的替身（仓库没有 fake-indexeddb）
 import { describe, expect, it, vi } from 'vitest';
 import { openCache, type Cache, type CachedRow, type OpenCacheResult } from '../cache.ts';
-import type { CacheMigration } from '../cache-migrations.ts';
+import { DB_VERSION, type CacheMigration } from '../cache-migrations.ts';
 import { cacheStores, type StoreDef } from '../cache-schema.ts';
-import { fakeIndexedDB, flush } from './idb-fake.ts';
+import { fakeIndexedDB, flush, nextDbVersion } from './idb-fake.ts';
 
 function mustOpen(r: OpenCacheResult): Cache {
   if (!r.ok) throw new Error(`open_failed:${r.reason}:${r.error}`);
@@ -19,7 +19,7 @@ describe('建库和读写', () => {
     const r = await openCache({ factory });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.upgrade).toMatchObject({ from: 0, to: 1, ran: [], failed: null });
+    expect(r.upgrade).toMatchObject({ from: 0, to: DB_VERSION, ran: [], failed: null });
     expect([...(fake.dbs.get('planner-v4')?.stores.keys() ?? [])].sort()).toEqual(cacheStores().map((s) => s.name).sort());
     expect(r.cache.syncTables).toContain('events');
     expect(r.cache.syncTables).not.toContain('outbox');
@@ -183,7 +183,7 @@ describe('onversionchange（TC-B1-48 的本机库部分）', () => {
     a.onBeforeVersionClose(async () => {
       await a.putDraft({ id: 'editing', kind: 'note-edit', data: '没保存的正文', updated_at: 2 });
     });
-    const b = mustOpen(await openCache({ factory, version: 2, migrations: [{ to: 2, up: () => undefined }] }));
+    const b = mustOpen(await openCache({ factory, ...nextDbVersion() }));
     expect(closed).toHaveBeenCalledWith('versionchange');
     expect(a.isClosed()).toBe(true);
     await expect(a.putRows('events', [row('x', 'y')])).rejects.toThrow('cache_closed');
@@ -214,12 +214,12 @@ describe('onversionchange（TC-B1-48 的本机库部分）', () => {
     const conn = [...(fake.dbs.get('planner-v4')?.connections ?? [])][0];
     if (conn) conn.onversionchange = null;
     const onBlocked = vi.fn();
-    const p = openCache({ factory, version: 2, migrations: [{ to: 2, up: () => undefined }], onBlocked });
+    const p = openCache({ factory, ...nextDbVersion(), onBlocked });
     await flush();
     expect(onBlocked).toHaveBeenCalledTimes(1);
     old.close();
     const c = mustOpen(await p);
-    expect(c.version).toBe(2);
+    expect(c.version).toBe(DB_VERSION + 1);
     c.close();
   });
 
@@ -231,7 +231,7 @@ describe('onversionchange（TC-B1-48 的本机库部分）', () => {
       during = await a.putRows('events', [row('x', 'y')]).catch((e: unknown) => e);
       await a.putDraft({ id: 'ok', kind: 'k', data: 1, updated_at: 1 });
     });
-    const b = mustOpen(await openCache({ factory, version: 2, migrations: [{ to: 2, up: () => undefined }] }));
+    const b = mustOpen(await openCache({ factory, ...nextDbVersion() }));
     expect((during as Error).message).toBe('cache_closed');
     expect(await b.getDraft('ok')).toBeDefined();
     b.close();

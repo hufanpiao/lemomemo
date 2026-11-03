@@ -52,3 +52,8 @@ export function useConsent(api: ConsentApi, { onDone, onRevoked, onDisabled, onS
 
   return { checked, setChecked, busy, slow, err, submit, skip: onSkip };
 }
+
+/** 当下 navigator.onLine 是不是没有明说断网（断网提示选“没有网络”还是“暂时连不上服务器”，协调者必改第 7 条） */
+export function onlineNow(): boolean {
+  return typeof navigator === 'undefined' || navigator.onLine !== false;
+}

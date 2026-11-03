@@ -1,0 +1,131 @@
+/* 今天页：只用令牌（A11）；普通标题 400，只有页顶日期加粗（R-134、R-136） */
+.page {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 16px) 16px 140px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.date {
+  margin: 0 0 12px;
+  font-size: var(--fs-20);
+  font-weight: 600;
+}
+
+.h2 {
+  margin: 16px 0 6px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-weight: 400;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  border-bottom: 1px solid var(--line);
+}
+
+.time {
+  flex: none;
+  width: 44px;
+  color: var(--text-2);
+  font-family: var(--f-num);
+  font-size: var(--fs-13);
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.title {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--fs-15);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row[data-done] .title {
+  color: var(--text-2);
+  text-decoration: line-through;
+}
+
+.sub {
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+/* “没赶上”F 版：透明底、淡红细描边，含义靠红字（R-76）；令牌里还没有 --late-line（color-mix 被 A11 禁），先用 --danger-text，比设计深（待 B2 负责人补令牌） */
+.late {
+  margin: 0 0 8px;
+  padding: 0 12px;
+  border: 1px solid var(--danger-text);
+  border-radius: var(--r-lg);
+}
+
+.late .row:last-child {
+  border-bottom: 0;
+}
+
+.lateTag {
+  color: var(--danger-text);
+  font-size: var(--fs-12-5);
+}
+
+.check {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 11px 0;
+  accent-color: var(--accent);
+}
+
+.del {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-18);
+}
+
+.empty {
+  margin: 8px 0;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.error {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: max(calc(env(safe-area-inset-bottom) + 118px), var(--kb, 0px));
+  max-width: 528px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  border-radius: var(--r-lg);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  font-size: var(--fs-14);
+}

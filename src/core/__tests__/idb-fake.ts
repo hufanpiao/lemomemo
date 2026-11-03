@@ -6,6 +6,7 @@
 // • 仓：put / get / getAll / delete / clear / count、index(name).getAll(key)、createIndex / deleteIndex
 // 不是测试文件本身（文件名不以 .test.ts 结尾）
 
+import { cacheMigrations, DB_VERSION, type CacheMigration } from '../cache-migrations.ts';
 import {
   errEvent,
   FakeObjectStore,
@@ -173,4 +174,13 @@ export function fakeIndexedDB(): { factory: IDBFactory; fake: FakeIDBFactory } {
 /** 等所有排着的宏任务跑完几轮 */
 export async function flush(rounds = 5): Promise<void> {
   for (let i = 0; i < rounds; i++) await new Promise((r) => setTimeout(r, 0));
+}
+
+/**
+ * 比当前 DB_VERSION 高一版的 openCache 参数（模拟“别的标签页开了新版 App”）：现有迁移照跑，再加一步 up。
+ * 不写死 version: 2——B2 起 DB_VERSION 已经是 2（0.29 续第 107 条），以后再升也不用改测试
+ */
+export function nextDbVersion(up: CacheMigration['up'] = () => undefined): { version: number; migrations: CacheMigration[] } {
+  const version = DB_VERSION + 1;
+  return { version, migrations: [...cacheMigrations, { to: version, up }] };
 }

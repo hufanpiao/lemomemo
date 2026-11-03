@@ -156,7 +156,7 @@ export function useAccountGate(deps: AuthFlowDeps = {}, onReplaced?: () => void)
       logoutWithToken: logout,
       timeoutMs,
     });
-    dropSession(steps, sid);
+    void dropSession(steps, sid);   // 不抛错；删没删成由 session-store 的删除状态兜着（A-1）
     snap.current = null;
     return true;
   }, [compare, reload, account, steps, readUserId, readToken, logout, timeoutMs]);
@@ -279,3 +279,8 @@ export function useAccountGate(deps: AuthFlowDeps = {}, onReplaced?: () => void)
 }
 
 export type AccountGate = ReturnType<typeof useAccountGate>;
+
+/** 当下 navigator.onLine 是不是没有明说断网（断网提示选“没有网络”还是“暂时连不上服务器”，协调者必改第 7 条） */
+export function onlineNow(): boolean {
+  return typeof navigator === 'undefined' || navigator.onLine !== false;
+}

@@ -7,7 +7,7 @@ import { openCache } from '../../core/cache.ts';
 import { clearAllCollections } from '../../core/store.ts';
 import { createSync, type Sync, type SyncOptions } from '../../core/sync/engine.ts';
 import { fakeTransport } from '../../core/sync/__tests__/fake-server.ts';
-import { fakeIndexedDB } from '../../core/__tests__/idb-fake.ts';
+import { fakeIndexedDB, nextDbVersion } from '../../core/__tests__/idb-fake.ts';
 import { todo, uid } from '../../core/__tests__/outbox-fixtures.ts';
 import { clearLocalSessionIf, readSessionId, readSessionUserId } from '../../platform/session.ts';
 import { wireSync } from '../sync-wiring.ts';
@@ -68,7 +68,7 @@ describe('wireSync', () => {
 
   it('version_too_new、没登录：不启动', async () => {
     const { factory } = fakeIndexedDB();
-    const hi = await openCache({ factory, version: 2, migrations: [{ to: 2, up: () => undefined }] });
+    const hi = await openCache({ factory, ...nextDbVersion() });
     if (hi.ok) hi.cache.close();
     const tooNew = await coldStart(opts(factory));
     expect(tooNew.status).toBe('version_too_new');

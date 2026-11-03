@@ -24,6 +24,15 @@ const whenOf = (tpl: string) => {
 const pending = { kind: 'pending_deletion' as const, purgeAfter: PURGE };
 
 
+
+/** 把 navigator.onLine 设成给定值（还原用 restoreOnLine） */
+function setOnLine(v: boolean) {
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => v });
+}
+function restoreOnLine() {
+  delete (window.navigator as unknown as Record<string, unknown>)['onLine'];
+}
+
 describe('验证码通过后先探测账号状态', () => {
   it('active：照常进 App', async () => {
     const account = fakeAccount();
@@ -141,6 +150,26 @@ describe('恢复页', () => {
     expect(screen.getByTestId('auth-restore-error').textContent).toBe(zh['auth.restore.err.tooLate']);
     expect(screen.queryByRole('button', { name: zh['auth.restore.restore'] })).toBeNull();
     expect(screen.getByRole('button', { name: zh['auth.restore.keep'] })).toBeTruthy();
+  });
+
+  it('restore 断网：navigator.onLine 为 false 说“没有网络”，否则说“暂时连不上服务器”（必改第 7 条）', async () => {
+    const restore = vi.fn(async () => ({ ok: false as const, error: 'offline' as const }));
+    await loginWith(fakeAccount({ status: vi.fn(async () => pending), restore }));
+    try {
+      setOnLine(false);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: zh['auth.restore.restore'] }));
+      });
+      expect(screen.getByTestId('auth-restore-error').textContent).toBe(zh['auth.restore.err.offline']);
+      setOnLine(true);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: zh['auth.restore.restore'] }));
+      });
+      expect(screen.getByTestId('auth-restore-error').textContent).toBe(zh['auth.restore.err.unreachable']);
+      expect(zh['auth.restore.err.unreachable']).toBe('暂时连不上服务器，稍后再试');
+    } finally {
+      restoreOnLine();
+    }
   });
 
   it('restore 回 account_disabled（冷静期里又被停用）：改显示“账号已停用”', async () => {

@@ -8,6 +8,11 @@ export const ROUTE_NAMES = [
   'today',
   'calendar',
   'todos',
+  // 编辑页（B2 FA-2）：#/event/<id>、#/event/new，#/todo/<id>、#/todo/new
+  'event',
+  'todo',
+  // “最近删除”（B2 FA-2，ADR-006）：#/trash
+  'trash',
   'notes',
   'vault',
   'anniv',
@@ -47,6 +52,14 @@ export function hrefOf(name: RouteName, ...params: string[]): string {
 // 浏览器的前进 / 后退（hashchange）走同一条路；一次切换只起一个 View Transition（监听器集中在这里）
 
 const listeners = new Set<() => void>();
+
+// 历史的深度标记（canGoBack 用）：放在 history.state 里，浏览器后退、刷新都还在
+const DEPTH = 'lemoDepth';
+function depthNow(): number {
+  const st: unknown = window.history.state;
+  const d = typeof st === 'object' && st !== null ? (st as Record<string, unknown>)[DEPTH] : undefined;
+  return typeof d === 'number' && d > 0 ? d : 0;
+}
 
 function notifyAll(): void {
   for (const l of [...listeners]) l();
@@ -116,7 +129,7 @@ export function navigate(name: RouteName, ...params: string[]): Promise<void> {
   const href = hrefOf(name, ...params);
   if (window.location.hash === href) return Promise.resolve();
   return commit(() => {
-    window.history.pushState(null, '', href);
+    window.history.pushState({ [DEPTH]: depthNow() + 1 }, '', href);
   });
 }
 
@@ -125,7 +138,7 @@ export function replaceRoute(name: RouteName, ...params: string[]): Promise<void
   const href = hrefOf(name, ...params);
   if (window.location.hash === href) return Promise.resolve();
   return commit(() => {
-    window.history.replaceState(null, '', href);
+    window.history.replaceState({ [DEPTH]: depthNow() }, '', href);
   });
 }
 
@@ -135,4 +148,17 @@ export function replaceRoute(name: RouteName, ...params: string[]): Promise<void
  */
 export function goBack(): void {
   window.history.back();
+}
+
+/**
+ * 有没有“App 里的上一页”（代码审查 S11）：navigate 压的历史带深度标记，进 App 的第一页是 0。
+ * 不用 history.length（从别的网站跳进来、同一个标签页之前开过别的页面时也大于 1，一后退就离开 App）
+ */
+export function canGoBack(): boolean {
+  return depthNow() > 0;
+}
+
+/** 只改地址、不重画（新建保存后把 #/todo/new 换成这一条的 id，代码审查 S7）；深度不变 */
+export function replaceAddress(name: RouteName, ...params: string[]): void {
+  window.history.replaceState({ [DEPTH]: depthNow() }, '', hrefOf(name, ...params));
 }

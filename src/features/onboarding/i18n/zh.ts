@@ -36,6 +36,8 @@ export const zh = {
   'consent.slow': '网络有点慢，还在保存…',
   'consent.continue': '继续使用',
   'consent.err.offline': '网络没连上，这一步还没记下。请联网后再点一次。',
+  // 报“断网”但 navigator.onLine 不是 false（请求失败、超时、读不出回包）：不说“没有网络”（协调者必改第 7 条）
+  'consent.err.unreachable': '暂时连不上服务器，稍后再试',
   'consent.err.version': '隐私说明刚更新过，请再点一次。',
   'consent.err.tryLater': '服务器忙，请稍后再点一次。',
   'consent.err.unknown': '这一步没记下，请再点一次。',

@@ -2,7 +2,7 @@
 // ① 推送失败比例加 claimed：claimed − sent 当成“没发成”，和“失败过半”同一条规则（没有 claimed 时照旧用 sent、failed）；
 // ② 网关回的 401（UNAUTHORIZED_*）和 usage-report 自己回的 401（{"error":"unauthorized"}）分开报；
 // ③ 调 usage-report 不再带 anon Bearer（Authorization 头一律不发），只靠 x-ops-secret。
-// push-dispatch 函数还在写：claimed 的字段名、usage-report 白名单加 claimed 都是“待函数落地后核对”（见 rules.ts 的 PUSH_DETAIL_FIELDS 注释）。
+// claimed 的字段名、usage-report 白名单含 claimed：11-03 push-dispatch 落地后已核对（见 rules.ts 的 PUSH_DETAIL_FIELDS 注释；对齐测试在 tests/edge/push-dispatch.test.ts 末尾）。
 import { describe, expect, it } from 'vitest';
 import { callUsageReport, classify401, type FetchFn } from '../../workers/lemo-ops/src/http.ts';
 import { readConfig } from '../../workers/lemo-ops/src/index.ts';

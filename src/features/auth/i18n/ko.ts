@@ -85,6 +85,7 @@ export const ko = {
   'auth.restore.err.tooLate': '계정 삭제가 이미 시작되어 복구할 수 없어요.', // R-106 B1 第一遍已审（10-31）；GATE-sugg ⑥（10-30）补主语“계정”
   'auth.restore.err.rateLimited': '오늘은 복구를 더 시도할 수 없어요. 내일 다시 시도해 주세요.', // R-106 B1 第一遍已审（10-30），按审校意见改过
   'auth.restore.err.tryLater': '서버가 바빠요. 잠시 후 다시 시도해 주세요.', // R-106 B1 第一遍已审（10-30）
+  'auth.restore.err.unreachable': '지금 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)：新句
   'auth.restore.err.offline': '지금 인터넷에 연결되어 있지 않아요. 연결한 뒤 다시 시도해 주세요.', // R-106 B1 第一遍已审（10-30），按审校意见改过
   'auth.restore.err.unknown': '문제가 생겼어요. 잠시 후 다시 시도해 주세요.', // R-106 B1 第一遍已审（10-30）
   'auth.gate.unsure': '지금은 계정 상태를 확인할 수 없어요. 다시 시도하거나 일단 레모에 들어갈 수 있어요.', // R-106 B1 第一遍已审（10-30），按审校意见改过

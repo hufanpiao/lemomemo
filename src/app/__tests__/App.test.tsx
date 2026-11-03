@@ -11,7 +11,8 @@ afterEach(() => {
 describe('App', () => {
   it('默认进今天页（懒加载）', async () => {
     render(<App />);
-    const page = await screen.findByRole('main');
+    // 懒加载在全量并发下可能超过默认的 1 秒（11-03 快照 r84 偶发失败），放宽到 5 秒
+    const page = await screen.findByRole('main', {}, { timeout: 5000 });
     expect(page.getAttribute('data-feature')).toBe('today');
   });
 

@@ -45,7 +45,7 @@ async function wire(extra: Partial<WireSyncDeps>) {
   wireSync(boot, {
     transport: fakeTransport(),
     clearCacheStorage: () => Promise.resolve(),
-    clearLocalSessionIf: () => undefined,
+    clearLocalSessionIf: () => Promise.resolve(true),
     goToAuth: () => undefined,
     setExitNotice: () => undefined,
     platform: 'web',

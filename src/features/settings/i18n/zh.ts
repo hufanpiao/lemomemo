@@ -111,6 +111,8 @@ export const zh = {
   'settings.signingOut': '正在退出…正在清空这台设备上的数据，网络不好时可能要十几秒。',
   'settings.cancel': '取消',
   'settings.err.offline': '现在没有网络，请联网后再试',
+  // 报“断网”但 navigator.onLine 不是 false（请求失败、超时、读不出回包）：不说“没有网络”（协调者必改第 7 条）
+  'settings.err.unreachable': '暂时连不上服务器，稍后再试',
   'settings.err.tryLater': '服务器忙，稍后再试',
   'settings.err.unknown': '出了点问题，请稍后再试',
   'settings.err.accountDisabled': '这个账号已停用。申请注销后 7 天内重新登录可以恢复。',
@@ -122,4 +124,21 @@ export const zh = {
   'settings.signedOut.body': '这个账号已在别的窗口退出，请重新登录。',
   'settings.offlineOut.title': '已在这台设备上退出',
   'settings.offlineOut.body': '服务器上的这次登录暂时没能吊销，本机已清空。之后可以在别的设备上用“退出其他所有设备”清掉它。',
+  // 设置 › 电脑 › 快速记录热键（R-297，只在电脑版 exe 显示）
+  'settings.desktop.title': '电脑',
+  'settings.hotkey.title': '快速记录热键',
+  'settings.hotkey.space': '空格',
+  'settings.hotkey.change': '更改',
+  'settings.hotkey.reset': '恢复默认',
+  'settings.hotkey.press': '按下新的组合键…（Esc 取消）',
+  'settings.hotkey.note': '在任何程序里按这个组合键，都会弹出快速记录。它会占用全系统的这个组合键，别的程序里原来的用法就不灵了，选的时候避开常用的。只用 Ctrl 或只用 Alt 的组合不能用，要再加上 Shift、Win 或另一个修饰键。',
+  'settings.hotkey.unregistered': '热键被占用：别的程序已经在用这个组合键，换一个试试。',
+  'settings.hotkey.err.inUse': '热键被占用：别的程序已经在用这个组合键，原来的热键照常可用。',
+  'settings.hotkey.err.invalid': '这个组合键不能用，请换一个。',
+  'settings.hotkey.err.combo': '要按住修饰键再按字母、数字、F1～F12 或空格；只用 Ctrl 或只用 Alt 不行，要再加上 Shift、Win 或另一个修饰键（比如 Ctrl + Shift + 空格），单用 Win 可以。',
+  'settings.hotkey.err.saveFailed': '新热键这次已经能用，但没保存下来，下次打开柠檬记会回到原来的。',
+  'settings.hotkey.err.failed': '没改成，请稍后再试。',
+  // 设置 › 关于：农历和节气数据出处（R-299、R-306、R-309：按香港天文台网站条款注明；B2 BE-5 只加键，界面由前端 A 接）
+  'settings.about.title': '关于',
+  'settings.about.lunarCredit': '农历及节气数据：香港天文台',
 } as const;

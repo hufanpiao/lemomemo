@@ -1,5 +1,8 @@
 // 注册 Service Worker（架构 8.1、16.1）：sw.js 放在 /app/，scope 只管 /app/，首页不受影响
 // navigator.serviceWorker 只准出现在 platform（A13）
+// exe（Tauri 窗口）里不注册（架构 5.10；B2 架构审 D4 第 1 点、B6-exe 约定 3）：WebView2 收不到 Web Push，exe 的界面文件在本机，
+// 用不着离线缓存；判断读 env.ts 的 isTauri，不在这里另写一份 __TAURI__ 检查
+import { isTauri } from './env.ts';
 import type { Lifecycle } from './net.ts';
 
 export const SW_URL = '/app/sw.js';
@@ -8,8 +11,10 @@ export const SW_SCOPE = '/app/';
 /** 注册最多等这么久（K6 复审建议 3：本机库来自更新版本时入口要等注册完再渲染，注册一直不返回不能白屏） */
 export const SW_REGISTER_WAIT_MS = 3000;
 
-/** 注册 SW；不支持、失败或超过 waitMs 都返回 null（超时只是不再等，注册请求本身照常进行）。永远 resolve */
-export async function registerServiceWorker(waitMs: number = SW_REGISTER_WAIT_MS): Promise<ServiceWorkerRegistration | null> {
+/** 注册 SW；exe 里、不支持、失败或超过 waitMs 都返回 null（超时只是不再等，注册请求本身照常进行）。永远 resolve。
+ * win 默认 globalThis（测试时传假的） */
+export async function registerServiceWorker(waitMs: number = SW_REGISTER_WAIT_MS, win: object = globalThis): Promise<ServiceWorkerRegistration | null> {
+  if (isTauri(win)) return null;
   if (!('serviceWorker' in navigator)) return null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<null>((resolve) => {

@@ -54,7 +54,7 @@ export function fakeExit(pending: number | null = 0) {
     }),
     deleteDb: vi.fn(async () => void order.push('deleteDb')),
     clearCacheStorage: vi.fn(async () => void order.push('caches')),
-    clearLocalSessionIf: vi.fn((_sid: string | null): void => void order.push('session')),
+    clearLocalSessionIf: vi.fn(async (_sid: string | null) => { order.push('session'); return true; }),
     readSessionId: vi.fn((): string | null => 's-me'),
     readUserId: vi.fn((): string | null => 'u1'),
     pendingCount: vi.fn(async () => pending),

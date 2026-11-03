@@ -17,7 +17,7 @@ const steps = (swap: string | null = 's2'): ExitSteps => ({
   clearCacheStorage: async () => {
     if (swap) put(swap);
   },
-  clearLocalSessionIf: () => undefined,
+  clearLocalSessionIf: () => Promise.resolve(true),
   readSessionId: () => readSessionId(),
 });
 
@@ -34,7 +34,7 @@ describe('会话在 ④ 前被换掉：不调 supabase-js，用旧令牌直接 l
     vi.stubGlobal('fetch', fetchFn);
     const signOut = vi.fn(async () => ({ serverDone: true }));
     const r = await signOutThisDevice({ server: { signOut }, steps: steps(), markSelf: () => undefined });
-    expect(r).toEqual({ serverDone: true });
+    expect(r).toMatchObject({ serverDone: true });
     expect(signOut).not.toHaveBeenCalled();
     expect(fetchFn).toHaveBeenCalledTimes(1);
     const [url, init] = fetchFn.mock.calls[0] ?? [];
@@ -51,9 +51,9 @@ describe('会话在 ④ 前被换掉：不调 supabase-js，用旧令牌直接 l
     const fetchFn = vi.fn(async () => new Response('{"code":"bad_jwt"}', { status: 401, headers: { 'content-type': 'application/json' } }));
     vi.stubGlobal('fetch', fetchFn);
     const signOut = vi.fn(async () => ({ serverDone: true }));
-    const clearLocalSessionIf = vi.fn();
+    const clearLocalSessionIf = vi.fn(async () => true);
     const r = await signOutThisDevice({ server: { signOut }, steps: { ...steps(), clearLocalSessionIf }, markSelf: () => undefined });
-    expect(r).toEqual({ serverDone: false });
+    expect(r).toMatchObject({ serverDone: false });
     expect(signOut).not.toHaveBeenCalled();
     expect(fetchFn).toHaveBeenCalledTimes(1);
     expect(clearLocalSessionIf.mock.calls).toEqual([['s1']]);   // 兜底只按旧 sid 删：本机是 s2，删不到
@@ -63,7 +63,7 @@ describe('会话在 ④ 前被换掉：不调 supabase-js，用旧令牌直接 l
   it('断网：serverDone = false；超时：用 ④ 剩下的预算，到点按没退成', async () => {
     put('s1');
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))));
-    expect(await signOutThisDevice({ server: { signOut: vi.fn() }, steps: steps(), markSelf: () => undefined })).toEqual({ serverDone: false });
+    expect(await signOutThisDevice({ server: { signOut: vi.fn() }, steps: steps(), markSelf: () => undefined })).toMatchObject({ serverDone: false });
 
     vi.useFakeTimers();
     put('s1');
@@ -75,7 +75,7 @@ describe('会话在 ④ 前被换掉：不调 supabase-js，用旧令牌直接 l
     await vi.advanceTimersByTimeAsync(0);
     expect(done).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(await p).toEqual({ serverDone: false });
+    expect(await p).toMatchObject({ serverDone: false });
     expect(readSessionId()).toBe('s2');
   });
 
@@ -83,7 +83,7 @@ describe('会话在 ④ 前被换掉：不调 supabase-js，用旧令牌直接 l
     const logout = vi.fn(async () => ({ serverDone: true }));
     const signOut = vi.fn(async () => ({ serverDone: true }));
     const r = await signOutThisDevice({ server: { signOut }, steps: steps(), markSelf: () => undefined, logoutWithToken: logout });
-    expect(r).toEqual({ serverDone: true });
+    expect(r).toMatchObject({ serverDone: true });
     expect(logout).not.toHaveBeenCalled();
     expect(signOut).not.toHaveBeenCalled();
     expect(readSessionId()).toBe('s2');
@@ -115,11 +115,11 @@ describe('logoutWithToken', () => {
   it('地址去掉末尾斜杠；带 apikey；2xx 为 true，其余为 false；不抛错', async () => {
     const fetchFn = vi.fn(async (_u: RequestInfo | URL, _i?: RequestInit) => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchFn);
-    expect(await logoutWithToken('t', 1000, 'https://lemomemo.com/sb/', 'anon')).toEqual({ serverDone: true });
+    expect(await logoutWithToken('t', 1000, 'https://lemomemo.com/sb/', 'anon')).toMatchObject({ serverDone: true });
     expect(String(fetchFn.mock.calls[0]?.[0])).toBe('https://lemomemo.com/sb/auth/v1/logout?scope=local');
     expect(new Headers(fetchFn.mock.calls[0]?.[1]?.headers).get('apikey')).toBe('anon');
     fetchFn.mockResolvedValueOnce(new Response(null, { status: 500 }));
-    expect(await logoutWithToken('t', 1000, 'https://lemomemo.com/sb', 'anon')).toEqual({ serverDone: false });
+    expect(await logoutWithToken('t', 1000, 'https://lemomemo.com/sb', 'anon')).toMatchObject({ serverDone: false });
   });
 
   it('到 timeoutMs 还没回来就 abort，按没退成（复审建议 2）', async () => {
@@ -140,7 +140,7 @@ describe('logoutWithToken', () => {
     expect(signal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect(signal?.aborted).toBe(true);
-    expect(await p).toEqual({ serverDone: false });
+    expect(await p).toMatchObject({ serverDone: false });
   });
 });
 
@@ -159,9 +159,9 @@ describe('封装里用的判断：sessionReplaced、logoutReplaced', () => {
 
   it('logoutReplaced：有旧令牌按预算调 logout；没有旧令牌有意算退成、不发请求', async () => {
     const logout = vi.fn(async () => ({ serverDone: false }));
-    expect(await logoutReplaced('t', 700, logout)).toEqual({ serverDone: false });
+    expect(await logoutReplaced('t', 700, logout)).toMatchObject({ serverDone: false });
     expect(logout.mock.calls).toEqual([['t', 700]]);
-    expect(await logoutReplaced(null, 700, logout)).toEqual({ serverDone: true });
+    expect(await logoutReplaced(null, 700, logout)).toMatchObject({ serverDone: true });
     expect(logout).toHaveBeenCalledTimes(1);
   });
 });

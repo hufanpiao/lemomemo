@@ -32,3 +32,7 @@ month-grid、week-view 两个测试 54 条全过；`tsc -p tsconfig.shared.json`
 - 建议 2：交前端 B。
 
 - 【11-03】建议 2 前端 B 已改：`unsynced()` 挪进 `tests/shared/calendar/fixtures.ts`，两个测试共用，并断言两列都不存在；54 条全过，eslint、tsc 0 错误。
+
+## 采纳情况（主持人，11-03）
+
+- 建议 1 已由前端 A 落实：today-model.ts 的 isLive、todo-list.ts 的 live 改用 isLiveRow（本机缓存行列为 unknown，各加一处类型断言并写明原因）；today、todos 各补一份对照测试（deleted_at、undone 各 14 种取值两两组合，本功能 isLive、isLiveRow、原写法三者逐条相等）。改动另请审查员复核，结论记在 B6-exe 安全审查记录“复核三”。

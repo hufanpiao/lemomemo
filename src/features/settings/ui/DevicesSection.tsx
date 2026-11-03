@@ -7,6 +7,7 @@ import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
 import type { DeviceNotice, DeviceView, useDevices } from '../hooks/useDevices.ts';
+import { onlineNow } from '../hooks/useOnline.ts';
 import { useSettingsT, type SettingsMsgKey } from '../hooks/useSettingsT.ts';
 import { ConfirmDialog } from './ConfirmDialog.tsx';
 import styles from './SettingsPage.module.css';
@@ -158,10 +159,10 @@ type DeviceErr = Extract<DeviceNotice, { kind: 'error' }>['error'];
  * 设备操作失败时提示哪一句。穷尽 switch、不写 default（R272-sugg ④，架构 0.29 续第 119 条②）：
  * try_later 单独一支“服务器忙，稍后再试”（临时故障，只提示、不清本机）；加了新码不补分支就编译不过
  */
-export function deviceErrKey(e: DeviceErr): Extract<SettingsMsgKey, `settings.err.${string}`> {
+export function deviceErrKey(e: DeviceErr, online: boolean = onlineNow()): Extract<SettingsMsgKey, `settings.err.${string}`> {
   switch (e) {
     case 'offline':
-      return 'settings.err.offline';
+      return online ? 'settings.err.unreachable' : 'settings.err.offline';
     case 'try_later':
       return 'settings.err.tryLater';
     case 'account_disabled':

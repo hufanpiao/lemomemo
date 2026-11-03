@@ -33,7 +33,7 @@ function steps(log: string[], over: Partial<ExitSteps> = {}): ExitSteps & { [K i
   return {
     deleteDb: vi.fn(async () => void log.push('deleteDb')),
     clearCacheStorage: vi.fn(async () => void log.push('caches')),
-    clearLocalSessionIf: vi.fn((_sid: string | null) => void log.push('session')),
+    clearLocalSessionIf: vi.fn(async (_sid: string | null) => { log.push('session'); return true; }),
     readSessionId: vi.fn((): string | null => 's1'),
     ...over,
   } as never;
@@ -125,7 +125,7 @@ describe('wipeThisDevice（清本机库和 Cache Storage）', () => {
   });
 
   it('默认几步：删本机会话用 session.ts 的 clearLocalSessionIf，清缓存用 session.ts 的 clearCacheStorage（保留 workbox-precache）', () => {
-    const spy = vi.spyOn(session, 'clearLocalSessionIf').mockImplementation(() => undefined);
+    const spy = vi.spyOn(session, 'clearLocalSessionIf').mockImplementation(() => Promise.resolve(true));
     defaultExitSteps.clearLocalSessionIf('s1');
     expect(spy).toHaveBeenCalledWith('s1');
     expect(defaultExitSteps.clearCacheStorage).toBe(session.clearCacheStorage);
@@ -141,14 +141,14 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
       steps: steps(log),
       readUserId: () => 'u1',
     });
-    expect(r).toEqual({ serverDone: true });
+    expect(r).toMatchObject({ serverDone: true });
     expect(log).toEqual(['row', 'deleteDb', 'caches', 'signout', 'deleteDb']);
   });
 
   it('服务器没退成：最后兜底删本机会话', async () => {
     const log: string[] = [];
     const r = await signOutThisDevice({ server: { signOut: async () => (log.push('signout'), { serverDone: false }) }, steps: steps(log), readUserId: () => 'u1' });
-    expect(r).toEqual({ serverDone: false });
+    expect(r).toMatchObject({ serverDone: false });
     expect(log).toEqual(['deleteDb', 'caches', 'signout', 'session', 'deleteDb']);
   });
 
@@ -163,7 +163,7 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
       steps: steps(log),
       readUserId: () => 'u1',
     });
-    expect(r).toEqual({ serverDone: false });
+    expect(r).toMatchObject({ serverDone: false });
     expect(log).toEqual(['deleteDb', 'caches', 'session', 'deleteDb']);
   });
 
@@ -182,7 +182,7 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
       await vi.advanceTimersByTimeAsync(7999);
       expect(log).toEqual(['deleteDb', 'caches']);
       await vi.advanceTimersByTimeAsync(1);
-      expect(await p).toEqual({ serverDone: false });
+      expect(await p).toMatchObject({ serverDone: false });
       expect(log).toEqual(['deleteDb', 'caches', 'session', 'deleteDb']);
       current = after;
       late.resolve({ serverDone: true });
@@ -206,7 +206,7 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
     await vi.advanceTimersByTimeAsync(3999);
     expect(log).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
-    expect(await p).toEqual({ serverDone: true });
+    expect(await p).toMatchObject({ serverDone: true });
     expect(log).toEqual(['deleteDb', 'caches', 'signout', 'deleteDb']);
     row.resolve();
     await vi.advanceTimersByTimeAsync(0);
@@ -228,7 +228,7 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
     await vi.advanceTimersByTimeAsync(7999);
     expect(log).toEqual(['deleteDb', 'caches']);
     await vi.advanceTimersByTimeAsync(1);
-    expect(await p).toEqual({ serverDone: false });
+    expect(await p).toMatchObject({ serverDone: false });
   });
 
   it('清库那几秒会话还在、别的标签页借旧会话重建了库：会话删掉以后再删一次，退出结束时库不存在（复审 M2）', async () => {
@@ -252,10 +252,10 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
           return { serverDone: false };
         },
       },
-      steps: { deleteDb: () => deleteLocalDb(factory), clearCacheStorage: async () => undefined, clearLocalSessionIf: () => void seq.push('session'), readSessionId: () => 's1' },
+      steps: { deleteDb: () => deleteLocalDb(factory), clearCacheStorage: async () => undefined, clearLocalSessionIf: async () => { seq.push('session'); return true; }, readSessionId: () => 's1' },
       readUserId: () => 'u1',
     });
-    expect(r).toEqual({ serverDone: false });
+    expect(r).toMatchObject({ serverDone: false });
     expect(seq).toEqual(['delete', 'rebuilt', 'session', 'delete']);
     expect(dbs.has('planner-v4')).toBe(false);
   });
@@ -274,7 +274,7 @@ describe('signOutThisDevice（①删行 ②清库 ③清缓存 ④signOut）', (
       });
       const p = signOutThisDevice({ server: { signOut }, steps: s, readUserId: () => 'u1' });
       await vi.advanceTimersByTimeAsync(7000);
-      expect(await p).toEqual({ serverDone: false });
+      expect(await p).toMatchObject({ serverDone: false });
       expect(signOut).toHaveBeenCalledTimes(1);
       expect(log).toEqual([`deleteDb:${how}`, 'caches', 'signout', 'session', `deleteDb:${how}`]);
     }
@@ -312,7 +312,7 @@ describe('signOutThisDevice 清日志上传队列（架构 0.38 第 68 条）', 
       steps: steps(log),
       readUserId: () => 'u1',
     });
-    expect(r).toEqual({ serverDone: true });
+    expect(r).toMatchObject({ serverDone: true });
     expect(atSignOut).toBeNull();
     expect(localStorage.getItem('lemo.logq.u2')).toBe('x');
     expect(localStorage.getItem('lemo.install_id')).toBe('i');

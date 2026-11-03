@@ -6,7 +6,7 @@
 //   report_tz 的“手机优先”按 platform = 'ios' 认手机（4.6）；Tauri 窗口记 tauri；其余记 web。windows 现在不用
 // • withLock：登记设备行时跨标签页互斥（navigator.locks，名字 'lemo-device-reg:<user_id>'）；没有 locks 时直接跑
 //   （core/device-reg.ts 另外在生成新 id 前重读一次 meta 兜底）
-import { isAppleMobile, type NavLike } from './env.ts';
+import { isAppleMobile, isTauri, type NavLike } from './env.ts';
 import type { LocksLike } from './tab-leader.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -31,7 +31,7 @@ export function readInstallId(storage?: Storage, gen: () => string = () => crypt
 
 /** devices.platform：Tauri 窗口 tauri；iPhone、iPad 上的任何浏览器 ios；其余 web */
 export function devicePlatform(nav: NavLike = navigator, win: object = globalThis): DevicePlatform {
-  if ('__TAURI_INTERNALS__' in win || '__TAURI__' in win) return 'tauri';
+  if (isTauri(win)) return 'tauri';   // 判断只在 env.ts 一处（B2 架构审 D4）
   return isAppleMobile(nav) ? 'ios' : 'web';
 }
 

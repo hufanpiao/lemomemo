@@ -8,7 +8,7 @@ import { createOutbox } from '../outbox.ts';
 import { clearAllCollections, collection } from '../store.ts';
 import { count, freshCache, seedA } from './account-fixtures.ts';
 import { FakeObjectStore } from './idb-fake-tx.ts';
-import { fakeIndexedDB } from './idb-fake.ts';
+import { fakeIndexedDB, nextDbVersion } from './idb-fake.ts';
 import { todo, uid } from './outbox-fixtures.ts';
 
 const bootDeps = {
@@ -107,7 +107,7 @@ describe('冷启动时换账号（M3、M4、M5）', () => {
     const b = await coldStart({
       ...bootDeps,
       userId: 'B',
-      cacheOptions: { factory, version: 2, migrations: [{ to: 2, up: (ctx) => ctx.fail(new Error('bad')) }] },
+      cacheOptions: { factory, ...nextDbVersion((ctx) => ctx.fail(new Error('bad'))) },
     });
     expect(b.status).toBe('ready');
     expect(b.upgradeReport?.failed).not.toBeNull();
@@ -131,7 +131,7 @@ describe('冷启动时换账号（M3、M4、M5）', () => {
     const b = await coldStart({
       ...bootDeps,
       userId: 'A',
-      cacheOptions: { factory, version: 2, migrations: [{ to: 2, up: (ctx) => ctx.fail(new Error('bad')) }] },
+      cacheOptions: { factory, ...nextDbVersion((ctx) => ctx.fail(new Error('bad'))) },
     });
     expect(b.upgradeReport?.rebuilt).toContain('todos');
     expect((await b.outbox?.list())?.length).toBe(1);

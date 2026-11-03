@@ -7,7 +7,7 @@ import { openCache } from '../cache.ts';
 import { OutboxRejectError } from '../outbox.ts';
 import { clearAllCollections, collection } from '../store.ts';
 import { canWriteLocal, localWriteBlocker, write } from '../write.ts';
-import { fakeIndexedDB } from './idb-fake.ts';
+import { fakeIndexedDB, nextDbVersion } from './idb-fake.ts';
 import { todo, uid } from './outbox-fixtures.ts';
 
 const NO_LOCAL = { ok: false, reason: 'local_unavailable' };
@@ -67,7 +67,7 @@ describe('write.*：本机库不可用时安全降级', () => {
   it('别的标签页在升级本机库（onversionchange 后库关了）：closing，不抛错、不写', async () => {
     const { factory } = fakeIndexedDB();
     const b = await coldStart(opts(factory));
-    const other = await openCache({ factory, version: 2, migrations: [{ to: 2, up: () => undefined }] });
+    const other = await openCache({ factory, ...nextDbVersion() });
     expect(b.cache?.isClosed()).toBe(true);
     expect(localWriteBlocker()).toBe('closing');
     expect(await write.insert('todos', { ...todo(1), id: uid(1) })).toEqual({ ok: false, reason: 'closing' });

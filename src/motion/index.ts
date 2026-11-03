@@ -56,6 +56,21 @@ interface VtDocument {
   startViewTransition?: (cb: () => void) => { finished: Promise<void> };
 }
 
+/** Pressable 在 DOM 上的标记（Pressable.tsx 写 data-pressable；data-snap 的样式在 Pressable.module.css） */
+const PRESSABLE_SEL = '[data-pressable]';
+const SNAP_ATTR = 'data-snap';
+
+/** 切页前把页面上所有 Pressable 瞬间复位（UI-4 B1 动效确认 C3 / X-3）：
+ * 点完按钮马上切页时，按钮还缩着或正在弹回，浏览器截旧画面会截到这一刻、淡出时定格（36319a2 查到的根因）。
+ * 统一在这里处理，不再每个按钮局部改：打 data-snap 去掉过渡、回到原大小，旧画面截的是复位后的样子；
+ * View Transition 的回调里（旧画面已经截完、新页面画之前）摘掉 */
+function snapPressables(doc: Document, on: boolean): void {
+  for (const el of doc.querySelectorAll(on ? PRESSABLE_SEL : `[${SNAP_ATTR}]`)) {
+    if (on) el.setAttribute(SNAP_ATTR, '');
+    else el.removeAttribute(SNAP_ATTR);
+  }
+}
+
 /** 页面切换：支持 View Transitions 就包一层，不支持或减少动态效果时直接执行（17.2 第 3 点） */
 export function transition(update: () => void): Promise<void> {
   const doc = typeof document === 'undefined' ? undefined : (document as Document & VtDocument);
@@ -63,7 +78,21 @@ export function transition(update: () => void): Promise<void> {
     update();
     return Promise.resolve();
   }
-  return doc.startViewTransition(update).finished.then(() => undefined, () => undefined);
+  snapPressables(doc, true);
+  let vt: { finished: Promise<void> };
+  try {
+    vt = doc.startViewTransition(() => {
+      snapPressables(doc, false);
+      update();
+    });
+  } catch {
+    // startViewTransition 同步抛错（个别实现、以后加的包装；代码审查 S2）：摘掉标记、直接画新页面，
+    // 不然 data-snap 一直留着，所有 Pressable 都没了按下反馈
+    snapPressables(doc, false);
+    update();
+    return Promise.resolve();
+  }
+  return vt.finished.then(() => undefined, () => undefined);
 }
 
 /** 以后的趣味动效从这里接入；4.0.0 什么都不做（17.2 第 4、7 点） */

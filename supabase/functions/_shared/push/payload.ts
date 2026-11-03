@@ -1,15 +1,21 @@
 // 推送负载 v1（架构 0.53 第 4 条、5.3“推送负载 v1”；B2 安全审查“六之三”、BE1-S2；代码审查 BE-1 M3、S1～S3）。push-dispatch、push-test 都只经
 // buildPayload 组装，不手拼 JSON。输入按 type 分成三种（联合类型），输出只有这几个字段：
-//   remind  { v: 1, type, user_id, kind, id, due_at, title?, body?, snooze?: { label, minutes } }
-//   resolve { v: 1, type, user_id, kind, id, due_at }          不带标题、正文、snooze（SW 用本地固定文案）
+//   remind  { v: 1, type, user_id, kind, id, due_at, title?, body?, snooze?: { label, minutes }, done?: { label }, ack?: { label } }
+//           通知上两个按钮（R-294、R-307、R-308，负责人 11-03）：待办“推迟 + 完成”，日程、纪念日“推迟 + 知道了”；
+//           SW 的 action 名：'snooze'（推迟 10 分钟）、'done'（完成，只给待办）、'ack'（知道了，只给日程和纪念日，只关通知、不改数据）；
+//           推迟和完成走同一条 pending 路径、完成后能撤销（SW 和整页提醒由前端 A 接）；文案由服务器按 ui_locale 生成
+//           （词典键 remind.push.action.snooze、remind.push.action.done、remind.push.action.ack；shared/logic/notify-text.ts 的 NOTIFY_ACTIONS、actionsFor）；
+//           按类型守住：kind 不是 todo 的不带 done，kind 是 todo 的不带 ack（传了也丢）
+//   resolve { v: 1, type, user_id, kind, id, due_at }          不带标题、正文、snooze、done、ack（SW 用本地固定文案）
 //   test    { v: 1, type, user_id }                            正好三个键
 //   • 永远没有地址、图片之类的字段（类型上就没有，运行时多给的键一律丢掉）；
 //   • user_id 必带：SW 拿它和本机 owner 比对，对不上只显示 App 名（M9、FE-1）；
 //   • 先校验（S3）：user_id、id 是小写 UUID，kind 认识，due_at 是正的安全整数；不合格抛 PushPayloadError，这一条记 push_failed、不影响别的；
-//   • 文字（title、body、snooze.label）先把 C0 控制字符（U+0000～U+001F）换成空格（S1），再按码点截：title、body 各 ≤ 300、label ≤ 40，
+//   • 文字（title、body、snooze.label、done.label、ack.label）先把 C0 控制字符（U+0000～U+001F）换成空格（S1），再按码点截：title、body 各 ≤ 300、label ≤ 40，
 //     都含末尾的“…”，和 SW src/sw/push.ts 的 TEXT_MAX、LABEL_MAX、clipText 一致；snooze.minutes 不是 1～1440 的整数就整个不带 snooze（S2，SW 同样处理）；
-//   • 整份 UTF-8 JSON ≤ 3071 字节，加 1 字节分隔放进 3072 一档（ece.ts PAD_TIERS）；放不下按 5.3 先再截 title、还不够再截 body
-//     （先截哪个等负责人定，明早清单第 71 条）；title 至少留 20 个码点、不截成没有（S1）；截完还放不下抛 PushCryptoError('payload_too_large')。
+//   • 整份 UTF-8 JSON ≤ 3071 字节，加 1 字节分隔放进 3072 一档（ece.ts PAD_TIERS）；放不下**先截 body（可以截到没有），再截 title**
+//     （R-294，负责人 11-03 定：保住标题；取代 5.3 原来的“先截标题”，代码审查 BE-1 S1）；title 至少留 20 个码点、不截成没有；
+//     截完还放不下抛 PushCryptoError('payload_too_large')。
 // 通知的 tag 是 kind:id:due_at，整页提醒地址 /app/#/remind/<kind>/<id>?due=<due_at>，都由前端按这几个字段拼，负载里不放。
 // 不 import npm 包、不碰 Deno 全局；Node 和 Deno 都能跑。
 import { PAD_TIERS, PushCryptoError } from './ece.ts';
@@ -31,6 +37,10 @@ export interface RemindPayloadInput extends ItemRef {
   title?: string | null;
   body?: string | null;
   snooze?: { label: string; minutes: number } | null;
+  /** “完成”按钮的文字（只给待办，R-308）；label 为空就不带 */
+  done?: { label: string } | null;
+  /** “知道了”按钮的文字（只给日程、纪念日，R-308）；label 为空就不带 */
+  ack?: { label: string } | null;
 }
 export interface ResolvePayloadInput extends ItemRef {
   type: 'resolve';
@@ -70,10 +80,20 @@ function encode(o: Record<string, unknown>): Uint8Array<ArrayBuffer> {
   return new Uint8Array(te.encode(JSON.stringify(o)));
 }
 
-/** C0 控制字符（U+0000～U+001F）换成空格：通知里本来显示不出来，转义后每个占 6 字节 */
-function noC0(s: string): string {
+/**
+ * 控制字符和不可见的方向、分隔字符换成空格（安全审查建议 ②；前端 A 的 SW clipText 用同一套，两边保持一致）：
+ * C0（U+0000～U+001F）、DEL（U+007F）、C1（U+0080～U+009F）、双向嵌入和覆盖（U+202A～U+202E）、双向隔离（U+2066～U+2069）、
+ * 方向标记（U+200E、U+200F、U+061C）、行和段分隔（U+2028、U+2029）、BOM / 零宽不换行（U+FEFF）。
+ * 通知里本来显示不出来或会把文字倒过来显示（伪装标题），转义后还多占字节
+ */
+export function isStrippedChar(cp: number): boolean {
+  return cp < 0x20 || (cp >= 0x7f && cp <= 0x9f) || (cp >= 0x202a && cp <= 0x202e) || (cp >= 0x2066 && cp <= 0x2069)
+    || cp === 0x200e || cp === 0x200f || cp === 0x061c || cp === 0x2028 || cp === 0x2029 || cp === 0xfeff;
+}
+/** isStrippedChar 认的字符（不只 C0）一律换成空格 */
+function strippedToSpace(s: string): string {
   let out = '';
-  for (const ch of s) out += ch.charCodeAt(0) < 0x20 ? ' ' : ch;
+  for (const ch of s) out += isStrippedChar(ch.codePointAt(0) as number) ? ' ' : ch;
   return out;
 }
 
@@ -83,7 +103,7 @@ function cut(s: string, n: number): string {
   return cps.length <= n ? s : cps.slice(0, Math.max(0, n - 1)).join('') + ELLIPSIS;
 }
 
-const text = (v: unknown, max: number): string | null => (typeof v === 'string' && v !== '' ? cut(noC0(v), max) : null);
+const text = (v: unknown, max: number): string | null => (typeof v === 'string' && v !== '' ? cut(strippedToSpace(v), max) : null);
 const isUuid = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
 const isDueAt = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0;
 const isSnoozeMin = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= SNOOZE_MAX_MIN;
@@ -100,16 +120,22 @@ export function buildPayload(p: PayloadInput): Uint8Array<ArrayBuffer> {
   let body = text(p.body, BODY_MAX);
   const sl = p.snooze ? text(p.snooze.label, LABEL_MAX) : null;
   const snooze = p.snooze && sl !== null && isSnoozeMin(p.snooze.minutes) ? { label: sl, minutes: p.snooze.minutes } : null;
+  const dl = p.done && p.kind === 'todo' ? text(p.done.label, LABEL_MAX) : null;
+  const done = dl !== null ? { label: dl } : null;
+  const al = p.ack && p.kind !== 'todo' ? text(p.ack.label, LABEL_MAX) : null;
+  const ack = al !== null ? { label: al } : null;
   const make = () => {
     const o: Record<string, unknown> = { ...base };
     if (title !== null) o.title = title;
     if (body !== null) o.body = body;
     if (snooze !== null) o.snooze = snooze;
+    if (done !== null) o.done = done;
+    if (ack !== null) o.ack = ack;
     return encode(o);
   };
   let out = make();
-  // 按架构 5.3 先截 title（至少留 TITLE_MIN_KEEP 个码点）、再截 body；每次按超出的字节数估一个字符数往下截（一个字符最多 6 字节，按 4 估、多跑几轮）
-  for (const which of ['title', 'body'] as const) {
+  // R-294：先截 body（截到没有为止），再截 title（至少留 TITLE_MIN_KEEP 个码点）；每次按超出的字节数估一个字符数往下截（一个字符最多 6 字节，按 4 估、多跑几轮）
+  for (const which of ['body', 'title'] as const) {
     const floor = which === 'title' ? TITLE_MIN_KEEP : 2;
     for (let guard = 0; out.length > MAX_PAYLOAD_BYTES && guard < 64; guard++) {
       const cur = which === 'body' ? body : title;

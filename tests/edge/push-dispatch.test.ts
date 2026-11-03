@@ -7,6 +7,9 @@ import { filterUsable, handle, type Deps, type HeartbeatDetail } from '../../sup
 import { isLocalStubEnv, resolveOverride } from '../../supabase/functions/_shared/push/stub.ts';
 import { loadVapid, type VapidKeys } from '../../supabase/functions/_shared/push/vapid.ts';
 import { b64u, unb64u } from '../fakes/push-service-vapid.ts';
+import { LOGIC, MemDb } from './push-dispatch-mem.ts';
+import { DETAIL_BOOL_FIELDS, DETAIL_FIELDS } from '../../supabase/functions/usage-report/core.ts';
+import { evaluatePush, PUSH_DETAIL_FIELDS } from '../../workers/lemo-ops/src/rules.ts';
 
 const CRON = 'c'.repeat(40);
 
@@ -37,7 +40,9 @@ function deps(over: Partial<Deps> = {}): Deps & { beats: HeartbeatDetail[]; logs
     cronSecret: CRON,
     override: { ok: true, url: null },
     vapid: async () => ({ ok: true, keys: (await keys()).keys }),
-    store: { writeHeartbeat: async (d) => { beats.push(d); } },
+    // BE-2 起 store 是整份 DispatchStore：空的内存库（一轮里没有任何条目），心跳记进 beats
+    store: Object.assign(new MemDb(), { writeHeartbeat: async (d: HeartbeatDetail) => { beats.push(d); } }),
+    logic: LOGIC,
     isUsable: async () => true,
     now: () => 1_793_000_000_000,
     log: (c) => logs.push(c),
@@ -122,15 +127,15 @@ describe('handle：500 misconfigured，一条都不发（日志只记原因码�
 });
 
 describe('handle：心跳', () => {
-  it('写 push-dispatch 心跳，detail 只有 claimed、sent、failed、budget_hit（骨架阶段都是 0 / false）', async () => {
+  it('写 push-dispatch 心跳，detail 只有 claimed、sent、failed、budget_hit（空库一轮都是 0 / false；回包另带 left）', async () => {
     const d = deps();
     const r = await handle(cronReq(CRON), d);
     expect(r.status).toBe(200);
     expect(d.beats).toEqual([{ claimed: 0, sent: 0, failed: 0, budget_hit: false }]);
-    expect(await r.json()).toEqual({ ok: true, claimed: 0, sent: 0, failed: 0, budget_hit: false });
+    expect(await r.json()).toEqual({ ok: true, claimed: 0, sent: 0, failed: 0, budget_hit: false, left: 0 });
   });
   it('写心跳失败回 503，日志只记 heartbeat_failed', async () => {
-    const d = deps({ store: { writeHeartbeat: async () => { throw new Error('db down: secret stuff'); } } });
+    const d = deps({ store: Object.assign(new MemDb(), { writeHeartbeat: async () => { throw new Error('db down: secret stuff'); } }) });
     expect((await handle(cronReq(CRON), d)).status).toBe(503);
     expect(d.logs).toEqual(['heartbeat_failed']);
   });
@@ -176,5 +181,26 @@ describe('D1-8：本机替身怎么认（TC-B2-80 环境变量组，安全审查
       'http://127.0.0.1:65536', 'http://127.0.0.1:099999', 'http://127.0.0.1', 'http://u:p@127.0.0.1:54399', 'http://127.0.0.1:54399/?x=1',
       'http://127.0.0.1:54399/#x', 'HTTP://127.0.0.1:54399', 'http://127.0.0.1:54399 ', 'http://[::1]:54399',
     ]) expect(resolveOverride(u, OK_URL, '1'), u).toEqual({ ok: false });
+  });
+});
+
+describe('心跳 detail 和 lemo-ops 对得上（rules.ts PUSH_DETAIL_FIELDS 11-03 核对）', () => {
+  it('handle 真写出的心跳字段名 = claimed、sent、failed、budget_hit；usage-report 白名单全收；转发后 evaluatePush 认得（换个名就判不了）', async () => {
+    const d = deps();
+    expect((await handle(cronReq(CRON), d)).status).toBe(200);
+    const beat = d.beats[0] as HeartbeatDetail;
+    expect(Object.keys(beat).sort()).toEqual(['budget_hit', 'claimed', 'failed', 'sent']);
+    for (const k of PUSH_DETAIL_FIELDS) expect(DETAIL_FIELDS as readonly string[], k).toContain(k);
+    expect(DETAIL_BOOL_FIELDS as readonly string[]).toContain('budget_hit');
+    // 照 usage-report 的 pickDetail 口径转发（数字字段按 DETAIL_FIELDS、布尔按 DETAIL_BOOL_FIELDS）
+    const forward = (x: Record<string, unknown>) => Object.fromEntries(Object.entries(x).filter(([k, v]) =>
+      (typeof v === 'number' && (DETAIL_FIELDS as readonly string[]).includes(k)) || (typeof v === 'boolean' && (DETAIL_BOOL_FIELDS as readonly string[]).includes(k))));
+    // 用真实心跳的键，只换数值：认领 4、成功 1、失败 3 → 失败过半
+    const vals: Record<string, number> = { claimed: 4, sent: 1, failed: 3 };
+    const bad = Object.fromEntries(Object.entries(beat).map(([k, v]) => [k, vals[k] ?? v]));
+    expect(evaluatePush(forward(bad))?.key).toBe('push-failed');
+    expect(evaluatePush(forward(beat as unknown as Record<string, unknown>))).toBeNull();
+    // 反例：字段名对不上（例如写成 ok / fail），evaluatePush 就判不出来
+    expect(evaluatePush(forward({ claimed: 4, ok: 1, fail: 3 }))).toBeNull();
   });
 });

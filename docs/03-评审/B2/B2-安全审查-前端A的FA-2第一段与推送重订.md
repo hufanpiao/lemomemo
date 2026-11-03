@@ -148,3 +148,24 @@ FA2-1、FA2-2 改完、复核通过，网页这一侧就可以签。FA2-3 必须
 - S2、S3、S4、S6：交前端 A 本批一起改。
 - S5（exe 里 mailto、tel 点了没反应）：属于功能问题，交前端 B 在 exe 外链处理里看。
 - 等代码审查结论回来后，合在一起交给前端 A。
+
+## 复核（11-03，同一审查员）：S7 与推送“完成”
+
+**结论：S7 理解正确、实现无问题；`{type:'done', due_at}` 无越权或伪造路径。剩 1 条必改 FA2-4。**
+- S7 出处：上一轮只写在给主持人的回报里，没有落盘。原意是 push-dispatch 每分钟跑一次，刚过一两分钟的提醒可能还没推出，撤销写入也要尽快送上服务器。前端 A 把“改之后”也按 now − 2 分钟算，更严，只多一种 [now − 2 分钟, now) 提前发的情况，可接受。`remindLive` 只在 `src/core/remind-flag.ts` 定义一次，四处页面共用。
+- done 链路：只有 SW 在 notificationclick 里写，负载必须是待办且带 done 按钮；只写已存在且 owner 一致的库，6 个字段；页面 isValidPendingAction 只认 todos、UUID、正安全整数，keepPendingAction 限当前账号和 24 小时；上服务器经 outbox 和 RLS。
+- 留给 FA-4：done 转写入前核对行存在、未删未完成、due_at 对上当前这次到点，对不上丢弃，并钉测试。
+- **必改 FA2-4**：`tests/build/sw-no-user-data.test.ts` 掉 2 条——push.ts 单行写法让“只有 6 个字段”的正则一处都匹配不到；push-actions.ts 引了不在白名单的 notify-text.ts。改法见代码审查 N3，断言不许删。期限：这一批合并之前。
+- FA2-3（exe 退出后主窗口仍显示）期限照旧，在 exe A8 验收前。
+
+**采纳（主持人，11-03）**：FA2-4 交前端 A，与代码审查 N3 一起改。
+
+## 复核二（11-03，同一审查员）：FA2-4
+
+**结论：通过，FA2-4 关闭。** 本批 SW 推送部分没有剩余必改。
+- `shared/logic/notify-actions.ts` 无任何 import（测试锁住），notify-text.ts 从它转出；后端生成目录已有副本。
+- 白名单加 notify-actions.ts 和 ./push-actions.ts，没加 notify-text.ts 并注明原因；push-actions.ts 在白名单和 IndexedDB 次数检查范围里。
+- push.ts 写 pending 改回多行，正好 6 个顶层字段，测试断言正好一处调用，补三个反例。
+- `PendingDone` 的 TODO(FA-4) 写明 due_at 核对条件。
+- 仍开着：FA2-3（期限 exe A8 验收前）、FA-4 接 toEnqueue 时的 due_at 核对。
+- 跑过：sw-no-user-data、sw-push、sw-push-actions、sw-pending 79 条通过。只读。

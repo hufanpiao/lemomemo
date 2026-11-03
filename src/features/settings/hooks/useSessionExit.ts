@@ -92,7 +92,7 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
     left.current = true;
     const p = cleanup.current;
     if (p) await withTimeout(() => p, leaveWaitMs, () => undefined);
-    clearSession();
+    void clearSession();   // 不抛错；goToAuth 在 exe 里自己等删除回来（A-1）
     try {
       exit.goToAuth();
     } catch {
@@ -115,7 +115,7 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
       // 标记记的是被拒的那个会话（K6-sugg4 ①），不是回包时本机的会话
       markSelfSignOutThisTab(Date.now(), sid);
       deadSid.current = sid;
-      dropSession(exit, sid);
+      void dropSession(exit, sid);   // 不抛错；删没删成由 session-store 的删除状态兜着（A-1）
       // 本机会话已经是别的会话（回包前别的标签页写进来的，上面没删）：不调 signOut，免得把它退掉（见文件头）
       const now = sessionIdOf(exit);
       if (now === null || now === sid) {
@@ -129,7 +129,7 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
       void track(
         (async () => {
           await wipeThisDevice(exit);
-          clearSession();   // 旧会话被晚到的令牌刷新写回时再删
+          void clearSession();   // 旧会话被晚到的令牌刷新写回时再删
           // 别的标签页可能在本页删会话之前借旧会话 reload 重建了库：会话删掉以后再删一次（platform/sign-out.ts ⑤）
           await deleteDbAgain(exit);
         })(),

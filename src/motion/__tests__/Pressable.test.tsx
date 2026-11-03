@@ -36,3 +36,30 @@ describe('Pressable 的 data-state', () => {
     expect(btn.dataset['state']).toBe('idle');
   });
 });
+
+// UI-4 B1 动效确认 C3（X-3）：按下和松开分开写；切页前的瞬间复位挂在 data-snap 上
+describe('Pressable 按下不过冲、切页前能瞬间复位（C3）', () => {
+  afterEach(cleanup);
+
+  it('按钮上带 data-pressable（motion 的 transition() 靠它找到所有 Pressable）', () => {
+    render(<Pressable>ok</Pressable>);
+    expect(screen.getByRole('button').hasAttribute('data-pressable')).toBe(true);
+  });
+
+  it('CSS：按下用 --ease-out（不过冲），松开回 idle 用 --ease-spring；data-snap 写在 pressed 之后、去掉过渡回到原大小', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const css = readFileSync(join(import.meta.dirname, '..', 'Pressable.module.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const top = css.slice(0, css.indexOf('@media'));
+    const block = (sel: string) => {
+      const at = top.indexOf(`\n${sel} {`);
+      if (at < 0) return '';
+      const open = top.indexOf('{', at);
+      return top.slice(open + 1, top.indexOf('}', open)).replace(/\s+/g, ' ').trim();
+    };
+    expect(block('.pressable')).toBe('transition: transform var(--dur-press) var(--ease-spring);');
+    expect(block('.pressable[data-state="pressed"]')).toBe('transform: scale(0.97); transition: transform var(--dur-press) var(--ease-out);');
+    expect(block('.pressable[data-snap]')).toBe('transform: none; transition: none;');
+    expect(top.indexOf('.pressable[data-snap]')).toBeGreaterThan(top.indexOf('.pressable[data-state="pressed"]'));
+  });
+});

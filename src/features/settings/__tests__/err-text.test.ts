@@ -54,7 +54,24 @@ describe('错误码 → 提示（R272-sugg ④）', () => {
   });
 
   it.each(Object.entries(ACCOUNT))('导出、注销：%s → %s', (e, key) => {
-    expect(accountErrText(e as AccountErr, keyOf)).toBe(key);
+    // 表里的 offline 是 navigator.onLine 为 false 时的那句
+    expect(accountErrText(e as AccountErr, keyOf, false)).toBe(key);
+  });
+
+  it('报断网但 navigator.onLine 不是 false：说“暂时连不上服务器，稍后再试”（必改第 7 条）', () => {
+    expect(accountErrText('offline', keyOf, true)).toBe('settings.err.unreachable');
+    expect(deviceErrKey('offline', true)).toBe('settings.err.unreachable');
+    expect(zh['settings.err.unreachable']).toBe('暂时连不上服务器，稍后再试');
+    expect(ko['settings.err.unreachable']).toBeTruthy();
+    // 不传就读当下的 navigator.onLine
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => false });
+    try {
+      expect(accountErrText('offline', keyOf)).toBe('settings.err.offline');
+      expect(deviceErrKey('offline')).toBe('settings.err.offline');
+    } finally {
+      delete (window.navigator as unknown as Record<string, unknown>)['onLine'];
+    }
+    expect(accountErrText('offline', keyOf)).toBe('settings.err.unreachable');
   });
 
   // 锁住 {word} 插值：用真的词典和 useSettingsT 渲染整句，句子里得有那个词（服务器只认“注销”“탈퇴”，R-188）
@@ -71,7 +88,7 @@ describe('错误码 → 提示（R272-sugg ④）', () => {
   });
 
   it.each(Object.entries(DEVICE))('设备列表：%s → %s', (e, key) => {
-    expect(deviceErrKey(e as SettingsErr)).toBe(key);
+    expect(deviceErrKey(e as SettingsErr, false)).toBe(key);
   });
 });
 

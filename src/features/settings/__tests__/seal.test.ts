@@ -109,11 +109,11 @@ describe('退出时清空本机（真 core）', () => {
     const log: string[] = [];
     const r = await signOutThisDevice({
       server: { signOut: async () => (log.push('signout'), { serverDone: false }) },
-      steps: { ...defaultExitDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSessionIf: () => void log.push('session') },
+      steps: { ...defaultExitDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSessionIf: async () => { log.push('session'); return true; } },
       readUserId: () => 'A',
       wipeMs: 50,
     });
-    expect(r).toEqual({ serverDone: false });
+    expect(r).toMatchObject({ serverDone: false });
     // 清库卡住改按库名删一次；会话删掉以后再删一次（⑤）
     expect(idb.deleted).toEqual(['planner-v4', 'planner-v4']);
     expect(log).toEqual(['caches', 'signout', 'session']);
@@ -138,7 +138,7 @@ describe('退出时清空本机（真 core）', () => {
     let r: { serverDone: boolean } | undefined;
     const running = signOutThisDevice({
       server: { signOut: async () => (log.push('signout'), { serverDone: true }) },
-      steps: { ...defaultExitDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSessionIf: () => void log.push('session') },
+      steps: { ...defaultExitDeps, clearCacheStorage: async () => void log.push('caches'), clearLocalSessionIf: async () => { log.push('session'); return true; } },
       readUserId: () => 'A',
       wipeMs: 50,
     }).then((v) => (r = v));
@@ -147,7 +147,7 @@ describe('退出时清空本机（真 core）', () => {
     expect(r).toBeUndefined();
     await vi.advanceTimersByTimeAsync(DELETE_WAIT_MS + 1);
     await running;
-    expect(r).toEqual({ serverDone: true });
+    expect(r).toMatchObject({ serverDone: true });
     expect(idb.deleted).toEqual([]);
     expect(log).toEqual(['caches', 'signout']);
     expect(reload).not.toHaveBeenCalled();

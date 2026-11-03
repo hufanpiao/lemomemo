@@ -2,7 +2,7 @@
 // 恢复页：“账号在注销冷静期，<日期 时刻> 后彻底删除。恢复吗？”（purge_after 为 null 时换不带日期的那句），“恢复账号”“保持注销并退出”
 // 停用页：auth.exit.disabled 一句和“回到登录”，不出现恢复提示（需求澄清 2.21 第 120 行）；退出、清本机做完以前只显示“请稍候…”
 // 无法确认（只在验证码刚通过时出现，R-258）：“重试”重新探测，“仍然进入”照旧进 App；不清本机
-import type { AccountGate, GateErr } from '../hooks/useAccountGate.ts';
+import { onlineNow, type AccountGate, type GateErr } from '../hooks/useAccountGate.ts';
 import { useAuthT, type AuthPlainKey } from '../hooks/useAuthT.ts';
 import styles from './AuthPage.module.css';
 
@@ -67,7 +67,7 @@ export function AccountGatePanel({ gate, onRestored, onEnter = onRestored }: Acc
       </p>
       {gate.error && (
         <p className={styles.hint} role="alert" data-testid="auth-restore-error" data-error={gate.error}>
-          {t(ERR_KEYS[gate.error], {})}
+          {t(gate.error === 'offline' && onlineNow() ? 'auth.restore.err.unreachable' : ERR_KEYS[gate.error], {})}
         </p>
       )}
       {!tooLate && (

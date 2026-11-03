@@ -79,6 +79,13 @@ html.scroll-locked body {
   animation-timing-function: var(--ease-standard);
 }
 
+/* 具名共享元素的组（列表那一条 ↔ 详情标题这类，位置和大小的移动）接令牌（接手清单 M4 剩余，第一个具名共享元素上线前）：
+   不用浏览器默认的 0.25s ease。page-head 的组下面单独写 animation: none（具名的比 * 优先） */
+::view-transition-group(*) {
+  animation-duration: var(--dur-sheet);
+  animation-timing-function: var(--ease-standard);
+}
+
 /* 页面顶栏（view-transition-name: page-head，目前是设置和注销账号两屏）：切换前后都有顶栏时先淡出、再淡入，不同时叠着。
    同时叠着的话，居中的旧标题“设置”会压在新标题“注销账号”中间，看着像这四个字跳了一下（负责人 10-31 iPhone 主屏幕版实测）。
    时长和整页一样是 --dur-sheet（A24 只准用令牌），先后靠关键帧的百分比：旧的前 40% 淡完，新的 40% 以后才淡入。

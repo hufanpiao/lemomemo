@@ -1,0 +1,55 @@
+/* 撤销提示条：贴底（离底 118px，和提示条、提醒按钮条同一位置；键盘弹起时让开），半透明磨砂；只用令牌（A11） */
+.toast {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: max(calc(env(safe-area-inset-bottom) + 118px), var(--kb, 0px));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 528px;
+  margin: 0 auto;
+  padding: 6px 6px 6px 16px;
+  border-radius: var(--r-lg);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(6px) saturate(var(--float-sat));
+  font-size: var(--fs-14);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .toast {
+    background: var(--float-solid);
+    backdrop-filter: none;
+  }
+}
+
+.msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undo {
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+
+  /* 柠檬黄字放在浅色磨砂上对比度不够：用提示条正文色加下划线 */
+  color: var(--toast-fg);
+  font-size: var(--fs-14);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.undo:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

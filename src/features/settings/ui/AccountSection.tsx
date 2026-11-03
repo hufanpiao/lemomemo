@@ -1,6 +1,7 @@
 // 设置 › 账号（R-256 ①，排第一）：组标题下一行当前登录邮箱（R-275，只显示；读不到不显示），已登录设备、退出其他所有设备（DevicesSection）、注销入口。
 // “最近的导出”（R-256 ②）在设备列表和注销入口之间；“退出登录”不在这里，在页面最底下单独一行
 import type { AccountErr } from '../hooks/useAccountActions.ts';
+import { onlineNow } from '../hooks/useOnline.ts';
 import type { useDevices } from '../hooks/useDevices.ts';
 import type { RecentExportState } from '../hooks/useRecentExport.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
@@ -15,15 +16,16 @@ type T = ReturnType<typeof useSettingsT>;
  * 导出、注销失败时的那一句（会话没了、停用、冷静期另走离开本机，不显示）。
  * 穷尽 switch、不写 default（R272-sugg ④，架构 0.29 续第 119 条②）：try_later 单独一支“服务器忙，稍后再试”；加了新码不补分支就编译不过
  */
-export function accountErrText(e: AccountErr, t: T): string {
+export function accountErrText(e: AccountErr, t: T, online: boolean = onlineNow()): string {
   switch (e) {
     case 'rate_limited':
       return t('settings.account.rateLimited', {});
     // 临时故障：只提示，不清本机、不回登录页（TC-B1-90）
     case 'try_later':
       return t('settings.err.tryLater', {});
+    // 只有 navigator.onLine 为 false 才说“没有网络”，其余说“暂时连不上服务器”（必改第 7 条）
     case 'offline':
-      return t('settings.err.offline', {});
+      return t(online ? 'settings.err.unreachable' : 'settings.err.offline', {});
     case 'confirm_required':
       return t('settings.delete.confirmRequired', { word: t('settings.delete.word', {}) });
     case 'admin_cannot_delete':

@@ -4,7 +4,7 @@ import { cacheOwner, claimCache } from '../account.ts';
 import { deleteCacheDb, openCache } from '../cache.ts';
 import { applyFreshConfig, coldStart, enabledFlags, getBoot, LOCAL_PURGE_AFTER_MS, resetBootForTest, type BootOptions } from '../boot.ts';
 import { clearAllCollections, collection } from '../store.ts';
-import { fakeIndexedDB } from './idb-fake.ts';
+import { fakeIndexedDB, nextDbVersion } from './idb-fake.ts';
 
 const NOW = 1_800_000_000_000;
 const DAY = 86_400_000;
@@ -181,7 +181,7 @@ describe('离线冷启动', () => {
     const { factory } = fakeIndexedDB();
     await seed(factory, async ({ cache }) => void (await claimCache(cache, 'u1')));
     const b = await coldStart(
-      opts(factory, { cacheOptions: { factory, version: 2, migrations: [{ to: 2, up: () => { throw new Error('x'); } }] } }),
+      opts(factory, { cacheOptions: { factory, ...nextDbVersion(() => { throw new Error('x'); }) } }),
     );
     expect(b.upgradeReport?.failed).not.toBeNull();
     expect(b.fullResync.length).toBe(9);
@@ -222,10 +222,69 @@ describe('离线冷启动', () => {
     const { factory } = fakeIndexedDB();
     const reload = vi.fn();
     const b = await coldStart(opts(factory, { upgradeDeps: { reload, swUpdate: () => Promise.resolve('no_update' as const), attempt: { get: () => null, set: () => undefined } } }));
-    const other = await openCache({ factory, version: 2, migrations: [{ to: 2, up: () => undefined }] });
+    const other = await openCache({ factory, ...nextDbVersion() });
     expect(other.ok).toBe(true);
     expect(b.cache?.isClosed()).toBe(true);
     expect(reload).toHaveBeenCalledTimes(1);
     if (other.ok) other.cache.close();
+  });
+});
+
+describe('启动时清 pending_actions（0.29 续第 107 条②，B2）', () => {
+  const ROW = '00000000-0000-4000-8000-000000000001';
+  const SNOOZE = { type: 'snooze', minutes: 10, due_at: NOW };
+  it('coldStart 接上了 prunePendingActions：别的账号的、超过 24 小时的在启动后就没了', async () => {
+    const { factory } = fakeIndexedDB();
+    await seed(factory, async ({ cache }) => {
+      await claimCache(cache, 'u1');
+      await cache.tx(['pending_actions'], 'readwrite', async (t) => {
+        await t.put('pending_actions', { id: 'keep', user_id: 'u1', row_table: 'todos', row_id: ROW, action: SNOOZE, created_at: NOW - 3600_000 });
+        await t.put('pending_actions', { id: 'other', user_id: 'u2', row_table: 'todos', row_id: ROW, action: SNOOZE, created_at: NOW });
+        await t.put('pending_actions', { id: 'old', user_id: 'u1', row_table: 'todos', row_id: ROW, action: SNOOZE, created_at: NOW - 2 * DAY });
+      });
+    });
+    const b = await coldStart(opts(factory));
+    expect(b.status).toBe('ready');
+    const left = await b.cache!.tx(['pending_actions'], 'readonly', (t) => t.getAll<{ id: string }>('pending_actions'));
+    expect(left.map((a) => a.id)).toEqual(['keep']);
+  });
+
+  it('换账号启动：整库清空，pending_actions 一条不剩（ensureAccount 在 prune 之前）', async () => {
+    const { factory } = fakeIndexedDB();
+    await seed(factory, async ({ cache }) => {
+      await claimCache(cache, 'u2');
+      await cache.tx(['pending_actions'], 'readwrite', (t) => t.put('pending_actions', { id: 'p', user_id: 'u2', row_table: 'todos', row_id: ROW, action: SNOOZE, created_at: NOW }));
+    });
+    const b = await coldStart(opts(factory));
+    expect(await b.cache!.tx(['pending_actions'], 'readonly', (t) => t.getAll('pending_actions'))).toEqual([]);
+  });
+});
+
+describe('v1 升 v2 的真实路径（cacheMigrations，代码审查 S4）', () => {
+  it('v1 的库按当前 DB_VERSION 打开：数据、outbox、pending_actions、owner 都在，只跑了 to: 2，不整表重拉', async () => {
+    const { factory } = fakeIndexedDB();
+    const v1 = await openCache({ factory, version: 1, migrations: [] });
+    if (!v1.ok) throw new Error('open v1');
+    await claimCache(v1.cache, 'u1');
+    await v1.cache.putRows('todos', [{ id: 't', server: { id: 't', rev: 1 }, view: { id: 't', rev: 1 } }]);
+    await v1.cache.tx(['outbox', 'pending_actions'], 'readwrite', async (t) => {
+      await t.put('outbox', { op_id: 'o', rec: 'todos:t', seq: 1, state: 'pending', v: 1, app: '4.0.0', next_at: 0, deps: [] });
+      await t.put('pending_actions', {
+        id: 'p', user_id: 'u1', row_table: 'todos', row_id: '00000000-0000-4000-8000-000000000001',
+        action: { type: 'snooze', minutes: 10, due_at: NOW }, created_at: NOW - 60_000,
+      });
+    });
+    v1.cache.close();
+
+    const b = await coldStart(opts(factory));
+    expect(b.status).toBe('ready');
+    expect(b.upgradeReport).toMatchObject({ from: 1, ran: [2], failed: null, rebuilt: [] });
+    expect(b.fullResync).toEqual([]);
+    expect(b.switchedUser).toBe(false);
+    const c = b.cache!;
+    expect(await cacheOwner(c)).toBe('u1');
+    expect((await c.tx(['todos'], 'readonly', (t) => t.getAll<{ id: string }>('todos'))).map((r) => r.id)).toEqual(['t']);
+    expect((await c.tx(['outbox'], 'readonly', (t) => t.getAll<{ op_id: string }>('outbox'))).map((r) => r.op_id)).toEqual(['o']);
+    expect((await c.tx(['pending_actions'], 'readonly', (t) => t.getAll<{ id: string }>('pending_actions'))).map((r) => r.id)).toEqual(['p']);
   });
 });

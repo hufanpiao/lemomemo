@@ -15,7 +15,7 @@ describe('兜底只删退出前那一个会话（K6-sugg3 ①）', () => {
     const s = {
       deleteDb: vi.fn(async () => undefined),
       clearCacheStorage: vi.fn(async () => undefined),
-      clearLocalSessionIf: vi.fn((_sid: string | null): void => undefined),
+      clearLocalSessionIf: vi.fn(async (_sid: string | null) => true),
       readSessionId: vi.fn((): string | null => 's1'),
     } satisfies ExitSteps;
     await signOutThisDevice({ server: { signOut: async () => ({ serverDone: false }) }, steps: s, readUserId: () => 'u1', markSelf: () => undefined });
@@ -32,5 +32,40 @@ describe('兜底只删退出前那一个会话（K6-sugg3 ①）', () => {
     put('s3');
     defaultExitSteps.clearLocalSessionIf(null);
     expect(defaultExitSteps.readSessionId()).toBe('s3');
+  });
+});
+
+describe('兜底删会话的结果接进退出结果（A-1、A-M1）', () => {
+  const steps = (ok: boolean | 'throw') => ({
+    deleteDb: vi.fn(async () => undefined),
+    clearCacheStorage: vi.fn(async () => undefined),
+    clearLocalSessionIf: vi.fn(async (_sid: string | null) => {
+      if (ok === 'throw') throw new Error('rust');
+      return ok;
+    }),
+    readSessionId: (): string | null => 's1',
+  }) satisfies ExitSteps;
+
+  it('服务器没退成、兜底删失败（exe 里 Rust 删不掉）：localDone = false；删成了 true；抛错按失败', async () => {
+    const run = (s: ExitSteps) => signOutThisDevice({ server: { signOut: async () => ({ serverDone: false }) }, steps: s, readUserId: () => 'u1', markSelf: () => undefined });
+    await expect(run(steps(false))).resolves.toEqual({ serverDone: false, localDone: false });
+    await expect(run(steps(true))).resolves.toEqual({ serverDone: false, localDone: true });
+    await expect(run(steps('throw'))).resolves.toEqual({ serverDone: false, localDone: false });
+  });
+
+  it('exe 里服务器退成了也兜底删一次（显式删除、会写标记，安全复核追加建议）：会话已删时 clearLocalSessionIf 什么都不做、localDone = true；没删掉又删失败 localDone = false', async () => {
+    const run = (s: ExitSteps) =>
+      signOutThisDevice({ server: { signOut: async () => ({ serverDone: true }) }, steps: s, readUserId: () => 'u1', markSelf: () => undefined, inTauri: () => true });
+    const ok = steps(true);
+    await expect(run(ok)).resolves.toEqual({ serverDone: true, localDone: true });
+    expect(ok.clearLocalSessionIf).toHaveBeenCalledExactlyOnceWith('s1');
+    await expect(run(steps(false))).resolves.toEqual({ serverDone: true, localDone: false });
+  });
+
+  it('网页版服务器退成了：不兜底删（supabase-js 自己删），localDone = true', async () => {
+    const s = steps(false);
+    await expect(signOutThisDevice({ server: { signOut: async () => ({ serverDone: true }) }, steps: s, readUserId: () => 'u1', markSelf: () => undefined }))
+      .resolves.toEqual({ serverDone: true, localDone: true });
+    expect(s.clearLocalSessionIf).not.toHaveBeenCalled();
   });
 });

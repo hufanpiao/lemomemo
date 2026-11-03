@@ -134,3 +134,75 @@ describe('transition()：减少动态效果时不起 View Transition', () => {
     expect(update).toHaveBeenCalledOnce();
   });
 });
+
+// 接手清单 M4 剩余：::view-transition-group(*) 接令牌（第一个具名共享元素上线前）
+describe('具名共享元素的组接令牌（M4）', () => {
+  it('::view-transition-group(*)：--dur-sheet + --ease-standard；page-head 的组仍是 animation: none', () => {
+    const d = declsOf('::view-transition-group(*)');
+    expect(d.get('animation-duration')).toBe('var(--dur-sheet)');
+    expect(d.get('animation-timing-function')).toBe('var(--ease-standard)');
+    expect(declsOf('::view-transition-group(page-head)').get('animation')).toBe('none');
+    // page-head 的规则写在 (*) 后面：就算哪个浏览器把两者算成同一优先级，后写的也赢
+    expect(css.indexOf('::view-transition-group(page-head)')).toBeGreaterThan(css.indexOf('::view-transition-group(*)'));
+  });
+});
+
+// 建测试按钮（A22 不准 innerHTML）：[文字, 是否 Pressable, data-state]
+function setButtons(spec: readonly (readonly [string, boolean, string?])[]): void {
+  document.body.replaceChildren(
+    ...spec.map(([text, pressable, state]) => {
+      const b = document.createElement('button');
+      b.textContent = text;
+      if (pressable) b.setAttribute('data-pressable', '');
+      if (state) b.setAttribute('data-state', state);
+      return b;
+    }),
+  );
+}
+
+// UI-4 B1 动效确认 C3（X-3）：切页前所有 Pressable 瞬间复位，旧画面不截到缩着的按钮
+describe('transition()：起 View Transition 前给 Pressable 打 data-snap，回调里摘掉（C3）', () => {
+  const doc = document as unknown as { startViewTransition?: unknown };
+
+  afterEach(() => {
+    delete doc.startViewTransition;
+    document.body.replaceChildren();
+  });
+
+  it('截旧画面那一刻（startViewTransition 被调用时）所有 Pressable 都带 data-snap；回调一进来就摘掉，再执行 update', async () => {
+    setButtons([['a', true, 'idle'], ['b', true, 'pressed'], ['c', false]]);
+    const atStart: string[] = [];
+    const inUpdate: number[] = [];
+    doc.startViewTransition = vi.fn((cb: () => void) => {
+      for (const b of document.querySelectorAll('button')) atStart.push(`${b.textContent}:${b.hasAttribute('data-snap')}`);
+      cb();
+      return { finished: Promise.resolve() };
+    });
+    await transition(() => inUpdate.push(document.querySelectorAll('[data-snap]').length));
+    expect(atStart).toEqual(['a:true', 'b:true', 'c:false']);
+    expect(inUpdate).toEqual([0]);
+    expect(document.querySelectorAll('[data-snap]')).toHaveLength(0);
+  });
+
+  it('startViewTransition 同步抛错：摘掉 data-snap、照样画新页面（代码审查 S2）', async () => {
+    setButtons([['a', true, 'idle']]);
+    doc.startViewTransition = vi.fn(() => {
+      throw new Error('boom');
+    });
+    let ran = 0;
+    await transition(() => {
+      ran++;
+    });
+    expect(ran).toBe(1);
+    expect(document.querySelectorAll('[data-snap]')).toHaveLength(0);
+  });
+
+  it('不起 View Transition 时（不支持或减少动态效果）不打标记', async () => {
+    setButtons([['a', true, 'idle']]);
+    let seen = -1;
+    await transition(() => {
+      seen = document.querySelectorAll('[data-snap]').length;
+    });
+    expect(seen).toBe(0);
+  });
+});

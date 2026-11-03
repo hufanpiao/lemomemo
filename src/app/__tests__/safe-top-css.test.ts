@@ -42,7 +42,7 @@ describe('顶部安全区底色条', () => {
     const strip = z(base, 'body::before');
     const banner = z(readFileSync('src/app/UpdateBanner.module.css', 'utf8'), '.banner');
     const scrim = z(dialog, '.scrim');
-    const content = z(dialog, '.content');
+    const content = z(dialog, '.dock'); // B2（UI-4 L-2）：定位和层级挪到滑动的那一层 .dock，.content 只管外观
     const blocked = z(readFileSync('src/app/CacheBlockedScreen.module.css', 'utf8'), '.screen');
     const tooNew = z(readFileSync('src/app/CacheTooNewScreen.module.css', 'utf8'), '.screen');
     expect(strip).toBe(1);

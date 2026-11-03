@@ -17,7 +17,7 @@ function deps(answer: () => Promise<ExitNotice | 'active'>, boot: Partial<BootRe
     }),
     clearCacheStorage: vi.fn(async () => undefined),
     setExitNotice: vi.fn((n) => void order.push(`notice:${n}`)),
-    clearLocalSessionIf: vi.fn((sid: string | null) => void order.push(`session:${sid ?? 'null'}`)),
+    clearLocalSessionIf: vi.fn(async (sid: string | null) => { order.push(`session:${sid ?? 'null'}`); return true; }),
     goToAuth: vi.fn(() => void order.push('auth')),
     clearLogs: vi.fn(() => undefined),
     broadcastReset: vi.fn(),

@@ -95,6 +95,8 @@ export const zh = {
   'auth.restore.err.rateLimited': '今天恢复的次数太多了，请明天再试。',
   'auth.restore.err.tryLater': '服务器忙，请稍后再试。',
   'auth.restore.err.offline': '现在没有网络，连上网络后再试一次。',
+  // 报“断网”但 navigator.onLine 不是 false（请求失败、超时、读不出回包）：不说“没有网络”（协调者必改第 7 条）
+  'auth.restore.err.unreachable': '暂时连不上服务器，稍后再试',
   'auth.restore.err.unknown': '出了点问题，请稍后再试。',
   // 验证码刚通过、探测不出账号状态（超时、断网、503、回包认不出；R-258）：不进 App、不清本机，给“重试”“仍然进入”
   'auth.gate.unsure': '暂时无法确认账号状态。可以重试，或者先进入柠檬记。',

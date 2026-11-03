@@ -155,7 +155,8 @@ describe('注销账号（设置 › 账号 › 注销账号）', () => {
       ['admin_cannot_delete', zh['settings.delete.admin']],
       ['rate_limited', zh['settings.account.rateLimited']],
       ['try_later', zh['settings.err.tryLater']],
-      ['offline', zh['settings.err.offline']],
+      // jsdom 的 navigator.onLine 为 true：报断网也说“暂时连不上服务器”（必改第 7 条；onLine 为 false 的那一支在 err-text.test）
+      ['offline', zh['settings.err.unreachable']],
     ] as const) {
       const account = fakeAccount({ requestDeletion: vi.fn(async () => ({ ok: false as const, error, sid: 's-me' })) });
       const { leave } = setup({ account });

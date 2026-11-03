@@ -83,7 +83,9 @@ export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault'
   service_role: ['take_rate', 'session_alive', 'rebind_device_impl', 'long_transactions', 'auth_mail_counts', 'account_usable', 'account_request_deletion', 'account_restore',
     'export_job_start', 'export_job_take', 'db_size_bytes', 'export_size_over', 'tags_ok',
     'invite_claim', 'invite_release',   // B1 迁移 20261031150000（INVITE-late-commit）
-    'orphan_auth_users'],   // B1 迁移 20261031160000（ORPHAN-alert）：usage-report 数没有 profile 的 auth 用户
+    'orphan_auth_users',   // B1 迁移 20261031160000（ORPHAN-alert）：usage-report 数没有 profile 的 auth 用户
+    'remind_queue_pop',   // B2 迁移 20261103130000（BE-2）：push-dispatch 第 0 步出队
+    'remind_due', 'remind_pushed'],   // B2 迁移 20261103140000（BE-2 安全审查必改 1）：push-dispatch 第 1 步到点、resolve 候选的精确判断
   fn_vault: ['purge_vault_impl', 'tags_ok'],
   fn_ai: [],
 };
@@ -114,6 +116,46 @@ export const REQUIRED_INDEXES: Readonly<Record<string, { why: string; def: strin
     why: '0.47 第 22 条 T2：part 取片前查本人 export 发起记录',
     // 普通索引、不是部分索引：PostgREST 传参数，通用计划用不上部分索引（迁移 20261031120000 文件头的实测）
     def: 'CREATE INDEX logs_account_export_idx ON public.logs USING btree (user_id, act, src, code)',
+  },
+  events_pushed_for_idx: {
+    why: 'B2 BE-2 安全审查必改：remind_pushed 按 pushed_for 取 resolve 候选，不再每分钟全表扫（迁移 20261103140000）',
+    def: 'CREATE INDEX events_pushed_for_idx ON public.events USING btree (pushed_for) WHERE (pushed_for IS NOT NULL)',
+  },
+  todos_pushed_for_idx: {
+    why: 'B2 BE-2 安全审查必改：remind_pushed 按 pushed_for 取 resolve 候选，不再每分钟全表扫（迁移 20261103140000）',
+    def: 'CREATE INDEX todos_pushed_for_idx ON public.todos USING btree (pushed_for) WHERE (pushed_for IS NOT NULL)',
+  },
+  anniversaries_pushed_for_idx: {
+    why: 'B2 BE-2 安全审查必改：remind_pushed 按 pushed_for 取 resolve 候选，不再每分钟全表扫（迁移 20261103140000）',
+    def: 'CREATE INDEX anniversaries_pushed_for_idx ON public.anniversaries USING btree (pushed_for) WHERE (pushed_for IS NOT NULL)',
+  },
+  anniversaries_remind_at_idx: {
+    why: 'B2 BE-2 代码审查建议：remind_due 下界按 remind_at 取（events、todos 在 0002 已有，迁移 20261103140000）',
+    def: 'CREATE INDEX anniversaries_remind_at_idx ON public.anniversaries USING btree (remind_at) WHERE ((deleted_at IS NULL) AND (remind_at IS NOT NULL))',
+  },
+  events_snooze_at_idx: {
+    why: 'B2 BE-2 代码审查建议：remind_due 下界里的 snooze_at > p_lo 走 BitmapOr（迁移 20261103140000）',
+    def: 'CREATE INDEX events_snooze_at_idx ON public.events USING btree (snooze_at) WHERE (snooze_at IS NOT NULL)',
+  },
+  todos_snooze_at_idx: {
+    why: 'B2 BE-2 代码审查建议：remind_due 下界里的 snooze_at > p_lo 走 BitmapOr（迁移 20261103140000）',
+    def: 'CREATE INDEX todos_snooze_at_idx ON public.todos USING btree (snooze_at) WHERE (snooze_at IS NOT NULL)',
+  },
+  anniversaries_snooze_at_idx: {
+    why: 'B2 BE-2 代码审查建议：remind_due 下界里的 snooze_at > p_lo 走 BitmapOr（迁移 20261103140000）',
+    def: 'CREATE INDEX anniversaries_snooze_at_idx ON public.anniversaries USING btree (snooze_at) WHERE (snooze_at IS NOT NULL)',
+  },
+  events_defer_until_idx: {
+    why: 'B2 BE-2 代码审查建议：remind_due 下界里的 defer_until > p_lo 走 BitmapOr（迁移 20261103140000）',
+    def: 'CREATE INDEX events_defer_until_idx ON public.events USING btree (defer_until) WHERE (defer_until IS NOT NULL)',
+  },
+  todos_defer_until_idx: {
+    why: 'B2 BE-2 代码审查建议：remind_due 下界里的 defer_until > p_lo 走 BitmapOr（迁移 20261103140000）',
+    def: 'CREATE INDEX todos_defer_until_idx ON public.todos USING btree (defer_until) WHERE (defer_until IS NOT NULL)',
+  },
+  anniversaries_defer_until_idx: {
+    why: 'B2 BE-2 代码审查建议：remind_due 下界里的 defer_until > p_lo 走 BitmapOr（迁移 20261103140000）',
+    def: 'CREATE INDEX anniversaries_defer_until_idx ON public.anniversaries USING btree (defer_until) WHERE (defer_until IS NOT NULL)',
   },
 };
 

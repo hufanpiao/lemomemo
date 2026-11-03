@@ -22,6 +22,25 @@ export const buildInfo = {
 /** 开发和验证用的页面（例如 CSP 试验页）只在非正式版里挂 */
 export const isProduction = buildInfo.env === 'production';
 
+// ───────── 运行环境（架构 5.10、5.3“exe”；B2 架构审 D4 第 1 点，B6-exe 约定 3）─────────
+
+/** 网页（浏览器、iPhone 主屏幕版）还是 exe（Tauri 窗口，WebView2） */
+export type Runtime = 'web' | 'tauri';
+
+/**
+ * 现在跑在哪：window 上有 Tauri 注入的 __TAURI_INTERNALS__（v2）或 __TAURI__（开了 withGlobalTauri）就是 exe。
+ * 只在这里判断一次，device-info（devices.platform）、sw-register（exe 不注册 SW）、以后的推送订阅都读它，不各写一份。
+ * win 默认 globalThis，测试时传假的进来
+ */
+export function runtimeOf(win: object = globalThis): Runtime {
+  return '__TAURI_INTERNALS__' in win || '__TAURI__' in win ? 'tauri' : 'web';
+}
+
+/** 是不是 exe（Tauri 窗口） */
+export function isTauri(win: object = globalThis): boolean {
+  return runtimeOf(win) === 'tauri';
+}
+
 // ───────── 设备判断（架构 5.9“首次引导”、TC-B1-17；R-225 起 iPhone / iPad 上不分浏览器）─────────
 
 /** 判断要用到的 navigator 字段（测试时传假的进来） */

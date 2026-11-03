@@ -169,7 +169,8 @@ const OFFLINE: Failure = { ok: false, error: 'offline' };
  */
 export function createSettingsApi(
   getDb: () => Promise<Db>,
-  clearLocalSessionIf: (sessionId: string | null) => void,
+  // 返回删没删成（A-1）；dropLocalSession 不看它，之后的 goToAuth 按 session-store 的删除状态处理
+  clearLocalSessionIf: (sessionId: string | null) => Promise<boolean>,
   timeoutMs: number = API_TIMEOUT_MS,
   readSid: () => string | null = () => readSessionId(),
 ): SettingsApi {
@@ -206,7 +207,7 @@ export function createSettingsApi(
 
   /** signOut({scope: 'local'})；不是 ok 就兜底删本机会话。不先查 getSession（令牌过期、断网时那一步本身会失败） */
   async function dropLocal(db: Db | null, sessionId: string | null, prior?: Pick<PriorSession, 'token' | 'budgetMs'>): Promise<LocalSignOut> {
-    const clear = (): void => clearLocalSessionIf(sessionId);
+    const clear = (): void => void clearLocalSessionIf(sessionId);
     if (!db) {
       clear();
       return { serverDone: false };

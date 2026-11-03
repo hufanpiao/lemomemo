@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
+import { buildInfo } from '../../../platform/env.ts';
 import type { ConsentApi, Result } from '../data/consent-api.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
@@ -112,12 +113,27 @@ describe('告知与同意页（TC-B1-11）', () => {
     expect(screen.queryByTestId('consent-slow')).toBeNull();
   });
 
+  it('断网且 navigator.onLine 为 false：说“网络没连上”', async () => {
+    const { api } = fakeApi([{ ok: false, error: 'offline' }]);
+    render(<ConsentPage api={api} {...handlers()} />);
+    fireEvent.click(checkbox());
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => false });
+    try {
+      await act(async () => { fireEvent.click(agreeBtn()); });
+      expect(screen.getByTestId('consent-error').textContent).toBe(zh['consent.err.offline']);
+    } finally {
+      delete (window.navigator as unknown as Record<string, unknown>)['onLine'];
+    }
+    expect(zh['consent.err.unreachable']).toBe('暂时连不上服务器，稍后再试');
+  });
+
   it('失败（断网、版本刚升、不确定记下没有）：留在本页给提示，不调 onDone；再点一次成功', async () => {
     const { api, calls } = fakeApi([{ ok: false, error: 'offline' }, { ok: false, error: 'version_changed' }, { ok: false, error: 'unsure' }, { ok: true, value: undefined }]);
     const h = handlers();
     render(<ConsentPage api={api} {...h} />);
     fireEvent.click(checkbox());
-    for (const key of ['consent.err.offline', 'consent.err.version', 'consent.err.unsure'] as const) {
+    // 断网那一次 navigator.onLine 为 true（jsdom 默认）：说“暂时连不上服务器”（必改第 7 条）
+    for (const key of ['consent.err.unreachable', 'consent.err.version', 'consent.err.unsure'] as const) {
       await act(async () => { fireEvent.click(agreeBtn()); });
       expect(screen.getByTestId('consent-error').textContent).toBe(zh[key]);
       expect(h.onDone).not.toHaveBeenCalled();
@@ -191,6 +207,28 @@ describe('告知与同意页（TC-B1-11）', () => {
       const a = screen.getByRole('link', { name });
       expect(a.getAttribute('href')).toBe(href);
       expect(a.getAttribute('rel')).toBe('noopener noreferrer');
+    }
+  });
+
+  it('隐私说明、条款链接：网页版不拦（照原样新窗口）；exe 里拦下点击，拼成本站绝对地址交给系统浏览器，不开新窗口、不在页面里跳走', () => {
+    const { api } = fakeApi();
+    render(<ConsentPage api={api} {...handlers()} />);
+    const link = () => screen.getByRole('link', { name: zh['consent.privacyLink'] });
+    expect(fireEvent.click(link())).toBe(true);
+    const invoke = vi.fn(async () => undefined);
+    const g = globalThis as { __TAURI_INTERNALS__?: unknown };
+    const info = buildInfo as { supabaseUrl: string };
+    const prevUrl = info.supabaseUrl;
+    g.__TAURI_INTERNALS__ = { invoke };
+    info.supabaseUrl = 'https://lemomemo.com/sb';
+    try {
+      expect(fireEvent.click(link())).toBe(false);
+      expect(invoke).toHaveBeenCalledExactlyOnceWith('open_external', { url: 'https://lemomemo.com/zh/privacy' });
+      expect(fireEvent.click(screen.getByRole('link', { name: zh['consent.termsLink'] }))).toBe(false);
+      expect(invoke).toHaveBeenLastCalledWith('open_external', { url: 'https://lemomemo.com/zh/terms' });
+    } finally {
+      delete g.__TAURI_INTERNALS__;
+      info.supabaseUrl = prevUrl;
     }
   });
 });

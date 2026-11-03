@@ -22,6 +22,10 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  // 弹层进出场改由 Motion 驱动后（UI-4 L-2，B2）：用了假计时器的用例结束时，Motion 的帧循环可能还挂着一帧在假计时器里，
+  // 直接换回真计时器那一帧就丢了，Motion 以为“下一帧已排上”不再排，后面用例里的退出动画永远播不完、弹层不卸载。
+  // 换回之前把假时间往前拨一点，让挂着的那一帧跑掉（组件已卸载，没有要动的，帧循环就停了）
+  if (vi.isFakeTimers()) vi.advanceTimersByTime(100);
   vi.useRealTimers();
 });
 
@@ -290,9 +294,7 @@ describe('退出登录（K9 第二轮 N2、L1、L2、L3）', () => {
     await waitFor(() => expect(text(screen.getByTestId('settings-signing-out'))).toBe(zh['settings.signingOut']));
     expect(screen.getByTestId('settings-signing-out').getAttribute('role')).toBe('status');
     expect((screen.getByTestId('settings-signout') as HTMLButtonElement).disabled).toBe(true);
-    await act(async () => {
-      signOut.resolve({ serverDone: false });
-    });
+    await act(async () => signOut.resolve({ serverDone: false }));
     expect(await screen.findByText(zh['settings.offlineOut.body'])).toBeTruthy();
     expect(text(screen.getByTestId('settings-signing-out'))).toBe('');
   });

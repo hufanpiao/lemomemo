@@ -1,5 +1,5 @@
 // 退出这台设备（架构 4.1、0.38 第 35～37 条；接手清单 K-signout-merge）：登录页“退出并换账号”（K4）和设置页“退出登录 / 被移除”（K9）共用这一份
-// 顺序：① 删本会话那一行 devices ② 清本机库 ③ 清 Cache Storage（只删运行时缓存，保留 workbox-precache，见 session.ts）
+// 顺序：① 删本会话那一行 devices ② 清本机库（设闸清空之后、按库名删库之前先断开浏览器推送：关通知、退订，FE-2）③ 清 Cache Storage（只删运行时缓存，保留 workbox-precache，见 session.ts）
 //   ④ signOut({scope: 'local'})，不是 ok 就 clearLocalSessionIf(退出前的 session_id) 兜底 ⑤ 会话删掉以后再按库名删一次库。
 //   会话放在 ④：中途被打断最坏是“有会话、没库”，下次打开能自愈
 // • ⑤ 的原因（K-signout-merge 复审 M2）：②③ 那几秒会话还在；按库名删库会让别的主 App 标签页收到 versionchange 立即 reload，
@@ -39,9 +39,10 @@
 //   （signOut 先等 initializePromise 再 _useSession 读存储），这时别的标签页正好写进新会话才会碰到；后果是那个标签页要重新登录。不再处理
 // • localStorage 里的 install_id、pv-locale 不清；日志上传队列 lemo.logq.<user_id>（log-store.ts，架构 0.38 第 68 条）在 ② 清本机时一起清
 //   （读不到是谁时清全部 lemo.logq.*）
-import { buildInfo } from './env.ts';
+import { buildInfo, isTauri } from './env.ts';
 import { appFetch } from './http.ts';
 import { clearLogQueue } from './log-store.ts';
+import { disconnectBrowserPush } from './push.ts';
 import {
   clearCacheStorage,
   clearLocalSessionIf,
@@ -126,11 +127,17 @@ export interface ExitSteps {
   clearCacheStorage(): Promise<void>;
   /**
    * 同步删本机会话：本机会话的 session_id 还是 sessionId 才删（默认 session.ts 的 clearLocalSessionIf，K6-sugg3 ①）。
-   * sessionId 必填（K6-sugg4 ②）；null = 那时本机没有会话 / 读不出，只在本机仍没有会话时删
+   * sessionId 必填（K6-sugg4 ②）；null = 那时本机没有会话 / 读不出，只在本机仍没有会话时删。
+   * 返回删没删成（A-1：exe 里删凭据管理器失败为 false；不是那个会话、不删也是 true）
    */
-  clearLocalSessionIf(sessionId: string | null): void;
+  clearLocalSessionIf(sessionId: string | null): Promise<boolean>;
   /** 本机会话 access token 里的 session_id（默认 session.ts 的 readSessionId）；读不出为 null */
   readSessionId(): string | null;
+  /**
+   * 断开浏览器推送（B2 安全审查 FE-2）：关掉本 App 已显示的通知、退订推送（默认 platform/push.ts 的 disconnectBrowserPush，
+   * 自带上限、不抛）。在 ② 设闸清库之后、按库名删库之前调；不传就不做（测试、没有推送的环境）
+   */
+  disconnectPush?(): Promise<void>;
 }
 
 export const defaultExitSteps: ExitSteps = {
@@ -138,12 +145,19 @@ export const defaultExitSteps: ExitSteps = {
   clearCacheStorage,
   clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
   readSessionId: () => readSessionId(),
+  disconnectPush: () => disconnectBrowserPush(),
 };
 
 /** 清本机库和 Cache Storage（②③）；某一步失败或超时不挡后面，永远 resolve */
 export async function wipeThisDevice(steps: ExitSteps, wipeMs = WIPE_TIMEOUT_MS, cachesMs = CACHES_TIMEOUT_MS): Promise<void> {
   const { wipe } = steps;
   const cleared = wipe ? await withTimeout(wipe, wipeMs, () => false) : false;
+  // FE-2：通知中心不留上一个账号的标题、旧账号的推送不再到达；自带上限，这里再兜一层异常
+  try {
+    await steps.disconnectPush?.();
+  } catch {
+    // 断不开不挡退出
+  }
   if (!cleared) {
     try {
       await steps.deleteDb();
@@ -161,12 +175,15 @@ export async function wipeThisDevice(steps: ExitSteps, wipeMs = WIPE_TIMEOUT_MS,
   );
 }
 
-/** 同步删本机会话，不抛错；只在本机会话还是 sessionId 时才删（必填，K6-sugg4 ②） */
-export function dropSession(steps: Pick<ExitSteps, 'clearLocalSessionIf'>, sessionId: string | null): void {
+/**
+ * 删本机会话（删除同步生效），不抛错；只在本机会话还是 sessionId 时才删（必填，K6-sugg4 ②）。
+ * 返回删没删成（A-1）：exe 里凭据管理器删失败为 false；存储不可用（本来也存不下会话）算 true
+ */
+export function dropSession(steps: Pick<ExitSteps, 'clearLocalSessionIf'>, sessionId: string | null): Promise<boolean> {
   try {
-    steps.clearLocalSessionIf(sessionId);
+    return Promise.resolve(steps.clearLocalSessionIf(sessionId)).catch(() => false);
   } catch {
-    // 存储不可用：本来也存不下会话
+    return Promise.resolve(true);
   }
 }
 
@@ -220,6 +237,8 @@ export interface SignOutOptions {
   timeoutMs?: number;
   wipeMs?: number;
   cachesMs?: number;
+  /** 是不是 exe（测试注入；默认 env.ts 的 isTauri）：exe 里服务器退成了也兜底删一次 */
+  inTauri?: () => boolean;
 }
 
 /** ⑤ 会话删掉以后再按库名删一次库（自带上限，出错也 resolve） */
@@ -303,8 +322,19 @@ export function defaultGuardRemoval(sid: string | null): () => void {
   return guardSessionRemoval((key) => mayRemoveSessionKey(key, sid), SELF_SIGN_OUT_TTL_MS);
 }
 
-/** 退出这台设备：①②③④⑤，本机一定清空、本机会话一定删掉；serverDone = false 时调用方提示“服务器上的这次登录暂时没能吊销” */
-export async function signOutThisDevice(o: SignOutOptions): Promise<{ serverDone: boolean }> {
+/**
+ * 退出这台设备：①②③④⑤，本机一定清空、本机会话删掉；serverDone = false 时调用方提示“服务器上的这次登录暂时没能吊销”。
+ * localDone 目前只给测试和以后的日志用，生产代码里没人读（退出后的界面由 goToAuth 看 session-store 的删除状态决定）。
+ * localDone **只代表最后兜底的那一次删除**（dropSession → clearLocalSessionIf(sid)，安全复审建议 ③）：false = 兜底删本机会话没成
+ * （A-1，只在 exe 里会出现）——调用方照常 goToAuth，它看 session-store 的删除状态，不重新载入回已登录界面、改显示“退出没完成，点重试”。
+ * • 服务器没退成：照旧兜底删。
+ * • 服务器退成了：supabase-js 自己删会话键（它不写“待删除”标记，成败只记在本页内存状态里）。exe 里再兜底删一次（安全复核追加建议）：
+ *   这是显式删除、会写标记——“服务器退成了、supabase-js 删键失败、用户不重试直接关 exe”这一路下次启动也会先删；
+ *   supabase-js 已经删掉时本机会话不再是 sid，clearLocalSessionIf 不删、localDone 为 true（sid 为 null 时例外：本机仍读不出会话就照删一遍
+ *   那三个本来不在的键，见 session-store.ts 文件头）。
+ *   网页版不兜底（localStorage 同步删，没有这个问题），localDone 恒为 true
+ */
+export async function signOutThisDevice(o: SignOutOptions): Promise<{ serverDone: boolean; localDone: boolean }> {
   const steps = o.steps ?? defaultExitSteps;
   const readUserId = o.readUserId ?? (() => readSessionUserId());
   const timeoutMs = o.timeoutMs ?? SIGN_OUT_TIMEOUT_MS;
@@ -319,7 +349,7 @@ export async function signOutThisDevice(o: SignOutOptions): Promise<{ serverDone
   const release = (o.guardRemoval ?? defaultGuardRemoval)(sid);
   let req: Promise<unknown> = Promise.resolve();
   const onLate = (): void => {
-    if (before !== null && readUserId() === before) dropSession(steps, sid);
+    if (before !== null && readUserId() === before) void dropSession(steps, sid);   // 晚到：结果由 session-store 的标记兜着（A-1）
   };
   try {
     const t0 = Date.now();
@@ -340,9 +370,9 @@ export async function signOutThisDevice(o: SignOutOptions): Promise<{ serverDone
       return p;
     };
     const r = await withTimeout(signOut, rest, () => ({ serverDone: false }), onLate);
-    if (!r.serverDone) dropSession(steps, sid);
+    const localDone = r.serverDone && !(o.inTauri ?? isTauri)() ? true : await dropSession(steps, sid);
     await deleteDbAgain(steps);
-    return { serverDone: r.serverDone };
+    return { serverDone: r.serverDone, localDone };
   } finally {
     // supabase-js 删会话键发生在 ④ 的请求 resolve 之前，等它回来再撤（没走到 ④ 时 req 是已完成的，当场撤）
     void req.then(release, release);

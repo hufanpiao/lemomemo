@@ -23,8 +23,9 @@ function deps(boot: Partial<BootResult> | null) {
     setExitNotice: vi.fn((n) => {
       order.push(`notice:${n}`);
     }),
-    clearLocalSessionIf: vi.fn((sid: string | null) => {
+    clearLocalSessionIf: vi.fn(async (sid: string | null) => {
       order.push(`session:${sid ?? 'null'}`);
+      return true;
     }),
     goToAuth: vi.fn(() => {
       order.push('auth');

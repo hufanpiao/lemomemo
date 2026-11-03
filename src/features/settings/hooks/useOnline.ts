@@ -14,6 +14,9 @@ function subscribe(fn: () => void): () => void {
 
 const read = (): boolean => typeof navigator === 'undefined' || navigator.onLine !== false;
 
+/** 当下有没有网（不订阅；出错提示选“没有网络”还是“连不上服务器”用） */
+export const onlineNow = read;
+
 export function useOnline(): boolean {
   return useSyncExternalStore(subscribe, read, () => true);
 }

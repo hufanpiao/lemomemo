@@ -1,10 +1,21 @@
-/* 按下回弹：按下 scale(0.97) 用 --dur-press，松开用 --ease-spring 弹回（17.1） */
+/* 按下回弹（17.1；UI-4 B1 动效确认 X-3 / C3，B2）：
+   按下和松开分开写——按下 scale(0.97) 用 --ease-out（不过冲，不会缩到 0.97 以下），松开回 idle 用 --ease-spring 弹回。
+   过渡取的是“目标状态”上的那一条：进 pressed 用 pressed 的，回 idle 用 .pressable 自己的 */
 .pressable {
   transition: transform var(--dur-press) var(--ease-spring);
 }
 
 .pressable[data-state="pressed"] {
   transform: scale(0.97);
+  transition: transform var(--dur-press) var(--ease-out);
+}
+
+/* 切页前瞬间复位（C3）：motion 的 transition() 起 View Transition 之前给页面上所有 Pressable 打 data-snap，
+   去掉过渡、立刻回到原大小，旧画面不会截到“还缩着 / 正在弹回”的按钮（36319a2 查到的根因）；
+   回调里新页面画之前摘掉。写在 pressed 之后：同优先级，后写的赢 */
+.pressable[data-snap] {
+  transform: none;
+  transition: none;
 }
 
 /* 减少动态效果（17.2 第 5 点，UI-4 L-1）：系统设置和设置里的开关两种都写；
@@ -17,7 +28,13 @@
 
   .pressable[data-state="pressed"] {
     transform: none;
+    transition: none;
     opacity: var(--press-dim);
+  }
+
+  .pressable[data-snap] {
+    transform: none;
+    transition: none;
   }
 }
 
@@ -27,5 +44,11 @@
 
 :global(:root[data-rm="1"]) .pressable[data-state="pressed"] {
   transform: none;
+  transition: none;
   opacity: var(--press-dim);
+}
+
+:global(:root[data-rm="1"]) .pressable[data-snap] {
+  transform: none;
+  transition: none;
 }

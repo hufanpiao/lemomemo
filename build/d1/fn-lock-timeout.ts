@@ -1,6 +1,6 @@
-// D1 第 6 节：服务器函数用的八个函数必须带函数级 lock_timeout = 5s（迁移 20261031130000 的四个，安全审查第 22 条建议 ②；
+// D1 第 6 节：服务器函数用的十一个函数必须带函数级 lock_timeout = 5s（迁移 20261031130000 的四个，安全审查第 22 条建议 ②；
 // 20261031140000 加 account_restore，接手清单 LOCK-restore；20261031150000 的 invite_claim、invite_release，
-// 20261031160000 的 orphan_auth_users（ORPHAN-alert）建函数时就带）。
+// 20261031160000 的 orphan_auth_users（ORPHAN-alert）、20261103130000 的 remind_queue_pop、20261103140000 的 remind_due、remind_pushed（B2 BE-2）建函数时就带）。
 // 纯函数：入参是 checks.ts 查出的 private 函数（名字、proconfig），单测 tests/build/d1-fn-lock-timeout.test.ts，
 // 反例 supabase/tests/d1-fixtures/37_fn_lock_timeout_reset.psql。
 
@@ -14,6 +14,9 @@ export const LOCK_TIMEOUT_FNS: Readonly<Record<string, string>> = {
   invite_claim: 'lock_timeout=5s',      // 迁移 20261031150000（建函数时就带）
   invite_release: 'lock_timeout=5s',
   orphan_auth_users: 'lock_timeout=5s', // 迁移 20261031160000（建函数时就带）
+  remind_queue_pop: 'lock_timeout=5s',  // 迁移 20261103130000（BE-2，建函数时就带）
+  remind_due: 'lock_timeout=5s',  // 迁移 20261103140000（BE-2，建函数时就带）
+  remind_pushed: 'lock_timeout=5s',  // 迁移 20261103140000（BE-2，建函数时就带）
 };
 
 export interface FnConfigRow { s: string; f: string; config: string[] | null }

@@ -1,7 +1,7 @@
 // 入口（架构 2.2）：挂 React、加载样式、注册 SW
 // StrictMode 只在开发版开（2.6）
 // 启动顺序（架构 4.1、0.27 第 1、4 点、0.38 第 17 条）：
-// 0. 最先关掉 zod 的 JIT（platform/zod-jitless.ts，必须是第一个 import）
+// 0. 最先关掉 zod 的 JIT（platform/zod-jitless.ts，必须是第一个 import）；进 start 后第一件事是 exe 里装 platform 桥（isTauri 才动态 import desktop.ts，0.53 第 2 条）
 // 1. 读本机会话的 user_id（不加载 supabase-js，离线也能读）；没登录 → 本机库还在就删掉，跳 /app/auth/，不建本机库、不渲染
 // 2. await coldStart({userId})：开本机库（迁移、换账号清库）、把上次的内容灌进集合、按缓存的 config / profile 算功能开关；
 //    coldStart 不抛错，出错已降级成 unavailable（不渲染缓存，只联网用）
@@ -33,17 +33,21 @@ import { createLogQueue, guardOwner } from '../core/log/queue.ts';
 import { devicePlatform, readInstallId, withLock } from '../platform/device-info.ts';
 import { clearLogQueue, clearOtherLogQueues, logQueueStore } from '../platform/log-store.ts';
 import { probeAccountForExit } from '../platform/account-status.ts';
+import { ensurePushSubscription } from '../platform/push-claim.ts';
 import { browserLifecycle } from '../platform/net.ts';
 import { createLogUploader, createSupabaseTransport } from '../platform/sync-net.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
-import { buildInfo, registerJsErrorLog } from '../platform/env.ts';
+import { buildInfo, isTauri, registerJsErrorLog } from '../platform/env.ts';
 import {
   clearCacheStorage, clearLocalSessionIf, goToAuth, onAuthUser, onSessionStorageChange, readSessionAccessToken, readSessionId, readSessionUserId,
-  setExitNotice, takeLocalSession,
+  markAccountUiShown, setExitNotice, takeLocalSession,
 } from '../platform/session.ts';
-import { hideSplashAfter, hideSplashWhenPainted } from '../platform/splash.ts';
+import { settleDropAtStartup } from '../platform/session-drop.ts';
+import { enableDropMark, installDesktopSession } from '../platform/session-store.ts';
+import { hideSplash, hideSplashAfter, hideSplashWhenPainted } from '../platform/splash.ts';
 import { nextFrame } from '../motion/index.ts';
 import { checkSwOnForeground, registerServiceWorker, reloadPage, upgradeLogCountStore, watchServiceWorkerUpdate } from '../platform/sw-register.ts';
+import { mountExitScreen, watchExitIncomplete } from './ExitIncompleteScreen.tsx';
 import { mountFeatures } from './features.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
 import { startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
@@ -67,7 +71,37 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
 // 启动画面最晚 5 秒收起：从入口模块开始执行算起（关口、冷启动、分包加载哪一步卡住都不再盖着）
 hideSplashAfter();
 
+/** exe（Tauri）里换上 exe 的 platform 桥（架构 0.53 第 2 条）：openReminder、openAuth、本机通知改走 exe；网页版不加载 desktop.ts */
+async function installNativeBridge(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { installDesktopBridge } = await import('../platform/desktop.ts');
+    installDesktopBridge();
+  } catch {
+    // 分包加载失败：留着网页版的桥（照常能用，只是 exe 专有的几件退回网页做法）
+  }
+}
+
 async function start(): Promise<void> {
+  // 最先装桥：下面没登录时的 goToAuth（openAuth）、渲染、boot 都要用 exe 的那一份
+  await installNativeBridge();
+  // exe：会话改存凭据管理器（F5-2 / N1）。在第一次读会话、建 supabase 客户端之前 preload 好；
+  // 登录小窗口写好会话后（auth:done）整页重新载入，不在原来的界面树上刷新（FA2-3）。网页版什么也不做
+  const installed = await installDesktopSession(reloadPage);
+  if (isTauri() && !installed) {
+    // 读不到凭据管理器（代码审查建议 4）：不往下走（登录了也接不上），提示重新打开
+    void hideSplash();
+    mountExitScreen('unavailable');
+    return;
+  }
+  // 上次退出时会话没删掉（A-1 的“待删除”标记）：先删；删不掉不画账号界面，只给“退出没完成，点重试”
+  // 只有主窗口记“待删除”标记（登录小窗口不记，安全复审建议 ①）
+  enableDropMark();
+  if (!(await settleDropAtStartup())) {
+    void hideSplash();
+    mountExitScreen('incomplete');
+    return;
+  }
   const el = document.getElementById('root');
   if (!el) throw new Error('root_missing');
   // 告知页关口还在问服务器时 #root 是空的，启动画面继续盖着；一画出东西就在下一帧收起
@@ -149,6 +183,10 @@ async function start(): Promise<void> {
   // 最外层兜底（K6-sugg3 ⑥）：App 顶层出错不白屏，显示静态的“出错了 · 刷新”
   const guarded = withCrashFallback(root, reloadPage);
   createRoot(el).render(import.meta.env.DEV ? <StrictMode>{guarded}</StrictMode> : guarded);
+  // 账号的界面画出来了：exe 里之后退出、被移除时先整页重新载入，再开登录小窗口（FA2-3）
+  markAccountUiShown();
+  // exe：之后退出、被移除时删会话失败，盖上“退出没完成，点重试”（A-1）；网页版不会出现
+  if (isTauri()) watchExitIncomplete();
 
   // 同步（K8）：只在 boot 正常时启动；被移除（同步引擎、outbox 的 removed 事件）只处理一次：清空本机、删本机会话、回登录页
   // 设备行（0.38 第 62 条④，接手清单 K8-tz-device）：主页拿到锁后登记或复用本会话的 devices 行，id 存 meta，report_tz 用它
@@ -187,6 +225,13 @@ async function start(): Promise<void> {
       watchServiceWorkerUpdate(reg, () => boot.upgrade.setSwReady());
       // 切到前台、在线、距上次查满 1 小时才主动查新版本（架构师 10-30 第 5 点；和同步引擎“切到前台时比较最低版本”同一个时机）
       checkSwOnForeground(reg, { life: browserLifecycle });
+      // 推送订阅（FA-1；换账号时旧订阅已退订，FE-2）：通知权限已给就重订、认领到这个账号；没给不弹权限框（只在设置 › 提醒的点按里请求）
+      // 先等本会话的设备行登记好再认领（代码审查 M3、安全审查 S1）；记录按“账号 + 会话 + endpoint”的摘要（FA2-1、FA2-2）；几个标签页串着来（S2）
+      void ensurePushSubscription({
+        userId, platform, claim: (a) => transport.claimEndpoint(a), sessionId: () => readSessionId(),
+        ...(device ? { ensureDevice: device.ensure, invalidateDevice: device.invalidate } : {}),
+        lock: (fn) => withLock(`lemo-push-claim:${userId}`, fn),
+      });
     });
   }
 }

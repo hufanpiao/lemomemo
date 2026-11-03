@@ -36,7 +36,8 @@ export interface LeaveDeps {
   clearCacheStorage(): Promise<void>;
   setExitNotice(n: ExitNotice): void;
   /** 本机会话还是这个 session_id 才删（platform/session.ts 的 clearLocalSessionIf） */
-  clearLocalSessionIf(sessionId: string | null): void;
+  // 返回删没删成（A-1）。这里不看返回值：之后的 goToAuth 按 session-store 的删除状态决定重新载入还是显示“退出没完成，点重试”
+  clearLocalSessionIf(sessionId: string | null): Promise<boolean>;
   goToAuth(): void;
   /** 清日志上传队列：给 user_id 只清这个账号的，null 清全部 lemo.logq.* */
   clearLogs(userId: string | null): void;
@@ -86,7 +87,7 @@ function leaveNow(notice: ExitNotice, sid: string | null, deps: LeaveDeps): Prom
   const drop = (): void => {
     if (notice === 'pending_deletion') return;
     try {
-      deps.clearLocalSessionIf(dead);
+      void deps.clearLocalSessionIf(dead);
     } catch {
       // 存储不可用：本来也存不下会话
     }

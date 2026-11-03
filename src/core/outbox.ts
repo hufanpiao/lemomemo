@@ -25,7 +25,17 @@ import { ackImpl, failImpl, type Ctx } from './outbox-send.ts';
 
 export * from './outbox-logic.ts';
 export * from './outbox-types.ts';
-export { drainPendingActions, PENDING_ACTION_TTL_MS } from './pending-actions.ts';
+export {
+  drainPendingActions,
+  isValidPendingAction,
+  keepPendingAction,
+  PENDING_ACTION_FUTURE_MS,
+  PENDING_ACTION_TTL_MS,
+  prunePendingActions,
+  type PendingDone,
+  type PendingSnooze,
+  type ValidPendingAction,
+} from './pending-actions.ts';
 
 const EMPTY_SET: ReadonlySet<string> = new Set();
 

@@ -3,7 +3,7 @@
 // 进场最小从 scale(0.95) 开始，不从 0 开始（17.3）
 import { tr } from './tokens.ts';
 
-export type AppearKind = 'toast' | 'sheet' | 'row' | 'page';
+export type AppearKind = 'toast' | 'sheet' | 'row' | 'page' | 'scrim';
 
 export interface Preset {
   initial: { opacity: number; transform: string };
@@ -32,6 +32,14 @@ export const presets: Record<AppearKind, Preset> = {
   },
   row: {
     initial: { opacity: 0, transform: 'translateY(4px) scale(1)' },
+    animate: { opacity: 1, transform: 'translateY(0px) scale(1)' },
+    exit: { opacity: 0, transform: 'translateY(0px) scale(1)' },
+    transition: tr.ui,
+    reduced: { opacity: 0 },
+  },
+  // 弹层的背景遮罩（17.1“背景遮罩淡入”；UI-4 L-2，B2）：只淡入淡出，不动位置
+  scrim: {
+    initial: { opacity: 0, transform: 'translateY(0px) scale(1)' },
     animate: { opacity: 1, transform: 'translateY(0px) scale(1)' },
     exit: { opacity: 0, transform: 'translateY(0px) scale(1)' },
     transition: tr.ui,

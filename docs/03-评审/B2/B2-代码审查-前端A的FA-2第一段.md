@@ -206,3 +206,64 @@ M1～M3、S1 和 prevRemindAt 接线都到位。复核中新发现两条必改�
 - eslint（kit、todos、calendar、today、push-claim、push、router、main、edit-save、sync-transport）：0 错误，1 个警告（`sync-transport.ts` max-lines 305）。
 - `python -I build/check_arch.py`：0 错误，2 个警告（缺 2027 年节假日文件）。
 - 草稿实验（会话临时目录 `cr-fa2/`，单独的 vitest 配置，不碰仓库）：`exp-r2a.test.tsx` 复现 N1，`exp-r2b.test.tsx` 复现 N2；上一轮的 `exp-race.test.tsx` 第 1 条（S1）已不再复现。
+
+## 第二次复核（11-03 夜，只看改动）
+
+复核对象：前端 A 补的 N2、S14～S16（`TodoEditPage.tsx`、`EventEditPage.tsx`、`todo-edit.ts`、`event-edit.ts`、`todo-actions.ts`、`today-actions.ts`、新文件 `src/core/remind-flag.ts`），以及新增的推送“完成”按钮（`src/sw/push-actions.ts`、`src/sw/push.ts`、`src/sw/pending.ts`、`src/core/pending-actions.ts`、`tests/build/sw-push-actions.test.ts`）。只读。
+
+### 结论：有条件通过，8 / 10
+
+N2、S14～S16 改到位了。还剩两条必改：N1 这次没有改，仍能复现；推送“完成”按钮让 `sw-no-user-data` 掉了 2 条（N3）。两条改完即签。
+
+| # | 结果 | 核对依据 |
+|---|---|---|
+| N1 状态显示已保存，其实还有字段没写进去 | **未改** | 这次的改动里没有动 `useEditRecord.ts` 的写入列（仍是 `target = { ...prev, ...changed }`）。重跑 `cr-fa2/exp-r2a.test.tsx`：改标题回 `closing`，再改备注，发出的 patch 仍只有 `{note}`，状态 `saved`。改法同上一节 |
+| N2 保存后再点新建还是那一条 | **已改** | `onCreated` 里把 `slot.id` 换成新 id，并 `bump()` 重画一次外层。`useRoute` 用 `useSyncExternalStore` 每次读 `location.hash`，重画时拿到的是新 id，等于 `slot.id`，编辑器不重挂；之后 `navigate` 到 new 就换一张空表。重跑 `cr-fa2/exp-r2b.test.tsx`：地址 `#/todo/new`、标题框为空。日程编辑页同样改了。补了用例 |
+| S13 device-reg 加 invalidate | 不在这次范围 | 仍挂在主持人那里 |
+| S14 按过“稍后”也算会响 | **已改** | `rowRemindPending`：行没删，且 `remind_at` 或 `snooze_at` 不早于 now − 宽限，就算会响；`todoRemindPendingBefore` 先看它 |
+| S15 三份逻辑合成一份 | **已改** | `src/core/remind-flag.ts`：纯函数，只引 shared；编辑页、今天页、待办页都调它。放在 core 而不是 shared，符合 A1（core 不引 React、功能），功能引 core 是正常的向下依赖；check_arch、ESLint 边界规则都过 |
+| S16 改之后也要 ≥ now − 宽限 | **已改** | `todoRemindAfter` 用 `remindLive`，宽限 `REMIND_PENDING_GRACE_MS` 是 2 分钟；理由写在文件头（push-dispatch 每分钟跑一次，刚过的提醒可能还没推）。日程的编辑页、今天页也用同一个 `remindLive`。旧用例按新规则改了，补了宽限边界和“按过稍后”的用例 |
+
+### 推送“完成”按钮
+
+做得对的地方：按钮顺序和 action 名取 `shared/logic/notify-text.ts` 的 `actionsFor`，和后端同一份；按类型再守一次（只有待办认 done、待办不认 ack），通知 data 里的 `done_ok` 也按 `kind === 'todo'` 再核一次；“知道了”只关通知、不开窗口；“完成”和“推迟”走同一条 pending 路径，写入失败照样打开整页提醒；`isValidPendingAction` 认 `{type: 'done', due_at}`，只认 todos 表，其余规则（UUID、24 小时、将来 5 分钟、owner）照旧。
+
+#### 新的必改
+
+| # | 问题 | 位置 | 改法 |
+|---|---|---|---|
+| N3 | **`tests/build/sw-no-user-data.test.ts` 掉了 2 条**（K-sw-seal、安全审查 FE-4 的护栏）。① “只引白名单里的模块”：`push-actions.ts` 引了 `../../shared/logic/notify-text.ts`，不在白名单里。`notify-text.ts` 又引 `shared/core/tz.ts`，会把时区和日期代码带进 SW 包，正是 0.53 第 7 条特意避免的（`reminderUrl` 不放进 `remind.ts`，就是为了不把日期代码带进 SW）。② “写进 pending 的只有 6 个字段”：`push.ts` 把 `writePendingAction(sw.indexedDB, {...})` 改成了写在一行里的闭包 `write`，测试按“多行对象字面量”的正则找不到这次调用（找到 0 处，要求 1 处），6 个字段这一条就核不了了 | `src/sw/push-actions.ts:6`；`src/sw/push.ts` 的 `handleNotificationClick`；`tests/build/sw-no-user-data.test.ts:30-40`、`:155-158` | ① 把 `actionsFor` 和 `NotifyAction` 挪到不 import 任何东西的文件（比如 `shared/logic/remind-route.ts`，或者新建一个 `shared/logic/notify-actions.ts`），`notify-text.ts` 和 SW 都从那里引；新文件进白名单要写理由，不要把 `notify-text.ts` 直接加进白名单。② 把 `writePendingAction` 的调用改回测试认得的多行写法；或者改测试的正则，但改完要能核出“正好一处调用、顶层正好 6 个字段”。这是安全审查的护栏，改测试要请安全审查员过一眼。补一个反例：多写一个字段，测试要报 |
+
+#### 记一笔（不卡）
+
+- “完成”现在只写进 pending_actions，`drainPendingActions` 的 `toEnqueue` 要等 FA-4 才接。在那之前，用户在通知上点“完成”，打开整页提醒后这条待办并没有打勾，24 小时后这一项被清掉。FA-4 接的时候注意两点：① 转成 patch 时按 `due_at` 和这一行现在的提醒核对，不是同一次到点的（已经改过时刻、或者已经完成）就不写；② 写入的 remind 标记用 `core/remind-flag.ts`，和页面上打勾同一条规则。
+- iOS 的网页推送不显示 actions 按钮，“完成”只在 Edge、Chrome、Android 上出现。这和 5.3 的说法一致，记一笔。
+
+### 跑过的测试（第二次复核）
+
+- vitest（`--exclude tests/build/gen-tauri-key.test.ts`）：`src/core`、`src/kit`、`src/features/todos`、`calendar`、`today`、`src/sw`、`src/platform`，`tests/build/sw-push`、`sw-push-actions`、`sw-pending`、`sw-no-user-data`，`tests/shared`：128 个文件，1488 条，**1485 过、2 失败**（都是 N3）、1 跳过。
+- tsc：app、sw、node、shared 四个配置都是 0 错误。
+- eslint（remind-flag、pending-actions、src/sw、todos、calendar、today、kit、sw-push-actions 测试）：0 问题。
+- `python -I build/check_arch.py`：0 错误，2 个警告（节假日文件）。
+- 草稿实验：`exp-r2a.test.tsx` 仍能复现 N1；`exp-r2b.test.tsx` 确认 N2 已改好。
+
+## 第三次复核（11-03 深夜，只看 N1、N3 的改动）
+
+### 结论：通过，8.5 / 10。没有剩余必改
+
+| # | 结果 | 核对依据 |
+|---|---|---|
+| N1 状态显示已保存，其实还有字段没写进去 | **已改** | `useEditRecord.ts`：每次写入带上“这一次的改动”加上改动那一刻还没写上、也没被拒的字段（`pendingOf`）；前面排着的写入已经写上的，从 dirty 里拿掉了，不重复带。被拒的字段连同被拒的值记在 `rejected` 里，下次不带；用户改成别的值，这个字段就不再算被拒（调用时 `delete rejected[k]`，`pendingOf` 按值比较）。带着旧字段一起被拒、分不清是谁的问题时，只拿这一次的改动重试一次：成了就把旧字段记为被拒，又被拒就把这一次的记为被拒、旧字段下次照带。只要 dirty 里还有被拒的字段，状态报 `rejected`，不报 `saved`。重跑 `cr-fa2/exp-r2a.test.tsx`：第二次 patch 是 `{title, note}`，状态 `saved`（标题这次真的写进去了）。新用例 `useEditRecord-unsaved.test.tsx` 四条，覆盖“临时失败后补带”“被拒不带且状态报 rejected”“一起被拒时重试区分”“重试也被拒”。逻辑核过，没发现漏写、重复写，也没有闪回 |
+| N3 sw-no-user-data 掉 2 条 | **已改** | 按钮常量挪到 `shared/logic/notify-actions.ts`，这个文件不 import 任何东西；`notify-text.ts` 原样转出，后端的引用不用改；`supabase/functions/_shared/gen/logic/` 里已有拷贝，check_backend 0 错误。SW 的 `push-actions.ts` 改引新文件；白名单只加了 `notify-actions.ts` 和 `./push-actions.ts`，`notify-text.ts` 没进白名单。`push.ts` 写 pending 改回多行写法；测试抽出 `pendingWrites`、`topKeys` 两个核对函数，仍断言“正好一处调用、顶层正好 6 个字段、不含 title、body、label”，并补了三个反例：多一个字段、多一处调用、写成一行（数不到，“正好一处”就会报） |
+
+还挂着、不卡签字的：S8（exe 里 `target="_blank"` 要前端 B 实测）、S13（device-reg 加 invalidate，归 core），以及推送“完成”要等 FA-4 接 `toEnqueue`（见第二次复核“记一笔”）。
+
+### 跑过的测试（第三次复核）
+
+- vitest（`--exclude tests/build/gen-tauri-key.test.ts`）：`src/kit`、`src/core`、`src/features/todos`、`calendar`、`today`、`src/sw`、`src/platform`，`tests/build/sw-push`、`sw-push-actions`、`sw-pending`、`sw-no-user-data`，`tests/shared`、`tests/edge`：141 个文件，1657 条，1656 过、1 跳过，0 失败。
+- tsc：app、sw、node、shared、functions 五个配置都是 0 错误。
+- eslint（`src/kit/hooks`、`notify-actions.ts`、`notify-text.ts`、`src/sw`、两个 SW 测试）：0 问题。
+- `check_arch.py`：0 错误，2 个警告（节假日文件）；`check_backend.py`：0 错误。
+- 草稿实验 `exp-r2a`（N1）、`exp-r2b`（N2）都确认已改好。
+
+**主持人补记（11-03）**：S13（device-reg 加 invalidate）已由前端 A 在本批做完（`src/core/device-reg.ts`、`src/core/__tests__/device-reg-invalidate.test.ts`），外壳代码审查复审核过并发与节流两条测试，关闭。S8（exe 里 `target="_blank"` 实测）等 11-04 前端 B 装好 Tauri CLI 后做 exe 实测时一起测。

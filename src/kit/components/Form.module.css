@@ -1,0 +1,112 @@
+/* 编辑页的表单（B2 FA-2；定稿线框 s1 / s6 右侧编辑栏的 .fld：左边字段名、右边值）：只用令牌，颜色在 skins/*.css（A11） */
+.group {
+  margin: 0 0 16px;
+  padding: 0 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: var(--hit);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.field:last-child {
+  border-bottom: 0;
+}
+
+.label {
+  flex: 0 0 auto;
+  min-width: 72px;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.control {
+  display: flex;
+  flex: 1 1 160px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hint {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+  text-align: right;
+}
+
+.input,
+.select,
+.area {
+  min-height: 36px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-15);
+}
+
+.input {
+  flex: 1 1 auto;
+}
+
+.area {
+  flex: 1 1 100%;
+  min-height: 88px;
+  resize: vertical;
+}
+
+.title {
+  width: 100%;
+  min-height: var(--hit);
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-20);
+  font-weight: 600;
+}
+
+.input:focus-visible,
+.select:focus-visible,
+.area:focus-visible,
+.title:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.input:disabled,
+.select:disabled,
+.area:disabled,
+.title:disabled {
+  color: var(--text-2);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--hit);
+  font-size: var(--fs-15);
+}
+
+.check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}

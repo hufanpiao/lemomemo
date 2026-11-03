@@ -40,7 +40,7 @@ function page(boot: Awaited<ReturnType<typeof coldStart>>, locks: LocksLike, bus
   const sync = wireSync(boot, {
     transport: t,
     clearCacheStorage: () => Promise.resolve(),
-    clearLocalSessionIf: () => undefined,
+    clearLocalSessionIf: () => Promise.resolve(true),
     goToAuth: () => undefined,
     setExitNotice: () => undefined,
     deviceId: () => 'dev-1',
@@ -161,7 +161,7 @@ describe('同步暂停后只听（TABLEADER-listen，真选主、真频道）', 
     const a = wireSync(boot, {
       transport: fakeTransport(server),
       clearCacheStorage: () => Promise.resolve(),
-      clearLocalSessionIf: () => undefined,
+      clearLocalSessionIf: () => Promise.resolve(true),
       goToAuth,
       setExitNotice: () => undefined,
       create: (b, o: SyncOptions) => ((onRemoved = o.onRemoved), createSync(b, { ...o, skipConfig: true, lifecycle: fakeLife(true) })),

@@ -48,6 +48,17 @@ export interface AuthStorage {
   removeItem(key: string): void;
 }
 
+/** 退出期间这个键能不能删（没挂判断时一律能删；判断出错按能删）。exe 的会话存储（session-store.ts）删键前也问它 */
+export function removalAllowed(key: string, now: number = Date.now()): boolean {
+  const g = current(now);
+  if (!g) return true;
+  try {
+    return g.mayRemove(key);
+  } catch {
+    return true;
+  }
+}
+
 /** 包了 localStorage 的适配器：每次调用时才取 globalThis.localStorage */
 export const guardedLocalStorage: AuthStorage = {
   getItem: (key) => globalThis.localStorage.getItem(key),
@@ -55,16 +66,7 @@ export const guardedLocalStorage: AuthStorage = {
     globalThis.localStorage.setItem(key, value);
   },
   removeItem: (key) => {
-    const g = current(Date.now());
-    if (g) {
-      let ok = true;
-      try {
-        ok = g.mayRemove(key);
-      } catch {
-        // 判断本身出错：按原来的行为删
-      }
-      if (!ok) return;
-    }
+    if (!removalAllowed(key)) return;
     globalThis.localStorage.removeItem(key);
   },
 };

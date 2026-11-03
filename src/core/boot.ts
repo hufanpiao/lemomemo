@@ -14,12 +14,13 @@ import { SCHEMA_V } from '../../shared/schema/rows.ts';
 import { buildInfo } from '../platform/env.ts';
 import { onUpgradeRequired } from '../platform/http.ts';
 import { clearCacheStorage } from '../platform/session.ts';
-import { reloadPage, updateAttemptStore, updateServiceWorker } from '../platform/sw-register.ts';
+import { requestAppUpdate } from '../platform/native-bridge.ts';
+import { reloadPage, updateAttemptStore } from '../platform/sw-register.ts';
 import { ensureAccount } from './account.ts';
 import { deleteCacheDb, openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
 import type { UpgradeReport } from './cache-migrations.ts';
 import { DRAFTS, OUTBOX, PENDING_ACTIONS, VAULT_DRAFTS } from './cache-schema.ts';
-import { createOutbox, type Outbox, type OutboxBootReport, type OutboxItem, type OutboxOptions } from './outbox.ts';
+import { createOutbox, prunePendingActions, type Outbox, type OutboxBootReport, type OutboxItem, type OutboxOptions } from './outbox.ts';
 import { rewriteRow } from './outbox-rows.ts';
 import { clearAllCollections, collection } from './store.ts';
 import { createUpgradeCenter, type UpgradeCenter, type UpgradeDeps } from './upgrade.ts';
@@ -175,7 +176,8 @@ function defaultUpgradeDeps(appVersion: string, partial: Partial<UpgradeDeps> = 
   return {
     appVersion,
     reload: reloadPage,
-    swUpdate: updateServiceWorker,
+    // “更新”按钮：网页版拉新 SW 后重新载入，exe 交 Rust 端（platform/native-bridge.ts，B2 架构审 D4）
+    swUpdate: requestAppUpdate,
     attempt: updateAttemptStore,
     ...partial,
   };
@@ -312,6 +314,10 @@ async function loadCache(
 
   // 换账号（4.1、0.38 第 17 条）：在读写任何东西之前比对 owner，不同就清空整库和运行时缓存，旧账号的 outbox 不发
   result.switchedUser = await ensureAccount(cache, userId, { clearCacheStorage: opts.clearCacheStorage ?? clearCacheStorage });
+
+  // SW 记下的通知按键（0.29 续第 107 条②，B2）：转 outbox 之前先丢掉别的账号的、超过 24 小时的；
+  // 转 outbox 由提醒功能做（FA-4）。清理失败不影响启动，下次启动再清
+  await prunePendingActions(cache, { userId, now: now() }).catch(() => 0);
 
   // 日志：仓库里还没有日志层（core/log），outbox 的 log（R-229 outbox_vault_shell_drop）暂不接；接上以后经 opts.outboxOptions.log 传进来（接手清单 K6-log）
   const outbox = createOutbox(cache, { ...opts.outboxOptions, appVersion, now });

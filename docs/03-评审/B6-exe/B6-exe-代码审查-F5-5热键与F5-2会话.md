@@ -68,3 +68,13 @@ vitest 14 个文件 190 条全过；tsc app、node 0 错误；eslint 18 个文�
 - 跑过：相关 vitest 1189 条全过；tsc app 0 错误；eslint 0 错误 1 警告。
 
 **采纳（主持人，11-03）**：建议 ①～④ 交前端 A。
+
+## 前端 A 第三轮复审（11-03，同一审查员）
+
+**结论：签，9 / 10，没有剩余必改。**
+- ① 待删除标记折中合理：只有 `markEnabled && collecting !== null`（主窗口 enableDropMark 后的显式退出）才写标记，登录小窗口不写，补了对应测试；显式删除单独记 dropping、dropFailed，全部成功才撤标记；supabase-js 自删只计本页内存 roundFailed、lastRoundFailed。“服务器退成了也兜底删”要改 9 条既有测试，收益不大，不采纳可以接受。
+- 小缺口（不阻塞）：supabase-js 删键失败后若 goToAuth 没发新的显式删除，lastRoundFailed 停在旧值，可能误显示“退出没完成”，点重试即自愈；进程关掉后靠下次启动刷新失败走“被移除”兜底。建议在 session-store.ts 文件头注释写明。
+- ② inert 只还原自己加的、焦点到按钮；③ localDone 注释；④ exit.test.tsx 300 行内。
+- 跑过：src/platform、src/app、src/features/settings 95 个文件 1022 条全过；eslint 0；tsc app 0。
+
+**采纳（主持人，11-03）**：注释建议交前端 A。

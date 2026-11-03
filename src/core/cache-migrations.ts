@@ -8,7 +8,7 @@
 import type { StoreDef } from './cache-schema.ts';
 
 /** 当前本机库版本。改了 store 结构就加 1，并在 cacheMigrations 末尾加一项 {to: 新版本} */
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 /** 迁移函数拿到的东西 */
 export interface MigrationCtx {
@@ -42,7 +42,11 @@ export interface CacheMigration {
  * 以后加：{ to: 2, up(ctx) { ctx.transform('events', (row) => …) } }；
  * 要删掉的仓由迁移自己 ctx.db.deleteObjectStore(…)（结构核对只补建缺的仓和索引，不自动删多出来的仓）
  */
-export const cacheMigrations: readonly CacheMigration[] = [];
+export const cacheMigrations: readonly CacheMigration[] = [
+  // 2（B2，0.29 续第 107 条①）：SW 开始往 pending_actions 写通知按键（src/sw/pending.ts）。这个仓 v1 就建好了，结构没变，
+  // 这一步不改数据；版本号照第 107 条跟着加，让新版第一次打开时走一遍升级（别的标签页开着旧版会收到 versionchange、关库让路）
+  { to: 2, up: () => undefined },
+];
 
 /** 一次打开库时升级的结果（cache.ts 返回给 boot，boot 决定要不要整表重拉） */
 export interface UpgradeReport {

@@ -17,8 +17,11 @@
 //   本机会话在判断“会话里现在是谁”的同一个同步段里就删（deps.dropSession，K6-signedout-sugg2 ①），删掉的 session_id 交给 onSignedOut：
 //   清库要几秒，等清完再删会把这几秒里别的标签页刚登录的新会话也删掉
 // • 失败即关（M3）：清库失败也关库，再 onFailed()（默认同 onSwitched：重新载入，冷启动会再清一次；再失败就按“本机库不可用”启动，不渲染缓存）
+// • 浏览器推送（B2 安全审查 FE-2）：换账号、会话没了、被移除时，清库之后、删库之前先关掉本 App 已显示的通知、退订推送
+//   （platform/push.ts 的 disconnectBrowserPush，自带上限、失败不挡）；设置页自己退出的那条在 platform/sign-out.ts 的 wipeThisDevice 里
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { BootResult } from './boot.ts';
+import { disconnectBrowserPush } from '../platform/push.ts';
 import { deleteCacheDb, type Cache } from './cache.ts';
 import { OWNER } from './cache-schema.ts';
 import { clearAllCollections } from './store.ts';
@@ -58,6 +61,20 @@ export async function cacheOwner(cache: Cache): Promise<string | undefined> {
 export interface EnsureAccountDeps {
   /** platform/session.ts 的 clearCacheStorage（只删运行时缓存） */
   clearCacheStorage(): Promise<void>;
+  /**
+   * 断开浏览器推送：关掉本 App 已显示的通知、退订推送（B2 安全审查 FE-2；默认 platform/push.ts 的 disconnectBrowserPush，
+   * 自带上限、不抛）。换账号、会话没了、被移除时在清库之后、删库之前调，旧账号的标题不留在通知中心、旧账号的推送不再到达
+   */
+  disconnectPush?(): Promise<void>;
+}
+
+/** 断开浏览器推送：出错、超时都不挡后面的步骤 */
+async function disconnectPush(deps: Pick<EnsureAccountDeps, 'disconnectPush'>): Promise<void> {
+  try {
+    await (deps.disconnectPush ?? (() => disconnectBrowserPush()))();
+  } catch {
+    // 断不开不挡退出、换账号
+  }
 }
 
 /** 比对并在需要时清空（库、内存集合、Cache Storage 的运行时缓存）；返回是否换了账号。出错就抛（调用方按“失败即关”处理） */
@@ -66,6 +83,7 @@ export async function ensureAccount(cache: Cache, userId: string, deps: EnsureAc
   if (r === 'same') return false;
   clearAllCollections();
   if (r === 'first') return false;
+  await disconnectPush(deps);
   await deps.clearCacheStorage();
   return true;
 }
@@ -130,13 +148,14 @@ function closeCache(boot: BootResult): void {
  * 会话没了（别的标签页退出、本页被移除或被退出）：调用前已设闸、封存 → 清空整库（封存后照样能清）→ 先关本页连接
  * （原因 'closed'，不触发 versionchange → 重新载入）→ 按库名删库 → 清运行时缓存。任何一步失败都照样往下走，永远 resolve
  */
-async function wipeSignedOut(boot: BootResult, deps: Pick<WatchAccountDeps, 'deleteDb' | 'clearCacheStorage'>): Promise<void> {
+async function wipeSignedOut(boot: BootResult, deps: Pick<WatchAccountDeps, 'deleteDb' | 'clearCacheStorage' | 'disconnectPush'>): Promise<void> {
   const cache = boot.cache;
   try {
     if (cache && !cache.isClosed()) await cache.clearAll();
   } catch {
     // 清不掉就靠下面按库名删
   }
+  await disconnectPush(deps);
   closeCache(boot);
   clearAllCollections();
   try {
@@ -179,6 +198,7 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
         closeCache(boot);
         clearAllCollections();
         clearCaches = r === 'switched';
+        if (r === 'switched') await disconnectPush(deps);
       }
       if (clearCaches) await deps.clearCacheStorage();
       boot.switchedUser = true;
@@ -246,6 +266,8 @@ export interface RemovedDeps {
   onRemoved(): void;
   /** 清库卡住或失败时按库名删库（默认 core/cache.ts 的 deleteCacheDb，库名取本页的库）；测试用 */
   deleteDb?(): Promise<unknown>;
+  /** 断开浏览器推送（FE-2，同 EnsureAccountDeps.disconnectPush） */
+  disconnectPush?(): Promise<void>;
   /** 测试用：清库（含按库名删）、清运行时缓存各自的上限 */
   wipeMs?: number;
   cachesMs?: number;
@@ -286,6 +308,7 @@ export async function wipeOnRemoved(boot: BootResult, deps: RemovedDeps): Promis
     // capped 已经返回、没人等它的结果，错误被 capped 里的 then 接住不外抛；本机库照样靠按库名删库清掉，结果不受影响
     const cleared = !cache || cache.isClosed() || (await capped(() => cache.clearAll(), wipeMs));
     clearAllCollections();
+    await disconnectPush(deps);
     if (!cleared) {
       closeCache(boot);   // 原因 'closed'：不触发 versionchange → 重新载入
       await capped(deps.deleteDb ?? (() => deleteCacheDb({ name: cache?.name, waitMs: wipeMs })), wipeMs);

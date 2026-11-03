@@ -1,0 +1,65 @@
+/* 编辑页外框（B2 FA-2；定稿线框“子页面（编辑器）”：左上“‹ 返回”、类型名、右上“自动保存”状态）：只用令牌（A11） */
+.page {
+  max-width: 560px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 16px) 16px max(env(safe-area-inset-bottom), 24px);
+  background: var(--bg);
+  color: var(--text);
+}
+
+:global(:root[data-top-banner]) .page {
+  min-height: 0;
+}
+
+.top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  min-height: var(--hit);
+  margin-bottom: 8px;
+}
+
+.back {
+  justify-self: start;
+  min-height: var(--hit);
+  padding: 0 8px 0 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-15);
+}
+
+.kind {
+  margin: 0;
+  font-size: var(--fs-17);
+  font-weight: 600;
+}
+
+.status {
+  justify-self: end;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+  text-align: right;
+}
+
+.statusBad {
+  color: var(--danger-text);
+}
+
+.notice {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: var(--fs-14);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}

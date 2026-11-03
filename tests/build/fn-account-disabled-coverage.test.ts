@@ -50,6 +50,11 @@ const PLAN: Plan = new Map<string, Entry>([
     // Docker 起真库才跑（store-it，同 account）：真 requireActiveUser + 真 account_usable；单测那条（tests/functions/invite-admin.test.ts 的 TC-B1-10）用的是假鉴权
     'no-profile': { file: 'supabase/tests/store-it/invite-admin-store.it.ts', title: 'TC-B1-10：真 JWT、没有 profiles 行的账号调 invite-admin 回 403 account_disabled' },
   } }],
+  ['push-test', { kind: 'jwt', covers: {
+    // B2 BE-6：index.ts 接 requireActiveUser；core 单测用假鉴权核对原样回 account_disabled、一条不发（写法同 invite-admin 的单测）
+    'admin-disabled': { file: 'tests/edge/push-test.test.ts', title: 'TC-B1-10 push-test：管理员停用的账号回 403 account_disabled，不扣次数、不查设备、不发' },
+    'no-profile': { file: 'tests/edge/push-test.test.ts', title: 'TC-B1-10 push-test：没有 profiles 行的账号回 403 account_disabled，不扣次数、不查设备、不发' },
+  } }],
   ['account-purge', { kind: 'all-users', why: 'TC-B1-109：照常处理到期的冷静期账号，故意不用 account_usable；pg_cron 带 x-cron-secret' }],
   ['invite-signup', { kind: 'no-user', why: '架构第 6 节：匿名 + Turnstile，还没有账号' }],
   ['usage-report', { kind: 'no-user', why: '架构第 6 节：x-ops-secret，只出全站统计' }],

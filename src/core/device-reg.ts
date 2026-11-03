@@ -51,6 +51,12 @@ export interface DeviceRegistrar {
   id(): string | null;
   /** 登记或复用（顺带按天刷新 last_seen_at、app_version）；成功返回行 id，失败或还在重试间隔里返回 null。不抛 */
   ensure(): Promise<string | null>;
+  /**
+   * 服务器说这一行不在了（claim_endpoint 回 device_not_found 等）：内存里是这个 id 就同步清掉；meta 里记的还是它就删掉、解除重试间隔，
+   * 接着重新登记（先按会话找，找不到才生成新 id）。忘掉 + 重新登记算一个“进行中”，这期间的 ensure 等它的结果。
+   * 记的已经换了（别的标签页刚重登记过）不删 meta、不解除间隔。不抛
+   */
+  invalidate(id: string): Promise<void>;
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
@@ -73,6 +79,38 @@ async function lookupRow(
   return null;
 }
 
+/** invalidate 用：meta 里记的还是 id 才删（在 lock 里做，和别的标签页的登记互斥）；返回对不对得上。不抛 */
+async function forgetMeta(deps: DeviceRegDeps, lock: <T>(fn: () => Promise<T>) => Promise<T>, id: string): Promise<boolean> {
+  try {
+    return await lock(async () => {
+      if ((await deps.cache.getMeta('device'))?.id !== id) return false;
+      await deps.cache.deleteMeta('device');
+      return true;
+    });
+  } catch {
+    return false;   // 库已关等：下一次 ensure 照旧
+  }
+}
+
+/** 登记失败记一次日志：断网不记；同一个页面（这个 registrar）同一个 code 只记一次 */
+function failLogger(deps: DeviceRegDeps): (r: NetResult<unknown>) => void {
+  const loggedCodes = new Set<string>();
+  return (r) => {
+    if (r.ok || r.error.network || !deps.log) return;
+    const code = r.error.code ?? `http_${r.error.status ?? 0}`;
+    if (loggedCodes.has(code)) return;
+    loggedCodes.add(code);
+    deps.log('device_reg_failed', { coll: 'devices', code });
+  };
+}
+
+/** 本机版本比 v 新（v 没有或认不出也算新；本机版本认不出算不新） */
+function isNewer(appVersion: string, v: string | undefined): boolean {
+  if (!parseVersion(appVersion)) return false;
+  if (v === undefined || !parseVersion(v)) return true;
+  return compareVersions(appVersion, v) > 0;
+}
+
 export function createDeviceRegistrar(deps: DeviceRegDeps): DeviceRegistrar {
   const now = deps.now ?? (() => Date.now());
   const newId = deps.newId ?? (() => crypto.randomUUID());
@@ -81,23 +119,8 @@ export function createDeviceRegistrar(deps: DeviceRegDeps): DeviceRegistrar {
   let inflight: Promise<string | null> | null = null;
   let failedAt: number | null = null;
   let touchFailedAt: number | null = null;
-  const loggedCodes = new Set<string>();
-
-  /** 登记失败记一次日志：断网不记；同一个页面（这个 registrar）同一个 code 只记一次 */
-  const logFail = (r: NetResult<unknown>): void => {
-    if (r.ok || r.error.network || !deps.log) return;
-    const code = r.error.code ?? `http_${r.error.status ?? 0}`;
-    if (loggedCodes.has(code)) return;
-    loggedCodes.add(code);
-    deps.log('device_reg_failed', { coll: 'devices', code });
-  };
-
-  /** 本机版本比 v 新（v 没有或认不出也算新；本机版本认不出算不新） */
-  const newerThan = (v: string | undefined): boolean => {
-    if (!parseVersion(deps.appVersion)) return false;
-    if (v === undefined || !parseVersion(v)) return true;
-    return compareVersions(deps.appVersion, v) > 0;
-  };
+  const logFail = failLogger(deps);
+  const newerThan = (v: string | undefined): boolean => isNewer(deps.appVersion, v);
 
   const touchDue = (t: number): boolean =>
     !!mem?.ok
@@ -204,28 +227,52 @@ export function createDeviceRegistrar(deps: DeviceRegDeps): DeviceRegistrar {
     return id;
   }
 
+  /** ensure 的本体（不看 inflight）：间隔内、不用刷新时直接给结果，否则在锁里登记 / 刷新 */
+  function start(): Promise<string | null> {
+    const t = now();
+    if (mem?.ok) {
+      if (!touchDue(t)) return Promise.resolve(mem.id);
+    } else if (failedAt !== null && t - failedAt < DEVICE_RETRY_MS) {
+      return Promise.resolve(null);
+    }
+    const sid = deps.sessionId();
+    if (!sid) return Promise.resolve(mem?.ok ? mem.id : null);
+    return lock(() => run(sid))
+      .catch(() => (mem?.ok ? mem.id : null))   // 库已关（换账号、清库中）等：不管
+      .then((id) => {
+        if (id === null) failedAt = now();
+        return id;
+      });
+  }
+
+  /** 设成进行中的那一个；结束时还是它才清掉 */
+  const track = (p: Promise<string | null>): Promise<string | null> => {
+    inflight = p;
+    void p.finally(() => {
+      if (inflight === p) inflight = null;
+    });
+    return p;
+  };
+
   return {
     id: () => (mem?.ok ? mem.id : null),
+    invalidate(id) {
+      // 同步先忘掉（代码审查建议 1）：之后的 ensure 不会再同步返回旧 id
+      if (mem?.id === id) mem = null;
+      const prev = inflight;
+      // 忘掉 + 重新登记作为一个“进行中”：并发的 ensure 等它，拿到的是重新登记的结果
+      const job = (async (): Promise<string | null> => {
+        await prev?.catch(() => null);
+        if (mem?.id === id) mem = null;   // 前一个进行中的可能又把它写回来了
+        // 60 秒节流只在 id 对得上时解除（别的标签页已经换了 id 时不动，免得绕过节流）
+        if (await forgetMeta(deps, lock, id)) failedAt = null;
+        return start();
+      })().catch(() => null);
+      return track(job).then(() => undefined);
+    },
     ensure() {
       if (inflight) return inflight;
-      const t = now();
-      if (mem?.ok) {
-        if (!touchDue(t)) return Promise.resolve(mem.id);
-      } else if (failedAt !== null && t - failedAt < DEVICE_RETRY_MS) {
-        return Promise.resolve(null);
-      }
-      const sid = deps.sessionId();
-      if (!sid) return Promise.resolve(mem?.ok ? mem.id : null);
-      inflight = lock(() => run(sid))
-        .catch(() => (mem?.ok ? mem.id : null))   // 库已关（换账号、清库中）等：不管
-        .then((id) => {
-          if (id === null) failedAt = now();
-          return id;
-        })
-        .finally(() => {
-          inflight = null;
-        });
-      return inflight;
+      return track(start());
     },
   };
 }
