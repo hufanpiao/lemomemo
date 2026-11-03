@@ -7,11 +7,24 @@
 //   截完不够最小长度的右端对齐当天末尾、往左补足；显示区间有交叠的归一组，组内上排空着放上排（row 0），
 //   否则下排空着放下排（row 1），两排都占着的不画、记进这一组的 more；组里有两排时 rows = 2，否则 1；
 // • 电脑（layout 'desk'，时间轴纵向，相当于 minBlockPx = 0）：按真实时长画，重叠的并排分列，块带 column、columns。
-// 只放日程（events）；待办不上周视图（5.12 没写，见回报）。纯函数。
+// • 待办（和前端 A 对过的接口）：规则和月历一样（todoDate：删掉的、已完成的、没有截止日的不放，截止日是浮动日期不换算），
+//   手机放进当天的 todos（kind 'todo'，泳道上画空心圆），电脑并进 allDay 那一行（排在全天日程后面）。纯函数。
 import { addDays, minOfDay, msAt, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import type { ProjectColor } from '../project-color.ts';
-import { assertTz, compareEntries, eventEntry, nearRange, placeEvent, TZ_SPILL_DAYS, type CalEvent, type DayEntry } from './cal-items.ts';
+import {
+  assertTz,
+  compareEntries,
+  eventEntry,
+  nearRange,
+  placeEvent,
+  todoDate,
+  todoEntry,
+  TZ_SPILL_DAYS,
+  type CalEvent,
+  type CalTodo,
+  type DayEntry,
+} from './cal-items.ts';
 import { weekDates } from './cal-nav.ts';
 
 const DAY_MIN = 1440;
@@ -57,7 +70,7 @@ export interface DeskBlock extends BlockBase {
   readonly columns: number;
 }
 
-/** 全天事项：count 件；只有 1 件时 short 是它的简称，否则 null */
+/** 全天事项：count 件；只有 1 件时 short 是它的简称，否则 null（电脑上待办也算在这一行里） */
 export interface AllDay {
   readonly count: number;
   readonly short: string | null;
@@ -67,6 +80,8 @@ export interface AllDay {
 export interface PhoneDay {
   readonly date: DateStr;
   readonly allDay: AllDay;
+  /** 截止日是这一天的待办（kind 'todo'，按 compareEntries 排）；泳道上画空心圆 */
+  readonly todos: readonly DayEntry[];
   readonly blocks: readonly PhoneBlock[];
   readonly groups: readonly PhoneGroup[];
 }
@@ -95,8 +110,10 @@ export interface DeskWeekOpts {
   readonly tz: Tz;
 }
 
+/** 和月历的 CalItems 同名同类型，调用方可以直接传同一个对象 */
 export interface WeekItems {
   readonly events: readonly CalEvent[];
+  readonly todos: readonly CalTodo[];
 }
 
 function contOf(i: number, n: number): Cont | undefined {
@@ -131,14 +148,16 @@ function splitAtMidnight(entry: DayEntry, date: DateStr, startMs: number, endMs:
 interface DayBuckets {
   readonly allDay: Map<DateStr, DayEntry[]>;
   readonly timed: Map<DateStr, Segment[]>;
+  readonly todos: Map<DateStr, DayEntry[]>;
 }
 
 function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets {
   const allDay = new Map<DateStr, DayEntry[]>(dates.map((d) => [d, []]));
   const timed = new Map<DateStr, Segment[]>(dates.map((d) => [d, []]));
+  const todos = new Map<DateStr, DayEntry[]>(dates.map((d) => [d, []]));
   const first = dates[0];
   const last = dates[dates.length - 1];
-  if (first === undefined || last === undefined) return { allDay, timed };
+  if (first === undefined || last === undefined) return { allDay, timed, todos };
   for (const ev of items.events) {
     // 预筛（代码审查 A）：除了换算时区可能差的天数，前面再多留 1 天——前一天开始、跨午夜进到这一周的那一段也要算
     if (ev.deleted_at !== null || !nearRange(ev.date, first, last, TZ_SPILL_DAYS + 1, TZ_SPILL_DAYS)) continue;
@@ -151,7 +170,11 @@ function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets
     }
     for (const [d, seg] of splitAtMidnight(entry, todayOf(p.startMs, tz), p.startMs, p.endMs, tz)) timed.get(d)?.push(seg);
   }
-  return { allDay, timed };
+  for (const td of items.todos) {
+    const d = todoDate(td);
+    if (d !== null) todos.get(d)?.push(todoEntry(td));
+  }
+  return { allDay, timed, todos };
 }
 
 function allDayOf(entries: DayEntry[]): AllDay {
@@ -279,9 +302,15 @@ export function buildWeek(weekStart: DateStr, items: WeekItems, opts: PhoneWeekO
   const dates = weekDates(weekStart);
   const b = bucket(dates, items, opts.tz);
   const segsOf = (d: DateStr): Segment[] => (b.timed.get(d) ?? []).sort(compareSegments);
-  const allDayFor = (d: DateStr): AllDay => allDayOf(b.allDay.get(d) ?? []);
+  const todosOf = (d: DateStr): DayEntry[] => b.todos.get(d) ?? [];
   if (opts.layout === 'phone') {
-    return dates.map((date) => ({ date, allDay: allDayFor(date), ...layoutPhone(segsOf(date), opts.minBlockPx, opts.dayPx) }));
+    return dates.map((date) => ({
+      date,
+      allDay: allDayOf(b.allDay.get(date) ?? []),
+      todos: todosOf(date).sort(compareEntries),
+      ...layoutPhone(segsOf(date), opts.minBlockPx, opts.dayPx),
+    }));
   }
-  return dates.map((date) => ({ date, allDay: allDayFor(date), blocks: layoutDesk(segsOf(date)) }));
+  // 电脑：待办并进全天那一行（compareEntries 把待办排在全天日程后面）
+  return dates.map((date) => ({ date, allDay: allDayOf([...(b.allDay.get(date) ?? []), ...todosOf(date)]), blocks: layoutDesk(segsOf(date)) }));
 }

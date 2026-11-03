@@ -144,6 +144,15 @@ export function todoEntry(td: CalTodo): DayEntry {
   };
 }
 
+/**
+ * 待办放在哪一天：截止日原样（浮动，不换算时区）；删掉的、已完成的、没有截止日的不上日历，返回 null。
+ * 月历、单日列表、周视图共用这一条，规则只在这里改。
+ */
+export function todoDate(td: CalTodo): string | null {
+  if (td.deleted_at !== null || td.done || td.due === null) return null;
+  return td.due;
+}
+
 /** ev.date 在不在 [from − spill, to + spill] 里（'YYYY-MM-DD' 按字符串比就是按日期比） */
 export function nearRange(date: string, from: DateStr, to: DateStr, spillBefore: number, spillAfter: number): boolean {
   return date >= addDays(from, -spillBefore) && date <= addDays(to, spillAfter);
@@ -163,8 +172,8 @@ export function collectEntries(items: CalItems, from: DateStr, to: DateStr, tz: 
     if (p) out.get(p.date)?.push(eventEntry(ev, p));
   }
   for (const td of items.todos) {
-    if (td.deleted_at !== null || td.done || td.due === null) continue;
-    out.get(td.due)?.push(todoEntry(td));
+    const d = todoDate(td);
+    if (d !== null) out.get(d)?.push(todoEntry(td));
   }
   for (const list of out.values()) list.sort(compareEntries);
   return out;
