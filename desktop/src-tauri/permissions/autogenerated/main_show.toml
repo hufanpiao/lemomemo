@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-main-show"
+description = "Enables the main_show command without any pre-configured scope."
+commands.allow = ["main_show"]
+
+[[permission]]
+identifier = "deny-main-show"
+description = "Denies the main_show command without any pre-configured scope."
+commands.deny = ["main_show"]

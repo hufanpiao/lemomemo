@@ -118,8 +118,8 @@ describe('手机布局（R-109、R-110）', () => {
       },
       phone,
     );
-    expect(dayOf(days, '2026-10-21')).toEqual({ date: '2026-10-21', allDay: { count: 1, short: '회의', itemIds: ['x'] }, todos: [], blocks: [], groups: [] });
-    expect(dayOf(days, '2026-10-22').allDay).toEqual({ count: 2, short: null, itemIds: ['z', 'y'] });
+    expect(dayOf(days, '2026-10-21')).toEqual({ date: '2026-10-21', allDay: { count: 1, short: '회의', itemIds: ['x'], kinds: ['allDay'] }, todos: [], blocks: [], groups: [] });
+    expect(dayOf(days, '2026-10-22').allDay).toEqual({ count: 2, short: null, itemIds: ['z', 'y'], kinds: ['allDay', 'allDay'] });
     expect(dayOf(days, '2026-10-20').allDay.count).toBe(0);
   });
 
@@ -266,7 +266,7 @@ describe('待办（和前端 A 对过的接口：手机 todos、电脑并进全�
 
   it('电脑：待办并进全天那一行，排在全天日程后面', () => {
     const d = dayOf(buildWeek(WEEK, { events, todos }, desk), '2026-10-20');
-    expect(d.allDay).toEqual({ count: 3, short: null, itemIds: ['all', 't0', 't1'] });
+    expect(d.allDay).toEqual({ count: 3, short: null, itemIds: ['all', 't0', 't1'], kinds: ['allDay', 'todo', 'todo'] });
     expect(d.blocks.map((b) => b.itemId)).toEqual(['tm']);
   });
 
@@ -275,6 +275,7 @@ describe('待办（和前端 A 对过的接口：手机 todos、电脑并进全�
     expect(d.allDay.count).toBe(1);
     expect(d.allDay.short).not.toBeNull();
     expect(d.allDay.itemIds).toEqual(['x']);
+    expect(d.allDay.kinds).toEqual(['todo']);
   });
 
   it('过滤规则和月历一致：同一份数据，每天的待办和 dayEntries 里的待办一样', () => {

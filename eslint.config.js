@@ -341,7 +341,10 @@ export default tseslint.config(
       'docs/**',
       'assets/**',
       'data/**',
-      'desktop/**',
+      // exe：只忽略编译产物和 Turnstile 探针；desktop/src-tauri/scripts 下的脚本照常检查（代码审查 S7）
+      'desktop/src-tauri/target/**',
+      'desktop/src-tauri/gen/**',
+      'desktop/turnstile-probe/**',
       'tests/arch-fixtures/**', // 违规样例：只在 tests/arch 里用虚拟路径过 ESLint
       'supabase/functions/_shared/gen/**',
       '.compat-base/**', // 旧版契约测试临时取出的基线用例（tests/compat/run-compat.ts）
@@ -373,7 +376,7 @@ export default tseslint.config(
   },
   // 构建脚本和配置文件：Node 环境
   {
-    files: ['build/**/*.{js,mjs}', '*.config.{js,ts,mjs}', 'vite*.config.ts', 'playwright.config.ts'],
+    files: ['build/**/*.{js,mjs}', 'desktop/src-tauri/scripts/**/*.{js,mjs}', '*.config.{js,ts,mjs}', 'vite*.config.ts', 'playwright.config.ts'],
     languageOptions: { globals: { ...globals.node } },
     rules: { 'max-lines': 'off' },
   },

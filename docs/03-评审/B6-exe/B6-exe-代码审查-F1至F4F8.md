@@ -78,3 +78,57 @@
 - S8：交前端 A，exe 里未登录时改成调 auth_window_open；建议做成 platform 的 openAuth()，exe 一侧经 setNativeBridge 接入。
 - desktop.test.ts 的 TS1294：交前端 B。
 - 架构 5.10 按现行写法改：已派架构师写进 0.53。
+
+## 复核（11-03）
+
+复核版本：工作区 11-03 下午第二版。新增 `src/commands.rs`、`src/manifest_check.rs`、`scripts/ci-guard.mjs`、`src/platform/desktop.ts`（及 `native-bridge.ts` 的 exe 一侧接线、`src/app/main.tsx` 装桥）；`Cargo.toml` 多了 `sha2 0.10.9`。
+
+### 结论
+
+| 部分 | 结论 | 分数 |
+|---|---|---|
+| exe 外壳 F1～F4、F8（Rust、配置、暂存与流水线脚本） | **签** | 8.5 / 10 |
+| 周视图加待办 | **签** | 9.5 / 10 |
+| `src/platform/desktop.ts`（顺带审） | 通过，见 N1、N3 | — |
+
+M1～M4 全部改到位，S1～S10 都改了。没给满分是因为两点：一是 F4 的页面一侧还没接（N1），会话现在还进不了凭据管理器；二是 `preview.html` 被排除在安装包外，理由写错了（N2）。这两条都不在本次被审的 Rust 代码里，不卡签字，但 **A8（TC-B6X-09、15）验收前 N1 必须做完**。
+
+### 逐条核对
+
+| # | 结果 | 依据 |
+|---|---|---|
+| M1 | 改到位 | `policy.rs:54-89`：三个窗口各自只认写死的路径（main：`/app/`、`/app/index.html`；auth：`/app/auth/`、`/app/auth/index.html`；quick-add 只有打字框页），按原样比较，路径里有 `%` 一律拒。用例 `审查复现的绕法三个窗口一律拒` 列了 20 种写法，三个窗口各跑一遍。用上一轮的草稿探针按 Tauri `get_asset` 的规则复跑：上一轮能绕过的 6 种写法全部被拒，auth 窗口的 `..%2F` 也被拒 |
+| M2 | 改到位 | `session.rs:1-176`：两套段（`~a<i>` / `~b<i>`）轮换，头部 `lemo2;<a|b>;<段数>;<总字节数>;<SHA-256>` 最后写；读时核对总长度、哈希、UTF-8。逐步推演：写新段时失败，头部还指着旧那套，旧段一个没动；写头部时失败，同样读回旧值；切换后清理失败，残留的是另一套代号的段，下次写会覆盖、`remove` 会清掉。用例 `写到一半失败_读回完整旧值_不会新旧拼接` 让 4 次写各失败一遍，每次都读回完整旧值，恢复后能切到新值；`长度对得上但内容不同` 的情况被哈希拦下。同一进程里有锁，正式版和预览版的键名不同，没有竞态 |
+| M3 | 改到位 | 命令名单只在 `src/commands.rs` 一处，`build.rs` 用 `include!` 读进来；`main.json` 加了 `allow-main-show`、`allow-app-update`。`manifest_check.rs` 有三条单测：`generate_handler!` 里的命令和名单一致；每个命令都有生成的权限文件；每个窗口只授予该给的命令、该给的都给了、不开 remote、插件权限只有那 5 条。`ci-guard.mjs permissions` 在编译后核对 `permissions/` 和已提交的内容一致 |
+| M4 | 改到位 | `stage-web.mjs:136-139`、`:159-162`：`CI` 或 `GITHUB_ACTIONS` 有值时带跳过参数退出码 2；`desktop-env.json` 写 `envCheck`，带了跳过参数但核对本来就通过时如实写 `passed`。`lib.rs:309-322`：发布版只认 `passed`，debug 版才认 `skipped`，有用例。`ci-guard.mjs workflows` 在编译前搜流水线文件 |
+| S1 | 改到位 | `policy.rs:99-163`：按解析后的主机判断，`localhost`、`*.localhost`、`*.local`、环回、私网、链路本地、运营商级 NAT、`0.0.0.0`、IPv4 映射的 IPv6 都拒，末尾带点的也拒；mailto 只收 `to`、`cc`、`bcc`、`subject`、`body`（参数名不分大小写，`%61ttach` 解码后同样会被拒）。另外新增 `new_window_external_url`：新窗口只转交 http、https，每秒最多 1 次。探针复跑：上一轮放行的本地地址全部被拒 |
+| S2 | 改到位 | `remove` 先删头部，再把两套代号的 0～31 段和旧格式的 `~1`～`~32` 全删一遍；`set` 切换后清另一套和多出来的段。用例 `删除时清掉所有孤段` 覆盖了各种孤段，并确认不会删到另一个键。注释写明卸载清理要按“前缀 + 键名”找 |
+| S3 | 改到位 | `lib.rs:342-354`：失败时写 `startup.log`（应用日志目录），弹固定文案的系统对话框，用固定退出码 78 退出 |
+| S4 | 改到位 | `PAGES` 里加了 quick-add，CSP 只许本地脚本、`frame-src 'none'`、只连 IPC；有这个页面就注入。另外名单以外的 `.html` 现在直接失败 |
+| S5 | 改到位 | 两个方向都查：预览包里出现 `https://lemomemo.com`（正则排除了 `lemomemo.com.evil` 这类）或 `*.supabase.co` 就失败。仍是子串查找，没有改成核对 `VITE_PUBLIC_SUPABASE_URL` 那一个值，可以接受，最终以 desktop.yml 反向搜 exe 为准 |
+| S6 | 改到位 | 真机凭据用例标了 `#[ignore]`，desktop.yml 用 `--include-ignored` 跑。本次 `cargo test` 不带这个参数，确认被跳过 |
+| S7 | 改到位 | `eslint.config.js:344-347` 只忽略 `target/`、`gen/`、`turnstile-probe/`，`scripts/*.mjs` 按 node 脚本规则检查 |
+| S8 | 改到位 | `native-bridge.ts` 加了 `openAuth()`，`goToAuth` 走它；exe 里 `desktop.ts` 的 `openAuth` 调 `auth_window_open`，主窗口不导航；`main.tsx` 在读会话、`goToAuth` 之前先装 exe 桥。TS1294 已消失，`tsc -p tsconfig.app.json` 0 错误 |
+| S9 | 改到位 | `AllDay` 加了 `kinds`，和 `itemIds` 一一对应；电脑布局的用例核对了 `['allDay','todo','todo']` |
+| S10 | 改到位 | `external_url` 先 trim 再判长度（有用例）；会话三件和 `open_external` 改成 async |
+
+### `desktop.ts` 顺带审
+
+写法清楚，依赖都能注入，测试覆盖了更新结果折算、`main_show` 失败照样切页、通知替换和撤回、快速记录载荷校验。`quickAddText` 用码点计长度，和 Rust 的 `chars().count()` 一致；`onQuickAddText` 的监听、取消参数和 Tauri 2.12 的事件插件一致。
+
+### 遗留（不卡这次签字）
+
+- **N1 F4 的页面一侧还没接：会话现在进不了凭据管理器（A8 验收前必须做，转协调员定由谁做）**。`desktop.ts` 里没有 secureStorage 适配器，supabase-js 在 exe 里仍然用 localStorage；`readSessionUserId()`（`src/platform/session.ts:56`）是同步读 localStorage 的，改成凭据管理器后这一步要变成异步，或在装桥后先把会话读进内存。另外 src 里没人监听 `auth:done`：登录小窗口写好会话、关掉以后，主窗口不会重新读会话。架构 15.4 中 7 写的是“`platform/desktop.ts` 的 `secureStorage`”。这两件做完才算 F4 完整，需要前端 A 一起改启动流程。
+- **N2 `preview.html` 被排除在安装包外，注释理由写错了**（`stage-web.mjs:12`、`:53`）。它不是“网页版的开发预览页”，是 5.13 第 3 点的附件预览沙箱（B4b-1 在这里接 pdf.js、docx-preview、SheetJS，`src/preview-frame/main.ts`）。现在还是占位，排除掉不影响运行；但 B4b-1 接上以后，exe 里的附件预览会打不开。建议把注释改对，并在任务单冲突表里记一笔：B4b-1 落地时把它加进 `PAGES`，单独定 CSP（不给 `allow-same-origin`，`connect-src` 只留 `'self'`）。
+- **N3 小处**：`open_external` 改成 async 以后，`ShellExecuteW` 跑在没有初始化 COM 的线程上，微软建议先 `CoInitializeEx`（打开 http 链接一般没问题）。可以加一次初始化，或者用 `run_on_main_thread` 交回主线程执行。`set` 每次收尾最多要删 95 个名字，每小时刷新令牌时都会走一遍，现在没有问题，但可以只删上一个头部记的段数加上旧格式的段。`host_is_local` 没有拦解析到本机的公网域名（如 `localtest.me`），不查 DNS 就拦不住，可以接受。
+- **N4 范围外**：`tsc -p tsconfig.node.json` 现在报 `supabase/functions/_shared/auth.ts` 的 3 个 TS2339（上一轮还是 0 错误），不是前端 B 的文件，请协调员转后端。另外 `node --test desktop/src-tauri/scripts/` 在本机的 Node 上把目录当成文件跑，会报 1 个失败；要按测试文件头注释写的那样，直接指定 `stage-web.test.mjs`。
+
+### 复核时跑的测试
+
+- `desktop/src-tauri` 下 `cargo test --locked`（正式版）：33 条通过，1 条按 `#[ignore]` 跳过（真机凭据，不写凭据管理器）。
+- 同上加 `--features preview`：33 条通过，1 条跳过。
+- `node --test desktop/src-tauri/scripts/stage-web.test.mjs`：11 条全过（含 ci-guard 的两个纯函数、仓库现有流水线里没有跳过参数）。
+- `npx vitest run tests/shared src/platform`：54 个文件，663 条通过，1 条跳过。
+- `tsc -p tsconfig.app.json`、`tsc -p tsconfig.shared.json`：0 错误；`tsc -p tsconfig.node.json`：3 个错误，都在 `supabase/functions/_shared/auth.ts`（N4）。
+- `eslint desktop/src-tauri/scripts src/platform shared/logic/calendar tests/shared/calendar eslint.config.js`：0 错误，3 个警告（`push.test.ts` 两处非空断言、`sw-register.test.ts` 超过 300 行），都不在本次改动的重点里。
+- 草稿探针（会话临时目录 `cr-b6/probe`）对改后的 `policy.rs`、`session.rs` 复跑：M1 的绕法和 S1 的本地地址全部被拒。没有运行 exe，没有安装，没有往凭据管理器写东西。

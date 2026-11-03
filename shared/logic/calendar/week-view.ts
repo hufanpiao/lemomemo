@@ -75,6 +75,8 @@ export interface AllDay {
   readonly count: number;
   readonly short: string | null;
   readonly itemIds: readonly string[];
+  /** 和 itemIds 一一对应：'allDay' 是全天日程（events 表），'todo' 是待办（todos 表，画空心圆）。代码审查 S9 */
+  readonly kinds: readonly DayEntry['kind'][];
 }
 
 export interface PhoneDay {
@@ -180,7 +182,7 @@ function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets
 function allDayOf(entries: DayEntry[]): AllDay {
   const sorted = entries.sort(compareEntries);
   const only = sorted.length === 1 ? sorted[0] : undefined;
-  return { count: sorted.length, short: only ? only.short : null, itemIds: sorted.map((e) => e.itemId) };
+  return { count: sorted.length, short: only ? only.short : null, itemIds: sorted.map((e) => e.itemId), kinds: sorted.map((e) => e.kind) };
 }
 
 /** 段的排序：开始分钟，再按创建时间、id（结果稳定） */

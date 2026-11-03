@@ -1,0 +1,48 @@
+# 柠檬记电脑版 exe（Tauri 2，B6-exe；架构 5.10、8.2、0.48）
+# • 页面打包进安装包（R-105），来源 http://tauri.localhost（不开 useHttpsScheme，0.48 第 3 条，以后不改）
+# • 双环境（F8）：正式版默认编；预览版 `--features preview` 并配 `--config tauri.preview.conf.json`，启动时核对两者一致
+# • 依赖版本发布满两周才用；第一次编译生成的 Cargo.lock 提交，CI 用 --locked（8.3）
+[package]
+name = "lemomemo-desktop"
+version = "4.0.0"
+edition = "2021"
+publish = false
+description = "柠檬记电脑版"
+
+[lib]
+name = "lemomemo_desktop_lib"
+crate-type = ["rlib"]
+
+[features]
+# 预览环境：更新地址、注册页地址、会话键白名单、identifier 都换成预览的（src/env.rs）
+preview = []
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.5", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2.5.4"
+tauri-plugin-autostart = "2.7.0"
+tauri-plugin-global-shortcut = "2.4.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = "2.5.8"
+# 会话头部的内容哈希（M2）；tauri 依赖树里已有同一版本，不多拉
+sha2 = "0.10.9"
+
+# 凭据管理器、外链直接用 Windows API；版本和 tauri 依赖树里的保持一致，不多拉一份
+# （WebView2 权限回调用 tauri 自带的 on_permission_request，不另外依赖 webview2-com）
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation",
+  "Win32_Security_Credentials",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
