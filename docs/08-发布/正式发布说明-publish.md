@@ -114,7 +114,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File E:\柠檬记-发布\publish-
 |---|---|---|
 | 发布前触发服务器的 backup-daily 并等它成功（架构 8.3 deploy-prod） | backup-daily 函数还没有；4.0.0 首次上线前正式库没有用户数据 | B7a，后端做好 backup-daily 后由运维加进第 2 步 |
 | 生成 GitHub Release | 不做（开发电脑不登录 GitHub）；需要的话负责人在 iPhone 上建 | — |
-| exe 的签名和发布（desktop.yml） | 不在本脚本；做法架构 0.30 已定（8.3a 第 8 步：下载 desktop.yml 的未签名产物，本机 `-Desktop` 签名后随 Pages 部署） | B6-exe |
+| exe 的签名和发布（desktop.yml） | 不在本脚本；做法架构 0.30 已定（8.3a 第 8 步：下载 desktop.yml 的未签名产物，本机签名后随 Pages 部署）。**架构 0.48 第 2 条**：正式的 exe 只随 `-Tag` 完整发布和网页一起签名、部署，不单独部署；`-Desktop` 只能和 `-Env preview` 一起用（签预览版 exe、部署到预览 Pages 项目的 `desktop` 分支）；Pages 每次部署是整站快照，**正式 Pages 的任何重新部署（含回滚）都必须带上同一个 tag 签好的 `desktop/`** | B6-exe |
 | 下载 CI 产物（替换本机构建） | 架构 0.31 第 24 条定方案 A；只读下载令牌的出处待负责人定 | B6-exe 期间改，B7a 前冻结 |
 | 提高 `min_client_version` | 照架构 8.3，不在任何流水线和脚本里，由负责人手动改。值只能是**每段 1～6 位的三段数字、不带后缀**（如 `4.1.0`，正则 `^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$`，只认半角数字；数据库约束同一写法，迁移 20261029190000，写错报 23514）；两道版本门不认的格式会放行所有人（B1 K10） | — |
 | 真实环境跑通 | 只在临时仓库里演练过（见第七节），还没对真的 Supabase / Cloudflare 跑过 | 第一次预览部署跑通后，B7a 前在正式项目上演练一次 |
