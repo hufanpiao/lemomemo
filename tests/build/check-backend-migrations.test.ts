@@ -89,6 +89,22 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(errors.find((e) => e.line === 6)?.message).toContain('UNAUTHORIZED_NO_AUTH_HEADER');
   });
 
+  it('F9（F9-reverse-check）：多认尾斜杠、format(\'%s/名\') 两种地址，跨行字符串里的 -- 不当注释；unschedule 掉的任务不再要求关 verify_jwt，又 schedule 回来的仍要；验了 x-cron-secret 却认不出 cron 调它 → 报在 index.ts', () => {
+    const { code, errors } = run(sample('f9-cron-reverse'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      'F9 supabase/functions/fn-orphan/index.ts:3', // concat() 拼的地址认不出，函数验了 x-cron-secret（lib.ts 里也有，只报一次）
+      'F9 supabase/migrations/20261103000000_reschedule.sql:3', // again-job unschedule 后又 schedule 回来，fn-again 没关 verify_jwt
+    ].sort());
+    expect(errors.find((e) => e.file.endsWith('fn-orphan/index.ts'))?.message).toContain('URL 写法认不出或者没有 cron');
+    // 没报的：fn-slash、fn-format、fn-multiline（认出来了）、fn-old（已 unschedule）、fn-test-only、fn-comment-only、_shared（不算验了）、块注释里的 ghost 任务；
+    // fn-keep：$$it's …$$ 纯文本单引号配不平，整段当纯文本，后面注释里的 cron.unschedule('keep-job') 不算（以前会被吞进字符串、当真 unschedule，误报 ③④）；
+    // fn-named：具名参数 job_name := 认不出任务名，schedule 按不带任务名一直算数，unschedule(job_name := …) 不起作用（固定当前行为）
+    for (const quiet of ['fn-slash', 'fn-format', 'fn-multiline', 'fn-old', 'fn-test-only', 'fn-comment-only', '_shared', 'fn-keep', 'fn-named']) {
+      expect(errors.some((e) => e.file.includes(`/${quiet}/`) || e.message.includes(`${quiet} `) || e.message.includes(`functions.${quiet}]`)), quiet).toBe(false);
+    }
+  });
+
   it('F9：真仓库里 cron 调的 account-purge 已在 supabase/config.toml 关 verify_jwt（预览 401 的回归）', () => {
     const toml = readFileSync(join(ROOT, 'supabase', 'config.toml'), 'utf8');
     expect(toml).toMatch(/^\[functions\.account-purge\]\r?\nverify_jwt = false\r?$/m);

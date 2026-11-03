@@ -86,6 +86,8 @@ export type Opts = {
   verify429?: boolean;        // /auth/v1/verify 一律回 429（限流）
   userTotals?: number[];      // P6：GET /auth/v1/admin/users 依次报的 x-total-count（默认一直是 7；最后一个用到底）
   adminTotals?: (number | null)[];   // P6：GET /rest/v1/admins（Accept-Profile: private）依次报的 Content-Range 总数（默认一直是 0；null = 回 500）
+  p6aNoUser?: boolean;               // P6A：预览里还没有 e2e-admin@lemomemo.test（login-token-fake-p6.ts）
+  p6aMember?: (number | null)[];     // P6A：e2e-admin 在 admins 里的行数，依次报（默认一直是 0；null = 回 500）
   plain: string[];            // Read-Host（明文）依次的回答
   secure: string[];           // Read-Host -AsSecureString 依次的回答
   args?: string;              // 额外参数
@@ -118,7 +120,7 @@ export async function runScript(dir: string, opts: Opts) {
     return e !== undefined && Date.now() / 1000 > e + (opts.p5Grace ?? 2);
   };
   const logouts: { auth: string; status: number }[] = [];
-  const p6Calls = { users: 0, admins: 0 };
+  const p6Calls = { users: 0, admins: 0, member: 0 };
   const P8_SEQ: [number, unknown][] = [
     [200, { ok: true }],
     [403, { error: 'account_disabled' }],

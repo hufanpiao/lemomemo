@@ -51,7 +51,7 @@
                                  P6-①  someone@gmail.com → not_test_email；
                                  P6-②  负责人验收邮箱本身 → 真实邮箱总是先被 ① 的「只认 .test」拦下（not_test_email），到不了 owner_email；
                                  P6-②b 另把 e2e-owner-probe@lemomemo.test 加进这次的 PREVIEW_OWNER_EMAILS → owner_email（证这一道）；
-                                 P6-③  管理员邮箱 → 跳过：预览 private.admins 现在 0 行，单测 preview-login.test.ts 第 67 行覆盖（不为此往预览写 admins）；
+                                 P6-③  管理员邮箱 → 跳过：不拿管理员邮箱实跑，单测 preview-login.test.ts 第 67 行覆盖（不为此往预览写 admins）；
                                  P6-④  e2e-nobody@lemomemo.test → no_such_user；跑前跑后各用 service key 查一次 auth.users 总数，必须不变（没有建号）；
                                  P6-⑤  --admin 负责人验收邮箱 → not_test_email（TC-B1-75 ④ 的反例；--admin 同样走只查护栏模式，绝不写 admins）；
                                  P6-⑥  --admin e2e-owner-probe@lemomemo.test（已在这次的 PREVIEW_OWNER_EMAILS 里）→ owner_email；
@@ -59,6 +59,14 @@
                                        不在预览里造“负责人在 admins 里”：护栏先查 .test、再查负责人名单，然后才读 admins，那种状态不影响结果，
                                        单测 preview-login-admin.test.ts 和本机真后端用例 tests/build/preview-login-admin.real.test.ts 覆盖。
                                不登录测试账号：只跑 P6 时不发验证码、不调 verify。
+    P6A（只在 -Only 里点名才跑）TC-B1-75 ④ 前一半：对负责人已在控制台建好的 e2e-admin@lemomemo.test 跑
+                               node tools/e2e/preview-login.ts --admin（不是只查护栏模式，会真写 private.admins 一行；不取验证码）。
+                               service key、负责人验收邮箱的输入方式同 P6（同一轮和 P6 一起点名只问一次）；PREVIEW_OWNER_EMAILS 只放负责人邮箱。
+                               跑前先只读查：auth.users 里有没有 e2e-admin（没有就记「不符合：先在控制台建账号」，不跑、不替人建）、
+                               private.admins 总条数和 e2e-admin 那一行（都用 Content-Range，不显示行），按跑前它在不在 admins 里自己判断第几次：
+                                 P6A-第一次（还不是管理员）→ 退出 0、输出「已把 e2e-admin@lemomemo.test 加进 private.admins」、总条数 +1、它那一行有了；
+                                 P6A-第二次（已是管理员）  → 退出 0、输出「e2e-admin@lemomemo.test 已是管理员，跳过」、总条数不变、它那一行还在。
+                               两种都要求输出里没有 key、负责人邮箱、email_otp。负责人的顺序：跑两次 -Only P6A（先第一次、再第二次），再跑 -Only P6。
     P8（可选，要 -P8Function） 实测清单 P8：调一个只调 requireActiveUser 的测试函数，中间由负责人在 SQL Editor 依次做「停用 / 注销冷静期 /
                                查会话变慢 / 吊销会话」并恢复，依次应为 200、403 account_disabled、403 account_pending_deletion（带 purge_after）、
                                503 try_later、401 session_revoked。预览上还没有这个测试函数时整项记「跳过」。
@@ -103,10 +111,10 @@
   预览上只调 requireActiveUser 的测试函数名（小写字母、数字、-）；不给则 P8 记「跳过」。
 
 .PARAMETER Only
-  只跑这几项，逗号分隔、不带空格：S1、P2、R2、TC-B1-112、P8、P5、P9、P6（R2 = R2-9、R2-2、R2-3、R2-6 四项）。
-  不给 = 除 P6 以外的全部（P6 要粘预览 service key，只在这里点名才跑）。
-  只选 S1、P2、P5、P9、P6 时不用在 SQL Editor 执行预览库检查（不用在 SQL Editor 改库；P9 会经 API 往测试账号的 settings 写行，见上）；
-  只选 P6 时也不登录测试账号。
+  只跑这几项，逗号分隔、不带空格：S1、P2、R2、TC-B1-112、P8、P5、P9、P6A、P6（R2 = R2-9、R2-2、R2-3、R2-6 四项）。
+  不给 = 除 P6A、P6 以外的全部（这两项要粘预览 service key，只在这里点名才跑；同时点名时先跑 P6A）。
+  只选 S1、P2、P5、P9、P6A、P6 时不用在 SQL Editor 执行预览库检查（不用在 SQL Editor 改库；P9 会经 API 往测试账号的 settings 写行，见上）；
+  只选 P6A、P6 时也不登录测试账号。
 
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File "D:\claude code\柠檬记APP\tools\keys\login-token-tests.ps1"
@@ -116,6 +124,9 @@
 
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File "D:\claude code\柠檬记APP\tools\keys\login-token-tests.ps1" -Only P6
+
+.EXAMPLE
+  powershell -NoProfile -ExecutionPolicy Bypass -File "D:\claude code\柠檬记APP\tools\keys\login-token-tests.ps1" -Only P6A
 #>
 [CmdletBinding()]
 param(
@@ -123,7 +134,7 @@ param(
     [string]$PptxPath = '',
     [ValidatePattern('\A([a-z0-9-]{1,40})?\z')][string]$P8Function = '',
     # 只跑这几项，逗号分隔（-File 运行时数组参数会被当成一个字符串，所以这里收字符串、脚本里自己拆）；不给 = 全部
-    [ValidatePattern('\A((S1|P2|R2|TC-B1-112|P8|P5|P9|P6)(,(S1|P2|R2|TC-B1-112|P8|P5|P9|P6))*)?\z')][string]$Only = '',
+    [ValidatePattern('\A((S1|P2|R2|TC-B1-112|P8|P5|P9|P6A|P6)(,(S1|P2|R2|TC-B1-112|P8|P5|P9|P6A|P6))*)?\z')][string]$Only = '',
     # 以下只给测试用（tests/build/login-token-tests-run.test.ts）：把接口指向本机假服务。只接受官方地址或 http://127.0.0.1:端口（\A…\z 整串匹配），
     # 本机地址还要另设环境变量 LEMO_TEST_API=1 才生效；令牌不会被发到别的主机
     [Parameter(DontShow = $true)][ValidatePattern('\A(https://yoeqwhygehbaftkppati\.supabase\.co|http://127\.0\.0\.1:\d{1,5})\z')][string]$SupabaseBase = 'https://yoeqwhygehbaftkppati.supabase.co',
@@ -161,7 +172,7 @@ $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$ScriptVersion = '2'
+$ScriptVersion = '3'
 if (($SupabaseBase -ne 'https://yoeqwhygehbaftkppati.supabase.co' -or $SiteBase -ne 'https://preview.lemomemo.com') -and $env:LEMO_TEST_API -ne '1') {
     throw '已停止：-SupabaseBase、-SiteBase 只给测试用，正式运行不要带这两个参数'
 }
@@ -173,6 +184,8 @@ $script:onlyIds = @($Only.Split(',') | Where-Object { $_ })
 function Want([string]$id) { return ($script:onlyIds.Count -eq 0 -or $script:onlyIds -contains $id) }
 # P6 要粘预览 service key：只有 -Only 里点名才跑；只跑 P6 时不登录测试账号
 $script:wantP6 = $script:onlyIds -contains 'P6'
+# P6A 会真往预览 private.admins 写一行（TC-B1-75 ④ 前一半）：同样只有 -Only 里点名才跑，不登录测试账号
+$script:wantP6A = $script:onlyIds -contains 'P6A'
 $script:needLogin = @(@('S1', 'P2', 'R2', 'TC-B1-112', 'P8', 'P5', 'P9') | Where-Object { Want $_ }).Count -gt 0
 # 这一轮里 /auth/v1/verify 最多调几次（预览项目 verify 限流：每 IP 每 5 分钟 10 次；一轮控制在 4 次以内，留出重跑的余地）
 $script:verifyMax = 4
@@ -774,23 +787,42 @@ function P6-AdminCount([string]$key) {
     if (($r.Status -ne 200 -and $r.Status -ne 206) -or -not $m.Success) { return [pscustomobject]@{ Total = $null; Desc = (D $r) } }
     return [pscustomobject]@{ Total = [long]$m.Groups[1].Value; Desc = (D $r) }
 }
+# P6、P6A 共用：预览 service key 和负责人验收邮箱各只问一次（同一轮 -Only P6A,P6 不重复粘贴），只留在内存里，主流程 finally 清掉。
+# 格式不对时返回空串，$script:svcKeyLen / $script:ownerLen 记收到几个字符（报不符合时用，不显示内容）
+$script:svcKey = $null; $script:svcKeyLen = 0; $script:ownerMail = $null; $script:ownerLen = 0
+function Read-PreviewKey {
+    if ($script:svcKey) { return $script:svcKey }
+    Say '  要用预览项目的 service key：Supabase › lemomemo-preview › Project Settings › API Keys › Secret keys（sb_secret_ 开头；旧的 service_role JWT 也行）'
+    Say '  只放进这次 node 子进程的环境变量 E2E_PREVIEW_SERVICE_KEY，不显示、不写文件、不进命令行；脚本结束时清掉'
+    $sec = Read-Host -AsSecureString '  粘贴预览项目的 service key（屏幕上不显示，粘贴后回车）'
+    Clear-Clip
+    $k = (To-Plain $sec).Trim()
+    $sec.Dispose(); $sec = $null
+    Add-Secret $k
+    $script:svcKeyLen = $k.Length
+    if ($k -notmatch '\A(sb_secret_[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\z') { return '' }
+    $script:svcKey = $k
+    return $k
+}
+function Read-OwnerEmail {
+    if ($script:ownerMail) { return $script:ownerMail }
+    $o = ([string](Read-Host '  输入你的负责人验收邮箱（就是 PREVIEW_OWNER_EMAILS 的值；只用在这次运行，不写进仓库，结果里也遮住）')).Trim().ToLowerInvariant()
+    $script:ownerLen = $o.Length
+    if ($o -notmatch '\A[^@\s,;]+@[^@\s,;]+\.[a-z]{2,}\z') { return '' }
+    Add-Secret $o
+    $script:ownerMail = $o
+    return $o
+}
 function Run-P6 {
     Step 'P6：tools/e2e/preview-login.ts 的反例（只查护栏模式：不签发验证码、不建号、不写库）'
     $key = $null; $owner = $null; $env6 = $null
     try {
-        Say '  要用预览项目的 service key：Supabase › lemomemo-preview › Project Settings › API Keys › Secret keys（sb_secret_ 开头；旧的 service_role JWT 也行）'
-        Say '  只放进这次 node 子进程的环境变量 E2E_PREVIEW_SERVICE_KEY，不显示、不写文件、不进命令行；脚本结束时清掉'
-        $sec = Read-Host -AsSecureString '  粘贴预览项目的 service key（屏幕上不显示，粘贴后回车）'
-        Clear-Clip
-        $key = (To-Plain $sec).Trim()
-        $sec.Dispose(); $sec = $null
-        Add-Secret $key
-        if ($key -notmatch '\A(sb_secret_[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\z') {
-            Rec 'P6' '不符合' 'preview-login 反例' "service key 格式不对（收到 $($key.Length) 个字符，要 sb_secret_ 开头或 JWT），没有跑"; return
+        $key = Read-PreviewKey
+        if (-not $key) {
+            Rec 'P6' '不符合' 'preview-login 反例' "service key 格式不对（收到 $($script:svcKeyLen) 个字符，要 sb_secret_ 开头或 JWT），没有跑"; return
         }
-        $owner = ([string](Read-Host '  输入你的负责人验收邮箱（就是 PREVIEW_OWNER_EMAILS 的值；只用在这次运行，不写进仓库，结果里也遮住）')).Trim().ToLowerInvariant()
-        if ($owner -notmatch '\A[^@\s,;]+@[^@\s,;]+\.[a-z]{2,}\z') { Rec 'P6' '不符合' 'preview-login 反例' "负责人验收邮箱的格式不对（收到 $($owner.Length) 个字符），没有跑"; return }
-        Add-Secret $owner
+        $owner = Read-OwnerEmail
+        if (-not $owner) { Rec 'P6' '不符合' 'preview-login 反例' "负责人验收邮箱的格式不对（收到 $($script:ownerLen) 个字符），没有跑"; return }
         $u0 = P6-UserTotal $key
         if ($null -eq $u0.Total) { Rec 'P6' '不符合' 'preview-login 反例' "用这个 service key 查不了预览的 auth.users 总数（$($u0.Desc)）：key 不对，或者不是预览项目的；没有跑"; return }
         Ok "service key 能用（预览 auth.users 现有 $($u0.Total) 个账号）"
@@ -816,7 +848,7 @@ function Run-P6 {
             @{ Id = 'P6-⑥'; Admin = $true; What = "--admin 放进 PREVIEW_OWNER_EMAILS 的 .test 邮箱（$probe）→ owner_email"; Email = $probe; Code = 'owner_email'; Note = '' }
         )
         foreach ($c in $cases) {
-            if ($c.Id -eq 'P6-④') { Rec 'P6-③' '跳过' 'private.admins 里的邮箱 → admin_email' '跳过：预览没有管理员（private.admins 现在 0 行），单测 preview-login.test.ts 第 67 行覆盖；按主持人要求不为此往预览写 admins' }
+            if ($c.Id -eq 'P6-④') { Rec 'P6-③' '跳过' 'private.admins 里的邮箱 → admin_email' '跳过：这里不拿管理员邮箱实跑，单测 preview-login.test.ts 第 67 行覆盖；按主持人要求不为此往预览写 admins' }
             $argv = @('tools/e2e/preview-login.ts')
             if ($c.ContainsKey('Admin') -and $c.Admin) { $argv += '--admin' }
             $argv += $c.Email
@@ -854,6 +886,112 @@ function Run-P6 {
     finally { $key = $null; $owner = $null; $env6 = $null; $sec = $null }
 }
 
+# ─────────── P6A：TC-B1-75 ④ 前一半——给已建好的 e2e-admin@lemomemo.test 加管理员（preview-login.ts --admin，真写 private.admins） ───────────
+$script:p6aEmail = 'e2e-admin@lemomemo.test'
+$script:uuidRe = '\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z'
+function P6-KeyHeaders([string]$key) {
+    $h = @{ apikey = $key }
+    if ($key.StartsWith('eyJ')) { $h.Authorization = "Bearer $key" }
+    return $h
+}
+# 在 auth.users 里按邮箱找账号 id（GoTrue 管理端分页，每页 200，最多 20 页；只读）。
+# 返回 Ok（查得清）和 Id（找不到为空串）；不显示任何账号信息
+function P6A-FindUser([string]$key, [string]$email) {
+    $seen = 0
+    for ($page = 1; $page -le 20; $page++) {
+        $r = Invoke-Http GET "$SupabaseBase/auth/v1/admin/users?page=$page&per_page=200" (P6-KeyHeaders $key) $null ''
+        $t = Hdr $r 'x-total-count'
+        $hasUsers = $r.Json -is [psobject] -and $r.Json -isnot [array] -and $null -ne $r.Json.PSObject.Properties['users']
+        if ($r.Status -ne 200 -or $t -notmatch '\A\d+\z' -or -not $hasUsers) { return [pscustomobject]@{ Ok = $false; Id = ''; Desc = (D $r) } }
+        $users = @($r.Json.users)
+        foreach ($u in $users) {
+            if (([string](Get-Prop $u 'email')).ToLowerInvariant() -eq $email) {
+                $id = ([string](Get-Prop $u 'id')).ToLowerInvariant()
+                if ($id -notmatch $script:uuidRe) { return [pscustomobject]@{ Ok = $false; Id = ''; Desc = '账号 id 的格式不对' } }
+                return [pscustomobject]@{ Ok = $true; Id = $id; Desc = '' }
+            }
+        }
+        $seen += $users.Count
+        if ($users.Count -eq 0 -or $seen -ge [long]$t) { return [pscustomobject]@{ Ok = $true; Id = ''; Desc = "翻完了 $seen 个账号" } }
+    }
+    return [pscustomobject]@{ Ok = $false; Id = ''; Desc = 'auth.users 超过 20 页，查不清' }
+}
+# 这个账号在 private.admins 里有几行（0 或 1；Content-Range，Prefer: count=exact，只读、limit=1、不显示行）；查不了 Total 为 $null
+function P6A-MemberCount([string]$key, [string]$uid) {
+    $h = P6-KeyHeaders $key
+    $h['Accept-Profile'] = 'private'; $h.Prefer = 'count=exact'
+    $r = Invoke-Http GET "$SupabaseBase/rest/v1/admins?select=user_id&user_id=eq.$uid&limit=1" $h $null ''
+    $m = [regex]::Match((Hdr $r 'content-range'), '/(\d+)\z')
+    if (($r.Status -ne 200 -and $r.Status -ne 206) -or -not $m.Success) { return [pscustomobject]@{ Total = $null; Desc = (D $r) } }
+    return [pscustomobject]@{ Total = [long]$m.Groups[1].Value; Desc = (D $r) }
+}
+function Show-Count($c) { if ($null -ne $c.Total) { return [string]$c.Total } else { return "查不了（$($c.Desc)）" } }
+# 跑前按 admins 里有没有 e2e-admin 判断第几次：
+#   第一次（还不是管理员）→ preview-login 退出 0、输出“已把 e2e-admin@lemomemo.test 加进 private.admins”，admins 总条数 +1、它那一行有了；
+#   第二次（已是管理员）  → 退出 0、输出“e2e-admin@lemomemo.test 已是管理员，跳过”，admins 总条数不变、它那一行还在。
+# 两种都要求：没超时、子进程输出里没有 key / 负责人邮箱、没有 email_otp（--admin 不取验证码）。账号不存在时不跑 node、不替人建号
+function Run-P6A {
+    Step 'P6A：TC-B1-75 ④ 前一半——给 e2e-admin@lemomemo.test 加管理员（preview-login.ts --admin，会真写 private.admins 一行）'
+    $key = $null; $owner = $null; $env6a = $null
+    $what = '--admin e2e-admin@lemomemo.test'
+    try {
+        $key = Read-PreviewKey
+        if (-not $key) { Rec 'P6A' '不符合' $what "service key 格式不对（收到 $($script:svcKeyLen) 个字符，要 sb_secret_ 开头或 JWT），没有跑"; return }
+        $owner = Read-OwnerEmail
+        if (-not $owner) { Rec 'P6A' '不符合' $what "负责人验收邮箱的格式不对（收到 $($script:ownerLen) 个字符），没有跑"; return }
+        if ($owner -eq $script:p6aEmail) { Rec 'P6A' '不符合' $what '负责人验收邮箱不能是 e2e-admin@lemomemo.test（会被 owner_email 拦下）；输入你自己的验收邮箱，没有跑'; return }
+        $f = P6A-FindUser $key $script:p6aEmail
+        if (-not $f.Ok) { Rec 'P6A' '不符合' $what "查不了预览的 auth.users（$($f.Desc)）：key 不对，或者不是预览项目的；没有跑"; return }
+        if (-not $f.Id) {
+            Rec 'P6A' '不符合' $what '先在控制台建账号：预览里还没有 e2e-admin@lemomemo.test（步骤见 docs/00-团队/负责人B0网页操作清单.md 第 ⑬ 节），本脚本不替你建；没有跑'; return
+        }
+        Add-Secret $f.Id   # 账号 id 不上屏、不进摘要（子进程输出、报错里出现都换成 ***）
+        Ok '预览里有 e2e-admin@lemomemo.test 这个账号'
+        $a0 = P6-AdminCount $key
+        $m0 = P6A-MemberCount $key $f.Id
+        if ($null -eq $a0.Total -or $null -eq $m0.Total -or $m0.Total -gt 1) {
+            Rec 'P6A' '不符合' $what "跑前查不清 private.admins（总条数 $(Show-Count $a0)、e2e-admin 那一行 $(Show-Count $m0)），判断不了是第几次；没有跑"; return
+        }
+        $first = $m0.Total -eq 0
+        if ($first) {
+            $id = 'P6A-第一次'; $what = '--admin e2e-admin@lemomemo.test（跑前还不是管理员）→ 写 1 行管理员、退出 0'
+            $wantLine = "已把 $($script:p6aEmail) 加进 private.admins"
+        } else {
+            $id = 'P6A-第二次'; $what = '--admin e2e-admin@lemomemo.test（跑前已是管理员）→ 跳过、退出 0、admins 条数不变'
+            $wantLine = "$($script:p6aEmail) 已是管理员，跳过"
+        }
+        Say "  跑前 private.admins 共 $($a0.Total) 行，e2e-admin $(if ($first) { '还不在里面：这是第一次' } else { '已在里面：这是第二次（或更多次）' })"
+        $env6a = @{
+            E2E_PREVIEW_SERVICE_KEY = $key; PREVIEW_SUPABASE_PROJECT_REF = 'yoeqwhygehbaftkppati'; PREVIEW_OWNER_EMAILS = $owner
+            PREVIEW_LOGIN_GUARD_ONLY = ''; GITHUB_OUTPUT = ''; E2E_ADMIN_EMAIL = ''
+        }
+        $r = Run-Node 'preview-login' @('tools/e2e/preview-login.ts', '--admin', $script:p6aEmail) $env6a 120
+        Show-ChildOut $r.Out
+        $a1 = P6-AdminCount $key
+        $m1 = P6A-MemberCount $key $f.Id
+        $hasLine = $r.Out.Contains($wantLine)
+        $err = [regex]::Match($r.Out, '错误（([a-z_]+)）')
+        $want1 = if ($first) { $a0.Total + 1 } else { $a0.Total }
+        $countOk = $null -ne $a1.Total -and $a1.Total -eq $want1
+        $memberOk = $null -ne $m1.Total -and $m1.Total -eq 1
+        $parts = @("退出码 $($r.Code)$(if ($r.TimedOut) { '（超过 2 分钟被停下）' })$(if ($err.Success) { '，错误码 ' + $err.Groups[1].Value })",
+            "输出 $(if ($hasLine) { '有' } else { '没有' })「$wantLine」",
+            "private.admins 总条数 跑前 $($a0.Total)、跑后 $(Show-Count $a1)（应为 $want1）",
+            "e2e-admin 那一行 跑前 $($m0.Total)、跑后 $(Show-Count $m1)（应为 1）",
+            "输出里 $(if ($r.Leak) { '出现了 key 或负责人邮箱' } else { '没有 key' })、$(if ($r.OtpSeen) { '出现了 email_otp' } else { '没有 email_otp' })")
+        $ok = $r.Code -eq 0 -and $hasLine -and $countOk -and $memberOk -and -not $r.Leak -and -not $r.OtpSeen -and -not $r.TimedOut
+        if (-not $countOk -and $null -ne $a1.Total) { $parts += '总条数和预期不一样：请在 SQL Editor 查 select user_id, created_at from private.admins，告诉后端' }
+        if ($ok -and $first) { $parts += '下一步：再跑一次 -Only P6A，应记 P6A-第二次 通过' }
+        if ($ok -and -not $first) { $parts += '下一步：跑 -Only P6' }
+        Rec $id $(if ($ok) { '通过' } else { '不符合' }) $what ($parts -join '；')
+    } catch {
+        # 报错里可能带出请求地址（含 user_id=eq.<id>）：任何 UUID 样式的串都换成 <e2e-admin> 再记
+        $em = [regex]::Replace([string]$_.Exception.Message, '(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', '<e2e-admin>')
+        Rec 'P6A' '不符合' $what "中途出错：$em"
+    }
+    finally { $key = $null; $owner = $null; $env6a = $null }
+}
+
 # ───────────────────────── 主流程 ─────────────────────────
 $noteId = $null; $made = $script:made
 $version = $null; $viaMagic = $false; $viaLink = $false
@@ -881,8 +1019,10 @@ try {
     Ok "版本 $version；读了 supabase/migrations 里的迁移（用来列 private 的表和函数）"
 
     # P6 不用测试账号的令牌：放在登录之前；只跑 P6 时到这里就结束（不发验证码、不调 verify），finally 照常出摘要
+    # 同时点名 P6A、P6 时先 P6A（TC-B1-75 ④ 的顺序：先加管理员，再跑反例）
+    if ($script:wantP6A) { Run-P6A }
     if ($script:wantP6) { Run-P6 }
-    if (-not $script:needLogin) { Say '  这次只跑 P6，不登录测试账号'; return }
+    if (-not $script:needLogin) { Say "  这次只跑 $(@($script:onlyIds) -join '、')，不登录测试账号"; return }
 
     Step '取 publishable key（公开值）'
     $script:pk = Find-PublishableKey
@@ -1380,6 +1520,7 @@ finally {
         }
         $lo = $null
     }
+    $script:svcKey = $null; $script:ownerMail = $null
     $script:acc = $null; $script:rtok = $null; $script:p5 = $null; $otp = $null; $pw = $null; $leak = $null
     $hash = $null; $u = $null; $sec = $null; $Matches = $null
     $v = $null; $h = $null; $set = $null; $login = $null; $claims = $null

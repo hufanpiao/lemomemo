@@ -1,7 +1,7 @@
 // account 函数 export 的单元测试之四：内存探针和分片响应（架构 0.47 第 21 条；安全审查 K1、K2）。
 //   探针要 EXPORT_MEM_PROBE=1 且本机才开，线上误设记 mem_probe_ignored；日志只有 export_mem_peak / export_mem_start 的整数 MB 和片序号；
 //   没开探针时不打；每片的 Content-Length 等于实际字节数，各片照样能解开。
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { memProbeFor, newWorkerId } from '../../supabase/functions/account/core.ts';
 import { PREVIEW_REF } from '../../supabase/functions/_shared/env-kind.ts';
 import { A, accountSetup as setup } from './account-fakes.ts';
@@ -42,15 +42,39 @@ describe('memProbeFor（K1：两个条件同时满足才开）', () => {
 });
 
 describe('newWorkerId（安全审查：随机、8～16 位十六进制）', () => {
-  it('12 位小写十六进制，每次不同；不含进程号、时间戳', () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('12 位小写十六进制，每次不同', () => {
     const ids = Array.from({ length: 200 }, () => newWorkerId());
     for (const w of ids) expect(w).toMatch(/^[0-9a-f]{12}$/);
-    expect(new Set(ids).size).toBe(ids.length);
-    const now = Date.now().toString(16);
-    for (const w of ids) {
-      expect(w).not.toContain(String(process.pid));
-      expect(w).not.toContain(now.slice(0, 8));
+    expect(new Set(ids).size).toBe(ids.length);   // 48 位随机，200 个里撞上的概率约 200² ÷ 2⁴⁹ ≈ 7×10⁻¹¹
+  });
+
+  // 不由进程号、时间戳派生：把随机源换成固定值，输出必须完全由随机源决定（不再用“随机串里不含 pid 这几位数字”的写法——
+  // 12 位随机十六进制含某个 4 位数字串的概率约 9 × 16⁻⁴，200 个里约 2.7%，CI 上偶发失败，10-31 518d011）
+  it('输出只来自 crypto.randomUUID：= 去掉横线后的前 12 位；不读时钟；随机源不变时进程号、时间变了输出也不变', () => {
+    type Uuid = ReturnType<typeof crypto.randomUUID>;
+    const U1 = '0123abcd-4567-4890-abcd-ef0123456789' as Uuid;
+    const U2 = 'fedcba98-7654-4321-8fed-cba987654321' as Uuid;
+    const rnd = vi.spyOn(crypto, 'randomUUID').mockReturnValue(U1);
+    const clock = vi.spyOn(Date, 'now');
+    const perf = vi.spyOn(performance, 'now');
+    expect(newWorkerId()).toBe('0123abcd4567');
+    expect(rnd).toHaveBeenCalledTimes(1);
+    expect(clock).not.toHaveBeenCalled();
+    expect(perf).not.toHaveBeenCalled();
+    // 时间往后拨 10 年、进程号换一个：同样的随机源给同样的输出
+    vi.useFakeTimers({ now: Date.now() + 10 * 365 * 86_400_000 });
+    const pid = vi.spyOn(process, 'pid', 'get').mockReturnValue(4242);
+    try {
+      expect(newWorkerId()).toBe('0123abcd4567');
+    } finally {
+      vi.useRealTimers();
+      pid.mockRestore();
     }
+    // 换一个随机源，输出跟着换
+    rnd.mockReturnValue(U2);
+    expect(newWorkerId()).toBe('fedcba987654');
   });
 });
 

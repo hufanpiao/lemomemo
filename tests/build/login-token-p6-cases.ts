@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PS, runScript, SERVICE, summary, type Opts, type RunResult } from './login-token-fake.ts';
+import { describeP6A } from './login-token-p6a-cases.ts';
 
 let dir = '';
 
@@ -76,4 +77,6 @@ export function describeP6(): void {
       expect(c.runs).toEqual([]);
     }, 420_000);
   });
+  // -Only P6A（TC-B1-75 ④ 前一半）的用例在 login-token-p6a-cases.ts
+  describeP6A();
 }

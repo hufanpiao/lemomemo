@@ -98,7 +98,13 @@ Pages Functions（functions/）和 App、shared：
       源码（.ts .mjs 等）用 AST 去掉注释后查（字符串里的 SQL 照查）；.sql .psql .ps1 .psm1 .py .sh 按原文查（注释也算，宁严勿漏）。
       只读（.select、select … from private.admins）不报。表名拼出来、存进变量再 .from(变量) 这类写法查不到，靠代码审查
   F9  pg_cron 调的函数要关网关的 JWT 校验（接手清单 PURGE-verify-jwt，11-03 预览 account-purge 一直 401 UNAUTHORIZED_NO_AUTH_HEADER）：
-      迁移里 net.http_post 调的函数（… 'functions_url') || '/<名>'，或写死的 /functions/v1/<名>，注释不算）——
+      迁移里 net.http_post 调的函数（… 'functions_url') || '/<名>' 或 '/<名>/'，写死的 /functions/v1/<名>，format('%s/<名>', …)；
+      注释不算，去注释按字符扫、认单引号字符串（跨行字符串里的 -- 不当注释）；$tag$…$tag$ 里单引号配得平就当 SQL（注释照去），
+      配不平（带奇数个单引号的纯文本，比如 comment on … is $$it's …$$）就当纯文本整段不认，不会把后面的代码吞进字符串
+      （剩下的局限：$$ 里纯文本恰好带偶数个单引号、又写着 net.http_post / cron.unschedule 的，仍会当 SQL 认）；
+      按迁移文件名顺序取每个任务最后一次 cron.schedule / cron.unschedule，unschedule 掉的任务调的函数不算（F9-reverse-check ②）；
+      任务名只认按位置写的字符串字面量：具名参数（cron.schedule(job_name := 'x', …)、cron.unschedule(job_name := 'x')）认不出任务名，
+      这样的 schedule 按不带任务名算、一直算数，这样的 unschedule 不起作用（宁严勿漏））——
       ① 必须在 supabase/config.toml 写 [functions.<名>] verify_jwt = false（cron 只带 x-cron-secret，不带 Authorization；
          functions deploy 和本地 edge runtime 都按这里的 verify_jwt，默认开着）；
       ② 函数目录里的非测试源码（*.test.* / *_test.* / *.spec.*、tests/ 目录不算）用 AST 去掉注释后，必须有带引号的 'x-cron-secret'
@@ -106,7 +112,9 @@ Pages Functions（functions/）和 App、shared：
          这条只看“有没有验这个头”；验得对不对（定长比较、错密钥回 401）由各函数单测管——新增 cron 函数必须带“错密钥回 401”的用例；
       ③ 反过来，config.toml 里 verify_jwt = false 的只准是 cron 调的函数（预览专用函数归 F6 管；
          supabase/functions/ 下没有同名目录的设了也不起作用，这里跳过）：
-         用户调的函数（account、invite-admin 等）不准关，网关那道 JWT 校验留着
+         用户调的函数（account、invite-admin 等）不准关，网关那道 JWT 校验留着；
+      ④ 反向兜底（F9-reverse-check ①）：函数目录里的非测试源码（同 ②）验了带引号的 'x-cron-secret'，迁移里却认不出 cron 调它
+         （concat() 拼、拼进变量等写法认不出，或者没有 cron / 已 unschedule）→ 报在这个函数的 index.ts；_shared 等共用模块、预览专用函数不算
 迁移（supabase/migrations/*.sql）：
   M1  security definer 函数必须写 set search_path = ''（create function 和 alter function 都查，属性写在函数体前后都认）。
       架构 0.29 续第 117 条、TC-B0-92
@@ -768,34 +776,179 @@ def check_bypass(fns, errors):
                                                  "否则“只准某几个函数读”的名单换个函数 import 一下就绕开了"))
 
 
-# F9：cron（net.http_post）调到的函数名。只认两种写法：vault 里 functions_url 拼 '/<名>'，或写死的 /functions/v1/<名>
-CRON_FN_URL = re.compile(r"'functions_url'\s*\)\s*\|\|\s*'/([a-z0-9][a-z0-9_-]*)'|/functions/v1/([a-z0-9][a-z0-9_-]*)")
+# F9：cron（net.http_post）调到的函数名。认这几种写法（注释不算）：vault 里 functions_url 拼 '/<名>' 或 '/<名>/'，
+# 写死的 /functions/v1/<名>，format('%s/<名>', …)（前面可带 pg_catalog.，路径可带尾斜杠）。
+# concat()、拼到变量里再用等认不出的写法，由 check_cron_verify_jwt 的反向兜底（函数验了 x-cron-secret 却没认出 cron 调它）报出来
+CRON_FN_URL = re.compile(
+    r"'functions_url'\s*\)\s*\|\|\s*'/([a-z0-9][a-z0-9_-]*)/?'"
+    r"|/functions/v1/([a-z0-9][a-z0-9_-]*)"
+    r"|\bformat\s*\(\s*'%s/([a-z0-9][a-z0-9_-]*)/?'",
+    re.IGNORECASE)
+CRON_CALL = re.compile(r"\bcron\s*\.\s*(schedule|schedule_in_database|unschedule)\s*\(", re.IGNORECASE)
+_DOLLAR_TAG = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)?\$")
+
+
+def _skip_sql_string(text, i, stop=None):
+    """text[i] 是单引号：返回字符串结束后的位置（'' 是转义的单引号；前面紧挨 E/e 且不是标识符的一部分时按 E'…'，反斜杠转义下一个字符）。
+    到 stop（默认文末）还没闭合就返回 stop + 1，调用方据此判断“没闭合”。去注释扫描器和 _call_args 共用这一个"""
+    n = len(text) if stop is None else stop
+    esc = i > 0 and text[i - 1] in "Ee" and (i < 2 or not (text[i - 2].isalnum() or text[i - 2] == "_"))
+    j = i + 1
+    while j < n:
+        if esc and text[j] == "\\":
+            j += 2
+        elif text[j] == "'":
+            if j + 1 < n and text[j + 1] == "'":
+                j += 2
+            else:
+                return j + 1
+        else:
+            j += 1
+    return n + 1
 
 
 def _strip_sql_comments(text):
-    """去掉 -- 行注释和 /* */ 块注释（换成同样多的换行，行号不变）；字符串里的 -- 不当注释（宁严勿漏，只影响注释判断）"""
-    text = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), text, flags=re.S)
-    out = []
-    for ln in text.split("\n"):
-        head = ln.split("--", 1)[0]
-        # “--” 前面的单引号是偶数个才算注释开头（奇数个说明 -- 在字符串里）
-        out.append(head if "--" in ln and head.count("'") % 2 == 0 else ln)
-    return "\n".join(out)
+    """去掉 -- 行注释和 /* */ 块注释（可嵌套），换成空格、换行照留（长度和行号不变）。
+    按字符扫：单引号字符串（'' 转义；E'…' 里反斜杠转义）、双引号标识符里的 -- 和 /* 不当注释，字符串跨行也认得（F9-reverse-check）。
+    $tag$…$tag$：里面单引号配得平（按同样的规则扫到收尾 tag 时不在字符串里）就当 SQL——cron 的命令、函数体本身就是 SQL，
+    里面的注释照样去掉；配不平（比如 comment on … is $$it's …$$ 这种带奇数个单引号的纯文本）就当纯文本，整段内容换成空格，
+    不让它把后面的代码吞进字符串，里面的字也不再当 SQL 认（代码审查 11-03 建议 A）"""
+    out = list(text)
+    _strip_range(text, out, 0, len(text))
+    return "".join(out)
+
+
+def _strip_range(text, out, a, b):
+    """在 text[a:b] 里去注释，写进 out；返回 True 表示扫到 b 时不在没闭合的字符串里（单引号配得平）"""
+    def blank(x, y):
+        for k in range(x, y):
+            if out[k] != "\n":
+                out[k] = " "
+
+    i = a
+    while i < b:
+        c = text[i]
+        if c == "-" and text.startswith("--", i) and i + 1 < b:
+            j = text.find("\n", i, b)
+            j = b if j < 0 else j
+            blank(i, j)
+            i = j
+        elif c == "/" and text.startswith("/*", i) and i + 1 < b:
+            depth, j = 1, i + 2
+            while j < b and depth:
+                if text.startswith("/*", j) and j + 1 < b:
+                    depth, j = depth + 1, j + 2
+                elif text.startswith("*/", j) and j + 1 < b:
+                    depth, j = depth - 1, j + 2
+                else:
+                    j += 1
+            blank(i, j)
+            i = j
+        elif c == "'":
+            i = _skip_sql_string(text, i, b)
+            if i > b:
+                return False
+        elif c == '"':
+            j = text.find('"', i + 1, b)
+            if j < 0:
+                return False
+            i = j + 1
+        elif c == "$" and (m := _DOLLAR_TAG.match(text, i, b)) and not (i > 0 and (text[i - 1].isalnum() or text[i - 1] == "_")):
+            close = text.find(m.group(0), m.end(), b)
+            if close < 0:
+                i = m.end()   # 没有收尾 tag：当普通字符往下扫
+                continue
+            trial = list(out)
+            if _strip_range(text, trial, m.end(), close):
+                out[m.end():close] = trial[m.end():close]
+            else:
+                blank(m.end(), close)
+            i = close + len(m.group(0))
+        else:
+            i += 1
+    return True
+
+
+def _call_args(code, open_paren):
+    """从 code[open_paren] 的 ( 起找配对的 )，同时按顶层逗号切参数（跳过单引号字符串、双引号标识符、$tag$…$tag$ 整段；
+    单引号字符串用 _skip_sql_string，和去注释扫描器同一套规则）。返回 (结束位置, [(参数起, 参数止), …])；没配上就到文末"""
+    depth, i, n = 0, open_paren, len(code)
+    args, start = [], open_paren + 1
+    while i < n:
+        c = code[i]
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                args.append((start, i))
+                return i + 1, args
+        elif c == "," and depth == 1:
+            args.append((start, i))
+            start = i + 1
+        elif c == "'":
+            i = _skip_sql_string(code, i)
+            continue
+        elif c == '"':
+            j = code.find('"', i + 1)
+            i = n if j < 0 else j
+        elif c == "$":
+            m = _DOLLAR_TAG.match(code, i)
+            if m:
+                j = code.find(m.group(0), m.end())
+                i = n if j < 0 else j + len(m.group(0)) - 1
+        i += 1
+    args.append((start, n))
+    return n, args
+
+
+def _str_literal(s):
+    """参数是一个单引号字符串字面量时返回它的值，否则 None"""
+    m = re.fullmatch(r"\s*'((?:[^']|'')*)'\s*", s)
+    return m.group(1).replace("''", "'") if m else None
 
 
 def cron_functions(root):
-    """迁移里 cron 调的函数：{函数名: (迁移相对路径, 行号)}（同名取第一次出现）"""
-    out = {}
+    """迁移里 cron 调的函数：{函数名: (迁移相对路径, 行号)}。
+    按迁移文件名顺序、文件里先后，逐个看 cron.schedule / cron.schedule_in_database / cron.unschedule：
+    带任务名的 schedule 记“这个任务现在调哪些函数”（同名再 schedule 就换掉），unschedule('任务名') 删掉这个任务（F9-reverse-check ②）；
+    不带任务名的 schedule（含具名参数 job_name := 'x' 写法，认不出任务名）、cron.schedule 之外的 net.http_post（比如写在函数体里）一直算数，
+    具名参数的 unschedule 不起作用。最后还在的任务调到的函数都算 cron 调的，
+    位置取最后一次 schedule 里那个地址（同名函数取第一处）"""
+    jobs = {}     # 任务名 → [(函数名, 路径, 行号)]
+    loose = []    # 不带任务名的 schedule、schedule 之外的调用
     mig = root / "supabase" / "migrations"
     if not mig.is_dir():
-        return out
+        return {}
     for f in sorted(mig.glob("*.sql")):
         code = _strip_sql_comments(f.read_text(encoding="utf-8"))
-        if "net.http_post" not in code:
-            continue
-        for m in CRON_FN_URL.finditer(code):
-            name = m.group(1) or m.group(2)
-            out.setdefault(name, (f"supabase/migrations/{f.name}", line_of(code, m.start())))
+        path = f"supabase/migrations/{f.name}"
+        spans = []
+        for m in CRON_CALL.finditer(code):
+            kind = m.group(1).lower()
+            end, args = _call_args(code, m.end() - 1)
+            if kind == "unschedule":
+                job = _str_literal(code[args[0][0]:args[0][1]]) if len(args) == 1 else None
+                if job is not None:
+                    jobs.pop(job, None)
+                continue
+            spans.append((m.start(), end))
+            body = code[m.end():end]
+            hits = [(u.group(1) or u.group(2) or u.group(3), path, line_of(code, m.end() + u.start()))
+                    for u in CRON_FN_URL.finditer(body)] if "net.http_post" in body else []
+            # schedule(任务名, 时间, 命令) / schedule_in_database(任务名, …) 带任务名；schedule(时间, 命令) 不带，unschedule 只能按 id 停，这里一直算数
+            job = _str_literal(code[args[0][0]:args[0][1]]) if args and (kind == "schedule_in_database" or len(args) >= 3) else None
+            if job is not None:
+                jobs[job] = hits
+            else:
+                loose.extend(hits)
+        if "net.http_post" in code:
+            for u in CRON_FN_URL.finditer(code):
+                if not any(a <= u.start() < b for a, b in spans):
+                    loose.append((u.group(1) or u.group(2) or u.group(3), path, line_of(code, u.start())))
+    out = {}
+    for name, path, line in [*loose, *(h for hits in jobs.values() for h in hits)]:
+        out.setdefault(name, (path, line))
     return out
 
 
@@ -844,6 +997,22 @@ def check_cron_verify_jwt(root, errors, sources):
         src = "".join(code for rel, code in sorted(sources.code.items()) if rel.split("/")[0] == name and not _is_test_source(rel))
         if not CRON_SECRET_LITERAL.search(src):
             errors.append(("F9", path, line, f"cron 调 {name}，但 supabase/functions/{name}/ 里没有验 x-cron-secret：关了网关的 JWT 校验以后，鉴权全靠函数自己验这个头"))
+    # 反向兜底（F9-reverse-check ①）：函数自己验了 x-cron-secret（非测试源码、去注释后带引号），迁移里却认不出有 cron 调它——
+    # 多半是 URL 写法这里认不出（concat()、拼进变量……），或者 cron 还没写 / 已经 unschedule；报在这个函数的 index.ts
+    verifying = {}
+    for rel, code in sorted(sources.code.items()):
+        fn = owner(rel)
+        if fn is None or is_preview(rel) or _is_test_source(rel):
+            continue
+        m = CRON_SECRET_LITERAL.search(code)
+        if m and (fn not in verifying or rel == f"{fn}/index.ts"):
+            verifying[fn] = line_of(code, m.start()) if rel == f"{fn}/index.ts" else verifying.get(fn, 1)
+    for fn, line in sorted(verifying.items()):
+        if fn not in crons:
+            errors.append(("F9", f"{FN_ROOT}/{fn}/index.ts", line,
+                           f"{fn} 验了 x-cron-secret，但迁移里认不出有 cron（net.http_post）调它：URL 写法认不出或者没有 cron。"
+                           "认得出的写法：… 'functions_url') || '/<名>'、写死的 /functions/v1/<名>、format('%s/<名>', …)；"
+                           "不是 cron 调的函数就别验这个头（也别关 verify_jwt）"))
     for name, conf in fns.items():
         # 预览专用函数归 F6 管；supabase/functions/ 下没有同名目录的（只写了配置、没有函数）设了也不起作用，F6 另查键名，这里不重复报
         if name in PREVIEW_FUNCS or not (root / FN_ROOT / name).is_dir() or not isinstance(conf, dict) or conf.get("verify_jwt") is not False:

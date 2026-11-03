@@ -1,0 +1,28 @@
+[api]
+enabled = true
+
+# 对照：三种新认出的写法，关了校验、函数里验 x-cron-secret → 不报
+[functions.fn-slash]
+verify_jwt = false
+
+[functions.fn-format]
+verify_jwt = false
+
+[functions.fn-multiline]
+verify_jwt = false
+
+# 对照：任务已 unschedule，开着校验 → 不报（以前会报 F9 ①②）
+[functions.fn-old]
+verify_jwt = true
+
+# 违规 F9 ①：unschedule 以后又 schedule 回来，仍是 cron 调的，没关校验
+[functions.fn-again]
+verify_jwt = true
+
+# 对照：$$ 里纯文本带奇数个单引号，后面注释里的 cron.unschedule('keep-job') 不算 → 仍是 cron 调的，关校验不报
+[functions.fn-keep]
+verify_jwt = false
+
+# 对照：具名参数认不出任务名，按不带任务名算数（unschedule(job_name := …) 不起作用）→ 关校验不报
+[functions.fn-named]
+verify_jwt = false
