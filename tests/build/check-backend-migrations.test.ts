@@ -1,7 +1,11 @@
-// build/check_backend.py：M1～M6 迁移写法（search_path、0001 的授权与先后、授权和架构 3.3 C 逐行比对、建表开关）
+// build/check_backend.py：M1～M6 迁移写法（search_path、0001 的授权与先后、授权和架构 3.3 C 逐行比对、建表开关）；
+// F9 迁移里 cron 调的函数和 config.toml 的 verify_jwt 对得上（11-03 PURGE-verify-jwt 补）
 // 从 check-backend.test.ts 按主题拆出（10-30，W1 超行），用例原样不变
 // 每个样例是一棵迷你仓库（tests/arch-fixtures/check_backend/<名字>/），用 --root 指过去；共用的 run、sample、where 在 check-backend-harness.ts
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { ROOT } from '../arch/fixture-header.ts';
 import { run, sample, where } from './check-backend-harness.ts';
 
 describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => {
@@ -70,5 +74,23 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(errors[0]?.message).toContain('note');
     expect(errors[2]?.message).toContain('note');
     expect(errors[3]?.message).toContain('JSON 字面量');
+  });
+
+  it('F9（PURGE-verify-jwt）：cron 调的函数没关 verify_jwt、函数里没验 x-cron-secret（只在注释里提不算）、不是 cron 调的函数关了 verify_jwt、只在 TS 注释或 *.test.ts 里有带引号的 x-cron-secret → 错误；注释里的 /functions/v1/ 地址不算 cron', () => {
+    const { code, errors } = run(sample('f9-cron-verify-jwt'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      'F9 supabase/config.toml:13', // [functions.account] 用户调的函数关了校验（行号按完整键名找，不会落到 account-purge）
+      'F9 supabase/migrations/20261101000000_cron.sql:6', // push-dispatch 没关 verify_jwt
+      'F9 supabase/migrations/20261101000000_cron.sql:9', // ai-classify 函数里没验 x-cron-secret
+      'F9 supabase/migrations/20261101000000_cron.sql:11', // vault-sweep 只在 TS 注释里写了带引号的 'x-cron-secret'（AST 去注释后没有）
+      'F9 supabase/migrations/20261101000000_cron.sql:13', // backup-daily 只在 index.test.ts 里有（测试文件不算）
+    ].sort());
+    expect(errors.find((e) => e.line === 6)?.message).toContain('UNAUTHORIZED_NO_AUTH_HEADER');
+  });
+
+  it('F9：真仓库里 cron 调的 account-purge 已在 supabase/config.toml 关 verify_jwt（预览 401 的回归）', () => {
+    const toml = readFileSync(join(ROOT, 'supabase', 'config.toml'), 'utf8');
+    expect(toml).toMatch(/^\[functions\.account-purge\]\r?\nverify_jwt = false\r?$/m);
   });
 });

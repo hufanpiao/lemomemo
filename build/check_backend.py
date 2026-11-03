@@ -97,6 +97,16 @@ Pages Functions（functions/）和 App、shared：
       .insert / .update / .upsert / .delete，或 SQL 文本里 insert into / update / delete from / merge into private.admins，都报。
       源码（.ts .mjs 等）用 AST 去掉注释后查（字符串里的 SQL 照查）；.sql .psql .ps1 .psm1 .py .sh 按原文查（注释也算，宁严勿漏）。
       只读（.select、select … from private.admins）不报。表名拼出来、存进变量再 .from(变量) 这类写法查不到，靠代码审查
+  F9  pg_cron 调的函数要关网关的 JWT 校验（接手清单 PURGE-verify-jwt，11-03 预览 account-purge 一直 401 UNAUTHORIZED_NO_AUTH_HEADER）：
+      迁移里 net.http_post 调的函数（… 'functions_url') || '/<名>'，或写死的 /functions/v1/<名>，注释不算）——
+      ① 必须在 supabase/config.toml 写 [functions.<名>] verify_jwt = false（cron 只带 x-cron-secret，不带 Authorization；
+         functions deploy 和本地 edge runtime 都按这里的 verify_jwt，默认开着）；
+      ② 函数目录里的非测试源码（*.test.* / *_test.* / *.spec.*、tests/ 目录不算）用 AST 去掉注释后，必须有带引号的 'x-cron-secret'
+         （关了网关校验，鉴权全靠函数自己验这个头；注释里写了带引号的、只在测试里有，都不算）。
+         这条只看“有没有验这个头”；验得对不对（定长比较、错密钥回 401）由各函数单测管——新增 cron 函数必须带“错密钥回 401”的用例；
+      ③ 反过来，config.toml 里 verify_jwt = false 的只准是 cron 调的函数（预览专用函数归 F6 管；
+         supabase/functions/ 下没有同名目录的设了也不起作用，这里跳过）：
+         用户调的函数（account、invite-admin 等）不准关，网关那道 JWT 校验留着
 迁移（supabase/migrations/*.sql）：
   M1  security definer 函数必须写 set search_path = ''（create function 和 alter function 都查，属性写在函数体前后都认）。
       架构 0.29 续第 117 条、TC-B0-92
@@ -758,10 +768,97 @@ def check_bypass(fns, errors):
                                                  "否则“只准某几个函数读”的名单换个函数 import 一下就绕开了"))
 
 
+# F9：cron（net.http_post）调到的函数名。只认两种写法：vault 里 functions_url 拼 '/<名>'，或写死的 /functions/v1/<名>
+CRON_FN_URL = re.compile(r"'functions_url'\s*\)\s*\|\|\s*'/([a-z0-9][a-z0-9_-]*)'|/functions/v1/([a-z0-9][a-z0-9_-]*)")
+
+
+def _strip_sql_comments(text):
+    """去掉 -- 行注释和 /* */ 块注释（换成同样多的换行，行号不变）；字符串里的 -- 不当注释（宁严勿漏，只影响注释判断）"""
+    text = re.sub(r"/\*.*?\*/", lambda m: "\n" * m.group(0).count("\n"), text, flags=re.S)
+    out = []
+    for ln in text.split("\n"):
+        head = ln.split("--", 1)[0]
+        # “--” 前面的单引号是偶数个才算注释开头（奇数个说明 -- 在字符串里）
+        out.append(head if "--" in ln and head.count("'") % 2 == 0 else ln)
+    return "\n".join(out)
+
+
+def cron_functions(root):
+    """迁移里 cron 调的函数：{函数名: (迁移相对路径, 行号)}（同名取第一次出现）"""
+    out = {}
+    mig = root / "supabase" / "migrations"
+    if not mig.is_dir():
+        return out
+    for f in sorted(mig.glob("*.sql")):
+        code = _strip_sql_comments(f.read_text(encoding="utf-8"))
+        if "net.http_post" not in code:
+            continue
+        for m in CRON_FN_URL.finditer(code):
+            name = m.group(1) or m.group(2)
+            out.setdefault(name, (f"supabase/migrations/{f.name}", line_of(code, m.start())))
+    return out
+
+
+CRON_SECRET_LITERAL = re.compile(r"""['"`]x-cron-secret['"`]""", re.IGNORECASE)
+TEST_SOURCE_NAME = re.compile(r"[._](test|spec)\.[^/]+$", re.IGNORECASE)
+
+
+def _fn_decl_line(lines, name):
+    """config.toml 里声明函数 name 的行号：[functions.name] 段头、[functions] 下的 name.xxx / name = {…}，键名可带引号；
+    按完整键名匹配（account 不会匹配到 account-purge）。找不到（比如用转义拼的键名）退到 [functions 第一次出现的行"""
+    q = re.escape(name)
+    pats = (rf"""^\s*\[\s*functions\s*\.\s*["']?{q}["']?\s*[\].]""", rf"""^\s*["']?{q}["']?\s*[.=]""")
+    for pat in pats:
+        for i, line in enumerate(lines, 1):
+            if re.search(pat, line):
+                return i
+    return _toml_line(lines, "[functions")
+
+
+def _is_test_source(rel):
+    """测试文件（部署后不会被调用）：*.test.* / *.spec.* / *_test.* / *_spec.*，或在 tests/、__tests__/ 目录里"""
+    parts = rel.split("/")
+    name = parts[-1]
+    return bool(TEST_SOURCE_NAME.search(name)) or any(d in ("tests", "__tests__") for d in parts[:-1])
+
+
+def check_cron_verify_jwt(root, errors, sources):
+    """F9：cron 调的函数在 config.toml 关 verify_jwt、函数自己验 x-cron-secret；关了 verify_jwt 的只准是 cron 调的函数"""
+    crons = cron_functions(root)
+    cfg = root / CONFIG_TOML
+    text = cfg.read_text(encoding="utf-8") if cfg.exists() else ""
+    lines = text.splitlines()
+    try:
+        fns = tomllib.loads(text).get("functions", {}) if text else {}
+    except tomllib.TOMLDecodeError:
+        return   # 解析不了由 F6 报
+    if not isinstance(fns, dict):
+        return
+    for name, (path, line) in sorted(crons.items()):
+        conf = fns.get(name)
+        if not (isinstance(conf, dict) and conf.get("verify_jwt") is False):
+            errors.append(("F9", path, line, f"cron 调 {name}，但 supabase/config.toml 没写 [functions.{name}] verify_jwt = false："
+                                             "cron 只带 x-cron-secret、不带 Authorization，网关会回 401 UNAUTHORIZED_NO_AUTH_HEADER，函数根本调不到"))
+        # 只看这个函数目录里的非测试源码，用 Fns 的 AST 结果（注释已由 TypeScript 解析器去掉，和 F8 同一套），再找带引号的字符串：
+        # 注释里写了 'x-cron-secret'、只有 *.test.ts 里有，都不算验了
+        src = "".join(code for rel, code in sorted(sources.code.items()) if rel.split("/")[0] == name and not _is_test_source(rel))
+        if not CRON_SECRET_LITERAL.search(src):
+            errors.append(("F9", path, line, f"cron 调 {name}，但 supabase/functions/{name}/ 里没有验 x-cron-secret：关了网关的 JWT 校验以后，鉴权全靠函数自己验这个头"))
+    for name, conf in fns.items():
+        # 预览专用函数归 F6 管；supabase/functions/ 下没有同名目录的（只写了配置、没有函数）设了也不起作用，F6 另查键名，这里不重复报
+        if name in PREVIEW_FUNCS or not (root / FN_ROOT / name).is_dir() or not isinstance(conf, dict) or conf.get("verify_jwt") is not False:
+            continue
+        if name not in crons:
+            errors.append(("F9", CONFIG_TOML, _fn_decl_line(lines, name),
+                           f"[functions.{name}] verify_jwt = false，但迁移里没有 cron 调它：只有 cron 调的函数（自己验 x-cron-secret）才准关网关的 JWT 校验，"
+                           "用户调的函数要留着这道校验"))
+
+
 def check_functions(root, errors):
     check_preview_mentions(root, errors)
     check_config_toml(root, errors)
     fns = Fns(root, errors)
+    check_cron_verify_jwt(root, errors, fns)
     check_preview(fns, errors)
     check_bypass(fns, errors)
     db_roles = {r: db_refs(fns, r)[0] for r in fns.code}   # 每个文件从 db.ts 导入的角色（复审必改，乙方案）

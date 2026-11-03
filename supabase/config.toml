@@ -184,6 +184,14 @@ deno_version = 2
 # 函数的 secret（PROXY_SECRET、VAULT_KEY、AI 和 Resend 的密钥等，8.4、0.31 第 11 条）不写在这里：
 # 本机 `supabase functions serve --env-file supabase/.env.local`；【线上】由负责人或运维按 8.4 设，不经 AI。
 
+# 网关的 JWT 校验（verify_jwt）默认开着，`supabase functions deploy`（预览、正式）和本地 edge runtime 都按这里的设置。
+# 只给 pg_cron 调的函数关掉：cron 的 net.http_post 只带 x-cron-secret、x-region，不带 Authorization，开着就被网关回
+# 401 UNAUTHORIZED_NO_AUTH_HEADER、函数根本调不到（11-03 预览 account-purge 实况，接手清单 PURGE-verify-jwt）；
+# 关了以后鉴权全靠函数自己定长比较 x-cron-secret。用户调的函数（account、invite-admin、invite-signup）和 lemo-ops 调的
+# usage-report 都留着默认的校验。规则由 build/check_backend.py F9 固定：cron 调的必须关、关了的必须是 cron 调的。
+[functions.account-purge]
+verify_jwt = false
+
 [analytics]
 # 本地不需要日志分析，少起一个容器；【线上】照常有
 enabled = false
