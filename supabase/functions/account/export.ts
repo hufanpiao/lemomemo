@@ -2,7 +2,7 @@
 // start：预检前三道闸 → 大小预检 → 扣当天次数 → 建任务 → 写 logs → 响应之后发导出通知；不读任何用户数据（架构 0.47 续 ①“开始”）。
 // part（取一片）在 export-part.ts。对外经 core.ts 转出。
 
-import { exportMail } from '../_shared/account-mail.ts';
+import { exportMail, platformName, type MailLocale } from '../_shared/account-mail.ts';
 import { readProxyHeaders } from '../_shared/proxy-headers.ts';
 import {
   ACCOUNT_DAILY_LIMIT, type ActiveUser, DAY_S, DbError, type Deps, err, type ExportTable, exportLimits, json, keys, mailInfo, type VaultMode,
@@ -58,7 +58,7 @@ const PHONE_LIKE = /(?:\p{Nd}[\s\p{Pd}()/+_]*){6}\p{Nd}/u;
 
 /**
  * 设备名放进邮件正文前清一下（K3 安全审查必改 1：设备名是用户自己写的，拿到会话的人也能改，不能让它变成钓鱼文案）：
- * NFKC 规整 → 去掉方向控制符、零宽字符、控制字符 → 像域名、网址、邮箱的一律整个不用（返回 null，邮件里写通用的“未知设备”）
+ * NFKC 规整 → 去掉方向控制符、零宽字符、控制字符 → 像域名、网址、邮箱的一律整个不用（返回 null，由 deviceDisplay 退回平台名）
  * → 截到 40 个字符。判断在截断之前做，截断只为版面。
  */
 export function cleanDeviceLabel(v: string | null): string | null {
@@ -66,6 +66,15 @@ export function cleanDeviceLabel(v: string | null): string | null {
   const s = v.normalize('NFKC').replace(BIDI_ZERO_WIDTH, '').replace(CONTROL, ' ').replace(/\s+/g, ' ').trim();
   if (!s || LINK_LIKE.test(s) || PHONE_LIKE.test(s)) return null;
   return [...s].slice(0, 40).join('');
+}
+
+/**
+ * 邮件里写的设备名（负责人 11-03 定）：用户起的名字（清过、能用）优先；没起名字、名字被上面过滤掉时，按 platform 写设置页同样的平台名
+ * （iPhone、Windows 电脑……）；这台设备在库里查不到（没带 device_id、别人的、已删）或平台值认不出，写“未知设备”
+ */
+export function deviceDisplay(dev: { label: string | null; platform: string | null } | null, loc: MailLocale): string {
+  if (!dev) return platformName(null, loc);
+  return cleanDeviceLabel(dev.label) ?? platformName(dev.platform, loc);
 }
 
 // ---------------- 隐私记过滤（start 不用，part 用；和 export_size_over 的过滤一致） ----------------
@@ -216,11 +225,11 @@ function exportNotice(req: Request, user: ActiveUser, deps: Deps, deviceId: stri
   deps.background((async () => {
     let sent = false;
     try {
-      const [info, label] = await Promise.all([
+      const [info, dev] = await Promise.all([
         mailInfo(deps, user.userId),
         deviceId ? store.deviceLabel(user.userId, deviceId).catch(() => null) : Promise.resolve(null),
       ]);
-      if (info) sent = await deps.sendMail(info.email, exportMail(info.loc, at, info.tz, cleanDeviceLabel(label), proxy.geo)).catch(() => false);
+      if (info) sent = await deps.sendMail(info.email, exportMail(info.loc, at, info.tz, deviceDisplay(dev, info.loc), proxy.geo)).catch(() => false);
     } catch {
       sent = false;
     }

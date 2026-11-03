@@ -46,7 +46,7 @@ export class FakeDb {
   /** src：account 自己写的是 'account'；测试直接塞的行可以不带（当作客户端上传的日志） */
   logs: { id: number; user_id: string; act: string; device: string | null; t: number; src?: string; code?: string; fields?: string[] }[] = [];
   private logSeq = 0;
-  devices = new Map<string, { user_id: string; label: string | null }>();
+  devices = new Map<string, { user_id: string; label: string | null; platform?: string | null }>();
   tables = new Map<string, Record<string, unknown>[]>();   // 导出读的 public 表
   /** readPage 每次调用的（表、after），测试核对按主键翻页 */
   pageReads: { table: string; after: string | number | null; limit: number }[] = [];
@@ -172,7 +172,7 @@ export class FakeDb {
       requestDeletion: async (u) => { this.guard('requestDeletion'); return this.requestDeletion(u); },
       restore: async (u) => { this.guard('restore'); return this.restore(u); },
       profile: async (u) => { const p = this.profiles.get(u); return p ? { ui_locale: p.ui_locale, current_tz: p.current_tz } : null; },
-      deviceLabel: async (u, d) => { const v = this.devices.get(d); return v && v.user_id === u ? v.label : null; },
+      deviceLabel: async (u, d) => { const v = this.devices.get(d); return v && v.user_id === u ? { label: v.label, platform: v.platform ?? null } : null; },
       insertLog: async (u, row) => {
         this.guard(`insertLog:${row.act}`);
         const extra = { ...(row.code === undefined ? {} : { code: row.code }), ...(row.fields === undefined ? {} : { fields: row.fields }) };

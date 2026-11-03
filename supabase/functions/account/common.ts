@@ -108,8 +108,9 @@ export interface AccountStore {
   restore(userId: string): Promise<string>;
   /** profiles 的 ui_locale、current_tz（发信用）；没有返回 null */
   profile(userId: string): Promise<{ ui_locale: string | null; current_tz: string | null } | null>;
-  /** 本人这台设备的名字（devices.label，按 id 和 user_id 一起查）；查不到返回 null */
-  deviceLabel(userId: string, deviceId: string): Promise<string | null>;
+  /** 本人这台设备的名字和平台（devices.label、platform，按 id 和 user_id 一起查）；查不到返回 null。
+   *  方法名沿用 deviceLabel（store-timeout 和测试按这个名字记调用）；label 为空时邮件按 platform 写设置页的平台名（11-03） */
+  deviceLabel(userId: string, deviceId: string): Promise<{ label: string | null; platform: string | null } | null>;
   insertLog(userId: string, row: LogRow): Promise<void>;
   /** 本人这次导出（code = export_id）是不是已经记过 export_done（最后一片重复请求时不再写第二条，代码审查 E1） */
   exportDoneLogged(userId: string, exportId: string): Promise<boolean>;

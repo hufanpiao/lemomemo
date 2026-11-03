@@ -117,8 +117,9 @@ function makeStore(admin: Admin, signal: AbortSignal): AccountStore {
       return must(await admin.from('profiles').select('ui_locale, current_tz').eq('user_id', userId).abortSignal(signal).maybeSingle());
     },
     async deviceLabel(userId, deviceId) {
-      const row = must(await admin.from('devices').select('label').eq('id', deviceId).eq('user_id', userId).abortSignal(signal).maybeSingle()) as { label: string | null } | null;
-      return row?.label ?? null;
+      const row = must(await admin.from('devices').select('label, platform').eq('id', deviceId).eq('user_id', userId).abortSignal(signal).maybeSingle()) as
+        { label: string | null; platform: string | null } | null;
+      return row ? { label: row.label ?? null, platform: row.platform ?? null } : null;
     },
     async insertLog(userId, row) {
       must(await admin.from('logs').insert({ user_id: userId, ...row }).abortSignal(signal));

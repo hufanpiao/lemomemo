@@ -130,6 +130,31 @@ export function restoredMail(loc: MailLocale): Mail {
   };
 }
 
+/**
+ * 设备的通用名（负责人 11-03 定：通知邮件里设备没起名字时，按 devices.platform 写设置页同样的平台名）。
+ * 和前端设置页词典 settings.platform.*（src/features/settings/i18n/zh.ts、ko.ts）逐字相同、键一一对应；
+ * tests/functions/account-mail-platform.test.ts 逐条比对，前端改了文案这里要跟着改。
+ * 只有中、韩两种：App 和邮件都只有这两种语言（MailLocale）。平台值认不出（不在 0001 的 check 里）时用 unknown（未知设备）
+ */
+export const PLATFORM_KEYS = ['ios', 'windows', 'tauri', 'web', 'unknown'] as const;
+export type PlatformKey = typeof PLATFORM_KEYS[number];
+const PLATFORM_ZH: Record<PlatformKey, string> = { ios: 'iPhone', windows: 'Windows 电脑', tauri: '电脑版', web: '网页', unknown: '未知设备' };
+const PLATFORM_KO: Record<PlatformKey, string> = { ios: 'iPhone', windows: 'Windows PC', tauri: 'PC 앱', web: '웹', unknown: '알 수 없는 기기' };
+/** 测试比对用（按语言取整份）；函数里一律经 platformName 取，不用变量当键（check_backend F7） */
+export const PLATFORM_NAMES: Readonly<Record<MailLocale, Readonly<Record<PlatformKey, string>>>> = { 'zh-CN': PLATFORM_ZH, 'ko-KR': PLATFORM_KO };
+
+/** 平台值 → 这种语言的通用名；不是 ios / windows / tauri / web 的（含 null、大小写不同、原型链上的名字）一律“未知设备” */
+export function platformName(platform: unknown, loc: MailLocale): string {
+  const n = loc === 'ko-KR' ? PLATFORM_KO : PLATFORM_ZH;
+  switch (platform) {
+    case 'ios': return n.ios;
+    case 'windows': return n.windows;
+    case 'tauri': return n.tauri;
+    case 'web': return n.web;
+    default: return n.unknown;
+  }
+}
+
 /** 导出地区：两样都是 '-' 或没有时写“未知地区”；不写 IP 本身（第 96 条①） */
 export function fmtGeo(geo: { country: string; city: string } | null, loc: MailLocale): string {
   const unknown = loc === 'ko-KR' ? '알 수 없는 지역' : '未知地区';
@@ -146,14 +171,14 @@ export function exportMail(loc: MailLocale, atMs: number, tz: unknown, device: s
   const when = fmtWhen(atMs, tz, loc);
   const where = fmtGeo(geo, loc);
   if (loc === 'ko-KR') {
-    const dev = device ?? '알 수 없는 기기';
+    const dev = device ?? PLATFORM_KO.unknown;
     return {
       subject: '방금 레모 데이터를 내보냈어요',
       text: `방금 레모 데이터 내보내기가 실행됐어요.\n\n시간: ${when}\n기기: ${dev}\n지역: ${where}\n\n`
         + '본인이 내보낸 것이 아니라면 지금 바로 레모 앱을 열어 설정에서 “다른 모든 기기에서 로그아웃”을 눌러 주세요.',
     };
   }
-  const dev = device ?? '未知设备';
+  const dev = device ?? PLATFORM_ZH.unknown;
   return {
     subject: '你的柠檬记数据刚刚被导出',
     text: `你的柠檬记数据刚刚被导出。\n\n时间：${when}\n设备：${dev}\n地区：${where}\n\n`
