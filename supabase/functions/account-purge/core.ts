@@ -23,8 +23,8 @@
 //        （两个码都只在真删成时记，没删成记 purge_forced_attempt）。进了照删期，第一段就不再给它补发、不再顺延（第三轮中 C）。
 //        局限（第三轮低 J）：发信接口超时、Resend 其实收下了的那次，用户手里有一封写着“现在 + 24 小时”的补发信，
 //        而第 3 天照删可能早于信里的时刻（只在接口超时时出现，见执行记录“局限”）。
-//        这几个日志码只在函数日志里，没有告警通道直接读它们；held、forced 也不进 usage-report 白名单（接手清单 PURGE-heartbeat-ops），
-//        运维侧现在靠 lemo-ops 的 purge:overdue（到期超过 1 天还没执行）兜底发现扣着的账号。
+//        这几个日志码只在函数日志里；心跳里的 held、remaining、forced 三个数字经 usage-report 白名单转发，
+//        lemo-ops 据此提示（PURGE-heartbeat-ops，workers/lemo-ops/src/purge-detail.ts），purge:overdue（到期超过 1 天还没执行）照旧兜底。
 //     1. 认领：单条 update 写 purge_started_at（只认没认领的、或认领超过 1 小时的，0.38 第 44 条、TC-B1-108 ③）；
 //        认领不到就跳过（restore 抢先了，或别的一次正在做）。
 //        认领后再核对：不在 admins 里、profile 还在且是停用状态（冷静期里被管理员停用的照样删，0.38 第 43 条）；

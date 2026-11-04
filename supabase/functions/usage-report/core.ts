@@ -107,10 +107,12 @@ function json(status: number, body: unknown): Response {
 export const MIN_SECRET_BYTES = 32;
 
 /**
- * heartbeat.detail 只转发这些字段，其余一律丢掉：数字字段（cleanup 的 rows、ms；push-dispatch 的 claimed、sent、failed；account-purge 的 purged）、
- * 布尔字段（push-dispatch 的 budget_hit）。claimed、budget_hit 是 B2 加的（安全审查 D2-S2：只加数字和布尔，不加别的；O-3 “claimed 与 sent 之差”要用）
+ * heartbeat.detail 只转发这些字段，其余一律丢掉：数字字段（cleanup 的 rows、ms；push-dispatch 的 claimed、sent、failed；account-purge 的 purged、
+ * held、remaining、forced）、布尔字段（push-dispatch 的 budget_hit）。claimed、budget_hit 是 B2 加的（安全审查 D2-S2：只加数字和布尔，不加别的；
+ * O-3 “claimed 与 sent 之差”要用）。held、remaining、forced 是 PURGE-heartbeat-ops 加的（同一口径：只是个数，没有任何账号标识；
+ * lemo-ops 的 purge-detail.ts 用它们提示“没收到提醒暂不删”“连续两天没做完”“没收到提醒就照删”）
  */
-export const DETAIL_FIELDS = ['rows', 'ms', 'claimed', 'sent', 'failed', 'purged'] as const;
+export const DETAIL_FIELDS = ['rows', 'ms', 'claimed', 'sent', 'failed', 'purged', 'held', 'remaining', 'forced'] as const;
 export const DETAIL_BOOL_FIELDS = ['budget_hit'] as const;
 
 type TimingSafeEqual = (a: ArrayBuffer | ArrayBufferView, b: ArrayBuffer | ArrayBufferView) => boolean;

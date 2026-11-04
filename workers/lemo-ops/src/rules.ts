@@ -3,10 +3,12 @@
 // usage-report 只报“距今多少秒”，阈值只写在这里一处。
 
 import { evaluateOrphans, parseOrphans, SCOPE_ORPHAN, type OrphanReport } from './orphans.ts';
+import { evaluatePurgeDetail, evaluatePurgePending } from './purge-detail.ts';
 import { fmtAge } from './stamp.ts';
 
 export { fmtAge };
 export { evaluateOrphans, ORPHAN_UNREADABLE, ORPHAN_USERS, SCOPE_ORPHAN, type OrphanReport } from './orphans.ts';
+export { evaluatePurgeDetail, evaluatePurgePending, PURGE_FORCED, PURGE_HELD, PURGE_OVERDUE_S, PURGE_REMAINING, PURGE_REMAINING_ROUNDS, PURGE_STUCK_S } from './purge-detail.ts';
 
 /** 一件要告警的事。key 用来去重：同一个 key 6 小时内只发一次，消失后发“已恢复” */
 export interface Issue {
@@ -66,10 +68,6 @@ export const HEARTBEAT_LIMITS: Readonly<Record<string, { limitS: number; label: 
  */
 export const PUSH_DETAIL_FIELDS = ['claimed', 'sent', 'failed'] as const;
 
-/** 冷静期到期超过 1 天还没开始删（0.29 续第 143 条；TC-B1-102 ③） */
-export const PURGE_OVERDUE_S = 24 * HOUR;
-/** 认领了（purge_started_at）超过 26 小时还没删完（0.29 续第 143 条；TC-B1-102 ⑤） */
-export const PURGE_STUCK_S = 26 * HOUR;
 /** 30 天清理单批超过 2 分钟告警（0.29 续第 135 条）；只看最近 30 分钟内写的那次心跳，免得旧的一批整天重复告警 */
 export const CLEANUP_SLOW_MS = 2 * MIN * 1000;
 const CLEANUP_RECENT_S = 30 * MIN;
@@ -292,23 +290,9 @@ export function evaluateHeartbeat(r: HeartbeatReport, required: readonly string[
     }
   }
 
-  const overdue = r.pending_deletions.filter((p) => p.purge_started_at === null && p.overdue_s > PURGE_OVERDUE_S);
-  if (overdue.length > 0) {
-    const worst = Math.max(...overdue.map((p) => p.overdue_s));
-    active.push({
-      key: 'purge:overdue',
-      title: '注销冷静期已满、超过 1 天还没删除',
-      lines: [`有 ${overdue.length} 个账号 purge_after 已过 1 天以上还没开始删，最久的过了 ${fmtAge(worst)}。`, '请看 account-purge 的 cron 是否停了、函数日志里的错误码。'],
-    });
-  }
-  const stuck = r.pending_deletions.filter((p) => p.started_age_s !== null && p.started_age_s > PURGE_STUCK_S);
-  if (stuck.length > 0) {
-    active.push({
-      key: 'purge:stuck',
-      title: '注销删除认领了没删完',
-      lines: [`有 ${stuck.length} 个账号 purge_started_at 超过 26 小时还在：${stuck.map((p) => p.purge_started_at ?? '').join('、')}。`, 'usage-report 的“冷静期中的账号”里能看到这几行。'],
-    });
-  }
+  // account-purge 的五条（purge:overdue、purge:stuck 看冷静期中的账号；held、remaining、forced 看心跳 detail，PURGE-heartbeat-ops）：
+  // 都在 purge-detail.ts。key 都以 purge: 开头，查过的范围已在 HEARTBEAT_SCOPES 里
+  active.push(...evaluatePurgePending(r.pending_deletions), ...evaluatePurgeDetail(byName.get('account-purge')?.detail));
 
   if (r.long_tx > 0) {
     active.push({ key: 'longtx', title: '数据库有超过 4 分钟的长事务', lines: [`现在有 ${r.long_tx} 个（private.long_transactions()）。不含 SQL 原文，请到控制台看。`] });

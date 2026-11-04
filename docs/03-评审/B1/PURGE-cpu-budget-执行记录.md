@@ -111,7 +111,7 @@
   - `failed` 里也可能有永远不会好的（`bad_user_id`），会一直算进去。
 
   这个口径写在 `core.ts` 的心跳注释里。
-- 运维侧要不要看到：usage-report 的 `DETAIL_FIELDS` 现在不转发这些新字段，lemo-ops 只读 `age_s`，新字段不破坏它。建议（**这次没改白名单**）：
+- 运维侧要不要看到（**后来已由 PURGE-heartbeat-ops 做了，见第 15 节**；下面是当时的建议）：当时 usage-report 的 `DETAIL_FIELDS` 不转发这些新字段，lemo-ops 只读 `age_s`，新字段不破坏它。建议（**这次没改白名单**）：
   - 把 `held` 和 `remaining` 两个数字加进 `DETAIL_FIELDS`；
   - lemo-ops 加两条：`held > 0` 当天就提示（有人没收到提醒、删号卡住了）；`remaining > 0` 连续 2 天提示（删号在积压）。
   - 按安全审查 D2-S2 的口径只加数字，要过安全审查。
@@ -157,7 +157,7 @@
   - Auth 里没有邮箱的（第一段取到 null，日志 `remind_no_email:<前 8 位>`），到期直接删，日志 `purge_no_email_no_notice:<前 8 位>`；
   - 两种都算进心跳新字段 `forced`（只算真删成的）；
   - `@lemomemo.test` 测试邮箱真函数不真发（`mail_skipped_test`），按同一条规则：扣 3 天，超过 3 天照删；TC-B7a-05 已对上（第 11 节低 E）。
-  - 这几个日志码现在只在函数日志里；要进告警得按 PURGE-heartbeat-ops 把 `held`、`forced` 转发进 usage-report（要过安全审查）。在那之前，扣着的账号由 lemo-ops 的 `purge:overdue` 兜底发现。
+  - 这几个日志码只在函数日志里。心跳里的 `held`、`remaining`、`forced` 已由 PURGE-heartbeat-ops 转发进 usage-report 并接上 lemo-ops 的提示（第 15 节，待安全审查）；`purge:overdue` 照旧兜底。
 - 新测试 `tests/functions/account-purge-hold.test.ts`（8 条）：
   - 中 A：`purge_after` 只比 `t0` 晚 2 秒、发信花 5 秒，这一轮发普通提醒、不删、不另外顺延，下一轮才删；已经提醒过、第一段跑了 5 秒的，按 `t0` 这一轮不删；刚提醒过、顺延没成但 `notice_sent` 已是 true 的，这一轮不删（`purge_held_just_reminded`）；
   - 中 B：3 天内每轮照旧补发、不删，超过 3 天照删并记 `purge_forced_no_notice`；扣着的 3 天里补发成功就照常顺延；没有邮箱的到期直接删；没有邮箱但没到期的不删；`@lemomemo.test` 测试邮箱扣 3 天、之后照删、一封都没真发。
@@ -236,6 +236,61 @@
   | 假库 `listRemind` 不看下限 | 1 |
   | 假库 `listRemind` 不排除已认领的（复跑） | 1 |
   | 没有下限、也去掉照删期 continue | 3 |
+
+### 15. PURGE-heartbeat-ops（11-04，待安全审查）
+
+- usage-report：`DETAIL_FIELDS` 白名单加了 `held`、`remaining`、`forced` 三个数字字段。
+  - 和 D2-S2 同一口径：只加数字、不加别的，非数字一律丢；
+  - account-purge 心跳本来就只有数字、没有任何账号标识；
+  - 白名单是所有心跳共用的，别的心跳写了同名数字也会转发，但 lemo-ops 只看 account-purge 那一行。
+- lemo-ops：新模块 `workers/lemo-ops/src/purge-detail.ts`（照 orphans.ts 的写法拆出，免得 rules.ts 超行数），由 `evaluateHeartbeat` 调用。
+  - 三条提示：
+
+    | key | 条件 | 什么时候发 |
+    |---|---|---|
+    | `purge:held` | `held > 0` | 当天（这一轮就发） |
+    | `purge:remaining` | `remaining > 0` | 连续 104 轮（26 小时）都 > 0 才发 |
+    | `purge:forced` | `forced > 0` | 当天（这一轮就发） |
+
+  - key 都以 `purge:` 开头，已在 `HEARTBEAT_SCOPES` 里，“已恢复”、6 小时去重、每天限额照 alerts.ts 的通用做法；
+  - 标题不带个数，正文只写个数，不写 user_id、邮箱；文案中文，照现有写法；
+  - “连续 2 天”的口径：心跳只记最近一轮，最后一轮的值留到第二天 03:30。偶尔 > 0 是正常的（留给 15 分钟后的补跑），所以用 alerts.ts 已有的 `minRounds` 宽限期，要连续 26 小时都 > 0 才发。26 小时盖住了第二天整段运行时间（03:30～05:30），意思是连着两天的运行都没清到 0；中间只要抽到一轮是 0，就从头算。
+- 局限：
+  - `forced` 是“这一轮发生了”的数，下一轮通常就回到 0，所以这件事随后会报“已恢复”；
+  - lemo-ops 每 15 分钟只抽一次心跳，和 account-purge 的运行刚好错开时，可能漏看某一轮的 `forced`（和推送失败比例是同一个抽样局限），漏掉的那次在函数日志 `purge_forced_no_notice` 里还在；
+  - 要不漏，得让 account-purge 在心跳里按天累计，要改 `core.ts`，这次没做。
+- 测试 `tests/functions/lemo-ops-purge.test.ts`（9 条）：
+  - 白名单：account-purge 真写的 12 个键，只放行 purged、failed、held、remaining、forced（和原有的 sent、ms）；三个新键是字符串、布尔、对象、数组、null 的都丢；混进来的 user_id、邮箱不转发；
+  - 判断边界：0 不报、1 就报；负数、小数、字符串、缺字段不判；标题不带个数；只看 account-purge 那一行；
+  - 端到端（真 usage-report 白名单 → 判断 → 去重发信）：`held` 这一轮就发、回到 0 两轮后发“已恢复”；`forced` 这一轮就发；`remaining` 第 103 轮不发、第 104 轮发，中间有一轮回到 0 就从头算。
+  - `lemo-ops-harness.ts` 加了 `setPurgeDetail`（照 `setPushDetail` 的写法）。
+- 变异（独立副本 `scratchpad/mut-hbops`，含 workers 目录，node_modules 用联接，用完已删）：跑 lemo-ops、usage-report、push-dispatch 对齐测试共 184 条，基线全过，下面 10 种每种至少 2 条失败。
+
+  | 变异 | 失败条数 |
+  |---|---|
+  | 白名单少 `held` | 3 |
+  | 白名单少 `remaining` | 2 |
+  | 白名单少 `forced` | 2 |
+  | 白名单不看类型（字符串等也转发） | 3 |
+  | `held >= 0` 就报 | 3 |
+  | `forced` 要大于 1 才报 | 2 |
+  | `remaining` 没有宽限期 | 2 |
+  | `remaining` 宽限期改成 24 小时 | 2 |
+  | 读的是 push-dispatch 那一行 | 4 |
+  | `evaluateHeartbeat` 没接上 | 4 |
+
+- 为了不让 `rules.ts` 超 max-lines（改之前正好 300 行），把 account-purge 现有的两条 `purge:overdue`、`purge:stuck` 连同常量 `PURGE_OVERDUE_S`、`PURGE_STUCK_S`，原样挪进 `purge-detail.ts` 的 `evaluatePurgePending`。`rules.ts` 照旧导出这两个常量，行为不变，原有测试全过。挪完在第二个独立副本里重跑了一组变异：
+
+  | 变异 | 失败条数 |
+  |---|---|
+  | 没接 `evaluatePurgePending` | 4 |
+  | 没接 `evaluatePurgeDetail` | 4 |
+  | 读的是 push-dispatch 那一行 | 4 |
+  | 逾期改成 2 天 | 3 |
+  | 卡住改成 25 小时 | 1 |
+
+- 不涉及数据库（没有迁移、没有 SQL），这次没起本机 lemo-b2push。
+- 没改 `account-purge/core.ts`（在复审）。它文件头里还写着“held、forced 也不进 usage-report 白名单（接手清单 PURGE-heartbeat-ops）”，这句注释已经过时，等复审完一起改。
 
 ## 单元测试
 

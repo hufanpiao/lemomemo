@@ -27,6 +27,8 @@ export function world() {
   let longTx = 0;
   let cleanupMs: number | undefined;
   let pushDetail: unknown = null;
+  /** account-purge 心跳的 detail（PURGE-heartbeat-ops：held、remaining、forced 经 usage-report 白名单转发） */
+  let purgeDetail: unknown = null;
   let mode: 'ok' | 'db_error' | 'db_slow' | 'bad_ts' | 'http500' | 'hang' | 'bad_body' | 'network' = 'ok';
   let resendDown = false;
   let keepaliveStatus = 200;
@@ -47,7 +49,7 @@ export function world() {
       if (mode === 'db_error') throw new Error('connection refused');
       if (mode === 'db_slow') return new Promise(() => {});
       if (mode === 'bad_ts') return [{ name: 'push-dispatch', at: 'not-a-date', detail: null }];
-      return [...hb].map(([name, at]) => ({ name, at: new Date(at).toISOString(), detail: name === 'cleanup' && cleanupMs !== undefined ? { rows: 1000, ms: cleanupMs } : name === 'push-dispatch' ? pushDetail : null }));
+      return [...hb].map(([name, at]) => ({ name, at: new Date(at).toISOString(), detail: name === 'cleanup' && cleanupMs !== undefined ? { rows: 1000, ms: cleanupMs } : name === 'push-dispatch' ? pushDetail : name === 'account-purge' ? purgeDetail : null }));
     },
     async pendingDeletions() {
       return pending.map((p) => ({ purge_after: new Date(p.purge_after).toISOString(), purge_started_at: p.purge_started_at === null ? null : new Date(p.purge_started_at).toISOString() }));
@@ -164,6 +166,9 @@ export function world() {
     },
     setPushDetail(d: unknown) {
       pushDetail = d;
+    },
+    setPurgeDetail(d: unknown) {
+      purgeDetail = d;
     },
     setMode(m: typeof mode) {
       mode = m;
