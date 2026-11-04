@@ -68,6 +68,16 @@ html.scroll-locked body {
   overflow: hidden;
 }
 
+/* 触屏上文档始终比视口高 1px、一直可以滚动（CI-webkit-crash，11-04）：整页 View Transition 播放期间，文档从“不到一屏、不能滚”
+   变成“超过一屏、能滚”（注销页 → 设置首页；今天页 → 第一次进日历，月历分包在过渡途中挂进来），webkit 整个页面崩溃（Page crashed）。
+   二分（5e0eaf2 对 4805049）：旧页面本来就能滚、或新页面不超一屏都不崩；这条规则让“能不能滚”在换页前后不变。
+   1px 的滚动量手指感觉不到（iPhone 本来就有回弹）；电脑上（有悬停的设备）不加，免得短页面也常显滚动条 */
+@media (hover: none) {
+  html {
+    min-height: calc(100% + 1px);
+  }
+}
+
 /* 页面切换（17.2 第 1、3 点，17.3；UI-4 L-3）：View Transitions 整页交叉淡入淡出接令牌，
    不用浏览器默认的 0.25s ease。--ease-standard 只留给页面切换。
    减少动态效果时 motion 的 transition() 直接切换、不起 View Transition，走不到这里 */

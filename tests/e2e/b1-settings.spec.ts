@@ -33,8 +33,11 @@ test.describe('设置页骨架', () => {
     await page.goto(SETTINGS);
     const main = settingsMain(page);
     await expect(main).toBeVisible();
+    // 日历组包在 <Suspense fallback={null}> 里懒加载：先等它出来，再一次性读标题（否则 webkit 常读到少了“日历”的列表）
+    await expect(main.locator('[data-section-slot="calendar"]').getByTestId('settings-cal-entry')).toBeVisible();
     const groups = (await main.getByRole('heading', { level: 2 }).allTextContents()).map((s) => s.trim());
-    expect(groups.slice(0, 3)).toEqual(['账号', '界面语言', '数据']);
+    // B2 FA-3（R-320）在界面语言和数据之间加了“日历”组（节假日三选一的入口）
+    expect(groups.slice(0, 4)).toEqual(['账号', '界面语言', '日历', '数据']);
 
     const account = main.locator('section[data-section="account"]');
     const data = main.locator('section[data-section="data"]');

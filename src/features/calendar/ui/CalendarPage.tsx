@@ -141,7 +141,7 @@ export default function CalendarPage() {
   const { p } = fold;
 
   return (
-    <main className={styles.page} data-testid="calendar-page" data-mode={model.view.mode} data-folded={fold.byWeek || undefined}>
+    <main className={styles.page} data-feature="calendar" data-testid="calendar-page" data-mode={model.view.mode} data-folded={fold.byWeek || undefined}>
       <h1 className={styles.srOnly}>{t('cal.h1', {})}</h1>
       {picking && !model.wide ? <PickScrim /> : null}
       <div className={styles.top}>
