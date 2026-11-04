@@ -85,6 +85,15 @@ describe.each(['production', 'preview', 'e2e', 'e2e-real'] as const)('T5 / TC-B0
     expect(effective(text, '/app/auth/index.html').get('cache-control')).toEqual(['no-cache']);
   });
 
+  it('节假日 JSON 不缓存（架构 5.4；安全审查 FA3-1）：只有一条 no-cache，安全头照样从 /app/* 继承', () => {
+    for (const path of ['/app/holidays/cn/2026.json', '/app/holidays/kr/2027.json']) {
+      const h = effective(text, path);
+      expect(h.get('cache-control'), path).toEqual(['no-cache']);
+      expect(h.get('x-content-type-options'), path).toEqual(['nosniff']);
+      expect(h.get('content-security-policy'), path).toHaveLength(1);
+    }
+  });
+
   it('登录页和主 App 的 connect-src 一样：只有 self 和本环境的 Realtime 地址', () => {
     const auth = effective(text, '/app/auth/').get('content-security-policy')?.[0] ?? '';
     const main = effective(text, '/app/').get('content-security-policy')?.[0] ?? '';

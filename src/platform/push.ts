@@ -186,12 +186,23 @@ export function forgetPushClaim(storage?: () => Storage | null): void {
  * 退出、被移除、注销、换账号时把浏览器这一侧断开（B2 安全审查六之三 FE-2）：
  * ① 关掉本 App 已显示的所有通知（通知中心里不留上一个账号的标题；getNotifications 不支持就跳过）
  * ② 退订推送（unsubscribePush），旧账号的推送哪怕服务器没删掉 devices 行也到不了这台设备。
+ *    通知权限不是 granted 时不退订（B2 FA-3 安全审查 PUSH-getsub-hang，P-1～P-6）：此时推送显示不出来，
+ *    残留订阅由删 devices 行、claim 第 d 步和 FE-1 兜。只有 Notification 存在、且权限明确是 denied / default 才跳过；
+ *    没有 Notification、读取抛错都照常退订（拿不准就退订）。跳过的只是退订这一步：认领记录和关通知照常先做。
+ *    （Playwright 自带的 WebKit 没有推送服务，getSubscription 会卡死主线程、2 秒上限也兜不住；默认 default 权限正好走跳过）
  * 拿到的 endpoint 不记录、不交出去：服务器上的 devices 行由退出流程 ① 按会话删。
  * exe 没有网页推送：只关掉 exe 已弹出的全部本机通知（platform 桥的 closeAllLocalReminders，安全审查 X-5；
  * 和网页的“关通知、再退订”在退出流程的同一个位置）。整体最多等 ms，出错、超时都 resolve，不抛
  */
 export function disconnectBrowserPush(
-  env: { win?: object; registration?: () => Promise<PushRegistrationLike | null>; closeLocal?: () => Promise<void>; storage?: () => Storage | null } = {},
+  env: {
+    win?: object;
+    registration?: () => Promise<PushRegistrationLike | null>;
+    closeLocal?: () => Promise<void>;
+    storage?: () => Storage | null;
+    /** 当前通知权限（默认 Notification.permission；没有 Notification 时返回 null，不能当 default，见 skipUnsubscribe） */
+    permission?: () => NotificationPermission | null;
+  } = {},
   ms: number = DISCONNECT_PUSH_MS,
 ): Promise<void> {
   // 先删本机的认领记录（安全审查 FA2-1：含账号信息的键退出时不留）；网页、exe 两边都删
@@ -213,9 +224,27 @@ export function disconnectBrowserPush(
     } catch {
       // 不支持 getNotifications（iOS 未核实）：照样退订
     }
+    // 通知权限明确不是 granted：推送显示不出来，不退订（不调 getSubscription，P-1、P-2）
+    if (skipUnsubscribe(env.permission ?? strictPermission)) return;
     await unsubscribePush({ win: env.win ?? globalThis, registration: async () => reg });
   };
   return withinMs(run, ms);
+}
+
+/**
+ * 退出时读通知权限（PUSH-getsub-hang P-2）：没有 Notification 返回 null。
+ * 不复用 defaultPermission：那个在没有 Notification 时返回 'default'，会把“拿不准”当成“可以不退订”
+ */
+const strictPermission = (): NotificationPermission | null => (typeof Notification !== 'undefined' ? Notification.permission : null);
+
+/** 只有权限明确是 denied / default 才跳过退订；null（没有 Notification）、别的值、读取抛错都照常退订 */
+function skipUnsubscribe(read: () => NotificationPermission | null): boolean {
+  try {
+    const p = read();
+    return p === 'denied' || p === 'default';
+  } catch {
+    return false;
+  }
 }
 
 /** 跑 fn，最多等 ms；出错、超时都 resolve（退出流程不能被卡住） */
