@@ -154,7 +154,12 @@ test.describe('设置页骨架', () => {
   // 注销页原来是设置页里的本地状态、没有历史记录，侧滑（浏览器后退）直接退回今天；现在有自己的地址 #/settings/delete
   test('今天 → 设置 → 注销账号：后退一次回设置、再后退回今天；注销页“‹ 返回”同样回设置、不多压一条历史', async ({ page }) => {
     await page.goto('/app/#/today');
-    await page.getByRole('link', { name: /设置/ }).click();
+    await expect(page.locator('main[data-feature="today"]')).toBeVisible();
+    // B2 FA-2 起今天页是真页面，不再有占位页右上角那个“设置”链接（底栏还没接）：改成和点 <a href="#/settings"> 等价的
+    // 改 hash（同样新压一条历史、走 hashchange），历史记录的断言不变。底栏接上后改回点底栏的“设置”
+    await page.evaluate(() => {
+      location.hash = '#/settings';
+    });
     await expect(settingsMain(page)).toBeVisible();
     await expect(page).toHaveURL(/#\/settings$/);
     await page.getByTestId('settings-delete-entry').click();

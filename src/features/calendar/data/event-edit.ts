@@ -105,9 +105,12 @@ function supportedTz(): readonly string[] {
   }
 }
 
-/** 这个时区能不能写（Intl 认得、表里有，或者就是原来存的值） */
-export function tzAllowed(tz: Tz, original: Tz | null, list: () => readonly string[] = supportedTz): boolean {
-  if (tz === original) return true;
+/**
+ * 这个时区能不能写（Intl 认得、表里有，或者是 keep 里的值：原来存的、本机的）。
+ * 本机时区要放进 keep：Intl.supportedValuesOf 不列 'UTC'（也可能只列旧名），本机就是 UTC 时切回有时刻会被拒（CI TZ=UTC 暴露）
+ */
+export function tzAllowed(tz: Tz, keep: Tz | null | readonly (Tz | null)[], list: () => readonly string[] = supportedTz): boolean {
+  if (typeof keep === 'string' ? tz === keep : keep !== null && keep.includes(tz)) return true;
   if (!isValidTz(tz)) return false;
   // Intl.supportedValuesOf 不可用（Safari 15.4 以前）时表是空的：退回只看 isValidTz（代码审查 S5），不然切回有时刻时本机时区也过不了
   const all = list();

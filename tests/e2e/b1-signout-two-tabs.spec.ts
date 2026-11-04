@@ -8,7 +8,7 @@
 // webkit 项目默认是 iPhone，登录页只给教程：这里统一换成桌面 Safari 的 UA、不带触屏，两个浏览器都点真按钮。
 // e2e 构建拿不到 supabase-js（没配 VITE_PUBLIC_SUPABASE_URL），服务器退出不是 ok，走兜底清本机会话那条路（同 auth.spec.ts）。
 // CSP 违规由 csp-fixture 自动检查（只看夹具自带的 page；第二页另外收集）
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 import { expect, fakeSessionJson, sessionKeyFor, test } from './session-fixture.ts';
 
 const MAC_SAFARI_UA =
@@ -24,9 +24,21 @@ async function fakeTurnstile(page: Page): Promise<void> {
   );
 }
 
+// Playwright 自带的 WebKit（Windows、Linux 构建）没有推送服务：PushManager.getSubscription() 一调整页主线程就卡死
+// （disconnectBrowserPush 的 2 秒上限是定时器，也跑不到；本机实测 017a13d 起退出时第一次走到这里）。真 Safari 不这样。
+// 本用例测的是两页退出、删库、回登录页，不是推送：webkit 下把 getSubscription 换成“没有订阅”，退订那一步由单元测试
+// src/platform/__tests__/push.test.ts、sign-out-push.test.ts 覆盖。chromium 照常走真的 getSubscription
+async function noPushServiceInWebkit(context: BrowserContext, browserName: string): Promise<void> {
+  if (browserName !== 'webkit') return;
+  await context.addInitScript(() => {
+    if (typeof PushManager !== 'undefined') PushManager.prototype.getSubscription = () => Promise.resolve(null);
+  });
+}
+
 const dbNames = (page: Page) => page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name));
 
-test('另一页“退出并换账号”：主 App 页清掉并删掉本机库、回登录页、不无限重新载入', async ({ page, context, baseURL }) => {
+test('另一页“退出并换账号”：主 App 页清掉并删掉本机库、回登录页、不无限重新载入', async ({ page, context, baseURL, browserName }) => {
+  await noPushServiceInWebkit(context, browserName);
   await fakeTurnstile(page);
   // 写一次会话（同源的登录页上写），再开主 App：本机库建好、今天页画出来
   await page.goto('/app/auth/');

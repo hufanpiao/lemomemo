@@ -40,6 +40,9 @@ describe('时区（D7）', () => {
     expect(tzAllowed('Mars/Base', null, list)).toBe(false);
     expect(tzAllowed('Europe/Paris', null, list)).toBe(false);
     expect(tzAllowed('Etc/Legacy', 'Etc/Legacy', list)).toBe(true);
+    // 本机时区放在 keep 里：Intl 表里没有（例如 'UTC'）也能写
+    expect(tzAllowed('UTC', null, list)).toBe(false);
+    expect(tzAllowed('UTC', [null, 'UTC'], list)).toBe(true);
   });
 
   it('真实的 Intl 表里有首尔和上海', () => {

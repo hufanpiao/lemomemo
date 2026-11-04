@@ -45,7 +45,8 @@ export function useEventEdit(id: string, onCreated?: (id: string) => void): Even
     (p: Partial<EventForm>) => {
       const next = normalize({ ...form, ...p }, deviceTz());
       if (p.title !== undefined) next.title = p.title.trim();
-      if (next.tz !== null && next.tz !== form.tz && !tzAllowed(next.tz, original)) {
+      // 本机时区一定能写（normalize 补的、切回有时刻用的就是它）：Intl 表里可能没有它（例如 'UTC'）
+      if (next.tz !== null && next.tz !== form.tz && !tzAllowed(next.tz, [original, deviceTz()])) {
         markRejected();
         return;
       }
@@ -74,7 +75,7 @@ export function useEventEdit(id: string, onCreated?: (id: string) => void): Even
     },
     [form.time, change],
   );
-  const tzList = useMemo(() => tzChoices([original, form.tz]), [original, form.tz]);
+  const tzList = useMemo(() => tzChoices([original, form.tz, deviceTz()]), [original, form.tz]);
   return {
     ...rec,
     change,
