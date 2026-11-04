@@ -135,3 +135,64 @@ describe('push-dispatch store.ts', () => {
     await expect(makeStore(admin).popQueue?.(1)).rejects.toThrow(/^db$/);
   });
 });
+
+describe('store.ts 的 inChunks（代码审查 M5 的分批函数；复审建议：独立单测）', () => {
+  type InChunks = <T>(ids: readonly string[], run: (chunk: string[]) => Promise<T[]>) => Promise<T[]>;
+  const load = async () => (await import(/* @vite-ignore */ STORE_PATH)) as { inChunks: InChunks; IN_CHUNK: number };
+  const ids = (n: number, p = 'u') => Array.from({ length: n }, (_, i) => `${p}${i}`);
+  const spy = () => {
+    const calls: string[][] = [];
+    return { calls, run: async (c: string[]) => { calls.push(c); return c.map((x) => `r:${x}`); } };
+  };
+
+  it('一批 100 个', async () => {
+    expect((await load()).IN_CHUNK).toBe(100);
+  });
+  it('空列表：不调 run，回 []', async () => {
+    const { inChunks } = await load();
+    const s = spy();
+    expect(await inChunks([], s.run)).toEqual([]);
+    expect(s.calls).toEqual([]);
+  });
+  it('边界：100 个一批；101 个两批（100、1）；结果按批次顺序合并', async () => {
+    const { inChunks } = await load();
+    const a = spy();
+    expect(await inChunks(ids(100), a.run)).toEqual(ids(100).map((x) => `r:${x}`));
+    expect(a.calls.map((c) => c.length)).toEqual([100]);
+    const b = spy();
+    expect(await inChunks(ids(101), b.run)).toEqual(ids(101).map((x) => `r:${x}`));
+    expect(b.calls.map((c) => c.length)).toEqual([100, 1]);
+    expect(b.calls[1]).toEqual(['u100']);
+  });
+  it('去重：重复的 id 只发一次，保留第一次出现的位置；去重后正好 100 个就是一批', async () => {
+    const { inChunks } = await load();
+    const s = spy();
+    const input = [...ids(100), 'u5', 'u0', 'u99'];
+    expect(await inChunks(input, s.run)).toEqual(ids(100).map((x) => `r:${x}`));
+    expect(s.calls).toEqual([ids(100)]);
+    const t = spy();
+    await inChunks(['b', 'a', 'b', 'c', 'a'], t.run);
+    expect(t.calls).toEqual([['b', 'a', 'c']]);
+  });
+  it('顺序：批与批按顺序发，前一批没回来不发下一批；某一批抛错就整体抛、后面的批不发', async () => {
+    const { inChunks } = await load();
+    const log: string[] = [];
+    let open = 0;
+    const run = async (c: string[]) => {
+      open++;
+      log.push(`start:${c[0]}:${open}`);
+      await new Promise((r) => setTimeout(r, 1));
+      open--;
+      return [c[0]];
+    };
+    expect(await inChunks(ids(250), run)).toEqual(['u0', 'u100', 'u200']);
+    expect(log).toEqual(['start:u0:1', 'start:u100:1', 'start:u200:1']);
+    const seen: string[] = [];
+    await expect(inChunks(ids(250), async (c) => {
+      seen.push(c[0] as string);
+      if (c[0] === 'u100') throw new Error('db');
+      return [];
+    })).rejects.toThrow('db');
+    expect(seen).toEqual(['u0', 'u100']);
+  });
+});

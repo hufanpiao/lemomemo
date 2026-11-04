@@ -2471,5 +2471,6 @@
 {"y":2100,"m":8,"leap":false,"start":"2100-09-04","days":30},
 {"y":2100,"m":9,"leap":false,"start":"2100-10-04","days":29},
 {"y":2100,"m":10,"leap":false,"start":"2100-11-02","days":29},
-{"y":2100,"m":11,"leap":false,"start":"2100-12-01","days":30}
+{"y":2100,"m":11,"leap":false,"start":"2100-12-01","days":30},
+{"y":2100,"m":12,"leap":false,"start":"2100-12-31","days":1,"open":true}
 ]

@@ -9,7 +9,7 @@ import { build, checkHkoSources, OUT } from '../../tools/lunar/build.mjs';
 import { dateOf, dayNum, decodeYears, encodeTerms } from '../../tools/lunar/lib.mjs';
 import { LUNAR_CN, LUNAR_KR, TERMS_CN, TERMS_KR } from '../../shared/logic/anniv/lunar-data';
 
-interface M { y: number; m: number; leap: boolean; start: string; days: number }
+interface M { y: number; m: number; leap: boolean; start: string; days: number; open?: boolean }
 
 let months: M[] = [];
 let terms: { y: number; terms: string[] }[] = [];
@@ -74,18 +74,23 @@ describe('香港天文台历表 → lunar-data.ts 抽查', () => {
     expect(TERMS_CN.first).toBe(1901);
     expect(TERMS_CN.years).toHaveLength(200);
   });
-  it('覆盖范围：农历 1901～2099（公历 1901-02-19 起），范围外查不到；中间格式另含首尾不成年的月', () => {
+  it('覆盖范围：整年农历 1901～2099；首尾零头月 1900 腊月、2100 正月～腊月初一；公历 1901-01-20～2100-12-31', () => {
     expect(LUNAR_CN.first).toBe(1901);
     expect(LUNAR_CN.years).toHaveLength(199);
-    expect(toLunar('1901-02-18')).toBeNull();
+    expect(LUNAR_CN.head).toEqual([[1900, 12, 0, dayNum('1901-01-20'), 30]]);
+    expect(LUNAR_CN.tail).toHaveLength(12);
+    expect(LUNAR_CN.tail.at(-1)).toEqual([2100, 12, 0, dayNum('2100-12-31'), 1]);
+    expect(LUNAR_CN.end).toBe(dayNum('2101-01-01'));
+    expect(LUNAR_CN.open).toBe(true);
+    expect(toLunar('1901-01-19')).toBeNull();
+    expect(toLunar('1901-01-20')).toEqual({ y: 1900, m: 12, leap: false, d: 1 });
+    expect(toLunar('1901-02-18')).toEqual({ y: 1900, m: 12, leap: false, d: 30 });
     expect(toLunar('1901-02-19')).toEqual({ y: 1901, m: 1, leap: false, d: 1 });
-    expect(decoded.at(-1)?.y).toBe(2099);
-    const last = decoded.at(-1) as M;
-    expect(dateOf((dayNum(last.start) as number) + last.days)).toBe(find(months, 2100, 1)?.start);
     expect(months[0]).toEqual({ y: 1900, m: 12, leap: false, start: '1901-01-20', days: 30 });
+    expect(months.at(-1)).toEqual({ y: 2100, m: 12, leap: false, start: '2100-12-31', days: 1, open: true });
   });
-  it('lunar-data.ts 解码后和 cn-months.json 的完整年份逐月一致', () => {
-    expect(decoded).toEqual(months.filter((x) => x.y >= 1901 && x.y <= 2099));
+  it('lunar-data.ts 解码后和 cn-months.json 逐月一致（含首尾零头月和没结束的 2100 腊月）', () => {
+    expect(decoded).toEqual(months);
   });
   it('节气全表：原始历表转出的 200 年节气编码后和 TERMS_CN 一字不差', () => {
     expect(encodeTerms(terms)).toEqual({ first: TERMS_CN.first, years: TERMS_CN.years });
@@ -95,8 +100,10 @@ describe('香港天文台历表 → lunar-data.ts 抽查', () => {
     expect(r.ok).toBe(true);
     expect(r.text).toBe(readFileSync(OUT, 'utf8'));
   });
-  it('范围边界：1901-01-01～01-19（农历 1900 年冬月中途）和腊月都查不到；2100 年第 24 个节气（冬至）在', () => {
-    for (const d of ['1901-01-01', '1901-01-19', '1901-01-20', '1901-02-18', '2100-02-09', '2100-12-31']) expect(toLunar(d), d).toBeNull();
+  it('范围边界：1901-01-01～01-19（月名推不出）查不到；2100 春节、腊月初一在；2100 年第 24 个节气（冬至）在', () => {
+    for (const d of ['1901-01-01', '1901-01-19']) expect(toLunar(d), d).toBeNull();
+    expect(toLunar('2100-02-09')).toEqual({ y: 2100, m: 1, leap: false, d: 1 });
+    expect(toLunar('2100-12-31')).toEqual({ y: 2100, m: 12, leap: false, d: 1 });
     expect(term(2100, 23)).toBe('2100-12-22');
     expect(TERMS_CN.years[2100 - TERMS_CN.first]).toHaveLength(24);
   });
@@ -109,6 +116,7 @@ describe('香港天文台历表 → lunar-data.ts 抽查', () => {
   });
   it('只有中国数据：韩国表为空（运行时按“没有韩国农历”处理）', () => {
     expect(LUNAR_KR.years).toEqual([]);
+    expect(LUNAR_KR.end).toBe(0);
     expect(TERMS_KR.years).toEqual([]);
   });
 });

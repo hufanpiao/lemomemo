@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { compareCountries, dateOf, dayNum, decodeYears, encodeMonths, encodeTerms, validateMonths } from '../../tools/lunar/lib.mjs';
 
-interface M { y: number; m: number; leap: boolean; start: string; days: number }
+interface M { y: number; m: number; leap: boolean; start: string; days: number; open?: boolean }
 
 function nth(ms: M[], i: number): M {
   const x = ms[i];
@@ -52,6 +52,34 @@ describe('tools/lunar/lib.mjs', () => {
   it('不完整的一年不收；年份不连续报错', () => {
     const ms = synth().slice(0, 20);
     expect((encodeMonths(ms) as { years: unknown[] }).years).toHaveLength(1);
+  });
+  it('首尾零头月：开头的腊月进 head、结尾没结束的月进 tail 且 open；往返一字不差', () => {
+    const full = synth();
+    let d = dayNum('2030-01-04') as number;
+    const head: M[] = [{ y: 2029, m: 12, leap: false, start: dateOf(d) as string, days: 30 }];
+    d = dayNum(nth(full, full.length - 1).start) + nth(full, full.length - 1).days;
+    const tail: M[] = [
+      { y: 2032, m: 1, leap: false, start: dateOf(d) as string, days: 30 },
+      { y: 2032, m: 2, leap: false, start: dateOf(d + 30) as string, days: 7, open: true } as M,
+    ];
+    const ms = [...head, ...full, ...tail];
+    expect(validateMonths(ms)).toEqual([]);
+    const enc = encodeMonths(ms) as { first: number; years: number[][]; head: number[][]; tail: number[][]; end: number; open: boolean };
+    expect(enc.first).toBe(2030);
+    expect(enc.years).toHaveLength(2);
+    expect(enc.head).toEqual([[2029, 12, 0, dayNum('2030-01-04'), 30]]);
+    expect(enc.tail).toHaveLength(2);
+    expect(enc.end).toBe(d + 37);
+    expect(enc.open).toBe(true);
+    expect(decodeYears(enc)).toEqual(ms);
+  });
+  it('open 只许出现在最后一个月，天数 1～30', () => {
+    const ms = synth().map((x) => ({ ...x }));
+    (ms[3] as M & { open?: boolean }).open = true;
+    expect((validateMonths(ms) as string[]).some((e) => e.includes('只有最后一个月可以标 open'))).toBe(true);
+    const ms2 = synth().map((x) => ({ ...x }));
+    ms2[ms2.length - 1] = { ...nth(ms2, ms2.length - 1), days: 0, open: true } as M;
+    expect((validateMonths(ms2) as string[]).some((e) => e.includes('不在 1～30'))).toBe(true);
   });
   it('两国逐月比对：相同不报；差一天报出来；写进白名单的不报', () => {
     const cn = synth();

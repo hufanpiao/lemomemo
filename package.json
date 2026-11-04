@@ -16,6 +16,7 @@
     "check:arch": "python -I build/check_arch.py",
     "check:site": "node build/build_site.mjs --check",
     "check:lunar": "node tools/lunar/build.mjs --check",
+    "check:holidays": "node tools/holidays/check.mjs",
     "check:gate": "node build/check_version_gate.mjs",
     "gen:files-rules": "node build/gen_files_rules.mjs",
     "check:files-rules": "node build/gen_files_rules.mjs --check",

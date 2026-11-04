@@ -7,7 +7,9 @@
        sw 的其他文件里不准再写 /sb、/files 的路径（不能给它们另挂 Workbox 路由或缓存）
   R2   src 里不准 import 对象存储的任何东西：shared/objstore.ts、aws4fetch、functions/ 下的文件（含生成的 files-rules）。
        App 只经 platform/files.ts 调同源的 /files/v1/*（架构 0.32 第 2、4 条，任务单 FA-2）
-  W2   src/public/holidays/cn|kr/ 缺明年的文件（警告）
+  LUNAR src 里不准静态引入农历数据和换算（shared/logic/anniv/lunar*）：import … from、export … from、只写路径的 import、require 都报；
+       只许 import('…') 按需加载（架构 2.6：农历单独 chunk、不进入口；BE-5 代码审查建议 ①）。import type 只引类型、编译后不留，放行
+  W2   src/public/holidays/cn|kr/ 缺明年的文件，或明年的文件还是 pending（警告）
   P142 supabase/migrations 里 private 的触发器函数不准出现 current_user，用 current_setting('role', true)（0.29 续第 142 条）
   A24  src 的 CSS 里 stylelint-disable 注释不准不写规则名（等于全关），也不准关 lemo/* 和 A24 的三条规则
        （declaration-property-value-disallowed-list、function-disallowed-list、property-disallowed-list；UI-4 M4 第三轮）
@@ -237,6 +239,29 @@ def r2_forbidden(spec):
     return None
 
 
+LUNAR_SPEC_RE = re.compile(r"(^|/)logic/anniv/lunar[^/]*$")
+# 静态的 import / export … from（含 import type，第 1 组）；只写路径的 import 'x'；require('x')
+LUNAR_STATIC_RE = re.compile(
+    r"""\b(?:import|export)\s+(type\s+)?(?:[^;'"`()]*?\s)?from\s*['"]([^'"]+)['"]"""
+    r"""|\bimport\s+['"]([^'"]+)['"]"""
+    r"""|\brequire\s*\(\s*['"]([^'"]+)['"]""",
+    re.DOTALL,
+)
+
+
+def check_lunar_import(root, errors):
+    for p in iter_files(root, "src", SOURCE_EXT):
+        rel = p.relative_to(root).as_posix()
+        code = strip_comments(p.read_text(encoding="utf-8"))
+        for m in LUNAR_STATIC_RE.finditer(code):
+            if m.group(1):
+                continue
+            spec = (m.group(2) or m.group(3) or m.group(4) or "").replace("\\", "/")
+            if LUNAR_SPEC_RE.search(re.sub(r"\.ts$", "", spec)):
+                errors.append(("LUNAR", rel, line_of(code, m.start()),
+                               f"农历数据只能按需加载：把 {spec} 改成 await import('…')（单独 chunk，不进入口，架构 2.6）"))
+
+
 def check_r2(root, errors):
     for p in iter_files(root, "src", SOURCE_EXT):
         rel = p.relative_to(root).as_posix()
@@ -252,9 +277,18 @@ def check_w2(root, warnings, today):
     next_year = today.year + 1
     for country in ("cn", "kr"):
         d = root / "src" / "public" / "holidays" / country
-        if not (d / f"{next_year}.json").exists():
-            rel = d.relative_to(root).as_posix()
+        f = d / f"{next_year}.json"
+        rel = d.relative_to(root).as_posix()
+        if not f.exists():
             warnings.append(("W2", rel, 0, f"缺明年的节假日文件 {next_year}.json"))
+            continue
+        # 架构 5.12：中国明年未公布时放 pending 空文件，W2 照常报警告，提醒公布后换成真实数据
+        try:
+            pending = json.loads(f.read_text(encoding="utf-8")).get("pending") is True
+        except (ValueError, AttributeError):
+            pending = False  # 格式错归 tools/holidays/check.mjs 管
+        if pending:
+            warnings.append(("W2", rel, 0, f"明年的节假日文件 {next_year}.json 还是 pending（未公布），公布后换成真实数据"))
 
 
 FUNC_RE = re.compile(
@@ -1133,6 +1167,7 @@ def main(argv=None):
     check_a20(root, errors)
     check_a19(root, errors)
     check_r2(root, errors)
+    check_lunar_import(root, errors)
     check_w2(root, warnings, today)
     check_p142(root, errors)
     check_a24_disable(root, errors)

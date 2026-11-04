@@ -106,6 +106,9 @@ jobs:
       - name: 农历数据检查（lunar-data.ts 和 sources、sources 和香港天文台原始历表一致）
         run: npm run check:lunar
 
+      - name: 节假日数据检查（src/public/holidays 下各年 JSON 的格式、日期、补班和替代公休日规则）
+        run: npm run check:holidays
+
       - name: 构建（preview 模式，不带任何环境的真实地址；含官网和拼好的 _headers）
         run: npm run build -- --mode preview
 

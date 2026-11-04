@@ -3,7 +3,7 @@
 -- push-dispatch-r316.test.ts（内存替身照这里的 SQL 写）。
 -- 用户：seed 的 A、B 可用，C 是管理员停用。时间用小数字：窗口 (1000000, 2000000]。
 begin;
-select plan(20);
+select plan(22);
 \ir _helpers.psql
 select tests.seed();
 
@@ -97,6 +97,15 @@ insert into public.todos (id, user_id, title, created_at, updated_at, remind_at,
   select format('01000000-0000-4000-8000-%s', lpad(to_hex(i), 12, '0'))::uuid, 'bbbbbbbb-0000-4000-8000-000000000002', 't', 1, 1, 1000000 + i, 1000000 + i
     from generate_series(1, 520) i;
 select is((select count(*)::int from private.remind_pushed(1000000, 2000000, 20, 500)), 6, 'B 的 520 条推过没处理的行一条不回，A 的 6 条照样回');
+
+-- ⑥ 下界（复审建议 4，c 层三支的 remind_at / snooze_at / defer_until 任一 > p_lo）：换一个空窗口 (5000000, 6000000] 只看这两条
+insert into public.todos (id, user_id, title, created_at, updated_at, remind_at, snooze_at, defer_until) values
+  ('74000000-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001', 't', 1, 1, 5000000, 5500000, null),     -- 只有 snooze_at > p_lo
+  ('74000000-0000-4000-8000-000000000002', 'aaaaaaaa-0000-4000-8000-000000000001', 't', 1, 1, 4000000, 5000000, 5000000);  -- 三列都 ≤ p_lo
+select is((select string_agg(id::text || '@' || due_at, ',' order by due_at, id) from private.remind_due(5000000, 6000000, 20, 500)),
+  '74000000-0000-4000-8000-000000000001@5500000', '下界：remind_at 正好等于 p_lo、只有 snooze_at 大于 p_lo 的照回，due_at 取 snooze_at');
+select is((select count(*)::int from private.remind_due(5000000, 6000000, 20, 500) where id = '74000000-0000-4000-8000-000000000002'), 0,
+  '下界：remind_at、snooze_at、defer_until 都 ≤ p_lo 的不回');
 
 select * from finish();
 rollback;

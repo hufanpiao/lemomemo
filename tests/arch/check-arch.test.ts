@@ -129,6 +129,13 @@ describe('build/check_arch.py（tests/arch-fixtures/check_arch）', () => {
     ]);
   });
 
+  it('W2：明年的文件还是 pending（未公布）→ 照样警告，只报 cn', () => {
+    const { code, report } = run(sample('w2-pending'));
+    expect(code).toBe(0);
+    expect(report.warnings.map((w) => `${w.rule} ${w.file}`)).toEqual(['W2 src/public/holidays/cn']);
+    expect(report.warnings[0]?.message).toContain('pending');
+  });
+
   it('第 142 条：private 触发器函数里用 current_user → 错误；普通函数和用 current_setting 的不报', () => {
     const { code, report } = run(sample('p142-current-user'));
     expect(code).toBe(1);
@@ -159,6 +166,18 @@ describe('build/check_arch.py（tests/arch-fixtures/check_arch）', () => {
       'R2 src/features/notes/data/bad.ts:2',
       'R2 src/platform/bad.ts:2',
       'R2 src/platform/bad.ts:4',
+    ]);
+  });
+
+  it('LUNAR：src 里静态 import / export from / 只写路径的 import / require 农历模块 → 错误；import()、import type、注释、别的 lunar 模块放行', () => {
+    const { code, report } = run(sample('lunar-static-import'));
+    expect(code).toBe(1);
+    expect(report.errors.map((e) => `${e.rule} ${e.file}:${e.line}`)).toEqual([
+      'LUNAR src/features/calendar/hooks/bad.ts:2',
+      'LUNAR src/features/calendar/hooks/bad.ts:3',
+      'LUNAR src/features/calendar/hooks/bad.ts:4',
+      'LUNAR src/features/calendar/hooks/bad.ts:5',
+      'LUNAR src/features/calendar/hooks/bad.ts:6',
     ]);
   });
 

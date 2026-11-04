@@ -4,10 +4,13 @@
 //
 // 中间格式文件（JSON，见 lib.mjs 文件头）放在 tools/lunar/sources/：
 //   cn-months.json  中国农历月表，由 adapters/hko-txt.mjs 从香港天文台《公历与农历日期对照表》（raw/hko/T1901c～T2100c.txt）转出。
-//                   香港天文台的表从 1901-01-01 起到 2100-12-31 止：开头 1901 年 1 月属农历 1900 年冬月中途、末尾 2100 年腊月没结束，
-//                   编码只收完整的农历年，所以实际覆盖农历 1901～2099 年 = 公历 1901-02-19～2100-02-08（1900 年不补，早于这个范围按“没有农历”处理）
+//                   香港天文台的表从 1901-01-01 起到 2100-12-31 止：开头 1901-01-01～19 属农历 1900 年冬月还是闰冬月推不出来，不收；
+//                   1900 年腊月（1901-01-20 起）收进 head；2100 年正月～冬月和只看得到初一的腊月（open）收进 tail。
+//                   实际覆盖公历 1901-01-20～2100-12-31（1900 年其余日期没有官方表，按“没有农历”处理）
 //   cn-terms.json   中国 24 节气，公历 1901～2100 年（香港天文台同一批表）
-//   kr-months.json、kr-terms.json  韩国（KASI 음양력 자료，先只做到 2050；2051～2100 的天文推算留 B5）。还没有数据：
+//   kr-months.json、kr-terms.json  韩国（KASI 음양력 자료，先只做到 2050；2051～2100 的天文推算留 B5）。【待 KASI 数据】
+//                   接口已留好：将来写 adapters/kasi-*.mjs 把 KASI 原始数据转成同样的中间格式（月表、节气按东九区划日期）放到这里，
+//                   本脚本就会自动做韩国结构校验和两国逐月比对（lib.mjs 的 compareCountries）。还没有数据：
 //                   两个文件都缺时只生成中国部分，韩国表为空（运行时按“没有韩国农历”处理）；只缺一个算数据不全，报错
 //   allow-diff.json 两国逐月比对里“本来就不同”的月份（中韩用不同经度，个别月份差一天），每条写明来源核对过；韩国数据到位后才比对
 // 没有中国数据时本脚本报“数据还没收集”并退出码 2，不生成半截数据。
@@ -83,7 +86,7 @@ if (argv[1] && fileURLToPath(import.meta.url) === argv[1]) {
       stderr.write('shared/logic/anniv/lunar-data.ts 和 tools/lunar/sources 不一致：跑 node tools/lunar/build.mjs 重新生成\n');
       exit(1);
     }
-    stdout.write(`lunar-data.ts 和来源一致${r.hasKr ? '' : '（只有中国数据，韩国部分为空）'}\n`);
+    stdout.write(`lunar-data.ts 和来源一致；中国：sources 和香港天文台原始历表一致${r.hasKr ? '；韩国：结构校验和两国逐月比对通过' : '；韩国：待 KASI 数据，两国逐月比对跳过'}\n`);
   } else {
     mkdirSync(dirname(OUT), { recursive: true });
     writeFileSync(OUT, r.text, 'utf8');

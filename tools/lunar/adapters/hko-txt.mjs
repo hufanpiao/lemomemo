@@ -1,7 +1,8 @@
 // 香港天文台《公历与农历日期对照表》文本版 → 中间格式（B2 BE-5；负责人 11-03 定 R-299、R-306、R-309）。
 // 读 tools/lunar/raw/hko/T1901c.txt～T2100c.txt（UTF-8 带 BOM、CRLF、繁体；原始文件只读不改），先按同目录 SHA256SUMS 逐个核对，
 // 对不上、缺文件、多出没登记的文件都报错退出，不生成任何东西。核对通过后写：
-//   tools/lunar/sources/cn-months.json  中间格式月表 { y, m, leap, start, days }（只收首尾完整的月：第一个月从 1901-01 中途开始、最后一个月到 2100-12-31 还没结束，都不收）
+//   tools/lunar/sources/cn-months.json  中间格式月表 { y, m, leap, start, days }（开头 1901-01-01～19 那段月名推不出来〔可能是冬月也可能是闰冬月〕，不收；
+//                                      最后一个月到 2100-12-31 还没结束，照收，标 open: true，days 只算到数据结尾那天）
 //   tools/lunar/sources/cn-terms.json   中间格式节气 { y, terms: 24 个日期（从小寒起）}
 // 用法：node tools/lunar/adapters/hko-txt.mjs          转换并写文件
 //       node tools/lunar/adapters/hko-txt.mjs --check  只转换核对、和已有的 sources/*.json 比对，不写
@@ -134,11 +135,15 @@ export function convert(rows) {
   if (!firstJan) throw new Error('没找到正月');
   let y = Number(rows[firstJan.i].date.slice(0, 4)) - 1;
   const months = [];
-  for (let h = 0; h + 1 < heads.length; h++) {   // 最后一个月还没结束，不收
+  for (let h = 0; h < heads.length; h++) {
     const a = heads[h];
     if (a.m === 1 && !a.leap) y = Number(rows[a.i].date.slice(0, 4));
-    const days = heads[h + 1].i - a.i;
-    months.push({ y, m: a.m, leap: a.leap, start: rows[a.i].date, days });
+    if (h + 1 < heads.length) {
+      months.push({ y, m: a.m, leap: a.leap, start: rows[a.i].date, days: heads[h + 1].i - a.i });
+    } else {
+      // 最后一个月：数据到这里就完了，不知道是大月还是小月；照收，标 open，days 只算到数据结尾（运行时覆盖到这天为止）
+      months.push({ y, m: a.m, leap: a.leap, start: rows[a.i].date, days: rows.length - a.i, open: true });
+    }
   }
   // 节气：按公历年收，每年 24 个、顺序从小寒到冬至
   const byYear = new Map();

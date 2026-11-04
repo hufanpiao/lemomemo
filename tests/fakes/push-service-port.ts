@@ -9,6 +9,9 @@ export type Incoming = { method: string; url: string; headers: Headers; body: Ui
 export type Outgoing = Response | null | 'reset';
 export type PortHandler = (inc: Incoming, signal: AbortSignal) => Promise<Outgoing>;
 
+/** fetch 规范里 1024 以上被拒连的端口（https://fetch.spec.whatwg.org/#port-blocking） */
+const FETCH_BAD_PORTS = new Set([1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080]);
+
 export class LoopbackServer {
   private readonly sockets = new Set<Socket>();
   private readonly server: Server;
@@ -25,13 +28,20 @@ export class LoopbackServer {
     const server = createServer((req, res) => {
       if (self) void onNode(self.origin, handler, req, res);
     });
-    await new Promise<void>((ok, fail) => {
-      server.once('error', fail);
-      server.listen(port, '127.0.0.1', () => {
-        server.off('error', fail);
-        ok();
+    const listenOn = (p: number) =>
+      new Promise<void>((ok, fail) => {
+        server.once('error', fail);
+        server.listen(p, '127.0.0.1', () => {
+          server.off('error', fail);
+          ok();
+        });
       });
-    });
+    await listenOn(port);
+    // port 为 0 时系统随机分配；Windows 动态端口可能从 1024 起，会分到 fetch 拒连的端口（bad port），换一个
+    for (let i = 0; port === 0 && FETCH_BAD_PORTS.has((server.address() as AddressInfo).port) && i < 20; i++) {
+      await new Promise<void>((ok) => server.close(() => ok()));
+      await listenOn(0);
+    }
     self = new LoopbackServer(server, `http://127.0.0.1:${(server.address() as AddressInfo).port}`);
     const sockets = self.sockets;
     server.on('connection', (s: Socket) => {
