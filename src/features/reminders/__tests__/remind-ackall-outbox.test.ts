@@ -11,7 +11,7 @@ vi.mock('../../../core/current-tz.ts', () => ({ currentTz: () => 'Asia/Seoul' })
 vi.mock('../../../platform/clock.ts', () => ({
   clock: { now: () => NOW, subscribe: () => () => undefined, offset: () => 0, isClockWrong: () => false },
 }));
-vi.mock('../../../platform/viewport.ts', () => ({ watchKeyboard: () => () => undefined }));
+vi.mock('../../../platform/viewport.ts', () => ({ watchKeyboard: () => () => undefined, isKeyboardOpen: () => false }));
 const closeLocalReminder = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock('../../../platform/native-bridge.ts', () => ({
   openReminder: async () => undefined,

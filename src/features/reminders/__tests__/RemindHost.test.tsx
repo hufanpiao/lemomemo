@@ -35,6 +35,7 @@ vi.mock('../../../platform/viewport.ts', () => ({
       kb = null;
     };
   },
+  isKeyboardOpen: () => false,
 }));
 const openReminder = vi.fn(async (..._a: unknown[]) => undefined);
 const showLocalReminder = vi.fn(async (..._a: unknown[]) => undefined);

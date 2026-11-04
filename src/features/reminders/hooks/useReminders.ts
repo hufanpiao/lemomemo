@@ -14,7 +14,7 @@ import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { closeLocalReminder, showLocalReminder } from '../../../platform/native-bridge.ts';
 import { closeHandledNotifications } from '../../../platform/notifications.ts';
-import { watchKeyboard } from '../../../platform/viewport.ts';
+import { isKeyboardOpen, watchKeyboard } from '../../../platform/viewport.ts';
 import { actionsFor, type RemindAction } from '../../../../shared/logic/remind-actions.ts';
 import { localDue, localText, shouldCloseShown, shownKey, staleShown } from '../data/local-notify.ts';
 import { allReminders, MISSED_WINDOW_MS, occurrenceKey, ringing, type Rang, type RangMap, type Reminder, type Row } from '../data/reminder-model.ts';
@@ -140,11 +140,16 @@ export function rangSnapshot(): RangMap {
   return rangStore;
 }
 
-export function useRemindEngine(): void {
+/**
+ * since：从哪一刻起到点的算“本次打开以后”（进横幅），之前到点的进“错过的提醒”。
+ * App 等首屏画完、浏览器空闲才挂 RemindHost（首屏减重 ⑥），挂得比打开晚；since 由 App 在第一次渲染时记下传进来，
+ * 打开到挂上之间到点的照样响（只是晚响这么一会儿）。没传时用挂载的时刻（测试、单独挂）
+ */
+export function useRemindEngine(sinceAt?: number): void {
   const now = useMinuteNow();
   const { list, tz, prefs, known } = useReminderList(now);
   const locale = useUi((s) => s.locale);
-  const since = useRef(clock.now());
+  const since = useRef(sinceAt ?? clock.now());
   const collapsed = useRemindQueue((s) => s.collapsed);
   // 本次打开以后响过的：occurrenceKey → 当时的 tag 和实际响的时刻。全天日程改了 remind.default_time，同一次提醒不再进横幅，
   // 没按“知道了”的进“错过的提醒”按当时的时刻显示（R-336 ②；重开 App 会忘，见 REMIND-shown-persist）
@@ -187,6 +192,8 @@ export function useRemindEngine(): void {
       }
     };
     const off = ob.subscribe(() => void flush());
+    // 挂上时先补写一次（首屏减重 ⑥）：引擎晚挂，挂上之前在整页提醒里只在本机了结的、那条改动已经发出去了的，不用等下一次 outbox 变化
+    void flush();
     return () => {
       alive = false;
       off();
@@ -221,6 +228,8 @@ export function useRemindEngine(): void {
         release = null;
       }
     });
+    // 挂载时键盘已经弹着（首屏减重 ⑥：引擎晚挂，用户可能已经在打字）：先排队。watchKeyboard 订阅时量过一次，这里读到的是现在的
+    if (isKeyboardOpen() && !release) release = holdReminders('keyboard');
     return () => {
       off();
       release?.();

@@ -24,7 +24,7 @@ vi.mock('../../../platform/clock.ts', () => ({
     isClockWrong: () => false,
   },
 }));
-vi.mock('../../../platform/viewport.ts', () => ({ watchKeyboard: () => () => undefined }));
+vi.mock('../../../platform/viewport.ts', () => ({ watchKeyboard: () => () => undefined, isKeyboardOpen: () => false }));
 vi.mock('../../../platform/native-bridge.ts', () => ({
   openReminder: async () => undefined,
   showLocalReminder: async () => undefined,

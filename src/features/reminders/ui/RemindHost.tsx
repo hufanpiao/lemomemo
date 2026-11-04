@@ -120,8 +120,8 @@ function Banner({ r, queued, tz, defaultTime }: { r: Reminder; queued: number; t
   );
 }
 
-export default function RemindHost({ route }: { route?: string }) {
-  useRemindEngine();
+export default function RemindHost({ route, since }: { route?: string | undefined; since?: number | undefined }) {
+  useRemindEngine(since);
   const t = useRemindT();
   const now = useMinuteNow();
   const { list, tz, prefs } = useReminderList(now);

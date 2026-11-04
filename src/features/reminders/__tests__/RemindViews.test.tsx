@@ -26,7 +26,7 @@ vi.mock('../../../platform/clock.ts', () => ({
     isClockWrong: () => false,
   },
 }));
-vi.mock('../../../platform/viewport.ts', () => ({ watchKeyboard: () => () => undefined }));
+vi.mock('../../../platform/viewport.ts', () => ({ watchKeyboard: () => () => undefined, isKeyboardOpen: () => false }));
 const openReminder = vi.fn(async (..._a: unknown[]) => undefined);
 const showLocalReminder = vi.fn(async (..._a: unknown[]) => undefined);
 const closeLocalReminder = vi.fn(async (..._a: unknown[]) => undefined);

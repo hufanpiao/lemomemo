@@ -8,7 +8,7 @@ export const FullReminderPage = lazy(() => import('./ui/FullReminderPage.tsx'));
 
 // 路由（REMIND-wiring）：router.ts 的 ROUTE_NAMES 里有 'remind'
 export const routes = [{ name: 'remind', Page: lazy(() => import('./ui/FullReminderPage.tsx')) }] as const;
-/** 提醒横幅、按钮条、“15:25 再提醒你”，并跑提醒引擎：App 上挂一份；props: { route?: 当前路由名 }（'today' 不画顶部横幅，'remind' 都不画） */
+/** 提醒横幅、按钮条、“15:25 再提醒你”，并跑提醒引擎：App 上挂一份；props: { route?: 当前路由名（'today' 不画顶部横幅，'remind' 都不画）; since?: App 第一次渲染的时刻，从这一刻起到点的进横幅（首屏减重 ⑥：App 空闲后才挂，没传时按挂载时刻） } */
 export const RemindHost = lazy(() => import('./ui/RemindHost.tsx'));
 /** 今天页顶部“错过 N 条提醒 ›”和底部弹层；没有错过的不画 */
 export const MissedReminders = lazy(() => import('./ui/MissedReminders.tsx'));
