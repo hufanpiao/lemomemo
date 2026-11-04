@@ -65,7 +65,9 @@ export async function step0(c: RoundCtx, logs: LogRow[], overBudget: () => boole
     let patch: { remind_at: number | null; next_date?: string | null } | null;
     try {
       if (q.table_name === 'events') {
-        if (row.time !== null && row.time !== undefined && (typeof row.tz !== 'string' || !c.logic.isValidTz(row.tz))) {
+        // 有时刻的日程：只有 tz 不为空而且认不出时才跳过、记 events（PUSH-tz-null-event，11-04 主持人定）。tz 为空的照 shared
+        //   eventRemindAt 算出 null（不提醒），不记原因码；这种行受 0002 的 check (time is null or tz is not null) 保护，真库里存不进来
+        if (row.time !== null && row.time !== undefined && typeof row.tz === 'string' && !c.logic.isValidTz(row.tz)) {
           tzInvalid();
           return;
         }

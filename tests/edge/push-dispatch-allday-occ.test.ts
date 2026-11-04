@@ -52,6 +52,17 @@ describe('二轮审查 N-M1：挪了日期又换了当天 / 前一天，是另�
     await w.round(at('09:00', '2026-11-06'));
     expect(w.sent().filter((p) => p.type === 'remind').map((p) => p.title)).toEqual(['今天 · 复查']);
   });
+  it('REMIND-offline-ack-merge：离线挪日期又对旧通知按“知道了”，合并出 {date, notified_for: 旧时刻}：旧时刻被清掉，新日期照推；写新时刻的照留', async () => {
+    const db = new MemDb().user(UA);
+    const w = await world(db);
+    const row = db.put('events', eventRow(UA, { title: '面试', date: DAY, time: null, tz: null, remind_days: 0, remind_at: at('09:00') }));
+    expect(db.edit('events', row.id, { date: '2026-11-06', remind_days: 1, notified_for: at('09:00') }).notified_for).toBeNull();
+    await w.round(at('19:00'));
+    await w.round(at('20:00'));
+    expect(w.sent().filter((p) => p.type === 'remind').map((p) => p.title)).toEqual(['明天 · 面试']);
+    const other = db.put('events', eventRow(UA, { date: DAY, time: null, tz: null, remind_days: 0, remind_at: at('09:00') }));
+    expect(db.edit('events', other.id, { date: '2026-11-07', notified_for: at('09:00', '2026-11-07') }).notified_for).toBe(at('09:00', '2026-11-07'));
+  });
   it('只改名称不算另一次提醒：pushed_for 保留，之后再改 default_time 仍不再推（R-336 那组不受影响）', async () => {
     const db = new MemDb().user(UA);
     const w = await world(db);

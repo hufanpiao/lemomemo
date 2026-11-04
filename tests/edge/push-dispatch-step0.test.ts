@@ -138,3 +138,25 @@ describe('第 0 步：不认识的时区那一行跳过、记 tz_invalid（D7，
     expect(db.queue.size).toBe(0);
   });
 });
+
+describe('第 0 步：有时刻但 tz 为空的日程（PUSH-tz-null-event，11-04 主持人定：以 eventRemindAt 和 0002 约束为准）', () => {
+  // 真库里这种行存不进来（0002：check (time is null or tz is not null)）；替身里造出来，核对服务器和 shared 同一口径：不提醒、不记原因码
+  for (const tz of [SEOUL, 'America/Los_Angeles']) {
+    it(`current_tz = ${tz}：remind_at 算成 null（原来有值也清掉），到点不推，不记 tz_invalid`, async () => {
+      const db = new MemDb().user(UA, { current_tz: tz });
+      const row = db.put('events', eventRow(UA, { date: '2026-11-03', time: '15:00', tz: null, remind_min: 15, remind_at: at('14:45') }), true);
+      const d = await run(db, at('14:45'));
+      expect(db.tables.events.get(row.id)?.remind_at).toBeNull();
+      expect(db.logs.filter((l) => l.act === 'tz_invalid')).toEqual([]);
+      expect(d.codes.filter((c) => c.startsWith('recalc_failed'))).toEqual([]);
+      expect(db.logs.filter((l) => l.act === 'push_ok')).toEqual([]);
+    });
+  }
+  it('tz 是乱写的值：照旧跳过、记 events（不写回，remind_at 保持原值）', async () => {
+    const db = new MemDb().user(UA);
+    const row = db.put('events', eventRow(UA, { date: '2026-11-03', time: '15:00', tz: 'Nowhere/Atlantis', remind_min: 15, remind_at: 7 }), true);
+    await run(db, at('10:00'));
+    expect(db.logs.filter((l) => l.act === 'tz_invalid').map((l) => l.code)).toEqual(['events']);
+    expect(db.tables.events.get(row.id)?.remind_at).toBe(7);
+  });
+});

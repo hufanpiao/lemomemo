@@ -83,7 +83,8 @@ export class MemDb implements DispatchStore {
   }
   /**
    * 客户端编辑一行（对应真库 UPDATE 时的三个触发器，真库语义在 rls/32 ⑧ 和 0001 的 touch()）：
-   * events_occ_reset——日程的 date、remind_days 变了，或 time 在空和非空之间变了，清 notified_for、snooze_at（这次没改它们的值时，R3-L2）和 pushed_for（二轮审查 N-M1）；
+   * events_occ_reset——日程的 date、remind_days 变了，或 time 在空和非空之间变了，清 notified_for、snooze_at（这次没改它们的值时，R3-L2；
+   *   notified_for 改成了 old.remind_at 也清，REMIND-offline-ack-merge）和 pushed_for（二轮审查 N-M1）；
    * 和真库一样按“值有没有变”判断（R3-L3），不看补丁里写没写这一列（客户端常常整行写回）；
    * touch()——提醒相关列变了清 pushed_for、defer_until；events_remind / todos_remind——这些列变了入 remind_queue
    */
@@ -96,6 +97,8 @@ export class MemDb implements DispatchStore {
       for (const k of ['notified_for', 'snooze_at'] as const) {
         if (!changed(k)) row[k] = null;
       }
+      // REMIND-offline-ack-merge（迁移 20261104110000）：离线合并进来的旧“知道了”（等于 old.remind_at）照样清
+      if (old.remind_at != null && row.notified_for === old.remind_at) row.notified_for = null;
       row.pushed_for = null;
     }
     const remindCols = ['date', 'time', 'tz', 'due', 'due_time', 'remind_before_min', 'remind_min', 'remind_days', 'remind_time', 'done', 'deleted_at'];
