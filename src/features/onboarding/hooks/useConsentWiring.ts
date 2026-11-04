@@ -1,5 +1,7 @@
 // 告知与同意页的接线（接手清单 CONSENT-wire ①③④；架构 15.5、0.40、0.41）
 // • 小容器：用 platform/supabase 的 getSupabase 建 createConsentApi，整个页面共用一个（A27：ui 不能引 data，所以放在 hooks）
+//   noticeState 先走快读（B2 FA-6 ①，data/consent-api.ts 的 createRestNoticeRead）：令牌还新鲜时直接 GET 两张表，启动关口不为它加载 supabase-js；
+//   读不了就退回 supabase-js。构建没带 supabase 地址时（envReady 为假）直接按读失败放行，同样不下载 supabase-js
 // • useNoticeState：只问一次 noticeState()；读失败（断网、超时、出错）按 'error' 交回，由调用方放行进 App。
 //   给了 limitMs（启动关口用 CONSENT_GATE_MS，CONSENT-sugg ①）时到点也按 'error' 交回，之后才回来的结果丢掉
 // • useConsentHandlers：ConsentPage 的四个必填回调
@@ -11,8 +13,12 @@
 //   - onSkip：R-239 没法保存选择 → 直接进 App
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { writeAiSwitchSettled } from '../../../core/ai-settings.ts';
+import { buildInfo } from '../../../platform/env.ts';
+import { appFetch } from '../../../platform/http.ts';
+import { readSessionAccessToken } from '../../../platform/session.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
-import { createConsentApi, type ConsentApi, type NoticeState } from '../data/consent-api.ts';
+import { REFRESH_MARGIN_MS } from '../../../platform/supabase/sync-errors.ts';
+import { createConsentApi, createRestNoticeRead, CONSENT_HARD_MS, CONSENT_SLOW_MS, type ConsentApi, type NoticeState } from '../data/consent-api.ts';
 import { leaveThisDevice } from '../data/consent-exit.ts';
 import type { ConsentHandlers } from './useConsent.ts';
 
@@ -22,7 +28,17 @@ let shared: ConsentApi | null = null;
 
 /** 整个页面共用的 ConsentApi（懒建） */
 export function consentApi(): ConsentApi {
-  shared ??= createConsentApi(getSupabase);
+  shared ??= createConsentApi(getSupabase, CONSENT_SLOW_MS, CONSENT_HARD_MS, undefined, {
+    envReady: Boolean(buildInfo.supabaseUrl && buildInfo.anonKey),
+    fastRead: createRestNoticeRead({
+      supabaseUrl: buildInfo.supabaseUrl,
+      anonKey: buildInfo.anonKey,
+      readToken: () => readSessionAccessToken(),
+      fetch: appFetch,
+      now: () => Date.now(),
+      marginMs: REFRESH_MARGIN_MS,
+    }),
+  });
   return shared;
 }
 

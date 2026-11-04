@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const ensure = vi.fn(async (..._a: unknown[]) => ({ result: 'claimed' as const }));
 vi.mock('../push-claim.ts', () => ({ ensurePushSubscription: (...a: unknown[]) => ensure(...a) }));
 
-const { claimDeps, runPushClaim, setPushClaimContext } = await import('../push-claim-run.ts');
+const { claimDeps, expectPushClaimContext, PUSH_CLAIM_WAIT_MS, resetPushClaimForTest, runPushClaim, setPushClaimContext } = await import('../push-claim-run.ts');
 const { getPushOutcome, setPushOutcome } = await import('../push-status.ts');
 
 const ensureDevice = vi.fn(async () => 'dev-1');
@@ -14,6 +14,8 @@ const invalidateDevice = vi.fn(async () => undefined);
 const ctx = { userId: 'u1', platform: 'web', claim: vi.fn(), sessionId: () => 's1', ensureDevice, invalidateDevice };
 
 afterEach(() => {
+  vi.useRealTimers();
+  resetPushClaimForTest();
   setPushClaimContext(null);
   ensure.mockClear();
 });
@@ -70,5 +72,56 @@ describe('推送认领的共用参数', () => {
     const setup = readFileSync('src/features/reminders/data/push-setup.ts', 'utf8');
     expect(setup).toMatch(/export async function claimNow\(\): Promise<EnsurePushOutcome> \{\s*return runPushClaim\(\);\s*\}/);
     expect(setup).not.toContain('ensurePushSubscription');
+  });
+});
+
+describe('等上下文（B2 FA-6 推迟启动审查 L3）：入口说过“马上会设”以后，点按认领先等它', () => {
+  it('等到上下文以后照常认领；等的时候不碰推送订阅（不调 ensurePushSubscription）', async () => {
+    vi.useFakeTimers();
+    expectPushClaimContext();
+    const p = runPushClaim();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(ensure).not.toHaveBeenCalled();
+    setPushClaimContext(ctx);
+    expect(await p).toEqual({ result: 'claimed' });
+    expect(ensure).toHaveBeenCalledTimes(1);
+    expect((ensure.mock.calls[0]?.[0] as { userId: string }).userId).toBe('u1');
+    expect(getPushOutcome()).toEqual({ result: 'claimed' });
+  });
+
+  it('等满 PUSH_CLAIM_WAIT_MS（10 秒）还没设：回 claim_failed，没调订阅', async () => {
+    vi.useFakeTimers();
+    expect(PUSH_CLAIM_WAIT_MS).toBe(10_000);
+    expectPushClaimContext();
+    let got: unknown = null;
+    void runPushClaim().then((o) => {
+      got = o;
+    });
+    await vi.advanceTimersByTimeAsync(PUSH_CLAIM_WAIT_MS - 1);
+    expect(got).toBeNull();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(got).toEqual({ result: 'claim_failed' });
+    expect(ensure).not.toHaveBeenCalled();
+  });
+
+  it('等的时候设成 null（换账号、退出）：立刻回 claim_failed，没调订阅', async () => {
+    vi.useFakeTimers();
+    expectPushClaimContext();
+    const p = runPushClaim();
+    await vi.advanceTimersByTimeAsync(100);
+    setPushClaimContext(null);
+    expect(await p).toEqual({ result: 'claim_failed' });
+    expect(ensure).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('没说过“马上会设”、或已经设过：不等，照旧（空就当场 claim_failed，有就当场认领）；显式传参的不等', async () => {
+    expect(await runPushClaim()).toEqual({ result: 'claim_failed' });
+    setPushClaimContext(ctx);
+    expectPushClaimContext();
+    expect(await runPushClaim()).toEqual({ result: 'claimed' });
+    setPushClaimContext(null);
+    expectPushClaimContext();
+    expect(await runPushClaim(null)).toEqual({ result: 'claim_failed' });
   });
 });

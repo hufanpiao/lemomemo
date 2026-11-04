@@ -118,13 +118,125 @@ function noticeVer(notice: unknown, key: 'policy_ver' | 'min_consent_ver'): stri
   return typeof v === 'string' && POLICY_VER_RE.test(v) ? v : null;
 }
 
+// ───── 首屏快读（B2 FA-6 ①）：启动关口的 noticeState 不为它加载 supabase-js（约 53 KB gzip） ─────
+// • 直接 GET 两张表（PostgREST，和 supabase-js 发的同一对请求）：/rest/v1/profiles?select=consent_policy_ver（RLS 只给本人那一行）、
+//   /rest/v1/app_config?select=notice&id=eq.1；带 apikey、Authorization: Bearer <本机会话的 access token>，经 appFetch 带版本头。
+// • 只在“令牌还新鲜”（exp 距现在超过 marginMs，和同步层先刷新再发的 REFRESH_MARGIN_MS 同一口径）时走；拿不到令牌、读不出 exp、
+//   任何一张表不是 2xx、不是 JSON、形状不对、网络错——一律回 null（另一张当场中断，L2），退回原来的 supabase-js 路径（会刷新令牌），错误的归类和以前完全一样。
+//   例如本机时钟不准导致 401：不在这里当成“被移除”，由 supabase-js 那条路刷新后再判断。
+// • 只读这两样；令牌只放在请求头里，不记录、不打印、不写回。record()（点同意、不同意）不走这里，页面那时早已画好。
+/** 快读到的两样：本人的 consent_policy_ver（没有 profile 行为 null）、app_config.notice（没有那一行为 null） */
+export interface NoticeRows {
+  mine: string | null;
+  notice: unknown;
+}
+/** 快读：读到了回 NoticeRows；读不了回 null（调用方退回 supabase-js）。signal：调用方放弃时中断请求 */
+export type FastNoticeRead = (signal: AbortSignal) => Promise<NoticeRows | null>;
+
+export interface RestNoticeDeps {
+  supabaseUrl: string;
+  anonKey: string;
+  /** 同步读本机会话的 access token（platform/session.ts 的 readSessionAccessToken） */
+  readToken(): string | null;
+  fetch(input: string, init: RequestInit): Promise<Response>;
+  now(): number;
+  /** 令牌至少还要剩这么久才走快读 */
+  marginMs: number;
+}
+
+/** access token payload 里的 exp（毫秒）；只解这一个字段，不校验签名。读不出返回 null */
+export function tokenExpMs(token: string): number | null {
+  const part = token.split('.')[1];
+  if (!part) return null;
+  try {
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    const exp = (JSON.parse(atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '='))) as { exp?: unknown } | null)?.exp;
+    return typeof exp === 'number' && Number.isFinite(exp) ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 一张表读不了（不是 2xx、不是 JSON、不是数组、多于一行）：抛它，让另一张立刻被中断（安全审查 L2） */
+class NoticeReadMiss extends Error {}
+
+/**
+ * GET 一张表、最多一行（同 maybeSingle）：row（没有那一行时为 null）；读不了就抛（见 NoticeReadMiss）。
+ * 不走 HTTP 缓存（缓存按 URL 存、不按 Authorization 分，换账号不能读到上一个人的行）、不跟随重定向（带 Bearer 的请求不转去别处）：安全审查 L1
+ */
+async function getOne(d: RestNoticeDeps, path: string, token: string, signal: AbortSignal): Promise<unknown> {
+  const res = await d.fetch(`${d.supabaseUrl.replace(/\/+$/, '')}/rest/v1/${path}`, {
+    headers: { apikey: d.anonKey, Authorization: `Bearer ${token}`, Accept: 'application/json' },
+    cache: 'no-store',
+    redirect: 'error',
+    signal,
+  });
+  if (!res.ok) throw new NoticeReadMiss();
+  const body: unknown = await res.json();
+  if (!Array.isArray(body) || body.length > 1) throw new NoticeReadMiss();
+  return body[0] ?? null;
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+export function createRestNoticeRead(d: RestNoticeDeps): FastNoticeRead {
+  return async (signal) => {
+    if (!d.supabaseUrl || !d.anonKey) return null;
+    const token = d.readToken();
+    if (!token) return null;
+    const exp = tokenExpMs(token);
+    if (exp === null || exp - d.now() < d.marginMs) return null;
+    // 一张表读不了（或抛错）就立刻中断另一张、马上退回 supabase-js，不等它回来（安全审查 L2）；外面放弃时同样中断两张
+    const own = new AbortController();
+    const stop = (): void => own.abort();
+    if (signal.aborted) stop();
+    else signal.addEventListener('abort', stop, { once: true });
+    const one = (path: string): Promise<unknown> => getOne(d, path, token, own.signal).catch((e: unknown) => {
+      stop();
+      throw e;
+    });
+    try {
+      const [p, c] = await Promise.all([one('profiles?select=consent_policy_ver'), one('app_config?select=notice&id=eq.1')]);
+      if (p !== null && !(isObj(p) && (p['consent_policy_ver'] === null || typeof p['consent_policy_ver'] === 'string'))) return null;
+      if (c !== null && !(isObj(c) && 'notice' in c)) return null;
+      return { mine: isObj(p) ? (p['consent_policy_ver'] as string | null) : null, notice: isObj(c) ? c['notice'] : null };
+    } catch {
+      return null;
+    } finally {
+      signal.removeEventListener('abort', stop);
+    }
+  };
+}
+
+/** createConsentApi 的可选项（B2 FA-6 ①） */
+export interface ConsentApiOptions {
+  /** noticeState 先试的快读；不给就只走 supabase-js */
+  fastRead?: FastNoticeRead;
+  /**
+   * 构建没带 supabase 地址或 anon key（本机、假后端 e2e）：supabase-js 那条路只会报 supabase_env_missing（归 unknown），
+   * noticeState 直接回这个结果，不为它下载 supabase-js。默认 true
+   */
+  envReady?: boolean;
+}
+
+/** 两样都读到了以后判断弹哪一屏（快读和 supabase-js 共用；规则见文件头） */
+function judgeNotice(mine: string | null, notice: unknown): Result<NoticeState> {
+  if (!mine) return { ok: true, value: 'first' };
+  const min = noticeVer(notice, 'min_consent_ver');
+  // R-239：只在本人版本有值、min 认得出、且本人版本低于 min 时才是“更新了”；本人版本认不出也按低于处理（要重新确认）
+  if (min && !policyVerAtLeast(mine, min)) return { ok: true, value: 'updated' };
+  return { ok: true, value: 'none' };
+}
+
 /** readSid：同步读本机会话的 session_id（默认 platform/session.ts 的 readSessionId；测试换掉） */
 export function createConsentApi(
   getDb: () => Promise<Db>,
   slowMs: number = CONSENT_SLOW_MS,
   hardMs: number = CONSENT_HARD_MS,
   readSid: () => string | null = () => readSessionId(),
+  opts: ConsentApiOptions = {},
 ): ConsentApi {
+  const { fastRead, envReady = true } = opts;
   async function readNotice(db: ConsentDb, sid: string | null): Promise<{ notice: unknown } | Failure> {
     const cfg = await db.from('app_config').select('notice').eq('id', 1).maybeSingle();
     return cfg.error ? fail(cfg.error, sid) : { notice: cfg.data?.notice ?? null };
@@ -165,23 +277,28 @@ export function createConsentApi(
       }
     },
 
-    noticeState: () =>
-      withTimeout(async (): Promise<Result<NoticeState>> => {
+    noticeState: () => {
+      // 超过 slowMs 放弃时中断快读还在路上的请求，也不再退回 supabase-js（FA-6 ①）
+      const ctl = new AbortController();
+      return withTimeout(async (): Promise<Result<NoticeState>> => {
         const sid = safeSid();
+        if (!envReady) return ERR('unknown');
         try {
+          const fast = fastRead ? await fastRead(ctl.signal) : null;
+          if (fast) return judgeNotice(fast.mine, fast.notice);
+          if (ctl.signal.aborted) return ERR('offline');
           const db = narrow(await getDb());
           const [prof, n] = await Promise.all([db.from('profiles').select('consent_policy_ver').maybeSingle(), readNotice(db, sid)]);
           if (prof.error) return fail(prof.error, sid);
           if ('ok' in n) return n;
-          const mine = prof.data?.consent_policy_ver ?? null;
-          if (!mine) return { ok: true, value: 'first' };
-          const min = noticeVer(n.notice, 'min_consent_ver');
-          // R-239：只在本人版本有值、min 认得出、且本人版本低于 min 时才是“更新了”；本人版本认不出也按低于处理（要重新确认）
-          if (min && !policyVerAtLeast(mine, min)) return { ok: true, value: 'updated' };
-          return { ok: true, value: 'none' };
+          return judgeNotice(prof.data?.consent_policy_ver ?? null, n.notice);
         } catch (e) {
           return fail(e, sid);
         }
-      }, slowMs, () => ERR('offline')),
+      }, slowMs, () => {
+        ctl.abort();
+        return ERR('offline');
+      });
+    },
   };
 }

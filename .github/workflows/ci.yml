@@ -360,11 +360,18 @@ jobs:
       - name: Playwright（e2e 模式构建 + wrangler pages dev dist/web，控制台出现 CSP 报错就算失败）
         run: npm run e2e
 
+      # 快读组（B2 FA-6 ①，安全审查 L5）：带 supabase 地址（同源 /sb、假 anon key）的 e2e 构建，只跑 b2-first-screen-supabase.spec.ts，
+      # 验证启动关口走快读、supabase-js 在今天页画出来以后才下载；默认组没配地址、跑不到快读分支。端口 8791、产物 dist/web-fastread，和上一步错开
+      - name: Playwright 快读组（带 supabase 地址的 e2e 构建，只跑首屏 supabase 用例）
+        run: npm run e2e:fastread
+
       - name: 失败时上传报告（只有本地测试数据，不含任何密钥）
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
-          path: playwright-report/
+          path: |
+            playwright-report/
+            playwright-report-fastread/
           retention-days: 7
           if-no-files-found: ignore

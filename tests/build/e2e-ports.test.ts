@@ -184,3 +184,55 @@ describe('无后端组：覆盖了假后端端口就不复用已有服务', () =
     expect(reuse(await loadPlain({ CI: 'true' }))).toEqual([false, false]);
   });
 });
+
+describe('快读组（playwright.fastread.config.ts，B2 FA-6 ① 安全审查 L5）', () => {
+  const KEYS = ['LEMO_WEB_OUT', 'LEMO_WS_PORT', 'VITE_PUBLIC_SUPABASE_URL', 'VITE_PUBLIC_ANON_KEY', S3, SB, 'CI', 'E2E_GLOBAL_TIMEOUT_MS'] as const;
+  /** 配置会强制设几个环境变量（构建、产物指纹、用例都读它们）：加载前清掉（再按 preset 预设）、加载后原样恢复，不漏给别的用例 */
+  async function loadFastread(preset: Partial<Record<(typeof KEYS)[number], string>> = {}): Promise<{ cfg: PlaywrightTestConfig; env: Record<string, string | undefined> }> {
+    const saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+    for (const k of KEYS) delete process.env[k];
+    Object.assign(process.env, preset);
+    vi.resetModules();
+    try {
+      const cfg = (await import('../../playwright.fastread.config.ts')).default;
+      return { cfg, env: Object.fromEntries(KEYS.map((k) => [k, process.env[k]])) };
+    } finally {
+      for (const k of KEYS) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    }
+  }
+
+  it('带同源 /sb 地址和假 anon key 构建，只跑首屏 supabase 用例；端口、产物、状态目录、调试端口和另外两组都错开', async () => {
+    const { cfg, env } = await loadFastread();
+    expect(env['VITE_PUBLIC_SUPABASE_URL']).toBe('http://127.0.0.1:8791/sb');
+    expect(env['VITE_PUBLIC_ANON_KEY']).toBe('fake-anon-key');
+    expect(env['LEMO_WEB_OUT']).toBe('dist/web-fastread');
+    expect(env['LEMO_WS_PORT']).toBe('8791');
+    expect(cfg.testMatch).toBe('**/b2-first-screen-supabase.spec.ts');
+    const [fake, web] = servers(cfg);
+    expect(fake?.url).toBe('http://127.0.0.1:9192/health');
+    expect(fake?.env).toEqual({ [S3]: '9193', [SB]: '9192' });
+    const cmd = web?.command ?? '';
+    expect(cmd).toContain('wrangler pages dev dist/web-fastread ');
+    expect(flag(cmd, '--port')).toBe('8791');
+    expect(flag(cmd, '--persist-to')).toBe('.wrangler/state-e2e-fastread');
+    expect(flag(cmd, '--inspector-port')).toBe('9233');
+    expect(bindingsOf(cmd)['SUPABASE_UPSTREAM']).toBe('http://127.0.0.1:9192');
+    for (const used of ['9199', '9198', '9197', '9196']) expect(Object.values(fake?.env ?? {})).not.toContain(used);
+  });
+
+  it('本机 shell 里已经有真实地址、key、产物目录、端口：一律被这一组的本机假值覆盖，不沿用（安全复审 L7）', async () => {
+    const { env } = await loadFastread({
+      VITE_PUBLIC_SUPABASE_URL: 'https://real-project.supabase.co',
+      VITE_PUBLIC_ANON_KEY: 'eyJ-real-looking-anon-key',
+      LEMO_WEB_OUT: 'dist/web',
+      LEMO_WS_PORT: '8788',
+    });
+    expect(env['VITE_PUBLIC_SUPABASE_URL']).toBe('http://127.0.0.1:8791/sb');
+    expect(env['VITE_PUBLIC_ANON_KEY']).toBe('fake-anon-key');
+    expect(env['LEMO_WEB_OUT']).toBe('dist/web-fastread');
+    expect(env['LEMO_WS_PORT']).toBe('8791');
+  });
+});

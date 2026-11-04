@@ -33,7 +33,7 @@ import { createLogQueue, guardOwner } from '../core/log/queue.ts';
 import { devicePlatform, readInstallId, withLock } from '../platform/device-info.ts';
 import { clearLogQueue, clearOtherLogQueues, logQueueStore } from '../platform/log-store.ts';
 import { probeAccountForExit } from '../platform/account-status.ts';
-import { runPushClaim, setPushClaimContext } from '../platform/push-claim-run.ts';
+import { expectPushClaimContext, runPushClaim, setPushClaimContext } from '../platform/push-claim-run.ts';
 import { setRemindHoldLog } from '../kit/state/remind-queue.ts';
 import { browserLifecycle } from '../platform/net.ts';
 import { createLogUploader, createSupabaseTransport } from '../platform/sync-net.ts';
@@ -46,13 +46,14 @@ import {
 import { settleDropAtStartup } from '../platform/session-drop.ts';
 import { enableDropMark, installDesktopSession } from '../platform/session-store.ts';
 import { hideSplash, hideSplashAfter, hideSplashWhenPainted } from '../platform/splash.ts';
+import { appPainted, startAppPaintLimit, watchAppPainted } from '../platform/first-paint.ts';
 import { nextFrame } from '../motion/index.ts';
 import { checkSwOnForeground, registerServiceWorker, reloadPage, upgradeLogCountStore, watchServiceWorkerUpdate } from '../platform/sw-register.ts';
 import { mountExitScreen, watchExitIncomplete } from './ExitIncompleteScreen.tsx';
 import { mountFeatures } from './features.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
 import { setRemindErrorLog } from './App.tsx';
-import { startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
+import { GATE_LIMIT_MS, startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
 import { wireSync } from './sync-wiring.ts';
 import { applyDocLocale } from '../platform/doc-locale.ts';
 
@@ -108,6 +109,9 @@ async function start(): Promise<void> {
   if (!el) throw new Error('root_missing');
   // 告知页关口还在问服务器时 #root 是空的，启动画面继续盖着；一画出东西就在下一帧收起
   hideSplashWhenPainted(el, nextFrame);
+  // 首屏画完（第一个功能页出来再过一帧）：同步、设备登记、SW 注册都排在它后面，supabase-js 不和页面分包抢下载（B2 FA-6 ①）。
+  // 这里只挂上观察和 15 秒长兜底；正式的时限在 render 之后才开始算（见下面 startAppPaintLimit）
+  watchAppPainted(el, nextFrame);
   el.dataset['version'] = buildInfo.version;
 
   const userId = readSessionUserId();
@@ -179,6 +183,8 @@ async function start(): Promise<void> {
     onSwitched: reloadPage,
   });
   if (boot.switching) return;
+  // 推送认领的上下文要等首屏画完才设（下面 setPushClaimContext）：这之前设置 › 提醒 的点按认领先等它，不当场回 claim_failed（推迟启动审查 L3）
+  expectPushClaimContext();
 
   // 选根（root.tsx）：在线先过告知页关口；本机库来自更新的版本（TC-B1-49，K6-ver-new）只渲染整屏提示（先注册 SW 再渲染，复审 S4）
   const root = await startRoot(boot, {
@@ -189,10 +195,27 @@ async function start(): Promise<void> {
   // 最外层兜底（K6-sugg3 ⑥）：App 顶层出错不白屏，显示静态的“出错了 · 刷新”
   const guarded = withCrashFallback(root, reloadPage);
   createRoot(el).render(import.meta.env.DEV ? <StrictMode>{guarded}</StrictMode> : guarded);
+  // 首屏时限从 render 起算（FA-6 推迟启动审查 L1）：告知页关口最多空白 GATE_LIMIT_MS（5 秒）后一定会画出页面，
+  // 时限取它再加 1 秒，关口慢时同步也不会在关口还空白时先起、和告知页分包抢下载；一直不画功能页的整屏提示、
+  // 后台标签页（rAF 不跑）最多多等这么久
+  startAppPaintLimit(GATE_LIMIT_MS + 1000);
   // 账号的界面画出来了：exe 里之后退出、被移除时先整页重新载入，再开登录小窗口（FA2-3）
   markAccountUiShown();
   // exe：之后退出、被移除时删会话失败，盖上“退出没完成，点重试”（A-1）；网页版不会出现
   if (isTauri()) watchExitIncomplete();
+
+  // 等第一个页面画出来（B2 FA-6 ①）：同步引擎一启动就要 supabase-js（realtime 订阅、刷新令牌、读 config），
+  // 原来紧跟在 render 后面，今天页分包还没到就先下载了 supabase-js。换账号、退出的监听（watchAccount）已在 render 之前挂好，不受影响。
+  // 取舍（审查 L4）：会话被撤销、账号停用要等同步引擎或 supabase-js 起来才发现，最多推后这一段（通常几百毫秒）；本机缓存的内容本来就先画
+  await appPainted();
+  // 等的这段时间里可能已经在换账号、退出（watchAccount 设了闸、封了库、退订了推送）：后面的同步、设备登记、推送认领、SW 注册
+  // 用的都是这个账号（userId）、本机库和当前会话的令牌，一律不再做（FA-6 推迟启动审查 M1；和 render 之前那道检查同一种写法）。
+  // 等着上下文的点按认领立刻回 claim_failed（L3），也补上“换账号时设 null”。
+  // 同步再比一次本机会话（安全复审 L6）：别的标签页已经换了账号、watchAccount 还没来得及设闸时，同样不用旧账号做下面这些
+  if (boot.switching || readSessionUserId() !== userId) {
+    setPushClaimContext(null);
+    return;
+  }
 
   // 同步（K8）：只在 boot 正常时启动；被移除（同步引擎、outbox 的 removed 事件）只处理一次：清空本机、删本机会话、回登录页
   // 设备行（0.38 第 62 条④，接手清单 K8-tz-device）：主页拿到锁后登记或复用本会话的 devices 行，id 存 meta，report_tz 用它

@@ -3,7 +3,7 @@
 // “整表重拉期间另一页的写入不丢、本机行不被误删”（审查员的复现用例）在 core/sync/__tests__/paging.test.ts
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { coldStart, getBoot, resetBootForTest, type BootOptions } from '../../core/boot.ts';
-import { clearAllCollections } from '../../core/store.ts';
+import { clearAllCollections, collection } from '../../core/store.ts';
 import { createSync, type SyncOptions } from '../../core/sync/engine.ts';
 import { fakeLife, fakeTransport, FakeServer, type FakeTransport } from '../../core/sync/__tests__/fake-server.ts';
 import { fakeIndexedDB } from '../../core/__tests__/idb-fake.ts';
@@ -207,4 +207,83 @@ describe('同步暂停后只听（TABLEADER-listen，真选主、真频道）', 
     await flush();
     expect(locks.holder()).toBeNull();   // 另一页关了，暂停页（只听）也不接手
   });
+});
+
+describe('推迟启动期间漏掉的提醒（FA-6 推迟启动审查 M3）', () => {
+  function wire(boot: Awaited<ReturnType<typeof coldStart>>, posts: unknown[], o: { isLeader?: boolean; onMake?: () => void } = {}) {
+    return wireSync(boot, {
+      transport: fakeTransport(new FakeServer()),
+      clearCacheStorage: () => Promise.resolve(),
+      clearLocalSessionIf: () => Promise.resolve(true),
+      goToAuth: () => undefined,
+      setExitNotice: () => undefined,
+      create: (b, o: SyncOptions) => createSync(b, { ...o, skipConfig: true, lifecycle: fakeLife(true) }),
+      // 默认别的页是主页：本页永远拿不到锁。isLeader: true 时本页当主页（不调 lead，引擎不起，只看补读本身）
+      leader: () => {
+        o.onMake?.();
+        return { isLeader: () => o.isLeader ?? false, post: (m) => void posts.push(m), close: () => Promise.resolve() };
+      },
+      lifecycle: fakeLife(true),
+    });
+  }
+
+  it('频道一建好就整份重读一次：启动前别的页写进本机库的行这时出现在界面上；本页没有待发的不提醒主页', async () => {
+    const boot = await coldStart(bootOpts());
+    const row = todo(7);
+    // 别的标签页（主页）在本页 wireSync 之前写了本机库，发的 changed 本页还没频道收
+    await boot.cache?.putRows('todos', [{ id: row['id'] as string, server: row as never, view: row as never }]);
+    expect(collection('todos').get(row['id'] as string)).toBeUndefined();
+    const posts: unknown[] = [];
+    const sync = wire(boot, posts);
+    await vi.waitFor(() => expect(collection('todos').get(row['id'] as string)).toBeTruthy());
+    await flush();
+    expect(posts).toEqual([]);
+    await sync?.stop();
+  });
+
+  it('本页启动前就有待发的写入（推迟期间写的）：读完以后提醒主页发一次', async () => {
+    const boot = await coldStart(bootOpts());
+    await boot.outbox?.enqueue({ table: 'todos', id: uid(8), op: 'insert', data: todo(8) });
+    const posts: unknown[] = [];
+    const sync = wire(boot, posts);
+    await vi.waitFor(() => expect(posts).toEqual([{ type: 'outbox' }]));
+    await sync?.stop();
+  });
+
+  it('本页是主页：读完以后有待发的也不给自己发 outbox 提醒（代码复审 N2）', async () => {
+    const boot = await coldStart(bootOpts());
+    await boot.outbox?.enqueue({ table: 'todos', id: uid(8), op: 'insert', data: todo(8) });
+    const row = todo(7);
+    await boot.cache?.putRows('todos', [{ id: row['id'] as string, server: row as never, view: row as never }]);
+    const posts: unknown[] = [];
+    const sync = wire(boot, posts, { isLeader: true });
+    await vi.waitFor(() => expect(collection('todos').get(row['id'] as string)).toBeTruthy());
+    await flush();
+    expect(posts).toEqual([]);
+    await sync?.stop();
+  });
+
+  for (const when of ['建频道时', 'wireSync 刚返回时'] as const) {
+    it(`换账号闸在${when}设上：不补读，旧账号的行不灌回内存（代码复审 N2）`, async () => {
+      const boot = await coldStart(bootOpts());
+      const row = todo(7);
+      await boot.cache?.putRows('todos', [{ id: row['id'] as string, server: row as never, view: row as never }]);
+      const gate = (): void => {
+        (boot as { switching: boolean }).switching = true;
+      };
+      if (!boot.cache) throw new Error('没有本机库');
+      const allRows = vi.spyOn(boot.cache, 'allRows');
+      if (!boot.outbox) throw new Error('没有 outbox');
+      const refresh = vi.spyOn(boot.outbox, 'refresh');
+      const sync = wire(boot, [], when === '建频道时' ? { onMake: gate } : {});
+      if (when === 'wireSync 刚返回时') gate();
+      await flush(10);
+      expect(allRows).not.toHaveBeenCalled();
+      // 建频道时就设上了：连 outbox 待发数也不重读（外层那道闸）；wireSync 返回以后才设：refresh 已经发出，回来再看闸（内层）
+      if (when === '建频道时') expect(refresh).not.toHaveBeenCalled();
+      expect(collection('todos').get(row['id'] as string)).toBeUndefined();
+      (boot as { switching: boolean }).switching = false;
+      await sync?.stop();
+    });
+  }
 });

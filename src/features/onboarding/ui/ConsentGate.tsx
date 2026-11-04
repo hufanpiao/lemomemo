@@ -8,14 +8,17 @@
 //   调用方给了 startedAt（src/app/root.tsx 的 GatedApp，K6-sugg3 ④）时从那一刻算起：分包加载用掉的时间扣掉，只等剩下的；
 //   挂上时调 onStart，调用方从此不再自己计时（已经显示的告知页不会被它打断）
 // • 做完时地址还停在 #/onboarding（直接打开过这个路由）：换到今天页，免得进 App 后再显示一遍告知页
+// • 告知页本身（ConsentPage）懒加载（B2 FA-6 首屏体积 ④）：已经同意过的人（绝大多数冷启动）不下载它；
+//   要显示时才加载，加载中什么也不画（和等 noticeState 时一样）；分包加载失败归 main.tsx 包着关口的错误边界，照旧放行画 App
 // • App 不画在关口里面（CONSENT-sugg ③）：main.tsx 的错误边界只包关口，关口出错或分包加载失败时放行画 App，App 自己出错不归它管（src/app/root.tsx）
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { navigate, parseHash } from '../../../app/router.ts';
 import type { ConsentApi } from '../hooks/useConsent.ts';
 import {
   CONSENT_GATE_MS, defaultConsentWiringDeps, useConsentApi, useConsentHandlers, useNoticeState, type ConsentWiringDeps,
 } from '../hooks/useConsentWiring.ts';
-import ConsentPage from './ConsentPage.tsx';
+
+const ConsentPage = lazy(() => import('./ConsentPage.tsx'));
 
 export interface ConsentGateProps {
   /** 放行：该画 App 了（只调一次） */
@@ -51,5 +54,9 @@ export default function ConsentGate({
   useEffect(() => {
     if (pass) onPass();
   }, [pass, onPass]);
-  return showConsent ? <ConsentPage api={api} variant={notice === 'updated' ? 'updated' : 'first'} {...handlers} /> : null;
+  return showConsent ? (
+    <Suspense fallback={null}>
+      <ConsentPage api={api} variant={notice === 'updated' ? 'updated' : 'first'} {...handlers} />
+    </Suspense>
+  ) : null;
 }

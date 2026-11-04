@@ -242,18 +242,35 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   outbox.subscribe(() => {
     if (leader && !leader.isLeader() && !boot.switching) leader.post({ type: 'outbox' });
   });
-  // 非主页回到前台：整份重读一次兜底（消息可能丢了）
-  life.onVisibility((visible) => {
-    if (!visible || !leader || leader.isLeader() || boot.switching) return;
+  // 整份重读一次（outbox 待发数、各集合）：库已关（换账号、清库中）时不管
+  const rereadAll = (): void => {
     void (async () => {
       await outbox.refresh();
       await reloadCollections(cache, null);
     })().catch(() => undefined);
+  };
+  // 非主页回到前台：整份重读一次兜底（消息可能丢了）
+  life.onVisibility((visible) => {
+    if (!visible || !leader || leader.isLeader() || boot.switching) return;
+    rereadAll();
   });
 
   const name = `lemo-sync:${boot.userId ?? ''}`;
   const make = deps.leader ?? createTabLeader;
   leader = make({ name, lead, onMessage, ...(deps.log ? { log: deps.log } : {}) });
+  // 频道刚建好时补一次（FA-6 推迟启动审查 M3）：wireSync 等首屏画完才跑（main.tsx 的 await appPainted()，最长约 6 秒），
+  // 这之前主页发的 changed 本页收不到、本页的写入也没提醒主页。抢锁是异步的，这一刻还不知道自己是不是主页：
+  // 一律整份重读一次（主页随后 start 会补拉，多读一次无害）；读完本页 outbox 里还有待发的、又不是主页，提醒一次主页马上发。
+  // 读库期间本机新写入、引擎拉进来的行不会被这次重读删掉或改回旧值（reloadCollections 只动读库期间没变过的行，代码复审 N1）。
+  // 换账号闸：建频道时、refresh 回来时各看一次（代码复审 N2），闸设上了就不把旧账号的行灌回刚清空的内存
+  if (!boot.switching) {
+    void (async () => {
+      await outbox.refresh();
+      if (boot.switching) return;
+      await reloadCollections(cache, null);
+      if (!boot.switching && leader && !leader.isLeader() && outbox.getStatus().pending > 0) leader.post({ type: 'outbox' });
+    })().catch(() => undefined);
+  }
   /**
    * 限次触发、同步暂停：让出主页（放锁、关频道），再开一个 listenOnly 的（只收提醒、从不排队抢锁、从不调 lead；
    * 没有 Web Locks 时也不当主页，D3），暂停期间别的标签页的冷静期 reset 照样收得到（R-263-sugg ①）。wireSync 的 close 关的是当前这个。

@@ -54,6 +54,16 @@
   pointer-events: auto;
 }
 
+/* 退场途中（<Appear> 打 data-state="leaving"，写法同 Dialog.module.css）：退出动画播完、卸载之前不接点按，
+   “知道了”“稍后”、点横幅本身都不再触发（接线第一段代码审查 R4，REMIND-banner-exit-click）。
+   只改 pointer-events，不碰 opacity、transform，退场动效照旧；减少动态效果时同样有 leaving。
+   已知（审查 L1）：退场约 0.2 秒内的点按会穿过横幅落到下面的页面上，比误触“稍后”写错数据轻，可以接受；
+   彻底不穿透、连键盘一起挡住，留给 MOTION-leaving-inert（在 Appear 的退场层上加 inert） */
+.layer[data-state="leaving"] > *,
+.layerNote[data-state="leaving"] > * {
+  pointer-events: none;
+}
+
 .banner {
   position: fixed;
   top: calc(var(--inset-top) + 8px);
