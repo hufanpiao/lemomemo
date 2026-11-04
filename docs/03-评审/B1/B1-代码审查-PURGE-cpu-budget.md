@@ -409,3 +409,45 @@
 `index.ts` 里 `listRemind` 的 `.is('purge_started_at', null)` 是单元测试测不到的（单元测试用的是假库），由真库测试 `purge-remind.it.ts` 守着；它要连本机数据库，按规矩没跑。
 
 没有连数据库、没有起 docker，没有 git add，没有改共享工作区的源码（只往本审查记录末尾追加了这一节），没碰 `D:\claude code\待办APP`。
+
+---
+
+## 第五轮（低项）（2026-11-04）
+
+- 范围：第四轮剩下的低 K、L、M。改动在 `core.ts`、`index.ts`、`tests/functions/account-fakes.ts`、`tests/functions/account-purge-fakes.ts`（新）、`account-purge-hold.test.ts`、`account-purge-remind.test.ts`、`supabase/tests/store-it/purge-remind.it.ts`，以及执行记录第 14 节。
+- 尺度相同，默认不通过。全量 vitest 里 2 条 Dialog-motion 失败，是前端 A 在改 `src/motion`，和这一项无关，按主持人要求不算；我只跑了和 account-purge 相关的测试。
+
+### 结论：通过，8.5 / 10（维持第四轮的分数）
+
+三条低项都按说的改到位了，没有带出新问题。仍然只剩低 D：B7a 前要在预览上复跑。
+
+| 第四轮 | 结论 | 依据 |
+|---|---|---|
+| 低 K（`account-fakes.ts` 超 max-lines） | **已解决** | 假库挪到 `tests/functions/account-purge-fakes.ts` 的 `fakePurgeStore(db)`；`FakeDb.purgeStore()` 一行转调。我用脚本把 `HEAD` 里旧的 `purgeStore()` 方法体和新文件逐行规范化比对，只差 `listRemind` 多了下限这一处，其余方法一字不差，搬家没走样。新文件对 `FakeDb` 只是 `import type`，编译后没有运行时循环引用。`guard` 改成公开，只是给测试用的假库开了一个口，没问题。eslint 对这几个文件 0 错误、0 警告 |
+| 低 L（照删期的行仍被列出，`remind_left` 偏大） | **已解决** | `index.ts` 的 `listRemind` 加了 `.gt('purge_after', sinceIso)`，`core.ts` 传 `since = now - PURGE_HOLD_MAX_MS`。这和第一段的兜底 `pa <= now - PURGE_HOLD_MAX_MS` 跳过、第二段 `pa <= t0 - PURGE_HOLD_MAX_MS` 照删，三处是同一条边界（`now` 就是 `t0`），列表里排除的正好是第二段要照删的。几处替身都改成了转发两个参数。真库边界由 `purge-remind.it.ts:26` 守着（要连库，我没跑，后端自报 4/4） |
+| 低 M（没有邮箱又认领卡住，要等 3 天才删） | **已记录** | 执行记录第 14 节和文末“局限”写清了原因和后果，可以接受 |
+
+### 变异（独立副本，跑 `tests/functions/account-purge*.test.ts` 共 63 条，跑完已还原）
+
+| 变异 | 改了什么 | 结果 |
+|---|---|---|
+| none | 不改 | 63/63 通过 |
+| noSince | `core.ts` 传的下限改成 1970 年（等于不设下限） | 拦住（1 条） |
+| sinceOffByDay | 下限放宽一天 | 拦住（1 条） |
+| sinceTooTight | 下限收紧一天（2～3 天的也不列了） | 拦住（2 条） |
+| fakeNoSince | 假库去掉下限过滤 | 拦住（1 条） |
+| fakeGte | 假库的 `>` 改成 `>=` | 没拦住，但这是等价变异：正好落在边界上的那一行就算被列出来，也会被 `core.ts` 的兜底 `continue` 跳过，行为不变；真库的 `gt` 由 `purge-remind.it.ts` 守着 |
+| noFallbackContinue | 去掉 `core.ts` 里照删期的兜底 `continue` | 没拦住，这是预期内的：`listRemind` 已经按下限不列这些行，这一行只是双保险。中 C 的两个场景（P1、P2）仍由下限和 `.is('purge_started_at', null)` 守住 |
+
+### 跑过的命令
+
+| 命令 | 结果 |
+|---|---|
+| `git diff`、`git status` 看改动；用脚本比对 `git show HEAD:tests/functions/account-fakes.ts` 的 `purgeStore()` 方法体和新文件 | 搬家内容一致 |
+| `npx eslint supabase/functions/account-purge/ tests/functions/account-fakes.ts tests/functions/account-purge-fakes.ts tests/functions/account-purge-hold.test.ts tests/functions/account-purge-remind.test.ts` | 0 错误、0 警告 |
+| `npx tsc -p tsconfig.functions.json`、`npx tsc -p tsconfig.node.json` | 0 错误 |
+| `npx vitest run` 跑 account-purge 的 hold、budget、remind、主测试、schedule，以及 account、account-status、account-export-p0-auth、lemo-ops、`tests/data-manifest/purge-runner.test.ts` | 10 个文件，127 条通过、5 条跳过 |
+| `python -I build/check_backend.py` | `check_backend：0 个错误` |
+| 变异：独立副本 `C:\Users\hoobey\AppData\Local\Temp\claude\D--claude-code\377a2f6c-6055-4a6d-a7cc-507392afac21\scratchpad\repo-copy`（node_modules 用联接），脚本 `C:\Users\hoobey\AppData\Local\Temp\claude\D--claude-code\377a2f6c-6055-4a6d-a7cc-507392afac21\scratchpad\mut5.py`，假库那两个变异在副本里直接改、跑完还原 | 见上表 |
+
+没有连数据库、没有起 docker，没有 git add，没有改共享工作区的源码（只往本审查记录末尾追加了这一节），没碰 `D:\claude code\待办APP`。

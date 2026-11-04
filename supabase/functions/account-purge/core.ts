@@ -94,8 +94,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export interface DueRow { user_id: string; purge_after: string; notice_sent?: boolean }
 
 export interface PurgeStore {
-  /** 提醒的候选：notice_sent = false、purge_after <= until（含已经过了的，补发并顺延），按 purge_after 从早到晚 */
-  listRemind(untilIso: string): Promise<DueRow[]>;
+  /**
+   * 提醒的候选：notice_sent = false、since < purge_after <= until（含已经过了的，补发并顺延；since = now - 3 天，照删期的不列，
+   * PURGE-r4-low 低 L）、没认领，按 purge_after 从早到晚
+   */
+  listRemind(untilIso: string, sinceIso: string): Promise<DueRow[]>;
   /** update pending_deletions set notice_sent = to where user_id = $1 and notice_sent = from：改到 1 行返回 true */
   casNotice(userId: string, from: boolean, to: boolean): Promise<boolean>;
   /**
@@ -236,7 +239,7 @@ interface RemindResult {
 async function remind(deps: FullDeps, now: number, overBudget: () => boolean): Promise<RemindResult> {
   const { store, log } = deps;
   const out: RemindResult = { sent: 0, postponed: 0, left: 0, reminded: new Set(), noEmail: new Set() };
-  const rows = [...await store.listRemind(new Date(now + REMIND_WINDOW_MS).toISOString())]
+  const rows = [...await store.listRemind(new Date(now + REMIND_WINDOW_MS).toISOString(), new Date(now - PURGE_HOLD_MAX_MS).toISOString())]
     .sort((x, y) => Date.parse(x.purge_after) - Date.parse(y.purge_after));   // 最急的先发（index.ts 也按 purge_after 排）
   for (const [i, r] of rows.entries()) {
     if (overBudget()) {   // 这一轮不再发，剩下的交给 15 分钟后的补跑（notice_sent 还是 false，下一次还在候选里）
@@ -246,7 +249,7 @@ async function remind(deps: FullDeps, now: number, overBudget: () => boolean): P
     }
     const pa = Date.parse(r.purge_after);
     if (!UUID.test(r.user_id) || !Number.isFinite(pa) || pa > now + REMIND_WINDOW_MS) continue;
-    // 已经进入照删期（从 purge_after 起超过 3 天，第二段照删）的不再补发、不再顺延（B1 代码审查第三轮中 C）：
+    // 已经进入照删期（从 purge_after 起超过 3 天，第二段照删）的不再补发、不再顺延（B1 代码审查第三轮中 C；listRemind 已按下限不列，这里兜底）：
     // 否则照删删了一半、信又发得出去时会被顺延回冷静期（数据已缺一块却能 restore），认领卡住时还会每轮发一封补发信
     if (pa <= now - PURGE_HOLD_MAX_MS) continue;
     const late = pa <= now;   // 到期了还没提醒：补发，删除时刻顺延到 now + 24 小时

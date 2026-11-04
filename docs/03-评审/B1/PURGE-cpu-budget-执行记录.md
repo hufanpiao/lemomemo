@@ -213,9 +213,33 @@
   | `listDue` 改回用 `deps.now()`（复跑） | 1 |
   | 不跳过本轮刚提醒过的（复跑） | 1 |
 
+### 14. PURGE-r4-low（第四轮复审 8.5 通过后剩下的低问题，11-04）
+
+- 低 K：`tests/functions/account-fakes.ts` 超 max-lines。把 account-purge 用的那套假库（`PurgeStore` 的内存版，原来是 `FakeDb.purgeStore()` 的方法体）挪到新文件 `tests/functions/account-purge-fakes.ts` 的 `fakePurgeStore(db)`。
+  - `FakeDb.purgeStore()` 留成一行转调，调用方一个都不用改；
+  - `FakeDb.guard` 新文件也要用，所以从 private 改成了公开；
+  - `FakeBackups`、`purgeDeps` 没挪：它们要用 account-fakes.ts 里的值（`CRON`、`mailer`），挪过去会两个文件互相引用；
+  - 新文件只 import FakeDb 的类型，运行时不互相引用。拆完 eslint 不再报 max-lines，行为不变（基线 63 条照过）。
+- 低 L：`listRemind` 加了时间下限：
+  - 接口改成 `listRemind(until, since)`，`since = now - 3 天`，只列 `since < purge_after <= until` 的。照删期的行不再列出来，第一段碰上限时 `remind_left` 不会把它们算进去；
+  - `index.ts` 加 `.gt('purge_after', sinceIso)`，假库同样加了这个条件；
+  - `core.ts` 里第三轮加的“照删期 continue”留着兜底；
+  - 新测试（remind 测试）：5 个到期超过 3 天的加 60 个窗口里的，第一轮 `remind_left` 正好是 10，不是 15；`listRemind` 一个照删期的都没列；照删期那 5 个只收到“已注销”一封；
+  - 真库：`purge-remind.it.ts` 新加一条，直接调 `makeStore(admin).listRemind`：到期 3 天又 10 分钟的不列，到期差 10 分钟满 3 天的照列。本机 lemo-b2push 4/4 过，跑完 `supabase stop`，`docker ps` 前后一致；
+  - 两处测试里包装 `listRemind` 的替身，原来只转发一个参数，改成两个都转发。
+- 低 M：写进文末“局限”。
+- 变异（独立副本 `scratchpad/mut-r4`，node_modules 用联接，用完已删）：基线 63/63，下面 4 种每种至少 1 条失败。
+
+  | 变异 | 失败条数 |
+  |---|---|
+  | `core.ts` 传的下限改成 1970 年（等于没有下限） | 1 |
+  | 假库 `listRemind` 不看下限 | 1 |
+  | 假库 `listRemind` 不排除已认领的（复跑） | 1 |
+  | 没有下限、也去掉照删期 continue | 3 |
+
 ## 单元测试
 
-`tests/functions/account-purge-budget.test.ts`（8 条，复审后加了低 C 一条）、`account-purge-remind.test.ts`（13 条，复审后加了低 C 一条）、`account-purge-hold.test.ts`（11 条，复审中 A、中 B 和第三轮中 C，见第 12、13 节）、`account-purge-schedule.test.ts`（新增中 2 一条、改名一条），连同 `account-purge.test.ts` 共 5 个文件 62 条，全过。
+`tests/functions/account-purge-budget.test.ts`（8 条，复审后加了低 C 一条）、`account-purge-remind.test.ts`（14 条，复审后加了低 C 一条、PURGE-r4-low 低 L 一条）、`account-purge-hold.test.ts`（11 条，复审中 A、中 B 和第三轮中 C，见第 12、13 节）、`account-purge-schedule.test.ts`（新增中 2 一条、改名一条），连同 `account-purge.test.ts` 共 5 个文件 63 条，全过。假库在 `tests/functions/account-purge-fakes.ts`（第 14 节）。
 
 - 删除段：
   - 做完 A 时次数用完，B 不认领，15 分钟后的补跑接着做完；
@@ -289,6 +313,7 @@
 ## 局限
 
 - 低 A：补发信发出去了、顺延那一步写库出错（网络断）时，这一行仍是 `notice_sent = false`、`purge_after` 已过，第二段不删（`held`）；15 分钟后再补发一封、写新的时刻再顺延。用户会收到两封补发信，时刻以后一封为准，不会提前删。同样，手动补跑撞上 cron 时可能各发一封，只有一次顺延成功。没加“以最新一封为准”这句，要加的话得和韩文审校一起定。
+- 低 M（第四轮）：没有邮箱的账号，如果照删时认领卡住了，要等满 3 天才删。原因是认领卡住以后第一段不再列它（`purge_started_at` 不为空），它就进不了 `noEmail`；认领过期以后第二段列出它，判成 `held`，直到满 3 天按 `purge_forced_no_notice` 照删。不会永远扣着，也不会发信，只是晚一些。没改代码。
 - 低 J（第三轮）：发信接口超时、但 Resend 其实已经收下的那次，`sendMail` 回 false，函数当作没发出去；用户手里却有一封写着“现在 + 24 小时”的补发信。到了第 3 天照删，可能早于信里写的时刻。只在发信接口超时时出现，没改代码。
 - 中 B 的代价：发信一直失败（比如正式库没配好发信钥匙）的账号，从 `purge_after` 起 3 天后照删，用户可能一封提醒都没收到。这是负责人定的取舍；能发现靠 `purge:overdue` 和函数日志 `purge_forced_no_notice`。
 

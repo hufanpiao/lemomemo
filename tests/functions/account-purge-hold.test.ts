@@ -44,7 +44,7 @@ describe('中 A：不在同一轮里先提醒、后删除', () => {
     if (d) d.notice_sent = true;
     w.clock.ms = pa - 2 * SEC;   // t0
     const s = w.db.purgeStore();
-    const r = await runPurge(w, { store: { ...s, listRemind: async (u) => { w.clock.advance(5 * SEC); return s.listRemind(u); } } });
+    const r = await runPurge(w, { store: { ...s, listRemind: async (u, v) => { w.clock.advance(5 * SEC); return s.listRemind(u, v); } } });
     expect(r.body).toMatchObject({ purged: 0, held: 0 });
     expect(w.db.users.has(A)).toBe(true);
     w.clock.advance(15 * MIN);

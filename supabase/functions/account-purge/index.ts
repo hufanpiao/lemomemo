@@ -35,10 +35,11 @@ export function makeStore(admin: Admin): PurgeStore {
   const priv = admin.schema('private');
   const pd = () => priv.from('pending_deletions');
   return {
-    async listRemind(untilIso) {
-      // 含已经到期的（补发并顺延，core.ts 文件头）；正在删的（已认领）不发（B1 代码审查第三轮中 C）；按 purge_after 从早到晚，最急的先发
-      return must(await pd().select('user_id, purge_after').eq('notice_sent', false).lte('purge_after', untilIso).is('purge_started_at', null)
-        .order('purge_after')) ?? [];
+    async listRemind(untilIso, sinceIso) {
+      // 含已经到期的（补发并顺延，core.ts 文件头）；照删期的（purge_after <= since）不列（PURGE-r4-low 低 L）；
+      // 正在删的（已认领）不发（B1 代码审查第三轮中 C）；按 purge_after 从早到晚，最急的先发
+      return must(await pd().select('user_id, purge_after').eq('notice_sent', false).lte('purge_after', untilIso).gt('purge_after', sinceIso)
+        .is('purge_started_at', null).order('purge_after')) ?? [];
     },
     async casNotice(userId, from, to) {
       const rows = must(await pd().update({ notice_sent: to }).eq('user_id', userId).eq('notice_sent', from).select('user_id'));

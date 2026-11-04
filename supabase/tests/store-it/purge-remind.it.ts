@@ -12,7 +12,7 @@
 //     （B1 代码审查第三轮中 C），认领没过期，第二段也不碰它。
 import {
   assert, assertEquals, BACKUP_DATE, EMAIL_LIKE, mails, s3Put, s3Has, sql, admin, ours, emails, writeLedger, purgeTraces, healLeftovers,
-  mkUser, pending, runPurge, userExists, releaseLock, s3Server,
+  mkUser, pending, runPurge, userExists, releaseLock, s3Server, purgeMod,
 } from './harness.ts';
 
 const opts = { sanitizeOps: false, sanitizeResources: false };
@@ -21,6 +21,21 @@ const H = 3600_000;
 Deno.test({ name: 'purge-remind 开跑：清掉上次留下的', ...opts, async fn() {
   await healLeftovers();
   assertEquals((await sql`select 1 from auth.users where email like ${EMAIL_LIKE}`).length, 0);
+} });
+
+Deno.test({ name: 'listRemind 的下限（PURGE-r4-low 低 L）：照删期（purge_after 早于 now - 3 天）的不列，3 天以内到期没提醒的照列', ...opts, async fn() {
+  const hold = await mkUser('pr-hold');
+  await pending(hold, -(3 * 24 * 3600 + 600));   // 到期 3 天又 10 分钟
+  const recent = await mkUser('pr-recent');
+  await pending(recent, -(3 * 24 * 3600 - 600));   // 到期 3 天差 10 分钟
+  await sql`update private.pending_deletions set notice_sent = false where user_id = any(${[hold, recent]}::uuid[])`;
+  const now = Date.now();
+  const rows = await purgeMod.makeStore(admin).listRemind(new Date(now + 48 * H).toISOString(), new Date(now - 72 * H).toISOString());
+  const ids = rows.map((r) => r.user_id);
+  assert(!ids.includes(hold), '照删期的行被列出来了');
+  assert(ids.includes(recent), '3 天以内到期没提醒的没列出来');
+  // 别留给下面的场景（它会被照删、多发一封信）
+  await sql`delete from private.pending_deletions where user_id = any(${[hold, recent]}::uuid[])`;
 } });
 
 Deno.test({ name: '多个账号同时到期、同时有 60 个要提醒、2 个到期没提醒：删号不积压、提醒一封不漏不重复、补发并顺延一次', ...opts, async fn() {

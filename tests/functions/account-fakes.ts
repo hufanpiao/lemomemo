@@ -6,6 +6,7 @@ import { DbError, handle, keys } from '../../supabase/functions/account/core.ts'
 import type { Backups, Deps as PurgeDeps, PurgeStore, R2 } from '../../supabase/functions/account-purge/core.ts';
 import { BackupsSubdirError } from '../../supabase/functions/account-purge/core.ts';
 import type { Mail } from '../../supabase/functions/_shared/account-mail.ts';
+import { fakePurgeStore } from './account-purge-fakes.ts';
 
 export const A = 'aaaaaaaa-0000-4000-8000-000000000001';
 export const B = 'bbbbbbbb-0000-4000-8000-000000000002';
@@ -70,7 +71,8 @@ export class FakeDb {
   }
 
   private nowIso() { return new Date(this.clock.ms).toISOString(); }
-  private guard(name: string) { if (this.fail.has(name)) throw new Error(`fake_${name}`); }
+  /** 故障注入的检查（account-purge-fakes.ts 也用，所以不是 private） */
+  guard(name: string) { if (this.fail.has(name)) throw new Error(`fake_${name}`); }
 
   /** 级联：auth.users 删行时，带外键的都跟着删（profiles、pending_deletions、revoked_sessions、sessions、各表），deleted_accounts 留着 */
   deleteUserCascade(id: string) {
@@ -195,57 +197,8 @@ export class FakeDb {
     };
   }
 
-  purgeStore(): PurgeStore {
-    return {
-      listRemind: async (untilIso) => {
-        this.guard('listRemind');
-        return [...this.pending].filter(([, d]) => !d.notice_sent && d.purge_after <= untilIso && d.purge_started_at === null)
-          .sort((x, y) => (x[1].purge_after < y[1].purge_after ? -1 : 1)).map(([user_id, d]) => ({ user_id, purge_after: d.purge_after }));
-      },
-      casNotice: async (u, from, to) => {
-        this.guard('casNotice');
-        const d = this.pending.get(u);
-        if (!d || d.notice_sent !== from) return false;
-        d.notice_sent = to;
-        return true;
-      },
-      postponeNotice: async (u, oldIso, newIso) => {
-        this.guard('postponeNotice');
-        this.beforePostpone?.();
-        const d = this.pending.get(u);
-        if (!d || d.notice_sent || d.purge_after !== oldIso || d.purge_started_at !== null) return false;
-        d.notice_sent = true;
-        d.purge_after = newIso;
-        return true;
-      },
-      listDue: async (nowIso, staleIso) => {
-        this.guard('listDue');
-        return [...this.pending].filter(([, d]) => d.purge_after <= nowIso && (d.purge_started_at === null || d.purge_started_at < staleIso))
-          .sort((x, y) => (x[1].purge_after < y[1].purge_after ? -1 : x[1].purge_after > y[1].purge_after ? 1 : x[0] < y[0] ? -1 : 1))
-          .map(([user_id, d]) => ({ user_id, purge_after: d.purge_after, notice_sent: d.notice_sent }));
-      },
-      claim: async (u, nowIso, staleIso) => {
-        this.guard('claim');
-        const d = this.pending.get(u);
-        if (!d || d.purge_after > nowIso || !(d.purge_started_at === null || d.purge_started_at < staleIso)) return false;
-        d.purge_started_at = nowIso;
-        return true;
-      },
-      release: async (u, iso) => { const d = this.pending.get(u); if (d && d.purge_started_at === iso) d.purge_started_at = null; },
-      stillClaimed: async (u, iso) => { this.beforeStillClaimed?.(); return this.pending.get(u)?.purge_started_at === iso; },
-      isAdmin: async (u) => this.admins.has(u),
-      profile: async (u) => { const p = this.profiles.get(u); return p ? { ...p } : null; },
-      deletePendingSignup: async (h) => { this.guard('deletePendingSignup'); this.pendingSignups.delete(h); },
-      deleteCounterKey: async (key) => { for (const k of [...this.counters.keys()]) if (k.split('|')[0] === key) this.counters.delete(k); },
-      deleteUserCounters: async (u) => {
-        this.guard('deleteUserCounters');
-        for (const k of [...this.counters.keys()]) if (k.split('|')[0]?.split(':')[1] === u) this.counters.delete(k);
-      },
-      insertDeletedAccount: async (u) => { this.guard('insertDeletedAccount'); this.deleted.add(u); },
-      remainingRows: async (u) => (this.profiles.has(u) ? 1 : 0) + (this.pending.has(u) ? 1 : 0),
-      writeHeartbeat: async (d) => { this.guard('writeHeartbeat'); this.heartbeat = { ...d }; },
-    };
-  }
+  /** account-purge 的假库在 account-purge-fakes.ts（低 K 拆出去的） */
+  purgeStore(): PurgeStore { return fakePurgeStore(this); }
 }
 
 /** backups 桶的内存版：路径 <日期>/<user_id>/<表>.json.gz */

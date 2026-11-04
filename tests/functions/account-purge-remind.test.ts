@@ -52,9 +52,32 @@ describe('提醒段：自己的上限，超了就停、下一轮接着发，最�
     w.clock.ms = T0 + 7 * DAY - 24 * H;
     const s = w.db.purgeStore();
     const k = Math.ceil((REMIND_WORK_OPS - 1) / 4);
-    const r = await runPurge(w, { store: { ...s, listRemind: async (u) => [...await s.listRemind(u)].reverse() } });
+    const r = await runPurge(w, { store: { ...s, listRemind: async (u, v) => [...await s.listRemind(u, v)].reverse() } });
     expect(r.body).toMatchObject({ sent: k, remind_left: 60 - k });
     expect(w.box.map((m) => m.to)).toEqual(ids.slice(0, k).map((_, i) => `u${i}@test.local`));
+  });
+
+  it('照删期（到期超过 3 天）的不进提醒候选：第一段碰上限时 remind_left 只算窗口里没发的（PURGE-r4-low 低 L）', async () => {
+    const w = world();
+    const held: string[] = [];
+    for (let i = 0; i < 5; i++) {   // 5 个到期超过 3 天、一直没提醒成功的（申请时刻比窗口里的早 5 天）
+      const id = `e${String(i).padStart(7, '0')}-0000-4000-8000-000000000000`;
+      w.db.addUser(id, `h${i}@test.local`);
+      w.clock.ms = T0 - 5 * DAY + i * MIN;
+      await requestDeletion(w, id);
+      held.push(id);
+    }
+    await many(w, 60);
+    w.box.length = 0;
+    w.clock.ms = T0 + 7 * DAY - 24 * H;
+    const s = w.db.purgeStore();
+    const seen: string[] = [];
+    const k = Math.ceil((REMIND_WORK_OPS - 1) / 4);
+    const r = await runPurge(w, { store: { ...s, listRemind: async (u, v) => { const rows = await s.listRemind(u, v); seen.push(...rows.map((x) => x.user_id)); return rows; } } });
+    expect(r.body).toMatchObject({ sent: k, remind_left: 60 - k });
+    expect(seen.filter((u) => held.includes(u))).toEqual([]);
+    // 它们这一轮被第二段照删，只收到“已注销”那一封，没有提醒、补发
+    expect(w.box.filter((m) => m.to.startsWith('h')).map((m) => m.mail.subject)).toEqual(held.map(() => deletionDoneMail('zh-CN').subject));
   });
 
   it('提醒多也不挤占删除：60 封提醒的同一轮里，到期的 A 照样删掉', async () => {
