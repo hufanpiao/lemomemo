@@ -1,0 +1,139 @@
+// 列表增删（架构 17.1“列表增删”“勾选完成”、17.4 B2；B2 FA-5，设计审查 M1～M3 返工 11-04）：
+//   <AppearList as="ul">{items.map((x) => <AppearItem key={x.id} as="li">…</AppearItem>)}</AppearList>
+// • 删除（含打勾后从原来的组离开）：一开始退场就移出文档流（按退场前量好的位置绝对定位，等于自己做的 popLayout），
+//   淡出马上开始，下面的行用 layout（FLIP，只动 transform）晚两帧（LIST_LAYOUT_LAG ≈ 33 ms）收上来，收拢 --dur-ui（设计审查 M3；
+//   第三轮 P1：今天页整组离开时，紧贴在下面的“今天的安排”第一帧就会碰上残影，先让残影淡两帧）。
+//   淡出只用 --dur-ui 的一半（110 ms，--ease-out；减少动态效果时也是 110 ms），残影在收上来的字压过来之前就淡掉；
+//   兜底：列表外壳 isolation: isolate 自成层叠上下文，离开的那一项 z-index: -1 画在收上来的行下面——
+//   两处必须一起：单加 -1 会掉到外层底色（今天页红框卡片）下面（第二轮设计审查 N1）
+//   不用 AnimatePresence 的 mode="popLayout"：它会插内联 <style>，被 CSP 拦（2.0；ESLint 也拦，UI-4 L-4）；
+//   这里的定位写在元素的 style 上（React 走 CSSOM），CSP 不拦
+// • 新增（含撤销恢复、打勾后挪进“已完成”组）：只淡入、不上移，并且晚 --dur-ui 的一半才开始——ease-out 前段快，
+//   这时周围的行已基本让开，新行看得见的时候不和任何一行叠着（设计审查 M2；第二轮 L1 把等待从 220 减到 110 ms；
+//   第三轮 P1 收拢晚了 LIST_LAYOUT_LAG，等待同步加上，≈ 143 ms）。
+//   淡入播完以前打 data-state="entering"、不接点按（透明的时候点不到看不见的圆圈或 ×，第二轮 L3）
+// • 打勾“圆圈先填满再离开”的那一拍（17.1）不在这里等：页面用 useHoldView 让分组晚 --dur-ui 再变，列表里那一刻什么都不动（M1）
+// • 第一次画列表不播（initial={false}）：冷启动、进页面不逐条入场
+// • 离开途中打 data-state="leaving"（17.2 第 2 点），使用方据此不接点按（免得点到正在淡出的那一行）
+// • 减少动态效果：和 <Appear> 同一个判断，只淡入淡出、时长减半、新行不等；MotionConfig 让 layout 位移直接到位
+// layout 要 domMax 功能包：只在用到列表的页面里懒加载（待办页本来就是懒加载，不进首屏）
+import { AnimatePresence, LayoutGroup, LazyMotion, m, MotionConfig, PresenceContext, useIsPresent, type MotionStyle } from 'motion/react';
+import { createElement, useCallback, useContext, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { motionLayoutFeatures } from './features.ts';
+import { dur, LIST_LAYOUT_LAG, tr } from './tokens.ts';
+import { useReducedMotionPref } from './useReducedMotionPref.ts';
+
+type ListTag = 'ul' | 'ol' | 'div';
+type ItemTag = 'li' | 'section' | 'div';
+
+export interface AppearListProps {
+  as?: ListTag;
+  className?: string | undefined;
+  children: ReactNode;
+  'data-testid'?: string | undefined;
+}
+
+/** 外壳要是定位元素：离开的那一项按它定位（offsetTop / offsetLeft 也是相对它量的）；
+ *  isolation 让它自成层叠上下文，离开那一项的 z-index: -1 只沉到这个列表里别的行下面，不掉到外层底色下面 */
+const LIST_STYLE: CSSProperties = { position: 'relative', isolation: 'isolate' };
+
+/** 列表外壳：子元素要带稳定的 key（AnimatePresence 靠 key 认出谁走了） */
+export function AppearList({ as = 'ul', className, children, ...rest }: AppearListProps) {
+  const reduced = useReducedMotionPref();
+  return (
+    <MotionConfig reducedMotion={reduced ? 'always' : 'never'}>
+      <LazyMotion features={motionLayoutFeatures} strict>
+        <LayoutGroup>
+          {createElement(as, { className, style: LIST_STYLE, 'data-testid': rest['data-testid'] }, <AnimatePresence initial={false}>{children}</AnimatePresence>)}
+        </LayoutGroup>
+      </LazyMotion>
+    </MotionConfig>
+  );
+}
+
+export interface AppearItemProps {
+  as?: ItemTag;
+  className?: string | undefined;
+  /** 整组（section）进出时用：标题的 id */
+  'aria-labelledby'?: string | undefined;
+  children: ReactNode;
+  [data: `data-${string}`]: string | undefined;
+}
+
+const tags = { li: m.li, section: m.section, div: m.div } as const;
+
+/** 列表项交给 Motion 的参数（组件和测试共用一份） */
+export function itemMotion(reduced: boolean) {
+  const t = reduced ? { ...tr.ui, duration: dur.ui / 2 } : tr.ui;
+  return {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    // 退场马上开始（和收拢同时），只淡出、--dur-ui 的一半，减少动态效果时同样 110 ms（不再减半，N1）；
+    // 进场等周围基本让开（--dur-ui 的一半，加上收拢晚开始的 LIST_LAYOUT_LAG）再淡入；
+    // 收拢晚 LIST_LAYOUT_LAG 开始（残影先淡两帧）。减少动态效果时都不等（layout 本来就直接到位）
+    exit: { opacity: 0, transition: { ...tr.ui, duration: dur.ui / 2 } },
+    transition: {
+      ...t,
+      delay: reduced ? 0 : dur.ui / 2 + LIST_LAYOUT_LAG,
+      layout: reduced ? tr.ui : { ...tr.ui, delay: LIST_LAYOUT_LAG },
+    },
+  };
+}
+
+interface Box {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+/** 离开时的定位：按开始离开那一刻的位置、大小绝对定位，下面的行立刻收上来（只这一项，不影响别的） */
+function popStyle(b: Box): MotionStyle {
+  return { position: 'absolute', top: b.top, left: b.left, width: b.width, height: b.height, margin: 0, zIndex: -1 };
+}
+
+/** 淡入播完以前：不接点按（第二轮 L3） */
+const ENTERING_STYLE: MotionStyle = { pointerEvents: 'none' };
+
+/** 列表里的一项：进出场只动 opacity，位置变化用 layout 平移过去 */
+export function AppearItem({ as = 'li', className, children, ...data }: AppearItemProps) {
+  const present = useIsPresent();
+  // 第一次画列表时（AnimatePresence initial={false}）不播进场，也就不算“进场中”；之后加进来的才算
+  const firstPaint = useContext(PresenceContext)?.initial === false;
+  const [entering, setEntering] = useState(!firstPaint);
+  const entered = useCallback(() => setEntering(false), []);
+  const reduced = useReducedMotionPref();
+  const mo = itemMotion(reduced);
+  const Tag = tags[as];
+  const el = useRef<HTMLElement | null>(null);
+  // 三种标签共用一个回调 ref（RefObject 对不上 li / section / div 的交叉类型）
+  const setEl = useCallback((e: HTMLElement | null) => {
+    el.current = e;
+  }, []);
+  // 开始离开的那一次渲染：读这一项现在的位置、大小（相对列表外壳；已经提交的布局，不受 FLIP 的 transform 影响），
+  // 和“这一项被删掉”同一次提交里移出文档流。只量一次：之后它已经是绝对定位，再量也一样，但没必要
+  const popped = useRef<MotionStyle | undefined>(undefined);
+  if (!present && popped.current === undefined && el.current) {
+    const e = el.current;
+    popped.current = popStyle({ top: e.offsetTop, left: e.offsetLeft, width: e.offsetWidth, height: e.offsetHeight });
+  }
+  const leaving = present ? undefined : popped.current;
+  const style = leaving ?? (entering ? ENTERING_STYLE : undefined);
+  return (
+    <Tag
+      {...data}
+      ref={setEl}
+      className={className}
+      {...(style ? { style } : {})}
+      data-state={present ? (entering ? 'entering' : data['data-state']) : 'leaving'}
+      layout="position"
+      initial={mo.initial}
+      animate={mo.animate}
+      exit={mo.exit}
+      transition={mo.transition}
+      onAnimationComplete={entered}
+    >
+      {children}
+    </Tag>
+  );
+}

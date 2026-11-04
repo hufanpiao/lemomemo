@@ -134,7 +134,8 @@ describe('Appear 减少动态效果时交给 Motion 的参数', () => {
       const on = appearMotion(kind, true);
       expect(on.initial).toEqual({ opacity: 0 });
       expect('transform' in on.animate).toBe(false);
-      expect(on.exit).toEqual({ opacity: 0 });
+      const out = presets[kind].exitTransition ?? presets[kind].transition;
+      expect(on.exit).toEqual({ opacity: 0, transition: { ...out, duration: out.duration / 2 } });
       expect('transform' in on.exit).toBe(false);
       expect(on.transition.duration).toBe(presets[kind].transition.duration / 2);
       expect(on.transition.ease).toEqual(presets[kind].transition.ease);
@@ -143,6 +144,17 @@ describe('Appear 减少动态效果时交给 Motion 的参数', () => {
       expect(off.transition.duration).toBe(presets[kind].transition.duration);
     });
   }
+
+  it('弹层退场比进场快：同一条抽屉曲线，时长是进场的 0.6～0.7 倍；遮罩、提示条等退场和进场一样（MOTION-sheet-exit）', () => {
+    const sheet = appearMotion('sheet', false);
+    expect(sheet.transition.duration).toBe(dur.sheet);
+    const ratio = sheet.exit.transition.duration / sheet.transition.duration;
+    expect(ratio).toBeGreaterThanOrEqual(0.6);
+    expect(ratio).toBeLessThanOrEqual(0.7);
+    expect(sheet.exit.transition.ease).toEqual(sheet.transition.ease);
+    expect((sheet.exit as { transform?: string }).transform).toBe('translateY(100%) scale(1)');
+    for (const k of ['scrim', 'toast', 'row'] as const) expect(appearMotion(k, false).exit.transition).toEqual(presets[k].transition);
+  });
 
   it('渲染出来的起始透明度是 0（data-rm="1"）', () => {
     fakeSystem(false);

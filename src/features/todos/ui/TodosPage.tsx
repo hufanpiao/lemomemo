@@ -3,12 +3,17 @@
 // • 分组：过期（标红：逾 N 天 / 已过 17:00）→ 今天 → 明天 → 7 天内按日期 → 以后 → 没有日期 → 已完成
 // • 每行：打勾（就地保存）、标题（常规字重）、截止标签（“今天 17:00 截止”）、删除（软删 + 8 秒撤销条）；点标题进编辑页
 // • 只读行的行尾标记、左滑、多选在后面一段（要 core 暴露 ro 标记，见回报里的接口建议）
+// • 动效（17.1“勾选完成”“列表增删”，B2 FA-5；设计审查 M1～M3 返工 11-04）：打勾时圆圈在原地填满（CSS，--dur-ui），
+//   列表先不动（useHoldView 留住按下之前的分组）；然后这一条从原来的组淡出、同时下面的行收上来，“已完成”组让开位置后它再淡入。
+//   删除：淡出和收拢同时；撤销恢复：先让开位置再淡入（不和别的行叠着）。第一次画列表不播。分组整组出现、消失同样淡入淡出。
+//   打勾没有撤销条（只有删除有）：点错了在圆圈填满的那 --dur-ui 里还能再点回去，开始离开以后要到“已完成”组里再点
 import { useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
+import { CheckCircle } from '../../../kit/components/CheckCircle.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { Pressable } from '../../../motion/components.ts';
+import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
 import { useListT, useTodoList, type ActionResult, type DueTag, type Group } from '../hooks/useTodoList.ts';
 import styles from './TodosPage.module.css';
 
@@ -19,11 +24,22 @@ export default function TodosPage() {
   const locale = useUi((s) => s.locale);
   const l = useTodoList();
   const [toast, setToast] = useState<Toast>(null);
+  // 打勾：先留住按下之前的分组 --dur-ui（圆圈在原地填满，17.1 勾选完成），再换成新的；
+  // 留着的期间圆圈按“刚点成什么”画（picked，不等保存回来），几条连着点就一起挪
+  const hv = useHoldView(l.groups);
+  const [picked, setPicked] = useState<ReadonlyMap<string, boolean>>(() => new Map());
 
   const report = (r: ActionResult) => {
     if (r === 'failed' || r === 'readonly') setToast({ kind: 'error', readonly: r === 'readonly' });
   };
+  const tick = (id: string, on: boolean) => {
+    setPicked((m) => new Map(hv.holding ? m : []).set(id, on));
+    hv.hold();
+    void l.toggleDone(id, on).then(report);
+  };
+  const shown = (id: string, done: boolean) => (hv.holding ? (picked.get(id) ?? done) : done);
   const del = async (id: string) => {
+    hv.release();
     const r = await l.remove(id, true);
     if (r === 'ok') setToast({ kind: 'undo', id });
     else report(r);
@@ -71,35 +87,38 @@ export default function TodosPage() {
         </div>
       ) : null}
 
-      {l.groups.length === 0 ? <p className={styles.empty}>{t('list.empty', {})}</p> : null}
-      {l.groups.map((g) => (
-        <section key={`${g.key}:${g.date ?? ''}`} className={g.key === 'late' ? styles.late : undefined} data-testid={`todos-g-${g.key}${g.date ? `-${g.date}` : ''}`}>
-          <h2 className={styles.h2}>{groupTitle(g)}</h2>
-          <ul className={styles.list}>
-            {g.items.map(({ todo, tag }) => (
-              <li key={todo.id} className={styles.row} data-done={todo.done ? '' : undefined} data-testid={`todos-row-${todo.id}`}>
-                <input
-                  type="checkbox"
-                  className={styles.check}
-                  checked={todo.done}
-                  aria-label={todo.done ? t('list.undoDone', {}) : t('list.done', {})}
-                  onChange={(e) => void l.toggleDone(todo.id, e.target.checked).then(report)}
-                  data-testid={`todos-done-${todo.id}`}
-                />
-                <button type="button" className={styles.main} onClick={() => void navigate('todo', todo.id)}>
-                  <span className={styles.title}>{todo.title}</span>
-                  <span className={tag.kind === 'late' ? styles.tagLate : styles.tag} data-testid={`todos-tag-${todo.id}`}>
-                    {[todo.important ? t('list.important', {}) : '', todo.project, tagText(tag)].filter(Boolean).join(' · ')}
-                  </span>
-                </button>
-                <Pressable className={styles.del} aria-label={t('list.delete', {})} onClick={() => void del(todo.id)} data-testid={`todos-del-${todo.id}`}>
-                  ×
-                </Pressable>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      {hv.view.length === 0 ? <p className={styles.empty}>{t('list.empty', {})}</p> : null}
+      <AppearList as="div">
+        {hv.view.map((g) => (
+          <AppearItem
+            as="section"
+            key={`${g.key}:${g.date ?? ''}`}
+            className={g.key === 'late' ? `${styles.group} ${styles.late}` : styles.group} data-testid={`todos-g-${g.key}${g.date ? `-${g.date}` : ''}`}>
+            <h2 className={styles.h2}>{groupTitle(g)}</h2>
+            <AppearList as="ul" className={styles.list}>
+              {g.items.map(({ todo, tag }) => (
+                <AppearItem key={todo.id} className={styles.row} data-done={todo.done ? '' : undefined} data-testid={`todos-row-${todo.id}`}>
+                  <CheckCircle
+                    checked={shown(todo.id, todo.done)}
+                    label={shown(todo.id, todo.done) ? t('list.undoDone', {}) : t('list.done', {})}
+                    onChange={(v) => tick(todo.id, v)}
+                    testId={`todos-done-${todo.id}`}
+                  />
+                  <button type="button" className={styles.main} onClick={() => void navigate('todo', todo.id)}>
+                    <span className={styles.title}>{todo.title}</span>
+                    <span className={tag.kind === 'late' ? styles.tagLate : styles.tag} data-testid={`todos-tag-${todo.id}`}>
+                      {[todo.important ? t('list.important', {}) : '', todo.project, tagText(tag)].filter(Boolean).join(' · ')}
+                    </span>
+                  </button>
+                  <Pressable className={styles.del} aria-label={t('list.delete', {})} onClick={() => void del(todo.id)} data-testid={`todos-del-${todo.id}`}>
+                    ×
+                  </Pressable>
+                </AppearItem>
+              ))}
+            </AppearList>
+          </AppearItem>
+        ))}
+      </AppearList>
 
       {toast?.kind === 'undo' ? (
         <UndoToast

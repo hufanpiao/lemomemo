@@ -11,6 +11,8 @@ export interface Preset {
   exit: { opacity: number; transform: string };
   /** 进出场一律用时长 + 曲线（弹簧只给手势和 layout） */
   transition: { readonly duration: number; readonly ease: readonly [number, number, number, number] };
+  /** 退场单独的时长曲线（不写就和进场一样）：弹层“快收”（MOTION-sheet-exit） */
+  exitTransition?: { readonly duration: number; readonly ease: readonly [number, number, number, number] };
   /** 减少动态效果时：只淡入淡出，时长减半（17.2 第 5 点） */
   reduced: { opacity: number };
 }
@@ -28,6 +30,7 @@ export const presets: Record<AppearKind, Preset> = {
     animate: { opacity: 1, transform: 'translateY(0%) scale(1)' },
     exit: { opacity: 1, transform: 'translateY(100%) scale(1)' },
     transition: tr.sheet,
+    exitTransition: tr.sheetExit,
     reduced: { opacity: 0 },
   },
   row: {

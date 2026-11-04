@@ -13,6 +13,11 @@
 // • busy 兜底（PROBE-sugg2 ③、BANNER-sugg ⑥）：单个 busy 令牌超过 BUSY_MAX_MS（30 分钟）自动作废、记 upgrade_busy_expired，
 //   免得哪里漏了释放，required、new_version、sync_paused 三种横幅一直不出、reloadPending 一直挂着。
 //   作废后不自动重新载入（持有方可能真的还在录音、编辑）：等着的“更新”回到 idle，用户再按一次直接载入（不再去查）；closed_for_upgrade 的横幅本来就有“重新打开”
+//   作废只解除横幅压制，不当成已释放（BUSY-wire，B2 FA-5）：作废的令牌还算“占着”，onCacheVersionChange、别的令牌释放这些自动重新载入的路
+//   都要等它真的释放；只有用户自己按“更新”（横幅已经能出来了）只看没作废的令牌
+//   用户按过“更新”的那一次决定（FA5-CR U1）：不管按的时候有没有正常令牌，一律“等所有正常令牌都释放了就载入”，作废的不挡——
+//   按的时候只剩作废令牌就当场载入；按的时候还有正常令牌，等它们最后一个释放时载入（原来这种情况回 idle、要再按一次，和前一种不一致）。
+//   等着的时候正常令牌不是被释放、而是到 30 分钟作废的：不算持有方放手，照旧回到 idle、下次按直接载入（持有方可能还在编辑、录音）
 // 纯 TS：不准 import React 和任何功能（A1）
 import { parseVersion, versionAtLeast } from '../../shared/core/version.ts';
 import type { SwUpdateResult } from '../platform/sw-register.ts';
@@ -172,12 +177,17 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
   /** 每个令牌的兜底计时器 */
   const busyTimers = new Map<number, ReturnType<typeof setTimeout>>();
   let busySeq = 0;
+  /** 已作废、但持有方还没释放的令牌（BUSY-wire）：不压横幅，但挡自动重新载入 */
+  const expired = new Set<number>();
+  /** 没作废的令牌数：横幅压制（state.busy）和用户按“更新”看这个；自动重新载入看 busy.size（含作废的） */
+  const liveCount = (): number => busy.size - expired.size;
   /** 按过“更新”、该重新载入了，但当时有录音、编辑在进行：等 busy 归零再载入 */
   let reloadPending = false;
   /** 等着的重新载入因 busy 作废被取消了：新 SW 已接管，下次按“更新”直接载入，不再去查（再查会因为没有 waiting 误报 still_old） */
   let reloadArmed = false;
+  // 只在用户按了“更新”之后走这里：没作废的令牌都放了就载入（作废的不挡用户自己的决定）
   const reloadWhenIdle = (): void => {
-    if (busy.size === 0) deps.reload();
+    if (liveCount() === 0) deps.reload();
     else reloadPending = true;
   };
 
@@ -232,29 +242,41 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
       busy.set(key, reason);
       set({ busy: true });
       let released = false;
-      const drop = (): boolean => {
-        if (released) return false;
-        released = true;
-        clearTimeout(busyTimers.get(key));
-        busyTimers.delete(key);
-        busy.delete(key);
-        return busy.size === 0;
-      };
-      // 兜底：超过 BUSY_MAX_MS 还没释放就作废这一个令牌（不自动重新载入，见文件头）
-      busyTimers.set(key, setTimeout(() => {
-        const idle = drop();
-        log('upgrade_busy_expired', reason);
-        if (!idle) return;
-        if (reloadPending) {
+      // 没作废的令牌都没了：横幅不再压。还有作废的令牌占着、用户按过“更新”在等时（U1）：
+      // released = 最后一个正常令牌是被释放的 → 照用户的决定载入（作废的不挡）；
+      // 是到点作废的 → 不算持有方放手，等着的“更新”回到 idle、下次按直接载入
+      const liveIdle = (cause: 'released' | 'expired'): void => {
+        if (liveCount() > 0) return;
+        if (busy.size > 0 && reloadPending) {
           reloadPending = false;
+          if (cause === 'released') {
+            // 先把横幅压制解除再载入（FA-5 复审 N4）：载入万一没真正换页，状态也不会一直停在 busy
+            set({ busy: false });
+            deps.reload();
+            return;
+          }
           reloadArmed = true;
           if (state.update === 'updating') set({ update: 'idle' });
         }
         set({ busy: false });
+      };
+      // 兜底：超过 BUSY_MAX_MS 还没释放就作废这一个令牌——只解除横幅压制，不当成已释放、不自动重新载入（见文件头）
+      busyTimers.set(key, setTimeout(() => {
+        busyTimers.delete(key);
+        expired.add(key);
+        log('upgrade_busy_expired', reason);
+        liveIdle('expired');
       }, BUSY_MAX_MS));
       return () => {
-        if (!drop()) return;
-        set({ busy: false });
+        if (released) return;
+        released = true;
+        clearTimeout(busyTimers.get(key));
+        busyTimers.delete(key);
+        busy.delete(key);
+        expired.delete(key);
+        liveIdle('released');
+        // 全部令牌（含作废的）都真的放了，才走自动重新载入
+        if (busy.size > 0) return;
         if (state.cache === 'closed_for_upgrade' || reloadPending) {
           reloadPending = false;
           deps.reload();

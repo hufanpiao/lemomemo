@@ -4,6 +4,7 @@
 import { presets, PRESS_SCALE, type AppearKind } from './presets.ts';
 import { prefersReducedMotion } from './reduced.ts';
 import { dur, ease, type Bezier } from './tokens.ts';
+import { reportDuplicateVtNames } from './vt.ts';
 
 // React 组件（Appear、Pressable、SharedLayout、Celebrate）在 ./components.ts：
 // 分开导出，免得只用函数的地方（例如 router 的 transition）把 motion/react 带进首屏（2.6）
@@ -88,6 +89,8 @@ export function transition(update: () => void): Promise<void> {
     vt = doc.startViewTransition(() => {
       snapPressables(doc, false);
       update();
+      // 开发版：新页面画完就查 view-transition-name 重名（17.2 第 3 点；X-5 改成读计算样式，CSS Modules 起的名字也查得到）
+      if (import.meta.env.DEV) reportDuplicateVtNames(doc);
     });
   } catch {
     // startViewTransition 同步抛错（个别实现、以后加的包装；代码审查 S2）：摘掉标记、直接画新页面，

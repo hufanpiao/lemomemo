@@ -2,12 +2,12 @@
 // • 复用 8788 上的服务时，服务上的 /app/ 首页要和本机 <产物目录>/app/index.html 逐字一样；不一样、取不到、本机没有都报
 // • 产物目录和 build_web 同一条规则（LEMO_WEB_OUT）：playwright.config.ts 的 wrangler 和 no-backend-premise.spec.ts 都跟着它
 // fetch 换成假的，不起服务、不起子进程
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PlaywrightTestConfig } from '@playwright/test';
-import { checkDistFingerprint, fingerprintProblem } from '../e2e/dist-fingerprint.ts';
+import { checkDistFingerprint, fingerprintProblem, sourcesNewerThan, staleProblem } from '../e2e/dist-fingerprint.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const HTML = '<!doctype html><script type="module" src="/app/assets/index-AbC123.js"></script>';
@@ -85,5 +85,33 @@ describe('playwright.config.ts：产物目录跟 LEMO_WEB_OUT 走，globalSetup 
     const spec = readFileSync(join(ROOT, 'tests/e2e/no-backend-premise.spec.ts'), 'utf8');
     expect(spec).toContain("const ASSETS_DIR = join(webOutDir(ROOT, process.env), 'app', 'assets');");
     expect(spec).not.toMatch(/dist\/web\/app\/assets'/);
+  });
+});
+
+// 产物比源码旧（B2 FA-5 第四轮 Q1）：指纹一致也可能是旧构建，按修改时间再比一次，只警告
+describe('产物比源码旧时警告', () => {
+  it('sourcesNewerThan：只列比产物新的源文件，从新到旧；跳过 __tests__', () => {
+    const root = mkdtempSync(join(tmpdir(), 'lemo-stale-'));
+    dirs.push(root);
+    const put = (rel: string, sec: number) => {
+      const f = join(root, rel);
+      mkdirSync(join(f, '..'), { recursive: true });
+      writeFileSync(f, 'x');
+      utimesSync(f, sec, sec);
+    };
+    put('src/old.ts', 1000);
+    put('src/motion/new.ts', 3000);
+    put('shared/newer.ts', 4000);
+    put('src/motion/__tests__/t.test.ts', 5000);
+    const got = sourcesNewerThan(root, 2000 * 1000);
+    expect(got.map((x) => x.file)).toEqual(['shared/newer.ts', 'src/motion/new.ts']);
+  });
+
+  it('staleProblem：没有更新的源文件不报；有就带上产物时间和最新的几个文件', () => {
+    expect(staleProblem(1000, [], 'dist/web/app/index.html')).toBeNull();
+    const msg = staleProblem(Date.UTC(2026, 10, 4, 3, 26), [{ file: 'src/motion/AppearList.tsx', mtimeMs: Date.UTC(2026, 10, 4, 4, 24) }], 'dist/web/app/index.html');
+    expect(msg).toContain('dist/web/app/index.html（2026-11-04T03:26:00.000Z）');
+    expect(msg).toContain('src/motion/AppearList.tsx（2026-11-04T04:24:00.000Z）');
+    expect(msg).toContain('npm run build -- --mode e2e');
   });
 });

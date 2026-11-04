@@ -1,7 +1,9 @@
 // 编辑页外框（B2 FA-2）：顶栏“‹ 返回 · 类型名 · 保存状态”、顶部提示（只读、没保存上）、正文、底部按钮。不含业务和文案（调用方传）
 // 保存状态是常驻的 role="status"，读屏会播报“已自动保存”“没保存上”
+// 编辑页挂着期间占住升级中心的 busy（BUSY-wire）：不出版本横幅、不自动重新载入，离开编辑页就释放
 import type { ReactNode } from 'react';
 import { Pressable } from '../../motion/components.ts';
+import { useHoldBusy } from '../hooks/useHoldBusy.ts';
 import styles from './EditShell.module.css';
 
 export interface EditShellProps {
@@ -17,6 +19,7 @@ export interface EditShellProps {
 }
 
 export function EditShell({ kind, backLabel, onBack, status, statusBad, notice, children, actions, ...rest }: EditShellProps) {
+  useHoldBusy('editing');
   return (
     <main className={styles.page} data-testid={rest['data-testid']}>
       <div className={styles.top}>

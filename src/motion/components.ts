@@ -4,3 +4,6 @@ export { Pressable } from './Pressable.tsx';
 export { SharedLayout } from './SharedLayout.tsx';
 export { Celebrate } from './Celebrate.tsx';
 export { useReducedMotionPref } from './useReducedMotionPref.ts';
+export { AppearList, AppearItem } from './AppearList.tsx';
+// 打勾停一拍再挪走：留住按下之前的那一份 --dur-ui（B2 FA-5 设计审查 M1）
+export { useHoldView } from './useHoldView.ts';

@@ -92,12 +92,10 @@
   font-size: var(--fs-12-5);
 }
 
-.check {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  margin: 11px 0;
-  accent-color: var(--accent);
+/* 离开途中（AppearItem 打 data-state="leaving"）：淡出、卸载之前不接点按 */
+.row[data-state="leaving"],
+.late[data-state="leaving"] {
+  pointer-events: none;
 }
 
 .del {

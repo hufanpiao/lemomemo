@@ -86,11 +86,23 @@ export const cssVarOf = {
   },
 } as const satisfies { dur: Record<keyof typeof dur, string>; ease: Record<keyof typeof ease, string> };
 
+/** 弹层退场是进场的几倍（MOTION-sheet-exit，B2 动效自查 11-04）：用户主动关闭时“快收”，进出不对称；
+ * 取 0.6～0.7 的中间值，由 --dur-sheet 推出来，不另起一个令牌（380ms × 0.65 ≈ 247ms） */
+export const SHEET_EXIT_RATIO = 0.65;
+
+/** 列表收拢晚几帧开始（B2 FA-5 第三轮设计审查 P1，11-04）：离开的那一项先淡出两帧（≈ 33 ms），下面的行再收上来，
+ * 今天页“没赶上”整组离开时，紧贴在卡片下沿的“今天的安排”第一帧移动时残影已在 0.25 以下。
+ * 由 --dur-ui 推出来（220ms × 0.15 = 33ms），不另起令牌；减少动态效果时不用（layout 本来就直接到位） */
+export const LIST_LAYOUT_LAG_RATIO = 0.15;
+export const LIST_LAYOUT_LAG = dur.ui * LIST_LAYOUT_LAG_RATIO;
+
 /** 现成的 Motion transition（组件里直接用这些，不自己拼） */
 export const tr = {
   press: { duration: dur.press, ease: ease.press },
   ui: { duration: dur.ui, ease: ease.out },
   sheet: { duration: dur.sheet, ease: ease.drawer },
+  /** 弹层退场：同一条抽屉曲线，时长是进场的 SHEET_EXIT_RATIO 倍 */
+  sheetExit: { duration: dur.sheet * SHEET_EXIT_RATIO, ease: ease.drawer },
   page: { duration: dur.sheet, ease: ease.standard },
   spring,
 } as const;
