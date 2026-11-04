@@ -58,6 +58,9 @@ describe('usage-report 白名单：按心跳名分开，account-purge 只多放�
     for (const [name, allow] of Object.entries(DETAIL_FIELDS_BY_NAME)) {
       for (const k of Object.keys(same)) expect(allow.num.includes(k), `${name}.${k}`).toBe(name === 'account-purge');
     }
+    // P1（PURGE-flip-low）：只认 detail 自己的属性，原型链上继承来的不算（钉住 pickDetail 取值处的 Object.hasOwn）
+    expect(await forwarded(Object.assign(Object.create({ held: 3, blocked: 2 }) as object, { purged: 1 }))).toEqual({ purged: 1 });
+    expect(await forwarded(Object.create({ claimed: 5, budget_hit: true }) as object, 'push-dispatch')).toBeNull();
     // account-purge 不收布尔
     expect(await forwarded({ budget_hit: true, purged: 1 })).toEqual({ purged: 1 });
   });
@@ -88,6 +91,8 @@ describe('lemo-ops 判断：四条提示的边界', () => {
     expect(a[1]?.lines[0]).toContain('还有 3 个到期账号没做成');
     expect(a[2]?.lines[0]).toContain('照删了 4 个没收到删除前提醒的账号');
     expect(a[3]?.lines[0]).toContain('有 5 个到期账号认领后再核对不过');
+    // P3、Q1：blocked 的账号满 1 天后也会触发 purge:overdue，正文点明会算进那条、个数可能更多
+    expect(a[3]?.lines.join(NL)).toContain('也会算进“注销冷静期已满、超过 1 天还没删除”那条提示；那条的个数比这里多的，多出来的是别的原因');
   });
 
   it('S3：detail 里就算带了 user_id、邮箱、名字（白名单之外），标题和正文也不出现这些值', () => {

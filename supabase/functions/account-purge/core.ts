@@ -286,6 +286,9 @@ async function remind(deps: FullDeps, now: number, overBudget: () => boolean): P
 // ---------------- 第二段：逐个彻底删除 ----------------
 // blocked：认领后再核对不过（skip_admin、skip_not_disabled）。它们也算进返回体的 skipped（原口径不变），另外单独计数进心跳（PURGE-halfway-flip）
 type Outcome = 'purged' | 'skipped' | 'blocked' | 'failed' | 'deferred';
+// giveUp 的原因码怎么归类（PURGE-flip-low P2：显式列出，不按前缀猜）：只有这三个不算 failed；其余（r2_not_empty、backups_not_empty、
+// step_error、备份子目录等）一律 failed。新加 skip_ 开头的原因码要在这里登记，不然会算成 failed、进 remaining
+const GIVE_UP_AS: ReadonlyMap<string, Outcome> = new Map([['time_budget', 'deferred'], ['skip_admin', 'blocked'], ['skip_not_disabled', 'blocked']]);
 
 async function purgeOne(
   deps: FullDeps, userId: string, overBudget: () => boolean, overWall: () => boolean,
@@ -300,7 +303,7 @@ async function purgeOne(
   const giveUp = async (code: string): Promise<Outcome> => {
     log?.(`${code}:${short(userId)}`);
     await store.release(userId, claimedIso).catch(() => log?.(`release_failed:${short(userId)}`));
-    return code === 'time_budget' ? 'deferred' : code === 'skip_admin' || code === 'skip_not_disabled' ? 'blocked' : code.startsWith('skip_') ? 'skipped' : 'failed';
+    return GIVE_UP_AS.get(code) ?? 'failed';
   };
 
   let email: string | null;
@@ -420,8 +423,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   let failed = 0;
   let skipped = 0, blocked = 0;   // blocked：skipped 里认领后再核对不过的（PURGE-halfway-flip；合成一行免得超 300 行）
   let deferred = 0;
-  let held = 0;
-  let forced = 0;
+  let held = 0, forced = 0;   // 合成一行免得超 300 行（PURGE-flip-low）
   for (const r of due) {
     // 0. 不在同一轮里先提醒、后删除（复审中 A）：这一轮刚发过提醒（含补发）的，留给下一轮
     if (rr.reminded.has(r.user_id)) {

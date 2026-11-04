@@ -113,6 +113,7 @@ export function evaluatePurgeDetail(detail: unknown): Issue[] {
         `account-purge 最近一轮有 ${blocked} 个到期账号认领后再核对不过：被加进了管理员名单，或 profile 不再是停用状态。`,
         '正规的停用、解除停用、恢复都不会这样，多半是在 SQL 编辑器里手工改了 admins 或 profiles；这种账号可能已经删了一半（R2、部分备份）。',
         '请看函数日志里的 skip_admin、skip_not_disabled（只有 user_id 前 8 位），确认后把它删完或恢复；处理完之前每一轮都会再算进来。',
+        '这些账号到期满 1 天后，也会算进“注销冷静期已满、超过 1 天还没删除”那条提示；那条的个数比这里多的，多出来的是别的原因。',
       ],
     });
   }

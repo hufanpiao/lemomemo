@@ -353,6 +353,14 @@
 - 局限：只告警，不自动收尾，要人手工删完或恢复；分不出“删过一半”和“从没开始删”（两种都该有人看）；`blocked` 也是“这一轮”的数，但这种账号每一轮都会再碰到，抽样漏看一轮不影响下一轮再报。
 - 不涉及数据库（没有迁移、没有 SQL），这次没起本机 lemo-b2push。
 
+### 17. PURGE-flip-low（方案 ① 安全补审的 3 条建议，11-04）
+
+- P1：`tests/functions/lemo-ops-purge.test.ts` 补两条断言：detail 的原型链上有 `held`、`blocked`（account-purge）或 `claimed`、`budget_hit`（push-dispatch），自己的属性只有 `purged` 或什么都没有时，只转发自己的那几个。钉住 `pickDetail` 取值处的 `Object.hasOwn`（审查员的等价变异 B2：去掉以后测试失败）。
+- P2：`account-purge/core.ts` 的 `giveUp` 不再按 `skip_` 前缀猜，改查显式表 `GIVE_UP_AS`：`time_budget` 算 deferred，`skip_admin`、`skip_not_disabled` 算 blocked，其余（`r2_not_empty`、`backups_not_empty`、`step_error`、备份子目录等）一律 failed；注释写明新加 `skip_` 码要在表里登记。行为不变：原来走到 `startsWith('skip_')` 的只有这两个码。为了不超过 300 行，`let held = 0, forced = 0;` 合成了一行。
+- P3：`purge:blocked` 正文加一句“这些账号也会出现在‘注销冷静期已满、超过 1 天还没删除’的提示里（同一件事，不是另一批）”，测试核对。补审二 Q1（主持人改，11-04）：措辞改为“这些账号到期满 1 天后，也会算进‘注销冷静期已满、超过 1 天还没删除’那条提示；那条的个数比这里多的，多出来的是别的原因”，免得以为两条个数相等。
+- 变异（独立副本，用完已删）：去掉取值处的 hasOwn、表里少 `skip_not_disabled`、少 `skip_admin`、少 `time_budget`、表外默认算 skipped、去掉 P3 那句，6 种都被抓到（失败 1～5 条）。
+- 残余：当天最后一轮预算停手前没碰到这个账号时 `blocked` 为 0，可能先报一封“已恢复”。照审查意见不改：第二天第一轮又会算进来，`purge:overdue` 一直在报。
+
 ## 单元测试
 
 `tests/functions/account-purge-budget.test.ts`（8 条，复审后加了低 C 一条）、`account-purge-remind.test.ts`（14 条，复审后加了低 C 一条、PURGE-r4-low 低 L 一条）、`account-purge-hold.test.ts`（11 条，复审中 A、中 B 和第三轮中 C，见第 12、13 节）、`account-purge-schedule.test.ts`（新增中 2 一条、改名一条），连同 `account-purge.test.ts` 共 5 个文件 63 条，全过。假库在 `tests/functions/account-purge-fakes.ts`（第 14 节）。

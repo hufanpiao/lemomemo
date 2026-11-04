@@ -31,7 +31,8 @@
 // 时间预算：一轮最长 limits.budgetMs 墙钟，到点不再认领新条目（第 0 步也不再处理新行），已认领的发完；发送并发 limits.concurrency；
 //   每轮发送（deliver 调用）最多 limits.sendLimit 次；预算或条数到了 budget_hit 为真，left 是没来得及认领的到点条目数（上界，见第 2 步）。
 // 11-03 拆分（REMIND-round-split，只搬家、不改行为）：类型和常量在 round-types.ts，小工具和 filterUsable 在 round-util.ts，
-//   第 0 步在 round-step0.ts，第 1～8 步在 round-dispatch.ts；这里留 runRound、写 logs，并照旧导出原来的全部名字。
+//   第 0 步在 round-step0.ts，第 1、2 步和总调用 steps1to8 在 round-dispatch.ts，第 3～8 步在 round-send.ts（11-04 REMIND-steps1to8-split）；
+//   这里留 runRound、写 logs，并照旧导出原来的全部名字。
 import type { LogRow, RoundCtx, RoundResult } from './round-types.ts';
 import { steps1to8 } from './round-dispatch.ts';
 import { step0 } from './round-step0.ts';

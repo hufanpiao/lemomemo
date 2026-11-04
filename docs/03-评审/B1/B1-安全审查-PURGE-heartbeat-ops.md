@@ -184,3 +184,54 @@ B8（blocked 不写进心跳）、B12（blocked 等于 0 也提示）都被抓�
 - **P1**：补一条测试，传入 `Object.create({ held: 9 })` 这类带继承属性的 detail，断言不转发，把 B2 钉住。
 - **P2**：在 `giveUp` 旁边写一句：以后加新的 `skip_` 码，要明确它算 blocked 还是 skipped；或者把映射改成显式表，而不是 `startsWith('skip_')`。
 - **P3**（可选）：`purge:blocked` 正文写明“这几个账号也会出现在‘超过 1 天还没删除’的提示里”，让负责人知道两封信说的是同一件事。
+
+---
+
+## 补审二（11-04）：PURGE-flip-low（上一轮建议 P1～P3）
+
+- **范围**：只看这次在工作区的改动，即工作区相对暂存区的差别（`git diff -- supabase/functions/account-purge/core.ts workers/lemo-ops/src/purge-detail.ts tests/functions/lemo-ops-purge.test.ts`）。暂存区里的方案 ① 上一轮已经审过。
+- **做法**：只读，默认不通过。把这 3 个文件和 usage-report/core.ts 同步进会话草稿目录里的独立副本，在副本上做变异，共享工作区和暂存区都没动。
+- **跑过**：副本 3 个测试文件 37 条全过；变异 7 个，全部被抓到。
+
+### 结论：通过，没有必改
+
+### 一、P1～P3 逐条核对
+
+| 建议 | 现状 | 判定 |
+|---|---|---|
+| P1：钉住 detail 取值处的 `Object.hasOwn` | 补了两条断言：`Object.create({ held: 3, blocked: 2 })` 加上自有属性 `purged: 1`，只转发 `{ purged: 1 }`；`Object.create({ claimed: 5, budget_hit: true })` 作为 push-dispatch 的 detail，结果为 null。上一轮存活的 B2 这次被抓到（C1）；布尔那一处的 hasOwn 也一并钉住了（C2） | 已解决 |
+| P2：giveUp 的原因码映射改成显式表 | 改成 `GIVE_UP_AS: ReadonlyMap`，`time_budget` 算 deferred，`skip_admin`、`skip_not_disabled` 算 blocked，没登记的一律算 failed；表上方的注释写明“新加 skip_ 码要在这里登记，不然算 failed、进 remaining”。C3～C6 四个变异都被抓到 | 已解决 |
+| P3：purge:blocked 正文点明和 overdue 是同一件事 | 加了一句“这些账号也会出现在‘注销冷静期已满、超过 1 天还没删除’的提示里（同一件事，不是另一批）”，并有测试断言（C7 被抓到）。正文没有带进新的标识 | 已解决（措辞见建议 Q1） |
+
+### 二、P2 的安全面
+
+- **行为没变**：现在调用 `giveUp` 的 skip 码只有 `skip_admin`、`skip_not_disabled` 两个，原来走 `startsWith('skip_') → skipped` 那条分支的码实际一个都没有，所以这次改法不改变现有的计数。
+- **出错时偏向会报警**：以后新加的原因码如果忘了登记，会算成 failed、进 remaining，连续 26 小时后 lemo-ops 会提示；原来的写法会把它当成 skipped，悄悄不算。对运维告警来说，现在的方向更安全。
+- **查表本身没有原型链问题**：用的是 `Map.get`，`__proto__`、`constructor` 这类码只会查不到、落到 failed。
+- 心跳 detail 的键和类型都没变，usage-report 的白名单不用跟着改。
+- 那处“合成一行”只是把两个计数变量的声明合并，不影响行为。
+
+### 三、变异（独立副本，7 个）
+
+| # | 变异 | 结果 |
+|---|---|---|
+| C1 | 数字字段取值去掉 hasOwn（上一轮的 B2） | 被抓到 |
+| C2 | 布尔字段取值去掉 hasOwn | 被抓到 |
+| C3 | skip_admin 改算 skipped | 被抓到 |
+| C4 | skip_not_disabled 改算 skipped | 被抓到 |
+| C5 | 从表里去掉 time_budget（会变成 failed） | 被抓到 |
+| C6 | 没登记的码默认算 skipped | 被抓到 |
+| C7 | 去掉 P3 加的那句 | 被抓到 |
+
+### 四、打分（和上一轮同一尺度，10 分制）
+
+| 维度 | 上一轮 | 本轮 | 说明 |
+|---|---|---|---|
+| 信息泄露 | 9 | 9 | 没变化；新加的一句只引用了提示标题 |
+| 白名单 | 9 | 10 | 两处 hasOwn 都有测试钉住 |
+| 告警不刷屏、不被压住 | 8 | 8 | 上一轮提的残余（当天最后一轮预算停手时可能先发“已恢复”）照意见没改，仍由 remaining 和 overdue 兜底；P3 只是让负责人知道两封信说的是同一件事，不减少封数 |
+| 测试质量 | 8 | 9 | 上一轮存活的 B2 已经钉住；B7 那条等价变异随着改成显式表已不存在；本轮 7/7 被抓到 |
+
+### 五、建议（不阻塞）
+
+- **Q1（措辞）**：purge:overdue 统计的是所有到期超过 1 天、还没开始删的账号。比如 cron 停了，它里面就可能有 blocked 以外的账号；而且只有到期满 1 天后，两条提示才会同时出现。“同一件事，不是另一批”可能让负责人以为 overdue 的个数就等于 blocked 的个数。建议改成：“这些账号到期满 1 天后也会算进‘超过 1 天还没删除’的提示；那条提示的个数如果比这里多，多出来的是别的原因。”
