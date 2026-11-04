@@ -1,8 +1,9 @@
 // 设置 › 提醒与通知 的状态和操作（B2 FA-4）：通知开关（点按里请求权限）、提醒里写什么（remind.show_title）、免打扰（remind.dnd）、
 // 发一条测试通知（push-test）、推送被占着时“移除它”（第 105 条）、“推送需要重新打开”（R-282 ③）
-// • 写设置经 core/write（进 outbox、本机先生效）；同一页里的写一条接一条排队；刚 insert 还没进本机集合的按记下的 id patch（照 calendar 的写法，代码审查 L6）
+// • 写设置：排队、刚 insert 还没进本机集合的按记下的 id patch，都在 core/setting-write.ts 的 createSettingWriter（和日历共用，REMIND-settings-core）；
+//   这里只取本机集合、管 error
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { write } from '../../../core/write.ts';
+import { createSettingWriter } from '../../../core/setting-write.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { showLocalTestNotification, type LocalTestResult } from '../../../platform/native-bridge.ts';
 import { getPushOutcome, subscribePushOutcome } from '../../../platform/push-status.ts';
@@ -11,52 +12,19 @@ import { sendTestPush, type PushTestResult } from '../data/push-test.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { tRemind } from './useRemindT.ts';
 import {
-  dndSettingOf, dndValue, KEY_DND, KEY_SHOW_TITLE, settingValue, settingWrite, showTitleOf, type DndSetting, type SettingRow,
+  dndSettingOf, dndValue, KEY_DND, KEY_SHOW_TITLE, settingValue, showTitleOf, type DndSetting, type SettingRow,
 } from '../data/remind-settings.ts';
 
 export function useSettingWriter(newId: () => string = () => crypto.randomUUID()) {
   const rows = useCollection<SettingRow>('settings');
   const [error, setError] = useState(false);
+  // 最新的本机行和 newId（排队中的写读它们）
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
-  const inserted = useRef(new Map<string, { id: string; value: string }>());
-  const queue = useRef<Promise<void>>(Promise.resolve());
-
-  const saveNow = useCallback(
-    async (key: string, value: unknown) => {
-      const cur = rowsRef.current;
-      const mine = inserted.current.get(key);
-      const json = JSON.stringify(value);
-      if (mine && !cur.some((r) => r.key === key)) {
-        if (mine.value === json) return;
-        const r = await write.patch('settings', mine.id, { value });
-        if (r.ok) inserted.current.set(key, { id: mine.id, value: json });
-        setError(!r.ok);
-        return;
-      }
-      const w = settingWrite(cur, key, value);
-      if (!w) return;
-      if (w.op === 'insert') {
-        const id = newId();
-        const r = await write.insert('settings', { id, ...w.data });
-        if (r.ok) inserted.current.set(key, { id, value: json });
-        setError(!r.ok);
-        return;
-      }
-      const r = await write.patch('settings', w.id, w.data);
-      setError(!r.ok);
-    },
-    [newId],
-  );
-
-  const save = useCallback(
-    (key: string, value: unknown): Promise<void> => {
-      const next = queue.current.then(() => saveNow(key, value));
-      queue.current = next.catch(() => undefined);
-      return next;
-    },
-    [saveNow],
-  );
+  const newIdRef = useRef(newId);
+  newIdRef.current = newId;
+  const [writer] = useState(() => createSettingWriter({ rows: () => rowsRef.current, newId: () => newIdRef.current(), onResult: (ok) => setError(!ok) }));
+  const save = useCallback((key: string, value: unknown): Promise<void> => writer.save(key, value), [writer]);
   return { rows, save, error };
 }
 

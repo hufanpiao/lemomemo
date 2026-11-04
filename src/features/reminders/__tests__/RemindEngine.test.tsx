@@ -41,8 +41,24 @@ vi.mock('../../../platform/notifications.ts', () => ({ closeHandledNotifications
 const navigate = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock('../../../app/router.ts', () => ({ canGoBack: () => false, goBack: vi.fn(), navigate: (...a: unknown[]) => navigate(...a) }));
 let remindRecs: ReadonlySet<string> = new Set();
+type ObItem = { rec: string; op: 'insert' | 'patch'; state: 'pending' | 'inflight' | 'failed'; sent?: boolean; data: Record<string, unknown> };
+let outboxList: ObItem[] = [];
+const outboxSubs = new Set<() => void>();
+const pendingPatch = (data: Record<string, unknown>): ObItem => ({ rec: `events:${E1}`, op: 'patch', state: 'pending', data });
+const fireOutbox = () => act(async () => {
+  for (const f of [...outboxSubs]) f();
+});
 vi.mock('../../../core/boot.ts', () => ({
-  getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ remindRecs }) } }),
+  getBoot: () => ({
+    outbox: {
+      subscribe: (fn: () => void) => {
+        outboxSubs.add(fn);
+        return () => outboxSubs.delete(fn);
+      },
+      getStatus: () => ({ remindRecs }),
+      list: async () => outboxList,
+    },
+  }),
 }));
 
 const { default: RemindHost } = await import('../ui/RemindHost.tsx');
@@ -74,6 +90,7 @@ beforeEach(() => {
   data.settings = [];
   nowMs = at('15:00');
   remindRecs = new Set();
+  outboxList = [];
   resetRemindQueue();
   remindQueue.setState({ holds: [] });
   for (const f of [savePatch, openReminder, showLocalReminder, closeLocalReminder, closeHandled, navigate]) f.mockClear();
@@ -235,5 +252,72 @@ describe('横幅手势与引擎（代码审查补漏测）', () => {
     expect(showLocalReminder).toHaveBeenCalledTimes(1);
     unmount();
     expect(closeLocalReminder).toHaveBeenCalledWith(`event:${E1}:${at('15:15')}`);
+  });
+
+  it('R4-L1：outbox 里还有没发出去的改日期，按“知道了”不写 notified_for，只关横幅、撤本机通知；之后不再弹；换账号（卸载）后清空', async () => {
+    const { unmount } = render(<RemindHost route="todos" />);
+    tick('15:16');
+    await screen.findByTestId('remind-bar');
+    outboxList = [pendingPatch({ date: '2026-11-04', notified_for: null, snooze_at: null, updated_at: 1 })];
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('remind-act-ack'));
+    });
+    expect(savePatch).not.toHaveBeenCalled();
+    expect(closeLocalReminder).toHaveBeenCalledWith(`event:${E1}:${at('15:15')}`);
+    await waitFor(() => expect(screen.queryByText('和 Kim 开会')).toBeNull());
+    tick('15:17');
+    expect(screen.queryByText('和 Kim 开会')).toBeNull();
+    unmount();
+    // 换账号重挂：本次会话的已处理集合已清空，这一条（同一个 tag）照常响
+    outboxList = [];
+    nowMs = at('15:10');   // 重挂时还没到点：到点进横幅（打开前就到点的进“错过的提醒”）
+    render(<RemindHost route="todos" />);
+    tick('15:16');
+    expect(await screen.findByText('和 Kim 开会')).toBeTruthy();
+  });
+  it('R4-L1：没有这种改动时照常写 notified_for', async () => {
+    render(<RemindHost route="todos" />);
+    tick('15:16');
+    await screen.findByTestId('remind-bar');
+    outboxList = [pendingPatch({ title: '改了标题', updated_at: 1 })];
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('remind-act-ack'));
+    });
+    expect(savePatch).toHaveBeenCalledWith('events', E1, { notified_for: at('15:15'), updated_at: at('15:16') }, true);
+  });
+
+  it('R4-L1 第三轮 L10：那条改动发出去以后，提醒时刻没变的补写一次“知道了”；变了的不写', async () => {
+    render(<RemindHost route="todos" />);
+    tick('15:16');
+    await screen.findByTestId('remind-bar');
+    outboxList = [pendingPatch({ date: DAY, remind_days: null, updated_at: 1 })];
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('remind-act-ack'));
+    });
+    expect(savePatch).not.toHaveBeenCalled();
+    // 还没发出去：outbox 变了也不补写
+    await fireOutbox();
+    expect(savePatch).not.toHaveBeenCalled();
+    // 发出去了（不在待发里了），提醒时刻还是 15:15：补写一次
+    outboxList = [];
+    await fireOutbox();
+    expect(savePatch).toHaveBeenCalledWith('events', E1, { notified_for: at('15:15'), updated_at: at('15:16') }, true);
+    savePatch.mockClear();
+    await fireOutbox();
+    expect(savePatch).not.toHaveBeenCalled();
+  });
+  it('R4-L1 第三轮 L10：发出去以后提醒时刻变了（另一次提醒），不补写', async () => {
+    render(<RemindHost route="todos" />);
+    tick('15:16');
+    await screen.findByTestId('remind-bar');
+    outboxList = [pendingPatch({ date: '2026-11-04', notified_for: null, snooze_at: null, updated_at: 1 })];
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('remind-act-ack'));
+    });
+    data.events = [ev(E1, '和 Kim 开会', '15:30', { date: '2026-11-04' }), ev(E2, '牙医', '15:45')];
+    tick('15:17');
+    outboxList = [];
+    await fireOutbox();
+    expect(savePatch).not.toHaveBeenCalled();
   });
 });

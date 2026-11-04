@@ -52,6 +52,10 @@ describe('顶部安全区底色条', () => {
     expect(blocked).toBe(100);
     expect(tooNew).toBe(100);
     expect(scrim).toBeLessThan(blocked);
+    // SAFETOP-sugg ①：kit Popover（日历年月选择器）经 Portal 挂到 body，在弹层之上、整屏提示之下
+    const popover = z(readFileSync('src/kit/components/Popover.module.css', 'utf8'), '.content');
+    expect(popover).toBeGreaterThan(scrim);
+    expect(popover).toBeLessThan(blocked);
   });
 
   it('登录页（背景是 --login-bg 渐变，页面能滚）：渐变固定在屏幕上，底色条用同一张（审查必改 2）', () => {

@@ -3,9 +3,10 @@
 // • remind.dnd：{start: 'HH:MM', end: 'HH:MM', enabled?: false}；认不出的按没开（和 push-dispatch 的 parseDnd 同一口径，
 //   supabase/functions/push-dispatch/round-util.ts）。关掉时保留时段、写 enabled: false，再打开还是原来的时段
 // • remind.default_time：全天日程“开始时再提醒”的时刻（startAtOf），没设 09:00
-// • 读：本机 settings 集合里这个键“活着”的那一行（没软删、没撤销）的 value；写：有这一行就 patch（settingPatch 管恢复），没有就 insert；值一样不写
+// • 读写一个键（settingValue、settingWrite、SettingRow）在 core/setting-write.ts，和日历共用一份（REMIND-settings-core、FA-4 代码审查 L7），这里转出
 import type { Dnd } from '../../../../shared/logic/remind.ts';
-import { settingPatch } from '../../../core/setting-patch.ts';
+
+export { settingValue, settingWrite, type SettingRow, type SettingWrite } from '../../../core/setting-write.ts';
 
 export const KEY_SHOW_TITLE = 'remind.show_title';
 export const KEY_DND = 'remind.dnd';
@@ -13,35 +14,6 @@ export const KEY_DEFAULT_TIME = 'remind.default_time';
 
 /** 打开免打扰时没设过时段的默认值（定稿线框 s13“免打扰 23:00 – 08:00”） */
 export const DEFAULT_DND = { start: '23:00', end: '08:00' } as const;
-
-export interface SettingRow {
-  readonly id: string;
-  readonly key?: unknown;
-  readonly value?: unknown;
-  readonly deleted_at?: unknown;
-  readonly undone?: unknown;
-}
-
-const live = (r: SettingRow): boolean => (r.deleted_at === null || r.deleted_at === undefined) && r.undone !== true;
-
-export function settingValue(rows: readonly SettingRow[], key: string): unknown {
-  return rows.find((r) => r.key === key && live(r))?.value;
-}
-
-export type SettingWrite =
-  | { readonly op: 'insert'; readonly data: { readonly key: string; readonly value: unknown } }
-  | { readonly op: 'patch'; readonly id: string; readonly data: Readonly<Record<string, unknown>> };
-
-const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
-
-/** 把 key 改成 value 要写什么；已经是这个值时 null */
-export function settingWrite(rows: readonly SettingRow[], key: string, value: unknown): SettingWrite | null {
-  const row = rows.find((r) => r.key === key && live(r)) ?? rows.find((r) => r.key === key);
-  if (!row) return { op: 'insert', data: { key, value } };
-  if (live(row) && typeof value === 'object' && value !== null && sameJson(row.value, value)) return null;
-  const data = settingPatch(row, value);
-  return data ? { op: 'patch', id: row.id, data } : null;
-}
 
 /** 推送写不写标题（设置一级；条目自己的 push_show_title 另算） */
 export function showTitleOf(v: unknown): boolean {

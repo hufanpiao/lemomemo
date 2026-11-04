@@ -4,7 +4,8 @@
 // • useRemindEngine：挂在 App 上（RemindHost）跑一份——每分钟算一次正在响的放进 kit 的队列；键盘弹起时压住横幅；
 //   exe 每分钟检查交 showLocalReminder 弹、别处处理了 closeLocalReminder 撤回（不写 pushed_for）；打开 App、回到前台时用 getNotifications() 关掉已处理的通知
 // • useRemindActions：知道了、稍后（写 notified_for / snooze_at，经 data/remind-write）、完成待办；处理完从队列拿掉，稍后弹 2 秒“15:25 再提醒你”
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { getBoot } from '../../../core/boot.ts';
 import { savePatch } from '../../../core/edit-save.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
@@ -17,7 +18,7 @@ import { watchKeyboard } from '../../../platform/viewport.ts';
 import { actionsFor, type RemindAction } from '../../../../shared/logic/remind-actions.ts';
 import { localDue, localText, shouldCloseShown, shownKey, staleShown } from '../data/local-notify.ts';
 import { allReminders, MISSED_WINDOW_MS, occurrenceKey, ringing, type Rang, type RangMap, type Reminder, type Row } from '../data/reminder-model.ts';
-import { ackAll as ackAllWrite, ackReminder, snoozeReminder, type SaveOutcome } from '../data/remind-write.ts';
+import { ackAll as ackAllWrite, ackReminder, snoozeReminder, timingPending, type OutboxLikeItem, type SaveOutcome } from '../data/remind-write.ts';
 import { defaultTimeOf, dndOf, KEY_DEFAULT_TIME, KEY_DND, KEY_SHOW_TITLE, settingValue, showTitleOf, type SettingRow } from '../data/remind-settings.ts';
 
 const MIN = 60_000;
@@ -58,13 +59,65 @@ export function useRemindPrefs() {
   );
 }
 
+// 本次会话只在本机处理过的提醒（R4-L1）：outbox 里还有没上服务器的“换一次提醒”的改动时，“知道了”不写 notified_for，
+// 只记 tag 在这里，横幅、错过的提醒、本机通知都当它已处理；引擎卸载（退出登录、换账号）时清空。新的那一次 tag 不同，照常响。
+// 外部存储：每次变化整个换一个新的只读 Set（第三轮 L12），useSyncExternalStore 取到的就是 useMemo 的依赖
+let sessionAcked: ReadonlySet<string> = new Set();
+const sessionAckedSubs = new Set<() => void>();
+function subscribeSessionAcked(fn: () => void): () => void {
+  sessionAckedSubs.add(fn);
+  return () => sessionAckedSubs.delete(fn);
+}
+const getSessionAcked = (): ReadonlySet<string> => sessionAcked;
+function setSessionAcked(next: ReadonlySet<string>): void {
+  sessionAcked = next;
+  for (const f of [...sessionAckedSubs]) f();
+}
+function ackLocally(tag: string): void {
+  setSessionAcked(new Set([...sessionAcked, tag]));
+}
+function clearSessionAcked(): void {
+  laterAcks.clear();
+  if (sessionAcked.size > 0) setSessionAcked(new Set());
+}
+const markSessionAcked = (list: Reminder[], acked: ReadonlySet<string>): Reminder[] =>
+  acked.size === 0 ? list : list.map((r) => (acked.has(r.tag) && !r.handled ? { ...r, handled: true } : r));
+
+/**
+ * 只在本机了结、等那条改动发出去以后补写的“知道了”（第三轮 L10）：tag → 这一条和当时的提醒时刻。
+ * 引擎监听 outbox，这一行不再 timingPending 时，提醒时刻还是当时那个（同一次提醒）就补写一次 ackPatch；变了（换成另一次了）就不写、丢掉
+ */
+const laterAcks = new Map<string, { kind: Reminder['kind']; id: string; remindAt: number | null }>();
+
+/** outbox 里还没上服务器的项；没启动、读不到时当没有 */
+async function outboxItems(): Promise<readonly OutboxLikeItem[]> {
+  const ob = getBoot()?.outbox as { list?: () => Promise<readonly OutboxLikeItem[]> } | undefined;
+  try {
+    return typeof ob?.list === 'function' ? await ob.list() : [];
+  } catch {
+    return [];
+  }
+}
+
+/** “知道了”在本机了结（R4-L1）：不写服务器，关横幅、撤本机通知、记进本次会话的已处理集合 */
+function ackOnlyHere(r: Reminder): void {
+  laterAcks.set(r.tag, { kind: r.kind, id: r.id, remindAt: r.remindAt });
+  ackLocally(r.tag);
+  removeRinging(r.tag);
+  void closeLocalReminder(r.tag).catch(() => undefined);
+}
+
 /** 本机现算的全部提醒（日程、待办） */
 export function useReminderList(now: number) {
   const events = useCollection<Row>('events');
   const todos = useCollection<Row>('todos');
   const prefs = useRemindPrefs();
   const tz = currentTz();
-  const list = useMemo(() => allReminders(events, todos, now, tz, prefs.dnd, prefs.defaultTime), [events, todos, now, tz, prefs.dnd, prefs.defaultTime]);
+  const acked = useSyncExternalStore(subscribeSessionAcked, getSessionAcked, getSessionAcked);
+  const list = useMemo(
+    () => markSessionAcked(allReminders(events, todos, now, tz, prefs.dnd, prefs.defaultTime), acked),
+    [events, todos, now, tz, prefs.dnd, prefs.defaultTime, acked],
+  );
   const known = useMemo(() => new Set([...events.map((r) => `event:${r.id}`), ...todos.map((r) => `todo:${r.id}`)]), [events, todos]);
   return { list, tz, prefs, known };
 }
@@ -95,7 +148,58 @@ export function useRemindEngine(): void {
   const collapsed = useRemindQueue((s) => s.collapsed);
   // 本次打开以后响过的：occurrenceKey → 当时的 tag 和实际响的时刻。全天日程改了 remind.default_time，同一次提醒不再进横幅，
   // 没按“知道了”的进“错过的提醒”按当时的时刻显示（R-336 ②；重开 App 会忘，见 REMIND-shown-persist）
-  useEffect(() => () => rangStore.clear(), []);
+  // 只在本机了结的“知道了”：那条改动发出去以后，提醒时刻没变的补写一次（第三轮 L10）
+  const listRef = useRef(list);
+  listRef.current = list;
+  useEffect(() => {
+    const ob = getBoot()?.outbox as { subscribe?: (fn: () => void) => () => void } | undefined;
+    if (typeof ob?.subscribe !== 'function') return;
+    // alive（第四轮 L13）：引擎卸载（退出登录、换账号）后，卡在 await 上的那次醒来不再拿旧账号的行补写；每次 await 之后都查
+    let alive = true;
+    let busy = false;
+    // dirty（第四轮 L14）：正在跑时又来了 outbox 通知，记下来，跑完再跑一次，不等下一次变化
+    let dirty = false;
+    const flush = async (): Promise<void> => {
+      if (busy) {
+        dirty = true;
+        return;
+      }
+      if (!alive || laterAcks.size === 0) return;
+      busy = true;
+      try {
+        const items = await outboxItems();
+        if (!alive) return;
+        for (const [tag, p] of [...laterAcks]) {
+          if (timingPending(p, items)) continue;
+          laterAcks.delete(tag);
+          const r = listRef.current.find((x) => x.kind === p.kind && x.id === p.id);
+          if (r && r.remindAt !== null && r.remindAt === p.remindAt && r.row['notified_for'] !== r.remindAt) {
+            await ackReminder(r, clock.now()).catch(() => undefined);
+            if (!alive) return;
+          }
+        }
+      } finally {
+        busy = false;
+        if (dirty && alive) {
+          dirty = false;
+          void flush();
+        }
+      }
+    };
+    const off = ob.subscribe(() => void flush());
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
+
+  useEffect(
+    () => () => {
+      rangStore.clear();
+      clearSessionAcked();
+    },
+    [],
+  );
 
   // 正在响的进队列（本次打开以后到点的；打开前就到点的进“错过的提醒”）
   useEffect(() => {
@@ -197,6 +301,10 @@ export function useRemindActions() {
     const a = actionsOf(r, now, currentTz(), prefsRef.current).find((x) => x.key === shown.key) ?? shown;
     if (a.key === 'genTodo') return 'failed';   // 纪念日（B5）
     if (a.key === 'ack') {
+      if (timingPending(r, await outboxItems())) {
+        ackOnlyHere(r);
+        return 'ok';
+      }
       const res = resultOf(await ackReminder(r, now));
       if (res === 'ok') removeRinging(r.tag);
       return res;
@@ -225,9 +333,13 @@ export function useRemindActions() {
 
   /** “全部知道了”：返回没写进去的条数；只把写进去的从队列拿掉（代码审查低 2） */
   const ackAll = useCallback(async (list: readonly Reminder[]): Promise<number> => {
-    const ok = await ackAllWrite(list, clock.now());
+    const items = await outboxItems();
+    const here = list.filter((r) => timingPending(r, items));
+    for (const r of here) ackOnlyHere(r);
+    const rest = list.filter((r) => !here.includes(r));
+    const ok = await ackAllWrite(rest, clock.now());
     for (const tag of ok) removeRinging(tag);
-    return list.length - ok.length;
+    return rest.length - ok.length;
   }, []);
 
   return { act, complete, ackAll };
