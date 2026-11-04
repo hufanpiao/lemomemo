@@ -9,14 +9,14 @@ import { SEED_USERS, seedObjects } from '../fakes/objstore-seed.ts';
 import { generate } from '../data-manifest/generate.ts';
 import { purgeCases, runPurgeCases, type PurgeActs } from '../data-manifest/purge-runner.ts';
 import { A, accountDeps, accountReq, B, DAY, H, T0 } from './account-fakes.ts';
-import { world, requestDeletion, runPurge, FIRST_RUN_AFTER } from './account-purge-harness.ts';
+import { world, requestDeletion, runPurge, seedOutside, markNoticed, toFirstRun } from './account-purge-harness.ts';
 
 describe('时间预算、backups 子目录（K3 安全审查低 9、10）', () => {
   it('处理完一个账号时间就用完：不再认领下一个（deferred），下一次运行再做', async () => {
     const w = world();
     await requestDeletion(w, A);
     await requestDeletion(w, B);
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     const r = await runPurge(w, {
       deleteUser: async (u) => { w.db.deleteUserCascade(u); w.clock.advance(PURGE_TIME_BUDGET_MS); },
     });
@@ -30,18 +30,46 @@ describe('时间预算、backups 子目录（K3 安全审查低 9、10）', () =
     expect(w.db.users.has(left)).toBe(false);
   });
 
-  it('做到一半时间用完：在写 deleted_accounts 之前停下、清掉认领，账号还在', async () => {
+  it('认领后墙钟就用完、R2 有对象：在第一个删了对象的桶之后停下（R2 检查点）、清掉认领，账号还在', async () => {
     const w = world();
     await requestDeletion(w, A);
-    w.clock.ms = FIRST_RUN_AFTER;
+    await seedOutside(w);
+    toFirstRun(w);
+    const realR2 = w.r2;
+    const buckets: string[] = [];
     const r = await runPurge(w, {
       userEmail: async (u) => { w.clock.advance(PURGE_TIME_BUDGET_MS); return w.db.users.get(u) ?? null; },
+      r2: { deletePrefix: async (b, p) => { buckets.push(b); return realR2.deletePrefix(b, p); } },
     });
     expect(r.body).toMatchObject({ purged: 0, deferred: 1, failed: 0 });
+    expect(buckets).toEqual([R2_BUCKETS[0]]);   // 第一个桶删了对象就停
     expect(r.logs).toContain('time_budget:aaaaaaaa');
+    expect(w.backups.count(A)).toBe(4);           // 备份段没开始
     expect(w.db.users.has(A)).toBe(true);
     expect(w.db.deleted.has(A)).toBe(false);
     expect(w.db.pending.get(A)?.purge_started_at).toBeNull();
+  });
+
+  it('第 5 步（counters）做完时墙钟到 110 秒：不可逆的几步之前停下——不写 deleted_accounts、账号还在、认领清掉（B1 代码审查中 2）', async () => {
+    const w = world();
+    await requestDeletion(w, A);
+    await seedOutside(w);
+    toFirstRun(w);
+    const store = w.db.purgeStore();
+    const r = await runPurge(w, {
+      store: { ...store, deleteUserCounters: async (u) => { await store.deleteUserCounters(u); w.clock.advance(PURGE_TIME_BUDGET_MS); } },
+    });
+    expect(r.body).toMatchObject({ purged: 0, deferred: 1, failed: 0 });
+    expect(r.logs).toContain('time_budget:aaaaaaaa');
+    expect(w.r2.count('images', `${A}/`)).toBe(0);   // 第 2～5 步都做完了
+    expect(w.backups.count(A)).toBe(0);
+    expect(w.db.deleted.has(A)).toBe(false);
+    expect(w.db.users.has(A)).toBe(true);
+    expect(w.db.pending.get(A)?.purge_started_at).toBeNull();
+    // 下一次运行从头再走一遍（前几步重做无害），这次走完
+    w.clock.advance(15 * 60_000);
+    expect((await runPurge(w)).body).toMatchObject({ purged: 1 });
+    expect(w.db.deleted.has(A)).toBe(true);
   });
 
   it('backups 的 <日期>/<user_id>/ 下有子目录：整个账号报错停下、清掉认领（删不到的不当作删完）', async () => {
@@ -49,7 +77,7 @@ describe('时间预算、backups 子目录（K3 安全审查低 9、10）', () =
     await requestDeletion(w, A);
     w.backups.files.add(`20261101/${A}/notes.json.gz`);
     w.backups.files.add(`20261101/${A}/old/notes.json.gz`);
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     const r = await runPurge(w);
     expect(r.body).toMatchObject({ purged: 0, failed: 1 });
     expect(r.logs).toContain('backups_subdir:aaaaaaaa');
@@ -63,7 +91,7 @@ describe('TC-B1-108：和 restore 不撞车', () => {
   it('① 已认领（另一次正在做，不到 1 小时）：这一次认领不到、跳过；restore 也被拒', async () => {
     const w = world();
     await requestDeletion(w, A);
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     const d = w.db.pending.get(A);
     if (!d) throw new Error('no pending');
     d.purge_started_at = new Date(w.clock.ms - CLAIM_STALE_MS + 60_000).toISOString();   // 59 分钟前认领
@@ -76,7 +104,7 @@ describe('TC-B1-108：和 restore 不撞车', () => {
     expect(CLAIM_STALE_MS).toBe(60 * 60_000);
     const w = world();
     await requestDeletion(w, A);
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     const d = w.db.pending.get(A);
     if (!d) throw new Error('no pending');
     const crashedAt = w.clock.ms;
@@ -92,7 +120,7 @@ describe('TC-B1-108：和 restore 不撞车', () => {
   it('④ 走到写 deleted_accounts 前这一行被删了（restore 等）：不写 deleted_accounts、不删账号', async () => {
     const w = world();
     await requestDeletion(w, A);
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     w.db.beforeStillClaimed = () => { w.db.pending.delete(A); };
     const r = await runPurge(w);
     expect(r.logs).toContain('skip_claim_gone:aaaaaaaa');
@@ -105,7 +133,7 @@ describe('TC-B1-108：和 restore 不撞车', () => {
     await requestDeletion(w, A);
     w.clock.ms = T0 + 7 * DAY - 3 * H;   // 到期前 3 小时恢复
     expect(w.db.restore(A)).toBe('ok');
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     expect((await runPurge(w)).body).toMatchObject({ purged: 0 });
     expect(w.db.users.has(A)).toBe(true);
     expect(w.db.profiles.get(A)?.disabled_at).toBeNull();
@@ -207,6 +235,7 @@ describe('TC-B0-117：四个 R2 桶，A 申请注销 → 满 7 天跑 account-pu
         await requestDeletion(w, u);
       },
       accountPurge: async () => {
+        markNoticed(w);   // 只测删除：当作提醒已经发过
         w.clock.advance(7 * DAY + H);
         const { body } = await runPurge(w);
         expect(body).toMatchObject({ failed: 0 });

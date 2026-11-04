@@ -35,15 +35,22 @@ export function makeStore(admin: Admin): PurgeStore {
   const priv = admin.schema('private');
   const pd = () => priv.from('pending_deletions');
   return {
-    async listRemind(nowIso, untilIso) {
-      return must(await pd().select('user_id, purge_after').eq('notice_sent', false).gt('purge_after', nowIso).lte('purge_after', untilIso)) ?? [];
+    async listRemind(untilIso) {
+      // 含已经到期的（补发并顺延，core.ts 文件头）；正在删的（已认领）不发（B1 代码审查第三轮中 C）；按 purge_after 从早到晚，最急的先发
+      return must(await pd().select('user_id, purge_after').eq('notice_sent', false).lte('purge_after', untilIso).is('purge_started_at', null)
+        .order('purge_after')) ?? [];
     },
     async casNotice(userId, from, to) {
       const rows = must(await pd().update({ notice_sent: to }).eq('user_id', userId).eq('notice_sent', from).select('user_id'));
       return Array.isArray(rows) && rows.length === 1;
     },
+    async postponeNotice(userId, oldIso, newIso) {
+      const rows = must(await pd().update({ notice_sent: true, purge_after: newIso }).eq('user_id', userId).eq('notice_sent', false)
+        .eq('purge_after', oldIso).is('purge_started_at', null).select('user_id'));
+      return Array.isArray(rows) && rows.length === 1;
+    },
     async listDue(nowIso, staleIso) {
-      return must(await pd().select('user_id, purge_after').lte('purge_after', nowIso).or(unclaimedOr(staleIso)).order('purge_after')) ?? [];
+      return must(await pd().select('user_id, purge_after, notice_sent').lte('purge_after', nowIso).or(unclaimedOr(staleIso)).order('purge_after').order('user_id')) ?? [];   // 同一时刻到期的按 user_id 固定先后：一轮停手的那个下一轮先接着做
     },
     async claim(userId, nowIso, staleIso) {
       const rows = must(await pd().update({ purge_started_at: nowIso }).eq('user_id', userId).lte('purge_after', nowIso).or(unclaimedOr(staleIso)).select('user_id'));

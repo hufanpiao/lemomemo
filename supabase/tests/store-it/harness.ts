@@ -149,11 +149,12 @@ export async function mkUser(tag: string, withProfile = true): Promise<string> {
   return id;
 }
 
-/** 冷静期：停用 deletion + pending_deletions（相对数据库 now()，秒） */
+/** 冷静期：停用 deletion + pending_deletions（相对数据库 now()，秒）。notice_sent = true：当作到期前提醒已经发过
+ *  （PURGE-cpu-budget 返工：没提醒过的 account-purge 不删，到期了还没提醒的会补发并顺延，这里只测删除和认领） */
 export async function pending(id: string, purgeAfterS: number, claimedAgoS: number | null = null) {
   await sql`update public.profiles set disabled_at = now(), disabled_reason = 'deletion' where user_id = ${id}`;
-  await sql`insert into private.pending_deletions (user_id, purge_after, purge_started_at)
-    values (${id}, now() + make_interval(secs => ${purgeAfterS}),
+  await sql`insert into private.pending_deletions (user_id, purge_after, notice_sent, purge_started_at)
+    values (${id}, now() + make_interval(secs => ${purgeAfterS}), true,
             case when ${claimedAgoS}::int is null then null else now() - make_interval(secs => ${claimedAgoS}::int) end)`;
 }
 

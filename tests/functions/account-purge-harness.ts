@@ -41,3 +41,14 @@ export async function seedOutside(w: World) {
 
 /** 到“满 7 天后的第一次 03:30（首尔）”：申请在 10-29 12:00（首尔），+7 天是 11-05 12:00，下一次 03:30 是 11-06 03:30 = UTC 11-05 18:30 */
 export const FIRST_RUN_AFTER = Date.parse('2026-11-05T18:30:00Z');
+
+/** 把所有待删账号标成“到期前提醒已经发过”（PURGE-cpu-budget 返工：没提醒过的第二段不删）。只测删除的用例用它代替那几次提醒运行 */
+export function markNoticed(w: World) {
+  for (const d of w.db.pending.values()) d.notice_sent = true;
+}
+
+/** 到 FIRST_RUN_AFTER，并当作提醒已经在前几天发过 */
+export function toFirstRun(w: World) {
+  markNoticed(w);
+  w.clock.ms = FIRST_RUN_AFTER;
+}

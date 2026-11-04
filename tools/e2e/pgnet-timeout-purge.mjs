@@ -7,8 +7,21 @@
 // 不写死任何密钥、邮箱：service role key 运行时从 `supabase status -o env` 读；R2 假凭据从 --env-file（函数用的同一份本机假值）读，
 //   值里不带 fake / FAKE / LOCAL 字样就拒绝；测试邮箱一律随机的 @lemomemo.test（account-purge 的 skipTestRecipients 不真发）。
 // 上一轮留下、已到期且认领已过期的待删账号也会被这一轮处理：算进 ② 的 purged，③ 一起核对（补跑）。
-// 用法：node tools/e2e/pgnet-timeout-purge.mjs --workdir <lemo-b2push 副本目录> --env-file <函数 env 文件> --container-host <容器里访问本机的主机名> [--users 3] [--dates 400] [--expect timeout|ok]
-//   --expect timeout（默认）：判 ① 超时 + ②～⑤；--expect ok（反证，用少量数据）：判 ① 200、没超时 + ②～⑤。输出一份 JSON 汇总，全部通过退出码 0。
+// 待删账号造成“到期前提醒已经发过”（notice_sent = true）：account-purge 不删没提醒过的（PURGE-cpu-budget 返工）。
+// 用法：node tools/e2e/pgnet-timeout-purge.mjs --workdir <lemo-b2push 副本目录> --env-file <函数 env 文件> --container-host <容器里访问本机的主机名>
+//         [--users 3] [--dates 400] [--expect rounds|timeout|ok] [--rounds 12] [--remind 0]
+//   account-purge 每次运行按调用次数停手（core.ts 的 PURGE_WORK_OPS），数据多的一轮删不完，所以三种模式都连跑多轮（每一轮就是一次补跑），
+//   直到心跳 remaining = 0（最多 --rounds 轮）；判每轮都有心跳、没有一轮被 CPU 上限掐掉、每轮结束都没留着认领，
+//   各轮 purged 合计 = 待删账号数，再判 ③～⑤。三种模式只差第 1 轮的 pg_net 结果（B1 代码审查低 5）：
+//     --expect rounds（默认）：不管第 1 轮超没超时；
+//     --expect timeout：第 1 轮必须超时（pg_net 5 秒），而且那一轮的心跳晚于 5 秒——证明超时以后函数照样跑完、写了心跳；
+//       要第 1 轮超过 5 秒，--dates 要够多（本机 1 个账号 × 400 个日期约 8 秒）；
+//     --expect ok（反证，用少量数据）：第 1 轮 200、没超时。
+//   --remind N：另造 N 个“48 小时内到期、还没提醒”的账号（邮箱是 @lemomemo.test，函数不真发，算发信失败）：
+//     看提醒段按自己的上限停手（remind_budget）、不挤占删除段；这些账号不在 ③ 里，另核对它们一个都没被删。
+//     发信失败时每个账号只算 3 次调用（取邮箱、取 profile、发信），要 N 大于 REMIND_WORK_OPS / 3（≥ 67，本机用 80）才看得到停手；
+//     “提醒一封不漏、不重复”要拦 Resend 才看得到，在 supabase/tests/store-it/purge-remind.it.ts。
+//   输出一份 JSON 汇总，全部通过退出码 0。
 /* global process, console, URL, fetch, setTimeout, Headers, Request, Buffer -- Node 24 的全局 */
 import { execFileSync, execSync, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -38,7 +51,10 @@ const workdir = arg('workdir');
 const envFile = arg('env-file');
 const nUsers = Number(arg('users', '3'));
 const nDates = Number(arg('dates', '400'));
-const expect = arg('expect', 'timeout');
+const expect = arg('expect', 'rounds');
+const maxRounds = Number(arg('rounds', '12'));
+const nRemind = Number(arg('remind', '0'));
+if (!['rounds', 'timeout', 'ok'].includes(expect)) fail('--expect 只能是 rounds、timeout、ok');
 // 容器里访问本机用的主机名（Docker Desktop 给容器的那个本机名字），由调用方传，脚本里不写死（check_backend F10）
 const hostFromContainer = arg('container-host');
 if (!workdir || !envFile || !hostFromContainer) fail('要 --workdir、--env-file 和 --container-host');
@@ -112,7 +128,7 @@ execFileSync('docker', ['rm', '-f', PROXY], { stdio: 'ignore' });
 execFileSync('docker', ['run', '-d', '--rm', '--name', PROXY, '--network', `container:${EDGE}`, '-v', `${proxyDir}:/proxy:ro`, '--entrypoint', 'edge-runtime', edgeImage, 'start', '--main-service=/proxy', `--port=${s3Url.port}`], { stdio: 'ignore' });
 const r2Count = (uid) => Object.fromEntries(R2_BUCKETS.map((b) => [b, [...s3.objects.keys()].filter((k) => k.startsWith(`${b}/${uid}/`)).length]));
 
-const out = { project: PROJECT, expect, users: nUsers, dates: nDates, checks: {} };
+const out = { project: PROJECT, expect, users: nUsers, dates: nDates, remind: nRemind, checks: {} };
 try {
   // ---------- 造数据：nUsers 个待删账号 + 1 个对照账号 B ----------
   const dates = Array.from({ length: nDates }, (_, i) => new Date(Date.UTC(2020, 0, 1) + i * 86_400_000).toISOString().slice(0, 10));
@@ -128,7 +144,15 @@ try {
   // profiles 行（App 首次登录时建；这里直接插）：待删账号是“注销冷静期”状态，对照账号 B 正常
   psql(`insert into public.profiles (user_id) select u from unnest(${lit([...targets, b])}) u on conflict (user_id) do nothing;
 update public.profiles set disabled_at = now(), disabled_reason = 'deletion' where user_id = any(${lit(targets)});
-insert into private.pending_deletions (user_id, purge_after) select u, now() - interval '1 minute' from unnest(${lit(targets)}) u;`);
+insert into private.pending_deletions (user_id, purge_after, notice_sent) select u, now() - interval '1 minute', true from unnest(${lit(targets)}) u;`);
+  // --remind：48 小时内到期、还没提醒的账号（只看提醒段，不该被删）
+  const reminds = [];
+  for (let i = 0; i < nRemind; i++) reminds.push(await createUser());
+  if (reminds.length) {
+    psql(`insert into public.profiles (user_id) select u from unnest(${lit(reminds)}) u on conflict (user_id) do nothing;
+update public.profiles set disabled_at = now(), disabled_reason = 'deletion' where user_id = any(${lit(reminds)});
+insert into private.pending_deletions (user_id, purge_after) select u, now() + interval '24 hours' + (n * interval '1 second') from unnest(${lit(reminds)}) with ordinality as t(u, n);`);
+  }
   const bBefore = { backups: backupCount(b), r2: r2Count(b) };
   // 之前留下、这一轮也会被处理的待删账号（到期、没认领或认领已过期）：比如上一轮被 CPU 上限掐断、认领过了 1 小时的那个。
   // 一起算进 ② 的 purged、③ 逐个核对（补跑能不能把半截的删完）
@@ -136,34 +160,52 @@ insert into private.pending_deletions (user_id, purge_after) select u, now() - i
   and not (user_id = any(${lit(targets)}));`).split(/\r?\n/).filter(Boolean);
   out.carried = carried.map((u) => u.slice(0, 8));
 
-  // ---------- 触发：cron.job 里那条 command 原样跑一次 ----------
+  // ---------- 触发：cron.job 里那条 command 原样跑一次（--expect rounds 时连跑多轮，直到心跳的 remaining 为 0） ----------
   const command = psql(`select command from cron.job where jobname = 'account-purge';`);
   if (!/net\.http_post/.test(command) || !/timeout_milliseconds := 5000/.test(command)) throw new Error('cron.job 里 account-purge 的 command 不是预期的那条');
-  const t0 = Number(psql('select (extract(epoch from clock_timestamp()) * 1000)::bigint;'));
-  const reqId = psql(`${command};`).split('\n').pop();
-  out.trigger = { t0: new Date(t0).toISOString(), request_id: reqId };
-
-  // ① pg_net 的结果
-  let resp = '';
-  for (let i = 0; i < 60 && !resp; i++) {
-    resp = psql(`select coalesce(status_code::text, ''), coalesce(timed_out::text, ''), coalesce(error_msg, ''), (extract(epoch from created) * 1000)::bigint from net._http_response where id = ${Number(reqId)};`);
-    if (!resp) await sleep(1000);
+  async function fire() {
+    const t0 = Number(psql('select (extract(epoch from clock_timestamp()) * 1000)::bigint;'));
+    const reqId = psql(`${command};`).split(/\r?\n/).pop();
+    let resp = '';
+    for (let i = 0; i < 60 && !resp; i++) {
+      resp = psql(`select coalesce(status_code::text, ''), coalesce(timed_out::text, ''), coalesce(error_msg, '') from net._http_response where id = ${Number(reqId)};`);
+      if (!resp) await sleep(1000);
+    }
+    const [code, timedOut, errMsg] = resp.split('|');
+    let hb = '';
+    for (let i = 0; i < 150 && !hb; i++) {
+      hb = psql(`select (extract(epoch from at) * 1000)::bigint, detail::text from private.heartbeat where name = 'account-purge' and at > to_timestamp(${t0} / 1000.0);`);
+      if (!hb) await sleep(1000);
+    }
+    const [hbAt, detail] = hb ? [Number(hb.slice(0, hb.indexOf('|'))), JSON.parse(hb.slice(hb.indexOf('|') + 1))] : [null, null];
+    await sleep(1500);   // 等 worker 的收尾日志
+    const lg = spawnSync('docker', ['logs', '--since', new Date(t0 - 1000).toISOString(), EDGE], { encoding: 'utf8' });
+    const claimed = Number(psql(`select count(*) from private.pending_deletions where user_id = any(${lit([...targets, ...carried])}) and purge_started_at is not null;`));
+    return {
+      t0, request_id: reqId, status_code: code || null, timed_out: timedOut || null, error_msg: errMsg || null,
+      isTimeout: code === '' && (timedOut === 'true' || /time(d)? ?out/i.test(errMsg ?? '')),
+      hbAt, detail, claimedAfter: claimed, cpuKilled: /CPU time hard limit reached/.test(`${lg.stdout}\n${lg.stderr}`),
+    };
   }
-  const [code, timedOut, errMsg] = resp.split('|');
-  const isTimeout = code === '' && (timedOut === 'true' || /time(d)? ?out/i.test(errMsg ?? ''));
-  out.checks['①'] = { status_code: code || null, timed_out: timedOut || null, error_msg: errMsg || null, pass: expect === 'timeout' ? isTimeout : code === '200' && timedOut !== 'true' };
-
-  // ② 心跳：at 晚于触发时刻（超时那次还要晚于 t0 + 5 秒），detail 是本次结果
-  let hb = '';
-  for (let i = 0; i < 150 && !hb; i++) {
-    hb = psql(`select (extract(epoch from at) * 1000)::bigint, detail::text from private.heartbeat where name = 'account-purge' and at > to_timestamp(${t0} / 1000.0);`);
-    if (!hb) await sleep(1000);
+  const rounds = [];
+  for (let i = 0; i < maxRounds; i++) {
+    const r = await fire();
+    rounds.push(r);
+    if (r.detail === null || r.detail.remaining === 0 || r.detail.remaining === undefined) break;
   }
-  const [hbAt, hbDetail] = hb ? [Number(hb.slice(0, hb.indexOf('|'))), JSON.parse(hb.slice(hb.indexOf('|') + 1))] : [null, null];
-  out.checks['②'] = {
-    at: hbAt ? new Date(hbAt).toISOString() : null, detail: hbDetail,
-    pass: hbDetail !== null && hbDetail.purged === nUsers + carried.length && hbDetail.failed === 0 && (expect === 'timeout' ? hbAt > t0 + 5000 && hbDetail.ms > 5000 : true),
-  };
+  const t0 = rounds[0].t0;
+  out.trigger = { t0: new Date(t0).toISOString(), request_id: rounds[0].request_id };
+  out.rounds = rounds.map((r) => ({ request_id: r.request_id, timed_out: r.timed_out, status_code: r.status_code, heartbeat: r.hbAt ? new Date(r.hbAt).toISOString() : null, detail: r.detail, claimedAfter: r.claimedAfter, cpuKilled: r.cpuKilled }));
+  // ①：每一轮 pg_net 都有结果、没有一轮被 CPU 上限掐掉、每一轮结束后没有留着认领（不停在半截）；第 1 轮按 --expect 判超时 / 200
+  const r1 = rounds[0];
+  const first = expect === 'timeout' ? r1.isTimeout && r1.hbAt > r1.t0 + 5000 && r1.detail?.ms > 5000
+    : expect === 'ok' ? r1.status_code === '200' && r1.timed_out !== 'true' : true;
+  out.checks['①'] = { first: { status_code: r1.status_code, timed_out: r1.timed_out, error_msg: r1.error_msg, pass: first },
+    pass: first && rounds.every((r) => (r.status_code !== null || r.timed_out !== null) && !r.cpuKilled && r.claimedAfter === 0) };
+  // ②：每一轮都有心跳、failed 0、held 0；各轮 purged 加起来 = 待删账号数，最后一轮 remaining = 0
+  const sum = rounds.reduce((n, r) => n + (r.detail?.purged ?? 0), 0);
+  out.checks['②'] = { purged: sum, pass: rounds.every((r) => r.detail !== null && r.hbAt > r.t0 && r.detail.failed === 0 && (r.detail.held ?? 0) === 0)
+    && sum === nUsers + carried.length && rounds.at(-1).detail?.remaining === 0 };
 
   // ③ 每个待删账号都删干净（没有删到一半）
   const per = [...targets, ...carried].map((u) => {
@@ -178,6 +220,14 @@ insert into private.pending_deletions (user_id, purge_after) select u, now() - i
   // ④ 对照账号 B 不受影响
   const bAfter = { backups: backupCount(b), r2: r2Count(b), profiles: Number(psql(`select count(*) from public.profiles where user_id = '${b}';`)) };
   out.checks['④'] = { before: bBefore, after: bAfter, pass: bAfter.profiles === 1 && bAfter.backups === bBefore.backups && JSON.stringify(bAfter.r2) === JSON.stringify(bBefore.r2) };
+  // ④'（--remind）：要提醒的账号一个都没被删、没被认领；提醒段按自己的上限停手，不挤占删除段
+  if (reminds.length) {
+    const alive = Number(psql(`select count(*) from private.pending_deletions where user_id = any(${lit(reminds)}) and purge_started_at is null;`));
+    out.checks["④'"] = { alive, sent: rounds.map((r) => r.detail?.sent ?? null), remind_left: rounds.map((r) => r.detail?.remind_left ?? null),
+      remind_ops: rounds.map((r) => r.detail?.remind_ops ?? null), ops: rounds.map((r) => r.detail?.ops ?? null),
+      // 第 1 轮：提醒段停在自己的上限（remind_left > 0，要 --remind 多于一轮的上限），同一轮删除段照样干了活（ops 远大于“只列一次”）
+      pass: alive === reminds.length && (rounds[0].detail?.remind_left ?? 0) > 0 && (rounds[0].detail?.ops ?? 0) > 50 };
+  }
 
   // ⑤ 函数日志里没有出错记录
   const lg = spawnSync('docker', ['logs', '--since', new Date(t0 - 2000).toISOString(), EDGE], { encoding: 'utf8' });

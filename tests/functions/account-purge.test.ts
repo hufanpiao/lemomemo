@@ -9,13 +9,13 @@ import { emailHash } from '../../supabase/functions/_shared/email-hash.ts';
 import { deletionDoneMail, deletionReminderMail, deletionRequestedMail } from '../../supabase/functions/_shared/account-mail.ts';
 import { seedObjects } from '../fakes/objstore-seed.ts';
 import { A, B, C, CRON, cronReq, DAY, HASH_SECRET, purgeDeps } from './account-fakes.ts';
-import { world, requestDeletion, runPurge, seedOutside, FIRST_RUN_AFTER } from './account-purge-harness.ts';
+import { world, requestDeletion, runPurge, seedOutside, FIRST_RUN_AFTER, toFirstRun } from './account-purge-harness.ts';
 
 describe('鉴权', () => {
   it('TC-B1-101 ②：不带或带错 x-cron-secret 回 401，什么都不做', async () => {
     const w = world();
     await requestDeletion(w, A);
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     for (const s of [null, '', 'wrong', `${CRON}x`]) {
       const res = await handle(cronReq(s), purgeDeps(w.db, w.r2, w.backups, w.box));
       expect(res.status).toBe(401);
@@ -65,7 +65,7 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
     expect(w.db.deleted.size).toBe(0);
     expect([...w.db.counters.keys()].some((k) => k.includes(A))).toBe(true);
 
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     w.box.length = 0;
     const calls0 = w.r2.calls.length;
     const { body } = await runPurge(w);
@@ -124,7 +124,7 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
       const eh = await emailHash(HASH_SECRET, 'a@test.local');
       w.db.pendingSignups.add(eh);
       await requestDeletion(w, A);
-      w.clock.ms = FIRST_RUN_AFTER;
+      toFirstRun(w);
       const { body, logs } = await runPurge(w, { hashSecret });
       expect(body).toMatchObject({ purged: 1, failed: 0 });
       expect(w.db.users.has(A)).toBe(false);
@@ -138,7 +138,7 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
     await requestDeletion(w, A);
     const p = w.db.profiles.get(A);
     if (p) p.disabled_reason = 'admin';
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     expect((await runPurge(w)).body).toMatchObject({ purged: 1 });
     expect(w.db.users.has(A)).toBe(false);
   });
@@ -147,7 +147,7 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
     const w = world();
     await requestDeletion(w, A);
     w.db.admins.add(A);
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     const r1 = await runPurge(w);
     expect(r1.body).toMatchObject({ purged: 0, failed: 0, skipped: 1 });
     expect(r1.logs).toContain('skip_admin:aaaaaaaa');
@@ -169,7 +169,7 @@ describe('TC-B1-102：一个失败不影响别人，第二天重试', () => {
     await seedOutside(w);
     await requestDeletion(w, A);
     await requestDeletion(w, C);
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     w.r2.failOnce('deleteMany');   // A 排在前面（purge_after 一样时按插入顺序），第一个 deleteMany 就是 A 的
     const day1 = await runPurge(w);
     expect(day1.body).toMatchObject({ purged: 1, failed: 1 });
@@ -191,7 +191,7 @@ describe('TC-B1-102：一个失败不影响别人，第二天重试', () => {
     const w = world();
     await seedOutside(w);
     await requestDeletion(w, A);
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     const failing = { deletePrefix: async () => { throw Object.assign(new Error('objstore_not_empty'), { code: 'not_empty' }); } };
     const r1 = await runPurge(w, { r2: failing });
     expect(r1.logs).toContain('r2_not_empty:aaaaaaaa');
@@ -209,7 +209,7 @@ describe('TC-B1-102：一个失败不影响别人，第二天重试', () => {
   it('deleteUser 失败：deleted_accounts 已写；第二天重来照样完成（写入 on conflict do nothing）', async () => {
     const w = world();
     await requestDeletion(w, A);
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     w.db.fail.add('deleteUser');
     expect((await runPurge(w)).body).toMatchObject({ failed: 1 });
     expect(w.db.deleted.has(A)).toBe(true);
@@ -231,7 +231,7 @@ describe('TC-B1-102：一个失败不影响别人，第二天重试', () => {
   it('deleteUser 以后核对 profiles、pending_deletions 不是 0 行：算失败（告警）', async () => {
     const w = world();
     await requestDeletion(w, A);
-    w.clock.ms = FIRST_RUN_AFTER;
+    toFirstRun(w);
     const r = await runPurge(w, { deleteUser: async () => { w.db.users.delete(A); } });   // 假装删了、其实没级联
     expect(r.body).toMatchObject({ purged: 0, failed: 1 });
     expect(r.logs).toContain('verify_failed:aaaaaaaa');

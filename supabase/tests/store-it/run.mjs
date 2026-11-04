@@ -4,7 +4,8 @@
 //   ① 读 `supabase status -o json` 的 API_URL、DB_URL、ANON_KEY、SERVICE_ROLE_KEY（本地 CLI 的演示值，不打印）；
 //      地址不是 127.0.0.1 / localhost / [::1] 就拒绝（account-store.it.ts 开头还会再查一次）；
 //   ② 先跑 copy:shared（两个 index.ts 引 _shared/gen/）；
-//   ③ 带这几项跑 deno test supabase/tests/store-it/account-store.it.ts、invite-admin-store.it.ts：网络只许 127.0.0.1，写只许 supabase/.temp/（残留清单）。
+//   ③ 带这几项跑 deno test supabase/tests/store-it/account-store.it.ts、invite-admin-store.it.ts，再另起一个进程跑 purge-remind.it.ts：
+//      网络只许 127.0.0.1，写只许 supabase/.temp/（残留清单）。
 // 不用 shell：supabase 先按 PATH 找（CI），找不到就用 node 直接跑 node_modules/supabase/dist/supabase.js（本机 npx 装的）。
 // 结果用 process.exitCode 交出。
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -48,5 +49,15 @@ if (!s || !s.API_URL || !s.DB_URL || !s.SERVICE_ROLE_KEY || !s.ANON_KEY) {
     env: { ...process.env, IT_API_URL: s.API_URL, IT_DB_URL: s.DB_URL, IT_ANON_KEY: s.ANON_KEY, IT_SERVICE_KEY: s.SERVICE_ROLE_KEY },
   });
   if (r.error) console.error(`store-it：deno 没跑起来（${r.error.message}）`);
-  process.exitCode = r.status ?? 1;
+  // PURGE-cpu-budget 返工：多账号同时到期、同时有一批要提醒的（purge-remind.it.ts）。harness 收尾会关库连接，所以另起一个 deno 进程
+  const r2 = spawnSync('deno', [
+    'test', '--config', 'deno.json', '--allow-net=127.0.0.1,localhost', '--allow-env', '--allow-read=.', '--allow-write=supabase/.temp',
+    'supabase/tests/store-it/purge-remind.it.ts',
+  ], {
+    cwd: root,
+    stdio: 'inherit',
+    env: { ...process.env, IT_API_URL: s.API_URL, IT_DB_URL: s.DB_URL, IT_ANON_KEY: s.ANON_KEY, IT_SERVICE_KEY: s.SERVICE_ROLE_KEY },
+  });
+  if (r2.error) console.error(`store-it：deno 没跑起来（${r2.error.message}）`);
+  process.exitCode = (r.status ?? 1) || (r2.status ?? 1);
 }

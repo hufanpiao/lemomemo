@@ -56,6 +56,8 @@ export class FakeDb {
   sizeCalls = 0; sizeResult: number | null = null;
   /** account-purge 的 stillClaimed 被调时先跑一下（模拟“写 deleted_accounts 前这一行被删”） */
   beforeStillClaimed: (() => void) | null = null;
+  /** account-purge 的 postponeNotice 被调时先跑一下（模拟“补发之后、顺延之前这一行被改了”） */
+  beforePostpone: (() => void) | null = null;
 
   readonly clock: Clock;
   constructor(clock: Clock) { this.clock = clock; }
@@ -195,10 +197,10 @@ export class FakeDb {
 
   purgeStore(): PurgeStore {
     return {
-      listRemind: async (nowIso, untilIso) => {
+      listRemind: async (untilIso) => {
         this.guard('listRemind');
-        return [...this.pending].filter(([, d]) => !d.notice_sent && d.purge_after > nowIso && d.purge_after <= untilIso)
-          .map(([user_id, d]) => ({ user_id, purge_after: d.purge_after }));
+        return [...this.pending].filter(([, d]) => !d.notice_sent && d.purge_after <= untilIso && d.purge_started_at === null)
+          .sort((x, y) => (x[1].purge_after < y[1].purge_after ? -1 : 1)).map(([user_id, d]) => ({ user_id, purge_after: d.purge_after }));
       },
       casNotice: async (u, from, to) => {
         this.guard('casNotice');
@@ -207,10 +209,20 @@ export class FakeDb {
         d.notice_sent = to;
         return true;
       },
+      postponeNotice: async (u, oldIso, newIso) => {
+        this.guard('postponeNotice');
+        this.beforePostpone?.();
+        const d = this.pending.get(u);
+        if (!d || d.notice_sent || d.purge_after !== oldIso || d.purge_started_at !== null) return false;
+        d.notice_sent = true;
+        d.purge_after = newIso;
+        return true;
+      },
       listDue: async (nowIso, staleIso) => {
         this.guard('listDue');
         return [...this.pending].filter(([, d]) => d.purge_after <= nowIso && (d.purge_started_at === null || d.purge_started_at < staleIso))
-          .sort((x, y) => (x[1].purge_after < y[1].purge_after ? -1 : 1)).map(([user_id, d]) => ({ user_id, purge_after: d.purge_after }));
+          .sort((x, y) => (x[1].purge_after < y[1].purge_after ? -1 : x[1].purge_after > y[1].purge_after ? 1 : x[0] < y[0] ? -1 : 1))
+          .map(([user_id, d]) => ({ user_id, purge_after: d.purge_after, notice_sent: d.notice_sent }));
       },
       claim: async (u, nowIso, staleIso) => {
         this.guard('claim');

@@ -373,8 +373,9 @@ export async function startLivePurge(cfg: LiveSupabase, s3: LiveS3): Promise<Liv
         if (res.status !== 200) throw new Error(`account delete 回 ${res.status}：${text}`);
       },
       async accountPurge(userId) {
-        // 冷静期注入成已满：只改 purge_after（其余照 account_request_deletion 写的）
-        const upd = await sql`update private.pending_deletions set purge_after = now() - interval '1 second' where user_id = ${userId} returning user_id`;
+        // 冷静期注入成已满：改 purge_after，并当作到期前提醒已经发过（notice_sent = true；没提醒过的 account-purge 不删，
+        // PURGE-cpu-budget 返工）；其余照 account_request_deletion 写的
+        const upd = await sql`update private.pending_deletions set purge_after = now() - interval '1 second', notice_sent = true where user_id = ${userId} returning user_id`;
         if (upd.length !== 1) throw new Error('account-purge 之前 pending_deletions 里没有这个人（account-delete 没生效？）');
         const body = await live.runPurge();
         if (body.purged !== 1 || body.failed !== 0) throw new Error(`account-purge 应该删掉 1 个、失败 0 个：${JSON.stringify(body)}`);
