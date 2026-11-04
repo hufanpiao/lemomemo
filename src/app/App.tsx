@@ -2,10 +2,14 @@
 // • 提醒（B2 FA-4，REMIND-wiring）：RemindHost 挂一份（横幅、按钮条、提醒引擎），在页面的 Suspense 和错误边界外面、自己一个 Suspense，
 //   提醒的分包没到、出错都不影响页面；key 用登录会话的 user_id（L8）：换账号就整个重新挂载，
 //   引擎卸载时清掉模块级的“本次打开响过的”“本次会话只在本机处理过的”，不把上个账号的带过来。没登录（测试里没启动）不挂
-// • 首屏减重 ⑥：页面画出来以后、浏览器空闲时才挂 RemindHost（约 14 KB 提醒代码不在首屏路径上）；冷启动就是整页提醒（点系统通知进来）时立刻挂。
+// • 首屏减重 ⑥：首屏画完以后、浏览器空闲时才挂 RemindHost（约 14 KB 提醒代码不在首屏路径上）；冷启动就是整页提醒（点系统通知进来）时立刻挂。
+//   “首屏画完”和同步、supabase-js 用同一套判断：platform/first-paint.ts 的 afterAppPainted（REMIND-arm-firstpaint，原来 App 自己放在
+//   页面 Suspense 里的 ArmReminders 去掉了）。first-paint 的“画完”= 第一个 main[data-feature] 出现再过一帧；它自己的兜底
+//   （render 后 startAppPaintLimit、挂上起 15 秒长兜底）到了也算画完。入口没挂 watchAppPainted 时（测试、别的入口）当场算画完。
 //   since（从哪一刻起到点的进横幅）在 App 第一次渲染时记下，打开到挂上之间到点的照样响，只是晚响这一会儿：
-//   页面分包到达并提交 + whenIdle（requestIdleCallback 最多 2 秒，没有时 300 ms）+ 下载 RemindHost 分包；后台标签页的定时器还会被节流。
-//   另有和页面无关的硬上限 REMIND_MAX_WAIT_MS（5 秒，从 App 第一次渲染算起）：页面分包一直不到、一直不提交，也最晚这时挂上
+//   首屏画完 + whenIdle（requestIdleCallback 最多 2 秒，没有时 300 ms）+ 下载 RemindHost 分包；后台标签页的定时器还会被节流。
+//   提醒自己的硬上限 REMIND_MAX_WAIT_MS 保留（5 秒，从 App 第一次渲染算起，和 first-paint 的兜底谁先到算谁）：比 first-paint 告知页关口那段
+//   （render 后 5 + 1 秒）更早，页面一直不出来（分包挂着、页面出错显示 ErrorView、整屏提示）也最晚这时挂上
 //   （这时页面可能还是空白，到点的横幅会先画出来、启动画面随之收起；比一直不响好，接线审查⑥ L3 接受的取舍）
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { getBoot } from '../core/boot.ts';
@@ -13,6 +17,7 @@ import { RemindHost } from '../features/reminders/index.ts';
 import { useT } from '../kit/hooks/useT.ts';
 import { isProduction } from '../platform/env.ts';
 import { clock } from '../platform/clock.ts';
+import { afterAppPainted } from '../platform/first-paint.ts';
 import { whenIdle } from '../platform/session.ts';
 import { reloadPage } from '../platform/sw-register.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
@@ -96,19 +101,6 @@ export const remindMaxWait = {
   stop: (id: ReturnType<typeof setTimeout>): void => clearTimeout(id),
 };
 
-/** 放在页面的 Suspense 里：页面真提交了（分包到了、画出来了）才跑 effect，再等浏览器空闲，通知 App 可以挂提醒了 */
-function ArmReminders({ onReady }: { onReady: () => void }) {
-  useEffect(() => {
-    let cancelled = false;
-    whenIdle(() => {
-      if (!cancelled) onReady();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [onReady]);
-  return null;
-}
 
 const allRoutes: readonly FeatureRoute[] = [...featureRoutes, ...devRoutes];
 /** 页面归属：samePageAs 指向的那条，没写就是自己 */
@@ -120,7 +112,7 @@ setSamePage((a, b) => grouped.has(pageOf(a.name)) && pageOf(a.name) === pageOf(b
 
 export function App() {
   const route = useRoute();
-  // 提醒什么时候挂（首屏减重 ⑥）：冷启动就是整页提醒时立刻挂；否则等页面画出来、浏览器空闲（ArmReminders）。挂上以后不再收回
+  // 提醒什么时候挂（首屏减重 ⑥）：冷启动就是整页提醒时立刻挂；否则等首屏画完（first-paint）、浏览器空闲。挂上以后不再收回
   const [remindReady, setRemindReady] = useState(() => route.name === 'remind');
   const [armRemind] = useState(() => () => setRemindReady(true));
   // 硬上限：页面一直不提交（分包挂着不成功也不失败）也最晚 REMIND_MAX_WAIT_MS 挂上
@@ -130,6 +122,19 @@ export function App() {
     const t = remindMaxWait.start(armRemind);
     return () => remindMaxWait.stop(t);
   }, [remindReady, armRemind]);
+  // 首屏画完再等空闲（REMIND-arm-firstpaint）：afterAppPainted 没有取消，用 cancelled 挡住卸载、已经挂上以后的回调
+  useEffect(() => {
+    if (remindReady) return;
+    let cancelled = false;
+    afterAppPainted(() => {
+      if (!cancelled) whenIdle(() => {
+        if (!cancelled) armRemind();
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [remindReady, armRemind]);
   const all = allRoutes;
   const found = all.find((r) => r.name === route.name);
   // samePageAs：#/calendar 和 #/cal/... 是同一个页面，挂同一个组件、错误边界用同一个 key，
@@ -138,7 +143,7 @@ export function App() {
   const Page = hit?.Page;
   const pageKey = hit?.name ?? route.name;
   // 版本横幅和页面放在同一个 Suspense 里：页面分包没到时一起不画，启动画面不会因为先画出横幅就提前收起（root.tsx 头注释）。
-  // 提醒在这个 Suspense 外面（首屏减重 ⑥）：要等页面提交、浏览器空闲才挂（冷启动整页提醒时那一页就是 remind 页面本身，横幅和按钮条都不画），
+  // 提醒在这个 Suspense 外面（首屏减重 ⑥）：要等首屏画完、浏览器空闲才挂（冷启动整页提醒时那一页就是 remind 页面本身，横幅和按钮条都不画），
   // 不会抢在页面前面画出来；切到分包还没加载的页面时也不跟着页面藏起来（原来的接线审查 R1 没有了）
   // 横幅在页面的错误边界外面（架构师 10-30 第 6 点）：页面出错显示 ErrorView 时横幅还在；横幅自己出错只是不画横幅
   return (
@@ -150,7 +155,6 @@ export function App() {
         <ErrorBoundary key={pageKey} fallback={<ErrorView />}>
           {Page ? <Page /> : offRoutes.has(route.name) ? <FeatureOffView /> : <ErrorView />}
         </ErrorBoundary>
-        {!remindReady && <ArmReminders onReady={armRemind} />}
       </Suspense>
       <Reminders route={route.name} ready={remindReady} />
     </>

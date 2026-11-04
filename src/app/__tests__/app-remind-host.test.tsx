@@ -4,6 +4,8 @@
 // 复审补（接线审查⑥ M1、L2、L3）：页面分包没到时不开始等空闲；页面分包加载失败（ErrorView）照样挂；换账号 since 重记；
 // 和页面无关的硬上限 REMIND_MAX_WAIT_MS（这里截下那一个定时器手动放行）
 // today 页换成可控的 lazy：正常、一直挂着（手动放行）、加载失败
+// REMIND-arm-firstpaint：“首屏画完”改用 platform/first-paint.ts（和同步同一套）。这里用真的 first-paint：在 document.body 上挂 watchAppPainted，
+// “再过一帧”换成手动放行（runFrame）；页面（main[data-feature]）出来、过了那一帧才算画完，然后才排等空闲
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -75,6 +77,18 @@ vi.mock('../../features/reminders/index.ts', async () => {
 });
 
 const { App, REMIND_MAX_WAIT_MS, remindMaxWait, setRemindErrorLog } = await import('../App.tsx');
+const { resetAppPaintedForTest, startAppPaintLimit, watchAppPainted } = await import('../../platform/first-paint.ts');
+
+/** first-paint 的“再过一帧”：截下来手动放行 */
+const frameQ: (() => void)[] = [];
+const frame = (fn: () => void): (() => void) => {
+  frameQ.push(fn);
+  return () => undefined;
+};
+const runFrame = () => act(() => {
+  for (const f of frameQ.splice(0)) f();
+});
+let unwatch: () => void = () => undefined;
 const { clock } = await import('../../platform/clock.ts');
 
 /** 硬上限的定时器（App 的 remindMaxWait）：spy 它，截下回调手动放行；stopped 记下被取消的编号 */
@@ -94,9 +108,11 @@ const settle = () => act(async () => {
 const runIdle = () => act(() => {
   for (const f of idleQ.splice(0)) f();
 });
-/** 页面画出来，再放行空闲 */
+/** 页面画出来、过了那一帧（首屏画完），再放行空闲 */
 async function pageThenIdle() {
   const page = await screen.findByRole('main', {}, { timeout: 10_000 });
+  await waitFor(() => expect(frameQ).toHaveLength(1), { timeout: 10_000 });
+  runFrame();
   await waitFor(() => expect(idleQ).toHaveLength(1), { timeout: 10_000 });
   runIdle();
   return page;
@@ -107,6 +123,10 @@ beforeEach(() => {
   idleQ.length = 0;
   capQ.length = 0;
   stopped.length = 0;
+  frameQ.length = 0;
+  resetAppPaintedForTest();
+  // 和入口（main.tsx）一样在 render 之前挂上；长兜底给大，这里不让它自己到点
+  unwatch = watchAppPainted(document.body, frame, 600_000);
   userId = null;
   hostMode = 'ok';
   setTodayPage('ok');
@@ -120,6 +140,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  unwatch();
+  resetAppPaintedForTest();
   setRemindErrorLog(null);
   vi.restoreAllMocks();
   window.location.hash = '';
@@ -190,6 +212,12 @@ describe('App 挂提醒', () => {
     render(<App />);
     const page = await screen.findByRole('main', {}, { timeout: 10_000 });
     expect(page.getAttribute('data-feature')).toBe('today');
+    // 页面出来了、那一帧还没过：首屏还没画完，不排等空闲、不挂
+    await waitFor(() => expect(frameQ).toHaveLength(1), { timeout: 10_000 });
+    await settle();
+    expect(idleQ).toHaveLength(0);
+    expect(screen.queryByTestId('fake-host')).toBeNull();
+    runFrame();
     await waitFor(() => expect(idleQ).toHaveLength(1), { timeout: 10_000 });
     expect(screen.queryByTestId('fake-host')).toBeNull();
     expect(life).toEqual([]);
@@ -205,6 +233,8 @@ describe('App 挂提醒', () => {
     const now = vi.spyOn(clock, 'now').mockReturnValue(1_800_000_000_000);
     render(<App />);
     await screen.findByRole('main', {}, { timeout: 10_000 });
+    await waitFor(() => expect(frameQ).toHaveLength(1), { timeout: 10_000 });
+    runFrame();
     await waitFor(() => expect(idleQ).toHaveLength(1), { timeout: 10_000 });
     now.mockReturnValue(1_800_000_002_000);
     runIdle();
@@ -217,24 +247,55 @@ describe('App 挂提醒', () => {
     render(<App />);
     await settle();
     expect(screen.queryByRole('main')).toBeNull();
+    expect(frameQ).toHaveLength(0);
     expect(idleQ).toHaveLength(0);
     expect(screen.queryByTestId('fake-host')).toBeNull();
     await act(async () => {
       releasePage();
     });
     await screen.findByRole('main', {}, { timeout: 10_000 });
+    await waitFor(() => expect(frameQ).toHaveLength(1), { timeout: 10_000 });
+    runFrame();
     await waitFor(() => expect(idleQ).toHaveLength(1), { timeout: 10_000 });
     expect(screen.queryByTestId('fake-host')).toBeNull();
   });
 
-  it('M1 (b)：页面分包加载失败（显示 ErrorView）：照样排等空闲，空闲后提醒挂上', async () => {
+  it('M1 (b)：页面分包加载失败（显示 ErrorView，没有 main[data-feature]）：不算画完，靠兜底挂上——提醒的硬上限到了就挂', async () => {
     userId = 'user-a';
     setTodayPage('reject');
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     render(<App />);
     await screen.findByTestId('app-error', {}, { timeout: 10_000 });
-    await waitFor(() => expect(idleQ).toHaveLength(1), { timeout: 10_000 });
+    await settle();
+    expect(frameQ).toHaveLength(0);
+    expect(idleQ).toHaveLength(0);
     expect(screen.queryByTestId('fake-host')).toBeNull();
+    runCap();
+    await screen.findByTestId('fake-host', {}, { timeout: 10_000 });
+  });
+
+  it('REMIND-arm-firstpaint：first-paint 自己的时限（render 后 startAppPaintLimit）到了也算画完，排等空闲、空闲后挂', async () => {
+    userId = 'user-a';
+    setTodayPage('pending');
+    render(<App />);
+    startAppPaintLimit(20);
+    await settle();
+    await waitFor(() => expect(idleQ).toHaveLength(1), { timeout: 10_000 });
+    // 页面还是没出来，那一帧也没排
+    expect(screen.queryByRole('main')).toBeNull();
+    expect(frameQ).toHaveLength(0);
+    expect(screen.queryByTestId('fake-host')).toBeNull();
+    runIdle();
+    await screen.findByTestId('fake-host', {}, { timeout: 10_000 });
+  });
+
+  it('REMIND-arm-firstpaint：入口没挂 watchAppPainted（测试、别的入口）时当场算画完，挂上就排等空闲', async () => {
+    unwatch();
+    resetAppPaintedForTest();
+    userId = 'user-a';
+    setTodayPage('pending');
+    render(<App />);
+    await waitFor(() => expect(idleQ).toHaveLength(1), { timeout: 10_000 });
     runIdle();
     await screen.findByTestId('fake-host', {}, { timeout: 10_000 });
   });
