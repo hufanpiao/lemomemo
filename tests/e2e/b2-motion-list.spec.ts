@@ -47,6 +47,19 @@ async function seed(page: Page): Promise<void> {
   await page.reload();
   await page.getByTestId('todos-row-t1').waitFor({ timeout: 30000 });
   await page.getByTestId('todos-g-done').waitFor();
+  await motionReady(page);
+}
+
+/**
+ * 等动效功能包下载完、装上（B2 FA-6 ②：功能包在首屏画出后才异步下载，src/motion/features.ts）。
+ * 这里测的是功能包到了以后的手感；没到之前删掉的行当场移除、没有淡出，那一段不归这些用例管（见 FA-6 执行说明“② 的连续帧对照”）。
+ * 下载完以后还要执行模块、各个 LazyMotion 重画一次：再等 300 ms 停稳
+ */
+async function motionReady(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    performance.getEntriesByType('resource').some((e) => /\/feature-bundle-[^/]*\.js$/.test(new URL(e.name).pathname) && (e as PerformanceResourceTiming).responseEnd > 0),
+  );
+  await page.waitForTimeout(300);
 }
 
 /** 在页面里每帧取样 ms 毫秒；时间从下一次 pointerup（点下去松手）算起。返回 [距松手毫秒, 取样结果] */

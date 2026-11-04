@@ -22,6 +22,9 @@ vi.mock('motion/react', async (importOriginal) => {
 });
 
 const { Appear } = await import('../components.ts');
+const { loadMotionFeatures } = await import('../features.ts');
+// 动效功能包异步加载（B2 FA-6 ②）：这里测的是功能包到了以后的退场起点，先等它到
+await loadMotionFeatures();
 
 afterEach(() => {
   cleanup();

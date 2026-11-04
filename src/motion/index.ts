@@ -112,3 +112,7 @@ export function nextFrame(cb: () => void): () => void {
   const id = requestAnimationFrame(cb);
   return () => cancelAnimationFrame(id);
 }
+
+// 动效功能包异步加载（B2 FA-6 ②，./features.ts）：提前开始下载、或等它到（测试里测“到了以后的手感”时用）。
+// features.ts 对 motion/react 只有类型引用，功能包本身是动态 import，不会把 motion/react 带进首屏
+export { loadMotionFeatures } from './features.ts';

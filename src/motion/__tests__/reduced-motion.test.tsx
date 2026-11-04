@@ -8,6 +8,10 @@ import { Appear, SharedLayout, useReducedMotionPref } from '../components.ts';
 import { animateIn, prefersReducedMotion, press } from '../index.ts';
 import { presets, PRESS_SCALE } from '../presets.ts';
 import { dur } from '../tokens.ts';
+import { loadMotionFeatures } from '../features.ts';
+
+// 动效功能包异步加载（B2 FA-6 ②）：这里测的是功能包到了以后的手感，先等它到（真实页面里首屏画完后才有人操作）
+await loadMotionFeatures();
 
 const html = document.documentElement;
 

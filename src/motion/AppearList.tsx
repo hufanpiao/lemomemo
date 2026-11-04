@@ -16,10 +16,11 @@
 // • 第一次画列表不播（initial={false}）：冷启动、进页面不逐条入场
 // • 离开途中打 data-state="leaving"（17.2 第 2 点），使用方据此不接点按（免得点到正在淡出的那一行）
 // • 减少动态效果：和 <Appear> 同一个判断，只淡入淡出、时长减半、新行不等；MotionConfig 让 layout 位移直接到位
-// layout 要 domMax 功能包：只在用到列表的页面里懒加载（待办页本来就是懒加载，不进首屏）
+// • 功能包异步加载（B2 FA-6 ②，见 ./features.ts）：功能包还没到时加进来的行直接显示（initial={false}），不打“进场中”、照常接点按；
+//   不会停在 opacity 0。这段时间里删掉的行当场移除（没有淡出、下面的行直接跳上来）
 import { AnimatePresence, LayoutGroup, LazyMotion, m, MotionConfig, PresenceContext, useIsPresent, type MotionStyle } from 'motion/react';
 import { createElement, useCallback, useContext, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { motionLayoutFeatures } from './features.ts';
+import { motionFeatures, motionFeaturesReady } from './features.ts';
 import { dur, LIST_LAYOUT_LAG, tr } from './tokens.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
 
@@ -42,7 +43,7 @@ export function AppearList({ as = 'ul', className, children, ...rest }: AppearLi
   const reduced = useReducedMotionPref();
   return (
     <MotionConfig reducedMotion={reduced ? 'always' : 'never'}>
-      <LazyMotion features={motionLayoutFeatures} strict>
+      <LazyMotion features={motionFeatures()} strict>
         <LayoutGroup>
           {createElement(as, { className, style: LIST_STYLE, 'data-testid': rest['data-testid'] }, <AnimatePresence initial={false}>{children}</AnimatePresence>)}
         </LayoutGroup>
@@ -100,7 +101,9 @@ export function AppearItem({ as = 'li', className, children, ...data }: AppearIt
   const present = useIsPresent();
   // 第一次画列表时（AnimatePresence initial={false}）不播进场，也就不算“进场中”；之后加进来的才算
   const firstPaint = useContext(PresenceContext)?.initial === false;
-  const [entering, setEntering] = useState(!firstPaint);
+  // 功能包还没到时挂上的：Motion 不会补播它的入场（FA-6 ②），直接显示，不算“进场中”
+  const [cold] = useState(() => !motionFeaturesReady());
+  const [entering, setEntering] = useState(!firstPaint && !cold);
   const entered = useCallback(() => setEntering(false), []);
   const reduced = useReducedMotionPref();
   const mo = itemMotion(reduced);
@@ -127,7 +130,7 @@ export function AppearItem({ as = 'li', className, children, ...data }: AppearIt
       {...(style ? { style } : {})}
       data-state={present ? (entering ? 'entering' : data['data-state']) : 'leaving'}
       layout="position"
-      initial={mo.initial}
+      initial={cold ? false : mo.initial}
       animate={mo.animate}
       exit={mo.exit}
       transition={mo.transition}

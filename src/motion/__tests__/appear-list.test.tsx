@@ -7,6 +7,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { itemMotion } from '../AppearList.tsx';
 import { AppearItem, AppearList } from '../components.ts';
 import { dur, ease, LIST_LAYOUT_LAG, tr } from '../tokens.ts';
+import { loadMotionFeatures } from '../features.ts';
+
+// 动效功能包异步加载（B2 FA-6 ②）：这里测的是功能包到了以后的手感，先等它到（真实页面里首屏画完后才有人操作）
+await loadMotionFeatures();
 
 afterEach(() => {
   cleanup();

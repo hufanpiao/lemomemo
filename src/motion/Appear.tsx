@@ -10,9 +10,13 @@
 // • 停稳以后 animate 写 transform: 'none'（N2）：减少动态效果开了又关、或在减少动态效果下挂上后再关掉，都不会从 none（= scale(0)）放大
 // • ⚠ 只保证停稳期间外层没有 transform（N3）：进场、退场期间外层带着 transform，fixed 子元素这段时间以外层为参照。
 //   带 fixed 子元素又会退场的用法，把 fixed 元素放到 Appear 外面
+// • 退场期间外层加 inert（接手清单 MOTION-leaving-inert）：CSS 的 pointer-events 只挡住鼠标和触摸，
+//   inert 再挡住键盘（Tab 进不去、回车按不到）和读屏，退场那约 0.2 秒里按不到正在离开的按钮
+// • 功能包异步加载（B2 FA-6 ②，见 ./features.ts）：功能包还没到时挂上的，直接画成停稳的样子
+//   （initial={false}、transform 已是 none、算“已停稳”），不会停在 initial 的透明里；之后的退场从“原位”起播
 import { AnimatePresence, LazyMotion, m, MotionConfig, useIsPresent } from 'motion/react';
 import { useRef, useState, type ReactNode } from 'react';
-import { motionFeatures } from './features.ts';
+import { motionFeatures, motionFeaturesReady } from './features.ts';
 import { presets, type AppearKind } from './presets.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
 
@@ -47,7 +51,9 @@ export function appearMotion(kind: AppearKind, reduced: boolean, settled = false
 function AppearBody({ kind, className, reduced, children }: { kind: AppearKind; className?: string | undefined; reduced: boolean; children: ReactNode }) {
   const present = useIsPresent();
   // 进场播完了没有（之后 transform 是 none，退场要从“原位”起播）；播完时重画一次，让 animate 换成停稳后的目标
-  const settled = useRef(false);
+  // 功能包还没到时挂上的（FA-6 ②）：不播入场，一挂上就算停稳
+  const [cold] = useState(() => !motionFeaturesReady());
+  const settled = useRef(cold);
   const [, repaint] = useState(0);
   // 退场起点：开始离开的那一次渲染里按当时是否停稳冻结（N1）；离开途中又回来（重新进场）就清掉，“已停稳”也一起清掉
   const leftSettled = useRef<boolean | null>(null);
@@ -63,9 +69,11 @@ function AppearBody({ kind, className, reduced, children }: { kind: AppearKind; 
       className={className}
       data-appear={kind}
       data-state={present ? undefined : 'leaving'}
+      // 退场期间键盘、读屏也碰不到（MOTION-leaving-inert）
+      inert={present ? undefined : true}
       // 遮罩只是装饰：读屏跳过（代码审查 S8，和改用 Appear 之前 Dialog 的遮罩一致）
       aria-hidden={kind === 'scrim' ? true : undefined}
-      initial={mo.initial}
+      initial={cold ? false : mo.initial}
       animate={mo.animate}
       exit={mo.exit}
       transition={mo.transition}
@@ -84,7 +92,7 @@ export function Appear({ kind, show, children, className }: AppearProps) {
   const reduced = useReducedMotionPref();
   return (
     <MotionConfig reducedMotion={reduced ? 'always' : 'never'}>
-      <LazyMotion features={motionFeatures} strict>
+      <LazyMotion features={motionFeatures()} strict>
         <AnimatePresence initial>
           {show ? (
             <AppearBody key={kind} kind={kind} className={className} reduced={reduced}>

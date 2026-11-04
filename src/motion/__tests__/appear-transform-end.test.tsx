@@ -6,6 +6,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { appearMotion } from '../Appear.tsx';
 import { Appear } from '../components.ts';
 import { presets, type AppearKind } from '../presets.ts';
+import { loadMotionFeatures } from '../features.ts';
+
+// 动效功能包异步加载（B2 FA-6 ②）：这里测的是功能包到了以后的手感，先等它到
+await loadMotionFeatures();
 
 afterEach(() => {
   cleanup();

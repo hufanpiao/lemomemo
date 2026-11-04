@@ -5,6 +5,10 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Dialog } from '../Dialog.tsx';
+import { loadMotionFeatures } from '../../../motion/index.ts';
+
+// 动效功能包异步加载（B2 FA-6 ②）：这里测的是功能包到了以后的手感（真实页面里首屏画完马上就到，打开弹层时早已到了），先等它到
+await loadMotionFeatures();
 
 const html = document.documentElement;
 

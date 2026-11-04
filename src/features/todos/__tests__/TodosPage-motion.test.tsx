@@ -6,6 +6,10 @@ import { useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
+import { loadMotionFeatures } from '../../../motion/index.ts';
+
+// 动效功能包异步加载（B2 FA-6 ②）：这里测的是功能包到了以后的手感，先等它到（真实页面里首屏画完后才有人操作）
+await loadMotionFeatures();
 
 // 留住的那一拍（useHoldView，--dur-ui）只假 setTimeout：断言“还在原处”之前计时器不会因为机器忙先到期
 // （真计时器下点击到断言若超过 220 ms 就会误判，前端 B 三时区并发跑时出现过）；推进完切回真计时器，Motion 的帧照常跑

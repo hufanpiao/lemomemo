@@ -11,6 +11,10 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { msAt } from '../../../../shared/core/date.ts';
 import { remindQueue, resetRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
+import { loadMotionFeatures } from '../../../motion/index.ts';
+
+// 动效功能包异步加载（B2 FA-6 ②）：这里测的是退场动画途中的点按，先等功能包到（真实页面里首屏画完后提醒才挂，那时早已到齐）
+await loadMotionFeatures();
 
 type Row = { id: string } & Record<string, unknown>;
 const data: Record<string, Row[]> = { events: [], todos: [], settings: [] };

@@ -4,6 +4,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
+import { loadMotionFeatures } from '../../../motion/index.ts';
+
+// 动效功能包异步加载（B2 FA-6 ②）：这里测的是功能包到了以后的手感，先等它到（真实页面里首屏画完后才有人操作）
+await loadMotionFeatures();
 
 let finish: () => void = () => undefined;
 let setLate: (v: unknown[]) => void = () => undefined;
