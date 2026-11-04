@@ -149,7 +149,8 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
     w.db.admins.add(A);
     toFirstRun(w);
     const r1 = await runPurge(w);
-    expect(r1.body).toMatchObject({ purged: 0, failed: 0, skipped: 1 });
+    expect(r1.body).toMatchObject({ purged: 0, failed: 0, skipped: 1, blocked: 1 });
+    expect(w.db.heartbeat).toMatchObject({ blocked: 1 });   // PURGE-halfway-flip：单独计数进心跳，lemo-ops 的 purge:blocked 读它
     expect(r1.logs).toContain('skip_admin:aaaaaaaa');
     expect(w.db.pending.get(A)?.purge_started_at).toBeNull();
     expect(w.db.users.has(A)).toBe(true);
@@ -158,7 +159,21 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
     if (p) { p.disabled_at = null; p.disabled_reason = null; }
     const r2 = await runPurge(w);
     expect(r2.logs).toContain('skip_not_disabled:aaaaaaaa');
+    expect(r2.body).toMatchObject({ skipped: 1, blocked: 1 });
     expect(w.db.users.has(A)).toBe(true);
+  });
+
+  it('PURGE-halfway-flip：别人先把认领拿走（skip_claim_gone）只算 skipped，不算 blocked；正常删完的 blocked 是 0', async () => {
+    const w = world();
+    await requestDeletion(w, A);
+    toFirstRun(w);
+    w.db.beforeStillClaimed = () => { const p = w.db.pending.get(A); if (p) p.purge_started_at = null; };
+    const r1 = await runPurge(w);
+    expect(r1.logs).toContain('skip_claim_gone:aaaaaaaa');
+    expect(r1.body).toMatchObject({ purged: 0, skipped: 1, blocked: 0 });
+    expect(w.db.heartbeat).toMatchObject({ blocked: 0 });
+    w.db.beforeStillClaimed = null;
+    expect((await runPurge(w)).body).toMatchObject({ purged: 1, skipped: 0, blocked: 0 });
   });
 });
 

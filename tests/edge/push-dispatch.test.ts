@@ -8,7 +8,9 @@ import { isLocalStubEnv, resolveOverride } from '../../supabase/functions/_share
 import { loadVapid, type VapidKeys } from '../../supabase/functions/_shared/push/vapid.ts';
 import { b64u, unb64u } from '../fakes/push-service-vapid.ts';
 import { LOGIC, MemDb } from './push-dispatch-mem.ts';
-import { DETAIL_BOOL_FIELDS, DETAIL_FIELDS } from '../../supabase/functions/usage-report/core.ts';
+import { DETAIL_FIELDS_BY_NAME } from '../../supabase/functions/usage-report/core.ts';
+
+const PUSH_ALLOW = DETAIL_FIELDS_BY_NAME['push-dispatch'] ?? { num: [], bool: [] };
 import { evaluatePush, PUSH_DETAIL_FIELDS } from '../../workers/lemo-ops/src/rules.ts';
 
 const CRON = 'c'.repeat(40);
@@ -190,11 +192,11 @@ describe('心跳 detail 和 lemo-ops 对得上（rules.ts PUSH_DETAIL_FIELDS 11-
     expect((await handle(cronReq(CRON), d)).status).toBe(200);
     const beat = d.beats[0] as HeartbeatDetail;
     expect(Object.keys(beat).sort()).toEqual(['budget_hit', 'claimed', 'failed', 'sent']);
-    for (const k of PUSH_DETAIL_FIELDS) expect(DETAIL_FIELDS as readonly string[], k).toContain(k);
-    expect(DETAIL_BOOL_FIELDS as readonly string[]).toContain('budget_hit');
-    // 照 usage-report 的 pickDetail 口径转发（数字字段按 DETAIL_FIELDS、布尔按 DETAIL_BOOL_FIELDS）
+    for (const k of PUSH_DETAIL_FIELDS) expect(PUSH_ALLOW.num, k).toContain(k);
+    expect(PUSH_ALLOW.bool).toContain('budget_hit');
+    // 照 usage-report 的 pickDetail 口径转发（按心跳名分开的白名单 DETAIL_FIELDS_BY_NAME['push-dispatch']：数字只收非负整数、布尔只收 true/false）
     const forward = (x: Record<string, unknown>) => Object.fromEntries(Object.entries(x).filter(([k, v]) =>
-      (typeof v === 'number' && (DETAIL_FIELDS as readonly string[]).includes(k)) || (typeof v === 'boolean' && (DETAIL_BOOL_FIELDS as readonly string[]).includes(k))));
+      (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && PUSH_ALLOW.num.includes(k)) || (typeof v === 'boolean' && PUSH_ALLOW.bool.includes(k))));
     // 用真实心跳的键，只换数值：认领 4、成功 1、失败 3 → 失败过半
     const vals: Record<string, number> = { claimed: 4, sent: 1, failed: 3 };
     const bad = Object.fromEntries(Object.entries(beat).map(([k, v]) => [k, vals[k] ?? v]));

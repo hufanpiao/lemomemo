@@ -67,7 +67,7 @@ describe('删除段：按调用次数停手，不再领新账号，心跳带 rem
     expect(r.body).toMatchObject({ purged: 0, failed: 1, held: 1, deferred: 0, remaining: 2 });
     expect(r.logs).toContain(`purge_held_no_notice:${B.slice(0, 8)}`);
     expect(Object.keys(w.db.heartbeat ?? {}).sort()).toEqual(
-      ['deferred', 'failed', 'forced', 'held', 'ms', 'ops', 'postponed', 'purged', 'remaining', 'remind_left', 'remind_ops', 'sent']);
+      ['blocked', 'deferred', 'failed', 'forced', 'held', 'ms', 'ops', 'postponed', 'purged', 'remaining', 'remind_left', 'remind_ops', 'sent']);
     for (const v of Object.values(w.db.heartbeat ?? {})) expect(typeof v).toBe('number');
   });
 });

@@ -107,13 +107,19 @@ function json(status: number, body: unknown): Response {
 export const MIN_SECRET_BYTES = 32;
 
 /**
- * heartbeat.detail 只转发这些字段，其余一律丢掉：数字字段（cleanup 的 rows、ms；push-dispatch 的 claimed、sent、failed；account-purge 的 purged、
- * held、remaining、forced）、布尔字段（push-dispatch 的 budget_hit）。claimed、budget_hit 是 B2 加的（安全审查 D2-S2：只加数字和布尔，不加别的；
- * O-3 “claimed 与 sent 之差”要用）。held、remaining、forced 是 PURGE-heartbeat-ops 加的（同一口径：只是个数，没有任何账号标识；
- * lemo-ops 的 purge-detail.ts 用它们提示“没收到提醒暂不删”“连续两天没做完”“没收到提醒就照删”）
+ * heartbeat.detail 按心跳名分开放行（安全审查 PURGE-heartbeat-ops 建议 S1：原来是所有心跳共用一份字段名，
+ * 以后哪个心跳碰巧也用 held、sent 这类名字、装了别的含义，就会被自动转发；分开以后只放行“这个心跳真写、lemo-ops 要看”的键）。
+ * 不在表里的心跳名，detail 一律不转发（只报 age_s）。数字只收非负整数（S1：现在写的都是计数和毫秒整数），布尔只收 true/false。
+ *   cleanup（SQL，0001 等三处迁移）：rows、ms
+ *   push-dispatch：claimed、sent、failed，布尔 budget_hit（B2 加的，安全审查 D2-S2：只加数字和布尔，不加别的；O-3“claimed 与 sent 之差”要用）
+ *   account-purge：purged、failed、sent、ms，加 held、remaining、forced（PURGE-heartbeat-ops）、blocked（PURGE-halfway-flip）
+ *     ——同一口径：只是个数，没有任何账号标识；lemo-ops 的 purge-detail.ts 用后四个提示
  */
-export const DETAIL_FIELDS = ['rows', 'ms', 'claimed', 'sent', 'failed', 'purged', 'held', 'remaining', 'forced'] as const;
-export const DETAIL_BOOL_FIELDS = ['budget_hit'] as const;
+export const DETAIL_FIELDS_BY_NAME: Readonly<Record<string, { readonly num: readonly string[]; readonly bool: readonly string[] }>> = {
+  cleanup: { num: ['rows', 'ms'], bool: [] },
+  'push-dispatch': { num: ['claimed', 'sent', 'failed'], bool: ['budget_hit'] },
+  'account-purge': { num: ['purged', 'failed', 'sent', 'ms', 'held', 'remaining', 'forced', 'blocked'], bool: [] },
+};
 
 type TimingSafeEqual = (a: ArrayBuffer | ArrayBufferView, b: ArrayBuffer | ArrayBufferView) => boolean;
 
@@ -244,18 +250,20 @@ function ageS(now: number, iso: string): number {
   return Math.round((now - t) / 1000);
 }
 
-function pickDetail(detail: unknown): Record<string, number | boolean> | null {
-  if (typeof detail !== 'object' || detail === null || Array.isArray(detail)) return null;
-  const out: Record<string, number | boolean> = {};
-  for (const k of DETAIL_FIELDS) {
-    const v = (detail as Record<string, unknown>)[k];
-    if (typeof v === 'number' && Number.isFinite(v)) out[k] = v;
+function pickDetail(name: string, detail: unknown): Record<string, number | boolean> | null {
+  const allow = Object.hasOwn(DETAIL_FIELDS_BY_NAME, name) ? DETAIL_FIELDS_BY_NAME[name] : undefined;
+  if (!allow || typeof detail !== 'object' || detail === null || Array.isArray(detail)) return null;
+  const d = detail as Record<string, unknown>;
+  const out = new Map<string, number | boolean>();
+  for (const k of allow.num) {
+    const v = Object.hasOwn(d, k) ? d[k] : undefined;
+    if (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0) out.set(k, v);
   }
-  for (const k of DETAIL_BOOL_FIELDS) {
-    const v = (detail as Record<string, unknown>)[k];
-    if (typeof v === 'boolean') out[k] = v;
+  for (const k of allow.bool) {
+    const v = Object.hasOwn(d, k) ? d[k] : undefined;
+    if (typeof v === 'boolean') out.set(k, v);
   }
-  return Object.keys(out).length > 0 ? out : null;
+  return out.size > 0 ? Object.fromEntries(out) : null;
 }
 
 async function heartbeatPart(deps: Deps & { db: UsageDb }): Promise<Response> {
@@ -288,7 +296,7 @@ async function heartbeatPart(deps: Deps & { db: UsageDb }): Promise<Response> {
     const now = deps.now();
     return json(200, {
       ok: true,
-      heartbeats: hb.map((h) => ({ name: h.name, age_s: ageS(now, h.at), detail: pickDetail(h.detail) })),
+      heartbeats: hb.map((h) => ({ name: h.name, age_s: ageS(now, h.at), detail: pickDetail(h.name, h.detail) })),
       // “冷静期中的账号”（0.29 续第 143 条）：只给时间，不给 user_id（要查是谁到控制台看）
       pending_deletions: pd.map((p) => ({
         purge_after: p.purge_after,

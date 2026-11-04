@@ -99,3 +99,88 @@ M8 存活的原因：测试直接调用 `evaluatePurgeDetail` 时，传入的 de
 - **S1**：把白名单改成按心跳名分开，例如 `{ cleanup: [rows, ms], 'push-dispatch': [...], 'account-purge': [...] }`，或者加一条测试：列出每个心跳写入方实际写的键，断言新加进白名单的键只出现在预期的那一个心跳里。`pickDetail` 也可以顺带只收非负整数（`ms` 本来就是整数）。
 - **S2**（已有问题）：把 `private.heartbeat` 给 `fn_ai` 的策略收窄到它自己的那个心跳名，或者查明 fn_ai 不需要写心跳就撤掉这项授权。
 - **S3**：给 `evaluatePurgeDetail` 补一条测试：传入带 `user_id`、`email` 的 detail，断言正文里没有这些值，把 M8 钉住。
+
+---
+
+## 补审（11-04）：PURGE-halfway-flip 方案 ①，连同上一轮 S1、S3
+
+- **范围**：工作区相对 HEAD（dfd2a8b）的 11 个文件，以 `git diff` 为准：
+  - 代码：`account-purge/core.ts`、`usage-report/core.ts`、`lemo-ops/src/purge-detail.ts`、`rules.ts`
+  - 测试：`lemo-ops-purge.test.ts`（13 条）、`account-purge.test.ts`、`account-purge-budget.test.ts`、`tests/edge/push-dispatch.test.ts`
+  - 文档：架构第 137 条 ⑦、TC-B1-102、执行记录第 16 节
+- S2 另记为 HEARTBEAT-fnai-policy，这次不审、不扣分。
+- **做法**：只读，默认不通过。变异在会话草稿目录里重新拷的一份副本上做（拷了 supabase/functions、shared、workers、tests/functions、tests/fakes），共享工作区没动。
+- **跑过**：副本基线 3 个文件 37 条全过；变异 12 个，见下文。
+
+### 结论：通过，没有必改
+
+### 一、上一轮意见逐条核对
+
+| 意见 | 现状 | 判定 |
+|---|---|---|
+| 必改 1：account-purge/core.ts 第 26～27 行的注释过时 | 1494038 里已改成“held、remaining、forced 经 usage-report 白名单转发……purge:overdue 照旧兜底” | 已解决 |
+| S1：白名单按心跳名分开；只收非负整数 | `DETAIL_FIELDS_BY_NAME` 三个心跳各列各的键。查心跳名用 `Object.hasOwn`，没登记的名字 detail 整个不转发（`__proto__`、`toString` 都测了）。数字只收 `Number.isSafeInteger && >= 0`，布尔只收 true/false。测试逐个断言 held、remaining、forced、blocked 只出现在 account-purge 一行；account-purge 白名单里的每个键都是它真写的 | 已解决 |
+| S3：钉住“正文不带账号标识” | 新增一条测试：detail 里混进 user_id、user_id 前 8 位、邮箱、名字，四条提示的标题和正文都不出现这些值，也不出现 `undefined`。上一轮存活的 M8，这次对应的 B11 被抓到 | 已解决 |
+| 上一轮的 M8 | 见 B11 | 已解决 |
+
+lemo-ops 实际读的字段（cleanup 的 `ms`；push-dispatch 的 `claimed`、`sent`、`failed`；account-purge 的四个键）都还在各自的白名单里，按心跳名分开以后没有功能回退。account-purge 原来也被转发的 `sent`、`ms`、`failed` 照留。
+
+### 二、blocked 会不会被 detail 带出个人信息
+
+**不会。**
+- `blocked` 是 account-purge 里的一个计数变量，只在 `skip_admin`、`skip_not_disabled` 两种情况下加 1，写进心跳的只是这个整数。
+- 经过 usage-report 时只放行非负安全整数，到 lemo-ops 再用 `isCount` 校验一次。
+- `purge:blocked` 的标题是固定文字；正文只写个数，以及 `skip_admin`、`skip_not_disabled` 这两个原因码的名字（告诉人去函数日志查，日志里只有 user_id 前 8 位），邮件本身不带 id。
+- `purge:overdue` 正文补的那一句也只是这两个原因码的名字。
+- 测试第 56 行和 S3 那一条都覆盖到了；变异 B9（标题带个数）、B11（正文拼 user_id）都被抓到。
+
+### 三、白名单能不能被原型链或同名字段绕过
+
+**绕不过。**
+- **心跳名**：用 `Object.hasOwn` 查表，`__proto__`、`constructor`、`toString` 这类名字拿不到 `Object.prototype`。B1 去掉 hasOwn 被抓到（`__proto__` 会直接抛错）。B5 让没登记的名字套用 account-purge 的白名单，也被抓到。
+- **同名字段**：别的心跳写了 held、blocked 这些键，按心跳名分开以后一律丢掉。B6 给 push-dispatch 也放行 held，被抓到。
+- **detail 里的键**：同样用 `Object.hasOwn`，输出用 `Map` 加 `Object.fromEntries` 组装，键只会来自白名单，原型上的东西进不来。B2 去掉这一处的 hasOwn 后**存活**，但这是等价变异：detail 来自 jsonb，经 `JSON.parse` 解出来，不会有继承来的属性；`"__proto__"` 只会被解成对象自己的普通键，而这个名字本来就不在白名单里。所以不算漏洞，只是这层纵深防御没有被测试钉住，见建议 P1。
+- **数字的形态**：B3 收小数、B4 收负数都被抓到；NaN、Infinity 也测了。
+- **伪造心跳**：fn_ai 能改写 account-purge 那一行心跳，这个缺口照旧存在，归 HEARTBEAT-fnai-policy，这次不扣分。
+
+### 四、blocked 一直不回 0 时，会不会刷屏或被压住
+
+**不会刷屏**：
+- blocked 的账号每一轮都会再被算进来，最后一轮写的值一直留到第二天，所以这件事会持续存在。按 alerts.ts 的规则，同一个 key 发一封，之后每 6 小时一封“仍未恢复”，一天最多 4 封。
+- 这些账号每次认领后都会被放回，`purge_started_at` 是 null，到期超过 1 天后 `purge:overdue` 也会同时报，一天同样最多 4 封。两件合计最多 8 封，占不满每天 17 封的普通额度。“仍未恢复”在额度紧时排在最后，挤不掉新告警。
+- 要制造 blocked，得手工改 admins 或 profiles，或者绕过 `admin_set_disabled`、`account_restore` 这两个正规函数，普通用户做不到。
+
+**也不会被压住**：
+- 不设宽限期，测试和 B10 核过：加 2 轮宽限期会被抓到。
+- 只有 blocked 回到 0、并且连续 2 轮正常才发“已恢复”。
+- 残余情况（低，不扣分）：如果某一轮在碰到这个账号之前就因预算停手，它会被记成 deferred 而不是 blocked。要是当天最后一轮正好这样，blocked 那天就是 0，可能先发一封“已恢复”。但这时 `remaining` 和 `purge:overdue` 照样会报，不会整件漏掉。
+
+### 五、blocked 的口径
+
+`skip_claim_gone` 只算 skipped，不算 blocked。测试有一条专门核这一点，`blocked` 返回值也在测试里。
+
+变异 B7（所有 `skip_` 开头的都算 blocked）存活，也是等价变异：`skip_claim_gone` 走的是第 357 行直接 `return 'skipped'`，不经过 `giveUp`；而 `giveUp` 现在只会收到 `skip_admin`、`skip_not_disabled` 两种 skip 码。以后要是给 `giveUp` 加新的 skip 码，就需要补测试。
+
+B8（blocked 不写进心跳）、B12（blocked 等于 0 也提示）都被抓到。
+
+### 六、变异汇总（12 个）
+
+- 被抓到 10 个：B1、B3、B4、B5、B6、B8、B9、B10、B11、B12
+- 存活 2 个，都是等价变异：
+  - B2：detail 键查找去掉 hasOwn，JSON 解出来的对象没有继承属性
+  - B7：skip_claim_gone 不经过 giveUp
+
+### 七、打分（同一尺度，10 分制）
+
+| 维度 | 分 | 说明 |
+|---|---|---|
+| 信息泄露 | 9 | 只有个数；标题固定；正文没有标识，有测试钉住 |
+| 白名单 | 9 | 按心跳名分开，两处 hasOwn，只收非负安全整数；扣 1 分是因为 detail 一侧的 hasOwn 没有被测试钉住（B2） |
+| 告警不刷屏、不被压住 | 8 | 有上限，不设宽限期，和 overdue 互为兜底；扣分是因为有“当天最后一轮预算停手”的残余情况，以及 blocked 和 overdue 会就同一件事各发一份 |
+| 测试质量 | 8 | 10/12 被抓到，剩下 2 个是等价变异；两条纵深防御没有测试 |
+
+### 八、建议（不阻塞）
+
+- **P1**：补一条测试，传入 `Object.create({ held: 9 })` 这类带继承属性的 detail，断言不转发，把 B2 钉住。
+- **P2**：在 `giveUp` 旁边写一句：以后加新的 `skip_` 码，要明确它算 blocked 还是 skipped；或者把映射改成显式表，而不是 `startsWith('skip_')`。
+- **P3**（可选）：`purge:blocked` 正文写明“这几个账号也会出现在‘超过 1 天还没删除’的提示里”，让负责人知道两封信说的是同一件事。

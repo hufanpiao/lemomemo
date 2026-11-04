@@ -8,7 +8,7 @@ import { fmtAge } from './stamp.ts';
 
 export { fmtAge };
 export { evaluateOrphans, ORPHAN_UNREADABLE, ORPHAN_USERS, SCOPE_ORPHAN, type OrphanReport } from './orphans.ts';
-export { evaluatePurgeDetail, evaluatePurgePending, PURGE_FORCED, PURGE_HELD, PURGE_OVERDUE_S, PURGE_REMAINING, PURGE_REMAINING_ROUNDS, PURGE_STUCK_S } from './purge-detail.ts';
+export { evaluatePurgeDetail, evaluatePurgePending, PURGE_BLOCKED, PURGE_FORCED, PURGE_HELD, PURGE_OVERDUE_S, PURGE_REMAINING, PURGE_REMAINING_ROUNDS, PURGE_STUCK_S } from './purge-detail.ts';
 
 /** 一件要告警的事。key 用来去重：同一个 key 6 小时内只发一次，消失后发“已恢复” */
 export interface Issue {
@@ -63,7 +63,7 @@ export const HEARTBEAT_LIMITS: Readonly<Record<string, { limitS: number; label: 
  * - 没有 claimed（旧版函数，或 usage-report 白名单还没加 claimed）：照旧 failed × 2 > sent + failed。
  * 11-03 已核对（push-dispatch 落地后）：core.ts 写心跳的 detail 正好是 claimed、sent、failed（另有 budget_hit）；
  * claimed 只数真认领成功的条目，预算或条数到了没来得及认领的记在 left（只回在响应里、不进心跳），不含在 claimed 里；
- * usage-report 的 DETAIL_FIELDS 已含 'claimed'（budget_hit 在 DETAIL_BOOL_FIELDS）。
+ * usage-report 的白名单 DETAIL_FIELDS_BY_NAME['push-dispatch'] 含 claimed、sent、failed 和布尔 budget_hit（11-04 起按心跳名分开，安全审查 S1）。
  * 测试：tests/edge/push-dispatch.test.ts 末尾一条，用 handle 真写出的心跳经 usage-report 白名单转发后喂 evaluatePush。
  */
 export const PUSH_DETAIL_FIELDS = ['claimed', 'sent', 'failed'] as const;

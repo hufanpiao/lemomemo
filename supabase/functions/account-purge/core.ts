@@ -28,7 +28,7 @@
 //     1. 认领：单条 update 写 purge_started_at（只认没认领的、或认领超过 1 小时的，0.38 第 44 条、TC-B1-108 ③）；
 //        认领不到就跳过（restore 抢先了，或别的一次正在做）。
 //        认领后再核对：不在 admins 里、profile 还在且是停用状态（冷静期里被管理员停用的照样删，0.38 第 43 条）；
-//        不满足就清掉认领、跳过、记日志。邮箱用 getUserById 取出留在内存里。
+//        不满足就清掉认领、跳过、记日志（skip_admin、skip_not_disabled，算进心跳的 blocked，PURGE-halfway-flip）。邮箱用 getUserById 取出留在内存里。
 //     2. R2 四个桶（images、files、vault-images、vault-files）各按 `<user_id>/` 删，删完再列一次，不为 0 就整个账号报错停下。
 //        vault-preview 不在这里删（路径不含 user_id，靠 vault-file sweep 到期删）。
 //     3. backups 桶（Supabase Storage）下 `*/<user_id>/` 全删：逐个日期列、有文件就删、删完再列一次为 0 才算这个日期干净
@@ -284,7 +284,8 @@ async function remind(deps: FullDeps, now: number, overBudget: () => boolean): P
 }
 
 // ---------------- 第二段：逐个彻底删除 ----------------
-type Outcome = 'purged' | 'skipped' | 'failed' | 'deferred';
+// blocked：认领后再核对不过（skip_admin、skip_not_disabled）。它们也算进返回体的 skipped（原口径不变），另外单独计数进心跳（PURGE-halfway-flip）
+type Outcome = 'purged' | 'skipped' | 'blocked' | 'failed' | 'deferred';
 
 async function purgeOne(
   deps: FullDeps, userId: string, overBudget: () => boolean, overWall: () => boolean,
@@ -299,7 +300,7 @@ async function purgeOne(
   const giveUp = async (code: string): Promise<Outcome> => {
     log?.(`${code}:${short(userId)}`);
     await store.release(userId, claimedIso).catch(() => log?.(`release_failed:${short(userId)}`));
-    return code === 'time_budget' ? 'deferred' : code.startsWith('skip_') ? 'skipped' : 'failed';
+    return code === 'time_budget' ? 'deferred' : code === 'skip_admin' || code === 'skip_not_disabled' ? 'blocked' : code.startsWith('skip_') ? 'skipped' : 'failed';
   };
 
   let email: string | null;
@@ -417,7 +418,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   const overBudget = () => overWall() || purgeOps.n >= PURGE_WORK_OPS;
   let purged = 0;
   let failed = 0;
-  let skipped = 0;
+  let skipped = 0, blocked = 0;   // blocked：skipped 里认领后再核对不过的（PURGE-halfway-flip；合成一行免得超 300 行）
   let deferred = 0;
   let held = 0;
   let forced = 0;
@@ -454,7 +455,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     if (o === 'purged') { purged++; if (force) forced++; }
     else if (o === 'failed') failed++;
     else if (o === 'deferred') deferred++;
-    else skipped++;
+    else { skipped++; if (o === 'blocked') blocked++; }
   }
 
   if (deferred) deps.log?.(`time_budget_deferred:${deferred}`);
@@ -464,10 +465,13 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   //   remaining = deferred + failed + held：这一轮列出的到期账号里**没做成、下一次运行还会再看**的个数。
   //     它不等于“还有多少账号等着删”：还没到期的不在里面；skipped（管理员、没停用、别人正在做）不算；
   //     failed 里也可能有永远不会好的（bad_user_id），会一直算进去。
+  //   blocked：到期、认领到了，但再核对不过（在 admins 里 skip_admin、profile 没了或不再是停用 skip_not_disabled）的个数，
+  //     也算在返回体的 skipped 里。正规函数（admin_set_disabled、account_restore）走不到这里，只有手工绕过它们才会出现；
+  //     这种账号可能已经删了一半（R2、部分备份），每一轮都会再碰到、再算进来，lemo-ops 的 purge:blocked 当天提示（PURGE-halfway-flip）。
   //   sent / postponed / remind_left：第一段发出的提醒、其中补发并顺延的、超了上限留给下一次的；
   //   ops / remind_ops：两段各发了多少次调用（核对上限用）；ms：这一轮的墙钟。
   const detail = {
-    purged, failed, deferred, held, forced, remaining: deferred + failed + held,
+    purged, failed, deferred, held, forced, remaining: deferred + failed + held, blocked,
     sent: rr.sent, postponed: rr.postponed, remind_left: rr.left,
     ops: purgeOps.n, remind_ops: remindOps.n, ms: Math.max(0, deps.now() - t0),
   };

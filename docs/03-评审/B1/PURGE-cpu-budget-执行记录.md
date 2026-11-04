@@ -118,7 +118,7 @@
 
 ### 9. 其余低项
 
-- 低 2（半截状态跨天，中途被改成不停用 / 管理员就永远停在半截）：**没改**。要在 `pending_deletions` 加一个“已开始删数据”的标记（改表结构），或在 lemo-ops 对“有过 time_budget 又变成 skip 的账号”告警，按审查建议放到 B7a 前再定。边界写在这里：返工后普通账号一轮就删完，跨轮的只有备份日期特别多的账号。
+- 低 2（半截状态跨天，中途被改成不停用 / 管理员就永远停在半截）：**当时没改，后来按方案 ① 做了告警（PURGE-halfway-flip，见第 16 节）**。当时的说明：要在 `pending_deletions` 加一个“已开始删数据”的标记（改表结构），或在 lemo-ops 对“有过 time_budget 又变成 skip 的账号”告警，按审查建议放到 B7a 前再定。边界写在这里：返工后普通账号一轮就删完，跨轮的只有备份日期特别多的账号。
 - 低 3：改了，见第 3 小节。
 - 低 4（8 秒对应 0.7 秒 CPU 是本机按 http 测的）：改成按调用次数，和线上延迟无关；CPU 比例按 3 倍放宽；仍要预览复跑确认。
 - 低 5（工具默认的 `--expect timeout` 在 3 × 400 下过不了）：三种模式都改成多轮，默认 `rounds`；`timeout` 只判第 1 轮超时、而且那一轮的心跳晚于 5 秒。本机 3 × 400 的第 1 轮（三个账号的第一次运行要先列、删 R2 和前几十个日期）用了 5661 ms，超过 pg_net 的 5 秒，函数照样跑完、写了心跳，所以 `timeout` 模式本机这次过了；但它只比 5 秒多一点，换台机器可能不超时，所以默认用 `rounds`。
@@ -290,7 +290,68 @@
   | 卡住改成 25 小时 | 1 |
 
 - 不涉及数据库（没有迁移、没有 SQL），这次没起本机 lemo-b2push。
-- 没改 `account-purge/core.ts`（在复审）。它文件头里还写着“held、forced 也不进 usage-report 白名单（接手清单 PURGE-heartbeat-ops）”，这句注释已经过时，等复审完一起改。
+- 没改 `account-purge/core.ts`（在复审）。它文件头里还写着“held、forced 也不进 usage-report 白名单（接手清单 PURGE-heartbeat-ops）”，这句注释已经过时，等复审完一起改。**（11-04 复审结束后已改，安全审查必改第 1 条。）**
+
+### 16. PURGE-halfway-flip 方案 ①，加安全审查 PURGE-heartbeat-ops 的建议 S1、S3（11-04，待安全审查补审）
+
+负责人定方案 ①：不加表结构，只加告警；方案 ②（加“已开始删数据”的标记、自动收尾）记进接手清单，不做。S2（fn_ai 写心跳的策略）另记 HEARTBEAT-fnai-policy，这次不做。
+
+- **先核对了真能走到半截的路径**（只读）：
+  - 认领后再核对不过时，`giveUp` 会清掉 `purge_started_at`，所以库里没有“删过一半”的痕迹，只能从这一轮的跳过原因看出来；
+  - 正规的 `admin_set_disabled(false)` 在 `pending_deletions` 行还在时只把 `disabled_reason` 改回 `deletion`，账号仍是停用；`admin_set_disabled(true)` 因 `PURGE_ADMIN_DISABLED = true` 照样删；`account_restore` 到期后回 `expired`；用户改不了 `disabled_*`（0001 列级授权）；
+  - 剩下的只有手工绕过：往 `private.admins` 插一行（`skip_admin`）、在 SQL 编辑器里直接改 `profiles.disabled_at` 或 `disabled_reason`、profile 行没了（`skip_not_disabled`）；
+  - 原来也不是完全没人发现：这一行到期超过 1 天，`purge:overdue` 会报，只是正文叫人看 cron，方向不对。
+- **account-purge**（`core.ts`）：`purgeOne` 的结果多一种 `blocked`（`skip_admin`、`skip_not_disabled`）。返回体的 `skipped` 照旧把它算进去（口径不变），另外单独计数，写进心跳 `blocked`。别人先把认领拿走（`skip_claim_gone`）、认领不到的，只算 `skipped`，不算 `blocked`。为了不超过 300 行，`let skipped = 0, blocked = 0;` 合成了一行。
+- **usage-report**（`core.ts`，S1）：白名单改成按心跳名分开 `DETAIL_FIELDS_BY_NAME`：
+
+  | 心跳 | 数字 | 布尔 |
+  |---|---|---|
+  | `cleanup` | `rows`、`ms` | 没有 |
+  | `push-dispatch` | `claimed`、`sent`、`failed` | `budget_hit` |
+  | `account-purge` | `purged`、`failed`、`sent`、`ms`、`held`、`remaining`、`forced`、`blocked` | 没有 |
+
+  - 选“按心跳名分开”、不选“加一条测试”的理由：以后哪个心跳碰巧也用 `held`、`sent` 这类名字，结构上就不会被转发，不靠有人记得去补测试；改动面也小，只有 `pickDetail` 和一条对齐测试（`tests/edge/push-dispatch.test.ts`）引用了旧的 `DETAIL_FIELDS`、`DETAIL_BOOL_FIELDS`；
+  - 不在表里的心跳名，detail 整个不转发（只报 `age_s`）；查表用 `Object.hasOwn`（check_backend F7），`__proto__`、`toString` 这类名字也查不到；
+  - 数字只收非负安全整数（S1 的后半句），负数、小数、无穷、NaN 都丢。现在写的都是计数和毫秒整数，没有受影响的；
+  - 和改之前比，转发出去的字段完全一样（多了 `blocked`）：原来共用表里的键，各心跳实际写的也就是表里这些。
+- **lemo-ops**（`purge-detail.ts`）：
+  - 新提示 `purge:blocked`，`blocked > 0` 当天发，标题“注销删除被手工改动挡住、可能停在半截”，不带个数；正文写个数、可能的原因（手工改了 admins 或 profiles）、要查的日志码 `skip_admin`、`skip_not_disabled`，以及“删完或恢复”；不写 user_id、邮箱；
+  - 它每一轮都会再碰到这个账号、再算进来，所以不会像 `forced` 那样随后报“已恢复”，要处理完才回到 0；6 小时去重、每日额度照 alerts.ts；
+  - `purge:overdue` 的正文补一句“也可能是 skip_admin、skip_not_disabled（账号被手工设成管理员或解除了停用，见‘注销删除被手工改动挡住’的提示）”；
+  - rules.ts 多转出一个常量 `PURGE_BLOCKED`，注释里的 `DETAIL_FIELDS` 改成新名字。
+- **测试**：
+  - `tests/functions/lemo-ops-purge.test.ts`（9 条到 13 条）：白名单按心跳名分开（S1：四个键只在 account-purge 放行，push-dispatch、cleanup 写了同名字段也丢，没登记的心跳名、`__proto__`、`toString` 整个不转发，account-purge 不收布尔）；只收非负整数；account-purge 真写的 13 个键和白名单对得上；`blocked` 的边界和端到端（当天发、2 小时内不重发、回到 0 两轮后“已恢复”）；S3：detail 里带了 `user_id`、`email`、名字时，标题和正文都不出现这些值，也不出现 `undefined`；`purge:overdue` 正文带那句提示；
+  - `tests/functions/account-purge.test.ts`：原来那条“认领后再核对不过”补上 `blocked: 1`（返回体和心跳）；新加一条：`skip_claim_gone` 只算 `skipped`、不算 `blocked`，正常删完的 `blocked` 是 0；
+  - `tests/functions/account-purge-budget.test.ts`：心跳键列表加 `blocked`；
+  - `tests/edge/push-dispatch.test.ts`：对齐测试改用 `DETAIL_FIELDS_BY_NAME['push-dispatch']`，转发口径同样只收非负整数。
+- **变异**（只在独立副本里做，副本用完已删）：21 种都被抓到，包括安全审查员那个存活的 M8。
+
+  | 变异 | 失败条数 |
+  |---|---|
+  | account-purge：`blocked` 不计数 | 1 |
+  | account-purge：`skip_claim_gone` 也算 `blocked` | 1 |
+  | account-purge：只有 `skip_admin` 算 `blocked` | 1 |
+  | account-purge：`blocked` 不再算进 `skipped` | 1 |
+  | account-purge：心跳里不写 `blocked` | 3 |
+  | usage-report：account-purge 不放行 `blocked` | 3 |
+  | usage-report：push-dispatch 也放行 `held` | 1 |
+  | usage-report：cleanup 也放行 `forced` | 1 |
+  | usage-report：负数也放行 | 1 |
+  | usage-report：小数也放行 | 1 |
+  | usage-report：没登记的心跳名按 account-purge 放行 | 1 |
+  | usage-report：查表不用 `Object.hasOwn` | 1 |
+  | usage-report：account-purge 也收布尔 | 1 |
+  | lemo-ops：`blocked >= 0` 就报 | 2 |
+  | lemo-ops：`blocked` 加宽限期 | 2 |
+  | lemo-ops：`blocked` 正文拼进 `detail.user_id` | 1 |
+  | lemo-ops：`forced` 正文拼进 `detail.user_id`（审查员的 M8） | 1 |
+  | lemo-ops：`held` 正文拼进 `detail.email` | 1 |
+  | lemo-ops：`blocked` 标题带个数 | 2 |
+  | lemo-ops：`purge:overdue` 正文去掉那句提示 | 1 |
+  | lemo-ops：`purge:blocked` 整条不报 | 4 |
+
+- 局限：只告警，不自动收尾，要人手工删完或恢复；分不出“删过一半”和“从没开始删”（两种都该有人看）；`blocked` 也是“这一轮”的数，但这种账号每一轮都会再碰到，抽样漏看一轮不影响下一轮再报。
+- 不涉及数据库（没有迁移、没有 SQL），这次没起本机 lemo-b2push。
 
 ## 单元测试
 
