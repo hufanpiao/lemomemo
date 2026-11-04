@@ -1,4 +1,4 @@
-// push-dispatch 第 0 步：出队即删、重算 remind_at（原 round.ts 第 338～430 行）。
+// push-dispatch 第 0 步：出队即删、重算 remind_at（b13882b^ 的 round.ts 第 338～430 行）。
 // 11-03 从 round.ts 原样搬来（REMIND-round-split：只搬家、不改行为）；流程总说明在 round.ts 文件头。
 import type { ItemRow, LogRow, Profile, QueueItem, QueueRef, RoundCtx, UserSettings } from './round-types.ts';
 import { groupBy, logTzInvalid, pool, uniq } from './round-util.ts';

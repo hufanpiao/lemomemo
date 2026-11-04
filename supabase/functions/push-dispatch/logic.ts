@@ -17,6 +17,8 @@ export interface SharedFns {
   dndDeferUntil(ms: number, tz: string, dnd: Dnd): number | null;
   notifyText(i: NotifyInputLike): NotifyTextLike;
   t(key: never, params: never, locale: 'zh-CN' | 'ko-KR'): string;
+  reminderTag(kind: 'event' | 'todo' | 'anniv', id: string, dueAt: number): string;
+  occurrenceKey(r: { kind: 'event' | 'todo' | 'anniv'; id: string; tag: string; snoozed: boolean; row: Readonly<Record<string, unknown>> }): string;
 }
 
 export function makeLogic(s: SharedFns): RoundLogic {
@@ -35,5 +37,14 @@ export function makeLogic(s: SharedFns): RoundLogic {
     t: (key, params, locale) => s.t(key as never, params as never, locale === 'ko-KR' ? 'ko-KR' : 'zh-CN'),
     // B5 填实现（logic/anniv 的 nextDate + 提醒偏移）；现在回 null：第 0 步不改纪念日、第 6 步推过以后不写下一次
     annivNext: () => null,
+    // tag = reminderTag(kind, id, due_at)。snoozed：推送时和前端 reminder-model 的 reminderOf 同一口径（snooze_at 等于 due_at 且不等于 remind_at）；
+    // 撤回时（due = pushed_for）按当初推的那一次判断：既不是 remind_at、也不是 defer_until，就是稍后那一次（代码审查 M1、L1，见 round-types.ts）。
+    // 纪念日的 occurrenceKey 等 B5 再定（现在 shared 照 tag）
+    occurrenceKey: (kind, row, due, at) => s.occurrenceKey({
+      kind, id: row.id, tag: s.reminderTag(kind, row.id, due),
+      snoozed: at === 'resolve' ? due !== row.remind_at && due !== row.defer_until
+        : row.snooze_at !== null && row.snooze_at === due && due !== row.remind_at,
+      row: row as unknown as Readonly<Record<string, unknown>>,
+    }),
   };
 }

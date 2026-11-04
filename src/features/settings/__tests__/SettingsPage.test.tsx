@@ -43,8 +43,8 @@ describe('已登录设备', () => {
 
   it('读屏名包含看得见的文字：本机行是“退出这台设备（名字）”，其他行是“移除 名字”', async () => {
     await renderPage();
-    expect(within(rowAt(0)).getByRole('button').getAttribute('aria-label')).toBe(`${zh['settings.devices.removeThis']}（${zh['settings.platform.windows']}）`);
-    expect(within(rowAt(1)).getByRole('button').getAttribute('aria-label')).toBe(`${zh['settings.devices.remove']} A 的 iPhone`);
+    expect(within(rowAt(0)).getByRole('button').getAttribute('aria-label')).toBe(`退出这台设备（${zh['settings.platform.windows']}）`);
+    expect(within(rowAt(1)).getByRole('button').getAttribute('aria-label')).toBe('移除 A 的 iPhone');
   });
 
   it('没有游离会话时不显示“另有 N 个登录”，“退出其他所有设备”照样在', async () => {
@@ -330,9 +330,9 @@ describe('设置 › 日历 二级页（R-320、R-321）', () => {
     expect(screen.getByText('공휴일')).toBeTruthy();
   });
 
-  it('设置韩文词典：二级页标题“달력”、返回“설정”', async () => {
+  it('设置韩文词典：二级页标题“캘린더”（B2K-05）、返回“설정”', async () => {
     const { ko } = await vi.importActual<{ ko: Record<string, string> }>('../i18n/ko.ts');
-    expect(ko['settings.cal.title']).toBe('달력');
+    expect(ko['settings.cal.title']).toBe('캘린더');
     expect(ko['settings.title']).toBe('설정');
   });
 });

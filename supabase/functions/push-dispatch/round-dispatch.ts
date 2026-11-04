@@ -1,4 +1,4 @@
-// push-dispatch 第 1～8 步：到点、免打扰、认领、发送、resolve、设备写回（原 round.ts 第 432～702 行）。
+// push-dispatch 第 1～8 步：到点、免打扰、认领、发送、resolve、设备写回（b13882b^ 的 round.ts 第 432～702 行）。
 // 11-03 从 round.ts 原样搬来（REMIND-round-split：只搬家、不改行为）；流程总说明在 round.ts 文件头。
 import { checkEndpoint } from '../_shared/push/endpoint.ts';
 import type { PushOptions } from '../_shared/push/send.ts';
@@ -210,7 +210,8 @@ export async function steps1to8(c: RoundCtx, logs: LogRow[], res: RoundResult, o
       const second = kind === 'todo'
         ? { done: { label: c.logic.t('remind.push.action.done', {}, prof.ui_locale) } }
         : { ack: { label: c.logic.t('remind.push.action.ack', {}, prof.ui_locale) } };
-      payload = c.buildPayload({ type: 'remind', user_id: u, kind, id: x.row.id, due_at: x.due, title: text.title, body: text.body, snooze, ...second });
+      // REMIND-close-occkey：带上“同一次提醒”的标识（shared 的 occurrenceKey，SW 撤回通知时比它）
+      payload = c.buildPayload({ type: 'remind', user_id: u, kind, id: x.row.id, due_at: x.due, occurrenceKey: c.logic.occurrenceKey(kind, x.row, x.due, 'push'), title: text.title, body: text.body, snooze, ...second });
     } catch (e) {
       // 最多一次：已认领，这一条不再推（App 的“错过的提醒”兜底）；只记原因码
       const code = (e as { code?: unknown })?.code;
@@ -259,7 +260,7 @@ export async function steps1to8(c: RoundCtx, logs: LogRow[], res: RoundResult, o
     }
     let payload: Uint8Array<ArrayBuffer>;
     try {
-      payload = c.buildPayload({ type: 'resolve', user_id: u, kind: kindOf(x.table), id: x.row.id, due_at: pushedFor });
+      payload = c.buildPayload({ type: 'resolve', user_id: u, kind: kindOf(x.table), id: x.row.id, due_at: pushedFor, occurrenceKey: c.logic.occurrenceKey(kindOf(x.table), x.row, pushedFor, 'resolve') });
     } catch {
       return;
     }

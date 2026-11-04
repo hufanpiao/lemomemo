@@ -27,7 +27,10 @@ export const ko = {
   'settings.devices.neverSeen': '아직 사용 기록이 없어요', // R-106 B1 第一遍已审（10-30）
   'settings.devices.stale': '오래 쓰지 않아 {date} 이후 자동으로 제거돼요', // R-106 B1 第一遍已审（10-30）
   'settings.devices.remove': '제거', // R-106 B1 第一遍已审（10-30）；移除照 auth.exit.removed 用 제거
-  'settings.devices.removeThis': '로그아웃', // R-106 B1 第一遍已审（10-30）；按钮只写 로그아웃，读屏标签另带“（设备名）”（DevicesSection.tsx）
+  'settings.devices.removeThis': '로그아웃', // R-106 B1 第一遍已审（10-30）；按钮只写 로그아웃，读屏标签见下面两条
+  // 读屏标签（KO-K43-a11y，B1 韩文审校 K-43 建议原文）：韩语“对象 + 动作”语序，不用中文全角括号；包含看得见的 로그아웃 / 제거。R-106 K-43 复核已审（11-04，removeLabel 按复核去掉“기기”）
+  'settings.devices.removeThisLabel': '{name}에서 로그아웃',
+  'settings.devices.removeLabel': '{name} 제거',
   'settings.devices.residual': '제거해도 그 기기는 최대 10분 동안 내 데이터를 읽고 쓸 수 있고, 그 뒤에 로그인 화면으로 돌아가요.', // R-106 B1 第一遍已审（10-30）
   'settings.devices.orphans': '기기 기록이 없는 로그인이 {n}건 더 있어요 (마지막 로그인 {date})', // R-106 B1 第一遍已审（10-31），按审校意见 K-14 改过：和 lastSeen 的“최근 사용”区分
   'settings.devices.signOutOthers': '다른 모든 기기에서 로그아웃', // R-106 B1 第一遍已审（10-30）；按钮；中文 8 字→韩文 15 字；auth.session.serverPending、settings.offlineOut.body 引号里引用这一句
@@ -82,7 +85,7 @@ export const ko = {
   'settings.export.wifi': '데이터가 많으면 파일이 수십 MB가 될 수 있어요. Wi-Fi에 연결하는 걸 추천해요', // R-106 B1 第一遍已审（10-31）；K-39 可不改，按主持人定不改；10-31 导出分片新加（0.47 续 ④ 第 4 点）
 
   'settings.delete.back': '설정', // R-106 B1 第一遍已审（10-31）；照 settings.title
-  'settings.cal.title': '달력', // REVIEW(ko)；照 calendar 的 cal.set.title
+  'settings.cal.title': '캘린더', // R-106 B2 第一遍已审（11-04）（B2K-05，和 calendar 的 cal.set.title、cal.h1 同名）
   'settings.delete.body.what': '탈퇴하면 레모에 기록한 모든 내용과 사진, 첨부파일, 설정, 그리고 서버에 있는 백업까지 모두 삭제돼요.', // R-106 B1 第一遍已审（10-31），按审校意见改过
   'settings.delete.body.cooling': '신청하면 7일간의 탈퇴 대기 기간이 시작돼요. 그동안 계정은 사용 중지되고, 모든 기기에서 로그아웃돼요. {date} 전에 이메일 인증 코드로 로그인하면 계정을 복구할 수 있어요.', // R-106 B1 第一遍已审（10-31），按审校意见 K-09 改过：“7일간의”修饰名词；10-30 设置页导出、注销批新写
   'settings.delete.body.final': '7일이 지나면 완전히 삭제되어 복구할 수 없어요.', // R-106 B1 第一遍已审（10-31），按审校意见改过

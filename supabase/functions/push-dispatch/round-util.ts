@@ -1,4 +1,4 @@
-// push-dispatch 一轮的小工具、tz_invalid 记录和 filterUsable（原 round.ts 第 208～282、320～336、704～720 行）。
+// push-dispatch 一轮的小工具、tz_invalid 记录和 filterUsable（b13882b^ 的 round.ts 第 208～282、320～336、704～720 行）。
 // 11-03 从 round.ts 原样搬来（REMIND-round-split：只搬家、不改行为）；流程总说明在 round.ts 文件头。
 import { AHEAD_MS, BEHIND_MS, LOG_SRC, type Dnd, type ItemRow, type LogRow, type NotifyMsgLike, type NotifyTextLike, type RoundCtx, type RoundLogic, type Table, type UserSettings } from './round-types.ts';
 

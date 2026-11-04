@@ -1,4 +1,4 @@
-// push-dispatch 一轮用的类型、常量和 kindOf（原 round.ts 第 38～206 行）。
+// push-dispatch 一轮用的类型、常量和 kindOf（b13882b^ 的 round.ts 第 38～206 行）。
 // 11-03 从 round.ts 原样搬来（REMIND-round-split：只搬家、不改行为）；流程总说明在 round.ts 文件头。
 import type { PayloadInput, PayloadKind } from '../_shared/push/payload.ts';
 import type { DeliverResult, Device, PushOptions } from '../_shared/push/send.ts';
@@ -154,6 +154,14 @@ export interface RoundLogic {
    * 第 0 步按 ctx.now = 现在调；第 6 步推过以后按 ctx.now = 这次 due_at + 1 调，取再下一次。回 null = 还没实现 / 不改
    */
   annivNext(row: ItemRow, ctx: AnnivCtx): AnnivNext | null;
+  /**
+   * “同一次提醒”的标识（REMIND-close-occkey：shared/logic/remind-route.ts 的 occurrenceKey，和前端横幅、本机通知同一份），放进推送负载。
+   * due 是这一次的 due_at（tag 里那个）；按了“稍后”的那一次照 tag。
+   * at = 'push'（推送时）：snooze_at = due、≠ remind_at 算稍后那一次（和前端 reminderOf 同一口径）；
+   * at = 'resolve'（撤回时，due = pushed_for）：按当初推的那一次判断，pushed_for 既不等于 remind_at、也不等于 defer_until 就是稍后那一次，
+   *   不看现在的 snooze_at（代码审查 occurrenceKey M1：推了稍后那一次以后再按稍后，snooze_at 已经变了；L1：R-336 保留了旧 remind_at 以后再按稍后）
+   */
+  occurrenceKey(kind: PayloadKind, row: ItemRow, due: number, at: 'push' | 'resolve'): string;
 }
 
 export interface Limits {

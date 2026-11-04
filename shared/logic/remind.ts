@@ -156,3 +156,15 @@ export function dndDeferUntil(ms: number, tz: Tz, dnd: Dnd): number | null {
 export function applyDnd(ms: number, tz: Tz, dnd: Dnd): number {
   return dndDeferUntil(ms, tz, dnd) ?? ms;
 }
+
+/**
+ * 全天日程的提醒落在哪天：日期 − remind_days（0 当天 / 1 前一天）；不是全天、没开提醒的返回 null。
+ * 前端的 occurrenceKey、allDayAcked、撤回通知共用（③；11-04 从 src/features/reminders/data/reminder-model.ts 挪来，那边原地转发导出）。
+ * “是不是全天日程”的条件和 shared/logic/remind-route.ts 的 isAllDayRemind 一致（那个文件不准 import，各写一份；tests/shared/occurrence-key.test.ts 核对）
+ */
+export function allDayRemindDay(row: Readonly<Record<string, unknown>>): DateStr | null {
+  const date = row['date'];
+  const days = row['remind_days'];
+  if (typeof row['time'] === 'string' || typeof date !== 'string' || (days !== 0 && days !== 1)) return null;
+  return addDays(date, -days);
+}

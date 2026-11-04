@@ -21,3 +21,35 @@ export function reminderUrl(kind: ReminderKind, id: string, dueAt: number): stri
 export function reminderTag(kind: ReminderKind, id: string, dueAt: number): string {
   return `${kind}:${id}:${dueAt}`;
 }
+
+/** occurrenceKey 要的几项（前端 reminder-model 的 Reminder、服务器 push-dispatch 的一行都按这个结构传；row 只读 date、time、remind_days） */
+export interface OccurrenceRef {
+  readonly kind: ReminderKind;
+  readonly id: string;
+  /** 这一次的 reminderTag（kind:id:dueAt，dueAt 是没按本机免打扰推迟的 due_at） */
+  readonly tag: string;
+  /** 这一次是按了“稍后”的那一次（snooze_at 等于 due_at、且不等于 remind_at） */
+  readonly snoozed: boolean;
+  readonly row: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * 是不是“全天日程提醒”：time 不是字符串（null、没有这一列）、date 是字符串、remind_days 是 0 或 1。
+ * 和 shared/logic/remind.ts 的 allDayRemindDay 判“是不是全天日程”的条件必须一致（本文件不准 import，所以各写一份；
+ * tests/shared/occurrence-key.test.ts 拿边界值逐个核对两边）
+ */
+export function isAllDayRemind(row: Readonly<Record<string, unknown>>): boolean {
+  const d = row['remind_days'];
+  return typeof row['time'] !== 'string' && typeof row['date'] === 'string' && (d === 0 || d === 1);
+}
+
+/**
+ * “同一次提醒”的标识（R-336：只对全天日程起作用）：全天日程（没按稍后）是 event:<id>:allday:<日期>:<remind_days>——
+ * 改默认时刻是同一次；日期变了、当天 / 前一天换了，是另一次（B2 前端增量审查 M1：11-05 当天提醒和 11-06 前一天提醒虽然都落在 11-05，也是两次）；
+ * 其余（有时刻的日程、待办、按了稍后的、纪念日）就是 tag。纪念日的 occurrenceKey 等 B5 再定（现在照 reminderTag）。
+ * 本机通知（local-notify 的 shownKey）、横幅、错过的提醒，和推送负载的 occurrenceKey（push-dispatch）都用这一份
+ */
+export function occurrenceKey(r: OccurrenceRef): string {
+  if (r.kind !== 'event' || r.snoozed || !isAllDayRemind(r.row)) return r.tag;
+  return `event:${r.id}:allday:${String(r.row['date'])}:${String(r.row['remind_days'])}`;
+}

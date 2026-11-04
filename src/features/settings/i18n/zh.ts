@@ -23,6 +23,9 @@ export const zh = {
   'settings.devices.stale': '很久没用，{date} 后自动移除',
   'settings.devices.remove': '移除',
   'settings.devices.removeThis': '退出这台设备',
+  // 设备行按钮的读屏标签（KO-K43-a11y）：要包含按钮上看得见的字（WCAG 2.5.3）；中文读法和原来代码拼的一样
+  'settings.devices.removeThisLabel': '退出这台设备（{name}）',
+  'settings.devices.removeLabel': '移除 {name}',
   'settings.devices.residual': '移除后，那台设备最多还能在 10 分钟内读写你的数据，之后会退回登录页。',
   'settings.devices.orphans': '另有 {n} 个登录没有设备记录（最近一次 {date}）',
   'settings.devices.signOutOthers': '退出其他所有设备',

@@ -1,12 +1,17 @@
 // 推送负载 v1（架构 0.53 第 4 条、5.3“推送负载 v1”；B2 安全审查“六之三”、BE1-S2；代码审查 BE-1 M3、S1～S3）。push-dispatch、push-test 都只经
 // buildPayload 组装，不手拼 JSON。输入按 type 分成三种（联合类型），输出只有这几个字段：
-//   remind  { v: 1, type, user_id, kind, id, due_at, title?, body?, snooze?: { label, minutes }, done?: { label }, ack?: { label } }
+//   remind  { v: 1, type, user_id, kind, id, due_at, occurrenceKey?, title?, body?, snooze?: { label, minutes }, done?: { label }, ack?: { label } }
 //           通知上两个按钮（R-294、R-307、R-308，负责人 11-03）：待办“推迟 + 完成”，日程、纪念日“推迟 + 知道了”；
 //           SW 的 action 名：'snooze'（推迟 10 分钟）、'done'（完成，只给待办）、'ack'（知道了，只给日程和纪念日，只关通知、不改数据）；
 //           推迟和完成走同一条 pending 路径、完成后能撤销（SW 和整页提醒由前端 A 接）；文案由服务器按 ui_locale 生成
 //           （词典键 remind.push.action.snooze、remind.push.action.done、remind.push.action.ack；shared/logic/notify-text.ts 的 NOTIFY_ACTIONS、actionsFor）；
 //           按类型守住：kind 不是 todo 的不带 done，kind 是 todo 的不带 ack（传了也丢）
-//   resolve { v: 1, type, user_id, kind, id, due_at }          不带标题、正文、snooze、done、ack（SW 用本地固定文案）
+//   resolve { v: 1, type, user_id, kind, id, due_at, occurrenceKey? }  不带标题、正文、snooze、done、ack（SW 用本地固定文案）
+//   • occurrenceKey（可选，REMIND-close-occkey，11-04）：“同一次提醒”的标识，push-dispatch 调 shared/logic/remind-route.ts 的 occurrenceKey 算，
+//     SW / 本机撤回通知时拿它比（旧客户端不认识这个键，忽略即可）。只认两种写法，别的一律不带（不抛错、这条照发）：
+//       ① 等于 tag：<kind>:<id>:<due_at>（和本条的 kind、id、due_at 逐字相同）；
+//       ② 全天日程：event:<id>:allday:<YYYY-MM-DD>:<0|1>（只在 kind 是 event 时，id 和本条相同；日期必须真实存在，安全审查 S1）。
+//     所以只含小写 UUID、数字、字母和冒号、连字符，最长 62 字节（event: + UUID + :allday: + 日期 + :1）；不截断（截了就认不出是同一次），字节放不下照旧先截 body、title；
 //   test    { v: 1, type, user_id }                            正好三个键
 //   • 永远没有地址、图片之类的字段（类型上就没有，运行时多给的键一律丢掉）；
 //   • user_id 必带：SW 拿它和本机 owner 比对，对不上只显示 App 名（M9、FE-1）；
@@ -16,7 +21,12 @@
 //   • 整份 UTF-8 JSON ≤ 3071 字节，加 1 字节分隔放进 3072 一档（ece.ts PAD_TIERS）；放不下**先截 body（可以截到没有），再截 title**
 //     （R-294，负责人 11-03 定：保住标题；取代 5.3 原来的“先截标题”，代码审查 BE-1 S1）；title 至少留 20 个码点、不截成没有；
 //     截完还放不下抛 PushCryptoError('payload_too_large')。
-// 通知的 tag 是 kind:id:due_at，整页提醒地址 /app/#/remind/<kind>/<id>?due=<due_at>，都由前端按这几个字段拼，负载里不放。
+// 通知的 tag 是 kind:id:due_at，整页提醒地址 /app/#/remind/<kind>/<id>?due=<due_at>，都由前端按这几个字段拼，负载里不放；
+//   有了 occurrenceKey 以后 tag 仍由前端自己按 kind、id、due_at 拼，不从 occurrenceKey 取（安全审查 S3）。
+//   撤回旧通知的兜底约定（代码审查 occurrenceKey M1、L1；架构 5.3“推送负载 v1”）：SW 拿 tag 和 occurrenceKey 两个都比，任一对上就撤回；
+//   负载不带 occurrenceKey 时只比 tag。服务器 resolve 带的 occurrenceKey 按当初推的那一次算（push-dispatch logic.ts），但稍后、R-336、免打扰
+//   这几样叠在一起时，以及推过以后换了时区（R-341：remind_at 按新时区重算，resolve 只能带 tag，复审 R2-L1），仍可能和当初那条不一样，
+//   所以不能只比 occurrenceKey。
 // 不 import npm 包、不碰 Deno 全局；Node 和 Deno 都能跑。
 import { PAD_TIERS, PushCryptoError } from './ece.ts';
 
@@ -30,6 +40,8 @@ interface ItemRef {
   id: string;
   /** 这一次提醒对应的时刻（毫秒），和 tag、整页提醒地址里的 due 一致 */
   due_at: number;
+  /** “同一次提醒”的标识（shared 的 occurrenceKey）；不合上面两种写法就不带 */
+  occurrenceKey?: string | null;
 }
 export interface RemindPayloadInput extends ItemRef {
   type: 'remind';
@@ -106,6 +118,29 @@ function cut(s: string, n: number): string {
 const text = (v: unknown, max: number): string | null => (typeof v === 'string' && v !== '' ? cut(strippedToSpace(v), max) : null);
 const isUuid = (v: unknown): v is string => typeof v === 'string' && UUID_RE.test(v);
 const isDueAt = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0;
+const DAY_RE = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/;
+/** 真实存在的日期 YYYY-MM-DD（安全审查 S1：月 01～12、日不超过当月天数，闰年按公历；9999-99-99、2026-02-30 都不放行） */
+function isRealDay(s: string): boolean {
+  const m = DAY_RE.exec(s);
+  if (!m) return false;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1) return false;
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const dim = mo === 2 ? (leap ? 29 : 28) : mo === 4 || mo === 6 || mo === 9 || mo === 11 ? 30 : 31;
+  return d <= dim;
+}
+/** occurrenceKey 只认 ① tag ② 全天日程两种写法（见文件头），都要和本条的 kind、id（、due_at）对得上 */
+function occKey(v: unknown, kind: string, id: string, dueAt: number): string | null {
+  if (typeof v !== 'string') return null;
+  if (v === `${kind}:${id}:${dueAt}`) return v;
+  const pre = `event:${id}:allday:`;
+  if (kind !== 'event' || !v.startsWith(pre)) return null;
+  const rest = v.slice(pre.length);
+  const day = rest.slice(0, 10);
+  return isRealDay(day) && (rest.slice(10) === ':0' || rest.slice(10) === ':1') ? v : null;
+}
 const isSnoozeMin = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= SNOOZE_MAX_MIN;
 
 /** 组装并编码；返回 UTF-8 字节（交给 ece.ts 的 encryptPush）。字段不合格抛 PushPayloadError，放不下抛 PushCryptoError('payload_too_large') */
@@ -114,6 +149,8 @@ export function buildPayload(p: PayloadInput): Uint8Array<ArrayBuffer> {
   if (p.type === 'test') return encode({ v: 1, type: 'test', user_id: p.user_id });
   if ((p.type !== 'remind' && p.type !== 'resolve') || !KINDS.has(p.kind) || !isUuid(p.id) || !isDueAt(p.due_at)) throw new PushPayloadError();
   const base: Record<string, unknown> = { v: 1, type: p.type, user_id: p.user_id, kind: p.kind, id: p.id, due_at: p.due_at };
+  const occ = occKey(p.occurrenceKey, p.kind, p.id, p.due_at);
+  if (occ !== null) base.occurrenceKey = occ;
   if (p.type === 'resolve') return encode(base);
 
   let title = text(p.title, TITLE_MAX);

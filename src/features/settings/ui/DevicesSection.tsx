@@ -50,8 +50,8 @@ function DeviceRowView({ d, busy, onRemove }: { d: DeviceView; busy: boolean; on
         className={`${styles.btn} ${styles.danger}`}
         disabled={busy}
         onClick={onRemove}
-        // 读屏名要包含看得见的文字（WCAG 2.5.3）
-        aria-label={d.isCurrent ? `${t('settings.devices.removeThis', {})}（${name}）` : `${t('settings.devices.remove', {})} ${name}`}
+        // 读屏名要包含看得见的文字（WCAG 2.5.3）；整句走词典，韩文按韩语语序（KO-K43-a11y）
+        aria-label={d.isCurrent ? t('settings.devices.removeThisLabel', { name }) : t('settings.devices.removeLabel', { name })}
       >
         {d.isCurrent ? t('settings.devices.removeThis', {}) : t('settings.devices.remove', {})}
       </Pressable>

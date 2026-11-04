@@ -91,7 +91,8 @@ describe('第 3～5、7、8 步：认领、文案、发给所有设备、日志�
     expect(new Set(ps.map((x) => x.dev)).size).toBe(2);
     for (const x of ps) {
       // R-294：两个按钮“推迟”（snooze）、“完成”（done）
-      expect(x.p).toEqual({ v: 1, type: 'remind', user_id: UA, kind: 'todo', id: t.id, due_at: now - 1000, title: '买柠檬',
+      expect(x.p).toEqual({ v: 1, type: 'remind', user_id: UA, kind: 'todo', id: t.id, due_at: now - 1000,
+        occurrenceKey: `todo:${t.id}:${now - 1000}`, title: '买柠檬',
         snooze: { label: '推迟', minutes: 10 }, done: { label: '完成' } });
       expect(x.headers['topic']).toBeUndefined();
       expect(x.headers['urgency']).toBe('high');
@@ -249,7 +250,7 @@ describe('Edge 的 resolve：主机属于 *.push.apple.com 的一律不发（不
     await round(w.deps({ now: () => now }));
     const ps = w.pushes();
     expect(ps).toHaveLength(1);
-    expect(ps[0]?.p).toEqual({ v: 1, type: 'resolve', user_id: UA, kind: 'todo', id: t.id, due_at: X });
+    expect(ps[0]?.p).toEqual({ v: 1, type: 'resolve', user_id: UA, kind: 'todo', id: t.id, due_at: X, occurrenceKey: `todo:${t.id}:${X}` });
     expect(w.f.requests.every((r) => !r.url.includes('apple'))).toBe(true);
     expect(w.db.tables.todos.get(t.id)?.pushed_for).toBeNull();
     await round(w.deps({ now: () => now + 60_000 }));

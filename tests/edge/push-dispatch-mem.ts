@@ -7,6 +7,7 @@ import { t } from '../../shared/i18n/i18n.ts';
 import { notifyText } from '../../shared/logic/notify-text.ts';
 import { allDayTimeOf, dndDeferUntil, eventRemindAt, todoRemindAt } from '../../shared/logic/remind.ts';
 import { startAtOf } from '../../shared/logic/remind-actions.ts';
+import { occurrenceKey, reminderTag } from '../../shared/logic/remind-route.ts';
 import type { DispatchStore, HeartbeatDetail } from '../../supabase/functions/push-dispatch/core.ts';
 import type { DeviceOutcome, DeviceRow, ItemRow, LogRow, Profile, QueueItem, QueueRef, RoundLogic, Table } from '../../supabase/functions/push-dispatch/round.ts';
 import { SETTING_KEYS, TABLES } from '../../supabase/functions/push-dispatch/round.ts';
@@ -14,7 +15,7 @@ import { makeLogic } from '../../supabase/functions/push-dispatch/logic.ts';
 
 /** 和 index.ts 同一份接线（logic.ts 的 makeLogic），名字一一对应，只是从 shared/ 引（tests/edge/push-dispatch-logic-wiring.test.ts 核对） */
 export const LOGIC: RoundLogic = makeLogic({
-  todoRemindAt, eventRemindAt, allDayTimeOf, startAtOf, msAt, parseHm, todayOf, isValidTz, dndDeferUntil, notifyText, t,
+  todoRemindAt, eventRemindAt, allDayTimeOf, startAtOf, msAt, parseHm, todayOf, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey,
 });
 
 export const UA = 'aaaaaaaa-0000-4000-8000-000000000001';

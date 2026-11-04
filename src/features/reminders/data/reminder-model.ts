@@ -18,8 +18,8 @@
 // 纪念日（anniversaries）的提醒归 B5（remindAtOf 还不算纪念日），这里只处理日程和待办
 import { addDays, msAt, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { ALL_DAY_EVE_TIME, allDayTimeOf, applyDnd, remindAtOf, type Dnd } from '../../../../shared/logic/remind.ts';
-import { reminderTag } from '../../../../shared/logic/remind-route.ts';
+import { ALL_DAY_EVE_TIME, allDayRemindDay, allDayTimeOf, applyDnd, remindAtOf, type Dnd } from '../../../../shared/logic/remind.ts';
+import { occurrenceKey, reminderTag } from '../../../../shared/logic/remind-route.ts';
 
 export type RemindKind = 'event' | 'todo';
 export type Row = Readonly<Record<string, unknown>> & { readonly id: string };
@@ -135,22 +135,9 @@ export function allReminders(events: readonly Row[], todos: readonly Row[], now:
   return out.sort((a, b) => a.dueAt - b.dueAt || a.id.localeCompare(b.id));
 }
 
-/** 全天日程的提醒落在哪天：日期 − remind_days（0 当天 / 1 前一天）；不是全天、没开提醒的返回 null。occurrenceKey、allDayAcked、撤回通知共用（③） */
-export function allDayRemindDay(row: Row): DateStr | null {
-  const date = str(row['date']);
-  const days = num(row['remind_days']);
-  if (str(row['time']) !== null || date === null || (days !== 0 && days !== 1)) return null;
-  return addDays(date, -days);
-}
-
-/**
- * “同一次提醒”的标识（R-336：只对全天日程起作用）：全天日程（没按稍后）是 event:<id>:allday:<日期>:<remind_days>——
- * 改默认时刻是同一次；日期变了、当天 / 前一天换了，是另一次（审查 M1：11-05 当天提醒和 11-06 前一天提醒虽然都落在 11-05，也是两次）；其余就是 tag
- */
-export function occurrenceKey(r: Reminder): string {
-  if (r.kind !== 'event' || r.snoozed || allDayRemindDay(r.row) === null) return r.tag;
-  return `event:${r.id}:allday:${str(r.row['date']) ?? ''}:${String(num(r.row['remind_days']))}`;
-}
+// allDayRemindDay、occurrenceKey 11-04 挪进 shared（REMIND-close-occkey：推送负载的 occurrenceKey 由服务器调同一份），这里原地转发导出，名字和行为不变：
+//   allDayRemindDay → shared/logic/remind.ts（要用 addDays）；occurrenceKey → shared/logic/remind-route.ts（不 import，SW 也能引）
+export { allDayRemindDay, occurrenceKey };
 
 /** 本次打开以后响过的一次：当时的 tag 和实际响的时刻（dueAt）；旧写法只放 tag */
 export interface Rang {

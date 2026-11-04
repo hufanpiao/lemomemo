@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App.tsx';
 import { featureRoutes } from '../features.ts';
 
+// 整个 App 挂载、页面懒加载：全量三个时区同时跑、机器忙时会拖过默认 5 秒（c8b5596 的 CI unit 就是这样超时的），
+// 这个文件单独放宽到 15 秒，等页面出现的上限 10 秒；单跑仍在 3 秒内
+vi.setConfig({ testTimeout: 15_000 });
+
 afterEach(() => {
   cleanup();
   window.location.hash = '';
@@ -17,7 +21,7 @@ describe('月历两条路由同一个页面', () => {
   it('#/calendar 点“下个月”到 #/cal/month/...：同一个页面元素，焦点还在“下个月”按钮上', async () => {
     window.history.replaceState(null, '', '/app/#/calendar');
     render(<App />);
-    const page = await screen.findByTestId('calendar-page', {}, { timeout: 5000 });
+    const page = await screen.findByTestId('calendar-page', {}, { timeout: 10_000 });
     const next = screen.getByTestId('cal-next');
     next.focus();
     await act(async () => {
@@ -53,7 +57,7 @@ describe('同一页里浏览器前进 / 后退不播整页动画', () => {
   it('#/cal/month/2026-11 后退到 #/cal/month/2026-10、#/cal/... 回到 #/calendar：不起 View Transition', async () => {
     window.history.replaceState(null, '', '/app/#/cal/month/2026-11');
     render(<App />);
-    await screen.findByTestId('calendar-page', {}, { timeout: 5000 });
+    await screen.findByTestId('calendar-page', {}, { timeout: 10_000 });
     expect((await back('#/cal/month/2026-11', '#/cal/month/2026-10')).mock.calls).toHaveLength(0);
     expect((await back('#/cal/month/2026-10', '#/calendar')).mock.calls).toHaveLength(0);
     expect(window.location.hash).toBe('#/calendar');
