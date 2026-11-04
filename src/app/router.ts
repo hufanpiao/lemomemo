@@ -18,6 +18,9 @@ export const ROUTE_NAMES = [
   'notes',
   'vault',
   'anniv',
+  // 整页提醒（B2 FA-4，REMIND-wiring）：#/remind/<kind>/<id>?due=<dueAt>。地址只由 openReminder / reminderHash
+  // （shared/logic/remind-route.ts）生成，不用 hrefOf（会把 ?due= 转义掉）；页面自己用 parseReminderHash 校验
+  'remind',
   'settings',
   'onboarding',
   'dev-csp',

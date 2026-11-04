@@ -35,6 +35,25 @@
   --pc: var(--p6s);
 }
 
+/* Appear 进场时外层带 transform（播完还留着 translateY(0) scale(1)），会成为 fixed 子元素的定位参照：
+   外层自己铺满视口、不接点按，里面的横幅、按钮条、提示才按视口定位（REMIND-wiring 截图查出来的） */
+.layer,
+.layerNote {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.layerNote {
+  z-index: 41;
+}
+
+.layer > *,
+.layerNote > * {
+  pointer-events: auto;
+}
+
 .banner {
   position: fixed;
   top: calc(var(--inset-top) + 8px);

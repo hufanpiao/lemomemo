@@ -3,12 +3,11 @@
 // 别的功能、App 怎么接这些组件见 B2 FA-4 交付说明的接线清单
 import { lazy } from 'react';
 
-// 整页提醒 #/remind/<kind>/<id>?due=<dueAt>：router.ts 的 ROUTE_NAMES 加 'remind' 以后，这里改成
-//   export const routes = [{ name: 'remind', Page: lazy(() => import('./ui/FullReminderPage.tsx')) }] as const;
-export const routes = [] as const;
-
-/** 整页提醒页面（路由接上前先单独导出；接上后挂在 routes 里） */
+/** 整页提醒页面 #/remind/<kind>/<id>?due=<dueAt>（地址由 openReminder / reminderHash 生成，不用 hrefOf） */
 export const FullReminderPage = lazy(() => import('./ui/FullReminderPage.tsx'));
+
+// 路由（REMIND-wiring）：router.ts 的 ROUTE_NAMES 里有 'remind'
+export const routes = [{ name: 'remind', Page: lazy(() => import('./ui/FullReminderPage.tsx')) }] as const;
 /** 提醒横幅、按钮条、“15:25 再提醒你”，并跑提醒引擎：App 上挂一份；props: { route?: 当前路由名 }（'today' 不画顶部横幅，'remind' 都不画） */
 export const RemindHost = lazy(() => import('./ui/RemindHost.tsx'));
 /** 今天页顶部“错过 N 条提醒 ›”和底部弹层；没有错过的不画 */

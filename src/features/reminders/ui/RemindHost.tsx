@@ -6,6 +6,8 @@
 // • 横幅不自动收起，处理了才消失；往上滑（或点“先收起”）先收起，收起的进“错过的提醒”
 // • 按了“稍后”弹 2 秒“15:25 再提醒你”
 // • 整页提醒那一页（route = 'remind'）不画横幅和按钮条（整页里有自己的按钮）
+// • exe 退出登录（接线审查 R3）：要等会话真删掉（最多 3 秒，platform/session.ts）才整页重新载入，这段时间里 RemindHost 还挂着，
+//   引擎碰上整分钟还会再算一次；退出流程先清了本机库，集合已经是空的，弹不出本机通知，所以不另设“停止”标记
 import { useRef, useState } from 'react';
 import { collapseRinging, useRemindQueue, visibleEntry } from '../../../kit/state/remind-queue.ts';
 import { Appear } from '../../../motion/components.ts';
@@ -134,17 +136,17 @@ export default function RemindHost({ route }: { route?: string }) {
 
   return (
     <>
-      <Appear kind="toast" show={showBanner}>
+      <Appear kind="toast" show={showBanner} className={styles.layer}>
         {r && <Banner key={r.tag} r={r} queued={queued} tz={tz} defaultTime={prefs.defaultTime} />}
       </Appear>
-      <Appear kind="toast" show={showBar && note === null}>
+      <Appear kind="toast" show={showBar && note === null} className={styles.layer}>
         {r && (
           <div className={styles.bar} role="group" aria-label={t('remind.a11y.region', {})} data-testid="remind-bar" data-kind={r.kind}>
             <RemindButtons key={r.tag} r={r} actions={actionsOf(r, clock.now(), tz, prefs)} />
           </div>
         )}
       </Appear>
-      <Appear kind="toast" show={note !== null}>
+      <Appear kind="toast" show={note !== null} className={styles.layerNote}>
         {note !== null && (
           <p className={styles.note} role="status" data-testid="remind-snooze-note">
             {t('remind.snoozed', { time: timeOf(note, tz) })}

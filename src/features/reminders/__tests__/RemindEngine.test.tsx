@@ -45,8 +45,10 @@ type ObItem = { rec: string; op: 'insert' | 'patch'; state: 'pending' | 'infligh
 let outboxList: ObItem[] = [];
 const outboxSubs = new Set<() => void>();
 const pendingPatch = (data: Record<string, unknown>): ObItem => ({ rec: `events:${E1}`, op: 'patch', state: 'pending', data });
+/** 发一次 outbox 通知，再等补写链跑完：排两轮宏任务（setTimeout 0）。纯微任务链在下一个宏任务之前一定跑完，不再靠“等 N 次微任务”数次数（接线审查范围外发现） */
 const fireOutbox = () => act(async () => {
   for (const f of [...outboxSubs]) f();
+  for (let i = 0; i < 2; i++) await new Promise<void>((r) => setTimeout(r, 0));
 });
 vi.mock('../../../core/boot.ts', () => ({
   getBoot: () => ({
@@ -301,7 +303,7 @@ describe('横幅手势与引擎（代码审查补漏测）', () => {
     // 发出去了（不在待发里了），提醒时刻还是 15:15：补写一次
     outboxList = [];
     await fireOutbox();
-    expect(savePatch).toHaveBeenCalledWith('events', E1, { notified_for: at('15:15'), updated_at: at('15:16') }, true);
+    await waitFor(() => expect(savePatch).toHaveBeenCalledWith('events', E1, { notified_for: at('15:15'), updated_at: at('15:16') }, true));
     savePatch.mockClear();
     await fireOutbox();
     expect(savePatch).not.toHaveBeenCalled();

@@ -38,7 +38,7 @@ import { setRemindHoldLog } from '../kit/state/remind-queue.ts';
 import { browserLifecycle } from '../platform/net.ts';
 import { createLogUploader, createSupabaseTransport } from '../platform/sync-net.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
-import { buildInfo, isTauri, registerJsErrorLog } from '../platform/env.ts';
+import { buildInfo, isTauri, JS_ERROR_ACT, jsErrorCode, registerJsErrorLog } from '../platform/env.ts';
 import {
   clearCacheStorage, clearLocalSessionIf, goToAuth, onAuthUser, onSessionStorageChange, readSessionAccessToken, readSessionId, readSessionUserId,
   markAccountUiShown, setExitNotice, takeLocalSession,
@@ -51,6 +51,7 @@ import { checkSwOnForeground, registerServiceWorker, reloadPage, upgradeLogCount
 import { mountExitScreen, watchExitIncomplete } from './ExitIncompleteScreen.tsx';
 import { mountFeatures } from './features.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
+import { setRemindErrorLog } from './App.tsx';
 import { startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
 import { wireSync } from './sync-wiring.ts';
 import { applyDocLocale } from '../platform/doc-locale.ts';
@@ -124,6 +125,8 @@ async function start(): Promise<void> {
   const logs = createLogChannel();
   // 提醒压住超时自动放开时记一条（B2 FA-4 代码审查 N1；日志没有动作名白名单）
   setRemindHoldLog((reason) => logs.log('remind_hold_timeout', { code: reason }));
+  // RemindHost 出错（接线审查 R2）：走现有的 js_error，code 只有“错误类型@文件名:行号”
+  setRemindErrorLog((err) => logs.log(JS_ERROR_ACT, { code: jsErrorCode(err, {}, location.origin) }));
   // 客户端错误日志（TC-B1-68、架构 6.1）：只记“类型@文件名:行号”，同一个 code 每天 5 条
   registerJsErrorLog(logs.log);
   // 写 logs 表的那一端（架构 0.38 第 68 条）：localStorage 队列 lemo.logq.<user_id>，主页在线时批量上传；别的账号留下的队列清掉

@@ -2,7 +2,7 @@
 // • L13：补写卡在 await 上时引擎卸载（退出登录、换账号），醒来后不再拿旧账号的行接着写
 // • L14：补写正在跑时又来了 outbox 通知，跑完再跑一次，不等下一次变化
 // 替身和 RemindEngine.test.tsx 同一套；用 renderHook 同时挂引擎（useRemindEngine）和按钮动作（useRemindActions）
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { remindQueue, resetRemindQueue } from '../../../kit/state/remind-queue.ts';
@@ -58,9 +58,9 @@ const blocked = (id: string): ObItem => ({ rec: `events:${id}`, op: 'patch', sta
 const fireOutbox = (): void => {
   for (const f of [...outboxSubs]) f();
 };
-/** 让排队的 promise 跑完几轮 */
+/** 等补写链跑完：排两轮宏任务（setTimeout 0）。纯微任务链在下一个宏任务之前一定跑完，不再靠“等 N 次微任务”数次数（接线审查范围外发现） */
 const settle = () => act(async () => {
-  for (let i = 0; i < 10; i++) await Promise.resolve();
+  for (let i = 0; i < 2; i++) await new Promise<void>((r) => setTimeout(r, 0));
 });
 /** 下一次 savePatch 卡住，直到调返回的 release */
 function holdNextSave(): () => void {
@@ -103,8 +103,7 @@ describe('补写的两个边界（第四轮）', () => {
     outboxList = [];
     const release = holdNextSave();
     fireOutbox();
-    await settle();
-    expect(savePatch).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(savePatch).toHaveBeenCalledTimes(1));
     expect(savePatch.mock.calls[0]?.[1]).toBe(E1);
     h.unmount();
     release();
@@ -118,13 +117,11 @@ describe('补写的两个边界（第四轮）', () => {
     outboxList = [blocked(E2)];
     const release = holdNextSave();
     fireOutbox();
-    await settle();
-    expect(savePatch).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(savePatch).toHaveBeenCalledTimes(1));
     // 正在写 E1 时 E2 的也发出去了，来了一次通知
     outboxList = [];
     fireOutbox();
     release();
-    await settle();
-    expect(savePatch.mock.calls.map((c) => c[1])).toEqual([E1, E2]);
+    await waitFor(() => expect(savePatch.mock.calls.map((c) => c[1])).toEqual([E1, E2]));
   });
 });
