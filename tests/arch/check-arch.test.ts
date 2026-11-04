@@ -181,6 +181,28 @@ describe('build/check_arch.py（tests/arch-fixtures/check_arch）', () => {
     ]);
   });
 
+  it('LUNAR 间接（LUNAR-indirect-import）：src 静态引入 shared 的模块、它再静态引入农历（隔一层、两层、环里都算）→ 错误；动态 import()、import type、链上有 import() 或 import type 断开的放行', () => {
+    const { code, report } = run(sample('lunar-indirect-import'));
+    expect(code).toBe(1);
+    const lunar = report.errors.filter((e) => e.rule === 'LUNAR');
+    expect(lunar.map((e) => `${e.file}:${e.line}`)).toEqual([
+      'src/features/today/cyc1.ts:2',
+      'src/features/today/cyc2.ts:2',     // 从环的另一头进：中间层的“走不到”不能被记住
+      'src/features/today/direct.ts:2',   // 直接
+      'src/features/today/one.ts:2',      // 隔一层（同目录 './lunar.ts' 写法）
+      'src/features/today/two.ts:2',      // 隔两层：import
+      'src/features/today/two.ts:3',      //          export … from（不带扩展名）
+      'src/features/today/two.ts:4',      //          只写路径的 import
+    ]);
+    expect(report.errors).toHaveLength(lunar.length);
+    const msg = (f: string) => lunar.find((e) => e.file === f)?.message ?? '';
+    expect(msg('src/features/today/direct.ts')).toContain('农历数据只能按需加载');
+    expect(msg('src/features/today/one.ts')).toContain('shared/logic/anniv/next-date.ts → shared/logic/anniv/lunar.ts');
+    expect(msg('src/features/today/two.ts')).toContain('shared/logic/mid.ts → shared/logic/anniv/next-date.ts → shared/logic/anniv/lunar.ts');
+    expect(msg('src/features/today/cyc2.ts')).toContain('shared/logic/cyc-b.ts → shared/logic/cyc-a.ts → shared/logic/anniv/lunar.ts');
+    expect(lunar.some((e) => e.file === 'src/features/today/ok.ts')).toBe(false);
+  });
+
   it('真仓库：0 个错误', { timeout: 60_000 }, () => {
     const { code, report } = run(ROOT);
     expect(report.errors).toEqual([]);

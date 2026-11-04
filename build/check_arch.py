@@ -9,6 +9,8 @@
        App 只经 platform/files.ts 调同源的 /files/v1/*（架构 0.32 第 2、4 条，任务单 FA-2）
   LUNAR src 里不准静态引入农历数据和换算（shared/logic/anniv/lunar*）：import … from、export … from、只写路径的 import、require 都报；
        只许 import('…') 按需加载（架构 2.6：农历单独 chunk、不进入口；BE-5 代码审查建议 ①）。import type 只引类型、编译后不留，放行
+       间接的也报：src 静态引入 shared/ 的模块，它再经静态引入（隔几层都算，只跟相对路径、只在 shared/ 里走）走到农历模块；
+       中间任何一层用 import() 或 import type 就算断开（B1 接手清单 LUNAR-indirect-import）
   W2   src/public/holidays/cn|kr/ 缺明年的文件，或明年的文件还是 pending（警告）
   P142 supabase/migrations 里 private 的触发器函数不准出现 current_user，用 current_setting('role', true)（0.29 续第 142 条）
   A24  src 的 CSS 里 stylelint-disable 注释不准不写规则名（等于全关），也不准关 lemo/* 和 A24 的三条规则
@@ -249,17 +251,92 @@ LUNAR_STATIC_RE = re.compile(
 )
 
 
+def lunar_static_specs(code):
+    """静态、非 type-only 的引入目标（import … from、export … from、只写路径的 import、require），带位置"""
+    for m in LUNAR_STATIC_RE.finditer(code):
+        if m.group(1):
+            continue
+        yield m.start(), (m.group(2) or m.group(3) or m.group(4) or "").replace("\\", "/")
+
+
+def is_lunar_spec(spec):
+    return bool(LUNAR_SPEC_RE.search(re.sub(r"\.ts$", "", spec)))
+
+
+LUNAR_RESOLVE_EXT = (".ts", ".tsx", ".mts", ".js", ".mjs")
+
+
+def resolve_rel(root, from_file, spec):
+    """相对路径的引入解析成仓库里的文件；不是相对路径（npm 包等）、解析不到的返回 None"""
+    spec = spec.split("?", 1)[0]
+    if not spec.startswith("."):
+        return None
+    base = (from_file.parent / spec).resolve()
+    cands = [base]
+    if base.suffix in (".js", ".mjs"):
+        cands.append(base.with_suffix(".ts" if base.suffix == ".js" else ".mts"))
+    cands += [base.with_name(base.name + e) for e in LUNAR_RESOLVE_EXT]
+    cands += [base / ("index" + e) for e in LUNAR_RESOLVE_EXT]
+    for c in cands:
+        if c.is_file():
+            try:
+                c.relative_to(root)
+            except ValueError:
+                return None
+            return c
+    return None
+
+
+def lunar_chain(root, path, memo, seen):
+    """shared/ 里的这个模块经静态引入（隔几层都算）能不能走到农历模块；能就返回经过的路径（rel 列表，最后一项是农历模块）。
+    memo 跨调用只存“走得到”的结果和每次最外层的“走不到”；seen 是这一次最外层查询里走过的模块
+    （走过的不再走：要么已经在找，要么已经确定从它走不到——有环时中间层的“走不到”不能跨查询复用）"""
+    if path in memo:
+        return memo[path]
+    if path in seen:
+        return None
+    seen.add(path)
+    code = strip_comments(path.read_text(encoding="utf-8"))
+    for _, spec in lunar_static_specs(code):
+        if is_lunar_spec(spec):
+            memo[path] = [spec]
+            return memo[path]
+        nxt = resolve_rel(root, path, spec)
+        if nxt is None or not nxt.relative_to(root).as_posix().startswith("shared/"):
+            continue
+        nrel = nxt.relative_to(root).as_posix()
+        if is_lunar_spec(nrel):   # 同目录的 './lunar.ts' 这种写法，按解析后的路径认
+            memo[path] = [nrel]
+            return memo[path]
+        sub = lunar_chain(root, nxt, memo, seen)
+        if sub:
+            memo[path] = [nrel] + sub
+            return memo[path]
+    return None
+
+
 def check_lunar_import(root, errors):
+    root = root.resolve()
+    memo = {}
     for p in iter_files(root, "src", SOURCE_EXT):
         rel = p.relative_to(root).as_posix()
         code = strip_comments(p.read_text(encoding="utf-8"))
-        for m in LUNAR_STATIC_RE.finditer(code):
-            if m.group(1):
-                continue
-            spec = (m.group(2) or m.group(3) or m.group(4) or "").replace("\\", "/")
-            if LUNAR_SPEC_RE.search(re.sub(r"\.ts$", "", spec)):
-                errors.append(("LUNAR", rel, line_of(code, m.start()),
+        for pos, spec in lunar_static_specs(code):
+            if is_lunar_spec(spec):
+                errors.append(("LUNAR", rel, line_of(code, pos),
                                f"农历数据只能按需加载：把 {spec} 改成 await import('…')（单独 chunk，不进入口，架构 2.6）"))
+                continue
+            # 间接（LUNAR-indirect-import）：src 静态引入 shared 的模块，它再静态引入农历（隔几层都算）
+            target = resolve_rel(root, p, spec)
+            if target is None or not target.relative_to(root).as_posix().startswith("shared/"):
+                continue
+            chain = lunar_chain(root, target, memo, set())
+            memo.setdefault(target, chain)   # 最外层的结果是确定的，走不到也记下
+            if chain:
+                via = " → ".join([target.relative_to(root).as_posix()] + chain)
+                errors.append(("LUNAR", rel, line_of(code, pos),
+                               f"间接静态引入了农历（{via}）：农历会打进首屏。在 src 里改成 await import('{spec}')，"
+                               f"或让 shared 那一层对农历只用 import()（架构 2.6，B1 接手清单 LUNAR-indirect-import）"))
 
 
 def check_r2(root, errors):
