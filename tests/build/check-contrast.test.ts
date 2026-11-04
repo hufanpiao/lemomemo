@@ -54,7 +54,7 @@ const BACKDROPS = {
 };
 const THRESHOLDS = { text: { min: 4.5 }, nontext: { min: 3 } };
 
-type Pair = { id: string; fg: string; bg: string | string[]; kind: string; modes?: string[] };
+type Pair = { id: string; fg: string; bg: string | string[]; kind: string; modes?: string[]; themes?: unknown };
 
 /**
  * 迷你仓库：skins 是 { 'x-light': '--a:#fff;…' }，pairs 只写要紧的字段（what、source 自动补）。
@@ -244,6 +244,14 @@ describe('build/check_contrast.py：算法', () => {
     expect(report.results?.map((r) => `${r.theme} ${r.id}`).sort()).toEqual(['x-dark both', 'x-light both', 'x-light light-only']);
   });
 
+  it('themes 只在列出的那几套里算（别处是 transparent 也不报错）；不是非空字符串数组算配置错误（设计复审 N7）', () => {
+    const mk = (themes: unknown) => fixture({ 'x-light': `${P}--a:#000;--b:#fff;`, 'x-dark': `${P}--a:transparent;--b:#000;` }, [{ id: 'ring', fg: '--a', bg: '--b', kind: 'nontext', themes }]);
+    expect(run(['--root', mk(['x-light'])]).report.results?.map((r) => `${r.theme} ${r.id}`)).toEqual(['x-light ring']);
+    for (const bad of [[], 'x-light', [1]]) expect(run(['--root', mk(bad)]).report.error).toContain('themes');
+    // 皮肤名写错不能悄悄跳过（代码复审 R3）：报配置错误、退出码 2，点名写错的那个
+    expect(run(['--root', mk(['x-light', 'x-lite'])])).toMatchObject({ code: 2, report: { error: expect.stringContaining('ring：themes 里的皮肤不存在：x-lite') } });
+  });
+
   it.each([
     ['变量不存在', '--b:var(--nope);', '没有变量 --nope'],
     ['循环引用', '--b:var(--c);--c:var(--b);', '循环引用'],
@@ -313,15 +321,17 @@ describe('build/check_contrast.py：算法', () => {
 describe('build/check_contrast.py：真仓库的清单和皮肤', () => {
   const { code, report } = run([]);
   const results = report.results ?? [];
-  const pairs = (JSON.parse(readFileSync(join(ROOT, 'build', 'contrast-pairs.json'), 'utf8')) as { pairs: { modes?: string[] }[] }).pairs;
-  const expected = (mode: string) => pairs.filter((p) => (p.modes ?? ['light', 'dark']).includes(mode)).length;
+  const pairs = (JSON.parse(readFileSync(join(ROOT, 'build', 'contrast-pairs.json'), 'utf8')) as { pairs: { modes?: string[]; themes?: string[] }[] }).pairs;
+  /** 某一套该算几项：按 modes 过滤，写了 themes 的只算列出的那几套 */
+  const expected = (theme: string) =>
+    pairs.filter((p) => (p.modes ?? ['light', 'dark']).includes(theme.split('-')[1] ?? '') && (p.themes === undefined || p.themes.includes(theme))).length;
 
   it('清单在现有四套（两种皮肤 × 浅深）里都算得出来：不是配置错误，每套的条数和按 modes 过滤后的清单一样多', () => {
     expect(report.error).toBeUndefined();
     expect([0, 1]).toContain(code);
     expect(report.themes).toEqual(['glass-dark', 'glass-light', 'simple-dark', 'simple-light']);
-    for (const t of report.themes ?? []) expect(results.filter((r) => r.theme === t).length).toBe(expected(t.split('-')[1] ?? ''));
-    expect(results.length).toBe(2 * (expected('light') + expected('dark')));
+    for (const t of report.themes ?? []) expect(results.filter((r) => r.theme === t).length).toBe(expected(t));
+    expect(results.length).toBe((report.themes ?? []).reduce((n, t) => n + expected(t), 0));
   });
 
   it.each([

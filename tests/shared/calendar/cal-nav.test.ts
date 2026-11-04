@@ -5,6 +5,7 @@ import {
   isThisWeek,
   monthKey,
   parseMonthKey,
+  parseWeekParam,
   resolveMonthParam,
   resolveWeekParam,
   resolveWeekStart,
@@ -12,6 +13,7 @@ import {
   shiftWeek,
   startOfWeek,
   weekDates,
+  weekInRange,
   weekOfPickedMonth,
 } from '../../../shared/logic/calendar/cal-nav.ts';
 
@@ -19,7 +21,10 @@ describe('周起始日', () => {
   it('设置了 0–6 就按设置，没设或不认识按界面语言（中文周一、韩文周日）', () => {
     expect(resolveWeekStart(0, 'zh-CN')).toBe(0);
     expect(resolveWeekStart(1, 'ko-KR')).toBe(1);
-    expect(resolveWeekStart(6, 'zh-CN')).toBe(6);
+    // 只认 0、1：2–6 回落到默认（代码审查 11-04）
+    expect(resolveWeekStart(6, 'zh-CN')).toBe(1);
+    expect(resolveWeekStart(2, 'ko-KR')).toBe(0);
+    expect(resolveWeekStart(5, 'zh-CN')).toBe(1);
     expect(resolveWeekStart(undefined, 'zh-CN')).toBe(1);
     expect(resolveWeekStart(null, 'ko-KR')).toBe(0);
     expect(resolveWeekStart(7, 'zh-CN')).toBe(1);
@@ -95,10 +100,66 @@ describe('路由参数（#/cal/month/…、#/cal/week/…）', () => {
 
   it('周：不带参数、非法日期、不存在的日期回到本周', () => {
     expect(resolveWeekParam(undefined, today, 1)).toBe('2026-11-02');
-    for (const bad of ['2026-02-30', '2026-13-01', '2026-1-1', 'x', '1899-12-31']) {
+    for (const bad of ['2026-02-30', '2026-13-01', '2026-1-1', 'x', '1899-12-24', '2101-01-08']) {
       expect(resolveWeekParam(bad, today, 1), bad).toBe('2026-11-02');
       expect(resolveWeekParam(bad, today, 0), bad).toBe('2026-11-01');
     }
+  });
+
+  // 代码审查 FA-3 L2：年份按“这一周有没有一天在 1900–2100 里”判断，1900 年第一周、2100 年最后一周都到得了
+  it('周：1900 年第一周（周日起始那周从 1899-12-31 开始）合法，不回到本周', () => {
+    // 1900-01-01 是周一：周日起始那周 1899-12-31～1900-01-06
+    expect(resolveWeekParam('1899-12-31', today, 0)).toBe('1899-12-31');
+    expect(resolveWeekParam('1900-01-01', today, 0)).toBe('1899-12-31');
+    expect(resolveWeekParam('1900-01-06', today, 0)).toBe('1899-12-31');
+    // 周一起始时 1899-12-31 那周（1899-12-25～31）一天都不在范围里
+    expect(resolveWeekParam('1899-12-31', today, 1)).toBe('2026-11-02');
+    expect(resolveWeekParam('1900-01-01', today, 1)).toBe('1900-01-01');
+    // 周六起始：1899-12-30～1900-01-05
+    expect(resolveWeekParam('1900-01-03', today, 6)).toBe('1899-12-30');
+  });
+
+  it('周：2100 年最后一周跨进 2101 年也合法（2100-12-31 是周五）', () => {
+    expect(resolveWeekParam('2100-12-31', today, 0)).toBe('2100-12-26');
+    expect(resolveWeekParam('2101-01-01', today, 0)).toBe('2100-12-26');
+    expect(resolveWeekParam('2101-01-02', today, 0)).toBe('2026-11-01');
+  });
+
+  it('parseWeekParam：合法时给那周第一天，没参数 / 非法 / 整周超范围给 null（调用方据此决定要不要 replace）', () => {
+    expect(parseWeekParam('2026-11-01', 1)).toBe('2026-10-26');
+    expect(parseWeekParam('2026-11-01', 0)).toBe('2026-11-01');
+    expect(parseWeekParam('1899-12-31', 0)).toBe('1899-12-31');
+    expect(parseWeekParam(undefined, 0)).toBeNull();
+    expect(parseWeekParam('', 0)).toBeNull();
+    expect(parseWeekParam('2026-02-30', 0)).toBeNull();
+    expect(parseWeekParam('1899-12-31', 1)).toBeNull();
+  });
+
+  it('parseWeekParam 边界（代码审查 11-04）：周一起始 2101-01-02 还在 2100 年最后一周，2101-01-03 起整周超范围；离谱年份给 null', () => {
+    expect(parseWeekParam('2101-01-02', 1)).toBe('2100-12-27');
+    expect(parseWeekParam('2101-01-03', 1)).toBeNull();
+    expect(parseWeekParam('0050-03-01', 1)).toBeNull();
+    expect(parseWeekParam('0000-01-01', 0)).toBeNull();
+    expect(parseWeekParam('9999-12-31', 1)).toBeNull();
+  });
+
+  // 代码审查 FA-3 L4：周起始从默认值（设置还没同步）换成用户设的值时，要从地址里原来那一天重新算，
+  // 而不是从按旧周起始规整过的日期再规整一次
+  it('周起始变了：从原始那天重新规整得到正确的周；从旧规整结果再规整会差一周', () => {
+    const fromPush = '2026-11-01'; // 周日，推送 / 搜索带来的
+    const byDefault = resolveWeekParam(fromPush, today, 1); // 中文默认周一起始
+    expect(byDefault).toBe('2026-10-26');
+    expect(resolveWeekParam(fromPush, today, 0)).toBe('2026-11-01'); // 对：原始那天重新规整
+    expect(resolveWeekParam(byDefault, today, 0)).toBe('2026-10-25'); // 错：差了一周，所以合法参数不能被 replace 掉
+  });
+
+  it('weekInRange：从 start 起的 7 天里有一天在 1900–2100 就算在范围内', () => {
+    expect(weekInRange('1899-12-31')).toBe(true);
+    expect(weekInRange('1899-12-26')).toBe(true);
+    expect(weekInRange('1899-12-25')).toBe(false);
+    expect(weekInRange('2100-12-31')).toBe(true);
+    expect(weekInRange('2101-01-01')).toBe(false);
+    expect(weekInRange('2026-11-02')).toBe(true);
   });
 
   it('周：闰日 2028-02-29 合法，2027-02-29 不合法', () => {
@@ -114,6 +175,12 @@ describe('年月选择器在周视图（R-101）', () => {
   });
   it('跨年：2027-01（1 日是周五）周一起始 → 2026-12-28', () => {
     expect(weekOfPickedMonth({ y: 2027, m: 1 }, 1)).toBe('2026-12-28');
+  });
+  it('1900-01 周日起始 → 1899-12-31，这个参数再解析回来仍是这一周（代码审查 L2）', () => {
+    const start = weekOfPickedMonth({ y: 1900, m: 1 }, 0);
+    expect(start).toBe('1899-12-31');
+    expect(resolveWeekParam(start, '2026-11-04', 0)).toBe(start);
+    expect(weekInRange(start)).toBe(true);
   });
 });
 

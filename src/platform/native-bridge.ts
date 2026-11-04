@@ -35,6 +35,9 @@ export interface LocalReminder {
   readonly body: string;
 }
 
+/** 设置 › 提醒“发一条测试通知”在 exe 里的结果（R-330）：已弹出 / 系统通知权限没开 / 失败（含 exe 还没实现 showLocalTest） */
+export type LocalTestResult = 'shown' | 'denied' | 'failed';
+
 /** exe 一侧要实现的五个函数（前端 B，src/platform/desktop.ts） */
 export interface NativeBridge {
   openReminder(kind: ReminderKind, id: string, dueAt: number): Promise<void>;
@@ -47,6 +50,13 @@ export interface NativeBridge {
   closeAllLocalReminders(): Promise<void>;
   /** 用户点了链接：交给系统浏览器（exe 的 open_external）。不实现时 openExternal 在 exe 里直接 invoke open_external */
   openExternal?(url: string): Promise<void>;
+  /**
+   * 待接口（B2 FA-4 加，R-330；exe 实现归 B6-exe，写在 desktop.ts）：设置 › 提醒“发一条测试通知”在 exe 里弹一条本机测试通知。
+   * 约定：和 showLocalReminder 同一路（WebView2 网页通知）；tag 固定 'lemo-local-test'（再点替换旧的，不和提醒的 tag 撞）；
+   * 权限 default 时在这次点按里请求，拒了或 denied 回 'denied'；弹出回 'shown'；其余回 'failed'。点通知只把主窗口拉到前台，不打开整页提醒。
+   * 网页版不实现（网页走 push-test）；exe 没实现时 showLocalTestNotification 回 'failed'
+   */
+  showLocalTest?(n: { readonly title: string; readonly body: string }): Promise<LocalTestResult>;
 }
 
 /** 整页提醒的完整路径（= shared 的 reminderUrl，和 SW 打开的同一个） */
@@ -128,6 +138,18 @@ export function showLocalReminder(reminder: LocalReminder): Promise<void> {
 /** 撤回本机通知（只有 exe 做事） */
 export function closeLocalReminder(tag: string): Promise<void> {
   return current().closeLocalReminder(tag);
+}
+
+/** 弹一条本机测试通知（只有 exe；R-330）。bridge 没实现 showLocalTest、或抛错时回 'failed' */
+export async function showLocalTestNotification(n: { readonly title: string; readonly body: string }): Promise<LocalTestResult> {
+  const b = current();
+  if (typeof b.showLocalTest !== 'function') return 'failed';
+  try {
+    const r = await b.showLocalTest(n);
+    return r === 'shown' || r === 'denied' ? r : 'failed';
+  } catch {
+    return 'failed';
+  }
 }
 
 /** 关掉已弹出的全部本机通知（只有 exe 做事；退出流程经 platform/push.ts 的 disconnectBrowserPush 调它，X-5） */

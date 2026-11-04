@@ -82,6 +82,7 @@ export const ko = {
   'settings.export.wifi': '데이터가 많으면 파일이 수십 MB가 될 수 있어요. Wi-Fi에 연결하는 걸 추천해요', // R-106 B1 第一遍已审（10-31）；K-39 可不改，按主持人定不改；10-31 导出分片新加（0.47 续 ④ 第 4 点）
 
   'settings.delete.back': '설정', // R-106 B1 第一遍已审（10-31）；照 settings.title
+  'settings.cal.title': '달력', // REVIEW(ko)；照 calendar 的 cal.set.title
   'settings.delete.body.what': '탈퇴하면 레모에 기록한 모든 내용과 사진, 첨부파일, 설정, 그리고 서버에 있는 백업까지 모두 삭제돼요.', // R-106 B1 第一遍已审（10-31），按审校意见改过
   'settings.delete.body.cooling': '신청하면 7일간의 탈퇴 대기 기간이 시작돼요. 그동안 계정은 사용 중지되고, 모든 기기에서 로그아웃돼요. {date} 전에 이메일 인증 코드로 로그인하면 계정을 복구할 수 있어요.', // R-106 B1 第一遍已审（10-31），按审校意见 K-09 改过：“7일간의”修饰名词；10-30 设置页导出、注销批新写
   'settings.delete.body.final': '7일이 지나면 완전히 삭제되어 복구할 수 없어요.', // R-106 B1 第一遍已审（10-31），按审校意见改过

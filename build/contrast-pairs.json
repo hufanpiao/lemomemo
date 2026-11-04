@@ -388,6 +388,86 @@
       "source": "皮肤视觉稿“对比度实测”；架构 5.12 月历“左侧竖线对格子底色 ≥ 3”"
     },
     {
+      "id": "cal-p1s-hol",
+      "what": "月历：项目 1 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p1s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-p2s-hol",
+      "what": "月历：项目 2 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p2s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-p3s-hol",
+      "what": "月历：项目 3 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p3s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-p4s-hol",
+      "what": "月历：项目 4 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p4s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-p5s-hol",
+      "what": "月历：项目 5 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p5s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-p6s-hol",
+      "what": "月历：项目 6 标签左侧竖线 / 放假那天的灰底（竖线对格子底 ≥ 3）",
+      "fg": "--p6s",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-c0-line",
+      "what": "月历：没有项目的标签左侧竖线 / 卡片底",
+      "fg": "--text-2",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-c0-text",
+      "what": "月历：没有项目的标签文字 / 标签底（--panel-2）",
+      "fg": "--text",
+      "bg": "--panel-2",
+      "kind": "text",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-check-panel",
+      "what": "设置 › 日历：单选选中的 ✓ / 卡片底",
+      "fg": "--text",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
+      "id": "cal-sel-ring",
+      "what": "月历 / 周视图：选中那天的墨色框 / 卡片底",
+      "fg": "--ink",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "B2 设计审查（前端 A 的 FA-3）第 123 行；架构 5.12 对比度"
+    },
+    {
       "id": "p1s-screen",
       "what": "项目标记 1（平铺在底色、玻璃渐变上）",
       "fg": "--p1s",
@@ -473,7 +553,9 @@
       "fg": "--g-ad-fg",
       "bg": "--g-ad-tint",
       "kind": "nontext",
-      "modes": ["light"],
+      "modes": [
+        "light"
+      ],
       "source": "架构 0.27 液态玻璃“对比度”第 855 行附近（深色玻璃 data-ad=\"dark\" 那组 --g-* 叠在最浅底色上）；第 844 行：深色主题不做自动深浅，只算浅色"
     },
     {
@@ -482,8 +564,83 @@
       "fg": "--g-ad-fg",
       "bg": "--g-halo",
       "kind": "text",
-      "modes": ["light"],
+      "modes": [
+        "light"
+      ],
       "source": "架构 0.27 第 855 行附近；令牌里没有 --g-ad-halo（第 830、886 行：data-ad 的令牌在 B2 前补齐），代码审查 M3"
+    },
+    {
+      "id": "remind-toggle-on",
+      "what": "免打扰开关打开：墨色底 / 设置卡片",
+      "fg": "--ink",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "B2 FA-4 设计审查 M6、M7（提醒设置的开关、移除按钮）"
+    },
+    {
+      "id": "remind-toggle-knob",
+      "what": "免打扰开关打开：圆钮 / 墨色底",
+      "fg": "--on-ink",
+      "bg": "--ink",
+      "kind": "nontext",
+      "source": "B2 FA-4 设计审查 M6、M7（提醒设置的开关、移除按钮）"
+    },
+    {
+      "id": "remind-toggle-off",
+      "what": "免打扰开关关闭：描边 / 设置卡片",
+      "fg": "--text-2",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "B2 FA-4 设计审查 M6、M7（提醒设置的开关、移除按钮）"
+    },
+    {
+      "id": "remind-danger-text",
+      "what": "“移除它”描边按钮文字 / 提示卡",
+      "fg": "--danger-text",
+      "bg": "--panel",
+      "kind": "text",
+      "source": "B2 FA-4 设计审查 M6、M7（提醒设置的开关、移除按钮）"
+    },
+    {
+      "id": "remind-danger-fill",
+      "what": "确认对话框“移除”：危险色字 / 危险色底",
+      "fg": "--danger-text",
+      "bg": "--danger-bg",
+      "kind": "text",
+      "source": "B2 FA-4 设计审查 M6、M7（提醒设置的开关、移除按钮）"
+    },
+    {
+      "id": "today-ring-panel",
+      "what": "月格今天的墨色细圈 / 格子底",
+      "fg": "--today-ring",
+      "bg": "--panel",
+      "kind": "nontext",
+      "themes": [
+        "simple-light"
+      ],
+      "source": "设计复审 N7（11-04）；R-132 简洁·浅色今天是透明底墨色细圈；月格 .today .dayNum、周视图 .laneToday"
+    },
+    {
+      "id": "today-ring-panel-2",
+      "what": "月格今天的墨色细圈 / 选中那天的底",
+      "fg": "--today-ring",
+      "bg": "--panel-2",
+      "kind": "nontext",
+      "themes": [
+        "simple-light"
+      ],
+      "source": "设计复审 N7（11-04）；R-132 简洁·浅色今天是透明底墨色细圈；月格 .today .dayNum、周视图 .laneToday"
+    },
+    {
+      "id": "today-ring-hol-bg",
+      "what": "月格今天的墨色细圈 / 放假灰底",
+      "fg": "--today-ring",
+      "bg": "--hol-bg",
+      "kind": "nontext",
+      "themes": [
+        "simple-light"
+      ],
+      "source": "设计复审 N7（11-04）；R-132 简洁·浅色今天是透明底墨色细圈；月格 .today .dayNum、周视图 .laneToday"
     }
   ]
 }

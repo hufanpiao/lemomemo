@@ -23,6 +23,8 @@ import type { RouteName } from './router.ts';
 export interface FeatureRoute {
   name: RouteName;
   Page: LazyExoticComponent<ComponentType>;
+  /** 和另一条路由是同一个页面（如 'cal' → 'calendar'）：App 挂那一条的 Page、错误边界用那一条的名字做 key，互相跳不重新挂载 */
+  samePageAs?: RouteName;
 }
 
 interface FeatureEntry {

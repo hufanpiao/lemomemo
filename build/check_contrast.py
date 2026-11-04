@@ -443,6 +443,10 @@ def load_pairs(path: pathlib.Path) -> dict:
         for m in p.get('modes', ['light', 'dark']):
             if m not in ('light', 'dark'):
                 raise ConfigError(f'{p["id"]}：modes 只能是 light、dark')
+        # 可选 themes：只在这几套里查（如只有“简洁·浅色”画今天的细圈，别的皮肤是 transparent；设计复审 N7）
+        th = p.get('themes')
+        if th is not None and (not isinstance(th, list) or not th or not all(isinstance(x, str) for x in th)):
+            raise ConfigError(f'{p["id"]}：themes 要是非空的字符串数组，如 ["simple-light"]')
     return data
 
 
@@ -462,12 +466,19 @@ def worst_of(p: dict, vars_: dict[str, str], theme: str, conf: dict) -> tuple[fl
 
 
 def check(themes: dict[str, dict[str, str]], data: dict) -> list[dict]:
+    # themes 里的皮肤名要真的存在：写错（如 simple-lite）不能悄悄跳过、等于这一项哪儿都不查（代码复审 R3）
+    for p in data['pairs']:
+        unknown = sorted(set(p.get('themes', [])) - set(themes))
+        if unknown:
+            raise ConfigError(f'{p["id"]}：themes 里的皮肤不存在：{"、".join(unknown)}（现有：{"、".join(sorted(themes))}）')
     results = []
     for theme in sorted(themes):
         vars_ = themes[theme]
         mode = theme.rsplit('-', 1)[1]
         for p in data['pairs']:
             if mode not in p.get('modes', ['light', 'dark']):
+                continue
+            if 'themes' in p and theme not in p['themes']:
                 continue
             try:
                 need = float(data['thresholds'][p['kind']]['min'])

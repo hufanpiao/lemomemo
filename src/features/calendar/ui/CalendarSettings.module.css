@@ -1,0 +1,182 @@
+/* 设置 › 日历（B2 FA-3 第二段；R-320 二级页）：外观照设置页，功能之间不共用样式，这里照写一份。
+   抄自 src/features/settings/ui/SettingsPage.module.css 的（设计审查意见 5，设置页那边改了这几条要一起改；抽成 kit 组件记进待办）：
+   .gt、.grp、.row、.row:last-child、.tx、.seg、.segBtn、.segBtn[aria-pressed]、.segBtn::after、.sn、.error、
+   .rowBtn、.row .rowBtn（按下变淡）、两条减少动态效果、.v、.srOnly。没抄的：.row:has(> .meta)（这里没有两行的行）、.rowBtn:disabled（入口行不会禁用）。
+   本文件自己的：.choice / .check（节假日每项一行、选中打 ✓，设计审查 M8）、.chev */
+
+/* 组标题写在卡片上方（同设置页 .gt） */
+.gt {
+  margin: 16px 4px 6px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-weight: 400;
+}
+
+section:first-child > .gt {
+  margin-top: 0;
+}
+
+.grp {
+  margin: 0;
+  padding: 0 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: var(--hit);
+  border-bottom: 1px solid var(--line);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.tx {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-15);
+  font-weight: inherit;
+  overflow-wrap: anywhere;
+}
+
+/* 节假日每个选项一行：44 高、行间分隔线，整行可点（label），选中的右边墨色“✓”（设计审查 M8：不用柠檬黄圆点，白卡上对比度不够） */
+.choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.choice:last-child {
+  border-bottom: 0;
+}
+
+.choice:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+.check {
+  flex: none;
+  width: 20px;
+  color: var(--text);
+  font-size: var(--fs-17);
+  font-weight: 600;
+  text-align: center;
+}
+
+.seg {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+}
+
+.segBtn {
+  position: relative;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.segBtn[aria-pressed='true'] {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+/* 扩点击区到至少 44×44（同设置页的写法） */
+.segBtn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.sn {
+  margin: 6px 4px 16px;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.error {
+  margin: 8px 4px 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+/* 设置首页的“日历”一行（R-320）：整行是按钮，左“日历”、右摘要和“›” */
+.rowBtn {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/* 整行宽、字靠左的行按钮按下不缩放，改成变淡（同设置页 .row .rowBtn，负责人 10-31） */
+.row .rowBtn {
+  transition: opacity var(--dur-press) var(--ease-out);
+}
+
+.row .rowBtn[data-state="pressed"] {
+  transform: none;
+  opacity: var(--press-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row .rowBtn {
+    transition: none;
+  }
+}
+
+:global(:root[data-rm="1"]) .row .rowBtn {
+  transition: none;
+}
+
+.v {
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-align: right;
+}
+
+.chev {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 只给读屏的文字（首页“日历”一组的组标题） */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

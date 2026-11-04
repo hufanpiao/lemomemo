@@ -1,0 +1,559 @@
+/* 提醒横幅、按钮条、“15:25 再提醒你”、错过的提醒、整页提醒（B2 FA-4；线框 s1b；皮肤视觉稿 .tban / .abar / .fa-big；R-122 / R-145 磨砂玻璃，只用令牌，A11）
+   • 横幅（视觉稿 .tban）：顶部下拉一张，内描边 1.5px 柠檬黄；[完成圆圈（项目色）] [类型 · 时刻 / 标题 16px 常规] [详情 ›]，下面抓手条 + “先收起”
+   • 按钮条（.abar）：贴底，离底 118px（和提示条同一位置），键盘弹起时让开（--kb）；“知道了”主按钮柠檬黄
+   • 整页提醒（线框 FULLALERT）：铃铛类型行、64px 大时刻（--fs-64、--f-num）、标题、“到 16:30 · 项目”、地点备注卡、下一条卡；
+     “知道了”整行宽主按钮，其余两颗一排（任何语言都不折字）
+   • 顶部只写 var(--inset-top)（安全区本身；base.css 第 15 行的约定：顶部安全区的 env() 只在 base.css 里写）
+   • 提示条出现时排在按钮条上方（提示条自己的位置，UI-2 低 3），这里不管 */
+
+/* 项目色（架构 5.12；和列表、月历同一个 projectColorIndex）：记号和完成圆圈读 --pc */
+.pc0 {
+  --pc: var(--text-2);
+}
+
+.pc1 {
+  --pc: var(--p1s);
+}
+
+.pc2 {
+  --pc: var(--p2s);
+}
+
+.pc3 {
+  --pc: var(--p3s);
+}
+
+.pc4 {
+  --pc: var(--p4s);
+}
+
+.pc5 {
+  --pc: var(--p5s);
+}
+
+.pc6 {
+  --pc: var(--p6s);
+}
+
+.banner {
+  position: fixed;
+  top: calc(var(--inset-top) + 8px);
+  left: 10px;
+  right: 10px;
+  z-index: 40;
+  max-width: 540px;
+  margin: 0 auto;
+  padding: 12px 14px 4px;
+  border-radius: 24px;
+  background: var(--float-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--shadow-2), inset 0 0 0 1.5px var(--accent);
+  backdrop-filter: blur(6px) saturate(var(--float-sat));
+  touch-action: pan-x;
+  user-select: none;
+}
+
+/* 往上拖没到 30px 松手：回位走 --dur-ui（跟手时不加过渡，设计 N2）；减少动态效果时直接回位 */
+.settling {
+  transition: transform var(--dur-ui) var(--ease-standard);
+}
+
+:global(:root[data-rm="1"]) .settling {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settling {
+    transition: none;
+  }
+}
+
+.bannerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bar {
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: max(calc(env(safe-area-inset-bottom) + 118px), var(--kb, 0px));
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 540px;
+  margin: 0 auto;
+  padding: 8px;
+  border-radius: var(--r-xl);
+  background: var(--abar-bg);
+  color: var(--abar-fg);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(6px) saturate(var(--float-sat));
+}
+
+.note {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: max(calc(env(safe-area-inset-bottom) + 118px), var(--kb, 0px));
+  z-index: 41;
+  max-width: 528px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  border-radius: var(--r-lg);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(6px) saturate(var(--float-sat));
+  font-size: var(--fs-14);
+  text-align: center;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .banner,
+  .bar,
+  .note {
+    background: var(--float-solid);
+    backdrop-filter: none;
+  }
+}
+
+.bannerMain {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.bannerText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.kicker {
+  color: var(--toast-fg2);
+  font-size: var(--fs-12);
+}
+
+.title {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--fs-16);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.more {
+  color: var(--toast-fg2);
+  font-size: var(--fs-12);
+}
+
+.detail {
+  flex: none;
+  font-size: var(--fs-13);
+  white-space: nowrap;
+}
+
+/* 抓手条（视觉稿 .tban .grab）+ 旁边“先收起”（不会滑的人也能收起，设计 M2） */
+.grabRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+}
+
+.grab {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--toast-track);
+}
+
+.collapse {
+  position: absolute;
+  top: 0;
+  left: -6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--toast-fg2);
+  font-size: var(--fs-12);
+}
+
+/* 抓手条这一行矮（28px）：“先收起”的点按区从自己顶边起只往下扩到 44px，不往上伸进“详情 ›”那一行（设计 N1） */
+.collapse::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  min-width: var(--hit);
+  height: var(--hit);
+}
+
+.small {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+/* 待办的完成圆圈（UI-2 第三轮中 1）：项目色描边（视觉稿 .done-c，设计 L4），可点范围外扩到 44 × 44 */
+.circle {
+  position: relative;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid var(--pc, currentcolor);
+  border-radius: 50%;
+  background: none;
+}
+
+.circle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--hit);
+  height: var(--hit);
+  transform: translate(-50%, -50%);
+}
+
+.btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 0 6px;
+  border: 1.5px solid currentcolor;
+  border-radius: var(--r-pill);
+  background: none;
+  color: inherit;
+  font-size: var(--fs-13);
+  white-space: nowrap;
+}
+
+.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+  text-align: center;
+}
+
+/* 今天页顶部“错过 N 条提醒 ›”（线框 MISSROW，设计 M3）：1.5px 墨色描边、铃铛、粗体 */
+.missRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bell {
+  flex: none;
+}
+
+.dim {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 错过的提醒弹层：“全部知道了”在右上（弹层外框 .dock 是 fixed，绝对定位相对它：16px 外边距 + 16px 内边距） */
+.sheetTopAct {
+  position: absolute;
+  top: 14px;
+  right: 30px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-13);
+  white-space: nowrap;
+}
+
+.sheetTopAct::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 每条一张小卡（线框 MISSSHEET） */
+.missCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+}
+
+.missBtns {
+  display: flex;
+  gap: 6px;
+}
+
+.itemText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rowBtn {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/* 类型记号：日程竖条、待办空心圆（线框 .m-ev / .m-td），项目色 */
+.mkEv,
+.mkEvSm {
+  display: inline-block;
+  flex: none;
+  width: 5px;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--pc, var(--text-2));
+  vertical-align: middle;
+}
+
+.mkEvSm {
+  height: 12px;
+}
+
+.mkTd,
+.mkTdSm {
+  display: inline-block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--pc, var(--text-2));
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.mkTdSm {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
+/* 整页提醒（线框 FULLALERT，设计 H1）：按钮在屏幕下方 */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 100dvh;
+  padding: calc(var(--safe-top) + 8px) 16px calc(env(safe-area-inset-bottom) + 16px);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+/* 大时刻（视觉稿 .fa-big） */
+.bigTime {
+  margin: 0;
+  font-family: var(--f-num);
+  font-size: var(--fs-64);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bigTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-24);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.sub {
+  margin: 0 0 6px;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.nextCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--hit);
+  margin-top: 4px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.nextTitle {
+  display: block;
+  overflow: hidden;
+  font-size: var(--fs-14);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nextSub {
+  display: block;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.fld {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+
+.fld dt {
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.fld dd {
+  margin: 0;
+  font-size: var(--fs-15);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+/* 整页的按钮：主按钮整行宽，其余两颗一排（待办 3 颗次按钮时第二行一颗，同宽） */
+.pageBar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.pageBar .btn {
+  flex: none;
+  width: 100%;
+  font-size: var(--fs-14);
+}
+
+.pageRest {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.state {
+  margin: 0;
+  font-size: var(--fs-17);
+  font-weight: 600;
+}
+
+.btn:focus-visible,
+.small:focus-visible,
+.circle:focus-visible,
+.bannerMain:focus-visible,
+.collapse:focus-visible,
+.missRow:focus-visible,
+.nextCard:focus-visible,
+.sheetTopAct:focus-visible,
+.rowBtn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

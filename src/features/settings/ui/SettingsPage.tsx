@@ -3,9 +3,11 @@
 // 其余分组（皮肤、提醒与通知、语音与 AI、隐私记、时区……）由各功能在后面的批次按表里的位置接进来。
 // “退出登录”不是分组：页面最底下单独一行，永远在所有分组之后。
 // 注销账号是本页里的另一屏，有自己的地址 #/settings/delete（负责人 10-30：注销页左滑应该回设置、不是回今天）：
-// 点入口 push 一条历史，侧滑、浏览器后退、左上角“‹ 返回”都退回设置；离开本机的提示框两屏都在
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+// 点入口 push 一条历史，侧滑、浏览器后退、左上角“‹ 返回”都退回设置；离开本机的提示框两屏都在。
+// 设置 › 日历 也是二级页（R-320，定稿线框）：首页只放一行“日历 … 农历 · 节假日：中国 ›”，点进 #/settings/calendar，返回同注销页
+import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { goBack, hrefOf, navigate, replaceRoute, useRoute } from '../../../app/router.ts';
+import { CalendarSettings, CalendarSettingsEntry } from '../../calendar/index.ts';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { orderSections, useSettingsPage, type ExitNotice, type SettingsDeps, type SettingsSectionId } from '../hooks/useSettingsPage.ts';
@@ -93,6 +95,31 @@ function ExitDialog({ notice, cleaning, onGo }: { notice: ExitNotice | null; cle
   );
 }
 
+/**
+ * 设置 › 日历 二级页（R-320）：顶栏由本页画（和注销页同一个 .top，整个 src 只有这一处起 page-head 名，切页时标题先出后入），
+ * 正文是 calendar 功能懒加载的 CalendarSettings；进来时焦点放到标题上（同注销页）
+ */
+function CalendarSubView({ onBack }: { onBack(): void }) {
+  const t = useSettingsT();
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => titleRef.current?.focus(), []);
+  return (
+    <>
+      <header className={styles.top}>
+        <Pressable className={styles.backBtn} onClick={onBack} data-testid="settings-cal-back">
+          ‹ {t('settings.title', {})}
+        </Pressable>
+        <h1 className={styles.title} ref={titleRef} tabIndex={-1}>
+          {t('settings.cal.title', {})}
+        </h1>
+      </header>
+      <Suspense fallback={null}>
+        <CalendarSettings />
+      </Suspense>
+    </>
+  );
+}
+
 export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   const t = useSettingsT();
   const page = useSettingsPage(deps);
@@ -101,19 +128,21 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   const [exportTick, setExportTick] = useState(0);
   const recent = useRecentExport(recentExports, exportTick);
   const [ask, setAsk] = useState<Ask>(null);
-  const view = useRoute().params[0] === 'delete' ? 'delete' : 'home';
-  /** 注销页是从本页点进去的（历史里上一条就是设置）：返回时退一步；直接打开 #/settings/delete 时没有这一条，原地换成设置（不多压一条） */
-  const pushedDelete = useRef(false);
-  const openDelete = (): void => {
-    pushedDelete.current = true;
-    void navigate('settings', 'delete');
+  const sub = useRoute().params[0];
+  const view = sub === 'delete' || sub === 'calendar' ? sub : 'home';
+  /** 二级页（注销、日历）是从本页点进去的（历史里上一条就是设置）：返回时退一步；直接打开 #/settings/delete 等时没有这一条，原地换成设置（不多压一条） */
+  const pushedSub = useRef(false);
+  const openSub = (name: 'delete' | 'calendar'): void => {
+    pushedSub.current = true;
+    void navigate('settings', name);
   };
-  const backFromDelete = (): void => {
-    if (!pushedDelete.current) {
+  const openDelete = (): void => openSub('delete');
+  const backFromSub = (): void => {
+    if (!pushedSub.current) {
       void replaceRoute('settings');
       return;
     }
-    pushedDelete.current = false;
+    pushedSub.current = false;
     goBack();
   };
   const nowFn = deps?.now ?? Date.now;
@@ -150,6 +179,12 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
       />
     ),
     language: <LanguageSection locale={locale} />,
+    // 设置 › 日历（R-320）：首页只放一行摘要，点进二级页；由 calendar 功能提供（懒加载，加载中这一组先空着）
+    calendar: (
+      <Suspense fallback={null}>
+        <CalendarSettingsEntry onOpen={() => openSub('calendar')} />
+      </Suspense>
+    ),
     data: <DataSection task={exportTask} />,
     ...(hotkey.status ? { desktop: <DesktopSection hotkey={hotkey} /> } : {}),
     about: <AboutSection />,
@@ -157,7 +192,9 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   return (
     <main className={styles.page} data-feature="settings" aria-busy={devices.busy !== null}>
       {view === 'delete' ? (
-        <DeleteAccountView account={account} pendingCount={exit.pendingCount} now={nowFn} onBack={backFromDelete} />
+        <DeleteAccountView account={account} pendingCount={exit.pendingCount} now={nowFn} onBack={backFromSub} />
+      ) : view === 'calendar' ? (
+        <CalendarSubView onBack={backFromSub} />
       ) : (
         <>
           <header className={styles.top}>

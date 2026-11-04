@@ -10,6 +10,9 @@ describe('router', () => {
     expect(parseHash('')).toEqual(DEFAULT_ROUTE);
     expect(parseHash('#/nope')).toEqual(DEFAULT_ROUTE);
     expect(parseHash('#/notes/a%2Fb')).toEqual({ name: 'notes', params: ['a/b'] });
+    // 设置的二级页挂在 settings 下（注销、日历 R-320），不另起路由名
+    expect(parseHash('#/settings/calendar')).toEqual({ name: 'settings', params: ['calendar'] });
+    expect(hrefOf('settings', 'calendar')).toBe('#/settings/calendar');
   });
 
   it('hrefOf 和 parseHash 互逆（参数会转义）', () => {

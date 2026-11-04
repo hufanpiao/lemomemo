@@ -1,7 +1,8 @@
 .content {
+  z-index: 30;
   padding: 12px;
   border-radius: var(--r-md);
-  background: var(--panel);
-  box-shadow: var(--shadow-2);
+  background: var(--sheet-bg);
+  box-shadow: var(--shadow-2), inset 0 0 0 1px var(--line);
   color: var(--text);
 }

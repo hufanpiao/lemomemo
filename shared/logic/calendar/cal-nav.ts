@@ -29,11 +29,12 @@ function defaultWeekStart(locale: UiLocale): WeekStart {
   }
 }
 
+// 只认周日（0）、周一（1）：界面上只有这两个选项；周二到周五起始时标题按“第一天 + 3 天”算月份，会算出 1899-12 或 2101-01（代码审查 11-04）
 function isWeekStart(v: unknown): v is WeekStart {
-  return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 6;
+  return v === 0 || v === 1;
 }
 
-/** 设置 cal.week_start 的值（0–6 的整数）有效就用它，没设或不认识时按界面语言取默认 */
+/** 设置 cal.week_start 的值是 0 或 1 就用它，没设、不认识（含 2–6）时按界面语言取默认 */
 export function resolveWeekStart(setting: unknown, locale: UiLocale): WeekStart {
   return isWeekStart(setting) ? setting : defaultWeekStart(locale);
 }
@@ -106,20 +107,41 @@ export function resolveMonthParam(param: string | undefined, today: DateStr): Ye
 }
 
 /**
+ * 从 start 起的这一周（7 天）有没有一天在 1900–2100 里（代码审查 FA-3 L2）。
+ * 周视图的年份范围按“整周有没有沾边”判断：周日起始时 1900 年第一周从 1899-12-31 开始，
+ * 2100 年最后一周可能跨进 2101 年，这两周都要到得了。上一周 / 下一周翻不翻也用它判断。
+ */
+export function weekInRange(start: DateStr): boolean {
+  return inYearRange(parseDate(start).y) || inYearRange(parseDate(addDays(start, 6)).y);
+}
+
+/**
+ * `#/cal/week/<参数>` 的参数 → 这一周的第一天（按 cal.week_start 规整）；
+ * 不带参数、格式不对、日期不存在、整周都在 1900–2100 以外时返回 null。
+ * 参数合法时，地址里的那一天就是“锚点”：周起始变了（如新设备设置晚到，代码审查 FA-3 L4）要从锚点重新规整，
+ * 所以调用方只在返回 null 时 replace 地址，合法但不是那周第一天的参数保持原样、只在内部换算。
+ */
+export function parseWeekParam(param: string | undefined, weekStart: WeekStart): DateStr | null {
+  if (!param || !/^\d{4}-\d{2}-\d{2}$/.test(param)) return null;
+  let y: number;
+  try {
+    y = parseDate(param).y;
+  } catch {
+    return null; // 日期不存在（如 2-30）
+  }
+  // 离范围很远的年份（如 9999-12-31）先挡掉：再往后算一周会到 10000 年，parseDate 认不出会抛异常（代码审查 11-04）
+  if (y < MIN_YEAR - 1 || y > MAX_YEAR + 1) return null;
+  const start = startOfWeek(param, weekStart);
+  return weekInRange(start) ? start : null;
+}
+
+/**
  * `#/cal/week/<参数>` 的参数 → 这一周的第一天（按 cal.week_start 规整）。
- * 参数是任意一天都规整到它所在那周的第一天；不带参数、非法日期、年份超出范围时回到本周。
- * 规整后和参数不一样时，调用方用 replace 改地址（不新增历史记录）。
+ * 参数是任意一天都规整到它所在那周的第一天；不带参数、非法日期、整周超出年份范围时回到本周。
+ * 要不要改地址看 parseWeekParam：只有非法（返回 null）时才 replace，见那里的说明。
  */
 export function resolveWeekParam(param: string | undefined, today: DateStr, weekStart: WeekStart): DateStr {
-  if (param && /^\d{4}-\d{2}-\d{2}$/.test(param)) {
-    try {
-      const { y } = parseDate(param);
-      if (inYearRange(y)) return startOfWeek(param, weekStart);
-    } catch {
-      // 日期不存在（如 2-30），按非法处理
-    }
-  }
-  return startOfWeek(today, weekStart);
+  return parseWeekParam(param, weekStart) ?? startOfWeek(today, weekStart);
 }
 
 /**

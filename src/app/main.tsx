@@ -33,7 +33,8 @@ import { createLogQueue, guardOwner } from '../core/log/queue.ts';
 import { devicePlatform, readInstallId, withLock } from '../platform/device-info.ts';
 import { clearLogQueue, clearOtherLogQueues, logQueueStore } from '../platform/log-store.ts';
 import { probeAccountForExit } from '../platform/account-status.ts';
-import { ensurePushSubscription } from '../platform/push-claim.ts';
+import { runPushClaim, setPushClaimContext } from '../platform/push-claim-run.ts';
+import { setRemindHoldLog } from '../kit/state/remind-queue.ts';
 import { browserLifecycle } from '../platform/net.ts';
 import { createLogUploader, createSupabaseTransport } from '../platform/sync-net.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
@@ -121,6 +122,8 @@ async function start(): Promise<void> {
 
   // 日志通道（K8-logs、K6-log）：outbox、同步、时区上报、设备登记都交到这里；写 logs 表的那一端接上以前先在内存里留着（log-channel.ts）
   const logs = createLogChannel();
+  // 提醒压住超时自动放开时记一条（B2 FA-4 代码审查 N1；日志没有动作名白名单）
+  setRemindHoldLog((reason) => logs.log('remind_hold_timeout', { code: reason }));
   // 客户端错误日志（TC-B1-68、架构 6.1）：只记“类型@文件名:行号”，同一个 code 每天 5 条
   registerJsErrorLog(logs.log);
   // 写 logs 表的那一端（架构 0.38 第 68 条）：localStorage 队列 lemo.logq.<user_id>，主页在线时批量上传；别的账号留下的队列清掉
@@ -217,6 +220,12 @@ async function start(): Promise<void> {
     ...(device ? { deviceId: device.id, ensureDevice: device.ensure } : {}),
   });
 
+  // 推送认领的参数（账号锁、设备登记）由 platform/push-claim-run.ts 统一拼，启动认领和设置 › 提醒 的点按认领用同一份（FA-4 代码审查中 2）
+  setPushClaimContext({
+    userId, platform, claim: (a) => transport.claimEndpoint(a), sessionId: () => readSessionId(),
+    ...(device ? { ensureDevice: device.ensure, invalidateDevice: device.invalidate } : {}),
+  });
+
   // version_too_new 时上面已经注册过
   // 注册以后盯住“后台装好了新版本”（8.1）：顶部提示“有新版本 · 重新打开”（App.tsx 的 UpdateBanner），不强制刷新
   if (!import.meta.env.DEV && boot.status !== 'version_too_new') {
@@ -227,11 +236,8 @@ async function start(): Promise<void> {
       checkSwOnForeground(reg, { life: browserLifecycle });
       // 推送订阅（FA-1；换账号时旧订阅已退订，FE-2）：通知权限已给就重订、认领到这个账号；没给不弹权限框（只在设置 › 提醒的点按里请求）
       // 先等本会话的设备行登记好再认领（代码审查 M3、安全审查 S1）；记录按“账号 + 会话 + endpoint”的摘要（FA2-1、FA2-2）；几个标签页串着来（S2）
-      void ensurePushSubscription({
-        userId, platform, claim: (a) => transport.claimEndpoint(a), sessionId: () => readSessionId(),
-        ...(device ? { ensureDevice: device.ensure, invalidateDevice: device.invalidate } : {}),
-        lock: (fn) => withLock(`lemo-push-claim:${userId}`, fn),
-      });
+      // 结果写进 push-status 交给设置 › 提醒（被占着出“移除它”、要重新打开、不支持）
+      void runPushClaim();
     });
   }
 }

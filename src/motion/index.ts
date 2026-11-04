@@ -11,6 +11,10 @@ export { vtName } from './vt.ts';
 // 减少动态效果只有一套判断（系统设置或 <html data-rm="1">，UI-4 M-1）；React 组件经 useReducedMotionPref 读同一个
 export { prefersReducedMotion, subscribeReducedMotion } from './reduced.ts';
 export type { AppearKind } from './presets.ts';
+// 左右滑动翻页（B2 FA-3 月历、周视图）：只依赖 react，不带 motion/react
+export { useSwipePager, type SwipePagerHandlers } from './swipe-pager.ts';
+// 上下拖动收起 / 展开（B2 FA-3 月历上拖收起）：只依赖 react
+export { useDragCollapse, type DragCollapse } from './drag-collapse.ts';
 
 const bezierCss = (b: Bezier): string => `cubic-bezier(${b.join(',')})`;
 

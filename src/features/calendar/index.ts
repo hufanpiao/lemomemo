@@ -4,6 +4,15 @@ import { lazy } from 'react';
 
 export const routes = [
   { name: 'calendar', Page: lazy(() => import('./ui/CalendarPage.tsx')) },
+  // 月历、周视图（B2 FA-3）：#/cal/month/<年-月>、#/cal/week/<日期>，和 #/calendar 同一个页面。
+  // samePageAs：App 挂 'calendar' 那条的组件、错误边界用同一个 key，两者互相跳时不重新挂载、焦点不丢（代码审查 M7）；
+  // 这里的 Page 只是占位，不会被渲染（A27 不许 index.ts 导出变量引用，所以不能两条共用一个 lazy 变量）
+  { name: 'cal', Page: lazy(() => import('./ui/CalendarPage.tsx')), samePageAs: 'calendar' },
   // 日程编辑页（B2 FA-2）：#/event/<id>、#/event/new
   { name: 'event', Page: lazy(() => import('./ui/EventEditPage.tsx')) },
 ] as const;
+
+/** 设置 › 日历（B2 FA-3 第二段；R-320 二级页 #/settings/calendar）：节假日三选一、每周第一天；设置页懒加载它（顶栏和返回由设置页画） */
+export const CalendarSettings = lazy(() => import('./ui/CalendarSettings.tsx'));
+/** 设置首页“日历”一行（R-320）：摘要“节假日：中国 ›”，点了进二级页；props: { onOpen } */
+export const CalendarSettingsEntry = lazy(() => import('./ui/CalendarSettingsEntry.tsx'));

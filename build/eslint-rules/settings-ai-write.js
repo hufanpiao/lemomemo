@@ -4,6 +4,7 @@
 //      （ai.enabled、ai.vault 删掉一行在 aiAllowed 里等于回到默认值；别的键要删，先在架构 0.41 登记再给这条规则开口）
 //   ② 参数里出现字符串 'ai.enabled' / 'ai.vault' → 报：这两个键只经 core/ai-settings.ts 的 writeAiSwitch 写
 // 例外（eslint.config.js 里关掉）：core/ai-settings.ts（唯一写法，恢复时要写 deleted_at: null）、core/write.ts（守门本身）、测试。
+// 恢复的 patch 内容只由 core/setting-patch.ts 的 settingPatch 给（ai-settings 和 calendar 的 cal-settings 共用，B2 安全审查 FA3-2），别处不要自己拼
 // 静态规则管不到的：数据先放进变量再传（write.patch('settings', id, data)）、表名是变量——运行时还有 write.* 的 guardSettings
 // 和服务器的 settings_guard 两道（0.41 第 1、2 条）
 const AI_KEYS = new Set(['ai.enabled', 'ai.vault']);

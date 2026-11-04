@@ -7,6 +7,8 @@ import { transition } from '../motion/index.ts';
 export const ROUTE_NAMES = [
   'today',
   'calendar',
+  // 月历、周视图（B2 FA-3，架构 5.12）：#/cal/month/<年-月>、#/cal/week/<那周任一天>；底栏的 #/calendar 等于本月
+  'cal',
   'todos',
   // 编辑页（B2 FA-2）：#/event/<id>、#/event/new，#/todo/<id>、#/todo/new
   'event',
@@ -90,10 +92,31 @@ function onPopState(e: PopStateEvent): void {
   uaVisualHash = ua ? window.location.hash : null;
 }
 
-function onHashChange(): void {
-  const skip = uaVisualHash !== null && uaVisualHash === window.location.hash;
+// 两个路由是不是同一个页面（App 按登记表的 samePageAs 设，例如 #/calendar 和 #/cal/...）。
+// 架构 5.12：页内切换不用 View Transition。浏览器在同一页里前进 / 后退（月历上个月 ↔ 下个月）也直接画，
+// 不播 380ms 的整页淡入淡出（代码复审 R2）；路由器本身不认识功能登记表，所以由 App 注入
+let samePage: (a: Route, b: Route) => boolean = () => false;
+
+/** App 启动时调一次；测试里可以换 */
+export function setSamePage(fn: (a: Route, b: Route) => boolean): void {
+  samePage = fn;
+}
+
+/** hashchange 的 oldURL 里的 hash；没有（老浏览器、测试里手工派的事件）时返回 null，照常起动画 */
+function oldHashOf(e: Event): string | null {
+  const old = (e as HashChangeEvent).oldURL;
+  if (typeof old !== 'string' || old === '') return null;
+  const i = old.indexOf('#');
+  return i < 0 ? '' : old.slice(i);
+}
+
+function onHashChange(e: Event): void {
+  const now = window.location.hash;
+  const skip = uaVisualHash !== null && uaVisualHash === now;
   uaVisualHash = null;
-  void commit(undefined, !skip);
+  const old = oldHashOf(e);
+  const inPage = old !== null && samePage(parseHash(old), parseHash(now));
+  void commit(undefined, !skip && !inPage);
 }
 
 function subscribe(cb: () => void): () => void {
@@ -140,6 +163,27 @@ export function replaceRoute(name: RouteName, ...params: string[]): Promise<void
   return commit(() => {
     window.history.replaceState({ [DEPTH]: depthNow() }, '', href);
   });
+}
+
+/**
+ * 同一页面里换参数（月历翻月翻周、“今天”、年月选择、规整地址）：push 一条历史，但**不起 View Transition**，直接画新状态。
+ * 页面自己决定要不要动（月历按钮翻页横滑、滑动跟手、键盘和“今天”直接切换，架构 5.12 第 3 点“动效”；B2 FA-3 代码复审 N1）
+ */
+export function navigateInPage(name: RouteName, ...params: string[]): Promise<void> {
+  const href = hrefOf(name, ...params);
+  if (window.location.hash === href) return Promise.resolve();
+  return commit(() => {
+    window.history.pushState({ [DEPTH]: depthNow() + 1 }, '', href);
+  }, false);
+}
+
+/** 同 navigateInPage，但替换当前这条历史（键盘连按合并、非法参数规整） */
+export function replaceInPage(name: RouteName, ...params: string[]): Promise<void> {
+  const href = hrefOf(name, ...params);
+  if (window.location.hash === href) return Promise.resolve();
+  return commit(() => {
+    window.history.replaceState({ [DEPTH]: depthNow() }, '', href);
+  }, false);
 }
 
 /**

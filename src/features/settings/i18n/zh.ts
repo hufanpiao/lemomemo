@@ -93,6 +93,8 @@ export const zh = {
 
   // 设置 › 账号 › 注销账号（R-188、R-192、R-256；功能说明第 30 项；架构 0.29 续第 129、131、137 条）
   'settings.delete.back': '设置',
+  // 设置 › 日历 二级页的顶栏标题（R-320；正文由 calendar 功能提供，和它词典里的 cal.set.title 同一个词）
+  'settings.cal.title': '日历',
   'settings.delete.body.what': '注销后，你在柠檬记里的全部记录、照片、附件、设置，以及服务器上的备份都会删除。',
   'settings.delete.body.cooling': '提交后有 7 天冷静期：账号先停用，所有设备都会退出；{date} 之前用邮箱验证码登录，可以选择恢复账号。',
   'settings.delete.body.final': '满 7 天后彻底删除，不能再恢复。',

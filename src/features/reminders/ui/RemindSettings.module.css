@@ -1,0 +1,393 @@
+/* 设置 › 提醒与通知（B2 FA-4）：外观照设置页，功能之间不共用样式，这里照写一份（抄自 calendar 的 CalendarSettings.module.css，
+   那边注明了来源是 settings/ui/SettingsPage.module.css；设置页那边改了这几条要一起改，抽成 kit 组件记进待办）。
+   本文件自己的：.notice / .noticeText / .act / .ok（顶部提示和行内按钮）、.switch、.timeLbl / .time（免打扰时段） */
+
+/* 组标题写在卡片上方（同设置页 .gt） */
+.gt {
+  margin: 16px 4px 6px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-weight: 400;
+}
+
+section:first-child > .gt {
+  margin-top: 0;
+}
+
+.grp {
+  margin: 0;
+  padding: 0 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: var(--hit);
+  border-bottom: 1px solid var(--line);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.tx {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-15);
+  font-weight: inherit;
+  overflow-wrap: anywhere;
+}
+
+/* 节假日每个选项一行：44 高、行间分隔线，整行可点（label），选中的右边墨色“✓”（设计审查 M8：不用柠檬黄圆点，白卡上对比度不够） */
+.choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.choice:last-child {
+  border-bottom: 0;
+}
+
+.choice:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+.check {
+  flex: none;
+  width: 20px;
+  color: var(--text);
+  font-size: var(--fs-17);
+  font-weight: 600;
+  text-align: center;
+}
+
+.seg {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+}
+
+.segBtn {
+  position: relative;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.segBtn[aria-pressed='true'] {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+/* 扩点击区到至少 44×44（同设置页的写法） */
+.segBtn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.sn {
+  margin: 6px 4px 16px;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.error {
+  margin: 8px 4px 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+/* 设置首页的“日历”一行（R-320）：整行是按钮，左“日历”、右摘要和“›” */
+.rowBtn {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/* 整行宽、字靠左的行按钮按下不缩放，改成变淡（同设置页 .row .rowBtn，负责人 10-31） */
+.row .rowBtn {
+  transition: opacity var(--dur-press) var(--ease-out);
+}
+
+.row .rowBtn[data-state="pressed"] {
+  transform: none;
+  opacity: var(--press-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row .rowBtn {
+    transition: none;
+  }
+}
+
+:global(:root[data-rm="1"]) .row .rowBtn {
+  transition: none;
+}
+
+.v {
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-align: right;
+}
+
+.chev {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 只给读屏的文字（首页“日历”一组的组标题） */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 顶部提示（推送被占着、要重新打开、不支持）：浅色卡片，下面一个行内按钮 */
+.notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.noticeText {
+  margin: 0;
+  font-size: var(--fs-14);
+  overflow-wrap: anywhere;
+}
+
+.act {
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-size: var(--fs-14);
+  font-weight: 600;
+}
+
+.act:disabled {
+  opacity: var(--press-dim);
+}
+
+.danger,
+.dangerFill,
+.ghost {
+  min-height: var(--hit);
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-14);
+  font-weight: 600;
+}
+
+/* “移除它…”：次要的危险样式（描边 + 危险色字；设计 M7），确认对话框里的“移除”用危险底色 */
+.danger {
+  border: 1.5px solid var(--danger-text);
+  background: none;
+  color: var(--danger-text);
+}
+
+.dangerFill {
+  border: 0;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.ghost {
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+}
+
+.danger:disabled {
+  opacity: var(--press-dim);
+}
+
+.dlgBtns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.danger:focus-visible,
+.dangerFill:focus-visible,
+.ghost:focus-visible,
+.act:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.ok {
+  margin: 0;
+  color: var(--ok-text);
+  font-size: var(--fs-13);
+}
+
+/* 免打扰拨动开关（设计 M6）：关 = 描边 + 左边圆钮；开 = 墨色底 + 右边圆钮。开关状态靠位置和墨色区分，不靠柠檬黄
+   （对比度：remind-toggle-on / knob / off，build/contrast-pairs.json） */
+.toggle {
+  flex: none;
+  width: 48px;
+  height: 28px;
+  margin: 0;
+  border: 1.5px solid var(--text-2);
+  border-radius: var(--r-pill);
+  background: radial-gradient(circle at 12px 50%, var(--text-2) 8px, transparent 8.5px), var(--panel);
+  cursor: pointer;
+  appearance: none;
+}
+
+.toggle:checked {
+  border-color: var(--ink);
+  background: radial-gradient(circle at calc(100% - 12px) 50%, var(--on-ink) 9px, transparent 9.5px), var(--ink);
+}
+
+.timeLbl {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--hit);
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.time {
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+}
+
+.toggle:focus-visible,
+.time:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 未来 7 天的提醒（线框 sR7，设计 M5） */
+.upSummary {
+  margin: 0 0 8px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  text-align: center;
+}
+
+.upHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.upDay {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.rowLi {
+  border-bottom: 1px solid var(--line);
+}
+
+.rowLi:last-child {
+  border-bottom: 0;
+}
+
+.upRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.upTime {
+  flex: none;
+  width: 44px;
+  font-family: var(--f-num);
+  font-size: var(--fs-14);
+  font-variant-numeric: tabular-nums;
+}
+
+.upMk {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  width: 18px;
+}
+
+.upText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.upText b {
+  overflow: hidden;
+  font-size: var(--fs-15);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upText small {
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.upRow:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

@@ -3,7 +3,7 @@
 // 进场最小从 scale(0.95) 开始，不从 0 开始（17.3）
 import { tr } from './tokens.ts';
 
-export type AppearKind = 'toast' | 'sheet' | 'row' | 'page' | 'scrim';
+export type AppearKind = 'toast' | 'sheet' | 'row' | 'page' | 'scrim' | 'popover';
 
 export interface Preset {
   initial: { opacity: number; transform: string };
@@ -42,6 +42,14 @@ export const presets: Record<AppearKind, Preset> = {
     initial: { opacity: 0, transform: 'translateY(0px) scale(1)' },
     animate: { opacity: 1, transform: 'translateY(0px) scale(1)' },
     exit: { opacity: 0, transform: 'translateY(0px) scale(1)' },
+    transition: tr.ui,
+    reduced: { opacity: 0 },
+  },
+  // 浮层（年月选择器，架构 5.12 第 3 点“弹出用 Appear 的 popover”）：从触发处略微下移、放大一点点淡入
+  popover: {
+    initial: { opacity: 0, transform: 'translateY(-4px) scale(0.97)' },
+    animate: { opacity: 1, transform: 'translateY(0px) scale(1)' },
+    exit: { opacity: 0, transform: 'translateY(-4px) scale(0.97)' },
     transition: tr.ui,
     reduced: { opacity: 0 },
   },

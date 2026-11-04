@@ -19,6 +19,7 @@
 // 纯 TS：不准 import React 和任何功能（A1）
 import { getBoot } from './boot.ts';
 import { collection, type Row } from './store.ts';
+import { settingPatch } from './setting-patch.ts';
 import { write, type WriteResult } from './write.ts';
 
 export type AiSwitch = { key: 'ai.enabled'; value: boolean } | { key: 'ai.vault'; value: false };
@@ -46,12 +47,8 @@ export function writeAiSwitch(sw: AiSwitch, newId: () => string = () => crypto.r
 /** 按给定的那一行写（没有就 insert） */
 async function writeOn(sw: AiSwitch, row: SettingsRow | undefined, newId: () => string): Promise<WriteResult> {
   if (!row) return write.insert('settings', { id: newId(), key: sw.key, value: sw.value });
-  const removed = row.deleted_at !== null && row.deleted_at !== undefined;
-  const undone = row.undone === true;
-  if (row.value === sw.value && !removed && !undone) return { ok: true, item: null };
-  const data: Record<string, unknown> = { value: sw.value };
-  if (removed) data['deleted_at'] = null;
-  if (undone) data['undone'] = false;
+  const data = settingPatch(row, sw.value);
+  if (!data) return { ok: true, item: null };
   return write.patch('settings', row.id, data);
 }
 

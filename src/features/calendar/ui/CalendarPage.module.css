@@ -1,0 +1,1034 @@
+/* 月历、周视图（B2 FA-3，架构 5.12；定稿线框 s2、s3，皮肤视觉稿 .mv-c / .wlane / .dwkv / .ympop）：只用令牌（A11）
+   项目色 1–6：块底色 --pN、左侧深色竖线 --pNs、字 --on-p（设计审查 H1）；0 = 没有项目（--panel-2 底、--text-2 竖线、--text 字）
+   今天：--today-bg 底 + --today-ring 圈（简洁·浅色是透明底墨色细圈，R-132，设计审查 H2） */
+.page {
+  position: relative;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 12px) 16px 140px;
+  background: var(--bg);
+  color: var(--text);
+
+  /* 上拖收起要几层叠放（星期行压住上移的格子、日清单压住淡出的格子），层级关在页面里：
+     页面整体仍在第 0 层，不会盖过顶部安全区底色条（base.css body::before） */
+  isolation: isolate;
+}
+
+/* ───────── 页顶（R-101 摆法 B） ───────── */
+.top {
+  display: flex;
+  align-items: center;
+  min-height: var(--hit);
+  margin-bottom: 6px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-17);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pillChev {
+  /* 下拉箭头用两条边画（“⌄”在部分中文字体里像字母 v） */
+  width: 7px;
+  height: 7px;
+  margin: -4px 2px 0;
+  border-right: 1.5px solid var(--text-2);
+  border-bottom: 1.5px solid var(--text-2);
+  transform: rotate(45deg);
+}
+
+.calnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+}
+
+.segBtn {
+  min-width: var(--hit);
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.segBtn[aria-pressed='true'] {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+.navBtns {
+  display: flex;
+  align-items: center;
+
+  /* 视觉 32 px、点按区各 44 px：间距 12 px，三个点按区刚好相接、不重叠（设计复审 N6） */
+  gap: 12px;
+}
+
+.nb,
+.tdy {
+  position: relative;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.nb {
+  width: 32px;
+  padding: 0;
+  font-size: var(--fs-17);
+  line-height: 1;
+}
+
+.tdy {
+  padding: 0 12px;
+  font-weight: 600;
+}
+
+/* 点按区各 44 px（视觉 32 px，伸出去的部分用伪元素补，R-101） */
+.nb::after,
+.tdy::after {
+  position: absolute;
+  inset: -6px;
+  content: '';
+}
+
+.nb[aria-disabled='true'],
+.tdy[aria-disabled='true'] {
+  color: var(--text-2);
+  cursor: default;
+}
+
+/* “今天”灰的时候和能点的时候差得更明显（设计复审 N3）：不填底、不加粗，只留细边 */
+.tdy[aria-disabled='true'] {
+  background: none;
+  font-weight: 400;
+}
+
+.offline {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.pager {
+  touch-action: pan-y;
+}
+
+/* 松手后滑回 0（跟手时不加过渡）；减少动态效果时 useSwipePager 不跟手，这里也不动（17.2 第 5 点） */
+.settling {
+  transition: transform var(--dur-ui) var(--ease-standard);
+}
+
+:global(:root[data-rm="1"]) .settling {
+  transform: none;
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settling {
+    transform: none;
+    transition: none;
+  }
+}
+
+.card {
+  border-radius: var(--r-md);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+/* 月格卡片不整体垫底色，底色画在每一格（.cell）上：上拖收起时别的行淡出，连底色一起淡掉，露出页面底色 */
+.monthCard {
+  background: none;
+}
+
+/* ───────── 年月选择器（视觉稿 .ympop） ───────── */
+.ympop {
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  padding: 12px;
+}
+
+/* 手机：铺满屏宽、左右各留 16 px（Popover 的 collisionPadding 也是 16），不再只盖住半边（设计复审 N1） */
+@media (width < 768px) {
+  .ympop {
+    width: calc(100vw - 32px);
+  }
+}
+
+/* 手机上选择器后面的遮罩（挂在 body 上）：比浮层（30）低一层；进出场交给 <Appear kind="scrim"> */
+.pickScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  background: var(--scrim);
+}
+
+.ymCols {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px;
+}
+
+.ymHead {
+  margin-bottom: 6px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.ymYears {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 232px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ymMonths {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.ymIt {
+  position: relative;
+  min-height: var(--hit);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font-family: var(--f-num);
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.ymIt:hover {
+  background: var(--panel-2);
+}
+
+.ymOn,
+.ymOn:hover {
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 600;
+}
+
+/* 今天所在的年 / 月：下面一个小点 */
+.ymCur::after {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: var(--r-pill);
+  background: currentcolor;
+  content: '';
+}
+
+.ymFt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.ymHint {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+
+  /* 不折行（设计复审 N5）；放不下时省略 */
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ymToday {
+  flex: none;
+  min-height: var(--hit);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-13);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ───────── 月格 ───────── */
+.weekdays,
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+/* 上拖收起时格子整片上移，从星期行底下穿过：星期行垫底色、压在上面 */
+.weekdays {
+  position: relative;
+  z-index: 1;
+  background: var(--panel);
+}
+
+/* 页面量锚点那一行的位置用（格子的 offsetTop 相对它） */
+.grid {
+  position: relative;
+}
+
+.wd {
+  padding: 6px 0 4px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  text-align: center;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+  min-height: 80px;
+  padding: 4px 3px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.out {
+  color: var(--text-2);
+}
+
+/* 放假只用灰底，周末、节日名不另上颜色（设计审查 M4） */
+.holiday {
+  background: var(--hol-bg);
+}
+
+.sel {
+  border-radius: 8px;
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+
+.dayNum {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: var(--r-pill);
+  font-family: var(--f-num);
+  font-size: var(--fs-13);
+}
+
+.today .dayNum {
+  background: var(--today-bg);
+  box-shadow: inset 0 0 0 1.5px var(--today-ring);
+  color: var(--today-fg);
+  font-weight: 700;
+}
+
+/* 一行文字：节假日 > 节气 > 农历；纪念日菱形跟在后面。一直占着高度：农历按需加载，加载前后格子不跳动 */
+.line {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 12px;
+  color: var(--text-2);
+  font-size: var(--fs-10);
+  line-height: 12px;
+}
+
+.lineTx {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.holName {
+  color: var(--text);
+}
+
+.lunar,
+.work {
+  color: var(--text-2);
+}
+
+/* 纪念日菱形（R-105）：柠檬黄填充 + 正文色边（深色模式正文色是浅色，自动成浅色边） */
+.dia {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 1px;
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1.5px var(--text);
+  transform: rotate(45deg);
+}
+
+/* 两国都显示：另一国的节日小一号写在第二行（R-97） */
+.hol2 {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-9-5);
+  line-height: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 事项标签：9.5 px（R-104 有意例外，不要改） */
+.mark {
+  display: block;
+  height: 15px;
+  overflow: hidden;
+  padding: 0 3px 0 5px;
+  border-radius: 3px;
+  font-size: var(--fs-9-5);
+  font-style: normal;
+  line-height: 15px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.more {
+  color: var(--text-2);
+  font-size: var(--fs-9-5);
+  line-height: 13px;
+}
+
+.out .mark {
+  opacity: 0.55;
+}
+
+/* 项目色：1–6；0 = 没有项目。底色 + 左侧 2 px 深色竖线 + --on-p 字（视觉稿 .lgtag / .wev） */
+.c0 {
+  background: var(--panel-2);
+  box-shadow: inset 2px 0 0 var(--text-2);
+  color: var(--text);
+}
+
+.c1 {
+  background: var(--p1);
+  box-shadow: inset 2px 0 0 var(--p1s);
+  color: var(--on-p);
+}
+
+.c2 {
+  background: var(--p2);
+  box-shadow: inset 2px 0 0 var(--p2s);
+  color: var(--on-p);
+}
+
+.c3 {
+  background: var(--p3);
+  box-shadow: inset 2px 0 0 var(--p3s);
+  color: var(--on-p);
+}
+
+.c4 {
+  background: var(--p4);
+  box-shadow: inset 2px 0 0 var(--p4s);
+  color: var(--on-p);
+}
+
+.c5 {
+  background: var(--p5);
+  box-shadow: inset 2px 0 0 var(--p5s);
+  color: var(--on-p);
+}
+
+.c6 {
+  background: var(--p6);
+  box-shadow: inset 2px 0 0 var(--p6s);
+  color: var(--on-p);
+}
+
+/* 图例（线框 s3） */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 8px 4px 0;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+}
+
+.legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legHol {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--hol-bg);
+}
+
+.legTag {
+  display: inline-block;
+  height: 15px;
+}
+
+/* ───────── 选中那天的清单 ───────── */
+.dayList {
+  margin-top: 12px;
+  padding: 4px 12px 8px;
+  border-radius: var(--r-md);
+  background: var(--panel);
+}
+
+.dayListHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 0 6px;
+  font-size: var(--fs-14);
+  font-weight: 600;
+}
+
+.dayListN {
+  flex: none;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  font-weight: 400;
+}
+
+.dayEmpty {
+  margin: 4px 0 8px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.dayRows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dayRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dayTime {
+  flex: none;
+  width: 44px;
+  color: var(--text-2);
+  font-family: var(--f-num);
+  font-size: var(--fs-12);
+}
+
+.dayMk {
+  flex: none;
+  width: 4px;
+  height: 20px;
+  border-radius: 2px;
+}
+
+/* 待办：空心小圆（颜色取竖线色） */
+.dayMkTodo {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: none;
+}
+
+.dayTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fs-14);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ───────── 周视图·手机（视觉稿 .wlane） ───────── */
+.wrul {
+  position: relative;
+  height: 18px;
+
+  /* 和泳道按钮对齐：左边 8 内边距 + 64 星期列 + 8 间距，右边 8 + 28 + 8 */
+  margin: 6px 44px 0 80px;
+  color: var(--text-2);
+  font-family: var(--f-num);
+  font-size: var(--fs-10);
+}
+
+.wrul > span {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+}
+
+.lanes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lane {
+  border-top: 1px solid var(--line);
+}
+
+.laneOff {
+  background: var(--hol-bg);
+}
+
+.laneSel {
+  background: var(--panel-2);
+}
+
+.laneBtn {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 58px;
+  padding: 4px 8px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.laneSel .laneBtn {
+  box-shadow: inset 0 0 0 1.5px var(--ink);
+}
+
+.laneWd {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.laneWd small {
+  color: var(--text-2);
+  font-size: var(--fs-10);
+}
+
+.laneWd b {
+  align-self: flex-start;
+  min-width: 22px;
+  border-radius: var(--r-pill);
+  font-family: var(--f-num);
+  font-size: var(--fs-15);
+  text-align: center;
+}
+
+.laneToday {
+  background: var(--today-bg);
+  box-shadow: inset 0 0 0 1.5px var(--today-ring);
+  color: var(--today-fg);
+}
+
+.laneSub {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.allDay {
+  display: block;
+  max-width: 100%;
+  margin-top: 2px;
+  overflow: hidden;
+  padding: 0 3px 0 5px;
+  border-radius: 3px;
+  font-size: var(--fs-9-5);
+  line-height: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.trk {
+  position: relative;
+  height: 44px;
+}
+
+.tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+.wev {
+  position: absolute;
+  top: 12px;
+  height: 20px;
+  overflow: hidden;
+  padding: 0 3px 0 5px;
+  border-radius: 3px;
+  font-size: var(--fs-9-5);
+  line-height: 20px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 上下两排时各占一半 */
+.r0,
+.r1 {
+  height: 19px;
+  line-height: 19px;
+}
+
+.r0 {
+  top: 2px;
+}
+
+.r1 {
+  top: 23px;
+}
+
+.contStart {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.contEnd {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.wmore {
+  position: absolute;
+  bottom: -2px;
+  color: var(--text-2);
+  font-size: var(--fs-9-5);
+}
+
+/* 待办空心圆：边色取项目竖线色（.cN 的 box-shadow 不适用，这里单独写边） */
+.wtd {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -5px 0 0 -5px;
+  border: 1.5px solid var(--text-2);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  box-shadow: none;
+}
+
+.wtd.c1 {
+  border-color: var(--p1s);
+}
+
+.wtd.c2 {
+  border-color: var(--p2s);
+}
+
+.wtd.c3 {
+  border-color: var(--p3s);
+}
+
+.wtd.c4 {
+  border-color: var(--p4s);
+}
+
+.wtd.c5 {
+  border-color: var(--p5s);
+}
+
+.wtd.c6 {
+  border-color: var(--p6s);
+}
+
+.dayMkTodo.c0 {
+  box-shadow: inset 0 0 0 1.5px var(--text-2);
+}
+
+.dayMkTodo.c1 {
+  box-shadow: inset 0 0 0 1.5px var(--p1s);
+}
+
+.dayMkTodo.c2 {
+  box-shadow: inset 0 0 0 1.5px var(--p2s);
+}
+
+.dayMkTodo.c3 {
+  box-shadow: inset 0 0 0 1.5px var(--p3s);
+}
+
+.dayMkTodo.c4 {
+  box-shadow: inset 0 0 0 1.5px var(--p4s);
+}
+
+.dayMkTodo.c5 {
+  box-shadow: inset 0 0 0 1.5px var(--p5s);
+}
+
+.dayMkTodo.c6 {
+  box-shadow: inset 0 0 0 1.5px var(--p6s);
+}
+
+/* 现在线 */
+.wnow {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--nowline);
+}
+
+.tdn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--text-2);
+  font-family: var(--f-num);
+  font-size: var(--fs-13);
+}
+
+.tdn em {
+  color: var(--danger-text);
+  font-size: var(--fs-10);
+  font-style: normal;
+}
+
+/* ───────── 周视图·电脑（视觉稿 .dwkv） ───────── */
+.dwk {
+  display: grid;
+  grid-template-columns: 48px repeat(7, minmax(0, 1fr));
+}
+
+.dHead {
+  border-bottom: 1px solid var(--line);
+}
+
+.dHeadBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 64px;
+  padding: 6px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+
+.dHeadBtn b {
+  min-width: 26px;
+  border-radius: var(--r-pill);
+  font-family: var(--f-num);
+  font-size: var(--fs-17);
+}
+
+.dHeadBtn small {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-10);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dHeadSel {
+  background: var(--panel-2);
+}
+
+.dAllLab {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: var(--fs-10);
+}
+
+.dAll {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+}
+
+.dAllItem {
+  min-height: 24px;
+  overflow: hidden;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-11);
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.dHours {
+  position: relative;
+  color: var(--text-2);
+  font-family: var(--f-num);
+  font-size: var(--fs-10);
+}
+
+.dHours > span {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+}
+
+.dHours > span:first-child {
+  transform: none;
+}
+
+.dCol {
+  position: relative;
+  border-left: 1px solid var(--line);
+  background-image: linear-gradient(var(--line) 1px, transparent 1px);
+  background-size: 100% 40px;
+}
+
+.be {
+  position: absolute;
+  overflow: hidden;
+  padding: 2px 4px 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  font: inherit;
+  font-size: var(--fs-11);
+  text-align: left;
+  cursor: pointer;
+}
+
+.beSh {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dNow {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 2px;
+  margin-top: -1px;
+  background: var(--nowline);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ───────── 上拖收起（线框 s3、R-326） ───────── */
+
+/* 拖动柄和日清单：收起时整块上移，压住淡出的格子 */
+.dayWrap {
+  position: relative;
+  z-index: 1;
+  background: var(--bg);
+}
+
+/* 拖动柄：整行宽、44 px 高的按钮；竖直方向的拖动交给页面（touch-action: none），点一下切换 */
+.fold {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: grab;
+  touch-action: none;
+}
+
+.grab {
+  width: 36px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: var(--text-2);
+}
+
+/* 电脑周视图：放假的表头和那一列灰底（代码复审 N4） */
+.dOff:not(.dHeadSel) {
+  background-color: var(--hol-bg);
+}
+
+/* 拖动柄已经占了 44 px 高，清单不再另留上边距 */
+.fold + .dayList {
+  margin-top: 0;
+}
