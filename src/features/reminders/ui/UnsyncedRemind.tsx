@@ -2,6 +2,8 @@
 // • 带提醒、还没同步上的记录（outbox 状态的 remindRecs，`${table}:${id}`）：列表行尾标“未同步”小标记（UnsyncedRemindMark），
 //   页面上出一行“未同步，提醒可能不响”（UnsyncedRemindHint）；不带提醒的不标、不出
 // • 同步成功（服务器回执）后 outbox 把它移出 remindRecs，标记和提示自动消失
+// • 自己不带 role="status"：读屏播报靠挂它的页面放一个常驻的 role="status" 容器、内容后填进去（提醒接线代码审查 L3：
+//   live region 和内容同时插进来时 iOS VoiceOver 常常不播报）
 // 小标记在 UnsyncedRemindMark.tsx；两个都由列表、今天页经 reminders 的 index.ts 懒加载挂（见交付说明的接线清单）
 import { useUnsyncedRemind } from '../hooks/useUnsynced.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
@@ -13,7 +15,7 @@ export default function UnsyncedRemindHint() {
   const recs = useUnsyncedRemind();
   if (recs.size === 0) return null;
   return (
-    <p className={styles.dim} role="status" data-testid="remind-unsynced-hint">
+    <p className={styles.dim} data-testid="remind-unsynced-hint">
       {t('remind.unsynced', {})}
     </p>
   );

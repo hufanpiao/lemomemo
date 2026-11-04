@@ -86,6 +86,10 @@ export const ko = {
 
   'settings.delete.back': '설정', // R-106 B1 第一遍已审（10-31）；照 settings.title
   'settings.cal.title': '캘린더', // R-106 B2 第一遍已审（11-04）（B2K-05，和 calendar 的 cal.set.title、cal.h1 同名）
+  'settings.remind.title': '알림', // REVIEW(ko)：照 reminders 的 remind.set.title
+  'settings.remind.upcoming': '앞으로 7일 알림', // REVIEW(ko)：照 reminders 的 remind.set.upcoming
+  'settings.remind.showTitle': '알림에 표시할 내용', // REVIEW(ko)：照 reminders 的 remind.set.showTitle（R-347）
+  'settings.remind.dnd': '방해 금지', // REVIEW(ko)：照 reminders 的 remind.set.dnd（R-347）
   'settings.delete.body.what': '탈퇴하면 레모에 기록한 모든 내용과 사진, 첨부파일, 설정, 그리고 서버에 있는 백업까지 모두 삭제돼요.', // R-106 B1 第一遍已审（10-31），按审校意见改过
   'settings.delete.body.cooling': '신청하면 7일간의 탈퇴 대기 기간이 시작돼요. 그동안 계정은 사용 중지되고, 모든 기기에서 로그아웃돼요. {date} 전에 이메일 인증 코드로 로그인하면 계정을 복구할 수 있어요.', // R-106 B1 第一遍已审（10-31），按审校意见 K-09 改过：“7일간의”修饰名词；10-30 设置页导出、注销批新写
   'settings.delete.body.final': '7일이 지나면 완전히 삭제되어 복구할 수 없어요.', // R-106 B1 第一遍已审（10-31），按审校意见改过

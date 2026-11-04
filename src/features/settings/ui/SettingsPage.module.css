@@ -115,10 +115,12 @@
   color: var(--text-2);
 }
 
+/* .sn 的 text-wrap: pretty：最后一个字不单独成行（提醒接线设计复审 L2；不支持的浏览器照旧） */
 .sn {
   margin: 6px 4px 0;
   color: var(--text-2);
   font-size: var(--fs-12-5);
+  text-wrap: pretty;
 }
 
 /* 各组的外层（负责人 10-30 14:55：注销卡片和“界面语言”卡片紧贴）：组和组之间一律 gap 16px，不靠外边距合并。

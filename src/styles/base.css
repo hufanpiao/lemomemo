@@ -57,9 +57,13 @@ body::before {
   pointer-events: none;
 }
 
+/* 韩文按词换行（接手清单 KO-keep-all；设计复审第二轮 N2）：不在音节之间把一个词拆成两行；一个词长到一行放不下时才在词里断
+   （overflow-wrap 用 break-word 不用 anywhere：anywhere 会把弹性布局里文字的最小宽度算成一个字，挤窄的行会被压成一列） */
 :lang(ko) body,
 body:lang(ko) {
   font-family: var(--f-ko);
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* 弹层打开时锁住页面滚动：自己写，不用 Radix 的 react-remove-scroll（它会插内联 <style>，CSP 下被拦；B0 验证结论，架构 2.0 做法 ①） */
@@ -159,4 +163,11 @@ html.scroll-locked body {
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+/* 程序放焦点的非控件（子页标题 h1、设备分组标题 tabIndex={-1}，给读屏用；弹层内容框）不画焦点框（设计复审第二轮 N4）：
+   标题不能操作，刷新或用键盘进来时命中 :focus-visible 会套一个方框，像是选中了什么。能操作的控件不写 tabindex=-1，照旧走上面的
+   :focus-visible；月份选择器的年列（roving tabindex）方向键先选中再移焦点，拿到焦点的那一年已经是 tabIndex 0 */
+[tabindex="-1"]:focus {
+  outline: none;
 }

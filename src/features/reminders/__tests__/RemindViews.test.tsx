@@ -145,6 +145,52 @@ describe('错过的提醒照线框（设计 M3、M4）', () => {
   });
 });
 
+describe('未来 7 天的总览（提醒接线设计复审 M1）', () => {
+  it('连着的几天合并写，日期之间用“、”；每段日期包在不折行的 span 里', () => {
+    nowMs = at('09:00');
+    // 今天 11-03 有、11-05 有，其余 11-04、11-06～11-09 没有
+    data.events = [ev(E1, '和 Kim 开会', '15:30'), ev(E2, '牙医', '10:00', { date: '2026-11-05' })];
+    render(<RemindUpcoming />);
+    const sum = screen.getByTestId('remind-upcoming-summary');
+    expect(sum.textContent).toBe('现在 09:00 之后 · 共 2 条 · 11月4日、11月6～9日 没有提醒');
+    const spans = [...sum.querySelectorAll('span')].filter((s) => s.className.includes('nowrap')).map((s) => s.textContent);
+    expect(spans).toEqual(['现在 09:00 之后 · 共 2 条', '11月4日', '11月6～9日']);
+  });
+  it('跨月的一段写“10月31日～11月2日”；韩文同一套', async () => {
+    const { noneRuns } = await import('../ui/RemindUpcoming.tsx');
+    const { remindZh } = await import('../i18n/zh.ts');
+    const { remindKo } = await import('../i18n/ko.ts');
+    const fmt = (dict: Record<string, string>) => (k: string, p: Record<string, string | number>) =>
+      Object.entries(p).reduce((s, [a, b]) => s.replace(`{${a}}`, String(b)), dict[k] ?? k);
+    const days = ['2026-10-31', '2026-11-01', '2026-11-02', '2026-11-04'] as never;
+    expect(noneRuns(fmt(remindZh) as never, days)).toEqual(['10月31日～11月2日', '11月4日']);
+    expect(noneRuns(fmt(remindKo) as never, ['2026-11-06', '2026-11-07'] as never)).toEqual(['11월 6~7일']);
+  });
+});
+
+describe('未来 7 天：开始那天和组头不是同一天时写哪天（设计复审第二轮 N3）', () => {
+  const subs = (): string[] => screen.getAllByTestId('remind-upcoming-item').map((li) => li.querySelector('small')?.textContent ?? '');
+  it('跨午夜（今晚 23:30 提醒、明天 00:00 开始）写“明天 00:00 开始”；提前一天的写“11月6日 00:10 开始”；同一天的照旧', () => {
+    nowMs = at('09:00');
+    data.events = [
+      ev(E1, '午夜发布', '00:00', { date: '2026-11-04', remind_min: 30 }),
+      ev(E2, '早班机', '00:10', { date: '2026-11-06', remind_min: 1440 }),
+      ev(T1, '和 Kim 开会', '15:30'),
+    ];
+    render(<RemindUpcoming />);
+    const days = screen.getAllByTestId('remind-upcoming-day').map((d) => d.getAttribute('data-date'));
+    expect(days).toEqual(['2026-11-03', '2026-11-05']);
+    expect(subs()).toEqual(['15:30 开始 · 提前 15 分钟', '明天 00:00 开始 · 提前 30 分钟', '11月6日 00:10 开始 · 提前 1 天']);
+  });
+  it('韩文：“내일 00:00 시작”', () => {
+    uiStore.getState().setLocale('ko-KR');
+    nowMs = at('09:00');
+    data.events = [ev(E1, '午夜发布', '00:00', { date: '2026-11-04', remind_min: 30 })];
+    render(<RemindUpcoming />);
+    expect(subs()[0]).toMatch(/^내일 00:00 시작 · /);
+  });
+});
+
 describe('未来 7 天的提醒（设计 M5）', () => {
   it('总览“现在 HH:MM 之后 · 共 N 条”并写出没有提醒的日子；组头“今天 · 11月3日 周二”和条数；副行“开始 · 提前”；点一条进编辑页', () => {
     nowMs = at('09:00');

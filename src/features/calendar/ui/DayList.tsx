@@ -6,12 +6,16 @@
 // • 跨午夜的日程（代码复审 N6）：dayEntries 只把它放在开始那天；这里给后面的日子补一行续段，排在最前，时刻写“至 01:00”
 //   （和周视图泳道次日的续段一致）；点了同样打开那条日程
 // • “往上拖列表、月历收成一周一行”的拖动柄在 CalNav.tsx 的 FoldHandle，这里只管列表
+// • 行尾“未同步”小标记（REMIND-wiring；TC-B2-69、架构 4.2）：带提醒、还没同步上的那一条才标，同步上自动消失；
+//   由 reminders 功能懒加载提供（UnsyncedRemindMark），没标时那一格不占位。周视图泳道、月格不标（定稿线框 s2、s3 没有这个标记）
+import { Suspense } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { minOfDay, msAt, todayOf, weekdayOf } from '../../../../shared/core/date.ts';
 import { isLiveRow, placeEvent, type CalItems, type DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
 import { projectColorIndex } from '../../../../shared/logic/project-color.ts';
 import { dayEntries } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
+import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
 import { colorClass, hm, weekdayKey } from './cal-ui.ts';
@@ -36,6 +40,17 @@ export function carryOver(date: DateStr, items: CalItems, tz: string): { entry: 
     });
   }
   return out.sort((a, b) => (a.entry.startMs ?? 0) - (b.entry.startMs ?? 0));
+}
+
+/** 行尾的“未同步”小标记（没有时整格不画，见 .dayUnsynced:empty） */
+function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
+  return (
+    <span className={styles.dayUnsynced}>
+      <Suspense fallback={null}>
+        <UnsyncedRemindMark table={table} id={id} />
+      </Suspense>
+    </span>
+  );
 }
 
 export function DayList({
@@ -90,6 +105,7 @@ export function DayList({
                 <span className={styles.dayTime}>{t('cal.day.until', { t: endMin >= 24 * 60 ? '24:00' : hm(endMin) })}</span>
                 <span className={`${styles.dayMk} ${colorClass(e.colorIndex)}`} aria-hidden="true" />
                 <span className={styles.dayTitle}>{titleOf(items, e)}</span>
+                <RowMark table="events" id={e.itemId} />
               </button>
             </li>
           ))}
@@ -99,6 +115,7 @@ export function DayList({
                 <span className={styles.dayTime}>{timeOf(e)}</span>
                 <span className={`${styles.dayMk} ${colorClass(e.colorIndex)} ${e.kind === 'todo' ? styles.dayMkTodo : ''}`} aria-hidden="true" />
                 <span className={styles.dayTitle}>{titleOf(items, e)}</span>
+                <RowMark table={e.kind === 'todo' ? 'todos' : 'events'} id={e.itemId} />
               </button>
             </li>
           ))}

@@ -112,10 +112,12 @@ section:first-child > .gt {
   transform: translate(-50%, -50%);
 }
 
+/* .sn 的 text-wrap: pretty：同设置页：最后一个字不单独成行（提醒接线设计复审 L2） */
 .sn {
   margin: 6px 4px 16px;
   color: var(--text-2);
   font-size: var(--fs-12-5);
+  text-wrap: pretty;
 }
 
 .error {

@@ -66,11 +66,11 @@ export const remindKo = {
   'remind.full.doneA11y': '이 할 일 완료', // REVIEW(ko)
   'remind.set.title': '알림', // REVIEW(ko)
   'remind.set.summary.on': '알림 켜짐', // REVIEW(ko)
-  'remind.set.summary.off': '알림 꺼짐', // REVIEW(ko)
+  'remind.set.summary.off': '알림 꺼짐, 알림이 안 울려요', // REVIEW(ko)：照线框 s13 补后半句（设计复审 M2）
   'remind.set.summary.desk': 'Windows 알림', // REVIEW(ko)
   'remind.set.notify': '알림 허용', // REVIEW(ko)
   'remind.set.notify.on': '켜짐', // REVIEW(ko)
-  'remind.set.notify.off': '허용 안 됨', // REVIEW(ko)
+  'remind.set.notify.off': '꺼짐', // REVIEW(ko)：和首页同一个说法（设计复审 M2）
   'remind.set.notify.enable': '알림 켜기', // REVIEW(ko)
   'remind.set.notify.denied': '알림이 꺼져 있어서 제때 알려 드릴 수 없어요. 시스템 설정에서 레모 알림을 허용해 주세요.', // R-106 B2 第一遍已审（11-04）（B2K-S03）
   'remind.set.notify.tauri': 'PC 앱은 Windows 알림을 써요', // R-106 B2 第一遍已审（11-04）（B2K-02）
@@ -78,11 +78,13 @@ export const remindKo = {
   'remind.set.showTitle': '알림에 표시할 내용', // REVIEW(ko)
   'remind.set.showTitle.on': '제목과 이름 그대로', // REVIEW(ko)
   'remind.set.showTitle.off': '잠금 화면에는 “일정 1개”만', // REVIEW(ko)
-  'remind.set.showTitle.note': '“잠금 화면에는 ‘일정 1개’만”을 고르면 “15:00 일정 1개”, “할 일 1개”처럼만 보여 주고, 제목과 할 일 마감 시각은 쓰지 않아요.', // REVIEW(ko)
+  'remind.set.showTitle.note': '잠금 화면 표시를 고르면 “15:00 일정 1개”, “할 일 1개”처럼만 보여 주고, 제목과 마감 시각은 쓰지 않아요.', // REVIEW(ko)：只留一层引号（设计复审 L3）
   'remind.set.dnd': '방해 금지', // REVIEW(ko)
   'remind.set.dnd.from': '시작', // REVIEW(ko)
   'remind.set.dnd.to': '종료', // REVIEW(ko)
   'remind.set.dnd.note': '방해 금지 시간에 걸린 알림은 끝난 뒤에 울려요.', // REVIEW(ko)
+  'remind.set.dnd.range': '{start} – {end}', // REVIEW(ko)：R-347
+  'remind.set.dnd.off': '꺼짐', // REVIEW(ko)：R-347，和 remind.set.notify.off 同一个说法
   'remind.set.dnd.same': '시작과 종료를 같은 시각으로 정할 수 없어요', // R-106 B2 第一遍已审（11-04）（B2K-S15）
   'remind.set.upcoming': '앞으로 7일 알림', // REVIEW(ko)
   'remind.set.upcoming.note': '앞으로 일주일 동안 울릴 알림을 볼 수 있어요. 하나를 누르면 고칠 수 있어요.', // REVIEW(ko)
@@ -128,7 +130,10 @@ export const remindKo = {
   'remind.up.summary': '지금 {time} 이후 · 모두 {n}개', // REVIEW(ko)
   'remind.up.noneOn': '{days} 알림 없음', // REVIEW(ko)
   'remind.up.sep': ', ', // REVIEW(ko)
+  'remind.up.rangeMonth': '{m}월 {d1}~{d2}일', // REVIEW(ko)：连着的几天合并写（设计复审 M1）
+  'remind.up.range': '{from}~{to}', // REVIEW(ko)
   'remind.up.evSub': '{time} 시작 · {mode}', // REVIEW(ko)
+  'remind.up.evSubDay': '{day} {time} 시작 · {mode}', // REVIEW(ko)
   'remind.up.tdSub': '할 일 · {mode}', // REVIEW(ko)
   'remind.mode.snoozed': '나중에 다시 알림', // REVIEW(ko)
   'remind.mode.onTime': '시작할 때 알림', // R-106 B2 第一遍已审（11-04）（B2K-03）
@@ -143,6 +148,5 @@ export const remindKo = {
   'remind.mode.dayBefore': '전날 {time}', // REVIEW(ko)
   'remind.unsynced': '동기화 안 됨. 알림이 안 울릴 수 있어요', // REVIEW(ko)
   'remind.unsynced.mark': '동기화 안 됨', // REVIEW(ko)
-  'remind.clock.wrong': '이 기기의 시간이 맞지 않아요', // REVIEW(ko)
   'remind.clock.wrongNote': '이 기기 시간이 서버와 약 {min}분 차이 나요. 알림은 서버 시간 기준으로 울려요.', // REVIEW(ko)
 } as const satisfies Record<keyof typeof remindZh, string>;

@@ -5,9 +5,13 @@
 // 注销账号是本页里的另一屏，有自己的地址 #/settings/delete（负责人 10-30：注销页左滑应该回设置、不是回今天）：
 // 点入口 push 一条历史，侧滑、浏览器后退、左上角“‹ 返回”都退回设置；离开本机的提示框两屏都在。
 // 设置 › 日历 也是二级页（R-320，定稿线框）：首页只放一行“日历 … 农历 · 节假日：中国 ›”，点进 #/settings/calendar，返回同注销页
+// 设置 › 提醒与通知 同样是二级页（REMIND-wiring；定稿线框 s13、sR7）：首页一行“提醒与通知 … 通知已打开 ›”，点进 #/settings/remind；
+// 二级页最上面“未来 7 天的提醒 ›”再进一层 #/settings/remind/upcoming，顶栏“‹ 提醒与通知”退回上一层；“提醒里写什么 ›”“免打扰 ›”
+// 同样点进去再改（R-347 照线框 sR7）：#/settings/remind/show-title、#/settings/remind/dnd。正文都由 reminders 功能懒加载提供
 import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { goBack, hrefOf, navigate, replaceRoute, useRoute } from '../../../app/router.ts';
+import { goBack, hrefOf, isSubEntry, navigateSub, replaceRoute, useRoute } from '../../../app/router.ts';
 import { CalendarSettings, CalendarSettingsEntry } from '../../calendar/index.ts';
+import { RemindDnd, RemindSettings, RemindSettingsEntry, RemindShowTitle, RemindUpcoming } from '../../reminders/index.ts';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { orderSections, useSettingsPage, type ExitNotice, type SettingsDeps, type SettingsSectionId } from '../hooks/useSettingsPage.ts';
@@ -99,26 +103,111 @@ function ExitDialog({ notice, cleaning, onGo }: { notice: ExitNotice | null; cle
  * 设置 › 日历 二级页（R-320）：顶栏由本页画（和注销页同一个 .top，整个 src 只有这一处起 page-head 名，切页时标题先出后入），
  * 正文是 calendar 功能懒加载的 CalendarSettings；进来时焦点放到标题上（同注销页）
  */
-function CalendarSubView({ onBack }: { onBack(): void }) {
-  const t = useSettingsT();
+function SubView({ back, title, backId, onBack, children }: { back: string; title: string; backId: string; onBack(): void; children: ReactNode }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => titleRef.current?.focus(), []);
   return (
     <>
       <header className={styles.top}>
-        <Pressable className={styles.backBtn} onClick={onBack} data-testid="settings-cal-back">
-          ‹ {t('settings.title', {})}
+        <Pressable className={styles.backBtn} onClick={onBack} data-testid={backId}>
+          {/* “‹”只是样子，读屏名只读“设置”（L2） */}
+          <span aria-hidden="true">‹</span> {back}
         </Pressable>
         <h1 className={styles.title} ref={titleRef} tabIndex={-1}>
-          {t('settings.cal.title', {})}
+          {title}
         </h1>
       </header>
-      <Suspense fallback={null}>
-        <CalendarSettings />
-      </Suspense>
+      <Suspense fallback={null}>{children}</Suspense>
     </>
   );
 }
+
+function CalendarSubView({ onBack }: { onBack(): void }) {
+  const t = useSettingsT();
+  return (
+    <SubView back={t('settings.title', {})} title={t('settings.cal.title', {})} backId="settings-cal-back" onBack={onBack}>
+      <CalendarSettings />
+    </SubView>
+  );
+}
+
+/** 设置 › 提醒与通知（线框 sR7 左图）：顶栏“‹ 设置”，正文是 reminders 的 RemindSettings，最上面一行进未来 7 天 */
+function RemindSubView({ onBack, onOpen }: { onBack(): void; onOpen(name: RemindLeaf): void }) {
+  const t = useSettingsT();
+  return (
+    <SubView back={t('settings.title', {})} title={t('settings.remind.title', {})} backId="settings-remind-back" onBack={onBack}>
+      <RemindSettings onOpenUpcoming={() => onOpen('upcoming')} onOpenShowTitle={() => onOpen('show-title')} onOpenDnd={() => onOpen('dnd')} />
+    </SubView>
+  );
+}
+
+/** 提醒与通知 下面的三层页：地址最后一段、顶栏标题、返回按钮的 testid、正文 */
+type RemindLeaf = 'upcoming' | 'show-title' | 'dnd';
+const REMIND_LEAVES = {
+  upcoming: { title: 'settings.remind.upcoming', backId: 'settings-remind-up-back', Body: RemindUpcoming },
+  'show-title': { title: 'settings.remind.showTitle', backId: 'settings-remind-st-back', Body: RemindShowTitle },
+  dnd: { title: 'settings.remind.dnd', backId: 'settings-remind-dnd-back', Body: RemindDnd },
+} as const;
+
+/** 设置 › 提醒与通知 › 未来 7 天的提醒 / 提醒里写什么 / 免打扰（线框 sR7）：顶栏“‹ 提醒与通知” */
+function RemindLeafView({ leaf, onBack }: { leaf: RemindLeaf; onBack(): void }) {
+  const t = useSettingsT();
+  const { title, backId, Body } = REMIND_LEAVES[leaf];
+  return (
+    <SubView back={t('settings.remind.title', {})} title={t(title, {})} backId={backId} onBack={onBack}>
+      <Body />
+    </SubView>
+  );
+}
+
+type SubName = 'delete' | 'calendar' | 'remind' | `remind-${RemindLeaf}`;
+
+/** 从哪个子页回来，焦点放回上一层的哪一行入口（提醒接线代码审查 L1） */
+const ENTRY_OF: Record<SubName, string> = {
+  delete: 'settings-delete-entry',
+  calendar: 'settings-cal-entry',
+  remind: 'settings-remind-entry',
+  'remind-upcoming': 'remind-open-upcoming',
+  'remind-show-title': 'remind-open-show-title',
+  'remind-dnd': 'remind-open-dnd',
+};
+/** 上一层是哪一页：三层页的上一层是提醒二级页，其余是首页 */
+const parentOf = (v: SubName): SubName | 'home' => (v.startsWith('remind-') ? 'remind' : 'home');
+
+/**
+ * 从子页退回上一层（点返回、侧滑都算）以后，焦点放回进来时点的那一行入口，读屏不用从头再读（L1）。
+ * 上一层重新挂载时标题会先拿到焦点（SubView），这里在它之后再挪；入口是懒加载的，没出来就隔一会儿再找，最多约 1 秒
+ */
+function useFocusBackToEntry(view: SubName | 'home'): void {
+  const prev = useRef(view);
+  useEffect(() => {
+    const from = prev.current;
+    prev.current = view;
+    if (from === 'home' || parentOf(from) !== view) return;
+    const id = ENTRY_OF[from];
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tryFocus = (): void => {
+      const el = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+      if (el) el.focus();
+      else if (tries++ < 20) timer = setTimeout(tryFocus, 50);
+    };
+    tryFocus();
+    return () => {
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [view]);
+}
+
+const isLeaf = (v: string | undefined): v is RemindLeaf => v === 'upcoming' || v === 'show-title' || v === 'dnd';
+
+function viewOf(params: readonly string[]): SubName | 'home' {
+  const [a, b] = params;
+  if (a === 'remind') return isLeaf(b) ? `remind-${b}` : 'remind';
+  return a === 'delete' || a === 'calendar' ? a : 'home';
+}
+
+const leafOf = (view: SubName | 'home'): RemindLeaf | null => (view.startsWith('remind-') ? (view.slice('remind-'.length) as RemindLeaf) : null);
 
 export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   const t = useSettingsT();
@@ -128,23 +217,25 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   const [exportTick, setExportTick] = useState(0);
   const recent = useRecentExport(recentExports, exportTick);
   const [ask, setAsk] = useState<Ask>(null);
-  const sub = useRoute().params[0];
-  const view = sub === 'delete' || sub === 'calendar' ? sub : 'home';
-  /** 二级页（注销、日历）是从本页点进去的（历史里上一条就是设置）：返回时退一步；直接打开 #/settings/delete 等时没有这一条，原地换成设置（不多压一条） */
-  const pushedSub = useRef(false);
-  const openSub = (name: 'delete' | 'calendar'): void => {
-    pushedSub.current = true;
-    void navigate('settings', name);
+  const view = viewOf(useRoute().params);
+  /** 子页（注销、日历、提醒，以及提醒下面的三层页）从上一层点进去时用 navigateSub 压历史，那条历史自己的 history.state 记着
+   *  “是点进来的”（提醒接线代码审查 H1、M1：不记在本组件里，去编辑页再回来、前进后退、刷新以后都还对）。
+   *  返回时有这个记号就退一步（和侧滑同一条路）；没有（直接打开 #/settings/delete 等、被 replace 过）就原地换成上一层，不多压一条 */
+  const openSub = (name: SubName): void => {
+    const l = leafOf(name);
+    void (l ? navigateSub('settings', 'remind', l) : navigateSub('settings', name));
   };
+  const leaf = leafOf(view);
   const openDelete = (): void => openSub('delete');
   const backFromSub = (): void => {
-    if (!pushedSub.current) {
-      void replaceRoute('settings');
+    if (view === 'home') return;
+    if (isSubEntry()) {
+      goBack();
       return;
     }
-    pushedSub.current = false;
-    goBack();
+    void (leaf ? replaceRoute('settings', 'remind') : replaceRoute('settings'));
   };
+  useFocusBackToEntry(view);
   const nowFn = deps?.now ?? Date.now;
   const counting = useRef(false);
 
@@ -185,6 +276,12 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
         <CalendarSettingsEntry onOpen={() => openSub('calendar')} />
       </Suspense>
     ),
+    // 设置 › 提醒与通知（REMIND-wiring，线框 s13）：首页一行摘要“通知已打开 / 通知没开”，点进二级页；由 reminders 功能提供（懒加载）
+    reminders: (
+      <Suspense fallback={null}>
+        <RemindSettingsEntry onOpen={() => openSub('remind')} />
+      </Suspense>
+    ),
     data: <DataSection task={exportTask} />,
     ...(hotkey.status ? { desktop: <DesktopSection hotkey={hotkey} /> } : {}),
     about: <AboutSection />,
@@ -195,6 +292,10 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
         <DeleteAccountView account={account} pendingCount={exit.pendingCount} now={nowFn} onBack={backFromSub} />
       ) : view === 'calendar' ? (
         <CalendarSubView onBack={backFromSub} />
+      ) : view === 'remind' ? (
+        <RemindSubView onBack={backFromSub} onOpen={(l) => openSub(`remind-${l}`)} />
+      ) : leaf ? (
+        <RemindLeafView key={leaf} leaf={leaf} onBack={backFromSub} />
       ) : (
         <>
           <header className={styles.top}>

@@ -11,12 +11,16 @@
 //   收起后 ‹ ›、← →、左右滑翻的是周
 // • 手机上年月选择器打开时，后面加一层半透明遮罩把内容压暗（设计复审 N1）；电脑不压暗
 // • 页面有一个视觉隐藏的 h1（代码复审 N7）
-import { useEffect, useRef, useState } from 'react';
+// • 有带提醒、还没同步上的记录时，翻页按钮下面出一行“未同步，提醒可能不响”（REMIND-wiring；TC-B2-69；reminders 的 UnsyncedRemindHint，懒加载）；
+//   浅灰条是负责人 11-04 定的（R-346）。和“联网后显示节假日”放在同一块浅灰提示里（两条同时出时是一块里的两行，不叠成两块，代码审查 L3）；
+//   这一块常驻、带 role="status"，内容后填进去读屏才会播报；两条都没有时不占位（.notice 里没有 p）
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { monthOf, weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
 import { useRoute } from '../../../app/router.ts';
 import { Appear } from '../../../motion/components.ts';
+import { UnsyncedRemindHint } from '../../reminders/index.ts';
 import { useSwipePager } from '../../../motion/index.ts';
 import { useCalendar } from '../hooks/useCalendar.ts';
 import { useCalHolidayChoice } from '../hooks/useCalSettings.ts';
@@ -83,6 +87,22 @@ function PickScrim() {
       <div data-testid="cal-picker-scrim" aria-hidden="true" />
     </Appear>,
     document.body,
+  );
+}
+
+/** 页顶提示：离线时“联网后显示节假日”、有没同步上的提醒时“未同步，提醒可能不响”（reminders 提供）；常驻的 status 容器，没内容时不占位 */
+function Notice({ offline, t }: { offline: boolean; t: CalViewT }) {
+  return (
+    <div className={styles.notice} role="status" data-testid="cal-notice">
+      {offline ? (
+        <p data-testid="cal-offline">
+          {t('cal.offline', {})}
+        </p>
+      ) : null}
+      <Suspense fallback={null}>
+        <UnsyncedRemindHint />
+      </Suspense>
+    </div>
   );
 }
 
@@ -174,11 +194,7 @@ export default function CalendarPage() {
         onNext={() => button(1)}
         onToday={goToday}
       />
-      {model.holidaysOffline ? (
-        <p className={styles.offline} role="status" data-testid="cal-offline">
-          {t('cal.offline', {})}
-        </p>
-      ) : null}
+      <Notice offline={model.holidaysOffline} t={t} />
       {/* 正文挂着左右滑动（触摸、笔，跟手）；键盘、鼠标用上面的按钮和 ← → */}
       <div
         ref={pagerRef}

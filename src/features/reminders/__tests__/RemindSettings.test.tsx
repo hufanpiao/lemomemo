@@ -38,6 +38,9 @@ vi.mock('../data/push-test.ts', async (orig) => ({ ...(await orig<typeof PushTes
 
 const { default: RemindSettings } = await import('../ui/RemindSettings.tsx');
 const { default: RemindSettingsEntry } = await import('../ui/RemindSettingsEntry.tsx');
+// “提醒里写什么”、免打扰是设置 › 提醒 下面点进去的页（R-347，线框 sR7）
+const { default: RemindShowTitle } = await import('../ui/RemindShowTitle.tsx');
+const { default: RemindDnd } = await import('../ui/RemindDnd.tsx');
 
 const holder = { id: 'd-old', label: 'Y 的 Edge', last_seen_at: '2026-10-30T01:00:00Z', install_id: 'inst-1' };
 
@@ -122,7 +125,7 @@ describe('TC-B2-71：推送被同账号另一条设备记录占着', () => {
 
 describe('设置 › 提醒', () => {
   it('锁屏只显示“有 1 项日程”：默认选“直接写标题”，改了写 remind.show_title = false', async () => {
-    render(<RemindSettings />);
+    render(<RemindShowTitle />);
     expect((screen.getByTestId('remind-show-title-on') as HTMLInputElement).checked).toBe(true);
     await act(async () => {
       fireEvent.click(screen.getByTestId('remind-show-title-off'));
@@ -130,13 +133,13 @@ describe('设置 › 提醒', () => {
     expect(insert).toHaveBeenCalledWith('settings', expect.objectContaining({ key: 'remind.show_title', value: false }));
   });
   it('免打扰：打开写 {start, end}（默认 23:00–08:00），关掉写 enabled:false 保留时段', async () => {
-    const { rerender } = render(<RemindSettings />);
+    const { rerender } = render(<RemindDnd />);
     await act(async () => {
       fireEvent.click(screen.getByTestId('remind-dnd-on'));
     });
     expect(insert).toHaveBeenCalledWith('settings', expect.objectContaining({ key: 'remind.dnd', value: { start: '23:00', end: '08:00' } }));
     data.settings = [{ id: 's1', key: 'remind.dnd', value: { start: '22:00', end: '07:00' }, deleted_at: null, undone: false }];
-    rerender(<RemindSettings key="2" />);
+    rerender(<RemindDnd key="2" />);
     expect((screen.getByTestId('remind-dnd-start') as HTMLInputElement).value).toBe('22:00');
     await act(async () => {
       fireEvent.click(screen.getByTestId('remind-dnd-on'));
@@ -209,29 +212,5 @@ describe('exe 里“发一条测试通知”弹本机测试通知（R-330）', (
     await click();
     expect(sendTestPush).toHaveBeenCalledTimes(1);
     expect(showLocalTest).not.toHaveBeenCalled();
-  });
-});
-
-describe('设置页排版（设计 M5、M6、L6）', () => {
-  it('“未来 7 天的提醒  N 条 ›”在最上面，下面一句说明', () => {
-    render(<RemindSettings />);
-    const root = screen.getByTestId('settings-reminders');
-    const entry = screen.getByTestId('remind-open-upcoming');
-    expect(root.querySelector('button')).toBe(entry);
-    expect(screen.getByTestId('remind-upcoming-count').textContent).toBe('0 条');
-    expect(root.textContent).toContain('看看接下来一周会响哪些提醒，点一条可以改。');
-  });
-  it('免打扰是拨动开关（role=switch），组标题不重复显示', () => {
-    render(<RemindSettings />);
-    const sw = screen.getByRole('switch');
-    expect(sw.getAttribute('data-testid')).toBe('remind-dnd-on');
-    expect(screen.getAllByText('免打扰').length).toBe(2);   // 读屏用的组标题 + 行里的标签；组标题 srOnly
-  });
-  it('开始和结束选成同一时刻：提示，不写', () => {
-    data.settings = [{ id: 's1', key: 'remind.dnd', value: { start: '22:00', end: '07:00' }, deleted_at: null, undone: false }];
-    render(<RemindSettings />);
-    fireEvent.change(screen.getByTestId('remind-dnd-start'), { target: { value: '07:00' } });
-    expect(screen.getByTestId('remind-dnd-same').textContent).toContain('不能是同一个时刻');
-    expect(patch).not.toHaveBeenCalled();
   });
 });

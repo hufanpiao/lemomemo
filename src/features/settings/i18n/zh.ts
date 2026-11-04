@@ -98,6 +98,11 @@ export const zh = {
   'settings.delete.back': '设置',
   // 设置 › 日历 二级页的顶栏标题（R-320；正文由 calendar 功能提供，和它词典里的 cal.set.title 同一个词）
   'settings.cal.title': '日历',
+  // 设置 › 提醒与通知 二级页、未来 7 天的提醒 的顶栏标题（REMIND-wiring；线框 sR7；和 reminders 词典的 remind.set.title、remind.set.upcoming 同一个词）
+  'settings.remind.title': '提醒与通知',
+  'settings.remind.upcoming': '未来 7 天的提醒',
+  'settings.remind.showTitle': '提醒里写什么',
+  'settings.remind.dnd': '免打扰',
   'settings.delete.body.what': '注销后，你在柠檬记里的全部记录、照片、附件、设置，以及服务器上的备份都会删除。',
   'settings.delete.body.cooling': '提交后有 7 天冷静期：账号先停用，所有设备都会退出；{date} 之前用邮箱验证码登录，可以选择恢复账号。',
   'settings.delete.body.final': '满 7 天后彻底删除，不能再恢复。',

@@ -50,7 +50,7 @@ export function DeleteAccountView({ account, pendingCount, now, onBack }: Delete
     <>
       <header className={styles.top}>
         <Pressable className={styles.backBtn} onClick={onBack} disabled={busy} data-testid="settings-delete-back">
-          ‹ {t('settings.delete.back', {})}
+          <span aria-hidden="true">‹</span> {t('settings.delete.back', {})}
         </Pressable>
         <h1 className={styles.title} ref={titleRef} tabIndex={-1}>
           {t('settings.account.delete', {})}

@@ -12,13 +12,17 @@ export const routes = [{ name: 'remind', Page: lazy(() => import('./ui/FullRemin
 export const RemindHost = lazy(() => import('./ui/RemindHost.tsx'));
 /** 今天页顶部“错过 N 条提醒 ›”和底部弹层；没有错过的不画 */
 export const MissedReminders = lazy(() => import('./ui/MissedReminders.tsx'));
-/** 设置 › 提醒与通知 二级页正文；props: { onOpenUpcoming?() }（顶栏和返回由设置页画） */
+/** 设置 › 提醒与通知 二级页正文；props: { onOpenUpcoming?(), onOpenShowTitle?(), onOpenDnd?() }（顶栏和返回由设置页画） */
 export const RemindSettings = lazy(() => import('./ui/RemindSettings.tsx'));
 /** 设置首页“提醒与通知”一行；props: { onOpen() } */
 export const RemindSettingsEntry = lazy(() => import('./ui/RemindSettingsEntry.tsx'));
+/** 设置 › 提醒 › 提醒里写什么（正文；R-347） */
+export const RemindShowTitle = lazy(() => import('./ui/RemindShowTitle.tsx'));
+/** 设置 › 提醒 › 免打扰（正文；R-347） */
+export const RemindDnd = lazy(() => import('./ui/RemindDnd.tsx'));
 /** 设置 › 提醒 › 未来 7 天的提醒（正文） */
 export const RemindUpcoming = lazy(() => import('./ui/RemindUpcoming.tsx'));
-/** “未同步，提醒可能不响”一行（有带提醒、没同步上的记录才出） */
+/** “未同步，提醒可能不响”一行（有带提醒、没同步上的记录才出）；不带 role，挂的页面放常驻的 role="status" 容器 */
 export const UnsyncedRemindHint = lazy(() => import('./ui/UnsyncedRemind.tsx'));
 /** 列表行尾的“未同步”小标记；props: { table: 'events' | 'todos', id } */
 export const UnsyncedRemindMark = lazy(() => import('./ui/UnsyncedRemindMark.tsx'));

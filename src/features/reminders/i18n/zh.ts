@@ -67,11 +67,13 @@ export const remindZh = {
   // 设置 › 提醒与通知（线框 s13 R_PUSH）
   'remind.set.title': '提醒与通知',
   'remind.set.summary.on': '通知已打开',
-  'remind.set.summary.off': '通知没开',
+  // 线框 s13：没开时写“通知没开，提醒不会响”（设计复审 M2）
+  'remind.set.summary.off': '通知没开，提醒不会响',
   'remind.set.summary.desk': 'Windows 通知',
   'remind.set.notify': '通知',
   'remind.set.notify.on': '已打开',
-  'remind.set.notify.off': '未允许',
+  // 和首页同一个说法（设计复审 M2）
+  'remind.set.notify.off': '没开',
   'remind.set.notify.enable': '打开通知',
   'remind.set.notify.denied': '通知被关掉了，提醒不会响。请到系统设置里允许柠檬记发通知。',
   'remind.set.notify.tauri': '电脑版用 Windows 通知',
@@ -79,11 +81,15 @@ export const remindZh = {
   'remind.set.showTitle': '提醒里写什么',
   'remind.set.showTitle.on': '直接写标题和名字',
   'remind.set.showTitle.off': '锁屏只显示“有 1 项日程”',
-  'remind.set.showTitle.note': '选“锁屏只显示‘有 1 项日程’”时，推送只写“15:00 有 1 项日程”“有 1 项待办”这类说法，不写标题，待办也不写截止时刻。',
+  // 只留一层引号（设计复审 L3）
+  'remind.set.showTitle.note': '选了锁屏只显示时，推送只写“15:00 有 1 项日程”“有 1 项待办”，不写标题和截止时刻。',
   'remind.set.dnd': '免打扰',
   'remind.set.dnd.from': '从',
   'remind.set.dnd.to': '到',
   'remind.set.dnd.note': '落在免打扰里的提醒，等免打扰结束再响。',
+  // 二级页“免打扰 ›”那一行的值（R-347）
+  'remind.set.dnd.range': '{start} – {end}',
+  'remind.set.dnd.off': '没开',
   'remind.set.dnd.same': '开始和结束不能是同一个时刻',
   'remind.set.upcoming': '未来 7 天的提醒',
   'remind.set.upcoming.note': '看看接下来一周会响哪些提醒，点一条可以改。',
@@ -131,7 +137,11 @@ export const remindZh = {
   'remind.up.summary': '现在 {time} 之后 · 共 {n} 条',
   'remind.up.noneOn': '{days} 没有提醒',
   'remind.up.sep': '、',
+  'remind.up.rangeMonth': '{m}月{d1}～{d2}日',
+  'remind.up.range': '{from}～{to}',
   'remind.up.evSub': '{time} 开始 · {mode}',
+  /** 开始那天和组头不是同一天（跨午夜、提前一天提醒）：前面写哪天（设计复审第二轮 N3） */
+  'remind.up.evSubDay': '{day} {time} 开始 · {mode}',
   'remind.up.tdSub': '待办 · {mode}',
   'remind.mode.snoozed': '稍后再提醒',
   'remind.mode.onTime': '准时提醒',
@@ -148,6 +158,5 @@ export const remindZh = {
   'remind.unsynced': '未同步，提醒可能不响',
   'remind.unsynced.mark': '未同步',
   // 设置 › 关于（K8-clock，4.3“时钟偏差”）
-  'remind.clock.wrong': '这台设备的时间不准',
-  'remind.clock.wrongNote': '这台设备的时间和服务器差了约 {min} 分钟，提醒按服务器时间算。',
+  'remind.clock.wrongNote': '这台设备的时间和服务器差了约 {min} 分钟，提醒按服务器时间响。',
 } as const;

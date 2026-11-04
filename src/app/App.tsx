@@ -9,15 +9,25 @@
 //   since（从哪一刻起到点的进横幅）在 App 第一次渲染时记下，打开到挂上之间到点的照样响，只是晚响这一会儿：
 //   首屏画完 + whenIdle（requestIdleCallback 最多 2 秒，没有时 300 ms）+ 下载 RemindHost 分包；后台标签页的定时器还会被节流。
 //   提醒自己的硬上限 REMIND_MAX_WAIT_MS 保留（5 秒，从 App 第一次渲染算起，和 first-paint 的兜底谁先到算谁）：比 first-paint 告知页关口那段
-//   （render 后 5 + 1 秒）更早，页面一直不出来（分包挂着、页面出错显示 ErrorView、整屏提示）也最晚这时挂上
+//   （render 后 5 + 1 秒）更早，页面一直不出来（分包挂着、整屏提示）也最晚这时挂上
 //   （这时页面可能还是空白，到点的横幅会先画出来、启动画面随之收起；比一直不响好，接线审查⑥ L3 接受的取舍）
+//   要等这 5 秒的，是所有根元素不是 main[data-feature] 的页面（REMIND-arm-low L2，审查记录 B2-代码审查-提醒挂载统一首屏判断.md）：
+//   编辑页（kit 的 EditShell）、设置 › 日历 正文（CalendarSettings）、告知页路由（ConsentRoute）、整页提醒（FullReminderPage，不过冷启动就是
+//   整页提醒时立刻挂、不等）。冷启动落在这些页面（比如在编辑页刷新）时提醒晚约 5 秒挂，不漏响。
+//   页面出错的 ErrorView、功能关掉的 FeatureOffView 根是 main[data-feature="error"] / main[data-feature="off"]（FIRSTPAINT-nofeature），
+//   首屏判断照常触发，不用等这 5 秒
+// • 告知页之后（REMIND-arm-low L1）：告知页 ConsentPage 也是 main[data-feature]，用户点完同意 App 才第一次渲染，这时 first-paint 早已算画完。
+//   做法二选一里选了“只认 App 挂上以后出现的功能页”：App 第一次渲染时 first-paint 已经算画完（告知页之后；入口没挂 watchAppPainted；
+//   冷启动慢过 15 秒长兜底），就另外等 App 自己的 main[data-feature] 出现，再等空闲。理由：只写注释的话，提醒分包会和今天页分包抢下载，
+//   今天页还没画出来时到点的按钮条可能先出现在空白屏上（启动画面早已收起）；改在 App 里看 DOM，不动 first-paint 和告知页，
+//   同步、supabase-js 的时机不变。页面一直不出来照样有 5 秒硬上限
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { getBoot } from '../core/boot.ts';
 import { RemindHost } from '../features/reminders/index.ts';
 import { useT } from '../kit/hooks/useT.ts';
 import { isProduction } from '../platform/env.ts';
 import { clock } from '../platform/clock.ts';
-import { afterAppPainted } from '../platform/first-paint.ts';
+import { afterAppPainted, APP_PAGE_SELECTOR } from '../platform/first-paint.ts';
 import { whenIdle } from '../platform/session.ts';
 import { reloadPage } from '../platform/sw-register.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
@@ -33,9 +43,11 @@ const devRoutes: readonly FeatureRoute[] = isProduction
 function ErrorView() {
   const t = useT();
   return (
-    <p role="alert" data-testid="app-error">
-      {t('error.unknown', {})}
-    </p>
+    <main data-feature="error">
+      <p role="alert" data-testid="app-error">
+        {t('error.unknown', {})}
+      </p>
+    </main>
   );
 }
 
@@ -43,9 +55,11 @@ function ErrorView() {
 function FeatureOffView() {
   const t = useT();
   return (
-    <p role="status" data-testid="feature-off">
-      {t('feature.off', {})}
-    </p>
+    <main data-feature="off">
+      <p role="status" data-testid="feature-off">
+        {t('feature.off', {})}
+      </p>
+    </main>
   );
 }
 
@@ -101,6 +115,32 @@ export const remindMaxWait = {
   stop: (id: ReturnType<typeof setTimeout>): void => clearTimeout(id),
 };
 
+/** 现在 first-paint 是不是已经算画完了（afterAppPainted 当场执行就是）。没画完时留下一个空回调，画完时跑一下，无害 */
+function paintedAlready(): boolean {
+  let now = false;
+  afterAppPainted(() => {
+    now = true;
+  });
+  return now;
+}
+
+/**
+ * App 自己的功能页（main[data-feature]）出现以后执行 fn（REMIND-arm-low L1）：现在已经有就当场执行，没有就看着 document.body 等它出来。
+ * 只在 App 挂上以后调：告知页那时已经卸掉，看到的一定是 App 的页面。返回取消函数
+ */
+export function whenOwnPage(fn: () => void, root: Element = document.body): () => void {
+  if (root.querySelector(APP_PAGE_SELECTOR)) {
+    fn();
+    return () => undefined;
+  }
+  const mo = new MutationObserver(() => {
+    if (!root.querySelector(APP_PAGE_SELECTOR)) return;
+    mo.disconnect();
+    fn();
+  });
+  mo.observe(root, { childList: true, subtree: true });
+  return () => mo.disconnect();
+}
 
 const allRoutes: readonly FeatureRoute[] = [...featureRoutes, ...devRoutes];
 /** 页面归属：samePageAs 指向的那条，没写就是自己 */
@@ -115,6 +155,8 @@ export function App() {
   // 提醒什么时候挂（首屏减重 ⑥）：冷启动就是整页提醒时立刻挂；否则等首屏画完（first-paint）、浏览器空闲。挂上以后不再收回
   const [remindReady, setRemindReady] = useState(() => route.name === 'remind');
   const [armRemind] = useState(() => () => setRemindReady(true));
+  // App 第一次渲染时 first-paint 已经算画完（告知页之后等，见头注释 L1）：还要等 App 自己的功能页出现
+  const [needOwnPage] = useState(paintedAlready);
   // 硬上限：页面一直不提交（分包挂着不成功也不失败）也最晚 REMIND_MAX_WAIT_MS 挂上
   useEffect(() => {
     if (remindReady) return;
@@ -122,19 +164,25 @@ export function App() {
     const t = remindMaxWait.start(armRemind);
     return () => remindMaxWait.stop(t);
   }, [remindReady, armRemind]);
-  // 首屏画完再等空闲（REMIND-arm-firstpaint）：afterAppPainted 没有取消，用 cancelled 挡住卸载、已经挂上以后的回调
+  // 首屏画完再等空闲（REMIND-arm-firstpaint）：afterAppPainted、whenIdle 都没有取消，用 cancelled 挡住卸载、已经挂上以后的回调
+  // （REMIND-arm-low L3 有测试守着）；等 App 自己的功能页那一段（L1）可以取消，卸载时一起停掉
   useEffect(() => {
     if (remindReady) return;
     let cancelled = false;
+    let stopOwn = (): void => undefined;
     afterAppPainted(() => {
-      if (!cancelled) whenIdle(() => {
+      if (cancelled) return;
+      const idle = (): void => whenIdle(() => {
         if (!cancelled) armRemind();
       });
+      if (needOwnPage) stopOwn = whenOwnPage(idle);
+      else idle();
     });
     return () => {
       cancelled = true;
+      stopOwn();
     };
-  }, [remindReady, armRemind]);
+  }, [remindReady, armRemind, needOwnPage]);
   const all = allRoutes;
   const found = all.find((r) => r.name === route.name);
   // samePageAs：#/calendar 和 #/cal/... 是同一个页面，挂同一个组件、错误边界用同一个 key，

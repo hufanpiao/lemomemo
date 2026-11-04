@@ -562,9 +562,10 @@
   font-size: var(--fs-14);
 }
 
+/* 两颗按钮一样宽：minmax(0, 1fr)，字长的那颗（比如韩文）不把另一颗挤窄（设计复审第三轮 R3-L4） */
 .pageRest {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
 }
 

@@ -1,15 +1,16 @@
 // 设置 › 提醒与通知 二级页正文（B2 FA-4；线框 s13 R_PUSH；数据字典第 9 节 remind.*；TC-B2-71、78、R-282 ③、第 105 条）
 // 顶栏和返回由设置页画（照 calendar 的 CalendarSettings），这里只画正文：
 // • 顶部提示（有才出）：推送被另一条设备记录占着 →“移除它”；推送需要重新打开 → 点一下；这个浏览器的推送服务暂不支持
-// • 通知：已打开 / 未允许（去系统设置）/ “打开通知”按钮（在点按里请求权限，FA-1 留给这里）；exe 写“电脑版用 Windows 通知”
-// • 提醒里写什么：直接写标题和名字（默认，R-46）/ 锁屏只显示“有 1 项日程”（remind.show_title = false，R-188）
-// • 免打扰：开关 + 从 / 到两个时刻（remind.dnd）
+// • 通知：已打开 / 没开（去系统设置；和首页“通知没开，提醒不会响”同一个说法，设计复审 M2）/ “打开通知”按钮（在点按里请求权限，FA-1 留给这里）；exe 写“电脑版用 Windows 通知”
+// • 提醒里写什么 ›：一行写当前选的，点进去再选（R-347 照线框 sR7；选项页在 RemindShowTitle.tsx）——直接写标题和名字（默认，R-46）/ 锁屏只显示“有 1 项日程”（remind.show_title = false，R-188）
+// • 免打扰 ›：一行写“23:00 – 08:00”（没开写“没开”），点进去开关、改时段（R-347 照线框 sR7；那一页在 RemindDnd.tsx）
 // • 未来 7 天的提醒 ›（点了由设置页打开 RemindUpcoming，props.onOpenUpcoming）
-// • 测试提醒能不能收到：发一条试试——网页版调 push-test，exe 弹本机测试通知（R-330）；结果写在下面
+// • “通知”单独一张卡，通知被关掉时说明紧跟在它下面；提醒里写什么、免打扰、测试提醒三行在下面另一张卡里（设计复审第二轮 N8；原来四行一张卡，说明隔了三行）
+// • 测试提醒能不能收到：整行是行按钮，右边“发一条试试 ›”（照线框 R_PUSH，设计复审 M3）——网页版调 push-test，exe 弹本机测试通知（R-330）；结果写在下面
 // 线框这一页的其余几行（日程默认提前、待办默认提醒、纪念日提醒、也装了电脑版时）不在 FA-4 范围，见交付说明
-import { useId, useState } from 'react';
+import { useId } from 'react';
 import { Pressable } from '../../../motion/components.ts';
-import { isHm, upcoming } from '../hooks/remind-view.ts';
+import { upcoming } from '../hooks/remind-view.ts';
 import { useMinuteNow, useReminderList } from '../hooks/useReminders.ts';
 import { useRemindSettings, type TestResult } from '../hooks/useRemindSettings.ts';
 import { useRemindT, type RemindT } from '../hooks/useRemindT.ts';
@@ -41,8 +42,6 @@ function testMsg(t: RemindT, r: TestResult | 'sending'): string {
   }
 }
 
-type S = ReturnType<typeof useRemindSettings>;
-
 /** “未来 7 天的提醒  N 条 ›”放在最上面，下面一句说明（线框 sR7，设计 M5） */
 function UpcomingEntry({ ids, onOpen }: { ids: string; onOpen?: (() => void) | undefined }) {
   const t = useRemindT();
@@ -72,75 +71,16 @@ function UpcomingEntry({ ids, onOpen }: { ids: string; onOpen?: (() => void) | u
   );
 }
 
-/** 免打扰：开关 + 从 / 到 */
-function DndSection({ s, ids }: { s: S; ids: string }) {
-  const t = useRemindT();
-  const [same, setSame] = useState(false);
-  return (
-    <section aria-labelledby={`${ids}-dnd`}>
-      {/* 组标题只给读屏（行里已经写了“免打扰”，设计 M6 去重） */}
-      <h2 id={`${ids}-dnd`} className={styles.srOnly}>
-        {t('remind.set.dnd', {})}
-      </h2>
-      <ul className={styles.grp}>
-        <li className={styles.row}>
-          <label className={styles.tx} htmlFor={`${ids}-dnd-on`}>
-            {t('remind.set.dnd', {})}
-          </label>
-          <input
-            id={`${ids}-dnd-on`}
-            type="checkbox"
-            role="switch"
-            className={styles.toggle}
-            checked={s.dnd.enabled}
-            onChange={(e) => void s.setDnd({ ...s.dnd, enabled: e.currentTarget.checked })}
-            data-testid="remind-dnd-on"
-          />
-        </li>
-        {s.dnd.enabled && (
-          <li className={styles.row}>
-            <label className={styles.timeLbl}>
-              {t('remind.set.dnd.from', {})}
-              <input
-                type="time"
-                className={styles.time}
-                value={s.dnd.start}
-                onChange={(e) => {
-                  const v = e.currentTarget.value;
-                  setSame(v === s.dnd.end);
-                  if (isHm(v) && v !== s.dnd.end) void s.setDnd({ ...s.dnd, start: v });
-                }}
-                data-testid="remind-dnd-start"
-              />
-            </label>
-            <label className={styles.timeLbl}>
-              {t('remind.set.dnd.to', {})}
-              <input
-                type="time"
-                className={styles.time}
-                value={s.dnd.end}
-                onChange={(e) => {
-                  const v = e.currentTarget.value;
-                  setSame(v === s.dnd.start);
-                  if (isHm(v) && v !== s.dnd.start) void s.setDnd({ ...s.dnd, end: v });
-                }}
-                data-testid="remind-dnd-end"
-              />
-            </label>
-          </li>
-        )}
-      </ul>
-      {same && (
-        <p className={styles.error} role="alert" data-testid="remind-dnd-same">
-          {t('remind.set.dnd.same', {})}
-        </p>
-      )}
-      <p className={styles.sn}>{t('remind.set.dnd.note', {})}</p>
-    </section>
-  );
-}
-
-export default function RemindSettings({ onOpenUpcoming }: { onOpenUpcoming?: () => void }) {
+/** 二级页正文；props: { onOpenUpcoming?、onOpenShowTitle?、onOpenDnd?（三个点进去的页，地址由设置页定） } */
+export default function RemindSettings({
+  onOpenUpcoming,
+  onOpenShowTitle,
+  onOpenDnd,
+}: {
+  onOpenUpcoming?: () => void;
+  onOpenShowTitle?: () => void;
+  onOpenDnd?: () => void;
+}) {
   const t = useRemindT();
   const s = useRemindSettings();
   const ids = useId();
@@ -176,45 +116,42 @@ export default function RemindSettings({ onOpenUpcoming }: { onOpenUpcoming?: ()
             )}
           </li>
         </ul>
-        {s.perm === 'denied' && <p className={styles.sn}>{t('remind.set.notify.denied', {})}</p>}
-      </section>
-
-      <section aria-labelledby={`${ids}-st`}>
-        <h2 id={`${ids}-st`} className={styles.gt}>
-          {t('remind.set.showTitle', {})}
-        </h2>
-        <div className={styles.grp} role="radiogroup" aria-labelledby={`${ids}-st`}>
-          {[true, false].map((v) => (
-            <label key={String(v)} className={styles.choice}>
-              <input
-                type="radio"
-                className={styles.srOnly}
-                name={`${ids}-show-title`}
-                checked={s.showTitle === v}
-                onChange={() => void s.setShowTitle(v)}
-                data-testid={`remind-show-title-${v ? 'on' : 'off'}`}
-              />
-              <span className={styles.tx}>{t(v ? 'remind.set.showTitle.on' : 'remind.set.showTitle.off', {})}</span>
-              <span className={styles.check} aria-hidden="true">
-                {s.showTitle === v ? '✓' : ''}
-              </span>
-            </label>
-          ))}
-        </div>
-        <p className={styles.sn}>{t('remind.set.showTitle.note', {})}</p>
-      </section>
-
-      <DndSection s={s} ids={ids} />
-
-      <section aria-labelledby={`${ids}-more`}>
-        <h2 id={`${ids}-more`} className={styles.srOnly}>
-          {t('remind.set.test', {})}
-        </h2>
-        <ul className={styles.grp}>
+        {/* 通知被关掉的说明紧跟在“通知”这一行下面（设计复审第二轮 N8）：“通知”单独一张卡，下面三行另一张 */}
+        {s.perm === 'denied' && (
+          <p className={styles.sn} data-testid="remind-denied-note">
+            {t('remind.set.notify.denied', {})}
+          </p>
+        )}
+        <ul className={`${styles.grp} ${styles.grpNext}`}>
           <li className={styles.row}>
-            <span className={styles.tx}>{t('remind.set.test', {})}</span>
-            <Pressable type="button" className={styles.act} disabled={s.test === 'sending'} onClick={() => void s.sendTest()} data-testid="remind-test">
-              {t('remind.set.test.btn', {})}
+            <Pressable type="button" className={styles.rowBtn} onClick={() => onOpenShowTitle?.()} data-testid="remind-open-show-title">
+              <span className={styles.tx}>{t('remind.set.showTitle', {})}</span>
+              <span className={styles.v} data-testid="remind-show-title-value">
+                {t(s.showTitle ? 'remind.set.showTitle.on' : 'remind.set.showTitle.off', {})}
+              </span>
+              <span className={styles.chev} aria-hidden>
+                ›
+              </span>
+            </Pressable>
+          </li>
+          <li className={styles.row}>
+            <Pressable type="button" className={styles.rowBtn} onClick={() => onOpenDnd?.()} data-testid="remind-open-dnd">
+              <span className={styles.tx}>{t('remind.set.dnd', {})}</span>
+              <span className={styles.v} data-testid="remind-dnd-value">
+                {s.dnd.enabled ? t('remind.set.dnd.range', { start: s.dnd.start, end: s.dnd.end }) : t('remind.set.dnd.off', {})}
+              </span>
+              <span className={styles.chev} aria-hidden>
+                ›
+              </span>
+            </Pressable>
+          </li>
+          <li className={styles.row}>
+            <Pressable type="button" className={styles.rowBtn} disabled={s.test === 'sending'} onClick={() => void s.sendTest()} data-testid="remind-test">
+              <span className={styles.tx}>{t('remind.set.test', {})}</span>
+              <span className={styles.v}>{t('remind.set.test.btn', {})}</span>
+              <span className={styles.chev} aria-hidden>
+                ›
+              </span>
             </Pressable>
           </li>
         </ul>

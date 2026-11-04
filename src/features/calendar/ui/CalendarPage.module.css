@@ -133,13 +133,27 @@
   font-weight: 400;
 }
 
-.offline {
+/* 页顶提示（离线“联网后显示节假日”、reminders 的“未同步，提醒可能不响”）：一块常驻的 role="status" 容器（代码审查 L3）。
+   没有提示时没有 p，高度为 0、不画；有一条或两条时画同一块浅灰（两条是一块里的两行，不叠成两块） */
+.notice {
+  margin: 0;
+}
+
+.notice:has(p) {
   margin: 0 0 8px;
   padding: 8px 12px;
   border-radius: var(--r-sm);
   background: var(--panel-2);
   color: var(--text-2);
   font-size: var(--fs-13);
+}
+
+.notice p {
+  margin: 0;
+}
+
+.notice p + p {
+  margin-top: 4px;
 }
 
 .pager {
@@ -602,6 +616,17 @@
   font-size: var(--fs-14);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* 行尾“未同步”小标记：不跟标题抢宽度、不折行；没有标记时整格不画（不多出一个 gap） */
+.dayUnsynced {
+  flex: none;
+  padding-right: 4px;
+  white-space: nowrap;
+}
+
+.dayUnsynced:empty {
+  display: none;
 }
 
 /* ───────── 周视图·手机（视觉稿 .wlane） ───────── */

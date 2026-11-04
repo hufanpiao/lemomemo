@@ -221,11 +221,12 @@ describe('设置分组顺序（TC-B1-71）', () => {
 
   it('账号排第一、界面语言紧随、数据在后；分组不重复；“退出登录”在最后一个分组之后', async () => {
     await renderPage();
-    // “日历”一组是懒加载的（calendar 功能提供），等它出来再数
+    // “日历”“提醒与通知”两组是懒加载的（calendar、reminders 功能提供），等它们出来再数
     await screen.findByTestId('settings-cal-entry');
+    await screen.findByTestId('settings-remind-entry');
     const heads = screen.getAllByRole('heading', { level: 2 });
     const groups = heads.map((h) => (h.textContent ?? '').trim()).filter((n) => ORDER.includes(n));
-    expect(groups.slice(0, 4)).toEqual(['账号', '界面语言', '日历', '数据']);
+    expect(groups.slice(0, 5)).toEqual(['账号', '界面语言', '日历', '提醒与通知', '数据']);
     expect(groups).toEqual([...groups].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
     expect(new Set(groups).size).toBe(groups.length);
     // 已登录设备、退出其他所有设备、注销入口都在账号这一组里

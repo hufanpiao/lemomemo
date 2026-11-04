@@ -85,7 +85,7 @@ describe('设置页组间距', () => {
     expect(new Set(slots.map((s) => s.parentElement)).size).toBe(1);
     expect(slots[0]?.parentElement?.className).not.toBe('');
     expect(slots[0]?.parentElement?.tagName).toBe('DIV');
-    expect(slots.map((s) => s.getAttribute('data-section-slot'))).toEqual(['account', 'language', 'calendar', 'data', 'about']);
+    expect(slots.map((s) => s.getAttribute('data-section-slot'))).toEqual(['account', 'language', 'calendar', 'reminders', 'data', 'about']);
     const cls = new Set(slots.map((s) => s.className));
     expect(cls.size).toBe(1);
     expect([...cls][0]).not.toBe('');

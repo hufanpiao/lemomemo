@@ -22,6 +22,11 @@ section:first-child > .gt {
   list-style: none;
 }
 
+/* 二级页“通知”单独一张卡，下面三行另一张（设计复审第二轮 N8）：没有说明夹在中间时两张卡之间留 12px；有说明时说明自己的下边距（16px）撑开 */
+.grp + .grpNext {
+  margin-top: 12px;
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;
@@ -110,16 +115,20 @@ section:first-child > .gt {
   transform: translate(-50%, -50%);
 }
 
+/* .sn 的 text-wrap: pretty：最后一个字不单独成行（设计复审 L2；不支持的浏览器照旧） */
 .sn {
   margin: 6px 4px 16px;
   color: var(--text-2);
   font-size: var(--fs-12-5);
+  text-wrap: pretty;
 }
 
+/* 错误、时钟不准等红字：同 .sn，最后一个字不单独成行（第二轮截图里“关于”那句末尾的“响。”单独一行） */
 .error {
   margin: 8px 4px 0;
   color: var(--danger-text);
   font-size: var(--fs-13);
+  text-wrap: pretty;
 }
 
 /* 设置首页的“日历”一行（R-320）：整行是按钮，左“日历”、右摘要和“›” */
@@ -135,6 +144,11 @@ section:first-child > .gt {
   color: inherit;
   font: inherit;
   text-align: left;
+}
+
+/* “测试提醒能不能收到”整行按钮发送中禁用 */
+.rowBtn:disabled {
+  opacity: var(--press-dim);
 }
 
 /* 整行宽、字靠左的行按钮按下不缩放，改成变淡（同设置页 .row .rowBtn，负责人 10-31） */
@@ -155,6 +169,16 @@ section:first-child > .gt {
 
 :global(:root[data-rm="1"]) .row .rowBtn {
   transition: none;
+}
+
+/* 免打扰那一行：整行是开关的 label，点行里哪儿都能切换，点按区就是整行（设计复审 L5） */
+.switchRow {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  cursor: pointer;
 }
 
 .v {
@@ -285,18 +309,31 @@ section:first-child > .gt {
   background: radial-gradient(circle at calc(100% - 12px) 50%, var(--on-ink) 9px, transparent 9.5px), var(--ink);
 }
 
+/* 免打扰“从 / 到”那一行（设计复审第二轮 N1）：上下各留 8px，两半一样宽，时刻框占满自己那一半（左右对称）；
+   不改成“开始 23:00 ›”两行：那样要自己做选时刻的弹层，现在用系统原生的时刻选择（iPhone 上是滚轮），键盘也能直接输 */
+.timesRow {
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 8px 0;
+}
+
 .timeLbl {
   display: flex;
   flex: 1 1 0;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   min-height: var(--hit);
   color: var(--text-2);
   font-size: var(--fs-14);
 }
 
+/* 电脑版宽屏上时刻框最宽 200px，不拉满半行（设计复审第三轮 R3-L2；手机上半行本来就不到 200） */
 .time {
-  min-height: 36px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 200px;
+  min-height: var(--hit);
   padding: 0 8px;
   border: 1px solid var(--inp-line);
   border-radius: var(--r-sm);
@@ -313,10 +350,16 @@ section:first-child > .gt {
 
 /* 未来 7 天的提醒（线框 sR7，设计 M5） */
 .upSummary {
-  margin: 0 0 8px;
+  /* 左右 4px 和组标题 .gt 对齐（设计复审第二轮 N6） */
+  margin: 0 4px 8px;
   color: var(--text-2);
   font-size: var(--fs-12);
-  text-align: center;
+  text-align: left;
+}
+
+/* 一个日期、一段日期、“现在 … 共 N 条”都不从中间折行（设计复审 M1） */
+.nowrap {
+  white-space: nowrap;
 }
 
 .upHead {

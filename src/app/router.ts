@@ -159,6 +159,25 @@ export function navigate(name: RouteName, ...params: string[]): Promise<void> {
   });
 }
 
+// “这一条历史是从上一层点进来的”（设置的二级页、三级页；提醒接线代码审查 H1、M1）：记在那条历史自己的 history.state 上，
+// 浏览器前进后退、刷新、去别的页再回来都跟着那条历史走；页面里点“‹ 返回”时看它决定退一步（goBack）还是原地换成上一层（replaceRoute）
+const SUB = 'lemoSub';
+
+/** 同 navigate，但在新压的那条历史上记“是从上一层点进来的”（isSubEntry 读）；设置页的子页入口用 */
+export function navigateSub(name: RouteName, ...params: string[]): Promise<void> {
+  const href = hrefOf(name, ...params);
+  if (window.location.hash === href) return Promise.resolve();
+  return commit(() => {
+    window.history.pushState({ [DEPTH]: depthNow() + 1, [SUB]: true }, '', href);
+  });
+}
+
+/** 当前这条历史是不是 navigateSub 压进来的（上一条就是上一层）：是就该 goBack，不是（直接打开、被 replace 过）就原地换成上一层 */
+export function isSubEntry(): boolean {
+  const st: unknown = window.history.state;
+  return typeof st === 'object' && st !== null && (st as Record<string, unknown>)[SUB] === true;
+}
+
 /** 同 navigate，但替换当前这条历史、不新压一条（直接打开的子页点“返回”回上一级时用，免得历史里叠一条子页） */
 export function replaceRoute(name: RouteName, ...params: string[]): Promise<void> {
   const href = hrefOf(name, ...params);
