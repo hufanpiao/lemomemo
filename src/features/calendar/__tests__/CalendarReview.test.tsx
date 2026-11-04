@@ -109,11 +109,22 @@ describe('其他复审项', () => {
 
   it('补班写“班·名字”：“班”在最前，放不下时也看得见；名字带“补班”尾巴的去掉再拼（截图 11-04 发现）', async () => {
     const { holText } = await import('../ui/cal-ui.ts');
-    expect(holText({ kind: 'work', name: '国庆节补班' }, '班', '补班')).toBe('班·国庆节');
-    expect(holText({ kind: 'work', name: '测试假' }, '班', '补班')).toBe('班·测试假');
-    expect(holText({ kind: 'work', name: '补班' }, '班', '补班')).toBe('班');
-    expect(holText({ kind: 'work', name: '国庆节补班' }, '班', '')).toBe('班·国庆节补班');
-    expect(holText({ kind: 'off', name: '国庆节' }, '班', '补班')).toBe('国庆节');
+    expect(holText({ kind: 'work', name: '国庆节补班' }, '班')).toBe('班·国庆节');
+    expect(holText({ kind: 'work', name: '测试假' }, '班')).toBe('班·测试假');
+    expect(holText({ kind: 'work', name: '补班' }, '班')).toBe('班');
+    // 韩文界面（B2K-06、R-338、R-340）：取到韩文名“춘절 대체 근무일”去“ 대체 근무일”再 trim；韩文名缺了回落中文名“元旦补班”时去“补班”
+    expect(holText({ kind: 'work', name: '춘절 대체 근무일' }, '근무')).toBe('근무·춘절');
+    expect(holText({ kind: 'work', name: '신정 대체 근무일' }, '근무')).toBe('근무·신정');
+    expect(holText({ kind: 'work', name: '대체 근무일' }, '근무')).toBe('근무');
+    expect(holText({ kind: 'work', name: '元旦补班' }, '근무')).toBe('근무·元旦');
+    expect(holText({ kind: 'off', name: '国庆节' }, '班')).toBe('国庆节');
+    // 读屏（B2K-08）：名字已带补班尾巴就不再加括号；没带的才加
+    const { workdayA11y } = await import('../ui/cal-ui.ts');
+    const koWrap = (name: string) => `${name}(대체 근무)`;
+    const zhWrap = (name: string) => `${name}（补班）`;
+    expect(workdayA11y('춘절 대체 근무일', koWrap)).toBe('춘절 대체 근무일');
+    expect(workdayA11y('元旦补班', zhWrap)).toBe('元旦补班');
+    expect(workdayA11y('测试假', zhWrap)).toBe('测试假（补班）');
   });
 
   it('韩国补休日窄处短写（负责人 11-04 定 L1）：手机月格写“대체휴일”、括号去掉，读屏照旧全称；电脑周表头照旧全称', async () => {
@@ -145,8 +156,8 @@ describe('其他复审项', () => {
     expect(narrowHolName('대체공휴일(개천절)', n)).toBe('대체휴일');
     expect(narrowHolName('대체공휴일', n)).toBe('대체휴일');
     expect(narrowHolName('개천절', n)).toBe('개천절');
-    expect(holText({ kind: 'off', name: '대체공휴일(추석)' }, '班', '补班', n)).toBe('대체휴일');
-    expect(holText({ kind: 'off', name: '대체공휴일(추석)' }, '班', '补班')).toBe('대체공휴일(추석)');
+    expect(holText({ kind: 'off', name: '대체공휴일(추석)' }, '班', n)).toBe('대체휴일');
+    expect(holText({ kind: 'off', name: '대체공휴일(추석)' }, '班')).toBe('대체공휴일(추석)');
   });
 
   it('layoutTop：沿 offsetParent 链一路加到 root；中途祖先带 transform 变成 offsetParent 也照样算对（设计第三轮复审 H1 的根因）', async () => {

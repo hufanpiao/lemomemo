@@ -30,10 +30,15 @@ export const ko = {
   'app.crashed.title': '앗, 멈췄어요', // R-106 B1 第一遍已审（10-30）；App 顶层出错的整屏兜底（K6-sugg3 ⑥）
   'app.crashed.refresh': '새로고침', // R-106 B1 第一遍已审（10-30）；和 update.tooNew.refresh 统一成 새로고침
   'remind.push.event': '{time} {title}', // R-106 B1 第一遍已审（10-31）
+  'remind.push.allDayToday': '오늘 · {title}', // REVIEW(ko)
+  'remind.push.allDayTomorrow': '내일 · {title}', // REVIEW(ko)
+  'remind.push.hiddenAllDayToday': '오늘 일정 1개', // R-106 B2 第一遍已审（11-04）（B2K-01 锁屏短式）
+  'remind.push.hiddenAllDayTomorrow': '내일 일정 1개', // R-106 B2 第一遍已审（11-04）（B2K-01 锁屏短式）
+  'remind.push.hiddenAllDay': '일정 1개', // R-106 B2 第一遍已审（11-04）（B2K-01 锁屏短式）
   'remind.push.todoDue': '{time} 마감', // REVIEW(ko)
-  'remind.push.hidden': '{time}에 일정 1개가 있어요', // REVIEW(ko)
-  'remind.push.hiddenTodo': '{time}에 할 일 1개가 있어요', // REVIEW(ko)
-  'remind.push.hiddenAnniv': '{time}에 기념일 1개가 있어요', // REVIEW(ko)
+  'remind.push.hidden': '{time} 일정 1개', // R-106 B2 第一遍已审（11-04）（B2K-01 锁屏短式）
+  'remind.push.hiddenTodo': '{time} 할 일 1개', // R-106 B2 第一遍已审（11-04）（B2K-01 锁屏短式）
+  'remind.push.hiddenAnniv': '{time} 기념일 1개', // R-106 B2 第一遍已审（11-04）（B2K-01 锁屏短式）
   'remind.push.action.snooze': '미루기', // REVIEW(ko)
   'remind.push.action.done': '완료', // REVIEW(ko)
   'remind.push.action.ack': '확인', // REVIEW(ko)

@@ -1,25 +1,21 @@
 // push-dispatch 测试用的内存数据库（按 store.ts 那几条查询的语义实现，含 private.remind_queue_pop 的出队规则）和共享 logic 接线。
 // LOGIC 和 supabase/functions/push-dispatch/index.ts 的 LOGIC 同一写法（那边从 _shared/gen 引，这里直接引 shared/）。
 // 推送服务用测试开发的替身 tests/fakes/push-service.ts（进程内 fake.fetch）；造数据按“少量设备、每台多条”（替身复核 N1）。
-import { msAt, parseHm } from '../../shared/core/date.ts';
+import { msAt, parseHm, todayOf } from '../../shared/core/date.ts';
 import { isValidTz } from '../../shared/core/tz.ts';
 import { t } from '../../shared/i18n/i18n.ts';
 import { notifyText } from '../../shared/logic/notify-text.ts';
-import { dndDeferUntil, remindAtOf, type EventRemindRow, type TodoRemindRow } from '../../shared/logic/remind.ts';
+import { allDayTimeOf, dndDeferUntil, eventRemindAt, todoRemindAt } from '../../shared/logic/remind.ts';
+import { startAtOf } from '../../shared/logic/remind-actions.ts';
 import type { DispatchStore, HeartbeatDetail } from '../../supabase/functions/push-dispatch/core.ts';
 import type { DeviceOutcome, DeviceRow, ItemRow, LogRow, Profile, QueueItem, QueueRef, RoundLogic, Table } from '../../supabase/functions/push-dispatch/round.ts';
 import { SETTING_KEYS, TABLES } from '../../supabase/functions/push-dispatch/round.ts';
+import { makeLogic } from '../../supabase/functions/push-dispatch/logic.ts';
 
-export const LOGIC: RoundLogic = {
-  remindAtOf: (kind, row, tz, now, prev) =>
-    kind === 'todo' ? remindAtOf('todo', row as unknown as TodoRemindRow, tz, now, prev) : remindAtOf('event', row as unknown as EventRemindRow, tz, now, prev),
-  isValidTz,
-  dndDeferUntil,
-  eventStartAt: (row) => (typeof row.time === 'string' && typeof row.tz === 'string' && typeof row.date === 'string' ? msAt(row.date, parseHm(row.time), row.tz) : null),
-  notify: (i) => notifyText(i),
-  t: (key, params, locale) => t(key as never, params as never, locale === 'ko-KR' ? 'ko-KR' : 'zh-CN'),
-  annivNext: () => null,
-};
+/** 和 index.ts 同一份接线（logic.ts 的 makeLogic），名字一一对应，只是从 shared/ 引（tests/edge/push-dispatch-logic-wiring.test.ts 核对） */
+export const LOGIC: RoundLogic = makeLogic({
+  todoRemindAt, eventRemindAt, allDayTimeOf, startAtOf, msAt, parseHm, todayOf, isValidTz, dndDeferUntil, notifyText, t,
+});
 
 export const UA = 'aaaaaaaa-0000-4000-8000-000000000001';
 export const UB = 'bbbbbbbb-0000-4000-8000-000000000002';
@@ -83,6 +79,32 @@ export class MemDb implements DispatchStore {
   put(table: Table, row: ItemRow, enqueue = false): ItemRow {
     this.tables[table].set(row.id, row);
     if (enqueue) this.queue.set(`${table}:${row.id}`, { table_name: table, id: row.id });
+    return row;
+  }
+  /**
+   * 客户端编辑一行（对应真库 UPDATE 时的三个触发器，真库语义在 rls/32 ⑧ 和 0001 的 touch()）：
+   * events_occ_reset——日程的 date、remind_days 变了，或 time 在空和非空之间变了，清 notified_for、snooze_at（这次没改它们的值时，R3-L2）和 pushed_for（二轮审查 N-M1）；
+   * 和真库一样按“值有没有变”判断（R3-L3），不看补丁里写没写这一列（客户端常常整行写回）；
+   * touch()——提醒相关列变了清 pushed_for、defer_until；events_remind / todos_remind——这些列变了入 remind_queue
+   */
+  edit(table: Table, id: string, patch: Partial<ItemRow>): ItemRow {
+    const old = this.tables[table].get(id);
+    if (!old) throw new Error(`没有这一行 ${table}:${id}`);
+    const row: ItemRow = { ...old, ...patch };
+    const changed = (k: string) => row[k] !== old[k];
+    if (table === 'events' && (changed('date') || changed('remind_days') || (old['time'] == null) !== (row['time'] == null))) {
+      for (const k of ['notified_for', 'snooze_at'] as const) {
+        if (!changed(k)) row[k] = null;
+      }
+      row.pushed_for = null;
+    }
+    const remindCols = ['date', 'time', 'tz', 'due', 'due_time', 'remind_before_min', 'remind_min', 'remind_days', 'remind_time', 'done', 'deleted_at'];
+    if (remindCols.some(changed)) {
+      row.pushed_for = null;
+      row.defer_until = null;
+    }
+    this.tables[table].set(id, row);
+    if ([...remindCols, 'snooze_at'].some(changed)) this.queue.set(`${table}:${id}`, { table_name: table, id });
     return row;
   }
   device(user: string, sub: { endpoint: string; p256dh: string; auth: string }): DeviceRow {

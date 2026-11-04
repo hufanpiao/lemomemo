@@ -20,7 +20,7 @@ import { projectColorIndex, type ProjectColor } from '../../../../shared/logic/p
 import { axisFrac, axisTicks, phoneScale, weekHourRange, type HourRange } from './week-axis.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, holText, itemShort, weekdayKey } from './cal-ui.ts';
+import { colorClass, holText, itemShort, weekdayKey, workdayA11y } from './cal-ui.ts';
 import { DeskWeek } from './DeskWeek.tsx';
 
 /** 色块最短长度（px，5.12：约 28 px，视觉稿 --wmin） */
@@ -131,7 +131,7 @@ function Lane({
   const total = dayTotal(date, items, p.tz);
   const todoIds = day?.todos.map((e) => e.itemId) ?? [];
   const overdue = hasOverdue(date, todoIds, today, nowMin, dueMins);
-  const sub = hol[0] ? holText(hol[0], t('cal.workday', {}), t('cal.workdayTail', {}), { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) }) : (p.lunarOf?.(date) ?? '');
+  const sub = hol[0] ? holText(hol[0], t('cal.workday', {}), { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) }) : (p.lunarOf?.(date) ?? '');
   const shift = w > 0 ? phoneScale(w, range).shiftPx : 0;
   const allDay = day?.allDay;
   const allDayIds = allDay?.itemIds.filter((_, i) => allDay.kinds[i] !== 'todo') ?? [];
@@ -140,7 +140,7 @@ function Lane({
     dateLabel(date, t),
     t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) }),
     ...(isToday ? [t('cal.a11y.todayMark', {})] : []),
-    ...hol.map((h) => (h.kind === 'work' ? t('cal.a11y.workday', { name: h.name }) : h.name)),
+    ...hol.map((h) => (h.kind === 'work' ? workdayA11y(h.name, (name) => t('cal.a11y.workday', { name })) : h.name)),
     total === 0 ? t('cal.a11y.none', {}) : t('cal.a11y.total', { n: total }),
     ...(overdue ? [t('cal.a11y.overdue', {})] : []),
   ].join(t('cal.a11y.sep', {}));

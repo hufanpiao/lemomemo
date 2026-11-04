@@ -23,11 +23,25 @@ describe('提醒词典', () => {
     }
     for (const [k, v] of Object.entries(remindZh)) expect(v, k).not.toBe('');
   });
-  it('韩文每一行都标 REVIEW(ko)（等 R-106 审校）', () => {
+  it('韩文每一行都有审校标记：没审过的标 REVIEW(ko)，R-106 B2 第一遍改过的标“已审（11-04）”并写条目编号', () => {
     const src = readFileSync(join(import.meta.dirname, '../i18n/ko.ts'), 'utf8');
     const lines = src.split('\n').filter((l) => /^\s+'remind\./.test(l));
     expect(lines.length).toBe(Object.keys(remindKo).length);
-    for (const l of lines) expect(l, l).toContain('// REVIEW(ko)');
+    for (const l of lines) expect(/\/\/ (REVIEW\(ko\)|R-106 B2 第一遍已审（11-04）（B2K-[S0-9]+）)/.test(l), l).toBe(true);
+  });
+  it('R-106 B2 韩文审校第一遍（B2K-01～04 必改、提醒词典的建议项）', () => {
+    expect(remindKo['remind.set.notify.tauri']).toBe('PC 앱은 Windows 알림을 써요');
+    expect(remindKo['remind.mode.onTime']).toBe('시작할 때 알림');
+    for (const k of ['remind.set.inUse.remove', 'remind.set.inUse.confirmOk']) expect(remindKo[k as keyof typeof remindKo]).toBe('제거');
+    // 移除设备记录一律“제거”，“로그인이 풀리다”改“로그아웃돼요”；面向用户不写“푸시”、不写“다시 해 주세요”
+    for (const [k, v] of Object.entries(remindKo)) {
+      if (k.startsWith('remind.set.inUse.')) expect(/지우|지웠|풀리/.test(v), `${k}: ${v}`).toBe(false);
+      expect(v.includes('푸시'), `${k}: ${v}`).toBe(false);
+      expect(v.includes('다시 해 주세요'), `${k}: ${v}`).toBe(false);
+    }
+    expect(remindKo['remind.set.inUse.confirmBody']).toContain('로그아웃되고');
+    // 锁屏只显示几项：设置页说明写的“15:00 일정 1개”“할 일 1개”和实际推送同一个样子（B2K-01）
+    expect(remindKo['remind.set.showTitle.note']).toContain('“15:00 일정 1개”');
   });
   it('线框原文：未同步提示、按钮文字、整页提醒“已在其他设备上处理”（R-328）', () => {
     expect(remindZh['remind.unsynced']).toBe('未同步，提醒可能不响');

@@ -157,12 +157,12 @@ describe('设置首页的“日历”一行（R-320）', () => {
     expect(summary()).toBe(want);
   });
 
-  it('韩文没选过：“공휴일: 한국”，不写음력（R-318）；行名“달력”', () => {
+  it('韩文没选过：“공휴일: 한국”，不写음력（R-318）；行名“캘린더”（R-106 B2K-05）', () => {
     uiStore.getState().setLocale('ko-KR');
     render(<CalendarSettingsEntry onOpen={() => undefined} />);
     expect(summary()).toBe('공휴일: 한국');
     expect(summary()).not.toContain('음력');
-    expect(screen.getByTestId('settings-cal-entry').textContent).toContain('달력');
+    expect(screen.getByTestId('settings-cal-entry').textContent).toContain('캘린더');
   });
 
   it.each([
@@ -181,9 +181,9 @@ describe('设置首页的“日历”一行（R-320）', () => {
     expect(summary()).toBe('节假日：中国');
   });
 
-  it('行名：中文“日历”、韩文“달력”（和设置页二级页标题同一个词，页面级核对在 SettingsPage.test.tsx，代码审查 L4）', () => {
+  it('行名：中文“日历”、韩文“캘린더”（R-106 B2K-05；和设置页二级页标题同一个词，设置页那一份归前端 A 待同步，页面级核对在 SettingsPage.test.tsx，代码审查 L4）', () => {
     expect(viewZh['cal.set.title']).toBe('日历');
-    expect(viewKo['cal.set.title']).toBe('달력');
+    expect(viewKo['cal.set.title']).toBe('캘린더');
   });
 
   it('韩文词典的摘要模板和中文用同一个占位符 {hol}', () => {

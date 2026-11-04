@@ -72,7 +72,8 @@ describe('patchOf', () => {
   it('改了时刻：tz 一起带上（库的约束：有时刻必须有时区）', () => {
     const prev = base({ time: null, tz: null });
     const next = normalize({ ...prev, time: '09:00' }, SEOUL);
-    expect(patchOf(row, prev, next, 5)).toEqual({ time: '09:00', tz: SEOUL, updated_at: 5 });
+    // 全天 → 有时刻：和服务器触发器同一口径，同时清掉 notified_for、snooze_at（审查 M1）
+    expect(patchOf(row, prev, next, 5)).toEqual({ time: '09:00', tz: SEOUL, notified_for: null, snooze_at: null, updated_at: 5 });
   });
 
   it('改标题：AI 起的简称清掉', () => {
@@ -82,6 +83,21 @@ describe('patchOf', () => {
 
   it('没变：null', () => {
     expect(patchOf(row, base(), base(), 5)).toBeNull();
+  });
+
+  it('换了一次提醒（日期或当天 / 前一天变了）：同一次写入清掉 notified_for、snooze_at（审查 M1）', () => {
+    const allDayForm = normalize(base({ time: null, remind_days: 0 }), SEOUL);
+    expect(patchOf(row, allDayForm, { ...allDayForm, date: '2026-11-06', remind_days: 1 }, 5)).toMatchObject({ date: '2026-11-06', remind_days: 1, notified_for: null, snooze_at: null });
+    expect(patchOf(row, allDayForm, { ...allDayForm, remind_days: 1 }, 5)).toMatchObject({ remind_days: 1, notified_for: null, snooze_at: null });
+    expect(patchOf(row, allDayForm, { ...allDayForm, date: '2026-11-04' }, 5)).toMatchObject({ date: '2026-11-04', notified_for: null, snooze_at: null });
+    // time 在空和非空之间切换（和服务器触发器同一口径）
+    expect(patchOf(row, allDayForm, normalize({ ...allDayForm, time: '09:00' }, SEOUL), 5)).toMatchObject({ time: '09:00', notified_for: null, snooze_at: null });
+    const timed = base({ time: '10:00', tz: SEOUL });
+    expect(patchOf(row, timed, normalize({ ...timed, time: null }, SEOUL), 5)).toMatchObject({ time: null, notified_for: null, snooze_at: null });
+    const moved = patchOf(row, timed, { ...timed, time: '11:00' }, 5);
+    expect(moved && 'notified_for' in moved).toBe(false);
+    const titleOnly = patchOf(row, allDayForm, { ...allDayForm, title: 'x' }, 5);
+    expect(titleOnly && 'notified_for' in titleOnly).toBe(false);
   });
 });
 
@@ -113,20 +129,30 @@ describe('hasRemind：固定时刻按日程自己的时区（shared 的 remindAt
     return { data, flag: hasRemind({ row, data, prev, next: n, tz: SH, now: at }) };
   };
 
-  it('新建：有时刻、设了提醒 → 响；不提醒、全天（shared 还没有这一支）→ 不响', () => {
+  it('新建：有时刻、设了提醒 → 响；不提醒 → 不响；全天日程设了 remind_days → 响，remind_days 为 null → 不响', () => {
     const ins = (form: EventForm) => hasRemind({ row: undefined, data: null, prev: null, next: form, tz: SH, now });
     expect(ins(timed)).toBe(true);
     expect(ins(base({ remind_min: null }))).toBe(false);
-    expect(ins(normalize(base({ time: null, remind_days: 0 }), SEOUL))).toBe(false);
+    expect(ins(normalize(base({ time: null, remind_days: 0 }), SEOUL))).toBe(true);
+    expect(ins(normalize(base({ time: null, remind_days: 1 }), SEOUL))).toBe(true);
+    expect(ins(normalize(base({ time: null, remind_days: null }), SEOUL))).toBe(false);
   });
 
-  it('prevRemindAtOf：新建、改 date / time / tz / remind_min 不传，其余传 remind_at（没有就 null）', () => {
+  it('全天日程的当天提醒：拿不到 remind.default_time，当天结束前都算会响（用户设 21:00 时上午改也带标记；代码审查 L1）', () => {
+    const allDay = normalize(base({ time: null, remind_days: 0 }), SEOUL);
+    const ins = (at: number) => hasRemind({ row: undefined, data: null, prev: null, next: allDay, tz: SH, now: at });
+    expect(ins(msAt('2026-11-05', 10 * 60, SH))).toBe(true);         // 09:00 已过，用户的 21:00 还没到
+    expect(ins(msAt('2026-11-05', 23 * 60 + 50, SH))).toBe(true);
+    expect(ins(msAt('2026-11-06', 5, SH))).toBe(false);              // 日程那天已过（超过 2 分钟宽限）
+  });
+
+  it('prevRemindAtOf：新建、改 date / time / tz / remind_min / remind_days 不传，其余传 remind_at（没有就 null）', () => {
     const row = rowOf(timed, { remind_at: remindAt });
     expect(prevRemindAtOf(row, null)).toBeUndefined();
-    for (const data of [{ date: '2026-11-06' }, { time: '16:00' }, { tz: SH }, { remind_min: 30 }, { time: null, tz: null }, { title: 'x', date: '2026-11-06' }]) {
+    for (const data of [{ date: '2026-11-06' }, { time: '16:00' }, { tz: SH }, { remind_min: 30 }, { remind_days: 1 }, { time: null, tz: null }, { title: 'x', date: '2026-11-06' }]) {
       expect(prevRemindAtOf(row, { ...data, updated_at: 5 })).toBeUndefined();
     }
-    for (const data of [{ title: 'x' }, { duration_min: 90 }, { remind_days: 1 }, { location: 'L' }, { project: 'P' }, { note: 'n' }, { deleted_at: 5 }, { deleted_at: null }]) {
+    for (const data of [{ title: 'x' }, { duration_min: 90 }, { location: 'L' }, { project: 'P' }, { note: 'n' }, { deleted_at: 5 }, { deleted_at: null }]) {
       expect(prevRemindAtOf(row, { ...data, updated_at: 5 })).toBe(remindAt);
     }
     expect(prevRemindAtOf(rowOf(timed), { note: 'n', updated_at: 5 })).toBeNull();
@@ -154,7 +180,7 @@ describe('hasRemind：固定时刻按日程自己的时区（shared 的 remindAt
   });
 
   it('EVENT_TIMING_COLS 和 EventRemindRow 里决定提醒时刻的字段一致（shared 加字段时这里编译不过）', () => {
-    const decides: Record<keyof EventRemindRow, boolean> = { date: true, time: true, tz: true, remind_min: true, deleted_at: false };
+    const decides: Record<keyof EventRemindRow, boolean> = { date: true, time: true, tz: true, remind_min: true, remind_days: true, deleted_at: false };
     expect([...EVENT_TIMING_COLS].sort()).toEqual(Object.entries(decides).filter(([, v]) => v).map(([k]) => k).sort());
   });
 });

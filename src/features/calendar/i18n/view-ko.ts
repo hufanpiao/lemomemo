@@ -25,7 +25,7 @@ export const viewKo = {
   'cal.pickHintMonth': '누르면 바로 이동해요 · 작은 점은 오늘', // REVIEW(ko)
   'cal.pickHintWeek': '그달 1일이 있는 주로 · 작은 점은 오늘', // REVIEW(ko)
   'cal.backToday': '오늘로 돌아가기', // REVIEW(ko)
-  'cal.h1': '달력', // REVIEW(ko)
+  'cal.h1': '캘린더', // R-106 B2 第一遍已审（11-04）（B2K-05，和底栏同名）
   'cal.fold.collapse': '한 주만 보기', // REVIEW(ko)
   'cal.fold.expand': '한 달 펼치기', // REVIEW(ko)
   'cal.wd.0': '일', // REVIEW(ko)
@@ -38,13 +38,12 @@ export const viewKo = {
   'cal.wdFull': '{wd}요일', // REVIEW(ko)
   'cal.more': '+{n}', // REVIEW(ko)
   'cal.workday': '근무', // REVIEW(ko)：中国的“补班”，韩国没有这个概念
-  'cal.workdayTail': '대체근무', // REVIEW(ko)
   // 下面两条是韩国节假日数据里的原文，中韩词典同值，不是漏翻（数据只有韩文名；只用来识别、缩短“대체공휴일”；代码复审 R4）
   'cal.subHolFull': '대체공휴일',
   'cal.subHolShort': '대체휴일',
   'cal.overdue': '지남', // REVIEW(ko)
   'cal.offline': '인터넷에 연결되면 공휴일이 표시돼요', // REVIEW(ko)
-  'cal.leg.hol': '회색 바탕: {country} 공휴일(설정 › 달력에서 바꿀 수 있어요)', // REVIEW(ko)
+  'cal.leg.hol': '회색 바탕: {country} 공휴일 (설정 › 캘린더에서 바꿀 수 있어요)', // R-106 B2 第一遍已审（11-04）（跟 cal.set.title 行名；括号前空格照 B1）
   'cal.leg.tag': '태그: 일 하나, 줄임말(색 = 프로젝트)', // REVIEW(ko)
   'cal.leg.tagSample': '고객', // REVIEW(ko)
   'cal.leg.more': '+N: N건 더 있어요', // REVIEW(ko)
@@ -56,7 +55,7 @@ export const viewKo = {
   'cal.day.empty': '이날은 일정이 없어요', // REVIEW(ko)
   'cal.day.todo': '할 일', // REVIEW(ko)
   'cal.day.until': '{t}까지', // REVIEW(ko)
-  'cal.set.title': '달력', // REVIEW(ko)
+  'cal.set.title': '캘린더', // R-106 B2 第一遍已审（11-04）（B2K-05；设置页 settings.cal.title 归前端 A，待同步）
   'cal.set.holidays': '공휴일', // REVIEW(ko)
   'cal.set.hol.cn': '중국만', // REVIEW(ko)
   'cal.set.hol.kr': '한국만', // REVIEW(ko)

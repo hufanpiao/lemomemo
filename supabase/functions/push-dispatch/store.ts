@@ -84,8 +84,9 @@ export function makeStore(admin: Admin): DispatchStore {
       return new Map(rows.map((r) => [r.user_id, { current_tz: r.current_tz, ui_locale: r.ui_locale } satisfies Profile]));
     },
     async settings(userIds) {
+      // 只认“活着”的设置：没软删、没撤销（和本机 remind-settings 同一口径；撤销了的按没设处理，11-04）
       const rows = await inChunks(userIds, async (c) => must(await admin.from('settings').select('user_id, key, value').in('user_id', c)
-        .in('key', [...SETTING_KEYS]).is('deleted_at', null)) as { user_id: string; key: string; value: unknown }[]);
+        .in('key', [...SETTING_KEYS]).is('deleted_at', null).eq('undone', false)) as { user_id: string; key: string; value: unknown }[]);
       const byUser = new Map<string, [string, unknown][]>();
       for (const r of rows) byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), [r.key, r.value]]);
       return new Map([...byUser].map(([u, kv]) => [u, Object.fromEntries(kv) as UserSettings]));

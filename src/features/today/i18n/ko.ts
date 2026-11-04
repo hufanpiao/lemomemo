@@ -22,7 +22,7 @@ export const ko: Readonly<Record<keyof typeof zh, string>> = {
   'late.title': '놓친 일', // REVIEW(ko)
   'late.days': '{n}일 지남', // REVIEW(ko)
   'late.passed': '{t} 지남', // REVIEW(ko)
-  'list.title': '오늘 할 일', // REVIEW(ko)
+  'list.title': '오늘 일정', // R-337（11-04 负责人定；R-106 B2 审校第三节 ①）
   'list.empty': '오늘은 예정된 일이 없어요', // REVIEW(ko)
   'list.allDay': '종일', // REVIEW(ko)
   'list.due': '{t} 마감', // REVIEW(ko)

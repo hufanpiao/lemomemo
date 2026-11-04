@@ -14,14 +14,14 @@ import type { WeekStart } from '../../../../shared/logic/calendar/cal-nav.ts';
 import type { MonthCell } from '../../../../shared/logic/calendar/month-grid.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, holText, weekdayKey } from './cal-ui.ts';
+import { colorClass, holText, workdayA11y, weekdayKey } from './cal-ui.ts';
 
 /** 一格的读屏名字 */
 export function cellLabel(c: MonthCell, t: CalViewT, lunarSay?: (date: DateStr) => string | undefined): string {
   const [, m = '1', d = '1'] = c.date.split('-');
   const parts = [t('cal.a11y.date', { m: Number(m), d: Number(d) }), t('cal.wdFull', { wd: t(weekdayKey(c.weekday), {}) })];
   if (c.isToday) parts.push(t('cal.a11y.todayMark', {}));
-  for (const h of c.holidays) parts.push(h.kind === 'work' ? t('cal.a11y.workday', { name: h.name }) : h.name);
+  for (const h of c.holidays) parts.push(h.kind === 'work' ? workdayA11y(h.name, (name) => t('cal.a11y.workday', { name })) : h.name);
   if (c.solarTerm) parts.push(c.solarTerm);
   if (c.lunar) parts.push(t('cal.a11y.lunar', { text: lunarSay?.(c.date) ?? c.lunar }));
   const total = c.a11y.reduce((n, p) => n + p.count, 0);
@@ -57,7 +57,7 @@ function Cell({
   const off = c.holidays.some((h) => h.kind === 'off');
   const cls = [styles.cell, c.inMonth ? '' : styles.out, c.isToday ? styles.today : '', off ? styles.holiday : '', selected ? styles.sel : ''].filter(Boolean).join(' ');
   const [first, second] = c.holidays;
-  const line = first ? holText(first, t('cal.workday', {}), t('cal.workdayTail', {}), { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) }) : (c.solarTerm ?? c.lunar ?? '');
+  const line = first ? holText(first, t('cal.workday', {}), { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) }) : (c.solarTerm ?? c.lunar ?? '');
   return (
     <button
       type="button"
@@ -79,7 +79,7 @@ function Cell({
       </span>
       {second ? (
         <span className={styles.hol2} aria-hidden="true">
-          {holText(second, t('cal.workday', {}), t('cal.workdayTail', {}), { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) })}
+          {holText(second, t('cal.workday', {}), { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) })}
         </span>
       ) : null}
       {c.marks.map((mk) => (

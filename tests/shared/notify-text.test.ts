@@ -20,6 +20,54 @@ describe('notifyText', () => {
     expect(n).toEqual({ title: { key: 'remind.push.event', params: { time: '15:00', title: 'NEOX 会议' } }, fromClaude: false, body: null });
     expect(t('remind.push.event', { time: '15:00', title: 'NEOX 会议' }, 'zh-CN')).toBe('15:00 NEOX 会议');
   });
+  describe('全天日程（R-333）：不写时刻，前一天“明天 · 名称”、当天“今天 · 名称”', () => {
+    const ev = (date: string, atMs: number, tz = SEOUL): NotifyInput => ({ ...base, kind: 'event', title: '团建', tz, timeMs: atMs, allDay: { date, at: atMs } });
+    const LA = 'America/Los_Angeles';
+    it('前一天 20:00 提醒：明天 · 团建；当天 09:00：今天 · 团建；中韩文案', () => {
+      const eve = msAt('2026-11-04', 20 * 60, SEOUL);
+      expect(notifyText(ev('2026-11-05', eve))).toEqual({ title: { key: 'remind.push.allDayTomorrow', params: { title: '团建' } }, fromClaude: false, body: null });
+      expect(notifyText(ev('2026-11-05', msAt('2026-11-05', 9 * 60, SEOUL))).title).toEqual({ key: 'remind.push.allDayToday', params: { title: '团建' } });
+      expect(t('remind.push.allDayTomorrow', { title: '团建' }, 'zh-CN')).toBe('明天 · 团建');
+      expect(t('remind.push.allDayToday', { title: '团建' }, 'zh-CN')).toBe('今天 · 团建');
+      expect(t('remind.push.allDayTomorrow', { title: '워크숍' }, 'ko-KR')).toBe('내일 · 워크숍');
+      expect(t('remind.push.allDayToday', { title: '워크숍' }, 'ko-KR')).toBe('오늘 · 워크숍');
+    });
+    it('按 current_tz 判断哪天：同一时刻在首尔是 11-05、在洛杉矶还是 11-04', () => {
+      const ms = msAt('2026-11-05', 9 * 60, SEOUL);   // 洛杉矶 11-04 16:00
+      expect(notifyText(ev('2026-11-05', ms, SEOUL)).title.key).toBe('remind.push.allDayToday');
+      expect(notifyText(ev('2026-11-05', ms, LA)).title.key).toBe('remind.push.allDayTomorrow');
+    });
+    it('前一天 20:00 被免打扰推迟到当天 07:00：按推迟后的时刻写“今天”', () => {
+      expect(notifyText(ev('2026-11-05', msAt('2026-11-05', 7 * 60, SEOUL))).title.key).toBe('remind.push.allDayToday');
+    });
+    it('稍后推迟到日程过后、或提前不止一天：只写标题，不加今天 / 明天', () => {
+      expect(notifyText(ev('2026-11-05', msAt('2026-11-06', 9 * 60, SEOUL))).title).toEqual({ key: null, params: { text: '团建' } });
+      expect(notifyText(ev('2026-11-05', msAt('2026-11-03', 9 * 60, SEOUL))).title).toEqual({ key: null, params: { text: '团建' } });
+    });
+    it('不写标题（R-334）：也不写时刻——前一天“明天有 1 项日程”、当天“今天有 1 项日程”、其余“有 1 项日程”；中韩', () => {
+      const hid = (date: string, atMs: number, tz = SEOUL) => notifyText({ ...ev(date, atMs, tz), showTitle: false });
+      expect(hid('2026-11-05', msAt('2026-11-04', 20 * 60, SEOUL))).toEqual({ title: { key: 'remind.push.hiddenAllDayTomorrow', params: {} }, fromClaude: false, body: null });
+      expect(hid('2026-11-05', msAt('2026-11-05', 9 * 60, SEOUL)).title).toEqual({ key: 'remind.push.hiddenAllDayToday', params: {} });
+      expect(hid('2026-11-05', msAt('2026-11-06', 9 * 60, SEOUL)).title).toEqual({ key: 'remind.push.hiddenAllDay', params: {} });
+      expect(hid('2026-11-05', msAt('2026-11-03', 9 * 60, SEOUL)).title).toEqual({ key: 'remind.push.hiddenAllDay', params: {} });
+      // 同一时刻按 current_tz：首尔已是当天、洛杉矶还是前一天
+      const ms = msAt('2026-11-05', 9 * 60, SEOUL);
+      expect(hid('2026-11-05', ms, LA).title.key).toBe('remind.push.hiddenAllDayTomorrow');
+      expect(t('remind.push.hiddenAllDayTomorrow', {}, 'zh-CN')).toBe('明天有 1 项日程');
+      expect(t('remind.push.hiddenAllDayToday', {}, 'zh-CN')).toBe('今天有 1 项日程');
+      expect(t('remind.push.hiddenAllDay', {}, 'zh-CN')).toBe('有 1 项日程');
+      expect(t('remind.push.hiddenAllDayTomorrow', {}, 'ko-KR')).toBe('내일 일정 1개');
+      expect(t('remind.push.hiddenAllDayToday', {}, 'ko-KR')).toBe('오늘 일정 1개');
+      expect(t('remind.push.hiddenAllDay', {}, 'ko-KR')).toBe('일정 1개');
+    });
+    it('经 Claude 记下的全天日程：写不写标题都加前缀标记', () => {
+      expect(notifyText({ ...ev('2026-11-05', msAt('2026-11-04', 20 * 60, SEOUL)), source: 'chat' }).fromClaude).toBe(true);
+      expect(notifyText({ ...ev('2026-11-05', msAt('2026-11-04', 20 * 60, SEOUL)), source: 'chat', showTitle: false }).fromClaude).toBe(true);
+    });
+    it('有时刻的日程不传 allDay（或传 null）时照旧“{time} {title}”', () => {
+      expect(notifyText({ ...base, kind: 'event', title: '会', allDay: null }).title).toEqual({ key: 'remind.push.event', params: { time: '15:00', title: '会' } });
+    });
+  });
   it('待办：标题原样；有截止时刻时正文“17:00 截止”', () => {
     expect(notifyText(base)).toEqual({ title: { key: null, params: { text: '买柠檬' } }, fromClaude: false, body: null });
     expect(notifyText({ ...base, dueTime: '17:00' }).body).toEqual({ key: 'remind.push.todoDue', params: { time: '17:00' } });
@@ -29,11 +77,11 @@ describe('notifyText', () => {
     expect(notifyText({ ...base, kind: 'event', showTitle: false, dueTime: '17:00' })).toEqual({ title: { key: 'remind.push.hidden', params: { time: '15:00' } }, fromClaude: false, body: null });
     expect(notifyText({ ...base, kind: 'anniv', showTitle: false })).toEqual({ title: { key: 'remind.push.hiddenAnniv', params: { time: '15:00' } }, fromClaude: false, body: null });
     expect(t('remind.push.hiddenAnniv', { time: '15:00' }, 'zh-CN')).toBe('15:00 有 1 项纪念日');
-    expect(t('remind.push.hiddenAnniv', { time: '15:00' }, 'ko-KR')).toBe('15:00에 기념일 1개가 있어요');
+    expect(t('remind.push.hiddenAnniv', { time: '15:00' }, 'ko-KR')).toBe('15:00 기념일 1개');
     expect(notifyText({ ...base, showTitle: false, dueTime: '17:00' })).toEqual({ title: { key: 'remind.push.hiddenTodo', params: { time: '15:00' } }, fromClaude: false, body: null });
     expect(t('remind.push.hidden', { time: '15:00' }, 'zh-CN')).toBe('15:00 有 1 项日程');
     expect(t('remind.push.hiddenTodo', { time: '15:00' }, 'zh-CN')).toBe('15:00 有 1 项待办');
-    expect(t('remind.push.hiddenTodo', { time: '15:00' }, 'ko-KR')).toBe('15:00에 할 일 1개가 있어요');
+    expect(t('remind.push.hiddenTodo', { time: '15:00' }, 'ko-KR')).toBe('15:00 할 일 1개');
   });
   it('按钮（R-294、R-307、R-308）：待办“推迟 + 完成”、日程和纪念日“推迟 + 知道了”；推迟 10 分钟；中韩文案', () => {
     expect(actionsFor('todo')).toEqual(['snooze', 'done']);

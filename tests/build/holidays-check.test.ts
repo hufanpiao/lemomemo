@@ -14,8 +14,8 @@ const SAMPLE_CN = {
   year: 2099,
   days: [
     { date: '2099-01-01', kind: 'off', name: { zh: '样例假日', ko: '샘플 휴일' } },
-    { date: '2099-01-02', kind: 'off', name: { zh: '样例假日' } },
-    { date: '2099-01-04', kind: 'work', name: { zh: '样例补班' } },
+    { date: '2099-01-02', kind: 'off', name: { zh: '样例假日', ko: '샘플 휴일' } },
+    { date: '2099-01-04', kind: 'work', name: { zh: '样例补班', ko: '샘플 근무' } },
   ],
 };
 
@@ -90,7 +90,7 @@ describe('validateHolidayJson：拦下来的情况', () => {
   });
   it('放假和补班撞在同一天；完全重复的条目', () => {
     const c = clone(SAMPLE_CN) as { days: Day[] };
-    c.days.splice(2, 0, { date: '2099-01-04', kind: 'off', name: { zh: '样例假日' } });
+    c.days.splice(2, 0, { date: '2099-01-04', kind: 'off', name: { zh: '样例假日', ko: '샘플 휴일' } });
     expect(has(validateHolidayJson(c, 'cn', 2099), '既是放假又是补班')).toBe(true);
     const d = clone(SAMPLE_CN) as { days: Day[] };
     d.days.splice(1, 0, clone(d.days[0] as Day));
@@ -105,6 +105,9 @@ describe('validateHolidayJson：拦下来的情况', () => {
   it('名称：本国语言必填、空串、首尾空格、超长、控制字符、不认识的语言、多余字段', () => {
     expect(has(validateHolidayJson(withDay(SAMPLE_CN, 0, { name: { ko: '샘플' } }), 'cn', 2099), 'name.zh 必填')).toBe(true);
     expect(has(validateHolidayJson(withDay(SAMPLE_KR, 0, { name: { zh: '样例' } }), 'kr', 2099), 'name.ko 必填')).toBe(true);
+    // R-338：中国的每一条也要有韩文名；韩国的不要求中文名
+    expect(has(validateHolidayJson(withDay(SAMPLE_CN, 0, { name: { zh: '样例' } }), 'cn', 2099), '韩文名 name.ko 必填')).toBe(true);
+    expect(validateHolidayJson(withDay(SAMPLE_KR, 0, { name: { ko: '샘플' } }), 'kr', 2099)).toEqual([]);
     expect(has(validateHolidayJson(withDay(SAMPLE_CN, 0, { name: { zh: '' } }), 'cn', 2099), '非空字符串')).toBe(true);
     expect(has(validateHolidayJson(withDay(SAMPLE_CN, 0, { name: { zh: ' 样例' } }), 'cn', 2099), '首尾不能有空格')).toBe(true);
     expect(has(validateHolidayJson(withDay(SAMPLE_CN, 0, { name: { zh: '样'.repeat(41) } }), 'cn', 2099), '超过 40')).toBe(true);

@@ -23,7 +23,8 @@ export const BEHIND_MS = 60 * MIN_MS;
 /** logs.src（≤ 16 字） */
 export const LOG_SRC = 'push-dispatch';
 /** 本轮要读的设置键 */
-export const SETTING_KEYS = ['remind.dnd', 'remind.show_title', 'anniv.default_offsets', 'anniv.default_time'] as const;
+// remind.default_time：全天日程当天提醒的时刻、全天日程的“开始”（架构 0.29 续第 47、57 条；没设、认不出按 09:00，shared/logic/remind.ts 的 allDayTimeOf）
+export const SETTING_KEYS = ['remind.dnd', 'remind.show_title', 'anniv.default_offsets', 'anniv.default_time', 'remind.default_time'] as const;
 
 export interface QueueItem { table_name: Table; id: string; user_id: string }
 export interface QueueRef { table_name: Table; id: string }
@@ -93,7 +94,7 @@ export interface RoundStore {
   /** 第 0 步按 id 读行（只读这个人的：user_id 一并核对） */
   rows(table: Table, ids: readonly string[]): Promise<ItemRow[]>;
   profiles(userIds: readonly string[]): Promise<Map<string, Profile>>;
-  /** 只读 SETTING_KEYS、没软删的 */
+  /** 只读 SETTING_KEYS、没软删、没撤销的（11-04 起撤销了的按没设处理） */
   settings(userIds: readonly string[]): Promise<Map<string, UserSettings>>;
   /**
    * 系统写入（不加 rev）：remind_at，纪念日另有 next_date。乐观条件（代码审查建议 ④）：只在 remind_at 还是 prevRemindAt 时写
@@ -127,17 +128,25 @@ export interface NotifyMsgLike { key: string | null; params: Readonly<Record<str
 export interface NotifyTextLike { title: NotifyMsgLike; fromClaude: boolean; body: NotifyMsgLike | null }
 export interface NotifyInputLike {
   kind: PayloadKind; title: string; source: string; showTitle: boolean; timeMs: number; dueTime: string | null; tz: string;
+  /** 全天日程才传（R-333）：date 是日程日期，at 是这一次提醒的时刻（due_at），notify-text 按 tz 比是“今天”还是“明天” */
+  allDay?: { date: string; at: number } | null;
 }
 export type Dnd = { start: string; end: string } | null;
 export interface AnnivCtx { tz: string; now: number; settings: UserSettings }
 export interface AnnivNext { remind_at: number | null; next_date: string | null }
 
 export interface RoundLogic {
-  remindAtOf(kind: 'todo' | 'event', row: ItemRow, tz: string, now: number, prevRemindAt: number | null): number | null;
+  /** defaultTime：设置 remind.default_time 的值（只有全天日程当天提醒用，原样交给 shared；待办忽略） */
+  remindAtOf(kind: 'todo' | 'event', row: ItemRow, tz: string, now: number, prevRemindAt: number | null, defaultTime?: unknown): number | null;
   isValidTz(tz: string): boolean;
   dndDeferUntil(ms: number, tz: string, dnd: Dnd): number | null;
-  /** 日程开始时刻（固定时刻，按日程自己的 tz）；全天日程回 null */
-  eventStartAt(row: ItemRow): number | null;
+  /**
+   * 日程开始时刻（shared/logic/remind-actions.ts 的 startAtOf 口径）：有时刻的按日程自己的 tz（缺 tz 回 null）；
+   * 全天日程（time 为空）是当天的 remind.default_time，按 tz（current_tz）算（0.29 续第 47、57 条）
+   */
+  eventStartAt(row: ItemRow, tz: string, defaultTime: unknown): number | null;
+  /** ms 在 tz 的日期 YYYY-MM-DD（shared 的 todayOf）；第 0 步判断全天日程“这一天推过没有”用（R-336） */
+  dayOf(ms: number, tz: string): string;
   notify(i: NotifyInputLike): NotifyTextLike;
   t(key: string, params: Readonly<Record<string, string | number>>, locale: string): string;
   /**

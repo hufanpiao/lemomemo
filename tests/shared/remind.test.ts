@@ -168,7 +168,7 @@ describe('日程（固定时刻，4.6）：msAt(date, time − remind_min, 日�
     expect(remindAtOf('event', ev, LA, 0)).toBe(at(TODAY, '14:45', SEOUL));
     expect(eventRemindAt({ ...ev, time: '00:10', remind_min: 30 })).toBe(at('2026-11-02', '23:40', SEOUL));
   });
-  it('remind_min 为 null、全天日程（time 为空）、缺 tz、已删除：这里不算（全天日程按 remind_days 的口径不在本次范围，返回 null）', () => {
+  it('remind_min 为 null、缺 tz、已删除返回 null；全天日程（time 为空）不传 tz 时返回 null（全天的算法见 remind-all-day.test.ts）', () => {
     const ev = { date: TODAY, time: '15:00', tz: SEOUL, remind_min: 15, deleted_at: null };
     expect(eventRemindAt({ ...ev, remind_min: null })).toBeNull();
     expect(eventRemindAt({ ...ev, time: null })).toBeNull();

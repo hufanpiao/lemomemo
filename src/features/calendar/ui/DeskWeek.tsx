@@ -29,7 +29,7 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
         const sel = p.selected === date;
         const hol = p.holidays.get(date) ?? [];
         const off = hol.some((h) => h.kind === 'off');
-        const sub = hol[0] ? holText(hol[0], t('cal.workday', {}), t('cal.workdayTail', {})) : (p.lunarOf?.(date) ?? '');
+        const sub = hol[0] ? holText(hol[0], t('cal.workday', {})) : (p.lunarOf?.(date) ?? '');
         return (
           <button
             key={date}

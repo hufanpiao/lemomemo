@@ -42,6 +42,23 @@ describe('remindOnDelete（补审改法 ④）', () => {
     expect(remindOnDelete('events', event({ remind_min: null, deleted_at: 1 }), false, at(9), TZ)).toBe(false);
   });
 
+  it('全天日程（按 current_tz）：设了 remind_days、还没到 → true；remind_days 为 null → false', () => {
+    const allDay = (over: Record<string, unknown> = {}) => event({ date: '2026-11-06', time: null, tz: null, remind_min: null, remind_days: 1, ...over });
+    // 11-06 的全天日程前一天 20:00 提醒（首尔 11-05 20:00）
+    expect(remindOnDelete('events', allDay(), true, at(19), TZ)).toBe(true);
+    expect(remindOnDelete('events', allDay({ deleted_at: 1 }), false, at(19), TZ)).toBe(true);
+    expect(remindOnDelete('events', allDay({ remind_days: 0 }), true, at(19), TZ)).toBe(true);
+    expect(remindOnDelete('events', allDay({ remind_days: null }), true, at(19), TZ)).toBe(false);
+    expect(remindOnDelete('events', allDay({ remind_days: null, deleted_at: 1 }), false, at(19), TZ)).toBe(false);
+  });
+
+  it('全天日程的当天提醒：拿不到 remind.default_time，当天结束前都算会响（代码审查 L1）', () => {
+    const today = (over: Record<string, unknown> = {}) => event({ date: '2026-11-05', time: null, tz: null, remind_min: null, remind_days: 0, ...over });
+    expect(remindOnDelete('events', today(), true, at(10), TZ)).toBe(true);
+    expect(remindOnDelete('events', today(), true, at(23, 50), TZ)).toBe(true);
+    expect(remindOnDelete('events', today({ date: '2026-11-04' }), true, at(10), TZ)).toBe(false);
+  });
+
   it('已经删了的再删：不带', () => {
     expect(remindOnDelete('todos', todo({ deleted_at: 1 }), true, at(15), TZ)).toBe(false);
     expect(remindOnDelete('events', event({ deleted_at: 1 }), true, at(9), TZ)).toBe(false);

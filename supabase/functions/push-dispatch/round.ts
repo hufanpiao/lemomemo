@@ -5,7 +5,7 @@
 // 第 0 步（原 tz-recalc，D6）：private.remind_queue_pop 出队即删（≤ QUEUE_POP_LIMIT；孤儿在函数里删，账号不可用的不出队，见迁移
 //   20261103130000）→ 按行重算 remind_at：待办用 profiles.current_tz，有时间的日程用它自己的 tz；**一律传这一行现在的 remind_at 作
 //   prevRemindAt**（代码审查 BE-1 R1：漏传就退回“回落”，按过“稍后”后重算会吞掉这次提醒）；纪念日交 anniv 钩子（B5 填实现）。
-//   时区不认识的那一行跳过、记 logs tz_invalid（code 只写表名，不写时区串和标题；每人每小时最多一条），不影响同批（D7）。
+//   时区不认识的那一行跳过、记 logs tz_invalid（code：日程自己的 tz 不认识写表名 events，current_tz 不认识写 profiles（11-04）；不写时区串和标题；每人每小时最多一条），不影响同批（D7）。
 //   写回带乐观条件（remind_at 还是读到的值）；写回失败、没更新到、时间预算到了没处理的插回队列；profiles 里没有这个人的丢弃（记原因码）。
 //   出队即删：插回之前进程崩溃，这一项就丢了，要等这一行下次被改才再入队（风险和兜底写在架构 5.3 第 0 步、接手清单）。
 // 第 1 步：due_at = greatest(remind_at, snooze_at, defer_until)，now − 60 分钟 < due_at ≤ now + 60 秒，deleted_at 为空、undone 为假、

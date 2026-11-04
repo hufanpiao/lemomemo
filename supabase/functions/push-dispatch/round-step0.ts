@@ -58,8 +58,9 @@ export async function step0(c: RoundCtx, logs: LogRow[], overBudget: () => boole
       c.log('recalc_no_profile');
       return;
     }
-    const tzInvalid = () => {
-      if (!tzNotes.has(q.user_id)) tzNotes.set(q.user_id, q.table_name);
+    // 原因码：日程自己的 tz 不认识记表名 events；current_tz 不认识（待办、纪念日、全天日程）记 profiles（11-04 主持人定，和 R-316 一致）
+    const tzInvalid = (code: string = q.table_name) => {
+      if (!tzNotes.has(q.user_id)) tzNotes.set(q.user_id, code);
     };
     let patch: { remind_at: number | null; next_date?: string | null } | null;
     try {
@@ -68,10 +69,26 @@ export async function step0(c: RoundCtx, logs: LogRow[], overBudget: () => boole
           tzInvalid();
           return;
         }
-        // 日程是固定时刻，不用 current_tz；prevRemindAt 照样传（R1：每个调用点都传这一行现在的 remind_at）
-        patch = { remind_at: c.logic.remindAtOf('event', row, prof.current_tz, now, row.remind_at) };
+        // 全天日程（time 为空）是浮动时刻，按 current_tz（架构 4.6）：current_tz 不认识照 R-316 跳过、记 tz_invalid，原因码 profiles
+        //   （和第 2 步同一口径；不让 msAt 抛错落到 recalc_failed:events）
+        if ((row.time === null || row.time === undefined) && !c.logic.isValidTz(prof.current_tz)) {
+          tzInvalid('profiles');
+          return;
+        }
+        // 有时刻的日程是固定时刻，不用 current_tz；全天日程按 current_tz 和设置 remind.default_time（第 6 个参数，只有全天日程当天提醒用）；
+        // prevRemindAt 照样传（R1：每个调用点都传这一行现在的 remind_at）
+        patch = { remind_at: c.logic.remindAtOf('event', row, prof.current_tz, now, row.remind_at, settings.get(q.user_id)?.['remind.default_time']) };
+        // R-336（11-04 负责人定）：全天日程“推过没有”按“这条日程 + 这一天”认，不按具体时刻认——
+        //   新算出的 remind_at 和原值不同，但这一行的 pushed_for（服务器推过）或 notified_for（按过“知道了”）按 current_tz 和新 remind_at
+        //   落在同一天，就当这一天已经提醒过：remind_at 保持原值、不写回（改 remind.default_time、换了同一天里的时刻都不再推第二次）。
+        //   换了“哪一次提醒”（挪日期、改 remind_days、time 在空和非空之间变）由迁移 20261104100000 的触发器 events_occ_reset
+        //   清空 notified_for、pushed_for，到这里就不会被压住（二轮审查 N-M1）。被压住时 remind_at 保留旧值，只供第 1 步到点判断用（N-L2）。
+        if ((row.time === null || row.time === undefined) && patch.remind_at !== null && patch.remind_at !== row.remind_at) {
+          const day = c.logic.dayOf(patch.remind_at, prof.current_tz);
+          if ([row.pushed_for, row.notified_for].some((x) => typeof x === 'number' && c.logic.dayOf(x, prof.current_tz) === day)) return;
+        }
       } else if (!c.logic.isValidTz(prof.current_tz)) {
-        tzInvalid();
+        tzInvalid('profiles');   // 待办、纪念日：current_tz 不认识，原因码 profiles（R-316，架构 5.3 第 2 步；11-04 主持人定第 0 步同一口径）
         return;
       } else if (q.table_name === 'todos') {
         patch = { remind_at: c.logic.remindAtOf('todo', row, prof.current_tz, now, row.remind_at) };

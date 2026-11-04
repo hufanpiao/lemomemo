@@ -189,7 +189,10 @@ export async function steps1to8(c: RoundCtx, logs: LogRow[], res: RoundResult, o
     let payload: Uint8Array<ArrayBuffer>;
     try {
       const kind = kindOf(x.table);
-      const timeMs = x.table === 'events' ? (c.logic.eventStartAt(x.row) ?? x.due) : x.due;
+      const tz = x.tz ?? prof.current_tz;
+      const allDay = x.table === 'events' && (x.row.time === null || x.row.time === undefined) && typeof x.row.date === 'string';
+      // 全天日程的“开始”是当天的 remind.default_time（current_tz）；文案按 R-333 由 notify-text 写“今天 · / 明天 ·”，不写时刻
+      const timeMs = x.table === 'events' ? (c.logic.eventStartAt(x.row, tz, settings.get(u)?.['remind.default_time']) ?? x.due) : x.due;
       const n = c.logic.notify({
         kind,
         title: String((x.table === 'anniversaries' ? x.row.name : x.row.title) ?? ''),
@@ -197,7 +200,8 @@ export async function steps1to8(c: RoundCtx, logs: LogRow[], res: RoundResult, o
         showTitle: showTitleOf(x.row, settings.get(u)),
         timeMs,
         dueTime: x.table === 'todos' ? (x.row.due_time ?? null) : null,
-        tz: x.tz ?? prof.current_tz,
+        tz,
+        allDay: allDay ? { date: x.row.date as string, at: x.due } : null,
       });
       const text = renderText(n, c.logic.t, prof.ui_locale);
       // R-294、R-307、R-308：通知上两个按钮（action 名 snooze、done、ack，SW 由前端 A 接）

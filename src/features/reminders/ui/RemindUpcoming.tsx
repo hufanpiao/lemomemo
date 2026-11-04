@@ -30,7 +30,7 @@ function dayHead(t: RemindT, date: DateStr, today: DateStr): string {
 }
 
 function subOf(t: RemindT, r: Reminder, tz: string, defaultTime: string): string {
-  const m = modeOf(r);
+  const m = modeOf(r, defaultTime);
   const mode = t(m.key, m.params as never);
   if (r.kind !== 'event') return t('remind.up.tdSub', { mode });
   const s = eventStart(r, tz, defaultTime);

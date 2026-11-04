@@ -30,6 +30,13 @@ export const zh = {
   'app.crashed.title': '哎呀，卡住了',
   'app.crashed.refresh': '刷新一下',
   'remind.push.event': '{time} {title}',
+  // 全天日程不写时刻（R-333）：前一天提醒“明天 · 名称”，当天提醒“今天 · 名称”
+  'remind.push.allDayToday': '今天 · {title}',
+  'remind.push.allDayTomorrow': '明天 · {title}',
+  // 全天日程、通知只显示有几项时也不写时刻（R-334）
+  'remind.push.hiddenAllDayToday': '今天有 1 项日程',
+  'remind.push.hiddenAllDayTomorrow': '明天有 1 项日程',
+  'remind.push.hiddenAllDay': '有 1 项日程',
   // 推送文案（B2 BE-2，shared/logic/notify-text.ts）：待办有截止时刻时的正文；不写标题时整条只有“几点有 1 项日程 / 待办”（R-188 保留项，R-294 分开说）；通知上“推迟”“完成”两个按钮（R-294）；经 Claude 记下的加前缀
   'remind.push.todoDue': '{time} 截止',
   'remind.push.hidden': '{time} 有 1 项日程',

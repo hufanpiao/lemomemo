@@ -1,4 +1,5 @@
-// 功能 reminders 的词典·韩文（B2 FA-4）。全部是自译初稿，等 R-106 审校，逐行标 REVIEW(ko)
+// 功能 reminders 的词典·韩文（B2 FA-4）。自译初稿逐行标 REVIEW(ko)；R-106 B2 韩文审校第一遍（docs/03-评审/B2/B2-韩文审校-第一遍.md）改过的行
+// 换成“R-106 B2 第一遍已审（11-04）”并注明条目编号；改了但还要韩语母语者确认的仍标 REVIEW(ko)
 // 语气统一用해요체（和其他功能一致）
 // satisfies Record<keyof typeof remindZh, string>：少一个键、多一个键都编译不过；占位符一致由 __tests__/remind-i18n.test.ts 查
 import type { remindZh } from './zh.ts';
@@ -20,20 +21,20 @@ export const remindKo = {
   'remind.when.noDue': '마감일 없음', // REVIEW(ko)
   'remind.act.ack': '확인', // REVIEW(ko)
   'remind.act.snooze10': '10분 후', // REVIEW(ko)
-  'remind.act.atStart': '시작할 때 다시', // REVIEW(ko)
+  'remind.act.atStart': '시작할 때 알림', // R-106 B2 第一遍已审（11-04）（B2K-S04）
   'remind.act.hour1': '1시간 후', // REVIEW(ko)
-  'remind.act.tomorrow': '내일 다시', // REVIEW(ko)
+  'remind.act.tomorrow': '내일 다시 알림', // R-106 B2 第一遍已审（11-04）（B2K-S05）
   'remind.act.genTodo': '할 일 만들기', // REVIEW(ko)
   'remind.snoozed': '{time}에 다시 알려 드릴게요', // REVIEW(ko)
-  'remind.saveFailed': '저장하지 못했어요. 잠시 후 다시 해 주세요', // REVIEW(ko)
-  'remind.readonly': '새 버전에서만 고칠 수 있어요', // REVIEW(ko)
+  'remind.saveFailed': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // R-106 B2 第一遍已审（11-04）（B2K-S08）
+  'remind.readonly': '새 버전으로 업데이트해야 고칠 수 있어요', // R-106 B2 第一遍已审（11-04）（B2K-S09）
   'remind.missed.row': '놓친 알림 {n}개', // REVIEW(ko)
   'remind.missed.open': '보기 ›', // REVIEW(ko)
   'remind.missed.titleN': '놓친 알림 {n}', // REVIEW(ko)
   'remind.missed.note': '처리하지 못한 알림이 여기 모여 있어요', // REVIEW(ko)
   'remind.missed.allAck': '모두 확인', // REVIEW(ko)
   'remind.missed.head': '{day} {time} ·', // REVIEW(ko)
-  'remind.missed.started': '(이미 시작했어요)', // REVIEW(ko)
+  'remind.missed.started': '(이미 시작됨)', // R-106 B2 第一遍已审（11-04）（B2K-S06）
   'remind.missed.empty': '놓친 알림이 없어요', // REVIEW(ko)
   'remind.kindName.event': '일정', // REVIEW(ko)
   'remind.kindName.todo': '할 일', // REVIEW(ko)
@@ -58,7 +59,7 @@ export const remindKo = {
   'remind.full.note': '메모', // REVIEW(ko)
   'remind.full.next': '다음: {title}', // REVIEW(ko)
   'remind.full.handled': '다른 기기에서 처리했어요', // REVIEW(ko)
-  'remind.full.handledNote': '이미 처리한 알림이에요. 더 할 일은 없어요.', // REVIEW(ko)
+  'remind.full.handledNote': '이미 처리한 알림이에요. 이 화면은 닫아도 돼요.', // R-106 B2 第一遍已审（11-04）（B2K-S02）
   'remind.full.gone': '이 알림을 찾을 수 없어요', // REVIEW(ko)
   'remind.full.goneNote': '삭제됐거나 아직 이 기기에 동기화되지 않았을 수 있어요.', // REVIEW(ko)
   'remind.full.home': '오늘로 돌아가기', // REVIEW(ko)
@@ -71,8 +72,8 @@ export const remindKo = {
   'remind.set.notify.on': '켜짐', // REVIEW(ko)
   'remind.set.notify.off': '허용 안 됨', // REVIEW(ko)
   'remind.set.notify.enable': '알림 켜기', // REVIEW(ko)
-  'remind.set.notify.denied': '알림이 꺼져 있어서 알림이 울리지 않아요. 시스템 설정에서 레모 알림을 허용해 주세요.', // REVIEW(ko)
-  'remind.set.notify.tauri': '컴퓨터 버전은 Windows 알림을 써요', // REVIEW(ko)
+  'remind.set.notify.denied': '알림이 꺼져 있어서 제때 알려 드릴 수 없어요. 시스템 설정에서 레모 알림을 허용해 주세요.', // R-106 B2 第一遍已审（11-04）（B2K-S03）
+  'remind.set.notify.tauri': 'PC 앱은 Windows 알림을 써요', // R-106 B2 第一遍已审（11-04）（B2K-02）
   'remind.set.notify.unsupported': '이 브라우저는 알림을 받을 수 없어요', // REVIEW(ko)
   'remind.set.showTitle': '알림에 표시할 내용', // REVIEW(ko)
   'remind.set.showTitle.on': '제목과 이름 그대로', // REVIEW(ko)
@@ -82,44 +83,44 @@ export const remindKo = {
   'remind.set.dnd.from': '시작', // REVIEW(ko)
   'remind.set.dnd.to': '종료', // REVIEW(ko)
   'remind.set.dnd.note': '방해 금지 시간에 걸린 알림은 끝난 뒤에 울려요.', // REVIEW(ko)
-  'remind.set.dnd.same': '시작과 끝을 같은 시각으로 할 수 없어요', // REVIEW(ko)
+  'remind.set.dnd.same': '시작과 종료를 같은 시각으로 정할 수 없어요', // R-106 B2 第一遍已审（11-04）（B2K-S15）
   'remind.set.upcoming': '앞으로 7일 알림', // REVIEW(ko)
   'remind.set.upcoming.note': '앞으로 일주일 동안 울릴 알림을 볼 수 있어요. 하나를 누르면 고칠 수 있어요.', // REVIEW(ko)
   'remind.set.test': '알림이 오는지 확인', // REVIEW(ko)
   'remind.set.test.btn': '한 번 보내 보기', // REVIEW(ko)
   'remind.set.test.sending': '보내는 중…', // REVIEW(ko)
   'remind.set.test.sent': '보냈어요. 이 기기에 왔는지 확인해 보세요', // REVIEW(ko)
-  'remind.set.test.noDevice': '푸시를 받을 수 있는 기기가 없어요. 먼저 알림을 켜 주세요', // REVIEW(ko)
-  'remind.set.test.resubscribe': '푸시 구독이 만료됐어요. 알림을 다시 켜 주세요', // REVIEW(ko)
-  'remind.set.test.rate': '한 시간에 5번까지 시험할 수 있어요. 잠시 후 다시 해 주세요', // REVIEW(ko)
-  'remind.set.test.offline': '인터넷에 연결된 뒤 다시 해 주세요', // REVIEW(ko)
-  'remind.set.test.failed': '보내지 못했어요. 잠시 후 다시 해 주세요', // REVIEW(ko)
+  'remind.set.test.noDevice': '알림을 받을 수 있는 기기가 없어요. 먼저 알림을 켜 주세요', // R-106 B2 第一遍已审（11-04）（B2K-S10）
+  'remind.set.test.resubscribe': '알림 연결이 끊겼어요. 알림을 다시 켜 주세요', // R-106 B2 第一遍已审（11-04）（B2K-S10）
+  'remind.set.test.rate': '테스트는 1시간에 5번까지 할 수 있어요. 잠시 후 다시 시도해 주세요', // R-106 B2 第一遍已审（11-04）（B2K-S07）
+  'remind.set.test.offline': '인터넷에 연결한 뒤 다시 시도해 주세요', // R-106 B2 第一遍已审（11-04）（B2K-S08）
+  'remind.set.test.failed': '보내지 못했어요. 잠시 후 다시 시도해 주세요', // R-106 B2 第一遍已审（11-04）（B2K-S08）
   'remind.set.test.help': '안 왔나요? 시스템 설정에서 레모 알림이 켜져 있는지, 집중 모드가 켜져 있지 않은지 확인해 보세요.', // REVIEW(ko)
   'remind.set.localTest.title': '레모 테스트 알림', // REVIEW(ko)
   'remind.set.localTest.body': '이 알림이 보이면 이 컴퓨터에서 알림을 띄울 수 있어요.', // REVIEW(ko)
   'remind.set.test.localShown': '띄웠어요. 화면 오른쪽 아래를 확인해 보세요', // REVIEW(ko)
   'remind.set.test.localDenied': 'Windows 알림이 꺼져 있어요. 설정 › 시스템 › 알림에서 레모를 켜 주세요', // REVIEW(ko)
-  'remind.set.test.localFailed': '띄우지 못했어요. 잠시 후 다시 해 주세요', // REVIEW(ko)
-  'remind.set.inUse.self': '이 기기의 예전 로그인 기록이 아직 이 기기의 푸시를 쓰고 있어요. 지워야 지금 로그인으로 알림이 와요.', // REVIEW(ko)
-  'remind.set.inUse.other': '이 기기의 푸시를 다른 기기 기록 “{label}”(최근 사용 {date})이 쓰고 있어요. 예전에 인터넷 없이 로그아웃해서 남은 기록일 가능성이 커요.', // REVIEW(ko)
-  'remind.set.inUse.remove': '지우기', // REVIEW(ko)
-  'remind.set.inUse.removing': '지우는 중…', // REVIEW(ko)
-  'remind.set.inUse.removed': '지웠어요. 이제 이 기기로 푸시가 와요', // REVIEW(ko)
-  'remind.set.inUse.reclaimFailed': '지웠지만 푸시는 아직 연결되지 않았어요. “다시 연결”을 눌러 주세요', // REVIEW(ko)
+  'remind.set.test.localFailed': '띄우지 못했어요. 잠시 후 다시 시도해 주세요', // R-106 B2 第一遍已审（11-04）（B2K-S08）
+  'remind.set.inUse.self': '이 기기의 예전 로그인 기록이 아직 이 기기의 알림을 받고 있어요. 이 기록을 제거해야 지금 로그인한 상태로 알림이 와요.', // REVIEW(ko)：B2K-S12 已按审校改，待韩语母语者确认
+  'remind.set.inUse.other': '다른 기기 기록 “{label}” (최근 사용 {date})이 이 기기의 알림을 받고 있어요. 예전에 인터넷이 끊긴 상태에서 로그아웃해서 남은 기록일 가능성이 커요.', // REVIEW(ko)：B2K-S13 已按审校改，待韩语母语者确认
+  'remind.set.inUse.remove': '제거', // R-106 B2 第一遍已审（11-04）（B2K-04）
+  'remind.set.inUse.removing': '제거하는 중…', // R-106 B2 第一遍已审（11-04）（B2K-04）
+  'remind.set.inUse.removed': '제거했어요. 이제 이 기기로 알림이 와요', // R-106 B2 第一遍已审（11-04）（B2K-04）
+  'remind.set.inUse.reclaimFailed': '제거했지만 알림이 아직 연결되지 않았어요. “다시 연결”을 눌러 주세요', // R-106 B2 第一遍已审（11-04）（B2K-04）
   'remind.set.inUse.reconnect': '다시 연결', // REVIEW(ko)
   'remind.set.inUse.reconnecting': '연결하는 중…', // REVIEW(ko)
-  'remind.set.inUse.confirmTitle': '이 기기 기록을 지울까요?', // REVIEW(ko)
-  'remind.set.inUse.confirmBody': '“{label}”(최근 사용 {date}) 기록을 지워요. 지우면 그 로그인은 풀리고, 그 기기에서는 알림을 더 받지 못해요.', // REVIEW(ko)
-  'remind.set.inUse.confirmBodySelf': '이 기기의 예전 로그인 기록(최근 사용 {date})을 지워요. 지우면 그 예전 로그인은 풀리고 알림도 더 받지 않아요.', // REVIEW(ko)
-  'remind.set.inUse.confirmOk': '지우기', // REVIEW(ko)
+  'remind.set.inUse.confirmTitle': '이 기기 기록을 제거할까요?', // R-106 B2 第一遍已审（11-04）（B2K-04）
+  'remind.set.inUse.confirmBody': '“{label}” (최근 사용 {date}) 기록을 제거해요. 제거하면 그 기기는 로그아웃되고, 더 이상 알림을 받지 않아요.', // R-106 B2 第一遍已审（11-04）（B2K-04）
+  'remind.set.inUse.confirmBodySelf': '이 기기의 예전 로그인 기록 (최근 사용 {date})을 제거해요. 제거하면 예전 로그인은 로그아웃되고, 더 이상 알림을 받지 않아요.', // R-106 B2 第一遍已审（11-04）（B2K-04）
+  'remind.set.inUse.confirmOk': '제거', // R-106 B2 第一遍已审（11-04）（B2K-04）
   'remind.set.inUse.cancel': '취소', // REVIEW(ko)
-  'remind.set.inUse.failed': '지우지 못했어요. 잠시 후 다시 해 주세요', // REVIEW(ko)
-  'remind.set.inUse.offline': '인터넷에 연결된 뒤 다시 해 주세요', // REVIEW(ko)
+  'remind.set.inUse.failed': '제거하지 못했어요. 잠시 후 다시 시도해 주세요', // R-106 B2 第一遍已审（11-04）（B2K-04）
+  'remind.set.inUse.offline': '인터넷에 연결한 뒤 다시 시도해 주세요', // R-106 B2 第一遍已审（11-04）（B2K-S08）
   'remind.set.inUse.noLabel': '이름 없는 기기', // REVIEW(ko)
   'remind.set.inUse.noDate': '알 수 없음', // REVIEW(ko)
-  'remind.set.resubscribe': '푸시를 다시 켜야 해요. 눌러 주세요', // REVIEW(ko)
-  'remind.set.notSupported': '이 브라우저의 푸시 서비스는 아직 지원하지 않아요', // REVIEW(ko)
-  'remind.set.saveFailed': '저장하지 못했어요. 잠시 후 다시 해 주세요', // REVIEW(ko)
+  'remind.set.resubscribe': '알림을 다시 켜야 해요. 여기를 눌러 주세요', // R-106 B2 第一遍已审（11-04）（B2K-S10）
+  'remind.set.notSupported': '이 브라우저에서는 아직 레모 알림을 받을 수 없어요', // R-106 B2 第一遍已审（11-04）（B2K-S14）
+  'remind.set.saveFailed': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // R-106 B2 第一遍已审（11-04）（B2K-S08）
   'remind.up.empty': '앞으로 7일 동안 알림이 없어요', // REVIEW(ko)
   'remind.up.date': '{date} {wd}', // REVIEW(ko)
   'remind.up.dayRel': '{label} · {full}', // REVIEW(ko)
@@ -130,7 +131,7 @@ export const remindKo = {
   'remind.up.evSub': '{time} 시작 · {mode}', // REVIEW(ko)
   'remind.up.tdSub': '할 일 · {mode}', // REVIEW(ko)
   'remind.mode.snoozed': '나중에 다시 알림', // REVIEW(ko)
-  'remind.mode.onTime': '정각에 알림', // REVIEW(ko)
+  'remind.mode.onTime': '시작할 때 알림', // R-106 B2 第一遍已审（11-04）（B2K-03）
   'remind.mode.beforeMin': '{n}분 전', // REVIEW(ko)
   'remind.mode.beforeHour': '{n}시간 전', // REVIEW(ko)
   'remind.mode.beforeDay': '{n}일 전', // REVIEW(ko)

@@ -6,7 +6,7 @@ import { msAt, parseHm } from '../../shared/core/date.ts';
 import { handle } from '../../supabase/functions/push-dispatch/core.ts';
 import type { RoundLogic } from '../../supabase/functions/push-dispatch/round.ts';
 import { cronReq, depsFor, fakeVapid } from './push-dispatch-harness.ts';
-import { eventRow, LOGIC, MemDb, todoRow, UA, UB } from './push-dispatch-mem.ts';
+import { eventRow, LOGIC, MemDb, todoRow, UA, UB, uuid } from './push-dispatch-mem.ts';
 
 const SEOUL = 'Asia/Seoul';
 const at = (hm: string, day = '2026-11-03') => msAt(day, parseHm(hm), SEOUL);
@@ -32,7 +32,8 @@ describe('第 0 步：重算 remind_at 时一律传这一行原来的 remind_at�
     for (const [row, prev] of [[t1, t1.remind_at], [t2, null], [e1, 123]] as const) {
       const call = byRow.get(row.id);
       expect(call, row.id).toBeDefined();
-      expect(call).toHaveLength(5);
+      // 11-04 全天日程：日程分支多传第 6 个参数 remind.default_time（这个人没设，是 undefined）；待办仍是 5 个
+      expect(call).toHaveLength(row === e1 ? 6 : 5);
       expect(call?.[4]).toBe(prev);
     }
     expect(byRow.get(t1.id)?.[2]).toBe(SEOUL);   // 待办按 current_tz
@@ -112,14 +113,14 @@ describe('第 0 步：出队即删、写回', () => {
 });
 
 describe('第 0 步：不认识的时区那一行跳过、记 tz_invalid（D7，TZ-invalid-b2）', () => {
-  it('日程自己的 tz 坏了、某人的 current_tz 坏了：各记一条 tz_invalid，code 只写表名；同批别的行照常重算', async () => {
+  it('日程自己的 tz 坏了、某人的 current_tz 坏了：各记一条 tz_invalid，code 分别是表名 events、profiles（11-04 起 current_tz 不认识统一记 profiles）；同批别的行照常重算', async () => {
     const db = new MemDb().user(UA).user(UB, { current_tz: 'Mars/Olympus_Mons' });
     const bad = db.put('events', eventRow(UA, { title: '机密会议', date: '2026-11-05', time: '15:00', tz: 'Not/AZone', remind_min: 15, remind_at: 1 }), true);
     const ok = db.put('events', eventRow(UA, { date: '2026-11-05', time: '15:00', tz: SEOUL, remind_min: 15 }), true);
     const tb = db.put('todos', todoRow(UB, { title: '机密待办', due: '2026-11-05', remind_days: 0, remind_at: 2 }), true);
     await run(db, at('10:00'));
     const tz = db.logs.filter((l) => l.act === 'tz_invalid');
-    expect(tz.map((l) => [l.user_id, l.code]).sort()).toEqual([[UA, 'events'], [UB, 'todos']].sort());
+    expect(tz.map((l) => [l.user_id, l.code]).sort()).toEqual([[UA, 'events'], [UB, 'profiles']].sort());
     for (const l of tz) expect(l.item_id === null && l.coll === null).toBe(true);
     const text = JSON.stringify(db.logs);
     for (const s of ['Not/AZone', 'Mars/Olympus_Mons', '机密会议', '机密待办']) expect(text).not.toContain(s);
@@ -127,5 +128,13 @@ describe('第 0 步：不认识的时区那一行跳过、记 tz_invalid（D7，
     expect(db.tables.todos.get(tb.id)?.remind_at).toBe(2);
     expect(db.tables.events.get(ok.id)?.remind_at).toBe(msAt('2026-11-05', 885, SEOUL));
     expect(db.queue.size).toBe(0);   // 跳过的不插回（插回只会每分钟再记一次）
+  });
+  it('11-04：current_tz 不认识时纪念日也记 profiles（和待办、全天日程同一口径，R-316）', async () => {
+    const db = new MemDb().user(UB, { current_tz: 'Mars/Olympus_Mons' });
+    db.put('anniversaries', { id: uuid('a'), user_id: UB, deleted_at: null, undone: false, push_show_title: null, remind_at: 3, notified_for: null,
+      snooze_at: null, pushed_for: null, defer_until: null, name: '妈妈生日', kind: 'birthday', calendar: 'solar', month: 11, day: 20 }, true);
+    await run(db, at('10:00'));
+    expect(db.logs.filter((l) => l.act === 'tz_invalid').map((l) => [l.user_id, l.code])).toEqual([[UB, 'profiles']]);
+    expect(db.queue.size).toBe(0);
   });
 });

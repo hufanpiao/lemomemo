@@ -62,6 +62,8 @@ function checkName(name, country, where, errs) {
   }
   const native = country === 'cn' ? 'zh' : 'ko';
   if (name[native] === undefined) errs.push(`${where}：本国语言的名称 name.${native} 必填`);
+  // R-338（11-04 负责人定）：韩文界面显示中国节假日的韩文名，所以中国的每一条 name.ko 也必填（韩国的 name.zh 仍可不填）
+  else if (country === 'cn' && name.ko === undefined) errs.push(`${where}：中国节假日的韩文名 name.ko 必填（R-338）`);
 }
 
 /**

@@ -1,4 +1,5 @@
 // 月历、周视图界面共用的小工具（B2 FA-3）：项目色的样式类、星期几的词典键、事项的标题和简称
+import { CN_WORKDAY_TAILS } from './holiday-tail-data.ts';
 import type { CalItems } from '../../../../shared/logic/calendar/cal-items.ts';
 import type { ProjectColor } from '../../../../shared/logic/project-color.ts';
 import { displayShort } from '../../../../shared/logic/short.ts';
@@ -72,16 +73,36 @@ export function itemTitle(items: CalItems, kind: ItemKind, id: string): string {
 /**
  * 节假日一行的文字：放假写名字；补班写“班·名字”（月格、手机泳道、电脑表头共用）。
  * “班”放在最前：手机月格一格只有约 45 px，放不下时省略号吃掉的是名字的尾巴，“班”总看得见（截图 11-04 发现“国庆节补班”被截成“国庆节…”）；
- * 节假日文件里的名字本来就带“补班”（词条 cal.workdayTail；空串表示不去）的，去掉这个尾巴再拼，免得写两遍
+ * 节假日文件里的名字本来就带补班尾巴（“国庆节补班”“춘절 대체 근무일”）的，去掉这个尾巴再拼，免得写两遍（手机月格“근무·춘절”）。
+ * 尾巴按实际取到的那份名字认（R-106 B2K-06、R-338、R-340）：holidayMarks 按界面语言取 name.zh / name.ko，缺了回落中文名，
+ * 所以中文名去“补班”、韩文名去“ 대체 근무일”，哪个结尾对上去哪个，去掉后 trim；
+ * 尾巴是数据常量 CN_WORKDAY_TAILS（ui/holiday-tail-data.ts，和 src/public/holidays/cn/*.json 的写法一致，__tests__/holiday-tail.test.ts 查），审校改了写法只改那里
  */
+
+/** 名字去掉补班尾巴（连同前后空格）；对不上原样返回 */
+export function stripWorkdayTail(name: string): string {
+  for (const raw of Object.values(CN_WORKDAY_TAILS)) {
+    const tail = raw.trim();
+    if (tail !== '' && name.endsWith(tail)) return name.slice(0, -tail.length).trim();
+  }
+  return name;
+}
+
+/**
+ * 补班日读屏（B2K-08）：名字里已经带了补班尾巴（“春节补班”“춘절 대체 근무일”）就直接读名字，
+ * 不再套 cal.a11y.workday 的括号（原来读成“元旦补班（补班）”）；没带尾巴的才用 wrap 加括号
+ */
+export function workdayA11y(name: string, wrap: (name: string) => string): string {
+  return stripWorkdayTail(name) !== name ? name : wrap(name);
+}
+
 export function holText(
   h: { readonly kind: 'off' | 'work'; readonly name: string },
   workday: string,
-  tail: string,
   narrow?: { readonly full: string; readonly short: string },
 ): string {
   if (h.kind !== 'work') return narrow ? narrowHolName(h.name, narrow) : h.name;
-  const base = tail !== '' && h.name.endsWith(tail) ? h.name.slice(0, -tail.length) : h.name;
+  const base = stripWorkdayTail(h.name);
   return base === '' ? workday : `${workday}·${base}`;
 }
 

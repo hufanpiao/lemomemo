@@ -9,29 +9,23 @@
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { isUsable } from '../_shared/auth.ts';
-import { msAt, parseHm } from '../_shared/gen/core/date.ts';
+import { msAt, parseHm, todayOf } from '../_shared/gen/core/date.ts';
 import { isValidTz } from '../_shared/gen/core/tz.ts';
 import { t } from '../_shared/gen/i18n/i18n.ts';
 import { notifyText } from '../_shared/gen/logic/notify-text.ts';
-import { dndDeferUntil, remindAtOf, type EventRemindRow, type TodoRemindRow } from '../_shared/gen/logic/remind.ts';
+import { allDayTimeOf, dndDeferUntil, eventRemindAt, todoRemindAt } from '../_shared/gen/logic/remind.ts';
+import { startAtOf } from '../_shared/gen/logic/remind-actions.ts';
 import { resolveOverride } from '../_shared/push/stub.ts';
 import { loadVapid, VapidSigner, type VapidKeys, type VapidLoad } from '../_shared/push/vapid.ts';
 import { handle } from './core.ts';
+import { makeLogic } from './logic.ts';
 import type { RoundLogic } from './round.ts';
 import { makeStore } from './store.ts';
 
-/** 共享 logic 接到 round.ts 的结构类型上（行是数据库原样读出的，类型在 shared 一侧） */
-export const LOGIC: RoundLogic = {
-  remindAtOf: (kind, row, tz, now, prev) =>
-    kind === 'todo' ? remindAtOf('todo', row as unknown as TodoRemindRow, tz, now, prev) : remindAtOf('event', row as unknown as EventRemindRow, tz, now, prev),
-  isValidTz,
-  dndDeferUntil,
-  eventStartAt: (row) => (typeof row.time === 'string' && typeof row.tz === 'string' && typeof row.date === 'string' ? msAt(row.date, parseHm(row.time), row.tz) : null),
-  notify: (i) => notifyText(i),
-  t: (key, params, locale) => t(key as never, params as never, locale === 'ko-KR' ? 'ko-KR' : 'zh-CN'),
-  // B5 填实现（logic/anniv 的 nextDate + 提醒偏移）；现在回 null：第 0 步不改纪念日、第 6 步推过以后不写下一次
-  annivNext: () => null,
-};
+/** 共享 logic 的接线（分支在 logic.ts 里只写一遍；这里只列 _shared/gen 下的函数，名字和测试替身一致，见 tests/edge/push-dispatch-logic-wiring.test.ts） */
+export const LOGIC: RoundLogic = makeLogic({
+  todoRemindAt, eventRemindAt, allDayTimeOf, startAtOf, msAt, parseHm, todayOf, isValidTz, dndDeferUntil, notifyText, t,
+});
 
 // 每个实例只自检一次（C-9）；三个变量的值变了（换钥匙后重新部署会起新实例，这里只是兜底）就重做
 // 三个值整串比较（代码审查 S10；值只在内存里，不写日志）。VapidSigner 跟着这份缓存走（下面的 signerFor）：缓存换了才新建 signer，

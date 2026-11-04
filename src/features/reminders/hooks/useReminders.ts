@@ -15,8 +15,8 @@ import { closeLocalReminder, showLocalReminder } from '../../../platform/native-
 import { closeHandledNotifications } from '../../../platform/notifications.ts';
 import { watchKeyboard } from '../../../platform/viewport.ts';
 import { actionsFor, type RemindAction } from '../../../../shared/logic/remind-actions.ts';
-import { localDue, localText, shouldCloseShown, staleTags } from '../data/local-notify.ts';
-import { allReminders, MISSED_WINDOW_MS, ringing, type Reminder, type Row } from '../data/reminder-model.ts';
+import { localDue, localText, shouldCloseShown, shownKey, staleShown } from '../data/local-notify.ts';
+import { allReminders, MISSED_WINDOW_MS, occurrenceKey, ringing, type Rang, type RangMap, type Reminder, type Row } from '../data/reminder-model.ts';
 import { ackAll as ackAllWrite, ackReminder, snoozeReminder, type SaveOutcome } from '../data/remind-write.ts';
 import { defaultTimeOf, dndOf, KEY_DEFAULT_TIME, KEY_DND, KEY_SHOW_TITLE, settingValue, showTitleOf, type SettingRow } from '../data/remind-settings.ts';
 
@@ -64,7 +64,7 @@ export function useReminderList(now: number) {
   const todos = useCollection<Row>('todos');
   const prefs = useRemindPrefs();
   const tz = currentTz();
-  const list = useMemo(() => allReminders(events, todos, now, tz, prefs.dnd), [events, todos, now, tz, prefs.dnd]);
+  const list = useMemo(() => allReminders(events, todos, now, tz, prefs.dnd, prefs.defaultTime), [events, todos, now, tz, prefs.dnd, prefs.defaultTime]);
   const known = useMemo(() => new Set([...events.map((r) => `event:${r.id}`), ...todos.map((r) => `todo:${r.id}`)]), [events, todos]);
   return { list, tz, prefs, known };
 }
@@ -80,16 +80,28 @@ export function actionsOf(r: Reminder, now: number, tz: string, prefs: { dnd: Re
 }
 
 /** 挂在 App 上跑一份：队列、键盘、本机通知、收回已处理的通知 */
+/** 本次打开以后响过的（R-336）：引擎写、“错过的提醒”读；引擎卸载（退出登录、换账号）时清空 */
+const rangStore = new Map<string, Rang>();
+/** 给“错过的提醒”用：本次打开以后响过的 occurrenceKey → 当时的 tag 和时刻 */
+export function rangSnapshot(): RangMap {
+  return rangStore;
+}
+
 export function useRemindEngine(): void {
   const now = useMinuteNow();
   const { list, tz, prefs, known } = useReminderList(now);
   const locale = useUi((s) => s.locale);
   const since = useRef(clock.now());
   const collapsed = useRemindQueue((s) => s.collapsed);
+  // 本次打开以后响过的：occurrenceKey → 当时的 tag 和实际响的时刻。全天日程改了 remind.default_time，同一次提醒不再进横幅，
+  // 没按“知道了”的进“错过的提醒”按当时的时刻显示（R-336 ②；重开 App 会忘，见 REMIND-shown-persist）
+  useEffect(() => () => rangStore.clear(), []);
 
   // 正在响的进队列（本次打开以后到点的；打开前就到点的进“错过的提醒”）
   useEffect(() => {
-    setRinging(ringing(list, now, since.current, collapsed).map((r) => ({ kind: r.kind, id: r.id, dueAt: r.tagDue, tag: r.tag })));
+    const ring = ringing(list, now, since.current, collapsed, rangStore);
+    for (const r of ring) if (!rangStore.has(occurrenceKey(r))) rangStore.set(occurrenceKey(r), { tag: r.tag, dueAt: r.dueAt });
+    setRinging(ring.map((r) => ({ kind: r.kind, id: r.id, dueAt: r.tagDue, tag: r.tag })));
   }, [list, now, collapsed]);
 
   // 退出（RemindHost 卸载）时清空队列
@@ -117,35 +129,36 @@ export function useRemindEngine(): void {
   }, [now]);
 
   // exe 每分钟检查：到点的弹本机通知（网页版 showLocalReminder 是空操作），别处处理了撤回
-  const shown = useRef(new Set<string>());
+  // 弹过的：shownKey → 弹出时的 tag（全天日程改了默认时刻，key 不变、不再弹第二次，R-336；撤回仍按原来那条通知的 tag）
+  const shown = useRef(new Map<string, string>());
   // 退出登录、换账号（RemindHost 卸载）时撤回本次弹出的本机通知（代码审查低 5；退出流程另有 closeAllLocalReminders 兜底）
   useEffect(
     () => () => {
-      for (const tag of shown.current) void closeLocalReminder(tag).catch(() => undefined);
+      for (const tag of shown.current.values()) void closeLocalReminder(tag).catch(() => undefined);
       shown.current.clear();
     },
     [],
   );
   useEffect(() => {
-    for (const tag of staleTags(shown.current, list)) {
-      shown.current.delete(tag);
+    for (const [key, tag] of staleShown(shown.current, list)) {
+      shown.current.delete(key);
       void closeLocalReminder(tag).catch(() => undefined);
     }
     for (const r of localDue(list, now, shown.current)) {
-      shown.current.add(r.tag);
+      shown.current.set(shownKey(r), r.tag);
       const text = localText(r, { showTitle: prefs.showTitle, tz, locale, defaultTime: prefs.defaultTime });
       void showLocalReminder({ tag: r.tag, kind: r.kind, id: r.id, dueAt: r.tagDue, title: text.title, body: text.body }).catch(() => undefined);
     }
   }, [list, now, prefs.showTitle, prefs.defaultTime, tz, locale]);
 
   // 打开 App、回到前台：关掉已处理的系统通知（iPhone 不发 resolve，5.3）；本机还没拉到的行不动
-  const latest = useRef({ list, known });
-  latest.current = { list, known };
+  const latest = useRef({ list, known, tz });
+  latest.current = { list, known, tz };
   useEffect(() => {
     const run = (): void => {
-      const { list: l, known: k } = latest.current;
+      const { list: l, known: k, tz: z } = latest.current;
       if (k.size === 0) return;
-      void closeHandledNotifications((t) => shouldCloseShown(t, l, k.has(`${t.kind}:${t.id}`)));
+      void closeHandledNotifications((t) => shouldCloseShown(t, l, k.has(`${t.kind}:${t.id}`), z));
     };
     const onVis = (): void => {
       if (document.visibilityState === 'visible') run();
@@ -157,8 +170,8 @@ export function useRemindEngine(): void {
   useEffect(() => {
     if (ranOnce.current || known.size === 0) return;
     ranOnce.current = true;
-    void closeHandledNotifications((t) => shouldCloseShown(t, list, known.has(`${t.kind}:${t.id}`)));
-  }, [list, known]);
+    void closeHandledNotifications((t) => shouldCloseShown(t, list, known.has(`${t.kind}:${t.id}`), tz));
+  }, [list, known, tz]);
 }
 
 export type ActResult = 'ok' | 'failed' | 'readonly' | 'silent';

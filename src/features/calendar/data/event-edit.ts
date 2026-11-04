@@ -8,7 +8,7 @@
 // 纯 TS：不准 import React（A1）
 import { minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { isValidTz, type Tz } from '../../../../shared/core/tz.ts';
-import { remindAtOf } from '../../../../shared/logic/remind.ts';
+import { ALL_DAY_LIVE_UNTIL, remindAtOf } from '../../../../shared/logic/remind.ts';
 import { remindLive, rowRemindPending } from '../../../core/remind-flag.ts';
 
 export interface EventForm {
@@ -142,6 +142,13 @@ export function patchOf(row: Readonly<Record<string, unknown>>, prev: EventForm,
   if (Object.keys(data).length === 0) return null;
   // 有时刻必须有时区（库的 check）：time 改了就把 tz 一起带上，免得只带一半
   if ('time' in data && !('tz' in data)) data['tz'] = next.tz;
+  // 换了一次提醒：旧的“知道了”“稍后”不再算数，同一次写入里清掉（B2 前端增量审查 M1；R-336 只认同一次提醒）。
+  // 口径和服务器触发器一致：date、remind_days 改了，或者 time 在空和非空之间切换（全天 ↔ 有时刻）；
+  // pushed_for 是系统列，本机不写，由服务器触发器清
+  if ('date' in data || 'remind_days' in data || (prev.time === null) !== (next.time === null)) {
+    data['notified_for'] = null;
+    data['snooze_at'] = null;
+  }
   if ('title' in data && row['short_by'] === 'ai') {
     data['short'] = null;
     data['short_by'] = null;
@@ -159,7 +166,7 @@ export function newEventRow(id: string, form: EventForm, now: number): Record<st
 }
 
 /** 日程按同一个写法：新建、改了这几列不传 prevRemindAt（eventRemindAt 不看这个参数，传不传结果一样；代码审查补审“日程”一节） */
-export const EVENT_TIMING_COLS: readonly string[] = ['date', 'time', 'tz', 'remind_min'];
+export const EVENT_TIMING_COLS: readonly string[] = ['date', 'time', 'tz', 'remind_min', 'remind_days'];
 
 type RowLike = Readonly<Record<string, unknown>> | undefined;
 const isDel = (v: unknown): boolean => v !== null && v !== undefined;
@@ -170,7 +177,10 @@ export function prevRemindAtOf(row: RowLike, data: Readonly<Record<string, unkno
   return typeof row['remind_at'] === 'number' ? row['remind_at'] : null;
 }
 
-const remindRow = (f: EventForm, deleted: boolean) => ({ date: f.date, time: f.time, tz: f.tz, remind_min: f.remind_min, deleted_at: deleted ? 1 : null });
+// 全天日程按 remind_days 和 current_tz 算（shared 的全天分支）。这里拿不到设置 remind.default_time（调用方 kit/hooks/useEditRecord 也拿不到），
+// 判断“还会不会响”时当天提醒按 23:59 算：当天结束前都算会响，用户把默认时刻设得再晚也不漏标（架构 5.3 第 4 步（11-04））
+export { ALL_DAY_LIVE_UNTIL };
+const remindRow = (f: EventForm, deleted: boolean) => ({ date: f.date, time: f.time, tz: f.tz, remind_min: f.remind_min, remind_days: f.remind_days, deleted_at: deleted ? 1 : null });
 
 /**
  * 写入的 remind 标记：改之后的提醒时刻不早于 now − 2 分钟，或者改之前还会响（代码审查 S2、S14、S16，规则同 core/remind-flag.ts）；
@@ -179,11 +189,11 @@ const remindRow = (f: EventForm, deleted: boolean) => ({ date: f.date, time: f.t
 export function hasRemind(c: { row: RowLike; data: Readonly<Record<string, unknown>> | null; prev: EventForm | null; next: EventForm; tz: Tz; now: number }): boolean {
   if (c.next.date === '') return false;
   const delAfter = c.data && 'deleted_at' in c.data ? isDel(c.data['deleted_at']) : isDel(c.row?.['deleted_at']);
-  if (remindLive(remindAtOf('event', remindRow(c.next, delAfter), c.tz, c.now, prevRemindAtOf(c.row, c.data)), c.now)) return true;
+  if (remindLive(remindAtOf('event', remindRow(c.next, delAfter), c.tz, c.now, prevRemindAtOf(c.row, c.data), ALL_DAY_LIVE_UNTIL), c.now)) return true;
   if (c.prev === null || c.row === undefined || isDel(c.row['deleted_at'])) return false;
   if (rowRemindPending(c.row, c.now)) return true;   // S14：按过“稍后”
   if (c.prev.date === '') return false;
   // 改之前那一份按“其余重算”传它自己的 remind_at；已经过了的提醒不用撤（不算，免得改一下过去的日程也整条提前发）
-  const before = remindAtOf('event', remindRow(c.prev, false), c.tz, c.now, prevRemindAtOf(c.row, {}));
+  const before = remindAtOf('event', remindRow(c.prev, false), c.tz, c.now, prevRemindAtOf(c.row, {}), ALL_DAY_LIVE_UNTIL);
   return remindLive(before, c.now);
 }

@@ -10,7 +10,7 @@ import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { openReminder } from '../../../platform/native-bridge.ts';
 import { dayMsg, eventStart, missed, timeOf, type Reminder } from '../hooks/remind-view.ts';
-import { actionsOf, useMinuteNow, useReminderList, useRemindActions } from '../hooks/useReminders.ts';
+import { actionsOf, rangSnapshot, useMinuteNow, useReminderList, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
 import { Bell } from './Bell.tsx';
 import { pcClass } from './pc-class.ts';
@@ -23,7 +23,7 @@ export default function MissedReminders() {
   const { list, tz, prefs } = useReminderList(now);
   const entries = useRemindQueue((s) => s.entries);
   const ringTags = useMemo(() => new Set(entries.map((e) => e.tag)), [entries]);
-  const items = useMemo(() => missed(list, now, ringTags), [list, now, ringTags]);
+  const items = useMemo(() => missed(list, now, ringTags, rangSnapshot()), [list, now, ringTags]);
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
   const { ackAll } = useRemindActions();

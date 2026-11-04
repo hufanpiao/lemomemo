@@ -196,3 +196,52 @@ describe('store.ts 的 inChunks（代码审查 M5 的分批函数；复审建议
     expect(seen).toEqual(['u0', 'u100']);
   });
 });
+
+describe('store.ts 的 settings：撤销了的设置按没设处理（11-04）', () => {
+  // 按记下的 PostgREST 条件真的筛一遍行（in、is、eq），证明条件写对了，而不只是“调用里有这一项”
+  type SRow = { user_id: string; key: string; value: unknown; deleted_at: number | null; undone: boolean };
+  function evalAdmin(rows: SRow[]) {
+    const chains: Call[][] = [];
+    const admin = {
+      from: (t: string) => {
+        const calls: Call[] = [['from', t]];
+        chains.push(calls);
+        const p: Record<string, unknown> = new Proxy({}, {
+          get(_x, k) {
+            if (k === 'then') {
+              return (ok: (v: unknown) => void) => {
+                const keep = rows.filter((r) => calls.every(([op, col, v]) => {
+                  const cell = (r as Record<string, unknown>)[col as string];
+                  if (op === 'in') return (v as unknown[]).includes(cell);
+                  if (op === 'is' || op === 'eq') return cell === v;
+                  return true;
+                }));
+                ok({ data: keep.map((r) => ({ user_id: r.user_id, key: r.key, value: r.value })), error: null });
+              };
+            }
+            return (...a: unknown[]) => { calls.push([String(k), ...a]); return p; };
+          },
+        });
+        return p;
+      },
+      schema: () => ({}),   // makeStore 开头取 private schema；settings 用不到
+    };
+    return { admin, chains };
+  }
+  it('撤销了的 remind.default_time、remind.dnd、remind.show_title 都不返回（round 里就按出厂 09:00、没开免打扰、写标题处理）；软删的同样不返回；活着的照返回', async () => {
+    const rows: SRow[] = [
+      { user_id: 'u', key: 'remind.default_time', value: '07:00', deleted_at: null, undone: true },
+      { user_id: 'u', key: 'remind.dnd', value: { start: '19:00', end: '08:00' }, deleted_at: null, undone: true },
+      { user_id: 'u', key: 'remind.show_title', value: false, deleted_at: null, undone: true },
+      { user_id: 'v', key: 'remind.default_time', value: '06:30', deleted_at: null, undone: false },
+      { user_id: 'v', key: 'remind.dnd', value: { start: '22:00', end: '07:00' }, deleted_at: 5, undone: false },
+      { user_id: 'v', key: 'remind.show_title', value: false, deleted_at: null, undone: false },
+    ];
+    const { admin, chains } = evalAdmin(rows);
+    const m = (await makeStore(admin).settings?.(['u', 'v'])) as Map<string, Record<string, unknown>>;
+    expect(m.get('u')).toBeUndefined();
+    expect(m.get('v')).toEqual({ 'remind.default_time': '06:30', 'remind.show_title': false });
+    expect(chains[0]).toContainEqual(['eq', 'undone', false]);
+    expect(chains[0]).toContainEqual(['is', 'deleted_at', null]);
+  });
+});
