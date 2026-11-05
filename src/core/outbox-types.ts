@@ -217,6 +217,28 @@ export interface Outbox {
   isSuspended(): boolean;
 }
 
+/** outbox.resolveGone 做成了什么 */
+/**
+ * gone 项的收尾（K8 冲突提示，方案 4.3；实现 outbox-gone.ts 的 resolveGoneImpl，功能层经 core/write-gone.ts 的 resolveGone 调）：
+ * restore = 合并这条记录所有 failed + gone 的项、加上它们之后还没发出的 patch，带 deleted_at: null 作为一项新的 pending patch 入队，再删掉这些项；
+ * drop = 只删 gone 的项。入队和删除在同一个写事务里，两个标签页同时点也只生效一次。
+ * done 为 'nothing'：已经没有 gone 项（别的标签页处理掉了），或连续两次读到的项都变了。
+ * 拒收抛 OutboxRejectError：undone（合并后是撤销）、readonly_row、row_missing、严格校验的码、outbox_suspended；
+ * 严格校验代码下载不下来抛 OutboxCodeUnavailableError
+ */
+export type ResolveGoneDone = 'restored' | 'dropped' | 'nothing';
+
+export interface ResolveGoneReport {
+  done: ResolveGoneDone;
+  /** 恢复项的 op_id（只有 restored 有） */
+  opId: string | null;
+}
+
+export interface ResolveGoneOptions {
+  /** restore 时：恢复以后这一行带不带提醒（merged 是本机 view 叠上恢复 patch 的整行，patch 是恢复 patch 本身）；不给按 false */
+  remindOf?: (merged: Readonly<Record<string, unknown>>, patch: Readonly<Record<string, unknown>>) => boolean;
+}
+
 export interface OutboxOptions {
   /** 默认构建版本 */
   appVersion?: string;

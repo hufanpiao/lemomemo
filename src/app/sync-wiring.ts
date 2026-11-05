@@ -39,6 +39,7 @@ import { createTzReporter, type TzReporter } from '../core/sync/report-tz.ts';
 import type { SyncState, SyncTransport } from '../core/sync/types.ts';
 import { browserLifecycle, onUserActivity, type Lifecycle } from '../platform/net.ts';
 import { exitNoticeOf, readExitNotice, type ExitNotice } from '../platform/session.ts';
+import { startSyncNotices } from './sync-notice-gate.ts';
 import { canProbe, currentSid, noLocalSession, noteExitFromOtherTab, probeThenLeave, type SyncDisabledDeps } from './sync-disabled.ts';
 import { createTabLeader, type SyncMessage, type TabLeader, type TabLeaderOptions } from '../platform/tab-leader.ts';
 
@@ -286,5 +287,7 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     if (exiting || boot.switching) return;
     leader = make({ name, lead: () => () => Promise.resolve(), onMessage, listenOnly: true });
   }
+  // 同步冲突、gone 提示（K8 冲突提示，方案 2.1）：gate 跟着这个块下载，宿主有要显示的才按需下载；换账号、同步停了自己卸掉
+  startSyncNotices(f.facade, boot, { log: deps.log });
   return f.facade;
 }

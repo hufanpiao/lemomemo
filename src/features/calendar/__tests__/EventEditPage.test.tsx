@@ -2,7 +2,7 @@
 // 和待办编辑页同一套：真实的冷启动（假 IndexedDB），写入经 write.* 进 outbox，再从集合读回来
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { msAt } from '../../../../shared/core/date.ts';
+import { msAt, todayOf } from '../../../../shared/core/date.ts';
 import { coldStart, getBoot, resetBootForTest } from '../../../core/boot.ts';
 import { fakeIndexedDB } from '../../../core/__tests__/idb-fake.ts';
 import type { ServerRow } from '../../../core/cache.ts';
@@ -178,6 +178,6 @@ describe('从日历页点“＋”新建（FA-7 第 5 项）', () => {
     expect(pendingNewDate()).toBeNull();
     view.unmount();
     open('#/event/new');
-    expect((screen.getByTestId('event-edit-date') as HTMLInputElement).value).toBe('2026-11-05');
+    expect((screen.getByTestId('event-edit-date') as HTMLInputElement).value).toBe(todayOf(NOW, currentTz()));
   });
 });

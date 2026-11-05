@@ -126,16 +126,21 @@ describe('TC-B1-25 / TC-B1-23 别的设备改过的字段照样冲突', () => {
     const id = await seedBoth(t, cache, 1);
     await outbox.enqueue({ table: 'todos', id, op: 'patch', data: { title: '本机' } });
     let first = true;
+    let second: string | null = null;
     t.beforeReply = async () => {
       if (!first) return;
       first = false;
       t.server.edit('todos', id, { note: '另一台' });
       await outbox.enqueue({ table: 'todos', id, op: 'patch', data: { note: '本机备注', important: true } });
+      second = (await outbox.list()).find((i) => i.data['note'] === '本机备注')?.op_id ?? null;
     };
     const d = deps(outbox, t);
     expect(await sendAll(d)).toBe('done');
     expect(d.events).toHaveLength(1);
     expect(d.events[0]).toMatchObject({ type: 'conflict', status: 'conflict', table: 'todos', id, conflicts: ['note'], old: { note: '另一台' } });
+    // K8：冲突提示按 opId 认“刚恢复”的那一项——必须是回 conflict 的那一项的 op_id（代码审查 M3），不是记录 id
+    expect(second).toMatch(/^op-/);
+    expect((d.events[0] as { opId?: unknown }).opId).toBe(second);
     expect(d.touchedTables).toEqual(['todos']);
     expect(outbox.getStatus().pending).toBe(0);   // 冲突也算确认：后保存的胜出，不留在队列里
   });

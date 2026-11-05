@@ -3,6 +3,7 @@
 // • role="status"：读屏会读出文字，但不抢焦点（不打断正在做的事）
 // • 鼠标悬停、键盘焦点在条上时暂停计时，移开后重新计 ms（读屏用户来得及按到“撤销”）
 // • 只渲染，不碰数据：撤销做什么由调用方给 onUndo
+// • 根元素带 data-undo-toast（K8 冲突提示 3.1，主持人已批）：冲突提示卡在撤销条开着时往上让一条
 import { useEffect, useRef, useState } from 'react';
 import styles from './UndoToast.module.css';
 
@@ -44,6 +45,7 @@ export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST
   return (
     <div
       className={styles.toast}
+      data-undo-toast=""
       role="status"
       data-testid={testId}
       onMouseEnter={() => setPaused(true)}

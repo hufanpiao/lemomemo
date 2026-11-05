@@ -4,7 +4,7 @@
 // • 行被锁（locked）→ 55P03（不记 applied_ops）；op_id 重复原样回上次结果
 // • 行没了 → not_found（rev、prev_rev 为 null）；已软删且 patch 不含 deleted_at → gone
 // • 冲突字段 = {k ∈ patch | fv[k] > base_rev 且 fv[k] 不在 own_revs 里}（own_revs 超过 20 个当空）；有冲突照样应用回 conflict；
-//   notes 的 title、body 冲突 → forked：原行只改 title、body 以外的键，另插一条“（冲突副本）”，返回 fork_id
+//   notes 的 title、body 冲突 → forked：原行只改 title、body 以外的键，另插一条冲突副本（后缀按 uiLocale 取 FORK_SUFFIX），返回 fork_id
 // • 清单的 noConflict 列（notified_for、snooze_at、updated_at、sort）不报冲突
 // • sameSynced = true 时新写的行都用同一个 synced_at（测同一时间戳跨页）；pullFailAt 让第 N 次 pullRows 失败（测翻页中途失败）
 // 另有 engine 测试用的 bootOf、fakeLife
@@ -14,6 +14,7 @@ import type { BootResult } from '../../boot.ts';
 import type { Cache } from '../../cache.ts';
 import type { Outbox } from '../../outbox-types.ts';
 import { createUpgradeCenter } from '../../upgrade.ts';
+import { FORK_SUFFIX } from '../../../../shared/sync/fork-suffix-data.ts';
 import type { Lifecycle } from '../../../platform/net.ts';
 import type { ParseServerRows, PatchArgs, PatchResponse, PullQuery, RealtimeHandlers, SessionCheck, SyncTransport, TombstoneRow } from '../types.ts';
 
@@ -43,6 +44,8 @@ export class FakeServer {
   /** 这些 id 的行被别的事务锁着 */
   locked = new Set<string>();
   allowedTables = new Set(PATCH_TABLES);
+  /** 本人的 profiles.ui_locale：冲突副本的后缀按它选（同服务器 apply_patch，K8 复审二 S3）；ko-KR 以外按中文 */
+  uiLocale: string | null = 'zh-CN';
   private forks = 0;
   tombstones: TombstoneRow[] = [];
   applied = new Map<string, PatchResponse>();
@@ -123,7 +126,12 @@ export class FakeServer {
       t.set(a.p_id, { ...row, ...patch, rev, fv, synced_at: this.nextSynced() } as FakeRow);
       if (fork) {
         const forkId = `fork-${++this.forks}`;
-        this.insert('notes', { id: forkId, title: `${String(a.p_patch['title'] ?? row['title'])}（冲突副本）`, body: a.p_patch['body'] ?? row['body'] });
+        const suffix = this.uiLocale === 'ko-KR' ? FORK_SUFFIX['ko-KR'] : FORK_SUFFIX['zh-CN'];
+        // 截断跟着后缀算，总长不超过 160（同服务器：left(标题, 160 - char_length(后缀))）
+        // 标题同 SQL：patch 带 title 键就用它，否则用原行；null 当空串（coalesce(…, '')，代码审查 L3）
+        const raw = 'title' in a.p_patch ? a.p_patch['title'] : row['title'];
+        const title = [...String(raw ?? '')].slice(0, 160 - [...suffix].length).join('');
+        this.insert('notes', { id: forkId, title: `${title}${suffix}`, body: a.p_patch['body'] ?? row['body'] });
         res = { status: 'forked', rev, prev_rev: row.rev, conflicts, old, fork_id: forkId };
       } else res = conflicts.length ? { status: 'conflict', rev, prev_rev: row.rev, conflicts, old } : { status: 'ok', rev, prev_rev: row.rev };
     }

@@ -7,7 +7,7 @@ import type { Manifest } from '../../shared/schema/manifest.ts';
 import { allTables } from './manifest-tables.ts';
 import { OUTBOX_V } from './outbox-migrations.ts';
 import type { AckResult, EnqueueInput, FailureKind, OutboxItem, SendFailure } from './outbox-types.ts';
-import type { newItem } from './outbox-new-item.ts';
+import type { mergePatch, newItem } from './outbox-new-item.ts';
 
 /**
  * 丢掉这一项、不重试的错误码（4.2 幂等：vault_required、settings_key_immutable；apply_patch 的 not_found，K6 审查 L2；
@@ -201,8 +201,8 @@ export interface RowSchemas {
   manifests: readonly Manifest[];
 }
 
-/** loadRowSchemas 给的：校验用的 RowSchemas，加上建新 outbox 项的 newItem（outbox-new-item.ts，K8 R2 ①：同批按需加载，不进首屏） */
-export type WriteCode = RowSchemas & { newItem: typeof newItem };
+/** loadRowSchemas 给的：校验用的 RowSchemas，加上建新 outbox 项的 newItem、合并两次 patch 的 mergePatch（outbox-new-item.ts，K8 R2 ①：同批按需加载，不进首屏） */
+export type WriteCode = RowSchemas & { newItem: typeof newItem; mergePatch: typeof mergePatch };
 
 /** 包一层“只加载一次”：成功后一直给同一个 promise；失败的那次照样失败，下次调用重新加载 */
 export function loadOnceRetrying<T>(load: () => Promise<T>): () => Promise<T> {
@@ -223,12 +223,15 @@ export function loadOnceRetrying<T>(load: () => Promise<T>): () => Promise<T> {
 export const loadRowSchemas: () => Promise<WriteCode> = loadOnceRetrying(async () => {
   // 11-05 首屏瘦身：完整清单快照（manifest-source.ts → manifests.gen.ts）也只有校验要用，和 rows.ts 一起下载
   // 建新项的 newItem 也只有入队要用，同一批下载（K8 R2 ①，首屏不增加）
-  const [rows, src, item] = await Promise.all([
-    import('../../shared/schema/rows.ts'),
-    import('./manifest-source.ts'),
-    import('./outbox-new-item.ts'),
-  ]);
-  return { insertSchema: rows.insertSchema, patchSchema: rows.patchSchema, rowsWrite: rows.rowsWrite, manifests: src.manifests, newItem: item.newItem };
+  const [rows, src, item] = await Promise.all([import('../../shared/schema/rows.ts'), import('./manifest-source.ts'), import('./outbox-new-item.ts')]);
+  return {
+    insertSchema: rows.insertSchema,
+    patchSchema: rows.patchSchema,
+    rowsWrite: rows.rowsWrite,
+    manifests: src.manifests,
+    newItem: item.newItem,
+    mergePatch: item.mergePatch,
+  };
 });
 
 /** 按 rows.ts 的严格版（有的表）或清单的可写列校验；返回错误码或 null。rows 由 loadRowSchemas() 给 */

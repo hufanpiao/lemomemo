@@ -110,13 +110,33 @@ describe('apply_patch 4.4.1 的错误码与 forked（0.38 第 57 条）', () => 
     await seed(cache, 'notes', id, { id, title: '原标题', body: '正文', tags: [] }, row.rev);
     t.server.edit('notes', id, { title: '另一台改的' });
     await outbox.enqueue({ table: 'notes', id, op: 'patch', data: { title: '本机改的', tags: ['本机'] } });
+    const opId = (await outbox.list())[0]?.op_id;
     const d = deps(outbox, t);
     expect(await sendAll(d)).toBe('done');
     expect(d.events).toHaveLength(1);
     expect(d.events[0]).toMatchObject({ type: 'conflict', status: 'forked', table: 'notes', id, conflicts: ['title'], forkId: 'fork-1' });
+    expect(opId).toMatch(/^op-/);
+    expect((d.events[0] as { opId?: unknown }).opId).toBe(opId);   // 代码审查 M3：forked 也带回发出去那一项的 op_id
     expect(t.server.table('notes').get(id)).toMatchObject({ title: '另一台改的', tags: ['本机'] });
     expect(t.server.table('notes').get('fork-1')?.['title']).toBe('本机改的（冲突副本）');
     expect(outbox.getStatus().pending).toBe(0);
+  });
+
+  it('冲突副本的后缀按本人的 ui_locale 取 FORK_SUFFIX（K8 复审二 S3）：ko-KR 是“ (충돌 사본)”；标题满 160 字时截短、总长正好 160', async () => {
+    const { cache, outbox } = await setup();
+    const t = fakeTransport();
+    t.server.uiLocale = 'ko-KR';
+    const id = uid(1);
+    const row = t.server.insert('notes', { id, title: '원래 제목', body: '본문', tags: [] });
+    await seed(cache, 'notes', id, { id, title: '원래 제목', body: '본문', tags: [] }, row.rev);
+    t.server.edit('notes', id, { title: '다른 기기' });
+    const long = '가'.repeat(160);
+    await outbox.enqueue({ table: 'notes', id, op: 'patch', data: { title: long } });
+    expect(await sendAll(deps(outbox, t))).toBe('done');
+    const fork = String(t.server.table('notes').get('fork-1')?.['title']);
+    expect(fork.endsWith(' (충돌 사본)')).toBe(true);
+    expect([...fork]).toHaveLength(160);
+    expect(fork).toBe(`${'가'.repeat(152)} (충돌 사본)`);
   });
 
   it('普通冲突的事件 forkId 为 null', async () => {

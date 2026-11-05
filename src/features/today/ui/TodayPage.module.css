@@ -174,7 +174,7 @@
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: max(calc(env(safe-area-inset-bottom) + 118px), var(--kb, 0px));
+  bottom: var(--dock-bottom);   /* 离底 118px、键盘弹起时让开；变量在 styles/base.css（K8 冲突提示 3.1） */
   max-width: 528px;
   margin: 0 auto;
   padding: 12px 16px;

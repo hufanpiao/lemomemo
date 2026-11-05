@@ -78,11 +78,13 @@ export type SyncEvent =
       old: Readonly<Record<string, unknown>> | null;
       /** forked 时冲突副本的 id（界面可跳过去看）；conflict 为 null */
       forkId: string | null;
+      /** 回这个结果的那一项的 op_id（K8：冲突提示按它认“刚恢复”的那一项，方案 4.4） */
+      opId: string;
     }
   /**
    * apply_patch 回 gone（一边删一边改）：这一项已按永久失败进“发送失败”区（outbox 同时发 error 事件，code = gone）。
-   * 界面提示“这条已在另一台设备上删除”：“恢复并保留我的修改”= 新入队一个 deleted_at = null、undone = false 加上原修改的 patch，
-   * 再 outbox.discard(opId)；“好的”= outbox.discard(opId)
+   * 界面提示“这条已在另一台设备上删除”：“恢复并保留我的修改”= core/write-gone.ts 的 resolveGone(table, id, 'restore')
+   * （同一事务里合并成一项带 deleted_at: null 的 patch、删掉 gone 项）；“不用了”= resolveGone(table, id, 'drop')（代码审查 L2）
    */
   | { type: 'gone'; table: string; id: string; opId: string; data: Readonly<Record<string, unknown>> };
 

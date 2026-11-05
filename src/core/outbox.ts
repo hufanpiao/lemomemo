@@ -105,10 +105,10 @@ async function enqueueImpl(ctx: Ctx, input: EnqueueInput): Promise<OutboxItem | 
       return;
     }
 
-    // 还没发出的 patch 合并（inflight 的、发出去过的不参与：重发同一 op_id 会被服务器当重复，新修改就丢了；带依赖的新项不合并，免得被提前）
+    // 还没发出的 patch 合并（规则在 outbox-new-item.ts 的 mergePatch：换了一次提醒后的“知道了”不并进去，R4-L1；inflight 的、发出去过的不参与：重发同一 op_id 会被服务器当重复，新修改就丢了；带依赖的新项不合并，免得被提前）
     const last = mine[mine.length - 1];
     if (op === 'patch' && last?.op === 'patch' && last.state === 'pending' && !last.sent && last.v === ctx.currentV && !input.deps?.length) {
-      result = { ...last, data: { ...last.data, ...input.data }, remind: last.remind || input.remind === true, client_ts: ts };
+      result = { ...last, data: rows.mergePatch(last.data, input.data), remind: last.remind || input.remind === true, client_ts: ts };
     } else {
       result = rows.newItem(ctx, input, row, mine, all, ts);   // 建新项的规则在 outbox-new-item.ts（随 loadRowSchemas 懒加载）
     }
@@ -152,6 +152,12 @@ async function deleteUnlessInflight(ctx: Ctx, item: OutboxItem): Promise<boolean
   return done;
 }
 
+/**
+ * 每个 outbox 的内部上下文（K8 冲突提示）：只给按需下载的 core 代码用（core/write-gone.ts → outbox-gone.ts 的 resolveGoneImpl），
+ * 不对功能层公开。不在 Outbox 接口上加 resolveGone 方法：首屏只剩 0.3 KB 余量，方法的包装、或首屏里的 import() 实测都要 +72～100 B gzip
+ */
+export const outboxCtx = new WeakMap<Outbox, Ctx>();
+
 export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
   let status: OutboxStatus = { pending: 0, failed: 0, paused: null, remindRecs: EMPTY_SET };
   const listeners = new Set<() => void>();
@@ -193,7 +199,7 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
   const list = (): Promise<OutboxItem[]> => cache.tx([OUTBOX], 'readonly', async (t) => (await t.getAll<OutboxItem>(OUTBOX)).sort(bySeq));
   const getItem = (opId: string): Promise<OutboxItem | undefined> => cache.tx([OUTBOX], 'readonly', (t) => t.get<OutboxItem>(OUTBOX, opId));
 
-  return {
+  const api: Outbox = {
     boot: () => bootImpl(ctx),
     enqueue: (input) => enqueueImpl(ctx, input),
     async next() {
@@ -304,4 +310,6 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
     suspend: ctx.suspend,
     isSuspended: ctx.isSuspended,
   };
+  outboxCtx.set(api, ctx);
+  return api;
 }

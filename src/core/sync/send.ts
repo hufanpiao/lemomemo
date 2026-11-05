@@ -157,7 +157,7 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
       if (r.status !== 'ok') {
         d.emit({
           type: 'conflict', status: r.status, table: item.table, id: item.id,
-          conflicts: r.conflicts ?? [], old: r.old ?? null, forkId: r.fork_id ?? null,
+          conflicts: r.conflicts ?? [], old: r.old ?? null, forkId: r.fork_id ?? null, opId: item.op_id,
         });
         d.log?.('sync_conflict', { coll: item.table, code: r.status });   // 0.38 第 67 条：code 是 conflict / forked；不记 old、conflicts、forkId、记录 id
         d.touched(item.table);
