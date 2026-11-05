@@ -1,5 +1,5 @@
 // 离线队列的纯函数（架构 4.2、0.27 第 1 点、第七轮 S1）：失败归类、退避、rebase、发送顺序、确认后推进、入队校验
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   advanceAfterAck,
   backoffMs,
@@ -9,8 +9,12 @@ import {
   sendOrder,
   validateWrite,
 } from '../outbox.ts';
-import { isTryLater, tryLaterBackoffMs } from '../outbox-logic.ts';
+import * as rowsMod from '../../../shared/schema/rows.ts';
+import { manifests } from '../manifest-source.ts';
+import { isTryLater, loadOnceRetrying, loadRowSchemas, tryLaterBackoffMs } from '../outbox-logic.ts';
 import { mk, todo, uid } from './outbox-fixtures.ts';
+
+const rows = { ...rowsMod, manifests };
 
 describe('纯函数', () => {
   it('TC-B1-110（归类一半）：失败归类：426 不算永久失败；401 刷新；断网、5xx、429 退避；vault_required 丢掉；其他 4xx 永久', () => {
@@ -88,13 +92,35 @@ describe('纯函数', () => {
   });
 
   it('校验：rows.ts 有严格版的按它校验；其余按清单的可写列；不同步的表拒收', () => {
-    expect(validateWrite({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) })).toBeNull();
-    expect(validateWrite({ table: 'todos', id: uid(1), op: 'insert', data: { ...todo(1), rev: 3 } })).toBe('invalid_row');
-    expect(validateWrite({ table: 'todos', id: uid(2), op: 'insert', data: todo(1) })).toBe('id_mismatch');
-    expect(validateWrite({ table: 'todos', id: uid(1), op: 'patch', data: { id: uid(1) } })).toBe('invalid_row');
-    expect(validateWrite({ table: 'todos', id: uid(1), op: 'patch', data: { undone: true } })).toBeNull();
-    expect(validateWrite({ table: 'categories', id: 'c', op: 'patch', data: { pushed_for: 1 } })).toBe('column_not_writable:pushed_for');
-    expect(validateWrite({ table: 'logs', id: 'l', op: 'insert', data: { id: 'l' } })).toBe('table_not_synced');
+    expect(validateWrite({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) }, rows)).toBeNull();
+    expect(validateWrite({ table: 'todos', id: uid(1), op: 'insert', data: { ...todo(1), rev: 3 } }, rows)).toBe('invalid_row');
+    expect(validateWrite({ table: 'todos', id: uid(2), op: 'insert', data: todo(1) }, rows)).toBe('id_mismatch');
+    expect(validateWrite({ table: 'todos', id: uid(1), op: 'patch', data: { id: uid(1) } }, rows)).toBe('invalid_row');
+    expect(validateWrite({ table: 'todos', id: uid(1), op: 'patch', data: { undone: true } }, rows)).toBeNull();
+    expect(validateWrite({ table: 'categories', id: 'c', op: 'patch', data: { pushed_for: 1 } }, rows)).toBe('column_not_writable:pushed_for');
+    expect(validateWrite({ table: 'logs', id: 'l', op: 'insert', data: { id: 'l' } }, rows)).toBe('table_not_synced');
+  });
+
+  it('入队校验用的 rows.ts 懒加载（FA-6 ③）：只加载一次，拿到的就是 shared/schema/rows.ts 的严格版', async () => {
+    const a = loadRowSchemas();
+    expect(loadRowSchemas()).toBe(a);
+    const got = await a;
+    expect(got.insertSchema).toBe(rows.insertSchema);
+    expect(got.patchSchema).toBe(rows.patchSchema);
+    expect(got.rowsWrite).toBe(rows.rowsWrite);
+    // 11-05 首屏瘦身：完整清单和 rows 一起按需加载，就是 manifest-source.ts 的那一份
+    expect(got.manifests).toBe(manifests);
+  });
+
+  it('loadOnceRetrying：成功后复用同一个 promise；失败的那次照样失败，下次调用重新加载', async () => {
+    const load = vi.fn<() => Promise<number>>().mockRejectedValueOnce(new Error('chunk')).mockResolvedValueOnce(7);
+    const get = loadOnceRetrying(load);
+    expect(load).not.toHaveBeenCalled();
+    await expect(get()).rejects.toThrow('chunk');
+    const ok = get();
+    expect(await ok).toBe(7);
+    expect(get()).toBe(ok);
+    expect(load).toHaveBeenCalledTimes(2);
   });
 });
 

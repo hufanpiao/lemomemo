@@ -12,6 +12,7 @@ import {
   deletionDoneMail, deletionReminderMail, deletionRequestedMail, exportMail, fmtWhen, restoredMail, safeTz,
 } from '../../supabase/functions/_shared/account-mail.ts';
 import { A, accountDeps, accountReq, B, accountSetup as setup, callAccount as call, COUNTER_KEY, DAY, H, T0 } from './account-fakes.ts';
+import { tzLabel } from '../../shared/i18n/tz-label.ts';
 
 describe('计数键、确认词、amr', () => {
   it('两个计数键过得了 counters 的 check 约束（附录 A：account、restore 按 UTC 日期）', () => {
@@ -78,8 +79,8 @@ describe('account delete（申请注销）', () => {
     // 第一封信：时刻按本人时区（首尔），和 purge_after 一致；正文没有链接
     expect(box).toHaveLength(1);
     expect(box[0]?.to).toBe('a@test.local');
-    expect(box[0]?.mail.text).toContain(fmtWhen(T0 + 7 * DAY, 'Asia/Seoul', 'zh-CN'));
-    expect(box[0]?.mail.text).toContain('2026年11月5日 12:00（Asia/Seoul）');
+    expect(box[0]?.mail.text).toContain(fmtWhen(T0 + 7 * DAY, 'Asia/Seoul', 'zh-CN', tzLabel));
+    expect(box[0]?.mail.text).toContain('2026年11月5日 12:00（韩国时间）');
     expect(box[0]?.mail.text).toContain('恢复账号');
     expect(box[0]?.mail.text).not.toMatch(/http|www\.|lemomemo\./i);
   });
@@ -88,7 +89,7 @@ describe('account delete（申请注销）', () => {
     const { db, box } = setup();
     const r = await call(db, box, { action: 'delete', confirm: '탈퇴' }, { user: B });
     expect(r.status).toBe(200);
-    expect(box[0]?.mail.text).toContain('2026년 11월 5일 12:00 (Asia/Seoul)');
+    expect(box[0]?.mail.text).toContain('2026년 11월 5일 12:00 (한국 시간)');
   });
 
   it('TC-B1-103 ①：管理员申请注销回 admin_cannot_delete，什么都不写', async () => {
@@ -278,8 +279,8 @@ describe('入口', () => {
 describe('注销相关邮件（TC-B1-107 ③：四封都不放链接，时刻按本人时区）', () => {
   it('中、韩两种语言的四封信正文都没有 http、www、域名', () => {
     for (const loc of ['zh-CN', 'ko-KR'] as const) {
-      const mails = [deletionRequestedMail(loc, T0, 'Asia/Seoul'), deletionReminderMail(loc, T0, 'Asia/Shanghai'), deletionDoneMail(loc), restoredMail(loc),
-        exportMail(loc, T0, 'Asia/Seoul', null, null)];
+      const mails = [deletionRequestedMail(loc, T0, 'Asia/Seoul', tzLabel), deletionReminderMail(loc, T0, 'Asia/Shanghai', tzLabel), deletionDoneMail(loc), restoredMail(loc),
+        exportMail(loc, T0, 'Asia/Seoul', null, null, tzLabel)];
       for (const m of mails) {
         expect(m.text, `${loc} ${m.subject}`).not.toMatch(/https?:|www\.|\.com|\.co\b|<a\s/i);
         expect(m.subject.length).toBeGreaterThan(0);
@@ -288,16 +289,29 @@ describe('注销相关邮件（TC-B1-107 ③：四封都不放链接，时刻按
   });
 
   it('时刻按时区换算；时区名不对就按首尔', () => {
-    expect(fmtWhen(T0, 'Asia/Shanghai', 'zh-CN')).toBe('2026年10月29日 11:00（Asia/Shanghai）');
-    expect(fmtWhen(T0 + 13 * H, 'Asia/Seoul', 'ko-KR')).toBe('2026년 10월 30일 01:00 (Asia/Seoul)');
+    expect(fmtWhen(T0, 'Asia/Shanghai', 'zh-CN', tzLabel)).toBe('2026年10月29日 11:00（北京时间）');
+    expect(fmtWhen(T0 + 13 * H, 'Asia/Seoul', 'ko-KR', tzLabel)).toBe('2026년 10월 30일 01:00 (한국 시간)');
     expect(safeTz('Not/AZone')).toBe('Asia/Seoul');
     expect(safeTz(null)).toBe('Asia/Seoul');
-    expect(fmtWhen(T0, 'Not/AZone', 'zh-CN')).toBe('2026年10月29日 12:00（Asia/Seoul）');
+    expect(fmtWhen(T0, 'Not/AZone', 'zh-CN', tzLabel)).toBe('2026年10月29日 12:00（韩国时间）');
+  });
+
+  it('KO-mail-tz-low L1：大小写变体、旧别名规范成 IANA 名（asia/seoul、ROK → Asia/Seoul），信里写“한국 시간”而不是原样字样', () => {
+    expect(safeTz('asia/seoul')).toBe('Asia/Seoul');
+    expect(safeTz('ASIA/SEOUL')).toBe('Asia/Seoul');
+    expect(safeTz('ROK')).toBe('Asia/Seoul');
+    expect(safeTz('Asia/Seoul')).toBe('Asia/Seoul');
+    // Kolkata、Calcutta 规范成同一个名字（V8 的 ICU 是 Asia/Calcutta），不按原名比
+    expect(safeTz('Asia/Kolkata')).toBe(safeTz('Asia/Calcutta'));
+    const ko = deletionRequestedMail('ko-KR', T0, 'asia/seoul', tzLabel).text;
+    expect(ko).toContain('(한국 시간)');
+    expect(ko).not.toMatch(/asia\/seoul/i);
+    expect(fmtWhen(T0, 'ROK', 'zh-CN', tzLabel)).toBe('2026年10月29日 12:00（韩国时间）');
   });
 
   it('申请信写“恢复账号”和“留意垃圾邮件”（15.7 第 8 项）；提醒信写“恢复账号”', () => {
-    expect(deletionRequestedMail('zh-CN', T0, 'Asia/Seoul').text).toMatch(/恢复账号[\s\S]*垃圾邮件/);
-    expect(deletionReminderMail('zh-CN', T0, 'Asia/Seoul').text).toContain('恢复账号');
-    expect(deletionReminderMail('ko-KR', T0, 'Asia/Seoul').text).toContain('계정 복구');
+    expect(deletionRequestedMail('zh-CN', T0, 'Asia/Seoul', tzLabel).text).toMatch(/恢复账号[\s\S]*垃圾邮件/);
+    expect(deletionReminderMail('zh-CN', T0, 'Asia/Seoul', tzLabel).text).toContain('恢复账号');
+    expect(deletionReminderMail('ko-KR', T0, 'Asia/Seoul', tzLabel).text).toContain('계정 복구');
   });
 });

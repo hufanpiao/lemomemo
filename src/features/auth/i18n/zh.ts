@@ -81,8 +81,8 @@ export const zh = {
   'auth.ios.noShare': '看不到分享按钮时，先点“在 Safari 中打开”。',
   'auth.ios.note': '这个页面不能登录。请从主屏幕上的图标打开，再登录，这样只用登一次。',
   // 注销冷静期的恢复页（R-256 ③、架构 0.29 续第 131 条④ 原文；{when} 是 purge_after 按本机时区的“日期 时刻”，口径同邮件 fmtWhen）
-  'auth.restore.ask': '账号在注销冷静期，{when} 后彻底删除。恢复吗？',
-  // {when} 的写法，口径同邮件 fmtWhen：2026年11月5日 14:30（Asia/Seoul）
+  'auth.restore.ask': '账号在注销冷静期，{when}后彻底删除。恢复吗？',
+  // {when} 的写法，口径同邮件 fmtWhen：2026年11月5日 14:30（韩国时间）；括号里是 shared/i18n/tz-label.ts 的通俗说法
   'auth.restore.when': '{y}年{m}月{d}日 {hh}:{mm}（{zone}）',
   // purge_after 为 null（服务器取不到时刻）时用这一句
   'auth.restore.askNoDate': '账号在注销冷静期，到期后会彻底删除。恢复吗？',

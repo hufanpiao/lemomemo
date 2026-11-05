@@ -10,6 +10,7 @@ import { generate } from '../data-manifest/generate.ts';
 import { purgeCases, runPurgeCases, type PurgeActs } from '../data-manifest/purge-runner.ts';
 import { A, accountDeps, accountReq, B, DAY, H, T0 } from './account-fakes.ts';
 import { world, requestDeletion, runPurge, seedOutside, markNoticed, toFirstRun } from './account-purge-harness.ts';
+import { tzLabel } from '../../shared/i18n/tz-label.ts';
 
 describe('时间预算、backups 子目录（K3 安全审查低 9、10）', () => {
   it('处理完一个账号时间就用完：不再认领下一个（deferred），下一次运行再做', async () => {
@@ -156,7 +157,7 @@ describe('TC-B1-107：到期前提醒', () => {
     }
     expect(got).toEqual([5]);   // 11-04 03:30 距 11-05 12:00 是 32.5 小时
     expect(w.db.pending.get(A)?.notice_sent).toBe(true);
-    expect(w.box[0]?.mail.text).toContain('2026年11月5日 12:00（Asia/Seoul）');
+    expect(w.box[0]?.mail.text).toContain('2026年11月5日 12:00（韩国时间）');
     expect(w.box[0]?.mail.text).not.toMatch(/http/);
   });
 
@@ -166,7 +167,7 @@ describe('TC-B1-107：到期前提醒', () => {
     w.box.length = 0;
     for (const d of [1, 2, 3, 4, 6]) { w.clock.ms = RUN(d); await runPurge(w); }
     expect(w.box).toHaveLength(1);
-    expect(w.box[0]?.mail.text).toContain('2026년 11월 5일 12:00 (Asia/Seoul)');
+    expect(w.box[0]?.mail.text).toContain('2026년 11월 5일 12:00 (한국 시간)');
   });
 
   it('先发信、发成功再标 notice_sent（K3 安全审查低 11）：发的那一刻还是 false', async () => {
@@ -216,7 +217,7 @@ describe('TC-B1-107：到期前提醒', () => {
     w.db.sessions.set('bbbbbbbb-s9', B);
     await accountHandle(accountReq({ action: 'restore' }), deps);
     await Promise.all(deps.bg);
-    expect(w.box.map((m) => m.mail.subject)).toEqual([deletionRequestedMail('ko-KR', 0, 'Asia/Seoul').subject, restoredMail('ko-KR').subject]);
+    expect(w.box.map((m) => m.mail.subject)).toEqual([deletionRequestedMail('ko-KR', 0, 'Asia/Seoul', tzLabel).subject, restoredMail('ko-KR').subject]);
     for (const m of w.box) expect(m.mail.text).not.toMatch(/http/);
   });
 });

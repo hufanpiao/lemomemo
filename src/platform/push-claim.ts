@@ -92,6 +92,11 @@ export interface EnsurePushDeps {
   readonly storage?: () => KeyValueLike | null;
   /** 本机令牌里的 session_id（platform/session.ts 的 readSessionId）；读不到就每次都认领 */
   readonly sessionId?: () => string | null;
+  /**
+   * 本机会话里现在的 user_id（platform/session.ts 的 readSessionUserId，FA6-r3-low L9）：订阅前、每次认领前同步比一次，
+   * 不等于 userId（别的标签页换了账号、退出了）就回 claim_failed。不给就不比（测试）
+   */
+  readonly currentUserId?: () => string | null;
   /** 登记或复用本会话的 devices 行（core/device-reg.ts 的 ensure）；返回 null = 这次登记不上，不认领 */
   readonly ensureDevice?: () => Promise<string | null>;
   /** 设备行在服务器上不在了：清掉缓存的那个 id（core/device-reg.ts 的 invalidate），之后 ensureDevice 重新登记 */
@@ -184,7 +189,18 @@ export async function ensurePushSubscription(deps: EnsurePushDeps): Promise<Ensu
   }
 }
 
+/**
+ * 会话还是这个账号（没给 currentUserId 时当作是）。订阅前、第一次认领前、补登记后第二次认领前各同步比一次（FA6-r3-low L9）。
+ * 剩下的已知窗口（首屏判断放宽与推送认领核对审查 L3，不改代码，只记下来）：比完以后 deps.claim → transport.claimEndpoint 里，
+ * supabase-js 还要异步取令牌（可能顺带刷新），中间隔着几个微任务。只有别的标签页恰好在这几个微任务里登录了 B、
+ * 而本页 supabase-js 内存里的会话还是 A 时才会碰上：认领按 A 的令牌发出，这台浏览器的 endpoint 归回 A，A 的提醒会推到已经换成 B 的这台浏览器上；
+ * 持续到本页被 watchAccount 发现换账号、整页重新载入，B 的启动认领把 endpoint 拿回去为止。窗口只有几个微任务，比 L9 以前小几个数量级，接受。
+ * 写法同 sign-out.ts 文件头“剩下的已知问题”
+ */
+const stillOwner = (deps: EnsurePushDeps): boolean => !deps.currentUserId || deps.currentUserId() === deps.userId;
+
 async function claimOnce(deps: EnsurePushDeps): Promise<EnsurePushOutcome> {
+  if (!stillOwner(deps)) return { result: 'claim_failed' };
   const sub = await (deps.subscribe ?? (() => subscribePush({ win: deps.win ?? globalThis })))();
   if (!sub.ok) return { result: sub.reason };
   const digest = deps.digest ?? sha256Short;
@@ -202,11 +218,13 @@ async function claimOnce(deps: EnsurePushDeps): Promise<EnsurePushOutcome> {
   const devId = deps.ensureDevice ? await deps.ensureDevice() : null;
   if (deps.ensureDevice && devId === null) return { result: 'device_pending' };
   const args = { endpoint: sub.sub.endpoint, p256dh: sub.sub.p256dh, auth: sub.sub.auth, label: (deps.label ?? defaultPushLabel()).slice(0, 80), platform: deps.platform };
+  if (!stillOwner(deps)) return { result: 'claim_failed' };
   let r = parseClaimResult(await deps.claim(args));
   if (!r.ok && r.reason === 'device_not_found' && deps.ensureDevice) {
     // 设备行不在（刚被清理、或登记的回包丢了）：先忘掉缓存的旧 id，补登记一次、再认领一次
     if (devId !== null) await deps.invalidateDevice?.(devId);
     if ((await deps.ensureDevice()) === null) return { result: 'device_pending' };
+    if (!stillOwner(deps)) return { result: 'claim_failed' };
     r = parseClaimResult(await deps.claim(args));
   }
   if (r.ok) {

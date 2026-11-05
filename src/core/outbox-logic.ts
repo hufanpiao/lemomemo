@@ -1,11 +1,13 @@
 // 离线写入队列的纯函数（架构 4.2、0.27 第 1 点、第七轮 S1）：失败归类、退避、rebase、发送顺序、确认后推进、入队校验
 // 不碰 IndexedDB，单独测（__tests__/outbox-logic.test.ts）
 // 纯 TS：不准 import React 和任何功能（A1）
-import { insertSchema, patchSchema, rowsWrite, type WritableTable } from '../../shared/schema/rows.ts';
+import type { insertSchema, patchSchema, rowsWrite, WritableTable } from '../../shared/schema/rows.ts';
 import type { ServerRow } from './cache.ts';
-import { allTables, type Manifest } from './manifest.ts';
+import type { Manifest } from '../../shared/schema/manifest.ts';
+import { allTables } from './manifest-tables.ts';
 import { OUTBOX_V } from './outbox-migrations.ts';
 import type { AckResult, EnqueueInput, FailureKind, OutboxItem, SendFailure } from './outbox-types.ts';
+import type { newItem } from './outbox-new-item.ts';
 
 /**
  * 丢掉这一项、不重试的错误码（4.2 幂等：vault_required、settings_key_immutable；apply_patch 的 not_found，K6 审查 L2；
@@ -179,9 +181,60 @@ export class OutboxRejectError extends Error {
   }
 }
 
-/** 按 rows.ts 的严格版（有的表）或清单的可写列校验；返回错误码或 null */
-export function validateWrite(input: EnqueueInput, list?: readonly Manifest[]): string | null {
-  const t = allTables(list).find((x) => x.schema === 'public' && x.name === input.table);
+/**
+ * 入队要的严格校验代码（shared/schema/rows.ts，带 zod）下载不下来（FA-6 ③ 审查 M2）：没写本机、没入队。
+ * 不是拒收（行本身没问题），write.* 归成 local_unavailable 返回 ok:false；pending_actions 转入时不删、下次再转
+ */
+export class OutboxCodeUnavailableError extends Error {
+  override name = 'OutboxCodeUnavailableError';
+  constructor(cause: unknown) {
+    super('outbox_code_unavailable', { cause });
+  }
+}
+
+/** 入队校验要用的 rows.ts 严格版（带 zod） */
+export interface RowSchemas {
+  insertSchema: typeof insertSchema;
+  patchSchema: typeof patchSchema;
+  rowsWrite: typeof rowsWrite;
+  /** 完整数据清单（manifest-source.ts，11-05 首屏瘦身：和 rows.ts 一起按需加载，不进首屏）；validateWrite 不传 list 时用它 */
+  manifests: readonly Manifest[];
+}
+
+/** loadRowSchemas 给的：校验用的 RowSchemas，加上建新 outbox 项的 newItem（outbox-new-item.ts，K8 R2 ①：同批按需加载，不进首屏） */
+export type WriteCode = RowSchemas & { newItem: typeof newItem };
+
+/** 包一层“只加载一次”：成功后一直给同一个 promise；失败的那次照样失败，下次调用重新加载 */
+export function loadOnceRetrying<T>(load: () => Promise<T>): () => Promise<T> {
+  let pending: Promise<T> | null = null;
+  return () => {
+    const p = (pending ??= load());
+    p.catch(() => {
+      if (pending === p) pending = null;
+    });
+    return p;
+  };
+}
+
+/**
+ * 第一次入队时才加载 shared/schema/rows.ts 和完整清单（B2 FA-6 ③：它带着 zod，本机库、outbox 在首屏就开，严格校验只有写入时才用）。
+ * 只加载一次；加载失败这次入队跟着失败（调用方当作意外错误），下次入队再试
+ */
+export const loadRowSchemas: () => Promise<WriteCode> = loadOnceRetrying(async () => {
+  // 11-05 首屏瘦身：完整清单快照（manifest-source.ts → manifests.gen.ts）也只有校验要用，和 rows.ts 一起下载
+  // 建新项的 newItem 也只有入队要用，同一批下载（K8 R2 ①，首屏不增加）
+  const [rows, src, item] = await Promise.all([
+    import('../../shared/schema/rows.ts'),
+    import('./manifest-source.ts'),
+    import('./outbox-new-item.ts'),
+  ]);
+  return { insertSchema: rows.insertSchema, patchSchema: rows.patchSchema, rowsWrite: rows.rowsWrite, manifests: src.manifests, newItem: item.newItem };
+});
+
+/** 按 rows.ts 的严格版（有的表）或清单的可写列校验；返回错误码或 null。rows 由 loadRowSchemas() 给 */
+export function validateWrite(input: EnqueueInput, rows: RowSchemas, list?: readonly Manifest[]): string | null {
+  const { insertSchema, patchSchema, rowsWrite } = rows;
+  const t = allTables(list ?? rows.manifests).find((x) => x.schema === 'public' && x.name === input.table);
   if (!t || t.sync !== true) return 'table_not_synced';
   if (input.op === 'insert' && input.data['id'] !== input.id) return 'id_mismatch';
   if (Object.hasOwn(rowsWrite, input.table)) {

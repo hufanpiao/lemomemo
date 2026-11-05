@@ -1,6 +1,13 @@
 // 首屏画完（B2 FA-6 ①）：冷启动时 supabase-js（约 53 KB gzip）和同步引擎要等第一个页面画出来以后再起，不和页面分包抢下载
-// • “画完”= #root 里出现第一个功能页（main[data-feature]，告知页 onboarding 也算）以后再过一帧；
-//   整屏提示（本机库来自更新的版本、被别的标签页挡住）没有 main[data-feature]，靠兜底：最多等 limitMs 就当画完了，同步不会因此一直不起
+// • “画完”= #root 里出现第一个页面（任何 <main>，告知页 onboarding 也算）以后再过一帧；
+//   整屏提示（本机库来自更新的版本、被别的标签页挡住）没有 <main>，靠兜底：最多等 limitMs 就当画完了，同步不会因此一直不起
+// • 选择器为什么是 'main' 而不是 'main[data-feature]'（FIRSTPAINT-nofeature，提醒挂载统一审查 F1，11-04 放宽）：
+//   有些页面的根是不带 data-feature 的 <main>，冷启动落在这些页时要等 render 后约 6 秒的兜底，同步、supabase-js 跟着晚起。
+//   现在靠不带 data-feature 的 <main> 触发的：kit 的 EditShell（编辑页）、reminders 的 FullReminderPage（整页提醒，
+//   从系统通知点进来最常见的冷启动路径）、开发版的 CspLab；其余页面（含 App.tsx 的出错页、功能关闭页）的根都是 main[data-feature]。
+// • 约束：App 外壳（App.tsx、root.tsx、关口、横幅、Suspense 占位等页面以外的部分）不许放常驻的 <main>，
+//   否则页面分包还没到就“画完”了，同步会和页面分包抢下载。src/app/__tests__/first-paint-shell.test.tsx 渲染 App 拦这一条；
+//   不带 data-feature 的 <main> 只许出现在登记过的页面里（first-paint-pages.test.tsx 扫源码，新增要先登记）
 // • 兜底分两段（FA-6 推迟启动审查 L1）：时限从 render 之后才算（入口在 render 后调 startAppPaintLimit），冷启动本身慢（迁移、库被挡住）
 //   不会把时限提前用完；挂上时另有一个长兜底 APP_PAINT_BACKSTOP_MS，入口在 render 之前就走了（换账号）时也不会一直不放行
 // • 看到功能页以后不清兜底：后台标签页、托盘里启动时 rAF 不跑，那一帧永远不来，只能靠兜底放行（审查 L2）
@@ -10,8 +17,8 @@
 
 export type FrameScheduler = (fn: () => void) => () => void;
 
-/** 第一个功能页的选择器 */
-export const APP_PAGE_SELECTOR = 'main[data-feature]';
+/** 第一个页面的选择器（为什么不再要求 data-feature 见文件头） */
+export const APP_PAGE_SELECTOR = 'main';
 /** 兜底：render 之后最多等这么久（毫秒）就当画完了（入口按告知页关口的时限另传，见 main.tsx） */
 export const APP_PAINT_LIMIT_MS = 4000;
 /** 长兜底：从挂上算，render 之前就走了、或冷启动特别慢时用 */

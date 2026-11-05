@@ -2,8 +2,10 @@
 // 结构（store 名、keyPath、indexes）一变，core/cache-migrations.ts 的 DB_VERSION 必须加 1：
 //   schemaHash() 的结果写在 core/cache-schema.lock，core/__tests__/cache-schema.test.ts 在 CI 里核对（漏改就失败）
 // 纯 TS：不准 import React 和任何功能（A1）
-import type { Manifest } from './manifest.ts';
-import { syncTables } from './manifest.ts';
+// 11-05 首屏瘦身：不传 list 时读 manifest-sync.gen.ts（每张表只有 name、schema、sync、rebuildable），完整清单快照不进首屏
+import type { Manifest } from '../../shared/schema/manifest.ts';
+import { isSyncTable, syncTables } from './manifest-tables.ts';
+import { syncTableSnapshot } from './manifest-sync.gen.ts';
 
 /** 一个索引；keyPath 只用字符串（本机库没有复合索引的需要） */
 export interface IndexDef {
@@ -56,7 +58,8 @@ export const LOCAL_STORES: readonly StoreDef[] = [
 
 /** 按清单生成的同步仓：sync: true 的每张表一个，主键 id，行存 {id, server, view, ro?} */
 export function syncStores(list?: readonly Manifest[]): StoreDef[] {
-  return syncTables(list).map((t) => ({ name: t.name, keyPath: 'id', indexes: [], rebuildable: t.rebuildable, kind: 'sync' as const }));
+  const tables = list ? syncTables(list) : syncTableSnapshot.filter(isSyncTable);
+  return tables.map((t) => ({ name: t.name, keyPath: 'id', indexes: [], rebuildable: t.rebuildable, kind: 'sync' as const }));
 }
 
 /** 本机库的全部 store（同步仓 + 本机专用仓）；同名直接报错 */

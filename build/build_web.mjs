@@ -40,6 +40,9 @@ try {
   process.exit(2);
 }
 const APP_DIR = resolve(OUT, 'app');
+// 首屏用的数据清单快照过期就不构建（B2 FA-6 ③ 审查 L5）：deploy-preview 不跑测试，过期快照不能进预览环境
+const manifests = spawnSync(process.execPath, [resolve(ROOT, 'build/gen_manifests_snapshot.mjs'), '--check'], { stdio: 'inherit' });
+if (manifests.status !== 0) process.exit(manifests.status ?? 1);
 const viteMode = mode === 'e2e' || mode === 'e2e-real' ? 'preview' : mode;
 
 await build({ configFile: resolve(ROOT, 'vite.config.ts'), mode: viteMode, logLevel: 'warn' });
@@ -52,8 +55,10 @@ console.log(`构建完成：mode=${mode}，输出到 ${OUT}，预缓存 ${n} 个
 const splash = spawnSync(process.execPath, [resolve(ROOT, 'build/check_splash_css.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });
 if (splash.status !== 0) process.exit(splash.status ?? 1);
 const size = spawnSync(process.execPath, [resolve(ROOT, 'build/check_size.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });
+// 首屏块里不许有 zod（FA-6 ③ 审查 M3 第二轮）：按 manifest 算入口 + 今天页、告知页关口的静态闭包；要在下面删掉 .vite 之前跑
+const zodFree = spawnSync(process.execPath, [resolve(ROOT, 'build/check_first_paint_chunks.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });
 // Vite 的 manifest 只给体积检查用，不发布；默认输出目录时另存一份到 dist/ 下给 npm run size 单独再查（别的输出目录不存，免得覆盖默认那份）
 const vm = resolve(APP_DIR, '.vite');
 if (OUT === resolve(ROOT, WEB_OUT_DEFAULT)) cpSync(vm, resolve(ROOT, 'dist/vite-manifest'), { recursive: true });
 rmSync(vm, { recursive: true, force: true });
-process.exit(size.status ?? 1);
+process.exit((size.status ?? 1) || (zodFree.status ?? 1));

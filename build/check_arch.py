@@ -86,7 +86,8 @@ SOURCE_EXT = (".ts", ".tsx", ".mts", ".js", ".mjs")
 
 
 def a20_exempt(rel, text):
-    if rel in ("shared/i18n/zh.ts", "shared/i18n/ko.ts"):
+    # 公共词典；tz-zh、tz-ko 是 11-05 从公共词典拆出的时区词典（只给登录页恢复页、邮件用，不进主 App 首屏），逐个登记
+    if rel in ("shared/i18n/zh.ts", "shared/i18n/ko.ts", "shared/i18n/tz-zh.ts", "shared/i18n/tz-ko.ts"):
         return True
     if re.match(r"src/features/[^/]+/i18n/[^/]+\.ts$", rel):
         return True

@@ -134,6 +134,9 @@ jobs:
       - name: /files 规则表和清单一致（前端 B 的脚本，架构 3.5 第 2 点、0.32 第 9 条）
         run: npm run check:files-rules
 
+      - name: 数据清单快照两份（完整 src/core/manifests.gen.ts、首屏用的精简 src/core/manifest-sync.gen.ts）和 shared/manifests 一致（B2 FA-6 ③ 审查 L5）
+        run: npm run check:manifests
+
   secrets-scan:
     name: 密钥扫描（gitleaks，CI 第二道）
     runs-on: ubuntu-24.04

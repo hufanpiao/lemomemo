@@ -65,6 +65,21 @@ describe('first-paint', () => {
     expect(seen).toEqual(['a', 'p', 'b']);
   });
 
+  it('FIRSTPAINT-nofeature：根是不带 data-feature 的 <main>（编辑页、整页提醒）也算画完；别的元素带 data-feature 不算', async () => {
+    const f = frames();
+    watchAppPainted(root, f.next);
+    const fn = vi.fn();
+    afterAppPainted(fn);
+    put('section', 'today');
+    await flush();
+    f.run();
+    expect(fn).not.toHaveBeenCalled();
+    put('main');
+    await flush();
+    f.run();
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
   it('挂的时候功能页已经在了：等一帧就算画完', () => {
     put('main', 'onboarding');
     const f = frames();

@@ -5,11 +5,12 @@
 --   TC-B1-69：B 用 A 用过的 op_id、B 用自己的 op_id 改 A 的行，都不影响 A 的数据（applied_ops 主键 (user_id, op_id)）。
 --   K8 第九节（迁移 20261105100000）：冲突副本后缀按本人的 ui_locale——ko-KR 接“ (충돌 사본)”、满额 160 字的标题截到 152；
 --   zh-CN 仍截到 154 接“（冲突副本）”；ui_locale 不认识、为空时退回中文（列有 not null 和 check，在子事务里临时去掉约束试）。
+--   K8 冲突卡“恢复”（11-05 服务器口径核查）：补拉前按删除前的 base_rev 恢复回 conflict（冲突列 deleted_at）、行照样恢复；随手记恢复叠加 title 冲突回 forked，原行恢复、另插副本。
 -- 真并发和 55P03 要两条真连接：经 dblink 连回本库（本机 supabase start 的 postgres 密码是 postgres，走容器网络地址才能带密码）；
 --   离线 PGlite 没有 dblink，这几条记为 SKIP（条数不变）；库里有 dblink 却连不上就判失败（审查建议 2：环境变量传不进
 --   supabase test db 跑的 SQL，实测 PGOPTIONS 带不进去，所以按“有没有 dblink”判，真库上一律严格）。经 dblink 写的数据是真提交的，用固定 id，开头先清、结尾删掉。
 begin;
-select plan(80);
+select plan(85);
 \ir _helpers.psql
 select tests.seed();   -- A、B 正常，C 停用
 
@@ -165,6 +166,33 @@ select is(tests.ap('aaaaaaaa-0000-4000-8000-000000000001', 'notes', 'a0000000-00
 select is((select n.title = repeat('长', 154) || '（冲突副本）' and char_length(n.title) = 160 from public.notes n
             where n.id = (select (a.result ->> 'fork_id')::uuid from public.applied_ops a where a.op_id = 'a0d00000-0000-4000-8000-000000000002')),
   true, 'zh-CN：160 字满额的标题仍截到 154 字接“（冲突副本）”，正好 160 字；B 是韩文也不影响 A 的副本（K8-S1）');
+-- ===== K8 冲突卡“恢复”的两种组合（11-05 服务器口径核查缺口 1、2；方案 4.4 M6）：此时 A 的 ui_locale 是 zh-CN =====
+-- 缺口 1：补拉之前就恢复。e4 活着（rev 1），另一台设备软删了它（rev 2，fv.deleted_at = 2）；本机还按删除前的 base_rev 1 发恢复补丁：
+--   deleted_at 在删除后被改过，回 conflict、冲突列 deleted_at（前端 M6 在刚恢复的 5 分钟内滤掉这一列），但行照样恢复、补丁照样应用
+insert into public.events (id, user_id, title, date, remind_at, created_at, updated_at, deleted_at) values
+  ('ae000000-0000-4000-8000-000000000004', 'aaaaaaaa-0000-4000-8000-000000000001', '第四条', current_date, null, 0, 0, null);
+update public.events set deleted_at = 1 where id = 'ae000000-0000-4000-8000-000000000004';
+select is(tests.ap('aaaaaaaa-0000-4000-8000-000000000001', 'events', 'ae000000-0000-4000-8000-000000000004',
+                   '{"title": "补拉前恢复", "deleted_at": null}', 1, 'a0e00000-0000-4000-8000-000000000001'),
+  '{"status": "conflict", "rev": 3, "prev_rev": 2, "conflicts": ["deleted_at"], "old": {"deleted_at": 1}}'::jsonb,
+  '补拉前恢复（base_rev 还是删除前的）：回 conflict，冲突列只有 deleted_at、旧值是删除时刻');
+select is((select title || '|' || coalesce(deleted_at::text, 'null') || '|' || rev from public.events where id = 'ae000000-0000-4000-8000-000000000004'),
+  '补拉前恢复|null|3', '补拉前恢复：虽然回 conflict，行照样恢复（deleted_at 为空），标题照样改');
+-- 缺口 2：随手记恢复叠加 title 冲突。n5 活着（rev 1）；另一台设备先改标题（rev 2）、再软删（rev 3）；本机按 base_rev 1 恢复并带自己的 title、body：
+--   回 forked（冲突列 deleted_at、title），原行恢复（deleted_at 为空）但 title、body 不动；另插一条冲突副本，带我的 title（加中文后缀）和 body
+insert into public.notes (id, user_id, title, body, tags, source, created_at, updated_at) values
+  ('a0000000-0000-4000-8000-000000000005', 'aaaaaaaa-0000-4000-8000-000000000001', '笔记五', '正文五', '{}', 'page', 0, 0);
+update public.notes set title = '对方改的标题五' where id = 'a0000000-0000-4000-8000-000000000005';
+update public.notes set deleted_at = 1 where id = 'a0000000-0000-4000-8000-000000000005';
+select is(tests.ap('aaaaaaaa-0000-4000-8000-000000000001', 'notes', 'a0000000-0000-4000-8000-000000000005',
+                   '{"title": "我的标题五", "body": "我的正文五", "deleted_at": null}', 1, 'a0e00000-0000-4000-8000-000000000002') - 'fork_id',
+  '{"status": "forked", "rev": 4, "prev_rev": 3, "conflicts": ["deleted_at", "title"], "old": {"deleted_at": 1, "title": "对方改的标题五"}}'::jsonb,
+  '随手记恢复叠加 title 冲突：回 forked，冲突列 deleted_at、title');
+select is((select title || '|' || body || '|' || coalesce(deleted_at::text, 'null') from public.notes where id = 'a0000000-0000-4000-8000-000000000005'),
+  '对方改的标题五|正文五|null', '随手记恢复叠加冲突：原行恢复了（deleted_at 为空），title、body 保持另一台设备的');
+select is((select n.title || '|' || n.body || '|' || coalesce(n.deleted_at::text, 'null') from public.notes n
+            where n.id = (select (a.result ->> 'fork_id')::uuid from public.applied_ops a where a.op_id = 'a0e00000-0000-4000-8000-000000000002')),
+  '我的标题五（冲突副本）|我的正文五|null', '随手记恢复叠加冲突：另有一条活着的冲突副本，带我的 title（加后缀）和 body');
 -- 不认识、为空的 ui_locale：列有 not null 和 check，正常造不出来。在子事务里临时去掉约束、改值、触发 forked，取到副本标题后 raise 带出来；
 -- 子事务回滚，约束、数据连同 alter table 拿的锁一起还原（锁不留到整个测试事务结束，后面经 dblink 的几条不会被挡住）
 create function tests.fork_title_with_locale(p_loc text, p_op uuid) returns text language plpgsql as $$

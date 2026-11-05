@@ -9,6 +9,7 @@
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { createObjStore } from '../_shared/gen/objstore.ts';
+import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
 import { skipTestRecipients, type Mail } from '../_shared/account-mail.ts';
 import { BACKUP_BUCKET, BackupsSubdirError, HEARTBEAT, handle, type Backups, type PurgeStore, type R2 } from './core.ts';
 
@@ -191,6 +192,7 @@ Deno.serve((req) => {
       if (error) throw new Error('auth');
     },
     sendMail: skipTestRecipients((to, mail) => (resendKey ? sendMail(resendKey, to, mail) : Promise.resolve(false)), log),   // @lemomemo.test 不真发（安全审查 D1）
+    tzLabel,   // 邮件里时区的通俗说法，和 App 恢复页同一份（shared/i18n/tz-label.ts，KO-mail-nolink-tz）
     hashSecret: Deno.env.get('SIGNUP_HASH_SECRET'),
     now: Date.now,
     log,

@@ -18,10 +18,11 @@
 //   清库要几秒，等清完再删会把这几秒里别的标签页刚登录的新会话也删掉
 // • 失败即关（M3）：清库失败也关库，再 onFailed()（默认同 onSwitched：重新载入，冷启动会再清一次；再失败就按“本机库不可用”启动，不渲染缓存）
 // • 浏览器推送（B2 安全审查 FE-2）：换账号、会话没了、被移除时，清库之后、删库之前先关掉本 App 已显示的通知、退订推送
-//   （platform/push.ts 的 disconnectBrowserPush，自带上限、失败不挡）；设置页自己退出的那条在 platform/sign-out.ts 的 wipeThisDevice 里
+//   （platform/push-disconnect.ts 的 disconnectPushLazy：先删认领记录，再按需下载 push.ts 断开，自带上限、下载失败也不挡，11-05）；设置页自己退出的那条在 platform/sign-out.ts 的 wipeThisDevice 里
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { BootResult } from './boot.ts';
-import { disconnectBrowserPush } from '../platform/push.ts';
+import { disconnectPushLazy } from '../platform/push-disconnect.ts';
+import { setPushClaimContext } from '../platform/push-claim-run.ts';
 import { deleteCacheDb, type Cache } from './cache.ts';
 import { OWNER } from './cache-schema.ts';
 import { clearAllCollections } from './store.ts';
@@ -62,7 +63,7 @@ export interface EnsureAccountDeps {
   /** platform/session.ts 的 clearCacheStorage（只删运行时缓存） */
   clearCacheStorage(): Promise<void>;
   /**
-   * 断开浏览器推送：关掉本 App 已显示的通知、退订推送（B2 安全审查 FE-2；默认 platform/push.ts 的 disconnectBrowserPush，
+   * 断开浏览器推送：关掉本 App 已显示的通知、退订推送（B2 安全审查 FE-2；默认 platform/push-disconnect.ts 的 disconnectPushLazy，按需下载 push.ts 的 disconnectBrowserPush，
    * 自带上限、不抛）。换账号、会话没了、被移除时在清库之后、删库之前调，旧账号的标题不留在通知中心、旧账号的推送不再到达
    */
   disconnectPush?(): Promise<void>;
@@ -71,7 +72,7 @@ export interface EnsureAccountDeps {
 /** 断开浏览器推送：出错、超时都不挡后面的步骤 */
 async function disconnectPush(deps: Pick<EnsureAccountDeps, 'disconnectPush'>): Promise<void> {
   try {
-    await (deps.disconnectPush ?? (() => disconnectBrowserPush()))();
+    await (deps.disconnectPush ?? (() => disconnectPushLazy()))();
   } catch {
     // 断不开不挡退出、换账号
   }
@@ -132,6 +133,8 @@ export function sealForExit(boot: BootResult): void {
   boot.switching = true;
   boot.outbox?.suspend();
   boot.cache?.seal();
+  // 推送认领的上下文一起作废（FA6-r3-low N4 / L9）：之后设置 › 提醒 的点按认领、等着上下文的认领都回 claim_failed，清掉上一账号的认领结果
+  setPushClaimContext(null);
 }
 
 const closeGate = sealForExit;

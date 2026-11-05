@@ -6,6 +6,12 @@ import { defineConfig } from 'vite';
 import { buildVersion, webOutDir } from './build/assemble_web.mjs';
 
 const root = import.meta.dirname;
+/**
+ * FA-6 ③：裸的 'zod' 一律别名到 src/platform/zod-jitless.ts（先 z.config({ jitless: true }) 再转出），
+ * 这样 zod 可以跟着用它的懒加载模块走、不必在入口第一个 import；严格 CSP 下照样不会触发 eval 探测。
+ * 只匹配整个说明符 'zod'；垫片自己引 'zod/v4'，不会绕回来。tests/build/zod-alias.test.ts 守着
+ */
+export const ZOD_JITLESS_ALIAS = { find: /^zod$/, replacement: resolve(root, 'src/platform/zod-jitless.ts') };
 // LEMO_BUILD_VERSION（deploy-preview 给的 X.Y.Z-preview.N）优先，否则 VERSION 文件；和 app/version.json 同一个来源
 export const APP_VERSION: string = buildVersion(root);
 
@@ -27,6 +33,7 @@ export default defineConfig(({ mode }) => {
     publicDir: resolve(root, 'src/public'),
     envPrefix: 'VITE_PUBLIC_',
     plugins: [react()],
+    resolve: { alias: [ZOD_JITLESS_ALIAS] },
     define: {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
       __BUILD_TIME__: JSON.stringify(new Date().toISOString()),

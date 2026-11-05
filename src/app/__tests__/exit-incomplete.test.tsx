@@ -7,7 +7,8 @@ import { uiStore } from '../../kit/state/ui-store.ts';
 const reloadPage = vi.fn();
 vi.mock('../../platform/sw-register.ts', () => ({ reloadPage: () => reloadPage() }));
 
-const { ExitIncompleteScreen, mountExitScreen, watchExitIncomplete } = await import('../ExitIncompleteScreen.tsx');
+const { ExitIncompleteScreen } = await import('../ExitIncompleteScreen.tsx');
+const { mountExitScreen, watchExitIncomplete } = await import('../exit-screen.tsx');
 const { clearDropMark, resetSessionBackendForTest, showExitIncomplete } = await import('../../platform/session-store.ts');
 
 beforeEach(() => {
@@ -69,5 +70,34 @@ describe('退出没完成（A-1）', () => {
     act(() => clearDropMark());
     expect(reloadPage).toHaveBeenCalledOnce();
     stop();
+  });
+});
+
+describe('整屏提示按需下载（11-05 首屏瘦身）', () => {
+  it('挂出时先加 inert，不等下载；下载失败画静态兜底“刷新一下”，点了重新载入', async () => {
+    const app = document.createElement('div');
+    app.id = 'root';
+    document.body.appendChild(app);
+    let unmount!: () => void;
+    act(() => {
+      unmount = mountExitScreen('unavailable', document, () => Promise.reject(new Error('chunk')));
+    });
+    expect(app.hasAttribute('inert')).toBe(true);
+    const fb = await screen.findByTestId('app-crash-fallback');
+    expect(fb.textContent).toContain(zh['app.crashed.refresh']);
+    fireEvent.click(screen.getByRole('button'));
+    expect(reloadPage).toHaveBeenCalledOnce();
+    act(() => unmount());
+    expect(app.hasAttribute('inert')).toBe(false);
+    app.remove();
+  });
+
+  it('下载期间就卸掉：下载好也不再画，宿主不留', async () => {
+    let done!: (m: { ExitIncompleteScreen: typeof ExitIncompleteScreen }) => void;
+    const unmount = mountExitScreen('incomplete', document, () => new Promise((r) => (done = r)));
+    unmount();
+    await act(async () => done({ ExitIncompleteScreen }));
+    expect(document.querySelector('[data-exit-screen-host]')).toBeNull();
+    expect(screen.queryByTestId('exit-screen')).toBeNull();
   });
 });

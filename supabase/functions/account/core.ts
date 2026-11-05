@@ -124,7 +124,7 @@ async function del(body: Record<string, unknown>, user: ActiveUser, deps: Deps):
   }
   const pa = Date.parse(purgeAfter);
   // ⑤ 第一封信（响应之后发；时刻和 purge_after 一致，按本人时区）
-  mailLater(deps, user.userId, (loc, tz) => deletionRequestedMail(loc, pa, tz), 'mail_failed:requested');
+  mailLater(deps, user.userId, (loc, tz) => deletionRequestedMail(loc, pa, tz, deps.tzLabel), 'mail_failed:requested');
   return json(200, { ok: true, purge_after: purgeAfter });
 }
 

@@ -10,6 +10,7 @@ import { deletionDoneMail, deletionReminderMail, deletionRequestedMail } from '.
 import { seedObjects } from '../fakes/objstore-seed.ts';
 import { A, B, C, CRON, cronReq, DAY, HASH_SECRET, purgeDeps } from './account-fakes.ts';
 import { world, requestDeletion, runPurge, seedOutside, FIRST_RUN_AFTER, toFirstRun } from './account-purge-harness.ts';
+import { tzLabel } from '../../shared/i18n/tz-label.ts';
 
 describe('鉴权', () => {
   it('TC-B1-101 ②：不带或带错 x-cron-secret 回 401，什么都不做', async () => {
@@ -111,8 +112,8 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
       await runPurge(w);
     }
     expect(w.box.map((m) => m.mail.subject)).toEqual([
-      deletionRequestedMail('zh-CN', 0, 'Asia/Seoul').subject,
-      deletionReminderMail('zh-CN', 0, 'Asia/Seoul').subject,
+      deletionRequestedMail('zh-CN', 0, 'Asia/Seoul', tzLabel).subject,
+      deletionReminderMail('zh-CN', 0, 'Asia/Seoul', tzLabel).subject,
       deletionDoneMail('zh-CN').subject,
     ]);
     for (const m of w.box) expect(m.mail.text).not.toMatch(/http/);

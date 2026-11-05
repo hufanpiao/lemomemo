@@ -62,7 +62,7 @@ describe('account export start（0.47 续 ①“开始”）', () => {
     expect(box).toHaveLength(1);
     expect(box[0]?.mail.text).toContain('我的 iPhone');
     expect(box[0]?.mail.text).toContain('KR 서울');
-    expect(box[0]?.mail.text).toContain('2026年10月29日 12:00（Asia/Seoul）');
+    expect(box[0]?.mail.text).toContain('2026年10月29日 12:00（韩国时间）');
     expect(box[0]?.mail.text).not.toMatch(/http|a-note/);
   });
 

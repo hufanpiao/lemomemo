@@ -56,7 +56,7 @@
 //   上限的依据和本机实测见 docs/03-评审/B1/PURGE-cpu-budget-执行记录.md。
 // 日志只记错误码和 user_id 前 8 位（A23）：不打印邮箱、请求头、请求体。
 
-import { deletionDoneMail, deletionReminderLateMail, deletionReminderMail, mailLocale, type Mail } from '../_shared/account-mail.ts';
+import { deletionDoneMail, deletionReminderLateMail, deletionReminderMail, mailLocale, type Mail, type TzLabeler } from '../_shared/account-mail.ts';
 import { emailHash } from '../_shared/email-hash.ts';
 import { safeEqual } from '../_shared/proxy-headers.ts';
 
@@ -160,7 +160,10 @@ export interface Deps {
   userEmail(userId: string): Promise<string | null>;
   /** auth.admin.deleteUser（硬删）；出错抛错 */
   deleteUser(userId: string): Promise<void>;
+  /** 发信 */
   sendMail(to: string, mail: Mail): Promise<boolean>;
+  /** 信里时区的通俗说法（shared/i18n/tz-label.ts，index.ts 从 _shared/gen 注入，KO-mail-nolink-tz） */
+  tzLabel: TzLabeler;
   hashSecret: string | undefined;
   now: () => number;
   log?: (code: string) => void;
@@ -177,9 +180,7 @@ const short = (uid: string) => uid.slice(0, 8);
 
 class StepError extends Error {}
 /** backups 里 <日期>/<user_id>/ 下出现子目录 */
-export class BackupsSubdirError extends Error {
-  constructor() { super('backups_subdir'); }
-}
+export class BackupsSubdirError extends Error { constructor() { super('backups_subdir'); } }
 
 // ---------------- 调用计数（预算按调用次数，见文件头） ----------------
 export interface Ops { n: number }
@@ -258,7 +259,7 @@ async function remind(deps: FullDeps, now: number, overBudget: () => boolean): P
       // 先发信，发成功再标记（顺序和理由见文件头）
       const [email, prof] = await Promise.all([deps.userEmail(r.user_id), store.profile(r.user_id)]);
       const loc = mailLocale(prof?.ui_locale);
-      const mail = late ? deletionReminderLateMail(loc, due, prof?.current_tz) : deletionReminderMail(loc, due, prof?.current_tz);
+      const mail = late ? deletionReminderLateMail(loc, due, prof?.current_tz, deps.tzLabel) : deletionReminderMail(loc, due, prof?.current_tz, deps.tzLabel);
       if (email === null) { out.noEmail.add(r.user_id); log?.(`remind_no_email:${short(r.user_id)}`); continue; }
       const ok = await deps.sendMail(email, mail).catch(() => false);
       if (!ok) { log?.(`remind_mail_failed:${short(r.user_id)}`); continue; }   // 什么都不改（也不顺延），下一次运行补发

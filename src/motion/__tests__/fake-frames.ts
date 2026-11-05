@@ -17,6 +17,12 @@ export const step = (ms: number = FRAME_MS): Promise<void> =>
   act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
     processFrame();
+    // 让出一次真实宏任务（11-05，CI 在首尔、洛杉矶两遍各红过一次 appear-transform-end N1，和时区无关，是负载下的偶发）：
+    // Appear 播完时 onAnimationComplete 里的 setState 有时落在 act 之外，交给 React Scheduler 用真实 setImmediate 排；
+    // 不让出的话这次重画和下一帧（播完后的 transitionEnd: none）谁先谁后看机器忙不忙，后到时外层停在 translateY(0%) scale(1)。
+    // 浏览器里重画总在下一帧之前，这里每帧之后等一次 setImmediate（先排的先跑），顺序就固定成和浏览器一样。
+    // 副本里 40 份并发：改前 240 次文件运行红 2 次，改后 480 次 0 次
+    await new Promise<void>((ok) => setImmediate(ok));
   });
 
 /** 按帧推满 ms 动画时间 */

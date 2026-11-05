@@ -2,8 +2,8 @@
 // - 只有这一页的 CSP 放行 https://challenges.cloudflare.com（src/_headers 的 /app/auth/* 一段）
 // - 不注册 SW（主 App 注册；这一页也在 /app/ 作用域里，装好的 SW 会预缓存它）
 // - 登录成功后跳回 /app/（同源，supabase-js 的会话存储共用）；exe 的登录小窗口改存凭据管理器（platform/session-store.ts），由 Rust 通知主窗口
-// - 现在这一页的包里没有 zod（2026-10-29 按构建产物核对过），所以不调 z.config({ jitless: true })；
-//   以后登录页一旦引入 zod（含 shared/schema），要在这里第一行调它，否则 zod 4 的 allowsEval 探测在严格 CSP 下报 eval 违规
+// - 现在这一页的包里没有 zod（2026-10-29 按构建产物核对过）；以后引入了也不用在这里调 z.config({ jitless: true })：
+//   FA-6 ③ 起 vite.config.ts 把裸的 'zod' 别名到 platform/zod-jitless.ts，转出之前已关掉 JIT（严格 CSP 下不会报 eval 违规）
 import { StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles/tokens.css';

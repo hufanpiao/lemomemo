@@ -2,7 +2,8 @@
 // • 正常：校验 → 同一个事务里改 view、入队（core/outbox.ts 的 enqueue）→ 通知集合；返回 { ok: true, item }
 //   item 为 null 只有一种情况：insert 后又撤销，和前面没发的一项抵消了（正常，等于已保存）
 // • 没写进去不抛错，返回 { ok: false, reason }（K6-ver-new 复审 W1：不能和“抵消”混成一个 null，否则写入被静默丢掉）：
-//   - local_unavailable：没启动，或本机库打不开（cache === null：unavailable、version_too_new）
+//   - local_unavailable：没启动，或本机库打不开（cache === null：unavailable、version_too_new），
+//     或入队要的严格校验代码下载不下来（OutboxCodeUnavailableError，FA-6 ③ 审查 M2）
 //   - closing：本机库正在关（别的标签页在升级库，onversionchange；途中抛 CacheClosedError）
 //   - switching：换账号、被移除、被停用或注销冷静期、退出登录途中（已封存或队列设了闸；途中抛 CacheClosedError / outbox_suspended）。
 //     这几种情况页面都会马上清本机、跳走（app/sync-wiring.ts、core/account.ts），不会停在原页静默丢写入
@@ -17,7 +18,7 @@
 // 纯 TS：不准 import React 和任何功能（A1）
 import { getBoot } from './boot.ts';
 import { CacheClosedError } from './cache.ts';
-import { OutboxRejectError, type EnqueueInput, type OutboxItem, type RecRef } from './outbox.ts';
+import { OutboxCodeUnavailableError, OutboxRejectError, type EnqueueInput, type OutboxItem, type RecRef } from './outbox.ts';
 import { collection, type Row } from './store.ts';
 
 export interface WriteOptions {
@@ -57,6 +58,8 @@ async function enqueue(input: EnqueueInput): Promise<WriteResult> {
   } catch (e) {
     if (e instanceof CacheClosedError) return { ok: false, reason: localWriteBlocker() === 'switching' ? 'switching' : 'closing' };
     if (e instanceof OutboxRejectError && e.code === 'outbox_suspended') return { ok: false, reason: 'switching' };
+    // 严格校验的代码下载不下来（首屏后那批没到、离线又没有 SW 缓存）：没写进去，照“本机写不进去”提示、保留输入（③ 审查 M2）
+    if (e instanceof OutboxCodeUnavailableError) return { ok: false, reason: 'local_unavailable' };
     throw e;
   }
 }

@@ -19,6 +19,8 @@ import {
   statusError,
   type AccountStatus,
 } from '../../../platform/account-status.ts';
+import type { Locale } from '../../../../shared/i18n/i18n.ts';
+import { canonicalTz, tzLabel } from '../../../../shared/i18n/tz-label.ts';
 import { isEntryErrorCode, type EntryErrorCode } from '../../../../shared/schema/entry-codes.ts';
 import { readSessionAccessToken, readSessionId } from '../../../platform/session.ts';
 import { budgetLeft, logoutReplaced, sessionReplaced, withTimeout, type PriorSession } from '../../../platform/sign-out.ts';
@@ -164,7 +166,7 @@ export function createAccountGateApi(getDb: () => Promise<Db>, o: AccountGateOpt
   };
 }
 
-/** 彻底删除时刻在本机时区的各部分（填进词条 auth.restore.when） */
+/** 彻底删除时刻在本机时区的各部分（填进词条 auth.restore.when）；zone 是时区的通俗说法（韩国时间 / 한국 시간），不是 IANA 名 */
 export interface PurgeWhen {
   y: string;
   m: string;
@@ -176,11 +178,13 @@ export interface PurgeWhen {
 
 /**
  * 彻底删除的时刻按本机时区拆成“日期 时刻”的各部分，口径同邮件的 fmtWhen（supabase/functions/_shared/account-mail.ts）：
- * 词条 auth.restore.when 拼成 zh 2026年11月5日 14:30（Asia/Seoul）、ko 2026년 11월 5일 14:30 (Asia/Seoul)（文字只放词典，A20）。
+ * 词条 auth.restore.when 拼成 zh 2026年11月5日 14:30（韩国时间）、ko 2026년 11월 5일 14:30 (한국 시간)（文字只放词典，A20）。
+ * zone 是时区的通俗说法，和邮件同一份 shared/i18n/tz-label.ts 的 tzLabel（字样在 shared 词典的 tz.*；韩文复核“账号信防钓鱼与时区”第五节），
+ * 所以要传界面语言 loc；时区说法按注销时刻 ms 取（和信的 fmtWhen 对齐，代码审查 M1 L3），不按固定参照时刻。
  * 不用 toLocaleString（各 ICU 标点不同）。iso 为 null 或解析不了为 null（界面换不带日期的说法）；
  * tz 默认本机时区，取不到或不能用按首尔（同 fmtWhen 的 safeTz）
  */
-export function purgeWhen(iso: string | null, tz?: string): PurgeWhen | null {
+export function purgeWhen(iso: string | null, loc: Locale, tz?: string): PurgeWhen | null {
   if (iso === null) return null;
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return null;
@@ -189,7 +193,7 @@ export function purgeWhen(iso: string | null, tz?: string): PurgeWhen | null {
     timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).formatToParts(new Date(ms));
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
-  return { y: get('year'), m: get('month'), d: get('day'), hh: get('hour').padStart(2, '0'), mm: get('minute').padStart(2, '0'), zone };
+  return { y: get('year'), m: get('month'), d: get('day'), hh: get('hour').padStart(2, '0'), mm: get('minute').padStart(2, '0'), zone: tzLabel(zone, loc, ms) };
 }
 
 const FALLBACK_TZ = 'Asia/Seoul';
@@ -202,12 +206,7 @@ function localZone(): string {
   }
 }
 
+/** 能用就回规范名（shared/i18n/tz-label.ts 的 canonicalTz，大小写变体、别名对上固定表），不能用按首尔 */
 function safeZone(tz: string): string {
-  if (!tz || tz.length > 64) return FALLBACK_TZ;
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(0);
-    return tz;
-  } catch {
-    return FALLBACK_TZ;
-  }
+  return canonicalTz(tz) ?? FALLBACK_TZ;
 }

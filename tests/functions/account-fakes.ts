@@ -6,6 +6,7 @@ import { DbError, handle, keys } from '../../supabase/functions/account/core.ts'
 import type { Backups, Deps as PurgeDeps, PurgeStore, R2 } from '../../supabase/functions/account-purge/core.ts';
 import { BackupsSubdirError } from '../../supabase/functions/account-purge/core.ts';
 import type { Mail } from '../../supabase/functions/_shared/account-mail.ts';
+import { tzLabel } from '../../shared/i18n/tz-label.ts';
 import { fakePurgeStore } from './account-purge-fakes.ts';
 
 export const A = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -253,6 +254,7 @@ export function accountDeps(db: FakeDb, box: Outbox[], over: Partial<AccountDeps
     store: db.accountStore(),
     userEmail: async (u) => db.users.get(u) ?? null,
     sendMail: mailer(box),
+    tzLabel,   // 和 index.ts 注入的是同一份（shared/i18n/tz-label.ts）
     verifyVaultToken: async () => 'vault_locked',
     exportTables: [],
     proxySecret: 'proxy-secret',
@@ -274,6 +276,7 @@ export function purgeDeps(db: FakeDb, r2: R2, backups: FakeBackups, box: Outbox[
     userEmail: async (u) => db.users.get(u) ?? null,
     deleteUser: async (u) => { if (db.fail.has('deleteUser')) throw new Error('auth'); db.deleteUserCascade(u); },
     sendMail: mailer(box),
+    tzLabel,   // 和 index.ts 注入的是同一份（shared/i18n/tz-label.ts）
     hashSecret: HASH_SECRET,
     now: db.clock.now,
     log: (c) => logs.push(c),

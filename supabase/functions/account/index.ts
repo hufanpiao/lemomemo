@@ -14,6 +14,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 import { AuthError, requireActiveUser } from '../_shared/auth.ts';
 import { allManifests } from '../_shared/gen/manifests/index.ts';
 import { ACCOUNT_ERROR_CODES } from '../_shared/gen/schema/account.ts';
+import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
 import { skipTestRecipients, type Mail } from '../_shared/account-mail.ts';
 import { ACCOUNT_ERRS, DbError, exportTablesOf, handle, memProbeFor, withStoreTimeouts, type AccountStore } from './core.ts';
 import { NO_STORE } from './common.ts';
@@ -217,6 +218,7 @@ Deno.serve((req) => {
       return data.user?.email ?? null;
     },
     sendMail: skipTestRecipients((to, mail) => sendMail(resendKey, to, mail), log),   // @lemomemo.test 不真发（安全审查 D1）
+    tzLabel,   // 邮件里时区的通俗说法，和 App 恢复页同一份（shared/i18n/tz-label.ts，KO-mail-nolink-tz）
     // 隐私记的令牌（vault_token）由 B5 的 vault 函数签发、_shared/vault-token.ts 验（6.2 A2）；B1 还没有这两样，
     // 所以现在没有任何有效令牌：带了令牌的导出一律回 vault_locked（不静默少一块），B5 接上 verifyVaultToken。
     verifyVaultToken: async () => 'vault_locked',

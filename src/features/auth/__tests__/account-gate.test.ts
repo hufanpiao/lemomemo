@@ -1,6 +1,8 @@
 // 登录页的 account 小封装（data/account-gate.ts；R-256 ③、架构第 6 节“account 的错误码”）：
 // 手写的 status 判断和 shared/schema/account.ts 的 accountStatusResponse 对得上；四种探测结果；restore 的错误码；日期按 fmtWhen 口径
 import { describe, expect, it, vi } from 'vitest';
+import { tzLabel } from '../../../../shared/i18n/tz-label.ts';
+import { fmtWhen } from '../../../../supabase/functions/_shared/account-mail.ts';
 import { accountStatusResponse } from '../../../../shared/schema/account.ts';
 import { apiError } from '../../../../shared/schema/api.ts';
 import { httpError } from '../../../platform/account-status.ts';
@@ -14,7 +16,7 @@ function fill(tpl: string, p: Record<string, string> | null): string | null {
   return p ? tpl.replace(/\{(\w+)\}/g, (_, k: string) => p[k] ?? '') : null;
 }
 const fmtPurgeAfter = (iso: string | null, loc: 'zh-CN' | 'ko-KR', tz?: string) =>
-  fill(loc === 'ko-KR' ? ko['auth.restore.when'] : zh['auth.restore.when'], purgeWhen(iso, tz) as Record<string, string> | null);
+  fill(loc === 'ko-KR' ? ko['auth.restore.when'] : zh['auth.restore.when'], purgeWhen(iso, loc, tz) as Record<string, string> | null);
 
 /** supabase-js 的 FunctionsHttpError：context 是原始 Response */
 function httpErr(status: number, body: unknown) {
@@ -260,11 +262,34 @@ describe('restore 的错误码（架构第 6 节错误码表）', () => {
 describe('purgeWhen + 词条 auth.restore.when：口径同邮件的 fmtWhen', () => {
   it('按给定时区写“日期 时刻”；中韩两种写法；null、解析不了为 null；时区不能用按首尔', () => {
     const iso = '2026-11-05T05:30:00.000Z';
-    expect(fmtPurgeAfter(iso, 'zh-CN', 'Asia/Seoul')).toBe('2026年11月5日 14:30（Asia/Seoul）');
-    expect(fmtPurgeAfter(iso, 'ko-KR', 'Asia/Seoul')).toBe('2026년 11월 5일 14:30 (Asia/Seoul)');
-    expect(fmtPurgeAfter(iso, 'zh-CN', 'Asia/Shanghai')).toBe('2026年11月5日 13:30（Asia/Shanghai）');
-    expect(fmtPurgeAfter(iso, 'zh-CN', 'Not/AZone')).toBe('2026年11月5日 14:30（Asia/Seoul）');
+    expect(fmtPurgeAfter(iso, 'zh-CN', 'Asia/Seoul')).toBe('2026年11月5日 14:30（韩国时间）');
+    expect(fmtPurgeAfter(iso, 'ko-KR', 'Asia/Seoul')).toBe('2026년 11월 5일 14:30 (한국 시간)');
+    expect(fmtPurgeAfter(iso, 'zh-CN', 'Asia/Shanghai')).toBe('2026年11月5日 13:30（北京时间）');
+    expect(fmtPurgeAfter(iso, 'ko-KR', 'Asia/Shanghai')).toBe('2026년 11월 5일 13:30 (중국 시간)');
+    expect(fmtPurgeAfter(iso, 'zh-CN', 'Not/AZone')).toBe('2026年11月5日 14:30（韩国时间）');
+    expect(fmtPurgeAfter(iso, 'ko-KR', 'asia/seoul')).toBe('2026년 11월 5일 14:30 (한국 시간)');
+    expect(fmtPurgeAfter(iso, 'zh-CN', 'ROK')).toBe('2026年11月5日 14:30（韩国时间）');
     expect(fmtPurgeAfter(null, 'zh-CN')).toBeNull();
     expect(fmtPurgeAfter('soon', 'zh-CN')).toBeNull();
+  });
+
+  it('和邮件 fmtWhen 逐字一致（同一时刻、同一时区、两种语言；括号里的时区说法同一份 tzLabel，韩文复核“账号信防钓鱼与时区”第五节）', () => {
+    const iso = '2026-11-05T05:30:00.000Z';
+    const zones = ['Asia/Seoul', 'Asia/Shanghai', 'Asia/Tokyo', 'America/New_York', 'Europe/Berlin', 'Pacific/Honolulu', 'Not/AZone', 'Asia/Kolkata',
+      // 大小写变体、别名（KO-mail-tz-low L1）：两边都先规范化，括号里同是固定表的说法
+      'asia/seoul', 'ROK', 'Asia/Calcutta', 'US/Eastern', ''];
+    for (const zone of zones) {
+      for (const loc of ['zh-CN', 'ko-KR'] as const) {
+        expect(fmtPurgeAfter(iso, loc, zone), `${zone} ${loc}`).toBe(fmtWhen(Date.parse(iso), zone, loc, tzLabel));
+      }
+    }
+  });
+
+  it('表外时区按注销时刻取说法，和信一致（代码审查 M1 L3）：开罗 2020 年夏天是“东欧标准时间”，不是固定参照时刻的“东欧时间”', () => {
+    const iso = '2020-07-01T09:00:00.000Z';
+    for (const loc of ['zh-CN', 'ko-KR'] as const) {
+      expect(fmtPurgeAfter(iso, loc, 'Africa/Cairo'), loc).toBe(fmtWhen(Date.parse(iso), 'Africa/Cairo', loc, tzLabel));
+    }
+    expect(purgeWhen(iso, 'zh-CN', 'Africa/Cairo')?.zone).toBe(tzLabel('Africa/Cairo', 'zh-CN', Date.parse(iso)));
   });
 });

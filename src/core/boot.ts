@@ -10,7 +10,7 @@
 // 失败即关（M3）：开库之后任何一步抛错，都关库、清掉内存集合，按 unavailable 返回（不渲染缓存，只联网用）；coldStart 本身不抛
 // 纯 TS：不准 import React 和任何功能（A1）
 import { featureOn } from '../../shared/logic/flags.ts';
-import { SCHEMA_V } from '../../shared/schema/rows.ts';
+import { SCHEMA_V } from './schema-version.ts';
 import { buildInfo } from '../platform/env.ts';
 import { onUpgradeRequired } from '../platform/http.ts';
 import { clearCacheStorage } from '../platform/session.ts';
@@ -52,7 +52,7 @@ export interface BootOptions {
   outboxOptions?: Omit<OutboxOptions, 'appVersion' | 'now'>;
   /** 测试用：换掉重新载入、SW 更新、sessionStorage */
   upgradeDeps?: Partial<UpgradeDeps>;
-  /** 默认 shared/schema/rows.ts 的 SCHEMA_V */
+  /** 默认 core/schema-version.ts 的 SCHEMA_V（shared/schema/rows.ts 正本的不带 zod 的副本，FA-6 ③） */
   schemaV?: number;
   /** 默认 true：经 platform/http.ts 订阅所有请求的 426 */
   listen426?: boolean;

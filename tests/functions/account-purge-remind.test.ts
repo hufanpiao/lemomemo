@@ -8,6 +8,7 @@ import { PURGE_TIME_BUDGET_MS, REMIND_LATE_POSTPONE_MS, REMIND_WINDOW_MS, REMIND
 import { deletionDoneMail, deletionReminderLateMail, deletionReminderMail, deletionRequestedMail } from '../../supabase/functions/_shared/account-mail.ts';
 import { A, DAY, H, T0 } from './account-fakes.ts';
 import { markNoticed, requestDeletion, runPurge, world, type World } from './account-purge-harness.ts';
+import { tzLabel } from '../../shared/i18n/tz-label.ts';
 
 const MIN = 60_000;
 
@@ -124,8 +125,8 @@ describe('到期了还没提醒：补发并顺延 24 小时（负责人 11-04 �
     expect(r.body).toMatchObject({ sent: 1, postponed: 1, purged: 0, held: 0 });
     expect(r.logs).toContain(`purge_postponed:${A.slice(0, 8)}`);
     expect(w.db.pending.get(A)).toMatchObject({ notice_sent: true, purge_after: new Date(now + REMIND_LATE_POSTPONE_MS).toISOString() });
-    expect(w.box.map((m) => m.mail.subject)).toEqual([deletionReminderLateMail('zh-CN', 0, 'Asia/Seoul').subject]);
-    expect(w.box[0]?.mail.text).toBe(deletionReminderLateMail('zh-CN', now + REMIND_LATE_POSTPONE_MS, 'Asia/Seoul').text);
+    expect(w.box.map((m) => m.mail.subject)).toEqual([deletionReminderLateMail('zh-CN', 0, 'Asia/Seoul', tzLabel).subject]);
+    expect(w.box[0]?.mail.text).toBe(deletionReminderLateMail('zh-CN', now + REMIND_LATE_POSTPONE_MS, 'Asia/Seoul', tzLabel).text);
     expect(w.db.users.has(A)).toBe(true);
   });
 
@@ -146,8 +147,8 @@ describe('到期了还没提醒：补发并顺延 24 小时（负责人 11-04 �
     w.clock.ms = newPa + MIN;
     expect((await runPurge(w)).body).toMatchObject({ purged: 1, postponed: 0 });
     expect(w.box.map((m) => m.mail.subject)).toEqual([
-      deletionRequestedMail('zh-CN', 0, 'Asia/Seoul').subject,
-      deletionReminderLateMail('zh-CN', 0, 'Asia/Seoul').subject,
+      deletionRequestedMail('zh-CN', 0, 'Asia/Seoul', tzLabel).subject,
+      deletionReminderLateMail('zh-CN', 0, 'Asia/Seoul', tzLabel).subject,
       deletionDoneMail('zh-CN').subject,
     ]);
     for (const m of w.box) expect(m.mail.text).not.toMatch(/http/);
@@ -218,15 +219,15 @@ describe('到期了还没提醒：补发并顺延 24 小时（负责人 11-04 �
     w.box.length = 0;
     expect((await runPurge(w)).body).toMatchObject({ sent: 1, postponed: 0 });
     expect(w.db.pending.get(A)).toMatchObject({ notice_sent: true, purge_after: pa0 });
-    expect(w.box[0]?.mail.subject).toBe(deletionReminderMail('zh-CN', 0, 'Asia/Seoul').subject);
+    expect(w.box[0]?.mail.subject).toBe(deletionReminderMail('zh-CN', 0, 'Asia/Seoul', tzLabel).subject);
   });
 
   it('补发的信：中、韩两种都写新的时刻、没有链接、写“恢复账号”', () => {
     const at = Date.parse('2026-11-07T03:00:00Z');
-    const zh = deletionReminderLateMail('zh-CN', at, 'Asia/Seoul');
-    const ko = deletionReminderLateMail('ko-KR', at, 'Asia/Seoul');
-    expect(zh.text).toContain('2026年11月7日 12:00（Asia/Seoul）');
-    expect(ko.text).toContain('2026년 11월 7일 12:00 (Asia/Seoul)');
+    const zh = deletionReminderLateMail('zh-CN', at, 'Asia/Seoul', tzLabel);
+    const ko = deletionReminderLateMail('ko-KR', at, 'Asia/Seoul', tzLabel);
+    expect(zh.text).toContain('2026年11月7日 12:00（韩国时间）');
+    expect(ko.text).toContain('2026년 11월 7일 12:00 (한국 시간)');
     expect(zh.text).toContain('恢复账号');
     expect(ko.text).toContain('계정 복구');
     for (const m of [zh, ko]) expect(`${m.subject}${m.text}`).not.toMatch(/http|lemomemo/);

@@ -34,6 +34,7 @@ import {
   wipeThisDevice,
 } from '../../../platform/sign-out.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
+import { useUi } from '../../../kit/state/ui-store.ts';
 import { createAccountGateApi, purgeWhen, type PurgeWhen, type RestoreErr } from '../data/account-gate.ts';
 import type { AuthFlowDeps } from './useAuthFlow.ts';
 
@@ -94,6 +95,12 @@ function useLatestRef<T>(v: T): { current: T } {
   const r = useRef(v);
   r.current = v;
   return r;
+}
+
+/** 删除时刻按本机时区拆好（括号里的时区说法跟界面语言，同邮件 fmtWhen）；purge_after 为 null 时为 null */
+function usePurgeWhen(purgeAfter: string | null): PurgeWhen | null {
+  const locale = useUi((s) => s.locale);
+  return useMemo(() => purgeWhen(purgeAfter, locale), [purgeAfter, locale]);
 }
 
 /** onReplaced：发现本机会话已被别的标签页换掉时调（登录页据此重走 SessionCheck） */
@@ -272,8 +279,8 @@ export function useAccountGate(deps: AuthFlowDeps = {}, onReplaced?: () => void)
     setView('exited');
   }, []);
 
-  /** 恢复页上的删除时刻（本机时区）；purge_after 为 null 时为 null */
-  const when: PurgeWhen | null = useMemo(() => purgeWhen(purgeAfter), [purgeAfter]);
+  /** 恢复页上的删除时刻；purge_after 为 null 时为 null */
+  const when = usePurgeWhen(purgeAfter);
 
   return { view, purgeAfter, when, busy, error, exit, check, retry, enter, restore, keep, backToLogin };
 }

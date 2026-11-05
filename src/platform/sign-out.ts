@@ -42,7 +42,7 @@
 import { buildInfo, isTauri } from './env.ts';
 import { appFetch } from './http.ts';
 import { clearLogQueue } from './log-store.ts';
-import { disconnectBrowserPush } from './push.ts';
+import { disconnectPushLazy } from './push-disconnect.ts';
 import {
   clearCacheStorage,
   clearLocalSessionIf,
@@ -134,7 +134,7 @@ export interface ExitSteps {
   /** 本机会话 access token 里的 session_id（默认 session.ts 的 readSessionId）；读不出为 null */
   readSessionId(): string | null;
   /**
-   * 断开浏览器推送（B2 安全审查 FE-2）：关掉本 App 已显示的通知、退订推送（默认 platform/push.ts 的 disconnectBrowserPush，
+   * 断开浏览器推送（B2 安全审查 FE-2）：关掉本 App 已显示的通知、退订推送（默认 platform/push-disconnect.ts 的 disconnectPushLazy，按需下载 push.ts 的 disconnectBrowserPush，
    * 自带上限、不抛）。在 ② 设闸清库之后、按库名删库之前调；不传就不做（测试、没有推送的环境）
    */
   disconnectPush?(): Promise<void>;
@@ -145,7 +145,7 @@ export const defaultExitSteps: ExitSteps = {
   clearCacheStorage,
   clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
   readSessionId: () => readSessionId(),
-  disconnectPush: () => disconnectBrowserPush(),
+  disconnectPush: () => disconnectPushLazy(),
 };
 
 /** 清本机库和 Cache Storage（②③）；某一步失败或超时不挡后面，永远 resolve */

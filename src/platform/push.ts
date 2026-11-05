@@ -8,6 +8,7 @@
 // • 浏览器权限：pushManager.subscribe({ userVisibleOnly: true }) 自己会弹权限框，要在用户点按里调；已拒绝的直接返回 denied
 import { buildInfo, isTauri } from './env.ts';
 import { closeAllLocalReminders } from './native-bridge.ts';
+import { CLAIM_STORAGE_KEY, DISCONNECT_PUSH_MS, forgetPushClaim, skipUnsubscribe, strictPermission } from './push-claim-key.ts';
 
 /** P-256 未压缩公钥：0x04 + 32 字节 x + 32 字节 y */
 export const VAPID_KEY_BYTES = 65;
@@ -164,23 +165,14 @@ export async function unsubscribePush(env: Pick<PushEnv, 'win' | 'registration'>
   }
 }
 
-/** 退出时断开浏览器推送最多等多久（关通知 + 退订；B2 安全审查 FE-2：失败、超时都不能卡住退出） */
-export const DISCONNECT_PUSH_MS = 2000;
+// 退出时断开浏览器推送的上限 DISCONNECT_PUSH_MS 挪到 push-claim-key.ts（push-disconnect.ts 给下载 + 断开整体用同一个数），这里原样再导出
+export { DISCONNECT_PUSH_MS };
 
 /** disconnectBrowserPush 用到的 SW 注册部分 */
 export type PushRegistrationLike = Pick<ServiceWorkerRegistration, 'pushManager' | 'getNotifications'>;
 
-/** 本机记“已认领 / 不支持”的键（push-claim.ts 写；值只有摘要，见那边的文件头） */
-export const CLAIM_STORAGE_KEY = 'lemo.push.claimed';
-
-/** 删掉本机的认领记录（退出、被移除、换账号都经 disconnectBrowserPush 走到这里）；不抛 */
-export function forgetPushClaim(storage?: () => Storage | null): void {
-  try {
-    (storage ? storage() : globalThis.localStorage)?.removeItem(CLAIM_STORAGE_KEY);
-  } catch {
-    // 读不了 localStorage：没有可删的
-  }
-}
+// 认领记录的键和删除挪到 push-claim-key.ts（11-05 首屏瘦身：退出流程按需下载本文件，删认领记录不能等下载），这里原样再导出
+export { CLAIM_STORAGE_KEY, forgetPushClaim };
 
 /**
  * 退出、被移除、注销、换账号时把浏览器这一侧断开（B2 安全审查六之三 FE-2）：
@@ -231,21 +223,7 @@ export function disconnectBrowserPush(
   return withinMs(run, ms);
 }
 
-/**
- * 退出时读通知权限（PUSH-getsub-hang P-2）：没有 Notification 返回 null。
- * 不复用 defaultPermission：那个在没有 Notification 时返回 'default'，会把“拿不准”当成“可以不退订”
- */
-const strictPermission = (): NotificationPermission | null => (typeof Notification !== 'undefined' ? Notification.permission : null);
-
-/** 只有权限明确是 denied / default 才跳过退订；null（没有 Notification）、别的值、读取抛错都照常退订 */
-function skipUnsubscribe(read: () => NotificationPermission | null): boolean {
-  try {
-    const p = read();
-    return p === 'denied' || p === 'default';
-  } catch {
-    return false;
-  }
-}
+// strictPermission、skipUnsubscribe 挪到 push-claim-key.ts（11-05：push-disconnect.ts 的兜底和这里用同一套判断）
 
 /** 跑 fn，最多等 ms；出错、超时都 resolve（退出流程不能被卡住） */
 function withinMs(fn: () => Promise<void>, ms: number): Promise<void> {

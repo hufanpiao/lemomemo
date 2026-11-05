@@ -16,9 +16,9 @@ beforeEach(resetHarness);
 afterEach(cleanup);
 
 const PURGE = '2026-11-05T05:30:00.000Z';
-/** 界面上的 {when}：本机时区，词条 auth.restore.when */
-const whenOf = (tpl: string) => {
-  const p = purgeWhen(PURGE) as unknown as Record<string, string>;
+/** 界面上的 {when}：本机时区，词条 auth.restore.when；括号里的时区说法跟界面语言 */
+const whenOf = (tpl: string, loc: 'zh-CN' | 'ko-KR') => {
+  const p = purgeWhen(PURGE, loc) as unknown as Record<string, string>;
   return tpl.replace(/\{(\w+)\}/g, (_, k: string) => p[k] ?? '');
 };
 const pending = { kind: 'pending_deletion' as const, purgeAfter: PURGE };
@@ -44,7 +44,7 @@ describe('验证码通过后先探测账号状态', () => {
   it('pending_deletion：不进 App，原地显示恢复页（日期按本机时区“日期 时刻”）和两个按钮，没有验证码框', async () => {
     const { onDone } = await loginWith(fakeAccount({ status: vi.fn(async () => pending) }));
     expect(onDone).not.toHaveBeenCalled();
-    const when = whenOf(zh['auth.restore.when']);
+    const when = whenOf(zh['auth.restore.when'], 'zh-CN');
     expect(screen.getByTestId('auth-restore-ask').textContent).toBe(zh['auth.restore.ask'].replace('{when}', when));
     expect(screen.getByRole('button', { name: zh['auth.restore.restore'] })).toBeTruthy();
     expect(screen.getByRole('button', { name: zh['auth.restore.keep'] })).toBeTruthy();
@@ -196,7 +196,7 @@ describe('恢复页', () => {
     await act(async () => {
       fireEvent.change(screen.getByLabelText(ko['auth.code.label']), { target: { value: '123456' } });
     });
-    const when = whenOf(ko['auth.restore.when']);
+    const when = whenOf(ko['auth.restore.when'], 'ko-KR');
     expect(screen.getByTestId('auth-restore-ask').textContent).toBe(ko['auth.restore.ask'].replace('{when}', when));
     expect(screen.getByRole('button', { name: ko['auth.restore.restore'] })).toBeTruthy();
     expect(screen.getByRole('button', { name: ko['auth.restore.keep'] })).toBeTruthy();

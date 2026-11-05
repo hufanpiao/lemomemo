@@ -33,6 +33,9 @@ describe('App 里的版本横幅', () => {
     expect(screen.queryByTestId('update-banner')).toBeNull();
     await act(async () => resolve({ default: Boom }));
     expect(await screen.findByTestId('app-error')).toBeTruthy();
-    expect(screen.getByTestId('update-banner').dataset['kind']).toBe('new_version');
+    // 横幅本体按需下载（App.tsx 的 BannerGate，11-05 首屏瘦身）：页面出错以后横幅分包才到，等它挂上；
+    // 挂上以后页面的错误状态仍在（横幅在错误边界外面）
+    expect((await screen.findByTestId('update-banner')).dataset['kind']).toBe('new_version');
+    expect(screen.getByTestId('app-error')).toBeTruthy();
   });
 });

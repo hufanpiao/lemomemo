@@ -11,7 +11,8 @@ const { getPushOutcome, setPushOutcome } = await import('../push-status.ts');
 
 const ensureDevice = vi.fn(async () => 'dev-1');
 const invalidateDevice = vi.fn(async () => undefined);
-const ctx = { userId: 'u1', platform: 'web', claim: vi.fn(), sessionId: () => 's1', ensureDevice, invalidateDevice };
+const currentUserId = (): string | null => 'u1';
+const ctx = { userId: 'u1', platform: 'web', claim: vi.fn(), sessionId: () => 's1', currentUserId, ensureDevice, invalidateDevice };
 
 afterEach(() => {
   vi.useRealTimers();
@@ -31,6 +32,10 @@ describe('推送认领的共用参数', () => {
     expect(d.ensureDevice).toBe(ensureDevice);
     expect(d.invalidateDevice).toBe(invalidateDevice);
     expect(d.userId).toBe('u1');
+    expect(d.currentUserId?.(), '认领前比对会话主人要用的函数没传下去（L9）').toBe('u1');
+    // 上下文已经不是当前那一份（L2）：当作不是本人
+    expect(claimDeps(ctx, lock, () => false).currentUserId?.()).toBeNull();
+    expect(claimDeps({ ...ctx, currentUserId: () => 'u2' }, lock).currentUserId?.()).toBe('u2');
     await d.lock?.(async () => 1);
     expect(names).toEqual(['lemo-push-claim:u1']);
   });
@@ -44,6 +49,18 @@ describe('推送认领的共用参数', () => {
     expect(typeof deps.lock).toBe('function');
     expect(getPushOutcome()).toEqual({ result: 'claimed' });
   });
+  it('安全审查 P7：说过“马上会设”、随后设成 null（换账号、退出）：之后的点按当场回 claim_failed，不再多等 10 秒', async () => {
+    vi.useFakeTimers();
+    expectPushClaimContext();
+    setPushClaimContext(null);
+    let got: unknown = null;
+    void runPushClaim().then((o) => (got = o));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(got).toEqual({ result: 'claim_failed' });
+    expect(vi.getTimerCount(), '还挂着等上下文的计时器').toBe(0);
+    expect(ensure).not.toHaveBeenCalled();
+  });
+
   it('没设上下文（没启动、没账号）：回 claim_failed，不去裸认领', async () => {
     expect(await runPushClaim()).toEqual({ result: 'claim_failed' });
     expect(ensure).not.toHaveBeenCalled();
@@ -123,5 +140,30 @@ describe('等上下文（B2 FA-6 推迟启动审查 L3）：入口说过“马�
     setPushClaimContext(null);
     expectPushClaimContext();
     expect(await runPushClaim(null)).toEqual({ result: 'claim_failed' });
+  });
+});
+
+describe('认领本体按需下载（首屏瘦身，11-05）', () => {
+  it('push-claim.ts 不再静态引入（只留 import type），默认走 import()', () => {
+    const src = readFileSync('src/platform/push-claim-run.ts', 'utf8');
+    expect(src).toMatch(/^import type \{[^}]*\} from '\.\/push-claim\.ts';$/m);
+    expect(src).not.toMatch(/^import \{[^}]*\} from '\.\/push-claim\.ts';$/m);
+    expect(src).toContain("import('./push-claim.ts')");
+  });
+
+  it('下载失败：回 claim_failed 并写进 push-status，不抛', async () => {
+    vi.resetModules();
+    vi.doMock('../push-claim.ts', () => {
+      throw new Error('Failed to fetch dynamically imported module');
+    });
+    try {
+      const run = await import('../push-claim-run.ts');
+      const status = await import('../push-status.ts');
+      expect(await run.runPushClaim(ctx)).toEqual({ result: 'claim_failed' });
+      expect(status.getPushOutcome()).toEqual({ result: 'claim_failed' });
+    } finally {
+      vi.doUnmock('../push-claim.ts');
+      vi.resetModules();
+    }
   });
 });

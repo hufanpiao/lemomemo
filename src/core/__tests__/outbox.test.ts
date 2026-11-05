@@ -25,6 +25,15 @@ describe('入队', () => {
     expect(outbox.getStatus().pending).toBe(1);
   });
 
+  it('FA-6 ③：等严格校验（rows.ts）加载的这段时间里设了闸，回来照样拒收 outbox_suspended，不写本机、不入队', async () => {
+    const { cache, outbox } = await setup();
+    const p = outbox.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
+    outbox.suspend();
+    await expect(p).rejects.toMatchObject({ code: 'outbox_suspended' });
+    expect(await cache.getRow('todos', uid(1))).toBeFalsy();
+    expect(outbox.getStatus().pending).toBe(0);
+  });
+
   it('patch：base_rev 取 server 的 rev；连续 patch 合并成一个（base_rev 不变）；inflight 的不参与合并', async () => {
     const { cache, outbox } = await setup();
     await seed(cache, 'todos', uid(1), todo(1), 5);

@@ -149,6 +149,47 @@ describe('ensurePushSubscription', () => {
     expect(store.m.get(CLAIM_STORAGE_KEY)).toBe(await okVal('A', 'S1', EP.endpoint));
   });
 
+  it('L9：订阅前会话已经换成别的账号（或退出了）：不订阅、不认领，回 claim_failed', async () => {
+    for (const now of ['B', null]) {
+      const { d, claim, subscribe } = deps({ currentUserId: () => now });
+      expect(await ensurePushSubscription(d)).toEqual({ result: 'claim_failed' });
+      expect(subscribe).not.toHaveBeenCalled();
+      expect(claim).not.toHaveBeenCalled();
+    }
+  });
+
+  it('L9：订阅、登记设备行的期间换了账号：不认领（不拿新账号的令牌认领旧账号的订阅），不记', async () => {
+    let now = 'A';
+    const ensureDevice = vi.fn(async () => {
+      now = 'B';
+      return 'dev1';
+    });
+    const { d, claim, store } = deps({ currentUserId: () => now, ensureDevice });
+    expect(await ensurePushSubscription(d)).toEqual({ result: 'claim_failed' });
+    expect(claim).not.toHaveBeenCalled();
+    expect(store.m.get(CLAIM_STORAGE_KEY)).toBeUndefined();
+  });
+
+  it('L9：device_not_found 后补登记的期间换了账号：不再认领第二次', async () => {
+    let now = 'A';
+    let n = 0;
+    const ensureDevice = vi.fn(async () => {
+      n += 1;
+      if (n === 2) now = 'B';
+      return 'dev1';
+    });
+    const claim = vi.fn(async (_a: ClaimArgs): Promise<NetResult<unknown>> => notFound());
+    const { d } = deps({ currentUserId: () => now, ensureDevice, claim });
+    expect(await ensurePushSubscription(d)).toEqual({ result: 'claim_failed' });
+    expect(claim).toHaveBeenCalledTimes(1);
+  });
+
+  it('L9：会话一直是这个账号：照常认领', async () => {
+    const { d, claim } = deps({ currentUserId: () => 'A' });
+    expect(await ensurePushSubscription(d)).toEqual({ result: 'claimed' });
+    expect(claim).toHaveBeenCalledTimes(1);
+  });
+
   it('device_not_found：先 invalidateDevice 忘掉旧 id，再补登记', async () => {
     const order: string[] = [];
     const ensureDevice = vi.fn(async () => {

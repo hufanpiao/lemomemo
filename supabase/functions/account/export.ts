@@ -229,7 +229,7 @@ function exportNotice(req: Request, user: ActiveUser, deps: Deps, deviceId: stri
         mailInfo(deps, user.userId),
         deviceId ? store.deviceLabel(user.userId, deviceId).catch(() => null) : Promise.resolve(null),
       ]);
-      if (info) sent = await deps.sendMail(info.email, exportMail(info.loc, at, info.tz, deviceDisplay(dev, info.loc), proxy.geo)).catch(() => false);
+      if (info) sent = await deps.sendMail(info.email, exportMail(info.loc, at, info.tz, deviceDisplay(dev, info.loc), proxy.geo, deps.tzLabel)).catch(() => false);
     } catch {
       sent = false;
     }

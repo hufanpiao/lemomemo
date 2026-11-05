@@ -2,7 +2,7 @@
 // 只被 account/ 下的 core.ts、status.ts、export.ts 引用，不反过来 import 它们（没有循环依赖）；对外一律经 core.ts 转出。
 // 和 core.ts 同样的约束：不 import npm 包、不碰 Deno 全局，Vitest 直接测。
 
-import { mailLocale, type Mail, type MailLocale } from '../_shared/account-mail.ts';
+import { mailLocale, type Mail, type MailLocale, type TzLabeler } from '../_shared/account-mail.ts';
 
 // ---------------- 常量（出处见行尾） ----------------
 export const ACCOUNT_DAILY_LIMIT = 3;          // export、delete 合计每人每天 3 次（第 6 节、附录 A account:<user_id>:<UTC 日期>）
@@ -140,6 +140,8 @@ export interface Deps {
   /** auth.admin.getUserById 的邮箱；取不到返回 null */
   userEmail(userId: string): Promise<string | null>;
   sendMail(to: string, mail: Mail): Promise<boolean>;
+  /** 邮件里时区的通俗说法（shared/i18n/tz-label.ts 的 tzLabel；index.ts 从 _shared/gen 注入，KO-mail-nolink-tz） */
+  tzLabel: TzLabeler;
   /** 验 vault_token（B5 的 _shared/vault-token.ts：HMAC、过期、pin_epoch） */
   verifyVaultToken(userId: string, token: string): Promise<'ok' | 'vault_locked' | 'vault_relock'>;
   exportTables: readonly ExportTable[];

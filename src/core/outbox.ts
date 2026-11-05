@@ -17,7 +17,7 @@
 import { buildInfo } from '../platform/env.ts';
 import type { Cache, CachedRow, CacheTx, ServerRow } from './cache.ts';
 import { OUTBOX } from './cache-schema.ts';
-import { bySeq, OutboxRejectError, recKey, sendOrder, validateWrite } from './outbox-logic.ts';
+import { bySeq, loadRowSchemas, OutboxCodeUnavailableError, OutboxRejectError, recKey, sendOrder, validateWrite } from './outbox-logic.ts';
 import { migrateOutboxItem, OUTBOX_V, outboxMigrations } from './outbox-migrations.ts';
 import type { EnqueueInput, Outbox, OutboxBootReport, OutboxEvent, OutboxItem, OutboxStatus, OutboxOptions } from './outbox-types.ts';
 import { applyServerRows, cancelDependents, notify, rewriteRow } from './outbox-rows.ts';
@@ -69,7 +69,16 @@ async function bootImpl(ctx: Ctx): Promise<OutboxBootReport> {
 
 async function enqueueImpl(ctx: Ctx, input: EnqueueInput): Promise<OutboxItem | null> {
   if (ctx.isSuspended()) throw new OutboxRejectError('outbox_suspended');
-  const bad = validateWrite(input, ctx.opts.manifests);
+  // 严格校验第一次用时才加载（FA-6 ③）；等加载的这段时间里可能设了闸，回来再查一次
+  // 加载失败：不写本机、不入队，抛 OutboxCodeUnavailableError（write.* 返回 ok:false，③ 审查 M2）；下次入队再试着加载
+  let rows: Awaited<ReturnType<typeof loadRowSchemas>>;
+  try {
+    rows = await loadRowSchemas();
+  } catch (e) {
+    throw new OutboxCodeUnavailableError(e);
+  }
+  if (ctx.isSuspended()) throw new OutboxRejectError('outbox_suspended');
+  const bad = validateWrite(input, rows, ctx.opts.manifests);
   if (bad) throw new OutboxRejectError(bad);
   const { table, id, op } = input;
   const rec = recKey(table, id);
@@ -101,28 +110,7 @@ async function enqueueImpl(ctx: Ctx, input: EnqueueInput): Promise<OutboxItem | 
     if (op === 'patch' && last?.op === 'patch' && last.state === 'pending' && !last.sent && last.v === ctx.currentV && !input.deps?.length) {
       result = { ...last, data: { ...last.data, ...input.data }, remind: last.remind || input.remind === true, client_ts: ts };
     } else {
-      const serverRev = row?.server?.['rev'];
-      const afterInsert = mine.some((i) => i.op === 'insert');
-      result = {
-        op_id: ctx.newOpId(),
-        table,
-        id,
-        rec,
-        op,
-        data: { ...input.data },
-        base_rev: op === 'patch' && !afterInsert && typeof serverRev === 'number' ? serverRev : null,
-        own_revs: op === 'patch' && !afterInsert ? [...(row?.own_revs ?? [])] : [],
-        client_ts: ts,
-        tries: 0,
-        next_at: 0,
-        state: 'pending',
-        v: ctx.currentV,
-        app: ctx.appVersion,
-        seq: all.reduce((m, i) => Math.max(m, i.seq), 0) + 1,
-        remind: input.remind === true,
-        deps: (input.deps ?? []).map((d) => ({ table: d.table, id: d.id })),
-        error: null,
-      };
+      result = rows.newItem(ctx, input, row, mine, all, ts);   // 建新项的规则在 outbox-new-item.ts（随 loadRowSchemas 懒加载）
     }
     await t.put(OUTBOX, result);
     view = await rewriteRow(t, table, id, row);

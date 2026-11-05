@@ -1,7 +1,7 @@
 // 入口（架构 2.2）：挂 React、加载样式、注册 SW
 // StrictMode 只在开发版开（2.6）
 // 启动顺序（架构 4.1、0.27 第 1、4 点、0.38 第 17 条）：
-// 0. 最先关掉 zod 的 JIT（platform/zod-jitless.ts，必须是第一个 import）；进 start 后第一件事是 exe 里装 platform 桥（isTauri 才动态 import desktop.ts，0.53 第 2 条）
+// 0. zod 的 JIT 由 vite.config.ts 的别名统一关掉（裸 'zod' → platform/zod-jitless.ts，FA-6 ③ 起 zod 不在首屏，入口不再先 import 它）；进 start 后第一件事是 exe 里装 platform 桥（isTauri 才动态 import desktop.ts，0.53 第 2 条）
 // 1. 读本机会话的 user_id（不加载 supabase-js，离线也能读）；没登录 → 本机库还在就删掉，跳 /app/auth/，不建本机库、不渲染
 // 2. await coldStart({userId})：开本机库（迁移、换账号清库）、把上次的内容灌进集合、按缓存的 config / profile 算功能开关；
 //    coldStart 不抛错，出错已降级成 unavailable（不渲染缓存，只联网用）
@@ -17,7 +17,6 @@
 //    选出来的根外面再包一层静态的“出错了 · 刷新”兜底（root.tsx 的 withCrashFallback，K6-sugg3 ⑥）
 // 启动画面（R-251、R-254；DOM 在 index.html，跟着首次绘制出来）：从这里起算最多盖 5 秒（hideSplashAfter）；
 // #root 第一次画出东西（告知页、App、整屏提示、崩溃兜底页）的下一帧收起（hideSplashWhenPainted）；root.tsx 的 SplashRelease 再各收一次
-import '../platform/zod-jitless.ts';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles/tokens.css';
@@ -28,15 +27,14 @@ import { fromUiLocale, LOCALE_STORAGE_KEY, pickLocale, toUiLocale } from '../../
 import { watchAccount } from '../core/account.ts';
 import { coldStart, type BootResult } from '../core/boot.ts';
 import { deleteCacheDb } from '../core/cache.ts';
-import { createDeviceRegistrar } from '../core/device-reg.ts';
 import { createLogQueue, guardOwner } from '../core/log/queue.ts';
 import { devicePlatform, readInstallId, withLock } from '../platform/device-info.ts';
 import { clearLogQueue, clearOtherLogQueues, logQueueStore } from '../platform/log-store.ts';
-import { probeAccountForExit } from '../platform/account-status.ts';
 import { expectPushClaimContext, runPushClaim, setPushClaimContext } from '../platform/push-claim-run.ts';
 import { setRemindHoldLog } from '../kit/state/remind-queue.ts';
+import { setQuietErrorLog } from '../kit/components/QuietBoundary.tsx';
+import { setPushDisconnectLog } from '../platform/push-disconnect.ts';
 import { browserLifecycle } from '../platform/net.ts';
-import { createLogUploader, createSupabaseTransport } from '../platform/sync-net.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
 import { buildInfo, isTauri, JS_ERROR_ACT, jsErrorCode, registerJsErrorLog } from '../platform/env.ts';
 import {
@@ -49,12 +47,12 @@ import { hideSplash, hideSplashAfter, hideSplashWhenPainted } from '../platform/
 import { appPainted, startAppPaintLimit, watchAppPainted } from '../platform/first-paint.ts';
 import { nextFrame } from '../motion/index.ts';
 import { checkSwOnForeground, registerServiceWorker, reloadPage, upgradeLogCountStore, watchServiceWorkerUpdate } from '../platform/sw-register.ts';
-import { mountExitScreen, watchExitIncomplete } from './ExitIncompleteScreen.tsx';
+import { mountExitScreen, watchExitIncomplete } from './exit-screen.tsx';
 import { mountFeatures } from './features.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
 import { setRemindErrorLog } from './App.tsx';
 import { GATE_LIMIT_MS, startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
-import { wireSync } from './sync-wiring.ts';
+import { AFTER_PAINT_NOTICE_AT, lazyLogUploader, loadAfterPaint, startAfterPaint, type AfterPaint } from './after-paint.ts';
 import { applyDocLocale } from '../platform/doc-locale.ts';
 
 /** 界面语言（16.4）：缓存的 profiles.ui_locale → 本机选过的（pv-locale）→ 设备语言 → 中文；规则同 src/auth/main.tsx，多一层缓存的 profile */
@@ -84,6 +82,9 @@ async function installNativeBridge(): Promise<void> {
     // 分包加载失败：留着网页版的桥（照常能用，只是 exe 专有的几件退回网页做法）
   }
 }
+
+/** 启动件连续下载失败时那条横幅的 id（kind 用 sync-paused；和同步引擎的 sync-paused 分开，下载成功只收掉这一条） */
+const AFTER_PAINT_BANNER_ID = 'after-paint-failed';
 
 async function start(): Promise<void> {
   // 最先装桥：下面没登录时的 goToAuth（openAuth）、渲染、boot 都要用 exe 的那一份
@@ -131,13 +132,18 @@ async function start(): Promise<void> {
   setRemindHoldLog((reason) => logs.log('remind_hold_timeout', { code: reason }));
   // RemindHost 出错（接线审查 R2）：走现有的 js_error，code 只有“错误类型@文件名:行号”
   setRemindErrorLog((err) => logs.log(JS_ERROR_ACT, { code: jsErrorCode(err, {}, location.origin) }));
+  // 页面里可有可无的一小块（错过的提醒、未同步提示和标记等，kit 的 QuietBoundary）出错（代码复审 N1）：动作名带是哪一块，code 同上只有“错误类型@文件名:行号”
+  setQuietErrorLog((name, err) => logs.log(`quiet_error_${name}`, { code: jsErrorCode(err, {}, location.origin) }));
+  // 退出、换账号时断开推送（platform/push-disconnect.ts，push.ts 按需下载，11-05 首屏瘦身）：下载失败、断开抛错记一条，code 是 load / error，不挡退出
+  setPushDisconnectLog((code) => logs.log('push_disconnect_fail', { code }));
   // 客户端错误日志（TC-B1-68、架构 6.1）：只记“类型@文件名:行号”，同一个 code 每天 5 条
   registerJsErrorLog(logs.log);
   // 写 logs 表的那一端（架构 0.38 第 68 条）：localStorage 队列 lemo.logq.<user_id>，主页在线时批量上传；别的账号留下的队列清掉
   clearOtherLogQueues(userId);
   // 上传前核对会话主人：别的标签页换成了别的账号，这一页拿到的是新账号的令牌，不能用它传这个账号的日志
+  // 上传那一端第一次真上传时才加载（after-paint.ts 的 lazyLogUploader，FA-6 ③：sync-net 不在首屏）；加载失败这一批回 retry
   const logQueue = createLogQueue({
-    store: logQueueStore(userId), upload: guardOwner(userId, readSessionUserId, createLogUploader()),
+    store: logQueueStore(userId), upload: guardOwner(userId, readSessionUserId, lazyLogUploader()),
     isOnline: () => browserLifecycle.isOnline(), onOnline: (fn) => browserLifecycle.onOnline(fn),
   });
   logs.setSink((e) => logQueue.add(e));
@@ -216,56 +222,87 @@ async function start(): Promise<void> {
     setPushClaimContext(null);
     return;
   }
-
-  // 同步（K8）：只在 boot 正常时启动；被移除（同步引擎、outbox 的 removed 事件）只处理一次：清空本机、删本机会话、回登录页
-  // 设备行（0.38 第 62 条④，接手清单 K8-tz-device）：主页拿到锁后登记或复用本会话的 devices 行，id 存 meta，report_tz 用它
-  const transport = createSupabaseTransport();
-  const platform = devicePlatform();
-  const device = boot.cache
-    ? createDeviceRegistrar({
-        transport, cache: boot.cache, platform, appVersion: buildInfo.version,
-        sessionId: () => readSessionId(), installId: () => readInstallId(),
-        lock: (fn) => withLock(`lemo-device-reg:${userId}`, fn), log: logs.log,
-      })
-    : null;
-  wireSync(boot, {
-    transport, clearCacheStorage, goToAuth, platform, log: logs.log,
-    // 第二个参数是 sid（被拒那次请求的会话），不是 session 的 setExitNotice 的 storage，要包一层
-    setExitNotice: (n, sid) => setExitNotice(n, undefined, { sid: sid ?? null }),
-    // 被移除、停用：一收到就删被拒那次请求的会话，回登录页前只在会话还是那一个时再删（K6-sugg3 ①；sid 必填，K6-sugg5 ②）
-    clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
-    // 收到 account_disabled 先探测是停用还是注销冷静期（R-256 ③ 后续）：用被拒那次会话的令牌调 account status
-    probeAccount: (token) => probeAccountForExit({ token }),
-    readSession: () => ({ sid: readSessionId(), token: readSessionAccessToken() }),
-    readUserId: () => readSessionUserId(),
-    reload: reloadPage,
-    // 限次触发、已让出同步主页：顶部出“同步暂停，请稍后重新打开”（App.tsx 的 UpdateBanner 读 ui-store 的 sync-paused）
-    onSyncPaused: () => uiStore.getState().pushBanner({ id: 'sync-paused', kind: 'sync-paused' }),
-    onLeader: (on) => logQueue.setLeader(on),
-    clearLogs,
-    ...(device ? { deviceId: device.id, ensureDevice: device.ensure } : {}),
-  });
-
-  // 推送认领的参数（账号锁、设备登记）由 platform/push-claim-run.ts 统一拼，启动认领和设置 › 提醒 的点按认领用同一份（FA-4 代码审查中 2）
-  setPushClaimContext({
-    userId, platform, claim: (a) => transport.claimEndpoint(a), sessionId: () => readSessionId(),
-    ...(device ? { ensureDevice: device.ensure, invalidateDevice: device.invalidate } : {}),
-  });
-
-  // version_too_new 时上面已经注册过
+  // SW 注册不依赖下面那批代码（③ 审查 M1）：过了第一道闸就注册，下载失败、重试期间照样有 SW 缓存和新版本提示。version_too_new 时上面已经注册过
   // 注册以后盯住“后台装好了新版本”（8.1）：顶部提示“有新版本 · 重新打开”（App.tsx 的 UpdateBanner），不强制刷新
-  if (!import.meta.env.DEV && boot.status !== 'version_too_new') {
-    void registerServiceWorker().then((reg) => {
-      if (!reg) return;
-      watchServiceWorkerUpdate(reg, () => boot.upgrade.setSwReady());
-      // 切到前台、在线、距上次查满 1 小时才主动查新版本（架构师 10-30 第 5 点；和同步引擎“切到前台时比较最低版本”同一个时机）
-      checkSwOnForeground(reg, { life: browserLifecycle });
-      // 推送订阅（FA-1；换账号时旧订阅已退订，FE-2）：通知权限已给就重订、认领到这个账号；没给不弹权限框（只在设置 › 提醒的点按里请求）
-      // 先等本会话的设备行登记好再认领（代码审查 M3、安全审查 S1）；记录按“账号 + 会话 + endpoint”的摘要（FA2-1、FA2-2）；几个标签页串着来（S2）
-      // 结果写进 push-status 交给设置 › 提醒（被占着出“移除它”、要重新打开、不支持）
-      void runPushClaim();
+  const swReg: Promise<ServiceWorkerRegistration | null> =
+    !import.meta.env.DEV && boot.status !== 'version_too_new'
+      ? registerServiceWorker().then((reg) => {
+          if (reg) {
+            watchServiceWorkerUpdate(reg, () => boot.upgrade.setSwReady());
+            // 切到前台、在线、距上次查满 1 小时才主动查新版本（架构师 10-30 第 5 点；和同步引擎“切到前台时比较最低版本”同一个时机）
+            checkSwOnForeground(reg, { life: browserLifecycle });
+          }
+          return reg;
+        })
+      : Promise.resolve(null);
+
+  /** 下载到了、闸也过了（startAfterPaint 保证）：起同步、设备登记、推送认领。这里面全是同步调用，查完闸到用上账号之间没有空档 */
+  const startSync = (late: AfterPaint): void => {
+    const { createSupabaseTransport, createDeviceRegistrar, wireSync, probeAccountForExit } = late;
+
+    // 同步（K8）：只在 boot 正常时启动；被移除（同步引擎、outbox 的 removed 事件）只处理一次：清空本机、删本机会话、回登录页
+    // 设备行（0.38 第 62 条④，接手清单 K8-tz-device）：主页拿到锁后登记或复用本会话的 devices 行，id 存 meta，report_tz 用它
+    const transport = createSupabaseTransport();
+    const platform = devicePlatform();
+    const device = boot.cache
+      ? createDeviceRegistrar({
+          transport, cache: boot.cache, platform, appVersion: buildInfo.version,
+          sessionId: () => readSessionId(), installId: () => readInstallId(),
+          lock: (fn) => withLock(`lemo-device-reg:${userId}`, fn), log: logs.log,
+        })
+      : null;
+    wireSync(boot, {
+      transport, clearCacheStorage, goToAuth, platform, log: logs.log,
+      // 第二个参数是 sid（被拒那次请求的会话），不是 session 的 setExitNotice 的 storage，要包一层
+      setExitNotice: (n, sid) => setExitNotice(n, undefined, { sid: sid ?? null }),
+      // 被移除、停用：一收到就删被拒那次请求的会话，回登录页前只在会话还是那一个时再删（K6-sugg3 ①；sid 必填，K6-sugg5 ②）
+      clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
+      // 收到 account_disabled 先探测是停用还是注销冷静期（R-256 ③ 后续）：用被拒那次会话的令牌调 account status
+      probeAccount: (token) => probeAccountForExit({ token }),
+      readSession: () => ({ sid: readSessionId(), token: readSessionAccessToken() }),
+      readUserId: () => readSessionUserId(),
+      reload: reloadPage,
+      // 限次触发、已让出同步主页：顶部出“同步暂停，请稍后重新打开”（App.tsx 的 UpdateBanner 读 ui-store 的 sync-paused）
+      onSyncPaused: () => uiStore.getState().pushBanner({ id: 'sync-paused', kind: 'sync-paused' }),
+      onLeader: (on) => logQueue.setLeader(on),
+      clearLogs,
+      ...(device ? { deviceId: device.id, ensureDevice: device.ensure } : {}),
     });
-  }
+
+    // 推送认领的参数（账号锁、设备登记）由 platform/push-claim-run.ts 统一拼，启动认领和设置 › 提醒 的点按认领用同一份（FA-4 代码审查中 2）
+    setPushClaimContext({
+      userId, platform, claim: (a) => transport.claimEndpoint(a), sessionId: () => readSessionId(), currentUserId: () => readSessionUserId(),
+      ...(device ? { ensureDevice: device.ensure, invalidateDevice: device.invalidate } : {}),
+    });
+
+    // 推送订阅（FA-1；换账号时旧订阅已退订，FE-2）：SW 注册好了才认领；通知权限已给就重订、认领到这个账号；没给不弹权限框（只在设置 › 提醒的点按里请求）
+    // 先等本会话的设备行登记好再认领（代码审查 M3、安全审查 S1）；记录按“账号 + 会话 + endpoint”的摘要（FA2-1、FA2-2）；几个标签页串着来（S2）
+    // 结果写进 push-status 交给设置 › 提醒（被占着出“移除它”、要重新打开、不支持）
+    void swReg.then((reg) => {
+      if (reg) void runPushClaim();
+    });
+  };
+
+  // 同步、设备登记、账号状态探测的代码这时才下载（after-paint.ts，FA-6 ③：zod、supabase 封装移出首屏）。
+  // 下载失败、超时（离线又没有 SW 缓存、网络卡住）：退避重试，恢复网络、切回前台立刻再试；每次下载前、回来后都过同一道换账号闸（③ 审查 M1）。
+  // 第一次失败就设 null 推送认领上下文（点按认领当场回 claim_failed，不多等），下载成功后再设；本机缓存照常能看、能改（outbox 留着）。
+  // 连续失败 AFTER_PAINT_NOTICE_AT 次：顶部出“同步暂停 · 重新打开”（沿用 sync-paused 横幅和文案，主持人 11-04 定；重新打开也绕开浏览器缓存失败的动态 import，L2）
+  startAfterPaint({
+    load: loadAfterPaint,
+    stillOwner: () => !boot.switching && readSessionUserId() === userId,
+    onAbandoned: () => setPushClaimContext(null),
+    life: browserLifecycle,
+    onFailed: (n, why) => {
+      if (n === 1) setPushClaimContext(null);
+      if (n === 1 || n === AFTER_PAINT_NOTICE_AT) logs.log('after_paint_load_failed', { code: `${why}:${n}` });
+      if (n === AFTER_PAINT_NOTICE_AT) uiStore.getState().pushBanner({ id: AFTER_PAINT_BANNER_ID, kind: 'sync-paused' });
+    },
+    onLoaded: (late) => {
+      uiStore.getState().dismissBanner(AFTER_PAINT_BANNER_ID);
+      startSync(late);
+    },
+  });
+
 }
 
 // start 自己不该抛（coldStart 不抛）；万一抛了（例如没有 #root）不留白屏：回登录页，登录页会显示“已登录 · 继续”
