@@ -1,0 +1,5 @@
+-- expect: 的策略 fn_own 的 using 没有 按 app.uid 绑定到本人
+-- HEARTBEAT-fnai 安全审查 G2（11-05）：给 fn 角色的策略不写 true、写成别的恒真式（1 = 1、key is not null），
+-- fn_vault、fn_ai 就能读写所有人的计数；D1 要求 fn 角色的策略按 app.uid 绑定到本人（例外只有 counters.fn_global、heartbeat）
+drop policy fn_own on private.counters;
+create policy fn_own on private.counters for all to fn_vault, fn_ai using (1 = 1) with check (key is not null);

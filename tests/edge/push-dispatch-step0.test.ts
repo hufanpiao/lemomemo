@@ -1,6 +1,7 @@
 // push-dispatch 第 0 步（原 tz-recalc；B2 任务单 BE-2 第 0 步、TZ-invalid-b2、K3-remind-orphan；架构 5.3 第 0 步、4.5、4.6、0.42 第 1 条、0.54 第 2 条；
 // 代码审查 BE-1 R1）。出队函数本身（孤儿删、停用和冷静期不出队、上限）在 supabase/tests/rls/30_remind_queue_pop.test.sql；这里测函数一侧：
-// 重算时传这一行原来的 remind_at、漏传就失败、时区不认识的跳过记 tz_invalid、写回失败插回、预算到了插回。
+// 重算时传这一行原来的 remind_at、漏传就失败、时区不认识的跳过记 tz_invalid、写回失败放回、预算到了放回。
+// 11-04 起出队是租约式（迁移 20261104130000）：“放回”= finish 时清租约，崩溃、有毒项、处理期间被改在 push-dispatch-lease.test.ts。
 import { describe, expect, it, vi } from 'vitest';
 import { msAt, parseHm } from '../../shared/core/date.ts';
 import { handle } from '../../supabase/functions/push-dispatch/core.ts';
@@ -62,7 +63,7 @@ describe('第 0 步：重算 remind_at 时一律传这一行原来的 remind_at�
   });
 });
 
-describe('第 0 步：出队即删、写回', () => {
+describe('第 0 步：出队、写回、按租约收尾', () => {
   it('换时区：按新的 current_tz 重算待办；日程是固定时刻不变；处理完队列清空', async () => {
     const db = new MemDb().user(UA, { current_tz: 'America/Los_Angeles' });
     const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0, remind_time: '09:00', remind_at: msAt('2026-11-05', 540, SEOUL) }), true);
@@ -84,7 +85,7 @@ describe('第 0 步：出队即删、写回', () => {
     expect(db.queue.size).toBe(0);
     expect(db.tables.todos.get(tb.id)?.remind_at).toBe(msAt('2026-11-05', 540, SEOUL));
   });
-  it('写回失败的插回队列，下一轮再算', async () => {
+  it('写回失败的放回队列，下一轮再算', async () => {
     const db = new MemDb().user(UA);
     const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0 }), true);
     db.failOn.add('writeRemind');
@@ -94,14 +95,14 @@ describe('第 0 步：出队即删、写回', () => {
     await run(db, at('10:01'));
     expect(db.queue.size).toBe(0);
   });
-  it('时间预算到了：出队以后没来得及处理的插回', async () => {
+  it('时间预算到了：出队以后没来得及处理的放回', async () => {
     const db = new MemDb().user(UA);
     db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0 }), true);
     db.put('todos', todoRow(UA, { due: '2026-11-06', remind_days: 0 }), true);
     let now = at('10:00');
     const pop = db.popQueue.bind(db);
-    db.popQueue = async (n) => {
-      const r = await pop(n);
+    db.popQueue = async (n, l, retry) => {
+      const r = await pop(n, l, retry);
       now += 25_000;   // 出队以后时钟跳过 20 秒预算
       return r;
     };
@@ -127,7 +128,7 @@ describe('第 0 步：不认识的时区那一行跳过、记 tz_invalid（D7，
     expect(db.tables.events.get(bad.id)?.remind_at).toBe(1);
     expect(db.tables.todos.get(tb.id)?.remind_at).toBe(2);
     expect(db.tables.events.get(ok.id)?.remind_at).toBe(msAt('2026-11-05', 885, SEOUL));
-    expect(db.queue.size).toBe(0);   // 跳过的不插回（插回只会每分钟再记一次）
+    expect(db.queue.size).toBe(0);   // 跳过的不放回（放回只会每分钟再记一次）：finish 按租约删掉
   });
   it('11-04：current_tz 不认识时纪念日也记 profiles（和待办、全天日程同一口径，R-316）', async () => {
     const db = new MemDb().user(UB, { current_tz: 'Mars/Olympus_Mons' });

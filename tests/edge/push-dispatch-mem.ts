@@ -1,4 +1,5 @@
-// push-dispatch 测试用的内存数据库（按 store.ts 那几条查询的语义实现，含 private.remind_queue_pop 的出队规则）和共享 logic 接线。
+// push-dispatch 测试用的内存数据库（按 store.ts 那几条查询的语义实现，含 private.remind_queue_pop 的出队规则、remind_queue_finish 的收尾规则，
+// 迁移 20261104130000 的租约式出队）和共享 logic 接线。
 // LOGIC 和 supabase/functions/push-dispatch/index.ts 的 LOGIC 同一写法（那边从 _shared/gen 引，这里直接引 shared/）。
 // 推送服务用测试开发的替身 tests/fakes/push-service.ts（进程内 fake.fetch）；造数据按“少量设备、每台多条”（替身复核 N1）。
 import { msAt, parseHm, todayOf } from '../../shared/core/date.ts';
@@ -41,6 +42,10 @@ export const eventRow = (user: string, over: Partial<ItemRow> = {}): ItemRow => 
 
 /** remind_queue_pop 每人每轮最多出队几条（和迁移 20261103130000 一致） */
 export const POP_PER_USER = 50;
+/** 取过几次还没处理完就当有毒项丢掉（迁移 20261104130000：attempts ≥ 5 的不再交出去） */
+export const POISON_AT = 5;
+/** 队列的一项：claim 为空（或没写）= 没人在处理；attempts 没写按 0（测试里直接 queue.set 的） */
+export type QEntry = QueueRef & { claim?: string | null; claimed_at?: number | null; attempts?: number };
 
 type Ranked = { table: Table; row: ItemRow; k: number };
 const cmpRanked = (a: Ranked, b: Ranked): number =>
@@ -59,7 +64,10 @@ function perUserCap(c: Ranked[], perUser: number, limit: number): { table: Table
 /** 内存库：所有写都在一个同步段里完成（JS 单线程，条件更新天然原子，对应 SQL 的行锁） */
 export class MemDb implements DispatchStore {
   tables: Record<Table, Map<string, ItemRow>> = { events: new Map(), todos: new Map(), anniversaries: new Map() };
-  queue = new Map<string, QueueRef>();
+  queue = new Map<string, QEntry>();
+  /** 出队函数里的 now()（租约过期判断）；测试把它接到 ctx 的时钟上 */
+  clock: () => number = () => Date.now();
+  private claimSeq = 0;
   /** 账号可用（account_usable）；不在里面的按“没有 profile”算 */
   usable = new Map<string, boolean>();
   profs = new Map<string, Profile>();
@@ -67,6 +75,10 @@ export class MemDb implements DispatchStore {
   devs: (DeviceRow & { deleted_at: number | null })[] = [];
   logs: LogRow[] = [];
   beats: HeartbeatDetail[] = [];
+  /** 上一次心跳（readHeartbeat 读的）；at 是 ISO 时刻，按 clock 记 */
+  lastBeat: { at: string; detail: unknown } | null = null;
+  /** 模拟“被用户事务锁着”的队列项（键 table:id）：finish 的放回和删除 skip locked，跳过它们（迁移 20261104130000，安全审查必改 2） */
+  locked = new Set<string>();
   /** 调用记录（核对“传了什么”） */
   calls: string[] = [];
   /** 注入故障：方法名 → 抛错 */
@@ -79,8 +91,15 @@ export class MemDb implements DispatchStore {
   }
   put(table: Table, row: ItemRow, enqueue = false): ItemRow {
     this.tables[table].set(row.id, row);
-    if (enqueue) this.queue.set(`${table}:${row.id}`, { table_name: table, id: row.id });
+    if (enqueue) this.enqueue(table, row.id);
     return row;
+  }
+  /** 4 个入队入口的语义（迁移 20261104130000）：已在队列里且正被租着或取过的，清租约、attempts 清零（11-04 审查返工 L2）；其余什么都不写；不在的新插 */
+  enqueue(table: Table, id: string): void {
+    const k = `${table}:${id}`;
+    const q = this.queue.get(k);
+    if (!q) this.queue.set(k, { table_name: table, id });
+    else if (q.claim || (q.attempts ?? 0) > 0) this.queue.set(k, { ...q, claim: null, claimed_at: null, attempts: 0 });
   }
   /**
    * 客户端编辑一行（对应真库 UPDATE 时的三个触发器，真库语义在 rls/32 ⑧ 和 0001 的 touch()）：
@@ -108,7 +127,7 @@ export class MemDb implements DispatchStore {
       row.defer_until = null;
     }
     this.tables[table].set(id, row);
-    if ([...remindCols, 'snooze_at'].some(changed)) this.queue.set(`${table}:${id}`, { table_name: table, id });
+    if ([...remindCols, 'snooze_at'].some(changed)) this.enqueue(table, id);
     return row;
   }
   device(user: string, sub: { endpoint: string; p256dh: string; auth: string }): DeviceRow {
@@ -124,32 +143,60 @@ export class MemDb implements DispatchStore {
   async writeHeartbeat(d: HeartbeatDetail) {
     this.check('writeHeartbeat');
     this.beats.push(d);
+    this.lastBeat = { at: new Date(this.clock()).toISOString(), detail: d };
   }
-  async popQueue(limit: number): Promise<QueueItem[]> {
+  async readHeartbeat() {
+    this.check('readHeartbeat');
+    return this.lastBeat;
+  }
+  async popQueue(limit: number, leaseS: number | null = 180, retry = false): Promise<QueueItem[]> {
     this.check('popQueue');
     for (const [k, q] of this.queue) if (!this.tables[q.table_name].has(q.id)) this.queue.delete(k);   // 孤儿
-    // 照 remind_queue_pop：可用账号的按人编号（按 table_name:id），先比编号再比键，每人最多 POP_PER_USER 条
+    // 照 remind_queue_pop：只取没被租的或租约过期的，retry 只取取过的（attempts ≥ 1）、否则只取新项（attempts = 0）；
+    // 可用账号的按人编号（按 table_name:id），先比编号再比键，每人最多 POP_PER_USER 条
+    const now = this.clock();
+    const leaseMs = Math.max(30, Math.min(leaseS ?? 180, 3600)) * 1000;
     const rank = new Map<string, number>();
-    const cand: { k: string; q: QueueRef; u: string; rn: number }[] = [];
+    const all: { k: string; q: QEntry; u: string; rn: number }[] = [];
     for (const k of [...this.queue.keys()].sort()) {
-      const q = this.queue.get(k) as QueueRef;
+      const q = this.queue.get(k) as QEntry;
+      if (q.claim && (q.claimed_at ?? now) >= now - leaseMs) continue;   // 租着、没过期
+      if (((q.attempts ?? 0) >= 1) !== retry) continue;                   // 两种出队互不取对方的项（11-05 安全复审 N1）
       const u = (this.tables[q.table_name].get(q.id) as ItemRow).user_id;
       if (!this.usable.get(u)) continue;
       const rn = (rank.get(u) ?? 0) + 1;
       rank.set(u, rn);
-      if (rn <= POP_PER_USER) cand.push({ k, q, u, rn });
+      all.push({ k, q, u, rn });
     }
-    cand.sort((a, b) => a.rn - b.rn || (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
+    const cmpK = (a: { k: string }, b: { k: string }) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0);
+    // 重试（11-04 审查返工 H1）：一次只交出 1 项，attempts 最少的先，同样次数的 claimed_at 早的先（空的最先），再按 table_name、id
+    const cat = (x: { q: QEntry }) => (x.q.claimed_at ?? -Infinity);
+    const cand = all.filter((x) => x.rn <= POP_PER_USER)
+      .sort((a, b) => (retry ? (a.q.attempts ?? 0) - (b.q.attempts ?? 0) || cat(a) - cat(b) : 0) || a.rn - b.rn || cmpK(a, b))
+      .slice(0, Math.max(0, Math.min(limit, retry ? 1 : 500)));
     const out: QueueItem[] = [];
-    for (const x of cand.slice(0, Math.max(0, Math.min(limit, 500)))) {
-      this.queue.delete(x.k);
-      out.push({ ...x.q, user_id: x.u });
+    const claim = `cccccccc-0000-4000-8000-${(++this.claimSeq).toString(16).padStart(12, '0')}`;
+    for (const x of cand) {
+      const att = x.q.attempts ?? 0;
+      if (att >= POISON_AT) {
+        this.queue.delete(x.k);   // 有毒项：删掉，以 claim 为空返回
+        out.push({ table_name: x.q.table_name, id: x.q.id, user_id: x.u, claim: null });
+        continue;
+      }
+      this.queue.set(x.k, { ...x.q, claim, claimed_at: now, attempts: att + 1 });
+      out.push({ table_name: x.q.table_name, id: x.q.id, user_id: x.u, claim });
     }
     return out;
   }
-  async requeue(items: readonly QueueRef[]) {
-    this.check('requeue');
-    for (const q of items) this.queue.set(`${q.table_name}:${q.id}`, { ...q });
+  /** remind_queue_finish：release 里还是这个租约的放回（清租约、attempts − 1），这个租约的其余项删掉；锁着的（locked）都跳过、租约留着 */
+  async finishQueue(claim: string, release: readonly QueueRef[]) {
+    this.check('finishQueue');
+    for (const r of release) {
+      const k = `${r.table_name}:${r.id}`;
+      const q = this.queue.get(k);
+      if (q && q.claim === claim && !this.locked.has(k)) this.queue.set(k, { ...q, claim: null, claimed_at: null, attempts: Math.max((q.attempts ?? 0) - 1, 0) });
+    }
+    for (const [k, q] of this.queue) if (q.claim === claim && !this.locked.has(k)) this.queue.delete(k);
   }
   async rows(table: Table, ids: readonly string[]) {
     this.check('rows');

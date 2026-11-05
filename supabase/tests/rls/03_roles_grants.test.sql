@@ -1,6 +1,6 @@
 -- 角色属性和授权白名单：TC-B0-33、34、69、70、77、78、81、86、87、95（表级 DELETE）；3.3 C、6.2
 begin;
-select plan(43);
+select plan(44);
 \ir _helpers.psql
 select tests.seed();
 
@@ -70,6 +70,11 @@ select is((select string_agg(table_schema || '.' || table_name || ':' || privile
   || 'private.scan_embed_queue:SELECT,private.scan_note_files:SELECT,private.scan_note_images:SELECT,private.user_limits:SELECT,'
   || 'private.vault_ai:INSERT,private.vault_ai:SELECT,private.vault_ai:UPDATE',
   'fn_ai 的表级授权 = 6.2（public 表只有列级）');
+select is((select string_agg(table_name || '.' || column_name || ':' || privilege_type, ',' order by table_name, column_name, privilege_type)
+  from information_schema.column_privileges where grantee = 'fn_ai' and table_schema = 'private' and privilege_type = 'SELECT'
+   and not has_table_privilege('fn_ai', quote_ident(table_schema) || '.' || quote_ident(table_name), 'SELECT')),
+  'heartbeat.at:SELECT,heartbeat.detail:SELECT,heartbeat.name:SELECT,vault.pin_epoch:SELECT,vault.user_id:SELECT',
+  'fn_ai 在 private 上的列级 select = 6.2：vault 只有 (user_id, pin_epoch)；heartbeat 的 (name, at, detail) 是迁移 20261104140000 给的（upsert 心跳要读，策略只放自己三个名字）');
 
 -- ===== 函数执行权（3.3 C；0.29 续第 55 条） =====
 select is((select count(*)::int from pg_proc p where p.pronamespace = 'private'::regnamespace
@@ -85,7 +90,7 @@ select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')), null, 'anon 不能执行任何 private 函数');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('service_role', p.oid, 'EXECUTE')),
-  'account_request_deletion,account_restore,account_usable,auth_mail_counts,db_size_bytes,export_job_start,export_job_take,export_size_over,invite_claim,invite_release,long_transactions,orphan_auth_users,rebind_device_impl,remind_due,remind_pushed,remind_queue_pop,session_alive,tags_ok,take_rate', 'service_role 能执行的 private 函数 = 白名单（remind_due、remind_pushed 是 B2 迁移 20261103140000 建的；remind_queue_pop 是 B2 迁移 20261103130000 建的；orphan_auth_users 是 B1 迁移 20261031160000 建的；invite_claim、invite_release 是 B1 迁移 20261031150000 建的；tags_ok 是 B1 迁移 20261031110000 建的；db_size_bytes、export_job_start、export_job_take、export_size_over 是 B1 迁移 20261031100000 建的；auth_mail_counts 是 B1 迁移 20261029230000 建的；rebind_device_impl 是 B1 迁移 20261029192000 建的；take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
+  'account_request_deletion,account_restore,account_usable,auth_mail_counts,db_size_bytes,export_job_start,export_job_take,export_size_over,invite_claim,invite_release,long_transactions,orphan_auth_users,rebind_device_impl,remind_due,remind_pushed,remind_queue_finish,remind_queue_pop,session_alive,tags_ok,take_rate', 'service_role 能执行的 private 函数 = 白名单（remind_queue_finish 是 B2 迁移 20261104130000 建的，同一迁移把 remind_queue_pop 重建成 (int, int)；remind_due、remind_pushed 是 B2 迁移 20261103140000 建的；remind_queue_pop 是 B2 迁移 20261103130000 建的；orphan_auth_users 是 B1 迁移 20261031160000 建的；invite_claim、invite_release 是 B1 迁移 20261031150000 建的；tags_ok 是 B1 迁移 20261031110000 建的；db_size_bytes、export_job_start、export_job_take、export_size_over 是 B1 迁移 20261031100000 建的；auth_mail_counts 是 B1 迁移 20261029230000 建的；rebind_device_impl 是 B1 迁移 20261029192000 建的；take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_vault', p.oid, 'EXECUTE')), 'purge_vault_impl,tags_ok', 'fn_vault 只能执行 purge_vault_impl 和 tags_ok（B1 迁移 20261031110000，notes.tags 的 check 用）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p

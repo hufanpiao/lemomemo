@@ -1,0 +1,141 @@
+// push-dispatch 第 0 步的租约式出队（REMIND-queue-crash-loss 方案丙，R-348；迁移 20261104130000；架构 5.3 第 0 步、0.49 第 3 条）。
+// 函数一侧：中途崩了（没调 finish）租约过期后重取并算对；处理期间同一行被改，finish 不删、下一轮（下一分钟）按新值算；放回的下一轮马上能取；
+// 取过 5 次都没处理完的丢掉、记 queue_poison；finish 失败记 queue_finish_failed、等租约过期。
+// SQL 本身（打租约、过期、skip locked、4 个入队入口清租约、attempts）在 supabase/tests/rls/30_remind_queue_pop.test.sql。
+import { describe, expect, it } from 'vitest';
+import { msAt, parseHm } from '../../shared/core/date.ts';
+import { handle, QUEUE_LEASE_S } from '../../supabase/functions/push-dispatch/core.ts';
+import { cronReq, depsFor, fakeVapid } from './push-dispatch-harness.ts';
+import { MemDb, POISON_AT, todoRow, UA } from './push-dispatch-mem.ts';
+
+const SEOUL = 'Asia/Seoul';
+const at = (hm: string, day = '2026-11-03') => msAt(day, parseHm(hm), SEOUL);
+const S = 1000;
+
+async function run(db: MemDb, now: number) {
+  db.clock = () => now;
+  const { keys } = await fakeVapid();
+  const d = depsFor(db, keys, { now: () => now, fetch: async () => new Response(null, { status: 201 }) });
+  expect((await handle(cronReq(), d)).status).toBe(200);
+  return d;
+}
+const want = (due: string) => msAt(due, 540, SEOUL);   // remind_days = 0、没设 remind_time：当天 09:00
+
+describe('第 0 步租约：崩溃以后', () => {
+  it('租约是 180 秒', () => {
+    expect(QUEUE_LEASE_S).toBe(180);
+  });
+  it('取走以后进程死了（没调 finish）：179 秒内别的轮不重取，过了 180 秒重取、算对、队列清空', async () => {
+    const db = new MemDb().user(UA);
+    const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0, remind_at: null }), true);
+    const t0 = at('10:00');
+    db.clock = () => t0;
+    expect((await db.popQueue(500, QUEUE_LEASE_S)).map((x) => x.id)).toEqual([t.id]);   // 崩掉的那一轮：取走就死了
+    db.calls.length = 0;
+    await run(db, t0 + 179 * S);
+    expect(db.calls).not.toContain('rows');   // 租着、没过期：这一轮第 0 步什么都没取到
+    expect(db.tables.todos.get(t.id)?.remind_at).toBeNull();
+    expect(db.queue.get(`todos:${t.id}`)?.claim).toBeTruthy();
+    await run(db, t0 + 181 * S);
+    expect(db.tables.todos.get(t.id)?.remind_at).toBe(want('2026-11-05'));
+    expect(db.queue.size).toBe(0);
+  });
+  it('finish 失败：记 queue_finish_failed，项留着（租着）；下一分钟不重算，租约过期后重取一次、结果一样不写回，然后删掉', async () => {
+    const db = new MemDb().user(UA);
+    const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0, remind_at: null }), true);
+    db.failOn.add('finishQueue');
+    const d = await run(db, at('10:00'));
+    expect(d.codes).toContain('queue_finish_failed');
+    expect(db.tables.todos.get(t.id)?.remind_at).toBe(want('2026-11-05'));
+    expect(db.queue.get(`todos:${t.id}`)?.claim).toBeTruthy();
+    db.failOn.clear();
+    db.calls.length = 0;
+    await run(db, at('10:01'));
+    expect(db.calls).not.toContain('rows');
+    await run(db, at('10:04'));
+    expect(db.calls.filter((x) => x === 'writeRemind')).toEqual([]);   // 重算结果相同（same），不写回
+    expect(db.queue.size).toBe(0);
+  });
+});
+
+describe('第 0 步租约：处理期间这一行又被改了', () => {
+  it('读完、写回之前用户改了截止日：触发器清租约、attempts 清零，finish 不删；下一轮当新项按新值重算', async () => {
+    const db = new MemDb().user(UA);
+    const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0, remind_at: null }), true);
+    const rows = db.rows.bind(db);
+    let edited = false;
+    db.rows = async (table, ids) => {
+      const r = await rows(table, ids);
+      if (!edited) {
+        edited = true;
+        db.edit('todos', t.id, { due: '2026-11-09' });   // 同一时刻另一端改了这一行（enqueue_remind：清租约）
+      }
+      return r;
+    };
+    const writes: (number | null)[] = [];
+    const wr = db.writeRemind.bind(db);
+    db.writeRemind = async (table, id, user, patch, prev) => {
+      writes.push(patch.remind_at);
+      return wr(table, id, user, patch, prev);
+    };
+    await run(db, at('10:00'));
+    // 第一次按读到的旧值写了 11-05（乐观条件只看 remind_at，编辑没动 remind_at），项留在队列里、租约已清、attempts 清零
+    expect(writes).toEqual([want('2026-11-05')]);
+    expect(db.queue.get(`todos:${t.id}`)).toMatchObject({ claim: null, attempts: 0 });
+    // 新项每轮按批出队一次（11-05 安全复审 N1），下一分钟按新值写成 11-09，然后删掉
+    await run(db, at('10:01'));
+    expect(writes).toEqual([want('2026-11-05'), want('2026-11-09')]);
+    expect(db.tables.todos.get(t.id)?.remind_at).toBe(want('2026-11-09'));
+    expect(db.queue.size).toBe(0);
+  });
+});
+
+describe('第 0 步租约：放回、有毒项', () => {
+  it('写回失败放回：租约清空、attempts 退回 0，下一分钟就能取到（不用等租约过期）', async () => {
+    const db = new MemDb().user(UA);
+    const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0, remind_at: null }), true);
+    db.failOn.add('writeRemind');
+    await run(db, at('10:00'));
+    expect(db.queue.get(`todos:${t.id}`)).toMatchObject({ claim: null, attempts: 0 });
+    db.failOn.clear();
+    await run(db, at('10:01'));
+    expect(db.tables.todos.get(t.id)?.remind_at).toBe(want('2026-11-05'));
+    expect(db.queue.size).toBe(0);
+  });
+  it('读行失败：整批放回，记 recalc_read_failed', async () => {
+    const db = new MemDb().user(UA);
+    const a = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0 }), true);
+    const b = db.put('todos', todoRow(UA, { due: '2026-11-06', remind_days: 0 }), true);
+    db.failOn.add('profiles');
+    const d = await run(db, at('10:00'));
+    expect(d.codes).toContain('recalc_read_failed');
+    for (const x of [a, b]) expect(db.queue.get(`todos:${x.id}`)).toMatchObject({ claim: null, attempts: 0 });
+  });
+  it(`连崩 ${POISON_AT} 次的项：第 ${POISON_AT + 1} 次丢掉、记 queue_poison，不再重算；同批别的项照常算`, async () => {
+    expect(POISON_AT).toBe(5);
+    const db = new MemDb().user(UA);
+    const bad = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0, remind_at: null }), true);
+    let now = at('10:00');
+    for (let i = 0; i < POISON_AT; i++) {
+      db.clock = () => now;
+      expect(await db.popQueue(500, QUEUE_LEASE_S, i > 0)).toHaveLength(1);   // 每次取走都崩（第 1 次是新项，之后是重试）
+      now += (QUEUE_LEASE_S + 1) * S;
+    }
+    expect(db.queue.get(`todos:${bad.id}`)?.attempts).toBe(POISON_AT);
+    const good = db.put('todos', todoRow(UA, { due: '2026-11-06', remind_days: 0, remind_at: null }), true);
+    const d = await run(db, now);
+    expect(d.codes.filter((c) => c === 'queue_poison')).toHaveLength(1);
+    expect(db.queue.size).toBe(0);
+    expect(db.tables.todos.get(bad.id)?.remind_at).toBeNull();   // 有毒项不再处理
+    expect(db.tables.todos.get(good.id)?.remind_at).toBe(want('2026-11-06'));
+  });
+  it('全是有毒项：只记 queue_poison，不读行、不调 finish', async () => {
+    const db = new MemDb().user(UA);
+    const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0 }), true);
+    db.queue.set(`todos:${t.id}`, { table_name: 'todos', id: t.id, claim: null, claimed_at: null, attempts: POISON_AT });
+    const d = await run(db, at('10:00'));
+    expect(d.codes).toEqual(['queue_poison']);
+    expect(db.calls).not.toContain('rows');
+    expect(db.calls).not.toContain('finishQueue');
+  });
+});

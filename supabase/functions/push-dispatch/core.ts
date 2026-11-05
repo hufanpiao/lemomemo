@@ -9,7 +9,8 @@
 //      VAPID_PUBLIC_KEY 没设或空串和不配对一样回 500，TC-B2-88）；数据库客户端在；
 //   3. 本轮（BE-2）：第 0 步出队即删、重算 remind_at，第 1～8 步到点查询、免打扰、认领、发送、写回，都在 round.ts 的 runRound；
 //      发送只经 _shared/push/send.ts 的 deliver，签名器 VapidSigner 由 index.ts 按 VAPID 缓存常驻复用（代码审查 S10）；
-//   4. 写心跳 push-dispatch，detail 记 claimed、sent、failed、budget_hit（6.1、0.49 第 3、4 条；lemo-ops 规则 O-3）。
+//   4. 写心跳 push-dispatch，detail 记 claimed、sent、failed、budget_hit（6.1、0.49 第 3、4 条；lemo-ops 规则 O-3），
+//      加第 0 步的 queue_ok、queue_poison（11-04 安全审查必改 3，见 HeartbeatDetail）。
 // 上限（0.49 第 3 条、D3；BE-1 实测后定的初值，写进架构 5.3 的建议由架构师改）：
 //   一轮最长 ROUND_BUDGET_MS 墙钟、发送并发 SEND_CONCURRENCY、每轮发送 SEND_LIMIT_PER_ROUND 次（本机实测每条约 0.9 ms CPU，
 //   Edge 上按慢 2～3 倍算 200 条约 0.6 s CPU，远在 2 s 上限内；等预览 cpu_time_used 复核后再调）、每人每分钟 PER_USER_PER_MINUTE 条（第 6 节）、
@@ -32,17 +33,54 @@ export const SEND_CONCURRENCY = 10;
 export const SEND_LIMIT_PER_ROUND = 200;
 export const PER_USER_PER_MINUTE = 20;
 export const QUEUE_POP_LIMIT = 500;
+// 第 0 步的租约（REMIND-queue-crash-loss 方案丙，R-348 负责人定 180 秒）：一轮最长 20 秒墙钟、pg_net 超时 25 秒，
+// 崩了的那批最多 3～4 分钟后被别的轮重取；有毒项上限 5 次写在迁移 20261104130000 的 SQL 里
+export const QUEUE_LEASE_S = 180;
+// 第 0 步一轮最多做几次单项重试（11-04 审查返工 H1，主持人定 20）：重试一次只交出 1 项，每次都要出队、读行、写回、收尾，
+// 太多会挤掉第 1～8 步的推送预算；一次崩溃留下的 500 项重试项约 25 分钟消化完。重试以后每轮都再做一次新项按批出队
+// （11-05 安全复审 N1），重试项再多也不耽误别人新改的项
+export const QUEUE_RETRY_POPS = 20;
+// 单项重试只在这一轮开始后的 5 秒内做（11-05 N1）：重试慢的时候也给新项按批出队和第 1～8 步留出时间（一轮预算 20 秒）
+export const QUEUE_RETRY_MS = 5000;
 export const DUE_LIMIT = 500;
 
-export type HeartbeatDetail = { claimed: number; sent: number; failed: number; budget_hit: boolean };
+/**
+ * 心跳 detail（usage-report 按 DETAIL_FIELDS_BY_NAME['push-dispatch'] 白名单转发，只是个数和布尔）：
+ * queue_ok——这一轮第 0 步出队、读行、收尾都没出错是 1，否则 0（lemo-ops 连续 3 次抽查都是 0 才提示：回滚以后第 0 步一直跳过、
+ *   或出队持续失败，编辑过的提醒一直不重算）；
+ * queue_poison——首尔当天累计丢掉的有毒项个数（写心跳前读上一次的心跳，同一个首尔日就累加，换日从这一轮重新算；
+ *   lemo-ops 15 分钟才抽一次，只记这一轮会漏掉）。> 0 当天提示（11-04 安全审查必改 3，主持人定）。
+ *   已知局限（代码审查复审 N3，11-05）：读上一次、加上这一轮、写回不是原子的。两轮重叠时（cron 每分钟一次、一轮预算 20 秒，
+ *   正常不会重叠，只在某一轮拖过 1 分钟时才会）后写的那一轮会盖掉先写的那一轮的个数，当天累计少算；
+ *   极端情况下上一次是 0、被盖掉的那一轮正好丢了有毒项，这一次的提示也会漏掉。丢掉的每一项在函数日志里都照样记 queue_poison，
+ *   漏的只是心跳里的数。要做到不丢，得在 SQL 里原子累加（新函数、新授权），现在不做（上线与回滚手册同样写明）。
+ */
+export type HeartbeatDetail = { claimed: number; sent: number; failed: number; budget_hit: boolean; queue_ok: number; queue_poison: number };
 
 export const LIMITS: Limits = {
   budgetMs: ROUND_BUDGET_MS, concurrency: SEND_CONCURRENCY, sendLimit: SEND_LIMIT_PER_ROUND, perUser: PER_USER_PER_MINUTE,
-  queuePop: QUEUE_POP_LIMIT, due: DUE_LIMIT,
+  queuePop: QUEUE_POP_LIMIT, queueLeaseS: QUEUE_LEASE_S, queueRetryPops: QUEUE_RETRY_POPS, queueRetryMs: QUEUE_RETRY_MS, due: DUE_LIMIT,
 };
 
 export interface DispatchStore extends RoundStore {
   writeHeartbeat(detail: HeartbeatDetail): Promise<void>;
+  /** 上一次写的 push-dispatch 心跳（at 是 ISO 时刻）；没有返回 null。只用来累计 queue_poison */
+  readHeartbeat(): Promise<{ at: string; detail: unknown } | null>;
+}
+
+const DAY_MS = 86_400_000;
+const SEOUL_MS = 9 * 3_600_000;
+/** 首尔日序号（首尔不用夏令时，固定 +9 小时） */
+export const seoulDay = (ms: number): number => Math.floor((ms + SEOUL_MS) / DAY_MS);
+
+/** 这一轮的 queue_poison 加上上一次心跳里同一个首尔日的累计；上一次的读不到、不是同一天、字段不是非负整数的，从这一轮重新算 */
+export function poisonToday(prev: { at: string; detail: unknown } | null, now: number, thisRound: number): number {
+  if (!prev) return thisRound;
+  const at = Date.parse(prev.at);
+  const d = prev.detail;
+  const n = typeof d === 'object' && d !== null && !Array.isArray(d) ? (d as Record<string, unknown>)['queue_poison'] : undefined;
+  if (!Number.isFinite(at) || seoulDay(at) !== seoulDay(now) || typeof n !== 'number' || !Number.isInteger(n) || n < 0) return thisRound;
+  return n + thisRound;
 }
 
 export type Deps = {
@@ -105,9 +143,18 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   } catch {
     // runRound 自己按步吞错；走到这里是意外，照样写心跳（数字按 0），lemo-ops 看得到这一轮跑过
     log('round_failed');
-    r = { claimed: 0, sent: 0, failed: 0, budget_hit: deps.now() - t0 >= ROUND_BUDGET_MS, left: 0 };
+    r = { claimed: 0, sent: 0, failed: 0, budget_hit: deps.now() - t0 >= ROUND_BUDGET_MS, left: 0, queue_ok: 0, queue_poison: 0 };
   }
-  const detail: HeartbeatDetail = { claimed: r.claimed, sent: r.sent, failed: r.failed, budget_hit: r.budget_hit };
+  let prev: { at: string; detail: unknown } | null = null;
+  try {
+    prev = await store.readHeartbeat();
+  } catch {
+    log('heartbeat_read_failed');   // 读不到上一次的：queue_poison 从这一轮重新算，心跳照写
+  }
+  const detail: HeartbeatDetail = {
+    claimed: r.claimed, sent: r.sent, failed: r.failed, budget_hit: r.budget_hit,
+    queue_ok: r.queue_ok, queue_poison: poisonToday(prev, deps.now(), r.queue_poison),
+  };
 
   try {
     await store.writeHeartbeat(detail);

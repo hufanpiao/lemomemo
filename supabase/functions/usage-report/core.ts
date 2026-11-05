@@ -111,13 +111,15 @@ export const MIN_SECRET_BYTES = 32;
  * 以后哪个心跳碰巧也用 held、sent 这类名字、装了别的含义，就会被自动转发；分开以后只放行“这个心跳真写、lemo-ops 要看”的键）。
  * 不在表里的心跳名，detail 一律不转发（只报 age_s）。数字只收非负整数（S1：现在写的都是计数和毫秒整数），布尔只收 true/false。
  *   cleanup（SQL，0001 等三处迁移）：rows、ms
- *   push-dispatch：claimed、sent、failed，布尔 budget_hit（B2 加的，安全审查 D2-S2：只加数字和布尔，不加别的；O-3“claimed 与 sent 之差”要用）
+ *   push-dispatch：claimed、sent、failed，布尔 budget_hit（B2 加的，安全审查 D2-S2：只加数字和布尔，不加别的；O-3“claimed 与 sent 之差”要用），
+ *     加 queue_ok（第 0 步这一轮成功 1、失败 0）、queue_poison（首尔当天累计丢掉的有毒项个数）（租约出队审查返工，安全审查必改 3；
+ *     同一口径：只是个数；lemo-ops 的 push-queue.ts 用）
  *   account-purge：purged、failed、sent、ms，加 held、remaining、forced（PURGE-heartbeat-ops）、blocked（PURGE-halfway-flip）
  *     ——同一口径：只是个数，没有任何账号标识；lemo-ops 的 purge-detail.ts 用后四个提示
  */
 export const DETAIL_FIELDS_BY_NAME: Readonly<Record<string, { readonly num: readonly string[]; readonly bool: readonly string[] }>> = {
   cleanup: { num: ['rows', 'ms'], bool: [] },
-  'push-dispatch': { num: ['claimed', 'sent', 'failed'], bool: ['budget_hit'] },
+  'push-dispatch': { num: ['claimed', 'sent', 'failed', 'queue_ok', 'queue_poison'], bool: ['budget_hit'] },
   'account-purge': { num: ['purged', 'failed', 'sent', 'ms', 'held', 'remaining', 'forced', 'blocked'], bool: [] },
 };
 

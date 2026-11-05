@@ -173,14 +173,14 @@ isOneToOne: false
                   ]
                 },"remind_queue": {
                   Row: {
-                    "id": string,"table_name": string
+                    "attempts": number,"claim": string | null,"claimed_at": string | null,"id": string,"table_name": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "id": string,"table_name": string
+                    "attempts"?: number,"claim"?: string | null,"claimed_at"?: string | null,"id": string,"table_name": string
                   }
                   Update: {
-                    "id"?: string,"table_name"?: string
+                    "attempts"?: number,"claim"?: string | null,"claimed_at"?: string | null,"id"?: string,"table_name"?: string
                   }
                   Relationships: [
                     
@@ -471,9 +471,12 @@ isOneToOne: false
               "id": string,"pushed_for": number,"table_name": string,"user_id": string
             }[]
                            },
+"remind_queue_finish":
+{ Args: { "p_claim": string,"p_release": Json }; Returns: undefined
+                           },
 "remind_queue_pop":
-{ Args: { "p_limit": number }; Returns: {
-              "id": string,"table_name": string,"user_id": string
+{ Args: { "p_lease_s": number,"p_limit": number,"p_retry": boolean }; Returns: {
+              "claim": string,"id": string,"table_name": string,"user_id": string
             }[]
                            },
 "remove_device_impl":

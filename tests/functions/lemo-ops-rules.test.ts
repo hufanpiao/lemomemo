@@ -80,10 +80,10 @@ describe('其他心跳规则（架构 6.1）', () => {
   it('推送一轮里超过一半失败（detail 的 sent、failed）', async () => {
     const w = world();
     w.freshAll();
-    w.setPushDetail({ sent: 5, failed: 5 });
+    w.setPushDetail({ sent: 5, failed: 5, queue_ok: 1, queue_poison: 0 });
     await w.tick();
     expect(w.inbox).toHaveLength(0);
-    w.setPushDetail({ sent: 4, failed: 6 });
+    w.setPushDetail({ sent: 4, failed: 6, queue_ok: 1, queue_poison: 0 });
     await w.tick();
     expect(w.inbox.map((m) => m.subject)).toEqual(['【柠檬记监控】推送一轮里超过一半失败']);
     expect(w.inbox[0]?.text).toContain('成功 4 条、失败 6 条');

@@ -1,0 +1,4 @@
+-- expect: private.heartbeat 上多了策略 qa_hb_wide（给 public）
+-- HEARTBEAT-fnai-policy（迁移 20261104140000）：fn_ai_own 还在，另加一条给 public 的宽策略（fn_ai 也属于 public），
+-- permissive 策略之间是 OR，fn_ai 照样能写 'ai-classify'、'account-purge' 等别人的心跳
+create policy qa_hb_wide on private.heartbeat for insert with check (name like '%-%');

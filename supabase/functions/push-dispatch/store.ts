@@ -67,12 +67,18 @@ export function makeStore(admin: Admin): DispatchStore {
       const { error } = await priv.from('heartbeat').upsert({ name: HEARTBEAT, at: new Date().toISOString(), detail }, { onConflict: 'name' });
       if (error) throw new Error('db');
     },
-    async popQueue(limit) {
-      return must(await priv.rpc('remind_queue_pop', { p_limit: limit })) as QueueItem[];
+    async readHeartbeat() {
+      const { data, error } = await priv.from('heartbeat').select('at, detail').eq('name', HEARTBEAT).maybeSingle();
+      if (error) throw new Error('db');
+      return data ? { at: String(data.at), detail: data.detail } : null;
     },
-    async requeue(items) {
-      const { error } = await priv.from('remind_queue').upsert(items.map((x) => ({ table_name: x.table_name, id: x.id })),
-        { onConflict: 'table_name,id', ignoreDuplicates: true });
+    async popQueue(limit, leaseS, retry) {
+      // 强转（代码审查 L4）：生成类型按函数返回列一律给非空（claim: string），但有毒项返回的 claim 是 null。
+      //   QueueItem 写的是 string | null，round-step0.ts 靠它判有毒项，不要照生成类型去掉 null 判断
+      return must(await priv.rpc('remind_queue_pop', { p_limit: limit, p_lease_s: leaseS, p_retry: retry })) as QueueItem[];
+    },
+    async finishQueue(claim, release) {
+      const { error } = await priv.rpc('remind_queue_finish', { p_claim: claim, p_release: release.map((x) => ({ table_name: x.table_name, id: x.id })) });
       if (error) throw new Error('db');
     },
     async rows(table, ids) {

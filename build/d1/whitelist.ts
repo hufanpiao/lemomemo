@@ -55,6 +55,7 @@ export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
   },
   fn_ai: {
     'private.vault:SELECT': ['user_id', 'pin_epoch'],
+    'private.heartbeat:SELECT': ['name', 'at', 'detail'],   // upsert 心跳要读（20261104140000，HEARTBEAT 选项 A）；策略 fn_ai_own 只放自己三个名字
     'public.events:SELECT': ['id', 'user_id', 'title', 'note', 'location', 'deleted_at'],
     'public.todos:SELECT': ['id', 'user_id', 'title', 'note', 'deleted_at'],
     'public.notes:SELECT': ['id', 'user_id', 'title', 'body', 'body_enc', 'enc_key_id', 'is_private', 'category_id', 'deleted_at'],
@@ -84,7 +85,8 @@ export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault'
     'export_job_start', 'export_job_take', 'db_size_bytes', 'export_size_over', 'tags_ok',
     'invite_claim', 'invite_release',   // B1 迁移 20261031150000（INVITE-late-commit）
     'orphan_auth_users',   // B1 迁移 20261031160000（ORPHAN-alert）：usage-report 数没有 profile 的 auth 用户
-    'remind_queue_pop',   // B2 迁移 20261103130000（BE-2）：push-dispatch 第 0 步出队
+    'remind_queue_pop',   // B2 迁移 20261103130000（BE-2）：push-dispatch 第 0 步出队；20261104130000 换成 (int, int, boolean) 租约式（REMIND-queue-crash-loss）
+    'remind_queue_finish',   // B2 迁移 20261104130000（REMIND-queue-crash-loss）：第 0 步结尾放回、按租约删
     'remind_due', 'remind_pushed'],   // B2 迁移 20261103140000（BE-2 安全审查必改 1）：push-dispatch 第 1 步到点、resolve 候选的精确判断
   fn_vault: ['purge_vault_impl', 'tags_ok'],
   fn_ai: [],
@@ -103,6 +105,10 @@ export const EXPORT_NONE_TABLES = ['private.vault', 'private.vault_credentials',
   'private.note_vectors', 'private.embed_queue', 'private.vault_preview', 'private.counters', 'private.vault_ai',
   'public.tombstones', 'private.pending_deletions'];
 export const EXPORT_NONE_BUCKETS = ['vault-images', 'vault-files'];
+
+/** fn_ai 能写的心跳名（private.heartbeat 的策略 fn_ai_own，迁移 20261104140000；架构附录 A）：只放 fn_ai 自己的定时函数。
+ *  不放 ai-classify、push-dispatch、account-purge 等 service_role 函数的名字，否则 fn_ai 能替它们刷心跳、掩盖停摆。加名字要新迁移 + 这里 + 附录 A 一起改 */
+export const FN_AI_HEARTBEATS = ['ai-embed', 'ai-media', 'file-check'];
 
 /** public 里只准有这九个 RPC（3.3 D；0.32 加 files_authorize，只给 /files 函数用），一律 security invoker、只授给 authenticated */
 export const PUBLIC_RPCS = ['apply_patch', 'report_tz', 'claim_endpoint', 'remove_device', 'my_ai_usage', 'record_consent', 'my_sessions', 'purge_deleted', 'files_authorize'];

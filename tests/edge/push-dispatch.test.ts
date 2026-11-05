@@ -129,12 +129,12 @@ describe('handle：500 misconfigured，一条都不发（日志只记原因码�
 });
 
 describe('handle：心跳', () => {
-  it('写 push-dispatch 心跳，detail 只有 claimed、sent、failed、budget_hit（空库一轮都是 0 / false；回包另带 left）', async () => {
+  it('写 push-dispatch 心跳，detail 只有 claimed、sent、failed、budget_hit、queue_ok、queue_poison（空库一轮：0 / false，第 0 步成功 queue_ok = 1；回包另带 left）', async () => {
     const d = deps();
     const r = await handle(cronReq(CRON), d);
     expect(r.status).toBe(200);
-    expect(d.beats).toEqual([{ claimed: 0, sent: 0, failed: 0, budget_hit: false }]);
-    expect(await r.json()).toEqual({ ok: true, claimed: 0, sent: 0, failed: 0, budget_hit: false, left: 0 });
+    expect(d.beats).toEqual([{ claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0 }]);
+    expect(await r.json()).toEqual({ ok: true, claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0, left: 0 });
   });
   it('写心跳失败回 503，日志只记 heartbeat_failed', async () => {
     const d = deps({ store: Object.assign(new MemDb(), { writeHeartbeat: async () => { throw new Error('db down: secret stuff'); } }) });
@@ -187,11 +187,12 @@ describe('D1-8：本机替身怎么认（TC-B2-80 环境变量组，安全审查
 });
 
 describe('心跳 detail 和 lemo-ops 对得上（rules.ts PUSH_DETAIL_FIELDS 11-03 核对）', () => {
-  it('handle 真写出的心跳字段名 = claimed、sent、failed、budget_hit；usage-report 白名单全收；转发后 evaluatePush 认得（换个名就判不了）', async () => {
+  it('handle 真写出的心跳字段名 = claimed、sent、failed、budget_hit、queue_ok、queue_poison；usage-report 白名单全收；转发后 evaluatePush 认得（换个名就判不了）', async () => {
     const d = deps();
     expect((await handle(cronReq(CRON), d)).status).toBe(200);
     const beat = d.beats[0] as HeartbeatDetail;
-    expect(Object.keys(beat).sort()).toEqual(['budget_hit', 'claimed', 'failed', 'sent']);
+    expect(Object.keys(beat).sort()).toEqual(['budget_hit', 'claimed', 'failed', 'queue_ok', 'queue_poison', 'sent']);
+    for (const k of ['queue_ok', 'queue_poison']) expect(PUSH_ALLOW.num, k).toContain(k);
     for (const k of PUSH_DETAIL_FIELDS) expect(PUSH_ALLOW.num, k).toContain(k);
     expect(PUSH_ALLOW.bool).toContain('budget_hit');
     // 照 usage-report 的 pickDetail 口径转发（按心跳名分开的白名单 DETAIL_FIELDS_BY_NAME['push-dispatch']：数字只收非负整数、布尔只收 true/false）

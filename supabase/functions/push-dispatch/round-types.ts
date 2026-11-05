@@ -26,7 +26,8 @@ export const LOG_SRC = 'push-dispatch';
 // remind.default_time：全天日程当天提醒的时刻、全天日程的“开始”（架构 0.29 续第 47、57 条；没设、认不出按 09:00，shared/logic/remind.ts 的 allDayTimeOf）
 export const SETTING_KEYS = ['remind.dnd', 'remind.show_title', 'anniv.default_offsets', 'anniv.default_time', 'remind.default_time'] as const;
 
-export interface QueueItem { table_name: Table; id: string; user_id: string }
+/** remind_queue_pop 返回的一项。claim 是这一批的租约号（同一批相同；重试模式一批只有 1 项）；为空表示有毒项（取过 5 次都没处理完，函数已删掉），只记 queue_poison */
+export interface QueueItem { table_name: Table; id: string; user_id: string; claim: string | null }
 export interface QueueRef { table_name: Table; id: string }
 
 /** 三张表读出来的一行（只取用得到的列；没有的列不在） */
@@ -87,10 +88,11 @@ export type LogRow = {
 export type DeviceOutcome = { ok: boolean; fails: number; drop: boolean };
 
 export interface RoundStore {
-  /** private.remind_queue_pop(limit) */
-  popQueue(limit: number): Promise<QueueItem[]>;
-  /** 插回队列（on conflict do nothing） */
-  requeue(items: readonly QueueRef[]): Promise<void>;
+  /** private.remind_queue_pop(limit, leaseS, retry)：打租约出队（REMIND-queue-crash-loss，迁移 20261104130000）。
+   *  retry = true 只取取过的项、一次 1 项；false 只取新项（attempts = 0）、按批（11-05 安全复审 N1） */
+  popQueue(limit: number, leaseS: number, retry: boolean): Promise<QueueItem[]>;
+  /** private.remind_queue_finish(claim, release)：release 里的放回（清租约），这个租约的其余项删掉 */
+  finishQueue(claim: string, release: readonly QueueRef[]): Promise<void>;
   /** 第 0 步按 id 读行（只读这个人的：user_id 一并核对） */
   rows(table: Table, ids: readonly string[]): Promise<ItemRow[]>;
   profiles(userIds: readonly string[]): Promise<Map<string, Profile>>;
@@ -170,6 +172,12 @@ export interface Limits {
   sendLimit: number;
   perUser: number;
   queuePop: number;
+  /** 第 0 步的租约秒数（QUEUE_LEASE_S） */
+  queueLeaseS: number;
+  /** 第 0 步一轮最多做几次单项重试（QUEUE_RETRY_POPS；重试一次只交出 1 项） */
+  queueRetryPops: number;
+  /** 单项重试只在这一轮开始后的这么多毫秒内做（QUEUE_RETRY_MS），留时间给新项按批出队和推送 */
+  queueRetryMs: number;
   due: number;
 }
 
@@ -188,4 +196,5 @@ export interface RoundCtx {
   log: (code: string) => void;
 }
 
-export interface RoundResult { claimed: number; sent: number; failed: number; budget_hit: boolean; left: number }
+/** queue_ok：第 0 步这一轮出队、读行、收尾都没出错是 1，否则 0；queue_poison：这一轮丢掉的有毒项个数（core.ts 写心跳时按首尔当天累计） */
+export interface RoundResult { claimed: number; sent: number; failed: number; budget_hit: boolean; left: number; queue_ok: number; queue_poison: number }

@@ -4,7 +4,9 @@
 // ② 从头跑到尾：外壳屏蔽 Read-Host（从队列取值）、注册表检查，把 Set-Clipboard、Start-Process 换成「记下来」，-ApiBase 指向本机假服务（另设 LEMO_TEST_API=1）。
 //    假服务的 database/query：do 块在「库里」生成 64 位十六进制值写进 Vault，select 读回。核对：SQL 文本里没有值也没有 32 位以上的十六进制串、
 //    读回的值原样写成 CRON_SECRET、原有 secrets 不少、屏幕不显示值和令牌；出错时（读回、写 secrets 回显明文）不打印响应体、提示重跑
-// ③ 本机 Supabase 开着（容器 supabase_db_lemomemo）时，把脚本发出的两段 SQL 在事务里真跑，最后回滚
+// ③ 测试库开着时，把脚本发出的两段 SQL 在事务里真跑，最后回滚。只认 CI 的 supabase_db_lemo-ci 和本机 e2e 的 supabase_db_lemo-e2e，
+//    按这个顺序找第一个开着的；名字带 lemomemo、lemo-purgeit 的一律拒绝，连 pg_isready 都不探（租约出队安全复审三：
+//    原来写死 supabase_db_lemomemo，本机开着 lemomemo 时跑 vitest 会直连它）。两个都没开就跳过这一段
 // 需要 Windows PowerShell（Windows 上）或 pwsh（其他系统）；都没有就整组跳过
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -24,8 +26,14 @@ const TOKEN = 'sbp_' + 'TEST_ONLY_not_a_real_token_'.padEnd(40, 'z');
 const FINALLY = '已清剪贴板、清掉内存里的变量';
 const RERUN = '数据库 Vault 的 cron_secret 已换、函数侧的 CRON_SECRET 还没换好';
 const HEX32 = /[0-9a-fA-F]{32,}/;
-const DB = 'supabase_db_lemomemo';
-const dbUp = spawnSync('docker', ['exec', DB, 'pg_isready', '-q'], { encoding: 'utf8' }).status === 0;
+/** 真库那一段只许连的容器（按顺序找第一个开着的） */
+const TEST_DB_CONTAINERS = ['supabase_db_lemo-ci', 'supabase_db_lemo-e2e'] as const;
+/** 容器名能不能连：只许上面两个，名字带 lemomemo、lemo-purgeit 的一律不许（大小写不论） */
+function testDbAllowed(name: string): boolean {
+  return !/lemomemo|lemo-purgeit/i.test(name) && (TEST_DB_CONTAINERS as readonly string[]).includes(name);
+}
+const DB = TEST_DB_CONTAINERS.find((c) => testDbAllowed(c) && spawnSync('docker', ['exec', c, 'pg_isready', '-q'], { encoding: 'utf8' }).status === 0) ?? null;
+const dbUp = DB !== null;
 
 let dir = '';
 const run = (args: string[], env: NodeJS.ProcessEnv = process.env) =>
@@ -209,8 +217,8 @@ $fin = if ($tries.Count -eq 1 -and $tries[0].Finally) { $tries[0].Finally.Extent
     expect(r.out).toContain('已写入 CRON_SECRET；原有的 2 个 secrets 都在');
     expect(r.out).toContain('全部写好');
 
-    // 本机库开着时：脚本发出的两段 SQL 真跑（写两遍：create 或 update 都走到），读回 64 位十六进制、每个名字一条，最后回滚
-    if (dbUp) {
+    // 测试库（lemo-ci 或 lemo-e2e）开着时：脚本发出的两段 SQL 真跑（写两遍：create 或 update 都走到），读回 64 位十六进制、每个名字一条，最后回滚
+    if (dbUp && DB !== null && testDbAllowed(DB)) {
       const p = spawnSync('docker', ['exec', '-i', DB, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-At', '-F', '|'], {
         encoding: 'utf8',
         input: `begin;\n${write}\n${write}\nselect name, decrypted_secret ~ '^[0-9a-f]{64}$' or decrypted_secret = '${FN_URL}', n from (${read}) x;\nrollback;\n`,
@@ -277,4 +285,14 @@ $fin = if ($tries.Count -eq 1 -and $tries[0].Finally) { $tries[0].Finally.Extent
     expect(r.out).toContain('收到 5 个字符，以 sbp_ 开头');
     expect(r.reqs).toHaveLength(0);
   }, 60_000);
+});
+
+describe('真库那一段的容器名护栏（租约出队安全复审三）', () => {
+  it('只许 lemo-ci、lemo-e2e；lemomemo、lemo-purgeit 及其变体一律不许；探到的容器也必须过护栏', () => {
+    expect(TEST_DB_CONTAINERS.every((c) => testDbAllowed(c))).toBe(true);
+    for (const bad of ['supabase_db_lemomemo', 'SUPABASE_DB_LEMOMEMO', 'supabase_db_lemo-purgeit', 'supabase_db_lemo-b2push', 'supabase_db_lemo-ci2', 'lemo-ci', '']) {
+      expect(testDbAllowed(bad), bad).toBe(false);
+    }
+    if (DB !== null) expect(testDbAllowed(DB)).toBe(true);
+  });
 });

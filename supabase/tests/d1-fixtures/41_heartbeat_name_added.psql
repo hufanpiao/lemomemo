@@ -1,0 +1,7 @@
+-- expect: private.heartbeat 的 fn_ai_own using 应是
+-- expect: private.heartbeat 的 fn_ai_own with check 应是
+-- HEARTBEAT-fnai-policy（迁移 20261104140000）：名单里混进 service_role 函数的心跳名 ai-classify，fn_ai 就能替它刷心跳；
+-- 加名字要新迁移 + whitelist.ts FN_AI_HEARTBEATS + 附录 A 一起改
+alter policy fn_ai_own on private.heartbeat
+  using (name in ('ai-embed', 'ai-media', 'file-check', 'ai-classify'))
+  with check (name in ('ai-embed', 'ai-media', 'file-check', 'ai-classify'));

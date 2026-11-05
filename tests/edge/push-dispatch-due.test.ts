@@ -97,10 +97,11 @@ describe('第 0 步出队按人公平（安全审查必改 2）', () => {
     const db = new MemDb().user(UA).user(UB);
     for (let i = 0; i < 600; i++) db.put('todos', todoRow(UB, { id: `00000000-0000-4000-8000-${i.toString(16).padStart(12, '0')}` }), true);
     const a = db.put('todos', todoRow(UA, { id: 'ffffffff-0000-4000-8000-000000000001' }), true);
-    const out = await db.popQueue(500);
+    const out = await db.popQueue(500, 180);
     expect(out.filter((q) => q.user_id === UB)).toHaveLength(POP_PER_USER);
     expect(out.map((q) => q.id)).toContain(a.id);
     expect(out[0]?.user_id === UA || out[1]?.user_id === UA).toBe(true);   // 先比编号：每人第 1 条排在最前
-    expect(db.queue.size).toBe(600 - POP_PER_USER);
+    // 租约式出队（迁移 20261104130000）：取走的打上租约、还在队列里；没被租的是余下那些
+    expect([...db.queue.values()].filter((q) => !q.claim)).toHaveLength(600 - POP_PER_USER);
   });
 });

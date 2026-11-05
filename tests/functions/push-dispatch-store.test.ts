@@ -1,5 +1,5 @@
 // push-dispatch/store.ts 的查询写法（B2 BE-2）：supabase-js 换成记调用的假客户端，核对几条关键查询带了该带的条件——
-// 出队走 private.remind_queue_pop、认领是条件更新（pushed_for 为空或不等于 due_at）、resolve 的释放只认原来的 pushed_for、
+// 出队走 private.remind_queue_pop（带租约秒数）、收尾走 private.remind_queue_finish、认领是条件更新（pushed_for 为空或不等于 due_at）、resolve 的释放只认原来的 pushed_for、
 // 设备写回只在 push_endpoint 还是发送时那一串时才写、每条写都带 user_id。真库上的语义由 rls 30_remind_queue_pop 和真库冒烟兜。
 // store.ts 顶上有 `import type … from 'npm:…'`：路径放在变量里动态加载（写法同 push-dispatch-usable.test.ts）
 import { describe, expect, it } from 'vitest';
@@ -34,10 +34,19 @@ function fakeAdmin(result: { data: unknown; error: unknown } = { data: [], error
 }
 
 describe('push-dispatch store.ts', () => {
-  it('出队：private.remind_queue_pop(p_limit)', async () => {
+  it('出队：private.remind_queue_pop(p_limit, p_lease_s, p_retry)（租约式，迁移 20261104130000；p_retry 11-05 加）', async () => {
     const { admin, chains } = fakeAdmin();
-    await makeStore(admin).popQueue?.(500);
-    expect(chains[0]).toEqual([['rpc', 'private.remind_queue_pop', { p_limit: 500 }]]);
+    await makeStore(admin).popQueue?.(500, 180, false);
+    expect(chains[0]).toEqual([['rpc', 'private.remind_queue_pop', { p_limit: 500, p_lease_s: 180, p_retry: false }]]);
+    expect(Object.keys(chains[0]?.[0]?.[2] as object).sort()).toEqual(['p_lease_s', 'p_limit', 'p_retry']);
+  });
+  it('收尾：private.remind_queue_finish(p_claim, p_release)，release 只带 table_name、id；出错抛 db', async () => {
+    const { admin, chains } = fakeAdmin();
+    const rel = [{ table_name: 'todos', id: 'x', user_id: 'u', claim: 'k' }];   // 带多余字段的 QueueItem：只转 table_name、id
+    await makeStore(admin).finishQueue?.('k', rel);
+    expect(chains[0]).toEqual([['rpc', 'private.remind_queue_finish', { p_claim: 'k', p_release: [{ table_name: 'todos', id: 'x' }] }]]);
+    const bad = fakeAdmin({ data: null, error: { message: 'secret detail' } });
+    await expect(makeStore(bad.admin).finishQueue?.('k', [])).rejects.toThrow(/^db$/);
   });
   it('认领：update pushed_for = due_at，条件 id、user_id、pushed_for 为空或不等于 due_at，回更新到的行', async () => {
     const { admin, chains } = fakeAdmin({ data: [{ id: 'x' }], error: null });

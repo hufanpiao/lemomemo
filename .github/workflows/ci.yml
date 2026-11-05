@@ -79,6 +79,16 @@ jobs:
             exit 1
           fi
 
+      - name: 本地 Supabase 改用 CI 专用的项目名 lemo-ci（容器叫 supabase_*_lemo-ci；租约出队安全复审二 R1-1）
+        id: sb-rename
+        # 仓库 config.toml 的 project_id 是 lemomemo，和开发机上在用的本地库同名。act 在本机跑这份工作流时会挂宿主的 docker socket，
+        # 不改名的话 supabase start、db reset、两连接脚本都会打到本机的 lemomemo。只改 runner 上这份检出，不提交；改不成就失败
+        run: |
+          sed -i 's/^project_id = "lemomemo"$/project_id = "lemo-ci"/' supabase/config.toml
+          if [ "$(grep -c '^project_id = ' supabase/config.toml)" -ne 1 ] || ! grep -qx 'project_id = "lemo-ci"' supabase/config.toml; then
+            echo "::error::supabase/config.toml 的 project_id 没能改成 lemo-ci（应只有一行 project_id = \"lemomemo\"）"; exit 1
+          fi
+
       - name: 算 Supabase 镜像缓存的 key（CLI 版本取自 tools/ci-tools.lock）
         # 镜像标签由 CLI 版本决定，config.toml 决定起哪些服务；两者不变，要拉的镜像就不变
         id: sb-images-key
@@ -243,6 +253,11 @@ jobs:
           eval "$(supabase status -o env | grep -E '^DB_URL=')"
           D1_DB_URL="$DB_URL" node build/ci/d1_negative.mjs
 
+      - name: remind_queue 两连接并发（tools/db/remind-queue-2conn.mjs：finish、出队删孤儿 skip locked 不等锁，提交后不重取）；后端
+        # 租约出队安全复审 R1、代码审查复审 N2：PGlite、pgTAP 都是单会话，测不出这几处 skip locked，只有两个真连接能测；约 20 秒
+        # 容器名是上面改过的项目名 lemo-ci（supabase_db_lemo-ci）；脚本对 lemomemo、lemo-purgeit 在任何环境都拒绝（安全复审二 R1-1）
+        run: node tools/db/remind-queue-2conn.mjs supabase_db_lemo-ci
+
       - name: shared 在 Deno 下再跑一遍（deno task test），服务器函数和 D1 入口过 deno check（deno task check）
         # deno.json 用 nodeModulesDir=manual，npm 包取 npm ci 装好的 node_modules（测试一侧版本由 package-lock.json 锁定；函数源码另由 supabase/functions/deno.lock 核对，见下一步）
         # deno task test 的权限按最小给：只读仓库、只读五个替身变量、只连 127.0.0.1:4566（B0 代码审查中 2）；
@@ -324,8 +339,10 @@ jobs:
           fi
 
       - name: 停掉本地 Supabase
-        if: always()
-        run: supabase stop --no-backup || true
+        # 只在改名成功以后停，而且写明 --project-id lemo-ci（租约出队安全复审三 R1-2）：改名前的检查或改名本身失败时 config.toml 还是 lemomemo，
+        # 用 act 在本机跑就会停掉本机的 lemomemo、连数据卷一起删。tests/build/remind-queue-2conn-guard.test.ts 钉住每条 supabase stop 都带 --project-id lemo-ci
+        if: always() && steps.sb-rename.outcome == 'success'
+        run: supabase stop --no-backup --project-id lemo-ci || true
 
       - name: 停掉 S3 替身
         if: always()

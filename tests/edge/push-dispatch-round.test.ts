@@ -1,50 +1,16 @@
 // push-dispatch 第 1～8 步（B2 任务单 BE-2；架构 5.3、6.1；架构审 D3 第 2～4、6 点；B2 安全审查“留给 BE-2 的条件”、六之四补 Topic 条件）。
 // 推送服务用测试开发的替身 tests/fakes/push-service.ts（进程内 fake.fetch，开 VAPID 校验、解每条负载）；造数据按“少量设备、每台多条”。
-// D3 第 6 点的“拖 3 秒、造 300 条、一轮 25 秒内返回”在 push-dispatch-budget.test.ts（耗时，进 node-slow）。
+// D3 第 6 点的“拖 3 秒、造 300 条、一轮 25 秒内返回”在 push-dispatch-budget.test.ts（耗时，进 node-slow）；不重复、最多一次、缩小版预算在 push-dispatch-round-d3.test.ts。
+// world、round 等在 push-dispatch-world.ts（11-05 拆出来，本文件压到 max-lines 300 以内）。
 import { afterEach, describe, expect, it } from 'vitest';
 import { actionsFor, hhmm, NOTIFY_ACTIONS, SNOOZE_MIN as SNOOZE_MIN_LOGIC } from '../../shared/logic/notify-text.ts';
-import { handle } from '../../supabase/functions/push-dispatch/core.ts';
 import { isDue, parseDnd, SNOOZE_MIN } from '../../supabase/functions/push-dispatch/round.ts';
-import { createFakePush, newPushSubscriber, reply, type FakePushService, type PushSubscriber } from '../fakes/push-service.ts';
-import { cronReq, depsFor, fakeVapid } from './push-dispatch-harness.ts';
-import { eventRow, LOGIC, MemDb, todoRow, UA, UB, uuid } from './push-dispatch-mem.ts';
+import { reply } from '../fakes/push-service.ts';
+import { apple, closeFakes, fcm, round, world } from './push-dispatch-world.ts';
+import { eventRow, todoRow, UA, UB } from './push-dispatch-mem.ts';
 
 const SEOUL = 'Asia/Seoul';
-let fakes: FakePushService[] = [];
-afterEach(async () => {
-  await Promise.all(fakes.map((f) => f.close()));
-  fakes = [];
-});
-
-const fcm = () => `https://fcm.googleapis.com/fcm/send/${uuid('f')}`;
-const apple = () => `https://web.push.apple.com/${uuid('a')}`;
-
-async function world(endpoints: Record<string, string[]>, opt: { delayMs?: number } = {}) {
-  const v = await fakeVapid();
-  const db = new MemDb();
-  const subs: PushSubscriber[] = [];
-  const devOf = new Map<number, string>();
-  for (const [user, eps] of Object.entries(endpoints)) {
-    db.user(user);
-    for (const ep of eps) {
-      const s = await newPushSubscriber(ep);
-      const d = db.device(user, { endpoint: ep, p256dh: s.p256dh, auth: s.auth });
-      devOf.set(subs.length, d.id);
-      subs.push(s);
-    }
-  }
-  const f = createFakePush({ subscribers: subs, vapid: { publicKey: v.pub }, ...(opt.delayMs ? { delayMs: opt.delayMs } : {}) });
-  fakes.push(f);
-  const deps = (over: Parameters<typeof depsFor>[2] = {}) => depsFor(db, v.keys, { fetch: f.fetch, ...over });
-  const pushes = () => f.requests.filter((r) => r.payload !== null).map((r) => ({ dev: devOf.get(r.subscriber?.index ?? -1), p: JSON.parse(r.payload as string) as Record<string, unknown>, headers: r.headers }));
-  return { db, f, deps, pushes, v };
-}
-
-async function round(deps: ReturnType<typeof depsFor>) {
-  const r = await handle(cronReq(), deps);
-  expect(r.status).toBe(200);
-  return (await r.json()) as { ok: true; claimed: number; sent: number; failed: number; budget_hit: boolean; left: number };
-}
+afterEach(closeFakes);
 
 describe('第 1 步：到点查询（isDue）', () => {
   const now = 1_793_000_000_000;
@@ -84,8 +50,8 @@ describe('第 3～5、7、8 步：认领、文案、发给所有设备、日志�
     const t = w.db.put('todos', todoRow(UA, { title: '买柠檬', remind_at: now - 1000 }));
     const d = w.deps({ now: () => now });
     const body = await round(d);
-    expect(body).toEqual({ ok: true, claimed: 1, sent: 1, failed: 0, budget_hit: false, left: 0 });
-    expect(w.db.beats).toEqual([{ claimed: 1, sent: 1, failed: 0, budget_hit: false }]);
+    expect(body).toEqual({ ok: true, claimed: 1, sent: 1, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0, left: 0 });
+    expect(w.db.beats).toEqual([{ claimed: 1, sent: 1, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0 }]);
     const ps = w.pushes();
     expect(ps).toHaveLength(2);
     expect(new Set(ps.map((x) => x.dev)).size).toBe(2);
@@ -255,7 +221,7 @@ describe('Edge 的 resolve：主机属于 *.push.apple.com 的一律不发（不
     expect(w.db.tables.todos.get(t.id)?.pushed_for).toBeNull();
     await round(w.deps({ now: () => now + 60_000 }));
     expect(w.pushes()).toHaveLength(1);
-    expect(w.db.beats.at(0)).toEqual({ claimed: 0, sent: 0, failed: 0, budget_hit: false });   // resolve 不计进提醒的四项
+    expect(w.db.beats.at(0)).toEqual({ claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1, queue_poison: 0 });   // resolve 不计进提醒的四项
   });
   it('推过之后按了“稍后”：发 resolve 换掉旧通知，到了稍后的时刻照常再推', async () => {
     const w = await world({ [UA]: [fcm()] });
@@ -267,62 +233,5 @@ describe('Edge 的 resolve：主机属于 *.push.apple.com 的一律不发（不
     await round(w.deps({ now: () => now + 10 * 60_000 }));
     expect(w.pushes().map((x) => [x.p['type'], x.p['due_at']])).toEqual([['resolve', X], ['remind', now + 10 * 60_000]]);
     expect(w.db.tables.todos.get(t.id)?.pushed_for).toBe(now + 10 * 60_000);
-  });
-});
-
-describe('D3 第 6 点：不重复、最多一次', () => {
-  it('两轮人为重叠：每条只发一次（每台设备各一条）', async () => {
-    const w = await world({ [UA]: [fcm(), fcm()], [UB]: [fcm()] }, { delayMs: 30 });
-    const now = Date.now();
-    const ids = [];
-    for (let i = 0; i < 15; i++) ids.push(w.db.put('todos', todoRow(i % 2 ? UA : UB, { remind_at: now - i })).id);
-    const [a, b] = await Promise.all([round(w.deps({ now: () => now })), round(w.deps({ now: () => now }))]);
-    expect((a?.claimed ?? 0) + (b?.claimed ?? 0)).toBe(15);
-    const seen = w.pushes().map((x) => `${String(x.p['id'])}@${x.dev}`);
-    expect(seen.length).toBe(new Set(seen).size);
-    expect(seen).toHaveLength(7 * 2 + 8);   // UA 7 条 × 2 台，UB 8 条 × 1 台
-  });
-  it('认领后、发出前出错：这一条不再推；它还停在“错过的提醒”里（pushed_for = due_at，notified_for 没写）', async () => {
-    const w = await world({ [UA]: [fcm()] });
-    const now = Date.now();
-    const boom = w.db.put('todos', todoRow(UA, { title: 'BOOM', remind_at: now }));
-    const fine = w.db.put('todos', todoRow(UA, { title: 'ok', remind_at: now - 1 }));
-    const logic = { ...LOGIC, notify: (i: Parameters<typeof LOGIC.notify>[0]) => { if (i.title === 'BOOM') throw new Error('x'); return LOGIC.notify(i); } };
-    expect(await round(w.deps({ now: () => now, logic }))).toMatchObject({ claimed: 2, sent: 1, failed: 1 });
-    expect(w.pushes().map((x) => x.p['id'])).toEqual([fine.id]);
-    await round(w.deps({ now: () => now + 30_000 }));
-    expect(w.pushes().map((x) => x.p['id'])).toEqual([fine.id]);
-    const row = w.db.tables.todos.get(boom.id);
-    expect(row?.pushed_for).toBe(now);
-    expect(row?.notified_for).toBeNull();
-    expect(row?.remind_at).toBe(now);
-    expect(w.db.logs.find((l) => l.item_id === boom.id)?.code).toBe('build_failed');
-  });
-  it('预算（缩小版）：替身每个请求拖 300 毫秒、预算 1 秒，60 条：按时返回、budget_hit 对、left 是剩下的条数，下一轮接着发、每条只发一次', async () => {
-    const users = Array.from({ length: 3 }, (_, i) => `${String(i + 1).repeat(8)}-0000-4000-8000-0000000000aa`);
-    const w = await world(Object.fromEntries(users.map((u) => [u, [fcm()]])), { delayMs: 300 });
-    const now = Date.now();
-    for (let i = 0; i < 60; i++) w.db.put('todos', todoRow(users[i % 3] as string, { remind_at: now - 60_000 + i }));
-    const t0 = Date.now();
-    const r1 = await round(w.deps({ limits: { budgetMs: 1000 } }));
-    expect(Date.now() - t0).toBeLessThan(1000 + 300 * 2 + 500);
-    expect(r1.budget_hit).toBe(true);
-    expect(r1.claimed).toBe(r1.sent);
-    expect(r1.left).toBe(60 - r1.claimed);
-    w.f.setDelay(0);
-    let total = r1.claimed;
-    for (let i = 0; i < 5 && total < 60; i++) total += (await round(w.deps())).claimed;
-    expect(total).toBe(60);
-    const ids = w.pushes().map((x) => x.p['id']);
-    expect(new Set(ids).size).toBe(60);
-    expect(ids).toHaveLength(60);
-  });
-  it('每轮发送条数上限：超过就停（budget_hit），剩下的下一轮', async () => {
-    const w = await world({ [UA]: [fcm(), fcm()] });
-    const now = Date.now();
-    for (let i = 0; i < 10; i++) w.db.put('todos', todoRow(UA, { remind_at: now - i }));
-    const r = await round(w.deps({ now: () => now, limits: { sendLimit: 7 } }));
-    expect(r).toMatchObject({ claimed: 3, budget_hit: true, left: 7 });
-    expect(w.f.requests).toHaveLength(6);
   });
 });

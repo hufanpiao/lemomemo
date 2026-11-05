@@ -54,7 +54,7 @@ describe('O-3 ①：push-dispatch 规则对一遍任务单的口径', () => {
   it('经真的 usage-report/core.ts 走一遍：claimed < sent 时发“推送心跳数据异常”，下一轮正常了发“已恢复”', async () => {
     const w = world();
     w.freshAll();
-    w.setPushDetail({ claimed: 3, sent: 5, failed: 0 });
+    w.setPushDetail({ claimed: 3, sent: 5, failed: 0, queue_ok: 1, queue_poison: 0 });
     await w.tick();
     expect(w.inbox.map((m) => m.subject)).toEqual(['【柠檬记监控】推送心跳数据异常']);
     expect(w.inbox[0]?.text).toContain('认领 3 条、成功 5 条');
@@ -62,7 +62,7 @@ describe('O-3 ①：push-dispatch 规则对一遍任务单的口径', () => {
     for (let i = 0; i < 2; i++) {
       w.advance(15 * M);
       w.freshAll();
-      w.setPushDetail({ claimed: 5, sent: 5, failed: 0 });
+      w.setPushDetail({ claimed: 5, sent: 5, failed: 0, queue_ok: 1, queue_poison: 0 });
       await w.tick();
     }
     expect(w.inbox).toHaveLength(2);

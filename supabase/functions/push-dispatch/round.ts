@@ -2,12 +2,16 @@
 // B2 安全审查“留给 BE-2 的条件”、六之四补的 Topic 条件；代码审查 BE-1 S10、R1）。
 // 数据库、共享 logic、发送都由调用方注入（core.ts 的 handle、index.ts 接线），Vitest 直接测这一份。不 import npm 包、不碰 Deno 全局。
 //
-// 第 0 步（原 tz-recalc，D6）：private.remind_queue_pop 出队即删（≤ QUEUE_POP_LIMIT；孤儿在函数里删，账号不可用的不出队，见迁移
-//   20261103130000）→ 按行重算 remind_at：待办用 profiles.current_tz，有时间的日程用它自己的 tz；**一律传这一行现在的 remind_at 作
+// 第 0 步（原 tz-recalc，D6）：private.remind_queue_pop 打租约出队（≤ QUEUE_POP_LIMIT、租约 QUEUE_LEASE_S；孤儿在函数里删，账号不可用的不出队，
+//   见迁移 20261103130000、20261104130000）→ 按行重算 remind_at：待办用 profiles.current_tz，有时间的日程用它自己的 tz；**一律传这一行现在的 remind_at 作
 //   prevRemindAt**（代码审查 BE-1 R1：漏传就退回“回落”，按过“稍后”后重算会吞掉这次提醒）；纪念日交 anniv 钩子（B5 填实现）。
 //   时区不认识的那一行跳过、记 logs tz_invalid（code：日程自己的 tz 不认识写表名 events，current_tz 不认识写 profiles（11-04）；不写时区串和标题；每人每小时最多一条），不影响同批（D7）。
-//   写回带乐观条件（remind_at 还是读到的值）；写回失败、没更新到、时间预算到了没处理的插回队列；profiles 里没有这个人的丢弃（记原因码）。
-//   出队即删：插回之前进程崩溃，这一项就丢了，要等这一行下次被改才再入队（风险和兜底写在架构 5.3 第 0 步、接手清单）。
+//   写回带乐观条件（remind_at 还是读到的值）；写回失败、没更新到、时间预算到了没处理的放回队列；profiles 里没有这个人的丢弃（记原因码）。
+//   每一批结尾调一次 private.remind_queue_finish：放回的清租约，这个租约的其余项删掉（REMIND-queue-crash-loss 方案丙）。出队分两种
+//   （remind_queue_pop(int, int, boolean) 的 p_retry；11-05 复审返工）：先做单项重试——只取取过的项（attempts ≥ 1），一次 1 项、
+//   一项一项收尾，至多 QUEUE_RETRY_POPS 次、QUEUE_RETRY_MS 毫秒或总预算到了就停；然后**每轮必做一次新项按批出队**（只取 attempts = 0 的，
+//   每人、总数有上限），只有总预算已经用完才跳过，重试项挡不住全站新改的项（round-step0.ts）。中途崩了不调 finish，
+//   租约过期后别的轮重取（至少一次重算，重算幂等）；处理期间被触发器重新入队的项租约已清空，finish 不删；取过 5 次都没处理完的丢掉、记 queue_poison。
 // 第 1 步：due_at = greatest(remind_at, snooze_at, defer_until)，now − 60 分钟 < due_at ≤ now + 60 秒，deleted_at 为空、undone 为假、
 //   待办 done 为假，coalesce(pushed_for, 0) ≠ due_at、coalesce(notified_for, 0) ≠ remind_at（remind_at 为空的按 SQL 语义不算到点）；
 //   以上在 SQL 里精确判（private.remind_due，迁移 20261103140000），只回可用账号的，每人最多 PER_USER_PER_MINUTE 条（按 due_at 先后），
@@ -26,7 +30,7 @@
 //   resolve（按 checkEndpoint 的 apple 判断，不看 devices.platform，0.49 第 1 条）。排在提醒之后、同样受预算和条数上限约束。
 // 第 6 步：纪念日推过以后由 anniv 钩子算下一次（B5 填实现；钩子回 null 就不写）。
 // 第 7 步：logs（push_ok、push_failed、push_bad_endpoint、tz_invalid），只写原因码、表名、条目和设备 id，**不写标题、地址、响应内容**。
-// 第 8 步：心跳 detail 记 claimed、sent、failed、budget_hit（按条目计：一条认领了、至少一台设备 ok 算 sent，一台都没成算 failed；
+// 第 8 步：心跳 detail 记 claimed、sent、failed、budget_hit，加第 0 步的 queue_ok、queue_poison（11-04 安全审查必改 3）（按条目计：一条认领了、至少一台设备 ok 算 sent，一台都没成算 failed；
 //   claimed − sent − failed 就是认领后没发出去的，lemo-ops 照 6.1 判断）。
 // 时间预算：一轮最长 limits.budgetMs 墙钟，到点不再认领新条目（第 0 步也不再处理新行），已认领的发完；发送并发 limits.concurrency；
 //   每轮发送（deliver 调用）最多 limits.sendLimit 次；预算或条数到了 budget_hit 为真，left 是没来得及认领的到点条目数（上界，见第 2 步）。
@@ -44,10 +48,12 @@ export { dueAtOf, filterUsable, isDue, isHandledAfterPush, parseDnd, pool, rende
 
 export async function runRound(c: RoundCtx): Promise<RoundResult> {
   const logs: LogRow[] = [];
-  const res: RoundResult = { claimed: 0, sent: 0, failed: 0, budget_hit: false, left: 0 };
+  const res: RoundResult = { claimed: 0, sent: 0, failed: 0, budget_hit: false, left: 0, queue_ok: 1, queue_poison: 0 };
   const overBudget = () => c.now() - c.t0 >= c.limits.budgetMs;
 
-  await step0(c, logs, overBudget);
+  const q = await step0(c, logs, overBudget);
+  res.queue_ok = q.ok ? 1 : 0;
+  res.queue_poison = q.poison;
   await steps1to8(c, logs, res, overBudget);
 
   if (logs.length) {

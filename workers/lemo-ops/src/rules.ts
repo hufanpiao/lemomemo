@@ -4,6 +4,7 @@
 
 import { evaluateOrphans, parseOrphans, SCOPE_ORPHAN, type OrphanReport } from './orphans.ts';
 import { evaluatePurgeDetail, evaluatePurgePending } from './purge-detail.ts';
+import { evaluatePushQueue } from './push-queue.ts';
 import { fmtAge } from './stamp.ts';
 
 export { fmtAge };
@@ -198,7 +199,7 @@ export const SCOPE_UNREACHABLE = 'unreachable';
 /** 15 分钟一轮的心跳检查查过的 key 前缀（调通时） */
 export const SCOPE_BAD_DATA = 'bad-data';
 /** push-bad-data：push-dispatch 心跳里 claimed 比 sent 还小（函数写心跳的口径错了），单独一件事，不和“失败过半”混（B2 代码审查 S5） */
-export const HEARTBEAT_SCOPES = [SCOPE_UNREACHABLE, SCOPE_BAD_DATA, 'hb:', 'purge:', 'longtx', 'cleanup-slow', 'push-failed', 'push-bad-data'];
+export const HEARTBEAT_SCOPES = [SCOPE_UNREACHABLE, SCOPE_BAD_DATA, 'hb:', 'purge:', 'longtx', 'cleanup-slow', 'push-failed', 'push-bad-data', 'push-queue:'];
 /** 发信量的四件事；usage-report 不带 auth_mail（没接）时整组悄悄删掉 */
 export const SCOPE_AUTH_MAIL = 'mail:';
 export const MAIL_UNREADABLE = 'mail:unreadable';
@@ -307,6 +308,8 @@ export function evaluateHeartbeat(r: HeartbeatReport, required: readonly string[
   // 这是抽样，偶发的一轮失败多半抽不到；持续失败才会被连续抽中。要看全量得让 push-dispatch 在 detail 里累计，B2 再定（K15 复审低 4）
   const pushIssue = evaluatePush(byName.get('push-dispatch')?.detail);
   if (pushIssue) active.push(pushIssue);
+  // 第 0 步的 queue_ok、queue_poison（push-queue.ts；租约出队审查返工，安全审查必改 3）
+  active.push(...evaluatePushQueue(byName.get('push-dispatch')?.detail));
 
   const scopes = [...HEARTBEAT_SCOPES];
   // 验证码发信量：usage-report 没带 auth_mail（数据来源还没接，或接了又撤掉）时不查，留下的状态悄悄删掉

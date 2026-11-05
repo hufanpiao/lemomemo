@@ -10,14 +10,15 @@ import { quotaWhenProblems } from './quota-when.ts';
 import { cronHardcodedSecret } from './cron-secret.ts';
 import { requiredIndexProblems } from './required-indexes.ts';
 import { lockTimeoutProblems } from './fn-lock-timeout.ts';
+import { LEASE_FNS_SQL, leaseResetProblems, type FnSrcRow } from './remind-lease.ts';
+import { POLICY_SQL, policyProblems, type PolicyRow } from './policies.ts';
 
 export type Row = Record<string, unknown>;
 /** 查询函数：T 是这条 SQL 结果行的形状（调用处按 select 的列写明；数据库给的值不做运行时校验） */
 export type Query = <T extends object = Row>(sql: string, params?: unknown[]) => Promise<T[]>;
 
 // auth.users 守卫的判定在 auth-guard.ts（10-30 拆出），原来从本文件取这些名字的调用方不用改
-export { checkAuthUsersTriggers, checkGuardNoPassword, sqlNorm } from './auth-guard.ts';
-export type { GuardRow } from './auth-guard.ts';
+export { checkAuthUsersTriggers, checkGuardNoPassword, sqlNorm, type GuardRow } from './auth-guard.ts';
 
 const key = (schema: string, name: string) => `${schema}.${name}`;
 const sorted = (a: Iterable<string>) => [...new Set(a)].sort();
@@ -90,9 +91,6 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   }
   for (const d of dbBuckets) if (!bucketOwner.has(d.id)) bad(`数据库有桶 ${d.id}，没登记进任何清单`);
   for (const m of manifests) for (const b of m.buckets) if (!b.limits && !bucketOwner.has(b.name)) bad(`${m.feature} 登记了桶 ${b.name} 的一段路径，但这个桶没有主人`);
-  // 0.32：客户端不直接访问 Supabase Storage（只剩 vault-preview、backups，都只经服务器函数），storage.objects 上一条策略都不建
-  const storagePolicies = await q<{ name: string }>(`select policyname as name from pg_policies where schemaname = 'storage' and tablename = 'objects'`);
-  for (const p of storagePolicies) bad(`storage.objects 上有策略 ${p.name}：0.32 起客户端不直接访问 Supabase Storage，不建任何存储策略`);
   // 客户端可传的桶（images、files）：store = 'r2'；files_authorize_impl 里出现的路径正则和这两个桶各段的 pathPattern 一字不差（双向）
   const clientBuckets: readonly string[] = CLIENT_FILE_BUCKETS;
   for (const n of clientBuckets) {
@@ -183,7 +181,10 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
       if (!f[role] && FUNCTION_EXEC[role].includes(f.f)) bad(`private.${f.f} 在白名单里，却没给 ${role} 执行权`);
     }
   }
-  for (const p of lockTimeoutProblems(fns)) bad(p);   // 四个写计数、写账号状态的函数带 lock_timeout=5s（迁移 20261031130000）
+  // 服务器函数用的那几个带 lock_timeout=5s（迁移 20261031130000 起，fn-lock-timeout.ts）；往 remind_queue 插入的 private 函数冲突时一律清租约
+  // （REMIND-queue-crash-loss，迁移 20261104130000；判定在 remind-lease.ts）；RLS 策略：storage 一条不建、fn 角色不放开（policies.ts）
+  for (const p of [...lockTimeoutProblems(fns), ...leaseResetProblems(await q<FnSrcRow>(LEASE_FNS_SQL)),
+    ...policyProblems(await q<PolicyRow>(POLICY_SQL))]) bad(p);
   for (const f of fns.filter((f) => f.s === 'public')) {
     if (!PUBLIC_RPCS.includes(f.f)) bad(`public.${f.f} 不在 3.3 D 的九个 RPC 里`);
     if (f.definer) bad(`public.${f.f} 是 security definer（public 里一律 invoker）`);
