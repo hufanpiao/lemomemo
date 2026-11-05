@@ -265,6 +265,13 @@ jobs:
           if [ "$rc" -ne 0 ]; then exit "$rc"; fi
           grep -qx '全部通过' 2conn.log || { echo "::error::两连接脚本退出码 0 但没打出 全部通过 这一行"; exit 1; }
 
+      - name: set-cron-secret 的真库段（tests/build/set-cron-secret.test.ts 打 lemo-ci，事务里真跑脚本发出的两段 SQL、最后回滚）；后端
+        # 接手清单 CI-setcron-realdb（租约安全复审四建议 R5）：这段原来只在本机开着 lemo-e2e 时跑，unit 任务里没有库、一直跳过。
+        # LEMO_REQUIRE_TEST_DB 设了就必须探到 supabase_db_lemo-ci、有 pwsh，真库段不许静默跳过（测试文件里有一条专门核对）
+        env:
+          LEMO_REQUIRE_TEST_DB: supabase_db_lemo-ci
+        run: npx vitest run tests/build/set-cron-secret.test.ts
+
       - name: shared 在 Deno 下再跑一遍（deno task test），服务器函数和 D1 入口过 deno check（deno task check）
         # deno.json 用 nodeModulesDir=manual，npm 包取 npm ci 装好的 node_modules（测试一侧版本由 package-lock.json 锁定；函数源码另由 supabase/functions/deno.lock 核对，见下一步）
         # deno task test 的权限按最小给：只读仓库、只读五个替身变量、只连 127.0.0.1:4566（B0 代码审查中 2）；

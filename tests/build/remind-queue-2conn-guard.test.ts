@@ -167,12 +167,22 @@ describe('remind-queue-2conn.mjs：“不等锁”按服务器上的证据判', 
     const src = readFileSync(SCRIPT, 'utf8');
     expect(src.match(/noWaitVerdict\(\{ err: r\.code === 0 \? '' : r\.err \|\| `psql 退出码 \$\{r\.code\}`,/g)).toHaveLength(2);
   });
+  it('复审八 R8-2：每次 psql 都有两道超时——服务器侧 statement_timeout 30 秒（大于持锁 7 秒）、客户端 45 秒后杀掉并回 124', () => {
+    const src = readFileSync(SCRIPT, 'utf8');
+    expect(src).toContain('const STMT_LIMIT_S = 30;');
+    expect(src).toContain('const PSQL_LIMIT_MS = 45_000;');
+    expect(src).toContain("spawn('docker', ['exec', '-i', '-e', `PGOPTIONS=-c statement_timeout=${STMT_LIMIT_S}s`, container, 'psql'");
+    expect(src).toMatch(/const timer = setTimeout\(\(\) => \{ timedOut = true; p\.kill\(\); \}, PSQL_LIMIT_MS\);/u);
+    expect(src).toMatch(/clearTimeout\(timer\);/u);
+    expect(src).toMatch(/code: timedOut \? 124 : code/u);
+    expect(src.match(/spawn\(/gu)).toHaveLength(1);   // 只有 psql() 这一处起子进程
+  });
   it('3516b93 复盘：脚本不再凭 1.5 秒时的一眼判断，执行期间每 250 毫秒采样，两处判定都把 lockSeen 传进去；两边出队都带 auto_explain', () => {
     const src = readFileSync(SCRIPT, 'utf8');
     expect(src).not.toMatch(/whyWaiting|1\.5 秒时：/u);
     expect(src).toMatch(/async function sampleWaits\(tag, isDone\)[\s\S]*?await sleep\(250\)/u);
     expect(src.match(/lockSeen: t\.waits\.lockSeen \}\);/g)).toHaveLength(2);
-    expect(src).toContain("const EXPLAIN_SLOW = 'set auto_explain.log_min_duration = 1000; set auto_explain.log_nested_statements = on; set auto_explain.log_analyze = on; set auto_explain.log_buffers = on; set auto_explain.log_level = notice;';");
+    expect(src).toContain("const EXPLAIN_SLOW = 'set auto_explain.log_min_duration = 1000; set auto_explain.log_nested_statements = on; set auto_explain.log_analyze = on; set auto_explain.log_buffers = on; set auto_explain.log_level = notice; set auto_explain.log_parameter_max_length = 0;';");
     expect(src).toMatch(/const first = psql\(`\$\{EXPLAIN_SLOW\} begin; with h as materialized/u);
     expect(src).toMatch(/timed\('2conn-pop', `\$\{EXPLAIN_SLOW\} \/\* 2conn-pop \*\//u);
     expect(src).toMatch(/set auto_explain\.log_min_duration = -1; select pg_sleep\(7\) \/\* 2conn-holder \*\//u);

@@ -32,7 +32,7 @@
 /* global console -- Node 24 的全局 */
 import { spawn } from 'node:child_process';
 import process from 'node:process';
-import { setTimeout } from 'node:timers';
+import { clearTimeout, setTimeout } from 'node:timers';
 import { NOW_MS, START_MS, STMT_MS, noWaitVerdict } from './remind-queue-2conn-verdict.mjs';
 
 await main();
@@ -58,22 +58,34 @@ const ORPHAN = '2c000000-0000-4000-8000-0000000000ff';   // 队列里有、todos
 const ids = T.map((x) => `'${x}'`).join(', ');
 
 /** 开一个 psql 连接跑 sql，回 { code, out, err, ms } */
+// 两连接复审八 R8-2：每次调用都有超时，采样或主语句卡住时不再干等 db 任务的 40 分钟。两道：
+//   ① 服务器侧 statement_timeout（PGOPTIONS 传给容器里的 psql，每条语句 STMT_LIMIT_S 秒；持锁方的 pg_sleep(7) 远小于它）；
+//   ② 客户端侧 PSQL_LIMIT_MS 后杀掉 docker exec，回 code 124、err 写明超时（万一连接本身卡住，服务器侧那道管不到）。
+const STMT_LIMIT_S = 30;
+const PSQL_LIMIT_MS = 45_000;
 function psql(sql) {
   return new Promise((resolve) => {
     const t0 = Date.now();
-    const p = spawn('docker', ['exec', '-i', container, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-At', '-q'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const p = spawn('docker', ['exec', '-i', '-e', `PGOPTIONS=-c statement_timeout=${STMT_LIMIT_S}s`, container, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-At', '-q'], { stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; p.kill(); }, PSQL_LIMIT_MS);
     p.stdout.on('data', (d) => { out += d; });
     p.stderr.on('data', (d) => { err += d; });
-    p.on('close', (code) => resolve({ code, out: out.trim(), err: err.trim(), ms: Date.now() - t0 }));
+    p.on('close', (code) => {
+      clearTimeout(timer);
+      const e = timedOut ? `psql 超时：${PSQL_LIMIT_MS / 1000} 秒还没结束，已杀掉（${sql.trim().slice(0, 60)}…）\n${err}` : err;
+      resolve({ code: timedOut ? 124 : code, out: out.trim(), err: e.trim(), ms: Date.now() - t0 });
+    });
     p.stdin.end(sql);
   });
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // 超过 1 秒的语句（含函数里的嵌套语句）把 EXPLAIN (ANALYZE, BUFFERS) 打到 psql 的 stderr（NOTICE）。auto_explain 由镜像预载，
-// 普通角色能设它的参数；没预载时这几句只是设了占位参数，不报错、也不打计划
-const EXPLAIN_SLOW = 'set auto_explain.log_min_duration = 1000; set auto_explain.log_nested_statements = on; set auto_explain.log_analyze = on; set auto_explain.log_buffers = on; set auto_explain.log_level = notice;';
+// 普通角色能设它的参数；没预载时这几句只是设了占位参数，不报错、也不打计划。
+// log_parameter_max_length = 0：计划里不带绑定参数的值（两连接复审八 R8-1；这里的语句都是字面量，参数只会来自函数内部）
+const EXPLAIN_SLOW = 'set auto_explain.log_min_duration = 1000; set auto_explain.log_nested_statements = on; set auto_explain.log_analyze = on; set auto_explain.log_buffers = on; set auto_explain.log_level = notice; set auto_explain.log_parameter_max_length = 0;';
 /** 判不过时打印：队列行数（其中孤儿多少、有租约多少），几张表的活行、死元组、上次 vacuum/analyze */
 const TABLE_STATE = `select 'remind_queue ' || count(*) || ' 行（孤儿 ' || count(*) filter (where not exists (select 1 from public.todos t where t.id = q.id) and not exists (select 1 from public.events e where e.id = q.id) and not exists (select 1 from public.anniversaries a where a.id = q.id)) || '，有租约 ' || count(*) filter (where q.claim is not null) || '）' from private.remind_queue q;
 select relname || '：活 ' || n_live_tup || '、死 ' || n_dead_tup || '、vacuum ' || coalesce(greatest(last_vacuum, last_autovacuum)::text, '没有') || '、analyze ' || coalesce(greatest(last_analyze, last_autoanalyze)::text, '没有') from pg_stat_all_tables where relid in ('private.remind_queue'::regclass, 'public.todos'::regclass, 'public.events'::regclass, 'public.anniversaries'::regclass, 'public.profiles'::regclass) order by relname;`;

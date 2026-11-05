@@ -295,4 +295,13 @@ describe('真库那一段的容器名护栏（租约出队安全复审三）', (
     }
     if (DB !== null) expect(testDbAllowed(DB)).toBe(true);
   });
+  // 接手清单 CI-setcron-realdb（租约安全复审四建议 R5）：CI 的 db 任务起了 lemo-ci 以后单独跑这个文件，并设 LEMO_REQUIRE_TEST_DB=supabase_db_lemo-ci。
+  // 设了就必须真跑到真库那一段：容器没探到、探到的不是它、没有 PowerShell（整组会被 skipIf 跳过），都判失败，不许静默跳过当通过
+  it('LEMO_REQUIRE_TEST_DB 设了时：必须探到这个容器、有 PowerShell，真库段不能跳过', () => {
+    const want = process.env['LEMO_REQUIRE_TEST_DB'] ?? '';
+    if (want === '') return;
+    expect(testDbAllowed(want), `LEMO_REQUIRE_TEST_DB=${want} 不在允许的测试库里`).toBe(true);
+    expect(DB, `要求连 ${want}，实际没探到（pg_isready 不通）或探到的是别的`).toBe(want);
+    expect(PS, '没有 PowerShell（Windows PowerShell 或 pwsh），整组会被跳过').not.toBeNull();
+  });
 });

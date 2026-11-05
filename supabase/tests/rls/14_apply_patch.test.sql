@@ -3,11 +3,13 @@
 --   白名单外的列被丢掉、profiles 回 patch_table_not_allowed、own_revs 命中与超过 20 个、forked 副本、另一个事务持锁 3 秒后 55P03、anon 被拒；
 --   另加：参数检查各条、白名单和 grant update 列逐表一致、五种 status 都记 applied_ops、同 op_id 真并发（后到的撞主键回滚、拿到先到的结果）；
 --   TC-B1-69：B 用 A 用过的 op_id、B 用自己的 op_id 改 A 的行，都不影响 A 的数据（applied_ops 主键 (user_id, op_id)）。
+--   K8 第九节（迁移 20261105100000）：冲突副本后缀按本人的 ui_locale——ko-KR 接“ (충돌 사본)”、满额 160 字的标题截到 152；
+--   zh-CN 仍截到 154 接“（冲突副本）”；ui_locale 不认识、为空时退回中文（列有 not null 和 check，在子事务里临时去掉约束试）。
 -- 真并发和 55P03 要两条真连接：经 dblink 连回本库（本机 supabase start 的 postgres 密码是 postgres，走容器网络地址才能带密码）；
 --   离线 PGlite 没有 dblink，这几条记为 SKIP（条数不变）；库里有 dblink 却连不上就判失败（审查建议 2：环境变量传不进
 --   supabase test db 跑的 SQL，实测 PGOPTIONS 带不进去，所以按“有没有 dblink”判，真库上一律严格）。经 dblink 写的数据是真提交的，用固定 id，开头先清、结尾删掉。
 begin;
-select plan(73);
+select plan(80);
 \ir _helpers.psql
 select tests.seed();   -- A、B 正常，C 停用
 
@@ -136,6 +138,53 @@ select is((select title || '|' || body || '|' || array_to_string(tags, ',') from
 select is((select n.title || '|' || n.body || '|' || array_to_string(n.tags, ',') || '|' || n.source || '|' || n.is_private::text from public.notes n
             where n.id = ((select result ->> 'fork_id' from public.applied_ops where op_id = 'a0b00000-0000-4000-8000-00000000000e'))::uuid),
   '我的标题（冲突副本）|正文|t1|page|false', 'forked：另插一条冲突副本（fork_id），标题取 patch 的加“（冲突副本）”，body 取原行（patch 没带），category_id、tags、source 照原行（改之前的 t1）');
+
+-- ===== K8 第九节：冲突副本后缀按 ui_locale（迁移 20261105100000；K8 方案评审 R3：用 160 字满额的标题，正好测到截断） =====
+-- n2、n3：A 的随手记，另一台设备把标题改成 160 字满额（rev 2，fv.title = 2）；本机按 base_rev 1 改标题 → forked
+insert into public.notes (id, user_id, title, body, tags, source, created_at, updated_at) values
+  ('a0000000-0000-4000-8000-000000000002', 'aaaaaaaa-0000-4000-8000-000000000001', '笔记二', '正文二', '{}', 'page', 0, 0),
+  ('a0000000-0000-4000-8000-000000000003', 'aaaaaaaa-0000-4000-8000-000000000001', '笔记三', '正文三', '{}', 'page', 0, 0);
+update public.notes set title = repeat('가', 160) where id in ('a0000000-0000-4000-8000-000000000002', 'a0000000-0000-4000-8000-000000000003');
+update public.profiles set ui_locale = 'ko-KR' where user_id = 'aaaaaaaa-0000-4000-8000-000000000001';
+select is(tests.ap('aaaaaaaa-0000-4000-8000-000000000001', 'notes', 'a0000000-0000-4000-8000-000000000002',
+                   jsonb_build_object('title', repeat('나', 160)), 1, 'a0d00000-0000-4000-8000-000000000001') ->> 'status',
+  'forked', 'ko-KR：本机改 160 字满额的标题，和另一台设备冲突，回 forked');
+-- 另起一条语句读（同一条语句里读到的是改之前的快照）
+select is((select n.title = repeat('나', 152) || ' (충돌 사본)' and char_length(n.title) = 160 from public.notes n
+            where n.id = (select (a.result ->> 'fork_id')::uuid from public.applied_ops a where a.op_id = 'a0d00000-0000-4000-8000-000000000001')),
+  true, 'ko-KR：冲突副本标题是 160 字满额标题截到 152 字再接“ (충돌 사본)”（半角空格、半角括号，8 个字符），正好 160 字');
+update public.profiles set ui_locale = 'zh-CN' where user_id = 'aaaaaaaa-0000-4000-8000-000000000001';
+-- 安全审查建议 K8-S1 反向用例：别人（B）的界面语言是韩文，A（中文）触发的冲突副本仍用中文后缀——只按本人（auth.uid()）的 ui_locale 选
+update public.profiles set ui_locale = 'ko-KR' where user_id = 'bbbbbbbb-0000-4000-8000-000000000002';
+select is((select string_agg(user_id::text || '=' || ui_locale, ',' order by user_id) from public.profiles
+            where user_id in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
+  'aaaaaaaa-0000-4000-8000-000000000001=zh-CN,bbbbbbbb-0000-4000-8000-000000000002=ko-KR', 'K8-S1 前提：A 是中文、B 是韩文');
+select is(tests.ap('aaaaaaaa-0000-4000-8000-000000000001', 'notes', 'a0000000-0000-4000-8000-000000000003',
+                   jsonb_build_object('title', repeat('长', 160)), 1, 'a0d00000-0000-4000-8000-000000000002') ->> 'status',
+  'forked', 'zh-CN：同样回 forked');
+select is((select n.title = repeat('长', 154) || '（冲突副本）' and char_length(n.title) = 160 from public.notes n
+            where n.id = (select (a.result ->> 'fork_id')::uuid from public.applied_ops a where a.op_id = 'a0d00000-0000-4000-8000-000000000002')),
+  true, 'zh-CN：160 字满额的标题仍截到 154 字接“（冲突副本）”，正好 160 字；B 是韩文也不影响 A 的副本（K8-S1）');
+-- 不认识、为空的 ui_locale：列有 not null 和 check，正常造不出来。在子事务里临时去掉约束、改值、触发 forked，取到副本标题后 raise 带出来；
+-- 子事务回滚，约束、数据连同 alter table 拿的锁一起还原（锁不留到整个测试事务结束，后面经 dblink 的几条不会被挡住）
+create function tests.fork_title_with_locale(p_loc text, p_op uuid) returns text language plpgsql as $$
+declare t text;
+begin
+  begin
+    alter table public.profiles drop constraint profiles_ui_locale_check;
+    alter table public.profiles alter column ui_locale drop not null;
+    update public.profiles set ui_locale = p_loc where user_id = 'aaaaaaaa-0000-4000-8000-000000000001';
+    insert into public.notes (id, user_id, title, body, tags, source, created_at, updated_at) values
+      ('a0000000-0000-4000-8000-000000000004', 'aaaaaaaa-0000-4000-8000-000000000001', '笔记四', '正文四', '{}', 'page', 0, 0);
+    update public.notes set title = '对方改的' where id = 'a0000000-0000-4000-8000-000000000004';
+    t := tests.ap('aaaaaaaa-0000-4000-8000-000000000001', 'notes', 'a0000000-0000-4000-8000-000000000004', '{"title": "我的"}', 1, p_op) ->> 'fork_id';
+    select n.title into t from public.notes n where n.id = t::uuid;
+    raise exception using errcode = 'P0L10', message = coalesce(t, '<没有副本>');
+  exception when sqlstate 'P0L10' then return sqlerrm;
+  end;
+end $$;
+select is(tests.fork_title_with_locale('ja-JP', 'a0d00000-0000-4000-8000-000000000003'), '我的（冲突副本）', 'ui_locale 不认识（ja-JP）：退回中文后缀');
+select is(tests.fork_title_with_locale(null, 'a0d00000-0000-4000-8000-000000000004'), '我的（冲突副本）', 'ui_locale 为空：退回中文后缀');
 
 -- ===== 隐私记的图片、附件（apply_patch 审查必改：迁移 20261029201000 的 note_images upd 策略加 bucket = 'images'） =====
 -- np 是本人的隐私记；vi 是它的图片（vault-images），vf 是它的附件（is_vault）；ni 是普通随手记 n1 的图片（images）
