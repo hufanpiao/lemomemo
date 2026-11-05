@@ -168,3 +168,13 @@ export function allDayRemindDay(row: Readonly<Record<string, unknown>>): DateStr
   if (typeof row['time'] === 'string' || typeof date !== 'string' || (days !== 0 && days !== 1)) return null;
   return addDays(date, -days);
 }
+
+/**
+ * R-336“同一条当天推过就不再响”的“同一天”（REMIND-shown-persist S2，11-05；方案 docs/03-评审/B2/B2-方案-提醒响过持久化.md 第 7 节）：
+ * at（pushed_for、notified_for 这类记下的时刻）是数字，并且按 tz 和 remindAt（这一次重算出的提醒时刻）落在同一天。
+ * push-dispatch 第 0 步判“这一天已经提醒过”、前端判“这一次响过 / 已处理”都调这一份（原来第 0 步里内联写 dayOf(x) === dayOf(remindAt)）；
+ * remind_days 是 0 还是 1 都按天比（服务器口径，方案第 5 节：前一天提醒也按天比，换了时区不多响）
+ */
+export function sameRemindDay(at: unknown, remindAt: number, tz: Tz): boolean {
+  return typeof at === 'number' && todayOf(at, tz) === todayOf(remindAt, tz);
+}

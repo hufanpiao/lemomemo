@@ -240,18 +240,22 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      - name: 给本次的库打上 rls 测试标记（supabase/tests/rls/_helpers.psql 开头认它，没有就报错；本机的 lemomemo 没有这个标记）
+        # 用 supabase_admin：PG15 起库级设置没注册过的自定义参数要超级用户（postgres 会报 permission denied，lemo-e2e 上 11-05 实测）
+        run: docker exec supabase_db_lemo-ci psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -q -c "alter database postgres set lemo.test_target = 'ci'"
+
       - name: RLS（pgTAP，supabase test db supabase/tests/rls）、D1（deno task d1）和 store-it（account、account-purge 真 store 打本机库）；后端
-        # B0 集成：test:db = supabase test db supabase/tests/rls && deno task d1 && node supabase/tests/store-it/run.mjs；D1 比对不过不能合并
+        # B0 集成：test:db = guard-cli.mjs && supabase test db supabase/tests/rls && deno task d1 && node supabase/tests/store-it/run.mjs；D1 比对不过不能合并
+        # guard-cli.mjs（11-05）只在 CI=true、没有 SUPABASE_* 变量和 .env*、config 顶层恰好一行 project_id = "lemo-ci" 时放行（上面第 82 行那一步改名），本机一律拒绝
         # store-it 用上面装好的 deno；连接只取 supabase status -o json 的 API_URL、DB_URL 和两把本地演示钥匙，不是本机地址就拒绝
         # 这一步只是正例（库和清单一致）；反例、违规样例在下一步打同一个真库，兼容样例在本任务最后
         run: npm run test:db
 
       - name: D1 反例和违规样例（真库：清单少登记一张表、supabase/tests/d1-fixtures/*.psql 逐个在事务里改一处，都必须报错，跑完回滚）
         # 和 unit.yml 的 test:db:offline（PGlite）是同一套样例、同一个 runD1；这里证明在真 Supabase 上也拦得住
-        # 连接串只取 supabase status 的 DB_URL（CLI 本次的本地值），不读 SUPABASE_DB_URL
-        run: |
-          eval "$(supabase status -o env | grep -E '^DB_URL=')"
-          D1_DB_URL="$DB_URL" node build/ci/d1_negative.mjs
+        # 不设 D1_DB_URL（11-05 复审 L1：设了就只许 lemo-e2e 的 55322，CI 也不例外）：走 build/d1/db-target.mjs 的默认 54322，
+        # 那条路要 CI=true、config 顶层恰好 project_id = "lemo-ci"、仓库根和 supabase/ 下没有 .env*；不读 SUPABASE_DB_URL
+        run: node build/ci/d1_negative.mjs
 
       - name: remind_queue 两连接并发（tools/db/remind-queue-2conn.mjs：finish、出队删孤儿 skip locked 不等锁，提交后不重取）；后端
         # 租约出队安全复审 R1、代码审查复审 N2：PGlite、pgTAP 都是单会话，测不出这几处 skip locked，只有两个真连接能测；约 20 秒

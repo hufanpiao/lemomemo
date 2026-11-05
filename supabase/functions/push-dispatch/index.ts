@@ -9,11 +9,11 @@
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { isUsable } from '../_shared/auth.ts';
-import { msAt, parseHm, todayOf } from '../_shared/gen/core/date.ts';
+import { msAt, parseHm } from '../_shared/gen/core/date.ts';
 import { isValidTz } from '../_shared/gen/core/tz.ts';
 import { t } from '../_shared/gen/i18n/i18n.ts';
 import { notifyText } from '../_shared/gen/logic/notify-text.ts';
-import { allDayTimeOf, dndDeferUntil, eventRemindAt, todoRemindAt } from '../_shared/gen/logic/remind.ts';
+import { allDayTimeOf, dndDeferUntil, eventRemindAt, sameRemindDay, todoRemindAt } from '../_shared/gen/logic/remind.ts';
 import { startAtOf } from '../_shared/gen/logic/remind-actions.ts';
 import { occurrenceKey, reminderTag } from '../_shared/gen/logic/remind-route.ts';
 import { resolveOverride } from '../_shared/push/stub.ts';
@@ -25,7 +25,7 @@ import { makeStore } from './store.ts';
 
 /** 共享 logic 的接线（分支在 logic.ts 里只写一遍；这里只列 _shared/gen 下的函数，名字和测试替身一致，见 tests/edge/push-dispatch-logic-wiring.test.ts） */
 export const LOGIC: RoundLogic = makeLogic({
-  todoRemindAt, eventRemindAt, allDayTimeOf, startAtOf, msAt, parseHm, todayOf, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey,
+  todoRemindAt, eventRemindAt, allDayTimeOf, startAtOf, msAt, parseHm, sameRemindDay, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey,
 });
 
 // 每个实例只自检一次（C-9）；三个变量的值变了（换钥匙后重新部署会起新实例，这里只是兜底）就重做

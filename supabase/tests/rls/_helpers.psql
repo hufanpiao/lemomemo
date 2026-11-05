@@ -3,6 +3,17 @@
 --       tests.rows_as(角色, 用户, 'select …') → 结果行的 jsonb 数组
 --       第四个参数给 fn_vault / fn_ai 的 app.uid（会话变量版 RLS），第五个参数给 JWT 的 session_id
 
+-- 第二道防线（11-05 审查 S1）：只许打带标记的库。标记是数据库级参数 lemo.test_target，只有这三处会设：
+--   CI 的 db 任务（ci.yml，db reset 之后设 'ci'）、lemo-e2e（tools/e2e/real-backend.mjs up 之后设 'e2e'）、离线 PGlite（offline/run.mjs 会话里设 'offline'）。
+--   本机的 lemomemo、lemo-purgeit 没有这个标记：手敲 supabase test db（没带 --db-url 指 55322）打到它们时，这里先报错，
+--   测试事务随之作废，后面的语句一条都不会生效。每个 *.test.sql 在 begin; select plan(n); 之后先 \ir 本文件或 _target.psql（只有这段检查，
+--   逐字一致；复审 R1），由 tests/build/rls-target-include.test.ts 钉住。
+do $$ begin
+  if coalesce(current_setting('lemo.test_target', true), '') not in ('ci', 'e2e', 'offline') then
+    raise exception 'rls 测试只许打 CI、lemo-e2e 或离线库（这个库没有 lemo.test_target 标记）。本机请 npm run e2e:real:up，再 supabase test db --db-url 指 127.0.0.1:55322';
+  end if;
+end $$;
+
 create schema tests;
 
 -- 真库上 postgres 不是超级用户：PG16 建角色时自动给的成员关系不带 SET，切不到 fn_vault、fn_ai；只在这个测试事务里补上

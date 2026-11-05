@@ -63,6 +63,8 @@ log(`✔ ${migrationFiles().length} 个迁移在 PGlite 上依次执行成功`);
 
 // 2) RLS 测试
 if (!only || only === 'rls') {
+  // rls/_helpers.psql 开头认这个标记（11-05 审查 S1，CI 和 lemo-e2e 是数据库级参数，这里同一个会话里设）
+  await db.query("select set_config('lemo.test_target', 'offline', false)");
   for (const f of readdirSync(rlsDir).filter((f) => f.endsWith('.test.sql')).sort()) {
     const { lines, errors } = await runTap(db, join(rlsDir, f));
     const n = lines.filter((l) => /^(not )?ok \d+/.test(l)).length;
@@ -200,4 +202,4 @@ if (!only || only === 'fn') {
 
 await db.close();
 if (failed) { console.log(`\n共 ${failed} 项失败`); process.exit(1); }
-console.log('\n全部通过（离线 PGlite；真库另跑 npm run test:db，要先 supabase start，CI 的 db 任务每次都跑）');
+console.log('\n全部通过（离线 PGlite；真库：CI 的 db 任务每次都跑 npm run test:db；本机只许打 lemo-e2e（npm run e2e:real:up 后用 --db-url 指 55322，store-it 加 --e2e-sb））');

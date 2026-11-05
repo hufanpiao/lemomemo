@@ -11,7 +11,7 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 import { createObjStore } from '../_shared/gen/objstore.ts';
 import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
 import { skipTestRecipients, type Mail } from '../_shared/account-mail.ts';
-import { BACKUP_BUCKET, BackupsSubdirError, HEARTBEAT, handle, type Backups, type PurgeStore, type R2 } from './core.ts';
+import { BACKUP_BUCKET, BACKUP_DAY, BackupsSubdirError, HEARTBEAT, handle, type Backups, type PurgeStore, type R2 } from './core.ts';
 
 const RESEND_URL = 'https://api.resend.com/emails';
 const MAIL_FROM = '柠檬记 <noreply@lemomemo.com>';   // 和 invite-signup、account 同一个发件人
@@ -63,6 +63,17 @@ export function makeStore(admin: Admin): PurgeStore {
     },
     async stillClaimed(userId, claimedIso) {
       return must(await pd().select('user_id').eq('user_id', userId).eq('purge_started_at', claimedIso).maybeSingle()) !== null;
+    },
+    async backupsCursor(userId, claimedIso) {
+      const r = must(await pd().select('backups_done_through').eq('user_id', userId).eq('purge_started_at', claimedIso).maybeSingle()) as { backups_done_through?: unknown } | null;
+      const v = r?.backups_done_through;
+      return typeof v === 'string' && BACKUP_DAY.test(v) ? v : null;
+    },
+    async saveBackupsCursor(userId, claimedIso, date) {
+      // date 先过 BACKUP_DAY（只有数字和连字符），才拼进 or 过滤串（PURGE-date-cursor：只往后推）
+      if (!BACKUP_DAY.test(date)) throw new Error('bad_cursor');
+      must(await pd().update({ backups_done_through: date }).eq('user_id', userId).eq('purge_started_at', claimedIso)
+        .or(`backups_done_through.is.null,backups_done_through.lt.${date}`));
     },
     async isAdmin(userId) {
       return must(await priv.from('admins').select('user_id').eq('user_id', userId).maybeSingle()) !== null;

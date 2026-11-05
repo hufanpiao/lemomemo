@@ -43,6 +43,7 @@ import { fileURLToPath, URL } from 'node:url';
 // 护栏和 config 改写拆在 real-backend-guard.mjs（纯函数），这里原样转出、命令行部分也用它们
 export * from './real-backend-guard.mjs';
 import {
+  E2E_PROJECT_ID,
   ROOT,
   E2E_WORKDIR,
   COPY_ITEMS,
@@ -121,6 +122,24 @@ export function pickEnv(status) {
   // 再拦一道：API 必须是 lemo-e2e 的 55321，不是就说明连错了库
   if (new URL(out.API_URL).port !== '55321') throw new Error(`API_URL 不在 55321 端口，拒绝输出（${new URL(out.API_URL).host}）`);
   return out;
+}
+
+/**
+ * 从 supabase status 取 DB_URL（store-it --e2e-sb 用，11-05 审查 M1）：用 status 实际给的地址，主机必须是本机、端口必须是 lemo-e2e 的 55322，
+ * 否则抛错（消息里只有主机和端口，不带口令）
+ */
+export function pickDbUrl(status) {
+  const v = status?.DB_URL;
+  if (typeof v !== 'string' || v === '') throw new Error('supabase status 里缺字段：DB_URL');
+  let u;
+  try {
+    u = new URL(v);
+  } catch {
+    throw new Error('supabase status 的 DB_URL 不是合法地址');
+  }
+  if (!['127.0.0.1', 'localhost', '[::1]'].includes(u.hostname)) throw new Error(`DB_URL 不是本机地址，拒绝输出（${u.hostname}）`);
+  if (u.port !== '55322') throw new Error(`DB_URL 不在 55322 端口，拒绝输出（${u.host}）`);
+  return v;
 }
 
 /**
@@ -231,6 +250,15 @@ function prepare() {
  * 取不到（没 up 过、容器没在跑、字段缺、端口不对）抛 RealBackendError，消息里带 NOT_UP_HINT；不 exit
  */
 export function statusEnv() {
+  return withStatus(pickEnv);
+}
+
+/** 同 statusEnv，另带 status 实际给的 DB_URL（过 pickDbUrl：本机、55322）；store-it --e2e-sb 用 */
+export function statusEnvWithDb() {
+  return withStatus((status) => ({ ...pickEnv(status), DB_URL: pickDbUrl(status) }));
+}
+
+function withStatus(pick) {
   try {
     guardOrExit();
     const out = supabase(['status', '-o', 'json'], true);
@@ -240,11 +268,22 @@ export function statusEnv() {
     } catch {
       fail('supabase status -o json 的输出不是 JSON（原文不显示）');
     }
-    return pickEnv(status);
+    return pick(status);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     throw new RealBackendError(`${msg}\n${NOT_UP_HINT}`, e instanceof RealBackendError ? e.exitCode : 2);
   }
+}
+
+/**
+ * 给 lemo-e2e 的库打上 rls 测试标记（supabase/tests/rls/_helpers.psql 开头认它，11-05 审查 S1）：数据库级参数 lemo.test_target = 'e2e'，
+ * 只对之后的新会话生效。容器名固定是 supabase_db_lemo-e2e（护栏保证 project_id）。
+ * 用 supabase_admin（镜像自带的超级用户）：PG15 起库级设置没注册过的自定义参数要超级用户，postgres 设会报 permission denied（11-05 实测）
+ */
+function markTestTarget() {
+  const r = spawnSync('docker', ['exec', `supabase_db_${E2E_PROJECT_ID}`, 'psql', '-U', 'supabase_admin', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q',
+    '-c', "alter database postgres set lemo.test_target = 'e2e'"], { stdio: ['ignore', 'ignore', 'inherit'] });
+  if (r.error || r.status !== 0) fail(`给 lemo-e2e 打 rls 测试标记失败（退出码 ${r.status ?? '无'}）`, 1);
 }
 
 function run(cmd) {
@@ -252,6 +291,7 @@ function run(cmd) {
     prepare();
     guardOrExit();
     supabase(['start', '-x', 'studio']);
+    markTestTarget();
   } else if (cmd === 'env') {
     const e = statusEnv();
     stdout.write(argv.includes('--json') ? `${JSON.stringify(e, null, 2)}\n` : Object.entries(e).map(([k, v]) => `${k}=${v}\n`).join(''));

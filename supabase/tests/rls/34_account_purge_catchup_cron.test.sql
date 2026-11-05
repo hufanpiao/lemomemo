@@ -3,6 +3,7 @@
 -- 03:30 那一条本身在 rls/12；真的调用（pg_net 发出请求、函数回 200 写心跳）在本机 supabase start 后做（PURGE-cpu-budget 执行记录）。
 begin;
 select plan(4);
+\ir _target.psql
 
 select is((select count(*)::int from cron.job where jobname like 'account-purge-catchup-%'), 3, 'cron.job 里有三条 account-purge 补跑');
 select is((select array_agg(schedule order by jobname) from cron.job where jobname like 'account-purge-catchup-%'),

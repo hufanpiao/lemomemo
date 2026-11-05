@@ -131,7 +131,11 @@ function isRealDay(s: string): boolean {
   const dim = mo === 2 ? (leap ? 29 : 28) : mo === 4 || mo === 6 || mo === 9 || mo === 11 ? 30 : 31;
   return d <= dim;
 }
-/** occurrenceKey 只认 ① tag ② 全天日程两种写法（见文件头），都要和本条的 kind、id（、due_at）对得上 */
+/**
+ * occurrenceKey 只认 ① tag ② 全天日程两种写法（见文件头），都要和本条的 kind、id（、due_at）对得上。
+ * 标准写法在 shared/logic/remind-route.ts 的 validOccurrenceKey（SW 调那一份，11-05）；这份文件在 Vitest、unit 的 tsc 里跑、不能 import _shared/gen，
+ * 所以照抄（isRealDay 同）；两边逐条一致由 tests/shared/push/occkey-parity.test.ts 钉住，改一边必须同改另一边
+ */
 function occKey(v: unknown, kind: string, id: string, dueAt: number): string | null {
   if (typeof v !== 'string') return null;
   if (v === `${kind}:${id}:${dueAt}`) return v;

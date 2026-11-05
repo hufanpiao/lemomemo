@@ -53,3 +53,33 @@ export function occurrenceKey(r: OccurrenceRef): string {
   if (r.kind !== 'event' || r.snoozed || !isAllDayRemind(r.row)) return r.tag;
   return `event:${r.id}:allday:${String(r.row['date'])}:${String(r.row['remind_days'])}`;
 }
+
+const DAY_RE = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/;
+/** 真实存在的日期 YYYY-MM-DD（安全审查 S1：月 01～12、日不超过当月天数，闰年按公历；9999-99-99、2026-02-30 都不放行） */
+function isRealDay(s: string): boolean {
+  const m = DAY_RE.exec(s);
+  if (!m) return false;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1) return false;
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const dim = mo === 2 ? (leap ? 29 : 28) : mo === 4 || mo === 6 || mo === 9 || mo === 11 ? 30 : 31;
+  return d <= dim;
+}
+
+/**
+ * 外来的 occurrenceKey（推送负载、通知 data）合不合格：只认 ① 等于 tag <kind>:<id>:<dueAt> ② 全天日程 event:<id>:allday:<YYYY-MM-DD>:<0|1>，
+ * 都要和这一条的 kind、id（、dueAt）逐字对得上，日期必须真实存在；合格原样返回，否则 null（REMIND-close-occkey；11-05 从
+ * supabase/functions/_shared/push/payload.ts 的 occKey 挪来，将由 SW 读负载和通知 data 时调这一份；11-05 前端那一半还没接，src/sw/ 里暂无调用者）。只比较、不显示；调用方先校验 id 是 UUID、dueAt 是正的安全整数。
+ * payload.ts 在 Vitest、unit 的 tsc 里跑，那时 _shared/gen 还没生成，不能 import 这一份，照抄了一份：两边逐条一致由 tests/shared/push/occkey-parity.test.ts 钉住
+ */
+export function validOccurrenceKey(v: unknown, kind: string, id: string, dueAt: number): string | null {
+  if (typeof v !== 'string') return null;
+  if (v === `${kind}:${id}:${dueAt}`) return v;
+  const pre = `event:${id}:allday:`;
+  if (kind !== 'event' || !v.startsWith(pre)) return null;
+  const rest = v.slice(pre.length);
+  const day = rest.slice(0, 10);
+  return isRealDay(day) && (rest.slice(10) === ':0' || rest.slice(10) === ':1') ? v : null;
+}

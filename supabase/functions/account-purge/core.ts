@@ -33,6 +33,9 @@
 //        vault-preview 不在这里删（路径不含 user_id，靠 vault-file sweep 到期删）。
 //     3. backups 桶（Supabase Storage）下 `*/<user_id>/` 全删：逐个日期列、有文件就删、删完再列一次为 0 才算这个日期干净
 //        （PURGE-cpu-budget：原来是先全删一遍再全列一遍，改成同一遍里逐日期核对，空日期只列一次，结果一样、调用少一半）。
+//        PURGE-date-cursor（11-05）：日期按名字升序做，停下时把“从头起连续删空的最后一个日期”写进 pending_deletions.backups_done_through，
+//        下一轮跳过不大于它的日期（backupDatesToScan；最后一个日期永远照列、不记）。前提：备份只往“当天”那个日期目录里写，
+//        不往以前的日期里补写（backup-daily 建的时候要守住这一条，接手清单 PURGE-date-cursor 写明）。
 //     4. 用邮箱的 HMAC（_shared/email-hash.ts，算法只此一处）删 pending_signups 那一行、counters 的 signup-mail:mail:<它>；
 //        SIGNUP_HASH_SECRET 换过的话删不到（10 分钟、1 小时就失效的东西），不影响注销；没配这把钥匙只记日志。
 //     5. counters 里第二段是这个 user_id 的键全删。
@@ -118,6 +121,13 @@ export interface PurgeStore {
   release(userId: string, claimedIso: string): Promise<void>;
   /** 认领还在：pending_deletions 这一行还在且 purge_started_at = claimedIso */
   stillClaimed(userId: string, claimedIso: string): Promise<boolean>;
+  /** PURGE-date-cursor：select backups_done_through where user_id = $1 and purge_started_at = claimedIso（不是自己的认领、没有行都回 null） */
+  backupsCursor(userId: string, claimedIso: string): Promise<string | null>;
+  /**
+   * 只往后推：update pending_deletions set backups_done_through = date
+   *   where user_id = $1 and purge_started_at = claimedIso and (backups_done_through is null or backups_done_through < date)
+   */
+  saveBackupsCursor(userId: string, claimedIso: string, date: string): Promise<void>;
   isAdmin(userId: string): Promise<boolean>;
   /** profiles 的停用状态和发信用的两列；没有 profile 返回 null */
   profile(userId: string): Promise<{ disabled_at: string | null; disabled_reason: string | null; ui_locale: string | null; current_tz: string | null } | null>;
@@ -200,6 +210,8 @@ function countedDeps(d: FullDeps, ops: Ops): FullDeps {
     claim: c(s.claim.bind(s)),
     release: c(s.release.bind(s)),
     stillClaimed: c(s.stillClaimed.bind(s)),
+    backupsCursor: c(s.backupsCursor.bind(s)),
+    saveBackupsCursor: c(s.saveBackupsCursor.bind(s)),
     isAdmin: c(s.isAdmin.bind(s)),
     profile: c(s.profile.bind(s)),
     deletePendingSignup: c(s.deletePendingSignup.bind(s)),
@@ -284,6 +296,38 @@ async function remind(deps: FullDeps, now: number, overBudget: () => boolean): P
   return out;
 }
 
+// ---------------- backups 的“删到哪个日期”游标（PURGE-date-cursor，迁移 20261105130000） ----------------
+/** 能当游标的日期目录名：YYYY-MM-DD 或 YYYYMMDD（同一种写法按字符串排序就是时间顺序）；和迁移里的 check 一致 */
+// 日期目录名只认两种写法（11-05 审查 S1：原来两个连字符各自可选，2026-1231、202610-01 也算，长度相同写法不同）；迁移 20261105130000 的 check 同一个正则
+export const BACKUP_DAY = /^(?:[0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{8})$/;
+// 最新的这么多个日期永远照列，游标只跳更老的（11-05 审查 M2）：守住“backup-daily 只往当天写”这个前提不成立的情况——
+// 补跑、重试往最近几天补写时照样删掉。取值 ≥ 备份保留天数（7）+ 1；普通账号只有约 7 个日期，等于没有游标，只有几百个日期的大账号才省
+export const BACKUP_RECENT_KEEP = 8;
+
+/**
+ * 这一轮要列的日期（升序）：跳过不大于游标的日期——只跳同一种写法（长度相同）的；别的名字、合格日期里最新的 BACKUP_RECENT_KEEP 个
+ * （列出来的最后一个日期一定在里面，当天的备份可能还在写）一律照列。cursor 为空时全列
+ */
+export function backupDatesToScan(dates: readonly string[], cursor: string | null): string[] {
+  const sorted = [...dates].sort();
+  if (cursor === null || !BACKUP_DAY.test(cursor)) return sorted;
+  const recent = new Set(sorted.filter((d) => BACKUP_DAY.test(d)).sort((a, b) => a.replace(/-/g, '').localeCompare(b.replace(/-/g, ''))).slice(-BACKUP_RECENT_KEEP));
+  return sorted.filter((d) => recent.has(d) || !(BACKUP_DAY.test(d) && d.length === cursor.length && d <= cursor));
+}
+
+/**
+ * 处理完（确认删空）一个日期以后游标能推到哪：只在“从游标起按顺序全都删空”的前提下推（调用方按 backupDatesToScan 的顺序逐个调，
+ * 出错就停、不再调）；不是能当游标的名字、写法和游标不同、是最后一个日期的，游标原样不动，而且之后都不再推（frozen）
+ */
+export function advanceBackupCursor(st: { through: string | null; frozen: boolean }, d: string, isLast: boolean): void {
+  if (st.frozen) return;
+  if (isLast || !BACKUP_DAY.test(d) || (st.through !== null && st.through.length !== d.length)) {
+    st.frozen = true;
+    return;
+  }
+  st.through = d;
+}
+
 // ---------------- 第二段：逐个彻底删除 ----------------
 // blocked：认领后再核对不过（skip_admin、skip_not_disabled）。它们也算进返回体的 skipped（原口径不变），另外单独计数进心跳（PURGE-halfway-flip）
 type Outcome = 'purged' | 'skipped' | 'blocked' | 'failed' | 'deferred';
@@ -308,6 +352,8 @@ async function purgeOne(
   };
 
   let email: string | null;
+  let cursor: string | null = null;
+  const cur = { through: null as string | null, frozen: false };
   try {
     // 1'. 再核对一次：不是管理员；profile 还在、仍是停用状态（restore 过的不会走到这里：restore 会删掉这一行）
     if (await store.isAdmin(userId)) return await giveUp('skip_admin');
@@ -326,13 +372,17 @@ async function purgeOne(
     }
 
     // 3. backups：逐个日期，<user_id>/ 下有文件就删、删完再列一次为 0；真删了文件的日期是一个检查点（空日期只列一次、不停）
-    const dates = await deps.backups.listDates();
+    //    PURGE-date-cursor：按名字升序，跳过上几轮已确认删空的日期（游标）；停下时（预算、出错）把新游标写回，见 catch
+    cursor = await store.backupsCursor(userId, claimedIso);
+    cur.through = cursor;
+    const dates = backupDatesToScan(await deps.backups.listDates(), cursor);
     for (const [i, d] of dates.entries()) {
       const files = await deps.backups.listUserFiles(d, userId);
       if (files.length) {
         await deps.backups.remove(files);
         if ((await deps.backups.listUserFiles(d, userId)).length) throw new StepError('backups_not_empty');
       }
+      advanceBackupCursor(cur, d, i === dates.length - 1);
       // 只在真删了文件之后判断（B1 代码审查中 1）：每一轮停下之前至少真删掉一个日期，后面几轮不会在空日期上原地打转。
       // 最后一个日期做完就不停了：剩下第 4～8 步只是几次小查询，走完它（不为省这点预算把整个账号拖到下一次）
       if (files.length && i < dates.length - 1 && overBudget()) throw new StepError('time_budget');
@@ -379,6 +429,10 @@ async function purgeOne(
   } catch (e) {
     const code = e instanceof StepError || e instanceof BackupsSubdirError ? e.message
       : (e as { code?: unknown })?.code === 'not_empty' ? 'r2_not_empty' : 'step_error';
+    // 游标里的日期都是这一轮或之前确认删空的：不管为什么停下都写回（写不成只记日志，下一轮多列几次而已）；放在放回认领之前（条件要认领时刻）
+    if (cur.through !== null && cur.through !== cursor) {
+      await store.saveBackupsCursor(userId, claimedIso, cur.through).catch(() => log?.(`cursor_save_failed:${short(userId)}`));
+    }
     return await giveUp(code);
   }
 }

@@ -28,6 +28,7 @@ export function render(fx) {
     `-- 端点 ${fx.endpoints.length} 条（跳过 "pg": false 的 ${skipped} 条），密钥 ${fx.keys.length} 条，只在发送时拒的公钥（keysSendOnly）${(fx.keysSendOnly ?? []).length} 条。Deno / Node 一侧是 tests/shared/push/push-endpoint.test.ts`,
     'begin;',
     `select plan(${eps.length + fx.keys.length + (fx.keysSendOnly ?? []).length});`,
+    '\\ir _target.psql',   // rls 标记检查（11-05 复审 R1、审查 M1）：生成时一并写出，重新生成也不会抹掉
     '',
   ];
   for (const e of eps) {

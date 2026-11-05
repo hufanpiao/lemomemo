@@ -100,9 +100,11 @@ export interface RoundStore {
   settings(userIds: readonly string[]): Promise<Map<string, UserSettings>>;
   /**
    * 系统写入（不加 rev）：remind_at，纪念日另有 next_date。乐观条件（代码审查建议 ④）：只在 remind_at 还是 prevRemindAt 时写
-   * （null 用 is null）；回是否更新到 1 行。没更新到 = 读完以后行被改了（用户又改了一次，触发器已重新入队），调用方插回队列
+   * （null 用 is null）；回是否更新到 1 行。没更新到 = 读完以后行被改了（用户又改了一次，触发器已重新入队），调用方插回队列。
+   * prevNotifiedFor（可选，只有第 0 步 S1 例外传）：另要求 notified_for 还等于它（11-05 安全审查 A4：读完以后另一台设备又改了 notified_for，
+   * 就不按旧的“知道了”写回新时刻，免得新时刻再推一次）
    */
-  writeRemind(table: Table, id: string, userId: string, patch: { remind_at: number | null; next_date?: string | null }, prevRemindAt: number | null): Promise<boolean>;
+  writeRemind(table: Table, id: string, userId: string, patch: { remind_at: number | null; next_date?: string | null }, prevRemindAt: number | null, prevNotifiedFor?: number): Promise<boolean>;
   /**
    * 第 1 步：private.remind_due(lo, hi, perUser, limit)——三张表合起来在 SQL 里按 isDue 的条件精确判断（安全审查必改 1、代码审查 M2：
    * 粗筛按 remind_at 取前 500 会被“remind_at 很早、snooze_at 很远”的行或推过的行占满），只回可用账号的，每人最多 perUser 条，
@@ -147,8 +149,8 @@ export interface RoundLogic {
    * 全天日程（time 为空）是当天的 remind.default_time，按 tz（current_tz）算（0.29 续第 47、57 条）
    */
   eventStartAt(row: ItemRow, tz: string, defaultTime: unknown): number | null;
-  /** ms 在 tz 的日期 YYYY-MM-DD（shared 的 todayOf）；第 0 步判断全天日程“这一天推过没有”用（R-336） */
-  dayOf(ms: number, tz: string): string;
+  /** at 是数字、且按 tz 和 remindAt 落在同一天（shared/logic/remind.ts 的 sameRemindDay，前端同一份）；第 0 步判断全天日程“这一天推过没有”用（R-336） */
+  sameRemindDay(at: unknown, remindAt: number, tz: string): boolean;
   notify(i: NotifyInputLike): NotifyTextLike;
   t(key: string, params: Readonly<Record<string, string | number>>, locale: string): string;
   /**

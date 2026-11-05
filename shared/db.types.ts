@@ -145,14 +145,14 @@ isOneToOne: false
                   ]
                 },"pending_deletions": {
                   Row: {
-                    "notice_sent": boolean,"purge_after": string,"purge_started_at": string | null,"requested_at": string,"user_id": string
+                    "backups_done_through": string | null,"notice_sent": boolean,"purge_after": string,"purge_started_at": string | null,"requested_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "notice_sent"?: boolean,"purge_after": string,"purge_started_at"?: string | null,"requested_at"?: string,"user_id": string
+                    "backups_done_through"?: string | null,"notice_sent"?: boolean,"purge_after": string,"purge_started_at"?: string | null,"requested_at"?: string,"user_id": string
                   }
                   Update: {
-                    "notice_sent"?: boolean,"purge_after"?: string,"purge_started_at"?: string | null,"requested_at"?: string,"user_id"?: string
+                    "backups_done_through"?: string | null,"notice_sent"?: boolean,"purge_after"?: string,"purge_started_at"?: string | null,"requested_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     

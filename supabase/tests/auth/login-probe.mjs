@@ -27,6 +27,7 @@ import { createRequire } from 'node:module';
 import { arch, platform } from 'node:process';
 import { dirname, join } from 'node:path';
 import postgres from 'postgres';
+import { checkRepoSupabase } from '../store-it/guard.mjs';
 
 // 找 supabase CLI：① 先按 PATH 找（CI 由 build/ci/install-tool.sh 装进 PATH，行为不变）；
 // ② PATH 里没有（Windows 上 node_modules/.bin 只有 .cmd 包装，execFileSync 不经 shell 调不到）时，
@@ -75,12 +76,18 @@ const readStatus = () => {
     return null;
   }
 };
-const status = readStatus();
+// 11-05 安全红线：在仓库根目录跑 supabase status 读到的是仓库 config 那套库，本机就是 lemomemo（project_id），会往里建用户、发信。
+// 和 npm run test:db 同一道护栏（supabase/tests/store-it/guard.mjs）：只有 CI（config 已改成 lemo-ci）放行，本机一律退出码 2，不调 supabase status
+const guardProblem = checkRepoSupabase(join(import.meta.dirname, '..', '..', '..'), process.env);
+const status = guardProblem === null ? readStatus() : null;
 const localOnly = (s) => [s.API_URL, s.MAILPIT_URL ?? s.INBUCKET_URL, s.DB_URL].every((u) => {
   const host = (() => { try { return new URL(u).hostname; } catch { return ''; } })();
   return ['127.0.0.1', 'localhost', '[::1]'].includes(host);
 });
-if (!status) {
+if (guardProblem !== null) {
+  console.error(`login-probe：${guardProblem}`);
+  process.exitCode = 2;
+} else if (!status) {
   process.exitCode = 1;
 } else if (!localOnly(status)) {
   console.error('login-probe：只打本机的 Supabase（supabase status 给的地址不是 127.0.0.1 / localhost / [::1]）');

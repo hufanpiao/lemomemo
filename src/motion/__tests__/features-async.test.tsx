@@ -5,6 +5,9 @@
 // • 没到时挂上、到了以后才关：退场照常播（data-state="leaving"），播完才卸载
 // • 退场期间外层带 inert（键盘、读屏碰不到）；没在退场时不带
 // • 只下载一次；下载失败不抛，下一次再试（另见 features-retry.test.ts）
+// 注意：本文件依赖用例顺序（K8-newItem 重构 M6 复审 L2，11-05）。功能包的“下载完”是模块级的 gate，只开一次，
+//   “还没到”的用例必须排在开 gate 的用例前面；打乱顺序（--sequence.shuffle）会红，改动前的旧版同样会红，不是假时钟带进来的。
+//   加用例时照现有顺序放；要单独跑某一条，连同它前面的用例一起跑
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -25,8 +28,12 @@ vi.mock('../feature-bundle.ts', async () => {
 
 const { Appear, AppearItem, AppearList } = await import('../components.ts');
 const { loadMotionFeatures, motionFeatures, motionFeaturesReady } = await import('../features.ts');
+// 假时钟推帧（FAKE、fakeWait、until）在 fake-frames.ts，原因见那边的文件头
+const { drainAndRestore, FAKE, fakeWait, until } = await import('./fake-frames.ts');
 
-afterEach(() => {
+afterEach(async () => {
+  // 用过假时钟的用例：切回真定时器之前先把排着的帧推完（fake-frames.ts）
+  await drainAndRestore();
   cleanup();
 });
 
@@ -76,6 +83,9 @@ describe('功能包还没到', () => {
 
 describe('功能包到了以后', () => {
   it('没到时挂上的弹层，到了以后关：照常播退场（leaving、带 inert），播完才卸载', async () => {
+    // 时间走假时钟、按帧推（代码审查 K8-newItem 重构 M6）：原来用真 setTimeout 每 12 ms 取样 6 次，
+    // 并发跑时真实帧来得慢，6 次取样可能一帧都没落在退场途中（“退场在往下滑”偶发红）
+    vi.useFakeTimers({ toFake: [...FAKE] });
     const view = (show: boolean) => (
       <Appear kind="sheet" show={show}>
         <button type="button">ok</button>
@@ -88,7 +98,7 @@ describe('功能包到了以后', () => {
       await loadMotionFeatures();
     });
     expect(motionFeaturesReady()).toBe(true);
-    await wait(20);
+    await fakeWait(20);
     rerender(view(false));
     const el = box(container, 'sheet');
     expect(el?.dataset['state']).toBe('leaving');
@@ -96,7 +106,7 @@ describe('功能包到了以后', () => {
     // 退场从“原位”起播（没到时挂上的算已停稳）：不能从 none（= 全零变换）起播，那样 scale 会从 0 放大
     const seen: string[] = [];
     for (let i = 0; i < 6; i += 1) {
-      await wait(12);
+      await fakeWait(12);
       seen.push(box(container, 'sheet')?.style.transform ?? '');
     }
     for (const tf of seen) {
@@ -105,7 +115,7 @@ describe('功能包到了以后', () => {
     }
     expect(seen.some((tf) => tf.startsWith('translateY(')), '退场在往下滑').toBe(true);
     expect(box(container, 'sheet'), '退场在播，还没卸载').not.toBeNull();
-    await waitFor(() => expect(box(container, 'sheet')).toBeNull(), { timeout: 3000 });
+    await until(() => box(container, 'sheet') === null, '退场播完卸载');
   });
 
   it('只下载一次；之后给 LazyMotion 的是包本身（同步装上）', () => {

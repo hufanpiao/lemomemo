@@ -69,6 +69,14 @@ describe('push-dispatch store.ts', () => {
     expect(await makeStore(b.admin).writeRemind?.('anniversaries', 'x', 'u', { remind_at: 7, next_date: '2027-01-01' }, null)).toBe(false);
     expect(b.chains[0]).toEqual([['from', 'anniversaries'], ['update', { remind_at: 7, next_date: '2027-01-01' }], ['eq', 'id', 'x'], ['eq', 'user_id', 'u'], ['is', 'remind_at', null], ['select', 'id']]);
   });
+  it('安全审查 A4：传了 prevNotifiedFor（第 0 步 S1 例外）另比 notified_for；不传时链上没有这一项', async () => {
+    const a = fakeAdmin({ data: [{ id: 'x' }], error: null });
+    expect(await makeStore(a.admin).writeRemind?.('events', 'x', 'u', { remind_at: 7 }, 5, 7)).toBe(true);
+    expect(a.chains[0]).toEqual([['from', 'events'], ['update', { remind_at: 7 }], ['eq', 'id', 'x'], ['eq', 'user_id', 'u'], ['eq', 'notified_for', 7], ['eq', 'remind_at', 5], ['select', 'id']]);
+    const b = fakeAdmin({ data: [{ id: 'x' }], error: null });   // 对照（审查 L3）：同一调用不传 prevNotifiedFor，链上没有 notified_for
+    expect(await makeStore(b.admin).writeRemind?.('events', 'x', 'u', { remind_at: 7 }, 5)).toBe(true);
+    expect(b.chains[0]).toEqual([['from', 'events'], ['update', { remind_at: 7 }], ['eq', 'id', 'x'], ['eq', 'user_id', 'u'], ['eq', 'remind_at', 5], ['select', 'id']]);
+  });
   it('代码审查建议 ⑥：tzLoggedSince 查本函数写的 tz_invalid（走 user_id、act、src 索引）', async () => {
     const { admin, chains } = fakeAdmin({ data: [{ user_id: 'u1' }, { user_id: 'u1' }], error: null });
     expect([...((await makeStore(admin).tzLoggedSince?.(['u1', 'u2'], 100)) as Set<string>)]).toEqual(['u1']);

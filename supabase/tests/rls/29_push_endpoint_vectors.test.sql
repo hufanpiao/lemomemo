@@ -3,6 +3,7 @@
 -- 端点 146 条（跳过 "pg": false 的 1 条），密钥 83 条，只在发送时拒的公钥（keysSendOnly）3 条。Deno / Node 一侧是 tests/shared/push/push-endpoint.test.ts
 begin;
 select plan(231);
+\ir _target.psql
 
 select is(private.push_endpoint_ok(convert_from(decode('aHR0cHM6Ly93ZWIucHVzaC5hcHBsZS5jb20vTFNVVVlSR2dPVzVZcFdvcDZyNmFmUERKbmI5ZE95dUZLLVFaa2hGTnJhM2Q5Q19WRlJOek5Oc1FXcUhI', 'base64'), 'UTF8')), true, 'ok-001 Safari / iPhone 主屏幕版现在用的端点主机');
 select is(private.push_endpoint_ok(convert_from(decode('aHR0cHM6Ly9hcGkucHVzaC5hcHBsZS5jb20vYlcyR3RnY3A1X3QxZjlJTVBteUhwdXZrcV9QampSQXNzc2VWaldyMA==', 'base64'), 'UTF8')), true, 'ok-002 另一个一级子域，苹果以后换子域也不用改');

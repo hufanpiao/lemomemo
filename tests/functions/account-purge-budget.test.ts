@@ -162,7 +162,10 @@ describe('删除段：半截续删，只在真删了东西之后停', () => {
       left.push(w.backups.count(A));
       w.clock.advance(15 * MIN);
     }
-    expect(left).toEqual([9, 8, 7, 6, 5, 4, 3, 2, 1, 0]);   // 每轮删掉一个日期就停；最后一个日期做完不停、走完
+    // 第 1 轮列完 640 个空日期、删掉第 641 个就停（不在空日期上停），停前把游标记到第 641 个；
+    // PURGE-date-cursor（11-05）以前第 2 轮起每轮还要把空日期全列一遍，只能再删一个（[9, 8, …, 0] 要十轮），现在跳过它们，一轮删完
+    expect(left).toEqual([9, 0]);
+    expect(w.db.pending.has(A)).toBe(false);
     expect(w.db.users.has(A)).toBe(false);
   });
 

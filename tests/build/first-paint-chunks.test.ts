@@ -4,7 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkFirstPaint, FIRST_PAINT_DYNAMIC, staticClosure, ZOD_MARKS } from '../../build/check_first_paint_chunks.mjs';
+import { checkFirstPaint, FIRST_PAINT_DYNAMIC, LUNAR_MARKS, staticClosure, ZOD_MARKS } from '../../build/check_first_paint_chunks.mjs';
 
 type Chunk = { file: string; src?: string; name?: string; isEntry?: boolean; isDynamicEntry?: boolean; imports?: string[]; dynamicImports?: string[] };
 type Manifest = Record<string, Chunk>;
@@ -19,7 +19,7 @@ function base(): Manifest {
     '_components-a.js': { file: 'assets/components-a.js', name: 'components' },
     'features/onboarding/ui/ConsentGate.tsx': { file: 'assets/ConsentGate-a.js', src: 'features/onboarding/ui/ConsentGate.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'], dynamicImports: ['features/onboarding/ui/ConsentPage.tsx'] },
     'features/onboarding/ui/ConsentPage.tsx': { file: 'assets/ConsentPage-a.js', src: 'features/onboarding/ui/ConsentPage.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
-    // 今天页里一打开就挂的提醒部件（③ 审查第三轮：MissedReminders 漏登过）
+    // 今天页里的提醒部件（③ 审查第三轮：MissedReminders 漏登过；11-05 起 MissedReminders 等引擎 armed 才挂、不在首屏，留在名单里只会更严）
     'features/reminders/ui/MissedReminders.tsx': { file: 'assets/MissedReminders-a.js', src: 'features/reminders/ui/MissedReminders.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
     'features/reminders/ui/UnsyncedRemind.tsx': { file: 'assets/UnsyncedRemind-a.js', src: 'features/reminders/ui/UnsyncedRemind.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
     'features/reminders/ui/UnsyncedRemindMark.tsx': { file: 'assets/UnsyncedRemindMark-a.js', src: 'features/reminders/ui/UnsyncedRemindMark.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
@@ -74,6 +74,43 @@ describe('首屏块里不许有 zod（按构建产物，FA-6 ③ M3）', () => {
     const bad = checkFirstPaint(m, text());
     expect(bad).toHaveLength(1);
     expect(bad[0]).toContain('ConsentGate');
+  });
+});
+
+describe('首屏块里不许有农历数据（LUNAR-indirect-import 剩下的兜底，11-05）', () => {
+  /** lunar-data.ts 里某张表 years 的前三项，原样拼成产物里的样子（数字、逗号、方括号；压缩不改这些） */
+  const head3 = (name: string): string | null => {
+    const src = readFileSync(join(ROOT, 'shared/logic/anniv/lunar-data.ts'), 'utf8');
+    const at = src.indexOf(`export const ${name}: LunarTable = `);
+    const ys = at < 0 ? -1 : src.indexOf('years: [', at);
+    if (ys < 0 || src.slice(ys + 8, ys + 9) !== '[') return null;   // 没有这张表，或者这张表的 years 是空的（[]）
+    const pairs = src.slice(ys + 8).split('],[').slice(0, 3);
+    return pairs.length === 3 ? `${pairs.join('],[')}]` : null;
+  };
+  it('LUNAR_MARKS 跟着数据源走：中国农历表的前三项就是登记的那一串；韩国农历表有了数据就必须也登记', () => {
+    const cn = head3('LUNAR_CN');
+    expect(cn).not.toBe(null);
+    expect(LUNAR_MARKS).toContain(cn);
+    const kr = head3('LUNAR_KR');
+    if (kr !== null) expect(LUNAR_MARKS, 'LUNAR_KR 有数据了：把它的前三项加进 build/check_first_paint_chunks.mjs 的 LUNAR_MARKS').toContain(kr);
+  });
+  it('农历块被首屏静态引进来（按名字认）：报出来', () => {
+    const m = base();
+    m['_lunar-a.js'] = { file: 'assets/lunar-a.js', name: 'lunar' };
+    m['features/today/ui/TodayPage.tsx']?.imports?.push('_lunar-a.js');
+    const bad = checkFirstPaint(m, text());
+    expect(bad.some((b) => b.includes('农历数据的块') && b.includes('_lunar-a.js'))).toBe(true);
+  });
+  it('农历数据被并进首屏别的块（名字认不出）：按特征数字串报出来；只被动态 import 的农历块不算', () => {
+    const m = base();
+    for (const mark of LUNAR_MARKS) {
+      const bad = checkFirstPaint(m, text({ 'assets/components-a.js': `const t={first:1901,years:[${mark},[-23707,2715]]};` }));
+      expect(bad).toEqual([`首屏块 assets/components-a.js（_components-a.js）里有农历表的数据`]);
+    }
+    m['_lunar-a.js'] = { file: 'assets/lunar-a.js', name: 'lunar', isDynamicEntry: true };
+    const today = m['features/today/ui/TodayPage.tsx'];
+    if (today) today.dynamicImports = ['_lunar-a.js'];
+    expect(checkFirstPaint(m, text({ 'assets/lunar-a.js': `const t=[${LUNAR_MARKS[0]}];` }))).toEqual([]);
   });
 });
 

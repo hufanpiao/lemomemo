@@ -19,7 +19,7 @@ export const CRON = 'test-cron-secret-0123456789abcdef-xyz';   // ≥ 32 字节
 export const HASH_SECRET = 'test-signup-hash-secret';
 
 export interface Profile { disabled_at: string | null; disabled_reason: string | null; ui_locale: string; current_tz: string }
-export interface Pending { purge_after: string; notice_sent: boolean; purge_started_at: string | null }
+export interface Pending { purge_after: string; notice_sent: boolean; purge_started_at: string | null; /** PURGE-date-cursor（迁移 20261105130000） */ backups_done_through?: string | null }
 
 export class Clock {
   ms: number;

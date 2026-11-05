@@ -12,7 +12,7 @@ export interface SharedFns {
   startAtOf(row: { date: string; time: string | null; tz: string | null }, tz: string, defaultTime?: string): number;
   msAt(date: string, min: number, tz: string): number;
   parseHm(hm: string): number;
-  todayOf(ms: number, tz: string): string;
+  sameRemindDay(at: unknown, remindAt: number, tz: string): boolean;
   isValidTz(tz: string): boolean;
   dndDeferUntil(ms: number, tz: string, dnd: Dnd): number | null;
   notifyText(i: NotifyInputLike): NotifyTextLike;
@@ -32,7 +32,7 @@ export function makeLogic(s: SharedFns): RoundLogic {
     eventStartAt: (row: ItemRow, tz, defaultTime) => typeof row.date !== 'string' ? null
       : row.time === null || row.time === undefined ? s.startAtOf({ date: row.date, time: null, tz: null }, tz, s.allDayTimeOf(defaultTime))
         : typeof row.time === 'string' && typeof row.tz === 'string' ? s.msAt(row.date, s.parseHm(row.time), row.tz) : null,
-    dayOf: (ms, tz) => s.todayOf(ms, tz),
+    sameRemindDay: s.sameRemindDay,
     notify: (i) => s.notifyText(i),
     t: (key, params, locale) => s.t(key as never, params as never, locale === 'ko-KR' ? 'ko-KR' : 'zh-CN'),
     // B5 填实现（logic/anniv 的 nextDate + 提醒偏移）；现在回 null：第 0 步不改纪念日、第 6 步推过以后不写下一次

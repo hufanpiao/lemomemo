@@ -5,10 +5,12 @@
 //   2) 违规样例 supabase/tests/d1-fixtures/*.psql：每个在事务里改一处，D1 必须报出样例头上 `-- expect:` 那句，然后回滚
 // 前提：supabase db reset 刚跑过。样例都在事务里执行并回滚，跑完库不变
 // 用法（仓库根目录）：D1_DB_URL=<supabase status 的 DB_URL> node build/ci/d1_negative.mjs
-//   连接串取 D1_DB_URL，默认是 supabase start 的本地库；不读 SUPABASE_DB_URL（TC-B0-35）
+//   连接串取 D1_DB_URL；不读 SUPABASE_DB_URL（TC-B0-35）。连哪个库由 build/d1/db-target.mjs 判（11-05 安全红线）：本机必须指 lemo-e2e 的 55322，
+//   没设时只有 CI（config 已改成 lemo-ci）才用默认的 54322
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { d1Target, repoReader } from '../d1/db-target.mjs';
 
 const root = resolve(import.meta.dirname, '..', '..');
 const fxDir = join(root, 'supabase', 'tests', 'd1-fixtures');
@@ -63,7 +65,12 @@ export async function runNegative(q, exec, log = console.log) {
 
 async function main() {
   const { default: postgres } = await import('postgres');
-  const url = process.env.D1_DB_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+  const target = d1Target({ CI: process.env.CI, D1_DB_URL: process.env.D1_DB_URL }, repoReader(root));
+  if ('problem' in target) {
+    console.error(`d1_negative：${target.problem}`);
+    return 2;
+  }
+  const url = target.url;
   const sql = postgres(url, { max: 1, prepare: false, onnotice: () => {} });
   const conn = await sql.reserve();
   let fails;

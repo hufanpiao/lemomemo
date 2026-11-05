@@ -260,6 +260,31 @@ Deno.test({ name: 'account 真 store：refundRate 在真 counters 上比较并�
   }
 } });
 
+Deno.test({ name: 'PURGE-date-cursor 真 store：backupsCursor、saveBackupsCursor 只认自己的认领时刻，只往后推，格式不对抛错', ...opts, async fn() {
+  const u = await mkUser('cursor');
+  await pending(u, 3 * 86400);   // 不到期：这条只测 store，不调 account-purge
+  const claim = '2026-11-05T01:02:03.456Z';
+  try {
+    await sql`update private.pending_deletions set purge_started_at = ${claim}::timestamptz where user_id = ${u}`;
+    const store = purgeMod.makeStore(admin);
+    const col = async () => one(await sql<{ c: string | null }[]>`select backups_done_through as c from private.pending_deletions where user_id = ${u}`).c;
+    assertEquals(await store.backupsCursor(u, claim), null);
+    await store.saveBackupsCursor(u, claim, '20261002');
+    assertEquals([await col(), await store.backupsCursor(u, claim)], ['20261002', '20261002']);
+    await store.saveBackupsCursor(u, claim, '20261001');   // 往回推：不写
+    assertEquals(await col(), '20261002');
+    await store.saveBackupsCursor(u, '2026-11-05T01:02:04.000Z', '20261009');   // 不是自己的认领：不写、也读不到
+    assertEquals([await col(), await store.backupsCursor(u, '2026-11-05T01:02:04.000Z')], ['20261002', null]);
+    let msg = '';
+    try { await store.saveBackupsCursor(u, claim, '2026,x'); } catch (e) { msg = e instanceof Error ? e.message : String(e); }
+    assertEquals([msg, await col()], ['bad_cursor', '20261002']);
+    await store.saveBackupsCursor(u, claim, '20261005');
+    assertEquals(await col(), '20261005');
+  } finally {
+    await sql`delete from private.pending_deletions where user_id = ${u}`;
+  }
+} });
+
 Deno.test({ name: 'store-it 收尾：删掉本次建的用户和留下的行', ...opts, async fn() {
   try {
     await purgeTraces(ours);

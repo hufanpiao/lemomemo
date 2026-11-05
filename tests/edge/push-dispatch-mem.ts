@@ -2,11 +2,11 @@
 // 迁移 20261104130000 的租约式出队）和共享 logic 接线。
 // LOGIC 和 supabase/functions/push-dispatch/index.ts 的 LOGIC 同一写法（那边从 _shared/gen 引，这里直接引 shared/）。
 // 推送服务用测试开发的替身 tests/fakes/push-service.ts（进程内 fake.fetch）；造数据按“少量设备、每台多条”（替身复核 N1）。
-import { msAt, parseHm, todayOf } from '../../shared/core/date.ts';
+import { msAt, parseHm } from '../../shared/core/date.ts';
 import { isValidTz } from '../../shared/core/tz.ts';
 import { t } from '../../shared/i18n/i18n.ts';
 import { notifyText } from '../../shared/logic/notify-text.ts';
-import { allDayTimeOf, dndDeferUntil, eventRemindAt, todoRemindAt } from '../../shared/logic/remind.ts';
+import { allDayTimeOf, dndDeferUntil, eventRemindAt, sameRemindDay, todoRemindAt } from '../../shared/logic/remind.ts';
 import { startAtOf } from '../../shared/logic/remind-actions.ts';
 import { occurrenceKey, reminderTag } from '../../shared/logic/remind-route.ts';
 import type { DispatchStore, HeartbeatDetail } from '../../supabase/functions/push-dispatch/core.ts';
@@ -16,7 +16,7 @@ import { makeLogic } from '../../supabase/functions/push-dispatch/logic.ts';
 
 /** 和 index.ts 同一份接线（logic.ts 的 makeLogic），名字一一对应，只是从 shared/ 引（tests/edge/push-dispatch-logic-wiring.test.ts 核对） */
 export const LOGIC: RoundLogic = makeLogic({
-  todoRemindAt, eventRemindAt, allDayTimeOf, startAtOf, msAt, parseHm, todayOf, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey,
+  todoRemindAt, eventRemindAt, allDayTimeOf, startAtOf, msAt, parseHm, sameRemindDay, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey,
 });
 
 export const UA = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -62,6 +62,13 @@ function perUserCap(c: Ranked[], perUser: number, limit: number): { table: Table
 }
 
 /** 内存库：所有写都在一个同步段里完成（JS 单线程，条件更新天然原子，对应 SQL 的行锁） */
+/**
+ * touch() 的提醒列，三张表合起来（纪念日那一组 11-05 补齐）。替身自己写一份、不引 shared 的 TOUCH_REMIND_COLS：
+ * tests/edge/push-dispatch-mem-reset.test.ts 从 0001 的 touch() 解析出列清单，和这份、shared 那份三方比对（审查 M4）
+ */
+export const MEM_TOUCH_COLS: readonly string[] = ['date', 'time', 'tz', 'due', 'due_time', 'remind_before_min', 'remind_min', 'remind_days', 'remind_time',
+  'remind_offsets', 'month', 'day', 'calendar', 'lunar_variant', 'is_leap', 'year', 'after_due', 'kind', 'done', 'deleted_at'];
+
 export class MemDb implements DispatchStore {
   tables: Record<Table, Map<string, ItemRow>> = { events: new Map(), todos: new Map(), anniversaries: new Map() };
   queue = new Map<string, QEntry>();
@@ -106,13 +113,16 @@ export class MemDb implements DispatchStore {
    * events_occ_reset——日程的 date、remind_days 变了，或 time 在空和非空之间变了，清 notified_for、snooze_at（这次没改它们的值时，R3-L2；
    *   notified_for 改成了 old.remind_at 也清，REMIND-offline-ack-merge）和 pushed_for（二轮审查 N-M1）；
    * 和真库一样按“值有没有变”判断（R3-L3），不看补丁里写没写这一列（客户端常常整行写回）；
-   * touch()——提醒相关列变了清 pushed_for、defer_until；events_remind / todos_remind——这些列变了入 remind_queue
+   * touch()——提醒相关列变了清 pushed_for、defer_until；events_remind / todos_remind——这些列变了入 remind_queue；
+   * events_allday_ack_enqueue——全天日程的 notified_for 改成不等于 remind_at 的值时也入队（真库语义在 rls/36）
    */
   edit(table: Table, id: string, patch: Partial<ItemRow>): ItemRow {
     const old = this.tables[table].get(id);
     if (!old) throw new Error(`没有这一行 ${table}:${id}`);
     const row: ItemRow = { ...old, ...patch };
-    const changed = (k: string) => row[k] !== old[k];
+    // 同 SQL 的 is distinct from：空和没有都算 null，数组（纪念日的 remind_offsets）按值比（11-05 三方对照 rls/38 补）
+    const val = (v: unknown) => (v === undefined ? null : typeof v === 'object' && v !== null ? JSON.stringify(v) : v);
+    const changed = (k: string) => val(row[k]) !== val(old[k]);
     if (table === 'events' && (changed('date') || changed('remind_days') || (old['time'] == null) !== (row['time'] == null))) {
       for (const k of ['notified_for', 'snooze_at'] as const) {
         if (!changed(k)) row[k] = null;
@@ -121,13 +131,21 @@ export class MemDb implements DispatchStore {
       if (old.remind_at != null && row.notified_for === old.remind_at) row.notified_for = null;
       row.pushed_for = null;
     }
-    const remindCols = ['date', 'time', 'tz', 'due', 'due_time', 'remind_before_min', 'remind_min', 'remind_days', 'remind_time', 'done', 'deleted_at'];
+    // touch()：待办的 due 是空的，连带清 due_time、remind_before_min（0001，0.29 续第 136 条）
+    if (table === 'todos' && val(row['due']) === null) {
+      row['due_time'] = null;
+      row['remind_before_min'] = null;
+    }
+    const remindCols = MEM_TOUCH_COLS;
     if (remindCols.some(changed)) {
       row.pushed_for = null;
       row.defer_until = null;
     }
     this.tables[table].set(id, row);
     if ([...remindCols, 'snooze_at'].some(changed)) this.enqueue(table, id);
+    // events_allday_ack_enqueue（迁移 20261105120000，REMIND-shown-persist S1）：全天日程的 notified_for 改成了不等于 remind_at 的值，入队
+    if (table === 'events' && row['time'] == null && row.deleted_at == null && row.notified_for != null && changed('notified_for')
+      && row.notified_for !== row.remind_at) this.enqueue(table, id);
     return row;
   }
   device(user: string, sub: { endpoint: string; p256dh: string; auth: string }): DeviceRow {
@@ -211,10 +229,11 @@ export class MemDb implements DispatchStore {
     const keys: readonly string[] = SETTING_KEYS;
     return new Map(users.filter((u) => this.sets.has(u)).map((u) => [u, Object.fromEntries(Object.entries(this.sets.get(u) ?? {}).filter(([k]) => keys.includes(k)))]));
   }
-  async writeRemind(table: Table, id: string, user: string, patch: { remind_at: number | null; next_date?: string | null }, prev: number | null) {
+  async writeRemind(table: Table, id: string, user: string, patch: { remind_at: number | null; next_date?: string | null }, prev: number | null, prevNotified?: number) {
     this.check('writeRemind');
     const r = this.tables[table].get(id);
     if (!r || r.user_id !== user || r.remind_at !== prev) return false;   // 乐观条件
+    if (prevNotified !== undefined && r.notified_for !== prevNotified) return false;   // S1 例外另比 notified_for（安全审查 A4）
     r.remind_at = patch.remind_at;
     if (patch.next_date !== undefined) r.next_date = patch.next_date;
     return true;

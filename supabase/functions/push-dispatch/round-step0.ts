@@ -108,6 +108,7 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
       if (!tzNotes.has(q.user_id)) tzNotes.set(q.user_id, code);
     };
     let patch: { remind_at: number | null; next_date?: string | null } | null;
+    let ackAt: number | undefined;   // S1 例外时 = 读到的 notified_for（安全审查 A4）
     try {
       if (q.table_name === 'events') {
         // 有时刻的日程：只有 tz 不为空而且认不出时才跳过、记 events（PUSH-tz-null-event，11-04 主持人定）。tz 为空的照 shared
@@ -130,9 +131,12 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
         //   落在同一天，就当这一天已经提醒过：remind_at 保持原值、不写回（改 remind.default_time、换了同一天里的时刻都不再推第二次）。
         //   换了“哪一次提醒”（挪日期、改 remind_days、time 在空和非空之间变）由迁移 20261104100000 的触发器 events_occ_reset
         //   清空 notified_for、pushed_for，到这里就不会被压住（二轮审查 N-M1）。被压住时 remind_at 保留旧值，只供第 1 步到点判断用（N-L2）。
+        //   例外（REMIND-shown-persist S1，11-05；迁移 20261105120000）：notified_for 正好等于新算出的 remind_at——压住以后客户端按“知道了”
+        //   写的是本机现算的新时刻——就照写回：notified_for = remind_at，第 1 步不算到点、不会在新时刻再推，resolve 成立、收回已推的那条。
         if ((row.time === null || row.time === undefined) && patch.remind_at !== null && patch.remind_at !== row.remind_at) {
-          const day = c.logic.dayOf(patch.remind_at, prof.current_tz);
-          if ([row.pushed_for, row.notified_for].some((x) => typeof x === 'number' && c.logic.dayOf(x, prof.current_tz) === day)) return;
+          const at = patch.remind_at;
+          if (row.notified_for === at) ackAt = at;   // S1 例外：写回时另要求 notified_for 还是这个值（安全审查 A4）
+          else if ([row.pushed_for, row.notified_for].some((x) => c.logic.sameRemindDay(x, at, prof.current_tz))) return;
         }
       } else if (!c.logic.isValidTz(prof.current_tz)) {
         tzInvalid('profiles');   // 待办、纪念日：current_tz 不认识，原因码 profiles（R-316，架构 5.3 第 2 步；11-04 主持人定第 0 步同一口径）
@@ -152,7 +156,7 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
     if (same) return;
     try {
       // 乐观条件（代码审查建议 ④）：读完以后行又被改了就不写，放回队列下一轮按新值重算
-      if (!(await c.store.writeRemind(q.table_name, q.id, q.user_id, patch, row.remind_at))) back.push(q);
+      if (!(await c.store.writeRemind(q.table_name, q.id, q.user_id, patch, row.remind_at, ackAt))) back.push(q);
     } catch {
       back.push(q);
     }

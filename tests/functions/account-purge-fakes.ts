@@ -42,6 +42,11 @@ export function fakePurgeStore(db: FakeDb): PurgeStore {
     },
     release: async (u, iso) => { const d = db.pending.get(u); if (d && d.purge_started_at === iso) d.purge_started_at = null; },
     stillClaimed: async (u, iso) => { db.beforeStillClaimed?.(); return db.pending.get(u)?.purge_started_at === iso; },
+    backupsCursor: async (u, iso) => { const d = db.pending.get(u); return d && d.purge_started_at === iso ? d.backups_done_through ?? null : null; },
+    saveBackupsCursor: async (u, iso, date) => {   // 同 index.ts：只往后推、条件带认领时刻
+      const d = db.pending.get(u);
+      if (d && d.purge_started_at === iso && (d.backups_done_through == null || d.backups_done_through < date)) d.backups_done_through = date;
+    },
     isAdmin: async (u) => db.admins.has(u),
     profile: async (u) => { const p = db.profiles.get(u); return p ? { ...p } : null; },
     deletePendingSignup: async (h) => { db.guard('deletePendingSignup'); db.pendingSignups.delete(h); },

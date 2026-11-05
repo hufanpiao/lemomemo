@@ -4,6 +4,7 @@
 -- grant 行和 3.3 C、附录 A 授权汇总的逐行比对由 check_backend.py M4 做，不在这里重复。
 begin;
 select plan(14);
+\ir _target.psql
 
 create temp view f as
   select p.oid, p.proname, p.prosecdef, p.proconfig, l.lanname, p.prosrc, p.proacl,

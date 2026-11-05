@@ -3,6 +3,7 @@
 -- 真的调用（pg_net 发出请求、函数回 200 写心跳）要在本机 supabase start 加 seed.sql 后做，不在这里（离线 PGlite 没有 pg_net）。
 begin;
 select plan(7);
+\ir _target.psql
 
 select is((select count(*)::int from cron.job where jobname = 'account-purge'), 1, 'cron.job 里有且只有一条 account-purge');
 select is((select schedule from cron.job where jobname = 'account-purge'), '30 18 * * *', '每天 18:30 UTC = 03:30 首尔');

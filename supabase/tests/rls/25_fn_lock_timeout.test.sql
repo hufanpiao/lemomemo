@@ -5,6 +5,7 @@
 -- 调用方遇到报错一律回 try_later 由 tests/functions/lock-timeout-callers.test.ts 证明。
 begin;
 select plan(4);
+\ir _target.psql
 
 select is((select string_agg(p.proname || ':' || pg_catalog.array_to_string(p.proconfig, ';'), ',' order by p.proname)
              from pg_catalog.pg_proc p

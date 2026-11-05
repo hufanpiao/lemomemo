@@ -59,6 +59,8 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/copy-shared.test.ts', // node（经目录联接调用 build\copy_shared.mjs，入口比真实路径，B2 安全审查 PUBLISH P1）
   'tests/build/publish-run-shared.test.ts', // PowerShell、git clone、node（发布脚本演练：部署函数前用 copy_shared 生成 _shared\gen，经 publish-run-harness.ts）
   'tests/build/remind-queue-2conn-guard.test.ts', // node tools/db/remind-queue-2conn.mjs --dry（容器名护栏，不连库）
+  'tests/build/d1-target.test.ts', // node build/ci/d1_negative.mjs、login-probe.mjs 本机环境（被拒绝，退出码 2，不连库）
+  'tests/build/store-it-guard.test.ts', // node supabase/tests/store-it/run.mjs、guard.mjs 本机环境（被护栏拒绝，退出码 2，不起 supabase）
   'tests/build/set-cron-secret.test.ts', // PowerShell（有 docker 时还起容器）
   'tests/build/set-signup-secrets.test.ts', // PowerShell
   'tests/build/set-vapid-keys.test.ts', // PowerShell（本机假服务，B2 O-1）

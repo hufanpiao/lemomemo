@@ -4,8 +4,9 @@
 -- 授权：表级 insert、update，加列级 select (name, at, detail)（11-04 负责人定选项 A，同一迁移）：upsert 心跳要读列。
 --   select 同样受这条策略管，只看得到自己三行（第 ④ 段）；upsert、带 where 的 update 碰不到别人的心跳（第 ④b 段）。
 --   旧策略下“不带 where 的 update”会把所有服务的心跳一起刷新——第 ⑤ 段专测这个口子已经堵上。
-\ir _helpers.psql
+-- 11-05：\ir 原来写在 begin 前面，辅助函数在事务外建、随文件提交，排在后面的 36 号 \ir 时报 schema "tests" already exists（真库全套跑才暴露）
 begin;
+\ir _helpers.psql
 select plan(20);
 
 -- ① 库里最终生效的策略（不比迁移源码）：只剩 fn_ai_own 一条，using 和 with check 都是这三个名字
@@ -16,6 +17,8 @@ select is((select qual || ' | ' || with_check from pg_policies where schemaname 
   $$(name = ANY (ARRAY['ai-embed'::text, 'ai-media'::text, 'file-check'::text])) | (name = ANY (ARRAY['ai-embed'::text, 'ai-media'::text, 'file-check'::text]))$$,
   'fn_ai_own 的 using、with check 都只认 ai-embed、ai-media、file-check');
 
+-- 11-05：库里可能已有真函数写过的心跳（如先跑过 store-it 的 account-purge），先在本事务里清空（随 rollback 恢复），免得插入撞主键
+delete from private.heartbeat;
 -- 别的服务的心跳（service_role 写的），一小时前
 insert into private.heartbeat (name, at, detail) values
   ('account-purge', now() - interval '1 hour', '{"held": 0}'), ('push-dispatch', now() - interval '1 hour', null),

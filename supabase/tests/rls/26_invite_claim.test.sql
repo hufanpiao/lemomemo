@@ -3,6 +3,7 @@
 -- 行为：第一次占回 ok、之后回 reused；占码幂等（同一邮箱同一个码只加一次）、换码先退旧码、退码只退占着的那一次、upsert pending 不带这一列时原值保留。
 begin;
 select plan(20);
+\ir _target.psql
 
 create temp view f as
   select p.oid, p.proname, p.prosecdef, p.proconfig from pg_catalog.pg_proc p

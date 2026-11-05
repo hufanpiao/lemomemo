@@ -97,11 +97,12 @@ export function makeStore(admin: Admin): DispatchStore {
       for (const r of rows) byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), [r.key, r.value]]);
       return new Map([...byUser].map(([u, kv]) => [u, Object.fromEntries(kv) as UserSettings]));
     },
-    async writeRemind(table, id, userId, patch, prevRemindAt) {
+    async writeRemind(table, id, userId, patch, prevRemindAt, prevNotifiedFor) {
       const body: Record<string, unknown> = { remind_at: patch.remind_at };
       if (table === 'anniversaries' && patch.next_date !== undefined) body.next_date = patch.next_date;
       // 乐观条件（代码审查建议 ④）：remind_at 还是读到的旧值才写
-      const q = admin.from(table).update(body).eq('id', id).eq('user_id', userId);
+      const q0 = admin.from(table).update(body).eq('id', id).eq('user_id', userId);
+      const q = prevNotifiedFor === undefined ? q0 : q0.eq('notified_for', prevNotifiedFor);   // S1 例外另比 notified_for（安全审查 A4）
       const rows = must(await (prevRemindAt === null ? q.is('remind_at', null) : q.eq('remind_at', prevRemindAt)).select('id')) as { id: string }[];
       return rows.length === 1;
     },

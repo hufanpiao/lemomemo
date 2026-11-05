@@ -1,0 +1,8 @@
+-- rls 测试的标记检查（11-05 审查 S1 与复审 R1）：只许打带 lemo.test_target 标记的库（CI、lemo-e2e、离线 PGlite），没有标记就报错，测试事务作废。
+-- 不需要 tests.* 辅助函数的测试文件在 begin; select plan(n); 之后先 \ir 本文件；要辅助函数的引 _helpers.psql（开头是同一段，逐字一致，
+-- 由 tests/build/rls-target-include.test.ts 比对）。_helpers.psql 不引本文件：tests/compat 直接读 _helpers.psql 的原文，不内联 \ir。
+do $$ begin
+  if coalesce(current_setting('lemo.test_target', true), '') not in ('ci', 'e2e', 'offline') then
+    raise exception 'rls 测试只许打 CI、lemo-e2e 或离线库（这个库没有 lemo.test_target 标记）。本机请 npm run e2e:real:up，再 supabase test db --db-url 指 127.0.0.1:55322';
+  end if;
+end $$;
