@@ -1,18 +1,15 @@
 // push-dispatch 第 3～8 步：发送的共享状态、提醒发送、纪念日下一次、resolve、轮末设备写回。
 // 11-04 从 round-dispatch.ts 的 steps1to8 原样拆出（REMIND-steps1to8-split：只搬家、不改行为）；流程总说明在 round.ts 文件头。
+// 11-05 REMIND-split-low L4（只改名、挪类型，不改行为）：Cand、Item、UserData 挪到 round-types.ts；本地 annivNext 改名 writeAnnivNext；
+//   remindOne 的 logs、res 收进 Sender（makeSender 本来就拿着这两样），参数从 6 个减到 4 个。
 import { checkEndpoint } from '../_shared/push/endpoint.ts';
 import type { PushOptions } from '../_shared/push/send.ts';
-import { BEHIND_MS, LOG_SRC, SNOOZE_MIN, kindOf, type DeviceOutcome, type DeviceRow, type ItemRow, type LogRow, type Profile, type RoundCtx, type RoundResult, type Table, type UserSettings } from './round-types.ts';
+import { BEHIND_MS, LOG_SRC, SNOOZE_MIN, kindOf, type Cand, type DeviceOutcome, type DeviceRow, type Item, type LogRow, type Profile, type RoundCtx, type RoundResult, type UserData, type UserSettings } from './round-types.ts';
 import { renderText, showTitleOf } from './round-util.ts';
 
-/** tz：第 2 步定下的显示和免打扰时区（current_tz；R-316 时区坏了的日程用它自己的 tz） */
-export type Cand = { table: Table; row: ItemRow; due: number; tz?: string };
-export type Item = { table: Table; row: ItemRow };
-/** 第 1 步之后一次读出的这几个人的资料 */
-export type UserData = { profiles: Map<string, Profile>; settings: Map<string, UserSettings>; devs: Map<string, DeviceRow[]> };
 export type Sender = ReturnType<typeof makeSender>;
 
-/** 发送的共享状态（一轮一份）：每台设备的结果、发送名额、按设备发送 */
+/** 发送的共享状态（一轮一份）：每台设备的结果、发送名额、按设备发送；logs、res 也放在这里，remindOne 从 S 取 */
 export function makeSender(c: RoundCtx, logs: LogRow[], res: RoundResult, devs: Map<string, DeviceRow[]>, overBudget: () => boolean) {
   const stats = new Map<string, { dev: DeviceRow; out: DeviceOutcome }>();
   const statOf = (d: DeviceRow) => {
@@ -72,7 +69,7 @@ export function makeSender(c: RoundCtx, logs: LogRow[], res: RoundResult, devs: 
     }
     return anyOk;
   };
-  return { stats, alive, reserve, unreserve, sendTo };
+  return { logs, res, stats, alive, reserve, unreserve, sendTo };
 }
 
 /** 提醒的负载（文案、两个按钮、occurrenceKey）；出错照原样抛出，由 remindOne 记原因码 */
@@ -105,7 +102,7 @@ function remindPayload(c: RoundCtx, x: Cand, prof: Profile, st: UserSettings | u
 }
 
 /** 第 6 步：纪念日推过以后算下一次（B5 填实现） */
-async function annivNext(c: RoundCtx, x: Cand, prof: Profile, st: UserSettings | undefined): Promise<void> {
+async function writeAnnivNext(c: RoundCtx, x: Cand, prof: Profile, st: UserSettings | undefined): Promise<void> {
   try {
     const nx = c.logic.annivNext(x.row, { tz: prof.current_tz, now: x.due + 1, settings: st ?? {} });
     // 乐观条件：推完以后用户又改了这条纪念日（触发器已入队，第 0 步会按新值重算），就不覆盖
@@ -116,7 +113,8 @@ async function annivNext(c: RoundCtx, x: Cand, prof: Profile, st: UserSettings |
 }
 
 /** 第 3～6 步：一条提醒（占名额 → 认领 → 组负载 → 发送 → 纪念日下一次） */
-export async function remindOne(c: RoundCtx, logs: LogRow[], res: RoundResult, S: Sender, d: UserData, x: Cand): Promise<void> {
+export async function remindOne(c: RoundCtx, S: Sender, d: UserData, x: Cand): Promise<void> {
+  const { logs, res } = S;
   const u = x.row.user_id;
   const targets = S.alive(u, 'any');
   if (targets.length === 0) return;
@@ -157,7 +155,7 @@ export async function remindOne(c: RoundCtx, logs: LogRow[], res: RoundResult, S
   }
   if (ok) res.sent++;
   else res.failed++;
-  if (x.table === 'anniversaries') await annivNext(c, x, prof, d.settings.get(u));
+  if (x.table === 'anniversaries') await writeAnnivNext(c, x, prof, d.settings.get(u));
 }
 
 /** 第 5 步之二：一条 resolve（Edge 等；苹果端点一律不发） */

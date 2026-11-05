@@ -1,9 +1,10 @@
 // push-dispatch 第 1～8 步：到点、免打扰、认领、发送、resolve、设备写回（b13882b^ 的 round.ts 第 432～702 行）。
 // 11-03 从 round.ts 原样搬来（REMIND-round-split：只搬家、不改行为）；流程总说明在 round.ts 文件头。
 // 11-04 steps1to8 再拆成几段（REMIND-steps1to8-split：只搬家、不改行为）：这里留第 1、2 步和总调用，第 3～8 步在 round-send.ts。
-import { AHEAD_MS, BEHIND_MS, type LogRow, type RoundCtx, type RoundResult } from './round-types.ts';
+// 11-05 REMIND-split-low L4：第 2 步 step2 改名 screenDnd；Cand、Item、UserData 从 round-types.ts 取。
+import { AHEAD_MS, BEHIND_MS, type Cand, type Item, type LogRow, type RoundCtx, type RoundResult, type UserData } from './round-types.ts';
 import { filterUsable, groupBy, isDue, isHandledAfterPush, logTzInvalid, parseDnd, pool, uniq } from './round-util.ts';
-import { makeSender, remindOne, resolveOne, writeDeviceOutcomes, type Cand, type Item, type UserData } from './round-send.ts';
+import { makeSender, remindOne, resolveOne, writeDeviceOutcomes } from './round-send.ts';
 
 // ---------------- 第 1～8 步 ----------------
 
@@ -60,7 +61,7 @@ async function readUsers(c: RoundCtx, users: string[]): Promise<UserData | null>
 //   安全审查建议 ①：每个候选单独 try，isValidTz、dndDeferUntil 出错只影响这一条（记 dnd_failed，留在窗口里下一分钟再来）。
 //   代码审查建议 ②：循环里看时间预算，到了就停（没处理的算 left）。
 //   复审建议：这里加进 left 的是上界——剩下的候选里有的本来会因没有 profile、免打扰顺延、时区不认识或没有设备而不发，没逐条判断就全算上。
-async function step2(c: RoundCtx, logs: LogRow[], res: RoundResult, cands: Cand[], d: UserData, overBudget: () => boolean, now: number): Promise<Cand[]> {
+async function screenDnd(c: RoundCtx, logs: LogRow[], res: RoundResult, cands: Cand[], d: UserData, overBudget: () => boolean, now: number): Promise<Cand[]> {
   const { profiles, settings, devs } = d;
   const tzNotes = new Map<string, string>();
   const ready: Cand[] = [];
@@ -111,11 +112,11 @@ export async function steps1to8(c: RoundCtx, logs: LogRow[], res: RoundResult, o
   if (cands.length === 0 && handled.length === 0) return;
   const d = await readUsers(c, uniq([...cands, ...handled].map((x) => x.row.user_id)));
   if (!d) return;
-  const ready = await step2(c, logs, res, cands, d, overBudget, now);
+  const ready = await screenDnd(c, logs, res, cands, d, overBudget, now);
 
   const S = makeSender(c, logs, res, d.devs, overBudget);
   // 第 3～6 步：提醒
-  await pool(ready, c.limits.concurrency, (x) => remindOne(c, logs, res, S, d, x));
+  await pool(ready, c.limits.concurrency, (x) => remindOne(c, S, d, x));
   // 第 5 步之二：resolve（Edge 等；苹果端点一律不发）
   await pool(handled, c.limits.concurrency, (x) => resolveOne(c, S, x));
   // 轮末：每台设备写一次

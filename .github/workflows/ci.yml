@@ -256,7 +256,14 @@ jobs:
       - name: remind_queue 两连接并发（tools/db/remind-queue-2conn.mjs：finish、出队删孤儿 skip locked 不等锁，提交后不重取）；后端
         # 租约出队安全复审 R1、代码审查复审 N2：PGlite、pgTAP 都是单会话，测不出这几处 skip locked，只有两个真连接能测；约 20 秒
         # 容器名是上面改过的项目名 lemo-ci（supabase_db_lemo-ci）；脚本对 lemomemo、lemo-purgeit 在任何环境都拒绝（安全复审二 R1-1）
-        run: node tools/db/remind-queue-2conn.mjs supabase_db_lemo-ci
+        # 安全复审五 R5-2：退出码 0 之外还要核对输出里有“全部通过”（脚本没跑起来、静默退出 0 也算失败）
+        run: |
+          set +e
+          node tools/db/remind-queue-2conn.mjs supabase_db_lemo-ci 2>&1 | tee 2conn.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" -ne 0 ]; then exit "$rc"; fi
+          grep -qx '全部通过' 2conn.log || { echo "::error::两连接脚本退出码 0 但没打出“全部通过”"; exit 1; }
 
       - name: shared 在 Deno 下再跑一遍（deno task test），服务器函数和 D1 入口过 deno check（deno task check）
         # deno.json 用 nodeModulesDir=manual，npm 包取 npm ci 装好的 node_modules（测试一侧版本由 package-lock.json 锁定；函数源码另由 supabase/functions/deno.lock 核对，见下一步）

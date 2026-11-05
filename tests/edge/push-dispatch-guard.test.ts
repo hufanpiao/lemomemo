@@ -2,6 +2,7 @@
 // ① 第 1 步 collect 自己的几道保险：取数的 SQL（remind_due、remind_pushed）本来就排好序、每人最多 perUser 条、只回可用账号的，collect 又各做了一遍。
 //    内存库照 SQL 写，前面那几道都先挡掉了，所以这里让取数故意回“没排序、不封顶、带不可用账号”的行，钉住 collect 自己的那一遍。
 // ② 读资料失败、提醒的 TTL、resolve 日志的 fields、纪念日推过以后写回下一次（logic.annivNext 正式实现等 B5，这里用替身给值）。
+// ③ 11-05 代码审查低问题 L1～L3（REMIND-split-low）：collect 的总条数截断、resolve 候选的“已处理”过滤、annivNext 收到的参数、每轮第一条一定发。
 import { afterEach, describe, expect, it } from 'vitest';
 import { handle } from '../../supabase/functions/push-dispatch/core.ts';
 import { createFakePush, newPushSubscriber, type FakePushService } from '../fakes/push-service.ts';
@@ -16,12 +17,12 @@ afterEach(async () => {
   fake = null;
 });
 
-/** 取数不排序（倒过来）、不封顶；isUsable 只认 UA（内存库里两个人都可用，SQL 那一道挡不住 UB） */
-async function world(over: Partial<Deps> = {}) {
+/** 取数不排序（倒过来）、不封顶；isUsable 只认 UA（内存库里两个人都可用，SQL 那一道挡不住 UB）；devsA：UA 有几台设备 */
+async function world(over: Partial<Deps> = {}, devsA = 1) {
   const v = await fakeVapid();
   const db = new MemDb().user(UA).user(UB);
   const subs = [];
-  for (const u of [UA, UB]) {
+  for (const u of [...Array<string>(devsA).fill(UA), UB]) {
     const ep = `https://fcm.googleapis.com/fcm/send/${uuid('f')}`;
     const s = await newPushSubscriber(ep);
     db.device(u, { endpoint: ep, p256dh: s.p256dh, auth: s.auth });
@@ -167,5 +168,56 @@ describe('名额和预算', () => {
     w.db.releasePushed = async (t, id, u, p) => (id === taken.id ? false : raw(t, id, u, p));
     await w.round(now);
     expect(w.pushes().map((p) => p.id)).toEqual([next.id]);
+  });
+});
+
+describe('审查低问题 L1～L3（REMIND-split-low）', () => {
+  it('L1 取数不按 limit 截断时：collect 自己只留到点最早的 due 条', async () => {
+    const w = await world({ limits: { perUser: 3, due: 2 } });
+    const now = Date.now();
+    w.db.dueRows = async (lo, hi) => (await MemDb.prototype.dueRows.call(w.db, lo, hi, 1000, 1000)).reverse();
+    const rows = [0, 1, 2].map((i) => w.db.put('todos', todoRow(UA, { remind_at: now - 5000 + i })));
+    const r = await w.round(now);
+    expect(r.claimed).toBe(2);
+    expect(w.pushes().map((p) => p.id).sort()).toEqual(rows.slice(0, 2).map((x) => x.id).sort());
+  });
+
+  it('L1 resolve 取数混进“推过、还没处理”的行（notified_for 为空）：collect 滤掉，不发 resolve、pushed_for 不清', async () => {
+    const w = await world();
+    const now = Date.now();
+    const at = now - 20 * 60_000;
+    const pending = w.db.put('todos', todoRow(UA, { remind_at: at, pushed_for: at, notified_for: null }));
+    const raw = w.db.pushedRows;
+    w.db.pushedRows = async (lo, hi, p, l) => [...(await raw(lo, hi, p, l)), { table: 'todos', row: { ...pending } }];
+    await w.round(now);
+    expect(w.pushes()).toEqual([]);
+    expect(w.db.calls).not.toContain('releasePushed');
+    expect(w.db.tables.todos.get(pending.id)?.pushed_for).toBe(at);
+  });
+
+  it('L2 纪念日推过以后算下一次：annivNext 收到 now = 到点 + 1、tz = current_tz、settings = 这个人的设置', async () => {
+    const seen: { tz: string; now: number; settings: unknown }[] = [];
+    const w = await world({ logic: { ...LOGIC, annivNext: (_row, o) => (seen.push(o), null) } });
+    const now = Date.now();
+    w.db.user(UA, { current_tz: 'Asia/Tokyo' });
+    w.db.sets.set(UA, { 'remind.default_time': '08:30' });
+    const due = now - 1000;
+    w.db.put('anniversaries', {
+      id: uuid('a'), user_id: UA, deleted_at: null, undone: false, source: 'page', push_show_title: null,
+      remind_at: due, notified_for: null, snooze_at: null, pushed_for: null, defer_until: null, name: '结婚纪念日', next_date: '2026-11-04',
+    });
+    await w.round(now);
+    expect(seen).toEqual([{ tz: 'Asia/Tokyo', now: due + 1, settings: { 'remind.default_time': '08:30' } }]);
+  });
+
+  it('L3 每轮第一条一定发：sendLimit 是 1、这个人有 2 台设备，这一条照发、两台都收到；后面那条留到下一轮', async () => {
+    const w = await world({ limits: { perUser: 3, sendLimit: 1, concurrency: 1 } }, 2);
+    const now = Date.now();
+    const first = w.db.put('todos', todoRow(UA, { remind_at: now - 2000 }));
+    w.db.put('todos', todoRow(UA, { remind_at: now - 1000 }));
+    const r = await w.round(now);
+    expect(r).toMatchObject({ claimed: 1, sent: 1, budget_hit: true, left: 1 });
+    expect(w.pushes().map((p) => p.id)).toEqual([first.id, first.id]);
+    expect(new Set(w.reqs().map((x) => x.subscriber?.endpoint)).size).toBe(2);
   });
 });

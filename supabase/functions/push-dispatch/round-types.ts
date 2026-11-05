@@ -198,3 +198,10 @@ export interface RoundCtx {
 
 /** queue_ok：第 0 步这一轮出队、读行、收尾都没出错是 1，否则 0；queue_poison：这一轮丢掉的有毒项个数（core.ts 写心跳时按首尔当天累计） */
 export interface RoundResult { claimed: number; sent: number; failed: number; budget_hit: boolean; left: number; queue_ok: number; queue_poison: number }
+
+// 第 1～8 步之间传的东西（11-05 从 round-send.ts 挪来，REMIND-split-low L4）
+/** tz：第 2 步定下的显示和免打扰时区（current_tz；R-316 时区坏了的日程用它自己的 tz） */
+export type Cand = { table: Table; row: ItemRow; due: number; tz?: string };
+export type Item = { table: Table; row: ItemRow };
+/** 第 1 步之后一次读出的这几个人的资料 */
+export type UserData = { profiles: Map<string, Profile>; settings: Map<string, UserSettings>; devs: Map<string, DeviceRow[]> };
