@@ -7,17 +7,14 @@ import { appearMotion } from '../Appear.tsx';
 import { Appear } from '../components.ts';
 import { presets, type AppearKind } from '../presets.ts';
 import { loadMotionFeatures } from '../features.ts';
+import { drainAndRestore, FAKE, fakeWait, until } from './fake-frames.ts';
 
 // 动效功能包异步加载（B2 FA-6 ②）：这里测的是功能包到了以后的手感，先等它到
 await loadMotionFeatures();
 
 afterEach(async () => {
-  // 用过假时钟的用例：切回真定时器之前先把排着的帧推完。Motion 的帧循环排过一帧就等它回来，
-  // 这一帧要是留在假时钟里被丢掉，之后的用例里 Motion 就再也不走了
-  if (vi.isFakeTimers()) {
-    for (let i = 0; i < 400 && vi.getTimerCount() > 0; i++) await act(() => vi.advanceTimersByTimeAsync(16));
-    vi.useRealTimers();
-  }
+  // 用过假时钟的用例：切回真定时器之前先把排着的帧推完（fake-frames.ts）
+  await drainAndRestore();
   cleanup();
   delete document.documentElement.dataset['rm'];
 });
@@ -91,22 +88,9 @@ describe('Appear 播完清掉 transform', () => {
     const m = /translateY\((-?[\d.]+)(px|%)\)/.exec(t);
     return m ? Number(m[1]) : 0;
   };
-  /**
-   * 假时钟（MOTION-n1-load-flaky）：rAF、performance.now、定时器一起换成假的，Motion 的帧循环只在这里往前推时才走，
-   * “关了 100 ms 再开、再过 20 ms 关”是动画时间轴上的 100 ms、20 ms，机器忙时取样间隔不会被拉长（原来按墙钟，r108 快照挂过一次）
-   */
-  const FAKE = ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance', 'Date'] as const;
-  const FRAME_MS = 16;
+  // 假时钟推帧（FAKE、fakeWait、until）在 fake-frames.ts，原因见那边的文件头
+  /** 真实时间等 ms（下面几条减少动态效果的用例用真定时器） */
   const wait = (ms: number) => act(() => new Promise<void>((ok) => setTimeout(ok, ms)));
-  const fakeWait = async (ms: number): Promise<void> => {
-    for (let t = 0; t < ms; t += FRAME_MS) await act(() => vi.advanceTimersByTimeAsync(Math.min(FRAME_MS, ms - t)));
-  };
-  /** 按帧往前推，直到 cond 成立（最多 limitMs 动画时间） */
-  const until = async (cond: () => boolean, limitMs = 3000): Promise<void> => {
-    for (let t = 0; t < limitMs && !cond(); t += FRAME_MS) await act(() => vi.advanceTimersByTimeAsync(FRAME_MS));
-    expect(cond(), `推了 ${limitMs} ms 动画时间还没到`).toBe(true);
-  };
-
   for (const kind of ['sheet', 'toast'] as const) {
     it(`${kind}：停稳 → 关 → 退场途中又开 → 没播完又关（FA-5 复审 N1）：第二次退场一路往终点走，不闪回原位`, async () => {
       const view = (show: boolean) => (

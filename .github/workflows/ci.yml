@@ -263,7 +263,7 @@ jobs:
           rc=${PIPESTATUS[0]}
           set -e
           if [ "$rc" -ne 0 ]; then exit "$rc"; fi
-          grep -qx '全部通过' 2conn.log || { echo "::error::两连接脚本退出码 0 但没打出“全部通过”"; exit 1; }
+          grep -qx '全部通过' 2conn.log || { echo "::error::两连接脚本退出码 0 但没打出 全部通过 这一行"; exit 1; }
 
       - name: shared 在 Deno 下再跑一遍（deno task test），服务器函数和 D1 入口过 deno check（deno task check）
         # deno.json 用 nodeModulesDir=manual，npm 包取 npm ci 装好的 node_modules（测试一侧版本由 package-lock.json 锁定；函数源码另由 supabase/functions/deno.lock 核对，见下一步）
