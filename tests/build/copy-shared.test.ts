@@ -1,5 +1,6 @@
 // build/copy_shared.mjs（架构 2.5）：shared 复制给 Edge Functions，zod 改成钉版本的 npm: 写法
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmdirSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -63,5 +64,25 @@ describe('copy_shared', () => {
     expect(rows).toMatch(/from 'npm:zod@\d+\.\d+\.\d+'/);
     expect(rows).not.toMatch(/from 'zod'/);
     expect(rows.startsWith('// 生成文件')).toBe(true);
+  });
+
+  it('B2 安全审查 PUBLISH P1：经目录联接调用（-RepoPath 指到联接、符号链接时就是这样）照样生成，不静默跳过；入口比真实路径', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lemo-cs-link-'));
+    const link = join(dir, 'build');
+    const dst = join(dir, 'gen');
+    symlinkSync(join(import.meta.dirname, '..', '..', 'build'), link, 'junction');
+    try {
+      const r = spawnSync(process.execPath, [join(link, 'copy_shared.mjs'), dst], { encoding: 'utf8', timeout: 30_000 });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toMatch(/^copy_shared：\d+ 个文件 → /u);
+      expect(readFileSync(join(dst, 'schema', 'rows.ts'), 'utf8').startsWith('// 生成文件')).toBe(true);
+    } finally {
+      unlinkSync(link);
+      rmSync(dst, { recursive: true, force: true });
+      rmdirSync(dir);
+    }
+    const src = readFileSync(join(import.meta.dirname, '..', '..', 'build', 'copy_shared.mjs'), 'utf8').replace(/^\s*\/\/.*$/gmu, '');
+    expect(src).not.toMatch(/pathToFileURL/u);
+    expect(src).toMatch(/realpathSync\.native\(fileURLToPath\(import\.meta\.url\)\) === realpathSync\.native\(arg\)/u);
   });
 });

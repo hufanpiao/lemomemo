@@ -5,6 +5,9 @@
 // - fakeFunctions：演练窗口里先定义好的 PowerShell 函数——git（只替换 git var 两种情形）、Invoke-WebRequest、Invoke-RestMethod、
 //   npm.cmd、node、Read-Host（从队列取假值，多问一次就失败）等，覆盖掉同名命令，publish.ps1 调到的就是它们。
 //   node 跑 build\ci\check_deno_drift.mjs 时不连 npm，按 LEMO_FAKE_DRIFT（第几次返回 1）给退出码，默认都是 0。
+//   node 跑 build\copy_shared.mjs 时转给真的 node（本地生成 _shared\gen，不连网）；LEMO_FAKE_COPY_SHARED 是 fail 时不跑、返回 1，
+//   是 raw 时生成后把一个文件换成 shared\ 里的原样（模拟原来的 Copy-Item），是 bare 时在一个生成文件末尾加一行裸引 aws4fetch（PUBLISH-shared-rewrite）；
+//   是 noop 时什么都不生成、返回 0（模拟入口判断静默跳过），是 ver 时把一个生成文件里的 npm:zod@<版本> 换成 npm:zod@0.0.1（B2 安全审查 P1、P-S1）。
 // 不是测试文件，不起子进程。
 
 /** 令牌相关的环境变量名（演练不传给子进程，假工具只记有没有值） */
@@ -107,6 +110,7 @@ function global:npm.cmd {
   $global:LASTEXITCODE = 0 }
 # node 跑临时目录里的 wrangler\\bin\\wrangler.js 时转给同目录的假 wrangler.exe（真的子进程，日志里记它拿到了哪些令牌）；其余只记日志
 $global:driftCalls = 0
+$global:RealNode = (Get-Command node -CommandType Application | Select-Object -First 1).Source
 function global:node {
   $a = @($args)
   if ($a.Count -gt 0 -and ([string]$a[0]).EndsWith('\\wrangler\\bin\\wrangler.js')) {
@@ -116,6 +120,16 @@ function global:node {
     $global:LASTEXITCODE = $LASTEXITCODE
     return }
   L ('node' + $global:T + ($a -join ' '))
+  if ($a.Count -gt 0 -and ([string]$a[0]).EndsWith('copy_shared.mjs')) {
+    if ($env:LEMO_FAKE_COPY_SHARED -eq 'fail') { $global:LASTEXITCODE = 1; return }
+    if ($env:LEMO_FAKE_COPY_SHARED -eq 'noop') { $global:LASTEXITCODE = 0; return }
+    & $global:RealNode @a
+    $global:LASTEXITCODE = $LASTEXITCODE
+    $k = 'supabase\\functions\\_shared\\gen\\schema\\kinds.ts'
+    if ($global:LASTEXITCODE -eq 0 -and $env:LEMO_FAKE_COPY_SHARED -eq 'raw') { Copy-Item -LiteralPath 'shared\\schema\\kinds.ts' -Destination $k -Force }
+    if ($global:LASTEXITCODE -eq 0 -and $env:LEMO_FAKE_COPY_SHARED -eq 'bare') { [IO.File]::AppendAllText((Join-Path (Get-Location) $k), "import { AwsV4Signer } from 'aws4fetch';" + [char]10) }
+    if ($global:LASTEXITCODE -eq 0 -and $env:LEMO_FAKE_COPY_SHARED -eq 'ver') { $kp = Join-Path (Get-Location) $k; [IO.File]::WriteAllText($kp, ([IO.File]::ReadAllText($kp) -replace 'npm:zod@[0-9.]+', 'npm:zod@0.0.1')) }
+    return }
   # 部署前查 npm 漂移（build\\ci\\check_deno_drift.mjs）：LEMO_FAKE_DRIFT 是 1 时第一次就返回 1，是 2 时第二次（输令牌前的复查）才返回 1。
   # 计数变量在上面先设成 0：publish.ps1 开了 Set-StrictMode，读没设过的变量会报错
   if ($a.Count -gt 0 -and ([string]$a[0]).EndsWith('check_deno_drift.mjs')) {

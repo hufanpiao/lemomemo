@@ -117,6 +117,8 @@ $script:WranglerTree = $null
 $script:WranglerTreeLock = 'tools\release\wrangler-tree.lock'
 # 第 3 步之后 node_modules\aws4fetch 的哈希（functions\ 经 shared\objstore.ts 引入它，wrangler pages deploy 打包进 Functions）
 $script:Aws4Hash = $null
+# 第 6 步生成并核对 _shared\gen 以后的指纹（Assert-GenUnchanged，B2 安全审查 PUBLISH P1）
+$script:GenHash = $null
 # 第 3 步核对过的 dist\web 复制到临时目录的那一份；之后的核对和 pages deploy 都用它
 $script:WebDir = $null
 # lemo-ops 要的六个密钥（workers\lemo-ops\wrangler.toml 末尾的注释；tests/build/publish-run-deploy.test.ts 核对两边一致）
@@ -466,7 +468,7 @@ function Assert-StillClean($info) {
 # GIT_INDEX_FILE 只在这三次调用里设，结束还原成原值（主流程开头“窗口里有 GIT_INDEX_FILE 就停”在这之前，不受影响）；临时索引用完就删。
 # 临时索引的位置是 [IO.Path]::GetTempPath()：Windows 上按 TMP 优先，其次 TEMP，再其次 USERPROFILE（本脚本建的 lemo-nohooks-* 用的是 TEMP，两者一般相同）。
 # 有差异就停，只列文件名（最多 10 个）。第 1 步（status 之后）、第 5 步（Assert-StillClean）各跑一次；
-# 第 6 步部署服务器函数之前、部署 lemo-ops 之前再各跑一次（R-269 复审：每次约 0.4 秒，缩小“核对之后、部署之前被改”的窗口），$state 写明那时已经做了什么
+# 第 6 步跑 build\copy_shared.mjs 之前（B2 安全审查 P-S2）、部署服务器函数之前、部署 lemo-ops 之前再各跑一次（R-269 复审：每次约 0.4 秒，缩小“核对之后、部署之前被改”的窗口），$state 写明那时已经做了什么
 function Assert-ContentMatchesHead([string]$state = '没输入任何令牌') {
     $tmp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
     $repoFull = [IO.Path]::GetFullPath($RepoPath).TrimEnd('\', '/') + '\'
@@ -640,7 +642,7 @@ function Assert-NoRiskyGlobalGitConfig {
 # 被 git 忽略的文件 git status 看不见，却会跟着正式部署上线（B0 复查 M2）：
 # wrangler pages deploy 打包 functions\ 下的文件，supabase functions deploy 打包函数目录和它 import 到的文件。
 # 所以 functions\、supabase\functions\ 下有被忽略的文件就停。supabase\functions\_shared\gen\ 除外：
-# 第 6 步部署函数前会把它删掉、从 shared\ 重新复制。core.quotepath=false：中文文件名照原样列出。
+# 第 6 步改库前由 build\copy_shared.mjs 删掉重建（PUBLISH-shared-rewrite）。core.quotepath=false：中文文件名照原样列出。
 function Assert-NoIgnoredDeployFiles {
     $out = Invoke-Git @('-c', 'core.quotepath=false', 'ls-files', '--others', '--ignored', '--exclude-standard', '--', 'functions', 'supabase/functions')
     $bad = @($out -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' -and -not $_.StartsWith('supabase/functions/_shared/gen/') })
@@ -979,6 +981,47 @@ function Invoke-Build($info) {
     Assert-WebCopyUnchanged '还没输入任何令牌，没部署任何东西'
 }
 
+# PUBLISH-shared-rewrite（11-05）：服务器函数的 _shared\gen 必须由 build\copy_shared.mjs 生成（和 CI、deploy-preview 一样）——
+# 它把 shared 里的裸包名 zod、aws4fetch 改写成 npm:包@package.json 锁的版本。functions deploy --use-api（Supabase CLI 2.120.0）
+# 找导入映射只看 config.toml 的 import_map、函数自己目录里的 deno.json / deno.jsonc / import_map.json、supabase\functions\import_map.json，
+# 不读 supabase\functions\deno.json，也不上传它；原来 Copy-Item 原样复制 shared\*，account、account-purge、invite-admin 打包时
+# 解析不了 'zod'、'aws4fetch'（本机把这样复制的目录去掉 deno.json、deno.lock 跑 deno check --no-config，报 Import "zod" not a dependency）。
+# 这里核对生成结果：目录在、每个 .ts 都带 copy_shared 的文件头、没有一处裸引 zod 或 aws4fetch；
+# 引的每个 npm:包@版本 都必须是 supabase\functions\deno.json 的 imports 里的某一项，一字不差（B2 安全审查建议 P-S1：版本漂移发布脚本自己拦，不靠 CI）。
+# 只管“像不像 copy_shared 生成的”；“是不是这一次生成的、之后有没有被改”由生成前删 gen、Assert-GenUnchanged 的指纹管（P1）。$state 是停下时各处的状态。
+function Assert-SharedRewritten([string]$state) {
+    $gen = Join-Path $RepoPath 'supabase\functions\_shared\gen'
+    $files = @(if (Test-Path -LiteralPath $gen -PathType Container) { Get-ChildItem -LiteralPath $gen -Recurse -File -Filter '*.ts' })
+    if ($files.Count -eq 0) { Fail "supabase\functions\_shared\gen 里没有生成的文件（build\copy_shared.mjs 没跑成）。$state" }
+    $denoJson = Join-Path $RepoPath 'supabase\functions\deno.json'
+    $imports = (Get-Content -LiteralPath $denoJson -Raw -Encoding UTF8 | ConvertFrom-Json).imports
+    $allowed = @(if ($null -ne $imports) { $imports.PSObject.Properties | ForEach-Object { [string]$_.Value } | Where-Object { $_.StartsWith('npm:') } })
+    if ($allowed.Count -eq 0) { Fail "supabase\functions\deno.json 的 imports 里没有一项 npm:包@版本，核对不了 _shared\gen 引的版本。$state" }
+    $bad = New-Object System.Collections.Generic.List[string]
+    foreach ($f in $files) {
+        $text = [IO.File]::ReadAllText($f.FullName, (New-Object System.Text.UTF8Encoding $false))
+        $rel = $f.FullName.Substring($gen.Length + 1)
+        if (-not $text.StartsWith('// 生成文件：由 build/copy_shared.mjs')) { $bad.Add("$rel（不是 copy_shared 生成的）"); continue }
+        if ($text -match '(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)[''"](zod|aws4fetch)[''"]') { $bad.Add("$rel（裸引 $($Matches[2])）"); continue }
+        foreach ($m in [regex]::Matches($text, '(\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)[''"](npm:[^''"]+)[''"]')) {
+            $spec = $m.Groups[2].Value
+            if ($allowed -cnotcontains $spec) { $bad.Add("$rel（引的 $spec 不是 supabase\functions\deno.json 锁的版本）") }
+        }
+    }
+    if ($bad.Count -gt 0) { Fail "supabase\functions\_shared\gen 不是 build\copy_shared.mjs 按锁定版本改写过的：$($bad -join '、')。这样部署解析不了裸包名，或者部署的版本和锁的不一样。$state" }
+    Ok "_shared\gen 由 build\copy_shared.mjs 生成（$($files.Count) 个文件，裸包名都已改写成 npm:包@版本）"
+}
+
+# B2 安全审查 PUBLISH P1：第 6 步生成并核对 _shared\gen 以后记下的指纹（算法同 Get-DistHash），部署服务器函数之前再比一次。
+# gen 被 git 忽略，Assert-ContentMatchesHead 管不到它；中间要等人核对迁移、输入“确认推送”，这段时间里文件头不动、只改内容，
+# Assert-SharedRewritten 看不出来，靠这里拦
+function Assert-GenUnchanged([string]$state) {
+    if ($null -eq $script:GenHash) { Fail "没有第 6 步生成 _shared\gen 以后记下的指纹。$state" }
+    $now = Get-DistHash (Join-Path $RepoPath 'supabase\functions\_shared\gen')
+    if ($now.Count -ne $script:GenHash.Count -or $now.Total -cne $script:GenHash.Total) { Fail "supabase\functions\_shared\gen 和生成后记下的指纹不一样了（生成以后被改过）。$state" }
+    Ok '_shared\gen 和生成后记下的指纹一致'
+}
+
 # ---------------------------------------------------------------- 4. 部署工具
 function Install-Tools {
     Step '4. 部署工具装到临时目录（核对哈希）'
@@ -1147,6 +1190,19 @@ function Invoke-Deploy($info) {
         # 上次留下的 supabase link 本地文件（项目 ref、连接池地址等）先删掉，不让它影响这次（finally 里还会再删一次）
         $linkTemp = Join-Path $RepoPath 'supabase\.temp'
         if (Test-Path -LiteralPath $linkTemp) { Remove-Item -LiteralPath $linkTemp -Recurse -Force }
+        # PUBLISH-shared-rewrite：改库之前先生成服务器函数用的 _shared\gen（zod、aws4fetch 改写成 npm:包@版本）；生成或核对不过就停，什么都还没动。
+        # 先删掉旧的 gen（B2 安全审查 P1）：copy_shared 万一没真正生成（退出码 0 却一个文件都没写），下面的核对就因“没有生成的文件”停下，
+        # 不会拿开发机或上次发布留下的旧 gen 配新函数部署出去
+        # B2 安全审查建议 P-S2：要跑的是仓库里的 build\copy_shared.mjs、shared\、package.json，第 5 步核对以后还等人输了令牌、Account ID、项目名，
+        # 跑之前再逐个比一次内容（约 0.4 秒），不执行被改过的脚本
+        Assert-ContentMatchesHead '还没改库、没部署任何代码'
+        $genDir = Join-Path $RepoPath 'supabase\functions\_shared\gen'
+        if (Test-Path -LiteralPath $genDir) { Remove-Item -LiteralPath $genDir -Recurse -Force }
+        if (Test-Path -LiteralPath $genDir) { Fail "删不掉旧的 supabase\functions\_shared\gen（被别的程序占着？）。还没改库、没部署任何代码" }
+        & node 'build\copy_shared.mjs'
+        if ($LASTEXITCODE -ne 0) { Fail "node build\copy_shared.mjs 退出码 $LASTEXITCODE（生成服务器函数用的 _shared\gen 失败，原因见上面）。还没改库、没部署任何代码" }
+        Assert-SharedRewritten '还没改库、没部署任何代码'
+        $script:GenHash = Get-DistHash $genDir
         if ($script:DoWeb) {
             Invoke-WithSecrets $sbDb { Run $script:SupabaseExe @('link', '--project-ref', $ref) }
             Say ''
@@ -1159,10 +1215,9 @@ function Invoke-Deploy($info) {
             Say '  只部署服务器函数（-Only functions）：不 db push（迁移只增不改，旧函数能用新表结构）'
         }
 
-        $shared = Join-Path $RepoPath 'supabase\functions\_shared\gen'
-        if (Test-Path -LiteralPath $shared) { Remove-Item -LiteralPath $shared -Recurse -Force }
-        New-Item -ItemType Directory -Path $shared | Out-Null
-        Copy-Item -Path (Join-Path $RepoPath 'shared\*') -Destination $shared -Recurse
+        # 部署函数前再核一次 _shared\gen（上面生成以后，中间等人确认推送的这段时间可能被改）：先比指纹（P1），再按生成规则核一遍
+        Assert-GenUnchanged "$(if ($script:DoWeb) { '数据库迁移已推，' })服务器函数、lemo-ops、网页都还是旧版，没部署任何代码。这种状态能用（迁移只增不改），查清原因后用同一个 tag 原样重跑"
+        Assert-SharedRewritten "$(if ($script:DoWeb) { '数据库迁移已推，' })服务器函数、lemo-ops、网页都还是旧版，没部署任何代码。这种状态能用（迁移只增不改），查清原因后用同一个 tag 原样重跑"
         # R-269 复审：部署服务器函数之前再逐个比一次内容（迁移和函数没有指纹核对）
         Assert-ContentMatchesHead "$(if ($script:DoWeb) { '数据库迁移已推，' })服务器函数、lemo-ops、网页都还是旧版，没部署任何代码。这种状态能用（迁移只增不改），查清原因后用同一个 tag 原样重跑"
         # 部署函数不连数据库，只给 Supabase 令牌

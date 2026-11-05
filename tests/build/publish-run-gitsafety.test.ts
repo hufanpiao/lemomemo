@@ -109,12 +109,12 @@ describe.skipIf(!PS)('publish.ps1 签名边界、第 5 步替换对象、第 6 �
     expect(main.slice(main.indexOf('} finally {'))).toMatch(/'GIT_CONFIG_KEY_2', 'GIT_CONFIG_VALUE_2'/u);
   });
 
-  it('R266-sugg ③ / R-269 复审 完整发布：pages deploy 带 --commit-message <tag>@<提交前 12 位>；内容逐个比了 4 次（第 1、5 步，函数、lemo-ops 之前）', async () => {
+  it('R266-sugg ③ / R-269 复审 完整发布：pages deploy 带 --commit-message <tag>@<提交前 12 位>；内容逐个比了 5 次（第 1、5 步，copy_shared、函数、lemo-ops 之前）', async () => {
     const r = await runScript('-Ops', FULL);
     expect(r.code, r.out).toBe(0);
     const pages = r.calls.find((c) => c.startsWith('wrangler\tpages deploy'));
     expect(pages, r.calls.join('\n')).toContain(`--commit-message v${ctx.ver}@${git(['rev-parse', 'HEAD']).slice(0, 12)} --commit-dirty=true`);
-    expect(count(r.out, CONTENT_OK)).toBe(4);
+    expect(count(r.out, CONTENT_OK)).toBe(5);
     expect(r.envLeft).toBe('');
   }, 180_000);
 
@@ -157,16 +157,20 @@ describe.skipIf(!PS)('publish.ps1 签名边界、第 5 步替换对象、第 6 �
     }, 180_000);
   }
 
-  it('R-269 复审 静态核对：函数、lemo-ops 部署之前各调一次，注释写明临时索引按 TMP 优先', () => {
+  it('R-269 复审 / B2 安全审查 P-S2 静态核对：跑 copy_shared 之前、函数、lemo-ops 部署之前各调一次，注释写明临时索引按 TMP 优先', () => {
     const ps = psText();
     const deploy = body(ps, 'Invoke-Deploy');
     const fn = deploy.indexOf("@('functions', 'deploy')");
     const ops = deploy.indexOf("Run-Wrangler @('deploy', '--config'");
     const checks = [...deploy.matchAll(/\n\s*Assert-ContentMatchesHead /gu)].map((m) => m.index);
-    expect(checks).toHaveLength(2);
-    expect(checks[0]).toBeLessThan(fn);
-    expect(checks[1]).toBeGreaterThan(fn);
-    expect(checks[1]).toBeLessThan(ops);
+    const cs = deploy.indexOf("& node 'build\\copy_shared.mjs'");
+    expect(checks).toHaveLength(3);
+    expect(cs).toBeGreaterThan(0);
+    expect(checks[0]).toBeLessThan(cs);
+    expect(checks[1]).toBeGreaterThan(cs);
+    expect(checks[1]).toBeLessThan(fn);
+    expect(checks[2]).toBeGreaterThan(fn);
+    expect(checks[2]).toBeLessThan(ops);
     expect(ps).toContain('Windows 上按 TMP 优先，其次 TEMP');
   });
 

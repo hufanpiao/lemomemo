@@ -103,10 +103,23 @@ describe('remind-queue-2conn.mjs：“不等锁”按服务器上的证据判', 
   it('持锁方提交之前就结束、服务器上耗时短：不等锁（墙钟多长都不管）', () => {
     expect(noWaitVerdict({ startAt: C - 3010, serverMs: 6, endAt: C - 3000, holderCommitAt: C }).ok).toBe(true);
   });
-  it('持锁方提交以后才结束：等了它的锁（哪怕只晚 1 毫秒）', () => {
-    const v = noWaitVerdict({ startAt: C - 900, serverMs: 901, endAt: C + 1, holderCommitAt: C });
-    expect(v).toMatchObject({ ok: false, late: false });
-    expect(v.why).toMatch(/提交以后才结束/);
+  it('持锁方提交以后才结束、采样看到在等锁：判“等锁”（哪怕只晚 1 毫秒）', () => {
+    const v = noWaitVerdict({ startAt: C - 900, serverMs: 901, endAt: C + 1, holderCommitAt: C, lockSeen: true });
+    expect(v).toMatchObject({ ok: false, late: false, kind: '等锁' });
+    expect(v.why).toMatch(/^等锁：/);
+    expect(v.why).toMatch(/提交以后才结束（晚 1 毫秒）/);
+  });
+  it('3516b93 复盘：服务器上 9833 毫秒、持锁方提交后 3001 毫秒才结束，但采样一直是 -/-：判“慢”，不写成等了它的锁', () => {
+    const v = noWaitVerdict({ startAt: C - 6832, serverMs: 9833, endAt: C + 3001, holderCommitAt: C, lockSeen: false });
+    expect(v).toMatchObject({ ok: false, late: false, kind: '慢' });
+    expect(v.why).toMatch(/^慢：服务器上 9833 毫秒，在持锁方提交以后才结束（晚 3001 毫秒）；执行中每次采样都没在等锁（不是锁的问题/);
+    expect(v.why).not.toMatch(/等了它的锁|^等锁/);
+  });
+  it('慢但没采到样（不可能，但兜住）：判“慢”，写明分不清是不是等锁；慢也不算通过', () => {
+    const v = noWaitVerdict({ startAt: C - 3000, serverMs: 1500, endAt: C - 1500, holderCommitAt: C });
+    expect(v).toMatchObject({ ok: false, kind: '慢' });
+    expect(v.why).toMatch(/分不清是不是等锁/);
+    expect(noWaitVerdict({ startAt: C - 3010, serverMs: 6, endAt: C - 3000, holderCommitAt: C, lockSeen: false })).toMatchObject({ ok: true, kind: '通过' });
   });
   it('服务器上耗时 1 秒以上：不算不等锁（兜住“持锁方提交时刻量晚了”的情况）', () => {
     expect(noWaitVerdict({ startAt: C - 3431, serverMs: 3430, endAt: C - 1, holderCommitAt: C }).ok).toBe(false);
@@ -116,10 +129,12 @@ describe('remind-queue-2conn.mjs：“不等锁”按服务器上的证据判', 
     expect(noWaitVerdict({ startAt: C - 1, serverMs: 1, endAt: C, holderCommitAt: Number.NaN }).ok).toBe(false);
     expect(noWaitVerdict({ startAt: Number.NaN, serverMs: 1, endAt: C, holderCommitAt: C + 1 }).ok).toBe(false);
   });
-  it('R5-1 ① 去掉 skip locked 的回归：等锁的语句在持锁方 commit 前取的时刻之后才结束，哪怕只晚 1 毫秒也判等锁', () => {
+  it('R5-1 ① 去掉 skip locked 的回归：等锁的语句在持锁方 commit 前取的时刻之后才结束，哪怕只晚 1 毫秒也不通过；采样看到等锁就判“等锁”', () => {
     // 持锁方 sleep 完在 C 取时刻、随后 commit 放锁；等锁的语句放锁后几毫秒结束，服务器上耗时只有 800 毫秒（语句开始得晚）
-    const v = noWaitVerdict({ startAt: C - 800, serverMs: 801, endAt: C + 1, holderCommitAt: C });
-    expect(v).toMatchObject({ ok: false, late: false });
+    for (const lockSeen of [true, false, undefined]) {
+      expect(noWaitVerdict({ startAt: C - 800, serverMs: 801, endAt: C + 1, holderCommitAt: C, lockSeen })).toMatchObject({ ok: false, late: false });
+    }
+    expect(noWaitVerdict({ startAt: C - 800, serverMs: 801, endAt: C + 1, holderCommitAt: C, lockSeen: true }).kind).toBe('等锁');
   });
   it('R5-1 ② 另一边在持锁方提交之后才开始（CI 起 psql 慢）：单独报“起晚了，这一轮没测到”，不算通过、也不说成等锁', () => {
     for (const startAt of [C, C + 1, C + 5000]) {
@@ -128,6 +143,39 @@ describe('remind-queue-2conn.mjs：“不等锁”按服务器上的证据判', 
       expect(v.why).toMatch(/起晚了/);
       expect(v.why).not.toMatch(/等了它的锁/);
     }
+  });
+  it('R6-1 语句撞到 lock_timeout：判“等锁”，写“等锁：撞到 lock_timeout”，带上 psql 的 ERROR 行（不再是“没拿到服务器时刻”）', () => {
+    const err = 'ERROR:  canceling statement due to lock timeout\nCONTEXT:  SQL statement "delete from private.remind_queue q"\nPL/pgSQL function private.remind_queue_pop(integer,integer,boolean) line 9';
+    const v = noWaitVerdict({ err, startAt: Number.NaN, serverMs: Number.NaN, endAt: Number.NaN, holderCommitAt: C });
+    expect(v).toMatchObject({ ok: false, late: false, kind: '等锁' });
+    expect(v.why).toBe('等锁：撞到 lock_timeout（ERROR:  canceling statement due to lock timeout）');
+    // auto_explain 的 NOTICE 在 ERROR 前面时，取的仍是 ERROR 那一行
+    const withNotice = noWaitVerdict({ err: 'NOTICE:  duration: 5001.2 ms  plan:\nQuery Text: delete from private.remind_queue q\n' + err, startAt: Number.NaN, serverMs: Number.NaN, endAt: Number.NaN, holderCommitAt: C });
+    expect(withNotice.why).toBe('等锁：撞到 lock_timeout（ERROR:  canceling statement due to lock timeout）');
+    expect(v.why).not.toMatch(/没拿到服务器时刻/);
+  });
+  it('R6-1 别的语句报错：写“语句报错：<第一行>”（跳过空行、去掉 CR）；时刻都正常也不算通过', () => {
+    const v = noWaitVerdict({ err: '\r\nERROR:  function private.remind_queue_pop(integer, integer, boolean) does not exist\r\nHINT:  No function matches', startAt: C - 10, serverMs: 3, endAt: C - 7, holderCommitAt: C });
+    expect(v).toMatchObject({ ok: false, late: false });
+    expect(v.why).toBe('语句报错：ERROR:  function private.remind_queue_pop(integer, integer, boolean) does not exist');
+    expect(noWaitVerdict({ err: 'psql 退出码 2', startAt: C - 10, serverMs: 3, endAt: C - 7, holderCommitAt: C }).why).toBe('语句报错：psql 退出码 2');
+  });
+  it('R6-1 没有报错（空串、只有空白）时照旧按时刻判；脚本两处判定都把 psql 报错传进去', () => {
+    expect(noWaitVerdict({ err: '', startAt: C - 10, serverMs: 3, endAt: C - 7, holderCommitAt: C }).ok).toBe(true);
+    expect(noWaitVerdict({ err: ' \n ', startAt: C - 10, serverMs: 3, endAt: C - 7, holderCommitAt: C }).ok).toBe(true);
+    expect(noWaitVerdict({ err: '', startAt: C - 10, serverMs: Number.NaN, endAt: C - 7, holderCommitAt: C }).why).toBe('没拿到服务器时刻');
+    const src = readFileSync(SCRIPT, 'utf8');
+    expect(src.match(/noWaitVerdict\(\{ err: r\.code === 0 \? '' : r\.err \|\| `psql 退出码 \$\{r\.code\}`,/g)).toHaveLength(2);
+  });
+  it('3516b93 复盘：脚本不再凭 1.5 秒时的一眼判断，执行期间每 250 毫秒采样，两处判定都把 lockSeen 传进去；两边出队都带 auto_explain', () => {
+    const src = readFileSync(SCRIPT, 'utf8');
+    expect(src).not.toMatch(/whyWaiting|1\.5 秒时：/u);
+    expect(src).toMatch(/async function sampleWaits\(tag, isDone\)[\s\S]*?await sleep\(250\)/u);
+    expect(src.match(/lockSeen: t\.waits\.lockSeen \}\);/g)).toHaveLength(2);
+    expect(src).toContain("const EXPLAIN_SLOW = 'set auto_explain.log_min_duration = 1000; set auto_explain.log_nested_statements = on; set auto_explain.log_analyze = on; set auto_explain.log_buffers = on; set auto_explain.log_level = notice;';");
+    expect(src).toMatch(/const first = psql\(`\$\{EXPLAIN_SLOW\} begin; with h as materialized/u);
+    expect(src).toMatch(/timed\('2conn-pop', `\$\{EXPLAIN_SLOW\} \/\* 2conn-pop \*\//u);
+    expect(src).toMatch(/set auto_explain\.log_min_duration = -1; select pg_sleep\(7\) \/\* 2conn-holder \*\//u);
   });
   it('脚本不再按墙钟判（r.ms 只出现在打印里）；持锁方进了 pg_sleep 才让另一边动手', () => {
     const src = readFileSync(SCRIPT, 'utf8');

@@ -4,9 +4,9 @@
 // • 'aws4fetch'（shared/objstore.ts 的 SigV4，架构 0.32、8.6）同样改写成 'npm:aws4fetch@<版本>'，版本取 package.json 锁的那一个
 // • 相对 import 必须带 .ts 后缀（Deno 要求），缺了直接失败
 // 用法：node build/copy_shared.mjs [输出目录]
-import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 const ROOT = join(import.meta.dirname, '..');
 const HEADER = '// 生成文件：由 build/copy_shared.mjs 从 /shared 复制，不要手改\n';
@@ -77,7 +77,20 @@ export function copyShared(outDir = join(ROOT, 'supabase', 'functions', '_shared
   return outputs.map((o) => o.rel);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+// 直接运行时才生成。比的是两边的真实路径（同两连接脚本复审五 R5-2）：经目录联接、符号链接、subst 盘符调用时，
+// import.meta.url（node 已解析成真实路径）和 argv[1] 字面上对不上，原来逐字比较会静默不生成、退出码 0，
+// 发布脚本就会沿用旧的 _shared\gen（B2 安全审查 PUBLISH-shared-rewrite P1）。realpathSync.native 连 subst 盘符也解析
+function isMain() {
+  const arg = process.argv[1];
+  if (!arg) return false;
+  try {
+    return realpathSync.native(fileURLToPath(import.meta.url)) === realpathSync.native(arg);
+  } catch {
+    return false;
+  }
+}
+
+if (isMain()) {
   const files = copyShared(process.argv[2]);
   console.log(`copy_shared：${files.length} 个文件 → ${process.argv[2] ?? 'supabase/functions/_shared/gen/'}`);
 }

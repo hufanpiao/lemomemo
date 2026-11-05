@@ -55,6 +55,8 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/publish-run-deploy.test.ts', // PowerShell、git clone（发布脚本演练，经 publish-run-harness.ts）
   'tests/build/publish-run-gitsafety.test.ts', // PowerShell、git clone（发布脚本演练：hookspath、签名、替换对象、逐个比内容，经 publish-run-harness.ts）
   'tests/build/publish-run-worktree.test.ts', // PowerShell、git clone（发布脚本演练：git 各级配置与属性来源，经 publish-run-harness.ts）
+  'tests/build/copy-shared.test.ts', // node（经目录联接调用 build\copy_shared.mjs，入口比真实路径，B2 安全审查 PUBLISH P1）
+  'tests/build/publish-run-shared.test.ts', // PowerShell、git clone、node（发布脚本演练：部署函数前用 copy_shared 生成 _shared\gen，经 publish-run-harness.ts）
   'tests/build/remind-queue-2conn-guard.test.ts', // node tools/db/remind-queue-2conn.mjs --dry（容器名护栏，不连库）
   'tests/build/set-cron-secret.test.ts', // PowerShell（有 docker 时还起容器）
   'tests/build/set-signup-secrets.test.ts', // PowerShell

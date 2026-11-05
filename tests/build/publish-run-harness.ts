@@ -171,6 +171,9 @@ export type RunOpts = {
   treeExtra?: boolean;
   /** git var 这个变量时当作不认识（模拟 2.42 以前的 git：退出码 129） */
   gitVarFail?: string;
+  /** 假 node 跑 build\copy_shared.mjs 时：fail 不跑、返回 1；raw 生成后换一个文件成原样复制的；bare 在一个生成文件里加裸引 aws4fetch（PUBLISH-shared-rewrite）；
+   *  noop 不生成、返回 0；ver 把一个生成文件里 zod 的版本换掉（B2 安全审查 P1、P-S1） */
+  copyShared?: 'fail' | 'raw' | 'bare' | 'noop' | 'ver';
   /** -Tag 的值，写成 PowerShell 表达式（默认 'v<VERSION>'；末尾带换行之类的写法用 ("v4.0.0" + [char]10)） */
   tagPs?: string;
 };
@@ -199,6 +202,7 @@ $env:LEMO_FAKE_TAMPER = ${q(o.tamper ?? '')}
 $env:LEMO_FAKE_SECRETS = ${q(secretListJson(o.secrets ?? OPS_SECRETS))}
 $env:LEMO_FAKE_TREE_EXTRA = ${q(o.treeExtra ? '1' : '')}
 $env:LEMO_FAKE_GITVAR_FAIL = ${q(o.gitVarFail ?? '')}
+$env:LEMO_FAKE_COPY_SHARED = ${q(o.copyShared ?? '')}
 ${Object.entries(env).map(([k, v]) => `[Environment]::SetEnvironmentVariable(${q(k)}, ${q(v)}, 'Process')`).join('\n')}
 ${fakeFunctions({ fakeTgz, fakeExe, fakeJs, ver, inputs })}
 & ${q(SCRIPT)} -Tag ${o.tagPs ?? q('v' + ver)} -RepoPath ${q(repo)} -BackupRoot ${q(backupRoot)} ${extra}
