@@ -14,13 +14,10 @@
   font-size: var(--fs-13);
 }
 
-/* 设置入口（PLACEHOLDER-settings-link）：字色字号同设置页的返回链接（SettingsPage.module.css .back），触控区至少 44px */
-.settings {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--hit);
-  margin-top: 16px;
-  color: var(--text);
+/* 给用户看的说明（随手记“即将推出”）：正文字体、次要色，居中放在页面中间偏上，以后换成空状态插画（R-93 扩展点②） */
+.note {
+  margin: 30vh 0 0;
+  color: var(--text-2);
   font-size: var(--fs-15);
-  text-decoration: none;
+  text-align: center;
 }

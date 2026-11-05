@@ -16,6 +16,26 @@ html {
 :root {
   --inset-top: env(safe-area-inset-top);
   --safe-top: var(--inset-top);
+
+  /* 底栏（B2 FA-7）占的高度：渐进模糊带 126px 盖住底栏和“＋”；有底栏的三页底部留白用 --tabbar-pad（再加安全区和 16px 余量），
+     最后一行能滚到模糊带上面、不被糊掉（设计动效评审 L6） */
+  --tabbar-h: 126px;
+  --tabbar-pad: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px);
+
+  /* 浮条（撤销条等）统一的底部位置（K8 方案复审，主持人 11-05 定由前端 B 定义）：底栏上沿往上一点（安全区 + 118px）；
+     键盘弹着时 --kb 是键盘高度，浮条贴在键盘上沿，取两者大的。--undo-h 是撤销条高度，叠放时往上让。
+     6 处浮条改用这两个变量由前端 A 做 K8 时一起改；宽屏侧栏（≥ 900px）没有底栏，在侧栏那段媒体查询里覆盖 --dock-bottom */
+  --dock-bottom: max(calc(env(safe-area-inset-bottom) + 118px), var(--kb, 0px));
+  --undo-h: 56px;
+}
+
+/* 电脑版侧栏（D5，断点和 GlassBar.module.css 侧栏那段一样是 (width >= 900px)）：底部没有底栏，
+   有底栏的页底部留白回到安全区 + 16px；浮条贴底：安全区 + 24px（普通间距，和侧栏离窗口边 16px 拉开一点），键盘弹着照旧取键盘高度 */
+@media (width >= 900px) {
+  :root {
+    --tabbar-pad: calc(env(safe-area-inset-bottom) + 16px);
+    --dock-bottom: max(calc(env(safe-area-inset-bottom) + 24px), var(--kb, 0px));
+  }
 }
 
 :root[data-top-banner] {
@@ -91,6 +111,28 @@ html.scroll-locked body {
 ::view-transition-new(page-head) {
   animation-duration: var(--dur-sheet);
   animation-timing-function: var(--ease-standard);
+}
+
+/* 切页动画期间点按不被吞（接手清单 UI4-B1-C2）：View Transition 的伪元素层盖在页面上面，默认会接住点按；
+   让它不接，点按落到底下已经换好的新页面（底栏切页上线前要有，B2 FA-7） */
+::view-transition {
+  pointer-events: none;
+}
+
+/* 底栏和“＋”（view-transition-name: tabbar、tabbar-add，B2 FA-7）：切页时不跟着整页淡入淡出、不滑位置。
+   新旧两份都不放动画、都画着，新的叠在旧的上面（液滴自己的滑动在页面里做，新的那份是活的）。
+   不能把旧的那份藏掉、只靠新的那份显示：webkit 过渡期间不画新的那份，整条底栏和“＋”会消失到过渡结束
+   （设计复审一 R1；tests/e2e/b2-tabbar.spec.ts 在过渡中途截图比像素） */
+::view-transition-group(tabbar),
+::view-transition-group(tabbar-add),
+::view-transition-old(tabbar),
+::view-transition-old(tabbar-add),
+::view-transition-new(tabbar),
+::view-transition-new(tabbar-add) {
+  animation: none;
+
+  /* 画着的旧那份正好盖在真底栏上：webkit 过渡期间点它会被这层接住（不按 ::view-transition 的 pointer-events 走），明写不接 */
+  pointer-events: none;
 }
 
 /* 具名共享元素的组（列表那一条 ↔ 详情标题这类，位置和大小的移动）接令牌（接手清单 M4 剩余，第一个具名共享元素上线前）：

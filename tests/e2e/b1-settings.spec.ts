@@ -38,7 +38,8 @@ test.describe('设置页骨架', () => {
     await expect(main.locator('[data-section-slot="reminders"]').getByTestId('settings-remind-entry')).toBeVisible();
     const groups = (await main.getByRole('heading', { level: 2 }).allTextContents()).map((s) => s.trim());
     // B2 FA-3（R-320）在界面语言和数据之间加了“日历”组（节假日三选一的入口）；REMIND-wiring（线框 s13）在日历后面加了“提醒与通知”
-    expect(groups.slice(0, 5)).toEqual(['账号', '界面语言', '日历', '提醒与通知', '数据']);
+    // B2 FA-7（TILT-b2）在界面语言后面加了“皮肤”组（倾斜高光开关）
+    expect(groups.slice(0, 6)).toEqual(['账号', '界面语言', '皮肤', '日历', '提醒与通知', '数据']);
 
     const account = main.locator('section[data-section="account"]');
     const data = main.locator('section[data-section="data"]');
@@ -159,11 +160,9 @@ test.describe('设置页骨架', () => {
   test('今天 → 设置 → 注销账号：后退一次回设置、再后退回今天；注销页“‹ 返回”同样回设置、不多压一条历史', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.locator('main[data-feature="today"]')).toBeVisible();
-    // B2 FA-2 起今天页是真页面，不再有占位页右上角那个“设置”链接（底栏还没接）：改成和点 <a href="#/settings"> 等价的
-    // 改 hash（同样新压一条历史、走 hashchange），历史记录的断言不变。底栏接上后改回点底栏的“设置”
-    await page.evaluate(() => {
-      location.hash = '#/settings';
-    });
+    // 从界面点进去（接手清单 NAV-today-no-settings；负责人 11-05 ①：设置入口是今天页右上角头像，B2 FA-7）；
+    // 宽屏（chromium 项目 1280 宽）右上角头像藏掉，入口在电脑版侧栏最下面（D5），两种都认看得见的那个
+    await page.locator('[data-testid="today-settings"]:visible, [data-testid="tabbar-settings"]:visible').first().click();
     await expect(settingsMain(page)).toBeVisible();
     await expect(page).toHaveURL(/#\/settings$/);
     await page.getByTestId('settings-delete-entry').click();

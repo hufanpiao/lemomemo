@@ -15,6 +15,8 @@ export const dur = {
   drop: 0.55,
   /** --dur-glass 0.3s：液态玻璃深浅切换 */
   glass: 0.3,
+  /** --dur-drop-press 0.25s：按住当前选中的页签时液滴放大（FA-7 设计动效评审 D3） */
+  dropPress: 0.25,
   /** --dur-splash-* ：启动画面（src/styles/splash.css，R-254 方向 B）专用，别处不用 */
   splashStill: 0.8,
   splashBar2: 1,
@@ -41,7 +43,10 @@ export const ease = {
   drop: [0.34, 1.45, 0.5, 1],
   /** --ease-gel：液滴拉伸 */
   gel: [0.3, 0.9, 0.4, 1],
-  /** --ease-press：按下 */
+  /**
+   * --ease-press：按住液滴鼓起（玻璃皮肤，R-143）。回冲 1.5，**不要用于按下那一段**：Pressable 按下用 ease.out、松开用 ease.spring（UI4-B1-C3），
+   * 用它会缩过 PRESS_SCALE 再弹回。现在全站没人用；令牌表要留（tokens.json 同一句说明，11-05 主持人定保留并注明）
+   */
   press: [0.3, 1.5, 0.5, 1],
   /** --ease-splash-breathe：启动画面竖条起伏（等于 ease-in-out），别处不用 */
   splashBreathe: [0.42, 0, 0.58, 1],
@@ -66,6 +71,7 @@ export const cssVarOf = {
     sheet: '--dur-sheet',
     drop: '--dur-drop',
     glass: '--dur-glass',
+    dropPress: '--dur-drop-press',
     splashStill: '--dur-splash-still',
     splashBar2: '--dur-splash-bar2',
     splashBar3: '--dur-splash-bar3',
@@ -98,6 +104,7 @@ export const LIST_LAYOUT_LAG = dur.ui * LIST_LAYOUT_LAG_RATIO;
 
 /** 现成的 Motion transition（组件里直接用这些，不自己拼） */
 export const tr = {
+  // 同上：只给“按住液滴鼓起”留着，不要拿来做按下回弹（11-05）
   press: { duration: dur.press, ease: ease.press },
   ui: { duration: dur.ui, ease: ease.out },
   sheet: { duration: dur.sheet, ease: ease.drawer },

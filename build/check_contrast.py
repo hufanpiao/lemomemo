@@ -31,7 +31,13 @@
 渐变里认不出的方向或色标、括号不配对。var() 照 CSS 的规矩：变量存在时缺省值整段不看，不存在时才解缺省值。
 皮肤文件里带 data-skin 的块写法不对、某个文件一块都没有、某套皮肤缺浅色或深色，也报 2（代码审查 S3）。
 
-退出码：0 全部达标；1 有不达标的项；2 清单或皮肤文件有问题（变量不存在、颜色解析不了、清单格式不对）。
+负责人已接受的例外（清单 accepted，B2 FA-7 第 4 项，负责人 11-05 定）：每条写皮肤 theme、项 id、当时的精确值 floor（4 位小数，向下截断）、
+decided（谁哪天定的）、reason（为什么接受）。名单里的项不达标、精确值截断到 4 位正好等于 floor 时不算失败，单独列成“已接受的例外”；
+floor 和现在的值对不上（颜色变了，变好变坏都算；代码复审 M5）、名单里的项已经达标了、或者皮肤、项不存在、字段缺了，报 2
+（名单要跟着改，重新请负责人定；不留过时的例外，也不能写个宽松的 floor 糊过去）。
+名单之外新出现的不达标照样报 1。
+
+退出码：0 全部达标（或只剩已接受的例外）；1 有不达标的项；2 清单或皮肤文件有问题（变量不存在、颜色解析不了、清单格式不对）。
 脚本自己出了异常也归 2，并报出是哪一套哪一项——保证退出码 1 一定是真的不达标。
 本脚本只读不写，不改任何皮肤文件。
 """
@@ -447,6 +453,24 @@ def load_pairs(path: pathlib.Path) -> dict:
         th = p.get('themes')
         if th is not None and (not isinstance(th, list) or not th or not all(isinstance(x, str) for x in th)):
             raise ConfigError(f'{p["id"]}：themes 要是非空的字符串数组，如 ["simple-light"]')
+    acc = data.get('accepted', [])
+    if not isinstance(acc, list):
+        raise ConfigError('accepted 要是数组')
+    seen: set[tuple[str, str]] = set()
+    for i, a in enumerate(acc, 1):
+        if not isinstance(a, dict):
+            raise ConfigError(f'accepted 第 {i} 条不是对象')
+        for key in ('theme', 'id', 'decided', 'reason'):
+            if not isinstance(a.get(key), str) or not a[key].strip():
+                raise ConfigError(f'accepted 第 {i} 条缺少 {key}（要写非空的文字）')
+        if not isinstance(a.get('floor'), (int, float)) or isinstance(a.get('floor'), bool):
+            raise ConfigError(f'accepted 第 {i} 条缺少 floor（接受时的精确值）')
+        if a['id'] not in ids:
+            raise ConfigError(f'accepted 第 {i} 条：清单里没有 {a["id"]}')
+        k = (a['theme'], a['id'])
+        if k in seen:
+            raise ConfigError(f'accepted 重复：{a["theme"]} {a["id"]}')
+        seen.add(k)
     return data
 
 
@@ -467,6 +491,10 @@ def worst_of(p: dict, vars_: dict[str, str], theme: str, conf: dict) -> tuple[fl
 
 def check(themes: dict[str, dict[str, str]], data: dict) -> list[dict]:
     # themes 里的皮肤名要真的存在：写错（如 simple-lite）不能悄悄跳过、等于这一项哪儿都不查（代码复审 R3）
+    accepted = {(a['theme'], a['id']): a for a in data.get('accepted', [])}
+    for theme, _ in accepted:
+        if theme not in themes:
+            raise ConfigError(f'accepted 里的皮肤不存在：{theme}（现有：{"、".join(sorted(themes))}）')
     for p in data['pairs']:
         unknown = sorted(set(p.get('themes', [])) - set(themes))
         if unknown:
@@ -499,7 +527,25 @@ def check(themes: dict[str, dict[str, str]], data: dict) -> list[dict]:
                 'bg': to_hex(b),
                 # 按精确值判定，不先取整（WCAG 2.x；代码审查 M4）：4.495 判不过
                 'ok': r >= need,
+                'accepted': False,
             })
+            a = accepted.get((theme, p['id']))
+            if a is None:
+                continue
+            if r >= need:
+                raise ConfigError(f'{theme} {p["id"]}：已经达标（{r:.4f} ≥ {need:g}），从 accepted 里删掉这条例外')
+            # floor 必须正好是现在的精确值向下截断到 4 位（代码复审 M5）：变好变坏都要改名单，名单不能写个宽松的数糊过去
+            want = math.floor(r * 10000) / 10000
+            if abs(float(a['floor']) - want) > 1e-9:
+                raise ConfigError(f'{theme} {p["id"]}：accepted 的 floor 是 {a["floor"]}，现在的精确值截断到 4 位是 {want:.4f}；'
+                                  '颜色变了要重新请负责人定，名单照新值改')
+            results[-1]['accepted'] = True
+            results[-1]['decided'] = a['decided']
+            results[-1]['floor'] = float(a['floor'])
+    done = {(r['theme'], r['id']) for r in results}
+    for k in accepted:
+        if k not in done:
+            raise ConfigError(f'accepted 里的 {k[0]} {k[1]} 没有算到（这套皮肤不查这一项），删掉这条例外')
     return results
 
 
@@ -529,17 +575,22 @@ def main(argv: list[str] | None = None) -> int:
         else:
             out.write(f'check_contrast：{msg}\n')
         return 2
-    bad = [r for r in results if not r['ok']]
+    bad = [r for r in results if not r['ok'] and not r['accepted']]
+    ok_exc = [r for r in results if r['accepted']]
     if args.json:
-        out.write(json.dumps({'themes': sorted(themes), 'results': results, 'failed': len(bad)},
+        out.write(json.dumps({'themes': sorted(themes), 'results': results, 'failed': len(bad), 'accepted': len(ok_exc)},
                              ensure_ascii=False, indent=1) + '\n')
     else:
         for r in bad:
             shown = math.floor(r['exact'] * 10000) / 10000  # 向下截断到 4 位：不会显示成“4.50 < 4.5”
+            worse = f'，比接受时的 {r["floor"]:.4f} 还低' if 'floor' in r else ''
             out.write(f'不达标 {r["theme"]} {r["id"]}（{r["what"]}）：{shown:.4f} < {r["min"]:g}'
-                      f'（{r["fg"]} / {r["bg"]}）\n')
+                      f'（{r["fg"]} / {r["bg"]}{worse}）\n')
+        for r in ok_exc:
+            shown = math.floor(r['exact'] * 10000) / 10000
+            out.write(f'已接受的例外 {r["theme"]} {r["id"]}：{shown:.4f} < {r["min"]:g}（{r["decided"]}）\n')
         out.write(f'check_contrast：{len(themes)} 套 × 清单 {len(data["pairs"])} 项，共算 {len(results)} 次，'
-                  f'不达标 {len(bad)} 次\n')
+                  f'不达标 {len(bad)} 次，已接受的例外 {len(ok_exc)} 次\n')
     return 1 if bad else 0
 
 

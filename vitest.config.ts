@@ -38,6 +38,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/check-backend.test.ts', // python build/check_backend.py（建 TypeScript 类型检查器）
   'tests/build/check-backend-f11-cors.test.ts', // python build/check_backend.py（F11 样例）
   'tests/build/check-contrast.test.ts', // python build/check_contrast.py（F12）
+  'tests/build/check-contrast-accepted.test.ts', // python build/check_contrast.py 的例外名单（B2 FA-7 第 4 项）
   'tests/build/check-backend-alias.test.ts', // python build/check_backend.py（F2、F3、F7 别名展开）
   'tests/build/check-backend-f7-keys.test.ts', // python build/check_backend.py（F7 类型检查器判键类型）
   'tests/build/check-backend-f7-syntax.test.ts', // python build/check_backend.py（F7 语法层白名单）

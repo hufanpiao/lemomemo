@@ -392,3 +392,36 @@
   background: var(--panel-2);
   color: var(--text-2);
 }
+
+/* 设置 › 皮肤 的拨动开关（TILT-b2）：和提醒页免打扰开关（reminders 的 RemindSettings.module.css，设计 M6）同一画法，功能之间不能互引，照抄一份。
+   关 = 描边 + 左边圆钮；开 = 墨色底 + 右边圆钮（对比度和那边同一组令牌：remind-toggle-on / knob / off） */
+.switchRow {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  cursor: pointer;
+}
+
+.toggle {
+  flex: none;
+  width: 48px;
+  height: 28px;
+  margin: 0;
+  border: 1.5px solid var(--text-2);
+  border-radius: var(--r-pill);
+  background: radial-gradient(circle at 12px 50%, var(--text-2) 8px, transparent 8.5px), var(--panel);
+  cursor: pointer;
+  appearance: none;
+}
+
+.toggle:checked {
+  border-color: var(--ink);
+  background: radial-gradient(circle at calc(100% - 12px) 50%, var(--on-ink) 9px, transparent 9.5px), var(--ink);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

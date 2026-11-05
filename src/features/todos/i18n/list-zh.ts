@@ -1,7 +1,6 @@
 // 功能 todos 的词典·中文（架构 2.4）：待办列表页（B2 FA-2）。编辑页的在 zh.ts（那一份在审查中，列表另放一份）
 export const listZh = {
   'list.title': '待办',
-  'list.new': '新建待办',
   'list.all': '全部',
   'list.filter': '按项目筛选',
   'list.g.late': '过期',

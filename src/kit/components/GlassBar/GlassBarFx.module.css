@@ -1,0 +1,118 @@
+/* 液态玻璃底栏的首屏后部分（GlassBarFx.tsx，主持人 11-05 首屏 ③）：渐进模糊带、果冻的 CSS 后备。
+   和外壳的 GlassBar.module.css 分开：外壳首屏的类名表里不带这几个名字 */
+
+/* 果冻的 CSS 后备：副本引擎没到、或 playGel 做不了时，GlassBarFx 给液滴里层重新加上这个类，动画从头放 */
+.jelly {
+  animation: gel var(--dur-drop) var(--ease-gel);
+}
+
+@keyframes gel {
+  35% {
+    scale: 1.22 0.86;
+  }
+
+  70% {
+    scale: 0.96 1.04;
+  }
+}
+
+/* 渐进模糊带（0.25）：5 层 1～16px，各管一段；底色渐变到 --bg 的 55%（用 opacity 套） */
+.band {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 9;
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.band i,
+.band b {
+  position: absolute;
+  inset: 0;
+}
+
+.band i {
+  backdrop-filter: blur(var(--b));
+  mask: linear-gradient(to bottom, transparent var(--m0), var(--bg) var(--m1) var(--m2), transparent var(--m3));
+}
+
+.band i:nth-child(1) {
+  --b: 1px;
+  --m0: 0%;
+  --m1: 16.7%;
+  --m2: 33.3%;
+  --m3: 50%;
+}
+
+.band i:nth-child(2) {
+  --b: 2px;
+  --m0: 16.7%;
+  --m1: 33.3%;
+  --m2: 50%;
+  --m3: 66.7%;
+}
+
+.band i:nth-child(3) {
+  --b: 4px;
+  --m0: 33.3%;
+  --m1: 50%;
+  --m2: 66.7%;
+  --m3: 83.3%;
+}
+
+.band i:nth-child(4) {
+  --b: 8px;
+  --m0: 50%;
+  --m1: 66.7%;
+  --m2: 83.3%;
+  --m3: 100%;
+}
+
+.band i:nth-child(5) {
+  --b: 16px;
+  --m0: 66.7%;
+  --m1: 83.3%;
+  --m2: 100%;
+  --m3: 100.1%;
+}
+
+.band b {
+  background: linear-gradient(to bottom, transparent, var(--bg) 70%);
+  opacity: 0.55;
+}
+
+/* 减少透明效果：没有模糊带 */
+@media (prefers-reduced-transparency: reduce) {
+  .band {
+    display: none;
+  }
+}
+
+:global(:root[data-rt='1']) .band {
+  display: none;
+}
+
+/* 减少动态效果：不放果冻 */
+@media (prefers-reduced-motion: reduce) {
+  .jelly {
+    animation: none;
+  }
+}
+
+:global(:root[data-rm='1']) .jelly {
+  animation: none;
+}
+
+/* 键盘弹着（FA-7 第 3 项）：模糊带和底栏、“＋”一起藏（设计复审一 R2：只管这一样） */
+.band[data-kb='1'] {
+  visibility: hidden;
+}
+
+/* 电脑版侧栏（D5，(width >= 900px)）：底部没有底栏，也就没有模糊带 */
+@media (width >= 900px) {
+  .band {
+    display: none;
+  }
+}

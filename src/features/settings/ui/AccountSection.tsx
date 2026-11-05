@@ -78,6 +78,7 @@ export function AccountSection({
             disabled={devices.busy !== null}
             onClick={onDelete}
             data-testid="settings-delete-entry"
+            data-no-proxy=""
           >
             <span className={styles.tx}>{t('settings.account.delete', {})}</span>
             <span className={styles.v} aria-hidden>

@@ -101,7 +101,7 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
       }
       actions={
         ed.row && !ed.deleted ? (
-          <Pressable onClick={() => void ed.setDeleted(true)} data-testid="todo-edit-delete">
+          <Pressable onClick={() => void ed.setDeleted(true)} data-testid="todo-edit-delete" data-no-proxy="">
             {t('todo.edit.delete', {})}
           </Pressable>
         ) : undefined

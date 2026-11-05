@@ -8,11 +8,13 @@
 // • 液态玻璃底栏、“＋”、时间河、错过的提醒、提醒按钮条不在这一段（FA-4、FA-7）
 import { useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
-import { navigate } from '../../../app/router.ts';
+import { hrefOf, navigate } from '../../../app/router.ts';
 import { CheckCircle } from '../../../kit/components/CheckCircle.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
+import { useT } from '../../../kit/hooks/useT.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
 import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
+import { useMeInitial } from '../hooks/useMeInitial.ts';
 import { useToday, type ActionResult } from '../hooks/useToday.ts';
 import { NowCard } from './NowCard.tsx';
 import styles from './TodayPage.module.css';
@@ -20,6 +22,8 @@ import styles from './TodayPage.module.css';
 type Toast = { kind: 'undo'; id: string } | { kind: 'error'; readonly: boolean } | null;
 
 export default function TodayPage() {
+  const tApp = useT();
+  const initial = useMeInitial();
   const t = useTodayT();
   const locale = useLocale();
   const d = useToday();
@@ -48,7 +52,17 @@ export default function TodayPage() {
 
   return (
     <main className={styles.page} data-feature="today" data-testid="today">
-      <h1 className={styles.date}>{fmtDay(d.today, locale, 'monthDayWeek')}</h1>
+      <div className={styles.head}>
+        <h1 className={styles.date}>{fmtDay(d.today, locale, 'monthDayWeek')}</h1>
+        {/* 设置入口（负责人 11-05 ①；接手清单 NAV-today-no-settings）：右上角头像，名字第一个字；没有名字时是一个人形 */}
+        <a className={styles.me} href={hrefOf('settings')} aria-label={tApp('app.settings', {})} data-testid="today-settings">
+          {initial ?? (
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0" />
+            </svg>
+          )}
+        </a>
+      </div>
 
       <NowCard card={d.card} now={d.now} tz={d.tz} today={d.today} tomorrowFirst={d.tomorrowFirst} />
 
@@ -60,7 +74,7 @@ export default function TodayPage() {
             <h2 id="today-late" className={styles.h2}>{t('late.title', {})}</h2>
             <AppearList as="ul" className={styles.list}>
               {v.late.map(({ todo, days }) => (
-                <AppearItem key={todo.id} className={styles.row}>
+                <AppearItem key={todo.id} className={styles.row} data-ghost="">
                   <CheckCircle checked={shown(todo.id, false)} label={shown(todo.id, false) ? t('list.undoDone', {}) : t('list.done', {})} onChange={(v) => tick(todo.id, v)} testId={`today-done-${todo.id}`} />
                   <button type="button" className={styles.main} onClick={() => void navigate('todo', todo.id)}>
                     <span className={styles.title}>{todo.title}</span>
@@ -77,7 +91,7 @@ export default function TodayPage() {
           {v.events.length === 0 && v.todos.length === 0 ? <p className={styles.empty}>{t('list.empty', {})}</p> : null}
           <AppearList as="ul" className={styles.list}>
             {v.events.map((o) => (
-              <AppearItem key={`e:${o.id}`} className={styles.row} data-testid={`today-event-${o.id}`}>
+              <AppearItem key={`e:${o.id}`} className={styles.row} data-ghost="" data-testid={`today-event-${o.id}`}>
                 <span className={styles.time}>{o.time ?? t('list.allDay', {})}</span>
                 <button type="button" className={styles.main} onClick={() => void navigate('event', o.id)}>
                   <span className={styles.title}>{o.title}</span>
@@ -86,7 +100,7 @@ export default function TodayPage() {
               </AppearItem>
             ))}
             {v.todos.map((td) => (
-              <AppearItem key={`t:${td.id}`} className={styles.row} data-testid={`today-todo-${td.id}`} data-done={td.done ? '' : undefined}>
+              <AppearItem key={`t:${td.id}`} className={styles.row} data-ghost="" data-testid={`today-todo-${td.id}`} data-done={td.done ? '' : undefined}>
                 <CheckCircle
                   checked={shown(td.id, td.done)}
                   label={shown(td.id, td.done) ? t('list.undoDone', {}) : t('list.done', {})}
@@ -97,7 +111,7 @@ export default function TodayPage() {
                   <span className={styles.title}>{td.title}</span>
                   <span className={styles.sub}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
                 </button>
-                <Pressable className={styles.del} aria-label={t('list.delete', {})} onClick={() => void del(td.id)} data-testid={`today-del-${td.id}`}>
+                <Pressable className={styles.del} aria-label={t('list.delete', {})} onClick={() => void del(td.id)} data-testid={`today-del-${td.id}`} data-no-proxy="">
                   ×
                 </Pressable>
               </AppearItem>

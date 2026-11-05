@@ -2,13 +2,69 @@
 .page {
   max-width: 560px;
   margin: 0 auto;
-  padding: max(var(--safe-top), 16px) 16px 140px;
+  padding: max(var(--safe-top), 16px) 16px var(--tabbar-pad);
   background: var(--bg);
   color: var(--text);
 }
 
-.date {
+/* 顶部一行：日期在左，头像（设置入口）在右 */
+.head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
   margin: 0 0 12px;
+}
+
+/* 头像（设置入口）：触控区 44，看得见的圆 36（::before 画），浅底细边，和日期标题同一层级（设计动效评审 D6，负责人 11-05） */
+.me {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  border-radius: 50%;
+  color: var(--text);
+  font-size: var(--fs-15);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.me::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  z-index: -1;
+  border-radius: 50%;
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--step-off);
+}
+
+.me svg {
+  width: 18px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.me:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 电脑版（D5，(width >= 900px)）：设置入口在左边侧栏最下面，右上角这个藏掉，免得两个入口 */
+@media (width >= 900px) {
+  .me {
+    display: none;
+  }
+}
+
+.date {
+  margin: 0;
   font-size: var(--fs-20);
   font-weight: 600;
 }

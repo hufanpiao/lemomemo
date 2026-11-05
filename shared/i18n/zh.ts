@@ -5,6 +5,15 @@ export const zh = {
   'app.name': '柠檬记',
   // B0 占位页上的设置入口（PLACEHOLDER-settings-link，B2 换真页面时去掉）；和 settings.title 同词，kit 用不了功能的词典所以放这里
   'app.settings': '设置',
+  // FA-7 底栏（负责人 11-05：4 个页签，随手记点了显示“即将推出”；“＋”按页新建日程或待办）
+  'nav.label': '主导航', // 底栏和电脑版侧栏共用，不分宽窄（主持人 11-05，宽屏侧栏不在底部，D5）
+  'nav.today': '今天',
+  'nav.calendar': '日历',
+  'nav.todos': '待办',
+  'nav.notes': '随手记',
+  'nav.newEvent': '新建日程',
+  'nav.newTodo': '新建待办',
+  'notes.soon': '即将推出',
   'common.ok': '好',
   'common.cancel': '取消',
   'common.retry': '重试',

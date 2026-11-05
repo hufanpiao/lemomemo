@@ -151,4 +151,9 @@ export const zh = {
   // 设置 › 关于：农历和节气数据出处（R-299、R-306、R-309：按香港天文台网站条款注明；B2 BE-5 只加键，界面由前端 A 接）
   'settings.about.title': '关于',
   'settings.about.lunarCredit': '农历及节气数据：香港天文台',
+  // 设置 › 皮肤（TILT-b2 做法 ②：倾斜高光开关，存本机、默认关；iOS 每次打开 App 后第一次点底栏再问方向权限）
+  'settings.skin.title': '皮肤',
+  'settings.skin.tilt': '倾斜高光',
+  'settings.skin.tiltNote': '底栏上的高光跟着手机倾斜移动。打开时会问一次能不能用方向数据；有的手机（例如 iPhone）记不住，每次重新打开柠檬记后第一次点底栏会再问一次。',
+  'settings.skin.tiltDenied': '没有拿到方向数据的权限，倾斜高光没开。彻底退出柠檬记、重新进来后，再打开这个开关试一次。',
 } as const;

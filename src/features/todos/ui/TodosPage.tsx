@@ -73,9 +73,7 @@ export default function TodosPage() {
     <main className={styles.page} data-feature="todos" data-testid="todos">
       <header className={styles.top}>
         <h1 className={styles.h1}>{t('list.title', {})}</h1>
-        <Pressable className={styles.add} onClick={() => void navigate('todo', 'new')} data-testid="todos-new">
-          {t('list.new', {})}
-        </Pressable>
+        {/* 新建待办在底栏的“＋”（负责人 11-05 ③，原来右上角的“＋ 新建”去掉） */}
       </header>
 
       {l.projects.length ? (
@@ -97,7 +95,7 @@ export default function TodosPage() {
             <h2 className={styles.h2}>{groupTitle(g)}</h2>
             <AppearList as="ul" className={styles.list}>
               {g.items.map(({ todo, tag }) => (
-                <AppearItem key={todo.id} className={styles.row} data-done={todo.done ? '' : undefined} data-testid={`todos-row-${todo.id}`}>
+                <AppearItem key={todo.id} className={styles.row} data-ghost="" data-done={todo.done ? '' : undefined} data-testid={`todos-row-${todo.id}`}>
                   <CheckCircle
                     checked={shown(todo.id, todo.done)}
                     label={shown(todo.id, todo.done) ? t('list.undoDone', {}) : t('list.done', {})}
@@ -110,7 +108,7 @@ export default function TodosPage() {
                       {[todo.important ? t('list.important', {}) : '', todo.project, tagText(tag)].filter(Boolean).join(' · ')}
                     </span>
                   </button>
-                  <Pressable className={styles.del} aria-label={t('list.delete', {})} onClick={() => void del(todo.id)} data-testid={`todos-del-${todo.id}`}>
+                  <Pressable className={styles.del} aria-label={t('list.delete', {})} onClick={() => void del(todo.id)} data-testid={`todos-del-${todo.id}`} data-no-proxy="">
                     ×
                   </Pressable>
                 </AppearItem>

@@ -4,11 +4,12 @@
 // • 时区只让选 Intl 支持的（D7）：不在表里的不写、状态报 rejected（S5）
 // • 全天 ↔ 有时刻（S3）：切成全天前记住原来的时刻、时区、提醒，同一页里切回来时恢复（误点一下不丢“纽约 15:00”）；
 //   没记过的（一开始就是全天）切回来用 9:00、本机时区。切成全天保留的是日程自己时区里的日期，不是“在你这里”的日期（两者可能差一天）
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { todayOf } from '../../../../shared/core/date.ts';
 import { deviceTz } from '../../../core/current-tz.ts';
 import { useEditRecord, type EditRecord } from '../../../kit/hooks/useEditRecord.ts';
 import { clock } from '../../../platform/clock.ts';
+import { clearNewDate, pendingNewDate } from './new-date.ts';
 import {
   durationOf, emptyForm, endOf, formOf, hasRemind, localOf, newEventRow, normalize, patchOf, tzAllowed, tzChoices, type EventForm,
 } from '../data/event-edit.ts';
@@ -36,9 +37,12 @@ export function useEventEdit(id: string, onCreated?: (id: string) => void): Even
     table: 'events', id, formOf, titleOf: (f) => f.title, patchOf, newRow: newEventRow, hasRemind, ...(onCreated ? { onCreated } : {}),
     emptyForm: () => {
       const tz = deviceTz();
-      return emptyForm(todayOf(clock.now(), tz), tz);
+      // 从日历页点“＋”来的：默认是日历上选中的那天（FA-7 第 5 项）
+      return emptyForm(pendingNewDate() ?? todayOf(clock.now(), tz), tz);
     },
   });
+  // 表单挂上以后清掉，下次从别处新建不再沿用
+  useEffect(() => clearNewDate(), []);
   const { form, update, row, markRejected } = rec;
   const original = typeof row?.['tz'] === 'string' ? row['tz'] : null;
   const change = useCallback(

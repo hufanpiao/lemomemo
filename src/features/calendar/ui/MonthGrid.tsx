@@ -125,7 +125,7 @@ export function MonthGrid({
   const gridStyle: CSSProperties | undefined = p > 0 && fold ? { transform: `translateY(${-fold.shiftY * p}px)` } : undefined;
   const heads = Array.from({ length: 7 }, (_, i) => (weekStart + i) % 7);
   return (
-    <section aria-label={label} data-testid="cal-month" className={`${styles.card} ${styles.monthCard}`}>
+    <section aria-label={label} data-ghost="" data-testid="cal-month" className={`${styles.card} ${styles.monthCard}`}>
       <div className={styles.weekdays} aria-hidden="true">
         {heads.map((wd) => (
           <span key={wd} className={styles.wd}>

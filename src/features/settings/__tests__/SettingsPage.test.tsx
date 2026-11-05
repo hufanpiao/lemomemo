@@ -226,7 +226,8 @@ describe('设置分组顺序（TC-B1-71）', () => {
     await screen.findByTestId('settings-remind-entry');
     const heads = screen.getAllByRole('heading', { level: 2 });
     const groups = heads.map((h) => (h.textContent ?? '').trim()).filter((n) => ORDER.includes(n));
-    expect(groups.slice(0, 5)).toEqual(['账号', '界面语言', '日历', '提醒与通知', '数据']);
+    // B2 FA-7（TILT-b2）在界面语言后面加了“皮肤”组
+    expect(groups.slice(0, 6)).toEqual(['账号', '界面语言', '皮肤', '日历', '提醒与通知', '数据']);
     expect(groups).toEqual([...groups].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
     expect(new Set(groups).size).toBe(groups.length);
     // 已登录设备、退出其他所有设备、注销入口都在账号这一组里

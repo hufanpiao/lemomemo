@@ -2,7 +2,7 @@
 .page {
   max-width: 560px;
   margin: 0 auto;
-  padding: max(var(--safe-top), 16px) 16px 140px;
+  padding: max(var(--safe-top), 16px) 16px var(--tabbar-pad);
   background: var(--bg);
   color: var(--text);
 }
@@ -18,16 +18,6 @@
   margin: 0;
   font-size: var(--fs-22);
   font-weight: 600;
-}
-
-.add {
-  min-height: var(--hit);
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--fab-bg);
-  color: var(--fab-fg);
-  font-size: var(--fs-14);
 }
 
 .filter {

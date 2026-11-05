@@ -26,6 +26,7 @@ import { DataSection } from './DataSection.tsx';
 import { DeleteAccountView } from './DeleteAccountView.tsx';
 import { DesktopSection } from './DesktopSection.tsx';
 import { LanguageSection } from './LanguageSection.tsx';
+import { SkinSection } from './SkinSection.tsx';
 import styles from './SettingsPage.module.css';
 
 /** 页面最底下的“退出登录”（交给页面的 askSignOut，先数没上传的） */
@@ -270,6 +271,8 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
       />
     ),
     language: <LanguageSection locale={locale} />,
+    // 设置 › 皮肤（TILT-b2）：倾斜高光开关，存本机、默认关
+    skin: <SkinSection deps={deps?.tilt} />,
     // 设置 › 日历（R-320）：首页只放一行摘要，点进二级页；由 calendar 功能提供（懒加载，加载中这一组先空着）
     calendar: (
       <Suspense fallback={null}>

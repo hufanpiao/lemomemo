@@ -5,6 +5,14 @@ import type { SharedMsgKey } from './i18n.ts';
 export const ko = {
   'app.name': '레모', // R-106 B1 第一遍已审（10-31）
   'app.settings': '설정', // 同 settings.title（R-106 B1 第一遍已审）；B0 占位页上的设置入口（PLACEHOLDER-settings-link，B2 换真页面时去掉）
+  'nav.label': '메인 메뉴', // R-106 已审（11-05，B2-韩文审校-TILT与主导航 N-1）：不分宽窄（D5 侧栏不在底部）；不用“주 메뉴”，免得和日历的“주”（周视图）混听
+  'nav.today': '오늘', // R-106 B2 FA-7 底栏已审（11-05）
+  'nav.calendar': '캘린더', // R-106 B2 FA-7 底栏已审（11-05）
+  'nav.todos': '할 일', // R-106 B2 FA-7 底栏已审（11-05）
+  'nav.notes': '메모', // R-106 B2 FA-7 底栏已审（11-05）
+  'nav.newEvent': '새 일정', // R-106 B2 FA-7 底栏已审（11-05）
+  'nav.newTodo': '새 할 일', // R-106 B2 FA-7 底栏已审（11-05）
+  'notes.soon': '메모는 준비 중이에요', // R-106 B2 FA-7 底栏已审（11-05）（F-8：占位页标题是“레모”，写明是哪个功能）
   'common.ok': '확인', // R-106 B1 第一遍已审（10-31）
   'common.cancel': '취소', // R-106 B1 第一遍已审（10-31）
   'common.retry': '다시 시도', // R-106 B1 第一遍已审（10-31）

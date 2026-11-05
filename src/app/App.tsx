@@ -24,6 +24,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { getBoot } from '../core/boot.ts';
 import { RemindHost } from '../features/reminders/index.ts';
+import { GlassBar } from '../kit/components/GlassBar/GlassBar.tsx';
 import { useT } from '../kit/hooks/useT.ts';
 import { isProduction } from '../platform/env.ts';
 import { clock } from '../platform/clock.ts';
@@ -33,7 +34,8 @@ import { reloadPage } from '../platform/sw-register.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { UpdateBanner } from './UpdateBanner.tsx';
 import { featureRoutes, offRoutes, type FeatureRoute } from './features.ts';
-import { setSamePage, useRoute, type RouteName } from './router.ts';
+import { navigate, setSamePage, useRoute, type RouteName } from './router.ts';
+import { tabBarFor } from './tab-of.ts';
 
 // CSP 试验页（B0 第一项验证）：只在非正式版里挂
 const devRoutes: readonly FeatureRoute[] = isProduction
@@ -49,6 +51,39 @@ function ErrorView() {
       </p>
     </main>
   );
+}
+
+/**
+ * 底栏（B2 FA-7）：显示在哪些页、选中哪个、“＋”新建什么见 tab-of.ts。
+ * 在页面的 Suspense 外面（设计动效评审 D1）：切到分包没到的页时页面被藏起来，底栏不跟着藏、液滴照样滑。
+ * 冷启动和页面一起出：第一个页面（main）出现以前不画，出现以后就一直画（不靠和页面共用 Suspense）
+ */
+function TabBar({ route }: { route: RouteName }) {
+  const t = useT();
+  const [paged, setPaged] = useState(() => document.querySelector(APP_PAGE_SELECTOR) !== null);
+  useEffect(() => (paged ? undefined : whenOwnPage(() => setPaged(true))), [paged]);
+  // 键盘弹起时藏起底栏和“＋”（FA-7 第 3 项）：键盘检测（platform/viewport.ts）不在首屏，首屏画完以后再下载
+  const [kb, setKb] = useState(false);
+  useEffect(() => {
+    let stop = (): void => undefined;
+    let off = false;
+    afterAppPainted(() => {
+      import('../platform/viewport.ts')
+        .then((m) => {
+          if (!off) stop = m.watchKeyboard((open) => setKb(open));
+        })
+        .catch(() => undefined);
+    });
+    return () => {
+      off = true;
+      stop();
+    };
+  }, []);
+  const bar = tabBarFor(route);
+  if (!bar || !paged) return null;
+  const { tab, add } = bar;
+  if (add === null) return <GlassBar active={tab} later={afterAppPainted} hide={kb} />;
+  return <GlassBar active={tab} later={afterAppPainted} hide={kb} add={{ label: t(add === 'todo' ? 'nav.newTodo' : 'nav.newEvent', {}), onClick: () => void navigate(add, 'new') }} />;
 }
 
 /** 功能开关关着的页面（hash 直接打开时）：不是出错（K6 审查 L11） */
@@ -204,6 +239,12 @@ export function App() {
           {Page ? <Page /> : offRoutes.has(route.name) ? <FeatureOffView /> : <ErrorView />}
         </ErrorBoundary>
       </Suspense>
+      {/* 底栏不和页面同一个 Suspense（D1）：自己一个错误边界、一个 Suspense；出错只是不画底栏 */}
+      <ErrorBoundary fallback={null}>
+        <Suspense fallback={null}>
+          <TabBar route={route.name} />
+        </Suspense>
+      </ErrorBoundary>
       <Reminders route={route.name} ready={remindReady} />
     </>
   );

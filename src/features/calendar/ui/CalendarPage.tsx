@@ -26,6 +26,7 @@ import { useCalendar } from '../hooks/useCalendar.ts';
 import { useCalHolidayChoice } from '../hooks/useCalSettings.ts';
 import { useCalViewT, type CalViewT } from '../hooks/useCalViewT.ts';
 import { useMonthFold } from '../hooks/useMonthFold.ts';
+import { watchAddClick } from '../hooks/new-date.ts';
 import { weekTitle } from './week-axis.ts';
 import styles from './CalendarPage.module.css';
 import { CalNav, FoldHandle } from './CalNav.tsx';
@@ -122,6 +123,10 @@ export default function CalendarPage() {
     model.view.mode === 'month' ? (model.cells?.some((c) => c.inMonth && c.date === d) ?? false) : weekDates(model.view.start).includes(d);
   const selected = picked !== null && inView(picked) ? picked : inView(model.today) ? model.today : null;
   const fold = useMonthFold(cal, selected, setPicked);
+  // 底栏“＋”新建日程带上选中的那天（FA-7 第 5 项，hooks/new-date.ts）
+  const sel0 = useRef(selected);
+  sel0.current = selected;
+  useEffect(() => watchAddClick(() => sel0.current), []);
 
   /** 翻一页（收起时翻一周）；翻不动返回 false */
   const turn = (n: -1 | 1): boolean => {

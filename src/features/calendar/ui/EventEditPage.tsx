@@ -103,7 +103,7 @@ function EventEditor({ id, onCreated }: { id: string; onCreated(id: string): voi
       }
       actions={
         ed.row && !ed.deleted ? (
-          <Pressable onClick={() => void ed.setDeleted(true)} data-testid="event-edit-delete">
+          <Pressable onClick={() => void ed.setDeleted(true)} data-testid="event-edit-delete" data-no-proxy="">
             {t('event.edit.delete', {})}
           </Pressable>
         ) : undefined

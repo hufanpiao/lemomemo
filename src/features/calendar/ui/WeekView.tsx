@@ -231,7 +231,7 @@ function PhoneWeek(p: WeekProps & { range: HourRange }) {
   }, [start, items, tz, w, range]);
   const dates = weekDates(start);
   return (
-    <section aria-label={p.label} data-testid="cal-week" data-layout="phone" data-range={`${range.h0}-${range.h1}`} className={styles.card}>
+    <section aria-label={p.label} data-ghost="" data-testid="cal-week" data-layout="phone" data-range={`${range.h0}-${range.h1}`} className={styles.card}>
       <div className={styles.wrul} aria-hidden="true">
         {axisTicks(range).map((h) => (
           <span key={h} style={{ left: `${axisFrac(h * 60, range) * 100}%` }}>

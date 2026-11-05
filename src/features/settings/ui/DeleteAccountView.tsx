@@ -105,6 +105,7 @@ export function DeleteAccountView({ account, pendingCount, now, onBack }: Delete
             disabled={!canSubmit}
             aria-busy={busy}
             data-testid="settings-delete-submit"
+            data-no-proxy=""
           >
             {t('settings.delete.submit', {})}
           </Pressable>
