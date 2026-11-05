@@ -10,6 +10,15 @@
 //   getComputedStyle 读到的晚一两帧，位置（layout 的 transform）却是当帧的；只看当帧会把残影估淡（第三轮：帧上 0.6、页面里读出 0.19）。
 //   按时间窗算、不按“前两次取样”算：webkit 取样间隔不匀，前两次可能隔了 50 ms 以上，会把早已淡掉的值算进来
 // • M1 补：220 ms 以后“已完成”组只往上走（top 单调不增），不往回退
+// • N1 补帧（MOTION-n1-load-flaky）：离开那一项一挂上 leaving 就当场补量一帧（退场进度 0）。补帧只用来垫不透明度的历史（让之后 LAG_MS 窗口里的
+//   rAF 帧按它算），不计入“取到看得清的帧”（seen 只数 rAF 帧）：补帧拿的是上一帧别的行的位置，只认得出“离开那一项自己跳位”，
+//   认不出“别的行不走 FLIP、直接跳上来压住残影”（首屏判断放宽与推送认领核对审查 M1）。一次都没取到看得清的 rAF 帧（机器忙、帧落不进淡出那一百来毫秒）
+//   就重做那一下，最多 GHOST_TRIES 次，还取不到就挂“没测到”，不放过去；每一次里出现的压字都算
+// • MOTION-②-low（FA-6 ② 审查 L5，并入 M1、M2 高负载偶发）：
+//   - 每帧取样的时间用读样式那一刻的 performance.now()，不用 rAF 回调的 now（帧开始的时间；忙的时候回调晚几十毫秒，会把晚的样子记早）；
+//   - M1 头 200 ms 里取不到 2 帧就重做，最多 GHOST_TRIES 次，还不够就挂“没测到”；
+//   - motionReady 等 <html data-motion="ready"> 再等三帧，不靠资源记录加固定 300 ms（CPU 降速 4、6 倍时 300 ms 不够，
+//     功能包没装齐就开始测，M2 会把“组标题没走 FLIP、直接到位”的样子当成压字）
 // 示例待办和 FA-5 连续帧同一份（docs/02-设计/当前界面截图-1104/动效-*.png）
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
@@ -53,13 +62,23 @@ async function seed(page: Page): Promise<void> {
 /**
  * 等动效功能包下载完、装上（B2 FA-6 ②：功能包在首屏画出后才异步下载，src/motion/features.ts）。
  * 这里测的是功能包到了以后的手感；没到之前删掉的行当场移除、没有淡出，那一段不归这些用例管（见 FA-6 执行说明“② 的连续帧对照”）。
- * 下载完以后还要执行模块、各个 LazyMotion 重画一次：再等 300 ms 停稳
+ * 等的是 features.ts 在包到了时打的 <html data-motion="ready">（FA-6 ② 审查 L5，不再靠资源加载记录加固定 300 ms）：
+ * 标记打在包到的那一轮，各个 LazyMotion 在之后那轮 then 里装上、React 再提交一次，所以看到标记以后再等三帧
  */
 async function motionReady(page: Page): Promise<void> {
-  await page.waitForFunction(() =>
-    performance.getEntriesByType('resource').some((e) => /\/feature-bundle-[^/]*\.js$/.test(new URL(e.name).pathname) && (e as PerformanceResourceTiming).responseEnd > 0),
+  await page.waitForFunction(() => document.documentElement.getAttribute('data-motion') === 'ready', undefined, { timeout: 30000 });
+  await page.evaluate(
+    () =>
+      new Promise<void>((ok) => {
+        let n = 0;
+        const step = (): void => {
+          n += 1;
+          if (n >= 3) ok();
+          else requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }),
   );
-  await page.waitForTimeout(300);
 }
 
 /** 在页面里每帧取样 ms 毫秒；时间从下一次 pointerup（点下去松手）算起。返回 [距松手毫秒, 取样结果] */
@@ -91,33 +110,64 @@ async function startSampler(page: Page, kind: 'done-group' | 'overlap' | 'ghost'
       };
       const cross = (a: DOMRect, b: DOMRect) =>
         Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5 && Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5;
-      const tick = (now: number): void => {
+      const r0 = `[data-testid="${root}"]`;
+      const label = (e: Element): string => e.getAttribute('data-testid') ?? e.textContent?.slice(0, 6) ?? '';
+      type Other = { el: Element; rects: DOMRect[] };
+      /** 别的看得见的行、组标题（行都是 li——两页的 AppearItem 默认画成 li；组标题都是 h2）和它们此刻的文字矩形 */
+      const othersNow = (): Other[] =>
+        [...document.querySelectorAll(`${r0} li, ${r0} h2`)]
+          .filter((o) => !o.closest('[data-state="leaving"]') && alpha(o) > 0.01)
+          .map((el) => ({ el, rects: textRects(el) }));
+      const hitsOf = (g: Element, others: Other[]): string[] => {
+        const gt = textRects(g);
+        return others.filter((o) => !o.el.contains(g) && !g.contains(o.el) && o.el !== g && gt.some((a) => o.rects.some((b) => cross(a, b)))).map((o) => label(o.el));
+      };
+      /** 上一帧（画到屏幕上的那一帧）别的行、组标题的文字位置，补“退场进度 0”那一帧时用 */
+      let lastOthers: Other[] = [];
+      /** 正在离开、还没淡完的行或整组，逐个和别的看得见的行、组标题比字（门槛在 Node 这边按 LAG_MS 窗口取最大后再判） */
+      const ghostSample = (dt: number): void => {
+        const ghosts = [...document.querySelectorAll(`${r0} [data-state="leaving"]`)].filter((g) => alpha(g) > 0.01);
+        const others = othersNow();
+        lastOthers = others;
+        w.__samples?.push([dt, ghosts.map((g) => [label(g), alpha(g), hitsOf(g, others)])]);
+      };
+      // MOTION-n1-load-flaky：按动画进度、不按墙钟补一帧。webkit 忙的时候 rAF 间隔会拉到 50～90 ms，离开那一项“看得清”（> 0.25）
+      // 的几十毫秒可能一帧都落不进去，原来就会报“没取到看得清的帧”。所以离开那一项一挂上 data-state="leaving"（退场进度 0、最不透明），
+      // 就当场补量一次：离开那一项此刻的字（popLayout 让它原地不动）对上一帧画出来的别的行、组标题的字。
+      // 不能拿别的行“此刻”的位置比——DOM 刚变时它们已经排到新位置、Motion 的 FLIP 反向位移还没套上，这个样子不会画到屏幕上；
+      // 退场进度 0 那一帧屏幕上的别的行还在原位，正是上一帧的位置。之后的帧照旧每帧取（Node 那边按时间排序后再判）
+      if (kind === 'ghost') {
+        const seenLeaving = new WeakSet<Element>();
+        const mo = new MutationObserver(() => {
+          const t0 = w.__t0;
+          if (t0 === undefined) return;
+          const fresh = [...document.querySelectorAll(`${r0} [data-state="leaving"]`)].filter((g) => !seenLeaving.has(g));
+          if (!fresh.length) return;
+          for (const g of fresh) seenLeaving.add(g);
+          const dt = performance.now() - t0;
+          if (dt >= ms) {
+            mo.disconnect();
+            return;
+          }
+          // 第三项标成补帧：Node 那边不计入 seen（见文件头）
+          w.__samples?.push([dt, fresh.map((g) => [label(g), alpha(g), hitsOf(g, lastOthers)]), 'patch']);
+        });
+        const host = document.querySelector(r0);
+        if (host) mo.observe(host, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-state'] });
+        setTimeout(() => mo.disconnect(), ms + 2000);
+      }
+      const tick = (): void => {
         const t0 = w.__t0;
         if (t0 === undefined) {
+          if (kind === 'ghost') lastOthers = othersNow();
           requestAnimationFrame(tick);
           return;
         }
-        const dt = now - t0;
+        // 用读样式这一刻的时间，不用 rAF 回调给的 now（MOTION-②-low，并入的 M1 偶发）：now 是这一帧开始的时间，
+        // 机器忙时回调要晚几十毫秒才轮到，读到的其实是更晚的样子，按 now 记会把“250 ms 时的样子”记成 150 ms
+        const dt = performance.now() - t0;
         if (kind === 'ghost') {
-          // 正在离开、还没淡完的行或整组，逐个和别的看得见的行、组标题比字（门槛在 Node 这边按前两帧取最大后再判）
-          const r0 = `[data-testid="${root}"]`;
-          const ghosts = [...document.querySelectorAll(`${r0} [data-state="leaving"]`)].filter((g) => alpha(g) > 0.01);
-          // 行都是 li（两页的 AppearItem 默认画成 li），组标题都是 h2
-          const others = [...document.querySelectorAll(`${r0} li, ${r0} h2`)].filter(
-            (o) => !o.closest('[data-state="leaving"]') && alpha(o) > 0.01,
-          );
-          const info: [string, number, string[]][] = [];
-          for (const g of ghosts) {
-            const gt = textRects(g);
-            const hits: string[] = [];
-            for (const o of others) {
-              if (o.contains(g)) continue;
-              const ot = textRects(o);
-              if (gt.some((a) => ot.some((b) => cross(a, b)))) hits.push(o.getAttribute('data-testid') ?? o.textContent ?? '');
-            }
-            info.push([g.getAttribute('data-testid') ?? g.textContent?.slice(0, 6) ?? '', alpha(g), hits]);
-          }
-          w.__samples?.push([dt, info]);
+          ghostSample(dt);
         } else if (kind === 'done-group') {
           const g = document.querySelector('[data-testid="todos-g-done"]');
           w.__samples?.push([dt, g ? g.getBoundingClientRect().top : null]);
@@ -156,39 +206,74 @@ async function samples<T>(page: Page, ms: number): Promise<T[]> {
   return page.evaluate(() => (window as Window & { __samples?: unknown[] }).__samples ?? []) as Promise<T[]>;
 }
 
-type GhostFrame = [number, [string, number, string[]][]];
+/** [距松手毫秒, 每个离开中的元素 [名字, 当帧不透明度, 压到的], 'patch' 表示补帧（不计入 seen）] */
+type GhostFrame = [number, [string, number, string[]][], 'patch'?];
 /** 合成器上的不透明度比主线程读到的晚多少（约两帧） */
 const LAG_MS = 34;
 /** 每一帧：离开的那一项“往前 LAG_MS 以内最大的不透明度”> 0.25 时，它的字压到别人的字就记一条（见文件头） */
-function ghostHits(s: GhostFrame[]): { seen: number; bad: string[]; trace: string } {
+function ghostHits(raw: GhostFrame[]): { seen: number; bad: string[]; trace: string } {
+  // rAF 的帧和 MutationObserver 补的那一帧混在一起，按时间排好再算窗口
+  const s = [...raw].sort((x, y) => x[0] - y[0]);
   const hist = new Map<string, [number, number][]>();
   let seen = 0;
   const bad: string[] = [];
-  for (const [dt, info] of s) {
+  for (const [dt, info, src] of s) {
     for (const [id, a, hits] of info) {
       const h = [...(hist.get(id) ?? []), [dt, a] as [number, number]].filter(([t]) => t >= dt - LAG_MS);
       hist.set(id, h);
       const eff = Math.max(...h.map(([, x]) => x));
       if (eff <= 0.25) continue;
-      seen += 1;
+      if (src !== 'patch') seen += 1;
       if (hits.length) bad.push(`松手后 ${dt.toFixed(0)} ms，${id} 不透明度按 ${eff.toFixed(2)} 算（当帧 ${a.toFixed(2)}），压到 ${hits.join('、')}`);
     }
   }
-  const trace = s.map(([dt, info]) => `${dt.toFixed(0)}${info.length ? ':' + info.map(([, a]) => a.toFixed(2)).join('/') : ''}`).join(' ');
+  const trace = s.map(([dt, info, src]) => `${src === 'patch' ? '补' : ''}${dt.toFixed(0)}${info.length ? ':' + info.map(([, a]) => a.toFixed(2)).join('/') : ''}`).join(' ');
   return { seen, bad, trace };
+}
+
+/** N1 一次都没取到看得清的 rAF 帧时最多重做几次（见文件头） */
+const GHOST_TRIES = 3;
+
+/**
+ * 做一次 N1：prepare（回到起点）→ 开始取样 → act（打勾、删除）→ 判。seen 为 0 就从 prepare 重来，最多 GHOST_TRIES 次。
+ * 返回各次的压字（带第几次）、最后一次的 seen 和每次的取样
+ */
+async function ghostRun(page: Page, root: string, prepare: () => Promise<void>, act: () => Promise<void>): Promise<{ seen: number; bad: string[]; traces: string[] }> {
+  const bad: string[] = [];
+  const traces: string[] = [];
+  let seen = 0;
+  for (let i = 1; i <= GHOST_TRIES && seen === 0; i += 1) {
+    await prepare();
+    await startSampler(page, 'ghost', '', 900, root);
+    await act();
+    const r = ghostHits(await samples<GhostFrame>(page, 900));
+    seen = r.seen;
+    bad.push(...r.bad.map((b) => `第 ${i} 次：${b}`));
+    traces.push(`第 ${i} 次：${r.trace}`);
+  }
+  return { seen, bad, traces };
 }
 
 test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1、L2）', () => {
   test.use({ loggedIn: true, viewport: { width: 390, height: 844 }, timezoneId: TZ, locale: 'zh-CN' });
 
   test('M1 打勾后头 220 ms 里“已完成”组不动，之后只往上走、不回退', async ({ page }) => {
-    await seed(page);
-    const before = await page.getByTestId('todos-g-done').evaluate((g) => g.getBoundingClientRect().top);
-    await startSampler(page, 'done-group', 't4', 900);
-    await page.getByTestId('todos-done-t4').click();
-    const s = await samples<[number, number | null]>(page, 900);
-    const head = s.filter(([dt]) => dt < UI_MS - 20);
-    expect(head.length).toBeGreaterThan(3);
+    // 头 200 ms 里要至少取到 2 帧才算测到；机器忙、松手后第一帧就晚过 200 ms 时从头重做（MOTION-②-low：
+    // 取样时间改成读样式那一刻以后，忙的时候早段可能一帧都没有，原来按 rAF 的 now 记会把晚到的帧记早、误报“组动了”）
+    let before = 0;
+    let s: [number, number | null][] = [];
+    let head: [number, number | null][] = [];
+    const counts: number[] = [];
+    for (let i = 0; i < GHOST_TRIES && head.length < 2; i += 1) {
+      await seed(page);
+      before = await page.getByTestId('todos-g-done').evaluate((g) => g.getBoundingClientRect().top);
+      await startSampler(page, 'done-group', 't4', 900);
+      await page.getByTestId('todos-done-t4').click();
+      s = await samples<[number, number | null]>(page, 900);
+      head = s.filter(([dt]) => dt < UI_MS - 20);
+      counts.push(head.length);
+    }
+    expect(head.length, `做了 ${counts.length} 次，头 ${UI_MS - 20} ms 里取到的帧数 ${counts.join('、')}：没测到`).toBeGreaterThanOrEqual(2);
     for (const [dt, top] of head) expect(top, `松手后 ${dt.toFixed(0)} ms`).toBeCloseTo(before, 0);
     // 之后只往上走一次、不往回退（第二轮 L2）
     const tail = s.filter(([dt, top]) => dt >= UI_MS && top !== null) as [number, number][];
@@ -205,28 +290,25 @@ test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1�
     ['删除', 'todos-del-t3'],
   ] as const) {
     test(`N1 ${name}：离开的那一项不透明度 > 0.25 的每一帧，它的字不压别的行、组标题的字`, async ({ page }) => {
-      await seed(page);
-      await startSampler(page, 'ghost', '', 900);
-      await page.getByTestId(testId).click();
-      const { seen, bad, trace } = ghostHits(await samples<GhostFrame>(page, 900));
-      expect(seen, `要取到离开那一项看得清的帧（否则这条什么都没测）。取样：${trace}`).toBeGreaterThan(0);
+      const { seen, bad, traces } = await ghostRun(page, 'todos', () => seed(page), () => page.getByTestId(testId).click());
       expect(bad).toEqual([]);
+      expect(seen, `做了 ${GHOST_TRIES} 次都没取到离开那一项看得清的 rAF 帧（补帧不算，否则这条什么都没测）。取样：${traces.join(' ｜ ')}`).toBeGreaterThan(0);
     });
   }
 
   test('N1 今天页“没赶上”最后一条打勾：整组离开，不透明度 > 0.25 的每一帧，它的字不压“今天的安排”等别的字（第三轮 P2）', async ({ page }) => {
-    await seed(page);
-    await page.goto('/app/#/today');
-    await page.getByTestId('today-late').waitFor({ timeout: 30000 });
-    // 今天页的数据是进页面后才到的：“没赶上”整组可能是进场中（entering，透明、不接点按），等它和里面的行都进场完、页面停稳再取样
-    await expect(page.locator('[data-testid="today"] [data-state="entering"]')).toHaveCount(0);
-    await page.waitForTimeout(500);
-    await startSampler(page, 'ghost', '', 900, 'today');
+    const prepare = async (): Promise<void> => {
+      await seed(page);
+      await page.goto('/app/#/today');
+      await page.getByTestId('today-late').waitFor({ timeout: 30000 });
+      // 今天页的数据是进页面后才到的：“没赶上”整组可能是进场中（entering，透明、不接点按），等它和里面的行都进场完、页面停稳再取样
+      await expect(page.locator('[data-testid="today"] [data-state="entering"]')).toHaveCount(0);
+      await page.waitForTimeout(500);
+    };
     // 只点没在离开中的那一份（代码审查 FA5-CR A4：打勾后退场和进场会短暂同时有两个 today-done-<id>）
-    await page.locator('[data-testid="today-done-t1"]:not([data-state="leaving"] *)').click();
-    const { seen, bad, trace } = ghostHits(await samples<GhostFrame>(page, 900));
-    expect(seen, `要取到离开那一组看得清的帧（否则这条什么都没测）。取样：${trace}`).toBeGreaterThan(0);
+    const { seen, bad, traces } = await ghostRun(page, 'today', prepare, () => page.locator('[data-testid="today-done-t1"]:not([data-state="leaving"] *)').click());
     expect(bad).toEqual([]);
+    expect(seen, `做了 ${GHOST_TRIES} 次都没取到离开那一组看得清的 rAF 帧（补帧不算，否则这条什么都没测）。取样：${traces.join(' ｜ ')}`).toBeGreaterThan(0);
     await expect(page.getByTestId('today-late')).toHaveCount(0);
   });
 

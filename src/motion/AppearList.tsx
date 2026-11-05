@@ -14,7 +14,8 @@
 //   淡入播完以前打 data-state="entering"、不接点按（透明的时候点不到看不见的圆圈或 ×，第二轮 L3）
 // • 打勾“圆圈先填满再离开”的那一拍（17.1）不在这里等：页面用 useHoldView 让分组晚 --dur-ui 再变，列表里那一刻什么都不动（M1）
 // • 第一次画列表不播（initial={false}）：冷启动、进页面不逐条入场
-// • 离开途中打 data-state="leaving"（17.2 第 2 点），使用方据此不接点按（免得点到正在淡出的那一行）
+// • 离开途中打 data-state="leaving"（17.2 第 2 点），使用方据此不接点按（免得点到正在淡出的那一行）；
+//   同时带 inert（FA-6 ② 审查 L3，和 Appear 一致）：Tab 进不去正在淡出的行里的 × 和打勾框，读屏也不念
 // • 减少动态效果：和 <Appear> 同一个判断，只淡入淡出、时长减半、新行不等；MotionConfig 让 layout 位移直接到位
 // • 功能包异步加载（B2 FA-6 ②，见 ./features.ts）：功能包还没到时加进来的行直接显示（initial={false}），不打“进场中”、照常接点按；
 //   不会停在 opacity 0。这段时间里删掉的行当场移除（没有淡出、下面的行直接跳上来）
@@ -129,6 +130,8 @@ export function AppearItem({ as = 'li', className, children, ...data }: AppearIt
       className={className}
       {...(style ? { style } : {})}
       data-state={present ? (entering ? 'entering' : data['data-state']) : 'leaving'}
+      // 离开途中键盘、读屏也碰不到（和 Appear 一致；FA-6 ② 审查 L3）：pointer-events 只挡鼠标和触摸
+      inert={present ? undefined : true}
       layout="position"
       initial={cold ? false : mo.initial}
       animate={mo.animate}

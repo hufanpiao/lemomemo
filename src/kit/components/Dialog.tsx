@@ -8,8 +8,12 @@
 //   减少动态效果时 Appear 只淡入淡出、时长减半（遮罩也减半）。
 //   关闭途中 Appear 打 data-state="leaving"，这时两层都不接点按（Dialog.module.css），不挡后面的页面、不会误点正在滑走的按钮。
 //   不用 data-state + @keyframes：同一个类名上进、出两段动位移的动画，lemo/reduced-motion-override 认不出覆盖（B2 试过）
+// 关掉以后焦点还给打开前的元素（FA-6 ② 审查 L4，主持人 11-04 定）：Radix 的 modal Content 关闭时会拦掉 FocusScope 自己的“还回去”，
+//   改成 triggerRef.current?.focus()；使用方都是自己的按钮 setOpen(true)、不用 RD.Trigger，triggerRef 是空的，焦点就一直停在 body。
+//   所以这里在打开的那一刻（useLayoutEffect，早于 FocusScope 在 useEffect 里把焦点移进弹层）记下 document.activeElement，
+//   onCloseAutoFocus 里先 preventDefault（Radix 就不再去找 triggerRef），再还给记下的元素——它还在文档里、没被禁用才还
 import * as RD from '@radix-ui/react-dialog';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Appear } from '../../motion/components.ts';
 import styles from './Dialog.module.css';
 
@@ -35,8 +39,24 @@ export interface DialogProps {
   children?: ReactNode;
 }
 
+/** 能不能把焦点还给它：还在文档里，没被禁用 */
+function canRefocus(el: Element | null): el is HTMLElement {
+  if (!(el instanceof HTMLElement) || !el.isConnected || el === document.body) return false;
+  return !(el as HTMLElement & { disabled?: boolean }).disabled;
+}
+
 export function Dialog({ open, onOpenChange, title, description, children }: DialogProps) {
   useScrollLock(open);
+  const returnTo = useRef<Element | null>(null);
+  useLayoutEffect(() => {
+    if (open) returnTo.current = document.activeElement;
+  }, [open]);
+  const restoreFocus = (e: Event): void => {
+    e.preventDefault();
+    const el = returnTo.current;
+    returnTo.current = null;
+    if (canRefocus(el)) el.focus();
+  };
   return (
     <RD.Root open={open} onOpenChange={onOpenChange}>
       <RD.Portal forceMount>
@@ -46,7 +66,7 @@ export function Dialog({ open, onOpenChange, title, description, children }: Dia
         <Appear kind="sheet" show={open} className={styles.dock}>
           {/* 描述的 id 和 aria-describedby 都交给 Radix 管（每个弹层各生成一个，不重名）：有描述时什么都不传；
               没描述时显式传 undefined，Radix 就不写 aria-describedby，也不报缺描述的警告 */}
-          <RD.Content forceMount className={styles.content} {...(description === undefined ? { 'aria-describedby': undefined } : {})}>
+          <RD.Content forceMount className={styles.content} onCloseAutoFocus={restoreFocus} {...(description === undefined ? { 'aria-describedby': undefined } : {})}>
             <RD.Title className={styles.title}>{title}</RD.Title>
             {description === undefined ? null : (
               <RD.Description className={styles.desc}>{description}</RD.Description>
