@@ -231,4 +231,32 @@ describe('remind-queue-2conn.mjs：“不等锁”按服务器上的证据判', 
     expect(fors).toHaveLength(4);
     for (const f of fors) expect(f).toMatch(/for update of \w+ skip locked/);
   });
+  it('迁移 20261105110000 重建的出队：删孤儿只算一次（materialized + 按表 any(array)），两处 for update 都带 skip locked，其余逐字照旧', () => {
+    const strip = (s: string) => s.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+    const fn = (s: string, head: string) => s.slice(s.indexOf(head), s.indexOf('end $$;', s.indexOf(head)) + 'end $$;'.length);
+    const neu = fn(strip(readFileSync(join(ROOT, 'supabase', 'migrations', '20261105110000_core_remind_queue_pop_orphan_once.sql'), 'utf8')),
+      'create or replace function private.remind_queue_pop(');
+    const old = fn(strip(readFileSync(join(ROOT, 'supabase', 'migrations', '20261104130000_core_remind_queue_lease.sql'), 'utf8')),
+      'create function private.remind_queue_pop(');
+    expect(neu.length).toBeGreaterThan(1000);
+    // 孤儿集合只算一次：materialized；删的时候不和 o 连接（不许 using o、in (select … from o)），三张表各一个 any(array(…))
+    expect(neu).toMatch(/with o as materialized \(/);
+    expect(neu).not.toMatch(/using \(select q2\./);
+    expect(neu).not.toMatch(/\bin \(select o\./);
+    expect(neu).not.toMatch(/\busing\s+o\b/);
+    // 孤儿判定（三张表各查自己那张）逐字照旧：取 select q2.table_name as tn … for update of q2 skip locked 一段，去掉空白比
+    const orphan = (s: string) => s.slice(s.indexOf('select q2.table_name as tn'), s.indexOf('for update of q2 skip locked')).replace(/\s+/g, '');
+    expect(orphan(neu).length).toBeGreaterThan(300);
+    expect(orphan(neu)).toBe(orphan(old));
+    for (const t of ['events', 'todos', 'anniversaries']) {
+      expect(neu).toContain(`(q.table_name = '${t}' and q.id = any (array(select o.qid from o where o.tn = '${t}')))`);
+    }
+    const fors = neu.match(/for update of \w+[^;]*?(?=\)|$)/gm) ?? [];
+    expect(fors).toHaveLength(2);
+    for (const f of fors) expect(f).toMatch(/for update of \w+ skip locked/);
+    // 删孤儿那句之后（从 if n = 0 起）逐字照 20261104130000；属性行也一样
+    const tail = (s: string) => s.slice(s.indexOf('  if n = 0 then return; end if;'));
+    expect(tail(neu)).toBe(tail(old));
+    expect(neu.split('\n').slice(0, 2).join('\n').replace('create or replace function', 'create function')).toBe(old.split('\n').slice(0, 2).join('\n'));
+  });
 });
