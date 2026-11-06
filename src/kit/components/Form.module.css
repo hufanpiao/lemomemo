@@ -59,8 +59,37 @@
   font-size: var(--fs-15);
 }
 
+/* 触屏上可输入控件至少 16px（负责人 11-06 真机截图 7）：iOS 聚焦字号小于 16px 的 input / select / textarea 会自动放大整页并横移。
+   不用 maximum-scale、user-scalable=no 禁缩放（无障碍）；只在触屏上调到 16px，电脑上仍是 15px。
+   src/app/__tests__/input-font-size.test.ts 检查全站可输入控件 */
+@media (any-pointer: coarse) {
+  .input,
+  .select,
+  .area {
+    font-size: var(--fs-16);
+  }
+}
+
+/* G11④：flex-basis 0，日期、时刻框能缩，“清掉”和输入框在同一行右边（新建页、编辑页一样），不被挤到下一行 */
 .input {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+}
+
+.input::placeholder,
+.area::placeholder {
+  color: var(--text-2);
+}
+
+/* 下拉框（G11 第三轮①）：和输入框同一套——同底色、细边框、圆角；去掉 WebKit 原生的凸边和深色下发亮的灰块（appearance: none，iOS Safari 15.4 起认不带前缀的写法），
+   箭头用两段渐变画成小三角（不用 data: 图片，不受 CSP img-src 限制），颜色跟 --text-2 走浅深两套 */
+.select {
+  padding-right: 30px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-2) 50%), linear-gradient(135deg, var(--text-2) 50%, transparent 50%);
+  background-repeat: no-repeat;
+  background-position: right 17px center, right 12px center;
+  background-size: 5px 5px;
+  cursor: pointer;
+  appearance: none;
 }
 
 .area {
@@ -87,7 +116,7 @@
 .area:focus-visible,
 .title:focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 .input:disabled,
@@ -95,6 +124,16 @@
 .area:disabled,
 .title:disabled {
   color: var(--text-2);
+}
+
+/* 只放勾选框的一行（“已完成”“重要”；新建、编辑、只读编辑页同一个组件，G11 第三轮②）：不留空的字段名，勾选框从左边排起，放得下就一行 */
+.label:empty {
+  display: none;
+}
+
+.control:has(> .check) {
+  justify-content: flex-start;
+  column-gap: 20px;
 }
 
 .check {
@@ -109,4 +148,53 @@
   width: 20px;
   height: 20px;
   accent-color: var(--accent);
+}
+
+/* 禁用的勾选框（只读行的编辑页等，FA-2 视觉验收第二轮第 2 条）：字和框都变淡，和禁用的输入框一样一眼看出改不了 */
+.check:has(> input:disabled) {
+  color: var(--text-2);
+}
+
+.check input:disabled {
+  opacity: 0.45;
+}
+
+/* 编辑页的按钮（FormButton，G11①）：圆角胶囊描边，浅色、深色一套（盖过 EditShell 里深色默认按钮那条 :where 规则） */
+.btn,
+.btnDanger {
+  flex: none;
+  min-height: var(--hit);
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  background: none;
+  font: inherit;
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.btn {
+  border: 1px solid var(--inp-line);
+  color: var(--text);
+}
+
+.btnDanger {
+  border: 1.5px solid var(--danger-text);
+  color: var(--danger-text);
+}
+
+.btn:disabled,
+.btnDanger:disabled {
+  opacity: var(--press-dim);
+}
+
+.btn:focus-visible,
+.btnDanger:focus-visible,
+.check input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 只有标题一项的卡片（编辑日程）：标题下面那条线就是卡片底边，会伸进下面的圆角（G11 第三轮③），去掉 */
+.group > .title:last-child {
+  border-bottom: 0;
 }

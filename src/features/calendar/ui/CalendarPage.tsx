@@ -1,6 +1,6 @@
 // 月历和周视图页面（B2 FA-3，架构 5.12）：#/calendar（底栏，本月）、#/cal/month/<年-月>、#/cal/week/<日期>
 // • 页顶按 R-101 摆法 B（定稿线框 s2、s3）：第一行标题胶囊“2026年10月 ⌄”/“10月19日–25日 ⌄”，点了弹出年月选择器（MonthPicker，Radix Popover）；
-//   第二行左边“周 / 月 / 纪念日”分段，右边“‹ 今天 ›”（CalNav.tsx）。“纪念日”分段跳 #/anniv（纪念日页现在是占位页，B3 做）
+//   第二行左边“周 / 月 / 纪念日”分段，右边“‹ 今天 ›”（CalNav.tsx）。“纪念日”是 B5 的功能，没做好之前置灰、不跳占位页，点了在页顶提示条里出“纪念日即将推出”，几秒后收起（B2 全站视觉审查 A2）
 // • 正文左右滑动翻页、跟手（motion 的 useSwipePager）；电脑键盘 ← → 翻页、T 回今天（焦点在输入框、浮层打开时不生效；连按合并成一次 push）
 // • 离线、又没拉到要显示的节假日：月历上方提示“联网后显示节假日”（5.12 第 1 点）
 // • 点月格某天 / 周视图某条泳道：选中那一天，下面列出当天全部日程和待办（DayList）；默认选中今天（在这一页里时）
@@ -14,11 +14,16 @@
 // • 有带提醒、还没同步上的记录时，翻页按钮下面出一行“未同步，提醒可能不响”（REMIND-wiring；TC-B2-69；reminders 的 UnsyncedRemindHint，懒加载）；
 //   浅灰条是负责人 11-04 定的（R-346）。和“联网后显示节假日”放在同一块浅灰提示里（两条同时出时是一块里的两行，不叠成两块，代码审查 L3）；
 //   这一块常驻、带 role="status"，内容后填进去读屏才会播报；两条都没有时不占位（.notice 里没有 p）
+// • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：日清单行尾“要新版本”标记；点日清单的行、电脑周视图的全天行和时间块都经 open() 拦下，
+//   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）；页顶（提示条上面）有带重复的只读行时出
+//   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner）
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { monthOf, weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
-import { useRoute } from '../../../app/router.ts';
+import { navigate, useRoute } from '../../../app/router.ts';
+import { ReadonlyToast, RepeatBanner } from '../../../kit/components/ReadonlyRow.tsx';
+import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import { Appear } from '../../../motion/components.ts';
 import { UnsyncedRemindHint } from '../../reminders/index.ts';
 import { useSwipePager } from '../../../motion/gestures.ts';
@@ -92,9 +97,24 @@ function PickScrim() {
 }
 
 /** 页顶提示：离线时“联网后显示节假日”、有没同步上的提醒时“未同步，提醒可能不响”（reminders 提供）；常驻的 status 容器，没内容时不占位 */
-function Notice({ offline, t }: { offline: boolean; t: CalViewT }) {
+/**
+ * 页顶的提示：重复事项横幅（FA-2，在浅灰提示块上面）、浅灰提示块（纪念日即将推出、联网后显示节假日、未同步）；
+ * 只读行被拦下的提示条也挂在这里（贴底 fixed，位置不跟着 DOM 走）
+ */
+function Notice({ offline, ro, t }: { offline: boolean; ro: CalGuard; t: CalViewT }) {
+  return (
+    <>
+      {ro.g.any ? <RepeatBanner onUpdate={ro.g.update} testId="cal-repeat" /> : null}
+      <ReadonlyToast guard={ro.g} message={t('cal.readonly', {})} testId="cal-ro-toast" />
+      <NoticeBlock offline={offline} annivSoon={ro.anniv.on} t={t} />
+    </>
+  );
+}
+
+function NoticeBlock({ offline, annivSoon, t }: { offline: boolean; annivSoon: boolean; t: CalViewT }) {
   return (
     <div className={styles.notice} role="status" data-testid="cal-notice">
+      {annivSoon ? <p data-testid="cal-anniv-soon">{t('cal.annivSoon', {})}</p> : null}
       {offline ? (
         <p data-testid="cal-offline">
           {t('cal.offline', {})}
@@ -107,6 +127,29 @@ function Notice({ offline, t }: { offline: boolean; t: CalViewT }) {
   );
 }
 
+/** “纪念日即将推出”留多久 */
+const ANNIV_SOON_MS = 4000;
+
+/** “纪念日”还没做好（A2）：点了出“纪念日即将推出”，几秒后收起；再点重新计时 */
+function useAnnivSoon(): { on: boolean; show(): void } {
+  const [at, setAt] = useState(0);
+  useEffect(() => {
+    if (!at) return undefined;
+    const id = setTimeout(() => setAt(0), ANNIV_SOON_MS);
+    return () => clearTimeout(id);
+  }, [at]);
+  return { on: at !== 0, show: () => setAt(Date.now()) };
+}
+
+/** 只读行（FA-2）和“纪念日即将推出”（A2）：open 打开一条之前先看是不是只读，是就出提示条、不进编辑页 */
+function useCalGuard() {
+  const g = useReadonlyGuard();
+  const anniv = useAnnivSoon();
+  const open = (kind: 'event' | 'todo', id: string): void => (g.isRo(kind, id) ? g.block() : void navigate(kind, id));
+  return { g, anniv, open };
+}
+type CalGuard = ReturnType<typeof useCalGuard>;
+
 export default function CalendarPage() {
   const route = useRoute();
   const t = useCalViewT();
@@ -117,6 +160,8 @@ export default function CalendarPage() {
   const month = model.view.mode === 'month';
   const title = month ? t('cal.title', { y: model.header.y, m: model.header.m }) : weekTitleText(model.view.start, t);
   const holChoice = useCalHolidayChoice();
+  // 只读行（FA-2）：打开一条之前先看是不是只读，是就出提示条、不进编辑页
+  const ro = useCalGuard();
 
   // 这一页里有哪几天：选中的那天不在这一页（翻走了）就回到今天（今天也不在就不选）
   const inView = (d: DateStr): boolean =>
@@ -198,8 +243,9 @@ export default function CalendarPage() {
         onPrev={() => button(-1)}
         onNext={() => button(1)}
         onToday={goToday}
+        onAnniv={ro.anniv.show}
       />
-      <Notice offline={model.holidaysOffline} t={t} />
+      <Notice offline={model.holidaysOffline} ro={ro} t={t} />
       {/* 正文挂着左右滑动（触摸、笔，跟手）；键盘、鼠标用上面的按钮和 ← → */}
       <div
         ref={pagerRef}
@@ -243,6 +289,8 @@ export default function CalendarPage() {
             wide={model.wide}
             selected={sel}
             onSelect={setPicked}
+            onOpen={ro.open}
+            isRo={ro.g.isRo}
             t={t}
             label={t('cal.weekGrid', { from: t('cal.a11y.date', { m: Number(model.view.start.slice(5, 7)), d: Number(model.view.start.slice(8)) }) })}
           />
@@ -258,6 +306,7 @@ export default function CalendarPage() {
             dueMins={model.dueMins}
             t={t}
             lunarText={model.lunar?.fullText(sel) ? t('cal.a11y.lunar', { text: model.lunar.fullText(sel) ?? '' }) : undefined}
+            onOpen={ro.open} isRo={ro.g.isRo}
           />
         ) : null}
       </div>

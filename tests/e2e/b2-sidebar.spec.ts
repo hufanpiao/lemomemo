@@ -80,10 +80,12 @@ test.describe('电脑版侧栏（FA-7 D5）', () => {
   test('键盘 Tab 顺序：“＋”→ 今天 → 日历 → 待办 → 随手记 → 设置', async ({ page, browserName }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
-    const ids = await page.evaluate(() =>
-      [...document.querySelectorAll<HTMLElement>('[data-testid="tabbar-add"], a[data-tab], [data-testid="tabbar-settings"]')].map(
-        (el) => el.dataset['tab'] ?? el.dataset['testid'] ?? '',
-      ),
+    // 今天页一出现时侧栏可能还没画全（webkit 偶发只找到 1 个；今天页首屏块变小以后今天页出来得更早，主持人 11-07）：先等 6 个都在再查顺序
+    const SEL = '[data-testid="tabbar-add"], a[data-tab], [data-testid="tabbar-settings"]';
+    await expect(page.locator(SEL)).toHaveCount(6, { timeout: 10_000 });
+    const ids = await page.evaluate(
+      (sel) => [...document.querySelectorAll<HTMLElement>(sel)].map((el) => el.dataset['tab'] ?? el.dataset['testid'] ?? ''),
+      SEL,
     );
     expect(ids).toEqual(['tabbar-add', 'today', 'calendar', 'todos', 'notes', 'tabbar-settings']);
     if (browserName === 'webkit') return;

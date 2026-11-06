@@ -18,24 +18,56 @@
 //      没内容时不占位（.notice 里没有 p）
 //   ③ 每行行尾“未同步”小标记（UnsyncedRemindMark，在行按钮里、标题和副行的右边；没有时那一格不画）
 //   ②③ 只看本机待同步队列、和引擎无关，同日历页直接挂，不等引擎（M1）
+// • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记、圆圈变淡；点这一行、打勾、删除统一拦下，
+//   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）。顶部（日期下面）有带重复的只读行时出
+//   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner；4.1.0 的重复事项 4.0.x 只显示第一次）
 // • 液态玻璃底栏、“＋”、时间河、提醒按钮条不在这一段（FA-4、FA-7）
 import { Suspense, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate } from '../../../app/router.ts';
-import { CheckCircle } from '../../../kit/components/CheckCircle.tsx';
+import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
 import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
-import { UndoToast } from '../../../kit/components/UndoToast.tsx';
+import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import { useT } from '../../../kit/hooks/useT.ts';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
 import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday, type ActionResult } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
+import { TodayRo } from '../index.ts';
 import { GrowIn } from './GrowIn.tsx';
 import { NowCard } from './NowCard.tsx';
 import styles from './TodayPage.module.css';
+import type { TodayRoProps, TodayToast } from './TodayToasts.tsx';
 
+// 页底提示条、顶部重复事项横幅、只读行的行尾标记和打勾圆圈：同一个按需下载的文件，按 part 画哪一块；
+// 懒加载写在功能入口 ../index.ts（预载名单和主包共用，首屏预算 150 KB，FA-2 返工）
+
+/** 分包下不来时那一块不画（QuietBoundary），不把整页换成出错页 */
+function Ro(p: TodayRoProps) {
+  return (
+    <QuietBoundary name="today-ro">
+      <Suspense fallback={p.part === 'check' ? <CheckCircle {...p} /> : p.part === 'del' ? <RoDel {...p} /> : null}>
+        <TodayRo {...p} />
+      </Suspense>
+    </QuietBoundary>
+  );
+}
+
+/** 打勾圆圈：只读行用按需下载的那个（读屏名字后接“要更新到新版本才能修改”，词条不进首屏），下载完以前先画普通的 */
+function Check(p: CheckCircleProps) {
+  return p.readOnly ? <Ro part="check" {...p} /> : <CheckCircle {...p} />;
+}
+
+/** 只读行的 ×：变淡、aria-disabled，label 是最终的读屏名字（按需下载的那份接上“要更新到新版本才能修改”，下载完以前先用这份） */
+export function RoDel(p: { label: string; onClick(): void; testId: string }) {
+  return (
+    <Pressable className={styles.del} aria-label={p.label} aria-disabled="true" onClick={p.onClick} data-testid={p.testId} data-no-proxy="">
+      ×
+    </Pressable>
+  );
+}
 
 /** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */
 function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
@@ -50,8 +82,6 @@ function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
   );
 }
 
-type Toast = { kind: 'undo'; id: string } | { kind: 'error'; readonly: boolean } | null;
-
 export default function TodayPage() {
   const tApp = useT();
   const t = useTodayT();
@@ -59,13 +89,17 @@ export default function TodayPage() {
   const d = useToday();
   /** 引擎 armed 或出错（含 App 的看门狗：迟迟不 armed 也算出错）才挂“错过的提醒”（REMIND-shown-persist 修订 1 P2） */
   const missedOn = useRemindQueue((s) => s.armedSince !== null || s.remindDown);
-  const [toast, setToast] = useState<Toast>(null);
   // 打勾：先留住按下之前的两张列表 --dur-ui（圆圈在原地填满），再换成新的（没赶上 → 今天的安排）；
   // 留着的期间圆圈按“刚点成什么”画（picked），几条连着点就一起挪
   const hv = useHoldView({ late: d.late, events: d.events, todos: d.todos });
   const v = hv.view;
   const [picked, setPicked] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  // 只读行统一拦下（拦下时收起撤销条、出错条，出“这条要新版本才能修改 · 更新”）；撤销条、出错条也在 g 里
+  const g = useReadonlyGuard<TodayToast>();
+  const roT = (id: string) => g.isRo('todo', id);
+  const open = (kind: 'event' | 'todo', id: string) => (g.isRo(kind, id) ? g.block() : void navigate(kind, id));
   const tick = (id: string, on: boolean) => {
+    if (roT(id)) return g.block();
     setPicked((m) => new Map(hv.holding ? m : []).set(id, on));
     hv.hold();
     void d.toggleDone(id, on).then(report);
@@ -73,12 +107,14 @@ export default function TodayPage() {
   const shown = (id: string, done: boolean) => (hv.holding ? (picked.get(id) ?? done) : done);
 
   const report = (r: ActionResult) => {
-    if (r === 'failed' || r === 'readonly') setToast({ kind: 'error', readonly: r === 'readonly' });
+    if (r === 'readonly') g.block();
+    else if (r === 'failed') g.show({ kind: 'error' });
   };
   const del = async (id: string) => {
+    if (roT(id)) return g.block();
     hv.release();
     const r = await d.remove('todos', id, true);
-    if (r === 'ok') setToast({ kind: 'undo', id });
+    if (r === 'ok') g.show({ kind: 'undo', id });
     else report(r);
   };
 
@@ -104,6 +140,10 @@ export default function TodayPage() {
           </QuietBoundary>
         </GrowIn>
       ) : null}
+      {/* 有只读行才下载横幅（条数在横幅里数，N 为 0 不画） */}
+      {g.any ? (
+        <Ro part="repeat" onUpdate={g.update} />
+      ) : null}
       <div className={styles.notice} role="status" data-testid="today-notice">
         <QuietBoundary name="unsynced-hint">
           <Suspense fallback={null}>
@@ -122,13 +162,20 @@ export default function TodayPage() {
             <h2 id="today-late" className={styles.h2}>{t('late.title', {})}</h2>
             <AppearList as="ul" className={styles.list}>
               {v.late.map(({ todo, days }) => (
-                <AppearItem key={todo.id} className={styles.row}>
-                  <CheckCircle checked={shown(todo.id, false)} label={shown(todo.id, false) ? t('list.undoDone', {}) : t('list.done', {})} onChange={(v) => tick(todo.id, v)} testId={`today-done-${todo.id}`} />
-                  <button type="button" className={styles.main} onClick={() => void navigate('todo', todo.id)}>
+                <AppearItem key={todo.id} className={styles.row} data-readonly={roT(todo.id) ? '' : undefined}>
+                  <Check
+                    checked={shown(todo.id, false)}
+                    label={shown(todo.id, false) ? t('list.undoDone', {}) : t('list.done', {})}
+                    onChange={(v) => tick(todo.id, v)}
+                    testId={`today-done-${todo.id}`}
+                    readOnly={roT(todo.id)}
+                  />
+                  <button type="button" className={styles.main} onClick={() => open('todo', todo.id)}>
                     <span className={styles.mainText}>
                       <span className={styles.title}>{todo.title}</span>
                       <span className={styles.lateTag}>{days > 0 ? t('late.days', { n: days }) : t('late.passed', { t: todo.dueTime ?? '' })}</span>
                     </span>
+                    {roT(todo.id) ? <Ro part="mark" testId={`today-ro-${todo.id}`} /> : null}
                     <RowMark table="todos" id={todo.id} />
                   </button>
                 </AppearItem>
@@ -142,13 +189,14 @@ export default function TodayPage() {
           {v.events.length === 0 && v.todos.length === 0 ? <p className={styles.empty}>{t('list.empty', {})}</p> : null}
           <AppearList as="ul" className={styles.list}>
             {v.events.map((o) => (
-              <AppearItem key={`e:${o.id}`} className={styles.row} data-testid={`today-event-${o.id}`}>
+              <AppearItem key={`e:${o.id}`} className={styles.row} data-readonly={g.isRo('event', o.id) ? '' : undefined} data-testid={`today-event-${o.id}`}>
                 <span className={styles.time}>{o.time ?? t('list.allDay', {})}</span>
-                <button type="button" className={styles.main} onClick={() => void navigate('event', o.id)}>
+                <button type="button" className={styles.main} onClick={() => open('event', o.id)}>
                   <span className={styles.mainText}>
                     <span className={styles.title}>{o.title}</span>
                     {o.origin ? <span className={styles.sub}>{t('list.origin', { zone: zoneName(o.origin.tz, locale), t: o.origin.time })}</span> : null}
                   </span>
+                  {g.isRo('event', o.id) ? <Ro part="mark" testId={`today-ro-${o.id}`} /> : null}
                   <RowMark table="events" id={o.id} />
                 </button>
                 {/* 日程行没有 ×：补一个和 × 一样宽的空格子，“未同步”标记和待办行落在同一列（设计复审 今天页待办 M2）。
@@ -157,42 +205,46 @@ export default function TodayPage() {
               </AppearItem>
             ))}
             {v.todos.map((td) => (
-              <AppearItem key={`t:${td.id}`} className={styles.row} data-testid={`today-todo-${td.id}`} data-done={td.done ? '' : undefined}>
-                <CheckCircle
+              <AppearItem
+                key={`t:${td.id}`}
+                className={styles.row}
+                data-testid={`today-todo-${td.id}`}
+                data-done={td.done ? '' : undefined}
+                data-readonly={roT(td.id) ? '' : undefined}
+              >
+                <Check
+                  readOnly={roT(td.id)}
                   checked={shown(td.id, td.done)}
                   label={shown(td.id, td.done) ? t('list.undoDone', {}) : t('list.done', {})}
                   onChange={(v) => tick(td.id, v)}
                   testId={`today-done-${td.id}`}
                 />
-                <button type="button" className={styles.main} onClick={() => void navigate('todo', td.id)}>
+                <button type="button" className={styles.main} onClick={() => open('todo', td.id)}>
                   <span className={styles.mainText}>
                     <span className={styles.title}>{td.title}</span>
                     <span className={styles.sub}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
                   </span>
+                  {roT(td.id) ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
                   <RowMark table="todos" id={td.id} />
                 </button>
-                <Pressable className={styles.del} aria-label={t('list.delete', {})} onClick={() => void del(td.id)} data-testid={`today-del-${td.id}`} data-no-proxy="">
-                  ×
-                </Pressable>
+                {/* 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条、代码复查二）：变淡、aria-disabled、读屏名字后接“要更新到新版本才能修改”；
+                    点了照样由 del 里的 useReadonlyGuard 拦下出提示条、不写 */}
+                {roT(td.id) ? (
+                  <Ro part="del" label={t('list.delete', {})} onClick={() => void del(td.id)} testId={`today-del-${td.id}`} />
+                ) : (
+                  <Pressable className={styles.del} aria-label={t('list.delete', {})} onClick={() => void del(td.id)} data-testid={`today-del-${td.id}`} data-no-proxy="">
+                    ×
+                  </Pressable>
+                )}
               </AppearItem>
             ))}
           </AppearList>
         </AppearItem>
       </AppearList>
 
-      {toast?.kind === 'undo' ? (
-        <UndoToast
-          key={toast.id}
-          message={t('toast.deleted', {})}
-          undoLabel={t('toast.undo', {})}
-          onUndo={() => void d.remove('todos', toast.id, false).then(report)}
-          onClose={() => setToast((x) => (x === toast ? null : x))}
-          data-testid="today-toast"
-        />
-      ) : toast?.kind === 'error' ? (
-        <p className={styles.error} role="alert" data-testid="today-error">
-          {toast.readonly ? t('err.readonly', {}) : t('err.save', {})}
-        </p>
+      {/* 页底提示条（撤销条、出错条、只读提示条）：真有一条时才下载（首屏预算，FA-2 返工）；分包下不来时不画、不把整页换成出错页 */}
+      {g.toast !== null || g.toastAt !== null ? (
+        <Ro part="toasts" g={g} t={t} onUndo={(id) => void d.remove('todos', id, false).then(report)} />
       ) : null}
     </main>
   );

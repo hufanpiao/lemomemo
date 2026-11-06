@@ -34,6 +34,7 @@ export const ko = {
   'settings.devices.signedOut': '로그아웃됨', // R-106 B1 第一遍已审（10-30）；标签
   'settings.devices.lastSeen': '최근 사용 {date}', // R-106 B1 第一遍已审（10-30）
   'settings.devices.neverSeen': '아직 사용 기록이 없어요', // R-106 B1 第一遍已审（10-30）
+  'settings.devices.inUse': '지금 사용 중', // B2 A4 新加，待 R-106 审校
   'settings.devices.stale': '오래 쓰지 않아 {date} 이후 자동으로 제거돼요', // R-106 B1 第一遍已审（10-30）
   'settings.devices.remove': '제거', // R-106 B1 第一遍已审（10-30）；移除照 auth.exit.removed 用 제거
   'settings.devices.removeThis': '로그아웃', // R-106 B1 第一遍已审（10-30）；按钮只写 로그아웃，读屏标签见下面两条

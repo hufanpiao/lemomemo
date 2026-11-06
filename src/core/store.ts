@@ -74,7 +74,45 @@ export function collection<T extends Row>(name: string): Collection<T> {
   return c as unknown as Collection<T>;
 }
 
-/** 清空所有集合（退出登录、换账号；测试之间） */
+/**
+ * 只读行的 id（FA-2 只读行界面；架构 0.27 第 1 点“带不认识的值的行只读显示”）：本机缓存行的 ro 标记（K7 宽容读取写，
+ * outbox.enqueue 一律拒收 readonly_row），每张表一份，跟着 view 一起由数据层推进来（outbox-rows 的 notify、boot 灌集合、reload 重读）。
+ * 列表据它画行尾只读标记、拦下点击 / 打勾 / 删除，不用等写进去被拒才知道
+ */
+export interface ReadonlyIds {
+  subscribe(listener: Listener): () => void;
+  /** 内容不变时返回同一个 Set（useSyncExternalStore 要求） */
+  getSnapshot(): ReadonlySet<string>;
+  /** 按行写进只读或可写 */
+  set(rows: readonly { id: string; ro: boolean }[]): void;
+  remove(ids: readonly string[]): void;
+  clear(): void;
+}
+
+/** 快照数组 → Set（同一个数组给同一个 Set，useSyncExternalStore 要求） */
+const roSets = new WeakMap<readonly Row[], ReadonlySet<string>>();
+
+/** 每张表一份，借一个名叫 ro:<表名> 的集合存（首屏预算，FA-2 返工：不另写一套订阅）；clearAllCollections 跟着清 */
+export function readonlyIds(table: string): ReadonlyIds {
+  const c = collection<Row>(`ro:${table}`);
+  return {
+    subscribe: c.subscribe,
+    getSnapshot() {
+      const a = c.getSnapshot();
+      let s = roSets.get(a);
+      if (!s) roSets.set(a, (s = new Set(a.map((r) => r.id))));
+      return s;
+    },
+    set(rows) {
+      c.upsert(rows.flatMap((r) => (r.ro && !c.get(r.id) ? [{ id: r.id }] : [])));
+      c.remove(rows.flatMap((r) => (r.ro ? [] : [r.id])));
+    },
+    remove: c.remove,
+    clear: c.clear,
+  };
+}
+
+/** 清空所有集合（退出登录、换账号；测试之间）；只读 id（ro:<表名> 集合）一起清 */
 export function clearAllCollections(): void {
   for (const c of registry.values()) c.clear();
 }

@@ -97,3 +97,8 @@
 :global(:root[data-rm="1"]) .tick {
   transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
 }
+
+/* 只读行（FA-2）：圆圈变淡，表示打不了勾（点了由使用方出“要新版本”提示条）；跟着 checkbox 的 aria-disabled，不另挂属性（首屏预算，11-06） */
+.checkBox:has(> [aria-disabled='true']) {
+  opacity: 0.45;
+}

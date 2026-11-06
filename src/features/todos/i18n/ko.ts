@@ -9,6 +9,7 @@ export const ko = {
   'todo.edit.titleLabel': '제목', // REVIEW(ko)
   'todo.edit.titlePh': '무엇을 할까요', // REVIEW(ko)
   'todo.edit.done': '완료 (체크한 뒤에도 계속 고칠 수 있어요)', // REVIEW(ko)
+  'todo.edit.doneShort': '완료', // REVIEW(ko) FA-2 只读编辑页：不写“체크한 뒤에도 계속 고칠 수 있어요”
   'todo.edit.important': '중요', // REVIEW(ko)
   'todo.edit.due': '마감', // REVIEW(ko)
   'todo.edit.dueTime': '마감 시각', // REVIEW(ko)
@@ -29,6 +30,8 @@ export const ko = {
   'todo.edit.needDue': '마감일을 정해야 알려 드려요', // REVIEW(ko)
   'todo.edit.project': '프로젝트', // REVIEW(ko)
   'todo.edit.note': '메모', // REVIEW(ko)
+  'todo.edit.projectPh': '예: 회사, 집', // REVIEW(ko) G11 占位
+  'todo.edit.notePh': '덧붙일 내용 (선택)', // REVIEW(ko) G11 占位
   'todo.edit.raw': '원래 한 말', // REVIEW(ko)
   'todo.edit.delete': '삭제', // REVIEW(ko)
   'todo.edit.deleted': '삭제했어요. 30일 안에는 ‘최근 삭제’에서 되살릴 수 있어요.', // REVIEW(ko)

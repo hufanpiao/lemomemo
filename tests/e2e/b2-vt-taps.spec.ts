@@ -52,7 +52,8 @@ const finishAll = (page: Page) =>
   });
 
 test.describe('页签互切淡入进行中点页面内容（FA-7 R6、L17，方案 B）', () => {
-  test.use({ loggedIn: true, viewport: { width: 375, height: 812 } });
+  // 浏览器时区和造数据用的首尔一致：本机不在首尔时，跨零点那一小时“今天”对不上（11-06 23 点实测挂）
+test.use({ loggedIn: true, timezoneId: 'Asia/Seoul', viewport: { width: 375, height: 812 } });
 
   // 目标：今天页右上角的头像（进设置的链接）。从待办点“今天”，淡入中按头像的真实坐标点
   const setup = async (page: Page) => {

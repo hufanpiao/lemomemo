@@ -52,6 +52,11 @@ coverage/
 playwright-report/
 test-results/
 test-results-real/
+# 视觉基准组（playwright.visual.config.ts）的输出和报告；基准图只收 linux 那一份，本机 Windows 跑出来的 win32、macOS 的 darwin 不进仓库
+test-results-visual/
+playwright-report-visual/
+tests/e2e/visual/__screenshots__/win32/
+tests/e2e/visual/__screenshots__/darwin/
 .vite/
 
 # Tauri（exe）的 Rust 编译产物
@@ -78,3 +83,8 @@ docs/03-评审/B2/底栏透明度截图/真机录屏-9d40848/帧-整帧/
 docs/03-评审/B2/底栏透明度截图/真机录屏-9d40848/帧-底栏放大/
 docs/03-评审/B2/底栏透明度截图/真机录屏-*/*.mov
 docs/03-评审/B2/底栏透明度截图/真机录屏-*/帧-*/
+# 真机截图、录屏原图不进公开仓库（11-07 主持人补；之前误提交的 31 张已从跟踪中移除）
+docs/**/真机-*.png
+docs/**/真机-*.jpg
+docs/**/真机录屏-*/
+docs/**/*视觉稿真机*.png

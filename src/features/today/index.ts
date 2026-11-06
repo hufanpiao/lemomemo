@@ -7,3 +7,10 @@ export const routes = [
   // “最近删除”（日程、待办；ADR-006）
   { name: 'trash', Page: lazy(() => import('./ui/RecentlyDeletedPage.tsx')) },
 ] as const;
+
+/**
+ * 今天页按需下载的只读行部件和页底提示条（ui/TodayToasts.tsx，按 part 画哪一块；只给 ui/TodayPage.tsx 用，不是对外接口）。
+ * 懒加载写在这里而不写在 TodayPage：这个文件在主包里，Vite 给 import() 生成的预载文件名单和主包已有的那份共用，
+ * 写在 TodayPage 里要在今天页的块里另带一份二十来个带哈希的文件名（首屏预算 150 KB，FA-2 返工 11-06 量过）
+ */
+export const TodayRo = lazy(() => import('./ui/TodayToasts.tsx'));

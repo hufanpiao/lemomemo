@@ -1,0 +1,23 @@
+/* 只读行的行尾小标记（FA-2）；只用令牌（A11）。和横幅分开放：首屏只带这一份类名（首屏预算，FA-2 返工） */
+.mark {
+  position: relative;
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* 只给读屏的整句 */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+

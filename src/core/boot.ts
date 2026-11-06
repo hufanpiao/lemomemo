@@ -22,7 +22,7 @@ import type { UpgradeReport } from './cache-migrations.ts';
 import { DRAFTS, OUTBOX, PENDING_ACTIONS, VAULT_DRAFTS } from './cache-schema.ts';
 import { createOutbox, prunePendingActions, type Outbox, type OutboxBootReport, type OutboxItem, type OutboxOptions } from './outbox.ts';
 import { rewriteRow } from './outbox-rows.ts';
-import { clearAllCollections, collection } from './store.ts';
+import { clearAllCollections, collection, readonlyIds } from './store.ts';
 import { createUpgradeCenter, type UpgradeCenter, type UpgradeDeps } from './upgrade.ts';
 
 /** 软删除的行在本机最多留 30 天（和服务器的 30 天清理同一规则） */
@@ -344,6 +344,8 @@ async function loadCache(
     if (expired.length) await cache.deleteRows(table, expired);
     result.purged += expired.length;
     const views = keep.flatMap((r) => (r.view ? [r.view] : []));
+    // 只读标记先于集合（FA-2 只读行界面；store 的 readonlyIds）
+    readonlyIds(table).set(keep.flatMap((r) => (r.view ? [{ id: r.id, ro: r.ro === true }] : [])));
     if (views.length) collection(table).upsert(views);
   }
 

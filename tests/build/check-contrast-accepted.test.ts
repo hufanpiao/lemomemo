@@ -96,18 +96,26 @@ describe('build/check_contrast.py：负责人已接受的例外（accepted，B2 
 });
 
 describe('build/check_contrast.py：真仓库的例外名单', () => {
-  it('名单清零（主持人 11-06 方案甲）：底栏玻璃两项按 over: ["--bg"] 算（底栏后面一律实色带），原来 12 条例外都不再需要；名单外没有不达标', () => {
+  it('例外名单（11-06 夜负责人要求底栏恢复透明，底栏玻璃两项去掉 over、按最坏底色算；负责人定玻璃按原样，8 项列为例外）：名单外没有不达标', () => {
     type Pair = { id: string; over?: string[] };
-    const data = JSON.parse(readFileSync(join(ROOT, 'build', 'contrast-pairs.json'), 'utf8')) as { accepted?: unknown[]; pairs: Pair[] };
-    // 名单只能缩小：以后要加例外，这里跟着改（代码复审 M5）
-    expect(data.accepted ?? []).toEqual([]);
+    type Exc = { theme: string; id: string; floor: number; decided: string; reason: string };
+    const data = JSON.parse(readFileSync(join(ROOT, 'build', 'contrast-pairs.json'), 'utf8')) as { accepted?: Exc[]; pairs: Pair[] };
+    // 名单只能缩小：以后要加例外，这里跟着改（代码复审 M5）。11-06 负责人定：底栏玻璃按原样，不为对比度加深（G1、G8）
+    const REASON = '负责人 11-06 定：底栏玻璃按原样，不为对比度加深（G1、G8）；上沿外 12pt 渐隐（G12 选 B12），后面的字照样透出来';
+    const want: [string, string, number][] = [];
+    for (const skin of ['glass', 'simple']) {
+      want.push([`${skin}-dark`, 'g-tint-floor', 2.4574], [`${skin}-dark`, 'g-fg-on-floor', 2.7284]);
+      want.push([`${skin}-light`, 'g-tint-floor', 1.4053], [`${skin}-light`, 'g-fg-on-floor', 1.4053]);
+    }
+    expect((data.accepted ?? []).map((e) => [e.theme, e.id, e.floor]).sort()).toEqual(want.sort());
+    for (const e of data.accepted ?? []) expect(e).toMatchObject({ decided: '2026-11-06', reason: REASON });
     // 自动深浅 11-06 取消，它的两对颜色也删了
     expect(data.pairs.map((p) => p.id)).not.toEqual(expect.arrayContaining(['g-ad-floor']));
     expect(data.pairs.some((p) => p.id.startsWith('g-ad-'))).toBe(false);
-    // 按 --bg 算的前提是实色带：规则锁在 GlassBar.test.tsx（实色带改回半透明那条会挂，提醒重算这里）
-    for (const id of ['g-tint-floor', 'g-fg-on-floor']) expect(data.pairs.find((p) => p.id === id)?.over).toEqual(['--bg']);
+    // 底栏后面又是页面内容（实色带只铺到底栏底边以下）：两项不能再按 over 指定的实色算
+    for (const id of ['g-tint-floor', 'g-fg-on-floor']) expect(data.pairs.find((p) => p.id === id)?.over).toBeUndefined();
     const { code, report } = exec(ROOT);
     expect(code).toBe(0);
-    expect(report).toMatchObject({ failed: 0, accepted: 0 });
+    expect(report).toMatchObject({ failed: 0, accepted: 8 });
   });
 });

@@ -1,10 +1,10 @@
 // 月历页的两个小部件（B2 FA-3；从 CalendarPage.tsx 拆出来）
-// • CalNav：页顶第二行，左边“周 / 月 / 纪念日”分段，右边“‹ 今天 ›”（视觉 32 px、点按区各 44 px、间距 12 px 刚好相接，设计复审 N6）。
+// • CalNav：页顶第二行，左边“周 / 月 / 纪念日”分段（纪念日是 B5 的功能，没做好之前置灰、不导航，点了只出“纪念日即将推出”，
+//   B2 全站视觉审查 A2），右边“‹ 今天 ›”（视觉 32 px、点按区各 44 px、间距 12 px 刚好相接，设计复审 N6）。
 //   “今天”在本月 / 本周时灰（aria-disabled，焦点不丢）；到头时 ‹ › 也 aria-disabled（代码审查 L1、L3）；
 //   byWeek 时 ‹ › 的名字是“上一周 / 下一周”（周视图，或月视图收起成一周时）
 // • FoldHandle：月视图日清单顶上的拖动柄（上拖收起，线框 s3、R-326）。本身是按钮：aria-expanded 说明月历展没展开，
 //   键盘、读屏、点一下切换；按住上下拖跟手（手势在 motion 的 useDragCollapse），拖过以后的那一下点击被吞掉
-import { navigate } from '../../../app/router.ts';
 import type { DragCollapse } from '../../../motion/gestures.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
@@ -20,6 +20,7 @@ export function CalNav({
   onPrev,
   onNext,
   onToday,
+  onAnniv,
 }: {
   t: CalViewT;
   month: boolean;
@@ -32,6 +33,8 @@ export function CalNav({
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
+  /** 点了置灰的“纪念日”：页面出“纪念日即将推出”（不导航，A2） */
+  onAnniv: () => void;
 }) {
   return (
     <div className={styles.calnav}>
@@ -42,7 +45,15 @@ export function CalNav({
         <button type="button" className={styles.segBtn} aria-pressed={month} onClick={() => onMode('month')} data-testid="cal-mode-month">
           {t('cal.month', {})}
         </button>
-        <button type="button" className={styles.segBtn} aria-pressed={false} onClick={() => void navigate('anniv')} data-testid="cal-mode-anniv">
+        {/* aria-disabled 不用 disabled：焦点不丢、读屏读得到“纪念日 · 即将推出”，点了出提示（A2） */}
+        <button
+          type="button"
+          className={styles.segBtn}
+          aria-disabled="true"
+          aria-label={t('cal.annivSoonLabel', {})}
+          onClick={onAnniv}
+          data-testid="cal-mode-anniv"
+        >
           {t('cal.anniv', {})}
         </button>
       </div>

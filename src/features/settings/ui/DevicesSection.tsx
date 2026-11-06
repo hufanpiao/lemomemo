@@ -1,5 +1,5 @@
 // 设置 › 已登录设备（架构 0.29 续第 98、103、108、111 条；15.7 第 19 项）
-// 每台：名字（没起名按平台）、本机 / 已退出标记、最近使用时间、“很久没用，<日期> 后自动移除”、移除按钮；
+// 每台：名字（没起名按平台）、本机 / 已退出标记、最近使用时间（本机写“正在使用”，A4）、“很久没用，<日期> 后自动移除”、移除按钮；
 // 下面“另有 N 个登录没有设备记录（最近一次 <时间>）”（N 为 0 时不显示）和“退出其他所有设备”
 import { useEffect, useRef, useState } from 'react';
 import { fmtDate } from '../../../../shared/i18n/fmt.ts';
@@ -56,9 +56,12 @@ function DeviceRowView({ d, busy, onRemove }: { d: DeviceView; busy: boolean; on
         {d.isCurrent ? t('settings.devices.removeThis', {}) : t('settings.devices.remove', {})}
       </Pressable>
       <p className={styles.meta}>
-        {d.lastActiveMs === null
-          ? t('settings.devices.neverSeen', {})
-          : t('settings.devices.lastSeen', { date: fmtWhen(d.lastActiveMs, locale) })}
+        {/* 本机写“正在使用”，不写 last_seen_at：它登记后每天最多刷新一次（core/device-reg.ts），写出来是上次刷新的旧时间（A4） */}
+        {d.isCurrent
+          ? t('settings.devices.inUse', {})
+          : d.lastActiveMs === null
+            ? t('settings.devices.neverSeen', {})
+            : t('settings.devices.lastSeen', { date: fmtWhen(d.lastActiveMs, locale) })}
         {d.autoRemoveAtMs === null ? null : ` · ${t('settings.devices.stale', { date: fmtDate(d.autoRemoveAtMs, localTz(), locale, 'monthDay') })}`}
       </p>
     </li>

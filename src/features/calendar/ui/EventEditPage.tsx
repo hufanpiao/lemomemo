@@ -6,9 +6,10 @@
 import { canGoBack, goBack, replaceAddress, replaceRoute, useRoute } from '../../../app/router.ts';
 import { useCallback, useReducer, useRef } from 'react';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
-import { Check, Field, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
+import { Check, Field, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
 import { LocationText } from '../../../kit/components/LocationText.tsx';
 import type { EditStatus } from '../../../kit/hooks/useEditRecord.ts';
+import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { requestAppUpdate } from '../../../platform/native-bridge.ts';
 import { useCalendarT, type CalendarMsgKey } from '../hooks/useCalendarT.ts';
@@ -31,7 +32,8 @@ const STATUS_KEY: Record<EditStatus, PlainKey | null> = {
   readonly: 'event.edit.st.readonly',
   rejected: 'event.edit.st.rejected',
 };
-const BAD: ReadonlySet<EditStatus> = new Set(['empty_title', 'missing', 'local_unavailable', 'closing', 'readonly', 'rejected']);
+// “写上标题才会保存”（empty_title）是提示不是报错，用中性灰（同待办编辑页，负责人 11-06 真机截图 6）
+const BAD: ReadonlySet<EditStatus> = new Set(['missing', 'local_unavailable', 'closing', 'readonly', 'rejected']);
 
 const minKey = (v: EventForm['remind_min']): PlainKey => (v === null ? 'event.edit.min.none' : (`event.edit.min.${v}` as PlainKey));
 const toMin = (v: string): EventForm['remind_min'] => (v === '0' || v === '15' || v === '30' || v === '60' || v === '1440' ? (Number(v) as EventForm['remind_min']) : null);
@@ -72,7 +74,10 @@ function EventEditor({ id, onCreated }: { id: string; onCreated(id: string): voi
   const ed = useEventEdit(id, onCreated);
   const { form, change, status } = ed;
   const statusKey = STATUS_KEY[status];
-  const off = status === 'missing' || ed.deleted;
+  // 只读行（0.27①“只读显示”，FA-2 视觉验收第 2 条）：一进来就判断，顶部出提示、输入全禁用、不出“删除”和“改了就自动保存”
+  const roIds = useReadonlyIds('events');
+  const readonly = status === 'readonly' || roIds.has(id);
+  const off = status === 'missing' || ed.deleted || readonly;
   const rawText = typeof ed.row?.['raw_text'] === 'string' ? ed.row['raw_text'] : '';
 
   return (
@@ -81,13 +86,13 @@ function EventEditor({ id, onCreated }: { id: string; onCreated(id: string): voi
       kind={t(ed.isNew ? 'event.edit.newKind' : 'event.edit.kind', {})}
       backLabel={t('event.edit.back', {})}
       onBack={back}
-      status={statusKey ? t(statusKey, {}) : ''}
+      status={statusKey && (status !== 'idle' || !readonly) ? t(statusKey, {}) : ''}
       statusBad={BAD.has(status)}
+      noticeTone={readonly ? 'quiet' : undefined}
       notice={
-        status === 'readonly' ? (
+        readonly ? (
           <>
-            {t('event.edit.st.readonly', {})}
-            {' · '}
+            <span>{t('event.edit.st.readonly', {})}</span>
             <Pressable onClick={() => void requestAppUpdate()} data-testid="event-edit-update">
               {t('event.edit.update', {})}
             </Pressable>
@@ -95,17 +100,17 @@ function EventEditor({ id, onCreated }: { id: string; onCreated(id: string): voi
         ) : ed.deleted ? (
           <>
             {t('event.edit.deleted', {})}{' '}
-            <Pressable onClick={() => void ed.setDeleted(false)} data-testid="event-edit-undo">
+            <FormButton onClick={() => void ed.setDeleted(false)} data-testid="event-edit-undo">
               {t('event.edit.undo', {})}
-            </Pressable>
+            </FormButton>
           </>
         ) : undefined
       }
       actions={
-        ed.row && !ed.deleted ? (
-          <Pressable onClick={() => void ed.setDeleted(true)} data-testid="event-edit-delete" data-no-proxy="">
+        ed.row && !ed.deleted && !readonly ? (
+          <FormButton danger onClick={() => void ed.setDeleted(true)} data-testid="event-edit-delete" data-no-proxy="">
             {t('event.edit.delete', {})}
-          </Pressable>
+          </FormButton>
         ) : undefined
       }
     >
@@ -190,25 +195,22 @@ function EventEditor({ id, onCreated }: { id: string; onCreated(id: string): voi
       </FormGroup>
 
       <FormGroup>
-        <Field
-          label={t('event.edit.location', {})}
-          htmlFor="event-location"
-          hint={form.location ? <LocationText text={form.location} /> : undefined}
-        >
+        <Field label={t('event.edit.location', {})} htmlFor="event-location" hint={form.location ? <LocationText text={form.location} /> : undefined}>
           <TextInput
             id="event-location"
             value={form.location}
             maxLength={LOCATION_MAX}
             disabled={off}
+            placeholder={t('event.edit.locationPh', {})}
             onCommit={(v) => change({ location: v.trim() })}
             data-testid="event-edit-location"
           />
         </Field>
         <Field label={t('event.edit.project', {})} htmlFor="event-project">
-          <TextInput id="event-project" value={form.project} maxLength={PROJECT_MAX} disabled={off} onCommit={(v) => change({ project: v.trim() })} />
+          <TextInput id="event-project" value={form.project} maxLength={PROJECT_MAX} disabled={off} placeholder={t('event.edit.projectPh', {})} onCommit={(v) => change({ project: v.trim() })} />
         </Field>
         <Field label={t('event.edit.note', {})} htmlFor="event-note">
-          <TextArea id="event-note" value={form.note} maxLength={NOTE_MAX} disabled={off} onCommit={(v) => change({ note: v })} />
+          <TextArea id="event-note" value={form.note} maxLength={NOTE_MAX} disabled={off} placeholder={t('event.edit.notePh', {})} onCommit={(v) => change({ note: v })} />
         </Field>
         {rawText ? (
           <Field label={t('event.edit.raw', {})}>

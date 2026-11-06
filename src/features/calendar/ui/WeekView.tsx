@@ -60,6 +60,10 @@ export interface WeekProps {
   onSelect: (date: DateStr) => void;
   t: CalViewT;
   label: string;
+  /** 打开一条（电脑周视图的全天行、时间块）；页面传进来，只读行在那里拦下（FA-2 只读行界面）。不传就直接打开编辑页 */
+  onOpen?: ((kind: 'event' | 'todo', id: string) => void) | undefined;
+  /** 这一条是不是只读行（FA-2）：电脑周视图的全天行、时间块据它加斜纹底、读屏名字后接“要更新到新版本才能修改” */
+  isRo?: ((kind: 'event' | 'todo', id: string) => boolean) | undefined;
 }
 
 /** 这一周所有有时刻的日程段（按设备时区切好）和待办截止时刻 → 时间轴范围 */

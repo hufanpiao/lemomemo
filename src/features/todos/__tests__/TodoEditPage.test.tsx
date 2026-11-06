@@ -85,6 +85,17 @@ describe('新建', () => {
     expect(items[1]?.data).toEqual({ title: '买两个收纳盒', updated_at: NOW });
   });
 
+  it('只选了日期、还没写标题：“写上标题才会保存”是中性灰提示，不用报错红（负责人 11-06 真机截图 6）', async () => {
+    await boot();
+    open('#/todo/new');
+    await pick('todo-edit-due', '2026-11-06');
+    const st = screen.getByTestId('edit-status');
+    expect(st.textContent).toBe('写上标题才会保存');
+    expect(st.className).toMatch(/\bstatus\b/);
+    expect(st.className).not.toMatch(/statusBad/);
+    expect(todos().getSnapshot()).toHaveLength(0);
+  });
+
   it('新建保存后：地址换成这一条的 id（不压历史，S7），编辑器不重挂（输入框还是同一个）', async () => {
     await boot();
     open('#/todo/new');
@@ -172,15 +183,41 @@ describe('编辑已有的', () => {
     await waitFor(() => expect(todos().get(ID)).toMatchObject({ title: '交周报', short: null, short_by: null }));
   });
 
-  it('只读行（带不认识的值）：写入被拒，顶部出“这条要新版本才能修改 · 更新”，输入保留', async () => {
+  it('只读行（带不认识的值，0.27①“只读显示”）：一进来顶部就出“这条要新版本才能修改 · 更新”；输入全禁用、没有“删除”、不写“改了就自动保存”；改不进去', async () => {
     const b = await boot();
     await b.outbox?.applyServer('todos', [{ row: serverTodo(), ro: true }]);
     open(`#/todo/${ID}`);
-    await commitText('todo-edit-title', '改不了');
-    await waitFor(() => expect(screen.getByTestId('edit-notice').textContent).toContain('这条要新版本才能修改'));
+    expect(screen.getByTestId('edit-notice').textContent).toContain('这条要新版本才能修改');
     expect(screen.getByTestId('todo-edit-update')).toBeTruthy();
-    expect((screen.getByTestId('todo-edit-title') as HTMLInputElement).value).toBe('改不了');
+    expect(screen.getByTestId('edit-status').textContent).toBe('');
+    expect(screen.queryByTestId('todo-edit-delete')).toBeNull();
+    for (const id of ['todo-edit-title', 'todo-edit-done', 'todo-edit-due', 'todo-edit-days']) {
+      expect((screen.getByTestId(id) as HTMLInputElement).disabled, id).toBe(true);
+    }
+    // 第二轮视觉验收第 2、3 条：“已完成”不写“打勾后也能继续改”；“清掉”和“删除”一样不出
+    expect(screen.getByTestId('todo-edit-done').closest('label')?.textContent).toBe('已完成');
+    expect(screen.queryByTestId('todo-edit-due-clear')).toBeNull();
+    // G11：禁用的输入不出占位提示（只读时空字段不该像“可以填”）
+    expect(document.querySelector('#todo-project')?.getAttribute('placeholder')).toBeNull();
+    expect(screen.queryByTestId('todo-edit-due-time-clear')).toBeNull();
+    await commitText('todo-edit-title', '改不了');
     expect(todos().get(ID)?.['title']).toBe('交报告');
+  });
+
+  it('可写的行照旧：有“删除”、右上“改了就自动保存”、输入可用', async () => {
+    const b = await boot();
+    await b.outbox?.applyServer('todos', [{ row: serverTodo() }]);
+    open(`#/todo/${ID}`);
+    expect(screen.getByTestId('todo-edit-delete')).toBeTruthy();
+    expect(screen.getByTestId('edit-status').textContent).toBe('改了就自动保存');
+    expect((screen.getByTestId('todo-edit-title') as HTMLInputElement).disabled).toBe(false);
+    expect(screen.queryByTestId('edit-notice')?.textContent ?? '').not.toContain('新版本');
+    expect(screen.getByTestId('todo-edit-done').closest('label')?.textContent).toBe('已完成（打勾后也能继续改）');
+    expect(screen.getByTestId('todo-edit-due-clear')).toBeTruthy();
+    // G11：空字段有占位提示；“清掉”“删除”用项目的按钮样式（FormButton），不是浏览器原生按钮
+    expect(document.querySelector('#todo-project')?.getAttribute('placeholder')).toBe('比如：工作、家里');
+    expect(screen.getByTestId('todo-edit-due-clear').className).toMatch(/btn/);
+    expect(screen.getByTestId('todo-edit-delete').className).toMatch(/btnDanger/);
   });
 
   it('删除：软删，页内出“撤销”；撤销后回来', async () => {

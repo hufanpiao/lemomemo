@@ -2,7 +2,9 @@
 // • 顶部项目筛选条：“全部 / 各项目 + 条数”，只作用于这一页（不写 settings）
 // • 分组：过期（标红：逾 N 天 / 已过 17:00）→ 今天 → 明天 → 7 天内按日期 → 以后 → 没有日期 → 已完成
 // • 每行：打勾（就地保存）、标题（常规字重）、截止标签（“今天 17:00 截止”）、删除（软删 + 8 秒撤销条）；点标题进编辑页
-// • 只读行的行尾标记、左滑、多选在后面一段（要 core 暴露 ro 标记，见回报里的接口建议）
+// • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记，圆圈变淡；点这一行、打勾、删除统一拦下（不进编辑页、不写），
+//   出提示条“这条要新版本才能修改 · 更新”（kit 的 useReadonlyGuard、ReadonlyToast）。只读 id 来自 core 的 readonlyIds。
+//   左滑和多选这一页还没有，以后加的时候照样先看 ro.has(id)
 // • 行尾“未同步”小标记（REMIND-wiring；TC-B2-69；reminders 的 UnsyncedRemindMark 懒加载）：带提醒、还没同步上的那条标，在行按钮里、
 //   标题和截止标签的右边；只看本机待同步队列，同日历页直接挂、不等提醒引擎（今天页待办 代码审查 M1），没有时那一格不画
 // • 动效（17.1“勾选完成”“列表增删”，B2 FA-5；设计审查 M1～M3 返工 11-04）：打勾时圆圈在原地填满（CSS，--dur-ui），
@@ -12,9 +14,11 @@
 import { Suspense, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
-import { CheckCircle } from '../../../kit/components/CheckCircle.tsx';
+import { ReadonlyMark, ReadonlyToast, RoCheckCircle } from '../../../kit/components/ReadonlyRow.tsx';
+import { useRoT } from '../../../kit/hooks/useRoT.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
+import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
 import { useListT, useTodoList, type ActionResult, type DueTag, type Group } from '../hooks/useTodoList.ts';
@@ -34,31 +38,38 @@ function RowMark({ id }: { id: string }) {
   );
 }
 
-type Toast = { kind: 'undo'; id: string } | { kind: 'error'; readonly: boolean } | null;
+type Toast = { kind: 'undo'; id: string } | { kind: 'error' };
 
 export default function TodosPage() {
   const t = useListT();
+  const tRo = useRoT();
   const locale = useUi((s) => s.locale);
   const l = useTodoList();
-  const [toast, setToast] = useState<Toast>(null);
   // 打勾：先留住按下之前的分组 --dur-ui（圆圈在原地填满，17.1 勾选完成），再换成新的；
   // 留着的期间圆圈按“刚点成什么”画（picked，不等保存回来），几条连着点就一起挪
   const hv = useHoldView(l.groups);
   const [picked, setPicked] = useState<ReadonlyMap<string, boolean>>(() => new Map());
-
+  // 只读行统一拦下（拦下时收起撤销条、出错条，出“这条要新版本才能修改 · 更新”）；撤销条、出错条也在 g 里
+  const g = useReadonlyGuard<Toast>();
+  const { toast } = g;
+  const isRo = (id: string) => g.isRo('todo', id);
   const report = (r: ActionResult) => {
-    if (r === 'failed' || r === 'readonly') setToast({ kind: 'error', readonly: r === 'readonly' });
+    if (r === 'readonly') g.block();
+    else if (r === 'failed') g.show({ kind: 'error' });
   };
+  const open = (id: string) => (isRo(id) ? g.block() : void navigate('todo', id));
   const tick = (id: string, on: boolean) => {
+    if (isRo(id)) return g.block();
     setPicked((m) => new Map(hv.holding ? m : []).set(id, on));
     hv.hold();
     void l.toggleDone(id, on).then(report);
   };
   const shown = (id: string, done: boolean) => (hv.holding ? (picked.get(id) ?? done) : done);
   const del = async (id: string) => {
+    if (isRo(id)) return g.block();
     hv.release();
     const r = await l.remove(id, true);
-    if (r === 'ok') setToast({ kind: 'undo', id });
+    if (r === 'ok') g.show({ kind: 'undo', id });
     else report(r);
   };
 
@@ -112,23 +123,40 @@ export default function TodosPage() {
             <h2 className={styles.h2}>{groupTitle(g)}</h2>
             <AppearList as="ul" className={styles.list}>
               {g.items.map(({ todo, tag }) => (
-                <AppearItem key={todo.id} className={styles.row} data-done={todo.done ? '' : undefined} data-testid={`todos-row-${todo.id}`}>
-                  <CheckCircle
+                <AppearItem
+                  key={todo.id}
+                  className={styles.row}
+                  data-done={todo.done ? '' : undefined}
+                  data-readonly={isRo(todo.id) ? '' : undefined}
+                  data-testid={`todos-row-${todo.id}`}
+                >
+                  <RoCheckCircle
+                    readOnly={isRo(todo.id)}
                     checked={shown(todo.id, todo.done)}
                     label={shown(todo.id, todo.done) ? t('list.undoDone', {}) : t('list.done', {})}
                     onChange={(v) => tick(todo.id, v)}
                     testId={`todos-done-${todo.id}`}
                   />
-                  <button type="button" className={styles.main} onClick={() => void navigate('todo', todo.id)}>
+                  <button type="button" className={styles.main} onClick={() => open(todo.id)}>
                     <span className={styles.mainText}>
                       <span className={styles.title}>{todo.title}</span>
                       <span className={tag.kind === 'late' ? styles.tagLate : styles.tag} data-testid={`todos-tag-${todo.id}`}>
                         {[todo.important ? t('list.important', {}) : '', todo.project, tagText(tag)].filter(Boolean).join(' · ')}
                       </span>
                     </span>
+                    {isRo(todo.id) ? <ReadonlyMark testId={`todos-ro-${todo.id}`} /> : null}
                     <RowMark id={todo.id} />
                   </button>
-                  <Pressable className={styles.del} aria-label={t('list.delete', {})} onClick={() => void del(todo.id)} data-testid={`todos-del-${todo.id}`} data-no-proxy="">
+                  {/* 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条、代码复查二）：变淡、aria-disabled、读屏名字后接“要更新到新版本才能修改”；
+                      点了照样由 del 里的 useReadonlyGuard 拦下出提示条、不写 */}
+                  <Pressable
+                    className={styles.del}
+                    aria-label={isRo(todo.id) ? tRo('ro.named', { label: t('list.delete', {}) }) : t('list.delete', {})}
+                    aria-disabled={isRo(todo.id) || undefined}
+                    onClick={() => void del(todo.id)}
+                    data-testid={`todos-del-${todo.id}`}
+                    data-no-proxy=""
+                  >
                     ×
                   </Pressable>
                 </AppearItem>
@@ -144,14 +172,15 @@ export default function TodosPage() {
           message={t('list.deleted', {})}
           undoLabel={t('list.undo', {})}
           onUndo={() => void l.remove(toast.id, false).then(report)}
-          onClose={() => setToast((x) => (x === toast ? null : x))}
+          onClose={() => g.dismiss(toast)}
           data-testid="todos-toast"
         />
       ) : toast?.kind === 'error' ? (
         <p className={styles.error} role="alert" data-testid="todos-error">
-          {toast.readonly ? t('list.err.readonly', {}) : t('list.err.save', {})}
+          {t('list.err.save', {})}
         </p>
       ) : null}
+      <ReadonlyToast guard={g} message={t('list.err.readonly', {})} testId="todos-ro-toast" />
     </main>
   );
 }

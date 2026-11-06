@@ -181,3 +181,23 @@ describe('从日历页点“＋”新建（FA-7 第 5 项）', () => {
     expect((screen.getByTestId('event-edit-date') as HTMLInputElement).value).toBe(todayOf(NOW, currentTz()));
   });
 });
+
+describe('只读行（0.27①“只读显示”，FA-2 视觉验收第 2 条）', () => {
+  it('一进来顶部就出“这条要新版本才能修改 · 更新”；输入全禁用、没有“删除”、不写“改了就自动保存”；可写的行照旧', async () => {
+    const b = await boot();
+    await b.outbox?.applyServer('events', [{ row: serverEvent(), ro: true }]);
+    open(`#/event/${ID}`);
+    expect(screen.getByTestId('edit-notice').textContent).toContain('这条要新版本才能修改');
+    expect(screen.getByTestId('event-edit-update')).toBeTruthy();
+    expect(screen.getByTestId('edit-status').textContent).toBe('');
+    expect(screen.queryByTestId('event-edit-delete')).toBeNull();
+    for (const el of document.querySelectorAll<HTMLInputElement>('[data-testid="event-edit"] input, [data-testid="event-edit"] select, [data-testid="event-edit"] textarea')) {
+      expect(el.disabled, el.dataset['testid'] ?? el.name).toBe(true);
+    }
+    cleanup();
+    await b.outbox?.applyServer('events', [{ row: serverEvent({ rev: 9 }) }]);
+    open(`#/event/${ID}`);
+    expect(screen.getByTestId('event-edit-delete')).toBeTruthy();
+    expect(screen.getByTestId('edit-status').textContent).toBe('改了就自动保存');
+  });
+});

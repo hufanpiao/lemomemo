@@ -150,6 +150,11 @@
   font-size: var(--fs-18);
 }
 
+/* 只读行的 ×（FA-2）：和只读打勾圆圈一样变淡；点了由页面拦下出“要新版本”提示条 */
+.del[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
 /* 日程行行尾和 × 一样宽的空格子（M2）：宽度直接用 .del 的 --hit，改了 × 两边一起变；不接点按 */
 .delGap {
   flex: none;

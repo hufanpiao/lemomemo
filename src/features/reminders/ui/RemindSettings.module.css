@@ -342,6 +342,13 @@ section:first-child > .gt {
   font: inherit;
 }
 
+/* 触屏上时刻框至少 16px（继承 .timeLbl 的 14px 时 iOS 聚焦会放大整页，同 kit/components/Form.module.css） */
+@media (any-pointer: coarse) {
+  .time {
+    font-size: var(--fs-16);
+  }
+}
+
 .toggle:focus-visible,
 .time:focus-visible {
   outline: 2px solid var(--focus);

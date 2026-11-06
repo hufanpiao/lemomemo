@@ -7,7 +7,8 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 import { FAKE_USER_ID } from './session-fixture.ts';
 
-test.use({ loggedIn: true });
+// 浏览器时区和造数据用的首尔一致：本机不在首尔时，跨零点那一小时“今天”对不上（11-06 23 点实测挂）
+test.use({ loggedIn: true, timezoneId: 'Asia/Seoul' });
 
 const TZ = 'Asia/Seoul';
 const today = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());

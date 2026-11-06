@@ -1,6 +1,6 @@
 // 液态玻璃底栏的“首屏后”部分（B2 FA-7；主持人 11-05 首屏选 ③）：外壳 GlassBar.tsx 首屏画完以后才下载这个文件
-// • 底部实色带（11-06 负责人：底栏后面、下面一律实色 --bg，只在底栏顶边上方 --band-fade 一段渐隐，GlassBarFx.module.css）；• 按住当前选中的页签放大（D3，data-state=press）
-// • 自动深浅（深色玻璃层 .adTint、data-ad）11-06 取消：底栏后面是实色，判断深浅没有意义（主持人 11-06 方案甲）
+// • 底部实色带（11-06 负责人真机 69659c1“底部导航栏透明又没了！！ 这个不要动！”）：实色 --bg 只铺在底栏底边以下到屏幕底，往上 --band-fade 渐隐；底栏和“＋”后面不垫实色，照样透出模糊的内容（GlassBarFx.module.css）；上沿外再加 --edge-fade 渐隐（.edge，负责人 11-06 选 B12），底栏、“＋”的形状挖掉；• 按住当前选中的页签放大（D3，data-state=press）
+// • 自动深浅（深色玻璃层 .adTint、data-ad）11-06 取消（主持人方案甲，当时的理由是底栏后面是实色；实色带改回只铺底栏以下以后，负责人 11-06 定不恢复）
 // • 玻璃标记、帧循环、倾斜高光（motion/glass-ghost.ts）：这个文件挂上以后再 import()（0.31 第 6 条：motion 以外不准静态引它）
 // • 切页过渡期间的点按（设计复审二 R4）：过渡进行中浏览器把点按都算到 <html> 上（::view-transition 的 pointer-events 不管用），
 //   底栏的页签和“＋”接不到；落在 <html> 上的点按按坐标找底栏里的页签或“＋”，替它点一下，马上开始下一次切页（新的过渡会打断旧的）
@@ -89,9 +89,11 @@ export interface GlassBarFxProps {
   kb: '1' | undefined;
   /** 电脑版侧栏（外壳按 (width >= 900px) 算好传进来）：侧栏不开副本引擎 */
   wide: boolean;
+  /** 启动时异步下载到、晚于外壳挂上的那一次：实色带、渐隐层从 0 淡入（data-fade，@starting-style）；底栏重挂时用缓存同步画，不淡入 */
+  fadeIn?: boolean;
 }
 
-export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide }: GlassBarFxProps) {
+export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide, fadeIn = false }: GlassBarFxProps) {
   const glass = useRef<{ poke(ms?: number): void } | null>(null);
   const gelFx = useRef<((el: HTMLElement) => boolean) | null>(null);
   // 过渡中的点按（R4、R6）在提交时就挂上（useLayoutEffect）：从设置回今天时 GlassBar 在过渡回调里重新挂上，
@@ -181,5 +183,13 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide }: GlassBarFxPr
     void el.offsetWidth; // 加回 CSS 动画类前先让样式落一次，动画才从头放
     el.classList.add(css);
   }, [i, gel]);
-  return <div className={fx.band} aria-hidden="true" data-kb={kb} data-testid="tabbar-band" />;
+  return (
+    <>
+      <div className={fx.band} aria-hidden="true" data-kb={kb} data-fade={fadeIn ? '1' : undefined} data-testid="tabbar-band" />
+      {/* 上沿外渐隐（B12）：在实色带后面挂，叠在它上面；没有“＋”时不挖那个圆 */}
+      <div className={fx.edge} aria-hidden="true" data-kb={kb} data-add={hasAdd ? '1' : '0'} data-fade={fadeIn ? '1' : undefined} data-testid="tabbar-edge">
+        <div className={fx.edgeTint} />
+      </div>
+    </>
+  );
 }

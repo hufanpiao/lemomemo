@@ -7,6 +7,9 @@ export const viewKo = {
   'cal.month': '월', // REVIEW(ko)
   'cal.week': '주', // REVIEW(ko)
   'cal.anniv': '기념일', // REVIEW(ko)
+  'cal.annivSoon': '기념일 기능은 곧 나올 예정이에요', // REVIEW(ko) B2 A2 新加
+  'cal.annivSoonLabel': '기념일 (곧 나올 예정)', // REVIEW(ko) B2 A2 新加
+  'cal.readonly': '새 버전으로 업데이트해야 수정할 수 있어요', // REVIEW(ko) FA-2 只读行新加；同 today err.readonly
   'cal.modeLabel': '보기', // REVIEW(ko)
   'cal.today': '오늘', // REVIEW(ko)
   'cal.prevMonth': '이전 달', // REVIEW(ko)

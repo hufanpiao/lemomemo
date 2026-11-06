@@ -1,7 +1,8 @@
 // 编辑页的表单零件（B2 FA-2）：字段行、文本框、多行文本、下拉、勾选。只管外观和读屏标注，不含任何业务；文案由调用方传
 // 文本框、多行文本：输入时只改本地值，失焦（或回车）时才 onCommit（定稿线框“失焦即保存”，不每敲一个字就入队）；
 // 没失焦就离开页面（后退、跳走、切后台）时补交一次（useCommitDraft）
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { Pressable } from '../../motion/components.ts';
 import styles from './Form.module.css';
 
 export function FormGroup({ children }: { children: ReactNode }) {
@@ -99,7 +100,7 @@ export function TextInput({ value, onCommit, type = 'text', title = false, ...p 
       id={p.id}
       maxLength={p.maxLength}
       disabled={p.disabled}
-      placeholder={p.placeholder}
+      placeholder={p.disabled ? undefined : p.placeholder}
       aria-label={p['aria-label']}
       data-testid={p['data-testid']}
       type={type}
@@ -130,7 +131,7 @@ export function TextArea({ value, onCommit, ...p }: CommitProps) {
       id={p.id}
       maxLength={p.maxLength}
       disabled={p.disabled}
-      placeholder={p.placeholder}
+      placeholder={p.disabled ? undefined : p.placeholder}
       aria-label={p['aria-label']}
       data-testid={p['data-testid']}
       className={styles.area}
@@ -176,4 +177,12 @@ export function Check({ label, checked, onChange, disabled, ...p }: { label: str
       {label}
     </label>
   );
+}
+
+/**
+ * 编辑页的按钮（“清掉”“删除”“撤销”；G11：不用浏览器原生按钮，浅色灰框、深色凸边都不要）：圆角胶囊描边，和设置 › 提醒的按钮一套写法；
+ * danger 是“删除”：危险色描边和字（同 RemindSettings 的 .danger）。聚焦 var(--focus)
+ */
+export function FormButton({ danger = false, ...p }: Omit<ComponentProps<typeof Pressable>, 'className'> & { danger?: boolean }) {
+  return <Pressable {...p} className={danger ? styles.btnDanger : styles.btn} />;
 }

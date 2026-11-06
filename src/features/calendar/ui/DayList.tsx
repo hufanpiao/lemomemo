@@ -8,6 +8,7 @@
 // • “往上拖列表、月历收成一周一行”的拖动柄在 CalNav.tsx 的 FoldHandle，这里只管列表
 // • 行尾“未同步”小标记（REMIND-wiring；TC-B2-69、架构 4.2）：带提醒、还没同步上的那一条才标，同步上自动消失；
 //   由 reminders 功能懒加载提供（UnsyncedRemindMark），没标时那一格不占位。周视图泳道、月格不标（定稿线框 s2、s3 没有这个标记）
+// • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记（kit 的 ReadonlyMark）；点了交给页面的 onOpen，由页面拦下、出提示条
 import { Suspense } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { minOfDay, msAt, todayOf, weekdayOf } from '../../../../shared/core/date.ts';
@@ -15,6 +16,7 @@ import { isLiveRow, placeEvent, type CalItems, type DayEntry } from '../../../..
 import { projectColorIndex } from '../../../../shared/logic/project-color.ts';
 import { dayEntries } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
+import { ReadonlyMark } from '../../../kit/components/ReadonlyRow.tsx';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
@@ -60,6 +62,8 @@ export function DayList({
   dueMins,
   t,
   lunarText,
+  onOpen = (kind, id) => void navigate(kind, id),
+  isRo = () => false,
 }: {
   date: DateStr;
   items: CalItems;
@@ -68,6 +72,10 @@ export function DayList({
   t: CalViewT;
   /** 中文界面的农历完整写法（“农历九月十五”）；没有时不写 */
   lunarText?: string | undefined;
+  /** 打开一条：页面给，只读行在那里拦下（FA-2）；不给就直接进编辑页 */
+  onOpen?: (kind: 'event' | 'todo', id: string) => void;
+  /** 这一条是不是只读行（FA-2） */
+  isRo?: (kind: 'event' | 'todo', id: string) => boolean;
 }) {
   let entries: DayEntry[] = [];
   let cont: { entry: DayEntry; endMin: number }[] = [];
@@ -101,20 +109,29 @@ export function DayList({
         <ul className={styles.dayRows}>
           {cont.map(({ entry: e, endMin }) => (
             <li key={`cont-${e.itemId}`}>
-              <button type="button" className={styles.dayRow} onClick={() => void navigate('event', e.itemId)} data-kind="cont">
+              <button type="button" className={styles.dayRow} onClick={() => onOpen('event', e.itemId)} data-kind="cont" data-readonly={isRo('event', e.itemId) ? '' : undefined}>
                 <span className={styles.dayTime}>{t('cal.day.until', { t: endMin >= 24 * 60 ? '24:00' : hm(endMin) })}</span>
                 <span className={`${styles.dayMk} ${colorClass(e.colorIndex)}`} aria-hidden="true" />
                 <span className={styles.dayTitle}>{titleOf(items, e)}</span>
+                {isRo('event', e.itemId) ? <ReadonlyMark /> : null}
                 <RowMark table="events" id={e.itemId} />
               </button>
             </li>
           ))}
           {entries.map((e) => (
             <li key={`${e.kind}-${e.itemId}`}>
-              <button type="button" className={styles.dayRow} onClick={() => void navigate(e.kind === 'todo' ? 'todo' : 'event', e.itemId)} data-kind={e.kind}>
+              <button
+                type="button"
+                className={styles.dayRow}
+                onClick={() => onOpen(e.kind === 'todo' ? 'todo' : 'event', e.itemId)}
+                data-kind={e.kind}
+                data-readonly={isRo(e.kind === 'todo' ? 'todo' : 'event', e.itemId) ? '' : undefined}
+                data-testid={`cal-day-row-${e.itemId}`}
+              >
                 <span className={styles.dayTime}>{timeOf(e)}</span>
                 <span className={`${styles.dayMk} ${colorClass(e.colorIndex)} ${e.kind === 'todo' ? styles.dayMkTodo : ''}`} aria-hidden="true" />
                 <span className={styles.dayTitle}>{titleOf(items, e)}</span>
+                {isRo(e.kind === 'todo' ? 'todo' : 'event', e.itemId) ? <ReadonlyMark testId={`cal-ro-${e.itemId}`} /> : null}
                 <RowMark table={e.kind === 'todo' ? 'todos' : 'events'} id={e.itemId} />
               </button>
             </li>

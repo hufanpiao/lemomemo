@@ -4,13 +4,21 @@ import type { Cache, CachedRow, CacheTx, ServerRow } from './cache.ts';
 import { OUTBOX } from './cache-schema.ts';
 import { rebaseView, recKey } from './outbox-logic.ts';
 import type { OutboxItem, ServerRowInput } from './outbox-types.ts';
-import { collection } from './store.ts';
+import { collection, readonlyIds } from './store.ts';
 
-/** 把 view 推给内存里的集合 */
-export function notify(table: string, rows: readonly { id: string; view: ServerRow | null }[]): void {
+/**
+ * 把 view 推给内存里的集合。ro：这一行的只读标记（FA-2 只读行界面，store 的 readonlyIds）；只有接服务器行（applyServer）
+ * 会改 ro，其余路径（enqueue、发送回来、gone 处理）传 undefined，只读 id 不动（rewriteRow 原样保留 ro）。
+ * 先写只读 id、再写集合：列表跟着集合重画时，只读标记已经是新的
+ */
+export function notify(table: string, rows: readonly { id: string; view: ServerRow | null; ro?: boolean }[]): void {
   const c = collection<ServerRow>(table);
   const up = rows.flatMap((r) => (r.view ? [r.view] : []));
   const gone = rows.filter((r) => r.view === null).map((r) => r.id);
+  const ro = readonlyIds(table);
+  const marks = rows.flatMap((r) => (r.view && r.ro !== undefined ? [{ id: r.id, ro: r.ro }] : []));
+  if (marks.length) ro.set(marks);
+  if (gone.length) ro.remove(gone);
   if (up.length) c.upsert(up);
   if (gone.length) c.remove(gone);
 }
@@ -128,7 +136,7 @@ export async function applyServerRows(
 ): Promise<ApplyServerReport> {
   const report: ApplyServerReport = { skipped: [] };
   if (rows.length === 0) return report;
-  const views: { id: string; view: ServerRow | null }[] = [];
+  const views: { id: string; view: ServerRow | null; ro?: boolean }[] = [];
   const logs: ShellDropLog[] = [];
   await cache.tx([table, OUTBOX], 'readwrite', async (t) => {
     for (const input of rows) {
@@ -150,7 +158,7 @@ export async function applyServerRows(
         const items = await t.getAllByIndex<OutboxItem>(OUTBOX, 'rec', recKey(table, row.id));
         for (const i of items) await t.delete(OUTBOX, i.op_id);
         await t.put(table, { id: row.id, server: row, view: row, ro: true, shell_rev: gate.rev, shell_inclusive: gate.inclusive } satisfies CachedRow);
-        views.push({ id: row.id, view: row });
+        views.push({ id: row.id, view: row, ro: true });
         if (items.length) logs.push({ act: 'outbox_vault_shell_drop', coll: table, id: row.id, dropped: items.length });
         continue;
       }
@@ -168,7 +176,7 @@ export async function applyServerRows(
       if (ro) base.ro = true;
       const own = (old?.own_revs ?? []).filter((r) => newRev === null || r > newRev);
       if (own.length) base.own_revs = own;
-      views.push({ id: row.id, view: await rewriteRow(t, table, row.id, base) });
+      views.push({ id: row.id, view: await rewriteRow(t, table, row.id, base), ro: base.ro === true });
     }
   });
   notify(table, views);

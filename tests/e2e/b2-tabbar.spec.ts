@@ -9,7 +9,8 @@ const tab = (page: Page, name: string) => bar(page).locator(`a[data-tab="${name}
 
 test.describe('底栏（FA-7）', () => {
   // 手机宽度的底栏：chromium 项目默认 1280 宽，那里是电脑版侧栏（D5，见 b2-sidebar.spec.ts）
-  test.use({ loggedIn: true, viewport: { width: 375, height: 812 } });
+  // timezoneId：“今天页“＋”还是今天”那条在浏览器里按本机时区算“今天”，CI 是 UTC、账号数据按首尔日期（前端 A 11-07 查明的同类问题），统一按首尔
+  test.use({ loggedIn: true, viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
 
   test('四页之间点页签切换；选中项 aria-current 跟着走；“＋”按页新建；随手记“即将推出”、没有“＋”', async ({ page }) => {
     await page.goto('/app/#/today');
@@ -167,6 +168,47 @@ test.describe('底栏（FA-7）', () => {
     });
     expect(r.same, '连点以后还是同一个元素').toBe(true);
     expect(r.running, '只有一个果冻动画在跑').toBe(1);
+  });
+
+  test('从没有底栏的页回来（新建日程 → 今天）：实色带和底栏同一次出现，第一帧起就不透明、不淡入（G2；主持人 11-07 复查）', async ({ page }) => {
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible();
+    const band = page.getByTestId('tabbar-band');
+    await expect(band).toBeAttached({ timeout: 10_000 });
+    // 启动那一次的淡入放完
+    await expect.poll(() => band.evaluate((el) => (el.getAnimations().length === 0 ? Number(getComputedStyle(el).opacity) : -1)), { timeout: 5000 }).toBe(1);
+    await page.getByTestId('tabbar-add').click();
+    await expect(page).toHaveURL(/#\/event\/new$/);
+    await expect(bar(page)).toHaveCount(0);
+    await expect(band).toHaveCount(0);
+    // 底栏一挂上就记：那一刻实色带在不在；之后逐帧记实色带、渐隐层的不透明度和正在跑的 opacity 过渡
+    await page.evaluate(() => {
+      type Row = { band: boolean; op: number; edgeOp: number; fades: number };
+      const w = window as unknown as { zzRemount: { atMount: boolean | null; rows: Row[] } };
+      w.zzRemount = { atMount: null, rows: [] };
+      const rec = w.zzRemount;
+      const q = (id: string) => document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+      const fades = (el: HTMLElement | null): number => (el ? el.getAnimations().filter((a) => (a as CSSTransition).transitionProperty === 'opacity').length : 0);
+      const mo = new MutationObserver(() => {
+        if (rec.atMount !== null || !q('tabbar')) return;
+        rec.atMount = q('tabbar-band') !== null;
+        mo.disconnect();
+        const frame = (): void => {
+          const b = q('tabbar-band');
+          const e = q('tabbar-edge');
+          rec.rows.push({ band: b !== null, op: b ? Number(getComputedStyle(b).opacity) : -1, edgeOp: e ? Number(getComputedStyle(e).opacity) : -1, fades: fades(b) + fades(e) });
+          if (rec.rows.length < 20) requestAnimationFrame(frame);
+        };
+        requestAnimationFrame(frame);
+      });
+      mo.observe(document.body, { childList: true, subtree: true });
+    });
+    await page.goBack();
+    await expect(page.getByTestId('today')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { zzRemount: { rows: unknown[] } }).zzRemount.rows.length), { timeout: 5000 }).toBe(20);
+    const rec = await page.evaluate(() => (window as unknown as { zzRemount: { atMount: boolean | null; rows: { band: boolean; op: number; edgeOp: number; fades: number }[] } }).zzRemount);
+    expect.soft(rec.atMount, '底栏挂上那一刻实色带还没在（重挂时又去异步下载首屏后部分）').toBe(true);
+    expect(rec.rows.every((r) => r.band && r.op === 1 && r.edgeOp === 1 && r.fades === 0), `重挂后实色带、渐隐层不是一直不透明 ${JSON.stringify(rec.rows)}`).toBe(true);
   });
 
   test('底栏样式：固定在底部、有切页名字 tabbar；页签触控区够高', async ({ page }) => {

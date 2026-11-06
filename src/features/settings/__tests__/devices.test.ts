@@ -75,6 +75,14 @@ describe('lastActive（0.38 第 14 条）', () => {
   });
 });
 
+describe('toDeviceView 本机（A4）', () => {
+  it('本机的 last_seen_at 再旧也不算“很久没用”，不出自动移除日期；别的设备照算', () => {
+    const old = new Date(NOW - 170 * DAY).toISOString();
+    expect(toDeviceView(row({ session_id: 's-me', last_seen_at: old, created_at: null }), 's-me', NOW).autoRemoveAtMs).toBeNull();
+    expect(toDeviceView(row({ session_id: 's-x', last_seen_at: old, created_at: null }), 's-me', NOW).autoRemoveAtMs).not.toBeNull();
+  });
+});
+
 describe('sortDevices', () => {
   it('本机排第一，其余按最后活动从近到远，没有时间的最后', () => {
     const list = [

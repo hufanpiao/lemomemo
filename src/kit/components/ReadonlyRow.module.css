@@ -1,0 +1,40 @@
+/* 只读行（FA-2）：日历和今天页顶部的重复事项横幅；只用令牌（A11）。行尾小标记在 ReadonlyMark.module.css */
+
+/* 和日历页顶的浅灰提示条同一块样式（CalendarPage.module.css 的 .notice:has(p)） */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 0 4px 0 12px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  margin: 8px 0;
+}
+
+.update {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-13);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.update:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}

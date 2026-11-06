@@ -11,14 +11,17 @@
   box-shadow: var(--g-bar-shadow);
   touch-action: manipulation;
   user-select: none;
+
+  /* avoid-ai-design-ignore: K3 负责人指定液态玻璃（底栏、“＋”的毛玻璃，B2 FA-7） */
   backdrop-filter: blur(8px) saturate(1.8);
   view-transition-name: tabbar;
+  transition: opacity var(--dur-ui) var(--ease-out);
 }
 
 .bar {
   left: 14px;
   right: 94px;
-  bottom: calc(8px + env(safe-area-inset-bottom));
+  bottom: calc(8px + var(--inset-bottom));
   display: flex;
   gap: 2px;
   height: 62px;
@@ -28,7 +31,7 @@
 
 .fab {
   right: 14px;
-  bottom: calc(6px + env(safe-area-inset-bottom));
+  bottom: calc(6px + var(--inset-bottom));
   display: grid;
   place-items: center;
   width: 66px;
@@ -116,7 +119,7 @@
   background: var(--g-tint);
 }
 
-/* 自动深浅（data-ad="dark"、深色玻璃层 .adTint、令牌 --g-ad-*）11-06 取消：负责人要求底栏后面一律实色 --bg（GlassBarFx.module.css 的实色带），主持人 11-06 定方案甲 */
+/* 自动深浅（data-ad="dark"、深色玻璃层 .adTint、令牌 --g-ad-*）11-06 取消（主持人方案甲；当时理由是底栏后面一律实色，11-06 夜负责人要求底栏恢复透明，实色带只铺底栏以下，负责人 11-06 定不恢复） */
 
 .tab {
   position: relative;
@@ -237,7 +240,7 @@
   box-shadow: inset 0 0 0 1.5px var(--g-pill-edge);
 }
 
-/* 减少动态效果：液滴直接换位置，不放大、不放果冻 */
+/* 减少动态效果：液滴直接换位置，不放大、不放果冻；启动时安全区稳定后直接出现，不淡入 */
 @media (prefers-reduced-motion: reduce) {
   .drop {
     transition: none;
@@ -254,6 +257,26 @@
 
 :global(:root[data-rm='1']) .drop[data-state='press'] {
   scale: none;
+}
+
+/* 启动时底部安全区还没稳定（G10，<html data-inset-wait>，platform/inset-watch.ts）：先不显示，稳定了淡入，不做位移动画。
+   只改 opacity，稳定后回到 1，不影响底栏透明（负责人 11-06 红线）。看不见的那段时间也点不到（代码审查 11-06：透明的底栏不该接点按） */
+:global(:root[data-inset-wait]) .bar,
+:global(:root[data-inset-wait]) .fab {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar,
+  .fab {
+    transition: none;
+  }
+}
+
+:global(:root[data-rm='1']) .bar,
+:global(:root[data-rm='1']) .fab {
+  transition: none;
 }
 
 /* 键盘弹着（data-kb，FA-7 第 3 项）：底栏、“＋”不显示，也不能点、不进 Tab 顺序（visibility）；只管这两样，模糊带在 GlassBarFx.module.css（设计复审一 R2） */
@@ -273,7 +296,7 @@
    有底栏的页（#root 里有 .bar）左边让出侧栏的位置；底部留白、浮条位置在 base.css 同一断点里改 */
 @media (width >= 900px) {
   .bar {
-    inset: calc(16px + var(--inset-top)) auto calc(16px + env(safe-area-inset-bottom)) 16px;
+    inset: calc(16px + var(--inset-top)) auto calc(16px + var(--inset-bottom)) 16px;
     flex-direction: column;
     gap: 6px;
     align-items: center;
@@ -283,6 +306,8 @@
     border-radius: 28px;
     background: var(--b-rail);
     box-shadow: var(--b-rail-shadow);
+
+    /* avoid-ai-design-ignore: K3 负责人指定液态玻璃（电脑版侧栏用同一套底栏，D5） */
     backdrop-filter: blur(var(--b-blur)) saturate(1.5);
   }
 

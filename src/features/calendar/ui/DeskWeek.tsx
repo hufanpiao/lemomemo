@@ -8,6 +8,7 @@ import { weekdayOf } from '../../../../shared/core/date.ts';
 import { weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
 import type { DeskDay } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
+import { useRoT } from '../../../kit/hooks/useRoT.ts';
 import styles from './CalendarPage.module.css';
 import { colorClass, hm, holText, itemShort, itemTitle, weekdayKey } from './cal-ui.ts';
 import type { HourRange } from './week-axis.ts';
@@ -18,6 +19,12 @@ export const DESK_HOUR_PX = 40;
 
 export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | null }) {
   const { t, items, today, nowMin, range } = p;
+  // 打开一条：页面给的 onOpen 先拦只读行（FA-2），没给就直接进编辑页
+  const open = p.onOpen ?? ((kind: 'event' | 'todo', id: string) => void navigate(kind, id));
+  // 只读行（FA-2 审查第 2 条）：块太小放不下“要新版本”字样，改成斜纹底（data-readonly），读屏名字后接“要更新到新版本才能修改”
+  const tRo = useRoT();
+  const isRo = p.isRo ?? (() => false);
+  const roLabel = (ro: boolean, label: string): string => (ro ? tRo('ro.named', { label }) : label);
   const dates = weekDates(p.start);
   const hours = Array.from({ length: range.h1 - range.h0 }, (_, i) => range.h0 + i);
   const colH = (range.h1 - range.h0) * DESK_HOUR_PX;
@@ -53,13 +60,17 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
             {ad?.itemIds.map((id, k) => {
               const kind = ad.kinds[k] ?? 'allDay';
               const title = itemTitle(items, kind, id) || itemShort(items, kind, id);
+              const which = kind === 'todo' ? 'todo' : 'event';
+              const ro = isRo(which, id);
               return (
                 <button
                   key={id}
                   type="button"
                   className={styles.dAllItem}
-                  onClick={() => void navigate(kind === 'todo' ? 'todo' : 'event', id)}
-                  aria-label={kind === 'todo' ? t('cal.todoMark', { title }) : `${t('cal.allDay', {})} ${title}`}
+                  onClick={() => open(which, id)}
+                  aria-label={roLabel(ro, kind === 'todo' ? t('cal.todoMark', { title }) : `${t('cal.allDay', {})} ${title}`)}
+                  data-readonly={ro ? '' : undefined}
+                  data-testid={`cal-desk-all-${id}`}
                 >
                   {kind === 'todo' ? '○ ' : ''}
                   {title}
@@ -86,14 +97,17 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
           {p.desk?.[i]?.blocks.map((b) => {
             const top = y(b.startMin);
             const h = Math.max(14, y(b.endMin) - top - 2);
+            const ro = isRo('event', b.itemId);
             return (
               <button
                 key={`${b.itemId}-${b.startMin}`}
                 type="button"
                 className={`${styles.be} ${colorClass(b.colorIndex)}`}
                 style={{ top, height: h, left: `${(b.column / b.columns) * 100}%`, width: `${100 / b.columns}%` }}
-                aria-label={t('cal.a11y.block', { title: itemTitle(items, 'timed', b.itemId) || b.short, start: hm(b.startMin), end: hm(b.endMin) })}
-                onClick={() => void navigate('event', b.itemId)}
+                aria-label={roLabel(ro, t('cal.a11y.block', { title: itemTitle(items, 'timed', b.itemId) || b.short, start: hm(b.startMin), end: hm(b.endMin) }))}
+                onClick={() => open('event', b.itemId)}
+                data-readonly={ro ? '' : undefined}
+                data-testid={`cal-desk-block-${b.itemId}`}
               >
                 <span className={styles.beSh}>{b.short}</span>
               </button>

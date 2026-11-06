@@ -13,12 +13,14 @@ export interface EditShellProps {
   status: string;
   statusBad?: boolean;
   notice?: ReactNode;
+  /** quiet：中性的浅灰条（只读行“这条要新版本才能修改 · 更新”，和今天页、日历页的重复事项横幅同款，FA-2 视觉验收第二轮）；不给是红色（没保存上、已删除） */
+  noticeTone?: 'quiet' | undefined;
   children: ReactNode;
   actions?: ReactNode;
   'data-testid'?: string;
 }
 
-export function EditShell({ kind, backLabel, onBack, status, statusBad, notice, children, actions, ...rest }: EditShellProps) {
+export function EditShell({ kind, backLabel, onBack, status, statusBad, notice, noticeTone, children, actions, ...rest }: EditShellProps) {
   useHoldBusy('editing');
   return (
     <main className={styles.page} data-testid={rest['data-testid']}>
@@ -32,7 +34,7 @@ export function EditShell({ kind, backLabel, onBack, status, statusBad, notice, 
         </p>
       </div>
       {notice ? (
-        <p className={styles.notice} role="alert" data-testid="edit-notice">
+        <p className={styles.notice} data-tone={noticeTone} role="alert" data-testid="edit-notice">
           {notice}
         </p>
       ) : null}

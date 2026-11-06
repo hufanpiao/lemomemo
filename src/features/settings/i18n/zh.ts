@@ -29,6 +29,8 @@ export const zh = {
   'settings.devices.signedOut': '已退出',
   'settings.devices.lastSeen': '最近使用 {date}',
   'settings.devices.neverSeen': '还没有使用记录',
+  // 本机那一行不写时间：last_seen_at 每天最多刷新一次，写出来是旧的（B2 全站视觉审查 A4）
+  'settings.devices.inUse': '正在使用',
   'settings.devices.stale': '很久没用，{date} 后自动移除',
   'settings.devices.remove': '移除',
   'settings.devices.removeThis': '退出这台设备',

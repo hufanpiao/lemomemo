@@ -27,6 +27,9 @@ export const ko = {
   'event.edit.location': '장소 / 링크', // REVIEW(ko)
   'event.edit.project': '프로젝트', // REVIEW(ko)
   'event.edit.note': '메모', // REVIEW(ko)
+  'event.edit.locationPh': '주소나 회의 링크', // REVIEW(ko) G11 占位
+  'event.edit.projectPh': '예: 회사, 집', // REVIEW(ko) G11 占位
+  'event.edit.notePh': '덧붙일 내용 (선택)', // REVIEW(ko) G11 占位
   'event.edit.raw': '원래 한 말', // REVIEW(ko)
   'event.edit.delete': '삭제', // REVIEW(ko)
   'event.edit.deleted': '삭제했어요. 30일 안에는 ‘최근 삭제’에서 되살릴 수 있어요.', // REVIEW(ko)

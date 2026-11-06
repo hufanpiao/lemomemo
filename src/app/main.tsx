@@ -44,7 +44,8 @@ import {
 import { settleDropAtStartup } from '../platform/session-drop.ts';
 import { enableDropMark, installDesktopSession } from '../platform/session-store.ts';
 import { hideSplash, hideSplashAfter, hideSplashWhenPainted } from '../platform/splash.ts';
-import { appPainted, startAppPaintLimit, watchAppPainted } from '../platform/first-paint.ts';
+import { afterAppPainted, appPainted, startAppPaintLimit, watchAppPainted } from '../platform/first-paint.ts';
+import { markInsetPainted, watchInsetBottom } from '../platform/inset-watch.ts';
 import { nextFrame } from '../motion/index.ts';
 import { checkSwOnForeground, registerServiceWorker, reloadPage, upgradeLogCountStore, watchServiceWorkerUpdate } from '../platform/sw-register.ts';
 import { mountExitScreen, watchExitIncomplete } from './exit-screen.tsx';
@@ -71,6 +72,8 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
 
 // 启动画面最晚 5 秒收起：从入口模块开始执行算起（关口、冷启动、分包加载哪一步卡住都不再盖着）
 hideSplashAfter();
+// 底部安全区（G10）：iOS 主屏幕版冷启动时先 0 后 34，稳定前底栏、“＋”、实色带不显示，稳定了淡入；首屏画完后最多藏 1.5 秒（platform/inset-watch.ts）
+watchInsetBottom();
 
 /** exe（Tauri）里换上 exe 的 platform 桥（架构 0.53 第 2 条）：openReminder、openAuth、本机通知改走 exe；网页版不加载 desktop.ts */
 async function installNativeBridge(): Promise<void> {
@@ -113,6 +116,8 @@ async function start(): Promise<void> {
   // 首屏画完（第一个功能页出来再过一帧）：同步、设备登记、SW 注册都排在它后面，supabase-js 不和页面分包抢下载（B2 FA-6 ①）。
   // 这里只挂上观察和 15 秒长兜底；正式的时限在 render 之后才开始算（见下面 startAppPaintLimit）
   watchAppPainted(el, nextFrame);
+  // 底部安全区“稳定”从首屏画完起算（G10，底栏跟着第一个页面出来）
+  afterAppPainted(markInsetPainted);
   el.dataset['version'] = buildInfo.version;
 
   const userId = readSessionUserId();

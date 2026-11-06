@@ -11,6 +11,11 @@ html {
   text-size-adjust: 100%;
 }
 
+/* 原生控件（日期、时刻、下拉的弹出面板、滚动条）跟 App 主题，不跟手机系统（负责人 11-06 真机截图 6）；跟随系统时两种都给 */
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark'] { color-scheme: dark; }
+:root[data-theme='system'] { color-scheme: light dark; }
+
 /* 页面顶部要留的安全区（架构师 10-30 第 7 点）：顶部有版本横幅时（UpdateBanner 在根节点设 data-top-banner）由横幅占安全区，
    页面不再留。页面顶部的 padding 写 var(--safe-top)，不直接写 env(safe-area-inset-top)；要安全区本身（不管有没有横幅）用 var(--inset-top） */
 :root {
@@ -28,12 +33,19 @@ html {
 
   /* 底部实色带上沿的渐隐高度（11-06 负责人：原来 54px 太长，缩到 24px；GlassBarFx.module.css .band） */
   --band-fade: 24px;
-  --tabbar-pad: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px);
+
+  /* 底栏、“＋”上沿外的渐隐高度（11-06 负责人选 B12：“导航上边一点透明渐变看到字”；GlassBarFx.module.css .edge） */
+  --edge-fade: 12px;
+
+  /* 底部安全区（G10，11-06）：底栏、“＋”、实色带、页面底部留白（--tabbar-pad）、浮条（--dock-bottom）统一用它，不各写各的 env(safe-area-inset-bottom)；
+     启动时它先 0 后 34 的那一段由 platform/inset-watch.ts 盯着，稳定前这三样不显示 */
+  --inset-bottom: env(safe-area-inset-bottom);
+  --tabbar-pad: calc(var(--tabbar-h) + var(--inset-bottom) + 16px);
 
   /* 浮条（撤销条等）统一的底部位置（K8 方案复审，主持人 11-05 定由前端 B 定义）：底栏上沿往上一点（安全区 + 118px）；
      键盘弹着时 --kb 是键盘高度，浮条贴在键盘上沿，取两者大的。--undo-h 是撤销条高度，叠放时往上让。
      6 处浮条改用这两个变量由前端 A 做 K8 时一起改；宽屏侧栏（≥ 900px）没有底栏，在侧栏那段媒体查询里覆盖 --dock-bottom */
-  --dock-bottom: max(calc(env(safe-area-inset-bottom) + 118px), var(--kb, 0px));
+  --dock-bottom: max(calc(var(--inset-bottom) + 118px), var(--kb, 0px));
   --undo-h: 56px;
 }
 
@@ -41,8 +53,8 @@ html {
    有底栏的页底部留白回到安全区 + 16px；浮条贴底：安全区 + 24px（普通间距，和侧栏离窗口边 16px 拉开一点），键盘弹着照旧取键盘高度 */
 @media (width >= 900px) {
   :root {
-    --tabbar-pad: calc(env(safe-area-inset-bottom) + 16px);
-    --dock-bottom: max(calc(env(safe-area-inset-bottom) + 24px), var(--kb, 0px));
+    --tabbar-pad: calc(var(--inset-bottom) + 16px);
+    --dock-bottom: max(calc(var(--inset-bottom) + 24px), var(--kb, 0px));
     --top-fade: 0px;
   }
 }
@@ -122,6 +134,7 @@ body::before {
 }
 
 .lemo-top-8 {
+  /* avoid-ai-design-ignore: K3 负责人 11-06 指定顶部和底部一样的渐变模糊 */
   backdrop-filter: blur(8px);
   mask: linear-gradient(to bottom, var(--bg) calc(var(--inset-top) * 0.5), transparent calc(var(--inset-top) + var(--top-fade) * 0.5));
   view-transition-name: top-blur-8;
@@ -129,7 +142,7 @@ body::before {
 
 .lemo-top-2 {
   background: var(--status-tint);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px); /* avoid-ai-design-ignore: K3 负责人 11-06 指定顶部和底部一样的渐变模糊 */
   mask: linear-gradient(to bottom, var(--bg) var(--inset-top), transparent 100%);
   view-transition-name: top-blur-2;
 }

@@ -3,6 +3,7 @@
 // • 第一行是最关键的：构建提交号、版本、构建时刻；第二行起是 SW（控制本页的脚本、各状态、缓存名）——主屏幕版可能还在用旧 SW 预缓存的旧版本
 // • navigator.serviceWorker 只准出现在 platform（A13），所以放在这里
 import { buildInfo } from './env.ts';
+import { insetTimelineLine } from './inset-watch.ts';
 
 /** 计算样式里要看的几项（伪元素和玻璃块） */
 const PSEUDO_KEYS = ['content', 'position', 'z-index', 'height', '-webkit-backdrop-filter', 'backdrop-filter', 'background-image', 'background-color', '-webkit-mask-image', 'mask-image'] as const;
@@ -79,6 +80,8 @@ export async function collectDiag(win: Window = window): Promise<string[]> {
     `standalone: ${mm('(display-mode: standalone)')} ua=${win.navigator.userAgent}`,
     `supports: -webkit-backdrop-filter=${sup('-webkit-backdrop-filter', 'blur(1px)')} backdrop-filter=${sup('backdrop-filter', 'blur(1px)')} nospace=${sup('-webkit-backdrop-filter', 'blur(8px)saturate(1.8)')}`,
     safe(() => geoLine(win), 'geo: ?'),
+    // 启动时间线（G10）：底部安全区、innerHeight 每次变化的时刻，和什么时候淡入底栏
+    safe(() => insetTimelineLine(), 'launch: ?'),
     `media: reduced-transparency=${mm('(prefers-reduced-transparency: reduce)')} reduced-motion=${mm('(prefers-reduced-motion: reduce)')}`,
     `html: data-rt=${root.dataset['rt'] ?? '-'} data-skin=${root.dataset['skin'] ?? '-'} data-theme=${root.dataset['theme'] ?? '-'} data-glass=${root.dataset['glass'] ?? '-'}`,
     `bar.data-glass=${bar?.getAttribute('data-glass') ?? '-'}`,

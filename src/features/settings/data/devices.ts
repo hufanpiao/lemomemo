@@ -64,7 +64,8 @@ export function toDeviceView(row: DeviceRow, currentSession: string | null, now:
     isCurrent,
     signedOut: !isCurrent && (row.session_id === null || signedOutIds.has(row.id)),
     lastActiveMs: last,
-    autoRemoveAtMs: last !== null && now - last > STALE_AFTER_MS ? last + REMOVE_AFTER_MS : null,
+    // 本机正在用，不会被自动移除；它的 last_seen_at 每天最多刷新一次，不能拿来判断“很久没用”（A4）
+    autoRemoveAtMs: !isCurrent && last !== null && now - last > STALE_AFTER_MS ? last + REMOVE_AFTER_MS : null,
   };
 }
 

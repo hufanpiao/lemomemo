@@ -54,6 +54,9 @@ console.log(`构建完成：mode=${mode}，输出到 ${OUT}，预缓存 ${n} 个
 // 启动画面样式的媒体查询没被压缩改写成旧版 Safari 不认的范围写法（R-254 审查必改 1）
 const splash = spawnSync(process.execPath, [resolve(ROOT, 'build/check_splash_css.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });
 if (splash.status !== 0) process.exit(splash.status ?? 1);
+// 底栏渐隐层的遮罩带 -webkit- 前缀（B12 代码审查 11-06）：构建配置变了不再补前缀时，旧一些的 iOS Safari 上底栏、“＋”的挖空会没
+const glass = spawnSync(process.execPath, [resolve(ROOT, 'build/check_glass_css.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });
+if (glass.status !== 0) process.exit(glass.status ?? 1);
 const size = spawnSync(process.execPath, [resolve(ROOT, 'build/check_size.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });
 // 首屏块里不许有 zod（FA-6 ③ 审查 M3 第二轮）：按 manifest 算入口 + 今天页、告知页关口的静态闭包；要在下面删掉 .vite 之前跑
 const zodFree = spawnSync(process.execPath, [resolve(ROOT, 'build/check_first_paint_chunks.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });

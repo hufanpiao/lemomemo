@@ -5,18 +5,78 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 
 
-/** 点页签以后每一帧记一次：有没有 View Transition、页面上几个 main、main 的不透明度、液滴横向位置、底栏和“＋”的 backdrop-filter 计算值 */
-const sampleAfterClick = (page: Page, name: string, ms: number) =>
+/** 液滴抽查用的进度点（占过渡时长的比例） */
+const PROBE_AT = [0.1, 0.25, 0.4, 0.55, 0.7, 0.85] as const;
+/** 淡入抽查用的进度点：每 5% 一个，中途哪里先变暗都抓得到（只抽 6 个点时，起点到 10% 之间先暗再亮会漏掉） */
+const FADE_AT = Array.from({ length: 19 }, (_, k) => (k + 1) * 0.05);
+
+/**
+ * 点页签以后每一帧记一次：有没有 View Transition、页面上几个 main、main 的不透明度、液滴横向位置、底栏和“＋”的 backdrop-filter 计算值，
+ * 液滴的过渡这一帧是不是真在跑（running 且 currentTime > 0）。
+ * 另外按动画自己的进度抽查（CI 机器慢、帧很稀时逐帧采样会整段漏掉 0.22 秒的淡入，7e197ea CI）：
+ * • 新页淡入：包一层 Element.prototype.animate，main 一建淡入动画就先读一次起点（fadeSwap 跳过第一帧后的位置），再暂停、按 FADE_AT 把 currentTime 拨到各点读 opacity，拨回原处接着放
+ * • 液滴：transitionrun（translate）时从 getAnimations() 拿到这次过渡，同样按进度读横向位置，再拨回接着放
+ * 抽查在同一个任务里同步做完（暂停、拨时间读值、拨回原处、接着放），这期间不出帧，看不到拨过去的样子；
+ * 动画会被往后推抽查本身花的那一点时间（一般不到 1 ms，慢机器上几毫秒），起止值、曲线、时长都不变
+ */
+const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
   page.evaluate(
-    async ({ name, ms }) => {
+    async ({ name, ms, at, fadeAt, minMove }) => {
       const nav = document.querySelector<HTMLElement>('[data-testid="tabbar"]');
       const drop = nav?.querySelector<HTMLElement>('[class*="_drop_"]');
       const add = document.querySelector<HTMLElement>('[data-testid="tabbar-add"]');
-      const rows: { t: number; vt: number; mains: number; op: number; x: number; fx: string; addFx: string; dataVt: boolean }[] = [];
+      const rows: { t: number; tl: number; vt: number; mains: number; op: number; x: number; fx: string; addFx: string; dataVt: boolean; run: boolean; pg: number }[] = [];
+      const probe: { fade: number[] | null; drop: number[] | null } = { fade: null, drop: null };
+      const dropAnim = (): Animation | undefined => drop?.getAnimations().find((a) => (a as CSSTransition).transitionProperty === 'translate');
+      /** 暂停 a，按进度拨到 pts 各点读 read()，拨回原处接着放；withStart 时先读一次当前位置，并跳过它之前的点 */
+      const scan = (a: Animation, read: () => number, pts: number[], withStart: boolean): number[] => {
+        const total = Number(a.effect?.getComputedTiming().duration ?? 0);
+        const cur = a.currentTime;
+        const wasRunning = a.playState === 'running';
+        const r3 = (): number => Math.round(read() * 1000) / 1000;
+        const out = withStart ? [r3()] : [];
+        a.pause();
+        for (const f of pts) {
+          if (withStart && f * total <= Number(cur ?? 0)) continue;
+          a.currentTime = f * total;
+          out.push(r3());
+        }
+        a.currentTime = cur;
+        if (wasRunning) a.play();
+        return out;
+      };
+      const proto = Element.prototype;
+      const origAnimate = proto.animate;
+      const patched = function (this: Element, ...args: Parameters<Element['animate']>) {
+        const a = origAnimate.apply(this, args);
+        const el = (a.effect as KeyframeEffect | null)?.target;
+        if (probe.fade === null && el?.tagName === 'MAIN') {
+          // 等调用方把起点拨好（fadeSwap 跳过第一帧）再抽查
+          queueMicrotask(() => {
+            probe.fade = scan(a, () => Number(getComputedStyle(el).opacity), fadeAt, true);
+          });
+        }
+        return a;
+      };
+      const onRun = (e: TransitionEvent): void => {
+        if (probe.drop !== null || e.propertyName !== 'translate' || e.target !== drop) return;
+        const a = dropAnim();
+        if (a && drop) probe.drop = scan(a, () => drop.getBoundingClientRect().x, at, false);
+      };
+      // 第几个 main 元素（换页时 main 换成新元素）：逐帧看新页自己的不透明度
+      let lastMain: Element | null = null;
+      let pg = 0;
       const take = (t0: number): void => {
         const main = document.querySelector('main');
+        if (main !== lastMain) {
+          lastMain = main;
+          pg += 1;
+        }
+        const da = dropAnim();
         rows.push({
           t: performance.now() - t0,
+          // 动画用的时钟（一帧之内不变）：慢机器上两次读数之间隔了几帧要按它算，按 performance.now() 会把上一帧的旧位置当成刚读的
+          tl: Number(document.timeline.currentTime ?? performance.now()),
           vt: document.getAnimations().filter((x) => String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition')).length,
           mains: document.querySelectorAll('main').length,
           op: main ? Number(getComputedStyle(main).opacity) : -1,
@@ -24,18 +84,33 @@ const sampleAfterClick = (page: Page, name: string, ms: number) =>
           fx: nav ? getComputedStyle(nav).backdropFilter : '',
           addFx: add ? getComputedStyle(add).backdropFilter : 'none-add',
           dataVt: document.documentElement.hasAttribute('data-vt'),
+          run: da !== undefined && da.playState === 'running' && Number(da.currentTime ?? 0) > 0,
+          pg,
         });
       };
+      // 先等一帧再记起点、再点：webkit 主线程忙时动画时钟只在出帧时走，直接读拿到的是好几帧以前的位置，
+      // 液滴的新过渡却从屏上真实位置起步，看起来像打断那一下跳了一截（慢机模拟实测）
+      await new Promise((r) => requestAnimationFrame(r));
       const t0 = performance.now();
-      take(t0);
-      nav?.querySelector<HTMLElement>(`a[data-tab="${name}"]`)?.click();
-      while (performance.now() - t0 < ms) {
-        await new Promise((r) => requestAnimationFrame(r));
+      try {
+        // 打补丁、挂监听都放在 try 里：中途出错也会在 finally 里还原（代码审查 11-06）
+        proto.animate = patched;
+        drop?.addEventListener('transitionrun', onRun);
         take(t0);
+        nav?.querySelector<HTMLElement>(`a[data-tab="${name}"]`)?.click();
+        // minMove：至少采 ms 毫秒，而且液滴离开起点 minMove pt 以后才停（慢机器上液滴晚起步，只采固定时长可能还没动；最多 2 秒）
+        const moved = (): boolean => Math.abs((rows.at(-1)?.x ?? 0) - (rows[0]?.x ?? 0)) >= minMove;
+        while (performance.now() - t0 < ms || (!moved() && performance.now() - t0 < 2000)) {
+          await new Promise((r) => requestAnimationFrame(r));
+          take(t0);
+        }
+      } finally {
+        proto.animate = origAnimate;
+        drop?.removeEventListener('transitionrun', onRun);
       }
-      return rows;
+      return { rows, probe };
     },
-    { name, ms },
+    { name, ms, at: [...PROBE_AT], fadeAt: FADE_AT, minMove },
   );
 
 test.describe('底栏：页签互切（FA-7，方案 B）', () => {
@@ -48,33 +123,63 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 }); // 首屏后部分到了（实时模糊接管）
     await page.waitForTimeout(400);
     for (const [name, testid] of [['todos', 'todos'], ['calendar', 'cal'], ['today', 'today']] as const) {
-      const rows = await sampleAfterClick(page, name, 700);
+      const { rows, probe } = await sampleAfterClick(page, name, 700);
       await expect(page.locator(testid === 'cal' ? 'main[data-feature="calendar"]' : `[data-testid="${testid}"]`)).toBeVisible();
+      // 逐帧都要满足的（帧再稀也照查）：不起 View Transition、两页不同时在屏上（叠字）、底栏和“＋”一直实时模糊、没有整页透明的一帧、最后不透明
       expect(rows.every((r) => r.vt === 0 && !r.dataVt), `${name}：起了 View Transition`).toBe(true);
       expect(rows.every((r) => r.mains <= 1), `${name}：两页同时在屏上`).toBe(true);
       // 底栏和“＋”一直带 backdrop-filter（不进快照，实时模糊）；随手记没有“＋”
       expect(rows.every((r) => r.fx.includes('blur(')), `${name}：底栏某一帧没有 backdrop-filter ${JSON.stringify(rows.map((r) => r.fx))}`).toBe(true);
       expect(rows.every((r) => r.addFx === 'none-add' || r.addFx.includes('blur(')), `${name}：“＋”某一帧没有 backdrop-filter`).toBe(true);
-      // 新页淡入：点完以后有一段 main 在 0～1 之间，最后是 1
       const after = rows.slice(1).filter((r) => r.op >= 0);
-      expect(after.some((r) => r.op > 0 && r.op < 0.95), `${name}：新页没有淡入 ${JSON.stringify(after.map((r) => r.op))}`).toBe(true);
-      expect(after.at(-1)?.op).toBe(1);
+      // 淡入放完以后整页不透明（慢机器上采样窗口里可能还没放完，所以等动画结束再查，不看采样最后一帧）
+      await expect.poll(() => page.evaluate(() => { const m = document.querySelector('main'); return m && m.getAnimations().length === 0 ? Number(getComputedStyle(m).opacity) : -1; }), { timeout: 5000 }).toBe(1);
       // 没有空白帧：淡入跳过 opacity 0 的第一帧（motion FADE_SKIP_MS），点完以后每一帧新页都看得见
       expect(after.every((r) => r.op > 0.1), `${name}：有整页透明的一帧 ${JSON.stringify(after.map((r) => r.op))}`).toBe(true);
-      // 液滴连续滑：中途至少 5 个不同的位置，每帧走的不超过总路程的一半（没有瞬移）；--ease-drop 带一点回弹，
-      // 允许冲过终点再回来，但不超过总路程的 15%，也不先往反方向走
-      const xs = rows.map((r) => Math.round(r.x * 10) / 10);
-      const [x0, x1] = [xs[0] ?? 0, xs.at(-1) ?? 0];
+      // 逐帧看新页自己（最后那个 main 元素）：只亮不暗——新页先实心露一帧、再从透明淡入（“先实心再透明”）在这里抓
+      const pgLast = rows.at(-1)?.pg ?? 0;
+      const own = rows.filter((r) => r.pg === pgLast && r.op >= 0).map((r) => r.op);
+      expect(own.every((v, k) => k === 0 || v >= (own[k - 1] ?? 0) - 0.001), `${name}：新页逐帧先亮后暗 ${JSON.stringify(own)}`).toBe(true);
+      // 新页淡入（按动画进度抽查，不靠帧率）：真有这次淡入；起点和各点都在 0～1 之间、跟着进度只增不减（中途先暗再亮也抓），
+      // 一开始明显没到 1（是淡入不是直接换上），中间值够多，后面比前面亮
+      const fade = probe.fade;
+      expect(fade, `${name}：新页没有淡入动画`).not.toBeNull();
+      const fz = fade ?? [];
+      expect(fz.every((v, k) => v > 0 && v <= 1 && (k === 0 || v >= (fz[k - 1] ?? 0) - 0.001)), `${name}：淡入不是从透明到不透明 ${JSON.stringify(fz)}`).toBe(true);
+      expect(fz.filter((v) => v > 0.05 && v < 0.95).length, `${name}：淡入中间值太少 ${JSON.stringify(fz)}`).toBeGreaterThanOrEqual(3);
+      expect(fz[0] ?? 1, `${name}：淡入一开始就几乎不透明 ${JSON.stringify(fz)}`).toBeLessThan(0.95);
+      expect((fz.at(-1) ?? 0) - (fz[0] ?? 0), `${name}：淡入前后几乎没变 ${JSON.stringify(fz)}`).toBeGreaterThan(0.1);
+      // 液滴连续滑：位置从过渡真正开始（running 且 currentTime > 0）以后的帧算起；每帧走的不超过总路程的一半（没有瞬移）；
+      // --ease-drop 带一点回弹，允许冲过终点再回来，但不超过总路程的 15%，也不先往反方向走
+      const x0 = rows[0]?.x ?? 0;
+      const k0 = rows.findIndex((r) => r.run);
+      expect(k0, `${name}：没看到液滴的过渡在跑`).toBeGreaterThan(0);
+      const moving = rows.slice(k0);
+      const xs = [x0, ...moving.map((r) => Math.round(r.x * 10) / 10)];
+      const ts = [rows[0]?.tl ?? 0, ...moving.map((r) => r.tl)];
+      const x1 = xs.at(-1) ?? 0;
       const total = Math.abs(x1 - x0);
       expect(total, `${name}：液滴没动`).toBeGreaterThan(40);
       const lo = Math.min(x0, x1) - total * 0.15;
       const hi = Math.max(x0, x1) + total * 0.15;
       expect(xs.every((x) => x >= lo && x <= hi), `${name}：液滴跑出了起点到终点之间 ${JSON.stringify(xs)}`).toBe(true);
-      expect(Math.sign((xs[2] ?? x0) - x0) === Math.sign(x1 - x0), `${name}：液滴先往反方向走 ${JSON.stringify(xs)}`).toBe(true);
-      // 按每帧实际时长折算成 60Hz 一帧走多少（并发跑时 webkit 会丢帧，一次隔 50 ms，不算瞬移）
-      const steps = xs.slice(1).map((x, k) => ((x - (xs[k] ?? 0)) * 16.7) / Math.max(16.7, (rows[k + 1]?.t ?? 0) - (rows[k]?.t ?? 0)));
+      // 起步方向看第一个真正挪动的位置（液滴偶尔晚一帧起步，前几帧都还在起点；原来取第 3 帧会判成 0，11-06 偶发、7e197ea CI）
+      const first = xs.find((x) => Math.abs(x - x0) > 0.5) ?? x0;
+      expect(Math.sign(first - x0) === Math.sign(x1 - x0), `${name}：液滴先往反方向走 ${JSON.stringify(xs)}`).toBe(true);
+      // 按每帧实际时长折算成 60Hz 一帧走多少（并发跑、CI 慢机器会丢帧，一次隔 50 ms 以上，不算瞬移）
+      const steps = xs.slice(1).map((x, k) => ((x - (xs[k] ?? 0)) * 16.7) / Math.max(16.7, (ts[k + 1] ?? 0) - (ts[k] ?? 0)));
       expect(Math.max(...steps.map(Math.abs)), `${name}：液滴一帧跳了太远 ${JSON.stringify(xs)}`).toBeLessThan(total / 2);
-      expect(new Set(xs).size, `${name}：液滴中途位置太少 ${JSON.stringify(xs)}`).toBeGreaterThanOrEqual(5);
+      // 中途位置（按过渡进度抽查 6 个点，不靠帧率）：至少 5 个不同的位置、都在起点到终点之间（含 15% 回弹）、
+      // 前半段一路朝终点走（不先往反方向、不原地不动），第一个点离终点还远（没有瞬移）
+      const dz = probe.drop;
+      expect(dz, `${name}：没抓到液滴的过渡`).not.toBeNull();
+      const pz = (dz ?? []).map((x) => Math.round(x * 10) / 10);
+      expect(new Set(pz).size, `${name}：液滴中途位置太少 ${JSON.stringify(pz)}`).toBeGreaterThanOrEqual(5);
+      expect(pz.every((x) => x >= lo && x <= hi), `${name}：液滴中途跑出了起点到终点之间 ${JSON.stringify(pz)}`).toBe(true);
+      const toward = (x: number): number => (x - x0) * Math.sign(x1 - x0);
+      expect(toward(pz[0] ?? x0), `${name}：液滴先往反方向走 ${JSON.stringify(pz)}`).toBeGreaterThan(0);
+      expect(toward(pz[0] ?? x0), `${name}：液滴一起步就到了终点（瞬移）${JSON.stringify(pz)}`).toBeLessThan(total * 0.9);
+      for (let k = 1; k < 3; k += 1) expect(toward(pz[k] ?? 0), `${name}：液滴前半段没有一路朝终点走 ${JSON.stringify(pz)}`).toBeGreaterThan(toward(pz[k - 1] ?? 0));
     }
   });
 
@@ -83,18 +188,18 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
     await page.waitForTimeout(400);
-    const first = await sampleAfterClick(page, 'notes', 120);
-    const second = await sampleAfterClick(page, 'calendar', 700);
+    const { rows: first } = await sampleAfterClick(page, 'notes', 120, 10);
+    const { rows: second } = await sampleAfterClick(page, 'calendar', 700);
     await expect(page.locator('main[data-feature="calendar"]')).toBeVisible();
     const mid = first.at(-1)?.x ?? 0;
     const start = first[0]?.x ?? 0;
     expect(mid - start, '第一次还没滑到就停了').toBeGreaterThan(5);
     // 第二次从打断那一刻的位置接着走：每一帧（按实际帧时长折算成 60Hz）都不超过 25pt，没有先跳回起点或跳到终点
     // （打断后头一两帧液滴还带着往随手记去的速度，再掉头，是 CSS 过渡从当前值重新起步，正常）
-    const jump = Math.max(...second.slice(1).map((r, k) => (Math.abs(r.x - (second[k]?.x ?? 0)) * 16.7) / Math.max(16.7, r.t - (second[k]?.t ?? 0))));
-    expect(jump, `打断时液滴跳了 ${JSON.stringify(second.slice(0, 6).map((r) => [Math.round(r.t), Math.round(r.x)]))}`).toBeLessThan(25);
+    const jump = Math.max(...second.slice(1).map((r, k) => (Math.abs(r.x - (second[k]?.x ?? 0)) * 16.7) / Math.max(16.7, r.tl - (second[k]?.tl ?? 0))));
+    expect(jump, `打断时液滴跳了 ${JSON.stringify(second.slice(0, 6).map((r) => [Math.round(r.tl - (second[0]?.tl ?? 0)), Math.round(r.x)]))}`).toBeLessThan(25);
     expect(second.every((r) => r.vt === 0)).toBe(true);
-    expect(second.at(-1)?.op).toBe(1);
+    await expect.poll(() => page.evaluate(() => { const m = document.querySelector('main'); return m && m.getAnimations().length === 0 ? Number(getComputedStyle(m).opacity) : -1; }), { timeout: 5000 }).toBe(1);
     expect(await page.evaluate(() => document.querySelector('main')?.getAnimations().length ?? -1)).toBe(0);
   });
 
@@ -103,7 +208,7 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar')).toBeVisible(); // 底栏在页面画出来以后才挂，没挂上时点不到
-    const rows = await sampleAfterClick(page, 'todos', 200);
+    const { rows } = await sampleAfterClick(page, 'todos', 200);
     await expect(page.getByTestId('todos')).toBeVisible();
     expect(rows.every((r) => r.vt === 0)).toBe(true);
     expect(rows.slice(1).filter((r) => r.op >= 0).every((r) => r.op === 1), JSON.stringify(rows.map((r) => r.op))).toBe(true);

@@ -2,12 +2,14 @@
 // 地址：#/todo/<id>（编辑）、#/todo/new（新建）。改了就自动保存（文本失焦、选择即存），不弹窗
 // • 截止日期下面是“截止时刻”（可空）；选了时刻才出现“提前提醒”：不提醒 / 准时 / 10 分钟 / 30 分钟 / 1 小时（第一次设时默认）/ 2 小时 / 1 天；
 //   清掉截止时刻回到“当天 / 前一天 + 提醒时刻”；清掉截止日期时同一个 patch 清掉截止时刻和提前量（逻辑在 data/todo-edit.ts）
-// • 只读行（带不认识的值，0.27①）：写入被拒时顶部出“这条要新版本才能修改 · 更新”，输入保留
+// • 只读行（带不认识的值，0.27①“只读显示”）：一进来就按 core 的只读 id 判断（kit 的 useReadonlyIds），顶部出“这条要新版本才能修改 · 更新”，
+//   输入框全部禁用、不出“删除”、右上不写“改了就自动保存”（FA-2 视觉验收第 2 条）；写入被拒（status readonly）时同样
 // • 删除：软删，页内出“已删除”和“撤销”（ADR-006）；“最近删除”页在 FA-2 后面一段
 import { canGoBack, goBack, replaceAddress, replaceRoute, useRoute } from '../../../app/router.ts';
 import { useCallback, useReducer, useRef } from 'react';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
-import { Check, Field, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
+import { Check, Field, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
+import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { requestAppUpdate } from '../../../platform/native-bridge.ts';
 import { NOTE_MAX, PROJECT_MAX, REMIND_BEFORE_OPTIONS, TITLE_MAX, useTodoEdit } from '../hooks/useTodoEdit.ts';
@@ -28,7 +30,8 @@ const STATUS_KEY: Record<EditStatus, TodosMsgKey | null> = {
   readonly: 'todo.edit.st.readonly',
   rejected: 'todo.edit.st.rejected',
 };
-const BAD: ReadonlySet<EditStatus> = new Set(['empty_title', 'missing', 'local_unavailable', 'closing', 'readonly', 'rejected']);
+// “写上标题才会保存”（empty_title）是提示不是报错，用中性灰（负责人 11-06 真机截图 6：只选了日期就出红字，看着像报错）
+const BAD: ReadonlySet<EditStatus> = new Set(['missing', 'local_unavailable', 'closing', 'readonly', 'rejected']);
 
 const beforeKey = (v: number | null): TodosMsgKey => (v === null ? 'todo.edit.before.none' : (`todo.edit.before.${v}` as TodosMsgKey));
 
@@ -69,8 +72,9 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
   const ed = useTodoEdit(id, onCreated);
   const { form, change, status } = ed;
   const statusKey = STATUS_KEY[status];
-  const readonly = status === 'readonly';
-  const off = status === 'missing' || ed.deleted;
+  const roIds = useReadonlyIds('todos');
+  const readonly = status === 'readonly' || roIds.has(id);
+  const off = status === 'missing' || ed.deleted || readonly;
   const rawText = typeof ed.row?.['raw_text'] === 'string' ? ed.row['raw_text'] : '';
 
   return (
@@ -79,13 +83,13 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
       kind={t(ed.isNew ? 'todo.edit.newKind' : 'todo.edit.kind', {})}
       backLabel={t('todo.edit.back', {})}
       onBack={back}
-      status={statusKey ? t(statusKey, {}) : ''}
+      status={statusKey && (status !== 'idle' || !readonly) ? t(statusKey, {}) : ''}
       statusBad={BAD.has(status)}
+      noticeTone={readonly ? 'quiet' : undefined}
       notice={
         readonly ? (
           <>
-            {t('todo.edit.st.readonly', {})}
-            {' · '}
+            <span>{t('todo.edit.st.readonly', {})}</span>
             <Pressable onClick={() => void requestAppUpdate()} data-testid="todo-edit-update">
               {t('todo.edit.update', {})}
             </Pressable>
@@ -93,17 +97,17 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
         ) : ed.deleted ? (
           <>
             {t('todo.edit.deleted', {})}{' '}
-            <Pressable onClick={() => void ed.setDeleted(false)} data-testid="todo-edit-undo">
+            <FormButton onClick={() => void ed.setDeleted(false)} data-testid="todo-edit-undo">
               {t('todo.edit.undo', {})}
-            </Pressable>
+            </FormButton>
           </>
         ) : undefined
       }
       actions={
-        ed.row && !ed.deleted ? (
-          <Pressable onClick={() => void ed.setDeleted(true)} data-testid="todo-edit-delete" data-no-proxy="">
+        ed.row && !ed.deleted && !readonly ? (
+          <FormButton danger onClick={() => void ed.setDeleted(true)} data-testid="todo-edit-delete" data-no-proxy="">
             {t('todo.edit.delete', {})}
-          </Pressable>
+          </FormButton>
         ) : undefined
       }
     >
@@ -119,7 +123,7 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
           data-testid="todo-edit-title"
         />
         <Field label="">
-          <Check label={t('todo.edit.done', {})} checked={form.done} disabled={off} onChange={(v) => change({ done: v })} data-testid="todo-edit-done" />
+          <Check label={readonly ? t('todo.edit.doneShort', {}) : t('todo.edit.done', {})} checked={form.done} disabled={off} onChange={(v) => change({ done: v })} data-testid="todo-edit-done" />
           <Check label={t('todo.edit.important', {})} checked={form.important} disabled={off} onChange={(v) => change({ important: v })} />
         </Field>
       </FormGroup>
@@ -127,10 +131,11 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
       <FormGroup>
         <Field label={t('todo.edit.due', {})} htmlFor="todo-due">
           <TextInput id="todo-due" type="date" value={form.due ?? ''} disabled={off} onCommit={(v) => change({ due: v === '' ? null : v })} data-testid="todo-edit-due" />
-          {form.due !== null ? (
-            <Pressable onClick={() => change({ due: null })} disabled={off} data-testid="todo-edit-due-clear">
+          {/* 只读时“清掉”和“删除”一样不出（FA-2 视觉验收第二轮第 3 条） */}
+          {form.due !== null && !readonly ? (
+            <FormButton onClick={() => change({ due: null })} disabled={off} data-testid="todo-edit-due-clear">
               {t('todo.edit.clear', {})}
-            </Pressable>
+            </FormButton>
           ) : null}
         </Field>
         {form.due !== null ? (
@@ -143,10 +148,10 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
               onCommit={(v) => change({ due_time: v === '' ? null : v })}
               data-testid="todo-edit-due-time"
             />
-            {form.due_time !== null ? (
-              <Pressable onClick={() => change({ due_time: null })} disabled={off} data-testid="todo-edit-due-time-clear">
+            {form.due_time !== null && !readonly ? (
+              <FormButton onClick={() => change({ due_time: null })} disabled={off} data-testid="todo-edit-due-time-clear">
                 {t('todo.edit.clear', {})}
-              </Pressable>
+              </FormButton>
             ) : null}
           </Field>
         ) : null}
@@ -191,10 +196,10 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
 
       <FormGroup>
         <Field label={t('todo.edit.project', {})} htmlFor="todo-project">
-          <TextInput id="todo-project" value={form.project} maxLength={PROJECT_MAX} disabled={off} onCommit={(v) => change({ project: v.trim() })} />
+          <TextInput id="todo-project" value={form.project} maxLength={PROJECT_MAX} disabled={off} placeholder={t('todo.edit.projectPh', {})} onCommit={(v) => change({ project: v.trim() })} />
         </Field>
         <Field label={t('todo.edit.note', {})} htmlFor="todo-note">
-          <TextArea id="todo-note" value={form.note} maxLength={NOTE_MAX} disabled={off} onCommit={(v) => change({ note: v })} />
+          <TextArea id="todo-note" value={form.note} maxLength={NOTE_MAX} disabled={off} placeholder={t('todo.edit.notePh', {})} onCommit={(v) => change({ note: v })} />
         </Field>
         {rawText ? (
           <Field label={t('todo.edit.raw', {})}>

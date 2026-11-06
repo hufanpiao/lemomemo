@@ -10,7 +10,7 @@
 // 换账号闸（FA6-r3-low N3）：逐表 await 的期间可能设了闸（watchAccount 清空了内存、正在清库），stop() 为 true 就不再读下一张、
 // 也不把刚读到的这张写回内存（每张表开读前、读完后各看一次）
 import type { Cache, ServerRow } from '../cache.ts';
-import { collection } from '../store.ts';
+import { collection, readonlyIds } from '../store.ts';
 
 /**
  * 按本机库重刷这几个集合：库里有 view 的写进去，集合里有、库里没有了的去掉；tables 为 null 时刷全部同步表。
@@ -26,11 +26,16 @@ export async function reloadCollections(cache: Cache, tables: readonly string[] 
     if (stop()) return;
     const views = rows.flatMap((r) => (r.view ? [r.view] : []));
     const keep = new Set(views.map((v) => v.id));
+    const roOf = new Map(rows.map((r) => [r.id, r.ro === true] as const));
     /** 读库期间这一行没被动过：现在的对象就是读之前那个（都没有也算） */
     const untouched = (id: string): boolean => c.get(id) === before.get(id);
     const gone = [...before.keys()].filter((id) => !keep.has(id) && before.get(id) !== undefined && untouched(id));
-    if (gone.length) c.remove(gone);
     const fresh = views.filter((v) => untouched(v.id));
+    // 只读标记（FA-2 只读行界面）跟着同一份快照走，先于集合
+    const ro = readonlyIds(table);
+    if (gone.length) ro.remove(gone);
+    if (fresh.length) ro.set(fresh.map((v) => ({ id: v.id, ro: roOf.get(v.id) === true })));
+    if (gone.length) c.remove(gone);
     if (fresh.length) c.upsert(fresh);
   }
 }

@@ -72,6 +72,7 @@ export const zh = {
   'update.syncPaused': '同步暂停，请稍后重新打开',
   // 查到了新版本但 30 秒内没装好、接管（BANNER-sugg ⑤）：不重新载入，提示稍后再试（core/upgrade.ts 的 stalled）
   'update.stalled': '新版本还没装好 · 请稍后再试',
+  // 只读行（FA-2）的词条全在 ro-zh.ts、ro-ko.ts（不进首屏）
   // exe 里退出时本机会话没删掉（安全审查 A-1，app/ExitIncompleteScreen.tsx）；读取登录信息失败（代码审查建议 4）
   'exit.incomplete.title': '退出没完成',
   'exit.incomplete.body': '这台电脑上的登录信息没删掉，点“重试”再删一次。删掉以前不会回到已登录的界面。',

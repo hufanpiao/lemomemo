@@ -32,6 +32,10 @@ describe('已登录设备', () => {
     expect(text(rows[0])).toContain(zh['settings.platform.windows']);
     expect(text(rows[0])).toContain(zh['settings.devices.thisDevice']);
     expect(text(rows[0])).not.toContain(zh['settings.devices.signedOut']);
+    // A4：本机写“正在使用”，不写每天才刷新一次的 last_seen_at（不然显示的是旧时间）
+    expect(text(rows[0])).toContain(zh['settings.devices.inUse']);
+    expect(text(rows[0])).not.toContain('最近使用');
+    expect(text(rows[1])).toContain('最近使用');
     expect(text(rows[1])).toContain('A 的 iPhone');
     expect(text(rows[1])).not.toContain(zh['settings.devices.signedOut']);
     // 会话已不在的“旧电脑”（TC-B1-79 ②）和 session_id 为空的网页

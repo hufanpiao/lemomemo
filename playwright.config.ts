@@ -35,7 +35,8 @@ export default defineConfig({
   // 只认 *.spec.ts；tests/e2e/*.preview.test.ts 是 Vitest 跑的预览环境用例（B0 集成）
   testMatch: '**/*.spec.ts',
   // *.real.spec.ts 是真后端那组（playwright.real.config.ts，npm run e2e:real），这里不跑；两组都写 dist/web，不能同时跑
-  testIgnore: '**/*.real.spec.ts',
+  // tests/e2e/visual/ 是视觉基准组（playwright.visual.config.ts，npm run e2e:visual），只跑 webkit 手机视口、自带基准图，这里不跑
+  testIgnore: ['**/*.real.spec.ts', '**/visual/**'],
   fullyParallel: true,
   globalTimeout: globalTimeoutMs(process.env, NO_BACKEND_GLOBAL_TIMEOUT_MS),
   // 复用服务时核对产物指纹（见上面 REUSE 的说明）；新起的服务刚构建完，两边本来就一样

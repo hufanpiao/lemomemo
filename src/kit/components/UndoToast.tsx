@@ -16,10 +16,12 @@ export interface UndoToastProps {
   /** 收起（到时、或点了撤销之后）；只调一次 */
   onClose(): void;
   ms?: number;
+  /** 默认 status；被拦下这类“刚才那一下没生效”的提示用 alert（新挂上的 status 区域 iOS VoiceOver 常常不读，FA-2 审查第 1 条） */
+  role?: 'status' | 'alert';
   'data-testid'?: string;
 }
 
-export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST_MS, 'data-testid': testId }: UndoToastProps) {
+export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST_MS, role = 'status', 'data-testid': testId }: UndoToastProps) {
   const [paused, setPaused] = useState(false);
   const done = useRef(false);
   const close = useRef(onClose);
@@ -46,7 +48,7 @@ export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST
     <div
       className={styles.toast}
       data-undo-toast=""
-      role="status"
+      role={role}
       data-testid={testId}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}

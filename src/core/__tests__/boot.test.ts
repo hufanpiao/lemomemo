@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cacheOwner, claimCache } from '../account.ts';
 import { deleteCacheDb, openCache } from '../cache.ts';
 import { applyFreshConfig, coldStart, enabledFlags, getBoot, LOCAL_PURGE_AFTER_MS, resetBootForTest, type BootOptions } from '../boot.ts';
-import { clearAllCollections, collection } from '../store.ts';
+import { clearAllCollections, collection, readonlyIds } from '../store.ts';
 import { fakeIndexedDB, nextDbVersion } from './idb-fake.ts';
 
 const NOW = 1_800_000_000_000;
@@ -89,6 +89,20 @@ describe('离线冷启动', () => {
     expect(ids).toEqual(['e1', 'e3', 'e4']);
     expect(collection<{ id: string; title?: string }>('events').get('e1')?.title).toBe('会议（本机改过）');
     expect(LOCAL_PURGE_AFTER_MS).toBe(30 * DAY);
+  });
+
+  it('只读行（FA-2）：灌集合时把缓存里的 ro 一起带进 store 的只读 id', async () => {
+    const { factory } = fakeIndexedDB();
+    await seed(factory, async ({ cache }) => {
+      await claimCache(cache, 'u1');
+      await cache.putRows('todos', [
+        { id: 't1', server: { id: 't1', rev: 1, repeat: { freq: 'week' } }, view: { id: 't1', rev: 1, repeat: { freq: 'week' } }, ro: true },
+        { id: 't2', server: { id: 't2', rev: 1 }, view: { id: 't2', rev: 1 } },
+      ]);
+    });
+    await coldStart(opts(factory));
+    expect(collection('todos').getSnapshot().map((r) => r.id).sort()).toEqual(['t1', 't2']);
+    expect([...readonlyIds('todos').getSnapshot()]).toEqual(['t1']);
   });
 
   it('换账号（0.38 第 17 条，启动时）：读写任何东西之前整库清空（含 outbox），清 Cache Storage，整表重拉', async () => {

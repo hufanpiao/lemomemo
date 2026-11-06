@@ -1,0 +1,303 @@
+{
+  "1-初始": {
+    "csp": [
+      "style-src-attr  #document #/todo/new"
+    ],
+    "dataTheme": "light",
+    "rootColorScheme": "light",
+    "metaColorScheme": "light",
+    "prefersDark": true,
+    "coarse": true,
+    "vvScale": 1,
+    "scrollX": 0,
+    "status": "改了就自动保存",
+    "statusColor": "rgb(89, 92, 100)",
+    "controls": [
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-title",
+        "fontSize": "20px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_0_",
+        "fontSize": "13px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_1_",
+        "fontSize": "13px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-due",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "select",
+        "type": "select-one",
+        "id": "todo-days",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-remind-time",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-project",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "textarea",
+        "type": "textarea",
+        "id": "todo-note",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      }
+    ]
+  },
+  "2-聚焦项目": {
+    "csp": [
+      "style-src-attr  #document #/todo/new",
+      "style-src-elem  #document #/todo/new"
+    ],
+    "dataTheme": "light",
+    "rootColorScheme": "light",
+    "metaColorScheme": "light",
+    "prefersDark": true,
+    "coarse": true,
+    "vvScale": 1,
+    "scrollX": 0,
+    "status": "改了就自动保存",
+    "statusColor": "rgb(89, 92, 100)",
+    "controls": [
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-title",
+        "fontSize": "20px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_0_",
+        "fontSize": "13px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_1_",
+        "fontSize": "13px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-due",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "select",
+        "type": "select-one",
+        "id": "todo-days",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-remind-time",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-project",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "textarea",
+        "type": "textarea",
+        "id": "todo-note",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      }
+    ]
+  },
+  "3-打开日期选择器": {
+    "csp": [
+      "style-src-attr  #document #/todo/new",
+      "style-src-elem  #document #/todo/new",
+      "style-src-elem  #document #/todo/new"
+    ],
+    "dataTheme": "light",
+    "rootColorScheme": "light",
+    "metaColorScheme": "light",
+    "prefersDark": true,
+    "coarse": true,
+    "vvScale": 1,
+    "scrollX": 0,
+    "status": "改了就自动保存",
+    "statusColor": "rgb(89, 92, 100)",
+    "controls": [
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-title",
+        "fontSize": "20px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_0_",
+        "fontSize": "13px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_1_",
+        "fontSize": "13px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-due",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "select",
+        "type": "select-one",
+        "id": "todo-days",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-remind-time",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-project",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "textarea",
+        "type": "textarea",
+        "id": "todo-note",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      }
+    ]
+  },
+  "4-只选了日期": {
+    "csp": [
+      "style-src-attr  #document #/todo/new",
+      "style-src-elem  #document #/todo/new",
+      "style-src-elem  #document #/todo/new",
+      "style-src-elem  #document #/todo/new"
+    ],
+    "dataTheme": "light",
+    "rootColorScheme": "light",
+    "metaColorScheme": "light",
+    "prefersDark": true,
+    "coarse": true,
+    "vvScale": 1,
+    "scrollX": 0,
+    "status": "写上标题才会保存",
+    "statusColor": "rgb(89, 92, 100)",
+    "controls": [
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-title",
+        "fontSize": "20px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_0_",
+        "fontSize": "13px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "checkbox",
+        "id": "_r_1_",
+        "fontSize": "13px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-due",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-due-time",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "select",
+        "type": "select-one",
+        "id": "todo-days",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-edit-remind-time",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "input",
+        "type": "text",
+        "id": "todo-project",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      },
+      {
+        "tag": "textarea",
+        "type": "textarea",
+        "id": "todo-note",
+        "fontSize": "16px",
+        "colorScheme": "light"
+      }
+    ]
+  }
+}

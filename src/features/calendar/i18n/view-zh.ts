@@ -4,6 +4,11 @@ export const viewZh = {
   'cal.month': '月',
   'cal.week': '周',
   'cal.anniv': '纪念日',
+  // 纪念日页在 B5 做，之前入口置灰、点了只出这一句（B2 全站视觉审查 A2）
+  'cal.annivSoon': '纪念日即将推出',
+  'cal.annivSoonLabel': '纪念日（即将推出）',
+  // 只读行被拦下（FA-2；和编辑页 event.edit.st.readonly 同一句）
+  'cal.readonly': '这条要新版本才能修改',
   'cal.modeLabel': '视图',
   'cal.today': '今天',
   'cal.prevMonth': '上个月',

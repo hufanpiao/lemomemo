@@ -9,13 +9,27 @@ export interface CheckCircleProps {
   label: string;
   onChange(v: boolean): void;
   testId: string;
+  /**
+   * 只读行（FA-2，架构 0.27 第 1 点）：aria-disabled、圆圈变淡；点了照样回调 onChange，由使用方拦下并出“要新版本”提示条
+   * （不用 disabled：点了没反应、读屏也跳过，用户不知道为什么）。读屏名字后面接“要更新到新版本才能修改”（FA-2 审查第 5 条）
+   * 由 ReadonlyRow.tsx 的 RoCheckCircle 拼进 label：那句词条不进首屏（首屏预算 150 KB，11-06），这里只用传进来的 label
+   */
+  readOnly?: boolean;
 }
 
-export function CheckCircle({ checked, label, onChange, testId }: CheckCircleProps) {
+export function CheckCircle({ checked, label, onChange, testId, readOnly = false }: CheckCircleProps) {
   const state = checked ? 'on' : 'off';
   return (
     <span className={styles.checkBox}>
-      <input type="checkbox" className={styles.check} checked={checked} aria-label={label} onChange={(e) => onChange(e.target.checked)} data-testid={testId} />
+      <input
+        type="checkbox"
+        className={styles.check}
+        checked={checked}
+        aria-label={label}
+        aria-disabled={readOnly || undefined}
+        onChange={(e) => onChange(e.target.checked)}
+        data-testid={testId}
+      />
       <span className={styles.fill} data-state={state} aria-hidden="true" />
       <span className={styles.tick} data-state={state} aria-hidden="true" />
     </span>

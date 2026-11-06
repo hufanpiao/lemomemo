@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { currentTz } from '../../../core/current-tz.ts';
+import { clearAllCollections, readonlyIds } from '../../../core/store.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import type { AppJson } from '../../../platform/app-static.ts';
@@ -147,17 +148,133 @@ describe('周视图（手机排布）', () => {
     expect(first && observed.has(first)).toBe(false);
   });
 
-  it('周 / 月 / 纪念日分段：本月切到本周；“纪念日”跳 #/anniv（纪念日页 B3 做，现在是占位）', async () => {
+  it('周 / 月 / 纪念日分段：本月切到本周；“纪念日”置灰、不跳占位页，点了出“纪念日即将推出”，几秒后收起（B2 全站视觉审查 A2）', async () => {
     open('#/cal/month/2026-11');
     await act(async () => {
       fireEvent.click(screen.getByTestId('cal-mode-week'));
     });
     expect(window.location.hash).toBe('#/cal/week/2026-11-02');
     expect(screen.getByTestId('cal-title').textContent).toContain('11月2日–8日');
+    const anniv = screen.getByTestId('cal-mode-anniv');
+    expect(anniv.getAttribute('aria-disabled')).toBe('true');
+    expect(anniv.getAttribute('aria-label')).toBe('纪念日（即将推出）');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      await act(async () => {
+        fireEvent.click(anniv);
+      });
+      expect(window.location.hash).toBe('#/cal/week/2026-11-02');
+      const soon = screen.getByTestId('cal-anniv-soon');
+      expect(soon.textContent).toBe('纪念日即将推出');
+      expect(soon.closest('[role="status"]')).toBeTruthy();
+      await act(async () => {
+        vi.advanceTimersByTime(4000);
+      });
+      expect(screen.queryByTestId('cal-anniv-soon')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('只读行（FA-2 只读行界面；架构 0.27 第 1 点）', () => {
+  afterEach(() => {
+    clearAllCollections();
+  });
+
+  it('页顶“有 N 条重复事项要新版本才能完整显示”；日清单只读行行尾有标记，点了不进编辑页、出提示条；可写的照常打开', async () => {
+    data.events = [ev('r1', { date: '2026-11-05', repeat: { freq: 'week' } }), ev('w1', { date: '2026-11-05', time: '11:00' })];
+    data.todos = [todo('rt', { due: '2026-11-05', repeat: { freq: 'day' } })];
+    readonlyIds('events').set([{ id: 'r1', ro: true }]);
+    readonlyIds('todos').set([{ id: 'rt', ro: true }]);
+    open('#/cal/month/2026-11');
+    expect((await screen.findByTestId('cal-repeat')).textContent).toContain('有 2 条重复事项要新版本才能完整显示');
+    expect((await screen.findByTestId('cal-ro-r1'))).toBeTruthy();
+    expect((await screen.findByTestId('cal-ro-rt'))).toBeTruthy();
+    expect(screen.queryByTestId('cal-ro-w1')).toBeNull();
     await act(async () => {
-      fireEvent.click(screen.getByTestId('cal-mode-anniv'));
+      fireEvent.click(screen.getByTestId('cal-day-row-r1'));
     });
-    expect(window.location.hash).toBe('#/anniv');
+    expect(window.location.hash).toBe('#/cal/month/2026-11');
+    expect((await screen.findByTestId('cal-ro-toast')).textContent).toContain('这条要新版本才能修改');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('cal-day-row-w1'));
+    });
+    expect(window.location.hash).toBe('#/event/w1');
+  });
+
+  it('电脑周视图（FA-2 审查第 2 条）：只读的时间块、全天行斜纹底（data-readonly），读屏名字后接“要更新到新版本才能修改”；点了拦下出提示条，可写的照常打开', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('min-width: 768px'),
+      media: q,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+    }));
+    data.events = [ev('r1', { date: '2026-11-05', repeat: { freq: 'week' } }), ev('w1', { date: '2026-11-05', time: '11:00' })];
+    data.todos = [todo('rt', { due: '2026-11-05', repeat: { freq: 'day' } })];
+    readonlyIds('events').set([{ id: 'r1', ro: true }]);
+    readonlyIds('todos').set([{ id: 'rt', ro: true }]);
+    open('#/cal/week/2026-11-05');
+    expect(screen.getByTestId('cal-week').getAttribute('data-layout')).toBe('desk');
+    const blk = screen.getByTestId('cal-desk-block-r1');
+    const all = screen.getByTestId('cal-desk-all-rt');
+    const ok = screen.getByTestId('cal-desk-block-w1');
+    expect(blk.hasAttribute('data-readonly')).toBe(true);
+    expect(all.hasAttribute('data-readonly')).toBe(true);
+    expect(ok.hasAttribute('data-readonly')).toBe(false);
+    expect(blk.getAttribute('aria-label')).toMatch(/日程r1.*，要更新到新版本才能修改$/);
+    expect(all.getAttribute('aria-label')).toMatch(/待办rt.*，要更新到新版本才能修改$/);
+    expect(ok.getAttribute('aria-label')).not.toContain('新版本');
+    await act(async () => {
+      fireEvent.click(blk);
+    });
+    expect(window.location.hash).toBe('#/cal/week/2026-11-05');
+    expect((await screen.findByTestId('cal-ro-toast')).getAttribute('role')).toBe('alert');
+    await act(async () => {
+      fireEvent.click(all);
+    });
+    expect(window.location.hash).toBe('#/cal/week/2026-11-05');
+    await act(async () => {
+      fireEvent.click(ok);
+    });
+    expect(window.location.hash).toBe('#/event/w1');
+  });
+
+  it('电脑周视图的时间块位置（视觉验收第 1 条核实）：23 点以后的、别的时区记的日程，都按设备时区画在对的那一格', async () => {
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q.includes('min-width: 768px'),
+      media: q,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+    }));
+    const { minOfDay } = await import('../../../../shared/core/date.ts');
+    const { DESK_HOUR_PX } = await import('../ui/DeskWeek.tsx');
+    // 别的时区：取和设备差 1 小时的那一个（设备是首尔就用上海，否则用首尔），记成 22:40，换到设备时区再算期望的分钟
+    const other = TZ === 'Asia/Seoul' ? 'Asia/Shanghai' : 'Asia/Seoul';
+    data.events = [
+      ev('late', { date: '2026-11-05', time: '23:40', duration_min: 15 }),
+      ev('late2', { date: '2026-11-05', time: '23:00', duration_min: 50 }),
+      ev('tzx', { date: '2026-11-05', time: '22:40', tz: other, duration_min: 10 }),
+    ];
+    open('#/cal/week/2026-11-05');
+    const [h0] = (screen.getByTestId('cal-week').getAttribute('data-range') ?? '0-24').split('-').map(Number);
+    const topOf = (min: number) => `${((min - (h0 ?? 0) * 60) / 60) * DESK_HOUR_PX}px`;
+    expect(screen.getByTestId('cal-desk-block-late').style.top).toBe(topOf(23 * 60 + 40));
+    expect(screen.getByTestId('cal-desk-block-late2').style.top).toBe(topOf(23 * 60));
+    const tzMin = minOfDay(msAt('2026-11-05', 22 * 60 + 40, other), TZ);
+    expect(screen.getByTestId('cal-desk-block-tzx').style.top).toBe(topOf(tzMin));
+    expect(screen.getByTestId('cal-desk-block-late').getAttribute('aria-label')).toContain('23:40');
+  });
+
+  it('没有只读行：不出横幅、不出标记', () => {
+    data.events = [ev('w1', { date: '2026-11-05', repeat: { freq: 'week' } })];
+    open('#/cal/month/2026-11');
+    expect(screen.queryByTestId('cal-repeat')).toBeNull();
+    expect(screen.queryByTestId('cal-ro-w1')).toBeNull();
   });
 });
 

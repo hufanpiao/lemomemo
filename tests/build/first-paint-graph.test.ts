@@ -99,6 +99,8 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/platform/push.ts': '断开浏览器推送：只在退出、被移除、换账号时下载（push-disconnect.ts，首屏瘦身 11-05）',
   'src/platform/push-claim.ts': '推送认领本体：首屏画完设好上下文、真要认领时才下载（首屏瘦身 11-05）',
   'src/features/reminders/ui/MissedSheet.tsx': '错过提醒的底部弹层：点开才下载，有错过时首屏画完、浏览器空闲才预取（前端 B 11-05 拆出）',
+  'src/features/today/ui/TodayToasts.tsx':
+    '今天页页底提示条（撤销条、出错条、只读提示条）和重复事项横幅：真有一条提示、或有只读行时才下载（FA-2 返工，首屏预算；连着 UndoToast、只读横幅一起不进首屏）',
   'src/platform/viewport.ts': '键盘检测：底栏在键盘弹起时藏起来用（FA-7 第 3 项），首屏画完以后 afterAppPainted 才下载',
   'src/kit/components/GlassBar/GlassBarFx.tsx':
     '液态玻璃底栏的首屏后部分：模糊带、果冻、按住放大；首屏画完以后 afterAppPainted 才下载，挂上以后再 import() 内容副本、自动深浅、帧循环（motion/glass-ghost.ts）（B2 FA-7，主持人 11-05 首屏 ③；没下载到时外壳用 backdrop-filter 后备）',
@@ -169,6 +171,22 @@ describe('时区词典不进首屏（11-05，tz.* 挪出公共词典）', { time
       const { prev } = reach(root);
       expect(tz.filter((f) => prev.has(f)).map(rel), rel(root)).toEqual([]);
     }
+  });
+});
+
+describe('只读行的词典和部件不进首屏（11-06，FA-2 返工，首屏预算 150 KB）', { timeout: GRAPH_TIMEOUT_MS }, () => {
+  const RO = ['shared/i18n/ro-zh.ts', 'shared/i18n/ro-ko.ts', 'src/kit/components/ReadonlyRow.tsx', 'src/kit/components/UndoToast.tsx'].map((f) => resolve(ROOT, f));
+  it('main.tsx 和首屏名单里各块的静态闭包都到不了 ro-zh.ts、ro-ko.ts、ReadonlyRow.tsx、UndoToast.tsx（今天页经 TodayToasts.tsx 按需下载）', async () => {
+    const { FIRST_PAINT_DYNAMIC } = (await import('../../build/check_first_paint_chunks.mjs')) as { FIRST_PAINT_DYNAMIC: string[] };
+    expect(FIRST_PAINT_DYNAMIC, '今天页不在首屏名单里了，这条守护要跟着改').toContain('features/today/ui/TodayPage.tsx');
+    for (const root of [ENTRY, ...FIRST_PAINT_DYNAMIC.map((k) => resolve(ROOT, 'src', k))]) {
+      const { prev } = reach(root);
+      expect(RO.filter((f) => prev.has(f)).map(rel), rel(root)).toEqual([]);
+    }
+  });
+  it('拦得住变异：今天页改回直接引 ReadonlyRow.tsx', () => {
+    const read = withPatch('src/features/today/ui/TodayPage.tsx', (s) => `import { RoCheckCircle as _ro } from '../../../kit/components/ReadonlyRow.tsx';\nvoid _ro;\n${s}`);
+    expect(reach(resolve(ROOT, 'src/features/today/ui/TodayPage.tsx'), read).prev.has(RO[0] ?? '')).toBe(true);
   });
 });
 

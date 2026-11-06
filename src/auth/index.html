@@ -3,6 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- 原生控件（日期、时刻、下拉）跟 App 主题、不跟手机系统：和 <html data-theme> 一致；切主题时 base.css 的 :root[data-theme] 规则跟着改 color-scheme -->
+    <meta name="color-scheme" content="light" />
     <meta name="robots" content="noindex" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <!-- R-349（负责人 11-06，取代 R-278）：主屏幕版页面铺到状态栏下面，顶部模糊带盖住状态栏；iOS 状态栏字一律白色，负责人 11-06 定先不加底色、纯模糊上真机看（备用 --status-tint 默认关）。改了以后已装的主屏幕图标要删掉重新添加才生效 -->

@@ -27,6 +27,7 @@ describe('collectDiag', () => {
     }
     expect(lines.find((l) => l.startsWith('.bar:'))).toMatch(/-webkit-backdrop-filter=/);
     expect(lines.find((l) => l.startsWith('geo:'))).toMatch(/env-top=\S* --inset-top=.* fixedTop0=.* #root\.padding-top=.* banner=(true|false)/);
+    expect(lines.find((l) => l.startsWith('launch:'))).toMatch(/^launch: standalone=(true|false) painted=\S+ ready=\S+\((quiet|max|off|wait)\)/); // G10 启动时间线
     expect(document.body.children.length).toBe(2); // 量安全区用的临时元素已经拿掉
     expect(lines.find((l) => l.startsWith('supports:'))).toMatch(/-webkit-backdrop-filter=(true|false) backdrop-filter=(true|false) nospace=(true|false)/);
   });

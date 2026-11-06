@@ -16,43 +16,145 @@
   }
 }
 
-/* 底部实色带（11-06 负责人：底栏后面、底栏和“＋”之间、底栏下面都不能看到字；只在底栏顶边上方一小段渐隐）。
-   带子从“底栏顶边往上 --band-fade”一直铺到屏幕底（含安全区）：上面 --band-fade 一段从透明渐变到 --bg，往下全是不透明的 --bg。
-   72px = “＋”顶边离屏幕底的距离（“＋”底边 6px + 高 66px；底栏是 8px + 62px = 70px，比“＋”低 2px），实色从这里开始，底栏和“＋”后面都是实色。
-   只做颜色渐变、不加模糊（原来 3 层 backdrop-filter 去掉）：渐隐只有 24px，模糊在这么短的一段里看不出来，
-   却要多 3 层合成（iOS 上最贵的就是 backdrop-filter），还会出“先清晰后模糊”的问题（11-06 负责人真机 9d40848）。
-   玻璃皮肤的页面底是 --scr-bg 渐变，带子用 --bg 纯色：底部那条在颜色上会和渐变差一点，见 B2-底栏透明度-真机差异排查.md 第 11 节 */
+/* 底部实色带（11-06 负责人真机看 69659c1：“底部导航栏透明又没了！！ 这个不要动！”）：底栏和“＋”本身保持透明毛玻璃，后面的内容模糊透出来（和 9d40848 一样），
+   实色只铺在底栏底边以下到屏幕最底（Home 横条那一条和安全区），这里看不到字；底栏所在的高度不铺实色。
+   8px = 底栏底边离屏幕底的距离（“＋”底边是 6px）：实色从底栏底边起铺，底栏底边以下一行字都不透（视觉组 G2，11-06 今天页实测：
+   原来取低的 6px 时，底栏底边到“＋”底边那 2px 还在渐隐段末尾，字的下沿透出来）；代价是“＋”最底下 2px 的弧后面垫的是实色；实色往上 --band-fade 一段从 --bg 渐到透明（先按 24px，等负责人确认）。
+   只做颜色渐变、不加模糊。玻璃皮肤的页面底是 --scr-bg 渐变，带子用 --bg 纯色：底部那条在颜色上会和渐变差一点 */
 .band {
   position: fixed;
   right: 0;
   bottom: 0;
   left: 0;
   z-index: 9;
-  height: calc(72px + var(--band-fade) + env(safe-area-inset-bottom));
+  height: calc(8px + var(--band-fade) + var(--inset-bottom));
   pointer-events: none;
   background: linear-gradient(to bottom, transparent 0, var(--bg) var(--band-fade), var(--bg) 100%);
+  transition: opacity var(--dur-ui) var(--ease-out);
 }
 
-/* 减少透明效果：也是实色，渐隐那一段也不要，从“＋”顶边起直接是 --bg */
+/* 启动时底部安全区还没稳定（G10）：和底栏、“＋”一起先不显示、稳定了淡入（GlassBar.module.css 同一段） */
+:global(:root[data-inset-wait]) .band {
+  opacity: 0;
+}
+
+/* 上沿外渐隐（11-06 负责人选 B12，原话“字超过底部导航栏上边一点时候可以渐变看到字”）：
+   从红线（“＋”底边，离屏幕底 6px）铺到底栏上沿往上 --edge-fade（12px）。最上面那 --edge-fade 一段，模糊和 --bg 着色从 0 渐到满，
+   往下一直保持满（3px 模糊、叠一半 --bg），接到 .band 的渐隐、再到实色：底栏和“＋”之间的窄缝、屏幕左右 14px 的边，上沿以下都没有硬边。
+   底栏、“＋”的形状从遮罩里挖掉（圆角和圆照外壳的尺寸）：它们背后取到的还是原样的页面内容，玻璃不变（负责人 11-06 红线）。
+   宽屏（≥ 481px）底栏居中，挖的位置跟着换；没有“＋”的页（随手记）不挖那个圆（data-add='0'）。
+   着色是子元素 .edgeTint（--bg 加 opacity，不用 color-mix，A11），跟父元素一起被遮罩 */
+.edge {
+  --edge-cy: calc(var(--edge-fade) + 31px);
+  --edge-bar-l: 14px;
+  --edge-bar-r: calc(100% - 94px);
+  --edge-fab-x: calc(100% - 47px);
+  --edge-rect-x: 45px;
+  --edge-fab-in: 32.5px;
+  --edge-fab-out: 33px;
+
+  position: fixed;
+  right: 0;
+  bottom: calc(6px + var(--inset-bottom));
+  left: 0;
+  z-index: 9;
+  height: calc(64px + var(--edge-fade));
+  pointer-events: none;
+  backdrop-filter: blur(3px); /* avoid-ai-design-ignore: K3 负责人 11-06 选 B12：底栏上沿外渐变模糊 */
+  mask-image:
+    linear-gradient(to bottom, transparent 0, var(--bg) var(--edge-fade)),
+    radial-gradient(circle at var(--edge-fab-x) var(--edge-cy), var(--bg) var(--edge-fab-in), transparent var(--edge-fab-out)),
+    radial-gradient(circle at calc(var(--edge-bar-l) + 31px) var(--edge-cy), var(--bg) 30.5px, transparent 31px),
+    radial-gradient(circle at calc(var(--edge-bar-r) - 31px) var(--edge-cy), var(--bg) 30.5px, transparent 31px),
+    linear-gradient(var(--bg), var(--bg));
+  mask-position: 0 0, 0 0, 0 0, 0 0, var(--edge-rect-x) var(--edge-fade);
+  mask-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%, calc(var(--edge-bar-r) - var(--edge-bar-l) - 62px) 62px;
+  mask-repeat: no-repeat;
+  mask-composite: subtract, add, add, add, add;
+  transition: opacity var(--dur-ui) var(--ease-out);
+}
+
+.edge[data-add='0'] {
+  --edge-fab-in: 0px;
+  --edge-fab-out: 0px;
+}
+
+/* 实色带、渐隐层在这个文件里，首屏画完以后才下载（不在首屏）：挂上时安全区可能早就稳定、data-inset-wait 已经去掉，
+   这时直接出现会和已经淡入的底栏不一致（代码审查 11-06）。@starting-style 让启动时晚到的那一次也从 0 淡入（--dur-ui）；
+   只认 data-fade='1'（GlassBar.tsx 异步下载到的那一次才带）：没有底栏的页回来、底栏重挂时用缓存同步画，第一帧就不透明，
+   不再淡入 220ms（那段时间红线以下会透字，碰 G2；主持人 11-07 复查）。
+   还在等安全区时 data-inset-wait 那条照样是 0，放行了再一起淡入。不认 @starting-style 的旧浏览器直接出现，和原来一样 */
+@starting-style {
+  .band[data-fade='1'],
+  .edge[data-fade='1'] {
+    opacity: 0;
+  }
+}
+
+.edgeTint {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: 0.5;
+}
+
+@media (width >= 481px) {
+  .edge {
+    --edge-bar-l: calc(50% - 226px);
+    --edge-bar-r: calc(50% + 146px);
+    --edge-fab-x: calc(50% + 193px);
+
+    /* mask-position 的百分比按“容器宽 − 图层宽”算：50% 是图层居中，再往左 40px 就是底栏中段（底栏中心在 50% − 40px） */
+    --edge-rect-x: calc(50% - 40px);
+  }
+}
+
+:global(:root[data-inset-wait]) .edge {
+  opacity: 0;
+}
+
+.edge[data-kb='1'] {
+  visibility: hidden;
+}
+
+/* 减少透明效果：渐隐那一段不要，从“＋”底边起直接是 --bg；上沿外渐隐（.edge）也不要 */
 @media (prefers-reduced-transparency: reduce) {
   .band {
     background: linear-gradient(to bottom, transparent var(--band-fade), var(--bg) var(--band-fade));
   }
+
+  .edge {
+    display: none;
+  }
+}
+
+:global(:root[data-rt='1']) .edge {
+  display: none;
 }
 
 :global(:root[data-rt='1']) .band {
   background: linear-gradient(to bottom, transparent var(--band-fade), var(--bg) var(--band-fade));
 }
 
-/* 减少动态效果：不放果冻 */
+/* 减少动态效果：不放果冻；实色带不淡入 */
 @media (prefers-reduced-motion: reduce) {
   .jelly {
     animation: none;
+  }
+
+  .band,
+  .edge {
+    transition: none;
   }
 }
 
 :global(:root[data-rm='1']) .jelly {
   animation: none;
+}
+
+:global(:root[data-rm='1']) .band,
+:global(:root[data-rm='1']) .edge {
+  transition: none;
 }
 
 /* 键盘弹着（FA-7 第 3 项）：实色带和底栏、“＋”一起藏（设计复审一 R2：只管这一样） */
@@ -63,6 +165,10 @@
 /* 电脑版侧栏（D5，(width >= 900px)）：底部没有底栏，也就没有实色带 */
 @media (width >= 900px) {
   .band {
+    display: none;
+  }
+
+  .edge {
     display: none;
   }
 }

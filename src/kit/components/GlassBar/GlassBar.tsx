@@ -14,6 +14,24 @@ import { useT } from '../../hooks/useT.ts';
 import type { GlassBarFxProps } from './GlassBarFx.tsx';
 import styles from './GlassBar.module.css';
 
+/** 下载到的首屏后部分（模块级缓存）：没有底栏的页（新建、编辑、设置）会卸掉底栏，回来时重新挂载，
+ *  这时直接同步用缓存、和外壳同一次画出来，实色带第一帧就在（主持人 11-07 复查：重挂不许再从 0 淡入、红线以下透字） */
+let loadedFx: ComponentType<GlassBarFxProps> | null = null;
+/** @internal 仅测试用：清掉缓存，回到“这次启动还没下载过”的状态 */
+export function __forgetGlassBarFxForTest(): void {
+  loadedFx = null;
+}
+
+/** 去掉 data-fade 前在 --dur-ui 之外多等的余量 */
+export const FADE_SLACK_MS = 100;
+/** --dur-ui（tokens.css，如 220ms / .22s）换成毫秒；读不到按 220 */
+function durUiMs(): number {
+  const v = getComputedStyle(document.documentElement).getPropertyValue('--dur-ui').trim();
+  const n = parseFloat(v);
+  if (!Number.isFinite(n)) return 220;
+  return v.endsWith('ms') ? n : n * 1000;
+}
+
 export type TabName = 'today' | 'calendar' | 'todos' | 'notes';
 const TABS: readonly TabName[] = ['today', 'calendar', 'todos', 'notes'];
 // 图标照试验页（今天 ◎、日历 ▦、待办 ✓、随手记 ✎），24 格、描边 2
@@ -58,12 +76,28 @@ export function GlassBar({ active, add, later = (fn) => fn(), hide = false }: Gl
   const navEl = useRef<HTMLElement>(null);
   const gelEl = useRef<HTMLSpanElement>(null);
   const wide = useSyncExternalStore(onWide, isWide);
-  const [Fx, setFx] = useState<ComponentType<GlassBarFxProps> | null>(null);
+  const [Fx, setFx] = useState<ComponentType<GlassBarFxProps> | null>(() => loadedFx);
+  // 只有这次挂载以后才异步到的那一次（启动时）实色带、渐隐层才淡入；用缓存同步画出来的不淡入
+  const [fadeIn, setFadeIn] = useState(false);
+  // 淡入放完（--dur-ui，再留 FADE_SLACK_MS）就去掉 data-fade：不然之后从 display: none 变回显示（关掉减少透明效果、
+  // 900px 上下拖宽度）时 @starting-style 又会生效、再淡入一次（主持人 11-07 第三轮复查）。还在等安全区时去掉也没关系：
+  // 放行时走的是 data-inset-wait 那条普通过渡，不靠 @starting-style
   useEffect(() => {
+    if (!fadeIn) return undefined;
+    const id = setTimeout(() => setFadeIn(false), durUiMs() + FADE_SLACK_MS);
+    return () => clearTimeout(id);
+  }, [fadeIn]);
+  useEffect(() => {
+    if (loadedFx) return;
     let off = false;
     later(() => {
       import('./GlassBarFx.tsx')
-        .then((m) => off || setFx(() => m.GlassBarFx))
+        .then((m) => {
+          loadedFx = m.GlassBarFx;
+          if (off) return;
+          setFadeIn(true);
+          setFx(() => m.GlassBarFx);
+        })
         .catch(() => undefined); // 下不来（离线）：一直用后备材质
     });
     return () => {
@@ -82,7 +116,6 @@ export function GlassBar({ active, add, later = (fn) => fn(), hide = false }: Gl
   );
   return (
     <>
-      {Fx && <Fx nav={navEl} drop={dropEl} gel={gelEl} i={i} hasAdd={add !== undefined} kb={kb} wide={wide} />}
       {wide && fab}
       <nav
         className={styles.bar}
@@ -123,6 +156,9 @@ export function GlassBar({ active, add, later = (fn) => fn(), hide = false }: Gl
         </a>
       </nav>
       {!wide && fab}
+      {/* 放在外壳后面：底栏重挂时 Fx 用缓存和外壳同一次提交，它的 useLayoutEffect 要在 nav、液滴的 ref 挂上以后才跑（排在前面时 nav.current 还是空，点按代理挂不上）。
+          实色带、渐隐层是 fixed + z-index 9，叠放不看 DOM 先后 */}
+      {Fx && <Fx nav={navEl} drop={dropEl} gel={gelEl} i={i} hasAdd={add !== undefined} kb={kb} wide={wide} fadeIn={fadeIn} />}
     </>
   );
 }
