@@ -374,6 +374,14 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    # 跑在 Playwright 官方镜像里，浏览器和系统依赖都在镜像里，不再 apt 装（11-06 main 69659c1、探针第八、九轮都卡在 apt 装依赖、被取消）。
+    # • tag 写死，必须和 package-lock 里 @playwright/test 的版本一致（镜像里 /ms-playwright 的浏览器版本跟 tag 走），再钉 digest；
+    #   升级 Playwright 时三处一起改，tests/build/e2e-container-image.test.ts 核对；
+    # • noble 和 runner 同是 Ubuntu 24.04，字体、系统库和原来 --with-deps 装的同一套；镜像自带 Node 26，下面 setup-node 照样装 24 并排在 PATH 前面；
+    # • 容器里默认 root，HOME=/github/home；chromium 由 Playwright 默认不开沙箱，root 能跑；--ipc=host 是官方建议（chromium 共享内存不够会崩）
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
+      options: --ipc=host
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -389,8 +397,13 @@ jobs:
           npm ci --ignore-scripts
           bash build/ci/rebuild-allowlist.sh
 
-      - name: 安装浏览器（chromium、webkit）
-        run: npx --no-install playwright install --with-deps chromium webkit
+      # 不装浏览器：镜像里已经有了。这里只核对 Node 是 NODE_VERSION、Playwright 版本和镜像 tag 对得上（对不上 playwright 会找不到浏览器，早点报）
+      - name: 核对 Node、Playwright 版本和镜像里的浏览器
+        shell: bash
+        run: |
+          node --version | grep -q "^v${NODE_VERSION}\." || { echo "Node 不是 ${NODE_VERSION}：$(node --version)"; exit 1; }
+          npx --no-install playwright --version
+          ls "$PLAYWRIGHT_BROWSERS_PATH"
 
       # 不单独构建：playwright.config.ts 的 webServer 自己先 npm run build -- --mode e2e 再起 wrangler pages dev（CI 下不复用已有服务），
       # 这里再构建一次 preview 模式会被覆盖掉，白花时间
@@ -403,6 +416,7 @@ jobs:
       # CI webkit 上名单内的动效时序用例关了 backdrop-filter（tests/e2e/webkit-ci-nofx.ts）：按用例去重计数，名单悄悄变长时一眼能看到
       - name: 汇总：本轮关模糊的用例数
         if: always()
+        shell: bash
         run: |
           # 不锚定行首：list 报告器可能在测试输出前加前缀；-o 只取标记以后的部分，重试的同一条去重后只算一次
           n=$(grep -a -o '\[webkit-ci-nofx\].*' e2e.log 2>/dev/null | sort -u | wc -l || true)
