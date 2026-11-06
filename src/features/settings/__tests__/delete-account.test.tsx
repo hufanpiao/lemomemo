@@ -7,7 +7,7 @@ import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
 import { COOLING_MS } from '../ui/DeleteAccountView.tsx';
 import { fmtWhen } from '../ui/DevicesSection.tsx';
-import { fakeAccount, setOnline, setup } from './account-fakes.tsx';
+import { fakeAccount, setOnline, setup as setupAt } from './account-fakes.tsx';
 import { NOW, text } from './fakes.tsx';
 
 beforeEach(() => {
@@ -18,6 +18,9 @@ afterEach(() => {
   cleanup();
   setOnline(true);
 });
+
+/** 合卡以后（SETTINGS-merge-cards）注销入口在账号二级页：默认从 #/settings/account 开始 */
+const setup = (o: Parameters<typeof setupAt>[0] = {}) => setupAt({ hash: '#/settings/account', ...o });
 
 async function openDelete(): Promise<void> {
   await act(async () => {
@@ -42,16 +45,16 @@ describe('注销账号（设置 › 账号 › 注销账号）', () => {
     expect(within(page).getAllByRole('textbox')).toHaveLength(1);
     expect(within(page).getByLabelText('请输入“注销”确认')).toBe(input());
     expect(text(submitBtn())).toBe('注销账号');
-    // 返回设置首页（退回上一条历史，不再 push 一条“设置”）
+    // 返回账号二级页（退回上一条历史，不再 push 一条“账号”）
     await act(async () => {
       fireEvent.click(screen.getByTestId('settings-delete-back'));
     });
     await waitFor(() => expect(screen.queryByTestId('settings-delete')).toBeNull());
-    expect(screen.getByTestId('settings-export')).toBeTruthy();
-    expect(window.location.hash).toBe('#/settings');
+    expect(screen.getByTestId('settings-delete-entry')).toBeTruthy();
+    expect(window.location.hash).toBe('#/settings/account');
   });
 
-  it('注销页有自己的地址（负责人 10-30“注销页左滑应该回设置”）：点入口 push #/settings/delete，侧滑（history.back）回设置首页', async () => {
+  it('注销页有自己的地址（负责人 10-30“注销页左滑应该回设置”）：点入口 push #/settings/delete，侧滑（history.back）回账号二级页（合卡以后注销入口在那里）', async () => {
     setup();
     await openDelete();
     expect(window.location.hash).toBe('#/settings/delete');
@@ -59,18 +62,18 @@ describe('注销账号（设置 › 账号 › 注销账号）', () => {
       window.history.back();
     });
     await waitFor(() => expect(screen.queryByTestId('settings-delete')).toBeNull());
-    expect(window.location.hash).toBe('#/settings');
+    expect(window.location.hash).toBe('#/settings/account');
     expect(screen.getByTestId('settings-delete-entry')).toBeTruthy();
   });
 
-  it('直接打开 #/settings/delete（没有从设置点进来）：显示注销页；“‹ 返回”原地换成设置首页、不多压一条历史', async () => {
+  it('直接打开 #/settings/delete（没有从设置点进来）：显示注销页；“‹ 账号”原地换成账号二级页、不多压一条历史', async () => {
     setup({ hash: '#/settings/delete' });
     const before = window.history.length;
     await screen.findByTestId('settings-delete');
     await act(async () => {
       fireEvent.click(screen.getByTestId('settings-delete-back'));
     });
-    await waitFor(() => expect(window.location.hash).toBe('#/settings'));
+    await waitFor(() => expect(window.location.hash).toBe('#/settings/account'));
     expect(screen.queryByTestId('settings-delete')).toBeNull();
     expect(window.history.length).toBe(before);
   });

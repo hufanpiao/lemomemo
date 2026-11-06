@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { TILT_KEY, readTiltPref } from '../data/local.ts';
+import { zh } from '../i18n/zh.ts';
 import { SkinSection } from '../ui/SkinSection.tsx';
 
 beforeEach(() => {
@@ -17,12 +18,13 @@ afterEach(() => {
 const sw = (): HTMLInputElement => screen.getByRole('switch', { name: '倾斜高光' });
 
 describe('设置 › 皮肤 › 倾斜高光', () => {
-  it('默认关；有组标题“皮肤”、说明', () => {
+  it('默认关；有说明；合卡以后没有“皮肤”组标题（等皮肤选择做出来再加，SETTINGS-merge-cards M2）', () => {
     const ask = vi.fn(async () => true);
     render(<SkinSection deps={{ ask }} />);
-    expect(screen.getByRole('heading', { name: '皮肤' })).toBeTruthy();
+    expect(screen.queryByRole('heading')).toBeNull();
     expect(sw().checked).toBe(false);
-    expect(sw().getAttribute('aria-describedby')).toBe('settings-skin-tilt-note');
+    // 说明挂在开关的 aria-describedby 上（id 由 kit 的行组件生成）
+    expect(document.getElementById(sw().getAttribute('aria-describedby') ?? '')?.textContent).toBe(zh['settings.skin.tiltNote']);
     expect(ask).not.toHaveBeenCalled(); // 不打开就不问权限
   });
 
@@ -79,6 +81,5 @@ describe('设置 › 皮肤 › 倾斜高光', () => {
     act(() => uiStore.getState().setLocale('ko-KR'));
     render(<SkinSection deps={{ ask: async () => true }} />);
     expect(screen.getByRole('switch', { name: '기울기 하이라이트' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: '스킨' })).toBeTruthy();
   });
 });

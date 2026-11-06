@@ -1,0 +1,211 @@
+// 设置页的卡片、行、分段按钮（SETTINGS-merge-cards；方案 docs/09-路线图/B2-SETTINGS-merge-cards-方案.md 第 4、5、8 节）
+// • SettingsCard：<section aria-labelledby> + 看不见的 <h2>（卡名，必填）+ <ul>（M3：每张卡一个看不见的标题，行名不做标题）
+// • SettingsEntryRow：整行一个按钮“行名 + 当前值 + ›”，点进二级页。值可以先空着（懒加载的值晚到，行一开始就能点，M4），
+//   值单行省略、行名不缩（S3）；例外：stacked 时值放在行名下面一行、可换行不省略（设置首页账号一行）；meta 是行里的第二行灰字
+// • SettingsSwitchRow：<label> 包行名和 role="switch" 的复选框；说明（note）和报错（error）写在这一行里、不挂在卡片下面（M2），
+//   说明用 aria-describedby 挂到开关上
+// • SettingsSegRow + Segmented：行名 + 分段按钮（界面语言，C：留分段按钮），分段按钮的组名取行名（aria-labelledby）
+// • SettingsInfoRow：只显示的一行“行名 + 值”，不能点（关于页的版本号）
+// • SettingsRow：别的内容自己放（例如已登录设备那种多段的行）
+// 文案一律由使用方传进来，这里不认 i18n 键
+import { useId, type ReactNode } from 'react';
+import { Pressable } from '../../../motion/components.ts';
+import styles from './Settings.module.css';
+
+export function SettingsCard({ title, children, testId }: { title: string; children: ReactNode; testId?: string }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} data-testid={testId}>
+      <h2 id={id} className={styles.srOnly}>
+        {title}
+      </h2>
+      <ul className={styles.grp}>{children}</ul>
+    </section>
+  );
+}
+
+export function SettingsRow({ children, testId, rowId }: { children: ReactNode; testId?: string; rowId?: string }) {
+  return (
+    <li className={styles.row} data-testid={testId} data-row-id={rowId}>
+      {children}
+    </li>
+  );
+}
+
+/** 只显示、不能点的一行：行名 + 值（例如关于页的“版本 4.0.0”，设计评审 M-1） */
+export function SettingsInfoRow({ label, value, testId, valueTestId }: { label: string; value: ReactNode; testId?: string; valueTestId?: string }) {
+  return (
+    <li className={styles.row} data-testid={testId}>
+      <span className={styles.tx}>{label}</span>
+      <span className={`${styles.v} ${styles.num}`} data-testid={valueTestId}>
+        {value}
+      </span>
+    </li>
+  );
+}
+
+export interface SettingsEntryRowProps {
+  /** 行名；一般是字符串，设置首页账号一行是插了 <wbr> 的邮箱（韩文复审建议） */
+  label: ReactNode;
+  /** 行名前面的东西（可选，例如设置首页账号一行的头像圈）；只是装饰，读屏只念行名 */
+  lead?: ReactNode;
+  /** 行名和值上下两行：值放在行名下面、可换行、不省略（设置首页账号一行，韩文审校 A-4：长邮箱、“设备列表读不出来”不能被截断） */
+  stacked?: boolean;
+  /** 右边的当前值；undefined 时先空着（懒加载的值还没到），行照样能点 */
+  value?: ReactNode;
+  /** 第二行灰字（可选） */
+  meta?: ReactNode;
+  onOpen(): void;
+  testId: string;
+  valueTestId?: string;
+  disabled?: boolean;
+  /** 写在 <li data-row-id>，使用方按它找这一行（例如设置页的分组 id） */
+  rowId?: string;
+}
+
+export function SettingsEntryRow({ label, lead, stacked, value, meta, onOpen, testId, valueTestId, disabled, rowId }: SettingsEntryRowProps) {
+  const metaId = useId();
+  return (
+    <li className={styles.row} data-row-id={rowId}>
+      <Pressable className={styles.rowBtn} onClick={onOpen} data-testid={testId} disabled={disabled} aria-describedby={meta === undefined ? undefined : metaId}>
+        {lead}
+        {stacked ? (
+          <span className={styles.stack}>
+            <span className={styles.tx}>{label}</span>
+            <span className={`${styles.v} ${styles.vBelow}`} data-testid={valueTestId}>
+              {value}
+            </span>
+          </span>
+        ) : (
+          <>
+            <span className={styles.tx}>{label}</span>
+            <span className={styles.v} data-testid={valueTestId}>
+              {value}
+            </span>
+          </>
+        )}
+        <span className={styles.chev} aria-hidden>
+          ›
+        </span>
+      </Pressable>
+      {meta === undefined ? null : (
+        <p id={metaId} className={styles.meta}>
+          {meta}
+        </p>
+      )}
+    </li>
+  );
+}
+
+export interface SettingsSwitchRowProps {
+  label: string;
+  checked: boolean;
+  onChange(v: boolean): void;
+  /** 行里的第二行说明，挂到开关的 aria-describedby */
+  note?: ReactNode;
+  /** 行里的报错（role="status"，出现时读屏会念） */
+  error?: ReactNode;
+  testId: string;
+  disabled?: boolean;
+  rowId?: string;
+}
+
+export function SettingsSwitchRow({ label, checked, onChange, note, error, testId, disabled, rowId }: SettingsSwitchRowProps) {
+  const noteId = useId();
+  return (
+    <li className={styles.row} data-row-id={rowId}>
+      <label className={styles.switchRow}>
+        <span className={styles.tx}>{label}</span>
+        <input
+          type="checkbox"
+          role="switch"
+          className={styles.toggle}
+          checked={checked}
+          disabled={disabled}
+          aria-describedby={note === undefined ? undefined : noteId}
+          onChange={(e) => onChange(e.currentTarget.checked)}
+          data-testid={testId}
+        />
+      </label>
+      {note === undefined ? null : (
+        <p id={noteId} className={styles.meta}>
+          {note}
+        </p>
+      )}
+      {error === undefined || error === null ? null : (
+        <p className={styles.error} role="status">
+          {error}
+        </p>
+      )}
+    </li>
+  );
+}
+
+export interface SegOption<T extends string> {
+  value: T;
+  label: string;
+  /** 选项文字本身的语言（例如“한국어”标 ko），读屏按这个语言念 */
+  lang?: string;
+}
+
+export interface SegmentedProps<T extends string> {
+  options: readonly SegOption<T>[];
+  value: T;
+  onChange(v: T): void;
+  /** 组名：传行名元素的 id（aria-labelledby），或者直接给 label（aria-label） */
+  labelledBy?: string;
+  label?: string;
+  /** 说明的 id（aria-describedby） */
+  describedBy?: string | undefined;
+  testId?: string;
+}
+
+export function Segmented<T extends string>({ options, value, onChange, labelledBy, label, describedBy, testId }: SegmentedProps<T>) {
+  return (
+    <div
+      className={styles.seg}
+      role="group"
+      aria-labelledby={labelledBy}
+      aria-label={labelledBy === undefined ? label : undefined}
+      aria-describedby={describedBy}
+      data-testid={testId}
+    >
+      {options.map((o) => (
+        <Pressable key={o.value} className={styles.segBtn} lang={o.lang} aria-pressed={o.value === value} data-value={o.value} onClick={() => onChange(o.value)}>
+          {o.label}
+        </Pressable>
+      ))}
+    </div>
+  );
+}
+
+export interface SettingsSegRowProps<T extends string> extends Omit<SegmentedProps<T>, 'labelledBy' | 'label' | 'describedBy'> {
+  label: string;
+  meta?: ReactNode;
+  error?: ReactNode;
+  rowId?: string;
+}
+
+/** 行名 + 分段按钮；meta 是第二行灰字（界面语言的缩短说明，M1），error 是行里的报错（同步失败，role="alert"） */
+export function SettingsSegRow<T extends string>({ label, meta, error, rowId, ...seg }: SettingsSegRowProps<T>) {
+  const id = useId();
+  const metaId = useId();
+  return (
+    <li className={`${styles.row} ${styles.segRow}`} data-row-id={rowId}>
+      <span id={id} className={styles.tx}>
+        {label}
+      </span>
+      <Segmented {...seg} labelledBy={id} describedBy={meta === undefined ? undefined : metaId} />
+      {meta === undefined ? null : (
+        <p id={metaId} className={styles.meta}>
+          {meta}
+        </p>
+      )}
+      {error === undefined || error === null ? null : (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
+    </li>
+  );
+}

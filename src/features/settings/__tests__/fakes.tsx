@@ -73,9 +73,27 @@ export function deferred<T = void>() {
   return { promise, resolve };
 }
 
+/** 从设置首页开始（上一条用例留下的地址不带过来），等首页“账号”一行写出设备数（设备列表读完） */
 export async function renderPage(api: SettingsApi = fakeApi(), exit: ExitDeps = fakeExit().exit, redirectMs = 5000) {
+  window.history.replaceState(null, '', '#/settings');
   render(<SettingsPage deps={{ api, exit, now, redirectMs }} />);
+  await waitFor(() => expect(screen.getByTestId('settings-account-summary').textContent).toMatch(/\d/));
+}
+
+/** 合卡以后（SETTINGS-merge-cards）设备列表、退出这台设备、注销入口都在账号二级页：从首页点“账号”一行进去 */
+export async function openAccount(): Promise<void> {
+  await act(async () => {
+    fireEvent.click(screen.getByTestId('settings-account-entry'));
+  });
   await waitFor(() => expect(screen.getAllByTestId('settings-device').length).toBeGreaterThan(0));
+}
+
+/** 从二级页点“‹ 设置”回首页（退出登录在首页最底下） */
+export async function backHome(backId: string): Promise<void> {
+  await act(async () => {
+    fireEvent.click(screen.getByTestId(backId));
+  });
+  await screen.findByTestId('settings-signout');
 }
 
 export const rowAt = (i: number): HTMLElement => screen.getAllByTestId('settings-device')[i] as HTMLElement;

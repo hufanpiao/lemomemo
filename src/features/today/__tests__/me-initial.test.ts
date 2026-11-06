@@ -1,6 +1,6 @@
-// 今天页右上角头像上的字（B2 FA-7；负责人 11-05 ①）
+// 今天页右上角头像上的字（B2 FA-7；负责人 11-05 ①）；实现在 kit/hooks/useMeInitial.ts（合卡代码审查 S6 删了 today 的转出文件）
 import { describe, expect, it } from 'vitest';
-import { nameInitial } from '../hooks/useMeInitial.ts';
+import { nameInitial } from '../../../kit/hooks/useMeInitial.ts';
 
 describe('nameInitial', () => {
   it('名字的第一个字：中文、韩文音节、英文、表情不切半；前后空白不算', () => {

@@ -7,7 +7,7 @@ import { isSelfSignOut, resetSelfSignOutForTest } from '../../../platform/sessio
 import type { LocalSignOut } from '../data/settings-api.ts';
 import { zh } from '../i18n/zh.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';
-import { clickSignOut, confirmWith, deferred, fail, fakeApi, fakeExit, now, renderPage, rowAt, text } from './fakes.tsx';
+import { clickSignOut, confirmWith, deferred, fail, fakeApi, fakeExit, now, openAccount, renderPage, rowAt, text } from './fakes.tsx';
 
 vi.mock('../i18n/ko.ts', async () => {
   const { zh: z } = await vi.importActual<{ zh: Record<string, string> }>('../i18n/zh.ts');
@@ -105,6 +105,7 @@ describe('会话没了：提示后回登录页（0.29 续第 98 条、0.38 第 7
     const api = fakeApi({ removeDevice: vi.fn(async () => fail('revoked')) });
     const { exit } = fakeExit();
     await renderPage(api, exit, 3000);
+    await openAccount();
     fireEvent.click(within(rowAt(1)).getByRole('button'));
     await confirmWith(zh['settings.confirm.remove.ok']);
     expect(await screen.findByText(zh['settings.revoked.body'])).toBeTruthy();

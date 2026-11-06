@@ -53,11 +53,12 @@ describe('设置首页“提醒与通知”一行（线框 s13）', () => {
     await renderPage();
     const entry = await screen.findByTestId('settings-remind-entry', {}, LAZY);
     expect(entry.textContent).toContain(R.title);
-    expect(screen.getByTestId('settings-remind-summary').textContent).not.toBe('');
-    const slots = Array.from(document.querySelectorAll('[data-section-slot]')).map((n) => n.getAttribute('data-section-slot'));
+    // 行一开始就在、能点（M4），摘要是懒加载的，等它出来
+    await waitFor(() => expect(screen.getByTestId('settings-remind-summary').textContent).not.toBe(''), LAZY);
+    const slots = Array.from(document.querySelectorAll('[data-row-id]')).map((n) => n.getAttribute('data-row-id'));
     expect(slots.indexOf('reminders')).toBe(slots.indexOf('calendar') + 1);
     expect(slots.indexOf('reminders')).toBeLessThan(slots.indexOf('data'));
-    expect(document.querySelector('[data-section-slot="reminders"]')?.contains(entry)).toBe(true);
+    expect(document.querySelector('[data-row-id="reminders"]')?.contains(entry)).toBe(true);
     expect(screen.queryByTestId('settings-reminders')).toBeNull();
     expect(screen.queryByTestId('remind-open-upcoming')).toBeNull();
   });
@@ -233,7 +234,8 @@ async function openUpcomingKo(): Promise<void> {
   await waitFor(() => expect(h1Text()).toBe(`[ko]${zh['settings.remind.upcoming']}`));
 }
 
-describe('设置 › 关于：手机时间不准（K8-clock）', () => {
+// 合卡以后（SETTINGS-merge-cards）“关于”是二级页，“手机时间不准”留在首页卡片下面，要马上看到
+describe('设置首页：手机时间不准（K8-clock）', () => {
   it('偏差正常时不画：先让提示出来，再把时钟调正常（又来了 5 次没偏差的样本），提示消失（代码复审第二轮 N4：只断言“没出现”可能是还没加载）', async () => {
     const local = Date.now();
     for (let i = 0; i < 5; i += 1) clock.record(new Date(local + 10 * 60_000).toUTCString(), local);
@@ -244,22 +246,22 @@ describe('设置 › 关于：手机时间不准（K8-clock）', () => {
     });
     expect(clock.isClockWrong()).toBe(false);
     await waitFor(() => expect(screen.queryByTestId('clock-wrong')).toBeNull());
-    // 关于 分组还在，农历出处照常
-    expect(screen.getByTestId('settings-lunar-credit')).toBeTruthy();
+    // 关于一行还在
+    expect(screen.getByTestId('settings-about-entry')).toBeTruthy();
   });
 
-  it('服务器时间比本机快 10 分钟：关于 分组里只出一句“这台设备的时间和服务器差了约 10 分钟…”（N7 不再重复），排在农历出处之前', async () => {
+  it('服务器时间比本机快 10 分钟：首页卡片之后、退出登录之前只出一句“这台设备的时间和服务器差了约 10 分钟…”（N7 不再重复），不在哪张卡里', async () => {
     const local = Date.now();
     for (let i = 0; i < 5; i += 1) clock.record(new Date(local + 10 * 60_000).toUTCString(), local);
     expect(clock.isClockWrong()).toBe(true);
     await renderPage();
     const note = await screen.findByTestId('clock-wrong', {}, LAZY);
-    const about = document.querySelector('[data-section="about"]') as HTMLElement;
-    expect(about.contains(note)).toBe(true);
+    const more = screen.getByTestId('settings-card-more');
+    expect(more.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(note.closest('section')).toBeNull();
     expect(note.textContent).toContain(R.clockWrong);
     expect(note.textContent).toContain('10');
     expect(note.textContent).not.toContain('不准');
-    const credit = screen.getByTestId('settings-lunar-credit');
-    expect(note.compareDocumentPosition(credit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(note.compareDocumentPosition(screen.getByTestId('settings-signout')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

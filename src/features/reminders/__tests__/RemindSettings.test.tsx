@@ -37,7 +37,7 @@ vi.mock('../../../platform/native-bridge.ts', async (orig) => ({
 vi.mock('../data/push-test.ts', async (orig) => ({ ...(await orig<typeof PushTest>()), sendTestPush: () => sendTestPush() }));
 
 const { default: RemindSettings } = await import('../ui/RemindSettings.tsx');
-const { default: RemindSettingsEntry } = await import('../ui/RemindSettingsEntry.tsx');
+const { default: RemindSettingsValue } = await import('../ui/RemindSettingsValue.tsx');
 // “提醒里写什么”、免打扰是设置 › 提醒 下面点进去的页（R-347，线框 sR7）
 const { default: RemindShowTitle } = await import('../ui/RemindShowTitle.tsx');
 const { default: RemindDnd } = await import('../ui/RemindDnd.tsx');
@@ -194,11 +194,10 @@ describe('设置 › 提醒', () => {
     fireEvent.click(screen.getByTestId('remind-open-upcoming'));
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
-  it('设置首页的入口行', () => {
-    const onOpen = vi.fn();
-    render(<RemindSettingsEntry onOpen={onOpen} />);
-    fireEvent.click(screen.getByRole('button'));
-    expect(onOpen).toHaveBeenCalledTimes(1);
+  it('设置首页那一行的值：只有摘要文字，没有按钮（整行和点进去由设置页管，SETTINGS-merge-cards）', () => {
+    render(<RemindSettingsValue />);
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(document.body.textContent).not.toBe('');
   });
 });
 

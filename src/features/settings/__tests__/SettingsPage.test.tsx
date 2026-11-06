@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { zh } from '../i18n/zh.ts';
 import SettingsPage from '../ui/SettingsPage.tsx';
-import { confirmWith, fail, fakeApi, fakeExit, now, renderPage, ROWS, rowAt, text } from './fakes.tsx';
+import { confirmWith, fail, fakeApi, fakeExit, now, openAccount, renderPage, ROWS, rowAt, text } from './fakes.tsx';
 
 vi.mock('../i18n/ko.ts', async () => {
   const { zh: z } = await vi.importActual<{ zh: Record<string, string> }>('../i18n/zh.ts');
@@ -22,9 +22,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+// 合卡以后（SETTINGS-merge-cards）设备列表在账号二级页：从首页点“账号”一行进去（openAccount），或直接打开 #/settings/account
 describe('已登录设备', () => {
   it('本机排第一并标“本机”；session_id 为空的、在 signed_out_device_ids 里的标“已退出”且能移除；很久没用的写自动移除日期；另有 N 个登录', async () => {
     await renderPage();
+    await openAccount();
     const rows = screen.getAllByTestId('settings-device');
     expect(rows.map((r) => r.getAttribute('data-current'))).toEqual(['1', null, null, null]);
     expect(text(rows[0])).toContain(zh['settings.platform.windows']);
@@ -43,6 +45,7 @@ describe('已登录设备', () => {
 
   it('读屏名包含看得见的文字：本机行是“退出这台设备（名字）”，其他行是“移除 名字”', async () => {
     await renderPage();
+    await openAccount();
     expect(within(rowAt(0)).getByRole('button').getAttribute('aria-label')).toBe(`退出这台设备（${zh['settings.platform.windows']}）`);
     expect(within(rowAt(1)).getByRole('button').getAttribute('aria-label')).toBe('移除 A 的 iPhone');
   });
@@ -55,6 +58,7 @@ describe('已登录设备', () => {
       })),
     });
     await renderPage(api);
+    await openAccount();
     expect(screen.queryByTestId('settings-orphans')).toBeNull();
     expect((screen.getByRole('button', { name: zh['settings.devices.signOutOthers'] }) as HTMLButtonElement).disabled).toBe(false);
   });
@@ -62,6 +66,7 @@ describe('已登录设备', () => {
   it('移除别的设备：先确认，调 remove_device，提示、重新读列表，焦点移到列表标题', async () => {
     const api = fakeApi();
     await renderPage(api);
+    await openAccount();
     fireEvent.click(within(rowAt(1)).getByRole('button'));
     await confirmWith(zh['settings.confirm.remove.ok']);
     expect(api.removeDevice).toHaveBeenCalledWith('x');
@@ -74,6 +79,7 @@ describe('已登录设备', () => {
     const { exit, order } = fakeExit();
     const api = fakeApi({}, order);
     await renderPage(api, exit);
+    await openAccount();
     await act(async () => {
       fireEvent.click(within(rowAt(0)).getByRole('button'));
     });
@@ -89,6 +95,7 @@ describe('已登录设备', () => {
     const api = fakeApi();
     const { exit } = fakeExit(2);
     await renderPage(api, exit);
+    await openAccount();
     await act(async () => {
       fireEvent.click(within(rowAt(0)).getByRole('button'));
     });
@@ -102,6 +109,7 @@ describe('已登录设备', () => {
     const api = fakeApi({ removeDevice: vi.fn(async () => fail('is_current_device')) });
     const { exit } = fakeExit();
     await renderPage(api, exit);
+    await openAccount();
     fireEvent.click(within(rowAt(1)).getByRole('button'));
     await confirmWith(zh['settings.confirm.remove.ok']);
     expect(text(await screen.findByRole('alert'))).toBe(zh['settings.devices.isCurrent']);
@@ -116,6 +124,7 @@ describe('已登录设备', () => {
   it('退出其他所有设备：确认后调 signOutOthers，提示并刷新列表', async () => {
     const api = fakeApi();
     await renderPage(api);
+    await openAccount();
     fireEvent.click(screen.getByRole('button', { name: zh['settings.devices.signOutOthers'] }));
     await confirmWith(zh['settings.confirm.others.ok']);
     expect(api.signOutOthers).toHaveBeenCalledTimes(1);
@@ -127,6 +136,7 @@ describe('已登录设备', () => {
     const api = fakeApi({ signOutOthers: vi.fn(async () => fail('try_later')) });
     const { exit } = fakeExit();
     await renderPage(api, exit);
+    await openAccount();
     fireEvent.click(screen.getByRole('button', { name: zh['settings.devices.signOutOthers'] }));
     await confirmWith(zh['settings.confirm.others.ok']);
     expect(text(await screen.findByRole('alert'))).toContain(zh['settings.err.tryLater']);
@@ -141,6 +151,7 @@ describe('已登录设备', () => {
       .mockResolvedValue({ ok: true, value: { rows: ROWS, sessions: null, session: 's-me' } });
     const api = fakeApi({ loadDevices: load });
     const { exit } = fakeExit();
+    window.history.replaceState(null, '', '#/settings/account');
     render(<SettingsPage deps={{ api, exit, now }} />);
     expect(await screen.findByText(zh['settings.devices.loadFailed'])).toBeTruthy();
     expect(exit.wipe).not.toHaveBeenCalled();
@@ -159,6 +170,7 @@ describe('已登录设备', () => {
     const leaveAccount = vi.fn(async () => undefined);
     let answer: (v: 'active') => void = () => undefined;
     const resolveDisabled = vi.fn(() => new Promise<'active'>((r) => (answer = r)));
+    window.history.replaceState(null, '', '#/settings/account');
     render(<SettingsPage deps={{ api, exit, now, leaveAccount, resolveDisabled }} />);
     await waitFor(() => expect(resolveDisabled).toHaveBeenCalledWith('s-me', undefined));
     expect(screen.queryByText(zh['settings.err.accountDisabled'])).toBeNull();
@@ -211,130 +223,51 @@ describe('退出登录（页面最底下单独一行）', () => {
   });
 });
 
-// TC-B1-71（R-256 改过）：账号第一，其余按定稿线框（第 996～998 行）的相对顺序；“退出登录”单独一行在所有分组之后。
-// 已有的分组按这个相对顺序出现即可；后面各批加分组时复跑，B7a 时齐全。只认二级标题（分组名），已登录设备是账号里的三级标题
-describe('设置分组顺序（TC-B1-71）', () => {
+// TC-B1-71（R-256 改过；R-325 合卡，SETTINGS-merge-cards 方案定稿）：首页三张卡——账号；常用（界面语言、倾斜高光、日历、提醒与通知）；
+// 更多（数据、电脑、关于）。卡里的行按定稿线框（第 996～998 行）的相对顺序；“退出登录”单独一行在所有卡之后。
+// 后面各批加行时复跑：只要求已有的行按 sections.ts 的相对顺序出现、不重复
+describe('设置首页的卡和行（TC-B1-71、R-325）', () => {
   const ORDER = [
-    '账号', '界面语言', '皮肤', '字体', '随手记显示方式', '日历', '提醒与通知', '语音与 AI', '隐私记', '时区',
-    '数据', '在 Claude 聊天里记事', '邀请朋友', '电脑', '符号说明', '关于',
+    'account', 'language', 'skin', 'font', 'notesView', 'calendar', 'reminders', 'voiceAi', 'vault', 'timezone',
+    'data', 'claude', 'invite', 'desktop', 'glossary', 'about',
   ];
 
-  it('账号排第一、界面语言紧随、数据在后；分组不重复；“退出登录”在最后一个分组之后', async () => {
+  it('三张卡依次是账号、常用、更多；行的顺序和归卡照定稿；“退出登录”在最后一张卡之后；首页不出现二级页的内容', async () => {
     await renderPage();
-    // “日历”“提醒与通知”两组是懒加载的（calendar、reminders 功能提供），等它们出来再数
     await screen.findByTestId('settings-cal-entry');
-    await screen.findByTestId('settings-remind-entry');
-    const heads = screen.getAllByRole('heading', { level: 2 });
-    const groups = heads.map((h) => (h.textContent ?? '').trim()).filter((n) => ORDER.includes(n));
-    // B2 FA-7（TILT-b2）在界面语言后面加了“皮肤”组
-    expect(groups.slice(0, 6)).toEqual(['账号', '界面语言', '皮肤', '日历', '提醒与通知', '数据']);
-    expect(groups).toEqual([...groups].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
-    expect(new Set(groups).size).toBe(groups.length);
-    // 已登录设备、退出其他所有设备、注销入口都在账号这一组里
-    const account = screen.getByRole('heading', { level: 2, name: '账号' }).closest('section') as HTMLElement;
-    expect(within(account).getByRole('heading', { level: 3, name: zh['settings.devices.title'] })).toBeTruthy();
-    expect(within(account).getByRole('button', { name: zh['settings.devices.signOutOthers'] })).toBeTruthy();
-    expect(within(account).getByTestId('settings-delete-entry')).toBeTruthy();
-    expect(within(account).queryByTestId('settings-signout')).toBeNull();
-    // 退出登录：在 DOM 里排在最后一个分组之后
+    const cards = screen.getAllByRole('heading', { level: 2 }).map((h) => h.closest('section') as HTMLElement);
+    expect(cards.map((c) => c.getAttribute('data-testid'))).toEqual(['settings-card-account', 'settings-card-main', 'settings-card-more']);
+    // 卡的标题看不见，但读屏能读（M3）：卡 1 就叫“账号”
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => (h.textContent ?? '').trim())).toEqual([
+      zh['settings.account.title'],
+      zh['settings.card.main'],
+      zh['settings.card.more'],
+    ]);
+    const ids = (c: HTMLElement): string[] => [...c.querySelectorAll('[data-row-id]')].map((el) => el.getAttribute('data-row-id') ?? '');
+    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'calendar', 'reminders'], ['data', 'about']]);
+    const all = cards.flatMap(ids);
+    expect(all).toEqual([...all].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
+    expect(new Set(all).size).toBe(all.length);
+    // 账号一行：名字是邮箱读不到时的“账号”，值是“N 台设备：本机、其他…”（本机排第一）
+    expect(text(screen.getByTestId('settings-account-entry'))).toContain(zh['settings.account.title']);
+    expect(text(screen.getByTestId('settings-account-summary'))).toBe(`4 台设备：${zh['settings.platform.windows']}、A 的 iPhone、旧电脑、${zh['settings.platform.web']}`);
+    // 设备列表、退出其他所有设备、注销入口、导出按钮都在二级页，首页没有
+    for (const id of ['settings-device', 'settings-delete-entry', 'settings-export']) expect(screen.queryAllByTestId(id)).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: zh['settings.devices.signOutOthers'] })).toBeNull();
     const signOut = screen.getByTestId('settings-signout');
-    const last = heads[heads.length - 1]?.closest('section') as HTMLElement;
+    const last = cards[cards.length - 1] as HTMLElement;
     expect(last.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(last.contains(signOut)).toBe(false);
   });
-});
 
-// R-320（负责人 11-03 按定稿线框）：设置 › 日历 是二级页 #/settings/calendar；首页只有一行“日历 … 节假日：中国 ›”（负责人 11-04：不提农历），不内联展开。
-// R-321：不加农历开关。返回同注销页：点进来的退一步（侧滑、后退一样），直接打开的原地换成设置首页、不多压一条历史
-describe('设置 › 日历 二级页（R-320、R-321）', () => {
-  beforeEach(() => window.history.replaceState(null, '', '#/settings'));
-  afterEach(() => window.history.replaceState(null, '', '#/settings'));
-
-  const openCal = async (): Promise<void> => {
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('settings-cal-entry'));
-    });
-    await screen.findByTestId('settings-calendar');
-  };
-
-  it('首页只有一行入口和摘要（“节假日：中国”，不提农历），不出现节假日单选、每周第一天、农历开关', async () => {
+  it('账号二级页：已登录设备、退出其他所有设备、注销入口都在这里，退出登录不在', async () => {
     await renderPage();
-    expect((await screen.findByTestId('settings-cal-summary')).textContent).toBe('节假日：中国');
-    expect(screen.getByTestId('settings-cal-entry').textContent).not.toContain('农历');
-    expect(screen.queryByTestId('settings-calendar')).toBeNull();
-    expect(screen.queryByTestId('settings-cal-hol-cn')).toBeNull();
-    expect(screen.queryByTestId('settings-cal-ws-1')).toBeNull();
-    expect(screen.queryByRole('checkbox')).toBeNull();
-  });
-
-  it('点入口 push #/settings/calendar：只显示日历二级页（首页分组、退出登录都不在）；“‹ 设置”退回首页', async () => {
-    await renderPage();
-    await openCal();
-    expect(window.location.hash).toBe('#/settings/calendar');
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('日历');
+    await openAccount();
+    expect(screen.getByRole('heading', { level: 1, name: zh['settings.account.title'] })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 3, name: zh['settings.devices.title'] })).toBeTruthy();
+    expect(screen.getByRole('button', { name: zh['settings.devices.signOutOthers'] })).toBeTruthy();
+    expect(screen.getByTestId('settings-delete-entry')).toBeTruthy();
     expect(screen.queryByTestId('settings-signout')).toBeNull();
-    expect(screen.queryByTestId('settings-delete-entry')).toBeNull();
-    expect(screen.getByTestId('settings-cal-hol-cn')).toBeTruthy();
-    expect(screen.getByTestId('settings-cal-ws-1')).toBeTruthy();
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('settings-cal-back'));
-    });
-    await waitFor(() => expect(screen.queryByTestId('settings-calendar')).toBeNull());
-    expect(window.location.hash).toBe('#/settings');
-    expect(await screen.findByTestId('settings-cal-entry')).toBeTruthy();
-    expect(screen.getByTestId('settings-signout')).toBeTruthy();
-  });
-
-  it('侧滑 / 浏览器后退（history.back）也回设置首页', async () => {
-    await renderPage();
-    await openCal();
-    await act(async () => {
-      window.history.back();
-    });
-    await waitFor(() => expect(screen.queryByTestId('settings-calendar')).toBeNull());
-    expect(window.location.hash).toBe('#/settings');
-  });
-
-  it('直接打开 #/settings/calendar：显示二级页；“‹ 设置”原地换成设置首页、不多压一条历史', async () => {
-    window.history.replaceState(null, '', '#/settings/calendar');
-    const before = window.history.length;
-    render(<SettingsPage deps={{ api: fakeApi(), exit: fakeExit().exit, now }} />);
-    await screen.findByTestId('settings-calendar');
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('settings-cal-back'));
-    });
-    await waitFor(() => expect(window.location.hash).toBe('#/settings'));
-    expect(screen.queryByTestId('settings-calendar')).toBeNull();
-    expect(window.history.length).toBe(before);
-  });
-
-  it('二级页顶栏：“‹ 设置”和标题“日历”（和首页入口行名同一个词，代码审查 L4），进来时焦点在标题上；正文不提农历', async () => {
-    await renderPage();
-    const rowName = (await screen.findByTestId('settings-cal-entry')).textContent ?? '';
-    await openCal();
-    expect(rowName.startsWith(screen.getByRole('heading', { level: 1 }).textContent ?? '?')).toBe(true);
-    expect(screen.getByTestId('settings-calendar').textContent).not.toContain('农历');
-    const h1 = screen.getByRole('heading', { level: 1 });
-    expect(h1.textContent).toBe(zh['settings.cal.title']);
-    expect(zh['settings.cal.title']).toBe('日历');
-    await waitFor(() => expect(document.activeElement).toBe(h1));
-    expect(screen.getByTestId('settings-cal-back').textContent).toBe('‹ 设置');
-  });
-
-  it('韩文界面：首页摘要“공휴일: 한국”（不写음력，calendar 用真韩文词典）；二级页顶栏跟着设置词典换语言', async () => {
-    uiStore.getState().setLocale('ko-KR');
-    await renderPage();
-    expect((await screen.findByTestId('settings-cal-summary')).textContent).toBe('공휴일: 한국');
-    await openCal();
-    // 本文件把设置的韩文词典换成“[ko]+中文”，真韩文在下一条核对
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('[ko]日历');
-    expect(screen.getByTestId('settings-cal-back').textContent).toBe('‹ [ko]设置');
-    expect(screen.getByText('공휴일')).toBeTruthy();
-  });
-
-  it('设置韩文词典：二级页标题“캘린더”（B2K-05）、返回“설정”', async () => {
-    const { ko } = await vi.importActual<{ ko: Record<string, string> }>('../i18n/ko.ts');
-    expect(ko['settings.cal.title']).toBe('캘린더');
-    expect(ko['settings.title']).toBe('설정');
+    expect(screen.queryByTestId('settings-card-main')).toBeNull();
   });
 });

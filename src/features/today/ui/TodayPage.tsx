@@ -23,13 +23,13 @@ import { Suspense, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate } from '../../../app/router.ts';
 import { CheckCircle } from '../../../kit/components/CheckCircle.tsx';
+import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useT } from '../../../kit/hooks/useT.ts';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
 import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
-import { useMeInitial } from '../hooks/useMeInitial.ts';
 import { useToday, type ActionResult } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
 import { GrowIn } from './GrowIn.tsx';
@@ -54,7 +54,6 @@ type Toast = { kind: 'undo'; id: string } | { kind: 'error'; readonly: boolean }
 
 export default function TodayPage() {
   const tApp = useT();
-  const initial = useMeInitial();
   const t = useTodayT();
   const locale = useLocale();
   const d = useToday();
@@ -90,11 +89,7 @@ export default function TodayPage() {
         <h1 className={styles.date} tabIndex={-1}>{fmtDay(d.today, locale, 'monthDayWeek')}</h1>
         {/* 设置入口（负责人 11-05 ①；接手清单 NAV-today-no-settings）：右上角头像，名字第一个字；没有名字时是一个人形 */}
         <a className={styles.me} href={hrefOf('settings')} aria-label={tApp('app.settings', {})} data-testid="today-settings">
-          {initial ?? (
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0" />
-            </svg>
-          )}
+          <MeAvatar />
         </a>
       </div>
 

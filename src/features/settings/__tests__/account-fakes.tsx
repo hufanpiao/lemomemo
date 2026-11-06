@@ -33,8 +33,8 @@ export function fakeAccount(over: Partial<AccountApi> = {}) {
 }
 
 export function setup(o: { account?: ReturnType<typeof fakeAccount>; resolveDisabled?: SettingsDeps['resolveDisabled']; pending?: number | null; save?: () => Promise<'shared' | 'downloaded' | 'cancelled' | 'needs_tap'>; recent?: () => Promise<RecentExportResult>; hash?: string } = {}) {
-  // 注销页有自己的地址（#/settings/delete）：每次从设置首页开始，上一条用例留下的地址不带过来
-  window.history.replaceState(null, '', o.hash ?? '#/settings');
+  // 每次从指定的地址开始，上一条用例留下的地址不带过来。合卡以后（SETTINGS-merge-cards）导出和最近的导出都在数据二级页，默认就从这里开始
+  window.history.replaceState(null, '', o.hash ?? '#/settings/data');
   const api = fakeApi();
   const { exit, order } = fakeExit('pending' in o ? (o.pending ?? null) : 0);
   const account = o.account ?? fakeAccount();

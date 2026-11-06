@@ -37,7 +37,7 @@ vi.mock('../../../platform/native-bridge.ts', async (orig) => ({
 vi.mock('../data/push-test.ts', async (orig) => ({ ...(await orig<typeof PushTest>()), sendTestPush: () => sendTestPush() }));
 
 const { default: RemindSettings } = await import('../ui/RemindSettings.tsx');
-const { default: RemindSettingsEntry } = await import('../ui/RemindSettingsEntry.tsx');
+const { default: RemindSettingsValue } = await import('../ui/RemindSettingsValue.tsx');
 // 免打扰是设置 › 提醒 下面点进去的页（R-347，线框 sR7）
 const { default: RemindDnd } = await import('../ui/RemindDnd.tsx');
 
@@ -54,8 +54,8 @@ afterEach(cleanup);
 describe('提醒接线设计复审（11-04）M2、M3、L5', () => {
   it('M2：通知没开时首页写“通知没开，提醒不会响”，二级页写“没开”（同一个说法）', () => {
     perm = 'denied';
-    render(<RemindSettingsEntry onOpen={vi.fn()} />);
-    expect(screen.getByTestId('settings-remind-summary').textContent).toBe('通知没开，提醒不会响');
+    render(<RemindSettingsValue />);
+    expect(document.body.textContent).toBe('通知没开，提醒不会响');
     cleanup();
     render(<RemindSettings />);
     expect(screen.getByTestId('remind-perm').textContent).toBe('没开');

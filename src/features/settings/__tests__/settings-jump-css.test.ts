@@ -77,8 +77,9 @@ describe('设置 ↔ 注销账号切换时“注销账号”不跳（负责人 1
 });
 
 describe('“界面语言”不单独加粗（负责人 10-31，R-136）', () => {
-  it('那一行的标签是 h2.tx；.tx 继承字重（span 本来就是常规字重，只有 h2 受影响）', () => {
-    expect(readFileSync(join(UI, 'LanguageSection.tsx'), 'utf8')).toMatch(/<h2 id="settings-lang-title" className=\{styles\.tx\}>/);
-    expect(block(css, '.tx')).toMatch(/font-weight: inherit;/);
+  it('合卡以后那一行是 kit 的 SettingsSegRow：标签是 span.tx，kit 的 .tx 继承字重（SETTINGS-merge-cards）', () => {
+    expect(readFileSync(join(UI, 'LanguageSection.tsx'), 'utf8')).toMatch(/<SettingsSegRow\b/);
+    const kit = readFileSync('src/kit/components/Settings/Settings.module.css', 'utf8');
+    expect(block(kit, '.tx')).toMatch(/font-weight: inherit;/);
   });
 });

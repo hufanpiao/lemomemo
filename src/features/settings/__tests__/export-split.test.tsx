@@ -100,24 +100,35 @@ describe('导出分片（设置 › 数据）', () => {
     expect(screen.queryByTestId('settings-export-resume')).toBeNull();
   });
 
-  it('导出途中进注销页再回来：任务挂在设置整页上，取片没停；中断的回来仍能“继续”，不抢焦点', async () => {
+  it('导出途中回设置首页再进来：任务挂在设置整页上，取片没停，首页“数据”一行只写“正在导出…”（取回了几片也不写 MB，负责人 11-05 ②）、中断了写“导出中断了”；回到数据二级页仍能“继续”，不抢焦点', async () => {
     let broken = true;
     const gate = deferred<AccountResult<ExportPart>>();
+    const gate2 = deferred<AccountResult<ExportPart>>();
+    let held = true;
     const takePart = vi.fn(async (_e: string, c: string | null) => {
       if (c === null) return gate.promise;
+      if (held) {
+        held = false;
+        return gate2.promise;
+      }
       return broken ? bad('bad_response') : part(MB, null);
     });
     const account = fakeAccount({ takePart });
     const { save } = setup({ account });
     await click(exportBtn());
-    await click(screen.getByTestId('settings-delete-entry'));
-    await screen.findByTestId('settings-delete');
+    await click(screen.getByTestId('settings-data-back'));
+    const value = await screen.findByTestId('settings-data-summary');
     expect(screen.queryByTestId('settings-export')).toBeNull();
-    // 在注销页时第一片回来，第二片失败、停下
+    // 还没取回第一片：写“正在导出…”
+    expect(text(value)).toBe('正在导出…');
+    // 在首页时第一片回来：仍只写“正在导出…”，不写 MB
     await act(async () => gate.resolve(part(MB, 'c1')));
     await waitFor(() => expect(takePart).toHaveBeenCalledTimes(2));
-    await click(screen.getByTestId('settings-delete-back'));
-    await waitFor(() => expect(screen.queryByTestId('settings-delete')).toBeNull());
+    expect(text(screen.getByTestId('settings-data-summary'))).toBe('正在导出…');
+    // 第二片失败、停下
+    await act(async () => gate2.resolve(bad('bad_response')));
+    await waitFor(() => expect(text(screen.getByTestId('settings-data-summary'))).toBe(zh['settings.data.pausedShort']));
+    await click(screen.getByTestId('settings-data-entry'));
     const resume = await screen.findByTestId('settings-export-resume');
     expect(status()).toContain(zh['settings.export.paused']);
     expect(text(screen.getByTestId('settings-export-progress'))).toBe(progress('1.0'));

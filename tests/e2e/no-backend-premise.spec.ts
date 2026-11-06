@@ -47,7 +47,8 @@ test.describe('无后端组的前提', () => {
         const u = new URL(req.url());
         if (u.pathname.startsWith('/sb/') || u.pathname === '/sb') sb.push(`${req.method()} ${u.pathname}`);
       });
-      await page.goto('/app/#/settings');
+      // 合卡以后（SETTINGS-merge-cards）设备列表在账号二级页
+      await page.goto('/app/#/settings/account');
       await expect(page.locator('main[data-feature="settings"]')).toBeVisible();
       // 设备列表那一节的“读不出来、重试”（DevicesSection 的 settings.devices.loadFailed），不是别处的 alert
       const devicesFailed = page

@@ -13,7 +13,11 @@ import SettingsPage from '../ui/SettingsPage.tsx';
 import { exportBtn, fakeAccount, setup } from './account-fakes.tsx';
 import { fail, fakeApi, fakeExit, now } from './fakes.tsx';
 
-beforeEach(() => uiStore.getState().setLocale('zh-CN'));
+beforeEach(() => {
+  uiStore.getState().setLocale('zh-CN');
+  // 合卡以后有的用例会点进账号二级页：每条从设置首页开始，上一条留下的地址不带过来
+  window.history.replaceState(null, '', '#/settings');
+});
 afterEach(cleanup);
 
 describe('leaveForDisabled', () => {
@@ -81,7 +85,12 @@ describe('设备列表、改语言同一时刻只探测一次（第六轮审查�
     await waitFor(() => expect(api.saveLocale).toHaveBeenCalledTimes(1));
     expect(resolveDisabled).toHaveBeenCalledTimes(1);
     await act(async () => answer('active'));
-    // 探测中排进来的也一起通知：设备列表改显示“读不出来”，不说停用
+    // 探测中排进来的也一起通知：首页“账号”一行写“读不出来”，账号二级页的设备列表也是，不说停用
+    expect(await screen.findByText(new RegExp(`${zh['settings.account.devicesFailed']}|${ko['settings.account.devicesFailed']}`))).toBeTruthy();
+    expect(screen.queryByText(new RegExp(`${zh['settings.err.accountDisabled']}|${ko['settings.err.accountDisabled']}`))).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('settings-account-entry'));
+    });
     expect(await screen.findByText(new RegExp(`${zh['settings.devices.loadFailed']}|${ko['settings.devices.loadFailed']}`))).toBeTruthy();
     expect(screen.queryByText(new RegExp(`${zh['settings.err.accountDisabled']}|${ko['settings.err.accountDisabled']}`))).toBeNull();
     await act(async () => {

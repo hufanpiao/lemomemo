@@ -1,4 +1,5 @@
-// 设置 › 数据（R-256 ②；B1 只有“导出全部”一行；架构第 6 节 account export、0.29 续第 93、96 条；0.47 续 ④ 第 4 点）
+// 设置 › 数据 二级页的正文（R-256 ②；架构第 6 节 account export、0.29 续第 93、96 条；0.47 续 ④ 第 4 点；SETTINGS-merge-cards B 甲：首页卡 3 只有一个入口行）
+// • 标题由二级页顶栏的 h1 给；“最近的导出”跟着挪进这一页，排在最后（评审补充）
 // • 导出任务（hooks/useExport.ts）由 SettingsPage 持有、经 task 传进来：进注销页再回来，取片照常、中断的仍能“继续”
 // • 按钮下常驻两句：“导出和注销每天合计最多 3 次，每点一次‘导出全部数据’算一次”（S4：start 不做幂等）、“数据多时……建议连 Wi-Fi”。
 //   按钮自己的字（含右边的说明）已经是它的名字，aria-describedby 只指这两句，读屏只读一段
@@ -14,7 +15,10 @@ import { Pressable } from '../../../motion/components.ts';
 import { fmtMb, type ExportErr, type ExportTask } from '../hooks/useExport.ts';
 import { useOnline } from '../hooks/useOnline.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
+import type { DevicesState } from '../hooks/useDevices.ts';
+import type { RecentExportState } from '../hooks/useRecentExport.ts';
 import { accountErrText } from './AccountSection.tsx';
+import { RecentExport } from './RecentExport.tsx';
 import styles from './SettingsPage.module.css';
 
 type T = ReturnType<typeof useSettingsT>;
@@ -25,7 +29,7 @@ function exportErrText(e: ExportErr, t: T): string {
   return accountErrText(e, t);
 }
 
-export function DataSection({ task }: { task: ExportTask }) {
+export function DataSection({ task, recent, devices }: { task: ExportTask; recent: RecentExportState; devices: DevicesState }) {
   const t = useSettingsT();
   const online = useOnline();
   const { state, saving, run, resume, cancel, saveAgain } = task;
@@ -43,14 +47,11 @@ export function DataSection({ task }: { task: ExportTask }) {
   }, [state.kind]);
 
   return (
-    <section aria-labelledby="settings-data-title" data-section="data">
-      <h2 id="settings-data-title" className={styles.gt}>
-        {t('settings.data.title', {})}
-      </h2>
+    <div data-section="data">
       <ul className={styles.grp}>
         <li className={styles.row}>
           <Pressable
-            className={styles.rowBtn}
+            className={`${styles.rowBtn} ${styles.rowBtnStack}`}
             disabled={!online || busy || paused}
             aria-busy={busy}
             aria-describedby="settings-export-notes"
@@ -58,7 +59,7 @@ export function DataSection({ task }: { task: ExportTask }) {
             data-testid="settings-export"
           >
             <span className={styles.tx}>{t('settings.account.export', {})}</span>
-            <span className={styles.v}>{online ? t('settings.export.hint', {}) : t('settings.export.offline', {})}</span>
+            <span className={`${styles.v} ${styles.vBelow}`}>{online ? t('settings.export.hint', {}) : t('settings.export.offline', {})}</span>
           </Pressable>
         </li>
       </ul>
@@ -109,6 +110,7 @@ export function DataSection({ task }: { task: ExportTask }) {
           {exportErrText(state.error, t)}
         </p>
       ) : null}
-    </section>
+      <RecentExport state={recent} devices={devices} />
+    </div>
   );
 }

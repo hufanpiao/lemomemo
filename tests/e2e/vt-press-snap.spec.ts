@@ -4,7 +4,8 @@
 //  加了也一样，没有效果，已撤掉；怎么处理待负责人定，见前端 A 第 8 行回报）
 import { expect, test } from './session-fixture.ts';
 
-const SETTINGS = '/app/#/settings';
+// 合卡以后（SETTINGS-merge-cards）注销入口在账号二级页
+const SETTINGS = '/app/#/settings/account';
 
 test.use({ loggedIn: true });
 

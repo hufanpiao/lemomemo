@@ -43,7 +43,7 @@ function counters(userId: string): Record<string, number> {
   return out;
 }
 
-/** 打开 /app/；首次登录先过告知页，再进设置页 */
+/** 打开 /app/；首次登录先过告知页，再进设置 › 数据 */
 async function openSettings(page: Page): Promise<void> {
   await page.goto('/app/');
   const consent = page.locator('main[data-feature="onboarding"][data-step="consent"]');
@@ -52,7 +52,8 @@ async function openSettings(page: Page): Promise<void> {
   if (await consent.isVisible()) await consent.getByRole('button', { name: '先不同意，直接用' }).click();
   await expect(app).toBeVisible();
   await page.evaluate(() => {
-    location.hash = '#/settings';
+    // 合卡以后（SETTINGS-merge-cards）导出在数据二级页
+    location.hash = '#/settings/data';
   });
   await expect(page.getByTestId('settings-export')).toBeEnabled();
 }

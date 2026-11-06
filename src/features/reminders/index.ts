@@ -14,8 +14,8 @@ export const RemindHost = lazy(() => import('./ui/RemindHost.tsx'));
 export const MissedReminders = lazy(() => import('./ui/MissedReminders.tsx'));
 /** 设置 › 提醒与通知 二级页正文；props: { onOpenUpcoming?(), onOpenShowTitle?(), onOpenDnd?() }（顶栏和返回由设置页画） */
 export const RemindSettings = lazy(() => import('./ui/RemindSettings.tsx'));
-/** 设置首页“提醒与通知”一行；props: { onOpen() } */
-export const RemindSettingsEntry = lazy(() => import('./ui/RemindSettingsEntry.tsx'));
+/** 设置首页“提醒与通知”一行右边的值（SETTINGS-merge-cards M4）：只给值的文字，整行和点进二级页由设置页画；没有 props */
+export const RemindSettingsValue = lazy(() => import('./ui/RemindSettingsValue.tsx'));
 /** 设置 › 提醒 › 提醒里写什么（正文；R-347） */
 export const RemindShowTitle = lazy(() => import('./ui/RemindShowTitle.tsx'));
 /** 设置 › 提醒 › 免打扰（正文；R-347） */

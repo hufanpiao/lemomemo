@@ -132,9 +132,14 @@
   padding-top: 8px;
 }
 
-/* 组里第一个组标题不再自带上边距（间距由 .groups 的 gap 给）；组里后面的小标题（已登录设备、最近的导出）照旧 16px */
-.slot > section > .gt:first-child {
-  margin-top: 0;
+/* 首页“账号”一行在读设备列表时的值：固定宽度的占位（SETTINGS-merge-cards 评审 A），读到以后换成文字，行高不变 */
+.ph {
+  display: inline-block;
+  width: 4.5em;
+  height: 0.9em;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  vertical-align: middle;
 }
 
 /* 设置 › 账号标题下的当前登录邮箱（R-275）：正文色、正文（15）的次一级 14，和灰色小号的组标题分开；长邮箱在任意位置换行，不撑破卡片宽度 */
@@ -145,33 +150,7 @@
   overflow-wrap: anywhere;
 }
 
-/* 中韩切换：两段的分段按钮，宽度随文字（韩文长 20–40%，不写死宽度，2.4 第 7 条） */
-.seg {
-  display: inline-flex;
-  margin-left: auto;
-  padding: 3px;
-  border-radius: var(--r-pill);
-  background: var(--panel-2);
-}
-
-/* R-282（负责人 10-30 选“再小一点”）：外框看得见的高度和本页其他按钮一样 38 = 3 + 32 + 3，在 44 高的行里上下各留 3；
-   选中块 32、圆角跟着高度（pill）；点击区由 .btn 下面那条 ::after 扩到 44（不超出 44 的行，左右两个不重叠） */
-.segBtn {
-  position: relative;
-  min-height: 32px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: none;
-  color: var(--text-2);
-  font-size: var(--fs-14);
-}
-
-.segBtn[aria-pressed='true'] {
-  background: var(--chip-on-bg);
-  color: var(--chip-on-fg);
-  font-weight: 600;
-}
+/* 中韩切换的分段按钮（R-282）合卡以后用 kit 的 SettingsSegRow，样式在 src/kit/components/Settings/Settings.module.css */
 
 /* R-276：看得见的 38 高；点击区由 ::after 扩到 44（上下各 3px），字号不变 */
 .btn {
@@ -186,9 +165,8 @@
 }
 
 /* 扩点击区（令牌 --hit 的写法，同皮肤视觉稿第 133 行）：不可见的伪元素以按钮中心向外扩到至少 44×44；
-   按钮本身比 44 宽的方向不扩，所以并排的分段按钮、相邻按钮的点击区不会互相盖住 */
+   按钮本身比 44 宽的方向不扩，所以相邻按钮的点击区不会互相盖住 */
 .btn::after,
-.segBtn::after,
 .primary::after {
   content: '';
   position: absolute;
@@ -292,6 +270,19 @@
   text-align: left;
 }
 
+/* 数据页“导出全部数据”：行名和说明上下两行（设计评审 L-4：韩文两段挤在一起，只隔约 8px） */
+.rowBtnStack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 0;
+}
+
+.vBelow {
+  margin-left: 0;
+  text-align: left;
+}
+
 .rowBtn:disabled {
   color: var(--text-2);
 }
@@ -334,6 +325,9 @@
   border: 0;
   background: none;
   color: var(--text);
+
+  /* 按钮默认不继承字体（Windows 版 webkit 落到宋体，“‹”后的空格比首页“‹ 今天”宽一倍，设计评审 L-1）：和首页的链接同一字体 */
+  font: inherit;
   font-size: var(--fs-15);
 }
 

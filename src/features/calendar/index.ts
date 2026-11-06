@@ -14,5 +14,5 @@ export const routes = [
 
 /** 设置 › 日历（B2 FA-3 第二段；R-320 二级页 #/settings/calendar）：节假日三选一、每周第一天；设置页懒加载它（顶栏和返回由设置页画） */
 export const CalendarSettings = lazy(() => import('./ui/CalendarSettings.tsx'));
-/** 设置首页“日历”一行（R-320）：摘要“节假日：中国 ›”，点了进二级页；props: { onOpen } */
-export const CalendarSettingsEntry = lazy(() => import('./ui/CalendarSettingsEntry.tsx'));
+/** 设置首页“日历”一行右边的值（R-320、SETTINGS-merge-cards M4）：只给值的文字，整行和点进二级页由设置页画；没有 props */
+export const CalendarSettingsValue = lazy(() => import('./ui/CalendarSettingsValue.tsx'));

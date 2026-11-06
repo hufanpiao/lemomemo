@@ -1,0 +1,231 @@
+/* 设置页的卡片、行、分段按钮（SETTINGS-merge-cards，FA-3 设计审查第 5 条；方案 docs/09-路线图/B2-SETTINGS-merge-cards-方案.md）
+   数值从 src/features/settings/ui/SettingsPage.module.css 原样搬来（R-276 行高 44、R-282 分段 38 / 32、扩到 44 的点击区），不改；
+   新加的只有两处：入口行的值单行省略、行名不缩（方案第 8 节 M4、S3），以及两行开关行的说明和报错写在行里（M2） */
+
+/* 只给读屏的文字（每张卡的卡名 h2，M3） */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.grp {
+  margin: 0;
+  padding: 0 14px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  list-style: none;
+}
+
+/* R-276（负责人 10-30）：单行整行高 44、不加上下内边距；行里的 .rowBtn 44 撑满整行，可点区不变 */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: var(--hit);
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* 两行内容的行（下面带一行灰字 .meta 或报错 .error）：上下各 8px，不然灰字压到卡片圆角（R-276 实测）；单行的行仍是 44 */
+.row:has(> .meta),
+.row:has(> .error) {
+  padding: 8px 0;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+/* 行名：不缩（S3），太长时换行，不省略 */
+.tx {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-15);
+  font-weight: inherit;
+  overflow-wrap: anywhere;
+}
+
+/* 当前值：单行，放不下就省略（M4、S3），保证入口行仍是 44 */
+.v {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* stacked：行名和值上下两行（韩文审校 A-4）；值在行名下面，可换行、不省略，行高跟着内容长 */
+.stack {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 0;
+}
+
+.vBelow {
+  flex: none;
+  margin-left: 0;
+  overflow: visible;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* 数字值（版本号）：等宽数字 */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.chev {
+  flex: none;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.meta {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-wrap: pretty;
+}
+
+.error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+/* 入口行：整行一个按钮 */
+.rowBtn {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.rowBtn:disabled {
+  color: var(--text-2);
+}
+
+/* 整行宽、字靠左的行按钮按下不缩放，改成变淡（负责人 10-31）：scale(0.97) 绕整行中心缩，左边的字被拉向右约 5px */
+.row .rowBtn {
+  transition: opacity var(--dur-press) var(--ease-out);
+}
+
+.row .rowBtn[data-state="pressed"] {
+  transform: none;
+  opacity: var(--press-dim);
+}
+
+/* 减少动态效果：变淡也直接切换（上面的 .row .rowBtn 权重比 Pressable 的 .pressable 高，要在这里自己关） */
+@media (prefers-reduced-motion: reduce) {
+  .row .rowBtn {
+    transition: none;
+  }
+}
+
+:global(:root[data-rm="1"]) .row .rowBtn {
+  transition: none;
+}
+
+/* 开关行：<label> 包行名和 role="switch" 的复选框（写法同提醒页免打扰） */
+.switchRow {
+  display: flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  cursor: pointer;
+}
+
+.switchRow > .tx {
+  flex: 1 1 auto;
+}
+
+.toggle {
+  flex: none;
+  width: 48px;
+  height: 28px;
+  margin: 0;
+  border: 1.5px solid var(--text-2);
+  border-radius: var(--r-pill);
+  background: radial-gradient(circle at 12px 50%, var(--text-2) 8px, transparent 8.5px), var(--panel);
+  cursor: pointer;
+  appearance: none;
+}
+
+.toggle:checked {
+  border-color: var(--ink);
+  background: radial-gradient(circle at calc(100% - 12px) 50%, var(--on-ink) 9px, transparent 9.5px), var(--ink);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 带分段按钮的行：行名占左边，分段按钮靠右 */
+.segRow > .tx {
+  flex: 1 1 auto;
+}
+
+/* 分段按钮：宽度随文字（韩文长 20–40%，不写死宽度，2.4 第 7 条） */
+.seg {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+}
+
+/* R-282（负责人 10-30 选“再小一点”）：外框 38 = 3 + 32 + 3，在 44 高的行里上下各留 3；点击区由 ::after 扩到 44 */
+.segBtn {
+  position: relative;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.segBtn[aria-pressed='true'] {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+/* 扩点击区（令牌 --hit 的写法）：以按钮中心向外扩到至少 44×44；按钮本身比 44 宽的方向不扩，并排的两个不互相盖住 */
+.segBtn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}

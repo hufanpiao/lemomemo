@@ -1,0 +1,33 @@
+/* 本人头像圈（今天页右上角、设置首页账号一行共用，负责人 11-05）：外框 var(--hit) 见方，圆圈内缩 4px */
+.avatar {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  border-radius: 50%;
+  color: var(--text);
+  font-size: var(--fs-15);
+  font-weight: 600;
+}
+
+.avatar::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  z-index: -1;
+  border-radius: 50%;
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--step-off);
+}
+
+.avatar svg {
+  width: 18px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}

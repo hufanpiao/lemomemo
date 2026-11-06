@@ -13,8 +13,17 @@ export const ko = {
   'settings.lang.title': '앱 언어', // R-106 B1 第一遍已审（10-30）
   'settings.lang.zh': '中文',
   'settings.lang.ko': '한국어',
-  'settings.lang.note': '언어를 바꾸면 레모 화면이 바로 바뀌고, 알림과 메일도 이 언어로 보내 드려요.', // R-106 B1 第一遍已审（10-30）
+  'settings.lang.note': '알림과 메일도 이 언어로 보내 드려요.', // SETTINGS-merge-cards M1 缩短稿，R-106 审校 9 分通过（11-05，B2-文案审校-语言说明）
   'settings.lang.syncFailed': '이 기기에서는 바꿨지만 계정에 동기화하지 못했어요. 인터넷에 연결한 뒤 언어를 다시 선택해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见 K-15 改过：“한 번 더 바꿔”容易读成换成别的语言
+  'settings.card.main': '기본 설정', // SETTINGS-merge-cards；R-106 韩文审校 C-1（11-06）：“기본”单说是“基本 / 默认”，改“기본 설정”
+  'settings.card.more': '기타', // SETTINGS-merge-cards；R-106 韩文审校 C-2（11-06）：卡片标题不是展开按钮，“더 보기”像按钮，改“기타”
+  'settings.account.devicesN': '기기 {n}대', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
+  'settings.account.devicesList': '기기 {n}대: {names}', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）；首页账号一行的值，放在邮箱下面一行，太长时换行、不省略（stacked）
+  'settings.account.nameSep': ', ', // TODO(ko) SETTINGS-merge-cards：设备名之间的分隔（只是标点，随新文案一起送 R-106 看）
+  'settings.account.devicesFailed': '기기 목록을 불러오지 못했어요', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
+  'settings.data.busyShort': '내보내는 중…', // SETTINGS-merge-cards：首页数据一行导出中只写这一句（负责人 11-05 ②），待 R-106 审
+  'settings.data.pausedShort': '내보내기가 중단됐어요', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
+  'settings.sub.failed': '이 화면을 불러오지 못했어요', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
 
   'settings.devices.title': '로그인한 기기', // R-106 B1 第一遍已审（10-30）
   'settings.devices.loading': '기기 목록을 불러오는 중…', // R-106 B1 第一遍已审（10-30）
@@ -81,10 +90,10 @@ export const ko = {
   'settings.export.tooLarge': '데이터 양이 한도를 넘어서 내보낼 수 없어요. 레모 운영자에게 문의해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见 K-36 改过；10-31 导出分片新加（0.47 续 ④ 第 4 点）
   'settings.export.tooLargeStart': '데이터 양이 1회 내보내기 한도를 넘어서 지금은 내보낼 수 없어요. 레모 운영자에게 문의해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见 K-41 改过；10-31 start 大小预检新加（0.47 续 ①“超大账号”、④ 第 4 点）
   'settings.export.partsUsedUp': '오늘 내보낼 수 있는 횟수를 다 썼어요. 내일 다시 시도해 주세요', // R-106 B1 第一遍已审（10-31）；10-31 导出分片新加（0.47 续 ④ 第 4 点）
-  'settings.export.quota': '내보내기와 회원 탈퇴는 합쳐서 하루 3번까지 할 수 있어요. “모든 데이터 내보내기”를 누를 때마다 1번씩 계산돼요', // R-106 B1 第一遍已审（10-31），按审校意见 K-38 改过；10-31 导出分片新加（0.47 续 ④ 第 4 点）
-  'settings.export.wifi': '데이터가 많으면 파일이 수십 MB가 될 수 있어요. Wi-Fi에 연결하는 걸 추천해요', // R-106 B1 第一遍已审（10-31）；K-39 可不改，按主持人定不改；10-31 导出分片新加（0.47 续 ④ 第 4 点）
+  'settings.export.quota': '내보내기와 회원 탈퇴는 합쳐서 하루 3번까지 할 수 있어요. “모든 데이터 내보내기”를 누를 때마다 1번씩 계산돼요.', // 11-06 句末补句号（设计评审 L-3，只改标点，待 R-106 看）；R-106 B1 第一遍已审（10-31），按审校意见 K-38 改过；10-31 导出分片新加（0.47 续 ④ 第 4 点）
+  'settings.export.wifi': '데이터가 많으면 파일이 수십 MB가 될 수 있어요. Wi-Fi에 연결하는 걸 추천해요.', // 11-06 句末补句号（设计评审 L-3）；R-106 B1 第一遍已审（10-31）；K-39 可不改，按主持人定不改；10-31 导出分片新加（0.47 续 ④ 第 4 点）
 
-  'settings.delete.back': '설정', // R-106 B1 第一遍已审（10-31）；照 settings.title
+  'settings.delete.back': '계정', // 合卡以后注销页退回账号二级页（SETTINGS-merge-cards），照 settings.account.title（R-106 B1 第一遍已审）
   'settings.cal.title': '캘린더', // R-106 B2 第一遍已审（11-04）（B2K-05，和 calendar 的 cal.set.title、cal.h1 同名）
   'settings.remind.title': '알림', // REVIEW(ko)：照 reminders 的 remind.set.title
   'settings.remind.upcoming': '앞으로 7일 알림', // REVIEW(ko)：照 reminders 的 remind.set.upcoming
@@ -143,6 +152,7 @@ export const ko = {
   'settings.hotkey.err.failed': '바꾸지 못했어요. 잠시 후 다시 시도해 주세요.', // REVIEW(ko)
   // 설정 › 정보：음력·절기 데이터 출처（R-299、R-306、R-309）
   'settings.about.title': '정보', // REVIEW(ko)；设置 › 关于（R-306 注明农历出处）
+  'settings.about.version': '버전', // 设置 › 关于“버전 4.0.0”（设计评审 M-1，11-06），待 R-106 审
   'settings.about.lunarCredit': '음력 및 절기 데이터: 홍콩 천문대', // REVIEW(ko)
   // 설정 › 스킨（TILT-b2：기울기 하이라이트）
   'settings.skin.title': '스킨', // R-106 已审（11-05，B2-韩文审校-TILT与主导航 K-1，维持）

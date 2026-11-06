@@ -59,9 +59,10 @@ function bootLikeEntry(deviceLangs: readonly string[]): void {
 }
 
 async function renderPage(api = fakeApi()) {
+  window.history.replaceState(null, '', '#/settings');
   render(<SettingsPage deps={{ api, exit }} />);
-  // 等设备列表读完（空列表那一句，中文和 [ko] 两种都认）
-  await screen.findByText(new RegExp(zh['settings.devices.empty']));
+  // 等设备列表读完：首页“账号”一行写出设备数（合卡以后设备列表在账号二级页；中文和 [ko] 两种都带数字）
+  await waitFor(() => expect(screen.getByTestId('settings-account-summary').textContent).toMatch(/[0-9]/));
   return api;
 }
 
@@ -70,7 +71,7 @@ function title(): string {
 }
 
 function pressed(): string | null {
-  return document.querySelector('[data-testid="settings-lang"] [aria-pressed="true"]')?.getAttribute('data-locale') ?? null;
+  return document.querySelector('[data-testid="settings-lang"] [aria-pressed="true"]')?.getAttribute('data-value') ?? null;
 }
 
 beforeEach(() => {
@@ -93,7 +94,7 @@ describe('中韩切换', () => {
     // 页面上不再剩中文词典的原文（除了两个语言名）
     const main = document.querySelector('main[data-feature="settings"]')?.textContent ?? '';
     expect(main).not.toContain(zh['settings.devices.signOutOthers'].replace(/^/, '\u0000'));
-    expect(main.split(`[ko]${zh['settings.devices.title']}`)).toHaveLength(2);
+    expect(main.split(`[ko]${zh['settings.card.main']}`)).toHaveLength(2);
     expect(pressed()).toBe('ko');
     expect(document.documentElement.lang).toBe('ko-KR');
     expect(localStorage.getItem('pv-locale')).toBe('ko');

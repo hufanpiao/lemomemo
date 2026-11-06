@@ -19,18 +19,23 @@ afterEach(() => {
   setOnline(true);
 });
 
-describe('最近的导出（设置 › 账号）', () => {
+describe('最近的导出（设置 › 数据，合卡以后从账号挪过来）', () => {
   const T = Date.parse('2026-10-29T03:00:00Z');
   const H = 3_600_000;
   const rows = (): HTMLElement[] => screen.getAllByTestId('settings-recent-export-row');
+  /** 设备名要等设备列表读完才对得上：这几条从设置首页开始（首页“账号”一行写出设备数就是读完了），再点“数据”进二级页 */
+  const setupHome = (o: Parameters<typeof setup>[0] = {}) => setup({ hash: '#/settings', ...o });
   /** 设备列表（fakes.tsx 的 ROWS：y 本机 Windows 电脑、x “A 的 iPhone”）和导出记录都读完 */
   async function ready(): Promise<void> {
-    await waitFor(() => expect(screen.getAllByTestId('settings-device').length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByTestId('settings-account-summary').textContent).toMatch(/\d/));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('settings-data-entry'));
+    });
     await screen.findByTestId('settings-recent-export');
   }
 
-  it('多条：在账号组里按时间倒序列出，每行写日期时刻和设备名；本机加“本机”标签；邮件都发出去时不标、不提示', async () => {
-    setup({
+  it('多条：在数据二级页里按时间倒序列出，每行写日期时刻和设备名；本机加“本机”标签；邮件都发出去时不标、不提示', async () => {
+    setupHome({
       recent: async () => ({
         kind: 'ready',
         list: [
@@ -41,7 +46,7 @@ describe('最近的导出（设置 › 账号）', () => {
     });
     await ready();
     const box = screen.getByTestId('settings-recent-export');
-    expect(box.closest('section[data-section="account"]')).toBeTruthy();
+    expect(box.closest('[data-section="data"]')).toBeTruthy();
     expect(text(box)).toContain(zh['settings.recentExport.title']);
     const [a, b] = rows();
     expect(text(a)).toContain(fmtWhen(T, 'zh-CN'));
@@ -55,7 +60,7 @@ describe('最近的导出（设置 › 账号）', () => {
   });
 
   it('设备对不上：设备列表里没有的写“已移除的设备”，没带设备号的写“未知设备”', async () => {
-    setup({
+    setupHome({
       recent: async () => ({
         kind: 'ready',
         list: [
@@ -70,7 +75,7 @@ describe('最近的导出（设置 › 账号）', () => {
   });
 
   it('邮件失败的：那一行标“通知邮件没发出去”，列表下方只放一句提示（不每行重复）', async () => {
-    setup({
+    setupHome({
       recent: async () => ({
         kind: 'ready',
         list: [
@@ -91,7 +96,7 @@ describe('最近的导出（设置 › 账号）', () => {
 
   it('超过默认条数：先显示最近 5 条，给“显示全部（共 N 条）”；点了列出全部、按钮消失', async () => {
     const list = Array.from({ length: 8 }, (_v, i) => ({ at: T - i * H, device: 'y', mailFailed: false, incomplete: false }));
-    setup({ recent: async () => ({ kind: 'ready', list }) });
+    setupHome({ recent: async () => ({ kind: 'ready', list }) });
     await ready();
     expect(rows()).toHaveLength(5);
     expect(text(rows()[0])).toContain(fmtWhen(T, 'zh-CN'));
@@ -106,7 +111,7 @@ describe('最近的导出（设置 › 账号）', () => {
   });
 
   it('5 条以内不给“显示全部”', async () => {
-    setup({ recent: async () => ({ kind: 'ready', list: [{ at: T, device: 'y', mailFailed: false, incomplete: false }] }) });
+    setupHome({ recent: async () => ({ kind: 'ready', list: [{ at: T, device: 'y', mailFailed: false, incomplete: false }] }) });
     await ready();
     expect(rows()).toHaveLength(1);
     expect(screen.queryByTestId('settings-recent-export-all')).toBeNull();

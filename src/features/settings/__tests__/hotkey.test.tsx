@@ -56,7 +56,8 @@ describe('快速记录热键（R-297）', () => {
     expect(container.childElementCount).toBe(0);
     cleanup();
     await renderPage();
-    expect(document.querySelector('[data-section="desktop"]')).toBeNull();
+    expect(document.querySelector('[data-row-id="desktop"]')).toBeNull();
+    expect(screen.queryByTestId('settings-desktop-entry')).toBeNull();
   });
 
   it('显示现在的热键，空格按界面语言写；默认时“恢复默认”不可点', async () => {
@@ -160,10 +161,30 @@ describe('快速记录热键（R-297）', () => {
 });
 
 describe('设置 › 关于（R-306）', () => {
-  it('注明农历及节气数据出处，排在所有分组最后', async () => {
+  it('“关于”一行排在首页最后；点进二级页注明农历及节气数据出处', async () => {
     await renderPage();
-    expect(screen.getByTestId('settings-lunar-credit').textContent).toBe(zh['settings.about.lunarCredit']);
-    const slots = [...document.querySelectorAll('[data-section-slot]')].map((n) => n.getAttribute('data-section-slot'));
+    const slots = [...document.querySelectorAll('[data-row-id]')].map((n) => n.getAttribute('data-row-id'));
     expect(slots.at(-1)).toBe('about');
+    expect(screen.queryByTestId('settings-lunar-credit')).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('settings-about-entry'));
+    });
+    expect((await screen.findByTestId('settings-lunar-credit')).textContent).toBe(zh['settings.about.lunarCredit']);
+  });
+
+  it('首页“关于”一行的值是版本号；二级页卡片里一行“版本 4.0.0”（不能点），农历出处在卡片下面（设计评审 M-1）', async () => {
+    await renderPage();
+    expect(screen.getByTestId('settings-about-summary').textContent).toBe('4.0.0');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('settings-about-entry'));
+    });
+    const row = await screen.findByTestId('settings-about-version');
+    expect(row.textContent).toBe(`${zh['settings.about.version']}4.0.0`);
+    expect(row.querySelector('button, a')).toBeNull();
+    const card = screen.getByTestId('settings-about-card');
+    expect(card.contains(row)).toBe(true);
+    const credit = screen.getByTestId('settings-lunar-credit');
+    expect(card.contains(credit)).toBe(false);
+    expect(card.compareDocumentPosition(credit) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

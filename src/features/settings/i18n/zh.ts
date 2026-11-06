@@ -8,8 +8,17 @@ export const zh = {
   'settings.lang.title': '界面语言',
   'settings.lang.zh': '中文',
   'settings.lang.ko': '한국어',
-  'settings.lang.note': '换语言后整个柠檬记立刻跟着变，提醒和邮件也会改用这种语言。',
+  'settings.lang.note': '提醒和邮件也会改用这种语言。', // SETTINGS-merge-cards M1 缩短稿，R-106 审校 9 分通过（11-05，B2-文案审校-语言说明）
   'settings.lang.syncFailed': '已在这台设备上换好；同步到账号没成功，联网后再换一次即可',
+  'settings.card.main': '常用', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
+  'settings.card.more': '更多', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
+  'settings.account.devicesN': '{n} 台设备', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
+  'settings.account.devicesList': '{n} 台设备：{names}', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）；首页账号一行的值，放在邮箱下面一行，太长时换行、不省略（stacked）
+  'settings.account.nameSep': '、', // SETTINGS-merge-cards：设备名之间的分隔
+  'settings.account.devicesFailed': '设备列表读不出来', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
+  'settings.data.busyShort': '正在导出…', // SETTINGS-merge-cards：首页数据一行导出中只写这一句、不写 MB（负责人 11-05 ②），待 R-106 审
+  'settings.data.pausedShort': '导出中断了', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
+  'settings.sub.failed': '这一页没加载出来', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
 
   'settings.devices.title': '已登录设备',
   'settings.devices.loading': '正在读取设备…',
@@ -80,8 +89,8 @@ export const zh = {
   // 0.47 续 ①“超大账号”、④ 第 4 点追加：start 大小预检拒了（原文估算超 480 MB，不扣次数）
   'settings.export.tooLargeStart': '你的数据量超过一次导出的上限，暂时导不出来，请联系柠檬记的负责人',
   'settings.export.partsUsedUp': '今天导出的次数用完了，明天再试',
-  'settings.export.quota': '导出和注销每天合计最多 3 次，每点一次“导出全部数据”算一次',
-  'settings.export.wifi': '数据多时文件可能有几十 MB，建议连 Wi-Fi',
+  'settings.export.quota': '导出和注销每天合计最多 3 次，每点一次“导出全部数据”算一次。', // 句末补句号（设计评审 L-3，11-06，只改标点，待 R-106 看）
+  'settings.export.wifi': '数据多时文件可能有几十 MB，建议连 Wi-Fi。', // 句末补句号（设计评审 L-3，11-06）
 
   // 设置 › 账号 › 最近的导出（R-256 ②；架构 0.29 续第 96 条③）
   'settings.recentExport.title': '最近的导出',
@@ -95,7 +104,7 @@ export const zh = {
   'settings.recentExport.incomplete': '未完成',
 
   // 设置 › 账号 › 注销账号（R-188、R-192、R-256；功能说明第 30 项；架构 0.29 续第 129、131、137 条）
-  'settings.delete.back': '设置',
+  'settings.delete.back': '账号', // 合卡以后注销页退回账号二级页（SETTINGS-merge-cards），照 settings.account.title
   // 设置 › 日历 二级页的顶栏标题（R-320；正文由 calendar 功能提供，和它词典里的 cal.set.title 同一个词）
   'settings.cal.title': '日历',
   // 设置 › 提醒与通知 二级页、未来 7 天的提醒 的顶栏标题（REMIND-wiring；线框 sR7；和 reminders 词典的 remind.set.title、remind.set.upcoming 同一个词）
@@ -150,6 +159,7 @@ export const zh = {
   'settings.hotkey.err.failed': '没改成，请稍后再试。',
   // 设置 › 关于：农历和节气数据出处（R-299、R-306、R-309：按香港天文台网站条款注明；B2 BE-5 只加键，界面由前端 A 接）
   'settings.about.title': '关于',
+  'settings.about.version': '版本', // 设置 › 关于 卡片里“版本 4.0.0”（设计评审 M-1，11-06），待 R-106 审
   'settings.about.lunarCredit': '农历及节气数据：香港天文台',
   // 设置 › 皮肤（TILT-b2 做法 ②：倾斜高光开关，存本机、默认关；iOS 每次打开 App 后第一次点底栏再问方向权限）
   'settings.skin.title': '皮肤',

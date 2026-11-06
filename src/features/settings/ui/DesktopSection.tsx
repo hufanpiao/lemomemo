@@ -1,4 +1,5 @@
 // 设置 › 电脑 › 快速记录热键（R-297；只在电脑版 exe 显示，网页版和手机没有这一项）
+// SETTINGS-merge-cards：首页卡 3 一个入口行“电脑 … 现在的热键 ›”，这里是二级页的正文，标题由顶栏 h1 给
 // • 一行：标题“快速记录热键”，右边是现在的热键（Space 显示成“空格 / 스페이스”，spaceLabel 从词典取，A20），下面“更改”“恢复默认”
 // • 启动时就没注册上（registered === false）：常驻一句“热键被占用”
 // • 点“更改”：变成“按下新的组合键…”的录键框并拿到焦点；Esc 或移开焦点取消；只按修饰键继续等；不能用的组合提示一句
@@ -31,10 +32,7 @@ export function DesktopSection({ hotkey }: { hotkey: QuickAddHotkey }) {
   const isDefault = status.accelerator === status.defaultAccelerator;
 
   return (
-    <section aria-labelledby="settings-desktop-title" data-section="desktop">
-      <h2 id="settings-desktop-title" className={styles.gt}>
-        {t('settings.desktop.title', {})}
-      </h2>
+    <div data-section="desktop">
       <ul className={styles.grp}>
         <li className={styles.row}>
           <span id="settings-hotkey-title" className={styles.tx}>
@@ -94,6 +92,6 @@ export function DesktopSection({ hotkey }: { hotkey: QuickAddHotkey }) {
           {t(NOTICE_KEY[notice], {})}
         </p>
       ) : null}
-    </section>
+    </div>
   );
 }

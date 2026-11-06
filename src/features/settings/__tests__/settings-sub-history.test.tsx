@@ -82,14 +82,33 @@ describe('点进来再点返回：一律退一步，不 replace', () => {
     await leavesSettings();
   });
 
-  it('注销账号页', async () => {
+  it.each([
+    ['settings-account-entry', '#/settings/account', 'settings-account-back'],
+    ['settings-data-entry', '#/settings/data', 'settings-data-back'],
+    ['settings-about-entry', '#/settings/about', 'settings-about-back'],
+  ])('合卡以后的二级页 %s（SETTINGS-merge-cards）', async (entry, hash, backId) => {
     mount();
+    await click(entry);
+    await hashIs(hash);
+    const h = spyHistory();
+    await click(backId);
+    await hashIs('#/settings');
+    expect(h.back).toHaveBeenCalledTimes(1);
+    expect(h.replace).not.toHaveBeenCalled();
+    await leavesSettings();
+  });
+
+  it('注销账号页：从账号二级页点进去，退回账号二级页，再退回首页', async () => {
+    mount();
+    await click('settings-account-entry');
     await click('settings-delete-entry');
     await hashIs('#/settings/delete');
     const h = spyHistory();
     await click('settings-delete-back');
+    await hashIs('#/settings/account');
+    await click('settings-account-back');
     await hashIs('#/settings');
-    expect(h.back).toHaveBeenCalledTimes(1);
+    expect(h.back).toHaveBeenCalledTimes(2);
     expect(h.replace).not.toHaveBeenCalled();
     await leavesSettings();
   });
@@ -124,7 +143,10 @@ describe('直接打开的子页：原地换成上一层（replace），不调 ba
     ['#/settings/remind/show-title', 'settings-remind-st-back', '#/settings/remind'],
     ['#/settings/remind/dnd', 'settings-remind-dnd-back', '#/settings/remind'],
     ['#/settings/calendar', 'settings-cal-back', '#/settings'],
-    ['#/settings/delete', 'settings-delete-back', '#/settings'],
+    ['#/settings/delete', 'settings-delete-back', '#/settings/account'],
+    ['#/settings/account', 'settings-account-back', '#/settings'],
+    ['#/settings/data', 'settings-data-back', '#/settings'],
+    ['#/settings/about', 'settings-about-back', '#/settings'],
   ])('%s', async (start, backId, to) => {
     window.history.replaceState({ lemoDepth: 1 }, '', start);
     mount();
@@ -221,13 +243,69 @@ describe('L1：退回上一层以后焦点回到进来时点的那一行', () =>
   it.each([
     ['settings-remind-entry', 'settings-remind-back'],
     ['settings-cal-entry', 'settings-cal-back'],
-    ['settings-delete-entry', 'settings-delete-back'],
+    ['settings-account-entry', 'settings-account-back'],
+    ['settings-data-entry', 'settings-data-back'],
+    ['settings-about-entry', 'settings-about-back'],
   ])('点 %s 进去，%s 回来', async (entry, back) => {
     mount();
     await click(entry);
     await click(back);
     await hashIs('#/settings');
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId(entry)), { timeout: 10_000 });
+  });
+
+  it('注销页回账号二级页：焦点回到“注销账号”那一行', async () => {
+    mount();
+    await click('settings-account-entry');
+    await click('settings-delete-entry');
+    await click('settings-delete-back');
+    await hashIs('#/settings/account');
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('settings-delete-entry')), { timeout: 10_000 });
+  });
+
+  it('S1：回到首页时滚动位置还原成点进去之前的，焦点放回入口时不再滚', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    mount();
+    const entry = await screen.findByTestId('settings-about-entry');
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 420 });
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    await click('settings-about-entry');
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+    await click('settings-about-back');
+    await hashIs('#/settings');
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('settings-about-entry')), { timeout: 10_000 });
+    expect(scrollTo).toHaveBeenCalledWith(0, 420);
+    // 首页重新挂载，入口是新的节点：放回焦点时带 preventScroll，不把还原好的位置再滚走
+    const again = screen.getByTestId('settings-about-entry');
+    expect(again).not.toBe(entry);
+    const i = focus.mock.contexts.lastIndexOf(again);
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(focus.mock.calls[i]?.[0]).toEqual({ preventScroll: true });
+    Object.defineProperty(window, 'scrollY', { configurable: true, value: 0 });
+  });
+
+  it('S2：只在首页点进去时记滚动位置；二级页里再往下点（账号 → 注销）不覆盖，回首页还原的是首页那一次的', async () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
+    const at = (y: number) => Object.defineProperty(window, 'scrollY', { configurable: true, value: y });
+    try {
+      mount();
+      await screen.findByTestId('settings-account-entry');
+      at(420);
+      await click('settings-account-entry');
+      await hashIs('#/settings/account');
+      at(777);
+      await click('settings-delete-entry');
+      await hashIs('#/settings/delete');
+      await click('settings-delete-back');
+      await hashIs('#/settings/account');
+      at(0);
+      await click('settings-account-back');
+      await hashIs('#/settings');
+      await waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 420), { timeout: 10_000 });
+      expect(scrollTo).not.toHaveBeenCalledWith(0, 777);
+    } finally {
+      at(0);
+    }
   });
 
   it('三层页回提醒二级页：焦点回到“未来 7 天的提醒”那一行；侧滑回来也一样', async () => {
@@ -252,8 +330,11 @@ describe('L2：返回按钮的读屏名不带“‹”', () => {
     expect(btn.querySelector('[aria-hidden="true"]')?.textContent).toBe('‹');
     expect(screen.getByRole('button', { name: '设置' })).toBe(btn);
     await click('settings-remind-back');
+    await click('settings-account-entry');
     await click('settings-delete-entry');
     const del = await screen.findByTestId('settings-delete-back');
     expect(del.querySelector('[aria-hidden="true"]')?.textContent).toBe('‹');
+    // 注销页的上一层是账号二级页（合卡以后），读屏名就是“账号”
+    expect(screen.getByRole('button', { name: '账号' })).toBe(del);
   });
 });

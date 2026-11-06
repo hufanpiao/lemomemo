@@ -17,7 +17,7 @@ import { useLocaleSwitch } from './useLocaleSwitch.ts';
 import { useSessionExit, type ExitDeps } from './useSessionExit.ts';
 
 export type { SettingsApi } from '../data/settings-api.ts';
-export { orderSections, type SettingsSectionId } from '../data/sections.ts';
+export { cardsOf, orderSections, type SettingsCardId, type SettingsSectionId } from '../data/sections.ts';
 export type { ExitDeps, ExitNotice } from './useSessionExit.ts';
 
 export interface SettingsDeps {

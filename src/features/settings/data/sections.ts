@@ -41,3 +41,27 @@ export function orderSections<T>(present: Partial<Record<SettingsSectionId, T>>)
   }
   return out;
 }
+
+/**
+ * 设置首页的三张卡（R-325 按定稿线框 s13 合卡；SETTINGS-merge-cards 方案第 2 节）：每个分组只在一张卡里，卡里照 SETTINGS_SECTION_ORDER 的先后排。
+ * 卡 1 账号单独一张；卡 2 是界面语言到时区；卡 3 是数据到关于。“退出登录”不在卡里，在所有卡之后
+ */
+export const SETTINGS_CARDS = [
+  { id: 'account', ids: ['account'] },
+  { id: 'main', ids: ['language', 'skin', 'font', 'notesView', 'calendar', 'reminders', 'voiceAi', 'vault', 'timezone'] },
+  { id: 'more', ids: ['data', 'claude', 'invite', 'desktop', 'glossary', 'about'] },
+] as const satisfies ReadonlyArray<{ id: string; ids: readonly SettingsSectionId[] }>;
+
+export type SettingsCardId = (typeof SETTINGS_CARDS)[number]['id'];
+
+/** 按卡分好、卡里按固定顺序排的分组；一张卡里一个都没有就不出这张卡 */
+export function cardsOf<T>(present: Partial<Record<SettingsSectionId, T>>): Array<[SettingsCardId, Array<[SettingsSectionId, T]>]> {
+  const ordered = orderSections(present);
+  const out: Array<[SettingsCardId, Array<[SettingsSectionId, T]>]> = [];
+  for (const card of SETTINGS_CARDS) {
+    const ids: readonly SettingsSectionId[] = card.ids;
+    const rows = ordered.filter(([id]) => ids.includes(id));
+    if (rows.length > 0) out.push([card.id, rows]);
+  }
+  return out;
+}

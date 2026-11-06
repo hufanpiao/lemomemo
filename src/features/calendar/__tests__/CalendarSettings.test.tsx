@@ -1,5 +1,6 @@
 // 设置 › 日历 界面（B2 FA-3 第二段，R-97；R-320 二级页、R-321 不加农历开关）：节假日三选一、每周第一天；写经 core/write（替身）
-// 二级页正文（CalendarSettings）和设置首页的入口行（CalendarSettingsEntry）都在这里测；顶栏、路由、返回在设置页的 SettingsPage.test.tsx
+// 二级页正文（CalendarSettings）和设置首页那一行的值（CalendarSettingsValue.tsx）都在这里测；
+// 行名、整行、顶栏、路由、返回由设置页画（SETTINGS-merge-cards），在设置页的 SettingsPage.test.tsx
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
@@ -15,7 +16,7 @@ const patch = vi.fn(async (..._a: unknown[]): Promise<Res> => ({ ok: true, item:
 vi.mock('../../../core/write.ts', () => ({ write: { insert: (...a: unknown[]) => insert(...a), patch: (...a: unknown[]) => patch(...a) } }));
 
 const { default: CalendarSettings } = await import('../ui/CalendarSettings.tsx');
-const { default: CalendarSettingsEntry } = await import('../ui/CalendarSettingsEntry.tsx');
+const { default: CalendarSettingsValue } = await import('../ui/CalendarSettingsValue.tsx');
 const { viewZh } = await import('../i18n/view-zh.ts');
 const { viewKo } = await import('../i18n/view-ko.ts');
 
@@ -133,16 +134,15 @@ describe('设置 › 日历', () => {
 });
 
 describe('设置首页的“日历”一行（R-320）', () => {
-  const summary = () => screen.getByTestId('settings-cal-summary').textContent;
+  /** 值组件只返回一段摘要文字 */
+  const summary = () => document.body.textContent;
 
-  it('中文没选过：“日历 … 节假日：中国”（不写农历，负责人 11-04），组标题“日历”给读屏；点了调 onOpen，不写任何东西', () => {
-    const onOpen = vi.fn();
-    render(<CalendarSettingsEntry onOpen={onOpen} />);
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('日历');
+  it('中文没选过：“节假日：中国”（不写农历，负责人 11-04）；只有文字，没有按钮和标题（整行由设置页画）；不写任何东西', () => {
+    render(<CalendarSettingsValue />);
     expect(summary()).toBe('节假日：中国');
     expect(summary()).not.toContain('农历');
-    fireEvent.click(screen.getByTestId('settings-cal-entry'));
-    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('heading')).toBeNull();
     expect(insert).not.toHaveBeenCalled();
     expect(patch).not.toHaveBeenCalled();
   });
@@ -153,16 +153,15 @@ describe('设置首页的“日历”一行（R-320）', () => {
     ['cn', '节假日：中国'],
   ])('中文、存的是 %s：摘要写 %s（两国时本国在前，负责人 11-04）', (v, want) => {
     data.settings = [{ id: 's1', key: 'cal.holidays', value: v, deleted_at: null, undone: false }];
-    render(<CalendarSettingsEntry onOpen={() => undefined} />);
+    render(<CalendarSettingsValue />);
     expect(summary()).toBe(want);
   });
 
-  it('韩文没选过：“공휴일: 한국”，不写음력（R-318）；行名“캘린더”（R-106 B2K-05）', () => {
+  it('韩文没选过：“공휴일: 한국”，不写음력（R-318）', () => {
     uiStore.getState().setLocale('ko-KR');
-    render(<CalendarSettingsEntry onOpen={() => undefined} />);
+    render(<CalendarSettingsValue />);
     expect(summary()).toBe('공휴일: 한국');
     expect(summary()).not.toContain('음력');
-    expect(screen.getByTestId('settings-cal-entry').textContent).toContain('캘린더');
   });
 
   it.each([
@@ -171,13 +170,13 @@ describe('设置首页的“日历”一行（R-320）', () => {
   ])('韩文、存的是 %s：摘要写 %s', (v, want) => {
     uiStore.getState().setLocale('ko-KR');
     data.settings = [{ id: 's1', key: 'cal.holidays', value: v, deleted_at: null, undone: false }];
-    render(<CalendarSettingsEntry onOpen={() => undefined} />);
+    render(<CalendarSettingsValue />);
     expect(summary()).toBe(want);
   });
 
   it('被软删的那一行不算：按界面语言推导', () => {
     data.settings = [{ id: 's1', key: 'cal.holidays', value: 'kr', deleted_at: '2026-11-01T00:00:00Z', undone: false }];
-    render(<CalendarSettingsEntry onOpen={() => undefined} />);
+    render(<CalendarSettingsValue />);
     expect(summary()).toBe('节假日：中国');
   });
 
