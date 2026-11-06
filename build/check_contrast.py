@@ -17,6 +17,9 @@
     最坏底色由半透明色本身的深浅决定（相对亮度 ≥ 0.179 算浅色，这是对黑、对白对比度相等的分界）：
     浅色半透明取清单 backdrops.light（墨黑 ＋ 本套最深的项目色），深色半透明取 backdrops.dark
     （白、柠檬黄 ＋ 本套最亮的项目色）；逐个算，取最低值。
+    清单项写了 over（令牌名数组，如 ["--bg"]）时，这块半透明色底下就按这几个实色算，不用最坏底色
+    over 的前提是那几个实色一定垫在底下：g-tint-floor、g-fg-on-floor 的前提是“有底栏玻璃着色时实色带一定在”（代码审查 L23；GlassBar.test.tsx 锁住实色带），实色带撤了就要把 over 去掉
+    （底栏玻璃：负责人 11-06 要求底栏后面一律是实色带 --bg，GlassBarFx.module.css .band）。
   • 渐变背景逐个色标算，取最低值：最底下一层（实色或线性渐变）的每个色标是一种“底”；
     上面每一层渐变的每个色标按自身透明度分别叠到每种底上（视觉稿的做法：每个光斑单独叠在底色上，不算光斑互相重叠）。
   • 背景可以写成多层（数组，第一个在最上面），例如选中块叠在玻璃上：从下往上逐层叠。
@@ -450,6 +453,9 @@ def load_pairs(path: pathlib.Path) -> dict:
             if m not in ('light', 'dark'):
                 raise ConfigError(f'{p["id"]}：modes 只能是 light、dark')
         # 可选 themes：只在这几套里查（如只有“简洁·浅色”画今天的细圈，别的皮肤是 transparent；设计复审 N7）
+        ov = p.get('over')
+        if ov is not None and (not isinstance(ov, list) or not ov or not all(isinstance(x, str) and x.startswith('--') for x in ov)):
+            raise ConfigError(f'{p["id"]}：over 要是非空的令牌名数组，如 ["--bg"]')
         th = p.get('themes')
         if th is not None and (not isinstance(th, list) or not th or not all(isinstance(x, str) for x in th)):
             raise ConfigError(f'{p["id"]}：themes 要是非空的字符串数组，如 ["simple-light"]')
@@ -474,8 +480,23 @@ def load_pairs(path: pathlib.Path) -> dict:
     return data
 
 
+def over_conf(names: list[str], vars_: dict[str, str]) -> dict:
+    """可选 over：这块半透明色底下就是这几个令牌的颜色（如底栏后面一律是实色带 --bg，负责人 11-06），
+    不再按 backdrops 的最坏底色算；令牌必须是实色"""
+    cols = []
+    for t in names:
+        v = resolve(vars_, t)
+        if parse_color(v)[3] < 1:
+            raise ConfigError(f'over 的 {t} 不是实色')
+        cols.append(v)
+    side = {'colors': cols}
+    return {'light': side, 'dark': side}
+
+
 def worst_of(p: dict, vars_: dict[str, str], theme: str, conf: dict) -> tuple[float, Color, Color]:
-    """一项在一套皮肤里最低的对比度和那一组颜色（前景、背景都已叠成不透明色）"""
+    """一项在一套皮肤里最低的对比度和那一组颜色（前景、背景都已叠成不透明色）；写了 over 的按它指定的底色算"""
+    if p.get("over"):
+        conf = over_conf(p["over"], vars_)
     bgs = bg_candidates(p["bg"], vars_, theme, conf)
     worst = None
     for f in fg_colors(p["fg"], vars_, theme):

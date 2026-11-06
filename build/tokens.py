@@ -30,7 +30,7 @@ SKINLESS = ("--dur-", "--ease-", "--press-", "--r-", "--f-", "--fs-", "--hit")
 # --g-pill-solid（“减少透明效果”时液滴的实色）：R-244 定为沿用 --glass-solid（tokens.json 里写成 var(--glass-solid)）
 GLASS_REQUIRED = {
     "--g-rim", "--rim-shade", "--g-pill-solid",  # --g-copy-fx、--g-drop-fx 11-06 随副本层一起删（代码审查 p1 L）
-    "--g-ad-tint", "--g-ad-hi", "--g-ad-hi2", "--g-ad-glow", "--g-ad-sheen", "--g-ad-fg", "--g-ad-pill",
+    # --g-ad-*（自动深浅）11-06 随自动深浅一起删（主持人方案甲：底栏后面一律实色 --bg）
 }
 LABEL = {"simple-light": "简洁·浅色", "simple-dark": "简洁·深色", "glass-light": "磨砂玻璃·浅色", "glass-dark": "磨砂玻璃·深色"}
 

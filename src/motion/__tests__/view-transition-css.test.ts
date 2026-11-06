@@ -275,3 +275,33 @@ describe('transition()：过渡期间 <html> 带 data-vt', () => {
     expect(has()).toBe(false);
   });
 });
+
+// 负责人 11-06 真机 9d40848：过渡中底栏不换实色、全程玻璃；iOS 把带 backdrop-filter 的元素按直角截快照，组上裁圆角；只画旧的那份（液滴不叠两颗）
+describe('底栏和“＋”的快照：圆角和阴影画在快照自己身上，只有一边有底栏时不剩空阴影壳（代码审查 M5）', () => {
+  it('组上不再画阴影、不裁：只有一边有底栏时组上的阴影会剩一个空壳', () => {
+    expect(css).not.toMatch(/::view-transition-group\(tabbar(-add)?\) \{[^}]*(box-shadow|overflow)/);
+  });
+  it('旧快照和只有新那份时的新快照：overflow: clip + 圆角 + 补阴影；“＋”连底色圈和细灰边；宽屏侧栏 --r-xl + --b-rail-shadow', () => {
+    expect(css).toMatch(/::view-transition-old\(tabbar\),\s*::view-transition-new\(tabbar\):only-child \{\s*overflow: clip;\s*border-radius: var\(--r-pill\);\s*box-shadow: var\(--g-bar-shadow\);/);
+    expect(css).toMatch(
+      /::view-transition-old\(tabbar-add\),\s*::view-transition-new\(tabbar-add\):only-child \{\s*overflow: clip;\s*border-radius: 50%;\s*box-shadow: 0 0 0 4px var\(--bg\), 0 0 0 5px var\(--step-off\), var\(--g-bar-shadow\);/,
+    );
+    expect(css).toMatch(/@media \(width >= 900px\) \{\s*::view-transition-old\(tabbar\),\s*::view-transition-new\(tabbar\):only-child \{\s*border-radius: var\(--r-xl\);\s*box-shadow: var\(--b-rail-shadow\);/);
+  });
+  it('两边都有时新的那份 opacity 0、旧的照画；只有新的那份时照样画（opacity 1）', () => {
+    expect(declsOf('::view-transition-new(tabbar)').get('opacity')).toBe('0');
+    expect(declsOf('::view-transition-new(tabbar-add)').get('opacity')).toBe('0');
+    expect(css).toMatch(/::view-transition-new\(tabbar\):only-child,\s*::view-transition-new\(tabbar-add\):only-child \{\s*opacity: 1;/);
+    expect(declsOf('::view-transition-old(tabbar)').has('opacity')).toBe(false);
+  });
+
+  it('只有一边有底栏（进出新建页、设置）：跟着整页先出后入（动效审查方案 B V1），两边都有时照旧 animation: none', () => {
+    for (const n of ['tabbar', 'tabbar-add']) {
+      expect(declsOf(`::view-transition-old(${n}):only-child`).get('animation')).toBe('lemo-head-out var(--dur-sheet) var(--ease-standard)');
+      expect(declsOf(`::view-transition-new(${n}):only-child`).get('animation')).toBe('lemo-head-in var(--dur-sheet) var(--ease-standard)');
+      expect(declsOf(`::view-transition-old(${n})`).get('animation')).toBe('none');
+      // 组上不留抄过来的模糊：快照淡掉后不剩直角毛玻璃方块
+      expect(declsOf(`::view-transition-group(${n})`).get('backdrop-filter')).toBe('none');
+    }
+  });
+});

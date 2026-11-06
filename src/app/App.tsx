@@ -36,7 +36,7 @@ import { reloadPage } from '../platform/sw-register.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { bannerKind } from './banner-kind.ts';
 import { featureRoutes, offRoutes, type FeatureRoute } from './features.ts';
-import { navigate, setSamePage, useRoute, type RouteName } from './router.ts';
+import { navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from './router.ts';
 import { tabBarFor } from './tab-of.ts';
 
 // CSP 试验页（B0 第一项验证）：只在非正式版里挂
@@ -247,6 +247,12 @@ const pageOf = (name: RouteName): RouteName => allRoutes.find((r) => r.name === 
 // 别的同名路由（#/event/1 → #/event/2）照旧是换页，不算（router.ts setSamePage，代码复审 R2）
 const grouped = new Set(allRoutes.flatMap((r) => (r.samePageAs === undefined ? [] : [r.samePageAs])));
 setSamePage((a, b) => grouped.has(pageOf(a.name)) && pageOf(a.name) === pageOf(b.name));
+// 四个页签之间互切（两头都有底栏、页签不同）：不起 View Transition，新页淡入，底栏一直实时模糊（router.ts setTabSwitch；负责人 11-06 方案 B）
+setTabSwitch((a, b) => {
+  const x = tabBarFor(a.name);
+  const y = tabBarFor(b.name);
+  return x !== null && y !== null && x.tab !== y.tab;
+});
 
 export function App() {
   const route = useRoute();

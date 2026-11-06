@@ -75,8 +75,9 @@ function snapPressables(doc: Document, on: boolean): void {
 
 /**
  * 过渡期间给 <html> 打 data-vt（11-06 代码审查 S4）：iOS 18.0～18.1 有 startViewTransition 但不认 :active-view-transition，
- * 底栏“过渡中换实色”的 CSS（GlassBar.module.css）同时认这个属性。旧画面在调用 startViewTransition 之后才截，所以要在调用之前打上；
- * 新过渡打断旧过渡时，旧的 finished 先结束，用计数，最后一个结束才摘
+ * 要按“正在过渡”写的样式或测试认这个属性。原来底栏“过渡中换实色”的 CSS 用它，11-06 实色已经去掉（负责人真机 9d40848），
+ * 页签互切也不再起 View Transition（fadeSwap 不打这个属性）；现在只有整页 View Transition 时打，CSS 里暂时没有规则用它。
+ * 旧画面在调用 startViewTransition 之后才截，所以要在调用之前打上；新过渡打断旧过渡时，旧的 finished 先结束，用计数，最后一个结束才摘
  */
 let vtOpen = 0;
 function markVt(doc: Document, on: boolean): void {
@@ -87,6 +88,8 @@ function markVt(doc: Document, on: boolean): void {
 
 /** 页面切换：支持 View Transitions 就包一层，不支持或减少动态效果时直接执行（17.2 第 3 点） */
 export function transition(update: () => void): Promise<void> {
+  // 页签互切的淡入还在等分包时走了整页过渡（点了“＋”、头像）：先停掉，不然后面换上来的编辑页、设置页会被当成新页再淡入一次（代码审查方案 B M9）
+  cancelFade();
   const doc = typeof document === 'undefined' ? undefined : (document as Document & VtDocument);
   if (!doc?.startViewTransition || prefersReducedMotion()) {
     update();
@@ -112,6 +115,141 @@ export function transition(update: () => void): Promise<void> {
   }
   const done = (): void => markVt(doc, false);
   return vt.finished.then(done, done);
+}
+
+/** 新页分包还没到（页面的 Suspense 先什么都不画）时，最多等多久让它出来再淡入；过了就不淡了 */
+export const FADE_WAIT_MS = 1500;
+/** 淡入从第几毫秒起播（一帧，60Hz）：不画 opacity 0 的那一帧 */
+export const FADE_SKIP_MS = 1000 / 60;
+/**
+ * 换页后这么久以内落在 main 里的点按吞掉（代码审查方案 B M8；沿用主持人 11-05 的规则“过渡开始很短时间内的点按算点在旧画面上”）：
+ * 旧页在点页签那一刻就卸掉了，手指顺手再点一下原来那页的位置，人还没看清新页，会直接点中新页同一位置的删除 ×、勾选圈。
+ * 原来 R6 的 EARLY_MS 是 50 ms；这里取 100 ms（新页第一帧约 17 ms 才画出来，再加人眼看清的最短时间），底栏不在 main 里，连点页签不受影响
+ */
+export const FADE_GUARD_MS = 100;
+/** 窗口里吞掉了 pointerdown 时，跟着的那次 click 晚到也吞（按下在窗口里、松开在窗口外），最多等这么久 */
+const GUARD_CLICK_MS = 1000;
+let fadeAnim: Animation | null = null;
+let fadeStop: (() => void) | null = null;
+let guardStop: (() => void) | null = null;
+
+/** 在 document 上用 capture 吞掉 ms 以内落在 main 里的 pointerdown、click；返回摘掉监听的函数 */
+function guardTaps(doc: Document, ms: number): () => void {
+  const t0 = performance.now();
+  let eatClickUntil = 0;
+  const inMain = (e: Event): boolean => e.target instanceof Element && e.target.closest('main') !== null;
+  const eat = (e: Event): void => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const down = (e: Event): void => {
+    if (performance.now() - t0 >= ms || !inMain(e)) {
+      // 新的一次按下（代码审查 S12）：上一次被吞的按下变成了滚动、没有 click，不能把这一次正常点按的 click 当成晚到的那一下吞掉
+      eatClickUntil = 0;
+      return;
+    }
+    eatClickUntil = performance.now() + GUARD_CLICK_MS;
+    eat(e);
+  };
+  // 被吞的按下变成滚动（手指往上划）时浏览器发 pointercancel、不会再有 click：清掉等 click 的标记（S12）
+  const cancel = (): void => {
+    eatClickUntil = 0;
+  };
+  const click = (e: Event): void => {
+    const now = performance.now();
+    const late = now < eatClickUntil;
+    eatClickUntil = 0;
+    if ((now - t0 < ms || late) && inMain(e)) eat(e);
+    else if (now - t0 >= ms) off();
+  };
+  const timer = setTimeout(() => {
+    if (eatClickUntil === 0) off();
+  }, ms);
+  const late = setTimeout(() => off(), ms + GUARD_CLICK_MS);
+  let dead = false;
+  const off = (): void => {
+    if (dead) return;
+    dead = true;
+    clearTimeout(timer);
+    clearTimeout(late);
+    doc.removeEventListener('pointerdown', down, true);
+    doc.removeEventListener('click', click, true);
+    doc.removeEventListener('pointercancel', cancel, true);
+    if (guardStop === off) guardStop = null;
+  };
+  doc.addEventListener('pointerdown', down, true);
+  doc.addEventListener('click', click, true);
+  doc.addEventListener('pointercancel', cancel, true);
+  return off;
+}
+
+/**
+ * 停掉页签互切的淡入（代码审查方案 B M9）：还在等分包的观察器、换页后吞点按的窗口；anim 为 true 时连正在播的淡入也取消（opacity 回到 1）。
+ * transition() 开头调（整页过渡要截的是完整的旧画面）；路由同页内切换（commit 的 none）调 cancelFade(false)：只停等待，不打断正在播的淡入
+ */
+export function cancelFade(anim = true): void {
+  fadeStop?.();
+  guardStop?.();
+  if (!anim) return;
+  fadeAnim?.cancel();
+  fadeAnim = null;
+}
+
+/**
+ * 四个页签之间互切（负责人 11-06 选方案 B，B2-动效审查-切页先出后入.md 第四批）：不起 View Transition，
+ * 底栏、“＋”、液滴、顶部两层模糊一直是真元素、一直实时模糊（WebKit bug 302256：过渡期间不画 backdrop-filter），液滴连续滑。
+ * 新页直接换上（update 同步画完，旧页已经卸掉，两页不同时在屏上），再给新页的 main 做一次 opacity 0→1（--dur-ui、--ease-out）。
+ * 连点：取消上一次还没播完的淡入（和还在等分包的那一次）；减少动态效果时只换页、不动。
+ * pick 找页面的 main。新页分包没到时 React 先留着旧页（webkit e2e 实测第一次切到待办约 50 ms），pick 还是旧的那个：
+ * 换页前先记下旧的，只认换上来的新元素；还没出来就看着 body 等，最多 FADE_WAIT_MS；等的时候走了整页过渡或同页内切换，cancelFade 停掉（M9）。
+ * 换页后 FADE_GUARD_MS 以内落在 main 里的点按吞掉（M8）。
+ * 返回的 Promise 等淡入放完（约 220 ms）才 resolve，比原来的 View Transition 早一点结束；等分包时 await 完拿到的可能是还没淡完的页（代码审查 L20）
+ */
+export function fadeSwap(update: () => void, pick: () => Element | null): Promise<void> {
+  cancelFade();
+  const before = pick();
+  update();
+  if (typeof document === 'undefined') return Promise.resolve();
+  // 换页后先吞一小会儿点按（M8）；减少动态效果时也吞：旧页一样是瞬间没的
+  guardStop = guardTaps(document, FADE_GUARD_MS);
+  if (prefersReducedMotion()) return Promise.resolve();
+  const play = (el: Element): Promise<void> => {
+    if (typeof el.animate !== 'function') return Promise.resolve();
+    const a = el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: dur.ui * 1000, easing: bezierCss(ease.out) });
+    // 跳过第一帧：从 0 起播时画出来的第一帧整页透明，只剩底色和底栏，等于一帧空白（11-06 chromium 逐帧实测）；从一帧以后起，第一帧约 0.3
+    a.currentTime = FADE_SKIP_MS;
+    fadeAnim = a;
+    const done = (): void => {
+      if (fadeAnim === a) fadeAnim = null;
+    };
+    return a.finished.then(done, done);
+  };
+  const fresh = (): Element | null => {
+    const el = pick();
+    return el !== null && el !== before ? el : null;
+  };
+  const now = fresh();
+  if (now) return play(now);
+  return new Promise<void>((resolve) => {
+    const stop = (): void => {
+      mo.disconnect();
+      clearTimeout(timer);
+      if (fadeStop === stop) fadeStop = null;
+      resolve();
+    };
+    const mo = new MutationObserver(() => {
+      const el = fresh();
+      if (!el) return;
+      stop();
+      // 分包晚到：新页这时才出来，吞点按的窗口从这一刻重新算
+      guardStop?.();
+      guardStop = guardTaps(document, FADE_GUARD_MS);
+      void play(el);
+    });
+    const timer = setTimeout(stop, FADE_WAIT_MS);
+    fadeStop = stop;
+    mo.observe(document.body, { childList: true, subtree: true });
+  });
 }
 
 /** 以后的趣味动效从这里接入；4.0.0 什么都不做（17.2 第 4、7 点） */

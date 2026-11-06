@@ -31,11 +31,12 @@ test('真后退（page.goBack）：只起一个 View Transition，回调里已�
   await page.goto('/app/#/today');
   await expect(page.locator('main[data-feature="today"]')).toBeVisible();
 
-  // 改 hash 走一条真历史（浏览器派 hashchange，等同点页面里的链接）
+  // 改 hash 走一条真历史（浏览器派 hashchange，等同点页面里的链接）。去设置不去日历：四个页签之间互切不起 View Transition（负责人 11-06 方案 B，
+  // tests/e2e/b2-tabbar-transition.spec.ts）
   await page.evaluate(() => {
-    location.hash = '#/calendar';
+    location.hash = '#/settings';
   });
-  await expect(page.locator('main[data-feature="calendar"]')).toBeVisible();
+  await expect(page.locator('main[data-feature="settings"]')).toBeVisible();
   await page.evaluate(() => {
     const rec = window.__vt;
     if (rec) {

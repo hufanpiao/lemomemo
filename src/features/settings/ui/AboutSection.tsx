@@ -2,6 +2,7 @@
 // 卡片里一行“版本 4.0.0”（设计评审 M-1，方案第 2 节和线框“关于 4.0.0 ›”）；农历数据的出处放在卡片下面（R-306：农历、节气数据要注明来自香港天文台；评审 S2）。
 // “手机时间不准”（K8-clock）是要马上看到的提醒，不跟着进二级页：设置首页在卡 3 下面直接放（SettingsHome）
 // 诊断信息（11-06）：3 秒内连点“版本”那一行 5 下，在卡片下面显示一块纯文字（platform/diag-info.ts 收集；只读、只显示、不上报），再连点 5 下收起。
+// 诊断开着时 <html> 带 data-diag="1"：顶部显示红、蓝两个小色条（base.css .lemo-probe，真机验证顶部回弹），离开设置页也留着，再连点 5 下或重开 App 才没
 // 版本那一行仍是只显示的行（不是按钮、不进读屏的可操作列表），点按在外层用监听接住
 import { useEffect, useRef, useState } from 'react';
 import { SettingsCard, SettingsInfoRow } from '../../../kit/components/Settings/Settings.tsx';
@@ -23,7 +24,13 @@ export function AboutSection() {
     if (!el) return undefined;
     let taps: number[] = [];
     let alive = true;
-    let open = false;
+    // 诊断开没开跟着 data-diag（跨页留着）：回到这一页时还开着就把文字也显示出来，连点 5 下关掉
+    let open = document.documentElement.dataset['diag'] === '1';
+    if (open) {
+      void collectDiag().then((lines) => {
+        if (alive && open) setDiag(lines);
+      });
+    }
     const onClick = (e: MouseEvent): void => {
       if (!(e.target instanceof Element) || !e.target.closest('[data-testid="settings-about-version"]')) return;
       const now = Date.now();
@@ -31,6 +38,8 @@ export function AboutSection() {
       if (taps.length < DIAG_TAPS) return;
       taps = [];
       open = !open;
+      if (open) document.documentElement.dataset['diag'] = '1';
+      else document.documentElement.removeAttribute('data-diag');
       if (!open) {
         setDiag(null);
         return;

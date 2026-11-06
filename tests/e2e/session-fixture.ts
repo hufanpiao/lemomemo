@@ -11,6 +11,7 @@
 //   • 单条用：await seedFakeSession(page.context(), baseURL)，必须在 page.goto 之前。
 import type { BrowserContext } from '@playwright/test';
 import { expect, test as cspTest } from './csp-fixture.ts';
+import { NOFX_RULE, needsNoFx } from './webkit-ci-nofx.ts';
 
 /** 假用户（uuid 格式，第 4 段 8 开头，和 session.ts 的 UUID_RE 一致） */
 export const FAKE_USER_ID = '0e2e0000-0000-4000-8000-000000000001';
@@ -54,8 +55,19 @@ export async function seedFakeSession(context: BrowserContext, baseURL: string |
 export const test = cspTest.extend<{ loggedIn: boolean; fakeSession: void }>({
   loggedIn: [false, { option: true }],
   fakeSession: [
-    async ({ loggedIn, context, baseURL }, use) => {
+    async ({ loggedIn, context, baseURL }, use, testInfo) => {
       if (loggedIn) await seedFakeSession(context, baseURL);
+      // CI 的 webkit 上，名单里的动效时序用例关掉 backdrop-filter（软件合成太慢；原因和数据见 webkit-ci-nofx.ts）
+      if (needsNoFx({ file: testInfo.file, title: testInfo.title, project: testInfo.project.name, ci: process.env['CI'] === 'true' })) {
+        testInfo.annotations.push({ type: 'webkit-ci-nofx', description: '已关 backdrop-filter（CI webkit 软件合成）' });
+        // ci.yml 的 e2e 汇总按这一行去重计数，打出“本轮关模糊的用例数”（审查 p4 L2），名单悄悄变长一眼能看到
+        process.stdout.write(`[webkit-ci-nofx] ${testInfo.file.split(/[\\/]/).pop() ?? ''} › ${testInfo.title}\n`);
+        await context.addInitScript((rule) => {
+          const sheet = new CSSStyleSheet();
+          sheet.insertRule(rule);
+          document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+        }, NOFX_RULE);
+      }
       await use();
     },
     { auto: true },

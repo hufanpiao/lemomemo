@@ -20,7 +20,7 @@ describe('collectDiag', () => {
     expect(lines[0]).toMatch(/^build: commit=\S+ version=\S+ builtAt=/);
     expect(lines[1]).toMatch(/^sw/);
     expect(lines.some((l) => l.startsWith('caches:') || l === 'sw: unsupported')).toBe(true);
-    expect(lines).toContain('bar.data-glass=copy data-ad=-');
+    expect(lines).toContain('bar.data-glass=copy');
     expect(lines.find((l) => l.startsWith('html:'))).toMatch(/data-rt=1/);
     for (const name of ['.bar:', '.fab:', '.lemo-top-8:', 'body::before:', '.lemo-top-2:']) {
       expect(lines.some((l) => l.startsWith(name)), name).toBe(true);

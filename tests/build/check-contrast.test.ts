@@ -54,7 +54,7 @@ const BACKDROPS = {
 };
 const THRESHOLDS = { text: { min: 4.5 }, nontext: { min: 3 } };
 
-type Pair = { id: string; fg: string; bg: string | string[]; kind: string; modes?: string[]; themes?: unknown };
+type Pair = { id: string; fg: string; bg: string | string[]; kind: string; modes?: string[]; themes?: unknown; over?: unknown };
 
 /**
  * 迷你仓库：skins 是 { 'x-light': '--a:#fff;…' }，pairs 只写要紧的字段（what、source 自动补）。
@@ -167,6 +167,26 @@ describe('build/check_contrast.py：算法', () => {
     const { report } = run(['--root', root]);
     expect(one(report, 'x-light', 'light-tint').bg).toBe('#C0C0C0');
     expect(one(report, 'x-light', 'dark-tint').bg).toBe('#606060');
+  });
+
+  it('over：写了的按指定实色算（底栏后面是实色带 --bg，11-06），没写的照旧按最坏底色算', () => {
+    const root = fixture({ 'x-light': `${P}--k:#000;--bg:#E0E0E0;--lt:rgba(255,255,255,.5);` }, [
+      { id: 'on-bg', fg: '--k', bg: '--lt', kind: 'nontext', over: ['--bg'] },
+      { id: 'worst', fg: '--k', bg: '--lt', kind: 'nontext' },
+    ]);
+    const { report } = run(['--root', root]);
+    // 50% 白叠 #E0E0E0 = #F0F0F0；没写 over 的叠墨黑 #141518 = #8A8A8C
+    expect(one(report, 'x-light', 'on-bg').bg).toBe('#F0F0F0');
+    expect(one(report, 'x-light', 'worst').bg).toBe('#8A8A8C');
+  });
+
+  it('over 写错：不是令牌名数组、或令牌不是实色，退出码 2', () => {
+    for (const over of [[], '--bg', ['#fff']]) {
+      const root = fixture({ 'x-light': `${P}--k:#000;--bg:#E0E0E0;--lt:rgba(255,255,255,.5);` }, [{ id: 'x', fg: '--k', bg: '--lt', kind: 'nontext', over }]);
+      expect(exec(['--root', root]).code).toBe(2);
+    }
+    const root = fixture({ 'x-light': `${P}--k:#000;--bg:rgba(0,0,0,.5);--lt:rgba(255,255,255,.5);` }, [{ id: 'x', fg: '--k', bg: '--lt', kind: 'nontext', over: ['--bg'] }]);
+    expect(exec(['--root', root]).code).toBe(2);
   });
 
   it('多种固定底色逐个算，不只看第一种（S1）：第二种底色才是最坏', () => {

@@ -122,7 +122,7 @@ export default function TodayPage() {
             <h2 id="today-late" className={styles.h2}>{t('late.title', {})}</h2>
             <AppearList as="ul" className={styles.list}>
               {v.late.map(({ todo, days }) => (
-                <AppearItem key={todo.id} className={styles.row} data-ghost="">
+                <AppearItem key={todo.id} className={styles.row}>
                   <CheckCircle checked={shown(todo.id, false)} label={shown(todo.id, false) ? t('list.undoDone', {}) : t('list.done', {})} onChange={(v) => tick(todo.id, v)} testId={`today-done-${todo.id}`} />
                   <button type="button" className={styles.main} onClick={() => void navigate('todo', todo.id)}>
                     <span className={styles.mainText}>
@@ -142,7 +142,7 @@ export default function TodayPage() {
           {v.events.length === 0 && v.todos.length === 0 ? <p className={styles.empty}>{t('list.empty', {})}</p> : null}
           <AppearList as="ul" className={styles.list}>
             {v.events.map((o) => (
-              <AppearItem key={`e:${o.id}`} className={styles.row} data-ghost="" data-testid={`today-event-${o.id}`}>
+              <AppearItem key={`e:${o.id}`} className={styles.row} data-testid={`today-event-${o.id}`}>
                 <span className={styles.time}>{o.time ?? t('list.allDay', {})}</span>
                 <button type="button" className={styles.main} onClick={() => void navigate('event', o.id)}>
                   <span className={styles.mainText}>
@@ -157,7 +157,7 @@ export default function TodayPage() {
               </AppearItem>
             ))}
             {v.todos.map((td) => (
-              <AppearItem key={`t:${td.id}`} className={styles.row} data-ghost="" data-testid={`today-todo-${td.id}`} data-done={td.done ? '' : undefined}>
+              <AppearItem key={`t:${td.id}`} className={styles.row} data-testid={`today-todo-${td.id}`} data-done={td.done ? '' : undefined}>
                 <CheckCircle
                   checked={shown(td.id, td.done)}
                   label={shown(td.id, td.done) ? t('list.undoDone', {}) : t('list.done', {})}

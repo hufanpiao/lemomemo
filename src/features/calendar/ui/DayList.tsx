@@ -87,7 +87,7 @@ export function DayList({
     return due === undefined ? t('cal.day.todo', {}) : hm(due);
   };
   return (
-    <section className={styles.dayList} aria-labelledby="cal-day-title" data-ghost="" data-testid="cal-day-list" data-date={date}>
+    <section className={styles.dayList} aria-labelledby="cal-day-title" data-testid="cal-day-list" data-date={date}>
       <h2 id="cal-day-title" className={styles.dayListHead}>
         <span>
           {head}

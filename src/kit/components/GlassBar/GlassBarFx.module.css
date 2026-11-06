@@ -1,4 +1,4 @@
-/* 液态玻璃底栏的首屏后部分（GlassBarFx.tsx，主持人 11-05 首屏 ③）：渐进模糊带、果冻的 CSS 后备。
+/* 液态玻璃底栏的首屏后部分（GlassBarFx.tsx，主持人 11-05 首屏 ③）：底部实色带、果冻的 CSS 后备。
    和外壳的 GlassBar.module.css 分开：外壳首屏的类名表里不带这几个名字 */
 
 /* 果冻的 CSS 后备：副本引擎没到、或 playGel 做不了时，GlassBarFx 给液滴里层重新加上这个类，动画从头放 */
@@ -16,70 +16,32 @@
   }
 }
 
-/* 渐进模糊带（0.25）：只管底栏上方那段渐隐（11-06 负责人真机对照视觉稿：底栏后面的字要透过玻璃认得出，带子不再叠在底栏后面加深）。
-   带子高 --tabbar-h + 安全区，底栏顶边离带子顶边正好 54px（底栏底边 8px + 高 62px + 余量 2px = 72px 加安全区，安全区两边抵消）：
-   3 层 1/3/6px 都在这 54px 里从无到有（最后一层到 60px 止，藏在底栏顶边后面）；底栏和“＋”区域内只有它们自己的 3px（--g-live-fx）。
-   底色渐变：上沿透明，到底栏顶边变成 --bg，整层 0.15，只轻轻压一点，底栏后面的内容照样透出来。
-   层数从 5 层减成 3 层，也减轻 webkit 主线程（CI 动效期间掉帧，11-06） */
+/* 底部实色带（11-06 负责人：底栏后面、底栏和“＋”之间、底栏下面都不能看到字；只在底栏顶边上方一小段渐隐）。
+   带子从“底栏顶边往上 --band-fade”一直铺到屏幕底（含安全区）：上面 --band-fade 一段从透明渐变到 --bg，往下全是不透明的 --bg。
+   72px = “＋”顶边离屏幕底的距离（“＋”底边 6px + 高 66px；底栏是 8px + 62px = 70px，比“＋”低 2px），实色从这里开始，底栏和“＋”后面都是实色。
+   只做颜色渐变、不加模糊（原来 3 层 backdrop-filter 去掉）：渐隐只有 24px，模糊在这么短的一段里看不出来，
+   却要多 3 层合成（iOS 上最贵的就是 backdrop-filter），还会出“先清晰后模糊”的问题（11-06 负责人真机 9d40848）。
+   玻璃皮肤的页面底是 --scr-bg 渐变，带子用 --bg 纯色：底部那条在颜色上会和渐变差一点，见 B2-底栏透明度-真机差异排查.md 第 11 节 */
 .band {
   position: fixed;
   right: 0;
   bottom: 0;
   left: 0;
   z-index: 9;
-  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  height: calc(72px + var(--band-fade) + env(safe-area-inset-bottom));
   pointer-events: none;
+  background: linear-gradient(to bottom, transparent 0, var(--bg) var(--band-fade), var(--bg) 100%);
 }
 
-.band i,
-.band b {
-  position: absolute;
-  inset: 0;
-}
-
-.band i {
-  backdrop-filter: blur(var(--b));
-  mask: linear-gradient(to bottom, transparent var(--m0), var(--bg) var(--m1) var(--m2), transparent var(--m3));
-}
-
-.band i:nth-child(1) {
-  --b: 1px;
-  --m0: 0px;
-  --m1: 12px;
-  --m2: 24px;
-  --m3: 36px;
-}
-
-.band i:nth-child(2) {
-  --b: 3px;
-  --m0: 18px;
-  --m1: 30px;
-  --m2: 42px;
-  --m3: 54px;
-}
-
-.band i:nth-child(3) {
-  --b: 6px;
-  --m0: 36px;
-  --m1: 48px;
-  --m2: 60px;
-  --m3: 60.1px;
-}
-
-.band b {
-  background: linear-gradient(to bottom, transparent 0, var(--bg) 54px, var(--bg) 100%);
-  opacity: 0.15;
-}
-
-/* 减少透明效果：没有模糊带 */
+/* 减少透明效果：也是实色，渐隐那一段也不要，从“＋”顶边起直接是 --bg */
 @media (prefers-reduced-transparency: reduce) {
   .band {
-    display: none;
+    background: linear-gradient(to bottom, transparent var(--band-fade), var(--bg) var(--band-fade));
   }
 }
 
 :global(:root[data-rt='1']) .band {
-  display: none;
+  background: linear-gradient(to bottom, transparent var(--band-fade), var(--bg) var(--band-fade));
 }
 
 /* 减少动态效果：不放果冻 */
@@ -93,12 +55,12 @@
   animation: none;
 }
 
-/* 键盘弹着（FA-7 第 3 项）：模糊带和底栏、“＋”一起藏（设计复审一 R2：只管这一样） */
+/* 键盘弹着（FA-7 第 3 项）：实色带和底栏、“＋”一起藏（设计复审一 R2：只管这一样） */
 .band[data-kb='1'] {
   visibility: hidden;
 }
 
-/* 电脑版侧栏（D5，(width >= 900px)）：底部没有底栏，也就没有模糊带 */
+/* 电脑版侧栏（D5，(width >= 900px)）：底部没有底栏，也就没有实色带 */
 @media (width >= 900px) {
   .band {
     display: none;

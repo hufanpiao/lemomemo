@@ -2,7 +2,7 @@
 // 页面超过约 15 个或要嵌套数据加载时，换成 React Router 的 hash 模式，改动只在这一个文件
 import { useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
-import { transition } from '../motion/index.ts';
+import { cancelFade, fadeSwap, transition } from '../motion/index.ts';
 
 export const ROUTE_NAMES = [
   'today',
@@ -70,18 +70,36 @@ function notifyAll(): void {
   for (const l of [...listeners]) l();
 }
 
-/** 改地址（可选）并同步把新页面画完；animate 为 true 时包在 View Transition 里 */
-function commit(change?: () => void, animate = true): Promise<void> {
+/** 切页怎么动：vt 整页 View Transition；fade 四个页签互切，不起 View Transition、新页淡入（motion 的 fadeSwap）；none 直接画 */
+type Anim = 'vt' | 'fade' | 'none';
+
+/** 改地址（可选）并同步把新页面画完；按 anim 包一层动画 */
+function commit(change?: () => void, anim: Anim = 'vt'): Promise<void> {
   const update = (): void => {
     change?.();
     flushSync(notifyAll);
   };
-  if (!animate) {
+  if (anim === 'none') {
+    cancelFade(false); // 页签互切的淡入还在等分包：停掉，同页内换上来的不是它要等的页（代码审查方案 B M9）
     update();
     return Promise.resolve();
   }
+  if (anim === 'fade') return fadeSwap(update, () => document.querySelector('main'));
   return transition(update);
 }
+
+// 两个路由是不是“四个页签之间互切”（App 按 tab-of.ts 设：两头都有底栏、页签不同）。负责人 11-06 选方案 B：
+// 页签互切不走 View Transition，底栏、液滴、顶部模糊一直实时模糊（WebKit 过渡期间不画 backdrop-filter，bug 302256）；
+// 别的切页（进编辑页、设置……）照旧 View Transition。路由器不认识底栏，所以由 App 注入
+let tabSwitch: (a: Route, b: Route) => boolean = () => false;
+
+/** App 启动时调一次；测试里可以换 */
+export function setTabSwitch(fn: (a: Route, b: Route) => boolean): void {
+  tabSwitch = fn;
+}
+
+/** 从当前地址去 href：页签互切淡入，别的整页过渡 */
+const animTo = (href: string): Anim => (tabSwitch(parseHash(window.location.hash), parseHash(href)) ? 'fade' : 'vt');
 
 // UI-4 第二轮 N-1：iPhone Safari 左边缘侧滑返回时系统自己已经播了返回动画（popstate.hasUAVisualTransition 为 true），
 // 再起 View Transition 会叠一次交叉淡入淡出。浏览器先派 popstate、紧接着派 hashchange：
@@ -120,7 +138,8 @@ function onHashChange(e: Event): void {
   uaVisualHash = null;
   const old = oldHashOf(e);
   const inPage = old !== null && samePage(parseHash(old), parseHash(now));
-  void commit(undefined, !skip && !inPage);
+  const tab = old !== null && tabSwitch(parseHash(old), parseHash(now));
+  void commit(undefined, skip || inPage ? 'none' : tab ? 'fade' : 'vt');
 }
 
 function subscribe(cb: () => void): () => void {
@@ -159,7 +178,7 @@ export function navigate(name: RouteName, ...params: string[]): Promise<void> {
   return commit(() => {
     window.history.pushState({ [DEPTH]: depthNow() + 1 }, '', href);
     noteEntry();
-  });
+  }, animTo(href));
 }
 
 // “这一条历史是从上一层点进来的”（设置的二级页、三级页；提醒接线代码审查 H1、M1）：记在那条历史自己的 history.state 上，
@@ -188,7 +207,7 @@ export function navigateSub(name: RouteName, ...params: string[]): Promise<void>
     noteEntry();
     window.history.pushState({ [DEPTH]: depthNow() + 1, [SUB]: window.location.hash }, '', href);
     noteEntry();
-  }).finally(() => {
+  }, animTo(href)).finally(() => {
     if (subInFlight?.done === done) subInFlight = null;
   });
   subInFlight = { href, done };
@@ -251,7 +270,7 @@ export function replaceRoute(name: RouteName, ...params: string[]): Promise<void
   return commit(() => {
     window.history.replaceState({ [DEPTH]: depthNow() }, '', href);
     noteEntry();
-  });
+  }, animTo(href));
 }
 
 /**
@@ -264,7 +283,7 @@ export function navigateInPage(name: RouteName, ...params: string[]): Promise<vo
   return commit(() => {
     window.history.pushState({ [DEPTH]: depthNow() + 1 }, '', href);
     noteEntry();
-  }, false);
+  }, 'none');
 }
 
 /** 同 navigateInPage，但替换当前这条历史（键盘连按合并、非法参数规整） */
@@ -274,7 +293,7 @@ export function replaceInPage(name: RouteName, ...params: string[]): Promise<voi
   return commit(() => {
     window.history.replaceState({ [DEPTH]: depthNow() }, '', href);
     noteEntry();
-  }, false);
+  }, 'none');
 }
 
 /**

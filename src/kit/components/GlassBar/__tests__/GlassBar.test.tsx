@@ -52,13 +52,11 @@ describe('GlassBar', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  it('液滴按选中的页签放位置（--i）；模糊带、深色玻璃层不在首屏外壳里，首屏后部分下载到以后才出（主持人 11-05 首屏 ③），不进读屏', async () => {
+  it('液滴按选中的页签放位置（--i）；底部实色带不在首屏外壳里，首屏后部分下载到以后才出（主持人 11-05 首屏 ③），不进读屏', async () => {
     let go: (() => void) | null = null;
     const view = render(<GlassBar active="today" later={(fn) => (go = fn)} />);
     expect(drop().style.getPropertyValue('--i')).toBe('0');
     expect(screen.queryByTestId('tabbar-band')).toBeNull();
-    const adTint = (): Element | null => screen.getByRole('navigation').querySelector(`.${styles.adTint}`);
-    expect(adTint()).toBeNull(); // 自动深浅的深色玻璃层也在首屏后部分里
     // 电脑版侧栏最下面的设置入口（D5）在首屏外壳里：首屏后部分没到、下不来时宽屏也有设置入口（设计复审三 S1；窄屏 CSS 藏着）
     const me = screen.getByTestId('tabbar-settings');
     expect(me.parentElement).toBe(screen.getByRole('navigation'));
@@ -71,9 +69,9 @@ describe('GlassBar', () => {
     act(() => go?.());
     await ready();
     expect(screen.getByTestId('tabbar-band').getAttribute('aria-hidden')).toBe('true');
-    expect(adTint()?.getAttribute('aria-hidden')).toBe('true');
-    // 放进 nav 最后面（叠放靠 z-index：浅色那层上面、页签下面）；设置入口还是那一个，没有多出一份
-    expect(screen.getByRole('navigation').lastElementChild).toBe(adTint());
+    expect(screen.getByTestId('tabbar-band').children.length).toBe(0); // 只是一层实色，没有模糊层
+    // 自动深浅 11-06 取消：nav 里没有深色玻璃层；设置入口还是那一个，没有多出一份
+    expect(screen.getByRole('navigation').querySelector('[class*="adTint"]')).toBeNull();
     expect(screen.getAllByTestId('tabbar-settings')).toEqual([me]);
   });
 
@@ -142,6 +140,39 @@ describe('GlassBar', () => {
     expect(drop().style.getPropertyValue('--i')).toBe('0');
   });
 
+  it('实色带防回退（对比度清单 g-tint-floor、g-fg-on-floor 按 over: ["--bg"] 算的前提）：从底栏、“＋”顶边到屏幕底是不透明的 --bg', async () => {
+    // 这条挂了：实色带被改成半透明或起点低于底栏顶边，底栏后面又会透出内容，build/contrast-pairs.json 那两项要去掉 over、重算例外（主持人 11-06）
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const strip = (t: string): string => t.replace(/\/\*[\s\S]*?\*\//g, '');
+    const css = strip(readFileSync(join(import.meta.dirname, '../GlassBar.module.css'), 'utf8'));
+    const fxCss = strip(readFileSync(join(import.meta.dirname, '../GlassBarFx.module.css'), 'utf8'));
+    // 顶层同名规则合在一起看（.bar、.fab 前面还有一条“.bar, .fab {”共用规则）
+    const RULES: Record<string, RegExp> = { '.bar': /\n\.bar \{([^}]*)\}/g, '.fab': /\n\.fab \{([^}]*)\}/g, '.band': /\n\.band \{([^}]*)\}/g };
+    const rule = (src: string, sel: string): string => [...src.matchAll(RULES[sel] ?? /$^/g)].map((x) => x[1]).join('\n');
+    const px = (block: string, prop: string): number => Number(new RegExp(String.raw`${prop}: (?:calc\()?(\d+)px`).exec(block)?.[1] ?? NaN);
+    // 顶边离屏幕底（不算安全区）：底栏 8 + 62 = 70，“＋” 6 + 66 = 72
+    const top = Math.max(px(rule(css, '.bar'), 'bottom') + px(rule(css, '.bar'), 'height'), px(rule(css, '.fab'), 'bottom') + px(rule(css, '.fab'), 'height'));
+    expect(top).toBe(72);
+    const band = rule(fxCss, '.band');
+    // 带子高 = 实色起点（离屏幕底 solid px）+ 渐隐段 --band-fade + 安全区；铺到屏幕底
+    const m = /height: calc\((\d+)px \+ var\(--band-fade\) \+ env\(safe-area-inset-bottom\)\);/.exec(band);
+    expect(m).not.toBeNull();
+    expect(Number(m?.[1])).toBeGreaterThanOrEqual(top);
+    expect(band).toMatch(/bottom: 0;/);
+    // 渐隐段走完以后一直是 --bg（不透明），整层没有 opacity、没有混合、没有半透明色
+    expect(band).toContain('background: linear-gradient(to bottom, transparent 0, var(--bg) var(--band-fade), var(--bg) 100%);');
+    expect(band).not.toMatch(/opacity|mix-blend|rgba|color-mix/);
+    expect(fxCss).not.toMatch(/\.band[^{]*\{[^}]*opacity/);
+    // --bg 在四套皮肤里都是实色
+    for (const f of ['glass', 'simple']) {
+      const skin = readFileSync(join(import.meta.dirname, `../../../../styles/skins/${f}.css`), 'utf8');
+      const bgs = [...skin.matchAll(/--bg:([^;]+);/g)].map((x) => x[1]);
+      expect(bgs.length).toBe(2);
+      for (const v of bgs) expect(v).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    }
+  });
+
   it('样式：液滴只动 translate、scale（时长、曲线用令牌），两种减少动态效果都关掉；减少透明效果两种都换实色；切页名字登记过', async () => {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
@@ -150,7 +181,9 @@ describe('GlassBar', () => {
     expect(css).toContain('transition: translate var(--dur-drop) var(--ease-drop), scale var(--dur-drop-press) var(--ease-press);');
     expect(fxCss).toContain('animation: gel var(--dur-drop) var(--ease-gel);');
     expect(fxCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.jelly \{\s*animation: none;/);
-    expect(fxCss).toMatch(/:global\(:root\[data-rt='1'\]\) \.band \{\s*display: none;/);
+    // 减少透明效果：带子照样在，而且是硬边实色（渐隐那段也不要）
+    for (const re of [/@media \(prefers-reduced-transparency: reduce\) \{\s*\.band \{\s*background: linear-gradient\(to bottom, transparent var\(--band-fade\), var\(--bg\) var\(--band-fade\)\);/, /:global\(:root\[data-rt='1'\]\) \.band \{\s*background: linear-gradient\(to bottom, transparent var\(--band-fade\), var\(--bg\) var\(--band-fade\)\);/]) expect(fxCss).toMatch(re);
+        expect(fxCss).toMatch(/@media \(width >= 900px\) \{\s*\.band \{\s*display: none;/);
     expect(fxCss).toMatch(/\.band\[data-kb='1'\] \{\s*visibility: hidden;/);
     expect(css).not.toMatch(/\.band|\.jelly \{|@keyframes gel/); // 外壳的样式里没有首屏后部分的类
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.drop \{\s*transition: none;/);
@@ -158,14 +191,14 @@ describe('GlassBar', () => {
     expect(css).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{\s*\.barTint \{\s*background: var\(--glass-solid\);/);
     expect(css).toMatch(/:global\(:root\[data-rt='1'\]\) \.barTint \{\s*background: var\(--glass-solid\);/);
     expect(css).toMatch(/\.drop\[data-state='press'\] \{\s*scale: 1\.12;/);
-    // 切页过渡期间实色遮罩、不模糊（负责人 11-06 70d94f5 残影；代码审查 M3、S4、S5，动效审查 M2、S4）
-    const VT = String.raw`:global\(:root:is\(\[data-vt\], :active-view-transition\)\)`;
-    expect(css).toMatch(new RegExp(String.raw`${VT} \.bar,\s*${VT} \.fab \{\s*backdrop-filter: none;`));
-    expect(css).toMatch(new RegExp(String.raw`${VT} \.bar::after,\s*${VT} \.fab::after \{\s*opacity: 1;\s*transition: none;`));
-    expect(css).toMatch(/\.bar::after,\s*\.fab::after \{[^}]*background: var\(--glass-solid\);\s*opacity: 0;[^}]*transition: opacity var\(--dur-glass\) var\(--ease-out\);/);
-    expect(css).toMatch(/\.bar\[data-ad='dark'\]::after \{\s*background: var\(--g-ad-solid\);/); // 深色玻璃配深色实底（M3）
-    expect(css).toMatch(/\.fab::after \{\s*background: var\(--fab-bg\);/);
-    expect(css).toMatch(/\.fab svg,\s*\.me \{\s*z-index: 1;/);
+    // 11-06 真机 9d40848：过渡中不再换实色（负责人不接受“先不透明再变透明”），没有 ::after 遮罩；快照组裁圆角见 view-transition-css.test.ts
+    expect(css).not.toMatch(/::after \{[^}]*--glass-solid|active-view-transition|data-vt/);
+    const fx2 = fxCss.replace(/\/\*[\s\S]*?\*\//g, '');
+    // 底部实色带（11-06 负责人）：从“＋”顶边（离屏幕底 72px）往上 --band-fade 起，一直铺到屏幕底（含安全区）；上沿 --band-fade 一段透明→--bg，往下不透明；只有颜色、不模糊
+    expect(fx2).toMatch(/\.band \{[^}]*height: calc\(72px \+ var\(--band-fade\) \+ env\(safe-area-inset-bottom\)\);[^}]*background: linear-gradient\(to bottom, transparent 0, var\(--bg\) var\(--band-fade\), var\(--bg\) 100%\);/);
+    expect(fx2).not.toMatch(/backdrop-filter|opacity|\.band [ib]\b/);
+    const base = readFileSync(join(import.meta.dirname, '../../../../styles/base.css'), 'utf8');
+    expect(base).toMatch(/--band-fade: 24px;/);
     expect(css).not.toContain('scale: 1.16');
     // 11-06 底栏透明度排查：副本档直接模糊背后的真实画面（--g-live-fx，3px）；没有 0.5px 外圈；后备 8px；阴影两层
     expect(css).toMatch(/\.bar\[data-glass='copy'\],\s*\.fab\[data-glass='copy'\] \{\s*backdrop-filter: var\(--g-live-fx\);/);

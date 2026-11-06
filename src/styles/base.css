@@ -25,6 +25,9 @@ html {
   /* 底栏（B2 FA-7）占的高度：渐进模糊带 126px 盖住底栏和“＋”；有底栏的三页底部留白用 --tabbar-pad（再加安全区和 16px 余量），
      最后一行能滚到模糊带上面、不被糊掉（设计动效评审 L6） */
   --tabbar-h: 126px;
+
+  /* 底部实色带上沿的渐隐高度（11-06 负责人：原来 54px 太长，缩到 24px；GlassBarFx.module.css .band） */
+  --band-fade: 24px;
   --tabbar-pad: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px);
 
   /* 浮条（撤销条等）统一的底部位置（K8 方案复审，主持人 11-05 定由前端 B 定义）：底栏上沿往上一点（安全区 + 118px）；
@@ -95,13 +98,25 @@ body::before {
    层级 1，和底色条 body::before 一样，在它后面画、压在它上面；弹层（70）、版本横幅（50）、整屏提示（100）、启动画面都在它上面，这是有意的（代码审查 L11）：
    弹层自己的遮罩 --scrim 铺满整屏、带模糊，盖住状态栏区时不需要这条带子再模糊一次；启动画面第一帧要和 iOS 启动图一模一样，带子不能糊到它上面。
    .lemo-top-2 另有备用底色 --status-tint（负责人 11-06 要求默认关闭：先按纯模糊上真机看白字，看过再决定开不开） */
+
+/* 外框（11-06 真机录屏-顶部带，主持人 11-06 选方案 B，保留回弹）：负责人录屏里页面滚到底再往上拉、回弹拉深（约超过带子高度）时，
+   iOS 把顶部这几个 fixed 层整层停画（连不带模糊的底色条 body::before 一起没），模糊“滚到一定范围就没了”。
+   两层模糊改成在一个铺满整屏的 fixed 外框里绝对定位：外框一直和可见区相交，不会被当成看不见。
+   外框不写 filter、opacity、mask、backdrop-filter、mix-blend-mode、will-change、clip-path，不成为背景根，里面两层照样模糊外框外面的页面。
+   真机还不行，下一批改成关掉回弹（html 上 overscroll-behavior-y: none），见 B2-底栏透明度-真机差异排查.md 第 12 节 */
+.lemo-top {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .lemo-top-8,
 .lemo-top-2 {
-  position: fixed;
+  position: absolute;
   top: 0;
   right: 0;
   left: 0;
-  z-index: 1;
   height: calc(var(--inset-top) + var(--top-fade));
   pointer-events: none;
 }
@@ -137,6 +152,37 @@ body::before {
   .lemo-top-2 {
     display: none;
   }
+}
+
+/* 诊断用的两个小色条（11-06 真机录屏-顶部带，主持人 11-06）：只在设置 › 关于“版本”连点 5 下打开诊断时显示（:root[data-diag="1"]，AboutSection.tsx 写，
+   再连点 5 下或重开 App 就没了），平时 display: none。都在状态栏下沿、纯色、不带模糊、不挡点按：
+   红条 .lemo-probe 直接 fixed（和原来的顶部带一样），蓝条 .lemo-top-probe 在外框 .lemo-top 里。真机滚到底用力往上拉：
+   红条跟着消失、蓝条还在，说明“固定层被停画”成立、外框有效 */
+.lemo-probe,
+.lemo-top-probe {
+  display: none;
+  top: var(--inset-top);
+  width: 48px;
+  height: 6px;
+  pointer-events: none;
+}
+
+.lemo-probe {
+  position: fixed;
+  left: 16px;
+  z-index: 2;
+  background: var(--rec-dot);
+}
+
+.lemo-top-probe {
+  position: absolute;
+  right: 16px;
+  background: var(--focus);
+}
+
+:root[data-diag='1'] .lemo-probe,
+:root[data-diag='1'] .lemo-top-probe {
+  display: block;
 }
 
 /* 按钮继承页面字体（L-6，SETTINGS 合卡设计复审建议、主持人 11-06 定）：浏览器默认按钮不继承 font，Windows 版 webkit 落到宋体，
@@ -198,9 +244,8 @@ html.scroll-locked body {
 }
 
 /* 底栏和“＋”（view-transition-name: tabbar、tabbar-add，B2 FA-7）：切页时不跟着整页淡入淡出、不滑位置。
-   新旧两份都不放动画、都画着，新的叠在旧的上面（液滴自己的滑动在页面里做，新的那份是活的）。
-   不能把旧的那份藏掉、只靠新的那份显示：webkit 过渡期间不画新的那份，整条底栏和“＋”会消失到过渡结束
-   （设计复审一 R1；tests/e2e/b2-tabbar.spec.ts 在过渡中途截图比像素） */
+   新旧两份都不放动画；画哪一份见下面一段。不能把旧的那份藏掉、只靠新的那份显示：webkit 过渡期间不画新的那份，
+   整条底栏和“＋”会消失到过渡结束（设计复审一 R1） */
 ::view-transition-group(tabbar),
 ::view-transition-group(tabbar-add),
 ::view-transition-group(top-blur-8),
@@ -217,6 +262,63 @@ html.scroll-locked body {
 
   /* 画着的旧那份正好盖在真底栏上：webkit 过渡期间点它会被这层接住（不按 ::view-transition 的 pointer-events 走），明写不接 */
   pointer-events: none;
+}
+
+/* 底栏和“＋”在 View Transition 里的样子。负责人 11-06 选方案 B 以后，四个页签互切不走 View Transition（router.ts setTabSwitch、motion fadeSwap，
+   底栏一直是真元素、一直实时模糊）；还会走到这里的是进出没有底栏的页（今天 ↔ 编辑页、设置……），只有一边有底栏或“＋”。
+   · 圆角裁切和阴影写在快照自己身上（::view-transition-old，和只有新那份时的 ::view-transition-new:only-child），不写在组上：
+     组上的阴影在只有一边有底栏、那一份又不画的时候会剩一个空阴影壳（代码审查 M5）。快照是替换元素，overflow: clip + border-radius 直接裁它：
+     iOS 把带 backdrop-filter 的元素按直角矩形截，圆角外露出灰块（70d94f5 残影），裁掉就没了；元素自己的阴影被一起裁掉，在快照上补同一组。
+   · 两边都有时只画旧的那份（新的 opacity 0）：两份叠着时液滴叠成一团（70d94f5 残影第 3 条），webkit 过渡期间也不画新的那份（设计复审一 R1）。
+     现在只有页签互切会两边都有，已经不走这里；留着防以后别的入口。
+   · 键盘弹着时底栏 visibility: hidden，GlassBar.module.css 同时去掉 view-transition-name，不然空快照上还会画出阴影 */
+::view-transition-new(tabbar),
+::view-transition-new(tabbar-add) {
+  opacity: 0;
+}
+
+::view-transition-old(tabbar),
+::view-transition-new(tabbar):only-child {
+  overflow: clip;
+  border-radius: var(--r-pill);
+  box-shadow: var(--g-bar-shadow);
+}
+
+::view-transition-old(tabbar-add),
+::view-transition-new(tabbar-add):only-child {
+  overflow: clip;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px var(--bg), 0 0 0 5px var(--step-off), var(--g-bar-shadow);
+}
+
+/* 只有一边有底栏或“＋”时（今天 ↔ 新建日程、设置……）跟着整页先出后入（动效审查方案 B V1）：原来新旧都是 animation: none，
+   进新建页时旧那份压在新页上停满整段过渡、最后一帧整条消失。现在旧那份用整页的 lemo-head-out 前 40% 淡完，
+   新那份（返回时）用 lemo-head-in 35% 以后淡入；时长、曲线和整页 root 一样 */
+::view-transition-new(tabbar):only-child,
+::view-transition-new(tabbar-add):only-child {
+  opacity: 1;
+  animation: lemo-head-in var(--dur-sheet) var(--ease-standard);
+}
+
+::view-transition-old(tabbar):only-child,
+::view-transition-old(tabbar-add):only-child {
+  animation: lemo-head-out var(--dur-sheet) var(--ease-standard);
+}
+
+/* 规范把具名元素的 backdrop-filter 抄到它的 ::view-transition-group 上（Chromium 照做）：组没有圆角、不跟着淡，
+   快照淡掉以后底栏和“＋”的位置会剩两块直角的毛玻璃方块（11-06 V1 逐帧，chromium）。组上不要模糊，快照淡到哪儿就是哪儿 */
+::view-transition-group(tabbar),
+::view-transition-group(tabbar-add) {
+  backdrop-filter: none;
+}
+
+/* 电脑版侧栏：圆角 28、阴影 --b-rail-shadow（GlassBar.module.css 同一断点） */
+@media (width >= 900px) {
+  ::view-transition-old(tabbar),
+  ::view-transition-new(tabbar):only-child {
+    border-radius: var(--r-xl);
+    box-shadow: var(--b-rail-shadow);
+  }
 }
 
 /* 具名共享元素的组（列表那一条 ↔ 详情标题这类，位置和大小的移动）接令牌（接手清单 M4 剩余，第一个具名共享元素上线前）：

@@ -98,9 +98,13 @@ describe('顶部安全区底色条', () => {
 
   it('顶部渐变模糊带（11-06）：两层模糊 .lemo-top-8 8px、.lemo-top-2 2px，从 y=0 起高“安全区 + --top-fade”，不挡点按；减少透明效果两种都藏模糊、只留底色渐变；宽屏不加', () => {
     const both = block(base, ['.lemo-top-8,', '.lemo-top-2'].join('\n'));
-    expect(both).toMatch(/position: fixed;/);
+    // 11-06 起两层在铺满整屏的 fixed 外框 .lemo-top 里绝对定位（真机录屏-顶部带：回弹拉深时 iOS 停画顶部 fixed 层）；层级 1 写在外框上
+    expect(both).toMatch(/position: absolute;/);
     expect(both).toMatch(/top: 0;/);
-    expect(both).toMatch(/z-index: 1;/);
+    const frame = block(base, '.lemo-top');
+    expect(frame).toMatch(/position: fixed;\s*inset: 0;\s*z-index: 1;\s*pointer-events: none;/);
+    // 外框不能成为背景根（不然里面两层取不到外面的页面）：不写这些属性
+    expect(frame).not.toMatch(/filter|opacity|mask|clip-path|mix-blend-mode|will-change|isolation|contain|view-transition-name/);
     expect(both).toMatch(/height: calc\(var\(--inset-top\) \+ var\(--top-fade\)\);/);
     expect(both).toMatch(/pointer-events: none;/);
     expect(block(base, '.lemo-top-8')).toMatch(/backdrop-filter: blur\(8px\);/);
@@ -109,15 +113,20 @@ describe('顶部安全区底色条', () => {
     expect(base).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{\s*\.lemo-top-8,\s*\.lemo-top-2 \{\s*display: none;/);
     expect(base).toMatch(/:root\[data-rt='1'\] \.lemo-top-8,\s*:root\[data-rt='1'\] \.lemo-top-2 \{\s*display: none;/);
     expect(base).toMatch(/@media \(width >= 900px\) \{\s*\.lemo-top-8,\s*\.lemo-top-2 \{\s*display: none;/);
-    expect(base.match(/backdrop-filter:/g)?.length).toBe(2); // 只两层（主持人：控制层数）
+    expect(base.match(/backdrop-filter: (?!none)/g)?.length).toBe(2); // 只两层（主持人：控制层数）；切页快照组上的 none 不算
+    // 诊断色条：平时 display: none，只有 :root[data-diag='1'] 时显示；红条直接 fixed、蓝条在外框里
+    expect(block(base, ['.lemo-probe,', '.lemo-top-probe'].join('\n'))).toMatch(/display: none;/);
+    expect(base).toMatch(/:root\[data-diag='1'\] \.lemo-probe,\s*:root\[data-diag='1'\] \.lemo-top-probe \{\s*display: block;/);
+    expect(block(base, '.lemo-probe')).toMatch(/position: fixed;/);
+    expect(base).toMatch(/\n\.lemo-top-probe \{[^}]*position: absolute;/);
+    expect(base.match(/\n\s*display: block;/g)?.length, '色条只在诊断时显示').toBe(1);
   });
 
   // 动效复审 M5（11-06）：伪元素属于整页快照，切页时跟着旧页淡掉、顶部闪一下；两层改成入口页里的具名真元素，过渡里不放动画
   it('两层模糊是入口页的具名真元素，过渡里 animation: none；没有灰色衬底 html::after，备用底色 --status-tint 默认透明', () => {
     for (const f of ['src/index.html', 'src/auth/index.html']) {
       const h = readFileSync(f, 'utf8');
-      expect(h, f).toContain('<div class="lemo-top-8" aria-hidden="true"></div>');
-      expect(h, f).toContain('<div class="lemo-top-2" aria-hidden="true"></div>');
+      expect(h, f).toMatch(/<div class="lemo-top" aria-hidden="true">\s*<div class="lemo-top-8"><\/div>\s*<div class="lemo-top-2"><\/div>/);
     }
     expect(block(base, '.lemo-top-8')).toMatch(/view-transition-name: top-blur-8;/);
     expect(base).toMatch(/view-transition-name: top-blur-2;/);

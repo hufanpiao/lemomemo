@@ -199,16 +199,7 @@ export const tokens: Record<Theme, Record<string, string>> = {
     "--rim-shade": "rgba(20,21,24,.10)",
     "--g-live-fx": "blur(3px) saturate(1.8) brightness(1.04)",
     "--g-glow-c": "rgba(255,255,255,.35)",
-    "--g-ad-glow-c": "rgba(255,255,255,.10)",
-    "--g-bar-shadow": "0 8px 24px rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.112)",
-    "--g-ad-tint": "rgba(30,31,36,.44)",
-    "--g-ad-solid": "#232429",
-    "--g-ad-hi": "rgba(255,255,255,.45)",
-    "--g-ad-hi2": "rgba(255,255,255,.18)",
-    "--g-ad-glow": ".10",
-    "--g-ad-sheen": ".14",
-    "--g-ad-fg": "#F2F3F5",
-    "--g-ad-pill": "rgba(255,255,255,.14)"
+    "--g-bar-shadow": "0 8px 24px rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.112)"
   },
   "simple-dark": {
     "--bg": "#111215",
@@ -407,16 +398,7 @@ export const tokens: Record<Theme, Record<string, string>> = {
     "--rim-shade": "rgba(20,21,24,.10)",
     "--g-live-fx": "blur(3px) saturate(1.8) brightness(1.04)",
     "--g-glow-c": "rgba(255,255,255,.10)",
-    "--g-ad-glow-c": "rgba(255,255,255,.10)",
-    "--g-bar-shadow": "0 8px 24px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.36)",
-    "--g-ad-tint": "rgba(30,31,36,.44)",
-    "--g-ad-solid": "#232429",
-    "--g-ad-hi": "rgba(255,255,255,.45)",
-    "--g-ad-hi2": "rgba(255,255,255,.18)",
-    "--g-ad-glow": ".10",
-    "--g-ad-sheen": ".14",
-    "--g-ad-fg": "#F2F3F5",
-    "--g-ad-pill": "rgba(255,255,255,.14)"
+    "--g-bar-shadow": "0 8px 24px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.36)"
   },
   "glass-light": {
     "--bg": "#EFEEE8",
@@ -615,16 +597,7 @@ export const tokens: Record<Theme, Record<string, string>> = {
     "--rim-shade": "rgba(20,21,24,.10)",
     "--g-live-fx": "blur(3px) saturate(1.8) brightness(1.04)",
     "--g-glow-c": "rgba(255,255,255,.35)",
-    "--g-ad-glow-c": "rgba(255,255,255,.10)",
-    "--g-bar-shadow": "0 8px 24px rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.112)",
-    "--g-ad-tint": "rgba(30,31,36,.44)",
-    "--g-ad-solid": "#262931",
-    "--g-ad-hi": "rgba(255,255,255,.45)",
-    "--g-ad-hi2": "rgba(255,255,255,.18)",
-    "--g-ad-glow": ".10",
-    "--g-ad-sheen": ".14",
-    "--g-ad-fg": "#F2F3F5",
-    "--g-ad-pill": "rgba(255,255,255,.14)"
+    "--g-bar-shadow": "0 8px 24px rgba(0,0,0,.14),0 1px 3px rgba(0,0,0,.112)"
   },
   "glass-dark": {
     "--bg": "#121419",
@@ -823,15 +796,6 @@ export const tokens: Record<Theme, Record<string, string>> = {
     "--rim-shade": "rgba(20,21,24,.10)",
     "--g-live-fx": "blur(3px) saturate(1.8) brightness(1.04)",
     "--g-glow-c": "rgba(255,255,255,.10)",
-    "--g-ad-glow-c": "rgba(255,255,255,.10)",
-    "--g-bar-shadow": "0 8px 24px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.36)",
-    "--g-ad-tint": "rgba(30,31,36,.44)",
-    "--g-ad-solid": "#262931",
-    "--g-ad-hi": "rgba(255,255,255,.45)",
-    "--g-ad-hi2": "rgba(255,255,255,.18)",
-    "--g-ad-glow": ".10",
-    "--g-ad-sheen": ".14",
-    "--g-ad-fg": "#F2F3F5",
-    "--g-ad-pill": "rgba(255,255,255,.14)"
+    "--g-bar-shadow": "0 8px 24px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.36)"
   }
 };

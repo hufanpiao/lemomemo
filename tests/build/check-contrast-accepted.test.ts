@@ -96,30 +96,18 @@ describe('build/check_contrast.py：负责人已接受的例外（accepted，B2 
 });
 
 describe('build/check_contrast.py：真仓库的例外名单', () => {
-  it('只剩负责人已接受的 12 项例外（11-05 的 8 项、11-06 浅色着色 .12 的 4 项），钉死每项的皮肤、项和值，写了谁哪天定的和原因；名单外没有不达标', () => {
-    type Acc = { theme: string; id: string; floor: number; decided: string; reason: string };
-    const acc = (JSON.parse(readFileSync(join(ROOT, 'build', 'contrast-pairs.json'), 'utf8')) as { accepted?: Acc[] }).accepted ?? [];
-    // 名单只能缩小：加一条、改一个值，这里都要跟着改（代码复审 M5）
-    expect(acc.map((a) => [a.theme, a.id, a.floor])).toEqual([
-      ['glass-dark', 'g-tint-floor', 2.4574],
-      ['glass-dark', 'g-fg-on-floor', 2.7284],
-      ['glass-light', 'g-ad-floor', 2.4574],
-      ['glass-light', 'g-ad-halo', 2.4574],
-      ['glass-light', 'g-tint-floor', 1.4053],
-      ['glass-light', 'g-fg-on-floor', 1.4053],
-      ['simple-dark', 'g-tint-floor', 2.4574],
-      ['simple-dark', 'g-fg-on-floor', 2.7284],
-      ['simple-light', 'g-ad-floor', 2.4574],
-      ['simple-light', 'g-ad-halo', 2.4574],
-      ['simple-light', 'g-tint-floor', 1.4053],
-      ['simple-light', 'g-fg-on-floor', 1.4053],
-    ]);
-    for (const a of acc) {
-      expect(a.decided).toMatch(/11-0[56]/);
-      expect(a.reason.length).toBeGreaterThan(5);
-    }
+  it('名单清零（主持人 11-06 方案甲）：底栏玻璃两项按 over: ["--bg"] 算（底栏后面一律实色带），原来 12 条例外都不再需要；名单外没有不达标', () => {
+    type Pair = { id: string; over?: string[] };
+    const data = JSON.parse(readFileSync(join(ROOT, 'build', 'contrast-pairs.json'), 'utf8')) as { accepted?: unknown[]; pairs: Pair[] };
+    // 名单只能缩小：以后要加例外，这里跟着改（代码复审 M5）
+    expect(data.accepted ?? []).toEqual([]);
+    // 自动深浅 11-06 取消，它的两对颜色也删了
+    expect(data.pairs.map((p) => p.id)).not.toEqual(expect.arrayContaining(['g-ad-floor']));
+    expect(data.pairs.some((p) => p.id.startsWith('g-ad-'))).toBe(false);
+    // 按 --bg 算的前提是实色带：规则锁在 GlassBar.test.tsx（实色带改回半透明那条会挂，提醒重算这里）
+    for (const id of ['g-tint-floor', 'g-fg-on-floor']) expect(data.pairs.find((p) => p.id === id)?.over).toEqual(['--bg']);
     const { code, report } = exec(ROOT);
     expect(code).toBe(0);
-    expect(report).toMatchObject({ failed: 0, accepted: 12 });
+    expect(report).toMatchObject({ failed: 0, accepted: 0 });
   });
 });

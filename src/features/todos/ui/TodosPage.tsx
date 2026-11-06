@@ -112,7 +112,7 @@ export default function TodosPage() {
             <h2 className={styles.h2}>{groupTitle(g)}</h2>
             <AppearList as="ul" className={styles.list}>
               {g.items.map(({ todo, tag }) => (
-                <AppearItem key={todo.id} className={styles.row} data-ghost="" data-done={todo.done ? '' : undefined} data-testid={`todos-row-${todo.id}`}>
+                <AppearItem key={todo.id} className={styles.row} data-done={todo.done ? '' : undefined} data-testid={`todos-row-${todo.id}`}>
                   <CheckCircle
                     checked={shown(todo.id, todo.done)}
                     label={shown(todo.id, todo.done) ? t('list.undoDone', {}) : t('list.done', {})}

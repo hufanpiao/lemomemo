@@ -1,5 +1,5 @@
 {
-  "$comment": "check_contrast.py 的清单（架构 8.1、B6-exe 任务单 F12）。每项在每套皮肤（src/styles/skins/*.css 的 data-skin × data-theme）都算一遍；modes 只限浅色或深色。bg 可以是数组（多层，第一个在最上面）。只收有出处的颜色对，source 写出处；令牌里没有、出处说不清的不收（见回报）。 accepted：负责人已接受的例外（theme、id、接受时的精确值 floor、decided、reason），不比 floor 更差时不算失败；名单之外的不达标照样报错（B2 FA-7 第 4 项，11-05）。",
+  "$comment": "check_contrast.py 的清单（架构 8.1、B6-exe 任务单 F12）。每项在每套皮肤（src/styles/skins/*.css 的 data-skin × data-theme）都算一遍；modes 只限浅色或深色。bg 可以是数组（多层，第一个在最上面）。只收有出处的颜色对，source 写出处；令牌里没有、出处说不清的不收（见回报）。 accepted：负责人已接受的例外（theme、id、接受时的精确值 floor、decided、reason），不比 floor 更差时不算失败；名单之外的不达标照样报错（B2 FA-7 第 4 项，11-05）。 11-06：自动深浅（data-ad）因“底栏后实色”（负责人 11-06）取消，g-ad-floor、g-ad-halo 两对和 4 条例外删掉（主持人 11-06 方案甲）。 同日底栏玻璃两项（g-tint-floor、g-fg-on-floor）改按 over: [\"--bg\"] 算，原来的 8 条例外随之删掉，名单清零。",
   "thresholds": {
     "text": {
       "min": 4.5,
@@ -541,11 +541,14 @@
     },
     {
       "id": "g-tint-floor",
-      "what": "底栏的字 / 玻璃本身（--g-tint 叠在最坏底色上，不算柔光）",
+      "what": "底栏的字 / 玻璃本身（--g-tint 叠在实色带 --bg 上，不算柔光）",
       "fg": "--g-fg",
       "bg": "--g-tint",
       "kind": "nontext",
-      "source": "架构 8.1（0.29 第 30 条下限 3:1）；TC-B2-60"
+      "source": "架构 8.1（0.29 第 30 条下限 3:1）；TC-B2-60；11-06 起底栏后面一律是实色带 --bg（负责人 11-06），按 over 指定的 --bg 算（前提：有底栏玻璃着色时实色带一定在，代码审查 L23）（主持人 11-06 方案甲），GlassBar.test.tsx 锁住实色带",
+      "over": [
+        "--bg"
+      ]
     },
     {
       "id": "g-fg-on-halo",
@@ -557,33 +560,14 @@
     },
     {
       "id": "g-fg-on-floor",
-      "what": "底栏选中项的字 / 玻璃本身（--g-tint 叠在最坏底色上，不算柔光）",
+      "what": "底栏选中项的字 / 玻璃本身（--g-tint 叠在实色带 --bg 上，不算柔光）",
       "fg": "--g-fg-on",
       "bg": "--g-tint",
       "kind": "nontext",
-      "source": "架构 8.1 第 4252 行附近；0.29 第 30 条下限 3:1（选中项算不算下限、按液滴还是按玻璃算待架构定，先按玻璃收，代码审查 M3、S6）"
-    },
-    {
-      "id": "g-ad-floor",
-      "what": "自动深浅（data-ad=\"dark\"）底栏的字 / 深色玻璃（--g-ad-tint 叠在最坏底色上）",
-      "fg": "--g-ad-fg",
-      "bg": "--g-ad-tint",
-      "kind": "nontext",
-      "modes": [
-        "light"
-      ],
-      "source": "架构 0.27 液态玻璃“对比度”第 855 行附近（深色玻璃 data-ad=\"dark\" 那组 --g-* 叠在最浅底色上）；第 844 行：深色主题不做自动深浅，只算浅色"
-    },
-    {
-      "id": "g-ad-halo",
-      "what": "自动深浅（data-ad=\"dark\"）底栏的字 / 柔光（data-ad 时柔光 --g-halo 换成 --g-ad-tint，GlassBar.module.css）",
-      "fg": "--g-ad-fg",
-      "bg": "--g-ad-tint",
-      "kind": "text",
-      "modes": [
-        "light"
-      ],
-      "source": "架构 0.27 第 855 行附近；原来令牌没有 ad 柔光、暂按 --g-halo 算（代码审查 M3），实际 data-ad 时字的柔光用 --g-ad-tint，11-05 照实际改（代码复审 M5 附带）"
+      "source": "架构 8.1 第 4252 行附近；0.29 第 30 条下限 3:1（选中项算不算下限、按液滴还是按玻璃算待架构定，先按玻璃收，代码审查 M3、S6）；11-06 起底栏后面一律是实色带 --bg（负责人 11-06），按 over 指定的 --bg 算（前提：有底栏玻璃着色时实色带一定在，代码审查 L23）（主持人 11-06 方案甲），GlassBar.test.tsx 锁住实色带",
+      "over": [
+        "--bg"
+      ]
     },
     {
       "id": "remind-toggle-on",
@@ -659,90 +643,5 @@
       "source": "设计复审 N7（11-04）；R-132 简洁·浅色今天是透明底墨色细圈；月格 .today .dayNum、周视图 .laneToday"
     }
   ],
-  "accepted": [
-    {
-      "theme": "glass-dark",
-      "id": "g-tint-floor",
-      "floor": 2.4574,
-      "decided": "负责人 11-05 定（B2 FA-7 第 4 项：深色 --g-tint 保持 0.44，不调）",
-      "reason": "深色玻璃 --g-tint 保持 0.44 不调（调到约 0.5 以上会改变玻璃观感）；最坏底色是理论下限，实际背后多是深色页面；字另有柔光和描边"
-    },
-    {
-      "theme": "glass-dark",
-      "id": "g-fg-on-floor",
-      "floor": 2.7284,
-      "decided": "负责人 11-05 定（B2 FA-7 第 4 项：深色 --g-tint 保持 0.44，不调）",
-      "reason": "同上：选中项的字在深色玻璃上，--g-tint 保持 0.44 不调"
-    },
-    {
-      "theme": "glass-light",
-      "id": "g-ad-floor",
-      "floor": 2.4574,
-      "decided": "负责人 11-05 定（B2 FA-7 第 4 项：深色 --g-tint 保持 0.44，不调）",
-      "reason": "自动深浅的深色玻璃 --g-ad-tint 只在背后大多是深色内容时出现（>55%），最坏底色是理论下限；和深色 --g-tint 同一取舍"
-    },
-    {
-      "theme": "glass-light",
-      "id": "g-ad-halo",
-      "floor": 2.4574,
-      "decided": "负责人 11-05 定（B2 FA-7 第 4 项：深色 --g-tint 保持 0.44，不调）",
-      "reason": "data-ad 时字的柔光就是深色玻璃 --g-ad-tint（和 g-ad-floor 同一层颜色，只是按正文 4.5 算）；深色玻璃只在背后大多是深色内容时出现（>55%），最坏底色是理论下限；和深色 --g-tint 同一取舍（11-05 改正清单定义：原来暂按 --g-halo 算出 1.05，不是实际画法）"
-    },
-    {
-      "theme": "glass-light",
-      "id": "g-tint-floor",
-      "floor": 1.4053,
-      "decided": "负责人 11-06 定（B2 底栏校准 G：浅色 --g-tint 从 0.34 降到 0.12，选方案 A 接受为例外）",
-      "reason": "栏后正好是深色内容时由 data-ad 自动切深色玻璃接管；日常页面实测最差 5.2:1；负责人 11-06 接受"
-    },
-    {
-      "theme": "glass-light",
-      "id": "g-fg-on-floor",
-      "floor": 1.4053,
-      "decided": "负责人 11-06 定（B2 底栏校准 G：浅色 --g-tint 从 0.34 降到 0.12，选方案 A 接受为例外）",
-      "reason": "同上：选中项的字，栏后正好是深色内容时由 data-ad 自动切深色玻璃接管；日常页面实测最差 5.2:1；负责人 11-06 接受"
-    },
-    {
-      "theme": "simple-dark",
-      "id": "g-tint-floor",
-      "floor": 2.4574,
-      "decided": "负责人 11-05 定（B2 FA-7 第 4 项：深色 --g-tint 保持 0.44，不调）",
-      "reason": "深色玻璃 --g-tint 保持 0.44 不调（调到约 0.5 以上会改变玻璃观感）；最坏底色是理论下限，实际背后多是深色页面；字另有柔光和描边"
-    },
-    {
-      "theme": "simple-dark",
-      "id": "g-fg-on-floor",
-      "floor": 2.7284,
-      "decided": "负责人 11-05 定（B2 FA-7 第 4 项：深色 --g-tint 保持 0.44，不调）",
-      "reason": "同上：选中项的字在深色玻璃上，--g-tint 保持 0.44 不调"
-    },
-    {
-      "theme": "simple-light",
-      "id": "g-ad-floor",
-      "floor": 2.4574,
-      "decided": "负责人 11-05 定（B2 FA-7 第 4 项：深色 --g-tint 保持 0.44，不调）",
-      "reason": "自动深浅的深色玻璃 --g-ad-tint 只在背后大多是深色内容时出现（>55%），最坏底色是理论下限；和深色 --g-tint 同一取舍"
-    },
-    {
-      "theme": "simple-light",
-      "id": "g-ad-halo",
-      "floor": 2.4574,
-      "decided": "负责人 11-05 定（B2 FA-7 第 4 项：深色 --g-tint 保持 0.44，不调）",
-      "reason": "data-ad 时字的柔光就是深色玻璃 --g-ad-tint（和 g-ad-floor 同一层颜色，只是按正文 4.5 算）；深色玻璃只在背后大多是深色内容时出现（>55%），最坏底色是理论下限；和深色 --g-tint 同一取舍（11-05 改正清单定义：原来暂按 --g-halo 算出 1.05，不是实际画法）"
-    },
-    {
-      "theme": "simple-light",
-      "id": "g-tint-floor",
-      "floor": 1.4053,
-      "decided": "负责人 11-06 定（B2 底栏校准 G：浅色 --g-tint 从 0.34 降到 0.12，选方案 A 接受为例外）",
-      "reason": "栏后正好是深色内容时由 data-ad 自动切深色玻璃接管；日常页面实测最差 5.2:1；负责人 11-06 接受"
-    },
-    {
-      "theme": "simple-light",
-      "id": "g-fg-on-floor",
-      "floor": 1.4053,
-      "decided": "负责人 11-06 定（B2 底栏校准 G：浅色 --g-tint 从 0.34 降到 0.12，选方案 A 接受为例外）",
-      "reason": "同上：选中项的字，栏后正好是深色内容时由 data-ad 自动切深色玻璃接管；日常页面实测最差 5.2:1；负责人 11-06 接受"
-    }
-  ]
+  "accepted": []
 }

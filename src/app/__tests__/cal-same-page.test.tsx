@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App.tsx';
 import { featureRoutes } from '../features.ts';
+import { FADE_GUARD_MS } from '../../motion/index.ts';
 
 // 整个 App 挂载、页面懒加载：全量三个时区同时跑、机器忙时会拖过默认 5 秒（c8b5596 的 CI unit 就是这样超时的），
 // 这个文件单独放宽到 15 秒，等页面出现的上限 10 秒；单跑仍在 3 秒内
@@ -24,6 +25,8 @@ describe('月历两条路由同一个页面', () => {
     const page = await screen.findByTestId('calendar-page', {}, { timeout: 10_000 });
     const next = screen.getByTestId('cal-next');
     next.focus();
+    // 换页后 FADE_GUARD_MS 以内点 main 里的东西会被吞掉（代码审查方案 B M8），等过这一段再点
+    await act(() => new Promise((r) => setTimeout(r, FADE_GUARD_MS + 20)));
     await act(async () => {
       fireEvent.click(next);
     });
@@ -63,10 +66,19 @@ describe('同一页里浏览器前进 / 后退不播整页动画', () => {
     expect(window.location.hash).toBe('#/calendar');
   });
 
-  it('换页照常起动画：#/today → #/calendar，以及没登记 samePageAs 的同名路由 #/event/a → #/event/b', async () => {
+  it('四个页签之间互切（#/today → #/calendar、#/cal/... → #/todos）：不起 View Transition（负责人 11-06 方案 B，main 淡入）', async () => {
     window.history.replaceState(null, '', '/app/#/today');
     render(<App />);
-    expect((await back('#/today', '#/calendar')).mock.calls).toHaveLength(1);
-    expect((await back('#/event/a', '#/event/b')).mock.calls).toHaveLength(1);
+    expect((await back('#/today', '#/calendar')).mock.calls).toHaveLength(0);
+    expect((await back('#/cal/month/2026-10', '#/todos')).mock.calls).toHaveLength(0);
+    expect(window.location.hash).toBe('#/todos');
+  });
+
+  it('换页照常起动画：#/today → #/settings，以及没登记 samePageAs 的同名路由 #/event/a → #/event/b', async () => {
+    window.history.replaceState(null, '', '/app/#/today');
+    render(<App />);
+    // 设置页、编辑页挂上以后可能自己再跳一次（拿不到数据 replaceRoute 回列表），所以是“至少一次”
+    expect((await back('#/today', '#/settings')).mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect((await back('#/event/a', '#/event/b')).mock.calls.length).toBeGreaterThanOrEqual(1);
   });
 });

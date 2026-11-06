@@ -395,7 +395,19 @@ jobs:
       # 不单独构建：playwright.config.ts 的 webServer 自己先 npm run build -- --mode e2e 再起 wrangler pages dev（CI 下不复用已有服务），
       # 这里再构建一次 preview 模式会被覆盖掉，白花时间
       - name: Playwright（e2e 模式构建 + wrangler pages dev dist/web，控制台出现 CSP 报错就算失败）
-        run: npm run e2e
+        # 显式写 shell: bash（-eo pipefail）：e2e 失败不会被 tee 的退出码吞掉，写法和 deno 测试那一步一致（p4 复审 L4）
+        shell: bash
+        run: |
+          npm run e2e 2>&1 | tee e2e.log
+
+      # CI webkit 上名单内的动效时序用例关了 backdrop-filter（tests/e2e/webkit-ci-nofx.ts）：按用例去重计数，名单悄悄变长时一眼能看到
+      - name: 汇总：本轮关模糊的用例数
+        if: always()
+        run: |
+          # 不锚定行首：list 报告器可能在测试输出前加前缀；-o 只取标记以后的部分，重试的同一条去重后只算一次
+          n=$(grep -a -o '\[webkit-ci-nofx\].*' e2e.log 2>/dev/null | sort -u | wc -l || true)
+          echo "本轮关模糊的用例数 = ${n:-0}（名单见 tests/e2e/webkit-ci-nofx.ts）"
+          grep -a -o '\[webkit-ci-nofx\].*' e2e.log 2>/dev/null | sort -u || true
 
       # 快读组（B2 FA-6 ①，安全审查 L5）：带 supabase 地址（同源 /sb、假 anon key）的 e2e 构建，只跑 b2-first-screen-supabase.spec.ts，
       # 验证启动关口走快读、supabase-js 在今天页画出来以后才下载；默认组没配地址、跑不到快读分支。端口 8791、产物 dist/web-fastread，和上一步错开

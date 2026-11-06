@@ -1,63 +1,6 @@
-// 液态玻璃的玻璃标记、自动深浅、帧循环（B2 FA-7，motion/glass-ghost.ts；11-06 起不再建内容副本，GLASS-copy-unused）
+// 液态玻璃的玻璃标记、帧循环（B2 FA-7，motion/glass-ghost.ts；11-06 起不再建内容副本 GLASS-copy-unused；自动深浅 11-06 取消，底栏后实色）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AD_OFF, AD_ON, isDarkEl, luminance, nextAd, playGel, startGlass } from '../glass-ghost.ts';
-
-/** 搭 DOM（A22 不用 innerHTML）：h('li', { id: 'x' }, '文字', h('b')) */
-function h(tag: string, attrs: Record<string, string> = {}, ...kids: (Node | string)[]): HTMLElement {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-  el.append(...kids);
-  return el;
-}
-describe('纯函数', () => {
-  it('luminance：白 1、黑 0；半透明以下当没有背景', () => {
-    expect(luminance('rgb(255, 255, 255)')).toBeCloseTo(1);
-    expect(luminance('rgb(0, 0, 0)')).toBe(0);
-    expect(luminance('rgba(0, 0, 0, 0)')).toBeNull();
-    expect(luminance('rgba(0, 0, 0, 0.3)')).toBeNull();
-    expect(luminance('rgba(20, 21, 24, 0.9)')).toBeLessThan(0.02);
-    expect(luminance('transparent')).toBeNull();
-  });
-
-  it('nextAd：> 55% 变深、< 45% 变浅，中间保持（防抖）', () => {
-    expect(nextAd(AD_ON + 0.01, false)).toBe(true);
-    expect(nextAd(0.5, false)).toBe(false);
-    expect(nextAd(0.5, true)).toBe(true);
-    expect(nextAd(AD_OFF - 0.01, true)).toBe(false);
-  });
-
-  it('isDarkEl：背景色深的算；背景是深色渐变的也算；没背景的不算', () => {
-    const a = document.createElement('div');
-    a.style.backgroundColor = 'rgb(30, 31, 36)';
-    const b = document.createElement('div');
-    b.style.backgroundImage = 'linear-gradient(135deg, rgb(60, 54, 23), rgb(30, 32, 39))';
-    const c = document.createElement('div');
-    document.body.append(a, b, c);
-    expect(isDarkEl(a)).toBe(true);
-    expect(isDarkEl(b)).toBe(true);
-    expect(isDarkEl(c)).toBe(false);
-    a.remove();
-    b.remove();
-    c.remove();
-  });
-});
-
-// IntersectionObserver 替身：observe 记下来，测试里手动宣布“进了底部那一段”
-let ioCb: ((es: { target: Element; isIntersecting: boolean }[]) => void) | null = null;
-const observed = new Set<Element>();
-class FakeIO {
-  constructor(cb: typeof ioCb) {
-    ioCb = cb;
-  }
-  observe(el: Element): void {
-    observed.add(el);
-  }
-  disconnect(): void {
-    observed.clear();
-  }
-}
-const rect = (left: number, top: number, w: number, h: number): DOMRect =>
-  ({ left, top, width: w, height: h, right: left + w, bottom: top + h, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+import { playGel, startGlass } from '../glass-ghost.ts';
 
 let frames: FrameRequestCallback[] = [];
 const runFrames = (n = 3): void => {
@@ -70,29 +13,17 @@ const runFrames = (n = 3): void => {
 
 describe('startGlass', () => {
   let nav: HTMLElement;
-  let main: HTMLElement;
-  let row: HTMLElement;
-  let vaultRow: HTMLElement;
   beforeEach(() => {
-    vi.stubGlobal('IntersectionObserver', FakeIO);
     vi.stubGlobal('requestAnimationFrame', (f: FrameRequestCallback) => {
       frames.push(f);
       return frames.length;
     });
     vi.stubGlobal('cancelAnimationFrame', () => undefined);
     vi.stubGlobal('matchMedia', () => ({ matches: false }));
-    document.body.replaceChildren(
-      h('main', {}, h('ul', {}, h('li', { 'data-ghost': '', id: 'r1', 'data-testid': 'row1' }, '交报告')), h('section', { 'data-private': '' }, h('p', { 'data-ghost': '' }, '密'))),
-      h('nav'),
-      h('aside', { 'data-ghost': '', id: 'outside' }, '页面外面'),
-    );
-    main = document.querySelector('main') as HTMLElement;
-    row = document.getElementById('r1') as HTMLElement;
-    vaultRow = main.querySelector('[data-private] p') as HTMLElement;
-    nav = document.querySelector('nav') as HTMLElement;
-    nav.getBoundingClientRect = () => rect(14, 700, 300, 62);
-    row.getBoundingClientRect = () => rect(16, 690, 340, 50);
-    vaultRow.getBoundingClientRect = () => rect(16, 690, 340, 50);
+    nav = document.createElement('nav');
+    const main = document.createElement('main');
+    main.append('交报告');
+    document.body.replaceChildren(main, nav);
   });
   afterEach(() => {
     vi.restoreAllMocks(); // performance.now 的 spy 每条用例后还原（代码审查 p1 S2）
@@ -102,87 +33,56 @@ describe('startGlass', () => {
     frames = [];
   });
 
-  it('只观察 main 里的 data-ghost；开着时玻璃块写 data-glass="copy"，不往玻璃块里放任何东西（11-06 起不建副本层）；停掉时摘掉', () => {
+  it('开着时玻璃块写 data-glass="copy"，不往玻璃块里放任何东西（11-06 起不建副本层）；停掉时摘掉', () => {
     const drop = document.createElement('span');
     nav.append(drop);
-    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }, { el: drop, fx: 'drop' }], adTarget: nav });
-    expect([...observed]).toEqual(expect.arrayContaining([row, vaultRow]));
-    expect(observed.has(document.getElementById('outside') as HTMLElement)).toBe(false); // main 外面的不看
-    ioCb?.([{ target: row, isIntersecting: true }, { target: vaultRow, isIntersecting: true }]);
+    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }, { el: drop, fx: 'drop' }] });
     runFrames();
     expect(nav.dataset['glass']).toBe('copy');
     expect(drop.dataset['glass']).toBe('copy');
     expect(nav.children.length).toBe(1); // 只有原来的液滴
     expect(drop.children.length).toBe(0);
-    expect(document.querySelectorAll('[data-glass-layer]').length).toBe(0);
     expect(document.body.textContent?.match(/交报告/g)?.length).toBe(1); // 页面内容没被复制
     g.stop();
     expect(nav.dataset['glass']).toBeUndefined();
     expect(drop.dataset['glass']).toBeUndefined();
   });
 
-  it('自动深浅不算隐私记：深色的隐私记行整个盖住底栏也不变深', () => {
-    vaultRow.style.backgroundColor = 'rgb(30, 31, 36)';
-    vaultRow.getBoundingClientRect = () => rect(14, 700, 300, 62);
-    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }], adTarget: nav });
-    ioCb?.([{ target: vaultRow, isIntersecting: true }]);
+  it('自动深浅取消（11-06 底栏后实色）：引擎从不写 data-ad', () => {
+    const dark = document.createElement('section');
+    dark.style.backgroundColor = 'rgb(30, 31, 36)';
+    document.querySelector('main')?.append(dark);
+    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }] });
     runFrames();
-    expect(nav.dataset['ad']).toBeUndefined();
+    expect(nav.hasAttribute('data-ad')).toBe(false);
     g.stop();
   });
 
-  it('自动深浅：深色内容盖住底栏大半时 data-ad="dark"，挪开换回', () => {
-    row.style.backgroundColor = 'rgb(30, 31, 36)';
-    row.getBoundingClientRect = () => rect(14, 700, 300, 62); // 整个盖住
-    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }], adTarget: nav });
-    ioCb?.([{ target: row, isIntersecting: true }]);
-    runFrames();
-    expect(nav.dataset['ad']).toBe('dark');
-    row.getBoundingClientRect = () => rect(14, 700, 300, 20); // 只盖住 1/3
-    g.poke();
-    runFrames();
-    expect(nav.dataset['ad']).toBeUndefined();
-    g.stop();
-  });
-
-  it('减少透明效果（:root[data-rt="1"]）：不写 data-glass、不变深', () => {
+  it('减少透明效果（:root[data-rt="1"]）：不写 data-glass；中途打开、关掉都跟着变', async () => {
     document.documentElement.dataset['rt'] = '1';
-    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }], adTarget: nav });
-    ioCb?.([{ target: row, isIntersecting: true }]);
+    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }] });
     runFrames();
     expect(nav.dataset['glass']).toBeUndefined();
-    expect(nav.dataset['ad']).toBeUndefined();
+    document.documentElement.removeAttribute('data-rt');
+    await Promise.resolve();
+    runFrames();
+    expect(nav.dataset['glass']).toBe('copy');
+    document.documentElement.dataset['rt'] = '1';
+    await Promise.resolve();
+    runFrames();
+    expect(nav.dataset['glass']).toBeUndefined();
     g.stop();
   });
 
-  it('帧循环只在有事时跑：一次 poke 跑完就停（没有一直排着下一帧）', () => {
-    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }], adTarget: nav });
+  it('帧循环只在有事时跑：一次 poke 跑完就停（没有一直排着下一帧）；滚动不再叫醒它', () => {
+    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }] });
     vi.spyOn(performance, 'now').mockReturnValue(1e9);
     runFrames(1);
     expect(frames.length).toBe(0);
+    dispatchEvent(new Event('scroll'));
+    expect(frames.length).toBe(0);
     g.poke();
     expect(frames.length).toBe(1);
-    g.stop();
-  });
-
-  it('页面内容变了：新加的 data-ghost 也观察、帧循环跑一次；玻璃块自己里的变化不算', async () => {
-    const g = startGlass({ pieces: [{ el: nav, fx: 'copy' }], adTarget: nav });
-    vi.spyOn(performance, 'now').mockReturnValue(5e9);
-    runFrames(1);
-    expect(frames.length).toBe(0);
-    const li = document.createElement('li');
-    li.dataset['ghost'] = '';
-    main.querySelector('ul')?.append(li);
-    await Promise.resolve();
-    expect(observed.has(li)).toBe(true);
-    expect(frames.length).toBe(1);
-    vi.spyOn(performance, 'now').mockReturnValue(6e9); // 过了 IDLE_MS，帧循环停下
-    runFrames(1);
-    expect(frames.length).toBe(0);
-    // 玻璃块里加东西（液滴重挂这类）：不算
-    nav.append(document.createElement('span'));
-    await Promise.resolve();
-    expect(frames.length).toBe(0);
     g.stop();
   });
 });

@@ -15,6 +15,7 @@ describe('关于页的诊断信息', () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    document.documentElement.removeAttribute('data-diag');
   });
 
   it('平时不显示；连点 5 下显示，第一行是构建提交号；再连点 5 下收起', async () => {
@@ -43,5 +44,22 @@ describe('关于页的诊断信息', () => {
     for (let k = 0; k < DIAG_TAPS; k++) fireEvent.click(screen.getByTestId('settings-lunar-credit'));
     await act(async () => undefined);
     expect(screen.queryByTestId('settings-about-diag')).toBeNull();
+  });
+
+  it('诊断开着时 <html> 带 data-diag="1"（顶部红、蓝诊断色条靠它显示）；离开设置页还留着，回来时文字也在，连点 5 下关掉才摘', async () => {
+    const root = document.documentElement;
+    const v = render(<AboutSection />);
+    expect(root.hasAttribute('data-diag')).toBe(false);
+    tapVersion(DIAG_TAPS);
+    await screen.findByTestId('settings-about-diag');
+    expect(root.dataset['diag']).toBe('1');
+    v.unmount();
+    expect(root.dataset['diag']).toBe('1');
+    render(<AboutSection />);
+    await screen.findByTestId('settings-about-diag');
+    tapVersion(DIAG_TAPS);
+    await act(async () => undefined);
+    expect(screen.queryByTestId('settings-about-diag')).toBeNull();
+    expect(root.hasAttribute('data-diag')).toBe(false);
   });
 });

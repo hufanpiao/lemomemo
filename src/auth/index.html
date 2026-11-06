@@ -16,9 +16,13 @@
     <title>Lemo</title>
   </head>
   <body>
-    <!-- 顶部渐变模糊带的两层（base.css .lemo-top-8、.lemo-top-2）：真元素、具名 view-transition-name，切页时不跟着整页快照淡掉（动效复审 M5，11-06） -->
-    <div class="lemo-top-8" aria-hidden="true"></div>
-    <div class="lemo-top-2" aria-hidden="true"></div>
+    <!-- 顶部渐变模糊带的两层（base.css .lemo-top-8、.lemo-top-2）：真元素、具名 view-transition-name，切页时不跟着整页快照淡掉（动效复审 M5，11-06）；
+         套在铺满整屏的外框 .lemo-top 里（11-06 真机录屏-顶部带：页面底部回弹拉深时 iOS 把顶部的固定层整层停画，外框一直和可见区相交）。
+         登录页不带诊断色条（.lemo-probe、.lemo-top-probe 只在 src/index.html 里；诊断开关在设置的“关于”里，登录页进不去，代码审查 L24） -->
+    <div class="lemo-top" aria-hidden="true">
+      <div class="lemo-top-8"></div>
+      <div class="lemo-top-2"></div>
+    </div>
     <div id="root"></div>
     <script type="module" src="./main.tsx"></script>
   </body>

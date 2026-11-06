@@ -1,16 +1,16 @@
 // 液态玻璃底栏的“首屏后”部分（B2 FA-7；主持人 11-05 首屏选 ③）：外壳 GlassBar.tsx 首屏画完以后才下载这个文件
-// • 渐进模糊带 3 层（0.25；11-06 起只管底栏上方的渐隐，底栏后面不再加深）；• 按住当前选中的页签放大（D3，data-state=press）
-// • 自动深浅的深色玻璃层 .adTint（L2）：用 portal 放进底栏 nav 最后面（只有副本引擎写 data-ad 时才用得上）
-// • 内容副本、自动深浅、帧循环（motion/glass-ghost.ts）：这个文件挂上以后再 import()（0.31 第 6 条：motion 以外不准静态引它）
+// • 底部实色带（11-06 负责人：底栏后面、下面一律实色 --bg，只在底栏顶边上方 --band-fade 一段渐隐，GlassBarFx.module.css）；• 按住当前选中的页签放大（D3，data-state=press）
+// • 自动深浅（深色玻璃层 .adTint、data-ad）11-06 取消：底栏后面是实色，判断深浅没有意义（主持人 11-06 方案甲）
+// • 玻璃标记、帧循环、倾斜高光（motion/glass-ghost.ts）：这个文件挂上以后再 import()（0.31 第 6 条：motion 以外不准静态引它）
 // • 切页过渡期间的点按（设计复审二 R4）：过渡进行中浏览器把点按都算到 <html> 上（::view-transition 的 pointer-events 不管用），
 //   底栏的页签和“＋”接不到；落在 <html> 上的点按按坐标找底栏里的页签或“＋”，替它点一下，马上开始下一次切页（新的过渡会打断旧的）
 //   页面内容（设计复审三 R6，主持人 11-05 定做法 A，首屏 0 字节）：底栏没接住的，先把过渡放完，再按坐标找真正的目标代点（tapThrough）
+//   R4、R6 都还要（11-06 代码审查方案 B：R6 曾删掉，后恢复）：页签互切不起 View Transition 了，可从编辑页、设置回到页签页时
+//   GlassBar 在过渡回调里重新挂上，这个文件第二次下载是缓存，几毫秒就挂好，0.38 秒的过渡里它是在的，点底栏、点页面内容都靠它（这两项的监听在 useLayoutEffect 里，提交时就挂上）
 // • 电脑版侧栏（D5，(width >= 900px)，外壳传 wide）：侧栏不用内容副本，宽屏时不开副本引擎；设置入口（头像）在外壳里（设计复审三 S1）
 // • 液滴果冻（L1：副本引擎到了用它的 playGel，WAAPI 从当前形变接着放；没到或做不了时给里层重新加 CSS 动画类 .jelly）
-// 外壳只留首屏必须的：页签、“＋”、液滴位置和点下就走（D1）。这个文件下不来（离线）时：没有模糊带、没有果冻和按住放大，材质用后备
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
-import styles from './GlassBar.module.css';
+// 外壳只留首屏必须的：页签、“＋”、液滴位置和点下就走（D1）。这个文件下不来（离线）时：没有实色带、没有果冻和按住放大，材质用后备
+import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import fx from './GlassBarFx.module.css';
 
 /** “＋”：窄屏紧跟在 nav 后面，宽屏（侧栏）在 nav 前面（Pressable 不接 ref） */
@@ -93,24 +93,12 @@ export interface GlassBarFxProps {
 
 export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide }: GlassBarFxProps) {
   const glass = useRef<{ poke(ms?: number): void } | null>(null);
-  // nav 挂上以后才有 portal 的落点（这个组件比外壳晚挂，第一次渲染时 nav 已经在了）
-  const [host] = useState(() => nav.current);
   const gelFx = useRef<((el: HTMLElement) => boolean) | null>(null);
-  useEffect(() => {
+  // 过渡中的点按（R4、R6）在提交时就挂上（useLayoutEffect）：从设置回今天时 GlassBar 在过渡回调里重新挂上，
+  // webkit 过渡中被动 effect（useEffect）要晚约 100 ms 才跑（11-06 e2e 实测：点按 3244 ms、监听 3249 ms 才挂上），这段时间点页面内容会落空
+  useLayoutEffect(() => {
     const n = nav.current;
-    const d = drop.current;
-    if (!n || !d) return undefined;
-    // 按住当前选中的页签才放大（D3）；按哪儿都让副本跟一会儿
-    const down = (e: PointerEvent): void => {
-      if (e.target instanceof Element && e.target.closest('[aria-current]')) d.dataset['state'] = 'press';
-      glass.current?.poke(400);
-    };
-    const up = (): void => {
-      delete d.dataset['state'];
-    };
-    const ends = ['pointerup', 'pointercancel', 'pointerleave'] as const;
-    n.addEventListener('pointerdown', down);
-    for (const t of ends) n.addEventListener(t, up);
+    if (!n) return undefined;
     const doc = n.ownerDocument;
     const root = doc.documentElement;
     // 同一时刻只留一个待发代点（代码审查 p1 M1）：用户自己又按下（capture，先于页面处理）、再次代点、卸载时取消
@@ -136,6 +124,27 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide }: GlassBarFxPr
       pending = tapThrough(doc, e.clientX, e.clientY);
     };
     root.addEventListener('click', lost);
+    return () => {
+      cancelTap();
+      doc.removeEventListener('pointerdown', cancelTap, true);
+      root.removeEventListener('click', lost);
+    };
+  }, [nav]);
+  useEffect(() => {
+    const n = nav.current;
+    const d = drop.current;
+    if (!n || !d) return undefined;
+    // 按住当前选中的页签才放大（D3）；按哪儿都让副本跟一会儿
+    const down = (e: PointerEvent): void => {
+      if (e.target instanceof Element && e.target.closest('[aria-current]')) d.dataset['state'] = 'press';
+      glass.current?.poke(400);
+    };
+    const up = (): void => {
+      delete d.dataset['state'];
+    };
+    const ends = ['pointerup', 'pointercancel', 'pointerleave'] as const;
+    n.addEventListener('pointerdown', down);
+    for (const t of ends) n.addEventListener(t, up);
     let off = wide;
     let stop = (): void => undefined;
     import('../../../motion/glass-ghost.ts')
@@ -145,7 +154,6 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide }: GlassBarFxPr
         const plus = plusOf(n);
         const g = m.startGlass({
           pieces: [{ el: n, fx: 'copy' }, { el: d, fx: 'drop' }, ...(hasAdd && plus ? [{ el: plus, fx: 'copy' as const }] : [])],
-          adTarget: n,
         });
         glass.current = g;
         stop = g.stop;
@@ -156,9 +164,6 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide }: GlassBarFxPr
       glass.current = null;
       stop();
       up();
-      cancelTap();
-      doc.removeEventListener('pointerdown', cancelTap, true);
-      root.removeEventListener('click', lost);
       n.removeEventListener('pointerdown', down);
       for (const t of ends) n.removeEventListener(t, up);
     };
@@ -176,15 +181,5 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide }: GlassBarFxPr
     void el.offsetWidth; // 加回 CSS 动画类前先让样式落一次，动画才从头放
     el.classList.add(css);
   }, [i, gel]);
-  return (
-    <>
-      <div className={fx.band} aria-hidden="true" data-kb={kb} data-testid="tabbar-band">
-        <i />
-        <i />
-        <i />
-        <b />
-      </div>
-      {host && createPortal(<span className={`${styles.glass} ${styles.adTint}`} aria-hidden="true" />, host)}
-    </>
-  );
+  return <div className={fx.band} aria-hidden="true" data-kb={kb} data-testid="tabbar-band" />;
 }

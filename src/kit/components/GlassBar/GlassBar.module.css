@@ -106,7 +106,7 @@
 /* 副本引擎接管（glass-ghost.ts 给玻璃块加 data-glass="copy"）：着色换成更透的 --g-tint，直接模糊背后的真实画面，滤镜 --g-live-fx（3px：11-06 底栏排查第二轮按视觉稿对照定的，6～10px 糊成一片白；理由见令牌说明）。
    11-06 底栏透明度排查（docs/03-评审/B2/B2-底栏透明度-真机差异排查.md）：副本层底色是不透明的 --bg、只复制带 data-ghost 的元素，
    图例、标题、空状态这些没标 data-ghost 的内容到了底栏后面就整块看不见，玻璃像实心的（负责人真机“把字移到下面也不透明”）。
-   所以改用 backdrop-filter（写在 .bar、.fab 上，见文件头）；11-06 起引擎也不再建副本（GLASS-copy-unused），只管 data-glass、自动深浅（data-ad）和倾斜高光 */
+   所以改用 backdrop-filter（写在 .bar、.fab 上，见文件头）；11-06 起引擎也不再建副本（GLASS-copy-unused），只管 data-glass 和倾斜高光；页面上的 data-ghost 标记也随之删掉 */
 .bar[data-glass='copy'],
 .fab[data-glass='copy'] {
   backdrop-filter: var(--g-live-fx);
@@ -116,30 +116,7 @@
   background: var(--g-tint);
 }
 
-/* 自动深浅：底栏背后大多是深色内容时换成深色玻璃（glass-ghost.ts 写 data-ad="dark"，令牌 --g-ad-*）。
-   不过渡背景色（设计动效评审 L2）：深色玻璃单独一层 .adTint，和浅色那层交叉淡入淡出 opacity；模糊在 .bar 自己身上，两层都只管着色 */
-.adTint {
-  background: var(--g-ad-tint);
-  opacity: 0;
-}
-
-.bar[data-ad='dark'] .barTint {
-  opacity: 0;
-}
-
-.bar[data-ad='dark'] .adTint {
-  opacity: 1;
-}
-
-.bar[data-ad='dark'] {
-  --g-hi: var(--g-ad-hi);
-  --g-hi2: var(--g-ad-hi2);
-  --g-sheen: var(--g-ad-sheen);
-  --g-glow-c: var(--g-ad-glow-c);
-  --g-fg: var(--g-ad-fg);
-  --g-pill: var(--g-ad-pill);
-  --g-halo: var(--g-ad-tint);
-}
+/* 自动深浅（data-ad="dark"、深色玻璃层 .adTint、令牌 --g-ad-*）11-06 取消：负责人要求底栏后面一律实色 --bg（GlassBarFx.module.css 的实色带），主持人 11-06 定方案甲 */
 
 .tab {
   position: relative;
@@ -283,6 +260,9 @@
 .bar[data-kb='1'],
 .fab[data-kb='1'] {
   visibility: hidden;
+
+  /* 藏着时不进切页快照：快照上补的圆角阴影（base.css）会画在空快照上，剩一个空阴影壳（代码审查 M5） */
+  view-transition-name: none;
 }
 
 /* 电脑版侧栏（设计动效评审 D5，主持人 11-05 定：断点 (width >= 900px)、不放 ⋯、方案 A 只用 CSS 复用底栏的 DOM）：
@@ -410,51 +390,4 @@
     background: var(--glass-solid);
     backdrop-filter: none;
   }
-}
-
-/* 切页过渡期间换成不透明的近似底色（负责人 11-06 iPhone 主屏幕版 70d94f5“切页过渡残影”）：
-   iOS 把带 backdrop-filter 的底栏、“＋”截进过渡快照时，模糊区按直角矩形截，圆角外露出灰色方块；
-   新那份底栏半透明，旧那份里的液滴透出来和滑动中的液滴叠成一团。过渡期间不模糊、盖一层实色，新的那份实色盖住旧的。
-   “过渡期间”认两种：:active-view-transition（iOS 18.2 起），和 motion/index.ts 在 startViewTransition 之前给 <html> 加的 data-vt
-   （iOS 18.0～18.1 有过渡但不认这个伪类，代码审查 S4、动效审查 S2）；:is() 是宽容列表，不认的那一项只被忽略，整条规则照样生效。
-   实色是单独一层遮罩 ::after（动效审查 M2）：在着色层上面、液滴和页签下面；过渡中 opacity 1 且不过渡（旧快照在 startViewTransition 之后才截，
-   截到的就是实色），平时 opacity 0、带 --dur-glass 淡出，过渡结束时不会一帧硬跳回玻璃（模糊在遮罩下面一帧恢复，被盖住看不出来）。
-   遮罩颜色：浅色玻璃 --glass-solid；深色玻璃（data-ad=dark）--g-ad-solid，不然是浅底配浅字（代码审查 M3）；
-   电脑版侧栏底色在 .bar 自己身上（--b-rail 半透明），遮罩照样盖住（代码审查 S5）；“＋”用 --fab-bg */
-.bar::after,
-.fab::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
-  background: var(--glass-solid);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--dur-glass) var(--ease-out);
-}
-
-.bar[data-ad='dark']::after {
-  background: var(--g-ad-solid);
-}
-
-.fab::after {
-  background: var(--fab-bg);
-}
-
-/* 遮罩画在“＋”的图标、侧栏头像下面（它们是 position: relative、z-index auto，不写会被后画的 ::after 盖住） */
-.fab svg,
-.me {
-  z-index: 1;
-}
-
-:global(:root:is([data-vt], :active-view-transition)) .bar,
-:global(:root:is([data-vt], :active-view-transition)) .fab {
-  backdrop-filter: none;
-}
-
-:global(:root:is([data-vt], :active-view-transition)) .bar::after,
-:global(:root:is([data-vt], :active-view-transition)) .fab::after {
-  opacity: 1;
-  transition: none;
 }

@@ -24,7 +24,7 @@ export function NowCard({ card, now, tz, today, tomorrowFirst }: { card: Card; n
 
   if (card.state === 'done' || card.state === 'empty') {
     return (
-      <section className={styles.card} data-ghost="" data-testid="now-card" data-state={card.state}>
+      <section className={styles.card} data-testid="now-card" data-state={card.state}>
         <p className={styles.quiet}>{t(card.state === 'done' ? 'now.done' : 'now.empty', {})}</p>
         {card.state === 'done' && tomorrowFirst?.time ? (
           <p className={styles.sub}>{t('now.doneNext', { t: tomorrowFirst.time, title: tomorrowFirst.title })}</p>
@@ -59,7 +59,7 @@ export function NowCard({ card, now, tz, today, tomorrowFirst }: { card: Card; n
   };
 
   return (
-    <section className={styles.card} data-ghost="" data-testid="now-card" data-state={card.state}>
+    <section className={styles.card} data-testid="now-card" data-state={card.state}>
       <p className={styles.head}>
         <span className={live ? styles.labelLive : styles.labelIdle}>
           {live ? (card.cur.length > 1 ? t('now.live2', { n: card.cur.length }) : t('now.live', {})) : t('now.idle', {})}

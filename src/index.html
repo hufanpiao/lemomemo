@@ -37,9 +37,15 @@
     <title>Lemo</title>
   </head>
   <body>
-    <!-- 顶部渐变模糊带的两层（base.css .lemo-top-8、.lemo-top-2）：真元素、具名 view-transition-name，切页时不跟着整页快照淡掉（动效复审 M5，11-06） -->
-    <div class="lemo-top-8" aria-hidden="true"></div>
-    <div class="lemo-top-2" aria-hidden="true"></div>
+    <!-- 顶部渐变模糊带的两层（base.css .lemo-top-8、.lemo-top-2）：真元素、具名 view-transition-name，切页时不跟着整页快照淡掉（动效复审 M5，11-06）；
+         套在铺满整屏的外框 .lemo-top 里（11-06 真机录屏-顶部带：页面底部回弹拉深时 iOS 把顶部的固定层整层停画，外框一直和可见区相交） -->
+    <div class="lemo-top" aria-hidden="true">
+      <div class="lemo-top-8"></div>
+      <div class="lemo-top-2"></div>
+      <div class="lemo-top-probe"></div>
+    </div>
+    <!-- 诊断用的红色小条（设置 › 关于“版本”连点 5 下打开诊断时才显示，base.css .lemo-probe）：不在外框里、直接 fixed，真机上看回弹时它会不会一起消失 -->
+    <div class="lemo-probe" aria-hidden="true"></div>
     <div id="root"></div>
     <!-- 启动画面：跟着网页第一次绘制出来，第一帧和 iOS 启动图一致；App 准备好后由 src/platform/splash.ts 的 hideSplash() 淡出并移除 -->
     <div id="lemo-splash" class="lemo-splash" aria-hidden="true">

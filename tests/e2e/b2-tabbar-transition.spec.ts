@@ -1,176 +1,171 @@
-// 液态玻璃底栏在切页过渡进行中的样子和点按（B2 FA-7 设计复审一 R1、复审二 R4、R5）；别的底栏用例见 b2-tabbar.spec.ts。
-// 两条都用“把 ::view-transition 的伪元素动画暂停在中途”的办法，让过渡停住再截图、再按坐标点
+// 液态玻璃底栏在切页时的样子和点按（B2 FA-7；负责人 11-06 选方案 B，B2-动效审查-切页先出后入.md 第四批）；别的底栏用例见 b2-tabbar.spec.ts。
+// • 四个页签之间互切不起 View Transition：新页直接换上，main 做一次 opacity 0→1；底栏、“＋”、液滴一直是真元素、一直实时模糊，液滴连续滑、能被下一次点按打断
+// • 进出没有底栏的页（今天 → 编辑页）照旧 View Transition：圆角和阴影画在快照自己身上，组上没有阴影，只有一边有底栏时不剩空阴影壳（代码审查 M5）
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 
-const bar = (page: Page) => page.getByTestId('tabbar');
-const tab = (page: Page, name: string) => bar(page).locator(`a[data-tab="${name}"]`);
 
-test.describe('底栏：切页过渡进行中（FA-7）', () => {
+/** 点页签以后每一帧记一次：有没有 View Transition、页面上几个 main、main 的不透明度、液滴横向位置、底栏和“＋”的 backdrop-filter 计算值 */
+const sampleAfterClick = (page: Page, name: string, ms: number) =>
+  page.evaluate(
+    async ({ name, ms }) => {
+      const nav = document.querySelector<HTMLElement>('[data-testid="tabbar"]');
+      const drop = nav?.querySelector<HTMLElement>('[class*="_drop_"]');
+      const add = document.querySelector<HTMLElement>('[data-testid="tabbar-add"]');
+      const rows: { t: number; vt: number; mains: number; op: number; x: number; fx: string; addFx: string; dataVt: boolean }[] = [];
+      const take = (t0: number): void => {
+        const main = document.querySelector('main');
+        rows.push({
+          t: performance.now() - t0,
+          vt: document.getAnimations().filter((x) => String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition')).length,
+          mains: document.querySelectorAll('main').length,
+          op: main ? Number(getComputedStyle(main).opacity) : -1,
+          x: drop ? drop.getBoundingClientRect().x : NaN,
+          fx: nav ? getComputedStyle(nav).backdropFilter : '',
+          addFx: add ? getComputedStyle(add).backdropFilter : 'none-add',
+          dataVt: document.documentElement.hasAttribute('data-vt'),
+        });
+      };
+      const t0 = performance.now();
+      take(t0);
+      nav?.querySelector<HTMLElement>(`a[data-tab="${name}"]`)?.click();
+      while (performance.now() - t0 < ms) {
+        await new Promise((r) => requestAnimationFrame(r));
+        take(t0);
+      }
+      return rows;
+    },
+    { name, ms },
+  );
+
+test.describe('底栏：页签互切（FA-7，方案 B）', () => {
   // 手机宽度的底栏：chromium 项目默认 1280 宽，那里是电脑版侧栏（D5，见 b2-sidebar.spec.ts）
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 } });
 
-  // 设计复审一 R1：webkit 切页的过渡期间画面上没有底栏和“＋”（DOM 一直在、看得见，是过渡层没画新的那一份），上面那条查 DOM 查不出来。
-  // 这里比像素，底栏和“＋”两块分开比：点之前截一张；点页签以后把整页过渡的动画（::view-transition-* 的伪元素动画）暂停住，等液滴滑完再截一张；
-  // 过渡放完、停稳以后截一张“画着”的，再把底栏和“＋”临时藏起来（CSSOM 写 visibility）截一张“没画”的。
-  // 只看“画着”和“没画”明显不同的像素（图标、字、液滴、边、阴影；玻璃和底色太接近的不算），中途那张这些像素里
-  // 更像“没画”的超过 10% 就算没画出来（设计复审二 R5：原来整块一起数、门槛 5%，只缺底栏时默认皮肤才差 3.7%，抓不住）
-  test('切页过渡进行中，画面上有底栏和“＋”（比像素；设计复审一 R1）', async ({ page, context, csp }) => {
-    // webkit 的 page.screenshot 自己会往页面插一段 <style>（CSP 报 style-src-elem inline、没有来源文件）：只放过截图那一刻冒出来的这一种，
-    // 别的违规（和截图以外时刻的同种违规）照样判失败
-    test.setTimeout(90_000); // 三次切页、每次三张截图加解码，webkit 4 并发时 30 秒不够
-    csp.expectViolations();
-    let excused = 0;
-    const shot = async (clip: { x: number; y: number; width: number; height: number }): Promise<Buffer> => {
-      const n0 = (await csp.allViolations()).length;
-      const png = await page.screenshot({ clip, animations: 'allow', caret: 'initial' });
-      await page.waitForTimeout(50);
-      const fresh = (await csp.allViolations()).slice(n0);
-      excused += fresh.filter((v) => v.directive === 'style-src-elem' && v.blocked === 'inline' && !v.source).length;
-      return png;
-    };
+  test('页签互切不起 View Transition；新页淡入、两页不同时在屏上；底栏一直实时模糊；液滴连续滑', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
-    await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 }); // 首屏后部分到了，之后底栏不再变样
-    const fab = page.getByTestId('tabbar-add');
-    const decoder = await context.newPage(); // 空白页解码 PNG（被测页面有 CSP）
-    const pixels = async (png: Buffer): Promise<number[]> =>
-      decoder.evaluate(async (b64) => {
-        const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
-        const c = document.createElement('canvas');
-        c.width = bmp.width;
-        c.height = bmp.height;
-        const g = c.getContext('2d') as CanvasRenderingContext2D;
-        g.drawImage(bmp, 0, 0);
-        return Array.from(g.getImageData(0, 0, bmp.width, bmp.height).data);
-      }, png.toString('base64'));
-    const dist = (x: number[], y: number[], k: number): number =>
-      Math.max(Math.abs((x[k] ?? 0) - (y[k] ?? 0)), Math.abs((x[k + 1] ?? 0) - (y[k + 1] ?? 0)), Math.abs((x[k + 2] ?? 0) - (y[k + 2] ?? 0)));
-    const setShown = (on: boolean) =>
-      page.evaluate((v) => {
-        for (const el of document.querySelectorAll<HTMLElement>('[data-testid="tabbar"],[data-testid="tabbar-add"]')) {
-          if (v) el.style.removeProperty('visibility');
-          else el.style.setProperty('visibility', 'hidden');
-        }
-      }, on);
-    // 过渡期间底栏和“＋”盖实色遮罩、不模糊（GlassBar.module.css，负责人 11-06 70d94f5 残影）：停稳以后截“画着”“没画”两张参照时，
-    // 给 <html> 打同一个 data-vt（motion/index.ts 过渡期间也打它），走的是同一条 CSS，比的仍是“画没画出来”，不是材质差别
-    const solid = (on: boolean) =>
-      page.evaluate((v) => {
-        if (v) document.documentElement.setAttribute('data-vt', '');
-        else document.documentElement.removeAttribute('data-vt');
-      }, on);
-    const boxOf = async (l: ReturnType<typeof bar>) => {
-      const r = await l.boundingBox();
-      expect(r).not.toBeNull();
-      return { x: Math.floor(r?.x ?? 0), y: Math.floor(r?.y ?? 0), width: Math.ceil(r?.width ?? 1), height: Math.ceil(r?.height ?? 1) };
-    };
-    for (const name of ['todos', 'calendar', 'today'] as const) {
-      const clips = { 底栏: await boxOf(bar(page)), '“＋”': await boxOf(fab) };
-      const before: Record<string, Buffer> = {};
-      const mid: Record<string, Buffer> = {};
-      const end: Record<string, Buffer> = {};
-      const gone: Record<string, Buffer> = {};
-      for (const [k, c] of Object.entries(clips)) before[k] = await shot(c);
-      await tab(page, name).click();
-      // 等过渡的伪元素动画出来，全部暂停（过渡就停在中途不结束）
-      const paused = await page
-        .waitForFunction(
-          () => {
-            const vt = document.getAnimations().filter((x) => String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition'));
-            for (const x of vt) x.pause();
-            return vt.length;
-          },
-          undefined,
-          { timeout: 2000, polling: 4 },
-        )
-        .then((h) => h.jsonValue());
-      expect(paused, `${name}：没等到切页过渡`).toBeGreaterThan(0);
-      await page.waitForTimeout(700); // 液滴滑完（--dur-drop 0.55s），过渡仍停着
-      // 代码审查 S6：过渡中确实是实色——底栏、“＋”不模糊，遮罩（::after）不透明；CSS 写错或被丢掉，这里就挂
-      const mat = await page.evaluate(() =>
-        ['[data-testid="tabbar"]', '[data-testid="tabbar-add"]'].map((sel) => {
-          const el = document.querySelector(sel) as Element;
-          const cs = getComputedStyle(el);
-          return { bf: cs.backdropFilter || cs.getPropertyValue('-webkit-backdrop-filter'), mask: getComputedStyle(el, '::after').opacity };
-        }),
-      );
-      expect(mat, `${name}：过渡中底栏和“＋”是实色`).toEqual([
-        { bf: 'none', mask: '1' },
-        { bf: 'none', mask: '1' },
-      ]);
-      for (const [k, c] of Object.entries(clips)) mid[k] = await shot(c);
-      const still = await page.evaluate(() => document.getAnimations().filter((x) => x.playState === 'paused').length);
-      expect(still, `${name}：截图时过渡还停在中途`).toBeGreaterThan(0);
-      await page.evaluate(() => {
-        for (const x of document.getAnimations()) if (String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition')) x.finish();
-      });
-      await expect(page).toHaveURL(new RegExp(`#/${name}$`));
-      await page.waitForTimeout(700);
-      await solid(true);
-      for (const [k, c] of Object.entries(clips)) end[k] = await shot(c);
-      await setShown(false);
-      for (const [k, c] of Object.entries(clips)) gone[k] = await shot(c);
-      await setShown(true);
-      await solid(false);
-      await page.waitForTimeout(400); // 遮罩平时带 --dur-glass（0.3s）淡出，等淡完再截下一轮的“点之前”
-      for (const k of Object.keys(clips)) {
-        const [o, p, q, z] = [await pixels(before[k] as Buffer), await pixels(mid[k] as Buffer), await pixels(end[k] as Buffer), await pixels(gone[k] as Buffer)];
-        let telling = 0;
-        let missing = 0;
-        for (let j = 0; j < p.length; j += 4) {
-          if (dist(q, z, j) <= 32) continue; // 画着、没画看不出差别的像素不算
-          telling += 1;
-          if (dist(p, z, j) < Math.min(dist(p, o, j), dist(p, q, j))) missing += 1;
-        }
-        expect(telling, `${name} ${k}：能分辨画没画的像素太少`).toBeGreaterThan(200);
-        const ratio = missing / telling;
-        if (ratio >= 0.1) await test.info().attach(`${name}-${k}-过渡中`, { body: mid[k] as Buffer, contentType: 'image/png' });
-        expect(ratio, `${name}：过渡中${k}那块，能分辨的像素里 ${(ratio * 100).toFixed(1)}% 更像“没画”`).toBeLessThan(0.1);
-      }
+    await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 }); // 首屏后部分到了（实时模糊接管）
+    await page.waitForTimeout(400);
+    for (const [name, testid] of [['todos', 'todos'], ['calendar', 'cal'], ['today', 'today']] as const) {
+      const rows = await sampleAfterClick(page, name, 700);
+      await expect(page.locator(testid === 'cal' ? 'main[data-feature="calendar"]' : `[data-testid="${testid}"]`)).toBeVisible();
+      expect(rows.every((r) => r.vt === 0 && !r.dataVt), `${name}：起了 View Transition`).toBe(true);
+      expect(rows.every((r) => r.mains <= 1), `${name}：两页同时在屏上`).toBe(true);
+      // 底栏和“＋”一直带 backdrop-filter（不进快照，实时模糊）；随手记没有“＋”
+      expect(rows.every((r) => r.fx.includes('blur(')), `${name}：底栏某一帧没有 backdrop-filter ${JSON.stringify(rows.map((r) => r.fx))}`).toBe(true);
+      expect(rows.every((r) => r.addFx === 'none-add' || r.addFx.includes('blur(')), `${name}：“＋”某一帧没有 backdrop-filter`).toBe(true);
+      // 新页淡入：点完以后有一段 main 在 0～1 之间，最后是 1
+      const after = rows.slice(1).filter((r) => r.op >= 0);
+      expect(after.some((r) => r.op > 0 && r.op < 0.95), `${name}：新页没有淡入 ${JSON.stringify(after.map((r) => r.op))}`).toBe(true);
+      expect(after.at(-1)?.op).toBe(1);
+      // 没有空白帧：淡入跳过 opacity 0 的第一帧（motion FADE_SKIP_MS），点完以后每一帧新页都看得见
+      expect(after.every((r) => r.op > 0.1), `${name}：有整页透明的一帧 ${JSON.stringify(after.map((r) => r.op))}`).toBe(true);
+      // 液滴连续滑：中途至少 5 个不同的位置，每帧走的不超过总路程的一半（没有瞬移）；--ease-drop 带一点回弹，
+      // 允许冲过终点再回来，但不超过总路程的 15%，也不先往反方向走
+      const xs = rows.map((r) => Math.round(r.x * 10) / 10);
+      const [x0, x1] = [xs[0] ?? 0, xs.at(-1) ?? 0];
+      const total = Math.abs(x1 - x0);
+      expect(total, `${name}：液滴没动`).toBeGreaterThan(40);
+      const lo = Math.min(x0, x1) - total * 0.15;
+      const hi = Math.max(x0, x1) + total * 0.15;
+      expect(xs.every((x) => x >= lo && x <= hi), `${name}：液滴跑出了起点到终点之间 ${JSON.stringify(xs)}`).toBe(true);
+      expect(Math.sign((xs[2] ?? x0) - x0) === Math.sign(x1 - x0), `${name}：液滴先往反方向走 ${JSON.stringify(xs)}`).toBe(true);
+      // 按每帧实际时长折算成 60Hz 一帧走多少（并发跑时 webkit 会丢帧，一次隔 50 ms，不算瞬移）
+      const steps = xs.slice(1).map((x, k) => ((x - (xs[k] ?? 0)) * 16.7) / Math.max(16.7, (rows[k + 1]?.t ?? 0) - (rows[k]?.t ?? 0)));
+      expect(Math.max(...steps.map(Math.abs)), `${name}：液滴一帧跳了太远 ${JSON.stringify(xs)}`).toBeLessThan(total / 2);
+      expect(new Set(xs).size, `${name}：液滴中途位置太少 ${JSON.stringify(xs)}`).toBeGreaterThanOrEqual(5);
     }
-    await decoder.close();
-    const all = await csp.allViolations();
-    expect(all.length - excused, `截图以外的 CSP 违规：${JSON.stringify(all)}`).toBe(0);
-    expect(await csp.violations().then((v) => v.filter((x) => !(x.directive === 'style-src-elem' && x.blocked === 'inline' && !x.source)))).toEqual([]);
   });
 
-  // 设计复审二 R4：上面那条用 locator.click，Playwright 会等过渡结束、元素稳定了才点，测不出“过渡中点按被吞”。
-  // 这里点日历以后等到切页过渡真的在跑（::view-transition 的伪元素动画出来），把它暂停在中途，再用 page.mouse 按坐标点“待办”：
-  // 点按要落到底栏的“待办”上，马上切过去（打断还没放完的过渡）
-  test('切页过渡进行中按坐标点页签：点按落在页签上，马上切过去（设计复审二 R4）', async ({ page }) => {
+  test('滑到一半点下一个页签：液滴从当前位置接着滑（被打断，不跳）；上一次的淡入取消，新页照样淡入', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
-    for (const [first, then] of [['calendar', 'todos'], ['today', 'calendar']] as const) {
-      const box = await tab(page, then).boundingBox();
-      expect(box).not.toBeNull();
-      await page.evaluate(() => {
-        const w = window as unknown as { __hit: string[] };
-        w.__hit = [];
-        document.addEventListener('click', (e) => w.__hit.push(e.target instanceof Element ? (e.target.closest('a[data-tab]')?.getAttribute('data-tab') ?? e.target.tagName) : '?'), { capture: true });
-      });
-      await tab(page, first).click();
-      const n = await page
-        .waitForFunction(
-          () => {
-            const vt = document.getAnimations().filter((x) => String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition'));
-            for (const x of vt) x.pause();
-            return vt.length;
-          },
-          undefined,
-          { timeout: 2000, polling: 4 },
-        )
-        .then((h) => h.jsonValue());
-      expect(n, `${first}：没等到切页过渡`).toBeGreaterThan(0);
-      await page.mouse.click((box?.x ?? 0) + (box?.width ?? 0) / 2, (box?.y ?? 0) + (box?.height ?? 0) / 2);
-      const hit = await page.evaluate(() => (window as unknown as { __hit: string[] }).__hit);
-      expect(hit.at(-1), `${first} 过渡中点 ${then}：点按落在了 ${hit.join('、')}`).toBe(then);
-      await expect(page).toHaveURL(new RegExp(`#/${then}$`), { timeout: 3000 });
-      await page.evaluate(() => {
-        for (const x of document.getAnimations()) if (String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition')) x.finish();
-      });
-      await expect(tab(page, then)).toHaveAttribute('aria-current', 'page');
-    }
+    await page.waitForTimeout(400);
+    const first = await sampleAfterClick(page, 'notes', 120);
+    const second = await sampleAfterClick(page, 'calendar', 700);
+    await expect(page.locator('main[data-feature="calendar"]')).toBeVisible();
+    const mid = first.at(-1)?.x ?? 0;
+    const start = first[0]?.x ?? 0;
+    expect(mid - start, '第一次还没滑到就停了').toBeGreaterThan(5);
+    // 第二次从打断那一刻的位置接着走：每一帧（按实际帧时长折算成 60Hz）都不超过 25pt，没有先跳回起点或跳到终点
+    // （打断后头一两帧液滴还带着往随手记去的速度，再掉头，是 CSS 过渡从当前值重新起步，正常）
+    const jump = Math.max(...second.slice(1).map((r, k) => (Math.abs(r.x - (second[k]?.x ?? 0)) * 16.7) / Math.max(16.7, r.t - (second[k]?.t ?? 0))));
+    expect(jump, `打断时液滴跳了 ${JSON.stringify(second.slice(0, 6).map((r) => [Math.round(r.t), Math.round(r.x)]))}`).toBeLessThan(25);
+    expect(second.every((r) => r.vt === 0)).toBe(true);
+    expect(second.at(-1)?.op).toBe(1);
+    expect(await page.evaluate(() => document.querySelector('main')?.getAnimations().length ?? -1)).toBe(0);
+  });
+
+  test('减少动态效果：页签互切直接换页，main 不做动画', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible();
+    await expect(page.getByTestId('tabbar')).toBeVisible(); // 底栏在页面画出来以后才挂，没挂上时点不到
+    const rows = await sampleAfterClick(page, 'todos', 200);
+    await expect(page.getByTestId('todos')).toBeVisible();
+    expect(rows.every((r) => r.vt === 0)).toBe(true);
+    expect(rows.slice(1).filter((r) => r.op >= 0).every((r) => r.op === 1), JSON.stringify(rows.map((r) => r.op))).toBe(true);
+  });
+});
+
+test.describe('底栏：进出没有底栏的页照旧 View Transition（代码审查 M5）', () => {
+  test.use({ loggedIn: true, viewport: { width: 375, height: 812 } });
+
+  /** 等切页过渡出来、停在中途，读底栏几个伪元素的计算样式 */
+  const holdAndRead = (page: Page) =>
+    page
+      .waitForFunction(
+        () => {
+          const vt = document.getAnimations().filter((x) => String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition'));
+          for (const x of vt) {
+            x.pause();
+            x.currentTime = 120;
+          }
+          if (vt.length === 0) return null;
+          const cs = (p: string) => getComputedStyle(document.documentElement, p);
+          const pick = (p: string) => ({ shadow: cs(p).boxShadow, radius: cs(p).borderRadius, overflow: cs(p).overflow, opacity: cs(p).opacity });
+          return { group: pick('::view-transition-group(tabbar)'), old: pick('::view-transition-old(tabbar)'), addGroup: pick('::view-transition-group(tabbar-add)'), addOld: pick('::view-transition-old(tabbar-add)') };
+        },
+        undefined,
+        { timeout: 2000, polling: 4 },
+      )
+      .then((h) => h.jsonValue());
+  const finishAll = (page: Page) =>
+    page.evaluate(() => {
+      for (const x of document.getAnimations()) if (String((x.effect as KeyframeEffect | null)?.pseudoElement ?? '').startsWith('::view-transition')) x.finish();
+    });
+
+  test('今天 → 新建日程（只有旧的一边有底栏）：组上没有阴影，旧快照自己裁圆角、补阴影', async ({ page }) => {
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible();
+    await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
+    await page.getByTestId('tabbar-add').click({ noWaitAfter: true });
+    const s = await holdAndRead(page);
+    expect(s, '没等到切页过渡').not.toBeNull();
+    expect(s?.group.shadow, '组上有阴影（只有一边有底栏时会剩空壳）').toBe('none');
+    expect(s?.addGroup.shadow).toBe('none');
+    expect(s?.old.shadow).not.toBe('none');
+    expect(s?.old.overflow).toBe('clip');
+    expect(s?.old.radius).not.toBe('0px');
+    expect(s?.addOld.radius).toBe('50%');
+    await finishAll(page);
+    await expect(page).toHaveURL(/#\/event\/new$/);
+  });
+
+  test('键盘弹着（data-kb）时底栏不进快照：没有 view-transition-name，不会画出空阴影壳', async ({ page }) => {
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible();
+    await expect(page.getByTestId('tabbar-add')).toBeVisible();
+    const names = await page.evaluate(() => {
+      const els = [...document.querySelectorAll<HTMLElement>('[data-testid="tabbar"],[data-testid="tabbar-add"]')];
+      for (const el of els) el.setAttribute('data-kb', '1');
+      const v = els.map((el) => getComputedStyle(el).viewTransitionName);
+      for (const el of els) el.removeAttribute('data-kb');
+      return { hidden: v, shown: els.map((el) => getComputedStyle(el).viewTransitionName) };
+    });
+    expect(names.hidden).toEqual(['none', 'none']);
+    expect(names.shown).toEqual(['tabbar', 'tabbar-add']);
   });
 });
