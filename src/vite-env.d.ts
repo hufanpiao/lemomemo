@@ -28,3 +28,5 @@ declare module '*.css';
 declare const __APP_VERSION__: string;
 /** 构建时刻（ISO 字符串），只用于显示和日志 */
 declare const __BUILD_TIME__: string;
+/** 构建用的提交号前 7 位（vite.config.ts 的 buildCommit；别的打包方式可能没定义，读的时候先 typeof） */
+declare const __BUILD_COMMIT__: string | undefined;

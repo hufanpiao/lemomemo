@@ -10,15 +10,15 @@ export const zh = {
   'settings.lang.ko': '한국어',
   'settings.lang.note': '提醒和邮件也会改用这种语言。', // SETTINGS-merge-cards M1 缩短稿，R-106 审校 9 分通过（11-05，B2-文案审校-语言说明）
   'settings.lang.syncFailed': '已在这台设备上换好；同步到账号没成功，联网后再换一次即可',
-  'settings.card.main': '常用', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
-  'settings.card.more': '更多', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
-  'settings.account.devicesN': '{n} 台设备', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
-  'settings.account.devicesList': '{n} 台设备：{names}', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）；首页账号一行的值，放在邮箱下面一行，太长时换行、不省略（stacked）
+  'settings.card.main': '常用', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）
+  'settings.card.more': '更多', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）
+  'settings.account.devicesN': '{n} 台设备', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）
+  'settings.account.devicesList': '{n} 台设备：{names}', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）；首页账号一行的值，放在邮箱下面一行，太长时换行、不省略（stacked）
   'settings.account.nameSep': '、', // SETTINGS-merge-cards：设备名之间的分隔
-  'settings.account.devicesFailed': '设备列表读不出来', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
-  'settings.data.busyShort': '正在导出…', // SETTINGS-merge-cards：首页数据一行导出中只写这一句、不写 MB（负责人 11-05 ②），待 R-106 审
-  'settings.data.pausedShort': '导出中断了', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
-  'settings.sub.failed': '这一页没加载出来', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
+  'settings.account.devicesFailed': '设备列表读不出来', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）
+  'settings.data.busyShort': '正在导出…', // SETTINGS-merge-cards：首页数据一行导出中只写这一句、不写 MB（负责人 11-05 ②），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
+  'settings.data.pausedShort': '导出中断了', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）
+  'settings.sub.failed': '这一页没加载出来', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）
 
   'settings.devices.title': '已登录设备',
   'settings.devices.loading': '正在读取设备…',
@@ -159,7 +159,7 @@ export const zh = {
   'settings.hotkey.err.failed': '没改成，请稍后再试。',
   // 设置 › 关于：农历和节气数据出处（R-299、R-306、R-309：按香港天文台网站条款注明；B2 BE-5 只加键，界面由前端 A 接）
   'settings.about.title': '关于',
-  'settings.about.version': '版本', // 设置 › 关于 卡片里“版本 4.0.0”（设计评审 M-1，11-06），待 R-106 审
+  'settings.about.version': '版本', // 设置 › 关于 卡片里“版本 4.0.0”（设计评审 M-1，11-06），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
   'settings.about.lunarCredit': '农历及节气数据：香港天文台',
   // 设置 › 皮肤（TILT-b2 做法 ②：倾斜高光开关，存本机、默认关；iOS 每次打开 App 后第一次点底栏再问方向权限）
   'settings.skin.title': '皮肤',

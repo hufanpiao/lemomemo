@@ -123,6 +123,20 @@
   text-wrap: pretty;
 }
 
+/* 关于页的诊断信息（11-06，连点“版本”5 下）：纯文字、等宽、长行折开，可以长按选中拷给我们 */
+.diag {
+  margin: 12px 4px 0;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--f-mono);
+  font-size: var(--fs-12-5);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
 /* 各组的外层（负责人 10-30 14:55：注销卡片和“界面语言”卡片紧贴）：组和组之间一律 gap 16px，不靠外边距合并。
    上内边距 8px + 顶部 .top 的下边距 8px = “设置”标题到第一组 16px（和以前一样） */
 .groups {

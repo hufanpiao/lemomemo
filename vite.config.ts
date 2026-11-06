@@ -1,5 +1,6 @@
 // Vite：App 主体、登录页 /app/auth/（15.6 第 4b 条，K4）和预览沙箱三个页面入口（SW 单独打包，见 vite.sw.config.ts）（架构 8.1）
 // base '/app/'，输出到 dist/web/app/（LEMO_WEB_OUT 可改输出目录，见 build/assemble_web.mjs 的 webOutDir）；没有内联脚本和样式，modulepreload polyfill 关掉
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
@@ -14,6 +15,19 @@ const root = import.meta.dirname;
 export const ZOD_JITLESS_ALIAS = { find: /^zod$/, replacement: resolve(root, 'src/platform/zod-jitless.ts') };
 // LEMO_BUILD_VERSION（deploy-preview 给的 X.Y.Z-preview.N）优先，否则 VERSION 文件；和 app/version.json 同一个来源
 export const APP_VERSION: string = buildVersion(root);
+/**
+ * 构建用的提交号（前 7 位；11-06 设置 › 关于的诊断信息要看主屏幕版到底跑的是哪一版）：CI 给的 GITHUB_SHA、Cloudflare Pages 给的 CF_PAGES_COMMIT_SHA 优先，
+ * 本机取 git rev-parse；都拿不到写 unknown。只是显示用，不参与任何判断
+ */
+function buildCommit(): string {
+  const e = process.env['GITHUB_SHA'] ?? process.env['CF_PAGES_COMMIT_SHA'];
+  if (e) return e.slice(0, 7);
+  try {
+    return execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
 
 export default defineConfig(({ mode }) => {
   if (mode === 'production') {
@@ -37,6 +51,7 @@ export default defineConfig(({ mode }) => {
     define: {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
       __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+      __BUILD_COMMIT__: JSON.stringify(buildCommit()),
     },
     build: {
       outDir: resolve(webOutDir(root), 'app'),

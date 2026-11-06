@@ -17,13 +17,13 @@ export const ko = {
   'settings.lang.syncFailed': '이 기기에서는 바꿨지만 계정에 동기화하지 못했어요. 인터넷에 연결한 뒤 언어를 다시 선택해 주세요', // R-106 B1 第一遍已审（10-31），按审校意见 K-15 改过：“한 번 더 바꿔”容易读成换成别的语言
   'settings.card.main': '기본 설정', // SETTINGS-merge-cards；R-106 韩文审校 C-1（11-06）：“기본”单说是“基本 / 默认”，改“기본 설정”
   'settings.card.more': '기타', // SETTINGS-merge-cards；R-106 韩文审校 C-2（11-06）：卡片标题不是展开按钮，“더 보기”像按钮，改“기타”
-  'settings.account.devicesN': '기기 {n}대', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
-  'settings.account.devicesList': '기기 {n}대: {names}', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）；首页账号一行的值，放在邮箱下面一行，太长时换行、不省略（stacked）
+  'settings.account.devicesN': '기기 {n}대', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）
+  'settings.account.devicesList': '기기 {n}대: {names}', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）；首页账号一行的值，放在邮箱下面一行，太长时换行、不省略（stacked）
   'settings.account.nameSep': ', ', // TODO(ko) SETTINGS-merge-cards：设备名之间的分隔（只是标点，随新文案一起送 R-106 看）
-  'settings.account.devicesFailed': '기기 목록을 불러오지 못했어요', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
-  'settings.data.busyShort': '내보내는 중…', // SETTINGS-merge-cards：首页数据一行导出中只写这一句（负责人 11-05 ②），待 R-106 审
-  'settings.data.pausedShort': '내보내기가 중단됐어요', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
-  'settings.sub.failed': '이 화면을 불러오지 못했어요', // SETTINGS-merge-cards 新文案，待 R-106 审（11-05）
+  'settings.account.devicesFailed': '기기 목록을 불러오지 못했어요', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）
+  'settings.data.busyShort': '내보내는 중…', // SETTINGS-merge-cards：首页数据一行导出中只写这一句（负责人 11-05 ②），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
+  'settings.data.pausedShort': '내보내기가 중단됐어요', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）
+  'settings.sub.failed': '이 화면을 불러오지 못했어요', // SETTINGS-merge-cards 新文案，R-106 已审（11-06，B2-韩文审校-SETTINGS合卡）
 
   'settings.devices.title': '로그인한 기기', // R-106 B1 第一遍已审（10-30）
   'settings.devices.loading': '기기 목록을 불러오는 중…', // R-106 B1 第一遍已审（10-30）
@@ -152,7 +152,7 @@ export const ko = {
   'settings.hotkey.err.failed': '바꾸지 못했어요. 잠시 후 다시 시도해 주세요.', // REVIEW(ko)
   // 설정 › 정보：음력·절기 데이터 출처（R-299、R-306、R-309）
   'settings.about.title': '정보', // REVIEW(ko)；设置 › 关于（R-306 注明农历出处）
-  'settings.about.version': '버전', // 设置 › 关于“버전 4.0.0”（设计评审 M-1，11-06），待 R-106 审
+  'settings.about.version': '버전', // 设置 › 关于“버전 4.0.0”（设计评审 M-1，11-06），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
   'settings.about.lunarCredit': '음력 및 절기 데이터: 홍콩 천문대', // REVIEW(ko)
   // 설정 › 스킨（TILT-b2：기울기 하이라이트）
   'settings.skin.title': '스킨', // R-106 已审（11-05，B2-韩文审校-TILT与主导航 K-1，维持）

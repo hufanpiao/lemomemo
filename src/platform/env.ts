@@ -11,6 +11,8 @@ function envOf(v: string | undefined, mode: string): AppEnv {
 export const buildInfo = {
   version: __APP_VERSION__,
   builtAt: __BUILD_TIME__,
+  /** 构建用的提交号前 7 位（设置 › 关于的诊断信息显示）；e2e 等别的打包方式没定义时是 unknown */
+  commit: typeof __BUILD_COMMIT__ === 'string' ? __BUILD_COMMIT__ : 'unknown',
   env: envOf(import.meta.env.VITE_PUBLIC_ENV, import.meta.env.MODE),
   /** 数据接口经自有域名转发：正式 https://lemomemo.com/sb，预览 https://preview.lemomemo.com/sb */
   supabaseUrl: import.meta.env.VITE_PUBLIC_SUPABASE_URL ?? '',
