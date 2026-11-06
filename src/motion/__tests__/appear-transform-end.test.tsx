@@ -1,6 +1,8 @@
 // Appear 进场播完以后外层不再带 transform（FA5-CR，前端 B 接线发现）：停在 translateY(0) scale(1) 的祖先会成为
 // position: fixed 子元素的定位参照，横幅、按钮条会跑到页面中间。减少动态效果时同样成立。
 // 停稳以后的退场：从“原位”起播到退场终点（不从 none 起播，Motion 会把 none 换成全零变换，scale 变成 0）
+// 第一个引：要在引到 motion/react 的模块之前把 rAF 换成闸（原因见 raf-gate.ts）
+import { rafGate } from './raf-gate.ts';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { appearMotion } from '../Appear.tsx';
@@ -13,8 +15,9 @@ import { drainAndRestore, FAKE, fakeWait, until } from './fake-frames.ts';
 await loadMotionFeatures();
 
 afterEach(async () => {
-  // 用过假时钟的用例：切回真定时器之前先把排着的帧推完（fake-frames.ts）
+  // 用过假时钟的用例：切回真定时器之前先把排着的帧推完（fake-frames.ts），再把冻住的真实帧交还 jsdom
   await drainAndRestore();
+  rafGate.release();
   cleanup();
   delete document.documentElement.dataset['rm'];
 });
@@ -99,7 +102,11 @@ describe('Appear 播完清掉 transform', () => {
         </Appear>
       );
       vi.useFakeTimers({ toFake: [...FAKE] });
+      // 帧只由 processFrame 推（见 raf-gate.ts）
+      rafGate.hold();
       const { container, rerender } = render(view(true));
+      // 确认 Motion 存下的是这道闸、不是别处的 rAF（不然冻不住，又回到抽签）：前面的用例里它经闸要过帧
+      expect(rafGate.requests(), 'Motion 没经过 rafGate 要帧').toBeGreaterThan(0);
       await until(() => outer(container, kind)?.style.transform === 'none');
       const el = outer(container, kind) as HTMLElement;
       rerender(view(false));

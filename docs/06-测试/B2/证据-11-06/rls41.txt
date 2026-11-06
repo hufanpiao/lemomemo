@@ -1,0 +1,5 @@
+Connecting to remote database...
+/claude code/柠檬记APP/supabase/tests/rls/41_claim_endpoint_error_shape.test.sql .. ok
+All tests successful.
+Files=1, Tests=7,  0 wallclock secs ( 0.02 usr  0.00 sys +  0.00 cusr  0.01 csys =  0.03 CPU)
+Result: PASS

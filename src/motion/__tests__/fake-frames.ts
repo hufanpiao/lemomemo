@@ -3,7 +3,9 @@
 // • 帧要显式推：Motion 在模块加载时就把真的 requestAnimationFrame 存下来了（motion-dom frameloop/frame.mjs），useFakeTimers 换掉全局 rAF
 //   也管不到它，帧其实跟着 jsdom 的真实 rAF 走；机器一忙真实帧来得慢，假时钟推满 3000 ms 时 Motion 可能一帧都没处理
 //   （2b65b43 CI 挂过“推了 3000 ms 动画时间还没到”）。所以每推一步都调 processFrame()（Motion 自带的手动推帧，时间戳取假的 performance.now），
-//   每步至少处理一帧；真实 rAF 偶尔多来一帧也用同一个假时间，不影响结果。副本里把真实 rAF 放慢到 200 ms 一帧能稳定复现旧问题，用这里的推法照样通过
+//   每步至少处理一帧。副本里把真实 rAF 放慢到 200 ms 一帧能稳定复现旧问题，用这里的推法照样通过。
+//   ⚠ 真实 rAF 多来的那一帧并非无害（11-06 更正）：它拿的是上一步的假时间，落在“播完那一步刷完、下一步推时间之前”会让 Appear 卡在
+//   translateY(0%) scale(1)。所以用假时钟的测试还要配 ./raf-gate.ts（第一个 import 引它，useFakeTimers 后 hold()，切回真定时器后 release()）
 import { act } from '@testing-library/react';
 import { processFrame } from 'motion/react';
 import { expect, vi } from 'vitest';

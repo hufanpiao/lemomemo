@@ -4,7 +4,8 @@
 //   ① 读 `supabase status -o json` 的 API_URL、DB_URL、ANON_KEY、SERVICE_ROLE_KEY（本地 CLI 的演示值，不打印）；
 //      地址不是 127.0.0.1 / localhost / [::1] 就拒绝（account-store.it.ts 开头还会再查一次）；
 //   ② 先跑 copy:shared（两个 index.ts 引 _shared/gen/）；
-//   ③ 带这几项跑 deno test supabase/tests/store-it/account-store.it.ts、invite-admin-store.it.ts，再另起一个进程跑 purge-remind.it.ts：
+//   ③ 带这几项跑 deno test supabase/tests/store-it/account-store.it.ts、invite-admin-store.it.ts，再另起一个进程跑 purge-remind.it.ts，
+//      再另起一个进程跑 push-dispatch-d3.it.ts（11-06 B2：push-dispatch 真 store 的 D3 第 6 点三条、TC-DEL-remind_queue 函数一侧，约 35 秒）：
 //      网络只许 127.0.0.1，写只许 supabase/.temp/（残留清单）。
 // 不用 shell：supabase 先按 PATH 找（CI），找不到就用 node 直接跑 node_modules/supabase/dist/supabase.js（本机 npx 装的）。
 // 结果用 process.exitCode 交出。
@@ -81,5 +82,16 @@ if (refused) {
     env: { ...process.env, IT_API_URL: s.API_URL, IT_DB_URL: s.DB_URL, IT_ANON_KEY: s.ANON_KEY, IT_SERVICE_KEY: s.SERVICE_ROLE_KEY },
   });
   if (r2.error) console.error(`store-it：deno 没跑起来（${r2.error.message}）`);
-  process.exitCode = (r.status ?? 1) || (r2.status ?? 1);
+  // B2 D3 第 6 点（push-dispatch-d3.it.ts）：同样 import harness（收尾关库连接），另起一个 deno 进程；推送全发进程内替身，不联网
+  const r3 = spawnSync('deno', [
+    'test', '--config', 'deno.json', '--allow-net=127.0.0.1,localhost', '--allow-env', '--allow-read=.', '--allow-write=supabase/.temp',
+    'supabase/tests/store-it/push-dispatch-d3.it.ts',
+  ], {
+    cwd: root,
+    stdio: 'inherit',
+    timeout: 180_000,   // 正常约 35 秒；卡住时 3 分钟后杀掉（status 为 null，按失败算），不拖到整个 db 任务的 40 分钟上限
+    env: { ...process.env, IT_API_URL: s.API_URL, IT_DB_URL: s.DB_URL, IT_ANON_KEY: s.ANON_KEY, IT_SERVICE_KEY: s.SERVICE_ROLE_KEY },
+  });
+  if (r3.error) console.error(`store-it：push-dispatch-d3 没跑完（${r3.error.message}）`);
+  process.exitCode = (r.status ?? 1) || (r2.status ?? 1) || (r3.status ?? 1);
 }

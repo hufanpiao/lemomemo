@@ -63,7 +63,8 @@ export const HEARTBEAT_LIMITS: Readonly<Record<string, { limitS: number; label: 
  *   没发成的 × 2 > claimed（且 claimed > 0）就告警；
  * - 没有 claimed（旧版函数，或 usage-report 白名单还没加 claimed）：照旧 failed × 2 > sent + failed。
  * 11-03 已核对（push-dispatch 落地后）：core.ts 写心跳的 detail 正好是 claimed、sent、failed（另有 budget_hit）；
- * claimed 只数真认领成功的条目，预算或条数到了没来得及认领的记在 left（只回在响应里、不进心跳），不含在 claimed 里；
+ * claimed 只数真认领成功的条目，预算或条数到了没来得及认领的记在 left（不含在 claimed 里；11-06 起 budget_hit 为真的那一轮也写进心跳、
+ *   usage-report 放行，TC-B2-81；本文件的规则不看它）；
  * usage-report 的白名单 DETAIL_FIELDS_BY_NAME['push-dispatch'] 含 claimed、sent、failed 和布尔 budget_hit（11-04 起按心跳名分开，安全审查 S1）。
  * 测试：tests/edge/push-dispatch.test.ts 末尾一条，用 handle 真写出的心跳经 usage-report 白名单转发后喂 evaluatePush。
  */

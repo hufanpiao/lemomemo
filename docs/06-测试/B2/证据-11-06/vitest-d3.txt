@@ -1,0 +1,5 @@
+[D3①] 第一轮 21126 ms，claimed=70 sent=70 left=230 budget_hit=true，并发峰值 10，发送 70 次；之后 2 轮发完：200/true、30/false；300 条各发 1 次
+[D3②] 两轮共 9037 ms；第一轮 claimed=30 sent=30，第二轮 claimed=20 sent=20，第二轮认领落空 20 次（全是第一轮已认领的），两轮认领交集 0；替身收到 50 条、去重 50
+[D3③] 第一轮 claimed=2 sent=1 failed=1（心跳 claimed−sent=1），日志 code=build_failed、不含标题和端点；第二轮 claimed=0；前端 missed() 返回这一条
+ Test Files  7 passed (7)
+      Tests  54 passed (54)

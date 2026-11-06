@@ -1,0 +1,6 @@
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  |unit| src/features/calendar/__tests__/CalendarWeek.test.tsx > 周视图（手机排布） > 周 / 月 / 纪念日分段：本月切到本周；“纪念日”跳 #/anniv（纪念日页 B3 做，现在是占位）
+ FAIL  |unit| src/kit/components/GlassBar/__tests__/GlassBar.test.tsx > GlassBar > 样式：液滴只动 translate、scale（时长、曲线用令牌），两种减少动态效果都关掉；减少透明效果两种都换实色；切页名字登记过
+ Test Files  2 failed | 568 passed | 3 skipped (573)
+      Tests  2 failed | 7285 passed | 29 skipped | 3 todo (7319)
+exit=1

@@ -1,0 +1,18 @@
+
+ RUN  v5.0.5 D:/claude code/柠檬记APP
+
+stdout | tests/edge/push-dispatch-d3-full.test.ts > D3 第 6 点（原数补齐） > ① 300 条 × 3 秒：并发峰值 ≤ 10、单轮发送 ≤ 200，剩下的下一轮发完且那一轮 budget_hit 为假
+[D3①] 第一轮 21129 ms，claimed=70 sent=70 left=230 budget_hit=true（心跳 left 一致），替身收到 70，并发峰值 10，发送 70 次；之后 2 轮发完：200/true、30/false；300 条各发 1 次
+
+stdout | tests/edge/push-dispatch-d3-full.test.ts > D3 第 6 点（原数补齐） > ② 50 条 × 3 秒，两轮重叠：每条只发一次，后起的一轮认领不到已被认领的，两轮 sent 合计 50
+[D3②] 两轮共 9024 ms；第一轮 claimed=30 sent=30，第二轮 claimed=20 sent=20，第一轮认领落空 20 次、第二轮 20 次（都是对方已认领的），两轮认领交集 0；替身收到 50 条、去重 50
+
+stdout | tests/edge/push-dispatch-d3-full.test.ts > D3 第 6 点（原数补齐） > ③ 认领后、发出前抛错：claimed 比 sent 多 1，日志不带标题和端点，下一轮不再推，“错过的提醒”里有它
+[D3③] 第一轮 claimed=2 sent=1 failed=1（心跳 claimed−sent=1），logs code=build_failed，函数日志 build_failed，都不含标题和端点；第二轮 claimed=0；前端 missed() 返回这一条
+
+
+ Test Files  4 passed (4)
+      Tests  37 passed (37)
+   Start at  23:27:23
+   Duration  30.47s (tests 99%)
+

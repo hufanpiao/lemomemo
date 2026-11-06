@@ -7,6 +7,7 @@ import { checkKeys } from '../../../supabase/functions/_shared/push/endpoint.ts'
 import { encryptPush, encryptWithFixedKeysForTest, padRecord, PAD_TIERS, PushCryptoError } from '../../../supabase/functions/_shared/push/ece.ts';
 import { JWT_TTL_S, loadVapid, VapidSigner } from '../../../supabase/functions/_shared/push/vapid.ts';
 import { b64u, checkVapid, decryptPayload, newPushSubscriber, unb64u } from '../../fakes/push-service-vapid.ts';
+import { RFC8291 } from '../../fixtures/rfc8291-appendix-a.ts';
 
 /** 推送服务一侧核 Authorization 头：替身的 checkVapid 再加一条“签名是 64 字节 r‖s、不是 DER”（C-7）。通过回 null，否则回原因 */
 async function checkVapidHeader(header: string, origin: string, nowSec: number): Promise<string | null> {
@@ -42,40 +43,8 @@ async function rejects(p: Promise<unknown>): Promise<string> {
   return 'resolved';
 }
 
-// RFC 8291 附录 A（www.rfc-editor.org/rfc/rfc8291.txt，11-03 取）的测试向量：去掉空白后原样抄，可逐字和 RFC 原文对照。
-// 按 RFC 里的出现顺序放进数组、按序号取，不写成“字段名: 值”：那种写法会被 gitleaks 的 generic-api-key 规则当成密钥误报
-// （写法同 tests/build/push-service-fake-crypto.test.ts）
-const RFC8291_APPENDIX_A = [
-  // [0] 明文（base64url）
-  'V2hlbiBJIGdyb3cgdXAsIEkgd2FudCB0byBiZSBhIHdhdGVybWVsb24',
-  // [1] 发送方（AS）公钥 as_public
-  'BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8',
-  // [2] 发送方私钥 as_private
-  'yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw',
-  // [3] 接收方（UA）公钥 ua_public
-  'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4',
-  // [4] 接收方私钥 ua_private
-  'q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94',
-  // [5] salt
-  'DGv6ra1nlYgDCS1FRnbzlw',
-  // [6] 认证密钥 auth_secret
-  'BTBZMqHH6r4Tts7J_aSIgg',
-  // [7] aes128gcm 头
-  'DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8',
-  // [8] 密文
-  '8pfeW0KbunFT06SuDKoJH9Ql87S1QUrdirN6GcG7sFz1y1sqLgVi1VhjVkHsUoEsbI_0LpXMuGvnzQ',
-] as const;
-const RFC = {
-  plaintext: RFC8291_APPENDIX_A[0],
-  asPublic: RFC8291_APPENDIX_A[1],
-  asPrivate: RFC8291_APPENDIX_A[2],
-  uaPublic: RFC8291_APPENDIX_A[3],
-  uaPrivate: RFC8291_APPENDIX_A[4],
-  salt: RFC8291_APPENDIX_A[5],
-  auth: RFC8291_APPENDIX_A[6],
-  header: RFC8291_APPENDIX_A[7],
-  ciphertext: RFC8291_APPENDIX_A[8],
-};
+// RFC 8291 附录 A 的测试向量：共用模块 tests/fixtures/rfc8291-appendix-a.ts（出处、不报警的写法见那里）
+const RFC = RFC8291;
 
 describe('RFC 8291 附录 A 固定向量（C-5）', () => {
   it('附录 A 的输入逐字节得出附录里的整份正文（86 字节头 + 密文）', async () => {

@@ -141,8 +141,10 @@ export async function remindOne(c: RoundCtx, S: Sender, d: UserData, x: Cand): P
   } catch (e) {
     // 最多一次：已认领，这一条不再推（App 的“错过的提醒”兜底）；只记原因码
     const code = (e as { code?: unknown })?.code;
+    const reason = code === 'bad_payload' || code === 'payload_too_large' ? code : 'build_failed';
     res.failed++;
-    logs.push({ user_id: u, t: c.now(), device: null, kind: 'run', act: 'push_failed', src: LOG_SRC, coll: x.table, item_id: x.row.id, code: code === 'bad_payload' || code === 'payload_too_large' ? code : 'build_failed' });
+    logs.push({ user_id: u, t: c.now(), device: null, kind: 'run', act: 'push_failed', src: LOG_SRC, coll: x.table, item_id: x.row.id, code: reason });
+    c.log(reason);   // 函数日志也记一笔（TC-B2-83“函数报错进函数日志”）：只有原因码，不带标题、地址、异常信息
     return;
   }
   const ttl = Math.max(60, Math.floor((x.due + BEHIND_MS - c.now()) / 1000));

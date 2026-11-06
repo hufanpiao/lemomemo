@@ -10,7 +10,8 @@
 //   3. 本轮（BE-2）：第 0 步出队即删、重算 remind_at，第 1～8 步到点查询、免打扰、认领、发送、写回，都在 round.ts 的 runRound；
 //      发送只经 _shared/push/send.ts 的 deliver，签名器 VapidSigner 由 index.ts 按 VAPID 缓存常驻复用（代码审查 S10）；
 //   4. 写心跳 push-dispatch，detail 记 claimed、sent、failed、budget_hit（6.1、0.49 第 3、4 条；lemo-ops 规则 O-3），
-//      加第 0 步的 queue_ok、queue_poison（11-04 安全审查必改 3，见 HeartbeatDetail）。
+//      加第 0 步的 queue_ok、queue_poison（11-04 安全审查必改 3，见 HeartbeatDetail）；budget_hit 为真的那一轮另记 left（没来得及认领的条数，
+//      TC-B2-81、架构审 D3 第 2 点“detail 写 budget_hit: true 和剩余条数”，11-06 主持人定按用例表改），没到预算的轮不写 left。
 // 上限（0.49 第 3 条、D3；BE-1 实测后定的初值，写进架构 5.3 的建议由架构师改）：
 //   一轮最长 ROUND_BUDGET_MS 墙钟、发送并发 SEND_CONCURRENCY、每轮发送 SEND_LIMIT_PER_ROUND 次（本机实测每条约 0.9 ms CPU，
 //   Edge 上按慢 2～3 倍算 200 条约 0.6 s CPU，远在 2 s 上限内；等预览 cpu_time_used 复核后再调）、每人每分钟 PER_USER_PER_MINUTE 条（第 6 节）、
@@ -54,7 +55,7 @@ export const DUE_LIMIT = 500;
  *   一句 insert … on conflict do update 在行锁下读旧值、加这一轮、写回，两轮重叠时后到的等先到的提交再累加，不再少算。
  *   原来是函数里先读上一次心跳、加上这一轮、再 upsert，两轮重叠时后写的会盖掉先写的。
  */
-export type HeartbeatDetail = { claimed: number; sent: number; failed: number; budget_hit: boolean; queue_ok: number; queue_poison: number };
+export type HeartbeatDetail = { claimed: number; sent: number; failed: number; budget_hit: boolean; queue_ok: number; queue_poison: number; left?: number };
 
 export const LIMITS: Limits = {
   budgetMs: ROUND_BUDGET_MS, concurrency: SEND_CONCURRENCY, sendLimit: SEND_LIMIT_PER_ROUND, perUser: PER_USER_PER_MINUTE,
@@ -136,7 +137,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     log('round_failed');
     r = { claimed: 0, sent: 0, failed: 0, budget_hit: deps.now() - t0 >= ROUND_BUDGET_MS, left: 0, queue_ok: 0, queue_poison: 0 };
   }
-  const base = { claimed: r.claimed, sent: r.sent, failed: r.failed, budget_hit: r.budget_hit, queue_ok: r.queue_ok };
+  // left 只在 budget_hit 为真时进心跳（TC-B2-81）：平时的心跳字段不变，lemo-ops、usage-report 照旧认得
+  const base = { claimed: r.claimed, sent: r.sent, failed: r.failed, budget_hit: r.budget_hit, queue_ok: r.queue_ok, ...(r.budget_hit ? { left: r.left } : {}) };
   let detail: HeartbeatDetail;
   try {
     detail = { ...base, queue_poison: await store.writeHeartbeat(base, r.queue_poison) };

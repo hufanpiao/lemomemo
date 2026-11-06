@@ -40,7 +40,7 @@ describe('D3 第 6 点：时间预算（原数）', () => {
     expect(r1.claimed).toBeGreaterThan(0);
     expect(r1.sent).toBe(r1.claimed);
     expect(r1.left).toBe(300 - r1.claimed);
-    expect(db.beats.at(-1)).toEqual({ claimed: r1.claimed, sent: r1.sent, failed: 0, budget_hit: true, queue_ok: 1, queue_poison: 0 });
+    expect(db.beats.at(-1)).toEqual({ claimed: r1.claimed, sent: r1.sent, failed: 0, budget_hit: true, queue_ok: 1, queue_poison: 0, left: r1.left });
 
     fake.setDelay(0);
     let total = r1.claimed;
