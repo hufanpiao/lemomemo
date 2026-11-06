@@ -15,7 +15,12 @@ html {
    页面不再留。页面顶部的 padding 写 var(--safe-top)，不直接写 env(safe-area-inset-top)；要安全区本身（不管有没有横幅）用 var(--inset-top） */
 :root {
   --inset-top: env(safe-area-inset-top);
-  --safe-top: var(--inset-top);
+
+  /* 11-06 评审 T-1：页面顶部比安全区多留 --top-fade，静止时顶部模糊带里没有内容 */
+  --safe-top: calc(var(--inset-top) + var(--top-fade));
+
+  /* 顶部渐变模糊带（负责人 11-06：向下滑时顶部也要和底部一样的渐变模糊）比安全区多出来的过渡段；宽屏侧栏为 0 */
+  --top-fade: 12px;
 
   /* 底栏（B2 FA-7）占的高度：渐进模糊带 126px 盖住底栏和“＋”；有底栏的三页底部留白用 --tabbar-pad（再加安全区和 16px 余量），
      最后一行能滚到模糊带上面、不被糊掉（设计动效评审 L6） */
@@ -35,6 +40,7 @@ html {
   :root {
     --tabbar-pad: calc(env(safe-area-inset-bottom) + 16px);
     --dock-bottom: max(calc(env(safe-area-inset-bottom) + 24px), var(--kb, 0px));
+    --top-fade: 0px;
   }
 }
 
@@ -71,10 +77,64 @@ body::before {
   right: 0;
   left: 0;
   z-index: 1;
-  height: var(--inset-top);
+  height: calc(var(--inset-top) + var(--top-fade));
   background: var(--safe-top-bg, var(--bg));
   background-size: 100vw 100vh;
   pointer-events: none;
+
+  /* 11-06 顶部渐变模糊带：底色从最上沿开始整段渐变到透明，不留实色段（负责人 11-06 选定），到安全区下面 --top-fade 处没了；下面两层模糊跟着从上往下变弱（和底部模糊带方向相反） */
+  mask: linear-gradient(to bottom, var(--bg), transparent);
+}
+
+/* 顶部渐变模糊带的两层模糊（负责人 11-06；主持人：控制层数，webkit 上多层 backdrop-filter 拖慢主线程，b2-motion-list M2 回归就是这个原因，
+   所以只用两层，底部那条是 5 层）：8px 管状态栏那一段，2px 管往下的过渡段；纯 CSS、不加 DOM、不进首屏脚本。不挡点按。
+   html::before 在底色条下面、body::after 在上面，层级同是 1（弹层 70、版本横幅 50 照旧在上面） */
+html::before,
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  height: calc(var(--inset-top) + var(--top-fade));
+  pointer-events: none;
+}
+
+html::before {
+  backdrop-filter: blur(8px);
+  mask: linear-gradient(to bottom, var(--bg) calc(var(--inset-top) * 0.5), transparent calc(var(--inset-top) + var(--top-fade) * 0.5));
+}
+
+body::after {
+  backdrop-filter: blur(2px);
+  mask: linear-gradient(to bottom, var(--bg) var(--inset-top), transparent 100%);
+}
+
+/* 减少透明效果：不模糊，只留底色渐变（实色渐变）；电脑版侧栏（≥ 900px）不加模糊带 */
+@media (prefers-reduced-transparency: reduce) {
+  html::before,
+  body::after {
+    display: none;
+  }
+}
+
+:root[data-rt='1']::before,
+:root[data-rt='1'] body::after {
+  display: none;
+}
+
+@media (width >= 900px) {
+  html::before,
+  body::after {
+    display: none;
+  }
+}
+
+/* 按钮继承页面字体（L-6，SETTINGS 合卡设计复审建议、主持人 11-06 定）：浏览器默认按钮不继承 font，Windows 版 webkit 落到宋体，
+   中韩文和页面其他字不一样宽；组件自己写的 font-size、font-weight 是类选择器，比这条优先，照旧生效 */
+button {
+  font: inherit;
 }
 
 /* 韩文按词换行（接手清单 KO-keep-all；设计复审第二轮 N2）：不在音节之间把一个词拆成两行；一个词长到一行放不下时才在词里断

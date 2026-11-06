@@ -27,8 +27,8 @@ describe('顶部安全区底色条', () => {
     expect(b).toMatch(/content: '';/);
     expect(b).toMatch(/position: fixed;/);
     expect(b).toMatch(/top: 0;/);
-    expect(b).toMatch(/height: var\(--inset-top\);/);
-    expect(block(base, ':root')).toMatch(/--inset-top: env\(safe-area-inset-top\);\s*--safe-top: var\(--inset-top\);/);
+    expect(b).toMatch(/height: calc\(var\(--inset-top\) \+ var\(--top-fade\)\);/); // 11-06 顶部渐变模糊带：安全区加一段过渡
+    expect(block(base, ':root')).toMatch(/--inset-top: env\(safe-area-inset-top\);\s*\/\*[^*]*\*\/\s*--safe-top: calc\(var\(--inset-top\) \+ var\(--top-fade\)\);/);
     expect(b).toMatch(/background: var\(--safe-top-bg, var\(--bg\)\);/);
     expect(b).toMatch(/background-size: 100vw 100vh;/);
     expect(b).toMatch(/pointer-events: none;/);
@@ -94,6 +94,20 @@ describe('顶部安全区底色条', () => {
     for (const f of ['src/features/onboarding/ui/ConsentPage.module.css', 'src/features/auth/ui/AuthPage.module.css']) {
       expect(block(readFileSync(f, 'utf8'), '.page'), f).toMatch(/padding: max\(var\(--safe-top\), 32px\)/);
     }
+  });
+
+  it('顶部渐变模糊带（11-06）：两层模糊 html::before 8px、body::after 2px，不挡点按；减少透明效果两种都藏模糊、只留底色渐变；宽屏不加', () => {
+    const both = block(base, ['html::before,', 'body::after'].join('\n'));
+    expect(both).toMatch(/position: fixed;/);
+    expect(both).toMatch(/z-index: 1;/);
+    expect(both).toMatch(/pointer-events: none;/);
+    expect(block(base, 'html::before')).toMatch(/backdrop-filter: blur\(8px\);/);
+    expect(base).toMatch(/\nbody::after \{\s*backdrop-filter: blur\(2px\);/);
+    expect(block(base, 'body::before')).toMatch(/mask: linear-gradient\(to bottom, var\(--bg\)/);
+    expect(base).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{\s*html::before,\s*body::after \{\s*display: none;/);
+    expect(base).toMatch(/:root\[data-rt='1'\]::before,\s*:root\[data-rt='1'\] body::after \{\s*display: none;/);
+    expect(base).toMatch(/@media \(width >= 900px\) \{\s*html::before,\s*body::after \{\s*display: none;/);
+    expect(base.match(/backdrop-filter:/g)?.length).toBe(2); // 只两层（主持人：控制层数）
   });
 
   it('src 下除了 base.css，没有 CSS 直接写 env(safe-area-inset-top)', () => {

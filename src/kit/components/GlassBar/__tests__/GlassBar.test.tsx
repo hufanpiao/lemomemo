@@ -13,8 +13,13 @@ beforeEach(() => act(() => uiStore.getState().setLocale('zh-CN')));
 afterEach(cleanup);
 
 const drop = (): HTMLElement => document.querySelector(`.${styles.drop}`) as HTMLElement;
-/** 等首屏后部分（GlassBarFx.tsx，import() 按需下载）挂上：模糊带出现 */
-const ready = (): Promise<void> => waitFor(() => expect(screen.getByTestId('tabbar-band')).toBeTruthy());
+/** 等首屏后部分（GlassBarFx.tsx，import() 按需下载）挂上：模糊带出现，再用 act 把它的 useEffect 跑完。
+ *  GLASSBAR-html-tap-flaky（11-06）：模糊带一进 DOM waitFor 就放行，但挂 <html> 点击、nav 按下监听的是被动 effect，
+ *  全量跑在负载下时它还没执行，紧接着的 fireEvent 落空（expected [] to deeply equal [ 'todos' ]）；act 结束前 React 一定把 effect 冲掉 */
+const ready = async (): Promise<void> => {
+  await waitFor(() => expect(screen.getByTestId('tabbar-band')).toBeTruthy());
+  await act(async () => undefined);
+};
 
 describe('GlassBar', () => {
   it('4 个页签都是链接（今天、日历、待办、随手记），只有选中的那个 aria-current="page"；导航有名字', () => {
@@ -154,6 +159,15 @@ describe('GlassBar', () => {
     expect(css).toMatch(/:global\(:root\[data-rt='1'\]\) \.barTint \{\s*background: var\(--glass-solid\);/);
     expect(css).toMatch(/\.drop\[data-state='press'\] \{\s*scale: 1\.12;/);
     expect(css).not.toContain('scale: 1.16');
+    // 11-06 底栏透明度排查：副本档直接模糊背后的真实画面（--g-live-fx，10px），不透明的副本层藏起来；没有 0.5px 外圈；后备 8px；阴影两层
+    expect(css).toMatch(/\.bar\[data-glass='copy'\],\s*\.fab\[data-glass='copy'\] \{\s*backdrop-filter: var\(--g-live-fx\);/);
+    expect(css).toMatch(/\.bar\[data-glass='copy'\] \.barTint \{\s*background: var\(--g-tint\);\s*\}/);
+    // 带 view-transition-name 的 .bar、.fab 是背景根：模糊只能写在它们自己身上，里面的着色层、液滴一律不写 backdrop-filter（第二轮根因 2）
+    expect(css).not.toMatch(/\.(glass|barTint|fabTint|adTint|pill)\b[^{]*\{[^}]*backdrop-filter: (?!none)/);
+    expect(css).toMatch(/\.bar :global\(\[data-glass-layer\]\),\s*\.fab :global\(\[data-glass-layer\]\) \{\s*display: none;/);
+    expect(css).not.toContain('var(--rim-shade)');
+    expect(css).toContain('backdrop-filter: blur(8px) saturate(1.8);');
+    expect(css).not.toContain('var(--shadow-2)');
     // 只藏底栏、“＋”、模糊带，不写成全局的 [data-kb] 选择器（设计复审一 R2）
     expect(css).toMatch(/\.bar\[data-kb='1'\],\s*\.fab\[data-kb='1'\] \{\s*visibility: hidden;/);
     expect(css).not.toMatch(/(^|\n)\[data-kb/);

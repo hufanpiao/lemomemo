@@ -1,14 +1,17 @@
 /* 液态玻璃底栏外壳（B2 FA-7）：尺寸、位置、材质参数照 皮肤-v4/液态玻璃-真机试验.html；颜色只引皮肤令牌（A11），
-   透明度类的数字令牌（--g-sheen、--g-glow）用单独一层的 opacity 套上；阴影用 --shadow-2。
+   透明度类的数字令牌（--g-sheen）用单独一层的 opacity 套上；内侧柔光用 --g-glow-c，阴影用 --g-bar-shadow（11-06 底栏排查 A 类照视觉稿补齐）。
    材质分两档：首屏后备（--g-tint-fb + backdrop-filter）；减少透明效果（系统设置或 data-rt="1"）时实色。
+   backdrop-filter 写在 .bar、.fab 自己身上，不写在里面的着色层：它们带 view-transition-name，按 Filter Effects 2 的 backdrop root 规则
+   自己就是子元素的“背景根”，子元素的 backdrop-filter 只能看到 .bar 里面（什么都没有），等于没模糊（11-06 底栏透明度排查第二轮根因 2）。
    内容副本那一档按需下载后接管（另做）。 */
 .bar,
 .fab {
   position: fixed;
   z-index: 10;
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--g-bar-shadow);
   touch-action: manipulation;
   user-select: none;
+  backdrop-filter: blur(8px) saturate(1.8);
   view-transition-name: tabbar;
 }
 
@@ -37,7 +40,7 @@
   color: var(--fab-fg);
 
   /* 4px 底色间隔圈 + 1px --step-off 细灰边（R-117；设计动效评审 L4） */
-  box-shadow: 0 0 0 4px var(--bg), 0 0 0 5px var(--step-off), var(--shadow-2);
+  box-shadow: 0 0 0 4px var(--bg), 0 0 0 5px var(--step-off), var(--g-bar-shadow);
   view-transition-name: tabbar-add;
 }
 
@@ -53,7 +56,8 @@
   }
 }
 
-/* 玻璃一层：着色 + 模糊；上沿亮边、内侧柔光、0.5px 外圈。
+/* 玻璃一层：着色 + 模糊；上沿亮边、内侧柔光（::before 是沿边亮光，::after 是斜上方一片光）。
+   0.5px 外圈（--rim-shade）去掉：视觉稿没有，负责人 11-06 定照稿；后备模糊 12px 改回视觉稿的 8px（排查 A 类）。
    倾斜高光（TILT-b2，设置里开了才有）：motion/glass-tilt.ts 往底栏和“＋”上写 --g-sx、--g-sy（斜上方那片光的中心）、
    --g-hx（亮边横向方向 -1～1）；没写时用后备值，就是原来的位置（左上 22% -30%、亮边在左上） */
 .glass {
@@ -62,12 +66,27 @@
   z-index: 0;
   border-radius: inherit;
   background: var(--g-tint-fb);
-  box-shadow: inset calc(1.5px * var(--g-hx, 1)) 1.5px 0 -0.5px var(--g-hi), inset calc(-1px * var(--g-hx, 1)) -1px 0 -0.5px var(--g-hi2);
-  outline: 0.5px solid var(--rim-shade);
-  outline-offset: -0.5px;
-  backdrop-filter: blur(12px) saturate(1.8);
+  box-shadow:
+    inset calc(1.5px * var(--g-hx, 1)) 1.5px 0 -0.5px var(--g-hi),
+    inset calc(-1px * var(--g-hx, 1)) -1px 0 -0.5px var(--g-hi2),
+    inset 0 0 10px var(--g-glow-c);
   pointer-events: none;
   transition: opacity var(--dur-glass) var(--ease-out);
+}
+
+/* 沿边亮光（视觉稿 .lens .spec::after，R-153）：1.6px 一圈，上沿一段 --g-hi、下沿对称一段 --g-hi2；位置跟倾斜高光的 --g-sx */
+.glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1.6px;
+  border-radius: inherit;
+  background:
+    radial-gradient(34% 120% at var(--g-sx, 22%) 0%, var(--g-hi), transparent 70%),
+    radial-gradient(30% 120% at calc(100% - var(--g-sx, 22%)) 100%, var(--g-hi2), transparent 70%);
+  mask:
+    linear-gradient(var(--bg) 0 0) content-box exclude,
+    linear-gradient(var(--bg) 0 0);
 }
 
 /* 斜上方的一片光（--g-sheen 是透明度） */
@@ -84,23 +103,29 @@
   background: var(--g-fab-tint);
 }
 
-/* 内容副本接管（glass-ghost.ts 给玻璃块加 data-glass="copy"）：底下一层是副本，着色换成更透的 --g-tint，不再用 backdrop-filter */
-.bar[data-glass='copy'] .barTint {
-  background: var(--g-tint);
-  backdrop-filter: none;
+/* 副本引擎接管（glass-ghost.ts 给玻璃块加 data-glass="copy"）：着色换成更透的 --g-tint，直接模糊背后的真实画面，滤镜 --g-live-fx（10px；副本那组 2px 是给复制品用的，模糊真实画面时字还读得出、和页签抢，主持人 11-06 对照视觉稿要求加重）。
+   11-06 底栏透明度排查（docs/03-评审/B2/B2-底栏透明度-真机差异排查.md）：副本层底色是不透明的 --bg、只复制带 data-ghost 的元素，
+   图例、标题、空状态这些没标 data-ghost 的内容到了底栏后面就整块看不见，玻璃像实心的（负责人真机“把字移到下面也不透明”）。
+   所以副本层先藏起来，改用 backdrop-filter（写在 .bar、.fab 上，见文件头）；引擎仍管自动深浅（data-ad）和倾斜高光 */
+.bar[data-glass='copy'],
+.fab[data-glass='copy'] {
+  backdrop-filter: var(--g-live-fx);
 }
 
-.fab[data-glass='copy'] .fabTint {
-  backdrop-filter: none;
+.bar[data-glass='copy'] .barTint {
+  background: var(--g-tint);
+}
+
+.bar :global([data-glass-layer]),
+.fab :global([data-glass-layer]) {
+  display: none;
 }
 
 /* 自动深浅：底栏背后大多是深色内容时换成深色玻璃（glass-ghost.ts 写 data-ad="dark"，令牌 --g-ad-*）。
-   不过渡背景色（设计动效评审 L2）：深色玻璃单独一层 .adTint，和浅色那层交叉淡入淡出 opacity；data-ad 只在副本引擎接管时写，
-   所以 .adTint 不用 backdrop-filter */
+   不过渡背景色（设计动效评审 L2）：深色玻璃单独一层 .adTint，和浅色那层交叉淡入淡出 opacity；模糊在 .bar 自己身上，两层都只管着色 */
 .adTint {
   background: var(--g-ad-tint);
   opacity: 0;
-  backdrop-filter: none;
 }
 
 .bar[data-ad='dark'] .barTint {
@@ -115,6 +140,7 @@
   --g-hi: var(--g-ad-hi);
   --g-hi2: var(--g-ad-hi2);
   --g-sheen: var(--g-ad-sheen);
+  --g-glow-c: var(--g-ad-glow-c);
   --g-fg: var(--g-ad-fg);
   --g-pill: var(--g-ad-pill);
   --g-halo: var(--g-ad-tint);
@@ -193,7 +219,6 @@
 
 .pill {
   background: var(--g-pill);
-  backdrop-filter: none;
 }
 
 /* 按住当前选中的页签：液滴本身放大 1.12（试验页；设计动效评审 D3）。视觉稿的 1.16 是液滴里背后画面的透镜倍数，留给副本引擎 */
@@ -205,6 +230,10 @@
 @media (prefers-reduced-transparency: reduce) {
   .barTint {
     background: var(--glass-solid);
+  }
+
+  .bar,
+  .fab {
     backdrop-filter: none;
   }
 
@@ -218,9 +247,13 @@
   }
 }
 
+:global(:root[data-rt='1']) .bar,
+:global(:root[data-rt='1']) .fab {
+  backdrop-filter: none;
+}
+
 :global(:root[data-rt='1']) .barTint {
   background: var(--glass-solid);
-  backdrop-filter: none;
 }
 
 :global(:root[data-rt='1']) .fabTint {
