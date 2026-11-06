@@ -1,5 +1,5 @@
 // 液态玻璃底栏的“首屏后”部分（B2 FA-7；主持人 11-05 首屏选 ③）：外壳 GlassBar.tsx 首屏画完以后才下载这个文件
-// • 渐进模糊带 5 层（0.25）；• 按住当前选中的页签放大（D3，data-state=press）
+// • 渐进模糊带 3 层（0.25；11-06 起只管底栏上方的渐隐，底栏后面不再加深）；• 按住当前选中的页签放大（D3，data-state=press）
 // • 自动深浅的深色玻璃层 .adTint（L2）：用 portal 放进底栏 nav 最后面（只有副本引擎写 data-ad 时才用得上）
 // • 内容副本、自动深浅、帧循环（motion/glass-ghost.ts）：这个文件挂上以后再 import()（0.31 第 6 条：motion 以外不准静态引它）
 // • 切页过渡期间的点按（设计复审二 R4）：过渡进行中浏览器把点按都算到 <html> 上（::view-transition 的 pointer-events 不管用），
@@ -22,6 +22,11 @@ const plusOf = (n: HTMLElement): HTMLButtonElement | null => {
 /** 过渡开始这么久以内的点按算点在旧画面上（用户看着旧画面点的），丢掉不代点：代点会点到新画面同一位置上的别的东西（主持人 11-05） */
 export const EARLY_MS = 50;
 /**
+ * 过渡放完以后，伪元素层要等下一次画面更新才撤：每隔 16 ms 找一次，最多找到点按后 HIT_MS（按挂钟算，代码审查 p1 M2）。
+ * 原来按次数算（10 次约 160 ms，后来 120 次）：CI 的 Linux webkit 一帧要几百毫秒，次数上限在慢机上要么太短、要么远超 2 秒（11-06 ci-webkit-probe）
+ */
+export const HIT_MS = 2000;
+/**
  * 页面内容里只代点导航类的链接和按钮（主持人 11-05 收紧）：复选框、开关、单选（input 和 role 同类、带 aria-pressed / aria-checked 的切换按钮）、
  * 文字输入、下拉、label 都不代点，免得过渡中顺手勾掉待办；删除等危险按钮自己带 data-no-proxy（设计复审五 R6-a），也不代点
  */
@@ -37,26 +42,39 @@ const vtAnims = (doc: Document): Animation[] =>
 
 /**
  * 过渡中落在 <html> 上、底栏没接住的点按（R6）：过渡开始 EARLY_MS 以内的丢掉；否则把过渡动画放完，等伪元素层撤掉
- * （下一次画面更新才撤，最多等 10 次、每次 16 ms），按坐标找真正的目标：是导航类的链接、按钮（TAPPABLE，不是 NOT_NAV、不带 data-no-proxy），而且没禁用、不在 inert / aria-hidden 里才代点。
- * 不在过渡里（没有过渡动画）时不管：那是点在空白处
+ * （下一次画面更新才撤，最多等 HIT_MS），按坐标找真正的目标：是导航类的链接、按钮（TAPPABLE，不是 NOT_NAV、不带 data-no-proxy），而且没禁用、不在 inert / aria-hidden 里才代点。
+ * 不在过渡里（没有过渡动画）时不管：那是点在空白处。
+ * 返回取消函数（代码审查 p1 M1）：调用方同一时刻只留一个待发代点，用户又按下、组件卸载时取消；
+ * 等待中换了路由（location.href 变了）或又进入新的过渡（出现没放完过的过渡动画）也放弃，免得点到新页面上
  */
-function tapThrough(doc: Document, x: number, y: number): void {
+function tapThrough(doc: Document, x: number, y: number): (() => void) | null {
   const vts = vtAnims(doc);
-  if (vts.length === 0 || vts.some((a) => Number(a.currentTime ?? 0) < EARLY_MS)) return;
+  if (vts.length === 0 || vts.some((a) => Number(a.currentTime ?? 0) < EARLY_MS)) return null;
   for (const a of vts) a.finish();
-  let tries = 0;
+  const done = new Set(vts);
+  const route = doc.location.href;
+  const t0 = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let dead = false;
   const hit = (): void => {
+    timer = undefined;
+    if (dead || doc.location.href !== route || vtAnims(doc).some((a) => !done.has(a))) return;
     const at = doc.elementFromPoint(x, y);
-    if ((at === null || at === doc.documentElement) && ++tries < 10) {
-      setTimeout(hit, 16);
+    if ((at === null || at === doc.documentElement) && Date.now() - t0 < HIT_MS) {
+      timer = setTimeout(hit, 16);
       return;
     }
+    dead = true;
     if (!at || at.closest(NOT_NAV)) return; // 表单控件（含藏在 label 里的复选框）、开关一类、危险按钮：点到的东西本身或外面套着的都算
     const el = at.closest<HTMLElement>(TAPPABLE);
     if (!el || el.matches(NOT_NAV) || blocked(el)) return;
     el.click();
   };
   hit();
+  return () => {
+    dead = true;
+    if (timer !== undefined) clearTimeout(timer);
+  };
 }
 
 export interface GlassBarFxProps {
@@ -93,12 +111,21 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide }: GlassBarFxPr
     const ends = ['pointerup', 'pointercancel', 'pointerleave'] as const;
     n.addEventListener('pointerdown', down);
     for (const t of ends) n.addEventListener(t, up);
-    const root = n.ownerDocument.documentElement;
+    const doc = n.ownerDocument;
+    const root = doc.documentElement;
+    // 同一时刻只留一个待发代点（代码审查 p1 M1）：用户自己又按下（capture，先于页面处理）、再次代点、卸载时取消
+    let pending: (() => void) | null = null;
+    const cancelTap = (): void => {
+      pending?.();
+      pending = null;
+    };
+    doc.addEventListener('pointerdown', cancelTap, true);
     const lost = (e: MouseEvent): void => {
       if (e.target !== root) return;
       const plus = plusOf(n);
       // 键盘弹着时底栏藏着（data-kb），不替它点
       const bar = getComputedStyle(n).visibility === 'hidden' ? [] : [...n.querySelectorAll<HTMLElement>('a[data-tab]'), ...(plus ? [plus] : [])];
+      cancelTap();
       for (const el of bar) {
         const r = el.getBoundingClientRect();
         if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) continue;
@@ -106,7 +133,7 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide }: GlassBarFxPr
         if (!blocked(el)) el.click();
         return;
       }
-      tapThrough(n.ownerDocument, e.clientX, e.clientY);
+      pending = tapThrough(doc, e.clientX, e.clientY);
     };
     root.addEventListener('click', lost);
     let off = wide;
@@ -129,6 +156,8 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide }: GlassBarFxPr
       glass.current = null;
       stop();
       up();
+      cancelTap();
+      doc.removeEventListener('pointerdown', cancelTap, true);
       root.removeEventListener('click', lost);
       n.removeEventListener('pointerdown', down);
       for (const t of ends) n.removeEventListener(t, up);
@@ -150,8 +179,6 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide }: GlassBarFxPr
   return (
     <>
       <div className={fx.band} aria-hidden="true" data-kb={kb} data-testid="tabbar-band">
-        <i />
-        <i />
         <i />
         <i />
         <i />

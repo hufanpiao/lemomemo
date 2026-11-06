@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 describe('collectDiag', () => {
-  it('第一行是构建提交号、版本；有底栏时列出它的 data-glass 和计算样式；三个伪元素都有一行', async () => {
+  it('第一行是构建提交号、版本；有底栏时列出它的 data-glass 和计算样式；顶部带三层（两层模糊元素、底色条）都有一行', async () => {
     const nav = document.createElement('nav');
     nav.dataset['testid'] = 'tabbar';
     nav.dataset['glass'] = 'copy';
@@ -22,7 +22,7 @@ describe('collectDiag', () => {
     expect(lines.some((l) => l.startsWith('caches:') || l === 'sw: unsupported')).toBe(true);
     expect(lines).toContain('bar.data-glass=copy data-ad=-');
     expect(lines.find((l) => l.startsWith('html:'))).toMatch(/data-rt=1/);
-    for (const name of ['.bar:', '.fab:', 'html::before:', 'body::before:', 'body::after:']) {
+    for (const name of ['.bar:', '.fab:', '.lemo-top-8:', 'body::before:', '.lemo-top-2:']) {
       expect(lines.some((l) => l.startsWith(name)), name).toBe(true);
     }
     expect(lines.find((l) => l.startsWith('.bar:'))).toMatch(/-webkit-backdrop-filter=/);

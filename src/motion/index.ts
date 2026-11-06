@@ -73,6 +73,18 @@ function snapPressables(doc: Document, on: boolean): void {
   }
 }
 
+/**
+ * 过渡期间给 <html> 打 data-vt（11-06 代码审查 S4）：iOS 18.0～18.1 有 startViewTransition 但不认 :active-view-transition，
+ * 底栏“过渡中换实色”的 CSS（GlassBar.module.css）同时认这个属性。旧画面在调用 startViewTransition 之后才截，所以要在调用之前打上；
+ * 新过渡打断旧过渡时，旧的 finished 先结束，用计数，最后一个结束才摘
+ */
+let vtOpen = 0;
+function markVt(doc: Document, on: boolean): void {
+  vtOpen = Math.max(0, vtOpen + (on ? 1 : -1));
+  if (vtOpen > 0) doc.documentElement.setAttribute('data-vt', '');
+  else doc.documentElement.removeAttribute('data-vt');
+}
+
 /** 页面切换：支持 View Transitions 就包一层，不支持或减少动态效果时直接执行（17.2 第 3 点） */
 export function transition(update: () => void): Promise<void> {
   const doc = typeof document === 'undefined' ? undefined : (document as Document & VtDocument);
@@ -81,6 +93,7 @@ export function transition(update: () => void): Promise<void> {
     return Promise.resolve();
   }
   snapPressables(doc, true);
+  markVt(doc, true);
   let vt: { finished: Promise<void> };
   try {
     vt = doc.startViewTransition(() => {
@@ -93,10 +106,12 @@ export function transition(update: () => void): Promise<void> {
     // startViewTransition 同步抛错（个别实现、以后加的包装；代码审查 S2）：摘掉标记、直接画新页面，
     // 不然 data-snap 一直留着，所有 Pressable 都没了按下反馈
     snapPressables(doc, false);
+    markVt(doc, false);
     update();
     return Promise.resolve();
   }
-  return vt.finished.then(() => undefined, () => undefined);
+  const done = (): void => markVt(doc, false);
+  return vt.finished.then(done, done);
 }
 
 /** 以后的趣味动效从这里接入；4.0.0 什么都不做（17.2 第 4、7 点） */

@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- R-349（负责人 11-06，取代 R-278）：主屏幕版页面铺到状态栏下面，顶部模糊带盖住状态栏；iOS 状态栏字一律白色，负责人 11-06 定先不加底色、纯模糊上真机看（备用 --status-tint 默认关）。改了以后已装的主屏幕图标要删掉重新添加才生效 -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Lemo" />
     <!-- 在登录页上“添加到主屏幕”也装成 App 本体：manifest 的 start_url 是 /app/ -->
     <link rel="manifest" href="/app/manifest.webmanifest" />
@@ -14,6 +16,9 @@
     <title>Lemo</title>
   </head>
   <body>
+    <!-- 顶部渐变模糊带的两层（base.css .lemo-top-8、.lemo-top-2）：真元素、具名 view-transition-name，切页时不跟着整页快照淡掉（动效复审 M5，11-06） -->
+    <div class="lemo-top-8" aria-hidden="true"></div>
+    <div class="lemo-top-2" aria-hidden="true"></div>
     <div id="root"></div>
     <script type="module" src="./main.tsx"></script>
   </body>

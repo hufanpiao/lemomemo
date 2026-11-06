@@ -84,9 +84,10 @@ export async function collectDiag(win: Window = window): Promise<string[]> {
     `bar.data-glass=${bar?.getAttribute('data-glass') ?? '-'} data-ad=${bar?.getAttribute('data-ad') ?? '-'}`,
     styleLine('.bar', bar, null, GLASS_KEYS, win),
     styleLine('.fab', fab, null, GLASS_KEYS, win),
-    styleLine('html::before', root, '::before', PSEUDO_KEYS, win),
+    // 顶部模糊带：11-06 起两层模糊是入口页里的真元素 .lemo-top-8、.lemo-top-2（动效复审 M5），底色条仍是 body::before
+    styleLine('.lemo-top-8', doc.querySelector('.lemo-top-8'), null, PSEUDO_KEYS, win),
     styleLine('body::before', doc.body, '::before', PSEUDO_KEYS, win),
-    styleLine('body::after', doc.body, '::after', PSEUDO_KEYS, win),
+    styleLine('.lemo-top-2', doc.querySelector('.lemo-top-2'), null, PSEUDO_KEYS, win),
   ];
   return lines;
 }

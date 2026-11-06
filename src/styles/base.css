@@ -87,11 +87,16 @@ body::before {
 }
 
 /* 顶部渐变模糊带的两层模糊（负责人 11-06；主持人：控制层数，webkit 上多层 backdrop-filter 拖慢主线程，b2-motion-list M2 回归就是这个原因，
-   所以只用两层，底部那条是 5 层）：8px 管状态栏那一段，2px 管往下的过渡段；纯 CSS、不加 DOM、不进首屏脚本。不挡点按。
-   html::before 在底色条下面、body::after 在上面，层级同是 1（弹层 70、版本横幅 50 照旧在上面） */
-html::before,
-body::after {
-  content: '';
+   所以只用两层，底部那条是 3 层）：8px 管状态栏那一段，2px 管往下的过渡段。不挡点按。
+   R-349 起（black-translucent）页面铺到状态栏下面，带子从 y=0 开始、高“安全区 + --top-fade”，盖住状态栏区（负责人 11-06“顶部最上面开始做模糊”）。
+   两层是入口页里的两个静态 div（src/index.html、src/auth/index.html 的 .lemo-top-8、.lemo-top-2），不是伪元素（动效复审 M5）：
+   伪元素属于整页快照，切页时跟着旧页淡掉，顶部会闪一下；真元素起具名 view-transition-name、过渡里 animation: none，一直画着。
+   模糊写在具名元素自己身上（具名元素是背景根，子元素的 backdrop-filter 看不到外面，同 GlassBar.module.css 文件头）。
+   层级 1，和底色条 body::before 一样，在它后面画、压在它上面；弹层（70）、版本横幅（50）、整屏提示（100）、启动画面都在它上面，这是有意的（代码审查 L11）：
+   弹层自己的遮罩 --scrim 铺满整屏、带模糊，盖住状态栏区时不需要这条带子再模糊一次；启动画面第一帧要和 iOS 启动图一模一样，带子不能糊到它上面。
+   .lemo-top-2 另有备用底色 --status-tint（负责人 11-06 要求默认关闭：先按纯模糊上真机看白字，看过再决定开不开） */
+.lemo-top-8,
+.lemo-top-2 {
   position: fixed;
   top: 0;
   right: 0;
@@ -101,32 +106,35 @@ body::after {
   pointer-events: none;
 }
 
-html::before {
+.lemo-top-8 {
   backdrop-filter: blur(8px);
   mask: linear-gradient(to bottom, var(--bg) calc(var(--inset-top) * 0.5), transparent calc(var(--inset-top) + var(--top-fade) * 0.5));
+  view-transition-name: top-blur-8;
 }
 
-body::after {
+.lemo-top-2 {
+  background: var(--status-tint);
   backdrop-filter: blur(2px);
   mask: linear-gradient(to bottom, var(--bg) var(--inset-top), transparent 100%);
+  view-transition-name: top-blur-2;
 }
 
 /* 减少透明效果：不模糊，只留底色渐变（实色渐变）；电脑版侧栏（≥ 900px）不加模糊带 */
 @media (prefers-reduced-transparency: reduce) {
-  html::before,
-  body::after {
+  .lemo-top-8,
+  .lemo-top-2 {
     display: none;
   }
 }
 
-:root[data-rt='1']::before,
-:root[data-rt='1'] body::after {
+:root[data-rt='1'] .lemo-top-8,
+:root[data-rt='1'] .lemo-top-2 {
   display: none;
 }
 
 @media (width >= 900px) {
-  html::before,
-  body::after {
+  .lemo-top-8,
+  .lemo-top-2 {
     display: none;
   }
 }
@@ -173,6 +181,16 @@ html.scroll-locked body {
   animation-timing-function: var(--ease-standard);
 }
 
+/* 整页不交叉叠着淡（负责人 11-06 iPhone 主屏幕版 70d94f5“切页过渡残影”）：同时半透明叠着时，旧页的“11月6日 周五”“今天没有日程”压在新页上。
+   改成和 page-head 一样先出后入：旧页前 40% 淡完，新页 35% 以后才淡入（35～40% 旧页只剩不到 0.5%），任何一帧只看得到一页的字 */
+::view-transition-old(root) {
+  animation-name: lemo-head-out;
+}
+
+::view-transition-new(root) {
+  animation-name: lemo-head-in;
+}
+
 /* 切页动画期间点按不被吞（接手清单 UI4-B1-C2）：View Transition 的伪元素层盖在页面上面，默认会接住点按；
    让它不接，点按落到底下已经换好的新页面（底栏切页上线前要有，B2 FA-7） */
 ::view-transition {
@@ -185,10 +203,16 @@ html.scroll-locked body {
    （设计复审一 R1；tests/e2e/b2-tabbar.spec.ts 在过渡中途截图比像素） */
 ::view-transition-group(tabbar),
 ::view-transition-group(tabbar-add),
+::view-transition-group(top-blur-8),
+::view-transition-group(top-blur-2),
 ::view-transition-old(tabbar),
 ::view-transition-old(tabbar-add),
+::view-transition-old(top-blur-8),
+::view-transition-old(top-blur-2),
 ::view-transition-new(tabbar),
-::view-transition-new(tabbar-add) {
+::view-transition-new(tabbar-add),
+::view-transition-new(top-blur-8),
+::view-transition-new(top-blur-2) {
   animation: none;
 
   /* 画着的旧那份正好盖在真底栏上：webkit 过渡期间点它会被这层接住（不按 ::view-transition 的 pointer-events 走），明写不接 */
@@ -205,7 +229,7 @@ html.scroll-locked body {
 /* 页面顶栏（view-transition-name: page-head，目前是设置和注销账号两屏）：切换前后都有顶栏时先淡出、再淡入，不同时叠着。
    同时叠着的话，居中的旧标题“设置”会压在新标题“注销账号”中间，看着像这四个字跳了一下（负责人 10-31 iPhone 主屏幕版实测）。
    时长和整页一样是 --dur-sheet（A24 只准用令牌），先后靠关键帧的百分比：旧的前 40% 淡完，新的 40% 以后才淡入。
-   Chromium 不认 :not(:only-child)，所以默认就是先出后入；只有一边有顶栏（今天 ↔ 设置）时用下面单独的 :only-child 换回整段淡入淡出 */
+   只有一边有顶栏（今天 ↔ 设置）时也一样先出后入：整页 root 11-06 起也是先出后入，原来为了和整页交叉淡同步写的 :only-child 整段淡入淡出删掉了（代码审查 M4：留着会让顶栏叠在整页上） */
 
 /* 顶栏的组不滑位置（浏览器默认 0.25s ease 从旧位置移到新位置）：设置页往下滚过再进注销页，新旧顶栏位置不同，会再“动一下”；只淡入淡出 */
 ::view-transition-group(page-head) {
@@ -220,14 +244,6 @@ html.scroll-locked body {
   animation-name: lemo-head-in;
 }
 
-::view-transition-old(page-head):only-child {
-  animation-name: lemo-fade-out;
-}
-
-::view-transition-new(page-head):only-child {
-  animation-name: lemo-fade-in;
-}
-
 @keyframes lemo-head-out {
   0% {
     opacity: 1;
@@ -239,26 +255,17 @@ html.scroll-locked body {
   }
 }
 
+/* 新的那份 35% 起淡入、这一段用 --ease-out（动效审查 M1）：原来 40% 起、整段 --ease-standard，两页都空约 66 ms（4 帧），读着像闪白；
+   现在空白约 36 ms。35～40% 之间旧页还剩不到 0.5%，字看不出来，不会重新叠字。整页 root 和 page-head 共用这一组 */
 @keyframes lemo-head-in {
   0%,
-  40% {
+  35% {
     opacity: 0;
+    animation-timing-function: var(--ease-out);
   }
 
   100% {
     opacity: 1;
-  }
-}
-
-@keyframes lemo-fade-out {
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes lemo-fade-in {
-  from {
-    opacity: 0;
   }
 }
 

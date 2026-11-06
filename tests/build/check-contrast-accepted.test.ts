@@ -96,7 +96,7 @@ describe('build/check_contrast.py：负责人已接受的例外（accepted，B2 
 });
 
 describe('build/check_contrast.py：真仓库的例外名单', () => {
-  it('只剩负责人已接受的 8 项例外（11-05），钉死每项的皮肤、项和值，写了谁哪天定的和原因；名单外没有不达标', () => {
+  it('只剩负责人已接受的 12 项例外（11-05 的 8 项、11-06 浅色着色 .12 的 4 项），钉死每项的皮肤、项和值，写了谁哪天定的和原因；名单外没有不达标', () => {
     type Acc = { theme: string; id: string; floor: number; decided: string; reason: string };
     const acc = (JSON.parse(readFileSync(join(ROOT, 'build', 'contrast-pairs.json'), 'utf8')) as { accepted?: Acc[] }).accepted ?? [];
     // 名单只能缩小：加一条、改一个值，这里都要跟着改（代码复审 M5）
@@ -105,17 +105,21 @@ describe('build/check_contrast.py：真仓库的例外名单', () => {
       ['glass-dark', 'g-fg-on-floor', 2.7284],
       ['glass-light', 'g-ad-floor', 2.4574],
       ['glass-light', 'g-ad-halo', 2.4574],
+      ['glass-light', 'g-tint-floor', 1.4053],
+      ['glass-light', 'g-fg-on-floor', 1.4053],
       ['simple-dark', 'g-tint-floor', 2.4574],
       ['simple-dark', 'g-fg-on-floor', 2.7284],
       ['simple-light', 'g-ad-floor', 2.4574],
       ['simple-light', 'g-ad-halo', 2.4574],
+      ['simple-light', 'g-tint-floor', 1.4053],
+      ['simple-light', 'g-fg-on-floor', 1.4053],
     ]);
     for (const a of acc) {
-      expect(a.decided).toContain('11-05');
+      expect(a.decided).toMatch(/11-0[56]/);
       expect(a.reason.length).toBeGreaterThan(5);
     }
     const { code, report } = exec(ROOT);
     expect(code).toBe(0);
-    expect(report).toMatchObject({ failed: 0, accepted: 8 });
+    expect(report).toMatchObject({ failed: 0, accepted: 12 });
   });
 });

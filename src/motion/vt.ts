@@ -16,6 +16,9 @@ export const VT_FIXED = {
   /** 底栏和“＋”（B2 FA-7，GlassBar.module.css）：切页时不跟着淡入淡出，直接用新的（base.css） */
   tabbar: 'tabbar',
   tabbarAdd: 'tabbar-add',
+  /** 顶部渐变模糊带的两层（入口页的 .lemo-top-8、.lemo-top-2，base.css）：切页时不跟着整页淡掉（动效复审 M5，11-06） */
+  topBlur8: 'top-blur-8',
+  topBlur2: 'top-blur-2',
 } as const;
 
 /** 一个元素实际生效的 view-transition-name：读计算样式，CSS Modules 里起的名字和内联 style 都算（X-5：原来只扫内联 style） */

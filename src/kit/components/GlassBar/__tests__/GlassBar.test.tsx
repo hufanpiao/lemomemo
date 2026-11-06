@@ -158,13 +158,21 @@ describe('GlassBar', () => {
     expect(css).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{\s*\.barTint \{\s*background: var\(--glass-solid\);/);
     expect(css).toMatch(/:global\(:root\[data-rt='1'\]\) \.barTint \{\s*background: var\(--glass-solid\);/);
     expect(css).toMatch(/\.drop\[data-state='press'\] \{\s*scale: 1\.12;/);
+    // 切页过渡期间实色遮罩、不模糊（负责人 11-06 70d94f5 残影；代码审查 M3、S4、S5，动效审查 M2、S4）
+    const VT = String.raw`:global\(:root:is\(\[data-vt\], :active-view-transition\)\)`;
+    expect(css).toMatch(new RegExp(String.raw`${VT} \.bar,\s*${VT} \.fab \{\s*backdrop-filter: none;`));
+    expect(css).toMatch(new RegExp(String.raw`${VT} \.bar::after,\s*${VT} \.fab::after \{\s*opacity: 1;\s*transition: none;`));
+    expect(css).toMatch(/\.bar::after,\s*\.fab::after \{[^}]*background: var\(--glass-solid\);\s*opacity: 0;[^}]*transition: opacity var\(--dur-glass\) var\(--ease-out\);/);
+    expect(css).toMatch(/\.bar\[data-ad='dark'\]::after \{\s*background: var\(--g-ad-solid\);/); // 深色玻璃配深色实底（M3）
+    expect(css).toMatch(/\.fab::after \{\s*background: var\(--fab-bg\);/);
+    expect(css).toMatch(/\.fab svg,\s*\.me \{\s*z-index: 1;/);
     expect(css).not.toContain('scale: 1.16');
-    // 11-06 底栏透明度排查：副本档直接模糊背后的真实画面（--g-live-fx，10px），不透明的副本层藏起来；没有 0.5px 外圈；后备 8px；阴影两层
+    // 11-06 底栏透明度排查：副本档直接模糊背后的真实画面（--g-live-fx，3px）；没有 0.5px 外圈；后备 8px；阴影两层
     expect(css).toMatch(/\.bar\[data-glass='copy'\],\s*\.fab\[data-glass='copy'\] \{\s*backdrop-filter: var\(--g-live-fx\);/);
     expect(css).toMatch(/\.bar\[data-glass='copy'\] \.barTint \{\s*background: var\(--g-tint\);\s*\}/);
     // 带 view-transition-name 的 .bar、.fab 是背景根：模糊只能写在它们自己身上，里面的着色层、液滴一律不写 backdrop-filter（第二轮根因 2）
     expect(css).not.toMatch(/\.(glass|barTint|fabTint|adTint|pill)\b[^{]*\{[^}]*backdrop-filter: (?!none)/);
-    expect(css).toMatch(/\.bar :global\(\[data-glass-layer\]\),\s*\.fab :global\(\[data-glass-layer\]\) \{\s*display: none;/);
+    expect(css).not.toContain('data-glass-layer'); // 11-06 起副本引擎不再建副本层（GLASS-copy-unused），样式里也不用再藏它
     expect(css).not.toContain('var(--rim-shade)');
     expect(css).toContain('backdrop-filter: blur(8px) saturate(1.8);');
     expect(css).not.toContain('var(--shadow-2)');

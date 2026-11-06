@@ -5,7 +5,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, type RenderResult } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GlassBar } from '../GlassBar.tsx';
-import { EARLY_MS } from '../GlassBarFx.tsx';
+import { EARLY_MS, HIT_MS } from '../GlassBarFx.tsx';
 
 vi.mock('../../../../motion/glass-ghost.ts', () => ({ startGlass: () => ({ stop: () => undefined, poke: () => undefined }), playGel: () => true }));
 
@@ -202,6 +202,91 @@ describe('过渡中点页面内容（R6）', () => {
       await vi.advanceTimersByTimeAsync(40);
     });
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('机器慢、伪元素层 1 秒多才撤（CI 的 Linux webkit，11-06）：还在等，撤了以后照样点到；一直撤不掉的约 2 秒后放弃', async () => {
+    const btn = put(document.createElement('button'));
+    const onClick = vi.fn();
+    btn.addEventListener('click', onClick);
+    under = document.documentElement;
+    inTransition(100);
+    document.documentElement.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1200);
+    });
+    expect(onClick).not.toHaveBeenCalled();
+    under = btn;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(40);
+    });
+    expect(onClick).toHaveBeenCalledTimes(1);
+    under = document.documentElement;
+    inTransition(100);
+    document.documentElement.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(HIT_MS + 100);
+    });
+    under = btn;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(onClick).toHaveBeenCalledTimes(1); // 放弃以后不再点
+  });
+});
+
+describe('等待中的代点可以取消（代码审查 p1 M1、M2、S1）', () => {
+  /** 伪元素层一直没撤的过渡中点一下页面中间：代点进入等待 */
+  const waiting = async () => {
+    const btn = put(document.createElement('button'));
+    const onClick = vi.fn();
+    btn.addEventListener('click', onClick);
+    under = document.documentElement;
+    inTransition(100);
+    document.documentElement.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(40);
+    });
+    return { btn, onClick };
+  };
+  const later = async () => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+  };
+
+  it('用户自己又按下：取消等待中的代点（不会导航两次）', async () => {
+    const { btn, onClick } = await waiting();
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    under = btn;
+    await later();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('等待中换了路由：放弃', async () => {
+    const { btn, onClick } = await waiting();
+    const before = location.href;
+    history.pushState(null, '', '#/todos');
+    under = btn;
+    await later();
+    expect(onClick).not.toHaveBeenCalled();
+    history.replaceState(null, '', before);
+  });
+
+  it('等待中又进入新的过渡：放弃，不点到新页面', async () => {
+    const { btn, onClick } = await waiting();
+    inTransition(10);
+    under = btn;
+    await later();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('卸载：不再代点，定时器清零', async () => {
+    const { btn, onClick } = await waiting();
+    view.unmount();
+    expect(vi.getTimerCount()).toBe(0);
+    under = btn;
+    await later();
+    expect(onClick).not.toHaveBeenCalled();
   });
 });
 

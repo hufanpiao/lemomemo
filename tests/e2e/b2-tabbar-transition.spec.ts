@@ -53,6 +53,13 @@ test.describe('底栏：切页过渡进行中（FA-7）', () => {
           else el.style.setProperty('visibility', 'hidden');
         }
       }, on);
+    // 过渡期间底栏和“＋”盖实色遮罩、不模糊（GlassBar.module.css，负责人 11-06 70d94f5 残影）：停稳以后截“画着”“没画”两张参照时，
+    // 给 <html> 打同一个 data-vt（motion/index.ts 过渡期间也打它），走的是同一条 CSS，比的仍是“画没画出来”，不是材质差别
+    const solid = (on: boolean) =>
+      page.evaluate((v) => {
+        if (v) document.documentElement.setAttribute('data-vt', '');
+        else document.documentElement.removeAttribute('data-vt');
+      }, on);
     const boxOf = async (l: ReturnType<typeof bar>) => {
       const r = await l.boundingBox();
       expect(r).not.toBeNull();
@@ -80,6 +87,18 @@ test.describe('底栏：切页过渡进行中（FA-7）', () => {
         .then((h) => h.jsonValue());
       expect(paused, `${name}：没等到切页过渡`).toBeGreaterThan(0);
       await page.waitForTimeout(700); // 液滴滑完（--dur-drop 0.55s），过渡仍停着
+      // 代码审查 S6：过渡中确实是实色——底栏、“＋”不模糊，遮罩（::after）不透明；CSS 写错或被丢掉，这里就挂
+      const mat = await page.evaluate(() =>
+        ['[data-testid="tabbar"]', '[data-testid="tabbar-add"]'].map((sel) => {
+          const el = document.querySelector(sel) as Element;
+          const cs = getComputedStyle(el);
+          return { bf: cs.backdropFilter || cs.getPropertyValue('-webkit-backdrop-filter'), mask: getComputedStyle(el, '::after').opacity };
+        }),
+      );
+      expect(mat, `${name}：过渡中底栏和“＋”是实色`).toEqual([
+        { bf: 'none', mask: '1' },
+        { bf: 'none', mask: '1' },
+      ]);
       for (const [k, c] of Object.entries(clips)) mid[k] = await shot(c);
       const still = await page.evaluate(() => document.getAnimations().filter((x) => x.playState === 'paused').length);
       expect(still, `${name}：截图时过渡还停在中途`).toBeGreaterThan(0);
@@ -88,10 +107,13 @@ test.describe('底栏：切页过渡进行中（FA-7）', () => {
       });
       await expect(page).toHaveURL(new RegExp(`#/${name}$`));
       await page.waitForTimeout(700);
+      await solid(true);
       for (const [k, c] of Object.entries(clips)) end[k] = await shot(c);
       await setShown(false);
       for (const [k, c] of Object.entries(clips)) gone[k] = await shot(c);
       await setShown(true);
+      await solid(false);
+      await page.waitForTimeout(400); // 遮罩平时带 --dur-glass（0.3s）淡出，等淡完再截下一轮的“点之前”
       for (const k of Object.keys(clips)) {
         const [o, p, q, z] = [await pixels(before[k] as Buffer), await pixels(mid[k] as Buffer), await pixels(end[k] as Buffer), await pixels(gone[k] as Buffer)];
         let telling = 0;

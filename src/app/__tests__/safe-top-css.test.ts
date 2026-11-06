@@ -96,18 +96,37 @@ describe('顶部安全区底色条', () => {
     }
   });
 
-  it('顶部渐变模糊带（11-06）：两层模糊 html::before 8px、body::after 2px，不挡点按；减少透明效果两种都藏模糊、只留底色渐变；宽屏不加', () => {
-    const both = block(base, ['html::before,', 'body::after'].join('\n'));
+  it('顶部渐变模糊带（11-06）：两层模糊 .lemo-top-8 8px、.lemo-top-2 2px，从 y=0 起高“安全区 + --top-fade”，不挡点按；减少透明效果两种都藏模糊、只留底色渐变；宽屏不加', () => {
+    const both = block(base, ['.lemo-top-8,', '.lemo-top-2'].join('\n'));
     expect(both).toMatch(/position: fixed;/);
+    expect(both).toMatch(/top: 0;/);
     expect(both).toMatch(/z-index: 1;/);
+    expect(both).toMatch(/height: calc\(var\(--inset-top\) \+ var\(--top-fade\)\);/);
     expect(both).toMatch(/pointer-events: none;/);
-    expect(block(base, 'html::before')).toMatch(/backdrop-filter: blur\(8px\);/);
-    expect(base).toMatch(/\nbody::after \{\s*backdrop-filter: blur\(2px\);/);
-    expect(block(base, 'body::before')).toMatch(/mask: linear-gradient\(to bottom, var\(--bg\)/);
-    expect(base).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{\s*html::before,\s*body::after \{\s*display: none;/);
-    expect(base).toMatch(/:root\[data-rt='1'\]::before,\s*:root\[data-rt='1'\] body::after \{\s*display: none;/);
-    expect(base).toMatch(/@media \(width >= 900px\) \{\s*html::before,\s*body::after \{\s*display: none;/);
+    expect(block(base, '.lemo-top-8')).toMatch(/backdrop-filter: blur\(8px\);/);
+    expect(base).toMatch(/\n\.lemo-top-2 \{\s*background: var\(--status-tint\);\s*backdrop-filter: blur\(2px\);/);
+    expect(block(base, 'body::before')).toMatch(/mask: linear-gradient\(to bottom, var\(--bg\), transparent\);/); // 整段渐变不留实色
+    expect(base).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{\s*\.lemo-top-8,\s*\.lemo-top-2 \{\s*display: none;/);
+    expect(base).toMatch(/:root\[data-rt='1'\] \.lemo-top-8,\s*:root\[data-rt='1'\] \.lemo-top-2 \{\s*display: none;/);
+    expect(base).toMatch(/@media \(width >= 900px\) \{\s*\.lemo-top-8,\s*\.lemo-top-2 \{\s*display: none;/);
     expect(base.match(/backdrop-filter:/g)?.length).toBe(2); // 只两层（主持人：控制层数）
+  });
+
+  // 动效复审 M5（11-06）：伪元素属于整页快照，切页时跟着旧页淡掉、顶部闪一下；两层改成入口页里的具名真元素，过渡里不放动画
+  it('两层模糊是入口页的具名真元素，过渡里 animation: none；没有灰色衬底 html::after，备用底色 --status-tint 默认透明', () => {
+    for (const f of ['src/index.html', 'src/auth/index.html']) {
+      const h = readFileSync(f, 'utf8');
+      expect(h, f).toContain('<div class="lemo-top-8" aria-hidden="true"></div>');
+      expect(h, f).toContain('<div class="lemo-top-2" aria-hidden="true"></div>');
+    }
+    expect(block(base, '.lemo-top-8')).toMatch(/view-transition-name: top-blur-8;/);
+    expect(base).toMatch(/view-transition-name: top-blur-2;/);
+    for (const k of ['group', 'old', 'new']) for (const n of ['top-blur-8', 'top-blur-2']) expect(base).toContain(`::view-transition-${k}(${n})`);
+    expect(base).not.toMatch(/html::after|status-scrim/);
+    for (const n of ['glass', 'simple']) {
+      const skin = readFileSync(`src/styles/skins/${n}.css`, 'utf8');
+      expect(skin.match(/--status-tint:rgba\(20,21,24,0\)/g)?.length, n).toBe(2);
+    }
   });
 
   it('src 下除了 base.css，没有 CSS 直接写 env(safe-area-inset-top)', () => {

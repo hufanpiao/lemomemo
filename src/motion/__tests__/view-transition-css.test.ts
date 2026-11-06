@@ -34,6 +34,14 @@ describe('View Transitions 接令牌（UI-4 L-3）', () => {
 
 // 负责人 10-31（iPhone 主屏幕版）：设置 ↔ 注销账号切换时“注销账号”四个字跳一下——整页交叉淡入淡出时，居中的旧标题“设置”叠在新标题中间。
 // 顶栏单独起名 page-head（SettingsPage.module.css 的 .top）：两边都有顶栏时先淡出、再淡入；只有一边有（今天 ↔ 设置）时和整页同步
+// 负责人 11-06（iPhone 主屏幕版 70d94f5）：今天 -> 日历 交叉淡入时旧页的字半透明叠在新页上。整页也先出后入，任何一帧只有一页的字
+describe('整页 root：先出后入，不叠字', () => {
+  it('旧页 lemo-head-out、新页 lemo-head-in', () => {
+    expect(declsOf('::view-transition-old(root)').get('animation-name')).toBe('lemo-head-out');
+    expect(declsOf('::view-transition-new(root)').get('animation-name')).toBe('lemo-head-in');
+  });
+});
+
 describe('页面顶栏 page-head：两边都有时先出后入，不叠在一起', () => {
   /** @keyframes name 里每个关键帧选择器 → opacity */
   function frames(name: string): Map<string, string> {
@@ -56,20 +64,21 @@ describe('页面顶栏 page-head：两边都有时先出后入，不叠在一起
     }
   });
 
-  it('两边都有：旧的 lemo-head-out 前 40% 淡完，新的 lemo-head-in 40% 以后才淡入（同一时刻不会两个都看得见）', () => {
+  it('两边都有：旧的 lemo-head-out 前 40% 淡完，新的 lemo-head-in 35% 以后才淡入（35～40% 旧的只剩不到 0.5%，看不出叠字）', () => {
     expect(declsOf('::view-transition-old(page-head)').get('animation-name')).toBe('lemo-head-out');
     expect(declsOf('::view-transition-new(page-head)').get('animation-name')).toBe('lemo-head-in');
     const out = frames('lemo-head-out');
     const inn = frames('lemo-head-in');
     expect(Object.fromEntries(out)).toEqual({ '0%': '1', '40%': '0', '100%': '0' });
-    expect(Object.fromEntries(inn)).toEqual({ '0%': '0', '40%': '0', '100%': '1' });
+    expect(Object.fromEntries(inn)).toEqual({ '100%': '1' });
+    // 动效审查 M1、S4（11-06）：新的 35% 起淡入，这一段用 --ease-out（两页都空从约 66 ms 降到约 36 ms）；锁住百分比和段内缓动
+    expect(css).toMatch(/@keyframes lemo-head-in \{\s*0%,\s*35% \{\s*opacity: 0;\s*animation-timing-function: var\(--ease-out\);\s*\}\s*100% \{\s*opacity: 1;\s*\}\s*\}/);
+    expect(css).toMatch(/@keyframes lemo-head-out \{\s*0% \{\s*opacity: 1;\s*\}\s*40%,\s*100% \{\s*opacity: 0;\s*\}\s*\}/);
   });
 
-  it('只有一边有顶栏（:only-child，今天 ↔ 设置）：换回整段淡出 / 淡入，和整页同步', () => {
-    expect(declsOf('::view-transition-old(page-head):only-child').get('animation-name')).toBe('lemo-fade-out');
-    expect(declsOf('::view-transition-new(page-head):only-child').get('animation-name')).toBe('lemo-fade-in');
-    expect(Object.fromEntries(frames('lemo-fade-out'))).toEqual({ to: '0' });
-    expect(Object.fromEntries(frames('lemo-fade-in'))).toEqual({ from: '0' });
+  it('只有一边有顶栏（今天 ↔ 设置）：也先出后入，没有 :only-child 的整段淡入淡出（11-06 代码审查 M4：整页改先出后入后，留着会让顶栏叠在整页上）', () => {
+    expect(css).not.toMatch(/page-head\):only-child/);
+    expect(css).not.toMatch(/@keyframes lemo-fade-(in|out)/);
   });
 
   it('顶栏的组不滑位置（animation: none）：往下滚过再进注销页时新旧顶栏位置不同，默认 0.25s 滑过去会再动一下', () => {
@@ -204,5 +213,65 @@ describe('transition()：起 View Transition 前给 Pressable 打 data-snap，�
       seen = document.querySelectorAll('[data-snap]').length;
     });
     expect(seen).toBe(0);
+  });
+});
+
+// 11-06 代码审查 S4：iOS 18.0～18.1 不认 :active-view-transition，底栏“过渡中换实色”还认 <html data-vt>
+describe('transition()：过渡期间 <html> 带 data-vt', () => {
+  const doc = document as unknown as { startViewTransition?: unknown };
+  const has = () => document.documentElement.hasAttribute('data-vt');
+  afterEach(() => {
+    delete doc.startViewTransition;
+  });
+
+  it('调用 startViewTransition 之前就打上（旧画面在调用之后才截），finished 以后摘掉', async () => {
+    let seen = false;
+    let end: () => void = () => undefined;
+    doc.startViewTransition = (cb: () => void) => {
+      seen = has();
+      cb();
+      return { finished: new Promise<void>((r) => (end = r)) };
+    };
+    const p = transition(() => undefined);
+    expect(seen).toBe(true);
+    expect(has()).toBe(true);
+    end();
+    await p;
+    expect(has()).toBe(false);
+  });
+
+  // 代码审查 L10：过渡被跳过或中止时 finished 会 reject，也要摘掉，transition() 照样 resolve
+  it('finished 被 reject：照样摘掉 data-vt，transition() 不往外抛', async () => {
+    let fail: (e: Error) => void = () => undefined;
+    doc.startViewTransition = (cb: () => void) => {
+      cb();
+      return { finished: new Promise<void>((_, rej) => (fail = rej)) };
+    };
+    const p = transition(() => undefined);
+    expect(has()).toBe(true);
+    fail(new Error('skipped'));
+    await expect(p).resolves.toBeUndefined();
+    expect(has()).toBe(false);
+  });
+
+  it('新过渡打断旧过渡：旧的先结束时还留着，最后一个结束才摘；同步抛错也摘', async () => {
+    const ends: Array<() => void> = [];
+    doc.startViewTransition = (cb: () => void) => {
+      cb();
+      return { finished: new Promise<void>((r) => ends.push(r)) };
+    };
+    const a = transition(() => undefined);
+    const b = transition(() => undefined);
+    ends[0]?.();
+    await a;
+    expect(has()).toBe(true);
+    ends[1]?.();
+    await b;
+    expect(has()).toBe(false);
+    doc.startViewTransition = () => {
+      throw new Error('boom');
+    };
+    await transition(() => undefined);
+    expect(has()).toBe(false);
   });
 });
