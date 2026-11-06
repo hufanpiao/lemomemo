@@ -105,7 +105,18 @@ export const test = base.extend<{ csp: CspWatch }>({
         },
       });
       if (!expected) {
-        const { list: all, selects } = page.isClosed() ? { list: [], selects: 0 } : await readState(page, webkit).catch(() => ({ list: [], selects: 0 }));
+        // 读页面计数是一张“那一刻”的快照（11-07 在 CI 同款 Linux webkit 镜像里查明）：用例刚等到地址变成编辑页就收尾，编辑页还在渲染，
+        // page.evaluate 在页面里跑完以后又建了 select，它们的控制台报错比 evaluate 的结果先到 Node，于是控制台条数 > 快照里的 select 个数，
+        // 多出来的被当成真违规（b2-readonly-rows“今天页”、b2-tabbar“＋”偶发失败）。读的过程中又来了控制台报错就再读一次，
+        // 直到读的那段时间里没有新报错：这时已到的每条报错都在快照之前发出，对应的 select 都已计数。放过条件不变（一个 select 只抵一条）
+        const read = async (): Promise<{ list: Violation[]; selects: number }> =>
+          page.isClosed() ? { list: [], selects: 0 } : await readState(page, webkit).catch(() => ({ list: [], selects: 0 }));
+        let seen = consoleErrors.length;
+        let { list: all, selects } = await read();
+        for (let i = 0; i < 5 && consoleErrors.length !== seen; i += 1) {
+          seen = consoleErrors.length;
+          ({ list: all, selects } = await read());
+        }
         // 控制台：webkit 建过几个 select，就最多扣掉几条同样文字的报错（不按已标出的事件条数扣，见文件头）
         // 控制台文字是通用的，这样扣可能顺带扣掉一条同文字的真违规；不会漏判：真违规的 securitypolicyviolation 事件不在扣除之列，下面事件那一路照样拦（代码审查 FA-7 第八节 L9）
         let skip = selects;
