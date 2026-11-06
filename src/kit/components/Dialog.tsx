@@ -12,6 +12,16 @@
 //   改成 triggerRef.current?.focus()；使用方都是自己的按钮 setOpen(true)、不用 RD.Trigger，triggerRef 是空的，焦点就一直停在 body。
 //   所以这里在打开的那一刻（useLayoutEffect，早于 FocusScope 在 useEffect 里把焦点移进弹层）记下 document.activeElement，
 //   onCloseAutoFocus 里先 preventDefault（Radix 就不再去找 triggerRef），再还给记下的元素——它还在文档里、没被禁用才还
+// 还焦点的时机（MOTION-②-low 与 Dialog 焦点审查 L-1，11-05）：open 变成 false 的那一次提交里就还（useEffect：这时 Radix FocusScope
+//   锁焦点的监听已经在同一次提交的清理阶段摘掉，不会把焦点拉回弹层），不等退场动画播完、Content 卸载；
+//   原来要等卸载，焦点先在 body 上停 0.03～0.38 秒，这段时间按 Tab 会从页面开头走。卸载时的 onCloseAutoFocus 只 preventDefault，
+//   焦点还在 body 或者还在正在退场的弹层里（例如提前还的时候打开按钮还被禁用着）才再还一次；用户已经点到别处就不动
+// 读屏补报（第 1 批审查 M1，主持人 11-05 定第一种）：提前还焦点时 Content 还挂着，Radix 的 hideOthers 让页面其余部分还带着
+//   aria-hidden（要等 Content 卸载才撤），焦点落在被隐藏的打开按钮上，VoiceOver 不报、撤掉以后也不补报。所以卸载时
+//   （onCloseAutoFocus，Radix 在卸载后的 setTimeout 里派，这时 aria-hidden 已经撤了）焦点还停在提前还的那个元素上，
+//   就 blur() 再 focus() 一次，让读屏重新报出来
+// 退路（L-2）：打开按钮被禁用、被移走（确认移除以后按钮变 removing、整块返回 null 等）时还不回去，
+//   使用方可以传 returnFocus 给一个退路元素（所在区块的标题、新出现的按钮），还不了打开按钮就还给它；都不行才留在 body
 import * as RD from '@radix-ui/react-dialog';
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { Appear } from '../../motion/components.ts';
@@ -37,6 +47,8 @@ export interface DialogProps {
   title: string;
   description?: string;
   children?: ReactNode;
+  /** 退路（审查 L-2）：打开前的元素还不回去（被禁用、被移走）时把焦点给它；返回 null 或同样还不了就算了 */
+  returnFocus?: () => HTMLElement | null;
 }
 
 /** 能不能把焦点还给它：还在文档里，没被禁用 */
@@ -45,17 +57,46 @@ function canRefocus(el: Element | null): el is HTMLElement {
   return !(el as HTMLElement & { disabled?: boolean }).disabled;
 }
 
-export function Dialog({ open, onOpenChange, title, description, children }: DialogProps) {
+export function Dialog({ open, onOpenChange, title, description, children, returnFocus }: DialogProps) {
   useScrollLock(open);
   const returnTo = useRef<Element | null>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const fallback = useRef(returnFocus);
+  fallback.current = returnFocus;
+  /** 提前还焦点（关上那一刻）时给到的元素：卸载时它还拿着焦点，就重新聚焦一次让读屏补报（M1） */
+  const early = useRef<HTMLElement | null>(null);
+  /** 按“打开前的元素 → 退路”的顺序还焦点；真聚焦上了（document.activeElement 就是它）才算还成，返回它（D-L4：在 inert 里、被隐藏的聚焦不上，接着试退路） */
+  const giveBack = (): HTMLElement | null => {
+    for (const el of [returnTo.current, fallback.current?.() ?? null]) {
+      if (!canRefocus(el)) continue;
+      el.focus();
+      if (document.activeElement === el) return el;
+    }
+    return null;
+  };
   useLayoutEffect(() => {
     if (open) returnTo.current = document.activeElement;
   }, [open]);
+  // L-1：关上的那一次提交里就还（见文件头）；第一次挂载时 open 就是 false、没记过，不动
+  useEffect(() => {
+    if (open || returnTo.current === null) return;
+    const active = document.activeElement;
+    // 关的途中用户已经把焦点放到弹层外的别处：不抢
+    if (active && active !== document.body && !content.current?.contains(active)) return;
+    early.current = giveBack();
+  }, [open]);
   const restoreFocus = (e: Event): void => {
     e.preventDefault();
-    const el = returnTo.current;
+    const active = document.activeElement;
+    const lost = !active || active === document.body || !active.isConnected || (content.current?.contains(active) ?? false);
+    if (lost) giveBack();
+    else if (active === early.current) {
+      // M1：提前还的时候它在 aria-hidden 里，读屏没报；现在撤掉了，重新聚焦一次
+      early.current.blur();
+      early.current.focus();
+    }
     returnTo.current = null;
-    if (canRefocus(el)) el.focus();
+    early.current = null;
   };
   return (
     <RD.Root open={open} onOpenChange={onOpenChange}>
@@ -66,7 +107,7 @@ export function Dialog({ open, onOpenChange, title, description, children }: Dia
         <Appear kind="sheet" show={open} className={styles.dock}>
           {/* 描述的 id 和 aria-describedby 都交给 Radix 管（每个弹层各生成一个，不重名）：有描述时什么都不传；
               没描述时显式传 undefined，Radix 就不写 aria-describedby，也不报缺描述的警告 */}
-          <RD.Content forceMount className={styles.content} onCloseAutoFocus={restoreFocus} {...(description === undefined ? { 'aria-describedby': undefined } : {})}>
+          <RD.Content ref={content} forceMount className={styles.content} onCloseAutoFocus={restoreFocus} {...(description === undefined ? { 'aria-describedby': undefined } : {})}>
             <RD.Title className={styles.title}>{title}</RD.Title>
             {description === undefined ? null : (
               <RD.Description className={styles.desc}>{description}</RD.Description>

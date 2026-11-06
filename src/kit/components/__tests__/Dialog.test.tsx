@@ -107,3 +107,122 @@ describe('Dialog 关掉以后焦点回到打开前的元素', () => {
     expect(document.activeElement === document.body || document.activeElement === null).toBe(true);
   });
 });
+
+// MOTION-②-low 与 Dialog 焦点审查（11-05）：L-1 关上那一刻就还、不等卸载；L-2 退路；L-3 canRefocus 的 disabled、body 两个分支
+describe('Dialog 还焦点的时机、退路（审查 L-1～L-3）', () => {
+  afterEach(cleanup);
+
+  function Host2({ disableOpener = false, dropOpener = false, withFallback = false }: { disableOpener?: boolean; dropOpener?: boolean; withFallback?: boolean }) {
+    const [open, setOpen] = useState(false);
+    const [off, setOff] = useState(false);
+    return (
+      <>
+        <h2 tabIndex={-1} data-testid="fallback">
+          section
+        </h2>
+        {off && dropOpener ? null : (
+          <button type="button" data-testid="opener" disabled={off && disableOpener} onClick={() => setOpen(true)}>
+            open
+          </button>
+        )}
+        <Dialog
+          open={open}
+          onOpenChange={setOpen}
+          title="t"
+          {...(withFallback ? { returnFocus: () => document.querySelector<HTMLElement>('[data-testid="fallback"]') } : {})}
+        >
+          <button
+            type="button"
+            data-testid="confirm"
+            onClick={() => {
+              setOff(true);
+              setOpen(false);
+            }}
+          >
+            confirm
+          </button>
+        </Dialog>
+      </>
+    );
+  }
+
+  async function openFrom(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
+    const opener = screen.getByTestId('opener');
+    opener.focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true));
+    return opener;
+  }
+
+  it('L-1：Esc 关上以后，弹层还在退场（没卸载）时焦点已经回到打开按钮', async () => {
+    const user = userEvent.setup();
+    render(<Host2 />);
+    const opener = await openFrom(user);
+    await user.keyboard('{Escape}');
+    // 退场动画还在：弹层节点还在文档里
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.activeElement).toBe(opener);
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull(), { timeout: 3000 });
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('L-3：打开按钮在关上时被禁用：不还给它、不抛错；没给退路就留在 body', async () => {
+    const user = userEvent.setup();
+    render(<Host2 disableOpener />);
+    const opener = await openFrom(user);
+    await user.click(screen.getByTestId('confirm'));
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull(), { timeout: 3000 });
+    expect((opener as HTMLButtonElement).disabled).toBe(true);
+    expect(document.activeElement).not.toBe(opener);
+    expect(document.activeElement === document.body || document.activeElement === null).toBe(true);
+  });
+
+  it('L-2：打开按钮被禁用、给了退路：焦点落在退路上', async () => {
+    const user = userEvent.setup();
+    render(<Host2 disableOpener withFallback />);
+    await openFrom(user);
+    await user.click(screen.getByTestId('confirm'));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('fallback')));
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull(), { timeout: 3000 });
+    expect(document.activeElement).toBe(screen.getByTestId('fallback'));
+  });
+
+  it('L-2：打开按钮被移走、给了退路：焦点落在退路上', async () => {
+    const user = userEvent.setup();
+    render(<Host2 dropOpener withFallback />);
+    await openFrom(user);
+    await user.click(screen.getByTestId('confirm'));
+    expect(screen.queryByTestId('opener')).toBeNull();
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull(), { timeout: 3000 });
+    expect(document.activeElement).toBe(screen.getByTestId('fallback'));
+  });
+
+  it('L-3：打开时焦点在 body（没有可还的元素）：不还给 body；给了退路就给退路', async () => {
+    function Ctl({ withFallback }: { withFallback: boolean }) {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <h2 tabIndex={-1} data-testid="fallback">
+            section
+          </h2>
+          <Dialog open={open} onOpenChange={setOpen} title="t" {...(withFallback ? { returnFocus: () => document.querySelector<HTMLElement>('[data-testid="fallback"]') } : {})}>
+            <button type="button" data-testid="close" onClick={() => setOpen(false)}>
+              close
+            </button>
+          </Dialog>
+        </>
+      );
+    }
+    for (const withFallback of [false, true]) {
+      (document.activeElement as HTMLElement | null)?.blur();
+      const user = userEvent.setup();
+      const { unmount } = render(<Ctl withFallback={withFallback} />);
+      await waitFor(() => expect(screen.getByRole('dialog').contains(document.activeElement)).toBe(true));
+      await user.click(screen.getByTestId('close'));
+      await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull(), { timeout: 3000 });
+      if (withFallback) expect(document.activeElement).toBe(screen.getByTestId('fallback'));
+      else expect(document.activeElement === document.body || document.activeElement === null).toBe(true);
+      unmount();
+    }
+  });
+});

@@ -1,5 +1,6 @@
 // 离线写入队列的“发送结果”两步：ack（确认后推进、更新本机的 server 副本）和 fail（五类失败 + 被移除）。outbox.ts 用
 // 纯 TS：不准 import React 和任何功能（A1）
+import { mergeWithServerResets } from '../../shared/logic/server-reset.ts';
 import type { Cache, CachedRow, ServerRow } from './cache.ts';
 import { META, OUTBOX } from './cache-schema.ts';
 import type { CacheTx } from './cache.ts';
@@ -65,21 +66,30 @@ export async function ackImpl(ctx: Ctx, opId: string, ack: AckResult): Promise<v
     await t.delete(OUTBOX, opId);
     for (const i of advanceAfterAck(await t.getAllByIndex<OutboxItem>(OUTBOX, 'rec', sent.rec), sent, ack)) await t.put(OUTBOX, i);
 
-    // 本机的 server 副本：中间没有别的设备写过时，直接认为服务器已是“server + 这次的修改”，rev 推进
+    // 本机的 server 副本：中间没有别的设备写过时，直接认为服务器已是“server + 这次的修改”，rev 推进。
+    // 合并一律走 shared 的 mergeWithServerResets（REMIND-shown-persist 修订 1 第 3 节 ③）：照服务器触发器（events_occ_reset、touch()）
+    // 清掉旧那一次的系统列（pushed_for、notified_for、snooze_at、defer_until 等），下一次拉取之前不会拿旧 pushed_for 误压新的一次提醒。
+    // 新建时 old 传 null（真库 INSERT 不清这几列）；forked 等只落库一部分时传 appliedColumns；rev、id 照旧叠在后面
+    // old 要是整行（清列函数按“合并后和原来不同”判断）：拉取一律 select('*')，是整行；R-229 空壳转换时已丢掉这一行的全部队列项，
+    // 确认回来找不到项直接返回，不会拿空壳当 old。唯一的部分列是“新建确认后”的副本：只有可写列，没有 remind_at、pushed_for 等系统列，
+    // 函数把没有的列当 null（新建时服务器这几列本来就是空的，remind_at 由服务器后填），下一次拉取整行替换时纠正。
+    // 夹了别的设备写入时拿本机旧 server 当 old，会和服务器差一点（多清或少清），同样到下一次拉取纠正
     const row = await t.get<CachedRow>(table, id);
     const server = row?.server ?? null;
     let nextServer: ServerRow | null = server;
     let own = row?.own_revs ?? [];
     if (sent.op === 'insert') {
-      nextServer = { ...(server ?? {}), ...sent.data, id, rev: ack.rev } as ServerRow;
+      // 新建时 old 传 null：真库 INSERT 不清这几列。本机若已有旧 server 副本（新建的回执丢了、重发，审查 L1），
+      // 副本里旧的 pushed_for、notified_for 等会原样带进来、不清，等下一次拉取整行替换时纠正
+      nextServer = { ...mergeWithServerResets(table, null, { ...(server ?? {}), ...sent.data }), id, rev: ack.rev } as ServerRow;
       own = [];
     } else if (server && ack.prev_rev !== null && ack.prev_rev === sent.base_rev) {
-      nextServer = { ...server, ...appliedColumns(sent, ack), rev: ack.rev } as ServerRow;
+      nextServer = { ...mergeWithServerResets(table, server, appliedColumns(sent, ack)), rev: ack.rev } as ServerRow;
       own = [];
     } else {
       // 中间夹了别的设备的写入（K6 审查 M6）：服务器上已经是“别人的修改 + 这次的修改”，本机还不知道别人改了什么。
       // 先把这次确认的修改叠进 server（rev 保持旧值，等 K8 拉到新行再整行替换），界面不回滚；rev 记进 own_revs
-      if (server) nextServer = { ...server, ...appliedColumns(sent, ack) } as ServerRow;
+      if (server) nextServer = mergeWithServerResets(table, server, appliedColumns(sent, ack));
       own = [...own, ack.rev];
       if (own.length > MAX_OWN_REVS) own = [];
     }

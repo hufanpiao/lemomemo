@@ -5,6 +5,12 @@
 // • 隐私记解锁中照常显示（隐私记不压）
 // • 横幅不自动收起，处理了才消失（提醒功能处理完调 remove）；往上滑先收起（collapse），收起的进“错过的提醒”
 // • 按了“稍后”弹 2 秒“15:25 再提醒你”（snoozeNote，提醒功能负责到时清掉）
+// • armedSince：提醒引擎（RemindHost）armed 了没有、从哪一刻起到点的算“本次打开以后”。引擎 armed 时写，卸载时清成 null。
+//   今天页等它不是 null 才挂“错过的提醒”，分包也那时才下载、不进首屏（REMIND-shown-persist 修订 1 P2，主持人 11-05 定，改掉原来 J1 的
+//   “按打开时刻一打开就挂”；REMIND-missed-flash：引擎没挂上时队列是空的，打开后刚到点的那条会先算进“错过 1 条”再跳进横幅）
+// • remindDown：引擎这次打开挂不上了（RemindHost 出错、分包下载失败，App 的错误边界吞掉、不再重试；或者挂上以后约 15 秒还没 armed，
+//   App 的看门狗写，之后 armed 了再清掉）。App 写，换账号时清掉。
+//   今天页看到它也挂“错过的提醒”，不传 since、照旧全算（今天页待办 代码审查 M1：引擎坏了提醒不响，“错过的提醒”是页面上唯一的信号）
 import { createStore } from 'zustand/vanilla';
 import { useStore } from 'zustand';
 import { useEffect } from 'react';
@@ -29,11 +35,15 @@ export interface RemindQueueState {
   readonly collapsed: ReadonlySet<string>;
   /** “15:25 再提醒你”：要显示的时刻（epoch ms）；null 不显示 */
   readonly snoozeNote: number | null;
+  /** 提醒引擎挂上时的 since（epoch ms，见上面头注释）；没挂上是 null */
+  readonly armedSince: number | null;
+  /** 引擎这次打开挂不上了（见文件头） */
+  readonly remindDown: boolean;
 }
 
 const EMPTY: ReadonlySet<string> = new Set();
 
-export const remindQueue = createStore<RemindQueueState>()(() => ({ entries: [], holds: [], collapsed: EMPTY, snoozeNote: null }));
+export const remindQueue = createStore<RemindQueueState>()(() => ({ entries: [], holds: [], collapsed: EMPTY, snoozeNote: null, armedSince: null, remindDown: false }));
 
 let seq = 0;
 
@@ -103,6 +113,16 @@ export function collapseRinging(tag: string): void {
 
 export function setSnoozeNote(at: number | null): void {
   remindQueue.setState({ snoozeNote: at });
+}
+
+/** 提醒引擎挂上（传 since）、卸载（传 null）时调；只有提醒功能的引擎写 */
+export function setRemindArmed(since: number | null): void {
+  remindQueue.setState((s) => (s.armedSince === since ? s : { armedSince: since }));
+}
+
+/** 引擎出错（App 的错误边界 onError、看门狗）时写 true，armed 了（看门狗写的那种）或那一份提醒卸载（换账号、退出）时写 false；只有 App 写 */
+export function setRemindDown(down: boolean): void {
+  remindQueue.setState((s) => (s.remindDown === down ? s : { remindDown: down }));
 }
 
 /** 退出、换账号时清空（提醒功能在账号变了时调） */

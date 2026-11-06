@@ -100,8 +100,13 @@ export interface OutboxStatus {
   failed: number;
   /** 因 426 暂停；界面显示“有 N 条等更新后同步 · 内容还在本机” */
   paused: OutboxPause | null;
-  /** 带提醒、还没同步上的记录（`${table}:${id}`） */
+  /** 带提醒、还没同步上的记录（`${table}:${id}`）：待发、在途、发送失败（含 gone）都算，REMIND-failed-unsynced */
   remindRecs: ReadonlySet<string>;
+  /**
+   * remindRecs 里能“重试”的记录：有发送失败、不是 gone 的项（UNSYNCED-retry-ui；gone 走冲突卡的“恢复”）。
+   * 和 remindRecs 同一次算出，界面上提示文字和“重试”按钮同一次渲染出来（审查 M1：不让按钮晚一拍插进 role="status" 引起重播）
+   */
+  retryRecs: ReadonlySet<string>;
 }
 
 export type OutboxEvent =

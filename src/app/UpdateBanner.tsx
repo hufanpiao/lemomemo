@@ -17,9 +17,10 @@
 // 按钮用普通 <button>，不用 motion 的 Pressable：横幅静态进首屏，motion 的汇总出口会把动效库一起拉进首屏（审查必改 1，首屏预算 W3）
 import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import type { Outbox, OutboxStatus } from '../core/outbox-types.ts';
-import type { UpgradeCenter, UpgradeState } from '../core/upgrade.ts';
+import type { UpgradeCenter } from '../core/upgrade.ts';
 import { useT } from '../kit/hooks/useT.ts';
 import { useUi } from '../kit/state/ui-store.ts';
+import { bannerKind } from './banner-kind.ts';
 import styles from './UpdateBanner.module.css';
 
 export interface UpdateBannerProps {
@@ -31,20 +32,11 @@ export interface UpdateBannerProps {
   onReload(): void;
 }
 
-export type BannerKind = 'required' | 'closed' | 'sync_paused' | 'new_version' | null;
+// 该出哪一条（bannerKind）在 banner-kind.ts：App.tsx 的横幅关口在首屏里用它，有横幅要出才下载本文件（11-05 首屏瘦身）
+export { bannerKind };
+export type { BannerKind } from './banner-kind.ts';
 
-/** 现在该出哪一条（纯函数，单测用）；syncPaused：ui-store 里有 sync-paused 横幅 */
-export function bannerKind(s: UpgradeState, syncPaused = false): BannerKind {
-  if (s.cache === 'too_new') return null;   // 整屏提示管
-  if (s.syncBlocked) return s.busy ? null : 'required';
-  if (s.cache === 'closed_for_upgrade') return 'closed';
-  // 录音、编辑在进行时先不出（同 new_version；第六轮审查建议 ④），busy 归零后状态一变就出
-  if (syncPaused) return s.busy ? null : 'sync_paused';
-  if (s.swReady && !s.swDismissed) return s.busy ? null : 'new_version';
-  return null;
-}
-
-const EMPTY_STATUS: OutboxStatus = { pending: 0, failed: 0, paused: null, remindRecs: new Set() };
+const EMPTY_STATUS: OutboxStatus = { pending: 0, failed: 0, paused: null, remindRecs: new Set(), retryRecs: new Set() };
 const noSubscribe = (): (() => void) => () => undefined;
 
 export function UpdateBanner({ upgrade, outbox, onReload }: UpdateBannerProps) {

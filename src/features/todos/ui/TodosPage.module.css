@@ -74,8 +74,8 @@
 .main {
   display: flex;
   flex: 1;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
   min-height: var(--hit);
   padding: 6px 0;
@@ -83,6 +83,25 @@
   background: none;
   color: inherit;
   text-align: left;
+}
+
+/* 标题和截止标签一列；右边是行尾“未同步”标记（REMIND-wiring） */
+.mainText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* 行尾“未同步”小标记那一格：没有时整格不画（不多出 gap） */
+.unsynced {
+  flex: none;
+  white-space: nowrap;
+}
+
+.unsynced:empty {
+  display: none;
 }
 
 .title {

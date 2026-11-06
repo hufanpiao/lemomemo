@@ -23,9 +23,20 @@ export const shownKey = occurrenceKey;
 /** 弹过的：Set 里放 shownKey（旧写法放 tag，非全天两者一样），或者 Map<shownKey, 弹出时的 tag> */
 export type Shown = ReadonlySet<string> | ReadonlyMap<string, string>;
 
-/** 现在该弹的：到点（dueAt ≤ now）、60 分钟内、没处理、这一次提醒还没弹过 */
-export function localDue(list: readonly Reminder[], now: number, shown: Shown): Reminder[] {
-  return list.filter((r) => !r.handled && r.dueAt <= now && r.dueAt > now - LOCAL_WINDOW_MS && !shown.has(shownKey(r)));
+/**
+ * 现在该弹的：到点（dueAt ≤ now）、60 分钟内、没处理、这一次提醒还没弹过；
+ * rang（REMIND-shown-persist）：这一次响过、当时的 tag 和现在不同的（服务器推过、后来改了默认时刻）也不弹；tag 相同的照旧弹（R-52）；
+ * 本机弹过的（local）不再弹（代码审查一 L12：staleShown 撤回后 shown 里删了 key，同一次又回到“该响”——撤销“知道了”、撤销删除——
+ * 60 分钟内不再弹第二次；稍后、改时间会换 key，不受影响）
+ */
+export function localDue(list: readonly Reminder[], now: number, shown: Shown, rang?: ReadonlyMap<string, { readonly tag: string; readonly local?: boolean } | string>): Reminder[] {
+  return list.filter((r) => {
+    if (r.handled || r.dueAt > now || r.dueAt <= now - LOCAL_WINDOW_MS || shown.has(shownKey(r))) return false;
+    const before = rang?.get(shownKey(r));
+    if (before === undefined) return true;
+    if (typeof before === 'string') return before === r.tag;
+    return before.local !== true && before.tag === r.tag;
+  });
 }
 
 /** 弹过的里面，现在已经不在“该响”名单里的（处理了、改了时间、删了）：[shownKey, 要撤回的 tag] */
@@ -93,11 +104,15 @@ export function localText(r: Reminder, opts: { showTitle: boolean; tz: Tz; local
  */
 const num0 = (v: unknown): boolean => v === 0;
 
-export function shouldCloseShown(t: { kind: string; id: string; dueAt: number }, list: readonly Reminder[], rowKnown: boolean, tz?: Tz): boolean {
+export function shouldCloseShown(t: { kind: string; id: string; dueAt: number; occurrenceKey?: string | null }, list: readonly Reminder[], rowKnown: boolean, tz?: Tz): boolean {
   if (t.kind === 'anniv') return false;   // 纪念日本批不在列表里，不动它
   const r = list.find((x) => x.kind === t.kind && x.id === t.id);
   if (!r) return rowKnown;
   if (r.handled) return true;
+  // 通知 data 里带了 occurrenceKey（REMIND-close-occkey，方案第 6 节 L1）：先按 key 判，等于这一次的就留着（R-336 ①），不等就关，不看 tag——
+  // 默认时刻设成 20:00 时，“D 当天 20:00”和“D+1 前一天 20:00”是同一个时刻，tag 相同、key 不同，先比 tag 会把旧通知留下
+  if (typeof t.occurrenceKey === 'string') return t.occurrenceKey !== occurrenceKey(r);
+  // 没带 key（旧通知、iPhone 拿不到 data）：tag 相同留着，不同就按下面的推断
   if (r.tag === `${t.kind}:${t.id}:${t.dueAt}`) return false;
   // 全天日程（没按稍后）改了 remind.default_time：已经弹出的那条是同一次、还没处理，不撤回（R-336 ①，和 exe 本机通知一致，服务器也不发 resolve）。
   // “同一次”按 occurrenceKey（日期 + 当天 / 前一天）认（审查 L7）：系统通知只带 tag（kind:id:dueAt），拿不到弹出时的日期和 remind_days，

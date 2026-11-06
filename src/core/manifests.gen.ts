@@ -575,7 +575,6 @@ export const manifestSnapshot: readonly Manifest[] = [
     "recordKinds": [],
     "settingsKeys": [
       "ui.*",
-      "cal.*",
       "remind.*",
       "ai.*",
       "desk.*",
@@ -671,7 +670,9 @@ export const manifestSnapshot: readonly Manifest[] = [
         }
       }
     ],
-    "settingsKeys": [],
+    "settingsKeys": [
+      "cal.*"
+    ],
     "ai": {
       "sendsToAI": true,
       "functions": [

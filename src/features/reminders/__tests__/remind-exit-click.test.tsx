@@ -12,6 +12,8 @@ import { msAt } from '../../../../shared/core/date.ts';
 import { remindQueue, resetRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { loadMotionFeatures } from '../../../motion/index.ts';
+// outbox 状态替身的空集合（UNSYNCED-retryRecs-required）：每次返回同一个对象，useSyncExternalStore 的快照才稳定
+const EMPTY_RECS = vi.hoisted((): ReadonlySet<string> => new Set());
 
 // 动效功能包异步加载（B2 FA-6 ②）：这里测的是退场动画途中的点按，先等功能包到（真实页面里首屏画完后提醒才挂，那时早已到齐）
 await loadMotionFeatures();
@@ -45,7 +47,7 @@ vi.mock('../../../platform/native-bridge.ts', () => ({
 vi.mock('../../../platform/notifications.ts', () => ({ closeHandledNotifications: async () => 0 }));
 vi.mock('../../../app/router.ts', () => ({ canGoBack: () => false, goBack: vi.fn(), navigate: async () => undefined }));
 vi.mock('../../../core/boot.ts', () => ({
-  getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ remindRecs: new Set() }), list: async () => [] } }),
+  getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ retryRecs: EMPTY_RECS, remindRecs: EMPTY_RECS }), list: async () => [] } }),
 }));
 
 const { default: RemindHost } = await import('../ui/RemindHost.tsx');

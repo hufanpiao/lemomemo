@@ -61,6 +61,27 @@ describe('AppearList / AppearItem', () => {
     expect(row('b')).not.toBeNull();
   });
 
+  it('退场途中同一个 key 又加回来：回到文档流；再删掉时按现在的位置重新量（FA5-CR-low A1）', async () => {
+    let top = 10;
+    const desc = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetTop');
+    Object.defineProperty(HTMLElement.prototype, 'offsetTop', { configurable: true, get: () => top });
+    try {
+      render(<Harness start={['a', 'b']} />);
+      act(() => setIds(['b']));
+      expect(row('a')?.style.top).toBe('10px');
+      act(() => setIds(['a', 'b']));
+      expect(row('a')?.dataset['state']).not.toBe('leaving');
+      expect(row('a')?.style.position).toBe('');
+      top = 50;
+      act(() => setIds(['b']));
+      expect(row('a')?.style.position).toBe('absolute');
+      expect(row('a')?.style.top).toBe('50px');
+      await waitFor(() => expect(row('a')).toBeNull());
+    } finally {
+      if (desc) Object.defineProperty(HTMLElement.prototype, 'offsetTop', desc);
+    }
+  });
+
   it('列表外壳是定位元素（离开的那一项按它定位），并自成层叠上下文（离开那一项的 z-index -1 不掉到外层底色下面）', () => {
     render(<Harness start={['a']} />);
     expect(screen.getByTestId('list').style.position).toBe('relative');

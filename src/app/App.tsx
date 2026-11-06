@@ -21,18 +21,20 @@
 //   冷启动慢过 15 秒长兜底），就另外等 App 自己的 main[data-feature] 出现，再等空闲。理由：只写注释的话，提醒分包会和今天页分包抢下载，
 //   今天页还没画出来时到点的按钮条可能先出现在空白屏上（启动画面早已收起）；改在 App 里看 DOM，不动 first-paint 和告知页，
 //   同步、supabase-js 的时机不变。页面一直不出来照样有 5 秒硬上限
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { getBoot } from '../core/boot.ts';
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { getBoot, type BootResult } from '../core/boot.ts';
 import { RemindHost } from '../features/reminders/index.ts';
 import { GlassBar } from '../kit/components/GlassBar/GlassBar.tsx';
 import { useT } from '../kit/hooks/useT.ts';
+import { useUi } from '../kit/state/ui-store.ts';
+import { remindQueue, setRemindDown } from '../kit/state/remind-queue.ts';
 import { isProduction } from '../platform/env.ts';
 import { clock } from '../platform/clock.ts';
 import { afterAppPainted, APP_PAGE_SELECTOR } from '../platform/first-paint.ts';
 import { whenIdle } from '../platform/session.ts';
 import { reloadPage } from '../platform/sw-register.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
-import { UpdateBanner } from './UpdateBanner.tsx';
+import { bannerKind } from './banner-kind.ts';
 import { featureRoutes, offRoutes, type FeatureRoute } from './features.ts';
 import { navigate, setSamePage, useRoute, type RouteName } from './router.ts';
 import { tabBarFor } from './tab-of.ts';
@@ -102,7 +104,27 @@ function FeatureOffView() {
 function Banner() {
   const boot = getBoot();
   if (!boot) return null;
-  return <UpdateBanner upgrade={boot.upgrade} outbox={boot.outbox} onReload={reloadPage} />;
+  return <BannerGate boot={boot} />;
+}
+
+// 横幅本体按需下载（11-05 首屏瘦身，主持人定第 4 项）：平时没有横幅，首屏不带 UpdateBanner.tsx。
+// 这里订阅同一份状态（升级中心、ui-store 的 sync-paused），用 banner-kind.ts 判断有横幅要出了才下载、挂上本体；
+// 挂上以后一直挂着（之后出、收、换哪一条都由本体管，不反复下载）。
+// 里面再包一层 Suspense：冷启动时页面分包没到，外面那层照样把横幅和页面一起藏着（横幅不会先画出来、启动画面不提前收）；
+// 用着用着来了横幅，只是横幅晚到一下，页面不跟着藏。分包取不到：外面的 ErrorBoundary 接住，只是不画横幅
+const LazyUpdateBanner = lazy(() => import('./UpdateBanner.tsx').then((m) => ({ default: m.UpdateBanner })));
+
+function BannerGate({ boot }: { boot: Pick<BootResult, 'upgrade' | 'outbox'> }) {
+  const state = useSyncExternalStore(boot.upgrade.subscribe, boot.upgrade.getState);
+  const syncPaused = useUi((s) => s.banners.some((b) => b.kind === 'sync-paused'));
+  const wanted = useRef(false);
+  if (bannerKind(state, syncPaused) !== null) wanted.current = true;
+  if (!wanted.current) return null;
+  return (
+    <Suspense fallback={null}>
+      <LazyUpdateBanner upgrade={boot.upgrade} outbox={boot.outbox} onReload={reloadPage} />
+    </Suspense>
+  );
 }
 
 /** RemindHost 出错（渲染出错、分包加载失败）时记日志：App 不碰日志层，由入口（main.tsx）接上 js_error；没接时不记（接线审查 R2） */
@@ -132,15 +154,56 @@ function Reminders({ route, ready }: { route: RouteName; ready: boolean }) {
 /** 一个账号的提醒：since 在第一次渲染（App 打开、换账号）时记下；ready 之前不渲染 RemindHost，分包也不下载 */
 function RemindersFor({ route, ready }: { route: RouteName; ready: boolean }) {
   const [since] = useState(() => clock.now());
+  // 引擎出错了（这次打开不再重试）：记进 kit 的 remindDown，今天页照样挂“错过的提醒”、照旧全算（今天页待办 代码审查 M1）。
+  // 今天页等引擎 armed 才挂“错过的提醒”（REMIND-shown-persist 修订 1 P2）：分包一直下不来又不报错（弱网、模块请求挂住）、本机库读不返回时
+  // 会永远等下去，所以 ready 以后起看门狗，REMIND_ARM_WATCHDOG_MS 内还没 armed 也写 remindDown（审查“错过提醒推迟挂载”M1）；之后 armed 了再清掉。
+  // 这一份卸载（换账号、退出）时清掉
+  useEffect(() => {
+    if (!ready) return;
+    let fired = false;
+    const id = remindArmWatchdog.start(() => {
+      if (remindQueue.getState().armedSince === null) {
+        fired = true;
+        setRemindDown(true);
+      }
+    });
+    const off = remindQueue.subscribe((s) => {
+      if (s.armedSince === null) return;
+      remindArmWatchdog.stop(id);
+      if (fired) {
+        fired = false;
+        setRemindDown(false);
+      }
+    });
+    return () => {
+      remindArmWatchdog.stop(id);
+      off();
+    };
+  }, [ready]);
+  useEffect(() => () => setRemindDown(false), []);
   if (!ready) return null;
   return (
-    <ErrorBoundary fallback={null} onError={logRemindError}>
+    <ErrorBoundary
+      fallback={null}
+      onError={(error) => {
+        logRemindError(error);
+        setRemindDown(true);
+      }}
+    >
       <Suspense fallback={null}>
         <RemindHost route={route} since={since} />
       </Suspense>
     </ErrorBoundary>
   );
 }
+
+/** 提醒引擎挂上（ready）以后最多等多久 armed，过了算出错（remindDown；审查“错过提醒推迟挂载”M1） */
+export const REMIND_ARM_WATCHDOG_MS = 15_000;
+/** 看门狗的定时器：单独一个对象，测试 spy 它 */
+export const remindArmWatchdog = {
+  start: (fn: () => void): ReturnType<typeof setTimeout> => setTimeout(fn, REMIND_ARM_WATCHDOG_MS),
+  stop: (id: ReturnType<typeof setTimeout>): void => clearTimeout(id),
+};
 
 /** 提醒最晚什么时候挂：从 App 第一次渲染算起，不管页面有没有画出来（接线审查⑥ L3） */
 export const REMIND_MAX_WAIT_MS = 5000;

@@ -101,7 +101,8 @@ export function desktopBridge(deps: DesktopDeps = defaultDeps()): NativeBridge {
       if (N.permission === 'denied') return;
       if (at !== epoch) return;
       shown.get(r.tag)?.close();
-      const n = new N(r.title, { body: r.body, tag: r.tag });
+      // data 里带 occurrenceKey（REMIND-close-occkey）：只比较、不显示
+      const n = new N(r.title, { body: r.body, tag: r.tag, ...(r.occurrenceKey ? { data: { occurrence_key: r.occurrenceKey } } : {}) });
       shown.set(r.tag, n);
       n.onclick = () => {
         n.close();

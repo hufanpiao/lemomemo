@@ -17,7 +17,7 @@
 import { buildInfo } from '../platform/env.ts';
 import type { Cache, CachedRow, CacheTx, ServerRow } from './cache.ts';
 import { OUTBOX } from './cache-schema.ts';
-import { bySeq, loadRowSchemas, OutboxCodeUnavailableError, OutboxRejectError, recKey, sendOrder, validateWrite } from './outbox-logic.ts';
+import { bySeq, canRetryUnsynced, loadRowSchemas, OutboxCodeUnavailableError, OutboxRejectError, recKey, sendOrder, validateWrite } from './outbox-logic.ts';
 import { migrateOutboxItem, OUTBOX_V, outboxMigrations } from './outbox-migrations.ts';
 import type { EnqueueInput, Outbox, OutboxBootReport, OutboxEvent, OutboxItem, OutboxStatus, OutboxOptions } from './outbox-types.ts';
 import { applyServerRows, cancelDependents, notify, rewriteRow } from './outbox-rows.ts';
@@ -38,6 +38,7 @@ export {
 } from './pending-actions.ts';
 
 const EMPTY_SET: ReadonlySet<string> = new Set();
+const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => a.size === b.size && [...b].every((r) => a.has(r));
 
 async function bootImpl(ctx: Ctx): Promise<OutboxBootReport> {
   const report: OutboxBootReport = { migrated: 0, future: 0, stuck: 0, reset: 0, paused: null };
@@ -159,7 +160,7 @@ async function deleteUnlessInflight(ctx: Ctx, item: OutboxItem): Promise<boolean
 export const outboxCtx = new WeakMap<Outbox, Ctx>();
 
 export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
-  let status: OutboxStatus = { pending: 0, failed: 0, paused: null, remindRecs: EMPTY_SET };
+  let status: OutboxStatus = { pending: 0, failed: 0, paused: null, remindRecs: EMPTY_SET, retryRecs: EMPTY_SET };
   const listeners = new Set<() => void>();
   const eventListeners = new Set<(e: OutboxEvent) => void>();
 
@@ -167,15 +168,20 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
     const items = await cache.tx([OUTBOX], 'readonly', (t) => t.getAll<OutboxItem>(OUTBOX));
     const paused = (await cache.getMeta('outbox_pause')) ?? null;
     const active = items.filter((i) => i.state !== 'failed');
-    const remind = new Set(active.filter((i) => i.remind).map((i) => i.rec));
+    // 带提醒的“未同步”（remindRecs）连 failed 一起算（接手清单 REMIND-failed-unsynced）：发送失败的修改同样没到服务器，
+    // 别的设备上这条提醒同样不会响；gone 也算（另一台设备已删，本机的修改没落库），直到恢复、放弃或重试成功
+    const remind = new Set(items.filter((i) => i.remind).map((i) => i.rec));
+    // 其中能“重试”的（UNSYNCED-retry-ui）：这条记录有能重发的发送失败项（canRetryUnsynced：不是 gone、不是重发必然同样失败的码，见数据字典 10.4b；
+    // 不论那一项带不带提醒，同一条记录一起重发）
+    const retry = new Set(items.filter((i) => canRetryUnsynced(i) && remind.has(i.rec)).map((i) => i.rec));
     const same =
       status.pending === active.length &&
       status.failed === items.length - active.length &&
       JSON.stringify(status.paused) === JSON.stringify(paused) &&
-      status.remindRecs.size === remind.size &&
-      [...remind].every((r) => status.remindRecs.has(r));
+      sameSet(status.remindRecs, remind) &&
+      sameSet(status.retryRecs, retry);
     if (same) return;
-    status = { pending: active.length, failed: items.length - active.length, paused, remindRecs: remind.size ? remind : EMPTY_SET };
+    status = { pending: active.length, failed: items.length - active.length, paused, remindRecs: remind.size ? remind : EMPTY_SET, retryRecs: retry.size ? retry : EMPTY_SET };
     for (const l of [...listeners]) l();
   };
 

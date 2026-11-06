@@ -7,6 +7,7 @@
 import { relative } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 import { webOutDir } from './build/assemble_web.mjs';
+import { reuseServers } from './tools/e2e/reuse-servers.mjs';
 import { FAKE_ANON_KEY, FAKE_PORT_ENV, e2eBindings, fakePorts, type FakePorts } from './tests/e2e/fake-values.ts';
 import { NO_BACKEND_GLOBAL_TIMEOUT_MS, globalTimeoutMs } from './tests/e2e/global-timeout.ts';
 
@@ -21,7 +22,8 @@ process.env['VITE_PUBLIC_ANON_KEY'] = FAKE_ANON_KEY;
 
 const WEB_OUT = relative(import.meta.dirname, webOutDir(import.meta.dirname, process.env)).replaceAll('\\', '/');
 const FAKE = fakePorts(process.env, FASTREAD_FAKE_PORTS);
-const REUSE = process.env.CI !== 'true' && !(process.env[FAKE_PORT_ENV.s3] || process.env[FAKE_PORT_ENV.supabase]);
+// 默认不复用，设了 LEMO_E2E_REUSE=1 才复用（tools/e2e/reuse-servers.mjs）；改了假后端端口一律不复用
+const REUSE = reuseServers(process.env) && !(process.env[FAKE_PORT_ENV.s3] || process.env[FAKE_PORT_ENV.supabase]);
 const BINDINGS = Object.entries(e2eBindings(FAKE))
   .map(([k, v]) => `--binding ${k}=${v}`)
   .join(' ');

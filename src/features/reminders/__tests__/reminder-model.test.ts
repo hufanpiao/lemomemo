@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { remindAtOf } from '../../../../shared/logic/remind.ts';
-import { allReminders, missed, modeOf, reminderOf, ringing, upcoming, type Row } from '../data/reminder-model.ts';
+import { allReminders, missed, modeOf, occurrenceKey, reminderOf, ringing, upcoming, type Row } from '../data/reminder-model.ts';
 import { ackPatch, snoozePatch } from '../data/remind-write.ts';
 
 const SEOUL = 'Asia/Seoul';
@@ -89,6 +89,19 @@ describe('正在响 / 错过的提醒（5.9；TC-B2-26）', () => {
     const tag = l2.find((r) => r.title === '日程1')!.tag;
     expect(ringing(l2, now2, at(DAY, '15:00'), new Set([tag]))).toEqual([]);
     expect(missed(l2, now2).some((r) => r.tag === tag)).toBe(true);
+  });
+  it('since 的边界（REMIND-missed-flash；今天页待办 代码审查 L3）：早于 since 才算；正好等于 since、晚于 since 的不算，除非响过（rang 里有）', () => {
+    const now = at(DAY, '15:20');
+    const l = allReminders([ev(1)], [], now, SEOUL); // 15:30 开始、提前 15 分钟：15:15 到点
+    const r = l[0]!;
+    const key = occurrenceKey(r);
+    expect(missed(l, now, new Set(), new Map(), r.dueAt).map((x) => x.title)).toEqual([]);
+    expect(missed(l, now, new Set(), new Map(), r.dueAt + 1).map((x) => x.title)).toEqual(['日程1']);
+    const rang = new Map([[key, { tag: r.tag, dueAt: r.dueAt }]]);
+    expect(missed(l, now, new Set(), rang, r.dueAt).map((x) => x.title)).toEqual(['日程1']);
+    expect(missed(l, now, new Set(), rang, r.dueAt - 60_000).map((x) => x.title)).toEqual(['日程1']);
+    // 响过、正在响（还在队列里）的不算
+    expect(missed(l, now, new Set([r.tag]), rang, r.dueAt - 60_000)).toEqual([]);
   });
 });
 

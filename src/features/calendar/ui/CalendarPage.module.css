@@ -697,9 +697,14 @@
   font-size: var(--fs-10);
 }
 
+/* 日期数字定高 22px、上下各留 2px：今天的圆圈不贴着“周三”和“廿六”（CAL-week-today-circle）。
+   每行都这样排，不只今天，免得今天那行比别的行高 */
 .laneWd b {
   align-self: flex-start;
   min-width: 22px;
+  height: 22px;
+  margin: 2px 0;
+  line-height: 22px;
   border-radius: var(--r-pill);
   font-family: var(--f-num);
   font-size: var(--fs-15);

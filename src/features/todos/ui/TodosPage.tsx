@@ -3,19 +3,36 @@
 // • 分组：过期（标红：逾 N 天 / 已过 17:00）→ 今天 → 明天 → 7 天内按日期 → 以后 → 没有日期 → 已完成
 // • 每行：打勾（就地保存）、标题（常规字重）、截止标签（“今天 17:00 截止”）、删除（软删 + 8 秒撤销条）；点标题进编辑页
 // • 只读行的行尾标记、左滑、多选在后面一段（要 core 暴露 ro 标记，见回报里的接口建议）
+// • 行尾“未同步”小标记（REMIND-wiring；TC-B2-69；reminders 的 UnsyncedRemindMark 懒加载）：带提醒、还没同步上的那条标，在行按钮里、
+//   标题和截止标签的右边；只看本机待同步队列，同日历页直接挂、不等提醒引擎（今天页待办 代码审查 M1），没有时那一格不画
 // • 动效（17.1“勾选完成”“列表增删”，B2 FA-5；设计审查 M1～M3 返工 11-04）：打勾时圆圈在原地填满（CSS，--dur-ui），
 //   列表先不动（useHoldView 留住按下之前的分组）；然后这一条从原来的组淡出、同时下面的行收上来，“已完成”组让开位置后它再淡入。
 //   删除：淡出和收拢同时；撤销恢复：先让开位置再淡入（不和别的行叠着）。第一次画列表不播。分组整组出现、消失同样淡入淡出。
 //   打勾没有撤销条（只有删除有）：点错了在圆圈填满的那 --dur-ui 里还能再点回去，开始离开以后要到“已完成”组里再点
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import { CheckCircle } from '../../../kit/components/CheckCircle.tsx';
+import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
 import { useListT, useTodoList, type ActionResult, type DueTag, type Group } from '../hooks/useTodoList.ts';
+import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import styles from './TodosPage.module.css';
+
+/** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */
+function RowMark({ id }: { id: string }) {
+  return (
+    <span className={styles.unsynced}>
+      <QuietBoundary name="unsynced-mark">
+        <Suspense fallback={null}>
+          <UnsyncedRemindMark table="todos" id={id} />
+        </Suspense>
+      </QuietBoundary>
+    </span>
+  );
+}
 
 type Toast = { kind: 'undo'; id: string } | { kind: 'error'; readonly: boolean } | null;
 
@@ -103,10 +120,13 @@ export default function TodosPage() {
                     testId={`todos-done-${todo.id}`}
                   />
                   <button type="button" className={styles.main} onClick={() => void navigate('todo', todo.id)}>
-                    <span className={styles.title}>{todo.title}</span>
-                    <span className={tag.kind === 'late' ? styles.tagLate : styles.tag} data-testid={`todos-tag-${todo.id}`}>
-                      {[todo.important ? t('list.important', {}) : '', todo.project, tagText(tag)].filter(Boolean).join(' · ')}
+                    <span className={styles.mainText}>
+                      <span className={styles.title}>{todo.title}</span>
+                      <span className={tag.kind === 'late' ? styles.tagLate : styles.tag} data-testid={`todos-tag-${todo.id}`}>
+                        {[todo.important ? t('list.important', {}) : '', todo.project, tagText(tag)].filter(Boolean).join(' · ')}
+                      </span>
                     </span>
+                    <RowMark id={todo.id} />
                   </button>
                   <Pressable className={styles.del} aria-label={t('list.delete', {})} onClick={() => void del(todo.id)} data-testid={`todos-del-${todo.id}`} data-no-proxy="">
                     ×

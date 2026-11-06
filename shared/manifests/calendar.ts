@@ -19,4 +19,6 @@ export const calendar = defineManifest({
   ],
   ai: { sendsToAI: true, functions: ['ai-parse', 'ai-voice', 'ai-embed'], vectors: { events: ['title', 'note', 'location'] } },
   usageReport: { rows: true, buckets: false },
+  // 日历用到的 settings 键（cal.holidays 节假日三选一、cal.week_start 周起始；src/features/calendar/data/cal-settings.ts）
+  settingsKeys: ['cal.*'],
 });

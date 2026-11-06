@@ -35,10 +35,12 @@ export function useTodoList() {
     return () => clearInterval(id);
   }, []);
   const tz = currentTz();
-  const projects = useMemo(() => projectCounts(rows), [rows]);
+  // 同一截止时刻、没日期那组按标题排，筛选条条数一样的按项目名排：按当前语言、数字按数值（“第 2 条”在“第 10 条”前）
+  const locale = useUi((s) => s.locale);
+  const projects = useMemo(() => projectCounts(rows, locale), [rows, locale]);
   // 筛的项目没了（最后一条完成或删掉）：回到“全部”
   const active = project !== null && projects.some((p) => p.project === project) ? project : null;
-  const groups = useMemo(() => groupTodos(rows, now, tz, active), [rows, now, tz, active]);
+  const groups = useMemo(() => groupTodos(rows, now, tz, active, locale), [rows, now, tz, active, locale]);
 
   const toggleDone = useCallback(
     async (id: string, done: boolean): Promise<ActionResult> => {

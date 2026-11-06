@@ -94,9 +94,11 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/features/reminders/ui/ClockWrongNote.tsx': '设置 › 关于里用',
   'src/features/calendar/ui/CalendarSettings.tsx': '设置页里用',
   'src/features/calendar/ui/CalendarSettingsEntry.tsx': '设置页里用',
+  'src/app/UpdateBanner.tsx': '顶部版本横幅本体：有横幅要出时才下载（App.tsx 的 BannerGate，首屏瘦身 11-05）',
   'src/app/ExitIncompleteScreen.tsx': 'exe 里会话出问题的整屏提示：真要挂出时才下载（exit-screen.tsx，首屏瘦身 11-05）',
   'src/platform/push.ts': '断开浏览器推送：只在退出、被移除、换账号时下载（push-disconnect.ts，首屏瘦身 11-05）',
   'src/platform/push-claim.ts': '推送认领本体：首屏画完设好上下文、真要认领时才下载（首屏瘦身 11-05）',
+  'src/features/reminders/ui/MissedSheet.tsx': '错过提醒的底部弹层：点开才下载，有错过时首屏画完、浏览器空闲才预取（前端 B 11-05 拆出）',
   'src/platform/viewport.ts': '键盘检测：底栏在键盘弹起时藏起来用（FA-7 第 3 项），首屏画完以后 afterAppPainted 才下载',
   'src/kit/components/GlassBar/GlassBarFx.tsx':
     '液态玻璃底栏的首屏后部分：模糊带、果冻、按住放大；首屏画完以后 afterAppPainted 才下载，挂上以后再 import() 内容副本、自动深浅、帧循环（motion/glass-ghost.ts）（B2 FA-7，主持人 11-05 首屏 ③；没下载到时外壳用 backdrop-filter 后备）',

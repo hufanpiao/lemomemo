@@ -29,6 +29,41 @@ const AUTH_CODES: readonly string[] = ['jwt_expired', 'PGRST301', 'PGRST303'];
 /** 不看 HTTP 状态、一律退避重试的码：55P03 = apply_patch 等不到行锁（lock_timeout 3 秒，整个调用已回滚，架构 4.4.1） */
 const TRANSIENT_CODES: readonly string[] = ['55P03'];
 
+/**
+ * 发送失败（failed）的项里，“未同步”提示行的“重试”能重发哪些（UNSYNCED-retry-ui；码表见数据字典 10.4b，接手清单 UNSYNCED-retry-codes，11-06）。
+ * 队列项的 error 是 sync-errors.ts 的 toFailure 取的码：raise exception 的小写码 > PostgREST 的 code（SQLSTATE、PGRSTxxx）> http_<状态>。
+ * 不给重试（数据不变原样重发，必然同样失败）：
+ * • gone（另一台设备已删）：要走冲突卡的“恢复并保留我的修改”另发 patch；
+ * • 本机校验没过（LOCAL_PERMANENT_CODES：validation、invalid_row）；
+ * • 10.4b 表二标“不能”的：23505 别的唯一约束、23514 / 23502 / 22xxx 新建时的值不合约束和类型、insert_conflict（id 被别人的行占着）、
+ *   （23514 / 23502 / 22xxx 只会从新建路径来：改的路径在 apply_patch 里已接住、改成 patch_bad_args 归 drop）、
+ *   vault_file_readonly / file_immutable / install_id_immutable（客户端写错了列）、PGRST1xx（PostgREST 解析请求失败）、http_413（请求体太大）。
+ * 给重试（别处改了以后能过）：quota、note_not_writable、23503、42501、25006、PGRST202 / 204 / 205、42883、42P01，
+ * 以及没有码的 http_<状态>、表里没列的码（查不清的一律保留，宁可多给一次重试也不让用户卡死）。
+ * apply_patch 自己抛的码（patch_bad_args、patch_table_not_allowed、not_found、account_disabled 等）归 drop、removed、disabled，不会留在 failed 里。
+ * 以后后端在 10.4b 加码，这里同步改
+ */
+const NO_RETRY_CODES: readonly string[] = [
+  'gone',
+  ...LOCAL_PERMANENT_CODES,
+  '23505',
+  '23514',
+  '23502',
+  'insert_conflict',
+  'vault_file_readonly',
+  'file_immutable',
+  'install_id_immutable',
+  'http_413',
+];
+/** 22 开头的五位 SQLSTATE（data_exception 一类，如 22P02、22001）、PGRST1xx（PGRST100～PGRST199） */
+const NO_RETRY_PATTERN = /^(22[0-9A-Z]{3}|PGRST1[0-9]{2})$/;
+
+export function canRetryUnsynced(i: { state: string; error: string | null }): boolean {
+  if (i.state !== 'failed') return false;
+  if (i.error === null) return true;
+  return !NO_RETRY_CODES.includes(i.error) && !NO_RETRY_PATTERN.test(i.error);
+}
+
 /** 退避上限 5 分钟 */
 export const MAX_BACKOFF_MS = 5 * 60 * 1000;
 /** own_revs 最多 20 个 */

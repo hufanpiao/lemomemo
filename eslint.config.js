@@ -274,13 +274,14 @@ const MOTION_IMPORTS = {
   paths: [],
   patterns: [{ regex: '^(motion|framer-motion)(/|$)', message: 'A25：Motion 只能在 src/motion/ 里 import' }],
 };
-// 0.31 第 6 条：src/motion 以外只准引 motion/index.ts（函数和类型）、motion/components.ts（React 组件）
+// 0.31 第 6 条：src/motion 以外只准引 motion/index.ts（函数和类型）、motion/components.ts（React 组件）、
+// motion/gestures.ts（跟手手势；11-05 主持人定，首屏体积：不经 index.ts 再导出，免得进入口块）
 const MOTION_PATH_IMPORTS = {
   paths: [],
   patterns: [
     {
-      regex: '^\\.{1,2}/(?:.*/)?motion(?:/(?!(?:index|components)\\.ts$).*)?$',
-      message: '0.31 第 6 条：src/motion 以外只准引 motion/index.ts 和 motion/components.ts',
+      regex: '^\\.{1,2}/(?:.*/)?motion(?:/(?!(?:index|components|gestures)\\.ts$).*)?$',
+      message: '0.31 第 6 条：src/motion 以外只准引 motion/index.ts、motion/components.ts 和 motion/gestures.ts',
     },
   ],
 };

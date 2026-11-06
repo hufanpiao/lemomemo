@@ -6,6 +6,8 @@
 // • 连续 E2E_SILENCE_MS（默认 6 分钟，许 1～60 分钟）没有任何输出：结束本次拉起的进程树
 //   （Windows：taskkill /PID <子进程 pid> /T /F；其他系统：子进程 detached 成独立进程组，process.kill(-pid, 'SIGKILL')），
 //   打印“静默超过 N 分钟，已结束本次拉起的进程树”，退出码 124；
+// • 起跑前先“看”--check-ports 列的端口（连一下）：有一个已经有进程在听就不拉起命令，打印是哪个端口，退出码 125（PORT_BUSY_EXIT_CODE）——
+//   不连别人起的旧服务（11-04 8788 上 7 小时的旧 wrangler 被复用、整套失败）。本机设了 LEMO_E2E_REUSE=1（要复用，tools/e2e/reuse-servers.mjs）跳过这一步；
 // • 结束以后只“看”--check-ports 列的端口是否已释放（连一下，连得上就是还有进程在听），打印结果，不做任何处理；
 // • 子进程自己退出：原样返回它的退出码（被信号结束的算 1）；
 // • 子进程已退出、过了退出宽限（默认 10 秒）输出管道还没关（子孙进程攥着）：判 orphaned，断开管道照常收尾，不再等静默阈值。
@@ -27,6 +29,7 @@ import { connect } from 'node:net';
 import process, { argv, env, execPath, exit, platform, stderr, stdout } from 'node:process';
 import { clearInterval, setInterval, setTimeout } from 'node:timers';
 import { pathToFileURL } from 'node:url';
+import { REUSE_ENV, reuseServers } from './reuse-servers.mjs';
 
 export const SILENCE_ENV = 'E2E_SILENCE_MS';
 export const DEFAULT_SILENCE_MS = 6 * 60_000;
@@ -36,6 +39,8 @@ export const SILENCE_MAX_MS = 60 * 60_000;
 export const SILENCE_EXIT_CODE = 124;
 /** 子进程 exit 以后等 close（输出管道全关）的宽限 */
 export const EXIT_GRACE_MS = 10_000;
+/** 起跑前 --check-ports 里有端口被占着（没设 LEMO_E2E_REUSE=1）时的退出码 */
+export const PORT_BUSY_EXIT_CODE = 125;
 
 /**
  * 读 E2E_SILENCE_MS：没设或空字符串用默认 6 分钟；非纯十进制、不在 1～60 分钟之间抛错
@@ -181,6 +186,16 @@ export function portFree(port) {
 }
 
 /**
+ * 起跑前查端口：返回已经有进程在听的那些（只连一下，不做任何处理）
+ * @param {readonly number[]} ports
+ * @returns {Promise<number[]>}
+ */
+export async function busyPorts(ports) {
+  const rows = await Promise.all(ports.map(async (p) => /** @type {const} */ ([p, await portFree(p)])));
+  return rows.filter(([, free]) => !free).map(([p]) => p);
+}
+
+/**
  * 计时器每一跳的判定（纯函数）：
  * • wait：没到静默阈值、退出宽限也没过，或已经处理过；
  * • kill：到静默阈值、子进程还活着 → 结束它的进程树；
@@ -245,7 +260,27 @@ export function reapOrphans({ pid, plat }) {
  * }} o
  * @returns {Promise<number>} 退出码
  */
-export function runWatchdog(o) {
+export async function runWatchdog(o) {
+  const e = o.env ?? env;
+  if (!reuseServers(e)) {
+    const busy = await busyPorts(o.checkPorts ?? []);
+    if (busy.length) {
+      (o.err ?? stderr).write(
+        `run-watchdog：端口 ${busy.join('、')} 已经有进程在监听，不拉起命令（不连别人起的旧服务）。` +
+          `请本人确认后自己处理，或换端口跑；确实要复用已经在跑的服务就设 ${REUSE_ENV}=1
+`,
+      );
+      return PORT_BUSY_EXIT_CODE;
+    }
+  }
+  return runChild(o);
+}
+
+/**
+ * @param {Parameters<typeof runWatchdog>[0]} o
+ * @returns {Promise<number>}
+ */
+function runChild(o) {
   const plat = o.plat ?? platform;
   const out = o.out ?? stdout;
   const err = o.err ?? stderr;

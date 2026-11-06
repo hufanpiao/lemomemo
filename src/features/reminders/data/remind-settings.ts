@@ -3,10 +3,11 @@
 // • remind.dnd：{start: 'HH:MM', end: 'HH:MM', enabled?: false}；认不出的按没开（和 push-dispatch 的 parseDnd 同一口径，
 //   supabase/functions/push-dispatch/round-util.ts）。关掉时保留时段、写 enabled: false，再打开还是原来的时段
 // • remind.default_time：全天日程“开始时再提醒”的时刻（startAtOf），没设 09:00
-// • 读写一个键（settingValue、settingWrite、SettingRow）在 core/setting-write.ts，和日历共用一份（REMIND-settings-core、FA-4 代码审查 L7），这里转出
+// • 读写一个键在 core/setting-read.ts（settingValue、SettingRow）、core/setting-write.ts（settingWrite），和日历共用一份（REMIND-settings-core、FA-4 代码审查 L7），这里只转出读的
 import type { Dnd } from '../../../../shared/logic/remind.ts';
 
-export { settingValue, settingWrite, type SettingRow, type SettingWrite } from '../../../core/setting-write.ts';
+// 只转出读的（core/setting-read.ts）：首屏算提醒列表要用，不带写设置那一套（首屏瘦身 H1 第三轮）；要写的直接用 core/setting-write.ts
+export { settingValue, type SettingRow } from '../../../core/setting-read.ts';
 
 export const KEY_SHOW_TITLE = 'remind.show_title';
 export const KEY_DND = 'remind.dnd';

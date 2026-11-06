@@ -2,6 +2,7 @@
 // 推送和本机通知的文案（remind.push.*、push.*）在 shared/i18n（服务器和 SW 也用），这里不重复
 // 占位符中韩必须一致（__tests__/remind-i18n.test.ts 逐键比对）
 export const remindZh = {
+  // 首屏那几句（错过的提醒一行、未同步提示和标记）不在这里，在 row-zh.ts（useRemindRowT）
   // 横幅、按钮条（线框 s1b“提醒响起时”）
   'remind.a11y.region': '提醒',
   'remind.banner.event': '日程 · {when}',
@@ -27,8 +28,6 @@ export const remindZh = {
   'remind.saveFailed': '没保存上，请稍后再试',
   'remind.readonly': '这条要新版本才能修改',
   // 错过的提醒（5.9；线框 MISSROW、MISSSHEET）
-  'remind.missed.row': '错过 {n} 条提醒',
-  'remind.missed.open': '查看 ›',
   'remind.missed.titleN': '错过的提醒 {n}',
   'remind.missed.note': '没来得及处理的提醒都在这里',
   'remind.missed.allAck': '全部知道了',
@@ -52,12 +51,26 @@ export const remindZh = {
   // 整页提醒（线框 FULLALERT；5.3 iPhone；“已处理”提示用中性说法，R-328）
   'remind.full.back': '返回',
   'remind.full.pos': '第 {i} 条，共 {n} 条',
+  // 整页提醒类型行的相对时间（设计复审 今天页待办 M3）
+  'remind.rel.startInMin': '{n} 分钟后开始',
+  'remind.rel.startInH': '{h} 小时后开始',
+  'remind.rel.startInHM': '{h} 小时 {m} 分钟后开始',
+  'remind.rel.startInD': '{n} 天后开始',
+  'remind.rel.startedNow': '刚刚开始',
+  'remind.rel.startedMin': '已经开始 {n} 分钟',
+  'remind.rel.startedH': '已经开始 {h} 小时',
+  'remind.rel.startedD': '已经开始 {n} 天',
+  'remind.rel.dueInMin': '{n} 分钟后截止',
+  'remind.rel.dueInH': '{h} 小时后截止',
+  'remind.rel.dueInHM': '{h} 小时 {m} 分钟后截止',
+  'remind.rel.dueInD': '{n} 天后截止',
   'remind.full.head.event': '日程 · {when}',
-  'remind.full.head.todo': '待办提醒 · {when}',
+  'remind.full.head.todo': '待办 · {when}', // 线框 FULLALERT：“待办 · 1 小时后截止”（设计复审 M3）
   'remind.full.until': '到 {time}',
   'remind.full.loc': '地点 / 链接',
   'remind.full.note': '备注',
   'remind.full.next': '下一条：{title}',
+  'remind.full.nextAt': '{time} 提醒',
   'remind.full.handled': '已在其他设备上处理',   // R-328：中性说法，不论在哪台设备处理
   'remind.full.handledNote': '这条提醒已经处理过了，不用再管它。',
   'remind.full.gone': '这条提醒找不到了',
@@ -155,8 +168,6 @@ export const remindZh = {
   'remind.mode.sameDay': '当天 {time}',
   'remind.mode.dayBefore': '前一天 {time}',
   // 离线新建的提醒（4.2；TC-B2-69）
-  'remind.unsynced': '未同步，提醒可能不响',
-  'remind.unsynced.mark': '未同步',
   // 设置 › 关于（K8-clock，4.3“时钟偏差”）
   'remind.clock.wrongNote': '这台设备的时间和服务器差了约 {min} 分钟，提醒按服务器时间响。',
 } as const;

@@ -3,8 +3,10 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
-import { remindQueue, resetRemindQueue } from '../../../kit/state/remind-queue.ts';
+import { collapseRinging, remindQueue, resetRemindQueue, setRemindArmed, setRemindDown } from '../../../kit/state/remind-queue.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
+// outbox 状态替身的空集合（UNSYNCED-retryRecs-required）：每次返回同一个对象，useSyncExternalStore 的快照才稳定
+const EMPTY_RECS = vi.hoisted((): ReadonlySet<string> => new Set());
 
 type Row = { id: string } & Record<string, unknown>;
 const data: Record<string, Row[]> = { events: [], todos: [], settings: [] };
@@ -41,7 +43,7 @@ const navigate = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock('../../../app/router.ts', () => ({ canGoBack: () => false, goBack: vi.fn(), navigate: (...a: unknown[]) => navigate(...a) }));
 let remindRecs: ReadonlySet<string> = new Set();
 vi.mock('../../../core/boot.ts', () => ({
-  getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ remindRecs }) } }),
+  getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ retryRecs: EMPTY_RECS, remindRecs }) } }),
 }));
 
 const { default: RemindHost } = await import('../ui/RemindHost.tsx');
@@ -85,6 +87,12 @@ afterEach(() => {
   window.location.hash = '';
 });
 
+/** 引擎读完本机“响过”记录、算好第一份快照才 armed（REMIND-shown-persist）：两步都是异步的，冲几拍 */
+const armedNow = () =>
+  act(async () => {
+    for (let k = 0; k < 6; k++) await Promise.resolve();
+  });
+
 describe('整页提醒照线框排（设计 H1）', () => {
   it('铃铛类型行、大时刻（开始时刻）、标题、“到 16:30 · 项目”、地点备注一张卡、下一条卡（时刻 · 类型 · 项目）、主按钮整行 + 其余两颗一排', async () => {
     data.events = [
@@ -92,18 +100,25 @@ describe('整页提醒照线框排（设计 H1）', () => {
       ev(E2, '牙医', '15:45'),
     ];
     render(<RemindHost route="remind" />);
+    await armedNow();
     tick('15:31');
     window.location.hash = `#/remind/event/${E1}?due=${at('15:15')}`;
     render(<FullReminderPage />);
     const page = screen.getByTestId('remind-full');
     expect(page.querySelector('svg')).not.toBeNull();
+    // 类型行写“还有多久”，不再写一遍时刻（设计复审 今天页待办 M3）
+    expect(screen.getByTestId('remind-full-kind').textContent).toBe('日程 · 已经开始 1 分钟');
     expect(screen.getByTestId('remind-full-time').textContent).toBe('15:30');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('SignPlex 客户反馈会');
+    // 返回按钮：“‹”只是样子，读屏名只读“返回”（代码复审 N2，同设置页）
+    const back = screen.getByTestId('remind-full-back');
+    expect(back.querySelector('[aria-hidden="true"]')?.textContent).toBe('‹');
+    expect(screen.getByRole('button', { name: '返回' })).toBe(back);
     expect(screen.getByTestId('remind-full-sub').textContent).toBe('到 16:30 · SignPlex');
     expect(screen.getByTestId('remind-full-detail').textContent).toContain('带上问题清单');
     const next = screen.getByTestId('remind-full-next');
     expect(next.textContent).toContain('下一条：牙医');
-    expect(next.textContent).toContain(`15:30 · 日程`);
+    expect(next.textContent).toContain(`15:30 提醒 · 日程`); // 副行写明是提醒时刻（设计复审第二轮 R2-L3）
     const ack = screen.getByTestId('remind-act-ack');
     const rest = screen.getByTestId('remind-act-snooze10').parentElement;
     expect(ack.parentElement).not.toBe(rest);
@@ -115,6 +130,7 @@ describe('整页提醒照线框排（设计 H1）', () => {
     nowMs = at('16:00');
     window.location.hash = `#/remind/todo/${T1}?due=${at('16:00')}`;
     render(<FullReminderPage />);
+    expect(screen.getByTestId('remind-full-kind').textContent).toBe('待办 · 1 小时后截止');
     expect(screen.getByTestId('remind-full-time').textContent).toBe('17:00');
     const circle = screen.getByTestId('remind-full-done');
     expect(circle.closest('h1')).toBeNull();
@@ -129,19 +145,130 @@ describe('整页提醒照线框排（设计 H1）', () => {
 });
 
 describe('错过的提醒照线框（设计 M3、M4）', () => {
-  it('那一行有铃铛和粗体；弹层标题带条数，“全部知道了”在弹层里；每条一张小卡，已经开始的日程只给“知道了”', () => {
+  // 引擎 armed 以后才画（REMIND-shown-persist 修订 1 P2）；since 取很大、不筛
+  beforeEach(() => setRemindArmed(Number.MAX_SAFE_INTEGER));
+  afterEach(() => setRemindArmed(null));
+  it('首屏只画那一行；有错过的提醒才在首屏画完、空闲时预取弹层（首屏瘦身 H1 第三轮），没有的不预取', async () => {
+    const idle = vi.fn();
+    vi.stubGlobal('requestIdleCallback', idle);
+    try {
+      nowMs = at('16:10');
+      const view = render(<MissedReminders />);
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(idle).toHaveBeenCalledTimes(1);
+      view.unmount();
+      idle.mockClear();
+      data.events = [];
+      render(<MissedReminders />);
+      expect(screen.queryByTestId('remind-missed-row')).toBeNull();
+      expect(idle).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it('那一行有铃铛和粗体；弹层标题带条数，“全部知道了”在弹层里；每条一张小卡，已经开始的日程只给“知道了”（弹层分包点开才下，等它出来）', async () => {
     nowMs = at('16:10');
     render(<MissedReminders />);
     const row = screen.getByTestId('remind-missed-row');
     expect(row.querySelector('svg')).not.toBeNull();
     expect(row.querySelector('b')?.textContent).toBe('错过 2 条提醒');
     fireEvent.click(row);
-    expect(screen.getByRole('dialog').textContent).toContain('错过的提醒 2');
+    expect((await screen.findByRole('dialog', {}, { timeout: 5000 })).textContent).toContain('错过的提醒 2');
     expect(screen.getByTestId('remind-missed-all').textContent).toBe('全部知道了');
     const cards = screen.getAllByTestId('remind-missed-item');
     expect(cards.length).toBe(2);
     expect(cards[0]?.textContent).toContain('（已经开始过了）');
     expect(cards[0]?.querySelectorAll('[data-testid^="remind-act-"]').length).toBe(1);
+  });
+  it('弹层开着时错过的都处理完了（那一行没了）：关上以后焦点回到所在页的标题 h1，不掉到 body（Dialog L-2）', async () => {
+    nowMs = at('16:10');
+    const page = (
+      <main>
+        <h1 tabIndex={-1}>11月3日</h1>
+        <MissedReminders />
+      </main>
+    );
+    const view = render(page);
+    const row = screen.getByTestId('remind-missed-row');
+    row.focus();
+    fireEvent.click(row);
+    await screen.findByRole('dialog', {}, { timeout: 5000 });
+    data.events = [];
+    view.rerender(
+      <main>
+        <h1 tabIndex={-1}>11月3日</h1>
+        <MissedReminders />
+      </main>,
+    );
+    expect(screen.queryByTestId('remind-missed-row')).toBeNull();
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(document.activeElement?.tagName).toBe('H1');
+  });
+  it('只有 1 条：弹层里不出“全部知道了”（和这一条的“知道了”重复；负责人 11-04 定，设计复审 L2）', async () => {
+    nowMs = at('16:10');
+    data.events = [ev(E2, '牙医', '15:00')];
+    render(<MissedReminders />);
+    fireEvent.click(screen.getByTestId('remind-missed-row'));
+    expect(await screen.findAllByTestId('remind-missed-item')).toHaveLength(1);
+    expect(screen.queryByTestId('remind-missed-all')).toBeNull();
+    expect(screen.getByTestId('remind-act-ack')).toBeTruthy();
+  });
+});
+
+describe('REMIND-missed-flash：错过的提醒只算 since 之前到点的和响过的', () => {
+  // E2 14:45 到点（since 之前，打开前就到点）；E1 16:05 到点（since 16:00 之后，本次打开以后，该进横幅）
+  const setup = (): void => {
+    nowMs = at('16:10');
+    data.events = [ev(E1, '和 Kim 开会', '16:20'), ev(E2, '牙医', '15:00')];
+  };
+  afterEach(() => {
+    setRemindArmed(null);
+    setRemindDown(false);
+  });
+
+  it('引擎出错（remindDown，代码审查 M1）：不按 since 筛，照旧都算', () => {
+    setup();
+    setRemindDown(true);
+    render(<MissedReminders />);
+    expect(screen.getByTestId('remind-missed-row').textContent).toContain('错过 2 条提醒');
+  });
+
+  it('引擎还没把 E1 排进队列的那一下：传了 since 只算 E2，不先算进“错过 2 条”再跳走', () => {
+    setup();
+    setRemindArmed(at('16:00'));
+    render(<MissedReminders />);
+    expect(screen.getByTestId('remind-missed-row').textContent).toContain('错过 1 条提醒');
+  });
+
+  it('没 armed、也没出错：不画（P2）；引擎出错（remindDown）、“响过”快照是空的：照旧都算、照样显示（方案复审 L9）', () => {
+    setup();
+    const view = render(<MissedReminders />);
+    expect(screen.queryByTestId('remind-missed-row')).toBeNull();
+    view.unmount();
+    setRemindDown(true);
+    render(<MissedReminders />);
+    expect(screen.getByTestId('remind-missed-row').textContent).toContain('错过 2 条提醒');
+  });
+
+  it('引擎挂上：写 armedSince（就是传进来的 since），E1 进队列、不算错过；往上滑收起以后 E1 照样进“错过的提醒”；卸载时清成 null', async () => {
+    setup();
+    const host = render(<RemindHost since={at('16:00')} />);
+    expect(remindQueue.getState().armedSince).toBeNull(); // 本机记录还没读完：还没 armed（REMIND-shown-persist）
+    await armedNow();
+    expect(remindQueue.getState().armedSince).toBe(at('16:00'));
+    expect(remindQueue.getState().entries.map((e) => e.id)).toEqual([E1]);
+    render(<MissedReminders />);
+    expect(screen.getByTestId('remind-missed-row').textContent).toContain('错过 1 条提醒');
+    const tag = remindQueue.getState().entries[0]?.tag ?? '';
+    await act(async () => {
+      collapseRinging(tag);
+    });
+    expect(screen.getByTestId('remind-missed-row').textContent).toContain('错过 2 条提醒');
+    host.unmount();
+    expect(remindQueue.getState().armedSince).toBeNull();
   });
 });
 

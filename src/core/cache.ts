@@ -88,6 +88,12 @@ export interface DeviceMeta {
   ver?: string;
 }
 
+/** meta 的 remind_seen（只是类型，形状由提醒功能定）：tag、dueAt 是第一次响的那一次；local = 本机弹过系统通知（exe） */
+export interface RemindSeenMeta {
+  readonly v: 1;
+  readonly items: Readonly<Record<string, { readonly tag: string; readonly dueAt: number; readonly local: boolean }>>;
+}
+
 /** meta 仓的键和值的类型 */
 export interface MetaMap {
   /** 写进缓存时的 rows.ts 版本（shared/schema/rows.ts 的 SCHEMA_V）；变了就整表重拉（2.6，TC-B1-40） */
@@ -99,6 +105,11 @@ export interface MetaMap {
   device: DeviceMeta;
   /** 队列连续收到 try_later 的次数（TC-B1-90，续第 119 条②；core/outbox-send.ts 读写，发送成功或别的失败时删掉） */
   try_later_streak: number;
+  /**
+   * 这一次提醒响过没有（REMIND-shown-persist；方案 docs/03-评审/B2/B2-方案-提醒响过持久化.md 第 4 节）：occurrenceKey → 第一次响的那一次。
+   * 提醒功能（features/reminders/data/remind-seen.ts）读写；只留 7 天、最多 500 条；随整库清掉，meta 重建时丢了也只是最多多响一次
+   */
+  remind_seen: RemindSeenMeta;
   /** 各表的同步游标（K8） */
   [k: `cursor:${string}`]: SyncCursor;
   /** 各表“待补拉”的 id（K7：一行解析不了时记下，下次启动单独补拉） */

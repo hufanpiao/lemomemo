@@ -6,6 +6,9 @@
 import { addDays, diffDays, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/calendar/cal-items.ts';
+import type { Locale } from '../../../../shared/i18n/i18n.ts';
+// 标题比较：按当前语言、数字按数值（“第 2 条”在“第 10 条”前；和今天页共用）
+import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
 
 export type Row = Readonly<{ id: string } & Record<string, unknown>>;
 
@@ -70,11 +73,14 @@ export function dueTagOf(t: TodoItem, now: number, tz: Tz): DueTag {
   return { kind: 'date', date: t.due, dueTime: t.dueTime };
 }
 
-const byDue = (a: TodoItem, b: TodoItem) =>
-  (a.due ?? '9999').localeCompare(b.due ?? '9999') || (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99') || Number(b.important) - Number(a.important) || a.title.localeCompare(b.title);
+const byDue = (byTitle: (a: string, b: string) => number) => (a: TodoItem, b: TodoItem) =>
+  (a.due ?? '9999').localeCompare(b.due ?? '9999') || (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99') || Number(b.important) - Number(a.important) || byTitle(a.title, b.title);
 
 /** 待办页的分组；空组不出现。project 不为 null 时只留这个项目的 */
-export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: string | null = null): Group[] {
+/** locale：同一截止时刻、没日期那组按标题排时用哪种语言比（数字按数值） */
+export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: string | null = null, locale: Locale = 'zh-CN'): Group[] {
+  const byTitle = titleCompare(locale);
+  const due = byDue(byTitle);
   const today = todayOf(now, tz);
   const week = addDays(today, 7);
   const groups = new Map<string, Group>();
@@ -101,14 +107,15 @@ export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: s
   const out = [...groups.values()].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key) || (a.date ?? '').localeCompare(b.date ?? ''));
   for (const g of out) {
     if (g.key === 'done') g.items.sort((a, b) => b.todo.doneAt - a.todo.doneAt);
-    else if (g.key === 'nodate') g.items.sort((a, b) => Number(b.todo.important) - Number(a.todo.important) || a.todo.title.localeCompare(b.todo.title));
-    else g.items.sort((a, b) => byDue(a.todo, b.todo));
+    else if (g.key === 'nodate') g.items.sort((a, b) => Number(b.todo.important) - Number(a.todo.important) || byTitle(a.todo.title, b.todo.title));
+    else g.items.sort((a, b) => due(a.todo, b.todo));
   }
   return out;
 }
 
-/** 项目筛选条：“全部”之外的项目和各自没完成的条数（按条数多的在前） */
-export function projectCounts(rows: readonly Row[]): { project: string; count: number }[] {
+/** 项目筛选条：“全部”之外的项目和各自没完成的条数（按条数多的在前；条数一样按项目名，按当前语言、数字按数值，和标题同一个比较） */
+export function projectCounts(rows: readonly Row[], locale: Locale = 'zh-CN'): { project: string; count: number }[] {
+  const byName = titleCompare(locale);
   const m = new Map<string, number>();
   for (const r of rows) {
     if (!isLive(r)) continue;
@@ -116,5 +123,5 @@ export function projectCounts(rows: readonly Row[]): { project: string; count: n
     if (t.done || t.project === '') continue;
     m.set(t.project, (m.get(t.project) ?? 0) + 1);
   }
-  return [...m].map(([project, count]) => ({ project, count })).sort((a, b) => b.count - a.count || a.project.localeCompare(b.project));
+  return [...m].map(([project, count]) => ({ project, count })).sort((a, b) => b.count - a.count || byName(a.project, b.project));
 }

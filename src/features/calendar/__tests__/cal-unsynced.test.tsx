@@ -11,6 +11,8 @@ import type * as BootMod from '../../../core/boot.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import type { AppJson } from '../../../platform/app-static.ts';
+// outbox 状态替身的空集合（UNSYNCED-retryRecs-required）：每次返回同一个对象，useSyncExternalStore 的快照才稳定
+const EMPTY_RECS = vi.hoisted((): ReadonlySet<string> => new Set());
 
 type Row = { id: string } & Record<string, unknown>;
 const data: { events: Row[]; todos: Row[]; settings: Row[] } = { events: [], todos: [], settings: [] };
@@ -37,7 +39,7 @@ const outbox = {
       box.subs.delete(fn);
     };
   },
-  getStatus: () => ({ remindRecs: box.recs }),
+  getStatus: () => ({ retryRecs: EMPTY_RECS, remindRecs: box.recs }),
 };
 vi.mock('../../../core/boot.ts', async (orig) => ({ ...(await orig<typeof BootMod>()), getBoot: () => ({ outbox }) }));
 

@@ -17,8 +17,8 @@ class FakeNotification implements NotificationLike {
   onclose: NotificationLike['onclose'] = null;
   closed = false;
   readonly title: string;
-  readonly options: { body: string; tag: string };
-  constructor(title: string, options: { body: string; tag: string }) {
+  readonly options: { body: string; tag: string; data?: unknown };
+  constructor(title: string, options: { body: string; tag: string; data?: unknown }) {
     this.title = title;
     this.options = options;
     FakeNotification.all.push(this);
@@ -114,6 +114,12 @@ describe('本机通知', () => {
     const { bridge } = setup();
     await bridge.showLocalReminder(R);
     expect(FakeNotification.all.map((n) => [n.title, n.options])).toEqual([['提醒', { body: '10:00 开会', tag: R.tag }]]);
+  });
+
+  it('带 occurrenceKey 的放进 data.occurrence_key（撤回时按 key 判，REMIND-close-occkey）', async () => {
+    const { bridge } = setup();
+    await bridge.showLocalReminder({ ...R, occurrenceKey: 'event:e1:allday:2023-11-15:0' });
+    expect(FakeNotification.all[0]?.options).toEqual({ body: '10:00 开会', tag: R.tag, data: { occurrence_key: 'event:e1:allday:2023-11-15:0' } });
   });
 
   it('点通知：关掉通知、拉到前台、打开整页提醒', async () => {

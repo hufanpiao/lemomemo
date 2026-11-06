@@ -30,6 +30,8 @@ export interface LocalReminder {
   readonly id: string;
   /** 这一次到点的时刻（epoch ms） */
   readonly dueAt: number;
+  /** 这一次提醒的 occurrenceKey（shared/logic/remind-route.ts；REMIND-close-occkey）：放进通知的 data，只比较、不显示 */
+  readonly occurrenceKey?: string;
   /** 通知标题、正文：提醒功能按界面语言和“锁屏只显示‘有 1 项日程’”设置生成好再传进来，platform 不碰语言包 */
   readonly title: string;
   readonly body: string;

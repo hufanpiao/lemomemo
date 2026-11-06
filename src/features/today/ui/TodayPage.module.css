@@ -101,8 +101,8 @@
 .main {
   display: flex;
   flex: 1;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
   min-height: var(--hit);
   padding: 6px 0;
@@ -110,6 +110,15 @@
   background: none;
   color: inherit;
   text-align: left;
+}
+
+/* 标题和副行一列；右边是行尾“未同步”标记（REMIND-wiring） */
+.mainText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
 }
 
 .title {
@@ -162,6 +171,67 @@
   background: none;
   color: var(--text-2);
   font-size: var(--fs-18);
+}
+
+/* 日程行行尾和 × 一样宽的空格子（M2）：宽度直接用 .del 的 --hit，改了 × 两边一起变；不接点按 */
+.delGap {
+  flex: none;
+  width: var(--hit);
+  pointer-events: none;
+}
+
+/* 包着“错过 N 条提醒”那一行：有这一行（button）时下面留 8px（M1），没有时不占位；在 GrowIn 里，8px 算进展开的高度 */
+.missed:has(> button) {
+  padding-bottom: 8px;
+}
+
+/* GrowIn（J1）：高度由脚本按里面的实际高度设，变的时候过渡（要瞬间到位时脚本临时关掉）；没到位时裁掉溢出，到位后放开（焦点框不被裁） */
+.grow {
+  height: 0;
+  overflow: hidden;
+  transition: height var(--dur-ui) var(--ease-out);
+}
+
+.grow[data-settled] {
+  overflow: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grow {
+    transition: none;
+  }
+}
+
+:global(:root[data-rm="1"]) .grow {
+  transition: none;
+}
+
+/* 行尾“未同步”小标记那一格：没有时整格不画（不多出 gap） */
+.unsynced {
+  flex: none;
+  white-space: nowrap;
+}
+
+.unsynced:empty {
+  display: none;
+}
+
+/* “未同步，提醒可能不响”（reminders 提供的一行 p）：常驻的 role="status" 容器，没有 p 时高度为 0；有时一块浅灰（同日历页，R-346） */
+.notice {
+  margin: 0;
+}
+
+.notice:has(p) {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.notice p {
+  margin: 0;
 }
 
 .empty {

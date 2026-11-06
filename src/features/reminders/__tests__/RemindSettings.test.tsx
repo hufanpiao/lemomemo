@@ -81,6 +81,32 @@ describe('TC-B2-71：推送被同账号另一条设备记录占着', () => {
     expect(removeHolder).toHaveBeenCalledWith('d-old');
     expect(screen.getByTestId('remind-remove-result').textContent).toContain('已移除');
   });
+  it('确认移除以后“移除它…”禁用、再消失：焦点退回这段说明，不掉到 body（Dialog L-2）', async () => {
+    setPushOutcome({ result: 'endpoint_in_use', holder });
+    render(<RemindSettings />);
+    const btn = screen.getByTestId('remind-remove-holder');
+    btn.focus();
+    fireEvent.click(btn);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('remind-remove-confirm'));
+    });
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.tagName).toBe('P');
+    expect(screen.getByTestId('remind-notice-in_use').contains(document.activeElement)).toBe(true);
+    expect(document.activeElement?.getAttribute('tabindex')).toBe('-1');
+  });
+  it('移除了但再认领没成功：焦点优先给“重新接上”，不给说明段（Dialog 退路，第四轮复查 L7）', async () => {
+    removeHolder.mockResolvedValueOnce('reclaim_failed');
+    setPushOutcome({ result: 'endpoint_in_use', holder });
+    render(<RemindSettings />);
+    const btn = screen.getByTestId('remind-remove-holder');
+    btn.focus();
+    fireEvent.click(btn);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('remind-remove-confirm'));
+    });
+    await vi.waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('remind-reconnect')), { timeout: 5000 });
+  });
   it('确认框点“取消”：不移除', () => {
     setPushOutcome({ result: 'endpoint_in_use', holder });
     render(<RemindSettings />);

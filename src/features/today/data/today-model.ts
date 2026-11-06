@@ -9,6 +9,9 @@
 import { addDays, diffDays, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/calendar/cal-items.ts';
+import type { Locale } from '../../../../shared/i18n/i18n.ts';
+// 同一时刻按标题排：按当前语言、数字按数值（和待办页共用，shared/i18n/title-compare.ts）
+import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
 
 export type Row = Readonly<{ id: string } & Record<string, unknown>>;
 
@@ -69,14 +72,15 @@ export function eventOcc(r: Row, current: Tz): EventOcc | null {
 }
 
 /** 某一天的日程：全天的在前，有时刻的按开始先后 */
-export function eventsOn(rows: readonly Row[], day: DateStr, current: Tz): EventOcc[] {
+export function eventsOn(rows: readonly Row[], day: DateStr, current: Tz, locale: Locale = 'zh-CN'): EventOcc[] {
+  const byTitle = titleCompare(locale);
   const out: EventOcc[] = [];
   for (const r of rows) {
     if (!isLive(r)) continue;
     const o = eventOcc(r, current);
     if (o && o.date === day) out.push(o);
   }
-  return out.sort((a, b) => (a.start ?? -Infinity) - (b.start ?? -Infinity) || a.title.localeCompare(b.title));
+  return out.sort((a, b) => (a.start ?? -Infinity) - (b.start ?? -Infinity) || byTitle(a.title, b.title));
 }
 
 // ---------- “现在”卡 ----------
@@ -192,7 +196,8 @@ export interface Late {
 }
 
 /** 没赶上：没完成，截止日早于今天，或今天的截止时刻已过；逾得久的在前 */
-export function lateTodos(rows: readonly Row[], now: number, current: Tz): Late[] {
+export function lateTodos(rows: readonly Row[], now: number, current: Tz, locale: Locale = 'zh-CN'): Late[] {
+  const byTitle = titleCompare(locale);
   const today = todayOf(now, current);
   const out: Late[] = [];
   for (const r of rows) {
@@ -203,11 +208,12 @@ export function lateTodos(rows: readonly Row[], now: number, current: Tz): Late[
     if (days > 0) out.push({ todo: t, days });
     else if (days === 0 && (dueAtOf(t, current) ?? Infinity) <= now) out.push({ todo: t, days: 0 });
   }
-  return out.sort((a, b) => b.days - a.days || (a.todo.dueTime ?? '').localeCompare(b.todo.dueTime ?? '') || a.todo.title.localeCompare(b.todo.title));
+  return out.sort((a, b) => b.days - a.days || (a.todo.dueTime ?? '').localeCompare(b.todo.dueTime ?? '') || byTitle(a.todo.title, b.todo.title));
 }
 
 /** 今天截止、还没过的待办（过了的进“没赶上”）；有截止时刻的按时刻在前，没完成的在前 */
-export function todayTodos(rows: readonly Row[], now: number, current: Tz): TodoOcc[] {
+export function todayTodos(rows: readonly Row[], now: number, current: Tz, locale: Locale = 'zh-CN'): TodoOcc[] {
+  const byTitle = titleCompare(locale);
   const today = todayOf(now, current);
   const out: TodoOcc[] = [];
   for (const r of rows) {
@@ -217,7 +223,7 @@ export function todayTodos(rows: readonly Row[], now: number, current: Tz): Todo
     if (!t.done && (dueAtOf(t, current) ?? Infinity) <= now) continue;
     out.push(t);
   }
-  return out.sort((a, b) => Number(a.done) - Number(b.done) || (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99') || a.title.localeCompare(b.title));
+  return out.sort((a, b) => Number(a.done) - Number(b.done) || (a.dueTime ?? '99:99').localeCompare(b.dueTime ?? '99:99') || byTitle(a.title, b.title));
 }
 
 /** 明天（当前时区） */

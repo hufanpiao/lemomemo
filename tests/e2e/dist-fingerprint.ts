@@ -1,5 +1,5 @@
 // 无后端组 e2e 的 globalSetup（playwright.config.ts，E2E-guard-sugg2 ④，10-30）：核对 8788 上跑的就是本机这份产物
-// 本机默认复用已经在跑的 wrangler（reuseExistingServer），这时 Playwright 不重新构建，也不管 8788 上跑的是哪份产物
+// 本机设了 LEMO_E2E_REUSE=1 时复用已经在跑的 wrangler（reuseExistingServer；11-04 起默认不复用，见 tools/e2e/reuse-servers.mjs），这时 Playwright 不重新构建，也不管 8788 上跑的是哪份产物
 // （可能是别的工作副本、别的产物目录起的）。这里取服务上的 /app/ 首页，和本机 <产物目录>/app/index.html 逐字比对：
 // index.html 里引的是带内容哈希的 JS、CSS 文件名，两边一样就是同一份产物；不一样、取不到、本机没有都直接失败，不往下跑用例。
 // • 产物比源码旧（B2 FA-5 第四轮 Q1，11-04）：服务和本机是同一份 dist、但 dist 比 src 旧时（复用时不会重新构建），指纹比对照样通过。

@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { remindQueue, resetRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
+// outbox 状态替身的空集合（UNSYNCED-retryRecs-required）：每次返回同一个对象，useSyncExternalStore 的快照才稳定
+const EMPTY_RECS = vi.hoisted((): ReadonlySet<string> => new Set());
 
 type Row = { id: string } & Record<string, unknown>;
 const data: Record<string, Row[]> = { events: [], todos: [], settings: [] };
@@ -57,7 +59,7 @@ vi.mock('../../../core/boot.ts', () => ({
         outboxSubs.add(fn);
         return () => outboxSubs.delete(fn);
       },
-      getStatus: () => ({ remindRecs }),
+      getStatus: () => ({ retryRecs: EMPTY_RECS, remindRecs }),
       list: async () => outboxList,
     },
   }),
@@ -101,6 +103,12 @@ afterEach(() => {
   cleanup();
   window.location.hash = '';
 });
+
+/** 引擎读完本机“响过”记录、算好第一份快照才 armed（REMIND-shown-persist）：两步都是异步的，冲几拍 */
+const armedNow = () =>
+  act(async () => {
+    for (let k = 0; k < 6; k++) await Promise.resolve();
+  });
 
 describe('横幅手势与引擎（代码审查补漏测）', () => {
   afterEach(() => vi.useRealTimers());
@@ -193,10 +201,11 @@ describe('横幅手势与引擎（代码审查补漏测）', () => {
     expect(closeHandled).toHaveBeenCalledTimes(2);
   });
 
-  it('跨分钟：不靠外部通知，整分钟计时器到了自己刷新', () => {
+  it('跨分钟：不靠外部通知，整分钟计时器到了自己刷新', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     nowMs = at('15:14') + 30_000;
     render(<RemindHost route="todos" />);
+    await armedNow();
     expect(screen.queryByTestId('remind-banner')).toBeNull();
     nowMs = at('15:15') + 60;
     act(() => {
@@ -205,11 +214,12 @@ describe('横幅手势与引擎（代码审查补漏测）', () => {
     expect(screen.getByTestId('remind-banner').textContent).toContain('和 Kim 开会');
   });
 
-  it('跨午夜：23:59 打开，第二天 00:00 的提醒到点照常出', () => {
+  it('跨午夜：23:59 打开，第二天 00:00 的提醒到点照常出', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     data.events = [ev(E1, '午夜航班', '00:15', { date: '2026-11-04' })];
     nowMs = at('23:59') + 30_000;
     render(<RemindHost route="todos" />);
+    await armedNow();
     expect(screen.queryByTestId('remind-banner')).toBeNull();
     nowMs = at('00:00', '2026-11-04') + 60;
     act(() => {
@@ -248,8 +258,9 @@ describe('横幅手势与引擎（代码审查补漏测）', () => {
     expect(savePatch).toHaveBeenCalledWith('events', E1, { snooze_at: at('15:30'), updated_at: at('15:20') }, true);
   });
 
-  it('卸载（退出登录、换账号）时撤回本次弹出的本机通知（代码审查低 5）', () => {
+  it('卸载（退出登录、换账号）时撤回本次弹出的本机通知（代码审查低 5）', async () => {
     const { unmount } = render(<RemindHost route="todos" />);
+    await armedNow();
     tick('15:16');
     expect(showLocalReminder).toHaveBeenCalledTimes(1);
     unmount();

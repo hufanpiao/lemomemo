@@ -1,5 +1,6 @@
 // 提示卡宿主（ui/SyncNoticeHost.tsx；K8 冲突提示方案 3.1～3.3、4.2、4.4，第五节“组件”清单）
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useLayoutEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import type { ConflictNotice, GoneNotice, Notice, NoticeSnapshot, SyncNoticeStore } from '../hooks/notice-types.ts';
@@ -40,7 +41,8 @@ const gone = (over: Partial<GoneNotice> = {}): GoneNotice => ({
   kind: 'gone', key: 'events:e1', table: 'events', id: 'e1', title: '开会', status: 'idle', ...over,
 });
 
-function mount(queue: Notice[], over: Partial<NoticeSnapshot> = {}) {
+/** keep：dismiss 只记调用、不删卡（只靠宿主自己的过滤藏卡时用） */
+function mount(queue: Notice[], over: Partial<NoticeSnapshot> = {}, keep = false) {
   const region = document.createElement('div');
   region.setAttribute('data-sync-notice', '');
   const live = document.createElement('div');
@@ -48,6 +50,7 @@ function mount(queue: Notice[], over: Partial<NoticeSnapshot> = {}) {
   region.append(live);
   document.body.append(region);
   const f = fakeStore(queue, over);
+  if (keep) f.store.dismiss = vi.fn();
   const r = render(<SyncNoticeHost store={f.store} live={live} region={region} />, { container: region.appendChild(document.createElement('div')) });
   return { ...f, region, live, ...r };
 }
@@ -84,10 +87,49 @@ describe('文案（3.2）', () => {
     expect(screen.getByTestId('sync-notice-ok')).toBeTruthy();
   });
 
-  it('冲突列全是不显示的列：没有“看另一台设备的版本”，只剩“知道了”', () => {
-    mount([conflict({ conflicts: ['updated_at'] })]);
-    expect(screen.queryByTestId('sync-notice-view')).toBeNull();
-    expect(screen.getByTestId('sync-notice-ok')).toBeTruthy();
+  it('冲突列全是不显示的列（S1）：不出卡，替用户收掉；后面排着的照常出，也不算进“还有 n 条”', () => {
+    const m = mount([conflict({ conflicts: ['updated_at', 'deleted_at'] }), gone(), conflict({ key: 'todos:t3', id: 't3', conflicts: ['note'] })], {}, true);
+    expect(m.store.dismiss).toHaveBeenCalledWith('todos:t1');
+    expect(screen.getByTestId('sync-notice-card').getAttribute('data-kind')).toBe('gone');
+    expect(screen.getByText('还有 1 条')).toBeTruthy();
+  });
+
+  it('只有一张全是隐藏列的冲突卡：什么都不显示、不播报', async () => {
+    const m = mount([conflict({ conflicts: ['updated_at'] })], {}, true);
+    expect(screen.queryByTestId('sync-notice-card')).toBeNull();
+    expect(m.store.dismiss).toHaveBeenCalledWith('todos:t1');
+    await new Promise<void>((ok) => setTimeout(ok, 50));
+    expect(m.live.textContent).toBe('');
+  });
+
+  it('收之前同一条又并进了真冲突（S1-L1）：不收', () => {
+    const f = fakeStore([conflict({ conflicts: ['updated_at'] })]);
+    f.store.dismiss = vi.fn();
+    const before = f.store.getState();
+    const merged = { ...before, queue: [conflict({ conflicts: ['updated_at', 'note'] })] };
+    let after = false;
+    // 渲染时看到的还是空卡；提交以后（布局副作用比被动副作用早）同一条已经并进了真冲突
+    f.store.getState = () => (after ? merged : before);
+    function Flip() {
+      useLayoutEffect(() => {
+        after = true;
+      }, []);
+      return null;
+    }
+    const region = document.body.appendChild(document.createElement('div'));
+    const live = region.appendChild(document.createElement('div'));
+    render(
+      <>
+        <SyncNoticeHost store={f.store} live={live} region={region} />
+        <Flip />
+      </>,
+    );
+    expect(f.store.dismiss).not.toHaveBeenCalled();
+  });
+
+  it('forked 不按这个滤（副本照样要说一声）', () => {
+    mount([conflict({ status: 'forked', table: 'notes', forkId: 'f1', conflicts: ['updated_at'] })]);
+    expect(screen.getByTestId('sync-notice-card')).toBeTruthy();
   });
 
   it('有排队时另起一行“还有 n 条”', () => {

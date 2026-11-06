@@ -236,7 +236,8 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     if (m.type === 'outbox' || boot.switching) return;
     void (async () => {
       await outbox.refresh();
-      await reloadCollections(cache, m.type === 'changed' ? m.colls : null);
+      if (boot.switching) return;
+      await reloadCollections(cache, m.type === 'changed' ? m.colls : null, () => boot.switching);
     })().catch(() => undefined);   // 库已关（换账号、清库中）：不管
   };
   // 非主页往 outbox 写了：提醒主页马上发
@@ -247,7 +248,8 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   const rereadAll = (): void => {
     void (async () => {
       await outbox.refresh();
-      await reloadCollections(cache, null);
+      if (boot.switching) return;
+      await reloadCollections(cache, null, () => boot.switching);
     })().catch(() => undefined);
   };
   // 非主页回到前台：整份重读一次兜底（消息可能丢了）
@@ -268,7 +270,8 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     void (async () => {
       await outbox.refresh();
       if (boot.switching) return;
-      await reloadCollections(cache, null);
+      // 逐表读的期间也可能设闸（N3）：每张表读完再看一次
+      await reloadCollections(cache, null, () => boot.switching);
       if (!boot.switching && leader && !leader.isLeader() && outbox.getStatus().pending > 0) leader.post({ type: 'outbox' });
     })().catch(() => undefined);
   }

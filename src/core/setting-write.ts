@@ -9,20 +9,9 @@
 import { settingPatch } from './setting-patch.ts';
 import { write } from './write.ts';
 
-export interface SettingRow {
-  readonly id: string;
-  readonly key?: unknown;
-  readonly value?: unknown;
-  readonly deleted_at?: unknown;
-  readonly undone?: unknown;
-}
+import { live, type SettingRow } from './setting-read.ts';
 
-const live = (r: SettingRow): boolean => (r.deleted_at === null || r.deleted_at === undefined) && r.undone !== true;
-
-/** 这个键现在生效的值；没有、被删、被撤销都是 undefined */
-export function settingValue(rows: readonly SettingRow[], key: string): unknown {
-  return rows.find((r) => r.key === key && live(r))?.value;
-}
+export { settingValue, type SettingRow } from './setting-read.ts';
 
 export type SettingWrite =
   | { readonly op: 'insert'; readonly data: { readonly key: string; readonly value: unknown } }

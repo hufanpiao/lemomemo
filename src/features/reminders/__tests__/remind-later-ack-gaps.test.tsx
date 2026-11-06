@@ -7,6 +7,8 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { remindQueue, resetRemindQueue } from '../../../kit/state/remind-queue.ts';
+// outbox 状态替身的空集合（UNSYNCED-retryRecs-required）：每次返回同一个对象，useSyncExternalStore 的快照才稳定
+const EMPTY_RECS = vi.hoisted((): ReadonlySet<string> => new Set());
 
 type Row = { id: string } & Record<string, unknown>;
 const data: Record<string, Row[]> = { events: [], todos: [], settings: [] };
@@ -42,7 +44,7 @@ vi.mock('../../../core/boot.ts', () => ({
         outboxSubs.add(fn);
         return () => outboxSubs.delete(fn);
       },
-      getStatus: () => ({ remindRecs: new Set() }),
+      getStatus: () => ({ retryRecs: EMPTY_RECS, remindRecs: EMPTY_RECS }),
       list: () => countedList(),
     },
   }),

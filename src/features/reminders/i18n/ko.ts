@@ -5,6 +5,7 @@
 import type { remindZh } from './zh.ts';
 
 export const remindKo = {
+  // 首屏那几句在 row-ko.ts
   'remind.a11y.region': '알림', // REVIEW(ko)
   'remind.banner.event': '일정 · {when}', // REVIEW(ko)
   'remind.banner.todo': '할 일 알림 · {when}', // REVIEW(ko)
@@ -28,8 +29,6 @@ export const remindKo = {
   'remind.snoozed': '{time}에 다시 알려 드릴게요', // REVIEW(ko)
   'remind.saveFailed': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // R-106 B2 第一遍已审（11-04）（B2K-S08）
   'remind.readonly': '새 버전으로 업데이트해야 고칠 수 있어요', // R-106 B2 第一遍已审（11-04）（B2K-S09）
-  'remind.missed.row': '놓친 알림 {n}개', // REVIEW(ko)
-  'remind.missed.open': '보기 ›', // REVIEW(ko)
   'remind.missed.titleN': '놓친 알림 {n}', // REVIEW(ko)
   'remind.missed.note': '처리하지 못한 알림이 여기 모여 있어요', // REVIEW(ko)
   'remind.missed.allAck': '모두 확인', // REVIEW(ko)
@@ -52,12 +51,25 @@ export const remindKo = {
   'remind.wd.6': '토요일', // REVIEW(ko)
   'remind.full.back': '뒤로', // REVIEW(ko)
   'remind.full.pos': '{n}개 중 {i}번째', // REVIEW(ko)
+  'remind.rel.startInMin': '{n}분 후 시작', // REVIEW(ko)
+  'remind.rel.startInH': '{h}시간 후 시작', // REVIEW(ko)
+  'remind.rel.startInHM': '{h}시간 {m}분 후 시작', // REVIEW(ko)
+  'remind.rel.startInD': '{n}일 후 시작', // REVIEW(ko)
+  'remind.rel.startedNow': '방금 시작', // REVIEW(ko)
+  'remind.rel.startedMin': '시작한 지 {n}분', // REVIEW(ko)
+  'remind.rel.startedH': '시작한 지 {h}시간', // REVIEW(ko)
+  'remind.rel.startedD': '시작한 지 {n}일', // REVIEW(ko)
+  'remind.rel.dueInMin': '{n}분 후 마감', // REVIEW(ko)
+  'remind.rel.dueInH': '{h}시간 후 마감', // REVIEW(ko)
+  'remind.rel.dueInHM': '{h}시간 {m}분 후 마감', // REVIEW(ko)
+  'remind.rel.dueInD': '{n}일 후 마감', // REVIEW(ko)
   'remind.full.head.event': '일정 · {when}', // REVIEW(ko)
-  'remind.full.head.todo': '할 일 알림 · {when}', // REVIEW(ko)
+  'remind.full.head.todo': '할 일 · {when}', // REVIEW(ko)
   'remind.full.until': '{time}까지', // REVIEW(ko)
   'remind.full.loc': '장소 / 링크', // REVIEW(ko)
   'remind.full.note': '메모', // REVIEW(ko)
   'remind.full.next': '다음: {title}', // REVIEW(ko)
+  'remind.full.nextAt': '{time} 알림', // REVIEW(ko)
   'remind.full.handled': '다른 기기에서 처리했어요', // REVIEW(ko)
   'remind.full.handledNote': '이미 처리한 알림이에요. 이 화면은 닫아도 돼요.', // R-106 B2 第一遍已审（11-04）（B2K-S02）
   'remind.full.gone': '이 알림을 찾을 수 없어요', // REVIEW(ko)
@@ -146,7 +158,5 @@ export const remindKo = {
   'remind.mode.dueBeforeDay': '마감 {n}일 전', // REVIEW(ko)
   'remind.mode.sameDay': '당일 {time}', // REVIEW(ko)
   'remind.mode.dayBefore': '전날 {time}', // REVIEW(ko)
-  'remind.unsynced': '동기화 안 됨. 알림이 안 울릴 수 있어요', // REVIEW(ko)
-  'remind.unsynced.mark': '동기화 안 됨', // REVIEW(ko)
   'remind.clock.wrongNote': '이 기기 시간이 서버와 약 {min}분 차이 나요. 알림은 서버 시간 기준으로 울려요.', // REVIEW(ko)
 } as const satisfies Record<keyof typeof remindZh, string>;

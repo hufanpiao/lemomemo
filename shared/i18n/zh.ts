@@ -81,4 +81,5 @@ export const zh = {
   'exit.unavailable.title': '读不到这台电脑上的登录信息',
   'exit.unavailable.body': '请重新打开柠檬记。还不行的话，重启电脑后再试。',
   'exit.unavailable.reopen': '重新打开',
+  // 时区的通俗说法（tz.*）11-05 挪到 shared/i18n/tz-zh.ts、tz-ko.ts：只有登录页的恢复页和邮件用，不进主 App 首屏的公共词典
 } as const;

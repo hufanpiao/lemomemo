@@ -8,13 +8,14 @@ const savePatch = vi.fn(async (..._a: unknown[]) => 'saved' as const);
 vi.mock('../../../core/edit-save.ts', () => ({ savePatch: (...a: unknown[]) => savePatch(...a) }));
 
 const { parseReminderHash } = await import('../data/remind-route.ts');
-const { dndOf, dndSettingOf, dndValue, settingWrite, showTitleOf } = await import('../data/remind-settings.ts');
+const { dndOf, dndSettingOf, dndValue, showTitleOf } = await import('../data/remind-settings.ts');
+const { settingWrite } = await import('../../../core/setting-write.ts');
 const { localDue, localText, shouldCloseShown, staleTags } = await import('../data/local-notify.ts');
 const { allReminders, reminderOf } = await import('../data/reminder-model.ts');
 const { pushTestResultOf } = await import('../data/push-test.ts');
 const { pushNoticeOf, removeHolder, enableNotifications, localInstallId } = await import('../data/push-setup.ts');
 const { ackReminder, snoozeReminder, ackAll } = await import('../data/remind-write.ts');
-const { dayMsg, whenMsg } = await import('../data/remind-format.ts');
+const { dayMsg, relMsg, whenMsg } = await import('../data/remind-format.ts');
 
 const SEOUL = 'Asia/Seoul';
 const DAY = '2026-11-03';
@@ -252,10 +253,44 @@ describe('说明文字', () => {
     expect(whenMsg(td, at(DAY, '16:00'), SEOUL)).toEqual({ key: 'remind.when.dueAt', params: { time: '17:00' } });
     expect(whenMsg(td, at(DAY, '17:30'), SEOUL)).toEqual({ key: 'remind.when.overdue', params: {} });
   });
+  it('整页提醒的相对时间（设计复审 今天页待办 M3）：分钟、小时（整点不写零头）、天；开始以后写过了多久；待办有截止时刻才算', () => {
+    const ev = reminderOf('event', { id: ID, title: 'x', date: DAY, time: '15:30', tz: SEOUL, remind_min: 15 }, at(DAY, '15:15'), SEOUL)!;
+    const rel = (now: number) => relMsg(ev, now, SEOUL);
+    expect(rel(at(DAY, '15:15'))).toEqual({ key: 'remind.rel.startInMin', params: { n: 15 } });
+    expect(rel(at(DAY, '14:30'))).toEqual({ key: 'remind.rel.startInH', params: { h: 1 } });
+    expect(rel(at(DAY, '13:25'))).toEqual({ key: 'remind.rel.startInHM', params: { h: 2, m: 5 } });
+    expect(rel(at('2026-10-31', '15:30'))).toEqual({ key: 'remind.rel.startInD', params: { n: 3 } });
+    expect(rel(at(DAY, '15:30'))).toEqual({ key: 'remind.rel.startedNow', params: {} });
+    expect(rel(at(DAY, '15:35'))).toEqual({ key: 'remind.rel.startedMin', params: { n: 5 } });
+    expect(rel(at(DAY, '17:40'))).toEqual({ key: 'remind.rel.startedH', params: { h: 2 } });
+    // 满 24 小时按天（代码复审 N3）：差 1 分钟满 24 小时还是 23 小时；满了写 1 天；2 天 1 小时 10 分钟写 2 天
+    expect(rel(at('2026-11-04', '15:29'))).toEqual({ key: 'remind.rel.startedH', params: { h: 23 } });
+    expect(rel(at('2026-11-04', '15:30'))).toEqual({ key: 'remind.rel.startedD', params: { n: 1 } });
+    expect(rel(at('2026-11-05', '16:40'))).toEqual({ key: 'remind.rel.startedD', params: { n: 2 } });
+    const td = reminderOf('todo', todoRow(), at(DAY, '16:00'), SEOUL)!;
+    expect(relMsg(td, at(DAY, '16:00'), SEOUL)).toEqual({ key: 'remind.rel.dueInH', params: { h: 1 } });
+    expect(relMsg(td, at(DAY, '16:20'), SEOUL)).toEqual({ key: 'remind.rel.dueInMin', params: { n: 40 } });
+    expect(relMsg(td, at(DAY, '17:00'), SEOUL)).toEqual({ key: 'remind.when.overdue', params: {} });
+    // 只有截止日期：照 whenMsg（今天截止）
+    const day = { ...td, row: { ...td.row, due_time: null } };
+    expect(relMsg(day, at(DAY, '09:00'), SEOUL)).toEqual({ key: 'remind.when.dueToday', params: {} });
+  });
   it('今天、昨天、明天', () => {
     expect(dayMsg(DAY, DAY).key).toBe('remind.day.today');
     expect(dayMsg('2026-11-02', DAY).key).toBe('remind.day.yesterday');
     expect(dayMsg('2026-11-04', DAY).key).toBe('remind.day.tomorrow');
     expect(dayMsg('2026-11-10', DAY)).toEqual({ key: 'remind.day.date', params: { m: 11, d: 10 } });
+  });
+});
+
+describe('本次打开以后响过的（R-336；代码复审第三轮 L4：rangStore 不导出，只经 recordRang、clearRang 写）', () => {
+  it('同一个 occurrenceKey 只记第一次响的 tag 和时刻；clearRang 清空', async () => {
+    const { clearRang, rangSnapshot, recordRang } = await import('../hooks/remind-list.ts');
+    clearRang();
+    recordRang('event:1@100', { tag: 'a', dueAt: 100 });
+    recordRang('event:1@100', { tag: 'b', dueAt: 200 });
+    expect(rangSnapshot().get('event:1@100')).toEqual({ tag: 'a', dueAt: 100, local: false }); // local：本机弹过系统通知（REMIND-shown-persist）
+    clearRang();
+    expect(rangSnapshot().size).toBe(0);
   });
 });

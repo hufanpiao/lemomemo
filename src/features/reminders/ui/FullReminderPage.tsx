@@ -11,7 +11,7 @@ import { canGoBack, goBack, navigate } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { clock } from '../../../platform/clock.ts';
 import { openReminder } from '../../../platform/native-bridge.ts';
-import { eventEnd, eventStart, findReminder, parseReminderHash, timeOf, whenMsg, type Reminder } from '../hooks/remind-view.ts';
+import { eventEnd, eventStart, findReminder, parseReminderHash, relMsg, timeOf, type Reminder } from '../hooks/remind-view.ts';
 import { actionsOf, useMinuteNow, useReminderList, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
 import { Bell } from './Bell.tsx';
@@ -68,8 +68,9 @@ export default function FullReminderPage() {
 
   const top = (
     <div className={styles.top}>
-      <Pressable type="button" className={styles.small} onClick={leave} data-testid="remind-full-back">
-        ‹ {t('remind.full.back', {})}
+      <Pressable type="button" className={`${styles.small} ${styles.backEdge}`} onClick={leave} data-testid="remind-full-back">
+        {/* “‹”只是样子，读屏只读“返回”（代码复审 N2，同设置页） */}
+        <span aria-hidden="true">‹</span> {t('remind.full.back', {})}
       </Pressable>
       {live && entries.length > 1 && (
         <span className={styles.dim}>{t('remind.full.pos', { i: Math.max(1, entries.findIndex((e) => e.tag === r.tag) + 1), n: entries.length })}</span>
@@ -100,7 +101,8 @@ export default function FullReminderPage() {
     );
   }
 
-  const w = whenMsg(r, clock.now(), tz, prefs.defaultTime);
+  // 类型行写“还有多久”，大号字写时刻，不重复（设计复审 今天页待办 M3）；页面每分钟随 useMinuteNow 重画
+  const w = relMsg(r, clock.now(), tz, prefs.defaultTime);
   const end = r.kind === 'event' ? eventEnd(r, tz) : null;
   const loc = typeof r.row['location'] === 'string' ? r.row['location'] : '';
   const note = typeof r.row['note'] === 'string' ? r.row['note'] : '';
@@ -113,7 +115,7 @@ export default function FullReminderPage() {
     <main className={styles.page} data-testid="remind-full" data-kind={r.kind}>
       {top}
       {/* 线框 FULLALERT（设计 H1）：铃铛 + 类型行、大时刻、标题（待办的完成圆圈并排，不在 h1 里，L1）、“到 16:30 · 项目”、地点备注卡、下一条卡 */}
-      <p className={styles.kind}>
+      <p className={styles.kind} data-testid="remind-full-kind">
         <Bell className={styles.bell} />
         {t(r.kind === 'event' ? 'remind.full.head.event' : 'remind.full.head.todo', { when: t(w.key, w.params as never) })}
       </p>
@@ -174,7 +176,7 @@ export default function FullReminderPage() {
           <span className={styles.grow}>
             <b className={styles.nextTitle}>{t('remind.full.next', { title: nextR.title })}</b>
             <span className={styles.nextSub}>
-              {[timeOf(next.dueAt, tz), t(nextR.kind === 'event' ? 'remind.kindName.event' : 'remind.kindAlert.todo', {}), nextProject].filter(Boolean).join(' · ')}
+              {[t('remind.full.nextAt', { time: timeOf(next.dueAt, tz) }), t(nextR.kind === 'event' ? 'remind.kindName.event' : 'remind.kindAlert.todo', {}), nextProject].filter(Boolean).join(' · ')}
             </span>
           </span>
           <span aria-hidden="true">›</span>

@@ -11,7 +11,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
 import { addDays, type DateStr } from '../../../../shared/core/date.ts';
 import { MAX_YEAR, MIN_YEAR, monthOf } from '../../../../shared/logic/calendar/cal-nav.ts';
-import { useDragCollapse } from '../../../motion/index.ts';
+import { useDragCollapse } from '../../../motion/gestures.ts';
 import type { useCalendar } from './useCalendar.ts';
 
 /** 收起后按周翻：从 base 挪 n 周，超出 1900–2100 时 null */

@@ -3,6 +3,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
+// outbox 状态替身的空集合（UNSYNCED-retryRecs-required）：每次返回同一个对象，useSyncExternalStore 的快照才稳定
+const EMPTY_RECS = vi.hoisted((): ReadonlySet<string> => new Set());
 
 const savePatch = vi.fn(async (..._a: unknown[]): Promise<string> => 'saved');
 vi.mock('../../../core/edit-save.ts', () => ({ savePatch: (...a: unknown[]) => savePatch(...a) }));
@@ -22,7 +24,7 @@ vi.mock('../../../platform/notifications.ts', () => ({ closeHandledNotifications
 type ObItem = { rec: string; op: 'insert' | 'patch'; state: 'pending' | 'inflight' | 'failed'; sent?: boolean; data: Record<string, unknown> };
 let outboxList: ObItem[] = [];
 vi.mock('../../../core/boot.ts', () => ({
-  getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ remindRecs: new Set() }), list: async () => outboxList } }),
+  getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ retryRecs: EMPTY_RECS, remindRecs: EMPTY_RECS }), list: async () => outboxList } }),
 }));
 
 const SEOUL = 'Asia/Seoul';

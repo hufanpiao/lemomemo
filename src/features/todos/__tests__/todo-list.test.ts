@@ -57,4 +57,57 @@ describe('分组', () => {
     expect(groupTodos(rows, NOW, TZ, 'SignPlex').flatMap((g) => g.items.map((i) => i.todo.project))).toEqual(['SignPlex', 'SignPlex']);
     expect(projectCounts(rows)).toEqual([{ project: 'NEOX', count: 2 }, { project: 'SignPlex', count: 1 }]);
   });
+
+  it('筛选条条数一样：按项目名，数字按数值、按当前语言（代码复审第三轮，和标题同一个比较）', () => {
+    const names = ['项目 10', '项目 2', '项目 1', '项目 20'];
+    const rows = names.map((project) => td({ project }));
+    const want = ['项目 1', '项目 2', '项目 10', '项目 20'];
+    expect(projectCounts(rows, 'zh-CN').map((p) => p.project)).toEqual(want);
+    expect(projectCounts(rows, 'ko-KR').map((p) => p.project)).toEqual(want);
+    const ko = ['프로젝트 10', '프로젝트 2', '프로젝트 1'].map((project) => td({ project }));
+    expect(projectCounts(ko, 'ko-KR').map((p) => p.project)).toEqual(['프로젝트 1', '프로젝트 2', '프로젝트 10']);
+    // 按传入的语言：中文里汉字在韩文前，韩文里韩文在汉字前（不传语言时按中文）
+    const mixed = ['가나', '北京'].map((project) => td({ project }));
+    expect(projectCounts(mixed, 'zh-CN').map((p) => p.project)).toEqual(['北京', '가나']);
+    expect(projectCounts(mixed, 'ko-KR').map((p) => p.project)).toEqual(['가나', '北京']);
+    expect(projectCounts(mixed).map((p) => p.project)).toEqual(['北京', '가나']);
+  });
+});
+
+describe('同一截止时刻、没日期那组按标题排：数字按数值（设计审查：“第 1、10、11 … 2、20”；和今天页共用 shared/i18n/title-compare.ts）', () => {
+  const mix = <T,>(a: T[]): T[] => [a[3], a[0], a[2], a[1]] as T[];
+  const titlesOf = (g: ReturnType<typeof groupTodos>, key: string) => g.find((x) => x.key === key)?.items.map((i) => i.todo.title);
+
+  it('没日期那组：中文 1、2、10、20；韩文 1、2、10、20', () => {
+    const zh = ['第 1 条', '第 2 条', '第 10 条', '第 20 条'];
+    expect(titlesOf(groupTodos(mix(zh).map((title) => td({ title })), NOW, TZ, null, 'zh-CN'), 'nodate')).toEqual(zh);
+    const ko = ['할 일 1', '할 일 2', '할 일 10', '할 일 20'];
+    expect(titlesOf(groupTodos(mix(ko).map((title) => td({ title })), NOW, TZ, null, 'ko-KR'), 'nodate')).toEqual(ko);
+  });
+
+  it('同一天同一截止时刻：中文、韩文都是 1、2、10、20', () => {
+    const zh = ['报表 1', '报表 2', '报表 10', '报表 20'];
+    const rowsZh = mix(zh).map((title) => td({ title, due: '2026-11-08', due_time: '10:00' }));
+    expect(titlesOf(groupTodos(rowsZh, NOW, TZ, null, 'zh-CN'), 'day')).toEqual(zh);
+    const ko = ['보고서 1', '보고서 2', '보고서 10', '보고서 20'];
+    const rowsKo = mix(ko).map((title) => td({ title, due: '2026-11-08', due_time: '10:00' }));
+    expect(titlesOf(groupTodos(rowsKo, NOW, TZ, null, 'ko-KR'), 'day')).toEqual(ko);
+  });
+
+  it('排序口径不变：重要的仍在前，截止时刻仍先比，标题只是最后一道', () => {
+    const rows = [
+      td({ title: '第 1 条' }),
+      td({ title: '第 20 条', important: true }),
+      td({ title: '第 2 条', due: '2026-11-08', due_time: '11:00' }),
+      td({ title: '第 10 条', due: '2026-11-08', due_time: '09:00' }),
+    ];
+    const g = groupTodos(rows, NOW, TZ, null, 'zh-CN');
+    expect(titlesOf(g, 'nodate')).toEqual(['第 20 条', '第 1 条']);
+    expect(titlesOf(g, 'day')).toEqual(['第 10 条', '第 2 条']);
+  });
+
+  it('按传入的语言比：中文按拼音，“北京”在“上海”前（按码位会反过来）', () => {
+    const rows = ['上海出差', '北京出差'].map((title) => td({ title }));
+    expect(titlesOf(groupTodos(rows, NOW, TZ, null, 'zh-CN'), 'nodate')).toEqual(['北京出差', '上海出差']);
+  });
 });

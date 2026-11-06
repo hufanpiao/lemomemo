@@ -46,6 +46,53 @@ export function whenMsg(r: Reminder, now: number, tz: Tz, defaultTime?: string):
   return { key: 'remind.when.dueOn', params: { m, d } };
 }
 
+/**
+ * 整页提醒的类型行（设计复审 今天页待办 M3；线框 FULLALERT）：写“还有多久”，不再写一遍下面大号字的时刻。
+ * • 日程：没开始写“15 分钟后开始”“2 小时 5 分钟后开始”“3 天后开始”；开始了写“刚刚开始”“已经开始 5 分钟”“已经开始 2 小时”“已经开始 1 天”（满 24 小时按天）
+ * • 待办有截止时刻：“40 分钟后截止”“1 小时后截止”“2 天后截止”，过了写“已过截止”；只有截止日期、没有截止日期的照 whenMsg
+ */
+export type RelMsg =
+  | { key: 'remind.rel.startInMin' | 'remind.rel.dueInMin' | 'remind.rel.startedMin'; params: { n: number } }
+  | { key: 'remind.rel.startInH' | 'remind.rel.dueInH' | 'remind.rel.startedH'; params: { h: number } }
+  | { key: 'remind.rel.startInHM' | 'remind.rel.dueInHM'; params: { h: number; m: number } }
+  | { key: 'remind.rel.startInD' | 'remind.rel.dueInD' | 'remind.rel.startedD'; params: { n: number } }
+  | { key: 'remind.rel.startedNow'; params: Record<string, never> }
+  | WhenMsg;
+
+const DAY_MIN = 24 * 60;
+
+/** 还有 min 分钟（≥ 1）：分钟、小时（零头分钟写上，整点不写）、天（满 24 小时按整天往下取） */
+function ahead(min: number, k: 'start' | 'due'): RelMsg {
+  if (min < 60) return { key: k === 'start' ? 'remind.rel.startInMin' : 'remind.rel.dueInMin', params: { n: min } };
+  if (min < DAY_MIN) {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    if (m === 0) return { key: k === 'start' ? 'remind.rel.startInH' : 'remind.rel.dueInH', params: { h } };
+    return { key: k === 'start' ? 'remind.rel.startInHM' : 'remind.rel.dueInHM', params: { h, m } };
+  }
+  return { key: k === 'start' ? 'remind.rel.startInD' : 'remind.rel.dueInD', params: { n: Math.floor(min / DAY_MIN) } };
+}
+
+export function relMsg(r: Reminder, now: number, tz: Tz, defaultTime?: string): RelMsg {
+  if (r.kind === 'event') {
+    const s = eventStart(r, tz, defaultTime);
+    if (s === null) return { key: 'remind.when.started', params: {} };
+    if (s > now) return ahead(Math.ceil((s - now) / 60_000), 'start');
+    const past = Math.floor((now - s) / 60_000);
+    if (past < 1) return { key: 'remind.rel.startedNow', params: {} };
+    if (past < 60) return { key: 'remind.rel.startedMin', params: { n: past } };
+    if (past < DAY_MIN) return { key: 'remind.rel.startedH', params: { h: Math.floor(past / 60) } };
+    // 满 24 小时按整天往下取（代码复审 N3：不写“已经开始 25 小时”）
+    return { key: 'remind.rel.startedD', params: { n: Math.floor(past / DAY_MIN) } };
+  }
+  const due = str(r.row['due']);
+  const dueTime = str(r.row['due_time']);
+  if (due === null || dueTime === null) return whenMsg(r, now, tz, defaultTime);
+  const end = msAt(due, parseHm(dueTime), tz);
+  if (end <= now) return { key: 'remind.when.overdue', params: {} };
+  return ahead(Math.ceil((end - now) / 60_000), 'due');
+}
+
 export type DayMsg =
   | { key: 'remind.day.today'; params: Record<string, never> }
   | { key: 'remind.day.yesterday'; params: Record<string, never> }

@@ -60,6 +60,7 @@ export const core = defineManifest({
       backup: 'none', export: 'none', countsToQuota: false, orphanSweep: null,
       userLookup: { by: 'pathPattern', level: 2 } },   // 0.29 续第 84 条：按第二级目录找人
   ],
-  settingsKeys: ['ui.*', 'cal.*', 'remind.*', 'ai.*', 'desk.*', 'layout.*'],
+  // cal.* 归日历（calendar.ts，MANIFEST-settings-prefix，架构 3.5 第 5 点：各功能声明自己用到的键前缀）
+  settingsKeys: ['ui.*', 'remind.*', 'ai.*', 'desk.*', 'layout.*'],
   usageReport: { rows: true, buckets: true },
 });

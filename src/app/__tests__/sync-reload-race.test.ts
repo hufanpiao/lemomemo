@@ -114,4 +114,70 @@ describe('补读期间的并发写入（FA-6 推迟启动代码复审 N1）', ()
     expect(c.get(uid(1))).toBeUndefined();
     await sync?.stop();
   });
+
+  for (const isLeader of [true, false]) {
+    it(`${isLeader ? '主页' : '非主页'}：补读逐表读的途中设了换账号闸（FA6-r3-low N3）：不再读后面的表，刚读到的也不写回内存`, async () => {
+      const { boot, cache } = await ready();
+      const row = todo(1);
+      await cache.putRows('todos', [{ id: uid(1), server: row as never, view: row as never }]);
+      const real = cache.allRows.bind(cache);
+      vi.spyOn(cache, 'allRows').mockImplementation(async (table: string) => {
+        const rows = await real(table);
+        boot.switching = true;   // 读第一张表的期间 watchAccount 设了闸
+        return rows as never;
+      });
+      const sync = wire(boot, isLeader);
+      await vi.waitFor(() => expect(cache.allRows).toHaveBeenCalled());
+      await flush(5);
+      expect(cache.allRows).toHaveBeenCalledTimes(1);
+      for (const t of cache.syncTables) expect(collection(t).getSnapshot(), `${t} 被灌回了旧账号的行`).toEqual([]);
+      await sync?.stop();
+    });
+  }
+
+  // 首屏判断放宽与推送认领核对审查 L1：另外两处补读（sync-wiring 收到别的标签页的消息、非主页回到前台整份重读）也带着闸
+  for (const how of ['收到别的标签页“改了”的消息', '非主页回到前台整份重读'] as const) {
+    it(`非主页：${how}，逐表读的途中设了换账号闸：不再读后面的表，刚读到的也不写回内存（L1）`, async () => {
+      const { boot, cache } = await ready();
+      const life = fakeLife(true);
+      let onMessage!: (m: never) => void;
+      const sync = wireSync(boot, {
+        transport: fakeTransport(new FakeServer()),
+        clearCacheStorage: () => Promise.resolve(),
+        clearLocalSessionIf: () => Promise.resolve(true),
+        goToAuth: () => undefined,
+        setExitNotice: () => undefined,
+        create: (b, o: SyncOptions) => createSync(b, { ...o, skipConfig: true, lifecycle: life }),
+        leader: (o) => {
+          onMessage = o.onMessage as never;
+          return { isLeader: () => false, post: () => undefined, close: () => Promise.resolve() };
+        },
+        lifecycle: life,
+      });
+      // 先等启动那次补读读完
+      const real = cache.allRows.bind(cache);
+      const spy = vi.spyOn(cache, 'allRows');
+      await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(cache.syncTables.length));
+      await flush(5);
+      // 库里多了一行（别的标签页写的）；这次补读读第一张表的期间 watchAccount 设了闸
+      const row = todo(1);
+      await cache.putRows('todos', [{ id: uid(1), server: row as never, view: row as never }]);
+      spy.mockClear();
+      spy.mockImplementation(async (table: string) => {
+        const rows = await real(table);
+        boot.switching = true;
+        return rows as never;
+      });
+      if (how === '收到别的标签页“改了”的消息') onMessage({ type: 'changed', colls: null } as never);
+      else {
+        life.setVisible(false);
+        life.setVisible(true);
+      }
+      await vi.waitFor(() => expect(spy).toHaveBeenCalled());
+      await flush(5);
+      expect(spy, '设了闸以后还在读后面的表').toHaveBeenCalledTimes(1);
+      expect(collection('todos').get(uid(1)), '设了闸以后还把读到的行写回了内存').toBeUndefined();
+      await sync?.stop();
+    });
+  }
 });

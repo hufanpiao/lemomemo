@@ -273,6 +273,9 @@ test.describe('待办列表动效（B2 FA-5 设计审查 M1、M2，第二轮 N1�
       head = s.filter(([dt]) => dt < UI_MS - 20);
       counts.push(head.length);
     }
+    // 门槛为什么是 2 帧（原来是“> 3 帧”，审查 L-7 要求写明）：要证明的是“头 UI_MS - 20 ms 里组一直没动”，1 帧只是一个点，
+    // 碰巧取在动之前也会过；2 帧起才算看过一段时间。再往上要求，高负载时这段里本来就只出得来两三帧，会误报“没测到”。
+    // 取不够 2 帧不算过：整段重做（最多 GHOST_TRIES 次），还不够就判失败，不会把“没测到”当成“没动”
     expect(head.length, `做了 ${counts.length} 次，头 ${UI_MS - 20} ms 里取到的帧数 ${counts.join('、')}：没测到`).toBeGreaterThanOrEqual(2);
     for (const [dt, top] of head) expect(top, `松手后 ${dt.toFixed(0)} ms`).toBeCloseTo(before, 0);
     // 之后只往上走一次、不往回退（第二轮 L2）

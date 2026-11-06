@@ -21,7 +21,7 @@ import { monthOf, weekDates } from '../../../../shared/logic/calendar/cal-nav.ts
 import { useRoute } from '../../../app/router.ts';
 import { Appear } from '../../../motion/components.ts';
 import { UnsyncedRemindHint } from '../../reminders/index.ts';
-import { useSwipePager } from '../../../motion/index.ts';
+import { useSwipePager } from '../../../motion/gestures.ts';
 import { useCalendar } from '../hooks/useCalendar.ts';
 import { useCalHolidayChoice } from '../hooks/useCalSettings.ts';
 import { useCalViewT, type CalViewT } from '../hooks/useCalViewT.ts';

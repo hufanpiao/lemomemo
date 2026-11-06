@@ -3,10 +3,16 @@
 // 替身和复位在 app-remind-host-fixture.tsx（必须第一个 import）
 import { App, clock, frameQ, idleQ, life, pageThenIdle, runFrame, runIdle, setRemindErrorLog, setTodayPage, settle, st, startAppPaintLimit } from './app-remind-host-fixture.tsx';
 import { act, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { remindQueue, setRemindArmed, setRemindDown } from '../../kit/state/remind-queue.ts';
+import { remindArmWatchdog } from '../App.tsx';
 
 // 挂整个 App：全量跑、机器忙时默认 5 秒不够
 vi.setConfig({ testTimeout: 15_000 });
+afterEach(() => {
+  setRemindDown(false);
+  setRemindArmed(null);
+});
 
 describe('App 挂提醒', () => {
   it('没启动（没有会话）：不挂 RemindHost', async () => {
@@ -60,6 +66,21 @@ describe('App 挂提醒', () => {
     expect(screen.queryByTestId('app-error')).toBeNull();
   });
 
+  it('RemindHost 出错：记进 kit 的 remindDown（今天页照样挂“错过的提醒”，今天页待办 代码审查 M1）；换账号那一份卸载时清掉、新账号重新试', async () => {
+    st.userId = 'user-a';
+    st.hostMode = 'throw';
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    setRemindErrorLog(() => undefined);
+    const { rerender } = render(<App />);
+    await pageThenIdle();
+    await waitFor(() => expect(remindQueue.getState().remindDown).toBe(true));
+    st.userId = 'user-b';
+    st.hostMode = 'ok';
+    rerender(<App />);
+    expect(await screen.findByTestId('fake-host', {}, { timeout: 10_000 })).toBeTruthy();
+    expect(remindQueue.getState().remindDown).toBe(false);
+  });
+
   it('提醒分包一直没到（R5）：页面照常画出来，提醒不先画、也不挡页面', async () => {
     st.userId = 'user-a';
     st.hostMode = 'pending';
@@ -68,6 +89,42 @@ describe('App 挂提醒', () => {
     expect(page.getAttribute('data-feature')).toBe('today');
     expect(screen.queryByTestId('fake-host')).toBeNull();
   });
+
+  // 审查“错过提醒推迟挂载”M1：今天页等 armed 才挂“错过的提醒”，引擎一直不 armed 又不报错时，看门狗到点写 remindDown
+  it('看门狗：分包一直没到，挂上（ready）以后 15 秒还没 armed → remindDown（今天页照样挂“错过的提醒”）；之后 armed 了清掉', async () => {
+    const fires: Array<() => void> = [];
+    vi.spyOn(remindArmWatchdog, 'start').mockImplementation((fn) => (fires.push(fn), 0 as unknown as ReturnType<typeof setTimeout>));
+    st.userId = 'user-a';
+    st.hostMode = 'pending';
+    render(<App />);
+    expect(fires).toHaveLength(0); // ready 之前不起表（复审 N2）
+    await pageThenIdle();
+    await waitFor(() => expect(fires).toHaveLength(1)); // ready 以后才起
+    expect(remindQueue.getState().remindDown).toBe(false);
+    act(() => fires[0]?.());
+    expect(remindQueue.getState().remindDown).toBe(true);
+    act(() => setRemindArmed(1));
+    expect(remindQueue.getState().remindDown).toBe(false);
+  });
+
+  it('看门狗：时限内 armed 了就停表，到点也不写 remindDown；出错写的 remindDown 不归看门狗清', async () => {
+    const fires: Array<() => void> = [];
+    const stop = vi.spyOn(remindArmWatchdog, 'stop');
+    vi.spyOn(remindArmWatchdog, 'start').mockImplementation((fn) => (fires.push(fn), 7 as unknown as ReturnType<typeof setTimeout>));
+    st.userId = 'user-a';
+    st.hostMode = 'pending';
+    render(<App />);
+    await pageThenIdle();
+    await waitFor(() => expect(fires).toHaveLength(1));
+    act(() => setRemindArmed(1));
+    expect(stop).toHaveBeenCalledWith(7);
+    act(() => fires[0]?.());
+    expect(remindQueue.getState().remindDown).toBe(false);
+    act(() => setRemindDown(true)); // 比如之后渲染出错（App 的错误边界写）
+    act(() => setRemindArmed(2));
+    expect(remindQueue.getState().remindDown).toBe(true);
+  });
+
   it('首屏减重 ⑥：页面画出来以后才开始等空闲，空闲之前不挂 RemindHost，空闲了才挂', async () => {
     st.userId = 'user-a';
     render(<App />);

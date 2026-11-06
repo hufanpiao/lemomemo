@@ -155,7 +155,7 @@ describe('两个配置真加载出来的 webServer', () => {
 describe('无后端组：覆盖了假后端端口就不复用已有服务', () => {
   async function loadPlain(env: Record<string, string>): Promise<WebServer[]> {
     vi.resetModules();
-    for (const k of [S3, SB, 'CI', 'E2E_GLOBAL_TIMEOUT_MS']) vi.stubEnv(k, '');
+    for (const k of [S3, SB, 'CI', 'E2E_GLOBAL_TIMEOUT_MS', 'LEMO_E2E_REUSE']) vi.stubEnv(k, '');
     for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v);
     try {
       return servers((await import('../../playwright.config.ts')).default);
@@ -164,14 +164,17 @@ describe('无后端组：覆盖了假后端端口就不复用已有服务', () =
     }
   }
   const reuse = (ws: WebServer[]) => ws.map((w) => (w as WebServer & { reuseExistingServer?: boolean }).reuseExistingServer);
+  /** 本机要复用得自己设 LEMO_E2E_REUSE=1（FA-6 执行说明四之一，11-04 起默认不复用，见 tools/e2e/reuse-servers.mjs） */
+  const REUSE = { LEMO_E2E_REUSE: '1' };
 
-  it('没设（或空字符串）：本机照旧复用，两个服务都是 true', async () => {
-    expect(reuse(await loadPlain({}))).toEqual([true, true]);
-    expect(reuse(await loadPlain({ [S3]: '', [SB]: '' }))).toEqual([true, true]);
+  it('没设（或空字符串）：设了 LEMO_E2E_REUSE=1 的本机复用，两个服务都是 true；没设 LEMO_E2E_REUSE 默认不复用', async () => {
+    expect(reuse(await loadPlain(REUSE))).toEqual([true, true]);
+    expect(reuse(await loadPlain({ ...REUSE, [S3]: '', [SB]: '' }))).toEqual([true, true]);
+    expect(reuse(await loadPlain({}))).toEqual([false, false]);
   });
 
-  it('设了任意一个：假后端和 wrangler 一律不复用（8788 上的旧 wrangler binding 还指着 9198）', async () => {
-    for (const env of [{ [S3]: '9195' }, { [SB]: '9194' }, { [S3]: '9195', [SB]: '9194' }]) {
+  it('设了任意一个：假后端和 wrangler 一律不复用，设了 LEMO_E2E_REUSE=1 也不复用（8788 上的旧 wrangler binding 还指着 9198）', async () => {
+    for (const env of [{ ...REUSE, [S3]: '9195' }, { ...REUSE, [SB]: '9194' }, { ...REUSE, [S3]: '9195', [SB]: '9194' }]) {
       const ws = await loadPlain(env);
       expect(reuse(ws), JSON.stringify(env)).toEqual([false, false]);
     }
@@ -180,8 +183,9 @@ describe('无后端组：覆盖了假后端端口就不复用已有服务', () =
     expect(bindingsOf(ws[1]?.command ?? '')['SUPABASE_UPSTREAM']).toBe('http://127.0.0.1:9194');
   });
 
-  it('CI 下照旧不复用', async () => {
+  it('CI 下照旧不复用（设了 LEMO_E2E_REUSE=1 也不复用）', async () => {
     expect(reuse(await loadPlain({ CI: 'true' }))).toEqual([false, false]);
+    expect(reuse(await loadPlain({ ...REUSE, CI: 'true' }))).toEqual([false, false]);
   });
 });
 

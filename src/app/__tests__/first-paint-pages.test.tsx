@@ -8,6 +8,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { APP_PAGE_SELECTOR } from '../../platform/first-paint.ts';
+// outbox 状态替身的空集合（UNSYNCED-retryRecs-required）：每次返回同一个对象，useSyncExternalStore 的快照才稳定
+const EMPTY_RECS = vi.hoisted((): ReadonlySet<string> => new Set());
 
 // 整页提醒要的替身（照 src/features/reminders/__tests__/RemindViews.test.tsx 的同一套，只留渲染“这条提醒找不到了”要的）
 vi.mock('../../kit/hooks/useCollection.ts', () => ({ useCollection: () => [] }));
@@ -18,7 +20,7 @@ vi.mock('../../platform/clock.ts', () => ({
 vi.mock('../../platform/native-bridge.ts', () => ({ openReminder: vi.fn(async () => undefined), showLocalReminder: vi.fn(), closeLocalReminder: vi.fn() }));
 vi.mock('../router.ts', () => ({ canGoBack: () => false, goBack: vi.fn(), navigate: vi.fn(async () => undefined) }));
 vi.mock('../../core/boot.ts', () => ({
-  getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ remindRecs: new Set() }) } }),
+  getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ retryRecs: EMPTY_RECS, remindRecs: EMPTY_RECS }) } }),
 }));
 
 // app 只许经功能的 index.ts 拿懒加载的页面（A27），所以包一层 Suspense

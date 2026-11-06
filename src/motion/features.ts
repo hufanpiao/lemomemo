@@ -10,7 +10,8 @@
 //   这一轮里新挂上的元素同样拿不到动画（例如以后才打开的弹层），所以到了就不再走异步
 // • 下载失败（离线、块丢了）：不抛（LazyMotion 的 then 没接 catch），这一次一直不到，元素照常显示、只是没有动画；
 //   下一个新挂上的 LazyMotion 再试一次。**这一次“再试”实际不生效**（FA-6 ② 审查 L2，e2e b2-motion-focus-retry 实测 11-04）：
-//   chromium、webkit 都把失败的动态 import 缓存住，不再去取，要刷新页面才恢复。后果只是没有动画，暂不换法子
+//   chromium、webkit 都把失败的动态 import 缓存住，不再去取，要刷新页面才恢复。后果只是没有动画，暂不换法子。
+//   webkit 还要页面由 SW 接管才行：没被接管时刷新以后照样用内存缓存里的失败结果、不发请求（审查 L-5，11-05 查清）；第二次打开起页面都由 SW 接管
 //   （要换得绕开同一个地址，例如带查询串重新 import，Vite 的预加载和哈希文件名得一起处理）
 // motion/react 只被 ./components.ts 那几个组件用到（check_size 会看）
 import type { FeatureBundle } from 'motion/react';

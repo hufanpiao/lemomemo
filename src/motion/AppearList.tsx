@@ -11,7 +11,13 @@
 // • 新增（含撤销恢复、打勾后挪进“已完成”组）：只淡入、不上移，并且晚 --dur-ui 的一半才开始——ease-out 前段快，
 //   这时周围的行已基本让开，新行看得见的时候不和任何一行叠着（设计审查 M2；第二轮 L1 把等待从 220 减到 110 ms；
 //   第三轮 P1 收拢晚了 LIST_LAYOUT_LAG，等待同步加上，≈ 143 ms）。
-//   淡入播完以前打 data-state="entering"、不接点按（透明的时候点不到看不见的圆圈或 ×，第二轮 L3）
+//   淡入播完以前打 data-state="entering"、不接点按（透明的时候点不到看不见的圆圈或 ×，第二轮 L3）。
+//   淡入和周围行的 layout 位移必须走同一个时钟（MOTION-list-undo-flaky，11-05）：opacity 默认被 Motion 交给 WAAPI 在合成器上按墙钟播，
+//   layout 位移是 JS 帧循环推的；主线程一忙（webkit 实测位移在 FLIP 起点停了 500 ms 以上），淡入照样播完，新行显出来时下面那组还没让开、
+//   字叠在一起。所以进场中给元素挂一个空的 onUpdate——Motion 见到 onUpdate 就不走 WAAPI（motion-dom supportsBrowserAnimation），
+//   淡入改由同一个帧循环推，位移卡住时淡入也一起等。退场不挂：退场的残影淡出要快、不等别人（下面的行收上来本来就晚两帧）。
+//   起点也要对齐：淡入的计时原来从挂载那一刻起，周围行的位移要等下一帧帧循环才开始（负载下差 200 ms 以上，实测淡到 0.57 时位移才走六成）；
+//   所以新行挂上以后先停在 opacity 0，等挂载后的第一帧回来（这时位移已经开始）才把 animate 换成淡入，等待和时长照旧从那一刻算
 // • 打勾“圆圈先填满再离开”的那一拍（17.1）不在这里等：页面用 useHoldView 让分组晚 --dur-ui 再变，列表里那一刻什么都不动（M1）
 // • 第一次画列表不播（initial={false}）：冷启动、进页面不逐条入场
 // • 离开途中打 data-state="leaving"（17.2 第 2 点），使用方据此不接点按（免得点到正在淡出的那一行）；
@@ -20,7 +26,7 @@
 // • 功能包异步加载（B2 FA-6 ②，见 ./features.ts）：功能包还没到时加进来的行直接显示（initial={false}），不打“进场中”、照常接点按；
 //   不会停在 opacity 0。这段时间里删掉的行当场移除（没有淡出、下面的行直接跳上来）
 import { AnimatePresence, LayoutGroup, LazyMotion, m, MotionConfig, PresenceContext, useIsPresent, type MotionStyle } from 'motion/react';
-import { createElement, useCallback, useContext, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createElement, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { motionFeatures, motionFeaturesReady } from './features.ts';
 import { dur, LIST_LAYOUT_LAG, tr } from './tokens.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
@@ -97,6 +103,9 @@ function popStyle(b: Box): MotionStyle {
 /** 淡入播完以前：不接点按（第二轮 L3） */
 const ENTERING_STYLE: MotionStyle = { pointerEvents: 'none' };
 
+/** 进场中挂上：有 onUpdate 时 Motion 不用 WAAPI，淡入和周围行的 layout 位移由同一个 JS 帧循环推（见文件头） */
+const SAME_CLOCK = (): void => undefined;
+
 /** 列表里的一项：进出场只动 opacity，位置变化用 layout 平移过去 */
 export function AppearItem({ as = 'li', className, children, ...data }: AppearItemProps) {
   const present = useIsPresent();
@@ -105,7 +114,22 @@ export function AppearItem({ as = 'li', className, children, ...data }: AppearIt
   // 功能包还没到时挂上的：Motion 不会补播它的入场（FA-6 ②），直接显示，不算“进场中”
   const [cold] = useState(() => !motionFeaturesReady());
   const [entering, setEntering] = useState(!firstPaint && !cold);
-  const entered = useCallback(() => setEntering(false), []);
+  // 进场的淡入等挂载后第一帧再开始（见文件头“起点也要对齐”）；不进场的（第一次画、冷挂上）直接是 true
+  const [go, setGo] = useState(!entering);
+  useEffect(() => {
+    if (go) return;
+    const id = requestAnimationFrame(() => setGo(true));
+    return () => cancelAnimationFrame(id);
+  }, [go]);
+  const goRef = useRef(go);
+  // 在提交以后同步（审查 L3：render 里写会被丢弃的 render 带偏）
+  useLayoutEffect(() => {
+    goRef.current = go;
+  }, [go]);
+  // 还没开始淡入时 Motion 也可能报一次“动画完成”（animate 和 initial 一样是 0）：那一次不算进场完
+  const entered = useCallback(() => {
+    if (goRef.current) setEntering(false);
+  }, []);
   const reduced = useReducedMotionPref();
   const mo = itemMotion(reduced);
   const Tag = tags[as];
@@ -115,8 +139,10 @@ export function AppearItem({ as = 'li', className, children, ...data }: AppearIt
     el.current = e;
   }, []);
   // 开始离开的那一次渲染：读这一项现在的位置、大小（相对列表外壳；已经提交的布局，不受 FLIP 的 transform 影响），
-  // 和“这一项被删掉”同一次提交里移出文档流。只量一次：之后它已经是绝对定位，再量也一样，但没必要
+  // 和“这一项被删掉”同一次提交里移出文档流。只量一次：之后它已经是绝对定位，再量也一样，但没必要。
+  // 退场途中同一个 key 又被加回来（Motion 复用同一个实例）：回到 present 时清掉，下次离开重新量（FA5-CR-low A1）
   const popped = useRef<MotionStyle | undefined>(undefined);
+  if (present) popped.current = undefined;
   if (!present && popped.current === undefined && el.current) {
     const e = el.current;
     popped.current = popStyle({ top: e.offsetTop, left: e.offsetLeft, width: e.offsetWidth, height: e.offsetHeight });
@@ -134,10 +160,11 @@ export function AppearItem({ as = 'li', className, children, ...data }: AppearIt
       inert={present ? undefined : true}
       layout="position"
       initial={cold ? false : mo.initial}
-      animate={mo.animate}
+      animate={go ? mo.animate : mo.initial}
       exit={mo.exit}
       transition={mo.transition}
       onAnimationComplete={entered}
+      {...(entering ? { onUpdate: SAME_CLOCK } : {})}
     >
       {children}
     </Tag>

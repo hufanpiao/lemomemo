@@ -5,7 +5,7 @@
 // • FoldHandle：月视图日清单顶上的拖动柄（上拖收起，线框 s3、R-326）。本身是按钮：aria-expanded 说明月历展没展开，
 //   键盘、读屏、点一下切换；按住上下拖跟手（手势在 motion 的 useDragCollapse），拖过以后的那一下点击被吞掉
 import { navigate } from '../../../app/router.ts';
-import type { DragCollapse } from '../../../motion/index.ts';
+import type { DragCollapse } from '../../../motion/gestures.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
 

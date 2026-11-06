@@ -72,12 +72,26 @@ export default function SyncNoticeHost({ store, live, region }: SyncNoticeHostPr
   const tRef = useRef(t);
   tRef.current = t;
 
-  const current = snap.queue[0] ?? null;
+  // 冲突列全是不显示的列（只动了 updated_at 一类，或两台都删了同一条）：没有可说的，不出卡（代码审查 K8 界面批 S1）。
+  // 字段描述在本功能的 data 里，app 那边的队列引不到，所以在这里滤掉，并替用户“知道了”，免得一直占着队列
+  const empty = (n: Notice): boolean => n.kind === 'conflict' && n.status === 'conflict' && conflictLines(n, locale).length === 0;
+  const queue = snap.queue.filter((n) => !empty(n));
+  // 拼成字符串只为让 effect 按内容比较依赖；key 是 table:uuid，不含 '|'（审查 L4）
+  const emptyKeys = snap.queue.filter(empty).map((n) => n.key).join('|');
+  const emptyRef = useRef(empty);
+  emptyRef.current = empty;
+  useEffect(() => {
+    if (!emptyKeys) return;
+    // 收之前按 store 现在的样子再判一次（S1-L1）：这期间同一条记录又来了真冲突、并进了这张卡，就不收
+    const keys = new Set(emptyKeys.split('|'));
+    for (const n of store.getState().queue) if (keys.has(n.key) && emptyRef.current(n)) store.dismiss(n.key);
+  }, [emptyKeys, store]);
+  const current = queue[0] ?? null;
   const shown = current !== null && !routeHidden;
   const suffix = snap.forkSuffix ?? FORK_SUFFIX[locale].trim();
   const head = current ? headOf(current, t) : '';
   const body = current ? bodyOf(current, t, suffix) : '';
-  const more = snap.queue.length - 1;
+  const more = queue.length - 1;
 
   // 容器挂上样式和按界面语言的 aria-label（gate 不放文字，2.1）
   useLayoutEffect(() => {
@@ -149,8 +163,7 @@ export default function SyncNoticeHost({ store, live, region }: SyncNoticeHostPr
             <div className={styles.actions}>
               {current.kind === 'conflict' ? (
                 <>
-                  {/* 冲突列全是不显示的列（只动了 updated_at 一类）：对话框会是空的，不给这个按钮（代码审查 K8 界面批建议） */}
-                  {current.status === 'conflict' && conflictLines(current, locale).length > 0 ? (
+                  {current.status === 'conflict' ? (
                     <button type="button" className={styles.btn} data-testid="sync-notice-view" onClick={() => setDialogKey(current.key)}>
                       {t('sn.conflict.view', {})}
                     </button>

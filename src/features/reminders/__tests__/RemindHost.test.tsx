@@ -4,8 +4,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
-import { holdReminders, remindQueue, resetRemindQueue } from '../../../kit/state/remind-queue.ts';
+import { holdReminders, remindQueue, resetRemindQueue, setRemindArmed } from '../../../kit/state/remind-queue.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
+// outbox 状态替身的空集合（UNSYNCED-retryRecs-required）：每次返回同一个对象，useSyncExternalStore 的快照才稳定
+const EMPTY_RECS = vi.hoisted((): ReadonlySet<string> => new Set());
 
 type Row = { id: string } & Record<string, unknown>;
 const data: Record<string, Row[]> = { events: [], todos: [], settings: [] };
@@ -51,7 +53,7 @@ const navigate = vi.fn(async (..._a: unknown[]) => undefined);
 vi.mock('../../../app/router.ts', () => ({ canGoBack: () => false, goBack: vi.fn(), navigate: (...a: unknown[]) => navigate(...a) }));
 let remindRecs: ReadonlySet<string> = new Set();
 vi.mock('../../../core/boot.ts', () => ({
-  getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ remindRecs }) } }),
+  getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ retryRecs: EMPTY_RECS, remindRecs }) } }),
 }));
 
 const { default: RemindHost } = await import('../ui/RemindHost.tsx');
@@ -97,6 +99,12 @@ afterEach(() => {
   window.location.hash = '';
 });
 
+/** 引擎读完本机“响过”记录、算好第一份快照才 armed（REMIND-shown-persist）：两步都是异步的，冲几拍 */
+const armedNow = () =>
+  act(async () => {
+    for (let k = 0; k < 6; k++) await Promise.resolve();
+  });
+
 describe('TC-B2-22：横幅排队', () => {
   it('到点出横幅和按钮条；打开 App 之前就到点的不出（进错过的提醒）', async () => {
     nowMs = at('15:20');   // 打开时 15:15 那条已经过了
@@ -109,6 +117,7 @@ describe('TC-B2-22：横幅排队', () => {
 
   it('键盘弹起时先排队，收起键盘后一条一条出；按“知道了”写 notified_for 并出下一条', async () => {
     render(<RemindHost route="todos" />);
+    await armedNow();
     act(() => kb?.(true));
     tick('15:31');   // 两条都到点
     expect(remindQueue.getState().entries.length).toBe(2);
@@ -287,8 +296,10 @@ describe('TC-B2-69：离线新建带提醒的记录', () => {
 });
 
 describe('TC-B2-26：错过的提醒（今天页那一行）', () => {
-  it('打开前已经到点的：出“错过 N 条提醒”，没有就不出', () => {
+  afterEach(() => setRemindArmed(null));
+  it('打开前已经到点的：出“错过 N 条提醒”，没有就不出（引擎 armed 以后才画，修订 1 P2）', () => {
     nowMs = at('16:10');
+    setRemindArmed(at('16:00'));
     render(<MissedReminders />);
     expect(screen.getByText('错过 2 条提醒')).toBeTruthy();
     cleanup();

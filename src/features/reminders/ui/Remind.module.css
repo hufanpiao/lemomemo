@@ -438,6 +438,11 @@
   color: var(--text);
 }
 
+/* 整页提醒的“‹ 返回”：点按区往左外扩 8px（抵掉 .small 的左内边距），字和下面正文左边对齐（设计复审 今天页待办 L1） */
+.backEdge {
+  margin-left: -8px;
+}
+
 .top {
   display: flex;
   align-items: center;
@@ -569,6 +574,11 @@
   gap: 8px;
 }
 
+/* 单数颗时最后一颗（比如“明天再提醒”）占满整行，不在右边留一个空格子（设计复审 提醒接线今天页待办 第二轮 R2-L1） */
+.pageRest > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .state {
   margin: 0;
   font-size: var(--fs-17);
@@ -586,4 +596,36 @@
 .rowBtn:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+/* “未同步，提醒可能不响”一行（UNSYNCED-retry-ui）：文字和末尾“重试”同一行，放不下时“重试”换到下一行 */
+.unsynced {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  margin: 0;
+}
+
+.unsynced:focus {
+  outline: none;
+}
+
+/* 文字按钮（同冲突卡的文字按钮：正文色加下划线，不加粗、不用强调色，R-136）：看得见的是一行字，点按区上下撑到 44px（负外边距收回，不把提示条撑高） */
+.retry {
+  min-height: var(--hit);
+  margin: -12px 0;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.retry[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: default;
 }

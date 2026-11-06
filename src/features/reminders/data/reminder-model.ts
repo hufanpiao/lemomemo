@@ -18,7 +18,7 @@
 // 纪念日（anniversaries）的提醒归 B5（remindAtOf 还不算纪念日），这里只处理日程和待办
 import { addDays, msAt, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { ALL_DAY_EVE_TIME, allDayRemindDay, allDayTimeOf, applyDnd, remindAtOf, type Dnd } from '../../../../shared/logic/remind.ts';
+import { ALL_DAY_EVE_TIME, allDayRemindDay, allDayTimeOf, applyDnd, remindAtOf, sameRemindDay, type Dnd } from '../../../../shared/logic/remind.ts';
 import { occurrenceKey, reminderTag } from '../../../../shared/logic/remind-route.ts';
 
 export type RemindKind = 'event' | 'todo';
@@ -102,10 +102,12 @@ export function reminderOf(kind: RemindKind, row: Row, now: number, tz: Tz, dnd:
   if (raw === null) return null;
   const notified = num(row['notified_for']);
   const snoozed = num(row['snooze_at']) !== null && num(row['snooze_at']) === raw && raw !== remindAt;
-  // 全天日程（没按稍后）的当天提醒：“知道了”记下的是当时的 remind_at；改了默认时刻以后 remind_at 变了，落在提醒那天就仍算处理过（R-336）。
-  // 前一天提醒固定 20:00，notified === remindAt 已经够用，不放宽（审查 M1：免得把当天提醒的“知道了”套到前一天提醒上）
+  // 全天日程（没按稍后）：“知道了”记下的是当时的 remind_at；改了默认时刻、换了时区以后 remind_at 变了，和这一次的 remind_at 落在同一天
+  // 就仍算处理过（R-336）。当天、前一天提醒都按天比，和服务器 push-dispatch 第 0 步同一个 sameRemindDay（REMIND-shown-persist 方案第 5 节，
+  // 主持人 11-05 定；原来前一天提醒要求正好相等，换时区以后本机会多响一次）。审查 M1 担心的“当天提醒的知道了套到前一天提醒上”
+  // 由换次清空挡住：改 date、remind_days 时日历编辑和服务器触发器都清掉 notified_for
   const day = kind === 'event' && !snoozed ? allDayRemindDay(row) : null;
-  const allDayAcked = day !== null && num(row['remind_days']) === 0 && remindAt !== null && notified !== null && todayOf(notified, tz) === day;
+  const allDayAcked = day !== null && remindAt !== null && sameRemindDay(notified, remindAt, tz);
   return {
     kind,
     id: row.id,
@@ -168,9 +170,18 @@ export function ringing(
 /**
  * 错过的提醒：最近 7 天里已到点、没处理、不在正在响的队列里的，最近的在前。
  * rang（R-336 ②）：响过、没按“知道了”、后来改了默认时刻的同一次提醒，不等新时刻，按当时实际响的时刻（dueAt）进来
+ * since（REMIND-missed-flash）：传了时，since 及以后到点、还没响过的不算（那是“本次打开以后”的，该进横幅；引擎刚挂上、还没排进队列的
+ * 那一下不先算进“错过 1 条”再跳走）；响过的（收起的、改了默认时刻的）照样算
  */
-export function missed(list: readonly Reminder[], now: number, ringingTags: ReadonlySet<string> = new Set(), rang: RangMap = new Map()): Reminder[] {
+export function missed(
+  list: readonly Reminder[],
+  now: number,
+  ringingTags: ReadonlySet<string> = new Set(),
+  rang: RangMap = new Map(),
+  since?: number,
+): Reminder[] {
   return list
+    .filter((r) => since === undefined || r.dueAt < since || rang.has(occurrenceKey(r)))
     .map((r) => {
       const before = r.handled ? undefined : rang.get(occurrenceKey(r));
       return before !== undefined && typeof before !== 'string' && before.tag !== r.tag ? { ...r, dueAt: before.dueAt } : r;

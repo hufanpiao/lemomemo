@@ -216,8 +216,10 @@ describe('R-336 同一次提醒：这一条、这个日期、当天 / 前一天�
   it('都落在 11-05 也是两次：11-05 当天提醒 和 挪到 11-06 改成前一天提醒', () => {
     expect(keyOf({ date: '2026-11-05', remind_days: 0 }, at('2026-11-05', '09:00'))).not.toBe(keyOf({ date: '2026-11-06', remind_days: 1 }, at('2026-11-05', '20:00')));
   });
-  it('复现 M1 ①：11-05 当天 09:00 按过“知道了”，挪到 11-06、改成前一天提醒（当晚 20:00）：照样响，不漏', () => {
-    const r = one({ date: '2026-11-06', remind_days: 1, notified_for: at('2026-11-05', '09:00') }, at('2026-11-05', '20:00'), '09:00');
+  it('复现 M1 ①：11-05 当天 09:00 按过“知道了”，挪到 11-06、改成前一天提醒（当晚 20:00）——日历编辑清掉了 notified_for，照样响，不漏', () => {
+    // 11-05 起前一天提醒也按“同一天”比（方案第 5 节，和服务器同口径）：不清的话 11-05 09:00 和 11-05 20:00 同一天会算处理过；
+    // 挡住它的是换次清空（event-edit 的 patchOf、服务器 events_occ_reset 都清 notified_for），这里按清过的写
+    const r = one({ date: '2026-11-06', remind_days: 1, notified_for: null }, at('2026-11-05', '20:00'), '09:00');
     expect(r.remindAt).toBe(at('2026-11-05', '20:00'));
     expect(r.handled).toBe(false);
     expect(ringing([r], at('2026-11-05', '20:00'), at('2026-11-05', '10:00')).length).toBe(1);
@@ -230,10 +232,13 @@ describe('R-336 同一次提醒：这一条、这个日期、当天 / 前一天�
     // 编辑写入时 date、remind_days 变了就清 notified_for、snooze_at（event-edit.test.ts 查写入那一半）
     expect(one({ date: '2026-11-04', remind_days: 0, notified_for: null }, at('2026-11-04', '21:00'), '21:00').handled).toBe(false);
   });
-  it('只改默认时刻仍算已处理；前一天提醒要正好 20:00', () => {
+  it('只改默认时刻仍算已处理；前一天提醒也按同一天比（方案第 5 节，主持人 11-05 定，和服务器 sameRemindDay 同口径）', () => {
     expect(one({ notified_for: at(DAY, '07:00') }, at(DAY, '07:20'), '07:20').handled).toBe(true);
     expect(one({ date: '2026-11-04', remind_days: 1, notified_for: at(DAY, '20:00') }, at(DAY, '20:00'), '09:00').handled).toBe(true);
-    expect(one({ date: '2026-11-04', remind_days: 1, notified_for: at(DAY, '09:00') }, at(DAY, '20:00'), '09:00').handled).toBe(false);
+    // 同一天的别的时刻（例如换时区以后前一天 20:00 换算成了别的时刻）也算处理过，不多响
+    expect(one({ date: '2026-11-04', remind_days: 1, notified_for: at(DAY, '09:00') }, at(DAY, '20:00'), '09:00').handled).toBe(true);
+    // 不同一天的不算
+    expect(one({ date: '2026-11-04', remind_days: 1, notified_for: at('2026-11-02', '20:00') }, at(DAY, '20:00'), '09:00').handled).toBe(false);
   });
   it('③ current_tz 变了：occurrenceKey 不变；“知道了”按新的 current_tz 算日期（首尔 11-03 09:00 = 洛杉矶 11-02，换到洛杉矶算没处理）', () => {
     const seoul = one({ notified_for: at(DAY, '09:00') }, at(DAY, '09:00'), '09:00');

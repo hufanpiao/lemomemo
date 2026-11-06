@@ -48,6 +48,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/deno-frozen-lock.test.ts', // node（copy_shared）、deno install --frozen（服务器函数依赖锁真拦得住锁外依赖）
   'tests/build/e2e-watchdog.test.ts', // 经 tools/e2e/run-watchdog.mjs 起 node（E2E-webkit-hang 看门狗真跑）
   'tests/build/e2e-watchdog-spawn.test.ts', // 起 node 跑看门狗（拉不起命令时的提示）
+  'tests/build/e2e-reuse.test.ts', // 起 node 跑看门狗（起跑前查端口、LEMO_E2E_REUSE=1 照常拉起）
   'tests/build/fn-version-gate-coverage.test.ts', // TypeScript 编译器
   'tests/build/login-token-tests.test.ts', // PowerShell
   'tests/build/login-token-tests-run.test.ts', // PowerShell（经 login-token-fake.ts）

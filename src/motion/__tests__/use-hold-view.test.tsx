@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useHoldView } from '../components.ts';
 import { dur } from '../tokens.ts';
+import { HOLD_MAX } from '../useHoldView.ts';
 
 const MS = 1000;
 let api: { set(v: string): void; hold(): void; release(): void } | null = null;
@@ -88,5 +89,43 @@ describe('useHoldView', () => {
       api?.set('b');
     });
     expect(shown()).toBe('b|false');
+  });
+
+  it('连着 hold 不停：从第一次 hold 起最多留 HOLD_MAX（3 × --dur-ui）就换成最新的（FA5-CR-low A2）', () => {
+    expect(HOLD_MAX).toBe(3 * dur.ui * MS);
+    render(<Harness />);
+    act(() => {
+      api?.hold();
+      api?.set('b');
+    });
+    // 每隔半个 --dur-ui 点一次，单看每次重新计时永远不会放开
+    let t = 0;
+    const step = (dur.ui * MS) / 2;
+    while (t + step < HOLD_MAX) {
+      act(() => {
+        vi.advanceTimersByTime(step);
+        api?.hold();
+      });
+      t += step;
+      expect(shown()).toBe('a|true');
+    }
+    act(() => {
+      vi.advanceTimersByTime(HOLD_MAX - t);
+    });
+    expect(shown()).toBe('b|false');
+    // 放开以后再 hold：重新算一轮
+    act(() => {
+      api?.hold();
+      api?.set('c');
+    });
+    expect(shown()).toBe('b|true');
+    act(() => {
+      vi.advanceTimersByTime(dur.ui * MS - 1);
+    });
+    expect(shown()).toBe('b|true');
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(shown()).toBe('c|false');
   });
 });

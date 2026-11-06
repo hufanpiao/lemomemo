@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { todayOf } from '../../../../shared/core/date.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
+import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { setDeleted, setTodoDone, type SaveOutcome, type TrashTable } from '../data/today-actions.ts';
 import { eventsOn, lateTodos, nowCard, todayTodos, tomorrowOf, type Row } from '../data/today-model.ts';
@@ -37,10 +38,12 @@ export function useToday() {
   const now = useMinuteNow();
   const tz = currentTz();
   const today = todayOf(now, tz);
+  // 同一时刻的按标题排，按当前语言、数字按数值（“第 2 条”在“第 10 条”前）
+  const locale = useUi((s) => s.locale);
 
   const model = useMemo(() => {
-    const evToday = eventsOn(events, today, tz);
-    const tomorrow = eventsOn(events, tomorrowOf(now, tz), tz).filter((o) => !o.allDay);
+    const evToday = eventsOn(events, today, tz, locale);
+    const tomorrow = eventsOn(events, tomorrowOf(now, tz), tz, locale).filter((o) => !o.allDay);
     return {
       today,
       tz,
@@ -48,10 +51,10 @@ export function useToday() {
       events: evToday,
       card: nowCard(evToday, now, tz, today),
       tomorrowFirst: tomorrow[0] ?? null,
-      late: lateTodos(todos, now, tz),
-      todos: todayTodos(todos, now, tz),
+      late: lateTodos(todos, now, tz, locale),
+      todos: todayTodos(todos, now, tz, locale),
     };
-  }, [events, todos, now, tz, today]);
+  }, [events, todos, now, tz, today, locale]);
 
   const rowOf = useCallback((id: string) => todos.find((r) => r.id === id), [todos]);
 

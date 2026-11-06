@@ -9,7 +9,7 @@
 // 二级页最上面“未来 7 天的提醒 ›”再进一层 #/settings/remind/upcoming，顶栏“‹ 提醒与通知”退回上一层；“提醒里写什么 ›”“免打扰 ›”
 // 同样点进去再改（R-347 照线框 sR7）：#/settings/remind/show-title、#/settings/remind/dnd。正文都由 reminders 功能懒加载提供
 import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { goBack, hrefOf, isSubEntry, navigateSub, replaceRoute, useRoute } from '../../../app/router.ts';
+import { backOrReplace, hrefOf, navigateSub, useRoute } from '../../../app/router.ts';
 import { CalendarSettings, CalendarSettingsEntry } from '../../calendar/index.ts';
 import { RemindDnd, RemindSettings, RemindSettingsEntry, RemindShowTitle, RemindUpcoming } from '../../reminders/index.ts';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
@@ -177,7 +177,8 @@ const parentOf = (v: SubName): SubName | 'home' => (v.startsWith('remind-') ? 'r
 
 /**
  * 从子页退回上一层（点返回、侧滑都算）以后，焦点放回进来时点的那一行入口，读屏不用从头再读（L1）。
- * 上一层重新挂载时标题会先拿到焦点（SubView），这里在它之后再挪；入口是懒加载的，没出来就隔一会儿再找，最多约 1 秒
+ * 上一层重新挂载时标题会先拿到焦点（SubView），这里在它之后再挪；入口是懒加载的，没出来就隔一会儿再找，最多约 1 秒。
+ * 等的这段时间用户已经把焦点挪去别处（不在 body、也不在上一层的标题上），就不再挪，免得入口一出来把焦点抢回来（复审第二轮 N2）
  */
 function useFocusBackToEntry(view: SubName | 'home'): void {
   const prev = useRef(view);
@@ -189,6 +190,7 @@ function useFocusBackToEntry(view: SubName | 'home'): void {
     let tries = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tryFocus = (): void => {
+      if (!focusIsFree()) return;
       const el = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
       if (el) el.focus();
       else if (tries++ < 20) timer = setTimeout(tryFocus, 50);
@@ -198,6 +200,12 @@ function useFocusBackToEntry(view: SubName | 'home'): void {
       if (timer !== null) clearTimeout(timer);
     };
   }, [view]);
+}
+
+/** 焦点还没被用户挪走：在 body 上（子页刚卸掉），或在页面标题上（SubView 进来时放的） */
+function focusIsFree(): boolean {
+  const a = document.activeElement;
+  return a === null || a === document.body || (a instanceof HTMLHeadingElement && a.tabIndex === -1);
 }
 
 const isLeaf = (v: string | undefined): v is RemindLeaf => v === 'upcoming' || v === 'show-title' || v === 'dnd';
@@ -230,11 +238,9 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
   const openDelete = (): void => openSub('delete');
   const backFromSub = (): void => {
     if (view === 'home') return;
-    if (isSubEntry()) {
-      goBack();
-      return;
-    }
-    void (leaf ? replaceRoute('settings', 'remind') : replaceRoute('settings'));
+    // 点进来的退一步，直接打开的原地换成上一层；上一条后来被换掉了（复审第二轮 N1）也回到上一层、不跳层（见 router 的 backOrReplace）
+    if (leaf) backOrReplace('settings', 'remind');
+    else backOrReplace('settings');
   };
   useFocusBackToEntry(view);
   const nowFn = deps?.now ?? Date.now;
