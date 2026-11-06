@@ -285,6 +285,34 @@ Deno.test({ name: 'PURGE-date-cursor 真 store：backupsCursor、saveBackupsCurs
   }
 } });
 
+// REMIND-poison-atomic（迁移 20261105140000）：push-dispatch 真 store 的 writeHeartbeat 走 private.push_heartbeat_write，
+// 30 次同时写（各是一次 PostgREST 请求、各一个事务）累计一个不少、返回值两两不同（行锁下逐个累加）。原来的心跳行先存下，跑完原样放回
+Deno.test({ name: 'push-dispatch 写心跳：queue_poison 原子累加，30 次同时写一个不少', ...opts, async fn() {
+  const DISPATCH_STORE = '../../functions/push-dispatch/store.ts';
+  const dispatch = (await import(/* @vite-ignore */ DISPATCH_STORE)) as { makeStore: (a: typeof admin) => { writeHeartbeat: (d: Record<string, unknown>, p: number) => Promise<number> } };
+  const store = dispatch.makeStore(admin);
+  // 审查 L3：首尔 23:59～00:01 跑会被判换日、累计重算，避开（等过去）；目标库上真有 push-dispatch 在写心跳时返回值也对不上，失败信息里提示
+  const seoulMin = () => { const d = new Date(Date.now() + 9 * 3600_000); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
+  while (seoulMin() >= 23 * 60 + 59 || seoulMin() < 1) await sleep(5_000);
+  const saved = await sql<{ at: Date; detail: unknown }[]>`select at, detail from private.heartbeat where name = 'push-dispatch'`;
+  const others = await sql`select name, at, detail from private.heartbeat where name <> 'push-dispatch' order by name`;
+  const base = { claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1 };
+  try {
+    await sql`delete from private.heartbeat where name = 'push-dispatch'`;
+    assertEquals(await store.writeHeartbeat(base, 2), 2, '首次写');
+    const got = await Promise.all(Array.from({ length: 30 }, () => store.writeHeartbeat(base, 1)));
+    assertEquals([...got].sort((a, b) => a - b), Array.from({ length: 30 }, (_, i) => i + 3), '30 次同时写的返回值（对不上时先看目标库上是不是有真的 push-dispatch 也在写心跳）');
+    const row = one(await sql<{ detail: Record<string, unknown> }[]>`select detail from private.heartbeat where name = 'push-dispatch'`);
+    const sorted = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));   // jsonb 不保键序
+    assertEquals(sorted(row.detail), sorted({ ...base, queue_poison: 32 }), '库里的累计');
+    assertEquals(await sql`select name, at, detail from private.heartbeat where name <> 'push-dispatch' order by name`, others, '别的服务的心跳没动');
+  } finally {
+    await sql`delete from private.heartbeat where name = 'push-dispatch'`;
+    const old = saved[0];
+    if (old) await sql`insert into private.heartbeat (name, at, detail) values ('push-dispatch', ${old.at}, ${sql.json(old.detail as never)})`;
+  }
+} });
+
 Deno.test({ name: 'store-it 收尾：删掉本次建的用户和留下的行', ...opts, async fn() {
   try {
     await purgeTraces(ours);

@@ -48,6 +48,16 @@ describe('push-dispatch store.ts', () => {
     const bad = fakeAdmin({ data: null, error: { message: 'secret detail' } });
     await expect(makeStore(bad.admin).finishQueue?.('k', [])).rejects.toThrow(/^db$/);
   });
+  it('写心跳：private.push_heartbeat_write(p_detail, p_poison)，回累计；出错、回的不是非负整数都抛 db（REMIND-poison-atomic）', async () => {
+    const base = { claimed: 1, sent: 1, failed: 0, budget_hit: false, queue_ok: 1 };
+    const { admin, chains } = fakeAdmin({ data: 7, error: null });
+    expect(await makeStore(admin).writeHeartbeat?.(base, 2)).toBe(7);
+    expect(chains).toEqual([[['rpc', 'private.push_heartbeat_write', { p_detail: base, p_poison: 2 }]]]);   // 不再先读心跳、不再 upsert
+    for (const r of [{ data: null, error: { message: 'secret detail' } }, { data: null, error: null }, { data: -1, error: null }, { data: 1.5, error: null }, { data: '3', error: null }]) {
+      await expect(makeStore(fakeAdmin(r).admin).writeHeartbeat?.(base, 2), JSON.stringify(r)).rejects.toThrow(/^db$/);
+    }
+    expect(makeStore(admin)).not.toHaveProperty('readHeartbeat');
+  });
   it('认领：update pushed_for = due_at，条件 id、user_id、pushed_for 为空或不等于 due_at，回更新到的行', async () => {
     const { admin, chains } = fakeAdmin({ data: [{ id: 'x' }], error: null });
     expect(await makeStore(admin).claim?.('todos', 'x', 'u', 123)).toBe(true);

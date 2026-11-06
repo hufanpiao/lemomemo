@@ -43,7 +43,7 @@ function deps(over: Partial<Deps> = {}): Deps & { beats: HeartbeatDetail[]; logs
     override: { ok: true, url: null },
     vapid: async () => ({ ok: true, keys: (await keys()).keys }),
     // BE-2 起 store 是整份 DispatchStore：空的内存库（一轮里没有任何条目），心跳记进 beats
-    store: Object.assign(new MemDb(), { writeHeartbeat: async (d: HeartbeatDetail) => { beats.push(d); } }),
+    store: Object.assign(new MemDb(), { writeHeartbeat: async (d: Omit<HeartbeatDetail, 'queue_poison'>, poison: number) => { beats.push({ ...d, queue_poison: poison }); return poison; } }),
     logic: LOGIC,
     isUsable: async () => true,
     now: () => 1_793_000_000_000,

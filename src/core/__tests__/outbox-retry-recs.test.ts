@@ -63,10 +63,10 @@ describe('outbox 状态的 retryRecs', () => {
     expect(outbox.getStatus().retryRecs).toEqual(new Set([rec(1)]));
   });
 
-  it('真 outbox 上按码分：23505、22P02、PGRST102、insert_conflict、没有码的 413 不算，quota、42501、25006 算（10.4b）', async () => {
+  it('真 outbox 上按码分：23505、22P02、PGRST102、insert_conflict、没有码的 413 不算，quota、42501、PGRST205 算（10.4b；25006 现在归临时故障，不进 failed）', async () => {
     const { cache, outbox } = await setup();
     // 码为空串：只有状态（网关回的，没有 PostgREST 的 JSON 体），outbox 记 http_<状态>
-    const codes: [number, string][] = [[409, '23505'], [400, '22P02'], [400, 'PGRST102'], [409, 'insert_conflict'], [413, ''], [400, 'quota'], [403, '42501'], [405, '25006']];
+    const codes: [number, string][] = [[409, '23505'], [400, '22P02'], [400, 'PGRST102'], [409, 'insert_conflict'], [413, ''], [400, 'quota'], [403, '42501'], [404, 'PGRST205']];
     for (let n = 1; n <= codes.length; n++) {
       await seed(cache, 'todos', uid(n), todo(n), 5);
       await outbox.enqueue({ table: 'todos', id: uid(n), op: 'patch', data: { title: `改${n}` }, remind: true });
@@ -102,5 +102,17 @@ describe('outbox 状态的 retryRecs', () => {
     }
     expect(outbox.getStatus().retryRecs.size).toBe(0);
     expect(outbox.getStatus().remindRecs.size).toBe(0);
+  });
+
+  it('25006 发送失败：留在待发、退避重发，不进 failed、不进 retryRecs；仍在 remindRecs（11-06）', async () => {
+    const { cache, outbox } = await setup();
+    await seed(cache, 'todos', uid(1), todo(1), 5);
+    await outbox.enqueue({ table: 'todos', id: uid(1), op: 'patch', data: { title: '改1' }, remind: true });
+    const it = await outbox.next();
+    expect(await outbox.fail(it?.op_id ?? '', { status: 405, code: '25006', sid: null })).toBe('transient');
+    expect(outbox.getStatus()).toMatchObject({ pending: 1, failed: 0 });
+    expect((await outbox.list())[0]).toMatchObject({ state: 'pending', tries: 1 });
+    expect(outbox.getStatus().remindRecs).toEqual(new Set([rec(1)]));
+    expect(outbox.getStatus().retryRecs.size).toBe(0);
   });
 });

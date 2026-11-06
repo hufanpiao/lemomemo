@@ -60,11 +60,12 @@ async function runTap(db, file) {
 // 1) 迁移
 const db = await freshDb({ tapShim: true });
 log(`✔ ${migrationFiles().length} 个迁移在 PGlite 上依次执行成功`);
+// rls/_helpers.psql 开头认这个标记（11-05 审查 S1，CI 和 lemo-e2e 是数据库级参数，这里同一个会话里设）。
+// 放在所有分段之前：第 4 段兼容样例也引 _helpers.psql，原来只在第 2 段里设，--only=compat 时没有标记（11-06 复盘）
+await db.query("select set_config('lemo.test_target', 'offline', false)");
 
 // 2) RLS 测试
 if (!only || only === 'rls') {
-  // rls/_helpers.psql 开头认这个标记（11-05 审查 S1，CI 和 lemo-e2e 是数据库级参数，这里同一个会话里设）
-  await db.query("select set_config('lemo.test_target', 'offline', false)");
   for (const f of readdirSync(rlsDir).filter((f) => f.endsWith('.test.sql')).sort()) {
     const { lines, errors } = await runTap(db, join(rlsDir, f));
     const n = lines.filter((l) => /^(not )?ok \d+/.test(l)).length;
@@ -170,7 +171,7 @@ if (!only || only === 'd1') {
 //    结果和样例头上的 expect-old-client 比。跑法和 CI 的 tests/compat/run-compat.ts 是同一个函数（tests/compat/sql-case.ts，B0 集成）
 //    迁移文件里出现 rename column / drop column 由前端 B 的 compat 检查拦下
 if (!only || only === 'compat') {
-  const { runSqlCase, sampleExpectation } = await import('../../../tests/compat/sql-case.ts');
+  const { runSqlCase, judgeSample } = await import('../../../tests/compat/sql-case.ts');
   const { parseSubset, sqlCases } = await import('../../../tests/compat/subset.ts');
   const subset = parseSubset(readFileSync(join(root, 'tests/compat/subset.json'), 'utf8'));
   const cases = sqlCases(subset);
@@ -181,13 +182,11 @@ if (!only || only === 'compat') {
   for (const f of readdirSync(compatDir).filter((f) => f.endsWith('.psql') && !f.startsWith('_')).sort()) {
     const sampleSql = readFileSync(join(compatDir, f), 'utf8');
     try {
-      const expect = sampleExpectation(sampleSql);
       const results = [];
-      for (const c of cases) results.push([c.id, await runSqlCase(exec, query, { caseSql: readFileSync(join(root, c.file), 'utf8'), helpersSql, sampleSql })]);
-      const ok = results.every(([, r]) => r === 'ok');
-      const detail = results.filter(([, r]) => r !== 'ok').map(([id, r]) => `${id}：${r.split(' ')[0]}`).join('，');
-      if ((expect === 'ok') === ok) log(`✔ 兼容样例 ${f}：旧版客户端${ok ? '照常读写' : `写入失败（${detail}），符合预期`}`);
-      else fail(`兼容样例 ${f}：预期 ${expect}，实际 ${ok ? 'ok' : detail}`);
+      for (const c of cases) results.push(await runSqlCase(exec, query, { caseSql: readFileSync(join(root, c.file), 'utf8'), helpersSql, sampleSql }));
+      const j = judgeSample(sampleSql, results);   // 和 CI 同一个判定：写了 SQLSTATE 的 fail 要因为这个码失败
+      if (j.same) log(`✔ 兼容样例 ${f}：${j.why}`);
+      else fail(`兼容样例 ${f}：${j.why}`);
     } catch (e) { fail(`兼容样例 ${f} 执行出错：${e.message}`); }
   }
 }

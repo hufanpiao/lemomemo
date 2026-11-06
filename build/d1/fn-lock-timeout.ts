@@ -18,6 +18,7 @@ export const LOCK_TIMEOUT_FNS: Readonly<Record<string, string>> = {
   remind_due: 'lock_timeout=5s',  // 迁移 20261103140000（BE-2，建函数时就带）
   remind_pushed: 'lock_timeout=5s',  // 迁移 20261103140000（BE-2，建函数时就带）
   remind_queue_finish: 'lock_timeout=5s',  // 迁移 20261104130000（REMIND-queue-crash-loss，建函数时就带；同一迁移重建的 remind_queue_pop(int, int, boolean) 也带）
+  push_heartbeat_write: 'lock_timeout=5s',  // 迁移 20261105140000（REMIND-poison-atomic，建函数时就带）
 };
 
 export interface FnConfigRow { s: string; f: string; config: string[] | null }

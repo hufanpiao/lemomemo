@@ -107,3 +107,21 @@
 - **低（记一笔，不阻塞）**：d1Target 不像 guard-cli 那样查 SUPABASE_* 环境变量；它反正不读这些变量，影响不大。
 
 结论：**通过**，分数维持 D1 8.5。必改：无。
+
+## CI 兼容样例复盘（2026-11-06）
+
+背景：ef3a569 的 CI（run 42122550396）“兼容样例”一步变红，根因是 R1 以后 `_helpers.psql` 要求库上有 lemo.test_target 标记，而样例循环每轮 `supabase db reset` 把标记清掉了。范围：ci.yml 兼容样例循环、tests/compat/sql-case.ts、run-compat.ts、supabase/tests/offline/run.mjs、sample_rename_column.psql、tests/build/run-compat.test.ts。只读，没连库。
+
+**这是 R1 带出来的漏项**：上一轮审 R1 时只核对了 test:db 那一步前面有没有打标记，没查同一个任务后面还有没有 db reset。这一点算本审查员漏看。
+
+核对结果：
+- ci.yml 里一共两处 `db reset`：第 217 行在打标记（245 行）之前，没问题；第 348 行在样例循环里，现在 reset 后马上重新打标记（第 350 行，写法同 245 行），然后才跑样例。没有别的 reset。
+- judgeSample：`fail <SQLSTATE>` 要求至少一条失败，而且失败的 SQL 用例全是这个码。“标记没打”“helpers 报错”这类其他原因的失败不再算符合，假通过的口子堵上了。run-compat.ts 里 httpOk 只赋值一次（只起一次 vitest），不会被覆盖。离线和 CI 用的是同一个判定函数。
+- 离线标记挪到所有分段之前，`--only=compat` 时也有标记。
+- 本机实测：run-compat 单测 20/20 通过；离线 `--only=compat` 两个样例都符合（rename 按 42703 失败）。lemo-e2e 上的正反对照组按后端回报采信，没有重跑。
+
+建议（低，不阻塞）：
+- **C1**：`fail` 不写码时仍是“随便失败就算符合”，同样的假通过以后还会出现。建议在 run-compat.test.ts 里加一条：supabase/tests/compat 下所有 `fail` 样例都必须写 SQLSTATE。
+- **C2**：同一个任务里以后再加 db reset 还可能漏打标记。可以让 run-compat.test.ts 钉住“ci.yml 里每个 `supabase db reset` 后面紧跟打标记，或者排在第 245 行之前”。
+
+结论：**通过 8.5/10**，必改：无。

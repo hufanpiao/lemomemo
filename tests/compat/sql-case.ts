@@ -33,9 +33,41 @@ export async function runSqlCase(exec: SqlExec, query: SqlQuery, input: SqlCaseI
   }
 }
 
-/** 兼容样例头上写的预期：-- expect-old-client: ok | fail */
+const EXPECT_LINE = /^-- expect-old-client: (ok|fail)(?: ([0-9A-Z]{5}))?\s*$/m;
+
+/** 兼容样例头上写的预期：-- expect-old-client: ok | fail [SQLSTATE] */
 export function sampleExpectation(sampleSql: string): 'ok' | 'fail' {
-  const m = /^-- expect-old-client: (ok|fail)\s*$/m.exec(sampleSql);
-  if (!m) throw new Error('兼容样例缺少 “-- expect-old-client: ok|fail” 一行');
+  const m = EXPECT_LINE.exec(sampleSql);
+  if (!m) throw new Error('兼容样例缺少 “-- expect-old-client: ok|fail [SQLSTATE]” 一行');
+  if (m[1] === 'ok' && m[2]) throw new Error('expect-old-client: ok 后面不能写 SQLSTATE');
   return m[1] === 'ok' ? 'ok' : 'fail';
+}
+
+/** fail 后面写的 SQLSTATE（如 42703）；没写返回 null */
+export function sampleFailCode(sampleSql: string): string | null {
+  const m = EXPECT_LINE.exec(sampleSql);
+  return m?.[1] === 'fail' ? (m[2] ?? null) : null;
+}
+
+/**
+ * 样例结果和预期比（CI 的 run-compat.ts、离线的 supabase/tests/offline/run.mjs 共用）。
+ * fail 写了 SQLSTATE 时，SQL 用例里至少一条是这个码失败，而且失败的 SQL 用例全是这个码：
+ * 别的原因失败（例：rls 标记没打、helpers 报错，结果是 'error …'）不算符合，免得假通过（11-06 CI 兼容样例复盘）。
+ * HTTP 用例（.test.ts）只有通过 / 失败，ok 预期时必须通过；fail 预期写了码时只看 SQL 用例。
+ */
+export function judgeSample(sampleSql: string, sqlResults: readonly string[], httpOk = true): { same: boolean; why: string } {
+  const want = sampleExpectation(sampleSql);
+  const code = sampleFailCode(sampleSql);
+  const bad = sqlResults.filter((r) => r !== 'ok');
+  if (want === 'ok') {
+    const same = bad.length === 0 && httpOk;
+    return { same, why: same ? '旧版照常' : `预期旧版照常，实际有失败（${bad.map((r) => r.split(' ')[0]).join('，') || 'HTTP 用例'}）` };
+  }
+  if (!code) {
+    const same = bad.length > 0 || !httpOk;
+    return { same, why: same ? '旧版失败，符合预期' : '预期旧版失败，实际全部通过' };
+  }
+  const hit = bad.filter((r) => r.startsWith(`${code} `));
+  const same = hit.length > 0 && hit.length === bad.length;
+  return { same, why: same ? `旧版写入失败（${code}），符合预期` : `预期旧版因 ${code} 失败，实际 ${bad.length ? bad.map((r) => r.slice(0, 80)).join(' | ') : '全部通过'}` };
 }

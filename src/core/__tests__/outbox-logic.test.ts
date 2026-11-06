@@ -152,4 +152,11 @@ describe('TC-B1-90：try_later 只退避重试', () => {
     // 其他 4xx 照旧永久失败
     expect(classifyFailure({ status: 400, code: 'something_else' })).toBe('permanent');
   });
+
+  it('25006（库只读，405）只认码归临时故障；没有码的 405、PGRST105 照旧永久失败（数据字典 10.4b，11-06）', () => {
+    expect(classifyFailure({ status: 405, code: '25006' })).toBe('transient');
+    expect(classifyFailure({ status: 405 })).toBe('permanent');
+    expect(classifyFailure({ status: 405, code: 'PGRST105' })).toBe('permanent');
+    expect(classifyFailure({ status: 400, code: '55P03' })).toBe('transient');
+  });
 });

@@ -6,7 +6,6 @@
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import type { DispatchStore } from './core.ts';
-import { HEARTBEAT } from './core.ts';
 import { LOG_SRC, SETTING_KEYS, TABLES, type DeviceRow, type ItemRow, type Profile, type QueueItem, type Table, type UserSettings } from './round.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,14 +62,11 @@ export function makeStore(admin: Admin): DispatchStore {
     return out;
   }
   return {
-    async writeHeartbeat(detail) {
-      const { error } = await priv.from('heartbeat').upsert({ name: HEARTBEAT, at: new Date().toISOString(), detail }, { onConflict: 'name' });
-      if (error) throw new Error('db');
-    },
-    async readHeartbeat() {
-      const { data, error } = await priv.from('heartbeat').select('at, detail').eq('name', HEARTBEAT).maybeSingle();
-      if (error) throw new Error('db');
-      return data ? { at: String(data.at), detail: data.detail } : null;
+    async writeHeartbeat(detail, poison) {
+      // 心跳名 push-dispatch（core.ts 的 HEARTBEAT）由函数写死；queue_poison 在 SQL 里按首尔当天原子累加（迁移 20261105140000，REMIND-poison-atomic）
+      const total = must(await priv.rpc('push_heartbeat_write', { p_detail: detail, p_poison: poison }));
+      if (typeof total !== 'number' || !Number.isInteger(total) || total < 0) throw new Error('db');
+      return total;
     },
     async popQueue(limit, leaseS, retry) {
       // 强转（代码审查 L4）：生成类型按函数返回列一律给非空（claim: string），但有毒项返回的 claim 是 null。

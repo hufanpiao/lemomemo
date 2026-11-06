@@ -452,6 +452,9 @@ isOneToOne: false
 "push_endpoint_ok":
 { Args: { "p": string }; Returns: boolean
                            },
+"push_heartbeat_write":
+{ Args: { "p_detail": Json,"p_poison": number }; Returns: number
+                           },
 "push_keys_ok":
 { Args: { "auth": string,"p256dh": string }; Returns: boolean
                            },

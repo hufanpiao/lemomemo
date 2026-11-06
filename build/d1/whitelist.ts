@@ -87,7 +87,8 @@ export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault'
     'orphan_auth_users',   // B1 迁移 20261031160000（ORPHAN-alert）：usage-report 数没有 profile 的 auth 用户
     'remind_queue_pop',   // B2 迁移 20261103130000（BE-2）：push-dispatch 第 0 步出队；20261104130000 换成 (int, int, boolean) 租约式（REMIND-queue-crash-loss）
     'remind_queue_finish',   // B2 迁移 20261104130000（REMIND-queue-crash-loss）：第 0 步结尾放回、按租约删
-    'remind_due', 'remind_pushed'],   // B2 迁移 20261103140000（BE-2 安全审查必改 1）：push-dispatch 第 1 步到点、resolve 候选的精确判断
+    'remind_due', 'remind_pushed',   // B2 迁移 20261103140000（BE-2 安全审查必改 1）：push-dispatch 第 1 步到点、resolve 候选的精确判断
+    'push_heartbeat_write'],   // B2 迁移 20261105140000（REMIND-poison-atomic）：push-dispatch 写心跳，queue_poison 原子累加
   fn_vault: ['purge_vault_impl', 'tags_ok'],
   fn_ai: [],
 };

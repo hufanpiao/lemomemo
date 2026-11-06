@@ -6,7 +6,7 @@
 // SQL 一侧同样的场景在 supabase/tests/rls/30_remind_queue_pop.test.sql ⑮；真库两连接的锁等待在 tools/db/remind-queue-2conn.mjs。
 import { describe, expect, it } from 'vitest';
 import { msAt, parseHm } from '../../shared/core/date.ts';
-import { handle, poisonToday, QUEUE_LEASE_S, QUEUE_RETRY_MS, QUEUE_RETRY_POPS, seoulDay, type HeartbeatDetail } from '../../supabase/functions/push-dispatch/core.ts';
+import { handle, QUEUE_LEASE_S, QUEUE_RETRY_MS, QUEUE_RETRY_POPS, seoulDay, type HeartbeatDetail } from '../../supabase/functions/push-dispatch/core.ts';
 import type { Limits } from '../../supabase/functions/push-dispatch/round-types.ts';
 import { cronReq, depsFor, fakeVapid } from './push-dispatch-harness.ts';
 import { MemDb, POISON_AT, todoRow, UA, UB } from './push-dispatch-mem.ts';
@@ -207,7 +207,7 @@ describe('心跳的 queue_ok、queue_poison（安全审查必改 3）', () => {
     expect(d.codes).toContain('round_failed');
     expect(db.beats.at(-1)).toMatchObject({ queue_ok: 0, queue_poison: 0 });
   });
-  it('queue_poison 按首尔当天累计：同一天加上上一次的，换日（首尔 0 点）从这一轮重新算；读上一次心跳失败也照写', async () => {
+  it('queue_poison 按首尔当天累计：同一天加上上一次的，换日（首尔 0 点）从这一轮重新算；响应体带累计值', async () => {
     const db = new MemDb().user(UA);
     const poisonOne = () => {
       const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0 }));
@@ -220,21 +220,40 @@ describe('心跳的 queue_ok、queue_poison（安全审查必改 3）', () => {
     expect(db.beats.map((b) => b.queue_poison)).toEqual([1, 2]);
     await round(db, at('00:01', '2026-11-04'));
     expect((db.beats.at(-1) as HeartbeatDetail).queue_poison).toBe(0);
-    db.failOn.add('readHeartbeat');
     poisonOne();
     const r = await round(db, at('00:05', '2026-11-04'));
-    expect(r.codes).toContain('heartbeat_read_failed');
     expect((db.beats.at(-1) as HeartbeatDetail).queue_poison).toBe(1);
+    expect(r.codes).not.toContain('heartbeat_read_failed');   // 不再先读心跳（累加在 SQL 里，REMIND-poison-atomic）
+    expect(db.calls).not.toContain('readHeartbeat');
   });
-  it('poisonToday：上一次不是对象、字段不是非负整数、时刻认不出的都从这一轮重新算', () => {
+  it('handle 把这一轮的个数交给 writeHeartbeat、响应体用它返回的累计（累加在 private.push_heartbeat_write 里，不在函数里算）', async () => {
+    const db = new MemDb().user(UA);
+    const now = at('10:00');
+    db.clock = () => now;
+    const got: Array<[unknown, number]> = [];
+    db.writeHeartbeat = async (d, poison) => { got.push([d, poison]); return 41 + poison; };
+    const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0 }));
+    db.queue.set(`todos:${t.id}`, { table_name: 'todos', id: t.id, claim: null, claimed_at: null, attempts: POISON_AT });
+    const { keys } = await fakeVapid();
+    const res = await handle(cronReq(), depsFor(db, keys, { now: () => now, fetch: async () => new Response(null, { status: 201 }) }));
+    expect(got).toHaveLength(1);
+    expect(got[0]?.[1]).toBe(1);
+    expect(got[0]?.[0]).not.toHaveProperty('queue_poison');
+    expect(((await res.json()) as HeartbeatDetail).queue_poison).toBe(42);
+  });
+  it('替身照 SQL：旧值不合格（不是对象、负数、小数、字符串、超 9 位）从这一轮重新算；这一轮负数、超大截到 0～100000', async () => {
+    const db = new MemDb();
     const now = at('12:00');
-    const iso = new Date(at('08:00')).toISOString();
-    expect(poisonToday(null, now, 2)).toBe(2);
-    expect(poisonToday({ at: iso, detail: { queue_poison: 3 } }, now, 2)).toBe(5);
-    for (const detail of [null, [], 'x', { queue_poison: -1 }, { queue_poison: 1.5 }, { queue_poison: '3' }, {}]) {
-      expect(poisonToday({ at: iso, detail }, now, 2), JSON.stringify(detail)).toBe(2);
+    db.clock = () => now;
+    const base = { claimed: 0, sent: 0, failed: 0, budget_hit: false, queue_ok: 1 };
+    for (const detail of [null, [], 'x', { queue_poison: -1 }, { queue_poison: 1.5 }, { queue_poison: '3' }, { queue_poison: 1_000_000_000 }, {}]) {
+      db.lastBeat = { at: at('08:00'), detail };
+      expect(await db.writeHeartbeat(base, 2), JSON.stringify(detail)).toBe(2);
     }
-    expect(poisonToday({ at: 'bad', detail: { queue_poison: 3 } }, now, 2)).toBe(2);
+    db.lastBeat = { at: at('08:00'), detail: { queue_poison: 3 } };
+    expect(await db.writeHeartbeat(base, 2)).toBe(5);
+    expect(await db.writeHeartbeat(base, -5)).toBe(5);
+    expect(await db.writeHeartbeat(base, 10_000_000)).toBe(100_005);
     expect(seoulDay(at('00:00'))).toBe(seoulDay(at('23:59')));
     expect(seoulDay(at('00:00', '2026-11-04'))).toBe(seoulDay(at('23:59')) + 1);
   });

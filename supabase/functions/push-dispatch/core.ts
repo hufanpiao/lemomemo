@@ -48,12 +48,11 @@ export const DUE_LIMIT = 500;
  * 心跳 detail（usage-report 按 DETAIL_FIELDS_BY_NAME['push-dispatch'] 白名单转发，只是个数和布尔）：
  * queue_ok——这一轮第 0 步出队、读行、收尾都没出错是 1，否则 0（lemo-ops 连续 3 次抽查都是 0 才提示：回滚以后第 0 步一直跳过、
  *   或出队持续失败，编辑过的提醒一直不重算）；
- * queue_poison——首尔当天累计丢掉的有毒项个数（写心跳前读上一次的心跳，同一个首尔日就累加，换日从这一轮重新算；
- *   lemo-ops 15 分钟才抽一次，只记这一轮会漏掉）。> 0 当天提示（11-04 安全审查必改 3，主持人定）。
- *   已知局限（代码审查复审 N3，11-05）：读上一次、加上这一轮、写回不是原子的。两轮重叠时（cron 每分钟一次、一轮预算 20 秒，
- *   正常不会重叠，只在某一轮拖过 1 分钟时才会）后写的那一轮会盖掉先写的那一轮的个数，当天累计少算；
- *   极端情况下上一次是 0、被盖掉的那一轮正好丢了有毒项，这一次的提示也会漏掉。丢掉的每一项在函数日志里都照样记 queue_poison，
- *   漏的只是心跳里的数。要做到不丢，得在 SQL 里原子累加（新函数、新授权），现在不做（上线与回滚手册同样写明）。
+ * queue_poison——首尔当天累计丢掉的有毒项个数（同一个首尔日就累加，换日从这一轮重新算；lemo-ops 15 分钟才抽一次，只记这一轮会漏掉）。
+ *   > 0 当天提示（11-04 安全审查必改 3，主持人定）。
+ *   累加在 SQL 里原子完成（11-05 接手清单 REMIND-poison-atomic，代码审查复审 N3；迁移 20261105140000 的 private.push_heartbeat_write）：
+ *   一句 insert … on conflict do update 在行锁下读旧值、加这一轮、写回，两轮重叠时后到的等先到的提交再累加，不再少算。
+ *   原来是函数里先读上一次心跳、加上这一轮、再 upsert，两轮重叠时后写的会盖掉先写的。
  */
 export type HeartbeatDetail = { claimed: number; sent: number; failed: number; budget_hit: boolean; queue_ok: number; queue_poison: number };
 
@@ -63,25 +62,17 @@ export const LIMITS: Limits = {
 };
 
 export interface DispatchStore extends RoundStore {
-  writeHeartbeat(detail: HeartbeatDetail): Promise<void>;
-  /** 上一次写的 push-dispatch 心跳（at 是 ISO 时刻）；没有返回 null。只用来累计 queue_poison */
-  readHeartbeat(): Promise<{ at: string; detail: unknown } | null>;
+  /**
+   * 写 push-dispatch 心跳：detail 是除 queue_poison 以外的字段，poison 是这一轮丢掉的有毒项个数；
+   * 返回写进心跳的首尔当天累计（private.push_heartbeat_write 原子累加，REMIND-poison-atomic）
+   */
+  writeHeartbeat(detail: Omit<HeartbeatDetail, 'queue_poison'>, poison: number): Promise<number>;
 }
 
 const DAY_MS = 86_400_000;
 const SEOUL_MS = 9 * 3_600_000;
-/** 首尔日序号（首尔不用夏令时，固定 +9 小时） */
+/** 首尔日序号（首尔不用夏令时，固定 +9 小时）；测试替身照 private.push_heartbeat_write 的“同一个首尔日”用 */
 export const seoulDay = (ms: number): number => Math.floor((ms + SEOUL_MS) / DAY_MS);
-
-/** 这一轮的 queue_poison 加上上一次心跳里同一个首尔日的累计；上一次的读不到、不是同一天、字段不是非负整数的，从这一轮重新算 */
-export function poisonToday(prev: { at: string; detail: unknown } | null, now: number, thisRound: number): number {
-  if (!prev) return thisRound;
-  const at = Date.parse(prev.at);
-  const d = prev.detail;
-  const n = typeof d === 'object' && d !== null && !Array.isArray(d) ? (d as Record<string, unknown>)['queue_poison'] : undefined;
-  if (!Number.isFinite(at) || seoulDay(at) !== seoulDay(now) || typeof n !== 'number' || !Number.isInteger(n) || n < 0) return thisRound;
-  return n + thisRound;
-}
 
 export type Deps = {
   cronSecret: string | undefined;
@@ -145,19 +136,10 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     log('round_failed');
     r = { claimed: 0, sent: 0, failed: 0, budget_hit: deps.now() - t0 >= ROUND_BUDGET_MS, left: 0, queue_ok: 0, queue_poison: 0 };
   }
-  let prev: { at: string; detail: unknown } | null = null;
+  const base = { claimed: r.claimed, sent: r.sent, failed: r.failed, budget_hit: r.budget_hit, queue_ok: r.queue_ok };
+  let detail: HeartbeatDetail;
   try {
-    prev = await store.readHeartbeat();
-  } catch {
-    log('heartbeat_read_failed');   // 读不到上一次的：queue_poison 从这一轮重新算，心跳照写
-  }
-  const detail: HeartbeatDetail = {
-    claimed: r.claimed, sent: r.sent, failed: r.failed, budget_hit: r.budget_hit,
-    queue_ok: r.queue_ok, queue_poison: poisonToday(prev, deps.now(), r.queue_poison),
-  };
-
-  try {
-    await store.writeHeartbeat(detail);
+    detail = { ...base, queue_poison: await store.writeHeartbeat(base, r.queue_poison) };
   } catch {
     deps.log?.('heartbeat_failed');
     return json(503, { error: 'try_later' });

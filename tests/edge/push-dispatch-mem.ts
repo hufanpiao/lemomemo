@@ -10,6 +10,7 @@ import { allDayTimeOf, dndDeferUntil, eventRemindAt, sameRemindDay, todoRemindAt
 import { startAtOf } from '../../shared/logic/remind-actions.ts';
 import { occurrenceKey, reminderTag } from '../../shared/logic/remind-route.ts';
 import type { DispatchStore, HeartbeatDetail } from '../../supabase/functions/push-dispatch/core.ts';
+import { seoulDay } from '../../supabase/functions/push-dispatch/core.ts';
 import type { DeviceOutcome, DeviceRow, ItemRow, LogRow, Profile, QueueItem, QueueRef, RoundLogic, Table } from '../../supabase/functions/push-dispatch/round.ts';
 import { SETTING_KEYS, TABLES } from '../../supabase/functions/push-dispatch/round.ts';
 import { makeLogic } from '../../supabase/functions/push-dispatch/logic.ts';
@@ -81,9 +82,10 @@ export class MemDb implements DispatchStore {
   sets = new Map<string, Record<string, unknown>>();
   devs: (DeviceRow & { deleted_at: number | null })[] = [];
   logs: LogRow[] = [];
+  /** 每次写进心跳的 detail（queue_poison 是累计后的值） */
   beats: HeartbeatDetail[] = [];
-  /** 上一次心跳（readHeartbeat 读的）；at 是 ISO 时刻，按 clock 记 */
-  lastBeat: { at: string; detail: unknown } | null = null;
+  /** 心跳行（private.heartbeat 的 push-dispatch 那一行）：at 是毫秒，按 clock 记；detail 可以由用例直接改成不合格的旧值 */
+  lastBeat: { at: number; detail: unknown } | null = null;
   /** 模拟“被用户事务锁着”的队列项（键 table:id）：finish 的放回和删除 skip locked，跳过它们（迁移 20261104130000，安全审查必改 2） */
   locked = new Set<string>();
   /** 调用记录（核对“传了什么”） */
@@ -158,14 +160,23 @@ export class MemDb implements DispatchStore {
     if (this.failOn.has(name)) throw new Error('db');
   }
 
-  async writeHeartbeat(d: HeartbeatDetail) {
+  /** 照 private.push_heartbeat_write（迁移 20261105140000）：这一轮截到 0～100000；旧行同一个首尔日、旧值是 0～999999999 的整数就累加，否则从这一轮重新算 */
+  async writeHeartbeat(d: Omit<HeartbeatDetail, 'queue_poison'>, poison: number): Promise<number> {
     this.check('writeHeartbeat');
-    this.beats.push(d);
-    this.lastBeat = { at: new Date(this.clock()).toISOString(), detail: d };
-  }
-  async readHeartbeat() {
-    this.check('readHeartbeat');
-    return this.lastBeat;
+    // 非整数在真实调用里 PostgREST 转 int 就报错（store 抛 db → 503）；调用方只传整数，这里照真实的抛错（审查 L2）
+    if (!Number.isInteger(poison)) throw new Error('db');
+    const add = Math.max(0, Math.min(poison, 100_000));
+    const now = this.clock();
+    const prev = this.lastBeat;
+    const old = prev && typeof prev.detail === 'object' && prev.detail !== null && !Array.isArray(prev.detail)
+      ? (prev.detail as Record<string, unknown>)['queue_poison'] : undefined;
+    const at = prev ? Math.max(prev.at, now) : now;   // greatest(h.at, now())，审查 L1
+    const ok = prev !== null && seoulDay(prev.at) === seoulDay(at) && typeof old === 'number' && Number.isInteger(old) && old >= 0 && old <= 999_999_999;
+    const total = ok ? (old as number) + add : add;
+    const detail: HeartbeatDetail = { ...d, queue_poison: total };
+    this.beats.push(detail);
+    this.lastBeat = { at, detail };
+    return total;
   }
   async popQueue(limit: number, leaseS: number | null = 180, retry = false): Promise<QueueItem[]> {
     this.check('popQueue');

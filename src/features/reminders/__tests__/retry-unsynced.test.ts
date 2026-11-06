@@ -99,4 +99,29 @@ describe('retryUnsynced（替身）', () => {
     const boom = { list: async () => items, retryFailed: vi.fn(async () => Promise.reject(new Error('坏了'))) };
     await expect(retryUnsynced(boom, new Set([rec(1)]))).rejects.toThrow('坏了');
   });
+
+  it('同一条记录里一项排除码、一项能重试（负责人 11-06 定：维持现状）：点重试只重发能重试的那项，排除的那项留在 failed，记录照样算未同步', async () => {
+    const { cache, outbox } = await setup();
+    const f = (seq: number, error: string): OutboxItem => ({ ...mk({ seq, id: uid(1) }), state: 'failed', error, remind: true });
+    const bad = f(1, '23505');
+    const ok = f(2, '23503');
+    await cache.tx([OUTBOX], 'readwrite', async (t) => {
+      await t.put(OUTBOX, bad);
+      await t.put(OUTBOX, ok);
+    });
+    await outbox.retryFailed(['没有这一项']); // 只为触发一次 refresh
+    expect(outbox.getStatus().retryRecs).toEqual(new Set([rec(1)]));   // 有一项能重试，按钮照样出
+
+    expect(await retryUnsynced(outbox, outbox.getStatus().remindRecs)).toBe(1);
+    const byOp = new Map((await outbox.list()).map((i) => [i.op_id, i]));
+    expect(byOp.get(bad.op_id)).toMatchObject({ state: 'failed', error: '23505' });
+    expect(byOp.get(ok.op_id)).toMatchObject({ state: 'pending', error: null });
+    expect(outbox.getStatus()).toMatchObject({ pending: 1, failed: 1 });
+    // 行尾“未同步”看 remindRecs：排除的那项还在 failed，这条记录照样算；能重试的已经没了，按钮消失
+    expect(outbox.getStatus().remindRecs).toEqual(new Set([rec(1)]));
+    expect(outbox.getStatus().retryRecs.size).toBe(0);
+    // 再点一次也不会重发排除的那项
+    expect(await retryUnsynced(outbox, outbox.getStatus().remindRecs)).toBe(0);
+    expect((await outbox.list()).find((i) => i.op_id === bad.op_id)).toMatchObject({ state: 'failed', error: '23505' });
+  });
 });

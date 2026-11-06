@@ -346,6 +346,8 @@ jobs:
             n=$((n + 1))
             echo "::group::$f"
             supabase db reset
+            # db reset 重建 postgres 库，库级的 rls 测试标记随之没了，要重新打（_helpers.psql 开头认它；11-06 CI 兼容样例复盘）
+            docker exec supabase_db_lemo-ci psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -q -c "alter database postgres set lemo.test_target = 'ci'"
             eval "$(supabase status -o env | grep -E '^(API_URL|ANON_KEY|DB_URL)=')"
             export API_URL ANON_KEY DB_URL
             npm run test:compat -- tests/compat --sample "$f"

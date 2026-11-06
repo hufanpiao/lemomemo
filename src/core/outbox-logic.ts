@@ -26,8 +26,14 @@ export const DISABLED_CODES: readonly string[] = ['account_disabled', 'account_p
 const LOCAL_PERMANENT_CODES: readonly string[] = ['validation', 'invalid_row'];
 /** 令牌过期一类：刷新令牌后重发，不计 tries（TC-B1-82 ②） */
 const AUTH_CODES: readonly string[] = ['jwt_expired', 'PGRST301', 'PGRST303'];
-/** 不看 HTTP 状态、一律退避重试的码：55P03 = apply_patch 等不到行锁（lock_timeout 3 秒，整个调用已回滚，架构 4.4.1） */
-const TRANSIENT_CODES: readonly string[] = ['55P03'];
+/**
+ * 不看 HTTP 状态、一律退避重试的码：
+ * • 55P03 = apply_patch 等不到行锁（lock_timeout 3 秒，整个调用已回滚，架构 4.4.1）；
+ * • 25006 = 库处于只读（Supabase 磁盘满时切只读，PostgREST 回 405；数据字典 10.4b，11-06 主持人定）：恢复写以后原样重发就能过，
+ *   不限次数、最长每 5 分钟一次，队列显示待发、不进 failed。只认码：没有码的 405（以及 PGRST105 一类）照旧永久失败。
+ *   已经按旧规则落进 failed 的 25006 旧项，canRetryUnsynced 里照旧给“重试”
+ */
+const TRANSIENT_CODES: readonly string[] = ['55P03', '25006'];
 
 /**
  * 发送失败（failed）的项里，“未同步”提示行的“重试”能重发哪些（UNSYNCED-retry-ui；码表见数据字典 10.4b，接手清单 UNSYNCED-retry-codes，11-06）。

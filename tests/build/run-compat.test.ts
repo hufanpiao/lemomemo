@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { missingSupabaseEnv, parseArgs } from '../compat/run-compat.ts';
-import { runSqlCase, sampleExpectation } from '../compat/sql-case.ts';
+import { judgeSample, runSqlCase, sampleExpectation, sampleFailCode } from '../compat/sql-case.ts';
 import { parseSubset, sqlCases, testFiles } from '../compat/subset.ts';
 
 const root = join(import.meta.dirname, '..', '..');
@@ -112,5 +112,62 @@ describe('SQL 用例', () => {
     const r = await runSqlCase(exec, async () => [], { caseSql: 'CASE', helpersSql: 'HELPERS' });
     expect(r).toBe('error boom');
     expect(log.at(-1)).toBe('rollback');
+  });
+});
+
+describe('兼容样例的判定（judgeSample；11-06 CI 兼容样例复盘：db reset 冲掉 rls 标记，“改列名”样例因标记报错也算符合，假通过）', () => {
+  const OK = '-- expect-old-client: ok\nselect 1;';
+  const FAIL = '-- expect-old-client: fail\nselect 1;';
+  const FAIL_CODE = '-- expect-old-client: fail 42703\nselect 1;';
+  const MARK = 'error rls 测试只许打 CI、lemo-e2e 或离线库（这个库没有 lemo.test_target 标记）';
+  it('仓库里“改列名”样例写明因 42703 失败', () => {
+    expect(sampleFailCode(readFileSync(join(root, 'supabase', 'tests', 'compat', 'sample_rename_column.psql'), 'utf8'))).toBe('42703');
+    expect(sampleFailCode(readFileSync(join(root, 'supabase', 'tests', 'compat', 'sample_add_column.psql'), 'utf8'))).toBeNull();
+  });
+  it('ok：SQL 用例全过、HTTP 用例也过才符合；标记报错不符合', () => {
+    expect(judgeSample(OK, ['ok']).same).toBe(true);
+    expect(judgeSample(OK, [MARK]).same).toBe(false);
+    expect(judgeSample(OK, ['ok'], false).same).toBe(false);
+  });
+  it('fail 写了码：要因为这个码失败；标记报错、别的码、全过都不符合', () => {
+    expect(judgeSample(FAIL_CODE, ['42703 column "important" of relation "todos" does not exist']).same).toBe(true);
+    expect(judgeSample(FAIL_CODE, [MARK]).same).toBe(false);
+    expect(judgeSample(FAIL_CODE, ['42501 permission denied']).same).toBe(false);
+    expect(judgeSample(FAIL_CODE, ['42703 x', MARK]).same).toBe(false);
+    expect(judgeSample(FAIL_CODE, ['ok']).same).toBe(false);
+  });
+  it('fail 没写码：照旧任何失败都算（只为兼容旧样例；新样例要写码）', () => {
+    expect(judgeSample(FAIL, [MARK]).same).toBe(true);
+    expect(judgeSample(FAIL, ['ok']).same).toBe(false);
+    expect(() => sampleExpectation('-- expect-old-client: ok 42703\n')).toThrow();
+  });
+  it('复查 C1：仓库里每个 fail 样例都写了 SQLSTATE（不写码时随便失败都算符合）', () => {
+    const dir = join(root, 'supabase', 'tests', 'compat');
+    for (const f of readdirSync(dir).filter((f) => f.endsWith('.psql') && !f.startsWith('_'))) {
+      const sql = readFileSync(join(dir, f), 'utf8');
+      if (sampleExpectation(sql) === 'fail') expect(sampleFailCode(sql), f).toMatch(/^[0-9A-Z]{5}$/);
+    }
+  });
+  it('复查 C2：ci.yml 里打过标记以后的每个 db reset，下一条命令就是重新打标记', () => {
+    const lines = readFileSync(join(root, '.github', 'workflows', 'ci.yml'), 'utf8').split('\n').map((l) => l.trim());
+    const MARK = "alter database postgres set lemo.test_target = 'ci'";
+    const first = lines.findIndex((l) => l.includes(MARK));
+    expect(first).toBeGreaterThan(0);
+    const resets = lines.map((l, i) => (/^supabase db reset\b/.test(l) ? i : -1)).filter((i) => i > first);
+    expect(resets.length).toBeGreaterThan(0);
+    for (const i of resets) {
+      const next = lines.slice(i + 1).find((l) => l !== '' && !l.startsWith('#'));
+      expect(next, `第 ${i + 1} 行的 db reset 后面`).toContain(MARK);
+    }
+  });
+  it('CI 的兼容样例循环：每次 db reset 之后、跑样例之前重新打 rls 标记', () => {
+    const ci = readFileSync(join(root, '.github', 'workflows', 'ci.yml'), 'utf8');
+    const step = ci.slice(ci.indexOf('- name: 兼容样例（test:compat --sample'), ci.indexOf('- name: 停掉本地 Supabase'));
+    const reset = step.indexOf('supabase db reset');
+    const mark = step.indexOf("alter database postgres set lemo.test_target = 'ci'");
+    const run = step.indexOf('npm run test:compat -- tests/compat --sample');
+    expect(reset).toBeGreaterThan(0);
+    expect(mark).toBeGreaterThan(reset);
+    expect(run).toBeGreaterThan(mark);
   });
 });

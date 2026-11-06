@@ -21,7 +21,7 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runSqlCase, sampleExpectation } from './sql-case.ts';
+import { judgeSample, runSqlCase } from './sql-case.ts';
 import { parseSubset, sqlCases, testFiles } from './subset.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -136,6 +136,8 @@ async function runBaseline(args: Args, src: string, subsetPath: string, base: st
   }
 
   let ok = true;
+  let httpOk = true;
+  const sqlResults: string[] = [];
   if (files.length) {
     const vitest = join(ROOT, 'node_modules', 'vitest', 'vitest.mjs');
     const r = spawnSync(process.execPath, [vitest, 'run', '--config', 'tests/compat/vitest.compat.config.ts', ...files], {
@@ -143,7 +145,8 @@ async function runBaseline(args: Args, src: string, subsetPath: string, base: st
       stdio: 'inherit',
       env: { ...process.env, LEMO_COMPAT_SUBSET: '1' },
     });
-    ok = r.status === 0 && ok;
+    httpOk = r.status === 0;
+    ok = httpOk && ok;
   }
 
   const sqls = sqlCases(subset);
@@ -154,16 +157,17 @@ async function runBaseline(args: Args, src: string, subsetPath: string, base: st
         const caseSql = readFileSync(join(base, c.file), 'utf8');
         const result = await runSqlCase(exec, query, { caseSql, helpersSql });
         console.log(`compat：[${c.id}] ${result === 'ok' ? '通过' : `失败：${result}`}`);
+        sqlResults.push(result);
         if (result !== 'ok') ok = false;
       }
     });
   }
 
   if (sample) {
-    const want = sampleExpectation(sample);
-    const same = (want === 'ok') === ok;
-    console.log(`compat：样例预期旧版${want === 'ok' ? '照常' : '失败'}，实际${ok ? '全部通过' : '有失败'} → ${same ? '符合' : '不符合'}`);
-    return same ? 0 : 1;
+    // 写了 SQLSTATE 的 fail 预期要求“因为这个码失败”，别的原因失败不算（sql-case.ts 的 judgeSample，11-06 复盘）
+    const j = judgeSample(sample, sqlResults, httpOk);
+    console.log(`compat：${j.why} → ${j.same ? '符合' : '不符合'}`);
+    return j.same ? 0 : 1;
   }
   console.log(`compat：旧版契约子集${ok ? '全部通过' : '有失败'}`);
   return ok ? 0 : 1;
