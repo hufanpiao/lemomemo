@@ -33,7 +33,17 @@ declare global {
  * 建的时候计数是同步的，总在违规事件之前。
  * 控制台文字（“Refused to apply a stylesheet …”）按建过的 select 个数扣：控制台消息可能比违规事件先到 Node，不能按“已标出的事件条数”扣。
  * 真正的内联样式违规照样有 securitypolicyviolation 事件，由事件那一路判失败。最小复现在 csp-webkit-select.spec.ts（test.fail）
+ * 整条用例累计（11-07 修，B2-UI-a V5 查明）：注入脚本每载入一次文档就重跑，原来 __cspSelects、__csp 跟着从 0 重来，控制台报错却是整条用例累计的；
+ * 一条用例进过两个带 select 的页面（例如先待办编辑页、再整页载入日程编辑页），前一页的报错就没有 select 抵，被当成真违规；前一页的违规事件也丢了。
+ * 现在离开文档（pagehide，导航、刷新都会触发）时把累计到的 select 个数、违规事件、本注入脚本 URL 存进 sessionStorage（CARRY_KEY），
+ * 下一个文档的注入脚本一开头读出来、删掉、接着累计；从后退缓存恢复（pageshow persisted）时同样读回。于是页面里的快照是整条用例的累计数，
+ * 和控制台同一个口径。放过条件不变：一个 select 只抵一条，只抵来源是本注入脚本的 style-src-attr / inline；真违规事件也一并带过来，照样判失败。
+ * 已知限制（两条都只会多报、不会漏判真违规的控制台那一路）：
+ * ① iframe：注入脚本在每个 frame 里各跑一份，各数各的，但收尾只读主 frame（page.evaluate）；控制台却收全部 frame 的报错。
+ *    iframe 里建的 select 不进额度，它的误报会被判成真违规；iframe 里的违规事件也看不到，只能靠控制台那一路。本站页面目前没有 iframe。
+ * ② 跨源导航：sessionStorage 按源分开，跳到别的源（再跳回来）时累计数带不过去，退回成“只按本文档数”，和修之前一样。用例都在同源里跑。
  */
+export const CARRY_KEY = '__lemo_csp_carry';
 const WEBKIT_SELECT_CONSOLE = /^\[error\] Refused to apply a stylesheet because its hash, its nonce, or 'unsafe-inline' does not appear in the style-src directive/;
 
 const CSP_TEXT = /Content[- ]Security[- ]Policy|Refused to (apply|load|execute|connect|frame)/i;
@@ -47,6 +57,14 @@ export interface CspWatch {
   consoleErrors: string[];
   /** 本用例预期会有违规（对照组），收尾时不判失败 */
   expectViolations(): void;
+  /** 整条用例累计建过的 select 个数（只 webkit 计数；给 csp-webkit-select.spec.ts 核对累计口径用） */
+  selects(): Promise<number>;
+}
+
+/** 控制台 CSP 报错里扣掉 webkit 建 select 的误报以后剩下的：建过几个 select，就最多扣掉几条同样文字的报错（收尾判失败和测试共用） */
+export function consoleRest(consoleErrors: readonly string[], selects: number): string[] {
+  let skip = selects;
+  return consoleErrors.filter((m) => !(skip > 0 && WEBKIT_SELECT_CONSOLE.test(m) && skip-- > 0));
 }
 
 /** 读全部违规，并把 webkit 建 select 的误报标出来：符合条件的按先后配对，最多配 __cspSelects 条 */
@@ -74,7 +92,7 @@ export const test = base.extend<{ csp: CspWatch }>({
   csp: [
     async ({ page, browserName }, use) => {
       const webkit = browserName === 'webkit';
-      await page.addInitScript((webkit: boolean) => {
+      await page.addInitScript(([webkit, key]: readonly [boolean, string]) => {
         window.__csp = [];
         window.__cspSelects = 0;
         if (webkit) {
@@ -87,10 +105,35 @@ export const test = base.extend<{ csp: CspWatch }>({
             return ce.call(this, tag, opts) as HTMLElement;
           } as typeof Document.prototype.createElement;
         }
+        // 整条用例累计（见文件头）：接上前一个文档存下的数；前一个文档的注入脚本 URL 若不同，它记下的来源换成本文档的，配对口径不变
+        const load = (): void => {
+          try {
+            const raw = sessionStorage.getItem(key);
+            if (raw === null) return;
+            sessionStorage.removeItem(key);
+            const c = JSON.parse(raw) as { selects: number; list: Violation[]; own: string };
+            const own = window.__cspOwn ?? '';
+            window.__csp = c.list.map((v) => (c.own !== '' && v.source === c.own ? { ...v, source: own } : v));
+            window.__cspSelects = c.selects;
+          } catch {
+            // sessionStorage 不可用（跨源、隐私模式）：只能按本文档数，和修之前一样
+          }
+        };
+        load();
+        addEventListener('pagehide', () => {
+          try {
+            sessionStorage.setItem(key, JSON.stringify({ selects: window.__cspSelects ?? 0, list: window.__csp ?? [], own: window.__cspOwn ?? '' }));
+          } catch {
+            // 同上
+          }
+        });
+        addEventListener('pageshow', (e) => {
+          if (e.persisted) load();
+        });
         document.addEventListener('securitypolicyviolation', (e) => {
           window.__csp?.push({ directive: e.violatedDirective, blocked: e.blockedURI, source: e.sourceFile });
         }, true);
-      }, webkit);
+      }, [webkit, CARRY_KEY] as const);
       const consoleErrors: string[] = [];
       page.on('console', (m) => {
         if (CSP_TEXT.test(m.text())) consoleErrors.push(`[${m.type()}] ${m.text()}`);
@@ -103,6 +146,7 @@ export const test = base.extend<{ csp: CspWatch }>({
         expectViolations: () => {
           expected = true;
         },
+        selects: async () => (await readState(page, webkit)).selects,
       });
       if (!expected) {
         // 读页面计数是一张“那一刻”的快照（11-07 在 CI 同款 Linux webkit 镜像里查明）：用例刚等到地址变成编辑页就收尾，编辑页还在渲染，
@@ -119,8 +163,7 @@ export const test = base.extend<{ csp: CspWatch }>({
         }
         // 控制台：webkit 建过几个 select，就最多扣掉几条同样文字的报错（不按已标出的事件条数扣，见文件头）
         // 控制台文字是通用的，这样扣可能顺带扣掉一条同文字的真违规；不会漏判：真违规的 securitypolicyviolation 事件不在扣除之列，下面事件那一路照样拦（代码审查 FA-7 第八节 L9）
-        let skip = selects;
-        const rest = consoleErrors.filter((m) => !(skip > 0 && WEBKIT_SELECT_CONSOLE.test(m) && skip-- > 0));
+        const rest = consoleRest(consoleErrors, selects);
         expect(counted(all), 'securitypolicyviolation 事件').toEqual([]);
         expect(rest, '控制台 CSP 报错').toEqual([]);
       }

@@ -20,14 +20,39 @@
   margin-bottom: 8px;
 }
 
+/* 返回按钮统一写法（B2-UI-a U3-6；编辑页、整页提醒、设置各页同一段，设置页那几处由前端 B 照抄）：
+   “‹ 文字”15px 正文色、按钮自己的字体（font: inherit，防 Windows 版 webkit 落到宋体）；左边不留内边距，字和下面正文左边对齐；
+   点击区不够 44 × 44 的用 ::after 以按钮中心外扩（同 Settings.module.css 的 .segBtn::after），不挪位置 */
 .back {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   justify-self: start;
   min-height: var(--hit);
-  padding: 0 8px 0 0;
+  padding: 0;
   border: 0;
   background: none;
   color: var(--text);
+  font: inherit;
   font-size: var(--fs-15);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.back::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.back:focus-visible {
+  border-radius: var(--r-sm);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .kind {
@@ -64,24 +89,10 @@
   margin-top: 8px;
 }
 
-/* 编辑页里没有自己底色的按钮（删除、清掉、撤销、更新，用的是浏览器默认按钮）：深色时 WebKit 的默认按钮是浅灰底（#C0C0C0）白字，
-   字看不清（B2 全站视觉审查 A5；加了 color-scheme 以后量出来仍是这样）。深色下改用 App 的令牌；浅色照旧（只修挡使用的，观感另记）。
-   :where 把权重压到和标签一样（:disabled 也包在 :where 里，FA-2 审查第 3 条），有自己 class 的按钮（返回、表单里的按钮）不受影响。
-   只认 data-theme='dark'：运行时不写 'system'，皮肤也只有 light、dark 两种（FA-2 审查第 4 条核过，删了 system 那段）。
-   改了底色以后 WebKit 不再画原生按钮，退回 2px outset 凸边（11-06 深色截图里“更新”“清掉”），所以边框、圆角一起给 */
-:where(:global(:root[data-theme='dark']) .page) button {
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background-color: var(--panel-2);
-  color: var(--text);
-}
-
-:where(:global(:root[data-theme='dark']) .page) button:where(:disabled) {
-  color: var(--text-2);
-}
-
-/* 只读行的提示（noticeTone="quiet"，FA-2 视觉验收第二轮）：不是出错，用中性浅灰条，和今天页、日历页的重复事项横幅同款
-   （ReadonlyRow.module.css 的 .banner、.update）；“更新”是带下划线的文字按钮，浅色、深色一样（盖过下面深色按钮那条） */
+/* 原来这里有一条深色下给“没有自己 class 的按钮”兜底的 :where(...) button 规则（B2 A5）：编辑页的按钮都换成了 FormButton、
+   “更新”有下面 .notice[data-tone='quiet'] > button 自己的样式，B2-UI-a U3-4 删掉了。
+   只读行的提示（noticeTone="quiet"，FA-2 视觉验收第二轮）：不是出错，用中性浅灰条，和今天页、日历页的重复事项横幅同款
+   （ReadonlyRow.module.css 的 .banner、.update）；“更新”是带下划线的文字按钮，浅色、深色一样 */
 .notice[data-tone='quiet'] {
   display: flex;
   align-items: center;

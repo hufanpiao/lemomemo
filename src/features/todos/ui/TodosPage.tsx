@@ -14,6 +14,7 @@
 import { Suspense, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
+import list from '../../../kit/components/List.module.css';
 import { ReadonlyMark, ReadonlyToast, RoCheckCircle } from '../../../kit/components/ReadonlyRow.tsx';
 import { useRoT } from '../../../kit/hooks/useRoT.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
@@ -28,7 +29,7 @@ import styles from './TodosPage.module.css';
 /** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */
 function RowMark({ id }: { id: string }) {
   return (
-    <span className={styles.unsynced}>
+    <span className={list.unsynced}>
       <QuietBoundary name="unsynced-mark">
         <Suspense fallback={null}>
           <UnsyncedRemindMark table="todos" id={id} />
@@ -113,7 +114,7 @@ export default function TodosPage() {
         </div>
       ) : null}
 
-      {hv.view.length === 0 ? <p className={styles.empty}>{t('list.empty', {})}</p> : null}
+      {hv.view.length === 0 ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
       <AppearList as="div">
         {hv.view.map((g) => (
           <AppearItem
@@ -121,26 +122,28 @@ export default function TodosPage() {
             key={`${g.key}:${g.date ?? ''}`}
             className={g.key === 'late' ? `${styles.group} ${styles.late}` : styles.group} data-testid={`todos-g-${g.key}${g.date ? `-${g.date}` : ''}`}>
             <h2 className={styles.h2}>{groupTitle(g)}</h2>
-            <AppearList as="ul" className={styles.list}>
+            <AppearList as="ul" className={list.list}>
               {g.items.map(({ todo, tag }) => (
                 <AppearItem
                   key={todo.id}
-                  className={styles.row}
+                  className={list.row}
                   data-done={todo.done ? '' : undefined}
                   data-readonly={isRo(todo.id) ? '' : undefined}
                   data-testid={`todos-row-${todo.id}`}
                 >
-                  <RoCheckCircle
-                    readOnly={isRo(todo.id)}
-                    checked={shown(todo.id, todo.done)}
-                    label={shown(todo.id, todo.done) ? t('list.undoDone', {}) : t('list.done', {})}
-                    onChange={(v) => tick(todo.id, v)}
-                    testId={`todos-done-${todo.id}`}
-                  />
-                  <button type="button" className={styles.main} onClick={() => open(todo.id)}>
-                    <span className={styles.mainText}>
-                      <span className={styles.title}>{todo.title}</span>
-                      <span className={tag.kind === 'late' ? styles.tagLate : styles.tag} data-testid={`todos-tag-${todo.id}`}>
+                  <span className={list.lead}>
+                    <RoCheckCircle
+                      readOnly={isRo(todo.id)}
+                      checked={shown(todo.id, todo.done)}
+                      label={shown(todo.id, todo.done) ? t('list.undoDone', {}) : t('list.done', {})}
+                      onChange={(v) => tick(todo.id, v)}
+                      testId={`todos-done-${todo.id}`}
+                    />
+                  </span>
+                  <button type="button" className={list.main} onClick={() => open(todo.id)}>
+                    <span className={list.text}>
+                      <span className={list.title}>{todo.title}</span>
+                      <span className={tag.kind === 'late' ? `${list.meta} ${styles.tagLate}` : list.meta} data-testid={`todos-tag-${todo.id}`}>
                         {[todo.important ? t('list.important', {}) : '', todo.project, tagText(tag)].filter(Boolean).join(' · ')}
                       </span>
                     </span>
@@ -150,7 +153,7 @@ export default function TodosPage() {
                   {/* 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条、代码复查二）：变淡、aria-disabled、读屏名字后接“要更新到新版本才能修改”；
                       点了照样由 del 里的 useReadonlyGuard 拦下出提示条、不写 */}
                   <Pressable
-                    className={styles.del}
+                    className={list.trail}
                     aria-label={isRo(todo.id) ? tRo('ro.named', { label: t('list.delete', {}) }) : t('list.delete', {})}
                     aria-disabled={isRo(todo.id) || undefined}
                     onClick={() => void del(todo.id)}

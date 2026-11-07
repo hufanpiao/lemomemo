@@ -11,7 +11,7 @@
 // • 判断不了的（try_later、断网、超时、session_revoked、unauthorized、认不出的回包）一律 unknown，由调用方按场合处理
 import type { AccountStatusResponse } from '../../shared/schema/account.ts';
 import { readSessionAccessToken, readSessionId, type ExitNotice } from './session.ts';
-import { withTimeout } from './sign-out.ts';
+import { withTimeout } from './exit-basics.ts';
 import { getSupabase, type Db } from './supabase/client.ts';
 
 export const ACCOUNT_FN = 'account';

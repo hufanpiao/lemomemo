@@ -56,23 +56,26 @@
   color: var(--text-2);
 }
 
-.input {
+/* 登录框（B2-UI-a U2-5、U1-2；代码审 M4）：AuthPage.tsx 同时挂 kit 表单的 .input（Form.module.css）和这里的 .input。
+   底色、圆角、描边、字体、字号都用表单那一份：电脑 15px、触屏 16px，触屏媒体查询全站只在 Form.module.css 一处（V3）。
+   这里只把登录页版式不同的几项覆盖回来：高 44、左右 12、不参与 flex 伸缩（.form 是竖排 flex，表单的 flex: 1 1 0 会把框压扁）。
+   写成 input.input（权重 0,1,1）：两份 CSS 模块谁先加载不固定，单类选择器会被表单那份盖掉 */
+input.input {
+  flex: none;
   min-height: var(--hit);
   padding: 0 12px;
-  border: 1px solid var(--inp-line);
-  border-radius: var(--r-md);
-  background: var(--panel);
-  color: var(--text);
+}
 
-  /* iOS 小于 16px 会在聚焦时放大页面 */
-  font-size: var(--fs-16);
+.input::placeholder {
+  color: var(--text-2);
 }
 
 .input[readonly] {
   color: var(--text-2);
 }
 
-.code {
+/* 验证码框 22px 数字字体：同样写成 input.code，压过表单触屏规则里的 16px */
+input.code {
   font-family: var(--f-num);
   font-size: var(--fs-22);
   letter-spacing: 0.4em;

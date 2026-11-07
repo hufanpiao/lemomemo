@@ -1,6 +1,10 @@
 /* 打勾圆圈（kit，B2 FA-5）：待办页、今天页共用。勾选完成的动效见 17.1：
    空心圆圈（视觉稿 .done-c）；打勾时强调色圆盘从中间放大、淡入，盖满圆圈，勾号随之淡入；取消原路退回 */
+
+/* checkbox 叠在 label 外扩区（.checkBox::after）上面：点圆圈点到的是 checkbox 本身，点外扩区才经 label 转给它（不然 ::after 盖住 checkbox） */
 .check {
+  position: relative;
+  z-index: 1;
   grid-area: 1 / 1;
   width: 22px;
   height: 22px;
@@ -15,7 +19,8 @@
 }
 
 .check:focus-visible {
-  outline: 2px solid var(--accent);
+  /* 聚焦框全 App 一种（B2-UI-a U1-3）：黄色 --accent 在白底上约 1.3:1，不过 3:1 */
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -23,12 +28,25 @@
    点下去当下就开始（使用方给的是“刚点的值”，不等保存回来）。只动 transform、opacity，--dur-ui + --ease-out；
    CSS 过渡可中断（连点两下直接反向） */
 .checkBox {
+  position: relative;
   display: grid;
   flex: none;
   place-items: center;
   width: 22px;
   height: 22px;
   margin: 11px 0;
+}
+
+/* 点击区外扩到 44 × 44（B2-UI-a U4-4，A8 核实原来只有 22 × 22；写法同 Settings.module.css 的 .segBtn::after）：
+   .checkBox 是包着 checkbox 的 label，点到外扩区等于点 checkbox；圆圈本身大小不变 */
+.checkBox::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
 }
 
 .fill {

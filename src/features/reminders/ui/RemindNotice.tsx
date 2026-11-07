@@ -3,8 +3,8 @@
 // 移除成功但再认领没接上 →“重新接上”（只再认领）；推送需要重新打开 → 点一下；这个浏览器的推送服务暂不支持
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
+import { FormButton } from '../../../kit/components/Form.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { Pressable } from '../../../motion/components.ts';
 import type { useRemindSettings } from '../hooks/useRemindSettings.ts';
 import { useRemindT, type RemindT } from '../hooks/useRemindT.ts';
 import styles from './RemindSettings.module.css';
@@ -60,20 +60,21 @@ function InUse({ s, n }: { s: S; n: Extract<NonNullable<S['notice']>, { kind: 'i
     <>
       <p ref={text} tabIndex={-1} className={styles.noticeText}>{n.self ? t('remind.set.inUse.self', {}) : t('remind.set.inUse.other', { label, date })}</p>
       {afterRemove ? (
-        <Pressable type="button" className={styles.act} disabled={s.remove === 'reclaiming'} data-testid="remind-reconnect" onClick={() => void s.reconnect()}>
+        <FormButton type="button" variant="secondary" strong disabled={s.remove === 'reclaiming'} data-testid="remind-reconnect" onClick={() => void s.reconnect()}>
           {t(s.remove === 'reclaiming' ? 'remind.set.inUse.reconnecting' : 'remind.set.inUse.reconnect', {})}
-        </Pressable>
+        </FormButton>
       ) : (
         s.remove !== 'ok' && (
-          <Pressable
+          <FormButton
             type="button"
-            className={styles.danger}
+            variant="danger"
+            strong
             disabled={s.remove === 'removing'}
             data-testid="remind-remove-holder"
             onClick={() => setConfirm(true)}
           >
             {t(s.remove === 'removing' ? 'remind.set.inUse.removing' : 'remind.set.inUse.remove', {})}
-          </Pressable>
+          </FormButton>
         )
       )}
       <Dialog
@@ -84,12 +85,12 @@ function InUse({ s, n }: { s: S; n: Extract<NonNullable<S['notice']>, { kind: 'i
         description={n.self ? t('remind.set.inUse.confirmBodySelf', { date }) : t('remind.set.inUse.confirmBody', { label, date })}
       >
         <div className={styles.dlgBtns}>
-          <Pressable type="button" className={styles.ghost} onClick={() => setConfirm(false)} data-testid="remind-remove-cancel">
+          <FormButton type="button" variant="ghost" strong onClick={() => setConfirm(false)} data-testid="remind-remove-cancel">
             {t('remind.set.inUse.cancel', {})}
-          </Pressable>
-          <Pressable
+          </FormButton>
+          <FormButton
             type="button"
-            className={styles.dangerFill}
+            variant="dangerFill"
             data-testid="remind-remove-confirm"
             onClick={() => {
               setConfirm(false);
@@ -97,7 +98,7 @@ function InUse({ s, n }: { s: S; n: Extract<NonNullable<S['notice']>, { kind: 'i
             }}
           >
             {t('remind.set.inUse.confirmOk', {})}
-          </Pressable>
+          </FormButton>
         </div>
       </Dialog>
     </>
@@ -118,9 +119,9 @@ export function NoticeCard({ s }: { s: S }) {
         </p>
       )}
       {s.notice?.kind === 'resubscribe' && (
-        <Pressable type="button" className={styles.act} onClick={() => void s.reclaim()} data-testid="remind-resubscribe">
+        <FormButton type="button" variant="primary" onClick={() => void s.reclaim()} data-testid="remind-resubscribe">
           {t('remind.set.resubscribe', {})}
-        </Pressable>
+        </FormButton>
       )}
       {s.notice?.kind === 'not_supported' && <p className={styles.noticeText}>{t('remind.set.notSupported', {})}</p>}
     </section>

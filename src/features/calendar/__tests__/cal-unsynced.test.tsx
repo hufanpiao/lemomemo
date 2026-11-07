@@ -137,7 +137,7 @@ describe('日清单行尾“未同步”小标记', () => {
     });
     await waitFor(() => expect(screen.queryByTestId('remind-unsynced-mark')).toBeNull());
     // 每行标记那一格都空着（CSS 里 :empty 不画，不多出一个 gap）
-    const cells = document.querySelectorAll('[data-testid="cal-day-list"] .dayUnsynced');
+    const cells = document.querySelectorAll('[data-testid="cal-day-list"] .unsynced');
     expect(cells).toHaveLength(rows().length);
     for (const c of cells) expect(c.childNodes).toHaveLength(0);
   });

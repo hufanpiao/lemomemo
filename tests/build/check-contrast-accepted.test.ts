@@ -96,7 +96,7 @@ describe('build/check_contrast.py：负责人已接受的例外（accepted，B2 
 });
 
 describe('build/check_contrast.py：真仓库的例外名单', () => {
-  it('例外名单（11-06 夜负责人要求底栏恢复透明，底栏玻璃两项去掉 over、按最坏底色算；负责人定玻璃按原样，8 项列为例外）：名单外没有不达标', () => {
+  it('例外名单（11-06 夜负责人要求底栏恢复透明，底栏玻璃两项去掉 over、按最坏底色算；负责人定玻璃按原样，8 项列为例外。11-07 R-355：深色“＋”聚焦框内外两侧 4 项列为例外）：名单外没有不达标', () => {
     type Pair = { id: string; over?: string[] };
     type Exc = { theme: string; id: string; floor: number; decided: string; reason: string };
     const data = JSON.parse(readFileSync(join(ROOT, 'build', 'contrast-pairs.json'), 'utf8')) as { accepted?: Exc[]; pairs: Pair[] };
@@ -107,8 +107,14 @@ describe('build/check_contrast.py：真仓库的例外名单', () => {
       want.push([`${skin}-dark`, 'g-tint-floor', 2.4574], [`${skin}-dark`, 'g-fg-on-floor', 2.7284]);
       want.push([`${skin}-light`, 'g-tint-floor', 1.4053], [`${skin}-light`, 'g-fg-on-floor', 1.4053]);
     }
+    // 11-07 负责人定（R-355，B2-UI-a 代码审 M1）：深色“＋”的键盘聚焦框（--focus 跟 --text）内外两侧都不到 3:1，登记为例外，GlassBar.module.css 不改
+    want.push(['simple-dark', 'focus-fab-in', 1.3288], ['simple-dark', 'focus-fab-out', 2.4574]);
+    want.push(['glass-dark', 'focus-fab-in', 1.3171], ['glass-dark', 'focus-fab-out', 2.4357]);
     expect((data.accepted ?? []).map((e) => [e.theme, e.id, e.floor]).sort()).toEqual(want.sort());
-    for (const e of data.accepted ?? []) expect(e).toMatchObject({ decided: '2026-11-06', reason: REASON });
+    for (const e of data.accepted ?? []) {
+      if (e.id.startsWith('focus-')) expect(e).toMatchObject({ decided: '2026-11-07', reason: expect.stringContaining('R-355') });
+      else expect(e).toMatchObject({ decided: '2026-11-06', reason: REASON });
+    }
     // 自动深浅 11-06 取消，它的两对颜色也删了
     expect(data.pairs.map((p) => p.id)).not.toEqual(expect.arrayContaining(['g-ad-floor']));
     expect(data.pairs.some((p) => p.id.startsWith('g-ad-'))).toBe(false);
@@ -116,6 +122,6 @@ describe('build/check_contrast.py：真仓库的例外名单', () => {
     for (const id of ['g-tint-floor', 'g-fg-on-floor']) expect(data.pairs.find((p) => p.id === id)?.over).toBeUndefined();
     const { code, report } = exec(ROOT);
     expect(code).toBe(0);
-    expect(report).toMatchObject({ failed: 0, accepted: 8 });
+    expect(report).toMatchObject({ failed: 0, accepted: 12 });
   });
 });

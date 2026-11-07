@@ -1,0 +1,146 @@
+/* 列表行（kit，B2-UI-a U4、U6）：今天页、待办页、最近删除页、日历当天列表共用一份，只做 CSS、没有 JS 组件；只用令牌（A11）。
+   原来三页各有一份几乎一样的 .list/.row（U4-1），这里合成一份，页面私有文件里同名规则已删。
+   • .list：一组行，白色面板（--panel、--r-lg，视觉稿“面板一律纯白”，U4-5）；放在 .panel 里面时退回成普通列表（面板由外面那层画，
+     例如今天页“没赶上”那一块、日历当天列表，标题和行在同一块面板里）
+   • .row：一行，最少 44 高，行与行之间一条细线，最后一行不画
+   • .lead：行首固定一格（时刻、打勾圆圈都放这一格），同一列表里标题起点一致（U4-2，B17：原来日程行标题 x≈70、待办行 x≈48）
+   • .main：行里可点的那一块（整块是按钮，点了进编辑页）；.text：标题和副行一列
+   • .title：标题一行，放不下省略号；.meta：副行（截止、来源、几天后清理）
+   • .unsynced：行尾“未同步”小标记那一格，没有时整格不画（不多出 gap）
+   • .trail：行尾 × 按钮，点击区 44 × 44（U4-3）
+   • .empty / .emptyNext：空状态一句主文 + 可选一行“下一步”提示位，全站一种对齐（左对齐，同页面标题、说明；U6） */
+
+.panel,
+.list {
+  padding: 0 12px;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+}
+
+.list {
+  margin: 0;
+  list-style: none;
+}
+
+.panel > .list {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  border-bottom: 1px solid var(--line);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+/* 离开途中（AppearItem 打 data-state="leaving"）：淡出、卸载之前不接点按 */
+.row[data-state='leaving'] {
+  pointer-events: none;
+}
+
+.lead {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: var(--hit);
+  color: var(--text-2);
+  font-family: var(--f-num);
+  font-size: var(--fs-13);
+
+  /* 不折行（代码审建议 1）：“至 01:00”“01:00까지”比 44 宽时这一格跟着变宽（min-width），不折成两行把行撑高、也不压到标题上 */
+  white-space: nowrap;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+/* 电脑（有悬停的指针）上整块可点，显示手形 */
+@media (hover: hover) {
+  .main {
+    cursor: pointer;
+  }
+}
+
+.text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.title {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: var(--fs-15);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row[data-done] .title {
+  color: var(--text-2);
+  text-decoration: line-through;
+}
+
+.meta {
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.unsynced {
+  flex: none;
+  white-space: nowrap;
+}
+
+.unsynced:empty {
+  display: none;
+}
+
+.trail {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-18);
+}
+
+/* 只读行的 ×（FA-2）：和只读打勾圆圈一样变淡；点了由页面拦下出“要新版本”提示条 */
+.trail[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
+.empty {
+  margin: 12px 0;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  text-align: start;
+}
+
+/* “下一步”提示位（U6-1；文案、什么时候出由各页给，本批只备好位置，U6-3 留 B2-UI-b） */
+.emptyNext {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+}

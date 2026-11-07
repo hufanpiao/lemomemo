@@ -217,7 +217,7 @@ describe('编辑已有的', () => {
     // G11：空字段有占位提示；“清掉”“删除”用项目的按钮样式（FormButton），不是浏览器原生按钮
     expect(document.querySelector('#todo-project')?.getAttribute('placeholder')).toBe('比如：工作、家里');
     expect(screen.getByTestId('todo-edit-due-clear').className).toMatch(/btn/);
-    expect(screen.getByTestId('todo-edit-delete').className).toMatch(/btnDanger/);
+    expect(screen.getByTestId('todo-edit-delete').className).toMatch(/danger/);
   });
 
   it('删除：软删，页内出“撤销”；撤销后回来', async () => {

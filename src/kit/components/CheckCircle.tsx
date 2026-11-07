@@ -20,7 +20,7 @@ export interface CheckCircleProps {
 export function CheckCircle({ checked, label, onChange, testId, readOnly = false }: CheckCircleProps) {
   const state = checked ? 'on' : 'off';
   return (
-    <span className={styles.checkBox}>
+    <label className={styles.checkBox}>
       <input
         type="checkbox"
         className={styles.check}
@@ -32,6 +32,6 @@ export function CheckCircle({ checked, label, onChange, testId, readOnly = false
       />
       <span className={styles.fill} data-state={state} aria-hidden="true" />
       <span className={styles.tick} data-state={state} aria-hidden="true" />
-    </span>
+    </label>
   );
 }

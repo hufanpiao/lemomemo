@@ -25,11 +25,41 @@
   view-transition-name: page-head;
 }
 
-.back {
+/* 返回按钮统一写法（B2-UI-a U3-6，照抄前端 A 在 kit 的 EditShell.module.css 里定的那段）：“‹ 文字”15px 正文色、按钮自己的字体（font: inherit，
+   防 Windows 版 webkit 落到宋体）；左边不留内边距，字和下面正文左边对齐；点击区不够 44 × 44 的用 ::after 以按钮中心外扩，不挪位置 */
+.back,
+.backBtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   justify-self: start;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--text);
+  font: inherit;
   font-size: var(--fs-15);
   text-decoration: none;
+  cursor: pointer;
+}
+
+.back::after,
+.backBtn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.back:focus-visible,
+.backBtn:focus-visible {
+  border-radius: var(--r-sm);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .title {
@@ -330,19 +360,6 @@
 /* 页面最底下单独一行“退出登录”（R-256 ①） */
 .bottom {
   margin-top: 24px;
-}
-
-.backBtn {
-  justify-self: start;
-  min-height: var(--hit);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-
-  /* 按钮默认不继承字体（Windows 版 webkit 落到宋体，“‹”后的空格比首页“‹ 今天”宽一倍，设计评审 L-1）：和首页的链接同一字体 */
-  font: inherit;
-  font-size: var(--fs-15);
 }
 
 /* 只给读屏的文字（注销页的标题、账号标题下邮箱前的“当前登录邮箱”） */

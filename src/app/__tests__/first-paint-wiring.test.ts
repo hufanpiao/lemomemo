@@ -64,14 +64,14 @@ describe('main.tsx：首屏画完以后才起同步、设备登记、推送认�
 
   it('用到账号、令牌、推送、设备的调用都在那道检查之后', () => {
     expect(gate1).toBeGreaterThan(0);
-    for (const call of ['createSupabaseTransport()', 'createDeviceRegistrar(', 'wireSync(boot,', 'setPushClaimContext({', 'registerServiceWorker().then', 'runPushClaim()']) {
+    for (const call of ['createSupabaseTransport()', 'createDeviceRegistrar(', 'wireSync(boot,', 'setPushClaimContext({', 'registerSwAfterPaint({', 'runPushClaim()']) {
       const at = once(main, call);
       expect(at, `${call} 要在 await appPainted() 和换账号检查之后`).toBeGreaterThan(gate1);
     }
   });
 
   describe('FA-6 ③：首屏画完以后才下载同步那批代码（③ 审查 M1：重试、SW 注册分开）', () => {
-    const swAt = once(main, 'registerServiceWorker().then(');
+    const swAt = once(main, 'registerSwAfterPaint({');
     const startAt = once(main, 'startAfterPaint({');
     const syncAt = once(main, 'const startSync = (late: AfterPaint): void => {');
     const syncEnd = syncAt + main.slice(syncAt).search(/\n {2}\};\s/);
@@ -126,11 +126,12 @@ describe('main.tsx：首屏画完以后才起同步、设备登记、推送认�
       expect(main).not.toMatch(/currentUserId:[^\n]*readSessionUserId\(\)\s*(\?\?|\|\||\?)/);
     });
 
-    it('SW 注册真的会执行（③ 复审 L-b）：swReg 就是那个三元式，registerServiceWorker() 只在它的真分支里调一次，不是挪进没人调的函数', () => {
+    it('SW 注册真的会执行（③ 复审 L-b）：swReg 就是那个三元式，registerServiceWorker() 只在它的真分支里调一次，不是挪进没人调的函数（11-07 起在 registerSwAfterPaint 里按需下载再调）', () => {
       expect(main).toMatch(
-        /\n {2}const swReg: Promise<ServiceWorkerRegistration \| null> =\s*!import\.meta\.env\.DEV && boot\.status !== 'version_too_new'\s*\? registerServiceWorker\(\)\.then\(\(reg\) => \{/,
+        /\n {2}const swReg: Promise<ServiceWorkerRegistration \| null> =\s*!import\.meta\.env\.DEV && boot\.status !== 'version_too_new'\s*\?(?:\s*\/\/[^\n]*\n)?\s*registerSwAfterPaint\(\{ onReady: \(\) => boot\.upgrade\.setSwReady\(\), life: browserLifecycle \}\)\.catch\(\(\) => null\)/,
       );
-      expect(main.match(/\bregisterServiceWorker\(\)/g)?.length, 'registerServiceWorker() 只调这一处').toBe(1);
+      // 11-07 起注册本体在 platform/sw-register.ts 的 registerSwAfterPaint（安全审 M1：下载不设超时），main.tsx 只调它这一处
+      expect(main.match(/\bregisterSwAfterPaint\(/g)?.length, 'registerSwAfterPaint( 只调这一处').toBe(1);
       expect(main.match(/\bconst swReg\b/g)?.length).toBe(1);
       // 声明在 start 的最外层（两格缩进）、第一道闸之后，不在别的函数里
       const at = once(main, '  const swReg: Promise<ServiceWorkerRegistration | null> =');

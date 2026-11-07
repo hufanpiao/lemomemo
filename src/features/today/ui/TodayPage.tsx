@@ -26,6 +26,7 @@ import { Suspense, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
+import list from '../../../kit/components/List.module.css';
 import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
@@ -55,15 +56,16 @@ function Ro(p: TodayRoProps) {
   );
 }
 
-/** 打勾圆圈：只读行用按需下载的那个（读屏名字后接“要更新到新版本才能修改”，词条不进首屏），下载完以前先画普通的 */
+/** 打勾圆圈：只读行用按需下载的那个（读屏名字后接“要更新到新版本才能修改”，词条不进首屏），下载完以前先画普通的。
+ *  放在行首那一格（kit 的 List.module.css .lead，和日程行的时刻同宽，标题起点一致，B2-UI-a U4-2） */
 function Check(p: CheckCircleProps) {
-  return p.readOnly ? <Ro part="check" {...p} /> : <CheckCircle {...p} />;
+  return <span className={list.lead}>{p.readOnly ? <Ro part="check" {...p} /> : <CheckCircle {...p} />}</span>;
 }
 
 /** 只读行的 ×：变淡、aria-disabled，label 是最终的读屏名字（按需下载的那份接上“要更新到新版本才能修改”，下载完以前先用这份） */
 export function RoDel(p: { label: string; onClick(): void; testId: string }) {
   return (
-    <Pressable className={styles.del} aria-label={p.label} aria-disabled="true" onClick={p.onClick} data-testid={p.testId} data-no-proxy="">
+    <Pressable className={list.trail} aria-label={p.label} aria-disabled="true" onClick={p.onClick} data-testid={p.testId} data-no-proxy="">
       ×
     </Pressable>
   );
@@ -72,7 +74,7 @@ export function RoDel(p: { label: string; onClick(): void; testId: string }) {
 /** 行尾“未同步”小标记：没有时那一格是空的，CSS 里 :empty 不画 */
 function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
   return (
-    <span className={styles.unsynced}>
+    <span className={list.unsynced}>
       <QuietBoundary name="unsynced-mark">
         <Suspense fallback={null}>
           <UnsyncedRemindMark table={table} id={id} />
@@ -158,11 +160,11 @@ export default function TodayPage() {
           下面“今天的安排”用 layout 平移收上来，不跳 */}
       <AppearList as="div">
         {v.late.length ? (
-          <AppearItem as="section" key="late" className={styles.late} aria-labelledby="today-late" data-testid="today-late">
+          <AppearItem as="section" key="late" className={`${list.panel} ${styles.late}`} aria-labelledby="today-late" data-testid="today-late">
             <h2 id="today-late" className={styles.h2}>{t('late.title', {})}</h2>
-            <AppearList as="ul" className={styles.list}>
+            <AppearList as="ul" className={list.list}>
               {v.late.map(({ todo, days }) => (
-                <AppearItem key={todo.id} className={styles.row} data-readonly={roT(todo.id) ? '' : undefined}>
+                <AppearItem key={todo.id} className={list.row} data-readonly={roT(todo.id) ? '' : undefined}>
                   <Check
                     checked={shown(todo.id, false)}
                     label={shown(todo.id, false) ? t('list.undoDone', {}) : t('list.done', {})}
@@ -170,10 +172,10 @@ export default function TodayPage() {
                     testId={`today-done-${todo.id}`}
                     readOnly={roT(todo.id)}
                   />
-                  <button type="button" className={styles.main} onClick={() => open('todo', todo.id)}>
-                    <span className={styles.mainText}>
-                      <span className={styles.title}>{todo.title}</span>
-                      <span className={styles.lateTag}>{days > 0 ? t('late.days', { n: days }) : t('late.passed', { t: todo.dueTime ?? '' })}</span>
+                  <button type="button" className={list.main} onClick={() => open('todo', todo.id)}>
+                    <span className={list.text}>
+                      <span className={list.title}>{todo.title}</span>
+                      <span className={`${list.meta} ${styles.lateTag}`}>{days > 0 ? t('late.days', { n: days }) : t('late.passed', { t: todo.dueTime ?? '' })}</span>
                     </span>
                     {roT(todo.id) ? <Ro part="mark" testId={`today-ro-${todo.id}`} /> : null}
                     <RowMark table="todos" id={todo.id} />
@@ -186,15 +188,15 @@ export default function TodayPage() {
 
         <AppearItem as="section" key="list" aria-labelledby="today-list" data-testid="today-list">
           <h2 id="today-list" className={styles.h2}>{t('list.title', {})}</h2>
-          {v.events.length === 0 && v.todos.length === 0 ? <p className={styles.empty}>{t('list.empty', {})}</p> : null}
-          <AppearList as="ul" className={styles.list}>
+          {v.events.length === 0 && v.todos.length === 0 ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
+          <AppearList as="ul" className={list.list}>
             {v.events.map((o) => (
-              <AppearItem key={`e:${o.id}`} className={styles.row} data-readonly={g.isRo('event', o.id) ? '' : undefined} data-testid={`today-event-${o.id}`}>
-                <span className={styles.time}>{o.time ?? t('list.allDay', {})}</span>
-                <button type="button" className={styles.main} onClick={() => open('event', o.id)}>
-                  <span className={styles.mainText}>
-                    <span className={styles.title}>{o.title}</span>
-                    {o.origin ? <span className={styles.sub}>{t('list.origin', { zone: zoneName(o.origin.tz, locale), t: o.origin.time })}</span> : null}
+              <AppearItem key={`e:${o.id}`} className={list.row} data-readonly={g.isRo('event', o.id) ? '' : undefined} data-testid={`today-event-${o.id}`}>
+                <span className={list.lead}>{o.time ?? t('list.allDay', {})}</span>
+                <button type="button" className={list.main} onClick={() => open('event', o.id)}>
+                  <span className={list.text}>
+                    <span className={list.title}>{o.title}</span>
+                    {o.origin ? <span className={list.meta}>{t('list.origin', { zone: zoneName(o.origin.tz, locale), t: o.origin.time })}</span> : null}
                   </span>
                   {g.isRo('event', o.id) ? <Ro part="mark" testId={`today-ro-${o.id}`} /> : null}
                   <RowMark table="events" id={o.id} />
@@ -207,7 +209,7 @@ export default function TodayPage() {
             {v.todos.map((td) => (
               <AppearItem
                 key={`t:${td.id}`}
-                className={styles.row}
+                className={list.row}
                 data-testid={`today-todo-${td.id}`}
                 data-done={td.done ? '' : undefined}
                 data-readonly={roT(td.id) ? '' : undefined}
@@ -219,10 +221,10 @@ export default function TodayPage() {
                   onChange={(v) => tick(td.id, v)}
                   testId={`today-done-${td.id}`}
                 />
-                <button type="button" className={styles.main} onClick={() => open('todo', td.id)}>
-                  <span className={styles.mainText}>
-                    <span className={styles.title}>{td.title}</span>
-                    <span className={styles.sub}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
+                <button type="button" className={list.main} onClick={() => open('todo', td.id)}>
+                  <span className={list.text}>
+                    <span className={list.title}>{td.title}</span>
+                    <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
                   </span>
                   {roT(td.id) ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
                   <RowMark table="todos" id={td.id} />
@@ -232,7 +234,7 @@ export default function TodayPage() {
                 {roT(td.id) ? (
                   <Ro part="del" label={t('list.delete', {})} onClick={() => void del(td.id)} testId={`today-del-${td.id}`} />
                 ) : (
-                  <Pressable className={styles.del} aria-label={t('list.delete', {})} onClick={() => void del(td.id)} data-testid={`today-del-${td.id}`} data-no-proxy="">
+                  <Pressable className={list.trail} aria-label={t('list.delete', {})} onClick={() => void del(td.id)} data-testid={`today-del-${td.id}`} data-no-proxy="">
                     ×
                   </Pressable>
                 )}

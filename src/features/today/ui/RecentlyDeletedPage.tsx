@@ -4,6 +4,7 @@
 // • 路由 #/trash（app/router.ts 的 ROUTE_NAMES、today/index.ts 的 routes）；返回：App 里有上一页就退回，否则换到设置（S11）
 import { useEffect, useState } from 'react';
 import { canGoBack, goBack, replaceRoute } from '../../../app/router.ts';
+import list from '../../../kit/components/List.module.css';
 import { Pressable } from '../../../motion/components.ts';
 import { useTodayT } from '../hooks/useTodayT.ts';
 import { useTrash, type RestoreResult } from '../hooks/useTrash.ts';
@@ -35,14 +36,16 @@ export default function RecentlyDeletedPage() {
         <span />
       </header>
       <p className={styles.note}>{t('trash.note', {})}</p>
-      {items.length === 0 ? <p className={styles.empty} data-testid="trash-empty">{t('trash.empty', {})}</p> : null}
-      <ul className={styles.list}>
+      {items.length === 0 ? <p className={list.empty} data-testid="trash-empty">{t('trash.empty', {})}</p> : null}
+      <ul className={list.list}>
         {items.map((it) => (
-          <li key={`${it.table}:${it.id}`} className={styles.row} data-testid={`trash-row-${it.id}`}>
-            <span className={styles.main}>
-              <span className={styles.title}>{it.title}</span>
-              <span className={styles.sub}>
-                {t(it.table === 'events' ? 'trash.kind.events' : 'trash.kind.todos', {})} · {t('trash.left', { n: it.daysLeft })}
+          <li key={`${it.table}:${it.id}`} className={list.row} data-testid={`trash-row-${it.id}`}>
+            <span className={list.main}>
+              <span className={list.text}>
+                <span className={list.title}>{it.title}</span>
+                <span className={list.meta}>
+                  {t(it.table === 'events' ? 'trash.kind.events' : 'trash.kind.todos', {})} · {t('trash.left', { n: it.daysLeft })}
+                </span>
               </span>
             </span>
             <Pressable className={styles.restore} onClick={() => void restore(it.table, it.id).then(setMsg)} data-testid={`trash-restore-${it.id}`}>

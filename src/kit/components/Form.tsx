@@ -3,6 +3,7 @@
 // 没失焦就离开页面（后退、跳走、切后台）时补交一次（useCommitDraft）
 import { useCallback, useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { Pressable } from '../../motion/components.ts';
+import cc from './CheckCircle.module.css';
 import styles from './Form.module.css';
 
 export function FormGroup({ children }: { children: ReactNode }) {
@@ -169,11 +170,37 @@ export function Select({
   );
 }
 
-export function Check({ label, checked, onChange, disabled, ...p }: { label: string; checked: boolean; onChange(v: boolean): void; disabled?: boolean; 'data-testid'?: string }) {
+/**
+ * 勾选框。look="circle"（B2-UI-a U2-4）：和列表的完成圆圈同一画法、同一动效（用 CheckCircle.module.css 的类，不另画一份）；
+ * 默认还是系统方形复选框
+ */
+export function Check({
+  label, checked, onChange, disabled, look = 'box', ...p
+}: { label: string; checked: boolean; onChange(v: boolean): void; disabled?: boolean; look?: 'box' | 'circle'; 'data-testid'?: string }) {
   const id = useId();
+  const input = (
+    <input
+      data-testid={p['data-testid']}
+      id={id}
+      type="checkbox"
+      className={look === 'circle' ? cc.check : undefined}
+      checked={checked}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.checked)}
+    />
+  );
+  const state = checked ? 'on' : 'off';
   return (
     <label className={styles.check} htmlFor={id}>
-      <input data-testid={p['data-testid']} id={id} type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      {look === 'circle' ? (
+        <span className={`${cc.checkBox} ${styles.circleBox}`}>
+          {input}
+          <span className={cc.fill} data-state={state} aria-hidden="true" />
+          <span className={cc.tick} data-state={state} aria-hidden="true" />
+        </span>
+      ) : (
+        input
+      )}
       {label}
     </label>
   );
@@ -183,6 +210,25 @@ export function Check({ label, checked, onChange, disabled, ...p }: { label: str
  * 编辑页的按钮（“清掉”“删除”“撤销”；G11：不用浏览器原生按钮，浅色灰框、深色凸边都不要）：圆角胶囊描边，和设置 › 提醒的按钮一套写法；
  * danger 是“删除”：危险色描边和字（同 RemindSettings 的 .danger）。聚焦 var(--focus)
  */
-export function FormButton({ danger = false, ...p }: Omit<ComponentProps<typeof Pressable>, 'className'> & { danger?: boolean }) {
-  return <Pressable {...p} className={danger ? styles.btnDanger : styles.btn} />;
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'dangerFill' | 'ghost';
+
+const VARIANT: Record<ButtonVariant, string | undefined> = {
+  primary: styles.primary,
+  secondary: styles.btn,
+  danger: styles.danger,
+  dangerFill: styles.dangerFill,
+  ghost: styles.ghost,
+};
+
+/**
+ * kit 通用按钮（B2-UI-a U3-1）：五种 variant，高度一律 --hit。原来的写法照用：不写 variant 是 secondary，
+ * 只写 danger（布尔）等于 variant="danger"。
+ * strong：字重 600（代码审 M2）。primary、dangerFill 本来就是 600；secondary、danger、ghost 默认 400（编辑页“删除”“清掉”），
+ * 设置 › 提醒的“重新连接”“移除它…”“取消”原来是 600，传 strong 保持原样（只有任务单写明的颜色可以变，字重不变）
+ */
+export function FormButton({
+  danger = false, variant, strong = false, ...p
+}: Omit<ComponentProps<typeof Pressable>, 'className'> & { danger?: boolean; variant?: ButtonVariant; strong?: boolean }) {
+  const cls = VARIANT[variant ?? (danger ? 'danger' : 'secondary')];
+  return <Pressable {...p} className={strong ? `${cls} ${styles.strong}` : cls} />;
 }

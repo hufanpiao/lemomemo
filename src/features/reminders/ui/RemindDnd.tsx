@@ -5,6 +5,8 @@ import { useId, useState } from 'react';
 import { isHm } from '../hooks/remind-view.ts';
 import { useRemindSettings } from '../hooks/useRemindSettings.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
+// 时刻框直接用 kit 表单的 .input（B2-UI-a U1-2：触屏 16px 的媒体查询全站只在 Form.module.css 一处；input-font-size.test.ts 按导入的文件认，导入名不限）
+import form from '../../../kit/components/Form.module.css';
 import styles from './RemindSettings.module.css';
 
 type S = ReturnType<typeof useRemindSettings>;
@@ -39,7 +41,7 @@ function DndSection({ s, ids }: { s: S; ids: string }) {
               {t('remind.set.dnd.from', {})}
               <input
                 type="time"
-                className={styles.time}
+                className={`${form.input} ${styles.time}`}
                 value={s.dnd.start}
                 onChange={(e) => {
                   const v = e.currentTarget.value;
@@ -53,7 +55,7 @@ function DndSection({ s, ids }: { s: S; ids: string }) {
               {t('remind.set.dnd.to', {})}
               <input
                 type="time"
-                className={styles.time}
+                className={`${form.input} ${styles.time}`}
                 value={s.dnd.end}
                 onChange={(e) => {
                   const v = e.currentTarget.value;

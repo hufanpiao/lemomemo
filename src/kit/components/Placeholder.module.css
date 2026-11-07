@@ -1,5 +1,7 @@
+/* 顶部让开安全区（视觉验收 11-07：模拟 62pt 时标题落进顶部模糊带）：同其他页写 var(--safe-top)，不直接写 env()（base.css）；
+   没有安全区时仍是原来的 24px */
 .page {
-  padding: 24px 16px;
+  padding: max(var(--safe-top), 24px) 16px 24px;
 }
 
 .title {
@@ -14,10 +16,4 @@
   font-size: var(--fs-13);
 }
 
-/* 给用户看的说明（随手记“即将推出”）：正文字体、次要色，居中放在页面中间偏上，以后换成空状态插画（R-93 扩展点②） */
-.note {
-  margin: 30vh 0 0;
-  color: var(--text-2);
-  font-size: var(--fs-15);
-  text-align: center;
-}
+/* 给用户看的说明（随手记“即将推出”）用 List.module.css 的 .empty（全站一种空状态，B2-UI-a U6-2）；以后换成空状态插画（R-93 扩展点②） */

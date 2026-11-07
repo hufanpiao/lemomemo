@@ -101,6 +101,8 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/features/reminders/ui/MissedSheet.tsx': '错过提醒的底部弹层：点开才下载，有错过时首屏画完、浏览器空闲才预取（前端 B 11-05 拆出）',
   'src/features/today/ui/TodayToasts.tsx':
     '今天页页底提示条（撤销条、出错条、只读提示条）和重复事项横幅：真有一条提示、或有只读行时才下载（FA-2 返工，首屏预算；连着 UndoToast、只读横幅一起不进首屏）',
+  'src/platform/sw-lifecycle.ts':
+    'SW 注册、盯新版本、回到前台查新版本、“更新”按钮：首屏画完以后 main.tsx 才下载注册（appPainted 之后），“更新”按下时才下载；只有 version_too_new 的整屏提示在渲染前下载（那时没有今天页）（B2-UI-a U7，11-07）',
   'src/platform/viewport.ts': '键盘检测：底栏在键盘弹起时藏起来用（FA-7 第 3 项），首屏画完以后 afterAppPainted 才下载',
   'src/kit/components/GlassBar/GlassBarFx.tsx':
     '液态玻璃底栏的首屏后部分：模糊带、果冻、按住放大；首屏画完以后 afterAppPainted 才下载，挂上以后再 import() 内容副本、自动深浅、帧循环（motion/glass-ghost.ts）（B2 FA-7，主持人 11-05 首屏 ③；没下载到时外壳用 backdrop-filter 后备）',
@@ -236,5 +238,34 @@ describe('首屏名单里各个动态入口的静态闭包也不碰 zod（③ �
     const read = withPatch(file, (s) => `${s}\nexport const NewWidget = () => import('./NowCard.tsx');\n`);
     expect(classifyDynamics(FIRST_PAINT_DYNAMIC).unclassified).toEqual([]);
     expect(classifyDynamics(FIRST_PAINT_DYNAMIC, read).unclassified.some((u) => u.includes('NowCard'))).toBe(true);
+  });
+});
+
+describe('退出流程本体、SW 注册更新不进首屏（B2-UI-a U7，11-07 主持人定 A、B）', { timeout: GRAPH_TIMEOUT_MS }, () => {
+  const SIGN_OUT = resolve(ROOT, 'src/platform/sign-out.ts');
+  const SW_LIFE = resolve(ROOT, 'src/platform/sw-lifecycle.ts');
+  it('main.tsx 和首屏名单里各块的静态闭包都到不了 sign-out.ts、sw-lifecycle.ts；首屏要用的 exit-basics.ts、sw-register.ts 在里面', async () => {
+    const { FIRST_PAINT_DYNAMIC } = (await import('../../build/check_first_paint_chunks.mjs')) as { FIRST_PAINT_DYNAMIC: string[] };
+    const main = reach(ENTRY).prev;
+    expect(main.has(resolve(ROOT, 'src/platform/exit-basics.ts')), 'exit-basics.ts 不在首屏了，这条守护要跟着改').toBe(true);
+    expect(main.has(resolve(ROOT, 'src/platform/sw-register.ts'))).toBe(true);
+    for (const root of [ENTRY, ...FIRST_PAINT_DYNAMIC.map((k) => resolve(ROOT, 'src', k))]) {
+      const { prev } = reach(root);
+      expect(prev.has(SIGN_OUT), rel(root)).toBe(false);
+      expect(prev.has(SW_LIFE), rel(root)).toBe(false);
+    }
+  });
+
+  it('拦得住变异：core/cache.ts 改回从 sign-out.ts 引 deleteLocalDb', () => {
+    const read = withPatch('src/core/cache.ts', (s) => s.replace("from '../platform/exit-basics.ts';", "from '../platform/sign-out.ts';"));
+    expect(read(resolve(ROOT, 'src/core/cache.ts'))).toContain("from '../platform/sign-out.ts'");
+    expect(reach(ENTRY, read).prev.has(SIGN_OUT)).toBe(true);
+  });
+
+  it('拦得住变异：sw-register.ts 改成静态转出 sw-lifecycle.ts', () => {
+    const read = withPatch('src/platform/sw-register.ts', (s) => `${s}
+export { registerServiceWorker } from './sw-lifecycle.ts';
+`);
+    expect(reach(ENTRY, read).prev.has(SW_LIFE)).toBe(true);
   });
 });

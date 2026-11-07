@@ -11,7 +11,7 @@
 import type { FeaturesConfig } from '../../shared/logic/flags.ts';
 import { cacheMigrations, DB_VERSION, runUpgrade, type CacheMigration, type UpgradeReport } from './cache-migrations.ts';
 import { cacheStores, DRAFTS, META, VAULT_DRAFTS, type StoreDef } from './cache-schema.ts';
-import { deleteLocalDb, type DeleteDbResult } from '../platform/sign-out.ts';
+import { deleteLocalDb, type DeleteDbResult } from '../platform/exit-basics.ts';
 
 export const DB_NAME = 'planner-v4';
 
@@ -372,7 +372,7 @@ export type DeleteCacheResult = DeleteDbResult;
 
 /**
  * 按库名删掉整个本机库（会话没了时用：别的标签页退出、冷启动没有会话但库还在；登录页审查）。
- * 实现只有一份：platform/sign-out.ts 的 deleteLocalDb（一开始就起总定时器，waitMs 到了返回 'blocked'，done 标志防重复 resolve；
+ * 实现只有一份：platform/exit-basics.ts 的 deleteLocalDb（从 sign-out.ts 搬来，11-07）（一开始就起总定时器，waitMs 到了返回 'blocked'，done 标志防重复 resolve；
  * 排在另一个卡住的删库请求后面、什么事件都收不到时也会按时返回，不会让启动永远等着白屏）。删库请求本身留在浏览器里，挡着的关了就删。
  * 调用方先关本页自己的连接（cache.close()，原因 'closed'），否则本页会收到 versionchange → 自动重新载入，形成循环。永远 resolve
  */

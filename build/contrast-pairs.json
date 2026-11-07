@@ -635,6 +635,68 @@
         "simple-light"
       ],
       "source": "设计复审 N7（11-04）；R-132 简洁·浅色今天是透明底墨色细圈；月格 .today .dayNum、周视图 .laneToday"
+    },
+    {
+      "id": "focus-bg",
+      "what": "聚焦框 / 页面底色（编辑页返回按钮、提醒页按钮；底栏页签聚焦时外圈 4px 的 --bg 也是它）",
+      "fg": "--focus",
+      "bg": "--bg",
+      "kind": "nontext",
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-panel",
+      "what": "聚焦框 / 卡片（表单、设置行）",
+      "fg": "--focus",
+      "bg": "--panel",
+      "kind": "nontext",
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-panel2",
+      "what": "聚焦框 / 次级底（列表圆圈、提醒时刻框所在行）",
+      "fg": "--focus",
+      "bg": "--panel-2",
+      "kind": "nontext",
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-inp",
+      "what": "聚焦框 / 输入框底色（有框输入框聚焦）",
+      "fg": "--focus",
+      "bg": "--inp-bg",
+      "kind": "nontext",
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-fab-in",
+      "what": "聚焦框 / 底栏“＋”内侧（--g-fab-tint 叠在最坏底色上）；按“框两侧任一侧 ≥ 3:1”算，浅色内侧达标即可",
+      "fg": "--focus",
+      "bg": "--g-fab-tint",
+      "kind": "nontext",
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-fab-out",
+      "what": "聚焦框 / 底栏“＋”外侧（--g-tint 叠在最坏底色上）；只查深色：浅色内侧已达标，按“任一侧 ≥ 3:1”不再要求外侧",
+      "fg": "--focus",
+      "bg": "--g-tint",
+      "kind": "nontext",
+      "modes": [
+        "dark"
+      ],
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）"
+    },
+    {
+      "id": "focus-rail",
+      "what": "聚焦框 / 电脑版侧栏（侧栏头像 .me 外扩 2px 的那一圈、侧栏里的页签和“＋”；--b-rail 叠在 --bg 上）",
+      "fg": "--focus",
+      "bg": "--b-rail",
+      "kind": "nontext",
+      "over": [
+        "--bg"
+      ],
+      "source": "B2-UI-a U1-3、V4（R-351 聚焦色跟 --text；R-352 ② 聚焦框 ≥ 3:1）；B2-UI-a 前端 A 代码审 M1（11-07）。over 的前提：宽屏 #root 左边让出 110px（GlassBar.module.css :global(#root):has(.bar)），侧栏（左 16、宽 78）后面只有 body 的 --bg"
     }
   ],
   "accepted": [
@@ -693,6 +755,34 @@
       "floor": 1.4053,
       "decided": "2026-11-06",
       "reason": "负责人 11-06 定：底栏玻璃按原样，不为对比度加深（G1、G8）；上沿外 12pt 渐隐（G12 选 B12），后面的字照样透出来"
+    },
+    {
+      "theme": "simple-dark",
+      "id": "focus-fab-in",
+      "floor": 1.3288,
+      "decided": "2026-11-07",
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45"
+    },
+    {
+      "theme": "simple-dark",
+      "id": "focus-fab-out",
+      "floor": 2.4574,
+      "decided": "2026-11-07",
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45"
+    },
+    {
+      "theme": "glass-dark",
+      "id": "focus-fab-in",
+      "floor": 1.3171,
+      "decided": "2026-11-07",
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45"
+    },
+    {
+      "theme": "glass-dark",
+      "id": "focus-fab-out",
+      "floor": 2.4357,
+      "decided": "2026-11-07",
+      "reason": "负责人 11-07 定（R-355）：深色“＋”的键盘聚焦框对比度不足登记为例外，不改，GlassBar.module.css 一行不动；口径同 g-tint-floor 例外（玻璃按最坏底色算）。聚焦色跟 --text（R-351），旧的蓝色在深色玻璃上也只有 1.45"
     }
   ]
 }

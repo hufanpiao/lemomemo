@@ -68,7 +68,7 @@ export default function FullReminderPage() {
 
   const top = (
     <div className={styles.top}>
-      <Pressable type="button" className={`${styles.small} ${styles.backEdge}`} onClick={leave} data-testid="remind-full-back">
+      <Pressable type="button" className={styles.back} onClick={leave} data-testid="remind-full-back">
         {/* “‹”只是样子，读屏只读“返回”（代码复审 N2，同设置页） */}
         <span aria-hidden="true">‹</span> {t('remind.full.back', {})}
       </Pressable>

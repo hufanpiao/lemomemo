@@ -29,6 +29,24 @@ describe('Pressable 的 data-state', () => {
     expect(onPointerCancel).toHaveBeenCalledOnce();
   });
 
+  it('禁用时按下不进 pressed（B2-UI-a U3-5）：aria-disabled（只读行的 ×）、disabled 都停在 idle，减少动态效果那一支也就不变淡', () => {
+    render(
+      <>
+        <Pressable aria-disabled="true">a</Pressable>
+        <Pressable aria-disabled>b</Pressable>
+        <Pressable disabled>c</Pressable>
+        <Pressable aria-disabled="false">d</Pressable>
+      </>,
+    );
+    const [a, b, c, d] = screen.getAllByRole('button');
+    for (const btn of [a, b, c]) {
+      fireEvent.pointerDown(btn as HTMLElement);
+      expect((btn as HTMLElement).dataset['state']).toBe('idle');
+    }
+    fireEvent.pointerDown(d as HTMLElement);
+    expect((d as HTMLElement).dataset['state']).toBe('pressed');
+  });
+
   it('按下后移出 → idle', () => {
     const { btn } = setup();
     fireEvent.pointerDown(btn);

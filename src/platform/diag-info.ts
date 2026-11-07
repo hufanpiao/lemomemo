@@ -3,7 +3,13 @@
 // • 第一行是最关键的：构建提交号、版本、构建时刻；第二行起是 SW（控制本页的脚本、各状态、缓存名）——主屏幕版可能还在用旧 SW 预缓存的旧版本
 // • navigator.serviceWorker 只准出现在 platform（A13），所以放在这里
 import { buildInfo } from './env.ts';
-import { insetTimelineLine } from './inset-watch.ts';
+import { insetTimeline, type InsetTimeline } from './inset-watch.ts';
+
+/** 诊断里的一行（11-07 首屏瘦身 U7 从 inset-watch.ts 搬来，原样没改；只有这里用，不再跟着首屏下载）：launch: standalone=… painted=+300 ready=+460(quiet) | +12 env-bottom=0px inner=956 | +340 env-bottom=34px inner=956 */
+export function insetTimelineLine(tl: InsetTimeline = insetTimeline()): string {
+  const head = `launch: standalone=${tl.standalone} painted=${tl.paintedAt === null ? '-' : `+${tl.paintedAt}`} ready=${tl.readyAt === null ? '-' : `+${tl.readyAt}`}(${tl.reason ?? 'wait'})`;
+  return [head, ...tl.rows.map((r) => `+${r.t} env-bottom=${r.env} inner=${r.inner}`)].join(' | ');
+}
 
 /** 计算样式里要看的几项（伪元素和玻璃块） */
 const PSEUDO_KEYS = ['content', 'position', 'z-index', 'height', '-webkit-backdrop-filter', 'backdrop-filter', 'background-image', 'background-color', '-webkit-mask-image', 'mask-image'] as const;

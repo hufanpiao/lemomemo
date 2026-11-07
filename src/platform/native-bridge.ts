@@ -17,7 +17,7 @@
 // 网页版打包里不带 Tauri 的代码。没装 bridge 时一律走网页版
 import { reminderHash, reminderTag, reminderUrl, type ReminderKind } from '../../shared/logic/remind-route.ts';
 import { buildInfo, isTauri } from './env.ts';
-import { updateServiceWorker, type SwUpdateResult } from './sw-register.ts';
+import { updateServiceWorkerLazy, type SwUpdateResult } from './sw-register.ts';
 
 // 地址、hash、tag 的拼法只留一份（shared/logic/remind-route.ts，架构 0.53）；照旧从这里转出，desktop.ts 不用改
 export { reminderHash, reminderTag, type ReminderKind };
@@ -89,7 +89,8 @@ export function webBridge(deps: { location?: () => LocationLike; update?: () => 
       // replace：登录页“返回”不回到已退出的主 App
       loc().replace(AUTH_PATH);
     },
-    requestAppUpdate: deps.update ?? (() => updateServiceWorker()),
+    // “更新”的代码按需下载（sw-register.ts 的 updateServiceWorkerLazy，11-07 首屏瘦身）：下载失败、超时回 failed（没查成）
+    requestAppUpdate: deps.update ?? (() => updateServiceWorkerLazy()),
     async showLocalReminder() {
       // 网页靠 Web Push（SW 显示通知），这里不做事
     },

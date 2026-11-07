@@ -1,9 +1,10 @@
 // 启动时盯住底部安全区（platform/inset-watch.ts，G10）：稳定前 <html data-inset-wait>，稳定了去掉；时间线记下每次变化
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  INSET_BACKSTOP_MS, INSET_LATE_LOG_MS, INSET_LATE_POLL_MS, INSET_MAX_MS, INSET_POLL_MS, INSET_QUIET_MS, INSET_WAIT_ATTR, INSET_ZERO_WAIT_MS, insetTimeline, insetTimelineLine, markInsetPainted,
+  INSET_BACKSTOP_MS, INSET_LATE_LOG_MS, INSET_LATE_POLL_MS, INSET_MAX_MS, INSET_POLL_MS, INSET_QUIET_MS, INSET_WAIT_ATTR, INSET_ZERO_WAIT_MS, insetTimeline, markInsetPainted,
   watchInsetBottom,
 } from '../inset-watch.ts';
+import { insetTimelineLine } from '../diag-info.ts';
 
 let stopIt: (() => void) | null = null;
 afterEach(() => {

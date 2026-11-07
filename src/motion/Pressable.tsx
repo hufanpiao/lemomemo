@@ -27,8 +27,9 @@ export function Pressable(props: PressableProps) {
       data-state={pressed ? 'pressed' : 'idle'}
       // 切页前 motion 的 transition() 按这个标记找到所有 Pressable，打 data-snap 瞬间复位（UI-4 C3，见 Pressable.module.css）
       data-pressable=""
+      // 禁用（disabled、aria-disabled，如只读行的 ×）时不进 pressed：不缩、不变淡（B2-UI-a U3-5）
       onPointerDown={(e) => {
-        setPressed(true);
+        if (!rest.disabled && String(rest['aria-disabled']) !== 'true') setPressed(true);
         onPointerDown?.(e);
       }}
       onPointerUp={(e) => {

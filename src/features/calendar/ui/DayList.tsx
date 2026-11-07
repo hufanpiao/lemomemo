@@ -6,6 +6,7 @@
 // • 跨午夜的日程（代码复审 N6）：dayEntries 只把它放在开始那天；这里给后面的日子补一行续段，排在最前，时刻写“至 01:00”
 //   （和周视图泳道次日的续段一致）；点了同样打开那条日程
 // • “往上拖列表、月历收成一周一行”的拖动柄在 CalNav.tsx 的 FoldHandle，这里只管列表
+// • 行的样式（白面板、行、时刻那一格、标题、行尾标记、空状态）用 kit 的 List.module.css，和今天页、待办页同一份（B2-UI-a U4、U6）
 // • 行尾“未同步”小标记（REMIND-wiring；TC-B2-69、架构 4.2）：带提醒、还没同步上的那一条才标，同步上自动消失；
 //   由 reminders 功能懒加载提供（UnsyncedRemindMark），没标时那一格不占位。周视图泳道、月格不标（定稿线框 s2、s3 没有这个标记）
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记（kit 的 ReadonlyMark）；点了交给页面的 onOpen，由页面拦下、出提示条
@@ -16,6 +17,7 @@ import { isLiveRow, placeEvent, type CalItems, type DayEntry } from '../../../..
 import { projectColorIndex } from '../../../../shared/logic/project-color.ts';
 import { dayEntries } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
+import list from '../../../kit/components/List.module.css';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyRow.tsx';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
@@ -47,7 +49,7 @@ export function carryOver(date: DateStr, items: CalItems, tz: string): { entry: 
 /** 行尾的“未同步”小标记（没有时整格不画，见 .dayUnsynced:empty） */
 function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
   return (
-    <span className={styles.dayUnsynced}>
+    <span className={list.unsynced}>
       <Suspense fallback={null}>
         <UnsyncedRemindMark table={table} id={id} />
       </Suspense>
@@ -95,7 +97,7 @@ export function DayList({
     return due === undefined ? t('cal.day.todo', {}) : hm(due);
   };
   return (
-    <section className={styles.dayList} aria-labelledby="cal-day-title" data-testid="cal-day-list" data-date={date}>
+    <section className={`${list.panel} ${styles.dayList}`} aria-labelledby="cal-day-title" data-testid="cal-day-list" data-date={date}>
       <h2 id="cal-day-title" className={styles.dayListHead}>
         <span>
           {head}
@@ -104,33 +106,33 @@ export function DayList({
         <span className={styles.dayListN}>{t('cal.day.count', { n: total })}</span>
       </h2>
       {total === 0 ? (
-        <p className={styles.dayEmpty}>{t('cal.day.empty', {})}</p>
+        <p className={list.empty}>{t('cal.day.empty', {})}</p>
       ) : (
-        <ul className={styles.dayRows}>
+        <ul className={`${list.list} ${styles.dayListRows}`}>
           {cont.map(({ entry: e, endMin }) => (
-            <li key={`cont-${e.itemId}`}>
-              <button type="button" className={styles.dayRow} onClick={() => onOpen('event', e.itemId)} data-kind="cont" data-readonly={isRo('event', e.itemId) ? '' : undefined}>
-                <span className={styles.dayTime}>{t('cal.day.until', { t: endMin >= 24 * 60 ? '24:00' : hm(endMin) })}</span>
+            <li key={`cont-${e.itemId}`} className={list.row}>
+              <button type="button" className={list.main} onClick={() => onOpen('event', e.itemId)} data-kind="cont" data-readonly={isRo('event', e.itemId) ? '' : undefined}>
+                <span className={list.lead}>{t('cal.day.until', { t: endMin >= 24 * 60 ? '24:00' : hm(endMin) })}</span>
                 <span className={`${styles.dayMk} ${colorClass(e.colorIndex)}`} aria-hidden="true" />
-                <span className={styles.dayTitle}>{titleOf(items, e)}</span>
+                <span className={list.title}>{titleOf(items, e)}</span>
                 {isRo('event', e.itemId) ? <ReadonlyMark /> : null}
                 <RowMark table="events" id={e.itemId} />
               </button>
             </li>
           ))}
           {entries.map((e) => (
-            <li key={`${e.kind}-${e.itemId}`}>
+            <li key={`${e.kind}-${e.itemId}`} className={list.row}>
               <button
                 type="button"
-                className={styles.dayRow}
+                className={list.main}
                 onClick={() => onOpen(e.kind === 'todo' ? 'todo' : 'event', e.itemId)}
                 data-kind={e.kind}
                 data-readonly={isRo(e.kind === 'todo' ? 'todo' : 'event', e.itemId) ? '' : undefined}
                 data-testid={`cal-day-row-${e.itemId}`}
               >
-                <span className={styles.dayTime}>{timeOf(e)}</span>
+                <span className={list.lead}>{timeOf(e)}</span>
                 <span className={`${styles.dayMk} ${colorClass(e.colorIndex)} ${e.kind === 'todo' ? styles.dayMkTodo : ''}`} aria-hidden="true" />
-                <span className={styles.dayTitle}>{titleOf(items, e)}</span>
+                <span className={list.title}>{titleOf(items, e)}</span>
                 {isRo(e.kind === 'todo' ? 'todo' : 'event', e.itemId) ? <ReadonlyMark testId={`cal-ro-${e.itemId}`} /> : null}
                 <RowMark table={e.kind === 'todo' ? 'todos' : 'events'} id={e.itemId} />
               </button>

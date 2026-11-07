@@ -1,4 +1,4 @@
-/* 今天页：只用令牌（A11）；普通标题 400，只有页顶日期加粗（R-134、R-136） */
+/* 今天页：只用令牌（A11）；普通标题 400，只有页顶日期加粗（R-134、R-136）。列表行、空状态在 kit 的 List.module.css（B2-UI-a U4、U6） */
 .page {
   max-width: 560px;
   margin: 0 auto;
@@ -53,109 +53,29 @@
   font-weight: 400;
 }
 
-.list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: var(--hit);
-  border-bottom: 1px solid var(--line);
-}
-
-.time {
-  flex: none;
-  width: 44px;
-  color: var(--text-2);
-  font-family: var(--f-num);
-  font-size: var(--fs-13);
-}
-
-.main {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: var(--hit);
-  padding: 6px 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-}
-
-/* 标题和副行一列；右边是行尾“未同步”标记（REMIND-wiring） */
-.mainText {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  align-items: flex-start;
-  min-width: 0;
-}
-
-.title {
-  max-width: 100%;
-  overflow: hidden;
-  font-size: var(--fs-15);
-  font-weight: 400;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.row[data-done] .title {
-  color: var(--text-2);
-  text-decoration: line-through;
-}
-
-.sub {
-  color: var(--text-2);
-  font-size: var(--fs-12-5);
-}
-
-/* “没赶上”F 版：透明底、淡红细描边，含义靠红字（R-76）；令牌里还没有 --late-line（color-mix 被 A11 禁），先用 --danger-text，比设计深（待 B2 负责人补令牌） */
+/* “没赶上”F 版：淡红细描边，含义靠红字（R-76）；令牌里还没有 --late-line（color-mix 被 A11 禁），先用 --danger-text，比设计深（待 B2 负责人补令牌）。
+   圆角、左右 12 由 kit 的 List.module.css .panel 给；底色保持透明（R-76 定的透明底、淡红细描边，本批不改，B2-UI-a 代码审 M1），这里去掉 .panel 的白底、加描边和下边距 */
 .late {
+  /* 自成一个排版上下文：里面标题的上边距留在框里，不从框顶漏出去（原来的 border 挡着，改成阴影以后要靠这个） */
+  display: flow-root;
   margin: 0 0 8px;
-  padding: 0 12px;
-  border: 1px solid var(--danger-text);
-  border-radius: var(--r-lg);
+  background: none;
+
+  /* 描边用 inset 阴影、不占排版宽度：里面的标题起点和下面“今天的安排”对齐（U4-2，用 border 会多出 1px） */
+  box-shadow: inset 0 0 0 1px var(--danger-text);
 }
 
-.late .row:last-child {
-  border-bottom: 0;
-}
-
-.lateTag {
+/* 副行的字号在 kit 的 .meta；这里只换红字。写成两级选择器，不靠两份样式表的先后顺序压过 .meta 的颜色 */
+.late .lateTag {
   color: var(--danger-text);
-  font-size: var(--fs-12-5);
 }
 
-/* 离开途中（AppearItem 打 data-state="leaving"）：淡出、卸载之前不接点按 */
-.row[data-state="leaving"],
+/* 离开途中（AppearItem 打 data-state="leaving"）：淡出、卸载之前不接点按（行的那条在 kit 的 List.module.css） */
 .late[data-state="leaving"] {
   pointer-events: none;
 }
 
-.del {
-  flex: none;
-  min-width: var(--hit);
-  min-height: var(--hit);
-  border: 0;
-  background: none;
-  color: var(--text-2);
-  font-size: var(--fs-18);
-}
-
-/* 只读行的 ×（FA-2）：和只读打勾圆圈一样变淡；点了由页面拦下出“要新版本”提示条 */
-.del[aria-disabled='true'] {
-  opacity: 0.45;
-}
-
-/* 日程行行尾和 × 一样宽的空格子（M2）：宽度直接用 .del 的 --hit，改了 × 两边一起变；不接点按 */
+/* 日程行行尾和 × 一样宽的空格子（M2）：宽度直接用 × 的 --hit（kit 的 List.module.css .trail），改了 × 两边一起变；不接点按 */
 .delGap {
   flex: none;
   width: var(--hit);
@@ -188,16 +108,6 @@
   transition: none;
 }
 
-/* 行尾“未同步”小标记那一格：没有时整格不画（不多出 gap） */
-.unsynced {
-  flex: none;
-  white-space: nowrap;
-}
-
-.unsynced:empty {
-  display: none;
-}
-
 /* “未同步，提醒可能不响”（reminders 提供的一行 p）：常驻的 role="status" 容器，没有 p 时高度为 0；有时一块浅灰（同日历页，R-346） */
 .notice {
   margin: 0;
@@ -214,12 +124,6 @@
 
 .notice p {
   margin: 0;
-}
-
-.empty {
-  margin: 8px 0;
-  color: var(--text-2);
-  font-size: var(--fs-14);
 }
 
 .error {

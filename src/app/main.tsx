@@ -47,7 +47,7 @@ import { hideSplash, hideSplashAfter, hideSplashWhenPainted } from '../platform/
 import { afterAppPainted, appPainted, startAppPaintLimit, watchAppPainted } from '../platform/first-paint.ts';
 import { markInsetPainted, watchInsetBottom } from '../platform/inset-watch.ts';
 import { nextFrame } from '../motion/index.ts';
-import { checkSwOnForeground, registerServiceWorker, reloadPage, upgradeLogCountStore, watchServiceWorkerUpdate } from '../platform/sw-register.ts';
+import { registerServiceWorkerLazy, registerSwAfterPaint, reloadPage, upgradeLogCountStore } from '../platform/sw-register.ts';
 import { mountExitScreen, watchExitIncomplete } from './exit-screen.tsx';
 import { mountFeatures } from './features.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
@@ -201,7 +201,7 @@ async function start(): Promise<void> {
   const root = await startRoot(boot, {
     online: browserLifecycle.isOnline(),
     onRefresh: reloadPage,
-    ...(import.meta.env.DEV ? {} : { registerSw: registerServiceWorker }),
+    ...(import.meta.env.DEV ? {} : { registerSw: registerServiceWorkerLazy }),
   });
   // 最外层兜底（K6-sugg3 ⑥）：App 顶层出错不白屏，显示静态的“出错了 · 刷新”
   const guarded = withCrashFallback(root, reloadPage);
@@ -229,16 +229,12 @@ async function start(): Promise<void> {
   }
   // SW 注册不依赖下面那批代码（③ 审查 M1）：过了第一道闸就注册，下载失败、重试期间照样有 SW 缓存和新版本提示。version_too_new 时上面已经注册过
   // 注册以后盯住“后台装好了新版本”（8.1）：顶部提示“有新版本 · 重新打开”（App.tsx 的 UpdateBanner），不强制刷新
+  // 注册的代码这时才下载（platform/sw-lifecycle.ts，11-07 首屏瘦身 U7）。下载不设超时（安全审 M1）：晚到也照常注册、盯新版本、
+  // 回到前台查新版本，下面的推送认领也照常等到 reg；只有下载失败才是 null（和注册失败同一条路）。切到前台查新版本的间隔见 sw-lifecycle.ts
   const swReg: Promise<ServiceWorkerRegistration | null> =
     !import.meta.env.DEV && boot.status !== 'version_too_new'
-      ? registerServiceWorker().then((reg) => {
-          if (reg) {
-            watchServiceWorkerUpdate(reg, () => boot.upgrade.setSwReady());
-            // 切到前台、在线、距上次查满 1 小时才主动查新版本（架构师 10-30 第 5 点；和同步引擎“切到前台时比较最低版本”同一个时机）
-            checkSwOnForeground(reg, { life: browserLifecycle });
-          }
-          return reg;
-        })
+      ? // 万一里面抛错（下载、注册、挂监听都已各自接住，这里再兜一层）：按“没注册”处理，不留没处理的拒绝、不影响首屏
+        registerSwAfterPaint({ onReady: () => boot.upgrade.setSwReady(), life: browserLifecycle }).catch(() => null)
       : Promise.resolve(null);
 
   /** 下载到了、闸也过了（startAfterPaint 保证）：起同步、设备登记、推送认领。这里面全是同步调用，查完闸到用上账号之间没有空档 */

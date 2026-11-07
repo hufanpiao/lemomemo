@@ -15,6 +15,8 @@ import { useTurnstile, type TurnstileAction } from '../hooks/useTurnstile.ts';
 import { AccountGatePanel } from './AccountGatePanel.tsx';
 import { ErrorCard } from './ErrorCard.tsx';
 import { InstallGuide } from './InstallGuide.tsx';
+// 登录框挂 kit 表单的 .input：字号（电脑 15、触屏 16）、底色、圆角和编辑页一套（B2-UI-a U1-2、代码审 M4）；版式差异在 AuthPage.module.css 覆盖
+import form from '../../../kit/components/Form.module.css';
 import styles from './AuthPage.module.css';
 
 export interface AuthPageProps {
@@ -132,7 +134,7 @@ function CodeStep({ flow }: { flow: ReturnType<typeof useAuthFlow> }) {
       </label>
       <input
         id="auth-code"
-        className={`${styles.input} ${styles.code}`}
+        className={`${form.input} ${styles.input} ${styles.code}`}
         name="code"
         autoComplete="one-time-code"
         inputMode="numeric"
@@ -218,7 +220,7 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
           </label>
           <input
             id="auth-email"
-            className={styles.input}
+            className={`${form.input} ${styles.input}`}
             type="email"
             name="email"
             autoComplete="email"
@@ -238,7 +240,7 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
               </label>
               <input
                 id="auth-invite"
-                className={styles.input}
+                className={`${form.input} ${styles.input}`}
                 name="invite"
                 autoComplete="off"
                 autoCapitalize="characters"

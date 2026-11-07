@@ -1,6 +1,6 @@
 // 注册 SW（K6 复审建议 3）：注册一直不返回时最多等 waitMs，返回 null，入口不会白屏；失败、不支持也返回 null；更新那一半在 sw-register-update.test.ts
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { checkSwOnForeground, registerServiceWorker, SW_FOREGROUND_CHECK_MS, watchServiceWorkerUpdate } from '../sw-register.ts';
+import { checkSwOnForeground, registerServiceWorker, SW_FOREGROUND_CHECK_MS, watchServiceWorkerUpdate } from '../sw-lifecycle.ts';
 
 function stubSw(register: () => Promise<unknown>) {
   Object.defineProperty(navigator, 'serviceWorker', { value: { register }, configurable: true });
@@ -23,10 +23,10 @@ describe('registerServiceWorker', () => {
     expect(register).toHaveBeenCalledOnce();
   });
 
-  it('sw-register.ts 源码里不再写 __TAURI__ 检查（只认 env.ts 一处）', async () => {
+  it('sw-lifecycle.ts（11-07 从 sw-register.ts 搬来）源码里不再写 __TAURI__ 检查（只认 env.ts 一处）', async () => {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
-    const src = readFileSync(join(import.meta.dirname, '..', 'sw-register.ts'), 'utf8');
+    const src = readFileSync(join(import.meta.dirname, '..', 'sw-lifecycle.ts'), 'utf8');
     expect(src).toContain("from './env.ts'");
     expect(src.replace(/\/\/.*$/gm, '')).not.toMatch(/__TAURI/);
   });

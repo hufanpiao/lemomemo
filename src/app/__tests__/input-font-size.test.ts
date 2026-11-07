@@ -2,7 +2,7 @@
 // iOS Safari 聚焦 font-size 小于 16px 的 input / select / textarea 会自动放大页面。修法是把触屏上的字号调到 ≥ 16px，
 // 不准用 viewport 的 maximum-scale、user-scalable=no 禁缩放（无障碍：用户要能双指放大）。
 // jsdom 不算样式，按源码核对：扫 src 里所有 .tsx 的 <input> / <select> / <textarea>（勾选框、单选等不弹键盘的类型除外），
-// 每个必须带 CSS 模块类（className={styles.x}），这些类在触屏（没有媒体查询，或媒体查询里有 pointer: coarse / hover: none）
+// 每个必须带 CSS 模块类（className={styles.x}；导入名不限，按导入的文件认，如 form.input 认 Form.module.css，代码审建议 3），这些类在触屏（没有媒体查询，或媒体查询里有 pointer: coarse / hover: none）
 // 下最后生效的 font-size 解析成 px 后 ≥ 16。写 font: inherit、不写字号的一律不通过（继承来的字号在源码里看不出来，要写明）。
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -91,13 +91,14 @@ function touchFontSize(rules: Rule[], cls: string): number | null {
 interface Control {
   file: string;
   tag: string;
-  classes: string[];
-  css: string | null;
+  /** [CSS 模块文件, 类名]：按导入名找到类来自哪个文件 */
+  classes: [string, string][];
 }
 
 /** 找出 .tsx 里的 <input / <select / <textarea 开标签（到花括号外的第一个 >） */
 function controlsIn(file: string, src: string): Control[] {
-  const css = /import\s+styles\s+from\s+'(\.[^']+\.module\.css)'/.exec(src)?.[1] ?? null;
+  // 文件里所有 CSS 模块导入：导入名 → 文件（相对这个 .tsx）
+  const mods = new Map([...src.matchAll(/import\s+(\w+)\s+from\s+'(\.[^']+\.module\.css)'/g)].map((x) => [x[1] ?? '', join(dirname(file), x[2] ?? '')]));
   const out: Control[] = [];
   for (const m of src.matchAll(/<(input|select|textarea)\b/g)) {
     let depth = 0;
@@ -122,17 +123,20 @@ function controlsIn(file: string, src: string): Control[] {
       }
       cn = tag.slice(at, k);
     }
-    out.push({ file, tag: m[1] ?? '', classes: [...cn.matchAll(/styles\.(\w+)/g)].map((x) => x[1] ?? ''), css: css === null ? null : join(dirname(file), css) });
+    const classes = [...cn.matchAll(/\b(\w+)\.(\w+)/g)].flatMap((x): [string, string][] => {
+      const css = mods.get(x[1] ?? '');
+      return css === undefined ? [] : [[css, x[2] ?? '']];
+    });
+    out.push({ file, tag: m[1] ?? '', classes });
   }
   return out;
 }
 
 function problems(c: Control): string[] {
   const where = `${c.file.replaceAll('\\', '/')} <${c.tag}>`;
-  if (c.classes.length === 0 || c.css === null) return [`${where}：没带 CSS 模块类，字号看不出来`];
-  const rules = parseCss(readFileSync(c.css, 'utf8'));
-  const sizes = c.classes.map((k) => [k, touchFontSize(rules, k)] as const);
-  if (sizes.every(([, s]) => s === null)) return [`${where}：类 ${c.classes.join(' ')} 在触屏上没写 font-size（或写的是 font: inherit）`];
+  if (c.classes.length === 0) return [`${where}：没带 CSS 模块类，字号看不出来`];
+  const sizes = c.classes.map(([css, k]) => [k, touchFontSize(parseCss(readFileSync(css, 'utf8')), k)] as const);
+  if (sizes.every(([, s]) => s === null)) return [`${where}：类 ${sizes.map(([k]) => k).join(' ')} 在触屏上没写 font-size（或写的是 font: inherit）`];
   return sizes.filter(([, s]) => s !== null && s < MIN_PX).map(([k, s]) => `${where}：.${k} 触屏字号 ${String(s)}px < ${MIN_PX}px`);
 }
 
@@ -161,8 +165,15 @@ describe('触屏上可输入控件字号 ≥ 16px（iOS 聚焦不放大页面）
     expect(touchFontSize(parseCss(`${base} @media (any-pointer: coarse) { .a, .b { font-size: var(--fs-16); } }`), 'a')).toBe(16);
     expect(touchFontSize(parseCss(`${base} @media (any-pointer: coarse) { .a, .b { font-size: var(--fs-16); } }`), 'b')).toBe(16);
     expect(touchFontSize(parseCss('.a:focus-visible { font-size: 20px; } .a { font-size: 12px; }'), 'a')).toBe(12);
-    const c = controlsIn('x.tsx', "import styles from './x.module.css';\n<input type=\"checkbox\" /><input className={`${styles.i} ${styles.j}`} onChange={(e) => f(e)} /><textarea />");
-    expect(c.map((x) => [x.tag, x.classes])).toEqual([['input', ['i', 'j']], ['textarea', []]]);
+    const c = controlsIn(
+      'x.tsx',
+      "import styles from './x.module.css';\nimport form from './f.module.css';\n<input type=\"checkbox\" /><input className={`${form.i} ${styles.j}`} onChange={(e) => f(e)} /><textarea className={other.k} />",
+    );
+    // 导入名不限、按文件认（代码审建议 3）；没导入的对象（other.k）不算 CSS 模块类
+    expect(c.map((x) => [x.tag, x.classes.map(([css, k]) => [css.replaceAll('\\', '/'), k])])).toEqual([
+      ['input', [['f.module.css', 'i'], ['x.module.css', 'j']]],
+      ['textarea', []],
+    ]);
   });
 
   it('入口页不禁缩放：viewport 里没有 maximum-scale、user-scalable', () => {

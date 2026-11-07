@@ -9,6 +9,7 @@
 // • 测试提醒能不能收到：整行是行按钮，右边“发一条试试 ›”（照线框 R_PUSH，设计复审 M3）——网页版调 push-test，exe 弹本机测试通知（R-330）；结果写在下面
 // 线框这一页的其余几行（日程默认提前、待办默认提醒、纪念日提醒、也装了电脑版时）不在 FA-4 范围，见交付说明
 import { useId } from 'react';
+import { FormButton } from '../../../kit/components/Form.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { upcoming } from '../hooks/remind-view.ts';
 import { useMinuteNow, useReminderList } from '../hooks/useReminders.ts';
@@ -97,9 +98,9 @@ export default function RemindSettings({
           <li className={styles.row}>
             <span className={styles.tx}>{t('remind.set.notify', {})}</span>
             {s.perm === 'default' ? (
-              <Pressable type="button" className={styles.act} onClick={() => void s.enable()} data-testid="remind-enable">
+              <FormButton type="button" variant="primary" onClick={() => void s.enable()} data-testid="remind-enable">
                 {t('remind.set.notify.enable', {})}
-              </Pressable>
+              </FormButton>
             ) : (
               <span className={styles.v} data-testid="remind-perm">
                 {t(

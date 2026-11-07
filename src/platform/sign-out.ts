@@ -54,66 +54,17 @@ import {
   SELF_SIGN_OUT_TTL_MS,
 } from './session.ts';
 import { guardSessionRemoval } from './supabase/auth-storage.ts';
+import { deleteLocalDb, withTimeout } from './exit-basics.ts';
 
-/** 本机库名（= core/cache.ts 的 DB_NAME；platform 不引 core，测试守着两边一致） */
-export const LOCAL_DB_NAME = 'planner-v4';
-/** 删库最多等多久（别的标签页开着库时浏览器会等它关） */
-export const DELETE_WAIT_MS = 3000;
+// 本机库名、删库、withTimeout 搬到 platform/exit-basics.ts（11-07 首屏瘦身）；这里原样转出，原有的 import 不用改
+export { DELETE_WAIT_MS, deleteLocalDb, LOCAL_DB_NAME, withTimeout, type DeleteDbResult } from './exit-basics.ts';
+
 /** ①④ 服务器部分的总超时 */
 export const SIGN_OUT_TIMEOUT_MS = 8000;
 /** ② 主 App 清库（wipe）最多等多久，超时改走按库名删库 */
 export const WIPE_TIMEOUT_MS = 3000;
 /** ③ 清 Cache Storage 最多等多久 */
 export const CACHES_TIMEOUT_MS = 2000;
-
-/**
- * 到点还没返回就用 fallback() 的值；run 抛错（同步或异步）也用 fallback()。fallback 只给值，不要有副作用。
- * 原来的请求不取消：它在超时以后才回来时调一次 onLate
- */
-export function withTimeout<T>(run: () => Promise<T>, ms: number, fallback: () => T, onLate?: () => void): Promise<T> {
-  let timedOut = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const req = Promise.resolve().then(run);
-  const late = (): void => {
-    if (timedOut) onLate?.();
-  };
-  req.then(late, late);
-  const timeout = new Promise<T>((resolve) => {
-    timer = setTimeout(() => {
-      timedOut = true;
-      resolve(fallback());
-    }, ms);
-  });
-  return Promise.race([req.catch(() => fallback()), timeout]).finally(() => clearTimeout(timer));
-}
-
-export type DeleteDbResult = 'deleted' | 'blocked' | 'error' | 'unavailable';
-
-/** 按库名删掉本机库；永远 resolve。别的标签页没关库（blocked）时最多等 waitMs，删库请求留在浏览器里，那边一关就删 */
-export function deleteLocalDb(
-  factory: IDBFactory | undefined = (globalThis as { indexedDB?: IDBFactory }).indexedDB,
-  name: string = LOCAL_DB_NAME,
-  waitMs: number = DELETE_WAIT_MS,
-): Promise<DeleteDbResult> {
-  if (!factory) return Promise.resolve('unavailable');
-  return new Promise((resolve) => {
-    let done = false;
-    const finish = (r: DeleteDbResult): void => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      resolve(r);
-    };
-    const timer = setTimeout(() => finish('blocked'), waitMs);
-    try {
-      const req = factory.deleteDatabase(name);
-      req.onsuccess = () => finish('deleted');
-      req.onerror = () => finish('error');
-    } catch {
-      finish('error');
-    }
-  });
-}
 
 /** 清本机的几步（测试换掉） */
 export interface ExitSteps {

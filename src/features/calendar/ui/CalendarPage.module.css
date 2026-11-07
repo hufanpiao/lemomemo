@@ -64,6 +64,7 @@
 }
 
 .segBtn {
+  position: relative;
   min-width: var(--hit);
   min-height: 40px;
   padding: 0 12px;
@@ -73,6 +74,17 @@
   color: var(--text-2);
   font-size: var(--fs-14);
   cursor: pointer;
+}
+
+/* 看得见 40 高，点击区以按钮中心外扩到至少 44 × 44（B2-UI-a V5；写法同 Settings.module.css 的 .segBtn::after）；按钮本来比 44 宽的方向不扩，相邻按钮不互相盖住 */
+.segBtn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
 }
 
 /* 还没做好的“纪念日”（A2）：置灰，和能点的“周 / 月”分得开；点了只出提示 */
@@ -120,12 +132,17 @@
   font-weight: 600;
 }
 
-/* 点按区各 44 px（视觉 32 px，伸出去的部分用伪元素补，R-101） */
+/* 点按区各 44 px（视觉 32 px，伸出去的部分用伪元素补，R-101）：原来写 inset: -6px，按钮实际 30 高时只扩到 42（B2-UI-a V5 量出来），
+   改成以按钮中心外扩到至少 44 × 44（同 Settings.module.css 的 .segBtn::after），不随按钮自身大小变 */
 .nb::after,
 .tdy::after {
-  position: absolute;
-  inset: -6px;
   content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
 }
 
 .nb[aria-disabled='true'],
@@ -540,11 +557,12 @@
 }
 
 /* ───────── 选中那天的清单 ───────── */
+
+/* 白底、圆角、左右 12 由 kit 的 List.module.css .panel 给（B2-UI-a U4-5）；行、时刻那一格、标题、行尾标记、空状态也在那里 */
 .dayList {
   margin-top: 12px;
-  padding: 4px 12px 8px;
-  border-radius: var(--r-md);
-  background: var(--panel);
+  padding-top: 4px;
+  padding-bottom: 8px;
 }
 
 .dayListHead {
@@ -558,6 +576,11 @@
   font-weight: 600;
 }
 
+/* 标题和行之间的分隔线只在有行时画；当天没有安排时“这一天没有安排”上面不多一条线（同 HEAD，B2-UI-a 代码审建议 2） */
+.dayListRows {
+  border-top: 1px solid var(--line);
+}
+
 .dayListN {
   flex: none;
   color: var(--text-2);
@@ -565,46 +588,12 @@
   font-weight: 400;
 }
 
-.dayEmpty {
-  margin: 4px 0 8px;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-}
-
-.dayRows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.dayRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: var(--hit);
-  padding: 0;
-  border: 0;
-  border-top: 1px solid var(--line);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.dayTime {
-  flex: none;
-  width: 44px;
-  color: var(--text-2);
-  font-family: var(--f-num);
-  font-size: var(--fs-12);
-}
-
+/* 日程竖线 4 宽、左右各让 3，和待办小圆（10 宽）占同一宽度：日程、待办标题起点一致（B2-UI-a U4-2） */
 .dayMk {
   flex: none;
   width: 4px;
   height: 20px;
+  margin: 0 3px;
   border-radius: 2px;
 }
 
@@ -612,28 +601,9 @@
 .dayMkTodo {
   width: 10px;
   height: 10px;
+  margin: 0;
   border-radius: var(--r-pill);
   background: none;
-}
-
-.dayTitle {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  font-size: var(--fs-14);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-/* 行尾“未同步”小标记：不跟标题抢宽度、不折行；没有标记时整格不画（不多出一个 gap） */
-.dayUnsynced {
-  flex: none;
-  padding-right: 4px;
-  white-space: nowrap;
-}
-
-.dayUnsynced:empty {
-  display: none;
 }
 
 /* ───────── 周视图·手机（视觉稿 .wlane） ───────── */

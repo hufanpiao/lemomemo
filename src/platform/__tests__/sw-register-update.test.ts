@@ -1,7 +1,7 @@
 // SW 更新那一半（updateServiceWorker：断网、接管超时和没查成、activated 与安装失败）和升级日志计数（upgradeLogCountStore）；
 // 从 sw-register.test.ts 分出来（那个文件超过 300 行），注册、有新版本、回到前台检查留在原文件
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { updateServiceWorker } from '../sw-register.ts';
+import { updateServiceWorker } from '../sw-lifecycle.ts';
 
 afterEach(() => {
   vi.useRealTimers();

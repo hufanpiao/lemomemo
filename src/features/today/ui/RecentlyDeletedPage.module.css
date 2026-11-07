@@ -15,14 +15,38 @@
   min-height: var(--hit);
 }
 
+/* 返回按钮统一写法（B2-UI-a U3-6，照抄前端 A 在 kit 的 EditShell.module.css 里定的那段）：“‹ 文字”15px 正文色、按钮自己的字体（font: inherit，
+   防 Windows 版 webkit 落到宋体）；左边不留内边距，字和下面正文左边对齐；点击区不够 44 × 44 的用 ::after 以按钮中心外扩，不挪位置 */
 .back {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   justify-self: start;
   min-height: var(--hit);
-  padding: 0 8px 0 0;
+  padding: 0;
   border: 0;
   background: none;
   color: var(--text);
+  font: inherit;
   font-size: var(--fs-15);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.back::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.back:focus-visible {
+  border-radius: var(--r-sm);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .h1 {
@@ -37,43 +61,12 @@
   font-size: var(--fs-12-5);
 }
 
-.list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
+/* 列表行、空状态在 kit 的 List.module.css（B2-UI-a U4、U6） */
 
-.row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: var(--hit);
-  padding: 6px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.main {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.title {
-  overflow: hidden;
-  font-size: var(--fs-15);
-  font-weight: 400;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sub {
-  color: var(--text-2);
-  font-size: var(--fs-12-5);
-}
-
+/* 上下留 6px（原来在行上的 padding，行样式并进 kit 以后放到这里）：44 高的胶囊不贴着行间的分隔线 */
 .restore {
   flex: none;
+  margin: 6px 0;
   min-width: var(--hit);
   min-height: var(--hit);
   padding: 0 12px;
@@ -82,13 +75,6 @@
   background: none;
   color: var(--text);
   font-size: var(--fs-14);
-}
-
-.empty {
-  margin: 24px 0;
-  color: var(--text-2);
-  font-size: var(--fs-14);
-  text-align: center;
 }
 
 .toast {

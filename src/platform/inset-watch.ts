@@ -214,9 +214,3 @@ export function markInsetPainted(): void {
 export function insetTimeline(): InsetTimeline {
   return { rows: [...timeline.rows], readyAt: timeline.readyAt, paintedAt: timeline.paintedAt, reason: timeline.reason, standalone: timeline.standalone };
 }
-
-/** 诊断里的一行：launch: standalone=… painted=+300 ready=+460(quiet) | +12 env-bottom=0px inner=956 | +340 env-bottom=34px inner=956 */
-export function insetTimelineLine(tl: InsetTimeline = insetTimeline()): string {
-  const head = `launch: standalone=${tl.standalone} painted=${tl.paintedAt === null ? '-' : `+${tl.paintedAt}`} ready=${tl.readyAt === null ? '-' : `+${tl.readyAt}`}(${tl.reason ?? 'wait'})`;
-  return [head, ...tl.rows.map((r) => `+${r.t} env-bottom=${r.env} inner=${r.inner}`)].join(' | ');
-}

@@ -1,6 +1,6 @@
 /* 设置 › 提醒与通知（B2 FA-4）：外观照设置页，功能之间不共用样式，这里照写一份（抄自 calendar 的 CalendarSettings.module.css，
    那边注明了来源是 settings/ui/SettingsPage.module.css；设置页那边改了这几条要一起改，抽成 kit 组件记进待办）。
-   本文件自己的：.notice / .noticeText / .act / .ok（顶部提示和行内按钮）、.switch、.timeLbl / .time（免打扰时段） */
+   本文件自己的：.notice / .noticeText / .ok（顶部提示；按钮用 kit 的 FormButton）、.switch、.timeLbl / .time（免打扰时段） */
 
 /* 组标题写在卡片上方（同设置页 .gt） */
 .gt {
@@ -222,66 +222,11 @@ section:first-child > .gt {
   overflow-wrap: anywhere;
 }
 
-.act {
-  min-height: var(--hit);
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--chip-on-bg);
-  color: var(--chip-on-fg);
-  font-size: var(--fs-14);
-  font-weight: 600;
-}
-
-.act:disabled {
-  opacity: var(--press-dim);
-}
-
-.danger,
-.dangerFill,
-.ghost {
-  min-height: var(--hit);
-  padding: 0 14px;
-  border-radius: var(--r-pill);
-  font-size: var(--fs-14);
-  font-weight: 600;
-}
-
-/* “移除它…”：次要的危险样式（描边 + 危险色字；设计 M7），确认对话框里的“移除”用危险底色 */
-.danger {
-  border: 1.5px solid var(--danger-text);
-  background: none;
-  color: var(--danger-text);
-}
-
-.dangerFill {
-  border: 0;
-  background: var(--danger-bg);
-  color: var(--danger-text);
-}
-
-.ghost {
-  border: 1px solid var(--line);
-  background: none;
-  color: var(--text);
-}
-
-.danger:disabled {
-  opacity: var(--press-dim);
-}
-
+/* 按钮（“打开通知”“重新订阅”“重新连接”“移除它…”“取消”“移除”）都是 kit 的 FormButton（B2-UI-a U3-2），这里不再写按钮样式 */
 .dlgBtns {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.danger:focus-visible,
-.dangerFill:focus-visible,
-.ghost:focus-visible,
-.act:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
 }
 
 .ok {
@@ -328,29 +273,16 @@ section:first-child > .gt {
   font-size: var(--fs-14);
 }
 
-/* 电脑版宽屏上时刻框最宽 200px，不拉满半行（设计复审第三轮 R3-L2；手机上半行本来就不到 200） */
-.time {
+/* 免打扰时刻框：外观、字号（电脑 15、触屏 16）、聚焦都用 kit 表单的 .input（B2-UI-a U1-1、U1-2，RemindDnd.tsx），这里只管排版：
+   电脑版宽屏上最宽 200px，不拉满半行（设计复审第三轮 R3-L2；手机上半行本来就不到 200）。
+   写成 .timeLbl > .time 压过 .input 的 flex、高度（两个 CSS 模块谁先加载不一定） */
+.timeLbl > .time {
   flex: 1 1 auto;
-  min-width: 0;
   max-width: 200px;
   min-height: var(--hit);
-  padding: 0 8px;
-  border: 1px solid var(--inp-line);
-  border-radius: var(--r-sm);
-  background: var(--panel-2);
-  color: var(--text);
-  font: inherit;
 }
 
-/* 触屏上时刻框至少 16px（继承 .timeLbl 的 14px 时 iOS 聚焦会放大整页，同 kit/components/Form.module.css） */
-@media (any-pointer: coarse) {
-  .time {
-    font-size: var(--fs-16);
-  }
-}
-
-.toggle:focus-visible,
-.time:focus-visible {
+.toggle:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }

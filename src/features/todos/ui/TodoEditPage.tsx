@@ -123,7 +123,7 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
           data-testid="todo-edit-title"
         />
         <Field label="">
-          <Check label={readonly ? t('todo.edit.doneShort', {}) : t('todo.edit.done', {})} checked={form.done} disabled={off} onChange={(v) => change({ done: v })} data-testid="todo-edit-done" />
+          <Check label={readonly ? t('todo.edit.doneShort', {}) : t('todo.edit.done', {})} checked={form.done} disabled={off} look="circle" onChange={(v) => change({ done: v })} data-testid="todo-edit-done" />
           <Check label={t('todo.edit.important', {})} checked={form.important} disabled={off} onChange={(v) => change({ important: v })} />
         </Field>
       </FormGroup>
