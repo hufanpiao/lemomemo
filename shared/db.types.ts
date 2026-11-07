@@ -383,6 +383,12 @@ isOneToOne: false
 "admin_set_disabled":
 { Args: { "p_on": boolean,"p_user": string }; Returns: undefined
                            },
+"ai_quota_refund":
+{ Args: { "p_key": string }; Returns: undefined
+                           },
+"ai_quota_take":
+{ Args: { "p_key": string,"p_limit": number }; Returns: number
+                           },
 "auth_mail_counts":
 { Args: Record<PropertyKey, never>; Returns: {
               "auth_1h": number,"auth_24h": number
@@ -416,6 +422,9 @@ isOneToOne: false
 "files_authorize_impl":
 { Args: { "p_items": Json,"p_op": string }; Returns: Json
                            },
+"intake_insert":
+{ Args: { "p_rows": Json,"p_user": string }; Returns: undefined
+                           },
 "invite_claim":
 { Args: { "p_code_hash": string,"p_email_hash": string,"p_now": string,"p_otp_hash": string }; Returns: string
                            },
@@ -429,6 +438,9 @@ isOneToOne: false
 { Args: Record<PropertyKey, never>; Returns: {
               "app": string,"pid": number,"role": unknown,"xact_start": string
             }[]
+                           },
+"my_ai_usage_impl":
+{ Args: Record<PropertyKey, never>; Returns: Json
                            },
 "my_sessions_impl":
 { Args: Record<PropertyKey, never>; Returns: {
@@ -753,6 +765,9 @@ isOneToOne: false
                            },
 "files_authorize":
 { Args: { "p_items": Json,"p_op": string }; Returns: Json
+                           },
+"my_ai_usage":
+{ Args: Record<PropertyKey, never>; Returns: Json
                            },
 "my_sessions":
 { Args: Record<PropertyKey, never>; Returns: {
