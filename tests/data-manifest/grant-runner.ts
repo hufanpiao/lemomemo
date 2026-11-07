@@ -143,7 +143,7 @@ async function runOne(db: GrantDb, c: GrantCase, cols: readonly string[]): Promi
  * 只有这里列出的没建算正常；九个里别的没建一律报错。哪一个建好了就从这里删掉。
  */
 export const RPCS_BUILT_LATER: Readonly<Record<string, 'B1' | 'B2' | 'B3'>> = {
-  my_ai_usage: 'B3', // B3 新迁移，配 private.my_ai_usage_impl（0.31 第 23 条）
+  // B3 迁移 20261107100000 建了 my_ai_usage（配 private.my_ai_usage_impl，0.31 第 23 条），九个已全部建好，名单清空
 };
 
 async function runRpc(db: GrantDb, c: RpcCase): Promise<GrantRunResult['rpc'][number]> {

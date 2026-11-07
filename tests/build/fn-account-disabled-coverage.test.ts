@@ -63,6 +63,27 @@ const PLAN: Plan = new Map<string, Entry>([
     'admin-disabled': { file: 'tests/functions/push-dispatch-usable.test.ts', title: 'TC-B1-109 push-dispatch：管理员停用（disabled_at 有值）的账号跳过' },
     'pending-deletion': { file: 'tests/functions/push-dispatch-usable.test.ts', title: 'TC-B1-109 push-dispatch：注销冷静期（disabled_reason = deletion）的账号跳过' },
   } }],
+  // B3 BE-4、BE-5：index.ts 接 requireActiveUser；core 单测用假鉴权核对原样回 account_disabled（写法同 push-test）
+  ['ai-parse', { kind: 'jwt', covers: {
+    'admin-disabled': { file: 'tests/edge/ai-parse.test.ts', title: 'TC-B1-10 ai-parse：管理员停用的账号回 403 account_disabled' },
+    // 代码审 M4：单测那条和“管理员停用”一模一样（同一个假鉴权），删了；改由 store-it 真 requireActiveUser 覆盖（同 account、invite-admin）
+    'no-profile': { file: 'supabase/tests/store-it/ai-fns-store.it.ts', title: 'TC-B1-10：真 JWT、没有 profiles 行的账号调 ai-parse、ai-voice、token-admin 回 403 account_disabled（真 requireActiveUser）' },
+  } }],
+  ['ai-voice', { kind: 'jwt', covers: {
+    'admin-disabled': { file: 'tests/edge/ai-parse.test.ts', title: 'TC-B1-10 ai-voice：管理员停用的账号回 403 account_disabled' },
+    // 代码审 M4：单测那条和“管理员停用”一模一样（同一个假鉴权），删了；改由 store-it 真 requireActiveUser 覆盖（同 account、invite-admin）
+    'no-profile': { file: 'supabase/tests/store-it/ai-fns-store.it.ts', title: 'TC-B1-10：真 JWT、没有 profiles 行的账号调 ai-parse、ai-voice、token-admin 回 403 account_disabled（真 requireActiveUser）' },
+  } }],
+  ['token-admin', { kind: 'jwt', covers: {
+    'admin-disabled': { file: 'tests/edge/claude-intake.test.ts', title: 'TC-B1-10 token-admin：管理员停用的账号回 403 account_disabled' },
+    // 代码审 M4：单测那条和“管理员停用”一模一样（同一个假鉴权），删了；改由 store-it 真 requireActiveUser 覆盖（同 account、invite-admin）
+    'no-profile': { file: 'supabase/tests/store-it/ai-fns-store.it.ts', title: 'TC-B1-10：真 JWT、没有 profiles 行的账号调 ai-parse、ai-voice、token-admin 回 403 account_disabled（真 requireActiveUser）' },
+  } }],
+  // B3 BE-5：连接码鉴权（网关不验 JWT），按连接码查到 user_id 后经 _shared/auth.ts 的 isUsable
+  ['claude-intake', { kind: 'usable', covers: {
+    'admin-disabled': { file: 'tests/edge/claude-intake.test.ts', title: 'TC-B1-109 claude-intake：管理员停用（disabled_at 有值）的账号' },
+    'pending-deletion': { file: 'tests/edge/claude-intake.test.ts', title: 'TC-B1-109 claude-intake：注销冷静期（disabled_reason = deletion）的账号' },
+  } }],
 ]);
 
 /** 架构第 6 节函数表的鉴权列、TC-B1-109 的函数清单：这些函数一旦建目录，PLAN 里的类别必须是这里写的（以后各批自动对上） */

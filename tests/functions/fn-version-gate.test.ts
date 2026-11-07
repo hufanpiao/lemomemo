@@ -92,6 +92,7 @@ describe('免查名单：同一份来源', () => {
       ['account', ['POST'], 'client'],
       ['account-purge', ['POST'], 'server'],
       ['push-dispatch', ['POST'], 'server'],   // B2：pg_cron 带 x-cron-secret（D1-S6）
+      ['claude-intake', ['POST'], 'client'],   // B3：add.ps1 带连接码调，只收 POST
       ['usage-report', ['POST'], 'server'],
     ]);
     expect(isFunctionExempt(FUNCTION_VERSION_EXEMPTIONS, 'invite-signup', 'POST')).toBe(false);

@@ -65,6 +65,15 @@ export const EXEMPT_RULES: readonly ExemptRule[] = [
     match: 'exact',
     why: '换账号后认领推送订阅，旧版也要能做，免得推送发错人（0.49 第 2 条，M9，TC-B1-22、81）',
   },
+  // B3（S-B3 免查名单 P0，TC-B3-23；架构 0.27 第 1 点免查名单“只改 revoked_at 的 PATCH /rest/v1/api_tokens”）：后端提改动，前端 B 会审。
+  // 转发层不读请求体，只能按方法和整条路径放行（?id=eq.… 由转发层先去掉）；“只准改 revoked_at、只准从空改成现在”由库里的
+  // guard_token_revoke() 触发器和列级授权管（TC-B3-22），这里放行的 PATCH 改别的列照样被库拒
+  {
+    method: 'PATCH',
+    path: '/rest/v1/api_tokens',
+    match: 'exact',
+    why: '设置里“断开连接”吊销连接码，旧版也要能做（只改 revoked_at 由 guard_token_revoke 管，TC-B3-22、23）',
+  },
 ];
 
 export interface ExemptFunction {

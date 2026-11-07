@@ -72,7 +72,10 @@ describe('needsVersionCheck：哪些请求要查', () => {
   });
 
   it('B1 K10：转发层只放行 account 的 POST（0.38 第 47 条）；account-purge、usage-report 直连、不经 /sb，照查（0.31 第 13 条）', () => {
-    expect(EXEMPT_FUNCTIONS.map((f) => [f.name, [...f.methods]])).toEqual([['account', ['POST']]]);
+    // B3：claude-intake 由 add.ps1 带连接码经 /sb 调（没有 App 版本），只收 POST，转发层放行它的 POST
+    expect(EXEMPT_FUNCTIONS.map((f) => [f.name, [...f.methods]])).toEqual([['account', ['POST']], ['claude-intake', ['POST']]]);
+    expect(needsVersionCheck('POST', '/functions/v1/claude-intake')).toBe(false);
+    expect(needsVersionCheck('GET', '/functions/v1/claude-intake')).toBe(true);
     expect(needsVersionCheck('POST', '/functions/v1/account')).toBe(false);
     for (const m of ['GET', 'PUT', 'PATCH', 'DELETE']) expect(needsVersionCheck(m, '/functions/v1/account'), m).toBe(true);
     expect(needsVersionCheck('POST', '/functions/v1/account-purge')).toBe(true);
@@ -92,6 +95,8 @@ describe('S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC
       // B2 两条（DELETE devices、claim_endpoint）在 version-gate-b2.test.ts
       ['DELETE', '/rest/v1/devices', 'exact'],
       ['POST', '/rest/v1/rpc/claim_endpoint', 'exact'],
+      // B3 一条（PATCH api_tokens）在 version-gate-b3.test.ts
+      ['PATCH', '/rest/v1/api_tokens', 'exact'],
     ]);
   });
 

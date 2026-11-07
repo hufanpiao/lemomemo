@@ -190,6 +190,7 @@ deno_version = 2
 # 关了以后鉴权全靠函数自己定长比较 x-cron-secret。用户调的函数（account、invite-admin、invite-signup）留着默认的校验。
 # 规则由 build/check_backend.py F9 固定：cron 调的必须关；另外只有 F9 里写死的 SERVER_SECRET_FUNCTIONS（usage-report → x-ops-secret）
 # 准关、也必须关；别的一律不准关。本批结束时 verify_jwt = false 只有 account-purge、usage-report、push-dispatch 三个（B2 安全审查 D2-4）。
+# B3 起 F9 另有 HASHED_TOKEN_FUNCTIONS（claude-intake → api_tokens，按连接码哈希查表），准关、也必须关，共四个。
 [functions.account-purge]
 verify_jwt = false
 
@@ -200,6 +201,13 @@ verify_jwt = false
 # B2（安全审查 D2）：usage-report 由独立 Worker lemo-ops 调，鉴权是 x-ops-secret（函数里 safeEqual 定长比较）；
 # 网关那道 JWT 校验只认公开的 anon key，对它起不到鉴权作用，关掉后未鉴权的请求只多算一次调用（和 account-purge 一样）
 [functions.usage-report]
+verify_jwt = false
+
+# B3（架构 5.7、0.47 续 usage-report 一条；B3 任务单 S14、M2）：claude-intake 由电脑上的 add.ps1 调，带的是连接码（Bearer lmc_…），不是 JWT，
+# 网关校验 JWT 会把它全部挡掉；关掉以后鉴权全靠函数按连接码的 SHA-256 查 api_tokens（未吊销、180 天内、scopes 含 create）。
+# F9 的 HASHED_TOKEN_FUNCTIONS 写死这一个，并核对函数源码真的按哈希查表、查有效期、查账号可用（安全审查看）。
+# ai-parse、ai-voice、token-admin 是用户带 JWT 调的，留着默认的校验，不在这里写。
+[functions.claude-intake]
 verify_jwt = false
 
 [analytics]

@@ -26,6 +26,9 @@ export const FUNCTION_VERSION_EXEMPTIONS: readonly FunctionExemption[] = [
   { name: 'account-purge', methods: ['POST'], caller: 'server', why: 'cron-x-cron-secret' },
   // B2：push-dispatch 同样是 pg_cron 每分钟调、带 x-cron-secret（B2 安全审查 D1-S6）
   { name: 'push-dispatch', methods: ['POST'], caller: 'server', why: 'cron-x-cron-secret' },
+  // B3（BE-5）：claude-intake 由 tools/claude-intake/add.ps1 经 /sb 调，带连接码、不带 JWT，也不是 App，没有客户端版本；
+  // 只收 POST（其余方法 405），鉴权由连接码的 SHA-256 查 api_tokens 管（check_backend F9 ⑥）
+  { name: 'claude-intake', methods: ['POST'], caller: 'client', why: 'connection-code-add-ps1' },
   // lemo-ops 调，带 x-ops-secret，没有客户端版本；鉴权照旧由 x-ops-secret 管
   { name: 'usage-report', methods: ['POST'], caller: 'server', why: 'ops-x-ops-secret' },
 ];

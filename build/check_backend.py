@@ -124,6 +124,11 @@ Pages Functions（functions/）和 App、shared：
          名单里的函数准关、也必须关 verify_jwt；它自己目录的非测试源码（去注释）里要读这个头（headers.get('<头>')）、对它调 safeEqual(，
          不能把它和别的值用 === == !== != 比（和 ''、null、undefined 判空除外）；名单外不是 cron 调的一律不准关（同 ③）。
          D2-S1：SERVER_SECRET_ENVS 的密钥变量（OPS_SECRET）只准对应函数自己的文件读，别处读报 F1
+      ⑥ 按哈希查表的名单（B3 任务单 M2、S14；架构 5.7、0.47 续 usage-report 一条）：HASHED_TOKEN_FUNCTIONS 写死 {claude-intake: api_tokens}
+         （tests/build/check-backend-f9-server.test.ts 钉住）。它靠 Authorization: Bearer <连接码> 鉴权，不是常量比对一个密钥，所以单列一类：
+         名单里的函数准关、也必须关 verify_jwt；它自己目录的非测试源码（去注释、合起来看）里要：读 Authorization 头；调 tokenHash(
+         （从 _shared/intake-token.ts import，不准自己定义同名函数）；查 .from('<表>') 并且 .eq('token_hash', …)；调 tokenLive(（吊销、180 天过期）；
+         查权限含 create（.includes('create')）；调 isUsable(（账号停用、冷静期）。不准按明文查（.eq('token', …)、.eq('token_hash', token)）。名单外不是 cron 调的一律不准关（同 ③）
   F10 host.docker.internal 只准出现在 supabase/functions/_shared/push/stub.ts（推送替身判断）和 tests/ 里（B2 安全审查 1.5 第 ② 点 D1-8）：
       扫仓库的代码和配置，JS / TS 去注释后查，别的按原文查；docs/、tests/、node_modules/、.e2e-sb/ 等不扫，.env* 不是代码不扫；
       supabase/functions/ 下的 tests/、__tests__/ 目录照扫（BE1-S3）；build/gen_push_endpoints.py 按精确路径放行（安全审查六之四）
@@ -1010,6 +1015,9 @@ TEST_SOURCE_NAME = re.compile(r"[._](test|spec)\.[^/]+$", re.IGNORECASE)
 SERVER_SECRET_FUNCTIONS = {"usage-report": "x-ops-secret"}
 # D2-S1：名单里每个函数对应的密钥变量只准这个函数自己的文件读（照 F1 对 SIGNUP_HASH_SECRET 的写法）
 SERVER_SECRET_ENVS = {"usage-report": "OPS_SECRET"}
+# F9 ⑥（B3 任务单 M2）：按 Bearer 连接码的 SHA-256 查表鉴权的函数（claude-intake → api_tokens），准关 verify_jwt。
+#   名单写死在这里；完整内容由 tests/build/check-backend-f9-server.test.ts 钉住，往名单加函数要同时改那条单测（过代码审查和安全审查）
+HASHED_TOKEN_FUNCTIONS = {"claude-intake": "api_tokens"}
 # 和头比较时允许的另一边（只是判空，不是比密钥）：''、""、``、null、undefined
 _EMPTY_OPERAND = re.compile(r"""^(?:''|""|``|null|undefined)$""")
 
@@ -1035,6 +1043,34 @@ def _server_secret_problems(code, header):
         for m in re.finditer(rf"""(''|""|``|[\w$.\])]+)\s*(===|!==|==|!=)\s*(?:{o})""", code, re.IGNORECASE):
             if not _EMPTY_OPERAND.match(m.group(1)):
                 probs.append(f"把 {header} 和别的值用 {m.group(2)} 比较（只准经 safeEqual 定长比较）")
+    return probs
+
+
+def _hashed_token_problems(code, table):
+    """F9 ⑥：在函数自己目录的非测试源码（已去注释、几个文件合起来）里，按连接码的哈希查表、查有效期、查账号能不能用。
+    返回问题列表（空 = 通过）。静态检查证明不了一定对，函数单测兜底（格式不对不查库、吊销和过期 401、停用 403，TC-B3-19～23）"""
+    q = r"""(['"`])"""
+    probs = []
+    if not re.search(rf"""\.\s*headers\s*\.\s*get\s*\(\s*{q}authorization\1\s*\)""", code, re.IGNORECASE):
+        probs.append("没有读 Authorization 头（headers.get('authorization')）")
+    if re.search(r"""\b(?:function\s+tokenHash\b|(?:const|let|var)\s+tokenHash\b)""", code):
+        probs.append("自己定义了 tokenHash（要从 _shared/intake-token.ts import）")
+    elif not re.search(r"""import\s*\{[^}]*\btokenHash\b[^}]*\}\s*from\s*['"][^'"]*_shared/intake-token\.ts['"]""", code):
+        probs.append("没有从 _shared/intake-token.ts import tokenHash")
+    if not re.search(r"\btokenHash\s*\(", code):
+        probs.append("没有对连接码调 tokenHash(（SHA-256，库里只存哈希）")
+    if not re.search(rf"""\.\s*from\s*\(\s*{q}{re.escape(table)}\1\s*\)""", code):
+        probs.append(f"没有查 {table} 表（.from('{table}')）")
+    if not re.search(rf"""\.\s*eq\s*\(\s*{q}token_hash\1\s*,""", code):
+        probs.append("没有按 token_hash 查（.eq('token_hash', …)）")
+    if re.search(rf"""\.\s*eq\s*\(\s*{q}token\1\s*,|\.\s*eq\s*\(\s*{q}token_hash\2\s*,\s*token\s*\)""", code):
+        probs.append("按明文连接码查表（只准按哈希查）")
+    if not re.search(r"\btokenLive\s*\(", code):
+        probs.append("没有查吊销和 180 天过期（tokenLive(）")
+    if not re.search(rf"""\.\s*includes\s*\(\s*{q}create\1\s*\)""", code):
+        probs.append("没有查连接码的权限含 create（scopes.includes('create')；安全审建议 2）")
+    if not re.search(r"\bisUsable\s*\(", code):
+        probs.append("没有查账号能不能用（isUsable(）")
     return probs
 
 
@@ -1112,16 +1148,30 @@ def check_cron_verify_jwt(root, errors, sources):
         probs = list(dict.fromkeys(_server_secret_problems(src, header)))   # 同一处只报一条（去重按位置），几个问题合在一起说
         if probs:
             errors.append(("F9", f"{FN_ROOT}/{rel}", line, f"{name} 在 SERVER_SECRET_FUNCTIONS 里，网关不验 JWT，鉴权全靠 {header}：{'；'.join(probs)}（B2 安全审查 D2-2）"))
+    # ⑥（B3 任务单 M2）：HASHED_TOKEN_FUNCTIONS 里的函数（目录在的）必须关 verify_jwt，并且按连接码的哈希查表、查有效期、查账号
+    for name, table in sorted(HASHED_TOKEN_FUNCTIONS.items()):
+        if not (root / FN_ROOT / name).is_dir():
+            continue
+        conf = fns.get(name)
+        if not (isinstance(conf, dict) and conf.get("verify_jwt") is False):
+            errors.append(("F9", CONFIG_TOML, _fn_decl_line(lines, name) if conf is not None else 1,
+                           f"{name} 在 HASHED_TOKEN_FUNCTIONS 里（按连接码哈希查 {table} 鉴权），supabase/config.toml 却没写 [functions.{name}] verify_jwt = false："
+                           "名单和配置要对得上（B3 任务单 M2）"))
+        own = [(rel, code) for rel, code in sorted(sources.code.items()) if rel.split("/")[0] == name and not _is_test_source(rel)]
+        probs = _hashed_token_problems("\n".join(code for _, code in own), table)
+        if probs:
+            errors.append(("F9", f"{FN_ROOT}/{name}/index.ts", 1,
+                           f"{name} 在 HASHED_TOKEN_FUNCTIONS 里，网关不验 JWT，鉴权全靠按连接码哈希查 {table}：{'；'.join(probs)}（B3 任务单 M2）"))
     for name, conf in fns.items():
         # 预览专用函数归 F6 管；supabase/functions/ 下没有同名目录的（只写了配置、没有函数）设了也不起作用，F6 另查键名，这里不重复报
         if name in PREVIEW_FUNCS or not (root / FN_ROOT / name).is_dir() or not isinstance(conf, dict) or conf.get("verify_jwt") is not False:
             continue
-        if name in SERVER_SECRET_FUNCTIONS:
-            continue   # D2-1 名单里的，上面按 D2-2 查过
+        if name in SERVER_SECRET_FUNCTIONS or name in HASHED_TOKEN_FUNCTIONS:
+            continue   # D2-1、⑥ 名单里的，上面查过
         if name not in crons:
             errors.append(("F9", CONFIG_TOML, _fn_decl_line(lines, name),
-                           f"[functions.{name}] verify_jwt = false，但迁移里没有 cron 调它，也不在 SERVER_SECRET_FUNCTIONS 里：只有 cron 调的函数（自己验 x-cron-secret）"
-                           "和名单里靠服务器密钥头鉴权的函数才准关网关的 JWT 校验，用户调的函数要留着这道校验"))
+                           f"[functions.{name}] verify_jwt = false，但迁移里没有 cron 调它，也不在 SERVER_SECRET_FUNCTIONS、HASHED_TOKEN_FUNCTIONS 里：只有 cron 调的函数（自己验 x-cron-secret）"
+                           "和名单里靠服务器密钥头、连接码哈希鉴权的函数才准关网关的 JWT 校验，用户调的函数要留着这道校验"))
 
 
 # F10（B2 安全审查 1.5 第 ② 点 D1-8）：host.docker.internal 只准出现在推送替身判断模块和 tests/ 里，免得被抄进别的出站白名单。

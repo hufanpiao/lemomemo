@@ -25,6 +25,10 @@ const PLAN = new Map<string, 'check' | readonly string[]>([
   ['usage-report', ['POST']],       // K15：lemo-ops 带 x-ops-secret
   ['push-dispatch', ['POST']],      // B2：pg_cron 带 x-cron-secret（B2 安全审查 D1-S6）
   ['push-test', 'check'],           // B2 BE-6：用户带 JWT 调，index.ts 入口处 versionGate
+  ['ai-parse', 'check'],            // B3 BE-3：用户带 JWT 调，index.ts 入口处 versionGate
+  ['ai-voice', 'check'],            // B3 BE-4：同上
+  ['token-admin', 'check'],         // B3 BE-5：同上
+  ['claude-intake', ['POST']],      // B3 BE-5：add.ps1 带连接码调，只收 POST
 ]);
 
 /** 接入代码等审查通过再加的目录；接上以后从这里删掉（K10 安全审查后：invite-signup 已接，account 只收 POST、不接） */

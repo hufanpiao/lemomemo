@@ -1,4 +1,5 @@
 // build/check_backend.py F9 ③ 的服务器密钥名单（B2 安全审查 D2-1～D2-4、D2-S1）和 F10（1.5 第 ② 点 D1-8：host.docker.internal 只准出现在替身判断模块和 tests/）。
+// B3 起另有 F9 ⑥ 按连接码哈希查表的名单（B3 任务单 M2），样例 f9-hashed-token、f9-hashed-token-ok。
 // 样例在 tests/arch-fixtures/check_backend/f9-server-secret、f9-server-secret-cfg、f10-fn-tests-dir、f10-fn-tests-dir-ok、f10-fn-test-import、f10-fn-test-import-ok；这份由后端写（测试开发的 F9 用例在 check-backend-migrations.test.ts，不动）
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -29,7 +30,7 @@ describe('D2-3：三个违规样例', () => {
     const msg = errors.find((e) => e.file.endsWith('usage-report/index.ts'))?.message ?? '';
     expect(msg).toContain('没有对 x-ops-secret 调 safeEqual(');
     expect(msg).toContain('用 !== 比较');
-    expect(errors.find((e) => e.line === 9)?.message).toContain('不在 SERVER_SECRET_FUNCTIONS 里');
+    expect(errors.find((e) => e.line === 9)?.message).toContain('不在 SERVER_SECRET_FUNCTIONS、HASHED_TOKEN_FUNCTIONS 里');   // B3 加了 ⑥ 的名单
     // 判空（got === ''）不算比较密钥
     expect(msg).not.toContain('用 === 比较');
   });
@@ -52,11 +53,39 @@ describe('D2-3：三个违规样例', () => {
 });
 
 describe('D2-4：真仓库', () => {
-  it('config.toml 里 verify_jwt = false 正好是 account-purge、push-dispatch、usage-report 三个', () => {
+  it('config.toml 里 verify_jwt = false 正好是 account-purge、claude-intake、push-dispatch、usage-report 四个（B3 加 claude-intake，M2）', () => {
     const toml = readFileSync(join(ROOT, 'supabase', 'config.toml'), 'utf8');
     const off = [...toml.matchAll(/^\[functions\.([\w-]+)\]\r?\nverify_jwt = false\r?$/gm)].map((m) => m[1]).sort();
-    expect(off).toEqual(['account-purge', 'push-dispatch', 'usage-report']);
-    expect(toml.match(/^\s*verify_jwt\s*=\s*false/gm)?.length).toBe(3);   // 注释里写的不算
+    expect(off).toEqual(['account-purge', 'claude-intake', 'push-dispatch', 'usage-report']);
+    expect(toml.match(/^\s*verify_jwt\s*=\s*false/gm)?.length).toBe(4);   // 注释里写的不算
+  });
+});
+
+describe('F9 ⑥：按连接码哈希查表的名单（B3 任务单 M2、S14；架构 5.7）', () => {
+  it('名单写死、完整内容钉住：正好是 {claude-intake: api_tokens}（往名单加函数要改这条单测，过代码审查和安全审查）', () => {
+    expect(PY.match(/^HASHED_TOKEN_FUNCTIONS = .*$/gm)).toEqual(['HASHED_TOKEN_FUNCTIONS = {"claude-intake": "api_tokens"}']);
+    expect(/HASHED_TOKEN_FUNCTIONS\s*(?:\[|\.update|\|=|=(?! \{"claude-intake))/.test(PY.replace(/^HASHED_TOKEN_FUNCTIONS = .*$/m, ''))).toBe(false);
+  });
+
+  it('违规样例被拦：名单里的没关 verify_jwt；名单外的关了；自己定义 tokenHash、按明文查、不查有效期和账号', () => {
+    const { code, errors } = run(sample('f9-hashed-token'));
+    expect(code).toBe(1);
+    expect(where(errors)).toEqual([
+      'F9 supabase/config.toml:5', // claude-intake 没关
+      'F9 supabase/config.toml:9', // token-extra 不在名单里
+      'F9 supabase/functions/claude-intake/index.ts:1',
+    ]);
+    expect(errors.find((e) => e.line === 5)?.message).toContain('HASHED_TOKEN_FUNCTIONS');
+    expect(errors.find((e) => e.line === 9)?.message).toContain('不在 SERVER_SECRET_FUNCTIONS、HASHED_TOKEN_FUNCTIONS 里');
+    const msg = errors.find((e) => e.file.endsWith('claude-intake/index.ts'))?.message ?? '';
+    for (const s of ['自己定义了 tokenHash', '没有按 token_hash 查', '按明文连接码查表', 'tokenLive(', 'isUsable(', "scopes.includes('create')"]) expect(msg, s).toContain(s);
+    // 读了 Authorization、查了 api_tokens 的不报这两项
+    expect(msg).not.toContain('没有读 Authorization 头');
+    expect(msg).not.toContain('没有查 api_tokens 表');
+  });
+
+  it('合规样例通过：读 Authorization、import tokenHash、按 token_hash 查 api_tokens、tokenLive、scopes 含 create、isUsable、关了 verify_jwt', () => {
+    expect(run(sample('f9-hashed-token-ok'))).toEqual({ code: 0, errors: [] });
   });
 });
 

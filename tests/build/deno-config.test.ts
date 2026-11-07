@@ -33,6 +33,8 @@ const LOCK_FILES = new Set(['supabase/functions/deno.json', 'supabase/functions/
 const OUTBOUND_API_URLS: ReadonlySet<string> = new Set([
   'https://challenges.cloudflare.com/turnstile/v0/siteverify',
   'https://api.resend.com/emails',
+  // B3 BE-1：Gemini generateContent 的前缀（supabase/functions/_shared/ai/gemini.ts 的 GEMINI_BASE，后面接模型名，模型名按 MODEL_RE 校验）
+  'https://generativelanguage.googleapis.com/v1beta/models/',
 ]);
 const NPM_EXACT =/^npm:((?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*)@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\/[\w./-]*)?$/;
 
