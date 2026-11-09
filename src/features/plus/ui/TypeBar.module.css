@@ -1,0 +1,102 @@
+/* 打字条（B3 FA-2；定稿线框“点一下＋打字”）：贴键盘上沿（--dock-bottom 已取键盘高度 --kb 和底栏上方两者大的，变量在 styles/base.css）；
+   磨砂和提示条、撤销条同一套（R-122）；只用令牌（A11）。输入框本身用 kit 的 Form .input（--inp-bg、--r-inp、--fs-inp、聚焦令牌，G11） */
+.bar {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: var(--dock-bottom);
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 8px;
+  border-radius: var(--r-lg);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(6px) saturate(var(--float-sat));
+  font-size: var(--fs-14);
+}
+
+/* 多条的提示条：位置、磨砂和打字条、撤销条同一套 */
+.saved {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: var(--dock-bottom);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 560px;
+  max-height: 60vh;
+  margin: 0 auto;
+  padding: 6px 6px 6px 16px;
+  overflow-y: auto;
+  border-radius: var(--r-lg);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(6px) saturate(var(--float-sat));
+  font-size: var(--fs-14);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .saved,
+  .bar {
+    background: var(--float-solid);
+    backdrop-filter: none;
+  }
+}
+
+/* 下滑收起的把手：整条宽、够高好按（44px 点击区由按钮行保证，这条只是拖动起点） */
+.grip {
+  align-self: center;
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: currentcolor;
+  opacity: 0.35;
+  touch-action: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview {
+  min-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 提示文字都在磨砂底上：一律用 --toast-fg（--text-2、--danger-text 是按页面底色配的，放这里对比度不保证），错误句靠加粗区分 */
+.err {
+  font-weight: 600;
+}

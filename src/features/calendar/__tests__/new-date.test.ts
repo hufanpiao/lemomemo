@@ -1,4 +1,4 @@
-// 日历页点“＋”带上选中的那天（B2 FA-7 第 5 项，hooks/new-date.ts）
+// 日历页点“＋”或按 Ctrl+N 带上选中的那天（B2 FA-7 第 5 项，hooks/new-date.ts；B3 S24）
 import { afterEach, describe, expect, it } from 'vitest';
 import { clearNewDate, pendingNewDate, watchAddClick } from '../hooks/new-date.ts';
 
@@ -40,6 +40,23 @@ describe('watchAddClick', () => {
     expect(pendingNewDate()).toBeNull();
     stop();
     add.click();
+    expect(pendingNewDate()).toBeNull();
+  });
+
+  it('按 Ctrl+N（或 ⌘N）那一刻记下选中的那天；别的组合键、输入法组字中不记；取消以后不记', () => {
+    const stop = watchAddClick(() => '2026-11-09');
+    const press = (i: KeyboardEventInit) => document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ...i }));
+    press({ key: 'z', ctrlKey: true });
+    press({ key: 'n', ctrlKey: true, isComposing: true });
+    expect(pendingNewDate()).toBeNull();
+    press({ key: 'n', ctrlKey: true });
+    expect(pendingNewDate()).toBe('2026-11-09');
+    clearNewDate();
+    press({ key: 'N', metaKey: true });
+    expect(pendingNewDate()).toBe('2026-11-09');
+    clearNewDate();
+    stop();
+    press({ key: 'n', ctrlKey: true });
     expect(pendingNewDate()).toBeNull();
   });
 });

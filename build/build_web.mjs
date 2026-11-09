@@ -57,7 +57,7 @@ if (splash.status !== 0) process.exit(splash.status ?? 1);
 // 底栏渐隐层的遮罩带 -webkit- 前缀（B12 代码审查 11-06）：构建配置变了不再补前缀时，旧一些的 iOS Safari 上底栏、“＋”的挖空会没
 const glass = spawnSync(process.execPath, [resolve(ROOT, 'build/check_glass_css.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });
 if (glass.status !== 0) process.exit(glass.status ?? 1);
-const size = spawnSync(process.execPath, [resolve(ROOT, 'build/check_size.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });
+const size = spawnSync(process.execPath, [resolve(ROOT, 'build/check_size.mjs'), '--app-dir', APP_DIR, '--mode', mode], { stdio: 'inherit' });
 // 首屏块里不许有 zod（FA-6 ③ 审查 M3 第二轮）：按 manifest 算入口 + 今天页、告知页关口的静态闭包；要在下面删掉 .vite 之前跑
 const zodFree = spawnSync(process.execPath, [resolve(ROOT, 'build/check_first_paint_chunks.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });
 // Vite 的 manifest 只给体积检查用，不发布；默认输出目录时另存一份到 dist/ 下给 npm run size 单独再查（别的输出目录不存，免得覆盖默认那份）

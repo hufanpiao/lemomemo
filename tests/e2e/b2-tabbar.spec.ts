@@ -1,23 +1,31 @@
 // 液态玻璃底栏（B2 FA-7；负责人 11-05 ①～④；接手清单 NAV-today-no-settings、UI4-B1-C2）：
-// 今天、日历、待办、随手记四页都有底栏，点页签换页、选中项跟着走；“＋”按页新建（今天、日历→日程，待办→待办），随手记没有“＋”、只写“即将推出”；
+// 今天、日历、待办、随手记四页都有底栏，点页签换页、选中项跟着走；“＋”点一下打开打字条（B3 M4，原来是按页新建），打字条“展开编辑”按页进新建页
+// （今天、日历→日程，待办→待办），随手记没有“＋”、只写“即将推出”；
 // 今天页右上角头像进设置；切页动画期间点按不被吞（::view-transition 不接点按）；底栏切页时不跟着淡入淡出
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 
 const bar = (page: Page) => page.getByTestId('tabbar');
 const tab = (page: Page, name: string) => bar(page).locator(`a[data-tab="${name}"]`);
+/** “＋”点一下打开打字条（B3 M4）；text 不空时先打字，再点“展开编辑”进完整新建页 */
+async function plusExpand(page: Page, text = '', opts: { noWaitAfter?: boolean } = {}): Promise<void> {
+  await page.getByTestId('tabbar-add').click();
+  await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 10_000 });
+  if (text) await page.getByTestId('type-input').fill(text);
+  await page.getByTestId('type-bar').getByRole('button', { name: '展开编辑' }).click(opts);
+}
 
 test.describe('底栏（FA-7）', () => {
   // 手机宽度的底栏：chromium 项目默认 1280 宽，那里是电脑版侧栏（D5，见 b2-sidebar.spec.ts）
   // timezoneId：“今天页“＋”还是今天”那条在浏览器里按本机时区算“今天”，CI 是 UTC、账号数据按首尔日期（前端 A 11-07 查明的同类问题），统一按首尔
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
 
-  test('四页之间点页签切换；选中项 aria-current 跟着走；“＋”按页新建；随手记“即将推出”、没有“＋”', async ({ page }) => {
+  test('四页之间点页签切换；选中项 aria-current 跟着走；“＋”名字是“打字记一条”；随手记“即将推出”、没有“＋”', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(bar(page)).toBeVisible();
     await expect(tab(page, 'today')).toHaveAttribute('aria-current', 'page');
-    await expect(page.getByTestId('tabbar-add')).toHaveAccessibleName('新建日程');
+    await expect(page.getByTestId('tabbar-add')).toHaveAccessibleName('打字记一条');
 
     await tab(page, 'calendar').click();
     await expect(page).toHaveURL(/#\/calendar$/);
@@ -27,7 +35,7 @@ test.describe('底栏（FA-7）', () => {
     await tab(page, 'todos').click();
     await expect(page.getByTestId('todos')).toBeVisible();
     await expect(page.getByTestId('todos-new')).toHaveCount(0); // 右上角原来的“＋ 新建”去掉了
-    await expect(page.getByTestId('tabbar-add')).toHaveAccessibleName('新建待办');
+    await expect(page.getByTestId('tabbar-add')).toHaveAccessibleName('打字记一条');
 
     await tab(page, 'notes').click();
     await expect(page.getByText('即将推出')).toBeVisible();
@@ -37,19 +45,38 @@ test.describe('底栏（FA-7）', () => {
 
   // webkit 进编辑页会报一条 CSP style-src-attr：是 WebKit 内核新建 <select> 时的误报（直接打开 #/todo/new 也报，11-05 前端 A 查明），
   // csp-fixture.ts 只对 webkit 精确放过这一种，别的违规照样判失败；最小复现见 csp-webkit-select.spec.ts（test.fail）
-  test('“＋”：待办页新建待办、今天页新建日程；编辑页没有底栏', async ({ page }) => {
+  test('“＋”点一下打开打字条，不换页；“展开编辑”：待办页进新建待办、今天页进新建日程，打的字带过去；编辑页没有底栏（B3 M4、R-353）', async ({ page }) => {
     await page.goto('/app/#/todos');
     await expect(page.getByTestId('todos')).toBeVisible();
     await page.getByTestId('tabbar-add').click();
+    await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 10_000 });
+    await expect(page).toHaveURL(/#\/todos$/);
+    await expect(page.getByTestId('type-input')).toBeFocused();
+    await page.getByTestId('type-input').fill('买牛奶');
+    await page.getByTestId('type-bar').getByRole('button', { name: '展开编辑' }).click();
     await expect(page).toHaveURL(/#\/todo\/new$/);
+    await expect(page.getByTestId('todo-edit-title')).toHaveValue('买牛奶');
     await expect(bar(page)).toHaveCount(0);
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
-    await page.getByTestId('tabbar-add').click();
+    await plusExpand(page);
     await expect(page).toHaveURL(/#\/event\/new$/);
   });
 
-  test('日历页“＋”带上选中的那天；今天页“＋”还是今天（FA-7 第 5 项）', async ({ page }) => {
+  test('打字条“收起”关掉；Esc 也关掉（B3 FA-2）', async ({ page }) => {
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible();
+    await page.getByTestId('tabbar-add').click();
+    await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId('type-bar').getByRole('button', { name: '收起' }).click();
+    await expect(page.getByTestId('type-bar')).toHaveCount(0);
+    await page.getByTestId('tabbar-add').click();
+    await expect(page.getByTestId('type-input')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('type-bar')).toHaveCount(0);
+  });
+
+  test('日历页“＋”再“展开编辑”带上选中的那天；今天页还是今天（FA-7 第 5 项、R-353）', async ({ page }) => {
     await page.goto('/app/#/calendar');
     // 只在日历页 main 里找：底栏的内容副本（data-glass-layer，在 nav 里）会复制出同样的日期按钮，inert 只写在副本层上、按钮本身没有（代码复审 L11）；
     // 同一天在 main 里也可能有几个（月历相邻几页），取看得见的第一个
@@ -60,13 +87,13 @@ test.describe('底栏（FA-7）', () => {
     expect(day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     await cell.click();
     await expect(cell).toHaveAttribute('aria-pressed', 'true');
-    await page.getByTestId('tabbar-add').click();
+    await plusExpand(page);
     await expect(page).toHaveURL(/#\/event\/new$/);
     await expect(page.getByTestId('event-edit-date')).toHaveValue(day);
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     const today = await page.evaluate(() => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10));
-    await page.getByTestId('tabbar-add').click();
+    await plusExpand(page);
     await expect(page.getByTestId('event-edit-date')).toHaveValue(today);
   });
 
@@ -177,7 +204,7 @@ test.describe('底栏（FA-7）', () => {
     await expect(band).toBeAttached({ timeout: 10_000 });
     // 启动那一次的淡入放完
     await expect.poll(() => band.evaluate((el) => (el.getAnimations().length === 0 ? Number(getComputedStyle(el).opacity) : -1)), { timeout: 5000 }).toBe(1);
-    await page.getByTestId('tabbar-add').click();
+    await plusExpand(page);
     await expect(page).toHaveURL(/#\/event\/new$/);
     await expect(bar(page)).toHaveCount(0);
     await expect(band).toHaveCount(0);

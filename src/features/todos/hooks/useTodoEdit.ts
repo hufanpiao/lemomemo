@@ -2,6 +2,7 @@
 // 界面每改一个字段调 change(patch)：先过 normalize（截止日期、截止时刻的连带规则），再保存
 import { useCallback } from 'react';
 import { useEditRecord, type EditRecord } from '../../../kit/hooks/useEditRecord.ts';
+import { useTypedTitle } from '../../../kit/hooks/useTypedTitle.ts';
 import { emptyForm, formOf, hasRemind, newTodoRow, normalize, patchOf, type TodoForm } from '../data/todo-edit.ts';
 
 export type { TodoForm } from '../data/todo-edit.ts';
@@ -28,5 +29,6 @@ export function useTodoEdit(id: string, onCreated?: (id: string) => void): EditR
     },
     [form, update],
   );
+  useTypedTitle(id, change);
   return { ...rec, change };
 }

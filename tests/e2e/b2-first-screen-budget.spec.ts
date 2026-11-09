@@ -11,6 +11,9 @@
 // 断开推送（push.ts）、月历手势、版本横幅、整屏提示改成按需下载（主持人定），合起来 149.9 KB（chromium、webkit 各 3 次一致），test.fail 已去掉。
 // 当时余量只有约 0.1 KB。11-05 再拆清单快照（首屏建本机仓只读 core/manifest-sync.gen.ts，完整快照随入队校验按需加载，省约 2.5 KB），
 // 同时推送断开按安全审查补了总上限和不依赖 push.ts 的兜底（约 +0.4 KB），合起来 148.0 KB（两个浏览器各 3 次一致），余量约 2 KB，留给 FA-7 底栏外壳。
+// 11-07 动画库移出首屏（R-354，前端 A 量）：Motion 的实现和功能包合成 motion-impl 一块（gzip 约 45.3 KB），main.tsx 在 appPainted() 之后才下载；
+// 首屏 148.8 KB → 132.9 KB（本 spec 的口径，chromium、webkit 各 3 次都是 132.9 KB；构建时 check_size 的静态口径 110.2 KB）。
+// build/check_first_paint_chunks.mjs 同时加了 MOTION_MARKS（transformPerspective、whileInView），首屏闭包里出现就挂。
 // 审查变异 R3b 在独立副本里重做过（11-05）：zod 那条两个浏览器都挂（首屏下载了 zod-jitless），体积 154.1 → 180.5 KB。
 import { gzipSync } from 'node:zlib';
 import type { Page } from '@playwright/test';

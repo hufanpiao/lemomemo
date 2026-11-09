@@ -1,0 +1,54 @@
+// 记录状态机（data/capture-state.ts；架构 5.9、5.11 第 4 点；B3 任务单 FA-1）
+import { describe, expect, it } from 'vitest';
+import { captureStep, isBusy, isFinal, keepsAudio, type CaptureEvent, type CaptureStatus } from '../data/capture-state.ts';
+
+const walk = (events: CaptureEvent[], from: CaptureStatus = 'idle'): CaptureStatus => events.reduce(captureStep, from);
+
+describe('captureStep', () => {
+  it('录音路：preparing → recording → encoding → uploading → organizing → saved', () => {
+    expect(walk([{ type: 'prepare' }, { type: 'start', path: 'rec' }, { type: 'stop', needEncode: true }, { type: 'encoded' }, { type: 'organize' }, { type: 'done', status: 'saved' }])).toBe('saved');
+  });
+  it('能直传：跳过 encoding', () => {
+    expect(walk([{ type: 'prepare' }, { type: 'start', path: 'rec' }, { type: 'stop', needEncode: false }])).toBe('uploading');
+  });
+  it('兜底路：listening → organizing；没听清 → no_speech', () => {
+    expect(walk([{ type: 'prepare' }, { type: 'start', path: 'speech' }, { type: 'organize' }])).toBe('organizing');
+    expect(walk([{ type: 'prepare' }, { type: 'start', path: 'speech' }, { type: 'no_speech' }])).toBe('no_speech');
+  });
+  it('打字路：idle → organizing → confirming → organizing → saved_rule', () => {
+    expect(walk([{ type: 'organize' }, { type: 'need_confirm' }, { type: 'confirmed' }, { type: 'done', status: 'saved_rule' }])).toBe('saved_rule');
+  });
+  it('ai_failed 可以重试回到 uploading', () => {
+    const failed = walk([{ type: 'prepare' }, { type: 'start', path: 'rec' }, { type: 'stop', needEncode: false }, { type: 'done', status: 'ai_failed' }]);
+    expect(failed).toBe('ai_failed');
+    expect(captureStep(failed, { type: 'retry' })).toBe('uploading');
+  });
+  it('取消：进行中的变 cancelled；结果和 idle 不变；确认行没选回到 idle', () => {
+    expect(captureStep('recording', { type: 'cancel' })).toBe('cancelled');
+    expect(captureStep('organizing', { type: 'cancel' })).toBe('cancelled');
+    expect(captureStep('saved', { type: 'cancel' })).toBe('saved');
+    expect(captureStep('idle', { type: 'cancel' })).toBe('idle');
+    expect(captureStep('confirming', { type: 'cancel' })).toBe('idle');
+  });
+  it('不合法的转移原样返回（晚到的回调、连点）', () => {
+    expect(captureStep('saved', { type: 'done', status: 'ai_failed' })).toBe('saved');
+    expect(captureStep('idle', { type: 'stop', needEncode: false })).toBe('idle');
+    expect(captureStep('recording', { type: 'organize' })).toBe('recording');
+    expect(captureStep('cancelled', { type: 'retry' })).toBe('cancelled');
+  });
+  it('reset 一律回 idle', () => {
+    expect(captureStep('ai_failed', { type: 'reset' })).toBe('idle');
+  });
+});
+
+describe('辅助判断', () => {
+  it('isFinal、isBusy、keepsAudio', () => {
+    expect(isFinal('offline_saved')).toBe(true);
+    expect(isFinal('organizing')).toBe(false);
+    expect(isBusy('recording')).toBe(true);
+    expect(isBusy('idle')).toBe(false);
+    expect(isBusy('saved')).toBe(false);
+    expect(keepsAudio('ai_failed')).toBe(true);
+    expect(keepsAudio('saved')).toBe(false);
+  });
+});

@@ -3,7 +3,7 @@
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
 import { useReducedMotionConfig } from 'motion/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { appearMotion } from '../Appear.tsx';
+import { appearMotion } from '../appear-impl.tsx';
 import { Appear, SharedLayout, useReducedMotionPref } from '../components.ts';
 import { animateIn, prefersReducedMotion, press } from '../index.ts';
 import { presets, PRESS_SCALE } from '../presets.ts';

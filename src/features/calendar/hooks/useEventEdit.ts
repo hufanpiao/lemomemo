@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { todayOf } from '../../../../shared/core/date.ts';
 import { deviceTz } from '../../../core/current-tz.ts';
 import { useEditRecord, type EditRecord } from '../../../kit/hooks/useEditRecord.ts';
+import { useTypedTitle } from '../../../kit/hooks/useTypedTitle.ts';
 import { clock } from '../../../platform/clock.ts';
 import { clearNewDate, pendingNewDate } from './new-date.ts';
 import {
@@ -58,6 +59,8 @@ export function useEventEdit(id: string, onCreated?: (id: string) => void): Even
     },
     [form, update, original, markRejected],
   );
+  // 打字条“展开编辑”带过来的字（R-353）：填进标题、照常保存
+  useTypedTitle(id, change);
   const before = useRef<Pick<EventForm, 'time' | 'tz' | 'remind_min'> | null>(null);
   const setAllDay = useCallback(
     (allDay: boolean) => {

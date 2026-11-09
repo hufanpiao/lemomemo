@@ -25,6 +25,7 @@ import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } fro
 import { getBoot, type BootResult } from '../core/boot.ts';
 import { RemindHost } from '../features/reminders/index.ts';
 import { GlassBar } from '../kit/components/GlassBar/GlassBar.tsx';
+import { useKeys } from '../kit/hooks/useKeys.ts';
 import { useT } from '../kit/hooks/useT.ts';
 import { useUi } from '../kit/state/ui-store.ts';
 import { remindQueue, setRemindDown } from '../kit/state/remind-queue.ts';
@@ -38,6 +39,9 @@ import { bannerKind } from './banner-kind.ts';
 import { featureRoutes, offRoutes, type FeatureRoute } from './features.ts';
 import { navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from './router.ts';
 import { tabBarFor } from './tab-of.ts';
+import { PlusSlot, preloadPlus } from './plus-slot.tsx';
+import type { DateStr } from '../../shared/core/date.ts';
+import { setNewItemDay, setNewItemTitle, takeNewItemDay } from '../kit/state/new-item.ts';
 
 // CSP 试验页（B0 第一项验证）：只在非正式版里挂
 const devRoutes: readonly FeatureRoute[] = isProduction
@@ -81,12 +85,49 @@ function TabBar({ route }: { route: RouteName }) {
       stop();
     };
   }, []);
+  // “＋”点一下打开打字条（B3 M4、FA-2）：打字条首屏画完以后先下载好（plus-slot.tsx）；open 时记着日历页选中的那天（R-353）
+  const [plus, setPlus] = useState<{ day: DateStr | null } | null>(null);
+  useEffect(() => afterAppPainted(() => void preloadPlus()), []);
+  // 换页就收起（去改某一条、展开编辑也是换页）
+  useEffect(() => setPlus(null), [route]);
   const bar = tabBarFor(route);
+  // 日历页在捕获阶段记下了选中的那天（calendar/hooks/new-date.ts），这里取走；别的页也取走（清掉旧的）
+  const open = (): void => {
+    const day = takeNewItemDay();
+    setPlus({ day: bar?.tab === 'calendar' ? day : null });
+  };
+  // Ctrl+N 打字记一条（S24）：有“＋”的页才接；已经开着就不动（打字条自己聚焦）
+  useKeys({
+    'mod+n': () => {
+      if (!bar || !paged || bar.add === null) return false;
+      if (plus === null) open();
+      return true;
+    },
+  });
   if (!bar || !paged) return null;
   const { tab, add } = bar;
   if (add === null) return <GlassBar active={tab} later={afterAppPainted} hide={kb} />;
-  return <GlassBar active={tab} later={afterAppPainted} hide={kb} add={{ label: t(add === 'todo' ? 'nav.newTodo' : 'nav.newEvent', {}), onClick: () => void navigate(add, 'new') }} />;
+  // 展开成完整新建页：打的字和那天带过去（kit/state/new-item.ts，新建页挂上以后取走）
+  const expand = (text: string, day: DateStr | null): void => {
+    setNewItemTitle(text);
+    setNewItemDay(day);
+    setPlus(null);
+    void navigate(add, 'new');
+  };
+  const edit = (table: string, id: string): void => {
+    const to = EDIT_OF[table];
+    if (to) void navigate(to, id);
+  };
+  return (
+    <>
+      <GlassBar active={tab} later={afterAppPainted} hide={kb} add={{ label: t('nav.add', {}), onClick: open }} />
+      <PlusSlot open={plus !== null} day={plus?.day ?? null} onExpand={expand} onEdit={edit} onClose={() => setPlus(null)} />
+    </>
+  );
 }
+
+/** 提示条里“修改”某一条：表 → 编辑页路由（随手记、纪念日的编辑页还没有，先不跳） */
+const EDIT_OF: Partial<Record<string, RouteName>> = { events: 'event', todos: 'todo' };
 
 /** 功能开关关着的页面（hash 直接打开时）：不是出错（K6 审查 L11） */
 function FeatureOffView() {

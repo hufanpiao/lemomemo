@@ -1,0 +1,38 @@
+/* “准备中”（B3 FA-2、Q4）：打字条还没下载好时，在打字条的位置占一条；位置和磨砂同打字条（features/plus/ui/TypeBar.module.css 的 .bar），只用令牌（A11） */
+.wait {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: var(--dock-bottom);
+  z-index: 31;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  max-width: 560px;
+  min-height: 44px;
+  margin: 0 auto;
+  padding: 4px 4px 4px 16px;
+  border-radius: var(--r-lg);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(6px) saturate(var(--float-sat));
+  font-size: var(--fs-14);
+}
+
+.close {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}

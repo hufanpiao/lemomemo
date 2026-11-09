@@ -13,6 +13,9 @@ export const zh = {
   'nav.notes': '随手记',
   'nav.newEvent': '新建日程',
   'nav.newTodo': '新建待办',
+  'nav.add': '打字记一条', // B3 M4：“＋”点一下打开打字条（原来是新建日程 / 新建待办）
+  'nav.plusPreparing': '准备中', // B3 Q4：打字条还没下载好就点了“＋”
+  'nav.plusClose': '关闭',
   'notes.soon': '即将推出',
   'common.ok': '好',
   'common.cancel': '取消',

@@ -7,11 +7,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FAKE } from './fake-frames.ts';
 
 const chunk = vi.hoisted(() => ({ fail: true, loads: 0 }));
-vi.mock('../feature-bundle.ts', async () => {
+vi.mock('../motion-impl.tsx', async (importOriginal) => {
   chunk.loads += 1;
   if (chunk.fail) throw new Error('Failed to fetch dynamically imported module');
-  const { domMax } = await import('motion/react');
-  return { default: domMax };
+  // 动画实现和功能包合成一块（R-354）：等闸开了再给真的那一块
+  return await importOriginal();
 });
 
 await import('motion/react');   // 先加载好，成功那次的 import 只是取缓存

@@ -46,7 +46,7 @@ import { enableDropMark, installDesktopSession } from '../platform/session-store
 import { hideSplash, hideSplashAfter, hideSplashWhenPainted } from '../platform/splash.ts';
 import { afterAppPainted, appPainted, startAppPaintLimit, watchAppPainted } from '../platform/first-paint.ts';
 import { markInsetPainted, watchInsetBottom } from '../platform/inset-watch.ts';
-import { nextFrame } from '../motion/index.ts';
+import { loadMotionFeatures, nextFrame } from '../motion/index.ts';
 import { registerServiceWorkerLazy, registerSwAfterPaint, reloadPage, upgradeLogCountStore } from '../platform/sw-register.ts';
 import { mountExitScreen, watchExitIncomplete } from './exit-screen.tsx';
 import { mountFeatures } from './features.ts';
@@ -303,7 +303,9 @@ async function start(): Promise<void> {
       startSync(late);
     },
   });
-
+  // 动画实现和功能包（R-354，主持人 11-07 定）：首屏画完以后立刻下载，排在首屏后那批代码后面（方案 K8）；
+  // 到了以后门面在安全的时机换成动画实现（src/motion/features.ts）。失败不抛，门面照常显示、只是没有动画
+  void loadMotionFeatures();
 }
 
 // start 自己不该抛（coldStart 不抛）；万一抛了（例如没有 #root）不留白屏：回登录页，登录页会显示“已登录 · 继续”

@@ -1,4 +1,15 @@
 // 功能 plus：“＋”统一入口：记录状态机、AI 退路、录音面板、打字条、意图结果卡片、总结
 // 对外唯一入口（架构 2.1、A27）：只导出懒加载的页面、登记项、类型和清单引用；别的功能只能 import 这个文件
-// B0 骨架：这个功能还没有页面，对应批次再加导出
+// 首屏体积（B3 Q4）：这个文件经 app/features.ts 进首屏，所以只放 lazy；打字条那一块首屏画完以后才预先下载（app/plus-slot.tsx）
+import { lazy } from 'react';
+
 export const routes = [] as const;
+
+/**
+ * 打字条（B3 FA-2）：“＋”点一下打开。
+ * props: { day: 日历页选中的那天或 null; onExpand(text, day): 展开成完整新建页; onEdit?(table, id): 提示条里“修改”某一条; onClose() }
+ */
+export const TypeBar = lazy(() => import('./ui/TypeBar.tsx'));
+
+/** 预先下载打字条的代码（B3 Q4）：首屏画完以后挂一份，什么都不画；之后点“＋”时 TypeBar 的模块已在内存里 */
+export const TypeBarPreload = lazy(() => import('./ui/TypeBarPreload.tsx'));

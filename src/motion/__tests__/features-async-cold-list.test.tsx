@@ -14,10 +14,10 @@ const gate = vi.hoisted(() => {
   const ready = new Promise<void>((ok) => (open = ok));
   return { ready, open: () => open() };
 });
-vi.mock('../feature-bundle.ts', async () => {
+vi.mock('../motion-impl.tsx', async (importOriginal) => {
   await gate.ready;
-  const { domMax } = await import('motion/react');
-  return { default: domMax };
+  // 动画实现和功能包合成一块（R-354）：等闸开了再给真的那一块
+  return await importOriginal();
 });
 
 const { AppearItem, AppearList } = await import('../components.ts');

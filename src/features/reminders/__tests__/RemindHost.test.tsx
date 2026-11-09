@@ -56,6 +56,8 @@ vi.mock('../../../core/boot.ts', () => ({
   getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ retryRecs: EMPTY_RECS, remindRecs }) } }),
 }));
 
+// 动画实现首屏画完以后才由 main.tsx 下载（R-354）；这里没有 main.tsx，测退场和焦点前先等它到
+await (await import('../../../motion/index.ts')).loadMotionFeatures();
 const { default: RemindHost } = await import('../ui/RemindHost.tsx');
 const { default: FullReminderPage } = await import('../ui/FullReminderPage.tsx');
 const { default: UnsyncedRemindHint } = await import('../ui/UnsyncedRemind.tsx');

@@ -33,6 +33,11 @@ export const FIRST_PAINT_DYNAMIC = [
 const FORBIDDEN_ID = /(^|[/_])zod([-./]|$)|zod-jitless|shared\/schema\/|shared\/manifests\/|(^|\/)_rows-/;
 /** zod 的特征字符串：zod 的块里有，首屏别的块里没有（11-04 在产物里核对过） */
 export const ZOD_MARKS = ['$ZodType', 'ZodError'];
+/**
+ * Motion（动画库）的特征字符串：只该出现在 src/motion/motion-impl.tsx 那一块（appPainted() 之后才下载，R-354）。
+ * 前端 A 11-07 在产物里核对过：这两个串只出现在 motion-impl-*.js；首屏闭包里出现就是动画库又被静态引回首屏
+ */
+export const MOTION_MARKS = ['transformPerspective', 'whileInView'];
 /** 农历数据的块：shared/logic/anniv/lunar.ts、lunar-data.ts（shared 在 vite root 外，块键是“_lunar-哈希.js”） */
 const LUNAR_ID = /shared\/logic\/anniv\/lunar|(^|\/)_lunar(-data)?-/;
 /**
@@ -69,6 +74,8 @@ export function checkFirstPaint(manifest, read, dynamic = FIRST_PAINT_DYNAMIC) {
     const hit = ZOD_MARKS.find((m) => text.includes(m));
     if (hit) bad.push(`首屏块 ${c.file}（${key}）里有 zod 的代码（含 ${hit}）`);
     if (LUNAR_MARKS.some((m) => text.includes(m))) bad.push(`首屏块 ${c.file}（${key}）里有农历表的数据`);
+    const mo = MOTION_MARKS.find((m) => text.includes(m));
+    if (mo) bad.push(`首屏块 ${c.file}（${key}）里有动画库 Motion 的代码（含 ${mo}；它只该在 motion-impl 那一块，R-354）`);
   }
   return bad;
 }
@@ -85,11 +92,11 @@ function main() {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const bad = checkFirstPaint(manifest, (f) => readFileSync(resolve(appDir, f), 'utf8'));
   if (bad.length) {
-    console.error('首屏块里有 zod 或农历数据（FA-6 ③ M3、LUNAR-indirect-import）：');
+    console.error('首屏块里有 zod、农历数据或动画库（FA-6 ③ M3、LUNAR-indirect-import、R-354）：');
     for (const b of bad) console.error(`  ${b}`);
     process.exit(1);
   }
-  console.log(`首屏块里没有 zod、农历数据：入口 + ${FIRST_PAINT_DYNAMIC.length} 个动态入口的静态闭包都查过`);
+  console.log(`首屏块里没有 zod、农历数据、动画库：入口 + ${FIRST_PAINT_DYNAMIC.length} 个动态入口的静态闭包都查过`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

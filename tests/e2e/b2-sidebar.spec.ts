@@ -5,6 +5,24 @@ import { expect, test } from './session-fixture.ts';
 const bar = (page: Page) => page.getByTestId('tabbar');
 const tab = (page: Page, name: string) => bar(page).locator(`a[data-tab="${name}"]`);
 
+/** R-363：鼠标真点“＋”的中心——先确认中心那一点命中的是“＋”（不是盖在上面的侧栏），再 page.mouse.click，打字条打开、输入框拿到焦点 */
+async function clickAddCenter(page: Page): Promise<void> {
+  await page.goto('/app/#/today');
+  await expect(page.getByTestId('today')).toBeVisible();
+  const add = page.getByTestId('tabbar-add');
+  await expect(add).toBeVisible();
+  const box = await add.boundingBox();
+  expect(box).not.toBeNull();
+  const cx = (box?.x ?? 0) + (box?.width ?? 0) / 2;
+  const cy = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+  const hitIsAdd = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('[data-testid="tabbar-add"]'), [cx, cy] as const);
+  expect(hitIsAdd, '“＋”中心那一点被别的元素盖住了').toBe(true);
+  await page.mouse.click(cx, cy);
+  await expect(page.getByTestId('type-input')).toBeFocused({ timeout: 10_000 });
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('type-bar')).toHaveCount(0);
+}
+
 // 电脑版侧栏（设计动效评审 D5，主持人 11-05：断点 (width >= 900px)、不放 ⋯、方案 A 只用 CSS 复用底栏的 DOM）：
 // 1280 宽时底栏排成左边竖的侧栏（上“＋”、中四个页签、下设置入口；选中项 --accent 底），没有模糊带和液滴，页面让出左边；今天页右上角头像藏掉；
 // 899 宽照旧是底栏
@@ -51,14 +69,25 @@ test.describe('电脑版侧栏（FA-7 D5）', () => {
     // 页面让出左边
     const main = await page.locator('main[data-feature="today"]').boundingBox();
     expect(main?.x ?? 0).toBeGreaterThanOrEqual(16 + 78);
-    // 切页、选中项跟着走；“＋”按页新建；设置入口进设置
+    // 切页、选中项跟着走；“＋”点一下打开打字条（B3 M4），Esc 收起；设置入口进设置
     await tab(page, 'todos').click();
     await expect(page.getByTestId('todos')).toBeVisible();
     await expect(tab(page, 'todos')).toHaveAttribute('aria-current', 'page');
-    await expect(page.getByTestId('tabbar-add')).toHaveAccessibleName('新建待办');
+    await expect(page.getByTestId('tabbar-add')).toHaveAccessibleName('打字记一条');
+    // 鼠标点“＋”（R-363：原来 1280 宽时侧栏 nav 盖在“＋”上、鼠标点不到，11-07 临时改成键盘按；修好后改回鼠标）
+    await page.getByTestId('tabbar-add').click();
+    await expect(page.getByTestId('type-input')).toBeFocused({ timeout: 10_000 });
+    await expect(page).toHaveURL(/#\/todos$/);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('type-bar')).toHaveCount(0);
     await me.click();
     await expect(page).toHaveURL(/#\/settings$/);
     await expect(bar(page)).toHaveCount(0);
+  });
+
+  // R-363：鼠标真点“＋”的中心（page.mouse，不走 locator 的点击）：中心那一点必须是“＋”本身，点下去打开打字条
+  test('1280 宽：鼠标点“＋”中心，打开打字条（R-363）', async ({ page }) => {
+    await clickAddCenter(page);
   });
 
   // 设计复审三 S1：设置入口在首屏外壳里，首屏后部分（GlassBarFx 分包）下载失败时宽屏也有设置入口
@@ -134,5 +163,13 @@ test.describe('电脑版侧栏（FA-7 D5）', () => {
     await expect(page.getByTestId('today-settings')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
     await expect(page.getByTestId('tabbar-settings')).toBeHidden();
+  });
+});
+
+// R-363：手机宽（375）也用鼠标真点一次“＋”
+test.describe('手机宽“＋”鼠标点击（R-363）', () => {
+  test.use({ loggedIn: true, viewport: { width: 375, height: 812 } });
+  test('375 宽：鼠标点“＋”中心，打开打字条', async ({ page }) => {
+    await clickAddCenter(page);
   });
 });

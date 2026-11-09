@@ -1,22 +1,11 @@
-﻿// 同一页面里元素的衔接（架构 17.2 第 3 点）：包一层 layoutId；跨页面的大块切换用 View Transitions
-// 同一个元素不能两种同时用。layoutId 要 domMax 功能包，异步加载、和 Appear 共用一块（B2 FA-6 ②，见 ./features.ts）
-// 减少动态效果（17.2 第 5 点，UI-4 M-1）：读同一个判断（系统设置或 data-rm="1"），
-// 成立时 MotionConfig reducedMotion="always"，layoutId 的弹簧位移直接到位
-import { LazyMotion, m, MotionConfig } from 'motion/react';
-import type { ReactNode } from 'react';
-import { motionFeatures } from './features.ts';
-import { tr } from './tokens.ts';
-import { useReducedMotionPref } from './useReducedMotionPref.ts';
+﻿// 同一页面里元素的衔接 <SharedLayout id>（架构 17.2 第 3 点）的门面（R-354 做法 A）：只依赖 react。
+// 真正的 layoutId 衔接在 ./shared-impl.tsx（motion 实现，首屏画完以后下载）。挂上时看一次：
+// 实现已经到了就交给实现；没到就画一个静态的 <div class>（和 motion 冷渲染一致），这一次挂着期间都不衔接
+import { useState, type ReactNode } from 'react';
+import { motionImpl } from './features.ts';
 
-export function SharedLayout({ id, children, className }: { id: string; children: ReactNode; className?: string | undefined }) {
-  const reduced = useReducedMotionPref();
-  return (
-    <MotionConfig reducedMotion={reduced ? 'always' : 'never'}>
-      <LazyMotion features={motionFeatures()} strict>
-        <m.div layoutId={id} className={className} transition={tr.spring}>
-          {children}
-        </m.div>
-      </LazyMotion>
-    </MotionConfig>
-  );
+export function SharedLayout(props: { id: string; children: ReactNode; className?: string | undefined }) {
+  const [impl] = useState(motionImpl);
+  if (impl) return <impl.SharedLayout {...props} />;
+  return <div className={props.className}>{props.children}</div>;
 }

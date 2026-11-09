@@ -5,7 +5,7 @@
 import { rafGate } from './raf-gate.ts';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { appearMotion } from '../Appear.tsx';
+import { appearMotion } from '../appear-impl.tsx';
 import { Appear } from '../components.ts';
 import { presets, type AppearKind } from '../presets.ts';
 import { loadMotionFeatures } from '../features.ts';

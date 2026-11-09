@@ -4,7 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { checkFirstPaint, FIRST_PAINT_DYNAMIC, LUNAR_MARKS, staticClosure, ZOD_MARKS } from '../../build/check_first_paint_chunks.mjs';
+import { checkFirstPaint, FIRST_PAINT_DYNAMIC, LUNAR_MARKS, MOTION_MARKS, staticClosure, ZOD_MARKS } from '../../build/check_first_paint_chunks.mjs';
 
 type Chunk = { file: string; src?: string; name?: string; isEntry?: boolean; isDynamicEntry?: boolean; imports?: string[]; dynamicImports?: string[] };
 type Manifest = Record<string, Chunk>;
@@ -65,6 +65,15 @@ describe('首屏块里不许有 zod（按构建产物，FA-6 ③ M3）', () => {
       const bad = checkFirstPaint(base(), text({ 'assets/components-a.js': `class ${mark} {}` }));
       expect(bad, mark).toHaveLength(1);
       expect(bad[0]).toContain('components-a.js');
+    }
+  });
+
+  it('动画库 Motion 被静态引回首屏（R-354）：按内容的特征字符串拦住', () => {
+    for (const mark of MOTION_MARKS) {
+      const bad = checkFirstPaint(base(), text({ 'assets/components-a.js': `const o={${mark}:1}` }));
+      expect(bad, mark).toHaveLength(1);
+      expect(bad[0]).toContain('components-a.js');
+      expect(bad[0]).toContain('Motion');
     }
   });
 

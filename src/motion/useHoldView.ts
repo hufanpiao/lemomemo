@@ -9,6 +9,7 @@
 // • 减少动态效果：不留，直接换（17.2 第 5 点）
 // • holding：现在是不是留着（页面据此决定圆圈按“刚点成什么”画）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { holdBegin } from './swap-guard.ts';
 import { dur } from './tokens.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
 
@@ -42,5 +43,8 @@ export function useHoldView<T>(live: T): { view: T; holding: boolean; hold(): vo
     timer.current = setTimeout(release, Math.max(0, Math.min(dur.ui * MS, since.current + HOLD_MAX - now)));
   }, [reduced, release]);
   useEffect(() => () => clearTimeout(timer.current), []);
-  return { view: held ? held.v : live, holding: held !== null, hold, release };
+  // 停一拍期间不把静态列表换成动画实现（R-354，./swap-guard.ts）：换了会重挂，留住的那一拍就断了
+  const holding = held !== null;
+  useEffect(() => (holding ? holdBegin() : undefined), [holding]);
+  return { view: held ? held.v : live, holding, hold, release };
 }

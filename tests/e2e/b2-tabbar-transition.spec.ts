@@ -246,7 +246,10 @@ test.describe('底栏：进出没有底栏的页照旧 View Transition（代码�
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
-    await page.getByTestId('tabbar-add').click({ noWaitAfter: true });
+    // B3 M4 起“＋”点一下打开打字条，“展开编辑”才换到新建日程页
+    await page.getByTestId('tabbar-add').click();
+    await expect(page.getByTestId('type-bar')).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId('type-bar').getByRole('button', { name: '展开编辑' }).click({ noWaitAfter: true });
     const s = await holdAndRead(page);
     expect(s, '没等到切页过渡').not.toBeNull();
     expect(s?.group.shadow, '组上有阴影（只有一边有底栏时会剩空壳）').toBe('none');

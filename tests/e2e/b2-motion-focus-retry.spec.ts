@@ -19,7 +19,8 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 
 const LAB = '/app/#/dev-csp';
-const BUNDLE = /\/feature-bundle-[^/]*\.js$/;
+// R-354：功能包和动画实现合成 motion-impl 一块，main.tsx 在首屏画完以后下载
+const BUNDLE = /\/motion-impl-[^/]*\.js$/;
 
 async function motionReady(page: Page): Promise<void> {
   await page.waitForFunction(() => document.documentElement.getAttribute('data-motion') === 'ready', undefined, { timeout: 30000 });
@@ -136,7 +137,7 @@ test.describe('功能包下载失败以后：不刷新不会再装上，刷新�
     await expect.poll(() => blocked, { timeout: 15000 }).toBeGreaterThanOrEqual(1);
     await page.waitForTimeout(1000);
     expect(await mark(), '被拦下了还打了标记').toBeNull();
-    // 放行，再挂一个新的 LazyMotion：features.ts 会再调一次 import()，但浏览器的模块表记着上次失败，不再去取
+    // 放行，再打开弹层：R-354 起首屏的是门面，打开弹层不会再触发下载（原来新挂的 LazyMotion 会再调一次 import()，浏览器的模块表也记着上次失败、不再去取）
     blocking = false;
     await page.getByTestId('dialog-open').click();
     await expect(page.getByRole('dialog'), '没有动画也照常打开').toBeVisible();

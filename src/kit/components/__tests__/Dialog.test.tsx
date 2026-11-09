@@ -4,6 +4,10 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Dialog } from '../Dialog.tsx';
+import { loadMotionFeatures } from '../../../motion/index.ts';
+
+// 动画实现首屏画完以后才由 main.tsx 下载（R-354）；这里没有 main.tsx，测退场和焦点前先等它到
+await loadMotionFeatures();
 
 const noop = () => undefined;
 

@@ -9,6 +9,11 @@
 //   拆出来的空段丢掉；只有日子或时刻、没有事由的段由调用方（parse-split.ts）并进下一段，合起来的那段判没把握（代码审 M3）。
 
 const SEP_RE = /[，,；;。\n]|然后|还有|그리고|그\s*다음에?/;
+
+/** 拆句用的同一套分隔（带 g，每次新建一个）：打字条只拿它在原话里找等确认那条的位置（src/features/plus/data/type-flow.ts），不另抄一份词（A20） */
+export function clauseSeparators(): RegExp {
+  return new RegExp(SEP_RE.source, 'g');
+}
 const KO_GO_RE = /(?<=[가-힣])고\s+(?=[^，,]*?\d{1,2}\s*(?:시|点|:))/;
 
 export function splitClauses(text: string): string[] {

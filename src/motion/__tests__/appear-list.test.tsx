@@ -4,7 +4,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { itemMotion } from '../AppearList.tsx';
+import { itemMotion } from '../list-impl.tsx';
 import { AppearItem, AppearList } from '../components.ts';
 import { dur, ease, LIST_LAYOUT_LAG, tr } from '../tokens.ts';
 import { loadMotionFeatures } from '../features.ts';

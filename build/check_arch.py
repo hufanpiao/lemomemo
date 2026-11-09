@@ -11,6 +11,10 @@
        只许 import('…') 按需加载（架构 2.6：农历单独 chunk、不进入口；BE-5 代码审查建议 ①）。import type 只引类型、编译后不留，放行
        间接的也报：src 静态引入 shared/ 的模块，它再经静态引入（隔几层都算，只跟相对路径、只在 shared/ 里走）走到农历模块；
        中间任何一层用 import() 或 import type 就算断开（B1 接手清单 LUNAR-indirect-import）
+  MOTION-IMPL motion、framer-motion、motion-dom、motion-utils（含子路径）只能在 src/motion/*-impl.tsx 里引入（import … from、export … from、
+       只写路径的 import、require、import() 都算；src/motion/ 下的纯类型 import type / export type … from 放行，import { type X } 照报）；
+       指向 src/motion/*-impl.tsx 的引入：静态的只准别的 *-impl.tsx 写，import() 只准 src/motion/features.ts 写。
+       src/motion/__tests__/ 和 src/motion/ 下的 *.test.ts(x) 不管（架构 2.3 MOTION-IMPL、2.6，R-354）
   W2   src/public/holidays/cn|kr/ 缺明年的文件，或明年的文件还是 pending（警告）
   P142 supabase/migrations 里 private 的触发器函数不准出现 current_user，用 current_setting('role', true)（0.29 续第 142 条）
   A24  src 的 CSS 里 stylelint-disable 注释不准不写规则名（等于全关），也不准关 lemo/* 和 A24 的三条规则
@@ -339,6 +343,84 @@ def check_lunar_import(root, errors):
                 errors.append(("LUNAR", rel, line_of(code, pos),
                                f"间接静态引入了农历（{via}）：农历会打进首屏。在 src 里改成 await import('{spec}')，"
                                f"或让 shared 那一层对农历只用 import()（架构 2.6，B1 接手清单 LUNAR-indirect-import）"))
+
+
+# MOTION-IMPL（架构 2.3，R-354）：来源字符串的三种引号；反引号里带 ${ 的不算（不是写死的来源）
+_MI_Q = r"""(['"`])([^'"`]*)\{q}"""
+MOTION_IMPORT_RE = re.compile(
+    # 1 关键字 2 type 3-4 来源：import … from / export … from（含 export *）；中间不跨分号、括号、引号，也不跨另一个 import/export。
+    # type 后面紧跟 from 的（import type from 'x'）是默认导入起名叫 type，不算纯类型；import type, { … } 同理（type 后面不是空白）
+    r"""\b(import|export)\s+(type\s+(?!from\b))?(?:(?!\b(?:import|export)\b)[^;'"`()])*?\bfrom\s*""" + _MI_Q.format(q=3)
+    # 5-6：只写路径的 import 'x'
+    + r"""|\bimport\s*""" + _MI_Q.format(q=5)
+    # 7-8：require('x')
+    + r"""|\brequire\s*\(\s*""" + _MI_Q.format(q=7)
+    # 9-10：动态 import('x')
+    + r"""|\bimport\s*\(\s*""" + _MI_Q.format(q=9),
+    re.DOTALL,
+)
+MOTION_PKG_RE = re.compile(r"^(motion|framer-motion|motion-dom|motion-utils)(/.*)?$")
+MOTION_IMPL_FILE_RE = re.compile(r"^src/motion/[^/]+-impl\.tsx$")
+MOTION_FEATURES = "src/motion/features.ts"
+
+
+def motion_imports(code):
+    """(位置, 来源, 写法, 是否语句级纯类型)；写法：static（import/export … from、只写路径、require）或 dynamic（import()）"""
+    for m in MOTION_IMPORT_RE.finditer(code):
+        if m.group(4) is not None:
+            q, spec, kind, typ = m.group(3), m.group(4), "static", bool(m.group(2))
+        elif m.group(6) is not None:
+            q, spec, kind, typ = m.group(5), m.group(6), "static", False
+        elif m.group(8) is not None:
+            q, spec, kind, typ = m.group(7), m.group(8), "static", False
+        else:
+            q, spec, kind, typ = m.group(9), m.group(10), "dynamic", False
+        if q == "`" and "${" in spec:
+            continue
+        yield m.start(), spec, kind, typ
+
+
+def motion_test_exempt(rel):
+    return rel.startswith("src/motion/") and ("/__tests__/" in rel or re.search(r"\.test\.tsx?$", rel) is not None)
+
+
+def check_motion_impl(root, errors):
+    """MOTION-IMPL（架构 2.3，R-354）。先用 strip_comments 去注释再找引入，有两条限制：
+    ① strip_comments 不认正则字面量，正则里带引号或 // 时可能把后面一段当成字符串或注释；项目源码里没有这种写法；
+    ② 只去注释、不去字符串：字符串里写着 import … from 'motion/react' 这类文字也会被当成引入照报（宁可多报）。
+    相对路径的引入用 resolve_rel 解析，解析到仓库外或解析不到的跳过，不中断"""
+    root = root.resolve()
+    for top in ("src", "shared"):
+        for p in iter_files(root, top, SOURCE_EXT):
+            rel = p.relative_to(root).as_posix()
+            if motion_test_exempt(rel):
+                continue
+            code = strip_comments(p.read_text(encoding="utf-8"))
+            in_motion = rel.startswith("src/motion/")
+            is_impl = bool(MOTION_IMPL_FILE_RE.match(rel))
+            for pos, spec, kind, typ in motion_imports(code):
+                if spec.startswith("./") or spec.startswith("../"):
+                    target = resolve_rel(root, p, spec)
+                    if target is None or not MOTION_IMPL_FILE_RE.match(target.relative_to(root).as_posix()):
+                        continue
+                    if typ:
+                        ok = in_motion
+                    elif kind == "dynamic":
+                        ok = rel == MOTION_FEATURES
+                    else:
+                        ok = is_impl
+                    if not ok:
+                        errors.append(("MOTION-IMPL", rel, line_of(code, pos),
+                                       f"动画实现 {spec} 只能由 src/motion/features.ts 用 import() 动态加载（别的 *-impl.tsx 可以静态引）："
+                                       f"静态引入会把 motion/react 带进首屏（架构 2.6、17.3，R-354）"))
+                    continue
+                if not MOTION_PKG_RE.match(spec):
+                    continue
+                if is_impl or (typ and in_motion):
+                    continue
+                errors.append(("MOTION-IMPL", rel, line_of(code, pos),
+                               f"只有 src/motion/*-impl.tsx 能引入 {spec}：要用 motion 的代码写进 src/motion/ 下的 *-impl.tsx、由 motion-impl.tsx 导出，"
+                               f"对外给只依赖 react 的门面；只要类型就写 import type（只限 src/motion/）（架构 2.6、17.3，R-354）"))
 
 
 def check_r2(root, errors):
@@ -1247,6 +1329,7 @@ def main(argv=None):
     check_a19(root, errors)
     check_r2(root, errors)
     check_lunar_import(root, errors)
+    check_motion_impl(root, errors)
     check_w2(root, warnings, today)
     check_p142(root, errors)
     check_a24_disable(root, errors)

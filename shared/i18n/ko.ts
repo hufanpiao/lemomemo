@@ -12,6 +12,9 @@ export const ko = {
   'nav.notes': '메모', // R-106 B2 FA-7 底栏已审（11-05）
   'nav.newEvent': '새 일정', // R-106 B2 FA-7 底栏已审（11-05）
   'nav.newTodo': '새 할 일', // R-106 B2 FA-7 底栏已审（11-05）
+  'nav.add': '입력해서 기록하기', // REVIEW(ko) B3 M4 初稿
+  'nav.plusPreparing': '준비 중', // REVIEW(ko) B3 Q4 初稿
+  'nav.plusClose': '닫기', // REVIEW(ko) B3 初稿
   'notes.soon': '메모는 준비 중이에요', // R-106 B2 FA-7 底栏已审（11-05）（F-8：占位页标题是“레모”，写明是哪个功能）
   'common.ok': '확인', // R-106 B1 第一遍已审（10-31）
   'common.cancel': '취소', // R-106 B1 第一遍已审（10-31）
