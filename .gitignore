@@ -88,3 +88,5 @@ docs/**/真机-*.png
 docs/**/真机-*.jpg
 docs/**/真机录屏-*/
 docs/**/*视觉稿真机*.png
+# 评测结果（tests/ai/run.ts）：每句有模型原文和句库原文，仓库公开，不提交；以工作流产物存档（BE-1 安全审建议 6，11-10）
+tests/ai/reports/
