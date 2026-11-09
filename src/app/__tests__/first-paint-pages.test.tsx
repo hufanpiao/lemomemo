@@ -63,7 +63,8 @@ describe('根是不带 data-feature 的 <main> 的页面也算画完', { timeout
 
 const SRC = resolve(import.meta.dirname, '..', '..');
 /** 根是不带 data-feature 的 <main> 的页面（登记在这里，first-paint.ts 文件头同步写着） */
-const PAGES_WITHOUT_FEATURE = ['app/dev/CspLab.tsx', 'features/reminders/ui/FullReminderPage.tsx', 'kit/components/EditShell.tsx'];
+// app/dev/VoiceProbe.tsx：R-68 探测页（B3 FA-0，非正式版 #/dev-csp/voice，一次性，和 voice-probe 同一个 PR 删）
+const PAGES_WITHOUT_FEATURE = ['app/dev/CspLab.tsx', 'app/dev/VoiceProbe.tsx', 'features/reminders/ui/FullReminderPage.tsx', 'kit/components/EditShell.tsx'];
 
 /**
  * 允许出现 main 的文件（带不带 data-feature 都算）：都是页面的根（首屏判断放宽与推送认领核对审查 L4）。

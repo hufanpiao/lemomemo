@@ -1,0 +1,81 @@
+/* R-68 探测页（一次性，和 voice-probe 同删）；只在非正式版的试验页下懒加载 */
+.page {
+  display: grid;
+  gap: 16px;
+  padding: 24px 16px 96px;
+  font-size: var(--fs-14);
+}
+
+.note {
+  color: var(--text-2);
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.chip[aria-pressed='true'] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.hold {
+  min-height: 96px;
+  border: 0;
+  border-radius: var(--r-xl);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-size: var(--fs-16);
+  touch-action: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.hold[data-recording='1'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.error {
+  color: var(--danger-text);
+}
+
+.segment {
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--panel);
+}
+
+.reply {
+  padding-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.reply[data-ok='0'] {
+  color: var(--danger-text);
+}
+
+.transcript {
+  white-space: pre-wrap;
+}

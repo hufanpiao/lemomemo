@@ -4,7 +4,7 @@
 // • 选择器为什么是 'main' 而不是 'main[data-feature]'（FIRSTPAINT-nofeature，提醒挂载统一审查 F1，11-04 放宽）：
 //   有些页面的根是不带 data-feature 的 <main>，冷启动落在这些页时要等 render 后约 6 秒的兜底，同步、supabase-js 跟着晚起。
 //   现在靠不带 data-feature 的 <main> 触发的：kit 的 EditShell（编辑页）、reminders 的 FullReminderPage（整页提醒，
-//   从系统通知点进来最常见的冷启动路径）、开发版的 CspLab；其余页面（含 App.tsx 的出错页、功能关闭页）的根都是 main[data-feature]。
+//   从系统通知点进来最常见的冷启动路径）、开发版的 CspLab 和它下面的 R-68 探测页 VoiceProbe（B3 FA-0，一次性）；其余页面（含 App.tsx 的出错页、功能关闭页）的根都是 main[data-feature]。
 // • 约束：App 外壳（App.tsx、root.tsx、关口、横幅、Suspense 占位等页面以外的部分）不许放常驻的 <main>，
 //   否则页面分包还没到就“画完”了，同步会和页面分包抢下载。src/app/__tests__/first-paint-shell.test.tsx 渲染 App 拦这一条；
 //   不带 data-feature 的 <main> 只许出现在登记过的页面里（first-paint-pages.test.tsx 扫源码，新增要先登记）

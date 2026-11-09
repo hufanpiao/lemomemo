@@ -183,7 +183,9 @@ PREVIEW_DIR = "_preview"
 # r2-probe（B0 实测清单 P12）10-28 下线、源码已删。名单空了 F6 照样管：_preview/ 下任何目录都报，
 # 别处提到 _preview、config.toml 声明或 entrypoint 指进 _preview/ 也都报
 # db-probe（B0 实测清单 P6，10-29 后端提出，一次性；说明和下线步骤见 docs/09-路线图/B0-P6数据库探测函数.md）：测完删，删时把它从这里和下面 PREVIEW_AI_FUNCS 里去掉
-PREVIEW_FUNCS = frozenset({"db-probe"})
+# voice-probe（B3 任务单 BE-0、Q1，R-68 录音格式探测，11-09 后端；2026-11-17T15:00:00Z 起 410；说明和下线步骤见 docs/09-路线图/B3-voice-probe探测函数.md）：
+#   不碰数据库、不进 PREVIEW_AI_FUNCS、PREVIEW_R2_FUNCS（只经 service role 调 private.take_rate 计数）；测完删，删时把它从这里去掉
+PREVIEW_FUNCS = frozenset({"db-probe", "voice-probe"})
 # 同上：预览专用函数里能用 objstore、读 R2_* 的（现在没有）
 PREVIEW_R2_FUNCS = frozenset()
 # 同上：预览专用函数里能经 _shared/db.ts 用 fn_ai、读 FN_AI_DB_URL 的（F2；只有 fn_ai，预览专用函数一律不准用 fn_vault）

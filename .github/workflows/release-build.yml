@@ -130,6 +130,9 @@ jobs:
           # 构建以后 A14 连 dist/web 一起扫
           python3 -I build/check_arch.py
 
+      - name: 正式产物里不能有 R-68 探测页和 voice-probe（B3 Q1 ⑧；和 voice-probe 同一个 PR 删）
+        run: node build/check_no_probe.mjs --dir dist/web
+
       - name: 发布包里不能有 source map（上线与回滚手册 第二节）
         run: |
           if find dist/web -name '*.map' | grep -q . || grep -rl 'sourceMappingURL' dist/web --include='*.js' | grep -q .; then

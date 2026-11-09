@@ -57,6 +57,11 @@ if (splash.status !== 0) process.exit(splash.status ?? 1);
 // 底栏渐隐层的遮罩带 -webkit- 前缀（B12 代码审查 11-06）：构建配置变了不再补前缀时，旧一些的 iOS Safari 上底栏、“＋”的挖空会没
 const glass = spawnSync(process.execPath, [resolve(ROOT, 'build/check_glass_css.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });
 if (glass.status !== 0) process.exit(glass.status ?? 1);
+// 正式产物里不能有 R-68 探测页和 voice-probe（B3 Q1 ⑧；和 voice-probe 同一个 PR 删）
+if (mode === 'production') {
+  const probe = spawnSync(process.execPath, [resolve(ROOT, 'build/check_no_probe.mjs'), '--dir', OUT], { stdio: 'inherit' });
+  if (probe.status !== 0) process.exit(probe.status ?? 1);
+}
 const size = spawnSync(process.execPath, [resolve(ROOT, 'build/check_size.mjs'), '--app-dir', APP_DIR, '--mode', mode], { stdio: 'inherit' });
 // 首屏块里不许有 zod（FA-6 ③ 审查 M3 第二轮）：按 manifest 算入口 + 今天页、告知页关口的静态闭包；要在下面删掉 .vite 之前跑
 const zodFree = spawnSync(process.execPath, [resolve(ROOT, 'build/check_first_paint_chunks.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });

@@ -21,9 +21,6 @@ export const buildInfo = {
   turnstileSiteKey: import.meta.env.VITE_PUBLIC_TURNSTILE_SITE_KEY ?? '',
 } as const;
 
-/** 开发和验证用的页面（例如 CSP 试验页）只在非正式版里挂 */
-export const isProduction = buildInfo.env === 'production';
-
 // ───────── 运行环境（架构 5.10、5.3“exe”；B2 架构审 D4 第 1 点，B6-exe 约定 3）─────────
 
 /** 网页（浏览器、iPhone 主屏幕版）还是 exe（Tauri 窗口，WebView2） */

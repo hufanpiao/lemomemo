@@ -29,7 +29,6 @@ import { useKeys } from '../kit/hooks/useKeys.ts';
 import { useT } from '../kit/hooks/useT.ts';
 import { useUi } from '../kit/state/ui-store.ts';
 import { remindQueue, setRemindDown } from '../kit/state/remind-queue.ts';
-import { isProduction } from '../platform/env.ts';
 import { clock } from '../platform/clock.ts';
 import { afterAppPainted, APP_PAGE_SELECTOR } from '../platform/first-paint.ts';
 import { whenIdle } from '../platform/session.ts';
@@ -43,8 +42,9 @@ import { PlusSlot, preloadPlus } from './plus-slot.tsx';
 import type { DateStr } from '../../shared/core/date.ts';
 import { setNewItemDay, setNewItemTitle, takeNewItemDay } from '../kit/state/new-item.ts';
 
-// CSP 试验页（B0 第一项验证）：只在非正式版里挂
-const devRoutes: readonly FeatureRoute[] = isProduction
+// CSP 试验页（B0 第一项验证）：只在非正式版里挂。用构建期常量 import.meta.env.MODE（构建时替换成字面量），
+// 正式构建时 rollup 把试验页整块删掉（运行时的 isProduction 删不掉，块会留在正式产物里）；build/check_no_probe.mjs 断言正式产物里没有它
+const devRoutes: readonly FeatureRoute[] = import.meta.env.MODE === 'production'
   ? []
   : [{ name: 'dev-csp', Page: lazy(() => import('./dev/CspLab.tsx')) }];
 

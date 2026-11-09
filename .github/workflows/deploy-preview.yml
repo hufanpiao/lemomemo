@@ -169,7 +169,9 @@ jobs:
         # 给它 verify_jwt = false（按“任何人都能调用”设计，防护在函数里：自带环境判断（只认预览项目）、写死的过期时间、
         # 只收 POST、限频、总预算）。
         # r2-probe（B0 实测清单 P12，一次性）已于 10-28 下线，源码已删（docs/09-路线图/B0-R2探测函数.md）。
-        # 现在名单里是 db-probe（B0 实测清单 P6，一次性；只认 SUPABASE_URL 是预览 ref；docs/09-路线图/B0-P6数据库探测函数.md）。
+        # 现在名单里是 db-probe（B0 实测清单 P6，一次性；只认 SUPABASE_URL 是预览 ref；docs/09-路线图/B0-P6数据库探测函数.md）
+        # 和 voice-probe（B3 BE-0，R-68 录音格式探测，一次性；同样只认预览 ref，另在函数里自己验 JWT、写死账号白名单、每天 ≤ 100 次，
+        # 2026-11-17T15:00:00Z 起 410；docs/09-路线图/B3-voice-probe探测函数.md）。
         # 名单为空、_preview/ 不存在时这一步什么都不做（glob 不匹配时 [ -d ] 不成立直接跳过）；
         # 以后有人在 _preview/ 下放目录而不进名单，这里和 check_backend F6 都会让构建失败。
         run: |
