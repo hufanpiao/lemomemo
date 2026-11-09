@@ -7,7 +7,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { BUDGET, measure, NET_GROWTH_MESSAGE, netGrowthCheck, stableText } from '../../build/check_size.mjs';
+import { BUDGET, measure, NET_GROWTH_MESSAGE, netGrowthCheck, publicValues, stableText } from '../../build/check_size.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const SAMPLE = join(ROOT, 'tests', 'arch-fixtures', 'check_size', 'w3-over-budget');
@@ -109,5 +109,20 @@ describe('B3 首屏净增额度：超过 基线 + 1 KB 就失败（build/check_s
     expect(stableText(a, ['6f0325b', 'unknown'])).toBe(stableText(b, ['6f0325b', 'unknown']));
     // 普通文字不受影响
     expect(stableText('jsx-runtime.js "abc"', ['unknown'])).toBe('jsx-runtime.js "abc"');
+  });
+  it('稳定口径：注入的公开变量（JWT、VAPID、Turnstile、地址、版本号）长短不同，量回“不注入”的同一份文字（807a10f deploy-preview +1179 的来源）', () => {
+    const page = (url: string, anon: string, vapid: string, ts: string, ver: string) =>
+      `const e={env:m(\`preview\`),supabaseUrl:\`${url}\`,anonKey:\`${anon}\`,vapid:"${vapid}",turnstile:'${ts}',version:\`${ver}\`};`;
+    const none = page('', '', '', '', '4.0.0');
+    const envA = { VITE_PUBLIC_ENV: 'preview', VITE_PUBLIC_SUPABASE_URL: 'https://preview.lemomemo.com/sb', VITE_PUBLIC_ANON_KEY: `eyJhbGciOiJIUzI1NiJ9.${'a'.repeat(120)}.sig1`, VITE_PUBLIC_VAPID_KEY: `B${'v'.repeat(86)}`, VITE_PUBLIC_TURNSTILE_SITE_KEY: '0x4AAAAAAAxxxxxxxxxxxxxx', LEMO_BUILD_VERSION: '4.0.0-preview.7' };
+    const envB = { VITE_PUBLIC_ENV: 'preview', VITE_PUBLIC_SUPABASE_URL: 'https://lemomemo-preview-long.lemomemo.com/sb', VITE_PUBLIC_ANON_KEY: `eyJhbGciOiJIUzI1NiJ9.${'b'.repeat(190)}.sig22`, VITE_PUBLIC_VAPID_KEY: `B${'w'.repeat(86)}`, VITE_PUBLIC_TURNSTILE_SITE_KEY: '0x4AAAAAAAyyyyyyyyyyyyyyyyyyyyyyyy', LEMO_BUILD_VERSION: '4.0.0-preview.1234' };
+    const built = (e: typeof envA) => page(e.VITE_PUBLIC_SUPABASE_URL, e.VITE_PUBLIC_ANON_KEY, e.VITE_PUBLIC_VAPID_KEY, e.VITE_PUBLIC_TURNSTILE_SITE_KEY, e.LEMO_BUILD_VERSION);
+    const a = stableText(built(envA), [], publicValues(envA, ROOT));
+    const b = stableText(built(envB), [], publicValues(envB, ROOT));
+    expect(a).toBe(none);
+    expect(b).toBe(none);
+    // ENV 和 8 个字符以下的短值不换（怕误伤别处同样的字面量）；没注入时什么都不换
+    expect(publicValues({ VITE_PUBLIC_ENV: 'preview', VITE_PUBLIC_ANON_KEY: 'x' }, ROOT)).toEqual([]);
+    expect(publicValues({}, ROOT)).toEqual([]);
   });
 });

@@ -41,7 +41,8 @@ export function measure(appDir) {
   const firstScreenJs = first.reduce((s, f) => s + gz(f), 0);
   const totalJs = all.reduce((s, f) => s + gz(f), 0);
   const commits = buildCommits();
-  const gzStable = (f) => gzipSync(Buffer.from(stableText(readFileSync(resolve(appDir, f), 'utf8'), commits)), { level: 9 }).length;
+  const pub = publicValues();
+  const gzStable = (f) => gzipSync(Buffer.from(stableText(readFileSync(resolve(appDir, f), 'utf8'), commits, pub)), { level: 9 }).length;
   const firstScreenStable = first.reduce((s, f) => s + gzStable(f), 0);
   return { firstScreenJs, firstScreenStable, totalJs, firstFiles: first };
 }
@@ -50,15 +51,39 @@ export function measure(appDir) {
  * 净增关卡用的“稳定”字节数（11-09 查清的抖动来源）：同一份源码连构建两次，首屏 gzip 差到 39 B（linux 镜像里 113936 / 113897），
  * 因为 vite.config.ts 把每次不同的 __BUILD_TIME__（ISO 时刻）和 __BUILD_COMMIT__（7 位提交号）编进了包，时刻一变，所在块的哈希、
  * 别的块 import 它时写的文件名（name-哈希.js）跟着全变，gzip 结果就抖。这里只在计数前把这三样换成固定值再压缩，产物本身不动；
- * 150 KB 的 W3 照旧按原样字节算
+ * 150 KB 的 W3 照旧按原样字节算。
+ * 11-09 补（807a10f deploy-preview 挂在净增 +1179，本机不注入只有 +992）：deploy-preview 构建时注入的公开变量（VITE_PUBLIC_ANON_KEY 这种 JWT、
+ * VAPID、Turnstile、Supabase 地址，以及 LEMO_BUILD_VERSION 的 X.Y.Z-preview.N）被原样写进首屏块（env.ts 的常量，在 jsx-runtime 那块），
+ * 一个高熵 JWT 就占一两百字节；基线 111404 是不注入时量的。pub 里每一对 [注入值, 不注入时的值] 只换带引号的整个字面量，
+ * 把带注入的构建量回“不注入”的样子（键值换成空串，版本号换回 VERSION 文件的值）
  */
-export function stableText(text, commits = []) {
+export function stableText(text, commits = [], pub = []) {
   let s = text
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, '2000-01-01T00:00:00.000Z')
     .replace(/-[A-Za-z0-9_-]{8}\.(js|css)\b/g, '-00000000.$1');
   // 压缩后是 commit:`6f0325b`（反引号），也认双引号、单引号
   for (const c of commits) if (c) for (const q of ['`', '"', "'"]) s = s.replaceAll(`${q}${c}${q}`, `${q}0000000${q}`);
+  for (const [from, to] of pub) if (from) for (const q of ['`', '"', "'"]) s = s.replaceAll(`${q}${from}${q}`, `${q}${to}${q}`);
   return s;
+}
+
+/**
+ * 构建时注入进前端的公开变量，返回 [注入值, 不注入时的值]。VITE_PUBLIC_ENV 不管：值只是 preview / production 这种短词，产物里别处也有同样的字面量，
+ * 换了会误伤，而且它没注入时也是同一个词（vite 的 mode），几个字节的差不影响 1 KB 的判断。只收 8 个字符以上的值，短值同理怕误伤
+ */
+export function publicValues(env = process.env, root = resolve(dirname(fileURLToPath(import.meta.url)), '..')) {
+  const out = [];
+  for (const [k, v] of Object.entries(env)) {
+    if (!k.startsWith('VITE_PUBLIC_') || k === 'VITE_PUBLIC_ENV') continue;
+    const t = v?.trim();
+    if (t && t.length >= 8) out.push([t, '']);
+  }
+  const ver = env['LEMO_BUILD_VERSION']?.trim();
+  if (ver) {
+    const base = readFileSync(resolve(root, 'VERSION'), 'utf8').trim();
+    if (ver !== base) out.push([ver, base]);
+  }
+  return out;
 }
 
 /** 和 vite.config.ts 的 buildCommit() 同一套来源（CI 的 GITHUB_SHA、Pages 的 CF_PAGES_COMMIT_SHA、本机 git），外加取不到时的 unknown */
