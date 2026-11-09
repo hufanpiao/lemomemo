@@ -47,6 +47,16 @@ const PHONE = {
   timezoneId: 'Asia/Seoul',
 };
 
+/** 底栏视觉锁定用：桌面 Chromium、375×812、2 倍屏（参照图的截法），不开触屏（参照图是桌面 Chromium 截的） */
+const CHROMIUM_375 = {
+  ...devices['Desktop Chrome'],
+  viewport: { width: 375, height: 812 },
+  screen: { width: 375, height: 812 },
+  deviceScaleFactor: 2,
+  locale: 'zh-CN',
+  timezoneId: 'Asia/Seoul',
+};
+
 export default defineConfig({
   testDir: 'tests/e2e/visual',
   testMatch: '**/*.spec.ts',
@@ -79,8 +89,11 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'webkit-simple-light', use: { ...PHONE, colorScheme: 'light' } },
-    { name: 'webkit-simple-dark', use: { ...PHONE, colorScheme: 'dark' } },
+    { name: 'webkit-simple-light', testIgnore: '**/tabbar-lock.spec.ts', use: { ...PHONE, colorScheme: 'light' } },
+    { name: 'webkit-simple-dark', testIgnore: '**/tabbar-lock.spec.ts', use: { ...PHONE, colorScheme: 'dark' } },
+    // 底栏视觉锁定（R-360、R-361；界面改动防返工规则第四条）：只用 Chromium——WebKit 不画 backdrop-filter，锁不住模糊。
+    // 条件和参照图（docs/03-评审/B2/底栏透明度截图/底栏-11-07还原后-对照确认图.png 右列）一致：375×812、@2x、无安全区，四套皮肤在用例里切
+    { name: 'chromium-tabbar-lock', testMatch: '**/tabbar-lock.spec.ts', use: { ...CHROMIUM_375 } },
   ],
   webServer: [
     {

@@ -428,6 +428,11 @@ jobs:
       - name: Playwright 快读组（带 supabase 地址的 e2e 构建，只跑首屏 supabase 用例）
         run: npm run e2e:fastread
 
+      # 底栏视觉锁定（R-360、R-361）：只跑 playwright.visual.config.ts 的 chromium-tabbar-lock 一组（Chromium 才画 backdrop-filter），
+      # 和 tests/e2e/visual/__screenshots__/linux/ 的基准比、0 像素差；不一样就失败、CI 变红。基准用这同一个镜像生成，改底栏要负责人新需求编号
+      - name: 底栏视觉锁定（Chromium，只跑 chromium-tabbar-lock）
+        run: npm run e2e:visual -- --project=chromium-tabbar-lock
+
       - name: 失败时上传报告（只有本地测试数据，不含任何密钥）
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -436,5 +441,7 @@ jobs:
           path: |
             playwright-report/
             playwright-report-fastread/
+            playwright-report-visual/
+            test-results-visual/
           retention-days: 7
           if-no-files-found: ignore
