@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "provider": "gemini",
+  "origin": "handmade",
+  "note": "坏输出：模型回的文字不是 JSON（手写，未经真调用录制；请求体不存，回放只按方法和地址对）",
+  "entries": [
+    {
+      "req": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-x:generateContent",
+        "body": null
+      },
+      "res": {
+        "kind": "http",
+        "status": 200,
+        "body": "{\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"好的，我帮你记下了：明天开会\"}]},\"finishReason\":\"STOP\"}]}"
+      }
+    }
+  ]
+}

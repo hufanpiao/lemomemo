@@ -152,6 +152,23 @@ jobs:
       - name: 安装 gitleaks（版本和 SHA-256 见 tools/ci-tools.lock）
         run: bash build/ci/install-tool.sh gitleaks
 
+      - name: 回放文件带假密钥必须被拦（TC-B0-90 后半，BE-6 安全审建议 3）
+        # 行为证明放在这里而不是 unit 任务：只有这个任务装了 gitleaks（unit 任务不装，那条 vitest 用例在 CI 跳过）。
+        # 假密钥运行时随机拼（字母数字混合；纯十六进制熵不够，gitleaks 不报），仓库里不出现整串；临时目录用完即删
+        run: |
+          d="$(mktemp -d)"
+          k="$(python3 -c "import secrets,string; a=string.ascii_letters+string.digits+'-_'; print('AI'+'za'+''.join(secrets.choice(a) for _ in range(35)))")"
+          printf '{"v":1,"provider":"gemini","origin":"recorded","note":"%s","entries":[]}\n' "$k" > "$d/leaked.json"
+          set +e
+          gitleaks dir --redact --no-banner --exit-code 1 "$d"
+          rc=$?
+          set -e
+          rm -rf "$d"
+          if [ "$rc" -ne 1 ]; then
+            echo "::error::gitleaks 没拦住回放文件里的假密钥（退出码 $rc，应为 1）"
+            exit 1
+          fi
+
       - name: 扫全部历史
         # --redact：日志里不出现疑似密钥的原文
         run: gitleaks git --redact --no-banner --exit-code 1 --log-opts="--all" .

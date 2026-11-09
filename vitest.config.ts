@@ -71,6 +71,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/vapid-public-key-check.test.ts', // bash 跑 release-build、deploy-preview 的 VAPID 公钥核对（VAPID-prod-format、B2 O-2）
   'tests/build/set-fn-role-passwords.test.ts', // PowerShell、python
   'tests/build/set-fn-role-passwords-run.test.ts', // PowerShell
+  'tests/edge/ai-replay-recorder.test.ts', // 起 gitleaks 子进程（BE-6 录制器存盘的回放文件带假密钥必须被拦）
   'tests/data-manifest/generate.test.ts', // PGlite 跑全部迁移
   'tests/data-manifest/grant-matrix.test.ts', // PGlite 跑全部迁移
 ];
