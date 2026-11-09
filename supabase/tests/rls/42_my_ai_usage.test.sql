@@ -3,7 +3,7 @@
 --   ② private.my_ai_usage_impl / public.my_ai_usage：设置里看到的次数 = 服务器扣的次数，只算本人；门在 impl 里；
 --   ③ private.intake_insert：claude-intake 三张表一个事务写完，只 insert，不准带 user_id。
 begin;
-select plan(42);
+select plan(43);
 \ir _helpers.psql
 select tests.seed();
 
@@ -118,8 +118,11 @@ select ok(tests.svc($$select private.intake_insert('aaaaaaaa-0000-4000-8000-0000
 -- 安全审复查建议：列按表写死，系统列只准带新建时的固定值
 select ok(tests.svc($$select private.intake_insert('aaaaaaaa-0000-4000-8000-000000000001', '{"events": [{"id": "e1000000-0000-4000-8000-000000000003", "title": "x", "date": "2026-10-29", "ai_status": "done", "created_at": 1761620000000, "updated_at": 1761620000000}]}')$$) ->> 'error' like '22023 bad_intake_column%', '写 ai_status（系统列，不在名单里）报错');
 select ok(tests.svc($$select private.intake_insert('aaaaaaaa-0000-4000-8000-000000000001', '{"todos": [{"id": "e2000000-0000-4000-8000-000000000005", "title": "x", "deleted_at": 1761620000000, "created_at": 1761620000000, "updated_at": 1761620000000}]}')$$) ->> 'error' like '22023 bad_intake_column%', 'deleted_at 带非空值报错（只准 null）');
-select is(tests.svc($$select count(*)::int as ok from (select private.intake_insert('aaaaaaaa-0000-4000-8000-000000000001', '{"todos": [{"id": "e2000000-0000-4000-8000-000000000006", "title": "整行", "done": false, "due": null, "important": false, "project": "", "note": "", "source": "chat", "raw_text": "整行", "batch_id": "e3000000-0000-4000-8000-000000000001", "from_note_id": null, "from_anniv_id": null, "short": null, "short_by": null, "done_at": 0, "remind_days": null, "remind_time": "09:00", "due_time": null, "remind_before_min": null, "push_show_title": null, "notified_for": null, "snooze_at": null, "deleted_at": null, "undone": false, "created_at": 1761620000000, "updated_at": 1761620000000}]}')) x$$),
-  '[{"ok": 1}]'::jsonb, 'capture-map 产出的整行待办（系统列都是固定值）写得进');
+select is(tests.svc($$select count(*)::int as ok from (select private.intake_insert('aaaaaaaa-0000-4000-8000-000000000001', '{"todos": [{"id": "e2000000-0000-4000-8000-000000000006", "title": "整行", "done": false, "due": null, "important": false, "project": "", "note": "", "source": "chat", "raw_text": "整行", "batch_id": "e3000000-0000-4000-8000-000000000001", "from_note_id": null, "from_anniv_id": null, "short": null, "short_by": null, "done_at": 0, "remind_days": null, "remind_time": "09:00", "due_time": null, "remind_before_min": null, "push_show_title": null, "notified_for": null, "snooze_at": null, "created_at": 1761620000000, "updated_at": 1761620000000}]}')) x$$),
+  '[{"ok": 1}]'::jsonb, 'capture-map 产出的整行待办（系统列都是固定值；11-09 起不带 deleted_at、undone）写得进');
+select is((select jsonb_agg(jsonb_build_array(deleted_at, undone) order by id) from (select id, deleted_at, undone from public.events where id = 'e1000000-0000-4000-8000-000000000001'
+           union all select id, deleted_at, undone from public.todos where id in ('e2000000-0000-4000-8000-000000000001', 'e2000000-0000-4000-8000-000000000006')) x),
+  '[[null, false], [null, false], [null, false]]'::jsonb, '没带 deleted_at、undone 的行走库默认值：deleted_at 为 null、undone 为 false（不报错、不写成 null）');
 select is((select count(*)::int from public.todos where id in ('e2000000-0000-4000-8000-000000000005')) + (select count(*)::int from public.events where id = 'e1000000-0000-4000-8000-000000000003'), 0, '被拒的两条什么都没写');
 
 select * from finish();

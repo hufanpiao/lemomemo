@@ -8,8 +8,8 @@
 //     本机规则（origin = 'rule'）不写 short；
 //   • 纪念日：阴历一律存中国农历 lunar_variant = 'cn'（R-169，说“음력”也一样），用户到编辑页能改成韩国阴历；B3 只测这一映射，端到端随 B5；
 //   • 随手记：写入路径 B4 才有，这里返回 null（调用方当作“这条存不了”）；
-//   • 不写 ai_status（系统列，客户端无权写；B3 保持 none，任务单 M5）；不写 repeat（R-163：重复只记最近一次）。
-// 输出的 events、todos 行能过 shared/schema/rows.ts 的 eventsWrite、todosWrite（单测核对）。纯函数，不读时钟（now 由调用方传）。
+//   • 不写 ai_status（系统列，客户端无权写；B3 保持 none，任务单 M5）；不写 deleted_at、undone（只能 update，新增时由库的默认值给 null、false）；不写 repeat（R-163：重复只记最近一次）。
+// 输出的 events、todos 行原样能过 shared/schema/rows.ts 的 insertSchema（tests/shared/capture-map-insert.test.ts 核对）。纯函数，不读时钟（now 由调用方传）。
 import type { DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
 import { DEFAULT_TODO_REMIND_TIME } from './remind.ts';
@@ -73,7 +73,7 @@ export interface EventRow {
   id: string; title: string; date: DateStr; time: string | null; tz: string | null; duration_min: number;
   project: string; note: string; source: CaptureCtx['source']; raw_text: string; location: string;
   short: string | null; short_by: 'ai' | null; push_show_title: null; batch_id: string;
-  remind_min: 15 | null; remind_days: null; notified_for: null; snooze_at: null; deleted_at: null; undone: false;
+  remind_min: 15 | null; remind_days: null; notified_for: null; snooze_at: null;
   created_at: number; updated_at: number;
 }
 
@@ -82,7 +82,7 @@ export interface TodoRow {
   source: CaptureCtx['source']; raw_text: string; batch_id: string; from_note_id: null; from_anniv_id: null;
   short: string | null; short_by: 'ai' | null; done_at: 0; remind_days: null; remind_time: string;
   due_time: string | null; remind_before_min: 60 | null; push_show_title: null; notified_for: null; snooze_at: null;
-  deleted_at: null; undone: false; created_at: number; updated_at: number;
+  created_at: number; updated_at: number;
 }
 
 export interface AnnivRow {
@@ -132,7 +132,7 @@ export function captureRow(item: CaptureItem, ctx: CaptureCtx): CaptureRow | nul
           duration_min: item.duration_min ?? EVENT_DURATION_DEFAULT, project, note, source: ctx.source, raw_text: raw, location: '',
           ...shortOf(item, ctx), push_show_title: null, batch_id: ctx.batchId,
           remind_min: time === null ? null : EVENT_REMIND_MIN_DEFAULT, remind_days: null,
-          notified_for: null, snooze_at: null, deleted_at: null, undone: false, created_at: ctx.now, updated_at: ctx.now,
+          notified_for: null, snooze_at: null, created_at: ctx.now, updated_at: ctx.now,
         },
       };
     }
@@ -145,7 +145,7 @@ export function captureRow(item: CaptureItem, ctx: CaptureCtx): CaptureRow | nul
           id: ctx.id, title: item.title, done: false, due, important: item.important, project, note, source: ctx.source, raw_text: raw,
           batch_id: ctx.batchId, from_note_id: null, from_anniv_id: null, ...shortOf(item, ctx), done_at: 0, remind_days: null,
           remind_time: DEFAULT_TODO_REMIND_TIME, due_time: dueTime, remind_before_min: dueTime === null ? null : TODO_REMIND_BEFORE_DEFAULT,
-          push_show_title: null, notified_for: null, snooze_at: null, deleted_at: null, undone: false, created_at: ctx.now, updated_at: ctx.now,
+          push_show_title: null, notified_for: null, snooze_at: null, created_at: ctx.now, updated_at: ctx.now,
         },
       };
     }

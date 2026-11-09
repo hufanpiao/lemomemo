@@ -302,7 +302,9 @@
     align-items: center;
     width: 78px;
     height: auto;
-    padding: 88px 8px 14px;
+
+    /* R-363：上内边距 94 = “＋”顶 20 + “＋”54 + 到第一个页签 20，照视觉稿 .desk .rail .fabd 的 margin 4 0 14 + gap 6（原来 88 只隔 14，显挤） */
+    padding: 94px 8px 14px;
     border-radius: 28px;
     background: var(--b-rail);
     box-shadow: var(--b-rail-shadow);
@@ -337,6 +339,9 @@
 
   .fab {
     inset: calc(36px + var(--inset-top)) auto auto 28px;
+
+    /* R-363：画在侧栏上面（同为 z-index 10 时 DOM 里在后的侧栏盖住了“＋”，看不见也点不到）；只改层级，颜色、模糊、尺寸不动 */
+    z-index: 11;
     width: 54px;
     height: 54px;
   }

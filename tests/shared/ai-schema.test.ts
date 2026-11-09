@@ -1,11 +1,11 @@
 // shared/schema/ai.ts、shared/logic/parse/past-date.ts、shared/logic/capture-map.ts（B3 任务单 BE-1、BE-2、S10、M10；架构第 7 节输出结构、0.29 第 17c 条、续第 36、68 条）。
-// 本机规则和 AI 输出共用这一套：AI 的键白名单、按 kind 清字段、过去的月日几号要问（confirm 由服务器算）、行映射能过 eventsWrite / todosWrite。
+// 本机规则和 AI 输出共用这一套：AI 的键白名单、按 kind 清字段、过去的月日几号要问（confirm 由服务器算）、行映射能原样过 insertSchema（新增口径，不带只能 update 的列）。
 // Vitest 和 Deno（deno task test）都跑。
 import { describe, expect, it } from 'vitest';
 import { aiResponse, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiCheckCtx, type AiItem } from '../../shared/schema/ai.ts';
 import { captureRow, type CaptureCtx } from '../../shared/logic/capture-map.ts';
 import { inAiRange, pastDate, resolveBasis } from '../../shared/logic/parse/past-date.ts';
-import { eventsWrite, todosWrite } from '../../shared/schema/rows.ts';
+import { insertSchema } from '../../shared/schema/rows.ts';
 
 // 2026-10-28（周三）12:00 首尔 = 03:00 UTC
 const NOW = Date.UTC(2026, 9, 28, 3, 0);
@@ -172,10 +172,10 @@ describe('capture-map.ts：识别结果 → 库里的一行（M10）', () => {
   });
   const item = (o: Partial<AiItem>): AiItem => ({ ...first(checkParseOutput({ items: [ev()] }, ALL)), ...o });
 
-  it('日程：有时刻记 tz、提前 15 分钟提醒；过 eventsWrite；AI 简称记 short_by ai，本机规则不写简称（TC-B3-05）', () => {
+  it('日程：有时刻记 tz、提前 15 分钟提醒；过 insertSchema；AI 简称记 short_by ai，本机规则不写简称（TC-B3-05）', () => {
     const r = captureRow(item({ short: '开会' }), ctx());
     expect(r?.table).toBe('events');
-    expect(eventsWrite.safeParse(r?.row).success).toBe(true);
+    expect(insertSchema('events').safeParse(r?.row).success).toBe(true);
     const row = r?.row as unknown as Record<string, unknown>;
     expect([row['tz'], row['remind_min'], row['duration_min'], row['short'], row['short_by'], row['batch_id'], row['source']])
       .toEqual([SEOUL, 15, 60, '开会', 'ai', BATCH, 'page']);
@@ -183,18 +183,18 @@ describe('capture-map.ts：识别结果 → 库里的一行（M10）', () => {
     expect([rule['short'], rule['short_by'], rule['source']]).toEqual([null, null, 'chat']);
     const allDay = captureRow(item({ time: null, date: null }), ctx())?.row as unknown as Record<string, unknown>;
     expect([allDay['date'], allDay['tz'], allDay['remind_min']]).toEqual(['2026-10-28', null, null]);
-    expect(eventsWrite.safeParse(allDay).success).toBe(true);
+    expect(insertSchema('events').safeParse(allDay).success).toBe(true);
   });
 
-  it('TC-B3-44：待办的 time 存成 due_time、提前 60 分钟；没 due 补今天；过 todosWrite', () => {
+  it('TC-B3-44：待办的 time 存成 due_time、提前 60 分钟；没 due 补今天；过 insertSchema', () => {
     const r = captureRow(item({ kind: 'todo', date: null, due: null, time: '17:00' }), ctx());
     expect(r?.table).toBe('todos');
     const row = r?.row as unknown as Record<string, unknown>;
     expect([row['due'], row['due_time'], row['remind_before_min'], 'time' in row]).toEqual(['2026-10-28', '17:00', 60, false]);
-    expect(todosWrite.safeParse(row).success).toBe(true);
+    expect(insertSchema('todos').safeParse(row).success).toBe(true);
     const plain = captureRow(item({ kind: 'todo', date: null, due: null, time: null }), ctx())?.row as unknown as Record<string, unknown>;
     expect([plain['due'], plain['due_time'], plain['remind_before_min']]).toEqual([null, null, null]);
-    expect(todosWrite.safeParse(plain).success).toBe(true);
+    expect(insertSchema('todos').safeParse(plain).success).toBe(true);
   });
 
   it('TC-B3-46：阴历纪念日一律 lunar_variant cn；阳历没有闰月；随手记 B4 才能存（null）', () => {
@@ -213,6 +213,6 @@ describe('capture-map.ts：识别结果 → 库里的一行（M10）', () => {
   it('原话截 2000 字、项目名截 40 字', () => {
     const row = captureRow(item({ project: 'p'.repeat(60) }), ctx({ rawText: '字'.repeat(2500) }))?.row as unknown as Record<string, unknown>;
     expect([(row['raw_text'] as string).length, (row['project'] as string).length]).toEqual([2000, 40]);
-    expect(eventsWrite.safeParse(row).success).toBe(true);
+    expect(insertSchema('events').safeParse(row).success).toBe(true);
   });
 });

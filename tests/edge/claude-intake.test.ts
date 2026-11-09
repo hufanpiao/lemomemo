@@ -9,7 +9,7 @@ import { isValidTz } from '../../shared/core/tz.ts';
 import { captureRow } from '../../shared/logic/capture-map.ts';
 import { arrangeHint, confidence, parseSplit, recurHint } from '../../shared/logic/parse/index.ts';
 import { checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, type AiItem } from '../../shared/schema/ai.ts';
-import { eventsWrite, todosWrite } from '../../shared/schema/rows.ts';
+import { insertSchema } from '../../shared/schema/rows.ts';
 import { makeParseWithAI } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { logIntakeFail, type StoreAdmin } from '../../supabase/functions/_shared/ai/store.ts';
 import { randomToken, TOKEN_RE, TOKEN_TTL_MS, tokenHash, tokenLive } from '../../supabase/functions/_shared/intake-token.ts';
@@ -290,7 +290,7 @@ describe('claude-intake：记事', () => {
     expect(w.inserted.map((i) => [i.userId, i.table])).toEqual([[UA, 'events']]);
     const row = w.inserted[0]?.rows[0] ?? {};
     expect([row['source'], row['raw_text'], row['tz'], row['short_by']]).toEqual(['chat', '明天下午3点开会', 'Asia/Seoul', null]);
-    expect(eventsWrite.safeParse(row).success).toBe(true);
+    expect(insertSchema('events').safeParse(row).success).toBe(true);
     expect(w.touched).toEqual([NOW]);
   });
   it('本机没把握、同意了 AI：走 AI（扣 1 次），按 AI 的结果记；AI 失败退回次数、用本机结果', async () => {
@@ -300,7 +300,7 @@ describe('claude-intake：记事', () => {
     expect([w.gate.provider.stub.calls.length, used(w.gate, `ai:${UA}`)]).toEqual([1, 1]);
     const row = w.inserted[0]?.rows[0] ?? {};
     expect([row['short'], row['short_by']]).toEqual(['合同', 'ai']);
-    expect(todosWrite.safeParse(row).success).toBe(true);
+    expect(insertSchema('todos').safeParse(row).success).toBe(true);
     const bad = await world({ gate: { reply: () => ({ ok: false, reason: 'timeout' }) } });
     const b = await send(bad, { text: '下周找时间和老王聊聊合同的事' });
     expect((b.body['created'] as { title: string }[]).map((c) => c.title)).toEqual(['下周找时间和老王聊聊合同的事']);
