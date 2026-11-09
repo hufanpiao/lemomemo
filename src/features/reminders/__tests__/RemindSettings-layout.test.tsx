@@ -137,6 +137,7 @@ describe('R-347：“提醒里写什么”、免打扰是点进去的页（线�
 });
 
 describe('设计复审第二轮 N8：通知被关掉的说明紧跟在“通知”那一行下面', () => {
+  // B2-UI-b W1 起两张卡各是 kit 的 SettingsCard（<section> 里 h2 + ul，说明是卡里 ul 后面的 <p>）
   it('“通知”单独一张卡，说明紧跟在后面，下面三行在另一张卡里', () => {
     perm = 'denied';
     render(<RemindSettings />);
@@ -144,15 +145,20 @@ describe('设计复审第二轮 N8：通知被关掉的说明紧跟在“通知�
     const notifyCard = screen.getByTestId('remind-perm').closest('ul') as HTMLElement;
     expect(notifyCard.querySelectorAll('li')).toHaveLength(1);
     expect(notifyCard.nextElementSibling).toBe(note);
+    expect(note.nextElementSibling).toBeNull();
     const rest = screen.getByTestId('remind-open-show-title').closest('ul') as HTMLElement;
     expect(rest).not.toBe(notifyCard);
-    expect(note.nextElementSibling).toBe(rest);
+    // 说明之后紧接着就是下面那张卡（中间没有别的东西）
+    const notifySection = notifyCard.closest('section') as HTMLElement;
+    expect(notifySection.nextElementSibling?.contains(rest)).toBe(true);
     expect(rest.contains(screen.getByTestId('remind-test'))).toBe(true);
   });
   it('通知开着：不出说明，两张卡挨着', () => {
     render(<RemindSettings />);
     expect(screen.queryByTestId('remind-denied-note')).toBeNull();
     const notifyCard = screen.getByTestId('remind-perm').closest('ul') as HTMLElement;
-    expect(notifyCard.nextElementSibling).toBe(screen.getByTestId('remind-open-show-title').closest('ul'));
+    expect(notifyCard.nextElementSibling).toBeNull();
+    const notifySection = notifyCard.closest('section') as HTMLElement;
+    expect(notifySection.nextElementSibling?.contains(screen.getByTestId('remind-open-show-title'))).toBe(true);
   });
 });

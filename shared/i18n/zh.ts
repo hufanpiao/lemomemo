@@ -32,7 +32,7 @@ export const zh = {
   'update.tooNew.update': '去更新',
   'update.tooNew.refresh': '刷新',
   'update.updating': '正在更新…',
-  'update.failed': '更新失败 · 联网后再试',
+  'update.failedReopen': '更新失败 · 联网后再试，不行就完全关闭柠檬记再打开',
   'update.stillOld': '已是最新版本，请稍后再试',
   'update.update': '更新',
   'update.queued': '有 {n} 条等更新后同步 · 内容还在本机',

@@ -18,6 +18,7 @@
 
 1. **底栏和“＋”不动**：`src/kit/components/GlassBar/`、`src/motion/glass-*.ts`、`src/styles/base.css` 模糊相关规则不改。
 2. **首屏 JS 上限 150 KB 不放宽**，按 e2e 页面时钟口径（`tests/e2e/b2-first-screen-budget.spec.ts`，chromium、webkit 各 3 次）。基线取开工时主干（底栏签字之后）上实测的数，开工第一件事量出来写进本单。本单进首屏的改动净增 ≤ 0；唯一例外是 W6 的退路，上限 0.3 KB，超了先报主持人。
+   - **开工基线（前端 B 11-09 量）**：主干 `812f275`（底栏定稿锁定之后）加当时工作区，`b2-first-screen-budget.spec.ts` chromium、webkit 各 3 次都是 **134.1 KB**（今天页出现约 0.73 s / 1.98 s）。本单收尾时再量，净增 ≤ 0（W6 另计 ≤ 0.3 KB）。
 3. **改完界面过八关**：① 原话清单 ② avoid-ai-design ③ design-critique ④ 无障碍 ⑤ 设计系统 ⑥ 动效 ⑦ 像素断言 ⑧ 本人看图；**另加防返工规则的“和参照稿并排对照”一关**（第七节）。每项的自验写在下面各项里；全过才签字。
 4. **只换零件、不重排整页**：行的顺序、分卡、文案不改（W6 新增的提示文字、W5 换控件类型属于负责人定过的例外）。
 5. **R-276、R-277 定过的外观不能被顺手改掉**：设置页小按钮看得见 38、`--panel-2` 实底、点击区 44；页底“退出登录”“注销账号”44 高。`tests/e2e/b1-settings.spec.ts` 里那条断言不动。
@@ -37,6 +38,7 @@
 - **改哪些文件**：A：`src/features/reminders/ui/RemindSettings.tsx`、`RemindSettings.module.css`、`RemindDnd.tsx`、`RemindShowTitle.tsx`（用到旧行的几个提醒文件，开工 grep 确认）；B：`src/kit/components/Settings/Settings.tsx`、`Settings.module.css`、`src/features/calendar/ui/CalendarSettings.tsx`、`CalendarSettings.module.css`、`src/features/settings/ui/SettingsPage.module.css`（只删旧 `.grp/.row/.rowBtn`）。
 - **验收**：grep 三个页面样式无私有 `.grp/.row/.rowBtn`；`b2-settings-remind.spec.ts`、`b2-settings-sub-low.spec.ts`、`b1-settings.spec.ts` 全绿；行高仍是 R-276 的 44（单行）；改前改后对照图（简洁浅深、App 浅色 + 系统深色）。**八关自验**：① 对 G11；② `detect.mjs` 不比改前多；③ 设计审看两页是否和设置首页一个样；④ 读屏：每张卡一个看不见的标题、开关 `role="switch"`、说明挂 `aria-describedby`（kit 已有，换过去不能丢）；⑤ 只引用令牌；⑥ 整行按下变淡不缩放、减少动态效果下不变淡过渡；⑦ 设置子页视觉基准；⑧ 负责人看两页对照图；并排对照见第七节。
 - **人日**：A 0.5～0.75（提醒设置）、B 0.5～0.75（kit 两种新行变体 + 日历设置 + 删旧样式 + 改 e2e）。
+- **补记（前端 B 11-09 开工复量，主持人同意方案 ①）**：`SettingsPage.module.css` 的旧 `.grp/.row/.rowBtn` 删除挪到 W4 收尾，原因：`AccountSection`、`DataSection`、`DesktopSection`、`DevicesSection`、`RecentExport` 五页仍在用；W3、W4 动这五个文件时顺带换成 kit 行，再一次删干净。W1 只删日历设置自己那一份。kit 新加 `SettingsCard` 的 `showTitle`/`note`、`SettingsChoiceCard`、`SettingsTimesRow`、`SettingsActionRow`，提醒设置可直接用。
 
 ### W2 设置说明文字断行（原 U5-2，B11）
 
@@ -45,6 +47,7 @@
 - **改哪些文件**：B：`Settings.module.css`、`SettingsPage.module.css`。
 - **验收**：**自动检查（M8）**：新加一条单测或 e2e 断言，中文时设置说明（`.meta`、`.sn`）的计算样式 `text-wrap` 不是 `pretty`，韩文时 `word-break` 是 `keep-all`；另截中韩两种语言的设置首页“倾斜高光”、账号页说明，375、440 两种宽度。**八关自验**：① 对 B11 原截图；⑤ 只改断行属性；⑧ 负责人看中韩对照图。
 - **人日**：B 0.25。
+- **补记（11-09）**：Chromium 的 `pretty` 只调最后几行，本机 WebKit 不支持 `text-wrap-style`，模拟不出 B11 原问题；**真机 Safari 效果待负责人在预览版上看**（对照图 `docs/03-评审/B2-UI-b/W2-说明断行-改前改后.png`）。韩文 `keep-all` 由 `base.css` 的 `:lang(ko) body` 继承，未另写规则。
 
 ### W3 危险整行按钮和“导出全部数据”（原 U5-3、U5-4，B24）
 
@@ -80,7 +83,7 @@
   4. “最多重载一次”的会话标记**由调用方记**。
   5. 都不行回 `failed`，提示文字带“请完全关闭后重新打开柠檬记”的一步说明（新词条，中韩各一条，韩文标 `REVIEW(ko)`）；`UpdateBanner`、`CacheTooNewScreen` 两处都改。
 - **改哪些文件**：B：`src/platform/sw-register.ts`、`src/app/UpdateBanner.tsx`、`src/app/CacheTooNewScreen.tsx`、i18n 词典（新增一条）、`src/platform/__tests__/sw-lazy.test.ts`。
-- **验收**：新单测：① 第一次 import 被拒、换地址那次成功 → 照常走更新；② 两次都被拒、有 `waiting` → 发了 `SKIP_WAITING` 并回 `reloading`；③ 都不行 → 回 `failed`，界面显示新提示；④ **退路不绕过调用方的忙碌检查**：调用方忙时，`updateServiceWorkerLazy` 返回后不发生重载；⑤ `updateServiceWorkerLazy` 内部没有 `location.reload` 调用（源码断言）。版本门测试（`upgrade.ts` 相关）不改、全绿；首屏 e2e 增量 ≤ 0.3 KB；**安全审查员复审 S1**（不绕版本门、`SKIP_WAITING` 只发给同源注册）；**八关自验**：① 不涉及原话，记“不适用”；④ 提示 `role="alert"` 能读到；⑥ 重载前不闪白（冷启动逐帧，G10）；⑧ 负责人看失败提示图。
+- **验收**：新单测：① 第一次 import 被拒、换地址那次成功 → 照常走更新；② 两次都被拒、有 `waiting` → 发了 `SKIP_WAITING` 并回 `reloading`；③ 都不行 → 回 `failed`，界面显示新提示；④ **退路不绕过调用方的忙碌检查**：调用方忙时，`updateServiceWorkerLazy` 返回后不发生重载；⑤ `updateServiceWorkerLazy` 内部没有 `location.reload` 调用（源码断言）。版本门测试（`upgrade.ts` 相关）不改、全绿；首屏 e2e 增量 ≤ 0.3 KB；**安全审查员复审 S1**（不绕版本门、`SKIP_WAITING` 只发给同源注册）；**八关自验**：① 不涉及原话，记“不适用”；④ 提示 `role="alert"` 能读到（**11-09 主持人同意改为 `role="status"` 礼貌播报，原因：进度、失败共用同一个元素，中途换 role 读屏不一定念**）；⑥ 重载前不闪白（冷启动逐帧，G10）；⑧ 负责人看失败提示图。
 - **人日**：B 0.5～0.6。
 
 ### W7 登录页玻璃皮肤 —— **移出本单（M2，D4 已定 ②）**
@@ -141,7 +144,7 @@
 | # | 标准 | 怎么验 |
 |---|---|---|
 | V1 | **底栏和“＋”0 像素差（M5）**：底栏区域视觉基准 `maxDiffPixels: 0`，基准取**底栏改动那一单的签字版**；`git diff` 里 `src/kit/components/GlassBar/`、`src/motion/glass-*.ts`、`src/styles/base.css` 模糊相关规则都为空 | 视觉基准（Chromium）；`git diff` |
-| V2 | 首屏 e2e 口径 ≤ 150 KB，比开工基线净增 ≤ 0（W6 例外 ≤ 0.3 KB） | `b2-first-screen-budget.spec.ts` 两浏览器各 3 次 |
+| V2 | 首屏 e2e 口径 ≤ 150 KB，比开工基线净增 ≤ 0（W6 例外 ≤ 0.45 KB（11-09 主持人定：采纳安全复审建议、含文案，CI 审查员实测 423 B）） | `b2-first-screen-budget.spec.ts` 两浏览器各 3 次 <br>**收尾实测（前端 B 11-09）**：共用工作区（主干 807a10f 加当时全部未提交改动，含前端 A 的工作）`b2-first-screen-budget.spec.ts` chromium、webkit 各 3 次都是 **134.7 KB**（开工基线 134.1 KB；今天页出现约 0.75 s / 2.0 s）。工作区里混着别人的改动，这个数分不出本单多少，按主持人定由 CI 审查员按稳定口径复量。本单能单独量的部分（稳定口径，同一份工作区只换本单文件比）：W3、W4 +2 B；开关并进 Form.module.css（删 Switch.module.css，主持人 11-09 定）−25 B；W1、W5 原来多出的约 25 B 里还剩约 3 B，出在几个设置子页的预加载清单各多两项依赖，不复制样式省不掉，主持人 11-09 认可不再省。 |
 | V3 | 设置页全部用 kit 设置行和 FormButton，相关页面样式无私有 `.grp/.row/.rowBtn/.btn/.wide` | grep（含 B3、B5 新加的设置节） |
 | V4 | R-276、R-277 外观不变：设置页按钮区域 `maxDiffPixels: 0`（选 D1 ① 时） | `b1-settings.spec.ts` 不改、全绿；设置页按钮区域单独基准 |
 | V5 | 全站 ≥ 44 点击区 | `hit-target.spec.ts` 0 个 |
@@ -160,7 +163,7 @@
 | R1 | 设置页按钮换成 FormButton 时顺手改掉 R-276、R-277 定过的外观 | 硬约束 5；`b1-settings.spec.ts` 断言不动；按钮区域 0 像素差 |
 | R2 | 提醒设置换行零件时丢了读屏结构（卡标题、开关描述） | W1 八关 ④ 逐项核；`b2-settings-remind.spec.ts` |
 | R3 | W6 退路绕过版本门，或绕过调用方忙碌检查丢掉编辑中、录音中的内容 | 退路只返回结果、不自己重载（单测 ④⑤）；只在拿不到模块时走；重载次数由调用方记；安全审查员复审 |
-| R4 | W6 退路进首屏，超 150 KB | 优先“换地址再 import 一次”，不复制 SW 逻辑；上限 0.3 KB，超了先报；必要时只做提示文字（D3 ②） |
+| R4 | W6 退路进首屏，超 150 KB | 优先“换地址再 import 一次”，不复制 SW 逻辑；上限 0.45 KB（11-09 主持人定：采纳安全复审建议、含文案，CI 审查员实测 423 B），超了先报；必要时只做提示文字（D3 ②） |
 | R5 | 底栏改动签字后视觉基准整体换版，本单按旧基准验 | V1 基准取底栏签字版；开工前确认基准已更新 |
 | R6 | B3、B5 先加的设置节用了旧 `.row` / `.btn`，W1、W4 漏掉 | 开工重新 grep，范围写进 W1、W4 |
 | R7 | A 被 B2-UI-b 占走时间，拖慢 B3～B5 | 开工时机写死在 B5 之后、底栏签字之后（M1） |
@@ -176,6 +179,11 @@
 | D2 | 待办“重要”、日程“全天”用什么勾选样式 | **① 开关（和设置页开关一样）**（推荐：圆圈只表示“完成”，“全天”切了会收起时刻框、“重要”是一个状态，都是开关的意思；架构审同意）／② 也用圆圈（和“已完成”一样，但两个圈意思不同）／③ 维持方框 |
 | D3 | “更新”拿不到模块时怎么办 | **① 先自动再试一次（换个地址再下载；有新版本在等就切过去），还不行再提示“请完全关闭后重新打开”**（推荐，首屏最多多约 0.3 KB；架构审同意，做法按 W6）／② 只改提示文字，不自动再试（不占首屏，但用户要自己重开）／③ 不改（接受现状） |
 | D5 | 全站审查里的整页细修（“已完成”挪页底、下拉改行式、子页合并、空状态引导等约 20 项）放哪一批 | **① 另开一单，排在底栏签字之后、B2-UI-b 收完遗留项后接着做，逐页出效果图给你挑**（推荐：整页截图都含底栏，底栏没定先修整页会白截一遍；架构审同意）／② 并进本单（本单人日要再加约 5～8，粗估）／③ 和底栏那一单一起做（不推荐：会拖慢底栏这件单独的事） |
+
+**D5 整页细修待收项（本单做的过程中发现，记进 D5 那一单，到时逐页出效果图给负责人挑）**：
+
+- 编辑日程“日期”一行：W5 把“全天”从方框（宽 20）换成开关（宽 48，R-364 D2）后，同一行的日期框跟着窄了约 28px（Chromium 440 宽实测）。主持人 11-09 定先不调，D5 时一并看。对照图 `docs/03-评审/B2-UI-b/W5-编辑页开关-改前改后并排.png`。
+  - 375 宽补核（Chromium 375×812，简洁皮肤浅深，11-09）：中文日期框 148 → 127 宽，“2026/11/09”刚好放下、没有余量，不换行；**韩文日期框 113 → 92 宽，日期被截成“2026/11”**（改前用方框时就已截成“2026/11/0”，W5 截得更多），也不换行（行高 44 不变）。韩文是“하루 종일”比“全天”长。对照图 `docs/03-评审/B2-UI-b/W5-日期框-375宽-改前改后.png`。注意 Chromium 的日期格式跟浏览器语言走，iPhone Safari 的样子还要另看
 
 **已定、不再问**：
 
@@ -210,3 +218,5 @@
 |---|---|---|
 | 2026-11-07 | 第一稿 | 计划起草人 |
 | 2026-11-07 | 按架构审（有条件通过 7 / 10）改：M1 写明开工在底栏签字之后、不占前端 A 的 B3～B5 关键路径、开工重新量行号并把 B3、B5 新设置节纳入 grep；M2 W7 移出，D4 定为 ②（登录页固定简洁皮肤），不再问负责人；M3 W8 改为已做只核对，变量名改 `--safe-top`；M4 开关画法由 B 抽成 kit 共用 `Switch.module.css`，写进约定；M5 V1 收紧为底栏区域 0 像素差、基准取底栏签字版、diff 范围含 `glass-*.ts` 和 `base.css` 模糊规则；M6 W6 退路放进 `updateServiceWorkerLazy`、只返回结果不自己重载，优先换地址再 import，加“不绕调用方忙碌检查”单测；M7 加硬约束 6：`tokens.json` 和皮肤文件归 A，本单原则上不新增令牌；M8 W3 改“等 W4”、W2 写清三处 `pretty` 由 A、B 在 W1 删并加自动检查、人日改为 4.9～6（八关 1.5）。D1、D2、D3、D5 保留推荐，等负责人看完底栏一并问。新增第七节防返工要求（引用《界面改动防返工规则》：唯一参照稿、Chromium 或真机并排对照、原样粘贴负责人原话） | 计划起草人 |
+| 2026-11-09 | 收尾（前端 B）：V2 写明收尾实测数和原因；W5 的共用开关按主持人定从 `Switch.module.css` 并进 `Form.module.css` 的 `.switch`（只动开关那一段，Switch.module.css 已删）；W4、W8 的视觉基准建在 `tests/e2e/visual/b2-ui-b-lock.spec.ts`（Chromium，CI 新加一步跑）；W9 跑通记录在 `docs/03-评审/B2-UI-b/W9-csp夹具收尾-e2e跑通记录.md`；W3、W4 八关自验在 `docs/03-评审/B2-UI-b/W3W4-八关自验.md` | 前端 B |
+| 2026-11-09 | 代码审（有条件通过 8 分）的修改和 R-366 一起做（前端 B）：锁定用例加 R-276、R-277 数值断言，补锁确认框那一对按钮和导出行；R-366 账号页“退出其他所有设备”改描边，FormButton 加 outline（只配合 compact）；对照图 `docs/03-评审/B2-UI-b/R-366-退出其他设备描边-改前改后.png` | 前端 B |

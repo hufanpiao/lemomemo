@@ -57,6 +57,16 @@ const CHROMIUM_375 = {
   timezoneId: 'Asia/Seoul',
 };
 
+/** B2-UI-b 视觉锁定用：桌面 Chromium、440×956（负责人 iPhone 的宽高）、2 倍屏，不开触屏（和底栏锁定同一种截法，只换尺寸） */
+const CHROMIUM_440 = {
+  ...devices['Desktop Chrome'],
+  viewport: { width: 440, height: 956 },
+  screen: { width: 440, height: 956 },
+  deviceScaleFactor: 2,
+  locale: 'zh-CN',
+  timezoneId: 'Asia/Seoul',
+};
+
 export default defineConfig({
   testDir: 'tests/e2e/visual',
   testMatch: '**/*.spec.ts',
@@ -89,11 +99,14 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'webkit-simple-light', testIgnore: '**/tabbar-lock.spec.ts', use: { ...PHONE, colorScheme: 'light' } },
-    { name: 'webkit-simple-dark', testIgnore: '**/tabbar-lock.spec.ts', use: { ...PHONE, colorScheme: 'dark' } },
+    { name: 'webkit-simple-light', testIgnore: ['**/tabbar-lock.spec.ts', '**/b2-ui-b-lock.spec.ts'], use: { ...PHONE, colorScheme: 'light' } },
+    { name: 'webkit-simple-dark', testIgnore: ['**/tabbar-lock.spec.ts', '**/b2-ui-b-lock.spec.ts'], use: { ...PHONE, colorScheme: 'dark' } },
     // 底栏视觉锁定（R-360、R-361；界面改动防返工规则第四条）：只用 Chromium——WebKit 不画 backdrop-filter，锁不住模糊。
     // 条件和参照图（docs/03-评审/B2/底栏透明度截图/底栏-11-07还原后-对照确认图.png 右列）一致：375×812、@2x、无安全区，四套皮肤在用例里切
     { name: 'chromium-tabbar-lock', testMatch: '**/tabbar-lock.spec.ts', use: { ...CHROMIUM_375 } },
+    // B2-UI-b 视觉锁定（任务单 W4、V4：设置页按钮区域 0 像素差，R-276、R-277；W8：随手记占位页模拟 62pt 顶部安全区）：
+    // 同底栏锁定用 Chromium（软件光栅化确定），440×956、@2x（负责人 iPhone 的宽高），简洁皮肤浅深在用例里切
+    { name: 'chromium-b2uib-lock', testMatch: '**/b2-ui-b-lock.spec.ts', use: { ...CHROMIUM_440 } },
   ],
   webServer: [
     {

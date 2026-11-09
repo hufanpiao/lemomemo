@@ -183,6 +183,19 @@ describe('编辑已有的', () => {
     await waitFor(() => expect(todos().get(ID)).toMatchObject({ title: '交周报', short: null, short_by: null }));
   });
 
+  it('“重要”是开关（B2-UI-b W5，D2 ①）：读屏念开关，点一下写 important=true；“已完成”仍是圆圈勾选', async () => {
+    const b = await boot();
+    await b.outbox?.applyServer('todos', [{ row: serverTodo() }]);
+    open(`#/todo/${ID}`);
+    const imp = screen.getByTestId('todo-edit-important');
+    expect(imp.getAttribute('role')).toBe('switch');
+    expect(screen.getByTestId('todo-edit-done').getAttribute('role')).toBeNull();
+    await act(async () => {
+      fireEvent.click(imp);
+    });
+    await waitFor(() => expect(todos().get(ID)).toMatchObject({ important: true }));
+  });
+
   it('只读行（带不认识的值，0.27①“只读显示”）：一进来顶部就出“这条要新版本才能修改 · 更新”；输入全禁用、没有“删除”、不写“改了就自动保存”；改不进去', async () => {
     const b = await boot();
     await b.outbox?.applyServer('todos', [{ row: serverTodo(), ro: true }]);

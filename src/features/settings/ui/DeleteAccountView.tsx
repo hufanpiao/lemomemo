@@ -6,6 +6,7 @@
 // • 提交 account delete，成功后离开本机（data/account-exit.ts），不调 signOut、不删 devices 行
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useUi } from '../../../kit/state/ui-store.ts';
+import { FormButton } from '../../../kit/components/Form.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { useDeleteAccount, type AccountActionDeps } from '../hooks/useAccountActions.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
@@ -99,16 +100,22 @@ export function DeleteAccountView({ account, pendingCount, now, onBack }: Delete
             }}
             data-testid="settings-delete-input"
           />
-          <Pressable
-            type="submit"
-            className={`${styles.primary} ${styles.primaryDanger} ${styles.full}`}
-            disabled={!canSubmit}
-            aria-busy={busy}
-            data-testid="settings-delete-submit"
-            data-no-proxy=""
-          >
-            {t('settings.delete.submit', {})}
-          </Pressable>
+          {/* B2-UI-b W4：.primary.primaryDanger.full → compact dangerFill block；对应表里没有 .full，
+              它多出来的上边距和“没输对时灰底灰字”放在外面这层 .full 上（SettingsPage.module.css） */}
+          <div className={styles.full}>
+            <FormButton
+              type="submit"
+              size="compact"
+              variant="dangerFill"
+              block
+              disabled={!canSubmit}
+              aria-busy={busy}
+              data-testid="settings-delete-submit"
+              data-no-proxy=""
+            >
+              {t('settings.delete.submit', {})}
+            </FormButton>
+          </div>
         </form>
         <p className={styles.status} role="status">
           {busy ? t('settings.delete.busy', {}) : ''}

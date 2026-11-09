@@ -1,7 +1,8 @@
 // 表单文本框的草稿提交（代码审查 M1、S6）：失焦 / 回车交；卸载、pagehide、visibilitychange 变 hidden 时补交；同一份只交一次；和外面一样不交
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { dateReady, TextArea, TextInput } from '../Form.tsx';
+import { Check, dateReady, TextArea, TextInput } from '../Form.tsx';
+import styles from '../Form.module.css';
 
 afterEach(() => {
   cleanup();
@@ -104,5 +105,38 @@ describe('日期框（S6）', () => {
     fireEvent.focus(screen.getByTestId('tm'));
     fireEvent.change(screen.getByTestId('tm'), { target: { value: '10:30' } });
     expect(onCommit).toHaveBeenCalledWith('10:30');
+  });
+});
+
+// B2-UI-b W5（D2 ①）：Check look="switch" 是开关：role="switch"、用 Form.module.css 里共用的 .switch；空格、点击切换，禁用不切
+describe('Check look="switch"', () => {
+  it('读屏是开关，带共用开关的类；点一下交出新值', () => {
+    const onChange = vi.fn();
+    render(<Check label="重要" checked={false} look="switch" onChange={onChange} />);
+    const el = screen.getByRole('switch', { name: '重要' }) as HTMLInputElement;
+    expect(el.className.split(' ')).toContain(styles.switch);
+    expect(el.checked).toBe(false);
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    fireEvent.click(el);
+    expect(onChange).toHaveBeenCalledWith(true);
+  });
+
+  // 禁用时浏览器不派发点击（jsdom 的 fireEvent 照派，这里只核 disabled 属性；真浏览器里的“点不动”由编辑页只读 e2e 管）
+  it('开着时 checked；禁用时 input 带 disabled', () => {
+    render(<Check label="全天" checked look="switch" disabled onChange={() => undefined} />);
+    const el = screen.getByRole('switch', { name: '全天' }) as HTMLInputElement;
+    expect(el.checked).toBe(true);
+    expect(el.disabled).toBe(true);
+  });
+
+  it('默认方框、圆圈不带 role="switch"', () => {
+    render(
+      <>
+        <Check label="方框" checked={false} onChange={() => undefined} />
+        <Check label="圆圈" checked={false} look="circle" onChange={() => undefined} />
+      </>,
+    );
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+    expect(screen.queryByRole('switch')).toBeNull();
   });
 });

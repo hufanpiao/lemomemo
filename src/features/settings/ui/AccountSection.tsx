@@ -5,7 +5,7 @@ import type { AccountErr } from '../hooks/useAccountActions.ts';
 import { onlineNow } from '../hooks/useOnline.ts';
 import type { useDevices } from '../hooks/useDevices.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
-import { Pressable } from '../../../motion/components.ts';
+import { SettingsEntryRow, SettingsList } from '../../../kit/components/Settings/Settings.tsx';
 import { DevicesSection } from './DevicesSection.tsx';
 import styles from './SettingsPage.module.css';
 import { MailLabel } from './MailLabel.tsx';
@@ -66,22 +66,12 @@ export function AccountSection({
         </p>
       ) : null}
       <DevicesSection devices={devices} onExitHere={onExitHere} />
-      <ul className={`${styles.grp} ${styles.gap}`}>
-        <li className={styles.row}>
-          <Pressable
-            className={`${styles.rowBtn} ${styles.danger}`}
-            disabled={devices.busy !== null}
-            onClick={onDelete}
-            data-testid="settings-delete-entry"
-            data-no-proxy=""
-          >
-            <span className={styles.tx}>{t('settings.account.delete', {})}</span>
-            <span className={styles.v} aria-hidden>
-              ›
-            </span>
-          </Pressable>
-        </li>
-      </ul>
+      {/* 注销入口（B2-UI-b W3）：kit 整行按钮的危险色，› 和别的入口行同一个 */}
+      <div className={styles.gap}>
+        <SettingsList>
+          <SettingsEntryRow label={t('settings.account.delete', {})} danger disabled={devices.busy !== null} onOpen={onDelete} testId="settings-delete-entry" />
+        </SettingsList>
+      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@
 // navigator.serviceWorker 只准出现在 platform（A13）；exe（Tauri 窗口）里不注册，判断读 env.ts 的 isTauri
 import { isTauri } from './env.ts';
 import type { Lifecycle } from './net.ts';
-import { SW_REGISTER_WAIT_MS, SW_SCOPE, SW_URL, type SwUpdateResult } from './sw-register.ts';
+import { SW_REGISTER_WAIT_MS, SW_SCOPE, SW_UPDATE_WAIT_MS, SW_URL, type SwUpdateResult } from './sw-register.ts';
 
 /** 注册 SW；exe 里、不支持、失败或超过 waitMs 都返回 null（超时只是不再等，注册请求本身照常进行）。永远 resolve。
  * win 默认 globalThis（测试时传假的） */
@@ -93,8 +93,7 @@ export function checkSwOnForeground(reg: ServiceWorkerRegistration, d: Foregroun
   });
 }
 
-/** 等新 SW 装好、接管的最长时间 */
-const SW_UPDATE_WAIT_MS = 30_000;
+// 等新 SW 装好、接管的最长时间 SW_UPDATE_WAIT_MS（30 秒）挪到 sw-register.ts，和退路 ② 共用（B2-UI-b W6 安全复审）
 
 /** 等新 SW 装好：installed = 装好了；redundant = 安装失败；timeout = ms 内没装好 */
 function waitInstalled(sw: ServiceWorker, ms: number): Promise<'installed' | 'redundant' | 'timeout'> {

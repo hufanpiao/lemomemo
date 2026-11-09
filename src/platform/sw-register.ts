@@ -14,6 +14,9 @@ export const SW_SCOPE = '/app/';
 /** 注册最多等这么久（K6 复审建议 3：本机库来自更新版本时入口要等注册完再渲染，注册一直不返回不能白屏） */
 export const SW_REGISTER_WAIT_MS = 3000;
 
+/** “更新”时等新 SW 装好、接管的最长时间（主路径 sw-lifecycle.ts 和退路 ② skipWaitingDirect 共用，W6 安全复审要求时长一致） */
+export const SW_UPDATE_WAIT_MS = 30_000;
+
 /**
  * “更新”按钮的结果（0.27 第 1 点）：reloading = 新 SW 已接管，调用方重新载入；no_update = 没有新版本；
  * failed = 没查成（update() 失败且没有在装、装好的，或者拿注册出错）或新 SW 安装失败（redundant）；
@@ -25,6 +28,9 @@ export type SwUpdateResult = 'reloading' | 'no_update' | 'failed' | 'takeover_ti
 /** sw-lifecycle.ts 的导出（按需下载） */
 export type SwLifecycleModule = typeof SwLifecycle;
 
+/** 按需下载 sw-lifecycle.ts（三处共用这一个写法）；“更新”的退路 ① 从它打包后的源码里取出真实地址（freshLifecycleUrl） */
+const importLifecycle = (): Promise<SwLifecycleModule> => import('./sw-lifecycle.ts');
+
 /**
  * 按需下载 sw-lifecycle.ts：下载失败或超过 waitMs（默认和注册同一个上限）都返回 null，永远 resolve，不抛错。
  * 调用方按“没注册（没有离线缓存、没有新版本提示）/ 没查成（failed）”处理，和注册失败、update() 失败同一条路。
@@ -32,7 +38,7 @@ export type SwLifecycleModule = typeof SwLifecycle;
  */
 export function loadSwLifecycle(
   waitMs: number = SW_REGISTER_WAIT_MS,
-  load: () => Promise<SwLifecycleModule> = () => import('./sw-lifecycle.ts'),
+  load: () => Promise<SwLifecycleModule> = importLifecycle,
 ): Promise<SwLifecycleModule | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<null>((resolve) => {
@@ -74,7 +80,7 @@ export interface AfterPaintSwDeps {
 export async function registerSwAfterPaint(d: AfterPaintSwDeps): Promise<ServiceWorkerRegistration | null> {
   let sw: SwLifecycleModule;
   try {
-    sw = await (d.load ?? (() => import('./sw-lifecycle.ts')))();
+    sw = await (d.load ?? importLifecycle)();
   } catch {
     return null;
   }
@@ -96,10 +102,76 @@ export async function registerSwAfterPaint(d: AfterPaintSwDeps): Promise<Service
   return reg;
 }
 
-/** 按需下载后走“更新”（native-bridge.ts 网页版的 requestAppUpdate）：下载失败、超时回 failed（没查成）。get 只给测试换 */
-export async function updateServiceWorkerLazy(get: () => Promise<SwLifecycleModule | null> = () => loadSwLifecycle()): Promise<SwUpdateResult> {
-  const m = await get();
-  return m ? m.updateServiceWorker() : 'failed';
+/**
+ * 退路 ① 的地址（B2-UI-b W6，首屏瘦身安全审 S1）：有的浏览器把失败的动态 import 记住，之后同一地址一直失败。
+ * 从 src（importLifecycle 打包后的源码）里取 import(…) 括号里的地址，按 base 解析，加查询串 r 换成新地址；只认同源，取不到回 null
+ */
+export function freshLifecycleUrl(src: string, base: string, stamp: string): string | null {
+  // 压缩后的产物把地址写成模板字符串（反引号），开发时是双引号：单引号、双引号、反引号三种都认。
+  // 正则里三种引号写成十六进制转义（同义），源码里不出现裸引号，check_arch 的字符串扫描（A20）才不会把后面的注释当成字符串
+  const m = /import\(\s*[\x22\x27\x60]([^\x22\x27\x60$]+)[\x22\x27\x60]\s*\)/.exec(src);
+  if (!m?.[1]) return null;
+  // base 是本模块自己的地址（import.meta.url），new URL 不会抛
+  const u = new URL(m[1], base);
+  if (u.origin !== new URL(base).origin) return null;
+  u.searchParams.set('r', stamp);
+  return u.href;
+}
+
+// 注意（W6 安全复审建议）：换地址下载会生成第二份 sw-lifecycle 模块实例（和原地址那份互不相通）。
+// 以后给 sw-lifecycle.ts 加模块级状态（计数、缓存、监听登记等）时要考虑两份并存的情况
+function importLifecycleFresh(): Promise<SwLifecycleModule> {
+  const url = freshLifecycleUrl(importLifecycle.toString(), import.meta.url, String(Date.now()));
+  return url ? import(/* @vite-ignore */ url) : Promise.reject();
+}
+
+/**
+ * 退路 ②：不靠 sw-lifecycle.ts，本页 scope 的注册里有等着接管的新 SW（waiting，同源、就是 SW_URL）才发 SKIP_WAITING，
+ * 然后照主路径（sw-lifecycle.ts 的 updateServiceWorker）等它真正接管（W6 安全复审建议，负责人 D3 原话“有新版本在等就切过去”）：
+ * 等到 controllerchange，或没等到但新 SW 已经 activated，才回 reloading；waitMs（和主路径同一个 SW_UPDATE_WAIT_MS）内没接管回 takeover_timeout。
+ * 没注册、没 waiting、地址不对、拿注册出错回 failed。不重新载入
+ */
+export async function skipWaitingDirect(
+  sw: Pick<ServiceWorkerContainer, 'getRegistration' | 'addEventListener'> | undefined = navigator.serviceWorker,
+  waitMs: number = SW_UPDATE_WAIT_MS,
+): Promise<SwUpdateResult> {
+  try {
+    const w = (await sw?.getRegistration(SW_SCOPE))?.waiting;
+    // scriptURL 是浏览器给的绝对地址：整串等于本站的 /app/sw.js 才发（同源、就是这个脚本，查询串、别的路径都不认）
+    if (!sw || !w || w.scriptURL !== location.origin + SW_URL) return 'failed';
+    // 接管时 resolve 成事件对象（真值），到点 resolve 成 undefined。为省首屏字节不清计时器：先接管时到点再 resolve 一次是空操作
+    const changed = new Promise((resolve) => {
+      setTimeout(resolve, waitMs);
+      sw.addEventListener('controllerchange', resolve, { once: true });
+    });
+    w.postMessage({ type: 'SKIP_WAITING' });
+    return (await changed) || w.state === 'activated' ? 'reloading' : 'takeover_timeout';
+  } catch {
+    return 'failed';
+  }
+}
+
+/** updateServiceWorkerLazy 的两条退路（只给测试换） */
+export interface SwUpdateFallback {
+  /** 退路 ①：换个地址再下载一次 */
+  retry?: () => Promise<SwLifecycleModule | null>;
+  /** 退路 ②：直接给等着的新 SW 发 SKIP_WAITING，等接管 */
+  skip?: () => Promise<SwUpdateResult>;
+}
+
+/**
+ * 按需下载后走“更新”（native-bridge.ts 网页版的 requestAppUpdate）。拿不到模块时（B2-UI-b W6，D3 ①）：
+ * ① 换个地址再下载一次（绕开浏览器缓存的失败），拿到了照常走；② 还不行，有等着接管的新 SW 就发 SKIP_WAITING，接管了回 reloading、
+ * 超时回 takeover_timeout；都不行回 failed（没查成）。这里只返回结果，**不自己重新载入**：什么时候载入由调用方定（core/upgrade.ts 的 reloadWhenIdle 先看
+ * 编辑中、录音等忙碌状态；“最多重载一次”的会话标记也在调用方）。get 只给测试换
+ */
+export async function updateServiceWorkerLazy(
+  get: () => Promise<SwLifecycleModule | null> = () => loadSwLifecycle(),
+  fb: SwUpdateFallback = {},
+): Promise<SwUpdateResult> {
+  const m = (await get()) ?? (await (fb.retry ?? (() => loadSwLifecycle(SW_REGISTER_WAIT_MS, importLifecycleFresh)))());
+  if (m) return m.updateServiceWorker();
+  return (fb.skip ?? (() => skipWaitingDirect()))();
 }
 
 const UPDATE_ATTEMPT_KEY = 'lemo.update_attempt';

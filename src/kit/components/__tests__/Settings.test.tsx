@@ -1,6 +1,6 @@
 // kit 的设置页卡片、行、分段按钮（SETTINGS-merge-cards；方案第 4、5、8 节）：结构、读屏名字和描述、点按、值先空着也能点、
 // 说明和报错写在行里；样式只查几条关键数值是原样搬来的（行高 44、分段 32、值单行省略），完整的视觉核对等合卡接上以后跑 layout_audit
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -158,7 +158,11 @@ describe('样式数值原样搬来（R-276、R-282）、值单行省略（M4、S
     expect(rule('.rowBtn')).toContain('min-height: var(--hit);');
     expect(rule('.segBtn')).toContain('min-height: 32px;');
     expect(rule('.segBtn::after')).toContain('height: max(100%, var(--hit));');
-    expect(rule('.toggle')).toMatch(/width: 48px;[\s\S]*height: 28px;/);
+    // 开关画法 B2-UI-b W5 挪到 kit 共用开关，11-09 并进 Form.module.css 的 .switch，48×28 不变；设置行里不能再留一份，单独的 Switch.module.css 也已删掉
+    const sw = readFileSync(join(import.meta.dirname, '..', 'Form.module.css'), 'utf8');
+    expect(existsSync(join(import.meta.dirname, '..', 'Switch.module.css'))).toBe(false);
+    expect(sw).toMatch(/\n\.switch \{[^}]*width: 48px;[^}]*height: 28px;/);
+    expect(css).not.toContain('.toggle');
   });
   it('值单行省略；行名不省略（换行）', () => {
     const v = rule('.v');

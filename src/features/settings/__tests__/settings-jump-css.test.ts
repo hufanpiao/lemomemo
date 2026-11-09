@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 const UI = 'src/features/settings/ui';
 const css = readFileSync(join(UI, 'SettingsPage.module.css'), 'utf8');
 const pressable = readFileSync('src/motion/Pressable.module.css', 'utf8');
+const kit = readFileSync('src/kit/components/Settings/Settings.module.css', 'utf8');
 
 /** 取某个选择器（整行相等）的声明块 */
 function block(src: string, selector: string): string {
@@ -44,20 +45,22 @@ describe('设置 ↔ 注销账号切换时“注销账号”不跳（负责人 1
     }
   });
 
+  // B2-UI-b W3、W4：“注销账号”“导出全部数据”两行换成 kit 的 SettingsEntryRow，按下变淡的规则跟着在 kit 的 Settings.module.css 里（设置页自己的删了）
   it('行按钮按下：不缩放、改成变淡（--press-dim）', () => {
-    const b = block(css, '.row .rowBtn[data-state="pressed"]');
+    const b = block(kit, '.row .rowBtn[data-state="pressed"]');
     expect(b).toMatch(/transform: none;/);
     expect(b).toMatch(/opacity: var\(--press-dim\);/);
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toContain('.rowBtn');
   });
 
   it('变淡带过渡（--dur-press、--ease-out）；减少动态效果的两种开关都关掉（权重比 Pressable 的 .pressable 高，得自己关）', () => {
-    expect(block(css, '.row .rowBtn')).toMatch(/transition: opacity var\(--dur-press\) var\(--ease-out\);/);
-    const media = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce) {\n  .row .rowBtn {'));
+    expect(block(kit, '.row .rowBtn')).toMatch(/transition: opacity var\(--dur-press\) var\(--ease-out\);/);
+    const media = kit.slice(kit.indexOf('@media (prefers-reduced-motion: reduce) {\n  .row .rowBtn {'));
     expect(media.startsWith('@media'), '有 prefers-reduced-motion 分支').toBe(true);
     expect(media.slice(0, media.indexOf('}'))).toMatch(/transition: none;/);
-    expect(block(css, ':global(:root[data-rm="1"]) .row .rowBtn')).toMatch(/transition: none;/);
+    expect(block(kit, ':global(:root[data-rm="1"]) .row .rowBtn')).toMatch(/transition: none;/);
     // 两个关掉的分支权重不低于开着的那条（:root[data-rm] 多一个属性和伪类；媒体查询里同权重、写在后面）
-    expect(css.indexOf('@media (prefers-reduced-motion: reduce) {\n  .row .rowBtn {')).toBeGreaterThan(css.indexOf('\n.row .rowBtn {'));
+    expect(kit.indexOf('@media (prefers-reduced-motion: reduce) {\n  .row .rowBtn {')).toBeGreaterThan(kit.indexOf('\n.row .rowBtn {'));
   });
 
   it('权重盖得过 Pressable 自己的按下规则（不靠 CSS 打包的先后顺序）', () => {
@@ -65,14 +68,15 @@ describe('设置 ↔ 注销账号切换时“注销账号”不跳（负责人 1
     expect(classWeight('.row .rowBtn[data-state="pressed"]')).toBeGreaterThan(classWeight('.pressable[data-state="pressed"]'));
   });
 
-  it('用 .rowBtn 的两处（注销账号、导出全部数据）都在 <li className={styles.row}> 里，上面的规则管得到', () => {
+  it('整行按钮的两处（注销账号、导出全部数据）都用 kit 的 SettingsEntryRow，它的按钮在 <li className={styles.row}> 里，上面的规则管得到', () => {
     for (const f of ['AccountSection.tsx', 'DataSection.tsx']) {
-      const src = readFileSync(join(UI, f), 'utf8');
-      const at = src.indexOf('styles.rowBtn');
-      expect(at, f).toBeGreaterThan(0);
-      const li = src.lastIndexOf('<li', at);
-      expect(src.slice(li, at), f).toContain('<li className={styles.row}>');
+      expect(readFileSync(join(UI, f), 'utf8'), f).toMatch(/<SettingsEntryRow\b/);
     }
+    const tsx = readFileSync('src/kit/components/Settings/Settings.tsx', 'utf8');
+    const entry = tsx.slice(tsx.indexOf('export function SettingsEntryRow'));
+    const at = entry.indexOf('styles.rowBtn');
+    expect(at).toBeGreaterThan(0);
+    expect(entry.slice(entry.lastIndexOf('<li', at), at)).toContain('<li className={styles.row}');
   });
 });
 

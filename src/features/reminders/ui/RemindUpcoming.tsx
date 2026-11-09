@@ -112,7 +112,7 @@ export default function RemindUpcoming() {
             <span className={styles.upDay}>{dayHead(t, d.date, today)}</span>
             <span>{t('remind.up.count', { n: d.items.length })}</span>
           </h2>
-          <ul className={styles.grp}>
+          <ul className={styles.upCard}>
             {d.items.map((r) => {
               const project = typeof r.row['project'] === 'string' ? r.row['project'] : '';
               return (

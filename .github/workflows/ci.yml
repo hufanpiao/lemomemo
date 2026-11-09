@@ -433,6 +433,11 @@ jobs:
       - name: 底栏视觉锁定（Chromium，只跑 chromium-tabbar-lock）
         run: npm run e2e:visual -- --project=chromium-tabbar-lock
 
+      # B2-UI-b 视觉锁定（任务单 W4、V4、W8）：设置页按钮区域（R-276、R-277）、随手记占位页 62pt 顶部安全区，0 像素差；
+      # 基准同样用这个镜像生成、放 tests/e2e/visual/__screenshots__/linux/b2-ui-b-lock.spec.ts/，改要负责人新需求编号
+      - name: B2-UI-b 视觉锁定（Chromium，只跑 chromium-b2uib-lock）
+        run: npm run e2e:visual -- --project=chromium-b2uib-lock
+
       - name: 失败时上传报告（只有本地测试数据，不含任何密钥）
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

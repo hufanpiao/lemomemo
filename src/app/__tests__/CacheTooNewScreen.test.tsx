@@ -43,7 +43,7 @@ describe('CacheTooNewScreen', () => {
     fireEvent.click(go);
     expect(swUpdate).toHaveBeenCalledTimes(1);
     await finish();
-    expect(screen.getByRole('status').textContent).toBe('更新失败 · 联网后再试');
+    expect(screen.getByRole('status').textContent).toBe('更新失败 · 联网后再试，不行就完全关闭柠檬记再打开');
   });
 
   it('没有新版本：提示已是最新', async () => {

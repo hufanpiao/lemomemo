@@ -5,7 +5,8 @@
 // • 点“更改”：变成“按下新的组合键…”的录键框并拿到焦点；Esc 或移开焦点取消；只按修饰键继续等；不能用的组合提示一句
 // • 改失败按 invalid、in_use、save_failed、failed 提示（role=alert）；忙的时候两个按钮都不可点
 import { useEffect, useRef } from 'react';
-import { Pressable } from '../../../motion/components.ts';
+import { FormButton } from '../../../kit/components/Form.tsx';
+import { SettingsDetailRow, SettingsList } from '../../../kit/components/Settings/Settings.tsx';
 import { hotkeyLabel, type HotkeyNotice, type QuickAddHotkey } from '../hooks/useQuickAddHotkey.ts';
 import { useSettingsT, type SettingsMsgKey } from '../hooks/useSettingsT.ts';
 import styles from './SettingsPage.module.css';
@@ -20,11 +21,12 @@ const NOTICE_KEY = {
 
 export function DesktopSection({ hotkey }: { hotkey: QuickAddHotkey }) {
   const t = useSettingsT();
-  const recRef = useRef<HTMLButtonElement>(null);
+  // 录键框换成 FormButton 以后（B2-UI-b W4）它不转发 ref：经外面那层 span 找按钮给焦点（同数据页“继续”的做法）
+  const recRef = useRef<HTMLSpanElement>(null);
   const { status, recording, saving, notice } = hotkey;
 
   useEffect(() => {
-    if (recording) recRef.current?.focus();
+    if (recording) recRef.current?.querySelector('button')?.focus();
   }, [recording]);
 
   if (!status) return null;
@@ -33,53 +35,42 @@ export function DesktopSection({ hotkey }: { hotkey: QuickAddHotkey }) {
 
   return (
     <div data-section="desktop">
-      <ul className={styles.grp}>
-        <li className={styles.row}>
-          <span id="settings-hotkey-title" className={styles.tx}>
-            {t('settings.hotkey.title', {})}
-          </span>
-          {recording ? (
-            <button
-              ref={recRef}
-              type="button"
-              className={styles.btn}
-              aria-labelledby="settings-hotkey-title settings-hotkey-rec"
-              onKeyDown={(e) => {
-                if (hotkey.onKey(e)) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }
-              }}
-              onBlur={hotkey.cancelRecording}
-              data-testid="settings-hotkey-recorder"
-            >
-              <span id="settings-hotkey-rec">{t('settings.hotkey.press', {})}</span>
-            </button>
-          ) : (
-            <span className={styles.v} data-testid="settings-hotkey-current">
-              {label}
-            </span>
-          )}
-        </li>
-      </ul>
+      {/* B2-UI-b W4：行换成 kit 的 SettingsDetailRow，三个按钮换成 FormButton（.btn → compact） */}
+      <SettingsList>
+        <SettingsDetailRow
+          label={t('settings.hotkey.title', {})}
+          labelId="settings-hotkey-title"
+          value={recording ? undefined : label}
+          valueTestId="settings-hotkey-current"
+          action={
+            recording ? (
+              <span ref={recRef}>
+                <FormButton
+                  size="compact"
+                  aria-labelledby="settings-hotkey-title settings-hotkey-rec"
+                  onKeyDown={(e) => {
+                    if (hotkey.onKey(e)) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }
+                  }}
+                  onBlur={hotkey.cancelRecording}
+                  data-testid="settings-hotkey-recorder"
+                >
+                  <span id="settings-hotkey-rec">{t('settings.hotkey.press', {})}</span>
+                </FormButton>
+              </span>
+            ) : undefined
+          }
+        />
+      </SettingsList>
       <div className={styles.actions}>
-        <Pressable
-          className={styles.btn}
-          disabled={saving || recording}
-          aria-busy={saving}
-          onClick={hotkey.startRecording}
-          data-testid="settings-hotkey-change"
-        >
+        <FormButton size="compact" disabled={saving || recording} aria-busy={saving} onClick={hotkey.startRecording} data-testid="settings-hotkey-change">
           {t('settings.hotkey.change', {})}
-        </Pressable>
-        <Pressable
-          className={styles.btn}
-          disabled={saving || isDefault}
-          onClick={() => void hotkey.resetDefault()}
-          data-testid="settings-hotkey-reset"
-        >
+        </FormButton>
+        <FormButton size="compact" disabled={saving || isDefault} onClick={() => void hotkey.resetDefault()} data-testid="settings-hotkey-reset">
           {t('settings.hotkey.reset', {})}
-        </Pressable>
+        </FormButton>
       </div>
       <p className={styles.sn}>{t('settings.hotkey.note', {})}</p>
       {!status.registered && notice !== 'in_use' ? (

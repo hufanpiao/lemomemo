@@ -114,7 +114,8 @@ describe('设置 › 日历', () => {
     uiStore.getState().setLocale('ko-KR');
     render(<CalendarSettings />);
     expect(screen.getByText('공휴일')).toBeTruthy();
-    expect(screen.getByText('한 주의 시작')).toBeTruthy();
+    // B2-UI-b W1 起用 kit 设置行：卡名（只给读屏的 h2）和行名都是“한 주의 시작”，分段按钮组的名字取行名
+    expect(screen.getByRole('group', { name: '한 주의 시작' })).toBeTruthy();
     expect(screen.getByTestId('settings-cal-hol-both').closest('label')?.textContent).toBe('두 나라 모두');
   });
 

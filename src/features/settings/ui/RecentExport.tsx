@@ -7,8 +7,9 @@
 // • 只要有一次邮件没发出去，列表下方放一句提示（不每行重复）
 // • 90 天里没有导出也写一句（不是本人操作时，用户能看出“明明没导出过”）；还在读、读失败、断网时整块不显示
 import { useState } from 'react';
+import { FormButton } from '../../../kit/components/Form.tsx';
+import { SettingsDetailRow, SettingsList, type SettingsMeta } from '../../../kit/components/Settings/Settings.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { Pressable } from '../../../motion/components.ts';
 import type { DevicesState } from '../hooks/useDevices.ts';
 import type { ExportEntry, RecentExportState } from '../hooks/useRecentExport.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
@@ -43,38 +44,37 @@ export function RecentExport({ state, devices }: { state: RecentExportState; dev
       {list.length === 0 ? (
         <p className={styles.sn}>{t('settings.recentExport.none', {})}</p>
       ) : (
-        <ul className={styles.grp}>
+        // B2-UI-b W4：行换成 kit 的 SettingsDetailRow（时间 + 右边设备名 + 下面的“未完成”“通知邮件没发出去”）
+        <SettingsList>
           {shown.map((e) => {
             const dev = exportDevice(e, devices, t);
+            const metas: SettingsMeta[] = [];
+            if (e.incomplete) metas.push({ text: t('settings.recentExport.incomplete', {}), testId: 'settings-recent-export-incomplete' });
+            if (e.mailFailed) metas.push({ text: t('settings.recentExport.mailMark', {}), danger: true, testId: 'settings-recent-export-mark' });
             return (
-              <li key={`${e.at}|${e.device ?? ''}`} className={styles.row} data-testid="settings-recent-export-row">
-                <span className={styles.tx}>{fmtWhen(e.at, locale)}</span>
-                <span className={styles.v}>
-                  {dev.name}
-                  {dev.isCurrent ? <span className={styles.tag}>{t('settings.devices.thisDevice', {})}</span> : null}
-                </span>
-                {e.incomplete ? (
-                  <p className={styles.meta} data-testid="settings-recent-export-incomplete">
-                    {t('settings.recentExport.incomplete', {})}
-                  </p>
-                ) : null}
-                {e.mailFailed ? (
-                  <p className={`${styles.meta} ${styles.danger}`} data-testid="settings-recent-export-mark">
-                    {t('settings.recentExport.mailMark', {})}
-                  </p>
-                ) : null}
-              </li>
+              <SettingsDetailRow
+                key={`${e.at}|${e.device ?? ''}`}
+                testId="settings-recent-export-row"
+                label={fmtWhen(e.at, locale)}
+                value={
+                  <>
+                    {dev.name}
+                    {dev.isCurrent ? <span className={styles.tag}>{t('settings.devices.thisDevice', {})}</span> : null}
+                  </>
+                }
+                metas={metas}
+              />
             );
           })}
-        </ul>
+        </SettingsList>
       )}
       {!all && list.length > RECENT_EXPORT_SHOWN ? (
-        <Pressable className={`${styles.btn} ${styles.wide}`} onClick={() => setAll(true)} data-testid="settings-recent-export-all">
+        <FormButton size="compact" block onClick={() => setAll(true)} data-testid="settings-recent-export-all">
           {t('settings.recentExport.showAll', { n: list.length })}
-        </Pressable>
+        </FormButton>
       ) : null}
       {anyFailed ? (
-        <p className={`${styles.sn} ${styles.danger}`} data-testid="settings-recent-export-mail">
+        <p className={`${styles.sn} ${styles.dangerText}`} data-testid="settings-recent-export-mail">
           {t('settings.recentExport.mailFailed', {})}
         </p>
       ) : null}

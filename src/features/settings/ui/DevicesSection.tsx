@@ -4,8 +4,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { fmtDate } from '../../../../shared/i18n/fmt.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
+import { FormButton } from '../../../kit/components/Form.tsx';
+import { SettingsDetailRow, SettingsList } from '../../../kit/components/Settings/Settings.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { Pressable } from '../../../motion/components.ts';
 import type { DeviceNotice, DeviceView, useDevices } from '../hooks/useDevices.ts';
 import { onlineNow } from '../hooks/useOnline.ts';
 import { useSettingsT, type SettingsMsgKey } from '../hooks/useSettingsT.ts';
@@ -39,32 +40,43 @@ function DeviceRowView({ d, busy, onRemove }: { d: DeviceView; busy: boolean; on
   const t = useSettingsT();
   const locale = useUi((s) => s.locale);
   const name = deviceName(d, t);
+  // B2-UI-b W3、W4：行换成 kit 的 SettingsDetailRow，“移除”换成 FormButton（.btn.danger → compact danger）
   return (
-    <li className={styles.row} data-testid="settings-device" data-current={d.isCurrent ? '1' : undefined}>
-      <span className={styles.tx}>
-        {name}
-        {d.isCurrent ? <span className={styles.tag}>{t('settings.devices.thisDevice', {})}</span> : null}
-        {d.signedOut ? <span className={`${styles.tag} ${styles.tagMuted}`}>{t('settings.devices.signedOut', {})}</span> : null}
-      </span>
-      <Pressable
-        className={`${styles.btn} ${styles.danger}`}
-        disabled={busy}
-        onClick={onRemove}
-        // 读屏名要包含看得见的文字（WCAG 2.5.3）；整句走词典，韩文按韩语语序（KO-K43-a11y）
-        aria-label={d.isCurrent ? t('settings.devices.removeThisLabel', { name }) : t('settings.devices.removeLabel', { name })}
-      >
-        {d.isCurrent ? t('settings.devices.removeThis', {}) : t('settings.devices.remove', {})}
-      </Pressable>
-      <p className={styles.meta}>
-        {/* 本机写“正在使用”，不写 last_seen_at：它登记后每天最多刷新一次（core/device-reg.ts），写出来是上次刷新的旧时间（A4） */}
-        {d.isCurrent
-          ? t('settings.devices.inUse', {})
-          : d.lastActiveMs === null
-            ? t('settings.devices.neverSeen', {})
-            : t('settings.devices.lastSeen', { date: fmtWhen(d.lastActiveMs, locale) })}
-        {d.autoRemoveAtMs === null ? null : ` · ${t('settings.devices.stale', { date: fmtDate(d.autoRemoveAtMs, localTz(), locale, 'monthDay') })}`}
-      </p>
-    </li>
+    <SettingsDetailRow
+      testId="settings-device"
+      current={d.isCurrent}
+      label={
+        <>
+          {name}
+          {d.isCurrent ? <span className={styles.tag}>{t('settings.devices.thisDevice', {})}</span> : null}
+          {d.signedOut ? <span className={`${styles.tag} ${styles.tagMuted}`}>{t('settings.devices.signedOut', {})}</span> : null}
+        </>
+      }
+      action={
+        <FormButton
+          size="compact"
+          danger
+          disabled={busy}
+          onClick={onRemove}
+          // 读屏名要包含看得见的文字（WCAG 2.5.3）；整句走词典，韩文按韩语语序（KO-K43-a11y）
+          aria-label={d.isCurrent ? t('settings.devices.removeThisLabel', { name }) : t('settings.devices.removeLabel', { name })}
+        >
+          {d.isCurrent ? t('settings.devices.removeThis', {}) : t('settings.devices.remove', {})}
+        </FormButton>
+      }
+      metas={[
+        {
+          // 本机写“正在使用”，不写 last_seen_at：它登记后每天最多刷新一次（core/device-reg.ts），写出来是上次刷新的旧时间（A4）
+          text: `${
+            d.isCurrent
+              ? t('settings.devices.inUse', {})
+              : d.lastActiveMs === null
+                ? t('settings.devices.neverSeen', {})
+                : t('settings.devices.lastSeen', { date: fmtWhen(d.lastActiveMs, locale) })
+          }${d.autoRemoveAtMs === null ? '' : ` · ${t('settings.devices.stale', { date: fmtDate(d.autoRemoveAtMs, localTz(), locale, 'monthDay') })}`}`,
+        },
+      ]}
+    />
   );
 }
 
@@ -106,9 +118,9 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
           <p className={styles.error}>
             {state.error === 'account_disabled' ? t('settings.err.accountDisabled', {}) : t('settings.devices.loadFailed', {})}
           </p>
-          <Pressable className={styles.btn} onClick={() => void devices.reload()}>
+          <FormButton size="compact" onClick={() => void devices.reload()}>
             {t('settings.devices.retry', {})}
-          </Pressable>
+          </FormButton>
         </div>
       ) : null}
       {state.kind === 'ready' ? (
@@ -116,7 +128,7 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
           {state.list.length === 0 ? (
             <p className={styles.status}>{t('settings.devices.empty', {})}</p>
           ) : (
-            <ul className={styles.grp} data-testid="settings-devices">
+            <SettingsList testId="settings-devices">
               {state.list.map((d) => (
                 <DeviceRowView
                   key={d.id}
@@ -125,7 +137,7 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
                   onRemove={() => (d.isCurrent ? onExitHere() : setPending({ kind: 'remove', device: d }))}
                 />
               ))}
-            </ul>
+            </SettingsList>
           )}
           {state.orphans.count > 0 ? (
             <p className={styles.sn} data-testid="settings-orphans">
@@ -135,9 +147,9 @@ export function DevicesSection({ devices, onExitHere }: { devices: Devices; onEx
               })}
             </p>
           ) : null}
-          <Pressable className={`${styles.btn} ${styles.wide}`} disabled={busy !== null} onClick={() => setPending({ kind: 'others' })}>
+          <FormButton size="compact" block outline disabled={busy !== null} onClick={() => setPending({ kind: 'others' })}>
             {t('settings.devices.signOutOthers', {})}
-          </Pressable>
+          </FormButton>
           <p className={styles.sn}>{t('settings.devices.residual', {})}</p>
         </>
       ) : null}

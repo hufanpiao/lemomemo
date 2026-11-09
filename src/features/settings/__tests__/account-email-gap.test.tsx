@@ -139,14 +139,21 @@ describe('设置页组间距', () => {
     expect(block('.status:empty')).toMatch(/margin-top: 0;/);
   });
 
-  it('R-276：单行 .row 整行高 44、不加上下内边距；两行内容（带 .meta）的行上下 8px；行里的 .rowBtn 仍 44 撑满整行', () => {
-    const row = block('.row');
+  // B2-UI-b W3、W4：设置页自己的 .grp、.row、.rowBtn、.tx 删了，账号、数据、电脑三页的行都用 kit 设置组件；R-276 的数值改在 kit 的 CSS 里核
+  it('R-276：单行 .row 整行高 44、不加上下内边距；两行内容（带 .meta）的行上下 8px；行里的 .rowBtn 仍 44 撑满整行（kit 设置组件）', () => {
+    const kit = readFileSync('src/kit/components/Settings/Settings.module.css', 'utf8');
+    const kitBlock = (sel: string): string => {
+      const at = kit.indexOf(`\n${sel} {`);
+      return at < 0 ? '' : kit.slice(at, kit.indexOf('}', at));
+    };
+    const row = kitBlock('.row');
     expect(row).toMatch(/min-height: var\(--hit\);/);
     expect(row).toMatch(/padding: 0;/);
-    expect(block('.row:has(> .meta)')).toMatch(/padding: 8px 0;/);
-    expect(block('.rowBtn')).toMatch(/min-height: var\(--hit\);/);
-    // 行里的标题（“界面语言”是 h2）去掉默认外边距，不把 44 的行撑高
-    expect(block('.tx')).toMatch(/margin: 0;/);
+    expect(kit).toMatch(/\n\.row:has\(> \.meta\),\n\.row:has\(> \.error\) \{\n {2}padding: 8px 0;/);
+    expect(kitBlock('.rowBtn')).toMatch(/min-height: var\(--hit\);/);
+    expect(kitBlock('.tx')).toMatch(/margin: 0;/);
+    // 设置页自己不再留一份
+    for (const sel of ['.grp', '.row', '.rowBtn', '.tx', '.v', '.meta']) expect(block(sel), sel).toBe('');
   });
 
   it('R-276/R-282：分段控件外框（.seg 上下内边距 + .segBtn 高）看得见 38、和本页其他按钮一样，在 44 的行里上下各留 3；数从 kit 的 CSS 源码里取（合卡以后语言行用 kit 的 SettingsSegRow）', () => {
@@ -164,32 +171,36 @@ describe('设置页组间距', () => {
     expect((44 - (2 * Number(pad) + Number(btnH))) / 2).toBe(3);
   });
 
-  it('R-277：页面最底下的“退出登录”另加 .signOut 撑到 44，写在 .btn 之后才压得住 38', () => {
-    expect(block('.signOut')).toMatch(/min-height: var\(--hit\);/);
-    expect(css.indexOf('\n.signOut {')).toBeGreaterThan(css.indexOf('\n.btn {'));
+  // B2-UI-b W4：设置页的 .btn、.primary、.signOut 删了，按钮一律用 kit 的 FormButton（对应表见 SettingsPage.module.css），数值在 Form.module.css 里核
+  const form = readFileSync('src/kit/components/Form.module.css', 'utf8');
+  const formBlock = (sel: string): string => {
+    const at = form.indexOf(`\n${sel} {`);
+    return at < 0 ? '' : form.slice(at, form.indexOf('}', at));
+  };
+
+  it('R-277：页面最底下的“退出登录”是 FormButton size="row"，撑到 44；.row 写在 .compact 之后才压得住 38', () => {
+    expect(formBlock('.row')).toMatch(/min-height: var\(--hit\);/);
+    expect(form.indexOf('\n.row {')).toBeGreaterThan(form.indexOf('\n.compact {'));
     const tsx = readFileSync('src/features/settings/ui/SettingsPage.tsx', 'utf8');
-    expect(tsx).toMatch(/styles\.signOut/);
+    const so = tsx.slice(tsx.indexOf('function SignOutRow'), tsx.indexOf('data-testid="settings-signout"'));
+    expect(so).toMatch(/<FormButton\s+size="row"\s+block/);
   });
 
-  it('R-276：.btn 和确认弹窗的 .primary 看得见 38；两者都用 ::after 把点击区扩到 44（分段按钮的在 kit，见 Settings.test.tsx）', () => {
-    const btn = block('.btn');
-    expect(btn).toMatch(/min-height: 38px;/);
-    expect(btn).toMatch(/position: relative;/);
-    expect(btn).toMatch(/font-size: var\(--fs-14\);/);
-    // 确认弹窗的确认按钮和“取消”一样高（负责人 10-30）；本模块的 .primary 只在设置里用，字号不变
-    const primary = block('.primary');
-    expect(primary).toMatch(/min-height: 38px;/);
-    expect(primary).toMatch(/position: relative;/);
-    expect(primary).toMatch(/font-size: var\(--fs-15\);/);
-    // 扩点击区：两个选择器共用一条规则，写法同皮肤视觉稿第 133 行
-    const at = css.indexOf('\n.btn::after,\n.primary::after {');
-    expect(at).toBeGreaterThan(0);
-    const after = css.slice(at, css.indexOf('}', at));
+  it('R-276：设置页的按钮（FormButton compact）看得见 38，用 ::after 把点击区扩到 44；确认弹窗的确认按钮字号 15、“取消”14', () => {
+    const compact = formBlock('.compact');
+    expect(compact).toMatch(/min-height: 38px;/);
+    expect(compact).toMatch(/position: relative;/);
+    expect(form).toMatch(/\n\.compact\.primary,\n\.compact\.dangerFill \{[^}]*font-size: var\(--fs-15\);/);
+    expect(form).toMatch(/\n\.btn,\n\.primary,\n\.danger,\n\.dangerFill,\n\.ghost \{[^}]*font-size: var\(--fs-14\);/);
+    const after = formBlock('.compact::after');
     expect(after).toMatch(/content: '';/);
     expect(after).toMatch(/position: absolute;/);
     expect(after).toMatch(/width: max\(100%, var\(--hit\)\);/);
     expect(after).toMatch(/height: max\(100%, var\(--hit\)\);/);
     expect(after).toMatch(/transform: translate\(-50%, -50%\);/);
+    // 设置页自己不再留一份
+    for (const sel of ['.btn', '.primary', '.primaryDanger', '.signOut', '.wide', '.danger']) expect(block(sel), sel).toBe('');
+    expect(css).not.toContain('.btn::after');
   });
 
   it('CSS：邮箱那一行是正文色、正文（15）的次一级 14，和灰色 13 的组标题分开；长邮箱任意处换行；读屏标签视觉上隐藏', async () => {

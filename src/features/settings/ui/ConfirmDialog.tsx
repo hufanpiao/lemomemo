@@ -1,6 +1,6 @@
 // 设置页的确认弹层：移除设备、退出其他所有设备、退出这台设备之前先问一次（kit 的 Dialog：焦点锁定、Esc 关闭）
 import { Dialog, DialogClose } from '../../../kit/components/Dialog.tsx';
-import { Pressable } from '../../../motion/components.ts';
+import { FormButton } from '../../../kit/components/Form.tsx';
 import styles from './SettingsPage.module.css';
 
 export interface ConfirmProps {
@@ -19,11 +19,12 @@ export function ConfirmDialog({ open, title, body, okLabel, cancelLabel, danger 
     <Dialog open={open} onOpenChange={(o) => (o ? undefined : onCancel())} title={title} description={body}>
       <div className={styles.actions}>
         <DialogClose asChild>
-          <Pressable className={styles.btn}>{cancelLabel}</Pressable>
+          <FormButton size="compact">{cancelLabel}</FormButton>
         </DialogClose>
-        <Pressable className={danger ? `${styles.primary} ${styles.primaryDanger}` : styles.primary} onClick={onOk}>
+        {/* B2-UI-b W4：.primary → compact primary，.primary.primaryDanger → compact dangerFill */}
+        <FormButton size="compact" variant={danger ? 'dangerFill' : 'primary'} onClick={onOk}>
           {okLabel}
-        </Pressable>
+        </FormButton>
       </div>
     </Dialog>
   );

@@ -117,6 +117,8 @@ describe('全天切换', () => {
     await b.outbox?.applyServer('events', [{ row: serverEvent() }]);
     open(`#/event/${ID}`);
     expect(screen.getByTestId('event-edit-start')).toBeTruthy();
+    // “全天”是开关（B2-UI-b W5，D2 ①）
+    expect(screen.getByTestId('event-edit-allday').getAttribute('role')).toBe('switch');
     await act(async () => {
       fireEvent.click(screen.getByTestId('event-edit-allday'));
     });

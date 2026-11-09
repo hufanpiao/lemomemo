@@ -163,7 +163,8 @@
   font-size: var(--fs-15);
 }
 
-.check input {
+/* 开关（look="switch"）的尺寸、画法全由下面的 .switch 管，这里只管方框和圆圈两种 */
+.check input:not([role="switch"]) {
   width: 20px;
   height: 20px;
   accent-color: var(--accent);
@@ -254,6 +255,74 @@
   outline-offset: 2px;
 }
 
+/* FormButton size="compact"（B2-UI-b W4，D1 ① 外观不变只换实现；R-276）：设置页按钮原样搬过来——
+   看得见 38、灰色实底 --panel-2、不描边、字重 400，点击区由 ::after 以中心向外扩到 44（同皮肤视觉稿第 133 行写法）；
+   secondary、danger、ghost 是灰底（danger 只换危险色字），primary、dangerFill 是确认弹窗那一对（左右 18、字号 15）。
+   禁用不变淡、字变 --text-2（原 .btn:disabled）。写在上面的 variant、:disabled 之后：同优先级后写的赢 */
+.compact {
+  position: relative;
+  min-height: 38px;
+  font-weight: 400;
+}
+
+.compact.btn,
+.compact.danger,
+.compact.ghost {
+  border: 0;
+  background: var(--panel-2);
+}
+
+.compact.primary,
+.compact.dangerFill {
+  padding: 0 18px;
+  font-size: var(--fs-15);
+  font-weight: 400;
+}
+
+.compact::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.compact:disabled {
+  opacity: 1;
+}
+
+.compact.btn:disabled,
+.compact.danger:disabled,
+.compact.ghost:disabled {
+  color: var(--text-2);
+}
+
+/* size="row"（R-277，负责人 10-30）：和 compact 同一外观，只是看得见 44，和设置页里的整行一样高（页底“退出登录”） */
+.row {
+  min-height: var(--hit);
+}
+
+/* block：整行宽。灰底按钮整行宽时放在页面底色上（原设置页 .wide）：底色换 --panel，和上面隔 16 */
+.block {
+  width: 100%;
+}
+
+.block.compact.btn,
+.block.compact.danger,
+.block.compact.ghost {
+  margin-top: 16px;
+  background: var(--panel);
+}
+
+/* outline（R-366，负责人 11-09 选 D5 方案 A）：compact 次要按钮改透明底 + 1px --inp-line 描边（和 regular 的 .btn 同一种写法），
+   只改底色和描边，高度、圆角、点击区、间距照 compact；写在 .block.compact.btn 后面、选择器同样三个类，压得住它的底色 */
+.compact.btn.outline {
+  border: 1px solid var(--inp-line);
+  background: none;
+}
+
 /* 只有标题一项的卡片（编辑日程）：标题下面那条线就是卡片底边，会伸进下面的圆角（G11 第三轮③），去掉 */
 .group > .title:last-child {
   border-bottom: 0;
@@ -271,4 +340,30 @@
 
 .check .circleBox > input:disabled {
   opacity: 1;
+}
+
+/* kit 共用开关（B2-UI-b W5、M4；11-09 主持人定：从 Switch.module.css 并到这里，少一个共用样式块，首屏稳定口径省 25 B）：
+   <input type="checkbox" role="switch" className={form.switch}>。画法从设置页原来的 .toggle 原样搬来，数值、令牌一个不改；
+   设置行（SettingsSwitchRow）和 Check look="switch"（待办“重要”、日程“全天”）共用这一份，别处只引用、不复制。
+   这一段归前端 B。关 = 描边 + 左边圆钮；开 = 墨色底 + 右边圆钮 */
+.switch {
+  flex: none;
+  width: 48px;
+  height: 28px;
+  margin: 0;
+  border: 1.5px solid var(--text-2);
+  border-radius: var(--r-pill);
+  background: radial-gradient(circle at 12px 50%, var(--text-2) 8px, transparent 8.5px), var(--panel);
+  cursor: pointer;
+  appearance: none;
+}
+
+.switch:checked {
+  border-color: var(--ink);
+  background: radial-gradient(circle at calc(100% - 12px) 50%, var(--on-ink) 9px, transparent 9.5px), var(--ink);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }

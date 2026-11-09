@@ -94,12 +94,13 @@
   font-size: var(--fs-13);
 }
 
+/* 说明文字断行（B2-UI-b W2，B11）：不用 text-wrap: pretty（它让中文提前换行，拆开“之后”“能不能”），用浏览器默认禁则、行尾排满；
+   韩文按词断由 base.css 的 :lang(ko) body { word-break: keep-all } 继承下来，这里不另写（e2e b2-ui-b-settings-wrap 查计算样式） */
 .meta {
   flex-basis: 100%;
   margin: 0;
   color: var(--text-2);
   font-size: var(--fs-13);
-  text-wrap: pretty;
 }
 
 .error {
@@ -164,27 +165,7 @@
   flex: 1 1 auto;
 }
 
-.toggle {
-  flex: none;
-  width: 48px;
-  height: 28px;
-  margin: 0;
-  border: 1.5px solid var(--text-2);
-  border-radius: var(--r-pill);
-  background: radial-gradient(circle at 12px 50%, var(--text-2) 8px, transparent 8.5px), var(--panel);
-  cursor: pointer;
-  appearance: none;
-}
-
-.toggle:checked {
-  border-color: var(--ink);
-  background: radial-gradient(circle at calc(100% - 12px) 50%, var(--on-ink) 9px, transparent 9.5px), var(--ink);
-}
-
-.toggle:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
+/* 开关本身的画法在 kit 共用的 ../Form.module.css 的 .switch（B2-UI-b W5） */
 
 /* 带分段按钮的行：行名占左边，分段按钮靠右 */
 .segRow > .tx {
@@ -228,4 +209,114 @@
   width: max(100%, var(--hit));
   height: max(100%, var(--hit));
   transform: translate(-50%, -50%);
+}
+
+/* ===== B2-UI-b W1：日历设置、提醒设置换 kit 时加的（数值从 CalendarSettings.module.css、RemindSettings.module.css 原样搬来） ===== */
+
+/* 看得见的组标题，写在卡片上方（SettingsCard / SettingsChoiceCard 的 showTitle） */
+.gt {
+  margin: 16px 4px 6px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-weight: 400;
+}
+
+section:first-child > .gt {
+  margin-top: 0;
+}
+
+/* 卡片下面的一句说明（note）；下边 16 把下一张卡隔开。不写 text-wrap: pretty（W2：中文提前换行，拆开词） */
+.note {
+  margin: 6px 4px 16px;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+/* 单选每项一行：44 高、行间分隔线，整行可点（label），选中的右边墨色“✓”（设计审查 M8：不用柠檬黄圆点，白卡上对比度不够） */
+.choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.choice:last-child {
+  border-bottom: 0;
+}
+
+.choice > .tx {
+  flex: 1 1 auto;
+}
+
+.choice:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+.check {
+  flex: none;
+  width: 20px;
+  color: var(--text);
+  font-size: var(--fs-17);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* 一行几个时刻框（免打扰“从 / 到”）：框的外观、字号、聚焦都用 kit 表单的 .input，这里只管排版 */
+.timesRow {
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.timeLbl {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: var(--hit);
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+/* 电脑宽屏上最宽 200px，不拉满半行（设计复审第三轮 R3-L2）；写成 .timeLbl > .time 压过 .input 的 flex、高度（两个 CSS 模块谁先加载不一定） */
+.timeLbl > .time {
+  flex: 1 1 auto;
+  max-width: 200px;
+  min-height: var(--hit);
+}
+
+/* 行名 + 行内按钮 / 值：行名占左边，按钮靠右 */
+.actRow > .tx {
+  flex: 1 1 auto;
+}
+
+.act {
+  flex: none;
+  margin-left: auto;
+}
+
+/* B2-UI-b W3、W4（设置页账号、数据、电脑三页换 kit）。数值从 features/settings/ui/SettingsPage.module.css 原样搬来 */
+
+/* SettingsDetailRow 的行名占满剩下的宽度，把右边的按钮、值推到右边（原 .tx 的 flex: 1 1 auto） */
+.grow {
+  flex: 1 1 auto;
+}
+
+/* SettingsDetailRow 右边的值：靠右、灰字，长了换行、不省略（原设置页 .v） */
+.end {
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-align: right;
+}
+
+/* 危险色：整行按钮（“注销账号”）、灰字里的“通知邮件没发出去”。整行按钮禁用时由上面的 .rowBtn:disabled 变灰（权重更高） */
+.danger {
+  color: var(--danger-text);
 }

@@ -1,6 +1,7 @@
-/* 设置 › 提醒与通知（B2 FA-4）：外观照设置页，功能之间不共用样式，这里照写一份（抄自 calendar 的 CalendarSettings.module.css，
-   那边注明了来源是 settings/ui/SettingsPage.module.css；设置页那边改了这几条要一起改，抽成 kit 组件记进待办）。
-   本文件自己的：.notice / .noticeText / .ok（顶部提示；按钮用 kit 的 FormButton）、.switch、.timeLbl / .time（免打扰时段） */
+/* 设置 › 提醒与通知（B2 FA-4）。
+   B2-UI-b W1（R-352）起提醒设置、免打扰、提醒里写什么三页的卡、行、开关、单选、时刻行都用 kit 设置组件（src/kit/components/Settings/），
+   原来从设置页抄来的 .grp/.row/.rowBtn（含按下变淡）、.tx、.v、.choice、.check、.seg、.segBtn、.switchRow、.toggle、.timesRow、.timeLbl、.time、.srOnly 都删了；
+   这里只剩：卡片下面的说明和红字（.sn、.error）、两张卡之间的 12px（.nextCard）、顶部提示（.notice 等）和“未来 7 天的提醒”页（.gt、.upCard、.up*） */
 
 /* 组标题写在卡片上方（同设置页 .gt） */
 .gt {
@@ -14,7 +15,8 @@ section:first-child > .gt {
   margin-top: 0;
 }
 
-.grp {
+/* “未来 7 天的提醒”页每天一张卡（列表卡，不是设置行；原 .grp） */
+.upCard {
   margin: 0;
   padding: 0 14px;
   border-radius: var(--r-lg);
@@ -23,184 +25,27 @@ section:first-child > .gt {
 }
 
 /* 二级页“通知”单独一张卡，下面三行另一张（设计复审第二轮 N8）：没有说明夹在中间时两张卡之间留 12px；有说明时说明自己的下边距（16px）撑开 */
-.grp + .grpNext {
+.nextCard {
   margin-top: 12px;
 }
 
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  min-height: var(--hit);
-  border-bottom: 1px solid var(--line);
-}
-
-.row:last-child {
-  border-bottom: 0;
-}
-
-.tx {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin: 0;
-  font-size: var(--fs-15);
-  font-weight: inherit;
-  overflow-wrap: anywhere;
-}
-
-/* 节假日每个选项一行：44 高、行间分隔线，整行可点（label），选中的右边墨色“✓”（设计审查 M8：不用柠檬黄圆点，白卡上对比度不够） */
-.choice {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: var(--hit);
-  border-bottom: 1px solid var(--line);
-  cursor: pointer;
-}
-
-.choice:last-child {
-  border-bottom: 0;
-}
-
-.choice:has(input:focus-visible) {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: var(--r-sm);
-}
-
-.check {
-  flex: none;
-  width: 20px;
-  color: var(--text);
-  font-size: var(--fs-17);
-  font-weight: 600;
-  text-align: center;
-}
-
-.seg {
-  display: inline-flex;
-  margin-left: auto;
-  padding: 3px;
-  border-radius: var(--r-pill);
-  background: var(--panel-2);
-}
-
-.segBtn {
-  position: relative;
-  min-height: 32px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: none;
-  color: var(--text-2);
-  font-size: var(--fs-14);
-}
-
-.segBtn[aria-pressed='true'] {
-  background: var(--chip-on-bg);
-  color: var(--chip-on-fg);
-  font-weight: 600;
-}
-
-/* 扩点击区到至少 44×44（同设置页的写法） */
-.segBtn::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: max(100%, var(--hit));
-  height: max(100%, var(--hit));
-  transform: translate(-50%, -50%);
-}
-
-/* .sn 的 text-wrap: pretty：最后一个字不单独成行（设计复审 L2；不支持的浏览器照旧） */
+/* 卡片下面的说明：中文用浏览器默认禁则、行尾排满，不用 text-wrap: pretty（B2-UI-b W1、W2，B11：它让中文提前换行） */
 .sn {
   margin: 6px 4px 16px;
   color: var(--text-2);
   font-size: var(--fs-12-5);
-  text-wrap: pretty;
 }
 
-/* 错误、时钟不准等红字：同 .sn，最后一个字不单独成行（第二轮截图里“关于”那句末尾的“响。”单独一行） */
+/* 错误、时钟不准等红字（同上，不用 text-wrap: pretty） */
 .error {
   margin: 8px 4px 0;
   color: var(--danger-text);
   font-size: var(--fs-13);
-  text-wrap: pretty;
-}
-
-/* 设置首页的“日历”一行（R-320）：整行是按钮，左“日历”、右摘要和“›” */
-.rowBtn {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 10px;
-  min-height: var(--hit);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-/* “测试提醒能不能收到”整行按钮发送中禁用 */
-.rowBtn:disabled {
-  opacity: var(--press-dim);
-}
-
-/* 整行宽、字靠左的行按钮按下不缩放，改成变淡（同设置页 .row .rowBtn，负责人 10-31） */
-.row .rowBtn {
-  transition: opacity var(--dur-press) var(--ease-out);
-}
-
-.row .rowBtn[data-state="pressed"] {
-  transform: none;
-  opacity: var(--press-dim);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .row .rowBtn {
-    transition: none;
-  }
-}
-
-:global(:root[data-rm="1"]) .row .rowBtn {
-  transition: none;
-}
-
-/* 免打扰那一行：整行是开关的 label，点行里哪儿都能切换，点按区就是整行（设计复审 L5） */
-.switchRow {
-  display: flex;
-  flex: 1 1 100%;
-  align-items: center;
-  gap: 10px;
-  min-height: var(--hit);
-  cursor: pointer;
-}
-
-.v {
-  margin-left: auto;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-  text-align: right;
 }
 
 .chev {
   color: var(--text-2);
   font-size: var(--fs-13);
-}
-
-/* 只给读屏的文字（首页“日历”一组的组标题） */
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
 
 /* 顶部提示（推送被占着、要重新打开、不支持）：浅色卡片，下面一个行内按钮 */
@@ -233,58 +78,6 @@ section:first-child > .gt {
   margin: 0;
   color: var(--ok-text);
   font-size: var(--fs-13);
-}
-
-/* 免打扰拨动开关（设计 M6）：关 = 描边 + 左边圆钮；开 = 墨色底 + 右边圆钮。开关状态靠位置和墨色区分，不靠柠檬黄
-   （对比度：remind-toggle-on / knob / off，build/contrast-pairs.json） */
-.toggle {
-  flex: none;
-  width: 48px;
-  height: 28px;
-  margin: 0;
-  border: 1.5px solid var(--text-2);
-  border-radius: var(--r-pill);
-  background: radial-gradient(circle at 12px 50%, var(--text-2) 8px, transparent 8.5px), var(--panel);
-  cursor: pointer;
-  appearance: none;
-}
-
-.toggle:checked {
-  border-color: var(--ink);
-  background: radial-gradient(circle at calc(100% - 12px) 50%, var(--on-ink) 9px, transparent 9.5px), var(--ink);
-}
-
-/* 免打扰“从 / 到”那一行（设计复审第二轮 N1）：上下各留 8px，两半一样宽，时刻框占满自己那一半（左右对称）；
-   不改成“开始 23:00 ›”两行：那样要自己做选时刻的弹层，现在用系统原生的时刻选择（iPhone 上是滚轮），键盘也能直接输 */
-.timesRow {
-  flex-wrap: nowrap;
-  gap: 12px;
-  padding: 8px 0;
-}
-
-.timeLbl {
-  display: flex;
-  flex: 1 1 0;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: var(--hit);
-  color: var(--text-2);
-  font-size: var(--fs-14);
-}
-
-/* 免打扰时刻框：外观、字号（电脑 15、触屏 16）、聚焦都用 kit 表单的 .input（B2-UI-a U1-1、U1-2，RemindDnd.tsx），这里只管排版：
-   电脑版宽屏上最宽 200px，不拉满半行（设计复审第三轮 R3-L2；手机上半行本来就不到 200）。
-   写成 .timeLbl > .time 压过 .input 的 flex、高度（两个 CSS 模块谁先加载不一定） */
-.timeLbl > .time {
-  flex: 1 1 auto;
-  max-width: 200px;
-  min-height: var(--hit);
-}
-
-.toggle:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
 }
 
 /* 未来 7 天的提醒（线框 sR7，设计 M5） */

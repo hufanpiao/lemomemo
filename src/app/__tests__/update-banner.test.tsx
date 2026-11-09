@@ -85,7 +85,7 @@ describe('收到 426（TC-B1-42、43）', () => {
     fireEvent.click(go);
     expect(swUpdate).toHaveBeenCalledTimes(1);
     await finish();
-    expect(screen.getByRole('status').textContent).toBe('更新失败 · 联网后再试');
+    expect(screen.getByRole('status').textContent).toBe('更新失败 · 联网后再试，不行就完全关闭柠檬记再打开');
   });
 
   it('录音、编辑在进行：横幅先不出，结束后再出', () => {
@@ -223,7 +223,7 @@ describe('复审：断网、录音中、关过横幅（复审必改、建议 1�
     fireEvent.click(screen.getByRole('button', { name: '更新' }));
     await finish();
     expect(reload).not.toHaveBeenCalled();
-    expect(screen.getByRole('status').textContent).toBe('更新失败 · 联网后再试');
+    expect(screen.getByRole('status').textContent).toBe('更新失败 · 联网后再试，不行就完全关闭柠檬记再打开');
   });
 
   it('按下以后、真正载入之前开始录音：等录音结束再重新载入，不打断', async () => {

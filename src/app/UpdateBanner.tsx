@@ -75,7 +75,7 @@ export function UpdateBanner({ upgrade, outbox, onReload }: UpdateBannerProps) {
     state.update === 'updating'
       ? t('update.updating', {})
       : state.update === 'failed'
-        ? t('update.failed', {})
+        ? t('update.failedReopen', {})
         : state.update === 'stalled'
           ? t('update.stalled', {})
           : state.update === 'still_old'

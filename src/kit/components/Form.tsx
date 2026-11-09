@@ -172,18 +172,20 @@ export function Select({
 
 /**
  * 勾选框。look="circle"（B2-UI-a U2-4）：和列表的完成圆圈同一画法、同一动效（用 CheckCircle.module.css 的类，不另画一份）；
- * 默认还是系统方形复选框
+ * look="switch"（B2-UI-b W5，负责人 11-09 定 D2 ①）：开关，role="switch"，画法用本文件样式里的 .switch（和设置页开关同一份，不另画）；
+ * 待办“重要”、日程“全天”用它，圆圈只留给“完成”。默认还是系统方形复选框
  */
 export function Check({
   label, checked, onChange, disabled, look = 'box', ...p
-}: { label: string; checked: boolean; onChange(v: boolean): void; disabled?: boolean; look?: 'box' | 'circle'; 'data-testid'?: string }) {
+}: { label: string; checked: boolean; onChange(v: boolean): void; disabled?: boolean; look?: 'box' | 'circle' | 'switch'; 'data-testid'?: string }) {
   const id = useId();
   const input = (
     <input
       data-testid={p['data-testid']}
       id={id}
       type="checkbox"
-      className={look === 'circle' ? cc.check : undefined}
+      role={look === 'switch' ? 'switch' : undefined}
+      className={look === 'circle' ? cc.check : look === 'switch' ? styles.switch : undefined}
       checked={checked}
       disabled={disabled}
       onChange={(e) => onChange(e.target.checked)}
@@ -226,9 +228,29 @@ const VARIANT: Record<ButtonVariant, string | undefined> = {
  * strong：字重 600（代码审 M2）。primary、dangerFill 本来就是 600；secondary、danger、ghost 默认 400（编辑页“删除”“清掉”），
  * 设置 › 提醒的“重新连接”“移除它…”“取消”原来是 600，传 strong 保持原样（只有任务单写明的颜色可以变，字重不变）
  */
+/**
+ * size（B2-UI-b W4，D1 ① 外观不变只换实现）：
+ * - regular（默认）：上面五种，看得见 --hit（44）。
+ * - compact：设置页按钮（R-276）：看得见 38、灰色实底、点击区扩到 44；primary、dangerFill 是确认弹窗那一对。
+ * - row：compact 的外观、看得见 44（R-277：页底“退出登录”和设置行一样高）。
+ * block：整行宽；compact、row 的灰底按钮整行宽时底色换 --panel、上面隔 16（原设置页 .wide）
+ * outline（R-366，负责人 11-09 选 D5 方案 A）：只配合 size="compact" 的次要按钮用，改成透明底 + 1px --inp-line 描边（regular 次要按钮同一种写法），
+ *   高度、圆角、点击区、间距都照 compact 不变（账号页“退出其他所有设备”，和下面的“注销账号”入口行分开）；别的 size 传了也不生效
+ */
+export type ButtonSize = 'regular' | 'compact' | 'row';
+
 export function FormButton({
-  danger = false, variant, strong = false, ...p
-}: Omit<ComponentProps<typeof Pressable>, 'className'> & { danger?: boolean; variant?: ButtonVariant; strong?: boolean }) {
-  const cls = VARIANT[variant ?? (danger ? 'danger' : 'secondary')];
-  return <Pressable {...p} className={strong ? `${cls} ${styles.strong}` : cls} />;
+  danger = false, variant, strong = false, size = 'regular', block = false, outline = false, ...p
+}: Omit<ComponentProps<typeof Pressable>, 'className'> & {
+  danger?: boolean; variant?: ButtonVariant; strong?: boolean; size?: ButtonSize; block?: boolean; outline?: boolean;
+}) {
+  const cls = [
+    VARIANT[variant ?? (danger ? 'danger' : 'secondary')],
+    strong && styles.strong,
+    size !== 'regular' && styles.compact,
+    size === 'row' && styles.row,
+    block && styles.block,
+    outline && size === 'compact' && styles.outline,
+  ].filter(Boolean).join(' ');
+  return <Pressable {...p} className={cls} />;
 }

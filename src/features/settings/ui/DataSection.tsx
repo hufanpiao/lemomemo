@@ -11,7 +11,8 @@
 // • 成功：“已导出，通知邮件已发到你的邮箱”；B1 一律没带隐私记令牌，再加一句“隐私记没有导出（没解锁）”；
 //   没存下来（分享面板取消等）写“还没存下来”；两种情况都给“再存一次”（不再调服务器；存的过程中按钮禁用，防连点）
 import { useEffect, useRef } from 'react';
-import { Pressable } from '../../../motion/components.ts';
+import { FormButton } from '../../../kit/components/Form.tsx';
+import { SettingsEntryRow, SettingsList } from '../../../kit/components/Settings/Settings.tsx';
 import { fmtMb, type ExportErr, type ExportTask } from '../hooks/useExport.ts';
 import { useOnline } from '../hooks/useOnline.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
@@ -38,7 +39,7 @@ export function DataSection({ task, recent, devices }: { task: ExportTask; recen
   const got = state.kind === 'busy' ? state.bytes : state.kind === 'paused' ? state.job.bytes : 0;
   const first = state.kind === 'busy' ? state.first : 0;
 
-  // 变成中断时把焦点给“继续”（Pressable 不转发 ref，经外面那层 div 找第一个能点的按钮：断网时“继续”不可点，焦点落到“取消”）
+  // 变成中断时把焦点给“继续”（FormButton 不转发 ref，经外面那层 div 找第一个能点的按钮：断网时“继续”不可点，焦点落到“取消”）
   const actionsRef = useRef<HTMLDivElement>(null);
   const prevKind = useRef(state.kind);
   useEffect(() => {
@@ -48,21 +49,19 @@ export function DataSection({ task, recent, devices }: { task: ExportTask; recen
 
   return (
     <div data-section="data">
-      <ul className={styles.grp}>
-        <li className={styles.row}>
-          <Pressable
-            className={`${styles.rowBtn} ${styles.rowBtnStack}`}
-            disabled={!online || busy || paused}
-            aria-busy={busy}
-            aria-describedby="settings-export-notes"
-            onClick={() => void run()}
-            data-testid="settings-export"
-          >
-            <span className={styles.tx}>{t('settings.account.export', {})}</span>
-            <span className={`${styles.v} ${styles.vBelow}`}>{online ? t('settings.export.hint', {}) : t('settings.export.offline', {})}</span>
-          </Pressable>
-        </li>
-      </ul>
+      {/* B2-UI-b W4：整行换成 kit 的入口行（stacked：行名在上、说明在下），右边多了和别的整行按钮一样的 › */}
+      <SettingsList>
+        <SettingsEntryRow
+          label={t('settings.account.export', {})}
+          stacked
+          value={online ? t('settings.export.hint', {}) : t('settings.export.offline', {})}
+          disabled={!online || busy || paused}
+          busy={busy}
+          describedBy="settings-export-notes"
+          onOpen={() => void run()}
+          testId="settings-export"
+        />
+      </SettingsList>
       <p id="settings-export-notes" className={styles.sn} data-testid="settings-export-notes">
         {t('settings.export.quota', {})}
         <br />
@@ -86,24 +85,18 @@ export function DataSection({ task, recent, devices }: { task: ExportTask; recen
       ) : null}
       {paused ? (
         <div ref={actionsRef} className={styles.exportActions}>
-          <Pressable className={styles.primary} disabled={!online} onClick={() => void resume()} data-testid="settings-export-resume">
+          <FormButton size="compact" variant="primary" disabled={!online} onClick={() => void resume()} data-testid="settings-export-resume">
             {t('settings.export.resume', {})}
-          </Pressable>
-          <Pressable className={styles.btn} onClick={cancel} data-testid="settings-export-cancel">
+          </FormButton>
+          <FormButton size="compact" onClick={cancel} data-testid="settings-export-cancel">
             {t('settings.cancel', {})}
-          </Pressable>
+          </FormButton>
         </div>
       ) : null}
       {state.kind === 'done' ? (
-        <Pressable
-          className={styles.btn}
-          disabled={saving}
-          aria-busy={saving}
-          onClick={() => void saveAgain()}
-          data-testid="settings-export-again"
-        >
+        <FormButton size="compact" disabled={saving} aria-busy={saving} onClick={() => void saveAgain()} data-testid="settings-export-again">
           {t('settings.export.saveAgain', {})}
-        </Pressable>
+        </FormButton>
       ) : null}
       {state.kind === 'error' ? (
         <p className={styles.error} role="alert">

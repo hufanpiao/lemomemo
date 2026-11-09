@@ -134,6 +134,7 @@ function EventEditor({ id, onCreated }: { id: string; onCreated(id: string): voi
             label={t('event.edit.allDay', {})}
             checked={form.time === null}
             disabled={off}
+            look="switch"
             onChange={(all) => ed.setAllDay(all)}
             data-testid="event-edit-allday"
           />

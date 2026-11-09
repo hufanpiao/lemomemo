@@ -1,4 +1,4 @@
-/* 设置页骨架（B1 K9）：分组卡片照定稿线框 s13（.grp / .row / .gt / .sn）；只用令牌，颜色在 skins/*.css（A11）
+/* 设置页骨架（B1 K9）：分组卡片照定稿线框 s13（组标题 .gt、说明 .sn；卡片和行 B2-UI-b 起用 kit 设置组件）；只用令牌，颜色在 skins/*.css（A11）
    按下回弹由 motion 的 Pressable 自带（含减少动态效果的覆盖），这里不写 transition、不动 transform */
 .page {
   max-width: 560px;
@@ -76,59 +76,10 @@
   font-weight: 400;
 }
 
-.grp {
-  margin: 0;
-  padding: 0 14px;
-  border-radius: var(--r-lg);
-  background: var(--panel);
-  list-style: none;
-}
+/* B2-UI-b W3、W4：原来的卡片、行、行名、值、行内灰字这几条样式（含两行内容的上下 8px、最后一行无分隔线）删了，
+   账号、数据、电脑三页的行都换成 kit 设置组件（src/kit/components/Settings/：SettingsList、SettingsDetailRow、SettingsEntryRow），数值原样搬在那边 */
 
-/* R-276（负责人 10-30，改视觉稿“设置行 50”）：单行整行高 44、不加上下内边距；行里的 .rowBtn 44 撑满整行，可点区不变 */
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 10px;
-  min-height: var(--hit);
-  padding: 0;
-  border-bottom: 1px solid var(--line);
-}
-
-/* 两行内容的行（下面带一行灰字 .meta：已登录设备、导出邮件没发出的那条）：上下各 8px，
-   不然按钮贴卡片上沿、灰字压到下边圆角（R-276 实测）。单行的行不受影响，仍是 44 */
-.row:has(> .meta) {
-  padding: 8px 0;
-}
-
-.row:last-child {
-  border-bottom: 0;
-}
-
-/* margin 0：“界面语言”的 .tx 是 h2，默认上下外边距会把 44 的行撑高（韩文实测 44.9，R-276） */
-.tx {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin: 0;
-  font-size: var(--fs-15);
-  font-weight: inherit;
-  overflow-wrap: anywhere;
-}
-
-.v {
-  margin-left: auto;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-  text-align: right;
-}
-
-.meta {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--text-2);
-  font-size: var(--fs-13);
-}
-
+/* 设备名后面的“本机”“已退出”，最近的导出设备名后面的“本机” */
 .tag {
   display: inline-block;
   margin-left: 6px;
@@ -145,12 +96,12 @@
   color: var(--text-2);
 }
 
-/* .sn 的 text-wrap: pretty：最后一个字不单独成行（提醒接线设计复审 L2；不支持的浏览器照旧） */
+/* 说明文字断行（B2-UI-b W2，B11）：不用 text-wrap: pretty（中文会提前换行，拆开“之后”“能不能”），用浏览器默认禁则、行尾排满；
+   韩文按词断由 base.css 的 :lang(ko) body { word-break: keep-all } 继承下来，这里不另写（e2e b2-ui-b-settings-wrap 查计算样式） */
 .sn {
   margin: 6px 4px 0;
   color: var(--text-2);
   font-size: var(--fs-12-5);
-  text-wrap: pretty;
 }
 
 /* 关于页的诊断信息（11-06，连点“版本”5 下）：纯文字、等宽、长行折开，可以长按选中拷给我们 */
@@ -196,49 +147,9 @@
 
 /* 中韩切换的分段按钮（R-282）合卡以后用 kit 的 SettingsSegRow，样式在 src/kit/components/Settings/Settings.module.css */
 
-/* R-276：看得见的 38 高；点击区由 ::after 扩到 44（上下各 3px），字号不变 */
-.btn {
-  position: relative;
-  min-height: 38px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--panel-2);
-  color: var(--text);
-  font-size: var(--fs-14);
-}
-
-/* 扩点击区（令牌 --hit 的写法，同皮肤视觉稿第 133 行）：不可见的伪元素以按钮中心向外扩到至少 44×44；
-   按钮本身比 44 宽的方向不扩，所以相邻按钮的点击区不会互相盖住 */
-.btn::after,
-.primary::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: max(100%, var(--hit));
-  height: max(100%, var(--hit));
-  transform: translate(-50%, -50%);
-}
-
-.btn:disabled {
-  color: var(--text-2);
-}
-
-.danger {
-  color: var(--danger-text);
-}
-
-.wide {
-  width: 100%;
-  margin-top: 16px;
-  background: var(--panel);
-}
-
-/* R-277（负责人 10-30）：页面最底下的“退出登录”和“注销账号”那一行一样高 44；“退出其他所有设备”等其余 .btn 仍看得见 38 */
-.signOut {
-  min-height: var(--hit);
-}
+/* B2-UI-b W4：原来的按钮样式（普通、危险、整行宽、页底退出登录、确认弹窗的主按钮和危险主按钮，含扩点击区、禁用灰字）删了，
+   一律用 kit 的 FormButton（对应表见任务单 W4：普通 → compact；危险 → compact danger；主按钮 → compact primary；
+   危险主按钮 → compact dangerFill；整行宽 → compact block；页底退出登录 → row block），数值在 kit/components/Form.module.css */
 
 .status {
   margin: 8px 4px 0;
@@ -276,82 +187,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* R-276（负责人 10-30）：和弹窗里的“取消”（.btn）一样看得见 38，点击区由上面的 ::after 扩到 44；
-   本模块的 .primary 只在设置里用：确认弹窗、离开本机的提示框、注销页的提交按钮 */
-.primary {
-  position: relative;
-  min-height: 38px;
-  padding: 0 18px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: var(--fs-15);
-}
-
-.primaryDanger {
-  background: var(--danger-bg);
-  color: var(--danger-text);
-}
-
 /* 账号组里设备列表下面的另一张卡片（注销入口） */
 .gap {
   margin-top: 12px;
 }
 
-/* 整行可点的一行（导出全部、注销账号）：文字在左、值或箭头在右 */
-.rowBtn {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 10px;
-  min-height: var(--hit);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-/* 数据页“导出全部数据”：行名和说明上下两行（设计评审 L-4：韩文两段挤在一起，只隔约 8px） */
-.rowBtnStack {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 8px 0;
-}
-
-.vBelow {
-  margin-left: 0;
-  text-align: left;
-}
-
-.rowBtn:disabled {
-  color: var(--text-2);
-}
-
-/* 整行宽、字靠左的行按钮按下不缩放，改成变淡（负责人 10-31：点“注销账号”这四个字跳一下）：
-   scale(0.97) 绕整行中心缩，左边的字被拉向右约 5px；点下去正好起页面切换，旧画面截在缩着的那一刻、淡出时一直定格 */
-.row .rowBtn {
-  transition: opacity var(--dur-press) var(--ease-out);
-}
-
-.row .rowBtn[data-state="pressed"] {
-  transform: none;
-  opacity: var(--press-dim);
-}
-
-/* 减少动态效果：变淡也直接切换（和 Pressable 的减少动态效果分支一致）；上面的 .row .rowBtn 权重比 Pressable 的 .pressable 高，要在这里自己关 */
-@media (prefers-reduced-motion: reduce) {
-  .row .rowBtn {
-    transition: none;
-  }
-}
-
-:global(:root[data-rm="1"]) .row .rowBtn {
-  transition: none;
-}
+/* B2-UI-b W3、W4：原来的整行按钮样式（含上下两行的写法、禁用灰字、按下变淡和减少动态效果的两条）删了，
+   改用 kit 的 SettingsEntryRow（危险色用它的 danger） */
 
 .line {
   margin: 0;
@@ -408,45 +250,18 @@
   font-size: var(--fs-16);
 }
 
+/* 注销页的提交按钮外面那层（B2-UI-b W4）：对应表里没有原来的 .full，按钮本身用 FormButton compact dangerFill block，
+   多出来的上边距和“没输对时灰底灰字”写在这里（原 .full、.full:disabled 的数值） */
 .full {
-  width: 100%;
   margin-top: 8px;
 }
 
-.full:disabled {
+.full > button:disabled {
   background: var(--panel-2);
   color: var(--text-2);
 }
 
-/* 设置 › 皮肤 的拨动开关（TILT-b2）：和提醒页免打扰开关（reminders 的 RemindSettings.module.css，设计 M6）同一画法，功能之间不能互引，照抄一份。
-   关 = 描边 + 左边圆钮；开 = 墨色底 + 右边圆钮（对比度和那边同一组令牌：remind-toggle-on / knob / off） */
-.switchRow {
-  display: flex;
-  flex: 1 1 100%;
-  align-items: center;
-  gap: 10px;
-  min-height: var(--hit);
-  cursor: pointer;
-}
-
-.toggle {
-  flex: none;
-  width: 48px;
-  height: 28px;
-  margin: 0;
-  border: 1.5px solid var(--text-2);
-  border-radius: var(--r-pill);
-  background: radial-gradient(circle at 12px 50%, var(--text-2) 8px, transparent 8.5px), var(--panel);
-  cursor: pointer;
-  appearance: none;
-}
-
-.toggle:checked {
-  border-color: var(--ink);
-  background: radial-gradient(circle at calc(100% - 12px) 50%, var(--on-ink) 9px, transparent 9.5px), var(--ink);
-}
-
-.toggle:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
+/* 最近的导出下面那句“通知邮件没发出去”的说明用危险色（原来和按钮共用 .danger） */
+.dangerText {
+  color: var(--danger-text);
 }

@@ -147,7 +147,7 @@ describe('触屏上可输入控件字号 ≥ 16px（iOS 聚焦不放大页面）
     const files = new Set(all.map((c) => c.file.replaceAll('\\', '/')));
     for (const f of [
       'src/kit/components/Form.tsx',
-      'src/features/reminders/ui/RemindDnd.tsx',
+      'src/kit/components/Settings/SettingsRows.tsx', // 免打扰时刻框（W1 起由 kit 的 SettingsTimesRow 画，RemindDnd.tsx 只传值）
       'src/features/auth/ui/AuthPage.tsx',
       'src/features/settings/ui/DeleteAccountView.tsx',
     ]) expect(files, f).toContain(f);

@@ -6,23 +6,64 @@
 //   说明用 aria-describedby 挂到开关上
 // • SettingsSegRow + Segmented：行名 + 分段按钮（界面语言，C：留分段按钮），分段按钮的组名取行名（aria-labelledby）
 // • SettingsInfoRow：只显示的一行“行名 + 值”，不能点（关于页的版本号）
-// • SettingsRow：别的内容自己放（例如已登录设备那种多段的行）
+// • SettingsRow：别的内容自己放
+// • B2-UI-b W1 加的（日历设置、提醒设置换 kit 时要用）：
+//   SettingsCard 的 showTitle（卡名写在卡片上方看得见，日历“节假日”）和 note（卡片下面一句说明）；
+//   SettingsChoiceCard：一组单选，每项一行、选中的右边打“✓”（原生 radio 视觉隐藏，整行是 label，方向键照常切换；点亮着的那项也回调）；
+//   SettingsTimesRow：一行几个时刻框（免打扰“从 / 到”），框用 kit 表单的 .input；
+//   SettingsActionRow：行名 + 右边一个行内按钮或一个值（提醒“通知”一行：没授权时是“打开”按钮，授权后是状态）
+// • B2-UI-b W3、W4 加的（设置页账号、数据、电脑三页换 kit 时要用）：
+//   SettingsList：只有一组行、没有卡名（标题由使用方自己写在外面，例如“已登录设备”要能接焦点）；
+//   SettingsDetailRow：多段的一行——行名（可带标签）+ 右边按钮或值（值可换行、不省略）+ 下面一行或几行灰字（已登录设备、最近的导出、快捷键）；
+//   SettingsEntryRow 的 danger（危险色整行，“注销账号”）、describedBy、busy（“导出全部数据”）
 // 文案一律由使用方传进来，这里不认 i18n 键
 import { useId, type ReactNode } from 'react';
 import { Pressable } from '../../../motion/components.ts';
+import form from '../Form.module.css';
 import styles from './Settings.module.css';
 
-export function SettingsCard({ title, children, testId }: { title: string; children: ReactNode; testId?: string }) {
+export interface SettingsCardProps {
+  title: string;
+  children: ReactNode;
+  testId?: string;
+  /** 卡名写在卡片上方、看得见（默认只给读屏，M3） */
+  showTitle?: boolean;
+  /** 卡片下面的一句说明（灰字） */
+  note?: ReactNode;
+  noteTestId?: string;
+}
+
+export function SettingsCard({ title, children, testId, showTitle, note, noteTestId }: SettingsCardProps) {
   const id = useId();
   return (
     <section aria-labelledby={id} data-testid={testId}>
-      <h2 id={id} className={styles.srOnly}>
+      <h2 id={id} className={showTitle === true ? styles.gt : styles.srOnly}>
         {title}
       </h2>
       <ul className={styles.grp}>{children}</ul>
+      {note === undefined ? null : (
+        <p className={styles.note} data-testid={noteTestId}>
+          {note}
+        </p>
+      )}
     </section>
   );
 }
+
+// 一组单选、时刻行、行内按钮行、不带卡名的组、多段的行在 SettingsRows.tsx（文件超 300 行拆开），从这里一并导出，使用方照旧从本文件引
+export {
+  SettingsActionRow,
+  SettingsChoiceCard,
+  SettingsDetailRow,
+  SettingsList,
+  SettingsTimesRow,
+  type SettingsActionRowProps,
+  type SettingsChoice,
+  type SettingsChoiceCardProps,
+  type SettingsDetailRowProps,
+  type SettingsMeta,
+  type SettingsTimeField,
+} from './SettingsRows.tsx';
 
 export function SettingsRow({ children, testId, rowId }: { children: ReactNode; testId?: string; rowId?: string }) {
   return (
@@ -61,13 +102,31 @@ export interface SettingsEntryRowProps {
   disabled?: boolean;
   /** 写在 <li data-row-id>，使用方按它找这一行（例如设置页的分组 id） */
   rowId?: string;
+  /**
+   * 危险操作的入口（“注销账号”），一个参数管两件事：① 危险色字，禁用时照样变灰；② 带 data-no-proxy，底栏切页过渡期间不被代点
+   * （GlassBarFx 的 NOT_NAV，危险操作不许被过渡误触发）。所以“只要红字、可以代点”的行不要用它（代码审 W3W4 建议 1，主持人 11-09 定只写注释、不另加参数）
+   */
+  danger?: boolean;
+  /** 说明写在行外面时，说明元素的 id（aria-describedby；有 meta 时用 meta） */
+  describedBy?: string;
+  /** 正在处理（aria-busy） */
+  busy?: boolean;
 }
 
-export function SettingsEntryRow({ label, lead, stacked, value, meta, onOpen, testId, valueTestId, disabled, rowId }: SettingsEntryRowProps) {
+export function SettingsEntryRow({ label, lead, stacked, value, meta, onOpen, testId, valueTestId, disabled, rowId, danger, describedBy, busy }: SettingsEntryRowProps) {
   const metaId = useId();
   return (
     <li className={styles.row} data-row-id={rowId}>
-      <Pressable className={styles.rowBtn} onClick={onOpen} data-testid={testId} disabled={disabled} aria-describedby={meta === undefined ? undefined : metaId}>
+      <Pressable
+        className={danger === true ? `${styles.rowBtn} ${styles.danger}` : styles.rowBtn}
+        onClick={onOpen}
+        data-testid={testId}
+        disabled={disabled}
+        aria-busy={busy}
+        aria-describedby={meta === undefined ? describedBy : metaId}
+        // 危险的整行不让底栏过渡代点（GlassBarFx 的 NOT_NAV，设计复审五 R6-a）
+        data-no-proxy={danger === true ? '' : undefined}
+      >
         {lead}
         {stacked ? (
           <span className={styles.stack}>
@@ -119,7 +178,7 @@ export function SettingsSwitchRow({ label, checked, onChange, note, error, testI
         <input
           type="checkbox"
           role="switch"
-          className={styles.toggle}
+          className={form.switch}
           checked={checked}
           disabled={disabled}
           aria-describedby={note === undefined ? undefined : noteId}
@@ -146,6 +205,8 @@ export interface SegOption<T extends string> {
   label: string;
   /** 选项文字本身的语言（例如“한국어”标 ko），读屏按这个语言念 */
   lang?: string;
+  /** 这一个按钮的 data-testid（可选） */
+  testId?: string;
 }
 
 export interface SegmentedProps<T extends string> {
@@ -171,7 +232,7 @@ export function Segmented<T extends string>({ options, value, onChange, labelled
       data-testid={testId}
     >
       {options.map((o) => (
-        <Pressable key={o.value} className={styles.segBtn} lang={o.lang} aria-pressed={o.value === value} data-value={o.value} onClick={() => onChange(o.value)}>
+        <Pressable key={o.value} className={styles.segBtn} lang={o.lang} aria-pressed={o.value === value} data-value={o.value} data-testid={o.testId} onClick={() => onChange(o.value)}>
           {o.label}
         </Pressable>
       ))}

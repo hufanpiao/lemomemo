@@ -16,7 +16,7 @@ import { backOrReplace, hrefOf, navigateSub, useRoute } from '../../../app/route
 import { CalendarSettings } from '../../calendar/index.ts';
 import { RemindSettings } from '../../reminders/index.ts';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
-import { Pressable } from '../../../motion/components.ts';
+import { FormButton } from '../../../kit/components/Form.tsx';
 import { useSettingsPage, type ExitNotice, type SettingsDeps } from '../hooks/useSettingsPage.ts';
 import { useExport } from '../hooks/useExport.ts';
 import { useRecentExport } from '../hooks/useRecentExport.ts';
@@ -37,15 +37,17 @@ function SignOutRow({ busy, signingOut, onSignOut }: { busy: boolean; signingOut
   const t = useSettingsT();
   return (
     <div className={styles.bottom}>
-      <Pressable
-        className={`${styles.btn} ${styles.wide} ${styles.signOut}`}
+      {/* B2-UI-b W4：.btn.wide.signOut → row block（和“注销账号”那一行一样高 44，R-277） */}
+      <FormButton
+        size="row"
+        block
         disabled={busy || signingOut}
         aria-busy={signingOut}
         onClick={onSignOut}
         data-testid="settings-signout"
       >
         {t('settings.account.signOut', {})}
-      </Pressable>
+      </FormButton>
       {/* 点了退出到跳走最长约 19 秒（删行、signOut 共 8 秒，清本机库、缓存、最后再删一次库另有上限）：一直写着“正在退出…”；状态区常驻，读屏才会播报 */}
       <p className={styles.status} role="status" data-testid="settings-signing-out">
         {signingOut ? t('settings.signingOut', {}) : ''}
@@ -95,9 +97,9 @@ function ExitDialog({ notice, cleaning, onGo }: { notice: ExitNotice | null; cle
   return (
     <Dialog open={notice !== null} onOpenChange={() => undefined} title={t(text.title, {})} description={t(text.body, {})}>
       <div className={styles.actions}>
-        <Pressable className={styles.primary} onClick={onGo} disabled={cleaning} aria-busy={cleaning} data-testid="settings-revoked-go">
+        <FormButton size="compact" variant="primary" onClick={onGo} disabled={cleaning} aria-busy={cleaning} data-testid="settings-revoked-go">
           {cleaning ? t('settings.busy', {}) : t('settings.revoked.go', {})}
-        </Pressable>
+        </FormButton>
       </div>
     </Dialog>
   );
