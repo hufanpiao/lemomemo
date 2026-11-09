@@ -43,7 +43,9 @@ const focused = (page: Page) => page.evaluate(() => document.activeElement?.getA
 
 test.describe('R-354：动画实现到了以后换上（K2、K9）', () => {
   // 不让 SW 接管：webkit 里 SW 取的请求 page.route 拦不到（seed 以后第二次打开已被接管，动画实现块直接从 SW 缓存来）
-  test.use({ loggedIn: true, serviceWorkers: 'block' });
+  // timezoneId：数据的 due 按 TZ（首尔）算今天，浏览器也得在首尔；CI 容器是 UTC，首尔 0～9 点跑时两边差一天，
+  // 今天页找不到 t3 超时（3c482a9 的 CI 在首尔 8 点跑挂了，本机不在 UTC 时区复现不出来）
+  test.use({ loggedIn: true, serviceWorkers: 'block', timezoneId: TZ });
 
   test('焦点在今天页列表里时不换、焦点不丢；移出以后换上，删行有退场', async ({ page }) => {
     // 从第一次打开就拦：webkit 会把同一页面里取到过的模块放在内存缓存里，之后刷新不再发请求
@@ -113,8 +115,12 @@ test.describe('R-354：动画实现到了以后换上（K2、K9）', () => {
     await expect(box, '换上以后还是停稳的样子').toHaveAttribute('style', /opacity: 1/);
     await page.getByTestId('motion-toggle').click();
     await expect(box, '关掉有退场').toHaveAttribute('data-state', 'leaving', { timeout: 1000 });
-    const op = await box.evaluate((e) => Number(getComputedStyle(e).opacity)).catch(() => 0);
-    expect(op, '退场途中透明度在往下走').toBeLessThan(1);
+    // leaving 和退场动画第一帧是同一次渲染：只读一次可能正好读到还没开始走的 1（3c482a9 的 CI chromium 首跑、重试都是 Received: 1，
+    // 全量并发时机器忙，Chromium 晚一两帧才开始走）。改成退场期间每约 16ms 读一次，要读到小于 1；
+    // 元素已经没了算失败（NaN），比原来“没了按 0 算通过”更严：当场消失、没有淡出的会挂
+    await expect
+      .poll(() => box.evaluate((e) => Number(getComputedStyle(e).opacity)).catch(() => Number.NaN), { message: '退场途中透明度在往下走', intervals: [16], timeout: 1000 })
+      .toBeLessThan(1);
     await expect(box).toHaveCount(0, { timeout: 3000 });
   });
 });
