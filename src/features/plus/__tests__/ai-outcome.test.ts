@@ -36,6 +36,17 @@ describe('outcomeOf', () => {
     expect(outcomeOf({ intent: 'record', confidence: 1, items: [{ ...ITEM, kind: 'spell' }], quota_left: 1 })).toEqual({ kind: 'ai_failed', reason: 'bad_response' });
   });
 
+  it('S3：日程、待办的 title 超过 160、short 超过 32（rows.ts 行约束）当读不懂，退回本机规则；刚好在上限内照收；纪念日不查', () => {
+    const rec = (it: Record<string, unknown>) => outcomeOf({ intent: 'record', confidence: 1, items: [ITEM, it], quota_left: 3 });
+    const BAD = { kind: 'ai_failed', reason: 'bad_response' };
+    for (const kind of ['event', 'todo']) {
+      expect(rec({ ...ITEM, kind, title: 'x'.repeat(161) })).toEqual(BAD);
+      expect(rec({ ...ITEM, kind, short: 'y'.repeat(33) })).toEqual(BAD);
+      expect(rec({ ...ITEM, kind, title: 'x'.repeat(160), short: 'y'.repeat(32) })).toMatchObject({ kind: 'record' });
+    }
+    expect(rec({ ...ITEM, kind: 'anniv', title: 'x'.repeat(161) })).toMatchObject({ kind: 'record' });
+  });
+
   it('其余几支', () => {
     expect(outcomeOf({ fallback: true, reason: 'feature_off' })).toEqual({ kind: 'fallback', reason: 'feature_off' });
     expect(outcomeOf({ consent_required: true })).toEqual({ kind: 'consent_required' });

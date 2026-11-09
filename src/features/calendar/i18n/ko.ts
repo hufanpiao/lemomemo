@@ -9,7 +9,7 @@ export const ko = {
   'event.edit.titleLabel': '제목', // REVIEW(ko)
   'event.edit.titlePh': '무슨 일인가요', // REVIEW(ko)
   'event.edit.date': '날짜', // REVIEW(ko)
-  'event.edit.allDay': '하루 종일', // REVIEW(ko)
+  'event.edit.allDay': '종일', // R-365 负责人 11-09 定（原“하루 종일”，375 宽日期框放不下）
   'event.edit.start': '시작', // REVIEW(ko)
   'event.edit.end': '종료', // REVIEW(ko)
   'event.edit.tz': '시간대', // REVIEW(ko)

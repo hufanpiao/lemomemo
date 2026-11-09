@@ -33,6 +33,8 @@ export interface TypeCtx {
 
 export interface TypeEnv {
   online: boolean;
+  /** 现在在不在线（断网重试前再看一眼；不给用 navigator.onLine） */
+  isOnline?: () => boolean;
   /** 开着 AI（ai.enabled）并且同意过告知 */
   aiOn: boolean;
   /** 本机记着今天的次数已经用完（quota_left = 0） */
@@ -111,8 +113,14 @@ const failOf = (e: unknown): SendFail => {
   return 'http';
 };
 
-/** 调一次 ai-parse（6 秒超时，网络错误自动重试 1 次）→ 结果 */
-export async function askAi(req: AiParseReq, call: CallAi, timeoutMs = AI_PARSE_TIMEOUT_MS): Promise<AiOutcome> {
+/** 浏览器明确说离线（navigator.onLine === false）才算离线；读不到当在线 */
+export const navOnline = (): boolean => typeof navigator === 'undefined' || navigator.onLine !== false;
+
+/**
+ * 调一次 ai-parse（6 秒超时，网络错误自动重试 1 次）→ 结果。
+ * 重试前浏览器已经明确说离线：不再重试（B3 前端A代码审 C4：不然断网时要等两个 6 秒才退回本机）
+ */
+export async function askAi(req: AiParseReq, call: CallAi, timeoutMs = AI_PARSE_TIMEOUT_MS, online: () => boolean = navOnline): Promise<AiOutcome> {
   for (let tried = 0; ; tried++) {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(new DOMException('timeout', 'TimeoutError')), timeoutMs);
@@ -120,7 +128,7 @@ export async function askAi(req: AiParseReq, call: CallAi, timeoutMs = AI_PARSE_
       return outcomeOf(await call(req, ac.signal));
     } catch (e) {
       const fail = ac.signal.aborted ? 'timeout' : failOf(e);
-      if (!canAutoRetry(fail, tried)) return { kind: 'ai_failed', reason: fail };
+      if (!canAutoRetry(fail, tried) || !online()) return { kind: 'ai_failed', reason: fail };
     } finally {
       clearTimeout(timer);
     }
@@ -145,7 +153,8 @@ export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: 
   const req: AiParseReq = {
     text: cutText(text), now: ctx.now, tz: ctx.tz, locale: ctx.locale, projects: normProjects(ctx.projects), scope: 'main', ...(dd !== null ? { default_day: dd } : {}),
   };
-  const out = await askAi(req, call);
+  const isOnline = env.isOnline ?? navOnline;
+  const out = await askAi(req, call, AI_PARSE_TIMEOUT_MS, isOnline);
   switch (out.kind) {
     case 'record': {
       if (out.items.length === 0) return local('saved_rule', 'empty', out.quotaLeft);
@@ -162,6 +171,8 @@ export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: 
       if (out.reason === 'feature_off' || out.reason === 'vault_ai_off') return local('saved', out.reason);
       return local('saved_rule', out.reason);
     case 'ai_failed':
+      // 发出去以后断了网（浏览器明确说离线）：和一开始就离线一样记（offline_saved），不出“AI 没回应”
+      if (out.reason === 'network' && !isOnline()) return local('offline_saved', out.reason);
       return local('saved_rule', out.reason);
     default: {
       const never: never = out;

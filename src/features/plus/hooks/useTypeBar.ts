@@ -20,8 +20,10 @@ import type { Writer } from '../data/capture-save.ts';
 import { noticeLines, type NoticeLine } from '../data/notice.ts';
 import { quotaResetClock } from '../../../../shared/logic/ai-quota.ts';
 import { markQuotaNotice, quotaNoticeDue, quotaOutToday, rememberQuotaLeft } from '../data/quota.ts';
+import { readSessionId } from '../../../platform/session.ts';
+import { consentStale } from '../../../kit/state/consent-fresh.ts';
 import { callAiParse } from '../data/ai-parse-api.ts';
-import { applyConfirm, keepAsked, planLocal, planTyped, splitConfirm, type CallAi, type TypeCtx, type TypePlan } from '../data/type-flow.ts';
+import { applyConfirm, keepAsked, navOnline, planLocal, planTyped, splitConfirm, type CallAi, type TypeCtx, type TypePlan } from '../data/type-flow.ts';
 import { clearTypeDraft, readTypeDraft, writeTypeDraft } from '../data/type-draft.ts';
 import { useSavedBatch, type BatchEntry, type SaveEnv, type SaveOutcome } from './useSavedBatch.ts';
 
@@ -76,8 +78,6 @@ const projectsOf = (rows: readonly (readonly { project?: unknown }[])[]): string
   for (const list of rows) for (const r of list) if (typeof r.project === 'string' && r.project !== '') s.add(r.project);
   return [...s];
 };
-
-const navOnline = (): boolean => typeof navigator === 'undefined' || navigator.onLine !== false;
 
 export function useTypeBar(o: TypeBarOpts): TypeBarState {
   const [text, setTextRaw] = useState('');
@@ -149,9 +149,10 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
     try {
       const c = ctx();
       go({ type: 'organize' });
-      const aiOn = settingValue(settings, 'ai.enabled') === true;
+      // 同意版本明确过期（告知页关口问到 first / updated、还没做完）：不发 ai-parse，用本机规则（S1，kit/state/consent-fresh.ts）
+      const aiOn = settingValue(settings, 'ai.enabled') === true && !consentStale(readSessionId());
       const quotaOut = aiOn ? await quotaOutToday(c.now) : false;
-      const p = await planTyped(text, c, { online: online(), aiOn, quotaOut }, callAi);
+      const p = await planTyped(text, c, { online: online(), isOnline: online, aiOn, quotaOut }, callAi);
       if (p.quotaLeft !== null) void rememberQuotaLeft(p.quotaLeft, c.now);
       if (p.items.length === 0) {
         fail('nothing');

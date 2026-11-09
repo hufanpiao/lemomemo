@@ -15,11 +15,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { writeAiSwitchSettled } from '../../../core/ai-settings.ts';
 import { buildInfo } from '../../../platform/env.ts';
 import { appFetch } from '../../../platform/http.ts';
-import { readSessionAccessToken } from '../../../platform/session.ts';
+import { readSessionAccessToken, readSessionId } from '../../../platform/session.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { REFRESH_MARGIN_MS } from '../../../platform/supabase/sync-errors.ts';
 import { createConsentApi, createRestNoticeRead, CONSENT_HARD_MS, CONSENT_SLOW_MS, type ConsentApi, type NoticeState } from '../data/consent-api.ts';
 import { leaveThisDevice } from '../data/consent-exit.ts';
+import { setConsentStale } from '../../../kit/state/consent-fresh.ts';
 import type { ConsentHandlers } from './useConsent.ts';
 
 export type { NoticeState };
@@ -70,7 +71,11 @@ export function useNoticeState(api: ConsentApi, limitMs?: number, startedAt?: nu
     const left = limitMs === undefined ? undefined : startedAt === undefined ? limitMs : Math.max(0, limitMs - (Date.now() - startedAt));
     const timer = left === undefined ? undefined : setTimeout(() => settle('error'), left);
     api.noticeState().then(
-      (r) => settle(r.ok ? r.value : 'error'),
+      (r) => {
+        // 记下同意版本是不是明确过期（S1，kit/state/consent-fresh.ts）：关口已经超时放行了也记，打字条据此不发 ai-parse
+        if (r.ok) setConsentStale(r.value === 'first' || r.value === 'updated', readSessionId());
+        settle(r.ok ? r.value : 'error');
+      },
       () => settle('error'),
     );
     return () => {
@@ -96,6 +101,7 @@ export const defaultConsentWiringDeps: ConsentWiringDeps = {
 export function useConsentHandlers(finish: () => void, deps: ConsentWiringDeps = defaultConsentWiringDeps): ConsentHandlers {
   const onDone = useCallback(
     (agreed: boolean) => {
+      setConsentStale(!agreed, readSessionId()); // 服务器已记下当前版本；不同意时 ai.enabled 同步回来之前也不发（S1、安全复审）
       if (agreed) void deps.enableAi().catch(() => undefined);
       finish();
     },

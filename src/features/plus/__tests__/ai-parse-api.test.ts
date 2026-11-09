@@ -3,12 +3,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { createCallAi } from '../data/ai-parse-api.ts';
-import { planTyped, type TypeCtx } from '../data/type-flow.ts';
+import { askAi, planTyped, type AiParseReq, type TypeCtx } from '../data/type-flow.ts';
 
 const NOW = Date.UTC(2026, 10, 2, 1, 0);
 const CTX: TypeCtx = { now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: [], day: null };
 const ON = { online: true, aiOn: true, quotaOut: false };
 const URL_ = 'https://sb.test/functions/v1/ai-parse';
+const REQ: AiParseReq = { text: '买牛奶', now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: [], scope: 'main' };
 
 const item = (over: Partial<AiItem> = {}): AiItem => ({
   kind: 'todo', title: 'AI title', date: null, time: null, duration_min: null, due: '2026-11-05', important: false,
@@ -18,9 +19,9 @@ const item = (over: Partial<AiItem> = {}): AiItem => ({
 const reply = (status: number, body: unknown) =>
   new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-function api(res: () => Promise<Response>, token: () => Promise<string | null> = async () => 'jwt-1') {
+function api(res: () => Promise<Response>, token: () => Promise<string | null> = async () => 'jwt-1', refresh: () => Promise<string | null> = async () => null) {
   const fetch = vi.fn(async (_u: RequestInfo | URL, _i?: RequestInit) => res());
-  return { fetch, call: createCallAi({ fetch, url: URL_, anonKey: 'anon-1', token }) };
+  return { fetch, call: createCallAi({ fetch, url: URL_, anonKey: 'anon-1', token, refresh }) };
 }
 
 describe('ai-parse 请求', () => {
@@ -105,6 +106,19 @@ describe('网络', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(p).toMatchObject({ status: 'saved_rule', aiReason: 'network' });
   });
+  it('断网报错时浏览器已明确离线（C4）：不再重试，按离线记（offline_saved），不出“AI 没回应”', async () => {
+    const { fetch, call } = api(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    const p = await planTyped('买牛奶', CTX, { ...ON, isOnline: () => false }, call);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(p).toMatchObject({ status: 'offline_saved', origin: 'rule', aiReason: 'network' });
+    expect(p.items[0]?.title).toBe('买牛奶');
+  });
+  it('超时、服务器出错时就算离线也不改成 offline_saved（只认断网）', async () => {
+    const { call } = api(async () => reply(500, {}));
+    expect(await planTyped('买牛奶', CTX, { ...ON, isOnline: () => false }, call)).toMatchObject({ status: 'saved_rule', aiReason: 'http' });
+  });
   it('重试那一次成功：用 AI 的结果', async () => {
     let n = 0;
     const { call } = api(async () => {
@@ -113,5 +127,54 @@ describe('网络', () => {
       return reply(200, { intent: 'record', confidence: 1, items: [item()], quota_left: 3 });
     });
     expect(await planTyped('买牛奶', CTX, ON, call)).toMatchObject({ status: 'saved', origin: 'ai', quotaLeft: 3 });
+  });
+});
+
+describe('401 先换一次 token 再发（C2）', () => {
+  const ok = () => reply(200, { intent: 'record', confidence: 1, items: [item()], quota_left: 5 });
+  const bearer = (f: ReturnType<typeof api>['fetch'], i: number) => (f.mock.calls[i]?.[1]?.headers as Record<string, string>)['authorization'];
+
+  it('换到新 token：用新 token 再发一次，用 AI 的结果', async () => {
+    let n = 0;
+    const refresh = vi.fn(async () => 'jwt-2');
+    const { fetch, call } = api(async () => (++n === 1 ? reply(401, { error: 'session_revoked' }) : ok()), undefined, refresh);
+    expect(await planTyped('买牛奶', CTX, ON, call)).toMatchObject({ status: 'saved', origin: 'ai', quotaLeft: 5 });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect([bearer(fetch, 0), bearer(fetch, 1)]).toEqual(['Bearer jwt-1', 'Bearer jwt-2']);
+  });
+
+  it('换来还是 401：只换一次、只再发一次，用本机规则记', async () => {
+    const refresh = vi.fn(async () => 'jwt-2');
+    const { fetch, call } = api(async () => reply(401, { error: 'session_revoked' }), undefined, refresh);
+    expect(await planTyped('买牛奶', CTX, ON, call)).toMatchObject({ status: 'saved_rule', aiReason: 'http' });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('换不到（null、出错）或换来的和原来一样：不再发，用本机规则记', async () => {
+    const fails: (() => Promise<string | null>)[] = [async () => null, () => Promise.reject(new Error('x')), async () => 'jwt-1'];
+    for (const refresh of fails) {
+      const { fetch, call } = api(async () => reply(401, {}), undefined, refresh);
+      expect(await planTyped('买牛奶', CTX, ON, call)).toMatchObject({ status: 'saved_rule', aiReason: 'http' });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('别的失败码不换 token', async () => {
+    const refresh = vi.fn(async () => 'jwt-2');
+    const { call } = api(async () => reply(403, {}), undefined, refresh);
+    await planTyped('买牛奶', CTX, ON, call);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('取会话、换 token 卡住：到时限照样退回本机（timeout），不一直等', async () => {
+    const hang = () => new Promise<string | null>(() => undefined);
+    const a = api(async () => ok(), hang);
+    expect(await askAi(REQ, a.call, 30)).toEqual({ kind: 'ai_failed', reason: 'timeout' });
+    expect(a.fetch).not.toHaveBeenCalled();
+    const b = api(async () => reply(401, {}), undefined, hang);
+    expect(await askAi(REQ, b.call, 30)).toEqual({ kind: 'ai_failed', reason: 'timeout' });
+    expect(b.fetch).toHaveBeenCalledTimes(1);
   });
 });

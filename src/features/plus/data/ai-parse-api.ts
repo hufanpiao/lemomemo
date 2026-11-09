@@ -4,12 +4,16 @@
 // • 返回码 → 打字流程（type-flow.ts 的 askAi、outcomeOf）怎么走：
 //   - 200：JSON 原样交给 outcomeOf：{intent:'record'} 记下（items 为空 = empty_items，退回本机规则）；{fallback, reason}（feature_off、
 //     vault_ai_off、quota、invalid、timeout、error）、{consent_required}、{quota_out} 各自的分支见 type-flow.ts 的 planTyped
+//   - 401：先换一次 token（refreshSession）再发一次（B3 前端A代码审 C2：token 刚好在两次调用之间过期，不该出“AI 没回应”）；
+//     换不到、换来的和原来一样、再发还是不行：照下一条走
 //   - 400 bad_request（含 default_day 不合格）、401 / 403（会话没了、账号停用）、413、426、429 rate_limited（每分钟上限）、
 //     500、503 try_later：抛 SendError('http')，不自动重试，用本机规则记下、原话不丢（状态 saved_rule）。
-//     会话没了、账号停用由同步（outbox）那边照常处理，这里不另外退出
+//     会话没了、账号停用由同步（outbox）那边照常处理，这里不主动退出；但 401 时换 token 遇到凭证已被吊销，
+//     supabase-js 会清掉本机会话、让用户登出（C2 带来的副作用）。会话本来就已失效，接受（代码审 D1）
 //   - 2xx 但不是 JSON：SendError('bad_response')
 //   - 断网、读不出原因（appFetch 抛 TypeError）：原样抛出，askAi 认成 network、自动重试 1 次；超时（6 秒）由 askAi 的 signal 取消
 //   - 没登录（拿不到会话）：SendError('http')，不发请求
+// • 取会话、换 token 也算在 6 秒里：超时取消时不再等它们（supabase-js 可能在等锁），原样抛出取消原因
 // • 只在打字条那一块（plus 的懒加载块）里，不进首屏；supabase-js 照旧由 getSupabase() 动态加载
 // 纯 TS：不准 import React（A1）
 import { buildInfo } from '../../../platform/env.ts';
@@ -25,34 +29,57 @@ export interface AiParseApiOptions {
   anonKey?: string;
   /** 取这次会话的 access token；没登录返回 null */
   token?: () => Promise<string | null>;
+  /** 401 时换一次 token；换不到返回 null */
+  refresh?: () => Promise<string | null>;
 }
 
-async function sessionToken(): Promise<string | null> {
+/** 本次会话的 JWT（没登录为 null）；claude-link-api.ts 生成连接码也用 */
+export async function sessionToken(): Promise<string | null> {
   const db = await getSupabase();
   const { data, error } = await db.auth.getSession();
   if (error) return null;
   return data.session?.access_token ?? null;
 }
 
+async function refreshedToken(): Promise<string | null> {
+  const db = await getSupabase();
+  const { data, error } = await db.auth.refreshSession();
+  if (error) return null;
+  return data.session?.access_token ?? null;
+}
+
+/** 等 p，但 signal 取消时立刻按取消原因抛出（不再等 p）；p 自己出错当 null */
+function tokenOr(p: () => Promise<string | null>, signal: AbortSignal): Promise<string | null> {
+  if (signal.aborted) return Promise.reject(signal.reason as Error);
+  return new Promise((resolve, reject) => {
+    const stop = (): void => reject(signal.reason as Error);
+    signal.addEventListener('abort', stop, { once: true });
+    p().then(resolve, () => resolve(null)).finally(() => signal.removeEventListener('abort', stop));
+  });
+}
+
 export function createCallAi(o: AiParseApiOptions = {}): CallAi {
   const doFetch = o.fetch ?? appFetch;
   const token = o.token ?? sessionToken;
+  const refresh = o.refresh ?? refreshedToken;
   return async (req: AiParseReq, signal: AbortSignal): Promise<unknown> => {
-    let jwt: string | null;
-    try {
-      jwt = await token();
-    } catch {
-      jwt = null;
-    }
+    const jwt = await tokenOr(token, signal);
     if (jwt === null) throw new SendError('http');
     const url = o.url ?? `${buildInfo.supabaseUrl}/functions/v1/${AI_PARSE_FN}`;
-    const res = await doFetch(url, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${jwt}`, apikey: o.anonKey ?? buildInfo.anonKey, 'content-type': 'application/json' },
-      body: JSON.stringify(req),
-      signal,
-      cache: 'no-store',
-    });
+    const body = JSON.stringify(req);
+    const send = (t: string): Promise<Response> =>
+      doFetch(url, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${t}`, apikey: o.anonKey ?? buildInfo.anonKey, 'content-type': 'application/json' },
+        body,
+        signal,
+        cache: 'no-store',
+      });
+    let res = await send(jwt);
+    if (res.status === 401) {
+      const fresh = await tokenOr(refresh, signal);
+      if (fresh !== null && fresh !== jwt) res = await send(fresh);
+    }
     if (!res.ok) throw new SendError('http');
     try {
       return (await res.json()) as unknown;

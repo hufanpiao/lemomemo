@@ -1,7 +1,8 @@
 // shared/logic/short.ts（TC-B2-10、TC-B2-11；架构 5.12 第 2 点、R-104、第三轮架构 L3、第 9 节单元 short）
 // emoji 的 ZWJ、变体选择符写成转义（LINT-bidi 不准原样出现）
 import { describe, expect, it } from 'vitest';
-import { displayShort, graphemeCount, itemShort, projectShort, shortPatchOnTitleChange } from '../../shared/logic/short.ts';
+import { parseSplit } from '../../shared/logic/parse/index.ts';
+import { cutGraphemes, displayShort, graphemeCount, itemShort, projectShort, shortPatchOnTitleChange } from '../../shared/logic/short.ts';
 import { eventsWrite } from '../../shared/schema/rows.ts';
 
 const ZWJ = '\u200D';
@@ -96,5 +97,28 @@ describe('改标题时简称的来源（TC-B2-11，第三轮架构 L3）', () =>
       updated_at: 1,
     };
     expect(eventsWrite.safeParse(row).success).toBe(true);
+  });
+});
+
+describe('cutGraphemes：按字截，不把表情截成半个（代码审 D2）', () => {
+  const SMILE = '\u{1F600}';
+  const FAMILY = '\u{1F468}\u200d\u{1F469}\u200d\u{1F467}'; // ZWJ 连起来的一家人，8 个 UTF-16 单元，算一个字
+  const E_NFD = 'e\u0301'; // 带组合符号的 é，2 个单元算一个字
+
+  it('放得下原样返回；放不下时整字整字地取，总长（UTF-16 单元）不超过上限', () => {
+    expect(cutGraphemes('买牛奶', 160)).toBe('买牛奶');
+    expect(cutGraphemes(`ab${SMILE}`, 3)).toBe('ab');
+    expect(cutGraphemes(`ab${SMILE}c`, 4)).toBe(`ab${SMILE}`);
+    expect(cutGraphemes(`a${FAMILY}`, 8)).toBe('a');
+    expect(cutGraphemes(`a${FAMILY}`, 9)).toBe(`a${FAMILY}`);
+    expect(cutGraphemes(E_NFD.repeat(3), 5)).toBe(E_NFD.repeat(2));
+  });
+
+  it('本机规则的标题：159 个字后面跟表情，不留半个表情，入队前的行约束（rows.ts title max 160）照样过', () => {
+    const now = Date.UTC(2026, 9, 28, 1, 0);
+    const title = parseSplit(`${'记'.repeat(159)}${SMILE}${SMILE}`, now, 'Asia/Seoul', 'zh', []).items[0]?.title ?? '';
+    expect(title).toBe('记'.repeat(159));
+    expect(title.length).toBeLessThan(161);
+    expect(/[\uD800-\uDBFF]$/.test(title)).toBe(false);
   });
 });

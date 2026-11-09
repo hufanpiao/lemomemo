@@ -3,9 +3,13 @@
 // • intent 用穷举 switch：B3 只接 record；不认识的 intent（以后的服务器多出来的）、default 一律当 ai_failed，
 //   调用方退回本机规则、原话不丢（Q2 ②，“不是空实现”）。B4b-3 放开 INTENTS 时这里的 switch 编译不过，逼着补分支
 // • intent 是 record 但 items 为空：当 ai_failed（empty_items，架构师 11-07 定）
+// • 日程、待办的 title、short 超过行约束（shared/schema/rows.ts 的 eventsWrite / todosWrite：160、32，两张表一样）：当读不懂（bad_response），
+//   退回本机规则、原话不丢（B3 前端接 ai-parse 安全审 S3）。不然 outbox 入队前按 rows.ts 校验会整行拒掉（invalid_row），整批记不下。
+//   纪念日、随手记不查：capture-map 自己截断或不写这几列
 // • 不写 ai_status（M5）
 // 纯 TS：不准 import React（A1）
 import { aiResponse, INTENTS, type AiItem, type Intent } from '../../../../shared/schema/ai.ts';
+import { eventsWrite, todosWrite } from '../../../../shared/schema/rows.ts';
 
 /** 状态机能处理的几种结果 */
 export type AiOutcome =
@@ -22,6 +26,15 @@ export type AiOutcome =
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const knownIntent = (v: unknown): v is Intent => typeof v === 'string' && (INTENTS as readonly string[]).includes(v);
+
+const ROW_COLS = { event: eventsWrite.shape, todo: todosWrite.shape } as const;
+
+/** 日程、待办这一条的 title、short 放得进行约束（S3） */
+function fitsRow(it: AiItem): boolean {
+  if (it.kind !== 'event' && it.kind !== 'todo') return true;
+  const cols = ROW_COLS[it.kind];
+  return cols.title.safeParse(it.title).success && cols.short.safeParse(it.short).success;
+}
 
 /** 识别成功那一支按 intent 分派（穷举；default 走退路） */
 function byIntent(intent: Intent, items: AiItem[], quotaLeft: number, transcript: string | null): AiOutcome {
@@ -47,7 +60,10 @@ export function outcomeOf(raw: unknown): AiOutcome {
   const r = aiResponse.safeParse(raw);
   if (!r.success) return { kind: 'ai_failed', reason: 'bad_response' };
   const v = r.data;
-  if ('intent' in v) return byIntent(v.intent, v.items, v.quota_left, v.transcript ?? null);
+  if ('intent' in v) {
+    if (!v.items.every(fitsRow)) return { kind: 'ai_failed', reason: 'bad_response' };
+    return byIntent(v.intent, v.items, v.quota_left, v.transcript ?? null);
+  }
   if ('fallback' in v) return { kind: 'fallback', reason: v.reason };
   if ('consent_required' in v) return { kind: 'consent_required' };
   if ('quota_out' in v) return { kind: 'quota_out' };

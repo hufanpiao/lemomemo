@@ -39,6 +39,20 @@ export function graphemeCount(text: string): number {
   return graphemes(text).length;
 }
 
+/**
+ * 按字截断（代码审 D2）：一个字形簇一个字形簇地取，不把 emoji、带组合符号的字截成半个；
+ * 总长按 UTF-16 单元算、不超过 maxUnits（和 shared/schema/rows.ts 里 z.string().max() 同一口径，截完的标题入队不会被拒）
+ */
+export function cutGraphemes(text: string, maxUnits: number): string {
+  if (text.length <= maxUnits) return text;
+  let out = '';
+  for (const g of graphemes(text)) {
+    if (out.length + g.length > maxUnits) break;
+    out += g;
+  }
+  return out;
+}
+
 /** 月历、周视图实际显示的简称：存了 short（AI 生成或用户手改）就用它，否则按标题取 */
 export function displayShort(item: { readonly title: string; readonly short: string | null }): string {
   const s = item.short?.trim() ?? '';

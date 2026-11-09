@@ -18,11 +18,15 @@ import type { AiItem } from '../../schema/ai.ts';
 import type { AiKind } from '../../schema/kinds.ts';
 import { takeDateKo, takeDateZh, type DateHit } from './date-words.ts';
 import { arrangeHint, cleanTitle, findProject, stripRequests, takeImportant, takeNamedKind, type NamedKind } from './marks.ts';
+import { cutGraphemes } from '../short.ts';
 import { pastDate, type DateBasis } from './past-date.ts';
 import { RECUR_MARK, recurHint, takeRecur } from './recur-hint.ts';
 import { splitClauses } from './split.ts';
 import { prepare, QUICK_MAX, restoreWeekdays, type Rest } from './text.ts';
 import { periodLeft, takePeriodOnly, takeTime } from './time-words.ts';
+
+/** 标题最长多少（UTF-16 单元，同 shared/schema/rows.ts 的 events / todos.title max(160)） */
+const TITLE_MAX = 160;
 
 /** 提示条要用的几样（客户端按它选文案） */
 export interface ParseHints {
@@ -118,7 +122,8 @@ export function parseSplit(text: string, now: number, tz: Tz, _locale: 'zh' | 'k
   if (out.length === 0) {
     // 什么都没剩下（只说了日子、时刻）：原话当标题，没把握
     doubts.add('empty');
-    const title = cleanTitle(raw).slice(0, 160) || raw.trim().slice(0, 160);
+    // 按字截（D2）：不把 emoji 截成半个；上限 160 和 rows.ts 的 title 同一口径（UTF-16 单元）
+    const title = cutGraphemes(cleanTitle(raw), TITLE_MAX) || cutGraphemes(raw.trim(), TITLE_MAX);
     if (title) out.push(blank(named === 'event' ? 'event' : 'todo', title));
   }
   if (out.length > 1) doubts.add('multi');
@@ -216,7 +221,7 @@ function parseClause(text: string, env: ClauseEnv): Clause {
 
   const important = takeImportant(c);
   const project = findProject(c.text, env.projects);
-  const title = [...restoreWeekdays(cleanTitle(c.text.replace(RECUR_MARK, recur?.display ?? '')))].slice(0, 160).join('');
+  const title = cutGraphemes(restoreWeekdays(cleanTitle(c.text.replace(RECUR_MARK, recur?.display ?? ''))), TITLE_MAX);
   const nextCtx: Ctx | null = date !== null && basis !== null ? { date, basis, period: tm?.period || hint || '', soft } : null;
 
   // 类型：点名优先（R-195）；像纪念日的（续第 151 条）、有具体时刻的日程、其余待办

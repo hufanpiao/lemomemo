@@ -4,11 +4,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import type { WriteResult } from '../../../core/write.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
+import { setConsentStale } from '../../../kit/state/consent-fresh.ts';
+import { collection } from '../../../core/store.ts';
 import { clock } from '../../../platform/clock.ts';
 import type { Writer } from '../data/capture-save.ts';
 import TypeBar from '../ui/TypeBar.tsx';
+import type * as Session from '../../../platform/session.ts';
 
-const NOW = msAt('2026-11-02', 10 * 60, 'Asia/Seoul');
+// S1：会话 id 固定一个非空值（consentStale 读到空 id 一律当没记过）
+const SID = 'sid-t';
+vi.mock('../../../platform/session.ts', async (orig) => ({ ...(await orig<typeof Session>()), readSessionId: () => SID }));
+
+// 取 UTC 中午：首尔 21:00、洛杉矶 04:00 都还是 11-02（test:tz 三个时区各跑一遍，“明天”都是 11-03）
+const NOW = msAt('2026-11-02', 12 * 60, 'UTC');
 const OK: WriteResult = { ok: true, item: null };
 /** 写入桩第 n 次调用的数据里某个字段 */
 const field = (v: unknown, k: string): unknown => (v as Record<string, unknown> | undefined)?.[k];
@@ -210,5 +218,38 @@ describe('打字条', () => {
     uiStore.getState().setLocale('ko-KR');
     setup();
     expect(screen.getByRole('button', { name: '자세히 편집' })).toBeTruthy();
+  });
+});
+
+describe('S1：同意版本明确过期时不发 ai-parse', () => {
+  const AI_ON = { id: 'set-ai', key: 'ai.enabled', value: true, deleted_at: null, updated_at: NOW };
+  afterEach(() => {
+    setConsentStale(false, null);
+    collection('settings').clear();
+  });
+
+  async function typeOnce(stale: boolean) {
+    collection('settings').upsert([AI_ON]);
+    setConsentStale(stale, SID);
+    const callAi = vi.fn(async () => ({ intent: 'record', confidence: 1, items: [], quota_left: 3 }));
+    const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
+    render(<TypeBar day={null} writer={writer} callAi={callAi} online={() => true} onExpand={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByTestId('type-input'), { target: { value: '买牛奶' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+    });
+    await waitFor(() => expect(writer.insert).toHaveBeenCalled());
+    return { callAi, writer };
+  }
+
+  it('告知页关口问到 first / updated（还没做完）：不调 AI，用本机规则记下、原话不丢', async () => {
+    const { callAi, writer } = await typeOnce(true);
+    expect(callAi).not.toHaveBeenCalled();
+    expect(writer.insert.mock.calls[0]?.[1]).toMatchObject({ title: '买牛奶' });
+  });
+
+  it('够新或不知道（默认）：照常调 AI', async () => {
+    const { callAi } = await typeOnce(false);
+    expect(callAi).toHaveBeenCalledTimes(1);
   });
 });
