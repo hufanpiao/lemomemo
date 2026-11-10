@@ -85,8 +85,12 @@ export interface UpgradeCenter {
   subscribe(listener: () => void): () => void;
   /** 收到 426：以响应体里的 min 为准（不用本机缓存的值） */
   reportUpgradeRequired(min: string | null, source?: '426' | 'queue'): void;
-  /** 启动、切到前台时：按 app_config.min_client_version 比较（不会解除 426 带来的挡） */
-  checkMinVersion(min: string | null | undefined): void;
+  /**
+   * 启动、切到前台时：按 app_config.min_client_version 比较（平时不会解除 426 带来的挡）。
+   * all 为真：本机版本已够时连 426、queue 来源的挡一起解除——只由 sync/round.ts 在刚从服务器拉到配置、min 是合法版本号、
+   * 本机版本 ≥ min 时传（同版本恢复；那边接着 outbox.resume()）
+   */
+  checkMinVersion(min: string | null | undefined, all?: boolean): void;
   /** 本机库因为别的标签页升级而关了（cache.ts 的 onClosed('versionchange')） */
   onCacheVersionChange(): void;
   /** 本机库来自更新的版本（openCache 返回 version_too_new） */
@@ -213,13 +217,13 @@ export function createUpgradeCenter(deps: UpgradeDeps): UpgradeCenter {
       if (cur && cur.source === '426' && source === 'queue') return;
       set({ syncBlocked: { min, source } });
     },
-    checkMinVersion(min) {
+    checkMinVersion(min, all) {
       const cur = state.syncBlocked;
       if (min && lowerThan(deps.appVersion, min)) {
         if (!cur || cur.source === 'config') set({ syncBlocked: { min, source: 'config' } });
         return;
       }
-      if (cur?.source === 'config') set({ syncBlocked: null });
+      if (all || cur?.source === 'config') set({ syncBlocked: null });
     },
     onCacheVersionChange() {
       set({ cache: 'closed_for_upgrade' });
