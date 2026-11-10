@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { savePatch } from '../../../core/edit-save.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useEditRecord, type EditRecord } from '../../../kit/hooks/useEditRecord.ts';
+import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { clock } from '../../../platform/clock.ts';
 import { todayOf, type DateStr } from '../../../../shared/core/date.ts';
@@ -61,11 +62,13 @@ export function useNoteEdit(
   const ai = row !== undefined && showsAi(row as Row);
   const seen = useRef<string | null>(null);
   const rowId = row ? String(row['id']) : null;
+  // 只读行（TC-B4-09）不写：core 也会按 readonly_row 拒，页面层先跳过（代码审 11-11）
+  const ro = useReadonlyIds('notes').has(id) || rec.status === 'readonly';
   useEffect(() => {
-    if (!ai || deleted || rowId === null || seen.current === rowId) return;
+    if (!ai || deleted || ro || rowId === null || seen.current === rowId) return;
     seen.current = rowId;
     void savePatch('notes', rowId, { category_seen: true, updated_at: clock.now() }, false);
-  }, [ai, deleted, rowId]);
+  }, [ai, deleted, ro, rowId]);
   // 编辑器里分类旁的“AI”：这次打开时是 AI 分的、还没看过就一直标着（写了已看也不马上消失），用户手动改了分类就不标
   const aiAtOpen = useRef(false);
   if (ai) aiAtOpen.current = true;

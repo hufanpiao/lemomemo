@@ -8,7 +8,7 @@
 import { z } from 'zod';
 
 /** 改了本文件的形状或枚举，就把它加 1（2.6：本机库按 schema_v 整表重拉） */
-export const SCHEMA_V = 2;   // 2：B0 集成按实际授权补列、加 devices
+export const SCHEMA_V = 3;   // 2：B0 集成按实际授权补列、加 devices；3：宽容读取补登记 notes、categories 的枚举列（架构 0.57，跟 B4 前端同一版发布）
 
 const uuid = z.uuid();
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);

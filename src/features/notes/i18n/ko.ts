@@ -48,5 +48,6 @@ export const ko = {
   'note.edit.st.unavailable': '지금 이 기기에 저장할 수 없어요. 내용은 그대로 있으니 잠시 후 다시 고쳐 주세요', // REVIEW(ko)
   'note.edit.st.rejected': '형식이 맞지 않아 저장하지 못했어요 (제목이나 본문이 너무 길어요)', // REVIEW(ko)
   'note.edit.st.readonly': '새 버전에서만 고칠 수 있어요', // REVIEW(ko)
+  'note.edit.update': '업데이트', // REVIEW(ko)   // 只读时的“更新”（S12）
   'note.edit.st.missing': '이 항목을 찾을 수 없어요. 다른 기기에서 삭제했을 수 있어요', // REVIEW(ko)
 } as const satisfies Record<keyof typeof zh, string>;

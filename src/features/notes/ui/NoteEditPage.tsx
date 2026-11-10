@@ -6,7 +6,8 @@
 //   AI 分的、还没看过的胶囊里标“AI”，打开就算看过（category_seen 置为已看，hooks/useNoteEdit.ts）
 // • “⋯”菜单：现在只有“删除”（软删，页内出“已删除”和“撤销”，ADR-006，进“最近删除”）；“移到隐私记 / 转成…”是 B5、S8 的活
 // • 保存状态：常驻 role="status" 给读屏播报；平时看不见（稿子上没有），没保存上、只读这些坏状态才显示出来
-// • 只读行（R-148 认不出的值）是 S12 的活，这一批不做
+// • 只读行（S12，R-148，TC-B4-09；照待办编辑页）：core 的只读 id 里有这一条（或写入被拒 readonly）时，标题、正文、分类全部禁用，“⋯”（删除）灰掉，
+//   出“这条要新版本才能修改 · 更新”；电脑抽屉复用这个编辑器，列表页已在点开时拦下，这里兜住直接打开地址、打开后才变只读的情况
 // • 动效：只有抽屉最基本的滑入（R-376），按钮用 Pressable 的按下反馈
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { canGoBack, goBack, parseHash, replaceRoute, useRoute } from '../../../app/router.ts';
@@ -15,9 +16,11 @@ import { FormButton } from '../../../kit/components/Form.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
 import type { EditStatus } from '../../../kit/hooks/useEditRecord.ts';
 import { useHoldBusy } from '../../../kit/hooks/useHoldBusy.ts';
+import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { Pressable } from '../../../motion/components.ts';
+import { requestAppUpdate } from '../../../platform/native-bridge.ts';
 import { BODY_MAX, TITLE_MAX, useNoteEdit, type CategoryOption } from '../hooks/useNoteEdit.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
 import styles from './NoteEditPage.module.css';
@@ -84,8 +87,10 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
   const t = useNotesT();
   const ed = useNoteEdit(id, onCreated);
   const { form, change, status } = ed;
+  const roIds = useReadonlyIds('notes');
+  const readonly = status === 'readonly' || roIds.has(id);
   const statusKey = STATUS_KEY[status];
-  const off = status === 'missing' || ed.deleted;
+  const off = status === 'missing' || ed.deleted || readonly;
   const [menu, setMenu] = useState(false);
   const locale = useUi((s) => s.locale);
 
@@ -107,6 +112,7 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
           options={ed.categories}
           ai={ed.ai}
           disabled={off}
+          muted={readonly}
           drawer={drawer}
           onChange={(v) => change({ category_id: v })}
         />
@@ -117,7 +123,7 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
           align="end"
           className={styles.menu}
           trigger={
-            <button type="button" className={styles.more} aria-label={t('notes.more', {})} disabled={!ed.row || ed.deleted} data-testid="note-edit-more">
+            <button type="button" className={styles.more} aria-label={t('notes.more', {})} disabled={!ed.row || ed.deleted || readonly} data-testid="note-edit-more">
               ⋯
             </button>
           }
@@ -146,8 +152,17 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
       </div>
       {meta ? <p className={styles.meta} data-testid="note-edit-meta">{meta}</p> : null}
       <p className={BAD.has(status) ? styles.statusBad : styles.status} role="status" data-testid="edit-status">
-        {statusKey ? t(statusKey, {}) : ''}
+        {statusKey && !readonly ? t(statusKey, {}) : ''}
       </p>
+      {/* 只读：和“已删除 · 撤销”同一种提示行，一句话加“更新”（同待办编辑页） */}
+      {readonly ? (
+        <p className={styles.roNotice} role="status" data-testid="note-edit-ro">
+          <span>{t('note.edit.st.readonly', {})}</span>
+          <button type="button" onClick={() => void requestAppUpdate()} data-testid="note-edit-update">
+            {t('note.edit.update', {})}
+          </button>
+        </p>
+      ) : null}
       {ed.deleted ? (
         <p className={styles.notice} role="alert" data-testid="edit-notice">
           {t('note.edit.deleted', {})}{' '}
@@ -189,11 +204,11 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
 }
 
 /** 顶栏的分类胶囊（s8“工作灵感 AI ▾”）：色点 + 名字 + AI + ▾；原生下拉透明盖在上面 */
-function CatChip(p: { value: string | null; options: CategoryOption[]; ai: boolean; disabled: boolean; drawer: boolean; onChange(v: string | null): void }) {
+function CatChip(p: { value: string | null; options: CategoryOption[]; ai: boolean; disabled: boolean; muted: boolean; drawer: boolean; onChange(v: string | null): void }) {
   const t = useNotesT();
   const cur = p.options.find((c) => c.id === p.value) ?? null;
   return (
-    <span className={p.drawer ? `${styles.chip} ${styles.chipStart}` : styles.chip} data-testid="note-edit-chip">
+    <span className={p.drawer ? `${styles.chip} ${styles.chipStart}` : styles.chip} data-muted={p.muted || undefined} data-testid="note-edit-chip">
       {cur?.color ? <i className={styles.dot} style={{ '--dot': cur.color } as CSSProperties} aria-hidden="true" /> : null}
       <span className={styles.chipName}>{cur ? cur.name : t('note.edit.noCategory', {})}</span>
       {p.ai ? (

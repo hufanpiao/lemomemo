@@ -46,5 +46,6 @@ export const zh = {
   'note.edit.st.unavailable': '这台设备现在存不了，内容还在这里，稍后再改一次',
   'note.edit.st.rejected': '格式不对，没保存上（标题或正文太长）',
   'note.edit.st.readonly': '这条要新版本才能修改',
+  'note.edit.update': '更新',   // 只读时的“更新”（S12）
   'note.edit.st.missing': '找不到这一条，可能已在别的设备上删除',
 } as const;

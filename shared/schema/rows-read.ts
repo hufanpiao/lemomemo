@@ -103,8 +103,16 @@ const SERVER_READ: Readonly<Record<string, Readonly<Record<string, ReadCol>>>> =
     defer_until: plain(z.number().nullable()),
     ai_status: plain(z.string()),   // 数据字典 4.9：无取值约束（P-16）
   },
+  // notes、categories 的枚举列（架构 0.57，TC-B4-09）：按库里的 check 约束登记，值不认识时整行只读。
+  // rows.ts 还没有这两张表的严格版，先写在这里；严格版写进 rows.ts 以后改成自动带进来，删掉这里重复的登记
   notes: {
     is_private: plain(z.boolean()),   // vaultRows.flag
+    category_source: enumOf(['ai', 'rule', 'manual', 'none']),   // notes_category_source_in；客户端会写、也按它判断（manual 不让 AI 改、“AI”小标）
+    source: enumOf(['page', 'chat', 'voice', 'import']),   // notes_source_in
+    ai_status: plain(z.string()),   // notes_ai_status_in（pending、done、rule）：系统列，客户端不写、不按它判断；服务器加状态不能把整条锁成只读
+  },
+  categories: {
+    created_by: enumOf(['ai', 'user']),   // 0003_notes.sql 的 check (created_by in ('ai','user'))
   },
   note_images: {
     bucket: enumOf(['images', 'vault-images']),   // vaultRows.flag：bucket = 'vault-images'

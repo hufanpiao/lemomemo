@@ -13,19 +13,23 @@
 //   插图这一批不做：点“图”提示“插图很快上线”。电脑上输入行铺满内容栏、左右各留 22px（DK.notes）
 // • 底栏 / 侧栏的“＋”在这一页直接把光标放进输入行（R-380，线框“低 1”；app/App.tsx 按 tab-of.ts 的 NOTES_INPUT_ID 找）
 // • 这一批不做：隐私记那一行（B5）、合并分类提示（S7）、插图（S3）
+// • 只读行（S12，R-148，TC-B4-09；照待办页）：带认不出的值的行（core 的 readonlyIds）标“要新版本”（瀑布流在底行“⋯”前，列表在摘要那一行末尾），菜单里的“删除”变淡；点开、删除统一拦下
+//   （不进编辑器、不开抽屉、不写），出 kit 的“这条要新版本才能修改 · 更新”（状态在 hooks/useNotesToast.ts）。左滑、多选还没有入口，以后加时同样先判只读
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
 import { useEffect, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate, navigateTab, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
+import { ReadonlyMark, ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useT } from '../../../kit/hooks/useT.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable } from '../../../motion/components.ts';
-import { useNoteList, type ActionResult, type NoteItem } from '../hooks/useNoteList.ts';
+import { useNoteList, type NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
+import { useNotesToast } from '../hooks/useNotesToast.ts';
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
@@ -63,7 +67,7 @@ function NotesList() {
   const view = useNotesViewValue();
   const wide = useWide();
   const l = useNoteList();
-  const [toast, setToast] = useState<Toast | null>(null);
+  const { toast, setToast, guard, isRo, block, show, report, up } = useNotesToast<Toast>({ kind: 'error' }, (x) => x.kind === 'undo');
   const [menu, setMenu] = useState<string | null>(null);
   const [just, setJust] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
@@ -73,23 +77,22 @@ function NotesList() {
     if (toast === null || toast.kind === 'undo') return undefined;
     const id = setTimeout(() => setToast((x) => (x === toast ? null : x)), 4000);
     return () => clearTimeout(id);
-  }, [toast]);
+  }, [toast, setToast]);
   // 窗口缩到没有侧栏：抽屉收起（窄窗口点开走编辑页）
   useEffect(() => {
     if (!wide) setDrawer(null);
   }, [wide]);
 
-  const report = (r: ActionResult) => {
-    if (r === 'failed' || r === 'readonly') setToast({ kind: 'error' });
-  };
   const open = (id: string) => {
-    if (wide) setDrawer(id);
+    if (isRo(id)) block();
+    else if (wide) setDrawer(id);
     else void navigate('note', id);
   };
   const del = async (id: string) => {
     setMenu(null);
+    if (isRo(id)) return block();
     const r = await l.remove(id, true);
-    if (r === 'ok') setToast({ kind: 'undo', id });
+    if (r === 'ok') show({ kind: 'undo', id });
     else report(r);
   };
   const add = async (text: string): Promise<boolean> => {
@@ -108,7 +111,7 @@ function NotesList() {
     return g === 'today' ? t('notes.at.today', { t: hm }) : g === 'yesterday' ? t('notes.at.yesterday', { t: hm }) : fmtDay(it.date, locale, 'monthDay');
   };
 
-  const more = (it: NoteItem) => <MoreMenu id={it.id} open={menu === it.id} onOpenChange={(o) => setMenu(o ? it.id : null)} onDelete={() => void del(it.id)} />;
+  const more = (it: NoteItem) => <MoreMenu id={it.id} ro={isRo(it.id)} open={menu === it.id} onOpenChange={(o) => setMenu(o ? it.id : null)} onDelete={() => void del(it.id)} />;
   const aiMark = (it: NoteItem) => (it.ai ? <AiMark id={it.id} /> : null);
   const onMenuKey = (id: string) => (e: { preventDefault(): void }) => {
     e.preventDefault();
@@ -148,6 +151,7 @@ function NotesList() {
                   <span className={styles.cardTitle}>{it.title}</span>
                   {it.summary ? <span className={styles.cardSum}>{it.summary}</span> : null}
                 </button>
+                <RoMark ro={isRo(it.id)} id={it.id} cls={styles.roCard} />
                 <div className={styles.cardFoot}>
                   {/* 定稿 PH.mason 底行只有“分类 · 时间 · ⋯”：AI 小标并进分类胶囊（“● 工作灵感 AI”，同 PH.notes），没分类时单独出 */}
                   {it.categoryName ? (
@@ -183,6 +187,7 @@ function NotesList() {
                           <span className={styles.t2txt}>{[it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
                           {aiMark(it)}
                         </span>
+                        <RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />
                       </span>
                     </button>
                     {more(it)}
@@ -194,8 +199,8 @@ function NotesList() {
         </AppearList>
       )}
 
-      <div className={toast?.kind === 'undo' ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
-        <InputRow up={toast?.kind === 'undo'} onAdd={add} onSoon={() => setToast({ kind: 'soon' })} />
+      <div className={up ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
+        <InputRow up={up} onAdd={add} onSoon={() => show({ kind: 'soon' })} />
         {toast !== null && toast.kind !== 'undo' ? (
           <p className={toast.kind === 'error' ? styles.error : styles.tip} role={toast.kind === 'error' ? 'alert' : 'status'} data-testid={toast.kind === 'error' ? 'notes-error' : 'notes-soon'}>
             {t(toast.kind === 'error' ? 'notes.err.save' : 'notes.imgSoon', {})}
@@ -215,6 +220,7 @@ function NotesList() {
           data-testid="notes-toast"
         />
       ) : null}
+      <ReadonlyToast guard={guard} message={t('note.edit.st.readonly', {})} testId="notes-ro-toast" />
     </main>
   );
 }
@@ -228,6 +234,15 @@ function Chip({ on, onClick, label, color, testId }: { on: boolean; onClick(): v
   );
 }
 
+/** 只读行的“要新版本”（S12，kit 的 ReadonlyMark） */
+// 只读标记单独一行：瀑布流放在正文下、底行上，列表放在摘要行下（视觉验收 11-11：挤在底行、摘要行会把时间、分类、“⋯”挤坏）
+const RoMark = ({ ro, id, cls }: { ro: boolean; id: string; cls: string | undefined }) =>
+  ro ? (
+    <span className={cls}>
+      <ReadonlyMark testId={`notes-ro-${id}`} />
+    </span>
+  ) : null;
+
 function AiMark({ id }: { id: string }) {
   const t = useNotesT();
   return (
@@ -238,7 +253,7 @@ function AiMark({ id }: { id: string }) {
 }
 
 /** “⋯”菜单：看得见 24px，点按区 ::after 扩到 44；现在只有“删除”；转成待办 / 日程（S8）、移到隐私记（B5）以后加在这里 */
-function MoreMenu({ id, open, onOpenChange, onDelete }: { id: string; open: boolean; onOpenChange(o: boolean): void; onDelete(): void }) {
+function MoreMenu({ id, ro, open, onOpenChange, onDelete }: { id: string; ro: boolean; open: boolean; onOpenChange(o: boolean): void; onDelete(): void }) {
   const t = useNotesT();
   return (
     <Popover
@@ -253,7 +268,8 @@ function MoreMenu({ id, open, onOpenChange, onDelete }: { id: string; open: bool
         </button>
       }
     >
-      <Pressable className={styles.menuItem} onClick={onDelete} data-testid={`notes-del-${id}`} data-no-proxy="">
+      {/* 只读行的“删除”变淡、aria-disabled，点了照样由 del 拦下出提示条（同待办页的 ×） */}
+      <Pressable className={styles.menuItem} aria-disabled={ro || undefined} onClick={onDelete} data-testid={`notes-del-${id}`} data-no-proxy="">
         {t('notes.delete', {})}
       </Pressable>
     </Popover>

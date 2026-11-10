@@ -325,6 +325,11 @@
   text-align: left;
 }
 
+/* 只读行的“删除”变淡（S12，同 kit 只读行的 ×）；点了由页面拦下出提示条 */
+.menuItem[aria-disabled='true'] {
+  opacity: 0.45;
+}
+
 .group {
   margin-top: 4px;
 }
@@ -620,4 +625,16 @@
     max-width: none;
     margin: 0;
   }
+}
+
+/* 只读行的“要新版本”（TC-B4-09）：单独一行、左对齐，不挤底行和摘要行（视觉验收 11-11） */
+.roCard {
+  display: flex;
+  margin-top: 6px;
+  padding: 0 12px;
+}
+
+.roRow {
+  display: flex;
+  margin-top: 4px;
 }
