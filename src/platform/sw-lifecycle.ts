@@ -1,4 +1,4 @@
-// Service Worker 的注册、盯新版本、回到前台查新版本、“更新”按钮（11-07 B2-UI-a 首屏瘦身 U7）：从 platform/sw-register.ts 原样搬来，一行没改。
+// Service Worker 的注册、盯新版本、回到前台查新版本、“更新”按钮（11-07 B2-UI-a 首屏瘦身 U7）：从 platform/sw-register.ts 搬来；11-10 在 watchServiceWorkerUpdate 里补了 ready 之后、回到前台时两处再查 waiting。
 // 不在首屏：经 sw-register.ts 按需下载。首屏后那次注册（registerSwAfterPaint）下载不设超时，晚到照常注册（安全审 M1）；
 // version_too_new 渲染前那次和“更新”按钮经 loadSwLifecycle，有 3 秒上限，拿不到按“没注册 / 没查成”处理。
 // navigator.serviceWorker 只准出现在 platform（A13）；exe（Tauri 窗口）里不注册，判断读 env.ts 的 isTauri
@@ -35,8 +35,21 @@ export async function registerServiceWorker(waitMs: number = SW_REGISTER_WAIT_MS
 export function watchServiceWorkerUpdate(reg: ServiceWorkerRegistration, onReady: () => void): () => void {
   if (!('serviceWorker' in navigator)) return () => undefined;
   const hasController = (): boolean => navigator.serviceWorker.controller !== null;
-  if (reg.waiting && hasController()) onReady();
   let stopped = false;
+  /** 已经有等着接管的新 SW（上次打开时装好、还没接管）：报一次。onReady 可以被调多次，调用方去重 */
+  const checkWaiting = (): void => {
+    if (!stopped && reg.waiting && hasController()) onReady();
+  };
+  checkWaiting();
+  // 11-10 负责人 iPhone 主屏幕版实测：新 SW 已是 waiting=installed，横幅却一直不出（冷启动两次都没有）。
+  // 原来只在挂上这一刻读一次 reg.waiting；WebKit 的注册对象跨进程同步，register() 刚回来时 waiting 可能还没补上，
+  // 而装好的新 SW 之后不会再发 updatefound、controllerchange，这次启动就再也不提示。补两处再查：
+  // ① navigator.serviceWorker.ready 之后；② 页面每次回到前台（visibilitychange 变成 visible）
+  void navigator.serviceWorker.ready?.then(checkWaiting, () => undefined);
+  const onVisible = (): void => {
+    if (document.visibilityState === 'visible') checkWaiting();
+  };
+  document.addEventListener('visibilitychange', onVisible);
   const onFound = (): void => {
     const sw = reg.installing;
     if (!sw) return;
@@ -56,6 +69,7 @@ export function watchServiceWorkerUpdate(reg: ServiceWorkerRegistration, onReady
     stopped = true;
     reg.removeEventListener('updatefound', onFound);
     navigator.serviceWorker.removeEventListener('controllerchange', onTakeover);
+    document.removeEventListener('visibilitychange', onVisible);
   };
 }
 

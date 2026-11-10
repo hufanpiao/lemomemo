@@ -110,6 +110,64 @@ describe('watchServiceWorkerUpdate（8.1 有新版本）', () => {
   });
 });
 
+describe('watchServiceWorkerUpdate：挂上时还看不到 waiting（11-10 iPhone 主屏幕版横幅不出）', () => {
+  const setVisible = (v: DocumentVisibilityState) => vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(v);
+  afterEach(() => vi.restoreAllMocks());
+
+  it('register 回来时 reg.waiting 还是 null、ready 之后才有：ready 以后回调', async () => {
+    let resolveReady: (r: unknown) => void = () => undefined;
+    const sw = stubController({});
+    Object.assign(sw, { ready: new Promise((r) => (resolveReady = r)) });
+    const { reg } = fakeReg();
+    const onReady = vi.fn();
+    watchServiceWorkerUpdate(reg, onReady);
+    expect(onReady).not.toHaveBeenCalled();
+    (reg as unknown as { waiting: object }).waiting = {};
+    resolveReady(reg);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('挂上时、ready 时都没有，之后回到前台时有了：回调；切到后台不查；没有 controller 不算', () => {
+    stubController({});
+    const { reg } = fakeReg();
+    const onReady = vi.fn();
+    watchServiceWorkerUpdate(reg, onReady);
+    (reg as unknown as { waiting: object }).waiting = {};
+    setVisible('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(onReady).not.toHaveBeenCalled();
+    setVisible('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(onReady).toHaveBeenCalledTimes(1);
+
+    stubController(null);
+    const other = fakeReg({});
+    const first = vi.fn();
+    watchServiceWorkerUpdate(other.reg, first);
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it('取消以后：回到前台、ready 都不再回调', async () => {
+    let resolveReady: (r: unknown) => void = () => undefined;
+    const sw = stubController({});
+    Object.assign(sw, { ready: new Promise((r) => (resolveReady = r)) });
+    const { reg } = fakeReg();
+    const onReady = vi.fn();
+    const off = watchServiceWorkerUpdate(reg, onReady);
+    off();
+    (reg as unknown as { waiting: object }).waiting = {};
+    setVisible('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+    resolveReady(reg);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onReady).not.toHaveBeenCalled();
+  });
+});
+
 describe('watchServiceWorkerUpdate：挂上时正在装、别的标签页让新 SW 接管', () => {
   it('挂上时 reg.installing 已经在装：装好照样回调', () => {
     stubController({});
