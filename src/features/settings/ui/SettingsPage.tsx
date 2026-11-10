@@ -217,7 +217,6 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
           locale={locale}
           exportState={exportTask.state}
           hotkey={hotkey}
-          tilt={deps?.tilt}
           onOpen={openSub}
           footer={<SignOutRow busy={devices.busy !== null} signingOut={exit.signingOut} onSignOut={() => void askSignOut('account')} />}
         />

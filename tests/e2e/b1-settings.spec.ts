@@ -3,7 +3,7 @@
 // e2e 构建没有 VITE_PUBLIC_SUPABASE_URL，设置页拿不到 Supabase 客户端：设备列表显示“读不出来、重试”（不当成被移除、不跳登录页），
 // 语言切换照样在本机生效，写账号失败只提示一句。设备列表、移除、退出其他设备、session_revoked 的流程在组件测试里
 // （src/features/settings/__tests__/），真登录的两台设备（TC-B1-18、77～79）要 /sb 接本地 Supabase，归 QA 的 S-B1 用例。
-// 合卡以后首页是三张卡（账号；常用：语言、倾斜高光、日历、提醒；更多：数据、电脑、关于），设备列表和注销入口在账号二级页，导出在数据二级页
+// 合卡以后首页是三张卡（账号；常用：语言、日历、提醒（倾斜高光 R-373 已删除）；更多：数据、电脑、关于），设备列表和注销入口在账号二级页，导出在数据二级页
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 
@@ -44,7 +44,7 @@ test.describe('设置页骨架', () => {
     ]);
     // 日历、提醒与通知、语音与 AI、在 Claude 聊天里记事几行一开始就在（值懒加载，M4）；顺序照定稿线框 s13（B3 FA-4 加了 voiceAi、claude）
     const rows = await main.locator('[data-row-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row-id')));
-    expect(rows).toEqual(['account', 'language', 'skin', 'calendar', 'reminders', 'voiceAi', 'data', 'claude', 'about']);
+    expect(rows).toEqual(['account', 'language', 'calendar', 'reminders', 'voiceAi', 'data', 'claude', 'about']);
     // e2e 构建读不到设备：账号一行写“设备列表读不出来”
     await expect(main.getByTestId('settings-account-summary')).toHaveText('设备列表读不出来');
     await expect(main.getByTestId('settings-export')).toHaveCount(0);

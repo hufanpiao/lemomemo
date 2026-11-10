@@ -158,9 +158,4 @@ export const ko = {
   'settings.about.version': '버전', // 设置 › 关于“버전 4.0.0”（设计评审 M-1，11-06），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
   'settings.about.lunarCredit': '음력 및 절기 데이터: 홍콩 천문대', // REVIEW(ko)
   'settings.about.probe': '녹음 테스트(실험)', // REVIEW(ko)；只在非正式版的关于页显示（B3 FA-0，11-10）；和 voice-probe 同一个 PR 删
-  // 설정 › 스킨（TILT-b2：기울기 하이라이트）
-  'settings.skin.title': '스킨', // R-106 已审（11-05，B2-韩文审校-TILT与主导航 K-1，维持）
-  'settings.skin.tilt': '기울기 하이라이트', // R-106 已审（11-05，B2-韩文审校-TILT与主导航 K-2）
-  'settings.skin.tiltNote': '휴대폰을 기울이면 하단 메뉴의 하이라이트가 따라 움직여요. 켜면 “동작 및 방향” 접근을 허용할지 물어봐요. iPhone처럼 허용을 기억하지 않는 휴대폰에서는 레모를 열 때마다 하단 메뉴를 처음 누르면 다시 물어봐요.', // R-106 已审（11-05，B2-韩文审校-TILT提示 T-1、T-2）
-  'settings.skin.tiltDenied': '“동작 및 방향” 접근이 허용되지 않아 기울기 하이라이트를 켜지 못했어요. 레모를 완전히 닫았다가 다시 연 뒤 이 스위치를 켜면 한 번 더 물어봐요.', // R-106 已审（11-05，B2-韩文审校-TILT提示 T-3）
 } as const satisfies Record<keyof typeof zh, string>;

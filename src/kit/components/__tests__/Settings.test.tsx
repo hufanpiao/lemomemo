@@ -74,13 +74,13 @@ describe('SettingsSwitchRow（M2）', () => {
     const onChange = vi.fn();
     render(
       <ul>
-        <SettingsSwitchRow label="倾斜高光" checked={false} onChange={onChange} note="转动手机时底栏的高光跟着动" testId="tilt" />
+        <SettingsSwitchRow label="示例开关" checked={false} onChange={onChange} note="示例说明" testId="sample" />
       </ul>,
     );
-    const sw = screen.getByRole('switch', { name: '倾斜高光' });
-    expect(sw).toBe(screen.getByTestId('tilt'));
+    const sw = screen.getByRole('switch', { name: '示例开关' });
+    expect(sw).toBe(screen.getByTestId('sample'));
     const desc = sw.getAttribute('aria-describedby');
-    expect(desc && document.getElementById(desc)?.textContent).toBe('转动手机时底栏的高光跟着动');
+    expect(desc && document.getElementById(desc)?.textContent).toBe('示例说明');
     fireEvent.click(sw);
     expect(onChange).toHaveBeenCalledWith(true);
   });
@@ -88,19 +88,19 @@ describe('SettingsSwitchRow（M2）', () => {
   it('报错写在同一行里（role=status），不在列表项外面；没有报错时没有这一段', () => {
     const { rerender } = render(
       <ul>
-        <SettingsSwitchRow label="倾斜高光" checked onChange={() => undefined} testId="tilt" />
+        <SettingsSwitchRow label="示例开关" checked onChange={() => undefined} testId="sample" />
       </ul>,
     );
     expect(screen.queryByRole('status')).toBeNull();
-    expect(screen.getByTestId('tilt').hasAttribute('aria-describedby')).toBe(false);
+    expect(screen.getByTestId('sample').hasAttribute('aria-describedby')).toBe(false);
     rerender(
       <ul>
-        <SettingsSwitchRow label="倾斜高光" checked={false} onChange={() => undefined} error="没有拿到方向数据的权限" testId="tilt" />
+        <SettingsSwitchRow label="示例开关" checked={false} onChange={() => undefined} error="示例报错" testId="sample" />
       </ul>,
     );
     const err = screen.getByRole('status');
-    expect(err.textContent).toBe('没有拿到方向数据的权限');
-    expect(err.closest('li')).toBe(screen.getByTestId('tilt').closest('li'));
+    expect(err.textContent).toBe('示例报错');
+    expect(err.closest('li')).toBe(screen.getByTestId('sample').closest('li'));
   });
 });
 

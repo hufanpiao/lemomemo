@@ -227,7 +227,7 @@ describe('退出登录（页面最底下单独一行）', () => {
   });
 });
 
-// TC-B1-71（R-256 改过；R-325 合卡，SETTINGS-merge-cards 方案定稿）：首页三张卡——账号；常用（界面语言、倾斜高光、日历、提醒与通知）；
+// TC-B1-71（R-256 改过；R-325 合卡，SETTINGS-merge-cards 方案定稿）：首页三张卡——账号；常用（界面语言、日历、提醒与通知）；（倾斜高光 R-373 已删除）
 // 更多（数据、电脑、关于）。卡里的行按定稿线框（第 996～998 行）的相对顺序；“退出登录”单独一行在所有卡之后。
 // 后面各批加行时复跑：只要求已有的行按 sections.ts 的相对顺序出现、不重复
 describe('设置首页的卡和行（TC-B1-71、R-325）', () => {
@@ -249,7 +249,7 @@ describe('设置首页的卡和行（TC-B1-71、R-325）', () => {
     ]);
     const ids = (c: HTMLElement): string[] => [...c.querySelectorAll('[data-row-id]')].map((el) => el.getAttribute('data-row-id') ?? '');
     // B3 FA-4 起常用卡多“语音与 AI”、更多卡多“在 Claude 聊天里记事”
-    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'calendar', 'reminders', 'voiceAi'], ['data', 'claude', 'about']]);
+    expect(cards.map(ids)).toEqual([['account'], ['language', 'calendar', 'reminders', 'voiceAi'], ['data', 'claude', 'about']]);
     const all = cards.flatMap(ids);
     expect(all).toEqual([...all].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
     expect(new Set(all).size).toBe(all.length);

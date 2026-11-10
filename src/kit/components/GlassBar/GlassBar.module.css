@@ -61,8 +61,7 @@
 
 /* 玻璃一层：着色 + 模糊；上沿亮边、内侧柔光（::before 是沿边亮光，::after 是斜上方一片光）。
    0.5px 外圈（--rim-shade）去掉：视觉稿没有，负责人 11-06 定照稿；后备模糊 12px 改回视觉稿的 8px（排查 A 类）。
-   倾斜高光（TILT-b2，设置里开了才有）：motion/glass-tilt.ts 往底栏和“＋”上写 --g-sx、--g-sy（斜上方那片光的中心）、
-   --g-hx（亮边横向方向 -1～1）；没写时用后备值，就是原来的位置（左上 22% -30%、亮边在左上） */
+   高光位置固定在左上（22% -30%、亮边在左上）：倾斜高光已删除（R-373），这里写死的就是原来关着倾斜时的后备值，样子不变 */
 .glass {
   position: absolute;
   inset: 0;
@@ -70,14 +69,14 @@
   border-radius: inherit;
   background: var(--g-tint-fb);
   box-shadow:
-    inset calc(1.5px * var(--g-hx, 1)) 1.5px 0 -0.5px var(--g-hi),
-    inset calc(-1px * var(--g-hx, 1)) -1px 0 -0.5px var(--g-hi2),
+    inset 1.5px 1.5px 0 -0.5px var(--g-hi),
+    inset -1px -1px 0 -0.5px var(--g-hi2),
     inset 0 0 10px var(--g-glow-c);
   pointer-events: none;
   transition: opacity var(--dur-glass) var(--ease-out);
 }
 
-/* 沿边亮光（视觉稿 .lens .spec::after，R-153）：1.6px 一圈，上沿一段 --g-hi、下沿对称一段 --g-hi2；位置跟倾斜高光的 --g-sx */
+/* 沿边亮光（视觉稿 .lens .spec::after，R-153）：1.6px 一圈，上沿一段 --g-hi、下沿对称一段 --g-hi2；位置固定在 22%（倾斜高光已删除，R-373） */
 .glass::before {
   content: '';
   position: absolute;
@@ -85,8 +84,8 @@
   padding: 1.6px;
   border-radius: inherit;
   background:
-    radial-gradient(34% 120% at var(--g-sx, 22%) 0%, var(--g-hi), transparent 70%),
-    radial-gradient(30% 120% at calc(100% - var(--g-sx, 22%)) 100%, var(--g-hi2), transparent 70%);
+    radial-gradient(34% 120% at 22% 0%, var(--g-hi), transparent 70%),
+    radial-gradient(30% 120% at 78% 100%, var(--g-hi2), transparent 70%);
   mask:
     linear-gradient(var(--bg) 0 0) content-box exclude,
     linear-gradient(var(--bg) 0 0);
@@ -98,7 +97,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: radial-gradient(120% 90% at var(--g-sx, 22%) var(--g-sy, -30%), var(--g-hi) 0 38%, transparent 60%);
+  background: radial-gradient(120% 90% at 22% -30%, var(--g-hi) 0 38%, transparent 60%);
   opacity: var(--g-sheen);
 }
 
@@ -109,7 +108,7 @@
 /* 副本引擎接管（glass-ghost.ts 给玻璃块加 data-glass="copy"）：着色换成更透的 --g-tint，直接模糊背后的真实画面，滤镜 --g-live-fx（3px：11-06 底栏排查第二轮按视觉稿对照定的，6～10px 糊成一片白；理由见令牌说明）。
    11-06 底栏透明度排查（docs/03-评审/B2/B2-底栏透明度-真机差异排查.md）：副本层底色是不透明的 --bg、只复制带 data-ghost 的元素，
    图例、标题、空状态这些没标 data-ghost 的内容到了底栏后面就整块看不见，玻璃像实心的（负责人真机“把字移到下面也不透明”）。
-   所以改用 backdrop-filter（写在 .bar、.fab 上，见文件头）；11-06 起引擎也不再建副本（GLASS-copy-unused），只管 data-glass 和倾斜高光；页面上的 data-ghost 标记也随之删掉 */
+   所以改用 backdrop-filter（写在 .bar、.fab 上，见文件头）；11-06 起引擎也不再建副本（GLASS-copy-unused），只管 data-glass；页面上的 data-ghost 标记也随之删掉 */
 .bar[data-glass='copy'],
 .fab[data-glass='copy'] {
   backdrop-filter: var(--g-live-fx);

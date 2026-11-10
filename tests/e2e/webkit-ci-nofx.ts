@@ -1,7 +1,7 @@
 // CI 的 webkit 上，给“依赖帧率的动效时序用例”关掉 backdrop-filter（只改测试环境，产品代码不动）。
 //
 // 为什么：GitHub Actions 的 Linux webkit 没有 GPU，backdrop-filter 走软件合成，主线程被拖到个位数帧率，
-// 按帧采样的时序断言（“头 220 ms 不动”“每一帧不重叠”“倾斜高光走到 90%”）就会挂；本机 Windows webkit、
+// 按帧采样的时序断言（“头 220 ms 不动”“每一帧不重叠”“倾斜高光走到 90%”（倾斜 R-373 已删除））就会挂；本机 Windows webkit、
 // iPhone 真机都有 GPU 合成，不卡（负责人至今没反馈真机卡）。ci-webkit-probe 第七轮（run 42201936743，
 // 提交 a69c0ed = 9d40848 加探针）用 CSSOM 二分，静止 todos / today 帧率、打勾时帧率：
 //   A 原样              38.5 / 1    fps，打勾 3.3 fps
@@ -31,10 +31,6 @@ export const WEBKIT_CI_NOFX: Readonly<Record<string, readonly string[]>> = {
     'M2 撤销恢复：新行看得见的每一帧都不和别的行、组标题重叠',
   ],
   'b2-tabbar.spec.ts': ['切页过程中底栏一直看得见；液滴点下去就走，不等页面（设计动效评审 D1）'],
-  'b2-tilt.spec.ts': [
-    'T1：设置里打开（在点按里问、同意）→ 回今天页，不点底栏直接倾斜就跟；换页不再弹窗；关掉以后不跟',
-    '新打开 App、开关本来就开着（授权记不住）：倾斜不跟；第一次点底栏弹窗同意后才跟',
-  ],
 };
 
 /** 关模糊的样式（用构造样式表 + adoptedStyleSheets 挂上，不受 CSP style-src 限制） */

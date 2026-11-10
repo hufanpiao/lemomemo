@@ -141,7 +141,6 @@ describe('S3：SettingsHome 账号一行上下两行排', () => {
         locale={{ current: 'zh', sync: 'idle', choose: async () => undefined }}
         exportState={{ kind: 'idle' }}
         hotkey={hotkey}
-        tilt={undefined}
         onOpen={() => undefined}
         footer={null}
       />,

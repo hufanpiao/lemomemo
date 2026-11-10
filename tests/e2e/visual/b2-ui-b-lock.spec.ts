@@ -2,7 +2,7 @@
 // ① 设置页按钮区域 0 像素差（任务单 W4、V4；R-276、R-277 定的外观）：
 //    W3、W4 把设置页私有的 .btn/.row/.rowBtn 换成 FormButton 和 kit 设置行，负责人定 D1 ①“外观一模一样，只换实现”。
 //    这里锁住换完以后的样子，以后谁改 FormButton、kit 设置行、共用开关（Form.module.css 的 .switch），这几块一变就红：
-//      • 设置首页：“退出登录”整行按钮（R-277，size="row" block）、外观一行的开关（48×28）；
+//      • 设置首页：“退出登录”整行按钮（R-277，size="row" block）、共用开关（48×28，R-373 起锁提醒页“勿扰时段”那一个）；
 //      • 账号页（无后端，设备列表读不到）：“重试”紧凑按钮（R-276，size="compact"，看得见 38 高、灰色实底）、“注销账号”危险入口行；
 //      • 注销页：没输对时禁用、输对后可按的危险实底按钮（size="compact" variant="dangerFill" block）；
 //      • 退出登录确认框（本机有没上传的待办时才弹）：“取消”compact、“退出”compact dangerFill 那一对（代码审 W3W4 建议 2）；
@@ -108,7 +108,13 @@ test.describe('设置页按钮视觉锁定（B2-UI-b W4、V4；R-276、R-277，C
       await calm(page);
       await expectRow44(page.getByTestId('settings-signout'), '“退出登录”');
       await lock(page, `设置-退出登录-${theme}`, page.getByTestId('settings-signout'), MSG);
-      await lock(page, `设置-开关-${theme}`, page.getByRole('switch').first(), MSG);
+      // 共用开关（48×28）原来锁的是首页“倾斜高光”那一个；R-373 删掉倾斜高光后首页没有开关了，改锁提醒页“勿扰时段”的开关
+      // （同一个 kit SettingsSwitchRow、默认关；基准图不变，删前删后 Chromium 本机逐像素对过）
+      await page.goto('/app/#/settings/remind/dnd');
+      await page.getByTestId('remind-dnd-on').waitFor({ timeout: 30_000 });
+      await calm(page);
+      await expect(page.getByTestId('remind-dnd-on')).not.toBeChecked();
+      await lock(page, `设置-开关-${theme}`, page.getByTestId('remind-dnd-on'), MSG);
     });
 
     test(`${THEME_ZH[theme]}：账号页“重试”紧凑按钮、“注销账号”危险入口行`, async ({ page }) => {

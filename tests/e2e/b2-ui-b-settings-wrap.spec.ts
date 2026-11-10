@@ -1,7 +1,7 @@
 // B2-UI-b W2（B11）设置说明文字断行的自动检查（任务单 M8）：
 // • 中文：设置说明（kit 的 .meta、.note，设置页的 .sn）计算样式里 text-wrap-style 不是 pretty（pretty 让中文提前换行，拆开“之后”“能不能”）；
 // • 韩文：同一批说明 word-break 是 keep-all（按词断、不拆词；<html lang> 由 src/platform/doc-locale.ts 设成界面语言）。
-// 三种说明各取一处：设置首页“倾斜高光”开关的说明（.meta，开关 aria-describedby 指向它）、数据页导出说明（.sn）、日历页节假日说明（.note）
+// 三种说明各取一处：设置首页“界面语言”一行的说明（.meta，分段按钮 aria-describedby 指向它；原来取“倾斜高光”开关的说明，倾斜高光 R-373 已删除）、数据页导出说明（.sn）、日历页节假日说明（.note）
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 
@@ -15,10 +15,10 @@ async function notes(page: Page): Promise<Record<string, Wrap>> {
     });
   const out: Record<string, Wrap> = {};
   await page.goto('/app/#/settings');
-  const tilt = page.getByTestId('settings-tilt');
-  await expect(tilt).toBeVisible();
-  const metaId = await tilt.getAttribute('aria-describedby');
-  expect(metaId, '倾斜高光开关应挂着说明').toBeTruthy();
+  const lang = page.locator('[data-row-id="language"] [aria-describedby]').first();
+  await expect(lang).toBeVisible();
+  const metaId = await lang.getAttribute('aria-describedby');
+  expect(metaId, '界面语言一行应挂着说明').toBeTruthy();
   out['meta'] = await read(`[id="${metaId}"]`);
   await page.goto('/app/#/settings/data');
   await expect(page.getByTestId('settings-export-notes')).toBeVisible();

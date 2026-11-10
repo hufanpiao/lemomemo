@@ -101,24 +101,24 @@ describe.each(['production', 'preview', 'e2e', 'e2e-real'] as const)('T5 / TC-B0
   });
 });
 
-// TC-B1-54（R-153；架构 0.27 第 5 点、8.1；S-B0b）：倾斜授权试验页 /diag/tilt.html 拿到的 Permissions-Policy。
-// 10-30 起试验页搬到 /app/ 作用域外的 /diag/（SW-update ③），site/_headers 的 /diag/* 单独一段给 Permissions-Policy 和 CSP；
-// 这里断言：试验页（含 Pages 去掉 .html 后的地址和它的脚本）只有一条 Permissions-Policy、两项是 (self)、其余设备能力关着；
-// 只有一条 CSP（/app/* 那条命不中这里）；官网 /zh/*、/ko/* 照旧全部关闭。
-describe.each(['production', 'preview', 'e2e', 'e2e-real'] as const)('TC-B1-54：倾斜授权试验页的 Permissions-Policy（%s）', (mode) => {
+// TC-B1-54（R-153；架构 0.27 第 5 点、8.1；S-B0b）：技术页 /diag/* 拿到的 Permissions-Policy。
+// 原来是给倾斜授权试验页 /diag/tilt.html 放开 accelerometer、gyroscope；R-373（11-10）倾斜高光整功能删除，试验页一起删，
+// /diag/* 只剩机型信息页，方向传感器也关掉。这里断言：/diag/ 下的页面只有一条 Permissions-Policy、设备能力全部关着；
+// 只有一条 CSP（/app/* 那条命不中这里）；官网 /zh/*、/ko/* 照旧全部关闭；/app/* 也不再放开方向传感器。
+describe.each(['production', 'preview', 'e2e', 'e2e-real'] as const)('TC-B1-54：技术页的 Permissions-Policy（%s）', (mode) => {
   const text = renderHeaders(app, site, mode);
   const items = (pp: string) => pp.split(',').map((s) => s.trim()).filter(Boolean);
 
-  it.each(['/diag/tilt.html', '/diag/tilt', '/diag/tilt.js', '/diag/tilt.css', '/diag/startup.html'])('%s：accelerometer、gyroscope 为 (self)，其余关闭', (path) => {
+  it.each(['/diag/startup.html', '/diag/startup', '/diag/startup.js'])('%s：accelerometer、gyroscope 和其余设备能力都关闭（R-373）', (path) => {
     const h = effective(text, path);
     const pp = h.get('permissions-policy') ?? [];
     expect(pp, '同一地址只能有一条 Permissions-Policy（多条时 Cloudflare 用逗号拼，结果不可控）').toHaveLength(1);
     const got = items(pp[0] ?? '');
-    for (const want of ['accelerometer=(self)', 'gyroscope=(self)', 'magnetometer=()', 'payment=()', 'usb=()', 'camera=()', 'geolocation=()']) {
+    for (const want of ['accelerometer=()', 'gyroscope=()', 'magnetometer=()', 'payment=()', 'usb=()', 'camera=()', 'geolocation=()']) {
       expect(got, want).toContain(want);
     }
-    // 只放给本源（self），不放给任何第三方或 *
-    expect(pp[0]).not.toMatch(/\*|https?:/);
+    // 什么都不放：没有 (self)、不放给任何第三方或 *
+    expect(pp[0]).not.toMatch(/self|\*|https?:/);
     // /diag/* 自己的 CSP：脚本、样式只许同源文件，默认全关，不许被嵌入
     const csp = h.get('content-security-policy') ?? [];
     expect(csp).toHaveLength(1);
@@ -133,7 +133,7 @@ describe.each(['production', 'preview', 'e2e', 'e2e-real'] as const)('TC-B1-54�
     expect(h.get('cache-control')).toEqual(['no-cache']);
   });
 
-  it.each(['/zh/', '/ko/'])('%s（官网）：accelerometer、gyroscope 仍然关闭', (path) => {
+  it.each(['/zh/', '/ko/', '/app/', '/app/index.html'])('%s：accelerometer、gyroscope 关闭（官网一直关；App 自 R-373 起关）', (path) => {
     const pp = effective(text, path).get('permissions-policy') ?? [];
     expect(pp).toHaveLength(1);
     expect(items(pp[0] ?? '')).toEqual(expect.arrayContaining(['accelerometer=()', 'gyroscope=()']));

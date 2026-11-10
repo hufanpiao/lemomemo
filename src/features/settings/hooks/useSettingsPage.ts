@@ -1,6 +1,5 @@
 // 设置页（B1 K9 骨架）的总 hook：把接口、离开本机、设备列表、中韩切换、导出和注销（R-256 ②⑤）接在一起
 // 测试经 deps 换掉接口、清本机和跳转、时钟
-import type { TiltDeps } from './useTiltPref.ts';
 import { useCallback, useMemo, useRef } from 'react';
 import { saveFile } from '../../../platform/save-file.ts';
 import { readSessionEmail } from '../../../platform/session.ts';
@@ -21,8 +20,6 @@ export { cardsOf, orderSections, type SettingsCardId, type SettingsSectionId } f
 export type { ExitDeps, ExitNotice } from './useSessionExit.ts';
 
 export interface SettingsDeps {
-  /** 设置 › 皮肤 › 倾斜高光（TILT-b2）：测试换掉方向权限申请和本机存储 */
-  tilt?: TiltDeps;
   /** R-297 快速记录热键（默认 platform/desktop-hotkey.ts；要传稳定的对象） */
   hotkey?: HotkeyApi;
   api?: SettingsApi;

@@ -167,9 +167,4 @@ export const zh = {
   'settings.about.version': '版本', // 设置 › 关于 卡片里“版本 4.0.0”（设计评审 M-1，11-06），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
   'settings.about.lunarCredit': '农历及节气数据：香港天文台',
   'settings.about.probe': '录音探测（试验）', // 只在非正式版的关于页显示（B3 FA-0，11-10）；和 voice-probe 同一个 PR 删
-  // 设置 › 皮肤（TILT-b2 做法 ②：倾斜高光开关，存本机、默认关；iOS 每次打开 App 后第一次点底栏再问方向权限）
-  'settings.skin.title': '皮肤',
-  'settings.skin.tilt': '倾斜高光',
-  'settings.skin.tiltNote': '底栏上的高光跟着手机倾斜移动。打开时会问一次能不能用方向数据；有的手机（例如 iPhone）记不住，每次重新打开柠檬记后第一次点底栏会再问一次。',
-  'settings.skin.tiltDenied': '没有拿到方向数据的权限，倾斜高光没开。彻底退出柠檬记、重新进来后，再打开这个开关试一次。',
 } as const;

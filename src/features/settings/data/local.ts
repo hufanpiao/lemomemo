@@ -116,27 +116,3 @@ export async function readLocalDeviceId(): Promise<string | null> {
     return null;
   }
 }
-
-/** 倾斜高光开关（TILT-b2，设置 › 皮肤）：只记在本机，默认关。键名和 motion/glass-tilt.ts 的 TILT_KEY 一样
- *  （motion 不能引 features，两处各写一份，tests/build 里有测试核对两边相同） */
-export const TILT_KEY = 'lemo.tilt';
-
-export function readTiltPref(storage?: Storage): boolean {
-  try {
-    return (storage ?? localStorage).getItem(TILT_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-/** 写不进（隐私模式）返回 false：界面照样显示“关” */
-export function writeTiltPref(on: boolean, storage?: Storage): boolean {
-  try {
-    const s = storage ?? localStorage;
-    if (on) s.setItem(TILT_KEY, '1');
-    else s.removeItem(TILT_KEY);
-    return true;
-  } catch {
-    return false;
-  }
-}

@@ -15,7 +15,7 @@ export function isNetworkOnly(pathname: string): boolean {
   return NETWORK_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-// 技术页（机型信息页、倾斜授权试验页）10-30 起在 /diag/（site/diag/，SW-update ③）：在 /app/ 作用域外，SW 管不到，
+// 技术页（机型信息页；倾斜授权试验页 R-373 已删除）10-30 起在 /diag/（site/diag/，SW-update ③）：在 /app/ 作用域外，SW 管不到，
 // 下面不再为它们开特例（routeOf 对 /app/ 以外一律 bypass；预缓存清单只收 dist/web/app/ 下的文件）
 
 /** 不走 App 外壳的导航（sw.ts 的 NavigationRoute denylist）：预览沙箱（Pages 会把 preview.html 308 到 /app/preview，两种写法都排除） */

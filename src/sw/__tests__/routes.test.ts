@@ -50,12 +50,12 @@ describe('routeOf', () => {
   });
 });
 
-describe('技术页（机型信息页、倾斜授权试验页）在 /app/ 作用域外的 /diag/（SW-update ③）', () => {
+describe('技术页（机型信息页；倾斜授权试验页 R-373 已删除）在 /app/ 作用域外的 /diag/（SW-update ③）', () => {
   it('/diag/ 下的导航和子资源一律直连，不进 lemo-nav 也不进任何缓存', () => {
-    for (const p of ['/diag/tilt.html', '/diag/tilt', '/diag/startup.html', '/diag/startup']) {
+    for (const p of ['/diag/startup.html', '/diag/startup']) {
       expect(r(p, 'GET', 'navigate'), p).toBe('bypass');
     }
-    for (const p of ['/diag/tilt.js', '/diag/tilt.css', '/diag/startup.js']) expect(r(p), p).toBe('bypass');
+    for (const p of ['/diag/startup.js', '/diag/startup.css']) expect(r(p), p).toBe('bypass');
     // 机型信息页读首页带 ?diag=1：照常是预缓存外的普通请求（见 startup-diag.test.ts）
     expect(r('/app/index.html?diag=1')).toBe('precache-or-network');
   });
@@ -63,7 +63,7 @@ describe('技术页（机型信息页、倾斜授权试验页）在 /app/ 作用
   it('NavigationRoute 的 denylist：只排除预览沙箱两种写法，App 页面照常走外壳；/app/diag/ 不再有特例', () => {
     const denied = (path: string) => NAV_DENYLIST.some((re) => re.test(path));
     for (const p of ['/app/preview', '/app/preview.html']) expect(denied(p), p).toBe(true);
-    for (const p of ['/app/', '/app/index.html', '/app/auth/', '/app/previewx', '/app/diag/tilt.html']) expect(denied(p), p).toBe(false);
+    for (const p of ['/app/', '/app/index.html', '/app/auth/', '/app/previewx', '/app/diag/startup.html']) expect(denied(p), p).toBe(false);
     expect(NAV_DENYLIST).toHaveLength(1);
   });
 });

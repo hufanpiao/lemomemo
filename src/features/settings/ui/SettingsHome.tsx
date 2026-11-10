@@ -1,5 +1,5 @@
 // 设置首页：三张卡（R-325，SETTINGS-merge-cards 方案定稿；卡和顺序见 data/sections.ts 的 SETTINGS_CARDS），每一行是 kit 的设置行；
-// 账号、日历、提醒与通知、语音与 AI、数据、在 Claude 聊天里记事、电脑、关于都是“一行入口 + 二级页”，语言、倾斜高光在首页直接改。从 SettingsPage 拆出
+// 账号、日历、提醒与通知、语音与 AI、数据、在 Claude 聊天里记事、电脑、关于都是“一行入口 + 二级页”，语言在首页直接改（倾斜高光已删除，R-373）。从 SettingsPage 拆出
 import { Fragment, Suspense, type ReactNode } from 'react';
 import { CalendarSettingsValue } from '../../calendar/index.ts';
 import { PlusSettings } from '../../plus/index.ts';
@@ -8,7 +8,7 @@ import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
 import { buildInfo } from '../../../platform/env.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { SettingsCard, SettingsEntryRow } from '../../../kit/components/Settings/Settings.tsx';
-import { cardsOf, type SettingsCardId, type SettingsDeps, type SettingsSectionId } from '../hooks/useSettingsPage.ts';
+import { cardsOf, type SettingsCardId, type SettingsSectionId } from '../hooks/useSettingsPage.ts';
 import type { ExportState } from '../hooks/useExport.ts';
 import { hotkeyLabel, type QuickAddHotkey } from '../hooks/useQuickAddHotkey.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
@@ -16,7 +16,6 @@ import type { DevicesState } from '../hooks/useDevices.ts';
 import { deviceName } from './DevicesSection.tsx';
 import { LanguageSection } from './LanguageSection.tsx';
 import { MailLabel } from './MailLabel.tsx';
-import { SkinSection } from './SkinSection.tsx';
 import type { SubName } from './SettingsSub.tsx';
 import styles from './SettingsPage.module.css';
 
@@ -26,13 +25,12 @@ type HomeProps = {
   locale: Parameters<typeof LanguageSection>[0]['locale'];
   exportState: ExportState;
   hotkey: QuickAddHotkey;
-  tilt: SettingsDeps['tilt'];
   onOpen(name: SubName): void;
   /** 最底下的“退出登录” */
   footer: ReactNode;
 };
 
-export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, tilt, onOpen, footer }: HomeProps) {
+export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, onOpen, footer }: HomeProps) {
   const t = useSettingsT();
   /** 卡片看不见的标题（M3）：卡 1 就叫“账号” */
   const cardTitle = (card: SettingsCardId): string =>
@@ -76,8 +74,6 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
     // 账号一行前面是今天页那个头像圈（负责人 11-05 ①：同一组件、同样尺寸）
     account: entry('account', email === null ? t('settings.account.title', {}) : <MailLabel mail={email} />, 'account', accountValue, <MeAvatar testId="settings-account-avatar" />),
     language: <LanguageSection locale={locale} />,
-    // 设置 › 倾斜高光（TILT-b2）：开关存本机、默认关；“皮肤”一行等皮肤选择做出来再加（M2）
-    skin: <SkinSection deps={tilt} />,
     // 日历（R-320）、提醒与通知（REMIND-wiring）：行名和整行由本页画，值由各自的功能懒加载（M4：行一开始就能点）；
     // 值没到之前空着，分包下载失败也只是空着（QuietBoundary 的 name 照约定写成字符串常量）
     calendar: (

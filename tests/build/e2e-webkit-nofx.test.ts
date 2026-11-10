@@ -35,14 +35,10 @@ const FROZEN = {
     'M2 撤销恢复：新行看得见的每一帧都不和别的行、组标题重叠',
   ],
   'b2-tabbar.spec.ts': ['切页过程中底栏一直看得见；液滴点下去就走，不等页面（设计动效评审 D1）'],
-  'b2-tilt.spec.ts': [
-    'T1：设置里打开（在点按里问、同意）→ 回今天页，不点底栏直接倾斜就跟；换页不再弹窗；关掉以后不跟',
-    '新打开 App、开关本来就开着（授权记不住）：倾斜不跟；第一次点底栏弹窗同意后才跟',
-  ],
 };
 
 /** 观感类用例的特征：出现在用例正文（含它调用的 helper）里就不许进名单。
- *  例外三种不算观感：hasAttribute('data-glass') 只是等引擎启动（倾斜用例）；--g-sx、--g-sy 是倾斜高光的位置，不是材质；
+ *  例外两种不算观感：hasAttribute('data-glass') 只是等引擎启动；
  *  “不透明度”是离开那一行的 opacity，不是玻璃透明度。数组的 .filter(...) 调用不算，读样式的 .filter 属性才算 */
 const LOOK_MARKERS = [
   /toHaveScreenshot/, /toMatchSnapshot/, /\.screenshot\(/, // 截图、快照对比
