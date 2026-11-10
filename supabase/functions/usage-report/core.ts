@@ -120,6 +120,8 @@ export const MIN_SECRET_BYTES = 32;
 export const DETAIL_FIELDS_BY_NAME: Readonly<Record<string, { readonly num: readonly string[]; readonly bool: readonly string[] }>> = {
   cleanup: { num: ['rows', 'ms'], bool: [] },
   'push-dispatch': { num: ['claimed', 'sent', 'failed', 'queue_ok', 'queue_poison', 'left'], bool: ['budget_hit'] },
+  // B4：ai-classify/core.ts 的 HeartbeatDetail
+  'ai-classify': { num: ['users', 'notes', 'ai', 'rule', 'manual', 'requeued', 'skipped', 'failed', 'ms'], bool: ['budget_hit', 'quota_hit'] },
   'account-purge': { num: ['purged', 'failed', 'sent', 'ms', 'held', 'remaining', 'forced', 'blocked'], bool: [] },
 };
 

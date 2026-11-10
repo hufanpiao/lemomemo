@@ -63,6 +63,11 @@ const PLAN: Plan = new Map<string, Entry>([
     'admin-disabled': { file: 'tests/functions/push-dispatch-usable.test.ts', title: 'TC-B1-109 push-dispatch：管理员停用（disabled_at 有值）的账号跳过' },
     'pending-deletion': { file: 'tests/functions/push-dispatch-usable.test.ts', title: 'TC-B1-109 push-dispatch：注销冷静期（disabled_reason = deletion）的账号跳过' },
   } }],
+  // B4：pg_cron 带 x-cron-secret，按人处理前经 _shared/auth.ts 的 isUsable
+  ['ai-classify', { kind: 'usable', covers: {
+    'admin-disabled': { file: 'tests/edge/ai-classify.test.ts', title: 'TC-B1-109 ai-classify：管理员停用（disabled_at 有值）的账号跳过' },
+    'pending-deletion': { file: 'tests/edge/ai-classify.test.ts', title: 'TC-B1-109 ai-classify：注销冷静期（disabled_reason = deletion）的账号跳过' },
+  } }],
   // B3 BE-4、BE-5：index.ts 接 requireActiveUser；core 单测用假鉴权核对原样回 account_disabled（写法同 push-test）
   ['ai-parse', { kind: 'jwt', covers: {
     'admin-disabled': { file: 'tests/edge/ai-parse.test.ts', title: 'TC-B1-10 ai-parse：管理员停用的账号回 403 account_disabled' },

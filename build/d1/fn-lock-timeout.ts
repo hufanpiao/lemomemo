@@ -22,6 +22,7 @@ export const LOCK_TIMEOUT_FNS: Readonly<Record<string, string>> = {
   ai_quota_take: 'lock_timeout=5s',  // 迁移 20261107100000（B3，建函数时就带）
   ai_quota_refund: 'lock_timeout=5s',
   intake_insert: 'lock_timeout=5s',
+  ai_classify_pending: 'lock_timeout=5s',  // 迁移 20261110121000（B4，建函数时就带）
 };
 
 export interface FnConfigRow { s: string; f: string; config: string[] | null }

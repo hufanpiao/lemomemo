@@ -9,7 +9,7 @@ const all = () => Object.keys(LOCK_TIMEOUT_FNS).map((f) => ok(f));
 
 describe('lockTimeoutProblems', () => {
   it('十三个函数都带 lock_timeout=5s：不报', () => {
-    expect(Object.keys(LOCK_TIMEOUT_FNS).sort()).toEqual(['account_request_deletion', 'account_restore', 'ai_quota_refund', 'ai_quota_take', 'export_job_start', 'export_job_take', 'intake_insert', 'invite_claim', 'invite_release', 'orphan_auth_users', 'push_heartbeat_write', 'remind_due', 'remind_pushed', 'remind_queue_finish', 'remind_queue_pop', 'take_rate']);
+    expect(Object.keys(LOCK_TIMEOUT_FNS).sort()).toEqual(['account_request_deletion', 'account_restore', 'ai_classify_pending', 'ai_quota_refund', 'ai_quota_take', 'export_job_start', 'export_job_take', 'intake_insert', 'invite_claim', 'invite_release', 'orphan_auth_users', 'push_heartbeat_write', 'remind_due', 'remind_pushed', 'remind_queue_finish', 'remind_queue_pop', 'take_rate']);
     expect(lockTimeoutProblems(all())).toEqual([]);
   });
 
@@ -30,8 +30,8 @@ describe('lockTimeoutProblems', () => {
     expect(lockTimeoutProblems([])).toEqual([]);
   });
 
-  it('迁移 20261031130000～20261031160000 和 20261103130000、20261103140000、20261104130000、20261105110000、20261105140000、20261107100000 合起来给名单里每个函数都写了 set lock_timeout = \'5s\'，没有多的', () => {
-    const sql = ['20261031130000_core_fn_lock_timeout.sql', '20261031140000_core_restore_lock_timeout.sql', '20261031150000_core_invite_claim.sql', '20261031160000_ops_orphan_auth_users.sql', '20261103130000_core_remind_queue_pop.sql', '20261103140000_core_remind_due.sql', '20261104130000_core_remind_queue_lease.sql', '20261105110000_core_remind_queue_pop_orphan_once.sql', '20261105140000_core_push_heartbeat_atomic.sql', '20261107100000_core_my_ai_usage.sql']
+  it('迁移 20261031130000～20261031160000 和 20261103130000、20261103140000、20261104130000、20261105110000、20261105140000、20261107100000、20261110121000 合起来给名单里每个函数都写了 set lock_timeout = \'5s\'，没有多的', () => {
+    const sql = ['20261031130000_core_fn_lock_timeout.sql', '20261031140000_core_restore_lock_timeout.sql', '20261031150000_core_invite_claim.sql', '20261031160000_ops_orphan_auth_users.sql', '20261103130000_core_remind_queue_pop.sql', '20261103140000_core_remind_due.sql', '20261104130000_core_remind_queue_lease.sql', '20261105110000_core_remind_queue_pop_orphan_once.sql', '20261105140000_core_push_heartbeat_atomic.sql', '20261107100000_core_my_ai_usage.sql', '20261110121000_notes_ai_classify_pending.sql']
       .map((f) => readFileSync(`supabase/migrations/${f}`, 'utf8')).join('\n');
     const altered = [...sql.matchAll(/^alter function private\.([a-z_]+)\([^)]*\) set lock_timeout = '5s';$/gm)].map((m) => m[1]);
     // 20261031150000 的两个函数、20261031160000 的 orphan_auth_users、20261103130000 的 remind_queue_pop、20261103140000 的 remind_due、remind_pushed、20261104130000 的 remind_queue_finish 和重建的 remind_queue_pop 建的时候就带：create function private.名字(…) …（下一行）… set lock_timeout = '5s' as $$

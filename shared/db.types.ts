@@ -383,6 +383,11 @@ isOneToOne: false
 "admin_set_disabled":
 { Args: { "p_on": boolean,"p_user": string }; Returns: undefined
                            },
+"ai_classify_pending":
+{ Args: { "p_per_user": number,"p_users": number }; Returns: {
+              "ai_meta": Json,"body": string,"category_source": string,"id": string,"tags": (string)[],"title": string,"user_id": string
+            }[]
+                           },
 "ai_quota_refund":
 { Args: { "p_key": string }; Returns: undefined
                            },

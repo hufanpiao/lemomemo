@@ -77,6 +77,8 @@
     ③ JSX 属性里的 HTML 实体（<a b="fn&#95;vault" />，解析器解码成 fn_vault）F1～F7 都没查：字符串转义检查只看 JS 字符串和模板。
        现在的处理：supabase/functions 下整个禁用 .tsx、.jsx（F7，B1 接手清单 S3 复审），服务器函数用不着 JSX；
        哪天要放开 .tsx，得先给 JSX 属性和 JSX 文本补上实体检查
+  F1  另：GEMINI_API_KEY 只准 _shared/ai/wire.ts 和 _preview/voice-probe/ 读；import _shared/ai/wire.ts 的只准 GEMINI_WIRE_FUNCS 名单里的函数
+      （ai-parse、ai-voice、ai-classify、claude-intake），共用模块、预览专用函数、别的函数都不准（B4 任务单硬约束 3，安全审 11-10 建议 3）
   F1  另：SIGNUP_HASH_SECRET 只准 invite-signup、account-purge 读（K2 安全审查，架构 8.4、0.38 第 24 条），Pages、App、shared 里也不准出现（F4）
   F5 disabled_at 只准出现在 _shared/auth.ts、account、account-purge（生成目录 _shared/gen/ 不算）。架构 0.29 续第 138 条④、TC-B0-97 ④
   F6  预览专用函数（supabase/functions/_preview/<函数名>/，只由 deploy-preview.yml 在产物里生成入口部署，正式发布不带）：
@@ -196,6 +198,12 @@ DISABLED_AT_OK = ("_shared/auth.ts", "account/", "account-purge/")
 #   架构 6.2 末尾白名单的这一行由架构师补
 SIGNUP_SECRET_FUNCS = frozenset({"invite-signup", "account-purge"})
 SIGNUP_SECRET = re.compile(r"\bSIGNUP_HASH_SECRET\b")
+# F1（B4 任务单硬约束 3，安全审 11-10 建议 3）：GEMINI_API_KEY 只准这两处读；能 import _shared/ai/wire.ts（经它拿到带密钥的服务商）的函数名单写死，
+#   完整内容由 tests/build/check-backend-gemini-key.test.ts 钉住，往名单加函数要同时改那条单测（过代码审查和安全审查）
+GEMINI_KEY = re.compile(r"\bGEMINI_API_KEY\b")
+GEMINI_KEY_FILE = "_shared/ai/wire.ts"
+GEMINI_KEY_PREVIEW_DIR = "_preview/voice-probe/"
+GEMINI_WIRE_FUNCS = frozenset({"ai-parse", "ai-voice", "ai-classify", "claude-intake"})
 
 # Deno 和打包器认的源码扩展名都算（代码审查有条件通过 4：原先漏了 .jsx、.cjs、.cts，import 进来的这类文件整个不查）
 SOURCE_EXT = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
@@ -1374,6 +1382,16 @@ def check_functions(root, errors):
             if is_preview(rel) or fn != owner_fn:
                 for m in re.finditer(rf"\b{re.escape(env_name)}\b", code):
                     errors.append(("F1", path, line_of(code, m.start()), f"{env_name} 只准 {owner_fn} 读（B2 安全审查 D2-S1），{fn or '共用模块'} 不准读"))
+
+        # F1（B4 硬约束 3，安全审 11-10 建议 3）：GEMINI_API_KEY 只准 wire.ts 和 voice-probe 读（注释不算）
+        if rel != GEMINI_KEY_FILE and not rel.startswith(GEMINI_KEY_PREVIEW_DIR):
+            for m in GEMINI_KEY.finditer(code):
+                errors.append(("F1", path, line_of(code, m.start()), f"GEMINI_API_KEY 只准 {GEMINI_KEY_FILE} 和 {GEMINI_KEY_PREVIEW_DIR} 读（B4 硬约束 3），{fn or '共用模块'} 不准读；要调 Gemini 经 {GEMINI_KEY_FILE} 的 gateDeps"))
+        # import wire.ts 的只准名单里的正式函数（共用模块、预览专用函数、别的函数都不准，免得借它拿到带密钥的服务商）
+        if rel != GEMINI_KEY_FILE and (is_preview(rel) or fn not in GEMINI_WIRE_FUNCS):
+            for line, target, _spec in fns.edges(rel):
+                if target == GEMINI_KEY_FILE:
+                    errors.append(("F1", path, line, f"只有 {'、'.join(sorted(GEMINI_WIRE_FUNCS))} 准 import {GEMINI_KEY_FILE}（它读 GEMINI_API_KEY，B4 硬约束 3），{fn or '共用模块'} 不准"))
 
         # F5
         if not gen and not rel.startswith(DISABLED_AT_OK):

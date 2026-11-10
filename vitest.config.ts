@@ -44,6 +44,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/check-backend-f7-syntax.test.ts', // python build/check_backend.py（F7 语法层白名单）
   'tests/build/check-backend-migrations.test.ts', // python build/check_backend.py（M1～M6 迁移写法）
   'tests/build/check-backend-f9-server.test.ts', // python build/check_backend.py（F9 服务器密钥名单、F10，B2）
+  'tests/build/check-backend-gemini-key.test.ts', // python build/check_backend.py（F1 GEMINI_API_KEY 守门，B4）
   'tests/build/check-size.test.ts', // 另起 node 跑 build/check_size.mjs
   'tests/build/deno-frozen-lock.test.ts', // node（copy_shared）、deno install --frozen（服务器函数依赖锁真拦得住锁外依赖）
   'tests/build/e2e-watchdog.test.ts', // 经 tools/e2e/run-watchdog.mjs 起 node（E2E-webkit-hang 看门狗真跑）

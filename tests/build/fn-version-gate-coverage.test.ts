@@ -24,6 +24,7 @@ const PLAN = new Map<string, 'check' | readonly string[]>([
   ['account-purge', ['POST']],      // K3：pg_cron 带 x-cron-secret
   ['usage-report', ['POST']],       // K15：lemo-ops 带 x-ops-secret
   ['push-dispatch', ['POST']],      // B2：pg_cron 带 x-cron-secret（B2 安全审查 D1-S6）
+  ['ai-classify', ['POST']],        // B4：pg_cron 每 2 分钟带 x-cron-secret（架构 5.2）
   ['push-test', 'check'],           // B2 BE-6：用户带 JWT 调，index.ts 入口处 versionGate
   ['ai-parse', 'check'],            // B3 BE-3：用户带 JWT 调，index.ts 入口处 versionGate
   ['ai-voice', 'check'],            // B3 BE-4：同上
