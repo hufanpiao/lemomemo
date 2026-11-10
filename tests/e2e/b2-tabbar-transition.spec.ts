@@ -15,7 +15,10 @@ const FADE_AT = Array.from({ length: 19 }, (_, k) => (k + 1) * 0.05);
  * 液滴的过渡这一帧是不是真在跑（running 且 currentTime > 0）。
  * 另外按动画自己的进度抽查（CI 机器慢、帧很稀时逐帧采样会整段漏掉 0.22 秒的淡入，7e197ea CI）：
  * • 新页淡入：包一层 Element.prototype.animate，main 一建淡入动画就先读一次起点（fadeSwap 跳过第一帧后的位置），再暂停、按 FADE_AT 把 currentTime 拨到各点读 opacity，拨回原处接着放
- * • 液滴：transitionrun（translate）时从 getAnimations() 拿到这次过渡，同样按进度读横向位置，再拨回接着放
+ * • 液滴：在点页签的同一个任务里（click() 返回、还没出下一帧）从 getAnimations() 拿到这次过渡，同样按进度读横向位置，再拨回接着放。
+ *   页签的点按是同步换路由、同步重画的，getAnimations() 会先把样式算好，这一刻过渡刚建好、还没开始走，帧再稀也不会已经放完
+ *   （3f5c210 CI webkit：一帧 250～600 ms 时，等到 transitionrun 或下一帧再取，过渡已经放完、取不到；同 b2-tabbar:186 的做法）。
+ *   点完当下没取到的，transitionrun 和逐帧看到在跑时照旧再试
  * 抽查在同一个任务里同步做完（暂停、拨时间读值、拨回原处、接着放），这期间不出帧，看不到拨过去的样子；
  * 动画会被往后推抽查本身花的那一点时间（一般不到 1 ms，慢机器上几毫秒），起止值、曲线、时长都不变
  */
@@ -45,7 +48,8 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
           a.currentTime = f * total;
           out.push(r3());
         }
-        a.currentTime = cur;
+        // 刚建好、还没开始走的过渡 currentTime 是 null（不能写回 null）：拨回 0，接着放就是从头开始，和没抽查过一样
+        a.currentTime = cur ?? 0;
         if (wasRunning) a.play();
         return out;
       };
@@ -134,6 +138,8 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
         take(t0);
         nav?.querySelector<HTMLElement>(`a[data-tab="${name}"]`)?.click();
         clicked = true;
+        // 同一个任务里马上抽查液滴（见文件头）：这时还没出帧，过渡不会已经放完
+        scanDrop();
         // minMove：至少采 ms 毫秒，而且液滴离开起点 minMove pt 以后才停（慢机器上液滴晚起步，只采固定时长可能还没动；最多 2 秒）
         const moved = (): boolean => Math.abs((rows.at(-1)?.x ?? 0) - (rows[0]?.x ?? 0)) >= minMove;
         while (performance.now() - t0 < ms || (!moved() && performance.now() - t0 < 2000)) {
