@@ -11,9 +11,11 @@
 // 设置 › 提醒与通知 同样是二级页（REMIND-wiring；定稿线框 s13、sR7）：首页一行“提醒与通知 … 通知已打开 ›”，点进 #/settings/remind；
 // 二级页最上面“未来 7 天的提醒 ›”再进一层 #/settings/remind/upcoming，顶栏“‹ 提醒与通知”退回上一层；“提醒里写什么 ›”“免打扰 ›”
 // 同样点进去再改（R-347 照线框 sR7）：#/settings/remind/show-title、#/settings/remind/dnd。正文都由 reminders 功能懒加载提供
+// 设置 › 语音与 AI（#/settings/ai）、在 Claude 聊天里记事（#/settings/claude）同日历（B3 FA-4）：正文由 plus 功能懒加载提供
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { backOrReplace, hrefOf, navigateSub, useRoute } from '../../../app/router.ts';
 import { CalendarSettings } from '../../calendar/index.ts';
+import { PlusSettings } from '../../plus/index.ts';
 import { RemindSettings } from '../../reminders/index.ts';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
@@ -179,6 +181,10 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
       sub(t('settings.about.title', {}), 'settings-about-back', <AboutSection />)
     ) : view === 'calendar' ? (
       sub(t('settings.cal.title', {}), 'settings-cal-back', <CalendarSettings />)
+    ) : view === 'ai' ? (
+      sub(t('settings.ai.title', {}), 'settings-ai-back', <PlusSettings part="voiceAi" view="page" />)
+    ) : view === 'claude' ? (
+      sub(t('settings.claude.title', {}), 'settings-claude-back', <PlusSettings part="claude" view="page" />)
     ) : view === 'remind' ? (
       sub(
         t('settings.remind.title', {}),

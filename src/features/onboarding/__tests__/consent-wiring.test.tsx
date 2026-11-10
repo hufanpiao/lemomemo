@@ -274,6 +274,17 @@ describe('路由 #/onboarding：ConsentRoute（CONSENT-wire ①）', () => {
     expect(window.location.hash).toBe('#/today');
   });
 
+  it('从 设置 › 语音与 AI 打开“AI 整理”进来的（#/onboarding/ai，R-369）：同意后写 ai.enabled，回语音与 AI 页、不回今天页', async () => {
+    window.history.replaceState(null, '', '#/onboarding/ai');
+    const w = wiring();
+    await act(async () => {
+      render(<ConsentRoute api={fakeApi(first)} wiring={w.deps} />);
+    });
+    await agree();
+    expect(w.enableAi).toHaveBeenCalledOnce();
+    expect(window.location.hash).toBe('#/settings/ai');
+  });
+
   it('停用：离开设备，不回今天页', async () => {
     window.history.replaceState(null, '', '#/onboarding');
     const w = wiring();

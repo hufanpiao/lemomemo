@@ -248,7 +248,8 @@ describe('设置首页的卡和行（TC-B1-71、R-325）', () => {
       zh['settings.card.more'],
     ]);
     const ids = (c: HTMLElement): string[] => [...c.querySelectorAll('[data-row-id]')].map((el) => el.getAttribute('data-row-id') ?? '');
-    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'calendar', 'reminders'], ['data', 'about']]);
+    // B3 FA-4 起常用卡多“语音与 AI”、更多卡多“在 Claude 聊天里记事”
+    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'calendar', 'reminders', 'voiceAi'], ['data', 'claude', 'about']]);
     const all = cards.flatMap(ids);
     expect(all).toEqual([...all].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
     expect(new Set(all).size).toBe(all.length);

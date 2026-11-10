@@ -1,7 +1,8 @@
 // 设置首页：三张卡（R-325，SETTINGS-merge-cards 方案定稿；卡和顺序见 data/sections.ts 的 SETTINGS_CARDS），每一行是 kit 的设置行；
-// 账号、日历、提醒与通知、数据、电脑、关于都是“一行入口 + 二级页”，语言、倾斜高光在首页直接改。从 SettingsPage 拆出
+// 账号、日历、提醒与通知、语音与 AI、数据、在 Claude 聊天里记事、电脑、关于都是“一行入口 + 二级页”，语言、倾斜高光在首页直接改。从 SettingsPage 拆出
 import { Fragment, Suspense, type ReactNode } from 'react';
 import { CalendarSettingsValue } from '../../calendar/index.ts';
+import { PlusSettings } from '../../plus/index.ts';
 import { ClockWrongNote, RemindSettingsValue } from '../../reminders/index.ts';
 import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
 import { buildInfo } from '../../../platform/env.ts';
@@ -111,7 +112,42 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
         valueTestId="settings-remind-summary"
       />
     ),
+    // 语音与 AI、在 Claude 聊天里记事（B3 FA-4，同日历一行）：值由 plus 功能懒加载（今天用量、连着没有），没到之前空着
+    voiceAi: (
+      <SettingsEntryRow
+        rowId="voiceAi"
+        label={t('settings.ai.title', {})}
+        value={
+          <QuietBoundary name="ai-value">
+            <Suspense fallback={null}>
+              <PlusSettings part="voiceAi" view="value" />
+            </Suspense>
+          </QuietBoundary>
+        }
+        // 值“AI 整理已打开 · 今天 AI 用了 n 次 / 共 50 次”一行放不下：照线框 s13 放到行名下面，不省略（R-369）
+        stacked
+        onOpen={() => onOpen('ai')}
+        testId="settings-ai-entry"
+        valueTestId="settings-ai-summary"
+      />
+    ),
     data: entry('data', t('settings.data.title', {}), 'data', dataValue),
+    claude: (
+      <SettingsEntryRow
+        rowId="claude"
+        label={t('settings.claude.title', {})}
+        value={
+          <QuietBoundary name="claude-value">
+            <Suspense fallback={null}>
+              <PlusSettings part="claude" view="value" />
+            </Suspense>
+          </QuietBoundary>
+        }
+        onOpen={() => onOpen('claude')}
+        testId="settings-claude-entry"
+        valueTestId="settings-claude-summary"
+      />
+    ),
     // R-297：不在电脑版 exe 里读回 null，“电脑”这一行不出现；值是现在的热键
     ...(hotkey.status
       ? { desktop: entry('desktop', t('settings.desktop.title', {}), 'desktop', hotkeyLabel(hotkey.status.accelerator, t('settings.hotkey.space', {}))) }

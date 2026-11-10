@@ -70,7 +70,7 @@ export function RemindLeafView({ leaf, onBack }: { leaf: RemindLeaf; onBack(): v
 }
 
 /** 首页一行入口点进去的二级页 */
-const SUBS = ['account', 'calendar', 'remind', 'data', 'desktop', 'about'] as const;
+const SUBS = ['account', 'calendar', 'remind', 'ai', 'data', 'claude', 'desktop', 'about'] as const;
 type HomeSub = (typeof SUBS)[number];
 export type SubName = HomeSub | 'delete' | `remind-${RemindLeaf}`;
 export type SettingsView = SubName | 'home';
@@ -81,6 +81,8 @@ const ENTRY_OF: Record<SubName, string> = {
   delete: 'settings-delete-entry',
   calendar: 'settings-cal-entry',
   remind: 'settings-remind-entry',
+  ai: 'settings-ai-entry',
+  claude: 'settings-claude-entry',
   data: 'settings-data-entry',
   desktop: 'settings-desktop-entry',
   about: 'settings-about-entry',

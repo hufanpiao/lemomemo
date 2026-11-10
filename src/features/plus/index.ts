@@ -13,3 +13,10 @@ export const TypeBar = lazy(() => import('./ui/TypeBar.tsx'));
 
 /** 预先下载打字条的代码（B3 Q4）：首屏画完以后挂一份，什么都不画；之后点“＋”时 TypeBar 的模块已在内存里 */
 export const TypeBarPreload = lazy(() => import('./ui/TypeBarPreload.tsx'));
+
+/**
+ * 设置 › 语音与 AI、在 Claude 聊天里记事（B3 FA-4，主持人 11-09 定方案 a：只多这一个懒加载导出）。
+ * props: { part: 'voiceAi' | 'claude'; view: 'value'（设置首页那一行右边的值）| 'page'（二级页正文） }
+ */
+export const PlusSettings = lazy(() => import('./ui/PlusSettings.tsx'));
+

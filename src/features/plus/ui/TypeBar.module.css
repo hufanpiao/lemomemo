@@ -125,3 +125,69 @@
   border-bottom: 0;
   border-top-color: var(--ink);
 }
+
+/* 设置 › 在 Claude 聊天里记事：新生成的连接码（B3 FA-4）。纯文字，可以长按全选复制，不是链接；放在这里不另开样式文件（另开一个，首屏依赖表多一项） */
+.code {
+  font-family: ui-monospace, monospace;
+  overflow-wrap: anywhere;
+  user-select: all;
+  color: var(--text);
+}
+
+/* 设置 › 语音与 AI：今天用量的进度条（线框 s13：用量那一行下面靠右的短条，深色是用掉的部分） */
+.meter {
+  display: block;
+  width: 60px;
+  height: 4px;
+  margin-left: auto;
+  border-radius: var(--r-pill);
+  background: var(--line);
+  overflow: hidden;
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+}
+
+/* 设置 › 在 Claude 聊天里记事：“断开连接”是一行普通字（线框 s13 不加粗、不带“›”、不是红字），整行可点 */
+.plainAct {
+  display: block;
+  width: 100%;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plainAct:disabled {
+  color: var(--text-2);
+  cursor: default;
+}
+
+.plainAct:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Claude 页“连接码”一行（R-369 线框 s13 左名右值）：行名不缩；值占右边剩下的宽度，长了在右栏里换行、不省略 */
+.codeLbl {
+  flex: none;
+  font-size: var(--fs-15);
+}
+
+.codeVal {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  text-align: right;
+  overflow-wrap: anywhere;
+}

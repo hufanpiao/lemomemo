@@ -112,6 +112,9 @@ export const zh = {
   // 设置 › 提醒与通知 二级页、未来 7 天的提醒 的顶栏标题（REMIND-wiring；线框 sR7；和 reminders 词典的 remind.set.title、remind.set.upcoming 同一个词）
   'settings.remind.title': '提醒与通知',
   'settings.remind.upcoming': '未来 7 天的提醒',
+  // 设置 › 语音与 AI、在 Claude 聊天里记事：首页那一行和二级页顶栏标题（B3 FA-4；和 plus 词典的 plus.set.ai.title、plus.set.cla.title 同一个词）
+  'settings.ai.title': '语音与 AI',
+  'settings.claude.title': '在 Claude 聊天里记事',
   'settings.remind.showTitle': '提醒里写什么',
   'settings.remind.dnd': '免打扰',
   'settings.delete.body.what': '注销后，你在柠檬记里的全部记录、照片、附件、设置，以及服务器上的备份都会删除。',
@@ -163,6 +166,7 @@ export const zh = {
   'settings.about.title': '关于',
   'settings.about.version': '版本', // 设置 › 关于 卡片里“版本 4.0.0”（设计评审 M-1，11-06），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
   'settings.about.lunarCredit': '农历及节气数据：香港天文台',
+  'settings.about.probe': '录音探测（试验）', // 只在非正式版的关于页显示（B3 FA-0，11-10）；和 voice-probe 同一个 PR 删
   // 设置 › 皮肤（TILT-b2 做法 ②：倾斜高光开关，存本机、默认关；iOS 每次打开 App 后第一次点底栏再问方向权限）
   'settings.skin.title': '皮肤',
   'settings.skin.tilt': '倾斜高光',

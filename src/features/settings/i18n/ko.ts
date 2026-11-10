@@ -98,6 +98,8 @@ export const ko = {
   'settings.cal.title': '캘린더', // R-106 B2 第一遍已审（11-04）（B2K-05，和 calendar 的 cal.set.title、cal.h1 同名）
   'settings.remind.title': '알림', // REVIEW(ko)：照 reminders 的 remind.set.title
   'settings.remind.upcoming': '앞으로 7일 알림', // REVIEW(ko)：照 reminders 的 remind.set.upcoming
+  'settings.ai.title': '음성과 AI', // REVIEW(ko)：照 plus 的 plus.set.ai.title
+  'settings.claude.title': 'Claude 채팅으로 기록', // REVIEW(ko)：照 plus 的 plus.set.cla.title
   'settings.remind.showTitle': '알림에 표시할 내용', // REVIEW(ko)：照 reminders 的 remind.set.showTitle（R-347）
   'settings.remind.dnd': '방해 금지', // REVIEW(ko)：照 reminders 的 remind.set.dnd（R-347）
   'settings.delete.body.what': '탈퇴하면 레모에 기록한 모든 내용과 사진, 첨부파일, 설정, 그리고 서버에 있는 백업까지 모두 삭제돼요.', // R-106 B1 第一遍已审（10-31），按审校意见改过
@@ -155,6 +157,7 @@ export const ko = {
   'settings.about.title': '정보', // REVIEW(ko)；设置 › 关于（R-306 注明农历出处）
   'settings.about.version': '버전', // 设置 › 关于“버전 4.0.0”（设计评审 M-1，11-06），R-106 已审（11-06，B2-韩文审校-设置新文案1106）
   'settings.about.lunarCredit': '음력 및 절기 데이터: 홍콩 천문대', // REVIEW(ko)
+  'settings.about.probe': '녹음 테스트(실험)', // REVIEW(ko)；只在非正式版的关于页显示（B3 FA-0，11-10）；和 voice-probe 同一个 PR 删
   // 설정 › 스킨（TILT-b2：기울기 하이라이트）
   'settings.skin.title': '스킨', // R-106 已审（11-05，B2-韩文审校-TILT与主导航 K-1，维持）
   'settings.skin.tilt': '기울기 하이라이트', // R-106 已审（11-05，B2-韩文审校-TILT与主导航 K-2）

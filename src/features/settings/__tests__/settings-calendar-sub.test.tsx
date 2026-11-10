@@ -37,8 +37,8 @@ describe('设置 › 日历 二级页（R-320、R-321）', () => {
 
   it('首页只有一行入口和摘要（“节假日：中国”，不提农历），不出现节假日单选、每周第一天、农历开关', async () => {
     await renderPage();
-    // 值由日历功能懒加载（M4）：本文件第一条先等分包到
-    await waitFor(() => expect(screen.getByTestId('settings-cal-summary').textContent).toBe('节假日：中国'));
+    // 值由日历功能懒加载（M4）：本文件第一条先等分包到。B3 FA-4 起首页还要懒加载 plus 的设置值，第一次转译分包更慢，等 5 秒
+    await waitFor(() => expect(screen.getByTestId('settings-cal-summary').textContent).toBe('节假日：中国'), { timeout: 5000 });
     expect(screen.getByTestId('settings-cal-entry').textContent).not.toContain('农历');
     expect(screen.queryByTestId('settings-calendar')).toBeNull();
     expect(screen.queryByTestId('settings-cal-hol-cn')).toBeNull();

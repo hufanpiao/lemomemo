@@ -96,6 +96,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/features/reminders/ui/ClockWrongNote.tsx': '设置 › 关于里用',
   'src/features/calendar/ui/CalendarSettings.tsx': '设置页里用',
   'src/features/calendar/ui/CalendarSettingsValue.tsx': '设置页里用',
+  'src/features/plus/ui/PlusSettings.tsx': '设置页里用：设置 › 语音与 AI、在 Claude 聊天里记事的首页值和二级页（B3 FA-4）',
   'src/app/UpdateBanner.tsx': '顶部版本横幅本体：有横幅要出时才下载（App.tsx 的 BannerGate，首屏瘦身 11-05）',
   'src/app/ExitIncompleteScreen.tsx': 'exe 里会话出问题的整屏提示：真要挂出时才下载（exit-screen.tsx，首屏瘦身 11-05）',
   'src/platform/push.ts': '断开浏览器推送：只在退出、被移除、换账号时下载（push-disconnect.ts，首屏瘦身 11-05）',
