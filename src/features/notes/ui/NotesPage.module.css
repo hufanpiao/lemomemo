@@ -480,6 +480,7 @@
 
 /* “图”（视觉稿 .ibtn 40 × 40、浅灰底） */
 .img {
+  position: relative;
   display: grid;
   flex: none;
   place-items: center;
@@ -490,6 +491,17 @@
   border-radius: 50%;
   background: var(--panel-2);
   color: var(--text);
+}
+
+/* 看得见 40 × 40，点击区以按钮中心外扩到 44 × 44（写法同 Settings.module.css 的 .segBtn::after），不占排版宽度 */
+.img::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
 }
 
 .imgIc {

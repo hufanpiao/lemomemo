@@ -1,6 +1,6 @@
 // 液态玻璃底栏（B2 FA-7；负责人 11-05 ①～④；接手清单 NAV-today-no-settings、UI4-B1-C2）：
 // 今天、日历、待办、随手记四页都有底栏，点页签换页、选中项跟着走；“＋”点一下打开打字条（B3 M4，原来是按页新建），打字条“展开编辑”按页进新建页
-// （今天、日历→日程，待办→待办），随手记没有“＋”、只写“即将推出”；
+// （今天、日历→日程，待办→待办）；随手记页（B4）也显示“＋”，名字同样是“打字记一条”（R-380：在这一页把光标放进输入行）；
 // 今天页右上角头像进设置；切页动画期间点按不被吞（::view-transition 不接点按）；底栏切页时不跟着淡入淡出
 import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
@@ -20,7 +20,7 @@ test.describe('底栏（FA-7）', () => {
   // timezoneId：“今天页“＋”还是今天”那条在浏览器里按本机时区算“今天”，CI 是 UTC、账号数据按首尔日期（前端 A 11-07 查明的同类问题），统一按首尔
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
 
-  test('四页之间点页签切换；选中项 aria-current 跟着走；“＋”名字是“打字记一条”；随手记“即将推出”、没有“＋”', async ({ page }) => {
+  test('四页之间点页签切换；选中项 aria-current 跟着走；“＋”名字是“打字记一条”；随手记页也有“＋”（R-380）', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(bar(page)).toBeVisible();
@@ -38,9 +38,10 @@ test.describe('底栏（FA-7）', () => {
     await expect(page.getByTestId('tabbar-add')).toHaveAccessibleName('打字记一条');
 
     await tab(page, 'notes').click();
-    await expect(page.getByText('即将推出')).toBeVisible();
+    await expect(page.getByTestId('notes')).toBeVisible();
     await expect(tab(page, 'notes')).toHaveAttribute('aria-current', 'page');
-    await expect(page.getByTestId('tabbar-add')).toHaveCount(0);
+    await expect(page.getByTestId('tabbar-add')).toBeVisible();
+    await expect(page.getByTestId('tabbar-add')).toHaveAccessibleName('打字记一条');
   });
 
   // webkit 进编辑页会报一条 CSP style-src-attr：是 WebKit 内核新建 <select> 时的误报（直接打开 #/todo/new 也报，11-05 前端 A 查明），
