@@ -184,6 +184,29 @@ test.describe('底栏（FA-7）', () => {
   // 设计动效评审 L1：首屏后部分（GlassBarFx，首屏画完以后下载；模糊带出现说明到了）到了以后，果冻由 WAAPI 放，
   // 连点时从当前形变接着放、不重挂元素（重挂会跳回原样）
   test('果冻：首屏后部分到了以后由 WAAPI 放；连点不重挂、不叠动画（L1）', async ({ page }) => {
+    // 探针（只记不改）：果冻元素上每次 animate、cancel、加 CSS 后备类的时刻，和减少动态效果的两个来源
+    await page.addInitScript(() => {
+      const w = window as unknown as { __jl: string[] };
+      w.__jl = [];
+      const isGel = (el: unknown) => el instanceof Element && /jelly/.test(el.className);
+      const an = Element.prototype.animate;
+      Element.prototype.animate = function (this: Element, ...args: Parameters<Element['animate']>) {
+        const r = an.apply(this, args);
+        if (isGel(this)) w.__jl.push(`animate@${Math.round(performance.now())} rm=${document.documentElement.dataset['rm'] ?? ''} mm=${matchMedia('(prefers-reduced-motion: reduce)').matches}`);
+        return r;
+      };
+      const cancel = Animation.prototype.cancel;
+      Animation.prototype.cancel = function (this: Animation) {
+        const t = (this.effect as KeyframeEffect | null)?.target;
+        if (isGel(t)) w.__jl.push(`cancel@${Math.round(performance.now())} ${this.constructor.name}/${this.playState}/${Math.round(Number(this.currentTime ?? -1))}`);
+        return cancel.call(this);
+      };
+      const cl = DOMTokenList.prototype.add;
+      DOMTokenList.prototype.add = function (this: DOMTokenList, ...t: string[]) {
+        if (t.some((x) => /jelly/.test(x))) w.__jl.push(`classAdd@${Math.round(performance.now())} ${t.join(',')}`);
+        return cl.apply(this, t);
+      };
+    });
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
@@ -198,17 +221,21 @@ test.describe('底栏（FA-7）', () => {
       w.__jelly = q();
       w.__jellyAt = null;
       window.addEventListener('click', (e) => {
+        (window as unknown as { __jl: string[] }).__jl.push(`anyclick@${Math.round(performance.now())} ${(e.target as Element | null)?.tagName} trusted=${e.isTrusted} hash=${location.hash}`);
         if ((e.target as Element | null)?.closest?.('a[data-tab="todos"]') === null) return;
         const el = q();
         w.__jellyAt = { same: el === w.__jelly, running: el?.getAnimations().length ?? -1 };
+        (window as unknown as { __jl: string[] }).__jl.push(`win@${Math.round(performance.now())} trusted=${e.isTrusted} hash=${location.hash} i=${(el?.parentElement as HTMLElement | null)?.style.getPropertyValue('--i')} cls=${el?.className} glass=${document.querySelector('[data-testid="tabbar"]')?.getAttribute('data-glass')} anims=${JSON.stringify(el?.getAnimations().map((a) => `${a.constructor.name}/${a.playState}/${Math.round(Number(a.currentTime ?? -1))}`))}`);
       });
     });
     await tab(page, 'calendar').click();
     await tab(page, 'todos').click();
     await expect(page).toHaveURL(/#\/todos$/);
     const r = await page.evaluate(() => (window as unknown as { __jellyAt: { same: boolean; running: number } | null }).__jellyAt ?? { same: false, running: -2 });
-    expect(r.same, '连点以后还是同一个元素').toBe(true);
-    expect(r.running, '只有一个果冻动画在跑').toBe(1);
+    // 偶发 running=0 还没复现出原因（11-10 镜像里带探针跑 b2 组 13 遍没再出现）：挂的时候把点按前后的果冻起播、取消、点按记录带进报错
+    const jl = await page.evaluate(() => (window as unknown as { __jl: string[] }).__jl);
+    expect(r.same, `连点以后还是同一个元素 ${JSON.stringify(jl)}`).toBe(true);
+    expect(r.running, `只有一个果冻动画在跑 ${JSON.stringify(jl)}`).toBe(1);
   });
 
   test('从没有底栏的页回来（新建日程 → 今天）：实色带和底栏同一次出现，第一帧起就不透明、不淡入（G2；主持人 11-07 复查）', async ({ page }) => {

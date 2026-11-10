@@ -23,6 +23,8 @@ async function boot() {
     userId: 'A', appVersion: '4.0.0', cacheOptions: { factory }, listen426: false, clearCacheStorage: () => Promise.resolve(),
     upgradeDeps: { reload: vi.fn(), swUpdate: () => Promise.resolve('no_update' as const), attempt: { get: () => null, set: () => undefined } },
   });
+  // “今天”按 current_tz 算（R-375 M2）：固定成首尔，和时钟同一个时区；不设时回落本机时区，CI 的洛杉矶那一组会算成 11-04
+  b.profile = { ...(b.profile ?? {}), current_tz: 'Asia/Seoul' } as NonNullable<typeof b.profile>;
   return b;
 }
 
@@ -113,8 +115,7 @@ describe('R-375：没设截止时改了提醒，截止日期自动填今天', ()
       return { ...orig.call(this), timeZone: 'America/Los_Angeles' };
     });
     expect(deviceTz()).toBe('America/Los_Angeles');
-    const b = await boot();
-    b.profile = { ...(b.profile ?? {}), current_tz: 'Asia/Seoul' } as NonNullable<typeof b.profile>;
+    const b = await boot(); // boot() 已把 current_tz 设成首尔
     await b.outbox?.applyServer('todos', [{ row: serverTodo({ due: null }) }]);
     open(`#/todo/${ID}`);
     await commitText('todo-edit-remind-time', '18:00');
