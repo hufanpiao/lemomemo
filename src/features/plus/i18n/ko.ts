@@ -46,4 +46,15 @@ export const ko = {
   'plus.notice.undoAll': '모두 되돌리기', // REVIEW(ko)
   'plus.notice.close': '닫기', // REVIEW(ko)
   'plus.notice.list': '이번에 기록한 항목', // REVIEW(ko)
+  'plus.hint.bubble': '누르고 말하기 · 탭해서 입력', // REVIEW(ko)
+  'plus.mic.ask.title': '+를 누른 채 말하려면 먼저 마이크를 허용해 주세요', // REVIEW(ko)
+  'plus.mic.ask.body': '아래 버튼을 누르면 iPhone이 한 번 물어봐요. 그다음부터는 +를 누른 채 바로 말하면 돼요.', // REVIEW(ko)
+  'plus.mic.ask.bodyWeb': '아래 버튼을 누르면 브라우저가 한 번 물어봐요. 그다음부터는 +를 누른 채 바로 말하면 돼요.', // REVIEW(ko) R-367 iPhone 아닌 기기
+  'plus.mic.ask.allow': '마이크 허용', // REVIEW(ko)
+  'plus.mic.ask.type': '일단 입력만 쓰기', // REVIEW(ko)
+  'plus.mic.denied.title': '마이크가 꺼져 있어요', // REVIEW(ko)
+  'plus.mic.denied.body': '음성 기록을 쓸 수 없어요. iPhone “설정”에서 이 앱의 마이크를 켜 주세요.', // REVIEW(ko)
+  'plus.mic.denied.bodyWeb': '음성 기록을 쓸 수 없어요. 브라우저 설정에서 이 사이트의 마이크를 켜 주세요.', // REVIEW(ko) R-367 iPhone 아닌 기기
+  'plus.mic.denied.type': '입력으로 기록', // REVIEW(ko)
+  'plus.mic.denied.retry': '켰어요, 다시 시도', // REVIEW(ko)
 } as const satisfies Record<keyof typeof zh, string>;

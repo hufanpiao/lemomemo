@@ -45,4 +45,17 @@ export const zh = {
   'plus.notice.undoAll': '全部撤销',
   'plus.notice.close': '关闭',
   'plus.notice.list': '这次记下的几条',
+  'plus.hint.bubble': '按住说话 · 点一下打字', // 前 3 次打开时“＋”上方的小气泡（S23，定稿线框“第一次使用”）
+  // 麦克风说明卡（S23；定稿线框“第一次按住”“麦克风被拒绝”两张卡原文）
+  'plus.mic.ask.title': '按住“＋”说话，要先允许用麦克风',
+  // body 是 iPhone、iPad 上的原文；bodyWeb 是其他设备的通用说法（R-367，负责人 11-10 定）
+  'plus.mic.ask.body': '点下面的按钮，iPhone 会问你一次。以后按住“＋”就能直接说。',
+  'plus.mic.ask.bodyWeb': '点下面的按钮，浏览器会问你一次。以后按住“＋”就能直接说。',
+  'plus.mic.ask.allow': '允许麦克风',
+  'plus.mic.ask.type': '先只用打字',
+  'plus.mic.denied.title': '麦克风没有打开',
+  'plus.mic.denied.body': '语音用不了。可以在 iPhone 的“设置”里给这个 App 打开麦克风。',
+  'plus.mic.denied.bodyWeb': '语音用不了。可以在浏览器的设置里给这个网站打开麦克风。',
+  'plus.mic.denied.type': '改用打字',
+  'plus.mic.denied.retry': '我已打开，再试一次',
 } as const;

@@ -49,6 +49,10 @@ export interface DialogProps {
   children?: ReactNode;
   /** 退路（审查 L-2）：打开前的元素还不回去（被禁用、被移走）时把焦点给它；返回 null 或同样还不了就算了 */
   returnFocus?: () => HTMLElement | null;
+  /** 标题上面放的东西（例如图标）。B3 S23：负责人 11-10 定，麦克风说明卡按线框 s10 在卡顶加麦克风图标；目前只有 MicCard 传 */
+  lead?: ReactNode;
+  /** 标题、说明、内容都居中。B3 S23：负责人 11-10 定，麦克风说明卡按线框 s10 居中；目前只有 MicCard 传。不传时类名和渲染结果都和原来一样 */
+  center?: boolean;
 }
 
 /** 能不能把焦点还给它：还在文档里，没被禁用 */
@@ -57,7 +61,7 @@ function canRefocus(el: Element | null): el is HTMLElement {
   return !(el as HTMLElement & { disabled?: boolean }).disabled;
 }
 
-export function Dialog({ open, onOpenChange, title, description, children, returnFocus }: DialogProps) {
+export function Dialog({ open, onOpenChange, title, description, children, returnFocus, lead, center }: DialogProps) {
   useScrollLock(open);
   const returnTo = useRef<Element | null>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -107,7 +111,14 @@ export function Dialog({ open, onOpenChange, title, description, children, retur
         <Appear kind="sheet" show={open} className={styles.dock}>
           {/* 描述的 id 和 aria-describedby 都交给 Radix 管（每个弹层各生成一个，不重名）：有描述时什么都不传；
               没描述时显式传 undefined，Radix 就不写 aria-describedby，也不报缺描述的警告 */}
-          <RD.Content ref={content} forceMount className={styles.content} onCloseAutoFocus={restoreFocus} {...(description === undefined ? { 'aria-describedby': undefined } : {})}>
+          <RD.Content
+            ref={content}
+            forceMount
+            className={center === true ? `${styles.content} ${styles.center}` : styles.content}
+            onCloseAutoFocus={restoreFocus}
+            {...(description === undefined ? { 'aria-describedby': undefined } : {})}
+          >
+            {lead == null ? null : <div className={styles.lead}>{lead}</div>}
             <RD.Title className={styles.title}>{title}</RD.Title>
             {description === undefined ? null : (
               <RD.Description className={styles.desc}>{description}</RD.Description>

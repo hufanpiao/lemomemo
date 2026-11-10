@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Dialog } from '../Dialog.tsx';
+import styles from '../Dialog.module.css';
 import { loadMotionFeatures } from '../../../motion/index.ts';
 
 // 动画实现首屏画完以后才由 main.tsx 下载（R-354）；这里没有 main.tsx，测退场和焦点前先等它到
@@ -228,5 +229,43 @@ describe('Dialog 还焦点的时机、退路（审查 L-1～L-3）', () => {
       else expect(document.activeElement === document.body || document.activeElement === null).toBe(true);
       unmount();
     }
+  });
+});
+
+describe('Dialog 的 lead、center（B3 S23，负责人 11-10：麦克风说明卡按线框 s10 加图标、居中）', () => {
+  afterEach(cleanup);
+
+  it('不传：内容区类名只有原来那一个，标题是第一个子元素，没有 lead 容器（和改之前完全一样）', () => {
+    render(<Dialog open onOpenChange={noop} title="t" description="d" />);
+    const d = screen.getByRole('dialog', { hidden: true });
+    expect(d.className).toBe(styles.content);
+    expect(d.firstElementChild?.tagName).toBe('H2');
+    expect(d.firstElementChild?.textContent).toBe('t');
+    expect(d.querySelector(`.${styles.lead}`)).toBeNull();
+    expect(d.querySelector(`.${styles.center}`)).toBeNull();
+  });
+
+  it('lead={null}：不多出 lead 容器，标题仍是第一个子元素（S23 代码审建议 5）', () => {
+    render(<Dialog open onOpenChange={noop} title="t" lead={null} />);
+    const d = screen.getByRole('dialog', { hidden: true });
+    expect(d.querySelector(`.${styles.lead}`)).toBeNull();
+    expect(d.firstElementChild?.tagName).toBe('H2');
+  });
+
+  it('center={false} 和不传一样', () => {
+    render(<Dialog open onOpenChange={noop} title="t" center={false} />);
+    expect(screen.getByRole('dialog', { hidden: true }).className).toBe(styles.content);
+  });
+
+  it('传 lead、center：lead 排在标题前面，内容区多一个居中类', () => {
+    render(<Dialog open onOpenChange={noop} title="t" description="d" lead={<i data-testid="ico" />} center />);
+    const d = screen.getByRole('dialog', { hidden: true });
+    expect(d.className).toBe(`${styles.content} ${styles.center}`);
+    const first = d.firstElementChild;
+    expect(first?.className).toBe(styles.lead);
+    expect(first?.querySelector('[data-testid="ico"]')).not.toBeNull();
+    expect(first?.nextElementSibling?.textContent).toBe('t');
+    // 标题仍然是弹层的可访问名称
+    expect(screen.getByRole('dialog', { hidden: true, name: 't' })).toBe(d);
   });
 });

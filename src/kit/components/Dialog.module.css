@@ -42,3 +42,18 @@
   color: var(--text-2);
   font-size: var(--fs-14);
 }
+
+/* 可选：标题上面的图标（lead）和整体居中（center）。B3 S23，负责人 11-10 定：麦克风说明卡按线框 s10 加麦克风图标、文字居中；
+   目前只有 MicCard 用，别的弹层不传，以上规则不变 */
+.lead {
+  display: flex;
+  margin: 4px 0 14px;
+}
+
+.center {
+  text-align: center;
+}
+
+.center .lead {
+  justify-content: center;
+}

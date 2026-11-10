@@ -44,4 +44,6 @@ export const ko: Readonly<Record<keyof typeof zh, string>> = {
   'trash.restored': '복원했어요', // REVIEW(ko)
   'trash.kind.events': '일정', // REVIEW(ko)
   'trash.kind.todos': '할 일', // REVIEW(ko)
+  'today.micDenied': '마이크가 꺼져 있어서 음성 기록을 쓸 수 없어요. iPhone “설정”에서 이 앱의 마이크를 켜 주세요.', // REVIEW(ko)
+  'today.micDeniedWeb': '마이크가 꺼져 있어서 음성 기록을 쓸 수 없어요. 브라우저 설정에서 이 사이트의 마이크를 켜 주세요.', // REVIEW(ko) R-367 iPhone 아닌 기기
 };
