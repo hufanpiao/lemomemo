@@ -1,0 +1,253 @@
+# ai-eval：测试集 ① AI 识别回归（B3 任务单 S19、Q5；AI 句库 5.2～5.4；R-162、R-175、R-168）
+# 只能手动触发：Actions › ai-eval › Run workflow，选要评的分支（不达门槛的改动不合并，所以合并前就在 PR 分支上跑）。
+# 用仓库级 secret GEMINI_EVAL_KEY（预览谷歌项目 lemomemo-preview 里单独一把，负责人本人放进 GitHub，环境清单第四节）；
+# 只在“查密钥”“跑评测和补跑”“上传前扫密钥原值”三步的 env 里出现。没有这把 secret 时第一步就报错退出，不会空跑出一份“通过”。
+# 流程：第一遍全量跑 → 判一次分拿到答错的句子 → 这些句子用 run.ts --only 补跑 3 次（句库 4.2、5.2）→ 带补跑结果最终判分
+# （门槛只按第一遍判，补跑只用来分稳定错 / 偶尔错）→ 扫密钥原值 → 查点开头的文件 → 上传 → 判分“通过”这一步才绿。
+# **仓库是公开仓库：工作流产物登录 GitHub 的任何人都能下载**（保留 30 天）。产物里有每句的句库原文和模型原文（负责人的句子已换化名，
+# 句库 5.3），不提交进仓库（tests/ai/reports/ 在 .gitignore 里，BE-1 安全审建议 6）；摘要页只放句子 id 和数字。
+# 正式报告由评测员下载产物后写进 docs/06-测试/AI回归/（句库 5.3）。
+# 第三方 action 一律按提交 SHA 锁定，行尾注释写版本号（15.3 第 7 条），和 ci.yml 同一版。
+# 额度：免费层每分钟 15 次、每天 500 次（环境清单第四节 GEMINI_API_KEY 一行），run.ts 按 80% 放慢（每分钟 12 次，Q6）；补跑和第一遍
+# 合计不超过每天上限的 80%（下面按已调的句数扣）。不和负责人试用预览版、R-68 实测排同一天（R-168）；同一天已经跑过，rpd 要先扣掉那一次。
+name: ai-eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 模型名（B3 锁 gemini-3.5-flash-lite，Q6；换模型等于改提示词，要全量重跑）
+        type: string
+        required: true
+        default: gemini-3.5-flash-lite
+      rpm:
+        description: 额度截图上的每分钟上限（run.ts 按 80% 放慢）
+        type: number
+        required: true
+        default: 15
+      rpd:
+        description: 额度截图上的每天上限（第一遍加补跑合计按 80% 计；当天已跑过要先扣掉）
+        type: number
+        required: true
+        default: 500
+      baseline:
+        description: 上一次的判分结果（仓库里 docs/06-测试/AI回归/ 下的 .score.json，可空；空 = 这次就是基线）
+        type: string
+        required: false
+        default: ''
+
+# 默认不给任何权限
+permissions: {}
+
+# 同时只跑一份，不取消已在跑的（取消了额度照样花掉）
+concurrency:
+  group: ai-eval
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '24'
+  FORCE_COLOR: '0'
+
+jobs:
+  eval:
+    name: 测试集 ① 回归（真调用 Gemini）
+    runs-on: ubuntu-24.04
+    # 约 176 句 × 每分钟 12 次 ≈ 15 分钟，错的句子补跑 3 遍，加安装和复制步骤
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: 查评测密钥（没有就报错退出，不空跑）
+        env:
+          GEMINI_EVAL_KEY: ${{ secrets.GEMINI_EVAL_KEY }}
+        run: |
+          if [ -z "${GEMINI_EVAL_KEY:-}" ]; then
+            echo "::error::仓库没有 secret GEMINI_EVAL_KEY（或为空）：请负责人按环境清单第四节在预览谷歌项目建一把评测密钥、放进仓库级 secret，再重跑"
+            exit 1
+          fi
+          echo "GEMINI_EVAL_KEY 已设置"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          # 和 ci.yml、本机同一版（架构 8.6）
+          deno-version: 2.9.8
+
+      - name: 安装依赖（不跑任何安装脚本；deno.json 的 nodeModulesDir=manual 直接用这份 node_modules）
+        run: |
+          npm ci --ignore-scripts
+          bash build/ci/rebuild-allowlist.sh
+
+      - name: 跑评测和补跑（run.ts 第一遍全量；答错的句子 --only 补跑 3 次）
+        id: run
+        env:
+          GEMINI_EVAL_KEY: ${{ secrets.GEMINI_EVAL_KEY }}
+          EVAL_MODEL: ${{ inputs.model }}
+          EVAL_RPM: ${{ inputs.rpm }}
+          EVAL_RPD: ${{ inputs.rpd }}
+        run: |
+          # 报告日期按首尔（句库 5.3 文件名里的日期）；模型名、rpm、rpd 由 run.ts 校验（只认小写字母数字点横线、正整数）
+          day="$(TZ=Asia/Seoul date +%F)"
+          eval_run() {
+            deno run --frozen \
+              --allow-read \
+              --allow-write=tests/ai/reports,supabase/functions/_shared/gen \
+              --allow-run=node \
+              --allow-env=GEMINI_EVAL_KEY,PATH,SYSTEMROOT \
+              --allow-net=generativelanguage.googleapis.com \
+              tests/ai/run.ts --model "$EVAL_MODEL" --rpm "$EVAL_RPM" --date "$day" "$@"
+          }
+          eval_run --rpd "$EVAL_RPD"
+          shopt -s nullglob
+          files=(tests/ai/reports/set1-*.json)
+          if [ "${#files[@]}" -ne 1 ]; then
+            echo "::error::tests/ai/reports/ 里应正好有一份第一遍结果，现在是 ${#files[@]} 份"
+            exit 1
+          fi
+          first="${files[0]}"
+          echo "file=$first" >> "$GITHUB_OUTPUT"
+          # 第一遍判一次分，只为拿到答错的句子（观察句不补跑；没拿到输出的不算答错，结论本来就是未定）
+          set +e
+          deno run --frozen --allow-read --allow-write=tests/ai/reports tests/ai/score.ts --run "$first" > /dev/null
+          code=$?
+          set -e
+          case "$code" in
+            0|10|11) ;;
+            *) echo "::error::第一遍判分出错（退出码 $code）"; exit 1 ;;
+          esac
+          wrong="$(jq -r '[.rows[] | select(.status == "wrong" and .scored != "observe") | .id] | join(",")' "${first%.json}.score.json")"
+          if [ -z "$wrong" ]; then
+            echo "第一遍没有答错的句子，不补跑"
+            exit 0
+          fi
+          echo "第一遍答错 $(printf '%s' "$wrong" | tr ',' '\n' | wc -l) 句，补跑 3 次"
+          # 每天上限 80% 里扣掉已经调过的句数：剩下 left 句，传给 run.ts 的 rpd 取 ceil(left / 0.8)，它再乘 0.8 正好不超过 left
+          cap=$(( EVAL_RPD * 8 / 10 ))
+          # 两次 run.ts 之间隔一个调用间隔：run.ts 只在一次运行内部限速，新一次的第一句会紧跟上一次的最后一句。
+          # 和 run-core.ts 的 paceOf 同一算法（每分钟 floor(rpm * 0.8) 次），秒数向上取整，保证跨两次运行也不超过每分钟上限的 80%
+          per_min=$(( EVAL_RPM * 8 / 10 ))
+          gap=$(( (60 + per_min - 1) / per_min ))
+          for i in 1 2 3; do
+            # 已调的句数 = 第一遍加已有的补跑结果（nullglob：还没有补跑时只读第一遍）
+            only=(tests/ai/reports/only-*.json)
+            used="$(jq -s 'map(.meta.called) | add' "$first" "${only[@]}")"
+            left=$(( cap - used ))
+            if [ "$left" -lt 1 ]; then
+              echo "::warning::每天上限的 80% 已用完（已调 $used 句），第 $i 次补跑不跑了；没补跑够的句子判成「未定」"
+              break
+            fi
+            sleep "$gap"
+            eval_run --rpd $(( (left * 5 + 3) / 4 )) --only "$wrong"
+          done
+
+      - name: 判分（score.ts：按 R-162、R-175 的门槛，只按第一遍；补跑结果分稳定错 / 偶尔错）
+        id: score
+        # 补跑那一段失败了也照样用第一遍判分（补跑不够的句子判成“未定”）
+        if: always() && steps.run.outputs.file != ''
+        env:
+          RESULT: ${{ steps.run.outputs.file }}
+          BASELINE: ${{ inputs.baseline }}
+        run: |
+          args=(--run "$RESULT")
+          shopt -s nullglob
+          for f in tests/ai/reports/only-*.json; do args+=(--retry "$f"); done
+          if [ -n "$BASELINE" ]; then
+            # 只认仓库里 AI 回归目录下的判分结果，不许跳出目录
+            case "$BASELINE" in
+              *..*) echo "::error::baseline 里不许有 .."; exit 1 ;;
+              docs/06-测试/AI回归/*.score.json) ;;
+              *) echo "::error::baseline 要是 docs/06-测试/AI回归/ 下的 .score.json"; exit 1 ;;
+            esac
+            if [ ! -f "$BASELINE" ]; then
+              echo "::error::找不到 baseline：$BASELINE"
+              exit 1
+            fi
+            args+=(--baseline "$BASELINE")
+          fi
+          set +e
+          deno run --frozen --allow-read --allow-write=tests/ai/reports tests/ai/score.ts "${args[@]}"
+          code=$?
+          set -e
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          md="${RESULT%.json}.score.md"
+          if [ -f "$md" ]; then cat "$md" >> "$GITHUB_STEP_SUMMARY"; fi
+          # 0 通过、10 不通过、11 未定：都要先上传产物，结论在最后一步判；其他退出码是判分本身出错
+          case "$code" in
+            0|10|11) ;;
+            *) echo "::error::判分出错（退出码 $code）"; exit 1 ;;
+          esac
+
+      - name: 上传前扫密钥原值（产物公开可下载；扫到就失败、不上传）
+        id: keyscan
+        if: always() && steps.run.outputs.file != ''
+        env:
+          GEMINI_EVAL_KEY: ${{ secrets.GEMINI_EVAL_KEY }}
+        run: |
+          if [ -z "${GEMINI_EVAL_KEY:-}" ]; then
+            echo "::error::没有 GEMINI_EVAL_KEY，扫不了，不上传"
+            exit 1
+          fi
+          # -R：跟进符号链接扫（upload-artifact 会跟进链接上传）；-F 按原文比；-f 从管道读密钥，值不进 grep 的命令行参数；
+          # 只打印文件名，不打印匹配到的内容。grep 退出码：0 扫到、1 没扫到、其他是读出错（例如文件读不了、链接指向不存在的目标）
+          set +e
+          hits="$(grep -RlF -f <(printf '%s' "$GEMINI_EVAL_KEY") tests/ai/reports)"
+          rc=$?
+          set -e
+          if [ -n "$hits" ]; then
+            echo '含密钥原值的文件：'
+            printf '%s\n' "$hits"
+          fi
+          case "$rc" in
+            0)
+              echo "::error::tests/ai/reports 里有 $(printf '%s\n' "$hits" | wc -l) 个文件含评测密钥原值，不上传；请负责人到 AI Studio 作废这把密钥、重新生成"
+              exit 1
+              ;;
+            1)
+              echo "没有扫到密钥原值"
+              ;;
+            *)
+              echo "::error::扫密钥时 grep 出错（退出码 $rc），没扫全，不上传"
+              exit 1
+              ;;
+          esac
+
+      - name: 要上传的 tests/ai/reports 里不许有点开头的文件（upload-artifact 默认不传它们，会被悄悄漏掉）
+        if: always() && steps.keyscan.outcome == 'success'
+        run: |
+          # -L：跟进符号链接查（upload-artifact 会跟进链接上传）；链接成环等 find 出错时，bash -e 让这一步失败
+          hidden="$(find -L tests/ai/reports -name '.*' -print)"
+          if [ -n "$hidden" ]; then
+            echo '点开头的文件或目录（每行一个，以 tests/ai/reports/ 开头）：'
+            printf '%s\n' "$hidden"
+            count="$(find -L tests/ai/reports -name '.*' -print0 | tr -cd '\0' | wc -c)"
+            echo "::error::tests/ai/reports 里有 $count 个点开头的文件或目录，upload-artifact 默认不传（include-hidden-files 默认 false），上传后会少文件；列表见上面的日志"
+            exit 1
+          fi
+
+      - name: 上传结果和判分（评测员下载后存档；公开仓库，登录 GitHub 的人都能下载；保留 30 天）
+        if: always() && steps.keyscan.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ai-eval-${{ github.run_id }}
+          path: tests/ai/reports/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 结论（只有判分“通过”这一步才绿）
+        env:
+          CODE: ${{ steps.score.outputs.code }}
+        run: |
+          case "$CODE" in
+            0) echo "判分：通过" ;;
+            10) echo "::error::判分：不通过（达不到 R-162 / R-175 的门槛，不合并、不上线；明细见摘要和产物）"; exit 1 ;;
+            11) echo "::error::判分：未定（句库和结果对不上、有句子没跑到或没拿到输出、负责人句未确认、补跑不够，见摘要的未定原因）"; exit 1 ;;
+            *) echo "::error::没有判分结论"; exit 1 ;;
+          esac

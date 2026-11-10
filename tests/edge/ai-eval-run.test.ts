@@ -12,7 +12,7 @@ import { GeminiProvider } from '../../supabase/functions/_shared/ai/gemini.ts';
 import { loadCassette, type Cassette } from '../ai/replay/cassette.ts';
 import { replay, REPLAY_KEY, REPLAY_MODEL } from '../ai/replay/replay.ts';
 import {
-  FEATURES, paceOf, parseArgs, parseSet, PROJECTS, reportName, runEval, runSet, type EvalDeps, type EvalRow,
+  FEATURES, onlyName, paceOf, parseArgs, parseOnly, parseSet, PROJECTS, reportName, runEval, runSet, selectRows, type EvalDeps, type EvalRow,
 } from '../ai/run-core.ts';
 
 const { parseWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
@@ -62,7 +62,7 @@ describe('评测骨架：参数和速度', () => {
   });
   it('命令行：--model、--rpm、--rpd 必填，没有默认值；--replay 只用回放桩；--date 只认 YYYY-MM-DD；不认的参数报错', () => {
     expect(parseArgs(['--model', 'gemini-3.5-flash-lite', '--rpm', '15', '--rpd', '1000', '--date', '2026-11-20']))
-      .toEqual({ model: 'gemini-3.5-flash-lite', rpm: 15, rpd: 1000, date: '2026-11-20', replay: null });
+      .toEqual({ model: 'gemini-3.5-flash-lite', rpm: 15, rpd: 1000, date: '2026-11-20', replay: null, only: null });
     expect(parseArgs(['--replay', 'parse-ok', '--rpm', '60', '--rpd', '100', '--date', '2026-11-20']).replay).toBe('parse-ok');
     expect(() => parseArgs(['--rpm', '15', '--rpd', '1000', '--date', '2026-11-20'])).toThrow(/--model/);
     expect(() => parseArgs(['--model', 'm', '--rpd', '1000', '--date', '2026-11-20'])).toThrow(/--rpm/);
@@ -207,6 +207,88 @@ describe('评测骨架：主流程 runEval 的顺序（代码审 M1、S1、S6）
     await runEval(['--replay', 'parse-ok', '--rpm', '60', '--rpd', '100', '--date', '2026-11-20'], f.deps);
     expect(f.log).toEqual(['replay:parse-ok', 'copy', 'rows', 'load', 'write:temp']);
     expect(JSON.parse(f.written[0]?.json ?? '{}').meta.mode).toBe('replay:parse-ok');
+  });
+});
+
+describe('评测骨架：--only 只跑指定句子（S19 补跑）', () => {
+  const R3 = parseSet('zh.jsonl', [row(), row({ id: 'Z02' }), row({ id: 'K10', locale: 'ko' })].join('\n'));
+  /** 和上面同样的全替身，句库三句 Z01、Z02、K10；记下每次调用的句子 */
+  function deps3(key?: string) {
+    const log: string[] = [];
+    const texts: string[] = [];
+    const written: { where: string; name: string; json: string }[] = [];
+    const c = fakeClock();
+    let n = 0;
+    const d: EvalDeps = {
+      getKey: () => { log.push('key'); return key; },
+      copyShared: async () => { log.push('copy'); },
+      readRows: async () => { log.push('rows'); return R3; },
+      loadParse: async () => { log.push('load'); return async (input) => { texts.push(input.locale); return { ok: false, reason: 'timeout' } as const; }; },
+      liveProvider: (model) => { log.push(`live:${model}`); return new GeminiProvider(model, 'k', async () => new Response('{}')); },
+      replayProvider: (name) => { log.push(`replay:${name}`); return { provider: new GeminiProvider(REPLAY_MODEL, REPLAY_KEY, async () => new Response('{}')), model: REPLAY_MODEL }; },
+      write: async (where, name, json) => { log.push(`write:${where}`); written.push({ where, name, json }); return `/x/${name}.json`; },
+      clock: c.clock, sleep: c.sleep, nowIso: () => `2026-11-20T03:15:22.${String(n++).padStart(3, '0')}Z`,
+    };
+    return { d, log, texts, written };
+  }
+  const BASE = ['--rpm', '60', '--rpd', '100', '--date', '2026-11-20'];
+
+  it('参数：逗号分开；空项、重复、怪字符、空值都报错', () => {
+    expect(parseArgs(['--replay', 'parse-ok', ...BASE, '--only', 'K10,Z01']).only).toEqual(['K10', 'Z01']);
+    expect(parseOnly(' Z01 , K10 ')).toEqual(['Z01', 'K10']);
+    for (const bad of ['Z01,,K10', 'Z01,', ',Z01', 'Z01,Z01', '../x', 'Z 01', 'Z01;rm', `Z${'1'.repeat(32)}`]) expect(() => parseOnly(bad), bad).toThrow(/--only/);
+    expect(() => parseOnly(Array.from({ length: 501 }, (_, i) => `Z${i}`).join(','))).toThrow(/最多 500/);
+    expect(() => parseArgs(['--replay', 'parse-ok', ...BASE, '--only'])).toThrow(/--only 缺值/);
+    expect(() => parseArgs(['--replay', 'parse-ok', ...BASE, '--only', 'Z01', '--only', 'Z02'])).toThrow(/--only 写了两次/);
+  });
+
+  it('挑句子保持句库顺序；有一个 id 句库里没有就报错，列出全部缺的', () => {
+    expect(selectRows(R3, ['K10', 'Z01']).map((r) => r.id)).toEqual(['Z01', 'K10']);
+    expect(selectRows(R3, null).map((r) => r.id)).toEqual(['Z01', 'Z02', 'K10']);
+    expect(() => selectRows(R3, ['Z01', 'X9', 'Y9'])).toThrow('--only 里有句库没有的 id：X9、Y9');
+  });
+
+  it('回放模式：只调指定的句子，结果名另起（only-…-t<时刻>），meta 记下 only 和 total', async () => {
+    const f = deps3();
+    const r = await runEval(['--replay', 'parse-ok', ...BASE, '--only', 'K10'], f.d);
+    expect(f.log).toEqual(['replay:parse-ok', 'copy', 'rows', 'load', 'write:temp']);
+    expect([r.called, f.texts]).toEqual([1, ['ko']]);
+    const name = f.written[0]?.name ?? '';
+    expect(name).toBe(`only-set1-2026-11-20-${PROMPT_VERSION.parse}-${REPLAY_MODEL}-t031522000`);
+    expect(name.startsWith('set1-')).toBe(false);   // 工作流按 set1-*.json 找第一遍，补跑不能混进去
+    const meta = JSON.parse(f.written[0]?.json ?? '{}').meta;
+    expect([meta.only, meta.total, meta.called]).toEqual([['K10'], 1, 1]);
+  });
+
+  it('真调用模式：同样只调指定的句子，写进 reports', async () => {
+    const f = deps3('k-not-real');
+    const r = await runEval(['--model', 'gemini-3.5-flash-lite', ...BASE, '--only', 'Z02,K10'], f.d);
+    expect(f.log).toEqual(['key', 'copy', 'rows', 'load', 'live:gemini-3.5-flash-lite', 'write:reports']);
+    expect([r.called, f.texts]).toEqual([2, ['zh', 'ko']]);
+    expect(f.written[0]?.name).toMatch(/^only-set1-2026-11-20-parse\.v\d+-gemini-3\.5-flash-lite-t\d{9}$/);
+    expect(f.written[0]?.json).not.toContain('k-not-real');
+  });
+
+  it('id 不存在：报错退出，不 import、一句都不调、不落盘（回放和真调用都一样）', async () => {
+    for (const argv of [['--replay', 'parse-ok', ...BASE, '--only', 'Z01,X9'], ['--model', 'gemini-3.5-flash-lite', ...BASE, '--only', 'X9']]) {
+      const f = deps3('k-not-real');
+      await expect(runEval(argv, f.d)).rejects.toThrow(/句库没有的 id：X9/);
+      expect(f.log.filter((x) => x === 'load' || x.startsWith('write'))).toEqual([]);
+      expect(f.texts).toEqual([]);
+    }
+  });
+
+  it('不带 --only：报告名、meta 照旧（only 为 null），和第一遍完全一样', async () => {
+    const f = deps3();
+    await runEval(['--replay', 'parse-ok', ...BASE], f.d);
+    expect(f.written[0]?.name).toBe(reportName('2026-11-20', PROMPT_VERSION.parse, REPLAY_MODEL));
+    expect(JSON.parse(f.written[0]?.json ?? '{}').meta.only).toBeNull();
+    expect(f.texts).toHaveLength(3);
+  });
+
+  it('结果名：时刻不是 UTC ISO 报错', () => {
+    expect(onlyName('set1-x', '2026-11-20T23:59:59.999Z')).toBe('only-set1-x-t235959999');
+    expect(() => onlyName('set1-x', '2026-11-20T23:59:59+09:00')).toThrow();
   });
 });
 

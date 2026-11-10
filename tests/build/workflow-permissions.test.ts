@@ -294,3 +294,130 @@ describe('desktop.yml 整理产物：安装包名来自 desktop_scan --package',
     expect(t).toContain('node build/ci/desktop_scan.mjs --env "$LEMO_ENV" --latest out/latest.json');
   });
 });
+
+// 评测工作流 ai-eval.yml（B3 任务单 S19、Q5；AI 句库 5.2）：只能手动触发；机密只有 GEMINI_EVAL_KEY、只在“查密钥”“跑评测和补跑”“上传前扫密钥原值”三步的 env 里；
+// 除这两行外照上面 desktop / release-build 的规矩（顶层 {}、只 contents: read、钉 SHA）；上传前查点开头的文件；
+// 手动输入只经 env 进脚本（不在 run 里直接展开）；没有这把 secret 时第一步就失败、不空跑，也不把值打进日志
+describe('ai-eval.yml：只手动触发、只用一把评测密钥', () => {
+  const t = readFileSync(join(ROOT, '.github/workflows/ai-eval.yml'), 'utf8');
+  const all = steps(t);
+  /** 步骤 env 里那一行（缩进 10 格） */
+  const SECRET_LINE = '          GEMINI_EVAL_KEY: ${{ secrets.GEMINI_EVAL_KEY }}\n';
+  it('触发只有 workflow_dispatch', () => {
+    const on = t.slice(t.indexOf('\non:\n'), t.indexOf('\npermissions:'));
+    expect(on.split('\n').filter((l) => /^ {2}[^\s#]/.test(l)).map((l) => l.trim())).toEqual(['workflow_dispatch:']);
+  });
+  it('机密只有 GEMINI_EVAL_KEY，正好三处，在“查评测密钥”“跑评测和补跑”“上传前扫密钥原值”三步的 env 里', () => {
+    expect(codeLines(t).map((x) => x.line).join('\n').match(/secrets\.\w+/g)).toEqual(['secrets.GEMINI_EVAL_KEY', 'secrets.GEMINI_EVAL_KEY', 'secrets.GEMINI_EVAL_KEY']);
+    const withKey = all.filter((s) => `${s.text}\n`.includes(`        env:\n${SECRET_LINE}`));
+    expect(withKey.map((s) => s.name.split('（')[0])).toEqual(['查评测密钥', '跑评测和补跑', '上传前扫密钥原值']);
+  });
+  it('去掉那三行以后，权限、钉 SHA 等规矩和 desktop / release-build 一样', () => {
+    expect(t.split(SECRET_LINE).length).toBe(4);
+    expect(checkWorkflow(t.split(SECRET_LINE).join(''))).toEqual([]);
+  });
+  it('上传前一步查点开头的文件；扫密钥原值那一步过了才查、才上传', () => {
+    expect(all.filter((s) => s.text.includes('upload-artifact@')).length).toBe(1);
+    expect(checkUploads(t)).toEqual([]);
+    const i = all.findIndex((s) => s.text.includes('upload-artifact@'));
+    expect(all[i]?.cond).toBe("always() && steps.keyscan.outcome == 'success'");
+    expect(all[i - 2]?.name.startsWith('上传前扫密钥原值')).toBe(true);
+    expect(all[i - 2]?.text).toMatch(/^ {8}id: keyscan$/m);
+  });
+  it('手动输入只经 env 进脚本', () => {
+    const uses = t.split('\n').filter((l) => l.includes('${{ inputs.'));
+    expect(uses.length).toBeGreaterThan(0);
+    expect(uses.filter((l) => !/^ {10}[A-Z_]+: \$\{\{ inputs\.\w+ \}\}$/.test(l))).toEqual([]);
+  });
+  // 把某一步的 run 原样取出来真跑
+  const scriptOf = (prefix: string) => {
+    const lines = (all.find((s) => s.name.startsWith(prefix))?.text ?? '').split('\n');
+    return lines.slice(lines.findIndex((l) => l.trim() === 'run: |') + 1).filter((l) => l.startsWith('          ') || l.trim() === '').map((l) => l.slice(10)).join('\n');
+  };
+  const script = scriptOf('查评测密钥');
+  it.skipIf(!BASH)('没有 secret（或为空）：报错退出；有：通过，日志里没有值', () => {
+    const d = mkdtempSync(join(tmpdir(), 'lemo-aieval-'));
+    try {
+      writeFileSync(join(d, 'check.sh'), `${script}\n`);
+      const go = (v: string | undefined) => {
+        const env: Record<string, string> = { PATH: process.env['PATH'] ?? '' };
+        if (v !== undefined) env['GEMINI_EVAL_KEY'] = v;
+        const r = spawnSync(BASH ?? 'bash', ['--noprofile', '--norc', '-eo', 'pipefail', 'check.sh'], { cwd: d, encoding: 'utf8', env });
+        return { code: r.status, out: r.stdout + r.stderr };
+      };
+      for (const v of [undefined, '']) {
+        const r = go(v);
+        expect(r.code).toBe(1);
+        expect(r.out).toContain('::error::仓库没有 secret GEMINI_EVAL_KEY');
+      }
+      const ok = go('AIzaFAKE-not-a-key');
+      expect(ok.code).toBe(0);
+      expect(ok.out).not.toContain('AIzaFAKE');
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+  // 扫密钥那一步真跑：在临时目录里搭 tests/ai/reports，按 grep 的三种退出码各跑一次（安全复查 M1）
+  const KEY = 'AIzaFAKE-scan-0123456789';
+  const scan = (setup: (reports: string, d: string) => void) => {
+    const d = mkdtempSync(join(tmpdir(), 'lemo-aieval-scan-'));
+    try {
+      writeFileSync(join(d, 'scan.sh'), `${scriptOf('上传前扫密钥原值')}\n`);
+      setup(join(d, 'tests', 'ai', 'reports'), d);
+      const r = spawnSync(BASH ?? 'bash', ['--noprofile', '--norc', '-eo', 'pipefail', 'scan.sh'], { cwd: d, encoding: 'utf8', env: { PATH: process.env['PATH'] ?? '', GEMINI_EVAL_KEY: KEY } });
+      return { code: r.status, out: r.stdout + r.stderr };
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  };
+  const reportsWith = (files: Record<string, string>) => (reports: string) => {
+    mkdirSync(reports, { recursive: true });
+    for (const [n, body] of Object.entries(files)) writeFileSync(join(reports, n), body);
+  };
+  it('扫密钥不把密钥放进 grep 的命令行参数（-f 从管道读），用 -R 跟进链接', () => {
+    const sc = scriptOf('上传前扫密钥原值');
+    expect(sc).toContain(`grep -RlF -f <(printf '%s' "$GEMINI_EVAL_KEY") tests/ai/reports`);
+    expect(sc).not.toMatch(/\|\| true/);
+    expect(sc).not.toMatch(/grep[^\n]*-e "\$GEMINI_EVAL_KEY"/);
+  });
+  it.skipIf(!BASH)('扫密钥 grep 退出 0（有文件含原值）：失败，只报文件名、不打印值', () => {
+    const r = scan(reportsWith({ 'set1-a.json': '{"raw":"没有密钥"}', 'only-b.json': `{"raw":"x-goog-api-key: ${KEY}"}` }));
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('tests/ai/reports/only-b.json');
+    expect(r.out).not.toContain('tests/ai/reports/set1-a.json');
+    expect(r.out).toContain('::error::tests/ai/reports 里有 1 个文件含评测密钥原值');
+    expect(r.out).not.toContain(KEY);
+  });
+  it.skipIf(!BASH)('扫密钥 grep 退出 1（没有文件含原值）：通过', () => {
+    const r = scan(reportsWith({ 'set1-a.json': '{"raw":"没有密钥"}', 'only-b.json': '{"raw":"AIzaFAKE-scan-01234"}' }));
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('没有扫到密钥原值');
+  });
+  it.skipIf(!BASH)('扫密钥 grep 退出 2（reports 目录不存在，读出错）：失败、不放行', () => {
+    const r = scan(() => {});
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('::error::扫密钥时 grep 出错（退出码 2），没扫全，不上传');
+    expect(r.out).not.toContain('没有扫到密钥原值');
+  });
+  // Windows 上建符号链接要特权（EPERM），这两条和上面 find -L 那条一样只在 Linux / macOS 上跑（CI 是 ubuntu）
+  it.skipIf(!BASH || process.platform === 'win32')('扫密钥 grep 退出 2（链接指向不存在的目标）：失败、不放行', () => {
+    const r = scan((reports) => {
+      reportsWith({ 'set1-a.json': '{"raw":"没有密钥"}' })(reports);
+      symlinkSync(join(reports, 'nope.json'), join(reports, 'dangling.json'));
+    });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('::error::扫密钥时 grep 出错（退出码 2），没扫全，不上传');
+    expect(r.out).not.toContain('没有扫到密钥原值');
+  });
+  it.skipIf(!BASH || process.platform === 'win32')('扫密钥跟进链接：链接指向 reports 外面的文件里有原值，要被扫到', () => {
+    const r = scan((reports, d) => {
+      reportsWith({ 'set1-a.json': '{"raw":"没有密钥"}' })(reports);
+      writeFileSync(join(d, 'outside.json'), `{"raw":"${KEY}"}`);
+      symlinkSync(join(d, 'outside.json'), join(reports, 'linked.json'));
+    });
+    expect(r.code).toBe(1);
+    expect(r.out).toContain('tests/ai/reports/linked.json');
+    expect(r.out).toContain('::error::tests/ai/reports 里有 1 个文件含评测密钥原值');
+    expect(r.out).not.toContain(KEY);
+  });
+});
