@@ -40,3 +40,43 @@
 2. 锁定覆盖补几块：确认弹窗的 primary / dangerFill 那一对、设备行“移除”、导出行（带 ›）、电脑版录键框和“恢复默认”。这些都换了实现，现在只靠计算样式对比的一次性记录。
 3. W9 记录里 6 条 files.spec、3 条 b1-version-gate 要假后端的，写明在哪次 CI 或哪个环境补跑过，补上结果。
 4. 文件登记册里 linux 基准写的是“官方镜像里 npm ci 按 package-lock 装”，和主持人转述的“Node 26、--engine-strict=false”对不上，统一成实际跑法。第一次 CI 跑 chromium-b2uib-lock 后，在八关自验 ⑦ 里补一句 CI 结果（Node 24 + npm ci 下 0 像素差），把 Node 26 生成的疑问关掉。
+
+## 复审：首屏预加载去重补的三条建议（2026-11-10）
+
+- 审查人：独立代码审查子 agent。只读，没有改代码；本节是唯一写入。
+- 范围：vite.config.ts（注释、buildStart 清 graph）、build/check_size.mjs、build/check_preload.mjs（新）、tests/build/check-preload.test.ts（新，8 条）、tests/build/preload-dedupe.test.ts、文件登记册两行；另看 W9 记录第 48 行、八关自验第 67 行的措辞。
+- 本人跑过：
+  - 两份测试，13 条全过；
+  - 用当前工作区在 scratchpad 临时目录里另构建一份（`vite build --mode e2e --outDir …`，保留 .vite/manifest.json，用完已删），跑 check_size：58 处懒加载核对，0 报错；首屏净增 983 B / 额度 1024 B（基线 111826 B，即首屏 112809 B）；
+  - 拿同一份 manifest，把“不去重时的表”当成实际的表喂给 checkCall：55 处里 53 处报错，没报错的 2 处是宿主闭包和目标闭包本来就不重叠。
+
+**分数：8.5 / 10，及格。**
+
+### 抽查前端 B 的说法
+
+- “不去重时 57 处里 55 处报错”：说法成立。我模拟出来是 55 处里 53 处，比例一致；条数差几处，是因为工作区代码在两次构建之间又变了（我这份是 58 处）。
+- “首屏 112729 B”：我这份是 112809 B，多 80 B，也是工作区里别人的改动带进来的；仍在额度内。提交时以 CI 那次构建的数为准。
+
+### 必改
+
+- **M1 两处 CI 结论要标成“推断”，不能写成已核实。**
+  - docs/03-评审/B2-UI-b/W3W4-八关自验.md:67 开头直接写“0 像素差，通过”，“按步骤结果和配置推出来”的说明放在段尾，读的人只看开头会当成看过日志。改成开头就写“按 CI 步骤结果推断：0 像素差”，后面再列依据（retries 0、maxDiffPixels 0、用例里没有 skip）。
+  - docs/03-评审/B2-UI-b/W9-csp夹具收尾-e2e跑通记录.md:48 “所以这 9 条在 CI 里都跑了、最终都通过”同样是推断：改成“按步骤结果和配置推断”。后面“还没核实到的一点”（有没有靠重试才过）保留。
+
+### check_preload.mjs 会不会在 CI 产物里误报
+
+照 CI 的跑法（build_web.mjs:65 在构建里、.vite 还在时调 check_size），用的是这次构建自己的 manifest，当前产物 0 误报。以后可能误报的地方有三处，都不拦：
+
+1. **只按 manifest 推断“该有表”**（build/check_preload.mjs:103-106）：
+   - 动态 import 的目标本身就在宿主静态闭包里时，去重会把整张表去空，Vite 就不写表了，这里会报“整张预加载表不见了”；
+   - 动态 import 的目标不走 Vite 预加载时（例如带 `/* @vite-ignore */`），也会报同一个错。
+   - 现在产物里这两种都是 0 处。建议算出来“该留的 JS 为空、CSS 也为空”时不要求有表。
+2. **用表的第一项当目标**（:64-66）：同样是目标在宿主闭包里的情况，第一项会变成别的块或 CSS，报“表的第一项不是 JS”。建议从代码里 `import("./x.js")` 的地址取目标，或者对照 manifest 的 dynamicImports。
+3. **manifest 的后备路径**（:12）：找不到 `<appDir>/.vite` 时，会去读 dist/vite-manifest。那份只有默认输出目录 dist/web 才会更新（build_web.mjs:70）。所以构建完以后对 dist/web-xxx 单独跑 `npm run size -- --app-dir …`，会拿到别的构建的 manifest，大面积报错。我在旧的 dist/web-b8833、dist/web-visual 上跑，就出了 103、105 条假错。check_size 原来的体积检查也是这个找法，但它不会这样硬报错。建议后备 manifest 只在 appDir 是 dist/web/app 时才用，或者先核对 manifest 里的文件在 assets 里都存在，不存在就报“manifest 和产物对不上”。
+
+### 上一轮三条建议
+
+- 建议 1（真实产物核对）：已解决。check_preload.mjs 核三件事（宿主已加载的 JS 不列；其余 JS 一个不少、也不多；CSS 和不去重时一样），按 Vite 8.3.5 collectPreloadDependencies 的顺序重算（:37-50，和 node.js:27240 一带一致）。check_size.mjs:150-155 每次构建都调。测试 8 条覆盖了通过、①、② 少 JS、② 多 JS、② 整张表不见、③ CSS 少一个、③ 顺序变、没有 assets 目录时跳过。
+- 建议 2（钩子顺序注释、buildStart 清 graph）：已解决，vite.config.ts 里 preloadGraph 的注释和 buildStart 都在。
+- 建议 3（chunk import map 失效方向）：已解决，写在 dropHostLoaded 上方的注释里。
+- 文件登记册：两行在（:920、:3227）。

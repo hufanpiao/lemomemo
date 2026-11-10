@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { checkPreload } from './check_preload.mjs';
 
 export const BUDGET = { firstScreenJs: 150 * 1024, totalJs: 250 * 1024 };
 
@@ -146,6 +147,12 @@ function main() {
     console.error(g.error);
     failed = true;
   } else console.log(`B3 首屏净增：${g.net} B / 额度 ${g.limit} B（基线 ${g.base} B）`);
+  // 预加载表去重的产物核对（vite.config.ts 的 dropHostLoaded，见 check_preload.mjs）。manifest 里该有表的动态 import 在产物里找不到也算失败
+  const p = checkPreload(appDir);
+  if (p.errors.length) {
+    for (const e of p.errors) console.error(`预加载表去重：${e}`);
+    failed = true;
+  } else if (p.calls > 0) console.log(`预加载表去重：${p.calls} 处懒加载都核对过（宿主已加载的 JS 不列、其余 JS 一个不少、CSS 和不去重时一样）`);
   if (failed) process.exit(1);
 }
 

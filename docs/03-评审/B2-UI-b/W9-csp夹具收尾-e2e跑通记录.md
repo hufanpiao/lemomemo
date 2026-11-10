@@ -41,9 +41,11 @@
 |---|---|---|
 | `files.spec.ts` 三条 × 两个浏览器（6 条） | 要用本机假后端（`fake-backends.ts` 的 S3 替身、假 files_authorize）。这次按规定没起假后端，返回 503 try_later | 环境原因，不是代码问题。要跑得在有假后端的环境（CI，或主持人指定的端口）补 |
 | `b1-version-gate.spec.ts` 三条（chromium，3 条） | 同样要假 Supabase 上游，返回 502 | 同上 |
+| `b1-settings.spec.ts` 的 :112、:185、:226（chromium，3 条） | 同一个 worker 连着三条，页面根本没画出来：页面快照是空的，5 秒内找不到 `main`。同一轮里 webkit 的这三条都通过 | 单独重跑 `b1-settings`，两个浏览器各 3 遍，51 条通过、3 条跳过、0 条失败。判断是机器忙时偶发的冷启动慢，不是夹具或设置页的问题 |
 
 **要假后端的 9 条由 CI 补跑**（代码审 W3W4 建议 3，主持人 11-09 定）：`files.spec.ts` 6 条、`b1-version-gate.spec.ts` 3 条，由 CI 的 e2e 任务补跑：ci.yml 的“Playwright（e2e 模式构建 + wrangler pages dev dist/web……）”那一步，也就是 `npm run e2e`，会按 playwright.config.ts 起假后端（`tests/e2e/fake-backends.ts`，9199、9198）。本机按规定不起假后端，所以这 9 条以 CI 结果为准，本单提交后第一次 CI 跑完再把结果补在这里。
-| `b1-settings.spec.ts` 的 :112、:185、:226（chromium，3 条） | 同一个 worker 连着三条，页面根本没画出来：页面快照是空的，5 秒内找不到 `main`。同一轮里 webkit 的这三条都通过 | 单独重跑 `b1-settings`，两个浏览器各 3 遍，51 条通过、3 条跳过、0 条失败。判断是机器忙时偶发的冷启动慢，不是夹具或设置页的问题 |
+
+**CI 结果（11-10 补，推断）**：本单在 10e2073，推送后第一次全绿是 5d442d4（含 10e2073）：ci run 42727513030、unit run 42727512591、deploy-preview run 42727512471 都成功，都是第 1 次运行（run_attempt 1）。ci 的“端到端（Playwright，带 CSP）”任务（job 129536834951）里，`npm run e2e` 那一步是 success。这一步用 `shell: bash` 加 `tee`，失败会让这一步变红；假后端是 playwright.config.ts 的 webServer，起不来整步就失败；`files.spec.ts` 没有跳过条件，`b1-version-gate.spec.ts` 只在非 chromium 下跳过（计入的 3 条正是 chromium）；`forbidOnly` 开着。按步骤结果和配置推断：这 9 条在 CI 里都跑了、最终都通过（没看到逐条日志，见下一句）。**还没核实到的一点**：CI 下 `retries: 1`，这 9 条有没有哪条是“第一次失败、重试才过”（flaky），只有日志看得出。GitHub 的任务日志接口要仓库管理员权限，本机没有 gh 和令牌，匿名下载返回 403（Must have admin rights to Repository），这次运行也没有上传产物，所以没能逐条核对日志。要逐条确认，请有权限的人打开 job 129536834951 的“Playwright（e2e 模式构建……）”那一步，搜 `files.spec.ts`、`b1-version-gate.spec.ts`，看有没有 `flaky` 或 `retry #1`。
 
 ### 审查员点名要的几条
 

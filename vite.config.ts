@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin, type Rolldown } from 'vite';
 import { buildVersion, webOutDir } from './build/assemble_web.mjs';
 
 const root = import.meta.dirname;
@@ -29,6 +29,59 @@ function buildCommit(): string {
   }
 }
 
+/**
+ * 动态 import 的预加载表去重（B2-UI-b 任务单 V2：首屏增量 ≤ 0）。Vite 给每个动态 import 写的预加载表（__vite__mapDeps）是目标块的整个静态闭包，
+ * 发起 import 的那一块（宿主）自己静态引过的块也照列，比如 main 里几十个懒加载每个都列一遍 jsx-runtime、native-bridge。
+ * （以后开了 chunk import map，bundle 的键和预加载表里的文件名会换成另一套，bundle[hostId] 找不到、闭包也对不上，去重会悄悄失效；
+ * 失效方向是安全的：表原样全列，只是 main 块变回长的，check_size 的首屏净增会看到。）宿主在跑，这些块早就加载完了；
+ * 运行时的预加载助手对页面里已有的 <link> 和加载过的地址本来也跳过，列了也白列，只让 main 块的表变长。
+ * 这里只去掉“宿主静态闭包里的 JS”：CSS 不经过 resolveDependencies（Vite 自己把 CSS 拆出来照旧全列），html 宿主（index.html 的 modulepreload 链接）不动。
+ * tests/build/preload-dedupe.test.ts 守着规则；build/check_preload.mjs（check_size 每次构建后调）拿真实产物逐个懒加载核对
+ */
+export function staticClosure(bundle: Rolldown.OutputBundle, fileName: string): Set<string> {
+  const seen = new Set<string>();
+  const visit = (f: string): void => {
+    if (seen.has(f)) return;
+    seen.add(f);
+    const c = bundle[f];
+    if (c?.type === 'chunk') for (const i of c.imports) visit(i);
+  };
+  visit(fileName);
+  return seen;
+}
+
+export function dropHostLoaded(bundle: Rolldown.OutputBundle | undefined, deps: string[], hostId: string, hostType: 'html' | 'js'): string[] {
+  if (hostType !== 'js' || !bundle?.[hostId]) return deps;
+  const loaded = staticClosure(bundle, hostId);
+  return deps.filter((d) => !loaded.has(d));
+}
+
+/**
+ * 产物图在 generateBundle 最前面记下，Vite 改写预加载表也在 generateBundle 里、排在它后面。
+ * 这个先后依赖 Vite 自己的 vite:build-import-analysis 插件的 generateBundle 不是 order: 'pre'（8.3.5 源码 dist/node/chunks/node.js:27164 是普通顺序）；
+ * 升级 Vite 时要重新核对：要是它也改成 pre，就可能排到我们前面，get() 拿到 undefined（buildStart 清过），去重整个不生效，方向安全但首屏会涨。
+ * buildStart 把 graph 清成 undefined，同一个配置连着构建也不会拿到上一次的产物图，“每次构建各用各的”不靠钩子顺序成立
+ */
+function preloadGraph(): { plugin: Plugin; get: () => Rolldown.OutputBundle | undefined } {
+  let graph: Rolldown.OutputBundle | undefined;
+  return {
+    plugin: {
+      name: 'lemo:preload-graph',
+      apply: 'build',
+      buildStart() {
+        graph = undefined;
+      },
+      generateBundle: {
+        order: 'pre',
+        handler(_opts, bundle) {
+          graph = bundle;
+        },
+      },
+    },
+    get: () => graph,
+  };
+}
+
 export default defineConfig(({ mode }) => {
   if (mode === 'production') {
     // 正式版必须带齐公开配置（只认 VITE_PUBLIC_ 前缀，A14）
@@ -41,12 +94,13 @@ export default defineConfig(({ mode }) => {
     if (!sitekey) throw new Error('production build needs VITE_PUBLIC_TURNSTILE_SITE_KEY');
     if (/^[1-3]x0{20}[A-Z]{2}$/.test(sitekey)) throw new Error('production build must not use a Turnstile test sitekey');
   }
+  const graph = preloadGraph();
   return {
     root: resolve(root, 'src'),
     base: '/app/',
     publicDir: resolve(root, 'src/public'),
     envPrefix: 'VITE_PUBLIC_',
-    plugins: [react()],
+    plugins: [react(), graph.plugin],
     resolve: { alias: [ZOD_JITLESS_ALIAS] },
     define: {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
@@ -59,7 +113,10 @@ export default defineConfig(({ mode }) => {
       manifest: true,
       sourcemap: false,
       target: 'es2023',
-      modulePreload: { polyfill: false },
+      modulePreload: {
+        polyfill: false,
+        resolveDependencies: (_file, deps, { hostId, hostType }) => dropHostLoaded(graph.get(), deps, hostId, hostType),
+      },
       // 小文件也不内联成 data: URI（img-src 虽然放了 data:，字体等没放）
       assetsInlineLimit: 0,
       rollupOptions: {
