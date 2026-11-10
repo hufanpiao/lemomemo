@@ -79,7 +79,7 @@ export const TEXT_COLS_UNBOUNDED: Readonly<Record<string, string>> = {};
 export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault' | 'fn_ai', string[]> = {
   authenticated: ['is_active', 'not_password_session', 'report_tz_impl', 'claim_endpoint_impl', 'my_ai_usage_impl', 'record_consent_impl', 'remove_device_impl',
     'devices_session_guard', 'purge_deleted_impl', 'my_sessions_impl', 'touch', 'enqueue_remind', 'row_quota', 'guard_token_revoke',
-    'table_meta_of', 'guard_note_image', 'guard_note_file', 'files_authorize_impl', 'enqueue_anniv_defaults', 'enqueue_embed', 'vault_ai_off',
+    'table_meta_of', 'guard_note_image', 'guard_note_file', 'files_authorize_impl', 'media_quota_guard', 'enqueue_anniv_defaults', 'enqueue_embed', 'vault_ai_off',
     'tags_ok'],   // tags_ok：B1 迁移 20261031110000，notes.tags 的 check 约束用（写 notes 的三种角色都要能执行）
   service_role: ['take_rate', 'session_alive', 'rebind_device_impl', 'long_transactions', 'auth_mail_counts', 'account_usable', 'account_request_deletion', 'account_restore',
     'export_job_start', 'export_job_take', 'db_size_bytes', 'export_size_over', 'tags_ok',

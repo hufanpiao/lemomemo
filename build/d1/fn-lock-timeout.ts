@@ -23,6 +23,8 @@ export const LOCK_TIMEOUT_FNS: Readonly<Record<string, string>> = {
   ai_quota_refund: 'lock_timeout=5s',
   intake_insert: 'lock_timeout=5s',
   ai_classify_pending: 'lock_timeout=5s',  // 迁移 20261110121000（B4，建函数时就带）
+  media_quota_guard: 'lock_timeout=5s',  // 迁移 20261111100000（B4 S10，建函数时就带）
+  media_quota_lock: 'lock_timeout=5s',  // 同一迁移：同一个人的存储额度锁（以后 note_files、头像的额度触发器共用）
 };
 
 export interface FnConfigRow { s: string; f: string; config: string[] | null }

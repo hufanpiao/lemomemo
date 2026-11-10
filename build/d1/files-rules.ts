@@ -35,6 +35,8 @@ export function filesRulesFacts(manifests: readonly Manifest[]): { what: string;
     if (!b.limits) continue;
     const n = b.limits.fileSizeLimit;
     facts.push({ what: `${b.name} 的大小上限 ${n}`, forms: [String(n), String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '_')] });
+    const tn = b.limits.thumbSizeLimit;   // B4 S10 ④：缩略图上限
+    if (tn !== undefined) facts.push({ what: `${b.name} 的缩略图上限 ${tn}`, forms: [String(tn), String(tn).replace(/\B(?=(\d{3})+(?!\d))/g, '_')] });
     for (const t of b.limits.allowedMimeTypes) facts.push({ what: `${b.name} 的类型 ${t}`, forms: [`'${t}'`, `"${t}"`] });
   }
   return facts;

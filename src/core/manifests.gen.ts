@@ -1029,7 +1029,8 @@ export const manifestSnapshot: readonly Manifest[] = [
           "fileSizeLimit": 2097152,
           "allowedMimeTypes": [
             "image/webp"
-          ]
+          ],
+          "thumbSizeLimit": 131072
         },
         "pathPrefix": "<user_id>/",
         "pathPattern": "^[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f-]{36}(\\.t)?\\.webp$",

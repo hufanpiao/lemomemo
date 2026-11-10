@@ -63,6 +63,29 @@ describe('gen_files_rules', () => {
     expect(() => gen(changed)).toThrow(/image\/webp/);
   });
 
+  it('B4 S10 ④：随手记插图的缩略图按 images 桶的 thumbSizeLimit（128 KB），原图仍按 2 MB；附件的缩略图不变（2 MB）', () => {
+    const rules = build(allManifests) as unknown as { bucket: string; variants: { kind: string; maxBytes: number }[] }[];
+    const thumbs = rules.flatMap((r) => r.variants.filter((x) => x.kind === 'thumb').map((x) => [r.bucket, x.maxBytes]));
+    expect(thumbs.sort()).toEqual([['files', 2097152], ['images', 131072]]);
+    const img = rules.find((r) => r.bucket === 'images' && r.variants.some((x) => x.kind === 'image'));
+    expect(img?.variants.find((x) => x.kind === 'image')?.maxBytes).toBe(2097152);
+  });
+
+  it('B4 S10 ④：清单的缩略图上限 = 迁移里额度的缩略图预留（media_row_bytes）= put 时缩略图声明的上限', () => {
+    const lim = allManifests.flatMap((m) => m.buckets ?? []).find((b) => b.name === 'images' && b.limits)?.limits?.thumbSizeLimit;
+    expect(lim).toBe(131072);
+    const quota = readFileSync('supabase/migrations/20261111100000_notes_media_quota.sql', 'utf8');
+    expect(quota).toMatch(new RegExp(`case when p_has_thumb then ${lim} else 0 end`));
+    expect(quota).toContain(`case when thumb then cl > ${lim} else cl <> row_.bytes end`);   // put 时缩略图声明的大小上限
+  });
+
+  it('images 桶的清单没写 thumbSizeLimit 就失败', () => {
+    const changed = tweak((b) => {
+      if (b.limits) delete (b.limits as { thumbSizeLimit?: number }).thumbSizeLimit;
+    }, 'images');
+    expect(() => gen(changed)).toThrow(/thumbSizeLimit/);
+  });
+
   it('多出一段生成器不认识的路径就失败', () => {
     const changed = tweak((b) => {
       b.pathPrefix = '<user_id>/other/';

@@ -14,9 +14,15 @@ begin
   return coalesce(r -> 0 -> 'r', r);
 end $$;
 -- A 的身份、A 的会话调，只看第一项的 reason（ok 时为 'ok'）
+-- B4 S10 ③（迁移 20261111101000 起强制）：照新版 /files 的做法，put 一律带 content_length——
+--   原图取这一行的 bytes（没有这一行时取 0），缩略图取 1；content_length 本身的判法见 45_files_content_length
 create function tests.fa1(p_op text, p_bucket text, p_path text) returns text language plpgsql as $$
 declare r jsonb := tests.fa('aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-5555-4000-8000-000000000001', p_op,
-  jsonb_build_array(jsonb_build_object('bucket', p_bucket, 'path', p_path)));
+  jsonb_build_array(jsonb_build_object('bucket', p_bucket, 'path', p_path)
+    || case when p_op = 'put' then jsonb_build_object('content_length',
+         case when p_path like '%.t.webp' then 1
+              else coalesce((select ni.bytes from public.note_images ni where ni.path = p_path), 0) end)
+       else '{}'::jsonb end));
 begin
   if r ? 'error' then return 'error:' || (r ->> 'error'); end if;
   return case when (r -> 'items' -> 0 ->> 'ok')::boolean then 'ok' else r -> 'items' -> 0 ->> 'reason' end;
@@ -78,7 +84,7 @@ select ok(tests.try_as('anon', null, $$select public.files_authorize('get', '[]'
 
 -- ===== TC-B0-99：跨用户一律拒 =====
 select is(tests.fa('aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-5555-4000-8000-000000000001', 'put',
-  '[{"bucket":"images","path":"aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/1e000000-0000-4000-8000-0000000000a1.webp"}]'),
+  '[{"bucket":"images","path":"aaaaaaaa-0000-4000-8000-000000000001/40000000-0000-4000-8000-0000000000a1/1e000000-0000-4000-8000-0000000000a1.webp","content_length":1}]'),   -- B4 S10 ③：照新版 /files 带 content_length（这一行 bytes = 1）
   '{"uid":"aaaaaaaa-0000-4000-8000-000000000001","items":[{"i":0,"ok":true}]}'::jsonb, 'A 传自己那行的插图：ok，返回的 uid 是 A');
 select is(tests.fa1('put', 'images', 'bbbbbbbb-0000-4000-8000-000000000002/40000000-0000-4000-8000-0000000000b1/1e000000-0000-4000-8000-0000000000b1.webp'),
   'not_owner', 'A 传 B 的插图路径：not_owner');

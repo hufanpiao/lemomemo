@@ -30,7 +30,8 @@ export const notes = defineManifest({
       systemCols: ['ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at'], noConflict: [] },
   ],
   buckets: [
-    { name: 'images', store: 'r2', limits: { fileSizeLimit: 2097152, allowedMimeTypes: ['image/webp'] },
+    // thumbSizeLimit：缩略图 128 KB（B4 S10 ④；≤ 384 px 足够），和存储额度里每个缩略图的预留一致（迁移 20261111100000 的 media_row_bytes）
+    { name: 'images', store: 'r2', limits: { fileSizeLimit: 2097152, allowedMimeTypes: ['image/webp'], thumbSizeLimit: 131072 },
       pathPrefix: '<user_id>/', pathPattern: `^${UUID_RE}/${UUID_RE}/${UUID_RE}(\\.t)?\\.webp$`,
       backup: 'weekly-s3', export: 'zip', countsToQuota: true,
       orphanSweep: { after: '24 hours', table: 'note_images', col: 'path' }, userLookup: { by: 'pathPattern', level: 1 } },

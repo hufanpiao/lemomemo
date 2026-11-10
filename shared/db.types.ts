@@ -444,6 +444,21 @@ isOneToOne: false
               "app": string,"pid": number,"role": unknown,"xact_start": string
             }[]
                            },
+"media_fits":
+{ Args: { "p_bytes": number,"p_exclude_image": string,"p_has_thumb": boolean,"p_uid": string }; Returns: boolean
+                           },
+"media_limit_bytes":
+{ Args: { "p_uid": string }; Returns: number
+                           },
+"media_quota_lock":
+{ Args: { "p_uid": string }; Returns: undefined
+                           },
+"media_row_bytes":
+{ Args: { "p_bytes": number,"p_has_thumb": boolean }; Returns: number
+                           },
+"media_used":
+{ Args: { "p_exclude_image": string,"p_uid": string }; Returns: number
+                           },
 "my_ai_usage_impl":
 { Args: Record<PropertyKey, never>; Returns: Json
                            },

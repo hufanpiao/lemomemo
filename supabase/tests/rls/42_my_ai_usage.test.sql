@@ -77,7 +77,8 @@ select tests.svc(format($$select private.ai_quota_take(%L, 50), private.ai_quota
   tests.k('aaaaaaaa-0000-4000-8000-000000000001'), tests.k('aaaaaaaa-0000-4000-8000-000000000001'), tests.k('aaaaaaaa-0000-4000-8000-000000000001')));
 select is(tests.rows_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$select public.my_ai_usage() as u$$, null, 'aaaaaaaa-5555-4000-8000-000000000001'),
   jsonb_build_array(jsonb_build_object('u', jsonb_build_object('ai_used', 3, 'ai_limit', 50,
-    'pacific_date', to_char((now() at time zone 'America/Los_Angeles')::date, 'YYYY-MM-DD')))),
+    'pacific_date', to_char((now() at time zone 'America/Los_Angeles')::date, 'YYYY-MM-DD'),
+    'media_used', 0, 'media_limit', 52428800))),   -- B4 迁移 20261111100000 加了存储用量两个键（44_media_quota 详测）
   'TC-B3-29：A 看到的次数 = 服务器扣的 3 次，上限 50，带太平洋日期');
 select is(tests.rows_as('authenticated', 'bbbbbbbb-0000-4000-8000-000000000002', $$select public.my_ai_usage() ->> 'ai_used' as n$$, null, 'bbbbbbbb-5555-4000-8000-000000000002'),
   '[{"n": "2"}]'::jsonb, 'B 跨窗口合计（旧窗口 2 + 当前退回后 0）= 2，A 的不算进来');

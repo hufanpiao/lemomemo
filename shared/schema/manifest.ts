@@ -78,7 +78,9 @@ export const bucketSchema = z.object({
   store: z.enum(['supabase', 'r2']),
   /** 桶的主人才写大小和类型限制；只登记一段路径的（纪念日头像）不写。
    *  store = 'supabase'：D1 和 storage.buckets 比对；store = 'r2'：生成 /files 的规则表和服务器函数的上传类型表（0.32） */
-  limits: z.object({ fileSizeLimit: z.number().int(), allowedMimeTypes: z.array(z.string()) }).optional(),
+  /** thumbSizeLimit（B4 S10 ④）：随手记插图缩略图（images 桶 .t.webp）的大小上限，只有 images 桶的主人写；
+   *  和存储额度里每个缩略图的预留（迁移 20261111100000 的 media_row_bytes，128 KB）一致。附件（files 桶）的缩略图不按它 */
+  limits: z.object({ fileSizeLimit: z.number().int(), allowedMimeTypes: z.array(z.string()), thumbSizeLimit: z.number().int().optional() }).optional(),
   pathPrefix: z.string(),
   /** 整条路径的正则（0.23 L8）；0.32 起客户端可传的 R2 桶（images、files）和 private.files_authorize_impl 里的正则一字不差（D1 核对），
    *  同时生成 /files 的规则表；只经服务器函数的桶写服务器端的拼法 */

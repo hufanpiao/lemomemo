@@ -36,7 +36,7 @@ export const FILES_RULES: readonly FilesRule[] = [
         "kind": "thumb",
         "suffix": ".t.webp",
         "contentType": "image/webp",
-        "maxBytes": 2097152,
+        "maxBytes": 131072,
         "webp": true
       },
       {

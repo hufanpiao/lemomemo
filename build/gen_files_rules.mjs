@@ -73,6 +73,8 @@ export function buildRules(manifests) {
     if (b.name === 'images') {
       if (!sameSet(owner.limits.allowedMimeTypes, [WEBP])) fail('images 桶只能放 image/webp');
       const max = owner.limits.fileSizeLimit;
+      const thumbMax = owner.limits.thumbSizeLimit;
+      if (!thumbMax) fail('images 桶的清单要写 limits.thumbSizeLimit（缩略图上限，B4 S10 ④）');
       if (b.pathPrefix === '<user_id>/anniv/') {
         mustMatch(re, `${S}/anniv/${S}/${S}.webp`, where);
         rules.push({ bucket: 'images', segment: 'avatar', pathPattern: b.pathPattern, variants: [v('avatar', '.webp', WEBP, max, true)] });
@@ -83,7 +85,7 @@ export function buildRules(manifests) {
           bucket: 'images',
           segment: 'image',
           pathPattern: b.pathPattern,
-          variants: [v('thumb', '.t.webp', WEBP, max, true), v('image', '.webp', WEBP, max, true)],
+          variants: [v('thumb', '.t.webp', WEBP, thumbMax, true), v('image', '.webp', WEBP, max, true)],
         });
       } else {
         fail(`${where}：生成器不认识这段路径，加了新的一段要同时改生成器和 /files 的有效期规则`);
@@ -97,6 +99,7 @@ export function buildRules(manifests) {
       const docMimes = owner.limits.allowedMimeTypes.filter((t) => t !== WEBP);
       if (!owner.limits.allowedMimeTypes.includes(WEBP)) fail('files 桶要放 image/webp（缩略图）');
       if (!sameSet(docMimes, Object.values(DOC_EXT_MIME))) fail('files 桶的 allowedMimeTypes 和 DOC_EXT_MIME 不一致');
+      // 附件的缩略图沿用 images 桶的原图上限（B4 S10 ④ 只改随手记插图的缩略图：额度只给 note_images 的缩略图预留 128 KB；附件的缩略图随 B4b-1 再定）
       const thumbMax = owners.get('images')?.limits.fileSizeLimit;
       if (!thumbMax) fail('缩略图的大小上限取 images 桶的，清单里没找到');
       mustMatch(re, `${S}/${S}/${S}.t.webp`, where);
