@@ -151,6 +151,7 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide, fadeIn = false
     let stop = (): void => undefined;
     import('../../../motion/glass-ghost.ts')
       .then((m) => {
+        m.forgetTilt(); // 不分宽窄屏都删以前的倾斜高光开关（R-373）
         if (off) return;
         gelFx.current = m.playGel;
         const plus = plusOf(n);

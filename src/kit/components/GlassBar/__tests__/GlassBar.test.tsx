@@ -7,7 +7,7 @@ import { __forgetGlassBarFxForTest, FADE_SLACK_MS, GlassBar } from '../GlassBar.
 import styles from '../GlassBar.module.css';
 
 // 首屏后部分（GlassBarFx）里的副本引擎另有测试（motion/__tests__/glass-ghost.test.ts）；这里用替身（jsdom 没有 IntersectionObserver）
-vi.mock('../../../../motion/glass-ghost.ts', () => ({ startGlass: () => ({ stop: () => undefined, poke: () => undefined }), playGel: () => true }));
+vi.mock('../../../../motion/glass-ghost.ts', () => ({ startGlass: () => ({ stop: () => undefined, poke: () => undefined }), playGel: () => true, forgetTilt: () => undefined }));
 
 beforeEach(() => {
   __forgetGlassBarFxForTest(); // 每条都从“这次启动还没下载过首屏后部分”开始

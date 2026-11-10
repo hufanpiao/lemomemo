@@ -1,6 +1,6 @@
 // 液态玻璃的玻璃标记、帧循环（B2 FA-7，motion/glass-ghost.ts；11-06 起不再建内容副本 GLASS-copy-unused；自动深浅 11-06 取消，底栏后实色）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { playGel, startGlass } from '../glass-ghost.ts';
+import { forgetTilt, playGel, startGlass } from '../glass-ghost.ts';
 
 let frames: FrameRequestCallback[] = [];
 const runFrames = (n = 3): void => {
@@ -132,5 +132,18 @@ describe('playGel（果冻从当前形变接着放，设计动效评审 L1）', 
     expect(playGel(el)).toBe(true);
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(calls.length).toBe(0);
+  });
+});
+
+describe('forgetTilt（R-373）', () => {
+  it('删掉以前存的倾斜高光开关；本机存储读写不了也不抛', () => {
+    localStorage.setItem('lemo.tilt', '1');
+    forgetTilt();
+    expect(localStorage.getItem('lemo.tilt')).toBeNull();
+    const spy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    expect(() => forgetTilt()).not.toThrow();
+    spy.mockRestore();
   });
 });

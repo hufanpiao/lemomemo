@@ -7,7 +7,7 @@
 // • 帧循环：只在 poke（液滴在动、按下底栏）和“减少透明效果”开关变了时跑一次，停下 IDLE_MS 后停掉；rAF 只在 motion 里（A25）
 // • 减少透明效果（系统设置或 :root[data-rt="1"]）：不写 data-glass，外壳用实色
 // • 倾斜高光已删除（R-373，负责人 11-10“设置里面倾斜高光去掉，不要这个功能了”）：高光固定在原来关着时的位置（GlassBar.module.css）；
-//   以前存过的本机开关 lemo.tilt 在引擎启动时顺手删掉，读不到、删不掉（隐私模式）都不管
+//   以前存过的本机开关 lemo.tilt 由 forgetTilt 删掉：GlassBarFx 下载完这个文件就调，不分宽窄屏（宽屏不开引擎也要删）；读不到、删不掉（隐私模式）都不管
 import { prefersReducedMotion } from './reduced.ts';
 
 export type GhostFx = 'copy' | 'drop';
@@ -55,6 +55,15 @@ export function playGel(el: HTMLElement): boolean {
 }
 
 /** 开始：返回停止函数（卸载底栏时调）；poke 让帧循环跑一会儿（液滴在动时调） */
+/** 删掉倾斜高光（R-373 已删除）以前存的本机开关；读写不了（隐私模式）不管 */
+export function forgetTilt(): void {
+  try {
+    localStorage.removeItem('lemo.tilt');
+  } catch {
+    // 隐私模式读写不了：不管
+  }
+}
+
 export function startGlass(opts: GlassOptions): { stop(): void; poke(ms?: number): void } {
   let raf = 0;
   let until = 0;
@@ -90,11 +99,6 @@ export function startGlass(opts: GlassOptions): { stop(): void; poke(ms?: number
   const mo = new MutationObserver(onRt);
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-rt'] });
   poke(300);
-  try {
-    localStorage.removeItem('lemo.tilt');
-  } catch {
-    // 隐私模式读写不了：不管
-  }
 
   return {
     poke,

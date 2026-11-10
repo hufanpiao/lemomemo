@@ -7,6 +7,7 @@ import fxStyles from '../GlassBarFx.module.css';
 
 const fx = vi.hoisted(() => ({ ok: true, started: 0, calls: [] as HTMLElement[] }));
 vi.mock('../../../../motion/glass-ghost.ts', () => ({
+  forgetTilt: () => undefined,
   startGlass: () => {
     fx.started += 1;
     return { stop: () => undefined, poke: () => undefined };

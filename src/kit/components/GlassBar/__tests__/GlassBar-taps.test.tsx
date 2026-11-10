@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GlassBar } from '../GlassBar.tsx';
 import { EARLY_MS, HIT_MS } from '../GlassBarFx.tsx';
 
-vi.mock('../../../../motion/glass-ghost.ts', () => ({ startGlass: () => ({ stop: () => undefined, poke: () => undefined }), playGel: () => true }));
+vi.mock('../../../../motion/glass-ghost.ts', () => ({ startGlass: () => ({ stop: () => undefined, poke: () => undefined }), playGel: () => true, forgetTilt: () => undefined }));
 
 let anims: Array<{ effect: { pseudoElement: string }; currentTime: number; finish: () => void }> = [];
 let under: Element | null = null;

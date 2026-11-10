@@ -1,11 +1,19 @@
 // 电脑版侧栏（D5，(width >= 900px)）的 DOM 顺序（设计复审三 S2）：侧栏里“＋”画在最上面，DOM 也在 nav 前面，
 // Tab 顺序是“＋”→ 四个页签 → 设置，和画面上下一致；窄屏“＋”在 nav 后面。窗口宽窄变了跟着换
 // 首屏后部分下不来时宽屏也有设置入口（S1）：设置入口在外壳 nav 里，不等 GlassBarFx
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GlassBar } from '../GlassBar.tsx';
+import { __forgetGlassBarFxForTest, GlassBar } from '../GlassBar.tsx';
 
-vi.mock('../../../../motion/glass-ghost.ts', () => ({ startGlass: () => ({ stop: () => undefined, poke: () => undefined }), playGel: () => true }));
+// forgetTilt 记下调用：宽屏不开引擎也要删以前的倾斜高光开关（R-373）；它本身删没删掉在 motion/__tests__/glass-ghost.test.ts 测
+const forget = vi.hoisted(() => ({ calls: 0 }));
+vi.mock('../../../../motion/glass-ghost.ts', () => ({
+  startGlass: () => ({ stop: () => undefined, poke: () => undefined }),
+  playGel: () => true,
+  forgetTilt: () => {
+    forget.calls += 1;
+  },
+}));
 
 /** 假的 matchMedia：只认 (width >= 900px)，可以中途改宽窄并发 change */
 function fakeWide(initial: boolean) {
@@ -52,5 +60,13 @@ describe('GlassBar 电脑版侧栏的 DOM 顺序', () => {
     render(<GlassBar active="todos" later={() => undefined} />);
     expect(screen.queryByTestId('tabbar-band')).toBeNull();
     expect(screen.getByRole('link', { name: '设置' }).getAttribute('data-testid')).toBe('tabbar-settings');
+  });
+
+  it('宽屏不开玻璃引擎，也调 forgetTilt 删以前存的倾斜高光开关 lemo.tilt（R-373）', async () => {
+    __forgetGlassBarFxForTest();
+    fakeWide(true);
+    forget.calls = 0;
+    render(<GlassBar active="today" later={(fn) => fn()} />);
+    await waitFor(() => expect(forget.calls).toBe(1));
   });
 });
