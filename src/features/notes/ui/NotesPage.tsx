@@ -151,7 +151,7 @@ function NotesList() {
                 <div className={styles.cardFoot}>
                   {/* 定稿 PH.mason 底行只有“分类 · 时间 · ⋯”：AI 小标并进分类胶囊（“● 工作灵感 AI”，同 PH.notes），没分类时单独出 */}
                   {it.categoryName ? (
-                    <span className={it.ai ? `${styles.cat} ${styles.catAi}` : styles.cat}>
+                    <span className={styles.cat}>
                       <Dot color={it.categoryColor} />
                       <span className={styles.catName}>{it.categoryName}</span>
                       {aiMark(it)}
@@ -159,7 +159,7 @@ function NotesList() {
                   ) : (
                     aiMark(it)
                   )}
-                  <span className={it.ai && it.categoryName ? `${styles.time} ${styles.timeAi}` : styles.time}>{timeOf(it, true)}</span>
+                  <span className={styles.time}>{timeOf(it, true)}</span>
                   {more(it)}
                 </div>
               </div>

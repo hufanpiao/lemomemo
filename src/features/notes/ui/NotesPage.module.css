@@ -160,8 +160,9 @@
 }
 
 /* 底部（.mcard .ft，今天顶部-对比.html 第 256～258 行）：不换行，右边“⋯”24px。
-   放不下时照稿子：分类胶囊不缩（.cat{flex:none}），时间省略（.num{overflow:hidden;text-overflow:ellipsis;min-width:0}）。
-   带 AI 的（主持人定 B+A）：AI 并进胶囊，胶囊里分类名可以省略、“AI”始终留着，时间至少留到能读出“今天 …” */
+   放不下时（主持人 11-11 定，改了稿子的“胶囊不缩、时间省略”）：时间和“⋯”不缩，时间一律完整显示（“昨天 16:05”“12月12日”）；
+   分类胶囊先缩，分类名省略号，色点和“AI”始终留着（AI 并进胶囊，主持人定 B+A）。放得下时跟原来一样。
+   更窄时的两段退路（下面 @container）只在视觉上藏分类名，读屏照念 */
 .cardFoot {
   display: flex;
   align-items: center;
@@ -171,11 +172,15 @@
   color: var(--text-2);
   font-size: var(--fs-11);
   white-space: nowrap;
+  container-type: inline-size;
 }
 
+/* 胶囊排成三栏：色点 | 分类名 | AI。分类名那栏最少可到 0（省略号），色点和 AI 不缩，所以胶囊最窄就是“色点 + AI”，不会压到时间上 */
 .cat {
-  flex: none;
-  display: inline-flex;
+  flex: 0 1 auto;
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, auto) auto;
   align-items: center;
   height: 22px;
   padding: 0 7px;
@@ -203,12 +208,8 @@
   margin-left: 0;
 }
 
-.catAi {
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
 .catName {
+  grid-column: 2;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -221,15 +222,69 @@
   background: var(--panel);
 }
 
-.timeAi {
-  min-width: 3.6em;
+/* 底行窄到带 AI 的胶囊里分类名露不出一个字（手机两列卡：320 宽底行约 115px、375 宽约 142px）时：
+   胶囊收成单独的“AI”小标（同没分类时的样子），分类色点和名字让出来，时间和“⋯”照样完整 */
+@container (max-width: 158px) {
+  .cat:has(.ai) {
+    padding: 0;
+    background: none;
+  }
+
+  .cat:has(.ai) .dot {
+    display: none;
+  }
+
+  .cat:has(.ai) .catName {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .cat .ai {
+    height: 18px;
+    margin-left: 0;
+    padding: 0 6px;
+    background: var(--panel-2);
+  }
+}
+
+/* 再窄（320 宽两列卡，底行约 115px）：放完整时间和“⋯”后，不带 AI 的胶囊连一个字都露不全，只留分类色点，不出半个字 */
+@container (max-width: 136px) {
+  .cat:not(:has(.ai)) {
+    padding: 0;
+    background: none;
+  }
+
+  .cat:not(:has(.ai)) .catName {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* 分类没设颜色：胶囊里什么都不剩，连同间距一起让掉，时间贴左 */
+  .cat:not(:has(.ai), :has(.dot)) {
+    margin-right: -6px;
+  }
+}
+
+/* 不认 @container 的浏览器（iOS 15.5～15.x，最低支持 15.5）：上面两段退路不生效，改让时间可缩、出省略号，“⋯”照样留在卡片里 */
+@supports not (container-type: inline-size) {
+  .time {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 .time {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: none;
 }
 
 /* “⋯”：看得见 24px，不占更多排版宽度；点按区用 ::after 透明扩到 44 × 44（视觉稿第 2101、2102 行） */

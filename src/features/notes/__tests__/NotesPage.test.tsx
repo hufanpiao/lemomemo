@@ -1,6 +1,7 @@
 // 随手记页（B4 S1、S2；TC-B4-01 页面一半；定稿线框 s7）：默认瀑布流、页面上没有切换；按本类设备的设置换成列表；空状态；
 // 底部输入行记一句（insert 不带 ai_status）、“刚记下”；“AI”小标；“⋯”删除进“最近删除”和撤销；分类胶囊筛选
 // 用真实的冷启动（假 IndexedDB）：写入经 write.* 进 outbox，再从集合读回来（同待办编辑页的测试）
+import { readFileSync } from 'node:fs';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
@@ -115,6 +116,26 @@ describe('卡片', () => {
     fireEvent.click(screen.getByTestId(`notes-filter-${uid(51)}`));
     expect(screen.queryByTestId(`notes-card-${uid(1)}`)).toBeNull();
     expect(screen.getByTestId(`notes-card-${uid(2)}`)).toBeTruthy();
+  });
+
+  it('窄卡退路只在视觉上藏分类名：底行里分类名文字还在（读屏照念），样式里 .catName 不用 display:none', async () => {
+    const b = await boot();
+    await act(async () => {
+      await b.outbox?.applyServer('categories', [{ row: serverCat(uid(50), '韩国生活与签证材料整理清单') }]);
+      await b.outbox?.applyServer('notes', [
+        { row: serverNote(1, { category_id: uid(50), category_source: 'ai', category_seen: false }) },
+        { row: serverNote(2, { category_id: uid(50), category_source: 'manual' }) },
+      ]);
+    });
+    open();
+    for (const n of [1, 2]) {
+      const foot = screen.getByTestId(`notes-more-${uid(n)}`).parentElement as HTMLElement;
+      expect(foot.textContent).toContain('韩国生活与签证材料整理清单');
+    }
+    const css = readFileSync('src/features/notes/ui/NotesPage.module.css', 'utf8');
+    const rules = [...css.matchAll(/([^{}]*\.catName[^{}]*)\{([^}]*)\}/g)];
+    expect(rules.length).toBeGreaterThan(1);
+    for (const [, sel, body] of rules) expect(body, sel).not.toMatch(/display:\s*none/);
   });
 });
 
