@@ -37,7 +37,7 @@ import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { bannerKind } from './banner-kind.ts';
 import { featureRoutes, offRoutes, type FeatureRoute } from './features.ts';
 import { navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from './router.ts';
-import { tabBarFor } from './tab-of.ts';
+import { NOTES_INPUT_ID, tabBarFor } from './tab-of.ts';
 import { PlusSlot, preloadPlus } from './plus-slot.tsx';
 import type { DateStr } from '../../shared/core/date.ts';
 import { setNewItemDay, setNewItemTitle, takeNewItemDay } from '../kit/state/new-item.ts';
@@ -93,6 +93,11 @@ function TabBar({ route }: { route: RouteName }) {
   const bar = tabBarFor(route);
   // 日历页在捕获阶段记下了选中的那天（calendar/hooks/new-date.ts），这里取走；别的页也取走（清掉旧的）
   const open = (): void => {
+    // 随手记页（R-380，线框“低 1”）：“＋”直接把光标放进页面底部的输入行，不开打字条
+    if (bar?.add === 'note') {
+      document.getElementById(NOTES_INPUT_ID)?.focus();
+      return;
+    }
     const day = takeNewItemDay();
     setPlus({ day: bar?.tab === 'calendar' ? day : null });
   };

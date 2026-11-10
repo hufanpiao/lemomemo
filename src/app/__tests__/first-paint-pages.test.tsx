@@ -77,6 +77,8 @@ const PAGE_FILES = [
   'features/auth/ui/AuthPage.tsx',
   'features/auth/ui/InstallGuide.tsx',
   'features/calendar/ui/CalendarPage.tsx',
+  'features/notes/ui/NoteEditPage.tsx',
+  'features/notes/ui/NotesPage.tsx',
   'features/onboarding/ui/ConsentPage.tsx',
   'features/settings/ui/SettingsPage.tsx',
   'features/today/ui/RecentlyDeletedPage.tsx',

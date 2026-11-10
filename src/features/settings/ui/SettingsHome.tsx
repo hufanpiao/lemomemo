@@ -12,6 +12,7 @@ import { cardsOf, type SettingsCardId, type SettingsSectionId } from '../hooks/u
 import type { ExportState } from '../hooks/useExport.ts';
 import { hotkeyLabel, type QuickAddHotkey } from '../hooks/useQuickAddHotkey.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
+import { useNotesViewSetting } from '../hooks/useNotesViewSetting.ts';
 import type { DevicesState } from '../hooks/useDevices.ts';
 import { deviceName } from './DevicesSection.tsx';
 import { LanguageSection } from './LanguageSection.tsx';
@@ -56,6 +57,7 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
       : ex.kind === 'paused'
         ? t('settings.data.pausedShort', {})
         : undefined;
+  const notesView = useNotesViewSetting();
   const entry = (id: SubName & SettingsSectionId, label: ReactNode, testId: string, value?: ReactNode, lead?: ReactNode): ReactNode => (
     <SettingsEntryRow
       rowId={id}
@@ -74,6 +76,17 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
     // 账号一行前面是今天页那个头像圈（负责人 11-05 ①：同一组件、同样尺寸）
     account: entry('account', email === null ? t('settings.account.title', {}) : <MailLabel mail={email} />, 'account', accountValue, <MeAvatar testId="settings-account-avatar" />),
     language: <LanguageSection locale={locale} />,
+    // 随手记显示方式（B4 S1，R-78；定稿线框第 997 行、皮肤视觉稿第 1368 行）：一行写完“瀑布流 · 只对本类设备生效 ›”（稿子第 997 行）；手机、电脑各自的说明在二级页
+    notesView: (
+      <SettingsEntryRow
+        rowId="notesView"
+        label={t('settings.notesView.title', {})}
+        value={t('settings.notesView.value', { v: t(notesView.view === 'list' ? 'settings.notesView.list' : 'settings.notesView.masonry', {}) })}
+        onOpen={() => onOpen('notes-view')}
+        testId="settings-notes-view-entry"
+        valueTestId="settings-notes-view-summary"
+      />
+    ),
     // 日历（R-320）、提醒与通知（REMIND-wiring）：行名和整行由本页画，值由各自的功能懒加载（M4：行一开始就能点）；
     // 值没到之前空着，分包下载失败也只是空着（QuietBoundary 的 name 照约定写成字符串常量）
     calendar: (

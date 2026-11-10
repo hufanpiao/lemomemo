@@ -1,0 +1,295 @@
+/* 随手记编辑器：只用令牌（A11）。手机整页照线框 s8（顶栏“‹ 随手记 ｜ 分类胶囊 ｜ ⋯ ｜ 完成”，24px 粗体标题，正文 15px、行高 1.7）；
+   电脑抽屉照皮肤视觉稿 DK.mason / NOTE_ED（右边浮起的圆角面板，--b-drawer） */
+.page {
+  max-width: 640px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 12px) 16px 40px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.inDrawer {
+  color: var(--text);
+}
+
+/* 电脑详情抽屉：右边浮起，侧栏和列表留着；进场只有最基本的滑入（R-376），减少动态效果时只淡入 */
+.drawer {
+  position: fixed;
+  top: calc(16px + var(--inset-top, 0px));
+  right: 16px;
+  bottom: calc(16px + var(--inset-bottom, 0px));
+  z-index: 20;
+  width: min(400px, calc(100vw - 160px));
+  padding: 14px 20px 24px;
+  overflow-y: auto;
+  border-radius: 22px;
+  background: var(--b-drawer);
+  box-shadow: var(--b-drawer-shadow);
+  animation: note-drawer-in var(--dur-ui) var(--ease-out) both;
+}
+
+@keyframes note-drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}
+
+@keyframes note-drawer-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer {
+    animation-name: note-drawer-fade;
+  }
+}
+
+/* 设置里“减少动态效果”（data-rm）：同样只淡入 */
+:global(:root[data-rm="1"]) .drawer {
+  animation-name: note-drawer-fade;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--hit);
+  font-size: var(--fs-14);
+}
+
+.back,
+.done {
+  flex: none;
+  min-height: var(--hit);
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+.back {
+  padding-left: 0;
+}
+
+.done {
+  padding-right: 0;
+  font-weight: 600;
+}
+
+/* 分类胶囊（s8“工作灵感 AI ▾”）：原生下拉透明盖在上面，点哪儿都能选 */
+.chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-13);
+}
+
+.chipStart {
+  margin-right: auto;
+}
+
+.chip:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.chipName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dot);
+}
+
+.ai {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-10-5);
+}
+
+.caret {
+  flex: none;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+}
+
+.select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  font-size: var(--fs-16);
+  cursor: pointer;
+}
+
+.select:disabled {
+  cursor: default;
+}
+
+.more {
+  flex: none;
+  width: var(--hit);
+  height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-16);
+}
+
+.more:disabled {
+  color: var(--text-2);
+}
+
+.close {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: var(--fs-18);
+  line-height: 1;
+}
+
+/* 点按区扩到 44 */
+.close::after {
+  position: absolute;
+  inset: -6px;
+  content: '';
+}
+
+.menu {
+  padding: 6px;
+}
+
+.menuItem {
+  display: block;
+  min-width: 120px;
+  min-height: var(--hit);
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--danger-text);
+  font-size: var(--fs-14);
+  text-align: left;
+}
+
+/* 电脑抽屉顶行“随手记 · 分类 · 时间”（NOTE_ED：12.5px、次要色） */
+.meta {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+/* 保存状态：平时只给读屏（稿子上没有），坏状态显示成一行红字 */
+.status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.statusBad {
+  margin: 4px 0 0;
+  color: var(--danger-text);
+  font-size: var(--fs-12);
+}
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 8px 14px;
+  border-radius: var(--r-md);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: var(--fs-14);
+}
+
+/* 标题：24px 粗体（s8），长标题换行、跟着内容长高（高度由脚本按内容写），没有下划线 */
+.title {
+  display: block;
+  width: 100%;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-24);
+  font-weight: 700;
+  line-height: 1.3;
+  resize: none;
+  overflow: hidden;
+}
+
+.title:focus {
+  outline: none;
+}
+
+.title::placeholder,
+.body::placeholder {
+  color: var(--text-2);
+}
+
+.body {
+  display: block;
+  width: 100%;
+  min-height: 40vh;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-15);
+  line-height: 1.7;
+  resize: none;
+}
+
+.body:focus {
+  outline: none;
+}
+
+/* 触屏上可输入控件至少 16px（iOS 聚焦时不自动放大整页，同 kit Form.module.css） */
+@media (pointer: coarse) {
+  .body {
+    font-size: var(--fs-16);
+  }
+}

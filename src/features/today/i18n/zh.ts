@@ -34,15 +34,6 @@ export const zh = {
   'toast.undo': '撤销',
   'err.save': '没保存上，稍后再试一次',
   'err.readonly': '这条要新版本才能修改',
-  'trash.title': '最近删除',
-  'trash.back': '返回',
-  'trash.note': '删除的日程和待办在这里留 30 天，之后自动清理',
-  'trash.empty': '最近删除里没有东西',
-  'trash.left': '{n} 天后清理',
-  'trash.restore': '恢复',
-  'trash.restored': '已恢复',
-  'trash.kind.events': '日程',
-  'trash.kind.todos': '待办',
   // 麦克风被拒时今天页常驻一行（B3 S23；定稿线框“麦克风被拒绝”卡原文）
   'today.micDenied': '麦克风没有打开，语音用不了。可以在 iPhone 的“设置”里给这个 App 打开麦克风。',
   // 其他设备的通用说法（R-367，负责人 11-10 定：iPhone、iPad 上照上面原文）

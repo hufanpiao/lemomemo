@@ -16,6 +16,8 @@ export const ROUTE_NAMES = [
   // “最近删除”（B2 FA-2，ADR-006）：#/trash
   'trash',
   'notes',
+  // 随手记编辑器（B4 S2）：#/note/<id>、#/note/new
+  'note',
   'vault',
   'anniv',
   // 整页提醒（B2 FA-4，REMIND-wiring）：#/remind/<kind>/<id>?due=<dueAt>。地址只由 openReminder / reminderHash

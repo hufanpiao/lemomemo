@@ -2,7 +2,7 @@
 // • 打勾、取消打勾属于“其余重算”：remind 标记按 remindAtOf 传这一行现在的 remind_at（B2 任务单“接口先定”第 4 条、架构 0.54 第 2 条）
 // • 打勾时改之前的提醒还没到也带标记（代码审查 S2）
 // • 删除是软删（deleted_at = now，进“最近删除”，ADR-006）；撤销和恢复把 deleted_at 改回 null；都算 remind 标记（补审改法 ④）
-// • “最近删除”：deleted_at 不为空、undone 不为 true、删了不到 30 天的日程和待办，最近删的在前（永久删除、全部清空在 B4，0.29 续第 121 条⑧）
+// • “最近删除”的列表在 trash.ts（B4 拆出，不进首屏）；永久删除、全部清空在 B4 S9（0.29 续第 121 条⑧）
 import { ALL_DAY_LIVE_UNTIL, remindAtOf } from '../../../../shared/logic/remind.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { saveDeleted, savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
@@ -31,7 +31,8 @@ export function setTodoDone(row: Row, done: boolean, now: number, tz: Tz): Promi
   return savePatch('todos', row.id, { done, done_at: done ? now : 0, updated_at: now }, remindAfterDone(row, done, now, tz));
 }
 
-export type TrashTable = 'events' | 'todos';
+/** 能进“最近删除”的表（B4 S2 起加随手记 notes；隐私记有自己的“最近删除”，R-193，B5） */
+export type TrashTable = 'events' | 'todos' | 'notes';
 
 /**
  * 日程这一行的提醒时刻（有时刻的按自己的 tz；全天日程按 remind_days 和 current_tz；不提醒为 null）。
@@ -46,6 +47,7 @@ function eventRemindAt(row: Row, deleted: boolean, tz: Tz): number | null {
 
 /** 删除 / 撤销删除、从“最近删除”恢复的 remind 标记（补审改法 ④） */
 export function remindOnDelete(table: TrashTable, row: Row, deleted: boolean, now: number, tz: Tz): boolean {
+  if (table === 'notes') return false;   // 随手记没有提醒
   if (table === 'todos') return remindAfterDelete(row, deleted, now, tz);
   if (deleted) {
     if (isDel(row['deleted_at'])) return false;
@@ -57,32 +59,4 @@ export function remindOnDelete(table: TrashTable, row: Row, deleted: boolean, no
 /** 删除（软删）/ 撤销删除、从“最近删除”恢复 */
 export function setDeleted(table: TrashTable, row: Row, deleted: boolean, now: number, tz: Tz): Promise<SaveOutcome> {
   return saveDeleted(table, row.id, deleted, now, remindOnDelete(table, row, deleted, now, tz));
-}
-
-export const TRASH_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
-
-export interface TrashItem {
-  table: TrashTable;
-  id: string;
-  title: string;
-  deletedAt: number;
-  /** 再过多少天清理（向上取整，至少 1） */
-  daysLeft: number;
-}
-
-/** “最近删除”的列表 */
-export function trashOf(events: readonly Row[], todos: readonly Row[], now: number): TrashItem[] {
-  const out: TrashItem[] = [];
-  const add = (table: TrashTable, rows: readonly Row[]) => {
-    for (const r of rows) {
-      const at = r['deleted_at'];
-      if (typeof at !== 'number' || r['undone'] === true) continue;
-      const left = at + TRASH_KEEP_MS - now;
-      if (left <= 0) continue;
-      out.push({ table, id: r.id, title: typeof r['title'] === 'string' ? r['title'] : '', deletedAt: at, daysLeft: Math.max(1, Math.ceil(left / 86_400_000)) });
-    }
-  };
-  add('events', events);
-  add('todos', todos);
-  return out.sort((a, b) => b.deletedAt - a.deletedAt || a.title.localeCompare(b.title));
 }

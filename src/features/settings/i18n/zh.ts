@@ -108,6 +108,13 @@ export const zh = {
   // 设置 › 账号 › 注销账号（R-188、R-192、R-256；功能说明第 30 项；架构 0.29 续第 129、131、137 条）
   'settings.delete.back': '账号', // 合卡以后注销页退回账号二级页（SETTINGS-merge-cards），照 settings.account.title
   // 设置 › 日历 二级页的顶栏标题（R-320；正文由 calendar 功能提供，和它词典里的 cal.set.title 同一个词）
+  'settings.notesView.title': '随手记显示方式',
+  'settings.notesView.masonry': '瀑布流',
+  'settings.notesView.list': '列表',
+  'settings.notesView.value': '{v} · 只对本类设备生效',
+  'settings.notesView.mobileNote': '只对手机生效，电脑另外设',
+  'settings.notesView.desktopNote': '只对电脑生效，手机另外设',
+  'settings.notesView.err': '没保存上，稍后再选一次',
   'settings.cal.title': '日历',
   // 设置 › 提醒与通知 二级页、未来 7 天的提醒 的顶栏标题（REMIND-wiring；线框 sR7；和 reminders 词典的 remind.set.title、remind.set.upcoming 同一个词）
   'settings.remind.title': '提醒与通知',

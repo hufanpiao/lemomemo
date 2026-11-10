@@ -35,15 +35,6 @@ export const ko: Readonly<Record<keyof typeof zh, string>> = {
   'toast.undo': '실행 취소', // REVIEW(ko)
   'err.save': '저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
   'err.readonly': '새 버전으로 업데이트해야 수정할 수 있어요', // REVIEW(ko)
-  'trash.title': '최근 삭제', // REVIEW(ko)
-  'trash.back': '뒤로', // REVIEW(ko)
-  'trash.note': '삭제한 일정과 할 일은 30일 동안 보관된 뒤 자동으로 정리돼요', // REVIEW(ko)
-  'trash.empty': '최근 삭제한 항목이 없어요', // REVIEW(ko)
-  'trash.left': '{n}일 후 정리', // REVIEW(ko)
-  'trash.restore': '복원', // REVIEW(ko)
-  'trash.restored': '복원했어요', // REVIEW(ko)
-  'trash.kind.events': '일정', // REVIEW(ko)
-  'trash.kind.todos': '할 일', // REVIEW(ko)
   'today.micDenied': '마이크가 꺼져 있어서 음성 기록을 쓸 수 없어요. iPhone “설정”에서 이 앱의 마이크를 켜 주세요.', // REVIEW(ko)
   'today.micDeniedWeb': '마이크가 꺼져 있어서 음성 기록을 쓸 수 없어요. 브라우저 설정에서 이 사이트의 마이크를 켜 주세요.', // REVIEW(ko) R-367 iPhone 아닌 기기
 };

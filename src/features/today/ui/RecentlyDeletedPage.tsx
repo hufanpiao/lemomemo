@@ -1,4 +1,4 @@
-// “最近删除”页（B2 FA-2；ADR-006；TC-B2-03 前两步）：日程和待办，最近删的在前，每条写“N 天后清理”和“恢复”
+// “最近删除”页（B2 FA-2；ADR-006；TC-B2-03 前两步；B4 S2 加随手记）：日程、待办和随手记，最近删的在前，每条写“N 天后清理”和“恢复”
 // • 恢复后出“已恢复”提示（2 秒，role=status）；写不进去出提示条
 // • 永久删除、全部清空在 B4（要联网、先弹确认，0.29 续第 121 条⑧）；隐私记有自己的“最近删除”（R-193，B5）
 // • 路由 #/trash（app/router.ts 的 ROUTE_NAMES、today/index.ts 的 routes）；返回：App 里有上一页就退回，否则换到设置（S11）
@@ -7,6 +7,7 @@ import { canGoBack, goBack, replaceRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
 import { Pressable } from '../../../motion/components.ts';
 import { useTodayT } from '../hooks/useTodayT.ts';
+import { useTrashT } from '../hooks/useTrashT.ts';
 import { useTrash, type RestoreResult } from '../hooks/useTrash.ts';
 import styles from './RecentlyDeletedPage.module.css';
 
@@ -16,7 +17,8 @@ function back(): void {
 }
 
 export default function RecentlyDeletedPage() {
-  const t = useTodayT();
+  const t = useTrashT();
+  const tToday = useTodayT();
   const { items, restore } = useTrash();
   const [msg, setMsg] = useState<RestoreResult | null>(null);
 
@@ -44,7 +46,7 @@ export default function RecentlyDeletedPage() {
               <span className={list.text}>
                 <span className={list.title}>{it.title}</span>
                 <span className={list.meta}>
-                  {t(it.table === 'events' ? 'trash.kind.events' : 'trash.kind.todos', {})} · {t('trash.left', { n: it.daysLeft })}
+                  {t(it.table === 'events' ? 'trash.kind.events' : it.table === 'notes' ? 'trash.kind.notes' : 'trash.kind.todos', {})} · {t('trash.left', { n: it.daysLeft })}
                 </span>
               </span>
             </span>
@@ -60,7 +62,7 @@ export default function RecentlyDeletedPage() {
         </p>
       ) : msg === 'failed' || msg === 'readonly' ? (
         <p className={styles.toast} role="alert" data-testid="trash-msg">
-          {t(msg === 'readonly' ? 'err.readonly' : 'err.save', {})}
+          {tToday(msg === 'readonly' ? 'err.readonly' : 'err.save', {})}
         </p>
       ) : null}
     </main>

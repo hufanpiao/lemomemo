@@ -95,6 +95,13 @@ export const ko = {
   'settings.export.wifi': '데이터가 많으면 파일이 수십 MB가 될 수 있어요. Wi-Fi에 연결하는 걸 추천해요.', // 11-06 句末补句号（设计评审 L-3）；R-106 B1 第一遍已审（10-31）；K-39 可不改，按主持人定不改；10-31 导出分片新加（0.47 续 ④ 第 4 点）
 
   'settings.delete.back': '계정', // 合卡以后注销页退回账号二级页（SETTINGS-merge-cards），照 settings.account.title（R-106 B1 第一遍已审）
+  'settings.notesView.title': '메모 보기 방식', // REVIEW(ko)
+  'settings.notesView.masonry': '카드', // REVIEW(ko)
+  'settings.notesView.list': '목록', // REVIEW(ko)
+  'settings.notesView.value': '{v} · 이 기기 종류에만 적용', // REVIEW(ko)
+  'settings.notesView.mobileNote': '휴대폰에만 적용돼요. 컴퓨터는 따로 설정해요', // REVIEW(ko)
+  'settings.notesView.desktopNote': '컴퓨터에만 적용돼요. 휴대폰은 따로 설정해요', // REVIEW(ko)
+  'settings.notesView.err': '저장하지 못했어요. 잠시 후 다시 골라 주세요', // REVIEW(ko)
   'settings.cal.title': '캘린더', // R-106 B2 第一遍已审（11-04）（B2K-05，和 calendar 的 cal.set.title、cal.h1 同名）
   'settings.remind.title': '알림', // REVIEW(ko)：照 reminders 的 remind.set.title
   'settings.remind.upcoming': '앞으로 7일 알림', // REVIEW(ko)：照 reminders 的 remind.set.upcoming
