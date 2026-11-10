@@ -100,6 +100,18 @@ function unitDenoProblems(unit: string, ci: string): string[] {
   if (count !== 1) return [...out, `unit.yml 里名字含“${UNIT_STEP}”的步骤应正好 1 个，现在 ${count} 个`];
   if (uu[0] && uu[0].i > start) out.push(`unit.yml 的 setup-deno 要装在“${UNIT_STEP}”那一步之前`);
   if (!keys.includes('env:') || !step.some((l) => l.trim() === REQUIRE_LINE)) out.push(`“${UNIT_STEP}”那一步的 env 里没有 ${REQUIRE_LINE}`);
+  // 11-10 单元测试拆成三时区矩阵作业：setup-deno 必须和单元测试在同一个作业里（装在别的作业，这个作业里照样没有 deno）
+  const lines = unit.split(/\r?\n/);
+  const jobAt = (i: number) => {
+    for (let k = i; k >= 0; k--) if (/^ {2}[\w-]+:\s*$/.test(lines[k] ?? '')) return k;
+    return -1;
+  };
+  const jobStart = jobAt(start);
+  if (uu[0] && jobAt(uu[0].i) !== jobStart) out.push(`unit.yml 的 setup-deno 要和“${UNIT_STEP}”在同一个作业里`);
+  // 三个时区一个不少（架构第 9 节 H2）：那一步的 env 写 TZ: ${{ matrix.tz }}，所在作业的矩阵正好是这三个
+  if (!step.some((l) => l.trim() === 'TZ: ${{ matrix.tz }}')) out.push(`“${UNIT_STEP}”那一步的 env 里没有 TZ: \${{ matrix.tz }}`);
+  const tzLine = lines.slice(Math.max(jobStart, 0), start).find((l) => /^\s*tz:\s*\[/.test(l))?.trim() ?? '';
+  if (tzLine !== 'tz: [UTC, Asia/Seoul, America/Los_Angeles]') out.push(`“${UNIT_STEP}”所在作业的矩阵应正好是 tz: [UTC, Asia/Seoul, America/Los_Angeles]，现在：${tzLine || '没有'}`);
   return out;
 }
 
@@ -158,9 +170,21 @@ describe('unit.yml 真的跑第二组：装了 deno、开关打开时没有 deno
     const block = lines.slice(usesAt, usesAt + 4);   // - uses、with、注释、deno-version
     expect(block.at(-1)?.trim(), '前提：setup-deno 这一步正好 4 行').toMatch(/^deno-version:/);
     const rest = [...lines.slice(0, usesAt), ...lines.slice(usesAt + 4)];
-    const at = rest.findIndex((l) => l.includes('name: 离线数据库检查'));
-    expect(at, '前提：单元测试之后有“离线数据库检查”那一步').toBeGreaterThan(0);
-    expect(unitDenoProblems([...rest.slice(0, at), ...block, ...rest.slice(at)].join('\n'), CI_YML)).toEqual([expect.stringContaining('之前')]);
+    // 挪到同一作业里单元测试那一步之后（11-10 起单元测试是 unit-tz 作业的最后一步，紧跟着是 secrets-scan 作业）
+    const at = rest.findIndex((l) => /^ {2}secrets-scan:/.test(l));
+    expect(at, '前提：unit-tz 作业之后是 secrets-scan').toBeGreaterThan(0);
+    expect(unitDenoProblems([...rest.slice(0, at - 1), ...block, ...rest.slice(at - 1)].join('\n'), CI_YML)).toEqual([expect.stringContaining('之前')]);
+    // 挪到别的作业（check）里，哪怕仍在单元测试那一行之前，也报“同一个作业”
+    const checkAt = rest.findIndex((l) => l.includes('name: wrangler 两处版本一致'));
+    expect(checkAt, '前提：check 作业里有“wrangler 两处版本一致”那一步').toBeGreaterThan(0);
+    expect(unitDenoProblems([...rest.slice(0, checkAt), ...block, ...rest.slice(checkAt)].join('\n'), CI_YML)).toEqual([expect.stringContaining('同一个作业')]);
+  });
+
+  it('反向验证：矩阵少一个时区、单元测试那一步不读矩阵的 TZ → 核对报出来', () => {
+    const tz = 'tz: [UTC, Asia/Seoul, America/Los_Angeles]';
+    expect(UNIT_YML.split(/\r?\n/).filter((l) => l.trim() === tz), '前提：矩阵这一行只有一处').toHaveLength(1);
+    expect(unitDenoProblems(UNIT_YML.replace(tz, 'tz: [UTC, Asia/Seoul]'), CI_YML)).toEqual([expect.stringContaining('矩阵')]);
+    expect(unitDenoProblems(UNIT_YML.replace('TZ: ${{ matrix.tz }}', "TZ: 'UTC'"), CI_YML)).toEqual([expect.stringContaining('matrix.tz')]);
   });
 });
 

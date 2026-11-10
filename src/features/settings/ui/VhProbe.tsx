@@ -10,7 +10,7 @@ export function VhProbe() {
   const [lines, setLines] = useState<string[]>([]);
   return (
     <div data-testid="settings-vh-probe">
-      <div className={styles.actions}>
+      <div className={`${styles.actions} ${styles.probeActions}`}>
         {VH_METHODS.map((m) => (
           <FormButton
             key={m.id}

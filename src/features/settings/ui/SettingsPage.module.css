@@ -177,6 +177,11 @@
   margin-top: 8px;
 }
 
+/* 真机探测按钮（VhProbe）：5 个一排放不下，换行；不换行时溢出到左边屏幕外点不到（11-10 负责人真机） */
+.probeActions {
+  flex-wrap: wrap;
+}
+
 /* 导出中断后的“继续”“取消”（0.47 续 ④ 第 4 点）：跟着上面的说明左对齐，不是弹窗底部那种靠右 */
 .exportActions {
   display: flex;

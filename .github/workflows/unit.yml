@@ -27,6 +27,7 @@ env:
   FORCE_COLOR: '0'
 
 jobs:
+  # 作业 id 和 name 不改（必需检查可能按名字认）；单元测试 11-10 起挪到下面的 unit-tz，三个时区并行
   check:
     name: 类型、规范、架构、单元测试、构建、体积、文档检查
     runs-on: ubuntu-24.04
@@ -46,12 +47,6 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      # tests/build/deno-frozen-lock.test.ts 要真跑 deno install --frozen（接手清单 DENO-lock-ci）；SHA 和版本与 ci.yml 逐字相同，那个测试会核对
-      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
-        with:
-          # 和本机同一版（架构 8.6：Deno 锁具体版本，本机和 CI 一致；本机 deno --version 为 2.9.8）
-          deno-version: 2.9.8
 
       - name: wrangler 两处版本一致（package.json 给 E2E、tools/deploy 给部署，含两份锁文件；架构 0.31 第 26 条）
         # 只读 JSON，不安装；不一致就失败，两处一起升
@@ -80,28 +75,6 @@ jobs:
       - name: 电脑版页面暂存脚本的回归测试（stage-web.mjs、ci-guard.mjs；node --test，B6-exe 安全审查 W-1）
         # desktop.yml 编 exe 前也跑一遍；这里让平时的提交就能发现回归，不用等打 tag
         run: node --test desktop/src-tauri/scripts/stage-web.test.mjs
-
-      # 不固定 pwsh 版本，用 runner 自带的；只把版本打出来，login-token-tests-run 再碰上 pwsh 自身启动崩溃（.NET FileLoadException，
-      # 10-31、11-10 各一次；tests/build/login-token-fake.ts 的 runScript 会整次重跑一遍）时能直接看出是哪一版
-      - name: 打印 pwsh 版本
-        run: |
-          if command -v pwsh >/dev/null; then pwsh --version || echo "pwsh --version 失败（不影响后面）"; else echo "runner 上没有 pwsh"; fi
-
-      - name: 单元和组件测试（UTC、首尔、洛杉矶三个时区各一遍，架构第 9 节 H2）
-        # 前端 A 的 test 脚本如果已经自己按三个时区跑，这里改成只跑一遍
-        # LEMO_REQUIRE_DENO=1：deno-frozen-lock.test.ts 找不到 deno 就失败，不再 skipIf 悄悄跳过
-        # POWERSHELL_*：关掉 pwsh 启动时的后台遥测和更新检查；10-31 c935906 这一步 pwsh（.NET 10）
-        # 在后台加载程序集时崩溃（FileLoadException，退出码 null），login-token-tests-run 一组 10 条因此失败
-        env:
-          LEMO_REQUIRE_DENO: '1'
-          POWERSHELL_TELEMETRY_OPTOUT: '1'
-          POWERSHELL_UPDATECHECK: 'Off'
-        run: |
-          for tz in UTC Asia/Seoul America/Los_Angeles; do
-            echo "::group::TZ=$tz"
-            TZ="$tz" npm test
-            echo "::endgroup::"
-          done
 
       - name: 离线数据库检查（PGlite：7 个迁移、RLS、D1 和违规样例、兼容样例、requireActiveUser；不要 Docker，真库在 ci.yml）
         run: npm run test:db:offline
@@ -143,6 +116,64 @@ jobs:
 
       - name: 数据清单快照两份（完整 src/core/manifests.gen.ts、首屏用的精简 src/core/manifest-sync.gen.ts）和 shared/manifests 一致（B2 FA-6 ③ 审查 L5）
         run: npm run check:manifests
+
+
+  unit-tz:
+    # 11-10：三个时区串行要 13～22 分钟、贴着 40 分钟上限，拆成矩阵并行；静态检查、构建、check_arch 等留在 check
+    # 三个作业都过才算过（fail-fast: false：一个时区挂了，另外两个照样跑完，失败看得全）
+    name: 单元测试 ${{ matrix.tz }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        tz: [UTC, Asia/Seoul, America/Los_Angeles]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # tests/build 里有用例调 python build/*.py，和 check 同一版
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # tests/build/deno-frozen-lock.test.ts 要真跑 deno install --frozen（接手清单 DENO-lock-ci）；SHA 和版本与 ci.yml 逐字相同，那个测试会核对
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          # 和本机同一版（架构 8.6：Deno 锁具体版本，本机和 CI 一致；本机 deno --version 为 2.9.8）
+          deno-version: 2.9.8
+
+      - name: 安装依赖（不跑任何安装脚本）
+        run: npm ci --ignore-scripts
+
+      - name: 白名单里的包单独 rebuild（package.json 的 lemo.allowScripts）
+        run: bash build/ci/rebuild-allowlist.sh
+
+      # 不固定 pwsh 版本，用 runner 自带的；只把版本打出来，login-token-tests-run 再碰上 pwsh 自身启动崩溃（.NET FileLoadException，
+      # 10-31、11-10 各一次；tests/build/login-token-fake.ts 的 runScript 会整次重跑一遍）时能直接看出是哪一版
+      - name: 打印 pwsh 版本
+        run: |
+          if command -v pwsh >/dev/null; then pwsh --version || echo "pwsh --version 失败（不影响后面）"; else echo "runner 上没有 pwsh"; fi
+
+      - name: 单元和组件测试（TZ=${{ matrix.tz }}；UTC、首尔、洛杉矶三个时区各一个作业并行，架构第 9 节 H2）
+        # 时区由矩阵给（上面 strategy.matrix.tz），每个作业只跑一遍；tests/build/deno-frozen-lock.test.ts 核对三个时区一个不少
+        # LEMO_REQUIRE_DENO=1：deno-frozen-lock.test.ts 找不到 deno 就失败，不再 skipIf 悄悄跳过
+        # POWERSHELL_*：关掉 pwsh 启动时的后台遥测和更新检查；10-31 c935906 这一步 pwsh（.NET 10）
+        # 在后台加载程序集时崩溃（FileLoadException，退出码 null），login-token-tests-run 一组 10 条因此失败
+        env:
+          TZ: ${{ matrix.tz }}
+          LEMO_REQUIRE_DENO: '1'
+          POWERSHELL_TELEMETRY_OPTOUT: '1'
+          POWERSHELL_UPDATECHECK: 'Off'
+        run: npm test
 
   secrets-scan:
     name: 密钥扫描（gitleaks，CI 第二道）

@@ -128,17 +128,18 @@ test.describe('底栏（FA-7）', () => {
 
   // 设计动效评审 D1：底栏原来和页面同一个 Suspense，切到分包没到的页（webkit 每次都是）时整条被 React 藏掉（display:none）、液滴晚 0.3 秒才动。
   // 冷启动以后第一次进待办、日历（分包都没下过），每 16ms 采一次：底栏和“＋”每一帧都看得见、宽度不为 0；液滴的 --i 点下去 100ms 内就变
-  // 采样按时间和次数两头算（代码审查 L13）：至少采满 900ms、而且至少 21 次才停；机器忙时定时器被拖慢，就多采一会儿（最多 5 秒）
+  // 采样按时间和次数两头算（代码审查 L13）：按下以后至少采满 900ms、而且至少 21 次才停；机器忙时定时器被拖慢，就多采一会儿（按下以后最多 5 秒）
   test('切页过程中底栏一直看得见；液滴点下去就走，不等页面（设计动效评审 D1）', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(bar(page)).toBeVisible();
     for (const [name, i] of [['todos', '2'], ['calendar', '1'], ['today', '0']] as const) {
       await page.evaluate(() => {
-        const w = window as unknown as { __tb: { t: number; nav: boolean; add: boolean; i: string }[]; __tbT0: number; __tbDown: number };
+        const w = window as unknown as { __tb: { t: number; nav: boolean; add: boolean; i: string }[]; __tbT0: number; __tbDown: number; __tbDone: boolean };
         w.__tb = [];
         w.__tbT0 = performance.now();
         w.__tbDown = -1;
+        w.__tbDone = false;
         // 从页面真正收到按下算起（Playwright 点之前还要等元素稳定，那段不算）
         document.addEventListener('pointerdown', () => (w.__tbDown = performance.now() - w.__tbT0), { capture: true, once: true });
         const seen = (el: Element | null): boolean => el instanceof HTMLElement && el.checkVisibility() && el.getBoundingClientRect().width > 0;
@@ -151,16 +152,18 @@ test.describe('底栏（FA-7）', () => {
             add: seen(document.querySelector('[data-testid="tabbar-add"]')),
             i: drop?.style.getPropertyValue('--i') ?? '',
           });
+          // 停止条件从按下算起（CI 审查员 11-10）：Playwright 点之前要等元素稳定，CI 上可能等过 900ms，从开始采样算会在按下前就停了。
+          // 按下以后至少采满 900ms、总数至少 21 次才停；按下以后最多再采 5 秒，一直没按下最多采 10 秒
           const t = performance.now() - w.__tbT0;
-          if ((t > 900 && w.__tb.length > 20) || t > 5000) clearInterval(id);
+          const d = w.__tbDown;
+          if ((d >= 0 && t - d > 900 && w.__tb.length > 20) || (d >= 0 && t - d > 5000) || t > 10_000) {
+            clearInterval(id);
+            w.__tbDone = true;
+          }
         }, 16);
       });
       await tab(page, name).click();
-      await page.waitForFunction(() => {
-        const tb = (window as unknown as { __tb: { t: number }[] }).__tb;
-        const t = tb.at(-1)?.t ?? 0;
-        return (t > 900 && tb.length > 20) || t > 5000;
-      }, undefined, { timeout: 8000 });
+      await page.waitForFunction(() => (window as unknown as { __tbDone?: boolean }).__tbDone === true, undefined, { timeout: 12_000 });
       const { got, down } = await page.evaluate(() => {
         const w = window as unknown as { __tb: { t: number; nav: boolean; add: boolean; i: string }[]; __tbDown: number };
         return { got: w.__tb, down: w.__tbDown };
