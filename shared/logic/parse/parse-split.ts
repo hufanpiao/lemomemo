@@ -5,7 +5,7 @@
 //     带重复说法、要先问日子（confirm）、有不存在的日子、像纪念日或随手记、句子过长的一律“没把握”，在线、有同意、有额度时交给 AI；
 //   • 输出和 AI 校验后的结构相同（shared/schema/ai.ts 的 AiItem，含 confirm，由 past-date.ts 的 pastDate 算），
 //     保存一侧统一走 shared/logic/capture-map.ts。
-// 步骤：预处理 → 点名类型（整句）→ 去请求说法（整句）→ 拆分 → 每段：重复说法 → 日期（韩文、中文）→ 时刻 → 时段词 → 重要 → 项目 → 标题。
+// 步骤：预处理 → 点名类型（整句）→ 去请求说法（整句）→ 拆分 → 每段：重复说法 → 日期（韩文、中文）→ 中文相对时刻（R-374）→ 时刻 → 时段词 → 重要 → 项目 → 标题。
 //   同一句后一件没说日子的沿用前一件的日子和 basis（照抄，第 7 节 0.29 续第 67 条），也沿用前一件写明的时段词（“周四上午九点看牙，十一点对账”）。
 // 纪念日：只有生日、纪念日（结婚、恋爱、周年、기념일、주년）、倒数日的说法才记纪念日（0.29 续第 151 条），而且 features 里有 anniv 才记；
 //   没打开（B5 之前）就记成待办。随手记本机规则不出（写入路径 B4），像随手记的只记“没把握”。
@@ -22,8 +22,8 @@ import { cutGraphemes } from '../short.ts';
 import { pastDate, type DateBasis } from './past-date.ts';
 import { RECUR_MARK, recurHint, takeRecur } from './recur-hint.ts';
 import { splitClauses } from './split.ts';
-import { prepare, QUICK_MAX, restoreWeekdays, type Rest } from './text.ts';
-import { periodLeft, takePeriodOnly, takeTime } from './time-words.ts';
+import { pad2, prepare, QUICK_MAX, restoreWeekdays, type Rest } from './text.ts';
+import { periodLeft, takePeriodOnly, takeRelative, takeTime } from './time-words.ts';
 
 /** 标题最长多少（UTF-16 单元，同 shared/schema/rows.ts 的 events / todos.title max(160)） */
 const TITLE_MAX = 160;
@@ -39,7 +39,7 @@ export interface ParseHints {
 }
 
 /** 没把握的原因（调试和单测看；客户端只看 confidence） */
-export type Doubt = 'multi' | 'no_date' | 'recur' | 'confirm' | 'bad_day' | 'anniv' | 'note' | 'too_long' | 'empty' | 'leftover';
+export type Doubt = 'multi' | 'no_date' | 'recur' | 'confirm' | 'bad_day' | 'anniv' | 'note' | 'too_long' | 'empty' | 'leftover' | 'rel_conflict';
 
 export interface ParseResult {
   items: AiItem[];
@@ -109,7 +109,7 @@ export function parseSplit(text: string, now: number, tz: Tz, _locale: 'zh' | 'k
   let carry = '';
   parts.forEach((part, i) => {
     const text = carry ? `${carry} ${part}` : part;
-    const env = { today, nowMin, ctx, named, features, projects, hints, doubts, dflt: opts.defaultDay ?? null, sentence: parts.length === 1 ? raw : '' };
+    const env = { today, nowMin, ctx, named, features, projects, hints, doubts, dflt: opts.defaultDay ?? null, sentence: parts.length === 1 ? raw : '', last: i === parts.length - 1 };
     const c = parseClause(text, env);
     if (!c.item.title && c.ctx && i < parts.length - 1) {
       carry = text;
@@ -164,6 +164,8 @@ interface ClauseEnv {
   dflt: DateStr | null;
   /** 只有一段时是原话：纪念日的说法可能被当成请求去掉了（“帮我做个倒数日”“디데이 만들어 줘”），按原话判 */
   sentence: string;
+  /** 是最后一段（没有下一段可并） */
+  last: boolean;
 }
 
 const minOf = (hm: string): number => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
@@ -182,7 +184,19 @@ function parseClause(text: string, env: ClauseEnv): Clause {
   let basis: DateBasis | null = d?.ok ? d.basis : null;
   let soft = false;
   const hint = d?.ok && d.period ? d.period : !d && env.ctx ? env.ctx.period : '';
-  const tm = takeTime(c, hint);
+  // 中文相对时刻（R-374）：“3分钟后 / 半小时后 / 一个半小时后”按记下那一刻（now）算成日子和时刻，过了午夜就是第二天；
+  // 同一段里又说了日期词或具体时刻（“明天半小时后”“半小时后3点开会”）：以相对时刻为准，另外那个从标题去掉，判没把握（rel_conflict，交给 AI）。
+  // 带重复说法的不认（重复要从某天起算，相对时刻没有意义）
+  const rel = recur ? null : takeRelative(c);
+  const said = takeTime(c, hint);
+  let tm = said;
+  if (rel !== null) {
+    if (d || said) env.doubts.add('rel_conflict');
+    const at = env.nowMin + rel;
+    date = addDays(env.today, Math.floor(at / 1440));
+    basis = 'rel';
+    tm = { time: pad2(Math.floor((at % 1440) / 60)) + ':' + pad2(at % 60), deadline: false, duration: null, nextDay: false, period: '' };
+  }
   // R8：取走一个时刻以后还剩“时段词 + 别的事”（“下午3点开会 晚上看电影”），中间只隔了空格：不拆，判没把握（下一行会把中文时段词从标题去掉，先看）
   if (tm && periodLeft(c.text)) env.doubts.add('leftover');
   const periodOnly = tm ? null : takePeriodOnly(c);
@@ -221,7 +235,9 @@ function parseClause(text: string, env: ClauseEnv): Clause {
 
   const important = takeImportant(c);
   const project = findProject(c.text, env.projects);
-  const title = cutGraphemes(restoreWeekdays(cleanTitle(c.text.replace(RECUR_MARK, recur?.display ?? ''))), TITLE_MAX);
+  let title = cutGraphemes(restoreWeekdays(cleanTitle(c.text.replace(RECUR_MARK, recur?.display ?? ''))), TITLE_MAX);
+  // “3分钟后提醒我”（R-374）：请求说法去掉以后没有事由了，又是最后一段（前面的段会并进下一段），记成标题“提醒”的日程
+  if (!title && rel !== null && env.last) title = '提醒';
   const nextCtx: Ctx | null = date !== null && basis !== null ? { date, basis, period: tm?.period || hint || '', soft } : null;
 
   // 类型：点名优先（R-195）；像纪念日的（续第 151 条）、有具体时刻的日程、其余待办

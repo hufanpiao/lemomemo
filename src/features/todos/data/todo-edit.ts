@@ -5,11 +5,14 @@
 //   ② 第一次设截止时刻（原来没有）：提前量默认 60（shared 的 remindBeforeOnSetDueTime，和 BE-4 同一份）；原来就有的保留；
 //   ③ 清掉截止时刻：提前量一并清掉，回到原来的“当天 / 前一天 + 时刻”（remind_days、remind_time 不动）；
 //   ④ 改了标题且简称是 AI 起的（short_by = 'ai'）：同一个 patch 里清掉 short、short_by（架构 5.12 L3）
+//   ⑤ R-375（11-10 负责人）：没有截止日期时改了提醒（当天 / 前一天、提醒时刻），截止日期自动填今天（按 current_tz，由调用方传 today），可以再改；
+//      改成“不提醒”不填（没要提醒，不替用户定截止）；已有截止日期不动。填了今天以后提醒时刻可能已经过了（“前一天”、或今天的时刻已过）：
+//      照样存，不挪日子；编辑页用 remindPassed 在提醒那一行下面出灰字“这个提醒时刻已经过了”，用户自己改
 // • 带不带提醒（写入的 remind 标记，outbox 据此整条提前发）：用 shared/logic/remind.ts 的 remindAtOf 本机现算，和服务器同一份
 // 纯 TS：不准 import React（A1）
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { DEFAULT_TODO_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime } from '../../../../shared/logic/remind.ts';
+import { DEFAULT_TODO_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime, todoRemindAt } from '../../../../shared/logic/remind.ts';
 import { todoRemindFlag } from '../../../core/remind-flag.ts';
 
 /** 编辑页能改的字段 */
@@ -64,9 +67,14 @@ export function emptyForm(): TodoForm {
   };
 }
 
-/** 截止日期、截止时刻改了以后把连带的字段一起改好（规则 ①②③）。界面每次改这几个字段都过一遍它 */
-export function normalize(prev: TodoForm, next: TodoForm): TodoForm {
+/** 截止日期、截止时刻改了以后把连带的字段一起改好（规则 ①②③⑤）。界面每次改这几个字段都过一遍它；today 给了才做 ⑤ */
+export function normalize(prev: TodoForm, next: TodoForm, today?: DateStr): TodoForm {
   const out = { ...next };
+  const remindChanged = next.remind_days !== prev.remind_days || next.remind_time !== prev.remind_time;
+  if (today !== undefined && prev.due === null && out.due === null && out.remind_days !== null && remindChanged) {
+    // ⑤ R-375：没设截止就改了提醒 → 截止日填今天
+    out.due = today;
+  }
   if (out.due === null) {
     // ①：没有日期就不能有截止时刻
     out.due_time = null;
@@ -81,6 +89,13 @@ export function normalize(prev: TodoForm, next: TodoForm): TodoForm {
     out.remind_before_min = remindBeforeOnSetDueTime(prev.due_time, prev.remind_before_min);
   }
   return out;
+}
+
+/** “当天 / 前一天 + 提醒时刻”算出来的提醒时刻已经过了（R-375 自动填了今天以后最常见）：编辑页出灰字。没设截止、用截止时刻提醒的不管 */
+export function remindPassed(form: TodoForm, tz: Tz, now: number): boolean {
+  if (form.due === null || form.due_time !== null || form.remind_days === null || form.done) return false;
+  const at = todoRemindAt(form, tz, now);
+  return at !== null && at < now;
 }
 
 /** 标题去掉首尾空白；空标题不写（界面提示） */

@@ -6,8 +6,8 @@ import { AI_KINDS, type AiKind } from '../../shared/schema/kinds.ts';
 import { GEMINI_BASE, GeminiProvider, geminiBody, toBase64 } from '../../supabase/functions/_shared/ai/gemini.ts';
 import { GEN_PARAMS, PARSE_TIMEOUT_MS, PROMPT_VERSION, TASK_PARAMS, VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
 import { cleanProjects, fillPrompt, makeParseWithAI, PROJECT_LEN, PROJECTS_MAX, responseSchema, sanitize, TEXT_MAX, wallOf, type AiKindLike, type InvalidReasonLike, type ParseInput } from '../../supabase/functions/_shared/ai/parse-core.ts';
-import { PARSE_V2 } from '../../supabase/functions/_shared/ai/prompts/parse.v2.ts';
-import { VOICE_V2 } from '../../supabase/functions/_shared/ai/prompts/voice.v2.ts';
+import { PARSE_V3 } from '../../supabase/functions/_shared/ai/prompts/parse.v3.ts';
+import { VOICE_V3 } from '../../supabase/functions/_shared/ai/prompts/voice.v3.ts';
 import { pickProvider, readAiConfig } from '../../supabase/functions/_shared/ai/router.ts';
 import { okJson, StubProvider } from './ai-fakes.ts';
 
@@ -34,7 +34,7 @@ describe('防提示注入：sanitize、cleanProjects', () => {
 
 describe('提示词和 responseSchema', () => {
   it('两份提示词填完没有漏下的 {{…}}；今天、星期、时刻、时区按 now、tz 算', () => {
-    for (const tpl of [PARSE_V2, VOICE_V2]) {
+    for (const tpl of [PARSE_V3, VOICE_V3]) {
       const p = fillPrompt(tpl, { now: NOW, tz: 'Asia/Seoul', locale: 'ko', features: ['event', 'todo'] }, checkDefaultDay).system;
       expect(/\{\{[^}]*\}\}/.test(p)).toBe(false);
       expect(p).toContain('2026-10-28');

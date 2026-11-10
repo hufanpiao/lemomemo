@@ -5,6 +5,8 @@
 // • 只读行（带不认识的值，0.27①“只读显示”）：一进来就按 core 的只读 id 判断（kit 的 useReadonlyIds），顶部出“这条要新版本才能修改 · 更新”，
 //   输入框全部禁用、不出“删除”、右上不写“改了就自动保存”（FA-2 视觉验收第 2 条）；写入被拒（status readonly）时同样
 // • 删除：软删，页内出“已删除”和“撤销”（ADR-006）；“最近删除”页在 FA-2 后面一段
+// • R-375：没有截止日期时改了提醒（当天 / 前一天、提醒时刻），截止日期自动填今天（规则在 data/todo-edit.ts ⑤），提醒那一行的灰字说明这一点；
+//   填了今天以后“当天 / 前一天 + 时刻”已经过了的，同一处灰字改成“这个提醒时刻已经过了，不会再提醒”（不替用户挪日子）
 import { canGoBack, goBack, parseHash, replaceRoute, useRoute } from '../../../app/router.ts';
 import { replaceAddress } from '../../../app/router-levels.ts';
 import { useCallback, useReducer, useRef } from 'react';
@@ -175,7 +177,7 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
             />
           </Field>
         ) : (
-          <Field label={t('todo.edit.remind', {})} htmlFor="todo-days" hint={form.due === null ? t('todo.edit.needDue', {}) : undefined}>
+          <Field label={t('todo.edit.remind', {})} htmlFor="todo-days" hint={form.due === null ? t('todo.edit.needDue', {}) : ed.remindPassed ? t('todo.edit.remindPast', {}) : undefined}>
             <Select
               id="todo-days"
               value={String(form.remind_days)}

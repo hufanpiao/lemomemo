@@ -4,8 +4,8 @@
 // 做的事：去控制字符、转义 </data>、截 2000 字 → 拼提示词 → 调 provider → 校验 → 返回校验后的结果和原始输出（评测两份都存）。
 // 不做的事：不查 AI 同意、不计次数和限流、不看“本机有把握就不调 AI”、不读写数据库（quota 只作为 reason 返回，ai_state 由调用方写）。
 import { PROMPT_VERSION, TASK_PARAMS, PARSE_TIMEOUT_MS, VOICE_TIMEOUT_MS } from './params.ts';
-import { DEFAULT_DAY_RULE, PARSE_V2 } from './prompts/parse.v2.ts';
-import { VOICE_V2 } from './prompts/voice.v2.ts';
+import { DEFAULT_DAY_RULE, PARSE_V3 } from './prompts/parse.v3.ts';
+import { VOICE_V3 } from './prompts/voice.v3.ts';
 import type { AIProvider } from './provider.ts';
 
 export type AiKindLike = 'event' | 'todo' | 'note' | 'anniv';
@@ -156,7 +156,7 @@ function failOf(r: { ok: false; reason: 'quota' | 'timeout' | 'error'; status?: 
 export function makeParseWithAI<Item>(checkers: Checkers<Item>) {
   /** 文字：ai-parse、claude-intake、评测 */
   async function parseWithAI(input: ParseInput, provider: AIProvider): Promise<ParseOk<{ items: Item[] }> | ParseFail> {
-    const fp = fillPrompt(PARSE_V2, input, checkers.checkDefaultDay);
+    const fp = fillPrompt(PARSE_V3, input, checkers.checkDefaultDay);
     const bad = fp.badDefaultDay ? ({ badDefaultDay: true } as const) : {};
     const r = await provider.generate({
       system: fp.system,
@@ -173,7 +173,7 @@ export function makeParseWithAI<Item>(checkers: Checkers<Item>) {
 
   /** 录音：ai-voice（一次完成转写和拆分；C 路不做评测，R-167） */
   async function voiceWithAI(input: VoiceInput, provider: AIProvider): Promise<ParseOk<{ transcript: string; items: Item[] }> | ParseFail> {
-    const fp = fillPrompt(VOICE_V2, input, checkers.checkDefaultDay);
+    const fp = fillPrompt(VOICE_V3, input, checkers.checkDefaultDay);
     const bad = fp.badDefaultDay ? ({ badDefaultDay: true } as const) : {};
     const r = await provider.generate({
       system: fp.system,

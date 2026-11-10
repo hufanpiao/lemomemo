@@ -13,7 +13,10 @@
 //   时段词后面接别的名词（약속、운동、회의……）的“점심 약속”“저녁 약속”“아침 운동”“점심 회의”一律去掉（R-165、续第 73 条，TC-B3-54；
 //   架构审第九节 7a：不再给“점심 약속”开特例）。没有具体时刻时句末的时段词也去掉（M28“和老李 점심”→“和老李”、当天截止的待办，R-165）。
 //   认不出的时间（如“25点”）原样留在文字里。
-import { pad2, type Rest } from './text.ts';
+//   中文相对时刻（R-374，11-10 负责人“只加中文”）：takeRelative 认“N 分钟后 / N 小时后 / N 个小时后 / 半小时后 / 一个半小时后 / N 个半小时后 /
+//   N 小时 M 分钟后 / 一刻钟后 / 过 N 分钟”（后、以后、之后、过后都算），返回从现在起多少分钟，由 parse-split 按 now 换成日子和时刻；
+//   最多 72 小时，超了不认、原样留在标题里。“开会两小时”这种不带“后 / 过”的是时长，不认。韩文不做。
+import { cnNum, pad2, type Rest } from './text.ts';
 
 const MORNING = ['凌晨', '早上', '早晨', '上午', '오전', '새벽', '아침'];
 const NOON = ['中午', '점심', '낮'];
@@ -149,4 +152,38 @@ export function periodLeft(text: string): boolean {
     }
   }
   return false;
+}
+
+/** 中文相对时刻（R-374）：数字可以是阿拉伯数字或“两 / 十五 / 二十”这类中文数字 */
+const REL_N = '(\\d{1,3}|[一二两三四五六七八九十]{1,3})';
+const REL_BODY =
+  '(?:' + REL_N + '\\s*个?\\s*(半)?\\s*(?:小时|钟头)(?:\\s*零?\\s*' + REL_N + '\\s*分钟?)?' +
+  '|(半)\\s*个?\\s*(?:小时|钟头)' +
+  '|' + REL_N + '\\s*分钟' +
+  '|([一三])\\s*刻钟)';
+/** 分组：1 过、2 小时数、3 半、4 小时后面的分钟、5 单说“半小时”、6 分钟数、7 一 / 三刻钟、8 后。
+ *  前面不能紧挨数字、“点”、冒号（“3点10分钟后”不认）；“过 N 分钟”可以不带“后”，别的必须带“后 / 以后 / 之后 / 过后”。
+ *  “过”只认白名单（代码审第二轮：黑名单挡不全“熬过 / 睡过 / 看过 / 跳过 / 路过……两小时”）：在开头、标点后，
+ *  或紧跟“再 / 等 / 大概 / 大约 / 约 / 差不多”（中间可隔空格）；字后隔空格的（“超 过30分钟”）不认。
+ *  不认的“过”不吞进来，后面没有“后”就是时长、限度，不记时刻；“不过10分钟后到”带“后”照认 */
+const REL_GUO_OK = '(?<=(?:^|[，。,.!?！？、；;：:（）()]|再|等|大概|大约|约|差不多)\\s*)';
+const REL_RE = new RegExp('(?<![\\d点:])(' + REL_GUO_OK + '过\\s*)?' + REL_BODY + '(\\s*(?:以后|之后|过后|后))?', 'g');
+/** 最多认多远（分钟） */
+export const REL_MAX_MIN = 72 * 60;
+
+/** 取走一句里第一个中文相对时刻，返回从现在起多少分钟；没有、或者超过 72 小时返回 null（不取走） */
+export function takeRelative(st: Rest): number | null {
+  const n = (w: string | undefined): number => (w === undefined ? 0 : (cnNum(w) ?? Number.NaN));
+  for (const m of st.text.matchAll(REL_RE)) {
+    if (!m[1] && !m[8]) continue;   // 不带“过 / 后”的是时长（“开会两小时”），不认
+    let min: number;
+    if (m[2] !== undefined) min = n(m[2]) * 60 + (m[3] ? 30 : 0) + n(m[4]);
+    else if (m[5]) min = 30;
+    else if (m[6] !== undefined) min = n(m[6]);
+    else min = m[7] === '三' ? 45 : 15;
+    if (!Number.isFinite(min) || min <= 0 || min > REL_MAX_MIN) return null;
+    st.text = st.text.slice(0, m.index) + ' ' + st.text.slice((m.index ?? 0) + m[0].length);
+    return min;
+  }
+  return null;
 }

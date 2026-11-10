@@ -27,7 +27,8 @@ export const ko = {
   'todo.edit.days.0': '당일', // REVIEW(ko)
   'todo.edit.days.1': '전날', // REVIEW(ko)
   'todo.edit.remindTime': '알림 시각', // REVIEW(ko)
-  'todo.edit.needDue': '마감일을 정해야 알려 드려요', // REVIEW(ko)
+  'todo.edit.needDue': '알림을 정하면 마감일이 오늘로 정해져요', // REVIEW(ko) R-375
+  'todo.edit.remindPast': '이 알림 시각은 이미 지나서 알려 드리지 않아요', // REVIEW(ko) R-375
   'todo.edit.project': '프로젝트', // REVIEW(ko)
   'todo.edit.note': '메모', // REVIEW(ko)
   'todo.edit.projectPh': '예: 회사, 집', // REVIEW(ko) G11 占位

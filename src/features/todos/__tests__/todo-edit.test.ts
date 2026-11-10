@@ -4,7 +4,7 @@ import { msAt } from '../../../../shared/core/date.ts';
 import { todosWrite } from '../../../../shared/schema/rows.ts';
 import { remindAtOf, type TodoRemindRow } from '../../../../shared/logic/remind.ts';
 import {
-  emptyForm, formOf, hasRemind, newTodoRow, normalize, patchOf, prevRemindAtOf, REMIND_BEFORE_OPTIONS, TODO_TIMING_COLS, type TodoForm,
+  emptyForm, formOf, hasRemind, newTodoRow, normalize, patchOf, prevRemindAtOf, REMIND_BEFORE_OPTIONS, remindPassed, TODO_TIMING_COLS, type TodoForm,
 } from '../data/todo-edit.ts';
 
 const TZ = 'Asia/Seoul';
@@ -196,5 +196,41 @@ describe('hasRemind：和 shared 的 remindAtOf 同一份（BE-4 共用）', () 
     const overdue = { ...f, due_time: '17:00', remind_before_min: 60 };
     expect(remindAtOf('todo', overdue, TZ, now)).toBe(dueAt);
     expect(remindAtOf('todo', overdue, TZ, now, at('16:00'))).toBe(at('16:00'));
+  });
+});
+
+describe('R-375：没设截止时改了提醒，截止日期自动填今天', () => {
+  const TODAY = '2026-11-05';
+  it('改“当天 / 前一天”、改提醒时刻都填今天；可以再改（再改提醒不覆盖）', () => {
+    const prev = base({ due: null, remind_days: 0 });
+    expect(normalize(prev, { ...prev, remind_days: 1 }, TODAY)).toMatchObject({ due: TODAY, remind_days: 1, due_time: null, remind_before_min: null });
+    expect(normalize(prev, { ...prev, remind_time: '20:00' }, TODAY)).toMatchObject({ due: TODAY, remind_time: '20:00' });
+    const set = base({ due: '2026-11-20', remind_days: 0 });
+    expect(normalize(set, { ...set, remind_days: 1 }, TODAY).due).toBe('2026-11-20');
+  });
+  it('改成“不提醒”、没改提醒、没传 today、同一次自己清掉截止：都不填', () => {
+    const prev = base({ due: null, remind_days: 0 });
+    expect(normalize(prev, { ...prev, remind_days: null }, TODAY).due).toBeNull();
+    expect(normalize(prev, { ...prev, note: '备注' }, TODAY).due).toBeNull();
+    expect(normalize(prev, { ...prev, remind_days: 1 }).due).toBeNull();
+    const had = base({ due: '2026-11-20', remind_days: 0 });
+    expect(normalize(had, { ...had, due: null, remind_days: 1 }, TODAY).due).toBeNull();
+  });
+});
+
+describe('remindPassed（R-375 灰字）', () => {
+  const at = (day: string, hm: number) => msAt(day, hm, TZ);
+  it('当天 09:00：9 点前没过、9 点以后过了；前一天的在今天已经过了', () => {
+    const f = base({ due: '2026-11-05', remind_days: 0, remind_time: '09:00' });
+    expect(remindPassed(f, TZ, at('2026-11-05', 8 * 60))).toBe(false);
+    expect(remindPassed(f, TZ, at('2026-11-05', 10 * 60))).toBe(true);
+    expect(remindPassed({ ...f, remind_days: 1 }, TZ, at('2026-11-05', 8 * 60))).toBe(true);
+  });
+  it('没截止、不提醒、用截止时刻提醒的、已完成的都不算', () => {
+    const now = at('2026-11-05', 23 * 60);
+    expect(remindPassed(base({ due: null }), TZ, now)).toBe(false);
+    expect(remindPassed(base({ due: '2026-11-05', remind_days: null }), TZ, now)).toBe(false);
+    expect(remindPassed(base({ due: '2026-11-05', due_time: '10:00', remind_before_min: 60 }), TZ, now)).toBe(false);
+    expect(remindPassed(base({ due: '2026-11-05', done: true }), TZ, now)).toBe(false);
   });
 });

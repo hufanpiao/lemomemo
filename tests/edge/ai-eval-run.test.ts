@@ -77,7 +77,7 @@ describe('评测骨架：参数和速度', () => {
     for (const bad of ['../../x', 'parse.ok', 'Parse-ok', '-x', 'a/b']) expect(() => parseArgs(['--replay', bad, '--rpm', '1', '--rpd', '1', '--date', '2026-11-20']), bad).toThrow(/--replay/);
   });
   it('报告文件名照句库 5.3：set1-<日期>-<提示词版本>-<模型名>；模型名有怪字符报错', () => {
-    expect(reportName('2026-11-20', PROMPT_VERSION.parse, 'gemini-3.5-flash-lite')).toBe('set1-2026-11-20-parse.v2-gemini-3.5-flash-lite');
+    expect(reportName('2026-11-20', PROMPT_VERSION.parse, 'gemini-3.5-flash-lite')).toBe('set1-2026-11-20-parse.v3-gemini-3.5-flash-lite');
     expect(() => reportName('2026-11-20', 'parse.v2', '../x')).toThrow();
   });
 });
@@ -176,7 +176,7 @@ describe('评测骨架：主流程 runEval 的顺序（代码审 M1、S1、S6）
     const f = fakeDeps({ key: 'k-not-real' });
     const r = await runEval(LIVE, f.deps);
     expect(f.log).toEqual(['key', 'copy', 'rows', 'load', 'live:gemini-3.5-flash-lite', 'write:reports']);
-    expect([r.called, f.calls(), f.written[0]?.name]).toEqual([2, 2, 'set1-2026-11-20-parse.v2-gemini-3.5-flash-lite']);
+    expect([r.called, f.calls(), f.written[0]?.name]).toEqual([2, 2, 'set1-2026-11-20-parse.v3-gemini-3.5-flash-lite']);
     expect(f.written[0]?.json).not.toContain('k-not-real');
   });
 

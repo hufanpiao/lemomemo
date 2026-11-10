@@ -129,7 +129,7 @@ describe('截止日期、截止时刻（TC-B2-74）', () => {
     await b.outbox?.applyServer('todos', [{ row: serverTodo({ due: null }) }]);
     open(`#/todo/${ID}`);
     expect(screen.queryByTestId('todo-edit-due-time')).toBeNull();
-    expect(screen.getByText('设了截止日期才会提醒')).toBeTruthy();
+    expect(screen.getByText('设了提醒，截止日期会自动填今天')).toBeTruthy();
     await pick('todo-edit-due', '2026-11-05');
     expect(screen.getByTestId('todo-edit-due-time')).toBeTruthy();
     expect(screen.queryByTestId('todo-edit-before')).toBeNull();
