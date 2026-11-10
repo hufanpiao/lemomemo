@@ -177,7 +177,8 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
     const active = items.filter((i) => i.state !== 'failed');
     // 带提醒的“未同步”（remindRecs）连 failed 一起算（接手清单 REMIND-failed-unsynced）：发送失败的修改同样没到服务器，
     // 别的设备上这条提醒同样不会响；gone 也算（另一台设备已删，本机的修改没落库），直到恢复、放弃或重试成功
-    const remind = new Set(items.filter((i) => i.remind).map((i) => i.rec));
+    // 新建失败（failed 的 insert，R-378）不带提醒也算：这一行只在本机，用现有的“未同步”提示条给重试、另存或放弃
+    const remind = new Set(items.filter((i) => i.remind || (i.state === 'failed' && i.op === 'insert')).map((i) => i.rec));
     // 其中能“重试”的（UNSYNCED-retry-ui）：这条记录有能重发的发送失败项（canRetryUnsynced：不是 gone、不是重发必然同样失败的码，见数据字典 10.4b；
     // 不论那一项带不带提醒，同一条记录一起重发）
     const retry = new Set(items.filter((i) => canRetryUnsynced(i) && remind.has(i.rec)).map((i) => i.rec));
@@ -256,7 +257,7 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
           }
         });
       }
-      await (targets.length ? touched(ctx) : refresh());
+      await touched(ctx);   // 没有目标也发一次 queue 事件（只多提醒主页一次，无害；省首屏字节，R-378）
     },
     async resetInflight(opId) {
       if (suspended) return;

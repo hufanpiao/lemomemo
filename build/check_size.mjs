@@ -1,7 +1,10 @@
 // 体积预算（架构 2.6、W3）：按 Vite 的 manifest 找出首屏要下载的 JS（入口 + 它静态 import 的 chunk），gzip 后合计
 // 首屏 JS ≤ 150 KB（含 React）超了就失败；全部 JS ≤ 250 KB 只提示（硬验收在 B2，B0 只做脚本，空白 App 的数字没有意义）
-// B3 净增额度（11-09，B3 任务单架构审“首屏净增 ≤ 1 KB”、代码审 B1）：--mode 给了、build/first-screen-baseline.json 里有这个模式和平台的基线时，
-// 首屏 JS 超过 基线 + limitBytes 也失败。150 KB 总量管不到这 1 KB。没有基线的模式（production 要真密钥构建、development、test）只提示不查
+// 首屏净增额度（11-09 起，B3 任务单架构审“首屏净增 ≤ 1 KB”、代码审 B1；R-379 起按批次重设）：--mode 给了、build/first-screen-baseline.json
+// 当前批次（current）的 modes 里有这个模式、基线已定时，首屏 JS 超过 基线 + limitBytes 也失败。150 KB 总量管不到这 1 KB。
+// 没有基线的模式（production 要真密钥构建、development、test）、基线还是 null 的批次只提示不查。日志和报错里的批次名取 current。
+// R-379（2026-11-10 负责人选项原文：“B4 新开一份 1 KB 额度（推荐）”）：首屏净增额度按批次重设：以 R-378 合入后的 main 为 B4 新基线，
+// B4 这一批首屏净增 ≤ 1 KB，标准同 B3
 // 用法：node build/check_size.mjs [--json] [--app-dir <目录>] [--mode <模式>] [--baseline <文件>]
 //（--app-dir 默认 dist/web/app；违规样例测试用它指到临时目录，QA D-06；--baseline 默认 build/first-screen-baseline.json，测试用它换成临时文件）
 import { execFileSync } from 'node:child_process';
@@ -100,22 +103,37 @@ function buildCommits() {
   return out;
 }
 
-export const NET_GROWTH_MESSAGE = 'B3 首屏净增额度用完，要主持人定从哪里挪空间或放宽（需求编号）';
+/** 额度用完时报错的开头；batch 是批次名（first-screen-baseline.json 的 current），R-379 起按批次报 */
+export const netGrowthMessage = (batch) => `${batch} 首屏净增额度用完，要主持人定从哪里挪空间或放宽（需求编号）`;
 
 /**
- * 相对基线的净增关卡。data：first-screen-baseline.json 的内容；返回 { skip } 或 { base, limit, net, error }（error 为 null 就是通过）
+ * 当前批次的设置（R-379：首屏净增额度按批次重设，B4 起以 R-378 合入后的 main 为新基线）。data：first-screen-baseline.json 的内容；
+ * 返回 { batch, cfg }。current 缺了、batches 里没有这一段都直接报错（不悄悄跳过关卡）
+ */
+export function currentBatch(data) {
+  const batch = data?.current;
+  if (typeof batch !== 'string' || batch === '') throw new Error('first-screen-baseline.json 的 current（当前批次名）没写');
+  const cfg = data?.batches?.[batch];
+  if (!cfg || typeof cfg !== 'object') throw new Error(`first-screen-baseline.json 的 batches 里没有当前批次 ${batch}`);
+  return { batch, cfg };
+}
+
+/**
+ * 相对基线的净增关卡。data：first-screen-baseline.json 的内容，只按 batches[current] 查；
+ * 返回 { batch, skip } 或 { batch, base, limit, net, error }（error 为 null 就是通过）
  */
 export function netGrowthCheck(firstScreenStable, data, mode) {
-  if (!mode) return { skip: '净增关卡跳过：没给 --mode' };
-  if (!(data?.modes ?? []).includes(mode)) return { skip: `净增关卡跳过：${mode} 模式不在 first-screen-baseline.json 的 modes 里` };
-  const base = data.baseline;
-  if (base === null) return { skip: '净增关卡跳过：first-screen-baseline.json 的基线还没定（baseline 为 null）' };
-  if (!Number.isInteger(base) || base <= 0) throw new Error('first-screen-baseline.json 的 baseline 不是正整数');
-  const limit = data.limitBytes;
-  if (!Number.isInteger(limit) || limit < 0) throw new Error('first-screen-baseline.json 的 limitBytes 不是非负整数');
+  const { batch, cfg } = currentBatch(data);
+  if (!mode) return { batch, skip: `${batch} 净增关卡跳过：没给 --mode` };
+  if (!(cfg.modes ?? []).includes(mode)) return { batch, skip: `${batch} 净增关卡跳过：${mode} 模式不在 first-screen-baseline.json 的 ${batch}.modes 里` };
+  const base = cfg.baseline;
+  if (base === null) return { batch, skip: `${batch} 净增关卡跳过：first-screen-baseline.json 的 ${batch} 基线还没定（baseline 为 null）` };
+  if (!Number.isInteger(base) || base <= 0) throw new Error(`first-screen-baseline.json 的 ${batch}.baseline 不是正整数`);
+  const limit = cfg.limitBytes;
+  if (!Number.isInteger(limit) || limit < 0) throw new Error(`first-screen-baseline.json 的 ${batch}.limitBytes 不是非负整数`);
   const net = firstScreenStable - base;
-  const error = net > limit ? `${NET_GROWTH_MESSAGE}：首屏（稳定口径）${firstScreenStable} B，基线 ${base} B（${mode}），净增 ${net} B > ${limit} B` : null;
-  return { base, limit, net, error };
+  const error = net > limit ? `${netGrowthMessage(batch)}：首屏（稳定口径）${firstScreenStable} B，基线 ${base} B（${mode}），净增 ${net} B > ${limit} B` : null;
+  return { batch, base, limit, net, error };
 }
 
 function argValue(name) {
@@ -146,7 +164,7 @@ function main() {
   else if (g.error) {
     console.error(g.error);
     failed = true;
-  } else console.log(`B3 首屏净增：${g.net} B / 额度 ${g.limit} B（基线 ${g.base} B）`);
+  } else console.log(`${g.batch} 首屏净增：${g.net} B / 额度 ${g.limit} B（基线 ${g.base} B）`);
   // 预加载表去重的产物核对（vite.config.ts 的 dropHostLoaded，见 check_preload.mjs）。manifest 里该有表的动态 import 在产物里找不到也算失败
   const p = checkPreload(appDir);
   if (p.errors.length) {

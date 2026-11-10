@@ -76,7 +76,7 @@ export const bearer = (uid: string) => `Bearer fakejwt.${uid}`;
 
 export interface FakeAuthz {
   fetch: (req: Request) => Promise<Response>;
-  calls: { op: string; items: { bucket: string; path: string }[] }[];
+  calls: { op: string; items: { bucket: string; path: string; content_length?: unknown }[] }[];
   /** 允许的 (op, bucket/path)；默认：路径第一段是本人就放行 */
   deny: Map<string, string>;
   /** 整批回这个错误（account_disabled、session_revoked、rate_limited） */
@@ -100,7 +100,7 @@ export function fakeAuthz(): FakeAuthz {
     async fetch(req) {
       const url = new URL(req.url);
       if (url.pathname !== '/rest/v1/rpc/files_authorize') return new Response('[]', { status: 404 });
-      const body = (await req.json()) as { p_op: string; p_items: { bucket: string; path: string }[] };
+      const body = (await req.json()) as { p_op: string; p_items: { bucket: string; path: string; content_length?: unknown }[] };
       st.calls.push({ op: body.p_op, items: body.p_items });
       if (st.delayMs) {
         await new Promise<void>((resolve, reject) => {

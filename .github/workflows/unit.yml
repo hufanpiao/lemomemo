@@ -91,8 +91,8 @@ jobs:
       - name: 构建（preview 模式，不带任何环境的真实地址；含官网和拼好的 _headers）
         run: npm run build -- --mode preview
 
-      # --mode preview：上一步是 preview 构建，按 build/first-screen-baseline.json 的 preview、linux 基线再卡 B3 净增 ≤ 1 KB
-      - name: 体积预算（架构 2.6；B3 首屏净增额度）
+      # --mode preview：上一步是 preview 构建，按 build/first-screen-baseline.json 当前批次（current）的 preview 基线再卡首屏净增（R-379 起按批次）
+      - name: 体积预算（架构 2.6；当前批次首屏净增额度）
         run: node build/check_size.mjs --mode preview
 
       - name: check_arch 再跑一次（构建以后，A14 连 dist/web 一起扫）

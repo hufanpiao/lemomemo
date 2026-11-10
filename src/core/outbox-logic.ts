@@ -120,11 +120,14 @@ export function recKey(table: string, id: string): string {
 /** 按 seq 排序 */
 export const bySeq = (a: OutboxItem, b: OutboxItem): number => a.seq - b.seq;
 
-/** server 上叠加这条记录还没确认的项（pending、inflight，不含 failed），得到 view（4.3 的 rebase） */
+/**
+ * server 上叠加这条记录还没确认的项（pending、inflight，不含 failed），得到 view（4.3 的 rebase）。
+ * 例外：failed 的 insert 照样叠加（R-378）：新建失败的行留在本机、标“未同步”，后面的修改叠在上面，等重试、另存或放弃
+ */
 export function rebaseView(server: ServerRow | null, items: readonly OutboxItem[]): ServerRow | null {
   let v: Record<string, unknown> | null = server ? { ...server } : null;
   for (const i of [...items].sort(bySeq)) {
-    if (i.state === 'failed') continue;
+    if (i.state === 'failed' && i.op !== 'insert') continue;
     if (i.op === 'insert') v = { ...(v ?? {}), ...i.data, id: i.id };
     else if (v) v = { ...v, ...i.data };
   }
@@ -136,12 +139,14 @@ export function rebaseView(server: ServerRow | null, items: readonly OutboxItem[
  * - 只看 pending、格式版本等于当前的（比自己高的、迁移失败的留着不发）；
  * - 一条记录最早的那项还在退避中，整条记录都等着（同一条的项不颠倒）；
  * - 带提醒的记录整条提前（连同它依赖的记录）；其余按 seq；
- * - 依赖的记录还有没发的项时，先发依赖；依赖在退避中，本条也等着
+ * - 依赖的记录还有没发的项时，先发依赖；依赖在退避中，本条也等着；
+ * - 有 failed 的 insert 的记录整条挡住，依赖它的也挡住（R-378：服务器上没有这一行，后面的修改发出去会回 not_found 被丢）
  */
 export function sendOrder(items: readonly OutboxItem[], now: number, currentV: number = OUTBOX_V): OutboxItem[] {
   const groups = new Map<string, OutboxItem[]>();
   for (const i of [...items].sort(bySeq)) {
-    if (i.state === 'failed') continue;
+    // failed 的 insert 留在组里当第一项（R-378）：不是 pending，下面整条记录就挡住了，依赖它的也跟着挡
+    if (i.state === 'failed' && i.op !== 'insert') continue;
     const g = groups.get(i.rec);
     if (g) g.push(i);
     else groups.set(i.rec, [i]);

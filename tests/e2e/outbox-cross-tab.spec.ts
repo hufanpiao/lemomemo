@@ -67,6 +67,8 @@ function build(): string {
       __APP_VERSION__: JSON.stringify('0.0.0-e2e'),
       __BUILD_TIME__: JSON.stringify('1970-01-01T00:00:00.000Z'),
       'import.meta.env': JSON.stringify({ MODE: 'e2e', DEV: false, PROD: true }),
+      // IIFE 里没有 import.meta：打进来的代码要是读 import.meta.url（new URL(…, import.meta.url) 一类），给一个同源的占位地址（代码审建议）
+      'import.meta.url': JSON.stringify('http://127.0.0.1:8788/__outbox-cross-tab.js'),
     },
     write: false,
   }).outputFiles[0]?.text;

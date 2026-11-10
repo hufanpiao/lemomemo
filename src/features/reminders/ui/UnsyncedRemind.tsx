@@ -6,14 +6,19 @@
 // • 重试（UNSYNCED-retry-ui，负责人 11-05 定方案 C）：这些记录里有发送失败、不是 gone 的项时，提示行末尾出“重试”，
 //   一次重试全部（同一条记录的几项一起，保持顺序）；gone 照旧走冲突卡的“恢复”。行尾标记只显示、不能点（它在整行按钮里，按钮不能套按钮）。
 //   点了以后这几项改回待发、按钮消失；焦点在按钮上时挪到提示行本身，不掉到页面开头
+// • 新建失败（R-378）：不带提醒也进 remindRecs；码能重试的同样出“重试”，不能重试的出“另存为新的一条”“放弃”（FailedCreateActions，按需下载）
 // • 自己不带 role="status"：读屏播报靠挂它的页面放一个常驻的 role="status" 容器、内容后填进去（提醒接线代码审查 L3：
 //   live region 和内容同时插进来时 iOS VoiceOver 常常不播报）
 // 小标记在 UnsyncedRemindMark.tsx；两个都由列表、今天页经 reminders 的 index.ts 懒加载挂（见交付说明的接线清单）
-import { useLayoutEffect, useRef } from 'react';
+import { lazy, Suspense, useLayoutEffect, useRef } from 'react';
 import { Pressable } from '../../../motion/components.ts';
 import { useRetryUnsynced, useUnsyncedRemind } from '../hooks/useUnsynced.ts';
 import { useRemindRowT } from '../hooks/useRemindRowT.ts';
 import styles from './Remind.module.css';
+
+// 新建失败、不能重试的记录的“另存为新的一条”“放弃”（R-378）：提示条里的记录比能重试的多时才下载（只待发的带提醒记录也会下载，
+// 首屏代码里分不出是不是新建失败：组件自己读 outbox，没有就什么也不画）；自带 Suspense，下载期间提示文字照常显示
+const FailedCreateActions = lazy(() => import('./FailedCreateActions.tsx'));
 
 /** 页面上一行提示；有带提醒、没同步上的记录才出 */
 export default function UnsyncedRemindHint() {
@@ -45,6 +50,11 @@ export default function UnsyncedRemindHint() {
         >
           {t('remind.unsynced.retry', {})}
         </Pressable>
+      ) : null}
+      {recs.size > retryRecs.size ? (
+        <Suspense fallback={null}>
+          <FailedCreateActions />
+        </Suspense>
       ) : null}
     </p>
   );

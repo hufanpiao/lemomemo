@@ -9,8 +9,12 @@
 //   服务器上一般没有 ai.enabled 行（只有 record_consent 的撤回分支写它，写了就有版本号），以后从设置页重开告知页时才可能碰到。
 //   writeAiSwitchSettled 兜这一种：insert 那一项被服务器拒（outbox 的 error / rejected 事件）以后，等同步把服务器那一行拉进集合，
 //   再按那一行 patch 一次；SETTLE_MS 内没等到就算了（AI 只是还没打开，设置 › 语音与 AI 能再开）。
-//   补写（patch 入队）成功后，把被拒的那一项从“发送失败”区删掉（outbox.discardUnlessInflight；接手清单 K6-sugg3 ②、K6-sugg4 ③）：留着点重试只会再撞一次约束。
-//   正在发的（inflight，用户刚点了重试）不动，“是不是在发”和“删”在同一个写事务里判断；rejected（已丢掉）的本来就不在队列里
+//   被拒（error 事件）时先把那一项连同本机那一行删掉（outbox.discardUnlessInflight），再等服务器那一行补 patch（R-378，主持人 11-10 定）：
+//   R-378 起新建失败的 insert 默认留在本机、标“未同步”，这一种留着只会再撞一次约束，按原来“回滚再补”处理；例外放在这里，不进 outbox 的首屏代码。
+//   正在发的（inflight，用户刚点了重试）不动，“是不是在发”和“删”在同一个写事务里判断（K6-sugg4 ③）；rejected（已丢掉）的本来就不在队列里。
+//   SETTLE_MS 到点只停“等服务器那一行”，error / rejected 的监听留到它们来了才摘（代码审查必改 1）：到点以后才被拒的照样回滚，
+//   不然它留在本机标“未同步”，另存又换不了 (user_id,key)。发成功的那一项没有事件，监听留到页面关（一个闭包，只在首次打开 AI 开关时有）。
+//   已知：error 事件在 outbox 刷新状态之后才发，删掉之前那一瞬间这条记录在 remindRecs 里，“未同步”提示条可能闪一下
 // • 被拒时服务器实际回的（K6-sugg3 ② 核对）：insert 不走 apply_patch，走 PostgREST 的 upsert(onConflict: 'id', ignoreDuplicates)
 //   （platform/supabase/sync-transport.ts 的 insertRow，= INSERT … ON CONFLICT (id) DO NOTHING）；撞的是 (user_id, key) 不是 id，
 //   ON CONFLICT 兜不住，抛 unique_violation（SQLSTATE 23505），PostgREST 回 HTTP 409、code '23505'；toFailure 得 {status: 409, code: '23505'}，
@@ -68,9 +72,11 @@ export async function writeAiSwitchSettled(
   const outbox = getBoot()?.outbox;
   if (!item || item.op !== 'insert' || !outbox) return r;
   let offRow: () => void = () => undefined;
+  let stopped = false;
+  /** 不再等服务器那一行（到点或已 patch）；事件监听不在这里摘 */
   const stop = (): void => {
+    stopped = true;
     clearTimeout(timer);
-    offEvent();
     offRow();
   };
   const timer = setTimeout(stop, o.settleMs ?? AI_SWITCH_SETTLE_MS);
@@ -79,18 +85,17 @@ export async function writeAiSwitchSettled(
     const row = rowOf(sw.key, item.id);
     if (!row) return false;
     stop();
-    void (async () => {
-      const w = await writeOn(sw, row, () => crypto.randomUUID());
-      if (!w.ok) return;
-      // 补写成功：被拒的 insert 不再有用，从“发送失败”区删掉（K6-sugg3 ②）；正在发的不删，判断和删在同一个写事务里（K6-sugg4 ③）
-      await outbox.discardUnlessInflight(item.op_id);
-    })().catch(() => undefined);
+    void writeOn(sw, row, () => crypto.randomUUID()).catch(() => undefined);
     return true;
   };
   const offEvent = outbox.onEvent((e) => {
     if ((e.type !== 'error' && e.type !== 'rejected') || e.item.op_id !== item.op_id) return;
     offEvent();
-    if (!tryPatch()) offRow = settings().subscribe(() => void tryPatch());
+    // 先回滚（删掉被拒的那一项和本机那一行），再等服务器那一行补 patch；删失败（库已关）照样往下等
+    const drop = e.type === 'error' ? outbox.discardUnlessInflight(item.op_id) : Promise.resolve(false);
+    void drop.catch(() => false).then(() => {
+      if (!stopped && !tryPatch()) offRow = settings().subscribe(() => void tryPatch());
+    });
   });
   return r;
 }

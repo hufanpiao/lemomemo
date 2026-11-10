@@ -66,11 +66,13 @@ async function handlePut(request: Request, env: FilesEnv, deps: FilesDeps, bucke
   if (declared === 0 || !request.body) return [err(400, 'bad_request', origin), 'put_empty'];
   if (m.variant.webp && declared < 12) return [err(415, 'bad_type', origin), 'put_bad_type'];
 
+  // 声明的大小一起交给 RPC 核对（B4 S10 ③：原图要等于这一行 bytes，缩略图 ≤ 128 KB；不一致的 reason 原样透出）
   const authz = await filesAuthorize(
     authzConfig(env, deps),
     bearer,
     'put',
     [{ bucket, path }],
+    { contentLength: declared },
   );
   if (authz.kind === 'error') return [err(authz.status, authz.code, origin, authz.reason), authz.log];
   const item = authz.items[0];

@@ -231,7 +231,8 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     if (m.type === 'reset' && m.notice === 'pending_deletion') return followCooling();
     if (leader?.isLeader()) {
       // 先重读：别的页改的队列本页 outbox 的摘要还不知道（暂停解除、待发数）；refresh 摘要变了引擎自己会 kickSend，
-      // 和这里的 sendNow 由引擎的 sendQueued 合并成一次（OUTBOX-cross-tab）
+      // 和这里的 sendNow 由引擎的 sendQueued 合并成一次（OUTBOX-cross-tab）。refresh 失败（库已关：换账号、清库中）就不 sendNow：
+      // 这时本页的队列已经不能用，发了也是空转；库正常时下一次提醒、定时发送照样会发
       if (m.type === 'outbox') void outbox.refresh().then(() => current?.sendNow()).catch(() => undefined);
       return;
     }

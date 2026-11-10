@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const ALLOWED = 'src/core/write-gone.ts';
+/** R-378：新建失败两个按钮的写入口，同 write-gone.ts 经 outboxCtx 取 ctx（只准引 outboxCtx，不准引 outbox-gone.ts） */
+const CTX_ALLOWED = 'src/core/write-failed-create.ts';
 const GONE = 'src/core/outbox-gone.ts';
 const OUTBOX = 'src/core/outbox.ts';
 
@@ -27,7 +29,7 @@ export function violations(file: string, src: string): string[] {
   }
   // 从 outbox.ts 取 outboxCtx：花括号里点名，或 import * as X 之后用 X.outboxCtx
   for (const m of code.matchAll(/(?:import|export)\s+(?:type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]/g)) {
-    if (target(m[2] ?? '') !== OUTBOX) continue;
+    if (target(m[2] ?? '') !== OUTBOX || file === CTX_ALLOWED) continue;
     const clause = m[1] ?? '';
     if (/\boutboxCtx\b/.test(clause)) out.push(`引了 outboxCtx：${m[0]}`);
     const ns = /\*\s*as\s+(\w+)/.exec(clause)?.[1];

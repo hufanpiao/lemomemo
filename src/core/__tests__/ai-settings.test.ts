@@ -151,31 +151,31 @@ describe('writeAiSwitchSettled：insert 撞唯一约束被拒后，等同步拉�
     const r = await writeAiSwitchSettled({ key: 'ai.enabled', value: true }, { newId: () => ID(20) });
     const opId = r.ok && r.item ? r.item.op_id : '';
     await rejectInsert(b, opId);
-    expect(settings().get(ID(20))).toBeUndefined();   // 被拒的那一项已回滚
+    await vi.waitFor(() => expect(settings().get(ID(20))).toBeUndefined());   // 被拒的那一项已回滚（R-378 起由这里删掉，不靠 outbox 回滚）
     await b.outbox?.applyServer('settings', [{ row: serverRow }]);
     await vi.waitFor(() => expect(settings().get(ID(30))?.value).toBe(true));
     const patch = ((await b.outbox?.list()) ?? []).find((i) => i.op === 'patch');
     expect(patch).toMatchObject({ table: 'settings', id: ID(30), data: { value: true } });
-    // 补写成功后，被拒的 insert 从“发送失败”区删掉（K6-sugg3 ②）
+    // 被拒的 insert 已从“发送失败”区删掉（R-378：被拒时就删，不等补写）
     await vi.waitFor(async () => expect(((await b.outbox?.list()) ?? []).find((i) => i.op_id === opId)).toBeUndefined());
     expect(b.outbox?.getStatus().failed).toBe(0);
   });
 
-  it('被拒后先在“发送失败”区（state = failed）；补写成功才删，补写前点了重试正在发的（inflight）不删', async () => {
+  it('被拒后马上删掉那一项和本机那一行（R-378：回滚再补），不留在“发送失败”区、不算“未同步”；之后等到服务器那一行再补 patch', async () => {
     const b = await boot();
     const r = await writeAiSwitchSettled({ key: 'ai.enabled', value: true }, { newId: () => ID(25) });
     const opId = r.ok && r.item ? r.item.op_id : '';
+    const seen: number[] = [];
+    b.outbox?.subscribe(() => seen.push(b.outbox?.getStatus().remindRecs.size ?? -1));
     await rejectInsert(b, opId);
-    expect(((await b.outbox?.list()) ?? []).find((i) => i.op_id === opId)?.state).toBe('failed');
-    expect(b.outbox?.getStatus().failed).toBe(1);
-    // 用户点了重试、正在发
-    await b.outbox?.retryFailed([opId]);
-    const again = await b.outbox?.next();
-    expect(again?.op_id).toBe(opId);
+    await vi.waitFor(async () => expect(((await b.outbox?.list()) ?? []).find((i) => i.op_id === opId)).toBeUndefined());
+    // 已知（写进回报）：outbox 先刷新状态再发 error 事件，删掉之前有一次通知里这条记录在 remindRecs 里——“未同步”提示条可能闪一下
+    expect(seen).toEqual([1, 0]);
+    expect(b.outbox?.getStatus().failed).toBe(0);
+    expect(b.outbox?.getStatus().remindRecs.size).toBe(0);
+    expect(settings().get(ID(25))).toBeUndefined();
     await b.outbox?.applyServer('settings', [{ row: serverRow }]);
-    await vi.waitFor(async () => expect(((await b.outbox?.list()) ?? []).some((i) => i.op === 'patch')).toBe(true));
-    await new Promise((res) => setTimeout(res, 20));
-    expect(((await b.outbox?.list()) ?? []).find((i) => i.op_id === opId)?.state).toBe('inflight');
+    await vi.waitFor(() => expect(settings().get(ID(30))?.value).toBe(true));
   });
 
   it('被拒时服务器那一行已经在本机集合里（同步抢先到了）：当场 patch', async () => {
@@ -194,11 +194,16 @@ describe('writeAiSwitchSettled：insert 撞唯一约束被拒后，等同步拉�
     expect(((await b.outbox?.list()) ?? []).filter((i) => i.op === 'patch')).toEqual([]);
   });
 
-  it('到点（settleMs）停止盯着：之后才被拒、才拉到那一行，都不再写', async () => {
+  it('到点（settleMs）只停“等服务器那一行”：之后才被拒照样回滚（删项和本机那一行，不留“未同步”），但不补 patch（代码审查必改 1）', async () => {
     const b = await boot();
     const r = await writeAiSwitchSettled({ key: 'ai.enabled', value: true }, { newId: () => ID(22), settleMs: 20 });
+    const opId = r.ok && r.item ? r.item.op_id : '';
     await new Promise((res) => setTimeout(res, 40));
-    await rejectInsert(b, r.ok && r.item ? r.item.op_id : '');
+    await rejectInsert(b, opId);
+    await vi.waitFor(async () => expect(((await b.outbox?.list()) ?? []).find((i) => i.op_id === opId)).toBeUndefined());
+    expect(settings().get(ID(22))).toBeUndefined();
+    expect(b.outbox?.getStatus().failed).toBe(0);
+    expect(b.outbox?.getStatus().remindRecs.size).toBe(0);
     await b.outbox?.applyServer('settings', [{ row: serverRow }]);
     await new Promise((r) => setTimeout(r, 20));
     expect(((await b.outbox?.list()) ?? []).filter((i) => i.op === 'patch')).toEqual([]);

@@ -1,6 +1,7 @@
 // outbox 的 queue 事件（OUTBOX-cross-tab）：本页真改了队列就发一次，待发数不变也发；只有主页引擎调的 ack、fail、applyServer、dropServer 不发。
 // app/sync-wiring 的非主页靠它提醒主页（两页接线的用例在 app/__tests__/sync-tabs-queue.test.ts）
 import { beforeEach, describe, expect, it } from 'vitest';
+import { resolveFailedCreateImpl } from '../outbox-failed-create.ts';
 import { resolveGoneImpl } from '../outbox-gone.ts';
 import { outboxCtx, type Outbox } from '../outbox.ts';
 import { clearAllCollections } from '../store.ts';
@@ -36,7 +37,7 @@ describe('queue 事件', () => {
     expect(n()).toBe(4);
   });
 
-  it('clearBackoff、retryFailed、discard、discardUnlessInflight（删成了才发）、resume：各发一次', async () => {
+  it('clearBackoff、retryFailed（没有目标也发、不改队列）、discard、discardUnlessInflight（删成了才发）、resume：各发一次', async () => {
     const { cache, outbox } = await setup();
     await seed(cache, 'todos', ID, todo(1));
     await outbox.enqueue({ table: 'todos', id: ID, op: 'patch', data: { title: '一' } });
@@ -51,20 +52,22 @@ describe('queue 事件', () => {
     expect(outbox.getStatus().failed).toBe(1);
     await outbox.retryFailed();
     expect(n()).toBe(2);
-    await outbox.retryFailed();   // 没有可重试的：不发
-    expect(n()).toBe(2);
+    const before = await outbox.list();
+    await outbox.retryFailed();   // 没有可重试的：照样发一次（R-378 省首屏字节），队列不变
+    expect(n()).toBe(3);
+    expect(await outbox.list()).toEqual(before);
     const inflight = await outbox.next();
     expect(await outbox.discardUnlessInflight(inflight?.op_id ?? '')).toBe(false);
-    expect(n()).toBe(2);
+    expect(n()).toBe(3);
     await outbox.resetInflight();
     expect(await outbox.discardUnlessInflight(inflight?.op_id ?? '')).toBe(true);
-    expect(n()).toBe(3);
+    expect(n()).toBe(4);
     await outbox.enqueue({ table: 'todos', id: ID, op: 'patch', data: { title: '二' } });
     const [last] = await outbox.list();
     await outbox.discard(last?.op_id ?? '');
-    expect(n()).toBe(5);
-    await outbox.resume();
     expect(n()).toBe(6);
+    await outbox.resume();
+    expect(n()).toBe(7);
   });
 
   it('ack、applyServer、dropServer 不发（只有主页的引擎调）', async () => {
@@ -89,5 +92,23 @@ describe('queue 事件', () => {
     if (!ctx) throw new Error('outboxCtx');
     expect((await resolveGoneImpl(ctx, 'todos', ID, 'drop')).done).toBe('dropped');
     expect(n()).toBe(1);
+  });
+
+  it('resolveFailedCreate 另存、放弃收尾也发；什么也没做（nothing）不发（代码审查必改 2）', async () => {
+    const { outbox } = await setup();
+    const ctx = outboxCtx.get(outbox);
+    if (!ctx) throw new Error('outboxCtx');
+    for (const i of [1, 2]) {
+      await outbox.enqueue({ table: 'todos', id: uid(i), op: 'insert', data: todo(i) });
+      const ins = await outbox.next();
+      await outbox.fail(ins?.op_id ?? '', { status: 409, code: 'insert_conflict', sid: null });
+    }
+    const n = count(outbox);
+    expect((await resolveFailedCreateImpl(ctx, 'todos', uid(1), 'copy', uid(50))).done).toBe('copied');
+    expect(n()).toBe(1);
+    expect((await resolveFailedCreateImpl(ctx, 'todos', uid(2), 'drop', uid(51))).done).toBe('dropped');
+    expect(n()).toBe(2);
+    expect((await resolveFailedCreateImpl(ctx, 'todos', uid(2), 'drop', uid(52))).done).toBe('nothing');
+    expect(n()).toBe(2);
   });
 });

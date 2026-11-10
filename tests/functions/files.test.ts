@@ -40,7 +40,7 @@ describe('PUT 上传（TC-B0-106～109、115）', () => {
     expect(r.headers.get('Access-Control-Expose-Headers')).toContain('ETag');
     expect(r.headers.get('Cache-Control')).toBe('private, no-store');
     expect(s.store.objects.get(`images/${IMG}`)?.contentType).toBe('image/webp');
-    expect(s.authz.calls).toEqual([{ op: 'put', items: [{ bucket: 'images', path: IMG }] }]);
+    expect(s.authz.calls).toEqual([{ op: 'put', items: [{ bucket: 'images', path: IMG, content_length: 1000 }] }]);   // B4 S10 ③
   });
 
   it('TC-B0-106：图片 2 MB + 1、附件 10 MB + 1 → 413，不调授权、不留对象', async () => {

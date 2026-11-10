@@ -4,6 +4,9 @@
 // 接口（和后端 BE-2 对的；改动要两边同意、同一个 PR 改架构）：
 //   POST <SUPABASE_UPSTREAM>/rest/v1/rpc/files_authorize   apikey: anon；Authorization: 用户的 Bearer
 //   请求 {p_op: 'put' | 'get', p_items: [{bucket, path}]}（put 只许 1 项，get 最多 100 项）
+//     put 时 p_items[0] 再带 content_length（请求的 Content-Length，JSON 非负整数；B4 S10 ③）：调用方给的不是非负安全整数就不带这个键，
+//     函数层不因此拒绝，拒不拒由 RPC 定（强制校验之前放行，之后回 length_required；对不上回 length_mismatch，都按下面的映射原样透出）。
+//     get 不带。部署顺序是 /files 先上：还没加新入参的 RPC 只读 bucket、path，多出来的键被忽略
 //   成功 200 {uid, items: [{i, ok, reason?}]}，i 是 p_items 的下标（从 0 起）
 //   整批不过：200 {uid, error: 'account_disabled' | 'session_revoked' | 'rate_limited', items: []}（后端 0004 的写法），
 //     或者 raise 成 PostgREST 的错误（4xx，{code, message}），message 就是这几个错误码之一——两种都认
@@ -65,7 +68,21 @@ function parseOk(body: unknown, n: number): AuthzResult | null {
   return { kind: 'ok', uid: o.uid, items };
 }
 
-export async function filesAuthorize(cfg: AuthzConfig, bearer: string, op: AuthzOp, items: readonly AuthzItem[]): Promise<AuthzResult> {
+/** put 时 p_items[0] 带上 content_length（只认非负安全整数，别的不带）；get 一律不带 */
+function payloadItems(op: AuthzOp, items: readonly AuthzItem[], contentLength: unknown): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = items.map((it) => ({ bucket: it.bucket, path: it.path }));
+  const first = out[0];
+  if (op === 'put' && first && typeof contentLength === 'number' && Number.isSafeInteger(contentLength) && contentLength >= 0) first.content_length = contentLength;
+  return out;
+}
+
+export async function filesAuthorize(
+  cfg: AuthzConfig,
+  bearer: string,
+  op: AuthzOp,
+  items: readonly AuthzItem[],
+  o: { contentLength?: unknown } = {},
+): Promise<AuthzResult> {
   const url = new URL('/rest/v1/rpc/files_authorize', cfg.upstream).toString();
   const req = new Request(url, {
     method: 'POST',
@@ -75,7 +92,7 @@ export async function filesAuthorize(cfg: AuthzConfig, bearer: string, op: Authz
       'content-type': 'application/json',
       accept: 'application/json',
     },
-    body: JSON.stringify({ p_op: op, p_items: items }),
+    body: JSON.stringify({ p_op: op, p_items: payloadItems(op, items, o.contentLength) }),
   });
   const ctl = new AbortController();
   let timer: ReturnType<typeof setTimeout> | null = null;
