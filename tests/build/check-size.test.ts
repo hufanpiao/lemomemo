@@ -89,9 +89,9 @@ describe('B3 首屏净增额度：超过 基线 + 1 KB 就失败（build/check_s
     expect(skip.out).toContain('净增关卡跳过');
   });
 
-  it('仓库里的基线文件：额度 1024 B，管 preview 和 e2e；基线没定时是 null（关卡跳过），定了就是正整数且出处不再是“待定”', () => {
+  it('仓库里的基线文件：额度 1096 B（11-10 负责人定放宽，底栏偏高修复 R-371），管 preview 和 e2e；基线没定时是 null（关卡跳过），定了就是正整数且出处不再是“待定”', () => {
     const data = JSON.parse(readFileSync(join(ROOT, 'build', 'first-screen-baseline.json'), 'utf8'));
-    expect(data.limitBytes).toBe(1024);
+    expect(data.limitBytes).toBe(1096); // 11-10 负责人定放宽（底栏偏高修复，R-371）：1024 → 1096，上限 1100
     expect(data.modes).toEqual(['preview', 'e2e']);
     if (data.baseline === null) {
       expect(netGrowthCheck(1, data, 'preview').skip).toContain('基线还没定');
@@ -99,8 +99,8 @@ describe('B3 首屏净增额度：超过 基线 + 1 KB 就失败（build/check_s
     }
     expect(Number.isInteger(data.baseline) && data.baseline > 0).toBe(true);
     expect(data._出处).not.toMatch(/^待定/);
-    expect(netGrowthCheck(data.baseline + 1025, data, 'preview').error).toContain(NET_GROWTH_MESSAGE);
-    expect(netGrowthCheck(data.baseline + 1024, data, 'e2e').error).toBeNull();
+    expect(netGrowthCheck(data.baseline + data.limitBytes + 1, data, 'preview').error).toContain(NET_GROWTH_MESSAGE);
+    expect(netGrowthCheck(data.baseline + data.limitBytes, data, 'e2e').error).toBeNull();
   });
 
   it('稳定口径：只差构建时刻、提交号、块文件名哈希的两份产物，计数前换成同一份文字（11-09 两次构建抖 39 B 的来源）', () => {
