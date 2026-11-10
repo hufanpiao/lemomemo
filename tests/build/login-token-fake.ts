@@ -8,6 +8,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { p6Route } from './login-token-fake-p6.ts';
+import { retryOnPwshCrash } from './pwsh-crash.ts';
 
 export const root = join(import.meta.dirname, '..', '..');
 export const SCRIPT = join(root, 'tools', 'keys', 'login-token-tests.ps1');
@@ -93,9 +94,12 @@ export type Opts = {
   secure: string[];           // Read-Host -AsSecureString 依次的回答
   args?: string;              // 额外参数
 };
-export type RunResult = Awaited<ReturnType<typeof runScript>>;
+export type RunResult = Awaited<ReturnType<typeof runOnce>>;
 
-export async function runScript(dir: string, opts: Opts) {
+/** 跑一遍外壳脚本；pwsh 自身启动崩溃时整次重跑一遍（pwsh-crash.ts）。每次 runOnce 都起自己的假服务，重跑没有副作用。spawnPs 只给测试换成假的 */
+export const runScript = (dir: string, opts: Opts, spawnPs: typeof spawn = spawn): Promise<RunResult> => retryOnPwshCrash(() => runOnce(dir, opts, spawnPs));
+
+async function runOnce(dir: string, opts: Opts, spawnPs: typeof spawn) {
   const reqs: Req[] = [];
   const objects = new Map<string, { body: Buffer; ct: string }>();
   const passwords: string[] = [];
@@ -311,7 +315,7 @@ function global:Read-Host { param([switch]$AsSecureString, [Parameter(Position =
 try { & ${q(SCRIPT)} -SupabaseBase '${base}' -SiteBase '${base}' -MsRemainSeconds 298 ${opts.all || opts.args?.includes('-Only') ? '' : "-Only 'S1,P2,R2,TC-B1-112,P8' "}${opts.args ?? ''}; if ($global:plain.Count -or $global:secure.Count) { [Console]::Error.WriteLine("test: 还剩 $($global:plain.Count) 个明文、$($global:secure.Count) 个密文输入没用上"); exit 2 }; exit 0 }
 catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }`,
   );
-  const child = spawn(PS ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', harness], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawnPs(PS ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', harness], { stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   let err = '';
   child.stdout.setEncoding('utf8').on('data', (c: string) => (out += c));

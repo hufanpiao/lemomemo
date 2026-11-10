@@ -65,7 +65,8 @@ describe('在 Claude 聊天里记事', () => {
   });
 
   it('二级页（线框 s13）：开关开着、连接码一行带最新码的日期、断开连接可点', async () => {
-    list.mockResolvedValue(linked(Date.UTC(2026, 9, 24, 3)));
+    // UTC 12:00：UTC、首尔、洛杉矶三个时区都是 10 月 24 日（CI 在三个时区各跑一遍）
+    list.mockResolvedValue(linked(Date.UTC(2026, 9, 24, 12)));
     render(<PlusSettings part="claude" view="page" />);
     await waitFor(() => expect((screen.getByTestId('plus-set-cla-switch') as HTMLInputElement).checked).toBe(true));
     expect(screen.getByTestId('plus-set-cla-code-info').textContent).toMatch(/^只能新增，不能看、改、删 · 10月24日 连接$/);

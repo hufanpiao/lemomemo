@@ -52,6 +52,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/fn-version-gate-coverage.test.ts', // TypeScript 编译器
   'tests/build/login-token-tests.test.ts', // PowerShell
   'tests/build/login-token-tests-run.test.ts', // PowerShell（经 login-token-fake.ts）
+  'tests/build/login-token-fake-retry.test.ts', // 经 login-token-fake.ts（引了 spawn；本文件用假 spawn，不真起 pwsh）
   'tests/build/ps1-static.test.ts', // PowerShell 解析 .ps1
   'tests/build/publish-run.test.ts', // PowerShell、git clone（发布脚本演练）
   'tests/build/publish-run-deploy.test.ts', // PowerShell、git clone（发布脚本演练，经 publish-run-harness.ts）

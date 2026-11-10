@@ -104,6 +104,31 @@ export default function SyncNoticeHost({ store, live, region }: SyncNoticeHostPr
     if (hasContent) region.setAttribute('aria-label', t('sn.region', {}));
     else region.removeAttribute('aria-label');
   }, [region, t, hasContent]);
+  // 卡出现时给页面底部让出卡的位置（B3 FA-4 后 e2e 实测：设置页加了两行，滚到底“退出登录”仍压在卡下面点不到）：
+  // 卡显示着就在 <html> 上标 data-sn-card，并把卡的实际高度写进 --sn-h（跟着换行、“还有 n 条”变化）；页底留白由 base.css 按它算（同 --undo-h 的做法）。
+  // 轻提示（flash）几秒就走，不让位；卡收起、宿主卸载时撤掉
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const clear = (): void => {
+      root.removeAttribute('data-sn-card');
+      root.style.removeProperty('--sn-h');
+    };
+    if (!shown) {
+      clear();
+      return undefined;
+    }
+    const put = (): void => {
+      root.style.setProperty('--sn-h', `${Math.ceil(region.getBoundingClientRect().height)}px`);
+      root.setAttribute('data-sn-card', '');
+    };
+    put();
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(put);
+    ro?.observe(region);
+    return () => {
+      ro?.disconnect();
+      clear();
+    };
+  }, [region, shown]);
   // 自己开的对话框不算“别的弹层”
   useEffect(() => {
     if (dialogKey === null) region.removeAttribute('data-own-dialog');

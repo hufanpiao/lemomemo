@@ -81,6 +81,12 @@ jobs:
         # desktop.yml 编 exe 前也跑一遍；这里让平时的提交就能发现回归，不用等打 tag
         run: node --test desktop/src-tauri/scripts/stage-web.test.mjs
 
+      # 不固定 pwsh 版本，用 runner 自带的；只把版本打出来，login-token-tests-run 再碰上 pwsh 自身启动崩溃（.NET FileLoadException，
+      # 10-31、11-10 各一次；tests/build/login-token-fake.ts 的 runScript 会整次重跑一遍）时能直接看出是哪一版
+      - name: 打印 pwsh 版本
+        run: |
+          if command -v pwsh >/dev/null; then pwsh --version || echo "pwsh --version 失败（不影响后面）"; else echo "runner 上没有 pwsh"; fi
+
       - name: 单元和组件测试（UTC、首尔、洛杉矶三个时区各一遍，架构第 9 节 H2）
         # 前端 A 的 test 脚本如果已经自己按三个时区跑，这里改成只跑一遍
         # LEMO_REQUIRE_DENO=1：deno-frozen-lock.test.ts 找不到 deno 就失败，不再 skipIf 悄悄跳过
