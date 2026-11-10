@@ -83,6 +83,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/core/outbox-new-item.ts': '建新 outbox 项（K8 R2 ①）：和 rows.ts 一起在 loadRowSchemas 里按需加载，不进首屏',
   'src/core/manifest-source.ts': '完整清单快照：和 rows.ts 一起在 loadRowSchemas 里按需加载（首屏瘦身 11-05，首屏建本机仓只读 manifest-sync.gen.ts）',
   'src/platform/desktop.ts': '只在 exe（Tauri）里加载，网页版不下载',
+  'src/platform/vh-timeline.ts': 'R-371 冷启动时间线：只在非正式版、诊断页开关“Timeline next launch”打开后的下一次冷启动才下载，默认不下载；正式构建整块摇掉',
   'src/app/CacheTooNewScreen.tsx': '只在本机库比 App 新（version_too_new）时整屏提示用',
   'src/motion/motion-impl.tsx': '动画实现和功能包合块，main.tsx 在 appPainted() 之后下载（R-354）',
   'src/features/plus/ui/TypeBar.tsx': '“＋”点一下打开的打字条：首屏画完以后 afterAppPainted 才预先下载（app/plus-slot.tsx 挂 TypeBarPreload），没下载好就点显示“准备中”（B3 Q4）',

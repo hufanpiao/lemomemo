@@ -75,6 +75,14 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
 hideSplashAfter();
 // 底部安全区（G10）：iOS 主屏幕版冷启动时先 0 后 34，稳定前底栏、“＋”、实色带不显示，稳定了淡入；首屏画完后最多藏 1.5 秒（platform/inset-watch.ts）
 watchInsetBottom();
+// R-371 冷启动时间线（非正式版，诊断页开关“Timeline next launch”）：开着才下载记录分包 platform/vh-timeline.ts（等帧传 motion 的 nextFrame，A25）；键名同那里的 ARM_KEY。正式构建靠 MODE 常量整块摇掉
+if (import.meta.env.MODE !== 'production') {
+  try {
+    if (localStorage.getItem('lemo-vh-tl')) void import('../platform/vh-timeline.ts').then((m) => m.startVhTimeline(nextFrame));
+  } catch {
+    // 读不到本机存储：不记
+  }
+}
 
 /** exe（Tauri）里换上 exe 的 platform 桥（架构 0.53 第 2 条）：openReminder、openAuth、本机通知改走 exe；网页版不加载 desktop.ts */
 async function installNativeBridge(): Promise<void> {

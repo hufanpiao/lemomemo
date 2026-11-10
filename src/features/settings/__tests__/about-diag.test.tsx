@@ -71,4 +71,35 @@ describe('关于页的诊断信息', () => {
     expect(screen.getByTestId('settings-vh-probe')).toBeTruthy();
     expect(screen.getByTestId('vh-probe-meta-height')).toBeTruthy();
   });
+
+  it('时间线开关点一下开、再点关（存本机）；没记过时“Copy timeline”不能点，记过了显示整段、点了复制整段（R-371 冷启动时间线）', async () => {
+    localStorage.clear();
+    render(<AboutSection />);
+    tapVersion(DIAG_TAPS);
+    await screen.findByTestId('settings-about-diag');
+    const arm = screen.getByTestId('vh-tl-arm');
+    expect(arm.textContent).toBe('Timeline next launch: OFF');
+    expect(arm.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(arm);
+    expect(arm.textContent).toBe('Timeline next launch: ON');
+    expect(localStorage.getItem('lemo-vh-tl')).toBe('1');
+    fireEvent.click(arm);
+    expect(arm.textContent).toBe('Timeline next launch: OFF');
+    expect(localStorage.getItem('lemo-vh-tl')).toBeNull();
+    expect((screen.getByTestId('vh-tl-copy') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTestId('vh-tl-out')).toBeNull();
+    cleanup();
+
+    localStorage.setItem('lemo-vh-tl-out', 'vh-timeline start=x\nt=0.25 inner=894');
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(<AboutSection />);
+    await screen.findByTestId('settings-about-diag');
+    expect(screen.getByTestId('vh-tl-out').textContent).toBe('vh-timeline start=x\nt=0.25 inner=894');
+    localStorage.setItem('lemo-vh-tl-out', 'vh-timeline start=x\nt=0.25 inner=894\nt=0.50 inner=956');
+    fireEvent.click(screen.getByTestId('vh-tl-copy'));
+    expect(writeText).toHaveBeenCalledWith('vh-timeline start=x\nt=0.25 inner=894\nt=0.50 inner=956');
+    expect(await screen.findByText('Copied')).toBeTruthy();
+    localStorage.clear();
+  });
 });
