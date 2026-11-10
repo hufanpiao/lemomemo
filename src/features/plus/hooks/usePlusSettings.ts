@@ -116,6 +116,11 @@ export function useClaudeLink(deps?: LinkDeps): ClaudeLink {
         await load();
         return;
       }
+      // 复审 R1：请求在路上时页面切到了后台，回包不显示明文码（同“切到后台就清掉”）；码已经有效，按服务器重读开关状态
+      if (document.visibilityState === 'hidden') {
+        await load();
+        return;
+      }
       setCode(r.value);
       // 新码已经有效：连着了，最后使用时间不变（新码还没被用过），连接日期是现在
       const now = clock.now();

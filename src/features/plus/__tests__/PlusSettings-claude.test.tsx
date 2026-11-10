@@ -240,4 +240,22 @@ describe('在 Claude 聊天里记事', () => {
     expect((screen.getByTestId('plus-set-cla-switch') as HTMLInputElement).checked).toBe(true);
     vis.mockRestore();
   });
+
+  it('生成请求在路上时切到后台（复审 R1）：回包不显示明文码，按服务器重读为已连接', async () => {
+    let done: (v: unknown) => void = () => undefined;
+    create.mockReturnValue(new Promise((r) => (done = r)));
+    list.mockResolvedValueOnce({ ok: true, value: [] }).mockResolvedValue(linked());
+    render(<PlusSettings part="claude" view="page" />);
+    await waitFor(() => expect((screen.getByTestId('plus-set-cla-switch') as HTMLInputElement).disabled).toBe(false));
+    fireEvent.click(screen.getByTestId('plus-set-cla-switch'));
+    const vis = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      done({ ok: true, value: { token: 'lemo_in_flight', expiresAt: null } });
+    });
+    vis.mockRestore();
+    expect(screen.queryByText('lemo_in_flight')).toBeNull();
+    expect(list).toHaveBeenCalledTimes(2);
+    expect((screen.getByTestId('plus-set-cla-switch') as HTMLInputElement).checked).toBe(true);
+  });
 });

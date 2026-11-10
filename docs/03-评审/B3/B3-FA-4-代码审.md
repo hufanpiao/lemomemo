@@ -94,3 +94,17 @@
 - **R1** `usePlusSettings.ts` 的 create：生成请求还在路上时页面切到后台，回包会在后台照样 `setCode`，切回来以后明文码仍然显示，等于绕过了“切到后台就清掉”。建议在 `setCode(r.value)` 之前看一下 `document.visibilityState`：如果是 hidden，就不显示明文码，改为提示“已生成，请重新生成以查看”，或者直接重读。
 - **R2** A31 规则还有两处认不出：`const f = ns.writeAiSwitch` 这种把命名空间成员当值传的写法，以及 `await import('…/ai-settings')` 动态导入。现在仓库里都没有这样的写法，可以先登记，以后需要时再补。
 - **R3** 探测页的词条 `settings.about.probe` 会留在正式版的词典里。它是无害的，而且会随 voice-probe 同一个 PR 一起删掉；也可以把这一句挪进只有非正式版才加载的词条。
+
+### 复审建议的处理（主持人 11-10 定）
+
+- **R1 已改**：`usePlusSettings.ts` 的 create 在显示明文码之前看 `document.visibilityState`，是 hidden 就不显示，改为按服务器重读开关状态；PlusSettings-claude.test.tsx 补了 1 条用例。
+- **R2 登记，不做**：A31 规则认不出 `const f = ns.writeAiSwitch`（命名空间成员当值传）和 `await import('…/ai-settings')`（动态导入）两种写法。现在仓库里都没有，以后真出现时再给规则补上。
+- **R3 不做**：`settings.about.probe` 留在正式版词典里，无害，随 voice-probe 同一个 PR 删。
+
+## 复核 R1（2026-11-10，提交 9abed23 之后的工作区改动）
+
+**R1 已解决。没有必改项。**
+
+- `usePlusSettings.ts:119-123`：生成成功、回包回来时，如果 `document.visibilityState === 'hidden'`，就不执行 `setCode`，只按服务器重读一次开关状态（`load()`）。这一步放在 `live` 检查和失败分支之后，所以只对“生成成功但页面在后台”这一种情况起作用。
+- `PlusSettings-claude.test.tsx` 新加了一条用例：请求还在路上时切到后台，回包到达以后，页面上找不到明文码；`list` 被调了 2 次；开关显示已连接。这份文件跑下来 20 条，全部通过。测试里的假码用的是 `lemo_` 开头的占位值，不是真码。
+- 附带说明（不算必改）：这种情况下，用户看到的是“已连接”，但看不到码。要拿到码，得先断开再重新生成。如果想说得更清楚，可以在这种情况下加一句提示“已生成，切回来后不再显示，需要的话断开后重新生成”。
