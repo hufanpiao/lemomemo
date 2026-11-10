@@ -15,7 +15,7 @@
 //    “退出登录”整行按钮 44、“注销账号”入口行 44（R-277）。R-366 只给“退出其他所有设备”加描边，这几个数不许跟着变。
 //    唯一参照：任务单第七节——改前（开工基线）的设置页截图。换完以后和改前逐个元素比过计算样式和位置（Chromium 浅深），
 //    除了任务单写明要变的两处（“注销账号”变危险色、导出行带 ›）都一样；对照图在 docs/03-评审/B2-UI-b/W3W4-*-改前改后.png。
-// ② W8 随手记占位页顶部安全区（任务单 W8，M3）：模拟负责人 iPhone 竖屏的 62pt 顶部安全区（visual-helpers.ts 的 SAFE_TOP，
+// ② W8 随手记页顶部安全区（任务单 W8，M3；11-11 B4 随手记上线，原来的“即将推出”页换成真页面，基准随之更新）：模拟负责人 iPhone 竖屏的 62pt 顶部安全区（visual-helpers.ts 的 SAFE_TOP，
 //    改 --inset-top，和 G5 同一个做法），截页面顶部 200pt：标题要落在顶部模糊带（安全区 + --top-fade）下面，不被压住。
 //    参照：视觉稿主页签页面顶部起点；另加数值断言：标题上沿 ≥ 62 + 12。
 //
@@ -183,7 +183,7 @@ test.describe('设置页按钮视觉锁定（B2-UI-b W4、V4；R-276、R-277，C
   }
 });
 
-test.describe('随手记占位页顶部安全区（B2-UI-b W8，模拟 62pt，Chromium）', () => {
+test.describe('随手记页顶部安全区（B2-UI-b W8，模拟 62pt，Chromium）', () => {
   test.use({ loggedIn: true });
 
   for (const theme of THEMES) {
@@ -197,7 +197,7 @@ test.describe('随手记占位页顶部安全区（B2-UI-b W8，模拟 62pt，Ch
       const fade = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--top-fade')) || 0);
       const top = (await main.locator('h1, h2').first().boundingBox())?.y ?? 0;
       expect(top, `标题上沿 ${top}，应 ≥ 安全区 ${SAFE_TOP} + 渐隐带 ${fade}`).toBeGreaterThanOrEqual(SAFE_TOP + fade);
-      await expect(page, '随手记占位页顶部变了（W8，对照视觉稿主页签页面顶部起点）').toHaveScreenshot(`随手记-顶部62pt-${theme}.png`, {
+      await expect(page, '随手记页顶部变了（W8，对照视觉稿主页签页面顶部起点）').toHaveScreenshot(`随手记-顶部62pt-${theme}.png`, {
         clip: { x: 0, y: 0, width: 440, height: 200 },
         maxDiffPixels: 0,
         threshold: 0,
