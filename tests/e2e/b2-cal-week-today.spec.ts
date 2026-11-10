@@ -39,6 +39,9 @@ test.describe('手机周视图：今天的日期圆圈不贴上下两行字（CA
     await page.reload();
     await page.getByTestId('cal-week').waitFor();
     await expect(page.locator('[data-testid="cal-week"] li[data-date="2026-09-29"]')).toContainText('出差');
+    // 节假日是页面画出来以后才拉的（useHolidays 拉 holidays/<国>/<年>.json，异步）：只等全天日程就量，帧稀时节假日还没到（11-10 镜像 b2 组 3/18 遍“有国庆休息日”挂）。
+    // 先等它到了再量；拉不到的话这里照样挂
+    await expect(page.locator('[data-testid="cal-week"] li[data-date="2026-10-01"]')).toContainText('国庆', { timeout: 10_000 });
     const rows = await page.evaluate(() =>
       [...document.querySelectorAll<HTMLElement>('[data-testid="cal-week"] li[data-date]')].map((li) => {
         const col = li.querySelector<HTMLElement>('[aria-hidden="true"]');

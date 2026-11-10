@@ -1,0 +1,5 @@
+Connecting to remote database...
+/claude code/柠檬记APP/supabase/tests/rls/42_my_ai_usage.test.sql .. ok
+All tests successful.
+Files=1, Tests=43,  0 wallclock secs ( 0.02 usr  0.00 sys +  0.01 cusr  0.00 csys =  0.03 CPU)
+Result: PASS

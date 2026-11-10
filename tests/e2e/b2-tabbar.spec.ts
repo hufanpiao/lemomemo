@@ -134,14 +134,32 @@ test.describe('底栏（FA-7）', () => {
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(bar(page)).toBeVisible();
     for (const [name, i] of [['todos', '2'], ['calendar', '1'], ['today', '0']] as const) {
-      await page.evaluate(() => {
-        const w = window as unknown as { __tb: { t: number; nav: boolean; add: boolean; i: string }[]; __tbT0: number; __tbDown: number; __tbDone: boolean };
+      await page.evaluate((i) => {
+        const w = window as unknown as {
+          __tb: { t: number; nav: boolean; add: boolean; i: string }[]; __tbT0: number; __tbDown: number; __tbClick: number; __tbI: number; __tbDone: boolean;
+        };
         w.__tb = [];
         w.__tbT0 = performance.now();
         w.__tbDown = -1;
+        w.__tbClick = -1;
+        w.__tbI = -1;
         w.__tbDone = false;
         // 从页面真正收到按下算起（Playwright 点之前还要等元素稳定，那段不算）
         document.addEventListener('pointerdown', () => (w.__tbDown = performance.now() - w.__tbT0), { capture: true, once: true });
+        document.addEventListener('click', () => (w.__tbClick = performance.now() - w.__tbT0), { capture: true, once: true });
+        // 液滴的 --i 真正改写的那一刻（MutationObserver 在改写的同一个任务里回调）：下面逐 16ms 采样的时刻在 CI 上会被拖迟
+        // （webkit 一帧 250～600ms 时计时器也跟着晚），按采样算的“液滴才动”混进了采样本身的延迟（11-10 镜像实测 103ms 那次）
+        const nav0 = document.querySelector('[data-testid="tabbar"]');
+        if (nav0) {
+          const mo = new MutationObserver(() => {
+            const d = nav0.querySelector('[style*="--i"]') as HTMLElement | null;
+            if (w.__tbI < 0 && d?.style.getPropertyValue('--i') === i) {
+              w.__tbI = performance.now() - w.__tbT0;
+              mo.disconnect();
+            }
+          });
+          mo.observe(nav0, { subtree: true, attributes: true, attributeFilter: ['style'] });
+        }
         const seen = (el: Element | null): boolean => el instanceof HTMLElement && el.checkVisibility() && el.getBoundingClientRect().width > 0;
         const id = setInterval(() => {
           const nav = document.querySelector('[data-testid="tabbar"]');
@@ -161,12 +179,12 @@ test.describe('底栏（FA-7）', () => {
             w.__tbDone = true;
           }
         }, 16);
-      });
+      }, i);
       await tab(page, name).click();
       await page.waitForFunction(() => (window as unknown as { __tbDone?: boolean }).__tbDone === true, undefined, { timeout: 12_000 });
-      const { got, down } = await page.evaluate(() => {
-        const w = window as unknown as { __tb: { t: number; nav: boolean; add: boolean; i: string }[]; __tbDown: number };
-        return { got: w.__tb, down: w.__tbDown };
+      const { got, down, click, setI } = await page.evaluate(() => {
+        const w = window as unknown as { __tb: { t: number; nav: boolean; add: boolean; i: string }[]; __tbDown: number; __tbClick: number; __tbI: number };
+        return { got: w.__tb, down: w.__tbDown, click: w.__tbClick, setI: w.__tbI };
       });
       expect(down, `${name}：没收到按下`).toBeGreaterThanOrEqual(0);
       expect(got.length, `${name}：采样太少`).toBeGreaterThan(20);
@@ -174,9 +192,10 @@ test.describe('底栏（FA-7）', () => {
       expect(got.filter((f) => !f.add).map((f) => Math.round(f.t)), `${name}：这些时刻“＋”看不见`).toEqual([]);
       const moved = got.find((f) => f.i === i);
       expect(moved, `${name}：液滴一直没到 --i=${i}`).toBeDefined();
-      // 按下之前就算“看得见”的帧也在上面查过了；液滴的时间从按下算
-      const lag = (moved?.t ?? Infinity) - down;
-      expect(lag, `${name}：按下以后 ${Math.round(lag)}ms 液滴才动`).toBeLessThan(100);
+      // 按下之前就算“看得见”的帧也在上面查过了；液滴的时间从按下算到 --i 真正改写（门槛不变，仍是 100ms）
+      const lag = (setI < 0 ? Infinity : setI) - down;
+      const at = `按下 ${Math.round(down)}、click ${Math.round(click)}、--i 改写 ${Math.round(setI)}、采样看到 ${Math.round(moved?.t ?? -1)}（ms）`;
+      expect(lag, `${name}：按下以后 ${Math.round(lag)}ms 液滴才动；${at}`).toBeLessThan(100);
       await expect(page).toHaveURL(new RegExp(`#/${name}$`));
     }
   });
@@ -211,6 +230,9 @@ test.describe('底栏（FA-7）', () => {
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
     await expect(bar(page).locator('[class*="jellyJs"]')).toHaveCount(1);
+    // 等副本引擎（glass-ghost）到了再点：它到了才由 WAAPI 放（gelFx 先装上，startGlass 随后给底栏挂 data-glass，关掉前一直在）。
+    // 只等实色带不够：11-10 镜像里负载重的一遍，副本引擎 5 秒还没到，两次都走了 CSS 后备，不是这条要测的路径
+    await expect(bar(page)).toHaveAttribute('data-glass', 'copy', { timeout: 10_000 });
     // 在点“待办”的同一个任务里读（点击冒泡到 window 时，页签的点按已经同步换完路由、放了果冻）。
     // 不等 click() 返回再读（r372-fix2）：CI 的 Linux webkit 一帧 250～600ms，返回和读之间插进一两帧时，550ms 的果冻已经正常放完，
     // getAnimations() 读到 0；对照组（986d406）同样条件下第二帧时也有 4/20 已经放完，不是没起播

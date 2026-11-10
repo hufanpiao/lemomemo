@@ -599,11 +599,46 @@ TC-B2-80 另加两条：push-test 对不合格端点只回 `bad_endpoint`、不�
 | O-1 VAPID 脚本（不经 AI、不进参数、不落盘；JWK 格式） | — | O-1 初稿 | **11-03 已审：通过，预览可运行**（第六之二节）；正式运行前满足 O1-P1、O1-P2 |
 | 风险接受：usage-report、push-dispatch 未鉴权的请求能进函数、算一次调用（和 account-purge 一样） | — | 写明即可 | 待审 |
 
+## 八、③ 正式审查（2026-11-10，只读，主仓 HEAD 3817439）
+
+- **怎么核的**：对照架构 15.4 的 S-B2 一行（`docs/10-架构/架构设计-v4.md:4713`），按第七节逐项核对。
+  - 定位用的是 [S-B2 服务器侧证据清单](../../06-测试/B2/B2-S-B2服务器侧证据清单.md)。这份清单只当待核材料，主仓的关键行已逐处抽查。
+  - 11-06 以后，审查范围内的文件只有三次提交改过：`1e41ff7`（R-373，只改 `src/sw/routes.ts` 两行）；`91876d6`、`3c482a9`（B3：F9 ⑥、免查名单加 `my_ai_usage` 和 `PATCH api_tokens`、`claude-intake` 关 verify_jwt）。这三次都没动 S-B2 的实现，B3 的这几处另由 S-B3 审。
+  - 核对期间 HEAD 前进到 `a5e2961`（R-376 文档、e2e），审查范围内的文件没有变化。
+- **本机重跑**（不联网、不连库）：
+  - S-B2 相关的 22 个 vitest 文件，560 条全过；
+  - 前端 FE 相关的 5 个文件，96 条全过；
+  - `python build/check_backend.py`：0 个错误。
+  - pgTAP 用 11-06 lemo-e2e 的全量结果（40 个文件 1573 条，见证据清单第七节第 5 行）。之后 `claim_endpoint` 相关的迁移没有改过，CI 的 `npm run test:db`（`.github/workflows/ci.yml:247-252`）每次都跑。
+- **R-376、R-373**：
+  - S-B2 没有动效或 UI 外观项，不受 R-376 影响；
+  - R-373 删掉倾斜高光，只改了 `src/sw/routes.ts` 的缓存路由，不涉及推送或账号隔离。
+
+| 第七节的项 | 级别 | 结果 | 证据 |
+|---|---|---|---|
+| 免查名单（TC-B2-27） | P0 | **已满足** | `functions/sb/version-gate.ts:56-67`（`DELETE /rest/v1/devices`、`POST /rest/v1/rpc/claim_endpoint`，按整条路径 exact 匹配）；`tests/functions/version-gate-b2.test.ts`（含名字相近的 `claim_endpoint_x` 反例）、`version-gate.test.ts`。CI 的 vitest 全量跑，即自动冒烟。用例里“经 /sb 真调、todos 行还在”属于 ④ QA 真后端冒烟，不卡 ③ |
+| cron 密钥（TC-B2-68） | P0 | **已满足** | `supabase/functions/push-dispatch/core.ts:105-107`（先鉴权，`safeEqual` 是同步函数，见 `_shared/proxy-headers.ts:25`）；`migrations/20261103120000_core_push_dispatch_cron.sql:12-17` 从 Vault 读，没有写死；反例 `supabase/tests/d1-fixtures/27_cron_hardcoded_secret.psql`；`tests/edge/push-dispatch.test.ts` |
+| claim_endpoint 授权（TC-B2-79、84） | P0 | **已满足** | `migrations/20261103110000_core_claim_endpoint.sql:71-77`（依次查 not_password_session、account_usable、session_alive）→ `:80-85`（校验，22023）→ `:94`（M9 删别的账号名下的行）；`0001_core.sql:343-346` 三列不授给客户端；`supabase/tests/rls/28_claim_endpoint.test.sql`、`41_claim_endpoint_error_shape.test.sql` |
+| usage-report 关网关校验、F9 ③ 名单（TC-B2-86） | P0 | **已满足** | `usage-report/core.ts:331-336`（先鉴权再判配置，`await safeEqual`）；`build/check_backend.py:1017-1022` 名单写死；`config.toml:194-211`：B2 的三个函数之外，只多了 B3 按 F9 ⑥ 加的 `claude-intake`（S-B3 已审，`check_backend.py:1022`）；`tests/build/check-backend-f9-server.test.ts`、`tests/functions/usage-report.test.ts`。“开工前意见 8 条”按第二节 2.2 的吸收记录核对 |
+| 端点白名单两处、不跟随重定向、替身变量线上拒绝启动（TC-B2-80） | P1 | **已满足** | `_shared/push/endpoint.ts`、`claim_endpoint.sql:34-61` 两份规则共用同一组 fixture；`_shared/push/send.ts` 用 `redirect: 'manual'`，3xx、0、opaqueredirect 都算失败；`_shared/push/stub.ts:16-42`、`push-dispatch/core.ts:114`；`push-endpoints-fixture`、`push-path-rule-sync`、`push-send`、`push-sb2-gaps` 全过 |
+| push-test（TC-B2-85） | P1 | **已满足** | `push-test/core.ts:79-118` 只回枚举；`tests/edge/push-test.test.ts` |
+| 推送不写日志原文（TC-B2-24） | P1 | **已满足** | `push-dispatch/round.ts`、`core.ts`、`index.ts` 只记原因码；`push-test/core.ts:13-14`；`tests/edge/push-dispatch-round.test.ts`、`push-dispatch-d3-full.test.ts` ③ 断言 logs 和函数日志里没有标题、端点 |
+| Web Push 自实现（C-1～C-10） | P1 | **已满足** | 逐条见证据清单第三节；`tests/shared/push/push-crypto.test.ts`（RFC 8291 附录 A 固定向量、启动自检）、`push-sb2-gaps.test.ts`（Math.random 扫描、逐步中间值、私钥不进日志）、`push-fixed-key-guard.test.ts` |
+| 正文补齐（第四节） | P1 | **已满足** | `_shared/push/ece.ts:19,38-45`、`payload.ts`；三档 1024 / 2048 / 3072 由 `push-crypto.test.ts`、`push-send.test.ts`、`push-test.test.ts` 覆盖 |
+| TZ-invalid-b2（D7） | — | **已满足** | `push-dispatch/round-util.ts:82-95`、`round-step0.ts`、`round-dispatch.ts`；`tests/edge/push-dispatch-step0.test.ts`（TZ-invalid-b2）、`push-dispatch-r316`、`push-dispatch-allday` |
+| 前端 SW 推送和 pending（FE-1～FE-4） | P1 | **已满足** | 11-03 复核已通过（六之三节）。当时留到 FA-4 ③ 的那一条，现已落地：`src/features/reminders/data/remind-route.ts:12-21` 整串匹配 `^#/remind/(event\|todo\|anniv)/<uuid>\?due=[1-9][0-9]*$`，并且是安全整数；`FullReminderPage.tsx` 只用它解析；反例（`next=`、`url=`、大写 UUID、0、负数、超大、别的类型）在 `src/features/reminders/__tests__/remind-data.test.ts:40-50` |
+| O-1 VAPID 脚本 | — | **已满足** | 11-03 已审通过（六之二节） |
+| 风险接受：usage-report、push-dispatch 未鉴权的请求也能进函数、算一次调用 | — | **已满足（接受）** | 两个函数都是先常量时间鉴权、再判配置，未鉴权的请求看不出函数配没配（`push-dispatch/core.ts:104-115`、`usage-report/core.ts:331-336`）。和 account-purge 一样，接受“算一次调用”的代价 |
+
+**结论：第七节 13 项全部满足，没有必修项。③ 安全审查签字通过。**
+
+说明：真机项（P2-01～P2-20）和 TC-B2-27 的真后端冒烟属于 ④ QA 和负责人验收，不在本环。
+
 ## 签字
 
 | 环 | 结论 | 签字 | 日期 |
 |---|---|---|---|
-| ③ 安全审查 | （留空，正式审查时填） | | |
+| ③ 安全审查 | 通过：第七节 13 项全部满足，没有必修项（第八节） | 独立安全审查员 | 2026-11-10 |
 
 ---
 
@@ -618,3 +653,4 @@ TC-B2-80 另加两条：push-test 对不合格端点只回 `bad_endpoint`、不�
 - 2026-11-03：六之三节补“11-03 复核”：FE-1～FE-4 通过，FE-S1～FE-S3 落地；FA-4 路由一侧的再校验留到 FA-4 ③ 打勾；exe 的本机通知归 B6-exe 外壳审查的 X-5。
 - 2026-11-03：加第六之四节：只读审 BE-1 实现，结论通过、没有必改项；D1-1～D1-8、D2-1～D2-4、1.5 节都已落实；列了留给 BE-2 的条件和建议 BE1-S1～S4；同意 build/gen_push_endpoints.py 进 F10 放行名单（附条件）。
 - 2026-11-03：加“六之四补”：复看 BE-1 后续五处改动（S6、BE1-S1、S3/S11、F10 放行条件、函数目录测试文件），都通过；小条件两条（os.system 一类也要断言、引用测试文件的检查要覆盖三种写法），留给 BE-2 一条（Topic 用不透明值）。
+- 2026-11-10：加第八节，完成 ③ 正式审查。对照架构 15.4 S-B2，在主仓 HEAD 3817439 上逐项核对第七节 13 项，都已满足；本机重跑 vitest（S-B2 相关 560 条、FE 相关 96 条）和 check_backend（0 个错误）；FA-4 页面一侧的再校验已经落地；签字通过。

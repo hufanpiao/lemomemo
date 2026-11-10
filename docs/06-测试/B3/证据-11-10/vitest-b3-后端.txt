@@ -1,0 +1,4 @@
+Test Files  42 passed (42)
+Tests  724 passed (724)
+命令：npx vitest run tests/edge tests/shared/ai-quota.test.ts tests/shared/ai-schema.test.ts tests/shared/capture-map-insert.test.ts tests/shared/parse tests/functions/version-gate-b3.test.ts tests/functions/fn-version-gate.test.ts --maxWorkers 4
+基线：main 38174399（2026-11-10）

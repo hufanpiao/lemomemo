@@ -9,12 +9,16 @@ import { expect, test } from './session-fixture.ts';
 const PROBE_AT = [0.1, 0.25, 0.4, 0.55, 0.7, 0.85] as const;
 /** 淡入抽查用的进度点：每 5% 一个，中途哪里先变暗都抓得到（只抽 6 个点时，起点到 10% 之间先暗再亮会漏掉） */
 const FADE_AT = Array.from({ length: 19 }, (_, k) => (k + 1) * 0.05);
+/** 新页淡入最晚什么时候建（ms，从点按算）：fadeSwap 等新页最多 FADE_WAIT_MS（src/motion/index.ts，1500），再留 300 余量 */
+const FADE_LATEST_MS = 1500 + 300;
 
 /**
  * 点页签以后每一帧记一次：有没有 View Transition、页面上几个 main、main 的不透明度、液滴横向位置、底栏和“＋”的 backdrop-filter 计算值，
  * 液滴的过渡这一帧是不是真在跑（running 且 currentTime > 0）。
  * 另外按动画自己的进度抽查（CI 机器慢、帧很稀时逐帧采样会整段漏掉 0.22 秒的淡入，7e197ea CI）：
- * • 新页淡入：包一层 Element.prototype.animate，main 一建淡入动画就先读一次起点（fadeSwap 跳过第一帧后的位置），再暂停、按 FADE_AT 把 currentTime 拨到各点读 opacity，拨回原处接着放
+ * • 新页淡入：包一层 Element.prototype.animate，main 一建淡入动画就先读一次起点（fadeSwap 跳过第一帧后的位置），再暂停、按 FADE_AT 把 currentTime 拨到各点读 opacity，拨回原处接着放。
+ *   点完在同一个任务里再从 getAnimations() 取一次（同液滴）；新页分包晚到时 fadeSwap 等到新 main 出来才建淡入，可能晚过逐帧采样的窗口
+ *   （11-10 镜像 b2 组 3.3 分钟那一遍：todos 首次进、probe.fade 为 null）：采样完还没取到就接着包着 animate 等，最多等到 FADE_LATEST_MS
  * • 液滴：在点页签的同一个任务里（click() 返回、还没出下一帧）从 getAnimations() 拿到这次过渡，同样按进度读横向位置，再拨回接着放。
  *   页签的点按是同步换路由、同步重画的，getAnimations() 会先把样式算好，这一刻过渡刚建好、还没开始走，帧再稀也不会已经放完
  *   （3f5c210 CI webkit：一帧 250～600 ms 时，等到 transitionrun 或下一帧再取，过渡已经放完、取不到；同 b2-tabbar:186 的做法）。
@@ -22,9 +26,10 @@ const FADE_AT = Array.from({ length: 19 }, (_, k) => (k + 1) * 0.05);
  * 抽查在同一个任务里同步做完（暂停、拨时间读值、拨回原处、接着放），这期间不出帧，看不到拨过去的样子；
  * 动画会被往后推抽查本身花的那一点时间（一般不到 1 ms，慢机器上几毫秒），起止值、曲线、时长都不变
  */
-const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
+/** waitFade：采样完还没取到淡入时接着等（只给要查淡入的用例；“打断”那条要马上点第二下，不能等） */
+const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0, waitFade = false) =>
   page.evaluate(
-    async ({ name, ms, at, fadeAt, minMove }) => {
+    async ({ name, ms, at, fadeAt, minMove, fadeLatest }) => {
       const nav = document.querySelector<HTMLElement>('[data-testid="tabbar"]');
       // 液滴每次现查：首屏后部分晚到时（冷启动的头一两遍）液滴元素会换一个，开头查一次会盯着已经摘掉的旧元素
       const dropEl = (): HTMLElement | null | undefined => nav?.querySelector<HTMLElement>('[class*="_drop_"]');
@@ -33,7 +38,13 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
       // runTl：液滴这次过渡开始（transitionrun）那一刻的动画时钟；之后的帧就是过渡已经在跑的帧（CI 无 GPU 的 WebKit 开着模糊只有个位数帧率，
       // 整段过渡可能落在两次采样之间，逐帧的 run 一帧都抓不到；按事件时刻认，不靠帧率）
       // dropDur：液滴这次过渡的时长（ms），和 runTl 一起算“过渡进行中”那一段
-      const probe: { fade: number[] | null; drop: number[] | null; runTl: number | null; dropDur: number } = { fade: null, drop: null, runTl: null, dropDur: 0 };
+      // mainAt、fadeAt0：新页 main 出现、淡入建好的时刻（ms，从点按算；没出现是 -1），取不到淡入时带进报错
+      const probe: { fade: number[] | null; drop: number[] | null; runTl: number | null; dropDur: number; mainAt: number; fadeAt0: number } = {
+        fade: null, drop: null, runTl: null, dropDur: 0, mainAt: -1, fadeAt0: -1,
+      };
+      let tClick = 0;
+      // 点之前的 main：只认换上来的新 main（旧页上没放完的淡入不算这次的）
+      let before: Element | null = null;
       const dropAnim = (): Animation | undefined => dropEl()?.getAnimations().find((a) => (a as CSSTransition).transitionProperty === 'translate');
       /** 暂停 a，按进度拨到 pts 各点读 read()，拨回原处接着放；withStart 时先读一次当前位置，并跳过它之前的点 */
       const scan = (a: Animation, read: () => number, pts: number[], withStart: boolean): number[] => {
@@ -59,12 +70,23 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
         const a = origAnimate.apply(this, args);
         const el = (a.effect as KeyframeEffect | null)?.target;
         if (probe.fade === null && el?.tagName === 'MAIN') {
+          if (probe.fadeAt0 < 0) probe.fadeAt0 = Math.round(performance.now() - tClick);
           // 等调用方把起点拨好（fadeSwap 跳过第一帧）再抽查
           queueMicrotask(() => {
+            if (probe.fade !== null) return; // 点按同一个任务里 scanFade 已经取过
             probe.fade = scan(a, () => Number(getComputedStyle(el).opacity), fadeAt, true);
           });
         }
         return a;
+      };
+      /** 新页 main 上已经有淡入（点按同一个任务里）就按进度抽查一次；起点已由 fadeSwap 拨好，直接读 */
+      const scanFade = (): void => {
+        const m = document.querySelector('main');
+        const a = m?.getAnimations().find((x) => (x.effect as KeyframeEffect | null)?.target === m && !(x instanceof CSSTransition));
+        if (probe.fade === null && m && m !== before && a) {
+          if (probe.fadeAt0 < 0) probe.fadeAt0 = Math.round(performance.now() - tClick);
+          probe.fade = scan(a, () => Number(getComputedStyle(m).opacity), fadeAt, true);
+        }
       };
       /** 液滴的过渡有了就按进度抽查一次（只做一次） */
       const scanDrop = (): void => {
@@ -104,6 +126,7 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
         if (main !== lastMain) {
           lastMain = main;
           pg += 1;
+          if (clicked && probe.mainAt < 0) probe.mainAt = Math.round(performance.now() - tClick);
         }
         const da = dropAnim();
         // 没收到 transitionrun（WebKit 偶尔不派）、这一帧却看到过渡在跑：从这一帧起算，照样按进度抽查
@@ -136,15 +159,25 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
         proto.animate = patched;
         nav?.addEventListener('transitionrun', onRun);
         take(t0);
+        before = document.querySelector('main');
+        tClick = performance.now();
         nav?.querySelector<HTMLElement>(`a[data-tab="${name}"]`)?.click();
         clicked = true;
-        // 同一个任务里马上抽查液滴（见文件头）：这时还没出帧，过渡不会已经放完
+        if (document.querySelector('main') !== before) probe.mainAt = 0;
+        // 同一个任务里马上抽查液滴和淡入（见文件头）：这时还没出帧，过渡、淡入都不会已经放完
         scanDrop();
+        scanFade();
         // minMove：至少采 ms 毫秒，而且液滴离开起点 minMove pt 以后才停（慢机器上液滴晚起步，只采固定时长可能还没动；最多 2 秒）
         const moved = (): boolean => Math.abs((rows.at(-1)?.x ?? 0) - (rows[0]?.x ?? 0)) >= minMove;
         while (performance.now() - t0 < ms || (!moved() && performance.now() - t0 < 2000)) {
           await new Promise((r) => requestAnimationFrame(r));
           take(t0);
+        }
+        // 新页分包晚到：淡入在新 main 出来时才建，接着包着 animate 等（不再记逐帧行，逐帧断言只看上面那段）
+        while (probe.fade === null && performance.now() - tClick < fadeLatest) {
+          await new Promise((r) => setTimeout(r, 16));
+          if (probe.mainAt < 0 && document.querySelector('main') !== before) probe.mainAt = Math.round(performance.now() - tClick);
+          scanFade();
         }
       } finally {
         proto.animate = origAnimate;
@@ -152,7 +185,7 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
       }
       return { rows, probe };
     },
-    { name, ms, at: [...PROBE_AT], fadeAt: FADE_AT, minMove },
+    { name, ms, at: [...PROBE_AT], fadeAt: FADE_AT, minMove, fadeLatest: waitFade ? FADE_LATEST_MS : 0 },
   );
 
 test.describe('底栏：页签互切（FA-7，方案 B）', () => {
@@ -163,9 +196,16 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 }); // 首屏后部分到了（实时模糊接管）
+    // 先把三个页签各进一遍，分包都到了再量：头一次进某页时分包晚到，fadeSwap 最多等 FADE_WAIT_MS（1500）就不放淡入、直接换上
+    // （产品就是这么设计的；11-10 镜像负载重的一遍，日历的新页点后 1788 ms 才出来），那样这条查不到淡入。这里要查的是淡入本身，不是分包快慢
+    for (const [name, testid] of [['todos', 'todos'], ['calendar', 'cal'], ['today', 'today']] as const) {
+      await page.getByTestId('tabbar').locator(`a[data-tab="${name}"]`).click();
+      await expect(page.locator(testid === 'cal' ? 'main[data-feature="calendar"]' : `[data-testid="${testid}"]`)).toBeVisible({ timeout: 10_000 });
+      await expect.poll(() => page.evaluate(() => document.querySelector('main')?.getAnimations().length ?? -1), { timeout: 5000 }).toBe(0);
+    }
     await page.waitForTimeout(400);
     for (const [name, testid] of [['todos', 'todos'], ['calendar', 'cal'], ['today', 'today']] as const) {
-      const { rows, probe } = await sampleAfterClick(page, name, 700);
+      const { rows, probe } = await sampleAfterClick(page, name, 700, 0, true);
       await expect(page.locator(testid === 'cal' ? 'main[data-feature="calendar"]' : `[data-testid="${testid}"]`)).toBeVisible();
       // 逐帧都要满足的（帧再稀也照查）：不起 View Transition、两页不同时在屏上（叠字）、底栏和“＋”一直实时模糊、没有整页透明的一帧、最后不透明
       expect(rows.every((r) => r.vt === 0 && !r.dataVt), `${name}：起了 View Transition`).toBe(true);
@@ -185,7 +225,7 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
       // 新页淡入（按动画进度抽查，不靠帧率）：真有这次淡入；起点和各点都在 0～1 之间、跟着进度只增不减（中途先暗再亮也抓），
       // 一开始明显没到 1（是淡入不是直接换上），中间值够多，后面比前面亮
       const fade = probe.fade;
-      expect(fade, `${name}：新页没有淡入动画`).not.toBeNull();
+      expect(fade, `${name}：新页没有淡入动画（新页 main 点后 ${probe.mainAt} ms 出现，淡入 ${probe.fadeAt0} ms 建好；-1 是没有）`).not.toBeNull();
       const fz = fade ?? [];
       expect(fz.every((v, k) => v > 0 && v <= 1 && (k === 0 || v >= (fz[k - 1] ?? 0) - 0.001)), `${name}：淡入不是从透明到不透明 ${JSON.stringify(fz)}`).toBe(true);
       expect(fz.filter((v) => v > 0.05 && v < 0.95).length, `${name}：淡入中间值太少 ${JSON.stringify(fz)}`).toBeGreaterThanOrEqual(3);
