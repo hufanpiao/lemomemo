@@ -230,7 +230,9 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
     noteExitFromOtherTab(m, deps);
     if (m.type === 'reset' && m.notice === 'pending_deletion') return followCooling();
     if (leader?.isLeader()) {
-      if (m.type === 'outbox') void current?.sendNow();
+      // 先重读：别的页改的队列本页 outbox 的摘要还不知道（暂停解除、待发数）；refresh 摘要变了引擎自己会 kickSend，
+      // 和这里的 sendNow 由引擎的 sendQueued 合并成一次（OUTBOX-cross-tab）
+      if (m.type === 'outbox') void outbox.refresh().then(() => current?.sendNow()).catch(() => undefined);
       return;
     }
     if (m.type === 'outbox' || boot.switching) return;
@@ -240,9 +242,16 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
       await reloadCollections(cache, m.type === 'changed' ? m.colls : null, () => boot.switching);
     })().catch(() => undefined);   // 库已关（换账号、清库中）：不管
   };
-  // 非主页往 outbox 写了：提醒主页马上发
-  outbox.subscribe(() => {
-    if (leader && !leader.isLeader() && !boot.switching) leader.post({ type: 'outbox' });
+  // 非主页改了队列（outbox 的 queue 事件：新写入、合并进已排队的项、清退避、重试、丢弃等，待发数不变也算）：提醒主页马上发。
+  // 同一轮里的多次合并成一次（OUTBOX-cross-tab）。别的页改的、本页 refresh 读到的不再提醒（那一页自己会提醒）
+  let nudging = false;
+  outbox.onEvent((e) => {
+    if (e.type !== 'queue' || nudging) return;
+    nudging = true;
+    queueMicrotask(() => {
+      nudging = false;
+      if (leader && !leader.isLeader() && !boot.switching) leader.post({ type: 'outbox' });
+    });
   });
   // 整份重读一次（outbox 待发数、各集合）：库已关（换账号、清库中）时不管
   const rereadAll = (): void => {
@@ -281,7 +290,7 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
    * 旧的 close 要等引擎 drain 完才关频道（最长约 20 秒），这段时间同一条消息新旧两个频道各收一次：onMessage 必须保持可以重复执行。
    * 行为变化（TABLEADER-listen）：以前借 NEVER_VISIBLE 时，没有 Web Locks 的页面只听的那个会自己当主页（isLeader() 为 true，
    * lead 是空的）；现在 listenOnly 的 isLeader() 恒为 false，所以暂停页收到 outbox 不再调 current?.sendNow()（current 已为 null，本来就是空操作），
-   * 收到 changed、reset 一律走下面“非主页”分支（outbox.refresh() + 重读集合）；outbox.subscribe 里非主页写入会发 outbox 提醒主页；
+   * 收到 changed、reset 一律走下面“非主页”分支（outbox.refresh() + 重读集合）；outbox 的 queue 事件里非主页改了队列会发 outbox 提醒主页；
    * 回到前台会整份重读兜底。冷静期 reset 照旧先走 followCooling
    */
   function yieldLeader(): void {

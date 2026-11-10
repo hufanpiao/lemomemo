@@ -38,6 +38,13 @@ export {
 } from './pending-actions.ts';
 
 const EMPTY_SET: ReadonlySet<string> = new Set();
+/** 本页改了队列（OutboxEvent queue） */
+const QUEUE: OutboxEvent = { type: 'queue' };
+/** 改完队列：发 queue 事件，再重算状态 */
+const touched = (ctx: Ctx): Promise<void> => {
+  ctx.emit(QUEUE);
+  return ctx.refresh();
+};
 const sameSet = (a: ReadonlySet<string>, b: ReadonlySet<string>): boolean => a.size === b.size && [...b].every((r) => a.has(r));
 
 async function bootImpl(ctx: Ctx): Promise<OutboxBootReport> {
@@ -118,7 +125,7 @@ async function enqueueImpl(ctx: Ctx, input: EnqueueInput): Promise<OutboxItem | 
   });
   notify(table, [{ id, view }]);
   for (const c of cancelled) notify(c.table, [c]);
-  await ctx.refresh();
+  await touched(ctx);
   return result;
 }
 
@@ -227,13 +234,13 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
       const item = await getItem(opId);
       if (!item) return;
       await rewriteRecs(ctx, item.table, [item.id], (t) => t.delete(OUTBOX, opId));
-      await refresh();
+      await touched(ctx);
     },
     async discardUnlessInflight(opId) {
       if (suspended) return false;
       const item = await getItem(opId);
       const done = item && item.state !== 'inflight' ? await deleteUnlessInflight(ctx, item) : false;
-      if (done) await refresh();
+      if (done) await touched(ctx);
       return done;
     },
     async retryFailed(opIds) {
@@ -249,7 +256,7 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
           }
         });
       }
-      await refresh();
+      await (targets.length ? touched(ctx) : refresh());
     },
     async resetInflight(opId) {
       if (suspended) return;
@@ -266,12 +273,12 @@ export function createOutbox(cache: Cache, opts: OutboxOptions = {}): Outbox {
         for (const i of await t.getAll<OutboxItem>(OUTBOX)) {
           if (i.state === 'pending' && i.next_at > 0) await t.put(OUTBOX, { ...i, next_at: 0 });
         }
-      });
+      }).then(() => ctx.emit(QUEUE));   // 发 queue 事件；不 refresh：next_at 不进摘要
     },
     async resume() {
       if (suspended) return;
       await cache.deleteMeta('outbox_pause');
-      await refresh();
+      await touched(ctx);
     },
     applyServer: async (table, rows) => {
       if (suspended) return { skipped: [] };

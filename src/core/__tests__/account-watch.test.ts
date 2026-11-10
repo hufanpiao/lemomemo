@@ -154,8 +154,8 @@ describe('被移除（session_revoked、account_disabled）', () => {
   it('fail 归成 removed：设闸、发 removed 事件；wipeOnRemoved 清空本机、关库、onRemoved', async () => {
     const { boot } = await setup();
     const events: string[] = [];
-    boot.outbox?.onEvent((e) => events.push(e.type));
     const item = await boot.outbox?.enqueue({ table: 'todos', id: uid(5), op: 'insert', data: todo(5) });
+    boot.outbox?.onEvent((e) => events.push(e.type));   // 入队之后才听：入队本身发 queue 事件（OUTBOX-cross-tab）
     const sent = await boot.outbox?.next();
     expect(sent?.op_id).toBeDefined();
     expect(await boot.outbox?.fail(item?.op_id ?? '', { status: 401, code: 'session_revoked', sid: null })).toBe('removed');

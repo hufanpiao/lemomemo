@@ -60,8 +60,8 @@ describe('L2：失败分类', () => {
     const { cache, outbox } = await setup();
     await seed(cache, 'todos', uid(1), todo(1), 5);
     const events: string[] = [];
-    outbox.onEvent((e) => events.push(e.type));
     await outbox.enqueue({ table: 'todos', id: uid(1), op: 'patch', data: { title: 'x' } });
+    outbox.onEvent((e) => events.push(e.type));   // 入队之后才听：入队本身发 queue 事件（OUTBOX-cross-tab）
     const a = await outbox.next();
     expect(await outbox.fail(a?.op_id ?? '', { status: 404, code: 'not_found', sid: null })).toBe('drop');
     expect(await outbox.list()).toEqual([]);
@@ -76,8 +76,8 @@ describe('account_disabled、account_pending_deletion：被停用、注销冷静
     const { cache, outbox } = await setup();
     await seed(cache, 'todos', uid(1), todo(1), 5);
     const events: string[] = [];
-    outbox.onEvent((e) => events.push(`${e.type}:${'code' in e ? e.code : ''}`));
     await outbox.enqueue({ table: 'todos', id: uid(1), op: 'patch', data: { title: '停用前改的' } });
+    outbox.onEvent((e) => events.push(`${e.type}:${'code' in e ? e.code : ''}`));   // 入队之后才听：入队本身发 queue 事件（OUTBOX-cross-tab）
     const a = await outbox.next();
     expect(await outbox.fail(a?.op_id ?? '', { status: 403, code: 'account_pending_deletion', sid: null })).toBe('disabled');
     expect(events).toEqual(['disabled:account_pending_deletion']);
@@ -89,8 +89,8 @@ describe('account_disabled、account_pending_deletion：被停用、注销冷静
   it('OUTBOX-sid-type：fail 不带 sid 编不过（@ts-expect-error 由 typecheck 检查），带了就原样进事件', async () => {
     const { outbox } = await setup();
     const got: unknown[] = [];
-    outbox.onEvent((e) => got.push(e));
     await outbox.enqueue({ table: 'todos', id: uid(2), op: 'insert', data: todo(2) });
+    outbox.onEvent((e) => got.push(e));   // 入队之后才听：入队本身发 queue 事件（OUTBOX-cross-tab）
     const a = await outbox.next();
     const noSid = (): Promise<unknown> =>
       // @ts-expect-error 少了 sid

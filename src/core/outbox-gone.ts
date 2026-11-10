@@ -134,6 +134,7 @@ export async function resolveGoneImpl(
       throw e;
     }
     notify(table, [{ id, view: r.view }]);
+    ctx.emit({ type: 'queue' });
     await ctx.refresh();
     return { done: mode === 'restore' ? 'restored' : 'dropped', opId: r.opId };
   }

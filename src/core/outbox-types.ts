@@ -123,7 +123,13 @@ export type OutboxEvent =
    */
   | { type: 'removed'; code: string; sid: string | null }
   /** 被停用（account_disabled）或注销冷静期（account_pending_deletion）：队列已设闸；调用方和 removed 一样清空本机、回登录页，按 code 提示；sid 同 removed */
-  | { type: 'disabled'; code: string; sid: string | null };
+  | { type: 'disabled'; code: string; sid: string | null }
+  /**
+   * 本页真改了队列（OUTBOX-cross-tab）：新写入或合并进已排队的项、撤销抵消、retryFailed、clearBackoff、discard、
+   * discardUnlessInflight 删成了、resume、resolveGone。待发数不变也发（refresh 摘要相同不通知 subscribe）；
+   * app/sync-wiring 的非主页靠它提醒主页马上发。ack、fail、applyServer、dropServer 不发（只有主页的引擎调）
+   */
+  | { type: 'queue' };
 
 /** 启动时整理队列的结果 */
 export interface OutboxBootReport {
