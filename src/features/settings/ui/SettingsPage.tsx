@@ -13,7 +13,8 @@
 // 同样点进去再改（R-347 照线框 sR7）：#/settings/remind/show-title、#/settings/remind/dnd。正文都由 reminders 功能懒加载提供
 // 设置 › 语音与 AI（#/settings/ai）、在 Claude 聊天里记事（#/settings/claude）同日历（B3 FA-4）：正文由 plus 功能懒加载提供
 import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { backOrReplace, hrefOf, navigateSub, useRoute } from '../../../app/router.ts';
+import { backTo, hrefOf, plainClick, useRoute } from '../../../app/router.ts';
+import { backOrReplace, navigateSub } from '../../../app/router-sub.ts';
 import { CalendarSettings } from '../../calendar/index.ts';
 import { PlusSettings } from '../../plus/index.ts';
 import { RemindSettings } from '../../reminders/index.ts';
@@ -200,7 +201,12 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
     ) : (
       <>
         <header className={styles.top}>
-          <a className={styles.back} href={hrefOf('today')}>
+          <a
+            className={styles.back}
+            href={hrefOf('today')}
+            // 按层级回今天（R-372）：从今天进来的退一步，不新压一条；直接打开的原地换；新标签页打开照常
+            onClick={(e) => plainClick(e) && backTo('today')}
+          >
             ‹ {t('settings.back', {})}
           </a>
           <h1 className={styles.title}>{t('settings.title', {})}</h1>

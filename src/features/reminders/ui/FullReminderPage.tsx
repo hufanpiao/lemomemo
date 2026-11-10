@@ -7,10 +7,10 @@
 import { useState, useSyncExternalStore } from 'react';
 import { LocationText } from '../../../kit/components/LocationText.tsx';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
-import { canGoBack, goBack, navigate } from '../../../app/router.ts';
+import { backTo, canGoBack, goBack, replaceRoute } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { clock } from '../../../platform/clock.ts';
-import { openReminder } from '../../../platform/native-bridge.ts';
+import { reminderHash, type ReminderKind } from '../../../platform/native-bridge.ts';
 import { eventEnd, eventStart, findReminder, parseReminderHash, relMsg, timeOf, type Reminder } from '../hooks/remind-view.ts';
 import { actionsOf, useMinuteNow, useReminderList, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
@@ -39,9 +39,19 @@ function bigTimeOf(r: Reminder, tz: string, defaultTime: string): string {
   return typeof dueTime === 'string' && /^\d{2}:\d{2}/.test(dueTime) ? dueTime.slice(0, 5) : timeOf(r.tagDue, tz);
 }
 
+// 按层级记历史（R-372，负责人 11-10“往左滑应该是返回上一个层级，不是返回上一个操作”）：连看几条提醒算同一层，
+// 左滑一步就离开整页提醒；关闭能退就退一步，退不了（直接打开、iOS 恢复后）原地换成今天，不新压一条
+
+/** 换成下一条：原地换这条历史（保留 state 里的深度、编号），再按地址变了通知路由和本页重画 */
+function showNext(kind: ReminderKind, id: string, dueAt: number): void {
+  const oldURL = window.location.href;
+  window.history.replaceState(window.history.state, '', reminderHash(kind, id, dueAt));
+  window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL, newURL: window.location.href }));
+}
+
 function leave(): void {
   if (canGoBack()) goBack();
-  else void navigate('today');
+  else void replaceRoute('today');
 }
 
 export default function FullReminderPage() {
@@ -62,7 +72,7 @@ export default function FullReminderPage() {
   const after = (cur: Reminder): void => {
     setDoneHere(cur.tag);
     const next = entries.find((e) => e.tag !== cur.tag);
-    if (next) void openReminder(next.kind, next.id, next.dueAt);
+    if (next) showNext(next.kind, next.id, next.dueAt);
     else leave();
   };
 
@@ -93,7 +103,7 @@ export default function FullReminderPage() {
         </div>
         <div className={styles.spacer} />
         <div className={styles.pageBar}>
-          <Pressable type="button" className={`${styles.btn} ${styles.primary}`} onClick={() => void navigate('today')}>
+          <Pressable type="button" className={`${styles.btn} ${styles.primary}`} onClick={() => backTo('today')}>
             {t('remind.full.home', {})}
           </Pressable>
         </div>
@@ -171,7 +181,7 @@ export default function FullReminderPage() {
         </div>
       )}
       {nextR && next && (
-        <Pressable type="button" className={styles.nextCard} onClick={() => void openReminder(next.kind, next.id, next.dueAt)} data-testid="remind-full-next">
+        <Pressable type="button" className={styles.nextCard} onClick={() => showNext(next.kind, next.id, next.dueAt)} data-testid="remind-full-next">
           <span className={`${nextR.kind === 'event' ? styles.mkEv : styles.mkTd} ${pcClass(nextProject)}`} aria-hidden="true" />
           <span className={styles.grow}>
             <b className={styles.nextTitle}>{t('remind.full.next', { title: nextR.title })}</b>

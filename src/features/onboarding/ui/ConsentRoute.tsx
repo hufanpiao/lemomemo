@@ -1,7 +1,8 @@
 // 路由 #/onboarding：告知与同意页（接手清单 CONSENT-wire ①）。容器只接线：api 和四个回调来自 hooks/useConsentWiring.ts（A27：ui 不引 data）
 // 做完（同意、不同意、R-239 跳过）回今天页；从 设置 › 语音与 AI 打开“AI 整理”进来的（#/onboarding/ai，R-369）回那一页（退一步，不多压历史）
 import { useCallback } from 'react';
-import { backOrReplace, navigate, useRoute } from '../../../app/router.ts';
+import { replaceRoute, useRoute } from '../../../app/router.ts';
+import { backOrReplace } from '../../../app/router-sub.ts';
 import type { ConsentApi } from '../hooks/useConsent.ts';
 import { defaultConsentWiringDeps, useConsentApi, useConsentHandlers, type ConsentWiringDeps } from '../hooks/useConsentWiring.ts';
 import ConsentPage from './ConsentPage.tsx';
@@ -16,7 +17,8 @@ export default function ConsentRoute({ api: injected, wiring = defaultConsentWir
   const shared = useConsentApi();
   const api = injected ?? shared;
   const fromAi = useRoute().params[0] === 'ai';
-  const finish = useCallback(() => (fromAi ? backOrReplace('settings', 'ai') : void navigate('today')), [fromAi]);
+  // 做完原地换成今天（R-372）：左滑不回到告知页
+  const finish = useCallback(() => (fromAi ? backOrReplace('settings', 'ai') : void replaceRoute('today')), [fromAi]);
   const handlers = useConsentHandlers(finish, wiring);
   return <ConsentPage api={api} {...handlers} />;
 }

@@ -24,7 +24,7 @@
 // • 液态玻璃底栏、“＋”、时间河、提醒按钮条不在这一段（FA-4、FA-7）
 import { Suspense, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
-import { hrefOf, navigate } from '../../../app/router.ts';
+import { hrefOf, navigate, navigateTab, plainClick } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
 import list from '../../../kit/components/List.module.css';
 import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
@@ -125,8 +125,9 @@ export default function TodayPage() {
       <div className={styles.head}>
         {/* tabIndex=-1：弹层关上、打开按钮没了时焦点的退路（错过的提醒“全部知道了”以后，Dialog L-2），不进 Tab 顺序 */}
         <h1 className={styles.date} tabIndex={-1}>{fmtDay(d.today, locale, 'monthDayWeek')}</h1>
-        {/* 设置入口（负责人 11-05 ①；接手清单 NAV-today-no-settings）：右上角头像，名字第一个字；没有名字时是一个人形 */}
-        <a className={styles.me} href={hrefOf('settings')} aria-label={tApp('app.settings', {})} data-testid="today-settings">
+        {/* 设置入口（负责人 11-05 ①；接手清单 NAV-today-no-settings）：右上角头像，名字第一个字；没有名字时是一个人形。
+            点了交给路由压一条带本次编号的历史（R-372）：设置里“‹ 今天”和左滑都退回这一条，不再叠一条今天；新标签页打开照常 */}
+        <a className={styles.me} href={hrefOf('settings')} onClick={(e) => plainClick(e) && navigateTab('settings')} aria-label={tApp('app.settings', {})} data-testid="today-settings">
           <MeAvatar />
         </a>
       </div>

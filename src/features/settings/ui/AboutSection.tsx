@@ -10,7 +10,7 @@
 // 可见高度探测按钮（R-371 第二条路，11-10）：诊断开着时在诊断文字下面多一排按钮（VhProbe.tsx），同样只在非正式版里有
 //   录音探测的文案在词条 settings.about.probe（A20 不准在组件里写汉字；正式版里只剩词典里这一句、没有这一行）；testid 带 check_no_probe.mjs 的标记 csp-lab，正式产物里残留就失败。和 voice-probe 同一个 PR 删
 import { useEffect, useRef, useState } from 'react';
-import { navigateSub } from '../../../app/router.ts';
+import { navigateSub } from '../../../app/router-sub.ts';
 import { SettingsCard, SettingsEntryRow, SettingsInfoRow } from '../../../kit/components/Settings/Settings.tsx';
 import { collectDiag } from '../../../platform/diag-info.ts';
 import { buildInfo } from '../../../platform/env.ts';

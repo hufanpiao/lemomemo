@@ -2,13 +2,13 @@
 // 这个文件是首屏的外壳：4 个页签、“＋”、液滴，材质先用 backdrop-filter 后备（--g-tint-fb）；减少透明效果时一直是实色。
 // 首屏用不着的（底部实色带、玻璃标记、帧循环、果冻、按住放大）在 GlassBarFx.tsx，首屏画完后才下载（主持人 11-05 首屏选 ③）；
 // 下载到以前和下不来时：没有模糊带、果冻、按住放大，材质用后备。
-// • 页签是 <a href>，选中项 aria-current="page"；“＋”是 Pressable（按下回弹，设计动效评审 L3），没有新建动作的页（随手记）不出
+// • 页签是 <a href>（新标签页打开照常），点按交给 navigateTab 按层级记历史（R-372）；选中项 aria-current="page"；“＋”是 Pressable（按下回弹，设计动效评审 L3），没有新建动作的页（随手记）不出
 // • 液滴：用 --i（第几个页签）做 translate；减少动态效果时直接换位置（CSS 两段覆盖）
 //   点页签时液滴马上往那边走，不等路由换过来（webkit 切到要下载的页时路由要晚 0.3 秒；设计动效评审 D1）：记下“从哪页点到哪页”，
 //   路由还是那一页就按点的那个画，路由一变就作废、用路由的
 // • 两个皮肤都用（负责人 11-05 ④）
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
-import { hrefOf } from '../../../app/router.ts';
+import { hrefOf, navigateTab, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { useT } from '../../hooks/useT.ts';
 import type { GlassBarFxProps } from './GlassBarFx.tsx';
@@ -138,8 +138,11 @@ export function GlassBar({ active, add, later = (fn) => fn(), hide = false }: Gl
             aria-current={name === active ? 'page' : undefined}
             data-tab={name}
             onClick={(e) => {
-              // 新标签页打开（按着修饰键、中键）不算换页
-              if (!(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0)) setWant({ from: active, to: name });
+              // 新标签页打开（按着修饰键、中键）不算换页，照浏览器默认；普通点击按层级记历史（R-372）：不让链接自己压一条，
+              // 交给 navigateTab（今天 → 别的页签压一条，页签之间原地换，回今天能退就退）
+              if (!plainClick(e)) return;
+              setWant({ from: active, to: name });
+              navigateTab(name);
             }}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -149,7 +152,8 @@ export function GlassBar({ active, add, later = (fn) => fn(), hide = false }: Gl
           </a>
         ))}
         {/* 侧栏最下面的设置入口（头像，D5）：在首屏外壳里，首屏后部分下不来时宽屏也有设置入口（设计复审三 S1）；窄屏不显示，用今天页右上角的 */}
-        <a className={styles.me} href={hrefOf('settings')} aria-label={t('app.settings', {})} data-testid="tabbar-settings">
+        {/* 点了按页签那套记历史（R-372 代码审建议）：从今天进压一条，从别的页签进原地换，设置里“‹ 今天”、左滑都回今天 */}
+        <a className={styles.me} href={hrefOf('settings')} onClick={(e) => plainClick(e) && navigateTab('settings')} aria-label={t('app.settings', {})} data-testid="tabbar-settings">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 8a7 7 0 0 1 14 0" />
           </svg>

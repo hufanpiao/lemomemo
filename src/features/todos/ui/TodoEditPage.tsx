@@ -5,7 +5,8 @@
 // • 只读行（带不认识的值，0.27①“只读显示”）：一进来就按 core 的只读 id 判断（kit 的 useReadonlyIds），顶部出“这条要新版本才能修改 · 更新”，
 //   输入框全部禁用、不出“删除”、右上不写“改了就自动保存”（FA-2 视觉验收第 2 条）；写入被拒（status readonly）时同样
 // • 删除：软删，页内出“已删除”和“撤销”（ADR-006）；“最近删除”页在 FA-2 后面一段
-import { canGoBack, goBack, parseHash, replaceAddress, replaceRoute, useRoute } from '../../../app/router.ts';
+import { canGoBack, goBack, parseHash, replaceRoute, useRoute } from '../../../app/router.ts';
+import { replaceAddress } from '../../../app/router-levels.ts';
 import { useCallback, useReducer, useRef } from 'react';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
 import { Check, Field, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';

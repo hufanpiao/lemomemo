@@ -4,7 +4,8 @@
 // • 农历、节气：后端的 shared/logic/anniv/lunar.ts 按需加载（useLunar）；加载中、加载失败不传 dayInfo，月格照常显示、没有农历行
 // • 地址参数非法或没规整（周参数不是那周第一天）时，用 replaceInPage 换成规整的（不新增历史）
 // • 月格按 (年月、数据、今天、每格几个标签、节假日) 记住；周视图的排布要量出时间轴宽度，在界面一侧算（WeekView）
-// • 键盘 ← →（电脑，架构 5.12 第 3 点）：连按合并成一次 push——一串按键的第一下 push，停下 500 ms 以内的后续按键 replace（不叠历史）
+// • 日历内部一律原地换（R-372 ②，负责人选“算同一层（推荐）”）：翻月、切月/周、“今天”、年月选择、点某天进周视图、键盘 ← → 都用 replaceInPage，
+//   不记步数，左滑直接回到进日历之前那一层（今天）
 // • 节假日没拉到（离线）时 model.holidaysOffline = true，页面提示“联网后显示节假日”；韩文界面不加载农历（useLunar）
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { minOfDay, todayOf, type DateStr } from '../../../../shared/core/date.ts';
@@ -12,7 +13,7 @@ import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { holidayCountries, holidayYears } from '../../../../shared/logic/calendar/holidays.ts';
 import { resolveWeekStart, type WeekStart, type YearMonth } from '../../../../shared/logic/calendar/cal-nav.ts';
 import { buildMonth, type MonthCell } from '../../../../shared/logic/calendar/month-grid.ts';
-import { navigateInPage, replaceInPage } from '../../../app/router.ts';
+import { replaceInPage } from '../../../app/router-levels.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -24,9 +25,6 @@ import { useHolidays } from './useHolidays.ts';
 import { useLunar, type LunarApi } from './useLunar.ts';
 
 const MIN = 60_000;
-/** 键盘连按合并的间隔（5.12：停下 500 ms 后才记一条历史） */
-export const KEY_BURST_MS = 500;
-
 /** 每分钟变一次的 now（对齐整分钟） */
 function useMinuteNow(): number {
   const [now, setNow] = useState(() => clock.now());
@@ -128,12 +126,12 @@ export function useCalendar(params: readonly string[]) {
     }
   }, [view, items, tz, today, weekStart, maxMarks, holidays, lunar]);
 
+  // 日历里翻月、切月/周、“今天”、选年月、点某天进周视图都算同一层（R-372 ②，负责人选“算同一层（推荐）”）：一律原地换，不记步数，
+  // 左滑直接回到进日历之前那一层（今天）
   const go = useCallback((v: CalView | null) => {
-    if (v) void navigateInPage('cal', ...paramsOf(v));
+    if (v) void replaceInPage('cal', ...paramsOf(v));
   }, []);
 
-  // 键盘连按合并：burstUntil 之前的按键用 replace（这一串只留一条历史）
-  const burstUntil = useRef(0);
   const viewRef = useRef(view);
   viewRef.current = view;
   const keyShift = useCallback((n: -1 | 1) => {
@@ -141,10 +139,7 @@ export function useCalendar(params: readonly string[]) {
     if (!v) return;
     // 同一次按键事件里地址还没变：先记下新视图，连按时从它往下翻
     viewRef.current = v;
-    const t = Date.now();
-    const inBurst = t < burstUntil.current;
-    burstUntil.current = t + KEY_BURST_MS;
-    void (inBurst ? replaceInPage('cal', ...paramsOf(v)) : navigateInPage('cal', ...paramsOf(v)));
+    void replaceInPage('cal', ...paramsOf(v));
   }, []);
 
   const model: CalendarModel = {
@@ -172,14 +167,14 @@ export function useCalendar(params: readonly string[]) {
     prev: () => go(shiftView(view, -1)),
     next: () => go(shiftView(view, 1)),
     // 周视图回今天、点某天开周视图：地址写那一天本身（L4：周起始后来变了也还落在那周）
-    goToday: () => (view.mode === 'week' ? void navigateInPage('cal', 'week', today) : go(todayView(view.mode, today, weekStart))),
+    goToday: () => (view.mode === 'week' ? void replaceInPage('cal', 'week', today) : go(todayView(view.mode, today, weekStart))),
     setMode: (mode: CalView['mode']) => {
       if (mode !== view.mode) go(switchMode(view, today, weekStart));
     },
     pick: (ym: YearMonth) => go(pickMonth(view, ym, weekStart)),
-    /** 键盘 ← →（连按合并成一次 push） */
+    /** 键盘 ← →（原地换，R-372） */
     keyShift,
     /** 点月格里的某一天：跳到那一天所在的周视图 */
-    openWeekOf: (date: DateStr) => void navigateInPage('cal', 'week', date),
+    openWeekOf: (date: DateStr) => void replaceInPage('cal', 'week', date),
   };
 }

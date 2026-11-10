@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const toSub = vi.fn();
-vi.mock('../../../app/router.ts', () => ({ navigateSub: (...a: unknown[]) => toSub(...a) }));
+vi.mock('../../../app/router-sub.ts', () => ({ navigateSub: (...a: unknown[]) => toSub(...a) }));
 const { AboutSection } = await import('../ui/AboutSection.tsx');
 
 afterEach(() => {

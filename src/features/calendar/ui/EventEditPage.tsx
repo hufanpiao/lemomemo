@@ -3,7 +3,8 @@
 // • 全天 / 有时刻：有时刻是固定时刻，按“时区”（只让选 Intl 支持的，D7）；和当前时区不同时写出“在你这里是哪天几点”
 // • 地点 / 链接：输入框下面用 kit 的 LocationText 显示，能过 safeHref 的才是可点的链接（SAFE-link-real）
 // • 只读行、删除和撤销：和待办编辑页同一套（kit 的 useEditRecord、EditShell）
-import { canGoBack, goBack, parseHash, replaceAddress, replaceRoute, useRoute } from '../../../app/router.ts';
+import { canGoBack, goBack, parseHash, replaceRoute, useRoute } from '../../../app/router.ts';
+import { replaceAddress } from '../../../app/router-levels.ts';
 import { useCallback, useReducer, useRef } from 'react';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
 import { Check, Field, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';

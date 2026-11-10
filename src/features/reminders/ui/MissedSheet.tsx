@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { todayOf } from '../../../../shared/core/date.ts';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { Pressable } from '../../../motion/components.ts';
-import { openReminder } from '../../../platform/native-bridge.ts';
+import { openReminder } from './open-reminder.ts';
 import type { RemindPrefs } from '../hooks/remind-list.ts';
 import { dayMsg, eventStart, timeOf, type Reminder } from '../hooks/remind-view.ts';
 import { actionsOf, useRemindActions } from '../hooks/useReminders.ts';

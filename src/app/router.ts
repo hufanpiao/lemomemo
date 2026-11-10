@@ -60,11 +60,11 @@ const listeners = new Set<() => void>();
 
 // 历史的深度标记 lemoDepth（canGoBack 用）：放在 history.state 里，浏览器后退、刷新都还在；键名直接写字面量（首屏额度）
 /** 当前这条历史的 state 里某一项（深度、载入编号、子页记号共用） */
-function stateOf(key: string): unknown {
+export function stateOf(key: string): unknown {
   const st: unknown = window.history.state;
   return typeof st === 'object' && st !== null ? (st as Record<string, unknown>)[key] : undefined;
 }
-function depthNow(): number {
+export function depthNow(): number {
   const d = stateOf('lemoDepth');
   return typeof d === 'number' && d > 0 ? d : 0;
 }
@@ -76,7 +76,7 @@ function depthNow(): number {
 // 还要写后备，首屏多几十字节（首屏额度）
 let doc = Math.random();
 /** 要写进历史的 state：step 为 1 是新压一条（深度 + 1，记这次载入的编号），0 是原地换（深度不变，编号沿用原来那条的） */
-function stateFor(step: 0 | 1, extra?: Record<string, unknown>): Record<string, unknown> {
+export function stateFor(step: 0 | 1, extra?: Record<string, unknown>): Record<string, unknown> {
   return { lemoDoc: step ? doc : stateOf('lemoDoc'), lemoDepth: depthNow() + step, ...extra };
 }
 
@@ -85,10 +85,10 @@ function notifyAll(): void {
 }
 
 /** 切页怎么动：vt 整页 View Transition；fade 四个页签互切，不起 View Transition、新页淡入（motion 的 fadeSwap）；none 直接画 */
-type Anim = 'vt' | 'fade' | 'none';
+export type Anim = 'vt' | 'fade' | 'none';
 
 /** 改地址（可选）并同步把新页面画完；按 anim 包一层动画 */
-function commit(change?: () => void, anim: Anim = 'vt'): Promise<void> {
+export function commit(change?: () => void, anim: Anim = 'vt'): Promise<void> {
   const update = (): void => {
     change?.();
     flushSync(notifyAll);
@@ -113,7 +113,7 @@ export function setTabSwitch(fn: (a: Route, b: Route) => boolean): void {
 }
 
 /** 从当前地址去 href：页签互切淡入，别的整页过渡 */
-const animTo = (href: string): Anim => (tabSwitch(parseHash(window.location.hash), parseHash(href)) ? 'fade' : 'vt');
+export const animTo = (href: string): Anim => (tabSwitch(parseHash(window.location.hash), parseHash(href)) ? 'fade' : 'vt');
 
 // UI-4 第二轮 N-1：iPhone Safari 左边缘侧滑返回时系统自己已经播了返回动画（popstate.hasUAVisualTransition 为 true），
 // 再起 View Transition 会叠一次交叉淡入淡出。浏览器先派 popstate、紧接着派 hashchange：
@@ -187,7 +187,15 @@ export function useRoute(): Route {
  * 已经在这一页（地址没变）就直接返回：不起空 transition，免得切换期间约 0.25 秒点按被吞掉（UI-4 第二轮 N-2）
  */
 export function navigate(name: RouteName, ...params: string[]): Promise<void> {
-  const href = hrefOf(name, ...params);
+  return goHref(hrefOf(name, ...params));
+}
+
+/**
+ * 按现成的地址新压一条（navigate 用；整页提醒的地址带 ?due=，不能走 hrefOf，App 里打开整页提醒时直接给它）：
+ * 深度 + 1、记这次载入的编号，关掉整页提醒时 canGoBack 为真、退一步回原页（R-372 代码审 M1）。
+ * replaceRoute、replaceInPage 不并进来：分开写 gzip 后反而小几个字节（首屏额度）
+ */
+export function goHref(href: string): Promise<void> {
   if (window.location.hash === href) return Promise.resolve();
   return commit(() => {
     window.history.pushState(stateFor(1), '', href);
@@ -195,15 +203,10 @@ export function navigate(name: RouteName, ...params: string[]): Promise<void> {
   }, animTo(href));
 }
 
-// “这一条历史是从上一层点进来的”（设置的二级页、三级页；提醒接线代码审查 H1、M1）：记在那条历史自己的 history.state 上，
-// 浏览器前进后退、刷新、去别的页再回来都跟着那条历史走；页面里点“‹ 返回”时看它决定退一步（goBack）还是原地换成上一层（replaceRoute）。
-// 记号的值是压这一条时上一层的地址（复审第二轮 N1）：上一条后来被原地换成了别的页（直接打开的二级页点“‹ 设置”被 replace 成首页，
-// 再“前进”回到三层页），goBack 就会跳过一层；所以返回前再对一下上一条现在的地址（entryAt，本标签页这次打开以来记的），对不上就不算
-const SUB = 'lemoSub';
 
 // 本标签页这次打开以来，每个深度上现在是哪条地址（N1 用）：压、换、前进后退（hashchange）时都记一笔；刷新以后从空开始，没记到的深度不拿来否定记号
-const entryAt = new Map<number, string>();
-function noteEntry(): void {
+export const entryAt = new Map<number, string>();
+export function noteEntry(): void {
   entryAt.set(depthNow(), window.location.hash);
 }
 
@@ -214,76 +217,9 @@ export function resetLoadForTest(): void {
   entryAt.clear();
 }
 
-// 快速连点同一个入口（复审 L7）：页面切换包在 View Transition 里，pushState 要等回调才执行，开头的“地址一样就不压”拦不住第二下。
-// 还在切的同一个地址直接返回那一次的 Promise；回调里压之前再看一次地址
-let subInFlight: { href: string; done: Promise<void> } | null = null;
 
-/** 同 navigate，但在新压的那条历史上记“是从上一层点进来的”（记的是上一层的地址，isSubEntry 读）；设置页的子页入口用 */
-export function navigateSub(name: RouteName, ...params: string[]): Promise<void> {
-  const href = hrefOf(name, ...params);
-  if (window.location.hash === href) return Promise.resolve();
-  if (subInFlight?.href === href) return subInFlight.done;
-  const done = commit(() => {
-    if (window.location.hash === href) return;
-    noteEntry();
-    window.history.pushState(stateFor(1, { [SUB]: window.location.hash }), '', href);
-    noteEntry();
-  }, animTo(href)).finally(() => {
-    if (subInFlight?.done === done) subInFlight = null;
-  });
-  subInFlight = { href, done };
-  return done;
-}
 
-/**
- * 当前这条历史是不是 navigateSub 压进来的、上一条还是当时的上一层：是就该 goBack；
- * 不是（直接打开、被 replace 过、上一条后来被换成了别的页）就原地换成上一层。旧版记号是 true（没记地址），照旧当是
- */
-export function isSubEntry(): boolean {
-  const mark = stateOf(SUB);
-  if (mark === true) return true;
-  if (typeof mark !== 'string') return false;
-  const before = entryAt.get(depthNow() - 1);
-  return before === undefined || before === mark;
-}
 
-/**
- * 子页的“‹ 返回”（设置的二级页、三级页）：回到上一层 name/params。
- * • 是点进来的、上一条还是上一层（isSubEntry）：退一步，和侧滑同一条路
- * • 是点进来的，但上一条后来被换成了别的页（N1）：照样退一步（不多压、不叠历史），退到的那一条在 popstate 里（hashchange 之前，
- *   不会先画出那一页）原地换成上一层；那一条不带记号，它的上一条不是它的上一层，再点返回就原地换
- * • 没有记号（直接打开、被 replace 过）：原地换成上一层，不多压一条
- * • 这一条不是这次载入里 App 压的（canGoBack 为假：iOS 恢复后只剩这一条、刷新后第一次返回）：原地换成上一层，不退出 App
- * 记号是地址时一律挂上 popstate 修正（审查 S-L1）：刷新以后 entryAt 是空的，isSubEntry 判不出上一条被换过，
- * 退到的那一条地址对得上时修正什么都不做，对不上就换成上一层，所以中途刷新也不跳层。
- * 修正只认这一次后退（审查 S-L2）：退到的深度必须是退之前减 1；约 1 秒内没派出 popstate 就自己摘掉，不留到之后不相干的后退
- */
-export const BACK_FIX_MS = 1000;
-export function backOrReplace(name: RouteName, ...params: string[]): void {
-  const mark = stateOf(SUB);
-  // 这一条不是这次载入里 App 压的（canGoBack 为假：iOS 主屏幕版被系统杀掉后恢复，只剩这一条和它的 state；刷新以后）：退一步可能退出 App，
-  // 不论有没有记号都原地换成上一层
-  if (mark === true && canGoBack()) {
-    // 旧版记号（没记地址）：照旧当是点进来的，退一步
-    goBack();
-    return;
-  }
-  const href = hrefOf(name, ...params);
-  if (typeof mark !== 'string' || !canGoBack()) {
-    void replaceRoute(name, ...params);
-    return;
-  }
-  const want = depthNow() - 1;
-  const fix = (): void => {
-    window.clearTimeout(timer);
-    if (depthNow() !== want || window.location.hash === href) return;
-    window.history.replaceState(stateFor(0), '', href);
-    noteEntry();
-  };
-  const timer = window.setTimeout(() => window.removeEventListener('popstate', fix), BACK_FIX_MS);
-  window.addEventListener('popstate', fix, { once: true });
-  goBack();
-}
 
 /** 同 navigate，但替换当前这条历史、不新压一条（直接打开的子页点“返回”回上一级时用，免得历史里叠一条子页） */
 export function replaceRoute(name: RouteName, ...params: string[]): Promise<void> {
@@ -295,28 +231,6 @@ export function replaceRoute(name: RouteName, ...params: string[]): Promise<void
   }, animTo(href));
 }
 
-/**
- * 同一页面里换参数（月历翻月翻周、“今天”、年月选择、规整地址）：push 一条历史，但**不起 View Transition**，直接画新状态。
- * 页面自己决定要不要动（月历按钮翻页横滑、滑动跟手、键盘和“今天”直接切换，架构 5.12 第 3 点“动效”；B2 FA-3 代码复审 N1）
- */
-export function navigateInPage(name: RouteName, ...params: string[]): Promise<void> {
-  const href = hrefOf(name, ...params);
-  if (window.location.hash === href) return Promise.resolve();
-  return commit(() => {
-    window.history.pushState(stateFor(1), '', href);
-    noteEntry();
-  }, 'none');
-}
-
-/** 同 navigateInPage，但替换当前这条历史（键盘连按合并、非法参数规整） */
-export function replaceInPage(name: RouteName, ...params: string[]): Promise<void> {
-  const href = hrefOf(name, ...params);
-  if (window.location.hash === href) return Promise.resolve();
-  return commit(() => {
-    window.history.replaceState(stateFor(0), '', href);
-    noteEntry();
-  }, 'none');
-}
 
 /**
  * 退回上一条历史（和 iPhone 左边缘侧滑、浏览器后退同一条路）：页内子页（设置 › 注销账号）的“‹ 返回”用它，
@@ -338,8 +252,31 @@ export function canGoBack(): boolean {
   return stateOf('lemoDoc') === doc;
 }
 
-/** 只改地址、不重画（新建保存后把 #/todo/new 换成这一条的 id，代码审查 S7）；深度不变 */
-export function replaceAddress(name: RouteName, ...params: string[]): void {
-  window.history.replaceState(stateFor(0), '', hrefOf(name, ...params));
-  noteEntry();
+/**
+ * 按层级回到 name（R-372，负责人 11-10“往左滑应该是返回上一个层级，不是返回上一个操作”）：上一条是这次载入里记到的、就是 name 那一页，
+ * 退一步（和左滑同一条路，不多压）；否则原地换成 name（不压历史；iOS 恢复后、刷新后也不会退出 App）
+ */
+export function backTo(name: RouteName): void {
+  // 已经在 name：replaceRoute 自己会不动；上一条不会也是 name（navigateTab 不在今天上面再叠今天），不用先比地址
+  const prev = entryAt.get(depthNow() - 1);
+  if (canGoBack() && prev !== undefined && parseHash(prev).name === name) goBack();
+  else void replaceRoute(name);
 }
+
+/** 链接的普通点击（不是按着修饰键、中键开新标签页）：拦下浏览器默认跳转、回 true，由调用方交给路由；新标签页打开照常、回 false */
+export function plainClick(e: Pick<MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'button' | 'preventDefault'>): boolean {
+  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return false;
+  e.preventDefault();
+  return true;
+}
+
+/**
+ * 底栏页签（R-372 ①“其他页左滑回今天”）：今天是根。今天 → 别的页签压一条（左滑回今天）；别的页签之间原地换；
+ * 回今天按 backTo（上一条就是今天就退一步，否则原地换）。在今天页左滑不动：今天下面不再叠别的页签
+ */
+export function navigateTab(name: RouteName): void {
+  if (name === 'today') backTo(name);
+  else void (parseHash(window.location.hash).name === 'today' ? navigate : replaceRoute)(name);
+}
+
+

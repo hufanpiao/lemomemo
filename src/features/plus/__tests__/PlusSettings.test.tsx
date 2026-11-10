@@ -27,7 +27,7 @@ vi.mock('../../../platform/perm-mic.ts', () => ({ micPermission: () => mic() }))
 vi.mock('../../../platform/env.ts', async (orig) => ({ ...(await orig<typeof Env>()), isTauri: () => exe, isAppleMobile: () => apple }));
 vi.mock('../../../kit/hooks/useCollection.ts', () => ({ useCollection: () => settings }));
 vi.mock('../../../core/ai-settings.ts', () => ({ writeAiSwitch: (sw: unknown) => writeAi(sw) }));
-vi.mock('../../../app/router.ts', () => ({ navigateSub: (...a: unknown[]) => toSub(...a) }));
+vi.mock('../../../app/router-sub.ts', () => ({ navigateSub: (...a: unknown[]) => toSub(...a) }));
 const { default: PlusSettings } = await import('../ui/PlusSettings.tsx');
 
 const aiOn = (v: boolean): void => {

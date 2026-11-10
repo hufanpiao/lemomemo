@@ -1,7 +1,7 @@
 // 月历、周视图的路由（B2 FA-3，架构 5.12）：#/cal/month/<年-月>、#/cal/week/<那周任一天>；#/calendar（底栏）等于本月
 // • 解析交给前端 B 的 cal-nav（resolveMonthParam、parseWeekParam）：非法参数回到本月 / 本周；周参数可以是这一周里任意合法的一天，当锚点，合法就不改地址
 // • 规整后的参数和地址里的不一样时，canonical 给出该用 replace 换上的参数（不新增历史记录）
-// 纯 TS：不碰 React、不碰路由本身（页面经 hooks 调 navigateInPage / replaceInPage：同一页内切换不起 View Transition，架构 5.12）
+// 纯 TS：不碰 React、不碰路由本身（页面经 hooks 调 replaceInPage：日历内部一律原地换、不记历史（R-372），同一页内切换不起 View Transition，架构 5.12）
 import { addDays, type DateStr } from '../../../../shared/core/date.ts';
 import {
   isThisMonth,

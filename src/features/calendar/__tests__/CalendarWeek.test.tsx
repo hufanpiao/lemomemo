@@ -279,7 +279,7 @@ describe('只读行（FA-2 只读行界面；架构 0.27 第 1 点）', () => {
 });
 
 describe('键盘（架构 5.12 第 3 点）', () => {
-  it('→ 连按三次：只新增一条历史，停在 3 个月后；← 往回；T 回今天', async () => {
+  it('→ 连按三次：不新增历史（R-372 日历内算同一层），停在 3 个月后；← 往回；T 回今天', async () => {
     open('#/cal/month/2026-11');
     const before = window.history.length;
     await act(async () => {
@@ -288,7 +288,7 @@ describe('键盘（架构 5.12 第 3 点）', () => {
       key('ArrowRight');
     });
     expect(window.location.hash).toBe('#/cal/month/2027-02');
-    expect(window.history.length).toBe(before + 1);
+    expect(window.history.length).toBe(before);
     await act(async () => {
       key('ArrowLeft');
     });

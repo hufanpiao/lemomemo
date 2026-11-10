@@ -47,17 +47,18 @@ export interface NotificationCtor {
 
 export interface DesktopDeps {
   readonly invoke: Invoke;
-  readonly location: () => { hash: string };
+  /** 在主窗口里打开整页提醒的地址：走路由压一条带本次编号的历史（R-372 代码审 M1），关掉时退一步回原页 */
+  readonly go: (hash: string) => unknown;
   readonly Notification: NotificationCtor | undefined;
 }
 
-function defaultDeps(): DesktopDeps {
+function defaultDeps(go: (hash: string) => unknown = (h) => (window.location.hash = h)): DesktopDeps {
   const internals = (globalThis as { __TAURI_INTERNALS__?: { invoke?: Invoke } }).__TAURI_INTERNALS__;
   const invoke = internals?.invoke;
   if (typeof invoke !== 'function') throw new Error('not_tauri');
   return {
     invoke: (cmd, args) => invoke(cmd, args),
-    location: () => window.location,
+    go,
     Notification: typeof Notification === 'function' ? (Notification as unknown as NotificationCtor) : undefined,
   };
 }
@@ -75,8 +76,9 @@ export function desktopBridge(deps: DesktopDeps = defaultDeps()): NativeBridge {
     } catch {
       // 拉不到前台也照样切到整页提醒（窗口本来就在前台时 main_show 失败不影响）
     }
-    // exe 的主窗口固定是 /app/index.html，只改 hash，路由自己切页
-    deps.location().hash = reminderHash(kind, id, dueAt);
+    // exe 的主窗口固定是 /app/index.html：只换 hash，走路由压一条带本次编号的历史（不直接改 location.hash：那样压的历史不带编号，
+    // 关掉整页提醒时 canGoBack 为假只能原地换成今天，今天下面留着打开前那一页，R-372 代码审 M1）
+    deps.go(reminderHash(kind, id, dueAt));
   }
 
   return {
@@ -355,11 +357,14 @@ export async function onAuthDone(
   });
 }
 
-/** exe 启动时调一次（在哪里调由前端 A 和协调员定，见回报）；不在 Tauri 里时什么也不做 */
-export function installDesktopBridge(): boolean {
+/**
+ * exe 启动时调一次（main.tsx）；不在 Tauri 里时什么也不做。go：在主窗口里换 hash 的办法，main.tsx 传路由的 goHref（压一条带本次编号的历史，
+ * 关掉整页提醒时退一步回原页，R-372 代码审 M1）；platform 不许引用 app（架构边界），所以由调用方注入，不传时直接改 hash
+ */
+export function installDesktopBridge(go?: (hash: string) => unknown): boolean {
   let deps: DesktopDeps;
   try {
-    deps = defaultDeps();
+    deps = defaultDeps(go);
   } catch {
     return false;
   }

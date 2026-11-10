@@ -1,18 +1,8 @@
 // 设置子页的历史记号（提醒接线代码复审第二轮 N1、L7）：navigateSub 记的是上一层的地址，backOrReplace 退之前对一下上一条现在是不是它；
 // 快速连点同一个入口只压一条。页面切换包在 View Transition 里，jsdom 没有 startViewTransition（直接同步画），L7 这里用替身把回调推迟到手动放行
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  BACK_FIX_MS,
-  backOrReplace,
-  canGoBack,
-  goBack,
-  isSubEntry,
-  navigate,
-  navigateSub,
-  replaceRoute,
-  resetLoadForTest,
-  useRoute,
-} from '../router.ts';
+import { canGoBack, goBack, navigate, replaceRoute, resetLoadForTest, useRoute } from '../router.ts';
+import { BACK_FIX_MS, backOrReplace, isSubEntry, navigateSub } from '../router-sub.ts';
 import { renderHook } from '@testing-library/react';
 
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));

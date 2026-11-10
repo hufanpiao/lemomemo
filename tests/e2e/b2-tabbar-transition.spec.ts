@@ -23,11 +23,15 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
   page.evaluate(
     async ({ name, ms, at, fadeAt, minMove }) => {
       const nav = document.querySelector<HTMLElement>('[data-testid="tabbar"]');
-      const drop = nav?.querySelector<HTMLElement>('[class*="_drop_"]');
+      // 液滴每次现查：首屏后部分晚到时（冷启动的头一两遍）液滴元素会换一个，开头查一次会盯着已经摘掉的旧元素
+      const dropEl = (): HTMLElement | null | undefined => nav?.querySelector<HTMLElement>('[class*="_drop_"]');
       const add = document.querySelector<HTMLElement>('[data-testid="tabbar-add"]');
       const rows: { t: number; tl: number; vt: number; mains: number; op: number; x: number; fx: string; addFx: string; dataVt: boolean; run: boolean; pg: number }[] = [];
-      const probe: { fade: number[] | null; drop: number[] | null } = { fade: null, drop: null };
-      const dropAnim = (): Animation | undefined => drop?.getAnimations().find((a) => (a as CSSTransition).transitionProperty === 'translate');
+      // runTl：液滴这次过渡开始（transitionrun）那一刻的动画时钟；之后的帧就是过渡已经在跑的帧（CI 无 GPU 的 WebKit 开着模糊只有个位数帧率，
+      // 整段过渡可能落在两次采样之间，逐帧的 run 一帧都抓不到；按事件时刻认，不靠帧率）
+      // dropDur：液滴这次过渡的时长（ms），和 runTl 一起算“过渡进行中”那一段
+      const probe: { fade: number[] | null; drop: number[] | null; runTl: number | null; dropDur: number } = { fade: null, drop: null, runTl: null, dropDur: 0 };
+      const dropAnim = (): Animation | undefined => dropEl()?.getAnimations().find((a) => (a as CSSTransition).transitionProperty === 'translate');
       /** 暂停 a，按进度拨到 pts 各点读 read()，拨回原处接着放；withStart 时先读一次当前位置，并跳过它之前的点 */
       const scan = (a: Animation, read: () => number, pts: number[], withStart: boolean): number[] => {
         const total = Number(a.effect?.getComputedTiming().duration ?? 0);
@@ -58,12 +62,25 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
         }
         return a;
       };
-      const onRun = (e: TransitionEvent): void => {
-        if (probe.drop !== null || e.propertyName !== 'translate' || e.target !== drop) return;
+      /** 液滴的过渡有了就按进度抽查一次（只做一次） */
+      const scanDrop = (): void => {
         const a = dropAnim();
-        if (a && drop) probe.drop = scan(a, () => drop.getBoundingClientRect().x, at, false);
+        const d = dropEl();
+        if (probe.drop === null && a && d) {
+          probe.dropDur = Number(a.effect?.getComputedTiming().duration ?? 0);
+          probe.drop = scan(a, () => d.getBoundingClientRect().x, at, false);
+        }
+      };
+      const nowTl = (): number => Number(document.timeline.currentTime ?? performance.now());
+      // transitionrun 会冒泡：挂在底栏上，液滴换了元素也收得到
+      const onRun = (e: TransitionEvent): void => {
+        if (e.propertyName !== 'translate' || e.target !== dropEl()) return;
+        probe.runTl ??= nowTl();
+        scanDrop();
       };
       // 第几个 main 元素（换页时 main 换成新元素）：逐帧看新页自己的不透明度
+      // 点下去以后才认“过渡在跑”：点之前上一次切页的液滴可能还在回弹
+      let clicked = false;
       let lastMain: Element | null = null;
       let pg = 0;
       const take = (t0: number): void => {
@@ -73,6 +90,12 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
           pg += 1;
         }
         const da = dropAnim();
+        // 没收到 transitionrun（WebKit 偶尔不派）、这一帧却看到过渡在跑：从这一帧起算，照样按进度抽查
+        if (clicked && da && da.playState === 'running') {
+          probe.runTl ??= nowTl() - 0.001;
+          scanDrop();
+        }
+        const drop = dropEl();
         rows.push({
           t: performance.now() - t0,
           // 动画用的时钟（一帧之内不变）：慢机器上两次读数之间隔了几帧要按它算，按 performance.now() 会把上一帧的旧位置当成刚读的
@@ -95,9 +118,10 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
       try {
         // 打补丁、挂监听都放在 try 里：中途出错也会在 finally 里还原（代码审查 11-06）
         proto.animate = patched;
-        drop?.addEventListener('transitionrun', onRun);
+        nav?.addEventListener('transitionrun', onRun);
         take(t0);
         nav?.querySelector<HTMLElement>(`a[data-tab="${name}"]`)?.click();
+        clicked = true;
         // minMove：至少采 ms 毫秒，而且液滴离开起点 minMove pt 以后才停（慢机器上液滴晚起步，只采固定时长可能还没动；最多 2 秒）
         const moved = (): boolean => Math.abs((rows.at(-1)?.x ?? 0) - (rows[0]?.x ?? 0)) >= minMove;
         while (performance.now() - t0 < ms || (!moved() && performance.now() - t0 < 2000)) {
@@ -106,7 +130,7 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
         }
       } finally {
         proto.animate = origAnimate;
-        drop?.removeEventListener('transitionrun', onRun);
+        nav?.removeEventListener('transitionrun', onRun);
       }
       return { rows, probe };
     },
@@ -152,8 +176,17 @@ test.describe('底栏：页签互切（FA-7，方案 B）', () => {
       // 液滴连续滑：位置从过渡真正开始（running 且 currentTime > 0）以后的帧算起；每帧走的不超过总路程的一半（没有瞬移）；
       // --ease-drop 带一点回弹，允许冲过终点再回来，但不超过总路程的 15%，也不先往反方向走
       const x0 = rows[0]?.x ?? 0;
-      const k0 = rows.findIndex((r) => r.run);
+      // 过渡在跑的帧：逐帧看到 running 且 currentTime > 0，或者是过渡开始（transitionrun）以后的帧（帧很稀时逐帧可能一帧都抓不到）
+      const runTl = probe.runTl;
+      expect(runTl, `${name}：没看到液滴的过渡开始`).not.toBeNull();
+      const k0 = rows.findIndex((r) => r.run || (runTl !== null && r.tl > runTl));
       expect(k0, `${name}：没看到液滴的过渡在跑`).toBeGreaterThan(0);
+      // 至少有一帧落在过渡进行中（R-372 复审建议）：逐帧看到在跑，或者那一帧的时刻在过渡开始到结束之间；
+      // 帧稀到整段过渡都落在两次采样之间时，逐帧那几条（没有瞬移、不越界、起步方向）就只看到起点和终点，测不到中段，这里拦下
+      const dur = probe.dropDur;
+      expect(dur, `${name}：没拿到液滴过渡的时长`).toBeGreaterThan(0);
+      const inMid = rows.some((r) => r.run || (runTl !== null && r.tl > runTl && r.tl < runTl + dur));
+      expect(inMid, `${name}：没有一帧落在液滴过渡进行中 ${JSON.stringify(rows.map((r) => Math.round(r.tl - (runTl ?? 0))))}（时长 ${dur}）`).toBe(true);
       const moving = rows.slice(k0);
       const xs = [x0, ...moving.map((r) => Math.round(r.x * 10) / 10)];
       const ts = [rows[0]?.tl ?? 0, ...moving.map((r) => r.tl)];

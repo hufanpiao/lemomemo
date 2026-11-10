@@ -12,7 +12,7 @@
 //   要显示时才加载，加载中什么也不画（和等 noticeState 时一样）；分包加载失败归 main.tsx 包着关口的错误边界，照旧放行画 App
 // • App 不画在关口里面（CONSENT-sugg ③）：main.tsx 的错误边界只包关口，关口出错或分包加载失败时放行画 App，App 自己出错不归它管（src/app/root.tsx）
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { navigate, parseHash } from '../../../app/router.ts';
+import { parseHash, replaceRoute } from '../../../app/router.ts';
 import type { ConsentApi } from '../hooks/useConsent.ts';
 import {
   CONSENT_GATE_MS, defaultConsentWiringDeps, useConsentApi, useConsentHandlers, useNoticeState, type ConsentWiringDeps,
@@ -45,7 +45,8 @@ export default function ConsentGate({
   }, [onStart]);
   const [done, setDone] = useState(false);
   const finish = useCallback(() => {
-    if (parseHash(window.location.hash).name === 'onboarding') void navigate('today');
+    // 告知页做完原地换成今天（R-372）：左滑不回到告知页
+    if (parseHash(window.location.hash).name === 'onboarding') void replaceRoute('today');
     setDone(true);
   }, []);
   const handlers = useConsentHandlers(finish, wiring);

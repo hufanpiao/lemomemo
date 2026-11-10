@@ -12,7 +12,7 @@ import { useRef, useState } from 'react';
 import { collapseRinging, useRemindQueue, visibleEntry } from '../../../kit/state/remind-queue.ts';
 import { Appear } from '../../../motion/components.ts';
 import { clock } from '../../../platform/clock.ts';
-import { openReminder } from '../../../platform/native-bridge.ts';
+import { openReminder } from './open-reminder.ts';
 import { findReminder, timeOf, whenMsg, type Reminder } from '../hooks/remind-view.ts';
 import { actionsOf, useMinuteNow, useReminderList, useRemindEngine, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';

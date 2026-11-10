@@ -50,6 +50,7 @@ import { loadMotionFeatures, nextFrame } from '../motion/index.ts';
 import { registerServiceWorkerLazy, registerSwAfterPaint, reloadPage, upgradeLogCountStore } from '../platform/sw-register.ts';
 import { mountExitScreen, watchExitIncomplete } from './exit-screen.tsx';
 import { mountFeatures } from './features.ts';
+import { goHref } from './router.ts';
 import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
 import { setRemindErrorLog } from './App.tsx';
 import { GATE_LIMIT_MS, startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
@@ -80,7 +81,7 @@ async function installNativeBridge(): Promise<void> {
   if (!isTauri()) return;
   try {
     const { installDesktopBridge } = await import('../platform/desktop.ts');
-    installDesktopBridge();
+    installDesktopBridge(goHref); // 点 exe 通知打开整页提醒走路由压带编号的历史（R-372 代码审 M1）
   } catch {
     // 分包加载失败：留着网页版的桥（照常能用，只是 exe 专有的几件退回网页做法）
   }

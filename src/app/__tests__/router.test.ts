@@ -1,6 +1,7 @@
 // hash 路由（架构 2.0）：/app/#/notes/abc
 import { describe, expect, it } from 'vitest';
-import { canGoBack, DEFAULT_ROUTE, hrefOf, navigate, parseHash, replaceAddress, replaceRoute, ROUTE_NAMES } from '../router.ts';
+import { canGoBack, DEFAULT_ROUTE, hrefOf, navigate, parseHash, replaceRoute, ROUTE_NAMES } from '../router.ts';
+import { replaceAddress } from '../router-levels.ts';
 import { featureRoutes } from '../features.ts';
 
 describe('router', () => {

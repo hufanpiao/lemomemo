@@ -42,6 +42,8 @@ const any = (...types) => types.map((type) => ({ element: { type } }));
 // app 里只有 router.ts（hrefOf、navigate、路由类型）下层也能用（0.31 第 3 条；router.ts 自己能引什么见下面 ROUTER_IMPORTS）
 // 构建信息在 platform/env.ts，是正常的向下依赖，不开例外（0.31 第 3 条）
 const ROUTER = { element: { type: 'app', fileInternalPath: 'router.ts' } };
+// router-sub.ts、router-levels.ts 是 router.ts 拆出来的、只有懒加载页面用的部分（R-372 首屏额度：不进首屏）：只给功能层（和 app）用，kit 只需要 router.ts
+const ROUTER_PARTS = { element: { type: 'app', fileInternalPath: '{router-sub,router-levels}.ts' } };
 /** 别的功能：只能经它的 index.ts */
 const otherFeatureIndex = { element: { type: 'feature', fileInternalPath: 'index.ts' } };
 
@@ -60,7 +62,7 @@ const layerPolicies = [
     from: { element: { type: 'feature-hooks' } },
     allow: {
       to: [
-        ...any('shared', 'platform', 'platform-supabase', 'core', 'kit', 'kit-hooks', 'motion'), ROUTER,
+        ...any('shared', 'platform', 'platform-supabase', 'core', 'kit', 'kit-hooks', 'motion'), ROUTER, ROUTER_PARTS,
         same('feature-data'),
         same('feature-hooks'),
         same('feature-i18n'),
@@ -73,7 +75,7 @@ const layerPolicies = [
     from: { element: { type: 'feature-ui' } },
     allow: {
       to: [
-        ...any('shared', 'platform', 'kit', 'kit-hooks', 'motion'), ROUTER,
+        ...any('shared', 'platform', 'kit', 'kit-hooks', 'motion'), ROUTER, ROUTER_PARTS,
         same('feature-hooks'),
         same('feature-ui'),
         same('feature-i18n'),
@@ -100,7 +102,7 @@ const layerPolicies = [
     from: { element: { type: 'feature-tests' } },
     allow: {
       to: [
-        ...any('shared', 'platform', 'platform-supabase', 'core', 'kit', 'kit-hooks', 'motion'), ROUTER,
+        ...any('shared', 'platform', 'platform-supabase', 'core', 'kit', 'kit-hooks', 'motion'), ROUTER, ROUTER_PARTS,
         same('feature'),
         same('feature-data'),
         same('feature-hooks'),
@@ -297,6 +299,27 @@ const ROUTER_IMPORTS = {
     },
   ],
 };
+const ROUTER_PART_IMPORTS = {
+  paths: [],
+  patterns: [
+    {
+      regex: '^(?!react$|react-dom$|(?:\\.\\./)+shared/|\\.\\./motion/index\\.ts$|\\./router\\.ts$)',
+      message: '0.31 第 3 条：app/router-sub.ts、router-levels.ts 只准 import react、react-dom、shared、motion/index.ts 和 ./router.ts',
+    },
+  ],
+};
+// router.ts 为了拆出 router-sub.ts、router-levels.ts 导出的内部件（R-372 复审 M1）：历史 state、深度、切页动画的底层，
+// 只准这两个文件和测试引；kit、功能、app 别处一律经 navigate、replaceRoute、backTo 这些公开的函数走，不准自己拼历史
+const ROUTER_INTERNAL_IMPORTS = {
+  paths: [],
+  patterns: [
+    {
+      regex: '(^|/)router(\\.ts)?$',
+      importNames: ['commit', 'stateFor', 'stateOf', 'depthNow', 'animTo', 'noteEntry', 'entryAt', 'resetLoadForTest'],
+      message: 'R-372 复审 M1：router.ts 的内部件只准 router-sub.ts、router-levels.ts 和测试引，别处用 navigate、replaceRoute、backTo 等公开函数',
+    },
+  ],
+};
 const TAURI_IMPORTS = { paths: [], patterns: [{ regex: '^@tauri-apps/', message: 'A13：@tauri-apps/* 只能在 src/platform/ 里 import' }] };
 
 function restrictedImports(...parts) {
@@ -307,7 +330,8 @@ function restrictedImports(...parts) {
 }
 
 /** 一个作用域的三条 no-restricted-* 规则 */
-function scope({ net = false, device = false, motion = false, html = false, pure = false, imports = [] }) {
+/** routerInternals：准不准引 router.ts 的内部件（只有 router-sub.ts、router-levels.ts 和测试准） */
+function scope({ net = false, device = false, motion = false, html = false, pure = false, routerInternals = false, imports = [] }) {
   return {
     'no-restricted-globals': [
       'error',
@@ -325,7 +349,7 @@ function scope({ net = false, device = false, motion = false, html = false, pure
       ...CSP_SYNTAX,
       ...REDUCED_MOTION_SYNTAX,
     ],
-    'no-restricted-imports': restrictedImports(...imports, REDUCED_MOTION_IMPORTS),
+    'no-restricted-imports': restrictedImports(...imports, REDUCED_MOTION_IMPORTS, ...(routerInternals ? [] : [ROUTER_INTERNAL_IMPORTS])),
   };
 }
 
@@ -468,6 +492,11 @@ export default tseslint.config(
     files: ['src/app/router.ts'],
     rules: scope({ imports: [MOTION_IMPORTS, TAURI_IMPORTS, ROUTER_IMPORTS] }),
   },
+  // router.ts 拆出来的两块（R-372）：同样的限制，另外只准引 ./router.ts 本身
+  {
+    files: ['src/app/router-sub.ts', 'src/app/router-levels.ts'],
+    rules: scope({ routerInternals: true, imports: [MOTION_IMPORTS, TAURI_IMPORTS, ROUTER_PART_IMPORTS] }),
+  },
   // A19：sw 只能 import shared 和 workbox-*
   {
     files: ['src/sw/**/*.ts'],
@@ -491,7 +520,7 @@ export default tseslint.config(
   {
     files: ['src/**/__tests__/**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.node } },
-    rules: { ...scope({ net: true, device: true, motion: true, imports: [MOTION_PATH_IMPORTS] }), 'max-lines-per-function': 'off' },
+    rules: { ...scope({ net: true, device: true, motion: true, routerInternals: true, imports: [MOTION_PATH_IMPORTS] }), 'max-lines-per-function': 'off' },
   },
   // ───────── shared：前后端共用，纯 TS（A2）─────────
   {

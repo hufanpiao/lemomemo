@@ -6,7 +6,7 @@
 //   客户端读不到“同意是否有效”，所以不分情况一律走告知页；不能只改 ai.enabled，也不能不经告知页调 record_consent
 // • 连接码：进页面读一次连着没有；新生成的明文码只放在这个 hook 的 state 里（离开这一页就没了，不存、不进日志）
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { navigateSub } from '../../../app/router.ts';
+import { navigateSub } from '../../../app/router-sub.ts';
 import { quotaResetClock } from '../../../../shared/logic/ai-quota.ts';
 import { writeAiSwitch } from '../../../core/ai-settings.ts';
 import { currentTz } from '../../../core/current-tz.ts';

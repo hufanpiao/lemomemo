@@ -1,4 +1,4 @@
-// src/platform/desktop.ts：exe 版的四个 platform 函数（假的 invoke、location、Notification）
+// src/platform/desktop.ts：exe 版的四个 platform 函数（假的 invoke、go、Notification）
 import { afterEach, describe, expect, it, onTestFinished } from 'vitest';
 import { desktopBridge, installDesktopBridge, quickAddText, QUICK_ADD_MAX_CHARS, toSwUpdateResult, type DesktopDeps, type NotificationLike } from '../desktop.ts';
 import { resetNativeBridgeForTest, type LocalReminder } from '../native-bridge.ts';
@@ -45,7 +45,7 @@ function setup(invokeImpl: (cmd: string) => unknown = () => null) {
       calls.push(cmd);
       return invokeImpl(cmd);
     },
-    location: () => loc,
+    go: (h: string) => void (loc.hash = h),
     Notification: FakeNotification,
   };
   return { bridge: desktopBridge(deps), calls, loc };
@@ -220,7 +220,7 @@ describe('本机通知', () => {
   });
 
   it('没有 Notification 时静默跳过', async () => {
-    const bridge = desktopBridge({ invoke: async () => null, location: () => ({ hash: '' }), Notification: undefined });
+    const bridge = desktopBridge({ invoke: async () => null, go: () => undefined, Notification: undefined });
     await expect(bridge.showLocalReminder(R)).resolves.toBeUndefined();
   });
 });

@@ -36,11 +36,12 @@ vi.mock('../../../platform/native-bridge.ts', () => ({
   openReminder: (...a: unknown[]) => openReminder(...a),
   showLocalReminder: (...a: unknown[]) => showLocalReminder(...a),
   closeLocalReminder: (...a: unknown[]) => closeLocalReminder(...a),
+  reminderHash: (kind: string, id: string, due: number) => `#/remind/${kind}/${id}?due=${due}`,
 }));
 const closeHandled = vi.fn(async (..._a: unknown[]) => 0);
 vi.mock('../../../platform/notifications.ts', () => ({ closeHandledNotifications: (...a: unknown[]) => closeHandled(...a) }));
 const navigate = vi.fn(async (..._a: unknown[]) => undefined);
-vi.mock('../../../app/router.ts', () => ({ canGoBack: () => false, goBack: vi.fn(), navigate: (...a: unknown[]) => navigate(...a) }));
+vi.mock('../../../app/router.ts', () => ({ canGoBack: () => false, goBack: vi.fn(), navigate: (...a: unknown[]) => navigate(...a), replaceRoute: (...a: unknown[]) => navigate(...a), backTo: (...a: unknown[]) => void navigate(...a) }));
 let remindRecs: ReadonlySet<string> = new Set();
 vi.mock('../../../core/boot.ts', () => ({
   getBoot: () => ({ outbox: { subscribe: () => () => undefined, getStatus: () => ({ retryRecs: EMPTY_RECS, remindRecs }) } }),
