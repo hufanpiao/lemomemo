@@ -71,12 +71,24 @@ const sampleAfterClick = (page: Page, name: string, ms: number, minMove = 0) =>
           probe.drop = scan(a, () => d.getBoundingClientRect().x, at, false);
         }
       };
+      /** 元素 translate 那一项的 transition-duration（ms）；transition-property 是 all 也算 */
+      const cssDur = (el: HTMLElement): number => {
+        const cs = getComputedStyle(el);
+        const props = cs.transitionProperty.split(',').map((x) => x.trim());
+        const durs = cs.transitionDuration.split(',').map((x) => x.trim());
+        const k = props.findIndex((x) => x === 'translate' || x === 'all');
+        const v = k < 0 ? '' : (durs[k % durs.length] ?? '');
+        const n = v.endsWith('ms') ? parseFloat(v) : parseFloat(v) * 1000;
+        return Number.isFinite(n) ? n : 0;
+      };
       const nowTl = (): number => Number(document.timeline.currentTime ?? performance.now());
       // transitionrun 会冒泡：挂在底栏上，液滴换了元素也收得到
       const onRun = (e: TransitionEvent): void => {
         if (e.propertyName !== 'translate' || e.target !== dropEl()) return;
         probe.runTl ??= nowTl();
         scanDrop();
+        // 帧很稀时收到 transitionrun 的回调里 getAnimations() 已经找不到这次过渡（CI 审查员 11-10）：时长退回读液滴算好的 transition-duration
+        if (probe.dropDur <= 0) probe.dropDur = cssDur(e.target as HTMLElement);
       };
       // 第几个 main 元素（换页时 main 换成新元素）：逐帧看新页自己的不透明度
       // 点下去以后才认“过渡在跑”：点之前上一次切页的液滴可能还在回弹

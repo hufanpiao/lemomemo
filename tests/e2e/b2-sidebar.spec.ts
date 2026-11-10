@@ -11,6 +11,11 @@ async function clickAddCenter(page: Page): Promise<void> {
   await expect(page.getByTestId('today')).toBeVisible();
   const add = page.getByTestId('tabbar-add');
   await expect(add).toBeVisible();
+  // 启动的两段等它们过去再取中心点（r372-fix2，CI 审查员 11-10 chromium 挂过）：toBeVisible 不看 opacity，这两段里“＋”已经算可见，但点不到——
+  // ① 启动画面（#lemo-splash，z-index 最高）在 #root 画出来以后还要再盖一帧，加 .is-leaving 起才放点按；
+  // ② <html data-inset-wait> 等安全区稳定期间底栏和“＋”opacity 0、pointer-events none（G10），中心点落到 body 上
+  await expect(page.locator('#lemo-splash:not(.is-leaving)')).toHaveCount(0);
+  await expect(page.locator('html[data-inset-wait]')).toHaveCount(0);
   const box = await add.boundingBox();
   expect(box).not.toBeNull();
   const cx = (box?.x ?? 0) + (box?.width ?? 0) / 2;

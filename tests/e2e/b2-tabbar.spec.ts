@@ -188,15 +188,25 @@ test.describe('底栏（FA-7）', () => {
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
     await expect(bar(page).locator('[class*="jellyJs"]')).toHaveCount(1);
+    // 在点“待办”的同一个任务里读（点击冒泡到 window 时，页签的点按已经同步换完路由、放了果冻）。
+    // 不等 click() 返回再读（r372-fix2）：CI 的 Linux webkit 一帧 250～600ms，返回和读之间插进一两帧时，550ms 的果冻已经正常放完，
+    // getAnimations() 读到 0；对照组（986d406）同样条件下第二帧时也有 4/20 已经放完，不是没起播
     await page.evaluate(() => {
-      (window as unknown as { __jelly: Element | null }).__jelly = document.querySelector('[data-testid="tabbar"] [class*="jellyJs"]');
+      type W = { __jelly: Element | null; __jellyAt: { same: boolean; running: number } | null };
+      const w = window as unknown as W;
+      const q = (): Element | null => document.querySelector('[data-testid="tabbar"] [class*="jellyJs"]');
+      w.__jelly = q();
+      w.__jellyAt = null;
+      window.addEventListener('click', (e) => {
+        if ((e.target as Element | null)?.closest?.('a[data-tab="todos"]') === null) return;
+        const el = q();
+        w.__jellyAt = { same: el === w.__jelly, running: el?.getAnimations().length ?? -1 };
+      });
     });
     await tab(page, 'calendar').click();
     await tab(page, 'todos').click();
-    const r = await page.evaluate(() => {
-      const el = document.querySelector('[data-testid="tabbar"] [class*="jellyJs"]');
-      return { same: el === (window as unknown as { __jelly: Element | null }).__jelly, running: el?.getAnimations().length ?? -1 };
-    });
+    await expect(page).toHaveURL(/#\/todos$/);
+    const r = await page.evaluate(() => (window as unknown as { __jellyAt: { same: boolean; running: number } | null }).__jellyAt ?? { same: false, running: -2 });
     expect(r.same, '连点以后还是同一个元素').toBe(true);
     expect(r.running, '只有一个果冻动画在跑').toBe(1);
   });
