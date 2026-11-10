@@ -54,7 +54,8 @@ test.describe('底栏（FA-7）', () => {
     await expect(page.getByTestId('type-input')).toBeFocused();
     await page.getByTestId('type-input').fill('买牛奶');
     await page.getByTestId('type-bar').getByRole('button', { name: '展开编辑' }).click();
-    await expect(page).toHaveURL(/#\/todo\/new$/);
+    // 带着字进来会自动保存，保存后地址换成这一条的 id（S7）：两种都算对
+    await expect(page).toHaveURL(/#\/todo\/(new|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
     await expect(page.getByTestId('todo-edit-title')).toHaveValue('买牛奶');
     await expect(bar(page)).toHaveCount(0);
     await page.goto('/app/#/today');

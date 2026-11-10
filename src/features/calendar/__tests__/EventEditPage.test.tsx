@@ -228,3 +228,49 @@ describe('‹ 返回（iOS 主屏幕版恢复后退出 App，代码审查 M1）'
     expect(b).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('新建保存晚到（b2-tabbar e2e，CI 审查员 11-10）', () => {
+  it('在新建页上正常保存：地址换成 #/event/<id>（不压历史，S7），编辑器不重挂', async () => {
+    await boot();
+    open('#/event/new');
+    const before = screen.getByTestId('event-edit-title');
+    const len = window.history.length;
+    await commitText('event-edit-title', '见客户');
+    await waitFor(() => expect(events().getSnapshot()).toHaveLength(1));
+    const id = events().getSnapshot()[0]?.id;
+    await waitFor(() => expect(window.location.hash).toBe(`#/event/${id}`));
+    expect(window.history.length).toBe(len);
+    expect(screen.getByTestId('event-edit-title')).toBe(before);
+  });
+
+  it('写上标题后马上离开（goto #/today 并卸载）：保存照常写进去，晚到的回调不把地址改回编辑页', async () => {
+    await boot();
+    const { unmount } = open('#/event/new');
+    const el = screen.getByTestId('event-edit-title');
+    fireEvent.focus(el);
+    fireEvent.change(el, { target: { value: '见客户' } });
+    fireEvent.blur(el);
+    window.history.replaceState(null, '', '/app/#/today');
+    unmount();
+    await waitFor(() => expect(events().getSnapshot()).toHaveLength(1));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(window.location.hash).toBe('#/today');
+  });
+
+  it('离开了但页面还没卸载：同样不改地址', async () => {
+    await boot();
+    open('#/event/new');
+    const el = screen.getByTestId('event-edit-title');
+    fireEvent.focus(el);
+    fireEvent.change(el, { target: { value: '见客户' } });
+    fireEvent.blur(el);
+    window.history.replaceState(null, '', '/app/#/today');
+    await waitFor(() => expect(events().getSnapshot()).toHaveLength(1));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(window.location.hash).toBe('#/today');
+  });
+});

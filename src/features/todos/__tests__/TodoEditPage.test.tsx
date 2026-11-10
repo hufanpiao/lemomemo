@@ -290,3 +290,36 @@ describe('‹ 返回（iOS 主屏幕版恢复后退出 App）', () => {
     expect(b).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('新建保存晚到（b2-tabbar e2e，CI 审查员 11-10）', () => {
+  it('写上标题后马上离开（goto #/today 并卸载）：保存照常写进去，晚到的回调不把地址改回编辑页', async () => {
+    await boot();
+    const { unmount } = open('#/todo/new');
+    const el = screen.getByTestId('todo-edit-title');
+    fireEvent.focus(el);
+    fireEvent.change(el, { target: { value: '买牛奶' } });
+    fireEvent.blur(el);   // 保存排进队列，还没写完
+    window.history.replaceState(null, '', '/app/#/today');
+    unmount();
+    await waitFor(() => expect(todos().getSnapshot()).toHaveLength(1));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(window.location.hash).toBe('#/today');
+  });
+
+  it('离开了但页面还没卸载（切页过渡中）：同样不改地址', async () => {
+    await boot();
+    open('#/todo/new');
+    const el = screen.getByTestId('todo-edit-title');
+    fireEvent.focus(el);
+    fireEvent.change(el, { target: { value: '买牛奶' } });
+    fireEvent.blur(el);
+    window.history.replaceState(null, '', '/app/#/today');
+    await waitFor(() => expect(todos().getSnapshot()).toHaveLength(1));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(window.location.hash).toBe('#/today');
+  });
+});

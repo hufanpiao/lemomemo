@@ -5,7 +5,7 @@
 // • 只读行（带不认识的值，0.27①“只读显示”）：一进来就按 core 的只读 id 判断（kit 的 useReadonlyIds），顶部出“这条要新版本才能修改 · 更新”，
 //   输入框全部禁用、不出“删除”、右上不写“改了就自动保存”（FA-2 视觉验收第 2 条）；写入被拒（status readonly）时同样
 // • 删除：软删，页内出“已删除”和“撤销”（ADR-006）；“最近删除”页在 FA-2 后面一段
-import { canGoBack, goBack, replaceAddress, replaceRoute, useRoute } from '../../../app/router.ts';
+import { canGoBack, goBack, parseHash, replaceAddress, replaceRoute, useRoute } from '../../../app/router.ts';
 import { useCallback, useReducer, useRef } from 'react';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
 import { Check, Field, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
@@ -52,16 +52,23 @@ export default function TodoEditPage() {
     slot.current = { id, key: id === 'new' ? `new:${++newSeq}` : id, created: null };
   }
   const key = slot.current.key;
-  const onCreated = useCallback((cid: string) => {
-    // N2（代码审查）：slot.id 也换成新 id（key 不变）——之后再点“新建”路由回到 'new'，和 slot.id 不同，才会换一张空表
-    if (slot.current) {
-      slot.current.created = cid;
-      slot.current.id = cid;
-    }
-    replaceAddress('todo', cid);
-    // replaceAddress 不通知路由的订阅者：外层重画一次，记下新地址（不然再 navigate 到 new 时地址看起来没变，不会重画）
-    bump();
-  }, []);
+  const onCreated = useCallback(
+    (cid: string) => {
+      // 保存可能晚到（11-10 CI 审查员，b2-tabbar e2e）：用户已经换到下一张新建表（key 变了），或已经离开这一页
+      // （地址不再是 #/todo/new），就只存不换地址，不把地址改回编辑页
+      const cur = slot.current;
+      if (!cur || cur.key !== key) return;
+      // N2（代码审查）：slot.id 也换成新 id（key 不变）——之后再点“新建”路由回到 'new'，和 slot.id 不同，才会换一张空表
+      cur.created = cid;
+      cur.id = cid;
+      const now = parseHash(window.location.hash);
+      if (now.name !== 'todo' || now.params[0] !== 'new') return;
+      replaceAddress('todo', cid);
+      // replaceAddress 不通知路由的订阅者：外层重画一次，记下新地址（不然再 navigate 到 new 时地址看起来没变，不会重画）
+      bump();
+    },
+    [key],
+  );
   return <TodoEditor key={key} id={id} onCreated={onCreated} />;
 }
 
