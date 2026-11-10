@@ -13,7 +13,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  * 以及 CSP 试验页（探测页挂在它下面；App.tsx 用构建期常量挡，正式构建整块删掉）的块名、根节点 testid、标题，防止以后又混进正式产物。
  * 试验页的标记不随 voice-probe 删
  */
-export const PROBE_MARKERS = ['voice-probe', 'VoiceProbe', 'Voice probe (R-68)', 'CspLab', 'csp-lab', 'CSP lab'];
+export const PROBE_MARKERS = ['voice-probe', 'VoiceProbe', 'Voice probe (R-68)', 'CspLab', 'csp-lab', 'CSP lab', 'vh-probe'];   // vh-probe：11-10 R-371 底栏偏高真机探测（诊断页按钮），正式包不能带
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {

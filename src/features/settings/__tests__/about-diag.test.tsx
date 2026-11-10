@@ -62,4 +62,13 @@ describe('关于页的诊断信息', () => {
     expect(screen.queryByTestId('settings-about-diag')).toBeNull();
     expect(root.hasAttribute('data-diag')).toBe(false);
   });
+
+  it('诊断开着时（非正式版）下面有可见高度探测按钮，平时没有（R-371 第二条路）', async () => {
+    render(<AboutSection />);
+    expect(screen.queryByTestId('settings-vh-probe')).toBeNull();
+    tapVersion(DIAG_TAPS);
+    await screen.findByTestId('settings-about-diag');
+    expect(screen.getByTestId('settings-vh-probe')).toBeTruthy();
+    expect(screen.getByTestId('vh-probe-meta-height')).toBeTruthy();
+  });
 });
