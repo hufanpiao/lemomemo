@@ -9,7 +9,7 @@ import type { ServerRow } from '../../../core/cache.ts';
 import { clearAllCollections, collection } from '../../../core/store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
-import { navigate } from '../../../app/router.ts';
+import { navigate, resetLoadForTest } from '../../../app/router.ts';
 import TodoEditPage from '../ui/TodoEditPage.tsx';
 
 const ID = '00000000-0000-4000-8000-0000000000a1';
@@ -263,5 +263,30 @@ describe('编辑已有的', () => {
     await commitText('todo-edit-title', '先记着');
     await waitFor(() => expect(screen.getByTestId('edit-status').textContent).toBe('这台设备现在存不了，内容还在这里，稍后再改一次'));
     expect((screen.getByTestId('todo-edit-title') as HTMLInputElement).value).toBe('先记着');
+  });
+});
+
+describe('‹ 返回（iOS 主屏幕版恢复后退出 App）', () => {
+  it('恢复后只剩编辑页这一条（state 带深度 1 和上一次载入的编号）：原地换成待办列表，不调用 history.back()', async () => {
+    await boot();
+    resetLoadForTest(); // 恢复 = 重新载入了一次，这一条的编号是上一次载入的
+    window.history.replaceState({ lemoDepth: 1, lemoDoc: 'old-load' }, '', `/app/#/todo/${ID}`);
+    render(<TodoEditPage />);
+    const b = vi.spyOn(window.history, 'back');
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('edit-back'));
+    });
+    expect(b).not.toHaveBeenCalled();
+    expect(window.location.hash).toBe('#/todos');
+  });
+
+  it('App 里从列表点进来的：照旧退一步', async () => {
+    await boot();
+    window.history.replaceState(null, '', '/app/#/todos');
+    await navigate('todo', ID);
+    render(<TodoEditPage />);
+    const b = vi.spyOn(window.history, 'back').mockImplementation(() => undefined);
+    fireEvent.click(screen.getByTestId('edit-back'));
+    expect(b).toHaveBeenCalledTimes(1);
   });
 });
