@@ -59,7 +59,7 @@ describe('watchInsetBottom', () => {
     const tl = insetTimeline();
     expect(tl.rows.map((r) => r.env)).toEqual(['0px', '34px']);
     expect(tl.standalone).toBe(true);
-    expect(insetTimelineLine(tl)).toMatch(/^launch: standalone=true painted=\+\d+ ready=\+\d+\(quiet\) \| \+\d+ env-bottom=0px inner=\d+ \| \+\d+ env-bottom=34px inner=\d+$/);
+    expect(insetTimelineLine(tl)).toMatch(/^launch: standalone=true painted=\+\d+ ready=\+\d+\(quiet\) \| \+\d+ env-bottom=0px inner=\d+ screen=\d+ \| \+\d+ env-bottom=34px inner=\d+ screen=\d+$/);
   });
 
   it('主屏幕版一直是 0（没有 Home 横条）：等到 INSET_ZERO_WAIT_MS 放行，不硬兜成 34', () => {
@@ -152,11 +152,22 @@ describe('watchInsetBottom', () => {
     expect(insetTimeline().reason).toBe('max');
   });
 
+  it('每一条都记 screen.height（11-10 底栏上偏）：主屏幕版 inner 比 screen 少一截状态栏时，时间线里看得出来；不影响放行', () => {
+    vi.spyOn(window.screen, 'height', 'get').mockReturnValue(956);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(894);
+    setup({ sab: '34px', standalone: true });
+    vi.advanceTimersByTime(INSET_QUIET_MS + INSET_POLL_MS);
+    expect(waiting()).toBe(false);
+    expect(insetTimeline().rows[0]).toMatchObject({ env: '34px', inner: 894, screen: 956 });
+    expect(insetTimelineLine()).toContain('env-bottom=34px inner=894 screen=956');
+  });
+
   it('innerHeight 变了也算变化、记一条；取消后探针拿掉、属性去掉', () => {
     setup({ sab: '34px' });
     vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(900);
     window.dispatchEvent(new Event('resize'));
     expect(insetTimeline().rows.at(-1)?.inner).toBe(900);
+    expect(insetTimeline().rows.at(-1)?.screen).toBe(window.screen.height);
     stopIt?.();
     stopIt = null;
     expect(waiting()).toBe(false);

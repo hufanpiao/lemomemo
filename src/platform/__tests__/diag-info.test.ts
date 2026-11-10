@@ -32,6 +32,13 @@ describe('collectDiag', () => {
     expect(lines.find((l) => l.startsWith('supports:'))).toMatch(/-webkit-backdrop-filter=(true|false) backdrop-filter=(true|false) nospace=(true|false)/);
   });
 
+  it('geo 行带 screen-inner = screen.height − innerHeight（11-10 主屏幕版少算状态栏那一截时一眼看出）', async () => {
+    vi.spyOn(window.screen, 'height', 'get').mockReturnValue(956);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(894);
+    const lines = await collectDiag();
+    expect(lines.find((l) => l.startsWith('geo:'))).toMatch(/ inner=\d+x894 screen=\d+x956 screen-inner=62 vv=/);
+  });
+
   it('没有底栏（键盘弹着、别的页面）写 absent；不发请求、不写本机存储', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const setSpy = vi.spyOn(Storage.prototype, 'setItem');

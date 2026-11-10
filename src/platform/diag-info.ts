@@ -8,7 +8,7 @@ import { insetTimeline, type InsetTimeline } from './inset-watch.ts';
 /** 诊断里的一行（11-07 首屏瘦身 U7 从 inset-watch.ts 搬来，原样没改；只有这里用，不再跟着首屏下载）：launch: standalone=… painted=+300 ready=+460(quiet) | +12 env-bottom=0px inner=956 | +340 env-bottom=34px inner=956 */
 export function insetTimelineLine(tl: InsetTimeline = insetTimeline()): string {
   const head = `launch: standalone=${tl.standalone} painted=${tl.paintedAt === null ? '-' : `+${tl.paintedAt}`} ready=${tl.readyAt === null ? '-' : `+${tl.readyAt}`}(${tl.reason ?? 'wait'})`;
-  return [head, ...tl.rows.map((r) => `+${r.t} env-bottom=${r.env} inner=${r.inner}`)].join(' | ');
+  return [head, ...tl.rows.map((r) => `+${r.t} env-bottom=${r.env} inner=${r.inner} screen=${r.screen}`)].join(' | ');
 }
 
 /** 计算样式里要看的几项（伪元素和玻璃块） */
@@ -47,7 +47,8 @@ async function swLines(nav: Navigator, win: Window): Promise<string[]> {
   return out;
 }
 
-/** 真机上安全区、视口、页面顶部留白到底是多少（11-06 真机截图：顶部带只在安全区下沿一窄条起作用、页面顶部多空了约 90pt） */
+/** 真机上安全区、视口、页面顶部留白到底是多少（11-06 真机截图：顶部带只在安全区下沿一窄条起作用、页面顶部多空了约 90pt）。
+ * screen-inner = screen.height − innerHeight（11-10 主屏幕版新版第一次进底栏上偏约 62pt）：正常主屏幕版是 0，约等于顶部安全区就是少算了状态栏那一截 */
 function geoLine(win: Window): string {
   const doc = win.document;
   const probe = doc.createElement('div');
@@ -66,7 +67,7 @@ function geoLine(win: Window): string {
   const rootEl = doc.getElementById('root');
   return [
     `geo: env-top=${env} --inset-top=${rootCs.getPropertyValue('--inset-top').trim() || '-'} --safe-top=${rootCs.getPropertyValue('--safe-top').trim() || '-'} --top-fade=${rootCs.getPropertyValue('--top-fade').trim() || '-'}`,
-    `fixedTop0=${probeTop} inner=${win.innerWidth}x${win.innerHeight} screen=${win.screen.width}x${win.screen.height} vv=${vv ? `${vv.width}x${vv.height}+${vv.offsetTop}` : '-'} scrollY=${win.scrollY}`,
+    `fixedTop0=${probeTop} inner=${win.innerWidth}x${win.innerHeight} screen=${win.screen.width}x${win.screen.height} screen-inner=${win.screen.height - win.innerHeight} vv=${vv ? `${vv.width}x${vv.height}+${vv.offsetTop}` : '-'} scrollY=${win.scrollY}`,
     `#root.padding-top=${rootEl ? win.getComputedStyle(rootEl).paddingTop : '-'} main.padding-top=${main ? win.getComputedStyle(main).paddingTop : '-'} main.top=${main ? Math.round(main.getBoundingClientRect().top) : '-'} first.top=${first ? Math.round(first.getBoundingClientRect().top) : '-'} banner=${doc.documentElement.hasAttribute('data-top-banner')}`,
   ].join(' ');
 }

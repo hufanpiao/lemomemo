@@ -58,35 +58,26 @@ export function hrefOf(name: RouteName, ...params: string[]): string {
 
 const listeners = new Set<() => void>();
 
-// 历史的深度标记（canGoBack 用）：放在 history.state 里，浏览器后退、刷新都还在
-const DEPTH = 'lemoDepth';
-function depthNow(): number {
+// 历史的深度标记 lemoDepth（canGoBack 用）：放在 history.state 里，浏览器后退、刷新都还在；键名直接写字面量（首屏额度）
+/** 当前这条历史的 state 里某一项（深度、载入编号、子页记号共用） */
+function stateOf(key: string): unknown {
   const st: unknown = window.history.state;
-  const d = typeof st === 'object' && st !== null ? (st as Record<string, unknown>)[DEPTH] : undefined;
+  return typeof st === 'object' && st !== null ? (st as Record<string, unknown>)[key] : undefined;
+}
+function depthNow(): number {
+  const d = stateOf('lemoDepth');
   return typeof d === 'number' && d > 0 ? d : 0;
 }
 
 // 这次载入的编号（canGoBack 用，代码审查 M1）：App 自己压的历史在 state 里写 lemoDoc；原地换的沿用原来那条的。
 // iOS 主屏幕版被系统杀掉后恢复、刷新以后，换了一次载入，旧历史上的编号对不上，就不认它前面还有 App 里的上一页；
 // 点底栏的 <a href> 浏览器自己压的历史没有编号，也不会替已经丢掉的上一条“作证”
-const DOC_KEY = 'lemoDoc';
-// randomUUID 只在安全来源有；http 局域网预览时没有，退回时间加随机数，不让 router 一加载就抛错白屏（复审建议）
-let doc: string = newDoc();
-function newDoc(): string {
-  return typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-}
-function docOf(): unknown {
-  const st: unknown = window.history.state;
-  return typeof st === 'object' && st !== null ? (st as Record<string, unknown>)[DOC_KEY] : undefined;
-}
-/** 新压一条历史的 state：深度 + 1，记这次载入的编号 */
-function pushedState(extra: Record<string, unknown> = {}): Record<string, unknown> {
-  return { [DEPTH]: depthNow() + 1, [DOC_KEY]: doc, ...extra };
-}
-/** 原地换这一条的 state：深度不变，编号沿用原来那条的（原来没有就不写） */
-function keptState(): Record<string, unknown> {
-  const d = docOf();
-  return d === undefined ? { [DEPTH]: depthNow() } : { [DEPTH]: depthNow(), [DOC_KEY]: d };
+// 编号只用来区分“这次载入”和“以前的载入”，不出本机、不当密钥用，Math.random 够了；不用 randomUUID：只在安全来源有（http 局域网预览没有），
+// 还要写后备，首屏多几十字节（首屏额度）
+let doc = Math.random();
+/** 要写进历史的 state：step 为 1 是新压一条（深度 + 1，记这次载入的编号），0 是原地换（深度不变，编号沿用原来那条的） */
+function stateFor(step: 0 | 1, extra?: Record<string, unknown>): Record<string, unknown> {
+  return { lemoDoc: step ? doc : stateOf('lemoDoc'), lemoDepth: depthNow() + step, ...extra };
 }
 
 function notifyAll(): void {
@@ -199,7 +190,7 @@ export function navigate(name: RouteName, ...params: string[]): Promise<void> {
   const href = hrefOf(name, ...params);
   if (window.location.hash === href) return Promise.resolve();
   return commit(() => {
-    window.history.pushState(pushedState(), '', href);
+    window.history.pushState(stateFor(1), '', href);
     noteEntry();
   }, animTo(href));
 }
@@ -216,9 +207,10 @@ function noteEntry(): void {
   entryAt.set(depthNow(), window.location.hash);
 }
 
-/** 只给测试用：当作重新载入了一次（换编号、清掉 entryAt） */
+/** 只给测试用：当作重新载入了一次（换编号、清掉 entryAt）。构建期常量挡掉，正式包里是空函数（首屏额度） */
 export function resetLoadForTest(): void {
-  doc = newDoc();
+  if (import.meta.env.MODE !== 'test') return;
+  doc = Math.random();
   entryAt.clear();
 }
 
@@ -234,7 +226,7 @@ export function navigateSub(name: RouteName, ...params: string[]): Promise<void>
   const done = commit(() => {
     if (window.location.hash === href) return;
     noteEntry();
-    window.history.pushState(pushedState({ [SUB]: window.location.hash }), '', href);
+    window.history.pushState(stateFor(1, { [SUB]: window.location.hash }), '', href);
     noteEntry();
   }, animTo(href)).finally(() => {
     if (subInFlight?.done === done) subInFlight = null;
@@ -248,8 +240,7 @@ export function navigateSub(name: RouteName, ...params: string[]): Promise<void>
  * 不是（直接打开、被 replace 过、上一条后来被换成了别的页）就原地换成上一层。旧版记号是 true（没记地址），照旧当是
  */
 export function isSubEntry(): boolean {
-  const st: unknown = window.history.state;
-  const mark = typeof st === 'object' && st !== null ? (st as Record<string, unknown>)[SUB] : undefined;
+  const mark = stateOf(SUB);
   if (mark === true) return true;
   if (typeof mark !== 'string') return false;
   const before = entryAt.get(depthNow() - 1);
@@ -269,20 +260,16 @@ export function isSubEntry(): boolean {
  */
 export const BACK_FIX_MS = 1000;
 export function backOrReplace(name: RouteName, ...params: string[]): void {
-  const st: unknown = window.history.state;
-  const mark = typeof st === 'object' && st !== null ? (st as Record<string, unknown>)[SUB] : undefined;
-  // 这一条不是这次载入里 App 压的（iOS 主屏幕版被系统杀掉后恢复，只剩这一条和它的 state；刷新以后）：退一步可能退出 App，原地换成上一层
-  if (!canGoBack()) {
-    void replaceRoute(name, ...params);
-    return;
-  }
-  if (mark === true) {
+  const mark = stateOf(SUB);
+  // 这一条不是这次载入里 App 压的（canGoBack 为假：iOS 主屏幕版被系统杀掉后恢复，只剩这一条和它的 state；刷新以后）：退一步可能退出 App，
+  // 不论有没有记号都原地换成上一层
+  if (mark === true && canGoBack()) {
     // 旧版记号（没记地址）：照旧当是点进来的，退一步
     goBack();
     return;
   }
   const href = hrefOf(name, ...params);
-  if (typeof mark !== 'string') {
+  if (typeof mark !== 'string' || !canGoBack()) {
     void replaceRoute(name, ...params);
     return;
   }
@@ -290,7 +277,7 @@ export function backOrReplace(name: RouteName, ...params: string[]): void {
   const fix = (): void => {
     window.clearTimeout(timer);
     if (depthNow() !== want || window.location.hash === href) return;
-    window.history.replaceState(keptState(), '', href);
+    window.history.replaceState(stateFor(0), '', href);
     noteEntry();
   };
   const timer = window.setTimeout(() => window.removeEventListener('popstate', fix), BACK_FIX_MS);
@@ -303,7 +290,7 @@ export function replaceRoute(name: RouteName, ...params: string[]): Promise<void
   const href = hrefOf(name, ...params);
   if (window.location.hash === href) return Promise.resolve();
   return commit(() => {
-    window.history.replaceState(keptState(), '', href);
+    window.history.replaceState(stateFor(0), '', href);
     noteEntry();
   }, animTo(href));
 }
@@ -316,7 +303,7 @@ export function navigateInPage(name: RouteName, ...params: string[]): Promise<vo
   const href = hrefOf(name, ...params);
   if (window.location.hash === href) return Promise.resolve();
   return commit(() => {
-    window.history.pushState(pushedState(), '', href);
+    window.history.pushState(stateFor(1), '', href);
     noteEntry();
   }, 'none');
 }
@@ -326,7 +313,7 @@ export function replaceInPage(name: RouteName, ...params: string[]): Promise<voi
   const href = hrefOf(name, ...params);
   if (window.location.hash === href) return Promise.resolve();
   return commit(() => {
-    window.history.replaceState(keptState(), '', href);
+    window.history.replaceState(stateFor(0), '', href);
     noteEntry();
   }, 'none');
 }
@@ -347,11 +334,12 @@ export function goBack(): void {
  * 恢复后点底栏 <a href> 压出的深度 0 那条会替丢掉的上一条“作证”。刷新以后第一次返回也走“原地换”，多留一条历史，不会退出 App
  */
 export function canGoBack(): boolean {
-  return depthNow() > 0 && docOf() === doc;
+  // 编号只有 navigate 类压的历史（深度至少 1）才写、原地换只沿用，所以带这次编号的一定深度 > 0，不用再比深度（首屏额度）
+  return stateOf('lemoDoc') === doc;
 }
 
 /** 只改地址、不重画（新建保存后把 #/todo/new 换成这一条的 id，代码审查 S7）；深度不变 */
 export function replaceAddress(name: RouteName, ...params: string[]): void {
-  window.history.replaceState(keptState(), '', hrefOf(name, ...params));
+  window.history.replaceState(stateFor(0), '', hrefOf(name, ...params));
   noteEntry();
 }

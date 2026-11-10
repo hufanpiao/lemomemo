@@ -32,6 +32,8 @@ export interface InsetRow {
   /** 安全区底部的计算值（如 '34px'） */
   readonly env: string;
   readonly inner: number;
+  /** screen.height（只记、不参与判断）：和 inner 对照，看主屏幕版是不是少算了状态栏那一截（11-10 底栏上偏约 62pt） */
+  readonly screen: number;
 }
 
 export interface InsetTimeline {
@@ -115,7 +117,7 @@ export function watchInsetBottom(env: InsetEnv = {}): () => void {
     } catch {
       envV = '?';
     }
-    return { t: Math.round(now()), env: envV, inner: win.innerHeight };
+    return { t: Math.round(now()), env: envV, inner: win.innerHeight, screen: win.screen.height };
   };
 
   const release = (reason: 'quiet' | 'max'): void => {
