@@ -1,10 +1,12 @@
 // 可见高度真机探测按钮（R-371 第二条路，platform/vh-probe.ts）：只在设置 › 关于的诊断打开时、非正式版里出现（AboutSection 挂）。
 // 一次只跑一种（跑着时按钮都禁用）；结果一行一条累加在下面，负责人截图。按钮字是英文、不进词典（同诊断区，A20 只管汉字）
+// Gap fix（R-371 修复候选，platform/vh-gapfix.ts）：“Gap fix: OFF/ON”开关存本机，开着时每次冷启动都做一次（下次冷启动起生效）；下面显示最近一次冷启动的日志，“Copy gap fix log”整段复制（和时间线开关可以同时开）
 // 冷启动时间线（R-371，11-10，platform/vh-timeline.ts）：再多一排——“Timeline next launch: OFF/ON”开关（存本机，下次冷启动记 3 分钟，开始记就自动关）、
 // “Copy timeline”整段复制上一次记下的时间线；下面显示那段时间线（按“Copy timeline”时重新读本机，记着的时候也能拿到最新的）
 import { useState } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { runVhMethod, VH_METHODS } from '../../../platform/vh-probe.ts';
+import { gapFixOn, readGapFixLog, setGapFixOn } from '../../../platform/vh-gapfix.ts';
 import { readTimeline, setTimelineArmed, timelineArmed } from '../../../platform/vh-timeline.ts';
 import styles from './SettingsPage.module.css';
 
@@ -12,6 +14,9 @@ export const TL_LABEL_ON = 'Timeline next launch: ON';
 export const TL_LABEL_OFF = 'Timeline next launch: OFF';
 export const TL_COPY = 'Copy timeline';
 export const TL_COPIED = 'Copied';
+export const GF_LABEL_ON = 'Gap fix: ON';
+export const GF_LABEL_OFF = 'Gap fix: OFF';
+export const GF_COPY = 'Copy gap fix log';
 export const TL_COPY_FAIL = 'Copy failed - long-press the text below';
 
 export function VhProbe() {
@@ -19,19 +24,30 @@ export function VhProbe() {
   const [lines, setLines] = useState<string[]>([]);
   const [armed, setArmed] = useState(() => timelineArmed());
   const [tl, setTl] = useState(() => readTimeline());
+  const [gf, setGf] = useState(() => gapFixOn());
+  const [gfLog, setGfLog] = useState(() => readGapFixLog());
   const [copied, setCopied] = useState<'' | 'ok' | 'fail'>('');
+  const [gfCopied, setGfCopied] = useState<'' | 'ok' | 'fail'>('');
+  /** 整段复制（按的时候重新读本机，记着的时候也拿最新的）；时间线、Gap fix 两个开关可以同时开，日志各复制各的 */
+  const copyText = (text: string, done: (s: 'ok' | 'fail') => void): void => {
+    try {
+      void navigator.clipboard.writeText(text).then(
+        () => done('ok'),
+        () => done('fail'),
+      );
+    } catch {
+      done('fail');
+    }
+  };
   const copy = (): void => {
     const text = readTimeline();
     setTl(text);
-    const done = (ok: boolean): void => setCopied(ok ? 'ok' : 'fail');
-    try {
-      void navigator.clipboard.writeText(text).then(
-        () => done(true),
-        () => done(false),
-      );
-    } catch {
-      done(false);
-    }
+    copyText(text, setCopied);
+  };
+  const copyGf = (): void => {
+    const text = readGapFixLog();
+    setGfLog(text);
+    copyText(text, setGfCopied);
   };
   return (
     <div data-testid="settings-vh-probe">
@@ -77,6 +93,27 @@ export function VhProbe() {
       {tl !== '' && (
         <pre className={styles.diag} data-testid="vh-tl-out">
           {tl}
+        </pre>
+      )}
+      <div className={`${styles.actions} ${styles.probeActions}`}>
+        <FormButton
+          size="compact"
+          aria-pressed={gf}
+          data-testid="vh-gapfix"
+          onClick={() => {
+            setGapFixOn(!gf);
+            setGf(gapFixOn());
+          }}
+        >
+          {gf ? GF_LABEL_ON : GF_LABEL_OFF}
+        </FormButton>
+        <FormButton size="compact" disabled={gfLog === ''} data-testid="vh-gapfix-copy" onClick={copyGf}>
+          {gfCopied === 'ok' ? TL_COPIED : gfCopied === 'fail' ? TL_COPY_FAIL : GF_COPY}
+        </FormButton>
+      </div>
+      {gfLog !== '' && (
+        <pre className={styles.diag} data-testid="vh-gapfix-out">
+          {gfLog}
         </pre>
       )}
     </div>

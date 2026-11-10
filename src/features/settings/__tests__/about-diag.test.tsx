@@ -102,4 +102,55 @@ describe('关于页的诊断信息', () => {
     expect(await screen.findByText('Copied')).toBeTruthy();
     localStorage.clear();
   });
+
+  it('Gap fix 开关点一下开、再点关（存本机 lemo-gapfix）；有日志时显示最近一次冷启动的日志（R-371 修复候选）', async () => {
+    localStorage.clear();
+    render(<AboutSection />);
+    tapVersion(DIAG_TAPS);
+    await screen.findByTestId('settings-about-diag');
+    const gf = screen.getByTestId('vh-gapfix');
+    expect(gf.textContent).toBe('Gap fix: OFF');
+    expect(gf.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByTestId('vh-gapfix-out')).toBeNull();
+    fireEvent.click(gf);
+    expect(gf.textContent).toBe('Gap fix: ON');
+    expect(localStorage.getItem('lemo-gapfix')).toBe('1');
+    fireEvent.click(gf);
+    expect(gf.textContent).toBe('Gap fix: OFF');
+    expect(localStorage.getItem('lemo-gapfix')).toBeNull();
+    cleanup();
+
+    localStorage.setItem('lemo-gapfix-out', 'gapfix start=x\nt=0 pad gap=61 top=61');
+    render(<AboutSection />);
+    await screen.findByTestId('settings-about-diag');
+    expect(screen.getByTestId('vh-gapfix-out').textContent).toBe('gapfix start=x\nt=0 pad gap=61 top=61');
+    localStorage.clear();
+  });
+
+  it('时间线、Gap fix 两个开关能同时开；Gap fix 日志一键复制（按时重新读本机），没日志时复制键灰着（R-371 11-10 复审）', async () => {
+    localStorage.clear();
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(<AboutSection />);
+    tapVersion(DIAG_TAPS);
+    await screen.findByTestId('settings-about-diag');
+    expect((screen.getByTestId('vh-gapfix-copy') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('vh-tl-arm'));
+    fireEvent.click(screen.getByTestId('vh-gapfix'));
+    expect(localStorage.getItem('lemo-vh-tl')).toBe('1');
+    expect(localStorage.getItem('lemo-gapfix')).toBe('1');
+    expect(screen.getByTestId('vh-tl-arm').textContent).toBe('Timeline next launch: ON');
+    expect(screen.getByTestId('vh-gapfix').textContent).toBe('Gap fix: ON');
+    cleanup();
+
+    localStorage.setItem('lemo-gapfix-out', 'gapfix start=x');
+    render(<AboutSection />);
+    await screen.findByTestId('settings-about-diag');
+    localStorage.setItem('lemo-gapfix-out', 'gapfix start=x\nt=0 skip no-gap(0)');
+    fireEvent.click(screen.getByTestId('vh-gapfix-copy'));
+    expect(writeText).toHaveBeenCalledWith('gapfix start=x\nt=0 skip no-gap(0)');
+    expect(await screen.findByText('Copied')).toBeTruthy();
+    expect(screen.getByTestId('vh-gapfix-out').textContent).toBe('gapfix start=x\nt=0 skip no-gap(0)');
+    localStorage.clear();
+  });
 });

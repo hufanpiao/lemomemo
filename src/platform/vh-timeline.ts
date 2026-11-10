@@ -5,6 +5,11 @@
 //   ① 前 DURATION_MS 每 TICK_MS 一行：inner、client、vv、scrollY、底栏下沿（[data-testid="tabbar"] 的 getBoundingClientRect().bottom，没有记 -）、当前路由（hash，id 换成 :id）；
 //   ② MutationObserver 盯底栏每次新挂载（开始记时已经挂着的那一个不算），记挂载那一刻和之后 MOUNT_FRAMES 帧的下沿；
 //      第 1 次什么都不做（对照），第 2 次 scrollTo(0, scrollY)，第 3 次 scrollBy(0, 1)、下一帧滚回，第 4 次起按这三种循环。
+//   ③ 换路由（App 用 pushState / replaceState，不发 hashchange：DOM 变动、resize、每个 tick 都核一次地址）记一行 route->：
+//      documentElement.scrollHeight、body.scrollHeight、inner、vv、底栏下沿、挂着的页面（main[data-feature]，切页途中可能两个）；
+//   ④ inner 或 vv 一变（resize 事件、DOM 变动、tick 都核）立刻记 vh-change：变前变后、离最近一次换路由过了多少 ms、当时挂着的页面；
+//   ⑤ 切到日历后 CAL_WATCH_MS 内按帧记（只记和上一帧不一样的）：日历页根（main[data-feature="calendar"]）和翻页容器（cal-pager）
+//      的高、scrollHeight、transform、overflow-y，加文档高（11-10 复审实测：月视图文档 940，今天页 895、触屏 896；切日历时把哪一步算进去，看这里）。
 // 结果是纯文字，存在 OUT_KEY（隔几秒存一次、结束和切到后台时也存），诊断页显示、可整段复制给主持人。
 // requestAnimationFrame 只许 src/motion 用（A25）：等帧的函数由调用方传进来（main.tsx 传 motion 的 nextFrame）
 export const ARM_KEY = "lemo-vh-tl";
@@ -14,6 +19,10 @@ export const DURATION_MS = 180_000;
 export const SAVE_MS = 2000;
 export const MOUNT_FRAMES = 10;
 export const BAR_SELECTOR = '[data-testid="tabbar"]';
+/** 切到日历后按帧盯多久 */
+export const CAL_WATCH_MS = 2000;
+export const CAL_ROOT = 'main[data-feature="calendar"]';
+export const CAL_PAGER = '[data-testid="cal-pager"]';
 
 /** 新挂载时的三种做法，按挂载次序循环 */
 export const MOUNT_ACTS = ["none", "scrollTo", "scrollBy1"] as const;
@@ -71,6 +80,31 @@ export function routeShape(hash: string): string {
 export function sampleLine(win: Window): string {
   const vv = win.visualViewport ? Math.round(win.visualViewport.height) : "-";
   return `inner=${win.innerHeight} client=${win.document.documentElement.clientHeight} vv=${vv} y=${Math.round(win.scrollY)} bar=${barBottom(win)} route=${routeShape(win.location.hash)}`;
+}
+
+/** 挂着的页面：main[data-feature]，切页途中新旧两个都在时用 + 连起来；没有写 - */
+export function pagesOf(doc: Document): string {
+  return Array.from(doc.querySelectorAll("main[data-feature]"), (m) => m.getAttribute("data-feature") ?? "?").join("+") || "-";
+}
+
+const vvOf = (win: Window): number | "-" => (win.visualViewport ? Math.round(win.visualViewport.height) : "-");
+
+/** 换路由那一行的数：文档高、body 高、inner、vv、底栏下沿、挂着的页面 */
+export function routeLine(win: Window): string {
+  const d = win.document;
+  return `docH=${d.documentElement.scrollHeight} bodyH=${d.body.scrollHeight} inner=${win.innerHeight} vv=${vvOf(win)} bar=${barBottom(win)} page=${pagesOf(d)}`;
+}
+
+/** 日历页一帧的样子：根和翻页容器各自的高、scrollHeight、transform、overflow-y，加文档高；不在写 - */
+export function calSig(win: Window): string {
+  const d = win.document;
+  const one = (name: string, sel: string): string => {
+    const el = d.querySelector(sel);
+    if (!el) return `${name}=-`;
+    const cs = win.getComputedStyle(el);
+    return `${name}=h${Math.round(el.getBoundingClientRect().height)}/sh${el.scrollHeight}/tf:${cs.transform}/ov:${cs.overflowY}`;
+  };
+  return `${one("root", CAL_ROOT)} ${one("pager", CAL_PAGER)} docH=${d.documentElement.scrollHeight}`;
 }
 
 /** 新挂载后做的那一下：label 写进结果；back 是下一帧要做的“滚回去”（只有 scrollBy1 有） */
@@ -147,7 +181,55 @@ export function startVhTimeline(
     frame(step);
   };
 
+  // ③④⑤ 换路由、可见高度变化、切到日历后按帧记
+  let route = routeShape(win.location.hash);
+  let routeAt = t0;
+  let routes = 0;
+  let inner = win.innerHeight;
+  let vv = vvOf(win);
+  let calUntil = 0;
+  let calLast = "";
+  const calStep = (): void => {
+    if (done || now() > calUntil) return;
+    const sig = calSig(win);
+    if (sig !== calLast) {
+      calLast = sig;
+      lines.push(`t=${sec()} cal +${now() - routeAt}ms ${sig}`);
+    }
+    frame(calStep);
+  };
+  const watchCal = (): void => {
+    const running = now() <= calUntil;
+    calUntil = now() + CAL_WATCH_MS;
+    calLast = "";
+    if (!running) frame(calStep);
+  };
+  const check = (): void => {
+    if (done) return;
+    const r = routeShape(win.location.hash);
+    if (r !== route) {
+      lines.push(`t=${sec()} route-> ${r} (from ${route}) ${routeLine(win)}`);
+      route = r;
+      routeAt = now();
+      routes += 1;
+      if (r.startsWith("#/calendar")) watchCal();
+    }
+    const i = win.innerHeight;
+    const v = vvOf(win);
+    if (i !== inner || v !== vv) {
+      lines.push(`t=${sec()} vh-change inner=${inner}->${i} vv=${vv}->${v} since-${routes > 0 ? "route" : "start"}=${now() - routeAt}ms route=${route} page=${pagesOf(win.document)} bar=${barBottom(win)}`);
+      inner = i;
+      vv = v;
+      save();
+    }
+  };
+  lines.push(`t=${sec()} route= ${route} ${routeLine(win)}`);
+  if (route.startsWith("#/calendar")) watchCal();
+  win.addEventListener("resize", check);
+  win.visualViewport?.addEventListener("resize", check);
+
   const mo = new MutationObserver(() => {
+    check();
     const el = win.document.querySelector(BAR_SELECTOR);
     if (el === lastBar) return;
     lastBar = el;
@@ -158,6 +240,7 @@ export function startVhTimeline(
   // 停止、存盘都按经过的时间算（代码审 S1）：iOS 切到后台时定时器会停，数跳了几次会拖过 3 分钟
   let lastSave = t0;
   const timer = win.setInterval(() => {
+    check();
     lines.push(`t=${sec()} ${sampleLine(win)}`);
     const at = now();
     if (at - t0 >= DURATION_MS) {
@@ -182,8 +265,10 @@ export function startVhTimeline(
     done = true;
     win.clearInterval(timer);
     mo.disconnect();
+    win.removeEventListener("resize", check);
+    win.visualViewport?.removeEventListener("resize", check);
     win.document.removeEventListener("visibilitychange", onHide);
-    lines.push(`t=${sec()} end mounts=${mounts}`);
+    lines.push(`t=${sec()} end mounts=${mounts} routes=${routes}`);
     save();
   }
   save();

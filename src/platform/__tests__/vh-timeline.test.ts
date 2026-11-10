@@ -72,7 +72,7 @@ describe("开关", () => {
     const main = readFileSync(resolve(__dirname, "../../app/main.tsx"), "utf8");
     expect(main).toContain(`localStorage.getItem('${ARM_KEY}')`);
     expect(main).toMatch(
-      /import\.meta\.env\.MODE !== 'production'\) \{\s*try \{\s*if \(localStorage\.getItem\('lemo-vh-tl'\)\)/,
+      /import\.meta\.env\.MODE !== 'production'\) \{\s*try \{\s*if \(localStorage\.getItem\('lemo-vh-tl'\) \|\| /,
     );
   });
 });
@@ -107,13 +107,13 @@ describe("startVhTimeline", () => {
     expect(out.at(-1)).toMatch(/bar=900 route=#\/today$/);
     vi.advanceTimersByTime(DURATION_MS);
     out = readTimeline().split("\n");
-    expect(out.at(-1)).toMatch(/^t=180\.00 end mounts=0$/);
+    expect(out.at(-1)).toMatch(/^t=180\.00 end mounts=0 routes=0$/);
     expect(
-      out.filter((l) => / inner=/.test(l) && !l.includes("initial-bar")),
+      out.filter((l) => / inner=/.test(l) && !l.includes("initial-bar") && !l.includes(" route= ")),
     ).toHaveLength(DURATION_MS / TICK_MS);
     // 停了以后不再记
     vi.advanceTimersByTime(TICK_MS * 8);
-    expect(readTimeline().split("\n").at(-1)).toMatch(/end mounts=0$/);
+    expect(readTimeline().split("\n").at(-1)).toMatch(/end mounts=0 routes=0$/);
   });
 
   it("开始时已经挂着的底栏不算新挂载；之后每次新挂载记 10 帧，做法按 none、scrollTo、scrollBy1、none 循环", async () => {
@@ -167,7 +167,7 @@ describe("startVhTimeline", () => {
     vi.setSystemTime(Date.now() + DURATION_MS);
     vi.advanceTimersByTime(TICK_MS);
     const out = readTimeline().split("\n");
-    expect(out.at(-1)).toMatch(/^t=180\.\d\d end mounts=0$/);
+    expect(out.at(-1)).toMatch(/^t=180\.\d\d end mounts=0 routes=0$/);
     expect(out.filter((l) => /^t=\S+ inner=/.test(l))).toHaveLength(3);
   });
 
@@ -176,7 +176,7 @@ describe("startVhTimeline", () => {
     const stop = start(f);
     stop();
     const before = readTimeline();
-    expect(before.split("\n").at(-1)).toMatch(/end mounts=0$/);
+    expect(before.split("\n").at(-1)).toMatch(/end mounts=0 routes=0$/);
     mountBar();
     await tick();
     f.flush(MOUNT_FRAMES);
