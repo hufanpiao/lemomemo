@@ -120,6 +120,23 @@ describe('startEarlyGapFix（早试本身）', () => {
     expect(e.what).toBe('changed 895->956 after=16ms gap=61 top=61');
   });
 
+  it('Q-2 复发（11-11 真机日志 changed 894->895）：innerHeight 只抖了 1px 不算成，垫块留着；变到整屏才撤', () => {
+    setInner(894);
+    const fr = frames();
+    const e = startEarlyGapFix(fr.frame, win(), now, readTop);
+    expect(pad()).not.toBeNull();
+    t = 10;
+    setInner(895);
+    fr.flush(1);
+    expect(pad()).not.toBeNull();
+    expect(e.done).toBe(false);
+    t = 40;
+    setInner(956);
+    fr.flush(1);
+    expect(pad()).toBeNull();
+    expect(e.what).toBe('changed 894->956 after=40ms gap=62 top=0');
+  });
+
   it(`顶部安全区还读到 0 也试（差值不超过 ${EARLY_MAX_GAP}）；到 ${EARLY_GIVE_UP_MS}ms 没变就撤、记 no-change`, () => {
     const fr = frames();
     const e = startEarlyGapFix(fr.frame, win(), now, readTop);
@@ -130,7 +147,7 @@ describe('startEarlyGapFix（早试本身）', () => {
     t = EARLY_GIVE_UP_MS;
     fr.flush(1);
     expect(pad()).toBeNull();
-    expect(e.what).toBe(`no-change after=${EARLY_GIVE_UP_MS}ms gap=61 top=0`);
+    expect(e.what).toBe(`no-change inner=895 after=${EARLY_GIVE_UP_MS}ms gap=61 top=0`);
     expect(fr.size).toBe(0);
   });
 

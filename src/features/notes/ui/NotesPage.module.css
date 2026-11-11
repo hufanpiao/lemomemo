@@ -459,7 +459,7 @@
   position: fixed;
   left: 14px;
   right: 14px;
-  bottom: calc(var(--dock-bottom) + var(--inrow-kb-gap, 0px));
+  bottom: calc(var(--dock-bottom) + var(--inrow-kb-gap, 0px) - var(--inrow-drop, 0px));
   z-index: 5;
   display: flex;
   align-items: center;
@@ -572,7 +572,7 @@
   position: fixed;
   left: 14px;
   right: 14px;
-  bottom: calc(var(--dock-bottom) + var(--inrow-kb-gap, 0px) + 64px);
+  bottom: calc(var(--dock-bottom) + var(--inrow-kb-gap, 0px) - var(--inrow-drop, 0px) + 64px);
   z-index: 30;
   max-width: 532px;
   margin: 0 auto;

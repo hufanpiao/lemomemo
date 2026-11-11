@@ -13,11 +13,25 @@
 //   iPad 上照旧只用上面那条可视区算法（和这次改动之前一样）
 //   这时布局视口下沿就是键盘上沿，--kb 记 0；根节点另打 data-kbo="1"（凡是键盘弹着都打），base.css 据此让 --dock-bottom 直接等于 --kb，
 //   打字条、随手记输入行贴着键盘；底栏、“＋”照 FA-7 第 3 项藏起（visibility，等于被键盘盖住），收起键盘原样出现。焦点进出（focusin / focusout）也重算一次
+// • 收起后暂缓（台账 Q-13，11-11 负责人“输入框收起来的时候导航栏也跟着上升一下再下降”，真机视频：键盘还在往下收时底栏就露在半屏，
+//   接着比原位高约 60pt 停 0.2～0.3 秒才落下；时间线：收键盘时 inner 542→895，0.33 秒后 Gap fix 才补成 956）：iOS 主屏幕版 iPhone 上，
+//   键盘刚收起、innerHeight 还没回到整屏（差超过 HOLD_TOL_PX），就再对订阅者报“还弹着”（底栏、“＋”继续藏），回到整屏或到 HOLD_MS 才报收起；
+//   data-kbo、--kb 照实时算（打字条等浮条不受影响）
+// • 底栏焊死（Q-13，负责人 11-11“导航给我焊死在下面！”）：iOS 主屏幕版 iPhone 键盘没弹时，innerHeight 比整屏少 HOLD_TOL_PX～GAP_MAX_PX
+//   （就是那个错的 895，少的是顶部安全区；冷启动和收键盘后 Gap fix 补回 956 之前都会出现），把差值写进根节点 --vh-gap，
+//   底栏、“＋”、实色带、渐隐层（kit GlassBar）的 bottom 减去它，落到屏幕最底，和 956 时同一个位置；回到整屏就清掉（只改位置，不碰玻璃材质，R-361）
 // • blockPageZoom()：拦 iOS 整页双指缩放（11-11，见文件末尾）
 // B2 先给提醒横幅排队用（FA-4）；导航和“＋”在键盘弹起时隐藏的那部分由各自页面读 --kb 或订阅这里
 import { isStandalone } from './env.ts';
 
 export const KB_MIN_PX = 120;
+/** 收起后暂缓最多这么久（Q-13；Gap fix 补回整屏实测 0.33 秒） */
+export const HOLD_MS = 1000;
+/** innerHeight 离整屏这么多以内算回到整屏 */
+export const HOLD_TOL_PX = 4;
+/** 布局视口比整屏少这么多以内才当“少了顶部安全区”补到底（更多的是分屏、横屏等，不补） */
+export const GAP_MAX_PX = 100;
+export const GAP_VAR = '--vh-gap';
 
 type VvLike = Pick<VisualViewport, 'height' | 'offsetTop' | 'addEventListener' | 'removeEventListener'> & { readonly scale?: number };
 type DocLike = Pick<Document, 'addEventListener' | 'removeEventListener'>;
@@ -38,6 +52,8 @@ export interface ViewportEnv {
   readonly full?: () => number;
   /** 是不是 iPhone（Q-9 那条只对 iPhone；不传就看 UA） */
   readonly phone?: () => boolean;
+  /** 现在的毫秒数（Q-13 暂缓计时；不传用 Date.now） */
+  readonly now?: () => number;
 }
 
 /** iPhone、iPod（iPad 不算：iPadOS 的 UA 是 Macintosh，这里也不去认它） */
@@ -77,6 +93,15 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
   const editingOf = env.editing ?? (() => editableFocused());
   const fullOf = env.full ?? defaultFull;
   const phoneOf = env.phone ?? (() => isIPhone());
+  // 单调时钟：系统时间往回调不影响暂缓计时（独立验证 11-11 建议 3）
+  const nowOf = env.now ?? (() => (typeof performance !== 'undefined' ? performance.now() : Date.now()));
+  /** 对订阅者报的开 / 关（Q-13 暂缓期间比 height 晚一步变成关） */
+  let reported = false;
+  /** 暂缓到什么时候（0 = 不在暂缓） */
+  let holdUntil = 0;
+  let holdTimer: ReturnType<typeof setTimeout> | undefined;
+  /** 现在 --vh-gap 写的值 */
+  let gapVar = 0;
   let doc: DocLike | null = null;
   const listeners = new Set<Listener>();
   let height = 0;
@@ -93,8 +118,26 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
     /** 主屏幕版：布局视口本身被压矮（Q-9） */
     const shrunk = !zoomed && over === 0 && standaloneOf() && phoneOf() && editingOf() ? Math.round(fullOf() - inner) : 0;
     const h = over > 0 ? over : shrunk >= KB_MIN_PX ? shrunk : 0;
-    if (h === height && over === kbVar) return;
+    // 正在输入时不写（独立验证 11-11 建议 2：外接键盘只剩几十 px 快捷条时 h=0，差值落在范围里，会把底栏推到快捷条底下）
+    const gapNow = h === 0 && !zoomed && standaloneOf() && phoneOf() && !editingOf() ? Math.round(fullOf() - inner) : 0;
+    const gap = gapNow > HOLD_TOL_PX && gapNow <= GAP_MAX_PX ? gapNow : 0;
+    if (gap !== gapVar) {
+      gapVar = gap;
+      const r = rootOf();
+      if (gap > 0) r?.style.setProperty(GAP_VAR, `${gap}px`);
+      else r?.style.removeProperty(GAP_VAR);
+    }
     const wasOpen = height > 0;
+    if (h > 0) holdUntil = 0;
+    else if (wasOpen && !zoomed && standaloneOf() && phoneOf()) holdUntil = nowOf() + HOLD_MS;
+    const holding = h === 0 && holdUntil > 0 && nowOf() < holdUntil && fullOf() - inner > HOLD_TOL_PX;
+    if (!holding) holdUntil = 0;
+    clearTimeout(holdTimer);
+    holdTimer = holding ? setTimeout(update, holdUntil - nowOf()) : undefined;
+    const show = h > 0 || holding;
+    if (h === height && over === kbVar && show === reported) return;
+    const wasShown = reported;
+    reported = show;
     height = h;
     kbVar = over;
     const root = rootOf() as (ReturnType<typeof rootOf> & { setAttribute?: (k: string, v: string) => void; removeAttribute?: (k: string) => void }) | null;
@@ -102,12 +145,12 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
     else root?.style.removeProperty('--kb');
     if (h > 0) root?.setAttribute?.('data-kbo', '1');
     else root?.removeAttribute?.('data-kbo');
-    if (wasOpen !== h > 0 || h > 0) for (const l of [...listeners]) l(h > 0, h);
+    if (wasShown !== show || h > 0) for (const l of [...listeners]) l(show, h);
   };
 
   return {
     /** 现在键盘是不是弹着 */
-    isOpen: (): boolean => height > 0,
+    isOpen: (): boolean => reported,
     watch(fn: Listener): () => void {
       if (listeners.size === 0) {
         vv = vvOf();
@@ -128,6 +171,10 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
           doc?.removeEventListener('visibilitychange', update);
           doc?.removeEventListener('focusin', update);
           doc?.removeEventListener('focusout', update);
+          clearTimeout(holdTimer);
+          holdTimer = undefined;
+          holdUntil = 0;
+          reported = height > 0;
           doc = null;
           vv = null;
         }

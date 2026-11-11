@@ -37,7 +37,7 @@ import { setQuietErrorLog } from '../kit/components/QuietBoundary.tsx';
 import { setPushDisconnectLog } from '../platform/push-disconnect.ts';
 import { browserLifecycle } from '../platform/net.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
-import { buildInfo, isTauri, JS_ERROR_ACT, jsErrorCode, registerJsErrorLog } from '../platform/env.ts';
+import { buildInfo, isAppleMobile, isStandalone, isTauri, JS_ERROR_ACT, jsErrorCode, registerJsErrorLog } from '../platform/env.ts';
 import { gapFixWanted, startEarlyGapFix } from '../platform/vh-gapfix-gate.ts';
 import {
   clearCacheStorage, clearLocalSessionIf, goToAuth, onAuthUser, onSessionStorageChange, readSessionAccessToken, readSessionId, readSessionUserId,
@@ -58,6 +58,15 @@ import { setRemindErrorLog } from './App.tsx';
 import { GATE_LIMIT_MS, startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
 import { AFTER_PAINT_NOTICE_AT, lazyLogUploader, loadAfterPaint, startAfterPaint, type AfterPaint } from './after-paint.ts';
 import { applyDocLocale } from '../platform/doc-locale.ts';
+
+/** 诊断页“Caret sync”开着没有（台账 Q-8 光标对齐带日志；只在非正式版用，读不到本机存储算关） */
+function caretLogWanted(): boolean {
+  try {
+    return localStorage.getItem('lemo-caret-sync') === '1';
+  } catch {
+    return false;
+  }
+}
 
 /** 界面语言（16.4）：缓存的 profiles.ui_locale → 本机选过的（pv-locale）→ 设备语言 → 中文；规则同 src/auth/main.tsx，多一层缓存的 profile */
 function applyLocale(boot: Pick<BootResult, 'profile'>): void {
@@ -84,13 +93,16 @@ if (gapFixWanted()) {
   startEarlyGapFix(nextFrame);
   void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));
 }
+// 台账 Q-8 光标对齐试验（非正式版，诊断页开关“Caret sync”，键名同 caret-sync.ts 的 ARM_KEY）：iOS 主屏幕版、开关开着才下载 caret-sync.ts（对齐本体在 caret-align.ts）。
+// 第一版试验（preview.267）光标归位了，但打字条掉进键盘下 62pt，这一版加了浮条补抬，真机过了再转正；正式构建靠 MODE 常量整块摇掉
+if (import.meta.env.MODE !== 'production' && isAppleMobile() && isStandalone() && caretLogWanted()) {
+  void import('../platform/caret-sync.ts').then((m) => m.startCaretSync());
+}
 // R-371 冷启动时间线（非正式版，诊断页开关“Timeline next launch”）：开着才下载 platform/vh-diag-boot.ts 记一次；键名同 vh-timeline.ts 的 ARM_KEY。
 // 正式构建靠 MODE 常量整块摇掉
 if (import.meta.env.MODE !== 'production') {
   try {
     if (localStorage.getItem('lemo-vh-tl')) void import('../platform/vh-diag-boot.ts').then((m) => m.startVhDiag(nextFrame));
-    // 光标偏位试验（台账 Q-8，诊断页开关“Caret sync”）：开着才下载 platform/caret-sync.ts；键名同 caret-sync.ts 的 ARM_KEY
-    if (localStorage.getItem('lemo-caret-sync')) void import('../platform/caret-sync.ts').then((m) => m.startCaretSync());
     // 启动画面颜色诊断（台账 Q-2，诊断页开关“Splash colors next launch”）：开着才下载 platform/splash-probe.ts 涂色、印数一次；键名同 splash-probe-arm.ts 的 ARM_KEY
     // 诊断这次在跑：同步打上 data-splash-hold，启动画面从第一次要收起时起再多留 SPLASH_HOLD_MS（8 秒）才照原逻辑收起（platform/splash.ts），来得及截图；
     // 分包加载失败：拿掉标记、清掉开关（cancelSplashHold），不让每次冷启动都重来、启动画面白白多盖

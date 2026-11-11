@@ -102,12 +102,15 @@ export function startEarlyGapFix(
     const step = (): void => {
       const h = win.innerHeight;
       const after = Math.round(now() - t0);
-      if (h === inner0 && after < EARLY_GIVE_UP_MS) {
+      // 只认“变到整屏”（台账 Q-2 复发，11-11 负责人真机 Gap fix 日志：冷启动 innerHeight 先 894 再抖成 895，原来“一变就撤”当成功撤了垫块，
+      // 实际还缺 61，灰条挂到 t=1294 等底栏那次才补上；随机出现就是因为只有碰上这 1px 抖动的冷启动才会这样）
+      const full = win.screen.height - h <= TOL_PX;
+      if (!full && after < EARLY_GIVE_UP_MS) {
         frame(step);
         return;
       }
       pad.remove();
-      end(h === inner0 ? `no-change after=${after}ms` : `changed ${inner0}->${h} after=${after}ms`);
+      end(full ? `changed ${inner0}->${h} after=${after}ms` : `no-change inner=${h} after=${after}ms`);
     };
     frame(step);
   }

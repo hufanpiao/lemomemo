@@ -192,7 +192,7 @@ describe('GlassBar', () => {
     const m = /height: calc\((\d+)px \+ var\(--band-fade\) \+ var\(--inset-bottom\)\);/.exec(band); // G10：统一用 --inset-bottom
     expect(m).not.toBeNull();
     expect(Number(m?.[1])).toBe(low); // 实色不高过底栏的底边，底栏底边以下也不留缝
-    expect(band).toMatch(/bottom: 0;/);
+    expect(band).toMatch(/bottom: calc\(0px - var\(--vh-gap, 0px\)\);/); // 平时 0；Q-13 焊死：iOS 主屏幕版布局视口少顶部安全区时补到屏幕底
     // 渐隐段走完以后一直是 --bg（不透明），整层没有 opacity、没有混合、没有半透明色
     expect(band).toContain('background: linear-gradient(to bottom, transparent 0, var(--bg) var(--band-fade), var(--bg) 100%);');
     // 唯一的 opacity 是启动淡入的过渡（G10）：只在 <html data-inset-wait> 时为 0，稳定后回到 1
@@ -201,7 +201,7 @@ describe('GlassBar', () => {
     expect(fxCss).toMatch(/:global\(:root\[data-inset-wait\]\) \.band \{\s*opacity: 0;\s*\}/);
     for (const sel of ['bar', 'fab']) {
       expect(css).toMatch(new RegExp(String.raw`:global\(:root\[data-inset-wait\]\) \.${sel}[,\s{]`));
-      expect(rule(css, `.${sel}`)).toMatch(/bottom: calc\(\d+px \+ var\(--inset-bottom\)\);/);
+      expect(rule(css, `.${sel}`)).toMatch(/bottom: calc\(\d+px \+ var\(--inset-bottom\) - var\(--vh-gap, 0px\)\);/); // --vh-gap 平时 0（Q-13 焊死）
     }
     expect(css + fxCss).not.toMatch(/env\(safe-area-inset-bottom\)/); // 不各写各的 env，也没有 max(…, 34px) 兜底
     expect(css + fxCss).not.toMatch(/max\([^)]*34px/);
@@ -231,7 +231,7 @@ describe('GlassBar', () => {
     expect(base).toMatch(/--edge-fade: 12px;/);
     const edge = /\n\.edge \{([^}]*)\}/.exec(fxCss)?.[1] ?? '';
     // 底边 = 红线（“＋”底边 6px），上沿 = 底栏上沿（8 + 62 = 70px）再往上 --edge-fade
-    expect(edge).toMatch(/bottom: calc\(6px \+ var\(--inset-bottom\)\);/);
+    expect(edge).toMatch(/bottom: calc\(6px \+ var\(--inset-bottom\) - var\(--vh-gap, 0px\)\);/); // --vh-gap 平时 0（Q-13 焊死）
     expect(edge).toMatch(/height: calc\(64px \+ var\(--edge-fade\)\);/);
     expect(edge).toMatch(/z-index: 9;/); // 和实色带同一层、在底栏（10）下面
     expect(edge).toMatch(/pointer-events: none;/);

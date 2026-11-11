@@ -3,7 +3,8 @@
    材质分两档：首屏后备（--g-tint-fb + backdrop-filter）；减少透明效果（系统设置或 data-rt="1"）时实色。
    backdrop-filter 写在 .bar、.fab 自己身上，不写在里面的着色层：它们带 view-transition-name，按 Filter Effects 2 的 backdrop root 规则
    自己就是子元素的“背景根”，子元素的 backdrop-filter 只能看到 .bar 里面（什么都没有），等于没模糊（11-06 底栏透明度排查第二轮根因 2）。
-   内容副本那一档按需下载后接管（另做）。 */
+   内容副本那一档按需下载后接管（另做）。
+   bottom 减去 --vh-gap（台账 Q-13“导航给我焊死在下面”，platform/viewport.ts 写）：iOS 主屏幕版布局视口少了顶部安全区那段时补到屏幕最底，平时是 0 */
 .bar,
 .fab {
   position: fixed;
@@ -21,7 +22,7 @@
 .bar {
   left: 14px;
   right: 94px;
-  bottom: calc(8px + var(--inset-bottom));
+  bottom: calc(8px + var(--inset-bottom) - var(--vh-gap, 0px));
   display: flex;
   gap: 2px;
   height: 62px;
@@ -31,7 +32,7 @@
 
 .fab {
   right: 14px;
-  bottom: calc(6px + var(--inset-bottom));
+  bottom: calc(6px + var(--inset-bottom) - var(--vh-gap, 0px));
   display: grid;
   place-items: center;
   width: 66px;

@@ -52,18 +52,24 @@ html[data-app] {
 
   /* 浮条（撤销条等）统一的底部位置（K8 方案复审，主持人 11-05 定由前端 B 定义）：底栏上沿往上一点（安全区 + 118px）；
      键盘弹着时 --kb 是键盘高度，浮条贴在键盘上沿，取两者大的。--undo-h 是撤销条高度，叠放时往上让。
-     6 处浮条改用这两个变量由前端 A 做 K8 时一起改；宽屏侧栏（≥ 900px）没有底栏，在侧栏那段媒体查询里覆盖 --dock-bottom */
-  --dock-bottom: max(calc(var(--inset-bottom) + 118px), var(--kb, 0px));
+     6 处浮条改用这两个变量由前端 A 做 K8 时一起改；宽屏侧栏（≥ 900px）没有底栏，在侧栏那段媒体查询里覆盖 --dock-bottom
+     减 --vh-gap（台账 Q-13 焊死，独立验证 11-11 建议 1）：布局视口少顶部安全区时浮条和底栏一起补到屏幕底，间距不变 */
+  --dock-bottom: max(calc(var(--inset-bottom) + 118px - var(--vh-gap, 0px)), var(--kb, 0px));
   --undo-h: 56px;
+
+  /* 随手记底部输入行键盘没弹时往下挪（负责人 11-11“随手记的输入框再往下一点，感觉不太协调”：原来离底栏上沿约 48pt，挪 36 后留 12）；键盘弹着时归 0 */
+  --inrow-drop: 36px;
 }
 
 /* 键盘弹着（<html data-kbo>，platform/viewport.ts，Q-9 11-11）：底栏、“＋”这时藏着（FA-7 第 3 项），浮条（打字条、随手记输入行等）直接贴键盘上沿，
    不再留出底栏那 118px。浏览器里 --kb 是键盘压住的高度；iOS 主屏幕版键盘把布局视口本身压矮，布局视口下沿就是键盘上沿，--kb 不写（0） */
 :root[data-kbo] {
-  --dock-bottom: var(--kb, 0px);
+  /* --caret-lift：台账 Q-8 光标对齐试验对齐后布局视口比可视区多出来的那段（platform/caret-align.ts 写，平时没有） */
+  --dock-bottom: calc(var(--kb, 0px) + var(--caret-lift, 0px));
 
   /* 随手记底部输入行键盘弹着时离辅助条再高一点（负责人 11-11“随手记输入框再距离辅助框再高一点”，原来只隔约 12pt） */
   --inrow-kb-gap: 12px;
+  --inrow-drop: 0px;
 }
 
 /* 同步提示卡显示着（<html data-sn-card>，SyncNoticeHost 写 --sn-h = 卡的实际高度）：页底留白至少让到卡上沿再加 8px，

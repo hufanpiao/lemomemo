@@ -1,6 +1,6 @@
 // iOS 主屏幕版键盘把布局视口本身压矮（Q-9，viewport.ts 的主屏幕版那条、只对 iPhone）和 editableFocused（从 remind-platform.test.ts 拆出来，11-11）
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createKeyboardWatcher, editableFocused, fullHeight, isIPhone } from '../viewport.ts';
+import { createKeyboardWatcher, editableFocused, fullHeight, GAP_MAX_PX, GAP_VAR, HOLD_MS, isIPhone } from '../viewport.ts';
 
 describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 preview.259：innerHeight 956→542，可视区跟着 542）', () => {
   const mk = (o: { standalone?: boolean; editing?: boolean; phone?: boolean } = {}) => {
@@ -28,6 +28,7 @@ describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 pr
       editing: () => editing,
       full: () => 956,
       phone: () => o.phone ?? true,
+      now: () => Date.now(),
     });
     const set = (h: number) => {
       inner = h;
@@ -37,7 +38,7 @@ describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 pr
     return { set, w, attrs, style, docH, setEditing: (v: boolean) => (editing = v) };
   };
 
-  it('输入框聚焦、innerHeight 956→542：算键盘弹着（高 414），--kb 不写（布局视口下沿就是键盘上沿），根节点打 data-kbo；收起（回 895 或 956）恢复', () => {
+  it('输入框聚焦、innerHeight 956→542：算键盘弹着（高 414），--kb 不写（布局视口下沿就是键盘上沿），根节点打 data-kbo；收起时 data-kbo 马上拿掉，回到整屏才对订阅者报收起（Q-13）', () => {
     const { set, w, attrs, style } = mk();
     const fn = vi.fn();
     w.watch(fn);
@@ -47,8 +48,85 @@ describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 pr
     expect(attrs.get('data-kbo')).toBe('1');
     expect(style.setProperty).not.toHaveBeenCalled();
     set(895);
-    expect(fn).toHaveBeenLastCalledWith(false, 0);
+    expect(fn).not.toHaveBeenCalledWith(false, 0);
+    expect(w.isOpen()).toBe(true);
     expect(attrs.has('data-kbo')).toBe(false);
+    set(956);
+    expect(fn).toHaveBeenLastCalledWith(false, 0);
+    expect(w.isOpen()).toBe(false);
+  });
+
+  it('Q-13 收起后暂缓：innerHeight 一直停在 895（Gap fix 关着等），最多 HOLD_MS 就报收起', () => {
+    vi.useFakeTimers();
+    try {
+      const { set, w } = mk();
+      const fn = vi.fn();
+      w.watch(fn);
+      set(542);
+      set(895);
+      expect(fn).not.toHaveBeenCalledWith(false, 0);
+      vi.advanceTimersByTime(HOLD_MS - 1);
+      expect(w.isOpen()).toBe(true);
+      vi.advanceTimersByTime(1);
+      expect(fn).toHaveBeenLastCalledWith(false, 0);
+      expect(w.isOpen()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('Q-13 暂缓只在主屏幕版 iPhone：浏览器里收键盘照旧马上报收起', () => {
+    const { set, w } = mk({ standalone: false });
+    const fn = vi.fn();
+    w.watch(fn);
+    set(542);
+    set(895);
+    expect(w.isOpen()).toBe(false);
+  });
+
+  it('Q-13 焊死：键盘没弹、没在输入、inner 比整屏少 5～100 才写 --vh-gap；iPad、差太多、正在输入（外接键盘快捷条）都不写', () => {
+    const gapCalls = (style: { setProperty: ReturnType<typeof vi.fn> }) => style.setProperty.mock.calls.filter((c) => c[0] === GAP_VAR);
+    const a = mk({ editing: false });
+    a.w.watch(vi.fn());
+    a.set(895);
+    expect(gapCalls(a.style).at(-1)).toEqual([GAP_VAR, '61px']);
+    a.set(956);
+    expect(a.style.removeProperty).toHaveBeenCalledWith(GAP_VAR);
+    const ipad = mk({ editing: false, phone: false });
+    ipad.w.watch(vi.fn());
+    ipad.set(895);
+    expect(gapCalls(ipad.style)).toEqual([]);
+    const far = mk({ editing: false });
+    far.w.watch(vi.fn());
+    far.set(956 - GAP_MAX_PX - 1);
+    expect(gapCalls(far.style)).toEqual([]);
+    const typing = mk({ editing: true });
+    typing.w.watch(vi.fn());
+    typing.set(895);
+    expect(gapCalls(typing.style)).toEqual([]);
+  });
+
+  it('Q-13 暂缓期间键盘又弹起：照旧报弹着；取消订阅清掉计时器、isOpen 复位', () => {
+    vi.useFakeTimers();
+    try {
+      const { set, w } = mk();
+      const fn = vi.fn();
+      const off = w.watch(fn);
+      set(542);
+      set(895);
+      expect(w.isOpen()).toBe(true);
+      const before = fn.mock.calls.length;
+      set(542);
+      expect(fn.mock.calls.length).toBe(before + 1);
+      expect(fn).toHaveBeenLastCalledWith(true, 414);
+      set(895);
+      expect(vi.getTimerCount()).toBe(1);
+      off();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(w.isOpen()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('冷启动那个错的 895（只差顶部安全区 61）不算键盘，哪怕输入框聚焦着', () => {
@@ -72,6 +150,9 @@ describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 pr
     expect(w.isOpen()).toBe(true);
     setEditing(false);
     docH.get('focusout')?.();
+    // Q-13：焦点走了、但布局视口还没回到整屏，先暂缓（底栏继续藏）；回到整屏才报收起
+    expect(w.isOpen()).toBe(true);
+    set(956);
     expect(w.isOpen()).toBe(false);
     expect(fn).toHaveBeenLastCalledWith(false, 0);
   });

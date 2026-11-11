@@ -24,7 +24,7 @@
 .band {
   position: fixed;
   right: 0;
-  bottom: 0;
+  bottom: calc(0px - var(--vh-gap, 0px));
   left: 0;
   z-index: 9;
   height: calc(8px + var(--band-fade) + var(--inset-bottom));
@@ -55,7 +55,7 @@
 
   position: fixed;
   right: 0;
-  bottom: calc(6px + var(--inset-bottom));
+  bottom: calc(6px + var(--inset-bottom) - var(--vh-gap, 0px));
   left: 0;
   z-index: 9;
   height: calc(64px + var(--edge-fade));
