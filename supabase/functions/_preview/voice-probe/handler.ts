@@ -9,7 +9,7 @@
 //   ⑤ 自己验 JWT（auth.getUser），user_id 不在写死的白名单里、令牌无效一律 404（不说是哪一种）；
 //   ⑥ 模型只认 Q6 的两个，由请求头 X-Model 指定、没有默认值，不对回 400；
 //   ⑦ Content-Type 照正式 ai-voice：去参数、转小写，只认 4 种，不在回 415（另回显收到的原始标注）；
-//   ⑧ 边读边计数 ≤ 600 KB，超了中断回 413；空的回 400；
+//   ⑧ 边读边计数 ≤ shared 的 AI_AUDIO_MAX_BYTES（index.ts 从生成副本注入），超了中断回 413；空的回 400；
 //   ⑨ 每天额度：经 service role 的 private.take_rate 记 voice_probe:global:<太平洋日期>，≤ 100 次，超了 429、不重试；
 //   ⑩ 调 Gemini（密钥只在 x-goog-api-key 请求头，由 _shared/ai/gemini.ts 管；15 秒超时），只要转写。11-11 起回 503 重试一次
 //      （_shared/ai/retry.ts，两次合计不超过 15 秒；iPhone 实测 40 次里 4 次 503），重试过的返回体带 retried: true。

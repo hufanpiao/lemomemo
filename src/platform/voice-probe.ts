@@ -5,6 +5,7 @@
 // • 同一段录音按两种 Content-Type 标注各传一次（iPhone 的 AAC：audio/mp4、audio/aac；电脑 Edge 的 WebM：audio/webm、audio/webm;codecs=opus）
 // • 回包只取约定的几个字段（mime、raw_type、bytes、gemini_http、gemini_ms、total_ms、result、transcript、model、error），别的不显示
 // 网络和 MediaRecorder 按 A12、A13 只能写在 platform
+import { AI_AUDIO_MAX_BYTES } from '../../shared/schema/ai.ts';
 import { buildInfo } from './env.ts';
 import { appFetch } from './http.ts';
 import { readSessionAccessToken } from './session.ts';
@@ -18,8 +19,8 @@ export const PROBE_TYPES = ['audio/mp4', 'audio/aac', 'audio/webm', 'audio/webm;
 /** 一段最长录多久（同正式录音的 50 秒） */
 export const PROBE_MAX_MS = 50_000;
 export const PROBE_UPLOAD_TIMEOUT_MS = 30_000;
-/** 服务器收的上限（_preview/voice-probe/handler.ts ⑧：超了回 413）；iPhone 的 AAC 录满 50 秒可能超 */
-export const PROBE_MAX_BYTES = 600 * 1024;
+/** 服务器收的上限（_preview/voice-probe/handler.ts ⑧：超了回 413，两边都用 shared 的 AI_AUDIO_MAX_BYTES）；iPhone 的 AAC 录满 50 秒可能超 */
+export const PROBE_MAX_BYTES = AI_AUDIO_MAX_BYTES;
 /** 到上限的九成就在页面上提示 */
 export const PROBE_WARN_BYTES = Math.round(PROBE_MAX_BYTES * 0.9);
 const MAX_TRANSCRIPT = 2000;
