@@ -5,7 +5,7 @@
 import { todayOf } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { convertedToAfter, convertRow, type ConvertKind } from '../../../../shared/logic/notes/note-convert.ts';
-import { saveOutcome, type SaveOutcome } from '../../../core/edit-save.ts';
+import { saveOutcome, saveUndone, type SaveOutcome } from '../../../core/edit-save.ts';
 import { readonlyIds } from '../../../core/store.ts';
 import { write } from '../../../core/write.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -57,6 +57,6 @@ export async function convertNote(note: Row, kind: ConvertKind, at: ConvertAt, d
   const moved = await saveOutcome(() => w.patch('notes', note.id, patch, { deps: [{ table: r.table, id }] }));
   if (moved === 'saved') return done({ ok: true, table: r.table, id, truncated: r.truncated });
   // 还没发出的 insert 会和这笔撤销抵消；已发出的写 undone（同“＋”整批撤回）
-  const undone = await saveOutcome(() => w.patch(r.table, id, { undone: true, updated_at: at.now }));
+  const undone = await saveUndone(r.table, id, at.now, w);
   return done(undone === 'saved' ? { ok: false, reason: moved } : { ok: false, reason: moved, left: { table: r.table, id } });
 }

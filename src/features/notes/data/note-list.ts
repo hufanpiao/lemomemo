@@ -58,7 +58,11 @@ export interface CategoryCount {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-const alive = (r: Row): boolean => r['deleted_at'] == null && r['undone'] !== true && r['is_private'] !== true;
+/** 行还在（没删、没撤销） */
+const present = (r: Row): boolean => r['deleted_at'] == null && r['undone'] !== true;
+const alive = (r: Row): boolean => present(r) && r['is_private'] !== true;
+/** 活着的分类：还在、没合并进别的分类（“活着的分类”只在这里定） */
+export const liveCategory = (c: Row): boolean => present(c) && c['merged_into'] == null;
 
 /** 标题和摘要：有标题就用标题、摘要是正文；没有标题取正文第一行当标题，后面的（第二行起）当摘要 */
 export function titleAndSummary(title: unknown, body: unknown): { title: string; summary: string } {
@@ -92,19 +96,23 @@ function categoryColors(categories: readonly Row[]): Map<string, string | null> 
 /** 活着的分类（没删、没合并进别的分类）：id → 名字 */
 export function categoryNames(categories: readonly Row[]): Map<string, string> {
   const out = new Map<string, string>();
-  for (const c of categories) if (c['deleted_at'] == null && c['undone'] !== true && c['merged_into'] == null) out.set(c.id, str(c['name']));
+  for (const c of categories) if (liveCategory(c)) out.set(c.id, str(c['name']));
   return out;
 }
 
-/** 条目的 category_id → 归到哪个活着的分类：顺着 merged_into 走（合并过的归到留下的那个），走不到活着的为 null */
+/**
+ * 条目的 category_id → 归到哪个活着的分类：顺着 merged_into 走（合并过的归到留下的那个），走不到活着的为 null。
+ * “条目归哪个分类”只在这里定：列表、分类胶囊、编辑页（note-edit.ts 的 formOf）都经它
+ */
 export function categoryResolver(categories: readonly Row[]): (id: unknown) => string | null {
-  const names = categoryNames(categories);
-  const into = new Map(categories.map((c) => [c.id, c['deleted_at'] == null && c['undone'] !== true ? c['merged_into'] : null]));
+  const byId = new Map(categories.map((c) => [c.id, c]));
   return (id) => {
     let cur = id;
     for (let hops = 0; typeof cur === 'string' && hops <= categories.length; hops++) {
-      if (names.has(cur)) return cur;
-      cur = into.get(cur);
+      const c = byId.get(cur);
+      if (!c || !present(c)) return null;
+      if (liveCategory(c)) return cur;
+      cur = c['merged_into'];
     }
     return null;
   };
@@ -114,7 +122,7 @@ export function categoryResolver(categories: readonly Row[]): (id: unknown) => s
 export function imagesByNote(images: readonly Row[]): Map<string, NoteImage[]> {
   const out = new Map<string, NoteImage[]>();
   for (const r of images) {
-    if (r['deleted_at'] != null || r['undone'] === true || r['bucket'] !== 'images') continue;
+    if (!present(r) || r['bucket'] !== 'images') continue;
     const noteId = str(r['note_id']);
     const path = str(r['path']);
     if (noteId === '' || path === '') continue;

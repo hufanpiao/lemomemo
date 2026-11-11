@@ -10,6 +10,12 @@ import { z } from 'zod';
 /** 改了本文件的形状或枚举，就把它加 1（2.6：本机库按 schema_v 整表重拉） */
 export const SCHEMA_V = 3;   // 2：B0 集成按实际授权补列、加 devices；3：宽容读取补登记 notes、categories 的枚举列（架构 0.57，跟 B4 前端同一版发布）
 
+/** events、todos 各文字列的上限（UTF-16 单元，同 z.string().max 的口径；截断用 shared/logic/short.ts 的 cutGraphemes） */
+export const ITEM_TITLE_MAX = 160;
+export const ITEM_NOTE_MAX = 2000;
+export const RAW_TEXT_MAX = 2000;
+export const PROJECT_MAX = 40;
+
 const uuid = z.uuid();
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const hm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
@@ -45,16 +51,16 @@ const shortBy = z.enum(['ai', 'user']).nullable();
 export const eventsWrite = z
   .strictObject({
     id: uuid,
-    title: z.string().min(1).max(160),
+    title: z.string().min(1).max(ITEM_TITLE_MAX),
     date: dateStr,
     time: hm.nullable(),
     // 和迁移 20261031110000 的 events_tz_fmt 一致：≤ 64 字、只许字母数字和 _ + / -（IANA 时区名都在里面）
     tz: z.string().min(1).max(64).regex(/^[A-Za-z0-9_+/-]+$/).nullable(),
     duration_min: z.number().int().min(1).max(1440),
-    project: z.string().max(40),
-    note: z.string().max(2000),
+    project: z.string().max(PROJECT_MAX),
+    note: z.string().max(ITEM_NOTE_MAX),
     source,
-    raw_text: z.string().max(2000),
+    raw_text: z.string().max(RAW_TEXT_MAX),
     location: z.string().max(200),
     short: z.string().max(32).nullable(),
     short_by: shortBy,
@@ -75,14 +81,14 @@ export const eventsWrite = z
 /** todos 的客户端可写列（附录 A） */
 export const todosWrite = z.strictObject({
   id: uuid,
-  title: z.string().min(1).max(160),
+  title: z.string().min(1).max(ITEM_TITLE_MAX),
   done: z.boolean(),
   due: dateStr.nullable(),
   important: z.boolean(),
-  project: z.string().max(40),
-  note: z.string().max(2000),
+  project: z.string().max(PROJECT_MAX),
+  note: z.string().max(ITEM_NOTE_MAX),
   source,
-  raw_text: z.string().max(2000),
+  raw_text: z.string().max(RAW_TEXT_MAX),
   batch_id: uuid.nullable(),
   from_note_id: uuid.nullable(),
   from_anniv_id: uuid.nullable(),

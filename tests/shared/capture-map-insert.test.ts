@@ -70,3 +70,21 @@ describe('capture-map 新增行逐行按新增口径校验', () => {
     expect(captureRow(item({ kind: 'anniv', anniv: null }), ctx())).toBeNull();
   });
 });
+
+describe('captureRow 的截断：按 UTF-16 单元截（同 insertSchema 的 max）、不截半个字', () => {
+  const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  const E = '😀';
+  for (const kind of ['event', 'todo'] as const) it(`${kind}：标题、备注、原话、项目都超长且全是 emoji → 过 insertSchema、是原文前缀、没有落单的代理对`, () => {
+    const long = { title: E.repeat(200), body: E.repeat(1500), project: E.repeat(30) };
+    const r = captureRow(item({ kind, ...long }), ctx({ rawText: E.repeat(1500) }));
+    if (!r || r.table === 'anniversaries') throw new Error('no_row');
+    const p = insertSchema(r.table).safeParse(r.row);
+    expect(p.success, JSON.stringify(p.error?.issues)).toBe(true);
+    for (const [k, src] of [['title', long.title], ['note', long.body], ['raw_text', E.repeat(1500)], ['project', long.project]] as const) {
+      const v = r.row[k];
+      expect(src.startsWith(v), k).toBe(true);
+      expect(lone.test(v), k).toBe(false);
+    }
+    expect([r.row.title.length, r.row.note.length, r.row.raw_text.length, r.row.project.length]).toEqual([160, 2000, 2000, 40]);
+  });
+});

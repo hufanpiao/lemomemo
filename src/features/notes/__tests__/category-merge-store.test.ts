@@ -10,6 +10,7 @@ import type { WriteResult } from '../../../core/write.ts';
 import {
   dismissedPairs, dismissMerge, MERGE_DISMISSED_KEY, MERGE_DISMISSED_MAX, mergeCategories, openMergePairs, withDismissed, type MergeDeps,
 } from '../data/category-merge-store.ts';
+import { formOf, patchOf } from '../data/note-edit.ts';
 import { categoryCounts, noteItems, type Row } from '../data/note-list.ts';
 import { boot, serverNote, setupImageTests, uid } from './note-images-kit.tsx';
 
@@ -21,6 +22,9 @@ const set = (value: unknown, over: Record<string, unknown> = {}): SettingRow => 
 const note = (id: string, category: string | null, over: Record<string, unknown> = {}): Row => ({
   id, title: null, body: id, is_private: false, category_id: category, deleted_at: null, undone: false, created_at: 1, ...over,
 });
+/** settings.value 存成 jsonb 后的文字形式（逗号后有空格）；jsonb 存储不会比它大，库约束 pg_column_size(value) <= 4096 拿它当上限量 */
+const jsonbText = (v: readonly (readonly [string, string])[]): string => `[${v.map(([a, b]) => `["${a}", "${b}"]`).join(', ')}]`;
+const bytes = (s: string): number => new TextEncoder().encode(s).length;
 
 describe('dismissedPairs / withDismissed', () => {
   it('没存、不是数组 → 空；坏项（不是两个字符串、两个一样、空串）丢掉，其余照留；反着存的读出来 id 小的在前', () => {
@@ -41,6 +45,12 @@ describe('dismissedPairs / withDismissed', () => {
     expect(next[0]).toEqual(full[1]);
     expect(next[MERGE_DISMISSED_MAX - 1]).toEqual([uid(998), uid(999)]);
   });
+  it(`封顶后的值按 jsonb 文字量不超过 4096 字节（settings.value 的库约束）`, () => {
+    const full = Array.from({ length: MERGE_DISMISSED_MAX + 5 }, (): [string, string] => [crypto.randomUUID(), crypto.randomUUID()])
+      .reduce<readonly [string, string][]>((l, [a, b]) => withDismissed(l, a, b), []);
+    expect(full).toHaveLength(MERGE_DISMISSED_MAX);
+    expect(bytes(jsonbText(full))).toBeLessThan(4097);
+  });
 });
 
 describe('openMergePairs（TC-B4-07 出提示）', () => {
@@ -54,8 +64,14 @@ describe('openMergePairs（TC-B4-07 出提示）', () => {
     expect(openMergePairs(cats, [set([[A, B]], { deleted_at: 9 })])).toHaveLength(1);
     expect(openMergePairs(cats, [set([[A, B]], { undone: true })])).toHaveLength(1);
   });
-  it('undone 的分类不参加', () => {
+  it('undone、删了的分类不参加', () => {
     expect(openMergePairs([cats[0] as Row, cat(B, '购物清单', { undone: true })], [])).toEqual([]);
+    expect(openMergePairs([cats[0] as Row, cat(B, '购物清单', { sort: 1, deleted_at: 5 })], [])).toEqual([]);
+    expect(openMergePairs([cat(A, '购物', { deleted_at: 5 }), cats[1] as Row], [])).toEqual([]);
+  });
+  it('留哪个按分类的 sort：sort 小的名字反而长，也留 sort 小的', () => {
+    expect(openMergePairs([cat(A, '购物清单', { sort: 0 }), cat(B, '购物', { sort: 1 })], [])).toEqual([{ keep: A, merge: B, why: 'contains' }]);
+    expect(openMergePairs([cat(A, '购物清单', { sort: 2 }), cat(B, '购物', { sort: 1 })], [])).toEqual([{ keep: B, merge: A, why: 'contains' }]);
   });
   it('dismissMerge：writer.save 只调一次，键是 notes.merge_dismissed，值是原有各对加上新的一对', async () => {
     const saved: [string, unknown][] = [];
@@ -95,6 +111,24 @@ describe('mergeCategories（TC-B4-07 合并后条目归到新分类）', () => {
     expect(items.filter((i) => i.id.startsWith('b')).map((i) => [i.id, i.categoryId])).toEqual([['b1', A], ['b2', A], ['b3', A]]);
     expect(noteItems(notes, after, TZ, A)).toHaveLength(4);
     expect(categoryCounts(notes, after, 'zh-CN').map((c) => [c.id, c.count])).toEqual([[A, 4]]);
+  });
+
+  it('合并完再算提示：这一对不再出', async () => {
+    const s = stub();
+    await mergeCategories({ keep: A, merge: B }, cats, s.deps);
+    expect(openMergePairs(cats, [])).toHaveLength(1);
+    expect(openMergePairs(applied(cats, s.calls), [])).toEqual([]);
+  });
+
+  it('编辑页读的分类（formOf）也归到 A，和列表一致；不动分类时保存不写分类列', async () => {
+    const s = stub();
+    await mergeCategories({ keep: A, merge: B }, cats, s.deps);
+    const after = applied(cats, s.calls);
+    const row = note('b1', B);
+    const f = formOf(row, after);
+    expect(f.category_id).toBe(A);
+    expect(patchOf(row, f, { ...f, title: '改了标题' }, 9)).toEqual({ title: '改了标题', updated_at: 9 });
+    expect(formOf(note('x', B), [cat(A, '甲', { deleted_at: 3 }), cat(B, '乙', { merged_into: A })]).category_id).toBeNull();
   });
 
   it('删除 → 合并 → 恢复：恢复的那条归到 A；合并后才写进来指向 B 的（别的设备、AI）也归到 A', async () => {
@@ -162,5 +196,7 @@ describe('mergeCategories：真 outbox（假 IndexedDB 冷启动）', () => {
     expect(q.map((i) => [i.op, i.table, i.id, i.data, i.deps])).toEqual([['patch', 'categories', B, { merged_into: A }, []]]);
     const items = noteItems(collection<Row>('notes').getSnapshot(), collection<Row>('categories').getSnapshot(), TZ);
     expect(items.map((i) => i.categoryId)).toEqual([A, A]);
+    // 编辑页不传分类时读本机集合，同样归到 A
+    expect(formOf({ ...serverNote(1), category_id: B }).category_id).toBe(A);
   });
 });

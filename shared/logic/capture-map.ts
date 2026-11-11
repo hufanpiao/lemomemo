@@ -12,7 +12,9 @@
 // 输出的 events、todos 行原样能过 shared/schema/rows.ts 的 insertSchema（tests/shared/capture-map-insert.test.ts 核对）。纯函数，不读时钟（now 由调用方传）。
 import type { DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
+import { ITEM_NOTE_MAX, ITEM_TITLE_MAX, PROJECT_MAX, RAW_TEXT_MAX } from '../schema/rows.ts';
 import { DEFAULT_TODO_REMIND_TIME } from './remind.ts';
+import { cutGraphemes } from './short.ts';
 
 /** 待办截止前多少分钟提醒的默认值（R-183，0.29 续第 124 条） */
 export const TODO_REMIND_BEFORE_DEFAULT = 60;
@@ -58,7 +60,7 @@ export interface CaptureCtx {
   tz: Tz;
   /** page：打字；voice：录音；chat：经连接码（claude-intake） */
   source: 'page' | 'voice' | 'chat';
-  /** 原话（语音是转写），截到 2000 字存进 raw_text */
+  /** 原话（语音是转写），截到 RAW_TEXT_MAX 存进 raw_text */
   rawText: string;
   /** ai：AI 识别的（short 记 short_by = 'ai'）；rule：本机规则的（不写 short） */
   origin: 'ai' | 'rule';
@@ -90,7 +92,8 @@ export interface AnnivRow {
   month: number; day: number; is_leap: boolean; year: number | null; note: string; created_at: number; updated_at: number;
 }
 
-const cut = (s: string, n: number): string => [...s].slice(0, n).join('');
+// 各文字列的截断只在这里做：按 UTF-16 单元（同 insertSchema 的 max）、不截半个字
+const cut = cutGraphemes;
 
 function shortOf(item: CaptureItem, ctx: CaptureCtx): { short: string | null; short_by: 'ai' | null } {
   if (ctx.origin !== 'ai' || !item.short) return { short: null, short_by: null };
@@ -111,7 +114,7 @@ export function annivRow(item: CaptureItem, ctx: CaptureCtx): AnnivRow | null {
     day: a.day,
     is_leap: a.calendar === 'lunar' ? a.is_leap : false,
     year: a.year,
-    note: cut(item.body ?? '', 2000),
+    note: cut(item.body ?? '', ITEM_NOTE_MAX),
     created_at: ctx.now,
     updated_at: ctx.now,
   };
@@ -119,16 +122,17 @@ export function annivRow(item: CaptureItem, ctx: CaptureCtx): AnnivRow | null {
 
 /** 一条识别结果 → 一行；随手记（B4）和缺 anniv 的纪念日返回 null */
 export function captureRow(item: CaptureItem, ctx: CaptureCtx): CaptureRow | null {
-  const raw = cut(ctx.rawText, 2000);
-  const project = cut(item.project ?? '', 40);
-  const note = cut(item.body ?? '', 2000);
+  const raw = cut(ctx.rawText, RAW_TEXT_MAX);
+  const project = cut(item.project ?? '', PROJECT_MAX);
+  const note = cut(item.body ?? '', ITEM_NOTE_MAX);
+  const title = cut(item.title, ITEM_TITLE_MAX);
   switch (item.kind) {
     case 'event': {
       const time = item.time;
       return {
         table: 'events',
         row: {
-          id: ctx.id, title: item.title, date: item.date ?? ctx.today, time, tz: time === null ? null : ctx.tz,
+          id: ctx.id, title, date: item.date ?? ctx.today, time, tz: time === null ? null : ctx.tz,
           duration_min: item.duration_min ?? EVENT_DURATION_DEFAULT, project, note, source: ctx.source, raw_text: raw, location: '',
           ...shortOf(item, ctx), push_show_title: null, batch_id: ctx.batchId,
           remind_min: time === null ? null : EVENT_REMIND_MIN_DEFAULT, remind_days: null,
@@ -142,7 +146,7 @@ export function captureRow(item: CaptureItem, ctx: CaptureCtx): CaptureRow | nul
       return {
         table: 'todos',
         row: {
-          id: ctx.id, title: item.title, done: false, due, important: item.important, project, note, source: ctx.source, raw_text: raw,
+          id: ctx.id, title, done: false, due, important: item.important, project, note, source: ctx.source, raw_text: raw,
           batch_id: ctx.batchId, from_note_id: null, from_anniv_id: null, ...shortOf(item, ctx), done_at: 0, remind_days: null,
           remind_time: DEFAULT_TODO_REMIND_TIME, due_time: dueTime, remind_before_min: dueTime === null ? null : TODO_REMIND_BEFORE_DEFAULT,
           push_show_title: null, notified_for: null, snooze_at: null, created_at: ctx.now, updated_at: ctx.now,

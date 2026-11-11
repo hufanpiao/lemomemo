@@ -1,5 +1,5 @@
 // 随手记新建、编辑的数据逻辑（B4 S2；定稿线框 s7 底部输入行、s8 编辑器；架构 5.2 第 2839 行）
-// • 表单 ↔ 行：formOf 取编辑器要的三个字段；newNoteRow 造新建的整行（insert 要整行可写列）
+// • 表单 ↔ 行：formOf 取编辑器要的三个字段（分类经 note-list.ts 的 categoryResolver，合并掉的归到留下的那个）；newNoteRow 造新建的整行
 // • 新建时先用本机规则给一个分类（classify.ts 的 ruleCategory，S5 归后端，现在是占位）：分到了写 category_source = 'rule'，没分到写 'none'。
 //   ai_status 不写：它是系统列，客户端无权写（架构 5.2 第 2797 行 M5、table_meta 的 system_cols），库里 insert 时默认就是 'pending'，
 //   等 ai-classify 来分（任务单 S2 的“保存时写 ai_status = pending”按这个落地）
@@ -7,6 +7,8 @@
 //   用户手动改分类：同一个 patch 写 category_id、category_source = 'manual'、category_seen = true（之后 AI 永远不改，S2）
 // • 标题可空（库里 title 允许 null）：空标题存 null；标题和正文都空时不保存（useEditRecord 的 titleOf 为空）
 // 纯 TS：不准 import React（A1）
+import { collection } from '../../../core/store.ts';
+import { categoryResolver, type Row } from './note-list.ts';
 
 export interface NoteForm {
   title: string;
@@ -19,8 +21,9 @@ export const BODY_MAX = 20000;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
-export function formOf(row: Readonly<Record<string, unknown>>): NoteForm {
-  return { title: str(row['title']), body: str(row['body']), category_id: typeof row['category_id'] === 'string' ? row['category_id'] : null };
+/** categories 不传时读本机集合（编辑页经 useEditRecord 只传行） */
+export function formOf(row: Readonly<Record<string, unknown>>, categories: readonly Row[] = collection<Row>('categories').getSnapshot()): NoteForm {
+  return { title: str(row['title']), body: str(row['body']), category_id: categoryResolver(categories)(row['category_id']) };
 }
 
 export function emptyForm(): NoteForm {

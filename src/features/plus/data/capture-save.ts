@@ -11,6 +11,7 @@ import { todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { captureRow, type CaptureCtx, type CaptureItem, type CaptureRow } from '../../../../shared/logic/capture-map.ts';
 import { remindAtOf } from '../../../../shared/logic/remind.ts';
+import { saveUndone } from '../../../core/edit-save.ts';
 import { remindLive, todoRemindAfter, todoRemindFields } from '../../../core/remind-flag.ts';
 import { write, type WriteFailReason, type WriteResult } from '../../../core/write.ts';
 
@@ -111,8 +112,7 @@ export async function undoRefs(refs: readonly SavedRef[], now: number, w: Writer
       left.push(ref);
       continue;
     }
-    const res = await w.patch(ref.table, ref.id, { undone: true, updated_at: now });
-    if (!res.ok) left.push(ref);
+    if ((await saveUndone(ref.table, ref.id, now, w)) !== 'saved') left.push(ref);
   }
   return left;
 }

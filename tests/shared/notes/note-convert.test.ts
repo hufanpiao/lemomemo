@@ -117,6 +117,25 @@ describe('convertRow：没有标题的随手记（底部输入行记下的都是
   });
 });
 
+describe('convertRow：显式标题超长', () => {
+  it('标题 159 个 a + emoji + 更多：截成 159 个 a、不留落单的代理对、过 insertSchema；标题丢了内容 → truncated 为 true；备注照旧是正文', () => {
+    const title = `${'a'.repeat(159)}😀后面还有`;
+    for (const kind of ['todo', 'event'] as const) {
+      const r = convertRow(note(title, 'x'), kind, ctx);
+      expect(r?.row.title).toBe('a'.repeat(159));
+      expect(lone.test(r?.row.title ?? '')).toBe(false);
+      expect(r?.row.note).toBe('x');
+      expect(r?.truncated).toBe(true);
+      expect(ok(kind === 'todo' ? 'todos' : 'events', r?.row)).toBe(true);
+    }
+  });
+  it('标题刚好 160 个单元：原样、truncated 为 false', () => {
+    const r = convertRow(note('a'.repeat(160), 'x'), 'todo', ctx);
+    expect(r?.row.title).toBe('a'.repeat(160));
+    expect(r?.truncated).toBe(false);
+  });
+});
+
 describe('convertRow：长正文截断', () => {
   it('正文 20000 字夹 emoji：备注不超过 2000、是原文前缀、不截半个字，过 insertSchema；truncated 为 true', () => {
     const body = `${'记😀'.repeat(6666)}记记`;

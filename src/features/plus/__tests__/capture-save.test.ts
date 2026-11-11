@@ -1,5 +1,6 @@
 // 记下来、撤销（data/capture-save.ts；B3 任务单 FA-1；架构审 M5、M10；TC-B3-04、05）
 import { describe, expect, it, vi } from 'vitest';
+import { OutboxRejectError } from '../../../core/outbox.ts';
 import type { WriteResult } from '../../../core/write.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { insertSchema, type WritableTable } from '../../../../shared/schema/rows.ts';
@@ -120,5 +121,11 @@ describe('undoRefs：capture.undo(batch_id)', () => {
       ['todos', 't1', { undone: true, updated_at: NOW }],
     ]);
     expect(left).toEqual([{ table: 'anniversaries', id: 'a1' }]);
+  });
+  it('撤回那笔没写进去或被 outbox 拒（抛 OutboxRejectError）→ 记进没撤成的，不往外抛', async () => {
+    const w = writer();
+    w.patch.mockResolvedValueOnce(FAIL).mockRejectedValueOnce(new OutboxRejectError('readonly_row'));
+    const refs = [{ table: 'events', id: 'e1' }, { table: 'todos', id: 't1' }, { table: 'todos', id: 't2' }] as const;
+    expect(await undoRefs(refs, NOW, w)).toEqual([refs[0], refs[1]]);
   });
 });
