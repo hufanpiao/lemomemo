@@ -25,9 +25,6 @@ const hmOf = (min: number): string => {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 };
 
-/** 还在用的行：没删、没被撤销——判断只留一份，用 shared/logic/live-row.ts 的 isLiveRow（前端 B 日历审查建议 1） */
-export const isLive = (r: Row): boolean => isLiveRow(r);
-
 export interface EventOcc {
   kind: 'event';
   id: string;
@@ -72,7 +69,7 @@ export function eventsOn(rows: readonly Row[], day: DateStr, current: Tz, locale
   const byTitle = titleCompare(locale);
   const out: EventOcc[] = [];
   for (const r of rows) {
-    if (!isLive(r)) continue;
+    if (!isLiveRow(r)) continue;
     const o = eventOcc(r, current);
     if (o && o.date === day) out.push(o);
   }
@@ -197,7 +194,7 @@ export function lateTodos(rows: readonly Row[], now: number, current: Tz, locale
   const today = todayOf(now, current);
   const out: Late[] = [];
   for (const r of rows) {
-    if (!isLive(r)) continue;
+    if (!isLiveRow(r)) continue;
     const t = todoOcc(r);
     if (t.done || !t.due) continue;
     const days = diffDays(t.due, today);
@@ -213,7 +210,7 @@ export function todayTodos(rows: readonly Row[], now: number, current: Tz, local
   const today = todayOf(now, current);
   const out: TodoOcc[] = [];
   for (const r of rows) {
-    if (!isLive(r)) continue;
+    if (!isLiveRow(r)) continue;
     const t = todoOcc(r);
     if (t.due !== today) continue;
     if (!t.done && (dueAtOf(t, current) ?? Infinity) <= now) continue;

@@ -7,11 +7,12 @@ import { useCallback, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
-import { saveCapture, undoRefs, type SavedRef, type Writer } from '../data/capture-save.ts';
+import { saveCapture, undoRefs, type StoredRef, type Writer } from '../data/capture-save.ts';
 import { mergeItems, type TypePlan } from '../data/type-flow.ts';
 
 export interface BatchEntry {
-  ref: SavedRef;
+  /** 显示标题用 ref.title（库里存的，可能比 item.title 短），不用 item.title */
+  ref: StoredRef;
   item: AiItem;
 }
 

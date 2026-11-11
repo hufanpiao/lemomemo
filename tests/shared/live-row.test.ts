@@ -11,6 +11,18 @@ describe('isLiveRow', () => {
     expect(isLiveRow({ deleted_at: 5, undone: false })).toBe(false);
     expect(isLiveRow({ deleted_at: null, undone: true })).toBe(false);
   });
+  it('deleted_at、undone 各种取值（含没有这一列、类型不对的怪值）都和“deleted_at 为 null 或没有、undone 不是 true”一致', () => {
+    // 原来今天页、待办页各有一份对照（src/features/{today,todos}/__tests__/live-row.test.ts，11-12 随 isLive 包装一起删），并到这里
+    const VALUES: unknown[] = [undefined, null, 0, 1, 1700000000000, -1, '', '0', 'x', true, false, NaN, {}, []];
+    for (const d of VALUES) {
+      for (const u of VALUES) {
+        const r: Record<string, unknown> = {};
+        if (d !== undefined) r['deleted_at'] = d;
+        if (u !== undefined) r['undone'] = u;
+        expect(isLiveRow(r), JSON.stringify(r)).toBe((d === null || d === undefined) && u !== true);
+      }
+    }
+  });
 });
 
 describe('isLiveCategory', () => {

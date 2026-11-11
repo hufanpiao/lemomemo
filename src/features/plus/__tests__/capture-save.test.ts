@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { OutboxRejectError } from '../../../core/outbox.ts';
 import type { WriteResult } from '../../../core/write.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
-import { insertSchema, type WritableTable } from '../../../../shared/schema/rows.ts';
+import { ANNIV_NAME_MAX } from '../../../../shared/logic/capture-map.ts';
+import { insertSchema, ITEM_TITLE_MAX, type WritableTable } from '../../../../shared/schema/rows.ts';
 import { rowsOf, saveCapture, undoRefs, type Writer } from '../data/capture-save.ts';
 
 /** 2026-11-02 10:00 首尔 */
@@ -19,6 +20,8 @@ let n = 0;
 const ids = (): string => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
 const OK: WriteResult = { ok: true, item: null };
 const FAIL: WriteResult = { ok: false, reason: 'local_unavailable' };
+/** 写入桩某次调用的数据里某个字段 */
+const field = (v: unknown, k: string): unknown => (v as Record<string, unknown> | undefined)?.[k];
 
 function writer(fail: number | null = null): Writer & { insert: ReturnType<typeof vi.fn>; patch: ReturnType<typeof vi.fn> } {
   let i = 0;
@@ -103,6 +106,17 @@ describe('saveCapture', () => {
     expect(r).toEqual({ ok: false, reason: 'local_unavailable' });
     expect(w.patch).toHaveBeenCalledTimes(1);
     expect(w.patch.mock.calls[0]?.[2]).toEqual({ deleted_at: NOW, undone: true, updated_at: NOW });
+  });
+
+  it('交回的每一条带库里实际存的标题：超长的按 captureRow 截过（和写进去的 title 一样），纪念日是截过的 name', async () => {
+    const w = writer();
+    const long = '买'.repeat(ITEM_TITLE_MAX + 20);
+    const anniv = item({ kind: 'anniv', title: '生'.repeat(ANNIV_NAME_MAX + 5), anniv: { type: 'birthday', calendar: 'solar', month: 11, day: 5, is_leap: false, year: null } });
+    const r = await saveCapture({ items: [item({ title: long }), anniv], rawText: 'r', source: 'page', origin: 'rule', now: NOW, tz: TZ }, w, ids);
+    if (!r.ok) throw new Error('应当写进去');
+    expect(r.saved.map((s) => s.title)).toEqual(['买'.repeat(ITEM_TITLE_MAX), '生'.repeat(ANNIV_NAME_MAX)]);
+    expect(field(w.insert.mock.calls[0]?.[1], 'title')).toBe(r.saved[0]?.title);
+    expect(field(w.insert.mock.calls[1]?.[1], 'name')).toBe(r.saved[1]?.title);
   });
 
   it('什么都没认出来：nothing，不写', async () => {

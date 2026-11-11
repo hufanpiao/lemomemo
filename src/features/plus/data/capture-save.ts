@@ -40,9 +40,14 @@ export interface SavedRef {
   id: string;
 }
 
+/** 写进去的一条，带库里实际存的标题（captureRow 截过的；纪念日是 name）：提示条、卡片照这个显示，和库里一致 */
+export interface StoredRef extends SavedRef {
+  title: string;
+}
+
 export type SaveResult =
   /** at：每一条写进去的行对应 items 里第几条（随手记等没生成行的跳过） */
-  | { ok: true; batchId: string; saved: SavedRef[]; at: number[]; remind: boolean }
+  | { ok: true; batchId: string; saved: StoredRef[]; at: number[]; remind: boolean }
   | { ok: false; reason: WriteFailReason | 'nothing' };
 
 const newId = (): string => crypto.randomUUID();
@@ -86,7 +91,7 @@ export function rowsOf(input: SaveInput, ids: () => string = newId): { batchId: 
 export async function saveCapture(input: SaveInput, w: Writer = write, ids: () => string = newId): Promise<SaveResult> {
   const { batchId, rows, at } = rowsOf(input, ids);
   if (rows.length === 0) return { ok: false, reason: 'nothing' };
-  const saved: SavedRef[] = [];
+  const saved: StoredRef[] = [];
   let remind = false;
   for (const r of rows) {
     const flag = remindOf(r, input.now, input.tz);
@@ -98,7 +103,7 @@ export async function saveCapture(input: SaveInput, w: Writer = write, ids: () =
       await undoRefs(saved, input.now, w);
       return { ok: false, reason: res.reason };
     }
-    saved.push({ table: r.table, id: r.row.id });
+    saved.push({ table: r.table, id: r.row.id, title: r.table === 'anniversaries' ? r.row.name : r.row.title });
     remind ||= flag;
   }
   return { ok: true, batchId, saved, at, remind };

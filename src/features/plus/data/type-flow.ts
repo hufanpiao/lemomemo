@@ -208,7 +208,8 @@ export function splitConfirm(items: readonly AiItem[]): { ready: AiItem[]; ask: 
 
 /**
  * “拆错了，合并成一条”（架构 5.1）：整句原话当标题，类型、日子、时刻取第一条的；不带简称（原话不是 AI 起的简称）。
- * 调用方先整批撤销，再按新的一批存这一条。标题不在这里截：存盘前由 captureRow 统一按上限截（shared/logic/capture-map.ts）
+ * 调用方先整批撤销，再按新的一批存这一条。标题不在这里截：存盘前由 captureRow 统一按上限截（shared/logic/capture-map.ts），
+ * 提示条、卡片显示 saveCapture 交回的 StoredRef.title（截过的，和库里一致）
  */
 export function mergeItems(items: readonly AiItem[], rawText: string): AiItem | null {
   const first = items[0];

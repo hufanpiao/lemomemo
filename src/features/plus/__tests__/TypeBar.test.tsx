@@ -2,6 +2,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
+import { cutGraphemes } from '../../../../shared/logic/short.ts';
+import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
 import type { WriteResult } from '../../../core/write.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { setConsentStale } from '../../../kit/state/consent-fresh.ts';
@@ -195,6 +197,28 @@ describe('打字条', () => {
       fireEvent.click(screen.getByRole('button', { name: '撤销' }));
     });
     expect(writer.patch).toHaveBeenCalledTimes(4);
+  });
+
+  it('合并成一条时原话超过标题上限：提示条显示的是存进库的截短标题，不是整句原话', async () => {
+    const { input, writer } = setup();
+    const tail = '写'.repeat(ITEM_TITLE_MAX);
+    const raw = `买牛奶，交电费，${tail}`;
+    fireEvent.change(input, { target: { value: raw } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+    });
+    expect(writer.insert).toHaveBeenCalledTimes(3);
+    fireEvent.click(screen.getByRole('button', { name: '展开' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '拆错了，合并成一条' }));
+    });
+    expect(writer.insert).toHaveBeenCalledTimes(4);
+    const stored = String(field(writer.insert.mock.calls[3]?.[1], 'title'));
+    expect(stored).toBe(cutGraphemes(raw, ITEM_TITLE_MAX));
+    expect(stored.length).toBeLessThan(raw.length);
+    const text = screen.getByTestId('type-notice').textContent ?? '';
+    expect(text).toContain(stored);
+    expect(text).not.toContain(raw);
   });
 
   it('R-166：同一句里没问题的先存，过去日子那条选完加进同一批', async () => {

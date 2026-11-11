@@ -53,9 +53,6 @@ export function itemOf(r: Row): TodoItem {
   };
 }
 
-/** 还在用的行：没删、没被撤销——判断只留一份，用 shared/logic/live-row.ts 的 isLiveRow（前端 B 日历审查建议 1） */
-export const isLive = (r: Row): boolean => isLiveRow(r);
-
 export function dueTagOf(t: TodoItem, now: number, tz: Tz): DueTag {
   if (!t.due) return { kind: 'none' };
   const today = todayOf(now, tz);
@@ -87,7 +84,7 @@ export function groupTodos(rows: readonly Row[], now: number, tz: Tz, project: s
     g.items.push({ todo, tag });
   };
   for (const r of rows) {
-    if (!isLive(r)) continue;
+    if (!isLiveRow(r)) continue;
     const t = itemOf(r);
     if (project !== null && t.project !== project) continue;
     const tag = dueTagOf(t, now, tz);
@@ -114,7 +111,7 @@ export function projectCounts(rows: readonly Row[], locale: Locale = 'zh-CN'): {
   const byName = titleCompare(locale);
   const m = new Map<string, number>();
   for (const r of rows) {
-    if (!isLive(r)) continue;
+    if (!isLiveRow(r)) continue;
     const t = itemOf(r);
     if (t.done || t.project === '') continue;
     m.set(t.project, (m.get(t.project) ?? 0) + 1);

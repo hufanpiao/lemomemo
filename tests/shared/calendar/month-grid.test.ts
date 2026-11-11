@@ -268,7 +268,7 @@ describe('耗时（代码审查 A）', () => {
   });
 });
 
-describe('删除、撤销的判断（前端 A 会审：和 today-model 的 isLive 一致）', () => {
+describe('删除、撤销的判断（前端 A 会审：和今天页一样用 live-row 的 isLiveRow）', () => {
   const day = '2026-10-24';
 
   it('离线新建、还没同步的日程和待办（没有 deleted_at、undone 两列）照样出现在月历和单日列表里', () => {

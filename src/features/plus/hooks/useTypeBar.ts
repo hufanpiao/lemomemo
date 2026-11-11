@@ -238,7 +238,7 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
   const notice = useMemo(() => {
     if (!batch || batch.entries.length === 0 || status === 'confirming') return null;
     const lines = noticeLines({
-      status: batch.plan.status, titles: batch.entries.map((e) => e.item.title), hints: batch.plan.hints, remind: batch.remind,
+      status: batch.plan.status, titles: batch.entries.map((e) => e.ref.title), hints: batch.plan.hints, remind: batch.remind,
       quotaNoticeDue: quotaDue, resetClock: quotaResetClock(clock.now(), currentTz()),
     });
     return { lines, entries: batch.entries };

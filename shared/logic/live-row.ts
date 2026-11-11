@@ -1,4 +1,6 @@
-// 一行还在不在、一个分类还活着没有：前端各页和 Edge Functions（经 _shared/gen 副本）共用，这类判断只在这里做。
+// 一行还在不在、一个分类还活着没有：月历、周视图、今天页、待办页、随手记、插图、分类合并和规则分类、ai-classify（经 _shared/gen 副本）用这一份。
+// 仓库里还有几处自己写的同类判断没并进来（11-12 整合时：core/setting-read.ts、core/outbox-failed-create.ts、
+//   reminders/data/reminder-model.ts、functions/_shared/consent.ts、push-dispatch/round-util.ts 两处），新代码请用这里的。
 // 不变量：deleted_at 为 null 或没有这一列 = 没删；undone 不是 true = 没撤销（本机新建、还没同步的行可能没有这两列）；
 //   活着的分类另要 merged_into 为空（没合并进别的分类）。纯函数。
 

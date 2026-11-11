@@ -245,7 +245,7 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
         {s.notice ? (
           <SavedNotice
             text={s.notice.lines.map((l) => line(l.key, l.params)).join(' · ')}
-            rows={s.notice.entries.map((e) => ({ table: e.ref.table, id: e.ref.id, label: `${kind(e.item)} · ${e.item.title}` }))}
+            rows={s.notice.entries.map((e) => ({ table: e.ref.table, id: e.ref.id, label: `${kind(e.item)} · ${e.ref.title}` }))}
             onUndoAll={() => void s.undo()}
             onUndoOne={(id) => void s.undoOne(id)}
             onMerge={() => void s.merge()}
