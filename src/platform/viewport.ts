@@ -5,6 +5,7 @@
 // • 双指放大时（visualViewport.scale 不是 1）可视视口也会变小，这时不算键盘弹起（代码审查低 6）
 // • 页面回到前台（visibilitychange）时重算一次：后台期间收起的键盘不会漏掉
 // • 电脑上没有软键盘，一直是收起
+// • blockPageZoom()：拦 iOS 整页双指缩放（11-11，见文件末尾）
 // B2 先给提醒横幅排队用（FA-4）；导航和“＋”在键盘弹起时隐藏的那部分由各自页面读 --kb 或订阅这里
 export const KB_MIN_PX = 120;
 
@@ -88,4 +89,19 @@ export function watchKeyboard(fn: Listener): () => void {
 
 export function isKeyboardOpen(): boolean {
   return shared.isOpen();
+}
+
+// 禁止整页双指缩放（负责人 11-11“今天，代办跟随手记为啥可以用双指扩大整个画面？？？”“缩放后缩小的话导航位置会上升”）：
+// iOS Safari / 主屏幕版不认 viewport 的 user-scalable=no、maximum-scale，html 的 touch-action: pan-x pan-y 在 iOS 上也拦不全双指，
+// 只有对 iOS 独有的 gesturestart / gesturechange / gestureend 调 preventDefault（passive: false）才停得住。别的浏览器不发这几个事件，等于什么都不做。
+// 只拦这三个，不碰 touchstart / touchmove：横滑翻页、竖向滚动、双击、拖动柄照常。首屏画完以后随本模块下载（App 的 TabBar 调），首屏 0 字节
+const GESTURES = ['gesturestart', 'gesturechange', 'gestureend'] as const;
+const stopGesture = (e: Event): void => e.preventDefault();
+
+/** 开始拦整页双指缩放；返回取消函数 */
+export function blockPageZoom(doc: Pick<Document, 'addEventListener' | 'removeEventListener'> | null = typeof document !== 'undefined' ? document : null): () => void {
+  for (const g of GESTURES) doc?.addEventListener(g, stopGesture, { passive: false });
+  return () => {
+    for (const g of GESTURES) doc?.removeEventListener(g, stopGesture);
+  };
 }

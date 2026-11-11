@@ -88,7 +88,7 @@ describe("startVhTimeline", () => {
       /^vh-timeline start=\S+ screen=\d+x\d+ tick=250ms dur=180s$/,
     );
     expect(out).toMatch(
-      /initial-bar=no inner=\d+ client=\d+ vv=\S+ y=0 bar=- route=#\/today/,
+      /initial-bar=no inner=\d+ client=\d+ vv=\S+ top=\S+ scale=\S+ y=0 bar=- route=#\/today/,
     );
     stop();
   });
@@ -146,7 +146,7 @@ describe("startVhTimeline", () => {
       const line = readTimeline().split("\n").at(-1) ?? "";
       expect(line).toMatch(
         new RegExp(
-          `^t=\\S+ mount#${k + 1} inner=\\d+ client=\\d+ vv=\\S+ y=0 bar=0 route=#/today act=\\w+\\(y=0\\) f0=0 frames=(0,){9}0$`,
+          `^t=\\S+ mount#${k + 1} inner=\\d+ client=\\d+ vv=\\S+ top=\\S+ scale=\\S+ y=0 bar=0 route=#/today act=\\w+\\(y=0\\) f0=0 frames=(0,){9}0$`,
         ),
       );
       acts.push(/act=(\w+)/.exec(line)?.[1] ?? "");
@@ -185,6 +185,46 @@ describe("startVhTimeline", () => {
     expect(readTimeline()).not.toContain("mount#");
   });
 
+  it("键盘、缩放（11-11）：每行带 vv 顶端偏移和缩放；vv 的 scroll 让 offsetTop、scale 一变就记 vv-move；focusin、focusout 各记一行（不记内容）；停了全摘掉", () => {
+    const vvT = new EventTarget() as EventTarget & { height: number; offsetTop: number; scale: number };
+    Object.assign(vvT, { height: 800, offsetTop: 0, scale: 1 });
+    Object.defineProperty(window, "visualViewport", { value: vvT, configurable: true });
+    try {
+      const f = frames();
+      const stop = start(f);
+      expect(readTimeline()).toMatch(/initial-bar=no inner=\d+ client=\d+ vv=800 top=0 scale=1\.00 y=0 /);
+      // 只发 scroll（不发 resize）：offsetTop 变了也要记
+      vvT.offsetTop = 61.4;
+      vvT.dispatchEvent(new Event("scroll"));
+      expect(readTimeline().split("\n").at(-1)).toMatch(/^t=\S+ vv-move top=0->61 scale=1\.00->1\.00 inner=\d+ client=\d+ vv=800 top=61 scale=1\.00 /);
+      // 没变化的 scroll 不重复记
+      const n = readTimeline().split("\n").length;
+      vvT.dispatchEvent(new Event("scroll"));
+      expect(readTimeline().split("\n")).toHaveLength(n);
+      vvT.scale = 1.5;
+      vvT.dispatchEvent(new Event("scroll"));
+      expect(readTimeline().split("\n").at(-1)).toMatch(/ vv-move top=61->61 scale=1\.00->1\.50 /);
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.dataset["testid"] = "notes-input";
+      inp.value = "私密内容";
+      document.body.append(inp);
+      inp.focus();
+      expect(readTimeline().split("\n").at(-1)).toMatch(/^t=\S+ focusin input\[text\]#notes-input inner=\d+ .* scale=1\.50 /);
+      inp.blur();
+      expect(readTimeline().split("\n").at(-1)).toMatch(/^t=\S+ focusout input\[text\]#notes-input inner=/);
+      expect(readTimeline()).not.toContain("私密内容");
+      stop();
+      const after = readTimeline();
+      vvT.offsetTop = 0;
+      vvT.dispatchEvent(new Event("scroll"));
+      inp.focus();
+      expect(readTimeline()).toBe(after);
+    } finally {
+      Reflect.deleteProperty(window, "visualViewport");
+    }
+  });
+
   it("切到后台时记一行并存下；本机存储写不进也不抛", () => {
     const f = frames();
     start(f);
@@ -219,7 +259,7 @@ describe("sampleLine", () => {
   it("没有底栏写 bar=-；路由为空写 #", () => {
     window.location.hash = "";
     expect(sampleLine(window)).toMatch(
-      /^inner=\d+ client=\d+ vv=\S+ y=0 bar=- route=#$/,
+      /^inner=\d+ client=\d+ vv=\S+ top=\S+ scale=\S+ y=0 bar=- route=#$/,
     );
   });
 });

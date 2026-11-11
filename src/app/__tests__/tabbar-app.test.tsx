@@ -14,11 +14,15 @@ vi.mock('../features.ts', () => ({
   featureRoutes: [{ name: 'today', Page: lazy(() => loadPage()) }],
   offRoutes: new Set(),
 }));
-const kb = vi.hoisted(() => ({ fn: null as ((open: boolean, h: number) => void) | null, stops: 0 }));
+const kb = vi.hoisted(() => ({ fn: null as ((open: boolean, h: number) => void) | null, stops: 0, zoom: 0, zoomStops: 0 }));
 vi.mock('../../platform/viewport.ts', () => ({
   watchKeyboard: (fn: (open: boolean, h: number) => void) => {
     kb.fn = fn;
     return () => (kb.stops += 1);
+  },
+  blockPageZoom: () => {
+    kb.zoom += 1;
+    return () => (kb.zoomStops += 1);
   },
 }));
 
@@ -29,6 +33,8 @@ beforeEach(() => {
   window.location.hash = '#/today';
   kb.fn = null;
   kb.stops = 0;
+  kb.zoom = 0;
+  kb.zoomStops = 0;
 });
 afterEach(cleanup);
 
@@ -54,7 +60,10 @@ describe('App 里的底栏', () => {
     for (const el of [nav, screen.getByTestId('tabbar-add'), band]) expect(el.dataset['kb']).toBe('1');
     act(() => kb.fn?.(false, 0));
     for (const el of [nav, screen.getByTestId('tabbar-add'), band]) expect(el.dataset['kb']).toBeUndefined();
+    // 同一个分包里拦整页双指缩放（负责人 11-11）：挂一次，卸载时一起摘
+    expect(kb.zoom).toBe(1);
     view.unmount();
     expect(kb.stops).toBe(1);
+    expect(kb.zoomStops).toBe(1);
   });
 });

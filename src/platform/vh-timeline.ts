@@ -10,6 +10,8 @@
 //   ④ inner 或 vv 一变（resize 事件、DOM 变动、tick 都核）立刻记 vh-change：变前变后、离最近一次换路由过了多少 ms、当时挂着的页面；
 //   ⑤ 切到日历后 CAL_WATCH_MS 内按帧记（只记和上一帧不一样的）：日历页根（main[data-feature="calendar"]）和翻页容器（cal-pager）
 //      的高、scrollHeight、transform、overflow-y，加文档高（11-10 复审实测：月视图文档 940，今天页 895、触屏 896；切日历时把哪一步算进去，看这里）。
+//   ⑥ 键盘、缩放（11-11 负责人“收起键盘后底栏升上去”“缩放后缩小的话导航位置会上升”）：每行带 vv.offsetTop（top）和 vv.scale（scale）；
+//      焦点 focusin / focusout 各记一行（哪个控件 + 一行数，不记内容）；visualViewport 的 scroll 也核一次，offsetTop、scale 一变记 vv-move。
 // 结果是纯文字，存在 OUT_KEY（隔几秒存一次、结束和切到后台时也存），诊断页显示、可整段复制给主持人。
 // requestAnimationFrame 只许 src/motion 用（A25）：等帧的函数由调用方传进来（main.tsx 传 motion 的 nextFrame）
 export const ARM_KEY = "lemo-vh-tl";
@@ -76,10 +78,23 @@ export function routeShape(hash: string): string {
     .join("/");
 }
 
-/** 一行数：inner、client、vv、scrollY、底栏下沿、路由 */
+/** 可见视口顶端偏移（px，取整）；没有 visualViewport 写 - */
+export const vvTopOf = (win: Window): number | "-" => (win.visualViewport ? Math.round(win.visualViewport.offsetTop) : "-");
+/** 可见视口缩放（两位小数）；没有写 - */
+export const vvScaleOf = (win: Window): string => (win.visualViewport ? win.visualViewport.scale.toFixed(2) : "-");
+
+/** 一行数：inner、client、vv、vv 顶端偏移、缩放、scrollY、底栏下沿、路由 */
 export function sampleLine(win: Window): string {
   const vv = win.visualViewport ? Math.round(win.visualViewport.height) : "-";
-  return `inner=${win.innerHeight} client=${win.document.documentElement.clientHeight} vv=${vv} y=${Math.round(win.scrollY)} bar=${barBottom(win)} route=${routeShape(win.location.hash)}`;
+  return `inner=${win.innerHeight} client=${win.document.documentElement.clientHeight} vv=${vv} top=${vvTopOf(win)} scale=${vvScaleOf(win)} y=${Math.round(win.scrollY)} bar=${barBottom(win)} route=${routeShape(win.location.hash)}`;
+}
+
+/** 焦点落在 / 离开的是哪个控件：标签[type]#testid（没有就不写；不记输入内容） */
+export function focusTarget(t: EventTarget | null): string {
+  if (!(t instanceof Element)) return "-";
+  const type = t.getAttribute("type");
+  const id = t.getAttribute("data-testid");
+  return `${t.tagName.toLowerCase()}${type ? `[${type}]` : ""}${id ? `#${id}` : ""}`;
 }
 
 /** 挂着的页面：main[data-feature]，切页途中新旧两个都在时用 + 连起来；没有写 - */
@@ -117,6 +132,32 @@ export function applyMountAct(
   if (act !== "scrollBy1") return { label: `${act}(y=${y})` };
   win.scrollBy(0, 1);
   return { label: `${act}(y=${y})`, back: () => win.scrollTo(0, y) };
+}
+
+/** vv 顶端偏移、缩放和上次比变没变：变了返回 vv-move 那一行（不带时刻），没变返回 null */
+export function vvMover(win: Window): () => string | null {
+  let top = vvTopOf(win);
+  let scale = vvScaleOf(win);
+  return () => {
+    const tp = vvTopOf(win);
+    const sc = vvScaleOf(win);
+    if (tp === top && sc === scale) return null;
+    const line = `vv-move top=${top}->${tp} scale=${scale}->${sc} ${sampleLine(win)}`;
+    top = tp;
+    scale = sc;
+    return line;
+  };
+}
+
+/** 焦点进出都交给 onLine 一行（不带时刻）；返回取消函数 */
+export function listenFocus(win: Window, onLine: (line: string) => void): () => void {
+  const on = (e: FocusEvent): void => onLine(`${e.type} ${focusTarget(e.target)} ${sampleLine(win)}`);
+  win.document.addEventListener("focusin", on);
+  win.document.addEventListener("focusout", on);
+  return () => {
+    win.document.removeEventListener("focusin", on);
+    win.document.removeEventListener("focusout", on);
+  };
 }
 
 export interface TimelineDeps {
@@ -187,6 +228,7 @@ export function startVhTimeline(
   let routes = 0;
   let inner = win.innerHeight;
   let vv = vvOf(win);
+  const vvMoved = vvMover(win);
   let calUntil = 0;
   let calLast = "";
   const calStep = (): void => {
@@ -222,11 +264,20 @@ export function startVhTimeline(
       vv = v;
       save();
     }
+    const moved = vvMoved();
+    if (moved !== null) {
+      lines.push(`t=${sec()} ${moved}`);
+      save();
+    }
   };
   lines.push(`t=${sec()} route= ${route} ${routeLine(win)}`);
   if (route.startsWith("#/calendar")) watchCal();
   win.addEventListener("resize", check);
-  win.visualViewport?.addEventListener("resize", check);
+  for (const ev of ["resize", "scroll"] as const) win.visualViewport?.addEventListener(ev, check);
+  const unFocus = listenFocus(win, (l) => {
+    lines.push(`t=${sec()} ${l}`);
+    save();
+  });
 
   const mo = new MutationObserver(() => {
     check();
@@ -266,7 +317,8 @@ export function startVhTimeline(
     win.clearInterval(timer);
     mo.disconnect();
     win.removeEventListener("resize", check);
-    win.visualViewport?.removeEventListener("resize", check);
+    for (const ev of ["resize", "scroll"] as const) win.visualViewport?.removeEventListener(ev, check);
+    unFocus();
     win.document.removeEventListener("visibilitychange", onHide);
     lines.push(`t=${sec()} end mounts=${mounts} routes=${routes}`);
     save();

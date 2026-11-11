@@ -11,6 +11,14 @@ html {
   text-size-adjust: 100%;
 }
 
+/* App 页面不许整页双指缩放、双击放大（负责人 11-11“今天，代办跟随手记为啥可以用双指扩大整个画面”；viewport 的 user-scalable=no iOS 不认，
+   iOS 上真正拦住的是 platform/viewport.ts 的 blockPageZoom）。只认 App 入口页（src/index.html 的 <html data-app>）：
+   登录页（src/auth/index.html）也引这份 CSS，照样能缩放（kb-zoom 代码审 M1，主持人定登录页不禁）。
+   touch-action 按祖先取交集：日历 pan-y、拖动柄 none、提醒 pan-x、底栏 manipulation 都还是原来的效果，只少了缩放 */
+html[data-app] {
+  touch-action: pan-x pan-y;
+}
+
 /* 原生控件（日期、时刻、下拉的弹出面板、滚动条）跟 App 主题，不跟手机系统（负责人 11-06 真机截图 6）；跟随系统时两种都给 */
 :root[data-theme='light'] { color-scheme: light; }
 :root[data-theme='dark'] { color-scheme: dark; }

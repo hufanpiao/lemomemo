@@ -4,7 +4,7 @@ import { resetNativeBridgeForTest, setNativeBridge, showLocalTestNotification, w
 import { closeHandledNotifications, parseReminderTag } from '../notifications.ts';
 import { notificationPermission, requestNotificationPermission } from '../perm.ts';
 import { getPushOutcome, setPushOutcome, subscribePushOutcome } from '../push-status.ts';
-import { createKeyboardWatcher, keyboardHeight, KB_MIN_PX } from '../viewport.ts';
+import { blockPageZoom, createKeyboardWatcher, keyboardHeight, KB_MIN_PX } from '../viewport.ts';
 
 const ID = '0b6f4f1e-2c7d-4a7e-9a55-111111111111';
 
@@ -163,5 +163,35 @@ describe('exe 本机测试通知（R-330，待接口 showLocalTest）', () => {
     expect(await showLocalTestNotification(n)).toBe('failed');
     withTest(async () => 'weird' as never);
     expect(await showLocalTestNotification(n)).toBe('failed');
+  });
+});
+
+describe('禁止整页双指缩放（负责人 11-11，blockPageZoom）', () => {
+  const fire = (type: string): Event => {
+    const e = new Event(type, { cancelable: true });
+    document.dispatchEvent(e);
+    return e;
+  };
+
+  it('iOS 的 gesturestart、gesturechange、gestureend 都被 preventDefault，以非被动方式登记；取消后不再拦', () => {
+    const add = vi.spyOn(document, 'addEventListener');
+    const stop = blockPageZoom();
+    for (const g of ['gesturestart', 'gesturechange', 'gestureend']) {
+      expect(add).toHaveBeenCalledWith(g, expect.any(Function), { passive: false });
+      expect(fire(g).defaultPrevented, g).toBe(true);
+    }
+    stop();
+    for (const g of ['gesturestart', 'gesturechange', 'gestureend']) expect(fire(g).defaultPrevented, g).toBe(false);
+    add.mockRestore();
+  });
+
+  it('只拦 gesture 事件：触摸、滚动、双击不碰（横滑翻页、竖向滚动、拖动柄照常）', () => {
+    const stop = blockPageZoom();
+    for (const t of ['touchstart', 'touchmove', 'touchend', 'wheel', 'dblclick', 'pointermove']) expect(fire(t).defaultPrevented, t).toBe(false);
+    stop();
+  });
+
+  it('没有 document 时什么都不做、不抛', () => {
+    expect(() => blockPageZoom(null)()).not.toThrow();
   });
 });

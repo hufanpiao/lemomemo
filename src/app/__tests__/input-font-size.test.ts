@@ -1,6 +1,6 @@
 // 触屏上可输入控件的字号不小于 16px（负责人 11-06 真机截图 7：点“项目”输入框，整页被放大并横移，左边被切掉）。
 // iOS Safari 聚焦 font-size 小于 16px 的 input / select / textarea 会自动放大页面。修法是把触屏上的字号调到 ≥ 16px，
-// 不准用 viewport 的 maximum-scale、user-scalable=no 禁缩放（无障碍：用户要能双指放大）。
+// 11-11 起 App 入口页禁止整页缩放（负责人“为啥可以用双指扩大整个画面”），字号这条照旧要守：禁缩放在 iOS 上靠 gesture 事件，不靠 viewport。
 // jsdom 不算样式，按源码核对：扫 src 里所有 .tsx 的 <input> / <select> / <textarea>（勾选框、单选等不弹键盘的类型除外），
 // 每个必须带 CSS 模块类（className={styles.x}；导入名不限，按导入的文件认，如 form.input 认 Form.module.css，代码审建议 3），这些类在触屏（没有媒体查询，或媒体查询里有 pointer: coarse / hover: none）
 // 下最后生效的 font-size 解析成 px 后 ≥ 16。写 font: inherit、不写字号的一律不通过（继承来的字号在源码里看不出来，要写明）。
@@ -176,11 +176,26 @@ describe('触屏上可输入控件字号 ≥ 16px（iOS 聚焦不放大页面）
     ]);
   });
 
-  it('入口页不禁缩放：viewport 里没有 maximum-scale、user-scalable', () => {
-    for (const f of ['src/index.html', 'src/auth/index.html']) {
-      const vp = /<meta name="viewport" content="([^"]*)"/.exec(readFileSync(f, 'utf8'))?.[1];
-      expect(vp, f).toBeDefined();
-      expect(vp, f).not.toMatch(/maximum-scale|user-scalable/);
-    }
+  it('App 入口页禁止整页缩放（负责人 11-11）：viewport 有 maximum-scale=1、user-scalable=no，<html data-app>，html[data-app] 有 touch-action: pan-x pan-y', () => {
+    const app = readFileSync('src/index.html', 'utf8');
+    const vp = /<meta name="viewport" content="([^"]*)"/.exec(app)?.[1];
+    expect(vp).toMatch(/(^|, )maximum-scale=1(,|$)/);
+    expect(vp).toMatch(/(^|, )user-scalable=no(,|$)/);
+    expect(vp).toMatch(/viewport-fit=cover/);
+    expect(app).toMatch(/<html [^>]*\bdata-app\b[^>]*>/);
+    const rules = parseCss(readFileSync('src/styles/base.css', 'utf8')).filter((r) => r.media === null);
+    const ta = (sel: string): string[] => rules.filter((r) => r.selectors.includes(sel)).flatMap((r) => r.decls.filter(([k]) => k === 'touch-action').map(([, v]) => v));
+    expect(ta('html[data-app]')).toEqual(['pan-x pan-y']);
+  });
+
+  it('登录页照样能缩放（kb-zoom 代码审 M1，主持人定）：viewport 不带 maximum-scale、user-scalable，<html> 不带 data-app，不加 html 上的 touch-action', () => {
+    const auth = readFileSync('src/auth/index.html', 'utf8');
+    const vp = /<meta name="viewport" content="([^"]*)"/.exec(auth)?.[1];
+    expect(vp).toBeDefined();
+    expect(vp).not.toMatch(/maximum-scale|user-scalable/);
+    expect(auth).not.toMatch(/<html [^>]*\bdata-app\b/);
+    // base.css 两个入口页都引：只许挂在 html[data-app] 上，不许写在不带 data-app 的 html、:root 上
+    const bare = parseCss(readFileSync('src/styles/base.css', 'utf8')).filter((r) => r.selectors.some((x) => x === 'html' || x === ':root'));
+    expect(bare.flatMap((r) => r.decls).filter(([k]) => k === 'touch-action')).toEqual([]);
   });
 });

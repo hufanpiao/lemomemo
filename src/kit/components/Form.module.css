@@ -62,7 +62,7 @@
 }
 
 /* 触屏上可输入控件至少 16px（负责人 11-06 真机截图 7）：iOS 聚焦字号小于 16px 的 input / select / textarea 会自动放大整页并横移。
-   不用 maximum-scale、user-scalable=no 禁缩放（无障碍）；只在触屏上调到 16px，电脑上仍是 15px。
+   只在触屏上调到 16px，电脑上仍是 15px。11-11 起 App 入口页另外禁止整页缩放（负责人；src/index.html、base.css、platform/viewport.ts 的 blockPageZoom），这条照旧要守。
    src/app/__tests__/input-font-size.test.ts 检查全站可输入控件。
    B2-UI-a U1-2：全站这条触屏媒体查询只写在这里一处；提醒的免打扰时刻框直接用这里的 .input（RemindDnd.tsx） */
 @media (any-pointer: coarse) {

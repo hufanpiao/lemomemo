@@ -76,7 +76,15 @@ function TabBar({ route }: { route: RouteName }) {
     afterAppPainted(() => {
       import('../platform/viewport.ts')
         .then((m) => {
-          if (!off) stop = m.watchKeyboard((open) => setKb(open));
+          if (off) return;
+          const k = m.watchKeyboard((open) => setKb(open));
+          stop = k;
+          // 同一个分包里顺带拦 iOS 整页双指缩放（11-11 负责人；platform/viewport.ts 的 blockPageZoom）
+          const z = m.blockPageZoom();
+          stop = () => {
+            k();
+            z();
+          };
         })
         .catch(() => undefined);
     });
