@@ -64,8 +64,8 @@ function NotesList() {
   const wide = useMedia(MQ_SIDEBAR);
   const l = useNoteList();
   const a = useListActions<ImgTip>('notes', { remove: l.remove });
-  const { g, isRo, report } = a;
-  const up = useNotesToast(g);
+  const { g: guard, isRo, report } = a;
+  const up = useNotesToast(guard);
   const [menu, setMenu] = useState<string | null>(null);
   const [just, setJust] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
@@ -76,7 +76,7 @@ function NotesList() {
   }, [wide]);
 
   const open = (id: string) => {
-    if (isRo(id)) g.block();
+    if (isRo(id)) guard.block();
     else if (wide) setDrawer(id);
     else void navigate('note', id);
   };
@@ -84,7 +84,7 @@ function NotesList() {
     setMenu(null);
     void a.del(id);
   };
-  const addImage = useAddImage(l, setJust, report, (m) => g.show({ kind: 'img', ...m }));
+  const addImage = useAddImage(l, setJust, report, (m) => guard.show({ kind: 'img', ...m }));
   const add = async (text: string): Promise<boolean> => {
     const { result, id } = await l.add(text);
     if (result === 'ok') setJust(id);
@@ -188,13 +188,13 @@ function NotesList() {
 
       <div className={up ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
         <InputRow up={up} onAdd={add} onImage={addImage} />
-        {g.toast !== null && g.toast.kind !== 'undo' ? <DockTip toast={g.toast} /> : null}
+        {guard.toast !== null && guard.toast.kind !== 'undo' ? <DockTip toast={guard.toast} /> : null}
       </div>
 
       {drawer !== null ? <NoteDrawer id={drawer} onClose={() => setDrawer(null)} /> : null}
 
-      {g.toast?.kind === 'undo' ? <UndoBar key={g.toast.id} toast={g.toast} onUndo={a.undo} onClose={g.dismiss} /> : null}
-      <ReadonlyToast guard={g} message={tEdit('edit.st.readonly', {})} testId="notes-ro-toast" />
+      {guard.toast?.kind === 'undo' ? <UndoBar key={guard.toast.id} toast={guard.toast} onUndo={a.undo} onClose={guard.dismiss} /> : null}
+      <ReadonlyToast guard={guard} message={tEdit('edit.st.readonly', {})} testId="notes-ro-toast" />
     </main>
   );
 }

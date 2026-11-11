@@ -96,7 +96,6 @@ export default function TodayPage() {
   const v = hv.view;
   const a = useListActions('todos', { toggle: d.toggleDone, remove: (id, deleted) => d.remove('todos', id, deleted) }, hv);
   const { g, tick, shown, del } = a;
-  const roT = a.isRo;
   const open = (kind: 'event' | 'todo', id: string) => (g.isRo(kind, id) ? g.block() : void navigate(kind, id));
 
   return (
@@ -145,20 +144,20 @@ export default function TodayPage() {
             <h2 id="today-late" className={styles.h2}>{t('late.title', {})}</h2>
             <AppearList as="ul" className={list.list}>
               {v.late.map(({ todo, days }) => (
-                <AppearItem key={todo.id} className={list.row} data-readonly={roT(todo.id) ? '' : undefined}>
+                <AppearItem key={todo.id} className={list.row} data-readonly={g.isRo('todo', todo.id) ? '' : undefined}>
                   <Check
                     checked={shown(todo.id, false)}
                     label={shown(todo.id, false) ? t('list.undoDone', {}) : t('list.done', {})}
                     onChange={(v) => tick(todo.id, v)}
                     testId={`today-done-${todo.id}`}
-                    readOnly={roT(todo.id)}
+                    readOnly={g.isRo('todo', todo.id)}
                   />
                   <button type="button" className={list.main} onClick={() => open('todo', todo.id)}>
                     <span className={list.text}>
                       <span className={list.title}>{todo.title}</span>
                       <span className={`${list.meta} ${styles.lateTag}`}>{days > 0 ? t('late.days', { n: days }) : t('late.passed', { t: todo.dueTime ?? '' })}</span>
                     </span>
-                    {roT(todo.id) ? <Ro part="mark" testId={`today-ro-${todo.id}`} /> : null}
+                    {g.isRo('todo', todo.id) ? <Ro part="mark" testId={`today-ro-${todo.id}`} /> : null}
                     <RowMark table="todos" id={todo.id} />
                   </button>
                 </AppearItem>
@@ -193,10 +192,10 @@ export default function TodayPage() {
                 className={list.row}
                 data-testid={`today-todo-${td.id}`}
                 data-done={td.done ? '' : undefined}
-                data-readonly={roT(td.id) ? '' : undefined}
+                data-readonly={g.isRo('todo', td.id) ? '' : undefined}
               >
                 <Check
-                  readOnly={roT(td.id)}
+                  readOnly={g.isRo('todo', td.id)}
                   checked={shown(td.id, td.done)}
                   label={shown(td.id, td.done) ? t('list.undoDone', {}) : t('list.done', {})}
                   onChange={(v) => tick(td.id, v)}
@@ -207,12 +206,12 @@ export default function TodayPage() {
                     <span className={list.title}>{td.title}</span>
                     <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
                   </span>
-                  {roT(td.id) ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
+                  {g.isRo('todo', td.id) ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
                   <RowMark table="todos" id={td.id} />
                 </button>
                 {/* 只读行的 × 和打勾圆圈一样（FA-2 视觉验收第二轮第 1 条、代码复查二）：变淡、aria-disabled、读屏名字后接“要更新到新版本才能修改”；
                     点了照样由 del 里的 useReadonlyGuard 拦下出提示条、不写 */}
-                {roT(td.id) ? (
+                {g.isRo('todo', td.id) ? (
                   <Ro part="del" label={t('list.delete', {})} onClick={() => void del(td.id)} testId={`today-del-${td.id}`} />
                 ) : (
                   <Pressable className={list.trail} aria-label={t('list.delete', {})} onClick={() => void del(td.id)} data-testid={`today-del-${td.id}`} data-no-proxy="">
