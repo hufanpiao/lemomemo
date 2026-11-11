@@ -33,6 +33,20 @@ describe('specificWords', () => {
     expect(specificWords('任务')).toBe('');
     expect(specificWords('')).toBe('');
   });
+  it('带空格的泛指词“할 일”整个丢掉，不剩“할”', () => {
+    expect(specificWords('할 일')).toBe('');
+    expect(specificWords('할 일을')).toBe('');
+    expect(specificWords('보고서 할 일')).toBe('보고서');
+  });
+});
+
+describe('泛指词只有一个口径：isGenericText 和 specificWords 结论一致', () => {
+  it('同一批输入：isGenericText(s) === (specificWords(s) === "")', () => {
+    for (const s of ['任务', '할 일', '할 일을', '任务 事情', '这些 任务', '采购任务', '구매 업무', '找工作', '보고서 할 일', '', '거']) {
+      expect(isGenericText(s), s).toBe(specificWords(s) === '');
+    }
+    expect(isGenericText('任务 事情')).toBe(true);
+  });
 });
 
 describe('resolveTarget：改期', () => {

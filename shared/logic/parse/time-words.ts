@@ -16,7 +16,8 @@
 //   中文相对时刻（R-374，11-10 负责人“只加中文”）：takeRelative 认“N 分钟后 / N 小时后 / N 个小时后 / 半小时后 / 一个半小时后 / N 个半小时后 /
 //   N 小时 M 分钟后 / 一刻钟后 / 过 N 分钟”（后、以后、之后、过后都算），返回从现在起多少分钟，由 parse-split 按 now 换成日子和时刻；
 //   最多 72 小时，超了不认、原样留在标题里。“开会两小时”这种不带“后 / 过”的是时长，不认。韩文不做。
-import { cnNum, pad2, type Rest } from './text.ts';
+import { fmtHm } from '../../core/date.ts';
+import { cnNum, type Rest } from './text.ts';
 
 const MORNING = ['凌晨', '早上', '早晨', '上午', '오전', '새벽', '아침'];
 const NOON = ['中午', '점심', '낮'];
@@ -79,8 +80,6 @@ function toMin(r: Raw, hint: string): { min: number; nextDay: boolean } | null {
   return { min: hh * 60 + r.mm, nextDay };
 }
 
-const fmt = (min: number): string => pad2(Math.floor(min / 60)) + ':' + pad2(min % 60);
-
 /** 取走一句里的时刻（先认起止、改口，再认单个时刻）；hint 是日期词或前一件带出的时段 */
 export function takeTime(st: Rest, hint: string): TimeHit | null {
   let m = st.text.match(RANGE_RE);
@@ -96,7 +95,7 @@ export function takeTime(st: Rest, hint: string): TimeHit | null {
       // 跨午夜（代码审 M2）：开始 18 点以后、结束 6 点以前，结束算第二天
       const overnight = e.min <= s.min && s.min >= 18 * 60 && e.min <= 6 * 60;
       const dur = e.min > s.min ? e.min - s.min : overnight ? e.min + 1440 - s.min : null;
-      return { time: fmt(s.min), deadline: false, duration: dur, nextDay: s.nextDay, period: a.per || hint };
+      return { time: fmtHm(s.min), deadline: false, duration: dur, nextDay: s.nextDay, period: a.per || hint };
     }
   }
   m = st.text.match(FIX_RE);
@@ -106,7 +105,7 @@ export function takeTime(st: Rest, hint: string): TimeHit | null {
     const e = toMin({ ...b, per: b.per || a.per }, hint);
     if (e) {
       st.text = st.text.replace(m[0], ' ');
-      return { time: fmt(e.min), deadline: false, duration: null, nextDay: e.nextDay, period: b.per || a.per || hint };
+      return { time: fmtHm(e.min), deadline: false, duration: null, nextDay: e.nextDay, period: b.per || a.per || hint };
     }
   }
   m = st.text.match(SINGLE_RE);
@@ -115,7 +114,7 @@ export function takeTime(st: Rest, hint: string): TimeHit | null {
   const t = toMin(r, hint);
   if (!t) return null;   // 认不出：不取走，留在标题里
   st.text = st.text.replace(m[0], ' ');
-  return { time: fmt(t.min), deadline: Boolean(m[8]), duration: null, nextDay: t.nextDay, period: r.per || hint };
+  return { time: fmtHm(t.min), deadline: Boolean(m[8]), duration: null, nextDay: t.nextDay, period: r.per || hint };
 }
 
 /** 只有时段词、没说几点（R-165）：取走时段词，返回它；是事由的不取（见文件头） */

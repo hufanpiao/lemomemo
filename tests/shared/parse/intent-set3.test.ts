@@ -162,7 +162,7 @@ const AS_RECORD = ['intent', 'target.kinds', 'target.date', 'target.time', 'targ
 const AS_RECORD_TO = [...AS_RECORD.slice(0, -1), 'to.date', 'to.time', 'cands'];
 /**
  * 本机规则跑测试集 ③ 的统计：句子编号 → 没对上的字段（不设通过线；89 句里 26 句有缺口）。缺口分三类：
- * ① 架构 5.14 的字面句式表里没有的说法 → 判成记下（10 句，交主持人定补词还是加“疑似词判没把握”的兜底）；
+ * ① 架构 5.14 的字面句式表里没有的说法 → 判成记下（10 句；疑似词兜底让它们都没把握，补不补词交主持人定）；
  * ② 本机不从“会 / 회의 / 饭局”推断 kinds 只有 event（期望 [event]、本机 [event, todo]），批量时把含“会议”的待办也带进候选；
  * ③ 中文整句当一个关键词、韩文多了动词（“签证材料已经交了”“发票整理”“다 했어”“和 민수”），候选找不到，要交给 AI。
  */
@@ -179,8 +179,8 @@ const PINNED: Record<string, string[]> = {
   // ③
   'F-Z03': ['cands'], 'F-Z04': ['cands'], 'F-K02': ['cands'], 'F-M03': ['cands'], 'T-Z44': ['target.kinds', 'cands'], 'T-M44': ['target.kinds', 'cands'],
 };
-/** 第 ① 类里 localIntent 和 parseSplit 都有把握的：在线也不调 AI，会直接存成一条新条目（如待办“取消我明天下午的项目会议”） */
-const SILENT = ['R09', 'R15', 'T-K45', 'T-M45'];
+/** 期望不是记下、本机却判成有把握的记下（在线也不调 AI，会直接存成一条新条目）：必须是 0 句 */
+const SILENT: string[] = [];
 /** 测试集 ① 里本机判成别的意图（都没把握，先按记下保存）：R23 含“总结”、O17 含“목록” */
 const SET1_UNSURE = ['R23:summarize', 'O17:search'];
 

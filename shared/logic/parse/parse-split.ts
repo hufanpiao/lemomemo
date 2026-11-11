@@ -12,7 +12,7 @@
 // B3 任务单补充（11-07 架构师）：R5 没说日子、时刻今天已过照样记今天（凌晨 / 새벽例外记明天）；R6 opts.defaultDay（日历页选中的那天）只对
 //   没说日子的条目生效（补出来的日子不算认出了日子，照旧判没把握，R9）；R8 只用空格隔开的“时刻 + 事 + 时段词 + 事”不拆、记 leftover 判没把握。
 // 纯函数：“现在”由 now（毫秒）和 tz 传入，不读时钟、不碰本地时区；locale 只留作接口（中韩说法两边都认，混说不看界面语言）。
-import { addDays, minOfDay, todayOf, type DateStr } from '../../core/date.ts';
+import { addDays, fmtHm, minOfDay, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import type { AiItem } from '../../schema/ai.ts';
 import type { AiKind } from '../../schema/kinds.ts';
@@ -23,7 +23,7 @@ import { cutGraphemes } from '../short.ts';
 import { pastDate, type DateBasis } from './past-date.ts';
 import { RECUR_MARK, recurHint, takeRecur } from './recur-hint.ts';
 import { splitClauses } from './split.ts';
-import { pad2, prepare, QUICK_MAX, restoreWeekdays, type Rest } from './text.ts';
+import { prepare, QUICK_MAX, restoreWeekdays, type Rest } from './text.ts';
 import { periodLeft, takePeriodOnly, takeRelative, takeTime } from './time-words.ts';
 
 /** 提示条要用的几样（客户端按它选文案） */
@@ -193,7 +193,7 @@ function parseClause(text: string, env: ClauseEnv): Clause {
     const at = env.nowMin + rel;
     date = addDays(env.today, Math.floor(at / 1440));
     basis = 'rel';
-    tm = { time: pad2(Math.floor((at % 1440) / 60)) + ':' + pad2(at % 60), deadline: false, duration: null, nextDay: false, period: '' };
+    tm = { time: fmtHm(at % 1440), deadline: false, duration: null, nextDay: false, period: '' };
   }
   // R8：取走一个时刻以后还剩“时段词 + 别的事”（“下午3点开会 晚上看电影”），中间只隔了空格：不拆，判没把握（下一行会把中文时段词从标题去掉，先看）
   if (tm && periodLeft(c.text)) env.doubts.add('leftover');

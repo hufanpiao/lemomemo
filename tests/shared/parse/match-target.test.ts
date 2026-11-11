@@ -1,7 +1,7 @@
 // matchTarget：取消、改期、完成找候选（TC-B4b3-47、TC-B4b3-48 ⑤⑧ 的单元部分；架构 5.14 第 7 点），含首尔、洛杉矶、UTC 三个时区。
 import { describe, expect, it } from 'vitest';
 import { BATCH_MAX, matchTarget, SINGLE_MAX, type TargetEvent, type TargetTodo } from '../../../shared/logic/parse/match-target.ts';
-import type { PlusTarget } from '../../../shared/logic/parse/resolve-target.ts';
+import { resolveTarget, type PlusTarget } from '../../../shared/logic/parse/resolve-target.ts';
 
 const SEOUL = 'Asia/Seoul';
 const LA = 'America/Los_Angeles';
@@ -49,7 +49,10 @@ describe('单条：放宽后的待办范围（TC-B4b3-47）', () => {
   });
   it('日程仍按今天起 14 天的窗口；说了日子只看那一天', () => {
     const at = (date: string) => ({ events: [ev('review', '采购评审会', date, '10:00')], todos: [] });
+    expect(ids(matchTarget(tg({ text: '采购评审会' }), at(T), NOW, SEOUL))).toEqual(['review']);
     expect(ids(matchTarget(tg({ text: '采购评审会' }), at('2026-11-16'), NOW, SEOUL))).toEqual(['review']);
+    expect(ids(matchTarget(tg({ text: '采购评审会' }), at('2026-11-17'), NOW, SEOUL))).toEqual([]);
+    expect(ids(matchTarget(tg({ text: '采购评审会' }), at('2026-11-01'), NOW, SEOUL))).toEqual([]);
     expect(ids(matchTarget(tg({ text: '采购评审会' }), at('2026-11-20'), NOW, SEOUL))).toEqual([]);
     expect(ids(matchTarget(tg({ text: '采购评审会', date: '2026-11-20' }), at('2026-11-20'), NOW, SEOUL))).toEqual(['review']);
     expect(ids(matchTarget(tg({ text: '采购评审会', date: '2026-11-19' }), at('2026-11-20'), NOW, SEOUL))).toEqual([]);
@@ -82,6 +85,12 @@ describe('单条：命中关', () => {
   it('泛指词“거”+ 日子 + 时刻：和空一样要同日同刻', () => {
     expect(ids(matchTarget(tg({ text: '거', date: TM, time: '15:00' }), slot, NOW, SEOUL))).toEqual(['e15', 't15']);
     expect(ids(matchTarget(tg({ text: '거', date: TM }), slot, NOW, SEOUL))).toEqual([]);
+  });
+  it('带空格的泛指词“할 일”：不拆成“할”去打分，没给时刻就没有候选', () => {
+    const items = { events: [], todos: [td('gm', '할머니 생신 선물', T), td('rp', '보고서 작성', T)] };
+    const { target } = resolveTarget('cancel', { text: '할 일', date: T, time: null, kinds: ['todo'] });
+    expect(matchTarget(target, items, NOW, SEOUL)).toEqual({ hits: [], more: 0 });
+    expect(ids(matchTarget(tg({ text: '보고서 할 일', kinds: ['todo'] }), items, NOW, SEOUL))).toEqual(['rp']);
   });
   it('说了时刻：同一天两条都命中关键词，同一时刻的排第一', () => {
     const items = { events: [ev('am', '周会', TM, '10:00'), ev('pm', '周会', TM, '15:00')], todos: [] };

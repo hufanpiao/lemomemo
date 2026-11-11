@@ -94,3 +94,8 @@ export function parseHm(hm: string): number {
   if (!mt) throw new Error(`bad_time:${hm}`);
   return Number(mt[1]) * 60 + Number(mt[2]);
 }
+
+/** 当天第几分钟（0～1439）→ 'HH:MM'，parseHm 的反方向 */
+export function fmtHm(min: number): string {
+  return `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}`;
+}

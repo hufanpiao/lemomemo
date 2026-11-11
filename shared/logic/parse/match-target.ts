@@ -2,14 +2,13 @@
 // 单条：先过命中关（关键词命中标题或地点；泛指词或空时要同一天同一时刻）再排序，最多 SINGLE_MAX 条。
 // 批量（all）：不打分，按日子、with_overdue、kinds 和具体词筛，按日期、时刻排，最多 BATCH_MAX 条，多出的计进 more。
 // 日程按记录时区换算到设备时区 tz 后的日期和时刻（4.6）；全天日程、待办截止日不换算。
-import { addDays, diffDays, todayOf, type DateStr } from '../../core/date.ts';
+import { addDays, diffDays, fmtHm, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import type { EventWrite, TodoWrite } from '../../schema/rows.ts';
 import { assertTz, isLiveRow, nearRange, placeEvent, TZ_SPILL_DAYS, type CalEvent, type CalTodo } from '../calendar/cal-items.ts';
 import { matchScore, type Field } from '../search.ts';
 import { specificWords } from './generic-words.ts';
 import type { PlusTarget, TargetKind } from './resolve-target.ts';
-import { pad2 } from './text.ts';
 
 export type TargetEvent = CalEvent & Readonly<Pick<EventWrite, 'location'>>;
 export type TargetTodo = CalTodo & Readonly<Pick<TodoWrite, 'due_time'>>;
@@ -46,7 +45,7 @@ function placedEvents(events: readonly TargetEvent[], from: DateStr, to: DateStr
     if (!isLiveRow(ev) || !nearRange(ev.date, from, to, TZ_SPILL_DAYS, TZ_SPILL_DAYS)) continue;
     const p = placeEvent(ev, tz);
     if (!p || p.date < from || p.date > to) continue;
-    const time = p.allDay ? null : pad2(Math.floor(p.startMin / 60)) + ':' + pad2(p.startMin % 60);
+    const time = p.allDay ? null : fmtHm(p.startMin);
     out.push({ kind: 'event', id: ev.id, date: p.date, time, fields: [ev.title, ev.location] });
   }
   return out;

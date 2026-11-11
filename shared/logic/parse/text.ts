@@ -86,5 +86,3 @@ export function take(st: Rest, re: RegExp): RegExpMatchArray | null {
 export function cut(st: Rest, str: string): void {
   st.text = st.text.replace(str, ' ');
 }
-
-export const pad2 = (n: number): string => String(n).padStart(2, '0');

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addDays,
   diffDays,
+  fmtHm,
   hourOf,
   minOfDay,
   msAt,
@@ -118,5 +119,11 @@ describe('纯日期运算', () => {
     expect(parseHm('23:59')).toBe(1439);
     expect(() => parseHm('24:00')).toThrow('bad_time');
     expect(() => parseHm('9:00')).toThrow('bad_time');
+  });
+  it('fmtHm：当天第几分钟 → HH:MM，和 parseHm 互逆', () => {
+    expect(fmtHm(0)).toBe('00:00');
+    expect(fmtHm(905)).toBe('15:05');
+    expect(fmtHm(1439)).toBe('23:59');
+    for (const m of [0, 59, 60, 721, 1439]) expect(parseHm(fmtHm(m))).toBe(m);
   });
 });
