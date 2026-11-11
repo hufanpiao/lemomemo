@@ -37,7 +37,7 @@ import { setQuietErrorLog } from '../kit/components/QuietBoundary.tsx';
 import { setPushDisconnectLog } from '../platform/push-disconnect.ts';
 import { browserLifecycle } from '../platform/net.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
-import { buildInfo, isAppleMobile, isStandalone, isTauri, JS_ERROR_ACT, jsErrorCode, registerJsErrorLog } from '../platform/env.ts';
+import { buildInfo, isTauri, JS_ERROR_ACT, jsErrorCode, registerJsErrorLog } from '../platform/env.ts';
 import { gapFixWanted, startEarlyGapFix } from '../platform/vh-gapfix-gate.ts';
 import {
   clearCacheStorage, clearLocalSessionIf, goToAuth, onAuthUser, onSessionStorageChange, readSessionAccessToken, readSessionId, readSessionUserId,
@@ -93,9 +93,9 @@ if (gapFixWanted()) {
   startEarlyGapFix(nextFrame);
   void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));
 }
-// 台账 Q-8 光标对齐试验（非正式版，诊断页开关“Caret sync”，键名同 caret-sync.ts 的 ARM_KEY）：iOS 主屏幕版、开关开着才下载 caret-sync.ts（对齐本体在 caret-align.ts）。
+// 台账 Q-8 光标对齐试验（非正式版，诊断页开关“Caret sync”，键名同 caret-sync.ts 的 ARM_KEY）：开关开着才下载 caret-sync.ts（是不是 iOS 主屏幕版在它里面判断，省首屏字节）（对齐本体在 caret-align.ts）。
 // 第一版试验（preview.267）光标归位了，但打字条掉进键盘下 62pt，这一版加了浮条补抬，真机过了再转正；正式构建靠 MODE 常量整块摇掉
-if (import.meta.env.MODE !== 'production' && isAppleMobile() && isStandalone() && caretLogWanted()) {
+if (import.meta.env.MODE !== 'production' && caretLogWanted()) {
   void import('../platform/caret-sync.ts').then((m) => m.startCaretSync());
 }
 // R-371 冷启动时间线（非正式版，诊断页开关“Timeline next launch”）：开着才下载 platform/vh-diag-boot.ts 记一次；键名同 vh-timeline.ts 的 ARM_KEY。

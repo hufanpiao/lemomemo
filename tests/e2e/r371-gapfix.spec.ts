@@ -122,7 +122,7 @@ test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () =>
     expect(await log(page)).toMatch(/no-change pad-removed/);
     // 台账 Q-2 早试：main.tsx 一开始就同步放过一次垫块（Chromium 不改 innerHeight，1 秒撤掉记 no-change），记在“等底栏后那一次”前面
     const full = await log(page);
-    expect(full).toMatch(/early nav=\d+ms no-change after=\d+ms gap=61 top=(0|61)/);
+    expect(full).toMatch(/early nav=\d+ms no-change inner=895 after=\d+ms gap=61 top=(0|61)/);
     expect(full.indexOf('early nav=')).toBeLessThan(full.indexOf('pad gap=61'));
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(await restH(page, 895));
     expect(await page.evaluate(() => Math.round(document.querySelector('[data-testid="tabbar"]')?.getBoundingClientRect().bottom ?? -1))).toBe(during.bar);

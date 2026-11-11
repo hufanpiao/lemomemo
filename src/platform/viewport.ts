@@ -94,7 +94,7 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
   const fullOf = env.full ?? defaultFull;
   const phoneOf = env.phone ?? (() => isIPhone());
   // 单调时钟：系统时间往回调不影响暂缓计时（独立验证 11-11 建议 3）
-  const nowOf = env.now ?? (() => (typeof performance !== 'undefined' ? performance.now() : Date.now()));
+  const nowOf = env.now ?? (() => performance.now());
   /** 对订阅者报的开 / 关（Q-13 暂缓期间比 height 晚一步变成关） */
   let reported = false;
   /** 暂缓到什么时候（0 = 不在暂缓） */

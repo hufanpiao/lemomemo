@@ -2,6 +2,7 @@
 // 对齐动作本身在 caret-align.ts（试验，只经本文件加载、只进非正式版）；这里启动它，并把每次对齐、补抬前后的数值记一行，
 // 存 OUT_KEY，诊断页可整段复制给主持人
 import { startCaretAlign } from './caret-align.ts';
+import { isAppleMobile, isStandalone } from './env.ts';
 
 export const ARM_KEY = 'lemo-caret-sync';
 export const OUT_KEY = 'lemo-caret-sync-out';
@@ -34,6 +35,8 @@ export function readCaretSyncLog(store: Storage = localStorage): string {
 
 /** 带日志启动光标对齐（main.tsx 冷启动调一次，代替不带日志的那次）；返回停止函数 */
 export function startCaretSync(win: Window = window, store: Storage = localStorage, now: () => number = () => Date.now()): () => void {
+  // 只在 iOS 主屏幕版做（main.tsx 只看开关，设备判断放这里省首屏字节）
+  if (win === window && !(isAppleMobile() && isStandalone())) return () => undefined;
   const t0 = now();
   const lines: string[] = [`caret-sync start=${new Date(t0).toISOString()} screen=${win.screen.width}x${win.screen.height}`];
   const save = (): void => {
