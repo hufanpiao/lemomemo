@@ -26,7 +26,7 @@ async function launch(page: Page, o: { on: boolean; screenH: number; top: number
       Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1', configurable: true });
     Object.defineProperty(navigator, 'standalone', { value: true, configurable: true });
     Object.defineProperty(screen, 'height', { get: () => a.screenH, configurable: true });
-    // 横屏按 innerWidth 比 screen 短边判（viewport-geom.ts）：webkit 项目的 iPhone 15 screen 宽 393，比视口 440 窄，盖成和视口一样宽
+    // 横屏按 innerWidth 比 screen 短边判（viewport-screen.ts）：webkit 项目的 iPhone 15 screen 宽 393，比视口 440 窄，盖成和视口一样宽
     Object.defineProperty(screen, 'width', { get: () => 440, configurable: true });
     // 注入脚本跑的时候 <html> 可能还没建出来：出来了再设
     const set = (): boolean => {

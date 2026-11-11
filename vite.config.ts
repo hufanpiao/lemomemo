@@ -13,6 +13,13 @@ const root = import.meta.dirname;
  * 只匹配整个说明符 'zod'；垫片自己引 'zod/v4'，不会绕回来。tests/build/zod-alias.test.ts 守着
  */
 export const ZOD_JITLESS_ALIAS = { find: /^zod$/, replacement: resolve(root, 'src/platform/zod-jitless.ts') };
+/**
+ * 只有 export … from 的出口文件按无副作用打包（11-12 首屏瘦身）：底栏从 motion/components.ts 只拿 Pressable，可出口是静态转出，
+ * Rolldown 把 Appear、AppearList、useHoldView、swap-guard 这些只有懒加载页用的组件也算进首屏块（约 1 KB gzip）。标成无副作用以后，
+ * 引入按名字直接连到真正的模块，没人在首屏用的跟着用它的页走。没匹配上的模块照默认（包的 package.json sideEffects 照认）。
+ * 出口文件只许有 export … from（tests/build/pure-reexports.test.ts 守着），往里加顶层语句就不是无副作用了
+ */
+export const PURE_REEXPORT_RULES = [{ test: /[\\/]src[\\/]motion[\\/]components\.ts$/, sideEffects: false }];
 // LEMO_BUILD_VERSION（deploy-preview 给的 X.Y.Z-preview.N）优先，否则 VERSION 文件；和 app/version.json 同一个来源
 export const APP_VERSION: string = buildVersion(root);
 /**
@@ -120,6 +127,7 @@ export default defineConfig(({ mode }) => {
       // 小文件也不内联成 data: URI（img-src 虽然放了 data:，字体等没放）
       assetsInlineLimit: 0,
       rollupOptions: {
+        treeshake: { moduleSideEffects: PURE_REEXPORT_RULES },
         input: {
           main: resolve(root, 'src/index.html'),
           auth: resolve(root, 'src/auth/index.html'),

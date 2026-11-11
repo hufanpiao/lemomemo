@@ -3,7 +3,8 @@
 // 等底栏挂上、键盘真收起由按需下载的 vh-gapfix.ts 再调 fixHeight（innerHeight 一变就撤）。本文件在首屏（main.tsx 静态引），只放这几样。
 // 不变量：只在竖屏、少的正是顶部安全区时做；同一时刻最多一块垫块。requestAnimationFrame 只许 src/motion 用（A25），等帧的函数由调用方传
 import { isAppleMobile, isStandalone, type NavLike } from './env.ts';
-import { fullHeight, GAP_MAX_PX, isLandscape, TOL_PX } from './viewport-geom.ts';
+// 整屏几何从 viewport-screen.ts 引，不经 viewport-geom.ts：那份不在首屏块里，跟着 viewport.ts 的分包按需下载（11-12 首屏瘦身）
+import { fullHeight, GAP_MAX_PX, isLandscape, TOL_PX } from './viewport-screen.ts';
 
 /** 诊断页“关掉用来对照”存的键：存了 '1' 就不做 */
 export const OFF_KEY = 'lemo-gapfix-off';
@@ -47,7 +48,7 @@ export interface GapState {
   readonly landscape: boolean;
   /** innerHeight */
   readonly inner: number;
-  /** 整屏高（viewport-geom 的 fullHeight） */
+  /** 整屏高（viewport-screen 的 fullHeight） */
   readonly full: number;
   /** 顶部安全区；冷启动时可能先读到 0 */
   readonly top: number;

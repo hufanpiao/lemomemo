@@ -5,7 +5,7 @@
 // - 冷静期探测（R-256 ③、R-258）：验证码通过后、本机已有会话时各探测一次账号状态，冷静期原地出恢复页、停用只出“账号已停用”，
 //   验证码刚通过时探测不出就出“暂时无法确认账号状态”（useAccountGate）；发现本机会话已被别的标签页换掉，整页重走 SessionCheck
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { installGate, type InstallGate } from '../../../platform/env.ts';
+import { installGate, type InstallGate } from '../../../platform/install-gate.ts';
 import { clearExitNotice, readExitNotice, readSessionUserId, type ExitNotice } from '../../../platform/session.ts';
 import { useAccountGate, type GateExit } from '../hooks/useAccountGate.ts';
 import { useAuthFlow, type AuthFlowDeps } from '../hooks/useAuthFlow.ts';

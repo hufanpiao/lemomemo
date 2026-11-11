@@ -1,7 +1,7 @@
 // 模拟 UA 和登录页的共用部分（从 b1-login-ua.spec.ts 抽出来，E2E-REAL 第 5 步）：
 // 无后端组的 b1-login-ua.spec.ts（判断逻辑、页面上该出教程还是登录表单）和真后端组的 b1-login-ua.real.spec.ts（真的登录一遍）共用。
 // 只模拟 JS 能读到的部分（UA、maxTouchPoints、navigator.standalone、matchMedia）；CSS 的 @media (display-mode) 不跟着变。
-// App 的判断是 platform/env.installGate()（isAppleMobile、isStandalone、isIOSSafari；iPadOS 加 maxTouchPoints > 1；R-225），按这几个 JS 接口判断时模拟有效。
+// App 的判断是 platform/install-gate.ts 的 installGate()（isAppleMobile、isStandalone、isIOSSafari；iPadOS 加 maxTouchPoints > 1；R-225），按这几个 JS 接口判断时模拟有效。
 // 这个文件不连任何后端。
 import { devices, type Page } from '@playwright/test';
 

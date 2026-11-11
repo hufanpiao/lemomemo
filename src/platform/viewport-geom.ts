@@ -1,27 +1,17 @@
 // 视口几何（这类事只在这里算）：可视高度、键盘高度、键盘弹着没有、整屏高、布局视口少的那截，以及这些判断的门槛常量。
 // 纯函数，不读 DOM、不记状态；监听和写根节点在 viewport.ts，冷启动高度校正在 vh-gapfix-gate.ts，都只用这里的结果。
+// 横竖屏、整屏高和 TOL_PX、GAP_MAX_PX 写在 viewport-screen.ts、这里照样转出：冷启动高度校正在首屏只要这几样，本文件不在首屏块里，跟着 viewport.ts 的分包按需下载（11-12 首屏瘦身）。
 // 不变量：iOS 主屏幕版 iPhone 弹键盘时布局视口本身被压矮（可视区算法量出 0），只有这时按“在输入 + 比整屏矮出一个键盘”判；
 // iPad 不算（台前调度、分屏、接实体键盘时窗口本来就比整屏矮得多）
 
+import { GAP_MAX_PX, TOL_PX } from './viewport-screen.ts';
+
+export { fullHeight, GAP_MAX_PX, isLandscape, TOL_PX } from './viewport-screen.ts';
+
 /** 高度差比这少不算键盘（地址栏伸缩只有几十 px） */
 export const KB_MIN_PX = 120;
-/** 两个高度差这么多以内算一样（回到整屏、少的正是顶部安全区） */
-export const TOL_PX = 4;
-/** 布局视口比整屏少这么多以内才当“少了顶部安全区”（再多是键盘、分屏等） */
-export const GAP_MAX_PX = 100;
 /** 可视区缩放和 1 差这么多以内算没缩放 */
 const SCALE_EPS = 0.01;
-
-type WinLike = Pick<Window, 'innerWidth' | 'innerHeight'> & { screen: Pick<Screen, 'width' | 'height'> };
-
-/** 横屏：innerWidth 比 screen 短边宽。iOS 的 screen 不随横竖屏转；不拿 innerHeight 比（弹键盘时它会被压得比宽还小） */
-export const isLandscape = (w: WinLike): boolean => w.innerWidth > Math.min(w.screen.width, w.screen.height);
-
-/** 整屏高：横屏取 screen 短边、竖屏取长边 */
-export const fullHeight = (w: WinLike): number => {
-  const { width, height } = w.screen;
-  return isLandscape(w) ? Math.min(width, height) : Math.max(width, height);
-};
 
 /** 键盘压在布局视口上的高度（px）：布局视口高 − 可视区高 − 可视区顶端偏移，不到 KB_MIN_PX 当 0 */
 export function keyboardHeight(innerHeight: number, vvHeight: number, vvOffsetTop: number): number {

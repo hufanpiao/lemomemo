@@ -6,7 +6,7 @@
 //   iPadOS Safari：Mac Safari 的 UA（iPadOS 默认伪装成 Mac）＋ navigator.maxTouchPoints = 5，非主屏幕
 //   桌面：chromium project 用 Desktop Chrome，webkit project 用 Desktop Safari（模拟 Mac Safari）
 // 只模拟 JS 能读到的部分（UA、maxTouchPoints、navigator.standalone、matchMedia）；CSS 的 @media (display-mode) 不跟着变。
-// App 的判断是 platform/env.installGate()（isAppleMobile、isStandalone、isIOSSafari；iPadOS 加 maxTouchPoints > 1；R-225），按这几个 JS 接口判断时模拟有效。
+// App 的判断是 platform/install-gate.ts 的 installGate()（isAppleMobile、isStandalone、isIOSSafari；iPadOS 加 maxTouchPoints > 1；R-225），按这几个 JS 接口判断时模拟有效。
 //
 // 能跑的：每种环境的自检（模拟值真的生效、按判断式该分到“教程”还是“登录”）、/app/ 外壳在该环境下能打开且没有 CSP 报错、
 //   登录页 /app/auth/（K4）上该出教程还是登录表单（TC-B1-16、TC-B1-17 的页面部分；R-225 起 iOS 上的 Chrome、KakaoTalk、微信也只给教程）。

@@ -1,7 +1,8 @@
 // 设备判断（架构 5.9、TC-B1-17、R-225）：iPhone、iPad 上凡是不在主屏幕模式运行的，一律只给“添加到主屏幕”教程；
 // 不是 Safari 时另提示“请在 Safari 里打开本页”；电脑浏览器、安卓照常登录
 import { describe, expect, it } from 'vitest';
-import { installGate, isAppleMobile, isIOSSafari, isStandalone, isTauri, mustInstallFirst, runtimeOf, type NavLike } from '../env.ts';
+import { isAppleMobile, isStandalone, isTauri, runtimeOf, type NavLike } from '../env.ts';
+import { installGate, isIOSSafari, mustInstallFirst } from '../install-gate.ts';
 
 const UA = {
   iphoneSafari:
