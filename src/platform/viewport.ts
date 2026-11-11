@@ -1,7 +1,8 @@
 // 视口监听（这类事只在这里做；几何在 viewport-geom.ts）：盯 visualViewport 的 resize / scroll、焦点进出、回前台，按 viewportGeom 的结果写根节点：
 // --kb（键盘压住布局视口的高度）、data-kbo（键盘弹着，浮条贴键盘）、--vh-gap（布局视口少一截，贴底元素补到屏幕底）、data-kbhide（底栏、“＋”藏起）。
 // 不变量：data-kbhide = data-kbo 或“收起后暂缓”（主屏幕版 iPhone 键盘刚收、布局视口还没回到整屏，最多 HOLD_MS），watchKeyboard 报的开关和它一致；
-// 键盘真收了（静了 KB_SETTLE_MS、没在输入）通知 watchKeyboardClosed（冷启动高度校正再做一次）。没有 visualViewport 的环境什么都不做。
+// 键盘真收了（静了 KB_SETTLE_MS、没在输入）通知 watchKeyboardClosed（冷启动高度校正再做一次）；回调都没接（正在做）就保持上膛，下一次视口事件静下来再报。
+// 没有 visualViewport 的环境什么都不做。
 // 另有 blockPageZoom：拦 iOS 整页双指缩放（iOS 不认 viewport 的 user-scalable=no，只有 gesture* 事件 preventDefault 停得住）
 import { isStandalone } from './env.ts';
 import { rlog } from './run-log-api.ts';
@@ -69,7 +70,8 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
   const phoneOf = env.phone ?? (() => isIPhone());
   const nowOf = env.now ?? (() => performance.now());
   const listeners = new Set<Listener>();
-  const closers = new Set<() => void>();
+  /** 返回 false 是这次没接 */
+  const closers = new Set<() => boolean>();
   let vv: VvLike | null = null;
   let doc: DocLike | null = null;
   /** 上次报的键盘高度、开关（开关含暂缓）和写到根节点的值 */
@@ -104,9 +106,11 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
     settleTimer = undefined;
     const g = measure();
     if (!g || g.open || editingOf() || (g.squeeze && g.short > GAP_MAX_PX)) return;
-    armed = false;
-    rlog('kb closed');
-    for (const f of [...closers]) f();
+    let taken = false;
+    for (const f of [...closers]) if (f()) taken = true;
+    // 都没接（冷启动高度校正正在做）：保持上膛，下一次视口事件静了再报，不排队
+    if (taken) armed = false;
+    rlog(taken ? 'kb closed' : 'kb closed not-taken');
   };
 
   const update = (): void => {
@@ -184,8 +188,8 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
     isOpen: (): boolean => reported,
     /** 键盘弹起 / 收起时通知（fn(open, heightPx)）；返回取消函数 */
     watch: (fn: Listener): (() => void) => subscribe(listeners, fn),
-    /** 键盘真收了时通知；返回取消函数 */
-    onClosed: (fn: () => void): (() => void) => subscribe(closers, fn),
+    /** 键盘真收了时通知（fn 返回 false 是这次没接，保持上膛等下一次视口事件）；返回取消函数 */
+    onClosed: (fn: () => boolean): (() => void) => subscribe(closers, fn),
   };
 }
 
@@ -200,8 +204,8 @@ export function isKeyboardOpen(): boolean {
   return shared.isOpen();
 }
 
-/** 键盘真收了时通知（冷启动高度校正用）；返回取消函数 */
-export function watchKeyboardClosed(fn: () => void): () => void {
+/** 键盘真收了时通知（冷启动高度校正用；fn 返回 false 是这次没接）；返回取消函数 */
+export function watchKeyboardClosed(fn: () => boolean): () => void {
   return shared.onClosed(fn);
 }
 

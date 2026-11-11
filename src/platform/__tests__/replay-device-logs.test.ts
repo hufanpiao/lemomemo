@@ -2,9 +2,10 @@
 // 所以把负责人真机日志里的数值原样按顺序喂进去，逐步算底栏在屏幕上的位置，不在“焊死”的那个位置又露着就不过。
 // 屏幕上的位置按真机时间线反推：fixed 贴底元素的下沿在屏幕上 = 布局视口下沿（innerHeight）− bottom；
 // 时间线里 inner=895 时底栏下沿 bar=853（= 895 − 8 − 34），inner=956 时 914（= 956 − 8 − 34），和这个算法一致。
+// 底栏、“＋”只按根节点 data-kbhide 藏（CSS），所以“藏没藏”读根节点属性；每一步再核 watch 回调报的开关和它一致。
 // 日志原文存 scratchpad（不进仓库），这里只留数值
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createKeyboardWatcher, GAP_VAR } from '../viewport.ts';
+import { BAR_HIDE_ATTR, createKeyboardWatcher, GAP_VAR } from '../viewport.ts';
 
 const SCREEN = 956;
 const INSET_BOTTOM = 34;
@@ -27,10 +28,11 @@ function rig() {
     removeEventListener: (k: string) => vvH.delete(k),
   };
   const vars = new Map<string, string>();
+  const attrs = new Map<string, string>();
   const root = {
     style: { setProperty: (k: string, v: string) => vars.set(k, v), removeProperty: (k: string) => vars.delete(k) },
-    setAttribute: vi.fn(),
-    removeAttribute: vi.fn(),
+    setAttribute: (k: string, v: string) => attrs.set(k, v),
+    removeAttribute: (k: string) => attrs.delete(k),
   };
   const w = createKeyboardWatcher({
     vv: () => vv as never,
@@ -43,15 +45,22 @@ function rig() {
     phone: () => true,
     now: () => Date.now(),
   });
-  let hidden = false;
-  w.watch((open) => (hidden = open));
-  /** 每一步：底栏藏着就不管位置；露着就必须在焊死的位置 */
+  /** watch 回调最后报的开关 */
+  let reported = false;
+  w.watch((open) => (reported = open));
+  /** 底栏藏没藏：根节点 data-kbhide（底栏、“＋”的 CSS 只认它） */
+  const hidden = (): boolean => attrs.get(BAR_HIDE_ATTR) === '1';
+  /** 每一步：data-kbhide 和 watch 回调一致；底栏藏着就不管位置，露着就必须在焊死的位置 */
   const problems: string[] = [];
+  const agree = (label: string): void => {
+    if (hidden() !== reported) problems.push(`${label}: data-kbhide=${hidden() ? 1 : 0}，watch 报 ${reported ? 1 : 0}`);
+  };
   const step = (label: string, h: number, vvHeight = h): void => {
     inner = h;
     vv.height = vvHeight;
     vvH.get('resize')?.();
-    if (hidden) return;
+    agree(label);
+    if (hidden()) return;
     const gap = Number.parseFloat(vars.get(GAP_VAR) ?? '0');
     const at = barBottomOnScreen(inner, gap);
     if (at !== WELDED) problems.push(`${label}: 底栏露着、下沿在 ${at}（应在 ${WELDED}）`);
@@ -62,9 +71,13 @@ function rig() {
     focus: (v: boolean) => {
       editing = v;
       docH.get(v ? 'focusin' : 'focusout')?.();
+      agree(v ? 'focusin' : 'focusout');
     },
-    wait: (ms: number) => vi.advanceTimersByTime(ms),
-    isHidden: () => hidden,
+    wait: (ms: number) => {
+      vi.advanceTimersByTime(ms);
+      agree(`等 ${ms}ms`);
+    },
+    isHidden: hidden,
   };
 }
 
@@ -91,6 +104,7 @@ describe('真机日志回放：底栏焊死（台账 Q-13、R-395）', () => {
     r.focus(false);
     r.step('键盘收起中（可视区还矮）', 895, 700);
     r.step('键盘收完 895', 895);
+    expect(r.isHidden()).toBe(true);
     r.wait(330);
     r.step('Gap fix 补回 956', 956);
     expect(r.problems).toEqual([]);

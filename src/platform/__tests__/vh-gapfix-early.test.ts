@@ -1,51 +1,10 @@
 // 台账 Q-2 早试（platform/vh-gapfix-gate.ts 的 startEarlyGapFix，11-11）：负责人真机日志 Gap fix 等底栏挂上 t=1571 才放垫块、t=1586 就变 956，
 // 启动画面盖着的这段底下一直是灰带。main.tsx 一开始同步早试一次（同样的垫块），不成再由 vh-gapfix.ts 等底栏挂上后照原样做；早试的时刻和结果记进 Gap fix 日志
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GAP_MAX_PX } from '../viewport-geom.ts';
 import { readGapFixLog, startGapFix } from '../vh-gapfix.ts';
-import { EARLY_GIVE_UP_MS, earlyGap, PAD_ID, startEarlyGapFix, type EarlyGap } from '../vh-gapfix-gate.ts';
-
-/** 手动推进的“帧” */
-function frames() {
-  const q: Array<() => void> = [];
-  return {
-    frame: (cb: () => void) => q.push(cb),
-    flush(n = 1) {
-      for (let k = 0; k < n; k++) q.shift()?.();
-    },
-    get size() {
-      return q.length;
-    },
-  };
-}
-
-let inner = 895;
-let clock = 0;
-const setInner = (h: number) => {
-  inner = h;
-};
-const mountBar = (): HTMLElement => {
-  const el = document.createElement('nav');
-  el.dataset['testid'] = 'tabbar';
-  document.body.append(el);
-  return el;
-};
-const pad = () => document.getElementById(PAD_ID);
-const deps = () => ({ now: () => clock, standalone: true, top: 61 });
-
-beforeEach(() => {
-  localStorage.clear();
-  inner = 895;
-  clock = 0;
-  vi.spyOn(window, 'innerHeight', 'get').mockImplementation(() => inner);
-  vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(440);
-  vi.spyOn(window.screen, 'height', 'get').mockReturnValue(956);
-  vi.spyOn(window.screen, 'width', 'get').mockReturnValue(440);
-});
-afterEach(() => {
-  document.body.replaceChildren();
-  vi.restoreAllMocks();
-});
+import { EARLY_GIVE_UP_MS, earlyGap, startEarlyGapFix, type EarlyGap } from '../vh-gapfix-gate.ts';
+import { deps, frames, mountBar, pad, setInner } from './gapfix-fixture.ts';
 
 describe('台账 Q-2 早试（main.tsx 一开始同步试一次，vh-gapfix-gate.ts）', () => {
   it('早试还没结束：不判断、不放第二块垫块；结束后先记 early 一行，再照原样做', () => {
@@ -99,7 +58,7 @@ describe('startEarlyGapFix（早试本身）', () => {
     t = 0;
   });
 
-  it('895 / 956：同步放垫块（不等帧、不等底栏），innerHeight 一变就撤、记 changed 和用时', () => {
+  it('895 / 956：同步放垫块（不等帧、不等底栏），回到整屏就撤、记 changed 和用时', () => {
     setTop(61);
     t = 300;
     const fr = frames();

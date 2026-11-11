@@ -1,4 +1,4 @@
-// viewport.ts 的藏底栏属性（BAR_HIDE_ATTR = data-kbo 或收起后暂缓）和“键盘真收了”通知（onClosed，冷启动高度校正用）
+// viewport.ts 的藏底栏属性（BAR_HIDE_ATTR = data-kbo 或收起后暂缓）和“键盘真收了”通知（onClosed，冷启动高度校正用；回调返回 false 是这次没接，保持上膛）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BAR_HIDE_ATTR, createKeyboardWatcher, HOLD_MS, KB_SETTLE_MS } from '../viewport.ts';
 
@@ -70,7 +70,7 @@ describe(`根节点 ${BAR_HIDE_ATTR}（底栏、“＋”藏起的唯一开关�
 describe('onClosed（键盘真收了）', () => {
   it('收起后静了 KB_SETTLE_MS 才报一次；没再弹键盘就不再报', () => {
     const k = mk();
-    const fn = vi.fn();
+    const fn = vi.fn(() => true);
     const stop = k.w.onClosed(fn);
     k.up();
     k.down(895);
@@ -86,7 +86,7 @@ describe('onClosed（键盘真收了）', () => {
 
   it('没弹过键盘（冷启动 895 → 956）不报', () => {
     const k = mk();
-    const fn = vi.fn();
+    const fn = vi.fn(() => true);
     const stop = k.w.onClosed(fn);
     k.set(895);
     k.set(956);
@@ -97,7 +97,7 @@ describe('onClosed（键盘真收了）', () => {
 
   it('焦点还在输入框、或布局视口还矮着一大截（还在往下收）：不报；离开输入框、回到只少顶部安全区才报', () => {
     const k = mk();
-    const fn = vi.fn();
+    const fn = vi.fn(() => true);
     const stop = k.w.onClosed(fn);
     k.up();
     k.down(895, true);
@@ -111,9 +111,31 @@ describe('onClosed（键盘真收了）', () => {
     stop();
   });
 
+  it('回调返回 false（正在做、这次不接）：保持上膛，不当场重报；下一次视口事件静了 KB_SETTLE_MS 再报', () => {
+    const k = mk();
+    let take = false;
+    const fn = vi.fn(() => take);
+    const stop = k.w.onClosed(fn);
+    k.up();
+    k.down(895);
+    k.wait(KB_SETTLE_MS);
+    expect(fn).toHaveBeenCalledTimes(1);
+    k.wait(KB_SETTLE_MS * 3);
+    expect(fn).toHaveBeenCalledTimes(1);
+    take = true;
+    k.set(895);
+    k.wait(KB_SETTLE_MS);
+    expect(fn).toHaveBeenCalledTimes(2);
+    // 这次接了：退膛，再来视口事件不报
+    k.set(956);
+    k.wait(KB_SETTLE_MS);
+    expect(fn).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
   it('取消订阅后计时器作废', () => {
     const k = mk();
-    const fn = vi.fn();
+    const fn = vi.fn(() => true);
     const stop = k.w.onClosed(fn);
     k.up();
     k.down(895);

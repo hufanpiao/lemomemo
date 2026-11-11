@@ -107,8 +107,9 @@ describe('--dock-bottom 四种状态（台账 Q-20）', () => {
     expect(dock({ wide: false, kbo: true }, { '--kb': 320 })).toBe(320);
   });
 
-  it('宽屏、键盘没弹：安全区 + 24', () => {
+  it('宽屏、键盘没弹：安全区 + 24；不减 --vh-gap（宽屏没有底栏，iPhone 大屏横屏主屏幕版 --vh-gap=61 也不往下挪，和改前一样）', () => {
     expect(dock({ wide: true, kbo: false }, {})).toBe(34 + 24);
+    expect(dock({ wide: true, kbo: false }, { '--vh-gap': 61 })).toBe(34 + 24);
     expect(dock({ wide: true, kbo: false }, { '--kb': 320 })).toBe(320);
   });
 

@@ -1,65 +1,13 @@
 // 底栏偏高修复 Gap fix（platform/vh-gapfix.ts，R-371 11-10；11-11 起 iOS 主屏幕版默认开）：诊断页关掉存本机；只在“主屏幕版、竖屏、少的正好是顶部安全区”时放垫块让文档比视口高，
-// innerHeight 变了或到点就撤；600ms 没变补一次滚 1px 再滚回；正常启动、网页版、横屏一律不动；每一步记日志
+// 等底栏后那次 innerHeight 一变就撤（早试才只认回整屏，见 vh-gapfix-early.test.ts）、到点也撤；600ms 没变补一次滚 1px 再滚回；
+// 顶部安全区读到 0 隔帧重读，一直 0 就不做；正常启动、网页版、横屏一律不动；每一步记日志。输入框聚焦、键盘弹起期间的几条在 vh-gapfix-editing.test.ts
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { GAP_MAX_PX, TOL_PX } from '../viewport-geom.ts';
-import { GIVE_UP_MS, gapFixOn, OUT_KEY, readGapFixLog, SCROLL_AT_MS, setGapFixOn, startGapFix, WAIT_BAR_MS } from '../vh-gapfix.ts';
-import { OFF_KEY, PAD_ID, skipReason } from '../vh-gapfix-gate.ts';
-
-/** 手动推进的“帧” */
-function frames() {
-  const q: Array<() => void> = [];
-  return {
-    frame: (cb: () => void) => q.push(cb),
-    flush(n = 1) {
-      for (let k = 0; k < n; k++) q.shift()?.();
-    },
-    get size() {
-      return q.length;
-    },
-  };
-}
-
-let inner = 895;
-let clock = 0;
-/** 页面滚动位置（scrollBy / scrollTo 的替身改它） */
-let sy = 0;
-const mockScroll = () => ({
-  by: vi.spyOn(window, 'scrollBy').mockImplementation(((_x: number, y: number) => {
-    sy += y;
-  }) as typeof window.scrollBy),
-  to: vi.spyOn(window, 'scrollTo').mockImplementation(((_x: number, y: number) => {
-    sy = y;
-  }) as typeof window.scrollTo),
-});
-const setInner = (h: number) => {
-  inner = h;
-};
-const mountBar = (): HTMLElement => {
-  const el = document.createElement('nav');
-  el.dataset['testid'] = 'tabbar';
-  document.body.append(el);
-  return el;
-};
-const pad = () => document.getElementById(PAD_ID);
-const deps = (over: { standalone?: boolean; top?: number | (() => number) } = {}) => ({ now: () => clock, standalone: true, top: 61, ...over });
-
-beforeEach(() => {
-  localStorage.clear();
-  inner = 895;
-  clock = 0;
-  sy = 0;
-  vi.spyOn(window, 'scrollY', 'get').mockImplementation(() => sy);
-  vi.spyOn(window, 'innerHeight', 'get').mockImplementation(() => inner);
-  vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(440);
-  vi.spyOn(window.screen, 'height', 'get').mockReturnValue(956);
-  vi.spyOn(window.screen, 'width', 'get').mockReturnValue(440);
-});
-afterEach(() => {
-  document.body.replaceChildren();
-  vi.restoreAllMocks();
-});
+import { GIVE_UP_MS, gapFixOn, OUT_KEY, readGapFixLog, SCROLL_AT_MS, setGapFixOn, startGapFix, TOP_RETRY_FRAMES, TOP_RETRY_MS, WAIT_BAR_MS } from '../vh-gapfix.ts';
+import { OFF_KEY, skipReason } from '../vh-gapfix-gate.ts';
+import { deps, frames, mockScroll, mountBar, pad, setInner, st } from './gapfix-fixture.ts';
 
 describe('开关（11-11 起默认开，诊断页关掉用来对照）', () => {
   it('默认开；关掉存 OFF_KEY，再开回删掉；本机存储抛错时当开着、不抛', () => {
@@ -132,11 +80,11 @@ describe('startGapFix', () => {
     expect(p?.style.visibility).toBe('hidden');
     expect(p?.style.pointerEvents).toBe('none');
     expect(p?.style.height).toBe('calc(100dvh + 62px)');
-    clock = 50;
+    st.clock = 50;
     f.flush();
     expect(pad()).not.toBeNull();
     setInner(956);
-    clock = 80;
+    st.clock = 80;
     f.flush();
     expect(pad()).toBeNull();
     const log = localStorage.getItem(OUT_KEY) ?? '';
@@ -149,13 +97,13 @@ describe('startGapFix', () => {
     mountBar();
     const f = frames();
     startGapFix(f.frame, deps());
-    clock = SCROLL_AT_MS;
+    st.clock = SCROLL_AT_MS;
     f.flush();
     expect(by).toHaveBeenCalledWith(0, 1);
     f.flush();
     expect(to).toHaveBeenCalledWith(0, 0);
     expect(to).toHaveBeenCalledTimes(1);
-    clock = GIVE_UP_MS;
+    st.clock = GIVE_UP_MS;
     f.flush(3);
     expect(pad()).toBeNull();
     // 代码审 M1：撤垫块时已经滚回过，不再多滚一次
@@ -169,16 +117,16 @@ describe('startGapFix', () => {
     mountBar();
     const f = frames();
     startGapFix(f.frame, deps());
-    clock = SCROLL_AT_MS;
+    st.clock = SCROLL_AT_MS;
     f.flush();
-    expect(sy).toBe(1);
-    sy = 300;
+    expect(st.sy).toBe(1);
+    st.sy = 300;
     f.flush();
-    clock = GIVE_UP_MS;
+    st.clock = GIVE_UP_MS;
     f.flush(3);
     expect(pad()).toBeNull();
     expect(to).not.toHaveBeenCalled();
-    expect(sy).toBe(300);
+    expect(st.sy).toBe(300);
   });
 
   it('代码审 M1：滚 1px 后还没到滚回那一帧就撤垫块（innerHeight 变了），还停在那 1px 上才滚回一次', () => {
@@ -186,11 +134,11 @@ describe('startGapFix', () => {
     mountBar();
     const f = frames();
     const stop = startGapFix(f.frame, deps());
-    clock = SCROLL_AT_MS;
+    st.clock = SCROLL_AT_MS;
     f.flush();
     stop();
     expect(to).toHaveBeenCalledTimes(1);
-    expect(sy).toBe(0);
+    expect(st.sy).toBe(0);
     f.flush(3);
     expect(to).toHaveBeenCalledTimes(1);
   });
@@ -199,25 +147,57 @@ describe('startGapFix', () => {
     mockScroll();
     const f = frames();
     startGapFix(f.frame, deps());
-    clock = WAIT_BAR_MS - 1000;
+    st.clock = WAIT_BAR_MS - 1000;
     mountBar();
     f.flush();
     expect(pad()).not.toBeNull();
-    clock += 50;
+    st.clock += 50;
     f.flush();
     expect(pad()).not.toBeNull();
-    clock += GIVE_UP_MS;
+    st.clock += GIVE_UP_MS;
     f.flush(3);
     expect(pad()).toBeNull();
   });
 
-  it('顶部安全区还读到 0（先 0 后 61）、差值不大：照做（和早试同一条规则，不隔帧重读）', () => {
+  it(`建议 1 时序：顶部安全区先读到 0、隔 ${TOP_RETRY_FRAMES} 帧重读、第二次读到 61：读到 61 的那一帧才放垫块，日志记 top=61`, () => {
+    mockScroll();
+    mountBar();
+    const reads = [0, 0, 61];
+    const f = frames();
+    startGapFix(f.frame, deps({ top: () => reads.shift() ?? 61 }));
+    expect(pad()).toBeNull();
+    st.clock = 30;
+    f.flush(TOP_RETRY_FRAMES - 1);
+    expect(pad()).toBeNull();
+    f.flush(1);
+    // 第一次重读还是 0：接着等
+    expect(pad()).toBeNull();
+    st.clock = 60;
+    f.flush(TOP_RETRY_FRAMES - 1);
+    expect(pad()).toBeNull();
+    f.flush(1);
+    expect(pad()).not.toBeNull();
+    const log = readGapFixLog();
+    expect(log).toMatch(/t=0 top=0 reread every 4 frames/);
+    expect(log).toMatch(/t=60 top-reread tries=2 after=60ms top=61 inner=895/);
+    expect(log).toMatch(/t=60 pad gap=61 top=61/);
+    expect(log).not.toMatch(/pad gap=61 top=0/);
+  });
+
+  it(`建议 1：顶部安全区一直是 0：重读到 ${TOP_RETRY_MS}ms 放过，记 still-0 和 skip，不放垫块`, () => {
     mockScroll();
     mountBar();
     const f = frames();
     startGapFix(f.frame, deps({ top: 0 }));
-    expect(pad()).not.toBeNull();
-    expect(readGapFixLog()).toMatch(/pad gap=61 top=0/);
+    for (let k = 0; k < 5; k++) f.flush(TOP_RETRY_FRAMES);
+    expect(pad()).toBeNull();
+    st.clock = TOP_RETRY_MS;
+    f.flush(TOP_RETRY_FRAMES);
+    expect(pad()).toBeNull();
+    expect(f.size).toBe(0);
+    const log = readGapFixLog();
+    expect(log).toMatch(/top-reread tries=6 after=1000ms top=0 still-0/);
+    expect(log).toMatch(/skip gap-not-top\(gap=61 top=0\) top=0/);
   });
 
   it('顶部安全区是 0、差值太大（700 / 956，像分屏）：只记 skip', () => {
@@ -230,13 +210,14 @@ describe('startGapFix', () => {
     expect(readGapFixLog()).toMatch(/skip gap-not-top\(gap=256 top=0\) top=0/);
   });
 
-  it('顶部安全区是 0、根本没少高度（正常启动）：直接 skip', () => {
+  it('顶部安全区是 0、根本没少高度（正常启动）：不重读，直接 skip', () => {
     setInner(956);
     mountBar();
     const f = frames();
     startGapFix(f.frame, deps({ top: 0 }));
     expect(f.size).toBe(0);
     expect(readGapFixLog()).toMatch(/skip no-gap\(0\) top=0/);
+    expect(readGapFixLog()).not.toMatch(/reread/);
   });
 
   it('滚过以后才变：记 after-scroll', () => {
@@ -244,7 +225,7 @@ describe('startGapFix', () => {
     mountBar();
     const f = frames();
     startGapFix(f.frame, deps());
-    clock = SCROLL_AT_MS;
+    st.clock = SCROLL_AT_MS;
     f.flush(2);
     setInner(956);
     f.flush();
@@ -276,7 +257,7 @@ describe('startGapFix', () => {
     startGapFix(f.frame, deps());
     f.flush();
     expect(pad()).toBeNull();
-    clock = WAIT_BAR_MS;
+    st.clock = WAIT_BAR_MS;
     f.flush();
     expect(pad()).not.toBeNull();
   });

@@ -1,6 +1,6 @@
 // 冷启动高度校正（这类事只在这里做）：iOS 主屏幕版布局视口少了顶部安全区（895 / 956）时，fixHeight 放一个看不见的垫块让文档比视口高，
-// iOS 这时会重算 innerHeight；回到整屏或到点就撤。触发：main.tsx 一开始同步试一次（startEarlyGapFix，启动画面还盖着），
-// 等底栏挂上、键盘真收起由按需下载的 vh-gapfix.ts 再调 fixHeight。本文件在首屏（main.tsx 静态引），只放这几样。
+// iOS 这时会重算 innerHeight；到点照样撤。触发：main.tsx 一开始同步试一次（startEarlyGapFix，启动画面还盖着，只认回到整屏），
+// 等底栏挂上、键盘真收起由按需下载的 vh-gapfix.ts 再调 fixHeight（innerHeight 一变就撤）。本文件在首屏（main.tsx 静态引），只放这几样。
 // 不变量：只在竖屏、少的正是顶部安全区时做；同一时刻最多一块垫块。requestAnimationFrame 只许 src/motion 用（A25），等帧的函数由调用方传
 import { isAppleMobile, isStandalone, type NavLike } from './env.ts';
 import { fullHeight, GAP_MAX_PX, isLandscape, TOL_PX } from './viewport-geom.ts';
@@ -65,22 +65,27 @@ export function skipReason(s: GapState): string | null {
   return null;
 }
 
-/** 怎么结束的：回到整屏、到点没回、调用方停了 */
-export type FixEnd = 'full' | 'gave-up' | 'stopped';
+/** 怎么结束的：innerHeight 到了结束条件（见 FixRun.anyChange）、到点没到、调用方停了 */
+export type FixEnd = 'changed' | 'gave-up' | 'stopped';
 
 export interface FixRun {
   readonly win: Window;
   readonly frame: Frame;
   readonly now: () => number;
-  /** 放了垫块这么久还没回到整屏就撤 */
+  /** 放了垫块这么久还没到结束条件就撤 */
   readonly giveUpMs: number;
-  /** 还没回整屏、没到点时每帧调一次（参数：放垫块后过了多少 ms） */
+  /**
+   * true：innerHeight 一变就撤（等底栏后、收键盘后两次，和改前 padFix 一样：这时用户能点“＋”，弹键盘把 innerHeight 压矮的那一帧就得撤）；
+   * 不传：只认回到整屏（早试：冷启动 innerHeight 会先抖 1px 894→895，一变就撤会把没修好的当成修好了，台账 Q-2；这时启动画面盖着，没有输入框）
+   */
+  readonly anyChange?: boolean;
+  /** 还没到结束条件、没到点时每帧调一次（参数：放垫块后过了多少 ms） */
   readonly tick?: (at: number) => void;
   /** 撤了垫块以后调：怎么结束的、那时的 innerHeight、用了多少 ms */
   readonly done: (how: FixEnd, inner: number, at: number) => void;
 }
 
-/** 校正一次：放垫块（绝对定位、1px 宽、看不见、不接点按，文档高 = 一屏 + 差值 + 1px），每帧看 innerHeight 回到整屏没有。返回停止函数 */
+/** 校正一次：放垫块（绝对定位、1px 宽、看不见、不接点按，文档高 = 一屏 + 差值 + 1px），每帧看 innerHeight 到了结束条件没有。返回停止函数 */
 export function fixHeight(r: FixRun, gap: number): () => void {
   const { win, frame, now } = r;
   const doc = win.document;
@@ -97,6 +102,7 @@ export function fixHeight(r: FixRun, gap: number): () => void {
     ['pointer-events', 'none'],
   ] as const)
     pad.style.setProperty(k, v);
+  const inner0 = win.innerHeight;
   (doc.body ?? doc.documentElement).append(pad);
   const t0 = now();
   let over = false;
@@ -108,9 +114,9 @@ export function fixHeight(r: FixRun, gap: number): () => void {
   };
   const step = (): void => {
     if (over) return;
-    // 只认“回到整屏”：冷启动 innerHeight 会先抖 1px（894→895），一变就撤会把没修好的当成修好了
-    if (fullHeight(win) - win.innerHeight <= TOL_PX) {
-      end('full');
+    const h = win.innerHeight;
+    if (r.anyChange ? h !== inner0 : fullHeight(win) - h <= TOL_PX) {
+      end('changed');
       return;
     }
     const at = now() - t0;
@@ -155,7 +161,7 @@ export function startEarlyGapFix(
   }
   const done = (how: FixEnd, h: number, after: number): void => {
     e.done = true;
-    e.what = `${how === 'full' ? `changed ${s.inner}->${h}` : `no-change inner=${h}`} after=${after}ms${tail}`;
+    e.what = `${how === 'changed' ? `changed ${s.inner}->${h}` : `no-change inner=${h}`} after=${after}ms${tail}`;
   };
   fixHeight({ win, frame, now, giveUpMs: EARLY_GIVE_UP_MS, done }, s.full - s.inner);
   return e;

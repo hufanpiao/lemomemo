@@ -51,10 +51,12 @@ html[data-app] {
   --tabbar-pad: max(calc(var(--tabbar-h) + var(--inset-bottom) + 16px), var(--sn-pad, 0px));
 
   /* 贴底浮条（撤销条、打字条、提醒按钮条等）离底的唯一公式：键盘没弹时离底 安全区 + --dock-lift（手机在底栏上方 118，宽屏 24），
-     减 --vh-gap（布局视口少一截时补到屏幕底）；键盘压住布局视口时 --kb 是键盘高度，取两者大的（变量由 platform/viewport.ts 写）。
+     减 --dock-gap（手机 = --vh-gap：布局视口少一截时和底栏一起补到屏幕底；宽屏 0：没有底栏，和侧栏一样不补）；
+     键盘压住布局视口时 --kb 是键盘高度，取两者大的（--vh-gap、--kb 由 platform/viewport.ts 写）。
      组件只写 bottom: var(--dock-bottom)，不另写公式；--undo-h 是撤销条高度，叠放时往上让 */
   --dock-lift: 118px;
-  --dock-bottom: max(calc(var(--inset-bottom) + var(--dock-lift) - var(--vh-gap, 0px)), var(--kb, 0px));
+  --dock-gap: var(--vh-gap, 0px);
+  --dock-bottom: max(calc(var(--inset-bottom) + var(--dock-lift) - var(--dock-gap)), var(--kb, 0px));
   --undo-h: 56px;
 
   /* 随手记底部输入行键盘没弹时往下挪 36（离底栏上沿留 12）；键盘弹着时归 0 */
@@ -85,11 +87,12 @@ html[data-app] {
 }
 
 /* 电脑版侧栏（D5，断点和 GlassBar.module.css 侧栏那段一样是 (width >= 900px)）：底部没有底栏，
-   有底栏的页底部留白回到安全区 + 16px；浮条离底 安全区 + 24px（和侧栏离窗口边 16px 拉开一点） */
+   有底栏的页底部留白回到安全区 + 16px；浮条离底 安全区 + 24px（和侧栏离窗口边 16px 拉开一点），不减 --vh-gap */
 @media (width >= 900px) {
   :root {
     --tabbar-pad: max(calc(var(--inset-bottom) + 16px), var(--sn-pad, 0px));
     --dock-lift: 24px;
+    --dock-gap: 0px;
     --top-fade: 0px;
   }
 }

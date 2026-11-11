@@ -1,124 +1,14 @@
 // 键盘真收了以后再做一次冷启动高度校正（Q-4，vh-gapfix.ts 的 startGapFix 订阅 viewport.ts 的“键盘真收了”）：冷启动 895 → 修好 956 → 键盘 542 → 收起回 895 时再做一次、记 kb 日志；
-// 条件不满足不做、连续 focusout 不叠跑、诊断页关掉不做、键盘还在不做、用户在滚不抢、停止、日志上限、网页版不盯键盘
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createKeyboardWatcher, KB_SETTLE_MS } from '../viewport.ts';
-import { GIVE_UP_MS, MAX_LINES, readGapFixLog, SCROLL_AT_MS, setGapFixOn, startGapFix, type GapFixDeps } from '../vh-gapfix.ts';
+// 条件不满足不做、连续 focusout 不叠跑、诊断页关掉不做、键盘还在不做、用户在滚不抢、停止、日志上限、网页版不盯键盘。
+// 做着时来的不接、innerHeight 一变就撤、输入期间不动的几条在 vh-gapfix-editing.test.ts；走默认接法（共享 watcher）的在 vh-gapfix-kb-device.test.ts
+import { describe, expect, it, vi } from 'vitest';
+import { KB_SETTLE_MS } from '../viewport.ts';
+import { GIVE_UP_MS, MAX_LINES, readGapFixLog, SCROLL_AT_MS, setGapFixOn } from '../vh-gapfix.ts';
 import { PAD_ID } from '../vh-gapfix-gate.ts';
-
-/** 手动推进的“帧” */
-function frames() {
-  const q: Array<() => void> = [];
-  return {
-    frame: (cb: () => void) => q.push(cb),
-    flush(n = 1) {
-      for (let k = 0; k < n; k++) q.shift()?.();
-    },
-    get size() {
-      return q.length;
-    },
-  };
-}
-
-let inner = 895;
-let clock = 0;
-/** 页面滚动位置（scrollBy / scrollTo 的替身改它） */
-let sy = 0;
-const mockScroll = () => ({
-  by: vi.spyOn(window, 'scrollBy').mockImplementation(((_x: number, y: number) => {
-    sy += y;
-  }) as typeof window.scrollBy),
-  to: vi.spyOn(window, 'scrollTo').mockImplementation(((_x: number, y: number) => {
-    sy = y;
-  }) as typeof window.scrollTo),
-});
-const setInner = (h: number) => (inner = h);
-/** 视口和焦点静过 KB_SETTLE_MS（watcher 的计时器用假时钟） */
-const settle = () => {
-  clock += KB_SETTLE_MS;
-  vi.advanceTimersByTime(KB_SETTLE_MS);
-};
-const mountBar = (): void => {
-  const el = document.createElement('nav');
-  el.dataset['testid'] = 'tabbar';
-  document.body.append(el);
-};
-const pad = () => document.getElementById(PAD_ID);
-
-/** 假的 visualViewport：只要 height、offsetTop 和 resize 事件 */
-let vvH = 895;
-let vvTarget = new EventTarget();
-const vvResize = (h: number) => {
-  vvH = h;
-  vvTarget.dispatchEvent(new Event('resize'));
-};
-/** innerHeight 和可视区一起变成 h（iOS 主屏幕版弹、收键盘时两个一样） */
-const resize = (h: number) => {
-  setInner(h);
-  vvResize(h);
-};
-/** 主屏幕版 iPhone 的键盘 watcher（整屏 956），只给本条测试用 */
-const watcher = () =>
-  createKeyboardWatcher({
-    vv: () => vvTarget as unknown as VisualViewport,
-    innerHeight: () => inner,
-    root: () => null,
-    doc: () => document,
-    standalone: () => true,
-    full: () => 956,
-    phone: () => true,
-    now: () => clock,
-  });
-/** 每条测试起的都在 afterEach 停掉（监听挂在 document 上，不停会串到下一条） */
-const stops: Array<() => void> = [];
-const start = (frame: (cb: () => void) => unknown, over: Partial<GapFixDeps> = {}): (() => void) => {
-  const w = watcher();
-  const stop = startGapFix(frame, { now: () => clock, standalone: true, top: 61, kbClosed: w.onClosed, ...over });
-  stops.push(stop);
-  return stop;
-};
-
-beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  localStorage.clear();
-  inner = 895;
-  clock = 0;
-  sy = 0;
-  vi.spyOn(window, 'scrollY', 'get').mockImplementation(() => sy);
-  vi.spyOn(window, 'innerHeight', 'get').mockImplementation(() => inner);
-  vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(440);
-  vi.spyOn(window.screen, 'height', 'get').mockReturnValue(956);
-  vi.spyOn(window.screen, 'width', 'get').mockReturnValue(440);
-  vvH = 895;
-  vvTarget = new EventTarget();
-  Object.defineProperties(vvTarget, { height: { configurable: true, get: () => vvH }, offsetTop: { configurable: true, value: 0 } });
-});
-afterEach(() => {
-  for (const stop of stops.splice(0)) stop();
-  document.body.replaceChildren();
-  vi.restoreAllMocks();
-  vi.useRealTimers();
-});
+import { coldThenKeyboard, frames, input, mockScroll, mountBar, pad, resize, setInner, settle, startKb, st, vvResize } from './gapfix-fixture.ts';
 
 describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956 → 键盘 542 → 收起回 895）', () => {
-  const input = (): HTMLInputElement => document.body.appendChild(document.createElement('input'));
   const kbPads = (): number => readGapFixLog().match(/kb pad /g)?.length ?? 0;
-  /** 冷启动那次做完（895 → 956），然后弹键盘（542）、点空白收起（focusout，回 895） */
-  const coldThenKeyboard = (f: ReturnType<typeof frames>) => {
-    mountBar();
-    start(f.frame);
-    resize(956);
-    clock = 50;
-    f.flush();
-    expect(pad()).toBeNull();
-    expect(readGapFixLog()).toMatch(/changed 895->956 by-pad pad-removed/);
-    const el = input();
-    el.focus();
-    clock = 1000;
-    resize(542);
-    clock = 4000;
-    el.blur();
-    resize(895);
-  };
 
   it('静了 KB_SETTLE_MS 才做同一套：放垫块（日志带 kb）、innerHeight 回 956 就撤', () => {
     mockScroll();
@@ -143,12 +33,12 @@ describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956
     const f = frames();
     coldThenKeyboard(f);
     settle();
-    clock += SCROLL_AT_MS;
+    st.clock += SCROLL_AT_MS;
     f.flush();
     expect(by).toHaveBeenCalledWith(0, 1);
     f.flush();
     expect(to).toHaveBeenCalledWith(0, 0);
-    clock += GIVE_UP_MS;
+    st.clock += GIVE_UP_MS;
     f.flush(3);
     expect(pad()).toBeNull();
     expect(readGapFixLog()).toMatch(/kb scrollBy1[\s\S]*kb no-change pad-removed/);
@@ -163,7 +53,7 @@ describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956
     const f = frames();
     coldThenKeyboard(f);
     for (let k = 0; k < 5; k++) {
-      clock += 50;
+      st.clock += 50;
       vi.advanceTimersByTime(50);
       document.dispatchEvent(new FocusEvent('focusout'));
       vvResize(895);
@@ -183,7 +73,7 @@ describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956
     mockScroll();
     const f = frames();
     mountBar();
-    start(f.frame);
+    startKb(f.frame);
     setInner(956);
     f.flush();
     const a = input();
@@ -208,7 +98,7 @@ describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956
     const { by } = mockScroll();
     const f = frames();
     mountBar();
-    start(f.frame);
+    startKb(f.frame);
     setInner(956);
     f.flush();
     const el = input();
@@ -232,32 +122,6 @@ describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956
     expect(readGapFixLog()).toMatch(/kb skip off/);
   });
 
-  it('冷启动那次还没做完就弹键盘又收起：不叠跑，始终最多一块垫块；冷启动那次撤了以后键盘那次接着做', () => {
-    mockScroll();
-    const f = frames();
-    mountBar();
-    start(f.frame);
-    expect(pad()).not.toBeNull();
-    const el = input();
-    el.focus();
-    resize(542);
-    el.blur();
-    resize(895);
-    for (let k = 0; k < 4; k++) {
-      settle();
-      f.flush();
-      expect(document.querySelectorAll('#' + PAD_ID).length).toBeLessThanOrEqual(1);
-    }
-    expect(kbPads()).toBe(0);
-    clock += GIVE_UP_MS;
-    for (let k = 0; k < 6; k++) {
-      settle();
-      f.flush();
-      expect(document.querySelectorAll('#' + PAD_ID).length).toBeLessThanOrEqual(1);
-    }
-    expect(kbPads()).toBe(1);
-  });
-
   it('代码审 M1：用户正在滚（手指按着、页面被滚过），键盘那次不补 1px 滚动，只靠垫块，到点照样撤', () => {
     const { by, to } = mockScroll();
     const f = frames();
@@ -265,22 +129,22 @@ describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956
     settle();
     expect(pad()).not.toBeNull();
     document.dispatchEvent(new Event('touchstart'));
-    sy = 120;
-    clock += SCROLL_AT_MS;
+    st.sy = 120;
+    st.clock += SCROLL_AT_MS;
     f.flush();
     expect(by).not.toHaveBeenCalled();
-    clock += GIVE_UP_MS;
+    st.clock += GIVE_UP_MS;
     f.flush(3);
     expect(pad()).toBeNull();
     expect(to).not.toHaveBeenCalled();
-    expect(sy).toBe(120);
+    expect(st.sy).toBe(120);
     expect(readGapFixLog()).toMatch(/kb scroll-skipped user-scrolling y=120/);
   });
 
   it('停止函数：之后键盘起落都不理', () => {
     const f = frames();
     mountBar();
-    const stop = start(f.frame);
+    const stop = startKb(f.frame);
     setInner(956);
     f.flush();
     stop();
@@ -298,7 +162,7 @@ describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956
     mockScroll();
     const f = frames();
     mountBar();
-    start(f.frame);
+    startKb(f.frame);
     setInner(956);
     f.flush();
     const el = input();
@@ -318,7 +182,7 @@ describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956
   it('网页版（不是主屏幕版）不盯键盘', () => {
     const kbClosed = vi.fn(() => () => undefined);
     mountBar();
-    start(frames().frame, { standalone: false, kbClosed });
+    startKb(frames().frame, { standalone: false, kbClosed });
     expect(kbClosed).not.toHaveBeenCalled();
   });
 });
