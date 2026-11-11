@@ -3,11 +3,13 @@
 // Gap fix（R-371，platform/vh-gapfix.ts，11-11 起 iOS 主屏幕版默认开）：开关改成“关掉用来对照”——默认 ON，点成 OFF 存本机，下次冷启动起不做（再点回 ON 恢复默认）；下面显示最近一次冷启动的日志，“Copy gap fix log”整段复制（和时间线开关可以同时开）
 // 冷启动时间线（R-371，11-10，platform/vh-timeline.ts）：再多一排——“Timeline next launch: OFF/ON”开关（存本机，下次冷启动记 3 分钟，开始记就自动关）、
 // “Copy timeline”整段复制上一次记下的时间线；下面显示那段时间线（按“Copy timeline”时重新读本机，记着的时候也能拿到最新的）
+// 启动画面颜色诊断（台账 Q-2，platform/splash-probe-arm.ts）：再一排“Splash colors next launch: OFF/ON”开关（存本机，下次冷启动涂色 20 秒，开始涂就自动关）
 import { useState } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { runVhMethod, VH_METHODS } from '../../../platform/vh-probe.ts';
 import { gapFixOn, readGapFixLog, setGapFixOn } from '../../../platform/vh-gapfix.ts';
 import { readTimeline, setTimelineArmed, timelineArmed } from '../../../platform/vh-timeline.ts';
+import { setSplashProbeArmed, splashProbeArmed } from '../../../platform/splash-probe-arm.ts';
 import styles from './SettingsPage.module.css';
 
 export const TL_LABEL_ON = 'Timeline next launch: ON';
@@ -17,6 +19,8 @@ export const TL_COPIED = 'Copied';
 export const GF_LABEL_ON = 'Gap fix: ON';
 export const GF_LABEL_OFF = 'Gap fix: OFF (compare)';
 export const GF_COPY = 'Copy gap fix log';
+export const SP_LABEL_ON = 'Splash colors next launch: ON';
+export const SP_LABEL_OFF = 'Splash colors next launch: OFF';
 export const TL_COPY_FAIL = 'Copy failed - long-press the text below';
 
 export function VhProbe() {
@@ -25,6 +29,7 @@ export function VhProbe() {
   const [armed, setArmed] = useState(() => timelineArmed());
   const [tl, setTl] = useState(() => readTimeline());
   const [gf, setGf] = useState(() => gapFixOn());
+  const [sp, setSp] = useState(() => splashProbeArmed());
   const [gfLog, setGfLog] = useState(() => readGapFixLog());
   const [copied, setCopied] = useState<'' | 'ok' | 'fail'>('');
   const [gfCopied, setGfCopied] = useState<'' | 'ok' | 'fail'>('');
@@ -109,6 +114,19 @@ export function VhProbe() {
         </FormButton>
         <FormButton size="compact" disabled={gfLog === ''} data-testid="vh-gapfix-copy" onClick={copyGf}>
           {gfCopied === 'ok' ? TL_COPIED : gfCopied === 'fail' ? TL_COPY_FAIL : GF_COPY}
+        </FormButton>
+      </div>
+      <div className={`${styles.actions} ${styles.probeActions}`}>
+        <FormButton
+          size="compact"
+          aria-pressed={sp}
+          data-testid="vh-sp-arm"
+          onClick={() => {
+            setSplashProbeArmed(!sp);
+            setSp(splashProbeArmed());
+          }}
+        >
+          {sp ? SP_LABEL_ON : SP_LABEL_OFF}
         </FormButton>
       </div>
       {gfLog !== '' && (

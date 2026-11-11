@@ -21,6 +21,12 @@ export const SPLASH_FADE_RM_MS = 120;
 export const SPLASH_MAX_MS = 5000;
 /** 定时器兜底比过渡多等一点 */
 const SLACK_MS = 80;
+/** 启动画面颜色诊断（台账 Q-2，只在非正式版）在跑时：从第一次要收起的那一刻起再多留这么久，负责人来得及截图；正式构建整段摇掉 */
+export const SPLASH_HOLD_MS = 8000;
+/** main.tsx 读到诊断开关时同步在 <html> 上设的标记（data-splash-hold）；诊断撤掉时一起拿掉 */
+export const SPLASH_HOLD_ATTR = 'splashHold';
+let held: Promise<void> | null = null;
+let releaseHeld: (() => void) | null = null;
 
 const leaving = new WeakMap<Element, Promise<void>>();
 
@@ -34,6 +40,20 @@ function hiddenByCss(el: Element): boolean {
   return typeof getComputedStyle === 'function' && getComputedStyle(el).visibility === 'hidden';
 }
 
+/**
+ * 诊断模块加载失败（main.tsx 的 .catch）：拿掉保留标记、清掉诊断开关（armKey 即 splash-probe-arm.ts 的 ARM_KEY），
+ * 已经在多留的就马上照原逻辑收起——不然每次冷启动都重来、启动画面白白多盖。只在非正式版分支里调用，正式构建摇掉
+ */
+export function cancelSplashHold(armKey: string, store?: Storage): void {
+  if (typeof document !== 'undefined') delete document.documentElement.dataset[SPLASH_HOLD_ATTR];
+  releaseHeld?.();
+  try {
+    (store ?? localStorage).removeItem(armKey);
+  } catch {
+    // 本机存储用不了：开关本来也读不到
+  }
+}
+
 /** 收起启动画面：淡出后移除 DOM。重复调用安全，返回同一个 Promise */
 export function hideSplash(): Promise<void> {
   if (typeof document === 'undefined') return Promise.resolve();
@@ -41,6 +61,20 @@ export function hideSplash(): Promise<void> {
   if (!el) return Promise.resolve();
   const running = leaving.get(el);
   if (running) return running;
+  if (import.meta.env.MODE !== 'production' && document.documentElement.dataset[SPLASH_HOLD_ATTR] === '1') {
+    held ??= new Promise<void>((resolve) => {
+      const release = (): void => {
+        clearTimeout(timer);
+        releaseHeld = null;
+        delete document.documentElement.dataset[SPLASH_HOLD_ATTR];
+        held = null;
+        resolve(hideSplash());
+      };
+      const timer = setTimeout(release, SPLASH_HOLD_MS);
+      releaseHeld = release;
+    });
+    return held;
+  }
   if (hiddenByCss(el)) {
     el.remove();
     return Promise.resolve();

@@ -44,7 +44,7 @@ import {
 } from '../platform/session.ts';
 import { settleDropAtStartup } from '../platform/session-drop.ts';
 import { enableDropMark, installDesktopSession } from '../platform/session-store.ts';
-import { hideSplash, hideSplashAfter, hideSplashWhenPainted } from '../platform/splash.ts';
+import { cancelSplashHold, hideSplash, hideSplashAfter, hideSplashWhenPainted, SPLASH_HOLD_ATTR } from '../platform/splash.ts';
 import { afterAppPainted, appPainted, startAppPaintLimit, watchAppPainted } from '../platform/first-paint.ts';
 import { markInsetPainted, watchInsetBottom } from '../platform/inset-watch.ts';
 import { loadMotionFeatures, nextFrame } from '../motion/index.ts';
@@ -84,6 +84,13 @@ if (gapFixWanted()) void import('../platform/vh-gapfix.ts').then((m) => m.startG
 if (import.meta.env.MODE !== 'production') {
   try {
     if (localStorage.getItem('lemo-vh-tl')) void import('../platform/vh-diag-boot.ts').then((m) => m.startVhDiag(nextFrame));
+    // 启动画面颜色诊断（台账 Q-2，诊断页开关“Splash colors next launch”）：开着才下载 platform/splash-probe.ts 涂色、印数一次；键名同 splash-probe-arm.ts 的 ARM_KEY
+    // 诊断这次在跑：同步打上 data-splash-hold，启动画面从第一次要收起时起再多留 SPLASH_HOLD_MS（8 秒）才照原逻辑收起（platform/splash.ts），来得及截图；
+    // 分包加载失败：拿掉标记、清掉开关（cancelSplashHold），不让每次冷启动都重来、启动画面白白多盖
+    if (localStorage.getItem('lemo-sp-color')) {
+      document.documentElement.dataset[SPLASH_HOLD_ATTR] = '1';
+      void import('../platform/splash-probe.ts').then((m) => m.startSplashProbe()).catch(() => cancelSplashHold('lemo-sp-color'));
+    }
   } catch {
     // 读不到本机存储：不记
   }

@@ -1,7 +1,8 @@
 // 启动画面的收起（R-251、R-254）：hideSplash 淡出后移除 DOM、可以重复调用；减少动态效果时按 120 ms 收；5 秒兜底和 #root 首次绘制以后收起
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  hideSplash, hideSplashAfter, hideSplashWhenPainted, isSplashShowing, SPLASH_FADE_MS, SPLASH_FADE_RM_MS, SPLASH_ID, SPLASH_MAX_MS,
+  cancelSplashHold, hideSplash, hideSplashAfter, hideSplashWhenPainted, isSplashShowing, SPLASH_FADE_MS, SPLASH_FADE_RM_MS, SPLASH_HOLD_ATTR, SPLASH_HOLD_MS,
+  SPLASH_ID, SPLASH_MAX_MS,
 } from '../splash.ts';
 
 function mountSplash(): HTMLElement {
@@ -31,6 +32,50 @@ afterEach(() => {
   vi.unstubAllGlobals();
   document.body.replaceChildren();
   delete document.documentElement.dataset['rm'];
+  delete document.documentElement.dataset[SPLASH_HOLD_ATTR];
+});
+
+// 台账 Q-2 启动画面颜色诊断（非正式版）：main.tsx 打上 data-splash-hold 时，第一次要收起先多留 8 秒；没有标记时照旧马上收
+describe('诊断保留', () => {
+  it('有标记：多留 SPLASH_HOLD_MS 再淡出，期间重复调用拿同一个 Promise；到点拿掉标记', async () => {
+    const el = mountSplash();
+    document.documentElement.dataset[SPLASH_HOLD_ATTR] = '1';
+    const a = hideSplash();
+    expect(hideSplash()).toBe(a);
+    await vi.advanceTimersByTimeAsync(SPLASH_HOLD_MS - 1);
+    expect(el.classList.contains('is-leaving')).toBe(false);
+    expect(isSplashShowing()).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(el.classList.contains('is-leaving')).toBe(true);
+    expect(document.documentElement.dataset[SPLASH_HOLD_ATTR]).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(SPLASH_FADE_MS + 200);
+    await a;
+    expect(document.getElementById(SPLASH_ID)).toBeNull();
+  });
+
+  it('诊断分包加载失败（main.tsx 的 .catch → cancelSplashHold）：标记和开关都清掉，已在多留的马上照原逻辑收起', async () => {
+    const el = mountSplash();
+    document.documentElement.dataset[SPLASH_HOLD_ATTR] = '1';
+    localStorage.setItem('lemo-sp-color', '1');
+    void hideSplash();
+    expect(el.classList.contains('is-leaving')).toBe(false);
+    cancelSplashHold('lemo-sp-color');
+    expect(document.documentElement.dataset[SPLASH_HOLD_ATTR]).toBeUndefined();
+    expect(localStorage.getItem('lemo-sp-color')).toBeNull();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(el.classList.contains('is-leaving')).toBe(true);
+    await vi.advanceTimersByTimeAsync(SPLASH_FADE_MS + 200);
+    expect(document.getElementById(SPLASH_ID)).toBeNull();
+  });
+
+  it('还没开始多留时加载失败：标记清掉以后 hideSplash 马上淡出；本机存储抛错也不出错', () => {
+    const el = mountSplash();
+    document.documentElement.dataset[SPLASH_HOLD_ATTR] = '1';
+    const broken = { removeItem: () => { throw new Error('denied'); } } as unknown as Storage;
+    expect(() => cancelSplashHold('lemo-sp-color', broken)).not.toThrow();
+    void hideSplash();
+    expect(el.classList.contains('is-leaving')).toBe(true);
+  });
 });
 
 describe('hideSplash', () => {

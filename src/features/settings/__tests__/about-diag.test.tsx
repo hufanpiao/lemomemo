@@ -103,6 +103,23 @@ describe('关于页的诊断信息', () => {
     localStorage.clear();
   });
 
+  it('启动画面颜色诊断开关默认 OFF，点一下 ON（存本机 lemo-sp-color）、再点回 OFF（台账 Q-2）', async () => {
+    localStorage.clear();
+    render(<AboutSection />);
+    tapVersion(DIAG_TAPS);
+    await screen.findByTestId('settings-about-diag');
+    const sp = screen.getByTestId('vh-sp-arm');
+    expect(sp.textContent).toBe('Splash colors next launch: OFF');
+    expect(sp.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(sp);
+    expect(sp.textContent).toBe('Splash colors next launch: ON');
+    expect(localStorage.getItem('lemo-sp-color')).toBe('1');
+    fireEvent.click(sp);
+    expect(sp.textContent).toBe('Splash colors next launch: OFF');
+    expect(localStorage.getItem('lemo-sp-color')).toBeNull();
+    localStorage.clear();
+  });
+
   it('Gap fix 开关默认 ON，点一下关掉用来对照（存本机 lemo-gapfix-off）、再点回 ON；有日志时显示最近一次冷启动的日志（R-371 11-11 默认开）', async () => {
     localStorage.clear();
     render(<AboutSection />);
