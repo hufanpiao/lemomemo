@@ -22,13 +22,13 @@ describe('App 挂提醒：告知页之后、卸载、硬上限（REMIND-arm-low�
     });
     await screen.findByRole('main', {}, { timeout: 10_000 });
     await waitFor(() => expect(idleQ).toHaveLength(1), { timeout: 10_000 });
-    // 不用再等一帧（first-paint 已经算画完了）
+    // 不用再等一帧（root-paint 已经算画完了）
     expect(frameQ).toHaveLength(0);
     runIdle();
     await screen.findByTestId('fake-host', {}, { timeout: 10_000 });
   });
 
-  /** 告知页：App 之前先画一个 main[data-feature="onboarding"]，过了那一帧 first-paint 就算画完；点同意后告知页卸掉、App 第一次渲染 */
+  /** 告知页：App 之前先画一个 main[data-feature="onboarding"]，过了那一帧 root-paint 就算画完；点同意后告知页卸掉、App 第一次渲染 */
   async function passConsent(): Promise<void> {
     const consent = document.createElement('main');
     consent.setAttribute('data-feature', 'onboarding');
@@ -89,7 +89,7 @@ describe('App 挂提醒：告知页之后、卸载、硬上限（REMIND-arm-low�
     later.remove();
   });
 
-  it('arm-low L3：页面出来、那一帧还没过时 App 卸载；之后 first-paint 放行，不再排等空闲（cancelled，拦变异 Y4）', async () => {
+  it('arm-low L3：页面出来、那一帧还没过时 App 卸载；之后 root-paint 放行，不再排等空闲（cancelled，拦变异 Y4）', async () => {
     st.userId = 'user-a';
     render(<App />);
     await screen.findByRole('main', {}, { timeout: 10_000 });

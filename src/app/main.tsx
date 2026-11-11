@@ -16,7 +16,7 @@
 //    选根（关口、离线、version_too_new）在 root.tsx（CONSENT-sugg ③⑥：错误边界只包关口，单独有测试）；
 //    选出来的根外面再包一层静态的“出错了 · 刷新”兜底（root.tsx 的 withCrashFallback，K6-sugg3 ⑥）
 // 启动画面（R-251、R-254；DOM 在 index.html，跟着首次绘制出来）：从这里起算最多盖 5 秒（hideSplashAfter）；
-// #root 第一次画出东西（告知页、App、整屏提示、崩溃兜底页）的下一帧收起（root-paint.ts 的 whenContent）
+// #root 第一次画出东西（告知页、App、整屏提示、崩溃兜底页）的下一帧收起（root-paint.ts 的 whenContent）；两处都经 leaveSplash（非正式版先等诊断启动件）
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles/tokens.css';
@@ -71,8 +71,14 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
   applyDocLocale(uiLocale);
 }
 
+// 诊断启动件（运行日志、冷启动时间线、启动画面颜色诊断，platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量整块摇掉（diagReady 是 null）。
+// 收起启动画面都走 leaveSplash，非正式版先等它：颜色诊断开着时它要先打好“多留 8 秒”的标记（data-splash-hold，splash.ts），
+// #root 先画出东西、分包过了 5 秒才到，也不会没打标记就先淡出。分包加载失败当它好了、照常收起；一直不回来时 splash.css 的 6 秒纯 CSS 兜底照样淡掉
+const diagReady: Promise<void> | null =
+  import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => m.startDiagBoot(nextFrame)).catch(() => undefined) : null;
+const leaveSplash = (): void => void (diagReady ? diagReady.then(hideSplash) : hideSplash());
 // 启动画面最晚 5 秒收起：从入口模块开始执行算起（关口、冷启动、分包加载哪一步卡住都不再盖着）
-hideSplashAfter();
+hideSplashAfter(leaveSplash);
 // 底部安全区（G10）：iOS 主屏幕版冷启动时先 0 后 34，稳定前底栏、“＋”、实色带不显示，稳定了淡入；首屏画完后最多藏 1.5 秒（platform/inset-watch.ts）
 watchInsetBottom();
 // R-371 Gap fix（底栏偏高修复，11-11 起默认开、正式版也做）：只在 iOS 主屏幕版冷启动时下载 platform/vh-gapfix.ts 做一次（判断见 vh-gapfix-gate.ts，
@@ -81,10 +87,6 @@ watchInsetBottom();
 if (gapFixWanted()) {
   startEarlyGapFix(nextFrame);
   void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));
-}
-// 诊断启动件（运行日志、冷启动时间线、启动画面颜色诊断，platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量整块摇掉
-if (import.meta.env.MODE !== 'production') {
-  void import('../platform/diag-boot.ts').then((m) => m.startDiagBoot(nextFrame)).catch(() => undefined);
 }
 
 /** exe（Tauri）里换上 exe 的 platform 桥（架构 0.53 第 2 条）：openReminder、openAuth、本机通知改走 exe；网页版不加载 desktop.ts */
@@ -127,7 +129,7 @@ async function start(): Promise<void> {
   // supabase-js 不和页面分包抢下载，B2 FA-6 ①）。这里只有 15 秒长兜底，正式的时限在 render 之后才开始算（见下面 startAppPaintLimit）
   watchRoot(el, nextFrame);
   // 告知页关口还在问服务器时 #root 是空的，启动画面继续盖着；一画出东西就在下一帧收起
-  whenContent(() => void nextFrame(() => void hideSplash()));
+  whenContent(() => void nextFrame(leaveSplash));
   // 底部安全区“稳定”从首屏画完起算（G10，底栏跟着第一个页面出来）
   afterAppPainted(markInsetPainted);
   el.dataset['version'] = buildInfo.version;
@@ -176,7 +178,7 @@ async function start(): Promise<void> {
     // 别的标签页退出登录、按库名删本机库（versionchange 的 newVersion 为 null，K6 复审 C）：同步读一次会话，
     // 没有了就回登录页（库正在被删，watchAccount 收到 storage 事件后也会走退出流程，重复跳转无害）；还有（那边已重新登录）就重新载入
     onCacheDeleted: () => (readSessionUserId() ? reloadPage() : goToAuth()),
-    // 升级中心的错误码（update_failed、update_takeover_timeout、upgrade_busy_expired 等，PROBE-sugg2 ③）进同一条日志通道；
+    // 升级中心的错误码（update_failed、update_takeover_timeout、upgrade_busy_expired 等，PROBE-sugg2 ③）进同一条日志总线（logEvent）；
     // 同一个 act 每天最多 5 条，计数在 localStorage lemo.upglog（B 组审查建议 1）
     upgradeDeps: { log: (act, code) => logEvent(act, code ? { code } : undefined), logCounts: upgradeLogCountStore },
     // 升级本机库被别的标签页挡住：coldStart 还在等库打开时整屏提示（文案见 update.blocked.title），库打开后自动消失（root.tsx，架构师 10-30 第 8 点）。

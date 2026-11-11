@@ -6,7 +6,8 @@
 // - 不依赖 transitionend：后台标签页、jsdom 里可能不来，按时长 + 余量的定时器兜底移除。
 // - splash.css 有 6 秒的纯 CSS 兜底（脚本没跑起来也不会一直盖着）：兜底淡完以后（visibility: hidden）再调，直接移除。
 // - 减少动态效果的判断照 src/motion/reduced.ts 的两条（系统设置或 <html data-rm="1">）；platform 层不能引 motion，这里另写一份。
-// 调用点：从启动起算 SPLASH_MAX_MS（5 秒）的兜底 hideSplashAfter()；#root 里第一次画出东西的下一帧（main.tsx 经 root-paint.ts 的 whenContent）；
+// 调用点：从启动起算 SPLASH_MAX_MS（5 秒）的兜底 hideSplashAfter；#root 里第一次画出东西的下一帧（main.tsx 经 root-paint.ts 的 whenContent），
+// 这两处在 main.tsx 里都经 leaveSplash（非正式版先等诊断启动件 diag-boot.ts 打好多留标记）；
 // 另挂在 body 下的“库被挡住”整屏提示提交后的下一帧（root.tsx 的 SplashRelease）
 
 export const SPLASH_ID = 'lemo-splash';
@@ -19,10 +20,9 @@ export const SPLASH_MAX_MS = 5000;
 const SLACK_MS = 80;
 /** 启动画面颜色诊断（台账 Q-2，只在非正式版）在跑时：从第一次要收起的那一刻起再多留这么久，负责人来得及截图；正式构建整段摇掉 */
 export const SPLASH_HOLD_MS = 8000;
-/** main.tsx 读到诊断开关时同步在 <html> 上设的标记（data-splash-hold）；诊断撤掉时一起拿掉 */
+/** 诊断启动件 diag-boot.ts 在涂色分包到了以后在 <html> 上设的标记（data-splash-hold；main.tsx 收起启动画面前先等 diag-boot，标记一定早于第一次收起）；诊断撤掉时一起拿掉 */
 export const SPLASH_HOLD_ATTR = 'splashHold';
 let held: Promise<void> | null = null;
-let releaseHeld: (() => void) | null = null;
 
 const leaving = new WeakMap<Element, Promise<void>>();
 
@@ -36,20 +36,6 @@ function hiddenByCss(el: Element): boolean {
   return typeof getComputedStyle === 'function' && getComputedStyle(el).visibility === 'hidden';
 }
 
-/**
- * 诊断模块加载失败（main.tsx 的 .catch）：拿掉保留标记、清掉诊断开关（armKey 即 splash-probe-arm.ts 的 ARM_KEY），
- * 已经在多留的就马上照原逻辑收起——不然每次冷启动都重来、启动画面白白多盖。只在非正式版分支里调用，正式构建摇掉
- */
-export function cancelSplashHold(armKey: string, store?: Storage): void {
-  if (typeof document !== 'undefined') delete document.documentElement.dataset[SPLASH_HOLD_ATTR];
-  releaseHeld?.();
-  try {
-    (store ?? localStorage).removeItem(armKey);
-  } catch {
-    // 本机存储用不了：开关本来也读不到
-  }
-}
-
 /** 收起启动画面：淡出后移除 DOM。重复调用安全，返回同一个 Promise */
 export function hideSplash(): Promise<void> {
   if (typeof document === 'undefined') return Promise.resolve();
@@ -59,15 +45,11 @@ export function hideSplash(): Promise<void> {
   if (running) return running;
   if (import.meta.env.MODE !== 'production' && document.documentElement.dataset[SPLASH_HOLD_ATTR] === '1') {
     held ??= new Promise<void>((resolve) => {
-      const release = (): void => {
-        clearTimeout(timer);
-        releaseHeld = null;
+      setTimeout(() => {
         delete document.documentElement.dataset[SPLASH_HOLD_ATTR];
         held = null;
         resolve(hideSplash());
-      };
-      const timer = setTimeout(release, SPLASH_HOLD_MS);
-      releaseHeld = release;
+      }, SPLASH_HOLD_MS);
     });
     return held;
   }
@@ -107,8 +89,8 @@ export function isSplashShowing(): boolean {
   return el !== null && !leaving.has(el) && !hiddenByCss(el);
 }
 
-/** 到点收起（从启动起算的兜底）；返回取消函数 */
-export function hideSplashAfter(ms: number = SPLASH_MAX_MS): () => void {
-  const t = setTimeout(() => void hideSplash(), ms);
+/** 到点收起（从启动起算的兜底）：到点调 hide（main.tsx 传 leaveSplash，非正式版先等诊断启动件；别处直接传 hideSplash）；返回取消函数 */
+export function hideSplashAfter(hide: () => unknown, ms: number = SPLASH_MAX_MS): () => void {
+  const t = setTimeout(() => void hide(), ms);
   return () => clearTimeout(t);
 }

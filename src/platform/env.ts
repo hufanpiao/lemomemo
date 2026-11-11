@@ -307,7 +307,7 @@ export interface JsErrorLogOptions {
 export type JsErrorLog = (act: typeof JS_ERROR_ACT | typeof JS_ERROR_FULL_ACT, f: { code: string }) => void;
 
 /**
- * 注册客户端错误日志（main.tsx 建好日志通道后调一次）。返回注销函数（测试用）。
+ * 注册客户端错误日志（main.tsx 接好日志总线 setLogSink 后调一次，传 logEvent）。返回注销函数（测试用）。
  */
 export function registerJsErrorLog(log: JsErrorLog, opts: JsErrorLogOptions = {}): () => void {
   const target = opts.target ?? (typeof window !== 'undefined' ? window : undefined);

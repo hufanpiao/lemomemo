@@ -4,21 +4,16 @@
 //   引擎卸载时清掉模块级的“本次打开响过的”“本次会话只在本机处理过的”，不把上个账号的带过来。没登录（测试里没启动）不挂
 // • 首屏减重 ⑥：首屏画完以后、浏览器空闲时才挂 RemindHost（约 14 KB 提醒代码不在首屏路径上）；冷启动就是整页提醒（点系统通知进来）时立刻挂。
 //   “首屏画完”和同步、supabase-js 用同一套判断：platform/root-paint.ts 的 afterAppPainted（REMIND-arm-firstpaint，原来 App 自己放在
-//   页面 Suspense 里的 ArmReminders 去掉了）。first-paint 的“画完”= 第一个 main[data-feature] 出现再过一帧；它自己的兜底
+//   页面 Suspense 里的 ArmReminders 去掉了）。root-paint 的“画完”= 第一个页面 <main> 出现再过一帧；它自己的兜底
 //   （render 后 startAppPaintLimit、挂上起 15 秒长兜底）到了也算画完。入口没挂 watchRoot 时（测试、别的入口）当场算画完。
 //   since（从哪一刻起到点的进横幅）在 App 第一次渲染时记下，打开到挂上之间到点的照样响，只是晚响这一会儿：
 //   首屏画完 + whenIdle（requestIdleCallback 最多 2 秒，没有时 300 ms）+ 下载 RemindHost 分包；后台标签页的定时器还会被节流。
-//   提醒自己的硬上限 REMIND_MAX_WAIT_MS 保留（5 秒，从 App 第一次渲染算起，和 first-paint 的兜底谁先到算谁）：比 first-paint 告知页关口那段
+//   提醒自己的硬上限 REMIND_MAX_WAIT_MS 保留（5 秒，从 App 第一次渲染算起，和 root-paint 的兜底谁先到算谁）：比 root-paint 告知页关口那段
 //   （render 后 5 + 1 秒）更早，页面一直不出来（分包挂着、整屏提示）也最晚这时挂上
 //   （这时页面可能还是空白，到点的横幅会先画出来、启动画面随之收起；比一直不响好，接线审查⑥ L3 接受的取舍）
-//   要等这 5 秒的，是所有根元素不是 main[data-feature] 的页面（REMIND-arm-low L2，审查记录 B2-代码审查-提醒挂载统一首屏判断.md）：
-//   编辑页（kit 的 EditShell）、设置 › 日历 正文（CalendarSettings）、告知页路由（ConsentRoute）、整页提醒（FullReminderPage，不过冷启动就是
-//   整页提醒时立刻挂、不等）。冷启动落在这些页面（比如在编辑页刷新）时提醒晚约 5 秒挂，不漏响。
-//   页面出错的 ErrorView、功能关掉的 FeatureOffView 根是 main[data-feature="error"] / main[data-feature="off"]（FIRSTPAINT-nofeature），
-//   首屏判断照常触发，不用等这 5 秒
-// • 告知页之后（REMIND-arm-low L1）：告知页 ConsentPage 也是 main[data-feature]，用户点完同意 App 才第一次渲染，这时 first-paint 早已算画完。
-//   做法二选一里选了“只认 App 挂上以后出现的功能页”：App 第一次渲染时 first-paint 已经算画完（告知页之后；入口没挂 watchRoot；
-//   冷启动慢过 15 秒长兜底），就另外等 App 自己的 main[data-feature] 出现，再等空闲。理由：只写注释的话，提醒分包会和今天页分包抢下载，
+// • 告知页之后（REMIND-arm-low L1）：告知页 ConsentPage 的根也是 <main>，用户点完同意 App 才第一次渲染，这时 root-paint 早已算画完。
+//   做法二选一里选了“只认 App 挂上以后出现的功能页”：App 第一次渲染时 root-paint 已经算画完（告知页之后；入口没挂 watchRoot；
+//   冷启动慢过 15 秒长兜底），就另外等 App 自己的页面 <main> 出现，再等空闲。理由：只写注释的话，提醒分包会和今天页分包抢下载，
 //   今天页还没画出来时到点的按钮条可能先出现在空白屏上（启动画面早已收起）；改在 App 里等 root-paint 的 whenPage，不动首屏判断和告知页，
 //   同步、supabase-js 的时机不变。页面一直不出来照样有 5 秒硬上限
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
@@ -276,10 +271,10 @@ setTabSwitch((a, b) => {
 
 export function App() {
   const route = useRoute();
-  // 提醒什么时候挂（首屏减重 ⑥）：冷启动就是整页提醒时立刻挂；否则等首屏画完（first-paint）、浏览器空闲。挂上以后不再收回
+  // 提醒什么时候挂（首屏减重 ⑥）：冷启动就是整页提醒时立刻挂；否则等首屏画完（root-paint）、浏览器空闲。挂上以后不再收回
   const [remindReady, setRemindReady] = useState(() => route.name === 'remind');
   const [armRemind] = useState(() => () => setRemindReady(true));
-  // App 第一次渲染时 first-paint 已经算画完（告知页之后等，见头注释 L1）：还要等 App 自己的功能页出现
+  // App 第一次渲染时 root-paint 已经算画完（告知页之后等，见头注释 L1）：还要等 App 自己的功能页出现
   const [needOwnPage] = useState(isAppPainted);
   // 硬上限：页面一直不提交（分包挂着不成功也不失败）也最晚 REMIND_MAX_WAIT_MS 挂上
   useEffect(() => {

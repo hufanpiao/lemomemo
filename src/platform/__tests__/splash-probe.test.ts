@@ -88,9 +88,10 @@ describe('启动画面多留 8 秒', () => {
 
 describe('接线', () => {
   const read = (p: string) => readFileSync(resolve(import.meta.dirname, '..', '..', '..', p), 'utf8');
-  it('只有 diag-boot.ts 在开关开着时动态加载（先打保留标记，加载失败清掉开关）；main.tsx 不碰它', () => {
+  it('只有 diag-boot.ts 在开关开着时动态加载（分包到了才打保留标记，加载失败不留标记、清掉开关；行为见 diag-boot.test.ts）；main.tsx 不碰它', () => {
     const boot = read('src/platform/diag-boot.ts');
-    expect(boot).toMatch(/if \(splashProbeArmed\(store\)\) \{\s*document\.documentElement\.dataset\[SPLASH_HOLD_ATTR\] = '1';\s*void import\('\.\/splash-probe\.ts'\)\.then\(\(m\) => m\.startSplashProbe\(window, store\)\)\.catch\(\(\) => cancelSplashHold\(SPLASH_ARM_KEY, store\)\);/);
+    expect(boot).toMatch(/if \(!splashProbeArmed\(store\)\) return;[\s\S]*const m = await import\('\.\/splash-probe\.ts'\);\s*root\.dataset\[SPLASH_HOLD_ATTR\] = '1';\s*m\.startSplashProbe\(window, store\);/);
+    expect(boot.match(/import\('\.\/splash-probe\.ts'\)/g)?.length).toBe(1);
     expect(boot).not.toMatch(/^import .*splash-probe\.ts/m);
     expect(read('src/app/main.tsx')).not.toContain('splash-probe');
   });

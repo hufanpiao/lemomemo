@@ -70,7 +70,7 @@ export interface UpgradeDeps {
   swUpdate(): Promise<SwUpdateResult>;
   /** 跨重新载入记住“刚按过更新”（platform/sw-register.ts 的 updateAttemptStore） */
   attempt: { get(): string | null; set(min: string | null): void };
-  /** 记错误码（不记内容）：act 是动作名，code 可选（busy 作废时是 holdBusy 的 reason，例如 sign_out）；main.tsx 接到日志通道。
+  /** 记错误码（不记内容）：act 是动作名，code 可选（busy 作废时是 holdBusy 的 reason，例如 sign_out）；main.tsx 接到日志总线（logEvent）。
    *  同一个 act 每天最多 UPGRADE_LOG_DAILY_MAX 条（断网时连点“更新”不刷满本机 200 条队列和每天的日志额度） */
   log?(act: string, code?: string): void;
   /** 日志每日计数存哪里（platform/sw-register.ts 的 upgradeLogCountStore）；不给或读写出错时只在内存里计 */

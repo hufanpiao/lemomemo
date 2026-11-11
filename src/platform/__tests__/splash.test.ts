@@ -1,7 +1,7 @@
 // 启动画面的收起（R-251、R-254）：hideSplash 淡出后移除 DOM、可以重复调用；减少动态效果时按 120 ms 收；5 秒兜底（#root 首次绘制的口径见 root-paint.test.ts）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  cancelSplashHold, hideSplash, hideSplashAfter, isSplashShowing, SPLASH_FADE_MS, SPLASH_FADE_RM_MS, SPLASH_HOLD_ATTR, SPLASH_HOLD_MS,
+  hideSplash, hideSplashAfter, isSplashShowing, SPLASH_FADE_MS, SPLASH_FADE_RM_MS, SPLASH_HOLD_ATTR, SPLASH_HOLD_MS,
   SPLASH_ID, SPLASH_MAX_MS,
 } from '../splash.ts';
 
@@ -35,7 +35,7 @@ afterEach(() => {
   delete document.documentElement.dataset[SPLASH_HOLD_ATTR];
 });
 
-// 台账 Q-2 启动画面颜色诊断（非正式版）：main.tsx 打上 data-splash-hold 时，第一次要收起先多留 8 秒；没有标记时照旧马上收
+// 台账 Q-2 启动画面颜色诊断（非正式版）：诊断启动件 diag-boot.ts 打上 data-splash-hold 时，第一次要收起先多留 8 秒；没有标记时照旧马上收
 describe('诊断保留', () => {
   it('有标记：多留 SPLASH_HOLD_MS 再淡出，期间重复调用拿同一个 Promise；到点拿掉标记', async () => {
     const el = mountSplash();
@@ -51,30 +51,6 @@ describe('诊断保留', () => {
     await vi.advanceTimersByTimeAsync(SPLASH_FADE_MS + 200);
     await a;
     expect(document.getElementById(SPLASH_ID)).toBeNull();
-  });
-
-  it('诊断分包加载失败（main.tsx 的 .catch → cancelSplashHold）：标记和开关都清掉，已在多留的马上照原逻辑收起', async () => {
-    const el = mountSplash();
-    document.documentElement.dataset[SPLASH_HOLD_ATTR] = '1';
-    localStorage.setItem('lemo-sp-color', '1');
-    void hideSplash();
-    expect(el.classList.contains('is-leaving')).toBe(false);
-    cancelSplashHold('lemo-sp-color');
-    expect(document.documentElement.dataset[SPLASH_HOLD_ATTR]).toBeUndefined();
-    expect(localStorage.getItem('lemo-sp-color')).toBeNull();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(el.classList.contains('is-leaving')).toBe(true);
-    await vi.advanceTimersByTimeAsync(SPLASH_FADE_MS + 200);
-    expect(document.getElementById(SPLASH_ID)).toBeNull();
-  });
-
-  it('还没开始多留时加载失败：标记清掉以后 hideSplash 马上淡出；本机存储抛错也不出错', () => {
-    const el = mountSplash();
-    document.documentElement.dataset[SPLASH_HOLD_ATTR] = '1';
-    const broken = { removeItem: () => { throw new Error('denied'); } } as unknown as Storage;
-    expect(() => cancelSplashHold('lemo-sp-color', broken)).not.toThrow();
-    void hideSplash();
-    expect(el.classList.contains('is-leaving')).toBe(true);
   });
 });
 
@@ -172,7 +148,7 @@ describe('hideSplash 的边角', () => {
 describe('hideSplashAfter', () => {
   it('hideSplashAfter：默认 5 秒到点收起；取消了就不收', async () => {
     const el = mountSplash();
-    hideSplashAfter();
+    hideSplashAfter(hideSplash);
     await vi.advanceTimersByTimeAsync(SPLASH_MAX_MS - 1);
     expect(el.classList.contains('is-leaving')).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
@@ -180,9 +156,19 @@ describe('hideSplashAfter', () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     const el2 = mountSplash();
-    const stop = hideSplashAfter(100);
+    const stop = hideSplashAfter(hideSplash, 100);
     stop();
     await vi.advanceTimersByTimeAsync(200);
     expect(el2.classList.contains('is-leaving')).toBe(false);
+  });
+  it('到点调传进来的 hide（main.tsx 的 leaveSplash），不自己直接收', async () => {
+    const el = mountSplash();
+    const hide = vi.fn();
+    hideSplashAfter(hide);
+    await vi.advanceTimersByTimeAsync(SPLASH_MAX_MS - 1);
+    expect(hide).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(hide).toHaveBeenCalledOnce();
+    expect(el.classList.contains('is-leaving')).toBe(false);
   });
 });

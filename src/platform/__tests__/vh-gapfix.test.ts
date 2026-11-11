@@ -40,7 +40,11 @@ describe('开关（11-11 起默认开，诊断页关掉用来对照）', () => {
     expect(main).toContain(call);
     // 台账 Q-2：同一个条件里，先同步早试、再下载本模块
     expect(main).toContain(['if (gapFixWanted()) {', '  startEarlyGapFix(nextFrame);', call].join('\n'));
-    expect(main.indexOf(call)).toBeLessThan(main.indexOf("import.meta.env.MODE !== 'production'"));
+    // 那个 if 在模块顶层（不缩进、不套在别的块里）；非正式版那一处（diagReady 的 MODE 三元式）只下载 diag-boot，不带 Gap fix
+    expect(main).toMatch(/^if \(gapFixWanted\(\)\) \{$/m);
+    const diagLine = main.split('\n').find((l) => l.includes("import.meta.env.MODE !== 'production'")) ?? '';
+    expect(diagLine).toContain("import('../platform/diag-boot.ts')");
+    expect(diagLine).not.toMatch(/gapfix|GapFix/i);
     expect(main).not.toContain("localStorage.getItem('lemo-gapfix')");
   });
 });

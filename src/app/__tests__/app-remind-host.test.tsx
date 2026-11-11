@@ -1,5 +1,5 @@
 // App 挂提醒（REMIND-wiring）：挂一份、按 user_id 作 key、整页提醒立刻挂、出错和分包没到不挡页面；首屏减重 ⑥ 画完、空闲以后才挂、since；
-// 接线审查⑥ M1（页面没提交不等空闲、出错页照常触发首屏判断）、REMIND-arm-firstpaint（first-paint 自己的时限）
+// 接线审查⑥ M1（页面没提交不等空闲、出错页照常触发首屏判断）、REMIND-arm-firstpaint（root-paint 自己的时限）
 // 替身和复位在 app-remind-host-fixture.tsx（必须第一个 import）
 import { App, clock, frameQ, idleQ, life, pageThenIdle, runFrame, runIdle, setLogSink, setTodayPage, settle, st, startAppPaintLimit } from './app-remind-host-fixture.tsx';
 import { act, render, screen, waitFor } from '@testing-library/react';
@@ -192,7 +192,7 @@ describe('App 挂提醒', () => {
     await screen.findByTestId('fake-host', {}, { timeout: 10_000 });
   });
 
-  it('REMIND-arm-firstpaint：first-paint 自己的时限（render 后 startAppPaintLimit）到了也算画完，排等空闲、空闲后挂', async () => {
+  it('REMIND-arm-firstpaint：root-paint 自己的时限（render 后 startAppPaintLimit）到了也算画完，排等空闲、空闲后挂', async () => {
     st.userId = 'user-a';
     setTodayPage('pending');
     render(<App />);

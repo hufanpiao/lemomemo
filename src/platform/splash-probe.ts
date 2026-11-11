@@ -5,10 +5,10 @@
 //   截图里还是灰的那一块不是上面任何一层：在网页画得到的范围之外（WKWebView 视口外的原生底色），或者网页还没画、仍是 iOS 启动图。
 // 左上角小字（白底黑字）每 200 ms 刷新：innerHeight、screen、visualViewport、documentElement.clientHeight、100lvh/svh/dvh/vh 实测、
 // --lemo-screen-h、启动画面的上下沿、顶部和底部安全区、Gap fix 垫块在不在、启动画面在哪个阶段；下面几行是数变的那一刻（相对开始的 ms）。
-// 启动画面多留 8 秒：main.tsx 同步打 data-splash-hold，platform/splash.ts 从第一次要收起的那一刻起再等 SPLASH_HOLD_MS 才收起；
+// 启动画面多留 8 秒：诊断启动件 diag-boot.ts 先打 data-splash-hold（main.tsx 收起启动画面前先等 diag-boot），platform/splash.ts 从第一次要收起的那一刻起再等 SPLASH_HOLD_MS 才收起；
 // 启动画面还在时小字顶上多一行 HOLD_HINT（英文，同其他诊断开关的文字），提示现在截图。
 // 跑 DURATION_MS 后整块撤掉（属性、小字、量尺、保留标记都拿掉），之后和平时一模一样；DURATION_MS 要晚于启动画面最晚收起的时刻（5 秒兜底 + 8 秒 + 淡出）。
-// 涂色全在 splash-probe.css（外链样式，CSP style-src 'self' 照旧；不写 style 属性），挂在 <html data-sp-probe> 上；本模块只在 main.tsx 的非正式版分支里动态加载
+// 涂色全在 splash-probe.css（外链样式，CSP style-src 'self' 照旧；不写 style 属性），挂在 <html data-sp-probe> 上；本模块只由 diag-boot.ts 在开关开着时动态加载（diag-boot 本身只在非正式版下载）
 import './splash-probe.css';
 import { ARM_KEY, setSplashProbeArmed } from './splash-probe-arm.ts';
 import { SPLASH_HOLD_ATTR } from './splash.ts';

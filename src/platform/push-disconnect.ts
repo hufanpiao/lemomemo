@@ -3,7 +3,7 @@
 // • 先删本机认领记录（push-claim-key.ts，同步、不等下载；安全审查 FA2-1）；
 // • 再下载 push.ts 调 disconnectBrowserPush（关通知、退订）；
 // • 下载失败、断开抛错都不抛给调用方，退出、换账号照常往下走；记一条日志 push_disconnect_fail（code 见 PushDisconnectFail），
-//   日志通道由入口（app/main.tsx）用 setPushDisconnectLog 接上，没接时不记（platform 不碰日志层）。
+//   入口（app/main.tsx）用 setPushDisconnectLog 接到日志总线（shared/core/log-bus.ts 的 logEvent），没接时不记（platform 不碰日志层）。
 // 安全审查（B2-安全审查-推送断开按需下载.md）后补的两条：
 // • 必改 1：“下载 + 断开”整体最多 DISCONNECT_PUSH_MS（2 秒，和改动前整个断开的上限相同）。下载最多 LOAD_PUSH_MS（1 秒），
 //   剩下的时间给断开或兜底；下载一直不回（没有 SW 时网络被挂住）也按时返回，记 timeout，退出的 ④ signOut、⑤ 删库和换账号不会卡住；
@@ -40,7 +40,7 @@ export interface FallbackEnv {
 
 let onFail: ((code: PushDisconnectFail, error: unknown) => void) | null = null;
 
-/** 入口接上日志通道；null 断开 */
+/** 入口接到日志总线（logEvent）；null 断开 */
 export function setPushDisconnectLog(fn: ((code: PushDisconnectFail, error: unknown) => void) | null): void {
   onFail = fn;
 }

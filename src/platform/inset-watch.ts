@@ -4,7 +4,7 @@
 //   启动时 <html> 带 data-inset-wait，这三样先不显示（opacity 0），值稳定了去掉这个属性，三样一起淡入（不用位移动画）。
 //   不用 max(…, 34px) 硬兜底：没有 Home 横条的机型安全区本来就是 0
 // • 默认是显示的：只有这里挂上了才藏，画完后最多藏 INSET_MAX_MS（读不到、出错、别的入口、测试都不会一直看不见）
-// • 计时从“首屏画完”算（入口在 first-paint 画完时调 markInsetPainted）：底栏跟着第一个页面一起出来，无头 webkit 实测要 2 秒多，
+// • 计时从“首屏画完”算（入口在 root-paint 算画完时调 markInsetPainted）：底栏跟着第一个页面一起出来，无头 webkit 实测要 2 秒多，
 //   从脚本启动算的话底栏还没出来就放行了。没调 markInsetPainted 时 INSET_BACKSTOP_MS 兜底放行
 // • “稳定”：画完以后，安全区底部和 innerHeight 都 INSET_QUIET_MS 没变；主屏幕版（standalone）读到 0 时多等到画完后 INSET_ZERO_WAIT_MS
 //   （0 可能是还没给真值；没有 Home 横条的机型就是多等这一会儿再淡入）。读到非 0 只等 INSET_QUIET_MS
