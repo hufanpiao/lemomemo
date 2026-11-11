@@ -85,9 +85,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/core/outbox-new-item.ts': '建新 outbox 项（K8 R2 ①）：和 rows.ts 一起在 loadRowSchemas 里按需加载，不进首屏',
   'src/core/manifest-source.ts': '完整清单快照：和 rows.ts 一起在 loadRowSchemas 里按需加载（首屏瘦身 11-05，首屏建本机仓只读 manifest-sync.gen.ts）',
   'src/platform/desktop.ts': '只在 exe（Tauri）里加载，网页版不下载',
-  'src/platform/vh-diag-boot.ts': 'R-371 冷启动时间线入口：只在非正式版、诊断页时间线开关打开时才在冷启动后下载，默认不下载；正式构建整块摇掉（vh-timeline.ts 由它静态引入，不在 main.tsx 里单独 import()）',
-  'src/platform/run-log.ts': '全局运行日志（11-11）：只在非正式版、首屏画完后动态下载；正式构建整块摇掉',
-  'src/platform/splash-probe.ts': '台账 Q-2 启动画面颜色诊断：只在非正式版、诊断页“Splash colors next launch”开关打开时才在冷启动下载一次，默认不下载；正式构建整块摇掉（涂色样式 splash-probe.css 由它静态引入）',
+  'src/platform/diag-boot.ts': '非正式版诊断启动件（11-11 启动链路整改：原来 main.tsx 里分别 import() 的 vh-diag-boot.ts、run-log.ts、splash-probe.ts 收成这一个入口）：只在非正式版冷启动时下载，正式构建整块摇掉（check_no_probe 兜底）；运行日志、冷启动时间线由它静态引入，启动画面颜色诊断 splash-probe.ts 只在诊断页开关打开时由它再 import()，默认不下载',
   'src/platform/vh-gapfix.ts': 'R-371 冷启动高度校正的后两次触发（等底栏挂上、键盘真收了）：只在 iOS 主屏幕版冷启动时下载（判断和早试在首屏的 vh-gapfix-gate.ts）；电脑、安卓、浏览器里打开都不下载',
   'src/app/CacheTooNewScreen.tsx': '只在本机库比 App 新（version_too_new）时整屏提示用',
   'src/motion/motion-impl.tsx': '动画实现和功能包合块，main.tsx 在 appPainted() 之后下载（R-354）',
@@ -112,7 +110,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/features/today/ui/TodayToasts.tsx':
     '今天页页底提示条（撤销条、出错条、只读提示条）和重复事项横幅：真有一条提示、或有只读行时才下载（FA-2 返工，首屏预算；连着 UndoToast、只读横幅一起不进首屏）',
   'src/platform/sw-lifecycle.ts':
-    'SW 注册、盯新版本、回到前台查新版本、“更新”按钮：首屏画完以后 main.tsx 才下载注册（appPainted 之后），“更新”按下时才下载；只有 version_too_new 的整屏提示在渲染前下载（那时没有今天页）（B2-UI-a U7，11-07）',
+    'SW 注册、盯新版本、回到前台查新版本、“更新”按钮：都经 sw-register.ts 的 loadSwLifecycle 这一个加载器下载；首屏画完以后 main.tsx 才下载注册（appPainted 之后），“更新”按下时才下载；只有 version_too_new 的整屏提示在渲染前下载（那时没有今天页）（B2-UI-a U7，11-07；11-11 启动链路整改）',
   'src/platform/viewport.ts': '视口监听（写 --kb、data-kbo、--vh-gap、data-kbhide）：首屏画完以后 afterAppPainted 才下载；iOS 主屏幕版冷启动时随 vh-gapfix.ts 的分包一起下',
   'src/kit/components/GlassBar/GlassBarFx.tsx':
     '液态玻璃底栏的首屏后部分：模糊带、果冻、按住放大；首屏画完以后 afterAppPainted 才下载，挂上以后再 import() 内容副本、自动深浅、帧循环（motion/glass-ghost.ts）（B2 FA-7，主持人 11-05 首屏 ③；没下载到时外壳用 backdrop-filter 后备）',

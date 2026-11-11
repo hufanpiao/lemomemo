@@ -1,4 +1,4 @@
-// 日志通道接上上传队列（架构 0.38 第 68 条；接手清单 K8-logs、K6-log）：setSink 之前记的按顺序交给队列；
+// 日志总线接上上传队列（架构 0.38 第 68 条；接手清单 K8-logs、K6-log）：setLogSink 之前记的按顺序交给队列；
 // 只有拿到同步锁的页面上传（wireSync 的 onLeader），放手时等正在传的那一批传完再放锁；
 // 被移除、停用、注销冷静期（wireSync 的 onRemoved）停止上传并清掉这个账号的队列
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -9,7 +9,8 @@ import type { Sync, SyncOptions } from '../../core/sync/engine.ts';
 import { fakeLife, fakeTransport } from '../../core/sync/__tests__/fake-server.ts';
 import { fakeIndexedDB } from '../../core/__tests__/idb-fake.ts';
 import { clearLogQueue, logQueueStore } from '../../platform/log-store.ts';
-import { createLogChannel } from '../log-channel.ts';
+import { logEvent, resetLogBusForTest, setLogSink } from '../../../shared/core/log-bus.ts';
+import { toLogRecord } from '../log-channel.ts';
 import { wireSync, type WireSyncDeps } from '../sync-wiring.ts';
 
 function bootOpts(): BootOptions {
@@ -72,8 +73,10 @@ const settle = async (): Promise<void> => {
   for (let i = 0; i < 4; i++) await Promise.resolve();
 };
 
-describe('日志通道 → 上传队列 → 主页上传', () => {
-  it('setSink 之前记的按顺序进队列；拿到锁才传，放手后不传', async () => {
+describe('日志总线 → 上传队列 → 主页上传', () => {
+  afterEach(() => resetLogBusForTest());
+
+  it('setLogSink 之前记的按顺序进队列；拿到锁才传，放手后不传', async () => {
     const sent: LogRow[][] = [];
     let text: string | null = null;
     const queue = createLogQueue({
@@ -84,11 +87,10 @@ describe('日志通道 → 上传队列 → 主页上传', () => {
       every: () => () => undefined,
       now: () => 7,
     });
-    const logs = createLogChannel({ now: () => 7 });
-    logs.log('first', { coll: 'notes' });
-    logs.log('second', { code: 'x' });
-    logs.setSink((e) => queue.add(e));
-    logs.log('third');
+    logEvent('first', { coll: 'notes' });
+    logEvent('second', { code: 'x' });
+    setLogSink((act, f) => queue.add(toLogRecord(act, f, 7)));
+    logEvent('third');
     expect(queue.peek().items.map((x) => x.act)).toEqual(['first', 'second', 'third']);
 
     const leaderFlags: boolean[] = [];
@@ -104,7 +106,7 @@ describe('日志通道 → 上传队列 → 主页上传', () => {
 
     await w.unlead();
     expect(leaderFlags).toEqual([true, false]);
-    logs.log('after');
+    logEvent('after');
     await queue.flush();
     expect(sent).toHaveLength(1);
     expect(queue.peek().items.map((x) => x.act)).toEqual(['after']);

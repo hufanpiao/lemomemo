@@ -14,7 +14,7 @@
 // 只读 user.id、user.email 和令牌 payload 里的 session_id（sessionIdOfToken），不校验、不记录、不打印令牌
 import { buildInfo, isTauri } from './env.ts';
 import { readExitNotice, setExitNotice, type ExitNotice } from './exit-notice.ts';
-import { afterAppPainted } from './first-paint.ts';
+import { afterAppPainted } from './root-paint.ts';
 import { openAuth } from './native-bridge.ts';
 import { collectRemovals, sessionDropState, sessionRemovalsSettled, sessionStore, showExitIncomplete } from './session-store.ts';
 import { reloadPage } from './sw-register.ts';
@@ -161,7 +161,7 @@ export function whenIdle(fn: () => void): void {
  * 全 App 只有这一处订阅 onAuthStateChange（K6-signedout；ESLint lemo/auth-events-in-session 守着，架构 2.3 A30）。
  * • 订阅在客户端一建好时就同步挂上（supabase/client.ts 的 onClientReady，审查 M1）：谁先 getSupabase()（同步的 ensureSession 往往更早）都一样，
  *   initialize 里刷新被拒发的 SIGNED_OUT 一定收得到
- * • 没人用 supabase-js 时，等首屏画完、浏览器空闲才加载它（K6 审查 L6）。“首屏画完”看第一个功能页真画出来了（first-paint.ts，
+ * • 没人用 supabase-js 时，等首屏画完、浏览器空闲才加载它（K6 审查 L6）。“首屏画完”看第一个功能页真画出来了（root-paint.ts，
  *   B2 FA-6 ①）：只等空闲不够，页面分包还在下载时浏览器就已经“空闲”了。返回取消函数
  */
 export function onAuthUser(fn: (userId: string) => void, onSignedOut?: SignedOutFn): () => void {

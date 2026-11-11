@@ -69,12 +69,10 @@ describe("开关", () => {
     expect(readTimeline()).toBe("");
   });
 
-  it("main.tsx 读的键名就是 ARM_KEY，并且只在非正式版里读", () => {
-    const main = readFileSync(resolve(__dirname, "../../app/main.tsx"), "utf8");
-    expect(main).toContain(`localStorage.getItem('${ARM_KEY}')`);
-    expect(main).toMatch(
-      /import\.meta\.env\.MODE !== 'production'\) \{\s*try \{\s*if \(localStorage\.getItem\('lemo-vh-tl'\)\) void import\('\.\.\/platform\/vh-diag-boot\.ts'\)/,
-    );
+  it("开关只由非正式版的诊断启动件 diag-boot.ts 读（timelineArmed），main.tsx 不读", () => {
+    const boot = readFileSync(resolve(__dirname, "../diag-boot.ts"), "utf8");
+    expect(boot).toContain("if (timelineArmed(store)) startVhTimeline(frame, { store });");
+    expect(readFileSync(resolve(__dirname, "../../app/main.tsx"), "utf8")).not.toContain(ARM_KEY);
   });
 });
 

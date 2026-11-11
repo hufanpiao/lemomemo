@@ -1,5 +1,5 @@
 // 启动画面颜色诊断（台账 Q-2，platform/splash-probe.ts）：开关只跑一次；开着时 <html data-sp-probe>、小字、量尺都在；到点全部撤掉，DOM 回到原样；
-// 入口只在 main.tsx 的非正式版分支里动态加载（正式构建摇掉，build/check_no_probe.mjs 登记了标记兜底）
+// 入口只在非正式版的诊断启动件 diag-boot.ts 里、开关开着才动态加载（正式构建摇掉，build/check_no_probe.mjs 登记了标记兜底）
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -88,12 +88,11 @@ describe('启动画面多留 8 秒', () => {
 
 describe('接线', () => {
   const read = (p: string) => readFileSync(resolve(import.meta.dirname, '..', '..', '..', p), 'utf8');
-  it('main.tsx 只在非正式版分支里、开关开着才动态加载', () => {
-    const main = read('src/app/main.tsx');
-    const block = main.slice(main.indexOf("if (import.meta.env.MODE !== 'production') {"));
-    expect(block).toMatch(/if \(localStorage\.getItem\('lemo-sp-color'\)\) \{\s*document\.documentElement\.dataset\[SPLASH_HOLD_ATTR\] = '1';\s*void import\('\.\.\/platform\/splash-probe\.ts'\)\.then\(\(m\) => m\.startSplashProbe\(\)\)\.catch\(\(\) => cancelSplashHold\('lemo-sp-color'\)\);/);
-    expect(main.indexOf("import('../platform/splash-probe.ts')")).toBeGreaterThan(main.indexOf("if (import.meta.env.MODE !== 'production') {"));
-    expect(main).not.toMatch(/^import .*splash-probe/m);
+  it('只有 diag-boot.ts 在开关开着时动态加载（先打保留标记，加载失败清掉开关）；main.tsx 不碰它', () => {
+    const boot = read('src/platform/diag-boot.ts');
+    expect(boot).toMatch(/if \(splashProbeArmed\(store\)\) \{\s*document\.documentElement\.dataset\[SPLASH_HOLD_ATTR\] = '1';\s*void import\('\.\/splash-probe\.ts'\)\.then\(\(m\) => m\.startSplashProbe\(window, store\)\)\.catch\(\(\) => cancelSplashHold\(SPLASH_ARM_KEY, store\)\);/);
+    expect(boot).not.toMatch(/^import .*splash-probe\.ts/m);
+    expect(read('src/app/main.tsx')).not.toContain('splash-probe');
   });
   it('分包名、键名、类名登记进 PROBE_MARKERS', () => {
     for (const m of ['splash-probe', 'lemo-sp-color', 'sp-probe', 'splashHold']) expect(PROBE_MARKERS).toContain(m);

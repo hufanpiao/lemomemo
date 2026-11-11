@@ -57,6 +57,7 @@ vi.mock('../../features/onboarding/index.ts', async () => {
 import { ErrorBoundary } from '../ErrorBoundary.tsx';
 import { readFileSync } from 'node:fs';
 import { GATE_LIMIT_MS, GatedApp, startRoot, withCrashFallback, type RootDeps } from '../root.tsx';
+import { SW_REGISTER_WAIT_MS } from '../../platform/sw-register.ts';
 
 const ready = { status: 'ready', upgrade: {} } as unknown as Parameters<typeof startRoot>[0];
 const tooNew = { status: 'version_too_new', upgrade: {} } as unknown as Parameters<typeof startRoot>[0];
@@ -119,6 +120,22 @@ describe('启动选根（CONSENT-sugg ⑥：main.tsx 关口接线）', () => {
     expect(screen.getByTestId('too-new')).toBeTruthy();
     expect(stubs.gateMounted).toBe(0);
     expect(stubs.appRenders).toBe(0);
+  });
+
+  it('version_too_new、注册 SW 一直不回（Q-23 起注册不设超时）：最多等 SW_REGISTER_WAIT_MS 就照样渲染整屏提示，不白屏（K6 复审建议 3）', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const loadTooNew = vi.fn(async () => ({ CacheTooNewScreen: () => <p data-testid="too-new">too new</p> }) as unknown as Awaited<ReturnType<NonNullable<RootDeps['loadTooNew']>>>);
+      let got: unknown = null;
+      void startRoot(tooNew, { online: true, onRefresh: vi.fn(), registerSw: () => new Promise(() => undefined), loadTooNew }).then((r) => (got = r));
+      await vi.advanceTimersByTimeAsync(SW_REGISTER_WAIT_MS - 1);
+      expect(loadTooNew).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(loadTooNew).toHaveBeenCalledOnce();
+      expect(got).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('version_too_new 且整屏提示分包加载失败、注册 SW 出错：回退到静态提示，不抛', async () => {

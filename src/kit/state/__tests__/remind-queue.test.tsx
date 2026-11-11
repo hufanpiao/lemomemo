@@ -1,8 +1,8 @@
 // 提醒横幅的队列（架构 5.9“提醒的排队规则”；TC-B2-22 的状态部分）：压着时不出、全部放开按顺序出、处理掉 / 收起出队、收起的不再进
-import { readFileSync } from 'node:fs';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { collapseRinging, HOLD_MAX_MS, holdReminders, pruneCollapsed, setRemindHoldLog, useHoldReminders, remindQueue, removeRinging, resetRemindQueue, setRinging, setSnoozeNote, visibleEntry, type RemindEntry } from '../remind-queue.ts';
+import { resetLogBusForTest, setLogSink } from '../../../../shared/core/log-bus.ts';
+import { collapseRinging, HOLD_MAX_MS, holdReminders, pruneCollapsed, useHoldReminders, remindQueue, removeRinging, resetRemindQueue, setRinging, setSnoozeNote, visibleEntry, type RemindEntry } from '../remind-queue.ts';
 
 const e = (n: number): RemindEntry => ({ kind: 'event', id: `id${n}`, dueAt: n, tag: `event:id${n}:${n}` });
 const vis = () => visibleEntry(remindQueue.getState());
@@ -14,7 +14,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  setRemindHoldLog(null);
+  resetLogBusForTest();
 });
 
 function Holder({ on }: { on: boolean }) {
@@ -77,7 +77,7 @@ describe('压住不会永久卡住（代码审查中 4）', () => {
   it('超过 10 分钟自动放开并记日志；按时放开的不记', () => {
     vi.useFakeTimers();
     const log = vi.fn();
-    setRemindHoldLog(log);
+    setLogSink(log);
     setRinging([e(1)]);
     const early = holdReminders('keyboard');
     early();
@@ -87,7 +87,7 @@ describe('压住不会永久卡住（代码审查中 4）', () => {
     vi.advanceTimersByTime(1);
     expect(vis()?.id).toBe('id1');
     expect(log).toHaveBeenCalledTimes(1);
-    expect(log).toHaveBeenCalledWith('recording');
+    expect(log).toHaveBeenCalledWith('remind_hold_timeout', { code: 'recording' });
   });
 });
 
@@ -98,14 +98,5 @@ describe('收起记录按 7 天修剪（代码审查低 8）', () => {
     collapseRinging(e(100).tag);
     pruneCollapsed(50);
     expect([...remindQueue.getState().collapsed]).toEqual([e(100).tag]);
-  });
-});
-
-describe('压住超时的日志接线（代码审查 N1）', () => {
-  it('main.tsx 在日志通道建好后接上 setRemindHoldLog，动作名 remind_hold_timeout、原因放 code', () => {
-    const main = readFileSync('src/app/main.tsx', 'utf8');
-    expect(main).toContain("import { setRemindHoldLog } from '../kit/state/remind-queue.ts';");
-    const at = main.indexOf("setRemindHoldLog((reason) => logs.log('remind_hold_timeout', { code: reason }));");
-    expect(at).toBeGreaterThan(main.indexOf('const logs = createLogChannel();'));
   });
 });

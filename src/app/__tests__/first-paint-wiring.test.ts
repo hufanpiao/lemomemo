@@ -1,7 +1,8 @@
 // 首屏画完以后才起的那些事（B2 FA-6 ①；推迟启动代码审查 M1、M2、L1）的接线，按源码文字核对
 // （main.tsx 一 import 就会启动整个 App，写法同 splash-release.test.tsx）：
-// • watchAppPainted(el, nextFrame) 在 render 之前、读会话之前挂上；render 之后马上 startAppPaintLimit（时限从 render 起算）
-// • await appPainted() 在 render 之后、同步 / 设备登记 / 推送认领 / SW 注册之前；紧跟着换账号检查（boot.switching 或本机会话换了人，L6；设 null 推送认领上下文再 return）
+// • watchRoot(el, nextFrame)（platform/root-paint.ts，首屏画完检测的唯一出口）在 render 之前、读会话之前挂上；render 之后马上 startAppPaintLimit（时限从 render 起算）
+// • await appPainted() 在 render 之后、同步 / 设备登记 / 推送认领 / SW 注册之前；紧跟着换账号检查 stillOwner（boot.switching 或本机会话换了人，L6；设 null 推送认领上下文再 return），
+//   startAfterPaint 下载前后用的是同一个 stillOwner
 // • expectPushClaimContext() 在 render 之前（推迟期间的点按认领先等上下文，L3）
 // • 之后用到账号、令牌、推送、设备的调用都在那道检查之后
 // • FA-6 ③：同步、设备登记、账号状态探测的代码在那道检查之后才经 startAfterPaint 下载（失败退避重试、下载前后都过同一道闸，
@@ -28,8 +29,8 @@ describe('main.tsx：首屏画完以后才起同步、设备登记、推送认�
   const render = once(main, 'createRoot(el).render(');
   const wait = once(main, 'await appPainted();');
 
-  it('watchAppPainted(el, nextFrame) 在 render 之前、读会话之前挂上', () => {
-    const watch = once(main, 'watchAppPainted(el, nextFrame);');
+  it('watchRoot(el, nextFrame) 在 render 之前、读会话之前挂上', () => {
+    const watch = once(main, 'watchRoot(el, nextFrame);');
     expect(watch).toBeLessThan(main.indexOf('const userId = readSessionUserId();'));
     expect(watch).toBeLessThan(render);
   });
@@ -40,7 +41,7 @@ describe('main.tsx：首屏画完以后才起同步、设备登记、推送认�
     expect(limit).toBeLessThan(wait);
   });
 
-  const GATE = /^if \(boot\.switching \|\| readSessionUserId\(\) !== userId\) \{\s*setPushClaimContext\(null\);\s*return;\s*\}/;
+  const GATE = /^const stillOwner = \(\): boolean => !boot\.switching && readSessionUserId\(\) === userId;\s*if \(!stillOwner\(\)\) \{\s*setPushClaimContext\(null\);\s*return;\s*\}/;
 
   it('await appPainted() 在 render 之后，紧跟着换账号检查（boot.switching 或本机会话已不是这个账号，安全复审 L6）：设 null 推送认领上下文再 return（M1、L3）', () => {
     expect(wait).toBeGreaterThan(render);
@@ -64,14 +65,14 @@ describe('main.tsx：首屏画完以后才起同步、设备登记、推送认�
 
   it('用到账号、令牌、推送、设备的调用都在那道检查之后', () => {
     expect(gate1).toBeGreaterThan(0);
-    for (const call of ['createSupabaseTransport()', 'createDeviceRegistrar(', 'wireSync(boot,', 'setPushClaimContext({', 'registerSwAfterPaint({', 'runPushClaim()']) {
+    for (const call of ['createSupabaseTransport()', 'createDeviceRegistrar(', 'wireSync(boot,', 'setPushClaimContext({', 'registerSw({', 'runPushClaim()']) {
       const at = once(main, call);
       expect(at, `${call} 要在 await appPainted() 和换账号检查之后`).toBeGreaterThan(gate1);
     }
   });
 
   describe('FA-6 ③：首屏画完以后才下载同步那批代码（③ 审查 M1：重试、SW 注册分开）', () => {
-    const swAt = once(main, 'registerSwAfterPaint({');
+    const swAt = once(main, 'registerSw({');
     const startAt = once(main, 'startAfterPaint({');
     const syncAt = once(main, 'const startSync = (late: AfterPaint): void => {');
     const syncEnd = syncAt + main.slice(syncAt).search(/\n {2}\};\s/);
@@ -88,7 +89,8 @@ describe('main.tsx：首屏画完以后才起同步、设备登记、推送认�
     it('startAfterPaint：下载 loadAfterPaint，闸和第一道一样，收手、第一次失败都设 null 推送认领上下文，连续失败出 sync-paused 横幅，成功才 startSync', () => {
       expect(startAt).toBeGreaterThan(gate1);
       expect(args).toContain('load: loadAfterPaint,');
-      expect(args).toContain('stillOwner: () => !boot.switching && readSessionUserId() === userId,');
+      expect(args, '下载前后的闸就是第一道闸那个 stillOwner，不另写一份').toContain('stillOwner,');
+      expect(main.match(/readSessionUserId\(\) === userId/g)?.length, '会话主人判断只写一处').toBe(1);
       expect(args).toContain('onAbandoned: () => setPushClaimContext(null),');
       expect(args).toContain('life: browserLifecycle,');
       expect(args).toMatch(/if \(n === 1\) setPushClaimContext\(null\);/);
@@ -126,12 +128,14 @@ describe('main.tsx：首屏画完以后才起同步、设备登记、推送认�
       expect(main).not.toMatch(/currentUserId:[^\n]*readSessionUserId\(\)\s*(\?\?|\|\||\?)/);
     });
 
-    it('SW 注册真的会执行（③ 复审 L-b）：swReg 就是那个三元式，registerServiceWorker() 只在它的真分支里调一次，不是挪进没人调的函数（11-07 起在 registerSwAfterPaint 里按需下载再调）', () => {
+    it('SW 注册真的会执行（③ 复审 L-b）：swReg 就是那个三元式，registerServiceWorker() 只在它的真分支里调一次，不是挪进没人调的函数（11-07 起按需下载再调，11-11 起统一经 sw-register.ts 的 registerSw）', () => {
       expect(main).toMatch(
-        /\n {2}const swReg: Promise<ServiceWorkerRegistration \| null> =\s*!import\.meta\.env\.DEV && boot\.status !== 'version_too_new'\s*\?(?:\s*\/\/[^\n]*\n)?\s*registerSwAfterPaint\(\{ onReady: \(\) => boot\.upgrade\.setSwReady\(\), life: browserLifecycle \}\)\.catch\(\(\) => null\)/,
+        /\n {2}const swReg: Promise<ServiceWorkerRegistration \| null> =\s*!import\.meta\.env\.DEV && boot\.status !== 'version_too_new'\s*\?(?:\s*\/\/[^\n]*\n)?\s*registerSw\(\{ onReady: \(\) => boot\.upgrade\.setSwReady\(\), life: browserLifecycle \}\)\.catch\(\(\) => null\)/,
       );
-      // 11-07 起注册本体在 platform/sw-register.ts 的 registerSwAfterPaint（安全审 M1：下载不设超时），main.tsx 只调它这一处
-      expect(main.match(/\bregisterSwAfterPaint\(/g)?.length, 'registerSwAfterPaint( 只调这一处').toBe(1);
+      // 注册本体在 platform/sw-register.ts 的 registerSw（安全审 M1、Q-23：下载、注册都不设超时），main.tsx 只调它这一处；
+      // version_too_new 那条路是把同一个 registerSw 原样交给 startRoot（{ registerSw }），不另调
+      expect(main.match(/\bregisterSw\(/g)?.length, 'registerSw( 只调这一处').toBe(1);
+      once(main, '{ registerSw }');
       expect(main.match(/\bconst swReg\b/g)?.length).toBe(1);
       // 声明在 start 的最外层（两格缩进）、第一道闸之后，不在别的函数里
       const at = once(main, '  const swReg: Promise<ServiceWorkerRegistration | null> =');

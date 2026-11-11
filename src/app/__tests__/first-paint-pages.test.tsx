@@ -7,7 +7,7 @@ import { Suspense } from 'react';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { APP_PAGE_SELECTOR } from '../../platform/first-paint.ts';
+import { APP_PAGE_SELECTOR } from '../../platform/root-paint.ts';
 // outbox 状态替身的空集合（UNSYNCED-retryRecs-required）：每次返回同一个对象，useSyncExternalStore 的快照才稳定
 const EMPTY_RECS = vi.hoisted((): ReadonlySet<string> => new Set());
 
@@ -62,7 +62,7 @@ describe('根是不带 data-feature 的 <main> 的页面也算画完', { timeout
 });
 
 const SRC = resolve(import.meta.dirname, '..', '..');
-/** 根是不带 data-feature 的 <main> 的页面（登记在这里，first-paint.ts 文件头同步写着） */
+/** 根是不带 data-feature 的 <main> 的页面（登记在这里，root-paint.ts 文件头同步写着） */
 // app/dev/VoiceProbe.tsx：R-68 探测页（B3 FA-0，非正式版 #/dev-csp/voice，一次性，和 voice-probe 同一个 PR 删）
 const PAGES_WITHOUT_FEATURE = ['app/dev/CspLab.tsx', 'app/dev/VoiceProbe.tsx', 'features/reminders/ui/FullReminderPage.tsx', 'kit/components/EditShell.tsx'];
 

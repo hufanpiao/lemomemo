@@ -1,4 +1,4 @@
-// 注册 SW（K6 复审建议 3）：注册一直不返回时最多等 waitMs，返回 null，入口不会白屏；失败、不支持也返回 null；更新那一半在 sw-register-update.test.ts
+// 注册 SW：等真实结果（Q-23 不设超时）；exe、不支持回 null，注册失败抛出（registerSw 记错误名）；更新那一半在 sw-register-update.test.ts
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkSwOnForeground, registerServiceWorker, SW_FOREGROUND_CHECK_MS, watchServiceWorkerUpdate } from '../sw-lifecycle.ts';
 
@@ -16,10 +16,10 @@ describe('registerServiceWorker', () => {
   it('exe 里（window 上有 __TAURI_INTERNALS__ 或 __TAURI__）：不调 register，直接返回 null；网页照常注册（对照）', async () => {
     const register = vi.fn(() => Promise.resolve({ scope: '/app/' }));
     stubSw(register);
-    expect(await registerServiceWorker(3000, { __TAURI_INTERNALS__: {} })).toBeNull();
-    expect(await registerServiceWorker(3000, { __TAURI__: {} })).toBeNull();
+    expect(await registerServiceWorker({ __TAURI_INTERNALS__: {} })).toBeNull();
+    expect(await registerServiceWorker({ __TAURI__: {} })).toBeNull();
     expect(register).not.toHaveBeenCalled();
-    expect(await registerServiceWorker(3000, {})).toEqual({ scope: '/app/' });
+    expect(await registerServiceWorker({})).toEqual({ scope: '/app/' });
     expect(register).toHaveBeenCalledOnce();
   });
 
@@ -31,23 +31,12 @@ describe('registerServiceWorker', () => {
     expect(src.replace(/\/\/.*$/gm, '')).not.toMatch(/__TAURI/);
   });
 
-  it('注册一直不返回：waitMs 后返回 null', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    stubSw(() => new Promise(() => undefined));
-    let done: unknown = 'pending';
-    void registerServiceWorker(3000).then((r) => (done = r));
-    await vi.advanceTimersByTimeAsync(2999);
-    expect(done).toBe('pending');
-    await vi.advanceTimersByTimeAsync(1);
-    expect(done).toBeNull();
-  });
-
-  it('正常注册：返回注册对象；注册抛错：返回 null；不支持：返回 null', async () => {
+  it('正常注册：返回注册对象；注册抛错：照样抛出（不吞，好记错误名）；不支持：返回 null', async () => {
     const reg = { scope: '/app/' };
     stubSw(() => Promise.resolve(reg));
     expect(await registerServiceWorker()).toBe(reg);
     stubSw(() => Promise.reject(new Error('x')));
-    expect(await registerServiceWorker()).toBeNull();
+    await expect(registerServiceWorker()).rejects.toThrow('x');
     Reflect.deleteProperty(navigator, 'serviceWorker');
     expect(await registerServiceWorker()).toBeNull();
   });

@@ -1,13 +1,12 @@
-// SW 注册、更新按需下载（首屏瘦身 U7，11-07 主持人定 B）：sw-lifecycle.ts 下载失败、一直不回都有退路，永远 resolve、不抛错。
-// version_too_new 那次注册拿不到 → null；“更新”拿不到 → 先走两条退路（W6），都不行才 failed（没查成）。首屏画完以后那次注册（registerSwAfterPaint）下载不设超时（安全审 M1）
+// SW 注册、更新按需下载（首屏瘦身 U7）：sw-lifecycle.ts 只经 loadSwLifecycle 下载，拿不到回 null，永远 resolve、不抛错。
+// 注册（registerSw）下载、注册都不设超时（安全审 M1、Q-23）；“更新”每次下载最多 SW_REGISTER_WAIT_MS，拿不到先换地址再下、再走 SKIP_WAITING（W6），都不行才 failed
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   freshLifecycleUrl,
   loadSwLifecycle,
-  registerServiceWorkerLazy,
-  registerSwAfterPaint,
+  registerSw,
   skipWaitingDirect,
   SW_REGISTER_WAIT_MS,
   SW_SCOPE,
@@ -28,43 +27,59 @@ const fakeModule = (over: Partial<SwLifecycleModule> = {}): SwLifecycleModule =>
     ...over,
   }) as unknown as SwLifecycleModule;
 
-describe('loadSwLifecycle', () => {
+describe('loadSwLifecycle（唯一的加载器）', () => {
   it('下载成功：返回模块', async () => {
     const m = fakeModule();
-    expect(await loadSwLifecycle(1000, async () => m)).toBe(m);
+    expect(await loadSwLifecycle({ load: async () => m })).toBe(m);
   });
 
-  it('下载失败（同步抛、异步拒绝）：返回 null，不抛', async () => {
-    expect(await loadSwLifecycle(1000, () => Promise.reject(new TypeError('Failed to fetch dynamically imported module')))).toBeNull();
+  it('下载失败（同步抛、异步拒绝）：返回 null，不抛；不要 retry 时不换地址', async () => {
+    const fresh = vi.fn(async () => fakeModule());
+    expect(await loadSwLifecycle({ load: () => Promise.reject(new TypeError('Failed to fetch dynamically imported module')), fresh })).toBeNull();
     expect(
-      await loadSwLifecycle(1000, () => {
-        throw new Error('boom');
+      await loadSwLifecycle({
+        load: () => {
+          throw new Error('boom');
+        },
+        fresh,
       }),
     ).toBeNull();
+    expect(fresh).not.toHaveBeenCalled();
   });
 
-  it('一直不回：到 waitMs 返回 null（默认和注册同一个上限 SW_REGISTER_WAIT_MS）', async () => {
+  it('不给 waitMs：一直等到真实结果（5 秒才到也照样拿到）', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const p = loadSwLifecycle(undefined, () => new Promise<SwLifecycleModule>(() => undefined));
+    const m = fakeModule();
     let done: unknown = 'pending';
-    void p.then((v) => (done = v));
-    await vi.advanceTimersByTimeAsync(SW_REGISTER_WAIT_MS - 1);
+    void loadSwLifecycle({ load: () => new Promise((res) => setTimeout(() => res(m), 5000)) }).then((v) => (done = v));
+    await vi.advanceTimersByTimeAsync(4999);
     expect(done).toBe('pending');
     await vi.advanceTimersByTimeAsync(1);
+    expect(done).toBe(m);
+  });
+
+  it('给了 waitMs、一直不回：到点返回 null；retry 时换地址再等一轮', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const hang = () => new Promise<SwLifecycleModule>(() => undefined);
+    const fresh = vi.fn(hang);
+    let done: unknown = 'pending';
+    void loadSwLifecycle({ waitMs: SW_REGISTER_WAIT_MS, retry: true, load: hang, fresh }).then((v) => (done = v));
+    await vi.advanceTimersByTimeAsync(SW_REGISTER_WAIT_MS);
+    expect(fresh).toHaveBeenCalledOnce();
+    expect(done).toBe('pending');
+    await vi.advanceTimersByTimeAsync(SW_REGISTER_WAIT_MS);
     expect(done).toBeNull();
   });
 });
 
-describe('registerServiceWorkerLazy、updateServiceWorkerLazy', () => {
+describe('updateServiceWorkerLazy', () => {
   it('拿到模块：照原来的函数走', async () => {
     const m = fakeModule();
-    expect(await registerServiceWorkerLazy(async () => m)).toEqual({ scope: '/app/' });
     expect(await updateServiceWorkerLazy(async () => m)).toBe('no_update');
   });
 
-  it('拿不到模块（下载失败、超时），两条退路也不行：注册回 null，“更新”回 failed（没查成），都不抛', async () => {
-    expect(await registerServiceWorkerLazy(async () => null)).toBeNull();
-    expect(await updateServiceWorkerLazy(async () => null, { retry: async () => null, skip: async () => 'failed' as const })).toBe('failed');
+  it('拿不到模块、SKIP_WAITING 也不行：回 failed（没查成），不抛', async () => {
+    expect(await updateServiceWorkerLazy(async () => null, async () => 'failed' as const)).toBe('failed');
   });
 });
 
@@ -73,7 +88,8 @@ describe('updateServiceWorkerLazy 的退路（W6）', () => {
   it('① 第一次下载被拒、换地址那次拿到：照常走 updateServiceWorker，不发 SKIP_WAITING', async () => {
     const m = fakeModule({ updateServiceWorker: vi.fn(async () => 'reloading' as const) });
     const skip = vi.fn(async () => 'reloading' as const);
-    expect(await updateServiceWorkerLazy(async () => null, { retry: async () => m, skip })).toBe('reloading');
+    const get = () => loadSwLifecycle({ retry: true, load: () => Promise.reject(new TypeError('x')), fresh: async () => m });
+    expect(await updateServiceWorkerLazy(get, skip)).toBe('reloading');
     expect(m.updateServiceWorker).toHaveBeenCalledTimes(1);
     expect(skip).not.toHaveBeenCalled();
   });
@@ -93,7 +109,7 @@ describe('updateServiceWorkerLazy 的退路（W6）', () => {
       return { sw, waiting, takeover: () => listeners.splice(0).forEach((f) => f(new Event('controllerchange'))) };
     };
     const lazy = (sw: Parameters<typeof skipWaitingDirect>[0], ms?: number) =>
-      updateServiceWorkerLazy(async () => null, { retry: async () => null, skip: () => skipWaitingDirect(sw, ms) });
+      updateServiceWorkerLazy(async () => null, () => skipWaitingDirect(sw, ms));
     afterEach(() => vi.useRealTimers());
 
     it('接管了（controllerchange）才回 reloading', async () => {
@@ -145,14 +161,14 @@ describe('updateServiceWorkerLazy 的退路（W6）', () => {
 
   it('③ 都不行（没有 waiting）：回 failed，界面显示新提示（update.failedReopen，见 update-banner、CacheTooNewScreen 的测试）', async () => {
     const sw = { getRegistration: vi.fn(async () => ({ waiting: null }) as unknown as ServiceWorkerRegistration), addEventListener: vi.fn() };
-    expect(await updateServiceWorkerLazy(async () => null, { retry: async () => null, skip: () => skipWaitingDirect(sw) })).toBe('failed');
+    expect(await updateServiceWorkerLazy(async () => null, () => skipWaitingDirect(sw))).toBe('failed');
     expect(await skipWaitingDirect(undefined)).toBe('failed');
     expect(await skipWaitingDirect({ getRegistration: async () => Promise.reject(new Error('x')), addEventListener: () => undefined })).toBe('failed');
   });
 
   // ④ 退路不绕过调用方的忙碌检查：platform 不准引 core，放在 src/app/__tests__/sw-update-fallback-busy.test.ts
 
-  it('⑤ “更新”和两条退路里没有重新载入的调用（什么时候载入只由调用方定；文件末尾的 reloadPage 是别处用的，不在这一段）', () => {
+  it('⑤ “更新”和退路里没有重新载入的调用（什么时候载入只由调用方定；文件末尾的 reloadPage 是别处用的，不在这一段）', () => {
     const all = readFileSync(join(import.meta.dirname, '..', 'sw-register.ts'), 'utf8');
     const from = all.indexOf('export function freshLifecycleUrl');
     const to = all.indexOf('const UPDATE_ATTEMPT_KEY');
@@ -189,7 +205,7 @@ describe('updateServiceWorkerLazy 的退路（W6）', () => {
   });
 });
 
-describe('registerSwAfterPaint（首屏画完以后那次注册，安全审 M1）', () => {
+describe('registerSw（下载、注册都不设超时，安全审 M1、Q-23）', () => {
   const life = { onVisibility: vi.fn(() => () => undefined), isOnline: () => true };
   const lateModule = () => {
     const reg = { scope: '/app/' } as unknown as ServiceWorkerRegistration;
@@ -206,7 +222,7 @@ describe('registerSwAfterPaint（首屏画完以后那次注册，安全审 M1�
     const { reg, m } = lateModule();
     const onReady = vi.fn();
     const runPushClaim = vi.fn();
-    const swReg = registerSwAfterPaint({ onReady, life, load: () => new Promise((res) => setTimeout(() => res(m), 5000)) });
+    const swReg = registerSw({ onReady, life, load: () => new Promise((res) => setTimeout(() => res(m), 5000)) });
     // 和 app/main.tsx 同一个写法：swReg.then((reg) => { if (reg) void runPushClaim(); })
     void swReg.then((r) => {
       if (r) runPushClaim();
@@ -221,9 +237,30 @@ describe('registerSwAfterPaint（首屏画完以后那次注册，安全审 M1�
     expect(runPushClaim).toHaveBeenCalledOnce();
   });
 
+  it('Q-23：注册本身过了 3 秒才回来（5 秒）：等真实结果，拿到 reg、挂上监听，不当失败；运行日志记一行结果和耗时', async () => {
+    const real = await import('../sw-lifecycle.ts');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const reg = Object.assign(new EventTarget(), { installing: null, waiting: null }) as unknown as ServiceWorkerRegistration;
+    const sw = Object.assign(new EventTarget(), { controller: null, register: vi.fn(() => new Promise((res) => setTimeout(() => res(reg), 5000))) });
+    Object.defineProperty(navigator, 'serviceWorker', { value: sw, configurable: true });
+    const lines: string[] = [];
+    const g = globalThis as unknown as Record<string, unknown>;
+    g['__lemoRunLog'] = { q: [], sink: (l: string) => void lines.push(l) };
+    try {
+      const swReg = registerSw({ onReady: vi.fn(), life, load: async () => real });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await swReg).toBe(reg);
+      expect(life.onVisibility).toHaveBeenCalled();
+      expect(lines).toEqual(['sw register ok 5000ms']);
+    } finally {
+      Reflect.deleteProperty(g, '__lemoRunLog');
+      Reflect.deleteProperty(navigator, 'serviceWorker');
+    }
+  });
+
   it('下载失败：返回 null，不注册、不认领，不抛', async () => {
     const runPushClaim = vi.fn();
-    const r = await registerSwAfterPaint({ onReady: vi.fn(), life, load: () => Promise.reject(new TypeError('Failed to fetch dynamically imported module')) });
+    const r = await registerSw({ onReady: vi.fn(), life, load: () => Promise.reject(new TypeError('Failed to fetch dynamically imported module')) });
     if (r) runPushClaim();
     expect(r).toBeNull();
     expect(runPushClaim).not.toHaveBeenCalled();
@@ -239,7 +276,7 @@ describe('registerSwAfterPaint（首屏画完以后那次注册，安全审 M1�
     try {
       const runPushClaim = vi.fn();
       // 和 app/main.tsx 同一个写法：.catch(() => null) 兜底，再 .then 认领
-      const swReg = registerSwAfterPaint({ onReady: vi.fn(), life, load: async () => m }).catch(() => null);
+      const swReg = registerSw({ onReady: vi.fn(), life, load: async () => m }).catch(() => null);
       void swReg.then((r) => {
         if (r) runPushClaim();
       });
@@ -253,10 +290,28 @@ describe('registerSwAfterPaint（首屏画完以后那次注册，安全审 M1�
     }
   });
 
-  it('注册本身失败（exe、不支持）：返回 null，不挂监听', async () => {
-    const { m } = lateModule();
-    (m.registerServiceWorker as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
-    expect(await registerSwAfterPaint({ onReady: vi.fn(), life, load: async () => m })).toBeNull();
+  it('exe、不支持（registerServiceWorker 回 null）、注册失败（抛错）、下载失败：返回 null，不挂监听；运行日志记 skip / 错误名（不记 message）', async () => {
+    const lines: string[] = [];
+    const g = globalThis as unknown as Record<string, unknown>;
+    g['__lemoRunLog'] = { q: [], sink: (l: string) => void lines.push(l) };
+    try {
+      const { m } = lateModule();
+      (m.registerServiceWorker as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+      expect(await registerSw({ onReady: vi.fn(), life, load: async () => m })).toBeNull();
+      (m.registerServiceWorker as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new DOMException('https://x/app/sw.js?a=1 failed', 'SecurityError'));
+      expect(await registerSw({ onReady: vi.fn(), life, load: async () => m })).toBeNull();
+      expect(await registerSw({ load: () => Promise.reject(new TypeError('x')) })).toBeNull();
+      expect(m.watchServiceWorkerUpdate).not.toHaveBeenCalled();
+      expect(m.checkSwOnForeground).not.toHaveBeenCalled();
+      expect(lines.map((l) => l.replace(/\d+ms$/, 'Nms'))).toEqual(['sw register skip Nms', 'sw register fail SecurityError Nms', 'sw register fail load Nms']);
+    } finally {
+      Reflect.deleteProperty(g, '__lemoRunLog');
+    }
+  });
+
+  it('不给 onReady、life（version_too_new 的整屏提示前那次）：只注册，不挂监听', async () => {
+    const { reg, m } = lateModule();
+    expect(await registerSw({ load: async () => m })).toBe(reg);
     expect(m.watchServiceWorkerUpdate).not.toHaveBeenCalled();
     expect(m.checkSwOnForeground).not.toHaveBeenCalled();
   });

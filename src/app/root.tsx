@@ -6,10 +6,8 @@
 //   分包还没加载好、关口还没挂上时由这里到点放行；关口挂上（onStart）以后由关口按剩下的时间自己计（startedAt + limitMs），
 //   已经显示了告知页就不再被这里的计时打断。这段空白由启动画面盖住（R-251、R-254，index.html 的 #lemo-splash）；
 //   启动画面只是把空白换成画面，不封顶等待时间，封顶仍靠这里的计时
-// • 启动画面的收起：告知页、App（关口放行后、离线时）都只靠 main.tsx 的 hideSplashWhenPainted(#root)——#root 里真画出东西的下一帧才收。
-//   App 的页面是懒加载的（App.tsx 里 <Suspense fallback={null}>），分包没到时 App 什么都不画；SplashRelease 若放在 App 旁边，
-//   会在页面到之前就提交、开始淡出，露出空白（R-251 要盖住的正是这段，复查必改）。
-//   SplashRelease 只放在不懒加载、提交即有内容的整屏提示和崩溃兜底页旁边（兜底页出来时 #root 可能早已有内容，靠它收）；最晚 5 秒见 main.tsx
+// • 启动画面的收起：画进 #root 的（告知页、App、整屏提示、崩溃兜底页）都只靠 main.tsx 经 root-paint.ts 的 whenContent——#root 里真画出东西的下一帧才收
+//   （App 的页面懒加载，分包没到时 #root 是空的，R-251 要盖住的正是这段）；只有另挂在 body 下的“库被挡住”整屏提示旁边放 SplashRelease。最晚 5 秒见 main.tsx
 // • 离线：直接画 App（关口问不了服务器，读失败本来也放行）
 // • 最外层（withCrashFallback，K6-sugg3 ⑥）：main.tsx 渲染的根整个包一层错误边界，App 顶层出错显示静态的“哎呀，卡住了 · 刷新”，不白屏
 // • 错误边界只包关口（CONSENT-sugg ③）：关口的分包加载失败、关口出错 → 放行画 App；App 画在边界外面，App 自己出错不会被当成关口失败
@@ -26,22 +24,14 @@ import { CacheTooNewFallback } from './CacheTooNewFallback.tsx';
 import type { CacheTooNewScreen as TooNewScreen } from './CacheTooNewScreen.tsx';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { nextFrame } from '../motion/index.ts';
+import { whenContent } from '../platform/root-paint.ts';
 import { hideSplash } from '../platform/splash.ts';
+import { SW_REGISTER_WAIT_MS } from '../platform/sw-register.ts';
 
-/** 画在整屏提示、崩溃兜底页旁边：它们提交以后的下一帧收起启动画面（重复调用无害）。不要放在 App 旁边：App 的页面懒加载，提交时可能还是空的 */
+/** 画在“库被挡住”整屏提示（不在 #root 里）旁边：提交以后的下一帧收起启动画面（重复调用无害） */
 export function SplashRelease(): null {
   useEffect(() => nextFrame(() => void hideSplash()), []);
   return null;
-}
-
-/** 根旁边带上 SplashRelease */
-function released(node: ReactElement): ReactElement {
-  return (
-    <>
-      {node}
-      <SplashRelease />
-    </>
-  );
 }
 
 /**
@@ -77,8 +67,7 @@ export function GatedApp({ limitMs = GATE_LIMIT_MS }: { limitMs?: number } = {})
 
 /** main.tsx 渲染的根外面那一层（K6-sugg3 ⑥）：里面没接住的渲染错误都换成静态的“哎呀，卡住了 · 刷新一下” */
 export function withCrashFallback(root: ReactElement, onRefresh: () => void): ReactElement {
-  // 兜底页出来时也收起启动画面，不然会盖在出错页上面
-  return <ErrorBoundary fallback={released(<AppCrashFallback onRefresh={onRefresh} />)}>{root}</ErrorBoundary>;
+  return <ErrorBoundary fallback={<AppCrashFallback onRefresh={onRefresh} />}>{root}</ErrorBoundary>;
 }
 
 export interface RootDeps {
@@ -86,7 +75,7 @@ export interface RootDeps {
   online: boolean;
   /** 整屏提示的“刷新” */
   onRefresh: () => void;
-  /** 注册 SW（version_too_new 时渲染前要等它；开发版不注册时不传） */
+  /** 注册 SW（version_too_new 时渲染前最多等它 SW_REGISTER_WAIT_MS，到点照样渲染、注册接着做；开发版不注册时不传） */
   registerSw?: () => Promise<unknown>;
   /** 测试用：换掉整屏提示的懒加载 */
   loadTooNew?: () => Promise<{ CacheTooNewScreen: typeof TooNewScreen }>;
@@ -95,14 +84,13 @@ export interface RootDeps {
 /** 按 boot 的状态选要渲染的根；不抛错 */
 export async function startRoot(boot: Pick<BootResult, 'status' | 'upgrade'>, d: RootDeps): Promise<ReactElement> {
   if (boot.status !== 'version_too_new') return d.online ? <GatedApp /> : <App />;
-  if (d.registerSw) await d.registerSw().catch(() => undefined);
-  const fallback = released(<CacheTooNewFallback onRefresh={d.onRefresh} />);
+  if (d.registerSw) await Promise.race([d.registerSw().catch(() => undefined), new Promise((ok) => setTimeout(ok, SW_REGISTER_WAIT_MS))]);
+  const fallback = <CacheTooNewFallback onRefresh={d.onRefresh} />;
   try {
     const { CacheTooNewScreen } = await (d.loadTooNew ?? (() => import('./CacheTooNewScreen.tsx')))();
     return (
       <ErrorBoundary fallback={fallback}>
         <CacheTooNewScreen upgrade={boot.upgrade} onRefresh={d.onRefresh} />
-        <SplashRelease />
       </ErrorBoundary>
     );
   } catch {
@@ -123,17 +111,12 @@ export interface WatchBlockedOptions {
   releaseMaxMs?: number;
 }
 
-/** #root 里真画出东西了（同 platform/splash.ts 的 painted：有元素子节点或非空白文本） */
-function painted(el: Element): boolean {
-  return el.firstElementChild !== null || /\S/.test(el.textContent ?? '');
-}
-
 /**
  * 升级本机库被别的标签页挡住（TC-B1-48 的 blocked；架构师 10-30 第 8 点）：upgrade.blocked 变成 true 时整屏提示
  * （文案见 update.blocked.title）。这时 coldStart 还在等库打开，#root 还没 createRoot，所以另挂一个容器（body 下的
  * #lemo-blocked）和它自己的根；画出来的下一帧收起启动画面（SplashRelease）。
  * blocked 变回 false（库打开了）以后不马上卸（BANNER-sugg ①：启动画面已经收起，马上卸会空白一小段）：
- * 等 #root 画出东西的下一帧再卸、删容器；页面里没有 #root 就马上卸；最多等 BLOCKED_RELEASE_MAX_MS。等的时候又 blocked 了就接着显示。
+ * 等 #root 画出东西（root-paint.ts 的 whenContent）的下一帧再卸、删容器；最多等 BLOCKED_RELEASE_MAX_MS。等的时候又 blocked 了就接着显示。
  * main.tsx 经 coldStart 的 onUpgradeCenter 调；返回取消订阅（同时马上卸掉）
  */
 export function watchCacheBlocked(upgrade: UpgradeCenter, opts: WatchBlockedOptions = {}): () => void {
@@ -158,33 +141,18 @@ export function watchCacheBlocked(upgrade: UpgradeCenter, opts: WatchBlockedOpti
   };
   const releaseWhenPainted = (): void => {
     if (cancelRelease) return;
-    const app = doc.getElementById('root');
-    if (!app) {
-      unmount();
-      return;
-    }
     let cancelFrame: (() => void) | null = null;
-    let mo: MutationObserver | null = null;
-    const done = (): void => {
-      if (cancelFrame) return;
-      mo?.disconnect();
-      cancelFrame = frame(unmount);
-    };
+    let stopWait = (): void => undefined;
     const timer = setTimeout(unmount, maxMs);
+    // 先登记取消：#root 已有内容、帧又是同步的时候，下面当场就会 unmount
     cancelRelease = () => {
       clearTimeout(timer);
-      mo?.disconnect();
+      stopWait();
       cancelFrame?.();
     };
-    if (painted(app)) {
-      done();
-      return;
-    }
-    if (typeof MutationObserver !== 'function') return;   // 只靠上面的最长等待
-    mo = new MutationObserver(() => {
-      if (painted(app)) done();
+    stopWait = whenContent(() => {
+      cancelFrame = frame(unmount);
     });
-    mo.observe(app, { childList: true, characterData: true, subtree: true });
   };
   const sync = (): void => {
     const blocked = upgrade.getState().blocked;
@@ -199,7 +167,12 @@ export function watchCacheBlocked(upgrade: UpgradeCenter, opts: WatchBlockedOpti
       host.id = 'lemo-blocked';
       doc.body.appendChild(host);
       root = createRoot(host);
-      root.render(released(<CacheBlockedScreen />));
+      root.render(
+        <>
+          <CacheBlockedScreen />
+          <SplashRelease />
+        </>,
+      );
     } else if (root) {
       releaseWhenPainted();
     }

@@ -1,51 +1,33 @@
-// 本页的日志通道（app/log-channel.ts；接手清单 K8-logs、K6-log）：写 logs 表的那一端接上以前先在内存里留最近 200 条，接上后按顺序交出；
-// outbox 的 outbox_vault_shell_drop 转成同一条通道（coll = 表名、itemId = 记录 id、code = 丢掉的条数）
+// 日志总线接上传队列的那一端（app/log-channel.ts；接手清单 K8-logs、K6-log）：toLogRecord 打时刻、错误换成 code；
+// outbox 的 outbox_vault_shell_drop 转成同一条总线（coll = 表名、itemId = 记录 id、code = 丢掉的条数）
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { logQueueKey } from '../../platform/log-store.ts';
-import { createLogChannel, LOG_BUFFER_MAX, logQueueCleaner, outboxLog, type LogEntry } from '../log-channel.ts';
+import { jsErrorCode } from '../../platform/env.ts';
+import { logQueueCleaner, outboxLog, toLogRecord } from '../log-channel.ts';
 
-describe('createLogChannel', () => {
-  it('没接上时先留着（只留 act、coll、code、itemId 和时刻），接上后按顺序交出，之后直接转交', () => {
-    let t = 1;
-    const ch = createLogChannel({ now: () => t++ });
-    ch.log('sync_conflict', { coll: 'todos', code: 'conflict' });
-    ch.log('sync_task_timeout');
-    expect(ch.pending()).toEqual([
-      { act: 'sync_conflict', coll: 'todos', code: 'conflict', t: 1 },
-      { act: 'sync_task_timeout', t: 2 },
-    ]);
-    const got: LogEntry[] = [];
-    ch.setSink((e) => got.push(e));
-    expect(got.map((e) => e.act)).toEqual(['sync_conflict', 'sync_task_timeout']);
-    expect(ch.pending()).toEqual([]);
-    ch.log('sync_gone', { coll: 'todos', code: 'gone' });
-    expect(got[2]).toEqual({ act: 'sync_gone', coll: 'todos', code: 'gone', t: 3 });
+describe('toLogRecord（总线 → 上传队列的一条）', () => {
+  it('打上时刻；只带 act、coll、code、itemId，空的不带', () => {
+    expect(toLogRecord('sync_conflict', { coll: 'todos', code: 'conflict' }, 1)).toEqual({ act: 'sync_conflict', coll: 'todos', code: 'conflict', t: 1 });
+    expect(toLogRecord('sync_task_timeout', undefined, 2)).toEqual({ act: 'sync_task_timeout', t: 2 });
+    expect(toLogRecord('x', { coll: '', code: '', itemId: '' }, 3)).toEqual({ act: 'x', t: 3 });
   });
 
-  it('缓存最多 LOG_BUFFER_MAX 条，满了丢最早的', () => {
-    const ch = createLogChannel();
-    for (let i = 0; i < LOG_BUFFER_MAX + 5; i++) ch.log('x', { code: String(i) });
-    const p = ch.pending();
-    expect(p).toHaveLength(LOG_BUFFER_MAX);
-    expect(p[0]?.code).toBe('5');
-  });
-
-  it('sink 抛错不影响调用方', () => {
-    const ch = createLogChannel();
-    ch.setSink(() => {
-      throw new Error('boom');
-    });
-    expect(() => ch.log('sync_gone')).not.toThrow();
+  it('error 换成“错误类型@文件名:行号”（jsErrorCode），错误对象本身和 message 不上传', () => {
+    const err = new TypeError('secret text');
+    err.stack = 'TypeError: secret text\n    at f (https://lemo.example/app/assets/today-abc.js:12:34)';
+    const e = toLogRecord('quiet_error_missed', { error: err }, 4, 'https://lemo.example');
+    expect(e).toEqual({ act: 'quiet_error_missed', t: 4, code: jsErrorCode(err, {}, 'https://lemo.example') });
+    expect(JSON.stringify(e)).not.toContain('secret');
   });
 });
 
 describe('outboxLog（K6-log）', () => {
   it('outbox_vault_shell_drop：coll = 表名、itemId = 记录 id、code = 丢掉的条数；不放别的', () => {
-    const ch = createLogChannel({ now: () => 9 });
-    outboxLog(ch.log)({ act: 'outbox_vault_shell_drop', coll: 'notes', id: 'n-1', dropped: 3 });
-    expect(ch.pending()).toEqual([{ act: 'outbox_vault_shell_drop', coll: 'notes', itemId: 'n-1', code: '3', t: 9 }]);
+    const log = vi.fn();
+    outboxLog(log)({ act: 'outbox_vault_shell_drop', coll: 'notes', id: 'n-1', dropped: 3 });
+    expect(log).toHaveBeenCalledWith('outbox_vault_shell_drop', { coll: 'notes', itemId: 'n-1', code: '3' });
   });
 });
 
@@ -97,9 +79,16 @@ describe('logQueueCleaner（架构 0.38 第 68 条；CONSENT-wire 审查：watch
   });
 });
 
-describe('升级中心的日志接到同一条通道（PROBE-sugg2 ③）', () => {
+describe('升级中心的日志接到同一条总线（PROBE-sugg2 ③）', () => {
   it('main.tsx 给 coldStart 传 upgradeDeps.log（act 原样、code 放进 code 列）和每日计数存储', () => {
     const src = readFileSync(join(import.meta.dirname, '../main.tsx'), 'utf8');
-    expect(src).toMatch(/upgradeDeps: \{ log: \(act, code\) => logs\.log\(act, code \? \{ code \} : undefined\), logCounts: upgradeLogCountStore \}/);
+    expect(src).toMatch(/upgradeDeps: \{ log: \(act, code\) => logEvent\(act, code \? \{ code \} : undefined\), logCounts: upgradeLogCountStore \}/);
+  });
+
+  it('main.tsx 只接一次总线（setLogSink → 上传队列），不再有别的日志 setter（提醒、QuietBoundary 直接 logEvent）', () => {
+    const src = readFileSync(join(import.meta.dirname, '../main.tsx'), 'utf8');
+    expect(src.match(/\bsetLogSink\(/g)?.length).toBe(1);
+    expect(src).toContain('setLogSink((act, f) => logQueue.add(toLogRecord(act, f, Date.now())));');
+    for (const gone of ['createLogChannel', 'setRemindHoldLog', 'setQuietErrorLog', 'setRemindErrorLog', 'logs.log']) expect(src).not.toContain(gone);
   });
 });

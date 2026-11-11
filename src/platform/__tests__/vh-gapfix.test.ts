@@ -34,7 +34,7 @@ describe('开关（11-11 起默认开，诊断页关掉用来对照）', () => {
     expect(readGapFixLog(bad)).toBe('');
   });
 
-  it('main.tsx 按 gapFixWanted() 直接加载本模块，不在“非正式版”那段里（正式版也做），也不再经 vh-diag-boot', () => {
+  it('main.tsx 按 gapFixWanted() 直接加载本模块，不在“非正式版”那段里（正式版也做），也不经诊断启动件 diag-boot', () => {
     const main = readFileSync(resolve(__dirname, '../../app/main.tsx'), 'utf8');
     const call = "  void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));";
     expect(main).toContain(call);

@@ -230,6 +230,6 @@ describe('接线', () => {
       expect(s, f).not.toMatch(/^import [^;]*from '[^']*\/push\.ts';$/m);
       expect(s, f).toContain('disconnectPushLazy()');
     }
-    expect(readFileSync('src/app/main.tsx', 'utf8')).toContain("setPushDisconnectLog((code) => logs.log('push_disconnect_fail', { code }))");
+    expect(readFileSync('src/app/main.tsx', 'utf8')).toContain("setPushDisconnectLog((code) => logEvent('push_disconnect_fail', { code }))");
   });
 });

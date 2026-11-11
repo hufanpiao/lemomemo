@@ -5,7 +5,7 @@
 // • 两种构建都要过：
 //   – 带 supabase 地址的构建（VITE_PUBLIC_SUPABASE_URL = 同源 /sb）：走快读，两张表各被请求一次、带 Bearer；
 //   – 假后端 e2e 的默认构建（没配 supabase 地址）：关口直接按读失败放行（envReady 为假），同样不在画出前下载 supabase-js。
-// • 同步引擎（realtime 订阅、ensureSession、fetchConfig 都会 getSupabase()）在 main.tsx 里等首屏画完（src/platform/first-paint.ts）才起，
+// • 同步引擎（realtime 订阅、ensureSession、fetchConfig 都会 getSupabase()）在 main.tsx 里等首屏画完（src/platform/root-paint.ts）才起，
 //   所以 supabase-js 那一块在今天页出现以后才下载（FA-6 ① 第二步，11-04）。
 // • 只数关口那一对请求（profiles?select=consent_policy_ver、app_config?select=notice）：首屏画完后同步引擎会再读 profiles?select=*，不算。
 //   每个请求都查：带 apikey（等于构建里的 anon key）、Bearer 令牌，只发往同源 /sb（安全审查 L5）；没有 supabase-js 的 x-client-info 头（安全复审 L8）。

@@ -1,7 +1,7 @@
-// 启动画面的收起（R-251、R-254）：hideSplash 淡出后移除 DOM、可以重复调用；减少动态效果时按 120 ms 收；5 秒兜底和 #root 首次绘制以后收起
+// 启动画面的收起（R-251、R-254）：hideSplash 淡出后移除 DOM、可以重复调用；减少动态效果时按 120 ms 收；5 秒兜底（#root 首次绘制的口径见 root-paint.test.ts）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  cancelSplashHold, hideSplash, hideSplashAfter, hideSplashWhenPainted, isSplashShowing, SPLASH_FADE_MS, SPLASH_FADE_RM_MS, SPLASH_HOLD_ATTR, SPLASH_HOLD_MS,
+  cancelSplashHold, hideSplash, hideSplashAfter, isSplashShowing, SPLASH_FADE_MS, SPLASH_FADE_RM_MS, SPLASH_HOLD_ATTR, SPLASH_HOLD_MS,
   SPLASH_ID, SPLASH_MAX_MS,
 } from '../splash.ts';
 
@@ -169,7 +169,7 @@ describe('hideSplash 的边角', () => {
   });
 });
 
-describe('hideSplashAfter、hideSplashWhenPainted', () => {
+describe('hideSplashAfter', () => {
   it('hideSplashAfter：默认 5 秒到点收起；取消了就不收', async () => {
     const el = mountSplash();
     hideSplashAfter();
@@ -184,101 +184,5 @@ describe('hideSplashAfter、hideSplashWhenPainted', () => {
     stop();
     await vi.advanceTimersByTimeAsync(200);
     expect(el2.classList.contains('is-leaving')).toBe(false);
-  });
-
-  it('root 还是空的：不收；画出第一个节点以后按传进来的 nextFrame 收', async () => {
-    const el = mountSplash();
-    const root = document.createElement('div');
-    document.body.appendChild(root);
-    const frames: (() => void)[] = [];
-    hideSplashWhenPainted(root, (cb) => {
-      frames.push(cb);
-      return () => undefined;
-    });
-    await Promise.resolve();
-    expect(frames).toHaveLength(0);
-    root.appendChild(document.createElement('p'));
-    await Promise.resolve();
-    expect(frames).toHaveLength(1);
-    expect(el.classList.contains('is-leaving')).toBe(false);
-    frames[0]?.();
-    expect(el.classList.contains('is-leaving')).toBe(true);
-    root.appendChild(document.createElement('p'));
-    await Promise.resolve();
-    expect(frames).toHaveLength(1);
-  });
-
-  it('root 里已经有东西：直接排下一帧；取消函数能撤掉还没画出的那一次', async () => {
-    const el = mountSplash();
-    const root = document.createElement('div');
-    root.appendChild(document.createElement('p'));
-    hideSplashWhenPainted(root);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(el.classList.contains('is-leaving')).toBe(true);
-    await vi.advanceTimersByTimeAsync(1000);
-
-    const el2 = mountSplash();
-    const empty = document.createElement('div');
-    const stop = hideSplashWhenPainted(empty);
-    stop();
-    empty.appendChild(document.createElement('p'));
-    await vi.advanceTimersByTimeAsync(10);
-    expect(el2.classList.contains('is-leaving')).toBe(false);
-  });
-});
-
-describe('hideSplashWhenPainted 的“画出东西”口径：有元素子节点或非空白文本', () => {
-  function setup(prefill?: (root: HTMLElement) => void) {
-    const el = mountSplash();
-    const root = document.createElement('div');
-    prefill?.(root);
-    document.body.appendChild(root);
-    const frames: (() => void)[] = [];
-    hideSplashWhenPainted(root, (cb) => {
-      frames.push(cb);
-      cb();
-      return () => undefined;
-    });
-    return { el, root, frames };
-  }
-
-  it('塞进纯空白文本：不收；再画出元素才收', async () => {
-    const { el, root } = setup();
-    root.appendChild(document.createTextNode('\n    '));
-    await Promise.resolve();
-    expect(el.classList.contains('is-leaving')).toBe(false);
-    root.appendChild(document.createElement('main'));
-    await Promise.resolve();
-    expect(el.classList.contains('is-leaving')).toBe(true);
-  });
-
-  it('塞进注释节点：不收；再画出元素才收', async () => {
-    const { el, root } = setup();
-    root.appendChild(document.createComment('react'));
-    await Promise.resolve();
-    expect(el.classList.contains('is-leaving')).toBe(false);
-    root.appendChild(document.createElement('main'));
-    await Promise.resolve();
-    expect(el.classList.contains('is-leaving')).toBe(true);
-  });
-
-  it('挂上之前 #root 里就有空白（index.html 格式化过）：挂上时不收；画出元素才收', async () => {
-    const { el, root, frames } = setup((r) => r.appendChild(document.createTextNode('\n  ')));
-    expect(frames).toHaveLength(0);
-    expect(el.classList.contains('is-leaving')).toBe(false);
-    root.appendChild(document.createElement('main'));
-    await Promise.resolve();
-    expect(el.classList.contains('is-leaving')).toBe(true);
-  });
-
-  it('空白文本原地改成文字：算画出东西，收起', async () => {
-    const { el, root } = setup();
-    const t = document.createTextNode('  ');
-    root.appendChild(t);
-    await Promise.resolve();
-    expect(el.classList.contains('is-leaving')).toBe(false);
-    t.data = '出错了';
-    await Promise.resolve();
-    expect(el.classList.contains('is-leaving')).toBe(true);
   });
 });

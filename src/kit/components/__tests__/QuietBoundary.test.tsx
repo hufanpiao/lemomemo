@@ -1,7 +1,8 @@
-// QuietBoundary（今天页待办 代码审查 M1；代码复审 N1）：里面出错只把这一块去掉、页面照常；按 name 交给入口接的日志，同一个 name 这一页只记一次
+// QuietBoundary（今天页待办 代码审查 M1；代码复审 N1）：里面出错只把这一块去掉、页面照常；按 name 记进日志总线（quiet_error_<name>），同一个 name 这一页只记一次
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { QUIET_NAME, QuietBoundary, resetQuietErrorLogForTest, setQuietErrorLog } from '../QuietBoundary.tsx';
+import { resetLogBusForTest, setLogSink } from '../../../../shared/core/log-bus.ts';
+import { QUIET_NAME, QuietBoundary, resetQuietErrorLogForTest } from '../QuietBoundary.tsx';
 
 function Boom(): never {
   throw new Error('boom');
@@ -13,14 +14,14 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
-  setQuietErrorLog(null);
+  resetLogBusForTest();
   vi.restoreAllMocks();
 });
 
 describe('QuietBoundary', () => {
   it('里面出错：这一块不画，旁边照常；按 name 记一条，同一个 name 只记一次', () => {
     const log = vi.fn();
-    setQuietErrorLog(log);
+    setLogSink(log);
     render(
       <div>
         <p>日程</p>
@@ -30,13 +31,13 @@ describe('QuietBoundary', () => {
       </div>,
     );
     expect(screen.getByText('日程')).toBeTruthy();
-    expect(log.mock.calls.map((c) => c[0])).toEqual(['unsynced-mark', 'missed']);
-    expect(log.mock.calls[0]?.[1]).toBeInstanceOf(Error);
+    expect(log.mock.calls.map((c) => c[0])).toEqual(['quiet_error_unsynced-mark', 'quiet_error_missed']);
+    expect(log.mock.calls[0]?.[1]?.error).toBeInstanceOf(Error);
   });
 
   it('没接日志、日志自己出错：都不挡页面', () => {
     render(<QuietBoundary name="a"><Boom /></QuietBoundary>);
-    setQuietErrorLog(() => {
+    setLogSink(() => {
       throw new Error('log down');
     });
     render(<div><QuietBoundary name="b"><Boom /></QuietBoundary><p>照常</p></div>);
@@ -65,18 +66,9 @@ describe('QuietBoundary', () => {
 
   it('不合约定的 name（太长、带大写或中文）按 bad-name 记', () => {
     const log = vi.fn();
-    setQuietErrorLog(log);
+    setLogSink(log);
     render(<QuietBoundary name="this-name-is-way-too-long-for-logs"><Boom /></QuietBoundary>);
     render(<QuietBoundary name="错过"><Boom /></QuietBoundary>);
-    expect(log.mock.calls.map((c) => c[0])).toEqual(['bad-name']);
-  });
-
-  it('main.tsx 在日志通道建好后接上 setQuietErrorLog，动作名 quiet_error_<name>、只记错误类型和位置（L2）', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const main = readFileSync(join(import.meta.dirname, '../../../app/main.tsx'), 'utf8');
-    expect(main).toContain("import { setQuietErrorLog } from '../kit/components/QuietBoundary.tsx';");
-    const at = main.indexOf('setQuietErrorLog((name, err) => logs.log(`quiet_error_${name}`, { code: jsErrorCode(err, {}, location.origin) }));');
-    expect(at).toBeGreaterThan(main.indexOf('const logs = createLogChannel();'));
+    expect(log.mock.calls.map((c) => c[0])).toEqual(['quiet_error_bad-name']);
   });
 });

@@ -1,7 +1,7 @@
-// onAuthUser 预加载 supabase-js 先等首屏画完（B2 FA-6 ①；推迟启动代码审查 M2）：入口挂了 watchAppPainted、页面还没画出来时，
+// onAuthUser 预加载 supabase-js 先等首屏画完（B2 FA-6 ①；推迟启动代码审查 M2）：入口挂了 watchRoot、页面还没画出来时，
 // 等多久都不调 getSupabase（只等浏览器空闲不够：页面分包还在下载时浏览器就已经“空闲”了）；功能页出现、那一帧跑完以后才调
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetAppPaintedForTest, watchAppPainted, type FrameScheduler } from '../first-paint.ts';
+import { resetRootPaintForTest, watchRoot, type FrameScheduler } from '../root-paint.ts';
 
 const getSupabase = vi.hoisted(() => vi.fn(() => Promise.reject(new Error('no env'))));
 vi.mock('../supabase/client.ts', () => ({
@@ -13,14 +13,14 @@ const { onAuthUser } = await import('../session.ts');
 
 let root: HTMLElement;
 beforeEach(() => {
-  resetAppPaintedForTest();
+  resetRootPaintForTest();
   getSupabase.mockClear();
   root = document.createElement('div');
   document.body.appendChild(root);
 });
 afterEach(() => {
   root.remove();
-  resetAppPaintedForTest();
+  resetRootPaintForTest();
 });
 
 describe('onAuthUser 等首屏画完', () => {
@@ -30,7 +30,7 @@ describe('onAuthUser 等首屏画完', () => {
       q.push(fn);
       return () => undefined;
     };
-    watchAppPainted(root, next);
+    watchRoot(root, next);
     const off = onAuthUser(() => undefined);
     // 浏览器早就“空闲”了（whenIdle 的回调有机会跑好几轮）
     await new Promise((r) => setTimeout(r, 300));
@@ -48,7 +48,7 @@ describe('onAuthUser 等首屏画完', () => {
 
   it('画完之前就取消了：画完以后也不调', async () => {
     const q: (() => void)[] = [];
-    watchAppPainted(root, (fn) => {
+    watchRoot(root, (fn) => {
       q.push(fn);
       return () => undefined;
     });

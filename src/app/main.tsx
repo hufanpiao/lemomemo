@@ -16,7 +16,7 @@
 //    选根（关口、离线、version_too_new）在 root.tsx（CONSENT-sugg ③⑥：错误边界只包关口，单独有测试）；
 //    选出来的根外面再包一层静态的“出错了 · 刷新”兜底（root.tsx 的 withCrashFallback，K6-sugg3 ⑥）
 // 启动画面（R-251、R-254；DOM 在 index.html，跟着首次绘制出来）：从这里起算最多盖 5 秒（hideSplashAfter）；
-// #root 第一次画出东西（告知页、App、整屏提示、崩溃兜底页）的下一帧收起（hideSplashWhenPainted）；root.tsx 的 SplashRelease 再各收一次
+// #root 第一次画出东西（告知页、App、整屏提示、崩溃兜底页）的下一帧收起（root-paint.ts 的 whenContent）
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles/tokens.css';
@@ -29,15 +29,14 @@ import { hasAuthLoss, readReauth } from '../platform/auth-loss-store.ts';
 import { coldStart, type BootResult } from '../core/boot.ts';
 import { deleteCacheDb } from '../core/cache.ts';
 import { createLogQueue, guardOwner } from '../core/log/queue.ts';
+import { logEvent, setLogSink } from '../../shared/core/log-bus.ts';
 import { devicePlatform, readInstallId, withLock } from '../platform/device-info.ts';
 import { clearLogQueue, clearOtherLogQueues, logQueueStore } from '../platform/log-store.ts';
 import { expectPushClaimContext, runPushClaim, setPushClaimContext } from '../platform/push-claim-run.ts';
-import { setRemindHoldLog } from '../kit/state/remind-queue.ts';
-import { setQuietErrorLog } from '../kit/components/QuietBoundary.tsx';
 import { setPushDisconnectLog } from '../platform/push-disconnect.ts';
 import { browserLifecycle } from '../platform/net.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
-import { buildInfo, isTauri, JS_ERROR_ACT, jsErrorCode, registerJsErrorLog } from '../platform/env.ts';
+import { buildInfo, isTauri, registerJsErrorLog } from '../platform/env.ts';
 import { gapFixWanted, startEarlyGapFix } from '../platform/vh-gapfix-gate.ts';
 import {
   clearCacheStorage, clearLocalSessionIf, goToAuth, onAuthUser, onSessionStorageChange, readSessionAccessToken, readSessionId, readSessionUserId,
@@ -45,16 +44,15 @@ import {
 } from '../platform/session.ts';
 import { settleDropAtStartup } from '../platform/session-drop.ts';
 import { enableDropMark, installDesktopSession } from '../platform/session-store.ts';
-import { cancelSplashHold, hideSplash, hideSplashAfter, hideSplashWhenPainted, SPLASH_HOLD_ATTR } from '../platform/splash.ts';
-import { afterAppPainted, appPainted, startAppPaintLimit, watchAppPainted } from '../platform/first-paint.ts';
+import { hideSplash, hideSplashAfter } from '../platform/splash.ts';
+import { afterAppPainted, appPainted, startAppPaintLimit, watchRoot, whenContent } from '../platform/root-paint.ts';
 import { markInsetPainted, watchInsetBottom } from '../platform/inset-watch.ts';
 import { loadMotionFeatures, nextFrame } from '../motion/index.ts';
-import { registerServiceWorkerLazy, registerSwAfterPaint, reloadPage, upgradeLogCountStore } from '../platform/sw-register.ts';
+import { registerSw, reloadPage, upgradeLogCountStore } from '../platform/sw-register.ts';
 import { mountExitScreen, watchExitIncomplete } from './exit-screen.tsx';
 import { mountFeatures } from './features.ts';
 import { goHref } from './router.ts';
-import { createLogChannel, logQueueCleaner, outboxLog } from './log-channel.ts';
-import { setRemindErrorLog } from './App.tsx';
+import { logQueueCleaner, outboxLog, toLogRecord } from './log-channel.ts';
 import { GATE_LIMIT_MS, startRoot, watchCacheBlocked, withCrashFallback } from './root.tsx';
 import { AFTER_PAINT_NOTICE_AT, lazyLogUploader, loadAfterPaint, startAfterPaint, type AfterPaint } from './after-paint.ts';
 import { applyDocLocale } from '../platform/doc-locale.ts';
@@ -84,26 +82,9 @@ if (gapFixWanted()) {
   startEarlyGapFix(nextFrame);
   void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));
 }
-// 全局运行日志（负责人 11-11“以后所有的bug看log能不能解决”；非正式版一直开着，platform/run-log.ts，诊断页“Copy run log”）：
-// 动态下载不占首屏；正式构建靠 MODE 常量整块摇掉
+// 诊断启动件（运行日志、冷启动时间线、启动画面颜色诊断，platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量整块摇掉
 if (import.meta.env.MODE !== 'production') {
-  void import('../platform/run-log.ts').then((m) => m.startRunLog(window)).catch(() => undefined);
-}
-// R-371 冷启动时间线（非正式版，诊断页开关“Timeline next launch”）：开着才下载 platform/vh-diag-boot.ts 记一次；键名同 vh-timeline.ts 的 ARM_KEY。
-// 正式构建靠 MODE 常量整块摇掉
-if (import.meta.env.MODE !== 'production') {
-  try {
-    if (localStorage.getItem('lemo-vh-tl')) void import('../platform/vh-diag-boot.ts').then((m) => m.startVhDiag(nextFrame));
-    // 启动画面颜色诊断（台账 Q-2，诊断页开关“Splash colors next launch”）：开着才下载 platform/splash-probe.ts 涂色、印数一次；键名同 splash-probe-arm.ts 的 ARM_KEY
-    // 诊断这次在跑：同步打上 data-splash-hold，启动画面从第一次要收起时起再多留 SPLASH_HOLD_MS（8 秒）才照原逻辑收起（platform/splash.ts），来得及截图；
-    // 分包加载失败：拿掉标记、清掉开关（cancelSplashHold），不让每次冷启动都重来、启动画面白白多盖
-    if (localStorage.getItem('lemo-sp-color')) {
-      document.documentElement.dataset[SPLASH_HOLD_ATTR] = '1';
-      void import('../platform/splash-probe.ts').then((m) => m.startSplashProbe()).catch(() => cancelSplashHold('lemo-sp-color'));
-    }
-  } catch {
-    // 读不到本机存储：不记
-  }
+  void import('../platform/diag-boot.ts').then((m) => m.startDiagBoot(nextFrame)).catch(() => undefined);
 }
 
 /** exe（Tauri）里换上 exe 的 platform 桥（架构 0.53 第 2 条）：openReminder、openAuth、本机通知改走 exe；网页版不加载 desktop.ts */
@@ -142,11 +123,11 @@ async function start(): Promise<void> {
   }
   const el = document.getElementById('root');
   if (!el) throw new Error('root_missing');
+  // #root 画没画出东西只看 root-paint.ts：这里挂上，并开始算首屏画完（第一个页面出来再过一帧；同步、设备登记、SW 注册都排在它后面，
+  // supabase-js 不和页面分包抢下载，B2 FA-6 ①）。这里只有 15 秒长兜底，正式的时限在 render 之后才开始算（见下面 startAppPaintLimit）
+  watchRoot(el, nextFrame);
   // 告知页关口还在问服务器时 #root 是空的，启动画面继续盖着；一画出东西就在下一帧收起
-  hideSplashWhenPainted(el, nextFrame);
-  // 首屏画完（第一个功能页出来再过一帧）：同步、设备登记、SW 注册都排在它后面，supabase-js 不和页面分包抢下载（B2 FA-6 ①）。
-  // 这里只挂上观察和 15 秒长兜底；正式的时限在 render 之后才开始算（见下面 startAppPaintLimit）
-  watchAppPainted(el, nextFrame);
+  whenContent(() => void nextFrame(() => void hideSplash()));
   // 底部安全区“稳定”从首屏画完起算（G10，底栏跟着第一个页面出来）
   afterAppPainted(markInsetPainted);
   el.dataset['version'] = buildInfo.version;
@@ -166,18 +147,11 @@ async function start(): Promise<void> {
     return;
   }
 
-  // 日志通道（K8-logs、K6-log）：outbox、同步、时区上报、设备登记都交到这里；写 logs 表的那一端接上以前先在内存里留着（log-channel.ts）
-  const logs = createLogChannel();
-  // 提醒压住超时自动放开时记一条（B2 FA-4 代码审查 N1；日志没有动作名白名单）
-  setRemindHoldLog((reason) => logs.log('remind_hold_timeout', { code: reason }));
-  // RemindHost 出错（接线审查 R2）：走现有的 js_error，code 只有“错误类型@文件名:行号”
-  setRemindErrorLog((err) => logs.log(JS_ERROR_ACT, { code: jsErrorCode(err, {}, location.origin) }));
-  // 页面里可有可无的一小块（错过的提醒、未同步提示和标记等，kit 的 QuietBoundary）出错（代码复审 N1）：动作名带是哪一块，code 同上只有“错误类型@文件名:行号”
-  setQuietErrorLog((name, err) => logs.log(`quiet_error_${name}`, { code: jsErrorCode(err, {}, location.origin) }));
-  // 退出、换账号时断开推送（platform/push-disconnect.ts，push.ts 按需下载，11-05 首屏瘦身）：下载失败、断开抛错记一条，code 是 load / error，不挡退出
-  setPushDisconnectLog((code) => logs.log('push_disconnect_fail', { code }));
+  // 业务日志都进日志总线（shared/core/log-bus.ts）：outbox、同步、时区上报、设备登记、提醒、QuietBoundary 各自 logEvent，下面 setLogSink 接一次上传队列。
+  // 退出、换账号时断开推送下载失败、断开抛错（platform/push-disconnect.ts）：记一条，code 是 load / timeout / error / fallback，不挡退出
+  setPushDisconnectLog((code) => logEvent('push_disconnect_fail', { code }));
   // 客户端错误日志（TC-B1-68、架构 6.1）：只记“类型@文件名:行号”，同一个 code 每天 5 条
-  registerJsErrorLog(logs.log);
+  registerJsErrorLog(logEvent);
   // 写 logs 表的那一端（架构 0.38 第 68 条）：localStorage 队列 lemo.logq.<user_id>，主页在线时批量上传；别的账号留下的队列清掉
   clearOtherLogQueues(userId);
   // 上传前核对会话主人：别的标签页换成了别的账号，这一页拿到的是新账号的令牌，不能用它传这个账号的日志
@@ -186,11 +160,11 @@ async function start(): Promise<void> {
     store: logQueueStore(userId), upload: guardOwner(userId, readSessionUserId, lazyLogUploader()),
     isOnline: () => browserLifecycle.isOnline(), onOnline: (fn) => browserLifecycle.onOnline(fn),
   });
-  logs.setSink((e) => logQueue.add(e));
+  setLogSink((act, f) => logQueue.add(toLogRecord(act, f, Date.now())));
   // 上次会话丢失的原因码（R-382 架构 4.1a 第 3 点）：只把 uid_h 对得上本账号的几条按 auth_loss 上传，别的账号的直接丢；取完整个键删掉
   // 本机有这个键才动态引入（auth-loss-log.ts 带 crypto.subtle 哈希，不进首屏；平时没有这个键，不下载）
   if (hasAuthLoss()) void import('../platform/auth-loss-log.ts')
-    .then(async (m) => (await m.takeAuthLossFor(userId, readInstallId())).forEach((e) => logs.log('auth_loss', { code: m.authLossLogCode(e) })))
+    .then(async (m) => (await m.takeAuthLossFor(userId, readInstallId())).forEach((e) => logEvent('auth_loss', { code: m.authLossLogCode(e) })))
     .catch(() => undefined);
   // 被移除、停用、注销冷静期、本页收到 SIGNED_OUT：停止上传并清掉这个账号的日志队列（架构 0.38 第 68 条）；watchAccount（K6-signedout）和 wireSync 共用
   const clearLogs = logQueueCleaner(logQueue, userId);
@@ -198,13 +172,13 @@ async function start(): Promise<void> {
   let localeFromBoot = false;
   const boot = await coldStart({
     userId,
-    outboxOptions: { log: outboxLog(logs.log) },
+    outboxOptions: { log: outboxLog(logEvent) },
     // 别的标签页退出登录、按库名删本机库（versionchange 的 newVersion 为 null，K6 复审 C）：同步读一次会话，
     // 没有了就回登录页（库正在被删，watchAccount 收到 storage 事件后也会走退出流程，重复跳转无害）；还有（那边已重新登录）就重新载入
     onCacheDeleted: () => (readSessionUserId() ? reloadPage() : goToAuth()),
     // 升级中心的错误码（update_failed、update_takeover_timeout、upgrade_busy_expired 等，PROBE-sugg2 ③）进同一条日志通道；
     // 同一个 act 每天最多 5 条，计数在 localStorage lemo.upglog（B 组审查建议 1）
-    upgradeDeps: { log: (act, code) => logs.log(act, code ? { code } : undefined), logCounts: upgradeLogCountStore },
+    upgradeDeps: { log: (act, code) => logEvent(act, code ? { code } : undefined), logCounts: upgradeLogCountStore },
     // 升级本机库被别的标签页挡住：coldStart 还在等库打开时整屏提示（文案见 update.blocked.title），库打开后自动消失（root.tsx，架构师 10-30 第 8 点）。
     // 这时 profile 还没读出来：blocked 第一次为 true、整屏提示画出来之前才按本机选过的语言和设备语言定一次界面语言（BANNER-sugg ③；
     // 没被挡住就不定，下面 applyLocale(boot) 按缓存的 profile 定；已经按 profile 定过就不再覆盖）
@@ -229,7 +203,7 @@ async function start(): Promise<void> {
     onSignedOut: goToAuth,
     // R-382：别的标签页删了会话，等它写好 lemo.reauth 再判断是登录过期还是退出了
     reauthGraceMs: REAUTH_GRACE_MS,
-    log: (act) => logs.log(act),
+    log: (act) => logEvent(act),
     // 别的标签页退出：本页关掉连接后按库名删库（登录页审查）
     deleteDb: () => deleteCacheDb(),
     // 清库失败（onFailed 不填）同样重新载入：冷启动会在读写任何东西之前再清一次，再失败就降级成 unavailable、不渲染缓存
@@ -240,11 +214,11 @@ async function start(): Promise<void> {
   // 推送认领的上下文要等首屏画完才设（下面 setPushClaimContext）：这之前设置 › 提醒 的点按认领先等它，不当场回 claim_failed（推迟启动审查 L3）
   expectPushClaimContext();
 
-  // 选根（root.tsx）：在线先过告知页关口；本机库来自更新的版本（TC-B1-49，K6-ver-new）只渲染整屏提示（先注册 SW 再渲染，复审 S4）
+  // 选根（root.tsx）：在线先过告知页关口；本机库来自更新的版本（TC-B1-49，K6-ver-new）只渲染整屏提示（先注册 SW 再渲染，复审 S4；只注册，不盯新版本）
   const root = await startRoot(boot, {
     online: browserLifecycle.isOnline(),
     onRefresh: reloadPage,
-    ...(import.meta.env.DEV ? {} : { registerSw: registerServiceWorkerLazy }),
+    ...(import.meta.env.DEV ? {} : { registerSw }),
   });
   // 最外层兜底（K6-sugg3 ⑥）：App 顶层出错不白屏，显示静态的“出错了 · 刷新”
   const guarded = withCrashFallback(root, reloadPage);
@@ -263,21 +237,21 @@ async function start(): Promise<void> {
   // 取舍（审查 L4）：会话被撤销、账号停用要等同步引擎或 supabase-js 起来才发现，最多推后这一段（通常几百毫秒）；本机缓存的内容本来就先画
   await appPainted();
   // 等的这段时间里可能已经在换账号、退出（watchAccount 设了闸、封了库、退订了推送）：后面的同步、设备登记、推送认领、SW 注册
-  // 用的都是这个账号（userId）、本机库和当前会话的令牌，一律不再做（FA-6 推迟启动审查 M1；和 render 之前那道检查同一种写法）。
-  // 等着上下文的点按认领立刻回 claim_failed（L3），也补上“换账号时设 null”。
-  // 同步再比一次本机会话（安全复审 L6）：别的标签页已经换了账号、watchAccount 还没来得及设闸时，同样不用旧账号做下面这些
-  if (boot.switching || readSessionUserId() !== userId) {
+  // 用的都是这个账号（userId）、本机库和当前会话的令牌，一律不再做（FA-6 推迟启动审查 M1）。等着上下文的点按认领立刻回 claim_failed（L3）。
+  // 同步再比一次本机会话（安全复审 L6）：别的标签页已经换了账号、watchAccount 还没来得及设闸时，同样不用旧账号做下面这些。
+  // 下面下载启动件前后的闸也是这一个 stillOwner
+  const stillOwner = (): boolean => !boot.switching && readSessionUserId() === userId;
+  if (!stillOwner()) {
     setPushClaimContext(null);
     return;
   }
   // SW 注册不依赖下面那批代码（③ 审查 M1）：过了第一道闸就注册，下载失败、重试期间照样有 SW 缓存和新版本提示。version_too_new 时上面已经注册过
-  // 注册以后盯住“后台装好了新版本”（8.1）：顶部提示“有新版本 · 重新打开”（App.tsx 的 UpdateBanner），不强制刷新
-  // 注册的代码这时才下载（platform/sw-lifecycle.ts，11-07 首屏瘦身 U7）。下载不设超时（安全审 M1）：晚到也照常注册、盯新版本、
-  // 回到前台查新版本，下面的推送认领也照常等到 reg；只有下载失败才是 null（和注册失败同一条路）。切到前台查新版本的间隔见 sw-lifecycle.ts
+  // 注册以后盯住“后台装好了新版本”（8.1）：顶部提示“有新版本 · 重新打开”（App.tsx 的 UpdateBanner），不强制刷新；回到前台查新版本。
+  // 注册的代码这时才下载（platform/sw-lifecycle.ts）；下载、注册都不设超时（安全审 M1、Q-23），下面的推送认领照常等到 reg；失败才是 null
   const swReg: Promise<ServiceWorkerRegistration | null> =
     !import.meta.env.DEV && boot.status !== 'version_too_new'
       ? // 万一里面抛错（下载、注册、挂监听都已各自接住，这里再兜一层）：按“没注册”处理，不留没处理的拒绝、不影响首屏
-        registerSwAfterPaint({ onReady: () => boot.upgrade.setSwReady(), life: browserLifecycle }).catch(() => null)
+        registerSw({ onReady: () => boot.upgrade.setSwReady(), life: browserLifecycle }).catch(() => null)
       : Promise.resolve(null);
 
   /** 下载到了、闸也过了（startAfterPaint 保证）：起同步、设备登记、推送认领。这里面全是同步调用，查完闸到用上账号之间没有空档 */
@@ -292,11 +266,11 @@ async function start(): Promise<void> {
       ? createDeviceRegistrar({
           transport, cache: boot.cache, platform, appVersion: buildInfo.version,
           sessionId: () => readSessionId(), installId: () => readInstallId(),
-          lock: (fn) => withLock(`lemo-device-reg:${userId}`, fn), log: logs.log,
+          lock: (fn) => withLock(`lemo-device-reg:${userId}`, fn), log: logEvent,
         })
       : null;
     wireSync(boot, {
-      transport, clearCacheStorage, goToAuth, platform, log: logs.log,
+      transport, clearCacheStorage, goToAuth, platform, log: logEvent,
       // 第二个参数是 sid（被拒那次请求的会话），不是 session 的 setExitNotice 的 storage，要包一层
       setExitNotice: (n, sid) => setExitNotice(n, undefined, { sid: sid ?? null }),
       // 被移除、停用：一收到就删被拒那次请求的会话，回登录页前只在会话还是那一个时再删（K6-sugg3 ①；sid 必填，K6-sugg5 ②）
@@ -333,12 +307,12 @@ async function start(): Promise<void> {
   // 连续失败 AFTER_PAINT_NOTICE_AT 次：顶部出“同步暂停 · 重新打开”（沿用 sync-paused 横幅和文案，主持人 11-04 定；重新打开也绕开浏览器缓存失败的动态 import，L2）
   startAfterPaint({
     load: loadAfterPaint,
-    stillOwner: () => !boot.switching && readSessionUserId() === userId,
+    stillOwner,
     onAbandoned: () => setPushClaimContext(null),
     life: browserLifecycle,
     onFailed: (n, why) => {
       if (n === 1) setPushClaimContext(null);
-      if (n === 1 || n === AFTER_PAINT_NOTICE_AT) logs.log('after_paint_load_failed', { code: `${why}:${n}` });
+      if (n === 1 || n === AFTER_PAINT_NOTICE_AT) logEvent('after_paint_load_failed', { code: `${why}:${n}` });
       if (n === AFTER_PAINT_NOTICE_AT) uiStore.getState().pushBanner({ id: AFTER_PAINT_BANNER_ID, kind: 'sync-paused' });
     },
     onLoaded: (late) => {

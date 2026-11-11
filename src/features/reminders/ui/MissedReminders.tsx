@@ -13,7 +13,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { Pressable } from '../../../motion/components.ts';
-import { afterAppPainted } from '../../../platform/first-paint.ts';
+import { afterAppPainted } from '../../../platform/root-paint.ts';
 import { missed, useMinuteNow, useRangView, useReminderList } from '../hooks/remind-list.ts';
 import { useRemindRowT } from '../hooks/useRemindRowT.ts';
 import { Bell } from './Bell.tsx';

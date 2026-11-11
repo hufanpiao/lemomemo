@@ -1,10 +1,10 @@
 // FIRSTPAINT-nofeature 的 App 部分（前端 B 11-04 把 ErrorView、FeatureOffView 的根改成 main[data-feature="error"] / main[data-feature="off"]）：
-// 冷启动落在出错页、功能关掉页时，首屏判断（watchAppPainted）照常在页面出来后一帧算画完，不用等 15 秒长兜底
+// 冷启动落在出错页、功能关掉页时，首屏判断（watchRoot）照常在页面出来后一帧算画完，不用等 15 秒长兜底
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { lazy, type ComponentType, type ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createUpgradeCenter } from '../../core/upgrade.ts';
-import { afterAppPainted, APP_PAGE_SELECTOR, resetAppPaintedForTest, watchAppPainted } from '../../platform/first-paint.ts';
+import { afterAppPainted, APP_PAGE_SELECTOR, resetRootPaintForTest, watchRoot } from '../../platform/root-paint.ts';
 
 vi.setConfig({ testTimeout: 15_000 });
 
@@ -30,7 +30,7 @@ function Boom(): never {
 
 afterEach(() => {
   cleanup();
-  resetAppPaintedForTest();
+  resetRootPaintForTest();
   for (const el of [...document.body.children]) el.remove();
   window.location.hash = '';
 });
@@ -41,7 +41,7 @@ async function renderWatched(before?: () => Promise<void>): Promise<{ frames: ((
   let painted = false;
   const root = document.createElement('div');
   document.body.append(root);
-  watchAppPainted(root, (fn) => {
+  watchRoot(root, (fn) => {
     frames.push(fn);
     return () => undefined;
   }, 600_000);

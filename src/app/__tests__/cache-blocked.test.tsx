@@ -3,6 +3,7 @@
 import { act, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createUpgradeCenter } from '../../core/upgrade.ts';
+import { resetRootPaintForTest, watchRoot } from '../../platform/root-paint.ts';
 
 const hideSplash = vi.fn(() => Promise.resolve());
 vi.mock('../../platform/splash.ts', () => ({ hideSplash: () => hideSplash() }));
@@ -58,14 +59,17 @@ describe('blocked 解除后等 #root 画出东西再卸（BANNER-sugg ①）', (
     const q: (() => void)[] = [];
     return { frame: (cb: () => void) => (q.push(cb), () => void q.splice(q.indexOf(cb), 1)), flush: () => q.splice(0).forEach((f) => f()) };
   }
+  /** 照 main.tsx：#root 在 coldStart 之前就交给 root-paint 盯着 */
   function appRoot(): HTMLElement {
     const el = document.createElement('div');
     el.id = 'root';
     document.body.appendChild(el);
+    watchRoot(el, () => () => undefined, 600_000);
     return el;
   }
   afterEach(() => {
     vi.useRealTimers();
+    resetRootPaintForTest();
     document.getElementById('root')?.remove();
   });
 

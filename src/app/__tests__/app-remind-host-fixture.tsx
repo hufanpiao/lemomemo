@@ -8,9 +8,9 @@
 // 复审补（接线审查⑥ M1、L2、L3）：页面分包没到时不开始等空闲；页面分包加载失败（ErrorView）照样挂；换账号 since 重记；
 // 和页面无关的硬上限 REMIND_MAX_WAIT_MS（这里截下那一个定时器手动放行）
 // today 页换成可控的 lazy：正常、一直挂着（手动放行）、加载失败
-// REMIND-arm-firstpaint：“首屏画完”改用 platform/first-paint.ts（和同步同一套）。这里用真的 first-paint：在 document.body 上挂 watchAppPainted，
+// REMIND-arm-firstpaint：“首屏画完”改用 platform/root-paint.ts（和同步同一套）。这里用真的 first-paint：在 document.body 上挂 watchRoot，
 // “再过一帧”换成手动放行（runFrame）；页面（main[data-feature]）出来、过了那一帧才算画完，然后才排等空闲
-// REMIND-arm-low：L1 App 第一次渲染时 first-paint 已经算画完（告知页之后、入口没挂 watchAppPainted）就另外等 App 自己的功能页；
+// REMIND-arm-low：L1 App 第一次渲染时 first-paint 已经算画完（告知页之后、入口没挂 watchRoot）就另外等 App 自己的功能页；
 // L3 cancelled：App 卸载以后放行 first-paint，不再排等空闲（拦变异 Y4）
 import { act, cleanup, screen, waitFor } from '@testing-library/react';
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
@@ -85,8 +85,9 @@ vi.mock('../../features/reminders/index.ts', async () => {
   };
 });
 
-export const { App, REMIND_MAX_WAIT_MS, remindMaxWait, setRemindErrorLog } = await import('../App.tsx');
-export const { resetAppPaintedForTest, startAppPaintLimit, watchAppPainted } = await import('../../platform/first-paint.ts');
+export const { App, REMIND_MAX_WAIT_MS, remindMaxWait } = await import('../App.tsx');
+export const { resetLogBusForTest, setLogSink } = await import('../../../shared/core/log-bus.ts');
+export const { resetRootPaintForTest, startAppPaintLimit, watchRoot } = await import('../../platform/root-paint.ts');
 
 /** first-paint 的“再过一帧”：截下来手动放行 */
 export const frameQ: (() => void)[] = [];
@@ -98,7 +99,7 @@ export const runFrame = () => act(() => {
   for (const f of frameQ.splice(0)) f();
 });
 let unwatch: () => void = () => undefined;
-/** 停掉 beforeEach 挂的 watchAppPainted（测“入口没挂 watchAppPainted”时用） */
+/** 停掉 beforeEach 挂的 watchRoot（测“入口没挂 watchRoot”时用） */
 export function stopWatch(): void {
   unwatch();
 }
@@ -137,9 +138,9 @@ beforeEach(() => {
   capQ.length = 0;
   stopped.length = 0;
   frameQ.length = 0;
-  resetAppPaintedForTest();
+  resetRootPaintForTest();
   // 和入口（main.tsx）一样在 render 之前挂上；长兜底给大，这里不让它自己到点
-  unwatch = watchAppPainted(document.body, frame, 600_000);
+  unwatch = watchRoot(document.body, frame, 600_000);
   st.userId = null;
   st.hostMode = 'ok';
   setTodayPage('ok');
@@ -154,8 +155,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   unwatch();
-  resetAppPaintedForTest();
-  setRemindErrorLog(null);
+  resetRootPaintForTest();
+  resetLogBusForTest();
   vi.restoreAllMocks();
   window.location.hash = '';
 });

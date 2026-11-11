@@ -1,28 +1,14 @@
-// Service Worker 的注册、盯新版本、回到前台查新版本、“更新”按钮（11-07 B2-UI-a 首屏瘦身 U7）：从 platform/sw-register.ts 搬来；11-10 在 watchServiceWorkerUpdate 里补了 ready 之后、回到前台时两处再查 waiting。
-// 不在首屏：经 sw-register.ts 按需下载。首屏后那次注册（registerSwAfterPaint）下载不设超时，晚到照常注册（安全审 M1）；
-// version_too_new 渲染前那次和“更新”按钮经 loadSwLifecycle，有 3 秒上限，拿不到按“没注册 / 没查成”处理。
+// Service Worker 的注册、盯新版本、回到前台查新版本、“更新”按钮。不在首屏：只经 sw-register.ts 的 loadSwLifecycle 按需下载。
 // navigator.serviceWorker 只准出现在 platform（A13）；exe（Tauri 窗口）里不注册，判断读 env.ts 的 isTauri
 import { isTauri } from './env.ts';
 import type { Lifecycle } from './net.ts';
-import { SW_REGISTER_WAIT_MS, SW_SCOPE, SW_UPDATE_WAIT_MS, SW_URL, type SwUpdateResult } from './sw-register.ts';
+import { SW_SCOPE, SW_UPDATE_WAIT_MS, SW_URL, type SwUpdateResult } from './sw-register.ts';
 
-/** 注册 SW；exe 里、不支持、失败或超过 waitMs 都返回 null（超时只是不再等，注册请求本身照常进行）。永远 resolve。
+/** 注册 SW，等真实结果（不设超时，Q-23）：exe 里、不支持回 null；注册失败照样抛出，由 sw-register.ts 的 registerSw 记下错误名。
  * win 默认 globalThis（测试时传假的） */
-export async function registerServiceWorker(waitMs: number = SW_REGISTER_WAIT_MS, win: object = globalThis): Promise<ServiceWorkerRegistration | null> {
-  if (isTauri(win)) return null;
-  if (!('serviceWorker' in navigator)) return null;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), waitMs);
-  });
-  try {
-    return await Promise.race([navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE }), timeout]);
-  } catch {
-    // 注册失败不影响使用（只是没有离线）；B1 接上日志后记错误码
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+export async function registerServiceWorker(win: object = globalThis): Promise<ServiceWorkerRegistration | null> {
+  if (isTauri(win) || !('serviceWorker' in navigator)) return null;
+  return navigator.serviceWorker.register(SW_URL, { scope: SW_SCOPE });
 }
 
 /**
@@ -106,8 +92,6 @@ export function checkSwOnForeground(reg: ServiceWorkerRegistration, d: Foregroun
     void reg.update().catch(() => undefined);
   });
 }
-
-// 等新 SW 装好、接管的最长时间 SW_UPDATE_WAIT_MS（30 秒）挪到 sw-register.ts，和退路 ② 共用（B2-UI-b W6 安全复审）
 
 /** 等新 SW 装好：installed = 装好了；redundant = 安装失败；timeout = ms 内没装好 */
 function waitInstalled(sw: ServiceWorker, ms: number): Promise<'installed' | 'redundant' | 'timeout'> {

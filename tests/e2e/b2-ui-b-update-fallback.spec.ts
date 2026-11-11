@@ -1,6 +1,6 @@
 // B2-UI-b W6（首屏瘦身安全审 S1，D3 ①）：“更新”拿不到 sw-lifecycle.ts 时的退路，真实浏览器里走一遍。
 // 造法同 b1-cache-too-new：先在 /app/auth/ 用更高版本建 planner-v4，再开 /app/ 出整屏提示“去更新”；
-// 整屏提示渲染前那次 registerServiceWorkerLazy 就会去下载 sw-lifecycle-*.js，这里在网络层拦掉，复现“启动那次下载失败”。
+// 整屏提示渲染前那次 registerSw（platform/sw-register.ts）就会去下载 sw-lifecycle-*.js，这里在网络层拦掉，复现“启动那次下载失败”。
 // ① 原地址、换地址（?r=）都拦：两条退路都不行（没有 waiting 的新 SW）→ 显示新提示“…不行就完全关闭柠檬记再打开”，而且确实发过 ?r= 的请求；
 // ② 只拦原地址：换地址那次拿到了模块（?r= 的请求 200、页面没有动态 import 报错）。这一页启动时没注册上 SW（启动那次下载被拦了），
 //   拿到模块后 updateServiceWorker 照实回“没查成”，所以最后的文字仍是失败提示；这里只验证退路 ① 真的把模块拿到了

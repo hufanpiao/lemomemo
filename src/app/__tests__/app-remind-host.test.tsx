@@ -1,7 +1,7 @@
 // App 挂提醒（REMIND-wiring）：挂一份、按 user_id 作 key、整页提醒立刻挂、出错和分包没到不挡页面；首屏减重 ⑥ 画完、空闲以后才挂、since；
 // 接线审查⑥ M1（页面没提交不等空闲、出错页照常触发首屏判断）、REMIND-arm-firstpaint（first-paint 自己的时限）
 // 替身和复位在 app-remind-host-fixture.tsx（必须第一个 import）
-import { App, clock, frameQ, idleQ, life, pageThenIdle, runFrame, runIdle, setRemindErrorLog, setTodayPage, settle, st, startAppPaintLimit } from './app-remind-host-fixture.tsx';
+import { App, clock, frameQ, idleQ, life, pageThenIdle, runFrame, runIdle, setLogSink, setTodayPage, settle, st, startAppPaintLimit } from './app-remind-host-fixture.tsx';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { remindQueue, setRemindArmed, setRemindDown } from '../../kit/state/remind-queue.ts';
@@ -56,7 +56,7 @@ describe('App 挂提醒', () => {
     st.hostMode = 'throw';
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const errors: unknown[] = [];
-    setRemindErrorLog((e) => errors.push(e));
+    setLogSink((act, f) => void (act === 'js_error' && errors.push(f?.error)));
     render(<App />);
     const page = await pageThenIdle();
     expect(page.getAttribute('data-feature')).toBe('today');
@@ -70,7 +70,6 @@ describe('App 挂提醒', () => {
     st.userId = 'user-a';
     st.hostMode = 'throw';
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    setRemindErrorLog(() => undefined);
     const { rerender } = render(<App />);
     await pageThenIdle();
     await waitFor(() => expect(remindQueue.getState().remindDown).toBe(true));

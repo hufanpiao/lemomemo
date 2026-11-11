@@ -9,11 +9,11 @@ describe('“更新”退路不绕过调用方的忙碌检查（W6 ④）', () =
   for (const reason of ['editing', 'recording'] as const satisfies readonly BusyReason[]) {
     it(`${reason} 时：两次下载都失败、退路发了 SKIP_WAITING、新 SW 接管后回 reloading，不重新载入；忙完才载入一次`, async () => {
       const reload = vi.fn();
-      const skip = vi.fn(async () => 'reloading' as const); // 退路 ② 等到新 SW 接管后回 reloading
+      const skip = vi.fn(async () => 'reloading' as const); // 原地址、换地址两次下载都失败（第一个参数回 null）以后的最后退路：等到新 SW 接管后回 reloading
       const u = createUpgradeCenter({
         appVersion: '4.0.0',
         reload,
-        swUpdate: () => updateServiceWorkerLazy(async () => null, { retry: async () => null, skip }),
+        swUpdate: () => updateServiceWorkerLazy(async () => null, skip),
         attempt: { get: () => null, set: () => undefined },
         log: vi.fn(),
       });

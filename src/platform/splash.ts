@@ -6,12 +6,8 @@
 // - 不依赖 transitionend：后台标签页、jsdom 里可能不来，按时长 + 余量的定时器兜底移除。
 // - splash.css 有 6 秒的纯 CSS 兜底（脚本没跑起来也不会一直盖着）：兜底淡完以后（visibility: hidden）再调，直接移除。
 // - 减少动态效果的判断照 src/motion/reduced.ts 的两条（系统设置或 <html data-rm="1">）；platform 层不能引 motion，这里另写一份。
-// 调用点（src/app/main.tsx、src/app/root.tsx）：
-//   ① 从启动起算 SPLASH_MAX_MS（5 秒）定时兜底：hideSplashAfter()
-//   ② #root 里第一次画出东西（告知页关口有了结果：显示告知页，或者放行画 App；离线直接画 App；整屏提示；崩溃兜底页）
-//      之后的下一帧：hideSplashWhenPainted(#root)
-//   ③ App、整屏提示、崩溃兜底页 AppCrashFallback 提交以后的下一帧：root.tsx 的 SplashRelease
-// “下一帧”由调用方传 motion 的 nextFrame（A25：requestAnimationFrame 只能写在 src/motion/，platform 又不能引 motion）
+// 调用点：从启动起算 SPLASH_MAX_MS（5 秒）的兜底 hideSplashAfter()；#root 里第一次画出东西的下一帧（main.tsx 经 root-paint.ts 的 whenContent）；
+// 另挂在 body 下的“库被挡住”整屏提示提交后的下一帧（root.tsx 的 SplashRelease）
 
 export const SPLASH_ID = 'lemo-splash';
 /** splash.css 里 .lemo-splash.is-leaving 的过渡时长（ms）：--dur-ui 220；减少动态效果 120（splash.css 里启动画面专用的那个令牌） */
@@ -115,39 +111,4 @@ export function isSplashShowing(): boolean {
 export function hideSplashAfter(ms: number = SPLASH_MAX_MS): () => void {
   const t = setTimeout(() => void hideSplash(), ms);
   return () => clearTimeout(t);
-}
-
-/** 排到下一帧执行，返回取消函数（motion 的 nextFrame 就是这个形状）；不给时退回 setTimeout 0 */
-export type FrameScheduler = (cb: () => void) => () => void;
-
-const soon: FrameScheduler = (cb) => {
-  const t = setTimeout(cb, 0);
-  return () => clearTimeout(t);
-};
-
-/**
- * root 里第一次有内容（有元素子节点或非空白文本；React 画出了告知页、App、整屏提示或崩溃兜底页）以后的下一帧收起。
- * 告知页关口还在问服务器时关口什么也不画（root 是空的），启动画面就继续盖着；返回取消函数
- */
-/** root 里真画出东西了：有元素子节点，或者有非空白文本（只有空白文本、注释节点不算，例如 index.html 格式化成 <div id="root"> 换行 </div>） */
-function painted(root: Element): boolean {
-  return root.firstElementChild !== null || /\S/.test(root.textContent ?? '');
-}
-
-export function hideSplashWhenPainted(root: Element, nextFrame: FrameScheduler = soon): () => void {
-  let cancelFrame: (() => void) | null = null;
-  const hide = () => nextFrame(() => void hideSplash());
-  if (painted(root)) return hide();
-  if (typeof MutationObserver !== 'function') return () => undefined;
-  const mo = new MutationObserver(() => {
-    if (!painted(root) || cancelFrame) return;
-    mo.disconnect();
-    cancelFrame = hide();
-  });
-  // 文本节点原地改写（空白改成文字）也要看到：characterData + subtree
-  mo.observe(root, { childList: true, characterData: true, subtree: true });
-  return () => {
-    mo.disconnect();
-    cancelFrame?.();
-  };
 }

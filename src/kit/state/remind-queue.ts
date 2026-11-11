@@ -14,6 +14,7 @@
 import { createStore } from 'zustand/vanilla';
 import { useStore } from 'zustand';
 import { useEffect } from 'react';
+import { logEvent } from '../../../shared/core/log-bus.ts';
 
 export type RemindHoldReason = 'recording' | 'keyboard';
 
@@ -50,12 +51,6 @@ let seq = 0;
 /** 一次压住最长多久：到了自动放开并记日志（代码审查中 4：调用方忘了放开时横幅不会永久卡住） */
 export const HOLD_MAX_MS = 10 * 60_000;
 
-/** 超时放开时记日志：kit 不碰日志层，由入口（main.tsx）接上；没接时不记 */
-let onHoldTimeout: ((reason: RemindHoldReason) => void) | null = null;
-export function setRemindHoldLog(fn: ((reason: RemindHoldReason) => void) | null): void {
-  onHoldTimeout = fn;
-}
-
 /** 压住提醒横幅（录音中、键盘弹起）；返回放开函数（多次调用只放一次）。超过 maxMs 自动放开并记日志。
  *  React 组件里优先用 useHoldReminders(active)，卸载时自动放开 */
 export function holdReminders(reason: RemindHoldReason, maxMs: number = HOLD_MAX_MS): () => void {
@@ -71,11 +66,7 @@ export function holdReminders(reason: RemindHoldReason, maxMs: number = HOLD_MAX
   const timer = setTimeout(() => {
     if (done) return;
     release();
-    try {
-      onHoldTimeout?.(reason);
-    } catch {
-      // 记日志失败不影响放开
-    }
+    logEvent('remind_hold_timeout', { code: reason });
   }, maxMs);
   return release;
 }

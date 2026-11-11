@@ -207,7 +207,7 @@ export function watchInsetBottom(env: InsetEnv = {}): () => void {
   return stop;
 }
 
-/** 首屏画完了（入口用 first-paint 的 afterAppPainted 调）：从这时起算“稳定”和最长时限。没挂 watchInsetBottom 时什么都不做 */
+/** 首屏画完了（入口用 root-paint 的 afterAppPainted 调）：从这时起算“稳定”和最长时限。没挂 watchInsetBottom 时什么都不做 */
 export function markInsetPainted(): void {
   painted?.();
 }
