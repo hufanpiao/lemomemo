@@ -1,5 +1,6 @@
 // matchTarget：取消、改期、完成找候选（TC-B4b3-47、TC-B4b3-48 ⑤⑧ 的单元部分；架构 5.14 第 7 点），含首尔、洛杉矶、UTC 三个时区。
 import { describe, expect, it } from 'vitest';
+import { localIntent } from '../../../shared/logic/parse/intent.ts';
 import { BATCH_MAX, matchTarget, SINGLE_MAX, type TargetEvent, type TargetTodo } from '../../../shared/logic/parse/match-target.ts';
 import { resolveTarget, type PlusTarget } from '../../../shared/logic/parse/resolve-target.ts';
 
@@ -183,6 +184,15 @@ describe('批量（all）', () => {
     expect(r.hits).toHaveLength(BATCH_MAX);
     expect(r.more).toBe(5);
     expect(matchTarget(all({ date: '2026-12-01', kinds: ['todo'] }), { events: [], todos }, NOW, SEOUL)).toEqual({ hits: [], more: 0 });
+  });
+  it('续第 164 条：all 没有 date 也没有 with_overdue → 按单条（泛指词没时刻就没有候选；具体词按单条打分、最多 3 条）', () => {
+    expect(matchTarget(all({ kinds: ['todo'] }), overdue, NOW, SEOUL)).toEqual({ hits: [], more: 0 });
+    expect(ids(matchTarget(all({ text: '采购', kinds: ['todo'] }), overdue, NOW, SEOUL))).toEqual(['d1102', 'd1103', 'd1031t']);
+  });
+  it('TC-B4b3-48 ④ 语序“今天采购没完成的”：本机规则取出的 target 能找到标题含“采购”的过期待办', () => {
+    const target = localIntent('今天采购没完成的都推到后天', NOW, SEOUL).target;
+    expect(target).not.toBe(null);
+    if (target) expect(ids(matchTarget(target, overdue, NOW, SEOUL))).toEqual(['d1031t', 'd1031n', 'd1102']);
   });
   it('kinds 只有 todo 时日程不出', () => {
     expect(ids(matchTarget(all({ date: T, kinds: ['todo'] }), overdue, NOW, SEOUL))).toEqual(['d1102']);

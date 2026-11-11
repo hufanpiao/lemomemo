@@ -74,6 +74,11 @@ export function firstOfMonth(ym: YearMonth): DateStr {
   return fmtDateStr(ym.y, ym.m, 1);
 }
 
+/** 某月最后一天 */
+export function lastOfMonth(ym: YearMonth): DateStr {
+  return addDays(firstOfMonth(shiftMonth(ym, 1)), -1);
+}
+
 /** 日期所在的年月 */
 export function monthOf(date: DateStr): YearMonth {
   const { y, m } = parseDate(date);

@@ -69,6 +69,10 @@ describe('resolveTarget：改期', () => {
       expect(resolveTarget('reschedule', tg({ text, date: T, with_overdue: true, all: true })).target.all).toBe(true);
     }
   });
+  it('⑦ 第 ② 路的“有 with_overdue 或有日子”任一即可：泛指词 + with_overdue、没有日子 → 补出 all；具体词不补', () => {
+    expect(resolveTarget('reschedule', tg({ text: '任务', with_overdue: true, kinds: ['todo'] })).target.all).toBe(true);
+    expect('all' in resolveTarget('reschedule', tg({ text: '采购', with_overdue: true, kinds: ['todo'] })).target).toBe(false);
+  });
   it('⑦ 带了 all 却没有日子也没有 with_overdue → 去掉 all', () => {
     const r = resolveTarget('reschedule', tg({ text: '', all: true }));
     expect('all' in r.target).toBe(false);

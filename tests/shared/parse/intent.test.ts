@@ -36,6 +36,16 @@ describe('基本查找、总结：祈使位置才有把握', () => {
     like(li('总结一下这个月的待办').query, { range: { from: '2026-11-01', to: '2026-11-30' }, kinds: ['todo'] });
     like(li('다음 달 일정 정리해 줘').query, { range: { from: '2026-12-01', to: '2026-12-31' }, kinds: ['event'] });
   });
+  it('句首是名词或动作用法、同句还有日子或别的动作：没把握（像是要记的事，D-15）', () => {
+    for (const s of ['总结报告周五交', '汇总表明天发给小王', '汇总一下报销单交财务', '搜一下资料写报告', '帮我找资料周五上传', '보고서 금요일까지 정리해 줘']) {
+      expect(li(s).sure, s).toBe(false);
+    }
+    for (const s of ['帮我总结一下这周的随手记', '帮我找交通卡', '总结一下下周的安排']) expect(li(s).sure, s).toBe(true);
+    expect([li('帮我总结一下这周的随手记').query?.text, li('请帮我找证件').query?.text]).toEqual(['', '证件']);
+  });
+  it('韩文“담주”和“다음 주”同义：整周范围', () => {
+    for (const s of ['담주 일정 정리해 줘', '다음 주 일정 정리해 줘']) like(li(s), { intent: 'summarize', sure: true, query: { range: { from: '2026-11-09', to: '2026-11-15' } } }, s);
+  });
   it('名词用法的“总结 / 汇总 / ？”不算有把握（D-15）', () => {
     for (const s of ['周五前交季度总结', '下周三写项目总结', '把汇总表发给小王', '明天开会？', '매주 금요일 오후 5시에 提醒我整理本周工作总结。']) {
       expect(li(s).sure, s).toBe(false);
@@ -147,10 +157,29 @@ describe('完成、取消', () => {
     like(li('明天的会取消了 顺便把相关待办也删了'), { intent: 'cancel', relatedTodos: true, target: { text: '会', date: TM, time: null } });
     like(li('明天的会取消了和相关的待办'), { intent: 'cancel', relatedTodos: true, target: { text: '会', date: TM } });
   });
+  it('相关待办在前、用“和 / 랑”接原条目，或用标点断开：原条目留着', () => {
+    for (const s of ['把相关待办和明天的会都取消了', '相关待办和明天的会都取消了', '相关待办不用管，明天的会取消了']) {
+      like(li(s), { intent: 'cancel', relatedTodos: true, target: { text: '会', date: TM } }, s);
+    }
+    like(li('관련 할 일이랑 내일 회의 취소해 줘'), { intent: 'cancel', relatedTodos: true, target: { text: '회의', date: TM } });
+  });
+  it('前后各说一次取消、完成：两处说法都不进 target', () => {
+    for (const s of ['明天的会取消了，相关待办也取消了', '明天的会不开了，相关的待办也取消了']) like(li(s), { intent: 'cancel', target: { text: '会', date: TM } }, s);
+    like(li('내일 회의 취소하고 관련 할 일도 취소해 줘'), { intent: 'cancel', target: { text: '회의', date: TM } });
+    like(li('把明天的会标记为已完成，相关待办也标记为已完成'), { intent: 'complete', target: { text: '会', date: TM } });
+  });
   it('相关待办夹在中间：后面的取消、改期说法留着', () => {
     like(li('明天的会和相关待办都取消了'), { intent: 'cancel', relatedTodos: true, target: { text: '会', date: TM } });
     like(li('내일 회의랑 관련 할 일 취소해 줘'), { intent: 'cancel', relatedTodos: true, target: { text: '회의', date: TM } });
     like(li('明天的会和相关待办都改到周五'), { intent: 'reschedule', relatedTodos: false, target: { text: '会', date: TM }, to: { date: '2026-11-06', time: null } });
+  });
+  it('TC-B4b3-48 ⑥：“都 + 泛指词或空”和“全部 / 所有”一样 → bulkRefused、不带 all；“都 + 具体词”按单条', () => {
+    for (const s of ['今天没完成的都标成完成', '今天的事都打勾', '明天的事都取消了', '明天全部取消了', '今天的所有待办都打勾']) {
+      const r = li(s);
+      expect(r.bulkRefused, s).toBe(true);
+      expect(r.target !== null && 'all' in r.target, s).toBe(false);
+    }
+    for (const s of ['明天的会都取消了', '首都机场的会取消了']) like(li(s), { intent: 'cancel', bulkRefused: false, target: { text: s.startsWith('首都') ? '首都机场的会' : '会' } }, s);
   });
   it('“所有 + 泛指词”的完成 → bulkRefused、不带 all', () => {
     const r = li('今天所有没完成的待办都标记为完成');
@@ -190,6 +219,11 @@ describe('改期', () => {
       const r = li(s);
       like(r, { intent: 'reschedule', target: { date: TM, time: '15:00', kinds: ['event', 'todo'] }, to: { date: null, time: '16:00' } }, s);
       expect(r.target?.all === undefined, s).toBe(true);
+    }
+  });
+  it('TC-B4b3-48 ④：“今天 + 具体词 + 没完成的”和“今天没完成的 + 具体词”取出同一个关键词', () => {
+    for (const s of ['今天采购没完成的都推到后天', '今天采购还没做的都推到后天', '今天没完成的采购都推到后天']) {
+      like(li(s), { intent: 'reschedule', target: { text: '采购', date: T, with_overdue: true, all: true, kinds: ['todo'] }, to: { date: '2026-11-04' } }, s);
     }
   });
   it('R26 原句：all 由 resolveTarget 补出', () => {

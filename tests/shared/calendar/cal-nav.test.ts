@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isThisMonth,
   isThisWeek,
+  lastOfMonth,
   monthKey,
   parseMonthKey,
   parseWeekParam,
@@ -55,6 +56,14 @@ describe('翻月、翻周', () => {
     expect(shiftMonth({ y: 2026, m: 10 }, 0)).toEqual({ y: 2026, m: 10 });
     expect(shiftMonth({ y: 2026, m: 3 }, -15)).toEqual({ y: 2024, m: 12 });
     expect(shiftMonth({ y: 2026, m: 3 }, 25)).toEqual({ y: 2028, m: 4 });
+  });
+
+  it('某月最后一天：大小月、闰年 2 月、12 月', () => {
+    expect(lastOfMonth({ y: 2026, m: 11 })).toBe('2026-11-30');
+    expect(lastOfMonth({ y: 2026, m: 12 })).toBe('2026-12-31');
+    expect(lastOfMonth({ y: 2028, m: 2 })).toBe('2028-02-29');
+    expect(lastOfMonth({ y: 2026, m: 2 })).toBe('2026-02-28');
+    expect(() => lastOfMonth({ y: 2026, m: 13 })).toThrow('bad_month');
   });
 
   it('月份不合法时抛错', () => {
