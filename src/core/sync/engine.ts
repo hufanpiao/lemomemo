@@ -55,6 +55,8 @@ export interface SyncOptions {
   skipConfig?: boolean;
   /** 测试用：串行链看门狗（默认 runner.ts 的 60 秒） */
   taskTimeoutMs?: number;
+  /** 新建回 403、42501 时探测账号是不是已停用（send.ts 的 SendDeps.insertDenied，Q-15）；app/sync-wiring.ts 给 */
+  insertDenied?(sid: string | null): Promise<boolean>;
 }
 
 /** createSync 里各部分共用的东西 */
@@ -145,6 +147,7 @@ function createSender(c: Ctx, tracked: Outbox, pullTableSoon: (t: string) => voi
           outbox: tracked, transport: c.opts.transport, gated: c.gated, emit: c.hub.emit, removed: c.removed, touched: pullTableSoon,
           blocked: () => c.boot.upgrade.getState().syncBlocked !== null, released: c.released, now: c.now,
           ...(c.opts.log ? { log: c.opts.log } : {}),
+          ...(c.opts.insertDenied ? { insertDenied: c.opts.insertDenied } : {}),
         });
         if (out === 'retry') await scheduleRetry();
         if (out === 'more') queueMicrotask(() => void kickSend());   // 一批发满了：排到链尾接着发，中间让拉取、Realtime 插进来

@@ -17,10 +17,13 @@
 //   transient（含 55P03 等不到行锁）→ 停下等退避；upgrade → 整个队列已暂停；removed → outbox 已设闸并发 removed 事件（main.tsx 接）；
 //   disabled（account_disabled）→ outbox 已设闸、发 disabled 事件，这里停发；清库、回登录页由 sync-wiring 接事件做（架构 4.3）；
 //   permanent、drop → 接着发下一项
+// • 新建回 403、42501（Q-15）：RLS with check 的 is_active() 拦下停用账号时只回这个，带不出 account_disabled；42501 也可能是别的原因。
+//   给了 insertDenied 就先探测一次（app/insert-denied.ts）：账号不可用 → 这一项按 account_disabled 交给 outbox（发 disabled 事件）；
+//   否则照旧 permanent。一轮里多条 42501 只探测一次（第一次的结果后面几条照用）；改、软删走 apply_patch，本来就回 account_disabled，不探测
 // • 发每个请求（看令牌、发一项、刷新令牌）之前记下本机会话的 session_id（transport.sessionId()，接手清单 K6-sugg4 ①）：
 //   被移除、停用时随 removed(code, sid) 或 outbox 事件（SendFailure.sid）带回，调用方只删这个会话——回包前别的标签页写进来的新会话不删
 // 纯 TS：不准 import React 和任何功能（A1）
-import type { Outbox, OutboxItem } from '../outbox-types.ts';
+import type { Outbox, OutboxItem, SendFailure, SentFailure } from '../outbox-types.ts';
 import type { NetResult, PatchResponse, SyncEvent, SyncLog, SyncTransport } from './types.ts';
 
 export interface SendDeps {
@@ -46,7 +49,12 @@ export interface SendDeps {
   batch?: { items: number; ms: number };
   /** 量批次时长用；默认 Date.now */
   now?(): number;
+  /** 新建回 403、42501 时探测账号是不是已停用（见文件头，Q-15）；sid = 被拒那次请求的会话。不给就不探测，照旧 permanent */
+  insertDenied?(sid: string | null): Promise<boolean>;
 }
+
+/** 新建被 RLS 拒：403、42501（Q-15，见文件头） */
+export const isInsertDenied = (item: OutboxItem, f: SendFailure): boolean => item.op === 'insert' && f.status === 403 && f.code === '42501';
 
 /** 一批最多 20 项或 15 秒（K8 复审建议 1） */
 export const SEND_BATCH = { items: 20, ms: 15_000 };
@@ -135,6 +143,8 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
   const now = d.now ?? (() => Date.now());
   const batch = d.batch ?? SEND_BATCH;
   const t0 = now();
+  /** 这一轮的停用探测（多条 42501 只探一次） */
+  let denied: Promise<boolean> | null = null;
   for (let n = 0; ; n++) {
     if (d.gated()) return 'stopped';
     if (n >= batch.items || now() - t0 >= batch.ms) return 'more';
@@ -171,7 +181,14 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
       continue;
     }
     // 传输层定死了令牌时带回的是真正发出去的那个会话（K6-sugg5 ④(b)），优先用它；没带时用发之前读的
-    const kind = await d.outbox.fail(item.op_id, { ...res.error, sid: res.error.sid !== undefined ? res.error.sid : sid });
+    let failure: SentFailure = { ...res.error, sid: res.error.sid !== undefined ? res.error.sid : sid };
+    if (d.insertDenied && isInsertDenied(item, res.error)) {
+      const probe = d.insertDenied;
+      denied ??= probe(failure.sid).catch(() => false);
+      if (await denied) failure = { ...failure, code: 'account_disabled' };
+      if (d.gated() && !d.released?.()) return 'stopped';   // 探测期间封存、换账号了：不写回
+    }
+    const kind = await d.outbox.fail(item.op_id, failure);
     if (kind === 'drop' && res.error.code === 'patch_bad_args') {
       // 服务器把 22xxx、23514、23502 也转成 patch_bad_args：丢掉这一项，但记下表名和 sqlstate，免得掩盖服务器触发器的 bug
       // （不记 sqlerrm：可能带用户填的值，0.38 第 62 条）

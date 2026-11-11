@@ -40,6 +40,8 @@
 //   设闸、写 lemo.reauth（session_id 记 null：登录页不查 session_fate，免得停用时被吊销的会话把本机清掉）、只关库，
 //   广播带 disabled 的 reset，删被拒的那个会话，记退出原因 disabled、回登录页。写不了记号退回原来的清库。
 //   冷静期、探测不出（disabled_unsure）、被移除不变
+// • 新建回 403、42501（Q-15）：探测、限次见 app/insert-denied.ts；探出停用后 outbox 发 disabled，照上面的停用路径走，
+//   probeThenLeave 沿用那次探测结果（knownProbe）、不再探第二次
 import { expireThisTab, markExpired, wipeOnRemoved } from '../core/account.ts';
 import type { AuthLossPath, AuthLossSignal } from '../core/auth-loss.ts';
 import { resolveAuthLossLazy } from '../core/auth-loss-lazy.ts';
@@ -52,6 +54,7 @@ import type { SyncState, SyncTransport } from '../core/sync/types.ts';
 import { browserLifecycle, onUserActivity, type Lifecycle } from '../platform/net.ts';
 import { exitNoticeOf, isSelfSignOut, readExitNotice, type ExitNotice } from '../platform/session.ts';
 import { startSyncNotices } from './sync-notice-gate.ts';
+import { createInsertDeniedCheck, type InsertDeniedCheck } from './insert-denied.ts';
 import { canProbe, currentSid, noLocalSession, noteExitFromOtherTab, probeThenLeave, type SyncDisabledDeps } from './sync-disabled.ts';
 import { markReauthDisabled } from '../platform/auth-loss-store.ts';
 import { createTabLeader, type SyncMessage, type TabLeader, type TabLeaderOptions } from '../platform/tab-leader.ts';
@@ -164,6 +167,13 @@ function wipeQuietly(boot: BootResult, deps: WireSyncDeps): true {
   return true;
 }
 
+/** Q-15：新建回 42501 的停用探测（见文件头）；能探测时才有。knownProbe 给 probeThenLeave 沿用探出的结果、不再探第二次 */
+function insertDeniedOf(deps: WireSyncDeps): { denied: InsertDeniedCheck | null; deps: WireSyncDeps } {
+  if (!canProbe(deps) || !deps.probeAccount || !deps.readSession) return { denied: null, deps };
+  const denied = createInsertDeniedCheck({ probe: deps.probeAccount, readSession: deps.readSession, ...(deps.now ? { now: deps.now } : {}) });
+  return { denied, deps: { ...deps, knownProbe: (sid) => denied.take(sid) } };
+}
+
 const IDLE: SyncState = { syncing: false, realtime: 'down', lastPullAt: null, stopped: false };
 
 /** 对外的 Sync：转给当前主页上的引擎（非主页时是空的）；订阅跨引擎保留 */
@@ -198,6 +208,12 @@ function createFacade(current: () => Sync | null, close: () => Promise<void>) {
 
 /** 接上同步（按选主启动）；不该接时返回 null */
 export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
+  const q15 = insertDeniedOf(deps);
+  return wireWith(boot, q15.deps, q15.denied);
+}
+
+/** wireSync 的主体；denied 见 insertDeniedOf */
+function wireWith(boot: BootResult, deps: WireSyncDeps, denied: InsertDeniedCheck | null): Sync | null {
   const { cache, outbox } = boot;
   if (boot.status !== 'ready' || boot.switching || !cache || !outbox) return null;
   const life = deps.lifecycle ?? browserLifecycle;
@@ -278,7 +294,7 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
       transport: deps.transport,
       onRemoved: (code, sid) => onRemoved(code, sid, 'sync'),
       onChanged: (colls) => leader?.post({ type: 'changed', colls }),
-      ...(deps.log ? { log: deps.log } : {}),
+      ...(deps.log ? { log: deps.log } : {}), ...(denied ? { insertDenied: denied.check } : {}),
     });
     current = sync;
     const detach = f.attach(sync);

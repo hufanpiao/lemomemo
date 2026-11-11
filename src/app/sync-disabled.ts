@@ -17,7 +17,7 @@
 //   本页会话已换成别的就不记：消息带 sid 时要和本页的对得上；不带 sid 时只在本页也没有会话时才记（第六轮审查建议 ①，免得 B 的标签页记下 A 的原因）
 import type { BootResult } from '../core/boot.ts';
 import type { SyncLog } from '../core/sync/types.ts';
-import { exitForDisabled, type AccountProbe } from '../platform/account-status.ts';
+import { exitAfterProbe, exitForDisabled, type AccountProbe } from '../platform/account-status.ts';
 import { isExitNotice, type ExitNotice } from '../platform/session.ts';
 import type { SyncMessage } from '../platform/tab-leader.ts';
 
@@ -30,6 +30,11 @@ export interface SyncDisabledDeps {
    * 和 readSession、reload 三个都给了才探测；不给就照旧直接按停用退出
    */
   probeAccount?: (token: string) => Promise<AccountProbe>;
+  /**
+   * 这个 sid 刚探测过、已知账号不可用（Q-15：新建回 42501 时 app/insert-denied.ts 探的）：给出结果就沿用、不再探第二次，
+   * 免得第二次回 unknown 落成 disabled_unsure 清本机（R-382）。sync-wiring 接，不给照常探测
+   */
+  knownProbe?: (sid: string | null) => AccountProbe | null;
   /** 本机会话的 user_id（platform/session.ts 的 readSessionUserId）：sid 为 null 时据此分“没有会话”（按 removed）和“读不出 sid”（照旧探测） */
   readUserId?: () => string | null;
   /** 本机会话现在的 session_id 和 access token（platform/session.ts 的 readSessionId、readSessionAccessToken；只放内存） */
@@ -104,7 +109,8 @@ export async function probeThenLeave(
   }
   // 本机会话已不是被拒那一个（别的标签页换了人）：exitForDisabled 不拿别人的令牌去查
   const probe = deps.probeAccount;
-  const r = await exitForDisabled(sid, { readSession: () => now, ...(probe ? { probe } : {}) });
+  const known = deps.knownProbe?.(sid) ?? null;
+  const r = known ? exitAfterProbe(known) : await exitForDisabled(sid, { readSession: () => now, ...(probe ? { probe } : {}) });
   if (boot.switching) return;
   if (r !== 'active') return leave(r, sid);
   // 闸保持关着；只有 5 分钟内头一次、并且记得下时刻才重新载入
