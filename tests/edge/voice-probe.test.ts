@@ -9,7 +9,6 @@ import {
   QUOTA_WINDOW_S, quotaKey, rawLabel, type HandlerDeps, type ProbeLog,
 } from '../../supabase/functions/_preview/voice-probe/handler.ts';
 import { pacificDate } from '../../supabase/functions/_shared/ai/gate.ts';
-import { TEST_UID as DB_PROBE_TEST_UID } from '../../supabase/functions/_preview/db-probe/probe.ts';
 import { GEMINI_BASE, GeminiProvider, type Fetch } from '../../supabase/functions/_shared/ai/gemini.ts';
 import { VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
 
@@ -120,7 +119,7 @@ describe('voice-probe：环境、到期、方法、白名单（Q1 ①②③）',
 
   it('仓库里的白名单正好是主持人 11-09 核对的两个账号（负责人的预览验收账号、QA 的 .test 账号），没有占位值；用真名单时这两个能过、别人 404', async () => {
     expect([...ALLOWED_UIDS]).toEqual(['7aa8c4cb-11ba-4e9e-aa6f-72196dfe3f8b', '8380dfe1-44e2-4eca-b8d2-7fef8f719305']);
-    expect(ALLOWED_UIDS).toContain(DB_PROBE_TEST_UID);
+    expect(ALLOWED_UIDS).toContain('7aa8c4cb-11ba-4e9e-aa6f-72196dfe3f8b');   // 负责人的预览验收账号（原 db-probe 的 TEST_UID）
     for (const who of ALLOWED_UIDS) {
       const { allowed: _drop, ...deps } = setup({ who }).deps;   // 不注入名单，走仓库里的 ALLOWED_UIDS
       expect((await handle(req(), deps)).status, who).toBe(200);

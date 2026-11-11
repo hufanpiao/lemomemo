@@ -439,6 +439,9 @@ isOneToOne: false
 "is_active":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
+"kill_session":
+{ Args: { "p_session": string,"p_user": string }; Returns: undefined
+                           },
 "long_transactions":
 { Args: Record<PropertyKey, never>; Returns: {
               "app": string,"pid": number,"role": unknown,"xact_start": string
@@ -520,6 +523,9 @@ isOneToOne: false
 "report_tz_impl":
 { Args: { "p_device": string,"p_platform": string,"p_tz": string }; Returns: string
                            },
+"require_live_session":
+{ Args: Record<PropertyKey, never>; Returns: string
+                           },
 "revoke_my_sessions_impl":
 { Args: { "p_include_current": boolean }; Returns: number
                            },
@@ -533,9 +539,6 @@ isOneToOne: false
                            },
 "session_alive":
 { Args: { "p_session": string }; Returns: boolean
-                           },
-"session_fate_impl":
-{ Args: { "p_pair": string }; Returns: string
                            },
 "session_pair_hash":
 { Args: { "p_session": string,"p_user": string }; Returns: string

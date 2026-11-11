@@ -32,9 +32,8 @@ export interface Deps<Item> extends GateDeps {
   logic: Logic<Item>;
 }
 
-const NO_STORE = { 'cache-control': 'no-store' };
-export const json = (status: number, body: unknown): Response =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...NO_STORE } });
+import { json } from '../_shared/http.ts';
+export { json };
 
 export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Response> {
   if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });

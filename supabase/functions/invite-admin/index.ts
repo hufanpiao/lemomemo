@@ -6,6 +6,7 @@
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { AuthError, requireActiveUser } from '../_shared/auth.ts';
+import { json } from '../_shared/http.ts';
 import { cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { INVITE_ADMIN_ERROR_CODES } from '../_shared/gen/schema/invite-admin.ts';
 import { handle, INVITE_ADMIN_ERRS, type InviteStore } from './core.ts';
@@ -68,7 +69,7 @@ Deno.serve((req) => {
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) {
     log('misconfigured');
-    return new Response(JSON.stringify({ error: 'misconfigured' }), { status: 500, headers: { 'content-type': 'application/json' } });
+    return json(500, { error: 'misconfigured' });
   }
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   return handle(req, {

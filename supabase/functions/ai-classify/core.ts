@@ -26,7 +26,7 @@
 //   现在库里没有通知表，待架构师定，本函数先不写（B4 任务单待定项）。
 // 日志只记原因码（A23）：不记标题、正文、分类名、密钥、模型原文。
 
-import { safeEqual } from '../_shared/proxy-headers.ts';
+import { cronGate, json } from '../_shared/http.ts';
 import { nextPacificMidnight, globalQuotaKey, userQuotaKey, type QuotaStore } from '../_shared/ai/gate.ts';
 import type { AIProvider } from '../_shared/ai/provider.ts';
 import type { AiConfig } from '../_shared/ai/router.ts';
@@ -34,7 +34,6 @@ import { classifyRequest, readItems, type PendingNote } from './request.ts';
 import { live, MAX_CATEGORIES, writeAi, writeManual, writeRules, type Category, type NotePatch, type Tally } from './write.ts';
 
 export const HEARTBEAT = 'ai-classify';
-export const MIN_SECRET_BYTES = 32;
 /** 架构 5.2：每批最多 20 条，一次请求分完 */
 export const BATCH_PER_USER = 20;
 /** 一轮最多送几次 AI（每人一次请求，最长 CLASSIFY_TIMEOUT_MS） */
@@ -95,19 +94,11 @@ export interface Deps {
   log(code: string): void;
 }
 
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
-}
 
 export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
-  const secret = deps.cronSecret ?? '';
-  const got = req.headers.get('x-cron-secret') ?? '';
-  if (secret === '' || got === '' || !safeEqual(got, secret)) return json(401, { error: 'unauthorized' });
-  if (new TextEncoder().encode(secret).length < MIN_SECRET_BYTES) {
-    deps.log('misconfigured:cron_secret');
-    return json(500, { error: 'misconfigured' });
-  }
+  const denied = cronGate(req.headers.get('x-cron-secret'), deps.cronSecret, deps.log);
+  if (denied) return denied;
   if (!deps.store) {
     deps.log('misconfigured:store');
     return json(500, { error: 'misconfigured' });

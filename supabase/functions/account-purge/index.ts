@@ -10,12 +10,13 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { createObjStore } from '../_shared/gen/objstore.ts';
 import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
-import { skipTestRecipients, type Mail } from '../_shared/account-mail.ts';
+import { skipTestRecipients } from '../_shared/account-mail.ts';
+import { timedFetch } from '../_shared/net.ts';
+import { sendMail } from '../_shared/mail-send.ts';
 import { BACKUP_BUCKET, BACKUP_DAY, BackupsSubdirError, HEARTBEAT, handle, type Backups, type PurgeStore, type R2 } from './core.ts';
 
-const RESEND_URL = 'https://api.resend.com/emails';
-const MAIL_FROM = '柠檬记 <noreply@lemomemo.com>';   // 和 invite-signup、account 同一个发件人
-const NET_TIMEOUT_MS = 8000;
+/** supabase-js 每次请求最长等多久：deleteUser 级联删一个大账号可能要十几秒，取宽（整轮预算见 core.ts 的 PURGE_TIME_BUDGET_MS） */
+const DB_REQUEST_TIMEOUT_MS = 30_000;
 const LIST_LIMIT = 1000;
 
 // 没有生成的库类型：按 _shared/auth.ts 的写法用不带泛型的 SupabaseClient（行一律当 any，返回值逐个收窄）
@@ -146,27 +147,9 @@ function makeR2(): R2 | null {
     accessKeyId,
     secretAccessKey,
     bucketPrefix: Deno.env.get('R2_BUCKET_PREFIX') ?? '',
-    fetch: (url, init) => fetch(url, init as RequestInit),
+    fetch: (url, init) => timedFetch()(url, init as RequestInit),
     now: () => Date.now(),
   });
-}
-
-async function sendMail(apiKey: string, to: string, mail: Mail): Promise<boolean> {
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), NET_TIMEOUT_MS);
-  try {
-    const r = await fetch(RESEND_URL, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ from: MAIL_FROM, to: [to], subject: mail.subject, text: mail.text }),
-      signal: ctl.signal,
-      redirect: 'error',
-    });
-    await r.body?.cancel();
-    return r.ok;
-  } finally {
-    clearTimeout(t);
-  }
 }
 
 const log = (code: string) => console.error(`account-purge: ${code}`);
@@ -175,7 +158,7 @@ Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const resendKey = Deno.env.get('RESEND_API_KEY');
-  const admin = url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
+  const admin = url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(DB_REQUEST_TIMEOUT_MS) } }) : null;
   let r2: R2 | null = null;
   try {
     r2 = makeR2();

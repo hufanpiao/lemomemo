@@ -50,9 +50,9 @@ select is(tests.try_as('postgres', null, $$insert into private.revoked_sessions 
 
 -- ================= 二、session_fate 的回答 =================
 select is((select string_agg(p.proname || ':' || p.provolatile::text || ':' || p.prosecdef, ',' order by p.proname) from pg_proc p where p.proname in ('session_fate', 'session_fate_impl')),
-  'session_fate:v:false,session_fate_impl:v:true', 'M2：session_fate 和 impl 都是 volatile（要写 counters）；外壳 invoker、impl definer');
-select is((select proconfig from pg_proc where oid = 'private.session_fate_impl(text)'::regprocedure), array['search_path=""', 'lock_timeout=5s'],
-  'session_fate_impl 带 search_path 空和 lock_timeout 5s');
+  'session_fate:v:true', 'M2：session_fate 是 volatile（要写 counters）、public 的 definer；private 里没有 impl（迁移 20261112090000）');
+select is((select proconfig from pg_proc where oid = 'public.session_fate(text)'::regprocedure), array['search_path=""', 'lock_timeout=5s'],
+  'session_fate 带 search_path 空和 lock_timeout 5s');
 select is(jsonb_build_array(
     tests.fate('aaaaaaaa-5555-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001'),   -- 有这个账号、会话没吊销
     tests.fate('aaaaaaaa-5555-4000-8000-000000000001', '99999999-0000-4000-8000-000000000009'),   -- 没有这个账号

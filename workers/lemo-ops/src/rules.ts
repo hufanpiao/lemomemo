@@ -5,10 +5,12 @@
 import { evaluateOrphans, parseOrphans, SCOPE_ORPHAN, type OrphanReport } from './orphans.ts';
 import { evaluatePurgeDetail, evaluatePurgePending } from './purge-detail.ts';
 import { evaluatePushQueue } from './push-queue.ts';
+import { evaluateSecurity, parseSecurity, SCOPE_SECURITY, type SecurityReport } from './security.ts';
 import { fmtAge } from './stamp.ts';
 
 export { fmtAge };
 export { evaluateOrphans, ORPHAN_UNREADABLE, ORPHAN_USERS, SCOPE_ORPHAN, type OrphanReport } from './orphans.ts';
+export { evaluateSecurity, SCOPE_SECURITY, SECURITY_PWREVOKE, SECURITY_SFATE, SECURITY_UNREADABLE, type SecurityReport } from './security.ts';
 export { evaluatePurgeDetail, evaluatePurgePending, PURGE_BLOCKED, PURGE_FORCED, PURGE_HELD, PURGE_OVERDUE_S, PURGE_REMAINING, PURGE_REMAINING_ROUNDS, PURGE_STUCK_S } from './purge-detail.ts';
 
 /** 一件要告警的事。key 用来去重：同一个 key 6 小时内只发一次，消失后发“已恢复” */
@@ -125,6 +127,8 @@ export interface HeartbeatReport {
   auth_mail?: AuthMailReport | null;
   /** 没有 profile 的 auth 用户（0.38 第 29 条）：没有这个键 = 还没接，不查；null = 这一轮读不到 */
   orphan_users?: OrphanReport | null;
+  /** 最近 15 分钟的安全计数（R-382）：没有这个键 = 还没接，不查；null = 这一轮读不到 */
+  security_events?: SecurityReport | null;
   /** 钩子出错告警（只在第三条路启用时由 usage-report 给出；0.29 续第 115 条）；同一小时最多一次 true，去重在服务器 */
   alert?: boolean;
 }
@@ -173,6 +177,7 @@ export function parseHeartbeatReport(v: unknown, log?: (code: string) => void): 
   if ('auth_mail' in v) out.auth_mail = parseAuthMail(v['auth_mail'], log);
   // 孤儿用户同一个做法：形状不对只降级成 null（报“读不到”），不连累整份返回体
   if ('orphan_users' in v) out.orphan_users = parseOrphans(v['orphan_users']);
+  if ('security_events' in v) out.security_events = parseSecurity(v['security_events']);
   return out;
 }
 
@@ -329,6 +334,14 @@ export function evaluateHeartbeat(r: HeartbeatReport, required: readonly string[
     const orphans = evaluateOrphans(r.orphan_users);
     active.push(...orphans.active);
     scopes.push(...orphans.scopes);
+  }
+  // 安全计数（R-382）：同上
+  if (r.security_events === undefined) {
+    drop.push(SCOPE_SECURITY);
+  } else {
+    const sec = evaluateSecurity(r.security_events);
+    active.push(...sec.active);
+    scopes.push(...sec.scopes);
   }
   return { active, scopes, drop };
 }

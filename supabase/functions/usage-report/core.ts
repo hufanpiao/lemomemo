@@ -1,6 +1,10 @@
 // usage-report 的处理逻辑（架构第 6 节函数表、6.1、0.29 续第 116、143 条；TC-B1-94 ①、TC-B1-102 ⑤）。
 // 不 import npm 包、不碰 Deno 全局：数据库读取由 index.ts 注入，Vitest 直接测这一份。
 // 鉴权只认 x-ops-secret（单独一把，不和 CRON_SECRET 共用）；日志只记错误码，不打印请求头、请求体（A23）。
+// 鉴权留在本文件（不用 _shared/http.ts 的 cronGate）：check_backend F9 D2-2 要求本目录里读 x-ops-secret 并调 safeEqual。
+import { json, MIN_SECRET_BYTES } from '../_shared/http.ts';
+
+export { MIN_SECRET_BYTES };
 
 /** 查数据库出错或超过这个时长就回 503 db_unreachable（0.29 续第 116 条①） */
 export const DB_TIMEOUT_MS = 5_000;
@@ -62,6 +66,18 @@ export function orphansFromRpc(data: unknown): OrphanCounts {
   return { count: r['orphans'] as number, latest_at: r['latest_at'] as string | null };
 }
 
+/** 安全计数读取单独计时（同 ORPHAN_TIMEOUT_MS） */
+export const SECURITY_TIMEOUT_MS = 2_000;
+
+/** private.security_events()（迁移 20261111120000）：最近 15 分钟 sfate-capped、pwrevoke-fail 两个计数，lemo-ops 大于 0 告警 */
+export interface SecurityCounts {
+  sfate_capped: number;
+  pw_revoke_failed: number;
+}
+
+/** rpc 的结果（returns table，一行的数组）→ 第一行；不判对错，交给 pickSecurity */
+export const securityFromRpc = (data: unknown): unknown => (Array.isArray(data) ? data[0] : data);
+
 /** 各读取都必须尊重 signal（超时后中止） */
 export interface UsageDb {
   heartbeats(signal: AbortSignal): Promise<HeartbeatRow[]>;
@@ -81,6 +97,8 @@ export interface UsageDb {
    * 只让 `orphan_users` 为 null（日志记 orphans:error / orphans:timeout / orphans:bad_data），不连累心跳那几项
    */
   orphanUsers?(signal: AbortSignal): Promise<OrphanCounts>;
+  /** 安全计数（R-382）；不提供时返回体里没有 security_events。出错、超时、数字不对只让它为 null（security:error / timeout / bad_data） */
+  securityEvents?(signal: AbortSignal): Promise<unknown>;
 }
 
 export interface Deps {
@@ -93,18 +111,10 @@ export interface Deps {
   authMailTimeoutMs?: number;
   /** 孤儿用户读取的单独超时（测试用；默认 ORPHAN_TIMEOUT_MS） */
   orphanTimeoutMs?: number;
+  /** 安全计数读取的单独超时（测试用；默认 SECURITY_TIMEOUT_MS） */
+  securityTimeoutMs?: number;
   log?: (code: string) => void;
 }
-
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  });
-}
-
-/** OPS_SECRET 至少 32 字节（UTF-8），短了按没配置好处理 */
-export const MIN_SECRET_BYTES = 32;
 
 /**
  * heartbeat.detail 按心跳名分开放行（安全审查 PURGE-heartbeat-ops 建议 S1：原来是所有心跳共用一份字段名，
@@ -245,6 +255,12 @@ function pickOrphans(now: () => number) {
   };
 }
 
+function pickSecurity(r: unknown): { out: SecurityCounts | null; code?: string } {
+  if (typeof r !== 'object' || r === null || Array.isArray(r)) return { out: null, code: 'security:bad_data' };
+  const { sfate_capped: a, pw_revoke_failed: b } = r as Record<string, unknown>;
+  return isCount(a) && isCount(b) ? { out: { sfate_capped: a, pw_revoke_failed: b } } : { out: null, code: 'security:bad_data' };
+}
+
 /** 数据库里的时间戳解析不了：是数据问题、不是连不上数据库，单独给错误码 */
 class BadData extends Error {}
 
@@ -289,6 +305,10 @@ async function heartbeatPart(deps: Deps & { db: UsageDb }): Promise<Response> {
   const orphans = orphanUsers
     ? startSide((s) => orphanUsers.call(db, s), deps.orphanTimeoutMs ?? ORPHAN_TIMEOUT_MS, 'orphans', pickOrphans(deps.now), deps.log)
     : null;
+  const securityEvents = db.securityEvents;
+  const security = securityEvents
+    ? startSide((s) => securityEvents.call(db, s), deps.securityTimeoutMs ?? SECURITY_TIMEOUT_MS, 'security', pickSecurity, deps.log)
+    : null;
   try {
     const [hb, pd, lt] = await Promise.race([
       Promise.all([db.heartbeats(ctl.signal), db.pendingDeletions(ctl.signal), db.longTxCount(ctl.signal)]),
@@ -297,6 +317,7 @@ async function heartbeatPart(deps: Deps & { db: UsageDb }): Promise<Response> {
     if (timer !== undefined) clearTimeout(timer);
     const am = mail ? await mail.done : undefined;
     const ou = orphans ? await orphans.done : undefined;
+    const se = security ? await security.done : undefined;
     const now = deps.now();
     return json(200, {
       ok: true,
@@ -313,10 +334,12 @@ async function heartbeatPart(deps: Deps & { db: UsageDb }): Promise<Response> {
       ...(am === undefined ? {} : { auth_mail: am }),
       // 没有 profile 的 auth 用户（ORPHAN-alert）：同上，没接不出这个键，接了读不到是 null
       ...(ou === undefined ? {} : { orphan_users: ou }),
+      ...(se === undefined ? {} : { security_events: se }),
     });
   } catch (e) {
     mail?.stop();   // 整轮已失败：不再补记 auth_mail、orphans 的日志
     orphans?.stop();
+    security?.stop();
     if (e instanceof BadData) {
       deps.log?.('bad_data:timestamp');
       return json(500, { error: 'bad_data' });

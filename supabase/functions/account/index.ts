@@ -15,13 +15,11 @@ import { AuthError, requireActiveUser } from '../_shared/auth.ts';
 import { allManifests } from '../_shared/gen/manifests/index.ts';
 import { ACCOUNT_ERROR_CODES } from '../_shared/gen/schema/account.ts';
 import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
-import { skipTestRecipients, type Mail } from '../_shared/account-mail.ts';
+import { skipTestRecipients } from '../_shared/account-mail.ts';
 import { ACCOUNT_ERRS, DbError, exportTablesOf, handle, memProbeFor, withStoreTimeouts, type AccountStore } from './core.ts';
-import { NO_STORE } from './common.ts';
+import { json } from '../_shared/http.ts';
+import { sendMail } from '../_shared/mail-send.ts';
 
-const RESEND_URL = 'https://api.resend.com/emails';
-const MAIL_FROM = '柠檬记 <noreply@lemomemo.com>';   // 5.6：发件人 noreply@lemomemo.com（和 invite-signup 同一个）
-const NET_TIMEOUT_MS = 8000;
 /** rpc 抛出的业务错误（raise exception '<码>'），原样当错误码 */
 const RPC_CODES = new Set(['admin_cannot_delete', 'account_disabled', 'account_pending_deletion']);
 
@@ -146,26 +144,6 @@ function makeStore(admin: Admin, signal: AbortSignal): AccountStore {
   };
 }
 
-async function postWithTimeout(url: string, init: RequestInit): Promise<Response> {
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), NET_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: ctl.signal, redirect: 'error' });
-  } finally {
-    clearTimeout(t);
-  }
-}
-
-async function sendMail(apiKey: string, to: string, mail: Mail): Promise<boolean> {
-  const r = await postWithTimeout(RESEND_URL, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ from: MAIL_FROM, to: [to], subject: mail.subject, text: mail.text }),
-  });
-  await r.body?.cancel();
-  return r.ok;
-}
-
 /** Supabase Edge Runtime 自带的全局（本机 deno 里没有，用 typeof 判断） */
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
@@ -198,7 +176,7 @@ Deno.serve((req) => {
   const resendKey = Deno.env.get('RESEND_API_KEY');
   if (!url || !key || !resendKey) {
     log('misconfigured');
-    return new Response(JSON.stringify({ error: 'misconfigured' }), { status: 500, headers: { 'content-type': 'application/json', ...NO_STORE } });
+    return json(500, { error: 'misconfigured' });
   }
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   return handle(req, {

@@ -14,7 +14,6 @@ import { handle, json } from './core.ts';
 // ai-voice 整个目录禁 console（eslint no-console，A23：录音函数一个字都不往日志打）；错误码不打印。
 // 失败分支由 core.ts 经 logFail 写进 logs 表（固定错误码、HTTP 状态、类型名、字节数区间）；校验没过的原因由 settle 写进 logs 表
 const log = (_code: string): void => {};
-const NO_STORE = { 'cache-control': 'no-store' };
 
 Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL');
@@ -36,7 +35,7 @@ Deno.serve(async (req) => {
       try {
         return { ok: true, user: await requireActiveUser(r, admin) };
       } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse(NO_STORE) };
+        if (e instanceof AuthError) return { ok: false, response: e.toResponse() };
         throw e;
       }
     },

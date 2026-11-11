@@ -3,6 +3,7 @@
 // 和 core.ts 同样的约束：不 import npm 包、不碰 Deno 全局，Vitest 直接测。
 
 import { mailLocale, type Mail, type MailLocale, type TzLabeler } from '../_shared/account-mail.ts';
+import { json, NO_STORE } from '../_shared/http.ts';
 
 // ---------------- 常量（出处见行尾） ----------------
 export const ACCOUNT_DAILY_LIMIT = 3;          // export、delete 合计每人每天 3 次（第 6 节、附录 A account:<user_id>:<UTC 日期>）
@@ -161,11 +162,8 @@ export interface Deps {
 }
 
 // ---------------- 小工具 ----------------
-export const NO_STORE = { 'cache-control': 'no-store' };
 
-export function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...NO_STORE } });
-}
+export { json, NO_STORE };
 export const err = (status: number, code: AccountErr, extra: Record<string, unknown> = {}) => json(status, { error: code, ...extra });
 
 /** UTC 日期 yyyymmdd（计数键第三段；和 invite-signup 同一写法） */

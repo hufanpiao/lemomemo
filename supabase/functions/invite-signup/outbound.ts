@@ -28,7 +28,7 @@ import type { EnvKind } from '../_shared/env-kind.ts';
 
 /** 官方地址（线上默认；改之前写死在 index.ts 里的就是这两个） */
 export const TURNSTILE_SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
-export const RESEND_EMAILS_URL = 'https://api.resend.com/emails';
+export { RESEND_EMAILS_URL } from '../_shared/mail-send.ts';
 
 /** 回环地址只认这两个主机名（不认 [::1]、127.0.0.2 之类；127.1 这种简写解析后虽然是 127.0.0.1，但原文不是字面写法，照样拒） */
 export const LOOPBACK_HOSTS: readonly string[] = ['127.0.0.1', 'localhost'];

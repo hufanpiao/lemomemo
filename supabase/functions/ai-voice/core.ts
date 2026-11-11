@@ -58,9 +58,8 @@ function gateFailCode(status: number, body: Record<string, unknown>, codes: read
   return codes.at(-1) ?? (body['reason'] === 'quota' ? 'quota_exhausted' : 'gate_error');
 }
 
-const NO_STORE = { 'cache-control': 'no-store' };
-export const json = (status: number, body: unknown): Response =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...NO_STORE } });
+import { json } from '../_shared/http.ts';
+export { json };
 
 /** Content-Type 去参数、转小写；在白名单里返回它，不在返回 null（audio/webm;codecs=opus → audio/webm） */
 export function audioType(ct: string | null): string | null {

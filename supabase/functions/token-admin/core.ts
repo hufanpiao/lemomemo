@@ -34,9 +34,8 @@ export interface Deps {
   newToken?: () => string;
 }
 
-const NO_STORE = { 'cache-control': 'no-store' };
-export const json = (status: number, body: unknown): Response =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...NO_STORE } });
+import { json } from '../_shared/http.ts';
+export { json };
 const err = (status: number, code: string) => json(status, { error: code });
 
 // eslint-disable-next-line no-control-regex

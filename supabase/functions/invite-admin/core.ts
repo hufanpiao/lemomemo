@@ -11,6 +11,7 @@
 // 日志只记错误码（A23）：不打印请求头、请求体、邀请码、备注。
 
 import { inviteCodeHash, randomInviteCode } from '../_shared/invite-code.ts';
+import { json } from '../_shared/http.ts';
 import { StoreTimeout } from '../_shared/store-timeout.ts';
 import { blockedMin, upgradeRequiredResponse } from '../_shared/version-gate-core.ts';
 
@@ -80,12 +81,6 @@ export interface Deps {
 }
 
 // ---------------- 小工具 ----------------
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  });
-}
 const err = (status: number, code: InviteAdminErr) => json(status, { error: code });
 
 /** UTC 日期 yyyymmdd（计数键第三段；和 invite-signup、account 同一写法） */

@@ -6,6 +6,8 @@
 // 版本门：免查（shared/version-gate-list.ts，pg_cron 调、没有客户端版本）。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { isUsable } from '../_shared/auth.ts';
+import { timedFetch } from '../_shared/net.ts';
+import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { gateDeps } from '../_shared/ai/wire.ts';
 import { aiAllowed } from '../_shared/consent.ts';
 import { classifyByRules } from '../_shared/gen/logic/notes/classify-rules.ts';
@@ -18,7 +20,7 @@ const log = (code: string) => console.error(`ai-classify: ${code}`);
 Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const admin = url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
+  const admin = url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(STORE_TIMEOUT_MS) } }) : null;
   if (!admin) return handle(req, { ...unconfigured(), cronSecret: Deno.env.get('CRON_SECRET') });
   const g = gateDeps(admin, log, (userId) => aiAllowed(admin, userId));
   return handle(req, {

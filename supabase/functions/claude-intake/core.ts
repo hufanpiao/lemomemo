@@ -113,9 +113,8 @@ export interface Deps<Item extends ItemLike> {
   uuid(): string;
 }
 
-const NO_STORE = { 'cache-control': 'no-store' };
-export const json = (status: number, body: unknown): Response =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...NO_STORE } });
+import { json } from '../_shared/http.ts';
+export { json };
 const err = (status: number, code: string, extra: Record<string, unknown> = {}) => json(status, { error: code, ...extra });
 
 const utcHour = (ms: number) => new Date(ms).toISOString().slice(0, 13).replace(/[-T]/g, '');

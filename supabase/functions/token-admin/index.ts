@@ -8,7 +8,6 @@ import { versionGate } from '../_shared/version-gate.ts';
 import { handle, json } from './core.ts';
 
 const log = (code: string) => console.error(`token-admin: ${code}`);
-const NO_STORE = { 'cache-control': 'no-store' };
 
 Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL');
@@ -29,7 +28,7 @@ Deno.serve(async (req) => {
       try {
         return { ok: true, user: await requireActiveUser(r, admin) };
       } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse(NO_STORE) };
+        if (e instanceof AuthError) return { ok: false, response: e.toResponse() };
         throw e;
       }
     },

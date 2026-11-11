@@ -8,13 +8,14 @@
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { envKind } from '../_shared/env-kind.ts';
+import { json } from '../_shared/http.ts';
+import { postOut } from '../_shared/net.ts';
+import { sendMail } from '../_shared/mail-send.ts';
 import { cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { handle, type AuthAdmin, type Store, type TurnstileResult } from './core.ts';
 import { REQUEST_BUDGET_MS, withAuthTimeouts, withStoreTimeouts } from './store-timeout.ts';
 import { RESEND_EMAILS_URL, TURNSTILE_SITEVERIFY_URL, resolveOutboundUrl } from './outbound.ts';
 
-const MAIL_FROM = '柠檬记 <noreply@lemomemo.com>';   // 5.6：发件人 noreply@lemomemo.com
-const NET_TIMEOUT_MS = 8000;
 
 // 没有生成的库类型：按 _shared/auth.ts 的写法用不带泛型的 SupabaseClient（行一律当 any，返回值在下面逐个收窄）
 // deno-lint-ignore no-explicit-any
@@ -114,20 +115,10 @@ function makeAuth(admin: Admin): AuthAdmin {
   };
 }
 
-async function postWithTimeout(url: string, init: RequestInit): Promise<Response> {
-  const ctl = new AbortController();
-  const t = setTimeout(() => ctl.abort(), NET_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: ctl.signal, redirect: 'error' });
-  } finally {
-    clearTimeout(t);
-  }
-}
-
 async function verifyTurnstile(siteverifyUrl: string, secret: string, token: string, remoteIp: string | null): Promise<TurnstileResult> {
   const form = new URLSearchParams({ secret, response: token });
   if (remoteIp) form.set('remoteip', remoteIp);
-  const r = await postWithTimeout(siteverifyUrl, { method: 'POST', body: form });
+  const r = await postOut(siteverifyUrl, { body: form });
   if (!r.ok) {
     await r.body?.cancel();
     throw new Error('turnstile_http');
@@ -139,16 +130,6 @@ async function verifyTurnstile(siteverifyUrl: string, secret: string, token: str
     action: typeof j.action === 'string' ? j.action : null,
   };
 }
-async function sendMail(emailsUrl: string, apiKey: string, to: string, mail: { subject: string; text: string }): Promise<boolean> {
-  const r = await postWithTimeout(emailsUrl, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ from: MAIL_FROM, to: [to], subject: mail.subject, text: mail.text }),
-  });
-  await r.body?.cancel();
-  return r.ok;
-}
-
 const log = (code: string) => console.error(`invite-signup: ${code}`);
 
 // 出站地址换成了回环地址（outbound.ts 的 overridden）时记 outbound_url_overridden：每个函数实例只记一次，只记日志码、不记地址（INVITE-sugg，10-30）
@@ -161,7 +142,7 @@ Deno.serve((req) => {
   const resendKey = Deno.env.get('RESEND_API_KEY');
   if (!url || !key || !turnstileSecret || !resendKey) {
     log('misconfigured');
-    return new Response(JSON.stringify({ error: 'misconfigured' }), { status: 500, headers: { 'content-type': 'application/json' } });
+    return json(500, { error: 'misconfigured' });
   }
   const env = envKind(url);
   // 出站地址（outbound.ts）：没设用官方地址；不合规不悄悄回落，当没配好（configured: false → 500 misconfigured）
@@ -181,7 +162,7 @@ Deno.serve((req) => {
     auth: withAuthTimeouts(makeAuth(admin), { log, until }),
     env,
     verifyTurnstile: (token, ip) => verifyTurnstile(siteverifyUrl, turnstileSecret, token, ip),
-    sendMail: (to, mail) => sendMail(emailsUrl, resendKey, to, mail),
+    sendMail: (to, mail) => sendMail(resendKey, to, mail, emailsUrl),
     hashSecret: Deno.env.get('SIGNUP_HASH_SECRET'),
     proxySecret: Deno.env.get('PROXY_SECRET'),
     configured: siteverify.ok && emails.ok,

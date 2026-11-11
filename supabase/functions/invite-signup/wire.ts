@@ -9,12 +9,8 @@ import type { InviteErr, Locale } from './types.ts';
 const MAX_BODY = 4096;
 
 // ---------------- 小工具 ----------------
-export function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  });
-}
+import { json } from '../_shared/http.ts';
+export { json };
 export const err = (status: number, code: InviteErr) => json(status, { error: code });
 
 export class Fail extends Error {

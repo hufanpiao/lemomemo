@@ -103,7 +103,8 @@ describe('TC-B1-130 ①⑤：取片之间账号停用、会话吊销、退出登
     const seq: string[] = [];
     const r = await partWith(w.db, w.box, jwt, w.id, w.next, { ...SMALL, store: recorded(w.db.accountStore(), seq) });
     expect(r.status).toBe(status);
-    expect(r.headers.get('content-type')).toBe('application/json');
+    expect(r.headers.get('content-type')).toBe('application/json; charset=utf-8');   // AuthError 的回应经 _shared/http.ts 的 json
+    expect(r.headers.get('cache-control')).toBe('no-store');
     expect(r.headers.get(NEXT)).toBeNull();
     expect(await r.json()).toEqual({ error: code });
     expect(seq).toEqual([]);   // 鉴权没过，store 一次都没碰

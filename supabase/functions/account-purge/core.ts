@@ -61,7 +61,7 @@
 
 import { deletionDoneMail, deletionReminderLateMail, deletionReminderMail, mailLocale, type Mail, type TzLabeler } from '../_shared/account-mail.ts';
 import { emailHash } from '../_shared/email-hash.ts';
-import { safeEqual } from '../_shared/proxy-headers.ts';
+import { cronGate, json } from '../_shared/http.ts';
 
 // ---------------- 常量（出处见行尾） ----------------
 export const R2_BUCKETS = ['images', 'files', 'vault-images', 'vault-files'] as const;   // 0.32、0.38 第 24 条第 2 步
@@ -90,7 +90,6 @@ export const REMIND_WINDOW_MS = 48 * 3600_000;  // 满 7 天前 48 小时以内�
 export const HEARTBEAT = 'account-purge';
 /** 冷静期里被管理员停用（disabled_reason = 'admin'）不取消注销，照样删（0.38 第 43 条；0.29 续第 134 条⑥、TC-B1-104 ④） */
 export const PURGE_ADMIN_DISABLED = true;
-const MIN_SECRET_BYTES = 32;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // ---------------- 注入的依赖 ----------------
@@ -179,12 +178,6 @@ export interface Deps {
   log?: (code: string) => void;
 }
 
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
-  });
-}
 
 const short = (uid: string) => uid.slice(0, 8);
 
@@ -440,11 +433,10 @@ async function purgeOne(
 export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
   // 先鉴权，再判“没配好”：没带对密钥的调用方看不出函数配没配
-  const secret = deps.cronSecret ?? '';
-  const got = req.headers.get('x-cron-secret') ?? '';
-  if (secret === '' || got === '' || !safeEqual(got, secret)) return json(401, { error: 'unauthorized' });
+  const denied = cronGate(req.headers.get('x-cron-secret'), deps.cronSecret, deps.log);
+  if (denied) return denied;
   const { store, r2, backups } = deps;
-  if (new TextEncoder().encode(secret).length < MIN_SECRET_BYTES || !store || !r2 || !backups) {
+  if (!store || !r2 || !backups) {
     deps.log?.('misconfigured');
     return json(500, { error: 'misconfigured' });
   }

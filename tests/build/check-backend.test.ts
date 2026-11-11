@@ -144,7 +144,7 @@ describe('build/check_backend.py（tests/arch-fixtures/check_backend）', () => 
     expect(errors[0]?.message).toContain('[functions.r2-probe]');
   });
 
-  it('--print-preview-funcs：一行一个打印预览专用函数名单（deploy-preview.yml、publish.ps1 读这一份）；和脚本里 PREVIEW_FUNCS 一致（10-29 起是 db-probe）', () => {
+  it('--print-preview-funcs：一行一个打印预览专用函数名单（deploy-preview.yml、publish.ps1 读这一份）；和脚本里 PREVIEW_FUNCS 一致（11-12 起只有 voice-probe）', () => {
     const out = execFileSync('python', ['-I', join(ROOT, 'build', 'check_backend.py'), '--print-preview-funcs'], { encoding: 'utf8' });
     // 名单只写在 check_backend.py 一处：从源码里读出 PREVIEW_FUNCS 再比，增删预览专用函数时这条不用跟着改
     const src = readFileSync(join(ROOT, 'build', 'check_backend.py'), 'utf8');

@@ -55,9 +55,7 @@ export interface Deps {
   log(code: string): void;
 }
 
-const NO_STORE = { 'cache-control': 'no-store' };
-const json = (status: number, body: unknown): Response =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...NO_STORE } });
+import { json } from '../_shared/http.ts';
 const err = (status: number, code: string): Response => json(status, { error: code });
 
 /** 计数键（附录 A 三段写法，第三段是 UTC 小时 yyyymmddhh，不含冒号；单测核对过得了 counters 的 check 约束） */

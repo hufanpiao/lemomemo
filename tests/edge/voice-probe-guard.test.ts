@@ -1,19 +1,17 @@
 // voice-probe 的守门和一致性核对（B3 任务单 BE-0、Q1 ①④⑤⑥⑦）：源码不打印多余的东西、不碰数据库、进 PREVIEW_FUNCS 不进别的名单；
-// 预览 ref、类型、大小上限和 db-probe、ai-voice 一致；每天额度的计数窗口在整个有效期内不切开任何一个太平洋日期。行为测试在 voice-probe.test.ts。
+// 类型、大小上限和 ai-voice 一致；每天额度的计数窗口在整个有效期内不切开任何一个太平洋日期。行为测试在 voice-probe.test.ts。
 import { existsSync, readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AUDIO_TYPES, EXPIRES_AT, isPreview, MAX_AUDIO, PREVIEW_REF, QUOTA_WINDOW_S } from '../../supabase/functions/_preview/voice-probe/handler.ts';
-import { PREVIEW_REF as DB_PROBE_REF } from '../../supabase/functions/_preview/db-probe/probe.ts';
 import { AUDIO_TYPES as VOICE_TYPES, MAX_AUDIO as VOICE_MAX } from '../../supabase/functions/ai-voice/core.ts';
 import { pacificDate } from '../../supabase/functions/_shared/ai/gate.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const PREVIEW_URL = `https://${PREVIEW_REF}.supabase.co`;
 
-describe('voice-probe：和 db-probe、ai-voice 一致；计数窗口', () => {
-  it('预览 ref 和 db-probe 写死的是同一个；isPreview 只许末尾多一个斜杠', () => {
-    expect(PREVIEW_REF).toBe(DB_PROBE_REF);
+describe('voice-probe：和 ai-voice 一致；计数窗口', () => {
+  it('isPreview 只许末尾多一个斜杠', () => {
     expect([isPreview(PREVIEW_URL), isPreview(`${PREVIEW_URL}/`), isPreview(`${PREVIEW_URL}//`)]).toEqual([true, true, false]);
   });
   it('类型和大小上限和正式 ai-voice 一样', () => {

@@ -10,11 +10,11 @@ import { buildPayload } from '../_shared/push/payload.ts';
 import { deliver } from '../_shared/push/send.ts';
 import { resolveOverride } from '../_shared/push/stub.ts';
 import { loadVapid, VapidSigner, type VapidKeys, type VapidLoad } from '../_shared/push/vapid.ts';
+import { json } from '../_shared/http.ts';
 import { versionGate } from '../_shared/version-gate.ts';
 import { handle, type TestDevice } from './core.ts';
 
 const log = (code: string) => console.error(`push-test: ${code}`);
-const NO_STORE = { 'cache-control': 'no-store' };
 
 let vapidMemo: { priv?: string | undefined; pub?: string | undefined; sub?: string | undefined; p: Promise<VapidLoad> } | null = null;
 function vapidOnce(priv: string | undefined, pub: string | undefined, sub: string | undefined): Promise<VapidLoad> {
@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) {
     log('misconfigured');
-    return new Response(JSON.stringify({ error: 'misconfigured' }), { status: 500, headers: { 'content-type': 'application/json', ...NO_STORE } });
+    return json(500, { error: 'misconfigured' });
   }
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   const blocked = await versionGate('push-test', req, async (signal) => {
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
       try {
         return { ok: true, user: await requireActiveUser(r, admin) };
       } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse(NO_STORE), code: e.code };
+        if (e instanceof AuthError) return { ok: false, response: e.toResponse(), code: e.code };
         throw e;
       }
     },

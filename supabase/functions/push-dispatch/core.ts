@@ -18,7 +18,7 @@
 //   第 0 步每次最多出队 QUEUE_POP_LIMIT、第 1 步每次最多取 DUE_LIMIT。
 // 日志只记原因码（A23）：不记地址、标题、密钥、JWT、响应体。
 
-import { safeEqual } from '../_shared/proxy-headers.ts';
+import { cronGate, json } from '../_shared/http.ts';
 import { buildPayload } from '../_shared/push/payload.ts';
 import { deliver, type FetchLike } from '../_shared/push/send.ts';
 import { VapidSigner, type VapidKeys, type VapidLoad } from '../_shared/push/vapid.ts';
@@ -28,7 +28,6 @@ import { runRound, type Limits, type RoundLogic, type RoundStore } from './round
 export { filterUsable } from './round.ts';
 
 export const HEARTBEAT = 'push-dispatch';
-export const MIN_SECRET_BYTES = 32;
 export const ROUND_BUDGET_MS = 20_000;
 export const SEND_CONCURRENCY = 10;
 export const SEND_LIMIT_PER_ROUND = 200;
@@ -96,21 +95,16 @@ export type Deps = {
   limits?: Partial<Limits>;
 };
 
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-}
 
 export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
-  const secret = deps.cronSecret ?? '';
-  const got = req.headers.get('x-cron-secret') ?? '';
-  if (secret === '' || got === '' || !safeEqual(got, secret)) return json(401, { error: 'unauthorized' });
+  const denied = cronGate(req.headers.get('x-cron-secret'), deps.cronSecret, deps.log);
+  if (denied) return denied;
 
   const misconfigured = (code: string) => {
     deps.log?.(code);
     return json(500, { error: 'misconfigured' });
   };
-  if (new TextEncoder().encode(secret).length < MIN_SECRET_BYTES) return misconfigured('misconfigured:cron_secret');
   if (!deps.override.ok) return misconfigured('misconfigured:override');
   if (!deps.store) return misconfigured('misconfigured:store');
   let vapid: VapidLoad;

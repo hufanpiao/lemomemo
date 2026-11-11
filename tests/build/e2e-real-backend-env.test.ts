@@ -200,8 +200,8 @@ describe('invite-signup/index.ts 的出站地址接法（源码核对；INVITE-m
   });
 
   it('siteverify、发信都用解析出来的地址', () => {
-    expect(src).toContain('postWithTimeout(siteverifyUrl,');
-    expect(src).toContain('postWithTimeout(emailsUrl,');
+    expect(src).toContain('postOut(siteverifyUrl,');
+    expect(src).toContain('sendMail(resendKey, to, mail, emailsUrl)');
   });
 
   it('换成回环地址时记 outbound_url_overridden：受模块级标志保护，每个实例只记一次，只记码不记地址（INVITE-sugg，10-30）', () => {

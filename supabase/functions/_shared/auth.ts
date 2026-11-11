@@ -2,6 +2,7 @@
 // admin = 用 service role 建的 supabase-js 客户端（绕过 RLS，所以这里必须自己查停用和会话）
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json 一致，tests/build/deno-config.test.ts 核对）
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
+import { json } from './http.ts';
 
 export type AuthCode = 'unauthorized' | 'account_disabled' | 'account_pending_deletion' | 'session_revoked' | 'try_later';
 
@@ -15,9 +16,8 @@ export class AuthError extends Error {
     this.status = status;
     this.purgeAfter = purgeAfter;
   }
-  toResponse(headers: HeadersInit = {}): Response {
-    const body = this.purgeAfter ? { error: this.code, purge_after: this.purgeAfter } : { error: this.code };
-    return new Response(JSON.stringify(body), { status: this.status, headers: { ...headers, 'content-type': 'application/json' } });
+  toResponse(headers: Record<string, string> = {}): Response {
+    return json(this.status, this.purgeAfter ? { error: this.code, purge_after: this.purgeAfter } : { error: this.code }, headers);
   }
 }
 
