@@ -11,19 +11,19 @@
 //   列表先不动（useHoldView 留住按下之前的分组）；然后这一条从原来的组淡出、同时下面的行收上来，“已完成”组让开位置后它再淡入。
 //   删除：淡出和收拢同时；撤销恢复：先让开位置再淡入（不和别的行叠着）。第一次画列表不播。分组整组出现、消失同样淡入淡出。
 //   打勾没有撤销条（只有删除有）：点错了在圆圈填满的那 --dur-ui 里还能再点回去，开始离开以后要到“已完成”组里再点
-import { Suspense, useState } from 'react';
+import { Suspense } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
-import { ReadonlyMark, ReadonlyToast, RoCheckCircle } from '../../../kit/components/ReadonlyRow.tsx';
+import { ListToasts } from '../../../kit/components/ListToasts.tsx';
+import { ReadonlyMark, RoCheckCircle } from '../../../kit/components/ReadonlyRow.tsx';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { useRoT } from '../../../kit/hooks/useRoT.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
-import { UndoToast } from '../../../kit/components/UndoToast.tsx';
-import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
+import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
-import { useListT, useTodoList, type ActionResult, type DueTag, type Group } from '../hooks/useTodoList.ts';
+import { useListT, useTodoList, type DueTag, type Group } from '../hooks/useTodoList.ts';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import styles from './TodosPage.module.css';
 
@@ -40,40 +40,16 @@ function RowMark({ id }: { id: string }) {
   );
 }
 
-type Toast = { kind: 'undo'; id: string } | { kind: 'error' };
-
 export default function TodosPage() {
   const t = useListT();
   const tRo = useRoT();
   const locale = useUi((s) => s.locale);
   const l = useTodoList();
-  // 打勾：先留住按下之前的分组 --dur-ui（圆圈在原地填满，17.1 勾选完成），再换成新的；
-  // 留着的期间圆圈按“刚点成什么”画（picked，不等保存回来），几条连着点就一起挪
+  // 打勾先留住按下之前的分组 --dur-ui（圆圈在原地填满，17.1 勾选完成）；只读行统一拦下；撤销条、出错条也在 a.g 里（kit 的 useListActions）
   const hv = useHoldView(l.groups);
-  const [picked, setPicked] = useState<ReadonlyMap<string, boolean>>(() => new Map());
-  // 只读行统一拦下（拦下时收起撤销条、出错条，出“这条要新版本才能修改 · 更新”）；撤销条、出错条也在 g 里
-  const g = useReadonlyGuard<Toast>();
-  const { toast } = g;
-  const isRo = (id: string) => g.isRo('todo', id);
-  const report = (r: ActionResult) => {
-    if (r === 'readonly') g.block();
-    else if (r === 'failed') g.show({ kind: 'error' });
-  };
-  const open = (id: string) => (isRo(id) ? g.block() : void navigate('todo', id));
-  const tick = (id: string, on: boolean) => {
-    if (isRo(id)) return g.block();
-    setPicked((m) => new Map(hv.holding ? m : []).set(id, on));
-    hv.hold();
-    void l.toggleDone(id, on).then(report);
-  };
-  const shown = (id: string, done: boolean) => (hv.holding ? (picked.get(id) ?? done) : done);
-  const del = async (id: string) => {
-    if (isRo(id)) return g.block();
-    hv.release();
-    const r = await l.remove(id, true);
-    if (r === 'ok') g.show({ kind: 'undo', id });
-    else report(r);
-  };
+  const a = useListActions(hv, { toggle: l.toggleDone, remove: l.remove });
+  const { isRo, tick, shown, del } = a;
+  const open = (id: string) => (isRo(id) ? a.g.block() : void navigate('todo', id));
 
   const groupTitle = (g: Group): string => {
     switch (g.key) {
@@ -171,21 +147,12 @@ export default function TodosPage() {
         ))}
       </AppearList>
 
-      {toast?.kind === 'undo' ? (
-        <UndoToast
-          key={toast.id}
-          message={t('list.deleted', {})}
-          undoLabel={t('list.undo', {})}
-          onUndo={() => void l.remove(toast.id, false).then(report)}
-          onClose={() => g.dismiss(toast)}
-          data-testid="todos-toast"
-        />
-      ) : toast?.kind === 'error' ? (
-        <p className={styles.error} role="alert" data-testid="todos-error">
-          {t('list.err.save', {})}
-        </p>
-      ) : null}
-      <ReadonlyToast guard={g} message={t('list.err.readonly', {})} testId="todos-ro-toast" />
+      <ListToasts
+        g={a.g}
+        onUndo={a.undo}
+        text={{ deleted: t('list.deleted', {}), undo: t('list.undo', {}), error: t('list.err.save', {}), readonly: t('list.err.readonly', {}) }}
+        prefix="todos"
+      />
     </main>
   );
 }

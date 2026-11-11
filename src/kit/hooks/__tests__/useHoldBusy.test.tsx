@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 const shell = () => (
-  <EditShell kind="k" backLabel="b" onBack={() => undefined} status="s">
+  <EditShell kind="k" backLabel="b" onBack={() => undefined} rec={{ row: undefined, status: 'idle', readonly: false, deleted: false, setDeleted: () => Promise.resolve('idle') }} own={{ empty: '', rejected: '' }} prefix="x-edit">
     {null}
   </EditShell>
 );
@@ -58,7 +58,7 @@ describe('编辑页占住 busy', () => {
 
   it('还没启动（拿不到升级中心）：照常画、不报错', () => {
     const r = render(shell());
-    expect(r.getByTestId('edit-status').textContent).toBe('s');
+    expect(r.getByTestId('edit-status').textContent).toBe('改了就自动保存');
     expect(holdBusy).not.toHaveBeenCalled();
   });
 });

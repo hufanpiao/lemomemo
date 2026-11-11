@@ -7,9 +7,10 @@
 //   点页签时液滴马上往那边走，不等路由换过来（webkit 切到要下载的页时路由要晚 0.3 秒；设计动效评审 D1）：记下“从哪页点到哪页”，
 //   路由还是那一页就按点的那个画，路由一变就作废、用路由的
 // • 两个皮肤都用（负责人 11-05 ④）
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ComponentType } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentType } from 'react';
 import { hrefOf, navigateTab, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
+import { MQ_SIDEBAR, useMedia } from '../../hooks/useMedia.ts';
 import { useT } from '../../hooks/useT.ts';
 import type { GlassBarFxProps } from './GlassBarFx.tsx';
 import styles from './GlassBar.module.css';
@@ -42,15 +43,8 @@ const ICONS: Record<TabName, string> = {
   notes: 'M15 5l4 4-10 10H5v-4z',
 };
 
-// 电脑版侧栏（D5，(width >= 900px)，和 GlassBar.module.css、base.css 那段媒体查询一样）：侧栏里“＋”画在最上面，
+// 电脑版侧栏（D5，kit/hooks/useMedia.ts 的 MQ_SIDEBAR）：侧栏里“＋”画在最上面，
 // DOM 也把它放到 nav 前面，Tab 顺序和画面上下一致（设计复审三 S2）；窄屏“＋”在底栏右边，DOM 在 nav 后面
-const wideMq = (): MediaQueryList | null => (typeof matchMedia === 'function' ? matchMedia('(width >= 900px)') : null);
-const onWide = (fn: () => void): (() => void) => {
-  const mq = wideMq();
-  mq?.addEventListener('change', fn);
-  return () => mq?.removeEventListener('change', fn);
-};
-const isWide = (): boolean => wideMq()?.matches ?? false;
 
 export interface GlassBarProps {
   active: TabName;
@@ -73,7 +67,7 @@ export function GlassBar({ active, add, later = (fn) => fn() }: GlassBarProps) {
   useLayoutEffect(() => dropEl.current?.style.setProperty('--i', String(i)), [i]);
   const navEl = useRef<HTMLElement>(null);
   const gelEl = useRef<HTMLSpanElement>(null);
-  const wide = useSyncExternalStore(onWide, isWide);
+  const wide = useMedia(MQ_SIDEBAR);
   const [Fx, setFx] = useState<ComponentType<GlassBarFxProps> | null>(() => loadedFx);
   // 只有这次挂载以后才异步到的那一次（启动时）实色带、渐隐层才淡入；用缓存同步画出来的不淡入
   const [fadeIn, setFadeIn] = useState(false);

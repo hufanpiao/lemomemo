@@ -7,119 +7,36 @@
 // • 删除：软删，页内出“已删除”和“撤销”（ADR-006）；“最近删除”页在 FA-2 后面一段
 // • R-375：没有截止日期时改了提醒（当天 / 前一天、提醒时刻），截止日期自动填今天（规则在 data/todo-edit.ts ⑤），提醒那一行的灰字说明这一点；
 //   填了今天以后“当天 / 前一天 + 时刻”已经过了的，同一处灰字改成“这个提醒时刻已经过了，不会再提醒”（不替用户挪日子）
-import { canGoBack, goBack, parseHash, replaceRoute, useRoute } from '../../../app/router.ts';
-import { replaceAddress } from '../../../app/router-levels.ts';
-import { useCallback, useReducer, useRef } from 'react';
+import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
 import { Check, Field, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
-import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
-import { Pressable } from '../../../motion/components.ts';
-import { requestAppUpdate } from '../../../platform/native-bridge.ts';
 import { NOTE_MAX, PROJECT_MAX, REMIND_BEFORE_OPTIONS, TITLE_MAX, useTodoEdit } from '../hooks/useTodoEdit.ts';
 import { useTodosT, type TodosMsgKey } from '../hooks/useTodosT.ts';
-import type { EditStatus } from '../../../kit/hooks/useEditRecord.ts';
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-const STATUS_KEY: Record<EditStatus, TodosMsgKey | null> = {
-  idle: 'todo.edit.st.idle',
-  saving: 'todo.edit.st.saving',
-  saved: 'todo.edit.st.saved',
-  empty_title: 'todo.edit.st.empty',
-  missing: 'todo.edit.st.missing',
-  local_unavailable: 'todo.edit.st.unavailable',
-  closing: 'todo.edit.st.failed',
-  switching: null,
-  readonly: 'todo.edit.st.readonly',
-  rejected: 'todo.edit.st.rejected',
-};
-// “写上标题才会保存”（empty_title）是提示不是报错，用中性灰（负责人 11-06 真机截图 6：只选了日期就出红字，看着像报错）
-const BAD: ReadonlySet<EditStatus> = new Set(['missing', 'local_unavailable', 'closing', 'readonly', 'rejected']);
 
 const beforeKey = (v: number | null): TodosMsgKey => (v === null ? 'todo.edit.before.none' : (`todo.edit.before.${v}` as TodosMsgKey));
 
 /** 直接打开的子页（推送、书签）没有上一页：退回待办列表 */
-function back(): void {
-  if (canGoBack()) goBack();
-  else void replaceRoute('todos');
-}
+const back = (): void => backOr('todos');
 
 export default function TodoEditPage() {
-  const route = useRoute();
-  const raw = route.params[0] ?? 'new';
-  const id = raw === 'new' || UUID.test(raw) ? raw : 'missing';
-  // 新建保存后地址换成这一条的 id（代码审查 S7），编辑器不重挂（key 不变，焦点里的草稿不丢）；换别的记录、再点“新建”才换一张
-  const [, bump] = useReducer((n: number) => n + 1, 0);
-  const slot = useRef<{ id: string; key: string; created: string | null } | null>(null);
-  if (slot.current === null || (id !== slot.current.id && id !== slot.current.created)) {
-    slot.current = { id, key: id === 'new' ? `new:${++newSeq}` : id, created: null };
-  }
-  const key = slot.current.key;
-  const onCreated = useCallback(
-    (cid: string) => {
-      // 保存可能晚到（11-10 CI 审查员，b2-tabbar e2e）：用户已经换到下一张新建表（key 变了），或已经离开这一页
-      // （地址不再是 #/todo/new），就只存不换地址，不把地址改回编辑页
-      const cur = slot.current;
-      if (!cur || cur.key !== key) return;
-      // N2（代码审查）：slot.id 也换成新 id（key 不变）——之后再点“新建”路由回到 'new'，和 slot.id 不同，才会换一张空表
-      cur.created = cid;
-      cur.id = cid;
-      const now = parseHash(window.location.hash);
-      if (now.name !== 'todo' || now.params[0] !== 'new') return;
-      replaceAddress('todo', cid);
-      // replaceAddress 不通知路由的订阅者：外层重画一次，记下新地址（不然再 navigate 到 new 时地址看起来没变，不会重画）
-      bump();
-    },
-    [key],
-  );
+  const { id, key, onCreated } = useEditRoute('todo');
   return <TodoEditor key={key} id={id} onCreated={onCreated} />;
 }
-
-let newSeq = 0;
 
 function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void }) {
   const t = useTodosT();
   const ed = useTodoEdit(id, onCreated);
-  const { form, change, status } = ed;
-  const statusKey = STATUS_KEY[status];
-  const roIds = useReadonlyIds('todos');
-  const readonly = status === 'readonly' || roIds.has(id);
-  const off = status === 'missing' || ed.deleted || readonly;
+  const { form, change, readonly, off } = ed;
   const rawText = typeof ed.row?.['raw_text'] === 'string' ? ed.row['raw_text'] : '';
 
   return (
     <EditShell
-      data-testid="todo-edit"
+      prefix="todo-edit"
       kind={t(ed.isNew ? 'todo.edit.newKind' : 'todo.edit.kind', {})}
       backLabel={t('todo.edit.back', {})}
       onBack={back}
-      status={statusKey && (status !== 'idle' || !readonly) ? t(statusKey, {}) : ''}
-      statusBad={BAD.has(status)}
-      noticeTone={readonly ? 'quiet' : undefined}
-      notice={
-        readonly ? (
-          <>
-            <span>{t('todo.edit.st.readonly', {})}</span>
-            <Pressable onClick={() => void requestAppUpdate()} data-testid="todo-edit-update">
-              {t('todo.edit.update', {})}
-            </Pressable>
-          </>
-        ) : ed.deleted ? (
-          <>
-            {t('todo.edit.deleted', {})}{' '}
-            <FormButton onClick={() => void ed.setDeleted(false)} data-testid="todo-edit-undo">
-              {t('todo.edit.undo', {})}
-            </FormButton>
-          </>
-        ) : undefined
-      }
-      actions={
-        ed.row && !ed.deleted && !readonly ? (
-          <FormButton danger onClick={() => void ed.setDeleted(true)} data-testid="todo-edit-delete" data-no-proxy="">
-            {t('todo.edit.delete', {})}
-          </FormButton>
-        ) : undefined
-      }
+      rec={ed}
+      own={{ empty: t('todo.edit.st.empty', {}), rejected: t('todo.edit.st.rejected', {}) }}
     >
       <FormGroup>
         <TextInput

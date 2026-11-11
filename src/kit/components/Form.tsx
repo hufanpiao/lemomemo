@@ -88,6 +88,11 @@ function useCommitDraft(value: string, onCommit: (v: string) => void, accept: (v
   return { draft, setDraft, setEditing, flush };
 }
 
+/** 回车是不是“提交”：中文、韩文输入法组字时的回车是选字（Safari 那一下 isComposing 为假、keyCode 229），这时失焦会丢掉还没上屏的字（Q-21） */
+export function enterCommits(e: { key: string; keyCode: number; nativeEvent: { isComposing: boolean } }): boolean {
+  return e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229;
+}
+
 /** 日期框：年份 ≥ 1900 才算定了（代码审查 S6：逐位敲年份时 0002-、0020-、0202- 都是合法日期，不能各写一次）；空串 = 清掉 */
 export function dateReady(v: string): boolean {
   return v === '' || (/^\d{4}-\d{2}-\d{2}$/.test(v) && Number(v.slice(0, 4)) >= 1900);
@@ -119,7 +124,7 @@ export function TextInput({ value, onCommit, type = 'text', title = false, ...p 
         d.flush();
       }}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' && type === 'text') (e.target as HTMLInputElement).blur();
+        if (type === 'text' && enterCommits(e)) e.currentTarget.blur();
       }}
     />
   );

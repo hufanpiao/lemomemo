@@ -2,9 +2,9 @@
 // 整屏提示（文案见 update.blocked.title）。这时 coldStart 还在等库打开、App 还没画，所以不放在顶部横幅里，
 // 由 root.tsx 的 watchCacheBlocked 另挂一个根画出来；别的窗口关掉、库打开以后（upgrade.blocked 变回 false）自动消失。
 // 显示和卸掉都由 watchCacheBlocked 管（BANNER-sugg ①：blocked 解除后要等 App 画出来再卸），这里不再读 upgrade.blocked。
-// 没有按钮：关掉别的窗口以后这一页自己接着打开，不用用户再点。读屏：role="alert"，标题、说明分别接 aria-labelledby / aria-describedby
+// 没有按钮：关掉别的窗口以后这一页自己接着打开，不用用户再点。样式用整屏提示共用的那一份（CacheTooNewScreen.module.css）。读屏：role="alert"，标题、说明分别接 aria-labelledby / aria-describedby
 import { useT } from '../kit/hooks/useT.ts';
-import styles from './CacheBlockedScreen.module.css';
+import styles from './CacheTooNewScreen.module.css';
 
 export function CacheBlockedScreen() {
   const t = useT();

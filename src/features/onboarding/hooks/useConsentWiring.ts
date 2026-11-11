@@ -116,8 +116,3 @@ export function useConsentHandlers(finish: () => void, deps: ConsentWiringDeps =
   );
   return { onDone, onRevoked, onDisabled, onSkip: finish };
 }
-
-/** 测试用 */
-export function resetConsentApiForTest(): void {
-  shared = null;
-}

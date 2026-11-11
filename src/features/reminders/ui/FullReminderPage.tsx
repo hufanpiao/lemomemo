@@ -7,12 +7,15 @@
 import { useState, useSyncExternalStore } from 'react';
 import { LocationText } from '../../../kit/components/LocationText.tsx';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
-import { backTo, canGoBack, goBack, replaceRoute } from '../../../app/router.ts';
+import { backTo } from '../../../app/router.ts';
+import { backOr } from '../../../app/router-levels.ts';
+import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { clock } from '../../../platform/clock.ts';
 import { reminderHash, type ReminderKind } from '../../../platform/native-bridge.ts';
+import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { eventEnd, eventStart, findReminder, parseReminderHash, relMsg, timeOf, type Reminder } from '../hooks/remind-view.ts';
-import { actionsOf, useMinuteNow, useReminderList, useRemindActions } from '../hooks/useReminders.ts';
+import { actionsOf, useReminderList, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
 import { Bell } from './Bell.tsx';
 import { pcClass } from './pc-class.ts';
@@ -49,10 +52,7 @@ function showNext(kind: ReminderKind, id: string, dueAt: number): void {
   window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL, newURL: window.location.href }));
 }
 
-function leave(): void {
-  if (canGoBack()) goBack();
-  else void replaceRoute('today');
-}
+const leave = (): void => backOr('today');
 
 export default function FullReminderPage() {
   const t = useRemindT();
@@ -78,10 +78,7 @@ export default function FullReminderPage() {
 
   const top = (
     <div className={styles.top}>
-      <Pressable type="button" className={styles.back} onClick={leave} data-testid="remind-full-back">
-        {/* “‹”只是样子，读屏只读“返回”（代码复审 N2，同设置页） */}
-        <span aria-hidden="true">‹</span> {t('remind.full.back', {})}
-      </Pressable>
+      <BackLink label={t('remind.full.back', {})} onBack={leave} testId="remind-full-back" />
       {live && entries.length > 1 && (
         <span className={styles.dim}>{t('remind.full.pos', { i: Math.max(1, entries.findIndex((e) => e.tag === r.tag) + 1), n: entries.length })}</span>
       )}

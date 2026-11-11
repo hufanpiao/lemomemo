@@ -3,10 +3,12 @@
 // • 插图（S3）：卡片顶部的图读 note_images 集合（data/note-list.ts 的 cover、images）；输入行的“图片”“拍照”先新建一条随手记
 //   （正文是输入框里的字，可以空），再把图插进这一条（data/image-uploader.ts）
 // • 删除：软删（deleted_at），进“最近删除”（ADR-006）；撤销把它改回 null。随手记没有提醒，remind 标记一律 false
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { currentTz } from '../../../core/current-tz.ts';
-import { saveDeleted, saveInsert, savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
+import { actionResult, type ActionResult } from '../../../core/action-result.ts';
+import { saveDeleted, saveInsert, savePatch } from '../../../core/edit-save.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
+import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { ruleCategory } from '../data/classify.ts';
@@ -14,10 +16,7 @@ import { BODY_MAX, newNoteRow } from '../data/note-edit.ts';
 import { aliveCount, categoryCounts, categoryNames, groupByDay, noteItems, type Row } from '../data/note-list.ts';
 
 export type { NoteGroup, NoteItem } from '../data/note-list.ts';
-export type ActionResult = 'ok' | 'failed' | 'readonly' | 'silent';
-const resultOf = (r: SaveOutcome): ActionResult => (r === 'saved' ? 'ok' : r === 'readonly' ? 'readonly' : r === 'switching' ? 'silent' : 'failed');
-
-const MIN = 60_000;
+export type { ActionResult };
 
 export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   const rows = useCollection<Row>('notes');
@@ -25,12 +24,8 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   const pics = useCollection<Row>('note_images');
   const locale = useUi((s) => s.locale);
   const [category, setCategory] = useState<string | null>(null);
-  const [now, setNow] = useState(() => clock.now());
   // 每分钟重算一次（过了半夜“今天”变“昨天”）
-  useEffect(() => {
-    const id = setInterval(() => setNow(clock.now()), MIN);
-    return () => clearInterval(id);
-  }, []);
+  const now = useMinuteNow();
   const tz = currentTz();
   const counts = useMemo(() => categoryCounts(rows, cats, locale), [rows, cats, locale]);
   // 筛的分类没了（最后一条删掉、分类被合并）：回到“全部”
@@ -47,7 +42,7 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
       const names = categoryNames(cats);
       const cat = ruleCategory({ title: '', body }, [...names].map(([cid, name]) => ({ id: cid, name })));
       const t = clock.now();
-      const r = resultOf(await saveInsert('notes', newNoteRow(id, { title: '', body, category_id: null }, t, cat), false));
+      const r = actionResult(await saveInsert('notes', newNoteRow(id, { title: '', body, category_id: null }, t, cat), false));
       return { result: r, id: r === 'ok' ? id : null };
     },
     [cats, newId],
@@ -55,12 +50,12 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   const remove = useCallback(
     async (id: string, deleted: boolean): Promise<ActionResult> => {
       if (!rows.some((x) => x.id === id)) return 'failed';
-      return resultOf(await saveDeleted('notes', id, deleted, clock.now(), false));
+      return actionResult(await saveDeleted('notes', id, deleted, clock.now(), false));
     },
     [rows],
   );
 
   /** 撤销刚新建的一条（undone，界面和“最近删除”都不显示）：输入行插图时，图片行没写成，不留一条空随手记 */
-  const discard = useCallback(async (id: string): Promise<ActionResult> => resultOf(await savePatch('notes', id, { undone: true, updated_at: clock.now() }, false)), []);
+  const discard = useCallback(async (id: string): Promise<ActionResult> => actionResult(await savePatch('notes', id, { undone: true, updated_at: clock.now() }, false)), []);
   return { items, groups, counts, category: active, setCategory, add, remove, discard, total: aliveCount(rows), now, tz };
 }

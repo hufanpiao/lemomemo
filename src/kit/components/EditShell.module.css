@@ -20,41 +20,6 @@
   margin-bottom: 8px;
 }
 
-/* 返回按钮统一写法（B2-UI-a U3-6；编辑页、整页提醒、设置各页同一段，设置页那几处由前端 B 照抄）：
-   “‹ 文字”15px 正文色、按钮自己的字体（font: inherit，防 Windows 版 webkit 落到宋体）；左边不留内边距，字和下面正文左边对齐；
-   点击区不够 44 × 44 的用 ::after 以按钮中心外扩（同 Settings.module.css 的 .segBtn::after），不挪位置 */
-.back {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-self: start;
-  min-height: var(--hit);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-15);
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.back::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: max(100%, var(--hit));
-  height: max(100%, var(--hit));
-  transform: translate(-50%, -50%);
-}
-
-.back:focus-visible {
-  border-radius: var(--r-sm);
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
 .kind {
   margin: 0;
   font-size: var(--fs-17);

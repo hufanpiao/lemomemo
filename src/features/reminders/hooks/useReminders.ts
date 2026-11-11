@@ -9,7 +9,9 @@
 // • useRemindActions：知道了、稍后（写 notified_for / snooze_at，经 data/remind-write）、完成待办；处理完从队列拿掉，稍后弹 2 秒“15:25 再提醒你”
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getBoot } from '../../../core/boot.ts';
+import { actionResult, type ActionResult as ActResult } from '../../../core/action-result.ts';
 import { savePatch } from '../../../core/edit-save.ts';
+import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { pruneCollapsed, remindQueue, removeRinging, resetRemindQueue, setRemindArmed, setRinging, setSnoozeNote, holdReminders, useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -20,13 +22,13 @@ import { isKeyboardOpen, watchKeyboard } from '../../../platform/viewport.ts';
 import { actionsFor, type RemindAction } from '../../../../shared/logic/remind-actions.ts';
 import { localDue, localText, shouldCloseShown, shownKey, staleShown } from '../data/local-notify.ts';
 import { MISSED_WINDOW_MS, occurrenceKey, ringing, type Reminder } from '../data/reminder-model.ts';
-import { ackAll as ackAllWrite, ackReminder, snoozeReminder, timingPending, type OutboxLikeItem, type SaveOutcome } from '../data/remind-write.ts';
+import { ackAll as ackAllWrite, ackReminder, snoozeReminder, timingPending, type OutboxLikeItem } from '../data/remind-write.ts';
 import type { dndOf } from '../data/remind-settings.ts';
 import { rangView, readSeen, writeSeen } from '../data/remind-seen.ts';
-import { ackLocally, clearRang, clearSessionAcked as clearAckedHere, loadRang, putBackDirtyRang, recordRang, setPushedRang, takeDirtyRang, useMinuteNow, useRangView, useReminderList, useRemindPrefs } from './remind-list.ts';
+import { ackLocally, clearRang, clearSessionAcked as clearAckedHere, loadRang, putBackDirtyRang, recordRang, setPushedRang, takeDirtyRang, useRangView, useReminderList, useRemindPrefs } from './remind-list.ts';
 
 // 算列表那一部分拆到 remind-list.ts（首屏瘦身 H1 第三轮），别处照旧从这里引
-export { rangSnapshot, useMinuteNow, useReminderList, useRemindPrefs } from './remind-list.ts';
+export { rangSnapshot, useReminderList, useRemindPrefs } from './remind-list.ts';
 
 /** “15:25 再提醒你”停留多久 */
 export const SNOOZE_NOTE_MS = 2_000;
@@ -289,8 +291,7 @@ export function useRemindEngine(sinceAt?: number): void {
   }, [list, known, tz]);
 }
 
-export type ActResult = 'ok' | 'failed' | 'readonly' | 'silent';
-const resultOf = (r: SaveOutcome): ActResult => (r === 'saved' ? 'ok' : r === 'readonly' ? 'readonly' : r === 'switching' ? 'silent' : 'failed');
+export type { ActResult };
 
 /** 知道了、稍后、完成待办 */
 export function useRemindActions() {
@@ -316,12 +317,12 @@ export function useRemindActions() {
         ackOnlyHere(r);
         return 'ok';
       }
-      const res = resultOf(await ackReminder(r, now));
+      const res = actionResult(await ackReminder(r, now));
       if (res === 'ok') removeRinging(r.tag);
       return res;
     }
     if (a.at === null) return 'failed';
-    const res = resultOf(await snoozeReminder(r, a.at, now));
+    const res = actionResult(await snoozeReminder(r, a.at, now));
     if (res === 'ok') {
       removeRinging(r.tag);
       setSnoozeNote(a.at);
@@ -337,7 +338,7 @@ export function useRemindActions() {
   const complete = useCallback(async (r: Reminder): Promise<ActResult> => {
     if (r.kind !== 'todo') return 'failed';
     const now = clock.now();
-    const res = resultOf(await savePatch('todos', r.id, { done: true, done_at: now, updated_at: now }, true));
+    const res = actionResult(await savePatch('todos', r.id, { done: true, done_at: now, updated_at: now }, true));
     if (res === 'ok') removeRinging(r.tag);
     return res;
   }, []);

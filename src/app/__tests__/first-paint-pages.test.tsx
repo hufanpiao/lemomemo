@@ -36,7 +36,7 @@ afterEach(() => {
 describe('根是不带 data-feature 的 <main> 的页面也算画完', { timeout: 20_000 }, () => {
   it('EditShell（编辑页）', () => {
     const { container } = render(
-      <EditShell kind="待办" backLabel="返回" onBack={() => undefined} status="">
+      <EditShell kind="待办" backLabel="返回" onBack={() => undefined} rec={{ row: undefined, status: 'idle', readonly: false, deleted: false, setDeleted: () => Promise.resolve('idle') }} own={{ empty: '', rejected: '' }} prefix="x-edit">
         <p>正文</p>
       </EditShell>,
     );

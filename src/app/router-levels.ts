@@ -1,6 +1,8 @@
 // 只有懒加载的页面才用的几个路由函数，从 router.ts 挪出来、不进首屏（R-372 首屏额度）：
-// 日历的 replaceInPage（日历内部一律原地换，R-372 ②）、编辑页的 replaceAddress。历史的 state、深度、编号仍由 router.ts 管
-import { commit, hrefOf, noteEntry, stateFor, type RouteName } from './router.ts';
+// 日历的 replaceInPage（日历内部一律原地换，R-372 ②）、编辑页的路由槽位 useEditRoute（三个编辑页的唯一出口，架构 10.1）、子页的返回 backOr。
+// 历史的 state、深度、编号仍由 router.ts 管
+import { useCallback, useReducer, useRef } from 'react';
+import { canGoBack, commit, goBack, hrefOf, noteEntry, parseHash, replaceRoute, stateFor, useRoute, type RouteName } from './router.ts';
 
 
 /**
@@ -21,4 +23,45 @@ export function replaceInPage(name: RouteName, ...params: string[]): Promise<voi
 export function replaceAddress(name: RouteName, ...params: string[]): void {
   window.history.replaceState(stateFor(0), '', hrefOf(name, ...params));
   noteEntry();
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+let newSeq = 0;
+
+/**
+ * 编辑页的路由槽位（#/todo、#/event、#/note 后面跟 id 或 new；不像 id 的当 'missing'）：key 给编辑器当 React key。
+ * 新建保存后地址换成这一条的 id，编辑器不重挂（key 不变，焦点里的草稿不丢，代码审查 S7）；换别的记录、再点“新建”才换一张。
+ * 保存可能晚到：用户已经换到下一张新建表（key 变了）或已经离开这一页，就只存不换地址
+ */
+export function useEditRoute(name: 'todo' | 'event' | 'note'): { id: string; key: string; onCreated(id: string): void } {
+  const raw = useRoute().params[0] ?? 'new';
+  const id = raw === 'new' || UUID.test(raw) ? raw : 'missing';
+  const [, bump] = useReducer((n: number) => n + 1, 0);
+  const slot = useRef<{ id: string; key: string; created: string | null } | null>(null);
+  if (slot.current === null || (id !== slot.current.id && id !== slot.current.created)) {
+    slot.current = { id, key: id === 'new' ? `new:${++newSeq}` : id, created: null };
+  }
+  const key = slot.current.key;
+  const onCreated = useCallback(
+    (cid: string) => {
+      const cur = slot.current;
+      if (!cur || cur.key !== key) return;
+      // slot.id 也换成新 id（key 不变）：之后再点“新建”路由回到 'new'，和 slot.id 不同，才会换一张空表（代码审查 N2）
+      cur.created = cid;
+      cur.id = cid;
+      const now = parseHash(window.location.hash);
+      if (now.name !== name || now.params[0] !== 'new') return;
+      replaceAddress(name, cid);
+      // replaceAddress 不通知路由的订阅者：外层重画一次，记下新地址（不然再 navigate 到 new 时地址看起来没变，不会重画）
+      bump();
+    },
+    [key, name],
+  );
+  return { id, key, onCreated };
+}
+
+/** 子页的“‹ 返回”：直接打开的（推送、书签、刷新）没有上一页，原地换成 fallback */
+export function backOr(fallback: RouteName): void {
+  if (canGoBack()) goBack();
+  else void replaceRoute(fallback);
 }

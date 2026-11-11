@@ -9,8 +9,9 @@
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { navigate } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
+import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { dayMsg, eventStart, modeOf, timeOf, upcoming, wdKey, type Reminder } from '../hooks/remind-view.ts';
-import { useMinuteNow, useReminderList } from '../hooks/useReminders.ts';
+import { useReminderList } from '../hooks/useReminders.ts';
 import { useRemindT, type RemindT } from '../hooks/useRemindT.ts';
 import { pcClass } from './pc-class.ts';
 import rs from './Remind.module.css';

@@ -11,6 +11,9 @@ import { useState, useSyncExternalStore } from 'react';
 import { readonlyIds } from '../../core/store.ts';
 import { requestAppUpdate } from '../../platform/native-bridge.ts';
 
+/** 只读提示里的“更新”：拉新版本（kit 的组件不能直接碰 platform，经这里） */
+export const appUpdate = (): void => void requestAppUpdate();
+
 export function useReadonlyIds(table: string): ReadonlySet<string> {
   const r = readonlyIds(table);
   return useSyncExternalStore(r.subscribe, r.getSnapshot, r.getSnapshot);
@@ -50,7 +53,7 @@ export function useReadonlyGuard<T = never>(): ReadonlyGuard<T> {
       setToastAt(Date.now());
     },
     close: (at) => setToastAt((x) => (at === undefined || x === at ? null : x)),
-    update: () => void requestAppUpdate(),
+    update: appUpdate,
     toast,
     show(x) {
       setToastAt(null);

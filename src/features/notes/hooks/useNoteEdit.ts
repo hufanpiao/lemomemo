@@ -9,7 +9,6 @@ import { useCallback, useEffect, useRef } from 'react';
 import { savePatch } from '../../../core/edit-save.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useEditRecord, type EditRecord } from '../../../kit/hooks/useEditRecord.ts';
-import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { clock } from '../../../platform/clock.ts';
 import { todayOf, type DateStr } from '../../../../shared/core/date.ts';
@@ -63,7 +62,7 @@ export function useNoteEdit(
   const seen = useRef<string | null>(null);
   const rowId = row ? String(row['id']) : null;
   // 只读行（TC-B4-09）不写：core 也会按 readonly_row 拒，页面层先跳过（代码审 11-11）
-  const ro = useReadonlyIds('notes').has(id) || rec.status === 'readonly';
+  const ro = rec.readonly;
   useEffect(() => {
     if (!ai || deleted || ro || rowId === null || seen.current === rowId) return;
     seen.current = rowId;

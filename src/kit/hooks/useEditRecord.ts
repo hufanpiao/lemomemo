@@ -20,6 +20,7 @@ import { currentTz } from '../../core/current-tz.ts';
 import { saveDeleted, saveInsert, savePatch, type SaveOutcome } from '../../core/edit-save.ts';
 import { clock } from '../../platform/clock.ts';
 import { useItem } from './useItem.ts';
+import { useReadonlyIds } from './useReadonly.ts';
 
 export type EditStatus = 'idle' | 'saving' | 'empty_title' | 'missing' | SaveOutcome;
 
@@ -61,6 +62,10 @@ export interface EditRecord<F> {
   savedId: string | null;
   deleted: boolean;
   status: EditStatus;
+  /** 只读行（0.27①“只读显示”）：core 的只读 id 里有这一条，或写入被拒 readonly；一进来就判断 */
+  readonly: boolean;
+  /** 输入一律禁用：找不到、已删除、只读 */
+  off: boolean;
   update(next: F): Promise<EditStatus>;
   setDeleted(deleted: boolean): Promise<EditStatus>;
   /** 调用方自己拦下了这次修改（比如时区不在白名单）：状态报 rejected，不写 */
@@ -78,6 +83,7 @@ export function useEditRecord<F>(spec: EditRecordSpec<F>): EditRecord<F> {
   const isNewRoute = spec.id === 'new';
   const [createdId, setCreatedId] = useState<string | null>(null);
   const recordId = isNewRoute ? createdId : spec.id;
+  const roIds = useReadonlyIds(spec.table);
   const row = useItem<{ id: string } & Record<string, unknown>>(spec.table, recordId);
   const [dirty, setDirtyState] = useState<Partial<F>>({});
   const [status, setStatus] = useState<EditStatus>('idle');
@@ -202,13 +208,18 @@ export function useEditRecord<F>(spec: EditRecordSpec<F>): EditRecord<F> {
     setStatus('rejected');
   }, []);
 
+  const deleted = row !== undefined && row['deleted_at'] !== null && row['deleted_at'] !== undefined;
+  const shownStatus: EditStatus = missing && status === 'idle' ? 'missing' : status;
+  const readonly = shownStatus === 'readonly' || roIds.has(spec.id);
   return {
     row,
     form,
     isNew: isNewRoute && createdId === null,
     savedId: recordId,
-    deleted: row !== undefined && row['deleted_at'] !== null && row['deleted_at'] !== undefined,
-    status: missing && status === 'idle' ? 'missing' : status,
+    deleted,
+    status: shownStatus,
+    readonly,
+    off: shownStatus === 'missing' || deleted || readonly,
     update,
     setDeleted,
     markRejected,

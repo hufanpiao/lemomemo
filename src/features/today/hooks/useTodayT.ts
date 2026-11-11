@@ -1,19 +1,16 @@
 // 功能 today 自己的 t()（架构 2.4）：词典在 ../i18n/，语言跟着 ui-store 的 locale；外加时长、时区名两个按语言拼的小工具
-import { useCallback } from 'react';
-import { createT, type Locale, type ParamsOf } from '../../../../shared/i18n/i18n.ts';
+import { createT, type Locale } from '../../../../shared/i18n/i18n.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { splitDur } from '../data/today-model.ts';
 import { ko } from '../i18n/ko.ts';
 import { zh } from '../i18n/zh.ts';
+import { makeUseT } from '../../../kit/hooks/useT.ts';
 
 export type TodayMsgKey = keyof typeof zh & string;
 
 const tToday = createT({ zh, ko });
 
-export function useTodayT() {
-  const locale = useUi((s) => s.locale);
-  return useCallback(<K extends TodayMsgKey>(key: K, params: ParamsOf<typeof zh, K>): string => tToday(key, params, locale), [locale]);
-}
+export const useTodayT = makeUseT({ zh, ko });
 
 export function useLocale(): Locale {
   return useUi((s) => s.locale);

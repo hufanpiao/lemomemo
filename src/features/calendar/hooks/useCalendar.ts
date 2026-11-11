@@ -7,7 +7,7 @@
 // • 日历内部一律原地换（R-372 ②，负责人选“算同一层（推荐）”）：翻月、切月/周、“今天”、年月选择、点某天进周视图、键盘 ← → 都用 replaceInPage，
 //   不记步数，左滑直接回到进日历之前那一层（今天）
 // • 节假日没拉到（离线）时 model.holidaysOffline = true，页面提示“联网后显示节假日”；韩文界面不加载农历（useLunar）
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { minOfDay, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { holidayCountries, holidayYears } from '../../../../shared/logic/calendar/holidays.ts';
@@ -16,45 +16,14 @@ import { buildMonth, type MonthCell } from '../../../../shared/logic/calendar/mo
 import { replaceInPage } from '../../../app/router-levels.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
+import { MQ_CAL_WIDE, useMedia } from '../../../kit/hooks/useMedia.ts';
+import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
-import { clock } from '../../../platform/clock.ts';
 import { calItemsOf, todoDueMinutes, type Row } from '../data/cal-data.ts';
 import { headerMonth, isCurrent, paramsOf, pickMonth, resolveView, shiftView, switchMode, todayView, type CalView } from '../data/cal-route.ts';
 import { useCalSettingValues } from './useCalSettings.ts';
 import { useHolidays } from './useHolidays.ts';
 import { useLunar, type LunarApi } from './useLunar.ts';
-
-const MIN = 60_000;
-/** 每分钟变一次的 now（对齐整分钟） */
-function useMinuteNow(): number {
-  const [now, setNow] = useState(() => clock.now());
-  useEffect(() => {
-    let t: ReturnType<typeof setTimeout>;
-    const tick = (): void => {
-      const n = clock.now();
-      setNow(n);
-      t = setTimeout(tick, MIN - (n % MIN) + 50);
-    };
-    t = setTimeout(tick, MIN - (clock.now() % MIN) + 50);
-    return () => clearTimeout(t);
-  }, []);
-  return now;
-}
-
-/** 窗口够宽（电脑档）时每格 4 个标签，手机 2 个（5.12、R-100） */
-const WIDE_QUERY = '(min-width: 768px)';
-
-function useWide(): boolean {
-  const [wide, setWide] = useState(() => typeof matchMedia === 'function' && matchMedia(WIDE_QUERY).matches);
-  useEffect(() => {
-    if (typeof matchMedia !== 'function') return;
-    const mq = matchMedia(WIDE_QUERY);
-    const on = (): void => setWide(mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  }, []);
-  return wide;
-}
 
 export interface CalendarModel {
   readonly view: CalView;
@@ -89,7 +58,8 @@ export function useCalendar(params: readonly string[]) {
   const today = todayOf(now, tz);
   const setting = useCalSettingValues();
   const weekStart = resolveWeekStart(setting.weekStart, locale);
-  const wide = useWide();
+  // 窗口够宽（电脑档）时每格 4 个标签，手机 2 个（5.12、R-100）
+  const wide = useMedia(MQ_CAL_WIDE);
 
   const paramKey = params.join('/');
   const resolved = useMemo(() => resolveView(paramKey === '' ? [] : paramKey.split('/'), today, weekStart), [paramKey, today, weekStart]);

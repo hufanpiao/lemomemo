@@ -12,8 +12,9 @@
 // 线框这一页的其余几行（日程默认提前、待办默认提醒、纪念日提醒、也装了电脑版时）不在 FA-4 范围，见交付说明
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { SettingsActionRow, SettingsCard, SettingsEntryRow } from '../../../kit/components/Settings/Settings.tsx';
+import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { upcoming } from '../hooks/remind-view.ts';
-import { useMinuteNow, useReminderList } from '../hooks/useReminders.ts';
+import { useReminderList } from '../hooks/useReminders.ts';
 import { useRemindSettings, type TestResult } from '../hooks/useRemindSettings.ts';
 import { useRemindT, type RemindT } from '../hooks/useRemindT.ts';
 import { NoticeCard } from './RemindNotice.tsx';

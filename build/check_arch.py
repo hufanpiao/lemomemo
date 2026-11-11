@@ -91,8 +91,9 @@ SOURCE_EXT = (".ts", ".tsx", ".mts", ".js", ".mjs")
 
 def a20_exempt(rel, text):
     # 公共词典；tz-zh、tz-ko 是 11-05 从公共词典拆出的时区词典（只给登录页恢复页、邮件用，不进主 App 首屏），逐个登记
-    # ro-zh、ro-ko 是 11-06 拆出的只读行词典（FA-2，只给按需下载的只读行部件用，不进首屏）
-    if rel in ("shared/i18n/zh.ts", "shared/i18n/ko.ts", "shared/i18n/tz-zh.ts", "shared/i18n/tz-ko.ts", "shared/i18n/ro-zh.ts", "shared/i18n/ro-ko.ts"):
+    # ro-zh、ro-ko 是 11-06 拆出的只读行词典（FA-2，只给按需下载的只读行部件用，不进首屏）；edit-zh、edit-ko 是三个编辑页共用的词典（11-11）
+    if rel in ("shared/i18n/zh.ts", "shared/i18n/ko.ts", "shared/i18n/tz-zh.ts", "shared/i18n/tz-ko.ts", "shared/i18n/ro-zh.ts", "shared/i18n/ro-ko.ts",
+               "shared/i18n/edit-zh.ts", "shared/i18n/edit-ko.ts"):
         return True
     if re.match(r"src/features/[^/]+/i18n/[^/]+\.ts$", rel):
         return True

@@ -8,7 +8,7 @@
 .bar,
 .fab {
   position: fixed;
-  z-index: 10;
+  z-index: var(--z-bar);
   box-shadow: var(--g-bar-shadow);
   touch-action: manipulation;
   user-select: none;
@@ -342,7 +342,7 @@
     inset: calc(36px + var(--inset-top)) auto auto 28px;
 
     /* R-363：画在侧栏上面（同为 z-index 10 时 DOM 里在后的侧栏盖住了“＋”，看不见也点不到）；只改层级，颜色、模糊、尺寸不动 */
-    z-index: 11;
+    z-index: var(--z-bar-over);
     width: 54px;
     height: 54px;
   }

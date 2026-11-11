@@ -11,76 +11,31 @@
 // • 只读行（S12，R-148，TC-B4-09；照待办编辑页）：core 的只读 id 里有这一条（或写入被拒 readonly）时，标题、正文、分类全部禁用，“⋯”（删除）灰掉，
 //   出“这条要新版本才能修改 · 更新”；电脑抽屉复用这个编辑器，列表页已在点开时拦下，这里兜住直接打开地址、打开后才变只读的情况
 // • 动效：只有抽屉最基本的滑入（R-376），按钮用 Pressable 的按下反馈
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { canGoBack, goBack, parseHash, replaceRoute, useRoute } from '../../../app/router.ts';
-import { replaceAddress } from '../../../app/router-levels.ts';
-import { FormButton } from '../../../kit/components/Form.tsx';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { backOr, useEditRoute } from '../../../app/router-levels.ts';
+import { DeletedNotice, ReadonlyNotice, useEditStatus, useEditT } from '../../../kit/components/EditNotices.tsx';
+import { enterCommits } from '../../../kit/components/Form.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
-import type { EditStatus } from '../../../kit/hooks/useEditRecord.ts';
 import { useHoldBusy } from '../../../kit/hooks/useHoldBusy.ts';
-import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { Pressable } from '../../../motion/components.ts';
-import { requestAppUpdate } from '../../../platform/native-bridge.ts';
 import { BODY_MAX, TITLE_MAX, useNoteEdit, type CategoryOption } from '../hooks/useNoteEdit.ts';
-import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
+import { useNotesT } from '../hooks/useNotesT.ts';
 import styles from './NoteEditPage.module.css';
 import { EditorImageBlock } from './NoteImages.tsx';
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const NONE = '';
 /** 正文停笔多久存一次 */
 export const BODY_IDLE_MS = 800;
 
-type StKey = Extract<NotesMsgKey, `note.edit.st.${string}`>;
-const STATUS_KEY: Record<EditStatus, StKey | null> = {
-  idle: 'note.edit.st.idle',
-  saving: 'note.edit.st.saving',
-  saved: 'note.edit.st.saved',
-  empty_title: 'note.edit.st.empty',
-  missing: 'note.edit.st.missing',
-  local_unavailable: 'note.edit.st.unavailable',
-  closing: 'note.edit.st.failed',
-  switching: null,
-  readonly: 'note.edit.st.readonly',
-  rejected: 'note.edit.st.rejected',
-};
-const BAD: ReadonlySet<EditStatus> = new Set(['missing', 'local_unavailable', 'closing', 'readonly', 'rejected']);
-
 /** 直接打开的（书签、刷新）没有上一页：退回随手记页 */
-function back(): void {
-  if (canGoBack()) goBack();
-  else void replaceRoute('notes');
-}
-
-let newSeq = 0;
+const back = (): void => backOr('notes');
 
 /** 手机整页编辑器（#/note/<id>、#/note/new） */
 export default function NoteEditPage() {
-  const route = useRoute();
-  const raw = route.params[0] ?? 'new';
-  const id = raw === 'new' || UUID.test(raw) ? raw : 'missing';
-  // 新建保存后地址换成这一条的 id，编辑器不重挂（同待办编辑页，代码审查 S7、N2）
-  const [, bump] = useReducer((n: number) => n + 1, 0);
-  const slot = useRef<{ id: string; key: string; created: string | null } | null>(null);
-  if (slot.current === null || (id !== slot.current.id && id !== slot.current.created)) {
-    slot.current = { id, key: id === 'new' ? `new:${++newSeq}` : id, created: null };
-  }
-  const key = slot.current.key;
-  const onCreated = useCallback(
-    (cid: string) => {
-      const cur = slot.current;
-      if (!cur || cur.key !== key) return;
-      cur.created = cid;
-      cur.id = cid;
-      const now = parseHash(window.location.hash);
-      if (now.name !== 'note' || now.params[0] !== 'new') return;
-      replaceAddress('note', cid);
-      bump();
-    },
-    [key],
-  );
+  // 新建保存后地址换成这一条的 id，编辑器不重挂（同待办编辑页）
+  const { id, key, onCreated } = useEditRoute('note');
   return <NoteEditor key={key} id={id} onCreated={onCreated} onClose={back} drawer={false} />;
 }
 
@@ -89,11 +44,9 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
   useHoldBusy('editing');
   const t = useNotesT();
   const ed = useNoteEdit(id, onCreated);
-  const { form, change, status } = ed;
-  const roIds = useReadonlyIds('notes');
-  const readonly = status === 'readonly' || roIds.has(id);
-  const statusKey = STATUS_KEY[status];
-  const off = status === 'missing' || ed.deleted || readonly;
+  const tEdit = useEditT();
+  const { form, change, readonly, off } = ed;
+  const st = useEditStatus(ed.status, { empty: t('note.edit.st.empty', {}), rejected: t('note.edit.st.rejected', {}) });
   const [menu, setMenu] = useState(false);
   const locale = useUi((s) => s.locale);
 
@@ -140,7 +93,7 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
             data-testid="note-edit-delete"
             data-no-proxy=""
           >
-            {t('note.edit.delete', {})}
+            {tEdit('edit.delete', {})}
           </Pressable>
         </Popover>
         {drawer ? (
@@ -150,24 +103,18 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
         ) : null}
       </div>
       {meta ? <p className={styles.meta} data-testid="note-edit-meta">{meta}</p> : null}
-      <p className={BAD.has(status) ? styles.statusBad : styles.status} role="status" data-testid="edit-status">
-        {statusKey && !readonly ? t(statusKey, {}) : ''}
+      <p className={st.bad ? styles.statusBad : styles.status} role="status" data-testid="edit-status">
+        {readonly ? '' : st.text}
       </p>
       {/* 只读：和“已删除 · 撤销”同一种提示行，一句话加“更新”（同待办编辑页） */}
       {readonly ? (
         <p className={styles.roNotice} role="status" data-testid="note-edit-ro">
-          <span>{t('note.edit.st.readonly', {})}</span>
-          <button type="button" onClick={() => void requestAppUpdate()} data-testid="note-edit-update">
-            {t('note.edit.update', {})}
-          </button>
+          <ReadonlyNotice plain testId="note-edit-update" />
         </p>
       ) : null}
       {ed.deleted ? (
         <p className={styles.notice} role="alert" data-testid="edit-notice">
-          {t('note.edit.deleted', {})}{' '}
-          <FormButton onClick={() => void ed.setDeleted(false)} data-testid="note-edit-undo">
-            {t('note.edit.undo', {})}
-          </FormButton>
+          <DeletedNotice onUndo={() => void ed.setDeleted(false)} testId="note-edit-undo" />
         </p>
       ) : null}
       <DraftArea
@@ -314,7 +261,7 @@ function DraftArea({ value, disabled, label, placeholder, maxLength, single = fa
       data-testid={testId}
       onFocus={() => setEditing(true)}
       onKeyDown={(e) => {
-        if (single && e.key === 'Enter' && !e.nativeEvent.isComposing) {
+        if (single && enterCommits(e)) {
           e.preventDefault();
           e.currentTarget.blur();
         }

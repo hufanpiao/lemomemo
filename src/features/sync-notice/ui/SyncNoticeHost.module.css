@@ -9,7 +9,7 @@
   left: 16px;
   right: 16px;
   bottom: var(--dock-bottom);
-  z-index: 31;
+  z-index: var(--z-float);
   display: flex;
   flex-direction: column;
   align-items: stretch;

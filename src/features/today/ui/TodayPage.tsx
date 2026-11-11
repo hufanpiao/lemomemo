@@ -15,31 +15,32 @@
 //      - 分包、本机数据晚到（页面已经画出来以后才有这一行），或者服务器回来发现别处已经处理、这一行要收起：外面的 GrowIn 让高度过渡，
 //        手指按着时先不动、滚过的页面补滚动位置（见 GrowIn.tsx）
 //   ② 再下面：“未同步，提醒可能不响”（UnsyncedRemindHint），浅灰条同日历页（R-346）；外面是常驻的 role="status" 空容器，内容后填进去读屏才播报，
-//      没内容时不占位（.notice 里没有 p）
+//      没内容时不占位（.notice 里没有 p）；麦克风被拒时同一个容器里再出一行（MicDeniedNote，B3 S23、Q-22）
 //   ③ 每行行尾“未同步”小标记（UnsyncedRemindMark，在行按钮里、标题和副行的右边；没有时那一格不画）
 //   ②③ 只看本机待同步队列、和引擎无关，同日历页直接挂，不等引擎（M1）
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记、圆圈变淡；点这一行、打勾、删除统一拦下，
 //   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）。顶部（日期下面）有带重复的只读行时出
 //   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner；4.1.0 的重复事项 4.0.x 只显示第一次）
 // • 液态玻璃底栏、“＋”、时间河、提醒按钮条不在这一段（FA-4、FA-7）
-import { Suspense, useState } from 'react';
+import { Suspense } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
-import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
+import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
 import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
-import { useToday, type ActionResult } from '../hooks/useToday.ts';
+import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
 import { TodayRo } from '../index.ts';
 import { GrowIn } from './GrowIn.tsx';
+import MicDeniedNote from './MicDeniedNote.tsx';
 import { NowCard } from './NowCard.tsx';
 import styles from './TodayPage.module.css';
-import type { TodayRoProps, TodayToast } from './TodayToasts.tsx';
+import type { TodayRoProps } from './TodayToasts.tsx';
 
 // 页底提示条、顶部重复事项横幅、只读行的行尾标记和打勾圆圈：同一个按需下载的文件，按 part 画哪一块；
 // 懒加载写在功能入口 ../index.ts（预载名单和主包共用，首屏预算 150 KB，FA-2 返工）
@@ -89,34 +90,14 @@ export default function TodayPage() {
   const d = useToday();
   /** 引擎 armed 或出错（含 App 的看门狗：迟迟不 armed 也算出错）才挂“错过的提醒”（REMIND-shown-persist 修订 1 P2） */
   const missedOn = useRemindQueue((s) => s.armedSince !== null || s.remindDown);
-  // 打勾：先留住按下之前的两张列表 --dur-ui（圆圈在原地填满），再换成新的（没赶上 → 今天的安排）；
-  // 留着的期间圆圈按“刚点成什么”画（picked），几条连着点就一起挪
+  // 打勾先留住按下之前的两张列表 --dur-ui（圆圈在原地填满），再换成新的（没赶上 → 今天的安排）；只读行统一拦下，
+  // 撤销条、出错条也在 g 里（kit 的 useListActions）
   const hv = useHoldView({ late: d.late, events: d.events, todos: d.todos });
   const v = hv.view;
-  const [picked, setPicked] = useState<ReadonlyMap<string, boolean>>(() => new Map());
-  // 只读行统一拦下（拦下时收起撤销条、出错条，出“这条要新版本才能修改 · 更新”）；撤销条、出错条也在 g 里
-  const g = useReadonlyGuard<TodayToast>();
-  const roT = (id: string) => g.isRo('todo', id);
+  const a = useListActions(hv, { toggle: d.toggleDone, remove: (id, deleted) => d.remove('todos', id, deleted) });
+  const { g, tick, shown, del } = a;
+  const roT = a.isRo;
   const open = (kind: 'event' | 'todo', id: string) => (g.isRo(kind, id) ? g.block() : void navigate(kind, id));
-  const tick = (id: string, on: boolean) => {
-    if (roT(id)) return g.block();
-    setPicked((m) => new Map(hv.holding ? m : []).set(id, on));
-    hv.hold();
-    void d.toggleDone(id, on).then(report);
-  };
-  const shown = (id: string, done: boolean) => (hv.holding ? (picked.get(id) ?? done) : done);
-
-  const report = (r: ActionResult) => {
-    if (r === 'readonly') g.block();
-    else if (r === 'failed') g.show({ kind: 'error' });
-  };
-  const del = async (id: string) => {
-    if (roT(id)) return g.block();
-    hv.release();
-    const r = await d.remove('todos', id, true);
-    if (r === 'ok') g.show({ kind: 'undo', id });
-    else report(r);
-  };
 
   return (
     <main className={styles.page} data-feature="today" data-testid="today">
@@ -149,6 +130,7 @@ export default function TodayPage() {
             <UnsyncedRemindHint />
           </Suspense>
         </QuietBoundary>
+        <MicDeniedNote />
       </div>
 
       <NowCard card={d.card} now={d.now} tz={d.tz} today={d.today} tomorrowFirst={d.tomorrowFirst} />
@@ -243,7 +225,7 @@ export default function TodayPage() {
 
       {/* 页底提示条（撤销条、出错条、只读提示条）：真有一条时才下载（首屏预算，FA-2 返工）；分包下不来时不画、不把整页换成出错页 */}
       {g.toast !== null || g.toastAt !== null ? (
-        <Ro part="toasts" g={g} t={t} onUndo={(id) => void d.remove('todos', id, false).then(report)} />
+        <Ro part="toasts" g={g} t={t} onUndo={a.undo} />
       ) : null}
     </main>
   );

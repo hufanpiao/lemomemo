@@ -6,7 +6,8 @@
 // • 隐私记有自己的“最近删除”（R-193，B5），这里的“全部清空”不含隐私记（服务器只清四张表的普通行）
 // • 路由 #/trash（app/router.ts 的 ROUTE_NAMES、today/index.ts 的 routes）；返回：App 里有上一页就退回，否则换到设置（S11）
 import { useEffect, useRef, useState } from 'react';
-import { canGoBack, goBack, replaceRoute } from '../../../app/router.ts';
+import { backOr } from '../../../app/router-levels.ts';
+import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { Dialog, DialogClose } from '../../../kit/components/Dialog.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import list from '../../../kit/components/List.module.css';
@@ -19,10 +20,7 @@ import { useTrash, type RestoreResult } from '../hooks/useTrash.ts';
 import { useTrashPurge, type PurgeMsg } from '../hooks/useTrashPurge.ts';
 import styles from './RecentlyDeletedPage.module.css';
 
-function back(): void {
-  if (canGoBack()) goBack();
-  else void replaceRoute('settings');
-}
+const back = (): void => backOr('settings');
 
 export default function RecentlyDeletedPage() {
   const t = useTrashT();
@@ -82,9 +80,7 @@ export default function RecentlyDeletedPage() {
   return (
     <main className={styles.page} data-feature="trash" data-testid="trash">
       <header className={styles.top}>
-        <Pressable className={styles.back} onClick={back} data-testid="trash-back">
-          {`‹ ${t('trash.back', {})}`}
-        </Pressable>
+        <BackLink label={t('trash.back', {})} onBack={back} testId="trash-back" />
         <h1 className={styles.h1}>{t('trash.title', {})}</h1>
         {items.length > 0 ? (
           <Pressable className={styles.clear} aria-disabled={off || undefined} onClick={() => { setMsg(null); purge.askAll(); }} data-testid="trash-clear">

@@ -140,3 +140,38 @@ describe('Check look="switch"', () => {
     expect(screen.queryByRole('switch')).toBeNull();
   });
 });
+
+describe('回车提交和输入法组字（Q-21）', () => {
+  const typed = (onCommit: (v: string) => void) => {
+    render(<TextInput value="" onCommit={onCommit} data-testid="t" />);
+    const el = screen.getByTestId('t');
+    el.focus();
+    fireEvent.focus(el);
+    fireEvent.change(el, { target: { value: '한글' } });
+    return el;
+  };
+
+  it('中文、韩文输入法组字时按回车是选字：不失焦、不交（isComposing）', () => {
+    const onCommit = vi.fn();
+    const el = typed(onCommit);
+    fireEvent.keyDown(el, { key: 'Enter', isComposing: true });
+    expect(document.activeElement).toBe(el);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it('Safari 选字那一下回车的 keyCode 是 229（isComposing 为假）：同样不失焦、不交', () => {
+    const onCommit = vi.fn();
+    const el = typed(onCommit);
+    fireEvent.keyDown(el, { key: 'Enter', keyCode: 229 });
+    expect(document.activeElement).toBe(el);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it('组字结束后再按回车：失焦并交', () => {
+    const onCommit = vi.fn();
+    const el = typed(onCommit);
+    fireEvent.keyDown(el, { key: 'Enter', keyCode: 13 });
+    expect(document.activeElement).not.toBe(el);
+    expect(onCommit).toHaveBeenCalledWith('한글');
+  });
+});

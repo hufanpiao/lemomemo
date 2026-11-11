@@ -19,7 +19,7 @@
   top: calc(16px + var(--inset-top, 0px));
   right: 16px;
   bottom: calc(16px + var(--inset-bottom, 0px));
-  z-index: 20;
+  z-index: var(--z-drawer);
   width: min(400px, calc(100vw - 160px));
   padding: 14px 20px 24px;
   overflow-y: auto;

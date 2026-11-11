@@ -1,0 +1,14 @@
+/* 列表页“没保存上”的出错条（ListToasts.tsx）：和撤销条同一个位置；只用令牌（A11） */
+.error {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: var(--dock-bottom);   /* 离底 118px、键盘弹起时让开；变量在 styles/base.css（K8 冲突提示 3.1） */
+  max-width: 528px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  border-radius: var(--r-lg);
+  background: var(--toast-bg);
+  color: var(--toast-fg);
+  font-size: var(--fs-14);
+}

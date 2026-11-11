@@ -6,6 +6,9 @@
 // 纯 TS，很小，进首屏
 import type { DateStr } from '../../../shared/core/date.ts';
 
+/** 随手记页底部输入框的 id：底栏 / 侧栏的“＋”在随手记页按它聚焦（R-380；App 和随手记页都从这里引） */
+export const NOTES_INPUT_ID = 'notes-input';
+
 let day: DateStr | null = null;
 let title: string | null = null;
 

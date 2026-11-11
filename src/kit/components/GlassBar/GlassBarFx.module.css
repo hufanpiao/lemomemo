@@ -26,7 +26,7 @@
   right: 0;
   bottom: calc(0px - var(--vh-gap, 0px));
   left: 0;
-  z-index: 9;
+  z-index: var(--z-bar-fx);
   height: calc(8px + var(--band-fade) + var(--inset-bottom));
   pointer-events: none;
   background: linear-gradient(to bottom, transparent 0, var(--bg) var(--band-fade), var(--bg) 100%);
@@ -57,7 +57,7 @@
   right: 0;
   bottom: calc(6px + var(--inset-bottom) - var(--vh-gap, 0px));
   left: 0;
-  z-index: 9;
+  z-index: var(--z-bar-fx);
   height: calc(64px + var(--edge-fade));
   pointer-events: none;
   backdrop-filter: blur(3px); /* avoid-ai-design-ignore: K3 负责人 11-06 选 B12：底栏上沿外渐变模糊 */

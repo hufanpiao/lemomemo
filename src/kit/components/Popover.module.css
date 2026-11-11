@@ -1,6 +1,6 @@
 /* 层级 80：Radix 经 Portal 挂到 body，要压过顶部底色条（1）、版本横幅（50）和弹层（70），弹层里打开的浮层也在上面（SAFETOP-sugg ①） */
 .content {
-  z-index: 80;
+  z-index: var(--z-popover);
   padding: 12px;
   border-radius: var(--r-md);
   background: var(--sheet-bg);

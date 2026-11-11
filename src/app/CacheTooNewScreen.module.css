@@ -1,8 +1,8 @@
-/* 本机库来自更新的版本的整屏提示（K6-ver-new）：盖住整个视口，不给继续使用 */
+/* 整屏提示共用的样式（本机库来自更新的版本 K6-ver-new、被别的标签页挡住、退出没完成、出错兜底）：盖住整个视口，不给继续使用 */
 .screen {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: var(--z-screen);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -27,6 +27,11 @@
   color: var(--text-2);
   font-size: var(--fs-15);
   line-height: 1.6;
+}
+
+/* 没有按钮的（被别的标签页挡住）：说明下面不留空 */
+.body:last-child {
+  margin-bottom: 0;
 }
 
 .actions {

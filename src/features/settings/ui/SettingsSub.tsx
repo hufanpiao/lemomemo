@@ -2,8 +2,8 @@
 // 首页一行入口点进 #/settings/<名字>（账号、日历、提醒与通知、数据、电脑、关于）；注销页 #/settings/delete 从账号二级页点进去；
 // 提醒与通知下面还有一层 #/settings/remind/upcoming、show-title、dnd（R-347 照线框 sR7）
 import { Component, Suspense, useEffect, useRef, type ReactNode } from 'react';
+import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { RemindDnd, RemindShowTitle, RemindUpcoming } from '../../reminders/index.ts';
-import { Pressable } from '../../../motion/components.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
 import styles from './SettingsPage.module.css';
 
@@ -35,10 +35,7 @@ export function SubView({ back, title, backId, onBack, children }: { back: strin
   return (
     <>
       <header className={styles.top}>
-        <Pressable className={styles.backBtn} onClick={onBack} data-testid={backId}>
-          {/* “‹”只是样子，读屏名只读“设置”（L2） */}
-          <span aria-hidden="true">‹</span> {back}
-        </Pressable>
+        <BackLink label={back} onBack={onBack} testId={backId} />
         <h1 className={styles.title} ref={titleRef} tabIndex={-1}>
           {title}
         </h1>

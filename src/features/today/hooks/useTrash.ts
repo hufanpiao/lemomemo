@@ -2,15 +2,15 @@
 // 永久删除、全部清空（purge_deleted，要联网）在 B4（0.29 续第 121 条⑧），这里不做
 import { useCallback, useMemo } from 'react';
 import { currentTz } from '../../../core/current-tz.ts';
+import { actionResult, type ActionResult as RestoreResult } from '../../../core/action-result.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
+import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { clock } from '../../../platform/clock.ts';
-import { setDeleted, type SaveOutcome, type TrashTable } from '../data/today-actions.ts';
+import { setDeleted, type TrashTable } from '../data/today-actions.ts';
 import { trashOf } from '../data/trash.ts';
 import type { Row } from '../data/today-model.ts';
-import { useMinuteNow } from './useToday.ts';
 
-export type RestoreResult = 'ok' | 'failed' | 'readonly' | 'silent';
-const resultOf = (r: SaveOutcome): RestoreResult => (r === 'saved' ? 'ok' : r === 'readonly' ? 'readonly' : r === 'switching' ? 'silent' : 'failed');
+export type { RestoreResult };
 
 export function useTrash() {
   const events = useCollection<Row>('events');
@@ -22,7 +22,7 @@ export function useTrash() {
     async (table: TrashTable, id: string): Promise<RestoreResult> => {
       const r = (table === 'todos' ? todos : table === 'notes' ? notes : events).find((x) => x.id === id);
       if (!r) return 'failed';
-      return resultOf(await setDeleted(table, r, false, clock.now(), currentTz()));
+      return actionResult(await setDeleted(table, r, false, clock.now(), currentTz()));
     },
     [events, todos, notes],
   );

@@ -13,8 +13,9 @@ import { collapseRinging, useRemindQueue, visibleEntry } from '../../../kit/stat
 import { Appear } from '../../../motion/components.ts';
 import { clock } from '../../../platform/clock.ts';
 import { openReminder } from './open-reminder.ts';
+import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { findReminder, timeOf, whenMsg, type Reminder } from '../hooks/remind-view.ts';
-import { actionsOf, useMinuteNow, useReminderList, useRemindEngine, useRemindActions } from '../hooks/useReminders.ts';
+import { actionsOf, useReminderList, useRemindEngine, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
 import { pcClass } from './pc-class.ts';
 import { RemindButtons } from './RemindButtons.tsx';

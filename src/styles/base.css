@@ -27,6 +27,24 @@ html[data-app] {
 /* 页面顶部要留的安全区（架构师 10-30 第 7 点）：顶部有版本横幅时（UpdateBanner 在根节点设 data-top-banner）由横幅占安全区，
    页面不再留。页面顶部的 padding 写 var(--safe-top)，不直接写 env(safe-area-inset-top)；要安全区本身（不管有没有横幅）用 var(--inset-top） */
 :root {
+  /* 层级只在这里定（架构 10.1“层级”唯一出口）：页面内容都不写 z-index，贴在视口上的各层按下面从低到高；
+     组件内部自成层叠上下文的小数（-1、0、1、2）照写在组件里 */
+  --z-strip: 1;          /* 顶部状态栏底色条、顶部模糊带：压住页面内容 */
+  --z-inrow: 5;          /* 随手记底部输入行 */
+  --z-bar-fx: 9;         /* 底栏实色带、上沿渐隐：在底栏下面 */
+  --z-bar: 10;           /* 底栏、“＋” */
+  --z-bar-over: 11;      /* 宽屏侧栏的“＋”、打字条的提示：压住底栏 */
+  --z-drawer: 20;        /* 随手记详情抽屉 */
+  --z-pick: 29;          /* 日历年月选择的遮罩 */
+  --z-toast: 30;         /* 撤销条、出错条、打字条“已记下” */
+  --z-float: 31;         /* 打字条、冲突提示、“＋”等待 */
+  --z-remind: 40;        /* 提醒横幅、按钮条、弹层 */
+  --z-remind-note: 41;   /* 提醒弹层上的小提示 */
+  --z-banner: 50;        /* 版本横幅 */
+  --z-probe: 60;         /* 诊断用的键盘辅助条探针 */
+  --z-dialog: 70;        /* 弹层遮罩和内容 */
+  --z-popover: 80;       /* Popover（经 Portal 挂到 body） */
+  --z-screen: 100;       /* 整屏提示 */
   --inset-top: env(safe-area-inset-top);
 
   /* 11-06 评审 T-1：页面顶部比安全区多留 --top-fade，静止时顶部模糊带里没有内容 */
@@ -129,7 +147,7 @@ body::before {
   top: 0;
   right: 0;
   left: 0;
-  z-index: 1;
+  z-index: var(--z-strip);
   height: calc(var(--inset-top) + var(--top-fade));
   background: var(--safe-top-bg, var(--bg));
   background-size: 100vw 100vh;
@@ -157,7 +175,7 @@ body::before {
 .lemo-top {
   position: fixed;
   inset: 0;
-  z-index: 1;
+  z-index: var(--z-strip);
   pointer-events: none;
 }
 

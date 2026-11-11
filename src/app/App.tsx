@@ -34,10 +34,10 @@ import { ErrorBoundary } from './ErrorBoundary.tsx';
 import { bannerKind } from './banner-kind.ts';
 import { featureRoutes, offRoutes, type FeatureRoute } from './features.ts';
 import { navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from './router.ts';
-import { NOTES_INPUT_ID, tabBarFor } from './tab-of.ts';
+import { tabBarFor } from './tab-of.ts';
 import { PlusSlot, preloadPlus } from './plus-slot.tsx';
 import type { DateStr } from '../../shared/core/date.ts';
-import { setNewItemDay, setNewItemTitle, takeNewItemDay } from '../kit/state/new-item.ts';
+import { NOTES_INPUT_ID, setNewItemDay, setNewItemTitle, takeNewItemDay } from '../kit/state/new-item.ts';
 
 // CSP 试验页（B0 第一项验证）：只在非正式版里挂。用构建期常量 import.meta.env.MODE（构建时替换成字面量），
 // 正式构建时 rollup 把试验页整块删掉（运行时的 isProduction 删不掉，块会留在正式产物里）；build/check_no_probe.mjs 断言正式产物里没有它

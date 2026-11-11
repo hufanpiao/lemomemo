@@ -12,19 +12,22 @@
 // • 底部输入行（视觉稿 .inrow、线框 COMPOSER）：右边是“图片”“拍照”（主持人定 3），打了字才出“记下”；回车或点“记下”就存，新的一条出现在最上面、时间写“刚记下”。
 //   选了图：先用输入框里的字（可以空）新建一条随手记，再把图插进去（S3，ui/NoteImages.tsx）。电脑上输入行铺满内容栏、左右各留 22px（DK.notes）
 // • 插图（S3）：瀑布流卡片顶部放第一张（16:10、右上角“+N”）；插入、上传失败出提示条，空间满了的带“最近删除”入口
-// • 底栏 / 侧栏的“＋”在这一页直接把光标放进输入行（R-380，线框“低 1”；app/App.tsx 按 tab-of.ts 的 NOTES_INPUT_ID 找）
+// • 底栏 / 侧栏的“＋”在这一页直接把光标放进输入行（R-380，线框“低 1”；app/App.tsx 按 kit/state/new-item.ts 的 NOTES_INPUT_ID 找）
 // • 这一批不做：隐私记那一行（B5）、合并分类提示（S7）
 // • 插图（S3）：卡片顶上放第一张图（多张标“+N”），列表行有图时在“⋯”前放缩略图；输入行只有“图片”（拍照在编辑页）
 // • 只读行（S12，R-148，TC-B4-09；照待办页）：带认不出的值的行（core 的 readonlyIds）标“要新版本”（单独一行：瀑布流在正文下、底行上，列表在摘要行下），菜单里的“删除”变淡；点开、删除统一拦下
 //   （不进编辑器、不开抽屉、不写），出 kit 的“这条要新版本才能修改 · 更新”（状态在 hooks/useNotesToast.ts）。左滑、多选还没有入口，以后加时同样先判只读
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
 import { rlog } from '../../../platform/run-log-api.ts';
-import { useEffect, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
+import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
+import { NOTES_INPUT_ID } from '../../../kit/state/new-item.ts';
 import { ReadonlyMark, ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
+import { useEditT } from '../../../kit/components/EditNotices.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -38,21 +41,7 @@ import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, PickButtons, useAddImage, type ImgMsgKey } from './NoteImages.tsx';
 import styles from './NotesPage.module.css';
 
-/** 底部输入框的 id：底栏 / 侧栏的“＋”按它聚焦（R-380）。和 app/tab-of.ts 的 NOTES_INPUT_ID 同一个值（功能不能引 app 的这个文件，测试对着两边核） */
-const NOTES_INPUT_ID = 'notes-input';
-
 type Toast = { kind: 'undo'; id: string } | { kind: 'error' } | { kind: 'img'; key: ImgMsgKey; trash: boolean };
-
-/** 有侧栏的宽窗口（和 GlassBar 侧栏同一个断点）：点开随手记用右边抽屉，不换页 */
-const WIDE = '(width >= 900px)';
-const wideNow = (): boolean => typeof window.matchMedia === 'function' && window.matchMedia(WIDE).matches;
-const onWide = (fn: () => void): (() => void) => {
-  if (typeof window.matchMedia !== 'function') return () => undefined;
-  const m = window.matchMedia(WIDE);
-  m.addEventListener('change', fn);
-  return () => m.removeEventListener('change', fn);
-};
-const useWide = (): boolean => useSyncExternalStore(onWide, wideNow, () => false);
 
 /** 分类色点（只在有颜色时画） */
 const Dot = ({ color, big }: { color: string | null; big?: boolean }) =>
@@ -65,9 +54,11 @@ export default function NotesPage() {
 
 function NotesList() {
   const t = useNotesT();
+  const tEdit = useEditT();
   const locale = useUi((s) => s.locale);
   const view = useNotesViewValue();
-  const wide = useWide();
+  // 有侧栏的宽窗口（和 GlassBar 侧栏同一个断点）：点开随手记用右边抽屉，不换页
+  const wide = useMedia(MQ_SIDEBAR);
   const l = useNoteList();
   const { toast, setToast, guard, isRo, block, show, report, up } = useNotesToast<Toast>({ kind: 'error' }, (x) => x.kind === 'undo');
   const [menu, setMenu] = useState<string | null>(null);
@@ -216,7 +207,7 @@ function NotesList() {
           data-testid="notes-toast"
         />
       ) : null}
-      <ReadonlyToast guard={guard} message={t('note.edit.st.readonly', {})} testId="notes-ro-toast" />
+      <ReadonlyToast guard={guard} message={tEdit('edit.st.readonly', {})} testId="notes-ro-toast" />
     </main>
   );
 }

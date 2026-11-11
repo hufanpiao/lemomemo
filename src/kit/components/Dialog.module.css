@@ -4,14 +4,14 @@
 .scrim {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: var(--z-dialog);
   background: var(--scrim);
 }
 
 /* 滑动的是这一层：离底边的 16px 算在它自己的高度里，translateY(100%) 时整块（连阴影）都出了屏幕，不在底边留一条 */
 .dock {
   position: fixed;
-  z-index: 70;
+  z-index: var(--z-dialog);
   left: 0;
   right: 0;
   bottom: 0;

@@ -233,7 +233,7 @@
 .pickScrim {
   position: fixed;
   inset: 0;
-  z-index: 29;
+  z-index: var(--z-pick);
   background: var(--scrim);
 }
 

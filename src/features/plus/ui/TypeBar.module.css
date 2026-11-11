@@ -5,7 +5,7 @@
   left: 16px;
   right: 16px;
   bottom: var(--dock-bottom);
-  z-index: 31;
+  z-index: var(--z-float);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -26,7 +26,7 @@
   left: 16px;
   right: 16px;
   bottom: var(--dock-bottom);
-  z-index: 30;
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -104,7 +104,7 @@
 /* “＋”上方的小气泡（B3 S23，PlusHint.tsx 用；放在这个文件里是为了不多一个样式块（首屏主块的依赖表少一项，主持人 11-09 定）；线框 .hint：深底白字、圆角 14、下沿小三角指着“＋”的中线） */
 .hint {
   position: fixed;
-  z-index: 11;
+  z-index: var(--z-bar-over);
   max-width: calc(100vw - 28px);
   padding: 8px 12px;
   border-radius: 14px;

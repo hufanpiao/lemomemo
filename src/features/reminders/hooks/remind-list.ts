@@ -1,40 +1,16 @@
 // 提醒列表（从 useReminders 拆出来的轻量部分；今天页首屏的“错过 N 条提醒”一行只用这些，首屏瘦身 H1 第三轮）：
-// • useMinuteNow、useRemindPrefs、useReminderList：从本机的 events、todos、settings 现算所有提醒（remindAtOf 和服务器同一份，TC-B2-29）
+// • useRemindPrefs、useReminderList：从本机的 events、todos、settings 现算所有提醒（remindAtOf 和服务器同一份，TC-B2-29）
 // • 本次会话只在本机处理过的集合（R4-L1）、本次打开以后响过的（rangSnapshot，R-336）：引擎（useReminders）写，这里和“错过的提醒”读
 // • 不带引擎、本机通知、写服务器、弹层这些：那些在 useReminders.ts，首屏用不到
 // useReminders.ts 原样转出这里的导出，别处照旧从 useReminders 引
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 import { currentTz } from '../../../core/current-tz.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
-import { clock } from '../../../platform/clock.ts';
 import { allReminders, type Rang, type RangMap, type Reminder, type Row } from '../data/reminder-model.ts';
 import { defaultTimeOf, dndOf, KEY_DEFAULT_TIME, KEY_DND, KEY_SHOW_TITLE, settingValue, showTitleOf, type SettingRow } from '../data/remind-settings.ts';
 
 // “错过的提醒”一行要的纯函数和类型（A1：ui 经 hooks 拿 data 的东西）
 export { missed, type Reminder } from '../data/reminder-model.ts';
-
-const MIN = 60_000;
-
-/** 每分钟变一次的 now（对齐整分钟，clock.now()）；测试里 spyOn clock.now 就能固定 */
-export function useMinuteNow(): number {
-  const [now, setNow] = useState(() => clock.now());
-  useEffect(() => {
-    let t: ReturnType<typeof setTimeout>;
-    const tick = (): void => {
-      const n = clock.now();
-      setNow(n);
-      t = setTimeout(tick, MIN - (n % MIN) + 50);
-    };
-    t = setTimeout(tick, MIN - (clock.now() % MIN) + 50);
-    // 时钟偏差变了也重算一次（K8-clock）
-    const off = clock.subscribe(() => setNow(clock.now()));
-    return () => {
-      clearTimeout(t);
-      off();
-    };
-  }, []);
-  return now;
-}
 
 /** 提醒相关的三项设置的类型 */
 export type RemindPrefs = ReturnType<typeof useRemindPrefs>;

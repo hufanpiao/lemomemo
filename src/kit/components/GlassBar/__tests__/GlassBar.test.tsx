@@ -233,7 +233,8 @@ describe('GlassBar', () => {
     // 底边 = 红线（“＋”底边 6px），上沿 = 底栏上沿（8 + 62 = 70px）再往上 --edge-fade
     expect(edge).toMatch(/bottom: calc\(6px \+ var\(--inset-bottom\) - var\(--vh-gap, 0px\)\);/); // --vh-gap 平时 0（Q-13 焊死）
     expect(edge).toMatch(/height: calc\(64px \+ var\(--edge-fade\)\);/);
-    expect(edge).toMatch(/z-index: 9;/); // 和实色带同一层、在底栏（10）下面
+    expect(edge).toMatch(/z-index: var\(--z-bar-fx\);/); // 和实色带同一层、在底栏（--z-bar 10）下面
+    expect(base).toMatch(/--z-bar-fx: 9;/);
     expect(edge).toMatch(/pointer-events: none;/);
     // 遮罩：第一层是从透明到满的渐隐，往下减掉“＋”的圆、底栏两头的圆和中段的矩形（尺寸照 GlassBar.module.css：底栏高 62、“＋”66）
     expect(edge).toMatch(/mask-image:\s*linear-gradient\(to bottom, transparent 0, var\(--bg\) var\(--edge-fade\)\),\s*radial-gradient\(circle at var\(--edge-fab-x\) var\(--edge-cy\)/);

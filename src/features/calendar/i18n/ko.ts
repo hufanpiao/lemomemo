@@ -31,17 +31,6 @@ export const ko = {
   'event.edit.projectPh': '예: 회사, 집', // REVIEW(ko) G11 占位
   'event.edit.notePh': '덧붙일 내용 (선택)', // REVIEW(ko) G11 占位
   'event.edit.raw': '원래 한 말', // REVIEW(ko)
-  'event.edit.delete': '삭제', // REVIEW(ko)
-  'event.edit.deleted': '삭제했어요. 30일 안에는 ‘최근 삭제’에서 되살릴 수 있어요.', // REVIEW(ko)
-  'event.edit.undo': '되돌리기', // REVIEW(ko)
-  'event.edit.update': '업데이트', // REVIEW(ko)
-  'event.edit.st.idle': '고치면 자동으로 저장돼요', // REVIEW(ko)
-  'event.edit.st.saving': '저장 중…', // REVIEW(ko)
-  'event.edit.st.saved': '자동 저장됨', // REVIEW(ko)
   'event.edit.st.empty': '제목을 써야 저장돼요', // REVIEW(ko)
-  'event.edit.st.failed': '저장하지 못했어요. 내용은 그대로 있으니 잠시 후 다시 고쳐 주세요', // REVIEW(ko)
-  'event.edit.st.unavailable': '지금 이 기기에 저장할 수 없어요. 내용은 그대로 있으니 잠시 후 다시 고쳐 주세요', // REVIEW(ko)
   'event.edit.st.rejected': '형식이 맞지 않아 저장하지 못했어요 (제목이 너무 길거나 날짜·시간대가 맞지 않아요)', // REVIEW(ko)
-  'event.edit.st.readonly': '새 버전에서만 고칠 수 있어요', // REVIEW(ko)
-  'event.edit.st.missing': '이 항목을 찾을 수 없어요. 다른 기기에서 삭제했을 수 있어요', // REVIEW(ko)
 } as const satisfies Record<keyof typeof zh, string>;
