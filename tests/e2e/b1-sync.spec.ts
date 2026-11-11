@@ -66,6 +66,8 @@ test.describe('K8 端到端（要真后端）', () => {
     // context.setOffline(true) → 记 10 条 → setOffline(false) → 等 outbox 清空 → 服务器上 10 条都在；第一个写请求是带提醒的那条
   });
 
+  // 前半（一边新增、修改、完成、软删，另一边不刷新就收到）11-11 起由真后端组 b2-crud-sync.real.spec.ts 覆盖（TC-B2-01，B2 QA 缺口 G-01）；
+  // 这里留着的是后半“断开 Realtime 只留轮询”
   test.fixme('TC-B1-28 一边新增、修改，另一边经 Realtime 实时看到；断开 Realtime 只留轮询也能收到', async () => {
     // 两个上下文 → A 新增、修改 → B 不刷新就看到 → 让 B 的 /sb/realtime 连不上 → A 再改 → B 在 60 秒轮询内收到
   });
