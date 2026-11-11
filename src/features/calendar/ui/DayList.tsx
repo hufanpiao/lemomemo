@@ -13,7 +13,8 @@
 import { Suspense } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { minOfDay, msAt, todayOf, weekdayOf } from '../../../../shared/core/date.ts';
-import { isLiveRow, placeEvent, type CalItems, type DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
+import { placeEvent, type CalItems, type DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
+import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { projectColorIndex } from '../../../../shared/logic/project-color.ts';
 import { dayEntries } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';

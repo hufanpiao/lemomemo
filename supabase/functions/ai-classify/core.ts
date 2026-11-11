@@ -22,8 +22,7 @@
 //         出错一共试 MAX_TRIES 次（含第一次），额度用完不计次数（write.ts）。
 // 文件：request.ts 组请求、读回；write.ts 写库；这里只留一轮的流程。
 //   5. 写心跳 ai-classify（lemo-ops 15 分钟没更新告警，6.1），detail 只放个数和布尔。
-// 合并相近分类的提示（S7）：判定在 shared/logic/notes/category-merge.ts（纯函数）；提示写到哪里，架构 5.2 只写了“写一条通知”，
-//   现在库里没有通知表，待架构师定，本函数先不写（B4 任务单待定项）。
+// 合并相近分类的提示（S7）：由客户端用 shared/logic/notes/category-merge.ts 判定并提示，本函数不写（B4 任务单待定项 7）。
 // 日志只记原因码（A23）：不记标题、正文、分类名、密钥、模型原文。
 
 import { cronGate, json } from '../_shared/http.ts';
@@ -31,7 +30,7 @@ import { nextPacificMidnight, globalQuotaKey, userQuotaKey, type QuotaStore } fr
 import type { AIProvider } from '../_shared/ai/provider.ts';
 import type { AiConfig } from '../_shared/ai/router.ts';
 import { classifyRequest, readItems, type PendingNote } from './request.ts';
-import { live, MAX_CATEGORIES, writeAi, writeManual, writeRules, type Category, type NotePatch, type Tally } from './write.ts';
+import { MAX_CATEGORIES, writeAi, writeManual, writeRules, type Category, type NotePatch, type Tally } from './write.ts';
 
 export const HEARTBEAT = 'ai-classify';
 /** 架构 5.2：每批最多 20 条，一次请求分完 */
@@ -74,6 +73,8 @@ export interface RuleLogic {
   classifyByRules(note: { title?: string | null; body?: string | null; tags?: readonly string[] | null }, cats: readonly Category[]): { category_id: string | null };
   /** shared/logic/search.ts 的 normalizeForSearch（比分类名用） */
   normalize(s: string): string;
+  /** shared/logic/live-row.ts 的 isLiveCategory（删了的、撤销的、合并掉的分类不用） */
+  isLiveCategory(c: Category): boolean;
 }
 
 export interface Deps {
@@ -198,7 +199,7 @@ export async function runRound(deps: Deps, store: ClassifyStore): Promise<Heartb
     }
     let cats: Category[];
     try {
-      cats = (await store.categories(userId)).filter(live);
+      cats = (await store.categories(userId)).filter(deps.logic.isLiveCategory);
     } catch {
       deps.log('categories_read_failed');
       tally.skipped += notes.length;

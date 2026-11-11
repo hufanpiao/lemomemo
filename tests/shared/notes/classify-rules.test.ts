@@ -1,5 +1,5 @@
 // shared/logic/notes/classify-rules.ts（B4 任务单 S5；架构 5.2 第 2839、2843 行；TC-B4-05 的本机一侧）
-// 只从已有分类里选、不新建；分类名出现在文字里优先（最长的）；常见类别词表；删掉的、合并掉的分类不选；单字分类名只认整个标题。
+// 只从已有分类里选、不新建；分类名出现在文字里优先（最长的）；常见类别词表；删掉的、撤销的、合并掉的分类不选；单字分类名只认整个标题。
 import { describe, expect, it } from 'vitest';
 import { classifyByRules, LEXICON, type RuleCategory } from '../../../shared/logic/notes/classify-rules.ts';
 
@@ -11,6 +11,7 @@ const cats: RuleCategory[] = [
   { id: 'book', name: '书', sort: 4 },
   { id: 'old', name: '健康', sort: 5, deleted_at: 1793581200000 },
   { id: 'merged', name: '学习', sort: 6, merged_into: 'work' },
+  { id: 'undone', name: '宠物', sort: 7, undone: true },
 ];
 
 describe('classifyByRules', () => {
@@ -33,8 +34,9 @@ describe('classifyByRules', () => {
   it('词表里的类别，用户没有对应分类：不选、不新建', () => {
     expect(classifyByRules({ title: '明天去医院体检' }, cats)).toEqual({ category_id: null, by: null });   // 健康已删
   });
-  it('删掉的、合并掉的分类不选', () => {
+  it('删掉的、撤销的、合并掉的分类不选', () => {
     expect(classifyByRules({ title: '健康 学习' }, cats).category_id).toBeNull();
+    expect(classifyByRules({ title: '宠物' }, cats).category_id).toBeNull();   // 宠物是撤销了的分类
   });
   it('单字分类名只在标题整个就是这个字时才算', () => {
     expect(classifyByRules({ title: '书' }, cats).category_id).toBe('book');

@@ -1,5 +1,6 @@
 // ai-classify 单测共用替身（tests/edge/ai-classify.test.ts、ai-classify-quota.test.ts）：内存假库（照 store.ts 和 private.ai_classify_pending 的条件）、
 // 内存额度、回放桩拼接、setup。服务商是真的 GeminiProvider，fetch 换成回放桩，不联网、不用真密钥。
+import { isLiveCategory } from '../../shared/logic/live-row.ts';
 import { classifyByRules } from '../../shared/logic/notes/classify-rules.ts';
 import { normalizeForSearch } from '../../shared/logic/search.ts';
 import { GeminiProvider } from '../../supabase/functions/_shared/ai/gemini.ts';
@@ -24,7 +25,7 @@ export const note = (id: string, user: string, title: string, o: Partial<Note> =
   category_id: null, category_source: 'none', category_seen: true, ...o,
 });
 export const cat = (id: string, user: string, name: string, o: Partial<Category> = {}): Category & { user_id: string } =>
-  ({ id, user_id: user, name, sort: 0, deleted_at: null, merged_into: null, ...o });
+  ({ id, user_id: user, name, sort: 0, deleted_at: null, undone: false, merged_into: null, ...o });
 
 /** 内存里的库：写回照 store.ts 的条件（还是 pending；manual 只在 manual 时写，否则只在不是 manual 时写） */
 export function fakeDb(notes: Note[], cats: (Category & { user_id: string })[]) {
@@ -50,7 +51,7 @@ export function fakeDb(notes: Note[], cats: (Category & { user_id: string })[]) 
     },
     async createCategory(userId, c) {
       if (cats.some((x) => x.user_id === userId && x.deleted_at === null && x.name.toLowerCase() === c.name.toLowerCase())) throw new Error('23505');
-      cats.push({ ...c, user_id: userId, deleted_at: null, merged_into: null });
+      cats.push({ ...c, user_id: userId, deleted_at: null, undone: false, merged_into: null });
     },
     async writeNote(userId, noteId, patch: NotePatch, manual) {
       const x = notes.find((n) => n.id === noteId && n.user_id === userId && n.ai_status === 'pending');
@@ -103,7 +104,7 @@ export function setup(o: {
     quota: quota.q,
     exhaustedUntil: async () => exhausted,
     markExhausted: async (u) => { exhausted = u; },
-    logic: { classifyByRules, normalize: normalizeForSearch },
+    logic: { classifyByRules, normalize: normalizeForSearch, isLiveCategory },
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, '0')}`,
     now: () => NOW,
     log: (c) => logs.push(c),

@@ -19,6 +19,7 @@ export interface Category {
   name: string;
   sort: number;
   deleted_at: number | null;
+  undone: boolean;
   merged_into: string | null;
 }
 
@@ -30,8 +31,6 @@ export interface NotePatch {
   category_source?: 'ai' | 'rule';
   category_seen?: boolean;
 }
-
-export const live = (c: Category) => c.deleted_at === null && c.merged_into === null;
 
 export type Tally = { ai: number; rule: number; manual: number; skipped: number; failed: number };
 
@@ -91,7 +90,7 @@ export async function writeAi(
         const c = { id: deps.newId(), name: it.name, sort: nextSort };
         try {
           await store.createCategory(userId, c);
-          const full: Category = { ...c, deleted_at: null, merged_into: null };
+          const full: Category = { ...c, deleted_at: null, undone: false, merged_into: null };
           byName.set(key, full);
           cats.push(full);
           liveCount++;

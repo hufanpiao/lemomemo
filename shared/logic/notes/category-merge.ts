@@ -1,18 +1,19 @@
 // 合并相近分类的判定（B4 任务单 S7；架构 5.2 末条“发现有分类彼此很像 → 提示‘要合并分类吗？’”；TC-B4-07）。
-// 只判哪几对像，不写库：提示写到哪里（架构只写了“写一条通知”，库里还没有通知表）待架构师定；前端也可以直接拿分类列表算。
-// 两个分类算“像”（都要没删、没合并掉，按 search.ts 的中韩归一比）：
+// 只判哪几对像，不写库：前端拿分类列表算、提示“要合并分类吗？”，忽略的记在 settings notes.merge_dismissed（B4 任务单待定项 7）。
+// 两个分类算“像”（都要活着，即 live-row.ts 的 isLiveCategory；按 search.ts 的中韩归一比）：
 //   ① 归一后一样（“工作 ”和“工作”、全角半角、大小写不同）；
 //   ② 一个包含另一个，且短的那个至少 2 个字（“购物”和“购物清单”；“书”和“书单”不算，单字太容易误中）；
 //   ③ 都至少 3 个字、只差一个字（增、删、换一个字：“读书笔记”和“读书笔迹”）。
-// 每对建议留下 sort 小的（一样就留名字短的、再按 id），把另一个合并进去。纯函数：前端和 Edge Functions 共用。
+// 每对建议留下 sort 小的（一样就留名字短的、再按 id），把另一个合并进去。纯函数。
+import { isLiveCategory, type Tombstone } from '../live-row.ts';
 import { normalizeForSearch } from '../search.ts';
 
-export interface MergeCategory {
+/** 一个分类（全部传进来即可：删了的、撤销的、合并掉的这里跳过） */
+export interface MergeCategory extends Tombstone {
   id: string;
   name: string;
   sort?: number;
-  deleted_at?: number | null;
-  merged_into?: string | null;
+  merged_into?: unknown;
 }
 
 export interface MergePair {
@@ -52,7 +53,7 @@ function why(a: string, b: string): MergePair['why'] | null {
 /** 找出彼此很像的分类对；同一对只出一次，按 keep 的 sort 先后 */
 export function similarCategoryPairs(categories: readonly MergeCategory[]): MergePair[] {
   const live = categories
-    .filter((c) => (c.deleted_at === null || c.deleted_at === undefined) && (c.merged_into === null || c.merged_into === undefined))
+    .filter(isLiveCategory)
     .map((c) => ({ c, n: normalizeForSearch(c.name) }))
     .filter((x) => x.n !== '')
     .sort((x, y) => (x.c.sort ?? 0) - (y.c.sort ?? 0) || [...x.c.name].length - [...y.c.name].length || (x.c.id < y.c.id ? -1 : 1));

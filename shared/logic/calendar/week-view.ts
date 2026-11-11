@@ -11,12 +11,12 @@
 //   手机放进当天的 todos（kind 'todo'，泳道上画空心圆），电脑并进 allDay 那一行（排在全天日程后面）。纯函数。
 import { addDays, minOfDay, msAt, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
+import { isLiveRow } from '../live-row.ts';
 import type { ProjectColor } from '../project-color.ts';
 import {
   assertTz,
   compareEntries,
   eventEntry,
-  isLiveRow,
   nearRange,
   placeEvent,
   todoDate,

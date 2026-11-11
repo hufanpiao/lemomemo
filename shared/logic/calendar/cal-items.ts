@@ -6,6 +6,7 @@ import { addDays, msAt, parseDate, parseHm, todayOf, minOfDay, type DateStr } fr
 import { isValidTz, type Tz } from '../../core/tz.ts';
 import type { EventWrite, TodoWrite } from '../../schema/rows.ts';
 import { normalizeProject, projectColorIndex, type ProjectColor } from '../project-color.ts';
+import { isLiveRow } from '../live-row.ts';
 import { displayShort } from '../short.ts';
 
 // 项目色挪到 shared/logic/project-color.ts（前端 A 会审 ①），这里转出保持原来的引用路径能用
@@ -24,11 +25,6 @@ export type CalEvent = Readonly<Pick<EventWrite, 'id' | 'title' | 'short' | 'pro
   Tombstone;
 /** 月历用到的待办列 */
 export type CalTodo = Readonly<Pick<TodoWrite, 'id' | 'title' | 'short' | 'project' | 'due' | 'done' | 'created_at'>> & Tombstone;
-
-/** 这一行还在不在：没删（deleted_at 为 null 或没有这一列）、也没撤销（undone 不是 true）。月历、单日列表、周视图共用 */
-export function isLiveRow(r: Tombstone): boolean {
-  return (r.deleted_at ?? null) === null && r.undone !== true;
-}
 
 /** 月历、单日列表的输入 */
 export interface CalItems {

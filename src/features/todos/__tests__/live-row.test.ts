@@ -1,8 +1,8 @@
-// “这一行还在不在”只留一份（前端 B 日历审查建议 1）：今天页、待办页都改用 shared/logic/calendar 的 isLiveRow，
-// 本机缓存的行列都是 unknown，传进去要断言一次类型。这里用同一组输入（含类型不对的怪值）对照结果（今天页那份在 today/__tests__/live-row.test.ts），
-// 并和原来本地的写法（deleted_at 为 null 或没有、undone 不是 true）逐条比，保证断言不改变行为
+// “这一行还在不在”只留一份（前端 B 日历审查建议 1）：今天页、待办页都改用 shared/logic/live-row.ts 的 isLiveRow，
+// 本机缓存的行（列都是 unknown）直接传进去。这里用同一组输入（含类型不对的怪值）对照结果（今天页那份在 today/__tests__/live-row.test.ts），
+// 并和原来本地的写法（deleted_at 为 null 或没有、undone 不是 true）逐条比，保证行为不变
 import { describe, expect, it } from 'vitest';
-import { isLiveRow } from '../../../../shared/logic/calendar/cal-items.ts';
+import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { isLive as todoIsLive } from '../data/todo-list.ts';
 
 type Row = Readonly<{ id: string } & Record<string, unknown>>;
@@ -26,7 +26,7 @@ describe('todo-list 的 isLive 和 isLiveRow 一致', () => {
       const want = old(r);
       const label = JSON.stringify(r);
       expect(todoIsLive(r), label).toBe(want);
-      expect(isLiveRow(r as Parameters<typeof isLiveRow>[0]), label).toBe(want);
+      expect(isLiveRow(r), label).toBe(want);
     }
     // 几条看得懂的
     expect(todoIsLive({ id: 'a', deleted_at: null, undone: false })).toBe(true);

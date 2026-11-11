@@ -22,8 +22,8 @@ describe('similarCategoryPairs', () => {
     expect(similarCategoryPairs([c('b', '购物清单', { sort: 0 }), c('a', '购物', { sort: 5 })])[0]).toEqual({ keep: 'b', merge: 'a', why: 'contains' });
     expect(similarCategoryPairs([c('b', '购物清单'), c('a', '购物')])[0]?.keep).toBe('a');
   });
-  it('删掉的、已经合并掉的不参加；不像的不出', () => {
-    expect(similarCategoryPairs([c('a', '购物'), c('b', '购物清单', { deleted_at: 1 }), c('d', '购物单', { merged_into: 'a' })])).toEqual([]);
+  it('删掉的、撤销的、已经合并掉的不参加；不像的不出', () => {
+    expect(similarCategoryPairs([c('a', '购物'), c('b', '购物清单', { deleted_at: 1 }), c('d', '购物单', { merged_into: 'a' }), c('u', '购物车', { undone: true })])).toEqual([]);
     expect(similarCategoryPairs([c('a', '工作'), c('b', '旅行'), c('e', '여행')])).toEqual([]);
   });
 });

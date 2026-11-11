@@ -1,6 +1,8 @@
 // 打字流程（data/type-flow.ts；B3 任务单 S2、FA-2、Q2；架构 5.1、5.11；R-54、R-353）。不调真 Gemini，AI 一律用桩
 import { describe, expect, it, vi } from 'vitest';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
+import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
+import { rowsOf } from '../data/capture-save.ts';
 import { aiReqCtx, applyConfirm, askAi, type CallAi, fillDay, keepAsked, mergeItems, needsConfirm, planLocal, planTyped, SendError, splitConfirm, type TypeCtx } from '../data/type-flow.ts';
 
 /** 2026-11-02（周一）10:00 首尔 */
@@ -223,6 +225,14 @@ describe('同一批里先存的和要问的（R-166）、合并成一条', () =>
     expect(m).toMatchObject({ kind: 'event', title: '明天十点开会，下午三点去银行', date: '2026-11-03', time: '10:00', short: null, confirm: null });
     expect(mergeItems([], 'x')).toBeNull();
     expect(mergeItems([item()], '   ')).toBeNull();
+  });
+  it('mergeItems：标题不自己截，存盘时由 captureRow 按 UTF-16 上限截、不截半个字', () => {
+    const raw = '😀'.repeat(ITEM_TITLE_MAX + 1);
+    const m = mergeItems([item()], raw);
+    expect(m?.title).toBe(raw);
+    const { rows } = rowsOf({ items: m ? [m] : [], rawText: raw, source: 'page', origin: 'rule', now: 0, tz: 'Asia/Seoul' }, () => 'id');
+    const title = rows[0]?.table === 'todos' ? rows[0].row.title : '';
+    expect(title).toBe('😀'.repeat(ITEM_TITLE_MAX / 2));
   });
 });
 

@@ -1,7 +1,7 @@
 // shared/logic/calendar/month-grid.ts、cal-items.ts（TC-B2-08；架构 5.12 第 2 点、4.6、第 9 节单元 month-grid）
 // 每个用例都显式传设备时区，和进程的 TZ 无关（test:tz 三个时区结果必须相同）
 import { describe, expect, it } from 'vitest';
-import { isLiveRow, placeEvent, projectColorIndex, PROJECT_COLORS } from '../../../shared/logic/calendar/cal-items.ts';
+import { placeEvent, projectColorIndex, PROJECT_COLORS } from '../../../shared/logic/calendar/cal-items.ts';
 import { buildMonth, dayEntries, monthGridDates, MONTH_CELLS, type MonthCell } from '../../../shared/logic/calendar/month-grid.ts';
 import { normalizeProject, projectColorIndex as colorFromModule } from '../../../shared/logic/project-color.ts';
 import { ev, timed, todo, unsynced } from './fixtures.ts';
@@ -270,15 +270,6 @@ describe('耗时（代码审查 A）', () => {
 
 describe('删除、撤销的判断（前端 A 会审：和 today-model 的 isLive 一致）', () => {
   const day = '2026-10-24';
-
-  it('isLiveRow：没有 deleted_at、deleted_at 为 undefined 或 null 都算还在；undone 为 true 算撤销', () => {
-    expect(isLiveRow({})).toBe(true);
-    expect(isLiveRow({ deleted_at: undefined, undone: undefined })).toBe(true);
-    expect(isLiveRow({ deleted_at: null, undone: false })).toBe(true);
-    expect(isLiveRow({ deleted_at: 0 })).toBe(false);
-    expect(isLiveRow({ deleted_at: 5, undone: false })).toBe(false);
-    expect(isLiveRow({ deleted_at: null, undone: true })).toBe(false);
-  });
 
   it('离线新建、还没同步的日程和待办（没有 deleted_at、undone 两列）照样出现在月历和单日列表里', () => {
     const items = {

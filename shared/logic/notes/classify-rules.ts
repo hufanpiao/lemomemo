@@ -15,14 +15,14 @@
 //        “러닝”不命中“머신러닝”；stems 里的词干（“맛있”“떠올”）只要求在词的开头。
 //   ③ 都不中：null。
 // 纯函数：不碰 DOM、不联网，前端和 Edge Functions 共用（Deno 经 _shared/gen/）。
+import { isLiveCategory, type Tombstone } from '../live-row.ts';
 import { normalizeForSearch, termVariants } from '../search.ts';
 
-export interface RuleCategory {
+export interface RuleCategory extends Tombstone {
   id: string;
   name: string;
   sort?: number;
-  deleted_at?: number | null;
-  merged_into?: string | null;
+  merged_into?: unknown;
 }
 
 export interface RuleNote {
@@ -76,16 +76,14 @@ function latinHit(rawLower: string, name: string): boolean {
   return re.test(rawLower);
 }
 
-const live = (c: RuleCategory) => (c.deleted_at === null || c.deleted_at === undefined) && (c.merged_into === null || c.merged_into === undefined);
-
-/** 按规则给一条随手记选分类；categories 是这个用户的全部分类（删掉的、合并掉的自动跳过） */
+/** 按规则给一条随手记选分类；categories 是这个用户的全部分类（删掉的、撤销的、合并掉的自动跳过） */
 export function classifyByRules(note: RuleNote, categories: readonly RuleCategory[]): RuleResult {
   const title = normalizeForSearch(note.title ?? '');
   const raws = [note.title ?? '', note.body ?? '', ...(note.tags ?? [])];
   const text = raws.map(normalizeForSearch).filter((s) => s !== '').join('\n');
   if (text === '') return { category_id: null, by: null };
   const rawLower = raws.join('\n').normalize('NFKC').toLowerCase();
-  const cats = categories.filter(live).map((c) => ({ c, n: normalizeForSearch(c.name) })).filter((x) => x.n !== '');
+  const cats = categories.filter(isLiveCategory).map((c) => ({ c, n: normalizeForSearch(c.name) })).filter((x) => x.n !== '');
 
   // ① 分类名出现在文字里
   const nameHit = ({ c, n }: { c: RuleCategory; n: string }): boolean => {

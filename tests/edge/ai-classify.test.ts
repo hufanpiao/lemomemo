@@ -40,6 +40,12 @@ describe('ai-classify：同意（TC-B4-05）', () => {
     ]);
     expect(notes.every((n) => (n.ai_meta as { skip?: string }).skip === 'consent')).toBe(true);
   });
+  it('撤销了的分类（undone）不用：和删了的、合并掉的一样跳过', async () => {
+    const notes = [note('n1', A, '周末去超市')];
+    const s = setup({ notes, cats: [cat('c-shop', A, '购物', { undone: true })], consent: async () => false });
+    await s.call();
+    expect([notes[0]?.ai_status, notes[0]?.category_id]).toEqual(['rule', null]);
+  });
   it('同意读不出：跳过这个人这一轮，留在 pending（不当成不同意）', async () => {
     const notes = [note('n1', A, '超市')];
     const s = setup({ notes, consent: async () => { throw new Error('consent_read_failed'); } });

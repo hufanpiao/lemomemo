@@ -6,6 +6,7 @@
 // • blob: 地址有上限（MAX_URLS，超了 revoke 最早的）；行软删、撤销、集合清空（退出、换账号、被移除）时 revoke 掉不再用的（安全审建议 4：
 //   exe 上“退出没完成”停在原页时，旧账号的图也不留在内存里）。整页那一份订阅 note_images 集合自己清
 // 纯 TS：不准 import React（A1）
+import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { collection } from '../../../core/store.ts';
 import { fetchBlob as realFetchBlob, sign as realSign, type FilesClient } from '../../../platform/files.ts';
 import { thumbPath } from './note-images.ts';
@@ -121,7 +122,7 @@ export type ImageView = ReturnType<typeof createImageView>;
 export function livePaths(rows: readonly Record<string, unknown>[]): Set<string> {
   const out = new Set<string>();
   for (const r of rows) {
-    if (r['deleted_at'] != null || r['undone'] === true || typeof r['path'] !== 'string') continue;
+    if (!isLiveRow(r) || typeof r['path'] !== 'string') continue;
     out.add(r['path']);
     out.add(thumbPath(r['path']));
   }

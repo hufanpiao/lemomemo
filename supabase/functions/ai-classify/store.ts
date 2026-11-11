@@ -56,13 +56,13 @@ export function makeStore(admin: ClassifyAdmin): ClassifyStore {
       return out;
     },
     async categories(userId) {
-      const d = must(await tbl(admin, 'categories').select('id, name, sort, deleted_at, merged_into').eq('user_id', userId), 'categories');
+      const d = must(await tbl(admin, 'categories').select('id, name, sort, deleted_at, undone, merged_into').eq('user_id', userId), 'categories');
       const out: Category[] = [];
       for (const r of Array.isArray(d) ? d : []) {
         if (!isObj(r) || !str(r['id']) || !str(r['name'])) continue;
         out.push({
           id: r['id'] as string, name: r['name'] as string, sort: typeof r['sort'] === 'number' ? r['sort'] : 0,
-          deleted_at: typeof r['deleted_at'] === 'number' ? r['deleted_at'] : null, merged_into: str(r['merged_into']),
+          deleted_at: typeof r['deleted_at'] === 'number' ? r['deleted_at'] : null, undone: r['undone'] === true, merged_into: str(r['merged_into']),
         });
       }
       return out;

@@ -5,7 +5,7 @@
 // • 项目筛选只在待办页（架构 5.9“项目筛选”）：project 为 null 是“全部”
 import { addDays, diffDays, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { isLiveRow } from '../../../../shared/logic/calendar/cal-items.ts';
+import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 // 标题比较：按当前语言、数字按数值（“第 2 条”在“第 10 条”前；和今天页共用）
 import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
@@ -53,12 +53,8 @@ export function itemOf(r: Row): TodoItem {
   };
 }
 
-/**
- * 还在用的行：没删、没被撤销——判断只留一份，用 shared/logic/calendar 的 isLiveRow（前端 B 日历审查建议 1）。
- * 本机缓存的行列都是 unknown，对不上它的入参类型，这里断言一次；运行时它只看 deleted_at ?? null 和 undone !== true，
- * 任何值都一样（同一组输入的对照测试在本功能的 __tests__/live-row.test.ts）
- */
-export const isLive = (r: Row): boolean => isLiveRow(r as Parameters<typeof isLiveRow>[0]);
+/** 还在用的行：没删、没被撤销——判断只留一份，用 shared/logic/live-row.ts 的 isLiveRow（前端 B 日历审查建议 1） */
+export const isLive = (r: Row): boolean => isLiveRow(r);
 
 export function dueTagOf(t: TodoItem, now: number, tz: Tz): DueTag {
   if (!t.due) return { kind: 'none' };

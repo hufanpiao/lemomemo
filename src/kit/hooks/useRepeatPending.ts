@@ -2,7 +2,7 @@
 // 4.1.0 的重复事项，4.0.x 只显示第一次；日历和今天页顶部据它出“有 N 条重复事项要新版本才能完整显示 · 更新”。
 // 只在按需下载的横幅里用（kit 的 ReadonlyRowView），不进首屏（首屏预算 150 KB，FA-2 返工）
 import { useMemo } from 'react';
-import { isLiveRow } from '../../../shared/logic/calendar/cal-items.ts';
+import { isLiveRow } from '../../../shared/logic/live-row.ts';
 import type { Row } from '../../core/store.ts';
 import { useCollection } from './useCollection.ts';
 import { useReadonlyIds } from './useReadonly.ts';
@@ -16,7 +16,7 @@ export function repeatPendingOf(rows: readonly AnyRow[], ro: ReadonlySet<string>
     if (!ro.has(r.id)) continue;
     const rep = r['repeat'];
     if (rep === undefined || rep === null) continue;
-    if (!isLiveRow(r as Parameters<typeof isLiveRow>[0])) continue;
+    if (!isLiveRow(r)) continue;
     n++;
   }
   return n;

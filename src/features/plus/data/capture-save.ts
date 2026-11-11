@@ -4,7 +4,7 @@
 // • 不写 ai_status（M5）
 // • 写入只经 core/write.ts 的 write（先进 outbox）；带不带提醒用 shared 的 remindAtOf 本机现算（同编辑页）
 // • 有一条没写进去：已写的几条立刻撤回，整批当没保存（调用方提示“没保存上”、保留原话）
-// • 撤销 capture.undo(batch_id)：还没发出的 write.patch 会和 insert 抵消；已发出的写 undone=true（H10）。
+// • 撤销 capture.undo(batch_id)：还没发出的 write.patch 会和 insert 抵消；已发出的经 core/edit-save.ts 的 saveUndone 撤回（H10：写 deleted_at 和 undone）。
 //   纪念日表没有 undone 列：B3 只开日程、待办（任务单 Q7），纪念日的撤销等 B4 定，这里先原样报“没撤”
 // 纯 TS：不准 import React（A1）
 import { todayOf, type DateStr } from '../../../../shared/core/date.ts';

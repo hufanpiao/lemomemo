@@ -8,7 +8,7 @@
 // • 没赶上：没完成、截止日早于今天的待办（逾 N 天）；今天有截止时刻、已经过了的也算（逾 0 天，界面写“已过 17:00”）
 import { addDays, diffDays, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { isLiveRow } from '../../../../shared/logic/calendar/cal-items.ts';
+import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 // 同一时刻按标题排：按当前语言、数字按数值（和待办页共用，shared/i18n/title-compare.ts）
 import { titleCompare } from '../../../../shared/i18n/title-compare.ts';
@@ -25,12 +25,8 @@ const hmOf = (min: number): string => {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 };
 
-/**
- * 还在用的行：没删、没被撤销——判断只留一份，用 shared/logic/calendar 的 isLiveRow（前端 B 日历审查建议 1）。
- * 本机缓存的行列都是 unknown，对不上它的入参类型，这里断言一次；运行时它只看 deleted_at ?? null 和 undone !== true，
- * 任何值都一样（同一组输入的对照测试在本功能的 __tests__/live-row.test.ts）
- */
-export const isLive = (r: Row): boolean => isLiveRow(r as Parameters<typeof isLiveRow>[0]);
+/** 还在用的行：没删、没被撤销——判断只留一份，用 shared/logic/live-row.ts 的 isLiveRow（前端 B 日历审查建议 1） */
+export const isLive = (r: Row): boolean => isLiveRow(r);
 
 export interface EventOcc {
   kind: 'event';

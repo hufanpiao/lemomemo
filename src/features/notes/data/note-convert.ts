@@ -4,6 +4,7 @@
 // 守门（已删、撤销、隐私记、只读行、内容为空、converted_to 认不出）一笔不写。rlog 只记长度和结果，不记文字。纯 TS，不准 React（A1）
 import { todayOf } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
+import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { convertedToAfter, convertRow, type ConvertKind } from '../../../../shared/logic/notes/note-convert.ts';
 import { saveOutcome, saveUndone, type SaveOutcome } from '../../../core/edit-save.ts';
 import { readonlyIds } from '../../../core/store.ts';
@@ -15,7 +16,7 @@ export type ConvertFail = Exclude<SaveOutcome, 'saved'> | 'empty' | 'gone';
 type Ref = { table: 'todos' | 'events'; id: string };
 
 export type ConvertResult =
-  /** truncated：正文太长，备注只放下了前 2000 个单元 */
+  /** truncated：随手记的内容没能全部放进新条（标题或备注被截短了，见 shared 的 convertRow） */
   | { ok: true; table: Ref['table']; id: string; truncated: boolean }
   /** left：新条已建、撤回也没写进去（界面要提示，别让用户再转一次） */
   | { ok: false; reason: ConvertFail; left?: Ref };
@@ -41,7 +42,7 @@ export async function convertNote(note: Row, kind: ConvertKind, at: ConvertAt, d
     rlog(`note convert ${kind} ${r.ok ? `ok truncated=${r.truncated}` : `${r.reason}${r.left ? ' left' : ''}`} title=${str(note['title']).length} body=${str(note['body']).length}`);
     return r;
   };
-  if (note['deleted_at'] != null || note['undone'] === true) return done({ ok: false, reason: 'gone' });
+  if (!isLiveRow(note)) return done({ ok: false, reason: 'gone' });
   // 隐私记的 converted_to 必须为空（数据字典），客户端也改不了隐私记行
   if (note['is_private'] === true) return done({ ok: false, reason: 'rejected' });
   if (isReadonly(note.id)) return done({ ok: false, reason: 'readonly' });

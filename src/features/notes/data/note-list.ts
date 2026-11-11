@@ -11,6 +11,7 @@
 // 纯 TS：不准 import React（A1）
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
+import { isLiveCategory, isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { noteHeadline } from '../../../../shared/logic/notes/note-headline.ts';
 
 export type Row = { readonly id: string } & Readonly<Record<string, unknown>>;
@@ -58,11 +59,7 @@ export interface CategoryCount {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-/** 行还在（没删、没撤销） */
-const present = (r: Row): boolean => r['deleted_at'] == null && r['undone'] !== true;
-const alive = (r: Row): boolean => present(r) && r['is_private'] !== true;
-/** 活着的分类：还在、没合并进别的分类（“活着的分类”只在这里定） */
-export const liveCategory = (c: Row): boolean => present(c) && c['merged_into'] == null;
+const alive = (r: Row): boolean => isLiveRow(r) && r['is_private'] !== true;
 
 /** 标题和摘要：有标题就用标题、摘要是正文；没有标题取正文第一行当标题，后面的（第二行起）当摘要 */
 export function titleAndSummary(title: unknown, body: unknown): { title: string; summary: string } {
@@ -88,15 +85,15 @@ export function categoryColor(v: unknown): string | null {
   return m ? `var(--p${m[1]}s)` : null;
 }
 
-/** 活着的分类：id → 颜色（同 categoryNames 的筛法） */
+/** 分类 id → 颜色（这里不筛：调用方只拿 categoryResolver 归到的活着的分类来取） */
 function categoryColors(categories: readonly Row[]): Map<string, string | null> {
   return new Map(categories.map((c) => [c.id, categoryColor(c['color'])]));
 }
 
-/** 活着的分类（没删、没合并进别的分类）：id → 名字 */
+/** 活着的分类（isLiveCategory：没删、没撤销、没合并进别的分类）：id → 名字 */
 export function categoryNames(categories: readonly Row[]): Map<string, string> {
   const out = new Map<string, string>();
-  for (const c of categories) if (liveCategory(c)) out.set(c.id, str(c['name']));
+  for (const c of categories) if (isLiveCategory(c)) out.set(c.id, str(c['name']));
   return out;
 }
 
@@ -110,8 +107,8 @@ export function categoryResolver(categories: readonly Row[]): (id: unknown) => s
     let cur = id;
     for (let hops = 0; typeof cur === 'string' && hops <= categories.length; hops++) {
       const c = byId.get(cur);
-      if (!c || !present(c)) return null;
-      if (liveCategory(c)) return cur;
+      if (!c || !isLiveRow(c)) return null;
+      if (isLiveCategory(c)) return cur;
       cur = c['merged_into'];
     }
     return null;
@@ -122,7 +119,7 @@ export function categoryResolver(categories: readonly Row[]): (id: unknown) => s
 export function imagesByNote(images: readonly Row[]): Map<string, NoteImage[]> {
   const out = new Map<string, NoteImage[]>();
   for (const r of images) {
-    if (!present(r) || r['bucket'] !== 'images') continue;
+    if (!isLiveRow(r) || r['bucket'] !== 'images') continue;
     const noteId = str(r['note_id']);
     const path = str(r['path']);
     if (noteId === '' || path === '') continue;

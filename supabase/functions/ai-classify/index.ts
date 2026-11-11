@@ -10,6 +10,7 @@ import { timedFetch } from '../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { gateDeps } from '../_shared/ai/wire.ts';
 import { aiAllowed } from '../_shared/consent.ts';
+import { isLiveCategory } from '../_shared/gen/logic/live-row.ts';
 import { classifyByRules } from '../_shared/gen/logic/notes/classify-rules.ts';
 import { normalizeForSearch } from '../_shared/gen/logic/search.ts';
 import { handle } from './core.ts';
@@ -36,7 +37,7 @@ Deno.serve((req) => {
     quota: g.quota,
     exhaustedUntil: g.exhaustedUntil,
     markExhausted: g.markExhausted,
-    logic: { classifyByRules, normalize: normalizeForSearch },
+    logic: { classifyByRules, normalize: normalizeForSearch, isLiveCategory },
     newId: () => crypto.randomUUID(),
     now: Date.now,
     log,
@@ -49,7 +50,7 @@ function unconfigured() {
   return {
     store: null, isUsable: no, consent: no, config: no, provider: () => null,
     quota: { take: no, refund: no }, exhaustedUntil: no, markExhausted: no,
-    logic: { classifyByRules: () => ({ category_id: null }), normalize: (s: string) => s },
+    logic: { classifyByRules: () => ({ category_id: null }), normalize: (s: string) => s, isLiveCategory },
     newId: () => crypto.randomUUID(), now: Date.now, log,
   };
 }
