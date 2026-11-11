@@ -135,6 +135,26 @@ describe('读 [Content_Types].xml 这一个条目', () => {
     const d = buildZip([{ name: CT, body: deflated, method: 8, size: xml.length, descriptor: true }]);
     expect(await sniffFile(d.bytes, () => xml)).toEqual(ok('docx'));
   });
+  it('[Content_Types].xml 不是第一条（排第 2、排最后）→ 照常判出', async () => {
+    const doc = { name: 'word/document.xml', body: enc('<w:document/>') };
+    const rels = { name: '_rels/.rels', body: enc('<Relationships/>') };
+    expect(await sniff(buildZip([doc, { name: CT, body: xml }, rels]).bytes)).toEqual(ok('docx'));
+    expect(await sniff(buildZip([doc, rels, { name: CT, body: xml }]).bytes)).toEqual(ok('docx'));
+  });
+  it('压缩方法 8、[Content_Types].xml 排在两个压缩条目后面：解压函数拿到的正好是它那一段', async () => {
+    const calls: number[][] = [];
+    const z = buildZip([
+      { name: 'word/document.xml', body: enc('deflated-document'), method: 8, size: 40 },
+      { name: '_rels/.rels', body: enc('deflated-rels'), method: 8, size: 30 },
+      { name: CT, body: deflated, method: 8, size: xml.length },
+    ]);
+    const inflate: InflateRaw = (d) => {
+      calls.push(Array.from(d));
+      return xml;
+    };
+    expect(await sniffFile(z.bytes, inflate)).toEqual(ok('docx'));
+    expect(calls).toEqual([Array.from(deflated)]);
+  });
   it('声明大小正好等于上限 → 照常解压一次，上限参数就是它', async () => {
     const full = concat(xml, new Uint8Array(CONTENT_TYPES_MAX_BYTES - xml.length).fill(0x20));
     const maxes: number[] = [];

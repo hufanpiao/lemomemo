@@ -39,6 +39,12 @@ describe('OOXML：按 [Content_Types].xml 判', () => {
   it('伪装成 docx 的 ZIP（没有 [Content_Types].xml）→ 不认', async () => {
     expect(await sniff(buildZip([{ name: 'a.txt', body: enc('hi') }]).bytes)).toEqual(unk('ct_missing'));
   });
+  it('只认包根目录的 [Content_Types].xml：子目录里那份声明了 docx 也不算', async () => {
+    for (const name of [`word/${CT}`, `foo/${CT}`, `foo\\${CT}`, `x${CT}`]) {
+      const z = buildZip([{ name, body: enc(ctXml(MAIN.docx)) }, { name: 'word/document.xml', body: enc('<w:document/>') }]);
+      expect(await sniff(z.bytes), name).toEqual(unk('ct_missing'));
+    }
+  });
   it('主部件不在六种里（dotx、ppsx、xlsb）→ 不认', async () => {
     for (const t of [
       'application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml',
@@ -106,6 +112,15 @@ describe('OLE2 旧格式', () => {
     expect(await sniff(two.bytes)).toEqual(ok('doc'));
     expect(await sniff(buildOle(rootWith(['Workbook', 2]), { shift: 12 }).bytes)).toEqual(ok('xls'));
   });
+  it('4096 字节扇区：目标流在第 2 个目录扇区、目录扇区的 FAT 项在第 2 个 FAT 扇区', async () => {
+    const kids = Array.from({ length: 40 }, (_, i): [string, number] => [`s${i}`, 2]);
+    kids.splice(35, 0, ['WordDocument', 2]);
+    const o = buildOle(rootWith(...kids), { shift: 12, pad: 1100 });
+    // 每扇区 32 个目录条目、1024 个 FAT 项：条目 36 在第 2 个目录扇区，目录扇区号 ≥ 1024
+    expect(o.dirSectors).toHaveLength(2);
+    expect(o.dirSectors.every((s) => s >= 1024)).toBe(true);
+    expect(await sniff(o.bytes)).toEqual(ok('doc'));
+  });
   it('大文件：目录扇区的 FAT 项在第 110 个 FAT 扇区，要走 DIFAT 链', async () => {
     const big = buildOle(rootWith(['WordDocument', 2]), { pad: 13900 });
     expect((big.dirSectors.at(0) ?? 0) >= 109 * 128).toBe(true);
@@ -136,6 +151,19 @@ describe('OLE2 旧格式', () => {
       const b = mutate(o.bytes, o.entry) ?? o.bytes;
       expect(await sniff(b), detail).toEqual(unk(detail));
     }
+  });
+  it('DIFAT 链：FAT 扇区数报成 2^31−1 且链指回自己 → 不认（靠 FAT 扇区数不超过文件扇区数停下）', async () => {
+    const o = buildOle(rootWith(['WordDocument', 2]));
+    put32(o.bytes, 44, 0x7fffffff);
+    put32(o.bytes, 68, 0);
+    put32(o.bytes, 512 + 127 * 4, 0);
+    expect(await sniff(o.bytes)).toEqual(unk('ole_bad_fat'));
+  });
+  it('DIFAT 链起点指到文件外 → 不认', async () => {
+    const o = buildOle(rootWith(['WordDocument', 2]), { pad: 200 });
+    put32(o.bytes, 44, 150);
+    put32(o.bytes, 68, 9999);
+    expect(await sniff(o.bytes)).toEqual(unk('ole_bad_fat'));
   });
 });
 

@@ -3,22 +3,10 @@
 // 解压函数由调用方传入（客户端 fflate、服务器 DecompressionStream 适配器），shared 不碰运行环境的 API。
 // 本文件会复制进 supabase/functions/_shared/gen 受 F7 检查：任意偏移的读取一律经 DataView，魔数写成数字，查表用 Map 或遍历元组。
 
-/** 附件可收的 10 种类型 → MIME（R-114 D-4）。全仓唯一一份：清单的 allowedMimeTypes、桶路径的扩展名、/files 的 Content-Type 都从这里推导 */
-export const DOC_KINDS = [
-  ['pdf', 'application/pdf'],
-  ['docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-  ['xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
-  ['pptx', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
-  ['docm', 'application/vnd.ms-word.document.macroEnabled.12'],
-  ['xlsm', 'application/vnd.ms-excel.sheet.macroEnabled.12'],
-  ['pptm', 'application/vnd.ms-powerpoint.presentation.macroEnabled.12'],
-  ['doc', 'application/msword'],
-  ['xls', 'application/vnd.ms-excel'],
-  ['ppt', 'application/vnd.ms-powerpoint'],
-] as const;
-export type DocKind = (typeof DOC_KINDS)[number][0];
+/** 判得出的 10 种附件类型（R-114 D-4，同 note_files.kind）；MIME 的唯一出处是 shared/manifests/attachments.ts 的 DOC_MIME，这里不放 */
+export type DocKind = 'pdf' | 'docx' | 'xlsx' | 'pptx' | 'docm' | 'xlsm' | 'pptm' | 'doc' | 'xls' | 'ppt';
 
-/** 三个家族：一行一个家族；三个 kind 字段受 DocKind 约束，DOC_KINDS 里删了某种类型 tsc 就报 */
+/** 三个家族：一行一个家族；三个 kind 字段受 DocKind 约束 */
 const FAMILIES = [
   {
     plain: 'docx', macro: 'docm', legacy: 'doc', streams: ['WordDocument'],
