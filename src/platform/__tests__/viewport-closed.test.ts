@@ -1,6 +1,6 @@
 // viewport.ts 的藏底栏属性（BAR_HIDE_ATTR = data-kbo 或收起后暂缓）和“键盘真收了”通知（onClosed，冷启动高度校正用；回调返回 false 是这次没接，保持上膛）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BAR_HIDE_ATTR, createKeyboardWatcher, HOLD_MS, KB_SETTLE_MS } from '../viewport.ts';
+import { BAR_HIDE_ATTR, createKeyboardWatcher, GAP_VAR, HOLD_MS, KB_SETTLE_MS } from '../viewport.ts';
 
 /** 主屏幕版 iPhone（整屏 956）：up() 聚焦弹键盘（542），down(h, editing) 收到 h */
 const mk = () => {
@@ -25,7 +25,7 @@ const mk = () => {
     clock += ms;
     vi.advanceTimersByTime(ms);
   };
-  return { w, set, up, down, wait, hidden: () => attrs.get(BAR_HIDE_ATTR) === '1', kbo: () => attrs.has('data-kbo') };
+  return { w, set, up, down, wait, root, hidden: () => attrs.get(BAR_HIDE_ATTR) === '1', kbo: () => attrs.has('data-kbo') };
 };
 
 beforeEach(() => {
@@ -64,6 +64,21 @@ describe(`根节点 ${BAR_HIDE_ATTR}（底栏、“＋”藏起的唯一开关�
     expect(k.hidden()).toBe(true);
     stop();
     expect(k.hidden()).toBe(false);
+  });
+});
+
+describe(`停止监听时 ${GAP_VAR} 跟着复位`, () => {
+  it('停了拿掉根节点 --vh-gap、记的值清零；再订阅照样重新写上（共享 watcher 停了又开不留旧值）', () => {
+    const k = mk();
+    k.set(895);
+    const stop = k.w.watch(() => undefined);
+    expect(k.root.style.setProperty).toHaveBeenCalledWith(GAP_VAR, '61px');
+    stop();
+    expect(k.root.style.removeProperty).toHaveBeenCalledWith(GAP_VAR);
+    k.root.style.setProperty.mockClear();
+    const again = k.w.watch(() => undefined);
+    expect(k.root.style.setProperty).toHaveBeenCalledWith(GAP_VAR, '61px');
+    again();
   });
 });
 

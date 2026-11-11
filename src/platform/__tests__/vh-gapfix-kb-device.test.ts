@@ -46,7 +46,8 @@ afterEach(() => {
   expect(listening()).toBe(0);
   Reflect.deleteProperty(window, 'visualViewport');
   Reflect.deleteProperty(navigator, 'standalone');
-  document.documentElement.style.removeProperty(GAP_VAR);
+  // 共享 watcher 停的时候自己拿掉 --vh-gap（不靠这里删，打乱顺序也不串）
+  expect(document.documentElement.style.getPropertyValue(GAP_VAR)).toBe('');
 });
 
 describe('收键盘那次校正：默认接法（共享 watcher + 假 visualViewport + iPhone UA）', () => {

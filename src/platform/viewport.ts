@@ -166,6 +166,9 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
     holdTimer = settleTimer = undefined;
     holdUntil = 0;
     armed = false;
+    // 停了就不再盯，--vh-gap 不留旧值；记的值清零，再订阅时照量出来的重新写
+    gapVar = 0;
+    setVar(GAP_VAR, 0);
     if (reported !== height > 0) {
       reported = height > 0;
       setAttr(BAR_HIDE_ATTR, reported);

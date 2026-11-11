@@ -121,6 +121,8 @@ export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
       idle();
       return;
     }
+    // 输入框聚焦着不放垫块（返修单之外加的，主持人 11-11 接受：方向保守）。冷启动那次碰上聚焦就整次放弃、不再重试，
+    // 等收键盘那次（键盘真收了、离开输入框静下来）补
     if (editableFocused(doc)) {
       row(`${p}skip editing`);
       idle();
