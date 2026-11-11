@@ -10,7 +10,7 @@
 import { buildInfo } from '../../../platform/env.ts';
 import { appFetch } from '../../../platform/http.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
-import { sessionToken } from './ai-parse-api.ts';
+import { sessionToken } from './fn-post.ts';
 
 export const LINK_TIMEOUT_MS = 8000;
 /** 连接码多久过期（天），同 _shared/intake-token.ts 的 TOKEN_TTL_MS */

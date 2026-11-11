@@ -6,6 +6,7 @@
 //   旧订阅用新公钥签的推送会被推送服务拒掉，不退订就再也收不到
 // • 订阅结果只交 endpoint、p256dh、auth 三样给调用方；登记到服务器（claim_endpoint）等后端 BE-1 的接口定了再接，这里不发请求
 // • 浏览器权限：pushManager.subscribe({ userVisibleOnly: true }) 自己会弹权限框，要在用户点按里调；已拒绝的直接返回 denied
+import { toB64u } from './b64url.ts';
 import { buildInfo, isTauri } from './env.ts';
 import { closeAllLocalReminders } from './native-bridge.ts';
 import { CLAIM_STORAGE_KEY, DISCONNECT_PUSH_MS, forgetPushClaim, skipUnsubscribe, strictPermission } from './push-claim-key.ts';
@@ -59,14 +60,8 @@ function fromB64u(s: string): Uint8Array | null {
   }
 }
 
-/** 字节 → base64url（不补位） */
-function toB64u(buf: ArrayBuffer | null): string {
-  if (!buf) return '';
-  const b = new Uint8Array(buf);
-  let s = '';
-  for (const x of b) s += String.fromCharCode(x);
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
+/** 订阅的一把钥匙 → base64url；没有这把钥匙得空串 */
+const keyB64u = (buf: ArrayBuffer | null): string => (buf ? toB64u(new Uint8Array(buf)) : '');
 
 /** 解 VAPID 公钥：65 字节、首字节 0x04 才算数，否则 null */
 export function decodeVapidKey(key: string): Uint8Array<ArrayBuffer> | null {
@@ -84,8 +79,8 @@ function sameBytes(a: ArrayBuffer | null | undefined, b: Uint8Array): boolean {
 }
 
 function endpointOf(sub: PushSubscription): PushEndpoint | null {
-  const p256dh = toB64u(sub.getKey('p256dh'));
-  const auth = toB64u(sub.getKey('auth'));
+  const p256dh = keyB64u(sub.getKey('p256dh'));
+  const auth = keyB64u(sub.getKey('auth'));
   return sub.endpoint && p256dh && auth ? { endpoint: sub.endpoint, p256dh, auth } : null;
 }
 

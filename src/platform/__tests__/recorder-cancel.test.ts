@@ -45,6 +45,49 @@ describe('开不起来：先关轨道、清计时器再返回', () => {
     expect(allClosed(m)).toBe(true);
     expect(log.lines.at(-1)).toMatch(/^rec fail reason=start_timeout$/);
   });
+
+  it('start 事件之前录音器就停了（轨道在开录前被系统收走）：start_failed，不卡在等待里', async () => {
+    const m = mic();
+    const onAutoStop = vi.fn();
+    const p = startRecorder(opts({ onAutoStop }));
+    await flush();
+    rec0().endNow();
+    expect(await p).toEqual({ ok: false, fail: 'start_failed' });
+    expect(allClosed(m)).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(log.lines.at(-1)).toBe('rec fail reason=start_failed');
+    expect(onAutoStop).not.toHaveBeenCalled();
+  });
+});
+
+describe('start 事件来晚了（Q-5：iPhone 上 start 事件慢）：结局不变，不多记日志、不留计时器', () => {
+  it('已经判了超时以后才到', async () => {
+    mic();
+    const p = startRecorder(opts());
+    await flush();
+    await vi.advanceTimersByTimeAsync(REC_START_WAIT_MS);
+    expect(await p).toEqual({ ok: false, fail: 'start_failed' });
+    const n = log.lines.length;
+    rec0().fireStart();
+    await flush();
+    expect(log.lines).toHaveLength(n);
+    expect(log.lines.at(-1)).toBe('rec fail reason=start_timeout');
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('已经取消了以后才到', async () => {
+    mic();
+    const ac = new AbortController();
+    const p = startRecorder(opts({ signal: ac.signal }));
+    await flush();
+    ac.abort();
+    expect(await p).toEqual({ ok: false, fail: 'cancelled' });
+    const n = log.lines.length;
+    rec0().fireStart();
+    await flush();
+    expect(log.lines).toHaveLength(n);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
 
 describe('取消（signal 全程有效，只有这一套）', () => {

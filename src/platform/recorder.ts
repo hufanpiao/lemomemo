@@ -30,11 +30,11 @@ export interface ActiveRecorder {
 }
 
 export interface RecorderOptions {
-  /** 最长录多久、最多多少字节：调用方传功能层的那两个常量（platform 不引功能层） */
+  /** 最长录多久、最多多少字节：调用方传 record-logic 的 REC_MAX_MS 和 shared 的 AI_AUDIO_MAX_BYTES（platform 不引功能层，也不在这里引 zod 那一份） */
   maxMs: number;
   maxBytes: number;
-  /** 给了才带 audioBitsPerSecond；不给就按浏览器默认码率录 */
-  bitsPerSecond?: number;
+  /** 必填：浏览器默认码率不受控（常见 128 kbps 上下，录满 60 秒会超字节上限） */
+  bitsPerSecond: number;
   signal?: AbortSignal;
   /** 没人调 stop() 录音就停了（录满 maxMs、轨道被系统收走）：界面照松手处理 */
   onAutoStop?: () => void;
@@ -170,7 +170,7 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
     };
 
     try {
-      const r = o.bitsPerSecond === undefined ? new MediaRecorder(stream) : new MediaRecorder(stream, { audioBitsPerSecond: o.bitsPerSecond });
+      const r = new MediaRecorder(stream, { audioBitsPerSecond: o.bitsPerSecond });
       rec = r;
       r.addEventListener('start', onStart);
       r.addEventListener('dataavailable', (ev) => {

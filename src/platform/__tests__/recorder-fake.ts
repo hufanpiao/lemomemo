@@ -1,11 +1,13 @@
 // recorder.test.ts、recorder-cancel.test.ts 共用：假的 MediaRecorder、假麦克风、开录到 start 事件的捷径、接运行日志
 import { afterEach, beforeEach, vi } from 'vitest';
+import { AI_AUDIO_MAX_BYTES } from '../../../shared/schema/ai.ts';
 import { MIC_PERM_KEY } from '../perm-mic.ts';
 import { startRecorder, type RecorderOptions } from '../recorder.ts';
 import { RL_SLOT } from '../run-log-api.ts';
 
 export const MAX_MS = 60_000;
-export const MAX_BYTES = 600 * 1024;
+export const MAX_BYTES = AI_AUDIO_MAX_BYTES;
+export const BPS = 48_000;
 
 export class FakeRecorder extends EventTarget {
   static made: FakeRecorder[] = [];
@@ -70,7 +72,7 @@ export function mic(result: 'ok' | Error | Promise<MediaStream> = 'ok'): Mic {
 /** 测试环境里 DOMException 不一定是 Error 的实例，桩用带 name 的 Error（归类只看 name） */
 export const named = (name: string): Error => Object.assign(new Error('x'), { name });
 export const allClosed = (m: Mic): boolean => m.tracks.every((t) => t.stop.mock.calls.length > 0);
-export const opts = (over: Partial<RecorderOptions> = {}): RecorderOptions => ({ maxMs: MAX_MS, maxBytes: MAX_BYTES, now: () => 0, ...over });
+export const opts = (over: Partial<RecorderOptions> = {}): RecorderOptions => ({ maxMs: MAX_MS, maxBytes: MAX_BYTES, bitsPerSecond: BPS, now: () => 0, ...over });
 export const flush = (): Promise<unknown> => vi.advanceTimersByTimeAsync(0);
 export const rec0 = (): FakeRecorder => {
   const r = FakeRecorder.made[0];

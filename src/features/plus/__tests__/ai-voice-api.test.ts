@@ -2,12 +2,11 @@
 // X-Projects 的编码和服务器真的解码（supabase/functions/ai-voice/core.ts 的 decodeProjects）做往返
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
-import { normProjects } from '../../../../shared/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, normProjects } from '../../../../shared/schema/ai.ts';
 import { decodeProjects, MAX_PROJECTS_HEADER } from '../../../../supabase/functions/ai-voice/core.ts';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import { outcomeOf } from '../data/ai-outcome.ts';
 import { createCallVoice, encodeProjects, voiceHeaders, type AiVoiceReq } from '../data/ai-voice-api.ts';
-import { BLOB_MAX_BYTES } from '../data/record-logic.ts';
 
 const NOW = Date.UTC(2026, 10, 2, 1, 0);
 const URL_ = 'https://sb.test/functions/v1/ai-voice';
@@ -107,13 +106,17 @@ describe('X-Projects 和服务器的解码往返', () => {
 });
 
 describe('本地拒发（不花流量、不花次数）', () => {
-  it('0 字节、超过 600 KB、没有类型：不发；刚好 600 KB 照发', async () => {
+  it('0 字节、没有类型：不发', async () => {
     const { fetch, call } = api(async () => reply(200, OK));
-    for (const bad of [req({ audio: clip(0) }), req({ audio: clip(BLOB_MAX_BYTES + 1) }), req({ mime: '' })]) {
+    for (const bad of [req({ audio: clip(0) }), req({ mime: '' })]) {
       await expect(call(bad, live())).rejects.toMatchObject({ name: 'SendError', fail: 'http' });
     }
     expect(fetch).not.toHaveBeenCalled();
-    await call(req({ audio: clip(BLOB_MAX_BYTES) }), live());
+  });
+
+  it('字节上限不在这里再判一次（录音器判过，服务器回 413）：超了照发，413 抛 SendError(http)', async () => {
+    const { fetch, call } = api(async () => reply(413, { error: 'too_large' }));
+    await expect(call(req({ audio: clip(AI_AUDIO_MAX_BYTES + 1) }), live())).rejects.toMatchObject({ name: 'SendError', fail: 'http' });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
@@ -194,11 +197,9 @@ describe('运行日志：只补网络那一行没有的（字节数、类型、�
   it('本地拒发：一行原因，带字节数', async () => {
     const { call } = api(async () => reply(200, OK));
     await call(req({ audio: clip(0) }), live()).catch(() => undefined);
-    await call(req({ audio: clip(BLOB_MAX_BYTES + 1) }), live()).catch(() => undefined);
     await call(req({ mime: '' }), live()).catch(() => undefined);
     expect(lines).toEqual([
       'voice upload fail reason=empty bytes=0',
-      `voice upload fail reason=too_large bytes=${BLOB_MAX_BYTES + 1}`,
       'voice upload fail reason=no_mime bytes=3',
     ]);
   });

@@ -1,20 +1,21 @@
 // 录音面板和按住“＋”的纯逻辑（B3 任务单 FA-1、FA-3、Q3；架构 5.1 按住流程、5.11 第 3、4 点）
-// • 计时：50 秒起倒数，60 秒自动结束；显示“0:07 / 1:00”
+// • 计时：50 秒起倒数，显示“0:07 / 1:00”；60 秒自动结束只由 platform/recorder.ts 定时停（界面听 onAutoStop）
 // • 上传总超时：8 秒 + 每 100 KB（不足 100 KB 按 100 KB 算）加 1 秒，最多 20 秒；ai-parse 6 秒
 // • 自动重试：只在网络错误、连接都没建立时自动重试，最多 1 次
-// • 录音 Blob：只放内存，最多 600 KB；识别失败时保留到提示条关闭，最多 2 分钟
+// • 录音 Blob：只放内存，最多 600 KB（shared/schema/ai.ts 的 AI_AUDIO_MAX_BYTES，由 recorder 判）；识别失败时保留到提示条关闭，最多 2 分钟
 // • 按住判定（Q3）：按下 350 ms 还没松开、没挪开算“按住”；之前松开算“点一下”；按下后先挪远了两样都不算。
 //   进了录音以后：拖进取消区松开 = 取消，拖进锁定区 = 锁定（松开也继续录）。取消区、锁定区的位置由界面量好，经 zoneAt 传进来
 // • 状态全是普通对象，界面放 ref 里，按住和移动期间不触发渲染（Q3：GlassBar 不重新渲染）
 // 纯 TS：不准 import React（A1）
 
 export const REC_MAX_MS = 60_000;
+/** 录音码率（架构 5.11：直传按 AAC 32–64 kbps 算）：录满 REC_MAX_MS 约 360 KB，留足 600 KB 上限的余量 */
+export const REC_BITS_PER_SECOND = 48_000;
 export const REC_COUNTDOWN_FROM_MS = 50_000;
 export const AI_PARSE_TIMEOUT_MS = 6_000;
 export const UPLOAD_BASE_MS = 8_000;
 export const UPLOAD_PER_100KB_MS = 1_000;
 export const UPLOAD_MAX_MS = 20_000;
-export const BLOB_MAX_BYTES = 600 * 1024;
 export const BLOB_KEEP_MS = 120_000;
 export const AUTO_RETRY_MAX = 1;
 export const HOLD_MS = 350;
@@ -26,9 +27,6 @@ export function uploadTimeoutMs(bytes: number): number {
   const steps = Math.ceil(Math.max(0, bytes) / (100 * 1024));
   return Math.min(UPLOAD_MAX_MS, UPLOAD_BASE_MS + steps * UPLOAD_PER_100KB_MS);
 }
-
-/** 到 60 秒就自动结束 */
-export const recShouldStop = (elapsedMs: number): boolean => elapsedMs >= REC_MAX_MS;
 
 /** 倒数还剩几秒；50 秒以前为 null（不显示倒数） */
 export function recCountdown(elapsedMs: number): number | null {
@@ -54,9 +52,6 @@ export interface KeptAudio {
   mime: string;
   keptAt: number;
 }
-
-/** 录音能不能留着重试：超过 600 KB 不留（上传本来也会被拒）；只放内存，不写库 */
-export const canKeep = (bytes: number): boolean => bytes > 0 && bytes <= BLOB_MAX_BYTES;
 
 /** 留着的录音是不是过期了（2 分钟） */
 export const keptExpired = (k: KeptAudio, now: number): boolean => now - k.keptAt >= BLOB_KEEP_MS;

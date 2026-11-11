@@ -19,6 +19,7 @@
 //   退出、被移除、换账号时 disconnectBrowserPush 删掉这个键（push.ts 的 forgetPushClaim）
 // • 几个标签页同时启动：认领包在 'lemo-push-claim:<user_id>' 锁里一个一个来（安全审查 S2），后来的读到记录就不再调
 import type { NetResult } from '../../shared/schema/sync.ts';
+import { toB64u } from './b64url.ts';
 import { isTauri } from './env.ts';
 import { CLAIM_STORAGE_KEY, subscribePush, type PushSubscribeResult } from './push.ts';
 
@@ -152,10 +153,7 @@ export async function sha256Short(text: string): Promise<string | null> {
   try {
     const subtle = globalThis.crypto?.subtle;
     if (!subtle) return null;
-    const buf = new Uint8Array(await subtle.digest('SHA-256', new TextEncoder().encode(text)));
-    let bin = '';
-    for (const b of buf) bin += String.fromCharCode(b);
-    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '').slice(0, 22);
+    return toB64u(new Uint8Array(await subtle.digest('SHA-256', new TextEncoder().encode(text)))).slice(0, 22);
   } catch {
     return null;
   }

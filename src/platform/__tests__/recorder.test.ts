@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { lastMicResult, MIC_PERM_KEY } from '../perm-mic.ts';
 import { recorderSupported, requestMic, startRecorder } from '../recorder.ts';
-import { allClosed, FakeRecorder, flush, MAX_BYTES, MAX_MS, mic, named, opts, rec0, recorderEnv, recording } from './recorder-fake.ts';
+import { allClosed, BPS, FakeRecorder, flush, MAX_BYTES, MAX_MS, mic, named, opts, rec0, recorderEnv, recording } from './recorder-fake.ts';
 
 const log = recorderEnv();
 
@@ -16,8 +16,8 @@ describe('起点：start 事件到了才算开始（句首丢字的根因）', (
       return r;
     });
     await flush();
-    // 和实测判“直传”时同一种录法：只给流、不带选项，start() 不带分片参数
-    expect(rec0().ctorArgs).toEqual([m.stream]);
+    // 码率每次都定死（不交给浏览器默认），start() 不带分片参数
+    expect(rec0().ctorArgs).toEqual([m.stream, { audioBitsPerSecond: BPS }]);
     expect(rec0().startArgs).toEqual([[]]);
     expect(settled).toBe(false);
     rec0().fireStart();
@@ -60,10 +60,10 @@ describe('起点：start 事件到了才算开始（句首丢字的根因）', (
     expect(allClosed(m)).toBe(true);
   });
 
-  it('要了码率才带 audioBitsPerSecond（60 秒会超字节上限时由调用方给）', async () => {
+  it('码率照调用方给的带上', async () => {
     const m = mic();
-    await recording({ bitsPerSecond: 64_000 });
-    expect(rec0().ctorArgs).toEqual([m.stream, { audioBitsPerSecond: 64_000 }]);
+    await recording({ bitsPerSecond: 32_000 });
+    expect(rec0().ctorArgs).toEqual([m.stream, { audioBitsPerSecond: 32_000 }]);
   });
 });
 
