@@ -6,7 +6,7 @@ import { todayOf } from '../../shared/core/date.ts';
 import { isValidTz } from '../../shared/core/tz.ts';
 import { captureRow } from '../../shared/logic/capture-map.ts';
 import { arrangeHint, confidence, parseSplit, recurHint } from '../../shared/logic/parse/index.ts';
-import { aiParseRequest, checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiItem } from '../../shared/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, aiParseRequest, checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiItem } from '../../shared/schema/ai.ts';
 import { nextPacificMidnight } from '../../supabase/functions/_shared/ai/gate.ts';
 import { PARSE_TIMEOUT_MS, VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
 import { makeParseWithAI } from '../../supabase/functions/_shared/ai/parse-core.ts';
@@ -50,7 +50,7 @@ const parseReq = () => new Request('http://kong/functions/v1/ai-parse', {
 function voiceDeps(g: FakeGate) {
   const fails: { code: string; fields: string[] }[] = [];
   const deps: VoiceDeps<AiItem> = {
-    ...g, authenticate: authed, logic: { normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI },
+    ...g, authenticate: authed, logic: { maxAudio: AI_AUDIO_MAX_BYTES, normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI },
     async logFail(_u, code, fields) {
       fails.push({ code, fields });
     },

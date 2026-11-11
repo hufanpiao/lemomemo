@@ -1,9 +1,9 @@
-// 录音上传 ai-voice（data/ai-voice-api.ts）：请求形状、各返回码、401 换令牌、本地拒发；
+// 录音上传 ai-voice（data/ai-voice-api.ts）：请求形状、各返回码、401 换令牌、录音能不能交出不在这里重判；
 // X-Projects 的编码和服务器真的解码（supabase/functions/ai-voice/core.ts 的 decodeProjects）做往返
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { AI_AUDIO_MAX_BYTES, normProjects } from '../../../../shared/schema/ai.ts';
-import { decodeProjects, MAX_AUDIO, MAX_PROJECTS_HEADER } from '../../../../supabase/functions/ai-voice/core.ts';
+import { decodeProjects, MAX_PROJECTS_HEADER } from '../../../../supabase/functions/ai-voice/core.ts';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import { outcomeOf } from '../data/ai-outcome.ts';
 import { createCallVoice, encodeProjects, voiceHeaders, type AiVoiceReq } from '../data/ai-voice-api.ts';
@@ -105,19 +105,11 @@ describe('X-Projects 和服务器的解码往返', () => {
   });
 });
 
-describe('字节上限', () => {
-  it('前端的 AI_AUDIO_MAX_BYTES 和服务器 ai-voice 读请求体用的 MAX_AUDIO 相等（合并成一份之前的护栏）', () => {
-    expect(AI_AUDIO_MAX_BYTES).toBe(MAX_AUDIO);
-  });
-});
-
-describe('本地拒发（不花流量、不花次数）', () => {
-  it('0 字节、没有类型：不发', async () => {
-    const { fetch, call } = api(async () => reply(200, OK));
-    for (const bad of [req({ audio: clip(0) }), req({ mime: '' })]) {
-      await expect(call(bad, live())).rejects.toMatchObject({ name: 'SendError', fail: 'http' });
-    }
-    expect(fetch).not.toHaveBeenCalled();
+describe('录音能不能交出由录音器判（0 字节、没有类型、超字节上限都不交出），这里不重判', () => {
+  it('没有类型的照发，服务器回 415 抛 SendError(http)', async () => {
+    const { fetch, call } = api(async () => reply(415, { error: 'unsupported_media_type' }));
+    await expect(call(req({ mime: '' }), live())).rejects.toMatchObject({ name: 'SendError', fail: 'http' });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('字节上限不在这里再判一次（录音器判过，服务器回 413）：超了照发，413 抛 SendError(http)', async () => {
@@ -193,21 +185,11 @@ describe('401 先换一次令牌再发', () => {
   });
 });
 
-describe('运行日志：只补网络那一行没有的（字节数、类型、项目个数、本地拒发的原因）', () => {
+describe('运行日志：只补网络那一行没有的（字节数、类型、项目个数）', () => {
   it('发出去的：只有开始一行（状态码和耗时在全局的 net 行里，这里不重复记）', async () => {
     const { call } = api(async () => reply(200, OK));
     await call(req({ projects: ['NEOX 宣传片', '사이드'] }), live());
     expect(lines).toEqual(['voice upload start bytes=3 mime=audio/mp4 projects=2']);
-  });
-
-  it('本地拒发：一行原因，带字节数', async () => {
-    const { call } = api(async () => reply(200, OK));
-    await call(req({ audio: clip(0) }), live()).catch(() => undefined);
-    await call(req({ mime: '' }), live()).catch(() => undefined);
-    expect(lines).toEqual([
-      'voice upload fail reason=empty bytes=0',
-      'voice upload fail reason=no_mime bytes=3',
-    ]);
   });
 
   it('不记项目名、不记转写', async () => {

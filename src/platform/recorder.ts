@@ -10,11 +10,12 @@ import { errTag, rlog } from './run-log-api.ts';
 export const REC_START_WAIT_MS = 3000;
 
 export type MicFail = 'unsupported' | 'denied' | 'no_mic';
-export type RecFail = MicFail | 'start_failed' | 'cancelled' | 'rec_error' | 'empty' | 'too_large';
+export type RecFail = MicFail | 'start_failed' | 'cancelled' | 'rec_error' | 'empty' | 'no_mime' | 'too_large';
 
+/** 交出来的录音一定交得出去：不是 0 字节、有类型、不超 maxBytes（这三条只在录音器判，上传层不重判） */
 export interface RecClip {
   blob: Blob;
-  /** 去掉参数、转成小写的类型（audio/mp4;codecs=mp4a.40.2 → audio/mp4），上传时直接当 Content-Type */
+  /** 去掉参数、转成小写的类型（audio/mp4;codecs=mp4a.40.2 → audio/mp4），不会是空串；上传时直接当 Content-Type */
   mime: string;
   ms: number;
 }
@@ -167,6 +168,7 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
       const size = ` bytes=${blob.size} ms=${ms}`;
       if (blob.size === 0) fail('empty', size);
       else if (blob.size > o.maxBytes) fail('too_large', size);
+      else if (mime === '') fail('no_mime', size);   // 录音器和各片都没标类型：发出去服务器只会回 415，重试也一样
       else finish({ ok: true, clip: { blob, mime, ms }, auto }, `rec end${size} auto=${auto ? 1 : 0}`);
     };
 

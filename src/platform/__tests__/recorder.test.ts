@@ -268,4 +268,14 @@ describe('运行日志：开始、结束、失败各一行，只有约定的键�
     expect(log.lines.at(-1)).toBe('rec fail reason=too_large bytes=100 ms=0');
     expect(log.lines).toHaveLength(2);
   });
+
+  it('录音器和各片都没标类型：no_mime，不交出录音（发出去服务器只会回 415）；原因记进 rec fail', async () => {
+    const m = mic();
+    const rec = await recording();
+    rec0().mimeType = '';
+    rec0().chunks = [new Blob([new Uint8Array(10)])];
+    expect(await rec.stop()).toEqual({ ok: false, fail: 'no_mime' });
+    expect(log.lines.at(-1)).toBe('rec fail reason=no_mime bytes=10 ms=0');
+    expect(allClosed(m)).toBe(true);
+  });
 });

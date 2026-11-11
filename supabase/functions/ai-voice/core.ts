@@ -1,6 +1,6 @@
 // ai-voice（架构第 6 节函数表 ai-voice 行、5.11、第 7 节“语音”；B3 任务单 S8、S12、BE-4，M3 X-Projects，Q2 服务器包 intent）。
 // 顺序：方法（只收 POST）→ JWT → Content-Type 白名单（先去参数再比，不在 4 种里回 415、不调 Gemini；S1、TC-B3-65 起新增用例）
-//   → 请求头 X-Now、X-TZ、X-Locale、X-Scope、X-Projects、X-Default-Day（日历页选中的那天，R6；不合格回 400）→ 边读边计数读请求体（≤ 600 KB，超了中断回 413，不只看 Content-Length）
+//   → 请求头 X-Now、X-TZ、X-Locale、X-Scope、X-Projects、X-Default-Day（日历页选中的那天，R6；不合格回 400）→ 边读边计数读请求体（≤ logic.maxAudio，超了中断回 413，不只看 Content-Length）
 //   → 共用的门（_shared/ai/gate.ts）→ voiceWithAI（Gemini 15 秒超时；回 503 时服务器端重试一次、两次合计仍不超过 15 秒，_shared/ai/retry.ts）→ 成功回 {intent: 'record', confidence, transcript, items, quota_left}；
 //   失败退回预扣、回 {ai_failed, reason}（客户端留着录音，可以重试或再说一次）。
 // 空列表（R7 ②）：转写为空回 {transcript: '', items: []}、照常算 1 次（客户端按 no_speech）；转写不空而条目为空由校验判 invalid（empty），退回次数。
@@ -15,7 +15,6 @@ import type { AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, ParseFail, ParseOk, VoiceInput } from '../_shared/ai/parse-core.ts';
 import { readCapped } from '../_shared/body.ts';
 
-export const MAX_AUDIO = 600 * 1024;
 export const MAX_PROJECTS_HEADER = 4096;
 export const AUDIO_TYPES = ['audio/mpeg', 'audio/aac', 'audio/mp4', 'audio/webm'] as const;
 export const RECORD_CONFIDENCE = 1;
@@ -26,7 +25,10 @@ export const VOICE_RETRY_COUNT_LIMIT = 1_000_000;
 
 export type AuthResult = { ok: true; user: { userId: string } } | { ok: false; response: Response };
 
+/** shared/schema/ai.ts 里的几样（index.ts 从 _shared/gen/ 注入，单测注入真的 shared；本文件不 import _shared/gen/） */
 export interface Logic<Item> {
+  /** 一段录音最多多少字节：shared 的 AI_AUDIO_MAX_BYTES（前端录音器判同一份） */
+  maxAudio: number;
   normLocale(v: unknown): 'zh' | 'ko';
   normProjects(v: unknown): string[];
   isValidTz(tz: string): boolean;
@@ -121,7 +123,7 @@ export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Resp
     await req.body?.cancel().catch(() => {});
     return json(400, { error: 'bad_request' });
   }
-  const audio = await readCapped(req, MAX_AUDIO);
+  const audio = await readCapped(req, deps.logic.maxAudio);
   if (audio === 'too_large') return json(413, { error: 'too_large' });
   if (audio === 'empty') return json(400, { error: 'bad_request' });
   if (scope === 'vault') return json(200, { fallback: true, reason: 'vault_ai_off' });

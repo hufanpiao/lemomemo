@@ -2,7 +2,7 @@
 // 服务商用桩（不联网），门用内存替身，校验注入真的 shared。
 import { describe, expect, it } from 'vitest';
 import { isValidTz } from '../../shared/core/tz.ts';
-import { aiParseRequest, aiResponse, checkDefaultDay, checkParseOutput, checkVoiceOutput, INVALID_REASONS, normLocale, normProjects, type AiCheckCtx, type AiItem } from '../../shared/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, aiParseRequest, aiResponse, checkDefaultDay, checkParseOutput, checkVoiceOutput, INVALID_REASONS, normLocale, normProjects, type AiCheckCtx, type AiItem } from '../../shared/schema/ai.ts';
 import { fillPrompt, makeParseWithAI, type InvalidReasonLike } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { PROMPT_VERSION } from '../../supabase/functions/_shared/ai/params.ts';
 import { PARSE_V3 } from '../../supabase/functions/_shared/ai/prompts/parse.v3.ts';
@@ -42,7 +42,7 @@ function voiceDeps(o: GateOpts = {}) {
   const g = fakeGate({ reply: () => okJson({ transcript: '下午三点开会', items: [{ kind: 'event', title: '开会', date: null, time: '15:00', date_basis: null }] }), ...o });
   const fails: string[] = [];
   const deps: VoiceDeps<AiItem> = {
-    ...g, authenticate: authed, logic: { normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI },
+    ...g, authenticate: authed, logic: { maxAudio: AI_AUDIO_MAX_BYTES, normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI },
     async logFail(_u, code) {
       fails.push(code);
     },

@@ -30,8 +30,8 @@ export const AI_TEXT_MAX = 2000;
 /** projects[]：最多几个、每个最长几个字（第 6 节 ai-parse；任务单 M3） */
 export const AI_PROJECTS_MAX = 30;
 export const AI_PROJECT_LEN = 40;
-/** 一段录音最多多少字节（架构 5.11 第 2 点）：前端录音器超了就不交出。服务器 ai-voice 还另用 core.ts 的 MAX_AUDIO（待改成引这一份），
- *  合并前由 ai-voice-api.test.ts 钉住两边相等 */
+/** 一段录音最多多少字节（架构 5.11 第 2 点）：前端录音器超了就不交出；服务器 ai-voice、voice-probe
+ *  读请求体也用这一份（各自的 index.ts 从 _shared/gen/ 注入，超了回 413） */
 export const AI_AUDIO_MAX_BYTES = 600 * 1024;
 
 /** B3 运行时只有 record（Q2）；B4b-3 放开枚举就改这一处 */

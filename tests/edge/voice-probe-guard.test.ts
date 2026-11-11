@@ -3,8 +3,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AUDIO_TYPES, EXPIRES_AT, isPreview, MAX_AUDIO, PREVIEW_REF, QUOTA_WINDOW_S } from '../../supabase/functions/_preview/voice-probe/handler.ts';
-import { AUDIO_TYPES as VOICE_TYPES, MAX_AUDIO as VOICE_MAX } from '../../supabase/functions/ai-voice/core.ts';
+import { AUDIO_TYPES, EXPIRES_AT, isPreview, PREVIEW_REF, QUOTA_WINDOW_S } from '../../supabase/functions/_preview/voice-probe/handler.ts';
+import { AUDIO_TYPES as VOICE_TYPES } from '../../supabase/functions/ai-voice/core.ts';
 import { pacificDate } from '../../supabase/functions/_shared/ai/gate.ts';
 
 const ROOT = join(import.meta.dirname, '..', '..');
@@ -14,9 +14,13 @@ describe('voice-probe：和 ai-voice 一致；计数窗口', () => {
   it('isPreview 只许末尾多一个斜杠', () => {
     expect([isPreview(PREVIEW_URL), isPreview(`${PREVIEW_URL}/`), isPreview(`${PREVIEW_URL}//`)]).toEqual([true, true, false]);
   });
-  it('类型和大小上限和正式 ai-voice 一样', () => {
+  it('类型白名单和正式 ai-voice 一样；大小上限两边的 index.ts 都从生成副本注入 shared 的 AI_AUDIO_MAX_BYTES（不各写一份）', () => {
     expect([...AUDIO_TYPES]).toEqual([...VOICE_TYPES]);
-    expect(MAX_AUDIO).toBe(VOICE_MAX);
+    for (const p of ['supabase/functions/ai-voice/index.ts', 'supabase/functions/_preview/voice-probe/index.ts']) {
+      const src = readFileSync(join(ROOT, p), 'utf8');
+      expect(src, p).toMatch(/import \{[^}]*\bAI_AUDIO_MAX_BYTES\b[^}]*\} from '(?:\.\.\/)+_shared\/gen\/schema\/ai\.ts';/);
+      expect(src, p).toContain('maxAudio: AI_AUDIO_MAX_BYTES');
+    }
   });
   it('有效期内（11-07 到 EXPIRES_AT）每个太平洋日期从头到尾都落在同一个 take_rate 窗口里（窗口按 1970 年起整数倍对齐），每天真的只有 100 次', () => {
     const win = (ms: number) => Math.floor(ms / 1000 / QUOTA_WINDOW_S);

@@ -22,8 +22,9 @@ import { pacificDate } from '../../_shared/ai/gate.ts';
 import { VOICE_PROBE_PARAMS, VOICE_TIMEOUT_MS } from '../../_shared/ai/params.ts';
 import type { AIProvider, AiResult } from '../../_shared/ai/provider.ts';
 import { generateRetry503 } from '../../_shared/ai/retry.ts';
-// 类型白名单和大小上限直接用正式 ai-voice 的（代码审 S3：从源头保证一致；ai-voice/core.ts 只依赖 _shared，不读环境变量、不碰数据库）
-import { AUDIO_TYPES, MAX_AUDIO } from '../../ai-voice/core.ts';
+// 类型白名单直接用正式 ai-voice 的（代码审 S3：从源头保证一致；ai-voice/core.ts 只依赖 _shared，不读环境变量、不碰数据库）；
+// 大小上限和正式 ai-voice 一样由 index.ts 注入 shared 的 AI_AUDIO_MAX_BYTES（HandlerDeps.maxAudio）
+import { AUDIO_TYPES } from '../../ai-voice/core.ts';
 
 /** 预览项目 ref（db-probe 11-12 已删，这里是唯一一份） */
 export const PREVIEW_REF = 'yoeqwhygehbaftkppati';
@@ -45,7 +46,7 @@ export const ALLOWED_UIDS: readonly string[] = [
 
 /** 模型只认 Q6 的两个（架构师 11-07 定、主持人第一天确认是哪个；探测时两个都可能要跑），由请求头 X-Model 指定，没有默认值 */
 export const MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'] as const;
-export { AUDIO_TYPES, MAX_AUDIO };
+export { AUDIO_TYPES };
 /** 每天额度（Q1 ④） */
 export const DAILY_LIMIT = 100;
 /**
@@ -90,6 +91,8 @@ export interface HandlerDeps {
   sleep?: (ms: number) => Promise<void>;
   /** 平台注入的 SUPABASE_URL */
   supabaseUrl: string | undefined;
+  /** 一段录音最多多少字节：shared 的 AI_AUDIO_MAX_BYTES（index.ts 从 _shared/gen/ 注入，和正式 ai-voice 同一份） */
+  maxAudio: number;
   now: () => number;
   /** 单调时钟（毫秒），量耗时用 */
   clock: () => number;
@@ -206,7 +209,7 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
     return reply(415, { error: 'unsupported_type', raw_type });
   }
   // ⑧
-  const audio = await readCapped(req, MAX_AUDIO);
+  const audio = await readCapped(req, deps.maxAudio);
   if (audio === 'too_large') {
     deps.log({ code: 'too_large', mime });
     return reply(413, { error: 'too_large', mime, raw_type });

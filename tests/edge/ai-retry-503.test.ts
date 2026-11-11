@@ -2,7 +2,7 @@
 // 只认 503；两次合计不超过 req.timeoutMs；剩的时间不够就不重试；最多一次。正式 ai-voice（voiceWithAI）用它，ai-parse 不用。服务商一律用桩。
 import { describe, expect, it } from 'vitest';
 import { isValidTz } from '../../shared/core/tz.ts';
-import { checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiItem } from '../../shared/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiItem } from '../../shared/schema/ai.ts';
 import { handle as voiceHandle, VOICE_RETRY_COUNT_LIMIT, voiceRetryKey, type Deps as VoiceDeps } from '../../supabase/functions/ai-voice/core.ts';
 import { VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
 import { makeParseWithAI, type ParseInput } from '../../supabase/functions/_shared/ai/parse-core.ts';
@@ -106,7 +106,7 @@ describe('ai-voice：503 重试透出 retried（11-11 架构复审）', () => {
     const fails: { code: string; fields: string[] }[] = [];
     const deps: VoiceDeps<AiItem> = {
       ...g, authenticate: async () => ({ ok: true as const, user: { userId: UA } }),
-      logic: { normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI },
+      logic: { maxAudio: AI_AUDIO_MAX_BYTES, normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI },
       async logFail(_u, code, fields) { fails.push({ code, fields }); },
       ...extra,
     };

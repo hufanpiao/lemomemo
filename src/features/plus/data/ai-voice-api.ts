@@ -1,12 +1,12 @@
 // 把一段录音 POST 给 ai-voice，返回已 parse 的 JSON，原样交给 ai-outcome.ts 的 outcomeOf
 // • 包体就是录音的原始字节，参数全在请求头；发送、401 换令牌、各返回码见 fn-post.ts 的 postFn
-// • 只发这一次：总超时（record-logic 的 uploadTimeoutMs）、自动重试由调用方管；字节上限由录音器判过、服务器再回 413，这里不重判
-// • 运行日志只补全局 net 行没有的：字节数、类型、项目个数、没发出去的原因；不记项目名
+// • 只发这一次：总超时（record-logic 的 uploadTimeoutMs）、自动重试由调用方管；录音能不能交出（不空、有类型、不超字节上限）由录音器判过，这里不重判
+// • 运行日志只补全局 net 行没有的：字节数、类型、项目个数；不记项目名
 // 纯 TS：不准 import React（A1）
 import { toB64u } from '../../../platform/b64url.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { postFn, type FnPostOptions } from './fn-post.ts';
-import { SendError, type AiReqCtx } from './type-flow.ts';
+import type { AiReqCtx } from './type-flow.ts';
 
 export const AI_VOICE_FN = 'ai-voice';
 /** 进日志的类型只收这种写法，别的记成 ? */
@@ -36,21 +36,9 @@ export function voiceHeaders(req: AiVoiceReq): Record<string, string> {
   };
 }
 
-/** 发了也是白发的录音，本机就拦下（类型白名单只在服务器，不在这里再抄一份） */
-function refusal(req: AiVoiceReq): 'empty' | 'no_mime' | null {
-  if (req.audio.size === 0) return 'empty';
-  return req.mime === '' ? 'no_mime' : null;
-}
-
 export function createCallVoice(o: FnPostOptions = {}): CallVoice {
   return (req: AiVoiceReq, signal: AbortSignal): Promise<unknown> => {
-    const bytes = req.audio.size;
-    const why = refusal(req);
-    if (why !== null) {
-      rlog(`voice upload fail reason=${why} bytes=${bytes}`);
-      return Promise.reject(new SendError('http'));
-    }
-    rlog(`voice upload start bytes=${bytes} mime=${MIME_RE.test(req.mime) ? req.mime : '?'} projects=${req.projects.length}`);
+    rlog(`voice upload start bytes=${req.audio.size} mime=${MIME_RE.test(req.mime) ? req.mime : '?'} projects=${req.projects.length}`);
     return postFn(AI_VOICE_FN, { headers: voiceHeaders(req), body: req.audio }, signal, o);
   };
 }

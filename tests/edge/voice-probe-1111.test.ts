@@ -1,6 +1,7 @@
 // voice-probe 11-11 改动（B3 iPhone 实测后）：系统提示加主语言和逐字转写要求、音频前加文字指令、Gemini 503 重试一次。
 // 其余行为见 voice-probe.test.ts（那边超 300 行，新用例放这里）。服务商用真的 GeminiProvider 套假 fetch，不联网。
 import { describe, expect, it } from 'vitest';
+import { AI_AUDIO_MAX_BYTES } from '../../shared/schema/ai.ts';
 import { handle, PREVIEW_REF, PROBE_INSTRUCTION, PROBE_SYSTEM, type HandlerDeps, type ProbeLog } from '../../supabase/functions/_preview/voice-probe/handler.ts';
 import { GeminiProvider, type Fetch } from '../../supabase/functions/_shared/ai/gemini.ts';
 
@@ -14,6 +15,7 @@ function setup(reply: Fetch) {
   const logs: ProbeLog[] = [];
   const deps: HandlerDeps = {
     supabaseUrl: `https://${PREVIEW_REF}.supabase.co`,
+    maxAudio: AI_AUDIO_MAX_BYTES,
     now: () => Date.UTC(2026, 10, 11, 3, 0),
     clock: () => 0,
     verify: async () => UID,

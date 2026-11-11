@@ -5,9 +5,10 @@
 // 密钥只在 x-goog-api-key；（源码守门、和 db-probe / ai-voice 的常量一致、计数窗口对齐在 voice-probe-guard.test.ts）Gemini 成功、额度用完、出错、超时、坏输出各自如实回；日志只有允许的字段，不带转写和音频。
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  ALLOWED_UIDS, DAILY_LIMIT, EXPIRES_AT, handle, MAX_AUDIO, MAX_TRANSCRIPT, MODELS, PREVIEW_REF, PROBE_INSTRUCTION,
+  ALLOWED_UIDS, DAILY_LIMIT, EXPIRES_AT, handle, MAX_TRANSCRIPT, MODELS, PREVIEW_REF, PROBE_INSTRUCTION,
   QUOTA_WINDOW_S, quotaKey, rawLabel, type HandlerDeps, type ProbeLog,
 } from '../../supabase/functions/_preview/voice-probe/handler.ts';
+import { AI_AUDIO_MAX_BYTES } from '../../shared/schema/ai.ts';
 import { pacificDate } from '../../supabase/functions/_shared/ai/gate.ts';
 import { GEMINI_BASE, GeminiProvider, type Fetch } from '../../supabase/functions/_shared/ai/gemini.ts';
 import { VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
@@ -27,7 +28,7 @@ function setup(o: Partial<HandlerDeps> & { reply?: Fetch; takeOk?: boolean | 'th
   const logs: ProbeLog[] = [];
   const reply: Fetch = o.reply ?? (async () => gem({ transcript: SAID }));
   const deps: HandlerDeps = {
-    supabaseUrl: PREVIEW_URL,
+    supabaseUrl: PREVIEW_URL, maxAudio: AI_AUDIO_MAX_BYTES,
     now: () => NOW,
     clock: () => 0,
     async verify(jwt) {
@@ -201,10 +202,10 @@ describe('voice-probe：模型、类型、大小（Q1 ⑤）', () => {
 
   it('正好 600 KB 收；多 1 字节回 413，不计数；不带 Content-Length 的分块上传读到超限就中断；空的回 400', async () => {
     const ok = setup();
-    const r = await call(await handle(req({}, new Uint8Array(MAX_AUDIO)), ok.deps));
-    expect([r.status, r.body['bytes']]).toEqual([200, MAX_AUDIO]);
+    const r = await call(await handle(req({}, new Uint8Array(AI_AUDIO_MAX_BYTES)), ok.deps));
+    expect([r.status, r.body['bytes']]).toEqual([200, AI_AUDIO_MAX_BYTES]);
     const big = setup();
-    expect((await handle(req({}, new Uint8Array(MAX_AUDIO + 1)), big.deps)).status).toBe(413);
+    expect((await handle(req({}, new Uint8Array(AI_AUDIO_MAX_BYTES + 1)), big.deps)).status).toBe(413);
     expect(big.calls.take).toEqual([]);
     let pulled = 0;
     const stream = new ReadableStream<Uint8Array>({
@@ -214,8 +215,7 @@ describe('voice-probe：模型、类型、大小（Q1 ⑤）', () => {
         else c.enqueue(new Uint8Array(4096));
       },
     });
-    const chunked = setup();
-    expect((await handle(req({}, stream), chunked.deps)).status).toBe(413);
+    expect((await handle(req({}, stream), setup().deps)).status).toBe(413);
     expect(pulled).toBeLessThan(200);
     const empty = setup();
     expect(await call(await handle(req({}, new Uint8Array(0)), empty.deps))).toMatchObject({ status: 400, body: { error: 'empty' } });

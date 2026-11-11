@@ -2,10 +2,10 @@
 // B3 任务单 BE-4、S8、S12、M3；TC-B3-24（超长音频边读边计数）、25、26、42、50；Q2（服务器包 intent）。
 import { describe, expect, it } from 'vitest';
 import { isValidTz } from '../../shared/core/tz.ts';
-import { aiParseRequest, aiResponse, checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiItem } from '../../shared/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, aiParseRequest, aiResponse, checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiItem } from '../../shared/schema/ai.ts';
 import { makeParseWithAI } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { handle as parseHandle, MAX_BODY, type Deps as ParseDeps } from '../../supabase/functions/ai-parse/core.ts';
-import { audioType, bytesBucket, decodeProjects, handle as voiceHandle, MAX_AUDIO, MAX_PROJECTS_HEADER, readCapped, type Deps as VoiceDeps } from '../../supabase/functions/ai-voice/core.ts';
+import { audioType, bytesBucket, decodeProjects, handle as voiceHandle, MAX_PROJECTS_HEADER, readCapped, type Deps as VoiceDeps } from '../../supabase/functions/ai-voice/core.ts';
 import { fakeGate, okJson, UA, used, type GateOpts } from './ai-fakes.ts';
 
 const { parseWithAI, voiceWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
@@ -110,7 +110,7 @@ function voiceDeps(o: GateOpts = {}) {
   const g = fakeGate({ reply: () => okJson({ transcript: '明天下午三点开会', items: [EV] }), ...o });
   const fails: { userId: string; code: string; fields: string[] }[] = [];
   const deps: VoiceDeps<AiItem> = {
-    ...g, authenticate: authed, logic: { normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI },
+    ...g, authenticate: authed, logic: { maxAudio: AI_AUDIO_MAX_BYTES, normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI },
     async logFail(userId, code, fields) {
       fails.push({ userId, code, fields });
     },
@@ -161,7 +161,7 @@ describe('ai-voice：失败分支写 logs 表（架构审第九节第 2 条）',
     expect(fails).toEqual([{ userId: UA, code: 'ai_timeout', fields: ['type=AbortError', 'bytes=<16k'] }]);
   });
   it('voiceWithAI 自己抛异常：写 ai_error，只记类型名，不记 message', async () => {
-    const { r, fails } = await run({}, { logic: { normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI: async () => { throw new TypeError('明天下午三点开会 secret'); } } });
+    const { r, fails } = await run({}, { logic: { maxAudio: AI_AUDIO_MAX_BYTES, normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI: async () => { throw new TypeError('明天下午三点开会 secret'); } } });
     expect(r.body).toEqual({ ai_failed: true, reason: 'error' });
     expect(fails).toEqual([{ userId: UA, code: 'ai_error', fields: ['type=TypeError', 'bytes=<16k'] }]);
     expect(JSON.stringify(fails)).not.toContain('secret');
@@ -193,7 +193,7 @@ describe('ai-voice：失败分支写 logs 表（架构审第九节第 2 条）',
     expect(v.g.logs).toContain('log_write_failed');
   });
   it('字节数区间', () => {
-    expect([0, 16 * 1024 - 1, 16 * 1024, 64 * 1024, 256 * 1024, MAX_AUDIO].map(bytesBucket)).toEqual(['<16k', '<16k', '16k-64k', '64k-256k', '256k-600k', '256k-600k']);
+    expect([0, 16 * 1024 - 1, 16 * 1024, 64 * 1024, 256 * 1024, AI_AUDIO_MAX_BYTES].map(bytesBucket)).toEqual(['<16k', '<16k', '16k-64k', '64k-256k', '256k-600k', '256k-600k']);
   });
 });
 
@@ -215,9 +215,9 @@ describe('ai-voice', () => {
     const t = trickle(64 * 1024, 100);
     expect((await voiceHandle(voiceReq(t.stream), deps)).status).toBe(413);
     expect(t.sent()).toBeLessThan(100);
-    expect(t.sent()).toBeLessThanOrEqual(Math.ceil(MAX_AUDIO / (64 * 1024)) + 2);
-    expect((await voiceHandle(voiceReq(new Uint8Array(MAX_AUDIO + 1)), deps)).status).toBe(413);
-    expect(await readCapped(voiceReq(new Uint8Array(MAX_AUDIO)), MAX_AUDIO)).toHaveLength(MAX_AUDIO);
+    expect(t.sent()).toBeLessThanOrEqual(Math.ceil(AI_AUDIO_MAX_BYTES / (64 * 1024)) + 2);
+    expect((await voiceHandle(voiceReq(new Uint8Array(AI_AUDIO_MAX_BYTES + 1)), deps)).status).toBe(413);
+    expect(await readCapped(voiceReq(new Uint8Array(AI_AUDIO_MAX_BYTES)), AI_AUDIO_MAX_BYTES)).toHaveLength(AI_AUDIO_MAX_BYTES);
     expect([g.provider.stub.calls.length, g.counts.size]).toEqual([0, 0]);
   });
   // 代码审 M4：同上

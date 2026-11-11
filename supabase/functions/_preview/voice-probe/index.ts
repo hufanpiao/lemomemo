@@ -10,6 +10,7 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { GeminiProvider } from '../../_shared/ai/gemini.ts';
 import { takeRate, type StoreAdmin } from '../../_shared/ai/store.ts';
+import { AI_AUDIO_MAX_BYTES } from '../../_shared/gen/schema/ai.ts';
 import { handle, type ProbeLog } from './handler.ts';
 import { timedFetch } from '../../_shared/net.ts';
 import { STORE_TIMEOUT_MS } from '../../_shared/store-timeout.ts';
@@ -32,6 +33,7 @@ const log = (e: ProbeLog): void => {
 Deno.serve((req) =>
   handle(req, {
     supabaseUrl: Deno.env.get('SUPABASE_URL'),
+    maxAudio: AI_AUDIO_MAX_BYTES,
     now: () => Date.now(),
     clock: () => performance.now(),
     async verify(jwt) {
