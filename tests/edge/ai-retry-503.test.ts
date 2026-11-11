@@ -44,6 +44,13 @@ describe('generateRetry503', () => {
     expect(r.p.calls.map((c) => c.timeoutMs)).toEqual([15_000, 15_000 - 2000 - RETRY_BACKOFF_MS]);
     expect(r.p.calls[1]?.system).toBe(REQ.system);
   });
+  // CI 11-11 洛杉矶时区作业：setTimeout 比 performance.now 早约 1 ms 回来，第二次拿到 14701 ms，两次合计超过 15 秒
+  it('等待提前回来（定时器比时钟早 2 ms）：第二次的超时照样按满 300 ms 扣，合计不超过 15 秒', async () => {
+    const r = rig([E503, okJson({ a: 1 })], [2000, 3000]);
+    const o = await generateRetry503(r.p, REQ, { ...r.deps, sleep: async (ms: number) => { r.slept.push(ms); await r.deps.sleep(ms - 2); } });
+    expect(o.retried).toBe(true);
+    expect(r.p.calls[1]?.timeoutMs).toBe(15_000 - 2000 - RETRY_BACKOFF_MS);
+  });
   it('两次都 503：只重试一次，回第二次的结果', async () => {
     const r = rig([E503, E503, okJson({})], [1000, 1000]);
     const o = await generateRetry503(r.p, REQ, r.deps);

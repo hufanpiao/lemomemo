@@ -36,8 +36,10 @@ export async function generateRetry503(provider: AIProvider, req: AiRequest, dep
   const first = await provider.generate(req);
   if (!is503(first)) return { result: first, retried: false };
   if (deadline - clock() < RETRY_MIN_LEFT_MS + RETRY_BACKOFF_MS) return { result: first, retried: false };
+  const slept = clock();
   await sleep(RETRY_BACKOFF_MS);
-  const left = Math.floor(deadline - clock());
+  // 定时器可能比时钟早 1 ms 左右回来：至少按满 RETRY_BACKOFF_MS 扣，合计才不会超过 req.timeoutMs
+  const left = Math.floor(deadline - Math.max(clock(), slept + RETRY_BACKOFF_MS));
   if (left < RETRY_MIN_LEFT_MS) return { result: first, retried: false };
   const second = await provider.generate({ ...req, timeoutMs: left });
   return { result: second, retried: true };
