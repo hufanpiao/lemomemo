@@ -80,17 +80,18 @@ const HIT: Readonly<Record<QueryKind, RegExp>> = {
   list: new RegExp(alt(PHRASES.list, () => true)),
   conflict: new RegExp(alt(PHRASES.conflict, () => true)),
 };
-/** 祈使位置的正则：没有这种位置的说法时不生成 */
-function imperativeRes(ps: readonly Phrase[]): RegExp[] {
+/** 祈使位置的正则：没有这种位置的说法时不生成；tailMark 是句尾说法后面许带的一个标点 */
+function imperativeRes(ps: readonly Phrase[], tailMark: string): RegExp[] {
   const at = (pos: Pos) => alt(ps, (p) => p.pos === pos);
   const shapes: [string, (w: string) => string][] = [
     [at('head'), (w) => `${POLITE}(?:${w})`],
-    [at('tail'), (w) => `(?:${w})\\s*[?？.。!！]?\\s*$`],
+    [at('tail'), (w) => `(?:${w})\\s*${tailMark}?\\s*$`],
     [at('ask'), (w) => `(?:${w})[^?？]*[?？]\\s*$`],
   ];
   return shapes.filter(([w]) => w !== '').map(([w, f]) => new RegExp(f(w)));
 }
-const IMPERATIVE = { search: imperativeRes(PHRASES.search), summarize: imperativeRes(PHRASES.summary) };
+/** 总结的句尾不收问号：句尾带问号的先命中查找的“[?？]”，走不到总结 */
+const IMPERATIVE = { search: imperativeRes(PHRASES.search, '[?？.。!！]'), summarize: imperativeRes(PHRASES.summary, '[.。!！]') };
 /** 查询文字里去掉的句式本身（四张表的全部说法） */
 const QUERY_STRIP = new RegExp(Object.values(PHRASES).flatMap((ps) => ps.map((p) => p.word)).join('|'), 'g');
 /** 日期解析认不出的时间说法：还在句子里就没把握，免得拿“上周”当关键词查 */
