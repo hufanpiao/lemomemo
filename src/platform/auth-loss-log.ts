@@ -1,13 +1,7 @@
-// 会话丢失的原因码 lemo.authloss 和本机算的哈希（架构 4.1a 第 1、3 点；R-382，0.59 安全审 M4、0.60 复审建议 5）
-// 从 auth-loss-store.ts 拆出来（首屏只要 lemo.reauth 那几个函数；这里随 core/auth-loss.ts 懒加载，main.tsx 上传时也是动态引入）
-// • lemo.authloss：最多 AUTH_LOSS_MAX（5）条（旧的挤掉），每条 30 天；字段只有
-//   {uid_h, path, code, status, fate, at, app}。uid_h = sha256(install_id ':' user_id) 的十六进制前 16 位（0.60 加盐），不存明文 user_id。
-//   被动清库（core/account.ts 的 wipeLocal、冷启动删库）不删它；K9 自己退出、登录页“清除这台设备上的内容”删它（clearAuthLoss）
-// • pairHash(session_id, user_id)：sha256(session_id ':' user_id) 的 64 位小写十六进制，在本机算（crypto.subtle），查 session_fate 用；
-//   和迁移 20261111120000 的 private.session_pair_hash（uuid::text 小写）同一口径
-// 首屏块里的模块一个都不 import（env.ts 在所有块共用的 jsx-runtime 块里，不算）：懒加载块一引首屏模块，
-// 构建就把首屏共享块按“谁引用”拆成两块，首屏多一百多字节（R-382 首屏净增，11-11 实测）。所以 install_id 由调用方传进来，
-// 下面几个常量在 auth-loss-store.ts、supabase/refresh-failure.ts 里各有一份同值的，platform/__tests__/auth-loss-store.test.ts 断言两边一致
+// 会话丢失的原因码 lemo.authloss 和本机算的哈希（架构 4.1a 第 1、3 点）：随 core/auth-loss.ts 懒加载，不进首屏
+// 不变量：最多 AUTH_LOSS_MAX 条、每条 30 天，只存 {uid_h, path, code, status, fate, at, app}；uid_h 加 install_id 盐，不存明文 user_id；被动清库不删
+// 不变量：pairHash 和迁移里的 private.session_pair_hash 同一口径；不 import 首屏模块（install_id 由调用方传），同值常量由 auth-loss-store.test.ts 断言一致
+// 为什么不引首屏模块见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
 import { buildInfo } from './env.ts';
 
 export const AUTH_LOSS_KEY = 'lemo.authloss';

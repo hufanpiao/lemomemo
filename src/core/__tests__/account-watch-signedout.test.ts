@@ -1,11 +1,10 @@
 // 本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signedout，TC-B1-61 ②、TC-B1-83）。
 // K6-sugg5 ⑤ 从 account-watch.test.ts 按主题拆出来；搭台在 account-watch-harness.ts
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { watchAccount } from '../account.ts';
 import { coldStart, getBoot, resetBootForTest } from '../boot.ts';
 import { clearAllCollections } from '../store.ts';
 import { fakeIndexedDB, flush } from './idb-fake.ts';
-import { setup } from './account-watch-harness.ts';
+import { setup, watchWithExit } from './account-watch-harness.ts';
 
 beforeEach(() => {
   clearAllCollections();
@@ -23,7 +22,7 @@ describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signe
     boot.cache?.close();
     resetBootForTest();
     const b2 = await coldStart({ userId: 'A', appVersion: '4.0.0', cacheOptions: { factory: fakeIndexedDB().factory }, listen426: false });
-    watchAccount(b2, {
+    watchWithExit(b2, {
       clearCacheStorage: () => Promise.resolve(), onAuthUser, onStorageUser: () => () => undefined,
       currentUserId: () => 'A', dropSession: () => null, onSignedOut: vi.fn(), onSwitched: vi.fn(),
     });
@@ -41,9 +40,9 @@ describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signe
     // 同步设闸：还没 await 任何东西
     expect(boot.switching).toBe(true);
     expect(boot.outbox?.isSuspended()).toBe(true);
-    expect(deps.clearLogs).toHaveBeenCalledTimes(1);
-    expect(deps.onSignedOut).not.toHaveBeenCalled();   // 清完才走
     await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
+    // 日志队列在回登录页之前清（清库前一次、清完兜底再一次，core/device-exit.ts）
+    expect(deps.clearLogs.mock.invocationCallOrder[0]).toBeLessThan(deps.onSignedOut.mock.invocationCallOrder[0] ?? 0);
     expect(deps.onSignedOut).toHaveBeenCalledWith('removed', null);
     expect(fake.dbs.has('planner-v4')).toBe(false);
     expect(boot.cache?.isClosed()).toBe(true);

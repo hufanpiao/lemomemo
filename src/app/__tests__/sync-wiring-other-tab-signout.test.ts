@@ -4,15 +4,16 @@
 // A 在路上的请求（发出时本机已没有会话，sid 为 null）回了 account_disabled → 之后 A 才收到 storage 事件（watchAccount 那一路）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { coldStart, getBoot, resetBootForTest, type BootOptions, type BootResult } from '../../core/boot.ts';
-import { claimCache, watchAccount } from '../../core/account.ts';
+import { claimCache } from '../../core/account.ts';
 import { clearAllCollections } from '../../core/store.ts';
 import type { Sync, SyncOptions } from '../../core/sync/engine.ts';
 import { fakeTransport } from '../../core/sync/__tests__/fake-server.ts';
-import { fakeIndexedDB } from '../../core/__tests__/idb-fake.ts';
+import { fakeIndexedDB, flush } from '../../core/__tests__/idb-fake.ts';
 import { todo, uid } from '../../core/__tests__/outbox-fixtures.ts';
 import { clearReauth, readReauth } from '../../platform/auth-loss-store.ts';
 import { markSelfSignOut, resetSelfSignOutForTest } from '../../platform/session.ts';
 import { wireSync } from '../sync-wiring.ts';
+import { watchWithExit } from '../../core/__tests__/account-watch-harness.ts';
 
 const A = '00000000-0000-4000-8000-00000000000a';
 const S = '00000000-0000-4000-8000-0000000000c1';
@@ -55,7 +56,7 @@ async function start() {
     onSwitched: vi.fn(),
     clearCacheStorage: vi.fn(() => Promise.resolve()),
   };
-  watchAccount(boot, w);
+  watchWithExit(boot, w);
   /** B 页本人退出：打标记、删记号（signOutThisDevice 的顺序）、最后会话键没了 */
   const otherTabSignsOut = (): void => {
     markSelfSignOut(undefined, Date.now(), S);
@@ -83,15 +84,17 @@ afterEach(() => {
 });
 
 describe('别的标签页本人退出（R-382 复核建议 ②）', () => {
-  it('sync-wiring-other-tab-signout：storage 事件到之前先收到 sid 为 null 的 account_disabled → 不留 lemo.reauth，下次冷启动不误报“登录已过期”', async () => {
+  it('sync-wiring-other-tab-signout：storage 事件到之前先收到 sid 为 null 的 account_disabled → 不留 lemo.reauth，下次冷启动不误报“登录已过期”；随后的 storage 事件不再退第二遍', async () => {
     const r = await start();
     r.otherTabSignsOut();
     await failWith(r.boot, 'account_disabled', null);
     await vi.waitFor(() => expect(r.d.goToAuth).toHaveBeenCalled());
     r.storageEvent();
-    await vi.waitFor(() => expect(r.w.onSignedOut).toHaveBeenCalled());
+    await flush(20);
+    // 同一页只退出一次（core/device-exit.ts 的 exited）：同步层已经在退出，watchAccount 那一路什么也不做
+    expect(r.w.onSignedOut).not.toHaveBeenCalled();
+    expect(r.d.goToAuth).toHaveBeenCalledTimes(1);
     expect(readReauth()).toBeNull();
-    expect(r.w.onSignedOut).not.toHaveBeenCalledWith('expired', expect.anything());
     expect(r.d.setExitNotice).not.toHaveBeenCalled();
   });
 

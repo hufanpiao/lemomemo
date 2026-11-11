@@ -1,16 +1,7 @@
-// 告知与同意页的接线（接手清单 CONSENT-wire ①③④；架构 15.5、0.40、0.41）
-// • 小容器：用 platform/supabase 的 getSupabase 建 createConsentApi，整个页面共用一个（A27：ui 不能引 data，所以放在 hooks）
-//   noticeState 先走快读（B2 FA-6 ①，data/consent-api.ts 的 createRestNoticeRead）：令牌还新鲜时直接 GET 两张表，启动关口不为它加载 supabase-js；
-//   读不了就退回 supabase-js。构建没带 supabase 地址时（envReady 为假）直接按读失败放行，同样不下载 supabase-js
-// • useNoticeState：只问一次 noticeState()；读失败（断网、超时、出错）按 'error' 交回，由调用方放行进 App。
-//   给了 limitMs（启动关口用 CONSENT_GATE_MS，CONSENT-sugg ①）时到点也按 'error' 交回，之后才回来的结果丢掉
-// • useConsentHandlers：ConsentPage 的四个必填回调
-//   - onDone(agreed)：服务器已记下；agreed 为 true 时经 settings 同步写 ai.enabled = true（core/ai-settings.ts 的 writeAiSwitchSettled，走 outbox；
-//     服务器只在撤回时写 false）；本机还没拉到服务器那一行、insert 被拒时，它等同步拉下那一行再 patch（CONSENT-sugg ②）。
-//     写不进本机（本机库不可用等）不挡进 App、不提示——同意已记在服务器上，ai.enabled 没写上时 AI 只是还没打开，设置 › 语音与 AI 能再开
-//   - onRevoked：会话不认 → 按“被移除”清本机、回登录页（data/consent-exit.ts，经 core/device-exit.ts，先查 session_fate 才清库）
-//   - onDisabled：account_disabled → 先探测再定退出原因（data/consent-exit.ts，R-256 ③：冷静期、已停用、不确定；账号正常就留在告知页）
-//   - onSkip：R-239 没法保存选择 → 直接进 App
+// 告知与同意页的接线（架构 15.5）：整个页面共用一个 createConsentApi；noticeState 先走快读，读不了再退回 supabase-js
+// 不变量：useNoticeState 只问一次，读失败或到 limitMs 都按 'error' 交回、放行进 App
+// 不变量：onRevoked、onDisabled 经 data/consent-exit.ts 交 core/device-exit.ts（被移除先查 session_fate 才清库）；同意后写 ai.enabled 写不进不挡进 App
+// 详细说明见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { writeAiSwitchSettled } from '../../../core/ai-settings.ts';
 import { buildInfo } from '../../../platform/env.ts';

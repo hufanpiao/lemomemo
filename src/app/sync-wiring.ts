@@ -1,20 +1,7 @@
-// 把 K8 同步接进入口（main.tsx 调）：只让主页跑同步（架构 4.3b、0.38 第 58 条），report_tz 也只在主页上报
-// • 只在 boot 正常（status === 'ready'、没在换账号）时接；version_too_new、signed_out、unavailable 不接（createSync 本身也会返回空引擎）
-// • 选主（platform/tab-leader.ts）：拿到 'lemo-sync:<user_id>' 锁的页面 createSync(...).start()；放手（页面隐藏、关闭）时 drain：
-//   断 Realtime、等在途请求（≤ 20 秒）后停下。没有 navigator.locks 时本页自己跑（记 sync_no_locks）
-// • 页面之间的提醒（BroadcastChannel）：非主页往 outbox 写了发 outbox，主页收到马上发送；主页写了本机库发 changed，
-//   其余页面 outbox.refresh() 并重读这几个集合；清库发 reset。消息只是提醒，非主页回到前台时整份重读一次兜底
-// • report_tz（4.6、4.3b）：主页拿到锁、同步启动、本会话的设备行登记好后 report(true)；之后 pointerdown / keydown 调 report()
-//   （自带 5 分钟间隔）；重新拿到锁时再 report(true)。设备行 id 由 deps.deviceId 给；还没有时先 deps.ensureDevice()
-//   （core/device-reg.ts：登记或复用本会话的 devices 行，0.38 第 62 条④；登记好以后它顺带每天刷新一次 last_seen_at、app_version），
-//   登记好了再报，登记不上这次不报（接手清单 K8-tz-device）。恢复网络（online）时也走一遍（登记 60 秒间隔、上报 5 分钟间隔照旧）
-// • 被移除、停用、冷静期（同步引擎刷新被拒、outbox 的 removed / disabled 事件）只处理一次（removedHandled），退出交给
-//   core/device-exit.ts 的 exitDevice（被移除先查 session_fate 才清库；停用、过期只退出；冷静期不删会话；只删被拒那次请求用的会话 sid）
-// • account_disabled 先探测、active 的重新载入限次、别的标签页发来的退出原因怎么记：见 app/sync-disabled.ts；
-//   sid 为 null、本机也没有会话时不探测：提示“登录已失效”只退出（R-263），会话是别的标签页本人退出删掉的就跟着清库、不提示
-// • 别的标签页发来冷静期 reset（R-263）：那边不删会话、本页收不到 storage 事件，followCooling 跟着清库、回登录页（不记原因，SessionCheck 会探测）
-// • 已停用优先（0.60 复审建议 2）：已经在走“会话没了”的退出时又收到 account_disabled，只把退出原因改记成 disabled
-// • 新建回 403、42501（Q-15）：探测、限次见 app/insert-denied.ts，probeThenLeave 沿用那次探测结果（knownProbe）
+// 把 K8 同步接进入口（main.tsx 调）：选主（platform/tab-leader.ts）只让主页跑同步和 report_tz；页面之间用 BroadcastChannel 提醒（outbox、changed、reset）
+// 不变量：只在 boot 正常时接；被移除、停用、冷静期只处理一次（removedHandled），退出交给 core/device-exit.ts 的 exitDevice
+// 不变量：account_disabled 先探测、active 限次重新载入、别的标签页发来的退出原因见 app/sync-disabled.ts；新建回 42501 见 app/insert-denied.ts
+// 不变量：别的标签页的冷静期 reset 跟着清库（followCooling，不删会话）；已在走“会话没了”的退出时又来 account_disabled，只改记成 disabled
 import { wipeLocal } from '../core/account.ts';
 import type { AuthLossPath, AuthLossSignal } from '../core/auth-loss.ts';
 import { defaultExitDeps, exitDevice, exitStarted, type ExitDeps, type ExitReason } from '../core/device-exit.ts';
@@ -92,7 +79,7 @@ function exitDepsOf(boot: BootResult, deps: WireSyncDeps, post: (m: SyncMessage)
     keep: defaultExitDeps.keep,
     clearLocalSessionIf: (sid) => deps.clearLocalSessionIf(sid),
     clearLogs: () => deps.clearLogs?.(),
-    broadcastReset: (_userId, exit) => post({ type: 'reset', ...(exit ?? {}) }),
+    broadcastReset: (_userId, exit) => post({ type: 'reset', ...exit }),
     goToAuth: (notice, sid) => {
       if (notice) record(notice, sid);
       deps.goToAuth();

@@ -14,9 +14,11 @@ const up = () => ({ holdBusy: vi.fn((_reason: string) => () => undefined) });
 const boot = vi.hoisted(() => ({
   current: null as null | FakeBoot,
   applyFreshConfig: vi.fn(async () => null),
-  wipeLocal: vi.fn(async () => undefined),
+  clearLocalData: vi.fn(async (_cache: unknown) => undefined),
   localUnsentCount: vi.fn(async (): Promise<number | null> => null),
   seal: vi.fn(),
+  closeCache: vi.fn(),
+  expireThisTab: vi.fn(() => false),
 }));
 
 vi.mock('../../../core/boot.ts', () => ({
@@ -24,7 +26,9 @@ vi.mock('../../../core/boot.ts', () => ({
   applyFreshConfig: boot.applyFreshConfig,
   localUnsentCount: boot.localUnsentCount,
 }));
-vi.mock('../../../core/account.ts', () => ({ sealForExit: boot.seal, wipeLocal: boot.wipeLocal }));
+vi.mock('../../../core/account.ts', () => ({
+  sealForExit: boot.seal, clearLocalData: boot.clearLocalData, closeCache: boot.closeCache, expireThisTab: boot.expireThisTab,
+}));
 
 const { defaultExitDeps, readLocalLocale, updateCachedLocale, writeLocalLocale } = await import('../data/local.ts');
 const { wipeThisDevice } = await import('../../../platform/sign-out.ts');
@@ -48,7 +52,7 @@ beforeEach(() => {
   localStorage.clear();
   boot.current = null;
   boot.applyFreshConfig.mockClear();
-  boot.wipeLocal.mockClear();
+  boot.clearLocalData.mockClear();
   boot.localUnsentCount.mockClear();
   boot.seal.mockReset();
   vi.unstubAllGlobals();
@@ -95,13 +99,13 @@ describe('updateCachedLocale', () => {
 });
 
 describe('defaultExitDeps', () => {
-  it('库能用：走 core/account 的 wipeLocal，经 platform 清理时不再按库名删库', async () => {
+  it('库能用：走 core/account 的 clearLocalData（只清库和内存集合），经 platform 清理时不再按库名删库', async () => {
     const deleted = fakeIdb();
     const cache = { isClosed: () => false };
     const b = { status: 'ready', profile: null, cache, upgrade: up() };
     boot.current = b;
     expect(await defaultExitDeps.wipe?.()).toBe(true);
-    expect(boot.wipeLocal).toHaveBeenCalledWith(b, expect.anything());
+    expect(boot.clearLocalData).toHaveBeenCalledWith(cache);
     await wipeThisDevice({ ...defaultExitDeps, clearCacheStorage: async () => undefined });
     expect(deleted).toEqual([]);
   });
@@ -116,12 +120,32 @@ describe('defaultExitDeps', () => {
     for (const b of all) {
       const deleted = fakeIdb();
       boot.current = b;
-      boot.wipeLocal.mockClear();
+      boot.clearLocalData.mockClear();
       expect(await defaultExitDeps.wipe?.()).toBe(false);
       await wipeThisDevice({ ...defaultExitDeps, clearCacheStorage: async () => undefined });
-      expect(boot.wipeLocal).not.toHaveBeenCalled();
+      expect(boot.clearLocalData).not.toHaveBeenCalled();
       expect(deleted).toEqual(['planner-v4']);
     }
+  });
+
+  it('清库出错不吞掉：wipe 照样拒绝（改前语义），platform 当“库不能用”按库名删 planner-v4', async () => {
+    const deleted = fakeIdb();
+    boot.current = { status: 'ready', profile: null, cache: { isClosed: () => false, close: () => undefined }, upgrade: up() };
+    boot.clearLocalData.mockRejectedValueOnce(new Error('quota'));
+    await expect(defaultExitDeps.wipe?.()).rejects.toThrow('quota');
+    boot.clearLocalData.mockRejectedValueOnce(new Error('quota'));
+    await wipeThisDevice({ ...defaultExitDeps, clearCacheStorage: async () => undefined });
+    expect(deleted).toEqual(['planner-v4']);
+  });
+
+  it('expireHere：记号已由 markHere 写好（marked）只关库、不写第二次；没写过才走 expireThisTab', () => {
+    const b = { status: 'ready', profile: null, cache: null, upgrade: up() };
+    boot.current = b;
+    expect(defaultExitDeps.expireHere?.('s1', true)).toBe(true);
+    expect(boot.closeCache).toHaveBeenCalledWith(b);
+    expect(boot.expireThisTab).not.toHaveBeenCalled();
+    expect(defaultExitDeps.expireHere?.('s1', false)).toBe(false);
+    expect(boot.expireThisTab).toHaveBeenCalledWith(b, 's1');
   });
 
   it('pendingCount 交给 core/boot 的 localUnsentCount（当前的 boot）', async () => {
@@ -141,7 +165,7 @@ describe('defaultExitDeps', () => {
     const b = { status: 'ready', profile: null, cache, upgrade };
     boot.current = b;
     boot.seal.mockImplementation(() => void seq.push('seal'));
-    boot.wipeLocal.mockImplementationOnce(async () => void seq.push('clear'));
+    boot.clearLocalData.mockImplementationOnce(async () => void seq.push('clear'));
     await defaultExitDeps.wipe?.();
     expect(boot.seal).toHaveBeenCalledWith(b);
     expect(seq).toEqual(['busy:sign_out', 'seal', 'clear']);

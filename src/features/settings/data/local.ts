@@ -1,15 +1,8 @@
-// 设置页在本机做的事（B1 K9）：记住界面语言、退出时清空本机
-// • 语言（架构 2.4 第 4 条、16.4）：写 localStorage 的 pv-locale（App 和登录页启动时按它定语言），
-//   再写 cookie lemo_lang（官网首页 / 按它跳 /zh/ 或 /ko/，和首页页脚的手动切换同一写法）
-// • 退出本机、被移除、被退出（4.1、0.29 续第 98 条）：流程在 platform/sign-out.ts（和登录页共用，K-signout-merge）；
-//   这里只给主 App 才有的一步 wipe：先 core/account 的 sealForExit 同步设闸（switching、outbox 暂停、库封存，不可解除；
-//   之后 K8 不再发送、ack / fail 不再写库，只有 clearAll 能写），再 core/account 的 wipeLocal（清库、清内存集合、关库；推送和运行时缓存由 platform 清）；
-//   库不能用（没启动、已关、打不开、来自更新的版本）时返回 false，由 platform 按库名删 planner-v4
-//   - 退出期间不能 reload（K-signout-merge 复审 M1）：按库名删库会给本页还开着的连接发 versionchange → core 关库 → 升级中心 reload，
-//     打断后面的 signOut，留下“有会话、没库”。所以 ① wipe 一开头 upgrade.holdBusy('sign_out')，退出期间不释放（最后 goToAuth 离开页面）；
-//     ② deleteDb 先 close() 本页连接（原因是 'closed'，不触发 reload）再删
+// 设置页在本机做的事（B1 K9）：记住界面语言（pv-locale + cookie lemo_lang），退出、被移除时给 platform/sign-out.ts 主 App 才有的几步
+// 不变量：wipe 先占住“忙”（退出期间不 reload）、同步设闸，再 clearLocalData；清库出错照样抛，由 platform 当“库不能用”按库名删 planner-v4
+// 不变量：deleteDb 先关本页连接再删（免得本页自己收到 versionchange 而 reload）；pendingCount 必须在 wipe 之前调
 import { LANG_COOKIE, LOCALE_STORAGE_KEY, asLocale, type Locale, type UiLocale } from '../../../../shared/i18n/pick-locale.ts';
-import { expireThisTab, markExpired, sealForExit, wipeLocal } from '../../../core/account.ts';
+import { clearLocalData, closeCache, expireThisTab, markExpired, sealForExit } from '../../../core/account.ts';
 import type { AuthLossSignal } from '../../../core/auth-loss.ts';
 import { resolveAuthLossLazy } from '../../../core/auth-loss-lazy.ts';
 import { applyFreshConfig, getBoot, localUnsentCount } from '../../../core/boot.ts';
@@ -68,13 +61,14 @@ export interface ExitDeps extends ExitSteps {
   releaseHold?(): void;
   /**
    * R-382（架构 4.1a 第 1 点 ②）：设置页的“被移除”先定结局。不给（测试）就照旧直接按被移除处理。
-   * resolveAuthLoss：默认 core/auth-loss.ts 的；expireHere：登录过期时设闸、写 lemo.reauth、关库（false = 写不了记号，退回清库）；
+   * resolveAuthLoss：默认 core/auth-loss.ts 的；expireHere：登录过期时设闸、写 lemo.reauth、关库（false = 写不了记号，退回清库；
+   *   marked：markHere 已写成记号，只关库、不写第二次）；
    * goToAuthExpired：回登录页提示“登录已过期”（只删那一个会话）；lostUserId：会话丢了的那个账号（本页启动时的账号）；
    * markHere：查 session_fate 之前先设闸、写 lemo.reauth（不关库；false = 写不了记号，直接按被移除清库），和别的出口的 markExpired 一样（独立验证建议 3）
    */
   resolveAuthLoss?(signal: AuthLossSignal): Promise<'expired' | 'removed'>;
   markHere?(sid: string | null): boolean;
-  expireHere?(sid: string | null): boolean;
+  expireHere?(sid: string | null, marked?: boolean): boolean;
   goToAuthExpired?(sid: string | null): void;
   lostUserId?(): string | null;
 }
@@ -93,8 +87,8 @@ export const defaultExitDeps: ExitDeps = {
     }
     const cache = boot?.cache;
     if (!cache || cache.isClosed() || boot.status !== 'ready') return false;
-    // 推送、运行时缓存由 platform/sign-out.ts 的 wipeThisDevice 接着清，这里不重复
-    await wipeLocal(boot, { clearCacheStorage: () => Promise.resolve(), disconnectPush: () => Promise.resolve() });
+    // 上限、推送、运行时缓存、按库名删都在 platform/sign-out.ts 的 wipeThisDevice（只有那一层上限）；出错照样抛给它
+    await clearLocalData(cache);
     return true;
   },
   deleteDb: async () => {
@@ -114,9 +108,12 @@ export const defaultExitDeps: ExitDeps = {
     const boot = getBoot();
     return boot ? markExpired(boot, sid) : false;
   },
-  expireHere: (sid) => {
+  expireHere: (sid, marked) => {
     const boot = getBoot();
-    return boot ? expireThisTab(boot, sid) : false;
+    if (!boot) return false;
+    if (!marked) return expireThisTab(boot, sid);
+    closeCache(boot);
+    return true;
   },
   goToAuthExpired: (sid) => goToAuth('expired', sid),
   lostUserId: () => getBoot()?.userId ?? null,

@@ -1,16 +1,16 @@
-// 账号没了、会话没了怎么退出这台设备，只在这里做（架构约定 10.1）：decideExit 定结局（纯函数），exitDevice 执行，清库走 account.ts 的 wipeLocal
-// 不变量：被移除必须先经服务器确认（session_fate 回 revoked）才清库，没确认只退出（R-382、Q-19）；停用、登录过期只退出不清库，
-//   写不了 lemo.reauth 记号才退回清库；冷静期不删会话（会话还活着，R-262）；同一页只执行一次（exited）
-// 顺序：（被移除：设闸、写记号、删会话、查服务器）→ 记号（只退出时）→ 广播带原因的 reset → 删被拒的那个会话
-//   →（清库时）清日志队列、wipeLocal、再清日志、广播 reset、再删会话 → 回登录页
-import { expireThisTab, markExpired, wipeLocal } from './account.ts';
+// 账号没了、会话没了怎么退出这台设备（架构约定 10.1）：decideExit 定结局，exitDevice 执行；主 App、告知页、插图上传、会话层都走这里
+// （设置页 useSessionExit 和本人退出走 platform/sign-out.ts 的清库步骤，不经这里）。清库走 account.ts 的 wipeLocal
+// 不变量：被移除必须服务器确认（session_fate 回 revoked）才清库，查不了、查出错都只退出；停用、过期只退出；冷静期不删会话
+// 不变量：记号写好以后只关库、不再写第二次；写不了记号才退回清库，退回清库的提示一律 removed（让人知道没上传的改动丢了）
+// 不变量：同一页只执行一次（exited）。顺序：被移除先设闸、写记号、删会话、查服务器 → 只关库或清库 → 广播带原因的 reset → 删会话 → 回登录页
+import { closeCache, expireThisTab, markExpired, wipeLocal, type SessionLoss } from './account.ts';
 import type { AuthLossOutcome, AuthLossPath, AuthLossSignal } from './auth-loss.ts';
 import { resolveAuthLossLazy } from './auth-loss-lazy.ts';
 import { getBoot, type BootResult } from './boot.ts';
+import { readReauth } from '../platform/auth-loss-store.ts';
 import { clearLogQueue } from '../platform/log-store.ts';
 import { rlog } from '../platform/run-log-api.ts';
 import { clearCacheStorage, clearLocalSessionIf, goToAuth, type ExitNotice } from '../platform/session.ts';
-import { postSyncMessage, syncChannelName } from '../platform/tab-leader.ts';
 
 /** 为什么退出：服务器码映射出的原因、探测结果；active = 账号正常；followed = 别的标签页已退出，跟着清库（不删会话、不记原因、不广播） */
 export type ExitReason = ExitNotice | 'active' | 'followed';
@@ -46,8 +46,10 @@ export interface ExitDeps {
   clearLocalSessionIf(sid: string | null): Promise<boolean>;
   /** 清日志上传队列：给 user_id 只清这个账号的，null 清全部 */
   clearLogs(userId: string | null): void;
-  /** 告诉别的标签页：带 exit 的在删会话之前发；不带的是清完库那一条（整份重读） */
-  broadcastReset(userId: string, exit?: { notice: ExitNotice; sid: string | null }): void;
+  /** 删会话之前告诉别的标签页退出原因（reset 带 notice、sid） */
+  broadcastReset(userId: string, exit: { notice: ExitNotice; sid: string | null }): void;
+  /** 清完库再发一条不带原因的 reset（别的标签页整份重读）；只有原来就发的调用方（设置页、插图上传）给，不给不发 */
+  broadcastWiped?(userId: string): void;
   /** 记退出原因、回登录页；notice 为 null 不记 */
   goToAuth(notice: ExitNotice | null, sid: string | null): void;
   /** 查服务器定会话丢了的结局（默认 resolveAuthLoss，查 session_fate） */
@@ -56,13 +58,13 @@ export interface ExitDeps {
   log?(act: string): void;
 }
 
-export const defaultExitDeps: ExitDeps = {
+/** 默认依赖；broadcastReset 由调用方给（platform/tab-leader.ts 的 postReset，或不广播的空函数），免得频道代码进首屏 */
+export const defaultExitDeps: Omit<ExitDeps, 'broadcastReset'> = {
   getBoot,
   wipe: (boot) => wipeLocal(boot, { clearCacheStorage }),
   keep: (boot, notice, sid) => (notice === 'disabled' ? expireThisTab(boot, null, 'disabled') : expireThisTab(boot, sid)),
   clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
   clearLogs: (userId) => clearLogQueue(userId),
-  broadcastReset: (userId, exit) => postSyncMessage(syncChannelName(userId), { type: 'reset', ...(exit ?? {}) }),
   goToAuth: (notice, sid) => {
     if (notice === null) goToAuth();
     else if (notice === 'removed' || notice === 'expired') goToAuth(notice, sid);
@@ -88,41 +90,61 @@ function safe(fn: () => void): void {
   }
 }
 
+/** 查服务器用的信号：sid 删会话用，lossSid 查 session_fate 用（不给同 sid）；status 不知道不填 */
+interface RemovedSignal {
+  sid: string | null;
+  lossSid?: string | null | undefined;
+  path: AuthLossPath;
+  code: string;
+  status?: number | undefined;
+}
+
 /**
  * 被移除先经服务器确认：设闸、写 lemo.reauth，同一个同步段里删被拒的那个会话，再查 session_fate。
- * 写不了记号（存储不可用）按 removed（退回清库，架构 4.1a 第 7 点）。查服务器出错按 expired
+ * 写不了记号（存储不可用）按 removed（退回清库，架构 4.1a 第 7 点）。查服务器出错（含分包加载失败）按 expired
  */
-async function confirmRemoved(boot: BootResult, s: { sid: string | null; path: AuthLossPath; code: string }, deps: ExitDeps): Promise<AuthLossOutcome> {
+async function confirmRemoved(boot: BootResult, s: RemovedSignal, deps: ExitDeps): Promise<AuthLossOutcome> {
   const kept = markExpired(boot, s.sid);
   if (!kept) deps.log?.('auth_loss_store_failed');
   safe(() => void deps.clearLocalSessionIf(s.sid));
   if (!kept) return 'removed';
   try {
-    return await deps.resolveAuthLoss({ path: s.path, code: s.code, sessionId: s.sid, userId: boot.userId });
+    const status = s.status === undefined ? {} : { status: s.status };
+    return await deps.resolveAuthLoss({ path: s.path, code: s.code, ...status, sessionId: s.lossSid ?? s.sid, userId: boot.userId });
   } catch {
     return 'expired';
   }
 }
 
-/** 按结局执行（顺序见文件头）。dropped：收到信号时已经删过一次会话（confirmRemoved） */
-function runExit(boot: BootResult | null, plan: Exclude<ExitPlan, { act: 'stay' }>, sid: string | null, deps: ExitDeps, dropped: boolean): Promise<void> {
-  const { notice } = plan;
+/**
+ * 按结局执行（顺序见文件头）。marked：记号已经写好（confirmRemoved 写的，或别的标签页写的），只关库、不再调 keep；
+ * dropped：收到信号时已经删过一次会话（confirmRemoved）
+ */
+function runExit(
+  boot: BootResult | null, plan: Exclude<ExitPlan, { act: 'stay' }>, sid: string | null, deps: ExitDeps, o: { marked: boolean; dropped: boolean },
+): Promise<void> {
   const userId = boot?.userId ?? null;
   if (boot) boot.sessionGone = true;
-  const kept = plan.act === 'logout' && boot !== null && notice !== null && deps.keep(boot, notice, sid);
+  let kept = false;
+  if (plan.act === 'logout' && boot !== null && plan.notice !== null) {
+    if (o.marked) closeCache(boot);
+    kept = o.marked || deps.keep(boot, plan.notice, sid);
+  }
+  // 退回清库：库清了，提示要让人知道没上传的改动丢了
+  const notice = !kept && plan.notice === 'expired' ? 'removed' : plan.notice;
   rlog(`exit ${plan.act} notice=${notice ?? '-'} kept=${kept} boot=${boot !== null}`);
   if (userId && plan.broadcast && notice) safe(() => deps.broadcastReset(userId, { notice, sid }));
   const drop = (): void => (plan.dropSession ? safe(() => void deps.clearLocalSessionIf(sid)) : undefined);
-  if (!dropped) drop();
+  if (!o.dropped) drop();
   if (kept) {
-    if (dropped) drop();   // 查服务器那几秒里旧会话被晚到的令牌刷新写回时再删
+    if (o.dropped) drop();   // 查服务器那几秒里旧会话被晚到的令牌刷新写回时再删
     deps.goToAuth(notice, sid);
     return Promise.resolve();
   }
-  deps.clearLogs(userId);
+  safe(() => deps.clearLogs(userId));   // 日志队列清不掉不挡退出
   const finish = (): void => {
-    deps.clearLogs(userId);   // 兜底：清库那几秒里又记下的
-    if (userId && plan.broadcast) safe(() => deps.broadcastReset(userId));
+    safe(() => deps.clearLogs(userId));   // 兜底：清库那几秒里又记下的
+    if (userId && plan.broadcast && deps.broadcastWiped) safe(() => deps.broadcastWiped?.(userId));
     drop();   // 旧会话被晚到的令牌刷新写回时再删；别的标签页刚登录的新会话不动
     deps.goToAuth(notice, sid);
   };
@@ -134,12 +156,12 @@ function runExit(boot: BootResult | null, plan: Exclude<ExitPlan, { act: 'stay' 
 }
 
 /**
- * 退出这台设备的唯一入口：reason 为 removed 时先经服务器确认（confirmRemoved），再 decideExit、runExit。
- * path、code：信号从哪来、服务器给的原因码（定要不要查 session_fate、lemo.authloss 记录用；不给按 session_revoked）。
- * 这一页已经在退出时什么也不做（“已在退出”只有 exited 这一个标志，查服务器之前就标上）
+ * 退出这台设备的入口：reason 为 removed 时先经服务器确认（confirmRemoved），再 decideExit、runExit。
+ * path、code、status、lossSid：信号从哪来、服务器给的原因码（code 不给按 session_revoked），查 session_fate 和 lemo.authloss 记录用。
+ * marked：记号已由别的标签页写好（跟着登录过期）。这一页已经在退出时什么也不做（exited，查服务器之前就标上）
  */
 export async function exitDevice(
-  facts: { reason: ExitReason; sid: string | null; path: AuthLossPath; code?: string; revoked?: boolean },
+  facts: { reason: ExitReason; sid: string | null; path: AuthLossPath; code?: string; status?: number | undefined; lossSid?: string | null | undefined; revoked?: boolean; marked?: boolean },
   deps: ExitDeps,
 ): Promise<void> {
   const boot = deps.getBoot();
@@ -148,13 +170,40 @@ export async function exitDevice(
   let fate: AuthLossOutcome | undefined;
   if (facts.reason === 'removed' && boot) {
     exited.add(key);
-    fate = await confirmRemoved(boot, { sid: facts.sid, path: facts.path, code: facts.code ?? 'session_revoked' }, deps);
+    const { sid, lossSid, path, status } = facts;
+    fate = await confirmRemoved(boot, { sid, lossSid, path, code: facts.code ?? 'session_revoked', status }, deps);
   }
   rlog(`exit reason=${facts.reason} path=${facts.path} fate=${fate ?? '-'}`);
   const plan = decideExit({ reason: facts.reason, ...(fate ? { fate } : {}), ...(facts.revoked ? { revoked: true } : {}) });
   if (plan.act === 'stay') return;
   exited.add(key);
-  return runExit(boot, plan, facts.sid, deps, fate !== undefined);
+  // fate 为 expired 说明 confirmRemoved 已写成记号（写不成会直接回 removed）
+  return runExit(boot, plan, facts.sid, deps, { marked: fate === 'expired' || facts.marked === true, dropped: fate !== undefined });
+}
+
+/** 别的标签页 SIGNED_OUT 写记号要晚几毫秒：storage 事件一来先等这么久再读（R-382） */
+export const REAUTH_GRACE_MS = 1000;
+
+/**
+ * 会话没了（core/account.ts 的 watchAccount 设好闸以后交来；main.tsx 接上）：
+ * 本页 SIGNED_OUT 按被移除先查服务器（码取刷新失败的记录，没有按 'none'）；
+ * 别的标签页删了会话：等 graceMs 再读 lemo.reauth，是本账号的就跟着登录过期（记号那边已写，只关库），否则跟着清库
+ */
+export function exitOnSessionLoss(loss: SessionLoss, deps: ExitDeps, graceMs = 0): void {
+  if (loss.here) {
+    const f = loss.failure;
+    void exitDevice({ reason: 'removed', sid: loss.sid, lossSid: f?.sid, path: 'sdk', code: f?.code ?? 'none', status: f?.status ?? 0 }, deps);
+    return;
+  }
+  // 跟着别的标签页退出不清日志队列：那边退出时已清过自己账号的（signOutThisDevice、exitDevice），改前也不清
+  const followDeps: ExitDeps = { ...deps, clearLogs: () => undefined };
+  const follow = (): void => {
+    const r = readReauth();
+    const mine = r !== null && r.user_id === deps.getBoot()?.userId;
+    void exitDevice(mine ? { reason: 'expired', sid: r.session_id, path: 'sdk', marked: true } : { reason: 'followed', sid: null, path: 'sdk' }, followDeps);
+  };
+  if (graceMs > 0) setTimeout(follow, graceMs);
+  else follow();
 }
 
 /** 测试用 */

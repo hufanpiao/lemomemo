@@ -80,6 +80,18 @@ describe('同步层：登录过期只关库不清', () => {
     expect(r.d.clearLogs).not.toHaveBeenCalled();
   });
 
+  it('查服务器失败（resolveAuthLoss 拒绝，例如分包加载失败）：按 expired，本机库和 outbox 都在，不清运行时缓存', async () => {
+    const r = await start('expired');
+    r.d.resolveAuthLoss.mockRejectedValue(new Error('Failed to fetch dynamically imported module'));
+    await failWith(r.boot, 'session_revoked');
+    await vi.waitFor(() => expect(r.d.goToAuth).toHaveBeenCalledTimes(1));
+    await flush();
+    expect(kept(r.fake)).toBe(true);
+    expect(r.d.clearCacheStorage).not.toHaveBeenCalled();
+    expect(readReauth()).toMatchObject({ user_id: A, session_id: S });
+    expect(r.d.setExitNotice).toHaveBeenCalledWith('expired', S);
+  });
+
   it('outbox 的 session_revoked、判 removed：照旧清库、删记号、记 removed', async () => {
     const r = await start('removed');
     await failWith(r.boot, 'session_revoked');

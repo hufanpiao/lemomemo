@@ -1,20 +1,8 @@
-// 主 App 收到 account_disabled 以后怎么办、别的标签页发来的退出原因怎么记（10-30 从 app/sync-wiring.ts 拆出来，让它回到 300 行以内；
-// 由 sync-wiring 调，不单独接线）
-// • 先探测（R-256 ③ 后续）：apply_patch 等 RLS 一路按 is_active() 判断，停用和注销冷静期都回 account_disabled，分不出来。
-//   用被拒那次请求所用会话的令牌调 account {action:'status'}，经 platform/account-status.ts 的 exitForDisabled
-//   （同意页、设置页、files 共用）定：pending_deletion → 冷静期退出；disabled → 停用退出；signed_out（错误码 unauthorized、session_revoked）
-//   → 被移除；unknown（断网、超时、令牌拿不到、不带码的 401）→ 保守照停用清本机，提示 disabled_unsure；
-//   active（刚好恢复了）→ 不清本机，重新载入页面重新同步（outbox 已设闸、闸只能靠重新载入解开；队列项还在库里，载入后照发）。
-//   探测期间（最多 8 秒）不先删会话——探测要用它；之后照旧只按被拒那次的 sid 删。
-//   sid 必填（K6-sugg5 ②）：fail 的调用方没给时 outbox 按 null 发——不拿本机现在那个会话的令牌探测，按 unknown（disabled_unsure）退出、只用 null 删。
-//   sid 为 null、本机也读不到账号（readUserId 为 null，没有会话）时不探测（K6-sugg5 审查建议、R-263）：没登录时发出去的请求本来就会被拒，不该提示“可能已停用”。
-//   11-11 起（R-382，主持人复核必改）：这条路仍提示 expired，但不再清库，经 core/device-exit.ts 只退出（expired）——只关库、不清、写 lemo.reauth
-// • active 的重新载入有次数限制（10-30 复审必改）：RPC 一路 uid 为 null 时也回 account_disabled，探测用的却是本机存的令牌，
-//   两边可能一直说不到一块，会无限重新载入。重新载入前在 sessionStorage 记下时刻（ACTIVE_RELOAD_KEY）；5 分钟内第二次遇到 active
-//   就不再载入：闸保持关着，记日志 disabled_probe_active_loop，让出同步主页（免得别的标签页也都不同步），经 onSyncPaused 在顶部提示
-//   “同步暂停，请稍后重新打开”；不清本机、不跳转。sessionStorage 读或写不了时也不载入（记不住就会循环）
-// • 别的标签页发来的 reset 带退出原因（DISABLED-probe-later ②）：记下同一条（带上 sid），回登录页时显示。
-//   本页会话已换成别的就不记：消息带 sid 时要和本页的对得上；不带 sid 时只在本页也没有会话时才记（第六轮审查建议 ①，免得 B 的标签页记下 A 的原因）
+// 主 App 收到 account_disabled 以后怎么办、别的标签页发来的退出原因怎么记（由 app/sync-wiring.ts 调，不单独接线）
+// 不变量：先用被拒那次的 sid 探测（platform/account-status.ts 的 exitForDisabled），探测期间不删会话；结局交 core/device-exit.ts（signed_out 也先查 session_fate）
+// 不变量：sid 为 null、本机也没有会话时不探测，按 expired 只退出；active 的重新载入 5 分钟内只一次，第二次让出主页、顶部提示同步暂停
+// 不变量：reset 带的原因只在 sid 对得上（不带 sid 时本页也没有会话）才记
+// 详细说明见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
 import type { BootResult } from '../core/boot.ts';
 import type { SyncLog } from '../core/sync/types.ts';
 import { exitAfterProbe, exitForDisabled, type AccountProbe } from '../platform/account-status.ts';

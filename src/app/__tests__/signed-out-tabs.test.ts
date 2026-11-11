@@ -8,13 +8,14 @@
 // • K6-signout-lib 审查必改：SIGNED_OUT 到时本机会话还在、就是本页认的那个（删键被存储保护拦下）：忽略
 // • K6-sugg4 ④：收到转来的 SIGNED_OUT 时本机会话已是别的标签页用同一账号刚登录的 s2（本页最后见到的是 s1）：不删 s2、不清库、不跳
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { claimCache, watchAccount, type WatchAccountDeps } from '../../core/account.ts';
+import { claimCache } from '../../core/account.ts';
 import { coldStart, getBoot, resetBootForTest, type BootResult } from '../../core/boot.ts';
 import { deleteCacheDb } from '../../core/cache.ts';
 import { fakeIndexedDB, type FakeIDBFactory } from '../../core/__tests__/idb-fake.ts';
 import { todo, uid } from '../../core/__tests__/outbox-fixtures.ts';
 import { clearAllCollections } from '../../core/store.ts';
 import { write } from '../../core/write.ts';
+import { watchWithExit, type WatchSpies } from '../../core/__tests__/account-watch-harness.ts';
 import {
   authEventHandler, clearAnyLocalSession, goToAuth, markSelfSignOut, readExitNotice, readSessionUserId, resetSelfSignOutForTest,
   takeLocalSession, type AuthEventSession,
@@ -30,7 +31,7 @@ const seed = (sid: string, user = A): void => localStorage.setItem(KEY, JSON.str
 interface Tab {
   boot: BootResult;
   fake: FakeIDBFactory;
-  deps: WatchAccountDeps;
+  deps: WatchSpies;
   /** supabase-js 发给本页的 onAuthStateChange 事件 */
   emit: (event: string, session: AuthEventSession) => void;
   /** 别的标签页改了会话（storage 事件） */
@@ -39,7 +40,7 @@ interface Tab {
 }
 
 /** B 页：会话 s1 的账号 A，库里有一条没发的、一条在途的；挂上真的会话层分发和 watchAccount */
-async function tabB(over: Partial<WatchAccountDeps> = {}): Promise<Tab> {
+async function tabB(over: Partial<WatchSpies> = {}): Promise<Tab> {
   seed('s1');
   const replace = vi.fn();
   vi.stubGlobal('location', { replace });
@@ -51,7 +52,7 @@ async function tabB(over: Partial<WatchAccountDeps> = {}): Promise<Tab> {
   await write.insert('todos', { ...todo(2), id: uid(2) });
   let emit: Tab['emit'] = () => undefined;
   let storageFn: (id: string | null) => void = () => undefined;
-  const deps: WatchAccountDeps = {
+  const deps: WatchSpies = {
     clearCacheStorage: vi.fn(() => Promise.resolve()),
     clearLogs: vi.fn(),
     onAuthUser: (fn, out) => {
@@ -69,7 +70,7 @@ async function tabB(over: Partial<WatchAccountDeps> = {}): Promise<Tab> {
     onSwitched: vi.fn(),
     ...over,
   };
-  watchAccount(boot, deps);
+  watchWithExit(boot, deps);
   return { boot, fake, deps, emit: (e, s) => emit(e, s), storage: () => storageFn(readSessionUserId()), replace };
 }
 
@@ -127,7 +128,7 @@ describe('A 页自己退出 → B 页收到转来的 SIGNED_OUT 和 storage(null
     b.emit('SIGNED_OUT', null);
     await vi.waitFor(() => expect(b.replace).toHaveBeenCalledTimes(1));
     expect(readExitNotice()).toBe('removed');
-    expect(b.deps.clearLogs).toHaveBeenCalledTimes(1);
+    expect(b.deps.clearLogs).toHaveBeenCalled();   // 清库前一次、清完兜底再一次（和别的清库出口一致）
   });
 });
 

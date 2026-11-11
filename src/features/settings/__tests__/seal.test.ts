@@ -66,7 +66,9 @@ afterEach(() => {
 
 describe('退出时清空本机（真 core）', () => {
   it('先数（封存前能数出来），清理开始就设闸：之后 ack、fail 不再写库，清完库里什么也不剩', async () => {
-    const b = await boot();
+    const { factory, fake } = fakeIndexedDB();
+    const rows = (store: string): number | undefined => fake.dbs.get('planner-v4')?.stores.get(store)?.records.size;
+    const b = await boot(factory);
     const { cache, outbox } = b;
     if (!cache || !outbox) throw new Error('boot');
     await seed(cache, 'todos', uid(1), todo(1), 5);
@@ -77,8 +79,9 @@ describe('退出时清空本机（真 core）', () => {
 
     // 计数在封存之前：数得出来
     expect(await defaultExitDeps.pendingCount()).toBe(2);
+    expect(rows('outbox')).toBe(2);
+    expect(rows('todos')).toBe(2);
 
-    const clearAll = vi.spyOn(cache, 'clearAll');
     // 清理开始：wipe 一调用就同步设闸（不用等它做完）
     const wiping = defaultExitDeps.wipe?.();
     expect(b.switching).toBe(true);
@@ -92,12 +95,28 @@ describe('退出时清空本机（真 core）', () => {
     await outbox.ack(sending.op_id, { status: 'ok', rev: 7, prev_rev: 6 });
     await outbox.fail(sending.op_id, { network: true, sid: null });
 
-    // 清完整库（core/account.ts 的 wipeLocal）并关库：之后晚到的 ack、fail 也写不进
-    expect(clearAll).toHaveBeenCalledOnce();
-    await expect(clearAll.mock.results[0]?.value).resolves.toBeUndefined();
-    expect(cache.isClosed()).toBe(true);
+    // 直接读假 IndexedDB 的仓：清理中途和清完以后晚到的 ack、fail 都没把行写回来
+    expect(rows('outbox')).toBe(0);
+    expect(rows('todos')).toBe(0);
     // 封存以后数不出来：所以界面一定先数再退出
     expect(await defaultExitDeps.pendingCount()).toBeNull();
+  });
+
+  it('清库出错不吞掉（改前语义）：wipe 拒绝，platform 当“库不能用”按库名删库', async () => {
+    const idb = withDeleteDatabase(fakeIndexedDB().factory);
+    vi.stubGlobal('indexedDB', idb.factory);
+    const b = await boot(idb.factory);
+    const { cache } = b;
+    if (!cache) throw new Error('boot');
+    vi.spyOn(cache, 'clearAll').mockRejectedValue(new Error('写不进'));
+    await expect(defaultExitDeps.wipe?.()).rejects.toThrow('写不进');
+    await signOutThisDevice({
+      server: { signOut: async () => ({ serverDone: true }) },
+      steps: { ...defaultExitDeps, clearCacheStorage: async () => undefined, clearLocalSessionIf: async () => true },
+      readUserId: () => 'A',
+      inTauri: () => false,
+    });
+    expect(idb.deleted[0]).toBe('planner-v4');
   });
 
   it('清库一直卡住、改按库名删库：先关本页连接再删，本页不 reload；signOut 照常做完，最后删本机会话', async () => {

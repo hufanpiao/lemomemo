@@ -7,7 +7,7 @@
 // R-382（架构 4.1a）：刷新被拒的码经 refresh-observer 记下、SIGNED_OUT 时交给 resolveAuthLoss：
 // session_not_found 要查 session_fate，回 revoked 才清库；refresh_token_already_used、或查出 unknown，按登录过期只关库、写 lemo.reauth
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { claimCache, watchAccount } from '../../core/account.ts';
+import { claimCache } from '../../core/account.ts';
 import { coldStart, resetBootForTest } from '../../core/boot.ts';
 import { deleteCacheDb } from '../../core/cache.ts';
 import { clearAllCollections } from '../../core/store.ts';
@@ -19,6 +19,7 @@ import {
   clearCacheStorage, goToAuth, onAuthUser, readExitNotice, readSessionUserId, resetSelfSignOutForTest, sessionStorageKey, takeLocalSession,
 } from '../../platform/session.ts';
 import { createSupabaseTransport } from '../../platform/sync-net.ts';
+import { watchWithExit } from '../../core/__tests__/account-watch-harness.ts';
 
 /** 只记事件名的订阅：在模块载入时就挂上，排在会话层（session.ts 的 onAuthUser）之前（app 不能直接引 platform/supabase，A1） */
 const events = vi.hoisted(() => [] as string[]);
@@ -98,7 +99,7 @@ describe('真实 auth-js：冷启动时刷新被拒 → 清库 → 回登录页�
 
     // 同一个 onAuthStateChange 里按挂上的先后分发：会话层回调 onSignedOut 时，events 的最后一个就是触发它的那个事件
     const trigger: string[] = [];
-    watchAccount(boot, {
+    watchWithExit(boot, {
       clearCacheStorage,
       onAuthUser: (fn, out) => onAuthUser(fn, out && ((sid, f) => (trigger.push(events.at(-1) ?? 'none'), out(sid, f)))),
       onStorageUser: () => () => undefined, currentUserId: () => readSessionUserId(), dropSession: () => takeLocalSession(),

@@ -4,11 +4,11 @@
 // 两条合起来固定 K6-sugg4 ④ 的前提：换账号清库走 storage 事件 / 换账号那一路，SIGNED_OUT 不会把 B 的新会话删掉
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authEventHandler } from '../../platform/session.ts';
-import { watchAccount, type WatchAccountDeps } from '../account.ts';
 import { coldStart, getBoot, resetBootForTest } from '../boot.ts';
 import { clearAllCollections } from '../store.ts';
 import { seedA } from './account-fixtures.ts';
 import { fakeIndexedDB, flush } from './idb-fake.ts';
+import { watchWithExit, type WatchSpies } from './account-watch-harness.ts';
 
 beforeEach(() => clearAllCollections());
 afterEach(() => {
@@ -37,7 +37,7 @@ describe('本机已是别的账号的 S2 时收到转来的 SIGNED_OUT', () => {
     if (boot.cache) await seedA(boot.cache);
     let signedOut: (sid?: string | null) => void = () => undefined;
     let current: string | null = 'A';
-    const deps: WatchAccountDeps = {
+    const deps: WatchSpies = {
       clearCacheStorage: vi.fn(() => Promise.resolve()),
       onAuthUser: (_fn, so) => {
         if (so) signedOut = so;
@@ -51,7 +51,7 @@ describe('本机已是别的账号的 S2 时收到转来的 SIGNED_OUT', () => {
       onSwitched: vi.fn(),
       onFailed: vi.fn(),
     };
-    watchAccount(boot, deps);
+    watchWithExit(boot, deps);
     current = 'B';
     signedOut('s1');
     await vi.waitFor(() => expect(deps.onSwitched).toHaveBeenCalledTimes(1));

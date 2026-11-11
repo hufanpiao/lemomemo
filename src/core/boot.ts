@@ -1,14 +1,7 @@
-// 离线冷启动（架构 4.1“启动时先用缓存渲染”、0.27 第 1、4 点）：入口在渲染 App 之前调 coldStart()，不等网络
-// 1. 打开本机库（建库、升级、迁移；VersionError → 整屏提示，不删库；被挡住 → 等 BLOCKED_PROMPT_DELAY_MS 仍没打开才提示关掉其他窗口）
-// 2. 换账号就清空整库（core/account.ts，比对和清空在一个事务里）；迁移失败时按 outbox 重建 view（M5）；
-//    清掉 deleted_at 早于 30 天的行（4.3 第①条的本机第二道）
-// 3. 把各同步仓的 view 灌进 core/store 的集合（界面先画上次的内容，顶部“正在同步…”由同步层管）
-// 4. 整理离线队列（队列项迁移、inflight 复位、版本变了就解除 426 暂停）
-// 5. 读 meta 的 config、profile，按 featureOn 算出这台设备离线时该挂哪些功能入口（TC-B1-50）
-// 6. 按缓存的 min_client_version、没解除的 426 暂停、“刚按过更新”判断是否挡同步
-// 返回给 K7（宽容读取：待补拉 id）和 K8（同步：要整表重拉的表、outbox、upgrade）用
-// 失败即关（M3）：开库之后任何一步抛错，都关库、清掉内存集合，按 unavailable 返回（不渲染缓存，只联网用）；coldStart 本身不抛
-// 纯 TS：不准 import React 和任何功能（A1）
+// 离线冷启动（架构 4.1、0.27）：渲染 App 之前调 coldStart()，不等网络
+// 步骤：开本机库（VersionError 整屏提示、不删库）→ 换账号清空（core/account.ts）→ view 灌进集合 → 整理离线队列 → 读缓存的 config、profile 算功能开关 → 判断是否挡同步
+// 不变量：开库之后任何一步抛错都关库、清内存集合，按 unavailable 返回；coldStart 本身不抛
+// 纯 TS：不准 import React 和任何功能（A1）。各步细节见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
 import { featureOn } from '../../shared/logic/flags.ts';
 import { SCHEMA_V } from './schema-version.ts';
 import { buildInfo } from '../platform/env.ts';

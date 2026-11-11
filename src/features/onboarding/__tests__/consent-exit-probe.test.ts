@@ -89,6 +89,44 @@ describe('告知页 account_disabled：先探测再定退出原因', () => {
   });
 });
 
+describe('探测回 signed_out 也先查 session_fate（架构 4.1a 第 1 点；11-11 有意修改）', () => {
+  const U = '00000000-0000-4000-8000-00000000000a';
+  const S = '00000000-0000-4000-8000-0000000000c1';
+  afterEach(() => localStorage.clear());
+  for (const [fate, wiped, notice] of [['expired', false, 'expired'], ['removed', true, 'removed']] as const) {
+    it(`真实账号（UUID，写得了记号）、session_fate 判 ${fate}：${wiped ? '清库' : '只退出不清库'}，提示 ${notice}`, async () => {
+      const { d } = deps(async () => 'removed', { switching: false, userId: U });
+      d.resolveAuthLoss = vi.fn(async () => fate);
+      await leaveThisDevice('account_disabled', S, d);
+      expect(d.resolveAuthLoss).toHaveBeenCalledWith(expect.objectContaining({ sessionId: S, userId: U }));
+      expect(d.wipe).toHaveBeenCalledTimes(wiped ? 1 : 0);
+      expect(d.goToAuth).toHaveBeenCalledWith(notice, S);
+    });
+  }
+});
+
+describe('探测期间再点一次（防重复，11-11 返修 ④）', () => {
+  it('第一次还在探测时，第二次 account_disabled、session_revoked 都不再探测、不再离开', async () => {
+    let answer = (_r: ExitNotice | 'active'): void => undefined;
+    const { d } = deps(() => new Promise((r) => (answer = r)));
+    const first = leaveThisDevice('account_disabled', 's1', d);
+    expect(await leaveThisDevice('account_disabled', 's1', d)).toBe(true);
+    expect(await leaveThisDevice('session_revoked', 's1', d)).toBe(true);
+    expect(d.resolveDisabled).toHaveBeenCalledTimes(1);
+    expect(d.goToAuth).not.toHaveBeenCalled();
+    answer('pending_deletion');
+    expect(await first).toBe(true);
+    expect(d.goToAuth).toHaveBeenCalledOnce();
+  });
+
+  it('探测回 active 以后可以再点（不被防重复挡住）', async () => {
+    const { d } = deps(async () => 'active');
+    expect(await leaveThisDevice('account_disabled', 's1', d)).toBe(false);
+    expect(await leaveThisDevice('account_disabled', 's1', d)).toBe(false);
+    expect(d.resolveDisabled).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('sid 读不出（null）时删会话（第八轮必改 1：不另认同账号）', () => {
   it('停用类退出也只用 clearLocalSessionIf(null)，前后两次', async () => {
     const { d, order } = deps(async () => 'disabled');
@@ -106,16 +144,16 @@ describe('离开前广播带原因的 reset（SESS-1030-sugg ①，和设置页�
     return x;
   }
 
-  it('探测出冷静期：先发 reset {notice: pending_deletion, sid}，再清库、发清完的 reset、回登录页；不删会话', async () => {
+  it('探测出冷静期：先发 reset {notice: pending_deletion, sid}，再清库、回登录页；清完库不发第二条（告知页原来就只发一条）；不删会话', async () => {
     const { d, order } = withPosts(async () => 'pending_deletion');
     await leaveThisDevice('account_disabled', 's1', d);
-    expect(order).toEqual(['post:U1:pending_deletion:s1', 'wipe', 'post:U1', 'notice:pending_deletion', 'auth']);
+    expect(order).toEqual(['post:U1:pending_deletion:s1', 'wipe', 'notice:pending_deletion', 'auth']);
   });
 
   it('停用：删会话之前先发；被移除（先查服务器）定了结局再发；sid 为 null 时带 null', async () => {
     const a = withPosts(async () => 'disabled');
     await leaveThisDevice('account_disabled', 's1', a.d);
-    expect(a.order).toEqual(['post:U1:disabled:s1', 'session:s1', 'wipe', 'post:U1', 'session:s1', 'notice:disabled', 'auth']);
+    expect(a.order).toEqual(['post:U1:disabled:s1', 'session:s1', 'wipe', 'session:s1', 'notice:disabled', 'auth']);
     resetLeaveForTest();
     const b = withPosts(async () => 'disabled');
     await leaveThisDevice('session_revoked', null, b.d);

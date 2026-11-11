@@ -4,7 +4,7 @@
 // resolveAuthLoss 判 expired（不查服务器）：本机库和没上传的草稿原样留着、写 lemo.reauth、回登录页提示“登录已过期”。
 // supabase 客户端是单例（只 initialize 一次），所以和 signed-out-real.test.ts（被移除那一条）分成两个文件
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { claimCache, watchAccount } from '../../core/account.ts';
+import { claimCache } from '../../core/account.ts';
 import { coldStart, resetBootForTest } from '../../core/boot.ts';
 import { deleteCacheDb } from '../../core/cache.ts';
 import { clearAllCollections } from '../../core/store.ts';
@@ -16,6 +16,7 @@ import {
   clearCacheStorage, goToAuth, onAuthUser, readExitNotice, readSessionUserId, resetSelfSignOutForTest, sessionStorageKey, takeLocalSession,
 } from '../../platform/session.ts';
 import { createSupabaseTransport } from '../../platform/sync-net.ts';
+import { watchWithExit } from '../../core/__tests__/account-watch-harness.ts';
 
 const URL_ = 'https://lemotest.supabase.co';
 const A = '00000000-0000-4000-8000-00000000000a';
@@ -63,7 +64,7 @@ describe('真实 auth-js：刷新被判复用（refresh_token_already_used）→
     if (!cache) throw new Error('no cache');
     await claimCache(cache, A);
     await cache.putDraft({ id: 'd', kind: 'capture', data: 'A 还没上传的草稿', updated_at: 1 });
-    watchAccount(boot, {
+    watchWithExit(boot, {
       clearCacheStorage, onAuthUser, onStorageUser: () => () => undefined, currentUserId: () => readSessionUserId(), dropSession: () => takeLocalSession(),
       onSignedOut: goToAuth, deleteDb: () => deleteCacheDb({ factory, waitMs: 50 }), onSwitched: vi.fn(),
     });

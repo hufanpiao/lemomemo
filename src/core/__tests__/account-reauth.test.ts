@@ -1,11 +1,12 @@
 // R-382（架构 4.1a 第 2 点、第 6 点单测）：登录过期只关库不清、被移除清库删记号；冷启动、别的标签页、重新登录按 lemo.reauth 处理
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { claimCache, expireThisTab, markExpired, watchAccount, wipeLocal, type WatchAccountDeps } from '../account.ts';
+import { claimCache, expireThisTab, markExpired, wipeLocal } from '../account.ts';
 import { coldStart, resetBootForTest, type BootResult } from '../boot.ts';
 import { deleteCacheDb } from '../cache.ts';
 import { clearAllCollections } from '../store.ts';
 import { fakeIndexedDB, flush, type FakeIDBFactory } from './idb-fake.ts';
 import { FUTURE_SKEW_MS, REAUTH_TTL_MS, readReauth, writeReauth } from '../../platform/auth-loss-store.ts';
+import { watchWithExit, type WatchSpies } from './account-watch-harness.ts';
 
 const A = '00000000-0000-4000-8000-00000000000a';
 const B = '00000000-0000-4000-8000-00000000000b';
@@ -20,7 +21,7 @@ afterEach(() => {
 interface Rig {
   boot: BootResult;
   fake: FakeIDBFactory;
-  deps: WatchAccountDeps;
+  deps: WatchSpies;
   signedOut: (sid?: string | null) => void;
   storage: (v: string | null) => void;
 }
@@ -32,7 +33,7 @@ async function rig(resolve: 'expired' | 'removed' = 'expired'): Promise<Rig> {
   await claimCache(boot.cache, A);
   await boot.cache.putDraft({ id: 'd', kind: 'capture', data: 'A 的草稿', updated_at: 1 });
   const h = { so: (_s?: string | null) => undefined as void, st: (_v: string | null) => undefined as void };
-  const deps: WatchAccountDeps = {
+  const deps: WatchSpies = {
     clearCacheStorage: vi.fn(() => Promise.resolve()),
     onAuthUser: (_fn, so) => {
       if (so) h.so = (s) => so(s, null);
@@ -50,7 +51,7 @@ async function rig(resolve: 'expired' | 'removed' = 'expired'): Promise<Rig> {
     deleteDb: () => deleteCacheDb({ factory, waitMs: 50 }),
     resolve: vi.fn(async () => resolve),
   };
-  watchAccount(boot, deps);
+  watchWithExit(boot, deps);
   return { boot, fake, deps, signedOut: (s) => h.so(s), storage: (v) => h.st(v) };
 }
 

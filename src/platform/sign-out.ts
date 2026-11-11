@@ -1,46 +1,8 @@
-// 退出这台设备（架构 4.1、0.38 第 35～37 条；接手清单 K-signout-merge）：登录页“退出并换账号”（K4）和设置页“退出登录 / 被移除”（K9）共用这一份
-// 顺序：① 删本会话那一行 devices ② 清本机库（设闸清空之后、按库名删库之前先断开浏览器推送：关通知、退订，FE-2）③ 清 Cache Storage（只删运行时缓存，保留 workbox-precache，见 session.ts）
-//   ④ signOut({scope: 'local'})，不是 ok 就 clearLocalSessionIf(退出前的 session_id) 兜底 ⑤ 会话删掉以后再按库名删一次库。
-//   会话放在 ④：中途被打断最坏是“有会话、没库”，下次打开能自愈
-// • ⑤ 的原因（K-signout-merge 复审 M2）：②③ 那几秒会话还在；按库名删库会让别的主 App 标签页收到 versionchange 立即 reload，
-//   它用还在的旧会话 coldStart、重建库并开始同步旧账号的数据。会话删掉以后再删一次，库就不会留在硬盘上（共用电脑）。
-//   主 App 那边“会话变 null 时先删库”交 K6（core/account.ts）
-// • 本机库：主 App 传 wipe（core 的 sealForExit 设闸 + clearAll；platform 不能引 core，登录页也不能带进 core——它经 manifests 带进 zod，
-//   zod 4 的 allowsEval 探测在登录页的严格 CSP 下报 eval 违规）。没传 wipe、wipe 说库不能用、出错或超时：按库名直接删 planner-v4。
-//   主 App 的 deleteDb 先关本页连接再删（设置页 data/local.ts），免得本页自己收到 versionchange 而 reload
-// • 超时：appFetch 没有超时，令牌过期时 supabase-js 先刷新再退避重试，网络卡住时请求几十秒不返回。①④ 一共最多 SIGN_OUT_TIMEOUT_MS（① 最多一半）；
-//   ②③⑤ 各有上限。超时按“服务器没退成”处理：照样清本机、删本机会话。
-//   最坏耗时：登录页约 16 秒（删库 3 + 缓存 2 + ①④ 8 + ⑤ 3）；主 App 约 19 秒（再加 wipe 3 秒超时）。一般网络下一两秒
-// • 登录页没传 ①：它的 api.signOutHere() 自己先删行再 signOut（auth-api.ts，不归这里改），两步合在 ④ 里，共用 ④ 的等待时间
-// • 晚到：④ 超时以后才回来、本机会话又是退出前那个 user_id（令牌刷新把旧会话写回）就再删一次；别的账号或没有会话不动。
-//   只挂在 ④ 上：① 晚到时本机会话本来就还在（④ 还没做），挂上会把会话提前删掉，之后 signOut 拿不到会话、误报成功
-// • 封存挡不住 Service Worker：以后 SW 收到通知按键会直接写 pending_actions（core/pending-actions.ts，推送从 B2 起），不经本页的 cache，
-//   sealForExit 管不到；退出过程中写进去的会被 ⑤ 删库带走，但 ⑤ 之后、离开页面之前写进去的会留下。
-//   K-sw-seal 结论（10-29）：B1 的 SW 不碰 IndexedDB，运行时缓存只有公共的导航 HTML、节假日、字体（tests/build/sw-no-user-data.test.ts 钉住）；
-//   B2 的 SW：⑴ 只往已存在、owner 仓有 user_id 的库里写（遇到要新建库就中止），且推送带的 user_id 和 owner 一致才写，不一致丢掉（不能直接用 owner 的值，防串号）；
-//   ⑵ 开库后监听 versionchange、收到立刻关连接，否则 ⑤ 删库被挡、退出卡住；⑶ 退出、换账号时退掉推送订阅或由服务器换绑，旧账号的通知不再推来。
-//   ⑤ 删库以后 SW 写不进去。不靠“通知 SW 停写”：SW 随时被浏览器停掉重启，内存里的标记会丢
-// • 一开头先 markSelfSignOut()（K6-signedout）：之后 ④ signOut、① 删行时刷新令牌失败等引起的本页 SIGNED_OUT，
-//   会话层（session.ts 的 onAuthUser → core/account.ts 的 watchAccount）见到标记就不再按“被移除”重复处理
-// • 兜底删本机会话只删“退出前那一个”（接手清单 K6-sugg3 ①）：一开头记下本机会话的 session_id，④ 不是 ok、④ 晚到时都按它
-//   clearLocalSessionIf(sid)（= session.ts 的 clearLocalSessionIf），退出那几秒里别的标签页刚登录的新会话不删。
-//   ExitSteps 只有这一个删会话的方法、sid 必填（K6-sugg4 ②）：没有“不给参数就直接删”的写法，桩忽略参数也不会让生产代码变成无条件删
-// • ④ 里 supabase-js 自己删会话键也只删“退出前那一个”（接手清单 K6-signout-lib，架构师 10-30：不改成直接调 /logout，加存储保护）：
-//   auth-js 2.118 的 _signOut 先读本机会话、拿它的令牌调 /logout，最后 _removeSession 无条件删会话键（默认不加锁）。
-//   client.ts 给 auth 传的是包了 localStorage 的适配器（supabase/auth-storage.ts），这里从一开头到 ④ 的请求回来（晚到也算，
-//   最多 SELF_SIGN_OUT_TTL_MS）挂上删键判断：session.ts 的 mayRemoveSessionKey(key, sid)，本机会话已不是 sid 就不删它和它的附属键。
-//   平时适配器和直接用 localStorage 一样，键名、storage 事件都不变
-// • ④ 前再读一次 sid（K6-signout-lib 收窄，架构师 10-30 更正）：supabase-js 调 /logout 用的令牌是它在 ④ 里从本机读的，
-//   ①②③ 那几秒里别的标签页登录的新会话会被它读到、在服务器上吊销。所以一开头和 sid 一起把旧会话的 access token 记在内存里（不记录、不写回），
-//   ④ 前再读一次 sid：还是那一个或读到 null 就照旧调 supabase-js（存储保护照旧）；已经换成别的会话就不调 supabase-js、也不碰存储，
-//   用记下的旧令牌经 appFetch 直接 POST <supabaseUrl>/auth/v1/logout?scope=local（logoutWithToken；版本门对它放行）：
-//   2xx（一般 204）算 serverDone，401（令牌过期）、断网、超时都算没退成，过期也不刷新令牌；等待用 ④ 剩下的预算
-//   剩下的已知问题：服务器上可能吊销了新会话——只剩“再读 sid”到 supabase-js 自己读本机会话之间几个微任务
-//   （signOut 先等 initializePromise 再 _useSession 读存储），这时别的标签页正好写进新会话才会碰到；后果是那个标签页要重新登录。不再处理
-// • localStorage 里的 install_id、pv-locale 不清；日志上传队列 lemo.logq.<user_id>（log-store.ts，架构 0.38 第 68 条）在 ② 清本机时一起清
-//   （读不到是谁时清全部 lemo.logq.*）
-// • R-382（架构 4.1a 第 2、3 点）：② 清本机时同一步删 lemo.reauth（被移除、自己退出都算）；
-//   lemo.authloss 只在本人主动退出（signOutThisDevice：设置页“退出登录 / 移除本机”、登录页“退出并换账号”）时删，被动清库（被移除）留着
+// 退出这台设备的清理步骤（架构 4.1）：登录页“退出并换账号”和设置页“退出登录 / 被移除”共用；不经 core/device-exit.ts
+// 顺序：① 删本会话的 devices 行 ② 清本机库（主 App 传 wipe；没传、库不能用、出错、超时都按库名删）③ 清运行时缓存 ④ signOut local ⑤ 会话删掉后再按库名删一次库
+// 不变量：会话放在 ④（被打断最坏“有会话、没库”）；兜底删会话只删退出前那一个 sid；①④ 合计最多 SIGN_OUT_TIMEOUT_MS，②③⑤ 各有上限，超时照样清本机
+// 不变量：一开头 markSelfSignOut，本页 SIGNED_OUT 不再按被移除处理；② 同一步删 lemo.reauth，lemo.authloss 只在本人主动退出时删
+// 为什么这样排（⑤ 的原因、SW 写库、supabase-js 删键保护、④ 前再读 sid）见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
 import { buildInfo, isTauri } from './env.ts';
 import { clearAuthLoss, clearReauth } from './auth-loss-store.ts';
 import { appFetch } from './http.ts';
@@ -57,17 +19,13 @@ import {
   SELF_SIGN_OUT_TTL_MS,
 } from './session.ts';
 import { guardSessionRemoval } from './supabase/auth-storage.ts';
-import { deleteLocalDb, withTimeout } from './exit-basics.ts';
+import { CACHES_TIMEOUT_MS, deleteLocalDb, WIPE_TIMEOUT_MS, withTimeout } from './exit-basics.ts';
 
-// 本机库名、删库、withTimeout 搬到 platform/exit-basics.ts（11-07 首屏瘦身）；这里原样转出，原有的 import 不用改
-export { DELETE_WAIT_MS, deleteLocalDb, LOCAL_DB_NAME, withTimeout, type DeleteDbResult } from './exit-basics.ts';
+// 本机库名、删库、超时、withTimeout 在 platform/exit-basics.ts（首屏只引那里）；这里原样转出
+export { CACHES_TIMEOUT_MS, DELETE_WAIT_MS, deleteLocalDb, LOCAL_DB_NAME, WIPE_TIMEOUT_MS, withTimeout, type DeleteDbResult } from './exit-basics.ts';
 
 /** ①④ 服务器部分的总超时 */
 export const SIGN_OUT_TIMEOUT_MS = 8000;
-/** ② 主 App 清库（wipe）最多等多久，超时改走按库名删库 */
-export const WIPE_TIMEOUT_MS = 3000;
-/** ③ 清 Cache Storage 最多等多久 */
-export const CACHES_TIMEOUT_MS = 2000;
 
 /** 清本机的几步（测试换掉） */
 export interface ExitSteps {

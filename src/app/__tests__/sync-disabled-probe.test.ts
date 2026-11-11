@@ -6,7 +6,7 @@ import { coldStart, getBoot, resetBootForTest, type BootOptions, type BootResult
 import { clearAllCollections } from '../../core/store.ts';
 import type { Sync, SyncOptions } from '../../core/sync/engine.ts';
 import { fakeTransport } from '../../core/sync/__tests__/fake-server.ts';
-import { fakeIndexedDB } from '../../core/__tests__/idb-fake.ts';
+import { fakeIndexedDB, flush } from '../../core/__tests__/idb-fake.ts';
 import { todo, uid } from '../../core/__tests__/outbox-fixtures.ts';
 import type { AccountProbe as AccountStatus } from '../../platform/account-status.ts';
 import { ACTIVE_RELOAD_KEY, ACTIVE_RELOAD_WINDOW_MS, wireSync } from '../sync-wiring.ts';
@@ -147,10 +147,10 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
     expect(d.clearLocalSessionIf.mock.calls.every(([sid]) => sid === null)).toBe(true);
   });
 
-  // R-263 ③ 照旧提示 expired（登录已失效，请重新登录）；R-382 起只关库不清（这里账号不是 uuid、写不了记号，走退回清库，只核提示和不探测；
-  // 不清库另见 sync-wiring-expired.test.ts）
-  it('K6-sugg5 审查建议：sid 为 null 且本机读不到账号（没有会话）→ 不探测、按 expired（登录已失效，请重新登录；R-263）退出；本机有账号或读出错 → 照旧 disabled_unsure', async () => {
-    const cases: [() => string | null, string][] = [[() => null, 'expired'], [() => 'A', 'disabled_unsure'], [() => { throw new Error('x'); }, 'disabled_unsure']];
+  // R-263 ③ 提示 expired（登录已失效，请重新登录）、R-382 起只关库不清（见 sync-wiring-expired.test.ts）；这里账号不是 uuid、写不了记号，
+  // 走退回清库：库清了，提示一律 removed（11-11 主持人定：让人知道没上传的改动丢了），只核提示和不探测
+  it('K6-sugg5 审查建议：sid 为 null 且本机读不到账号（没有会话）→ 不探测；写不了记号退回清库提示 removed；本机有账号或读出错 → 照旧 disabled_unsure', async () => {
+    const cases: [() => string | null, string][] = [[() => null, 'removed'], [() => 'A', 'disabled_unsure'], [() => { throw new Error('x'); }, 'disabled_unsure']];
     for (const [readUserId, notice] of cases) {
       resetBootForTest();
       const boot = await coldStart(opts(fakeIndexedDB().factory));
@@ -228,6 +228,29 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
     expect(d.setExitNotice.mock.calls.map((c) => c[0])).toContain('removed');
     expect(d.clearLocalSessionIf).toHaveBeenCalledWith('s1');
   });
+});
+
+describe('signed_out 也先查 session_fate（架构 4.1a 第 1 点：会话没了的信号都先交给 resolveAuthLoss；11-11 有意修改）', () => {
+  const U = '00000000-0000-4000-8000-00000000000a';
+  const S = '00000000-0000-4000-8000-0000000000c1';
+  afterEach(() => localStorage.clear());
+  for (const [fate, wiped, notice] of [['expired', false, 'expired'], ['removed', true, 'removed']] as const) {
+    it(`真实账号（UUID，写得了记号）探测回 signed_out、session_fate 判 ${fate}：${wiped ? '清库' : '只退出不清库'}，提示 ${notice}`, async () => {
+      const { factory, fake } = fakeIndexedDB();
+      const boot = await coldStart({ ...opts(factory), userId: U });
+      await boot.outbox?.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
+      const s = spySync();
+      const d = { ...deps(s.create, async () => ({ kind: 'signed_out' }), { sid: S, token: 'tok-1' }), resolveAuthLoss: vi.fn(async () => fate) };
+      wireSync(boot, d);
+      s.removed('account_disabled', S);
+      await vi.waitFor(() => expect(d.goToAuth).toHaveBeenCalledTimes(1));
+      await flush();
+      expect(d.resolveAuthLoss).toHaveBeenCalledWith(expect.objectContaining({ sessionId: S, userId: U }));
+      expect(fake.dbs.get('planner-v4')?.stores.get('outbox')?.records.size ?? 0).toBe(wiped ? 0 : 1);
+      expect(d.clearCacheStorage).toHaveBeenCalledTimes(wiped ? 1 : 0);
+      expect(d.setExitNotice).toHaveBeenCalledWith(notice, S);
+    });
+  }
 });
 
 describe('active 的重新载入有次数限制（RPC 和探测一直说不到一块时不能无限载入）', () => {

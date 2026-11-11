@@ -15,8 +15,9 @@ function deps(boot: Partial<BootResult> | null = { switching: false, userId: 'u1
     // 默认 keep 是 expireThisTab：账号 u1 不是 UUID，写不了记号，停用退回清库
     keep: vi.fn((_b: BootResult, _n: string, _sid: string | null) => false),
     clearLogs: vi.fn((u: string | null) => void order.push(`logs:${u}`)),
-    broadcastReset: vi.fn((u: string, exit?: { notice: string; sid: string | null }) =>
-      void order.push(exit ? `reset:${u}:${exit.notice}:${exit.sid ?? 'null'}` : `reset:${u}`)),
+    broadcastReset: vi.fn((u: string, exit: { notice: string; sid: string | null }) => void order.push(`reset:${u}:${exit.notice}:${exit.sid ?? 'null'}`)),
+    // 清完库那条不带原因的 reset（设置页原来就发）
+    broadcastWiped: vi.fn((u: string) => void order.push(`reset:${u}`)),
     clearLocalSessionIf: vi.fn(async (sid: string | null) => { order.push(`session:${sid}`); return true; }),
     goToAuth: vi.fn((n: string | null, _sid: string | null) => void order.push(`auth:${n}`)),
     setNotice: vi.fn(),

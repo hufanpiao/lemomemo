@@ -1,22 +1,7 @@
-// 入口（架构 2.2）：挂 React、加载样式、注册 SW
-// StrictMode 只在开发版开（2.6）
-// 启动顺序（架构 4.1、0.27 第 1、4 点、0.38 第 17 条）：
-// 0. zod 的 JIT 由 vite.config.ts 的别名统一关掉（裸 'zod' → platform/zod-jitless.ts，FA-6 ③ 起 zod 不在首屏，入口不再先 import 它）；进 start 后第一件事是 exe 里装 platform 桥（isTauri 才动态 import desktop.ts，0.53 第 2 条）
-// 1. 读本机会话的 user_id（不加载 supabase-js，离线也能读）；没登录 → 本机库还在就删掉，跳 /app/auth/，不建本机库、不渲染
-// 2. await coldStart({userId})：开本机库（迁移、换账号清库）、把上次的内容灌进集合、按缓存的 config / profile 算功能开关；
-//    coldStart 不抛错，出错已降级成 unavailable（不渲染缓存，只联网用）
-// 3. 定界面语言：缓存的 profiles.ui_locale → pv-locale → 设备语言 → 中文（降级时没有 profile，照样走后几层）
-// 4. 按 flags 挂功能入口，再渲染（先用缓存画），然后启动 K8 同步（sync-wiring.ts，主页顺带登记本会话的 devices 行、报时区）；本机库来自更新的版本时只渲染整屏提示 CacheTooNewScreen
-// 5.（在 render 之前）盯住换账号的另外三个时机：本页 SIGNED_IN、TOKEN_REFRESHED（supabase-js 空闲时才加载），别的标签页的 storage 事件；
-//    挂上后马上再读一次会话比一次，补上 1 到 5 之间漏掉的变化（K6 审查 M1）
-// 6.（mountFeatures 之后、渲染 App 之前，接手清单 CONSENT-wire ②）在线时先过告知页关口 ConsentGate（features/onboarding）：
-//    它问 noticeState()，first 先显示告知页（排在通知、麦克风说明之前），updated 留给“隐私说明更新了”那一屏（还没做，现在直接进 App），
-//    读失败、超过 3 秒（CONSENT-sugg ①）、懒加载失败都不挡进 App。noticeState 在关口里调而不是在这里 await：A27 只许 app 经 index.ts
-//    拿懒加载的组件，拿不到 data 层的函数；#root 本来是空的，关口回答之前不画 App，看起来和“等完再渲染”一样，同步也不用跟着等。
-//    选根（关口、离线、version_too_new）在 root.tsx（CONSENT-sugg ③⑥：错误边界只包关口，单独有测试）；
-//    选出来的根外面再包一层静态的“出错了 · 刷新”兜底（root.tsx 的 withCrashFallback，K6-sugg3 ⑥）
-// 启动画面（R-251、R-254；DOM 在 index.html，跟着首次绘制出来）：从这里起算最多盖 5 秒（hideSplashAfter）；
-// #root 第一次画出东西（告知页、App、整屏提示、崩溃兜底页）的下一帧收起（root-paint.ts 的 whenContent）；这两处经 leaveSplash（非正式版先等诊断启动件），进退出屏时直接收
+// 入口（架构 2.2、4.1）：装 exe 桥 → 读本机会话（没登录删库去登录页）→ coldStart → 定界面语言 → 挂功能入口 → 挂换账号监听 → 过告知页关口渲染 → 启动同步
+// 不变量：换账号、会话没了的监听在 render 之前挂、挂上马上再比一次；会话没了交 core/device-exit.ts 的 exitOnSessionLoss
+// 不变量：告知页关口读失败、超时、懒加载失败都不挡进 App；启动画面最多盖 5 秒、#root 第一次画出东西（root-paint.ts 的 whenContent）的下一帧收起，这两处经 leaveSplash（非正式版先等诊断启动件），进退出屏时直接收；StrictMode 只在开发版开
+// 每一步的理由见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles/tokens.css';
@@ -24,7 +9,8 @@ import '../styles/skins/simple.css';
 import '../styles/skins/glass.css';
 import '../styles/base.css';
 import { fromUiLocale, LOCALE_STORAGE_KEY, pickLocale, toUiLocale } from '../../shared/i18n/pick-locale.ts';
-import { REAUTH_GRACE_MS, watchAccount } from '../core/account.ts';
+import { watchAccount, wipeLocal } from '../core/account.ts';
+import { defaultExitDeps, exitOnSessionLoss, REAUTH_GRACE_MS, type ExitDeps } from '../core/device-exit.ts';
 import { hasAuthLoss, readReauth } from '../platform/auth-loss-store.ts';
 import { coldStart, type BootResult } from '../core/boot.ts';
 import { deleteCacheDb } from '../core/cache.ts';
@@ -195,20 +181,25 @@ async function start(): Promise<void> {
   mountFeatures(boot.flags);
 
   // 换账号监听在 render 之前挂（K6 复审 N4）：挂上时同步再比一次会话，coldStart 期间已经换了账号或退出就不渲染，直接走换账号流程
+  // 会话没了（本页 SIGNED_OUT、别的标签页退出）走退出出口 core/device-exit.ts：清库时关掉连接后按库名删库（不留库文件，登录页审查）；
+  // 这两路原来就不广播 reset（别的标签页各自收得到 storage 事件）
+  const lossExit: ExitDeps = {
+    ...defaultExitDeps,
+    getBoot: () => boot,
+    wipe: (b) => wipeLocal(b, { clearCacheStorage, deleteDb: () => deleteCacheDb(), dropDb: true, log: (act) => logEvent(act) }),
+    clearLogs,
+    broadcastReset: () => undefined,
+    log: (act) => logEvent(act),
+  };
   watchAccount(boot, {
     clearCacheStorage,
-    clearLogs,
     onAuthUser,
     onStorageUser: (fn) => onSessionStorageChange(fn),
     currentUserId: () => readSessionUserId(),
     // 本页收到 SIGNED_OUT：判断会话归谁的同一刻就删本机会话，回登录页前只在会话还是那一个时再删（K6-signedout-sugg2 ①）
     dropSession: () => takeLocalSession(),
-    onSignedOut: goToAuth,
     // R-382：别的标签页删了会话，等它写好 lemo.reauth 再判断是登录过期还是退出了
-    reauthGraceMs: REAUTH_GRACE_MS,
-    log: (act) => logEvent(act),
-    // 别的标签页退出：本页关掉连接后按库名删库（登录页审查）
-    deleteDb: () => deleteCacheDb(),
+    onSessionLost: (loss) => exitOnSessionLoss(loss, lossExit, REAUTH_GRACE_MS),
     // 清库失败（onFailed 不填）同样重新载入：冷启动会在读写任何东西之前再清一次，再失败就降级成 unavailable、不渲染缓存
     // 不删本机会话：会话是各标签页共用的，删了会把别的标签页刚登录的新账号也登出
     onSwitched: reloadPage,

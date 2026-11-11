@@ -31,7 +31,7 @@ describe('outboxLog（K6-log）', () => {
   });
 });
 
-describe('logQueueCleaner（架构 0.38 第 68 条；CONSENT-wire 审查：watchAccount 的 clearLogs）', () => {
+describe('logQueueCleaner（架构 0.38 第 68 条；CONSENT-wire 审查：会话没了那一路的 clearLogs）', () => {
   it('先 close、马上同步清这个账号的队列；在途那一批收尾后再清一次', async () => {
     const order: string[] = [];
     let finish: () => void = () => undefined;
@@ -69,11 +69,12 @@ describe('logQueueCleaner（架构 0.38 第 68 条；CONSENT-wire 审查：watch
     localStorage.removeItem(logQueueKey('U2'));
   });
 
-  it('main.tsx 把同一个 clearLogs 交给了 watchAccount 和 wireSync（main.tsx 一导入就启动，没法直接跑，改查源码）', () => {
+  it('main.tsx 把同一个 clearLogs 交给了会话没了的退出出口（lossExit，watchAccount 经 exitOnSessionLoss 用它）和 wireSync（main.tsx 一导入就启动，没法直接跑，改查源码）', () => {
     const src = readFileSync(join(import.meta.dirname, '../main.tsx'), 'utf8');
     expect(src).toMatch(/const clearLogs = logQueueCleaner\(logQueue, userId\);/);
-    const watch = /watchAccount\(boot, \{([\s\S]*?)\n {2}\}\);/.exec(src)?.[1] ?? '';
-    expect(watch).toMatch(/^\s*clearLogs,$/m);
+    const loss = /const lossExit: ExitDeps = \{([\s\S]*?)\n {2}\};/.exec(src)?.[1] ?? '';
+    expect(loss).toMatch(/^\s*clearLogs,$/m);
+    expect(src).toMatch(/onSessionLost: \(loss\) => exitOnSessionLoss\(loss, lossExit, REAUTH_GRACE_MS\)/);
     const wire = /wireSync\(boot, \{([\s\S]*?)\n {2}\}\);/.exec(src)?.[1] ?? '';
     expect(wire).toMatch(/^\s*clearLogs,$/m);
   });

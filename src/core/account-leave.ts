@@ -6,6 +6,7 @@ import type { AuthLossPath } from './auth-loss.ts';
 import { defaultExitDeps, exitDevice, type ExitDeps } from './device-exit.ts';
 import { exitForDisabled, type ProbedExit } from '../platform/account-status.ts';
 import { setExitNotice } from '../platform/session.ts';
+import { postReset } from '../platform/tab-leader.ts';
 
 /** 回登录页时的提示：冷静期、已停用、探测不出、申请注销后确认不了办没办成（deletion-check.ts）、被移除 */
 export type AccountLeaveNotice = 'pending_deletion' | 'disabled' | 'disabled_unsure' | 'deletion_unsure' | 'removed';
@@ -19,6 +20,9 @@ export interface AccountLeaveDeps extends ExitDeps {
 
 export const defaultAccountLeaveDeps: AccountLeaveDeps = {
   ...defaultExitDeps,
+  broadcastReset: postReset,
+  // 清完库再发一条不带原因的 reset：设置页、插图上传原来就发（别的标签页整份重读，读到空库）
+  broadcastWiped: (userId) => postReset(userId),
   setNotice: (notice, sid) => setExitNotice(notice, undefined, { sid }),
 };
 

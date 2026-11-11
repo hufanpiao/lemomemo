@@ -1,11 +1,13 @@
-// 退出流程里首屏也要用的几样小工具（11-07 B2-UI-a 首屏瘦身 U7，主持人定 A）：从 platform/sign-out.ts 原样搬来，一行没改。
-// 首屏的 core/cache.ts（deleteLocalDb）、platform/account-status.ts、onboarding 的 consent-api.ts（withTimeout）只用到这几样，
-// 改从这里引以后 sign-out.ts 本体不再被首屏带进来，只跟设置页、登录页的分包一起下载（那两页本来就静态引它，没有新的“下载失败”路径）。
-// sign-out.ts 把这里的东西原样转出，原有的 import 不用改
+// 退出流程里首屏也要用的几样（本机库名、删库、超时、withTimeout）：首屏只引这里，platform/sign-out.ts 本体不进首屏
+// 不变量：退出用的超时常量全仓只在这里定义一次（core/account.ts、platform/sign-out.ts 都从这里引）
 /** 本机库名（= core/cache.ts 的 DB_NAME；platform 不引 core，测试守着两边一致） */
 export const LOCAL_DB_NAME = 'planner-v4';
 /** 删库最多等多久（别的标签页开着库时浏览器会等它关） */
 export const DELETE_WAIT_MS = 3000;
+/** 清本机库最多等多久，超时改按库名删库 */
+export const WIPE_TIMEOUT_MS = 3000;
+/** 清 Cache Storage（运行时缓存）最多等多久 */
+export const CACHES_TIMEOUT_MS = 2000;
 
 /**
  * 到点还没返回就用 fallback() 的值；run 抛错（同步或异步）也用 fallback()。fallback 只给值，不要有副作用。

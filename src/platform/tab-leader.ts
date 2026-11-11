@@ -222,3 +222,8 @@ export function postSyncMessage(name: string, m: SyncMessage, channel: (name: st
     }
   }
 }
+
+/** 退出时告诉别的标签页：给 exit 是删会话之前那条（带原因、sid），不给是清完库那条（别的标签页整份重读） */
+export function postReset(userId: string, exit?: { notice: ExitNotice; sid: string | null }): void {
+  postSyncMessage(syncChannelName(userId), { type: 'reset', ...exit });
+}

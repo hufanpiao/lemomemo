@@ -1,27 +1,8 @@
-// 离开这台设备（架构 4.1、0.29 续第 98 条、0.38 第 7 条；K9 第二轮审查 N1、N2、L1）
-// • 被移除 / 被退出 / 会话不认（session_revoked、unauthorized、401、刷新失败）：“发现”来自某个接口请求的回包，
-//   回包带着那次请求用的会话的 session_id（settings-api 发请求前记下，接手清单 K6-sugg4 ①）。一发现就同步删本机会话——
-//   只删那个 session_id 的（clearLocalSessionIf(sid)）：回包前别的标签页可能已用同一账号写进新会话，那个不删
-//   （K6-sugg3 ① 的“同一同步段里删”管不到请求在路上的那几秒）。服务器上的会话已经没了，不用等 signOut。
-//   signOut local 紧接着放后台、不等它；本机会话已经是别人的（上面没删掉）时不调，免得它把那个新会话退掉。
-//   再清本机库和 Cache Storage，清完、回登录页前只在本机会话还是那个 sid 时再删——清库那几秒里别的标签页刚登录的新会话不删。
-//   signOut 不能放到清库之后：supabase-js 的 signOut 自己读本机会话、最后自己删会话键（含 `-user` 等），放在后面会把那个新会话当成本页的退掉。
-//   放在前面时本机会话已删，它读到没有会话就不发吊销请求，但不是“几毫秒就做完”（K6-sugg4 ⑤）：客户端还没建好时要先加载 supabase-js 分包
-//   （慢网几秒；离线加载失败就走兜底删），建好了也要先等它初始化完（initializePromise，里面可能在刷新令牌）、再排 auth-js 的锁（auth-js GoTrueClient.signOut）；最后它照样无条件删一次会话键，
-//   这段时间里别的标签页写进来的新会话：K6-signout-lib 起后台这次 signOut 也挂 defaultGuardRemoval(sid)，会话键已不是 sid 就不删；
-//   settings-api 紧贴 signOut 前也会再读一次本机会话，换了就不调 signOut
-//   界面提示“这台设备已在别的设备上被移除……”。“去登录”和几秒后的自动跳转都等清理做完再跳（最多等 LEAVE_WAIT_MAX_MS），
-//   清理没做完时按钮禁用，免得页面卸载把 IndexedDB 事务中止、留下“有会话、有库”
-// • 本机已经没有会话（别的标签页正常退出了）：同上，提示“已退出登录”
-// • 自己退出（“退出登录”和“移除本机”）：① 删本机那一行 devices ② 清本机库和缓存 ③ signOut local，不是 ok 就删本机会话。
-//   会话放最后：中途被打断最坏是“有会话、没库”，下次打开能自愈。①③ 一共最多等 EXIT_TIMEOUT_MS（① 最多一半）；
-//   超时照样删本机会话，提示“服务器上的这次登录暂时没能吊销”。超时以后请求才回来、本机会话又是退出前那个 user_id
-//   （令牌刷新把旧会话写回）就再删一次。这些步骤在 platform/sign-out.ts，和登录页“退出并换账号”共用（K-signout-merge）
-// • R-382（架构 4.1a 第 1 点 ②）：onRevoked 先经 resolveAuthLoss 定结局（码按 session_revoked，要查 session_fate）：
-//   removed 照旧走下面的清库；expired 只关库、不清（exit.expireHere 写 lemo.reauth），删那一个会话、回登录页提示“登录已过期”。
-//   查之前先 markHere（设闸、写记号，同别的出口的 markExpired），写不了记号直接按被移除；exit 没给 expireHere（测试）时照旧直接按被移除处理
-// • 本页自己处理“会话没了”时也会调 signOut：先 markSelfSignOutThisTab()（只打本页内存里的），会话层的 SIGNED_OUT 监听见到标记不再重复处理（K6-signedout）。
-//   本页不另开 SIGNED_OUT 监听
+// 设置页离开这台设备（架构 4.1、4.1a）：会话不认、本机已没有会话、本人退出三种；清理步骤在 platform/sign-out.ts
+// 不变量：发现会话不认就同步删那次请求用的 sid（别的标签页的新会话不删）；后台 signOut local 放在清库之前；跳登录页等清理做完（最多 LEAVE_WAIT_MAX_MS）
+// 不变量：onRevoked 先 markHere（设闸、写记号）再查 session_fate，没确认被吊销只关库、不清、不写第二次；写不了记号才按被移除清库
+// 不变量：本页自己调 signOut 前先 markSelfSignOutThisTab，会话层的 SIGNED_OUT 不再重复处理；本页不另开 SIGNED_OUT 监听
+// 详细理由见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   defaultGuardRemoval, deleteDbAgain, dropSession, sessionIdOf, SIGN_OUT_TIMEOUT_MS, signOutThisDevice, withTimeout, wipeThisDevice,
@@ -149,7 +130,8 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
       if (exiting.current) return;
       exiting.current = true;   // 定结局那几秒里再来的信号不再处理
       // 查 session_fate 之前先设闸、写记号（和别的出口一样先 markExpired，独立验证建议 3）：查的那几秒里不再往外发；写不了记号直接按被移除清库
-      if (exit.markHere && !exit.markHere(sid)) {
+      const marked = exit.markHere?.(sid);
+      if (marked === false) {
         exiting.current = false;
         return onSessionLost('revoked', sid);
       }
@@ -158,8 +140,8 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
         .resolveAuthLoss({ path: 'settings', code: 'session_revoked', sessionId: sid, userId })
         .catch(() => 'expired' as const)
         .then((r) => {
-          // 结局按 core/device-exit.ts 的 decideExit：没确认被移除只退出；写不了记号退回清库
-          if (decideExit({ reason: 'removed', fate: r }).act === 'logout' && expire(sid)) {
+          // 结局按 core/device-exit.ts 的 decideExit：没确认被移除只退出（记号已写好就只关库）；写不了记号退回清库
+          if (decideExit({ reason: 'removed', fate: r }).act === 'logout' && expire(sid, marked === true)) {
             void dropSession(exit, sid);
             exit.goToAuthExpired?.(sid);
             return;

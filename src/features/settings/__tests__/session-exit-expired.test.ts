@@ -20,7 +20,7 @@ describe('设置页 onRevoked', () => {
     });
     await vi.waitFor(() => expect(goToAuthExpired).toHaveBeenCalledWith('s-me'));
     expect(resolveAuthLoss).toHaveBeenCalledWith({ path: 'settings', code: 'session_revoked', sessionId: 's-me', userId: 'u1' });
-    expect(expireHere).toHaveBeenCalledWith('s-me');
+    expect(expireHere).toHaveBeenCalledWith('s-me', false);
     expect(exit.clearLocalSessionIf).toHaveBeenCalledWith('s-me');
     expect(exit.wipe).not.toHaveBeenCalled();
   });
@@ -55,6 +55,21 @@ describe('设置页 onRevoked', () => {
     expect(order).toEqual(['mark', 'resolve']);
   });
 
+  it('markHere 已写成记号、判 expired：expireHere 带 marked=true（只关库、不写第二次）；第二次写会失败也不清库', async () => {
+    const { exit } = fakeExit();
+    const expireHere = vi.fn((_sid: string | null, marked?: boolean) => marked === true);
+    const goToAuthExpired = vi.fn();
+    const { result } = renderHook(() =>
+      useSessionExit(fakeApi(), { ...exit, markHere: () => true, resolveAuthLoss: async () => 'expired', expireHere, goToAuthExpired, lostUserId: () => 'u1' }));
+    await act(async () => {
+      result.current.onRevoked('s-me');
+    });
+    await vi.waitFor(() => expect(goToAuthExpired).toHaveBeenCalledWith('s-me'));
+    expect(expireHere).toHaveBeenCalledWith('s-me', true);
+    expect(exit.wipe).not.toHaveBeenCalled();
+    expect(result.current.notice).not.toBe('revoked');
+  });
+
   it('markHere 写不了记号：不查 session_fate，直接按被移除（提示 revoked）', async () => {
     const { exit } = fakeExit();
     const resolveAuthLoss = vi.fn(async () => 'expired' as const);
@@ -83,6 +98,7 @@ describe('createLeaveAccount(removed) 的 R-382 路径（插图上传 path files
     wipe: vi.fn(async (_b: BootResult) => undefined),
     clearLogs: vi.fn(),
     broadcastReset: vi.fn(),
+    broadcastWiped: vi.fn(),
     clearLocalSessionIf: vi.fn(async () => true),
     goToAuth: vi.fn(),
   });
@@ -98,13 +114,35 @@ describe('createLeaveAccount(removed) 的 R-382 路径（插图上传 path files
     expect(d.wipe).not.toHaveBeenCalled();
   });
 
-  it('判 removed：清库、goToAuth(removed, sid)；expired 但写不了记号：退回清库，提示登录已过期', async () => {
-    for (const [r, kept, notice] of [['removed', true, 'removed'], ['expired', false, 'expired']] as const) {
-      resetExitForTest();
-      const d = base();
-      await createLeaveAccount({ ...d, resolveAuthLoss: async () => r, keep: () => kept })('removed', S);
-      expect(d.wipe).toHaveBeenCalledTimes(1);
-      expect(d.goToAuth).toHaveBeenCalledWith(notice, S);
-    }
+  it('判 removed：清库、goToAuth(removed, sid)，清完再发一条不带原因的 reset', async () => {
+    const d = base();
+    await createLeaveAccount({ ...d, resolveAuthLoss: async () => 'removed' })('removed', S);
+    expect(d.wipe).toHaveBeenCalledTimes(1);
+    expect(d.goToAuth).toHaveBeenCalledWith('removed', S);
+    expect(d.broadcastWiped).toHaveBeenCalledWith(U);
+  });
+
+  it('判 expired、第二次写记号会失败（keep 返回 false）：记号在查之前已写好，不再调 keep，不清库，提示登录已过期', async () => {
+    const d = base();
+    const keep = vi.fn(() => false);
+    await createLeaveAccount({ ...d, resolveAuthLoss: async () => 'expired', keep })('removed', S);
+    expect(keep).not.toHaveBeenCalled();
+    expect(d.wipe).not.toHaveBeenCalled();
+    expect(d.goToAuth).toHaveBeenCalledWith('expired', S);
+  });
+
+  it('查之前就写不了记号（账号不是 UUID）：退回清库，提示一律 removed（让人知道没上传的改动丢了），不是 expired', async () => {
+    const d = { ...base(), getBoot: () => ({ switching: false, userId: 'u1' }) as BootResult };
+    const resolveAuthLoss = vi.fn(async () => 'expired' as const);
+    await createLeaveAccount({ ...d, resolveAuthLoss })('removed', S);
+    expect(resolveAuthLoss).not.toHaveBeenCalled();
+    expect(d.wipe).toHaveBeenCalledTimes(1);
+    expect(d.goToAuth).toHaveBeenCalledWith('removed', S);
+  });
+
+  it('没启动过（没有 boot）：提示 removed（改前语义）', async () => {
+    const d = { ...base(), getBoot: () => null };
+    await createLeaveAccount(d)('removed', S);
+    expect(d.goToAuth).toHaveBeenCalledWith('removed', S);
   });
 });
