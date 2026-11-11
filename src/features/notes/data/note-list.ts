@@ -7,6 +7,7 @@
 // • 分类胶囊：全部 + 有条目的分类和条数（按条数多的在前，一样的按分类的 sort、名字）
 // • 分类色点（视觉稿第 1322、1341 行，6px）：颜色取 categories.color（架构：小写 #rrggbb，或皮肤令牌名）；
 //   令牌名只认皮肤里有的项目色 p1～p6（画深色那一档 --pNs），别的认不出、没设颜色的不画点
+// • 插图（S3，视觉稿 PH.mason）：卡片顶部放第一张（按 id 排，id 是 UUID v7、按插入先后），右上角“+N”是另外还有几张
 // 纯 TS：不准 import React（A1）
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
@@ -25,6 +26,20 @@ export interface NoteItem {
   ai: boolean;
   createdAt: number;
   date: DateStr;
+  /** 第一张插图（没有为 null） */
+  cover: NoteImage | null;
+  /** 一共几张插图 */
+  images: number;
+}
+
+/** 一张插图（note_images 一行里界面要的） */
+export interface NoteImage {
+  id: string;
+  noteId: string;
+  path: string;
+  hasThumb: boolean;
+  width: number;
+  height: number;
 }
 
 export interface NoteGroup {
@@ -80,9 +95,26 @@ export function categoryNames(categories: readonly Row[]): Map<string, string> {
   return out;
 }
 
+/** 活着的插图，按随手记分好、每条里按 id（插入先后）排 */
+export function imagesByNote(images: readonly Row[]): Map<string, NoteImage[]> {
+  const out = new Map<string, NoteImage[]>();
+  for (const r of images) {
+    if (r['deleted_at'] != null || r['undone'] === true || r['bucket'] !== 'images') continue;
+    const noteId = str(r['note_id']);
+    const path = str(r['path']);
+    if (noteId === '' || path === '') continue;
+    const list = out.get(noteId) ?? [];
+    list.push({ id: r.id, noteId, path, hasThumb: r['has_thumb'] === true, width: num(r['width']), height: num(r['height']) });
+    out.set(noteId, list);
+  }
+  for (const l of out.values()) l.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return out;
+}
+
 /** 列表要的条目（已筛掉删了的、隐私记），最近记的在前；category 不为 null 时只留这个分类的 */
-export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: Tz, category: string | null = null): NoteItem[] {
+export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: Tz, category: string | null = null, images: readonly Row[] = []): NoteItem[] {
   const names = categoryNames(categories);
+  const pics = imagesByNote(images);
   const colors = categoryColors(categories);
   const out: NoteItem[] = [];
   for (const r of rows) {
@@ -99,6 +131,8 @@ export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: 
       ai: cid !== null && showsAi(r),
       createdAt,
       date: todayOf(createdAt, tz),
+      cover: pics.get(r.id)?.[0] ?? null,
+      images: pics.get(r.id)?.length ?? 0,
     });
   }
   return out.sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

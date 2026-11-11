@@ -6,6 +6,8 @@
 //   AI 分的、还没看过的胶囊里标“AI”，打开就算看过（category_seen 置为已看，hooks/useNoteEdit.ts）
 // • “⋯”菜单：现在只有“删除”（软删，页内出“已删除”和“撤销”，ADR-006，进“最近删除”）；“移到隐私记 / 转成…”是 B5、S8 的活
 // • 保存状态：常驻 role="status" 给读屏播报；平时看不见（稿子上没有），没保存上、只读这些坏状态才显示出来
+// • 插图（S3，NOTE_ED）：正文下面一张张 16:10 的图，再下面“图片”“拍照”（ui/NoteImages.tsx）；插入、上传失败的提示出在保存状态下面，
+//   空间满了的带“最近删除”入口。电脑抽屉里上传失败的提示由随手记页出（不出两遍）；只读行（off）时“图片”“拍照”和图上的按钮一起禁用
 // • 只读行（S12，R-148，TC-B4-09；照待办编辑页）：core 的只读 id 里有这一条（或写入被拒 readonly）时，标题、正文、分类全部禁用，“⋯”（删除）灰掉，
 //   出“这条要新版本才能修改 · 更新”；电脑抽屉复用这个编辑器，列表页已在点开时拦下，这里兜住直接打开地址、打开后才变只读的情况
 // • 动效：只有抽屉最基本的滑入（R-376），按钮用 Pressable 的按下反馈
@@ -24,6 +26,7 @@ import { requestAppUpdate } from '../../../platform/native-bridge.ts';
 import { BODY_MAX, TITLE_MAX, useNoteEdit, type CategoryOption } from '../hooks/useNoteEdit.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
 import styles from './NoteEditPage.module.css';
+import { EditorImageBlock } from './NoteImages.tsx';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const NONE = '';
@@ -190,6 +193,7 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
         onCommit={(v) => change({ body: v })}
         testId="note-edit-body"
       />
+      <EditorImageBlock noteId={ed.row ? String(ed.row['id']) : null} drawer={drawer} disabled={off} msgClass={styles.notice} />
     </>
   );
   return drawer ? (
@@ -267,13 +271,17 @@ function DraftArea({ value, disabled, label, placeholder, maxLength, single = fa
       live.current.draft = value;
     }
   }, [value, editing]);
-  // 标题跟着内容长高（一行起）
+  // 标题、正文都跟着内容长高（标题一行起；正文的最小高度在样式里，有图时降到两行，图紧跟在正文后面，NOTE_ED）
   useLayoutEffect(() => {
     const ta = el.current;
-    if (!single || ta === null) return;
+    if (ta === null) return;
+    // 量内容本身的高度（先去掉样式里的最小高度）；写回去的 height 再被样式的 min-height 托底（没图 40vh、有图两行）
     ta.style.height = 'auto';
-    ta.style.height = `${ta.scrollHeight}px`;
-  }, [single, draft]);
+    ta.style.minHeight = '0px';
+    const h = ta.scrollHeight;
+    ta.style.minHeight = '';
+    ta.style.height = `${h}px`;
+  }, [draft]);
 
   const flush = useCallback((): void => {
     const l = live.current;

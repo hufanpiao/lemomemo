@@ -301,3 +301,10 @@ export function validateWrite(input: EnqueueInput, rows: RowSchemas, list?: read
   }
   return null;
 }
+
+/**
+ * 新建失败时不能“另存为新的一条”的表（R-378；core/outbox-failed-create.ts 的 copy 按 drop 处理，“未同步”提示条只出“放弃”）：
+ * settings 按 (user_id,key) 唯一，换 id 照样 23505；note_images 的 path 钉死成 <uid>/<note_id>/<id>.webp 且唯一，
+ * 换 id 不换 path 过不了 check，图片本身也只在内存里、跟着原 id 走（B4 插图，主持人 11-11 定）
+ */
+export const NO_COPY_TABLES: ReadonlySet<string> = new Set(['settings', 'note_images']);

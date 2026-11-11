@@ -193,7 +193,8 @@ describe('删除（进“最近删除”）', () => {
     });
     await waitFor(() => expect(notes().getSnapshot().find((r) => r.id === uid(1))?.['deleted_at']).toBe(NOW));
     await waitFor(() => expect(screen.queryByTestId(`notes-card-${uid(1)}`)).toBeNull());
-    expect(screen.getByTestId('notes-toast').textContent).toContain('已删除');
+    // 卡片先消失、l.remove() 后回来才出撤销条：高负载下两者之间有空隙，等它出来（代码审 a4dc5a71）
+    expect((await screen.findByTestId('notes-toast')).textContent).toContain('已删除');
     await act(async () => {
       fireEvent.click(within(screen.getByTestId('notes-toast')).getByRole('button', { name: '撤销' }));
     });
@@ -227,14 +228,11 @@ describe('韩文', () => {
 });
 
 describe('视觉验收 A1 补的几处', () => {
-  it('“图”按钮：插图这一批不做，点了提示“插图很快上线”', async () => {
+  it('输入行右边只有一个“图片”（插图 S3，视觉验收必改 4：没有“拍照”；选图和上传见 NoteImages.test.tsx）', async () => {
     await boot();
     open();
-    await act(async () => {
-      fireEvent.click(screen.getByTestId('notes-img'));
-    });
-    expect(screen.getByTestId('notes-soon').textContent).toBe('插图很快上线');
-    expect(screen.getByTestId('notes-img').getAttribute('aria-label')).toBe('插图');
+    expect(screen.getByTestId('notes-img').getAttribute('aria-label')).toBe('图片');
+    expect(screen.queryByTestId('notes-camera')).toBeNull();
   });
 
   it('输入框带 NOTES_INPUT_ID（随手记页的“＋”按它聚焦，R-380）；右上角头像是设置入口', async () => {

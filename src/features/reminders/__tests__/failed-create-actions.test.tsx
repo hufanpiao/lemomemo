@@ -85,6 +85,13 @@ describe('新建失败的两个按钮（R-378）', () => {
     expect(await screen.findByTestId('remind-unsynced-copy')).toBeTruthy();
   });
 
+  it('全是 note_images 的新建失败（码不能重试，例如 23514）：只出“放弃”，不出“另存”（B4 插图；quota_exceeded 能重试，走“重试”）', async () => {
+    setItems([mk({ seq: 1, table: 'note_images', id: uid(1), op: 'insert', state: 'failed', error: '23514' })]);
+    render(<FailedCreateActions outbox={outbox} resolve={resolve} />);
+    expect((await screen.findByTestId('remind-unsynced-drop')).textContent).toBe('放弃');
+    expect(screen.queryByTestId('remind-unsynced-copy')).toBeNull();
+  });
+
   it('真队列：重开页面后才被拒的 settings 新建（23505，没有 ai-settings 监听）只出“放弃”，点了以后从“未同步”里消失（R-378 复查必改）', async () => {
     clearAllCollections();
     const { cache, outbox: real } = await setup();

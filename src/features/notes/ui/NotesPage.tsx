@@ -9,14 +9,16 @@
 // • “⋯”打开菜单；右键（安卓长按）也打开同一个菜单。菜单现在只有“删除”（转成待办 / 日程 S8、移到隐私记 B5 以后加）；
 //   瀑布流里不能左滑（R-78），列表的左滑以后和别的页一起加
 // • 删除：软删，进“最近删除”，出 8 秒撤销条
-// • 底部输入行（视觉稿 .inrow、线框 COMPOSER）：空着时右边是“图”按钮，打了字才出“记下”；回车或点“记下”就存，新的一条出现在最上面、时间写“刚记下”。
-//   插图这一批不做：点“图”提示“插图很快上线”。电脑上输入行铺满内容栏、左右各留 22px（DK.notes）
+// • 底部输入行（视觉稿 .inrow、线框 COMPOSER）：右边是“图片”“拍照”（主持人定 3），打了字才出“记下”；回车或点“记下”就存，新的一条出现在最上面、时间写“刚记下”。
+//   选了图：先用输入框里的字（可以空）新建一条随手记，再把图插进去（S3，ui/NoteImages.tsx）。电脑上输入行铺满内容栏、左右各留 22px（DK.notes）
+// • 插图（S3）：瀑布流卡片顶部放第一张（16:10、右上角“+N”）；插入、上传失败出提示条，空间满了的带“最近删除”入口
 // • 底栏 / 侧栏的“＋”在这一页直接把光标放进输入行（R-380，线框“低 1”；app/App.tsx 按 tab-of.ts 的 NOTES_INPUT_ID 找）
-// • 这一批不做：隐私记那一行（B5）、合并分类提示（S7）、插图（S3）
-// • 只读行（S12，R-148，TC-B4-09；照待办页）：带认不出的值的行（core 的 readonlyIds）标“要新版本”（瀑布流在底行“⋯”前，列表在摘要那一行末尾），菜单里的“删除”变淡；点开、删除统一拦下
+// • 这一批不做：隐私记那一行（B5）、合并分类提示（S7）
+// • 插图（S3）：卡片顶上放第一张图（多张标“+N”），列表行有图时在“⋯”前放缩略图；输入行只有“图片”（拍照在编辑页）
+// • 只读行（S12，R-148，TC-B4-09；照待办页）：带认不出的值的行（core 的 readonlyIds）标“要新版本”（单独一行：瀑布流在正文下、底行上，列表在摘要行下），菜单里的“删除”变淡；点开、删除统一拦下
 //   （不进编辑器、不开抽屉、不写），出 kit 的“这条要新版本才能修改 · 更新”（状态在 hooks/useNotesToast.ts）。左滑、多选还没有入口，以后加时同样先判只读
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
-import { useEffect, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react';
+import { useEffect, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate, navigateTab, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
@@ -33,12 +35,13 @@ import { useNotesToast } from '../hooks/useNotesToast.ts';
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
+import { CardCover, ListThumb, PickButtons, useAddImage, type ImgMsgKey } from './NoteImages.tsx';
 import styles from './NotesPage.module.css';
 
 /** 底部输入框的 id：底栏 / 侧栏的“＋”按它聚焦（R-380）。和 app/tab-of.ts 的 NOTES_INPUT_ID 同一个值（功能不能引 app 的这个文件，测试对着两边核） */
 const NOTES_INPUT_ID = 'notes-input';
 
-type Toast = { kind: 'undo'; id: string } | { kind: 'error' } | { kind: 'soon' };
+type Toast = { kind: 'undo'; id: string } | { kind: 'error' } | { kind: 'img'; key: ImgMsgKey; trash: boolean };
 
 /** 有侧栏的宽窗口（和 GlassBar 侧栏同一个断点）：点开随手记用右边抽屉，不换页 */
 const WIDE = '(width >= 900px)';
@@ -72,10 +75,10 @@ function NotesList() {
   const [just, setJust] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
 
-  // 出错条、“插图很快上线”4 秒后自己收起
+  // 出错条、插图提示 4 秒后自己收起（带“最近删除”入口的留 8 秒，来得及点）
   useEffect(() => {
     if (toast === null || toast.kind === 'undo') return undefined;
-    const id = setTimeout(() => setToast((x) => (x === toast ? null : x)), 4000);
+    const id = setTimeout(() => setToast((x) => (x === toast ? null : x)), toast.kind === 'img' && toast.trash ? 8000 : 4000);
     return () => clearTimeout(id);
   }, [toast, setToast]);
   // 窗口缩到没有侧栏：抽屉收起（窄窗口点开走编辑页）
@@ -95,6 +98,7 @@ function NotesList() {
     if (r === 'ok') show({ kind: 'undo', id });
     else report(r);
   };
+  const addImage = useAddImage(l, setJust, report, (m) => show({ kind: 'img', ...m }));
   const add = async (text: string): Promise<boolean> => {
     const { result, id } = await l.add(text);
     if (result === 'ok') setJust(id);
@@ -148,6 +152,11 @@ function NotesList() {
             <AppearItem key={it.id} className={styles.card} data-testid={`notes-card-${it.id}`}>
               <div onContextMenu={onMenuKey(it.id)}>
                 <button type="button" className={styles.cardMain} onClick={() => open(it.id)} aria-current={drawer === it.id ? 'true' : undefined}>
+                  {it.cover ? (
+                    <span className={styles.cardCover}>
+                      <CardCover img={it.cover} count={it.images} />
+                    </span>
+                  ) : null}
                   <span className={styles.cardTitle}>{it.title}</span>
                   {it.summary ? <span className={styles.cardSum}>{it.summary}</span> : null}
                 </button>
@@ -181,14 +190,8 @@ function NotesList() {
                     <button type="button" className={styles.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} aria-current={drawer === it.id ? 'true' : undefined}>
                       <span className={styles.rowTime}>{timeOf(it, false)}</span>
                       <span className={styles.mn} aria-hidden="true" />
-                      <span className={styles.ltext}>
-                        <span className={styles.t1}>{it.title}</span>
-                        <span className={styles.t2}>
-                          <span className={styles.t2txt}>{[it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
-                          {aiMark(it)}
-                        </span>
-                        <RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />
-                      </span>
+                      <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} />
+                      {it.cover ? <ListThumb img={it.cover} /> : null}
                     </button>
                     {more(it)}
                   </AppearItem>
@@ -200,12 +203,8 @@ function NotesList() {
       )}
 
       <div className={up ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
-        <InputRow up={up} onAdd={add} onSoon={() => show({ kind: 'soon' })} />
-        {toast !== null && toast.kind !== 'undo' ? (
-          <p className={toast.kind === 'error' ? styles.error : styles.tip} role={toast.kind === 'error' ? 'alert' : 'status'} data-testid={toast.kind === 'error' ? 'notes-error' : 'notes-soon'}>
-            {t(toast.kind === 'error' ? 'notes.err.save' : 'notes.imgSoon', {})}
-          </p>
-        ) : null}
+        <InputRow up={up} onAdd={add} onImage={addImage} />
+        {toast !== null && toast.kind !== 'undo' ? <DockTip toast={toast} /> : null}
       </div>
 
       {drawer !== null ? <NoteDrawer id={drawer} onClose={() => setDrawer(null)} /> : null}
@@ -222,6 +221,35 @@ function NotesList() {
       ) : null}
       <ReadonlyToast guard={guard} message={t('note.edit.st.readonly', {})} testId="notes-ro-toast" />
     </main>
+  );
+}
+
+/** 列表行中间的字：标题；摘要 · 分类（+ AI 小标）；只读行再在下面单独一行标“要新版本” */
+function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: ReactNode }) {
+  return (
+    <span className={styles.ltext}>
+      <span className={styles.t1}>{it.title}</span>
+      <span className={styles.t2}>
+        <span className={styles.t2txt}>{[it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
+        {ai}
+      </span>
+      {ro}
+    </span>
+  );
+}
+
+/** 输入行上面的提示条：没保存上，或插图提示（空间满了的带“最近删除”入口） */
+function DockTip({ toast }: { toast: Exclude<Toast, { kind: 'undo' }> }) {
+  const t = useNotesT();
+  return (
+    <p className={styles.error} role="alert" data-testid={toast.kind === 'error' ? 'notes-error' : 'notes-img-tip'}>
+      {t(toast.kind === 'error' ? 'notes.err.save' : toast.key, {})}
+      {toast.kind === 'img' && toast.trash ? (
+        <a className={styles.tipLink} href={hrefOf('trash')} onClick={(e) => plainClick(e) && void navigate('trash')} data-testid="notes-img-trash">
+          {t('notes.img.trash', {})}
+        </a>
+      ) : null}
+    </p>
   );
 }
 
@@ -276,22 +304,11 @@ function MoreMenu({ id, ro, open, onOpenChange, onDelete }: { id: string; ro: bo
   );
 }
 
-/** 插图按钮的图标（同视觉稿 ic('img')：相框、太阳、山） */
-function ImgIcon() {
-  return (
-    <svg className={styles.imgIc} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
-      <circle cx="9" cy="10" r="1.6" />
-      <path d="M4.5 17.5l5-5 3.5 3.5 2.5-2.5 4 4" />
-    </svg>
-  );
-}
-
 /**
- * 底部输入行（视觉稿 .inrow、线框 COMPOSER）：空着时右边只有“图”，打了字才出“记下”；回车或点“记下”就存；没存上把这句放回输入框。
- * 有撤销条、提示条时往上让一格（up）。“图”这一批不做插图，点了提示“插图很快上线”（onSoon）
+ * 底部输入行（视觉稿 .inrow、线框 COMPOSER）：右边是“图片”“拍照”，打了字才出“记下”；回车或点“记下”就存；没存上把这句放回输入框。
+ * 选了图：输入框里的字和图一起记成新的一条（onImage），没记上同样放回。有撤销条、提示条时往上让一格（up）
  */
-function InputRow({ up, onAdd, onSoon }: { up: boolean; onAdd(text: string): Promise<boolean>; onSoon(): void }) {
+function InputRow({ up, onAdd, onImage }: { up: boolean; onAdd(text: string): Promise<boolean>; onImage(text: string, file: File): Promise<boolean> }) {
   const t = useNotesT();
   const [draft, setDraft] = useState('');
   const has = draft.trim() !== '';
@@ -301,6 +318,11 @@ function InputRow({ up, onAdd, onSoon }: { up: boolean; onAdd(text: string): Pro
     if (text.trim() === '') return;
     setDraft('');
     if (!(await onAdd(text))) setDraft(text);
+  };
+  const image = async (file: File) => {
+    const text = draft;
+    setDraft('');
+    if (!(await onImage(text, file))) setDraft(text);
   };
   return (
     <form className={up ? `${styles.inrow} ${styles.inrowUp}` : styles.inrow} onSubmit={(e) => void submit(e)} data-testid="notes-input-row">
@@ -314,9 +336,7 @@ function InputRow({ up, onAdd, onSoon }: { up: boolean; onAdd(text: string): Pro
         enterKeyHint="done"
         data-testid="notes-input"
       />
-      <Pressable type="button" className={styles.img} onClick={onSoon} aria-label={t('notes.img', {})} data-testid="notes-img">
-        <ImgIcon />
-      </Pressable>
+      <PickButtons onFile={(f) => void image(f)} className={styles.img} idPrefix="notes" camera={false} />
       {has ? (
         <Pressable type="submit" className={styles.add} data-testid="notes-add">
           {t('notes.add', {})}

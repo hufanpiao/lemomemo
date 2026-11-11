@@ -287,6 +287,12 @@
   outline: none;
 }
 
+/* 有图（插图 S3）：正文最少两行，图紧跟在正文后面（NOTE_ED：正文下面上边距 14 就是图） */
+.page:has([data-images='1']) .body,
+.inDrawer:has([data-images='1']) .body {
+  min-height: 3.4em;
+}
+
 /* 触屏上可输入控件至少 16px（iOS 聚焦时不自动放大整页，同 kit Form.module.css） */
 @media (pointer: coarse) {
   .body {

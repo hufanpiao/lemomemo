@@ -88,6 +88,22 @@ describe('另存为新的一条（copy）', () => {
     expect(await s.cache.getRow('settings', NEW)).toBeUndefined();
   });
 
+  it('note_images 不另存（path 跟着 id 拼、唯一，换 id 过不了 check；图片只在内存里）：按放弃处理（B4 插图）', async () => {
+    const s = await setup();
+    const NID = uid(6);
+    const IID = uid(5);
+    await s.outbox.enqueue({ table: 'notes', id: NID, op: 'insert', data: { id: NID, title: null, body: '带图', is_private: false, category_id: null, category_source: 'none', category_seen: true, tags: [], converted_to: null, source: 'page', raw_text: '', batch_id: null } });
+    const n = await s.outbox.next();
+    await s.outbox.ack(n?.op_id ?? '', { status: 'ok', rev: 1, prev_rev: 0 });
+    await s.outbox.enqueue({ table: 'note_images', id: IID, op: 'insert', data: { id: IID, note_id: NID, bucket: 'images', path: `u/${NID}/${IID}.webp`, bytes: 100, width: 10, height: 10, mime: 'image/webp', taken_at: null, has_thumb: true } });
+    const ins = await s.outbox.next();
+    await s.outbox.fail(ins?.op_id ?? '', { status: 400, code: 'quota_exceeded', sid: null });
+    expect(await run(s.outbox, 'copy', 'note_images', IID)).toEqual({ done: 'dropped', id: null });
+    expect((await s.outbox.list()).filter((i) => i.table === 'note_images')).toEqual([]);
+    expect(await s.cache.getRow('note_images', IID)).toBeUndefined();
+    expect(await s.cache.getRow('note_images', NEW)).toBeUndefined();
+  });
+
   it('有在途（inflight）的项：什么也不做（代码审查必改 3）', async () => {
     const { cache, outbox } = await failedCreate();
     const items = await outbox.list();

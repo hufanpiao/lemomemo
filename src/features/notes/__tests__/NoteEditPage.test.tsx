@@ -81,14 +81,16 @@ describe('新建 #/note/new', () => {
     await typeBody('   ');
     expect(notes().getSnapshot()).toHaveLength(0);
     await typeBody('想到一句');
-    await waitFor(() => expect(notes().getSnapshot()).toHaveLength(1));
+    // 等保存状态出来再断言（默认 1 秒的 waitFor 在高负载下会超时，代码审 a4dc5a71）
+    await waitFor(() => expect(screen.getByTestId('edit-status').textContent).toBe('已自动保存'), { timeout: 5000 });
+    expect(notes().getSnapshot()).toHaveLength(1);
     const row = notes().getSnapshot()[0];
     expect(row).toMatchObject({ title: null, body: '想到一句', is_private: false, category_id: null, category_source: 'none', source: 'page', created_at: NOW });
     const ins = ((await b.outbox?.list()) ?? []).find((i) => i.op === 'insert');
     expect(ins && 'ai_status' in ins.data).toBe(false);
-    await waitFor(() => expect(window.location.hash).toBe(`#/note/${row?.id ?? ''}`));
+    await waitFor(() => expect(window.location.hash).toBe(`#/note/${row?.id ?? ''}`), { timeout: 5000 });
     await typeBody('想到一句话');
-    await waitFor(async () => expect((await b.outbox?.list())?.some((i) => i.data['body'] === '想到一句话')).toBe(true));
+    await waitFor(async () => expect((await b.outbox?.list())?.some((i) => i.data['body'] === '想到一句话')).toBe(true), { timeout: 5000 });
     expect(((await b.outbox?.list()) ?? []).filter((i) => i.op === 'insert')).toHaveLength(1);
     expect(notes().getSnapshot()).toHaveLength(1);
   });

@@ -3,13 +3,14 @@
 //   （提醒标记取各项的“或”），旧记录的项和本机行删掉。合成后已删除（deleted_at）或撤销（undone）的，不另存，按 drop 处理。
 //   有别的记录依赖它（deps）时拒收（has_dependents）：依赖项的数据里指着旧 id，另存过去也对不上，只能放弃
 // • drop = “放弃”：删掉这条记录的全部项和本机行，依赖它的项一起删（cancelDependents，同 insert 被撤销抵消）
-// • settings 不准另存，copy 按 drop 处理：它按 (user_id,key) 唯一，换 id 照样 23505（代码审查必改 1）
+// • settings、note_images 不准另存（NO_COPY_TABLES），copy 按 drop 处理：settings 按 (user_id,key) 唯一，换 id 照样 23505（代码审查必改 1）；
+//   note_images 的 path 跟着 id 拼、唯一，换 id 过不了 check（B4 插图）
 // • 在途（inflight）的不动：有在途项返回 nothing（发送结果回来再说）
 // • 不进首屏：只有 core/write-failed-create.ts（按需下载）静态引它；ctx 经 outbox.ts 导出的 outboxCtx 取（同 outbox-gone.ts）
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { CachedRow } from './cache.ts';
 import { OUTBOX } from './cache-schema.ts';
-import { bySeq, loadRowSchemas, OutboxCodeUnavailableError, OutboxRejectError, recKey, validateWrite, type WriteCode } from './outbox-logic.ts';
+import { bySeq, loadRowSchemas, NO_COPY_TABLES, OutboxCodeUnavailableError, OutboxRejectError, recKey, validateWrite, type WriteCode } from './outbox-logic.ts';
 import type { OutboxItem } from './outbox-types.ts';
 import { cancelDependents, notify, rewriteRow } from './outbox-rows.ts';
 import type { Ctx } from './outbox-send.ts';
@@ -47,7 +48,7 @@ export async function resolveFailedCreateImpl(
   if (!before.some(isFailedInsert) || before.some((i) => i.state === 'inflight')) return { done: 'nothing', id: null };
   let data: Record<string, unknown> | null = null;
   let rows: WriteCode | null = null;
-  if (mode === 'copy' && table !== 'settings') {
+  if (mode === 'copy' && !NO_COPY_TABLES.has(table)) {
     try {
       rows = await loadRowSchemas();
     } catch (e) {

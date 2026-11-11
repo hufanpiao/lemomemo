@@ -4,7 +4,8 @@
 //   已登记成枚举（架构 0.57，shared/schema/rows-read.ts，SCHEMA_V 3），新版本的值让这一条只读；ai_status 是系统列，新值不锁
 // • 列表（瀑布流、列表两种）：正文下面单独一行标“要新版本”（不挤底行和摘要行，视觉验收 11-11），菜单里的“删除”变淡；点开、删除都拦下（不进编辑器、不开抽屉、不写、不进 outbox），
 //   出“这条要新版本才能修改 · 更新”；页面自己的提示条和它同时只出一条
-// • 编辑页（直接打开地址）：标题、正文、分类禁用，“⋯”灰掉，写“这条要新版本才能修改”，有“更新”
+// • 编辑页（直接打开地址）：标题、正文、分类禁用，“⋯”灰掉，写“这条要新版本才能修改”，有“更新”；插图的“图片”“拍照”、没传上的图上的“删除”“重新插入”也禁用，
+//   硬塞一张图进来上传器也拦下（回 readonly，不写行）
 // • 左滑删除、多选：页面上还没有这两个入口，等入口做出来再补（主持人 11-11 定，记进任务单）
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -17,7 +18,10 @@ import { readRows } from '../../../core/read/lenient.ts';
 import { clearAllCollections } from '../../../core/store.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
+import { resetUploaderForTest } from '../data/image-uploader.ts';
+import { resetImageViewForTest } from '../data/image-view.ts';
 import NotesPage from '../ui/NotesPage.tsx';
+import { serverImage, wire } from './note-images-kit.tsx';
 
 const NOW = msAt('2026-11-10', 20 * 60, 'Asia/Seoul');
 const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -64,6 +68,8 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  resetUploaderForTest();
+  resetImageViewForTest();
   getBoot()?.cache?.close();
   resetBootForTest();
 });
@@ -123,10 +129,11 @@ describe('列表：只读标记，点开、删除统一拦下（TC-B4-09）', ()
     fireEvent.click(screen.getByTestId(`notes-card-${RO}`).querySelector('button') as HTMLElement);
     await waitFor(() => expect(screen.queryByTestId('notes-toast')).toBeNull());
     expect(roToast()).toBeTruthy();
-    // 再出页面自己的提示条（“插图很快上线”）：只读提示条收起
-    fireEvent.click(screen.getByTestId('notes-img'));
+    // 再出页面自己的提示条（插图提示：选了一张 HEIC，打不开）：只读提示条收起
+    const heic = new File([new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 104, 101, 105, 99])], 'IMG_1.HEIC', { type: 'image/heic' });
+    fireEvent.change(screen.getByTestId('notes-img-input'), { target: { files: [heic] } });
     await waitFor(() => expect(roToast()).toBeNull());
-    expect(screen.getByTestId('notes-soon')).toBeTruthy();
+    expect(screen.getByTestId('notes-img-tip')).toBeTruthy();
   });
 
   it('电脑（有侧栏）：点只读那条不开抽屉，出提示条', async () => {
@@ -153,6 +160,23 @@ describe('编辑页：直接打开只读那条的地址', () => {
       const el = screen.getByTestId(id) as HTMLTextAreaElement | HTMLInputElement;
       expect(el.disabled || el.readOnly).toBe(true);
     }
+  });
+
+  it('插图入口也拦下：“图片”“拍照”禁用；没传上的图“删除”“重新插入”也禁用；硬塞一张进来不写、提示要新版本（代码审 M1）', async () => {
+    wire({ missing: true });
+    const b = await boot();
+    const IMG = uid(70);
+    await act(async () => {
+      await b.outbox?.applyServer('note_images', [{ row: serverImage(IMG, RO) }]);
+    });
+    open(`#/note/${RO}`);
+    await screen.findByTestId('note-edit-ro');
+    for (const id of ['note-edit-img', 'note-edit-camera']) expect(screen.getByTestId(id).hasAttribute('disabled')).toBe(true);
+    await waitFor(() => expect(screen.getByTestId(`note-image-${IMG}`).getAttribute('data-state')).toBe('failed'));
+    for (const k of ['delete', 'reinsert']) expect(screen.getByTestId(`note-image-${k}-${IMG}`).hasAttribute('disabled')).toBe(true);
+    fireEvent.change(screen.getByTestId('note-edit-img-input'), { target: { files: [new File([new Uint8Array(5)], 'a.jpg', { type: 'image/jpeg' })] } });
+    await waitFor(() => expect(screen.getByTestId('note-edit-img-msg').textContent).toContain('这条要新版本才能修改'));
+    expect(await b.outbox?.list()).toEqual([]);
   });
 
   it('只读提示是中性灰条：“更新”是最右边的文字按钮（不是红底的 FormButton）；分类胶囊变淡', async () => {

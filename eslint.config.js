@@ -198,6 +198,14 @@ const HTML_SYNTAX = [
     message: 'A22：禁止 document.write',
   },
 ];
+// A26 补（插图安全审建议 3）：不准直接给元素写 .src =（img、iframe、script 的地址都算）。
+// 图片的 blob: 地址一律经 kit/hooks/useBlobSrc.ts 的 setBlobSrc（只放行 blob:）；platform（turnstile 的脚本）、预览沙箱、测试另算
+const SRC_SYNTAX = [
+  {
+    selector: "AssignmentExpression > MemberExpression.left[property.name='src']",
+    message: 'A26 补：不准直接写 .src =；图片的 blob: 地址经 kit/hooks/useBlobSrc.ts 的 setBlobSrc',
+  },
+];
 const MOTION_SYNTAX = [
   { selector: "CallExpression[callee.property.name='animate']", message: 'A25：element.animate 只能写在 src/motion/' },
   { selector: "MemberExpression[property.name='startViewTransition']", message: 'A25：startViewTransition 只能写在 src/motion/' },
@@ -331,7 +339,8 @@ function restrictedImports(...parts) {
 
 /** 一个作用域的三条 no-restricted-* 规则 */
 /** routerInternals：准不准引 router.ts 的内部件（只有 router-sub.ts、router-levels.ts 和测试准） */
-function scope({ net = false, device = false, motion = false, html = false, pure = false, routerInternals = false, imports = [] }) {
+/** src：准不准直接写 .src =（A26 补；只有 platform、预览沙箱、kit/hooks/useBlobSrc.ts 和测试准） */
+function scope({ net = false, device = false, motion = false, html = false, pure = false, routerInternals = false, src = false, imports = [] }) {
   return {
     'no-restricted-globals': [
       'error',
@@ -344,6 +353,7 @@ function scope({ net = false, device = false, motion = false, html = false, pure
       ...(net ? [] : NET_SYNTAX),
       ...(device ? [] : DEVICE_SYNTAX),
       ...(html ? [] : HTML_SYNTAX),
+      ...(src ? [] : SRC_SYNTAX),
       ...(motion ? [] : MOTION_SYNTAX),
       ...(pure ? PURE_SYNTAX : []),
       ...CSP_SYNTAX,
@@ -454,7 +464,12 @@ export default tseslint.config(
   // platform：网络和设备能力都在这里；不准 React
   {
     files: ['src/platform/**/*.{ts,tsx}'],
-    rules: scope({ net: true, device: true, imports: [REACT_IMPORTS, MOTION_PATH_IMPORTS] }),
+    rules: scope({ net: true, device: true, src: true, imports: [REACT_IMPORTS, MOTION_PATH_IMPORTS] }),
+  },
+  // A26 补：blob: 图片地址只在这一处写进 .src
+  {
+    files: ['src/kit/hooks/useBlobSrc.ts'],
+    rules: scope({ src: true, imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
   },
   // core、功能的 data：纯 TS，不准 React
   {
@@ -514,13 +529,13 @@ export default tseslint.config(
   // A22 的唯一例外：预览沙箱里第三方预览库要写 DOM（0.20）
   {
     files: ['src/preview-frame/**/*.{ts,tsx}'],
-    rules: scope({ html: true, imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
+    rules: scope({ html: true, src: true, imports: [MOTION_IMPORTS, TAURI_IMPORTS, MOTION_PATH_IMPORTS] }),
   },
   // 测试文件里可以用网络、rAF 等全局（模拟用）
   {
     files: ['src/**/__tests__/**/*.{ts,tsx}'],
     languageOptions: { globals: { ...globals.node } },
-    rules: { ...scope({ net: true, device: true, motion: true, routerInternals: true, imports: [MOTION_PATH_IMPORTS] }), 'max-lines-per-function': 'off' },
+    rules: { ...scope({ net: true, device: true, motion: true, routerInternals: true, src: true, imports: [MOTION_PATH_IMPORTS] }), 'max-lines-per-function': 'off' },
   },
   // ───────── shared：前后端共用，纯 TS（A2）─────────
   {

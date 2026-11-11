@@ -6,7 +6,7 @@
 //   另存被拒（有别的记录依赖它，has_dependents）的留着，只能放弃；有没处理成的，failed 给出原因（'dependents' 或 'other'），下次点时清掉。期间 busy，重复点不重复做；出错（拒收以外）挪到下一个微任务重新抛出（同 useRetryUnsynced）
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { getBoot } from '../../../core/boot.ts';
-import { canRetryUnsynced } from '../../../core/outbox-logic.ts';
+import { canRetryUnsynced, NO_COPY_TABLES } from '../../../core/outbox-logic.ts';
 import type { Outbox } from '../../../core/outbox-types.ts';
 import { resolveFailedCreate } from '../../../core/write-failed-create.ts';
 
@@ -20,7 +20,14 @@ const noop = (): (() => void) => () => undefined;
 export function useFailedCreates(
   outbox: FailedCreateOutbox | null = getBoot()?.outbox ?? null,
   resolve: ResolveFailedCreate = resolveFailedCreate,
-): { readonly recs: readonly Rec[]; readonly busy: boolean; readonly failed: FailedReason | null; readonly run: (mode: 'copy' | 'drop') => void } {
+): {
+  readonly recs: readonly Rec[];
+  /** 有能“另存”的记录（不全是 NO_COPY_TABLES 里的表：settings、note_images） */
+  readonly canCopy: boolean;
+  readonly busy: boolean;
+  readonly failed: FailedReason | null;
+  readonly run: (mode: 'copy' | 'drop') => void;
+} {
   // 状态里的两个集合换新就重读（getStatus 每次可能返回新对象，不能直接拿它当快照）
   const remind = useSyncExternalStore(outbox ? outbox.subscribe : noop, () => outbox?.getStatus().remindRecs ?? null, () => null);
   const retry = useSyncExternalStore(outbox ? outbox.subscribe : noop, () => outbox?.getStatus().retryRecs ?? null, () => null);
@@ -68,5 +75,5 @@ export function useFailedCreates(
     },
     [recs, resolve],
   );
-  return { recs, busy, failed, run };
+  return { recs, canCopy: recs.some(([table]) => !NO_COPY_TABLES.has(table)), busy, failed, run };
 }

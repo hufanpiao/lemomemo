@@ -128,6 +128,12 @@
   overflow: hidden;
 }
 
+/* 卡片顶部的图（视觉稿 .mcard .im）：贴满卡片宽，抵掉按钮的内边距 */
+.cardCover {
+  display: block;
+  margin: -10px -12px 10px;
+}
+
 .cardMain {
   display: flex;
   flex-direction: column;
@@ -387,6 +393,10 @@
 .lmain {
   display: grid;
   grid-template-columns: 44px 18px 1fr;
+
+  /* 有图的行在“⋯”前多一栏缩略图（视觉稿 PH.notes：44px 18px 1fr auto 24px）；没图的不多出这一栏和间距 */
+  grid-auto-columns: auto;
+  grid-auto-flow: column;
   gap: 10px;
   align-items: center;
   min-width: 0;
@@ -564,16 +574,6 @@
   transform: translate(-50%, -50%);
 }
 
-.imgIc {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .add {
   flex: none;
   min-width: var(--hit);
@@ -604,6 +604,17 @@
   box-shadow: var(--shadow-2);
   backdrop-filter: blur(6px) saturate(var(--float-sat));
   font-size: var(--fs-14);
+}
+
+/* 提示条里的“最近删除”入口：点按区照 44 高 */
+.tipLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--hit);
+  margin-left: 8px;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
 }
 
 @media (prefers-reduced-transparency: reduce) {
