@@ -35,6 +35,10 @@ describe('D2-3：三个违规样例', () => {
     expect(msg).not.toContain('用 === 比较');
   });
 
+  it('对照：读出的头直接交给 _shared/http.ts 的 cronGate（里面用 safeEqual 定长比较）也算常量时间比对，不报', () => {
+    expect(run(sample('f9-server-secret-crongate'))).toEqual({ code: 0, errors: [] });
+  });
+
   it('D2-2：名单里有、config.toml 没关也报；只出现头名字符串（没读头、没调 safeEqual）报；D2-S1：别的函数读 OPS_SECRET 报；F10', () => {
     const { code, errors } = run(sample('f9-server-secret-cfg'));
     expect(code).toBe(1);

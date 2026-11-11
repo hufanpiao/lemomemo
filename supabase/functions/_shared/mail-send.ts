@@ -8,7 +8,7 @@ export const MAIL_FROM = '柠檬记 <noreply@lemomemo.com>';
 
 /** 发一封纯文本信；Resend 回 2xx 才算发出。网络错、超时照常抛错，由调用方按“没发出去”处理 */
 export async function sendMail(apiKey: string, to: string, mail: { subject: string; text: string }, url: string = RESEND_EMAILS_URL): Promise<boolean> {
-  const r = await postOut(url, {
+  const r = await postOut((u, i) => fetch(u, i), url, {
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({ from: MAIL_FROM, to: [to], subject: mail.subject, text: mail.text }),
   });

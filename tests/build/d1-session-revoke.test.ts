@@ -1,7 +1,8 @@
-// D1 第 6 节之三：删 auth.sessions 只准在 private.kill_session 里、且它要调 private.revoke_session（build/d1/session-revoke.ts；迁移 20261112090000）。
-// 真库上的反例是 supabase/tests/d1-fixtures/44（离线 PGlite 也跑）；这里只测判定逻辑。
+// D1 第 6 节之三（build/d1/session-revoke.ts；迁移 20261112090000）：删 auth.sessions 只准在 private.kill_session 里、且它要调 private.revoke_session；
+// 校验密码会话（not_password_session）只准在 require_live_session、is_active、rebind_device_impl 里。
+// 真库上的反例是 supabase/tests/d1-fixtures/44、47（离线 PGlite 也跑）；这里只测判定逻辑。
 import { describe, expect, it } from 'vitest';
-import { sessionRevokeProblems } from '../../build/d1/session-revoke.ts';
+import { SESSION_CHECK_FNS, sessionCheckProblems, sessionRevokeProblems } from '../../build/d1/session-revoke.ts';
 import { allManifests } from '../../shared/manifests/index.ts';
 import { manifestSnapshot } from '../../src/core/manifests.gen.ts';
 
@@ -20,6 +21,24 @@ describe('sessionRevokeProblems', () => {
     ])).toEqual([
       'private.x 直接删了 auth.sessions（一律改调 private.kill_session，它同时写吊销记录；R-382）',
       'private.kill_session 删了 auth.sessions，却没调 private.revoke_session（被删会话的设备会被当成登录过期、不清本机；R-382）',
+    ]);
+  });
+});
+
+describe('sessionCheckProblems', () => {
+  it('名单钉住：只有 require_live_session、is_active、rebind_device_impl（rebind 按参数里的会话另校验）', () => {
+    expect([...SESSION_CHECK_FNS]).toEqual(['require_live_session', 'is_active', 'rebind_device_impl']);
+  });
+  it('名单里的调 not_password_session 不报；别的 *_impl 改调 require_live_session 不报', () => {
+    expect(sessionCheckProblems([
+      { f: 'require_live_session', src: 'if not private.not_password_session() then raise exception' },
+      { f: 'rebind_device_impl', src: 'if not Private . Not_Password_Session ( ) then' },
+      { f: 'claim_endpoint_impl', src: 'sid := private.require_live_session();' },
+    ])).toEqual([]);
+  });
+  it('名单外的函数自己调 not_password_session：报（大小写、空格都认）', () => {
+    expect(sessionCheckProblems([{ f: 'x_impl', src: 'IF NOT private . NOT_PASSWORD_SESSION() THEN' }])).toEqual([
+      'private.x_impl 自己校验密码会话（not_password_session），会话校验一律改调 private.require_live_session（架构约定 10.1）',
     ]);
   });
 });

@@ -1,7 +1,7 @@
 // ai-classify 的额度、重试和公平取数（TC-B4-06；代码审查 11-10 必改 1、2）。替身见 ai-classify-fakes.ts。
 import { describe, expect, it } from 'vitest';
 import { BATCH_PER_USER, handle, SCAN_USERS } from '../../supabase/functions/ai-classify/core.ts';
-import { userQuotaKey } from '../../supabase/functions/_shared/ai/gate.ts';
+import { globalQuotaKey, userQuotaKey } from '../../supabase/functions/_shared/ai/gate.ts';
 import { MAX_TRIES } from '../../supabase/functions/ai-classify/write.ts';
 import { SECRET, NOW, A, B, note, cat, setup } from './ai-classify-fakes.ts';
 
@@ -73,6 +73,14 @@ describe('ai-classify：额度（TC-B4-06）', () => {
     const all = setup({ notes: [note('a1', A, '超市'), note('b1', B, '机票')], cfg: { global_daily: 0 } });
     await all.call();
     expect([all.rp.calls, all.quota.refunds.length, all.logs]).toEqual([0, 1, ['global_quota_out']]);
+  });
+  it('扣了个人额度、全项目那一下出错（超时、断线）：退回个人那一次，这批不送 AI；全项目那一下扣没扣上不知道，不退', async () => {
+    const s = setup({ notes: [note('a1', A, '超市')] });
+    const take = s.quota.q.take.bind(s.quota.q);
+    s.deps.quota = { ...s.quota.q, take: async (k, l) => { if (k === globalQuotaKey(NOW)) throw new Error('timeout'); return take(k, l); } };
+    await s.call();
+    expect([s.rp.calls, s.quota.refunds, s.logs]).toEqual([0, [userQuotaKey(A, NOW)], ['quota_failed']]);
+    expect(s.quota.used.get(userQuotaKey(A, NOW))).toBe(0);
   });
   it('AI 没配好（模型没配、密钥没配）：能送的人留在 pending', async () => {
     const s = setup({ notes: [note('a1', A, '超市')] });

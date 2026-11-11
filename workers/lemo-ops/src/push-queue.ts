@@ -15,9 +15,7 @@
 //     首尔 0 点后 push-dispatch 从 0 重新算，这件事随后报“已恢复”。
 // 标题不带个数（个数变了不算“情况有变”反复发信，同 purge-detail.ts）；正文只写个数。
 import type { Issue } from './rules.ts';
-
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+import { isCount, isObj } from './guards.ts';
 
 export const PUSH_QUEUE_STALLED = 'push-queue:stalled';
 export const PUSH_QUEUE_POISON = 'push-queue:poison';

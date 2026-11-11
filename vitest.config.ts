@@ -37,6 +37,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/check-arch-binimport-source.test.ts', // python build/check_arch.py（LINT-binimport：点号 source、反斜杠续行）
   'tests/build/check-backend.test.ts', // python build/check_backend.py（建 TypeScript 类型检查器）
   'tests/build/check-backend-f11-cors.test.ts', // python build/check_backend.py（F11 样例）
+  'tests/build/check-backend-f12-json.test.ts', // python build/check_backend.py（F12 json 响应只在 _shared/http.ts）
   'tests/build/check-contrast.test.ts', // python build/check_contrast.py（F12）
   'tests/build/check-contrast-accepted.test.ts', // python build/check_contrast.py 的例外名单（B2 FA-7 第 4 项）
   'tests/build/check-backend-alias.test.ts', // python build/check_backend.py（F2、F3、F7 别名展开）

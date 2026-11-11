@@ -1,7 +1,7 @@
 // 发一条 Web Push：校验 → 加密 → 签 VAPID → fetch → 按状态归类。push-dispatch、push-test 共用（B2 安全审查第五节第 4～8 条，D1-4、D1-S2）。
 //   • 发送前再按白名单查一次端点和密钥（endpoint.ts；不合格不发，结果 bad_endpoint / bad_keys，调用方把这一行三列置空、记 push_bad_endpoint）；
 //   • 原样用通过校验的字符串 fetch；redirect: 'manual'，opaqueredirect、状态 0、3xx 都算失败，不读、不记 Location；
-//     每个请求 AbortSignal.timeout(5000)；响应体最多读 1 KB 就 cancel；不带 Cookie（credentials: 'omit'），除 VAPID 外不带别的凭据；
+//     每个请求 5 秒超时（经 _shared/net.ts 的 timedFetch）；响应体最多读 1 KB 就 cancel；不带 Cookie（credentials: 'omit'），除 VAPID 外不带别的凭据；
 //   • 归类只给枚举（日志、push-test 的返回值都只用它，不回状态码、响应头、响应体、耗时，D1-5）：
 //       ok（2xx）、gone（404、410：调用方删订阅）、vapid_rejected（401、403：只加 push_fail_count、不删订阅，R-282 ②）、
 //       too_large（413）、rate_limited（429）、redirect（3xx 等）、timeout、network、failed（其余）。
@@ -13,6 +13,7 @@ import type { Bytes } from './b64.ts';
 import { checkEndpoint, checkKeys, type EndpointReason } from './endpoint.ts';
 import { encryptPush, PushCryptoError } from './ece.ts';
 import type { VapidSigner } from './vapid.ts';
+import { timedFetch } from '../net.ts';
 
 export const SEND_TIMEOUT_MS = 5000;
 export const MAX_RESPONSE_BYTES = 1024;
@@ -79,9 +80,7 @@ export async function postPush(fetchImpl: FetchLike, url: string, authorization:
   }
   let r: Response;
   try {
-    r = await fetchImpl(url, {
-      method: 'POST', redirect: 'manual', credentials: 'omit', signal: AbortSignal.timeout(SEND_TIMEOUT_MS), headers, body,
-    });
+    r = await timedFetch(fetchImpl, SEND_TIMEOUT_MS)(url, { method: 'POST', redirect: 'manual', credentials: 'omit', headers, body });
   } catch (e) {
     const name = (e as { name?: unknown })?.name;
     return name === 'TimeoutError' || name === 'AbortError' ? 'timeout' : 'network';

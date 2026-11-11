@@ -146,9 +146,9 @@ describe('Gemini 适配（TC-B3-24）', () => {
     let calls = 0;
     const hang = new GeminiProvider('m', 'k', (_u, init) => {
       calls++;
-      return new Promise((_, rej) => init.signal?.addEventListener('abort', () => rej(new Error('aborted'))));
+      return new Promise((_, rej) => init.signal?.addEventListener('abort', () => rej(init.signal?.reason)));   // 同真的 fetch：以 signal.reason 拒绝
     });
-    expect(await hang.generate({ ...req, timeoutMs: 20 })).toEqual({ ok: false, reason: 'timeout', errName: 'Error' });
+    expect(await hang.generate({ ...req, timeoutMs: 20 })).toEqual({ ok: false, reason: 'timeout', errName: 'TimeoutError' });
     expect(calls).toBe(1);
     expect(await new GeminiProvider('m', 'k', async () => { throw new TypeError('net secret'); }).generate(req)).toEqual({ ok: false, reason: 'error', errName: 'TypeError' });
   });

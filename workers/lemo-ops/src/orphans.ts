@@ -2,11 +2,8 @@
 // usage-report {part: heartbeat} 返回体的 orphan_users（读 private.orphan_auth_users()，迁移 20261031160000）的校验和判断。
 // 只做纯计算；rules.ts 的 parseHeartbeatReport、evaluateHeartbeat 调这里，去重和发信在 alerts.ts。
 import type { Evaluation, Issue } from './rules.ts';
+import { isCount, isNum, isObj } from './guards.ts';
 import { fmtAge } from './stamp.ts';
-
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
 
 /** 没有 profile 的 auth 用户（ORPHAN-alert；usage-report 读 private.orphan_auth_users()，迁移 20261031160000） */
 export interface OrphanReport {

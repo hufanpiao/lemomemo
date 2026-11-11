@@ -13,7 +13,7 @@ import { ENV, req as sbReq, setup as sbSetup } from './sb-harness.ts';
 // ---------------- 130 ①⑤：真的 requireActiveUser ----------------
 interface AuthModule {
   requireActiveUser(req: Request, admin: unknown, opts?: { allowPendingDeletion?: boolean }): Promise<ActiveUser>;
-  AuthError: new (...a: never[]) => Error & { code: string; toResponse(h?: HeadersInit): Response };
+  AuthError: new (...a: never[]) => Error & { code: string; toResponse(): Response };
 }
 // _shared/auth.ts 顶上有 `import type … from 'npm:…'`（只有 Deno 认）：Vitest 运行时类型导入会被去掉，能直接加载；
 // 路径放在变量里，tsc（tsconfig.functions.json）不去解析 npm: 写法
@@ -66,7 +66,7 @@ function realAuth(db: FakeDb) {
     try {
       return { ok: true, user: await auth.requireActiveUser(r, admin, opts) };
     } catch (e) {
-      if (e instanceof auth.AuthError) return { ok: false, response: e.toResponse({ 'cache-control': 'no-store' }), code: e.code };
+      if (e instanceof auth.AuthError) return { ok: false, response: e.toResponse(), code: e.code };
       throw e;
     }
   };

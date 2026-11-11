@@ -123,7 +123,7 @@ Pages Functions（functions/）和 App、shared：
       ④ 反向兜底（F9-reverse-check ①）：函数目录里的非测试源码（同 ②）验了带引号的 'x-cron-secret'，迁移里却认不出 cron 调它
          （concat() 拼、拼进变量等写法认不出，或者没有 cron / 已 unschedule）→ 报在这个函数的 index.ts；_shared 等共用模块、预览专用函数不算
       ⑤ 服务器密钥名单（B2 安全审查 D2-1～D2-4）：SERVER_SECRET_FUNCTIONS 写死 {usage-report: x-ops-secret}（tests/build/check-backend-f9-server.test.ts 钉住）。
-         名单里的函数准关、也必须关 verify_jwt；它自己目录的非测试源码（去注释）里要读这个头（headers.get('<头>')）、对它调 safeEqual(，
+         名单里的函数准关、也必须关 verify_jwt；它自己目录的非测试源码（去注释）里要读这个头（headers.get('<头>')）、对它调 safeEqual(（或交给 cronGate( 当第一个参数），
          不能把它和别的值用 === == !== != 比（和 ''、null、undefined 判空除外）；名单外不是 cron 调的一律不准关（同 ③）。
          D2-S1：SERVER_SECRET_ENVS 的密钥变量（OPS_SECRET）只准对应函数自己的文件读，别处读报 F1
       ⑥ 按哈希查表的名单（B3 任务单 M2、S14；架构 5.7、0.47 续 usage-report 一条）：HASHED_TOKEN_FUNCTIONS 写死 {claude-intake: api_tokens}
@@ -141,6 +141,8 @@ Pages Functions（functions/）和 App、shared：
       import map 里的别名也查，审查 M2）；JS / TS 去注释后查，别的文件（.toml .json .sql 等）按原文查；测试源码只按文件名（*.test.* 等）认，
       tests/、__tests__/、dist/ 目录照扫，只跳过 node_modules（BE1-S3 同一口径，F5-4）；读不出 UTF-8 的文件报错不跳过；
       只防无意写入，字符串拼接这类有意绕过靠审查
+  F12 json 响应只在 _shared/http.ts 做（架构约定 10.1：一律 no-store、同一个 content-type）：别的文件（去注释）出现 new Response(JSON.stringify(
+      或自己定义 function json( 就报；流式响应（new Response(<流>)）不管。_shared/gen/ 是 shared/ 的副本，不查
 迁移（supabase/migrations/*.sql）：
   M1  security definer 函数必须写 set search_path = ''（create function 和 alter function 都查，属性写在函数体前后都认）。
       架构 0.29 续第 117 条、TC-B0-92
@@ -1034,7 +1036,7 @@ _EMPTY_OPERAND = re.compile(r"""^(?:''|""|``|null|undefined)$""")
 
 def _server_secret_problems(code, header):
     """D2-2：在函数自己目录的非测试源码（已去注释）里，① 读这个头（.headers.get('<头>')，头名带引号、不分大小写）、
-    ② 对它调 safeEqual(（把读出来的变量或 headers.get(…) 本身当参数）、③ 没有把它和别的值用 === == !== != 比较（和 ''、null、undefined 判空除外）。
+    ② 对它调 safeEqual(（把读出来的变量或 headers.get(…) 本身当参数），或把它当第一个参数交给 _shared/http.ts 的 cronGate(、③ 没有把它和别的值用 === == !== != 比较（和 ''、null、undefined 判空除外）。
     返回问题列表（空 = 通过）。静态检查证明不了一定对，函数单测兜底（没带头、错值、空值都回 401 且不读库，TC-B2-86 ②③）"""
     h = re.escape(header)
     get = rf"""\.\s*headers\s*\.\s*get\s*\(\s*(?:'{h}'|"{h}"|`{h}`)\s*\)"""
@@ -1043,7 +1045,9 @@ def _server_secret_problems(code, header):
     names = set(re.findall(rf"""\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*[^;]*?{get}""", code, re.IGNORECASE))
     operands = [re.escape(n) + r"\b" for n in sorted(names)] + [r"[\w$.]*" + get]
     probs = []
-    called = any(re.search(rf"""\bsafeEqual\s*\(\s*(?:{o})\s*,|\bsafeEqual\s*\([^,()]+,\s*(?:{o})\s*\)""", code, re.IGNORECASE) for o in operands)
+    # cronGate(<读头>, …)（_shared/http.ts：里面对第一个参数调 safeEqual）同样算
+    called = any(re.search(rf"""\bsafeEqual\s*\(\s*(?:{o})\s*,|\bsafeEqual\s*\([^,()]+,\s*(?:{o})\s*\)|\bcronGate\s*\(\s*(?:{o})\s*,""", code, re.IGNORECASE)
+                 for o in operands)
     if not called:
         probs.append(f"没有对 {header} 调 safeEqual(（只出现头名、或用别的方式比都不算常量时间比对）")
     for o in operands:
@@ -1346,6 +1350,12 @@ def check_test_imports(fns, errors):
                            f"非测试文件不准引用测试文件 {FN_ROOT}/{target}（会跟着部署出去；测试文件里放过的 host.docker.internal 等也就出去了，安全审查六之四补）"))
 
 
+JSON_HTTP_FILE = "_shared/http.ts"
+JSON_RESPONSE = re.compile(r"\bnew\s+Response\s*\(\s*JSON\s*\.\s*stringify\s*\(|\bfunction\s+json\s*\(")
+F12_MSG = ("json 响应只在 _shared/http.ts 做（架构约定 10.1：一律 no-store、同一个 content-type）：改用它的 json(status, body, 额外的头)，"
+           "不要自己 new Response(JSON.stringify(…)) 或另定义 function json(")
+
+
 def check_functions(root, errors):
     check_preview_mentions(root, errors)
     check_config_toml(root, errors)
@@ -1400,6 +1410,11 @@ def check_functions(root, errors):
 
         if gen:
             continue   # 生成目录是 shared/ 的副本，F4 在 shared/ 上查
+
+        # F12：json 响应只在 _shared/http.ts 做
+        if rel != JSON_HTTP_FILE:
+            for m in JSON_RESPONSE.finditer(code):
+                errors.append(("F12", path, line_of(code, m.start()), F12_MSG))
 
         if fn is None:
             # 共用模块：连接串只在 db.ts 读；R2_* 只在 objstore*.ts 读，而且不准是 R2_FILES_* / R2_PULL_*

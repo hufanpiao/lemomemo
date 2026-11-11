@@ -169,6 +169,8 @@ export interface Deps {
   userEmail(userId: string): Promise<string | null>;
   /** auth.admin.deleteUser（硬删）；出错抛错 */
   deleteUser(userId: string): Promise<void>;
+  /** auth.admin.getUserById 回 404（用户已不在）为 true；出错抛错 */
+  userGone(userId: string): Promise<boolean>;
   /** 发信 */
   sendMail(to: string, mail: Mail): Promise<boolean>;
   /** 信里时区的通俗说法（shared/i18n/tz-label.ts，index.ts 从 _shared/gen 注入，KO-mail-nolink-tz） */
@@ -229,6 +231,7 @@ function countedDeps(d: FullDeps, ops: Ops): FullDeps {
     },
     userEmail: (u) => { ops.n++; return d.userEmail(u); },
     deleteUser: (u) => { ops.n++; return d.deleteUser(u); },
+    userGone: (u) => { ops.n++; return d.userGone(u); },
     sendMail: (to, m) => { ops.n++; return d.sendMail(to, m); },
   };
 }
@@ -407,7 +410,11 @@ async function purgeOne(
     await store.insertDeletedAccount(userId);
 
     // 7. deleteUser，各表级联；核对 profiles、pending_deletions 都是 0 行
-    await deps.deleteUser(userId);
+    //    超时只是这边不等了，GoTrue 那边可能已经删完：出错先回读一次，人已不在就照常往下核对（否则这个人永远卡在“失败”）
+    await deps.deleteUser(userId).catch(async (e: unknown) => {
+      if (!(await deps.userGone(userId).catch(() => false))) throw e;
+      log?.(`delete_user_late:${short(userId)}`);
+    });
     if ((await store.remainingRows(userId)) !== 0) {
       log?.(`verify_failed:${short(userId)}`);   // 用户已删，认领行若还在由 lemo-ops 的 26 小时告警发现
       return 'failed';

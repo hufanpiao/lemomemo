@@ -29,8 +29,12 @@ describe('鉴权', () => {
     const w = world();
     expect((await handle(cronReq(CRON), purgeDeps(w.db, w.r2, w.backups, w.box, { cronSecret: undefined }))).status).toBe(401);
     const short = 'x'.repeat(31);
-    expect((await handle(cronReq(short), purgeDeps(w.db, w.r2, w.backups, w.box, { cronSecret: short }))).status).toBe(500);
-    expect((await handle(cronReq(CRON), purgeDeps(w.db, w.r2, w.backups, w.box, { r2: null }))).status).toBe(500);
+    const d1 = purgeDeps(w.db, w.r2, w.backups, w.box, { cronSecret: short });
+    expect((await handle(cronReq(short), d1)).status).toBe(500);
+    expect(d1.logs).toEqual(['misconfigured:cron_secret']);   // 密钥太短经 _shared/http.ts 的 cronGate 记（改前记 misconfigured）
+    const d2 = purgeDeps(w.db, w.r2, w.backups, w.box, { r2: null });
+    expect((await handle(cronReq(CRON), d2)).status).toBe(500);
+    expect(d2.logs).toEqual(['misconfigured']);
     expect((await handle(new Request('https://x/account-purge', { method: 'GET', headers: { 'x-cron-secret': CRON } }), purgeDeps(w.db, w.r2, w.backups, w.box))).status).toBe(405);
   });
 });
@@ -235,6 +239,21 @@ describe('TC-B1-102：一个失败不影响别人，第二天重试', () => {
     w.clock.advance(DAY);
     expect((await runPurge(w)).body).toMatchObject({ purged: 1 });
     expect(w.db.users.has(A)).toBe(false);
+  });
+
+  it('deleteUser 这边等不到回应（超时、断线）但 GoTrue 其实删完了：回读一次，用户已不在就按删成功往下走', async () => {
+    const w = world();
+    await requestDeletion(w, A);
+    toFirstRun(w);
+    const r = await runPurge(w, { deleteUser: async (u) => { w.db.deleteUserCascade(u); throw new Error('auth'); } });
+    expect(r.body).toMatchObject({ purged: 1, failed: 0 });
+    expect(r.logs).toContain('delete_user_late:aaaaaaaa');
+    // 回读也出错：照旧算失败（不当成删掉了）
+    const w2 = world();
+    await requestDeletion(w2, A);
+    toFirstRun(w2);
+    const r2 = await runPurge(w2, { deleteUser: async () => { throw new Error('auth'); }, userGone: async () => { throw new Error('auth'); } });
+    expect(r2.body).toMatchObject({ purged: 0, failed: 1 });
   });
 
   it('查到期名单就出错：503，不写心跳（lemo-ops 靠 26 小时没心跳告警）', async () => {

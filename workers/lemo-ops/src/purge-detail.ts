@@ -18,12 +18,10 @@
 //     它每一轮都会再碰到、再算进来，所以不像 forced 那样随后“已恢复”，要人处理（删完或恢复）之后才回到 0。
 // 标题不带个数（个数变了不算“情况有变”反复发信，同 orphans.ts）；正文只写个数，不写 user_id、邮箱。
 import type { Issue, PendingDeletionItem } from './rules.ts';
+import { isCount, isObj } from './guards.ts';
 import { fmtAge } from './stamp.ts';
 
 const HOUR = 3600;
-
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
 
 export const PURGE_HELD = 'purge:held';
 export const PURGE_REMAINING = 'purge:remaining';

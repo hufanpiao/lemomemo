@@ -118,7 +118,7 @@ function makeAuth(admin: Admin): AuthAdmin {
 async function verifyTurnstile(siteverifyUrl: string, secret: string, token: string, remoteIp: string | null): Promise<TurnstileResult> {
   const form = new URLSearchParams({ secret, response: token });
   if (remoteIp) form.set('remoteip', remoteIp);
-  const r = await postOut(siteverifyUrl, { body: form });
+  const r = await postOut(fetch, siteverifyUrl, { body: form });
   if (!r.ok) {
     await r.body?.cancel();
     throw new Error('turnstile_http');

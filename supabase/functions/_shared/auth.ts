@@ -16,8 +16,8 @@ export class AuthError extends Error {
     this.status = status;
     this.purgeAfter = purgeAfter;
   }
-  toResponse(headers: Record<string, string> = {}): Response {
-    return json(this.status, this.purgeAfter ? { error: this.code, purge_after: this.purgeAfter } : { error: this.code }, headers);
+  toResponse(): Response {
+    return json(this.status, this.purgeAfter ? { error: this.code, purge_after: this.purgeAfter } : { error: this.code });
   }
 }
 
@@ -87,7 +87,7 @@ export type ActiveUser = { userId: string; sessionId: string; jwt: string; pendi
 /**
  * 验 JWT → 不是密码会话（amr 里没有 password，0.36）→ 账号能不能用 → 会话还在不在、有没有被吊销（private.session_alive）。
  * allowPendingDeletion：只有 account 的 restore、status 传 true，冷静期里放行（返回值带 pendingDeletion）。
- * 不通过抛 AuthError，函数入口 catch 后 return e.toResponse(cors)。
+ * 不通过抛 AuthError，函数入口 catch 后 return e.toResponse()。
  */
 export async function requireActiveUser(req: Request, admin: SupabaseClient, opts: { allowPendingDeletion?: boolean } = {}): Promise<ActiveUser> {
   const m = /^Bearer\s+(\S+)$/i.exec(req.headers.get('authorization') ?? '');

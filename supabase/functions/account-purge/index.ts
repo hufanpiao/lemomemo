@@ -147,7 +147,7 @@ function makeR2(): R2 | null {
     accessKeyId,
     secretAccessKey,
     bucketPrefix: Deno.env.get('R2_BUCKET_PREFIX') ?? '',
-    fetch: (url, init) => timedFetch()(url, init as RequestInit),
+    fetch: (url, init) => timedFetch(fetch)(url, init as RequestInit),
     now: () => Date.now(),
   });
 }
@@ -158,7 +158,7 @@ Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const resendKey = Deno.env.get('RESEND_API_KEY');
-  const admin = url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(DB_REQUEST_TIMEOUT_MS) } }) : null;
+  const admin = url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, DB_REQUEST_TIMEOUT_MS) } }) : null;
   let r2: R2 | null = null;
   try {
     r2 = makeR2();
@@ -184,6 +184,15 @@ Deno.serve((req) => {
       if (!admin) throw new Error('misconfigured');
       const { error } = await admin.auth.admin.deleteUser(userId);   // 硬删（不传 shouldSoftDelete）
       if (error) throw new Error('auth');
+    },
+    async userGone(userId) {
+      if (!admin) throw new Error('misconfigured');
+      const { data, error } = await admin.auth.admin.getUserById(userId);
+      if (error) {
+        if ((error as { status?: number }).status === 404) return true;
+        throw new Error('auth');
+      }
+      return !data.user;
     },
     sendMail: skipTestRecipients((to, mail) => (resendKey ? sendMail(resendKey, to, mail) : Promise.resolve(false)), log),   // @lemomemo.test 不真发（安全审查 D1）
     tzLabel,   // 邮件里时区的通俗说法，和 App 恢复页同一份（shared/i18n/tz-label.ts，KO-mail-nolink-tz）

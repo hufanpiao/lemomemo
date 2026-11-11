@@ -1,5 +1,6 @@
 -- 20261112090000_core_session_helpers.sql：会话校验、吊销会话各收成一个出口；session_fate 挪到 public，anon 不再有 private 的 usage（架构约定 10.1、10.7）。
--- 不变量：会话校验只经 private.require_live_session()；删 auth.sessions 只经 private.kill_session()（D1 build/d1/session-revoke.ts 核对）。
+-- 不变量：经 JWT 调的 *_impl 校验会话只经 private.require_live_session()（rebind_device_impl 是 service_role 调的，按参数里的两个会话另校验）；
+-- 删 auth.sessions 只经 private.kill_session()。两条都由 D1 build/d1/session-revoke.ts 核对。
 -- 下面 create or replace 的函数体照现行定义，只把开场白换成 require_live_session、把“吊销 + 删会话”换成 kill_session。
 
 -- ===== 会话校验：密码会话、账号能用、JWT 的 session_id 活着；不过就抛 session_revoked / account_disabled，过了回 session_id =====
@@ -21,6 +22,8 @@ end $$;
 revoke execute on function private.require_live_session() from public;   -- 只给下面这些 security definer 函数（属主 postgres）调
 
 -- ===== 吊销并删掉一个会话：会话不在（或不是这个人的）什么都不做 =====
+-- 先删、真删到了才写吊销记录。并发时会话已被别的事务先删掉（另一笔 kill_session，或 GoTrue 正常退出登录），这里 found 为假、不写：
+--   先删的是 kill_session 的话它已写过；是正常退出的话那台按“登录过期”处理（不清本机）。改前是“先写记录再删”，差别只在这一种同时发生的情况。
 create function private.kill_session(p_session uuid, p_user uuid) returns void
   language plpgsql security definer set search_path = '' as $$
 begin
@@ -76,11 +79,11 @@ begin
    order by d.id limit 1 for update;
   if not found then raise exception 'device_not_found'; end if;
 
-  -- d. 别的账号名下同一 endpoint 的行（M9）
+  -- d. 别的账号名下同一 endpoint 的行：一个推送端点只归一个账号
   delete from public.devices d where d.push_endpoint = p_endpoint and d.user_id <> uid;
 
   -- e. 同一账号别的行占着：会话还在、而且没软删的才回 endpoint_in_use；会话已失效或已软删（设置页的设备列表按 deleted_at is null
-  --    过滤，用户看不到、也移除不了）的直接删掉（代码审查 BE-1 S6）
+  --    过滤，用户看不到、也移除不了）的直接删掉
   select d.id, d.label, d.last_seen_at, d.install_id, d.session_id, d.deleted_at into holder from public.devices d
    where d.push_endpoint = p_endpoint and d.user_id = uid and d.id <> me.id for update;
   if found then
@@ -119,7 +122,7 @@ begin
                    and (v #>> '{}')::numeric = trunc((v #>> '{}')::numeric) and (v #>> '{}')::numeric <= 2147483647
               then (v #>> '{}')::int else 50 end;
   return jsonb_build_object('ai_used', used, 'ai_limit', cap, 'pacific_date', to_char(d, 'YYYY-MM-DD'),
-                            'media_used', private.media_used(uid, null), 'media_limit', private.media_limit_bytes(uid));   -- B4 S10 ①
+                            'media_used', private.media_used(uid, null), 'media_limit', private.media_limit_bytes(uid));
 end $$;
 
 create or replace function private.my_sessions_impl() returns TABLE(orphan_count integer, orphan_last_at timestamp with time zone, signed_out_device_ids uuid[])
@@ -184,26 +187,25 @@ create or replace function private.record_consent_impl(p_ver text, p_revoke bool
 declare n int;
 begin
   perform private.require_live_session();
-  -- 20261029220000：p_ver 为 null 一律拒绝（notice 被清空或缺 policy_ver 时，null 与 null 不是 distinct，原写法会放行）
+  -- p_ver 为 null 一律拒绝：notice 被清空或缺 policy_ver 时，null 与 null 不是 distinct，会放行
   if p_ver is null or p_ver is distinct from (select c.notice->>'policy_ver' from public.app_config c where c.id = 1) then
     raise exception 'policy_ver_mismatch'; end if;
-  if p_revoke then   -- 0.27：和换模型补算互斥，同一把锁
+  if p_revoke then   -- 和换模型补算互斥，同一把锁
     perform pg_advisory_xact_lock(hashtext('embed:' || (select auth.uid())::text)); end if;
   update public.profiles
      set consent_ai_at = case when p_revoke then null else now() end,
          consent_policy_ver = p_ver   -- 拒绝时也记版本
    where user_id = (select auth.uid()) and disabled_at is null;
   get diagnostics n = row_count;
-  -- 20261029210000：没有 profile 行或刚被停用，一行都没写：报错（整个调用回滚，撤回分支也不写 ai.enabled、不删向量）
+  -- 没有 profile 行或刚被停用，一行都没写：报错（整个调用回滚，撤回分支也不写 ai.enabled、不删向量）
   if n = 0 then raise exception 'account_disabled'; end if;
   if p_revoke then
     insert into public.settings (id, user_id, key, value) values (gen_random_uuid(), (select auth.uid()), 'ai.enabled', 'false')
       on conflict (user_id, key) do update set value = 'false', deleted_at = null, undone = false;
-    -- 0.29（P-13）：删这个人全部的向量（所有模型）和队列；两张表在 0007，plpgsql 运行时才解析
+    -- 撤回同意：删这个人全部的向量（所有模型）和队列；两张表在 0007，plpgsql 运行时才解析
     delete from private.note_vectors where user_id = (select auth.uid());
     delete from private.embed_queue  where user_id = (select auth.uid());
   end if;
-  -- 同意分支的“恢复 skip 的图片和附件”（R-179，0.29 续第 120 条）属于 B4b-2，那时 create or replace
 end $$;
 
 create or replace function private.files_authorize_impl(p_op text, p_items jsonb) returns jsonb
@@ -217,7 +219,7 @@ declare
   it record; row_ record;
   b text; p text; base text; thumb boolean; r text;
   seg_id uuid; seg_id2 uuid; seg text;
-  cl numeric;   -- B4 S10 ③：put 时 /files 传来的 Content-Length（JSON 整数，字节数）
+  cl numeric;   -- put 时 /files 传来的 Content-Length（JSON 整数，字节数）
   -- 8-4-4-4-12 的小写 uuid（和 uuid::text 一致）；不加首尾锚点，配合 length = 36 判整段（D1 把函数体里带首尾锚点的字符串都当成路径正则和清单核对）
   uuid_re constant text := '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
   out_ jsonb := '[]'::jsonb;
@@ -264,7 +266,7 @@ begin
       r := 'not_owner';
     elsif b = 'images' and split_part(p, '/', 2) = 'anniv' then
       -- 纪念日头像：本人这一行的 avatar_id 等于路径里的那个 id
-      -- 代码审查低 3：路径段先认成 uuid 再和 uuid 列比（不把列转成文本，主键索引用得上）；
+      -- 路径段先认成 uuid 再和 uuid 列比（不把列转成文本，主键索引用得上）；
       --   路径正则 [0-9a-f-]{36} 放得过、却不是 8-4-4-4-12 的段认成 null（不转换、不报错），当“没有这一行”
       seg := split_part(p, '/', 3);                 seg_id  := case when length(seg) = 36 and seg ~ uuid_re then seg::uuid end;
       seg := left(split_part(p, '/', 4), -5);       seg_id2 := case when length(seg) = 36 and seg ~ uuid_re then seg::uuid end;
@@ -282,23 +284,19 @@ begin
        where ni.user_id = uid and ni.path = base;
       if not found or (thumb and not row_.has_thumb) then r := 'no_row';
       elsif row_.bucket <> 'images' then r := 'not_owner';   -- 隐私记的图（vault-images）不经 /files
-      -- 0.33（B0 代码审查低 8）：挂的随手记要 is_private = false（和触发器 guard_note_image() 同一口径；纵深一道）；
-      --   0.34 第 2 条：put、get 都查（原来只查 put）
+      -- 挂的随手记要 is_private = false（和触发器 guard_note_image() 同一口径；纵深一道），put、get 都查
       elsif row_.is_private then r := 'bad_bucket';
       elsif row_.deleted_at is not null and (p_op = 'put' or row_.deleted_at < now_ms - keep_ms) then r := 'deleted';
-      -- B4 S10 ②：put 再按写行触发器同一口径复核（media_fits），合计时排除这一行自己（行已经写进去了）；
+      -- put 再按写行触发器同一口径复核（media_fits），合计时排除这一行自己（行已经写进去了）；
       --   原图和缩略图的 put 都核（这一行的占用 = 原图 bytes ＋ 缩略图预留，已在写行时算进去）
-      -- B4 S10 ③：带了合法的 content_length 才比（原图要等于这一行 bytes，缩略图 ≤ 131072，和额度里的缩略图预留、清单 notes.ts 的
-      --   thumbSizeLimit 一致），对不上 length_mismatch；缺了或不合法这一步放行，第二步（20261111101000）起 length_required
-      -- B4 S10 ③ 第二步（20261111101000）：缺了或不是非负整数 length_required
       elsif p_op = 'put' and (cl is null or cl < 0 or cl <> trunc(cl)) then r := 'length_required';
-      elsif p_op = 'put' and cl >= 0 and cl = trunc(cl) and (case when thumb then cl > 131072 else cl <> row_.bytes end) then r := 'length_mismatch';
+      elsif p_op = 'put' and cl >= 0 and cl = trunc(cl) and (case when thumb then cl > 131072 else cl <> row_.bytes end) then r := 'length_mismatch';   -- 131072 和额度里的缩略图预留、notes.ts 的 thumbSizeLimit 一致
       elsif p_op = 'put' and not private.media_fits(uid, row_.id, row_.bytes, row_.has_thumb) then r := 'quota_exceeded';
       end if;
     else
       -- 附件（原 file_slot_open）：put 只认本人、普通、pending、没删的行；get 只给 check_status = 'ok' 的
       if thumb then
-        -- 缩略图按 (note_id, id) 找原文件（扩展名未知）；两段都按 uuid 比（同上，代码审查低 3）
+        -- 缩略图按 (note_id, id) 找原文件（扩展名未知）；两段都按 uuid 比（同上）
         seg := split_part(p, '/', 2);                         seg_id  := case when length(seg) = 36 and seg ~ uuid_re then seg::uuid end;
         seg := split_part(split_part(p, '/', 3), '.', 1);     seg_id2 := case when length(seg) = 36 and seg ~ uuid_re then seg::uuid end;
         select f.is_vault, f.has_thumb, f.deleted_at, f.check_status into row_ from public.note_files f
@@ -337,7 +335,7 @@ begin
   if dev.session_id is not null and dev.session_id = sid then raise exception 'is_current_device'; end if;
 
   perform private.kill_session(dev.session_id, uid);
-  -- 第 109 条：布局按安装存（layout.<页>@inst:<install_id>）；同一个 install_id 还有别的行（这台重新登录过）就留着
+  -- 布局按安装存（layout.<页>@inst:<install_id>）；同一个 install_id 还有别的行（这台重新登录过）就留着
   if dev.install_id is not null and not exists (
        select 1 from public.devices o where o.user_id = uid and o.install_id = dev.install_id and o.id <> dev.id) then
     delete from public.settings s
@@ -362,7 +360,7 @@ begin
   if p_platform is null or p_platform not in ('ios', 'windows', 'web', 'tauri') then
     raise exception 'bad_platform' using errcode = '22023'; end if;
   if p_tz is null or char_length(p_tz) > 64 or p_tz like '%:%' then raise exception 'bad_tz' using errcode = '22023'; end if;
-  -- 只认本人、本会话的那一行（第 99 条：设备行绑在会话上）；平台以行里登记的为准，和参数不一致就拒
+  -- 只认本人、本会话的那一行（设备行绑在会话上）；平台以行里登记的为准，和参数不一致就拒
   select d.id, d.platform into dev from public.devices d
    where d.id = p_device and d.user_id = uid and d.session_id = sid;
   if not found then raise exception 'device_mismatch'; end if;
@@ -437,7 +435,7 @@ declare
   dev record;
   got uuid;
 begin
-  if not private.not_password_session() then raise exception 'session_revoked'; end if;   -- 0.36（依赖 S1 迁移；service role 的令牌没有 amr，照常通过）
+  if not private.not_password_session() then raise exception 'session_revoked'; end if;   -- service role 的令牌没有 amr，照常通过
   if p_user is null or not private.account_usable(p_user) then raise exception 'account_disabled'; end if;
   if p_device is null or p_old_session is null or p_new_session is null or p_old_session = p_new_session then
     raise exception 'bad_rebind' using errcode = '22023'; end if;
@@ -500,7 +498,7 @@ begin
   delete from public.note_files    where ctid in (select ctid from public.note_files    where deleted_at < cut30 limit left_); get diagnostics k = row_count; left_ := left_ - k;
   delete from public.notes         where ctid in (select ctid from public.notes         where deleted_at < cut30 limit left_); get diagnostics k = row_count; left_ := left_ - k;
   delete from public.categories    where ctid in (select ctid from public.categories    where deleted_at < cut30 limit left_); get diagnostics k = row_count; left_ := left_ - k;
-  -- 20261029210000：ai.vault、ai.enabled 不硬删（删了就回到默认值，ai.vault 的默认是打开）
+  -- ai.vault、ai.enabled 不硬删（删了就回到默认值，ai.vault 的默认是打开）
   delete from public.settings      where ctid in (select ctid from public.settings      where deleted_at < cut30 and key not in ('ai.vault', 'ai.enabled') limit left_); get diagnostics k = row_count; left_ := left_ - k;
   -- 不同步的表
   delete from public.logs          where ctid in (select ctid from public.logs where t < cut90 limit left_); get diagnostics k = row_count; left_ := left_ - k;
@@ -509,11 +507,11 @@ begin
   delete from private.pending_signups     where ctid in (select ctid from private.pending_signups where expires_at < now() limit left_); get diagnostics k = row_count; left_ := left_ - k;
   delete from private.webauthn_challenges where ctid in (select ctid from private.webauthn_challenges where expires_at < now() limit left_); get diagnostics k = row_count; left_ := left_ - k;
   delete from private.counters            where ctid in (select ctid from private.counters where window_start < now() - interval '30 days' limit left_); get diagnostics k = row_count; left_ := left_ - k;
-  -- B1 a：会话已不在的设备行（第 98 条；session_id 为空的不碰）
+  -- 会话已不在的设备行（session_id 为空的不碰）
   delete from public.devices d where d.ctid in (select x.ctid from public.devices x
      where x.session_id is not null and not exists (select 1 from auth.sessions s where s.id = x.session_id) limit left_);
   get diagnostics k = row_count; left_ := left_ - k;
-  -- B1 b：180 天没用的设备行，先吊销会话再删（第 108 条）
+  -- 180 天没用的设备行，先吊销会话再删
   for r in select x.id, x.user_id, x.session_id from public.devices x
             where greatest(
                     case when x.last_seen_at <= now() + interval '1 day' then x.last_seen_at end,
@@ -526,9 +524,9 @@ begin
     delete from public.devices d where d.id = r.id;
     left_ := left_ - 1;
   end loop;
-  -- B1 c（R-382 改口径）：吊销记录按 revoked_at 留 30 天，到期并且会话已不在 auth.sessions 才删（不管明文清没清）；
-  --   离线 30 天以内的丢失设备一联网还能经 session_fate 查出 revoked。
-  --   安全审 M1：会话还在的不删——session_alive 只看这张表，删了它，一个被吊销却还没从 auth.sessions 删掉的会话就又活了
+  -- 吊销记录按 revoked_at 留 30 天，到期并且会话已不在 auth.sessions 才删（不管明文清没清）：
+  --   离线 30 天以内的丢失设备一联网还能经 session_fate 查出 revoked；
+  --   会话还在的不删——session_alive 只看这张表，删了它，一个被吊销却还没从 auth.sessions 删掉的会话就又活了
   delete from private.revoked_sessions rs where rs.ctid in (select y.ctid from private.revoked_sessions y
      where y.revoked_at < now() - interval '30 days'
        and (y.session_id is null or not exists (select 1 from auth.sessions s where s.id = y.session_id))

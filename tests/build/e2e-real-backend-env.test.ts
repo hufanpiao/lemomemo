@@ -200,7 +200,7 @@ describe('invite-signup/index.ts 的出站地址接法（源码核对；INVITE-m
   });
 
   it('siteverify、发信都用解析出来的地址', () => {
-    expect(src).toContain('postOut(siteverifyUrl,');
+    expect(src).toContain('postOut(fetch, siteverifyUrl,');
     expect(src).toContain('sendMail(resendKey, to, mail, emailsUrl)');
   });
 

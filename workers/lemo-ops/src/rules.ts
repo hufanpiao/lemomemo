@@ -2,6 +2,7 @@
 // 只做纯计算：把 usage-report 的返回变成“现在有哪些事”，不发信、不读写状态（发信和去重在 alerts.ts）。
 // usage-report 只报“距今多少秒”，阈值只写在这里一处。
 
+import { isCount, isNum, isObj } from './guards.ts';
 import { evaluateOrphans, parseOrphans, SCOPE_ORPHAN, type OrphanReport } from './orphans.ts';
 import { evaluatePurgeDetail, evaluatePurgePending } from './purge-detail.ts';
 import { evaluatePushQueue } from './push-queue.ts';
@@ -131,18 +132,6 @@ export interface HeartbeatReport {
   security_events?: SecurityReport | null;
   /** 钩子出错告警（只在第三条路启用时由 usage-report 给出；0.29 续第 115 条）；同一小时最多一次 true，去重在服务器 */
   alert?: boolean;
-}
-
-function isObj(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
-
-function isNum(v: unknown): v is number {
-  return typeof v === 'number' && Number.isFinite(v);
-}
-
-function isCount(v: unknown): v is number {
-  return typeof v === 'number' && Number.isInteger(v) && v >= 0;
 }
 
 /**
@@ -318,31 +307,18 @@ export function evaluateHeartbeat(r: HeartbeatReport, required: readonly string[
   active.push(...evaluatePushQueue(byName.get('push-dispatch')?.detail));
 
   const scopes = [...HEARTBEAT_SCOPES];
-  // 验证码发信量：usage-report 没带 auth_mail（数据来源还没接，或接了又撤掉）时不查，留下的状态悄悄删掉
-  if (r.auth_mail === undefined) {
-    drop.push(SCOPE_AUTH_MAIL);
-  } else {
-    const mail = evaluateAuthMail(r.auth_mail);
-    active.push(...mail.active);
-    drop.push(...(mail.drop ?? []));
-    scopes.push(...mail.scopes);
-  }
-  // 没有 profile 的 auth 用户（ORPHAN-alert）：同上，没带 orphan_users 时不查、留下的状态悄悄删掉
-  if (r.orphan_users === undefined) {
-    drop.push(SCOPE_ORPHAN);
-  } else {
-    const orphans = evaluateOrphans(r.orphan_users);
-    active.push(...orphans.active);
-    scopes.push(...orphans.scopes);
-  }
-  // 安全计数（R-382）：同上
-  if (r.security_events === undefined) {
-    drop.push(SCOPE_SECURITY);
-  } else {
-    const sec = evaluateSecurity(r.security_events);
-    active.push(...sec.active);
-    scopes.push(...sec.scopes);
-  }
+  // 验证码发信量、没有 profile 的 auth 用户（ORPHAN-alert）、安全计数（R-382）：usage-report 没带这一项（还没接，或接了又撤掉）时不查，
+  // 留下的状态悄悄删掉；带了就并进这一轮
+  const side = <T>(v: T | undefined, scope: string, evaluate: (v: T) => Evaluation) => {
+    if (v === undefined) { drop.push(scope); return; }
+    const e = evaluate(v);
+    active.push(...e.active);
+    drop.push(...(e.drop ?? []));
+    scopes.push(...e.scopes);
+  };
+  side(r.auth_mail, SCOPE_AUTH_MAIL, evaluateAuthMail);
+  side(r.orphan_users, SCOPE_ORPHAN, evaluateOrphans);
+  side(r.security_events, SCOPE_SECURITY, evaluateSecurity);
   return { active, scopes, drop };
 }
 

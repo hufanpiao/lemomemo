@@ -184,7 +184,7 @@ Deno.serve((req) => {
       try {
         return { ok: true, user: await requireActiveUser(r, admin, opts) };
       } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse({ 'cache-control': 'no-store' }), code: e.code };
+        if (e instanceof AuthError) return { ok: false, response: e.toResponse(), code: e.code };
         throw e;
       }
     },

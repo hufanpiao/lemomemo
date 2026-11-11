@@ -2,9 +2,7 @@
 // （读 private.security_events()：最近 15 分钟 sfate-capped、pwrevoke-fail 两个计数，迁移 20261111120000）的校验和判断。
 // 只做纯计算；rules.ts 调这里，去重和发信在 alerts.ts。读不到时只报“读不到”，原来两件的状态留着（同 orphans.ts）。
 import type { Evaluation, Issue } from './rules.ts';
-
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+import { isCount, isObj } from './guards.ts';
 
 export interface SecurityReport {
   /** 最近 15 分钟 session_fate 撞上全库每分钟 600 次总闸的分钟数 */

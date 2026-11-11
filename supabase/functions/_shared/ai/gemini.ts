@@ -2,10 +2,11 @@
 // • 地址 generativelanguage.googleapis.com/v1beta/models/<model>:generateContent；模型名从 app_config.ai.model 读，由调用方传进来，不写死；
 // • 密钥只放 x-goog-api-key 请求头，不进 URL（S-B3 低 6，TC-B3-24）；
 // • 文字和 inlineData 音频（base64）两种内容；生成参数、responseMimeType、responseSchema 由调用方给（params.ts 一处）；
-// • 超时由 AbortController 中止，不重试；
+// • 超时经 _shared/net.ts 的 timedFetch（读正文也算在内），到点中止、不重试；
 // • 429 且 status 是 RESOURCE_EXHAUSTED 当 quota（调用方写 ai_state.exhausted_until）；其他错误、返回不是 JSON、被拦下当 error；
 // • 不打印请求体、返回正文和密钥（15.3 第 6 条、A23）；出错只回 HTTP 状态码。
 // fetch 注入：单测和回放桩（BE-6）传假的，函数传全局 fetch。
+import { timedFetch } from '../net.ts';
 import { errNameOf, type AiPart, type AiRequest, type AiResult, type AIProvider } from './provider.ts';
 
 export const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
@@ -74,15 +75,11 @@ export class GeminiProvider implements AIProvider {
   }
 
   async generate(req: AiRequest): Promise<AiResult> {
-    const ac = new AbortController();
-    let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; ac.abort(); }, req.timeoutMs);
     try {
-      const res = await this.fetchFn(`${GEMINI_BASE}${this.model}:generateContent`, {
+      const res = await timedFetch(this.fetchFn, req.timeoutMs)(`${GEMINI_BASE}${this.model}:generateContent`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-goog-api-key': this.apiKey },
         body: JSON.stringify(geminiBody(req)),
-        signal: ac.signal,
       });
       if (!res.ok) {
         const quota = res.status === 429 && (await isExhausted(res));
@@ -97,9 +94,9 @@ export class GeminiProvider implements AIProvider {
         return { ok: false, reason: 'error', status: res.status };
       }
     } catch (e) {
-      return { ok: false, reason: timedOut ? 'timeout' : 'error', errName: errNameOf(e) };
-    } finally {
-      clearTimeout(timer);
+      // 这里没有别的中止来源：被中止（真 fetch 抛 TimeoutError，替身多抛 AbortError）就是到点了
+      const name = errNameOf(e);
+      return { ok: false, reason: name === 'TimeoutError' || name === 'AbortError' ? 'timeout' : 'error', errName: name };
     }
   }
 }

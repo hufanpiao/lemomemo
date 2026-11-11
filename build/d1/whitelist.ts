@@ -117,8 +117,8 @@ export const EXPORT_NONE_BUCKETS = ['vault-images', 'vault-files'];
  *  不放 ai-classify、push-dispatch、account-purge 等 service_role 函数的名字，否则 fn_ai 能替它们刷心跳、掩盖停摆。加名字要新迁移 + 这里 + 附录 A 一起改 */
 export const FN_AI_HEARTBEATS = ['ai-embed', 'ai-media', 'file-check'];
 
-/** public 里只准有这 11 个 RPC（3.3 D；0.32 加 files_authorize，只给 /files 函数用；R-382 加 session_fate、revoke_my_sessions），一律 security invoker、
- *  授给 authenticated、不给 service_role；anon 只准 PUBLIC_RPCS_ANON 里的；definer 只准 PUBLIC_RPCS_DEFINER 里的 */
+/** public 里只准有这 11 个 RPC（3.3 D；0.32 加 files_authorize，只给 /files 函数用；R-382 加 session_fate、revoke_my_sessions）：除 PUBLIC_RPCS_DEFINER 外
+ *  一律 security invoker；授给 authenticated、不给 service_role；anon 只准 PUBLIC_RPCS_ANON 里的 */
 export const PUBLIC_RPCS = ['apply_patch', 'report_tz', 'claim_endpoint', 'remove_device', 'my_ai_usage', 'record_consent', 'my_sessions', 'purge_deleted', 'files_authorize',
   'session_fate', 'revoke_my_sessions'];
 /** 不登录也能调的 public RPC（R-382：登录过期的设备没有可用 JWT，要用 anon key 查会话是不是被吊销） */

@@ -1,0 +1,6 @@
+[api]
+enabled = true
+
+# F9 ⑤ 对照：名单里的 usage-report 关了校验，鉴权经 _shared/http.ts 的 cronGate（里面是 safeEqual）
+[functions.usage-report]
+verify_jwt = false

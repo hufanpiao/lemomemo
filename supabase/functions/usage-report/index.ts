@@ -1,10 +1,6 @@
-// usage-report 入口（架构第 6 节函数表、6.1）：给独立 Worker lemo-ops 调，鉴权是 x-ops-secret。
-// 经 supabase-js（service role）读 private.heartbeat、private.pending_deletions 和 rpc long_transactions、auth_mail_counts
-// （0.29 续第 52 条：经 schema('private')）；不直连数据库（不 import _shared/db.ts），不碰 R2。逻辑和测试见 core.ts、tests/functions/usage-report.test.ts。
-// 发信量（0.38 第 12 条，core.ts 的 authMail）：auth_1h 取 rpc private.auth_mail_counts()（迁移 20261029230000，数 auth.audit_log_entries
-// 里的 user_recovery_requested）；resend_24h 要有读权限的 Resend 密钥，暂不接（不传，返回体里为 null）。
-// 没有 profile 的 auth 用户（ORPHAN-alert，core.ts 的 orphanUsers）：rpc private.orphan_auth_users()（迁移 20261031160000）。
-// 安全计数（R-382，core.ts 的 securityEvents）：rpc private.security_events()（迁移 20261111120000，只给 service_role）。
+// usage-report 入口（架构第 6 节函数表、6.1）：给独立 Worker lemo-ops 调，鉴权是 x-ops-secret；逻辑和测试见 core.ts、tests/functions/usage-report*.test.ts。
+// 经 supabase-js（service role，schema('private')）读 heartbeat、pending_deletions 和 rpc long_transactions、auth_mail_counts、orphan_auth_users、security_events；
+// 不直连数据库（不 import _shared/db.ts），不碰 R2。resend_24h 要有读权限的 Resend 密钥，暂不接（不传，返回体里为 null）。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { authMailFromRpc, handle, orphansFromRpc, securityFromRpc, type UsageDb } from './core.ts';
 

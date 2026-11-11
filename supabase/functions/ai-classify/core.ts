@@ -219,14 +219,17 @@ export async function runRound(deps: Deps, store: ClassifyStore): Promise<Heartb
     const now = deps.now();
     const userKey = userQuotaKey(userId, now);
     const globalKey = globalQuotaKey(now);
+    let userTaken = false;
     try {
       const used = await deps.quota.take(userKey, cfg.per_user_daily);
       if (used === null) {
         tally.skipped += toAi.length;
         continue;
       }
+      userTaken = true;
       const g = await deps.quota.take(globalKey, cfg.global_daily ?? 0);
       if (g === null) {
+        userTaken = false;   // 下面这次退回出错时，catch 里不再退第二次
         await deps.quota.refund(userKey);
         deps.log('global_quota_out');
         globalOut = true;
@@ -235,6 +238,8 @@ export async function runRound(deps: Deps, store: ClassifyStore): Promise<Heartb
       }
     } catch {
       deps.log('quota_failed');
+      // 个人那一下扣上了、全项目那一下出错：退回个人的；全项目那一下扣没扣上不知道，不退（宁可多算）
+      if (userTaken) await deps.quota.refund(userKey).catch(() => deps.log('settle_failed'));
       tally.skipped += toAi.length;
       continue;
     }

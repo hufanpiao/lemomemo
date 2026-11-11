@@ -1,8 +1,8 @@
 // _shared/push/send.ts 的 deliver（B2 第一天派工表第 4 行；B2 安全审查第五节第 4～8 条、1.5 第 ② 点 D1-8）：推送服务用测试开发的替身 tests/fakes/push-service.ts，
 // 进程内注入 fake.fetch（D3 第 6 点）；“3xx 的 Location 指向别的端口、那个端口一次都没被访问”这一条开两个本机端口、用真 fetch。
 // 钥匙一律现生成的假 VAPID（用完即丢）。handle、替身判断在 push-dispatch.test.ts
-import { afterEach, describe, expect, it } from 'vitest';
-import { classify, deliver, MAX_RESPONSE_BYTES, type DeliverCtx, type FetchLike } from '../../supabase/functions/_shared/push/send.ts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { classify, deliver, MAX_RESPONSE_BYTES, SEND_TIMEOUT_MS, type DeliverCtx, type FetchLike } from '../../supabase/functions/_shared/push/send.ts';
 import { loadVapid, VapidSigner, type VapidKeys } from '../../supabase/functions/_shared/push/vapid.ts';
 import { fx } from '../build/push-endpoints-fixture-load.ts';
 import { b64u, createFakePush, newPushSubscriber, reply, unb64u, type FakePushService } from '../fakes/push-service.ts';
@@ -141,6 +141,28 @@ describe('deliver：按状态归类（只给枚举，不回状态码、响应头
     for (const [name, outcome] of [['TypeError', 'network'], ['TimeoutError', 'timeout'], ['AbortError', 'timeout']] as const) {
       const { ctx, dev } = await setup(null, boom(name));
       expect(await deliver(dev, te.encode('x'), OPT, ctx)).toEqual({ outcome });
+    }
+  });
+  it('超时经 _shared/net.ts 的 timedFetch（假计时器管得到）：差 1 ms 还在等，到 SEND_TIMEOUT_MS 算 timeout', async () => {
+    const seen: RequestInit[] = [];
+    const hangs: FetchLike = (_u, init) => new Promise((_, rej) => {
+      seen.push(init);
+      init.signal?.addEventListener('abort', () => rej(init.signal?.reason));
+    });
+    const { ctx, dev } = await setup(null, hangs);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let out: unknown = null;
+      const p = deliver(dev, te.encode('x'), OPT, ctx).then((r) => { out = r; });
+      for (let i = 0; i < 1000 && seen.length === 0; i++) await new Promise((r) => setImmediate(r));
+      await vi.advanceTimersByTimeAsync(SEND_TIMEOUT_MS - 1);
+      expect(out).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      await p;
+      expect(out).toEqual({ outcome: 'timeout' });
+      expect([seen[0]?.redirect, seen[0]?.credentials]).toEqual(['manual', 'omit']);
+    } finally {
+      vi.useRealTimers();
     }
   });
   it('替身挂住不回：5 秒后放弃，算 timeout', async () => {

@@ -1,7 +1,7 @@
 // usage-report 的单元测试（架构 6.1、0.29 续第 116、143 条）：TC-B1-94 ①、TC-B1-102 ⑤ 的 usage-report 部分。
 // 只测 core.ts（index.ts 只是把 supabase-js 接上），数据库由假对象代替。
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AUTH_MAIL_TIMEOUT_MS, DB_TIMEOUT_MS, authMailFromRpc, handle, safeEqual, type Deps, type UsageDb } from '../../supabase/functions/usage-report/core.ts';
+import { DB_TIMEOUT_MS, SIDE_TIMEOUT_MS, authMailFromRpc, handle, type Deps, type UsageDb } from '../../supabase/functions/usage-report/core.ts';
 
 const SECRET = 'test-ops-secret-xxxxxxxxxxxxxxxxxxxxxx';   // ≥ 32 字节
 const NOW = Date.parse('2026-10-29T12:00:00Z');
@@ -50,8 +50,10 @@ describe('usage-report 鉴权', () => {
 
   it('OPS_SECRET 少于 32 字节：带对了也回 500 misconfigured；带错回 401', async () => {
     const short = 'x'.repeat(31);
-    const r = await handle(req({ part: 'heartbeat' }, short), deps({ opsSecret: short }));
+    const log = vi.fn();
+    const r = await handle(req({ part: 'heartbeat' }, short), deps({ opsSecret: short, log }));
     expect(r.status).toBe(500);
+    expect(log.mock.calls).toEqual([['misconfigured']]);   // 日志码和改用 cronGate 之前一样
     expect(await r.json()).toEqual({ error: 'misconfigured' });
     expect((await handle(req({ part: 'heartbeat' }, 'y'.repeat(31)), deps({ opsSecret: short }))).status).toBe(401);
     expect((await handle(req({ part: 'heartbeat' }, 'x'.repeat(32)), deps({ opsSecret: 'x'.repeat(32) }))).status).toBe(200);
@@ -59,36 +61,15 @@ describe('usage-report 鉴权', () => {
 
   it('函数缺 service role key（db 为 null）：鉴权过了才回 misconfigured', async () => {
     expect((await handle(req({ part: 'heartbeat' }, 'wrong'), deps({ db: null }))).status).toBe(401);
-    expect((await handle(req({ part: 'heartbeat' }), deps({ db: null }))).status).toBe(500);
+    const log = vi.fn();
+    expect((await handle(req({ part: 'heartbeat' }), deps({ db: null, log }))).status).toBe(500);
+    expect(log.mock.calls).toEqual([['misconfigured']]);
   });
 
   it('只收 POST；part 不认识回 400；usage 部分 B7 才有，回 501', async () => {
     expect((await handle(req(null, SECRET, 'GET'), deps())).status).toBe(405);
     expect((await handle(req({ part: 'x' }), deps())).status).toBe(400);
     expect((await handle(req({ part: 'usage' }), deps())).status).toBe(501);
-  });
-
-  it('safeEqual：长度不同、内容不同都是 false', async () => {
-    expect(await safeEqual('abc', 'abc')).toBe(true);
-    expect(await safeEqual('abc', 'abd')).toBe(false);
-    expect(await safeEqual('abc', 'abcd')).toBe(false);
-    expect(await safeEqual('', 'a')).toBe(false);
-  });
-
-  it('safeEqual：运行环境有 crypto.subtle.timingSafeEqual 时用它（比较的是两段 SHA-256）', async () => {
-    const calls: number[] = [];
-    const subtle = crypto.subtle as unknown as { timingSafeEqual?: unknown };
-    subtle.timingSafeEqual = (a: ArrayBuffer, b: ArrayBuffer) => {
-      calls.push(a.byteLength, b.byteLength);
-      return new Uint8Array(a).every((v, i) => v === new Uint8Array(b)[i]);
-    };
-    try {
-      expect(await safeEqual('abc', 'abc')).toBe(true);
-      expect(await safeEqual('abc', 'abcdef')).toBe(false);
-      expect(calls).toEqual([32, 32, 32, 32]);
-    } finally {
-      delete subtle.timingSafeEqual;
-    }
   });
 });
 
@@ -294,7 +275,7 @@ describe('发信量 auth_mail（TC-B1-119 ⑤；架构 0.38 第 12 条；审查�
     let settled = false;
     const pending = handle(req({ part: 'heartbeat' }), deps({ db, log })).finally(() => (settled = true));
     await called;
-    await vi.advanceTimersByTimeAsync(AUTH_MAIL_TIMEOUT_MS - 1);
+    await vi.advanceTimersByTimeAsync(SIDE_TIMEOUT_MS - 1);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     const r = await pending;
@@ -304,7 +285,7 @@ describe('发信量 auth_mail（TC-B1-119 ⑤；架构 0.38 第 12 条；审查�
     expect(b['heartbeats']).toHaveLength(1);
     expect(log.mock.calls).toEqual([['auth_mail:timeout']]);
     expect(aborted).toBe(true);
-    expect(AUTH_MAIL_TIMEOUT_MS).toBeLessThan(DB_TIMEOUT_MS);
+    expect(SIDE_TIMEOUT_MS).toBeLessThan(DB_TIMEOUT_MS);
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -324,7 +305,7 @@ describe('发信量 auth_mail（TC-B1-119 ⑤；架构 0.38 第 12 条；审查�
     const r = await handle(req({ part: 'heartbeat' }), deps({ db, log }));
     expect(r.status).toBe(503);
     failMail(new Error('late'));
-    await vi.advanceTimersByTimeAsync(AUTH_MAIL_TIMEOUT_MS * 2);
+    await vi.advanceTimersByTimeAsync(SIDE_TIMEOUT_MS * 2);
     expect(log.mock.calls).toEqual([['db_unreachable:error']]);
     expect(vi.getTimerCount()).toBe(0);
   });

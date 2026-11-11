@@ -7,6 +7,7 @@
 //   • OPTIONS 不查；免查名单（shared/version-gate-list.ts）里的函数和方法不查。
 // 这一份不 import 名单（名单在 _shared/gen/，单测不跑 copy:shared）：名单由调用方传进来，入口见 _shared/version-gate.ts。
 // 不 import npm 包、不碰 Deno 全局；日志只记错误码（A23）。tests/functions/fn-version-gate.test.ts 核对和转发层结论一致。
+import { json } from './http.ts';
 
 export const VERSION_HEADER = 'x-app-version';
 
@@ -67,15 +68,10 @@ export function fnNeedsVersionCheck(exemptions: readonly Exemption[], fn: string
 
 /** 本地生成的 426：和转发层同一个状态码、响应体、Content-Type、Cache-Control，另带 /sb 的三个安全头（经 /sb 时转发层会再覆盖一遍） */
 export function upgradeRequiredResponse(min: string): Response {
-  return new Response(JSON.stringify({ code: 'upgrade_required', min }), {
-    status: 426,
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'cache-control': 'no-store',
-      'x-content-type-options': 'nosniff',
-      'content-security-policy': "sandbox; default-src 'none'",
-      'referrer-policy': 'no-referrer',
-    },
+  return json(426, { code: 'upgrade_required', min }, {
+    'x-content-type-options': 'nosniff',
+    'content-security-policy': "sandbox; default-src 'none'",
+    'referrer-policy': 'no-referrer',
   });
 }
 

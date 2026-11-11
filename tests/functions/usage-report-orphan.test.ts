@@ -2,7 +2,7 @@
 // 和发信量（usage-report.test.ts 的 auth_mail）同一个做法：单独计时、出错只让 orphan_users 为 null，不连累心跳。
 // lemo-ops 那一半在 lemo-ops-orphan.test.ts，数据库那一半在 supabase/tests/rls/27_orphan_auth_users.test.sql。
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handle, ORPHAN_TIMEOUT_MS, orphansFromRpc, type Deps, type UsageDb } from '../../supabase/functions/usage-report/core.ts';
+import { handle, SIDE_TIMEOUT_MS, orphansFromRpc, type Deps, type UsageDb } from '../../supabase/functions/usage-report/core.ts';
 
 const SECRET = 'test-ops-secret-xxxxxxxxxxxxxxxxxxxxxx';
 const NOW = Date.parse('2026-10-31T12:00:00Z');
@@ -81,7 +81,7 @@ describe('usage-report：没有 profile 的 auth 用户 orphan_users（ORPHAN-al
     let settled = false;
     const pending = handle(req(), deps({ db, log })).finally(() => (settled = true));
     await called;
-    await vi.advanceTimersByTimeAsync(ORPHAN_TIMEOUT_MS - 1);
+    await vi.advanceTimersByTimeAsync(SIDE_TIMEOUT_MS - 1);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     const r = await pending;
@@ -102,7 +102,7 @@ describe('usage-report：没有 profile 的 auth 用户 orphan_users（ORPHAN-al
     });
     expect((await handle(req(), deps({ db, log }))).status).toBe(503);
     fail(new Error('late'));
-    await vi.advanceTimersByTimeAsync(ORPHAN_TIMEOUT_MS * 2);
+    await vi.advanceTimersByTimeAsync(SIDE_TIMEOUT_MS * 2);
     expect(log.mock.calls).toEqual([['db_unreachable:error']]);
     expect(vi.getTimerCount()).toBe(0);
     vi.useRealTimers();

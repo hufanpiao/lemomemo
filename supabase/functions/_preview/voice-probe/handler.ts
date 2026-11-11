@@ -17,6 +17,7 @@
 // 日志（Q1 ⑥）：只记事件码、mime、字节数、HTTP 状态、耗时；不记转写、音频、请求头、Gemini 出错时的返回正文，不打印请求体。
 // 录音只在内存里（5.11 第 3 点、A23）：不写 Storage、不写库、不写日志。响应一律 Cache-Control: no-store。
 import { readCapped } from '../../_shared/body.ts';
+import { json } from '../../_shared/http.ts';
 import { pacificDate } from '../../_shared/ai/gate.ts';
 import { VOICE_PROBE_PARAMS, VOICE_TIMEOUT_MS } from '../../_shared/ai/params.ts';
 import type { AIProvider, AiResult } from '../../_shared/ai/provider.ts';
@@ -104,12 +105,8 @@ export interface HandlerDeps {
   allowed?: readonly string[];
 }
 
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
-  });
-}
+/** 回 json（经 _shared/http.ts，一律 no-store），另带 nosniff */
+const reply = (status: number, body: unknown): Response => json(status, body, { 'x-content-type-options': 'nosniff' });
 
 /** 一字不差，只许去掉末尾一个斜杠（同 db-probe 的 isPreview） */
 export function isPreview(supabaseUrl: string | undefined): boolean {
@@ -157,24 +154,24 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   // ①
   if (!isPreview(deps.supabaseUrl)) {
     await drop(req);
-    return json(404, { error: 'not_found' });
+    return reply(404, { error: 'not_found' });
   }
   // ②
   if (!(deps.now() < EXPIRES_AT)) {
     await drop(req);
-    return json(410, { error: 'expired' });
+    return reply(410, { error: 'expired' });
   }
   // ③ 鉴权前一律 404（安全审建议 1）
   if (req.method !== 'POST') {
     await drop(req);
-    return json(404, { error: 'not_found' });
+    return reply(404, { error: 'not_found' });
   }
   // ④ 同上：名单改坏了也像没有这个函数一样，只在日志里记 misconfigured
   const allowed = deps.allowed ?? ALLOWED_UIDS;
   if (!allowedReady(allowed)) {
     await drop(req);
     deps.log({ code: 'misconfigured' });
-    return json(404, { error: 'not_found' });
+    return reply(404, { error: 'not_found' });
   }
   // ⑤ 令牌无效、不在白名单：一律 404（像没有这个函数）
   const m = BEARER.exec(req.headers.get('authorization') ?? '');
@@ -185,19 +182,19 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
     } catch {
       await drop(req);
       deps.log({ code: 'auth_unavailable' });
-      return json(503, { error: 'try_later' });
+      return reply(503, { error: 'try_later' });
     }
   }
   if (uid === null || !allowed.includes(uid)) {
     await drop(req);
     deps.log({ code: uid === null ? 'auth_rejected' : 'not_allowed' });
-    return json(404, { error: 'not_found' });
+    return reply(404, { error: 'not_found' });
   }
   // ⑥
   const model = req.headers.get('x-model');
   if (!isModel(model)) {
     await drop(req);
-    return json(400, { error: 'bad_model', models: MODELS });
+    return reply(400, { error: 'bad_model', models: MODELS });
   }
   // ⑦
   const ct = req.headers.get('content-type');
@@ -206,17 +203,17 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   if (mime === null) {
     await drop(req);
     deps.log({ code: 'unsupported_type' });
-    return json(415, { error: 'unsupported_type', raw_type });
+    return reply(415, { error: 'unsupported_type', raw_type });
   }
   // ⑧
   const audio = await readCapped(req, MAX_AUDIO);
   if (audio === 'too_large') {
     deps.log({ code: 'too_large', mime });
-    return json(413, { error: 'too_large', mime, raw_type });
+    return reply(413, { error: 'too_large', mime, raw_type });
   }
   if (audio === 'empty') {
     deps.log({ code: 'empty' });   // 代码审 S5：只记事件码
-    return json(400, { error: 'empty', mime, raw_type });
+    return reply(400, { error: 'empty', mime, raw_type });
   }
   const bytes = audio.length;
   // 先确认配了密钥再扣次数（代码审 S4：没配密钥不白占名额）
@@ -226,7 +223,7 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   });
   if (!provider) {
     deps.log({ code: 'misconfigured', mime, bytes });
-    return json(500, { error: 'misconfigured' });
+    return reply(500, { error: 'misconfigured' });
   }
   // ⑨
   let okQuota: boolean;
@@ -234,11 +231,11 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
     okQuota = await deps.take(quotaKey(deps.now()), DAILY_LIMIT, QUOTA_WINDOW_S);
   } catch {
     deps.log({ code: 'quota_unavailable', mime, bytes });
-    return json(503, { error: 'try_later' });
+    return reply(503, { error: 'try_later' });
   }
   if (!okQuota) {
     deps.log({ code: 'daily_limit', mime, bytes });
-    return json(429, { error: 'daily_limit', limit: DAILY_LIMIT });
+    return reply(429, { error: 'daily_limit', limit: DAILY_LIMIT });
   }
   // ⑩
   const g0 = deps.clock();
@@ -260,7 +257,7 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   const gemini_ms = Math.round(deps.clock() - g0);
   const o = outcome(r, seen);
   deps.log({ code: `gemini_${o.result}${retried ? '_retried' : ''}`, mime, bytes, ...(o.http === null ? {} : { http: o.http }), ms: gemini_ms });
-  return json(200, {
+  return reply(200, {
     model, mime, raw_type, bytes,
     gemini_http: o.http, gemini_ms, total_ms: Math.round(deps.clock() - t0),
     result: o.result, transcript: o.transcript, retried,

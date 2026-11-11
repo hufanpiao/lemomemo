@@ -278,6 +278,7 @@ export function purgeDeps(db: FakeDb, r2: R2, backups: FakeBackups, box: Outbox[
     backups,
     userEmail: async (u) => db.users.get(u) ?? null,
     deleteUser: async (u) => { if (db.fail.has('deleteUser')) throw new Error('auth'); db.deleteUserCascade(u); },
+    userGone: async (u) => !db.users.has(u),
     sendMail: mailer(box),
     tzLabel,   // 和 index.ts 注入的是同一份（shared/i18n/tz-label.ts）
     hashSecret: HASH_SECRET,

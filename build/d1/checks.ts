@@ -12,7 +12,7 @@ import { requiredIndexProblems } from './required-indexes.ts';
 import { lockTimeoutProblems } from './fn-lock-timeout.ts';
 import { LEASE_FNS_SQL, leaseResetProblems, type FnSrcRow } from './remind-lease.ts';
 import { POLICY_SQL, policyProblems, type PolicyRow } from './policies.ts';
-import { sessionRevokeProblems } from './session-revoke.ts';
+import { sessionCheckProblems, sessionRevokeProblems } from './session-revoke.ts';
 import { publicRpcProblems } from './public-rpcs.ts';
 
 export type Row = Record<string, unknown>;
@@ -184,8 +184,8 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   }
   // 服务器函数用的那几个带 lock_timeout=5s（迁移 20261031130000 起，fn-lock-timeout.ts）；往 remind_queue 插入的 private 函数冲突时一律清租约
   // （REMIND-queue-crash-loss，迁移 20261104130000；判定在 remind-lease.ts）；RLS 策略：storage 一条不建、fn 角色不放开（policies.ts）
-  const privFnSrc = await q<FnSrcRow>(LEASE_FNS_SQL);   // R-382：删 auth.sessions 的函数必须调 private.revoke_session（session-revoke.ts）
-  for (const p of [...lockTimeoutProblems(fns), ...leaseResetProblems(privFnSrc), ...sessionRevokeProblems(privFnSrc),
+  const privFnSrc = await q<FnSrcRow>(LEASE_FNS_SQL);   // 删会话、校验会话各只准经一个出口（session-revoke.ts）
+  for (const p of [...lockTimeoutProblems(fns), ...leaseResetProblems(privFnSrc), ...sessionRevokeProblems(privFnSrc), ...sessionCheckProblems(privFnSrc),
     ...policyProblems(await q<PolicyRow>(POLICY_SQL))]) bad(p);
   for (const p of publicRpcProblems(fns.filter((f) => f.s === 'public'))) bad(p);   // public RPC 的名单和执行权（public-rpcs.ts）
   // 视图：public 一律 security_invoker；private（扫描视图）一律 security_barrier

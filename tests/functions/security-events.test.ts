@@ -24,7 +24,7 @@ describe('usage-report：security_events', () => {
       [async () => securityFromRpc([]), 'security:bad_data'],
     ] as const) {
       const log = vi.fn();
-      const r = await handle(req(), deps({ db: fakeDb({ securityEvents: read }), log, securityTimeoutMs: 5 }));
+      const r = await handle(req(), deps({ db: fakeDb({ securityEvents: read }), log, sideTimeoutMs: 5 }));
       expect(r.status).toBe(200);
       expect((await body(r))['security_events']).toBeNull();
       expect(log.mock.calls).toEqual([[code]]);
