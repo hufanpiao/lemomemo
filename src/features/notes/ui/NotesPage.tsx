@@ -18,6 +18,7 @@
 // • 只读行（S12，R-148，TC-B4-09；照待办页）：带认不出的值的行（core 的 readonlyIds）标“要新版本”（单独一行：瀑布流在正文下、底行上，列表在摘要行下），菜单里的“删除”变淡；点开、删除统一拦下
 //   （不进编辑器、不开抽屉、不写），出 kit 的“这条要新版本才能修改 · 更新”（状态在 hooks/useNotesToast.ts）。左滑、多选还没有入口，以后加时同样先判只读
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
+import { rlog } from '../../../platform/run-log-api.ts';
 import { useEffect, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
@@ -311,9 +312,12 @@ function InputRow({ up, onAdd, onImage }: { up: boolean; onAdd(text: string): Pr
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const text = draft;
+    rlog(`notes submit len=${text.length} trim=${text.trim().length}`);
     if (text.trim() === '') return;
     setDraft('');
-    if (!(await onAdd(text))) setDraft(text);
+    const ok = await onAdd(text);
+    rlog(`notes add ${ok ? 'ok' : 'failed'}`);
+    if (!ok) setDraft(text);
   };
   const image = async (file: File) => {
     const text = draft;

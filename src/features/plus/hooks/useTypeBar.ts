@@ -7,6 +7,7 @@
 // • “展开编辑”：把已打的字和日历页选中的那天交给调用方，打开完整新建页（R-353）
 // • callAi 默认是真的 ai-parse（data/ai-parse-api.ts，B3 接线）；设置里 ai.enabled 没开时不调，没把握的也直接用本机规则，不出“AI 没回应”
 // • 提示条：一条 → “已记下：…”；多条 → “已记下 N 条”，展开逐条改、撤，“拆错了，合并成一条”“全部撤销”
+import { rlog } from '../../../platform/run-log-api.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
@@ -143,7 +144,11 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
   }, [go]);
 
   const submit = useCallback(async () => {
-    if (busy.current || text.trim() === '') return;
+    rlog(`typebar submit len=${text.length} trim=${text.trim().length} busy=${busy.current} status=${status}`);
+    if (busy.current || text.trim() === '') {
+      rlog(`typebar submit skipped ${busy.current ? 'busy' : 'empty'}`);
+      return;
+    }
     busy.current = true;
     setError(null);
     try {
@@ -154,12 +159,14 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
       const quotaOut = aiOn ? await quotaOutToday(c.now) : false;
       const p = await planTyped(text, c, { online: online(), isOnline: online, aiOn, quotaOut }, callAi);
       if (p.quotaLeft !== null) void rememberQuotaLeft(p.quotaLeft, c.now);
+      rlog(`typebar planned items=${p.items.length} ai=${aiOn} quotaOut=${quotaOut}`);
       if (p.items.length === 0) {
         fail('nothing');
         return;
       }
       const { ready, ask: later } = splitConfirm(p.items);
       const r = await store({ batchId: null, entries: [], plan: p, raw: text, remind: false }, ready, env());
+      rlog(`typebar stored out=${r.out} ready=${ready.length} ask=${later.length}`);
       if (r.out !== 'ok' || !r.batch) {
         fail(r.out);
         return;
@@ -171,10 +178,13 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
         return;
       }
       finish(p);
+    } catch (err) {
+      rlog(`typebar submit threw ${(err as Error | undefined)?.name ?? ''} ${String((err as Error | undefined)?.message ?? err).slice(0, 200)}`);
+      throw err;
     } finally {
       busy.current = false;
     }
-  }, [text, ctx, env, callAi, settings, online, store, setBatch, fail, finish, go]);
+  }, [text, status, ctx, env, callAi, settings, online, store, setBatch, fail, finish, go]);
 
   const asking = status === 'confirming' ? (ask[0] ?? null) : null;
 

@@ -107,6 +107,8 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
   let height = 0;
   /** 现在 --kb 写的值 */
   let kbVar = 0;
+  /** 现在 data-kbo 打着没有 */
+  let kboVar = false;
   let vv: VvLike | null = null;
 
   const update = (): void => {
@@ -134,8 +136,13 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
     if (!holding) holdUntil = 0;
     clearTimeout(holdTimer);
     holdTimer = holding ? setTimeout(update, holdUntil - nowOf()) : undefined;
-    const show = h > 0 || holding;
-    if (h === height && over === kbVar && show === reported) return;
+    // 主屏幕版手机上只要光标在输入框里就算键盘弹着（负责人 11-11“底栏焊死在下面不动有这么难吗”：iOS 滚动可视区后 inner − vv − top 量出 0，
+    // 底栏又冒到键盘上方；不再只靠 inner − vv − top，焦点在输入框、可视区比整屏矮出一个键盘（vv.height 不受滚动影响）就藏底栏、打 data-kbo）
+    const typing = !zoomed && standaloneOf() && phoneOf() && editingOf() && fullOf() - vv.height >= KB_MIN_PX;
+    const kbo = h > 0 || typing;
+    const show = kbo || holding;
+    if (h === height && over === kbVar && show === reported && kbo === kboVar) return;
+    kboVar = kbo;
     const wasShown = reported;
     reported = show;
     height = h;
@@ -143,9 +150,9 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
     const root = rootOf() as (ReturnType<typeof rootOf> & { setAttribute?: (k: string, v: string) => void; removeAttribute?: (k: string) => void }) | null;
     if (over > 0) root?.style.setProperty('--kb', `${over}px`);
     else root?.style.removeProperty('--kb');
-    if (h > 0) root?.setAttribute?.('data-kbo', '1');
+    if (kbo) root?.setAttribute?.('data-kbo', '1');
     else root?.removeAttribute?.('data-kbo');
-    if (wasShown !== show || h > 0) for (const l of [...listeners]) l(show, h);
+    if (wasShown !== show || h > 0 || kbo) for (const l of [...listeners]) l(show, h);
   };
 
   return {

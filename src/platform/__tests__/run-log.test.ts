@@ -1,0 +1,121 @@
+// 全局运行日志（负责人 11-11“以后所有的bug看log能不能解决”“要做就给我做详细的log”，platform/run-log.ts）
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describeEl, MAX_LINES, OUT_KEY, readRunLog, startRunLog } from '../run-log.ts';
+import { rlog, RL_SLOT } from '../run-log-api.ts';
+
+const mkField = () => {
+  const form = document.createElement('form');
+  form.setAttribute('data-testid', 'type-bar');
+  const input = document.createElement('input');
+  input.setAttribute('data-testid', 'type-input');
+  input.value = '秘密内容';
+  const btn = document.createElement('button');
+  btn.type = 'submit';
+  btn.setAttribute('aria-label', '记下');
+  btn.textContent = '记下';
+  form.append(input, btn);
+  form.addEventListener('submit', (e) => e.preventDefault());
+  document.body.append(form);
+  return { form, input, btn };
+};
+
+describe('全局运行日志', () => {
+  afterEach(() => {
+    localStorage.clear();
+    document.body.replaceChildren();
+    document.documentElement.removeAttribute('data-kbo');
+    delete (globalThis as Record<string, unknown>)[RL_SLOT];
+    vi.useRealTimers();
+  });
+
+  it('开头、boot 版面快照；焦点（点出来还是程序聚焦、长度）、点按、回车（表单、提交按钮禁没禁用）、提交、键盘标记、报错各记一行；不记输入的文字', async () => {
+    vi.useFakeTimers();
+    const { input, btn, form } = mkField();
+    const stop = startRunLog(window, { version: 'test' });
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    btn.disabled = true;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    btn.disabled = false;
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    form.requestSubmit(btn);
+    document.documentElement.setAttribute('data-kbo', '1');
+    await vi.advanceTimersByTimeAsync(500);
+    window.dispatchEvent(new ErrorEvent('error', { message: 'boom', filename: 'https://x/a.js', lineno: 3, colno: 7 }));
+    stop();
+    const log = readRunLog();
+    expect(log).toMatch(/=== start .* v=test/);
+    expect(log).toMatch(/boot inner=.*\[bar=none .*type=/);
+    expect(log).toMatch(/focusin input\[text\]#type-input by=code len=4 sel=/);
+    expect(log).toMatch(/key Enter code=13 on=input\[text\]#type-input form=form#type-bar submitBtn=enabled len=4/);
+    expect(log).toMatch(/key Enter code=13 on=input\[text\]#type-input form=form#type-bar submitBtn=disabled/);
+    expect(log).toMatch(/key char /);
+    expect(log).toMatch(/down button#记下 /);
+    expect(log).toMatch(/submit form#type-bar by=button#记下/);
+    expect(log).toMatch(/root kbo=1/);
+    expect(log).toMatch(/settled\(focusin\)/);
+    expect(log).toMatch(/error boom @a\.js:3:7/);
+    expect(log).not.toContain('秘密内容');
+  });
+
+  it('业务代码 rlog：下载前排队的补进来，之后直接写', () => {
+    rlog('typebar submit len=3');
+    const stop = startRunLog(window, { version: 't' });
+    rlog('typebar stored out=ok');
+    stop();
+    const log = readRunLog();
+    expect(log).toMatch(/app typebar submit len=3/);
+    expect(log).toMatch(/app typebar stored out=ok/);
+  });
+
+  it('网络请求记方法、路径（不带参数）、状态；失败记 FAIL', async () => {
+    const orig = window.fetch;
+    let fail = false;
+    window.fetch = vi.fn(async () => {
+      if (fail) throw new TypeError('net');
+      return new Response('', { status: 403 });
+    }) as typeof fetch;
+    try {
+      const stop = startRunLog(window, { version: 't' });
+      await window.fetch('/sb/rest/v1/notes?select=secret', { method: 'POST' });
+      fail = true;
+      await expect(window.fetch('/sb/x')).rejects.toThrow();
+      stop();
+      const log = readRunLog();
+      expect(log).toMatch(/net POST \/sb\/rest\/v1\/notes 403 \d+ms/);
+      expect(log).toMatch(/net GET \/sb\/x FAIL TypeError/);
+      expect(log).not.toContain('secret');
+    } finally {
+      window.fetch = orig;
+    }
+  });
+
+  it('console.error 记下来，原来的照样调用；停止后还原', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const stop = startRunLog(window, { version: 't' });
+    console.error(new Error('bad thing'));
+    stop();
+    expect(readRunLog()).toMatch(/console\.error Error: bad thing/);
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it('跨冷启动保留旧日志，超过 MAX_LINES 丢最旧的', () => {
+    localStorage.setItem(OUT_KEY, Array.from({ length: MAX_LINES + 50 }, (_, i) => `old${i}`).join('\n'));
+    startRunLog(window, { version: 'v2' })();
+    const lines = readRunLog().split('\n');
+    expect(lines.length).toBeLessThanOrEqual(MAX_LINES);
+    expect(lines.some((l) => l.includes('v=v2'))).toBe(true);
+    expect(lines[0]).not.toBe('old0');
+  });
+
+  it('describeEl 只给标签、type、testid / aria-label / id', () => {
+    const b = document.createElement('button');
+    b.textContent = '用户文字';
+    expect(describeEl(b)).toBe('button');
+    b.setAttribute('aria-label', '收起');
+    expect(describeEl(b)).toBe('button#收起');
+    expect(describeEl(null)).toBe('-');
+  });
+});

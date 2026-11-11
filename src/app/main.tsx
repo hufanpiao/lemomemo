@@ -59,15 +59,6 @@ import { GATE_LIMIT_MS, startRoot, watchCacheBlocked, withCrashFallback } from '
 import { AFTER_PAINT_NOTICE_AT, lazyLogUploader, loadAfterPaint, startAfterPaint, type AfterPaint } from './after-paint.ts';
 import { applyDocLocale } from '../platform/doc-locale.ts';
 
-/** 诊断页“Caret sync”开着没有（台账 Q-8 光标对齐带日志；只在非正式版用，读不到本机存储算关） */
-function caretLogWanted(): boolean {
-  try {
-    return localStorage.getItem('lemo-caret-sync') === '1';
-  } catch {
-    return false;
-  }
-}
-
 /** 界面语言（16.4）：缓存的 profiles.ui_locale → 本机选过的（pv-locale）→ 设备语言 → 中文；规则同 src/auth/main.tsx，多一层缓存的 profile */
 function applyLocale(boot: Pick<BootResult, 'profile'>): void {
   const cachedUi = boot.profile?.['ui_locale'];
@@ -93,10 +84,10 @@ if (gapFixWanted()) {
   startEarlyGapFix(nextFrame);
   void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));
 }
-// 台账 Q-8 光标对齐试验（非正式版，诊断页开关“Caret sync”，键名同 caret-sync.ts 的 ARM_KEY）：开关开着才下载 caret-sync.ts（是不是 iOS 主屏幕版在它里面判断，省首屏字节）（对齐本体在 caret-align.ts）。
-// 第一版试验（preview.267）光标归位了，但打字条掉进键盘下 62pt，这一版加了浮条补抬，真机过了再转正；正式构建靠 MODE 常量整块摇掉
-if (import.meta.env.MODE !== 'production' && caretLogWanted()) {
-  void import('../platform/caret-sync.ts').then((m) => m.startCaretSync());
+// 全局运行日志（负责人 11-11“以后所有的bug看log能不能解决”；非正式版一直开着，platform/run-log.ts，诊断页“Copy run log”）：
+// 动态下载不占首屏；正式构建靠 MODE 常量整块摇掉
+if (import.meta.env.MODE !== 'production') {
+  void import('../platform/run-log.ts').then((m) => m.startRunLog(window)).catch(() => undefined);
 }
 // R-371 冷启动时间线（非正式版，诊断页开关“Timeline next launch”）：开着才下载 platform/vh-diag-boot.ts 记一次；键名同 vh-timeline.ts 的 ARM_KEY。
 // 正式构建靠 MODE 常量整块摇掉

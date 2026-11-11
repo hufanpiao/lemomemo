@@ -86,7 +86,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/core/manifest-source.ts': '完整清单快照：和 rows.ts 一起在 loadRowSchemas 里按需加载（首屏瘦身 11-05，首屏建本机仓只读 manifest-sync.gen.ts）',
   'src/platform/desktop.ts': '只在 exe（Tauri）里加载，网页版不下载',
   'src/platform/vh-diag-boot.ts': 'R-371 冷启动时间线入口：只在非正式版、诊断页时间线开关打开时才在冷启动后下载，默认不下载；正式构建整块摇掉（vh-timeline.ts 由它静态引入，不在 main.tsx 里单独 import()）',
-  'src/platform/caret-sync.ts': '台账 Q-8 光标偏位试验：只在非正式版、诊断页“Caret sync”开关打开时才在冷启动下载，默认不下载；正式构建整块摇掉',
+  'src/platform/run-log.ts': '全局运行日志（11-11）：只在非正式版、首屏画完后动态下载；正式构建整块摇掉',
   'src/platform/splash-probe.ts': '台账 Q-2 启动画面颜色诊断：只在非正式版、诊断页“Splash colors next launch”开关打开时才在冷启动下载一次，默认不下载；正式构建整块摇掉（涂色样式 splash-probe.css 由它静态引入）',
   'src/platform/vh-gapfix.ts': 'R-371 Gap fix（11-11 起默认开）：只在 iOS 主屏幕版冷启动时下载（判断在首屏的 vh-gapfix-gate.ts），等底栏挂上（今天页画好）才做；电脑、安卓、浏览器里打开都不下载',
   'src/app/CacheTooNewScreen.tsx': '只在本机库比 App 新（version_too_new）时整屏提示用',

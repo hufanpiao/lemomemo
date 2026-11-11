@@ -35,11 +35,11 @@ describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 pr
       vv.height = h;
       handlers.get('resize')?.();
     };
-    return { set, w, attrs, style, docH, setEditing: (v: boolean) => (editing = v) };
+    return { set, w, attrs, style, docH, vv, setInner: (h: number) => (inner = h), setEditing: (v: boolean) => (editing = v) };
   };
 
   it('输入框聚焦、innerHeight 956→542：算键盘弹着（高 414），--kb 不写（布局视口下沿就是键盘上沿），根节点打 data-kbo；收起时 data-kbo 马上拿掉，回到整屏才对订阅者报收起（Q-13）', () => {
-    const { set, w, attrs, style } = mk();
+    const { set, w, attrs, style, setEditing } = mk();
     const fn = vi.fn();
     w.watch(fn);
     set(542);
@@ -47,6 +47,7 @@ describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 pr
     expect(w.isOpen()).toBe(true);
     expect(attrs.get('data-kbo')).toBe('1');
     expect(style.setProperty).not.toHaveBeenCalled();
+    setEditing(false);
     set(895);
     expect(fn).not.toHaveBeenCalledWith(false, 0);
     expect(w.isOpen()).toBe(true);
@@ -59,10 +60,11 @@ describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 pr
   it('Q-13 收起后暂缓：innerHeight 一直停在 895（Gap fix 关着等），最多 HOLD_MS 就报收起', () => {
     vi.useFakeTimers();
     try {
-      const { set, w } = mk();
+      const { set, w, setEditing } = mk();
       const fn = vi.fn();
       w.watch(fn);
       set(542);
+      setEditing(false);
       set(895);
       expect(fn).not.toHaveBeenCalledWith(false, 0);
       vi.advanceTimersByTime(HOLD_MS - 1);
@@ -198,6 +200,35 @@ describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 pr
     vv.height = 800;
     handlers.get('resize')?.();
     expect(attrs.has('data-kbo')).toBe(false);
+  });
+  it('负责人 11-11“底栏焊死在下面不动”：可视区被滚下去（inner=941、vv=542、top=399，量出键盘 0）时，只要光标在输入框里照样算弹着、打 data-kbo；离开输入框才报收起', () => {
+    const { w, attrs, docH, setEditing, vv, setInner } = mk();
+    const fn = vi.fn();
+    w.watch(fn);
+    setInner(941);
+    vv.height = 542;
+    vv.offsetTop = 399;
+    docH.get('focusin')?.();
+    expect(w.isOpen()).toBe(true);
+    expect(attrs.get('data-kbo')).toBe('1');
+    expect(fn).toHaveBeenLastCalledWith(true, 0);
+    setEditing(false);
+    docH.get('focusout')?.();
+    expect(attrs.has('data-kbo')).toBe(false);
+    expect(w.isOpen()).toBe(false);
+  });
+
+  it('光标在输入框里就藏底栏只在主屏幕版 iPhone：浏览器里、非 iPhone 照旧按量出来的高度', () => {
+    for (const o of [{ standalone: false }, { phone: false }]) {
+      const { w, attrs, docH, vv, setInner } = mk(o);
+      w.watch(vi.fn());
+      setInner(941);
+      vv.height = 542;
+      vv.offsetTop = 399;
+      docH.get('focusin')?.();
+      expect(w.isOpen()).toBe(false);
+      expect(attrs.has('data-kbo')).toBe(false);
+    }
   });
 });
 

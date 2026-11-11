@@ -64,8 +64,7 @@ html[data-app] {
 /* 键盘弹着（<html data-kbo>，platform/viewport.ts，Q-9 11-11）：底栏、“＋”这时藏着（FA-7 第 3 项），浮条（打字条、随手记输入行等）直接贴键盘上沿，
    不再留出底栏那 118px。浏览器里 --kb 是键盘压住的高度；iOS 主屏幕版键盘把布局视口本身压矮，布局视口下沿就是键盘上沿，--kb 不写（0） */
 :root[data-kbo] {
-  /* --caret-lift：台账 Q-8 光标对齐试验对齐后布局视口比可视区多出来的那段（platform/caret-align.ts 写，平时没有） */
-  --dock-bottom: calc(var(--kb, 0px) + var(--caret-lift, 0px));
+  --dock-bottom: var(--kb, 0px);
 
   /* 随手记底部输入行键盘弹着时离辅助条再高一点（负责人 11-11“随手记输入框再距离辅助框再高一点”，原来只隔约 12pt） */
   --inrow-kb-gap: 12px;
