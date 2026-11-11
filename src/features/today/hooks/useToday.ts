@@ -12,8 +12,6 @@ import { clock } from '../../../platform/clock.ts';
 import { setDeleted, setTodoDone, type TrashTable } from '../data/today-actions.ts';
 import { eventsOn, lateTodos, nowCard, todayTodos, tomorrowOf, type Row } from '../data/today-model.ts';
 
-export type { ActionResult };
-
 export function useToday() {
   const events = useCollection<Row>('events');
   const todos = useCollection<Row>('todos');

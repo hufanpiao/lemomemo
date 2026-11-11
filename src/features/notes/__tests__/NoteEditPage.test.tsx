@@ -209,6 +209,49 @@ describe('TC-B4-14：正文连续打字（第一个 patch 在途）不生成冲�
   });
 });
 
+describe('标题框回车和输入法组字（Q-21）', () => {
+  // 标题框（DraftArea single）回车 = 失焦并存；中文、韩文输入法组字时的回车是选字，这时失焦会丢掉还没上屏的字。
+  // 只断言“马上”的结果：0.8 秒的停笔计时还没到，这时能存上的只有失焦
+  const typed = async (b: Awaited<ReturnType<typeof boot>>) => {
+    await seed(b);
+    open(`#/note/${ID}`);
+    const el = screen.getByTestId('note-edit-title');
+    act(() => el.focus());
+    fireEvent.change(el, { target: { value: '首尔林银杏黄了 한글' } });
+    return el;
+  };
+
+  it('组字中按回车（isComposing）：不失焦、不存', async () => {
+    const b = await boot();
+    const el = await typed(b);
+    await act(async () => {
+      fireEvent.keyDown(el, { key: 'Enter', isComposing: true });
+    });
+    expect(document.activeElement).toBe(el);
+    expect(await patches(b)).toHaveLength(0);
+  });
+
+  it('Safari 选字那一下回车 keyCode 229（isComposing 为假）：同样不失焦、不存', async () => {
+    const b = await boot();
+    const el = await typed(b);
+    await act(async () => {
+      fireEvent.keyDown(el, { key: 'Enter', keyCode: 229 });
+    });
+    expect(document.activeElement).toBe(el);
+    expect(await patches(b)).toHaveLength(0);
+  });
+
+  it('组完字再按回车（keyCode 13）：失焦并存', async () => {
+    const b = await boot();
+    const el = await typed(b);
+    await act(async () => {
+      fireEvent.keyDown(el, { key: 'Enter', keyCode: 13 });
+    });
+    expect(document.activeElement).not.toBe(el);
+    await waitFor(async () => expect((await patches(b)).map((p) => p.data['title'])).toEqual(['首尔林银杏黄了 한글']), { timeout: 2000 });
+  });
+});
+
 describe('补存：没停笔就离开也不丢字（代码审 可选 2）', () => {
   // 停笔计时用假时钟、全程不推进：800 ms 的计时器永远不会自己触发，能存上的只有补存（去掉任一处补存，对应那条就会红）。
   // 只假 setTimeout / clearTimeout，IndexedDB 照常走；不用 waitFor（它自己也靠 setTimeout），改为让出几轮 setImmediate 等写入落地

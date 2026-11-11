@@ -38,10 +38,12 @@ export function EditShell({ kind, backLabel, onBack, rec, own, prefix, children 
           {rec.status !== 'idle' || !readonly ? st.text : ''}
         </p>
       </div>
-      {/* 只读：中性浅灰条（quiet，和今天页、日历页的重复事项横幅同款）；已删除：红条 */}
-      {readonly || deleted ? (
-        <p className={styles.notice} data-tone={readonly ? 'quiet' : undefined} role="alert" data-testid="edit-notice">
-          {readonly ? <ReadonlyNotice testId={`${prefix}-update`} /> : <DeletedNotice onUndo={() => del(false)} testId={`${prefix}-undo`} />}
+      {/* 只读：中性浅灰条（ReadonlyNotice 自己画）；已删除：红条 */}
+      {readonly ? (
+        <ReadonlyNotice role="alert" testId="edit-notice" updateTestId={`${prefix}-update`} className={styles.roNotice} />
+      ) : deleted ? (
+        <p className={styles.notice} role="alert" data-testid="edit-notice">
+          <DeletedNotice onUndo={() => del(false)} testId={`${prefix}-undo`} />
         </p>
       ) : null}
       {children}

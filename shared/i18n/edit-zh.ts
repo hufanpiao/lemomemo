@@ -8,7 +8,6 @@ export const editZh = {
   'edit.st.unavailable': '这台设备现在存不了，内容还在这里，稍后再改一次',
   'edit.st.readonly': '这条要新版本才能修改',
   'edit.st.missing': '找不到这一条，可能已在别的设备上删除',
-  'edit.update': '更新',
   'edit.delete': '删除',
   'edit.deleted': '已删除。30 天内可以在“最近删除”里找回。',
   'edit.undo': '撤销',

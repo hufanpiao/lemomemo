@@ -18,6 +18,14 @@ afterEach(() => {
 });
 
 describe('最近删除 ‹ 返回', () => {
+  it('按钮写“‹ 返回”，读屏名只读“返回”（“‹”是 aria-hidden，同 kit 的 BackLink）', () => {
+    window.history.replaceState(null, '', '/app/#/trash');
+    render(<RecentlyDeletedPage />);
+    const back = screen.getByTestId('trash-back');
+    expect(back.textContent).toBe('‹ 返回');
+    expect(screen.getByRole('button', { name: '返回' })).toBe(back);
+  });
+
   it('恢复后只剩这一页（深度 1、上一次载入的编号）：原地换成设置，不调用 history.back()', async () => {
     window.history.replaceState({ lemoDepth: 1, lemoDoc: 'old-load' }, '', '/app/#/trash');
     render(<RecentlyDeletedPage />);

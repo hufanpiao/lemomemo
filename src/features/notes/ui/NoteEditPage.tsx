@@ -107,11 +107,7 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
         {readonly ? '' : st.text}
       </p>
       {/* 只读：和“已删除 · 撤销”同一种提示行，一句话加“更新”（同待办编辑页） */}
-      {readonly ? (
-        <p className={styles.roNotice} role="status" data-testid="note-edit-ro">
-          <ReadonlyNotice plain testId="note-edit-update" />
-        </p>
-      ) : null}
+      {readonly ? <ReadonlyNotice plain role="status" testId="note-edit-ro" updateTestId="note-edit-update" className={styles.roNotice} /> : null}
       {ed.deleted ? (
         <p className={styles.notice} role="alert" data-testid="edit-notice">
           <DeletedNotice onUndo={() => void ed.setDeleted(false)} testId="note-edit-undo" />

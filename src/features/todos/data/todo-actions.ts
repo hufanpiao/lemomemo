@@ -8,8 +8,6 @@ import { saveDeleted, savePatch, type SaveOutcome } from '../../../core/edit-sav
 import { todoRemindAfter, todoRemindFields, todoRemindFlag, todoRemindPendingBefore } from '../../../core/remind-flag.ts';
 import type { Row } from './todo-list.ts';
 
-export type { SaveOutcome } from '../../../core/edit-save.ts';
-
 const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
 
 /** 打勾 / 取消打勾的 remind 标记：“其余重算”，传这一行的 remind_at；改之后会响，或者改之前还会响（规则在 core/remind-flag.ts） */

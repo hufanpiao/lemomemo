@@ -43,9 +43,6 @@ const ICONS: Record<TabName, string> = {
   notes: 'M15 5l4 4-10 10H5v-4z',
 };
 
-// 电脑版侧栏（D5，kit/hooks/useMedia.ts 的 MQ_SIDEBAR）：侧栏里“＋”画在最上面，
-// DOM 也把它放到 nav 前面，Tab 顺序和画面上下一致（设计复审三 S2）；窄屏“＋”在底栏右边，DOM 在 nav 后面
-
 export interface GlassBarProps {
   active: TabName;
   /** “＋”：按页新建（今天、日历新建日程，待办新建待办）；不传就不出“＋” */
@@ -67,6 +64,8 @@ export function GlassBar({ active, add, later = (fn) => fn() }: GlassBarProps) {
   useLayoutEffect(() => dropEl.current?.style.setProperty('--i', String(i)), [i]);
   const navEl = useRef<HTMLElement>(null);
   const gelEl = useRef<HTMLSpanElement>(null);
+  // 电脑版侧栏（D5，kit/hooks/useMedia.ts 的 MQ_SIDEBAR）：侧栏里“＋”画在最上面，
+  // DOM 也把它放到 nav 前面，Tab 顺序和画面上下一致（设计复审三 S2）；窄屏“＋”在底栏右边，DOM 在 nav 后面
   const wide = useMedia(MQ_SIDEBAR);
   const [Fx, setFx] = useState<ComponentType<GlassBarFxProps> | null>(() => loadedFx);
   // 只有这次挂载以后才异步到的那一次（启动时）实色带、渐隐层才淡入；用缓存同步画出来的不淡入

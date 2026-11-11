@@ -54,43 +54,8 @@
   margin-top: 8px;
 }
 
-/* 原来这里有一条深色下给“没有自己 class 的按钮”兜底的 :where(...) button 规则（B2 A5）：编辑页的按钮都换成了 FormButton、
-   “更新”有下面 .notice[data-tone='quiet'] > button 自己的样式，B2-UI-a U3-4 删掉了。
-   只读行的提示（noticeTone="quiet"，FA-2 视觉验收第二轮）：不是出错，用中性浅灰条，和今天页、日历页的重复事项横幅同款
-   （ReadonlyRow.module.css 的 .banner、.update）；“更新”是带下划线的文字按钮，浅色、深色一样 */
-.notice[data-tone='quiet'] {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 4px 0 12px;
-  border-radius: var(--r-sm);
-  background: var(--panel-2);
-  color: var(--text-2);
-  font-size: var(--fs-13);
+/* 只读提示的外边距（灰条本身在 ReadonlyRow.module.css 的 .banner，EditNotices.tsx 的 ReadonlyNotice 画） */
+.roNotice {
+  margin: 0 0 12px;
 }
 
-.notice[data-tone='quiet'] > span {
-  flex: 1;
-  min-width: 0;
-  margin: 8px 0;
-}
-
-.notice[data-tone='quiet'] > button {
-  flex: none;
-  min-width: var(--hit);
-  min-height: var(--hit);
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--r-md);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.notice[data-tone='quiet'] > button:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}

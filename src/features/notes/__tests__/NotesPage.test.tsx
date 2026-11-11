@@ -9,6 +9,7 @@ import { coldStart, getBoot, resetBootForTest } from '../../../core/boot.ts';
 import { fakeIndexedDB } from '../../../core/__tests__/idb-fake.ts';
 import type { ServerRow } from '../../../core/cache.ts';
 import { clearAllCollections, collection } from '../../../core/store.ts';
+import { NOTES_INPUT_ID } from '../../../kit/state/new-item.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import NotesPage from '../ui/NotesPage.tsx';
@@ -238,7 +239,7 @@ describe('视觉验收 A1 补的几处', () => {
   it('输入框带 NOTES_INPUT_ID（随手记页的“＋”按它聚焦，R-380）；右上角头像是设置入口', async () => {
     await boot();
     open();
-    expect(screen.getByTestId('notes-input').id).toBe('notes-input'); // 和 app/tab-of.ts 的 NOTES_INPUT_ID 一致（app/__tests__/tab-of.test.ts 核两边）
+    expect(screen.getByTestId('notes-input').id).toBe(NOTES_INPUT_ID); // App 的“＋”按这个 id 找输入行（R-380）
     expect(screen.getByTestId('notes-settings').getAttribute('href')).toContain('#/settings');
   });
 

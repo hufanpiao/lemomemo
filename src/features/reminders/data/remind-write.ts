@@ -10,8 +10,6 @@
 import { savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
 import type { Reminder } from './reminder-model.ts';
 
-export type { SaveOutcome } from '../../../core/edit-save.ts';
-
 const tableOf = (r: Pick<Reminder, 'kind'>): 'events' | 'todos' => (r.kind === 'event' ? 'events' : 'todos');
 
 /** “知道了”的 patch */

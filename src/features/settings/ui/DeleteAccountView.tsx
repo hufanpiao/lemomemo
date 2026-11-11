@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
-import { Pressable } from '../../../motion/components.ts';
+import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { useDeleteAccount, type AccountActionDeps } from '../hooks/useAccountActions.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
 import { accountErrText } from './AccountSection.tsx';
@@ -50,9 +50,7 @@ export function DeleteAccountView({ account, pendingCount, now, onBack }: Delete
   return (
     <>
       <header className={styles.top}>
-        <Pressable className={styles.backBtn} onClick={onBack} disabled={busy} data-testid="settings-delete-back">
-          <span aria-hidden="true">‹</span> {t('settings.delete.back', {})}
-        </Pressable>
+        <BackLink label={t('settings.delete.back', {})} onBack={onBack} disabled={busy} testId="settings-delete-back" />
         <h1 className={styles.title} ref={titleRef} tabIndex={-1}>
           {t('settings.account.delete', {})}
         </h1>

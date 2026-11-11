@@ -17,8 +17,6 @@ export type ListMsgKey = keyof typeof listZh & string;
 
 export const useListT = makeUseT({ zh: listZh, ko: listKo });
 
-export type { ActionResult };
-
 export function useTodoList() {
   const rows = useCollection<Row>('todos');
   const [project, setProject] = useState<string | null>(null);

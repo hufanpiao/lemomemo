@@ -20,7 +20,7 @@ export function RepeatBanner({ onUpdate, testId }: { onUpdate(): void; testId?: 
   const n = useRepeatPending();
   if (n <= 0) return null;
   return (
-    <div className={styles.banner} data-testid={testId}>
+    <div className={`${styles.banner} ${styles.repeat}`} data-testid={testId}>
       <p className={styles.text}>{t('ro.repeat', { n })}</p>
       <button type="button" className={styles.update} onClick={onUpdate} data-testid={testId ? `${testId}-update` : undefined}>
         {t('ro.update', {})}

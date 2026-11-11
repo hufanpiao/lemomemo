@@ -9,8 +9,6 @@ import { saveDeleted, savePatch, type SaveOutcome } from '../../../core/edit-sav
 import { remindLive, rowRemindPending, todoRemindAfter, todoRemindFields, todoRemindFlag, todoRemindPendingBefore } from '../../../core/remind-flag.ts';
 import type { Row } from './today-model.ts';
 
-export type { SaveOutcome } from '../../../core/edit-save.ts';
-
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
 const isDel = (v: unknown): boolean => v !== null && v !== undefined;

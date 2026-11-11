@@ -16,7 +16,8 @@
 // • 这一批不做：隐私记那一行（B5）、合并分类提示（S7）
 // • 插图（S3）：卡片顶上放第一张图（多张标“+N”），列表行有图时在“⋯”前放缩略图；输入行只有“图片”（拍照在编辑页）
 // • 只读行（S12，R-148，TC-B4-09；照待办页）：带认不出的值的行（core 的 readonlyIds）标“要新版本”（单独一行：瀑布流在正文下、底行上，列表在摘要行下），菜单里的“删除”变淡；点开、删除统一拦下
-//   （不进编辑器、不开抽屉、不写），出 kit 的“这条要新版本才能修改 · 更新”（状态在 hooks/useNotesToast.ts）。左滑、多选还没有入口，以后加时同样先判只读
+//   （不进编辑器、不开抽屉、不写），出 kit 的“这条要新版本才能修改 · 更新”（删除撤销、只读拦截、出错条走 kit 的 useListActions，插图提示和输入行上移在 hooks/useNotesToast.ts）。
+//   左滑、多选还没有入口，以后加时同样先判只读
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
 import { rlog } from '../../../platform/run-log-api.ts';
 import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
@@ -24,6 +25,7 @@ import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
+import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { NOTES_INPUT_ID } from '../../../kit/state/new-item.ts';
 import { ReadonlyMark, ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
@@ -41,7 +43,8 @@ import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, PickButtons, useAddImage, type ImgMsgKey } from './NoteImages.tsx';
 import styles from './NotesPage.module.css';
 
-type Toast = { kind: 'undo'; id: string } | { kind: 'error' } | { kind: 'img'; key: ImgMsgKey; trash: boolean };
+/** 随手记页自己另加的提示条：插图提示（撤销条、出错条在 kit 的 useListActions 里） */
+type ImgTip = { kind: 'img'; key: ImgMsgKey; trash: boolean };
 
 /** 分类色点（只在有颜色时画） */
 const Dot = ({ color, big }: { color: string | null; big?: boolean }) =>
@@ -60,35 +63,28 @@ function NotesList() {
   // 有侧栏的宽窗口（和 GlassBar 侧栏同一个断点）：点开随手记用右边抽屉，不换页
   const wide = useMedia(MQ_SIDEBAR);
   const l = useNoteList();
-  const { toast, setToast, guard, isRo, block, show, report, up } = useNotesToast<Toast>({ kind: 'error' }, (x) => x.kind === 'undo');
+  const a = useListActions<ImgTip>('notes', { remove: l.remove });
+  const { g, isRo, report } = a;
+  const up = useNotesToast(g);
   const [menu, setMenu] = useState<string | null>(null);
   const [just, setJust] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
 
-  // 出错条、插图提示 4 秒后自己收起（带“最近删除”入口的留 8 秒，来得及点）
-  useEffect(() => {
-    if (toast === null || toast.kind === 'undo') return undefined;
-    const id = setTimeout(() => setToast((x) => (x === toast ? null : x)), toast.kind === 'img' && toast.trash ? 8000 : 4000);
-    return () => clearTimeout(id);
-  }, [toast, setToast]);
   // 窗口缩到没有侧栏：抽屉收起（窄窗口点开走编辑页）
   useEffect(() => {
     if (!wide) setDrawer(null);
   }, [wide]);
 
   const open = (id: string) => {
-    if (isRo(id)) block();
+    if (isRo(id)) g.block();
     else if (wide) setDrawer(id);
     else void navigate('note', id);
   };
-  const del = async (id: string) => {
+  const del = (id: string) => {
     setMenu(null);
-    if (isRo(id)) return block();
-    const r = await l.remove(id, true);
-    if (r === 'ok') show({ kind: 'undo', id });
-    else report(r);
+    void a.del(id);
   };
-  const addImage = useAddImage(l, setJust, report, (m) => show({ kind: 'img', ...m }));
+  const addImage = useAddImage(l, setJust, report, (m) => g.show({ kind: 'img', ...m }));
   const add = async (text: string): Promise<boolean> => {
     const { result, id } = await l.add(text);
     if (result === 'ok') setJust(id);
@@ -105,7 +101,7 @@ function NotesList() {
     return g === 'today' ? t('notes.at.today', { t: hm }) : g === 'yesterday' ? t('notes.at.yesterday', { t: hm }) : fmtDay(it.date, locale, 'monthDay');
   };
 
-  const more = (it: NoteItem) => <MoreMenu id={it.id} ro={isRo(it.id)} open={menu === it.id} onOpenChange={(o) => setMenu(o ? it.id : null)} onDelete={() => void del(it.id)} />;
+  const more = (it: NoteItem) => <MoreMenu id={it.id} ro={isRo(it.id)} open={menu === it.id} onOpenChange={(o) => setMenu(o ? it.id : null)} onDelete={() => del(it.id)} />;
   const aiMark = (it: NoteItem) => (it.ai ? <AiMark id={it.id} /> : null);
   const onMenuKey = (id: string) => (e: { preventDefault(): void }) => {
     e.preventDefault();
@@ -192,22 +188,13 @@ function NotesList() {
 
       <div className={up ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
         <InputRow up={up} onAdd={add} onImage={addImage} />
-        {toast !== null && toast.kind !== 'undo' ? <DockTip toast={toast} /> : null}
+        {g.toast !== null && g.toast.kind !== 'undo' ? <DockTip toast={g.toast} /> : null}
       </div>
 
       {drawer !== null ? <NoteDrawer id={drawer} onClose={() => setDrawer(null)} /> : null}
 
-      {toast?.kind === 'undo' ? (
-        <UndoToast
-          key={toast.id}
-          message={t('notes.deleted', {})}
-          undoLabel={t('notes.undo', {})}
-          onUndo={() => void l.remove(toast.id, false).then(report)}
-          onClose={() => setToast((x) => (x === toast ? null : x))}
-          data-testid="notes-toast"
-        />
-      ) : null}
-      <ReadonlyToast guard={guard} message={tEdit('edit.st.readonly', {})} testId="notes-ro-toast" />
+      {g.toast?.kind === 'undo' ? <UndoBar key={g.toast.id} toast={g.toast} onUndo={a.undo} onClose={g.dismiss} /> : null}
+      <ReadonlyToast guard={g} message={tEdit('edit.st.readonly', {})} testId="notes-ro-toast" />
     </main>
   );
 }
@@ -226,8 +213,16 @@ function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: ReactNode })
   );
 }
 
+/** 页底的撤销条（换一条删除就换一个 key，重新计时） */
+function UndoBar({ toast, onUndo, onClose }: { toast: { kind: 'undo'; id: string }; onUndo(id: string): void; onClose(x: { kind: 'undo'; id: string }): void }) {
+  const t = useNotesT();
+  return (
+    <UndoToast message={t('notes.deleted', {})} undoLabel={t('notes.undo', {})} onUndo={() => onUndo(toast.id)} onClose={() => onClose(toast)} data-testid="notes-toast" />
+  );
+}
+
 /** 输入行上面的提示条：没保存上，或插图提示（空间满了的带“最近删除”入口） */
-function DockTip({ toast }: { toast: Exclude<Toast, { kind: 'undo' }> }) {
+function DockTip({ toast }: { toast: { kind: 'error' } | ImgTip }) {
   const t = useNotesT();
   return (
     <p className={styles.error} role="alert" data-testid={toast.kind === 'error' ? 'notes-error' : 'notes-img-tip'}>

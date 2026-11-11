@@ -299,42 +299,8 @@
   opacity: 0.5;
 }
 
-/* 只读提示（视觉验收 11-11）：不是出错，和待办编辑页只读同款（kit EditShell.module.css 的 .notice[data-tone='quiet']，FA-2 视觉验收第二轮）——
-   中性浅灰条，“更新”是放在最右边、带下划线的文字按钮 */
+/* 只读提示的外边距（灰条本身在 kit 的 ReadonlyRow.module.css 的 .banner，EditNotices.tsx 的 ReadonlyNotice 画，和待办编辑页同一条） */
 .roNotice {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin: 8px 0 0;
-  padding: 0 4px 0 12px;
-  border-radius: var(--r-sm);
-  background: var(--panel-2);
-  color: var(--text-2);
-  font-size: var(--fs-13);
 }
 
-.roNotice > span {
-  flex: 1;
-  min-width: 0;
-  margin: 8px 0;
-}
-
-.roNotice > button {
-  flex: none;
-  min-width: var(--hit);
-  min-height: var(--hit);
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--r-md);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.roNotice > button:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}

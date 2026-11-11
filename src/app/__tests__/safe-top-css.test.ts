@@ -48,15 +48,14 @@ describe('顶部安全区底色条', () => {
     const banner = z(readFileSync('src/app/UpdateBanner.module.css', 'utf8'), '.banner');
     const scrim = z(dialog, '.scrim');
     const content = z(dialog, '.dock'); // B2（UI-4 L-2）：定位和层级挪到滑动的那一层 .dock，.content 只管外观
-    // 被挡住、版本太新等整屏提示共用 CacheTooNewScreen.module.css
+    // 被挡住、版本太新等整屏提示共用 CacheTooNewScreen.module.css（被挡住那一屏真的引它，换了样式文件这里要跟着改）
     const blocked = z(readFileSync('src/app/CacheTooNewScreen.module.css', 'utf8'), '.screen');
-    const tooNew = blocked;
+    expect(readFileSync('src/app/CacheBlockedScreen.tsx', 'utf8')).toMatch(/from '\.\/CacheTooNewScreen\.module\.css'/);
     expect(strip).toBe(1);
     expect(banner).toBeGreaterThan(strip);
     expect(scrim).toBeGreaterThan(banner);
     expect(content).toBe(scrim);
     expect(blocked).toBe(100);
-    expect(tooNew).toBe(100);
     expect(scrim).toBeLessThan(blocked);
     // SAFETOP-sugg ①：kit Popover（日历年月选择器）经 Portal 挂到 body，在弹层之上、整屏提示之下
     const popover = z(readFileSync('src/kit/components/Popover.module.css', 'utf8'), '.content');

@@ -47,7 +47,7 @@ export default function TodosPage() {
   const l = useTodoList();
   // 打勾先留住按下之前的分组 --dur-ui（圆圈在原地填满，17.1 勾选完成）；只读行统一拦下；撤销条、出错条也在 a.g 里（kit 的 useListActions）
   const hv = useHoldView(l.groups);
-  const a = useListActions(hv, { toggle: l.toggleDone, remove: l.remove });
+  const a = useListActions('todos', { toggle: l.toggleDone, remove: l.remove }, hv);
   const { isRo, tick, shown, del } = a;
   const open = (id: string) => (isRo(id) ? a.g.block() : void navigate('todo', id));
 

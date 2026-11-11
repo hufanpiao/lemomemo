@@ -19,6 +19,7 @@ import { backOrReplace, navigateSub } from '../../../app/router-sub.ts';
 import { CalendarSettings } from '../../calendar/index.ts';
 import { PlusSettings } from '../../plus/index.ts';
 import { RemindSettings } from '../../reminders/index.ts';
+import backLink from '../../../kit/components/BackLink.module.css';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { useSettingsPage, type ExitNotice, type SettingsDeps } from '../hooks/useSettingsPage.ts';
@@ -206,7 +207,7 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
       <>
         <header className={styles.top}>
           <a
-            className={styles.back}
+            className={backLink.back}
             href={hrefOf('today')}
             // 按层级回今天（R-372）：从今天进来的退一步，不新压一条；直接打开的原地换；新标签页打开照常
             onClick={(e) => plainClick(e) && backTo('today')}

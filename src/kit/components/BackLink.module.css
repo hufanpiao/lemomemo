@@ -1,4 +1,4 @@
-/* 返回按钮（kit 的 BackLink.tsx，架构 10.1 唯一出口；B2-UI-a U3-6 的统一写法）：
+/* 返回按钮（kit 的 BackLink.tsx，架构 10.1 唯一出口；设置首页的“‹ 今天”链接也直接用 .back）：
    “‹ 文字”15px 正文色、按钮自己的字体（font: inherit，防 Windows 版 webkit 落到宋体）；左边不留内边距，字和下面正文左边对齐；
    点击区不够 44 × 44 的用 ::after 以按钮中心外扩（同 Settings.module.css 的 .segBtn::after），不挪位置 */
 .back {

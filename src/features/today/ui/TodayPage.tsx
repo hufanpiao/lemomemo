@@ -94,7 +94,7 @@ export default function TodayPage() {
   // 撤销条、出错条也在 g 里（kit 的 useListActions）
   const hv = useHoldView({ late: d.late, events: d.events, todos: d.todos });
   const v = hv.view;
-  const a = useListActions(hv, { toggle: d.toggleDone, remove: (id, deleted) => d.remove('todos', id, deleted) });
+  const a = useListActions('todos', { toggle: d.toggleDone, remove: (id, deleted) => d.remove('todos', id, deleted) }, hv);
   const { g, tick, shown, del } = a;
   const roT = a.isRo;
   const open = (kind: 'event' | 'todo', id: string) => (g.isRo(kind, id) ? g.block() : void navigate(kind, id));
@@ -130,7 +130,9 @@ export default function TodayPage() {
             <UnsyncedRemindHint />
           </Suspense>
         </QuietBoundary>
-        <MicDeniedNote />
+        <QuietBoundary name="mic-denied">
+          <MicDeniedNote />
+        </QuietBoundary>
       </div>
 
       <NowCard card={d.card} now={d.now} tz={d.tz} today={d.today} tomorrowFirst={d.tomorrowFirst} />
