@@ -39,12 +39,10 @@ const fmt = (vs: Violation[]): string => vs.map((v) => `${v.id}（${v.impact ?? 
 const SEVERE = new Set(['serious', 'critical']);
 
 /**
- * 首轮扫出、还没修的 serious（11-11 QA 交主持人，按主持人要求不改源码）：页面名 → 暂时放过的规则 id；放过的出现时记进注解 axe-known。
- * 不强求一定出现：农历是异步加载的，加载完以后看得见的字才和 aria-label 对不上，扫的时机不同结果不同。修好以后删掉这一行。
- * • 月历、周视图 label-content-name-mismatch：每天那一格的按钮 aria-label 是“10月26日，周一，农历九月十七，没有安排”这种写法，
- *   看得见的字（日期数字、周几、农历“十七”）连起来不在可访问名称里（WCAG 2.5.3 Label in Name，语音控制按看到的字点不中）
+ * 扫出来还没修的 serious：页面名 → 暂时放过的规则 id；放过的出现时记进注解 axe-known。修好以后删掉那一行。
+ * 现在没有：月历、周视图日期格的 label-content-name-mismatch（WCAG 2.5.3）11-11 已修，名字以看得见的字开头（ui/cal-ui.ts labelInName）
  */
-const KNOWN: Readonly<Record<string, string>> = { 月历: 'label-content-name-mismatch', 周视图: 'label-content-name-mismatch' };
+const KNOWN: Readonly<Record<string, string>> = {};
 
 /** 扫一页：serious、critical 判失败（KNOWN 里登记的放过、记注解）；其余写进注解（报告里看得到，不挡） */
 async function check(page: Page, name = ''): Promise<void> {

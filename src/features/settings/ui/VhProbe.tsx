@@ -4,13 +4,18 @@
 // 冷启动时间线（R-371，11-10，platform/vh-timeline.ts）：再多一排——“Timeline next launch: OFF/ON”开关（存本机，下次冷启动记 3 分钟，开始记就自动关）、
 // “Copy timeline”整段复制上一次记下的时间线；下面显示那段时间线（按“Copy timeline”时重新读本机，记着的时候也能拿到最新的）
 // 启动画面颜色诊断（台账 Q-2，platform/splash-probe-arm.ts）：再一排“Splash colors next launch: OFF/ON”开关（存本机，下次冷启动涂色 20 秒，开始涂就自动关）
-import { useState } from 'react';
+// 键盘上方输入辅助条诊断（台账 Q-11，KbAccessoryProbe.tsx）：再一排“Keyboard bar test”，点了才下载测试层（React.lazy），A～H 八种输入写法逐个点
+import { lazy, Suspense, useState } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { runVhMethod, VH_METHODS } from '../../../platform/vh-probe.ts';
 import { gapFixOn, readGapFixLog, setGapFixOn } from '../../../platform/vh-gapfix.ts';
 import { readTimeline, setTimelineArmed, timelineArmed } from '../../../platform/vh-timeline.ts';
 import { setSplashProbeArmed, splashProbeArmed } from '../../../platform/splash-probe-arm.ts';
 import styles from './SettingsPage.module.css';
+
+// 顶层的 lazy() 打包器当有副作用不删，正式构建要靠 MODE 常量挡住，连同动态分包一起摇掉（check_no_probe 兜底）
+const KbAccessoryProbe = import.meta.env.MODE === 'production' ? null : lazy(() => import('./KbAccessoryProbe.tsx'));
+export const KB_TEST_LABEL = 'Keyboard bar test';
 
 export const TL_LABEL_ON = 'Timeline next launch: ON';
 export const TL_LABEL_OFF = 'Timeline next launch: OFF';
@@ -31,6 +36,7 @@ export function VhProbe() {
   const [gf, setGf] = useState(() => gapFixOn());
   const [sp, setSp] = useState(() => splashProbeArmed());
   const [gfLog, setGfLog] = useState(() => readGapFixLog());
+  const [kbTest, setKbTest] = useState(false);
   const [copied, setCopied] = useState<'' | 'ok' | 'fail'>('');
   const [gfCopied, setGfCopied] = useState<'' | 'ok' | 'fail'>('');
   /** 整段复制（按的时候重新读本机，记着的时候也拿最新的）；时间线、Gap fix 两个开关可以同时开，日志各复制各的 */
@@ -129,6 +135,16 @@ export function VhProbe() {
           {sp ? SP_LABEL_ON : SP_LABEL_OFF}
         </FormButton>
       </div>
+      <div className={`${styles.actions} ${styles.probeActions}`}>
+        <FormButton size="compact" data-testid="kbacc-probe-open" onClick={() => setKbTest(true)}>
+          {KB_TEST_LABEL}
+        </FormButton>
+      </div>
+      {kbTest && KbAccessoryProbe && (
+        <Suspense fallback={null}>
+          <KbAccessoryProbe onClose={() => setKbTest(false)} />
+        </Suspense>
+      )}
       {gfLog !== '' && (
         <pre className={styles.diag} data-testid="vh-gapfix-out">
           {gfLog}

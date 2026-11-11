@@ -9,8 +9,9 @@
 // • 电脑（宽屏）：7 列时间格（纵向时间轴，每小时 40 px），表头星期、日期、农历，顶部“全天”行放全天日程和当天截止的待办（○ 标题）；
 //   重叠的并排分列（buildWeek layout 'desk' 的 column / columns）；色块点了打开编辑页；点表头选中那一天
 // • 量宽：用回调 ref 量第一条轨道，翻周后轨道换了新元素会重新挂 ResizeObserver（代码审查 M1）
-// • 读屏：泳道按钮的名字是“10月19日，周一，今天，节日，共 3 项，有逾期的待办”；完整标题在下面的清单里
-import { useCallback, useEffect, useMemo, useState } from 'react';
+// • 读屏：泳道按钮的名字先按显示顺序念看得见的字（“周一 19 十七 会议 +1 3 逾”，WCAG 2.5.3，cal-ui.ts labelInName），
+//   再接“10月19日，今天，节日，共 3 项，有逾期的待办”（星期前面已经念过，不再重复）；完整标题在下面的清单里
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { weekdayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
 import { todoDate, type CalItems } from '../../../../shared/logic/calendar/cal-items.ts';
@@ -20,7 +21,7 @@ import { projectColorIndex, type ProjectColor } from '../../../../shared/logic/p
 import { axisFrac, axisTicks, phoneScale, weekHourRange, type HourRange } from './week-axis.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, holText, itemShort, weekdayKey, workdayA11y } from './cal-ui.ts';
+import { colorClass, holText, itemShort, labelInName, weekdayKey, workdayA11y } from './cal-ui.ts';
 import { DeskWeek } from './DeskWeek.tsx';
 
 /** 色块最短长度（px，5.12：约 28 px，视觉稿 --wmin） */
@@ -140,29 +141,39 @@ function Lane({
   const allDay = day?.allDay;
   const allDayIds = allDay?.itemIds.filter((_, i) => allDay.kinds[i] !== 'todo') ?? [];
   const allDayFirst = allDayIds[0];
-  const a11y = [
-    dateLabel(date, t),
-    t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) }),
-    ...(isToday ? [t('cal.a11y.todayMark', {})] : []),
-    ...hol.map((h) => (h.kind === 'work' ? workdayA11y(h.name, (name) => t('cal.a11y.workday', { name })) : h.name)),
-    total === 0 ? t('cal.a11y.none', {}) : t('cal.a11y.total', { n: total }),
-    ...(overdue ? [t('cal.a11y.overdue', {})] : []),
-  ].join(t('cal.a11y.sep', {}));
+  const wd = t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) });
+  const allDayText = allDayFirst === undefined ? '' : allDayIds.length === 1 ? itemShort(items, 'allDay', allDayFirst) : `${t('cal.allDay', {})} ${allDayIds.length}`;
+  const moreTexts = day?.groups.filter((g) => g.more > 0).map((g) => t('cal.more', { n: g.more })) ?? [];
+  // 看得见的字，和下面画的顺序一致：星期、日期数字、农历或节日、全天标签、色块简称、“+N”、当天件数、“逾”
+  const shown = [wd, String(Number(date.slice(8))), sub, allDayText, ...(day?.blocks.map((b) => b.short) ?? []), ...moreTexts, String(total), overdue ? t('cal.overdue', {}) : ''];
+  const a11y = labelInName(
+    shown,
+    [
+      dateLabel(date, t),
+      ...(isToday ? [t('cal.a11y.todayMark', {})] : []),
+      ...hol.map((h) => (h.kind === 'work' ? workdayA11y(h.name, (name) => t('cal.a11y.workday', { name })) : h.name)),
+      total === 0 ? t('cal.a11y.none', {}) : t('cal.a11y.total', { n: total }),
+      ...(overdue ? [t('cal.a11y.overdue', {})] : []),
+    ],
+    t('cal.a11y.sep', {}),
+  );
   // 同一处的待办依次往左错开：按位置分桶数
   const seen = new Map<number, number>();
   return (
     <li className={[styles.lane, sel ? styles.laneSel : '', off ? styles.laneOff : ''].filter(Boolean).join(' ')} data-date={date}>
       <button type="button" className={styles.laneBtn} aria-pressed={sel} aria-label={a11y} onClick={() => p.onSelect(date)}>
         <span className={styles.laneWd} aria-hidden="true">
-          <small>{t('cal.wdFull', { wd: t(weekdayKey(weekdayOf(date)), {}) })}</small>
-          <b className={isToday ? styles.laneToday : undefined}>{Number(date.slice(8))}</b>
+          {/* 几段字之间的 {' '}：laneWd、tdn 是 flex，laneBtn 是 grid，轨道里全是绝对定位，空格都不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}
+          <small>{wd}</small>{' '}
+          <b className={isToday ? styles.laneToday : undefined}>{Number(date.slice(8))}</b>{' '}
           <small className={styles.laneSub}>{sub}</small>
           {allDayFirst !== undefined ? (
-            <span className={`${styles.allDay} ${colorClass(colorOfAllDay(items, allDayFirst))}`}>
-              {allDayIds.length === 1 ? itemShort(items, 'allDay', allDayFirst) : `${t('cal.allDay', {})} ${allDayIds.length}`}
-            </span>
+            <>
+              {' '}
+              <span className={`${styles.allDay} ${colorClass(colorOfAllDay(items, allDayFirst))}`}>{allDayText}</span>
+            </>
           ) : null}
-        </span>
+        </span>{' '}
         <span className={styles.trk} ref={trackRef ?? undefined} aria-hidden="true">
           {axisTicks(range).map((h) => (
             <i key={h} className={styles.tick} style={{ left: `${axisFrac(h * 60, range) * 100}%` }} />
@@ -172,29 +183,34 @@ function Lane({
             <i className={styles.wnow} style={{ left: `${axisFrac(nowMin, range) * 100}%` }} data-testid="cal-now" />
           ) : null}
           {day?.blocks.map((b) => (
-            <span
-              key={`${b.itemId}-${b.startMin}`}
-              className={[
-                styles.wev,
-                colorClass(b.colorIndex),
-                b.rows === 2 ? (b.row === 1 ? styles.r1 : styles.r0) : '',
-                b.cont === 'start' || b.cont === 'both' ? styles.contStart : '',
-                b.cont === 'end' || b.cont === 'both' ? styles.contEnd : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              style={{ left: b.startPx - shift, width: b.widthPx }}
-              data-item={b.itemId}
-            >
-              {b.short}
-            </span>
+            <Fragment key={`${b.itemId}-${b.startMin}`}>
+              {' '}
+              <span
+                className={[
+                  styles.wev,
+                  colorClass(b.colorIndex),
+                  b.rows === 2 ? (b.row === 1 ? styles.r1 : styles.r0) : '',
+                  b.cont === 'start' || b.cont === 'both' ? styles.contStart : '',
+                  b.cont === 'end' || b.cont === 'both' ? styles.contEnd : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                style={{ left: b.startPx - shift, width: b.widthPx }}
+                data-item={b.itemId}
+              >
+                {b.short}
+              </span>
+            </Fragment>
           ))}
           {day?.groups
             .filter((g) => g.more > 0)
             .map((g) => (
-              <span key={`more-${g.hiddenIds.join(',')}`} className={styles.wmore} style={{ left: g.moreAtPx - shift }}>
-                {t('cal.more', { n: g.more })}
-              </span>
+              <Fragment key={`more-${g.hiddenIds.join(',')}`}>
+                {' '}
+                <span className={styles.wmore} style={{ left: g.moreAtPx - shift }}>
+                  {t('cal.more', { n: g.more })}
+                </span>
+              </Fragment>
             ))}
           {day?.todos.map((e) => {
             const due = dueMins.get(e.itemId);
@@ -204,9 +220,10 @@ function Lane({
             seen.set(k, n + 1);
             return <i key={e.itemId} className={`${styles.wtd} ${colorClass(e.colorIndex)}`} style={{ left: at - n * TODO_STEP_PX }} data-todo={e.itemId} />;
           })}
-        </span>
+        </span>{' '}
         <span className={styles.tdn} aria-hidden="true">
           {total}
+          {overdue ? ' ' : null}
           {overdue ? <em>{t('cal.overdue', {})}</em> : null}
         </span>
       </button>

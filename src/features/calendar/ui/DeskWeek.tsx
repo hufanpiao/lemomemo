@@ -10,7 +10,7 @@ import type { DeskDay } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
 import { useRoT } from '../../../kit/hooks/useRoT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, hm, holText, itemShort, itemTitle, weekdayKey } from './cal-ui.ts';
+import { colorClass, hm, holText, itemShort, itemTitle, labelInName, weekdayKey } from './cal-ui.ts';
 import type { HourRange } from './week-axis.ts';
 import type { WeekProps } from './WeekView.tsx';
 
@@ -98,13 +98,16 @@ export function DeskWeek(p: WeekProps & { range: HourRange; desk: DeskDay[] | nu
             const top = y(b.startMin);
             const h = Math.max(14, y(b.endMin) - top - 2);
             const ro = isRo('event', b.itemId);
+            const title = itemTitle(items, 'timed', b.itemId) || b.short;
+            // 块上只画简称：简称和标题不一样（“交报” / “交报告”）时名字先念简称（WCAG 2.5.3，cal-ui.ts labelInName）
+            const name = labelInName(title === b.short ? [] : [b.short], [t('cal.a11y.block', { title, start: hm(b.startMin), end: hm(b.endMin) })], t('cal.a11y.sep', {}));
             return (
               <button
                 key={`${b.itemId}-${b.startMin}`}
                 type="button"
                 className={`${styles.be} ${colorClass(b.colorIndex)}`}
                 style={{ top, height: h, left: `${(b.column / b.columns) * 100}%`, width: `${100 / b.columns}%` }}
-                aria-label={roLabel(ro, t('cal.a11y.block', { title: itemTitle(items, 'timed', b.itemId) || b.short, start: hm(b.startMin), end: hm(b.endMin) }))}
+                aria-label={roLabel(ro, name)}
                 onClick={() => open('event', b.itemId)}
                 data-readonly={ro ? '' : undefined}
                 data-testid={`cal-desk-block-${b.itemId}`}

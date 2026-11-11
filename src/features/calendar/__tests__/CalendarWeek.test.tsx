@@ -113,7 +113,7 @@ describe('周视图（手机排布）', () => {
     open('#/cal/week/2026-11-02');
     const l4 = lane('2026-11-04') as HTMLElement;
     expect(l4.querySelector('[data-todo="t1"]')?.className).toContain(styles.wtd);
-    expect(l4.querySelector(`.${styles.tdn ?? 'x'}`)?.textContent).toBe('1逾');
+    expect(l4.querySelector(`.${styles.tdn ?? 'x'}`)?.textContent).toBe('1 逾');
     expect(within(l4).getByRole('button').getAttribute('aria-label')).toContain('有逾期的待办');
     const l6 = lane('2026-11-06') as HTMLElement;
     expect((l6.querySelector('[data-todo="t2"]') as HTMLElement).style.left).toBe(`${(TRACK * 7) / 14}px`);

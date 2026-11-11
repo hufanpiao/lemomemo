@@ -120,6 +120,38 @@ describe('关于页的诊断信息', () => {
     localStorage.clear();
   });
 
+  it('键盘上方输入辅助条诊断（台账 Q-11）：“Keyboard bar test”点了才打开全屏测试层，A～I 九种写法各有说明；B 聚焦时别的框禁用、失焦恢复；F 聚焦后去掉只读；Close 关掉', async () => {
+    render(<AboutSection />);
+    tapVersion(DIAG_TAPS);
+    await screen.findByTestId('settings-about-diag');
+    expect(screen.queryByTestId('kbacc-probe')).toBeNull();
+    const open = screen.getByTestId('kbacc-probe-open');
+    expect(open.textContent).toBe('Keyboard bar test');
+    vi.useRealTimers();
+    fireEvent.click(open);
+    const layer = await screen.findByTestId('kbacc-probe');
+    for (const id of 'ABCDEFGHI') expect(screen.getByTestId(`kbacc-probe-${id}`)).toBeTruthy();
+    expect(layer.querySelectorAll('form [data-case]')).toHaveLength(1);
+    expect(screen.getByTestId('kbacc-probe-G').getAttribute('inputmode')).toBe('none');
+    expect(screen.getByTestId('kbacc-probe-D').getAttribute('contenteditable')).toBe('true');
+    const b = screen.getByTestId('kbacc-probe-B') as HTMLInputElement;
+    const a = screen.getByTestId('kbacc-probe-A') as HTMLInputElement;
+    fireEvent.focus(b);
+    expect(a.disabled).toBe(true);
+    expect(b.disabled).toBe(false);
+    fireEvent.blur(b);
+    expect(a.disabled).toBe(false);
+    const f = screen.getByTestId('kbacc-probe-F') as HTMLInputElement;
+    expect(f.readOnly).toBe(true);
+    fireEvent.focus(f);
+    await act(async () => new Promise((r) => setTimeout(r, 5)));
+    expect(f.readOnly).toBe(false);
+    fireEvent.blur(f);
+    expect(f.readOnly).toBe(true);
+    fireEvent.click(screen.getByTestId('kbacc-probe-close'));
+    expect(screen.queryByTestId('kbacc-probe')).toBeNull();
+  });
+
   it('Gap fix 开关默认 ON，点一下关掉用来对照（存本机 lemo-gapfix-off）、再点回 ON；有日志时显示最近一次冷启动的日志（R-371 11-11 默认开）', async () => {
     localStorage.clear();
     render(<AboutSection />);

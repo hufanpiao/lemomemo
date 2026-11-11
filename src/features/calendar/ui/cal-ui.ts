@@ -113,3 +113,14 @@ export function holText(
 export function narrowHolName(name: string, narrow: { readonly full: string; readonly short: string }): string {
   return narrow.full !== '' && name.startsWith(narrow.full) ? narrow.short : name;
 }
+
+/**
+ * 日期格、泳道按钮的读屏名字（WCAG 2.5.3 Label in Name，axe label-content-name-mismatch）：
+ * 先按显示顺序念格子里看得见的字（空格隔开，空的跳过），再接补充说明（完整日期、星期、农历全称、件数……），用 cal.a11y.sep 连。
+ * 这样语音控制照着屏幕说“点 26 十七”能点中；看得见的字由调用方从画格子的同一份数据取，农历加载前后都对得上。
+ * DOM 里这几段字之间也要有空格（MonthGrid、WeekView 里的 {' '}；格子是 flex / grid、轨道里全是绝对定位，空格不画出来）：
+ * 否则 axe 把相邻两段连成一个词（“26추석”“+13”），和名字里的词对不上
+ */
+export function labelInName(shown: readonly string[], rest: readonly string[], sep: string): string {
+  return [shown.filter((s) => s !== '').join(' '), ...rest].filter((s) => s !== '').join(sep);
+}

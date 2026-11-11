@@ -1,0 +1,82 @@
+/* 键盘上方输入辅助条诊断层（台账 Q-11，KbAccessoryProbe.tsx）：非正式版诊断区专用，全屏盖在设置页上；只用令牌（A11）。
+   输入框字号 16px 以上（--fs-16），iOS 聚焦时不会自动放大页面 */
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow-y: auto;
+  padding: calc(var(--inset-top) + 12px) 16px calc(var(--inset-bottom) + 24px);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-16);
+}
+
+.form {
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 12px;
+}
+
+.id {
+  flex: none;
+  width: 24px;
+  padding-top: 10px;
+  font-size: var(--fs-16);
+  font-weight: 700;
+}
+
+.cell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-inp);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+  resize: none;
+}
+
+.field:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.note {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.cell .note {
+  margin: 0;
+}
+
+/* I：负责人 11-11 发来的文章方法一（iOS 26 说法，未证实，等真机实测） */
+/* stylelint-disable-next-line selector-pseudo-element-no-unknown -- WebKit 私有伪元素，诊断用 */
+.noAcc::-webkit-input-accessory-view {
+  display: none !important;
+  height: 0 !important;
+}

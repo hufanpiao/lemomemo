@@ -4,21 +4,35 @@
 //   “两国都显示”时另一国的节日名小一号写在第二行（R-97，放不下省略）；
 //   下面是事项标签：底色是项目块色 --pN，左侧 2 px 深色竖线 --pNs，字 --on-p，9.5 px（R-104 有意例外，不要改）；多出来写“+N”
 // • 放假只用灰底（--hol-bg），周末、节日名都不另上颜色（设计审查 M4）
-// • 读屏：每格是一个按钮，名字是“日期、星期几、今天、节假日、节气、农历（完整写法）、共几件、按项目汇总的件数、另有几件未显示、有纪念日”
+// • 读屏：每格是一个按钮，名字先按显示顺序念格子里看得见的字（日期数字、那一行、第二个节日名、事项简称、“+N”，WCAG 2.5.3），
+//   再接“日期、星期几、今天、节假日、节气、农历（完整写法）、共几件、按项目汇总的件数、另有几件未显示、有纪念日”（cal-ui.ts labelInName）
 // • 点一格：选中那一天（aria-pressed），下面的清单列出当天全部日程和待办（线框 s3）
 // • 上拖收起（线框 s3、R-326）：fold 给出锚点那一行、进度 p 和要上移的像素；只动 transform、opacity（17.2 第 6 点），布局不变。
 //   别的行跟着淡出；收起后别的行 inert（点不到、读屏和 Tab 都跳过）
-import type { CSSProperties, Ref } from 'react';
+import { Fragment, type CSSProperties, type Ref } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { WeekStart } from '../../../../shared/logic/calendar/cal-nav.ts';
 import type { MonthCell } from '../../../../shared/logic/calendar/month-grid.ts';
 import type { CalViewT } from '../hooks/useCalViewT.ts';
 import styles from './CalendarPage.module.css';
-import { colorClass, holText, workdayA11y, weekdayKey } from './cal-ui.ts';
+import { colorClass, holText, labelInName, workdayA11y, weekdayKey } from './cal-ui.ts';
+
+/** 一格里那一行（节假日 > 节气 > 农历）和第二个节日名的文字：画格子和读屏名字共用，两边永远一致 */
+function cellLines(c: MonthCell, t: CalViewT): { line: string; hol2: string } {
+  const sub = { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) };
+  const [first, second] = c.holidays;
+  return {
+    line: first ? holText(first, t('cal.workday', {}), sub) : (c.solarTerm ?? c.lunar ?? ''),
+    hol2: second ? holText(second, t('cal.workday', {}), sub) : '',
+  };
+}
 
 /** 一格的读屏名字 */
 export function cellLabel(c: MonthCell, t: CalViewT, lunarSay?: (date: DateStr) => string | undefined): string {
   const [, m = '1', d = '1'] = c.date.split('-');
+  const { line, hol2 } = cellLines(c, t);
+  // 看得见的字，和下面画的顺序一致
+  const shown = [String(Number(d)), line, hol2, ...c.marks.map((mk) => mk.short), c.more > 0 ? t('cal.more', { n: c.more }) : ''];
   const parts = [t('cal.a11y.date', { m: Number(m), d: Number(d) }), t('cal.wdFull', { wd: t(weekdayKey(c.weekday), {}) })];
   if (c.isToday) parts.push(t('cal.a11y.todayMark', {}));
   for (const h of c.holidays) parts.push(h.kind === 'work' ? workdayA11y(h.name, (name) => t('cal.a11y.workday', { name })) : h.name);
@@ -32,7 +46,7 @@ export function cellLabel(c: MonthCell, t: CalViewT, lunarSay?: (date: DateStr) 
   }
   if (c.more > 0) parts.push(t('cal.a11y.hidden', { n: c.more }));
   if (c.anniv) parts.push(t('cal.a11y.anniv', {}));
-  return parts.join(t('cal.a11y.sep', {}));
+  return labelInName(shown, parts, t('cal.a11y.sep', {}));
 }
 
 function Cell({
@@ -57,7 +71,7 @@ function Cell({
   const off = c.holidays.some((h) => h.kind === 'off');
   const cls = [styles.cell, c.inMonth ? '' : styles.out, c.isToday ? styles.today : '', off ? styles.holiday : '', selected ? styles.sel : ''].filter(Boolean).join(' ');
   const [first, second] = c.holidays;
-  const line = first ? holText(first, t('cal.workday', {}), { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) }) : (c.solarTerm ?? c.lunar ?? '');
+  const { line, hol2 } = cellLines(c, t);
   return (
     <button
       type="button"
@@ -71,26 +85,36 @@ function Cell({
     >
       <span className={styles.dayNum} aria-hidden="true">
         {Number(c.date.slice(8))}
-      </span>
+      </span>{' '}
+      {/* 几段字之间的 {' '}：格子是 flex，空格不画出来；给 axe 和读屏分词用（cal-ui.ts labelInName） */}
       {/* 这一行一直占着高度：农历按需加载，加载前后格子不跳动 */}
       <span className={[styles.line, first ? styles.holName : styles.lunar, first?.kind === 'work' ? styles.work : ''].filter(Boolean).join(' ')} aria-hidden="true">
         <span className={styles.lineTx}>{line}</span>
         {c.anniv ? <span className={styles.dia} data-testid="cal-anniv" /> : null}
       </span>
       {second ? (
-        <span className={styles.hol2} aria-hidden="true">
-          {holText(second, t('cal.workday', {}), { full: t('cal.subHolFull', {}), short: t('cal.subHolShort', {}) })}
-        </span>
+        <>
+          {' '}
+          <span className={styles.hol2} aria-hidden="true">
+            {hol2}
+          </span>
+        </>
       ) : null}
       {c.marks.map((mk) => (
-        <span key={mk.itemId} className={`${styles.mark} ${colorClass(mk.colorIndex)}`} aria-hidden="true">
-          {mk.short}
-        </span>
+        <Fragment key={mk.itemId}>
+          {' '}
+          <span className={`${styles.mark} ${colorClass(mk.colorIndex)}`} aria-hidden="true">
+            {mk.short}
+          </span>
+        </Fragment>
       ))}
       {c.more > 0 ? (
-        <span className={styles.more} aria-hidden="true">
-          {t('cal.more', { n: c.more })}
-        </span>
+        <>
+          {' '}
+          <span className={styles.more} aria-hidden="true">
+            {t('cal.more', { n: c.more })}
+          </span>
+        </>
       ) : null}
     </button>
   );
