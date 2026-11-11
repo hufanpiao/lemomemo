@@ -37,10 +37,15 @@ describe('X-App-Version', () => {
     expect(h2.get('b')).toBe('2');
   });
 
-  it('supabase-js：global.headers 带版本，global.fetch 走同一个封装', () => {
+  it('supabase-js：global.headers 带版本，global.fetch 走同一个封装（外面包了 R-382 的刷新观察，请求照样经 appFetch 带上版本头）', async () => {
     const o = clientOptions('4.1.0');
     expect(o.global.headers[APP_VERSION_HEADER]).toBe('4.1.0');
-    expect(o.global.fetch).toBe(appFetch);
+    const spy = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) => Promise.resolve(new Response('ok')));
+    vi.stubGlobal('fetch', spy);
+    await o.global.fetch('https://example.invalid/rest/v1/x', { method: 'GET' });
+    await o.global.fetch('https://example.invalid/auth/v1/token?grant_type=refresh_token', { method: 'POST', body: '{}' });
+    expect(spy).toHaveBeenCalledTimes(2);
+    for (const c of spy.mock.calls) expect(new Headers(c[1]?.headers).get(APP_VERSION_HEADER)).toBe('4.0.0');
   });
 });
 

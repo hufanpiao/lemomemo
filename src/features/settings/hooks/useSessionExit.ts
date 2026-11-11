@@ -17,6 +17,9 @@
 //   会话放最后：中途被打断最坏是“有会话、没库”，下次打开能自愈。①③ 一共最多等 EXIT_TIMEOUT_MS（① 最多一半）；
 //   超时照样删本机会话，提示“服务器上的这次登录暂时没能吊销”。超时以后请求才回来、本机会话又是退出前那个 user_id
 //   （令牌刷新把旧会话写回）就再删一次。这些步骤在 platform/sign-out.ts，和登录页“退出并换账号”共用（K-signout-merge）
+// • R-382（架构 4.1a 第 1 点 ②）：onRevoked 先经 resolveAuthLoss 定结局（码按 session_revoked，要查 session_fate）：
+//   removed 照旧走下面的清库；expired 只关库、不清（exit.expireHere 写 lemo.reauth），删那一个会话、回登录页提示“登录已过期”。
+//   查之前先 markHere（设闸、写记号，同别的出口的 markExpired），写不了记号直接按被移除；exit 没给 expireHere（测试）时照旧直接按被移除处理
 // • 本页自己处理“会话没了”时也会调 signOut：先 markSelfSignOutThisTab()（只打本页内存里的），会话层的 SIGNED_OUT 监听见到标记不再重复处理（K6-signedout）。
 //   本页不另开 SIGNED_OUT 监听
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -138,7 +141,33 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
     [api, exit, track, clearSession],
   );
 
-  const onRevoked = useCallback((sid: string | null) => onSessionLost('revoked', sid), [onSessionLost]);
+  const onRevoked = useCallback(
+    (sid: string | null) => {
+      const expire = exit.expireHere;
+      if (!expire || !exit.resolveAuthLoss) return onSessionLost('revoked', sid);
+      if (exiting.current) return;
+      exiting.current = true;   // 定结局那几秒里再来的信号不再处理
+      // 查 session_fate 之前先设闸、写记号（和别的出口一样先 markExpired，独立验证建议 3）：查的那几秒里不再往外发；写不了记号直接按被移除清库
+      if (exit.markHere && !exit.markHere(sid)) {
+        exiting.current = false;
+        return onSessionLost('revoked', sid);
+      }
+      const userId = exit.lostUserId?.() ?? null;
+      void exit
+        .resolveAuthLoss({ path: 'settings', code: 'session_revoked', sessionId: sid, userId })
+        .catch(() => 'expired' as const)
+        .then((r) => {
+          if (r === 'expired' && expire(sid)) {
+            void dropSession(exit, sid);
+            exit.goToAuthExpired?.(sid);
+            return;
+          }
+          exiting.current = false;
+          onSessionLost('revoked', sid);
+        });
+    },
+    [exit, onSessionLost],
+  );
   const onSignedOut = useCallback((sid: string | null) => onSessionLost('signed_out', sid), [onSessionLost]);
 
   useEffect(() => {

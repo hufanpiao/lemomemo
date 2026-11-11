@@ -7,18 +7,22 @@
 //   ① 条件（都满足才做，不然记 skip 什么都不动）：主屏幕版、竖屏、screen.height − innerHeight 落在顶部安全区（--inset-top）± TOL_PX 以内、而且大于 0；
 //   ② 在 body 里放一个看不见的垫块（绝对定位、1px 宽、visibility hidden、不接点按），文档高度 = 一屏 + 差值 + 1px，页面变得能滚；不挪底栏、不改任何看得见的东西；
 //   ③ 每帧看 innerHeight 变没变；放垫块后 SCROLL_AT_MS 还没变再补一次“滚 1px、下一帧滚回”；变了或放垫块后到 GIVE_UP_MS 就撤掉垫块（从放垫块算起，等底栏、重读顶部安全区的时间不算）。
+// 台账 Q-2（11-11）：main.tsx 一开始先同步早试一次（vh-gapfix-gate.ts 的 startEarlyGapFix），本模块等早试结束、把结果记一行，再照原样做（早试成了，这里就是 skip no-gap）。
 // 等底栏挂上（今天页画好，最多 WAIT_BAR_MS）再判断、再做。冷启动时顶部安全区可能先读到 0（底部就有过“先 0 后 34”）：
 // 读到 0 而别的条件都满足时，每 TOP_RETRY_FRAMES 帧重读一次，最多 TOP_RETRY_MS，重读的结果记进日志（代码审建议 1）。
 // 滚 1px 只在下一帧滚回一次；撤垫块时只在页面还停在那 1px 上才滚回，用户已经自己在滚（比如切到日历）就不动（代码审 M1）。
 // 每一步记一行（时刻、inner、底栏下沿），存在 OUT_KEY（只留最近一次冷启动），诊断页显示、可复制。没关掉时每次冷启动都做（不像时间线只跑一次）。
 // 正常启动（inner = 屏幕高）条件不满足，什么都不做，像素不变；底栏、“＋”、实色带（R-361“这个不要动”）都不碰。
+// 键盘收起后再做一次（Q-4，11-11）：主屏幕版时 vh-gapfix-kb.ts 盯键盘起落，键盘真收了再按同一套①②③做一次，日志行带 kb 前缀；
+//   键盘那次用户手指按着或页面已经被滚过，就不补那 1px 滚动（代码审 M1）。日志最多留 MAX_LINES 行。
 // requestAnimationFrame 只许 src/motion 用（A25）：等帧的函数由调用方传进来（main.tsx 传 motion 的 nextFrame）
 import { isStandalone } from './env.ts';
-import { OFF_KEY } from './vh-gapfix-gate.ts';
+import { earlyGap, insetTop, OFF_KEY, PAD_ID, TOL_PX, type EarlyGap } from './vh-gapfix-gate.ts';
+import { watchKbClose, type KbWatch } from './vh-gapfix-kb.ts';
+
+export { insetTop, PAD_ID, TOL_PX };
 
 export const OUT_KEY = 'lemo-gapfix-out';
-/** 差值和顶部安全区差多少以内算“少的正是顶部安全区” */
-export const TOL_PX = 4;
 /** 放了垫块这么久 innerHeight 还没变：补一次滚动 */
 export const SCROLL_AT_MS = 600;
 /** 最多等这么久，到点撤掉垫块 */
@@ -30,7 +34,8 @@ export const TOP_RETRY_MS = 1000;
 /** 顶部安全区读到 0 时隔几帧重读 */
 export const TOP_RETRY_FRAMES = 4;
 export const BAR_SELECTOR = '[data-testid="tabbar"]';
-export const PAD_ID = 'lemo-gapfix-pad';
+/** 日志最多留这么多行（第一行是开头，一直留着） */
+export const MAX_LINES = 200;
 
 export type Frame = (cb: () => void) => unknown;
 
@@ -60,25 +65,6 @@ export function readGapFixLog(store: Storage = localStorage): string {
   }
 }
 
-/** 顶部安全区（px）：读 --inset-top（base.css，= env(safe-area-inset-top)），和页面用的是同一个值 */
-export function insetTop(doc: Document): number {
-  const probe = doc.createElement('div');
-  for (const [k, v] of [
-    ['position', 'fixed'],
-    ['top', '0'],
-    ['width', '0'],
-    ['height', '0'],
-    ['visibility', 'hidden'],
-    ['pointer-events', 'none'],
-    ['padding-top', 'var(--inset-top, env(safe-area-inset-top))'],
-  ] as const)
-    probe.style.setProperty(k, v);
-  (doc.body ?? doc.documentElement).append(probe);
-  const px = parseFloat(getComputedStyle(probe).paddingTop) || 0;
-  probe.remove();
-  return px;
-}
-
 export interface GapState {
   readonly standalone: boolean;
   readonly inner: number;
@@ -104,6 +90,8 @@ export interface GapFixDeps {
   readonly standalone?: boolean;
   /** 顶部安全区（测试用，可以每次读给不同的值；不传就读 --inset-top） */
   readonly top?: number | (() => number);
+  /** 早试（vh-gapfix-gate.ts 的 startEarlyGapFix；测试用，不传就读这次冷启动的） */
+  readonly early?: () => EarlyGap | null;
 }
 
 const barBottom = (doc: Document): string => {
@@ -111,7 +99,92 @@ const barBottom = (doc: Document): string => {
   return el ? String(Math.round(el.getBoundingClientRect().bottom)) : '-';
 };
 
-/** 冷启动时调一次（main.tsx 在 iOS 主屏幕版、没关掉时动态加载本模块后调）；返回停止函数（测试用；到点自己也会停、撤掉垫块） */
+interface PadCtx {
+  readonly win: Window;
+  readonly frame: Frame;
+  readonly now: () => number;
+  readonly row: (what: string) => void;
+  /** 手指按着屏幕（键盘那次用：用户在滚就不补滚动） */
+  readonly touching: () => boolean;
+}
+
+/** ②③：放垫块、必要时滚 1px、撤垫块，撤完调 onEnd。p 是日志前缀（冷启动 ''，键盘收起 'kb '）；键盘那次用户在滚就不补滚动。返回停止函数 */
+function padFix(c: PadCtx, state: GapState, p: string, onEnd: () => void): () => void {
+  const { win, frame, now, row } = c;
+  const doc = win.document;
+  const inner0 = win.innerHeight;
+  const gap = state.screenH - inner0;
+  const pad = doc.createElement('div');
+  pad.id = PAD_ID;
+  pad.setAttribute('aria-hidden', 'true');
+  for (const [k, v] of [
+    ['position', 'absolute'],
+    ['top', '0'],
+    ['left', '0'],
+    ['width', '1px'],
+    ['height', `calc(100dvh + ${gap + 1}px)`],
+    ['visibility', 'hidden'],
+    ['pointer-events', 'none'],
+  ] as const)
+    pad.style.setProperty(k, v);
+  let done = false;
+  let scrolled = false;
+  let y0 = 0;
+  let tPad = 0;
+  let yPad = 0;
+  /** 还停在自己滚的那 1px 上才滚回：用户这时可能已经在滚（切到日历），不能拉回去 */
+  const backIfOurs = (): void => {
+    if (Math.round(win.scrollY) === y0 + 1) win.scrollTo(0, y0);
+  };
+  const finish = (what: string): void => {
+    if (done) return;
+    done = true;
+    pad.remove();
+    if (scrolled) backIfOurs();
+    row(`${p}${what} pad-removed`);
+    onEnd();
+  };
+  const step = (): void => {
+    if (done) return;
+    if (win.innerHeight !== inner0) {
+      finish(`changed ${inner0}->${win.innerHeight}${scrolled ? ' after-scroll' : ' by-pad'}`);
+      return;
+    }
+    const at = now() - tPad;
+    if (at >= GIVE_UP_MS) {
+      finish('no-change');
+      return;
+    }
+    if (!scrolled && at >= SCROLL_AT_MS) {
+      scrolled = true;
+      const y = Math.round(win.scrollY);
+      if (p !== '' && (c.touching() || y !== yPad)) {
+        // 代码审 M1：用户正在滚，不抢滚动位置；只靠垫块，到点照样撤（scrolled 记 true 但不滚，撤时也不滚回）
+        y0 = Number.NaN;
+        row(`${p}scroll-skipped user-scrolling y=${y}`);
+        frame(step);
+        return;
+      }
+      y0 = y;
+      win.scrollBy(0, 1);
+      row(`${p}scrollBy1 y=${Math.round(win.scrollY)}`);
+      frame(() => {
+        if (!done) backIfOurs();
+        frame(step);
+      });
+      return;
+    }
+    frame(step);
+  };
+  (doc.body ?? doc.documentElement).append(pad);
+  tPad = now();
+  yPad = Math.round(win.scrollY);
+  row(`${p}pad gap=${gap} top=${state.top} docH=${doc.documentElement.scrollHeight}`);
+  frame(step);
+  return () => finish('stopped');
+}
+
+/** 冷启动时调一次（main.tsx 在 iOS 主屏幕版、没关掉时动态加载本模块后调）；主屏幕版时同时盯键盘收起（Q-4，vh-gapfix-kb.ts）。返回停止函数（测试用；到点自己也会停、撤掉垫块） */
 export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
   const win = deps.win ?? window;
   const standalone = deps.standalone ?? isStandalone();
@@ -119,18 +192,31 @@ export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
   const now = deps.now ?? (() => Date.now());
   const doc = win.document;
   const t0 = now();
-  const lines: string[] = [`gapfix start=${new Date(t0).toISOString()} screen=${win.screen.width}x${win.screen.height}`];
+  const getEarly = deps.early ?? earlyGap;
+  const lines: string[] = [`gapfix start=${new Date(t0).toISOString()} nav=${Math.round(win.performance.now())}ms screen=${win.screen.width}x${win.screen.height}`];
   const row = (what: string): void => {
     lines.push(`t=${now() - t0} ${what} inner=${win.innerHeight} bar=${barBottom(doc)}`);
+    if (lines.length > MAX_LINES) lines.splice(1, lines.length - MAX_LINES);
     try {
       store.setItem(OUT_KEY, lines.join('\n'));
     } catch {
       // 存不下：照样做
     }
   };
-  const readTop = (): number => (typeof deps.top === 'function' ? deps.top() : (deps.top ?? insetTop(doc)));
+  /** 最近一次读到的顶部安全区（判断键盘在不在时用，不每次重读） */
+  let lastTop = 0;
+  const readTop = (): number => {
+    lastTop = typeof deps.top === 'function' ? deps.top() : (deps.top ?? insetTop(doc));
+    return lastTop;
+  };
+  const stateNow = (): GapState => ({ standalone, inner: win.innerHeight, width: win.innerWidth, screenH: win.screen.height, top: readTop() });
   let topTries = 0;
   let topT0 = -1;
+  let cancelled = false;
+  /** 正在做（冷启动那次从等底栏就算）：键盘那边不叠着做 */
+  let busy = true;
+  let kb: KbWatch | null = null;
+  let stopFix = (): void => undefined;
   const later = (n: number, cb: () => void): void => {
     frame(() => {
       if (cancelled) return;
@@ -138,8 +224,18 @@ export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
       else later(n - 1, cb);
     });
   };
+  const idle = (): void => {
+    busy = false;
+    stopFix = () => undefined;
+    kb?.idle();
+  };
+  const ctx: PadCtx = { win, frame, now, row, touching: () => kb?.touching() ?? false };
+  const fix = (state: GapState, p: string): void => {
+    busy = true;
+    stopFix = padFix(ctx, state, p, idle);
+  };
   const run = (): void => {
-    const state: GapState = { standalone, inner: win.innerHeight, width: win.innerWidth, screenH: win.screen.height, top: readTop() };
+    const state = stateNow();
     const why = skipReason(state);
     if (why !== null && state.top === 0 && why.startsWith('gap-not-top')) {
       // 顶部安全区还没出来（先 0 后 61）：隔几帧重读，不当成“差值不是顶部安全区”直接放过
@@ -156,81 +252,51 @@ export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
     if (topTries > 0) row(`top-reread tries=${topTries} after=${now() - topT0}ms top=${state.top}${state.top === 0 ? ' still-0' : ''}`);
     if (why !== null) {
       row(`skip ${why} top=${state.top}`);
+      idle();
       return;
     }
-    const inner0 = win.innerHeight;
-    const gap = state.screenH - inner0;
-    const pad = doc.createElement('div');
-    pad.id = PAD_ID;
-    pad.setAttribute('aria-hidden', 'true');
-    for (const [k, v] of [
-      ['position', 'absolute'],
-      ['top', '0'],
-      ['left', '0'],
-      ['width', '1px'],
-      ['height', `calc(100dvh + ${gap + 1}px)`],
-      ['visibility', 'hidden'],
-      ['pointer-events', 'none'],
-    ] as const)
-      pad.style.setProperty(k, v);
-    let done = false;
-    let scrolled = false;
-    let y0 = 0;
-    let tPad = 0;
-    /** 还停在自己滚的那 1px 上才滚回：用户这时可能已经在滚（切到日历），不能拉回去 */
-    const backIfOurs = (): void => {
-      if (Math.round(win.scrollY) === y0 + 1) win.scrollTo(0, y0);
-    };
-    const finish = (what: string): void => {
-      if (done) return;
-      done = true;
-      pad.remove();
-      if (scrolled) backIfOurs();
-      row(`${what} pad-removed`);
-    };
-    const step = (): void => {
-      if (done) return;
-      if (win.innerHeight !== inner0) {
-        finish(`changed ${inner0}->${win.innerHeight}${scrolled ? ' after-scroll' : ' by-pad'}`);
-        return;
-      }
-      const at = now() - tPad;
-      if (at >= GIVE_UP_MS) {
-        finish('no-change');
-        return;
-      }
-      if (!scrolled && at >= SCROLL_AT_MS) {
-        scrolled = true;
-        y0 = Math.round(win.scrollY);
-        win.scrollBy(0, 1);
-        row(`scrollBy1 y=${Math.round(win.scrollY)}`);
-        frame(() => {
-          if (!done) backIfOurs();
-          frame(step);
-        });
-        return;
-      }
-      frame(step);
-    };
-    stopFix = () => finish('stopped');
-    (doc.body ?? doc.documentElement).append(pad);
-    tPad = now();
-    row(`pad gap=${gap} top=${state.top} docH=${doc.documentElement.scrollHeight}`);
-    frame(step);
+    fix(state, '');
   };
-  let stopFix = (): void => undefined;
-  let cancelled = false;
+  let earlyLogged = false;
   const wait = (): void => {
     if (cancelled) return;
+    // 早试还在等 innerHeight 变：等它结束（最多 EARLY_GIVE_UP_MS），不叠两块垫块；结束了先把早试结果记一行
+    const e = getEarly();
+    if (e !== null && !e.done) {
+      frame(wait);
+      return;
+    }
+    if (e !== null && !earlyLogged) {
+      earlyLogged = true;
+      row(`early nav=${e.at}ms ${e.what}`);
+    }
     if (doc.querySelector(BAR_SELECTOR) === null && now() - t0 < WAIT_BAR_MS) {
       frame(wait);
       return;
     }
     run();
   };
+  /** 键盘真收了（Q-4）：诊断页没关掉、条件①照样满足才按同一套再做，日志带 kb */
+  const kbFix = (): void => {
+    if (!gapFixOn(store)) {
+      row('kb skip off');
+      return;
+    }
+    const state = stateNow();
+    const why = skipReason(state);
+    if (why !== null) {
+      row(`kb skip ${why} top=${state.top}`);
+      return;
+    }
+    fix(state, 'kb ');
+  };
+  // 网页版（不是主屏幕版）条件①永远不满足，不盯键盘
+  if (standalone) kb = watchKbClose({ win, frame, now, row, busy: () => busy, top: () => lastTop, tryFix: kbFix });
+
   wait();
   return () => {
     cancelled = true;
+    kb?.stop();
     stopFix();
   };
 }

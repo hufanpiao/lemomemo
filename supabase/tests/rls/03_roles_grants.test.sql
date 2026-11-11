@@ -1,6 +1,6 @@
 -- 角色属性和授权白名单：TC-B0-33、34、69、70、77、78、81、86、87、95（表级 DELETE）；3.3 C、6.2
 begin;
-select plan(44);
+select plan(45);
 \ir _helpers.psql
 select tests.seed();
 
@@ -84,20 +84,21 @@ select is((select count(*)::int from pg_proc p where p.pronamespace = 'private':
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
   'claim_endpoint_impl,devices_session_guard,enqueue_anniv_defaults,enqueue_embed,enqueue_remind,files_authorize_impl,guard_note_file,guard_note_image,guard_token_revoke,is_active,'
-  || 'media_quota_guard,my_ai_usage_impl,my_sessions_impl,not_password_session,purge_deleted_impl,record_consent_impl,remove_device_impl,report_tz_impl,row_quota,table_meta_of,tags_ok,touch,vault_ai_off',
-  'authenticated 能执行的 private 函数 = 白名单（tags_ok 是 B1 迁移 20261031110000 建的，notes.tags 的 check 用；B1 迁移 20261029192000 建了 report_tz_impl、remove_device_impl、my_sessions_impl；claim_endpoint_impl 是 B2 迁移 20261103110000 建的；my_ai_usage_impl 是 B3 迁移 20261107100000 建的；media_quota_guard 是 B4 迁移 20261111100000 建的）');
+  || 'media_quota_guard,my_ai_usage_impl,my_sessions_impl,not_password_session,purge_deleted_impl,record_consent_impl,remove_device_impl,report_tz_impl,revoke_my_sessions_impl,row_quota,session_fate_impl,table_meta_of,tags_ok,touch,vault_ai_off',
+  'authenticated 能执行的 private 函数 = 白名单（tags_ok 是 B1 迁移 20261031110000 建的，notes.tags 的 check 用；B1 迁移 20261029192000 建了 report_tz_impl、remove_device_impl、my_sessions_impl；claim_endpoint_impl 是 B2 迁移 20261103110000 建的；my_ai_usage_impl 是 B3 迁移 20261107100000 建的；media_quota_guard 是 B4 迁移 20261111100000 建的；revoke_my_sessions_impl、session_fate_impl 是 R-382 迁移 20261111120000 建的）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
-  where p.pronamespace = 'private'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')), null, 'anon 不能执行任何 private 函数');
+  where p.pronamespace = 'private'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')), 'session_fate_impl',
+  'anon 能执行的 private 函数只有 session_fate_impl（R-382，不登录查会话是不是被吊销；只回 revoked / unknown）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('service_role', p.oid, 'EXECUTE')),
-  'account_request_deletion,account_restore,account_usable,ai_classify_pending,ai_quota_refund,ai_quota_take,auth_mail_counts,db_size_bytes,export_job_start,export_job_take,export_size_over,intake_insert,invite_claim,invite_release,long_transactions,orphan_auth_users,push_heartbeat_write,rebind_device_impl,remind_due,remind_pushed,remind_queue_finish,remind_queue_pop,session_alive,tags_ok,take_rate', 'service_role 能执行的 private 函数 = 白名单（ai_classify_pending 是 B4 迁移 20261110121000 建的；ai_quota_take、ai_quota_refund、intake_insert 是 B3 迁移 20261107100000 建的；push_heartbeat_write 是 B2 迁移 20261105140000 建的；remind_queue_finish 是 B2 迁移 20261104130000 建的，同一迁移把 remind_queue_pop 重建成 (int, int)；remind_due、remind_pushed 是 B2 迁移 20261103140000 建的；remind_queue_pop 是 B2 迁移 20261103130000 建的；orphan_auth_users 是 B1 迁移 20261031160000 建的；invite_claim、invite_release 是 B1 迁移 20261031150000 建的；tags_ok 是 B1 迁移 20261031110000 建的；db_size_bytes、export_job_start、export_job_take、export_size_over 是 B1 迁移 20261031100000 建的；auth_mail_counts 是 B1 迁移 20261029230000 建的；rebind_device_impl 是 B1 迁移 20261029192000 建的；take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
+  'account_request_deletion,account_restore,account_usable,ai_classify_pending,ai_quota_refund,ai_quota_take,auth_mail_counts,db_size_bytes,export_job_start,export_job_take,export_size_over,intake_insert,invite_claim,invite_release,long_transactions,orphan_auth_users,push_heartbeat_write,rebind_device_impl,remind_due,remind_pushed,remind_queue_finish,remind_queue_pop,security_events,session_alive,tags_ok,take_rate', 'service_role 能执行的 private 函数 = 白名单（security_events 是 R-382 迁移 20261111120000 建的；ai_classify_pending 是 B4 迁移 20261110121000 建的；ai_quota_take、ai_quota_refund、intake_insert 是 B3 迁移 20261107100000 建的；push_heartbeat_write 是 B2 迁移 20261105140000 建的；remind_queue_finish 是 B2 迁移 20261104130000 建的，同一迁移把 remind_queue_pop 重建成 (int, int)；remind_due、remind_pushed 是 B2 迁移 20261103140000 建的；remind_queue_pop 是 B2 迁移 20261103130000 建的；orphan_auth_users 是 B1 迁移 20261031160000 建的；invite_claim、invite_release 是 B1 迁移 20261031150000 建的；tags_ok 是 B1 迁移 20261031110000 建的；db_size_bytes、export_job_start、export_job_take、export_size_over 是 B1 迁移 20261031100000 建的；auth_mail_counts 是 B1 迁移 20261029230000 建的；rebind_device_impl 是 B1 迁移 20261029192000 建的；take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_vault', p.oid, 'EXECUTE')), 'purge_vault_impl,tags_ok', 'fn_vault 只能执行 purge_vault_impl 和 tags_ok（B1 迁移 20261031110000，notes.tags 的 check 用）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_ai', p.oid, 'EXECUTE')), null, 'fn_ai 不能执行任何 private 函数');
 select is((select string_agg(p.proname || ':' || p.prosecdef, ',' order by p.proname) from pg_proc p where p.pronamespace = 'public'::regnamespace),
-  'apply_patch:false,claim_endpoint:false,files_authorize:false,my_ai_usage:false,my_sessions:false,purge_deleted:false,record_consent:false,remove_device:false,report_tz:false',
-  'public 里只有这九个 RPC，都是 security invoker（B1 迁移 20261029192000 加了 report_tz、remove_device、my_sessions，20261029200000 加了 apply_patch；B2 迁移 20261103110000 加了 claim_endpoint；B3 迁移 20261107100000 加了 my_ai_usage）');
+  'apply_patch:false,claim_endpoint:false,files_authorize:false,my_ai_usage:false,my_sessions:false,purge_deleted:false,record_consent:false,remove_device:false,report_tz:false,revoke_my_sessions:false,session_fate:false',
+  'public 里只有这 11 个 RPC，都是 security invoker（R-382 迁移 20261111120000 加了 revoke_my_sessions、session_fate；B1 迁移 20261029192000 加了 report_tz、remove_device、my_sessions，20261029200000 加了 apply_patch；B2 迁移 20261103110000 加了 claim_endpoint；B3 迁移 20261107100000 加了 my_ai_usage）');
 select ok(not has_function_privilege('anon', 'public.purge_deleted(jsonb)', 'EXECUTE') and not has_function_privilege('anon', 'public.record_consent(text, boolean)', 'EXECUTE')
   and not has_function_privilege('service_role', 'public.purge_deleted(jsonb)', 'EXECUTE')
   and not has_function_privilege('anon', 'public.files_authorize(text, jsonb)', 'EXECUTE')
@@ -114,7 +115,13 @@ select ok(not has_function_privilege('anon', 'public.purge_deleted(jsonb)', 'EXE
   and has_function_privilege('authenticated', 'public.my_sessions()', 'EXECUTE')
   and not has_function_privilege('anon', 'public.apply_patch(text, uuid, jsonb, int, uuid, int[])', 'EXECUTE')
   and not has_function_privilege('service_role', 'public.apply_patch(text, uuid, jsonb, int, uuid, int[])', 'EXECUTE')
-  and has_function_privilege('authenticated', 'public.apply_patch(text, uuid, jsonb, int, uuid, int[])', 'EXECUTE'), 'public RPC 只授给 authenticated');
+  and has_function_privilege('authenticated', 'public.apply_patch(text, uuid, jsonb, int, uuid, int[])', 'EXECUTE')
+  and not has_function_privilege('anon', 'public.revoke_my_sessions(boolean)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.revoke_my_sessions(boolean)', 'EXECUTE')
+  and has_function_privilege('authenticated', 'public.revoke_my_sessions(boolean)', 'EXECUTE'), 'public RPC 只授给 authenticated（session_fate 例外，见下一条）');
+select ok(has_function_privilege('anon', 'public.session_fate(text)', 'EXECUTE') and has_function_privilege('authenticated', 'public.session_fate(text)', 'EXECUTE')
+  and not has_function_privilege('service_role', 'public.session_fate(text)', 'EXECUTE'),
+  'R-382：public.session_fate 是唯一授给 anon 的 RPC（anon、authenticated 能调，service_role 不给）');
 
 -- ===== TC-B0-95：表级 DELETE 只有 devices =====
 select is((select string_agg(table_name || ':' || grantee, ',' order by table_name, grantee) from information_schema.role_table_grants

@@ -1,0 +1,8 @@
+-- expect: private.rebind_device_impl 删了 auth.sessions，却没调 private.revoke_session
+-- R-382（架构 4.1a 第 4 点吊销路径表）：换绑设备只删旧会话、不写吊销记录，旧设备再联网时 session_fate 查不到 revoked，
+-- 会被当成登录过期、本机数据留着
+create or replace function private.rebind_device_impl(p_user uuid, p_device uuid, p_old_session uuid, p_new_session uuid) returns void
+  language plpgsql security definer set search_path = '' as $$
+begin
+  delete from auth.sessions s where s.id = p_old_session and s.user_id = p_user;
+end $$;

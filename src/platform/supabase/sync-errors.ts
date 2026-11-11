@@ -7,9 +7,9 @@ export const REQUEST_TIMEOUT_MS = 20_000;
 /** 令牌还剩这么多就先刷新再发（TC-B1-82 ①） */
 export const REFRESH_MARGIN_MS = 60_000;
 
-/** 刷新令牌回这些码（code 或 message 里包含）：会话已不在（被移除或被退出，0.29 续第 98、106 条；TC-B1-88 ④⑤） */
-const REMOVED_AUTH_CODES = ['session_not_found', 'refresh_token_not_found'];
-/** 403 且 code 或 message 里含这个也算被移除（TC-B1-88 ⑥） */
+/** 刷新令牌回这些码（code 或 message 里包含）：会话已不在，要查 session_fate 再定（R-382 4.1a；TC-B1-88 ④⑤） */
+const CHECK_AUTH_CODES = ['session_not_found', 'refresh_token_not_found'];
+/** 403 且 code 或 message 里含这个也要查（TC-B1-88 ⑥） */
 const REVOKED_403 = 'session_revoked';
 const FETCH_FAILED = /failed to fetch|load failed|networkerror|network request failed|network error|fetcherror|aborterror|timeout/i;
 const TOKEN = /^[a-z][a-z0-9_]*$/;
@@ -41,10 +41,11 @@ export function toFailure(error: unknown, status: number | undefined): SendFailu
 }
 
 /**
- * auth-js 刷新令牌的错误 → SessionCheck（单独导出测；TC-B1-88）：
+ * auth-js 刷新令牌的错误 → SessionCheck（单独导出测；TC-B1-88，R-382 架构 4.1a 第 1 点 ② 改）：
  * ① 断网 ② 5xx ③ 429（以及 408）→ network（临时故障，不退出）；
- * ④ session_not_found ⑤ refresh_token_not_found（code 或 message 包含）⑥ 403 且含 session_revoked → removed；
- * ⑦⑧ 别的 4xx（含 refresh_token_already_used）→ failed：调用方记日志、再试一次，两次都 failed 才按被移除（send.ts refreshFlow）
+ * ④ session_not_found ⑤ refresh_token_not_found（code 或 message 包含）⑥ 403 且含 session_revoked → check（查 session_fate 再定）；
+ * ⑦⑧ 别的 4xx（含 refresh_token_already_used、session_expired）→ expired：按登录过期处理（只关库、不清）。
+ * 不再有“两次 failed 就算被移除”（auth_refresh_failed，send.ts refreshFlow 已去掉）
  */
 export function toSessionCheck(error: unknown): SessionCheck {
   if (!error) return 'ok';
@@ -54,12 +55,12 @@ export function toSessionCheck(error: unknown): SessionCheck {
   const name = str(e['name']);
   const status = typeof e['status'] === 'number' ? e['status'] : -1;
   const has = (needle: string): boolean => code.includes(needle) || msg.includes(needle);
-  if (REMOVED_AUTH_CODES.some(has)) return 'removed';
-  if (status === 403 && has(REVOKED_403)) return 'removed';
+  if (CHECK_AUTH_CODES.some(has)) return 'check';
+  if (status === 403 && has(REVOKED_403)) return 'check';
   if (status === 0 || name === 'AuthRetryableFetchError' || (status < 0 && FETCH_FAILED.test(msg))) return 'network';
   if (status >= 500 || status === 429 || status === 408) return 'network';
-  if (status >= 400) return 'failed';
-  return status < 0 ? 'network' : 'failed';   // 没有状态又不认识：按临时故障，不退出
+  if (status >= 400) return 'expired';
+  return status < 0 ? 'network' : 'expired';   // 没有状态又不认识：按临时故障，不退出
 }
 
 /**

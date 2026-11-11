@@ -10,11 +10,13 @@ import { clearExitNotice, readExitNotice, readSessionUserId, type ExitNotice } f
 import { useAccountGate, type GateExit } from '../hooks/useAccountGate.ts';
 import { useAuthFlow, type AuthFlowDeps } from '../hooks/useAuthFlow.ts';
 import { useAuthT } from '../hooks/useAuthT.ts';
+import { useReauth } from '../hooks/useReauth.ts';
 import { useSessionGate } from '../hooks/useSessionGate.ts';
 import { useTurnstile, type TurnstileAction } from '../hooks/useTurnstile.ts';
 import { AccountGatePanel } from './AccountGatePanel.tsx';
 import { ErrorCard } from './ErrorCard.tsx';
 import { InstallGuide } from './InstallGuide.tsx';
+import { ReauthClear, ReauthNotice } from './ReauthNotice.tsx';
 // 登录框挂 kit 表单的 .input：字号（电脑 15、触屏 16）、底色、圆角和编辑页一套（B2-UI-a U1-2、代码审 M4）；版式差异在 AuthPage.module.css 覆盖
 import form from '../../../kit/components/Form.module.css';
 import styles from './AuthPage.module.css';
@@ -186,6 +188,9 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
   }, [gate.view, backToEmail]);
   const exitShown = useExitShown(gate.view === 'exited' ? gate.exit : gateExit);
   const gated = gate.view === 'pending' || gate.view === 'disabled' || gate.view === 'unsure';
+  // 登录过期、本机内容还留着（R-382）：有 lemo.reauth 时用 ReauthNotice 代替 ExitNoticeLine
+  const reauth = useReauth(deps?.reauth);
+  const reauthShown = reauth.view.kind !== 'none';
   const askEmail = !gated && (step === 'email' || step === 'invite');
   const askCode = !gated && (step === 'code' || step === 'invite-code');
 
@@ -198,7 +203,8 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
           {t(GATE_EXIT_KEYS[exitShown], {})}
         </p>
       )}
-      {step === 'email' && !exitShown && <ExitNoticeLine />}
+      {step === 'email' && !exitShown && reauthShown && <ReauthNotice view={reauth.view} />}
+      {step === 'email' && !exitShown && !reauthShown && <ExitNoticeLine />}
       {step === 'email' && serverPending && (
         <p className={styles.notice} role="status" data-testid="auth-server-pending">
           {t('auth.session.serverPending', {})}
@@ -272,6 +278,8 @@ function LoginPanel(p: { deps: AuthFlowDeps | undefined; serverPending?: boolean
       )}
 
       {askCode && <CodeStep flow={flow} />}
+
+      {step === 'email' && !gated && <ReauthClear view={reauth.view} onClear={() => void reauth.clear()} />}
 
       {/* 有易混提示时不再叠“邀请码是 12 位…”那句：只显示一句 */}
       {hint && !gated && !(hint === 'invite_format' && flow.inviteConfusable) && (

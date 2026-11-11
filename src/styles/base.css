@@ -57,6 +57,12 @@ html[data-app] {
   --undo-h: 56px;
 }
 
+/* 键盘弹着（<html data-kbo>，platform/viewport.ts，Q-9 11-11）：底栏、“＋”这时藏着（FA-7 第 3 项），浮条（打字条、随手记输入行等）直接贴键盘上沿，
+   不再留出底栏那 118px。浏览器里 --kb 是键盘压住的高度；iOS 主屏幕版键盘把布局视口本身压矮，布局视口下沿就是键盘上沿，--kb 不写（0） */
+:root[data-kbo] {
+  --dock-bottom: var(--kb, 0px);
+}
+
 /* 同步提示卡显示着（<html data-sn-card>，SyncNoticeHost 写 --sn-h = 卡的实际高度）：页底留白至少让到卡上沿再加 8px，
    最后一行（设置页的“退出登录”等）能滚到卡上面、点得到；撤销条同时开着时卡再往上让一条，留白也跟着加。
    --sn-pad 没有卡时不定义，用的地方写 var(--sn-pad, 0px) */

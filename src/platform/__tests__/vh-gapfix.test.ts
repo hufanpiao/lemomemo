@@ -87,8 +87,10 @@ describe('开关（11-11 起默认开，诊断页关掉用来对照）', () => {
 
   it('main.tsx 按 gapFixWanted() 直接加载本模块，不在“非正式版”那段里（正式版也做），也不再经 vh-diag-boot', () => {
     const main = readFileSync(resolve(__dirname, '../../app/main.tsx'), 'utf8');
-    const call = "if (gapFixWanted()) void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));";
+    const call = "  void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));";
     expect(main).toContain(call);
+    // 台账 Q-2：同一个条件里，先同步早试、再下载本模块
+    expect(main).toContain(['if (gapFixWanted()) {', '  startEarlyGapFix(nextFrame);', call].join('\n'));
     expect(main.indexOf(call)).toBeLessThan(main.indexOf("import.meta.env.MODE !== 'production'"));
     expect(main).not.toContain("localStorage.getItem('lemo-gapfix')");
   });

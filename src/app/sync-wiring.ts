@@ -10,7 +10,8 @@
 //   登记好了再报，登记不上这次不报（接手清单 K8-tz-device）。恢复网络（online）时也走一遍（登记 60 秒间隔、上报 5 分钟间隔照旧）
 // • 被移除只处理一次：同步引擎（刷新令牌失败）和 outbox 的 removed 事件走同一个 onRemoved
 //   → 删本机会话 → wipeOnRemoved：设闸 → 清空本机库和运行时缓存 → 关库（原因 'closed'，不触发 versionchange → 重新载入）→ 回登录页
-// • 被停用、注销冷静期（outbox 的 disabled 事件：account_disabled、account_pending_deletion）和被移除走同一套（4.3、4.3b、0.29 续第 131 条②）：
+// • 被停用、注销冷静期（outbox 的 disabled 事件：account_disabled、account_pending_deletion）和被移除走同一套（4.3、4.3b、0.29 续第 131 条②；
+//   R-382 起已停用改为只退出、不清本机，见文件末尾那条）：
 //   设闸 → 清库 → 删会话 → 回登录页；跳转前记下退出原因（platform/session.ts 的 setExitNotice），登录页提示“已停用”或冷静期的恢复入口。
 //   页面一定会跳走，不会出现“停在原页、写入被 switching 静默丢掉”
 // • 删本机会话只删被拒那次请求用的会话（接手清单 K6-sugg3 ①、K6-sugg4 ①）：“被移除、停用”都来自某个请求的回包，
@@ -31,8 +32,19 @@
 //   暂停期间的提醒照样收得到
 // • followCooling 不自己记退出原因（R-263-sugg ③，有意的）：原因靠前面的 noteExitFromOtherTab，sid 对不上（本页会话已换成别的）
 //   时不记，登录页就不提示；这不是漏了——SessionCheck 照样探测出冷静期、就地出恢复页
-import { wipeOnRemoved } from '../core/account.ts';
+// • R-382（架构 4.1a 第 1 点 ②）：刷新令牌被拒（引擎的 onRemoved）和 outbox 的 removed 事件（session_revoked）不再直接清库，
+//   先设闸、经 core/auth-loss.ts 的 resolveAuthLoss 定结局：removed 照旧 leave('removed')；expired 走 expireLeave——
+//   先广播带 expired 的 reset，写 lemo.reauth、关库（不清），再删被拒的那个会话、记退出原因 expired、回登录页
+// • 已停用优先（0.60 复审建议 2）：已经在走“会话没了”的退出（boot.sessionGone）时又收到 account_disabled，只把退出原因改记成 disabled
+// • 已停用只退出、不清本机（R-382 负责人 11-11 定）：leave('disabled')（探测出已停用、或不能探测时直接按停用）改走 keepLeave——
+//   设闸、写 lemo.reauth（session_id 记 null：登录页不查 session_fate，免得停用时被吊销的会话把本机清掉）、只关库，
+//   广播带 disabled 的 reset，删被拒的那个会话，记退出原因 disabled、回登录页。写不了记号退回原来的清库。
+//   冷静期、探测不出（disabled_unsure）、被移除不变
+import { expireThisTab, markExpired, wipeOnRemoved } from '../core/account.ts';
+import type { AuthLossPath, AuthLossSignal } from '../core/auth-loss.ts';
+import { resolveAuthLossLazy } from '../core/auth-loss-lazy.ts';
 import type { BootResult } from '../core/boot.ts';
+import type { Cache } from '../core/cache.ts';
 import { createSync, type Sync, type SyncOptions } from '../core/sync/engine.ts';
 import { reloadCollections } from '../core/sync/reload.ts';
 import { createTzReporter, type TzReporter } from '../core/sync/report-tz.ts';
@@ -67,11 +79,60 @@ export interface WireSyncDeps extends SyncDisabledDeps {
   onLeader?: (on: boolean) => void | Promise<void>;
   /** 被移除、停用、注销冷静期退出时停掉并清掉这个账号的日志队列（架构 0.38 第 68 条） */
   clearLogs?: () => void;
+  /** 测试用：会话没了怎么定结局（默认 core/auth-loss.ts 的 resolveAuthLoss，R-382） */
+  resolveAuthLoss?: (signal: AuthLossSignal) => Promise<'expired' | 'removed'>;
   /** 测试用：换掉 createSync、选主、前后台、用户操作 */
   create?: (boot: BootResult, opts: SyncOptions) => Sync;
   leader?: (o: TabLeaderOptions) => TabLeader;
   lifecycle?: Lifecycle;
   onActivity?: (fn: () => void) => () => void;
+}
+
+/** 只删被拒的那个会话（K6-sugg3 ①、K6-sugg4 ①）；存储不可用时本来也存不下会话 */
+function dropSession(deps: WireSyncDeps, sid: string | null): void {
+  try {
+    void deps.clearLocalSessionIf(sid);
+  } catch {
+    // 存储不可用
+  }
+}
+
+/** 已停用优先（0.60 复审建议 2）：会话没了的退出已经在走（被移除、登录过期），又收到这个会话的 account_disabled：改记“已停用” */
+function notePriorDisabled(boot: BootResult, deps: WireSyncDeps, code: string, sid: string | null): void {
+  if (code === 'account_disabled' && boot.sessionGone && sid !== null) deps.setExitNotice('disabled', sid);
+}
+
+/**
+ * 登录过期、已停用（R-382）：记号已写（markExpired / expireThisTab）；只关库不清，广播带原因的 reset，删被拒的那个会话，记退出原因、回登录页。
+ * expired 不覆盖已记下的原因；disabled 照记（已停用优先）
+ */
+function keepAndLeave(cache: Cache, deps: WireSyncDeps, post: (m: SyncMessage) => void, notice: 'expired' | 'disabled', sid: string | null): void {
+  try {
+    cache.close();
+  } catch {
+    // 已经关了
+  }
+  post({ type: 'reset', notice, sid });
+  dropSession(deps, sid);
+  if (notice === 'disabled' || (deps.readExitNotice ?? readExitNotice)() === null) deps.setExitNotice(notice, sid);
+  deps.goToAuth();
+}
+
+/**
+ * 会话没了（session_revoked、刷新被拒）：先设闸、写 lemo.reauth，同一个同步段里删被拒的那个会话（K6-sugg3 ①），再定结局（R-382）。
+ * 写不了记号（存储不可用）：记 auth_loss_store_failed，直接按 removed（退回原来的清库，4.1a 第 7 点）
+ */
+function markThenResolve(
+  boot: BootResult, deps: WireSyncDeps, s: { path: AuthLossPath; code: string; sid: string | null }, done: (r: 'expired' | 'removed') => void,
+): void {
+  const kept = markExpired(boot, s.sid);
+  if (!kept) deps.log?.('auth_loss_store_failed');
+  dropSession(deps, s.sid);
+  if (!kept) return done('removed');
+  const signal: AuthLossSignal = { path: s.path, code: s.code, sessionId: s.sid, userId: boot.userId };
+  void (deps.resolveAuthLoss ?? resolveAuthLossLazy)(signal)
+    .catch(() => 'expired' as const)
+    .then(done);
 }
 
 const IDLE: SyncState = { syncing: false, realtime: 'down', lastPullAt: null, stopped: false };
@@ -115,23 +176,18 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   /** 已经在退出（leave 或 followCooling 走过一次）：只走一次（R-263-sugg ①，见文件头） */
   let exiting = false;
   let leader: TabLeader | null = null;
-  /** 清本机、回登录页；sid：被拒那次请求发出前本机会话的 session_id */
-  const leave = (notice: ExitNotice, sid: string | null): void => {
+  /** 清本机、回登录页；sid：被拒那次请求发出前本机会话的 session_id；dropped：收到时已经删过一次会话（R-382 那一路） */
+  const leave = (notice: ExitNotice, sid: string | null, dropped = false): void => {
     if (exiting) return;
+    // 已停用：只退出、不清本机（见文件头）；写不了记号才往下走原来的清库
+    if (notice === 'disabled' && expireThisTab(boot, null)) return keepLeave(sid, 'disabled');
     exiting = true;
     // 先告诉别的标签页退出原因（DISABLED-probe-later ②）：赶在删会话（storage 事件 → 它们的 watchAccount 清库、回登录页）之前发，
     // 那边收到就 setExitNotice，回登录页时显示同一条提示。带上被拒的 sid：那边的会话已换成别的就不记
     leader?.post({ type: 'reset', notice, sid });
     // 同一个同步段里先删本机会话——只删被拒的那个（K6-sugg3 ①、K6-sugg4 ①）；冷静期不删（R-262，见文件头）
-    const drop = (): void => {
-      if (notice === 'pending_deletion') return;
-      try {
-        void deps.clearLocalSessionIf(sid);
-      } catch {
-        // 存储不可用：本来也存不下会话
-      }
-    };
-    drop();
+    const drop = (): void => (notice === 'pending_deletion' ? undefined : dropSession(deps, sid));
+    if (!dropped) drop();
     deps.clearLogs?.();
     void wipeOnRemoved(boot, {
       clearCacheStorage: deps.clearCacheStorage,
@@ -147,17 +203,29 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
       },
     });
   };
-  /** sid：被拒那次请求发出前本机会话的 session_id */
-  const onRemoved = (code: string, sid: string | null): void => {
-    if (removedHandled || boot.switching) return;
+  /**
+   * 登录过期、已停用（R-382）：记号已写（markExpired / expireThisTab）；只关库不清，广播带原因的 reset，删被拒的那个会话，记退出原因、回登录页。
+   * expired 不覆盖已记下的原因；disabled 照记（已停用优先）
+   */
+  const keepLeave = (sid: string | null, notice: 'expired' | 'disabled'): void => {
+    if (exiting) return;
+    exiting = true;
+    keepAndLeave(cache, deps, (m) => leader?.post(m), notice, sid);
+  };
+  /** sid：被拒那次请求发出前本机会话的 session_id；path：信号从哪来（lemo.authloss 记录用） */
+  const onRemoved = (code: string, sid: string | null, path: AuthLossPath = 'outbox'): void => {
+    if (removedHandled || boot.switching) return notePriorDisabled(boot, deps, code, sid);
     removedHandled = true;
-    // sid 为 null、本机也没有会话：不是账号出了问题，按“登录已失效，请重新登录”退出（K6-sugg5 审查建议、R-263，见 sync-disabled.ts 文件头）
-    if (code === 'account_disabled' && noLocalSession(deps, sid)) return leave('expired', null);
+    // sid 为 null、本机也没有会话：不探测（K6-sugg5 审查建议、R-263，见 sync-disabled.ts 文件头）。没带会话的请求 is_active() 按 uid 为空
+    // 本来就回 account_disabled，账号并没停用：提示“登录已失效”（R-263 ③），同样只关库、不清、写 lemo.reauth（R-382，主持人 11-11 复核必改）；
+    // 写不了记号才退回原来的清库
+    if (code === 'account_disabled' && noLocalSession(deps, sid)) return expireThisTab(boot, null) ? keepLeave(null, 'expired') : leave('expired', null);
     if (code === 'account_disabled' && canProbe(deps)) {
       // 限次触发时让出同步主页（这一页的闸关着，占着锁别的标签页就都不同步了）
       return void probeThenLeave(boot, deps, sid, leave, yieldLeader);
     }
-    leave(exitNoticeOf(code), sid);
+    if (exitNoticeOf(code) !== 'removed') return leave(exitNoticeOf(code), sid);
+    markThenResolve(boot, deps, { path, code, sid }, (r) => (r === 'removed' ? leave('removed', sid, true) : keepLeave(sid, 'expired')));
   };
   outbox.onEvent((e) => {
     if (e.type === 'removed' || e.type === 'disabled') onRemoved(e.code, e.sid);
@@ -181,7 +249,7 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   const lead = (): (() => Promise<void>) => {
     const sync = (deps.create ?? createSync)(boot, {
       transport: deps.transport,
-      onRemoved,
+      onRemoved: (code, sid) => onRemoved(code, sid, 'sync'),
       onChanged: (colls) => leader?.post({ type: 'changed', colls }),
       ...(deps.log ? { log: deps.log } : {}),
     });

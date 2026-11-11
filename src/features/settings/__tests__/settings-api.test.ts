@@ -20,6 +20,7 @@ interface FakeOpts {
   devices?: { data: unknown; error: unknown };
   mySessions?: { data: unknown; error: unknown };
   removeDevice?: { data: unknown; error: unknown };
+  revokeSessions?: { data: unknown; error: unknown };
   profileUpdate?: { data: unknown; error: unknown };
   signOut?: { error: unknown };
   updateUser?: { error: unknown };
@@ -46,6 +47,7 @@ function fakeDb(o: FakeOpts = {}) {
     },
     rpc: vi.fn(async (fn: string, args?: unknown) => {
       calls.push(['rpc', fn, args]);
+      if (fn === 'revoke_my_sessions') return o.revokeSessions ?? { data: 1, error: null };
       if (fn === 'my_sessions') return o.mySessions ?? { data: [{ orphan_count: 1, orphan_last_at: '2026-10-28T00:00:00Z', signed_out_device_ids: ['d2'] }], error: null };
       return o.removeDevice ?? { data: null, error: null };
     }),
@@ -147,10 +149,16 @@ describe('createSettingsApi', () => {
     expect(await b.api.removeDevice('d1')).toEqual({ ok: false, error: 'is_current_device' });
   });
 
-  it('signOutOthers 走 auth.signOut({scope: "others"})（免查名单，不另写函数）', async () => {
+  it('signOutOthers（R-382 架构 4.1a 第 3 点）：先 rpc revoke_my_sessions(p_include_current=false) 记下被撤的会话，再 auth.signOut({scope: "others"})', async () => {
     const { api, calls } = fakeDb();
-    await api.signOutOthers();
-    expect(calls).toEqual([['signOut', { scope: 'others' }]]);
+    expect(await api.signOutOthers()).toEqual({ ok: true, value: undefined });
+    expect(calls).toEqual([['rpc', 'revoke_my_sessions', { p_include_current: false }], ['signOut', { scope: 'others' }]]);
+  });
+
+  it('signOutOthers：revoke_my_sessions 出错就回错、不调 signOut（不让别的设备只看到“登录过期”）', async () => {
+    const { api, calls } = fakeDb({ revokeSessions: { data: null, error: { code: 'PGRST202', message: 'not found' } } });
+    expect((await api.signOutOthers()).ok).toBe(false);
+    expect(calls.some((c) => c[0] === 'signOut')).toBe(false);
   });
 
   it('deleteOwnDevice 删本机那一行；没有本机 id 时什么也不做', async () => {

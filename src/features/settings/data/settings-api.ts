@@ -3,7 +3,8 @@
 // • 设备列表：经 RLS 读 devices（只看得到本人的行）；“另有 N 个登录”和“已退出”的设备：rpc my_sessions()
 //   （20261029193000 起多一列 signed_out_device_ids uuid[]：session_id 为空、会话已不在、已被吊销的设备行 id）
 // • 移除别的设备：rpc remove_device(p_device_id)（服务器吊销那台的会话、删行）；移除本机由调用方改走“退出登录”
-// • 退出其他所有设备：auth.signOut({scope: 'others'})（POST /auth/v1/logout?scope=others，免查名单）
+// • 退出其他所有设备：先调 RPC revoke_my_sessions(false)（R-382 0.59 M3 / 0.60：把别的会话写进 revoked_sessions，那些设备才判“被移除”清库），
+//   成功后再 auth.signOut({scope: 'others'})（POST /auth/v1/logout?scope=others，免查名单）；RPC 失败就不调 signOut，按原样回错（界面提示重试）
 // • 退出本机分两步，由 hooks/useSessionExit.ts 排顺序、套总超时（K9 第二轮 L1、N2）：deleteOwnDevice 删本机那一行 →（清本机库）→
 //   dropLocalSession：auth.signOut({scope: 'local'})，不是 ok（断网、令牌失效、拿不到客户端）就删本机会话兜底
 // • 读列表、移除、退出其他设备、改语言各套 API_TIMEOUT_MS 超时，超时按 offline 处理（K9 第二轮 N2）
@@ -128,6 +129,8 @@ export interface MySessionsRow {
 interface LooseDb {
   rpc(fn: 'my_sessions'): Res<MySessionsRow[]>;
   rpc(fn: 'remove_device', args: { p_device_id: string }): Res;
+  /** R-382（迁移 20261111120000，后端）：吊掉本人的会话写进 revoked_sessions；false 不含当前会话，返回吊了几个 */
+  rpc(fn: 'revoke_my_sessions', args: { p_include_current: boolean }): Res<number>;
   from(table: 'devices'): {
     select(cols: string): { is(col: 'deleted_at', v: null): Res<unknown[]> };
     delete(): { eq(col: 'id', v: string): Res };
@@ -259,6 +262,8 @@ export function createSettingsApi(
     signOutOthers: () =>
       timed(() =>
         run(async (db, s) => {
+          const rv = await loose(db).rpc('revoke_my_sessions', { p_include_current: false });
+          if (rv.error) return fail(rv.error, s.sessionId);
           const { error } = await db.auth.signOut({ scope: 'others' });
           return error ? fail(error, s.sessionId) : OK;
         }),

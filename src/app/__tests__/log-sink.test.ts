@@ -146,8 +146,11 @@ describe('日志通道 → 上传队列 → 主页上传', () => {
           void queue.close();
           clearLogQueue('A');
         },
+        // R-382：session_not_found 先经 resolveAuthLoss 定结局；这里钉成“服务器确认被吊销”
+        resolveAuthLoss: () => Promise.resolve('removed'),
       });
       w.removed(code);
+      await settle();
       expect(localStorage.getItem('lemo.logq.A')).toBeNull();
       expect(localStorage.getItem('lemo.logq.B')).toBe('other');
       queue.add({ act: 'late', t: Date.now() });

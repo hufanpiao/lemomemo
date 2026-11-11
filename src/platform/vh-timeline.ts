@@ -149,12 +149,41 @@ export function vvMover(win: Window): () => string | null {
   };
 }
 
-/** 焦点进出都交给 onLine 一行（不带时刻）；返回取消函数 */
+/** focusin 后再记一次的时刻（ms）：键盘弹完、页面滚完 */
+export const FOCUS_SETTLE_MS = 800;
+
+/** 光标偏位（台账 Q-8）定位用：聚焦控件的位置（上沿,下沿，布局视口坐标）和最近一个有 transform 或正在跑动画的祖先（标签#testid:transform 值；没有写 -） */
+export function focusGeom(el: Element, win: Window): string {
+  const r = el.getBoundingClientRect();
+  let tf = "-";
+  for (let p: Element | null = el.parentElement; p; p = p.parentElement) {
+    const cs = win.getComputedStyle(p);
+    const anim = typeof p.getAnimations === "function" ? p.getAnimations().length : 0;
+    if ((cs.transform && cs.transform !== "none") || anim > 0) {
+      tf = `${focusTarget(p)}:${cs.transform}${anim > 0 ? `+anim${anim}` : ""}`;
+      break;
+    }
+  }
+  return `el=${Math.round(r.top)},${Math.round(r.bottom)} tf=${tf}`;
+}
+
+/** 焦点进出都交给 onLine 一行（不带时刻）；focusin 另带控件位置和 transform 祖先，FOCUS_SETTLE_MS 后焦点还在就再记一行 focus-settle；返回取消函数 */
 export function listenFocus(win: Window, onLine: (line: string) => void): () => void {
-  const on = (e: FocusEvent): void => onLine(`${e.type} ${focusTarget(e.target)} ${sampleLine(win)}`);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const on = (e: FocusEvent): void => {
+    const el = e.target;
+    const geom = e.type === "focusin" && el instanceof Element ? ` ${focusGeom(el, win)}` : "";
+    onLine(`${e.type} ${focusTarget(el)} ${sampleLine(win)}${geom}`);
+    if (geom === "" || !(el instanceof Element)) return;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (win.document.activeElement === el) onLine(`focus-settle ${focusTarget(el)} ${sampleLine(win)} ${focusGeom(el, win)}`);
+    }, FOCUS_SETTLE_MS);
+  };
   win.document.addEventListener("focusin", on);
   win.document.addEventListener("focusout", on);
   return () => {
+    clearTimeout(timer);
     win.document.removeEventListener("focusin", on);
     win.document.removeEventListener("focusout", on);
   };

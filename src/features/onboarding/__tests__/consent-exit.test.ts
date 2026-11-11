@@ -49,9 +49,17 @@ describe('leaveThisDevice', () => {
     expect(order).toEqual(['session:s1', 'logs:U1', 'wipe', 'caches', 'logs:U1', 'notice:removed', 'session:s1', 'auth']);
   });
 
-  it('账号停用：同一套，退出原因记 disabled（登录页 auth.exit.disabled）', async () => {
+  it('R-382（负责人 11-11 定）账号停用只退出、不清本机：keepForDisabled 写记号、只关库 → 删会话 → 记 disabled → 回登录页；不清库、不清日志', async () => {
     const { d, order } = deps({ switching: false, userId: 'U1' });
-    await leaveThisDevice('account_disabled', 's1', d);
+    const keepForDisabled = vi.fn(() => (order.push('keep'), true));
+    await leaveThisDevice('account_disabled', 's1', { ...d, keepForDisabled });
+    expect(order).toEqual(['session:s1', 'keep', 'notice:disabled', 'auth']);
+    expect(d.wipeOnRemoved).not.toHaveBeenCalled();
+  });
+
+  it('账号停用但写不了记号：退回原来那一套（清库），退出原因记 disabled', async () => {
+    const { d, order } = deps({ switching: false, userId: 'U1' });
+    await leaveThisDevice('account_disabled', 's1', { ...d, keepForDisabled: () => false });
     expect(order).toEqual(['session:s1', 'logs:U1', 'wipe', 'caches', 'logs:U1', 'notice:disabled', 'session:s1', 'auth']);
   });
 

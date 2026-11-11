@@ -97,6 +97,8 @@ describe('S-B1 免查的 RPC：remove_device（TC-B1-80）、record_consent（TC
       ['POST', '/rest/v1/rpc/claim_endpoint', 'exact'],
       // B3 一条（PATCH api_tokens）在 version-gate-b3.test.ts
       ['PATCH', '/rest/v1/api_tokens', 'exact'],
+      // R-382 一条（session_fate）在 version-gate-r382.test.ts
+      ['POST', '/rest/v1/rpc/session_fate', 'exact'],
     ]);
   });
 

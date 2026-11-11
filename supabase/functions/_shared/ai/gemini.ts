@@ -36,6 +36,8 @@ export function geminiBody(req: AiRequest): Record<string, unknown> {
       candidateCount: req.params.candidateCount,
       responseMimeType: 'application/json',
       responseSchema: req.schema,
+      // 只有调用方写了思考档位才带（录音；11-11）。没写的照旧不带，用模型默认
+      ...(req.params.thinkingLevel ? { thinkingConfig: { thinkingLevel: req.params.thinkingLevel } } : {}),
     },
   };
 }

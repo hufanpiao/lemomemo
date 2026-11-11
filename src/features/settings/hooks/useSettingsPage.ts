@@ -5,7 +5,7 @@ import { saveFile } from '../../../platform/save-file.ts';
 import { readSessionEmail } from '../../../platform/session.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { createAccountApi, EXPORT_MIME, type AccountApi, type ExportFile } from '../data/account-api.ts';
-import { createLeaveAccount, leaveForDisabled, type DisabledLeaveDeps, type LeaveAccount } from '../data/account-exit.ts';
+import { createLeaveAccount, defaultAccountLeaveDeps, leaveForDisabled, type DisabledLeaveDeps, type LeaveAccount } from '../data/account-exit.ts';
 import { createRecentExportsApi, type RecentExportsApi } from '../data/recent-exports.ts';
 import { defaultExitDeps, readLocalDeviceId } from '../data/local.ts';
 import { createSettingsApi, type SettingsApi } from '../data/settings-api.ts';
@@ -56,7 +56,8 @@ export function useSettingsPage(deps: SettingsDeps = {}) {
     ...(deps.exitTimeoutMs === undefined ? {} : { exitTimeoutMs: deps.exitTimeoutMs }),
     ...(deps.leaveWaitMs === undefined ? {} : { leaveWaitMs: deps.leaveWaitMs }),
   });
-  const leave = useMemo(() => deps.leaveAccount ?? createLeaveAccount(), [deps.leaveAccount]);
+  // R-382：设置页的“被移除”记录成 settings 一路（lemo.authloss 的 path）
+  const leave = useMemo(() => deps.leaveAccount ?? createLeaveAccount({ ...defaultAccountLeaveDeps, authPath: 'settings' }), [deps.leaveAccount]);
   const { onRevoked, onSignedOut } = exit;
   // settings-api 的 account_disabled（RLS 一路，分不清停用和冷静期）：先探测再定（R-256 ③；探测不出按 disabled_unsure）
   // 设备列表和改语言共用这一个：探测中（probing）再来的不再探测（第六轮审查建议 ③，同一时刻只探测一次）；

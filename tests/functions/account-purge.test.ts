@@ -91,12 +91,13 @@ describe('TC-B1-101：满 7 天后彻底删除', () => {
     expect([...w.db.counters.keys()].filter((k) => /^export-(job|part|size):/.test(k) && k.includes(A))).toEqual([]);   // export-job:、export-part:、export-size: 都删了
     expect(w.db.counters.has(`export-job:${B}:${JOB_E}.omitted.${SID}|1`)).toBe(true);
     expect(w.db.counters.has(`export-part:${B}:20261029|1`)).toBe(true);
-    // deleted_accounts 写了，账号和 pending_deletions、profiles、revoked_sessions 都没了
+    // deleted_accounts 写了，账号和 pending_deletions、profiles 都没了；revoked_sessions 里 A 的行只剩哈希（R-382，外键 set null）
     expect(w.db.deleted.has(A)).toBe(true);
     expect(w.db.users.has(A)).toBe(false);
     expect(w.db.pending.has(A)).toBe(false);
     expect(w.db.profiles.has(A)).toBe(false);
     expect([...w.db.revoked.values()]).not.toContain(A);
+    expect(w.db.revokedHashOnly).toBeGreaterThan(0);
     expect(w.db.users.has(B)).toBe(true);
     // 最后一封信发到删之前取出的邮箱
     expect(w.box.map((m) => [m.to, m.mail.subject])).toEqual([['A@Test.local', deletionDoneMail('zh-CN').subject]]);

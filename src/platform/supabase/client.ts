@@ -4,12 +4,14 @@
 // - supabase-js 约 40 KB，不进首屏：调用 getSupabase() 时才动态 import（先用 IndexedDB 画出上次的内容）
 // - auth.storage 是包了 localStorage 的适配器（auth-storage.ts，接手清单 K6-signout-lib）：平时和直接用 localStorage 一样、键名不变；
 //   只在退出流程期间删会话键前先核对 session_id。localStorage 用不了时不传，auth-js 照旧用内存存储
+// - global.fetch 外面包一层刷新观察（refresh-observer.ts，R-382 架构 4.1a 第 1 点 ①）：只记刷新令牌请求失败的码，Response 原样交回
 // - exe 里换成凭据管理器那一份（platform/session-store.ts 的 authBackendStorage，F5-2 / N1）：先由入口 await installDesktopSession()
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildInfo } from '../env.ts';
 import { APP_VERSION_HEADER, appFetch } from '../http.ts';
 import { authBackendStorage } from '../session-store.ts';
 import { authStorage } from './auth-storage.ts';
+import { observeRefresh } from './refresh-observer.ts';
 import type { Database } from './database.ts';
 
 export type Db = SupabaseClient<Database>;
@@ -41,7 +43,7 @@ export function clientOptions(version: string = buildInfo.version) {
   return {
     global: {
       headers: { [APP_VERSION_HEADER]: version },
-      fetch: appFetch,
+      fetch: observeRefresh(appFetch),
     },
     auth: {
       persistSession: true,

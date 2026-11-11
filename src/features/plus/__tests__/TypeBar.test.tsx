@@ -63,22 +63,26 @@ describe('打字条', () => {
     expect(writer.patch).toHaveBeenCalledWith('events', expect.any(String), { undone: true, updated_at: NOW });
   });
 
-  it('S24 Ctrl+Z：提示条还在、输入框空着时撤销这一批；输入框有字时让给浏览器撤销打字；没有提示条时不管', async () => {
-    const { input, writer } = setup();
+  it('S24 Ctrl+Z：提示条还在、输入框空着时撤销这一批；输入框有字时让给浏览器撤销打字；没有提示条时不管（记下后自动收起，R-392：再点“＋”打开后测）', async () => {
+    const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
+    const ui = (n: number) => <TypeBar day={null} writer={writer} online={() => true} opened={n} onExpand={vi.fn()} onClose={vi.fn()} />;
+    const r = render(ui(1));
     const ctrlZ = (): KeyboardEvent => {
       const e = new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true });
-      input.dispatchEvent(e);
+      screen.getByTestId('type-input').dispatchEvent(e);
       return e;
     };
     expect(ctrlZ().defaultPrevented, '还没记下，不管').toBe(false);
-    fireEvent.change(input, { target: { value: '明天下午3点去银行办理业务' } });
+    fireEvent.change(screen.getByTestId('type-input'), { target: { value: '明天下午3点去银行办理业务' } });
     await act(async () => {
       fireEvent.submit(screen.getByTestId('type-bar'));
     });
-    fireEvent.change(input, { target: { value: '买' } });
+    expect(screen.queryByTestId('type-bar'), '记下后自动收起').toBeNull();
+    r.rerender(ui(2));
+    fireEvent.change(screen.getByTestId('type-input'), { target: { value: '买' } });
     expect(ctrlZ().defaultPrevented, '有字：让给浏览器').toBe(false);
     expect(writer.patch).not.toHaveBeenCalled();
-    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('type-input'), { target: { value: '' } });
     let e!: KeyboardEvent;
     await act(async () => {
       e = ctrlZ();

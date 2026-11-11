@@ -269,7 +269,7 @@ describe('闸、CacheClosedError、被移除', () => {
 
   it('刷新令牌发现被移除：onRemoved 只调一次，同步停下', async () => {
     const d = await device();
-    d.t.ensure = 'removed';
+    d.t.ensure = 'check';
     await d.outbox.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
     d.sync.start();
     await d.sync.idle();

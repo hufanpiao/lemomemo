@@ -14,6 +14,7 @@ import { SCHEMA_V } from './schema-version.ts';
 import { buildInfo } from '../platform/env.ts';
 import { onUpgradeRequired } from '../platform/http.ts';
 import { clearCacheStorage } from '../platform/session.ts';
+import { clearReauth, readReauth } from '../platform/auth-loss-store.ts';
 import { requestAppUpdate } from '../platform/native-bridge.ts';
 import { reloadPage, updateAttemptStore } from '../platform/sw-register.ts';
 import { ensureAccount } from './account.ts';
@@ -56,6 +57,8 @@ export interface BootOptions {
   schemaV?: number;
   /** 默认 true：经 platform/http.ts 订阅所有请求的 426 */
   listen426?: boolean;
+  /** 测试用：读 lemo.reauth（默认 platform/auth-loss-store.ts 的 readReauth，R-382） */
+  readReauth?: (now: number) => unknown;
   /**
    * 升级中心一建好就同步调（在开库之前）：main.tsx 用它盯 blocked（整屏提示，文案见 update.blocked.title）——
    * 被挡住时 coldStart 还在等库打开，App 还没画（架构师 10-30 第 8 点）
@@ -215,7 +218,11 @@ export async function coldStart(opts: BootOptions): Promise<BootResult> {
     // 库里还没同步的修改一起丢（R-231 负责人已接受）。
     // 版本比本 App 高的库（v99 一类、TC-B1-49 的 version_too_new）也照样删：TC-B1-49 管的是“有会话时不删、只提示更新”，
     // 没有会话时库里的数据本来就该清掉，两者不矛盾
+    // 例外（R-382 架构 4.1a 第 2 点）：有 lemo.reauth、在 30 天以内（也不比本机时间晚 1 天以上）是登录过期，不删库，登录页提示重新登录；
+    // 没有记号或已失效：照旧删库，记号一起删
     result.status = 'signed_out';
+    if ((opts.readReauth ?? readReauth)(now()) !== null) return result;
+    clearReauth();
     await deleteCacheDb({ factory: opts.cacheOptions?.factory, name: opts.cacheOptions?.name });
     return result;
   }
@@ -314,6 +321,9 @@ async function loadCache(
 
   // 换账号（4.1、0.38 第 17 条）：在读写任何东西之前比对 owner，不同就清空整库和运行时缓存，旧账号的 outbox 不发
   result.switchedUser = await ensureAccount(cache, userId, { clearCacheStorage: opts.clearCacheStorage ?? clearCacheStorage });
+  // 登录过期后重新登录（R-382 4.1a 第 2 点）：同一账号库原样用（same），换了账号上面已在同一个事务里清空（switched）；两种都删掉 lemo.reauth。
+  // lemo.authloss 里别的账号的记录由 main.tsx 上传那一步丢掉（按 uid_h 匹配）
+  clearReauth();
 
   // SW 记下的通知按键（0.29 续第 107 条②，B2）：转 outbox 之前先丢掉别的账号的、超过 24 小时的；
   // 转 outbox 由提醒功能做（FA-4）。清理失败不影响启动，下次启动再清

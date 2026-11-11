@@ -44,7 +44,10 @@ export const core = defineManifest({
     { ...priv, name: 'webauthn_challenges', backup: 'none', export: 'none', onAccountDelete: 'cascade', userLookup: BY_USER },
     { ...priv, name: 'deleted_accounts', backup: 'json', export: 'none', onAccountDelete: 'keep-id-only', userLookup: BY_USER },
     { ...priv, name: 'pending_deletions', backup: 'none', export: 'none', onAccountDelete: 'cascade', userLookup: BY_USER },
-    { ...priv, name: 'revoked_sessions', backup: 'none', export: 'none', onAccountDelete: 'cascade', userLookup: BY_USER },
+    // R-382（架构 4.1a 第 4 点，安全审 M5）：注销不删吊销记录，外键 set null 把 user_id、session_id 置空，只留 pair_hash、revoked_at；
+    //   maxLifetime：保留到这次登录彻底失效、并且满 30 天——revoked_at 满 30 天、并且会话已不在 auth.sessions 才由每日清理删（cleanup_batch B1 c；
+    //   安全审 M1：会话还在的不删，否则 session_alive 会把被吊销的会话当成活的）
+    { ...priv, name: 'revoked_sessions', backup: 'none', export: 'none', onAccountDelete: 'keep-id-only', userLookup: BY_USER, maxLifetime: '30 days' },
     { ...priv, name: 'counters', backup: 'none', export: 'none', onAccountDelete: 'explicit',
       userLookup: { by: 'keyPattern', col: 'key', pattern: '%:<user>:%' } },
     { ...priv, name: 'ai_state', backup: 'none', export: 'none', onAccountDelete: 'keep-id-only', noUserData: true },

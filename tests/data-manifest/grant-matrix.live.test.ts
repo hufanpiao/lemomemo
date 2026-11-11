@@ -35,7 +35,7 @@ describe.skipIf(!DB_URL)('授权矩阵打本机真库（TC-B0-89 / C9；没设 I
     await sql?.end({ timeout: 5 });
   });
 
-  it('全部格和九个 RPC 都和期望一致；暂缺的 RPC 正好是“后面批次才建”名单里的', async () => {
+  it('全部格和 11 个 RPC 都和期望一致；暂缺的 RPC 正好是“后面批次才建”名单里的', async () => {
     const r = await runGrantMatrix(db, m);
     expect(grantProblems(r)).toEqual([]);
     expect(r.outcomes).toHaveLength(m.cases.length);

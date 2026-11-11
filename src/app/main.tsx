@@ -24,7 +24,8 @@ import '../styles/skins/simple.css';
 import '../styles/skins/glass.css';
 import '../styles/base.css';
 import { fromUiLocale, LOCALE_STORAGE_KEY, pickLocale, toUiLocale } from '../../shared/i18n/pick-locale.ts';
-import { watchAccount } from '../core/account.ts';
+import { REAUTH_GRACE_MS, watchAccount } from '../core/account.ts';
+import { hasAuthLoss, readReauth } from '../platform/auth-loss-store.ts';
 import { coldStart, type BootResult } from '../core/boot.ts';
 import { deleteCacheDb } from '../core/cache.ts';
 import { createLogQueue, guardOwner } from '../core/log/queue.ts';
@@ -37,7 +38,7 @@ import { setPushDisconnectLog } from '../platform/push-disconnect.ts';
 import { browserLifecycle } from '../platform/net.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
 import { buildInfo, isTauri, JS_ERROR_ACT, jsErrorCode, registerJsErrorLog } from '../platform/env.ts';
-import { gapFixWanted } from '../platform/vh-gapfix-gate.ts';
+import { gapFixWanted, startEarlyGapFix } from '../platform/vh-gapfix-gate.ts';
 import {
   clearCacheStorage, clearLocalSessionIf, goToAuth, onAuthUser, onSessionStorageChange, readSessionAccessToken, readSessionId, readSessionUserId,
   markAccountUiShown, setExitNotice, takeLocalSession,
@@ -78,7 +79,11 @@ hideSplashAfter();
 watchInsetBottom();
 // R-371 Gap fix（底栏偏高修复，11-11 起默认开、正式版也做）：只在 iOS 主屏幕版冷启动时下载 platform/vh-gapfix.ts 做一次（判断见 vh-gapfix-gate.ts，
 // 诊断页可以关掉对照）；等帧传 motion 的 nextFrame（A25）
-if (gapFixWanted()) void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));
+// 台账 Q-2：先在这里同步早试一次（启动画面还盖着，不等下载、不等底栏），不成再由 vh-gapfix.ts 等底栏挂上后照原样补一次
+if (gapFixWanted()) {
+  startEarlyGapFix(nextFrame);
+  void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));
+}
 // R-371 冷启动时间线（非正式版，诊断页开关“Timeline next launch”）：开着才下载 platform/vh-diag-boot.ts 记一次；键名同 vh-timeline.ts 的 ARM_KEY。
 // 正式构建靠 MODE 常量整块摇掉
 if (import.meta.env.MODE !== 'production') {
@@ -145,10 +150,14 @@ async function start(): Promise<void> {
   if (!userId) {
     // 没登录：库还在就按库名整库删掉（coldStart 的 signed_out 分支），未同步的修改一起丢（R-231）。
     // 不等删库，直接去登录页（登录页审查建议 2）：coldStart 在第一个 await 之前就同步发出了 deleteDatabase，跳转不影响它执行
+    // 例外（R-382 架构 4.1a 第 2 点）：有 lemo.reauth 且没过期是登录过期，coldStart 不删库，日志队列也留着（同一账号重新登录后照传），
+    // 登录页提示“登录已过期，请重新登录”
+    const kept = readReauth() !== null;
     void coldStart({ userId: null }).catch(() => undefined);
     // 日志上传队列一起清（架构 0.38 第 68 条 ⑤；K6-signedout 审查建议 1）：没有会话时哪个账号的都不该留
-    clearLogQueue(null);
-    goToAuth();
+    if (!kept) clearLogQueue(null);
+    if (kept) goToAuth('expired', null);
+    else goToAuth();
     return;
   }
 
@@ -173,6 +182,11 @@ async function start(): Promise<void> {
     isOnline: () => browserLifecycle.isOnline(), onOnline: (fn) => browserLifecycle.onOnline(fn),
   });
   logs.setSink((e) => logQueue.add(e));
+  // 上次会话丢失的原因码（R-382 架构 4.1a 第 3 点）：只把 uid_h 对得上本账号的几条按 auth_loss 上传，别的账号的直接丢；取完整个键删掉
+  // 本机有这个键才动态引入（auth-loss-log.ts 带 crypto.subtle 哈希，不进首屏；平时没有这个键，不下载）
+  if (hasAuthLoss()) void import('../platform/auth-loss-log.ts')
+    .then(async (m) => (await m.takeAuthLossFor(userId, readInstallId())).forEach((e) => logs.log('auth_loss', { code: m.authLossLogCode(e) })))
+    .catch(() => undefined);
   // 被移除、停用、注销冷静期、本页收到 SIGNED_OUT：停止上传并清掉这个账号的日志队列（架构 0.38 第 68 条）；watchAccount（K6-signedout）和 wireSync 共用
   const clearLogs = logQueueCleaner(logQueue, userId);
   /** 已按 boot 的 profile 定过界面语言（之后 blocked 也不再按“没有 profile”覆盖） */
@@ -208,6 +222,9 @@ async function start(): Promise<void> {
     // 本页收到 SIGNED_OUT：判断会话归谁的同一刻就删本机会话，回登录页前只在会话还是那一个时再删（K6-signedout-sugg2 ①）
     dropSession: () => takeLocalSession(),
     onSignedOut: goToAuth,
+    // R-382：别的标签页删了会话，等它写好 lemo.reauth 再判断是登录过期还是退出了
+    reauthGraceMs: REAUTH_GRACE_MS,
+    log: (act) => logs.log(act),
     // 别的标签页退出：本页关掉连接后按库名删库（登录页审查）
     deleteDb: () => deleteCacheDb(),
     // 清库失败（onFailed 不填）同样重新载入：冷启动会在读写任何东西之前再清一次，再失败就降级成 unavailable、不渲染缓存

@@ -25,7 +25,7 @@ describe('本机已是别的账号的 S2 时收到转来的 SIGNED_OUT', () => {
     expect(out).not.toHaveBeenCalled();
     local = null;
     h('SIGNED_OUT', null);
-    expect(out).toHaveBeenCalledWith('s2');
+    expect(out).toHaveBeenCalledWith('s2', null);   // R-382：第二个参数是最近的刷新失败记录（没有为 null）
   });
 
   it('② 转到了 watchAccount：会话里已是 B → 换账号（switchedUser、onSwitched），不删会话、不按“被移除”回登录页', async () => {

@@ -4,6 +4,7 @@
 // 拿到会话以后、跳进 /app/ 之前先探测账号状态（R-256 ③、R-258，useAccountGate 的 check('login') 经 probe 传进来）：
 //   冷静期、停用、探测不出（unknown）时不跳，由登录页原地显示恢复页、“账号已停用”或“暂时无法确认账号状态”；active 才进 App
 // 错误各自一张卡片；发得太频繁、刚发过码都有 60 秒倒计时（Supabase：同一邮箱 60 秒一次）
+import type { ReauthDeps } from '../data/reauth.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
@@ -66,6 +67,8 @@ export interface AuthFlowDeps {
   readToken?: () => string | null;
   /** 测试用：会话已被别的标签页换掉时，用旧令牌直接 /logout（默认 platform/sign-out.ts 的 logoutWithToken） */
   logoutWithToken?: (token: string, timeoutMs: number) => Promise<{ serverDone: boolean }>;
+  /** 测试用：登录过期那几样（R-382；默认 data/reauth.ts 的 defaultReauthDeps） */
+  reauth?: ReauthDeps;
 }
 
 const defaultApi = (): AuthApi => createAuthApi(getSupabase);

@@ -11,7 +11,8 @@
 // • 结果：ok / conflict / forked → ack（conflict、forked 另发 conflict 事件并补拉这张表）；gone → 按永久失败进“发送失败”区、发 gone 事件并补拉这张表；
 //   not_found（行没了或本人看不到：硬删、清理、移进隐私记、别人的行，4.4.1）→ 丢掉这一项（drop），行真被删了墓碑会删本机行；
 //   patch_table_not_allowed、patch_bad_args 同样丢掉
-// • 失败按 outbox.fail 的归类：auth → 刷新令牌再发（不计 tries，refreshFlow 按 TC-B1-88 ①～⑧）；刷新成功后马上又 401 → 不当被移除，
+// • 失败按 outbox.fail 的归类：auth → 刷新令牌再发（不计 tries，refreshFlow 按 TC-B1-88 ①～⑧；R-382 起刷新被拒不再在这里判“被移除”，
+//   码交给 removed(code, sid)，由 sync-wiring 经 core/auth-loss.ts 的 resolveAuthLoss 定 expired / removed）；刷新成功后马上又 401 → 不当被移除，
 //   这一项按临时故障退避（tries + 1）、停发、记 auth_retry_401（K8 审查必改 4）；
 //   transient（含 55P03 等不到行锁）→ 停下等退避；upgrade → 整个队列已暂停；removed → outbox 已设闸并发 removed 事件（main.tsx 接）；
 //   disabled（account_disabled）→ outbox 已设闸、发 disabled 事件，这里停发；清库、回登录页由 sync-wiring 接事件做（架构 4.3）；
@@ -52,9 +53,18 @@ export const SEND_BATCH = { items: 20, ms: 15_000 };
 
 /**
  * 刷新令牌的结果：ok 再发；network 临时故障（留在 pending、不计 tries，稍后再试）；
- * removed 被移除（code、sid 交给 removed；sid = 被拒的那次刷新发出前本机会话的 session_id）
+ * lost 会话没了（code、sid 交给 removed，由 resolveAuthLoss 定结局；sid = 被拒的那次刷新发出前本机会话的 session_id）。
+ * code：check 类用 session_not_found（要查 session_fate），expired 类用 REFRESH_REJECTED（直接判 expired）
  */
-export type RefreshOutcome = { kind: 'ok' } | { kind: 'network' } | { kind: 'removed'; code: string; sid: string | null };
+export type RefreshOutcome = { kind: 'ok' } | { kind: 'network' } | { kind: 'lost'; code: string; sid: string | null };
+
+/** 刷新被拒、不用查服务器的那一类（别的 4xx：refresh_token_already_used 等）交给 resolveAuthLoss 的码 */
+export const REFRESH_REJECTED = 'refresh_rejected';
+
+/** SessionCheck 里的 check / expired / failed → 交给 resolveAuthLoss 的码 */
+export function lostCodeOf(r: 'check' | 'expired' | 'failed'): string {
+  return r === 'check' ? 'session_not_found' : REFRESH_REJECTED;
+}
 
 /** 本机会话现在的 session_id；实现抛错时按读不出（null） */
 export function sessionIdNow(t: Pick<SyncTransport, 'sessionId'>): string | null {
@@ -66,21 +76,17 @@ export function sessionIdNow(t: Pick<SyncTransport, 'sessionId'>): string | null
 }
 
 /**
- * 刷新令牌（TC-B1-88）：① 断网 ② 503 ③ 429 → network；④⑤⑥ → removed；
- * ⑦ 别的 4xx 记一条日志再试一次，成功就 ok；⑧ 两次都是别的 4xx → removed（auth_refresh_failed）。
- * 每次刷新前记下本机会话的 session_id（K6-sugg4 ①），被移除时带回最后一次的
+ * 刷新令牌（TC-B1-88；R-382 架构 4.1a 第 1 点 ② 改）：① 断网 ② 503 ③ 429 → network；
+ * ④⑤⑥（check）、⑦⑧ 别的 4xx（expired）→ lost，码交给 resolveAuthLoss。只刷新一次，不再“两次 failed 就算被移除”（auth_refresh_failed 去掉）。
+ * 刷新前记下本机会话的 session_id（K6-sugg4 ①）随结果带回
  */
 export async function refreshFlow(t: Pick<SyncTransport, 'refreshSession' | 'sessionId'>, log?: (code: string) => void): Promise<RefreshOutcome> {
-  let sid: string | null = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    sid = sessionIdNow(t);
-    const r = await t.refreshSession();
-    if (r === 'ok') return { kind: 'ok' };
-    if (r === 'network') return { kind: 'network' };
-    if (r === 'removed') return { kind: 'removed', code: 'session_not_found', sid };
-    log?.('auth_refresh_4xx');
-  }
-  return { kind: 'removed', code: 'auth_refresh_failed', sid };
+  const sid = sessionIdNow(t);
+  const r = await t.refreshSession();
+  if (r === 'ok') return { kind: 'ok' };
+  if (r === 'network') return { kind: 'network' };
+  if (r !== 'check') log?.('auth_refresh_4xx');
+  return { kind: 'lost', code: lostCodeOf(r), sid };
 }
 
 /**
@@ -120,8 +126,8 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
   const sid0 = sessionIdNow(d.transport);
   const s = await d.transport.ensureSession();
   if (d.gated()) return 'stopped';
-  if (s === 'removed') {
-    d.removed('session_not_found', sid0);
+  if (s === 'check' || s === 'expired') {
+    d.removed(lostCodeOf(s), sid0);   // 会话没了：sync-wiring 经 resolveAuthLoss 定结局（R-382）
     return 'removed';
   }
   if (s === 'network') return 'retry';
@@ -187,7 +193,7 @@ export async function sendAll(d: SendDeps): Promise<SendOutcome> {
     const r = await refreshFlow(d.transport, d.log);
     if (d.gated()) return stopWith(d, item.op_id);
     if (r.kind === 'ok') continue;
-    if (r.kind === 'removed') {
+    if (r.kind === 'lost') {
       d.removed(r.code, r.sid);
       return 'removed';
     }

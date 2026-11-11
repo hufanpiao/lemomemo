@@ -2,7 +2,7 @@
 // 按“清单里的每张表 + 白名单里的四个 scan_ 视图 × {anon、authenticated、service_role、fn_vault、fn_ai} × {SELECT、INSERT、UPDATE、DELETE}”
 // 每格生成一条用例，写明期望：整张表都给（all）、一列都不给（none）、只给这几列（列名单）。runner（grant-runner.ts）在数据库里以那个角色
 // 逐列真的执行一句不动数据的语句，看哪些成功、哪些被拒（42501），和期望逐项比：多一列、少一列都失败。
-// 另外 public 的九个 RPC（3.3 D）各生成 anon、authenticated、service_role 三条执行权用例。
+// 另外 public 的 11 个 RPC（3.3 D）各生成 anon、authenticated、service_role 三条执行权用例（anon 只有 PUBLIC_RPCS_ANON 里的能调，R-382 的 session_fate）。
 //
 // 期望从哪来（和 D1 第 4、5 节同一口径，不另起一套）：
 //   anon          public：只有清单 anonReadable 的列能 SELECT；其余一律没有。private：一律没有
@@ -24,6 +24,8 @@ export interface GrantWhitelist {
   TABLE_GRANTS: Record<'service_role' | 'fn_vault' | 'fn_ai', Record<string, readonly string[]>>;
   COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', Record<string, readonly string[]>>;
   PUBLIC_RPCS: readonly string[];
+  /** 不登录也能调的 public RPC（R-382：session_fate）；没写当空 */
+  PUBLIC_RPCS_ANON?: readonly string[];
 }
 
 /** 'all'：表级授权（每一列都行）；'none'：一列都不行；列名单：只有这几列行（列级授权，表级没有） */
@@ -140,7 +142,8 @@ export function generateGrantMatrix(manifests: readonly Manifest[], wl: GrantWhi
 
   if (new Set(wl.PUBLIC_RPCS).size !== wl.PUBLIC_RPCS.length) throw new ManifestError('PUBLIC_RPCS 有重复');
   const rpcCases: RpcCase[] = wl.PUBLIC_RPCS.flatMap((fn) =>
-    (['anon', 'authenticated', 'service_role'] as const).map((role) => ({ id: `TC-GRANT-rpc-${fn}-${role}`, fn, role, expect: role === 'authenticated' })),
+    (['anon', 'authenticated', 'service_role'] as const).map((role) => ({ id: `TC-GRANT-rpc-${fn}-${role}`, fn, role,
+      expect: role === 'authenticated' || (role === 'anon' && (wl.PUBLIC_RPCS_ANON ?? []).includes(fn)) })),
   );
   return { cases, rpcCases, relations };
 }

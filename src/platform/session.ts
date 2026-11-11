@@ -19,6 +19,7 @@ import { openAuth } from './native-bridge.ts';
 import { collectRemovals, sessionDropState, sessionRemovalsSettled, sessionStore, showExitIncomplete } from './session-store.ts';
 import { reloadPage } from './sw-register.ts';
 import { getSupabase, onClientReady } from './supabase/client.ts';
+import { recentRefreshFailure, setRefreshSessionReader, type RefreshFailure } from './supabase/refresh-failure.ts';
 
 const KEY_RE = /^sb-.+-auth-token$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -126,6 +127,9 @@ export function readSessionId(storage?: Storage, supabaseUrl: string = buildInfo
   return sessionIdOfToken(readSessionAccessToken(storage, supabaseUrl));
 }
 
+// 刷新观察（R-382，refresh-observer.ts）记的 sid 取本机当前会话的 session_id：在这里挂上（client.ts 不能 import 本文件，免得循环）
+setRefreshSessionReader(() => readSessionId());
+
 /** 别的标签页改了会话（登录、换账号、退出）：回调新的 user_id（没有会话为 null）。返回取消函数 */
 export function onSessionStorageChange(
   fn: (userId: string | null) => void,
@@ -160,7 +164,7 @@ export function whenIdle(fn: () => void): void {
  * • 没人用 supabase-js 时，等首屏画完、浏览器空闲才加载它（K6 审查 L6）。“首屏画完”看第一个功能页真画出来了（first-paint.ts，
  *   B2 FA-6 ①）：只等空闲不够，页面分包还在下载时浏览器就已经“空闲”了。返回取消函数
  */
-export function onAuthUser(fn: (userId: string) => void, onSignedOut?: (deadSessionId?: string | null) => void): () => void {
+export function onAuthUser(fn: (userId: string) => void, onSignedOut?: SignedOutFn): () => void {
   let off: (() => void) | null = null;
   let cancelled = false;
   const offReady = onClientReady((db) => {
@@ -189,7 +193,12 @@ export interface AuthEventOptions {
   onSignedIn?: (sessionId: string | null) => void;
   /** 收到 SIGNED_OUT 那一刻本机会话的 session_id；默认同步读 readSessionId() */
   localSessionId?: () => string | null;
+  /** 最近 120 秒内刷新令牌失败的那条（R-382，refresh-observer.ts）；默认 recentRefreshFailure */
+  refreshFailure?: () => RefreshFailure | null;
 }
+
+/** 本页的 SIGNED_OUT 回调：deadSessionId 是本页最后见到的 session_id；failure 是最近 120 秒内刷新失败的记录（没有为 null，按 code 'none'） */
+export type SignedOutFn = (deadSessionId?: string | null, failure?: RefreshFailure | null) => void;
 
 /** onAuthStateChange 回调里用到的会话字段（supabase-js 的 Session 的子集） */
 export type AuthEventSession = { user: { id: string }; access_token?: unknown } | null;
@@ -211,7 +220,7 @@ export type AuthEventSession = { user: { id: string }; access_token?: unknown } 
  */
 export function authEventHandler(
   fn: (userId: string) => void,
-  onSignedOut?: (deadSessionId?: string | null) => void,
+  onSignedOut?: SignedOutFn,
   o: AuthEventOptions = {},
 ): (event: string, session: AuthEventSession) => void {
   const selfSignOut = o.selfSignOut ?? ((sid: string | null) => isSelfSignOut(undefined, undefined, sid));
@@ -232,8 +241,8 @@ export function authEventHandler(
       }
       // 本机会话还在、就是本页认的那个：auth-js 先删键再通知，键还在只说明删除被存储保护拦下了（K6-signout-lib，见上）。忽略
       if (local !== null && local === sid) return;
-      onSignedOut(sid);
-    } else if (event === 'INITIAL_SESSION' && session === null && sessionGone()) onSignedOut(sid);
+      onSignedOut(sid, (o.refreshFailure ?? recentRefreshFailure)());
+    } else if (event === 'INITIAL_SESSION' && session === null && sessionGone()) onSignedOut(sid, (o.refreshFailure ?? recentRefreshFailure)());
   };
 }
 
@@ -465,8 +474,9 @@ export function mayRemoveSessionKey(key: string, sessionId: string | null, stora
  */
 export function goToAuth(...args: GoToAuthArgs): void {
   const [notice] = args;
-  if (args[0] === 'removed') void clearLocalSessionIf(args[1]);
-  if (notice && !(notice === 'removed' && readExitNotice() !== null)) setExitNotice(notice);
+  if (args[0] === 'removed' || args[0] === 'expired') void clearLocalSessionIf(args[1]);
+  // removed、expired 不覆盖已记下的原因（R-382 0.60 复审建议 2：已停用优先，不被“被移除”“登录过期”盖掉）
+  if (notice && !((notice === 'removed' || notice === 'expired') && readExitNotice() !== null)) setExitNotice(notice);
   // exe 里账号的界面已经画出来过（FA2-3）：主窗口不会因为开登录小窗口而卸载，编辑页保留的输入、内存里的集合会一直显示着。
   // 等会话真删掉（发给 Rust 的删除回来，最多 3 秒）再整页重新载入；重新启动时没有会话，只开登录小窗口
   // 删不掉（A-1）：不重新载入（会带着会话回到已登录界面），改显示“退出没完成，点重试”；之后删成了（晚到的成功、或点了重试）再重新载入
@@ -494,10 +504,11 @@ export function resetAccountUiShownForTest(): void {
   accountUiShown = false;
 }
 
-/** goToAuth 的参数：不带原因；带 disabled / pending_deletion；带 removed 时必须给删掉的那个 session_id（K6-sugg4 ②） */
-export type GoToAuthArgs = [] | [notice: Exclude<ExitNotice, 'removed'>] | [notice: 'removed', deadSessionId: string | null];
+/**
+ * goToAuth 的参数：不带原因；带 disabled / pending_deletion 等；带 removed 或 expired（R-382）时必须给作废的那个 session_id（K6-sugg4 ②），
+ * 只在本机会话还是那一个时才删
+ */
+export type GoToAuthArgs = [] | [notice: Exclude<ExitNotice, 'removed' | 'expired'>] | [notice: 'removed' | 'expired', deadSessionId: string | null];
 
 // ───────── 退出原因：搬到 platform/exit-notice.ts（10-30，session.ts 回到 300 行以内）；这里原样转出，原有的 import 不用改 ─────────
-export {
-  clearExitNotice, EXIT_NOTICE_TTL_MS, exitNoticeOf, isExitNotice, readExitNotice, setExitNotice, type ExitNotice,
-} from './exit-notice.ts';
+export { clearExitNotice, EXIT_NOTICE_TTL_MS, exitNoticeOf, isExitNotice, readExitNotice, setExitNotice, type ExitNotice } from './exit-notice.ts';

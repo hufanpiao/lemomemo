@@ -9,7 +9,9 @@
 //     打断后面的 signOut，留下“有会话、没库”。所以 ① wipe 一开头 upgrade.holdBusy('sign_out')，退出期间不释放（最后 goToAuth 离开页面）；
 //     ② deleteDb 先 close() 本页连接（原因是 'closed'，不触发 reload）再删
 import { LANG_COOKIE, LOCALE_STORAGE_KEY, asLocale, type Locale, type UiLocale } from '../../../../shared/i18n/pick-locale.ts';
-import { sealForExit } from '../../../core/account.ts';
+import { expireThisTab, markExpired, sealForExit } from '../../../core/account.ts';
+import type { AuthLossSignal } from '../../../core/auth-loss.ts';
+import { resolveAuthLossLazy } from '../../../core/auth-loss-lazy.ts';
 import { applyFreshConfig, getBoot, localUnsentCount, wipeLocal } from '../../../core/boot.ts';
 import { goToAuth, readSessionUserId } from '../../../platform/session.ts';
 import { defaultExitSteps, deleteLocalDb, type ExitSteps } from '../../../platform/sign-out.ts';
@@ -64,6 +66,17 @@ export interface ExitDeps extends ExitSteps {
   goToAuth(): void;
   /** 跳登录页失败时放开 wipe 占住的“忙”：库已因升级关掉的话，升级中心会自己重新载入页面 */
   releaseHold?(): void;
+  /**
+   * R-382（架构 4.1a 第 1 点 ②）：设置页的“被移除”先定结局。不给（测试）就照旧直接按被移除处理。
+   * resolveAuthLoss：默认 core/auth-loss.ts 的；expireHere：登录过期时设闸、写 lemo.reauth、关库（false = 写不了记号，退回清库）；
+   * goToAuthExpired：回登录页提示“登录已过期”（只删那一个会话）；lostUserId：会话丢了的那个账号（本页启动时的账号）；
+   * markHere：查 session_fate 之前先设闸、写 lemo.reauth（不关库；false = 写不了记号，直接按被移除清库），和别的出口的 markExpired 一样（独立验证建议 3）
+   */
+  resolveAuthLoss?(signal: AuthLossSignal): Promise<'expired' | 'removed'>;
+  markHere?(sid: string | null): boolean;
+  expireHere?(sid: string | null): boolean;
+  goToAuthExpired?(sid: string | null): void;
+  lostUserId?(): string | null;
 }
 
 /** wipe 里 holdBusy('sign_out') 的释放函数；退出期间不放，只在跳登录页失败时放 */
@@ -95,6 +108,17 @@ export const defaultExitDeps: ExitDeps = {
   // 必须在 wipe（封存）之前调：封存以后 localUnsentCount 返回 null
   pendingCount: () => localUnsentCount(getBoot()),
   goToAuth,
+  resolveAuthLoss: (signal) => resolveAuthLossLazy(signal),
+  markHere: (sid) => {
+    const boot = getBoot();
+    return boot ? markExpired(boot, sid) : false;
+  },
+  expireHere: (sid) => {
+    const boot = getBoot();
+    return boot ? expireThisTab(boot, sid) : false;
+  },
+  goToAuthExpired: (sid) => goToAuth('expired', sid),
+  lostUserId: () => getBoot()?.userId ?? null,
   releaseHold: () => {
     const r = releaseBusy;
     releaseBusy = null;

@@ -11,8 +11,8 @@ export interface AiRequest {
   parts: AiPart[];
   /** Gemini responseSchema（OpenAPI 子集） */
   schema: Record<string, unknown>;
-  /** 生成参数（只准传 _shared/ai/params.ts 里的） */
-  params: Readonly<{ temperature: number; candidateCount: number }>;
+  /** 生成参数（只准传 _shared/ai/params.ts 里的）；thinkingLevel 现在只有探测页写（11-11，Gemini 3 的思考档位；正式 ai-voice 等实测后再加） */
+  params: Readonly<{ temperature: number; candidateCount: number; thinkingLevel?: 'minimal' }>;
   /** 超时（毫秒），到点中止、不重试 */
   timeoutMs: number;
 }

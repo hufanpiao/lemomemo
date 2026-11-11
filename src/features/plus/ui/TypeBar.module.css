@@ -191,3 +191,33 @@
   text-align: right;
   overflow-wrap: anywhere;
 }
+
+/* 打字条开着时“已记下 · 撤销”提示条抬到打字条上方（负责人 11-11“现在就挪到打字条上方”）：
+   外壳不占位（display: contents），--type-lift 由 TypeBar.tsx 按打字条实际高度写；没写（收起了）就是 0，回到底栏上方。
+   只动 transform；110ms（calc(var(--dur-ui) / 2)，不超过 200ms）ease-out；系统或 App 里“减少动态”时直接到位 */
+.noticeSlot {
+  display: contents;
+}
+
+.noticeSlot > [data-undo-toast],
+.noticeSlot > .saved {
+  transform: translateY(calc(-1 * var(--type-lift, 0px)));
+  transition: transform calc(var(--dur-ui) / 2) var(--ease-out);
+}
+
+/* 多条展开时别顶出屏幕上沿：可用高度扣掉抬起的那段 */
+.noticeSlot > .saved {
+  max-height: calc(60vh - var(--type-lift, 0px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .noticeSlot > [data-undo-toast],
+  .noticeSlot > .saved {
+    transition: none;
+  }
+}
+
+:global(:root[data-rm="1"]) .noticeSlot > [data-undo-toast],
+:global(:root[data-rm="1"]) .noticeSlot > .saved {
+  transition: none;
+}

@@ -118,7 +118,8 @@ create function tests.cy() returns jsonb language sql as $$ select tests.cl('aaa
 create function tests.cy_pw() returns jsonb language sql as $$ select tests.cl('aaaaaaaa-0000-4000-8000-000000000001', 'aaaaaaaa-1150-4000-8000-0000000000a1', true) $$;
 -- 快照里的 revoked、tomb 只取测试用户 A、B 的行（DBTEST-sugg ③：库里有别的用户残留时不误报；p116 的 ai、p117 的 tomb 同样）；
 --   A、B 以外的行的主键列表单独放在 other 里（DBTEST-sugg2：原来只比行数），只和快照比（写死期望的那几条先 #- '{state,other}' 再比，另有一条比 other）；
---   revoked_sessions、tombstones（0001）、note_vectors、embed_queue（0007）的 user_id 都是 not null，not in / <> 不会漏掉 null 行
+--   tombstones（0001）、note_vectors、embed_queue（0007）的 user_id 都是 not null，not in / <> 不会漏掉 null 行；
+--   revoked_sessions 从 R-382 起 user_id 可空（注销后只留 pair_hash），other 里单独把 user_id 为空的行算进去、按 pair_hash 列
 create function tests.p115() returns text language sql as $$ select $q$
   select jsonb_build_object(
     'devs', (select jsonb_agg(d.label order by d.label) from public.devices d where d.id::text like 'de000000-0000-4000-8000-0000000115%'),
@@ -126,7 +127,7 @@ create function tests.p115() returns text language sql as $$ select $q$
     'revoked', (select jsonb_agg(jsonb_build_object('s', r.session_id, 'u', r.user_id) order by r.session_id) from private.revoked_sessions r where r.user_id in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
     'tomb', (select jsonb_agg(t.id order by t.id) from public.tombstones t where t.tbl = 'devices' and t.user_id in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
     'other', jsonb_build_object(   -- A、B 以外的行的主键列表：只和快照比（库里别人的残留多少都行，但这次调用不能动它们；比主键，删一行又多一行也测得出）
-      'revoked', (select jsonb_agg(r.session_id order by r.session_id) from private.revoked_sessions r where r.user_id not in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
+      'revoked', (select jsonb_agg(r.pair_hash order by r.pair_hash) from private.revoked_sessions r where r.user_id is null or r.user_id not in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002')),
       'tomb', (select jsonb_agg(t.id order by t.id) from public.tombstones t where t.tbl = 'devices' and t.user_id not in ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000002'))))$q$ $$;
 create function tests.s115() returns jsonb language plpgsql as $$ declare r jsonb; begin execute tests.p115() into r; return r; end $$;
 insert into tests.snap values ('115', tests.s115());

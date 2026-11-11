@@ -56,6 +56,8 @@ export const tableSchema = z.object({
   noConflict: cols.optional(),
   /** 本机库迁移出错时能不能清空重拉 */
   rebuildable: z.boolean().default(true),
+  /** 服务器上一行最多留多久（只做登记，由每日清理执行；R-382 起 revoked_sessions 写 '30 days'，口径见架构 3.5 第 5 点） */
+  maxLifetime: z.string().optional(),
   /** 导出（account export）时去掉的列：推送订阅的密钥、会话 id 这类对用户没用、外泄有害的（K3 安全审查低 8；只对 export: 'json' 的表有意义） */
   exportOmitCols: cols.default([]),
 }).refine((t) => (t.userLookup === undefined) !== (t.noUserData === undefined), { message: 'manifest_user_lookup_xor_no_user_data' })   // userLookup 和 noUserData 必须二选一

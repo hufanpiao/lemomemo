@@ -1,15 +1,16 @@
 // ai-voice（架构第 6 节函数表 ai-voice 行、5.11、第 7 节“语音”；B3 任务单 S8、S12、BE-4，M3 X-Projects，Q2 服务器包 intent）。
 // 顺序：方法（只收 POST）→ JWT → Content-Type 白名单（先去参数再比，不在 4 种里回 415、不调 Gemini；S1、TC-B3-65 起新增用例）
 //   → 请求头 X-Now、X-TZ、X-Locale、X-Scope、X-Projects、X-Default-Day（日历页选中的那天，R6；不合格回 400）→ 边读边计数读请求体（≤ 600 KB，超了中断回 413，不只看 Content-Length）
-//   → 共用的门（_shared/ai/gate.ts）→ voiceWithAI（Gemini 15 秒超时、不重试）→ 成功回 {intent: 'record', confidence, transcript, items, quota_left}；
+//   → 共用的门（_shared/ai/gate.ts）→ voiceWithAI（Gemini 15 秒超时；回 503 时服务器端重试一次、两次合计仍不超过 15 秒，_shared/ai/retry.ts）→ 成功回 {intent: 'record', confidence, transcript, items, quota_left}；
 //   失败退回预扣、回 {ai_failed, reason}（客户端留着录音，可以重试或再说一次）。
 // 空列表（R7 ②）：转写为空回 {transcript: '', items: []}、照常算 1 次（客户端按 no_speech）；转写不空而条目为空由校验判 invalid（empty），退回次数。
 // X-Projects：UTF-8 JSON 再 base64url，≤ 4 KB；超了截到 4 KB、按项截断（留下完整的几项），本来就解不开的当没给（不拒收）。
 // 音频只在内存里：不写 Storage、不写日志、不 console.*（5.11 第 3 点、A23）。转交 Gemini 时 mimeType 用去掉参数以后的类型。
 // 失败分支写 logs 表（架构审第九节第 2 条）：Gemini 拒收、超时、额度用完、计数出错各写一行 kind 'ai'、act 'voice_fail'、src 'ai-voice'，
-//   code 是固定错误码，fields 只有 status=HTTP 状态、type=异常类型名、bytes=音频字节数区间；不写转写、正文、请求头。写失败不影响回答。
+//   code 是固定错误码，fields 只有 status=HTTP 状态、type=异常类型名、retried=1（503 重试过）、bytes=音频字节数区间；不写转写、正文、请求头。写失败不影响回答。
+// 503 重试后成功的，counters 记 voice-retry:global:<太平洋日期> 加一（经 take_rate，上限给得很大、只当计数用；写失败不影响回答）。
 // scope = vault：隐私记页面经“＋”记下在 B4b-3 才有（届时换成 verifyVaultToken + ai.vault），B3 回 {fallback, vault_ai_off}、不调 Gemini、不扣次数。
-import { aiGate, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
+import { aiGate, pacificDate, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
 import type { AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, ParseFail, ParseOk, VoiceInput } from '../_shared/ai/parse-core.ts';
 import { readCapped } from '../_shared/body.ts';
@@ -18,6 +19,10 @@ export const MAX_AUDIO = 600 * 1024;
 export const MAX_PROJECTS_HEADER = 4096;
 export const AUDIO_TYPES = ['audio/mpeg', 'audio/aac', 'audio/mp4', 'audio/webm'] as const;
 export const RECORD_CONFIDENCE = 1;
+/** 503 重试后成功的全项目计数键（附录 A；三段写法过得了 counters 的 check 约束） */
+export const voiceRetryKey = (ms: number): string => `voice-retry:global:${pacificDate(ms)}`;
+/** 只当计数用：上限给得远超全项目每日额度，take_rate 永远放行 */
+export const VOICE_RETRY_COUNT_LIMIT = 1_000_000;
 
 export type AuthResult = { ok: true; user: { userId: string } } | { ok: false; response: Response };
 
@@ -157,11 +162,19 @@ export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Resp
     await logFail(`ai_${r.reason}`, [
       ...(r.status !== undefined ? [`status=${r.status}`] : []),
       ...(r.errName !== undefined ? [`type=${r.errName}`] : []),
+      ...(r.retried ? ['retried=1'] : []),
     ]);
     const before = codes.length;
     await settleFailure(d, gate, userId, 'ai-voice', r);
     if (codes.slice(before).includes('settle_failed')) await logFail('settle_failed', []);
     return json(200, { ai_failed: true, reason: r.reason });
+  }
+  if (r.retried) {
+    try {
+      await d.rate(voiceRetryKey(d.now()), VOICE_RETRY_COUNT_LIMIT, 86_400);
+    } catch {
+      d.log('voice_retry_count_failed');
+    }
   }
   return json(200, {
     intent: 'record', confidence: RECORD_CONFIDENCE, transcript: r.value.transcript, items: r.value.items, quota_left: gate.quotaLeft,

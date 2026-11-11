@@ -75,6 +75,8 @@ const DYNAMIC = /import\(\s*['"]([^'"]+)['"]\s*\)/g;
 
 /** 不在首屏下载的动态入口（相对仓库根）→ 原因 */
 const NOT_FIRST_PAINT: Record<string, string> = {
+  'src/platform/auth-loss-log.ts': 'R-382：main.tsx 只在本机有 lemo.authloss（上次会话丢了留下的原因码，少见）时才下载、上传后删键；平时不下载',
+  'src/core/auth-loss.ts': 'R-382：会话丢了要定结局时（core/auth-loss-lazy.ts）才下载，平时不下载',
   'src/core/device-reg.ts': '首屏画完以后 startAfterPaint 才下载（FA-6 ③，app/after-paint.ts）',
   'src/platform/account-status.ts': '告知页关口的 consent-exit.ts 静态引用了它，本来就在首屏（体积已算进页面时钟）；after-paint 里这次 import() 只是取引用，不再发请求（第四轮审查 L-d）',
   'src/platform/sync-net.ts': '同上，首屏画完以后才下载',

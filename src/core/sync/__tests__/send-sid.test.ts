@@ -59,7 +59,7 @@ describe('被移除、停用带回发请求时的 sid（K6-sugg4 ①）', () => 
       t.failNext.push({ status: 401 });
       t.refreshSession = async () => {
         t.sid = 's2';
-        return 'removed';
+        return 'check';
       };
     });
     expect(r.out).toBe('removed');
@@ -70,7 +70,7 @@ describe('被移除、停用带回发请求时的 sid（K6-sugg4 ①）', () => 
     const r = await run((t) => {
       t.ensureSession = async () => {
         t.sid = 's2';
-        return 'removed';
+        return 'check';
       };
     });
     expect(r.removed).toEqual([['session_not_found', 's1']]);

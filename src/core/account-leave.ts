@@ -19,7 +19,14 @@
 // • 冷静期不删会话（R-262 K6-pending-s2）：探测出冷静期、或服务器直接回 pending_deletion，说明被拒那次请求的会话还活着，
 //   删它没有安全收益，反而会误伤别的标签页刚登录的同账号 S2。清库、记退出原因、回登录页照旧，登录页 SessionCheck 探测出冷静期就地出恢复页。
 //   例外：注销申请成功（{revoked: true}）——服务器已在同一事务里吊销全部会话，留着没用，照旧删
-import { wipeOnRemoved } from './account.ts';
+// • R-382（架构 4.1a 第 1 点 ②）：notice 为 'removed'（插图上传收到 session_revoked）时先经 resolveAuthLoss 定结局：
+//   removed 照旧清库；expired 只关库不清（expireThisTab 写 lemo.reauth），删被拒的那个会话、回登录页提示“登录已过期”
+// • 已停用只退出、不清本机（R-382 负责人 11-11 定）：notice 为 'disabled' 时 expire(boot, null)（写 lemo.reauth，session_id 记 null，
+//   登录页不查 session_fate）、只关库，广播带 disabled 的 reset、删被拒的那个会话、goToAuth('disabled')。写不了记号退回原来的清库。
+//   冷静期、disabled_unsure、注销确认不了不变
+import { expireThisTab, wipeOnRemoved } from './account.ts';
+import type { AuthLossPath, AuthLossSignal } from './auth-loss.ts';
+import { resolveAuthLossLazy } from './auth-loss-lazy.ts';
 import { getBoot, type BootResult } from './boot.ts';
 import { clearLogQueue } from '../platform/log-store.ts';
 import { exitForDisabled, type ProbedExit } from '../platform/account-status.ts';
@@ -49,6 +56,14 @@ export interface AccountLeaveDeps {
   goToAuth(notice: AccountLeaveNotice, sid?: string | null): void;
   /** 只记下退出原因、不跳转（platform/session.ts 的 setExitNotice）；见 createLeaveAccount 里 deletion_unsure 的那一段 */
   setNotice?(notice: AccountLeaveNotice, sid: string | null): void;
+  /** removed 先定结局（R-382；默认 core/auth-loss.ts 的 resolveAuthLoss） */
+  resolveAuthLoss?(signal: AuthLossSignal): Promise<'expired' | 'removed'>;
+  /** 登录过期：设闸、写记号、关库（默认 core/account.ts 的 expireThisTab）；false = 写不了记号，退回清库 */
+  expire?(boot: BootResult, sid: string | null): boolean;
+  /** 登录过期回登录页（默认 goToAuth('expired', sid)：只删那一个会话） */
+  goToAuthExpired?(sid: string | null): void;
+  /** 信号从哪来（lemo.authloss 记录用）；默认 files */
+  authPath?: AuthLossPath;
 }
 
 export const defaultAccountLeaveDeps: AccountLeaveDeps = {
@@ -60,6 +75,7 @@ export const defaultAccountLeaveDeps: AccountLeaveDeps = {
   clearLocalSessionIf: (sid) => clearLocalSessionIf(sid),
   goToAuth: (notice, sid = null) => (notice === 'removed' ? goToAuth('removed', sid) : goToAuth(notice)),
   setNotice: (notice, sid) => setExitNotice(notice, undefined, { sid }),
+  goToAuthExpired: (sid) => goToAuth('expired', sid),
 };
 
 export type LeaveAccount = (notice: AccountLeaveNotice, sid: string | null, o?: { revoked?: boolean }) => Promise<void>;
@@ -67,20 +83,10 @@ export type LeaveAccount = (notice: AccountLeaveNotice, sid: string | null, o?: 
 /** 一个页面只离开一次（返回的函数自己记着）；测试每次新建一个 */
 export function createLeaveAccount(deps: AccountLeaveDeps = defaultAccountLeaveDeps): LeaveAccount {
   let leaving = false;
-  return (notice, sid, o) => {
-    if (leaving) return Promise.resolve();
+  /** 清库、回登录页（原来的流程） */
+  const wipeAndLeave = (boot: BootResult | null, notice: AccountLeaveNotice, sid: string | null, o?: { revoked?: boolean }): Promise<void> => {
     // 冷静期且会话没被服务器吊销：不删会话（见文件头 R-262）
     const keepSession = notice === 'pending_deletion' && !o?.revoked;
-    const boot = deps.getBoot();
-    if (boot?.switching) {
-      // 已经在走别的退出流程，不清第二遍。唯一的例外是 deletion_unsure：申请注销后查状态时 getSession 刷新令牌失败，
-      // 本页先收到 SIGNED_OUT（core/account.ts 的 watchAccount → signedOutHere 同步设闸），那一路清完会 goToAuth('removed')。
-      // 这里先记下 deletion_unsure，goToAuth('removed') 见已有原因就不覆盖（platform/session.ts），登录页显示“没能确认注销”而不是“被移除”
-      // 只在闸是“会话没了”那一路设的时候记（boot.sessionGone，代码审查建议 1）：换账号、别的退出流程不记
-      if (notice === 'deletion_unsure' && boot.sessionGone) deps.setNotice?.(notice, sid);
-      return Promise.resolve();
-    }
-    leaving = true;
     const userId = boot ? boot.userId : null;
     const drop = (): void => {
       if (keepSession) return;
@@ -117,6 +123,54 @@ export function createLeaveAccount(deps: AccountLeaveDeps = defaultAccountLeaveD
       return Promise.resolve();
     }
     return deps.wipeOnRemoved(boot, { clearCacheStorage: deps.clearCacheStorage, onRemoved: finish });
+  };
+  /** 只退出、不清本机（记号已写、库已关）：广播带原因的 reset、删被拒的那个会话、回登录页 */
+  const keepAndLeave = (boot: BootResult, notice: 'expired' | 'disabled', sid: string | null): void => {
+    if (boot.userId) {
+      try {
+        deps.broadcastReset(boot.userId, { notice, sid });
+      } catch {
+        // 提醒丢了不要紧
+      }
+    }
+    try {
+      void deps.clearLocalSessionIf(sid);
+    } catch {
+      // 存储不可用
+    }
+    if (notice === 'disabled') deps.goToAuth('disabled');
+    else (deps.goToAuthExpired ?? ((s: string | null) => goToAuth('expired', s)))(sid);
+  };
+  /** 被移除先定结局（R-382）：expired 只关库、回登录页；removed（或写不了记号）照旧清库 */
+  const resolveThenLeave = async (boot: BootResult, sid: string | null): Promise<void> => {
+    const signal: AuthLossSignal = { path: deps.authPath ?? 'files', code: 'session_revoked', sessionId: sid, userId: boot.userId };
+    let r: 'expired' | 'removed';
+    try {
+      r = await (deps.resolveAuthLoss ?? resolveAuthLossLazy)(signal);
+    } catch {
+      r = 'expired';
+    }
+    if (r === 'expired' && (deps.expire ?? expireThisTab)(boot, sid)) return keepAndLeave(boot, 'expired', sid);
+    return wipeAndLeave(boot, 'removed', sid);
+  };
+  return (notice, sid, o) => {
+    if (leaving) return Promise.resolve();
+    const boot = deps.getBoot();
+    if (boot?.switching) {
+      // 已经在走别的退出流程，不清第二遍。唯一的例外是 deletion_unsure：申请注销后查状态时 getSession 刷新令牌失败，
+      // 本页先收到 SIGNED_OUT（core/account.ts 的 watchAccount → signedOutHere 同步设闸），那一路清完会 goToAuth('removed')。
+      // 这里先记下 deletion_unsure，goToAuth('removed') 见已有原因就不覆盖（platform/session.ts），登录页显示“没能确认注销”而不是“被移除”
+      // 只在闸是“会话没了”那一路设的时候记（boot.sessionGone，代码审查建议 1）：换账号、别的退出流程不记
+      if (notice === 'deletion_unsure' && boot.sessionGone) deps.setNotice?.(notice, sid);
+      return Promise.resolve();
+    }
+    leaving = true;
+    if (notice === 'removed' && boot) return resolveThenLeave(boot, sid);
+    if (notice === 'disabled' && boot && (deps.expire ?? expireThisTab)(boot, null)) {
+      keepAndLeave(boot, 'disabled', sid);
+      return Promise.resolve();
+    }
+    return wipeAndLeave(boot, notice, sid, o);
   };
 }
 

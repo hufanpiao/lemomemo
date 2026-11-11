@@ -3,7 +3,7 @@
 // 返回问题列表，空 = 通过
 import type { Manifest, ManifestTable } from '../../shared/schema/manifest.ts';
 import { CLIENT_FILE_BUCKETS } from '../../shared/manifests/_common.ts';
-import { COLUMN_GRANTS, CRON_WITHOUT_USABLE, EXPORT_NONE_BUCKETS, EXPORT_NONE_TABLES, FUNCTION_EXEC, PUBLIC_RPCS, REQUIRED_CONSTRAINTS, TABLE_GRANTS, TEXT_COLS_UNBOUNDED } from './whitelist.ts';
+import { COLUMN_GRANTS, CRON_WITHOUT_USABLE, EXPORT_NONE_BUCKETS, EXPORT_NONE_TABLES, FUNCTION_EXEC, REQUIRED_CONSTRAINTS, TABLE_GRANTS, TEXT_COLS_UNBOUNDED } from './whitelist.ts';
 import { textColProblems } from './text-bounds.ts';
 import { GUARD_NO_PASSWORD, checkAuthUsersTriggers, checkGuardNoPassword, type GuardRow } from './auth-guard.ts';
 import { quotaWhenProblems } from './quota-when.ts';
@@ -12,6 +12,8 @@ import { requiredIndexProblems } from './required-indexes.ts';
 import { lockTimeoutProblems } from './fn-lock-timeout.ts';
 import { LEASE_FNS_SQL, leaseResetProblems, type FnSrcRow } from './remind-lease.ts';
 import { POLICY_SQL, policyProblems, type PolicyRow } from './policies.ts';
+import { sessionRevokeProblems } from './session-revoke.ts';
+import { publicRpcProblems } from './public-rpcs.ts';
 
 export type Row = Record<string, unknown>;
 /** 查询函数：T 是这条 SQL 结果行的形状（调用处按 select 的列写明；数据库给的值不做运行时校验） */
@@ -175,22 +177,17 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   for (const f of fns.filter((f) => f.s === 'private')) {
     if (f.pub) bad(`private.${f.f} 给了 PUBLIC 执行权`);
     if (f.owner !== 'postgres') bad(`private.${f.f} 的属主是 ${f.owner}，不是 postgres`);
-    if (f.anon) bad(`private.${f.f} anon 能执行`);
-    for (const role of ['authenticated', 'service_role', 'fn_vault', 'fn_ai'] as const) {
+    for (const role of ['anon', 'authenticated', 'service_role', 'fn_vault', 'fn_ai'] as const) {
       if (f[role] && !FUNCTION_EXEC[role].includes(f.f)) bad(`private.${f.f} 给了 ${role} 执行权，不在白名单里`);
       if (!f[role] && FUNCTION_EXEC[role].includes(f.f)) bad(`private.${f.f} 在白名单里，却没给 ${role} 执行权`);
     }
   }
   // 服务器函数用的那几个带 lock_timeout=5s（迁移 20261031130000 起，fn-lock-timeout.ts）；往 remind_queue 插入的 private 函数冲突时一律清租约
   // （REMIND-queue-crash-loss，迁移 20261104130000；判定在 remind-lease.ts）；RLS 策略：storage 一条不建、fn 角色不放开（policies.ts）
-  for (const p of [...lockTimeoutProblems(fns), ...leaseResetProblems(await q<FnSrcRow>(LEASE_FNS_SQL)),
+  const privFnSrc = await q<FnSrcRow>(LEASE_FNS_SQL);   // R-382：删 auth.sessions 的函数必须调 private.revoke_session（session-revoke.ts）
+  for (const p of [...lockTimeoutProblems(fns), ...leaseResetProblems(privFnSrc), ...sessionRevokeProblems(privFnSrc),
     ...policyProblems(await q<PolicyRow>(POLICY_SQL))]) bad(p);
-  for (const f of fns.filter((f) => f.s === 'public')) {
-    if (!PUBLIC_RPCS.includes(f.f)) bad(`public.${f.f} 不在 3.3 D 的九个 RPC 里`);
-    if (f.definer) bad(`public.${f.f} 是 security definer（public 里一律 invoker）`);
-    if (f.anon || f.service_role) bad(`public.${f.f} 给了 anon 或 service_role 执行权`);
-    if (!f.authenticated) bad(`public.${f.f} 没给 authenticated 执行权`);
-  }
+  for (const p of publicRpcProblems(fns.filter((f) => f.s === 'public'))) bad(p);   // public RPC 的名单和执行权（public-rpcs.ts）
   // 视图：public 一律 security_invoker；private（扫描视图）一律 security_barrier
   const views = await q<{ s: string; v: string; opts: string }>(`select n.nspname as s, c.relname as v, coalesce(array_to_string(c.reloptions, ','), '') as opts
     from pg_class c join pg_namespace n on n.oid = c.relnamespace where c.relkind = 'v' and n.nspname in ('public', 'private')`);

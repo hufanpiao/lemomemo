@@ -416,12 +416,13 @@ export const manifestSnapshot: readonly Manifest[] = [
         "softDelete": false,
         "backup": "none",
         "export": "none",
-        "onAccountDelete": "cascade",
+        "onAccountDelete": "keep-id-only",
         "userLookup": {
           "by": "column",
           "col": "user_id"
         },
         "rebuildable": true,
+        "maxLifetime": "30 days",
         "exportOmitCols": []
       },
       {

@@ -6,9 +6,11 @@
 --   private.counters          键里带 id，不是列（account-purge 按 split_part(key, ':', 2) 删）
 --   private.pending_signups   按邮箱哈希（account-purge 按 email_hash 删）
 --   private.invites.created_by  set null（邀请码行留着，只把创建人置空）
+--   private.revoked_sessions.user_id  set null（R-382，架构 4.1a 第 4 点、安全审 M5：注销后吊销记录只留 pair_hash、revoked_at，
+--     明文 session_id 由行触发器一起清掉；按 revoked_at 留 30 天，每日清理删）
 -- 另带 TC-B1-97 ②：级联删一个已申请注销（disabled_at 已设）的人时不写墓碑。
 begin;
-select plan(11);
+select plan(13);
 \ir _helpers.psql
 select tests.seed();
 
@@ -21,13 +23,14 @@ create function tests.missing_cascade() returns jsonb language sql as $$
       join pg_attribute a on a.attrelid = c.oid and a.attname = 'user_id' and a.attnum > 0 and not a.attisdropped
      where n.nspname in ('public', 'private') and c.relkind in ('r', 'p')
        and (n.nspname, c.relname) <> ('private', 'deleted_accounts')
+       and (n.nspname, c.relname) <> ('private', 'revoked_sessions')   -- R-382：set null，见下面例外 5
        and not exists (select 1 from pg_constraint k
                         where k.conrelid = c.oid and k.contype = 'f' and k.confrelid = 'auth.users'::regclass
                           and k.confdeltype = 'c' and k.conkey = array[a.attnum]::smallint[])) x
 $$;
 
 -- ① 主断言：除了写死的例外，带 user_id 的表全都级联
-select is(tests.missing_cascade(), '[]'::jsonb, '带 user_id 列的表都有 user_id → auth.users 的 on delete cascade（例外只有 deleted_accounts）');
+select is(tests.missing_cascade(), '[]'::jsonb, '带 user_id 列的表都有 user_id → auth.users 的 on delete cascade（例外只有 deleted_accounts、revoked_sessions）');
 
 -- ② 查的范围不是空的（防止条件写错、一张表都没查到也“通过”）
 select ok((select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
@@ -46,6 +49,10 @@ select is((select jsonb_agg(jsonb_build_object('col', a.attname, 'del', k.confde
              from pg_constraint k join pg_attribute a on a.attrelid = k.conrelid and a.attnum = any(k.conkey)
             where k.conrelid = 'private.invites'::regclass and k.contype = 'f' and k.confrelid = 'auth.users'::regclass),
   '[{"col": "created_by", "del": "n"}]'::jsonb, '例外 4：invites.created_by → auth.users 是 on delete set null');
+select is((select jsonb_agg(jsonb_build_object('col', a.attname, 'del', k.confdeltype::text))
+             from pg_constraint k join pg_attribute a on a.attrelid = k.conrelid and a.attnum = any(k.conkey)
+            where k.conrelid = 'private.revoked_sessions'::regclass and k.contype = 'f' and k.confrelid = 'auth.users'::regclass),
+  '[{"col": "user_id", "del": "n"}]'::jsonb, '例外 5：revoked_sessions.user_id → auth.users 是 on delete set null（R-382）');
 
 -- ⑦ 反过来：所有指到 auth.users 的外键里，不是 cascade 的只有 invites.created_by 一个
 select is((select coalesce(jsonb_agg(n.nspname || '.' || c.relname || '.' || a.attname), '[]'::jsonb)
@@ -53,7 +60,7 @@ select is((select coalesce(jsonb_agg(n.nspname || '.' || c.relname || '.' || a.a
              join pg_class c on c.oid = k.conrelid join pg_namespace n on n.oid = c.relnamespace
              join pg_attribute a on a.attrelid = k.conrelid and a.attnum = any(k.conkey)
             where k.contype = 'f' and k.confrelid = 'auth.users'::regclass and n.nspname in ('public', 'private') and k.confdeltype <> 'c'),
-  '["private.invites.created_by"]'::jsonb, '指到 auth.users 的外键里，不级联的只有 invites.created_by');
+  '["private.invites.created_by", "private.revoked_sessions.user_id"]'::jsonb, '指到 auth.users 的外键里，不级联的只有 invites.created_by、revoked_sessions.user_id');
 
 -- ⑧ 自测：造一张忘了外键的表、一张外键不是 cascade 的表，检查必须把两张都报出来（随 rollback 消失）
 create table private.qa_forgot_fk (user_id uuid);
@@ -77,7 +84,11 @@ select is((select (select count(*) from public.profiles where user_id = 'aaaaaaa
                 + (select count(*) from public.logs where user_id = 'aaaaaaaa-0000-4000-8000-000000000001')
                 + (select count(*) from private.pending_deletions where user_id = 'aaaaaaaa-0000-4000-8000-000000000001')
                 + (select count(*) from private.revoked_sessions where user_id = 'aaaaaaaa-0000-4000-8000-000000000001'))::int,
-  0, '删 auth.users 以后 A 的 profiles、settings、logs、pending_deletions、revoked_sessions 都随外键删掉');
+  0, '删 auth.users 以后 A 的 profiles、settings、logs、pending_deletions 都随外键删掉，revoked_sessions 里不再有 A 的 user_id');
+-- R-382：A 的吊销记录还在，只剩哈希和时间（申请注销时 A 的会话 5555 写进去的，tests.seed 里 A 只有这一个会话）
+select is((select jsonb_agg(jsonb_build_object('s', r.session_id, 'u', r.user_id)) from private.revoked_sessions r
+            where r.pair_hash = private.session_pair_hash('aaaaaaaa-5555-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001')),
+  '[{"s": null, "u": null}]'::jsonb, 'R-382：注销真删后 A 的吊销记录只留 pair_hash、revoked_at，session_id、user_id 都清空');
 select is((select count(*)::int from public.tombstones where user_id = 'aaaaaaaa-0000-4000-8000-000000000001'), 0,
   '级联删已停用的 A 不写墓碑（write_tombstone 跳过，TC-B1-97 ②）');
 select ok(exists (select 1 from private.deleted_accounts where user_id = 'aaaaaaaa-0000-4000-8000-000000000001')

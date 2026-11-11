@@ -5,7 +5,7 @@
 // 密钥只在 x-goog-api-key；（源码守门、和 db-probe / ai-voice 的常量一致、计数窗口对齐在 voice-probe-guard.test.ts）Gemini 成功、额度用完、出错、超时、坏输出各自如实回；日志只有允许的字段，不带转写和音频。
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  ALLOWED_UIDS, DAILY_LIMIT, EXPIRES_AT, handle, MAX_AUDIO, MAX_TRANSCRIPT, MODELS, PREVIEW_REF,
+  ALLOWED_UIDS, DAILY_LIMIT, EXPIRES_AT, handle, MAX_AUDIO, MAX_TRANSCRIPT, MODELS, PREVIEW_REF, PROBE_INSTRUCTION,
   QUOTA_WINDOW_S, quotaKey, rawLabel, type HandlerDeps, type ProbeLog,
 } from '../../supabase/functions/_preview/voice-probe/handler.ts';
 import { pacificDate } from '../../supabase/functions/_shared/ai/gate.ts';
@@ -182,8 +182,9 @@ describe('voice-probe：模型、类型、大小（Q1 ⑤）', () => {
       const s = setup();
       const r = await call(await handle(req({ 'content-type': ct as string }), s.deps));
       expect([r.status, r.body['mime'], r.body['raw_type']], ct).toEqual([200, mime, ct]);
-      const sent = JSON.parse(String(s.calls.fetch[0]?.init.body)) as { contents: { parts: { inlineData: { mimeType: string } }[] }[] };
-      expect(sent.contents[0]?.parts[0]?.inlineData.mimeType).toBe(mime);
+      const sent = JSON.parse(String(s.calls.fetch[0]?.init.body)) as { contents: { parts: { text?: string; inlineData?: { mimeType: string } }[] }[] };
+      expect(sent.contents[0]?.parts[0]?.text).toBe(PROBE_INSTRUCTION);
+      expect(sent.contents[0]?.parts[1]?.inlineData?.mimeType).toBe(mime);
       // responseSchema 用大写写法，和正式 parse-core 一致（代码审 S1）
       expect((sent as unknown as { generationConfig: { responseSchema: unknown } }).generationConfig.responseSchema)
         .toEqual({ type: 'OBJECT', properties: { transcript: { type: 'STRING' } }, required: ['transcript'] });
@@ -240,13 +241,13 @@ describe('voice-probe：每天额度（Q1 ④）', () => {
 });
 
 describe('voice-probe：调 Gemini 和返回（Q1 ⑤⑥）', () => {
-  it('成功：回 {model, mime, raw_type, bytes, gemini_http, gemini_ms, total_ms, result, transcript}，no-store；密钥只在 x-goog-api-key、不在地址里', async () => {
+  it('成功：回 {model, mime, raw_type, bytes, gemini_http, gemini_ms, total_ms, result, transcript, retried}，no-store；密钥只在 x-goog-api-key、不在地址里', async () => {
     const s = setup();
     const r = await call(await handle(req(), s.deps));
     expect(r.status).toBe(200);
     expect(r.cache).toBe('no-store');
-    expect(Object.keys(r.body).sort()).toEqual(['bytes', 'gemini_http', 'gemini_ms', 'mime', 'model', 'raw_type', 'result', 'total_ms', 'transcript']);
-    expect(r.body).toMatchObject({ mime: 'audio/mp4', raw_type: 'audio/mp4', bytes: 1000, gemini_http: 200, result: 'ok', transcript: SAID });
+    expect(Object.keys(r.body).sort()).toEqual(['bytes', 'gemini_http', 'gemini_ms', 'mime', 'model', 'raw_type', 'result', 'retried', 'total_ms', 'transcript']);
+    expect(r.body).toMatchObject({ mime: 'audio/mp4', raw_type: 'audio/mp4', bytes: 1000, gemini_http: 200, result: 'ok', transcript: SAID, retried: false });
     const f = s.calls.fetch[0];
     expect(new Headers(f?.init.headers).get('x-goog-api-key')).toBe(KEY);
     expect(f?.url).not.toContain(KEY);

@@ -7,6 +7,7 @@ import { PROMPT_VERSION, TASK_PARAMS, PARSE_TIMEOUT_MS, VOICE_TIMEOUT_MS } from 
 import { DEFAULT_DAY_RULE, PARSE_V3 } from './prompts/parse.v3.ts';
 import { VOICE_V3 } from './prompts/voice.v3.ts';
 import type { AIProvider } from './provider.ts';
+import { generateRetry503 } from './retry.ts';
 
 export type AiKindLike = 'event' | 'todo' | 'note' | 'anniv';
 export type InvalidReasonLike = 'missing_date_basis' | 'bad_date' | 'not_whitelisted' | 'out_of_range' | 'schema' | 'empty';
@@ -46,8 +47,9 @@ export interface VoiceInput extends Omit<ParseInput, 'text'> {
 export type FailReason = 'quota' | 'timeout' | 'invalid' | 'error';
 /** status：服务商的 HTTP 状态码；errName：异常类型名（只给日志用，ai-voice 写 logs，架构审第九节第 2 条） */
 /** badDefaultDay：传进来的默认日子没过校验，已按没传处理（R10 兜底；调用方记错误码 bad_default_day） */
-export type ParseFail = { ok: false; reason: FailReason; raw?: unknown; invalid_reasons?: InvalidReasonLike[]; issues?: unknown[]; status?: number; errName?: string; badDefaultDay?: true };
-export type ParseOk<T> = { ok: true; value: T; raw: unknown; prompt: string; badDefaultDay?: true };
+export type ParseFail = { ok: false; reason: FailReason; raw?: unknown; invalid_reasons?: InvalidReasonLike[]; issues?: unknown[]; status?: number; errName?: string; badDefaultDay?: true; retried?: true };
+/** retried：录音第一次回 503、服务器端重试过（只有 voiceWithAI 会带；ai-voice 记日志和计数用） */
+export type ParseOk<T> = { ok: true; value: T; raw: unknown; prompt: string; badDefaultDay?: true; retried?: true };
 
 export const TEXT_MAX = 2000;
 export const PROJECTS_MAX = 30;
@@ -175,7 +177,8 @@ export function makeParseWithAI<Item>(checkers: Checkers<Item>) {
   async function voiceWithAI(input: VoiceInput, provider: AIProvider): Promise<ParseOk<{ transcript: string; items: Item[] }> | ParseFail> {
     const fp = fillPrompt(VOICE_V3, input, checkers.checkDefaultDay);
     const bad = fp.badDefaultDay ? ({ badDefaultDay: true } as const) : {};
-    const r = await provider.generate({
+    // 11-11：Gemini 回 503 重试一次，两次合计不超过 VOICE_TIMEOUT_MS（retry.ts；B3 iPhone 实测 40 次里 4 次 503）
+    const { result: r, retried } = await generateRetry503(provider, {
       system: fp.system,
       parts: [
         { text: `<projects>${JSON.stringify(cleanProjects(input.projects))}</projects>` },
@@ -185,10 +188,11 @@ export function makeParseWithAI<Item>(checkers: Checkers<Item>) {
       params: TASK_PARAMS.voice,
       timeoutMs: VOICE_TIMEOUT_MS,
     });
-    if (!r.ok) return { ...failOf(r), ...bad };
+    const rt = retried ? ({ retried: true } as const) : {};
+    if (!r.ok) return { ...failOf(r), ...bad, ...rt };
     const v = checkers.checkVoiceOutput(r.json, { now: input.now, tz: input.tz, features: input.features, defaultDay: fp.defaultDay });
-    if (!v.ok) return { ok: false, reason: 'invalid', raw: r.json, invalid_reasons: v.invalid_reasons, issues: v.issues, ...bad };
-    return { ok: true, value: v.value, raw: r.json, prompt: PROMPT_VERSION.voice, ...bad };
+    if (!v.ok) return { ok: false, reason: 'invalid', raw: r.json, invalid_reasons: v.invalid_reasons, issues: v.issues, ...bad, ...rt };
+    return { ok: true, value: v.value, raw: r.json, prompt: PROMPT_VERSION.voice, ...bad, ...rt };
   }
 
   return { parseWithAI, voiceWithAI };

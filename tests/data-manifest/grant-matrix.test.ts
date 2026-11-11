@@ -45,9 +45,10 @@ describe('生成：每张表 × 五个角色 × 四种操作都有一条', () =>
     // authenticated 对 devices 以外的表 delete 一律没有（续第 121 条①）
     const del = m.cases.filter((c) => c.role === 'authenticated' && c.op === 'DELETE' && c.expect === 'all').map((c) => c.relation);
     expect(del).toEqual(['public.devices']);
-    // anon 调九个 public RPC 都被拒；和 3.3 D 白名单双向比（九个）
-    expect(m.rpcCases.filter((c) => c.role === 'anon').map((c) => [c.fn, c.expect])).toEqual(WL.PUBLIC_RPCS.map((f) => [f, false]));
-    expect(WL.PUBLIC_RPCS).toHaveLength(9);
+    // anon 调 public RPC 只有 session_fate 放行（R-382），别的都被拒；和 3.3 D 白名单双向比（11 个）
+    expect(m.rpcCases.filter((c) => c.role === 'anon').map((c) => [c.fn, c.expect])).toEqual(WL.PUBLIC_RPCS.map((f) => [f, f === 'session_fate']));
+    expect(WL.PUBLIC_RPCS).toHaveLength(11);
+    expect(WL.PUBLIC_RPCS_ANON).toEqual(['session_fate']);
   });
 
   it('正例也有：anon 只读 app_config 那几列；authenticated 按清单写；service_role 在 public 全给', () => {
@@ -89,13 +90,13 @@ describe('执行：PGlite 上跑完全部迁移之后的真授权（离线）', 
     await pg?.close();
   });
 
-  it('全部格和九个 RPC 都和期望一致；数据库里没有生成器没覆盖的表和视图', async () => {
+  it('全部格和 11 个 RPC 都和期望一致；数据库里没有生成器没覆盖的表和视图', async () => {
     const r = await runGrantMatrix(db, m);
     expect(grantProblems(r)).toEqual([]);
     expect(r.outcomes).toHaveLength(m.cases.length);
     // 九个里 B0 迁移建了 3 个、B1 迁移 20261029192000 建了 3 个、20261029200000 建了 apply_patch，B2 迁移 20261103110000 建了 claim_endpoint，B3 迁移 20261107100000 建了 my_ai_usage，九个已全部建好（架构 0.33 第 3 条）
     expect([...new Set(r.rpc.filter((x) => !x.missing).map((x) => x.id.split('-')[3]))].sort()).toEqual(
-      ['apply_patch', 'claim_endpoint', 'files_authorize', 'my_ai_usage', 'my_sessions', 'purge_deleted', 'record_consent', 'remove_device', 'report_tz']);
+      ['apply_patch', 'claim_endpoint', 'files_authorize', 'my_ai_usage', 'my_sessions', 'purge_deleted', 'record_consent', 'remove_device', 'report_tz', 'revoke_my_sessions', 'session_fate']);   // R-382 迁移 20261111120000 加了后两个
     // 暂缺的正好是“后面批次才建”名单里的（B3 建了 my_ai_usage 以后名单为空），名单本身也都在九个里
     expect([...new Set(r.rpc.filter((x) => x.missing).map((x) => x.id.split('-')[3]))].sort()).toEqual(Object.keys(RPCS_BUILT_LATER).sort());
     expect(Object.keys(RPCS_BUILT_LATER).filter((f) => !WL.PUBLIC_RPCS.includes(f))).toEqual([]);

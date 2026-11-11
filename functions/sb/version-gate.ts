@@ -74,6 +74,14 @@ export const EXEMPT_RULES: readonly ExemptRule[] = [
     match: 'exact',
     why: '设置里“断开连接”吊销连接码，旧版也要能做（只改 revoked_at 由 guard_token_revoke 管，TC-B3-22、23）',
   },
+  // R-382（架构 4.1a 第 4 点）：后端提改动，前端 B 会审。登录过期的设备用 anon key 问“我这个会话是不是被移除了”，
+  // 答案决定清不清本机数据；旧版被 426 挡住就分不出被移除还是过期，丢失设备的本机数据会留着
+  {
+    method: 'POST',
+    path: '/rest/v1/rpc/session_fate',
+    match: 'exact',
+    why: '被远程移除的设备要能查出 revoked、清掉本机数据，旧版也要能做（R-382，架构 4.1a 第 4 点）',
+  },
 ];
 
 export interface ExemptFunction {

@@ -38,6 +38,8 @@ export class FakeDb {
   users = new Map<string, string>();                  // auth.users：id → email
   sessions = new Map<string, string>();               // auth.sessions：id → user_id
   revoked = new Map<string, string>();                // private.revoked_sessions
+  /** R-382：注销后只剩 pair_hash 的吊销记录条数（外键 set null，session_id、user_id 都清空，假库里不再按会话找得到） */
+  revokedHashOnly = 0;
   profiles = new Map<string, Profile>();
   pending = new Map<string, Pending>();
   admins = new Set<string>();
@@ -75,14 +77,15 @@ export class FakeDb {
   /** 故障注入的检查（account-purge-fakes.ts 也用，所以不是 private） */
   guard(name: string) { if (this.fail.has(name)) throw new Error(`fake_${name}`); }
 
-  /** 级联：auth.users 删行时，带外键的都跟着删（profiles、pending_deletions、revoked_sessions、sessions、各表），deleted_accounts 留着 */
+  /** 级联：auth.users 删行时，带外键的都跟着删（profiles、pending_deletions、sessions、各表），deleted_accounts 留着；
+   *  revoked_sessions 是 set null（R-382）：行留着、只剩 pair_hash，这里从按会话的表里拿掉、记进 revokedHashOnly */
   deleteUserCascade(id: string) {
     this.users.delete(id);
     this.profiles.delete(id);
     this.pending.delete(id);
     this.admins.delete(id);
     for (const [s, u] of [...this.sessions]) if (u === id) this.sessions.delete(s);
-    for (const [s, u] of [...this.revoked]) if (u === id) this.revoked.delete(s);
+    for (const [s, u] of [...this.revoked]) if (u === id) { this.revoked.delete(s); this.revokedHashOnly++; }
     for (const [k, rows] of this.tables) this.tables.set(k, rows.filter((r) => r.user_id !== id));
     for (const [d, v] of [...this.devices]) if (v.user_id === id) this.devices.delete(d);
     this.logs = this.logs.filter((l) => l.user_id !== id);

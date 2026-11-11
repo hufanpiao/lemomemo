@@ -59,7 +59,6 @@ export const ko = {
   'note.edit.category': '분류', // REVIEW(ko)
   'note.edit.noCategory': '분류 없음', // REVIEW(ko)
   'note.edit.delete': '삭제', // REVIEW(ko)
-  'note.edit.done': '완료', // REVIEW(ko)
   'note.edit.close': '닫기', // REVIEW(ko)
   'note.edit.drawer': '메모 상세', // REVIEW(ko)
   'note.edit.deleted': '삭제했어요. 30일 안에는 ‘최근 삭제’에서 되살릴 수 있어요.', // REVIEW(ko)

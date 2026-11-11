@@ -48,11 +48,12 @@ describe('toFailure：错误只认码', () => {
 });
 
 describe('toSessionCheck', () => {
-  it('session_not_found、refresh_token_not_found、session_revoked → removed；断网 → network；别的 → failed', () => {
+  it('session_not_found、refresh_token_not_found、session_revoked → check（R-382：查 session_fate 再定）；断网 → network；别的 4xx → expired', () => {
     expect(toSessionCheck(null)).toBe('ok');
-    expect(toSessionCheck({ code: 'session_not_found', status: 400 })).toBe('removed');
-    expect(toSessionCheck({ code: 'refresh_token_not_found', status: 400 })).toBe('removed');
-    expect(toSessionCheck({ code: 'session_revoked', status: 403 })).toBe('removed');
+    expect(toSessionCheck({ code: 'session_not_found', status: 400 })).toBe('check');
+    expect(toSessionCheck({ code: 'refresh_token_not_found', status: 400 })).toBe('check');
+    expect(toSessionCheck({ code: 'session_revoked', status: 403 })).toBe('check');
+    expect(toSessionCheck({ code: 'refresh_token_already_used', status: 400 })).toBe('expired');
     expect(toSessionCheck({ name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' })).toBe('network');
     expect(toSessionCheck({ code: 'unexpected_failure', status: 500 })).toBe('network');   // TC-B1-88 ②：5xx 算临时故障
   });

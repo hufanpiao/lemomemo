@@ -1,4 +1,5 @@
--- expect: private.revoked_sessions 写 onAccountDelete: cascade，user_id 却没有 references auth.users on delete cascade
--- 架构 0.31 第 15 条：清单写 cascade 的表，外键少了 on delete cascade（注销后吊销记录留下来）
-alter table private.revoked_sessions drop constraint revoked_sessions_user_id_fkey;
-alter table private.revoked_sessions add foreign key (user_id) references auth.users;
+-- expect: private.pending_deletions 写 onAccountDelete: cascade，user_id 却没有 references auth.users on delete cascade
+-- 架构 0.31 第 15 条：清单写 cascade 的表，外键少了 on delete cascade（注销后冷静期记录留下来）
+-- （R-382 起 revoked_sessions 改成 keep-id-only、外键 set null，这个反例换成 pending_deletions；keep-id-only 却 cascade 的反例见 43）
+alter table private.pending_deletions drop constraint pending_deletions_user_id_fkey;
+alter table private.pending_deletions add foreign key (user_id) references auth.users;

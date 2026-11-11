@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ARM_KEY,
   DURATION_MS,
+  FOCUS_SETTLE_MS,
   MOUNT_FRAMES,
   OUT_KEY,
   readTimeline,
@@ -223,6 +224,29 @@ describe("startVhTimeline", () => {
     } finally {
       Reflect.deleteProperty(window, "visualViewport");
     }
+  });
+
+  it("光标偏位（Q-8）：focusin 带控件位置和最近的 transform 祖先；FOCUS_SETTLE_MS 后焦点还在再记 focus-settle，失焦了就不记", () => {
+    const f = frames();
+    start(f);
+    const box = document.createElement("form");
+    box.dataset["testid"] = "type-bar";
+    box.style.transform = "translateY(12px)";
+    const inp = document.createElement("input");
+    inp.type = "text";
+    box.append(inp);
+    document.body.append(box);
+    const last = (): string => readTimeline().split("\n").at(-1) ?? "";
+    inp.focus();
+    expect(last()).toMatch(/ focusin input\[text\] .* el=\d+,\d+ tf=form#type-bar:translateY\(12px\)$/);
+    vi.advanceTimersByTime(FOCUS_SETTLE_MS);
+    expect(last()).toMatch(/^t=\S+ focus-settle input\[text\] inner=.* el=\d+,\d+ tf=form#type-bar:/);
+    inp.blur();
+    inp.focus();
+    inp.blur();
+    const n = readTimeline().split("\n").length;
+    vi.advanceTimersByTime(FOCUS_SETTLE_MS);
+    expect(readTimeline().split("\n")).toHaveLength(n);
   });
 
   it("切到后台时记一行并存下；本机存储写不进也不抛", () => {

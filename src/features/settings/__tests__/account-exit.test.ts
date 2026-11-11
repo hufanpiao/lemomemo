@@ -26,9 +26,18 @@ function deps(boot: Partial<BootResult> | null = { switching: false, userId: 'u1
 }
 
 describe('createLeaveAccount', () => {
-  it('顺序：先广播带退出原因的 reset（DISABLED-probe-later ②）→ 删那个会话、清日志 → wipeOnRemoved（清库、缓存）→ 再清日志 → 广播 reset → 再删一次那个会话 → 回登录页（停用）', async () => {
+  it('R-382（负责人 11-11 定）已停用只退出、不清本机：expire(boot, null) 写记号、只关库 → 广播带 disabled 的 reset → 删那个会话 → 回登录页；不清库、不清日志', async () => {
     const { d, order } = deps();
-    await createLeaveAccount(d)('disabled', 's-me');
+    const expire = vi.fn(() => (order.push('expire'), true));
+    await createLeaveAccount({ ...d, expire })('disabled', 's-me');
+    expect(expire).toHaveBeenCalledWith(expect.anything(), null);
+    expect(order).toEqual(['expire', 'reset:u1:disabled:s-me', 'session:s-me', 'auth:disabled']);
+    expect(d.wipeOnRemoved).not.toHaveBeenCalled();
+  });
+
+  it('顺序（已停用但写不了记号，退回原来的清库）：先广播带退出原因的 reset（DISABLED-probe-later ②）→ 删那个会话、清日志 → wipeOnRemoved（清库、缓存）→ 再清日志 → 广播 reset → 再删一次那个会话 → 回登录页', async () => {
+    const { d, order } = deps();
+    await createLeaveAccount({ ...d, expire: () => false })('disabled', 's-me');
     expect(order).toEqual([
       'reset:u1:disabled:s-me', 'session:s-me', 'logs:u1', 'wipe', 'caches', 'logs:u1', 'reset:u1', 'session:s-me', 'auth:disabled',
     ]);
@@ -45,7 +54,7 @@ describe('createLeaveAccount', () => {
 
   it('停用时提示 disabled；只离开一次（再调不清第二遍）', async () => {
     const { d } = deps();
-    const leave = createLeaveAccount(d);
+    const leave = createLeaveAccount({ ...d, expire: () => false });
     await leave('disabled', 's-me');
     await leave('pending_deletion', 's-me');
     expect(d.wipeOnRemoved).toHaveBeenCalledTimes(1);

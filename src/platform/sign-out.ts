@@ -39,7 +39,10 @@
 //   （signOut 先等 initializePromise 再 _useSession 读存储），这时别的标签页正好写进新会话才会碰到；后果是那个标签页要重新登录。不再处理
 // • localStorage 里的 install_id、pv-locale 不清；日志上传队列 lemo.logq.<user_id>（log-store.ts，架构 0.38 第 68 条）在 ② 清本机时一起清
 //   （读不到是谁时清全部 lemo.logq.*）
+// • R-382（架构 4.1a 第 2、3 点）：② 清本机时同一步删 lemo.reauth（被移除、自己退出都算）；
+//   lemo.authloss 只在本人主动退出（signOutThisDevice：设置页“退出登录 / 移除本机”、登录页“退出并换账号”）时删，被动清库（被移除）留着
 import { buildInfo, isTauri } from './env.ts';
+import { clearAuthLoss, clearReauth } from './auth-loss-store.ts';
 import { appFetch } from './http.ts';
 import { clearLogQueue } from './log-store.ts';
 import { disconnectPushLazy } from './push-disconnect.ts';
@@ -102,6 +105,7 @@ export const defaultExitSteps: ExitSteps = {
 /** 清本机库和 Cache Storage（②③）；某一步失败或超时不挡后面，永远 resolve */
 export async function wipeThisDevice(steps: ExitSteps, wipeMs = WIPE_TIMEOUT_MS, cachesMs = CACHES_TIMEOUT_MS): Promise<void> {
   const { wipe } = steps;
+  clearReauth();
   const cleared = wipe ? await withTimeout(wipe, wipeMs, () => false) : false;
   // FE-2：通知中心不留上一个账号的标题、旧账号的推送不再到达；自带上限，这里再兜一层异常
   try {
@@ -291,6 +295,10 @@ export async function signOutThisDevice(o: SignOutOptions): Promise<{ serverDone
   const timeoutMs = o.timeoutMs ?? SIGN_OUT_TIMEOUT_MS;
   // 先打标记再发任何请求：① 删行也可能因刷新令牌失败引起 SIGNED_OUT
   (o.markSelf ?? (() => markSelfSignOut()))();
+  // 本人主动退出：会话丢失的原因码一起删（R-382 0.59 M4）；lemo.reauth 也在发任何服务器请求之前先删（安全审建议 2）：
+  // 删行、signOut 引起的 SIGNED_OUT 或中途关页，都不会把本人退出当成“登录过期”留下本机库（wipeThisDevice 里还会再删一次）
+  clearAuthLoss();
+  clearReauth();
   const before = readUserId();
   // 退出前的会话（K6-sugg3 ①）：兜底只删它，别的标签页刚登录的新会话不删
   const sid = sessionIdOf(steps);

@@ -11,14 +11,16 @@
 //   ⑦ Content-Type 照正式 ai-voice：去参数、转小写，只认 4 种，不在回 415（另回显收到的原始标注）；
 //   ⑧ 边读边计数 ≤ 600 KB，超了中断回 413；空的回 400；
 //   ⑨ 每天额度：经 service role 的 private.take_rate 记 voice_probe:global:<太平洋日期>，≤ 100 次，超了 429、不重试；
-//   ⑩ 调 Gemini（密钥只在 x-goog-api-key 请求头，由 _shared/ai/gemini.ts 管；15 秒超时、不重试），只要转写。
-// 返回 {mime, raw_type, bytes, gemini_http, gemini_ms, total_ms, result, transcript, model}；Gemini 失败也回 200，result 写原因。
+//   ⑩ 调 Gemini（密钥只在 x-goog-api-key 请求头，由 _shared/ai/gemini.ts 管；15 秒超时），只要转写。11-11 起回 503 重试一次
+//      （_shared/ai/retry.ts，两次合计不超过 15 秒；iPhone 实测 40 次里 4 次 503），重试过的返回体带 retried: true。
+// 返回 {mime, raw_type, bytes, gemini_http, gemini_ms, total_ms, result, transcript, model, retried}；Gemini 失败也回 200，result 写原因。
 // 日志（Q1 ⑥）：只记事件码、mime、字节数、HTTP 状态、耗时；不记转写、音频、请求头、Gemini 出错时的返回正文，不打印请求体。
 // 录音只在内存里（5.11 第 3 点、A23）：不写 Storage、不写库、不写日志。响应一律 Cache-Control: no-store。
 import { readCapped } from '../../_shared/body.ts';
 import { pacificDate } from '../../_shared/ai/gate.ts';
-import { TASK_PARAMS, VOICE_TIMEOUT_MS } from '../../_shared/ai/params.ts';
+import { VOICE_PROBE_PARAMS, VOICE_TIMEOUT_MS } from '../../_shared/ai/params.ts';
 import type { AIProvider, AiResult } from '../../_shared/ai/provider.ts';
+import { generateRetry503 } from '../../_shared/ai/retry.ts';
 // 类型白名单和大小上限直接用正式 ai-voice 的（代码审 S3：从源头保证一致；ai-voice/core.ts 只依赖 _shared，不读环境变量、不碰数据库）
 import { AUDIO_TYPES, MAX_AUDIO } from '../../ai-voice/core.ts';
 
@@ -57,11 +59,15 @@ export const MAX_TRANSCRIPT = 2000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const BEARER = /^Bearer ([A-Za-z0-9._-]{20,4096})$/;
 
-/** 给 Gemini 的系统提示：探测只要转写，不做识别（不用正式的 voice 提示词，免得把格式问题和解析问题混在一起） */
+/** 给 Gemini 的系统提示：探测只要转写，不做识别（不用正式的 voice 提示词，免得把格式问题和解析问题混在一起）。
+ *  11-11 改（B3 iPhone 实测）：第 4 段“买牛奶”两次都被写成韩文“우유”、第 12 段中文字间带空格——加主语言提示和逐字转写的要求 */
 export const PROBE_SYSTEM = [
-  '你是语音转写器。把音频里说的话原样转写成文字（可能是中文、韩文或中韩混说），不翻译、不总结、不补充。',
+  '你是语音转写器。录音的主要语言是简体中文，可能夹着韩文。',
+  '逐字转写：听到什么语言就用什么语言写，不翻译、不改写、不总结、不补字；中文写成简体，汉字之间不加空格。',
   '听不到人声时 transcript 给空字符串。只按 responseSchema 输出 JSON。',
 ].join('\n');
+/** 音频前面的一段文字指令（只有音频、没有文字时模型更容易自由发挥） */
+export const PROBE_INSTRUCTION = '请转写这段录音。';
 /** 大写写法和正式的 parse-core.ts responseSchema 一致（代码审 S1：请求和正式的长得一样，免得大小写被拒的 400 和“格式被拒”混在一起） */
 export const PROBE_SCHEMA = Object.freeze({
   type: 'OBJECT',
@@ -79,6 +85,8 @@ export interface ProbeLog {
 }
 
 export interface HandlerDeps {
+  /** 只给单测用：503 重试前的等待（默认 setTimeout）；时钟用下面的 clock */
+  sleep?: (ms: number) => Promise<void>;
   /** 平台注入的 SUPABASE_URL */
   supabaseUrl: string | undefined;
   now: () => number;
@@ -235,23 +243,26 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   // ⑩
   const g0 = deps.clock();
   let r: AiResult;
+  let retried = false;
   try {
-    r = await provider.generate({
+    const out = await generateRetry503(provider, {
       system: PROBE_SYSTEM,
-      parts: [{ inlineData: { mimeType: mime, data: audio } }],
+      parts: [{ text: PROBE_INSTRUCTION }, { inlineData: { mimeType: mime, data: audio } }],
       schema: PROBE_SCHEMA,
-      params: TASK_PARAMS.voice,
+      params: VOICE_PROBE_PARAMS,   // 带 thinkingLevel minimal，先在探测页实测（正式 ai-voice 暂不带，11-11 架构复审定）
       timeoutMs: VOICE_TIMEOUT_MS,
-    });
+    }, { clock: deps.clock, ...(deps.sleep ? { sleep: deps.sleep } : {}) });
+    r = out.result;
+    retried = out.retried;
   } catch {
     r = { ok: false, reason: 'error' };
   }
   const gemini_ms = Math.round(deps.clock() - g0);
   const o = outcome(r, seen);
-  deps.log({ code: `gemini_${o.result}`, mime, bytes, ...(o.http === null ? {} : { http: o.http }), ms: gemini_ms });
+  deps.log({ code: `gemini_${o.result}${retried ? '_retried' : ''}`, mime, bytes, ...(o.http === null ? {} : { http: o.http }), ms: gemini_ms });
   return json(200, {
     model, mime, raw_type, bytes,
     gemini_http: o.http, gemini_ms, total_ms: Math.round(deps.clock() - t0),
-    result: o.result, transcript: o.transcript,
+    result: o.result, transcript: o.transcript, retried,
   });
 }

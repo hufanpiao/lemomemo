@@ -45,6 +45,8 @@ function deps(create: (b: BootResult, o: SyncOptions) => Sync, answer: () => Pro
     transport: fakeTransport(),
     clearCacheStorage: vi.fn(() => Promise.resolve()),
     clearLocalSessionIf: vi.fn(),
+    // R-382：这里测的是“被移除”那条路，结局钉成 removed（登录过期另见 sync-wiring-expired.test.ts）
+    resolveAuthLoss: () => Promise.resolve('removed' as const),
     goToAuth: vi.fn(),
     setExitNotice: vi.fn((_n: string, _sid?: string | null) => undefined),
     create,
@@ -145,6 +147,8 @@ describe('收到 account_disabled：先探测 status 再决定', () => {
     expect(d.clearLocalSessionIf.mock.calls.every(([sid]) => sid === null)).toBe(true);
   });
 
+  // R-263 ③ 照旧提示 expired（登录已失效，请重新登录）；R-382 起只关库不清（这里账号不是 uuid、写不了记号，走退回清库，只核提示和不探测；
+  // 不清库另见 sync-wiring-expired.test.ts）
   it('K6-sugg5 审查建议：sid 为 null 且本机读不到账号（没有会话）→ 不探测、按 expired（登录已失效，请重新登录；R-263）退出；本机有账号或读出错 → 照旧 disabled_unsure', async () => {
     const cases: [() => string | null, string][] = [[() => null, 'expired'], [() => 'A', 'disabled_unsure'], [() => { throw new Error('x'); }, 'disabled_unsure']];
     for (const [readUserId, notice] of cases) {

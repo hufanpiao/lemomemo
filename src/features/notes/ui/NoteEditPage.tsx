@@ -1,6 +1,6 @@
 // 随手记编辑器（B4 S2；交互照定稿线框 s8（第 910～913 行），视觉照皮肤视觉稿 NOTE_ED / DK.mason）
 // 地址：#/note/<id>（编辑）、#/note/new（新建）。改了就自动保存，不弹窗：标题失焦、回车就存；正文停笔约 0.8 秒存一次，失焦、离开页面、切到后台时补存
-// • 手机（整页）：顶栏“‹ 随手记 ｜ [● 分类 AI ▾] ｜ ⋯ ｜ 完成”，下面 24px 粗体标题和正文（s8）。“完成”就是退回（已经自动保存）
+// • 手机（整页）：顶栏“‹ 随手记 ｜ [● 分类 AI ▾] ｜ ⋯”，下面 24px 粗体标题和正文（s8）。不放“完成”：改了自动保存，“‹ 随手记”退回就行（R-393，负责人 11-11“完成按钮可以去掉，目前都是修改完退出自动保存”）
 // • 电脑（≥ 900px）：不换页，从随手记页右边滑出详情抽屉（NoteDrawer，DK.mason），侧栏和列表留着；顶栏“[● 分类 AI ▾] ｜ ⋯ ｜ ×”，Esc 也关
 // • 分类：胶囊里是原生下拉（透明盖在胶囊上，读屏和键盘照常用）“不分类 / 各分类”；改了写 category_source = 'manual'，之后 AI 不再动（S2）。
 //   AI 分的、还没看过的胶囊里标“AI”，打开就算看过（category_seen 置为已看，hooks/useNoteEdit.ts）
@@ -147,11 +147,7 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
           <button type="button" className={styles.close} onClick={onClose} aria-label={t('note.edit.close', {})} data-testid="note-edit-close">
             ×
           </button>
-        ) : (
-          <Pressable className={styles.done} onClick={onClose} data-testid="note-edit-done">
-            {t('note.edit.done', {})}
-          </Pressable>
-        )}
+        ) : null}
       </div>
       {meta ? <p className={styles.meta} data-testid="note-edit-meta">{meta}</p> : null}
       <p className={BAD.has(status) ? styles.statusBad : styles.status} role="status" data-testid="edit-status">

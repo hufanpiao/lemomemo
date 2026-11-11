@@ -76,11 +76,13 @@ export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
 export const TEXT_COLS_UNBOUNDED: Readonly<Record<string, string>> = {};
 
 /** private 函数的执行权（3.3 C）。B1 起才建的函数也列在这里：没建时 D1 不报，建了却没授权或授多了才报 */
-export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault' | 'fn_ai', string[]> = {
+export const FUNCTION_EXEC: Record<'anon' | 'authenticated' | 'service_role' | 'fn_vault' | 'fn_ai', string[]> = {
+  anon: ['session_fate_impl'],   // R-382 迁移 20261111120000：不登录查会话是不是被吊销（只回 revoked / unknown；库内每分钟总闸）。anon 只准这一个
   authenticated: ['is_active', 'not_password_session', 'report_tz_impl', 'claim_endpoint_impl', 'my_ai_usage_impl', 'record_consent_impl', 'remove_device_impl',
     'devices_session_guard', 'purge_deleted_impl', 'my_sessions_impl', 'touch', 'enqueue_remind', 'row_quota', 'guard_token_revoke',
     'table_meta_of', 'guard_note_image', 'guard_note_file', 'files_authorize_impl', 'media_quota_guard', 'enqueue_anniv_defaults', 'enqueue_embed', 'vault_ai_off',
-    'tags_ok'],   // tags_ok：B1 迁移 20261031110000，notes.tags 的 check 约束用（写 notes 的三种角色都要能执行）
+    'tags_ok',   // tags_ok：B1 迁移 20261031110000，notes.tags 的 check 约束用（写 notes 的三种角色都要能执行）
+    'session_fate_impl', 'revoke_my_sessions_impl'],   // R-382 迁移 20261111120000
   service_role: ['take_rate', 'session_alive', 'rebind_device_impl', 'long_transactions', 'auth_mail_counts', 'account_usable', 'account_request_deletion', 'account_restore',
     'export_job_start', 'export_job_take', 'db_size_bytes', 'export_size_over', 'tags_ok',
     'invite_claim', 'invite_release',   // B1 迁移 20261031150000（INVITE-late-commit）
@@ -90,7 +92,8 @@ export const FUNCTION_EXEC: Record<'authenticated' | 'service_role' | 'fn_vault'
     'remind_due', 'remind_pushed',   // B2 迁移 20261103140000（BE-2 安全审查必改 1）：push-dispatch 第 1 步到点、resolve 候选的精确判断
     'push_heartbeat_write',   // B2 迁移 20261105140000（REMIND-poison-atomic）：push-dispatch 写心跳，queue_poison 原子累加
     'ai_quota_take', 'ai_quota_refund', 'intake_insert',   // B3 迁移 20261107100000：AI 额度原子预扣、退回；claude-intake 三张表一个事务写完
-    'ai_classify_pending'],   // B4 迁移 20261110121000（代码审查 11-10 必改 1）：ai-classify 按人取待分类的随手记
+    'ai_classify_pending',   // B4 迁移 20261110121000（代码审查 11-10 必改 1）：ai-classify 按人取待分类的随手记
+    'security_events'],   // R-382 迁移 20261111120000：usage-report 读最近 15 分钟 sfate-capped、pwrevoke-fail 两个计数
   fn_vault: ['purge_vault_impl', 'tags_ok'],
   fn_ai: [],
 };
@@ -113,8 +116,12 @@ export const EXPORT_NONE_BUCKETS = ['vault-images', 'vault-files'];
  *  不放 ai-classify、push-dispatch、account-purge 等 service_role 函数的名字，否则 fn_ai 能替它们刷心跳、掩盖停摆。加名字要新迁移 + 这里 + 附录 A 一起改 */
 export const FN_AI_HEARTBEATS = ['ai-embed', 'ai-media', 'file-check'];
 
-/** public 里只准有这九个 RPC（3.3 D；0.32 加 files_authorize，只给 /files 函数用），一律 security invoker、只授给 authenticated */
-export const PUBLIC_RPCS = ['apply_patch', 'report_tz', 'claim_endpoint', 'remove_device', 'my_ai_usage', 'record_consent', 'my_sessions', 'purge_deleted', 'files_authorize'];
+/** public 里只准有这 11 个 RPC（3.3 D；0.32 加 files_authorize，只给 /files 函数用；R-382 加 session_fate、revoke_my_sessions），一律 security invoker、
+ *  授给 authenticated、不给 service_role；anon 只准 PUBLIC_RPCS_ANON 里的 */
+export const PUBLIC_RPCS = ['apply_patch', 'report_tz', 'claim_endpoint', 'remove_device', 'my_ai_usage', 'record_consent', 'my_sessions', 'purge_deleted', 'files_authorize',
+  'session_fate', 'revoke_my_sessions'];
+/** 不登录也能调的 public RPC（R-382：登录过期的设备没有可用 JWT，要用 anon key 查会话是不是被吊销） */
+export const PUBLIC_RPCS_ANON = ['session_fate'];
 
 /**
  * 必须有的索引（D1 第 7 节）：public 下的索引名 → 理由 + pg_indexes.indexdef 原文（离线 PGlite 实测）。整段比对：

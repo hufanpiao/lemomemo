@@ -7,8 +7,8 @@
 //   active（刚好恢复了）→ 不清本机，重新载入页面重新同步（outbox 已设闸、闸只能靠重新载入解开；队列项还在库里，载入后照发）。
 //   探测期间（最多 8 秒）不先删会话——探测要用它；之后照旧只按被拒那次的 sid 删。
 //   sid 必填（K6-sugg5 ②）：fail 的调用方没给时 outbox 按 null 发——不拿本机现在那个会话的令牌探测，按 unknown（disabled_unsure）退出、只用 null 删。
-//   sid 为 null、本机也读不到账号（readUserId 为 null，没有会话）时不探测，按 expired（auth.exit.expired“登录已失效，请重新登录”，R-263）退出（K6-sugg5 审查建议）：
-//   没登录时发出去的请求本来就会被拒，不是账号出了问题，不该提示“可能已停用”
+//   sid 为 null、本机也读不到账号（readUserId 为 null，没有会话）时不探测（K6-sugg5 审查建议、R-263）：没登录时发出去的请求本来就会被拒，不该提示“可能已停用”。
+//   11-11 起（R-382，主持人复核必改）：这条路仍提示 expired，但不再清库，改走 sync-wiring 的 keepLeave(null, 'expired')——只关库、不清、写 lemo.reauth
 // • active 的重新载入有次数限制（10-30 复审必改）：RPC 一路 uid 为 null 时也回 account_disabled，探测用的却是本机存的令牌，
 //   两边可能一直说不到一块，会无限重新载入。重新载入前在 sessionStorage 记下时刻（ACTIVE_RELOAD_KEY）；5 分钟内第二次遇到 active
 //   就不再载入：闸保持关着，记日志 disabled_probe_active_loop，让出同步主页（免得别的标签页也都不同步），经 onSyncPaused 在顶部提示

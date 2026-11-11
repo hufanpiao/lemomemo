@@ -222,7 +222,7 @@ describe('TC-B1-82 令牌过期（401）', () => {
     const t = fakeTransport();
     await outbox.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
     t.failNext.push({ status: 401 });
-    t.refresh.push('removed');
+    t.refresh.push('check');   // R-382：要查 session_fate 的那一类
     const d = deps(outbox, t);
     expect(await sendAll(d)).toBe('removed');
     expect(d.removedCodes).toEqual(['session_not_found']);
@@ -262,7 +262,7 @@ describe('TC-B1-82 令牌过期（401）', () => {
   it('发送前看令牌：ensureSession 回被移除就不发', async () => {
     const { outbox } = await setup();
     const t = fakeTransport();
-    t.ensure = 'removed';
+    t.ensure = 'check';
     await outbox.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
     const d = deps(outbox, t);
     expect(await sendAll(d)).toBe('removed');

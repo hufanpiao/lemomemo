@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { AI_PROJECT_LEN, AI_PROJECTS_MAX, AI_TEXT_MAX, checkDefaultDay, checkParseOutput, checkVoiceOutput, INVALID_REASONS, type AiItem, type InvalidReason } from '../../shared/schema/ai.ts';
 import { AI_KINDS, type AiKind } from '../../shared/schema/kinds.ts';
 import { GEMINI_BASE, GeminiProvider, geminiBody, toBase64 } from '../../supabase/functions/_shared/ai/gemini.ts';
-import { GEN_PARAMS, PARSE_TIMEOUT_MS, PROMPT_VERSION, TASK_PARAMS, VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
+import { GEN_PARAMS, PARSE_TIMEOUT_MS, PROMPT_VERSION, TASK_PARAMS, VOICE_PROBE_PARAMS, VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
 import { cleanProjects, fillPrompt, makeParseWithAI, PROJECT_LEN, PROJECTS_MAX, responseSchema, sanitize, TEXT_MAX, wallOf, type AiKindLike, type InvalidReasonLike, type ParseInput } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { PARSE_V3 } from '../../supabase/functions/_shared/ai/prompts/parse.v3.ts';
 import { VOICE_V3 } from '../../supabase/functions/_shared/ai/prompts/voice.v3.ts';
@@ -57,8 +57,12 @@ describe('提示词和 responseSchema', () => {
 });
 
 describe('TC-B3-48：生成参数只有一份', () => {
-  it('六种用途一律 temperature 0、candidateCount 1；超时 parse 5 秒、voice 15 秒', () => {
+  it('六种用途一律 temperature 0、candidateCount 1（正式 voice 也不带思考档位，只有探测页带 minimal，11-11 架构复审定）；超时 parse 5 秒、voice 15 秒', () => {
     for (const k of ['parse', 'voice', 'classify', 'media', 'intent', 'summarize'] as const) expect(TASK_PARAMS[k]).toEqual({ temperature: 0, candidateCount: 1 });
+    expect(VOICE_PROBE_PARAMS).toEqual({ temperature: 0, candidateCount: 1, thinkingLevel: 'minimal' });
+    expect(geminiBody({ system: 's', parts: [], schema: {}, params: VOICE_PROBE_PARAMS, timeoutMs: 1 }).generationConfig).toMatchObject({ thinkingConfig: { thinkingLevel: 'minimal' } });
+    expect(geminiBody({ system: 's', parts: [], schema: {}, params: TASK_PARAMS.voice, timeoutMs: 1 }).generationConfig).not.toHaveProperty('thinkingConfig');
+    expect(geminiBody({ system: 's', parts: [], schema: {}, params: TASK_PARAMS.parse, timeoutMs: 1 }).generationConfig).not.toHaveProperty('thinkingConfig');
     expect(GEN_PARAMS).toEqual({ temperature: 0, candidateCount: 1 });
     expect([PARSE_TIMEOUT_MS, VOICE_TIMEOUT_MS]).toEqual([5000, 15000]);
   });

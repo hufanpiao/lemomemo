@@ -61,7 +61,8 @@ insert into public.anniversaries (id, user_id, kind, name, calendar, month, day,
   ('a0000000-0000-4000-8000-0000000000d5', 'aaaaaaaa-0000-4000-8000-000000000001', 'birthday', '妈妈', 'solar', 3, 5, 1, 1);
 select is((select count(*)::int from private.remind_queue where table_name = 'anniversaries' and id = 'a0000000-0000-4000-8000-0000000000d5'), 1,
   'remind_queue：纪念日的触发器写入的名字过得了 check');
--- 架构 0.31 第 15 条：pending_deletions、revoked_sessions 随 auth.users 一起删（清单 cascade）；tombstones 也是
+-- 架构 0.31 第 15 条：pending_deletions 随 auth.users 一起删（清单 cascade）；tombstones 也是；
+--   revoked_sessions 从 R-382 起不删行，只把 user_id、session_id 置空、留 pair_hash（清单 keep-id-only，见 10_account_cascade）
 insert into private.pending_deletions (user_id, purge_after) values ('bbbbbbbb-0000-4000-8000-000000000002', now() + interval '30 days');
 insert into private.revoked_sessions (session_id, user_id) values ('bbbbbbbb-5555-4000-8000-0000000000d6', 'bbbbbbbb-0000-4000-8000-000000000002');
 insert into public.tombstones (tbl, id, user_id) values ('todos', '70000000-0000-4000-8000-0000000000d7', 'bbbbbbbb-0000-4000-8000-000000000002');
@@ -69,7 +70,7 @@ delete from auth.users where id = 'bbbbbbbb-0000-4000-8000-000000000002';
 select is((select count(*)::int from private.pending_deletions where user_id = 'bbbbbbbb-0000-4000-8000-000000000002')
         + (select count(*)::int from private.revoked_sessions where user_id = 'bbbbbbbb-0000-4000-8000-000000000002')
         + (select count(*)::int from public.tombstones where user_id = 'bbbbbbbb-0000-4000-8000-000000000002'), 0,
-  '删 auth.users：pending_deletions、revoked_sessions、tombstones 跟着删');
+  '删 auth.users：pending_deletions、tombstones 跟着删，revoked_sessions 里不再有这个 user_id');
 
 -- ===== TC-B0-74（0.32 改）：storage.buckets 只剩 Supabase 的 2 个桶；images、files、vault-images、vault-files 在 R2 =====
 select is((select string_agg(id || ':' || public || ':' || file_size_limit || ':' || cardinality(allowed_mime_types), ',' order by id) from storage.buckets),

@@ -62,24 +62,14 @@
   font-size: var(--fs-14);
 }
 
-.back,
-.done {
+.back {
   flex: none;
   min-height: var(--hit);
-  padding: 0 4px;
+  padding: 0 4px 0 0;
   border: 0;
   background: none;
   color: var(--text);
   font-size: var(--fs-14);
-}
-
-.back {
-  padding-left: 0;
-}
-
-.done {
-  padding-right: 0;
-  font-weight: 600;
 }
 
 /* 分类胶囊（s8“工作灵感 AI ▾”）：原生下拉透明盖在上面，点哪儿都能选 */

@@ -94,7 +94,9 @@ function TabBar({ route }: { route: RouteName }) {
     };
   }, []);
   // “＋”点一下打开打字条（B3 M4、FA-2）：打字条首屏画完以后先下载好（plus-slot.tsx）；open 时记着日历页选中的那天（R-353）
-  const [plus, setPlus] = useState<{ day: DateStr | null } | null>(null);
+  // n：第几次点“＋”（Q-10：点空白收起了打字条、只留“已记下”提示条时，再点“＋”靠它把打字条重新画出来）
+  const [plus, setPlus] = useState<{ day: DateStr | null; n: number } | null>(null);
+  const opens = useRef(0);
   useEffect(() => afterAppPainted(() => void preloadPlus()), []);
   // 换页就收起（去改某一条、展开编辑也是换页）
   useEffect(() => setPlus(null), [route]);
@@ -107,13 +109,14 @@ function TabBar({ route }: { route: RouteName }) {
       return;
     }
     const day = takeNewItemDay();
-    setPlus({ day: bar?.tab === 'calendar' ? day : null });
+    opens.current += 1;
+    setPlus({ day: bar?.tab === 'calendar' ? day : null, n: opens.current });
   };
-  // Ctrl+N 打字记一条（S24）：有“＋”的页才接；已经开着就不动（打字条自己聚焦）
+  // Ctrl+N 打字记一条（S24）：有“＋”的页才接；开着时再按只让 opened 加 1（收起的会重新展开、聚焦）
   useKeys({
     'mod+n': () => {
       if (!bar || !paged || bar.add === null) return false;
-      if (plus === null) open();
+      open(); // 收起（只剩提示条）时 plus 不为 null，也要靠 opened 加 1 重新展开（独立验证 11-11）
       return true;
     },
   });
@@ -134,7 +137,7 @@ function TabBar({ route }: { route: RouteName }) {
   return (
     <>
       <GlassBar active={tab} later={afterAppPainted} hide={kb} add={{ label: t('nav.add', {}), onClick: open }} />
-      <PlusSlot open={plus !== null} day={plus?.day ?? null} onExpand={expand} onEdit={edit} onClose={() => setPlus(null)} />
+      <PlusSlot open={plus !== null} day={plus?.day ?? null} opened={plus?.n} onExpand={expand} onEdit={edit} onClose={() => setPlus(null)} />
     </>
   );
 }

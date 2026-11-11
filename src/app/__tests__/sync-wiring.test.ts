@@ -41,6 +41,8 @@ function deps(create?: (b: BootResult, o: SyncOptions) => Sync) {
     transport: fakeTransport(),
     clearCacheStorage: vi.fn(() => Promise.resolve()),
     clearLocalSessionIf: vi.fn(),
+    // R-382：这里测的是“被移除”那条路，结局钉成 removed（登录过期另见 sync-wiring-expired.test.ts）
+    resolveAuthLoss: () => Promise.resolve('removed' as const),
     goToAuth: vi.fn(),
     setExitNotice: vi.fn((_n: string, _sid?: string | null) => undefined),
     ...(create ? { create } : {}),
@@ -110,7 +112,8 @@ describe('wireSync', () => {
     expect(d.goToAuth).not.toHaveBeenCalled();
   });
 
-  it('被停用、注销冷静期（outbox 的 disabled 事件）：和被移除一样清本机、删会话、回登录页，并记下退出原因；页面跳走，不会静默丢写入', async () => {
+  // R-382（负责人 11-11 定）：已停用写得了记号时只退出、不清本机（sync-wiring-expired.test.ts）；这里账号 'A' 不是 uuid、写不了记号，走退回清库
+  it('被停用（写不了记号时）、注销冷静期（outbox 的 disabled 事件）：和被移除一样清本机、删会话、回登录页，并记下退出原因；页面跳走，不会静默丢写入', async () => {
     for (const [code, notice] of [['account_disabled', 'disabled'], ['account_pending_deletion', 'pending_deletion']] as const) {
       resetBootForTest();
       const boot = await coldStart(opts(fakeIndexedDB().factory));

@@ -87,10 +87,12 @@ export const tzReportResult = z.enum(['accepted', 'pending', 'unchanged', 'fixed
 export type TzReportResult = z.infer<typeof tzReportResult>;
 
 /**
- * 刷新令牌的结果（TC-B1-88）：network = 断网、5xx、429（临时故障）；removed = session_not_found、refresh_token_not_found、
- * 403 含 session_revoked；failed = 别的 4xx（调用方记日志再试一次，两次都失败才按被移除）或本机没有会话
+ * 刷新令牌的结果（TC-B1-88；R-382 架构 4.1a 第 1 点 ② 改）：network = 断网、5xx、429（临时故障）；
+ * check = session_not_found、refresh_token_not_found、403 含 session_revoked（要查 session_fate 再定是不是被移除）；
+ * expired = 别的 4xx（含 refresh_token_already_used、session_expired），按登录过期处理、不清库；
+ * failed = 本机没有会话（ensureSession 用；退出登录由 watchAccount 管）
  */
-export type SessionCheck = 'ok' | 'network' | 'removed' | 'failed';
+export type SessionCheck = 'ok' | 'network' | 'check' | 'expired' | 'failed';
 
 export type RealtimeStatus = 'up' | 'down';
 

@@ -89,7 +89,7 @@ function createPulls(c: Ctx) {
     if (r === 'auth' && !c.gated()) {
       const f = await refreshFlow(c.opts.transport, c.opts.log);
       if (c.gated()) return;
-      if (f.kind === 'removed') return c.removed(f.code, f.sid);
+      if (f.kind === 'lost') return c.removed(f.code, f.sid);   // 会话没了：sync-wiring 经 resolveAuthLoss 定结局（R-382）
       if (f.kind === 'ok') r = await pullRound(ctx, c.opts.transport);
     }
     if (ctx.withConfig) c.round.withConfig = true;   // config 没拉成功的留到下一轮

@@ -20,6 +20,8 @@ export interface TypeBarSlotProps {
   day: DateStr | null;
   onExpand(text: string, day: DateStr | null): void;
   onEdit?: (table: string, id: string) => void;
+  /** 第几次点“＋”打开（Q-10，传给打字条） */
+  opened?: number | undefined;
   onClose(): void;
 }
 

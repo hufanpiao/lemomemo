@@ -203,6 +203,6 @@ export function grantProblems(r: GrantRunResult): string[] {
     ...r.rpc.filter((x) => !x.ok).map((x) => `${x.id}：${x.problem ?? ''}`),
     ...r.extraRelations.map((x) => `数据库里有 ${x}，清单和白名单都没有（生成器没覆盖）`),
     ...r.missingRelations.map((x) => `清单或白名单里有 ${x}，数据库里没有`),
-    ...r.extraRpcs.map((x) => `public.${x} 不在 3.3 D 的九个 RPC 里`),
+    ...r.extraRpcs.map((x) => `public.${x} 不在 3.3 D 的 11 个 RPC 里`),
   ];
 }

@@ -19,8 +19,20 @@
 // • 失败即关（M3）：清库失败也关库，再 onFailed()（默认同 onSwitched：重新载入，冷启动会再清一次；再失败就按“本机库不可用”启动，不渲染缓存）
 // • 浏览器推送（B2 安全审查 FE-2）：换账号、会话没了、被移除时，清库之后、删库之前先关掉本 App 已显示的通知、退订推送
 //   （platform/push-disconnect.ts 的 disconnectPushLazy：先删认领记录，再按需下载 push.ts 断开，自带上限、下载失败也不挡，11-05）；设置页自己退出的那条在 platform/sign-out.ts 的 wipeThisDevice 里
+// • R-382（架构 4.1a 第 1、2 点）：本页的 SIGNED_OUT、别的标签页删了会话（storage 事件）都先分类，不再一律清库：
+//   - signedOutHere：同步删会话、设闸、先写 lemo.reauth（别的标签页的 storage 事件读得到），再 resolveAuthLoss（码取 refresh-observer 的记录，
+//     没有按 'none'）。expired → 只关库、不清，onSignedOut('expired', sid)；removed → 删记号、清库，onSignedOut('removed', sid)
+//   - storage 那一路（会话变 null）：设闸，等 reauthGraceMs（supabase-js 先删键再通知，那一页写记号要晚几毫秒）再读 lemo.reauth：
+//     是本账号的 → 只关库、onSignedOut('expired', 记号里的 sid)；否则照旧清库、删记号
+//   - 写不了记号（存储不可用）：退回原来的清库，记 auth_loss_store_failed
+//   - 所有按 removed 清库的出口（wipeSignedOut、wipeOnRemoved）同一步删 lemo.reauth；删不掉记 auth_loss_store_failed
+//     （wipeOnRemoved 没有日志通道，下次冷启动看到记号时登录页会再查 session_fate）。lemo.authloss 被动清库不删
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { BootResult } from './boot.ts';
+import type { AuthLossSignal } from './auth-loss.ts';
+import { resolveAuthLossLazy } from './auth-loss-lazy.ts';
+import { clearReauth, readReauth, writeReauth } from '../platform/auth-loss-store.ts';
+import type { RefreshFailure } from '../platform/supabase/refresh-failure.ts';
 import { disconnectPushLazy } from '../platform/push-disconnect.ts';
 import { setPushClaimContext } from '../platform/push-claim-run.ts';
 import { deleteCacheDb, type Cache } from './cache.ts';
@@ -94,7 +106,7 @@ export interface WatchAccountDeps extends EnsureAccountDeps {
    * 本页的 SIGNED_IN、TOKEN_REFRESHED（platform/session.ts 的 onAuthUser）；同一个监听的 SIGNED_OUT 回调 onSignedOut
    * （自己退出的已滤掉，K6-signedout）。K8、各功能页不另开 SIGNED_OUT 监听
    */
-  onAuthUser(fn: (userId: string) => void, onSignedOut?: (deadSessionId?: string | null) => void): () => void;
+  onAuthUser(fn: (userId: string) => void, onSignedOut?: (deadSessionId?: string | null, failure?: RefreshFailure | null) => void): () => void;
   /** 别的标签页改了会话（platform/session.ts 的 onSessionStorageChange）；null 表示那边退出了 */
   onStorageUser(fn: (userId: string | null) => void): () => void;
   /** 现在会话里的 user_id（platform/session.ts 的 readSessionUserId）：挂上监听后马上再比一次（M1） */
@@ -103,7 +115,7 @@ export interface WatchAccountDeps extends EnsureAccountDeps {
    * 会话没了，本页已经清掉本机库以后调，去登录页：别的标签页退出时不带参数；
    * 本页收到 SIGNED_OUT（被移除或被退出）时带 'removed'，登录页提示“已在别的设备上被移除”（platform/session.ts 的 goToAuth）
    */
-  onSignedOut(...args: [] | [reason: 'removed', deadSessionId: string | null]): void;
+  onSignedOut(...args: [] | [reason: 'removed' | 'expired', deadSessionId: string | null]): void;
   /**
    * 本页收到 SIGNED_OUT（被移除或被退出）时同步删掉本机会话，返回删之前的 session_id（platform/session.ts 的 takeLocalSession；
    * K6-signedout-sugg2 ①）。和判断“会话里现在是谁”在同一个同步段里调，返回值原样交给 onSignedOut('removed', …)，
@@ -121,7 +133,19 @@ export interface WatchAccountDeps extends EnsureAccountDeps {
   onSwitched(): void;
   /** 清库失败（已关库）：不填同 onSwitched（重新载入，冷启动会再清一次） */
   onFailed?(): void;
+  /** 会话没了怎么定结局（R-382；默认 core/auth-loss.ts 的 resolveAuthLoss）；测试换掉 */
+  resolve?(signal: AuthLossSignal): Promise<'expired' | 'removed'>;
+  /**
+   * 别的标签页删了会话（storage 事件）以后等多久再读 lemo.reauth（R-382；main.tsx 传 REAUTH_GRACE_MS）。
+   * 不填（0）不等：同步读
+   */
+  reauthGraceMs?: number;
+  /** 记一条日志（只有 act，例如 auth_loss_store_failed）；不填不记 */
+  log?(act: string): void;
 }
+
+/** 别的标签页 SIGNED_OUT 写记号要晚几毫秒：storage 事件一来先等这么久再读（R-382） */
+export const REAUTH_GRACE_MS = 1000;
 
 /**
  * 同步设闸（换账号、被移除、本页退出登录共用）：boot.switching = true、outbox.suspend()、cache.seal()。
@@ -151,7 +175,9 @@ function closeCache(boot: BootResult): void {
  * 会话没了（别的标签页退出、本页被移除或被退出）：调用前已设闸、封存 → 清空整库（封存后照样能清）→ 先关本页连接
  * （原因 'closed'，不触发 versionchange → 重新载入）→ 按库名删库 → 清运行时缓存。任何一步失败都照样往下走，永远 resolve
  */
-async function wipeSignedOut(boot: BootResult, deps: Pick<WatchAccountDeps, 'deleteDb' | 'clearCacheStorage' | 'disconnectPush'>): Promise<void> {
+async function wipeSignedOut(boot: BootResult, deps: Pick<WatchAccountDeps, 'deleteDb' | 'clearCacheStorage' | 'disconnectPush' | 'log'>): Promise<void> {
+  // 清库出口同一步删 lemo.reauth（R-382 0.60 复审建议 4）
+  if (!clearReauth()) deps.log?.('auth_loss_store_failed');
   const cache = boot.cache;
   try {
     if (cache && !cache.isClosed()) await cache.clearAll();
@@ -174,6 +200,33 @@ async function wipeSignedOut(boot: BootResult, deps: Pick<WatchAccountDeps, 'del
 }
 
 /**
+ * 登录过期（R-382 架构 4.1a 第 2 点）：设闸（停同步、停 Realtime、停上传）→ 写 lemo.reauth → 关本页连接。
+ * outbox、server、view 三份全部留着，Cache Storage 也不清。写不了记号返回 false（只设了闸，调用方退回清库）。
+ * 不删会话、不跳转：调用方随后 clearLocalSessionIf(sid)、回登录页（记号要先于删会话写好，别的标签页的 storage 事件才读得到）
+ */
+export function expireThisTab(boot: BootResult, sessionId: string | null, now: number = Date.now()): boolean {
+  if (!markExpired(boot, sessionId, now)) return false;
+  // 内存集合不清：界面照旧，不闪成空白；随后整页离开
+  closeCache(boot);
+  return true;
+}
+
+/**
+ * 结局还没定（要查 session_fate）时先做的一半：设闸、写 lemo.reauth，不关库。
+ * 不关库是因为判成 removed 时还要清库（wipeOnRemoved 见库已关会当成“没有要清的”）。写不了记号返回 false
+ */
+export function markExpired(boot: BootResult, sessionId: string | null, now: number = Date.now()): boolean {
+  boot.sessionGone = true;
+  closeGate(boot);
+  return boot.userId !== null && writeReauth(boot.userId, sessionId, now);
+}
+
+/** 只关库、不清（记号已由别处写好）：别的标签页 expired 了、本页跟着回登录页 */
+function closeOnly(boot: BootResult): void {
+  closeCache(boot);
+}
+
+/**
  * 盯住后三个时机（启动那一次在 coldStart 里），挂上后马上再比一次。
  * 一旦发现账号变了（或会话没了），只处理这一次：设闸 → 清库 → 关库 → onSwitched / onFailed（会话没了：设闸 → 清库 → 关库 → 删库 → onSignedOut）。
  * 本页的 SIGNED_OUT（不是自己退出）也在这里接，和上面共用“只处理一次”（K6-signedout）。
@@ -187,8 +240,20 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
     if (userId === null) boot.sessionGone = true;   // 会话没了（别的标签页退出），见 BootResult.sessionGone
     closeGate(boot);   // 同步设闸：从这一刻起不再发送、不再写回
     if (userId === null) {
-      // 别的标签页退出了（登录页审查）：本页可能已按这个账号开库、同步过，不能把数据留在硬盘上
-      void wipeSignedOut(boot, deps).finally(() => deps.onSignedOut());
+      // 别的标签页退出了（登录页审查）：本页可能已按这个账号开库、同步过，不能把数据留在硬盘上。
+      // 例外（R-382）：那边是登录过期（lemo.reauth 是本账号的），本页同样只关库、回登录页
+      const decide = (): void => {
+        const r = readReauth();
+        if (r && r.user_id === boot.userId) {
+          closeOnly(boot);
+          deps.onSignedOut('expired', r.session_id);
+          return;
+        }
+        void wipeSignedOut(boot, deps).finally(() => deps.onSignedOut());
+      };
+      const grace = deps.reauthGraceMs ?? 0;
+      if (grace > 0) setTimeout(decide, grace);
+      else decide();
       return;
     }
     const run = async (): Promise<void> => {
@@ -222,8 +287,8 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
       },
     );
   };
-  /** 本页的 SIGNED_OUT（不是自己退出，K6-signedout） */
-  const signedOutHere = (lastSessionId: string | null = null): void => {
+  /** 本页的 SIGNED_OUT（不是自己退出，K6-signedout）；failure：最近 120 秒内刷新令牌失败的记录（R-382） */
+  const signedOutHere = (lastSessionId: string | null = null, failure: RefreshFailure | null = null): void => {
     if (handled || boot.switching) return;   // 已经在走换账号、被移除、自己退出等流程
     const now = deps.currentUserId();
     if (now !== null && now !== boot.userId) {
@@ -241,14 +306,30 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
     // （K6-signout-lib），回登录页前按它再删一次（晚到的刷新把它写回时）
     dead ??= lastSessionId;
     handled = true;
-    boot.sessionGone = true;   // 本页的 SIGNED_OUT：会话没了，见 BootResult.sessionGone
-    closeGate(boot);
-    try {
-      deps.clearLogs?.();
-    } catch {
-      // 日志队列清不掉不挡退出
-    }
-    void wipeSignedOut(boot, deps).finally(() => deps.onSignedOut('removed', dead));
+    // 先写记号再定结局（R-382）：supabase-js 已经删了会话键，别的标签页的 storage 事件随时会到，它们等 reauthGraceMs 后读记号；
+    // 查 session_fate 要几秒，判成 removed 再删记号、清库（别的标签页已经只关了库的，登录页再查时补清）
+    const kept = markExpired(boot, dead);
+    if (!kept) deps.log?.('auth_loss_store_failed');
+    const removed = (): void => {
+      try {
+        deps.clearLogs?.();
+      } catch {
+        // 日志队列清不掉不挡退出
+      }
+      void wipeSignedOut(boot, deps).finally(() => deps.onSignedOut('removed', dead));
+    };
+    if (!kept) return removed();   // 写不了记号：退回原来的清库（4.1a 第 7 点）
+    const signal: AuthLossSignal = {
+      path: 'sdk', code: failure?.code ?? 'none', status: failure?.status ?? 0,
+      sessionId: failure?.sid ?? dead, userId: boot.userId,
+    };
+    void (deps.resolve ?? resolveAuthLossLazy)(signal)
+      .catch(() => 'expired' as const)
+      .then((r) => {
+        if (r === 'removed') return removed();
+        closeOnly(boot);
+        deps.onSignedOut('expired', dead);
+      });
   };
   const offAuth = deps.onAuthUser((id) => check(id), signedOutHere);
   const offStorage = deps.onStorageUser((id) => check(id));
@@ -304,6 +385,8 @@ export async function wipeOnRemoved(boot: BootResult, deps: RemovedDeps): Promis
   // 注销其实已办成时同步常先收到 session_revoked 走到这里，设置页随后的 leave('deletion_unsure') 要能记下原因
   boot.sessionGone = true;
   closeGate(boot);
+  // 清库出口同一步删 lemo.reauth（R-382 0.60 复审建议 4：被移除、停用、冷静期都算）；删不掉时下次冷启动登录页会再查 session_fate
+  clearReauth();
   const wipeMs = deps.wipeMs ?? REMOVED_WIPE_MS;
   try {
     const cache = boot.cache;

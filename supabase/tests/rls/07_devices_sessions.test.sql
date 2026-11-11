@@ -418,7 +418,7 @@ select is((select count(*)::int from public.devices where id = 'de000000-0000-40
 --   k7 created_at 181 天前、last_seen 是今天（不清）；k8 last_seen 为空、created_at 是今天（不清）；
 --   k9 last_seen 200 天前、created_at 181 天前，但会话刚刷新过（不清，0.38 变更表第 14 条）；
 --   k10 last_seen 写成未来 2 天、created_at 181 天前、没有会话（未来时间不认，删）；
---   revoked_sessions：R1 会话已不在、R2 会话还在（模拟第三条路）
+--   revoked_sessions（R-382 改口径：按 revoked_at 留 30 天）：R1 31 天前吊销（删）、R2 29 天前吊销（留）
 insert into auth.users (id, email) values ('0a0a0a0a-0000-4000-8000-000000000007', 'k@test.local');
 insert into public.profiles (user_id) values ('0a0a0a0a-0000-4000-8000-000000000007');
 insert into auth.sessions (id, user_id) values
@@ -451,9 +451,9 @@ select is(tests.try_as('service_role', null, $$update public.devices set push_fa
 select is((select (synced_at > now() - interval '1 minute')::text || '|' || (created_at < now() - interval '180 days')::text || '|' || (last_seen_at is null)::text
              from public.devices where id = 'de000000-0000-4000-8000-0000000000c5'), 'true|true|true',
   '0.38 第 8 条：c5 的 synced_at 是刚刚的，created_at 超过 180 天，last_seen_at 为空');
-insert into private.revoked_sessions (session_id, user_id) values
-  ('0a0a0a0a-8888-4000-8000-000000000007', '0a0a0a0a-0000-4000-8000-000000000007'),
-  ('0a0a0a0a-7777-4000-8000-000000000007', '0a0a0a0a-0000-4000-8000-000000000007');
+insert into private.revoked_sessions (session_id, user_id, revoked_at) values
+  ('0a0a0a0a-8888-4000-8000-000000000007', '0a0a0a0a-0000-4000-8000-000000000007', now() - interval '31 days'),
+  ('0a0a0a0a-7777-4000-8000-000000000007', '0a0a0a0a-0000-4000-8000-000000000007', now() - interval '29 days');
 select ok(private.cleanup_batch() >= 5, '跑一批每日清理');
 select is((select string_agg(right(id::text, 2), ',' order by id) from public.devices where user_id = '0a0a0a0a-0000-4000-8000-000000000007'), 'c2,c3,c6,c7,c8,c9',
   'TC-B1-79 ⑤、89 ②：删会话已不在的 c1、181 天没用的 c4，synced_at 一直在刷新但 created_at 超过 180 天的 c5、last_seen 写成未来的 c10；c2、c3、c6、c7、c8 和会话刚刷新过的 c9 不动');
@@ -464,8 +464,8 @@ select is((select count(*)::int from public.devices where id = 'de000000-0000-40
 select is((select count(*)::int from public.devices where id = 'de000000-0000-4000-8000-0000000000ca'), 0,
   '0.38 变更表第 14 条：last_seen_at 写成未来 2 天（不认）、created_at 181 天前、没有会话的 c10 删掉');
 select is((select count(*)::int from auth.sessions where id in ('0a0a0a0a-4444-4000-8000-000000000007', '0a0a0a0a-5555-4000-8000-000000000007')), 0, 'TC-B1-89 ③：c4、c5 的会话不在了（刷新会失败）');
-select is((select string_agg(session_id::text, ',') from private.revoked_sessions where user_id = '0a0a0a0a-0000-4000-8000-000000000007'),
-  '0a0a0a0a-7777-4000-8000-000000000007', 'TC-B1-79 ⑤：revoked_sessions 里会话已不在的删掉，会话还在的 R2 留下');
+select is((select string_agg(substr(session_id::text, 10, 4), ',' order by session_id) from private.revoked_sessions where user_id = '0a0a0a0a-0000-4000-8000-000000000007'),
+  '4444,5555,7777', 'TC-B1-79 ⑤（R-382 改口径）：revoked_sessions 里吊销超过 30 天的 R1（8888）删掉，29 天的 R2（7777）和刚吊销的 c4、c5 留下');
 select is((select count(*)::int from public.tombstones where id in ('de000000-0000-4000-8000-0000000000c1', 'de000000-0000-4000-8000-0000000000c4', 'de000000-0000-4000-8000-0000000000c5', 'de000000-0000-4000-8000-0000000000ca')), 4,
   '清理删掉的设备行都留了墓碑');
 

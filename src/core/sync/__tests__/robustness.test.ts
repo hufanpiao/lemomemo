@@ -170,32 +170,36 @@ describe('必改 3：闸', () => {
 });
 
 describe('必改 4：刷新令牌 TC-B1-88 ①～⑧', () => {
-  it('toSessionCheck 三类：①断网 ②503 ③429 → network；④⑤ 含码 ⑥ 403 含 session_revoked → removed；⑦⑧ 别的 4xx → failed', () => {
+  it('toSessionCheck 三类（R-382 改）：①断网 ②503 ③429 → network；④⑤ 含码 ⑥ 403 含 session_revoked → check；⑦⑧ 别的 4xx → expired', () => {
     expect(toSessionCheck({ name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' })).toBe('network');
     expect(toSessionCheck({ status: 503, message: 'Service Unavailable' })).toBe('network');
     expect(toSessionCheck({ status: 429, code: 'over_request_rate_limit' })).toBe('network');
-    expect(toSessionCheck({ status: 400, code: 'session_not_found' })).toBe('removed');
-    expect(toSessionCheck({ status: 400, message: 'Invalid Refresh Token: refresh_token_not_found' })).toBe('removed');
-    expect(toSessionCheck({ status: 403, message: 'session_revoked: device removed' })).toBe('removed');
-    expect(toSessionCheck({ status: 400, message: 'session_revoked' })).toBe('failed');   // 不是 403 不算
-    expect(toSessionCheck({ status: 400, code: 'refresh_token_already_used' })).toBe('failed');   // 不再直接当被移除
-    expect(toSessionCheck({ status: 422, code: 'validation_failed' })).toBe('failed');
+    expect(toSessionCheck({ status: 400, code: 'session_not_found' })).toBe('check');
+    expect(toSessionCheck({ status: 400, message: 'Invalid Refresh Token: refresh_token_not_found' })).toBe('check');
+    expect(toSessionCheck({ status: 403, message: 'session_revoked: device removed' })).toBe('check');
+    expect(toSessionCheck({ status: 400, message: 'session_revoked' })).toBe('expired');   // 不是 403 不算
+    expect(toSessionCheck({ status: 400, code: 'refresh_token_already_used' })).toBe('expired');   // R-382：登录过期，不清库
+    expect(toSessionCheck({ status: 400, code: 'session_expired' })).toBe('expired');
+    expect(toSessionCheck({ status: 422, code: 'validation_failed' })).toBe('expired');
   });
 
-  it('refreshFlow：⑦ 别的 4xx 记日志再试一次，成功不退出；⑧ 两次都失败按被移除', async () => {
+  it('refreshFlow（R-382 改）：只刷新一次；check → lost(session_not_found)，别的 4xx → lost(refresh_rejected) 记一条日志；不再有 auth_refresh_failed', async () => {
     const logs: string[] = [];
-    const seq = (xs: SessionCheck[]) => ({ refreshSession: () => Promise.resolve(xs.shift() ?? 'ok'), sessionId: () => 's1' });
-    expect(await refreshFlow(seq(['failed', 'ok']), (c) => logs.push(c))).toEqual({ kind: 'ok' });
+    let calls = 0;
+    const seq = (xs: SessionCheck[]) => ({ refreshSession: () => (calls++, Promise.resolve(xs.shift() ?? 'ok')), sessionId: () => 's1' });
+    expect(await refreshFlow(seq(['expired', 'ok']), (c) => logs.push(c))).toEqual({ kind: 'lost', code: 'refresh_rejected', sid: 's1' });
+    expect(calls).toBe(1);   // 不再试第二次
     expect(logs).toEqual(['auth_refresh_4xx']);
-    expect(await refreshFlow(seq(['failed', 'failed']), (c) => logs.push(c))).toEqual({ kind: 'removed', code: 'auth_refresh_failed', sid: 's1' });
-    expect(logs).toHaveLength(3);
+    expect(await refreshFlow(seq(['check']), (c) => logs.push(c))).toEqual({ kind: 'lost', code: 'session_not_found', sid: 's1' });
+    expect(logs).toHaveLength(1);
+    expect(await refreshFlow(seq(['network']))).toEqual({ kind: 'network' });
+    expect(await refreshFlow(seq(['ok']))).toEqual({ kind: 'ok' });
   });
 
   const cases: { name: string; refresh: SessionCheck[]; out: string; removed: string[] }[] = [
     { name: '①②③ 临时故障', refresh: ['network'], out: 'retry', removed: [] },
-    { name: '④⑤⑥ 被移除', refresh: ['removed'], out: 'removed', removed: ['session_not_found'] },
-    { name: '⑦ 别的 4xx，第二次成功', refresh: ['failed', 'ok'], out: 'done', removed: [] },
-    { name: '⑧ 别的 4xx，两次都失败', refresh: ['failed', 'failed'], out: 'removed', removed: ['auth_refresh_failed'] },
+    { name: '④⑤⑥ 要查服务器（check）', refresh: ['check'], out: 'removed', removed: ['session_not_found'] },
+    { name: '⑦⑧ 别的 4xx（expired，R-382：不再试第二次）', refresh: ['expired', 'ok'], out: 'removed', removed: ['refresh_rejected'] },
   ];
   for (const c of cases) {
     it(`sendAll 收到 401 后刷新：${c.name}`, async () => {
@@ -229,7 +233,7 @@ describe('必改 4：刷新令牌 TC-B1-88 ①～⑧', () => {
 
     const e = await device();
     e.t.pullFailAt = { n: 1, failure: { status: 401 } };
-    e.t.refresh.push('removed');
+    e.t.refresh.push('check');
     e.sync.start();
     await e.sync.idle();
     expect(e.removed).toEqual(['session_not_found']);

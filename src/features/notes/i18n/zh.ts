@@ -57,7 +57,6 @@ export const zh = {
   'note.edit.category': '分类',
   'note.edit.noCategory': '不分类',
   'note.edit.delete': '删除',
-  'note.edit.done': '完成',
   'note.edit.close': '关闭',
   'note.edit.drawer': '随手记详情',
   'note.edit.deleted': '已删除。30 天内可以在“最近删除”里找回。',
