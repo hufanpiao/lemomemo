@@ -128,22 +128,30 @@ describe('convertNote：桩写入口', () => {
     expect(s.calls).toHaveLength(1);
   });
 
-  it('随手记那笔没写进去（closing）→ 撤回新条 {undone: true, updated_at}，返回 closing', async () => {
+  // 撤销（架构 3.4 H10）= 写 deleted_at 和 undone = true：软删，30 天清理按 deleted_at 删掉、不长期占行数额度
+  it('随手记那笔没写进去（closing）→ 撤回新条 {deleted_at, undone: true, updated_at}，返回 closing', async () => {
     const s = stub([() => OK, fail('closing')]);
     expect(await convertNote(note(), 'todo', { now: NOW, tz: TZ }, s.deps)).toEqual({ ok: false, reason: 'closing' });
     expect(s.calls.map((c) => [c.op, c.table, c.id])).toEqual([['insert', 'todos', NEW], ['patch', 'notes', uid(1)], ['patch', 'todos', NEW]]);
-    expect(s.calls[2]?.data).toEqual({ undone: true, updated_at: NOW });
+    expect(s.calls[2]?.data).toEqual({ deleted_at: NOW, undone: true, updated_at: NOW });
   });
 
-  it('随手记那笔抛 readonly_row（入队时才发现只读）→ 撤回新条，返回 readonly', async () => {
+  it('转日程时随手记那笔抛 readonly_row（入队时才发现只读）→ 撤回打在 events 的新条上，返回 readonly', async () => {
     const s = stub([() => OK, throws('readonly_row')]);
     expect(await convertNote(note(), 'event', { now: NOW, tz: TZ }, s.deps)).toEqual({ ok: false, reason: 'readonly' });
-    expect(s.calls[2]?.data).toEqual({ undone: true, updated_at: NOW });
+    expect([s.calls[2]?.op, s.calls[2]?.table, s.calls[2]?.id]).toEqual(['patch', 'events', NEW]);
+    expect(s.calls[2]?.data).toEqual({ deleted_at: NOW, undone: true, updated_at: NOW });
   });
 
   it('撤回也没写进去 → 返回原因并带上没撤掉的新条（left），调用方据此提示、不让用户再点出第二条', async () => {
     const s = stub([() => OK, fail('closing'), fail('closing')]);
     expect(await convertNote(note(), 'todo', { now: NOW, tz: TZ }, s.deps)).toEqual({ ok: false, reason: 'closing', left: { table: 'todos', id: NEW } });
+  });
+
+  it('转日程、撤回也没写进去 → left 指 events 的新条', async () => {
+    const s = stub([() => OK, fail('closing'), fail('closing')]);
+    expect(await convertNote(note(), 'event', { now: NOW, tz: TZ }, s.deps)).toEqual({ ok: false, reason: 'closing', left: { table: 'events', id: NEW } });
+    expect([s.calls[2]?.table, s.calls[2]?.id]).toEqual(['events', NEW]);
   });
 });
 

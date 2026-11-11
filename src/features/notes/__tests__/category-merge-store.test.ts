@@ -10,7 +10,7 @@ import type { WriteResult } from '../../../core/write.ts';
 import {
   dismissedPairs, dismissMerge, MERGE_DISMISSED_KEY, MERGE_DISMISSED_MAX, mergeCategories, openMergePairs, withDismissed, type MergeDeps,
 } from '../data/category-merge-store.ts';
-import { formOf, patchOf } from '../data/note-edit.ts';
+import { aiMarkKept, formOf, patchOf } from '../data/note-edit.ts';
 import { categoryCounts, noteItems, type Row } from '../data/note-list.ts';
 import { boot, serverNote, setupImageTests, uid } from './note-images-kit.tsx';
 
@@ -63,6 +63,20 @@ describe('openMergePairs（TC-B4-07 出提示）', () => {
     expect(openMergePairs(cats, [set([[A, B]])])).toEqual([]);
     expect(openMergePairs(cats, [set([[A, B]], { deleted_at: 9 })])).toHaveLength(1);
     expect(openMergePairs(cats, [set([[A, B]], { undone: true })])).toHaveLength(1);
+  });
+  it('只去掉点过的那一对：购物 / 购物清单 / 购物车 只记过 (购物, 购物车) → (购物, 购物清单) 照常出；记的是不相干的一对 → 两对都出', () => {
+    const C = uid(103);
+    const three = [cat(A, '购物'), cat(B, '购物清单', { sort: 1 }), cat(C, '购物车', { sort: 2 })];
+    expect(openMergePairs(three, [])).toEqual([{ keep: A, merge: B, why: 'contains' }, { keep: A, merge: C, why: 'contains' }]);
+    expect(openMergePairs(three, [set([[C, A]])])).toEqual([{ keep: A, merge: B, why: 'contains' }]);
+    expect(openMergePairs(three, [set([[A, B]])])).toEqual([{ keep: A, merge: C, why: 'contains' }]);
+    expect(openMergePairs(three, [set([[uid(7), uid(8)]])])).toHaveLength(2);
+  });
+  it('三个彼此相近的分类（读书笔记 / 读书笔迹 / 读书笔录）记过其中一对 → 另外两对还在', () => {
+    const C = uid(103);
+    const three = [cat(A, '读书笔记'), cat(B, '读书笔迹', { sort: 1 }), cat(C, '读书笔录', { sort: 2 })];
+    expect(openMergePairs(three, []).map((p) => [p.keep, p.merge])).toEqual([[A, B], [A, C], [B, C]]);
+    expect(openMergePairs(three, [set([[C, B]])]).map((p) => [p.keep, p.merge])).toEqual([[A, B], [A, C]]);
   });
   it('undone、删了的分类不参加', () => {
     expect(openMergePairs([cats[0] as Row, cat(B, '购物清单', { undone: true })], [])).toEqual([]);
@@ -129,6 +143,20 @@ describe('mergeCategories（TC-B4-07 合并后条目归到新分类）', () => {
     expect(f.category_id).toBe(A);
     expect(patchOf(row, f, { ...f, title: '改了标题' }, 9)).toEqual({ title: '改了标题', updated_at: 9 });
     expect(formOf(note('x', B), [cat(A, '甲', { deleted_at: 3 }), cat(B, '乙', { merged_into: A })]).category_id).toBeNull();
+  });
+
+  it('编辑页分类旁的“AI”（aiMarkKept）按归并后的分类比：AI 分到 B、B 合并进 A 后照样标，和列表一致；改了分类、不是 AI 分的、归不到活着的分类都不标', async () => {
+    const s = stub();
+    await mergeCategories({ keep: A, merge: B }, cats, s.deps);
+    const after = applied(cats, s.calls);
+    const row = note('b1', B, { category_source: 'ai', category_seen: false });
+    const f = formOf(row, after);
+    expect(noteItems([row], after, TZ)[0]?.ai).toBe(true);
+    expect(aiMarkKept(row, f, after)).toBe(true);
+    expect(aiMarkKept(row, { ...f, category_id: null }, after)).toBe(false);
+    expect(aiMarkKept({ ...row, category_source: 'rule' }, f, after)).toBe(false);
+    const dead = [cat(A, '甲', { deleted_at: 3 }), cat(B, '乙', { merged_into: A })];
+    expect(aiMarkKept(row, formOf(row, dead), dead)).toBe(false);
   });
 
   it('删除 → 合并 → 恢复：恢复的那条归到 A；合并后才写进来指向 B 的（别的设备、AI）也归到 A', async () => {

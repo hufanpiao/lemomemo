@@ -15,6 +15,7 @@ import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { arrangeHint, clauseSeparators, confidence, parseSplit, recurHint, type ParseHints, type ParseResult } from '../../../../shared/logic/parse/index.ts';
 import { AI_TEXT_MAX, checkDefaultDay, normProjects, type AiItem } from '../../../../shared/schema/ai.ts';
+import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
 import type { AiKind } from '../../../../shared/schema/kinds.ts';
 import { outcomeOf, type AiOutcome } from './ai-outcome.ts';
 import { AI_PARSE_TIMEOUT_MS, canAutoRetry, type SendFail } from './record-logic.ts';
@@ -206,16 +207,13 @@ export function splitConfirm(items: readonly AiItem[]): { ready: AiItem[]; ask: 
   return { ready: items.filter((it) => it.confirm === null), ask: items.filter((it) => it.confirm !== null) };
 }
 
-/** 标题最长（和编辑页 TITLE_MAX 一致） */
-export const MERGE_TITLE_MAX = 160;
-
 /**
  * “拆错了，合并成一条”（架构 5.1）：整句原话当标题，类型、日子、时刻取第一条的；不带简称（原话不是 AI 起的简称）。
  * 调用方先整批撤销，再按新的一批存这一条
  */
 export function mergeItems(items: readonly AiItem[], rawText: string): AiItem | null {
   const first = items[0];
-  const title = [...rawText.trim()].slice(0, MERGE_TITLE_MAX).join('');
+  const title = [...rawText.trim()].slice(0, ITEM_TITLE_MAX).join('');
   if (!first || title === '') return null;
   return { ...first, title, short: null, body: null, confirm: null };
 }

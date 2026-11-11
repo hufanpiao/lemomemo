@@ -18,15 +18,13 @@ import type { AiItem } from '../../schema/ai.ts';
 import type { AiKind } from '../../schema/kinds.ts';
 import { takeDateKo, takeDateZh, type DateHit } from './date-words.ts';
 import { arrangeHint, cleanTitle, findProject, stripRequests, takeImportant, takeNamedKind, type NamedKind } from './marks.ts';
+import { ITEM_TITLE_MAX } from '../../schema/rows.ts';
 import { cutGraphemes } from '../short.ts';
 import { pastDate, type DateBasis } from './past-date.ts';
 import { RECUR_MARK, recurHint, takeRecur } from './recur-hint.ts';
 import { splitClauses } from './split.ts';
 import { pad2, prepare, QUICK_MAX, restoreWeekdays, type Rest } from './text.ts';
 import { periodLeft, takePeriodOnly, takeRelative, takeTime } from './time-words.ts';
-
-/** 标题最长多少（UTF-16 单元，同 shared/schema/rows.ts 的 events / todos.title max(160)） */
-const TITLE_MAX = 160;
 
 /** 提示条要用的几样（客户端按它选文案） */
 export interface ParseHints {
@@ -123,7 +121,7 @@ export function parseSplit(text: string, now: number, tz: Tz, _locale: 'zh' | 'k
     // 什么都没剩下（只说了日子、时刻）：原话当标题，没把握
     doubts.add('empty');
     // 按字截（D2）：不把 emoji 截成半个；上限 160 和 rows.ts 的 title 同一口径（UTF-16 单元）
-    const title = cutGraphemes(cleanTitle(raw), TITLE_MAX) || cutGraphemes(raw.trim(), TITLE_MAX);
+    const title = cutGraphemes(cleanTitle(raw), ITEM_TITLE_MAX) || cutGraphemes(raw.trim(), ITEM_TITLE_MAX);
     if (title) out.push(blank(named === 'event' ? 'event' : 'todo', title));
   }
   if (out.length > 1) doubts.add('multi');
@@ -235,7 +233,7 @@ function parseClause(text: string, env: ClauseEnv): Clause {
 
   const important = takeImportant(c);
   const project = findProject(c.text, env.projects);
-  let title = cutGraphemes(restoreWeekdays(cleanTitle(c.text.replace(RECUR_MARK, recur?.display ?? ''))), TITLE_MAX);
+  let title = cutGraphemes(restoreWeekdays(cleanTitle(c.text.replace(RECUR_MARK, recur?.display ?? ''))), ITEM_TITLE_MAX);
   // “3分钟后提醒我”（R-374）：请求说法去掉以后没有事由了，又是最后一段（前面的段会并进下一段），记成标题“提醒”的日程
   if (!title && rel !== null && env.last) title = '提醒';
   const nextCtx: Ctx | null = date !== null && basis !== null ? { date, basis, period: tm?.period || hint || '', soft } : null;

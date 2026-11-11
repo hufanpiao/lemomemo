@@ -26,6 +26,15 @@ export function formOf(row: Readonly<Record<string, unknown>>, categories: reado
   return { title: str(row['title']), body: str(row['body']), category_id: categoryResolver(categories)(row['category_id']) };
 }
 
+/**
+ * 编辑页分类旁的“AI”还标不标：这一行是 AI 分的、归到了活着的分类，表单的分类还是它（两边都按 formOf 归并后比，和列表的 showsAi 一致；
+ * 用户手动改了分类就不标）
+ */
+export function aiMarkKept(row: Readonly<Record<string, unknown>>, form: NoteForm, categories?: readonly Row[]): boolean {
+  const cid = formOf(row, categories).category_id;
+  return row['category_source'] === 'ai' && cid !== null && cid === form.category_id;
+}
+
 export function emptyForm(): NoteForm {
   return { title: '', body: '', category_id: null };
 }

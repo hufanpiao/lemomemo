@@ -38,7 +38,10 @@ export function saveDeleted(table: string, id: string, deleted: boolean, now: nu
   return saveOutcome(() => write.patch(table, id, { deleted_at: deleted ? now : null, updated_at: now }, { remind }));
 }
 
-/** 撤回一行（undone：界面和“最近删除”都不显示；新建的几笔没写全时撤回已写的）；“撤回一行”只在这里写。w：测试换成桩 */
+/**
+ * 撤回一行（架构 3.4 H10：写 deleted_at 和 undone = true，软删，30 天照常清理；界面和“最近删除”都不显示）；
+ * 新建的几笔没写全时撤回已写的。“撤回一行”只在这里写。w：测试换成桩
+ */
 export function saveUndone(table: string, id: string, now: number, w: Pick<typeof write, 'patch'> = write): Promise<SaveOutcome> {
-  return saveOutcome(() => w.patch(table, id, { undone: true, updated_at: now }));
+  return saveOutcome(() => w.patch(table, id, { deleted_at: now, undone: true, updated_at: now }));
 }

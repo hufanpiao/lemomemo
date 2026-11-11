@@ -12,6 +12,7 @@
 // 纯 TS：不准 import React（A1）
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
+import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
 import { DEFAULT_TODO_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime, todoRemindAt } from '../../../../shared/logic/remind.ts';
 import { todoRemindFlag } from '../../../core/remind-flag.ts';
 
@@ -34,9 +35,7 @@ export interface TodoForm {
 /** “提前提醒”的选项：不提醒（null）放最前，其余照 shared 的表（TC-B2-74：不提醒 / 准时 / 10 分钟 / 30 分钟 / 1 小时 / 2 小时 / 1 天） */
 export const REMIND_BEFORE_OPTIONS: readonly (number | null)[] = [null, ...REMIND_BEFORE_CHOICES];
 
-export const TITLE_MAX = 160;
-export const PROJECT_MAX = 40;
-export const NOTE_MAX = 2000;
+export { ITEM_TITLE_MAX as TITLE_MAX, PROJECT_MAX, ITEM_NOTE_MAX as NOTE_MAX } from '../../../../shared/schema/rows.ts';
 
 const str = (v: unknown, d = ''): string => (typeof v === 'string' ? v : d);
 const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
@@ -100,7 +99,7 @@ export function remindPassed(form: TodoForm, tz: Tz, now: number): boolean {
 
 /** 标题去掉首尾空白；空标题不写（界面提示） */
 export function cleanTitle(s: string): string {
-  return s.trim().slice(0, TITLE_MAX);
+  return s.trim().slice(0, ITEM_TITLE_MAX);
 }
 
 const FIELDS: readonly (keyof TodoForm)[] = [

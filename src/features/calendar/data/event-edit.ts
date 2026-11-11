@@ -8,6 +8,7 @@
 // 纯 TS：不准 import React（A1）
 import { minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { isValidTz, type Tz } from '../../../../shared/core/tz.ts';
+import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
 import { ALL_DAY_LIVE_UNTIL, remindAtOf } from '../../../../shared/logic/remind.ts';
 import { remindLive, rowRemindPending } from '../../../core/remind-flag.ts';
 
@@ -33,10 +34,8 @@ export const REMIND_MIN_OPTIONS: readonly EventForm['remind_min'][] = [null, 0, 
 /** 新建有时刻的日程时默认提前 15 分钟（定稿线框 s13“日程默认提前 15 分钟”；设置项接上以前先用出厂值） */
 export const DEFAULT_REMIND_MIN = 15;
 export const DEFAULT_DURATION_MIN = 60;
-export const TITLE_MAX = 160;
+export { ITEM_TITLE_MAX as TITLE_MAX, PROJECT_MAX, ITEM_NOTE_MAX as NOTE_MAX } from '../../../../shared/schema/rows.ts';
 export const LOCATION_MAX = 200;
-export const PROJECT_MAX = 40;
-export const NOTE_MAX = 2000;
 
 const DAY_MIN = 1440;
 const str = (v: unknown, d = ''): string => (typeof v === 'string' ? v : d);
@@ -128,7 +127,7 @@ export function localOf(form: EventForm, current: Tz): { date: DateStr; time: st
 }
 
 export function cleanTitle(s: string): string {
-  return s.trim().slice(0, TITLE_MAX);
+  return s.trim().slice(0, ITEM_TITLE_MAX);
 }
 
 const FIELDS: readonly (keyof EventForm)[] = [

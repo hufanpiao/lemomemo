@@ -95,7 +95,7 @@ describe('打字条', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '撤销' }));
     });
-    expect(writer.patch).toHaveBeenCalledWith('events', expect.any(String), { undone: true, updated_at: NOW });
+    expect(writer.patch).toHaveBeenCalledWith('events', expect.any(String), { deleted_at: NOW, undone: true, updated_at: NOW });
   });
 
   it('S24 Ctrl+Z：提示条还在、输入框空着时撤销这一批；输入框有字时让给浏览器撤销打字；没有提示条时不管（记下后自动收起，R-392：再点“＋”打开后测）', async () => {
@@ -123,7 +123,7 @@ describe('打字条', () => {
       e = ctrlZ();
     });
     expect(e.defaultPrevented).toBe(true);
-    expect(writer.patch).toHaveBeenCalledWith('events', expect.any(String), { undone: true, updated_at: NOW });
+    expect(writer.patch).toHaveBeenCalledWith('events', expect.any(String), { deleted_at: NOW, undone: true, updated_at: NOW });
   });
 
   it('没写进去：提示“没保存上”，原话留在输入框', async () => {
@@ -182,7 +182,7 @@ describe('打字条', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '撤销：待办 · 커피 원두 사기' }));
     });
-    expect(writer.patch).toHaveBeenLastCalledWith('todos', ids[0], { undone: true, updated_at: NOW });
+    expect(writer.patch).toHaveBeenLastCalledWith('todos', ids[0], { deleted_at: NOW, undone: true, updated_at: NOW });
     expect(screen.getByTestId('type-notice').textContent).toContain('已记下 2 条');
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '拆错了，合并成一条' }));

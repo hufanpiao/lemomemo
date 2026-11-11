@@ -101,7 +101,7 @@ describe('点页面空白处（Q-10 / R-390）', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '撤销' }));
     });
-    expect(writer.patch).toHaveBeenCalledWith('events', expect.any(String), { undone: true, updated_at: NOW });
+    expect(writer.patch).toHaveBeenCalledWith('events', expect.any(String), { deleted_at: NOW, undone: true, updated_at: NOW });
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 

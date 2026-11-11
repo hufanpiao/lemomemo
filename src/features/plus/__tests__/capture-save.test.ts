@@ -102,7 +102,7 @@ describe('saveCapture', () => {
     const r = await saveCapture({ items: [item({ title: 'a' }), item({ title: 'b' })], rawText: 'r', source: 'page', origin: 'rule', now: NOW, tz: TZ }, w, ids);
     expect(r).toEqual({ ok: false, reason: 'local_unavailable' });
     expect(w.patch).toHaveBeenCalledTimes(1);
-    expect(w.patch.mock.calls[0]?.[2]).toEqual({ undone: true, updated_at: NOW });
+    expect(w.patch.mock.calls[0]?.[2]).toEqual({ deleted_at: NOW, undone: true, updated_at: NOW });
   });
 
   it('什么都没认出来：nothing，不写', async () => {
@@ -113,12 +113,12 @@ describe('saveCapture', () => {
 });
 
 describe('undoRefs：capture.undo(batch_id)', () => {
-  it('日程、待办写 undone=true；纪念日先不撤（B4 定），原样报回', async () => {
+  it('日程、待办写 deleted_at 和 undone=true（架构 3.4 H10：软删，30 天照常清理）；纪念日先不撤（B4 定），原样报回', async () => {
     const w = writer();
     const left = await undoRefs([{ table: 'events', id: 'e1' }, { table: 'todos', id: 't1' }, { table: 'anniversaries', id: 'a1' }], NOW, w);
     expect(w.patch.mock.calls.map((c) => [c[0], c[1], c[2]])).toEqual([
-      ['events', 'e1', { undone: true, updated_at: NOW }],
-      ['todos', 't1', { undone: true, updated_at: NOW }],
+      ['events', 'e1', { deleted_at: NOW, undone: true, updated_at: NOW }],
+      ['todos', 't1', { deleted_at: NOW, undone: true, updated_at: NOW }],
     ]);
     expect(left).toEqual([{ table: 'anniversaries', id: 'a1' }]);
   });
