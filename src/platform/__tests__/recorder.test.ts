@@ -38,13 +38,14 @@ describe('起点：start 事件到了才算开始（句首丢字的根因）', (
     t = 3400;
     const end = await r.rec.stop();
     expect(end).toMatchObject({ ok: true, clip: { ms: 2000 } });
+    t = 9999;
     expect(r.rec.elapsed()).toBe(2000);
   });
 
   it('60 秒从 start 事件起算：到点录音器自己停、通知一次，结果带 auto', async () => {
     const m = mic();
     const onAutoStop = vi.fn();
-    const p = startRecorder(opts({ onAutoStop }));
+    const p = startRecorder(opts({ onAutoStop, now: () => Date.now() }));
     await flush();
     await vi.advanceTimersByTimeAsync(2000);
     rec0().fireStart();
@@ -55,7 +56,10 @@ describe('起点：start 事件到了才算开始（句首丢字的根因）', (
     await vi.advanceTimersByTimeAsync(1);
     expect(rec0().stopCalls).toBe(1);
     expect(onAutoStop).toHaveBeenCalledTimes(1);
-    expect(await r.rec.stop()).toMatchObject({ ok: true, auto: true });
+    expect(await r.rec.stop()).toMatchObject({ ok: true, auto: true, clip: { ms: MAX_MS } });
+    // 停了以后计时停在最终时长，时钟再走也不变
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(r.rec.elapsed()).toBe(MAX_MS);
     expect(rec0().stopCalls).toBe(1);
     expect(allClosed(m)).toBe(true);
   });
@@ -126,13 +130,48 @@ describe('结束', () => {
     expect(allClosed(m)).toBe(true);
   });
 
-  it('录音中出 error 事件：rec_error，关轨道', async () => {
+  it('录音中出 error 事件：rec_error，关轨道；没人调 stop()，也要通知一次（锁定录音时没人会去停）', async () => {
     const m = mic();
-    const rec = await recording();
+    const onAutoStop = vi.fn();
+    const rec = await recording({ onAutoStop });
     rec0().fireError();
+    await flush();
+    expect(onAutoStop).toHaveBeenCalledTimes(1);
     expect(await rec.stop()).toEqual({ ok: false, fail: 'rec_error' });
+    expect(onAutoStop).toHaveBeenCalledTimes(1);
     expect(allClosed(m)).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('录满但超了字节上限、录完 0 字节：结局是失败，也通知一次', async () => {
+    for (const chunks of [[new Blob([new Uint8Array(MAX_BYTES + 1)])], []]) {
+      FakeRecorder.made = [];
+      mic();
+      const onAutoStop = vi.fn();
+      const rec = await recording({ onAutoStop });
+      rec0().chunks = chunks;
+      rec0().endNow();
+      expect(onAutoStop).toHaveBeenCalledTimes(1);
+      expect((await rec.stop()).ok).toBe(false);
+    }
+  });
+
+  it('调用方自己 stop()、取消，或出错时调用方正在 stop()：都不通知', async () => {
+    mic();
+    const a = vi.fn();
+    const ac = new AbortController();
+    await recording({ onAutoStop: a, signal: ac.signal });
+    ac.abort();
+    await flush();
+
+    FakeRecorder.made = [];
+    mic();
+    const b = vi.fn();
+    const rec = await recording({ onAutoStop: b });
+    const p = rec.stop();
+    rec0().fireError();
+    expect(await p).toEqual({ ok: false, fail: 'rec_error' });
+    expect([a, b].map((f) => f.mock.calls.length)).toEqual([0, 0]);
   });
 });
 

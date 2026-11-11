@@ -1,6 +1,6 @@
 // 录音面板和按住“＋”的纯逻辑（B3 任务单 FA-1、FA-3、Q3；架构 5.1 按住流程、5.11 第 3、4 点）
-// • 计时：50 秒起倒数，显示“0:07 / 1:00”；60 秒自动结束只由 platform/recorder.ts 定时停（界面听 onAutoStop）
-// • 上传总超时：8 秒 + 每 100 KB（不足 100 KB 按 100 KB 算）加 1 秒，最多 20 秒；ai-parse 6 秒
+// • 计时：50 秒起倒数，显示“0:07 / 1:00”；60 秒自动结束只由 platform/recorder.ts 定时停（录音自己结束了界面听 onAutoStop）
+// • 上传总超时：下限 17 秒，每 100 KB（不足按 100 KB 算）加 1 秒，上限 22 秒（服务器等 Gemini 15 秒，客户端不能先放弃）；ai-parse 6 秒
 // • 自动重试：只在网络错误、连接都没建立时自动重试，最多 1 次
 // • 录音 Blob：只放内存，最多 600 KB（shared/schema/ai.ts 的 AI_AUDIO_MAX_BYTES，由 recorder 判）；识别失败时保留到提示条关闭，最多 2 分钟
 // • 按住判定（Q3）：按下 350 ms 还没松开、没挪开算“按住”；之前松开算“点一下”；按下后先挪远了两样都不算。
@@ -13,9 +13,9 @@ export const REC_MAX_MS = 60_000;
 export const REC_BITS_PER_SECOND = 48_000;
 export const REC_COUNTDOWN_FROM_MS = 50_000;
 export const AI_PARSE_TIMEOUT_MS = 6_000;
-export const UPLOAD_BASE_MS = 8_000;
+export const UPLOAD_MIN_MS = 17_000;
 export const UPLOAD_PER_100KB_MS = 1_000;
-export const UPLOAD_MAX_MS = 20_000;
+export const UPLOAD_MAX_MS = 22_000;
 export const BLOB_KEEP_MS = 120_000;
 export const AUTO_RETRY_MAX = 1;
 export const HOLD_MS = 350;
@@ -25,7 +25,7 @@ export const HOLD_SLOP_PX = 10;
 /** 上传的总超时（毫秒） */
 export function uploadTimeoutMs(bytes: number): number {
   const steps = Math.ceil(Math.max(0, bytes) / (100 * 1024));
-  return Math.min(UPLOAD_MAX_MS, UPLOAD_BASE_MS + steps * UPLOAD_PER_100KB_MS);
+  return Math.min(UPLOAD_MAX_MS, UPLOAD_MIN_MS + steps * UPLOAD_PER_100KB_MS);
 }
 
 /** 倒数还剩几秒；50 秒以前为 null（不显示倒数） */

@@ -41,16 +41,26 @@ export interface TypeEnv {
   quotaOut: boolean;
 }
 
-/** ai-parse 的请求体（接口先定第 2 条） */
-export interface AiParseReq {
-  text: string;
+/** ai-parse、ai-voice 共用的请求上下文（接口先定第 2 条），只由 aiReqCtx 拼 */
+export interface AiReqCtx {
   now: number;
   tz: Tz;
   locale: 'zh' | 'ko';
+  /** 规整过的项目名（normProjects） */
   projects: string[];
   scope: 'main';
   /** 日历页选中的那天（R6；已过 checkDefaultDay）；别的页不传 */
   default_day?: DateStr;
+}
+
+/** ai-parse 的请求体 */
+export type AiParseReq = AiReqCtx & { text: string };
+
+/** 拼请求上下文：项目名规整、选中的日子过 checkDefaultDay；日子超出后端认的范围返回 bad_default_day（发了也是 400） */
+export function aiReqCtx(ctx: Pick<TypeCtx, 'now' | 'tz' | 'locale' | 'projects' | 'day'>): AiReqCtx | 'bad_default_day' {
+  const dd = ctx.day === null ? null : checkDefaultDay(ctx.day, ctx.now, ctx.tz);
+  if (dd === 'bad') return 'bad_default_day';
+  return { now: ctx.now, tz: ctx.tz, locale: ctx.locale, projects: normProjects(ctx.projects), scope: 'main', ...(dd !== null ? { default_day: dd } : {}) };
 }
 
 /** 送 ai-parse 的口子：返回已 parse 的 JSON；失败抛 SendError（或 fetch 原样抛的 TypeError、AbortError） */
@@ -148,11 +158,9 @@ export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: 
   if (env.quotaOut) return local('quota_out');
   if (!env.aiOn) return local('saved');
   // 选中的日子超出后端认的范围：发了也是 400，不调 AI、不花次数，直接用本机结果（记到选中那天）；不是“AI 没回应”，不出那句提示
-  const dd = ctx.day === null ? null : checkDefaultDay(ctx.day, ctx.now, ctx.tz);
-  if (dd === 'bad') return local('saved', 'bad_default_day');
-  const req: AiParseReq = {
-    text: cutText(text), now: ctx.now, tz: ctx.tz, locale: ctx.locale, projects: normProjects(ctx.projects), scope: 'main', ...(dd !== null ? { default_day: dd } : {}),
-  };
+  const base = aiReqCtx(ctx);
+  if (base === 'bad_default_day') return local('saved', base);
+  const req: AiParseReq = { ...base, text: cutText(text) };
   const isOnline = env.isOnline ?? navOnline;
   const out = await askAi(req, call, AI_PARSE_TIMEOUT_MS, isOnline);
   switch (out.kind) {

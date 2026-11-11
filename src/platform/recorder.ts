@@ -36,7 +36,7 @@ export interface RecorderOptions {
   /** 必填：浏览器默认码率不受控（常见 128 kbps 上下，录满 60 秒会超字节上限） */
   bitsPerSecond: number;
   signal?: AbortSignal;
-  /** 没人调 stop() 录音就停了（录满 maxMs、轨道被系统收走）：界面照松手处理 */
+  /** 开录以后没人调 stop()、没取消，录音就结束了（录满 maxMs、轨道被系统收走、录音器出错）：通知一次，界面调 stop() 拿结局 */
   onAutoStop?: () => void;
   now?: () => number;
 }
@@ -132,6 +132,8 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
       rlog(log);
       if (startAt === null && !r.ok) started(r);
       giveEnd(r);
+      // 录音结束只从这里告诉界面：不管为什么结束，调用方没要停、也没取消，就通知
+      if (startAt !== null && !asked && !(!r.ok && r.fail === 'cancelled')) o.onAutoStop?.();
     };
     const fail = (f: RecFail, more = '', reason: string = f): void => finish({ ok: false, fail: f }, `rec fail reason=${reason}${more}`);
     const onAbort = (): void => fail('cancelled');
@@ -166,7 +168,6 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
       if (blob.size === 0) fail('empty', size);
       else if (blob.size > o.maxBytes) fail('too_large', size);
       else finish({ ok: true, clip: { blob, mime, ms }, auto }, `rec end${size} auto=${auto ? 1 : 0}`);
-      if (auto) o.onAutoStop?.();
     };
 
     try {

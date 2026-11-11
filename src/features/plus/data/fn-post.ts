@@ -1,6 +1,6 @@
-// 带本次会话的令牌 POST 一个服务器函数（ai-parse、ai-voice 共用）：这类事只在这里做。经 appFetch，authorization、apikey 由这里加
-// • 返回码：2xx 是 JSON 就原样交回，不是 JSON 抛 SendError('bad_response')；401 先换一次令牌再发；其余非 2xx 抛 SendError('http')、不重试
-// • 没登录（拿不到令牌）抛 SendError('http')、不发请求；断网（appFetch 抛 TypeError）原样抛，由调用方决定要不要重试
+// 带本次会话的令牌 POST 一个服务器函数（ai-parse、ai-voice、token-admin）：这类事只在这里做。经 appFetch，authorization、apikey 由这里加
+// • sendFn：没登录返回 null、不发；401 先换一次令牌再发；交回 Response，返回码由调用方归类（token-admin 要分 409、429）
+// • postFn：2xx 是 JSON 就原样交回，不是 JSON 抛 SendError('bad_response')；没登录、非 2xx 抛 SendError('http')；断网的 TypeError 原样抛
 // • 超时和取消只由调用方的 signal 管：取令牌、换令牌途中取消也立刻按取消原因抛出（supabase-js 可能在等锁，不再等它）
 // 纯 TS：不准 import React（A1）
 import { buildInfo } from '../../../platform/env.ts';
@@ -18,8 +18,8 @@ export interface FnPostOptions {
   refresh?: () => Promise<string | null>;
 }
 
-/** 本次会话的 JWT（没登录为 null）；claude-link-api.ts 生成连接码也用 */
-export async function sessionToken(): Promise<string | null> {
+/** 本次会话的 JWT（没登录为 null） */
+async function sessionToken(): Promise<string | null> {
   const db = await getSupabase();
   const { data, error } = await db.auth.getSession();
   if (error) return null;
@@ -43,11 +43,17 @@ function tokenOr(p: () => Promise<string | null>, signal: AbortSignal): Promise<
   });
 }
 
-/** POST <supabaseUrl>/functions/v1/<fn>，返回已 parse 的 JSON。headers 里放 content-type 和各自的参数头 */
-export async function postFn(fn: string, req: { headers: Record<string, string>; body: BodyInit }, signal: AbortSignal, o: FnPostOptions = {}): Promise<unknown> {
+export interface FnReq {
+  /** content-type 和各自的参数头 */
+  headers: Record<string, string>;
+  body: BodyInit;
+}
+
+/** POST <supabaseUrl>/functions/v1/<fn>，交回 Response；没登录返回 null、不发请求 */
+export async function sendFn(fn: string, req: FnReq, signal: AbortSignal, o: FnPostOptions = {}): Promise<Response | null> {
   const doFetch = o.fetch ?? appFetch;
   const jwt = await tokenOr(o.token ?? sessionToken, signal);
-  if (jwt === null) throw new SendError('http');
+  if (jwt === null) return null;
   const url = o.url ?? `${buildInfo.supabaseUrl}/functions/v1/${fn}`;
   const send = (t: string): Promise<Response> =>
     doFetch(url, {
@@ -63,7 +69,13 @@ export async function postFn(fn: string, req: { headers: Record<string, string>;
     const fresh = await tokenOr(o.refresh ?? refreshedToken, signal);
     if (fresh !== null && fresh !== jwt) res = await send(fresh);
   }
-  if (!res.ok) throw new SendError('http');
+  return res;
+}
+
+/** 同 sendFn，只收 2xx 的 JSON，返回已 parse 的值 */
+export async function postFn(fn: string, req: FnReq, signal: AbortSignal, o: FnPostOptions = {}): Promise<unknown> {
+  const res = await sendFn(fn, req, signal, o);
+  if (res === null || !res.ok) throw new SendError('http');
   try {
     return (await res.json()) as unknown;
   } catch (e) {

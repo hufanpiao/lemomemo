@@ -1,7 +1,7 @@
 // 打字流程（data/type-flow.ts；B3 任务单 S2、FA-2、Q2；架构 5.1、5.11；R-54、R-353）。不调真 Gemini，AI 一律用桩
 import { describe, expect, it, vi } from 'vitest';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
-import { applyConfirm, askAi, type CallAi, fillDay, keepAsked, mergeItems, needsConfirm, planLocal, planTyped, SendError, splitConfirm, type TypeCtx } from '../data/type-flow.ts';
+import { aiReqCtx, applyConfirm, askAi, type CallAi, fillDay, keepAsked, mergeItems, needsConfirm, planLocal, planTyped, SendError, splitConfirm, type TypeCtx } from '../data/type-flow.ts';
 
 /** 2026-11-02（周一）10:00 首尔 */
 const NOW = Date.UTC(2026, 10, 2, 1, 0);
@@ -22,6 +22,19 @@ describe('有把握就不调 AI（R-54）', () => {
     expect(call).not.toHaveBeenCalled();
     expect(p).toMatchObject({ status: 'saved', origin: 'rule' });
     expect(p.items[0]).toMatchObject({ kind: 'event', date: '2026-11-03', time: '15:00' });
+  });
+});
+
+describe('aiReqCtx：打字、录音共用的请求上下文（项目名、选中的日子只在这里整理）', () => {
+  it('项目名规整（去空白、去重、最多 30 个）；没选日子不带 default_day', () => {
+    const many = Array.from({ length: 35 }, (_v, i) => `P${i}`);
+    expect(aiReqCtx({ ...CTX, projects: [' NEOX ', 'NEOX', '', ...many] })).toEqual({
+      now: NOW, tz: 'Asia/Seoul', locale: 'zh', projects: ['NEOX', ...many.slice(0, 29)], scope: 'main',
+    });
+  });
+  it('选中的日子在范围里带上；超出后端认的范围返回 bad_default_day', () => {
+    expect(aiReqCtx({ ...CTX, day: '2026-11-20' })).toMatchObject({ default_day: '2026-11-20' });
+    expect(aiReqCtx({ ...CTX, day: '2020-01-01' })).toBe('bad_default_day');
   });
 });
 

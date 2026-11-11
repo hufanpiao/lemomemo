@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { AI_AUDIO_MAX_BYTES, normProjects } from '../../../../shared/schema/ai.ts';
-import { decodeProjects, MAX_PROJECTS_HEADER } from '../../../../supabase/functions/ai-voice/core.ts';
+import { decodeProjects, MAX_AUDIO, MAX_PROJECTS_HEADER } from '../../../../supabase/functions/ai-voice/core.ts';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import { outcomeOf } from '../data/ai-outcome.ts';
 import { createCallVoice, encodeProjects, voiceHeaders, type AiVoiceReq } from '../data/ai-voice-api.ts';
@@ -74,18 +74,18 @@ describe('请求', () => {
 describe('X-Projects 和服务器的解码往返', () => {
   const NAMES = ['NEOX 宣传片', '사이드 프로젝트', '🎬 剪辑', '带"引号"的', '反\\斜杠', 'a,b', '  首尾空格  ', 'NEOX 宣传片', '', '长'.repeat(60)];
 
-  it('中文、韩文、表情、引号、反斜杠、逗号、空格、重复、超长：服务器解出来等于规整后的列表', () => {
-    const h = encodeProjects(NAMES);
+  it('中文、韩文、表情、引号、反斜杠、逗号、空格、超长（规整后的列表，见 aiReqCtx）：服务器解出来一模一样', () => {
+    const names = normProjects(NAMES);
+    const h = encodeProjects(names);
     expect(h).toMatch(/^[A-Za-z0-9_-]+$/);
-    expect(decodeProjects(h)).toEqual(normProjects(NAMES));
-    expect(normProjects(NAMES)).toHaveLength(8);
+    expect(decodeProjects(h)).toEqual(names);
+    expect(names).toHaveLength(8);
   });
 
-  it('超过 30 个只带前 30 个；一个都没有不带这个头', () => {
-    const many = Array.from({ length: 45 }, (_v, i) => `项目${i}`);
-    expect(decodeProjects(encodeProjects(many))).toEqual(many.slice(0, 30));
+  it('30 个都带上；一个都没有不带这个头', () => {
+    const many = Array.from({ length: 30 }, (_v, i) => `项目${i}`);
+    expect(decodeProjects(encodeProjects(many))).toEqual(many);
     expect(encodeProjects([])).toBeNull();
-    expect(encodeProjects(['  ', ''])).toBeNull();
   });
 
   it('超过服务器的 4 KB：服务器留下前面完整的几项，顺序不变', () => {
@@ -100,8 +100,14 @@ describe('X-Projects 和服务器的解码往返', () => {
 
   it('真发出去的那个请求头，服务器解得开', async () => {
     const { fetch, call } = api(async () => reply(200, OK));
-    await call(req({ projects: NAMES }), live());
+    await call(req({ projects: normProjects(NAMES) }), live());
     expect(decodeProjects(sentHeaders(fetch)['x-projects'] ?? null)).toEqual(normProjects(NAMES));
+  });
+});
+
+describe('字节上限', () => {
+  it('前端的 AI_AUDIO_MAX_BYTES 和服务器 ai-voice 读请求体用的 MAX_AUDIO 相等（合并成一份之前的护栏）', () => {
+    expect(AI_AUDIO_MAX_BYTES).toBe(MAX_AUDIO);
   });
 });
 

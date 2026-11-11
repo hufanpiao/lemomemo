@@ -6,19 +6,24 @@ import {
   type HoldAction, type HoldEvent, type HoldState,
 } from '../data/record-logic.ts';
 
-describe('上传总超时：8 秒 + 每 100 KB 1 秒，最多 20 秒', () => {
+describe('上传总超时：下限 17 秒、每 100 KB 加 1 秒、上限 22 秒（5.11 第 1 点定论：比服务器等 Gemini 的 15 秒长）', () => {
   it.each([
-    [0, 8_000],
-    [1, 9_000],
-    [100 * 1024, 9_000],
-    [100 * 1024 + 1, 10_000],
-    [200 * 1024, 10_000],
-    [600 * 1024, 14_000],
-    [5_000 * 1024, 20_000],
+    [0, 17_000],
+    [1, 18_000],
+    [100 * 1024, 18_000],
+    [100 * 1024 + 1, 19_000],
+    [150 * 1024, 19_000],
+    [400 * 1024, 21_000],
+    [500 * 1024, 22_000],
+    [600 * 1024, 22_000],
+    [5_000 * 1024, 22_000],
   ])('%i 字节 → %i ms', (bytes, ms) => expect(uploadTimeoutMs(bytes)).toBe(ms));
 });
 
 describe('码率：录满 60 秒也在 600 KB 以内（架构 5.11：直传按 AAC 32–64 kbps 算）', () => {
+  it('字节上限就是 600 KB（架构 5.11 第 2 点“客户端硬上限 600 KB”）', () => {
+    expect(AI_AUDIO_MAX_BYTES).toBe(600 * 1024);
+  });
   it('码率在 32–64 kbps 里', () => {
     expect(REC_BITS_PER_SECOND).toBeGreaterThanOrEqual(32_000);
     expect(REC_BITS_PER_SECOND).toBeLessThanOrEqual(64_000);

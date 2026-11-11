@@ -1,6 +1,6 @@
 // 设置 › 在 Claude 聊天里记事（FA-4）：连着没有、最后使用、生成连接码、断开连接
 import { describe, expect, it, vi } from 'vitest';
-import { CODE_TTL_DAYS, createLink, disconnectAll, linkStateOf, listLinks, type LinkDeps, type LinkRow } from '../data/claude-link-api.ts';
+import { CODE_TTL_DAYS, createLink, createVia, disconnectAll, linkStateOf, listLinks, type LinkDeps, type LinkRow } from '../data/claude-link-api.ts';
 
 const NOW = Date.parse('2026-11-09T03:00:00Z');
 const DAY = 86_400_000;
@@ -81,6 +81,38 @@ describe('createLink', () => {
       throw new TypeError('Failed to fetch');
     };
     expect(await createLink(deps({ create }))).toEqual({ ok: false, err: 'offline' });
+  });
+});
+
+describe('生成连接码的请求走 fn-post 的 sendFn（令牌 POST 只有那一个出口）', () => {
+  const via = (res: (n: number) => Response, token: string | null = 'jwt-1', refresh: string | null = null) => {
+    let n = 0;
+    const fetch = vi.fn(async (_u: RequestInfo | URL, _i?: RequestInit) => res(++n));
+    const create = createVia({ fetch, url: 'https://sb.test/functions/v1/token-admin', anonKey: 'anon-1', token: async () => token, refresh: async () => refresh });
+    return { fetch, d: deps({ create }) };
+  };
+
+  it('POST token-admin：带令牌、apikey、no-store，包体 {action: create}', async () => {
+    const { fetch, d } = via(() => json(200, { token: 'lemo_abc' }));
+    expect(await createLink(d)).toMatchObject({ ok: true, value: { token: 'lemo_abc' } });
+    const [url, init] = fetch.mock.calls[0] ?? [];
+    expect(String(url)).toBe('https://sb.test/functions/v1/token-admin');
+    expect(init).toMatchObject({ method: 'POST', cache: 'no-store', body: JSON.stringify({ action: 'create' }) });
+    expect(init?.headers).toEqual({ authorization: 'Bearer jwt-1', apikey: 'anon-1', 'content-type': 'application/json' });
+  });
+
+  it('409、429 原样交给 createLink 归类；没登录不发', async () => {
+    expect(await createLink(via(() => json(409, {})).d)).toEqual({ ok: false, err: 'too_many' });
+    expect(await createLink(via(() => json(429, {})).d)).toEqual({ ok: false, err: 'rate_limited' });
+    const out = via(() => json(200, { token: 'x' }), null);
+    expect(await createLink(out.d)).toEqual({ ok: false, err: 'signed_out' });
+    expect(out.fetch).not.toHaveBeenCalled();
+  });
+
+  it('401：换一次令牌再发', async () => {
+    const { fetch, d } = via((n) => (n === 1 ? json(401, {}) : json(200, { token: 'lemo_abc' })), 'jwt-1', 'jwt-2');
+    expect(await createLink(d)).toMatchObject({ ok: true });
+    expect(fetch.mock.calls.map((c) => (c[1]?.headers as Record<string, string>)['authorization'])).toEqual(['Bearer jwt-1', 'Bearer jwt-2']);
   });
 });
 

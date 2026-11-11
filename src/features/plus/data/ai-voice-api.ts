@@ -3,38 +3,24 @@
 // • 只发这一次：总超时（record-logic 的 uploadTimeoutMs）、自动重试由调用方管；字节上限由录音器判过、服务器再回 413，这里不重判
 // • 运行日志只补全局 net 行没有的：字节数、类型、项目个数、没发出去的原因；不记项目名
 // 纯 TS：不准 import React（A1）
-import type { DateStr } from '../../../../shared/core/date.ts';
-import type { Tz } from '../../../../shared/core/tz.ts';
-import { normProjects } from '../../../../shared/schema/ai.ts';
 import { toB64u } from '../../../platform/b64url.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { postFn, type FnPostOptions } from './fn-post.ts';
-import { SendError } from './type-flow.ts';
+import { SendError, type AiReqCtx } from './type-flow.ts';
 
 export const AI_VOICE_FN = 'ai-voice';
 /** 进日志的类型只收这种写法，别的记成 ? */
 const MIME_RE = /^[a-z0-9/.+-]{1,40}$/;
 
-export interface AiVoiceReq {
-  audio: Blob;
-  /** 录音的类型，不带参数（audio/mp4）；直接当 Content-Type */
-  mime: string;
-  now: number;
-  tz: Tz;
-  locale: 'zh' | 'ko';
-  projects: readonly string[];
-  scope: 'main';
-  /** 日历页选中的那天（已过 checkDefaultDay）；别的页不传 */
-  default_day?: DateStr;
-}
+/** 上下文由 type-flow 的 aiReqCtx 拼（和打字同一份）；mime 是录音的类型、不带参数（audio/mp4），直接当 Content-Type */
+export type AiVoiceReq = AiReqCtx & { audio: Blob; mime: string };
 
 /** 送 ai-voice 的口子：失败抛 SendError（或 fetch 原样抛的 TypeError、取消原因），和打字的 CallAi 同一个形状 */
 export type CallVoice = (req: AiVoiceReq, signal: AbortSignal) => Promise<unknown>;
 
-/** X-Projects：规整后的项目名 → JSON → UTF-8 → base64url；一个都没有返回 null（不带这个头）。太长由服务器按项截断，这里不截 */
+/** X-Projects：项目名（aiReqCtx 已规整）→ JSON → UTF-8 → base64url；一个都没有返回 null（不带这个头）。太长由服务器按项截断，这里不截 */
 export function encodeProjects(projects: readonly string[]): string | null {
-  const names = normProjects(projects);
-  return names.length === 0 ? null : toB64u(new TextEncoder().encode(JSON.stringify(names)));
+  return projects.length === 0 ? null : toB64u(new TextEncoder().encode(JSON.stringify(projects)));
 }
 
 export function voiceHeaders(req: AiVoiceReq): Record<string, string> {
@@ -64,7 +50,7 @@ export function createCallVoice(o: FnPostOptions = {}): CallVoice {
       rlog(`voice upload fail reason=${why} bytes=${bytes}`);
       return Promise.reject(new SendError('http'));
     }
-    rlog(`voice upload start bytes=${bytes} mime=${MIME_RE.test(req.mime) ? req.mime : '?'} projects=${normProjects(req.projects).length}`);
+    rlog(`voice upload start bytes=${bytes} mime=${MIME_RE.test(req.mime) ? req.mime : '?'} projects=${req.projects.length}`);
     return postFn(AI_VOICE_FN, { headers: voiceHeaders(req), body: req.audio }, signal, o);
   };
 }

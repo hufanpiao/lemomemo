@@ -1,16 +1,14 @@
 // 设置 › 在 Claude 聊天里记事（B3 任务单 FA-4、BE-5；架构 5.7；R-65；S-B3 中 6）
 // • 现在连着没有、最后使用时间：经 RLS 直接读 api_tokens（tok_sel，只看得到本人的行），不经同步队列（清单里 sync: false）
 //   有效 = 没吊销、建了不到 180 天（同 supabase/functions/_shared/intake-token.ts 的 TOKEN_TTL_MS）；最后使用 = 有效码里最晚的 last_used_at
-// • 生成连接码：POST token-admin {action: 'create'}，回 {token, id, expires_at}；明文码只在这一次响应里，界面只显示这一次、不做成链接、不存
+// • 生成连接码：经 fn-post 的 sendFn POST token-admin {action: 'create'}，回 {token, id, expires_at}；明文码只在这一次响应里，界面只显示这一次、不做成链接、不存
 //   409 too_many_tokens（同时最多 5 个）、429 rate_limited（每天 10 次）各自提示；426 由 appFetch 出升级横幅（token-admin 过版本门）
 // • 断开连接：PATCH api_tokens set revoked_at（guard_token_revoke 改成 now()），只改 revoked_at 为空的行（revoked_at=is.null），
 //   一行已吊销不会让整批报错；PATCH /rest/v1/api_tokens 免查版本（前端会审），不走同步队列
 // • 各自 8 秒超时；只在设置这一块（plus 懒加载块）里，不进首屏
 // 纯 TS：不准 import React（A1）
-import { buildInfo } from '../../../platform/env.ts';
-import { appFetch } from '../../../platform/http.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
-import { sessionToken } from './fn-post.ts';
+import { sendFn, type FnPostOptions } from './fn-post.ts';
 
 export const LINK_TIMEOUT_MS = 8000;
 /** 连接码多久过期（天），同 _shared/intake-token.ts 的 TOKEN_TTL_MS */
@@ -72,6 +70,12 @@ export interface LinkDeps {
 
 const LINK_COLS = 'id,created_at,last_used_at,revoked_at';
 
+/** 生成连接码的请求（测试注入 fetch、令牌） */
+export const createVia =
+  (o: FnPostOptions = {}): LinkDeps['create'] =>
+  (signal) =>
+    sendFn('token-admin', { headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'create' }) }, signal, o);
+
 const defaultDeps: LinkDeps = {
   async list(signal) {
     const db = await getSupabase();
@@ -82,17 +86,7 @@ const defaultDeps: LinkDeps = {
     // 值随便给一个非空的：触发器 guard_token_revoke 一律改成服务器的 now()
     return db.from('api_tokens').update({ revoked_at: new Date().toISOString() }).is('revoked_at', null).abortSignal(signal);
   },
-  async create(signal) {
-    const jwt = await sessionToken();
-    if (jwt === null) return null;
-    return appFetch(`${buildInfo.supabaseUrl}/functions/v1/token-admin`, {
-      method: 'POST',
-      headers: { authorization: `Bearer ${jwt}`, apikey: buildInfo.anonKey, 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'create' }),
-      signal,
-      cache: 'no-store',
-    });
-  },
+  create: createVia(),
 };
 
 const isRow = (v: unknown): v is LinkRow => {
