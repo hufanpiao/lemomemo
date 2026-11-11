@@ -1,5 +1,5 @@
 // 退出流程里首屏也要用的几样（本机库名、删库、超时、withTimeout）：首屏只引这里，platform/sign-out.ts 本体不进首屏
-// 不变量：退出用的超时常量全仓只在这里定义一次（core/account.ts、platform/sign-out.ts 都从这里引）
+// 不变量：WIPE_TIMEOUT_MS、CACHES_TIMEOUT_MS、DELETE_WAIT_MS 只在这里定义（core/account.ts、platform/sign-out.ts 都从这里引）
 /** 本机库名（= core/cache.ts 的 DB_NAME；platform 不引 core，测试守着两边一致） */
 export const LOCAL_DB_NAME = 'planner-v4';
 /** 删库最多等多久（别的标签页开着库时浏览器会等它关） */

@@ -24,7 +24,7 @@ export function outboxLog(log: SyncLog): NonNullable<OutboxOptions['log']> {
 }
 
 /**
- * 停掉并清掉这个账号的日志上传队列（架构 0.38 第 68 条；被移除、停用、注销冷静期、本页收到 SIGNED_OUT）：main.tsx 交给 watchAccount 和 wireSync 共用。
+ * 停掉并清掉这个账号的日志上传队列（架构 0.38 第 68 条；被移除、停用、注销冷静期、本页收到 SIGNED_OUT）：main.tsx 交给 lossExit（core/device-exit.ts 的 exitOnSessionLoss）和 wireSync 共用。
  * close 立刻生效（之后不记、不传、在途那一批传完也不写回），所以先同步清一次，不打乱后面清本机、回登录页的顺序；等在途那一批收尾后再清一次兜底
  */
 export function logQueueCleaner(

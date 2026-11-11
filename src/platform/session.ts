@@ -466,7 +466,8 @@ export function mayRemoveSessionKey(key: string, sessionId: string | null, stora
 
 /**
  * 没登录：去登录页（不建本机库）。带 notice 时先记下退出原因（setExitNotice），登录页据此提示：
- * watchAccount 收到本页的 SIGNED_OUT（不是自己退出）时调 goToAuth('removed', 删掉的那个 session_id)（K6-signedout）。
+ * 会话没了由 core/device-exit.ts 回登录页（defaultExitDeps.goToAuth）：本页的 SIGNED_OUT（不是自己退出）按服务器结局调
+ * goToAuth('removed' 或 'expired', 删掉的那个 session_id)。
  * 带 'removed' 时先删本机会话（审查建议 5）：服务器上已经作废，留着登录页会同时显示“当前已登录”和“被移除”。
  * • 带 'removed' 时 deadSessionId 必填（K6-signedout-sugg2 ①、K6-sugg4 ②，类型 GoToAuthArgs 管着）：只在本机会话还是那一个时才删——
  *   清库那几秒里别的标签页刚登录的新会话不删。不再有“不给就直接删”的写法

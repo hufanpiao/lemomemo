@@ -1,13 +1,7 @@
-// 多个标签页只让一个页面跑同步（架构 4.3b、0.38 第 58 条）：选主、交接、页面之间的提醒。只管锁和频道，不认识同步
-// • 选主：navigator.locks.request('lemo-sync:<user_id>', {mode: 'exclusive'})，拿到锁的是主页，持有到放手为止
-// • 只在前台排队抢锁：页面隐藏时主页主动放手（先调 lead() 返回的 stop：断 Realtime、等在途请求 ≤ 20 秒），排队中的撤掉；
-//   重新显示时再排队（iPhone 冻结的后台页不会一直占着锁）。页面关掉或崩溃时浏览器自动放锁，排队的页面自动拿到
-// • 提醒：BroadcastChannel('lemo-sync:<user_id>')，消息 outbox / changed / reset 只是提醒，真相在 IndexedDB
-// • 兜底：没有 navigator.locks（某些内嵌浏览器）：这个页面自己当主页（回到 0.38 以前的做法），记一次 sync_no_locks；
-//   没有 BroadcastChannel：不发提醒（回到前台整份重读兜底）
-// • 只听（listenOnly，TABLEADER-listen）：只开频道收提醒、能发提醒，从不排队抢锁、从不调 lead；isLeader() 恒为 false，
-//   没有 Web Locks 时也一样（D3：只听页一律不当主页，也不记 sync_no_locks）。用于同步暂停后让出主页的页面（app/sync-wiring.ts）
-// 纯 TS：不准 import React（A1）
+// 多个标签页只让一个页面跑同步（架构 4.3b）：选主、交接、页面之间的提醒（BroadcastChannel 'lemo-sync:<user_id>'）；只管锁和频道，不认识同步
+// 不变量：navigator.locks 按 'lemo-sync:<user_id>' 选主；只在前台排队抢锁，隐藏时主页先 stop 再放手；提醒只是提醒，真相在 IndexedDB
+// 不变量：只听页（listenOnly）只收发提醒、从不抢锁、从不当主页；没有 Web Locks 时普通页自己当主页并记 sync_no_locks，没有频道就不发提醒
+// 纯 TS：不准 import React（A1）。原文见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
 import type { ExitNotice } from './session.ts';
 
 /** 页面之间的提醒（4.3b） */

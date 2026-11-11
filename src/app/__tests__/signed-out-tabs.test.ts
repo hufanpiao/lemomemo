@@ -128,7 +128,7 @@ describe('A 页自己退出 → B 页收到转来的 SIGNED_OUT 和 storage(null
     b.emit('SIGNED_OUT', null);
     await vi.waitFor(() => expect(b.replace).toHaveBeenCalledTimes(1));
     expect(readExitNotice()).toBe('removed');
-    expect(b.deps.clearLogs).toHaveBeenCalled();   // 清库前一次、清完兜底再一次（和别的清库出口一致）
+    expect(b.deps.clearLogs).toHaveBeenCalledTimes(2);   // 清库前一次、清完兜底再一次（和别的清库出口一致）
   });
 });
 

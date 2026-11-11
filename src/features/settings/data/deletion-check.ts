@@ -8,8 +8,8 @@
 //   但别的设备刚好移除了本机也是这个结果，两者分不清。会话照删、清本机，登录页提示 auth.exit.deletionUnsure（“没能确认注销是否已经办好”），
 //   不说冷静期（安全审查 H1）
 // • 本机会话已经没了（getSession 刷新令牌被拒，auth-js 删了会话并发出 SIGNED_OUT）→ 同上 unsure。
-//   这时本页的 SIGNED_OUT 一路（core/account.ts 的 watchAccount）已经先设了闸、在清本机，leave 不会清第二遍，
-//   只记下 deletion_unsure，那一路最后的 goToAuth('removed') 不覆盖已有原因（见 account-exit.ts）
+//   这时本页的 SIGNED_OUT 一路已经先设了闸（core/account.ts 的 watchAccount），在 core/device-exit.ts 的 exitDevice 里退出，
+//   leave 不会清第二遍，只记下 deletion_unsure；那一路最后的 goToAuth('removed' 或 'expired') 不覆盖已有原因（见 account-exit.ts）
 // • active → 没办成，照旧提示稍后再试
 // • disabled → 交给已有的“账号停用”流程
 // • unknown（断网、超时、本机会话已换人、刷新因断网失败而会话还在）→ 判断不了，照旧提示稍后再试（不猜）

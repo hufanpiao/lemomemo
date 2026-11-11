@@ -155,7 +155,8 @@ async function start(): Promise<void> {
   if (hasAuthLoss()) void import('../platform/auth-loss-log.ts')
     .then(async (m) => (await m.takeAuthLossFor(userId, readInstallId())).forEach((e) => logEvent('auth_loss', { code: m.authLossLogCode(e) })))
     .catch(() => undefined);
-  // 被移除、停用、注销冷静期、本页收到 SIGNED_OUT：停止上传并清掉这个账号的日志队列（架构 0.38 第 68 条）；watchAccount（K6-signedout）和 wireSync 共用
+  // 被移除、停用、注销冷静期、本页收到 SIGNED_OUT：停止上传并清掉这个账号的日志队列（架构 0.38 第 68 条）；
+  // 交给 lossExit（core/device-exit.ts 的 exitOnSessionLoss）和 wireSync 共用
   const clearLogs = logQueueCleaner(logQueue, userId);
   /** 已按 boot 的 profile 定过界面语言（之后 blocked 也不再按“没有 profile”覆盖） */
   let localeFromBoot = false;

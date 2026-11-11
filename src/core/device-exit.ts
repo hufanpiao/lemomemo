@@ -1,7 +1,7 @@
 // 账号没了、会话没了怎么退出这台设备（架构约定 10.1）：decideExit 定结局，exitDevice 执行；主 App、告知页、插图上传、会话层都走这里
 // （设置页 useSessionExit 和本人退出走 platform/sign-out.ts 的清库步骤，不经这里）。清库走 account.ts 的 wipeLocal
 // 不变量：被移除必须服务器确认（session_fate 回 revoked）才清库，查不了、查出错都只退出；停用、过期只退出；冷静期不删会话
-// 不变量：记号写好以后只关库、不再写第二次；写不了记号才退回清库，退回清库的提示一律 removed（让人知道没上传的改动丢了）
+// 不变量：记号写好以后只关库、不再写第二次；写不了记号才退回清库：登录过期、未确认的被移除退回清库时提示 removed，停用仍提示 disabled
 // 不变量：同一页只执行一次（exited）。顺序：被移除先设闸、写记号、删会话、查服务器 → 只关库或清库 → 广播带原因的 reset → 删会话 → 回登录页
 import { closeCache, expireThisTab, markExpired, wipeLocal, type SessionLoss } from './account.ts';
 import type { AuthLossOutcome, AuthLossPath, AuthLossSignal } from './auth-loss.ts';
