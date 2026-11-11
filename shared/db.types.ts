@@ -805,6 +805,12 @@ isOneToOne: false
                            },
 "report_tz":
 { Args: { "device_id": string,"platform": string,"tz": string }; Returns: string
+                           },
+"revoke_my_sessions":
+{ Args: { "p_include_current": boolean }; Returns: number
+                           },
+"session_fate":
+{ Args: { "p_pair": string }; Returns: string
                            }
           }
           Enums: {
