@@ -459,7 +459,7 @@
   position: fixed;
   left: 14px;
   right: 14px;
-  bottom: var(--dock-bottom);
+  bottom: calc(var(--dock-bottom) + var(--inrow-kb-gap, 0px));
   z-index: 5;
   display: flex;
   align-items: center;
@@ -474,7 +474,7 @@
 }
 
 .inrowUp {
-  bottom: calc(var(--dock-bottom) + 64px);
+  bottom: calc(var(--dock-bottom) + var(--inrow-kb-gap, 0px) + 64px);
 }
 
 /* 电脑：铺满内容栏、左右各留 22px（DK.notes 第 1491 行），不按整个窗口居中；栏底 22px。
@@ -572,7 +572,7 @@
   position: fixed;
   left: 14px;
   right: 14px;
-  bottom: calc(var(--dock-bottom) + 64px);
+  bottom: calc(var(--dock-bottom) + var(--inrow-kb-gap, 0px) + 64px);
   z-index: 30;
   max-width: 532px;
   margin: 0 auto;

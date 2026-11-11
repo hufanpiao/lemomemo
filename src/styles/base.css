@@ -61,6 +61,9 @@ html[data-app] {
    不再留出底栏那 118px。浏览器里 --kb 是键盘压住的高度；iOS 主屏幕版键盘把布局视口本身压矮，布局视口下沿就是键盘上沿，--kb 不写（0） */
 :root[data-kbo] {
   --dock-bottom: var(--kb, 0px);
+
+  /* 随手记底部输入行键盘弹着时离辅助条再高一点（负责人 11-11“随手记输入框再距离辅助框再高一点”，原来只隔约 12pt） */
+  --inrow-kb-gap: 12px;
 }
 
 /* 同步提示卡显示着（<html data-sn-card>，SyncNoticeHost 写 --sn-h = 卡的实际高度）：页底留白至少让到卡上沿再加 8px，

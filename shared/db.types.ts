@@ -187,14 +187,14 @@ isOneToOne: false
                   ]
                 },"revoked_sessions": {
                   Row: {
-                    "revoked_at": string,"session_id": string,"user_id": string
+                    "pair_hash": string,"revoked_at": string,"session_id": string | null,"user_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "revoked_at"?: string,"session_id": string,"user_id": string
+                    "pair_hash": string,"revoked_at"?: string,"session_id"?: string | null,"user_id"?: string | null
                   }
                   Update: {
-                    "revoked_at"?: string,"session_id"?: string,"user_id"?: string
+                    "pair_hash"?: string,"revoked_at"?: string,"session_id"?: string | null,"user_id"?: string | null
                   }
                   Relationships: [
                     
@@ -520,8 +520,25 @@ isOneToOne: false
 "report_tz_impl":
 { Args: { "p_device": string,"p_platform": string,"p_tz": string }; Returns: string
                            },
+"revoke_my_sessions_impl":
+{ Args: { "p_include_current": boolean }; Returns: number
+                           },
+"revoke_session":
+{ Args: { "p_session": string,"p_user": string }; Returns: undefined
+                           },
+"security_events":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "pw_revoke_failed": number,"sfate_capped": number
+            }[]
+                           },
 "session_alive":
 { Args: { "p_session": string }; Returns: boolean
+                           },
+"session_fate_impl":
+{ Args: { "p_pair": string }; Returns: string
+                           },
+"session_pair_hash":
+{ Args: { "p_session": string,"p_user": string }; Returns: string
                            },
 "table_meta_of":
 { Args: { "p_tbl": string }; Returns: {
