@@ -7,14 +7,24 @@ declare const Deno: {
 };
 
 const stack: string[] = [];
+/** 每层 describe 自己的 afterEach；Deno 把所有测试文件放在一个进程里跑，所以只认写在 describe 里的，免得串到别的文件 */
+const afters: Array<Array<() => void>> = [];
 
 export function describe(name: string, fn: () => void): void {
   stack.push(name);
+  afters.push([]);
   try {
     fn();
   } finally {
     stack.pop();
+    afters.pop();
   }
+}
+
+export function afterEach(fn: () => void): void {
+  const top = afters.at(-1);
+  if (!top) throw new Error('deno-vitest-shim：afterEach 只支持写在 describe 里');
+  top.push(fn);
 }
 
 /** 正在 describe.skipIf(true) 的组里：组里每条都登记成 ignored */
@@ -33,7 +43,14 @@ describe.skipIf = (cond: unknown) => (name: string, fn: () => void): void => {
 export function it(name: string, a: unknown, b?: unknown): void {
   if (skipping > 0) return it.skip(name);
   const fn = (typeof a === 'function' ? a : b) as () => void | Promise<void>;
-  Deno.test([...stack, name].join(' > '), fn);
+  const after = afters.flat();
+  Deno.test([...stack, name].join(' > '), async () => {
+    try {
+      await fn();
+    } finally {
+      for (const h of after) h();
+    }
+  });
 }
 /** 报告里显示“ignored”（跳过），不是“通过”（QA D-10） */
 it.skip = (name: string, _a?: unknown, _b?: unknown): void => {

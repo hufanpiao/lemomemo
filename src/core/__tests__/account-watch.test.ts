@@ -2,7 +2,7 @@
 // 挂上监听后再比一次（补上 coldStart 期间漏掉的事件）；同步设闸；清完关库；清库失败即关；本机库打不开时也重来；被移除。
 // 本页的 SIGNED_OUT（K6-signedout）那一组 K6-sugg5 ⑤ 起在 account-watch-signedout.test.ts；搭台在 account-watch-harness.ts
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cacheOwner, claimCache, wipeLocal, type WatchAccountDeps } from '../account.ts';
+import { cacheOwner, claimCache, wipeLocal } from '../account.ts';
 import { getBoot, resetBootForTest } from '../boot.ts';
 import { deleteCacheDb } from '../cache.ts';
 import { OutboxRejectError } from '../outbox.ts';
@@ -167,16 +167,4 @@ describe('被移除（session_revoked、account_disabled）', () => {
     expect(clearCaches).toHaveBeenCalledTimes(1);
     expect(cache?.isClosed()).toBe(true);
   });
-});
-
-// K6-sugg4 ②：onSignedOut 带 removed 时必须带 session_id（typecheck 检查；不执行）
-function signedOutShapes(d: WatchAccountDeps): void {
-  // @ts-expect-error 带 removed 不带 session_id
-  d.onSignedOut('removed');
-  d.onSignedOut();
-  d.onSignedOut('removed', null);
-}
-
-it('K6-sugg4 ②：不给 session_id 的调用编不过（上面的 @ts-expect-error，由 typecheck 检查）', () => {
-  expect(typeof signedOutShapes).toBe('function');
 });

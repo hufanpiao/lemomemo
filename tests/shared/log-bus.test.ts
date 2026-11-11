@@ -2,9 +2,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { LOG_EARLY_MAX, logEvent, resetLogBusForTest, setLogSink, type LogFields } from '../../shared/core/log-bus.ts';
 
-afterEach(() => resetLogBusForTest());
-
 describe('日志总线', () => {
+  afterEach(() => resetLogBusForTest());
+
   it('没接上时先留着，接上后按顺序交出，之后直接转交', () => {
     logEvent('sync_conflict', { coll: 'todos', code: 'conflict' });
     logEvent('sync_task_timeout');
