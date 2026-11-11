@@ -30,7 +30,7 @@ const base = { user_id: FAKE_USER_ID, tz: TZ, created_at: 1, updated_at: 1, dele
 const day = (n: number) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(Date.now() + n * 86400000));
 const TD = [
   { ...base, id: 't1', title: '交周报', project: 'NEOX', due: day(-2), due_time: null, done: false },
-  { ...base, id: 't2', title: '订机票', project: '旅行', due: day(0), due_time: '23:30', done: false },
+  { ...base, id: 't2', title: '订机票', project: '旅行', due: day(0), due_time: null, done: false }, // 不带时刻：原来的 23:30 一过，它也进“没赶上”，P2 那条整组不离开（CI 11-11 首尔 23:42 挂过）
   { ...base, id: 't3', title: '买牛奶', project: '', due: day(0), due_time: null, done: false },
   { ...base, id: 't4', title: '整理照片', project: '', due: null, due_time: null, done: false },
   { ...base, id: 't5', title: '回邮件', project: '', due: null, due_time: null, done: true, done_at: Date.now() - 3600000 },
