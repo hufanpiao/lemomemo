@@ -6,12 +6,14 @@ import { lazy } from 'react';
 export const routes = [] as const;
 
 /**
- * 打字条（B3 FA-2）：“＋”点一下打开。
+ * 打字条（B3 FA-2）：“＋”点一下打开。下载打字条那一块，拿到组件本身（app/plus-slot.tsx 首屏画完以后先调）。
+ * 不用 lazy：lazy 第一次渲染总要挂起一拍，React 19 再把内容压后约 300ms 才放出来，聚焦就不在点按的那一下里，
+ * iOS 不弹键盘（Q-24）。下载好以后 plus-slot 直接画组件，打开的那一次渲染当场画出、当场聚焦。
  * props: { day: 日历页选中的那天或 null; onExpand(text, day): 展开成完整新建页; onEdit?(table, id): 提示条里“修改”某一条; onClose() }
  */
-export const TypeBar = lazy(() => import('./ui/TypeBar.tsx'));
+export const loadTypeBar = () => import('./ui/TypeBar.tsx');
 
-/** 预先下载打字条的代码（B3 Q4）：首屏画完以后挂一份，什么都不画；之后点“＋”时 TypeBar 的模块已在内存里 */
+/** “＋”上方的小气泡（B3 S23）：首屏画完以后挂一份 */
 export const TypeBarPreload = lazy(() => import('./ui/TypeBarPreload.tsx'));
 
 /**

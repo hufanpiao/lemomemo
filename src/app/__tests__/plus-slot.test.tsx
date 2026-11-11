@@ -1,8 +1,9 @@
 // “＋”点一下打开打字条的接线（app/plus-slot.tsx；B3 FA-2、M4、Q4）：
 // • 没打开、没预先下载：什么都不画，也不下载打字条那一块
 // • 还没下载好就打开：过 PREPARING_DELAY_MS 显示“准备中”（不能点了没反应），可以关掉；到了换成打字条，日子原样交过去
-// • 首屏画完以后 preloadPlus：挂一份预先下载（什么都不画）；之后打开直接是打字条，不闪“准备中”；展开、关闭原样交回
-// （React.lazy 成功一次就缓存，冷启动只能测一次，所以“还没下载好”那条排在预先下载那条前面）
+// • 首屏画完以后 preloadPlus：挂一份小气泡（什么都不画）；之后打开直接是打字条，不闪“准备中”；展开、关闭原样交回
+// • 预先下载好以后打开：打开的那一次渲染当场画出（Q-24，iOS 弹键盘的前提）。这条排在任何画出打字条的用例前面：
+//   万一以后有人改回 React.lazy，lazy 成功一次就缓存，排在后面就测不出来
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../kit/state/ui-store.ts';
@@ -22,11 +23,11 @@ vi.mock('../../features/plus/index.ts', async () => {
   };
   return {
     routes: [],
-    TypeBar: lazy(async () => {
+    loadTypeBar: async () => {
       gate.bars += 1;
       await gate.ready;
       return { default: Bar };
-    }),
+    },
     TypeBarPreload: lazy(async () => {
       gate.preloads += 1;
       await gate.ready;
@@ -54,6 +55,16 @@ describe('PlusSlot', () => {
     await wait(10);
     expect(container.childElementCount).toBe(0);
     expect(gate.bars + gate.preloads).toBe(0);
+  });
+
+  // Q-24（负责人 11-11“点+不出来键盘，还要点输入框才出来键盘”；运行日志 7 次冷启动后第一次点＋，focusin 都晚 310～480ms、键盘没弹）：
+  // iOS 只在点按的同一个任务里 focus 才弹键盘，打字条必须在打开的那一次渲染里当场画出来，不许挂起等下一拍
+  it('预先下载好以后打开：同一次渲染当场画出打字条，不挂起（iOS 才会弹键盘）', async () => {
+    const { rerender } = render(<PlusSlot open={false} day={null} onExpand={noop} onClose={noop} />);
+    act(() => preloadPlus());
+    await wait(10);
+    act(() => rerender(<PlusSlot open day={null} onExpand={noop} onClose={noop} />));
+    expect(screen.queryByTestId('type-bar-stub'), '打开的那一次就要在').not.toBeNull();
   });
 
   it('还没下载好就打开：晚一点显示“准备中”，能关；到了换成打字条', async () => {

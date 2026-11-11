@@ -2,9 +2,12 @@
 // • 不准值导入自己的 ui/、hooks/、data/、i18n/（只能在 lazy(() => import(...)) 里动态引入）
 // • 不准 export … from（类型和 ./data.manifest.ts 除外），不准 export *
 // • 导出的值只能是字面量、数组、对象、lazy(() => import('./…'))；函数、类、变量引用都不行
-// • plusAdapter: () => import('./plus-adapter.ts') 只有 vault 能导出（0.23 M1）
+// • 受控例外（只能是 () => import('./…')，只有指定的功能能导出）：
+//   vault 的 plusAdapter（0.23 M1）；plus 的 loadTypeBar（Q-24：打字条下载好以后要当场渲染，lazy 第一次渲染总要挂起，iOS 不弹键盘）
 const INNER = /^\.\/(ui|hooks|data|i18n)(\/|$)/;
 const MANIFEST = /^\.\/data\.manifest(\.ts)?$/;
+/** 受控例外：导出名 → 唯一能导出它的功能 */
+const LOADERS = { plusAdapter: 'vault', loadTypeBar: 'plus' };
 
 function featureOf(filename) {
   const m = /[\\/]src[\\/]features[\\/]([^\\/]+)[\\/]index\.ts$/.exec(filename);
@@ -54,7 +57,7 @@ export default {
       exportAll: 'A27：index.ts 不准 export *',
       badValue: 'A27：index.ts 导出的 {{name}} 只能是字面量、数组、对象或 lazy(() => import(...))',
       badDecl: 'A27：index.ts 不准导出函数或类（{{name}}）',
-      plusAdapter: 'A27：plusAdapter 只有 vault 能导出，且必须是 () => import(...)',
+      loader: 'A27：{{name}} 只有 {{owner}} 能导出，且必须是 () => import(...)',
       defaultExport: 'A27：index.ts 不准默认导出',
     },
   },
@@ -62,7 +65,7 @@ export default {
     const feature = featureOf(context.filename);
     if (!feature) return {};
 
-    function checkValue(node, name, inPlusAdapter) {
+    function checkValue(node, name) {
       const n = unwrap(node);
       if (!n) return true;
       switch (n.type) {
@@ -73,26 +76,25 @@ export default {
         case 'Identifier':
           return n.name === 'undefined';
         case 'ArrayExpression':
-          return n.elements.every((el) => el === null || (el.type !== 'SpreadElement' && checkValue(el, name, false)));
+          return n.elements.every((el) => el === null || (el.type !== 'SpreadElement' && checkValue(el, name)));
         case 'ObjectExpression':
           return n.properties.every((p) => {
             if (p.type !== 'Property' || p.computed) return false;
             const key = p.key.type === 'Identifier' ? p.key.name : String(p.key.value);
-            if (key === 'plusAdapter') return checkPlusAdapter(p.value, p);
-            return checkValue(p.value, name, false);
+            if (Object.hasOwn(LOADERS, key)) return checkLoader(key, p.value, p);
+            return checkValue(p.value, name);
           });
         case 'CallExpression':
           return isLazyCall(n);
-        case 'ArrowFunctionExpression':
-          return inPlusAdapter && isLazyImportArrow(n);
         default:
           return false;
       }
     }
 
-    function checkPlusAdapter(value, reportNode) {
-      if (feature !== 'vault' || !isLazyImportArrow(value)) {
-        context.report({ node: reportNode, messageId: 'plusAdapter' });
+    function checkLoader(name, value, reportNode) {
+      const owner = LOADERS[name];
+      if (feature !== owner || !isLazyImportArrow(value)) {
+        context.report({ node: reportNode, messageId: 'loader', data: { name, owner } });
       }
       return true; // 已单独报过，不再报 badValue
     }
@@ -138,11 +140,11 @@ export default {
         if (decl.type === 'VariableDeclaration') {
           for (const d of decl.declarations) {
             const name = d.id.type === 'Identifier' ? d.id.name : '?';
-            if (name === 'plusAdapter') {
-              checkPlusAdapter(d.init, d);
+            if (Object.hasOwn(LOADERS, name)) {
+              checkLoader(name, d.init, d);
               continue;
             }
-            if (!checkValue(d.init, name, false)) context.report({ node: d, messageId: 'badValue', data: { name } });
+            if (!checkValue(d.init, name)) context.report({ node: d, messageId: 'badValue', data: { name } });
           }
         }
       },

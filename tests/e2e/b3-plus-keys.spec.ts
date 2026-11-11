@@ -25,6 +25,29 @@ test.describe('“＋”离线“准备中”（B3 Q4）', () => {
   });
 });
 
+// Q-24（负责人 11-11“点+不出来键盘，还要点输入框才出来键盘”）：iOS 只在点按的同一个任务里 focus 才弹键盘。
+// 运行日志：冷启动后第一次点＋，focusin 晚 310～480ms，键盘没弹；之后再点都在 10ms 内，键盘弹了。
+// 这里等打字条那一块下载完，用脚本点一下“＋”，点按处理完的同一个任务里焦点必须已经在输入框里
+test.describe('冷启动后第一次点“＋”当场聚焦（Q-24）', () => {
+  test.use({ loggedIn: true, viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
+
+  test('打字条下载好以后第一次点“＋”：点按处理完时焦点已在输入框', async ({ page }) => {
+    const loaded = page.waitForResponse(/\/TypeBar-[^/]*\.js$/);
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible();
+    await loaded;
+    await expect.poll(() => page.evaluate(() => Boolean(document.querySelector('[data-testid="tabbar-add"]')))).toBe(true);
+    await page.waitForTimeout(200); // 下载完到模块执行、记住组件之间留一拍
+    // React 在点按这个任务的微任务里提交、聚焦（iOS 认这一段）；下一个任务（setTimeout 0）开始时焦点必须已经在输入框
+    const focused = await page.evaluate(async () => {
+      (document.querySelector('[data-testid="tabbar-add"]') as HTMLElement).click();
+      await new Promise((ok) => setTimeout(ok, 0));
+      return document.activeElement?.getAttribute('data-testid') ?? document.activeElement?.tagName ?? null;
+    });
+    expect(focused, '点按的同一个任务里就聚焦').toBe('type-input');
+  });
+});
+
 test.describe('窗口内快捷键（S24）', () => {
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
 
