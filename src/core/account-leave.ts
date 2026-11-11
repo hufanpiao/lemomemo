@@ -21,7 +21,7 @@
 //   例外：注销申请成功（{revoked: true}）——服务器已在同一事务里吊销全部会话，留着没用，照旧删
 // • R-382（架构 4.1a 第 1 点 ②）：notice 为 'removed'（插图上传收到 session_revoked）时先经 resolveAuthLoss 定结局：
 //   removed 照旧清库；expired 只关库不清（expireThisTab 写 lemo.reauth），删被拒的那个会话、回登录页提示“登录已过期”
-// • 已停用只退出、不清本机（R-382 负责人 11-11 定）：notice 为 'disabled' 时 expire(boot, null)（写 lemo.reauth，session_id 记 null，
+// • 已停用只退出、不清本机（R-382 负责人 11-11 定）：notice 为 'disabled' 时 expire(boot, null, 'disabled')（写 lemo.reauth，session_id 记 null，
 //   登录页不查 session_fate）、只关库，广播带 disabled 的 reset、删被拒的那个会话、goToAuth('disabled')。写不了记号退回原来的清库。
 //   冷静期、disabled_unsure、注销确认不了不变
 import { expireThisTab, wipeOnRemoved } from './account.ts';
@@ -58,8 +58,8 @@ export interface AccountLeaveDeps {
   setNotice?(notice: AccountLeaveNotice, sid: string | null): void;
   /** removed 先定结局（R-382；默认 core/auth-loss.ts 的 resolveAuthLoss） */
   resolveAuthLoss?(signal: AuthLossSignal): Promise<'expired' | 'removed'>;
-  /** 登录过期：设闸、写记号、关库（默认 core/account.ts 的 expireThisTab）；false = 写不了记号，退回清库 */
-  expire?(boot: BootResult, sid: string | null): boolean;
+  /** 登录过期、已停用：设闸、写记号（reason 记进记号，停用传 'disabled'）、关库（默认 core/account.ts 的 expireThisTab）；false = 写不了记号，退回清库 */
+  expire?(boot: BootResult, sid: string | null, reason?: 'expired' | 'disabled'): boolean;
   /** 登录过期回登录页（默认 goToAuth('expired', sid)：只删那一个会话） */
   goToAuthExpired?(sid: string | null): void;
   /** 信号从哪来（lemo.authloss 记录用）；默认 files */
@@ -166,7 +166,7 @@ export function createLeaveAccount(deps: AccountLeaveDeps = defaultAccountLeaveD
     }
     leaving = true;
     if (notice === 'removed' && boot) return resolveThenLeave(boot, sid);
-    if (notice === 'disabled' && boot && (deps.expire ?? expireThisTab)(boot, null)) {
+    if (notice === 'disabled' && boot && (deps.expire ?? expireThisTab)(boot, null, 'disabled')) {
       keepAndLeave(boot, 'disabled', sid);
       return Promise.resolve();
     }

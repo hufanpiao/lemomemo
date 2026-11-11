@@ -16,7 +16,7 @@ const S = '00000000-0000-4000-8000-0000000000c1';
 
 function deps(o: Partial<ReauthDeps> = {}): ReauthDeps & Record<keyof ReauthDeps, ReturnType<typeof vi.fn>> {
   return {
-    read: vi.fn(() => ({ v: 1 as const, user_id: A, session_id: S, at: 1 })),
+    read: vi.fn(() => ({ v: 1 as const, user_id: A, session_id: S, at: 1, reason: 'expired' as const })),
     count: vi.fn(async () => 0),
     online: vi.fn(() => true),
     onOnline: vi.fn(() => () => undefined),
@@ -105,7 +105,7 @@ describe('登录页：登录已过期（lemo.reauth）', () => {
 
   it('已停用（负责人 11-11 定：只退出、不清本机）：显示“已停用、已退出登录”和“内容还在”，记号 session_id 为 null 不查 session_fate', async () => {
     setExitNotice('disabled');
-    const d = deps({ read: vi.fn(() => ({ v: 1 as const, user_id: A, session_id: null, at: 1 })) });
+    const d = deps({ read: vi.fn(() => ({ v: 1 as const, user_id: A, session_id: null, at: 1, reason: 'disabled' as const })) });
     await show(d);
     const line = screen.getByTestId('auth-exit-notice');
     expect(line.getAttribute('data-reason')).toBe('disabled');
@@ -115,5 +115,33 @@ describe('登录页：登录已过期（lemo.reauth）', () => {
     expect(screen.getByTestId('auth-reauth-clear')).toBeTruthy();
     expect(d.fate).not.toHaveBeenCalled();
     expect(d.wipe).not.toHaveBeenCalled();
+  });
+});
+
+describe('登录页：停用原因以记号为准（R-382 复核建议 ①）', () => {
+  const disabledMark = () => ({ v: 1 as const, user_id: A, session_id: null, at: 1, reason: 'disabled' as const });
+
+  it('刷新登录页（或 iOS 杀掉重开）：第一次挂载删掉了 sessionStorage 的退出原因，第二次挂载照样提示“已停用”', async () => {
+    setExitNotice('disabled');
+    await show(deps({ read: vi.fn(disabledMark) }));
+    expect(screen.getByTestId('auth-exit-notice').getAttribute('data-reason')).toBe('disabled');
+    expect(readExitNotice()).toBeNull();
+    cleanup();
+    resetHarness();
+    await show(deps({ read: vi.fn(disabledMark) }));
+    const line = screen.getByTestId('auth-exit-notice');
+    expect(line.getAttribute('data-reason')).toBe('disabled');
+    expect(line.textContent).toBe(zh['auth.exit.disabled']);
+  });
+
+  it('记号 reason 为 expired、sessionStorage 也没有：提示登录已过期', async () => {
+    await show(deps());
+    expect(screen.getByTestId('auth-exit-notice').getAttribute('data-reason')).toBe('expired');
+  });
+
+  it('后备：记号说 expired（例如旧记号读成 expired）、sessionStorage 记着 disabled → 仍按停用', async () => {
+    setExitNotice('disabled');
+    await show(deps({ read: vi.fn(() => ({ v: 1 as const, user_id: A, session_id: null, at: 1, reason: 'expired' as const })) }));
+    expect(screen.getByTestId('auth-exit-notice').getAttribute('data-reason')).toBe('disabled');
   });
 });

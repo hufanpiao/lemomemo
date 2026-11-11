@@ -15,7 +15,7 @@ function deps(fates: Fate[], o: Partial<ReauthDeps> = {}) {
   const fate = vi.fn(async (): Promise<Fate> => (fates.length > 0 ? (fates.shift() as Fate) : 'retry'));
   const wipe = vi.fn(async () => undefined);
   const d: ReauthDeps = {
-    read: () => ({ v: 1, user_id: A, session_id: S, at: 1 }),
+    read: () => ({ v: 1, user_id: A, session_id: S, at: 1, reason: 'expired' }),
     count: async () => 0,
     online: () => true,
     onOnline: () => () => undefined,

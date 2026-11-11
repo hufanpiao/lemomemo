@@ -18,7 +18,7 @@
 //   BroadcastChannel 'lemo-sync:<user_id>' 发 {type: 'reset', notice, sid}。别的标签页收到先记下同一条原因；冷静期那边不删会话、
 //   收不到 storage 事件，靠这条跟着清库回登录页（R-263），不用等自己的请求被拒。本页自己的 TabLeader 也会收到（临时频道是另一个对象），
 //   那时 wipeOnRemoved 已设 switching，sync-wiring 不会再走第二遍。没启动过（没有 boot、读不到账号）不发
-// • 已停用只退出、不清本机（R-382 负责人 11-11 定）：探测出 disabled 时 keepForDisabled（默认 core/account.ts 的 expireThisTab(boot, null)：
+// • 已停用只退出、不清本机（R-382 负责人 11-11 定）：探测出 disabled 时 keepForDisabled（默认 core/account.ts 的 expireThisTab(boot, null, 'disabled')：
 //   设闸、写 lemo.reauth（session_id 记 null，登录页不查 session_fate）、只关库），广播带 disabled 的 reset、删被拒的那个会话、
 //   记退出原因、回登录页；写不了记号退回原来的清库。冷静期、disabled_unsure、被移除不变
 // 不新挂任何监听（SIGNED_OUT 那一路归会话层）
@@ -48,7 +48,7 @@ export interface LeaveDeps {
   broadcastReset(userId: string, exit: { notice: ExitNotice; sid: string | null }): void;
   /** account_disabled 先探测（默认 platform/account-status.ts 的 exitForDisabled） */
   resolveDisabled?: (sid: string | null) => Promise<ExitNotice | 'active'>;
-  /** 已停用：写记号、只关库（默认 expireThisTab(boot, null)）；false = 写不了记号，退回清库 */
+  /** 已停用：写记号、只关库（默认 expireThisTab(boot, null, 'disabled')：记号原因记 disabled）；false = 写不了记号，退回清库 */
   keepForDisabled?: (boot: BootResult) => boolean;
 }
 
@@ -106,7 +106,7 @@ function leaveNow(notice: ExitNotice, sid: string | null, deps: LeaveDeps): Prom
     }
   }
   drop();
-  if (notice === 'disabled' && boot && (deps.keepForDisabled ?? ((b: BootResult) => expireThisTab(b, null)))(boot)) {
+  if (notice === 'disabled' && boot && (deps.keepForDisabled ?? ((b: BootResult) => expireThisTab(b, null, 'disabled')))(boot)) {
     deps.setExitNotice(notice);
     deps.goToAuth();
     return Promise.resolve();

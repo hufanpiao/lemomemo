@@ -4,8 +4,10 @@
 //   在线但回 429、5xx（限流、服务器出错）→ 30 秒起每次翻倍、最长 5 分钟，最多再查 FATE_RETRY_MAX 次；到点离线就照旧等联网（安全审建议 1）
 // • clear()：登录页“不登录了，清除这台设备上的内容”：清库、删 lemo.reauth（wipe 里）、删 lemo.authloss → cleared
 // • 状态是 expired、removed、cleared 时登录页不再显示 lemo.exit_notice 里那条（这里顺手删掉，免得以后冒出来）
-// • 已停用只退出、不清本机（R-382 负责人 11-11 定）：记号在、且记下的退出原因是 disabled → reason 'disabled'，
+// • 已停用只退出、不清本机（R-382 负责人 11-11 定）：记号在、且原因是 disabled → reason 'disabled'，
 //   提示“账号已停用、已退出登录”，内容还在、可以清除；停用写的记号 session_id 为 null，不查 session_fate
+// • 原因以记号里的 reason 为准（R-382 复核建议 ①）：退出原因只存 sessionStorage，下面一挂载就删，刷新登录页、iOS 杀掉重开都会丢；
+//   sessionStorage 只当后备（旧记号没有 reason 时按 expired，这时 sessionStorage 记着 disabled 仍按停用）
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { clearExitNotice, readExitNotice } from '../../../platform/session.ts';
 import { defaultReauthDeps, type ReauthDeps } from '../data/reauth.ts';
@@ -24,8 +26,10 @@ export const FATE_RETRY_MAX = 5;
 export function useReauth(deps: ReauthDeps = defaultReauthDeps) {
   const [view, setView] = useState<ReauthView>(() => {
     try {
-      if (!deps.read()) return { kind: 'none' };
-      return { kind: 'expired', reason: readExitNotice() === 'disabled' ? 'disabled' : 'expired', pending: null, busy: false };
+      const r = deps.read();
+      if (!r) return { kind: 'none' };
+      const disabled = r.reason === 'disabled' || readExitNotice() === 'disabled';
+      return { kind: 'expired', reason: disabled ? 'disabled' : 'expired', pending: null, busy: false };
     } catch {
       return { kind: 'none' };
     }

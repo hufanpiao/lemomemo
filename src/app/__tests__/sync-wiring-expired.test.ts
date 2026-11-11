@@ -71,7 +71,7 @@ describe('同步层：登录过期只关库不清', () => {
     r.removed('refresh_rejected');
     expect(r.boot.switching).toBe(true);
     await vi.waitFor(() => expect(r.d.goToAuth).toHaveBeenCalledTimes(1));
-    expect(readReauth()).toMatchObject({ user_id: A, session_id: S });
+    expect(readReauth()).toMatchObject({ user_id: A, session_id: S, reason: 'expired' });
     expect(r.boot.cache?.isClosed()).toBe(true);
     expect(r.fake.dbs.has('planner-v4')).toBe(true);
     expect(r.d.clearCacheStorage).not.toHaveBeenCalled();
@@ -110,6 +110,7 @@ describe('同步层：日志通道和已停用优先', () => {
     settle('expired');
     await vi.waitFor(() => expect(r.d.goToAuth).toHaveBeenCalledTimes(1));
     expect(r.d.setExitNotice).toHaveBeenCalledWith('disabled', S);
+    expect(readReauth()?.reason).toBe('disabled');   // 记号也改成 disabled（登录页以记号为准，复核建议 ①）
   });
 });
 
@@ -124,7 +125,7 @@ describe('同步层：已停用只退出、不清本机（负责人 11-11 定）
     expect(r.fake.dbs.has('planner-v4')).toBe(true);
     expect(kept(r.fake)).toBe(true);
     expect(r.d.clearCacheStorage).not.toHaveBeenCalled();
-    expect(readReauth()).toMatchObject({ user_id: A, session_id: null });
+    expect(readReauth()).toMatchObject({ user_id: A, session_id: null, reason: 'disabled' });
     expect(r.d.clearLocalSessionIf).toHaveBeenCalledWith(S);
     expect(r.d.setExitNotice).toHaveBeenCalledWith('disabled', S);
     expect(r.d.resolveAuthLoss).not.toHaveBeenCalled();
@@ -142,7 +143,7 @@ describe('同步层：已停用只退出、不清本机（负责人 11-11 定）
     expect(kept(r.fake)).toBe(true);
     expect(d.clearCacheStorage).not.toHaveBeenCalled();
     expect(d.clearLogs).not.toHaveBeenCalled();
-    expect(readReauth()).toMatchObject({ user_id: A, session_id: null });
+    expect(readReauth()).toMatchObject({ user_id: A, session_id: null, reason: 'expired' });
     expect(d.setExitNotice).toHaveBeenCalledWith('expired', null);
     expect(d.setExitNotice).not.toHaveBeenCalledWith('disabled', null);
   });

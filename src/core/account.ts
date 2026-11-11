@@ -31,7 +31,7 @@
 import type { BootResult } from './boot.ts';
 import type { AuthLossSignal } from './auth-loss.ts';
 import { resolveAuthLossLazy } from './auth-loss-lazy.ts';
-import { clearReauth, readReauth, writeReauth } from '../platform/auth-loss-store.ts';
+import { clearReauth, readReauth, writeReauth, type ReauthReason } from '../platform/auth-loss-store.ts';
 import type { RefreshFailure } from '../platform/supabase/refresh-failure.ts';
 import { disconnectPushLazy } from '../platform/push-disconnect.ts';
 import { setPushClaimContext } from '../platform/push-claim-run.ts';
@@ -202,10 +202,11 @@ async function wipeSignedOut(boot: BootResult, deps: Pick<WatchAccountDeps, 'del
 /**
  * 登录过期（R-382 架构 4.1a 第 2 点）：设闸（停同步、停 Realtime、停上传）→ 写 lemo.reauth → 关本页连接。
  * outbox、server、view 三份全部留着，Cache Storage 也不清。写不了记号返回 false（只设了闸，调用方退回清库）。
- * 不删会话、不跳转：调用方随后 clearLocalSessionIf(sid)、回登录页（记号要先于删会话写好，别的标签页的 storage 事件才读得到）
+ * 不删会话、不跳转：调用方随后 clearLocalSessionIf(sid)、回登录页（记号要先于删会话写好，别的标签页的 storage 事件才读得到）。
+ * reason：记号里记下的原因（已停用传 'disabled'，登录页据此提示，R-382 复核建议 ①）
  */
-export function expireThisTab(boot: BootResult, sessionId: string | null, now: number = Date.now()): boolean {
-  if (!markExpired(boot, sessionId, now)) return false;
+export function expireThisTab(boot: BootResult, sessionId: string | null, reason: ReauthReason = 'expired', now: number = Date.now()): boolean {
+  if (!markExpired(boot, sessionId, reason, now)) return false;
   // 内存集合不清：界面照旧，不闪成空白；随后整页离开
   closeCache(boot);
   return true;
@@ -215,10 +216,10 @@ export function expireThisTab(boot: BootResult, sessionId: string | null, now: n
  * 结局还没定（要查 session_fate）时先做的一半：设闸、写 lemo.reauth，不关库。
  * 不关库是因为判成 removed 时还要清库（wipeOnRemoved 见库已关会当成“没有要清的”）。写不了记号返回 false
  */
-export function markExpired(boot: BootResult, sessionId: string | null, now: number = Date.now()): boolean {
+export function markExpired(boot: BootResult, sessionId: string | null, reason: ReauthReason = 'expired', now: number = Date.now()): boolean {
   boot.sessionGone = true;
   closeGate(boot);
-  return boot.userId !== null && writeReauth(boot.userId, sessionId, now);
+  return boot.userId !== null && writeReauth(boot.userId, sessionId, now, undefined, reason);
 }
 
 /** 只关库、不清（记号已由别处写好）：别的标签页 expired 了、本页跟着回登录页 */

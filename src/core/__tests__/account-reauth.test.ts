@@ -1,6 +1,6 @@
 // R-382（架构 4.1a 第 2 点、第 6 点单测）：登录过期只关库不清、被移除清库删记号；冷启动、别的标签页、重新登录按 lemo.reauth 处理
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { claimCache, watchAccount, type WatchAccountDeps } from '../account.ts';
+import { claimCache, expireThisTab, markExpired, watchAccount, wipeOnRemoved, type WatchAccountDeps } from '../account.ts';
 import { coldStart, resetBootForTest, type BootResult } from '../boot.ts';
 import { deleteCacheDb } from '../cache.ts';
 import { clearAllCollections } from '../store.ts';
@@ -146,5 +146,32 @@ describe('冷启动没有会话', () => {
     expect(b2.switchedUser).toBe(false);
     expect(localStorage.getItem('lemo.reauth')).toBeNull();
     b2.cache?.close();
+  });
+});
+
+describe('记号的 reason（R-382 复核建议 ①）', () => {
+  it('expireThisTab(boot, null, disabled)：记号原因记 disabled；不给按 expired', async () => {
+    const r = await rig();
+    expect(expireThisTab(r.boot, null, 'disabled')).toBe(true);
+    expect(readReauth()).toMatchObject({ user_id: A, session_id: null, reason: 'disabled' });
+    localStorage.clear();
+    const r2 = await rig();
+    expect(markExpired(r2.boot, S)).toBe(true);
+    expect(readReauth()?.reason).toBe('expired');
+  });
+
+  it('别的标签页已写下 disabled 记号，本页随后收到 SIGNED_OUT 判 expired：记号原因仍是 disabled', async () => {
+    const r = await rig('expired');
+    writeReauth(A, null, Date.now(), undefined, 'disabled');
+    r.signedOut();
+    await vi.waitFor(() => expect(r.deps.onSignedOut).toHaveBeenCalledWith('expired', S));
+    expect(readReauth()).toMatchObject({ session_id: S, reason: 'disabled' });
+  });
+
+  it('清库出口照旧同一步删记号：disabled 记号也删（wipeOnRemoved）', async () => {
+    const r = await rig();
+    writeReauth(A, null, Date.now(), undefined, 'disabled');
+    await wipeOnRemoved(r.boot, { clearCacheStorage: () => Promise.resolve(), onRemoved: vi.fn(), wipeMs: 200, cachesMs: 50 });
+    expect(readReauth()).toBeNull();
   });
 });

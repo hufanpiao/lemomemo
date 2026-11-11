@@ -50,9 +50,10 @@ import { reloadCollections } from '../core/sync/reload.ts';
 import { createTzReporter, type TzReporter } from '../core/sync/report-tz.ts';
 import type { SyncState, SyncTransport } from '../core/sync/types.ts';
 import { browserLifecycle, onUserActivity, type Lifecycle } from '../platform/net.ts';
-import { exitNoticeOf, readExitNotice, type ExitNotice } from '../platform/session.ts';
+import { exitNoticeOf, isSelfSignOut, readExitNotice, type ExitNotice } from '../platform/session.ts';
 import { startSyncNotices } from './sync-notice-gate.ts';
 import { canProbe, currentSid, noLocalSession, noteExitFromOtherTab, probeThenLeave, type SyncDisabledDeps } from './sync-disabled.ts';
+import { markReauthDisabled } from '../platform/auth-loss-store.ts';
 import { createTabLeader, type SyncMessage, type TabLeader, type TabLeaderOptions } from '../platform/tab-leader.ts';
 
 export { ACTIVE_RELOAD_KEY, ACTIVE_RELOAD_WINDOW_MS } from './sync-disabled.ts';
@@ -69,6 +70,8 @@ export interface WireSyncDeps extends SyncDisabledDeps {
   goToAuth(): void;
   /** 测试用：读已记下的退出原因（默认 platform/session.ts 的 readExitNotice） */
   readExitNotice?: () => ExitNotice | null;
+  /** 测试用：最近有没有本人退出（本页或别的标签页打的 lemo.self_signout；默认 platform/session.ts 的 isSelfSignOut，R-382 复核建议 ②） */
+  isSelfSignOut?: () => boolean;
   /** 本会话的 devices 行 id（登录流程登记设备后才有）；不给或返回 null 时不报时区 */
   deviceId?: () => string | null;
   /** 登记或复用本会话的 devices 行、按天刷新 last_seen_at（core/device-reg.ts 的 ensure）；只在主页调（拿到锁、用户操作、恢复网络） */
@@ -99,7 +102,10 @@ function dropSession(deps: WireSyncDeps, sid: string | null): void {
 
 /** 已停用优先（0.60 复审建议 2）：会话没了的退出已经在走（被移除、登录过期），又收到这个会话的 account_disabled：改记“已停用” */
 function notePriorDisabled(boot: BootResult, deps: WireSyncDeps, code: string, sid: string | null): void {
-  if (code === 'account_disabled' && boot.sessionGone && sid !== null) deps.setExitNotice('disabled', sid);
+  if (code !== 'account_disabled' || !boot.sessionGone || sid === null) return;
+  deps.setExitNotice('disabled', sid);
+  // 记号已写成 expired 的，一起改成 disabled（登录页以记号为准，R-382 复核建议 ①）
+  markReauthDisabled();
 }
 
 /**
@@ -133,6 +139,29 @@ function markThenResolve(
   void (deps.resolveAuthLoss ?? resolveAuthLossLazy)(signal)
     .catch(() => 'expired' as const)
     .then(done);
+}
+
+/**
+ * sid 为 null、本机也没有会话的 account_disabled（R-263 那条路）怎么走。不探测（K6-sugg5 审查建议、R-263，见 sync-disabled.ts 文件头）：
+ * 没带会话的请求 is_active() 按 uid 为空本来就回 account_disabled，账号并没停用——提示“登录已失效”（R-263 ③），
+ * 同样只关库、不清、写 lemo.reauth（R-382，主持人 11-11 复核必改）；写不了记号才退回原来的清库。
+ * quiet：会话是别的标签页本人退出删掉的（lemo.self_signout 还新鲜，R-382 复核建议 ②）——不写记号（那边退出时已删过，
+ *   这里再写就没人删，下次冷启动误报“登录已过期”），也不提示，清库、回登录页（wipeQuietly）；
+ * keepLeave：已写好记号（原因 expired）、只关库；leave：写不了记号，退回原来的清库
+ */
+function noSessionExit(
+  boot: BootResult, deps: WireSyncDeps,
+  to: { keepLeave(sid: null, notice: 'expired'): void; leave(notice: 'expired', sid: null): void; quiet(): void },
+): void {
+  if ((deps.isSelfSignOut ?? (() => isSelfSignOut()))()) return to.quiet();
+  return expireThisTab(boot, null) ? to.keepLeave(null, 'expired') : to.leave('expired', null);
+}
+
+/** 别的标签页本人退出了：清库（wipeOnRemoved 同一步删 lemo.reauth）、清日志队列、回登录页，不记退出原因。返回 true（记作已在退出） */
+function wipeQuietly(boot: BootResult, deps: WireSyncDeps): true {
+  deps.clearLogs?.();
+  void wipeOnRemoved(boot, { clearCacheStorage: deps.clearCacheStorage, onRemoved: () => deps.goToAuth() });
+  return true;
 }
 
 const IDLE: SyncState = { syncing: false, realtime: 'down', lastPullAt: null, stopped: false };
@@ -180,7 +209,7 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   const leave = (notice: ExitNotice, sid: string | null, dropped = false): void => {
     if (exiting) return;
     // 已停用：只退出、不清本机（见文件头）；写不了记号才往下走原来的清库
-    if (notice === 'disabled' && expireThisTab(boot, null)) return keepLeave(sid, 'disabled');
+    if (notice === 'disabled' && expireThisTab(boot, null, 'disabled')) return keepLeave(sid, 'disabled');
     exiting = true;
     // 先告诉别的标签页退出原因（DISABLED-probe-later ②）：赶在删会话（storage 事件 → 它们的 watchAccount 清库、回登录页）之前发，
     // 那边收到就 setExitNotice，回登录页时显示同一条提示。带上被拒的 sid：那边的会话已换成别的就不记
@@ -216,10 +245,8 @@ export function wireSync(boot: BootResult, deps: WireSyncDeps): Sync | null {
   const onRemoved = (code: string, sid: string | null, path: AuthLossPath = 'outbox'): void => {
     if (removedHandled || boot.switching) return notePriorDisabled(boot, deps, code, sid);
     removedHandled = true;
-    // sid 为 null、本机也没有会话：不探测（K6-sugg5 审查建议、R-263，见 sync-disabled.ts 文件头）。没带会话的请求 is_active() 按 uid 为空
-    // 本来就回 account_disabled，账号并没停用：提示“登录已失效”（R-263 ③），同样只关库、不清、写 lemo.reauth（R-382，主持人 11-11 复核必改）；
-    // 写不了记号才退回原来的清库
-    if (code === 'account_disabled' && noLocalSession(deps, sid)) return expireThisTab(boot, null) ? keepLeave(null, 'expired') : leave('expired', null);
+    // sid 为 null、本机也没有会话：不探测（K6-sugg5 审查建议、R-263），按 noSessionExit 走（那里写着为什么）
+    if (code === 'account_disabled' && noLocalSession(deps, sid)) return noSessionExit(boot, deps, { keepLeave, leave, quiet: () => void (exiting ||= wipeQuietly(boot, deps)) });
     if (code === 'account_disabled' && canProbe(deps)) {
       // 限次触发时让出同步主页（这一页的闸关着，占着锁别的标签页就都不同步了）
       return void probeThenLeave(boot, deps, sid, leave, yieldLeader);

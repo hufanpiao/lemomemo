@@ -30,7 +30,7 @@ describe('createLeaveAccount', () => {
     const { d, order } = deps();
     const expire = vi.fn(() => (order.push('expire'), true));
     await createLeaveAccount({ ...d, expire })('disabled', 's-me');
-    expect(expire).toHaveBeenCalledWith(expect.anything(), null);
+    expect(expire).toHaveBeenCalledWith(expect.anything(), null, 'disabled');   // 记号原因记 disabled（R-382 复核建议 ①）
     expect(order).toEqual(['expire', 'reset:u1:disabled:s-me', 'session:s-me', 'auth:disabled']);
     expect(d.wipeOnRemoved).not.toHaveBeenCalled();
   });

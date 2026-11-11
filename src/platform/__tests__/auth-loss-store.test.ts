@@ -1,7 +1,7 @@
 // R-382（架构 4.1a 第 2、3 点、第 6 点单测）：lemo.reauth 记号（auth-loss-store.ts）和 lemo.authloss 原因码、哈希（auth-loss-log.ts）的规则
 import { afterEach, describe, expect, it } from 'vitest';
 import * as reauthStore from '../auth-loss-store.ts';
-import { FUTURE_SKEW_MS, REAUTH_KEY, REAUTH_TTL_MS, clearReauth, hasAuthLoss, readReauth, writeReauth } from '../auth-loss-store.ts';
+import { FUTURE_SKEW_MS, REAUTH_KEY, REAUTH_TTL_MS, clearReauth, hasAuthLoss, markReauthDisabled, readReauth, writeReauth } from '../auth-loss-store.ts';
 import * as authLossLog from '../auth-loss-log.ts';
 import { AUTH_CODE_RE as REFRESH_CODE_RE } from '../supabase/refresh-failure.ts';
 import {
@@ -48,7 +48,7 @@ describe('首屏、懒加载两份常量一致', () => {
 describe('lemo.reauth', () => {
   it('写了读得回；30 天以内有效', () => {
     expect(writeReauth(A, S, NOW)).toBe(true);
-    expect(readReauth(NOW)).toEqual({ v: 1, user_id: A, session_id: S, at: NOW });
+    expect(readReauth(NOW)).toEqual({ v: 1, user_id: A, session_id: S, at: NOW, reason: 'expired' });
     expect(readReauth(NOW + REAUTH_TTL_MS - 1)).not.toBeNull();
   });
 
@@ -92,6 +92,42 @@ describe('lemo.reauth', () => {
     writeReauth(A, S, NOW);
     expect(clearReauth()).toBe(true);
     expect(localStorage.getItem(REAUTH_KEY)).toBeNull();
+  });
+});
+
+describe('lemo.reauth 的 reason（R-382 复核建议 ①）', () => {
+  it('写 disabled 读回 disabled，原样存进 localStorage', () => {
+    expect(writeReauth(A, null, NOW, undefined, 'disabled')).toBe(true);
+    expect(readReauth(NOW)?.reason).toBe('disabled');
+    expect(JSON.parse(localStorage.getItem(REAUTH_KEY) ?? '{}').reason).toBe('disabled');
+  });
+
+  it('不给 reason 按 expired 写', () => {
+    writeReauth(A, S, NOW);
+    expect(JSON.parse(localStorage.getItem(REAUTH_KEY) ?? '{}').reason).toBe('expired');
+  });
+
+  it('向后兼容：旧记号没有 reason、或 reason 认不出 → 仍然有效，按 expired', () => {
+    localStorage.setItem(REAUTH_KEY, JSON.stringify({ v: 1, user_id: A, session_id: S, at: NOW }));
+    expect(readReauth(NOW)).toEqual({ v: 1, user_id: A, session_id: S, at: NOW, reason: 'expired' });
+    localStorage.setItem(REAUTH_KEY, JSON.stringify({ v: 1, user_id: A, session_id: S, at: NOW, reason: 'nope' }));
+    expect(readReauth(NOW)?.reason).toBe('expired');
+  });
+
+  it('已停用优先：本账号已有 disabled 记号时再写 expired 不降级（session_id、at 照旧更新）；别的账号不沾', () => {
+    writeReauth(A, null, NOW, undefined, 'disabled');
+    expect(writeReauth(A, S, NOW + 1)).toBe(true);
+    expect(readReauth(NOW + 1)).toEqual({ v: 1, user_id: A, session_id: S, at: NOW + 1, reason: 'disabled' });
+    writeReauth(B, S, NOW + 2);
+    expect(readReauth(NOW + 2)?.reason).toBe('expired');
+  });
+
+  it('markReauthDisabled：已有记号改成 disabled（session_id、at 不变）；没有记号什么也不做', () => {
+    expect(markReauthDisabled(NOW)).toBe(false);
+    expect(localStorage.getItem(REAUTH_KEY)).toBeNull();
+    writeReauth(A, S, NOW);
+    expect(markReauthDisabled(NOW + 5)).toBe(true);
+    expect(readReauth(NOW + 5)).toEqual({ v: 1, user_id: A, session_id: S, at: NOW, reason: 'disabled' });
   });
 });
 

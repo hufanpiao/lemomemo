@@ -4,6 +4,7 @@
 // 本机会话一开头就删、回登录页前再删一次，两次都只删被拒那次请求用的会话（调用方传进来的 sid；K6-sugg3 ①、K6-sugg4 ①）
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BootResult } from '../../../core/boot.ts';
+import { readReauth } from '../../../platform/auth-loss-store.ts';
 import { logQueueKey } from '../../../platform/log-store.ts';
 import { readSessionUserId, takeLocalSession } from '../../../platform/session.ts';
 import { defaultLeaveDeps, leaveThisDevice, resetLeaveForTest, type LeaveDeps } from '../data/consent-exit.ts';
@@ -55,6 +56,18 @@ describe('leaveThisDevice', () => {
     await leaveThisDevice('account_disabled', 's1', { ...d, keepForDisabled });
     expect(order).toEqual(['session:s1', 'keep', 'notice:disabled', 'auth']);
     expect(d.wipeOnRemoved).not.toHaveBeenCalled();
+  });
+
+  it('账号停用、默认 keepForDisabled：记号原因记 disabled（R-382 复核建议 ①，登录页刷新后照样提示已停用）', async () => {
+    const U = '00000000-0000-4000-8000-00000000000a';
+    const { d } = deps({ switching: false, userId: U });
+    try {
+      await leaveThisDevice('account_disabled', 's1', d);
+      expect(readReauth()).toMatchObject({ user_id: U, session_id: null, reason: 'disabled' });
+      expect(d.wipeOnRemoved).not.toHaveBeenCalled();
+    } finally {
+      localStorage.clear();
+    }
   });
 
   it('账号停用但写不了记号：退回原来那一套（清库），退出原因记 disabled', async () => {
