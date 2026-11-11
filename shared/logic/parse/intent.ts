@@ -126,7 +126,7 @@ function takeRange(st: Rest, today: DateStr): Range | null {
 /** 两段文字从头起相同的那一段（取走日子以后，看日子前面有没有别的字） */
 function commonHead(a: string, b: string): string {
   let i = 0;
-  while (i < a.length && a[i] === b[i]) i++;
+  while (i < a.length && a.at(i) === b.at(i)) i++;
   return a.slice(0, i);
 }
 
@@ -166,7 +166,7 @@ function untouched(pre: string): boolean {
  */
 function sureQuery(intent: 'search' | 'summarize', pre: string, h: Hits, extra: boolean, built: { rest: string; recordLike: boolean }): boolean {
   const only = intent === 'search' ? !h.summary && !h.list && !h.conflict : true;
-  const imperative = IMPERATIVE[intent].some((re) => re.test(pre));
+  const imperative = (intent === 'search' ? IMPERATIVE.search : IMPERATIVE.summarize).some((re) => re.test(pre));
   return only && imperative && !built.recordLike && !extra && !h.overdue && untouched(pre) && !TIME_LEFT_RE.test(pre) && !LEFTOVER_RE.test(built.rest);
 }
 

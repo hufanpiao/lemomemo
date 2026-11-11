@@ -12,5 +12,5 @@ export function noteHeadline(title: unknown, body: unknown): { title: string; re
   const rest = lines.slice(i + 1);
   while (rest.length > 0 && blank(rest[0] ?? '')) rest.shift();
   while (rest.length > 0 && blank(rest[rest.length - 1] ?? '')) rest.pop();
-  return { title: (lines[i] ?? '').trim(), rest: rest.join('\n'), fromBody: true };
+  return { title: (lines.at(i) ?? '').trim(), rest: rest.join('\n'), fromBody: true };
 }
