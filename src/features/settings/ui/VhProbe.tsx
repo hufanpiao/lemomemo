@@ -4,6 +4,7 @@
 // 冷启动时间线（R-371，11-10，platform/vh-timeline.ts）：再多一排——“Timeline next launch: OFF/ON”开关（存本机，下次冷启动记 3 分钟，开始记就自动关）、
 // “Copy timeline”整段复制上一次记下的时间线；下面显示那段时间线（按“Copy timeline”时重新读本机，记着的时候也能拿到最新的）
 // 启动画面颜色诊断（台账 Q-2，platform/splash-probe-arm.ts）：再一排“Splash colors next launch: OFF/ON”开关（存本机，下次冷启动涂色 20 秒，开始涂就自动关）
+// 光标偏位试验（台账 Q-8，platform/caret-sync.ts）：再一排“Caret sync: OFF/ON”开关（存本机，开着时每次冷启动都做，点回 OFF 才停）和“Copy caret log”整段复制
 // 键盘上方输入辅助条诊断（台账 Q-11，KbAccessoryProbe.tsx）：再一排“Keyboard bar test”，点了才下载测试层（React.lazy），A～H 八种输入写法逐个点
 import { lazy, Suspense, useState } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
@@ -11,6 +12,7 @@ import { runVhMethod, VH_METHODS } from '../../../platform/vh-probe.ts';
 import { gapFixOn, readGapFixLog, setGapFixOn } from '../../../platform/vh-gapfix.ts';
 import { readTimeline, setTimelineArmed, timelineArmed } from '../../../platform/vh-timeline.ts';
 import { setSplashProbeArmed, splashProbeArmed } from '../../../platform/splash-probe-arm.ts';
+import { caretSyncOn, readCaretSyncLog, setCaretSyncOn } from '../../../platform/caret-sync.ts';
 import styles from './SettingsPage.module.css';
 
 // 顶层的 lazy() 打包器当有副作用不删，正式构建要靠 MODE 常量挡住，连同动态分包一起摇掉（check_no_probe 兜底）
@@ -26,6 +28,9 @@ export const GF_LABEL_OFF = 'Gap fix: OFF (compare)';
 export const GF_COPY = 'Copy gap fix log';
 export const SP_LABEL_ON = 'Splash colors next launch: ON';
 export const SP_LABEL_OFF = 'Splash colors next launch: OFF';
+export const CS_LABEL_ON = 'Caret sync: ON';
+export const CS_LABEL_OFF = 'Caret sync: OFF';
+export const CS_COPY = 'Copy caret log';
 export const TL_COPY_FAIL = 'Copy failed - long-press the text below';
 
 export function VhProbe() {
@@ -37,6 +42,8 @@ export function VhProbe() {
   const [sp, setSp] = useState(() => splashProbeArmed());
   const [gfLog, setGfLog] = useState(() => readGapFixLog());
   const [kbTest, setKbTest] = useState(false);
+  const [cs, setCs] = useState(() => caretSyncOn());
+  const [csCopied, setCsCopied] = useState<'' | 'ok' | 'fail'>('');
   const [copied, setCopied] = useState<'' | 'ok' | 'fail'>('');
   const [gfCopied, setGfCopied] = useState<'' | 'ok' | 'fail'>('');
   /** 整段复制（按的时候重新读本机，记着的时候也拿最新的）；时间线、Gap fix 两个开关可以同时开，日志各复制各的 */
@@ -133,6 +140,22 @@ export function VhProbe() {
           }}
         >
           {sp ? SP_LABEL_ON : SP_LABEL_OFF}
+        </FormButton>
+      </div>
+      <div className={`${styles.actions} ${styles.probeActions}`}>
+        <FormButton
+          size="compact"
+          aria-pressed={cs}
+          data-testid="vh-cs-arm"
+          onClick={() => {
+            setCaretSyncOn(!cs);
+            setCs(caretSyncOn());
+          }}
+        >
+          {cs ? CS_LABEL_ON : CS_LABEL_OFF}
+        </FormButton>
+        <FormButton size="compact" data-testid="vh-cs-copy" onClick={() => copyText(readCaretSyncLog(), setCsCopied)}>
+          {csCopied === 'ok' ? TL_COPIED : csCopied === 'fail' ? TL_COPY_FAIL : CS_COPY}
         </FormButton>
       </div>
       <div className={`${styles.actions} ${styles.probeActions}`}>

@@ -89,6 +89,8 @@ if (gapFixWanted()) {
 if (import.meta.env.MODE !== 'production') {
   try {
     if (localStorage.getItem('lemo-vh-tl')) void import('../platform/vh-diag-boot.ts').then((m) => m.startVhDiag(nextFrame));
+    // 光标偏位试验（台账 Q-8，诊断页开关“Caret sync”）：开着才下载 platform/caret-sync.ts；键名同 caret-sync.ts 的 ARM_KEY
+    if (localStorage.getItem('lemo-caret-sync')) void import('../platform/caret-sync.ts').then((m) => m.startCaretSync());
     // 启动画面颜色诊断（台账 Q-2，诊断页开关“Splash colors next launch”）：开着才下载 platform/splash-probe.ts 涂色、印数一次；键名同 splash-probe-arm.ts 的 ARM_KEY
     // 诊断这次在跑：同步打上 data-splash-hold，启动画面从第一次要收起时起再多留 SPLASH_HOLD_MS（8 秒）才照原逻辑收起（platform/splash.ts），来得及截图；
     // 分包加载失败：拿掉标记、清掉开关（cancelSplashHold），不让每次冷启动都重来、启动画面白白多盖
