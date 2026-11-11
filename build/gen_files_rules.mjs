@@ -14,6 +14,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const OUT = join(ROOT, 'functions', '_generated', 'files-rules.ts');
 
 const common = await import(pathToFileURL(join(ROOT, 'shared', 'manifests', '_common.ts')).href);
+const sniff = await import(pathToFileURL(join(ROOT, 'shared', 'logic', 'files', 'file-sniff.ts')).href);
 
 /** 客户端经 /files 能传的桶（3.3 G“R2 起”：vault-* 一律只经服务器函数）；和 files_authorize_impl、D1 用同一份（shared/manifests/_common.ts） */
 export const CLIENT_BUCKETS = [...common.CLIENT_FILE_BUCKETS];
@@ -24,19 +25,8 @@ export function storeOf(b) {
   return b.store;
 }
 
-/** 附件 10 种扩展名 → MIME（R-114 D-4）。生成时和清单的 allowedMimeTypes、pathPattern 里的扩展名逐个核对，对不上就失败 */
-export const DOC_EXT_MIME = {
-  pdf: 'application/pdf',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  docm: 'application/vnd.ms-word.document.macroEnabled.12',
-  xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
-  pptm: 'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
-  doc: 'application/msword',
-  xls: 'application/vnd.ms-excel',
-  ppt: 'application/vnd.ms-powerpoint',
-};
+/** 附件 10 种扩展名 → MIME：取 shared/logic/files/file-sniff.ts 的 DOC_KINDS（唯一一份）。生成时和清单的 allowedMimeTypes、pathPattern 里的扩展名逐个核对，对不上就失败 */
+export const DOC_EXT_MIME = Object.fromEntries(sniff.DOC_KINDS);
 
 const WEBP = 'image/webp';
 const S = '00000000-0000-4000-8000-000000000000';

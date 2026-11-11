@@ -1,5 +1,7 @@
 // file-sniff 测试用的样本：按 ZIP（APPNOTE 6.3）和复合文档（MS-CFB）的格式用字节拼出最小文件，不放真实文档
-// 返回各记录的偏移，畸形用例在拼好的字节上改字段
+// 返回各记录的偏移，畸形用例在拼好的字节上改字段；末尾是两个 file-sniff 测试共用的断言辅助
+
+import { sniffFile, type InflateRaw, type SniffResult } from '../../../shared/logic/files/file-sniff.ts';
 
 export const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 
@@ -42,6 +44,12 @@ export interface ZipEntry {
   descriptor?: boolean;
   /** 只写本地条目，不进中央目录 */
   hidden?: boolean;
+  /** 本地头的 extra 字段、本地头里的名字（默认同 name，长度可以和目录头不同） */
+  localExtra?: Uint8Array;
+  localName?: string;
+  /** 中央目录头的 extra 字段和条目注释 */
+  centralExtra?: Uint8Array;
+  comment?: Uint8Array;
 }
 export interface Zip {
   bytes: Uint8Array;
@@ -60,8 +68,10 @@ export function buildZip(entries: ZipEntry[], opt: { comment?: Uint8Array; tail?
     parts.push(b);
     at += b.length;
   };
+  const none = new Uint8Array(0);
   for (const e of entries) {
-    const name = enc(e.name);
+    const name = enc(e.localName ?? e.name);
+    const extra = e.localExtra ?? none;
     const flags = (e.flags ?? 0) | (e.descriptor ? 8 : 0);
     const h = new Uint8Array(30);
     put32(h, 0, 0x04034b50);
@@ -74,8 +84,9 @@ export function buildZip(entries: ZipEntry[], opt: { comment?: Uint8Array; tail?
       put32(h, 22, e.size ?? e.body.length);
     }
     put16(h, 26, name.length);
+    put16(h, 28, extra.length);
     local.push(at);
-    push(concat(h, name, e.body));
+    push(concat(h, name, extra, e.body));
     if (e.descriptor) {
       const d = new Uint8Array(16);
       put32(d, 0, 0x08074b50);
@@ -93,6 +104,8 @@ export function buildZip(entries: ZipEntry[], opt: { comment?: Uint8Array; tail?
       return;
     }
     const name = enc(e.name);
+    const extra = e.centralExtra ?? none;
+    const note = e.comment ?? none;
     const h = new Uint8Array(46);
     put32(h, 0, 0x02014b50);
     put16(h, 4, 20);
@@ -103,12 +116,14 @@ export function buildZip(entries: ZipEntry[], opt: { comment?: Uint8Array; tail?
     put32(h, 20, e.body.length);
     put32(h, 24, e.size ?? e.body.length);
     put16(h, 28, name.length);
+    put16(h, 30, extra.length);
+    put16(h, 32, note.length);
     put32(h, 42, local.at(i) ?? 0);
     central.push(at);
-    push(concat(h, name));
+    push(concat(h, name, extra, note));
   });
   const count = central.filter((c) => c >= 0).length;
-  const comment = opt.comment ?? new Uint8Array(0);
+  const comment = opt.comment ?? none;
   const end = new Uint8Array(22);
   put32(end, 0, 0x06054b50);
   put16(end, 8, count);
@@ -117,7 +132,7 @@ export function buildZip(entries: ZipEntry[], opt: { comment?: Uint8Array; tail?
   put32(end, 16, cd);
   put16(end, 20, comment.length);
   const eocd = at;
-  push(concat(end, comment, opt.tail ?? new Uint8Array(0)));
+  push(concat(end, comment, opt.tail ?? none));
   return { bytes: concat(...parts), local, central, cd, eocd };
 }
 
@@ -143,6 +158,7 @@ export const CT = '[Content_Types].xml';
 /** 最小 OOXML 包：[Content_Types].xml（不压缩）加一个主部件，extra 追加在后面 */
 export const ooxml = (xml: string, extra: ZipEntry[] = []): Zip =>
   buildZip([{ name: CT, body: enc(xml) }, { name: 'word/document.xml', body: enc('<w:document/>') }, ...extra]);
+export const docx = (): Zip => ooxml(ctXml(MAIN.docx));
 
 // ───────── OLE2 复合文档 ─────────
 
@@ -235,3 +251,14 @@ export function buildOle(entries: DirEntry[], opt: { shift?: 9 | 12; pad?: numbe
   }
   return { bytes: b, size, dirSectors, entry };
 }
+
+// ───────── 断言用 ─────────
+
+/** 一调用就抛错：结果照常说明这条路没用到解压 */
+export const noInflate: InflateRaw = () => {
+  throw new Error('不该调用解压函数');
+};
+export const sniff = (b: Uint8Array): Promise<SniffResult> => sniffFile(b, noInflate);
+export const ok = (kind: string) => ({ ok: true, kind });
+export const bad = (detail: string) => ({ ok: false, reason: 'bad_archive', detail });
+export const unk = (detail: string) => ({ ok: false, reason: 'unknown', detail });
