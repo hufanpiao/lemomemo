@@ -26,6 +26,17 @@ describe('ZIP 结束记录和中央目录', () => {
     const fake = concat(new Uint8Array([0x50, 0x4b, 0x05, 0x06]), new Uint8Array(18), enc('XY'));
     expect(await sniff(buildZip(ents, { comment: fake }).bytes)).toEqual(bad('eocd_not_at_end'));
   });
+  it('注释最长 0xffff 字节：结束记录在搜索范围最远处 → 照常；再往前 1 字节（后面多 1 字节）就找不到 → 压缩包异常', async () => {
+    const ents: ZipEntry[] = [{ name: CT, body: enc(ctXml(MAIN.docx)) }];
+    const comment = new Uint8Array(0xffff).fill(0x20);
+    const z = buildZip(ents, { comment });
+    expect(z.bytes.length - 22 - z.eocd).toBe(0xffff);
+    expect(await sniff(z.bytes)).toEqual(ok('docx'));
+    // 唯一的结束记录离文件尾 0xffff+23 字节，超出搜索范围 1 字节
+    const far = buildZip(ents, { comment, tail: new Uint8Array(1) });
+    expect(far.bytes.length - far.eocd).toBe(0xffff + 23);
+    expect(await sniff(far.bytes)).toEqual(bad('eocd_missing'));
+  });
   it('截断到没有结束记录 → 压缩包异常', async () => {
     const z = docx();
     expect(await sniff(z.bytes.subarray(0, z.eocd))).toEqual(bad('eocd_missing'));

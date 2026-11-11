@@ -205,4 +205,12 @@ describe('其他文件和拼接', () => {
       }
     }
   });
+  it('OLE 截断：WordDocument 那条目录没读完的长度一律不认，读越界回 ole_range；读完了才是 doc', async () => {
+    // 第 5 条在第 2 个目录扇区；读到它的左右兄弟（+68、+72 各 4 字节）为止，要读满 entry(5)+76 字节
+    const ole = buildOle(rootWith(['a', 2], ['b', 2], ['c', 2], ['d', 2], ['WordDocument', 2]));
+    const end = ole.entry(5) + 76;
+    for (let n = 0; n < end; n += 1) expect((await sniff(ole.bytes.slice(0, n))).ok, `doc@${n}`).toBe(false);
+    for (const n of [ole.entry(5), end - 1]) expect(await sniff(ole.bytes.slice(0, n)), `doc@${n}`).toEqual(unk('ole_range'));
+    expect(await sniff(ole.bytes.slice(0, end))).toEqual(ok('doc'));
+  });
 });
