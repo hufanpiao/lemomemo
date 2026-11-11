@@ -13,6 +13,7 @@ import { gapFixOn, readGapFixLog, setGapFixOn } from '../../../platform/vh-gapfi
 import { readTimeline, setTimelineArmed, timelineArmed } from '../../../platform/vh-timeline.ts';
 import { setSplashProbeArmed, splashProbeArmed } from '../../../platform/splash-probe-arm.ts';
 import { clearRunLog, readRunLog } from '../../../platform/run-log.ts';
+import { useRunLogSend, type RunLogSendState } from '../hooks/useRunLogSend.ts';
 import styles from './SettingsPage.module.css';
 
 // 顶层的 lazy() 打包器当有副作用不删，正式构建要靠 MODE 常量挡住，连同动态分包一起摇掉（check_no_probe 兜底）
@@ -26,6 +27,14 @@ export const TL_COPIED = 'Copied';
 /** 全局运行日志（platform/run-log.ts，非正式版一直在记） */
 export const RL_COPY = 'Copy run log';
 export const RL_CLEAR = 'Clear run log';
+/** 一键发送（features/settings/data/diag-send.ts → public.diag_logs，每人一行、新的覆盖旧的） */
+export const RL_SEND = 'Send run log';
+export const RL_SEND_LABEL: Record<Exclude<RunLogSendState, ''>, string> = {
+  busy: 'Sending...',
+  ok: 'Sent',
+  signed_out: 'Send failed - sign in first',
+  fail: 'Send failed - try again',
+};
 export const GF_LABEL_ON = 'Gap fix: ON';
 export const GF_LABEL_OFF = 'Gap fix: OFF (compare)';
 export const GF_COPY = 'Copy gap fix log';
@@ -43,6 +52,7 @@ export function VhProbe() {
   const [gfLog, setGfLog] = useState(() => readGapFixLog());
   const [kbTest, setKbTest] = useState(false);
   const [rlCopied, setRlCopied] = useState<'' | 'ok' | 'fail'>('');
+  const rlSend = useRunLogSend();
   const [copied, setCopied] = useState<'' | 'ok' | 'fail'>('');
   const [gfCopied, setGfCopied] = useState<'' | 'ok' | 'fail'>('');
   /** 整段复制（按的时候重新读本机，记着的时候也拿最新的）；时间线、Gap fix 两个开关可以同时开，日志各复制各的 */
@@ -142,6 +152,14 @@ export function VhProbe() {
         </FormButton>
       </div>
       <div className={`${styles.actions} ${styles.probeActions}`}>
+        <FormButton
+          size="compact"
+          data-testid="vh-rl-send"
+          disabled={rlSend.state === 'busy'}
+          onClick={rlSend.send}
+        >
+          {rlSend.state === '' ? RL_SEND : RL_SEND_LABEL[rlSend.state]}
+        </FormButton>
         <FormButton size="compact" data-testid="vh-rl-copy" onClick={() => copyText(readRunLog(), setRlCopied)}>
           {rlCopied === 'ok' ? TL_COPIED : rlCopied === 'fail' ? TL_COPY_FAIL : RL_COPY}
         </FormButton>
@@ -151,6 +169,7 @@ export function VhProbe() {
           onClick={() => {
             clearRunLog();
             setRlCopied('');
+            rlSend.reset();
           }}
         >
           {RL_CLEAR}

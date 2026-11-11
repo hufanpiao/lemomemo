@@ -247,6 +247,32 @@ export const manifestSnapshot: readonly Manifest[] = [
         "exportOmitCols": []
       },
       {
+        "name": "diag_logs",
+        "schema": "public",
+        "sync": false,
+        "realtime": false,
+        "localCache": "none",
+        "clientWritable": [
+          "sent_at",
+          "app_version",
+          "body"
+        ],
+        "insertOnly": [],
+        "updateOnly": [],
+        "anonReadable": [],
+        "clientDelete": false,
+        "softDelete": false,
+        "backup": "none",
+        "export": "none",
+        "onAccountDelete": "cascade",
+        "userLookup": {
+          "by": "column",
+          "col": "user_id"
+        },
+        "rebuildable": true,
+        "exportOmitCols": []
+      },
+      {
         "name": "app_config",
         "schema": "public",
         "sync": false,

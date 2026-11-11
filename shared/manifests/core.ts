@@ -33,6 +33,9 @@ export const core = defineManifest({
       clientWritable: ['t', 'device', 'kind', 'act', 'src', 'coll', 'item_id', 'fields', 'code'],
       insertOnly: ['t', 'device', 'kind', 'act', 'src', 'coll', 'item_id', 'fields', 'code'],
       softDelete: false, backup: 'none', export: 'json', onAccountDelete: 'cascade', userLookup: BY_USER },
+    { name: 'diag_logs', schema: 'public', sync: false, realtime: false, localCache: 'none',   // 诊断日志一键发送（20261111200000）：每人一行、新发的覆盖旧的，7 天删
+      clientWritable: ['sent_at', 'app_version', 'body'],
+      softDelete: false, backup: 'none', export: 'none', onAccountDelete: 'cascade', userLookup: BY_USER },
     { name: 'app_config', schema: 'public', sync: false, realtime: false, localCache: 'none', clientWritable: [],
       anonReadable: ['id', 'min_client_version', 'latest_version', 'notice'],
       softDelete: false, backup: 'json', export: 'none', onAccountDelete: 'keep-id-only', noUserData: true },

@@ -48,6 +48,12 @@ export const syncTableSnapshot: readonly SyncTableLite[] = [
     "rebuildable": true
   },
   {
+    "name": "diag_logs",
+    "schema": "public",
+    "sync": false,
+    "rebuildable": true
+  },
+  {
     "name": "app_config",
     "schema": "public",
     "sync": false,

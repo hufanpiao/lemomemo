@@ -102,6 +102,7 @@ export const FUNCTION_EXEC: Record<'anon' | 'authenticated' | 'service_role' | '
  *  名单外的任务，命令或它调的 private 函数体里必须出现 account_usable。加名单要写原因 */
 export const CRON_WITHOUT_USABLE: Record<string, string> = {
   'cleanup-batch': '30 天清理：冷静期里照常清理（0.29 续第 138 条④）',
+  'diag-logs-expire': '诊断日志 7 天删：不分账号状态，过期就删，只删 public.diag_logs 自己的旧行（20261111200000）',
   'account-purge': '满 7 天执行注销：要处理的正是冷静期里的账号（account_usable 会把它们全排除）；命令只经 pg_net 调函数、不直接碰表，挑人在函数里（0.38 第 24、46 条）',
 };
 

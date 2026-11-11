@@ -644,6 +644,20 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"diag_logs": {
+                  Row: {
+                    "app_version": string | null,"body": string,"sent_at": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "app_version"?: string | null,"body": string,"sent_at"?: string,"user_id"?: string
+                  }
+                  Update: {
+                    "app_version"?: string | null,"body"?: string,"sent_at"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"events": {
                   Row: {
                     "ai_status": string,"batch_id": string | null,"created_at": number,"date": string,"defer_until": number | null,"deleted_at": number | null,"duration_min": number,"fv": NonNullable<Json>,"id": string,"location": string,"note": string,"notified_for": number | null,"project": string,"push_show_title": boolean | null,"pushed_for": number | null,"raw_text": string,"remind_at": number | null,"remind_days": number | null,"remind_min": number | null,"repeat": Json | null,"repeat_skip": (string)[],"rev": number,"short": string | null,"short_by": string | null,"snooze_at": number | null,"source": string,"synced_at": string,"time": string | null,"title": string,"tz": string | null,"undone": boolean,"updated_at": number,"user_id": string
