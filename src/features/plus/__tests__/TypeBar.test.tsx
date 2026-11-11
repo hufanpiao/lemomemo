@@ -46,6 +46,41 @@ describe('打字条', () => {
     expect(screen.getByTestId('type-preview').textContent).toBe('会记成这样：日程 · 去银行办理业务 · 11-03 15:00');
   });
 
+  // 台账 Q-8：iPhone 上系统为了露出输入框会滚页面，滚过以后光标偏位；打开时、没聚焦时手指点输入框，都要原地聚焦（preventScroll），聚焦前先排完版面
+  it('原地聚焦（Q-8）：打开时 focus 带 preventScroll、聚焦前先读 offsetHeight', () => {
+    const calls: string[] = [];
+    const h = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => {
+      calls.push('layout');
+      return 40;
+    });
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation(function (this: HTMLElement, o?: FocusOptions) {
+      calls.push(`focus preventScroll=${String(o?.preventScroll)}`);
+    });
+    setup();
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(['layout', 'focus preventScroll=true']);
+    h.mockRestore();
+  });
+
+  it('原地聚焦（Q-8）：没聚焦时手指点输入框 → 拦掉默认、原地聚焦、光标放末尾；已聚焦时不拦', () => {
+    const { input } = setup();
+    const el = input as HTMLInputElement;
+    fireEvent.change(el, { target: { value: '买牛奶' } });
+    el.blur();
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    const tap = (): TouchEvent => {
+      const e = new TouchEvent('touchend', { bubbles: true, cancelable: true });
+      el.dispatchEvent(e);
+      return e;
+    };
+    expect(tap().defaultPrevented, '没聚焦：拦掉默认').toBe(true);
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(document.activeElement).toBe(el);
+    expect([el.selectionStart, el.selectionEnd], '光标在末尾').toEqual([3, 3]);
+    expect(tap().defaultPrevented, '已聚焦：不拦，点哪里光标去哪里').toBe(false);
+    expect(focus).toHaveBeenCalledTimes(1);
+  });
+
   it('回车保存：经写入口进 outbox，输入框清空，出“已记下 · 撤销”；撤销写 undone', async () => {
     const { input, writer } = setup();
     fireEvent.change(input, { target: { value: '明天下午3点去银行办理业务' } });

@@ -7,7 +7,7 @@
 // • 回车：所在表单、输入框值的长度、提交按钮在不在、禁没禁用、是不是正在用输入法；表单真提交了另记 submit
 // • 点按（down/up/cancel/click）：点到哪个元素、坐标；路由；前后台；报错、未处理的 Promise 拒绝、console.error/warn；网络请求（方法、路径不带参数、状态、耗时）
 // • 业务代码经 run-log-api.ts 的 rlog 记的结果（提交了没有、为什么没提交）
-// • 焦点进出、路由变化后 400ms 再拍一次版面快照（等键盘、动画停稳）
+// • 焦点进出、路由变化后 400ms 再拍一次版面快照（等键盘、动画停稳）；焦点进来后 400ms、1500ms 各记一行 kbcheck（系统滚没滚页面、浮条贴没贴键盘，台账 Q-8）
 // 隐私：不记用户输入的任何文字、不记网址参数；按钮只记 data-testid / aria-label / id
 import { buildInfo } from './env.ts';
 import { RL_SLOT } from './run-log-api.ts';
@@ -18,6 +18,8 @@ export const MAX_LINES = 3000;
 const VV_GAP_MS = 16;
 /** 焦点、路由变化后多久再拍一次版面 */
 const SETTLE_SNAP_MS = 400;
+/** 焦点进来多久再记第二次 kbcheck（第一次跟着 SETTLE_SNAP_MS 那次快照） */
+export const KB_CHECK_MS = 1500;
 /** 版面快照要看的元素 */
 export const LAYOUT_TARGETS: ReadonlyArray<readonly [string, string]> = [
   ['bar', '[data-testid="tabbar"]'],
@@ -187,10 +189,26 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const onVvResize = onVv('vv');
   const onWinResize = onVv('win');
   const onWinScroll = onVv('scroll');
+  /** 焦点进来时的滚动位置：kbcheck 用它算系统滚了多少 */
+  let focusY = 0;
+  /** 焦点停稳后一行结论（台账 Q-8）：dy 系统滚了多少（0 = 没滚）、top 可视区偏移、dock 浮层下沿离可视区底多远（0～12 = 贴着键盘）、fieldIn 输入框整个在可视区里 */
+  const kbcheck = (): void => {
+    const act = doc.activeElement;
+    if (!isField(act) || !vv) return;
+    const top = vv.offsetTop;
+    const f = act.getBoundingClientRect();
+    const host = fixedHost(act)?.getBoundingClientRect();
+    const dock = host ? Math.round(vv.height - (host.bottom - top)) : '-';
+    add(`kbcheck dy=${Math.round(win.scrollY - focusY)} top=${Math.round(top)} dock=${dock} fieldIn=${f.top >= top && f.bottom - top <= vv.height ? 1 : 0}`);
+  };
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
+  let kbTimer: ReturnType<typeof setTimeout> | undefined;
   const settleSnap = (why: string): void => {
     clearTimeout(settleTimer);
-    settleTimer = setTimeout(() => snap(`settled(${why})`), SETTLE_SNAP_MS);
+    settleTimer = setTimeout(() => {
+      snap(`settled(${why})`);
+      if (why === 'focusin') kbcheck();
+    }, SETTLE_SNAP_MS);
   };
 
   /** 最近一次点按的时间：焦点进来时判断是点出来的还是程序聚焦 */
@@ -198,7 +216,11 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const onFocusIn = (e: FocusEvent): void => {
     const by = now() - lastDown < 800 ? 'tap' : 'code';
     add(`focusin ${describeEl(e.target)} by=${by}${fieldState(e.target)} ${vvState()} ${layout()}`);
+    focusY = win.scrollY;
     settleSnap('focusin');
+    // 主屏幕版键盘弹完、布局视口压矮有时要 1 秒多，再记一次
+    clearTimeout(kbTimer);
+    kbTimer = setTimeout(kbcheck, KB_CHECK_MS);
   };
   const onFocusOut = (e: FocusEvent): void => {
     add(`focusout ${describeEl(e.target)} to=${describeEl(e.relatedTarget)}${fieldState(e.target)}`);
@@ -352,6 +374,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     win.removeEventListener('unhandledrejection', onRej);
     clearTimeout(vvTimer);
     clearTimeout(settleTimer);
+    clearTimeout(kbTimer);
     if (saveTimer !== undefined) clearTimeout(saveTimer);
     save();
   };

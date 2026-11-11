@@ -48,6 +48,44 @@ test.describe('冷启动后第一次点“＋”当场聚焦（Q-24）', () => {
   });
 });
 
+// Q-8（负责人 11-11“点+输入框蓝色输入标位置不对”）：iPhone 上系统为了露出输入框会滚页面，滚过以后固定浮条里的光标偏位。
+// 打字条一律原地聚焦（focus 带 preventScroll，platform/viewport.ts 的 focusInPlace）。系统那一侧的滚动、光标只能真机看，这里守两件：
+// ① 点“＋”那一次 focus 带 preventScroll；② 页面先滚到 y=800 再点“＋”，滚动位置不变（Chromium 本来就不为固定元素滚，只防以后有人改成 scrollIntoView 之类）
+test.describe('打字条原地聚焦（Q-8）', () => {
+  test.use({ loggedIn: true, viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
+
+  test('点“＋”：输入框的 focus 带 preventScroll；先滚到 y=800 再点，scrollY 不变', async ({ page }) => {
+    await page.addInitScript(() => {
+      const w = window as unknown as { __focusOpts: string[] };
+      w.__focusOpts = [];
+      const orig = HTMLElement.prototype.focus;
+      HTMLElement.prototype.focus = function (this: HTMLElement, o?: FocusOptions) {
+        if (this.getAttribute('data-testid') === 'type-input') w.__focusOpts.push(`preventScroll=${String(o?.preventScroll)}`);
+        orig.call(this, o);
+      };
+    });
+    const loaded = page.waitForResponse(/\/TypeBar-[^/]*\.js$/);
+    await page.goto('/app/#/today');
+    await expect(page.getByTestId('today')).toBeVisible();
+    await loaded;
+    await page.waitForTimeout(200); // 下载完到模块执行、记住组件之间留一拍
+    // 页面撑高到能滚 800（测试数据里今天页不够长）
+    const y = await page.evaluate(() => {
+      const pad = document.createElement('div');
+      pad.style.height = '3000px';
+      document.body.append(pad);
+      window.scrollTo(0, 800);
+      return window.scrollY;
+    });
+    expect(y).toBe(800);
+    await page.getByTestId('tabbar-add').click();
+    await expect(page.getByTestId('type-input')).toBeFocused();
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => (window as unknown as { __focusOpts: string[] }).__focusOpts)).toEqual(['preventScroll=true']);
+    expect(await page.evaluate(() => window.scrollY), '聚焦没滚页面').toBe(800);
+  });
+});
+
 test.describe('窗口内快捷键（S24）', () => {
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
 

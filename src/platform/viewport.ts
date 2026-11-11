@@ -3,7 +3,12 @@
 // 不变量：data-kbhide = data-kbo 或“收起后暂缓”（主屏幕版 iPhone 键盘刚收、布局视口还没回到整屏，最多 HOLD_MS），watchKeyboard 报的开关和它一致；
 // 键盘真收了（静了 KB_SETTLE_MS、没在输入）通知 watchKeyboardClosed（冷启动高度校正再做一次）；回调都没接（正在做）就保持上膛，下一次视口事件静下来再报。
 // 没有 visualViewport 的环境什么都不做。
-// 另有 blockPageZoom：拦 iOS 整页双指缩放（iOS 不认 viewport 的 user-scalable=no，只有 gesture* 事件 preventDefault 停得住）
+// 另有 blockPageZoom：拦 iOS 整页双指缩放（iOS 不认 viewport 的 user-scalable=no，只有 gesture* 事件 preventDefault 停得住）；
+// focusInPlace / tapFocusInPlace：贴底浮条（position: fixed）里的输入框原地聚焦（台账 Q-8）。
+// 不变量：贴底浮条里的输入框一律经这两个函数聚焦，不让 iOS 为了露出输入框去滚页面。iPhone 上文字输入框聚焦时，系统一律把它滚到键盘上方可视区的中间
+// （WebKit _zoomToFocusRect：iPhone 文字框 forceScroll，不做“看得见就不滚”的判断），滚过以后固定容器里的光标和画面差出一截
+// （WebKit bug 176896、300690），只有 focus({ preventScroll: true }) 让它整个跳过（_zoomToRevealFocusedElement 第一句）。
+// 页面里普通的输入框（编辑页等）照旧要系统滚出来，不用这两个
 import { isStandalone } from './env.ts';
 import { rlog } from './run-log-api.ts';
 import { fullHeight, GAP_MAX_PX, TOL_PX, viewportGeom, type Geom } from './viewport-geom.ts';
@@ -213,6 +218,31 @@ export function watchKeyboardClosed(fn: () => boolean): () => void {
 /** 开始盯视口、写根节点（App 首屏画完以后调）；返回停止函数 */
 export function startViewport(): () => void {
   return shared.watch(() => undefined);
+}
+
+type Field = HTMLInputElement | HTMLTextAreaElement;
+
+/**
+ * 原地聚焦（文件头不变量）：先读一次 offsetHeight 让刚画出来的输入框排完版面（WebKit bug 238093：新插进来的元素聚焦后版面才排，会再自己滚一次），
+ * 再 focus({ preventScroll: true })。要在点按的同一个任务里调（Q-24：iOS 只在这时弹键盘）。via 记进运行日志（open = 打开打字条，tap = 点输入框）
+ */
+export function focusInPlace(el: Field | null, via: string): void {
+  if (!el) return;
+  const h = el.offsetHeight;
+  el.focus({ preventScroll: true });
+  rlog(`focus in-place via=${via} h=${h} y=${Math.round(typeof window === 'undefined' ? 0 : window.scrollY)}`);
+}
+
+/**
+ * 输入框还没聚焦时手指点它（onTouchEnd 调）：拦掉默认（手指点出来的聚焦不带 preventScroll，系统照样滚），改成原地聚焦，光标放到末尾；
+ * 已经聚焦着不拦，点哪里光标去哪里
+ */
+export function tapFocusInPlace(e: Pick<Event, 'cancelable' | 'preventDefault'>, el: Field | null): void {
+  if (!el || !e.cancelable || el.ownerDocument.activeElement === el) return;
+  e.preventDefault();
+  focusInPlace(el, 'tap');
+  const end = el.value.length;
+  el.setSelectionRange(end, end);
 }
 
 const GESTURES = ['gesturestart', 'gesturechange', 'gestureend'] as const;

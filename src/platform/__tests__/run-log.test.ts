@@ -1,6 +1,6 @@
 // 全局运行日志（负责人 11-11“以后所有的bug看log能不能解决”“要做就给我做详细的log”，platform/run-log.ts）
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { describeEl, MAX_LINES, OUT_KEY, readRunLog, startRunLog } from '../run-log.ts';
+import { describeEl, KB_CHECK_MS, MAX_LINES, OUT_KEY, readRunLog, startRunLog } from '../run-log.ts';
 import { rlog, RL_SLOT } from '../run-log-api.ts';
 
 const mkField = () => {
@@ -108,6 +108,40 @@ describe('全局运行日志', () => {
     expect(lines.length).toBeLessThanOrEqual(MAX_LINES);
     expect(lines.some((l) => l.includes('v=v2'))).toBe(true);
     expect(lines[0]).not.toBe('old0');
+  });
+
+  // 台账 Q-8：真机一次就能看出成没成——系统滚没滚页面（dy）、浮条贴没贴键盘（dock）、输入框在不在可视区里（fieldIn）
+  it('焦点进来后 400ms、KB_CHECK_MS 各记一行 kbcheck：dy = 系统滚了多少，top、dock、fieldIn', async () => {
+    vi.useFakeTimers();
+    const own = (k: string) => Object.getOwnPropertyDescriptor(window, k);
+    const saved = { visualViewport: own('visualViewport'), scrollY: own('scrollY') };
+    const vv = { height: 480, offsetTop: 0, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    Object.defineProperty(window, 'visualViewport', { value: vv, configurable: true });
+    Object.defineProperty(window, 'scrollY', { value: 100, configurable: true, writable: true });
+    const { form, input } = mkField();
+    form.style.position = 'fixed';
+    const rect = (top: number, bottom: number) => () => ({ top, bottom, height: bottom - top }) as DOMRect;
+    form.getBoundingClientRect = rect(330, 474);
+    input.getBoundingClientRect = rect(350, 394);
+    try {
+      const stop = startRunLog(window, { version: 't' });
+      input.focus();
+      await vi.advanceTimersByTimeAsync(500);
+      // 之后系统把页面滚了 353、可视区下移 291：浮条留在布局视口里，相对可视区跑到上面去了
+      Object.defineProperty(window, 'scrollY', { value: 453, configurable: true, writable: true });
+      vv.offsetTop = 291;
+      await vi.advanceTimersByTimeAsync(KB_CHECK_MS);
+      stop();
+      const checks = readRunLog().split('\n').filter((l) => l.includes(' kbcheck '));
+      expect(checks).toHaveLength(2);
+      expect(checks[0]).toMatch(/kbcheck dy=0 top=0 dock=6 fieldIn=1$/);
+      expect(checks[1]).toMatch(/kbcheck dy=353 top=291 dock=297 fieldIn=1$/);
+    } finally {
+      for (const [k, d] of Object.entries(saved)) {
+        if (d) Object.defineProperty(window, k, d);
+        else Reflect.deleteProperty(window, k);
+      }
+    }
   });
 
   it('describeEl 只给标签、type、testid / aria-label / id', () => {
