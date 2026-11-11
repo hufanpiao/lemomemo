@@ -22,10 +22,9 @@ const boot = vi.hoisted(() => ({
 vi.mock('../../../core/boot.ts', () => ({
   getBoot: () => boot.current,
   applyFreshConfig: boot.applyFreshConfig,
-  wipeLocal: boot.wipeLocal,
   localUnsentCount: boot.localUnsentCount,
 }));
-vi.mock('../../../core/account.ts', () => ({ sealForExit: boot.seal }));
+vi.mock('../../../core/account.ts', () => ({ sealForExit: boot.seal, wipeLocal: boot.wipeLocal }));
 
 const { defaultExitDeps, readLocalLocale, updateCachedLocale, writeLocalLocale } = await import('../data/local.ts');
 const { wipeThisDevice } = await import('../../../platform/sign-out.ts');
@@ -96,12 +95,13 @@ describe('updateCachedLocale', () => {
 });
 
 describe('defaultExitDeps', () => {
-  it('库能用：走 core/boot 的 wipeLocal，经 platform 清理时不再按库名删库', async () => {
+  it('库能用：走 core/account 的 wipeLocal，经 platform 清理时不再按库名删库', async () => {
     const deleted = fakeIdb();
     const cache = { isClosed: () => false };
-    boot.current = { status: 'ready', profile: null, cache, upgrade: up() };
+    const b = { status: 'ready', profile: null, cache, upgrade: up() };
+    boot.current = b;
     expect(await defaultExitDeps.wipe?.()).toBe(true);
-    expect(boot.wipeLocal).toHaveBeenCalledWith(cache);
+    expect(boot.wipeLocal).toHaveBeenCalledWith(b, expect.anything());
     await wipeThisDevice({ ...defaultExitDeps, clearCacheStorage: async () => undefined });
     expect(deleted).toEqual([]);
   });

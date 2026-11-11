@@ -78,6 +78,7 @@ describe('退出时清空本机（真 core）', () => {
     // 计数在封存之前：数得出来
     expect(await defaultExitDeps.pendingCount()).toBe(2);
 
+    const clearAll = vi.spyOn(cache, 'clearAll');
     // 清理开始：wipe 一调用就同步设闸（不用等它做完）
     const wiping = defaultExitDeps.wipe?.();
     expect(b.switching).toBe(true);
@@ -91,9 +92,10 @@ describe('退出时清空本机（真 core）', () => {
     await outbox.ack(sending.op_id, { status: 'ok', rev: 7, prev_rev: 6 });
     await outbox.fail(sending.op_id, { network: true, sid: null });
 
-    expect(await outbox.list()).toEqual([]);
-    expect(await cache.getRow('todos', uid(1))).toBeUndefined();
-    expect(await cache.getRow('todos', uid(2))).toBeUndefined();
+    // 清完整库（core/account.ts 的 wipeLocal）并关库：之后晚到的 ack、fail 也写不进
+    expect(clearAll).toHaveBeenCalledOnce();
+    await expect(clearAll.mock.results[0]?.value).resolves.toBeUndefined();
+    expect(cache.isClosed()).toBe(true);
     // 封存以后数不出来：所以界面一定先数再退出
     expect(await defaultExitDeps.pendingCount()).toBeNull();
   });

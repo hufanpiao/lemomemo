@@ -2,7 +2,7 @@
 // 从 auth-loss-store.ts 拆出来（首屏只要 lemo.reauth 那几个函数；这里随 core/auth-loss.ts 懒加载，main.tsx 上传时也是动态引入）
 // • lemo.authloss：最多 AUTH_LOSS_MAX（5）条（旧的挤掉），每条 30 天；字段只有
 //   {uid_h, path, code, status, fate, at, app}。uid_h = sha256(install_id ':' user_id) 的十六进制前 16 位（0.60 加盐），不存明文 user_id。
-//   被动清库（wipeOnRemoved、wipeSignedOut、冷启动删库）不删它；K9 自己退出、登录页“清除这台设备上的内容”删它（clearAuthLoss）
+//   被动清库（core/account.ts 的 wipeLocal、冷启动删库）不删它；K9 自己退出、登录页“清除这台设备上的内容”删它（clearAuthLoss）
 // • pairHash(session_id, user_id)：sha256(session_id ':' user_id) 的 64 位小写十六进制，在本机算（crypto.subtle），查 session_fate 用；
 //   和迁移 20261111120000 的 private.session_pair_hash（uuid::text 小写）同一口径
 // 首屏块里的模块一个都不 import（env.ts 在所有块共用的 jsx-runtime 块里，不算）：懒加载块一引首屏模块，
@@ -32,7 +32,7 @@ export function clearAuthLoss(storage?: Storage): void {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const PATHS = ['sdk', 'sync', 'outbox', 'files', 'settings'] as const;
+const PATHS = ['sdk', 'sync', 'outbox', 'files', 'settings', 'consent'] as const;
 const FATES = ['expired', 'revoked', 'unknown', 'unchecked'] as const;
 
 export type AuthLossPath = (typeof PATHS)[number];

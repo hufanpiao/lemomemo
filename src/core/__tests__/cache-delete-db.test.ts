@@ -1,4 +1,4 @@
-// 会话失效、被移除时的兜底删库（core/account.ts 的 wipeOnRemoved 经 deleteCacheDb）：11-07 首屏瘦身 U7 起 deleteCacheDb 改从
+// 会话失效、被移除时的兜底删库（core/account.ts 的 wipeLocal 经 deleteCacheDb）：11-07 首屏瘦身 U7 起 deleteCacheDb 改从
 // platform/exit-basics.ts 引 deleteLocalDb（从 sign-out.ts 原样搬来，逻辑没改）。这里钉住改引用以后照样按库名删、各种结果照旧
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';

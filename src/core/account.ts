@@ -25,8 +25,7 @@
 //   - storage 那一路（会话变 null）：设闸，等 reauthGraceMs（supabase-js 先删键再通知，那一页写记号要晚几毫秒）再读 lemo.reauth：
 //     是本账号的 → 只关库、onSignedOut('expired', 记号里的 sid)；否则照旧清库、删记号
 //   - 写不了记号（存储不可用）：退回原来的清库，记 auth_loss_store_failed
-//   - 所有按 removed 清库的出口（wipeSignedOut、wipeOnRemoved）同一步删 lemo.reauth；删不掉记 auth_loss_store_failed
-//     （wipeOnRemoved 没有日志通道，下次冷启动看到记号时登录页会再查 session_fate）。lemo.authloss 被动清库不删
+//   - 清本机数据只走 wipeLocal（同一步删 lemo.reauth；删不掉记 auth_loss_store_failed）。lemo.authloss 被动清库不删
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { BootResult } from './boot.ts';
 import type { AuthLossSignal } from './auth-loss.ts';
@@ -172,34 +171,6 @@ function closeCache(boot: BootResult): void {
 }
 
 /**
- * 会话没了（别的标签页退出、本页被移除或被退出）：调用前已设闸、封存 → 清空整库（封存后照样能清）→ 先关本页连接
- * （原因 'closed'，不触发 versionchange → 重新载入）→ 按库名删库 → 清运行时缓存。任何一步失败都照样往下走，永远 resolve
- */
-async function wipeSignedOut(boot: BootResult, deps: Pick<WatchAccountDeps, 'deleteDb' | 'clearCacheStorage' | 'disconnectPush' | 'log'>): Promise<void> {
-  // 清库出口同一步删 lemo.reauth（R-382 0.60 复审建议 4）
-  if (!clearReauth()) deps.log?.('auth_loss_store_failed');
-  const cache = boot.cache;
-  try {
-    if (cache && !cache.isClosed()) await cache.clearAll();
-  } catch {
-    // 清不掉就靠下面按库名删
-  }
-  await disconnectPush(deps);
-  closeCache(boot);
-  clearAllCollections();
-  try {
-    await deps.deleteDb?.();
-  } catch {
-    // 删不掉（别的标签页挡着）：内容已清空
-  }
-  try {
-    await deps.clearCacheStorage();
-  } catch {
-    // 运行时缓存清不掉不挡退出
-  }
-}
-
-/**
  * 登录过期（R-382 架构 4.1a 第 2 点）：设闸（停同步、停 Realtime、停上传）→ 写 lemo.reauth → 关本页连接。
  * outbox、server、view 三份全部留着，Cache Storage 也不清。写不了记号返回 false（只设了闸，调用方退回清库）。
  * 不删会话、不跳转：调用方随后 clearLocalSessionIf(sid)、回登录页（记号要先于删会话写好，别的标签页的 storage 事件才读得到）。
@@ -214,7 +185,7 @@ export function expireThisTab(boot: BootResult, sessionId: string | null, reason
 
 /**
  * 结局还没定（要查 session_fate）时先做的一半：设闸、写 lemo.reauth，不关库。
- * 不关库是因为判成 removed 时还要清库（wipeOnRemoved 见库已关会当成“没有要清的”）。写不了记号返回 false
+ * 不关库是因为判成 removed 时还要清库（wipeLocal 见库已关会当成“没有要清的”）。写不了记号返回 false
  */
 export function markExpired(boot: BootResult, sessionId: string | null, reason: ReauthReason = 'expired', now: number = Date.now()): boolean {
   boot.sessionGone = true;
@@ -250,7 +221,7 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
           deps.onSignedOut('expired', r.session_id);
           return;
         }
-        void wipeSignedOut(boot, deps).finally(() => deps.onSignedOut());
+        void wipeLocal(boot, { ...deps, dropDb: Boolean(deps.deleteDb) }).finally(() => deps.onSignedOut());
       };
       const grace = deps.reauthGraceMs ?? 0;
       if (grace > 0) setTimeout(decide, grace);
@@ -317,7 +288,7 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
       } catch {
         // 日志队列清不掉不挡退出
       }
-      void wipeSignedOut(boot, deps).finally(() => deps.onSignedOut('removed', dead));
+      void wipeLocal(boot, { ...deps, dropDb: Boolean(deps.deleteDb) }).finally(() => deps.onSignedOut('removed', dead));
     };
     if (!kept) return removed();   // 写不了记号：退回原来的清库（4.1a 第 7 点）
     const signal: AuthLossSignal = {
@@ -341,26 +312,19 @@ export function watchAccount(boot: BootResult, deps: WatchAccountDeps): () => vo
   };
 }
 
-export interface RemovedDeps {
-  /** platform/session.ts 的 clearCacheStorage（只删运行时缓存） */
-  clearCacheStorage(): Promise<void>;
-  /**
-   * 清完以后：回登录页显示“已被移除”的提示。本机会话由调用方在调 wipeOnRemoved 之前同步删掉（takeLocalSession），
-   * 这里只按删掉的 session_id 再删一次（clearLocalSessionIf；K6-sugg3 ①，同 signedOutHere）
-   */
-  onRemoved(): void;
-  /** 清库卡住或失败时按库名删库（默认 core/cache.ts 的 deleteCacheDb，库名取本页的库）；测试用 */
+export interface WipeDeps extends Pick<WatchAccountDeps, 'clearCacheStorage' | 'disconnectPush' | 'log'> {
+  /** 按库名删库（默认 core/cache.ts 的 deleteCacheDb，库名取本页的库） */
   deleteDb?(): Promise<unknown>;
-  /** 断开浏览器推送（FE-2，同 EnsureAccountDeps.disconnectPush） */
-  disconnectPush?(): Promise<void>;
+  /** true：清完也按库名删整个库（会话没了，不留库文件）；默认只在清库卡住或失败时删 */
+  dropDb?: boolean;
   /** 测试用：清库（含按库名删）、清运行时缓存各自的上限 */
   wipeMs?: number;
   cachesMs?: number;
 }
 
-/** wipeOnRemoved 清库、清运行时缓存各自最多等多久（SETTINGS-sugg ①；和 platform/sign-out.ts 的 WIPE_TIMEOUT_MS、CACHES_TIMEOUT_MS 同值） */
-export const REMOVED_WIPE_MS = 3000;
-export const REMOVED_CACHES_MS = 2000;
+/** 清库、清运行时缓存各自最多等多久（和 platform/sign-out.ts 的 WIPE_TIMEOUT_MS、CACHES_TIMEOUT_MS 同值） */
+export const WIPE_MS = 3000;
+export const WIPE_CACHES_MS = 2000;
 
 /** 到点或出错都返回 false，按时完成返回 true；原来的操作不取消 */
 function capped(run: () => Promise<unknown>, ms: number): Promise<boolean> {
@@ -376,35 +340,26 @@ function capped(run: () => Promise<unknown>, ms: number): Promise<boolean> {
 }
 
 /**
- * 被移除、被停用、注销冷静期（主 App 的 sync-wiring、同意页、设置页三处共用；TC-B1-77 ⑤）：
- * 设闸 → 清空整个本机库（含 outbox，还没上传的改动丢弃）→ 清运行时缓存 → 关库 → onRemoved。
- * 每一步都有上限（SETTINGS-sugg ①）：清库卡住或失败时先关本页连接、按库名删库（同 platform/sign-out.ts 的 ②）；
- * 清运行时缓存卡住不等。任何情况都照样关库、onRemoved（回登录页），最坏约 REMOVED_WIPE_MS × 2 + REMOVED_CACHES_MS
+ * 清本机数据只在这里做（架构约定 10.1）：设闸 → 删 lemo.reauth → 清空整库（含 outbox，没上传的丢弃）→ 清内存集合 → 断开推送 → 关库
+ * →（清不掉或 dropDb）按库名删库 → 清运行时缓存。每一步有上限、失败照样往下走，永远 resolve；最坏约 WIPE_MS × 2 + WIPE_CACHES_MS
  */
-export async function wipeOnRemoved(boot: BootResult, deps: RemovedDeps): Promise<void> {
-  // 被移除（会话被吊销）、停用、冷静期、注销后离开都走这里：都按“会话没了”标上（BootResult.sessionGone，代码复查必改）——
-  // 注销其实已办成时同步常先收到 session_revoked 走到这里，设置页随后的 leave('deletion_unsure') 要能记下原因
-  boot.sessionGone = true;
+export async function wipeLocal(boot: BootResult, deps: WipeDeps): Promise<void> {
   closeGate(boot);
-  // 清库出口同一步删 lemo.reauth（R-382 0.60 复审建议 4：被移除、停用、冷静期都算）；删不掉时下次冷启动登录页会再查 session_fate
-  clearReauth();
-  const wipeMs = deps.wipeMs ?? REMOVED_WIPE_MS;
+  // 删不掉时下次冷启动登录页会再查 session_fate
+  if (!clearReauth()) deps.log?.('auth_loss_store_failed');
+  const wipeMs = deps.wipeMs ?? WIPE_MS;
+  const cache = boot.cache;
   try {
-    const cache = boot.cache;
-    // 超时后 clearAll 不取消、仍在后台跑，下面关库后它会以“库已关”之类的错误结束（SESS-1030-sugg ②）：这是预期的——
-    // capped 已经返回、没人等它的结果，错误被 capped 里的 then 接住不外抛；本机库照样靠按库名删库清掉，结果不受影响
+    // 超时后 clearAll 不取消，关库后它以“库已关”结束，没人等它；本机库靠按库名删清掉
     const cleared = !cache || cache.isClosed() || (await capped(() => cache.clearAll(), wipeMs));
     clearAllCollections();
     await disconnectPush(deps);
-    if (!cleared) {
-      closeCache(boot);   // 原因 'closed'：不触发 versionchange → 重新载入
-      await capped(deps.deleteDb ?? (() => deleteCacheDb({ name: cache?.name, waitMs: wipeMs })), wipeMs);
-    }
-    await capped(() => deps.clearCacheStorage(), deps.cachesMs ?? REMOVED_CACHES_MS);
+    closeCache(boot);   // 原因 'closed'：不触发 versionchange → 重新载入
+    if (!cleared || deps.dropDb) await capped(deps.deleteDb ?? (() => deleteCacheDb({ name: cache?.name, waitMs: wipeMs })), wipeMs);
+    await capped(() => deps.clearCacheStorage(), deps.cachesMs ?? WIPE_CACHES_MS);
   } catch {
     clearAllCollections();
   } finally {
     closeCache(boot);
-    deps.onRemoved();
   }
 }

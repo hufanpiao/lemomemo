@@ -87,7 +87,7 @@ export interface BootResult {
   switching: boolean;
   /**
    * 设闸是因为本机会话没了：本页的 SIGNED_OUT、别的标签页退出（watchAccount 设闸时同步标上），以及被移除、停用、冷静期、注销后离开
-   * （core/account.ts 的 wipeOnRemoved 标上）。只有换账号不标。
+   * （core/device-exit.ts 退出时标上）。只有换账号不标。
    * 设置页申请注销后确认不了办没办成时，只有闸是这一路设的才另记 deletion_unsure（features/settings/data/account-exit.ts），
    * 免得换账号时这条原因在 sessionStorage 留着、后来正常退出时冒出来（代码审查建议 1）
    */
@@ -127,12 +127,6 @@ export function enabledFlags(config: CachedConfig | null, profile: CachedProfile
   if (!features) return null;
   const ctx = { beta: profile?.beta_features ?? [], appVersion };
   return new Set(Object.keys(features).filter((k) => featureOn(features, k, ctx)));
-}
-
-/** 退出登录、换账号、被移除：清空整个本机库和内存里的集合（Cache Storage、推送订阅由调用方另清；install_id 不在这里） */
-export async function wipeLocal(cache: Cache): Promise<void> {
-  await cache.clearAll();
-  clearAllCollections();
 }
 
 let current: BootResult | null = null;

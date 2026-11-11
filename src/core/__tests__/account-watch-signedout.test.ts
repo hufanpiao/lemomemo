@@ -93,7 +93,7 @@ describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signe
     expect(deps.clearLogs).not.toHaveBeenCalled();
   });
 
-  it('已经在走别的退出流程（自己退出的 sealForExit、wipeOnRemoved 设过闸）：不再清第二遍、不跳', async () => {
+  it('已经在走别的退出流程（自己退出的 sealForExit、wipeLocal 设过闸）：不再清第二遍、不跳', async () => {
     const { boot, deps, signedOut, session } = await setup();
     session.id = null;
     boot.switching = true;

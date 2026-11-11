@@ -26,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   defaultGuardRemoval, deleteDbAgain, dropSession, sessionIdOf, SIGN_OUT_TIMEOUT_MS, signOutThisDevice, withTimeout, wipeThisDevice,
 } from '../../../platform/sign-out.ts';
+import { decideExit } from '../../../core/device-exit.ts';
 import { markSelfSignOutThisTab } from '../../../platform/session.ts';
 import { defaultExitDeps, type ExitDeps } from '../data/local.ts';
 import type { SettingsApi } from '../data/settings-api.ts';
@@ -157,7 +158,8 @@ export function useSessionExit(api: SettingsApi, exit: ExitDeps = defaultExitDep
         .resolveAuthLoss({ path: 'settings', code: 'session_revoked', sessionId: sid, userId })
         .catch(() => 'expired' as const)
         .then((r) => {
-          if (r === 'expired' && expire(sid)) {
+          // 结局按 core/device-exit.ts 的 decideExit：没确认被移除只退出；写不了记号退回清库
+          if (decideExit({ reason: 'removed', fate: r }).act === 'logout' && expire(sid)) {
             void dropSession(exit, sid);
             exit.goToAuthExpired?.(sid);
             return;

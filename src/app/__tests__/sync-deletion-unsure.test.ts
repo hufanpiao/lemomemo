@@ -1,4 +1,4 @@
-// 代码复查必改（安全审查 H1 后续）：注销其实已办成时，同步常先收到 session_revoked，由 wireSync 走 wipeOnRemoved 设闸；
+// 代码复查必改（安全审查 H1 后续）：注销其实已办成时，同步常先收到 session_revoked，由 wireSync 走 wipeLocal 设闸；
 // 设置页随后的 leave('deletion_unsure') 要记下这条原因，同步一路清完记 removed 时不覆盖，登录页显示 auth.exit.deletionUnsure。
 // 边界规则不许 app 引 features：这里只测同步这一半（标 sessionGone、不覆盖已记的原因），leave 见到 sessionGone 就记 deletion_unsure
 // 那一半在 src/features/settings/__tests__/deletion-unsure.test.tsx
@@ -42,7 +42,7 @@ afterEach(() => {
   clearExitNotice();
 });
 
-describe('闸由 wipeOnRemoved（同步收到 session_revoked）设：leave(deletion_unsure) 仍记下原因，登录页显示 deletionUnsure', () => {
+describe('闸由 wipeLocal（同步收到 session_revoked）设：leave(deletion_unsure) 仍记下原因，登录页显示 deletionUnsure', () => {
   it('同步先走：标上 sessionGone；设置页 leave 随后记下 deletion_unsure（boot.sessionGone 时它只做这一件）；同步清完记 removed 时不覆盖', async () => {
     const b = await boot();
     const s = spySync();
@@ -56,7 +56,7 @@ describe('闸由 wipeOnRemoved（同步收到 session_revoked）设：leave(dele
     };
     wireSync(b, d);
     s.removed('session_revoked', 's1');
-    // wipeOnRemoved 同步设闸并标上“会话没了”
+    // wipeLocal 同步设闸并标上“会话没了”
     expect(b.switching).toBe(true);
     expect(b.sessionGone).toBe(true);
     // 设置页 leave 在已设闸且 sessionGone 时做的事（createLeaveAccount 的 setNotice）

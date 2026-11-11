@@ -1,7 +1,7 @@
 // 换账号、会话没了、被移除时断开浏览器推送（B2 安全审查六之三 FE-2）：
 // 清库之后、删库之前调 disconnectPush（关掉本 App 已显示的通知、退订推送）；它失败、卡住都不挡后面的步骤
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { claimCache, ensureAccount, wipeOnRemoved } from '../account.ts';
+import { claimCache, ensureAccount, wipeLocal } from '../account.ts';
 import { resetBootForTest } from '../boot.ts';
 import { freshCache } from './account-fixtures.ts';
 import { setup } from './account-watch-harness.ts';
@@ -58,20 +58,19 @@ describe('watchAccount', () => {
   });
 });
 
-describe('wipeOnRemoved（被移除、停用、注销）', () => {
-  it('断开在 onRemoved 之前；断开卡住或出错都不挡回登录页', async () => {
+describe('wipeLocal（被移除、冷静期、注销）', () => {
+  it('断开在清运行时缓存、回登录页之前；断开卡住或出错都不挡回登录页', async () => {
     for (const fail of [false, true]) {
       const s = await setup();
       const order: string[] = [];
       const onRemoved = vi.fn(() => void order.push('onRemoved'));
-      await wipeOnRemoved(s.boot, {
+      await wipeLocal(s.boot, {
         clearCacheStorage: async () => void order.push('clearCacheStorage'),
-        onRemoved,
         disconnectPush: async () => {
           order.push('disconnect');
           if (fail) throw new Error('x');
         },
-      });
+      }).then(onRemoved);
       expect(order).toEqual(['disconnect', 'clearCacheStorage', 'onRemoved']);
       resetBootForTest();
       await flush();

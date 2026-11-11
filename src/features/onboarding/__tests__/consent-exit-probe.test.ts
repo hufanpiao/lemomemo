@@ -10,15 +10,15 @@ function deps(answer: () => Promise<ExitNotice | 'active'>, boot: Partial<BootRe
   const order: string[] = [];
   const d: LeaveDeps = {
     getBoot: () => boot as BootResult | null,
-    wipeOnRemoved: vi.fn(async (_b: BootResult, r: { clearCacheStorage(): Promise<void>; onRemoved(): void }) => {
-      order.push('wipe');
-      await r.clearCacheStorage();
-      r.onRemoved();
-    }),
-    clearCacheStorage: vi.fn(async () => undefined),
-    setExitNotice: vi.fn((n) => void order.push(`notice:${n}`)),
+    wipe: vi.fn(async () => void order.push('wipe')),
+    // 默认的 keep（expireThisTab）：账号 U1 不是 UUID，写不了记号，停用退回清库
+    keep: defaultLeaveDeps.keep,
     clearLocalSessionIf: vi.fn(async (sid: string | null) => { order.push(`session:${sid ?? 'null'}`); return true; }),
-    goToAuth: vi.fn(() => void order.push('auth')),
+    goToAuth: vi.fn((n: ExitNotice | null) => {
+      if (n) order.push(`notice:${n}`);
+      order.push('auth');
+    }),
+    resolveAuthLoss: vi.fn(async () => 'removed' as const),
     clearLogs: vi.fn(() => undefined),
     broadcastReset: vi.fn(),
     resolveDisabled: vi.fn(answer),
@@ -36,7 +36,7 @@ describe('告知页 account_disabled：先探测再定退出原因', () => {
       expect(d.resolveDisabled).toHaveBeenCalledWith('s1');
       // 冷静期不删会话（R-262），清库、记原因、回登录页照旧
       expect(order).toEqual(
-        notice === 'pending_deletion' ? ['wipe', `notice:${notice}`, 'auth'] : ['session:s1', 'wipe', `notice:${notice}`, 'session:s1', 'auth'],
+        notice === 'pending_deletion' ? ['wipe', `notice:${notice}`, 'auth'] : ['session:s1', 'wipe', 'session:s1', `notice:${notice}`, 'auth'],
       );
     });
   }
@@ -76,7 +76,7 @@ describe('告知页 account_disabled：先探测再定退出原因', () => {
     const { d } = deps(async () => 'disabled');
     await leaveThisDevice('session_revoked', 's1', d);
     expect(d.resolveDisabled).not.toHaveBeenCalled();
-    expect(d.setExitNotice).toHaveBeenCalledWith('removed');
+    expect(d.goToAuth).toHaveBeenCalledWith('removed', 's1');
   });
 
   it('不给 resolveDisabled 时用 exitForDisabled：本机没有会话（拿不到令牌）→ 不探测，按 disabled_unsure', async () => {
@@ -85,7 +85,7 @@ describe('告知页 account_disabled：先探测再定退出原因', () => {
     sessionStorage.clear();
     localStorage.clear();
     await leaveThisDevice('account_disabled', 's1', d);
-    expect(d.setExitNotice).toHaveBeenCalledWith('disabled_unsure');
+    expect(d.goToAuth).toHaveBeenCalledWith('disabled_unsure', 's1');
   });
 });
 
@@ -100,27 +100,26 @@ describe('sid 读不出（null）时删会话（第八轮必改 1：不另认同
 describe('离开前广播带原因的 reset（SESS-1030-sugg ①，和设置页、sync-wiring 一致）', () => {
   function withPosts(answer: () => Promise<ExitNotice | 'active'>, boot: Partial<BootResult> | null = { switching: false, userId: 'U1' }) {
     const x = deps(answer, boot);
-    x.d.broadcastReset = vi.fn((userId: string, e: { notice: ExitNotice; sid: string | null }) => {
-      x.order.push(`post:${userId}:${e.notice}:${e.sid ?? 'null'}`);
+    x.d.broadcastReset = vi.fn((userId: string, e?: { notice: ExitNotice; sid: string | null }) => {
+      x.order.push(e ? `post:${userId}:${e.notice}:${e.sid ?? 'null'}` : `post:${userId}`);
     });
     return x;
   }
 
-  it('探测出冷静期：先发 reset {notice: pending_deletion, sid}，再清库、回登录页；不删会话', async () => {
+  it('探测出冷静期：先发 reset {notice: pending_deletion, sid}，再清库、发清完的 reset、回登录页；不删会话', async () => {
     const { d, order } = withPosts(async () => 'pending_deletion');
     await leaveThisDevice('account_disabled', 's1', d);
-    expect(order).toEqual(['post:U1:pending_deletion:s1', 'wipe', 'notice:pending_deletion', 'auth']);
-    expect(d.broadcastReset).toHaveBeenCalledOnce();
+    expect(order).toEqual(['post:U1:pending_deletion:s1', 'wipe', 'post:U1', 'notice:pending_deletion', 'auth']);
   });
 
-  it('停用、被移除：删会话之前先发；sid 为 null 时带 null', async () => {
+  it('停用：删会话之前先发；被移除（先查服务器）定了结局再发；sid 为 null 时带 null', async () => {
     const a = withPosts(async () => 'disabled');
     await leaveThisDevice('account_disabled', 's1', a.d);
-    expect(a.order).toEqual(['post:U1:disabled:s1', 'session:s1', 'wipe', 'notice:disabled', 'session:s1', 'auth']);
+    expect(a.order).toEqual(['post:U1:disabled:s1', 'session:s1', 'wipe', 'post:U1', 'session:s1', 'notice:disabled', 'auth']);
     resetLeaveForTest();
     const b = withPosts(async () => 'disabled');
     await leaveThisDevice('session_revoked', null, b.d);
-    expect(b.order[0]).toBe('post:U1:removed:null');
+    expect(b.order.slice(0, 2)).toEqual(['session:null', 'post:U1:removed:null']);
   });
 
   it('没启动过（没有 boot、读不到账号）：不发；active 不离开也不发；广播抛错照样离开', async () => {

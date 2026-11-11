@@ -3,16 +3,16 @@
 //   再写 cookie lemo_lang（官网首页 / 按它跳 /zh/ 或 /ko/，和首页页脚的手动切换同一写法）
 // • 退出本机、被移除、被退出（4.1、0.29 续第 98 条）：流程在 platform/sign-out.ts（和登录页共用，K-signout-merge）；
 //   这里只给主 App 才有的一步 wipe：先 core/account 的 sealForExit 同步设闸（switching、outbox 暂停、库封存，不可解除；
-//   之后 K8 不再发送、ack / fail 不再写库，只有 clearAll 能写），再 core/boot 的 wipeLocal（clearAll + 清内存集合）；
+//   之后 K8 不再发送、ack / fail 不再写库，只有 clearAll 能写），再 core/account 的 wipeLocal（清库、清内存集合、关库；推送和运行时缓存由 platform 清）；
 //   库不能用（没启动、已关、打不开、来自更新的版本）时返回 false，由 platform 按库名删 planner-v4
 //   - 退出期间不能 reload（K-signout-merge 复审 M1）：按库名删库会给本页还开着的连接发 versionchange → core 关库 → 升级中心 reload，
 //     打断后面的 signOut，留下“有会话、没库”。所以 ① wipe 一开头 upgrade.holdBusy('sign_out')，退出期间不释放（最后 goToAuth 离开页面）；
 //     ② deleteDb 先 close() 本页连接（原因是 'closed'，不触发 reload）再删
 import { LANG_COOKIE, LOCALE_STORAGE_KEY, asLocale, type Locale, type UiLocale } from '../../../../shared/i18n/pick-locale.ts';
-import { expireThisTab, markExpired, sealForExit } from '../../../core/account.ts';
+import { expireThisTab, markExpired, sealForExit, wipeLocal } from '../../../core/account.ts';
 import type { AuthLossSignal } from '../../../core/auth-loss.ts';
 import { resolveAuthLossLazy } from '../../../core/auth-loss-lazy.ts';
-import { applyFreshConfig, getBoot, localUnsentCount, wipeLocal } from '../../../core/boot.ts';
+import { applyFreshConfig, getBoot, localUnsentCount } from '../../../core/boot.ts';
 import { goToAuth, readSessionUserId } from '../../../platform/session.ts';
 import { defaultExitSteps, deleteLocalDb, type ExitSteps } from '../../../platform/sign-out.ts';
 
@@ -93,7 +93,8 @@ export const defaultExitDeps: ExitDeps = {
     }
     const cache = boot?.cache;
     if (!cache || cache.isClosed() || boot.status !== 'ready') return false;
-    await wipeLocal(cache);
+    // 推送、运行时缓存由 platform/sign-out.ts 的 wipeThisDevice 接着清，这里不重复
+    await wipeLocal(boot, { clearCacheStorage: () => Promise.resolve(), disconnectPush: () => Promise.resolve() });
     return true;
   },
   deleteDb: async () => {

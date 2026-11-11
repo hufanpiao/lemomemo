@@ -2,7 +2,7 @@
 // 挂上监听后再比一次（补上 coldStart 期间漏掉的事件）；同步设闸；清完关库；清库失败即关；本机库打不开时也重来；被移除。
 // 本页的 SIGNED_OUT（K6-signedout）那一组 K6-sugg5 ⑤ 起在 account-watch-signedout.test.ts；搭台在 account-watch-harness.ts
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cacheOwner, claimCache, wipeOnRemoved, type WatchAccountDeps } from '../account.ts';
+import { cacheOwner, claimCache, wipeLocal, type WatchAccountDeps } from '../account.ts';
 import { getBoot, resetBootForTest } from '../boot.ts';
 import { deleteCacheDb } from '../cache.ts';
 import { OutboxRejectError } from '../outbox.ts';
@@ -151,7 +151,7 @@ describe('watchAccount：登录、刷新令牌、别的标签页', () => {
 });
 
 describe('被移除（session_revoked、account_disabled）', () => {
-  it('fail 归成 removed：设闸、发 removed 事件；wipeOnRemoved 清空本机、关库、onRemoved', async () => {
+  it('fail 归成 removed：设闸、发 removed 事件；wipeLocal 清空本机、关库', async () => {
     const { boot } = await setup();
     const events: string[] = [];
     const item = await boot.outbox?.enqueue({ table: 'todos', id: uid(5), op: 'insert', data: todo(5) });
@@ -161,11 +161,9 @@ describe('被移除（session_revoked、account_disabled）', () => {
     expect(await boot.outbox?.fail(item?.op_id ?? '', { status: 401, code: 'session_revoked', sid: null })).toBe('removed');
     expect(boot.outbox?.isSuspended()).toBe(true);
     expect(events).toEqual(['removed']);
-    const onRemoved = vi.fn();
     const clearCaches = vi.fn(() => Promise.resolve());
     const cache = boot.cache;
-    await wipeOnRemoved(boot, { clearCacheStorage: clearCaches, onRemoved });
-    expect(onRemoved).toHaveBeenCalledTimes(1);
+    await wipeLocal(boot, { clearCacheStorage: clearCaches });
     expect(clearCaches).toHaveBeenCalledTimes(1);
     expect(cache?.isClosed()).toBe(true);
   });

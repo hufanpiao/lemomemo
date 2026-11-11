@@ -8,7 +8,7 @@
 //   - onDone(agreed)：服务器已记下；agreed 为 true 时经 settings 同步写 ai.enabled = true（core/ai-settings.ts 的 writeAiSwitchSettled，走 outbox；
 //     服务器只在撤回时写 false）；本机还没拉到服务器那一行、insert 被拒时，它等同步拉下那一行再 patch（CONSENT-sugg ②）。
 //     写不进本机（本机库不可用等）不挡进 App、不提示——同意已记在服务器上，ai.enabled 没写上时 AI 只是还没打开，设置 › 语音与 AI 能再开
-//   - onRevoked：会话不认 → 按“被移除”清本机、回登录页（data/consent-exit.ts，调现有出口 wipeOnRemoved）
+//   - onRevoked：会话不认 → 按“被移除”清本机、回登录页（data/consent-exit.ts，经 core/device-exit.ts，先查 session_fate 才清库）
 //   - onDisabled：account_disabled → 先探测再定退出原因（data/consent-exit.ts，R-256 ③：冷静期、已停用、不确定；账号正常就留在告知页）
 //   - onSkip：R-239 没法保存选择 → 直接进 App
 import { useCallback, useEffect, useMemo, useState } from 'react';

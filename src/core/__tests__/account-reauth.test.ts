@@ -1,6 +1,6 @@
 // R-382（架构 4.1a 第 2 点、第 6 点单测）：登录过期只关库不清、被移除清库删记号；冷启动、别的标签页、重新登录按 lemo.reauth 处理
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { claimCache, expireThisTab, markExpired, watchAccount, wipeOnRemoved, type WatchAccountDeps } from '../account.ts';
+import { claimCache, expireThisTab, markExpired, watchAccount, wipeLocal, type WatchAccountDeps } from '../account.ts';
 import { coldStart, resetBootForTest, type BootResult } from '../boot.ts';
 import { deleteCacheDb } from '../cache.ts';
 import { clearAllCollections } from '../store.ts';
@@ -168,10 +168,10 @@ describe('记号的 reason（R-382 复核建议 ①）', () => {
     expect(readReauth()).toMatchObject({ session_id: S, reason: 'disabled' });
   });
 
-  it('清库出口照旧同一步删记号：disabled 记号也删（wipeOnRemoved）', async () => {
+  it('清库出口照旧同一步删记号：disabled 记号也删（wipeLocal）', async () => {
     const r = await rig();
     writeReauth(A, null, Date.now(), undefined, 'disabled');
-    await wipeOnRemoved(r.boot, { clearCacheStorage: () => Promise.resolve(), onRemoved: vi.fn(), wipeMs: 200, cachesMs: 50 });
+    await wipeLocal(r.boot, { clearCacheStorage: () => Promise.resolve(), wipeMs: 200, cachesMs: 50 });
     expect(readReauth()).toBeNull();
   });
 });

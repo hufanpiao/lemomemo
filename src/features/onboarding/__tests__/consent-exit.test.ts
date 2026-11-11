@@ -1,36 +1,32 @@
-// 告知页里会话不认、账号停用时离开这台设备（CONSENT-wire ④；架构 4.1、4.3 ②）：调现有出口 wipeOnRemoved，清完记退出原因、删会话、回登录页；
-// 原因按码：session_revoked → removed，account_disabled → disabled；已经在走别的退出流程（switching）不再走；只处理一次；
+// 告知页里会话不认、账号停用时离开这台设备（CONSENT-wire ④；架构 4.1、4.3 ②）：走 core/device-exit.ts 的 exitDevice，清完删会话、记退出原因、回登录页；
+// 原因按码：session_revoked → removed（先查服务器，见 consent-exit-q19.test.ts），account_disabled → disabled；已经在走别的退出流程（switching）不再走；只处理一次；
 // 这个账号的日志上传队列清库前清一次、回登录页前再清一次（0.38 第 68 条 ⑤，审查 M1），没启动过时清全部；
 // 本机会话一开头就删、回登录页前再删一次，两次都只删被拒那次请求用的会话（调用方传进来的 sid；K6-sugg3 ①、K6-sugg4 ①）
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BootResult } from '../../../core/boot.ts';
 import { readReauth } from '../../../platform/auth-loss-store.ts';
 import { logQueueKey } from '../../../platform/log-store.ts';
-import { readSessionUserId, takeLocalSession } from '../../../platform/session.ts';
+import { readSessionUserId, takeLocalSession, type ExitNotice } from '../../../platform/session.ts';
 import { defaultLeaveDeps, leaveThisDevice, resetLeaveForTest, type LeaveDeps } from '../data/consent-exit.ts';
 
 function deps(boot: Partial<BootResult> | null) {
   const order: string[] = [];
   const d: LeaveDeps = {
     getBoot: () => boot as BootResult | null,
-    wipeOnRemoved: vi.fn(async (_b: BootResult, r: { clearCacheStorage(): Promise<void>; onRemoved(): void }) => {
+    wipe: vi.fn(async () => {
       order.push('wipe');
-      await r.clearCacheStorage();
-      r.onRemoved();
     }),
-    clearCacheStorage: vi.fn(async () => {
-      order.push('caches');
-    }),
-    setExitNotice: vi.fn((n) => {
-      order.push(`notice:${n}`);
-    }),
+    keep: defaultLeaveDeps.keep,
     clearLocalSessionIf: vi.fn(async (sid: string | null) => {
       order.push(`session:${sid ?? 'null'}`);
       return true;
     }),
-    goToAuth: vi.fn(() => {
+    goToAuth: vi.fn((n: ExitNotice | null) => {
+      if (n) order.push(`notice:${n}`);
       order.push('auth');
     }),
+    // 账号 U1 不是 UUID：写不了记号，按被移除清库（真实账号先查 session_fate，见 consent-exit-q19.test.ts）
+    resolveAuthLoss: vi.fn(async () => 'removed' as const),
     clearLogs: vi.fn((userId: string | null) => {
       order.push(`logs:${userId ?? '*'}`);
     }),
@@ -44,27 +40,27 @@ function deps(boot: Partial<BootResult> | null) {
 afterEach(resetLeaveForTest);
 
 describe('leaveThisDevice', () => {
-  it('会话不认：清本机（wipeOnRemoved）→ 记 removed → 删会话 → 回登录页', async () => {
+  it('会话不认：删会话 → 清本机（wipe）→ 再删会话 → 记 removed、回登录页', async () => {
     const { d, order } = deps({ switching: false, userId: 'U1' });
     await leaveThisDevice('session_revoked', 's1', d);
-    expect(order).toEqual(['session:s1', 'logs:U1', 'wipe', 'caches', 'logs:U1', 'notice:removed', 'session:s1', 'auth']);
+    expect(order).toEqual(['session:s1', 'logs:U1', 'wipe', 'logs:U1', 'session:s1', 'notice:removed', 'auth']);
   });
 
-  it('R-382（负责人 11-11 定）账号停用只退出、不清本机：keepForDisabled 写记号、只关库 → 删会话 → 记 disabled → 回登录页；不清库、不清日志', async () => {
+  it('R-382（负责人 11-11 定）账号停用只退出、不清本机：keep 写记号、只关库 → 删会话 → 记 disabled → 回登录页；不清库、不清日志', async () => {
     const { d, order } = deps({ switching: false, userId: 'U1' });
-    const keepForDisabled = vi.fn(() => (order.push('keep'), true));
-    await leaveThisDevice('account_disabled', 's1', { ...d, keepForDisabled });
-    expect(order).toEqual(['session:s1', 'keep', 'notice:disabled', 'auth']);
-    expect(d.wipeOnRemoved).not.toHaveBeenCalled();
+    const keep = vi.fn(() => (order.push('keep'), true));
+    await leaveThisDevice('account_disabled', 's1', { ...d, keep });
+    expect(order).toEqual(['keep', 'session:s1', 'notice:disabled', 'auth']);
+    expect(d.wipe).not.toHaveBeenCalled();
   });
 
-  it('账号停用、默认 keepForDisabled：记号原因记 disabled（R-382 复核建议 ①，登录页刷新后照样提示已停用）', async () => {
+  it('账号停用、默认 keep：记号原因记 disabled（R-382 复核建议 ①，登录页刷新后照样提示已停用）', async () => {
     const U = '00000000-0000-4000-8000-00000000000a';
     const { d } = deps({ switching: false, userId: U });
     try {
       await leaveThisDevice('account_disabled', 's1', d);
       expect(readReauth()).toMatchObject({ user_id: U, session_id: null, reason: 'disabled' });
-      expect(d.wipeOnRemoved).not.toHaveBeenCalled();
+      expect(d.wipe).not.toHaveBeenCalled();
     } finally {
       localStorage.clear();
     }
@@ -72,15 +68,15 @@ describe('leaveThisDevice', () => {
 
   it('账号停用但写不了记号：退回原来那一套（清库），退出原因记 disabled', async () => {
     const { d, order } = deps({ switching: false, userId: 'U1' });
-    await leaveThisDevice('account_disabled', 's1', { ...d, keepForDisabled: () => false });
-    expect(order).toEqual(['session:s1', 'logs:U1', 'wipe', 'caches', 'logs:U1', 'notice:disabled', 'session:s1', 'auth']);
+    await leaveThisDevice('account_disabled', 's1', { ...d, keep: () => false });
+    expect(order).toEqual(['session:s1', 'logs:U1', 'wipe', 'logs:U1', 'session:s1', 'notice:disabled', 'auth']);
   });
 
   it('没启动过（没有 boot）：不清库，直接记原因、删会话、回登录页', async () => {
     const { d, order } = deps(null);
     await leaveThisDevice('account_disabled', 's1', d);
-    expect(order).toEqual(['session:s1', 'logs:*', 'logs:*', 'notice:disabled', 'session:s1', 'auth']);
-    expect(d.wipeOnRemoved).not.toHaveBeenCalled();
+    expect(order).toEqual(['session:s1', 'logs:*', 'logs:*', 'session:s1', 'notice:disabled', 'auth']);
+    expect(d.wipe).not.toHaveBeenCalled();
   });
 
   it('已经在走别的退出流程（switching）：什么也不做', async () => {
@@ -92,9 +88,9 @@ describe('leaveThisDevice', () => {
   it('只处理一次：连着来两次只清一遍、只跳一次', async () => {
     const { d } = deps({ switching: false, userId: 'U1' });
     await Promise.all([leaveThisDevice('session_revoked', 's1', d), leaveThisDevice('account_disabled', 's1', d)]);
-    expect(d.wipeOnRemoved).toHaveBeenCalledOnce();
+    expect(d.wipe).toHaveBeenCalledOnce();
     expect(d.goToAuth).toHaveBeenCalledOnce();
-    expect(d.setExitNotice).toHaveBeenCalledWith('removed');
+    expect(d.goToAuth).toHaveBeenCalledWith('removed', 's1');
   });
 
   it('默认的 clearLogs 真的删掉 localStorage 里的队列：有账号只删这个账号的，null 删全部 lemo.logq.*', () => {
@@ -118,15 +114,14 @@ describe('leaveThisDevice', () => {
     const seed = (sid: string, user = A): void => localStorage.setItem(KEY, JSON.stringify({ access_token: tok(sid), user: { id: user } }));
     afterEach(() => localStorage.clear());
 
-    /** wipeOnRemoved 卡在 gate 上（= 清库那几秒）；会话两步用默认的 */
+    /** wipe 卡在 gate 上（= 清库那几秒）；会话两步用默认的 */
     function gated() {
       let release: () => void = () => undefined;
       const gate = new Promise<void>((r) => (release = r));
       const { d } = deps({ switching: false, userId: A });
       d.clearLocalSessionIf = defaultLeaveDeps.clearLocalSessionIf;
-      d.wipeOnRemoved = vi.fn(async (_b: BootResult, r: { onRemoved(): void }) => {
+      d.wipe = vi.fn(async () => {
         await gate;
-        r.onRemoved();
       });
       return { d, release };
     }

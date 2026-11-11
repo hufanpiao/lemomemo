@@ -3,6 +3,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BootResult } from '../../../core/boot.ts';
+import { resetExitForTest } from '../../../core/device-exit.ts';
 import type { AccountProbe } from '../../../platform/account-status.ts';
 import { clearExitNotice, goToAuth, readExitNotice, setExitNotice } from '../../../platform/session.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
@@ -21,15 +22,13 @@ function db(): () => Promise<Db> {
 function leaveDeps(boot: Partial<BootResult> | null) {
   return {
     getBoot: vi.fn(() => boot as BootResult | null),
-    wipeOnRemoved: vi.fn(async (_b: BootResult, r: { clearCacheStorage(): Promise<void>; onRemoved(): void }) => {
-      await r.clearCacheStorage();
-      r.onRemoved();
-    }),
-    clearCacheStorage: vi.fn(async () => undefined),
+    wipe: vi.fn(async (_b: BootResult) => undefined),
+    keep: vi.fn(() => false),
     clearLogs: vi.fn(),
     broadcastReset: vi.fn(),
-    clearLocalSessionIf: vi.fn(),
-    goToAuth: vi.fn(),
+    clearLocalSessionIf: vi.fn(async (_sid: string | null) => true),
+    goToAuth: vi.fn((_n: string | null, _sid: string | null) => undefined),
+    resolveAuthLoss: vi.fn(async () => 'removed' as const),
     setNotice: vi.fn((n: Parameters<typeof setExitNotice>[0], sid: string | null) => setExitNotice(n, undefined, { sid })),
   } satisfies AccountLeaveDeps;
 }
@@ -55,13 +54,14 @@ async function submitWith(probeRes: AccountProbe, d: ReturnType<typeof leaveDeps
 afterEach(() => {
   vi.unstubAllGlobals();
   clearExitNotice();
+  resetExitForTest();
 });
 
 describe('H1：注销 try_later 后按 status 定离开原因', () => {
   it('status 回会话已失效（signed_out）：goToAuth 收到 deletion_unsure 而不是 pending_deletion；会话照删', async () => {
     const d = leaveDeps(null);
     const { deps } = await submitWith({ kind: 'signed_out' }, d);
-    expect(d.goToAuth.mock.calls).toEqual([['deletion_unsure']]);
+    expect(d.goToAuth.mock.calls).toEqual([['deletion_unsure', 's-1']]);
     expect(d.clearLocalSessionIf).toHaveBeenCalledWith('s-1');
     expect(deps.onRevoked).not.toHaveBeenCalled();
   });
@@ -69,7 +69,7 @@ describe('H1：注销 try_later 后按 status 定离开原因', () => {
   it('status 回冷静期：照旧 pending_deletion', async () => {
     const d = leaveDeps(null);
     await submitWith({ kind: 'pending_deletion', purgeAfter: '2026-11-06T15:30:00Z' }, d);
-    expect(d.goToAuth.mock.calls).toEqual([['pending_deletion']]);
+    expect(d.goToAuth.mock.calls).toEqual([['pending_deletion', 's-1']]);
   });
 
   it('status 回 active：不离开，显示稍后再试', async () => {
@@ -85,7 +85,7 @@ describe('H1 ②：本页的 SIGNED_OUT 一路和这里的 leave 只走一条，
     vi.stubGlobal('location', { replace: vi.fn() });
     const d = leaveDeps({ switching: true, sessionGone: true, userId: 'u1' });
     await createLeaveAccount(d)('deletion_unsure', 's-1', { revoked: true });
-    expect(d.wipeOnRemoved).not.toHaveBeenCalled();
+    expect(d.wipe).not.toHaveBeenCalled();
     expect(d.goToAuth).not.toHaveBeenCalled();
     expect(d.clearLocalSessionIf).not.toHaveBeenCalled();
     expect(d.setNotice).toHaveBeenCalledWith('deletion_unsure', 's-1');
@@ -112,8 +112,8 @@ describe('H1 ②：本页的 SIGNED_OUT 一路和这里的 leave 只走一条，
   it('leave 先走（没设闸）：正常清本机并 goToAuth(deletion_unsure)，不另记原因', async () => {
     const d = leaveDeps({ switching: false, userId: 'u1' });
     await createLeaveAccount(d)('deletion_unsure', 's-1', { revoked: true });
-    expect(d.wipeOnRemoved).toHaveBeenCalledTimes(1);
-    expect(d.goToAuth.mock.calls).toEqual([['deletion_unsure']]);
+    expect(d.wipe).toHaveBeenCalledTimes(1);
+    expect(d.goToAuth.mock.calls).toEqual([['deletion_unsure', 's-1']]);
     expect(d.setNotice).not.toHaveBeenCalled();
   });
 
@@ -123,7 +123,7 @@ describe('H1 ②：本页的 SIGNED_OUT 一路和这里的 leave 只走一条，
     expect(readExitNotice()).toBe('removed');
     const d = leaveDeps({ switching: true, sessionGone: true, userId: 'u1' });
     await createLeaveAccount(d)('deletion_unsure', 's-1', { revoked: true });
-    expect(d.wipeOnRemoved).not.toHaveBeenCalled();
+    expect(d.wipe).not.toHaveBeenCalled();
     expect(d.goToAuth).not.toHaveBeenCalled();
     const final = readExitNotice();
     expect(final).not.toBe('pending_deletion');
