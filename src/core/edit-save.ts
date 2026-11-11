@@ -5,11 +5,12 @@
 // • 调用方义务（write.ts）：没写进去时界面提示“没保存上”并保留输入；switching 例外（页面马上跳走）
 // 纯 TS：不准 import React 和任何功能（A1）
 import { OutboxRejectError } from './outbox.ts';
-import { write, type WriteFailReason } from './write.ts';
+import { write, type WriteFailReason, type WriteResult } from './write.ts';
 
 export type SaveOutcome = 'saved' | WriteFailReason | 'readonly' | 'rejected';
 
-async function run(f: () => ReturnType<typeof write.insert>): Promise<SaveOutcome> {
+/** 写一次（任意一笔 write.*，可带 deps 等选项），结果变成一个码；“写入结果 → 码”只在这里做 */
+export async function saveOutcome(f: () => Promise<WriteResult>): Promise<SaveOutcome> {
   try {
     const r = await f();
     return r.ok ? 'saved' : r.reason;
@@ -21,12 +22,12 @@ async function run(f: () => ReturnType<typeof write.insert>): Promise<SaveOutcom
 
 /** 新建一行（整行可写列） */
 export function saveInsert(table: string, row: Record<string, unknown> & { id: string }, remind: boolean): Promise<SaveOutcome> {
-  return run(() => write.insert(table, row, { remind }));
+  return saveOutcome(() => write.insert(table, row, { remind }));
 }
 
 /** 改一行（只放变了的列） */
 export function savePatch(table: string, id: string, data: Record<string, unknown>, remind: boolean): Promise<SaveOutcome> {
-  return run(() => write.patch(table, id, data, { remind }));
+  return saveOutcome(() => write.patch(table, id, data, { remind }));
 }
 
 /**
@@ -34,5 +35,5 @@ export function savePatch(table: string, id: string, data: Record<string, unknow
  * remind：这一行删之前或恢复以后会不会响（代码审查补审改法 ④：删了要尽快上服务器撤掉提醒，恢复要尽快重算）
  */
 export function saveDeleted(table: string, id: string, deleted: boolean, now: number, remind = false): Promise<SaveOutcome> {
-  return run(() => write.patch(table, id, { deleted_at: deleted ? now : null, updated_at: now }, { remind }));
+  return saveOutcome(() => write.patch(table, id, { deleted_at: deleted ? now : null, updated_at: now }, { remind }));
 }

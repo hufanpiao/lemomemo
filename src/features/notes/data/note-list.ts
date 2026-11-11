@@ -4,13 +4,14 @@
 // • 分组（列表方式）：今天 / 昨天 / 日期（按 current_tz 算哪一天）
 // • 没有标题时取正文前两行当标题（线框 s7 注）：第一行当标题，第二行起当摘要
 // • “AI”小标：AI 分过类、用户还没看过（category_source = 'ai' 且 category_seen = false）
-// • 分类胶囊：全部 + 有条目的分类和条数（按条数多的在前，一样的按分类的 sort、名字）
+// • 分类胶囊：全部 + 有条目的分类和条数（按条数多的在前，一样的按分类的 sort、名字）；条目的分类顺着 merged_into 归到留下的那个
 // • 分类色点（视觉稿第 1322、1341 行，6px）：颜色取 categories.color（架构：小写 #rrggbb，或皮肤令牌名）；
 //   令牌名只认皮肤里有的项目色 p1～p6（画深色那一档 --pNs），别的认不出、没设颜色的不画点
 // • 插图（S3，视觉稿 PH.mason）：卡片顶部放第一张（按 id 排，id 是 UUID v7、按插入先后），右上角“+N”是另外还有几张
 // 纯 TS：不准 import React（A1）
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
+import { noteHeadline } from '../../../../shared/logic/notes/note-headline.ts';
 
 export type Row = { readonly id: string } & Readonly<Record<string, unknown>>;
 
@@ -61,13 +62,13 @@ const alive = (r: Row): boolean => r['deleted_at'] == null && r['undone'] !== tr
 
 /** 标题和摘要：有标题就用标题、摘要是正文；没有标题取正文第一行当标题，后面的（第二行起）当摘要 */
 export function titleAndSummary(title: unknown, body: unknown): { title: string; summary: string } {
-  const t = str(title).trim();
-  const lines = str(body)
+  const h = noteHeadline(title, body);
+  const summary = h.rest
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l !== '');
-  if (t !== '') return { title: t, summary: lines.join(' ') };
-  return { title: lines[0] ?? '', summary: lines.slice(1).join(' ') };
+    .filter((l) => l !== '')
+    .join(' ');
+  return { title: h.title, summary };
 }
 
 /** 显示“AI”小标：AI 分过的、还没看过 */
@@ -95,6 +96,20 @@ export function categoryNames(categories: readonly Row[]): Map<string, string> {
   return out;
 }
 
+/** 条目的 category_id → 归到哪个活着的分类：顺着 merged_into 走（合并过的归到留下的那个），走不到活着的为 null */
+export function categoryResolver(categories: readonly Row[]): (id: unknown) => string | null {
+  const names = categoryNames(categories);
+  const into = new Map(categories.map((c) => [c.id, c['deleted_at'] == null && c['undone'] !== true ? c['merged_into'] : null]));
+  return (id) => {
+    let cur = id;
+    for (let hops = 0; typeof cur === 'string' && hops <= categories.length; hops++) {
+      if (names.has(cur)) return cur;
+      cur = into.get(cur);
+    }
+    return null;
+  };
+}
+
 /** 活着的插图，按随手记分好、每条里按 id（插入先后）排 */
 export function imagesByNote(images: readonly Row[]): Map<string, NoteImage[]> {
   const out = new Map<string, NoteImage[]>();
@@ -114,12 +129,13 @@ export function imagesByNote(images: readonly Row[]): Map<string, NoteImage[]> {
 /** 列表要的条目（已筛掉删了的、隐私记），最近记的在前；category 不为 null 时只留这个分类的 */
 export function noteItems(rows: readonly Row[], categories: readonly Row[], tz: Tz, category: string | null = null, images: readonly Row[] = []): NoteItem[] {
   const names = categoryNames(categories);
+  const target = categoryResolver(categories);
   const pics = imagesByNote(images);
   const colors = categoryColors(categories);
   const out: NoteItem[] = [];
   for (const r of rows) {
     if (!alive(r)) continue;
-    const cid = typeof r['category_id'] === 'string' && names.has(r['category_id']) ? r['category_id'] : null;
+    const cid = target(r['category_id']);
     if (category !== null && cid !== category) continue;
     const createdAt = num(r['created_at']);
     out.push({
@@ -161,12 +177,13 @@ export function groupByDay(items: readonly NoteItem[], now: number, tz: Tz): Not
 /** 分类胶囊：有条目的分类和条数（隐私记、删了的不算） */
 export function categoryCounts(rows: readonly Row[], categories: readonly Row[], locale: string): CategoryCount[] {
   const names = categoryNames(categories);
+  const target = categoryResolver(categories);
   const colors = categoryColors(categories);
   const sortOf = new Map(categories.map((c) => [c.id, num(c['sort'])]));
   const n = new Map<string, number>();
   for (const r of rows) {
-    const cid = r['category_id'];
-    if (alive(r) && typeof cid === 'string' && names.has(cid)) n.set(cid, (n.get(cid) ?? 0) + 1);
+    const cid = alive(r) ? target(r['category_id']) : null;
+    if (cid !== null) n.set(cid, (n.get(cid) ?? 0) + 1);
   }
   return [...n]
     .map(([id, count]) => ({ id, name: names.get(id) ?? '', color: colors.get(id) ?? null, count }))

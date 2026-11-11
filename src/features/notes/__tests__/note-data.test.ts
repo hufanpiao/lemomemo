@@ -33,10 +33,11 @@ describe('列表条目', () => {
     note('n7', { body: '分类已合并', category_id: 'c3', created_at: at('2026-11-10', 8 * 60) }),
   ];
 
-  it('删了的、撤销的、隐私记不出；最近记的在前；分类已合并、不存在的当没分类', () => {
+  it('删了的、撤销的、隐私记不出；最近记的在前；分类已合并的归到合并进去的那个（S7）', () => {
     const items = noteItems(rows, cats, TZ);
     expect(items.map((i) => i.id)).toEqual(['n1', 'n7', 'n2', 'n3']);
-    expect(items.find((i) => i.id === 'n7')?.categoryId).toBeNull();
+    expect(items.find((i) => i.id === 'n7')?.categoryId).toBe('c1');
+    expect(noteItems([note('nx', { body: 'x', category_id: 'gone' })], cats, TZ)[0]?.categoryId).toBeNull();
     expect(aliveCount(rows)).toBe(4);
   });
 
@@ -61,10 +62,10 @@ describe('列表条目', () => {
   });
 
   it('分类胶囊：只算活着的普通随手记，条数多的在前', () => {
-    const more = [...rows, note('n8', { body: 'x', category_id: 'c2' }), note('n9', { body: 'y', category_id: 'c2', deleted_at: 1 })];
+    const more = [...rows, note('n8', { body: 'x', category_id: 'c2' }), note('n10', { body: 'z', category_id: 'c2' }), note('n9', { body: 'y', category_id: 'c2', deleted_at: 1 })];
     expect(categoryCounts(more, cats, 'zh-CN')).toEqual([
-      { id: 'c2', name: '韩国生活', color: null, count: 2 },
-      { id: 'c1', name: '工作灵感', color: null, count: 1 },
+      { id: 'c2', name: '韩国生活', color: null, count: 3 },
+      { id: 'c1', name: '工作灵感', color: null, count: 2 },
     ]);
   });
 });
