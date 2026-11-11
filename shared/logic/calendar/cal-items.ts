@@ -157,13 +157,33 @@ export function todoEntry(td: CalTodo): DayEntry {
  * 月历、单日列表、周视图共用这一条，规则只在这里改。
  */
 export function todoDate(td: CalTodo): string | null {
-  if (!isLiveRow(td) || td.done || td.due === null) return null;
+  if (!isOpenTodo(td) || td.due === null) return null;
   return td.due;
 }
 
+/** 待办还开着：没删、没撤销、没完成。月历、周视图（经 todoDate）和“＋”找候选共用 */
+export function isOpenTodo(td: Tombstone & Readonly<Pick<TodoWrite, 'done'>>): boolean {
+  return isLiveRow(td) && !td.done;
+}
+
 /** ev.date 在不在 [from − spill, to + spill] 里（'YYYY-MM-DD' 按字符串比就是按日期比） */
-export function nearRange(date: string, from: DateStr, to: DateStr, spillBefore: number, spillAfter: number): boolean {
+function nearRange(date: string, from: DateStr, to: DateStr, spillBefore: number, spillAfter: number): boolean {
   return date >= addDays(from, -spillBefore) && date <= addDays(to, spillAfter);
+}
+
+/**
+ * 没删、没撤销、可能落在 from～to 的日程，连同换算到设备时区后的位置。月历、周视图、“＋”找候选共用这一条，落日规则只在这里改。
+ * 只按 ev.date 预筛（前面放宽 TZ_SPILL_DAYS + extraBefore 天，后面 TZ_SPILL_DAYS 天），不按换算后的日子复核：
+ * 月历按日子放进格子、周视图要按午夜切段、找候选按 from～to 复核，各自处理。
+ */
+export function liveEventsNear<E extends CalEvent>(events: readonly E[], from: DateStr, to: DateStr, tz: Tz, extraBefore = 0): [E, EventPlacement][] {
+  const out: [E, EventPlacement][] = [];
+  for (const ev of events) {
+    if (!isLiveRow(ev) || !nearRange(ev.date, from, to, TZ_SPILL_DAYS + extraBefore, TZ_SPILL_DAYS)) continue;
+    const p = placeEvent(ev, tz);
+    if (p) out.push([ev, p]);
+  }
+  return out;
 }
 
 /**
@@ -174,11 +194,7 @@ export function nearRange(date: string, from: DateStr, to: DateStr, spillBefore:
 export function collectEntries(items: CalItems, from: DateStr, to: DateStr, tz: Tz): Map<DateStr, DayEntry[]> {
   const out = new Map<DateStr, DayEntry[]>();
   for (let d = from; d <= to; d = addDays(d, 1)) out.set(d, []);
-  for (const ev of items.events) {
-    if (!isLiveRow(ev) || !nearRange(ev.date, from, to, TZ_SPILL_DAYS, TZ_SPILL_DAYS)) continue;
-    const p = placeEvent(ev, tz);
-    if (p) out.get(p.date)?.push(eventEntry(ev, p));
-  }
+  for (const [ev, p] of liveEventsNear(items.events, from, to, tz)) out.get(p.date)?.push(eventEntry(ev, p));
   for (const td of items.todos) {
     const d = todoDate(td);
     if (d !== null) out.get(d)?.push(todoEntry(td));

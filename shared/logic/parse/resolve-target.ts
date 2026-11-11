@@ -23,12 +23,16 @@ export interface ResolvedTarget {
   bulkRefused: boolean;
 }
 
+/** 有范围：说了日子或“今天没完成的”。改期批量必须有范围；match-target 收到没过 resolveTarget 的 all 也按这一条退回单条 */
+export function isScoped(t: Pick<PlusTarget, 'date' | 'with_overdue'>): boolean {
+  return t.with_overdue === true || t.date !== null;
+}
+
 export function resolveTarget(intent: TargetIntent, input: PlusTarget): ResolvedTarget {
   const { all, ...rest } = input;
   const target: PlusTarget = { ...rest, kinds: [...input.kinds] };
   const generic = isGenericText(input.text);
   if (intent !== 'reschedule') return { target, bulkRefused: all === true && generic };
-  const scoped = input.with_overdue === true || input.date !== null;
-  if (scoped && (all === true || (generic && input.time === null))) target.all = true;
+  if (isScoped(input) && (all === true || (generic && input.time === null))) target.all = true;
   return { target, bulkRefused: false };
 }

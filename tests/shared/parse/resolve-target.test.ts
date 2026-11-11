@@ -9,7 +9,7 @@ const tg = (o: Partial<PlusTarget>): PlusTarget => ({ text: '', date: null, time
 
 describe('isGenericText', () => {
   it('整段是泛指词（去掉“的 / 这些 / 那些 / 들”和韩文助词）才算', () => {
-    for (const s of ['任务', '这些任务', '事情', '的事', '할 일', '업무들', '거', '', '  ', '업무를', '일을', '할 일을', '것을', '거를', '业务', '待办事项']) {
+    for (const s of ['任务', '这些任务', '事情', '的事', '할 일', '업무들', '거', '', '  ', '업무를', '일을', '할 일을', '것을', '거를', '业务', '待办事项', '일에서도', '업무들을']) {
       expect(isGenericText(s), s).toBe(true);
     }
   });

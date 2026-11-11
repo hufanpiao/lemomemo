@@ -1,17 +1,19 @@
 // TC-B4b3-08：测试集 ③（tests/ai/set3）的数据自检，和本机规则 localIntent + matchTarget 跑全集的统计（不设通过线，统计钉在这里、进报告）。
-// 另跑测试集 ① 的全部记下句：本机判成别的意图又有把握的必须是 0 句（D-15 不丢记录）。公共字段和 id 查重用 tests/ai/run-core.ts 的 parseSet。
+// 另跑测试集 ① 的全部记下句：本机判成别的意图又有把握的必须是 0 句（D-15 不丢记录）。公共字段和 id 查重用 tests/ai/run-core.ts 的 parseSet、parseSetRaw（只解析一遍），公共键用 score-core.ts 的 BASE_ROW_KEYS。
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { localIntent, PLUS_INTENTS, type LocalIntent } from '../../../shared/logic/parse/intent.ts';
 import { confidence, parseSplit } from '../../../shared/logic/parse/index.ts';
 import { matchTarget, type TargetEvent, type TargetItems, type TargetTodo } from '../../../shared/logic/parse/match-target.ts';
-import { parseSet, PROJECTS, type EvalRow } from '../../ai/run-core.ts';
+import { specificWords } from '../../../shared/logic/parse/generic-words.ts';
+import { parseSet, parseSetRaw, PROJECTS, type EvalRow } from '../../ai/run-core.ts';
+import { BASE_ROW_KEYS } from '../../ai/score-core.ts';
 
 const BANK_NOW = Date.UTC(2026, 10, 2, 1, 0);
 const SET3 = ['owner', 'zh', 'ko', 'mix'] as const;
 const read = (set: string, name: string) => readFileSync(new URL(`../../ai/${set}/${name}`, import.meta.url), 'utf8');
 
-const ROW_KEYS = new Set(['id', 'set_version', 'group', 'source', 'scored', 'text', 'now', 'tz', 'locale', 'note', 'expect', 'accept', 'fixture', 'hit', 'never', 'owner_confirmed']);
+const ROW_KEYS = new Set([...BASE_ROW_KEYS, 'fixture', 'hit', 'never']);
 const ACCEPT_PATHS = new Set(['target.kinds', 'target.date', 'target.time', 'target.with_overdue', 'target.all', 'to.date', 'to.time', 'query.range.from', 'query.range.to', 'query.kinds', 'query.done']);
 interface Expect {
   intent: (typeof PLUS_INTENTS)[number];
@@ -36,11 +38,7 @@ interface FixtureGroup {
 const seen = new Set<string>();
 for (const f of SET3) parseSet(`set1/${f}.jsonl`, read('set1', `${f}.jsonl`), seen);
 const SET1 = [...seen];
-const rows: Set3Row[] = SET3.flatMap((f) => {
-  const common = parseSet(`set3/${f}.jsonl`, read('set3', `${f}.jsonl`), seen);
-  const extra = read('set3', `${f}.jsonl`).split(/\r?\n/).filter((l) => l.trim() !== '').map((l) => JSON.parse(l) as Record<string, unknown>);
-  return common.map((c, i) => ({ ...(extra[i] as object), ...c }) as Set3Row);
-});
+const rows: Set3Row[] = SET3.flatMap((f) => parseSetRaw(`set3/${f}.jsonl`, read('set3', `${f}.jsonl`), seen).map(({ row, raw }) => ({ ...raw, ...row }) as Set3Row));
 const fixtures = (JSON.parse(read('set3', 'fixtures.json')) as { groups: Record<string, FixtureGroup> }).groups;
 const groupOf = (name: string): FixtureGroup => {
   const g = Object.entries(fixtures).find(([k]) => k === name)?.[1];
@@ -188,6 +186,11 @@ describe('TC-B4b3-08：本机规则跑测试集 ③（单独统计，不设通�
   const table = Object.fromEntries(rows.map((r) => [r.id, misses(r)] as const).filter(([, m]) => m.length > 0));
   it('“句子 → 没对上的字段”和钉住的表完全相等', () => {
     expect(table).toEqual(PINNED);
+  });
+  it('截止到今天的查找 D-*：“今天没完成的”整段取走，query.text 只剩泛指词或空（不留“还 / 所有 / 아직”这类字）', () => {
+    const ds = rows.filter((r) => r.id.startsWith('D-'));
+    expect(ds).toHaveLength(12);
+    for (const r of ds) expect(specificWords(localIntent(r.text, r.now, r.tz).query?.text ?? '?'), r.id).toBe('');
   });
   it('易混记下句 X-Z01～03、X-K01～02、X-M01～02：本机都判记下', () => {
     const xs = rows.filter((r) => r.id.startsWith('X-'));

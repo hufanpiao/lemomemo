@@ -31,7 +31,12 @@ const str = (v: unknown): v is string => typeof v === 'string' && v !== '';
 
 /** 读一个 jsonl 文件；seen 跨文件查 id 重复 */
 export function parseSet(file: string, content: string, seen: Set<string> = new Set()): EvalRow[] {
-  const out: EvalRow[] = [];
+  return parseSetRaw(file, content, seen).map((x) => x.row);
+}
+
+/** 同 parseSet，另带每行解析出来的原始对象（测试集 ③ 要读公共字段以外的键，只解析一遍） */
+export function parseSetRaw(file: string, content: string, seen: Set<string> = new Set()): { row: EvalRow; raw: Record<string, unknown> }[] {
+  const out: { row: EvalRow; raw: Record<string, unknown> }[] = [];
   content.split(/\r?\n/).forEach((line, i) => {
     if (line.trim() === '') return;
     const at = `${file}:${i + 1}`;
@@ -49,10 +54,11 @@ export function parseSet(file: string, content: string, seen: Set<string> = new 
     const id = o['id'] as string;
     if (seen.has(id)) throw new Error(`${at} id 重复：${id}`);
     seen.add(id);
-    out.push({
+    const row: EvalRow = {
       id, set_version: o['set_version'] as string, group: o['group'] as string, scored: o['scored'] as EvalRow['scored'],
       text: o['text'] as string, now: o['now'] as number, tz: o['tz'] as string, locale: o['locale'] as EvalRow['locale'],
-    });
+    };
+    out.push({ row, raw: o });
   });
   return out;
 }

@@ -5,10 +5,10 @@
 import { addDays, diffDays, fmtHm, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import type { EventWrite, TodoWrite } from '../../schema/rows.ts';
-import { assertTz, isLiveRow, nearRange, placeEvent, TZ_SPILL_DAYS, type CalEvent, type CalTodo } from '../calendar/cal-items.ts';
+import { assertTz, isOpenTodo, liveEventsNear, type CalEvent, type CalTodo } from '../calendar/cal-items.ts';
 import { matchScore, type Field } from '../search.ts';
 import { specificWords } from './generic-words.ts';
-import type { PlusTarget, TargetKind } from './resolve-target.ts';
+import { isScoped, type PlusTarget, type TargetKind } from './resolve-target.ts';
 
 export type TargetEvent = CalEvent & Readonly<Pick<EventWrite, 'location'>>;
 export type TargetTodo = CalTodo & Readonly<Pick<TodoWrite, 'due_time'>>;
@@ -40,21 +40,15 @@ interface Row extends TargetHit {
 
 /** 没删、没撤销的日程里，换算后落在 from～to 的 */
 function placedEvents(events: readonly TargetEvent[], from: DateStr, to: DateStr, tz: Tz): Row[] {
-  const out: Row[] = [];
-  for (const ev of events) {
-    if (!isLiveRow(ev) || !nearRange(ev.date, from, to, TZ_SPILL_DAYS, TZ_SPILL_DAYS)) continue;
-    const p = placeEvent(ev, tz);
-    if (!p || p.date < from || p.date > to) continue;
-    const time = p.allDay ? null : fmtHm(p.startMin);
-    out.push({ kind: 'event', id: ev.id, date: p.date, time, fields: [ev.title, ev.location] });
-  }
-  return out;
+  return liveEventsNear(events, from, to, tz)
+    .filter(([, p]) => p.date >= from && p.date <= to)
+    .map(([ev, p]) => ({ kind: 'event' as const, id: ev.id, date: p.date, time: p.allDay ? null : fmtHm(p.startMin), fields: [ev.title, ev.location] }));
 }
 
 /** 没删、没撤销、没完成，且截止日过了 keep 的待办 */
 function openTodos(todos: readonly TargetTodo[], keep: (due: DateStr | null) => boolean): Row[] {
   return todos
-    .filter((td) => isLiveRow(td) && !td.done && keep(td.due))
+    .filter((td) => isOpenTodo(td) && keep(td.due))
     .map((td) => ({ kind: 'todo' as const, id: td.id, date: td.due, time: td.due_time, fields: [td.title] }));
 }
 
@@ -95,6 +89,5 @@ function batch(t: PlusTarget, items: TargetItems, today: DateStr, tz: Tz): Targe
 export function matchTarget(target: PlusTarget, items: TargetItems, now: number, tz: Tz): TargetMatch {
   assertTz(tz);
   const today = todayOf(now, tz);
-  const scoped = target.with_overdue === true || target.date !== null;
-  return target.all === true && scoped ? batch(target, items, today, tz) : single(target, items, today, tz);
+  return target.all === true && isScoped(target) ? batch(target, items, today, tz) : single(target, items, today, tz);
 }

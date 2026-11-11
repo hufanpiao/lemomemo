@@ -75,6 +75,11 @@ export function addDays(s: DateStr, n: number): DateStr {
   return fmtDateStr(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
 }
 
+/** y 年 m 月有几天；月末日期就是 fmtDateStr(y, m, daysIn(y, m))，全仓“这个月有几天 / 月末是哪天”只用这一个 */
+export function daysIn(y: number, m: number): number {
+  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
 /** 星期几：0 = 周日 … 6 = 周六 */
 export function weekdayOf(s: DateStr): number {
   const { y, m, d } = parseDate(s);

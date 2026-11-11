@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays,
+  daysIn,
   diffDays,
   fmtHm,
   hourOf,
@@ -119,6 +120,9 @@ describe('纯日期运算', () => {
     expect(parseHm('23:59')).toBe(1439);
     expect(() => parseHm('24:00')).toThrow('bad_time');
     expect(() => parseHm('9:00')).toThrow('bad_time');
+  });
+  it('daysIn：大小月、闰年和平年的 2 月、12 月', () => {
+    expect([daysIn(2026, 11), daysIn(2026, 12), daysIn(2028, 2), daysIn(2026, 2), daysIn(2000, 2), daysIn(2100, 2)]).toEqual([30, 31, 29, 28, 29, 28]);
   });
   it('fmtHm：当天第几分钟 → HH:MM，和 parseHm 互逆', () => {
     expect(fmtHm(0)).toBe('00:00');

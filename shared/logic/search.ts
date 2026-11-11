@@ -37,12 +37,15 @@ export function queryTerms(q: string): string[] {
 /** 最多连续去掉几层助词 */
 export const MAX_PARTICLE_LAYERS = 2;
 
-/** 一个词的几种写法：原词；韩文结尾的再依次加上去掉末尾助词的（最多两层，每层去完至少剩 2 个字） */
-export function termVariants(term: string): string[] {
+/** 去掉助词后默认至少剩几个字 */
+const KEEP_MIN = 2;
+
+/** 一个词的几种写法：原词；韩文结尾的再依次加上去掉末尾助词的（最多两层，每层去完至少剩 keepMin 个字；泛指词表有单字词，传 1） */
+export function termVariants(term: string, keepMin = KEEP_MIN): string[] {
   const v = [term];
   let cur = term;
   for (let layer = 0; layer < MAX_PARTICLE_LAYERS && HANGUL_END.test(cur); layer++) {
-    const p = KO_TRAILING_PARTICLES.find((x) => cur.endsWith(x) && [...cur].length - [...x].length >= 2);
+    const p = KO_TRAILING_PARTICLES.find((x) => cur.endsWith(x) && [...cur].length - [...x].length >= keepMin);
     if (p === undefined) break;
     cur = cur.slice(0, cur.length - p.length);
     v.push(cur);

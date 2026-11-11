@@ -46,6 +46,7 @@ const NAMED = namedRules();
 /** 原话说到的类型词（不看是不是请求动词的宾语；“日程表 / 일정표”不算）：“＋”的查找、取消、改期定 kinds 用 */
 const TODO_WORD = new RegExp(`${ZH_TODO}|${KO_TODO}`, 'g');
 const EVENT_WORD = new RegExp(`${ZH_EVENT}(?!表)|${KO_EVENT}`, 'g');
+const NOTE_WORD = /随手记|메모/g;
 
 /** 取走一类词，返回原话里有没有 */
 function takeAll(st: Rest, re: RegExp): boolean {
@@ -55,10 +56,11 @@ function takeAll(st: Rest, re: RegExp): boolean {
   return hit;
 }
 
-/** 认出并取走原话里的类型词，返回说到了哪几种 */
-export function takeKindWords(st: Rest): { todo: boolean; event: boolean } {
+/** 认出并取走原话里的类型词（待办、日程、随手记），返回说到了哪几种；类型词只在这里认 */
+export function takeKindWords(st: Rest): { todo: boolean; event: boolean; note: boolean } {
   const todo = takeAll(st, TODO_WORD);
-  return { todo, event: takeAll(st, EVENT_WORD) };
+  const event = takeAll(st, EVENT_WORD);
+  return { todo, event, note: takeAll(st, NOTE_WORD) };
 }
 
 /** 认出点名并取走（点名词、请求动词、“一个 / 하나”一起）；没点名返回 null */

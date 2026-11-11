@@ -1,9 +1,8 @@
 // i18n-exempt: 解析词表
 // “＋”取消、改期、完成里说的泛指词（任务、할 일……）：词表只在这里定义，resolve-target、match-target 共用（架构 5.14 第 7 点）。
 // 不变量：只有 specificWords 一个判定口径，isGenericText 就是“取完关键词什么都不剩”；词先按 search.ts 归一，
-// 再去掉“的 / 这些 / 那些”、一层韩文助词（search-data.ts 的词表）和末尾的“들”；带空格的泛指词（할 일）连着两段一起认。
-import { KO_TRAILING_PARTICLES } from '../search-data.ts';
-import { normalizeForSearch, queryTerms } from '../search.ts';
+// 再去掉“的 / 这些 / 那些”、韩文助词（search.ts 的 termVariants，去完至少剩 1 个字）和末尾的“들”；带空格的泛指词（할 일）连着两段一起认。
+import { normalizeForSearch, queryTerms, termVariants } from '../search.ts';
 
 export const GENERIC_WORDS: readonly string[] = Object.freeze([
   '任务', '待办', '待办事项', '事情', '事', '业务', '工作', '活', '할 일', '일', '업무', '작업', '것', '거',
@@ -22,10 +21,7 @@ const TAIL_KEEP_MIN = 2;
 function isGenericWord(word: string): boolean {
   const cur = word.replace(ZH_FILLER, '');
   if (cur === '') return true;
-  const forms = [cur];
-  const p = KO_TRAILING_PARTICLES.find((x) => cur.endsWith(x) && cur.length > x.length);
-  if (p !== undefined) forms.push(cur.slice(0, cur.length - p.length));
-  return forms.some((f) => GENERIC.has(f) || (f.endsWith('들') && GENERIC.has(f.slice(0, -1))));
+  return termVariants(cur, 1).some((f) => GENERIC.has(f) || (f.endsWith('들') && GENERIC.has(f.slice(0, -1))));
 }
 
 /** 取关键词：泛指词（含连着几段组成的“할 일”）丢掉，中文粘着的泛指词尾巴去掉；结果用空格连起来给 matchScore */

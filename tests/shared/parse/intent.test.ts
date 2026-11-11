@@ -252,3 +252,43 @@ describe('隐私记页面和超长输入', () => {
     expect(li('买'.repeat(600)).sure).toBe(false);
   });
 });
+
+describe('“今天 X 没完成的”：查找和取消、改期、完成共用 takeOverdue，中间的 X 留下当关键词', () => {
+  it('查找：query.text 是中间的关键词，range 截止到今天、kinds [todo]、done open', () => {
+    for (const s of ['查一下今天采购没完成的', '今天采购没完成的有哪些？']) {
+      like(li(s), { intent: 'search', sure: false, query: { text: '采购', range: { from: null, to: T }, kinds: ['todo'], done: 'open' } }, s);
+    }
+  });
+  it('同一句说成完成：target.text 也是“采购”', () => {
+    like(li('把今天采购没完成的标记为已完成'), { intent: 'complete', target: { text: '采购', date: T, with_overdue: true, kinds: ['todo'] } });
+  });
+  it('中间只有“还 / 所有 / 아직 / 중에서”这类字：query.text 为空，不拿它们当关键词', () => {
+    for (const s of ['今天还有哪些没做完的', '查一下今天所有没完成的', '오늘 아직 못 한 할 일 보여 줘', '오늘 할 일 중에서 아직 완료하지 않은 거 보여 줘']) {
+      const q = li(s).query;
+      expect([q?.range?.from, q?.done], s).toEqual([null, 'open']);
+      expect(['', '거'], s).toContain(q?.text);
+    }
+  });
+});
+
+describe('韩文“안 가”：带词尾的说法认成取消（取消一律没把握），“가”开头的别的词不算', () => {
+  it('안 가 / 안 가요 / 안 가기로 했어 / 안 가게 됐어 / 안 가겠어 / 안 가려고 해 → cancel、没把握、target 是“회의”', () => {
+    for (const s of ['내일 회의 안 가', '내일 회의 안 가요', '내일 회의 안 가기로 했어', '내일 회의 안 가게 됐어', '내일 회의 안 가겠어', '내일 회의 안 가려고 해']) {
+      like(li(s), { intent: 'cancel', sure: false, target: { text: '회의', date: TM, time: null } }, s);
+    }
+  });
+  it('안 가져 / 안 가져가 / 안 가방 / 안 가르쳐：不是取消', () => {
+    for (const s of ['우산 안 가져', '내일 우산 안 가져가', '안 가방', '수학 안 가르쳐 줘']) expect(li(s).intent, s).not.toBe('cancel');
+  });
+});
+
+describe('查找、总结的说法表：命中、祈使位置、去掉句式从同一张表生成', () => {
+  it('句首客气话“请 / 帮我”后面跟任何一个句首说法都算祈使', () => {
+    for (const s of ['帮我搜一下发票', '请查一下快递单号', '请帮我总结一下这周的会']) expect(li(s).sure, s).toBe(true);
+  });
+  it('“看一下”单说只去掉、不算命中；配“有什么”才算查找', () => {
+    like(li('下周三 회의 겹치는지 看一下'), { intent: 'search', query: { text: '회의', kinds: ['event'] } });
+    like(li('看一下明天有什么'), { intent: 'search', sure: true, query: { text: '' } });
+    expect(li('看一下报告').intent).toBe('record');
+  });
+});

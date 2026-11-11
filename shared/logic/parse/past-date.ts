@@ -9,7 +9,7 @@
 //         29～31 号遇上没有这一天的月份：取月末，不管过没过去都问，next 取下一个有这一天的月份；
 //   • 最后查“今天前 1 年到后 5 年”（inAiRange），越界算 out_of_range（由调用方判断）。
 // “今天”一律按请求传入的 now 和 tz 算（todayOf），不按服务器当天。纯函数，前端和 Edge Functions 共用（复制到 _shared/gen/）。
-import { fmtDateStr, parseDate, todayOf, type DateStr } from '../../core/date.ts';
+import { daysIn, fmtDateStr, parseDate, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 
 /** 日期是怎么说出来的：说了年份 / 只说月日 / 只说几号 / 相对说法（明天、下周三、月底、没说日子按今天记、重复说法的最近一次） */
@@ -27,12 +27,12 @@ export type BasisResult = { ok: true; date: DateStr; confirm: Confirm | null } |
 /** 只查格式：YYYY-MM-DD，月 01～12，日 01～31（不查这一天存不存在，0.29 续第 68 条 ①） */
 export const DATE_FMT_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
-/** 各月在闰年里的天数：月日“在任何一年都有没有”按这个判断 */
-const MAX_DAY = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+/** 拿一个闰年量各月天数：月日“在任何一年里有没有”按闰年算（2 月 29 日算有） */
+const LEAP_YEAR = 2000;
 
-/** y 年 m 月有几天 */
-export function daysIn(y: number, m: number): number {
-  return new Date(Date.UTC(y, m, 0)).getUTCDate();
+/** m 月 d 日在任何一年里有没有（11-31、02-30、04-31 没有）；date-words 判 bad 也用这一个 */
+export function inSomeYear(m: number, d: number): boolean {
+  return d <= daysIn(LEAP_YEAR, m);
 }
 
 /** 这一天在那年那月存不存在（格式已经过 DATE_FMT_RE） */
@@ -83,7 +83,7 @@ export function resolveBasis(raw: DateStr, basis: DateBasis, today: DateStr): Ba
     case 'rel':
       return dateExists(raw) ? { ok: true, date: raw, confirm: null } : { ok: false, reason: 'bad_date' };
     case 'md': {
-      if (r.d > (MAX_DAY.at(r.m - 1) ?? 31)) return { ok: false, reason: 'bad_date' };   // 11-31、02-30、04-31：任何一年都没有
+      if (!inSomeYear(r.m, r.d)) return { ok: false, reason: 'bad_date' };   // 11-31、02-30、04-31：任何一年都没有
       if (r.d > daysIn(t.y, r.m)) {
         // 02-29 遇上平年：记 2 月最后一天，一律问
         const past = fmtDateStr(t.y, r.m, daysIn(t.y, r.m));

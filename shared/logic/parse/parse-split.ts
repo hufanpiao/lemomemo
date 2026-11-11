@@ -16,7 +16,7 @@ import { addDays, fmtHm, minOfDay, todayOf, type DateStr } from '../../core/date
 import type { Tz } from '../../core/tz.ts';
 import type { AiItem } from '../../schema/ai.ts';
 import type { AiKind } from '../../schema/kinds.ts';
-import { takeDateKo, takeDateZh, type DateHit } from './date-words.ts';
+import { takeDate, type DateHit } from './date-words.ts';
 import { arrangeHint, cleanTitle, findProject, stripRequests, takeImportant, takeNamedKind, type NamedKind } from './marks.ts';
 import { ITEM_TITLE_MAX } from '../../schema/rows.ts';
 import { cutGraphemes } from '../short.ts';
@@ -172,7 +172,7 @@ function parseClause(text: string, env: ClauseEnv): Clause {
   const c: Rest = { text: ' ' + text + ' ' };
   const recur = takeRecur(c);
   // 重复说法同一段里的“明天 / 下周一”是开始的日子（代码审建议 1：原来不取，留在标题里、日子记成今天）；每年 M 月 D 日本身带日子，不再取
-  const d: DateHit | null = recur?.md ? null : (takeDateKo(c, env.today) ?? takeDateZh(c, env.today));
+  const d: DateHit | null = recur?.md ? null : takeDate(c, env.today);
   if (recur && d?.ok) c.text = c.text.replace(/从\s*开始|从\s*起|(?<=\s)부터/, ' ');
   if (d && !d.ok) {
     env.hints.bad_day ??= d.bad;

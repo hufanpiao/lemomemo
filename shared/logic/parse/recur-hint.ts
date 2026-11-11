@@ -8,8 +8,7 @@
 //     每月N号 → 本月N号（已过 → 下个月，下个月没有这一天就再往后找）；每年M月D日 → 今年（已过 → 明年）。
 //     重复说法连同里面的具体日子留在标题里（“每个月15号交水费”“每周一开周会”），只有几点几分拿去填 time；date_basis 一律 rel。
 //   4.0.0 不写 repeat 列。纯函数，“今天”和“现在第几分钟”由调用方传。
-import { addDays, fmtDateStr, weekdayOf, type DateStr } from '../../core/date.ts';
-import { daysIn } from './past-date.ts';
+import { addDays, daysIn, fmtDateStr, weekdayOf, type DateStr } from '../../core/date.ts';
 import { pick, type Rest, weekdayZh } from './text.ts';
 
 /** 原话里有没有重复说法（不需要预处理，中韩都认） */

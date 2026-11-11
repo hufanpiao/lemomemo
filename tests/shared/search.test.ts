@@ -50,6 +50,7 @@ describe('查询拆词', () => {
     expect(termVariants('금요일까지도')).toEqual(['금요일까지도', '금요일까지', '금요일']);
     expect(termVariants('에게는')).toEqual(['에게는', '에게']);                  // 再去就不足 2 个字
     expect(termVariants('회의에서도는')).toEqual(['회의에서도는', '회의에서도', '회의에서']);   // 最多两层
+    expect(termVariants('일에서도', 1)).toEqual(['일에서도', '일에서', '일']);   // keepMin 1：泛指词表的单字词用
   });
   it('叠用助词的查询能找到原文（회의에서도 → 회의 자료）', () => {
     expect(matchScore(['회의 자료'], '회의에서도')).toBeGreaterThan(0);

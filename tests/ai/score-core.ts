@@ -66,8 +66,10 @@ export interface SetRow {
   owner_confirmed: boolean;
 }
 
-/** 句库 2.5 写到的键，多一个就停（拼错的键会被悄悄当成“不评”） */
-const ROW_KEYS = new Set(['id', 'set_version', 'group', 'source', 'scored', 'text', 'now', 'tz', 'locale', 'expect', 'accept', 'note', 'expect_invalid_date', 'title_ignore_person', 'owner_confirmed']);
+/** 句库 2.5 各测试集都有的键（测试集 ③ 的自检在这份上加 fixture、hit、never） */
+export const BASE_ROW_KEYS: readonly string[] = Object.freeze(['id', 'set_version', 'group', 'source', 'scored', 'text', 'now', 'tz', 'locale', 'expect', 'accept', 'note', 'owner_confirmed']);
+/** 测试集 ① 的键，多一个就停（拼错的键会被悄悄当成“不评”） */
+const ROW_KEYS = new Set([...BASE_ROW_KEYS, 'expect_invalid_date', 'title_ignore_person']);
 const ITEM_KEYS = new Set(['kind', 'date', 'due', 'time', 'duration_min', 'title_has', 'title_forbid', 'project', 'important', 'confirm', 'date_basis', 'anniv', 'short']);
 const ANNIV_KEYS = new Set(['type', 'calendar', 'month', 'day', 'is_leap', 'year']);
 const unknownKey = (o: Record<string, unknown>, ok: Set<string>) => Object.keys(o).find((k) => !ok.has(k));

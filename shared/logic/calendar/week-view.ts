@@ -11,17 +11,14 @@
 //   手机放进当天的 todos（kind 'todo'，泳道上画空心圆），电脑并进 allDay 那一行（排在全天日程后面）。纯函数。
 import { addDays, minOfDay, msAt, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
-import { isLiveRow } from '../live-row.ts';
 import type { ProjectColor } from '../project-color.ts';
 import {
   assertTz,
   compareEntries,
   eventEntry,
-  nearRange,
-  placeEvent,
+  liveEventsNear,
   todoDate,
   todoEntry,
-  TZ_SPILL_DAYS,
   type CalEvent,
   type CalTodo,
   type DayEntry,
@@ -161,11 +158,8 @@ function bucket(dates: readonly DateStr[], items: WeekItems, tz: Tz): DayBuckets
   const first = dates[0];
   const last = dates[dates.length - 1];
   if (first === undefined || last === undefined) return { allDay, timed, todos };
-  for (const ev of items.events) {
-    // 预筛（代码审查 A）：除了换算时区可能差的天数，前面再多留 1 天——前一天开始、跨午夜进到这一周的那一段也要算
-    if (!isLiveRow(ev) || !nearRange(ev.date, first, last, TZ_SPILL_DAYS + 1, TZ_SPILL_DAYS)) continue;
-    const p = placeEvent(ev, tz);
-    if (!p) continue;
+  // 预筛（代码审查 A）：除了换算时区可能差的天数，前面再多留 1 天——前一天开始、跨午夜进到这一周的那一段也要算
+  for (const [ev, p] of liveEventsNear(items.events, first, last, tz, 1)) {
     const entry = eventEntry(ev, p);
     if (p.allDay) {
       allDay.get(p.date)?.push(entry);
