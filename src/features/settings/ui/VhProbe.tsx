@@ -1,6 +1,6 @@
 // 可见高度真机探测按钮（R-371 第二条路，platform/vh-probe.ts）：只在设置 › 关于的诊断打开时、非正式版里出现（AboutSection 挂）。
 // 一次只跑一种（跑着时按钮都禁用）；结果一行一条累加在下面，负责人截图。按钮字是英文、不进词典（同诊断区，A20 只管汉字）
-// Gap fix（R-371 修复候选，platform/vh-gapfix.ts）：“Gap fix: OFF/ON”开关存本机，开着时每次冷启动都做一次（下次冷启动起生效）；下面显示最近一次冷启动的日志，“Copy gap fix log”整段复制（和时间线开关可以同时开）
+// Gap fix（R-371，platform/vh-gapfix.ts，11-11 起 iOS 主屏幕版默认开）：开关改成“关掉用来对照”——默认 ON，点成 OFF 存本机，下次冷启动起不做（再点回 ON 恢复默认）；下面显示最近一次冷启动的日志，“Copy gap fix log”整段复制（和时间线开关可以同时开）
 // 冷启动时间线（R-371，11-10，platform/vh-timeline.ts）：再多一排——“Timeline next launch: OFF/ON”开关（存本机，下次冷启动记 3 分钟，开始记就自动关）、
 // “Copy timeline”整段复制上一次记下的时间线；下面显示那段时间线（按“Copy timeline”时重新读本机，记着的时候也能拿到最新的）
 import { useState } from 'react';
@@ -15,7 +15,7 @@ export const TL_LABEL_OFF = 'Timeline next launch: OFF';
 export const TL_COPY = 'Copy timeline';
 export const TL_COPIED = 'Copied';
 export const GF_LABEL_ON = 'Gap fix: ON';
-export const GF_LABEL_OFF = 'Gap fix: OFF';
+export const GF_LABEL_OFF = 'Gap fix: OFF (compare)';
 export const GF_COPY = 'Copy gap fix log';
 export const TL_COPY_FAIL = 'Copy failed - long-press the text below';
 

@@ -1,9 +1,10 @@
-// 底栏偏高修复候选 Gap fix（platform/vh-gapfix.ts，R-371 11-10）：开关存本机；只在“主屏幕版、竖屏、少的正好是顶部安全区”时放垫块让文档比视口高，
+// 底栏偏高修复 Gap fix（platform/vh-gapfix.ts，R-371 11-10；11-11 起 iOS 主屏幕版默认开）：诊断页关掉存本机；只在“主屏幕版、竖屏、少的正好是顶部安全区”时放垫块让文档比视口高，
 // innerHeight 变了或到点就撤；600ms 没变补一次滚 1px 再滚回；正常启动、网页版、横屏一律不动；每一步记日志
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GIVE_UP_MS, gapFixOn, ON_KEY, OUT_KEY, PAD_ID, readGapFixLog, SCROLL_AT_MS, setGapFixOn, skipReason, startGapFix, TOL_PX, TOP_RETRY_FRAMES, TOP_RETRY_MS, WAIT_BAR_MS } from '../vh-gapfix.ts';
+import { GIVE_UP_MS, gapFixOn, OUT_KEY, PAD_ID, readGapFixLog, SCROLL_AT_MS, setGapFixOn, skipReason, startGapFix, TOL_PX, TOP_RETRY_FRAMES, TOP_RETRY_MS, WAIT_BAR_MS } from '../vh-gapfix.ts';
+import { OFF_KEY } from '../vh-gapfix-gate.ts';
 
 /** 手动推进的“帧” */
 function frames() {
@@ -59,14 +60,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('开关', () => {
-  it('开、关存在本机；本机存储抛错时当没开、不抛', () => {
-    expect(gapFixOn()).toBe(false);
-    setGapFixOn(true);
-    expect(localStorage.getItem(ON_KEY)).toBe('1');
+describe('开关（11-11 起默认开，诊断页关掉用来对照）', () => {
+  it('默认开；关掉存 OFF_KEY，再开回删掉；本机存储抛错时当开着、不抛', () => {
     expect(gapFixOn()).toBe(true);
     setGapFixOn(false);
-    expect(localStorage.getItem(ON_KEY)).toBeNull();
+    expect(localStorage.getItem(OFF_KEY)).toBe('1');
+    expect(gapFixOn()).toBe(false);
+    setGapFixOn(true);
+    expect(localStorage.getItem(OFF_KEY)).toBeNull();
+    expect(gapFixOn()).toBe(true);
     const bad = {
       getItem: () => {
         throw new Error('x');
@@ -78,17 +80,17 @@ describe('开关', () => {
         throw new Error('x');
       },
     } as unknown as Storage;
-    expect(gapFixOn(bad)).toBe(false);
-    expect(() => setGapFixOn(true, bad)).not.toThrow();
+    expect(gapFixOn(bad)).toBe(true);
+    expect(() => setGapFixOn(false, bad)).not.toThrow();
     expect(readGapFixLog(bad)).toBe('');
   });
 
-  it('main.tsx 读的键名就是 ON_KEY，并且和时间线一起只在非正式版里读', () => {
+  it('main.tsx 按 gapFixWanted() 直接加载本模块，不在“非正式版”那段里（正式版也做），也不再经 vh-diag-boot', () => {
     const main = readFileSync(resolve(__dirname, '../../app/main.tsx'), 'utf8');
-    expect(main).toContain(`localStorage.getItem('${ON_KEY}')`);
-    const block = main.slice(main.indexOf("import.meta.env.MODE !== 'production'"));
-    expect(block.indexOf(`localStorage.getItem('${ON_KEY}')`)).toBeGreaterThan(0);
-    expect(block.indexOf(`localStorage.getItem('${ON_KEY}')`)).toBeLessThan(block.indexOf('} catch'));
+    const call = "if (gapFixWanted()) void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));";
+    expect(main).toContain(call);
+    expect(main.indexOf(call)).toBeLessThan(main.indexOf("import.meta.env.MODE !== 'production'"));
+    expect(main).not.toContain("localStorage.getItem('lemo-gapfix')");
   });
 });
 

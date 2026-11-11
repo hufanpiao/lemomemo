@@ -1,4 +1,5 @@
-// 底栏偏高修复候选（R-371 Gap fix，11-10 主持人批；非正式版诊断页开关“Gap fix: OFF/ON”，负责人真机开关对比，确认后再改成默认）。
+// 底栏偏高修复（R-371 Gap fix，11-10 主持人批；11-11 负责人真机通过后改成默认开，正式版也做）：
+// 只在 iOS 主屏幕版冷启动时由 main.tsx 动态加载（判断在 vh-gapfix-gate.ts）；诊断页“Gap fix”开关改成“关掉用来对照”（存 OFF_KEY）。
 // 现象（负责人原话“就刚打开的时候底栏在上面，只要切换到日历或者代办他就落下去了”）：iPhone 主屏幕版冷启动后 innerHeight 比屏幕少一个顶部安全区
 // （895 / 956，差 61），今天页底栏跟着可见区底边偏高；第一次切到日历、待办就恢复，切设置不恢复。
 // 推断：日历（6 行月格，和数据无关）、负责人的待办长列表在 895 高时文档比视口高、页面能滚；今天页（body min-height: 100dvh，正好一屏）、设置不超过一屏。
@@ -9,12 +10,12 @@
 // 等底栏挂上（今天页画好，最多 WAIT_BAR_MS）再判断、再做。冷启动时顶部安全区可能先读到 0（底部就有过“先 0 后 34”）：
 // 读到 0 而别的条件都满足时，每 TOP_RETRY_FRAMES 帧重读一次，最多 TOP_RETRY_MS，重读的结果记进日志（代码审建议 1）。
 // 滚 1px 只在下一帧滚回一次；撤垫块时只在页面还停在那 1px 上才滚回，用户已经自己在滚（比如切到日历）就不动（代码审 M1）。
-// 每一步记一行（时刻、inner、底栏下沿），存在 OUT_KEY，诊断页显示、可复制。开关打开时每次冷启动都做（不像时间线只跑一次）。
+// 每一步记一行（时刻、inner、底栏下沿），存在 OUT_KEY（只留最近一次冷启动），诊断页显示、可复制。没关掉时每次冷启动都做（不像时间线只跑一次）。
 // 正常启动（inner = 屏幕高）条件不满足，什么都不做，像素不变；底栏、“＋”、实色带（R-361“这个不要动”）都不碰。
 // requestAnimationFrame 只许 src/motion 用（A25）：等帧的函数由调用方传进来（main.tsx 传 motion 的 nextFrame）
 import { isStandalone } from './env.ts';
+import { OFF_KEY } from './vh-gapfix-gate.ts';
 
-export const ON_KEY = 'lemo-gapfix';
 export const OUT_KEY = 'lemo-gapfix-out';
 /** 差值和顶部安全区差多少以内算“少的正是顶部安全区” */
 export const TOL_PX = 4;
@@ -33,20 +34,21 @@ export const PAD_ID = 'lemo-gapfix-pad';
 
 export type Frame = (cb: () => void) => unknown;
 
+/** 诊断页开关：默认开；关掉（存 OFF_KEY）用来对照。读不到本机存储时当开着（和 vh-gapfix-gate.ts 一致） */
 export function gapFixOn(store: Storage = localStorage): boolean {
   try {
-    return store.getItem(ON_KEY) === '1';
+    return store.getItem(OFF_KEY) !== '1';
   } catch {
-    return false;
+    return true;
   }
 }
 
 export function setGapFixOn(on: boolean, store: Storage = localStorage): void {
   try {
-    if (on) store.setItem(ON_KEY, '1');
-    else store.removeItem(ON_KEY);
+    if (on) store.removeItem(OFF_KEY);
+    else store.setItem(OFF_KEY, '1');
   } catch {
-    // 本机存储用不了：开关不生效，诊断页照样显示 OFF
+    // 本机存储用不了：关不掉，诊断页照样显示 ON
   }
 }
 
@@ -109,7 +111,7 @@ const barBottom = (doc: Document): string => {
   return el ? String(Math.round(el.getBoundingClientRect().bottom)) : '-';
 };
 
-/** 冷启动时调一次（main.tsx 在开关开着时动态加载本模块后调）；返回停止函数（测试用；到点自己也会停、撤掉垫块） */
+/** 冷启动时调一次（main.tsx 在 iOS 主屏幕版、没关掉时动态加载本模块后调）；返回停止函数（测试用；到点自己也会停、撤掉垫块） */
 export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
   const win = deps.win ?? window;
   const standalone = deps.standalone ?? isStandalone();

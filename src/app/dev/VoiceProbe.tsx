@@ -1,7 +1,10 @@
 // R-68 录音格式探测页（B3 任务单 FA-0、Q1 第 ⑧ 条；一次性，和 voice-probe 同一个 PR 删）
 // • 入口：非正式版的试验页 #/dev-csp/voice（CspLab.tsx 懒加载本页）；正式版没有试验页，build/check_no_probe.mjs 再断言产物里搜不到
 // • 显示这台设备 isTypeSupported 的结果；按住按钮录一段，松开后同一段按两种标注各传一次 voice-probe，逐行显示回包
-// • 录音 Blob 只在内存（传完就丢）；不写 IndexedDB、不存任何东西；不显示账号信息
+// • 录音 Blob 只在内存（传完就丢）；不写 IndexedDB；不显示账号信息
+// • 结果留底（R-382，负责人录到一半被踢回登录页、结果全丢）：每段结果一回来就整份存进本机 localStorage 的单独键（voice-probe-keep.ts，
+//   只存 recorder、标注、HTTP、result、gemini_http、字节、ms、转写文字，录音不存、不上传，登出清库不碰）；
+//   重新进页面先显示之前的结果，“Clear results”删掉
 // • 录音中离开页面（组件卸载、pagehide）马上停录音、关麦克风，这一段不上传；上传中卸载就取消上传（代码审 S1）
 // • 到 50 秒上限按钮改成“已到上限”（S2）；录音接近 600 KB 时在这一段上提示服务器会回 413（S3）
 // • 请照 QA 事先写好、不含真实隐私的句子念（录音会进谷歌免费版，R-62）
@@ -21,15 +24,38 @@ import {
   type Recording,
 } from '../../platform/voice-probe.ts';
 import styles from './VoiceProbe.module.css';
+import { keepReply, loadKept, saveKept, type KeptSegment } from './voice-probe-keep.ts';
 
 interface Segment {
   n: number;
   mime: string;
   size: number;
   ms: number;
-  model: ProbeModel;
+  /** 从本机留底读回来的段没有模型（不存） */
+  model: ProbeModel | null;
   replies: { label: string; reply: ProbeReply | null }[];
+  /** 上次留下的结果 */
+  kept?: boolean;
 }
+
+/** 存：只存已经回来的标注，字段按白名单挑 */
+const toKept = (s: Segment): KeptSegment => ({
+  n: s.n,
+  recorder: s.mime,
+  size: s.size,
+  ms: s.ms,
+  replies: s.replies.flatMap((r) => (r.reply ? [keepReply(r.label, r.reply)] : [])),
+});
+/** 读：没存的字段显示成 - */
+const fromKept = (k: KeptSegment): Segment => ({
+  n: k.n,
+  mime: k.recorder,
+  size: k.size,
+  ms: k.ms,
+  model: null,
+  kept: true,
+  replies: k.replies.map(({ label, ...r }) => ({ label, reply: { ...r, model: null, mime: null, raw_type: null, error: null } })),
+});
 
 const kb = (b: number): string => `${(b / 1024).toFixed(1)} KB`;
 
@@ -64,9 +90,15 @@ export default function VoiceProbe() {
   const [recording, setRecording] = useState(false);
   const [capped, setCapped] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [segments, setSegments] = useState<Segment[]>([]);
+  // 先把上次留下的结果读出来（R-382），编号接着往下排
+  const [segments, setSegments] = useState<Segment[]>(() => loadKept().map(fromKept));
   const rec = useRef<Promise<Recording> | null>(null);
-  const count = useRef(0);
+  const count = useRef(segments.reduce((m, s) => Math.max(m, s.n), 0));
+
+  // 每段结果一回来就整份存一次（只存已回来的标注；清空时删键）
+  useEffect(() => {
+    saveKept(segments.map(toKept));
+  }, [segments]);
   const uploads = useRef<AbortController | null>(null);
 
   // 录音中离开（组件卸载、pagehide）：马上停掉 MediaRecorder 和麦克风轨道、不上传，不等 50 秒上限（安全审建议 ①）
@@ -186,11 +218,17 @@ export default function VoiceProbe() {
           {error}
         </p>
       )}
+      {segments.length > 0 && (
+        <button type="button" className={styles.chip} data-testid="probe-clear" onClick={() => setSegments([])}>
+          Clear results
+        </button>
+      )}
       <ol className={styles.list} data-testid="probe-results">
         {segments.map((s) => (
           <li key={s.n} className={styles.segment}>
             <div>
-              #{s.n} · recorder {s.mime || '(empty)'} · {kb(s.size)} · {(s.ms / 1000).toFixed(1)} s · {s.model}
+              #{s.n} · recorder {s.mime || '(empty)'} · {kb(s.size)} · {(s.ms / 1000).toFixed(1)} s · {s.model ?? '-'}
+              {s.kept ? ' · saved earlier' : ''}
             </div>
             {s.size >= PROBE_WARN_BYTES && (
               <div className={styles.error} data-testid="probe-size-warn">

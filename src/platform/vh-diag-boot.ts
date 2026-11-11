@@ -1,10 +1,9 @@
-// R-371 非正式版冷启动诊断的统一入口（11-10 代码审建议 2）：main.tsx 只读两个开关、只留一处动态加载，首屏少一份 import 包装；
-// 两个开关（时间线 ARM_KEY、Gap fix ON_KEY）各自开着才跑，键名见 vh-timeline.ts、vh-gapfix.ts。正式构建 main.tsx 整块摇掉，本模块不进正式包。
+// R-371 非正式版冷启动诊断入口（11-10 代码审建议 2）：main.tsx 读时间线开关（ARM_KEY，见 vh-timeline.ts），开着才动态加载本模块。
+// 正式构建 main.tsx 整块摇掉，本模块不进正式包。Gap fix 11-11 起默认开、正式版也做，不再经这里（main.tsx 按 vh-gapfix-gate.ts 直接加载 vh-gapfix.ts）。
 // 等帧的函数由调用方传进来（A25：requestAnimationFrame 只许 src/motion 用）
-import { type Frame, gapFixOn, startGapFix } from './vh-gapfix.ts';
+import type { Frame } from './vh-gapfix.ts';
 import { startVhTimeline, timelineArmed } from './vh-timeline.ts';
 
 export function startVhDiag(frame: Frame, store: Storage = localStorage): void {
   if (timelineArmed(store)) startVhTimeline(frame, { store });
-  if (gapFixOn(store)) startGapFix(frame, { store });
 }

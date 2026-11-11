@@ -1,10 +1,10 @@
-// R-371 非正式版冷启动诊断统一入口（platform/vh-diag-boot.ts，11-10 代码审建议 2）：main.tsx 两个开关一次判断、只留一处动态加载；
-// 入口按开关分别启动时间线、Gap fix，只跑开着的那个
+// R-371 非正式版冷启动诊断入口（platform/vh-diag-boot.ts，11-10 代码审建议 2）：只管时间线；
+// Gap fix 11-11 起默认开、正式版也做，main.tsx 按 vh-gapfix-gate.ts 直接加载 vh-gapfix.ts，不经这里
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { startVhDiag } from '../vh-diag-boot.ts';
-import { ON_KEY, readGapFixLog } from '../vh-gapfix.ts';
+import { readGapFixLog } from '../vh-gapfix.ts';
 import { ARM_KEY, OUT_KEY as TL_OUT_KEY } from '../vh-timeline.ts';
 
 /** 只收不跑的“帧”：只看启动那一刻做了什么 */
@@ -17,31 +17,22 @@ const mountBar = (): void => {
 
 beforeEach(() => localStorage.clear());
 afterEach(() => document.body.replaceChildren());
-describe('统一入口 startVhDiag（代码审建议 2）', () => {
-  it('只跑开着的那个：只开 Gap fix 不记时间线；只开时间线不跑 Gap fix；都开都跑', () => {
+describe('诊断入口 startVhDiag', () => {
+  it('时间线开着才记；不跑 Gap fix（Gap fix 不经这里）', () => {
     mountBar();
-    localStorage.setItem(ON_KEY, '1');
     startVhDiag(frames().frame);
-    expect(readGapFixLog()).toMatch(/^gapfix start=/);
     expect(localStorage.getItem(TL_OUT_KEY)).toBeNull();
-    localStorage.clear();
-    localStorage.setItem(ARM_KEY, '1');
-    startVhDiag(frames().frame);
     expect(readGapFixLog()).toBe('');
-    expect(localStorage.getItem(ARM_KEY)).toBeNull();
-    localStorage.clear();
     localStorage.setItem(ARM_KEY, '1');
-    localStorage.setItem(ON_KEY, '1');
     startVhDiag(frames().frame);
-    expect(readGapFixLog()).toMatch(/^gapfix start=/);
     expect(localStorage.getItem(ARM_KEY)).toBeNull();
+    expect(readGapFixLog()).toBe('');
   });
 
-  it('main.tsx 两个开关一次判断、只留一处动态加载（统一入口）', () => {
+  it('main.tsx 只在非正式版、时间线开着时加载本入口；时间线不单独 import()', () => {
     const main = readFileSync(resolve(__dirname, '../../app/main.tsx'), 'utf8');
-    expect(main).toContain(`localStorage.getItem('${ARM_KEY}') || localStorage.getItem('${ON_KEY}')`);
-    expect(main).toContain("import('../platform/vh-diag-boot.ts')");
-    expect(main).not.toContain("import('../platform/vh-gapfix.ts')");
+    const block = main.slice(main.indexOf("import.meta.env.MODE !== 'production'"));
+    expect(block).toContain(`if (localStorage.getItem('${ARM_KEY}')) void import('../platform/vh-diag-boot.ts')`);
     expect(main).not.toContain("import('../platform/vh-timeline.ts')");
   });
 });

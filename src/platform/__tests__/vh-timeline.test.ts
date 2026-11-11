@@ -72,7 +72,7 @@ describe("开关", () => {
     const main = readFileSync(resolve(__dirname, "../../app/main.tsx"), "utf8");
     expect(main).toContain(`localStorage.getItem('${ARM_KEY}')`);
     expect(main).toMatch(
-      /import\.meta\.env\.MODE !== 'production'\) \{\s*try \{\s*if \(localStorage\.getItem\('lemo-vh-tl'\) \|\| /,
+      /import\.meta\.env\.MODE !== 'production'\) \{\s*try \{\s*if \(localStorage\.getItem\('lemo-vh-tl'\)\) void import\('\.\.\/platform\/vh-diag-boot\.ts'\)/,
     );
   });
 });

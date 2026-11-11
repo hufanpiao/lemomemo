@@ -1,9 +1,9 @@
-// R-371 底栏偏高修复候选 Gap fix（platform/vh-gapfix.ts，诊断页开关“Gap fix: OFF/ON”）：Chromium 里模拟负责人那次冷启动——
-// 主屏幕版（navigator.standalone）、屏幕 956、可见高度 895（视口 440×895）、顶部安全区 61（--inset-top；Chromium 的 env() 恒为 0，用 CSSOM 盖上）。
+// R-371 底栏偏高修复 Gap fix（platform/vh-gapfix.ts；11-11 起 iOS 主屏幕版默认开，诊断页“Gap fix: OFF (compare)”关掉对照）：Chromium 里模拟负责人那次冷启动——
+// iPhone（navigator.userAgent 换成 iPhone 的，只在页面里换，请求头不动）、主屏幕版（navigator.standalone）、屏幕 956、可见高度 895（视口 440×895）、顶部安全区 61（--inset-top；Chromium 的 env() 恒为 0，用 CSSOM 盖上）。
 // ① 根据：895 高时只有日历页文档比视口高（6 行月格，和数据无关），今天页正好一屏——负责人“只有切到日历才回落”，iOS 是在文档变得能滚时重算的；
-// ② 开关开着：底栏挂上以后放看不见的垫块让今天页文档比视口高（照日历），Chromium 不会改 innerHeight，到 1.5 秒撤掉，日志记 no-change；
+// ② 默认开着：底栏挂上以后放看不见的垫块让今天页文档比视口高（照日历），Chromium 不会改 innerHeight，到 1.5 秒撤掉，日志记 no-change；
 //    垫块在的时候底栏位置不变、点不到垫块；稳定后的今天页和开关关着时逐像素一样；
-// ③ 开关关着：什么都不做、不记日志；④ 正常启动（956 / 956）开关开着也只记 skip，画面和关着时逐像素一样
+// ③ 诊断页关掉：什么都不做、不记日志；④ 正常启动（956 / 956）开着也只记 skip，画面和关着时逐像素一样
 // chromium、webkit 两个项目都跑：webkit 下全程（含放垫块、撤垫块）不许有 CSP 违规；“逐像素一样”在 webkit 改比版面指纹（见 shot）；触屏上文档高多 base.css 的 1px（见 restH）
 import { mkdirSync } from 'node:fs';
 import type { Page } from '@playwright/test';
@@ -11,16 +11,19 @@ import { expect, test } from './session-fixture.ts';
 
 const SHOTS = process.env['R371_SHOTS'] ?? 'test-results/r371-gapfix';
 
-/** 打开前注入：开关、主屏幕版、屏幕高、顶部安全区 */
+/** 打开前注入：开关（on: false = 诊断页关掉，存 lemo-gapfix-off）、iPhone、主屏幕版、屏幕高、顶部安全区 */
 async function launch(page: Page, o: { on: boolean; screenH: number; top: number }): Promise<void> {
   await page.addInitScript((a) => {
     try {
-      if (a.on) localStorage.setItem('lemo-gapfix', '1');
-      else localStorage.removeItem('lemo-gapfix');
+      if (a.on) localStorage.removeItem('lemo-gapfix-off');
+      else localStorage.setItem('lemo-gapfix-off', '1');
       localStorage.removeItem('lemo-gapfix-out');
     } catch {
       // 不会走到
     }
+    // Gap fix 只在 iOS 主屏幕版做（vh-gapfix-gate.ts）：chromium 项目是电脑 UA，页面里换成 iPhone 的（webkit 项目本来就是 iPhone 15）
+    if (!/iPhone|iPad/.test(navigator.userAgent))
+      Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1', configurable: true });
     Object.defineProperty(navigator, 'standalone', { value: true, configurable: true });
     Object.defineProperty(screen, 'height', { get: () => a.screenH, configurable: true });
     // 注入脚本跑的时候 <html> 可能还没建出来：出来了再设
@@ -94,7 +97,7 @@ test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () =>
     for (const name of ['today', 'todos', 'notes']) expect(await docH(name), name).toBe(rest);
   });
 
-  test('开关开着：底栏挂上后放垫块，今天页文档比视口高、底栏不动、垫块看不见也点不到；1.5 秒撤掉，记 no-change；稳定后和关着时逐像素一样', async ({ page }) => {
+  test('默认开着：底栏挂上后放垫块，今天页文档比视口高、底栏不动、垫块看不见也点不到；1.5 秒撤掉，记 no-change；稳定后和关着时逐像素一样', async ({ page }) => {
     await launch(page, { on: true, screenH: 956, top: 61 });
     const pad = page.locator('#lemo-gapfix-pad');
     await expect.poll(() => log(page), { timeout: 10_000 }).toMatch(/pad gap=61 top=61/);
@@ -122,7 +125,7 @@ test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () =>
     await settle(page);
     const on = await shot(page, '895-on');
 
-    // 同一个页面按“关着”重新冷启动一次（后加的注入脚本把开关清掉；会话夹具挂在这个 context 上）
+    // 同一个页面按“诊断页关掉”重新冷启动一次（后加的注入脚本存上 lemo-gapfix-off；会话夹具挂在这个 context 上）
     await page.goto('about:blank');
     await launch(page, { on: false, screenH: 956, top: 61 });
     await settle(page);
@@ -133,7 +136,7 @@ test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () =>
     expect(on.equals(off), '开着（撤完垫块）和关着逐像素一样').toBe(true);
   });
 
-  test('开关关着：不放垫块、不记日志', async ({ page }) => {
+  test('诊断页关掉：不放垫块、不记日志', async ({ page }) => {
     await launch(page, { on: false, screenH: 956, top: 61 });
     await page.waitForTimeout(2000);
     await expect(page.locator('#lemo-gapfix-pad')).toHaveCount(0);
@@ -144,7 +147,7 @@ test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () =>
 test.describe('正常启动（956 / 956）', () => {
   test.use({ loggedIn: true, viewport: { width: 440, height: 956 }, timezoneId: 'Asia/Seoul' });
 
-  test('开关开着也只记 skip、不放垫块；今天页和开关关着时逐像素一样', async ({ page }) => {
+  test('默认开着也只记 skip、不放垫块；今天页和关掉时逐像素一样', async ({ page }) => {
     await launch(page, { on: true, screenH: 956, top: 61 });
     await settle(page);
     await page.waitForTimeout(500);

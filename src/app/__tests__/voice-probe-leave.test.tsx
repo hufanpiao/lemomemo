@@ -17,6 +17,8 @@ vi.mock('../../platform/voice-probe.ts', async (orig) => ({
 const { default: VoiceProbe } = await import('../dev/VoiceProbe.tsx');
 
 beforeEach(() => {
+  // 结果留底（R-382）会把上一条用例的结果带进来：每条用例从空的开始
+  localStorage.clear();
   // jsdom 没有 setPointerCapture
   HTMLElement.prototype.setPointerCapture = vi.fn();
   start.mockImplementation(async () => ({ stop, cancel }));

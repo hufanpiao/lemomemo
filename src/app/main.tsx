@@ -37,6 +37,7 @@ import { setPushDisconnectLog } from '../platform/push-disconnect.ts';
 import { browserLifecycle } from '../platform/net.ts';
 import { uiStore } from '../kit/state/ui-store.ts';
 import { buildInfo, isTauri, JS_ERROR_ACT, jsErrorCode, registerJsErrorLog } from '../platform/env.ts';
+import { gapFixWanted } from '../platform/vh-gapfix-gate.ts';
 import {
   clearCacheStorage, clearLocalSessionIf, goToAuth, onAuthUser, onSessionStorageChange, readSessionAccessToken, readSessionId, readSessionUserId,
   markAccountUiShown, setExitNotice, takeLocalSession,
@@ -75,11 +76,14 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
 hideSplashAfter();
 // 底部安全区（G10）：iOS 主屏幕版冷启动时先 0 后 34，稳定前底栏、“＋”、实色带不显示，稳定了淡入；首屏画完后最多藏 1.5 秒（platform/inset-watch.ts）
 watchInsetBottom();
-// R-371 冷启动时间线、Gap fix（非正式版，诊断页开关“Timeline next launch”“Gap fix”）：两个开关一次判断，有一个开着才下载 platform/vh-diag-boot.ts，
-// 由它按开关跑 vh-timeline.ts、vh-gapfix.ts（等帧传 motion 的 nextFrame，A25）；键名同那里的 ARM_KEY、ON_KEY。正式构建靠 MODE 常量整块摇掉
+// R-371 Gap fix（底栏偏高修复，11-11 起默认开、正式版也做）：只在 iOS 主屏幕版冷启动时下载 platform/vh-gapfix.ts 做一次（判断见 vh-gapfix-gate.ts，
+// 诊断页可以关掉对照）；等帧传 motion 的 nextFrame（A25）
+if (gapFixWanted()) void import('../platform/vh-gapfix.ts').then((m) => m.startGapFix(nextFrame));
+// R-371 冷启动时间线（非正式版，诊断页开关“Timeline next launch”）：开着才下载 platform/vh-diag-boot.ts 记一次；键名同 vh-timeline.ts 的 ARM_KEY。
+// 正式构建靠 MODE 常量整块摇掉
 if (import.meta.env.MODE !== 'production') {
   try {
-    if (localStorage.getItem('lemo-vh-tl') || localStorage.getItem('lemo-gapfix')) void import('../platform/vh-diag-boot.ts').then((m) => m.startVhDiag(nextFrame));
+    if (localStorage.getItem('lemo-vh-tl')) void import('../platform/vh-diag-boot.ts').then((m) => m.startVhDiag(nextFrame));
   } catch {
     // 读不到本机存储：不记
   }
