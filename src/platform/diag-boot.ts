@@ -3,7 +3,7 @@
 // • 全局运行日志（一直开，run-log.ts）；• R-371 冷启动时间线（诊断页开关开着才记，vh-timeline.ts）；
 // • 启动画面颜色诊断（诊断页开关开着才下载 splash-probe.ts）：涂色分包到了才打 data-splash-hold，让启动画面多留 8 秒（splash.ts）；
 //   分包加载失败、开始涂色出错：不留标记、清掉开关（不然每次冷启动都重来），启动画面照常收起
-// 返回的 Promise 在标记打好（或确定不打）以后才完成：main.tsx 收起启动画面先等它（diagReady），标记一定早于第一次收起
+// 返回的 Promise 在标记打好（或确定不打）以后才完成：main.tsx 的 5 秒兜底和 #root 画出东西这两处收起前先等它（diagReady），标记早于这两处的收起；进退出屏、库被挡住时直接收，不等诊断
 // 等帧的函数由调用方传进来（A25：requestAnimationFrame 只许 src/motion 用）
 import { startRunLog } from './run-log.ts';
 import { setSplashProbeArmed, splashProbeArmed } from './splash-probe-arm.ts';

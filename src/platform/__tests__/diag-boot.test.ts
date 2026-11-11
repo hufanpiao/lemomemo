@@ -1,6 +1,6 @@
 // 非正式版的诊断启动件（platform/diag-boot.ts）：运行日志一直开；冷启动时间线、启动画面颜色诊断按诊断页开关；
 // main.tsx 只在非正式版分支里动态 import 它这一处，入口里不再读诊断开关（Gap fix 正式版也做，不经这里）。
-// 启动画面多留 8 秒的标记由它打：main.tsx 收起启动画面（5 秒兜底、#root 画出东西）先等它（diagReady），标记一定早于第一次收起
+// 启动画面多留 8 秒的标记由它打：main.tsx 的 5 秒兜底和 #root 画出东西这两处走 leaveSplash、先等它（diagReady），标记早于这两处的收起；进退出屏、库被挡住时直接收，不等诊断
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -136,13 +136,13 @@ describe('接线', () => {
     expect(main).not.toMatch(/SPLASH_HOLD_ATTR|cancelSplashHold/);
   });
 
-  it('收起启动画面只有 leaveSplash 一个出口：5 秒兜底和 #root 画出东西都先等 diagReady；diagReady、leaveSplash 写在 5 秒兜底之前', () => {
+  it('5 秒兜底和 #root 画出东西这两处走 leaveSplash、先等 diagReady（进退出屏的两处直接收，不等诊断）；diagReady、leaveSplash 写在 5 秒兜底之前', () => {
     expect(main).toContain(LEAVE);
     expect(code).toMatch(/^hideSplashAfter\(leaveSplash\);$/m);
     expect(code).toContain('whenContent(() => void nextFrame(leaveSplash));');
     expect(code.indexOf(DIAG_READY)).toBeLessThan(code.indexOf(LEAVE));
     expect(code.indexOf(LEAVE)).toBeLessThan(code.indexOf('hideSplashAfter('));
-    // 除了 leaveSplash 自己，只有 start() 里冷启动就进退出屏的两处（还没挂 #root）直接收
+    // 除了 leaveSplash 自己，只有 start() 里冷启动就进退出屏的两处（还没挂 #root）直接收、不等诊断；库被挡住的 SplashRelease 在 root.tsx，也直接收
     expect(code.match(/hideSplash\(\)/g)?.length).toBe(3);
   });
 

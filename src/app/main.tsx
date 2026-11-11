@@ -16,7 +16,7 @@
 //    选根（关口、离线、version_too_new）在 root.tsx（CONSENT-sugg ③⑥：错误边界只包关口，单独有测试）；
 //    选出来的根外面再包一层静态的“出错了 · 刷新”兜底（root.tsx 的 withCrashFallback，K6-sugg3 ⑥）
 // 启动画面（R-251、R-254；DOM 在 index.html，跟着首次绘制出来）：从这里起算最多盖 5 秒（hideSplashAfter）；
-// #root 第一次画出东西（告知页、App、整屏提示、崩溃兜底页）的下一帧收起（root-paint.ts 的 whenContent）；两处都经 leaveSplash（非正式版先等诊断启动件）
+// #root 第一次画出东西（告知页、App、整屏提示、崩溃兜底页）的下一帧收起（root-paint.ts 的 whenContent）；这两处经 leaveSplash（非正式版先等诊断启动件），进退出屏时直接收
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles/tokens.css';
@@ -72,8 +72,9 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
 }
 
 // 诊断启动件（运行日志、冷启动时间线、启动画面颜色诊断，platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量整块摇掉（diagReady 是 null）。
-// 收起启动画面都走 leaveSplash，非正式版先等它：颜色诊断开着时它要先打好“多留 8 秒”的标记（data-splash-hold，splash.ts），
-// #root 先画出东西、分包过了 5 秒才到，也不会没打标记就先淡出。分包加载失败当它好了、照常收起；一直不回来时 splash.css 的 6 秒纯 CSS 兜底照样淡掉
+// 5 秒兜底和 #root 画出东西这两处走 leaveSplash；进退出屏（start 里两处）、库被挡住（root.tsx 的 SplashRelease）时直接收，不等诊断。
+// leaveSplash 在非正式版先等它：颜色诊断开着时它要先打好“多留 8 秒”的标记（data-splash-hold，splash.ts），
+// 这两处即使 #root 先画出东西、分包过了 5 秒才到，也不会没打标记就先淡出。分包加载失败当它好了、照常收起；一直不回来时 splash.css 的 6 秒纯 CSS 兜底照样淡掉
 const diagReady: Promise<void> | null =
   import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => m.startDiagBoot(nextFrame)).catch(() => undefined) : null;
 const leaveSplash = (): void => void (diagReady ? diagReady.then(hideSplash) : hideSplash());

@@ -1,6 +1,7 @@
 // 底栏偏高冷启动时间线（R-371，11-10 主持人批）：5 个探针都改不动 clientHeight（894），要分清“一直挂着的底栏也偏高”还是“只有新挂载时先高后落”，
 // 并试“新挂载后补一次滚动”能不能让 iOS 当场摆对。只在非正式版里有：诊断页（VhProbe）的开关在本机存储里放 ARM_KEY，
-// 下次冷启动 main.tsx 读到就动态加载本模块（首屏只有读本机存储那一行，记录代码在这个分包里），开始记的同时把开关清掉（只跑一次）。
+// 下次冷启动由非正式版的诊断启动件 diag-boot.ts 读开关（timelineArmed），开着才调 startVhTimeline；本模块被 diag-boot 静态引入，
+// 跟着 diag-boot 分包走（正式构建整块摇掉，不进首屏），开始记的同时把开关清掉（只跑一次）。
 // 记什么：
 //   ① 前 DURATION_MS 每 TICK_MS 一行：inner、client、vv、scrollY、底栏下沿（[data-testid="tabbar"] 的 getBoundingClientRect().bottom，没有记 -）、当前路由（hash，id 换成 :id）；
 //   ② MutationObserver 盯底栏每次新挂载（开始记时已经挂着的那一个不算），记挂载那一刻和之后 MOUNT_FRAMES 帧的下沿；
@@ -195,7 +196,7 @@ export interface TimelineDeps {
   readonly now?: () => number;
 }
 
-/** 开始记（main.tsx 冷启动时调一次，frame 传 nextFrame；入口里少写一层对象省首屏字节）；返回停止函数（测试用，到时自己也会停） */
+/** 开始记（diag-boot.ts 在冷启动、开关开着时调一次，frame 是 main.tsx 传给 diag-boot 的 nextFrame）；返回停止函数（测试用，到时自己也会停） */
 export function startVhTimeline(
   frame: Frame,
   deps: TimelineDeps = {},
