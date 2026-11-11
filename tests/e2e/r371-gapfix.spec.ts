@@ -26,6 +26,8 @@ async function launch(page: Page, o: { on: boolean; screenH: number; top: number
       Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1', configurable: true });
     Object.defineProperty(navigator, 'standalone', { value: true, configurable: true });
     Object.defineProperty(screen, 'height', { get: () => a.screenH, configurable: true });
+    // 横屏按 innerWidth 比 screen 短边判（viewport-geom.ts）：webkit 项目的 iPhone 15 screen 宽 393，比视口 440 窄，盖成和视口一样宽
+    Object.defineProperty(screen, 'width', { get: () => 440, configurable: true });
     // 注入脚本跑的时候 <html> 可能还没建出来：出来了再设
     const set = (): boolean => {
       document.documentElement?.style.setProperty('--inset-top', `${a.top}px`);
@@ -157,7 +159,7 @@ test.describe('正常启动（956 / 956）', () => {
     await page.waitForTimeout(500);
     await expect(page.locator('#lemo-gapfix-pad')).toHaveCount(0);
     expect(await log(page)).toMatch(/skip no-gap\(0\)/);
-    expect(await log(page)).toMatch(/early nav=\d+ms skip gap=0 /);
+    expect(await log(page)).toMatch(/early nav=\d+ms skip no-gap\(0\) gap=0 /);
     const on = await shot(page, '956-on');
     await page.goto('about:blank');
     await launch(page, { on: false, screenH: 956, top: 61 });

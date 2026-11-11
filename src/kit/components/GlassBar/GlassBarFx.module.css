@@ -113,10 +113,6 @@
   opacity: 0;
 }
 
-.edge[data-kb='1'] {
-  visibility: hidden;
-}
-
 /* 减少透明效果：渐隐那一段不要，从“＋”底边起直接是 --bg；上沿外渐隐（.edge）也不要 */
 @media (prefers-reduced-transparency: reduce) {
   .band {
@@ -157,8 +153,9 @@
   transition: none;
 }
 
-/* 键盘弹着（FA-7 第 3 项）：实色带和底栏、“＋”一起藏（设计复审一 R2：只管这一样） */
-.band[data-kb='1'] {
+/* 键盘弹着（根节点 data-kbhide，FA-7 第 3 项）：实色带、渐隐层和底栏、“＋”一起藏（设计复审一 R2：只管这两样） */
+:global(:root[data-kbhide]) .band,
+:global(:root[data-kbhide]) .edge {
   visibility: hidden;
 }
 

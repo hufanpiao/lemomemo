@@ -14,7 +14,7 @@ const { default: PlusHint } = await import('../ui/PlusHint.tsx');
 function addFab(rect: Partial<DOMRect>, kb = false): HTMLElement {
   const b = document.createElement('button');
   b.setAttribute('data-testid', 'tabbar-add');
-  if (kb) b.setAttribute('data-kb', 'true');
+  if (kb) document.documentElement.setAttribute('data-kbhide', '1');
   b.getBoundingClientRect = () => ({ top: 0, right: 0, width: 0, height: 0, left: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}), ...rect }) as DOMRect;
   document.body.appendChild(b);
   return b;
@@ -30,6 +30,7 @@ afterEach(() => {
   cleanup();
   resetPlusHintForTest();
   document.querySelectorAll('[data-testid="tabbar-add"]').forEach((e) => e.remove());
+  document.documentElement.removeAttribute('data-kbhide');
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -88,16 +89,16 @@ describe('PlusHint', () => {
   it('键盘弹起把“＋”藏起来：气泡跟着收起，落下再出来', async () => {
     vi.useFakeTimers();
     try {
-      const fab = addFab({ top: 740, right: 359, width: 56, height: 56 });
+      addFab({ top: 740, right: 359, width: 56, height: 56 });
       await mount({ enabled: true, exe: false });
       expect(screen.getByTestId('plus-hint')).toBeTruthy();
       await act(async () => {
-        fab.setAttribute('data-kb', 'true');
+        document.documentElement.setAttribute('data-kbhide', '1');
         await vi.advanceTimersByTimeAsync(150);
       });
       expect(screen.queryByTestId('plus-hint')).toBeNull();
       await act(async () => {
-        fab.removeAttribute('data-kb');
+        document.documentElement.removeAttribute('data-kbhide');
         await vi.advanceTimersByTimeAsync(150);
       });
       expect(screen.getByTestId('plus-hint')).toBeTruthy();

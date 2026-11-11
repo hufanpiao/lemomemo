@@ -3,8 +3,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GIVE_UP_MS, gapFixOn, OUT_KEY, PAD_ID, readGapFixLog, SCROLL_AT_MS, setGapFixOn, skipReason, startGapFix, TOL_PX, TOP_RETRY_FRAMES, TOP_RETRY_MS, WAIT_BAR_MS } from '../vh-gapfix.ts';
-import { OFF_KEY } from '../vh-gapfix-gate.ts';
+import { GAP_MAX_PX, TOL_PX } from '../viewport-geom.ts';
+import { GIVE_UP_MS, gapFixOn, OUT_KEY, readGapFixLog, SCROLL_AT_MS, setGapFixOn, startGapFix, WAIT_BAR_MS } from '../vh-gapfix.ts';
+import { OFF_KEY, PAD_ID, skipReason } from '../vh-gapfix-gate.ts';
 
 /** 手动推进的“帧” */
 function frames() {
@@ -97,7 +98,7 @@ describe('开关（11-11 起默认开，诊断页关掉用来对照）', () => {
 });
 
 describe('skipReason：只在“主屏幕版、竖屏、少的正好是顶部安全区”时做', () => {
-  const base = { standalone: true, inner: 895, width: 440, screenH: 956, top: 61 };
+  const base = { standalone: true, landscape: false, inner: 895, full: 956, top: 61 };
   it('负责人那次（895 / 956，顶部 61）要做', () => expect(skipReason(base)).toBeNull());
   it(`差值和顶部安全区差 ${TOL_PX} 以内也做，多 1 就不做`, () => {
     expect(skipReason({ ...base, top: 61 - TOL_PX })).toBeNull();
@@ -106,8 +107,13 @@ describe('skipReason：只在“主屏幕版、竖屏、少的正好是顶部安
   it('正常启动（inner = 屏幕高）、网页版、横屏、iPad 窗口化（差值不是顶部安全区）都不做', () => {
     expect(skipReason({ ...base, inner: 956 })).toBe('no-gap(0)');
     expect(skipReason({ ...base, standalone: false })).toBe('not-standalone');
-    expect(skipReason({ ...base, width: 956, inner: 440, screenH: 440 })).toBe('landscape');
+    expect(skipReason({ ...base, landscape: true, inner: 440, full: 440 })).toBe('landscape');
     expect(skipReason({ ...base, inner: 700, top: 24 })).toMatch(/^gap-not-top/);
+  });
+  it(`顶部安全区还读到 0（冷启动先 0 后 61）：差值不超过 ${GAP_MAX_PX} 照做，再多不做`, () => {
+    expect(skipReason({ ...base, top: 0 })).toBeNull();
+    expect(skipReason({ ...base, inner: 956 - GAP_MAX_PX, top: 0 })).toBeNull();
+    expect(skipReason({ ...base, inner: 956 - GAP_MAX_PX - 1, top: 0 })).toBe(`gap-not-top(gap=${GAP_MAX_PX + 1} top=0)`);
   });
 });
 
@@ -205,50 +211,32 @@ describe('startGapFix', () => {
     expect(pad()).toBeNull();
   });
 
-  it(`建议 1：顶部安全区先读到 0（先 0 后 61）：每 ${TOP_RETRY_FRAMES} 帧重读，读到 61 照做，日志记重读结果`, () => {
-    mockScroll();
-    mountBar();
-    const reads = [0, 0, 61];
-    const f = frames();
-    startGapFix(f.frame, deps({ top: () => reads.shift() ?? 61 }));
-    expect(pad()).toBeNull();
-    clock = 30;
-    f.flush(TOP_RETRY_FRAMES - 1);
-    expect(pad()).toBeNull();
-    f.flush(1);
-    expect(pad()).toBeNull();
-    clock = 60;
-    f.flush(TOP_RETRY_FRAMES);
-    expect(pad()).not.toBeNull();
-    const log = readGapFixLog();
-    expect(log).toMatch(/top=0 reread every 4 frames/);
-    expect(log).toMatch(/top-reread tries=2 after=60ms top=61/);
-    expect(log).toMatch(/pad gap=61 top=61/);
-  });
-
-  it(`建议 1：顶部安全区一直是 0：重读到 ${TOP_RETRY_MS}ms 放过，记 still-0 和 skip`, () => {
+  it('顶部安全区还读到 0（先 0 后 61）、差值不大：照做（和早试同一条规则，不隔帧重读）', () => {
     mockScroll();
     mountBar();
     const f = frames();
     startGapFix(f.frame, deps({ top: 0 }));
-    for (let k = 0; k < 5; k++) f.flush(TOP_RETRY_FRAMES);
-    expect(pad()).toBeNull();
-    clock = TOP_RETRY_MS;
-    f.flush(TOP_RETRY_FRAMES);
-    expect(pad()).toBeNull();
-    expect(f.size).toBe(0);
-    const log = readGapFixLog();
-    expect(log).toMatch(/top-reread tries=6 after=1000ms top=0 still-0/);
-    expect(log).toMatch(/skip gap-not-top\(gap=61 top=0\) top=0/);
+    expect(pad()).not.toBeNull();
+    expect(readGapFixLog()).toMatch(/pad gap=61 top=0/);
   });
 
-  it('建议 1：顶部安全区是 0、但根本没少高度（正常启动）：不重读，直接 skip', () => {
+  it('顶部安全区是 0、差值太大（700 / 956，像分屏）：只记 skip', () => {
+    setInner(700);
+    mountBar();
+    const f = frames();
+    startGapFix(f.frame, deps({ top: 0 }));
+    expect(pad()).toBeNull();
+    expect(f.size).toBe(0);
+    expect(readGapFixLog()).toMatch(/skip gap-not-top\(gap=256 top=0\) top=0/);
+  });
+
+  it('顶部安全区是 0、根本没少高度（正常启动）：直接 skip', () => {
     setInner(956);
     mountBar();
     const f = frames();
     startGapFix(f.frame, deps({ top: 0 }));
     expect(f.size).toBe(0);
-    expect(readGapFixLog()).not.toMatch(/reread/);
+    expect(readGapFixLog()).toMatch(/skip no-gap\(0\) top=0/);
   });
 
   it('滚过以后才变：记 after-scroll', () => {

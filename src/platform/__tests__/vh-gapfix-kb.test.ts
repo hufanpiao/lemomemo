@@ -1,10 +1,9 @@
-// 键盘收起后再做一次 Gap fix（Q-4，platform/vh-gapfix-kb.ts 经 vh-gapfix.ts 的 startGapFix 接上，11-11）：冷启动 895 → 修好 956 → 键盘 542 → 收起回 895 时再做一次、记 kb 日志；
-// 条件不满足不做、连续 focusout 不叠跑、诊断页关掉不做、键盘还在不做、用户在滚不抢、停止、日志上限
+// 键盘真收了以后再做一次冷启动高度校正（Q-4，vh-gapfix.ts 的 startGapFix 订阅 viewport.ts 的“键盘真收了”）：冷启动 895 → 修好 956 → 键盘 542 → 收起回 895 时再做一次、记 kb 日志；
+// 条件不满足不做、连续 focusout 不叠跑、诊断页关掉不做、键盘还在不做、用户在滚不抢、停止、日志上限、网页版不盯键盘
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GIVE_UP_MS, MAX_LINES, PAD_ID, readGapFixLog, SCROLL_AT_MS, setGapFixOn, startGapFix } from '../vh-gapfix.ts';
-import { KB_SETTLE_MS } from '../vh-gapfix-kb.ts';
-
-const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
+import { createKeyboardWatcher, KB_SETTLE_MS } from '../viewport.ts';
+import { GIVE_UP_MS, MAX_LINES, readGapFixLog, SCROLL_AT_MS, setGapFixOn, startGapFix, type GapFixDeps } from '../vh-gapfix.ts';
+import { PAD_ID } from '../vh-gapfix-gate.ts';
 
 /** 手动推进的“帧” */
 function frames() {
@@ -32,13 +31,11 @@ const mockScroll = () => ({
     sy = y;
   }) as typeof window.scrollTo),
 });
-const setInner = (h: number) => {
-  inner = h;
-};
-/** 静过防抖时间再跑几帧 */
-const settle = (f: { flush(n?: number): void }) => {
+const setInner = (h: number) => (inner = h);
+/** 视口和焦点静过 KB_SETTLE_MS（watcher 的计时器用假时钟） */
+const settle = () => {
   clock += KB_SETTLE_MS;
-  f.flush(3);
+  vi.advanceTimersByTime(KB_SETTLE_MS);
 };
 const mountBar = (): void => {
   const el = document.createElement('nav');
@@ -46,18 +43,10 @@ const mountBar = (): void => {
   document.body.append(el);
 };
 const pad = () => document.getElementById(PAD_ID);
-const deps = (over: { standalone?: boolean; top?: number | (() => number) } = {}) => ({ now: () => clock, standalone: true, top: 61, ...over });
 
 /** 假的 visualViewport：只要 height、offsetTop 和 resize 事件 */
 let vvH = 895;
 let vvTarget = new EventTarget();
-/** 每条测试起的都在 afterEach 停掉（监听挂在 document 上，不停会串到下一条） */
-const stops: Array<() => void> = [];
-const start = (...a: Parameters<typeof startGapFix>): (() => void) => {
-  const stop = startGapFix(...a);
-  stops.push(stop);
-  return stop;
-};
 const vvResize = (h: number) => {
   vvH = h;
   vvTarget.dispatchEvent(new Event('resize'));
@@ -67,8 +56,29 @@ const resize = (h: number) => {
   setInner(h);
   vvResize(h);
 };
+/** 主屏幕版 iPhone 的键盘 watcher（整屏 956），只给本条测试用 */
+const watcher = () =>
+  createKeyboardWatcher({
+    vv: () => vvTarget as unknown as VisualViewport,
+    innerHeight: () => inner,
+    root: () => null,
+    doc: () => document,
+    standalone: () => true,
+    full: () => 956,
+    phone: () => true,
+    now: () => clock,
+  });
+/** 每条测试起的都在 afterEach 停掉（监听挂在 document 上，不停会串到下一条） */
+const stops: Array<() => void> = [];
+const start = (frame: (cb: () => void) => unknown, over: Partial<GapFixDeps> = {}): (() => void) => {
+  const w = watcher();
+  const stop = startGapFix(frame, { now: () => clock, standalone: true, top: 61, kbClosed: w.onClosed, ...over });
+  stops.push(stop);
+  return stop;
+};
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   localStorage.clear();
   inner = 895;
   clock = 0;
@@ -78,35 +88,24 @@ beforeEach(() => {
   vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(440);
   vi.spyOn(window.screen, 'height', 'get').mockReturnValue(956);
   vi.spyOn(window.screen, 'width', 'get').mockReturnValue(440);
-  vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(IPHONE_UA);
   vvH = 895;
   vvTarget = new EventTarget();
-  Object.defineProperty(window, 'visualViewport', {
-    configurable: true,
-    value: Object.defineProperties(vvTarget, {
-      height: { configurable: true, get: () => vvH },
-      offsetTop: { configurable: true, value: 0 },
-    }),
-  });
+  Object.defineProperties(vvTarget, { height: { configurable: true, get: () => vvH }, offsetTop: { configurable: true, value: 0 } });
 });
 afterEach(() => {
   for (const stop of stops.splice(0)) stop();
-  Reflect.deleteProperty(window, 'visualViewport');
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
-describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → 键盘 542 → 收起回 895）', () => {
-  const input = (): HTMLInputElement => {
-    const el = document.createElement('input');
-    document.body.append(el);
-    return el;
-  };
+describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956 → 键盘 542 → 收起回 895）', () => {
+  const input = (): HTMLInputElement => document.body.appendChild(document.createElement('input'));
   const kbPads = (): number => readGapFixLog().match(/kb pad /g)?.length ?? 0;
   /** 冷启动那次做完（895 → 956），然后弹键盘（542）、点空白收起（focusout，回 895） */
   const coldThenKeyboard = (f: ReturnType<typeof frames>) => {
     mountBar();
-    start(f.frame, deps());
+    start(f.frame);
     resize(956);
     clock = 50;
     f.flush();
@@ -116,20 +115,18 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     el.focus();
     clock = 1000;
     resize(542);
-    expect(readGapFixLog()).toMatch(/kb open vv=542/);
     clock = 4000;
     el.blur();
     resize(895);
   };
 
-  it('收起后防抖 KB_SETTLE_MS 再做同一套：放垫块（日志带 kb）、innerHeight 回 956 就撤', () => {
+  it('静了 KB_SETTLE_MS 才做同一套：放垫块（日志带 kb）、innerHeight 回 956 就撤', () => {
     mockScroll();
     const f = frames();
     coldThenKeyboard(f);
-    f.flush(3);
+    vi.advanceTimersByTime(KB_SETTLE_MS - 1);
     expect(pad()).toBeNull();
-    clock = 4000 + KB_SETTLE_MS;
-    f.flush();
+    settle();
     expect(pad()).not.toBeNull();
     expect(pad()?.style.height).toBe('calc(100dvh + 62px)');
     setInner(956);
@@ -145,8 +142,7 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     const { by, to } = mockScroll();
     const f = frames();
     coldThenKeyboard(f);
-    clock = 4000 + KB_SETTLE_MS;
-    f.flush();
+    settle();
     clock += SCROLL_AT_MS;
     f.flush();
     expect(by).toHaveBeenCalledWith(0, 1);
@@ -157,7 +153,7 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     expect(pad()).toBeNull();
     expect(readGapFixLog()).toMatch(/kb scrollBy1[\s\S]*kb no-change pad-removed/);
     vvResize(895);
-    settle(f);
+    settle();
     expect(pad()).toBeNull();
     expect(kbPads()).toBe(1);
   });
@@ -168,16 +164,17 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     coldThenKeyboard(f);
     for (let k = 0; k < 5; k++) {
       clock += 50;
+      vi.advanceTimersByTime(50);
       document.dispatchEvent(new FocusEvent('focusout'));
       vvResize(895);
       f.flush();
     }
     expect(pad()).toBeNull();
-    settle(f);
+    settle();
     expect(document.querySelectorAll('#' + PAD_ID)).toHaveLength(1);
     document.dispatchEvent(new FocusEvent('focusout'));
     vvResize(895);
-    settle(f);
+    settle();
     expect(document.querySelectorAll('#' + PAD_ID)).toHaveLength(1);
     expect(kbPads()).toBe(1);
   });
@@ -186,7 +183,7 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     mockScroll();
     const f = frames();
     mountBar();
-    start(f.frame, deps());
+    start(f.frame);
     setInner(956);
     f.flush();
     const a = input();
@@ -194,15 +191,15 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     resize(542);
     const b = input();
     b.focus();
-    settle(f);
+    settle();
     expect(pad()).toBeNull();
     // innerHeight 回来了但焦点还在输入框：也不做
     resize(895);
-    settle(f);
+    settle();
     expect(pad()).toBeNull();
     expect(kbPads()).toBe(0);
     b.blur();
-    settle(f);
+    settle();
     expect(pad()).not.toBeNull();
     expect(kbPads()).toBe(1);
   });
@@ -211,7 +208,7 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     const { by } = mockScroll();
     const f = frames();
     mountBar();
-    start(f.frame, deps());
+    start(f.frame);
     setInner(956);
     f.flush();
     const el = input();
@@ -219,7 +216,7 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     resize(542);
     el.blur();
     resize(956);
-    settle(f);
+    settle();
     expect(pad()).toBeNull();
     expect(by).not.toHaveBeenCalled();
     expect(readGapFixLog()).toMatch(/kb skip no-gap\(0\) top=61/);
@@ -230,7 +227,7 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     const f = frames();
     coldThenKeyboard(f);
     setGapFixOn(false);
-    settle(f);
+    settle();
     expect(pad()).toBeNull();
     expect(readGapFixLog()).toMatch(/kb skip off/);
   });
@@ -239,7 +236,7 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     mockScroll();
     const f = frames();
     mountBar();
-    start(f.frame, deps());
+    start(f.frame);
     expect(pad()).not.toBeNull();
     const el = input();
     el.focus();
@@ -247,13 +244,14 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     el.blur();
     resize(895);
     for (let k = 0; k < 4; k++) {
-      clock += KB_SETTLE_MS;
+      settle();
       f.flush();
       expect(document.querySelectorAll('#' + PAD_ID).length).toBeLessThanOrEqual(1);
     }
+    expect(kbPads()).toBe(0);
     clock += GIVE_UP_MS;
     for (let k = 0; k < 6; k++) {
-      clock += KB_SETTLE_MS;
+      settle();
       f.flush();
       expect(document.querySelectorAll('#' + PAD_ID).length).toBeLessThanOrEqual(1);
     }
@@ -264,8 +262,7 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     const { by, to } = mockScroll();
     const f = frames();
     coldThenKeyboard(f);
-    clock = 4000 + KB_SETTLE_MS;
-    f.flush();
+    settle();
     expect(pad()).not.toBeNull();
     document.dispatchEvent(new Event('touchstart'));
     sy = 120;
@@ -283,13 +280,16 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
   it('停止函数：之后键盘起落都不理', () => {
     const f = frames();
     mountBar();
-    const stop = start(f.frame, deps());
+    const stop = start(f.frame);
     setInner(956);
     f.flush();
     stop();
+    const el = input();
+    el.focus();
     resize(542);
+    el.blur();
     resize(895);
-    settle(f);
+    settle();
     expect(readGapFixLog()).not.toMatch(/kb/);
     expect(pad()).toBeNull();
   });
@@ -298,16 +298,27 @@ describe('键盘收起后再做一次（Q-4：冷启动 895 → 修好 956 → �
     mockScroll();
     const f = frames();
     mountBar();
-    start(f.frame, deps());
+    start(f.frame);
     setInner(956);
     f.flush();
+    const el = input();
     for (let k = 0; k < MAX_LINES; k++) {
+      el.focus();
       resize(542);
+      el.blur();
       resize(956);
-      settle(f);
+      settle();
     }
     const log = readGapFixLog().split('\n');
     expect(log).toHaveLength(MAX_LINES);
     expect(log[0]).toMatch(/^gapfix start=/);
+    expect(log.at(-1)).toMatch(/kb skip no-gap\(0\)/);
+  });
+
+  it('网页版（不是主屏幕版）不盯键盘', () => {
+    const kbClosed = vi.fn(() => () => undefined);
+    mountBar();
+    start(frames().frame, { standalone: false, kbClosed });
+    expect(kbClosed).not.toHaveBeenCalled();
   });
 });

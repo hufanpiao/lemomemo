@@ -306,8 +306,7 @@ describe('底栏的页签（R4）：键盘弹着、inert 时不代点（代码�
     expect(clicked).toHaveBeenCalledTimes(1);
   });
 
-  it('键盘弹着（底栏 data-kb、visibility: hidden）：不替页签点', () => {
-    view.rerender(<GlassBar active="today" hide />);
+  it('键盘弹着（根节点 data-kbhide，底栏 visibility: hidden）：不替页签点', () => {
     screen.getByRole('navigation', { hidden: true }).style.setProperty('visibility', 'hidden'); // jsdom 不算 CSS Modules 的样式，直接写
     const clicked = hook();
     fireEvent.click(document.documentElement, { clientX: 170, clientY: 720 });

@@ -353,15 +353,15 @@ test.describe('底栏：进出没有底栏的页照旧 View Transition（代码�
     await expect(page).toHaveURL(/#\/event\/new$/);
   });
 
-  test('键盘弹着（data-kb）时底栏不进快照：没有 view-transition-name，不会画出空阴影壳', async ({ page }) => {
+  test('键盘弹着（根节点 data-kbhide）时底栏不进快照：没有 view-transition-name，不会画出空阴影壳', async ({ page }) => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await expect(page.getByTestId('tabbar-add')).toBeVisible();
     const names = await page.evaluate(() => {
       const els = [...document.querySelectorAll<HTMLElement>('[data-testid="tabbar"],[data-testid="tabbar-add"]')];
-      for (const el of els) el.setAttribute('data-kb', '1');
+      document.documentElement.setAttribute('data-kbhide', '1');
       const v = els.map((el) => getComputedStyle(el).viewTransitionName);
-      for (const el of els) el.removeAttribute('data-kb');
+      document.documentElement.removeAttribute('data-kbhide');
       return { hidden: v, shown: els.map((el) => getComputedStyle(el).viewTransitionName) };
     });
     expect(names.hidden).toEqual(['none', 'none']);

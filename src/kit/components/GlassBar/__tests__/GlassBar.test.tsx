@@ -252,18 +252,17 @@ describe('GlassBar', () => {
     expect(fxCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[^@]*\.band,\s*\.edge \{\s*transition: none;/);
     expect(fxCss).toMatch(/:global\(:root\[data-rm='1'\]\) \.band,\s*:global\(:root\[data-rm='1'\]\) \.edge \{\s*transition: none;/);
     expect(fxCss).toMatch(/@media \(width >= 900px\) \{[^@]*\.edge \{\s*display: none;/);
-    expect(fxCss).toMatch(/\.edge\[data-kb='1'\] \{\s*visibility: hidden;/);
+    expect(fxCss).toMatch(/:global\(:root\[data-kbhide\]\) \.band,\s*:global\(:root\[data-kbhide\]\) \.edge \{\s*visibility: hidden;/);
     expect(fxCss).toMatch(/:global\(:root\[data-inset-wait\]\) \.edge \{\s*opacity: 0;/);
-    // DOM：首屏后部分挂上以后才有；不进读屏；有没有“＋”写在 data-add；键盘弹着跟着 data-kb
+    // DOM：首屏后部分挂上以后才有；不进读屏；有没有“＋”写在 data-add（键盘弹着只看根节点 data-kbhide，不往这里写属性）
     const view = render(<GlassBar active="today" add={{ label: '新建', onClick: () => undefined }} />);
     await ready();
     const el = screen.getByTestId('tabbar-edge');
     expect(el.getAttribute('aria-hidden')).toBe('true');
     expect(el.getAttribute('data-add')).toBe('1');
     expect(el.children.length).toBe(1);
-    view.rerender(<GlassBar active="notes" hide />);
+    view.rerender(<GlassBar active="notes" />);
     expect(screen.getByTestId('tabbar-edge').getAttribute('data-add')).toBe('0');
-    expect(screen.getByTestId('tabbar-edge').getAttribute('data-kb')).toBe('1');
   });
 
   it('样式：液滴只动 translate、scale（时长、曲线用令牌），两种减少动态效果都关掉；减少透明效果两种都换实色；切页名字登记过', async () => {
@@ -277,7 +276,6 @@ describe('GlassBar', () => {
     // 减少透明效果：带子照样在，而且是硬边实色（渐隐那段也不要）
     for (const re of [/@media \(prefers-reduced-transparency: reduce\) \{\s*\.band \{\s*background: linear-gradient\(to bottom, transparent var\(--band-fade\), var\(--bg\) var\(--band-fade\)\);/, /:global\(:root\[data-rt='1'\]\) \.band \{\s*background: linear-gradient\(to bottom, transparent var\(--band-fade\), var\(--bg\) var\(--band-fade\)\);/]) expect(fxCss).toMatch(re);
         expect(fxCss).toMatch(/@media \(width >= 900px\) \{\s*\.band \{\s*display: none;/);
-    expect(fxCss).toMatch(/\.band\[data-kb='1'\] \{\s*visibility: hidden;/);
     expect(css).not.toMatch(/\.band|\.jelly \{|@keyframes gel/); // 外壳的样式里没有首屏后部分的类
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.drop \{\s*transition: none;/);
     expect(fxCss).toMatch(/:global\(:root\[data-rm='1'\]\) \.jelly \{\s*animation: none;/);
@@ -306,9 +304,9 @@ describe('GlassBar', () => {
     expect(css).not.toContain('var(--rim-shade)');
     expect(css).toContain('backdrop-filter: blur(8px) saturate(1.8);');
     expect(css).not.toContain('var(--shadow-2)');
-    // 只藏底栏、“＋”、模糊带，不写成全局的 [data-kb] 选择器（设计复审一 R2）
-    expect(css).toMatch(/\.bar\[data-kb='1'\],\s*\.fab\[data-kb='1'\] \{\s*visibility: hidden;/);
-    expect(css).not.toMatch(/(^|\n)\[data-kb/);
+    // 键盘弹着按根节点 data-kbhide 只藏底栏、“＋”（实色带、渐隐层在 GlassBarFx），不写成藏一切的全局选择器（设计复审一 R2）
+    expect(css).toMatch(/:global\(:root\[data-kbhide\]\) \.bar,\s*:global\(:root\[data-kbhide\]\) \.fab \{\s*visibility: hidden;/);
+    for (const c of [css, fxCss]) expect(c).not.toMatch(/(^|\n)\[data-kb|:global\(:root\[data-kbhide\]\)\s*[,{]/);
     // “＋”聚焦只加焦点环，不覆盖底色圈、细灰边和阴影（R3）：写 box-shadow 的聚焦规则只有页签那条
     expect(css).toMatch(/\.tab:focus-visible,\s*\.fab:focus-visible \{\s*outline: 2px solid var\(--focus\);\s*\}/);
     expect(css).not.toMatch(/\.fab:focus-visible[^{]*\{[^}]*box-shadow/);

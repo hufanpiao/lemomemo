@@ -58,12 +58,10 @@ export interface GlassBarProps {
   add?: { label: string; onClick(): void };
   /** 什么时候下载首屏后部分（GlassBarFx.tsx）：App 传 afterAppPainted（首屏画完以后；kit 不直接依赖 platform）；不传就马上 */
   later?: (fn: () => void) => void;
-  /** 键盘弹着：底栏、“＋”、模糊带都藏起来（FA-7 第 3 项；App 订阅 platform/viewport.ts） */
-  hide?: boolean;
 }
 
-export function GlassBar({ active, add, later = (fn) => fn(), hide = false }: GlassBarProps) {
-  const kb = hide ? '1' : undefined;
+/** 键盘弹着时底栏、“＋”、实色带、渐隐层藏起来（FA-7 第 3 项）：只靠根节点 data-kbhide（platform/viewport.ts 写）和样式，不走属性 */
+export function GlassBar({ active, add, later = (fn) => fn() }: GlassBarProps) {
   const t = useT();
   const [want, setWant] = useState<{ from: TabName; to: TabName } | null>(null);
   // 路由换了（点过去到了，或者后退、别处跳走）就作废：不然后退回原页时又会按旧的“点到哪页”画
@@ -107,7 +105,7 @@ export function GlassBar({ active, add, later = (fn) => fn(), hide = false }: Gl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const fab = add && (
-    <Pressable type="button" className={styles.fab} aria-label={add.label} onClick={add.onClick} data-testid="tabbar-add" data-kb={kb}>
+    <Pressable type="button" className={styles.fab} aria-label={add.label} onClick={add.onClick} data-testid="tabbar-add">
       <span className={`${styles.glass} ${styles.fabTint}`} aria-hidden="true" />
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M12 5v14M5 12h14" />
@@ -121,7 +119,6 @@ export function GlassBar({ active, add, later = (fn) => fn(), hide = false }: Gl
         className={styles.bar}
         aria-label={t('nav.label', {})}
         data-testid="tabbar"
-        data-kb={kb}
         ref={navEl}
       >
         <span className={`${styles.glass} ${styles.barTint}`} aria-hidden="true" />
@@ -162,7 +159,7 @@ export function GlassBar({ active, add, later = (fn) => fn(), hide = false }: Gl
       {!wide && fab}
       {/* 放在外壳后面：底栏重挂时 Fx 用缓存和外壳同一次提交，它的 useLayoutEffect 要在 nav、液滴的 ref 挂上以后才跑（排在前面时 nav.current 还是空，点按代理挂不上）。
           实色带、渐隐层是 fixed + z-index 9，叠放不看 DOM 先后 */}
-      {Fx && <Fx nav={navEl} drop={dropEl} gel={gelEl} i={i} hasAdd={add !== undefined} kb={kb} wide={wide} fadeIn={fadeIn} />}
+      {Fx && <Fx nav={navEl} drop={dropEl} gel={gelEl} i={i} hasAdd={add !== undefined} wide={wide} fadeIn={fadeIn} />}
     </>
   );
 }

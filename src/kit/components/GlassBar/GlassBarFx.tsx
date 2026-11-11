@@ -86,14 +86,13 @@ export interface GlassBarFxProps {
   i: number;
   /** 有没有“＋”（随手记没有）：变了就重开副本引擎 */
   hasAdd: boolean;
-  kb: '1' | undefined;
   /** 电脑版侧栏（外壳按 (width >= 900px) 算好传进来）：侧栏不开副本引擎 */
   wide: boolean;
   /** 启动时异步下载到、晚于外壳挂上的那一次：实色带、渐隐层从 0 淡入（data-fade，@starting-style）；底栏重挂时用缓存同步画，不淡入 */
   fadeIn?: boolean;
 }
 
-export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide, fadeIn = false }: GlassBarFxProps) {
+export function GlassBarFx({ nav, drop, gel, i, hasAdd, wide, fadeIn = false }: GlassBarFxProps) {
   const glass = useRef<{ poke(ms?: number): void } | null>(null);
   const gelFx = useRef<((el: HTMLElement) => boolean) | null>(null);
   // 过渡中的点按（R4、R6）在提交时就挂上（useLayoutEffect）：从设置回今天时 GlassBar 在过渡回调里重新挂上，
@@ -113,7 +112,7 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide, fadeIn = false
     const lost = (e: MouseEvent): void => {
       if (e.target !== root) return;
       const plus = plusOf(n);
-      // 键盘弹着时底栏藏着（data-kb），不替它点
+      // 键盘弹着时底栏藏着（根节点 data-kbhide），不替它点
       const bar = getComputedStyle(n).visibility === 'hidden' ? [] : [...n.querySelectorAll<HTMLElement>('a[data-tab]'), ...(plus ? [plus] : [])];
       cancelTap();
       for (const el of bar) {
@@ -186,9 +185,9 @@ export function GlassBarFx({ nav, drop, gel, i, hasAdd, kb, wide, fadeIn = false
   }, [i, gel]);
   return (
     <>
-      <div className={fx.band} aria-hidden="true" data-kb={kb} data-fade={fadeIn ? '1' : undefined} data-testid="tabbar-band" />
+      <div className={fx.band} aria-hidden="true" data-fade={fadeIn ? '1' : undefined} data-testid="tabbar-band" />
       {/* 上沿外渐隐（B12）：在实色带后面挂，叠在它上面；没有“＋”时不挖那个圆 */}
-      <div className={fx.edge} aria-hidden="true" data-kb={kb} data-add={hasAdd ? '1' : '0'} data-fade={fadeIn ? '1' : undefined} data-testid="tabbar-edge">
+      <div className={fx.edge} aria-hidden="true" data-add={hasAdd ? '1' : '0'} data-fade={fadeIn ? '1' : undefined} data-testid="tabbar-edge">
         <div className={fx.edgeTint} />
       </div>
     </>

@@ -1,8 +1,9 @@
 // 台账 Q-2 早试（platform/vh-gapfix-gate.ts 的 startEarlyGapFix，11-11）：负责人真机日志 Gap fix 等底栏挂上 t=1571 才放垫块、t=1586 就变 956，
 // 启动画面盖着的这段底下一直是灰带。main.tsx 一开始同步早试一次（同样的垫块），不成再由 vh-gapfix.ts 等底栏挂上后照原样做；早试的时刻和结果记进 Gap fix 日志
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PAD_ID, readGapFixLog, startGapFix } from '../vh-gapfix.ts';
-import { EARLY_GIVE_UP_MS, EARLY_MAX_GAP, earlyGap, startEarlyGapFix, type EarlyGap } from '../vh-gapfix-gate.ts';
+import { GAP_MAX_PX } from '../viewport-geom.ts';
+import { readGapFixLog, startGapFix } from '../vh-gapfix.ts';
+import { EARLY_GIVE_UP_MS, earlyGap, PAD_ID, startEarlyGapFix, type EarlyGap } from '../vh-gapfix-gate.ts';
 
 /** 手动推进的“帧” */
 function frames() {
@@ -137,7 +138,7 @@ describe('startEarlyGapFix（早试本身）', () => {
     expect(e.what).toBe('changed 894->956 after=40ms gap=62 top=0');
   });
 
-  it(`顶部安全区还读到 0 也试（差值不超过 ${EARLY_MAX_GAP}）；到 ${EARLY_GIVE_UP_MS}ms 没变就撤、记 no-change`, () => {
+  it(`顶部安全区还读到 0 也试（差值不超过 ${GAP_MAX_PX}）；到 ${EARLY_GIVE_UP_MS}ms 没变就撤、记 no-change`, () => {
     const fr = frames();
     const e = startEarlyGapFix(fr.frame, win(), now, readTop);
     expect(pad()).not.toBeNull();
@@ -151,12 +152,13 @@ describe('startEarlyGapFix（早试本身）', () => {
     expect(fr.size).toBe(0);
   });
 
-  it('正常启动、横屏、差值不是顶部安全区、差值太大：不放垫块，直接记 skip', () => {
+  it('正常启动、横屏、差值不是顶部安全区、差值太大：不放垫块，直接记 skip 和原因（同 skipReason）', () => {
     const cases: Array<[number, number, number, string]> = [
-      [956, 440, 61, 'skip gap=0 top=61'],
-      [400, 900, 0, 'skip landscape gap=556 top=0'],
-      [895, 440, 24, 'skip gap=61 top=24'],
-      [700, 440, 0, 'skip gap=256 top=0'],
+      [956, 440, 61, 'skip no-gap(0) gap=0 top=61'],
+      // 横屏整屏取 screen 短边 440
+      [400, 900, 0, 'skip landscape gap=40 top=0'],
+      [895, 440, 24, 'skip gap-not-top(gap=61 top=24) gap=61 top=24'],
+      [700, 440, 0, 'skip gap-not-top(gap=256 top=0) gap=256 top=0'],
     ];
     for (const [h, w, top, what] of cases) {
       setInner(h);

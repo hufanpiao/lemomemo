@@ -279,9 +279,10 @@
   transition: none;
 }
 
-/* 键盘弹着（data-kb，FA-7 第 3 项）：底栏、“＋”不显示，也不能点、不进 Tab 顺序（visibility）；只管这两样，模糊带在 GlassBarFx.module.css（设计复审一 R2） */
-.bar[data-kb='1'],
-.fab[data-kb='1'] {
+/* 键盘弹着（根节点 data-kbhide，platform/viewport.ts 写；FA-7 第 3 项）：底栏、“＋”不显示，也不能点、不进 Tab 顺序（visibility）；
+   只管这两样，实色带、渐隐层在 GlassBarFx.module.css 按同一个属性藏（设计复审一 R2） */
+:global(:root[data-kbhide]) .bar,
+:global(:root[data-kbhide]) .fab {
   visibility: hidden;
 
   /* 藏着时不进切页快照：快照上补的圆角阴影（base.css）会画在空快照上，剩一个空阴影壳（代码审查 M5） */

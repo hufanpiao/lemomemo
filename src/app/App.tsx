@@ -68,8 +68,8 @@ function TabBar({ route }: { route: RouteName }) {
   const t = useT();
   const [paged, setPaged] = useState(() => document.querySelector(APP_PAGE_SELECTOR) !== null);
   useEffect(() => (paged ? undefined : whenOwnPage(() => setPaged(true))), [paged]);
-  // 键盘弹起时藏起底栏和“＋”（FA-7 第 3 项）：键盘检测（platform/viewport.ts）不在首屏，首屏画完以后再下载
-  const [kb, setKb] = useState(false);
+  // 视口监听（platform/viewport.ts，不在首屏，首屏画完以后再下载）：写根节点的 --kb、data-kbo、--vh-gap、data-kbhide，
+  // 键盘弹着时底栏和“＋”按 data-kbhide 由样式藏起（FA-7 第 3 项）；同一个分包里顺带拦 iOS 整页双指缩放
   useEffect(() => {
     let stop = (): void => undefined;
     let off = false;
@@ -77,9 +77,7 @@ function TabBar({ route }: { route: RouteName }) {
       import('../platform/viewport.ts')
         .then((m) => {
           if (off) return;
-          const k = m.watchKeyboard((open) => setKb(open));
-          stop = k;
-          // 同一个分包里顺带拦 iOS 整页双指缩放（11-11 负责人；platform/viewport.ts 的 blockPageZoom）
+          const k = m.startViewport();
           const z = m.blockPageZoom();
           stop = () => {
             k();
@@ -122,7 +120,7 @@ function TabBar({ route }: { route: RouteName }) {
   });
   if (!bar || !paged) return null;
   const { tab, add } = bar;
-  if (add === null) return <GlassBar active={tab} later={afterAppPainted} hide={kb} />;
+  if (add === null) return <GlassBar active={tab} later={afterAppPainted} />;
   // 展开成完整新建页：打的字和那天带过去（kit/state/new-item.ts，新建页挂上以后取走）
   const expand = (text: string, day: DateStr | null): void => {
     setNewItemTitle(text);
@@ -136,7 +134,7 @@ function TabBar({ route }: { route: RouteName }) {
   };
   return (
     <>
-      <GlassBar active={tab} later={afterAppPainted} hide={kb} add={{ label: t('nav.add', {}), onClick: open }} />
+      <GlassBar active={tab} later={afterAppPainted} add={{ label: t('nav.add', {}), onClick: open }} />
       <PlusSlot open={plus !== null} day={plus?.day ?? null} opened={plus?.n} onExpand={expand} onEdit={edit} onClose={() => setPlus(null)} />
     </>
   );

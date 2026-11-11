@@ -50,25 +50,27 @@ html[data-app] {
   --inset-bottom: env(safe-area-inset-bottom);
   --tabbar-pad: max(calc(var(--tabbar-h) + var(--inset-bottom) + 16px), var(--sn-pad, 0px));
 
-  /* 浮条（撤销条等）统一的底部位置（K8 方案复审，主持人 11-05 定由前端 B 定义）：底栏上沿往上一点（安全区 + 118px）；
-     键盘弹着时 --kb 是键盘高度，浮条贴在键盘上沿，取两者大的。--undo-h 是撤销条高度，叠放时往上让。
-     6 处浮条改用这两个变量由前端 A 做 K8 时一起改；宽屏侧栏（≥ 900px）没有底栏，在侧栏那段媒体查询里覆盖 --dock-bottom
-     减 --vh-gap（台账 Q-13 焊死，独立验证 11-11 建议 1）：布局视口少顶部安全区时浮条和底栏一起补到屏幕底，间距不变 */
-  --dock-bottom: max(calc(var(--inset-bottom) + 118px - var(--vh-gap, 0px)), var(--kb, 0px));
+  /* 贴底浮条（撤销条、打字条、提醒按钮条等）离底的唯一公式：键盘没弹时离底 安全区 + --dock-lift（手机在底栏上方 118，宽屏 24），
+     减 --vh-gap（布局视口少一截时补到屏幕底）；键盘压住布局视口时 --kb 是键盘高度，取两者大的（变量由 platform/viewport.ts 写）。
+     组件只写 bottom: var(--dock-bottom)，不另写公式；--undo-h 是撤销条高度，叠放时往上让 */
+  --dock-lift: 118px;
+  --dock-bottom: max(calc(var(--inset-bottom) + var(--dock-lift) - var(--vh-gap, 0px)), var(--kb, 0px));
   --undo-h: 56px;
 
-  /* 随手记底部输入行键盘没弹时往下挪（负责人 11-11“随手记的输入框再往下一点，感觉不太协调”：原来离底栏上沿约 48pt，挪 36 后留 12）；键盘弹着时归 0 */
+  /* 随手记底部输入行键盘没弹时往下挪 36（离底栏上沿留 12）；键盘弹着时归 0 */
   --inrow-drop: 36px;
 }
 
-/* 键盘弹着（<html data-kbo>，platform/viewport.ts，Q-9 11-11）：底栏、“＋”这时藏着（FA-7 第 3 项），浮条（打字条、随手记输入行等）直接贴键盘上沿，
-   不再留出底栏那 118px。浏览器里 --kb 是键盘压住的高度；iOS 主屏幕版键盘把布局视口本身压矮，布局视口下沿就是键盘上沿，--kb 不写（0） */
-:root[data-kbo] {
-  --dock-bottom: var(--kb, 0px);
+/* 手机上键盘弹着（<html data-kbo>）：底栏、“＋”藏着，浮条直接贴键盘上沿。iOS 主屏幕版键盘把布局视口本身压矮，--kb 是 0。
+   只管窄屏：宽屏没有底栏，键盘弹着照旧走上面的公式（台账 Q-20） */
+@media (width < 900px) {
+  :root[data-kbo] {
+    --dock-bottom: var(--kb, 0px);
 
-  /* 随手记底部输入行键盘弹着时离辅助条再高一点（负责人 11-11“随手记输入框再距离辅助框再高一点”，原来只隔约 12pt） */
-  --inrow-kb-gap: 12px;
-  --inrow-drop: 0px;
+    /* 随手记输入行键盘弹着时离键盘辅助条再高 12 */
+    --inrow-kb-gap: 12px;
+    --inrow-drop: 0px;
+  }
 }
 
 /* 同步提示卡显示着（<html data-sn-card>，SyncNoticeHost 写 --sn-h = 卡的实际高度）：页底留白至少让到卡上沿再加 8px，
@@ -83,11 +85,11 @@ html[data-app] {
 }
 
 /* 电脑版侧栏（D5，断点和 GlassBar.module.css 侧栏那段一样是 (width >= 900px)）：底部没有底栏，
-   有底栏的页底部留白回到安全区 + 16px；浮条贴底：安全区 + 24px（普通间距，和侧栏离窗口边 16px 拉开一点），键盘弹着照旧取键盘高度 */
+   有底栏的页底部留白回到安全区 + 16px；浮条离底 安全区 + 24px（和侧栏离窗口边 16px 拉开一点） */
 @media (width >= 900px) {
   :root {
     --tabbar-pad: max(calc(var(--inset-bottom) + 16px), var(--sn-pad, 0px));
-    --dock-bottom: max(calc(var(--inset-bottom) + 24px), var(--kb, 0px));
+    --dock-lift: 24px;
     --top-fade: 0px;
   }
 }

@@ -1,14 +1,15 @@
 // “＋”上方的小气泡（B3 S23，见 ../data/plus-hint.ts）：这次启动要不要出、出在哪
 // • exe 不出（R-90：exe 不做语音）；开关 PLUS_HINT_ENABLED 关着时不出、也不记次数
 // • 位置跟着“＋”（底栏 kit/components/GlassBar 的 data-testid="tabbar-add"）：只读它的位置，不改底栏；
-//   “＋”不在（没有底栏的页）、被藏起（键盘弹起时 data-kb="true"）、尺寸为 0 时不出
-// • 底栏换页、键盘起落、窗口变化时重新量：听 resize、hashchange，并看根节点下的增删和 data-kb 变化（合并到 100 ms 量一次）；
+//   “＋”不在（没有底栏的页）、被藏起（键盘弹起时根节点 data-kbhide，platform/viewport.ts）、尺寸为 0 时不出
+// • 底栏换页、键盘起落、窗口变化时重新量：听 resize、hashchange，并看根节点下的增删和 data-kbhide 变化（合并到 100 ms 量一次）；
 //   量出来和上次一样就不更新状态，不白白重画（S23 代码审建议 1）
 // • 本机库还没准备好（例如还在登录页）或读写出错：这次不出，换页（hashchange）时再查一次（建议 3、复审 R1）
 // • 按住过一次（markPlusHeld）：当场收起（建议 3）
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { clock } from '../../../platform/clock.ts';
 import { isTauri } from '../../../platform/env.ts';
+import { BAR_HIDE_ATTR } from '../../../platform/viewport.ts';
 import { PLUS_HINT_ENABLED, plusHeldNow, plusHintThisLaunch, watchPlusHeld } from '../data/plus-hint.ts';
 
 export interface HintSpot {
@@ -24,7 +25,7 @@ const sameSpot = (a: HintSpot | null, b: HintSpot | null): boolean => a === b ||
 
 /** “＋”的位置 → 气泡放哪；看不见时 null */
 export function spotOf(fab: Element | null, vw: number, vh: number): HintSpot | null {
-  if (!fab || fab.getAttribute('data-kb') === 'true') return null;
+  if (!fab || fab.ownerDocument.documentElement.hasAttribute(BAR_HIDE_ATTR)) return null;
   const r = fab.getBoundingClientRect();
   if (r.width === 0 || r.height === 0) return null;
   return { right: Math.round(vw - r.right), bottom: Math.round(vh - r.top + 10) };
@@ -73,7 +74,7 @@ export function usePlusHint(enabled: boolean = PLUS_HINT_ENABLED, exe: boolean =
     window.addEventListener('resize', soon);
     window.addEventListener('hashchange', soon);
     const mo = new MutationObserver(soon);
-    mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-kb'] });
+    mo.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: [BAR_HIDE_ATTR] });
     return () => {
       window.removeEventListener('resize', soon);
       window.removeEventListener('hashchange', soon);
