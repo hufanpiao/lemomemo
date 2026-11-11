@@ -58,37 +58,41 @@ function tokenOr(p: () => Promise<string | null>, signal: AbortSignal): Promise<
   });
 }
 
-export function createCallAi(o: AiParseApiOptions = {}): CallAi {
+/**
+ * 带本次会话的令牌 POST 一个函数，返回已 parse 的 JSON（打字的 ai-parse、录音的 ai-voice 共用，口径见文件头）。
+ * headers 里放 content-type 和各自的参数头；authorization、apikey 由这里加
+ */
+export async function postFn(fn: string, req: { headers: Record<string, string>; body: BodyInit }, signal: AbortSignal, o: AiParseApiOptions = {}): Promise<unknown> {
   const doFetch = o.fetch ?? appFetch;
-  const token = o.token ?? sessionToken;
-  const refresh = o.refresh ?? refreshedToken;
-  return async (req: AiParseReq, signal: AbortSignal): Promise<unknown> => {
-    const jwt = await tokenOr(token, signal);
-    if (jwt === null) throw new SendError('http');
-    const url = o.url ?? `${buildInfo.supabaseUrl}/functions/v1/${AI_PARSE_FN}`;
-    const body = JSON.stringify(req);
-    const send = (t: string): Promise<Response> =>
-      doFetch(url, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${t}`, apikey: o.anonKey ?? buildInfo.anonKey, 'content-type': 'application/json' },
-        body,
-        signal,
-        cache: 'no-store',
-      });
-    let res = await send(jwt);
-    if (res.status === 401) {
-      const fresh = await tokenOr(refresh, signal);
-      if (fresh !== null && fresh !== jwt) res = await send(fresh);
-    }
-    if (!res.ok) throw new SendError('http');
-    try {
-      return (await res.json()) as unknown;
-    } catch (e) {
-      // 读包体时被取消（超时）原样抛，askAi 认成 timeout
-      if (signal.aborted) throw e;
-      throw new SendError('bad_response');
-    }
-  };
+  const jwt = await tokenOr(o.token ?? sessionToken, signal);
+  if (jwt === null) throw new SendError('http');
+  const url = o.url ?? `${buildInfo.supabaseUrl}/functions/v1/${fn}`;
+  const send = (t: string): Promise<Response> =>
+    doFetch(url, {
+      method: 'POST',
+      headers: { ...req.headers, authorization: `Bearer ${t}`, apikey: o.anonKey ?? buildInfo.anonKey },
+      body: req.body,
+      signal,
+      cache: 'no-store',
+    });
+  let res = await send(jwt);
+  if (res.status === 401) {
+    const fresh = await tokenOr(o.refresh ?? refreshedToken, signal);
+    if (fresh !== null && fresh !== jwt) res = await send(fresh);
+  }
+  if (!res.ok) throw new SendError('http');
+  try {
+    return (await res.json()) as unknown;
+  } catch (e) {
+    // 读包体时被取消（超时）原样抛，askAi 认成 timeout
+    if (signal.aborted) throw e;
+    throw new SendError('bad_response');
+  }
+}
+
+export function createCallAi(o: AiParseApiOptions = {}): CallAi {
+  return (req: AiParseReq, signal: AbortSignal): Promise<unknown> =>
+    postFn(AI_PARSE_FN, { headers: { 'content-type': 'application/json' }, body: JSON.stringify(req) }, signal, o);
 }
 
 /** 打字条默认用的那一个 */

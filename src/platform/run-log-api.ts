@@ -16,3 +16,9 @@ export function rlog(line: string): void {
   if (slot.sink) slot.sink(line);
   else if (slot.q.length < MAX_EARLY) slot.q.push([Date.now(), line]);
 }
+
+/** 进日志的错误类型名：` type=<名>`，只收字母；认不出返回空串。错误的 message 可能带用户内容，不记 */
+export function errTag(err: unknown): string {
+  const name = typeof err === 'object' && err !== null && 'name' in err ? (err as { name: unknown }).name : null;
+  return typeof name === 'string' && /^[A-Za-z]{1,40}$/.test(name) ? ` type=${name}` : '';
+}
