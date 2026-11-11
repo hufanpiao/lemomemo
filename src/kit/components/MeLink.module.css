@@ -1,0 +1,22 @@
+/* 顶栏右上角的设置入口（R-381，四页共用；原来今天页、随手记页各写一份，数值照搬）：触控区 44，圆圈在 MeAvatar 里内缩 4px */
+.me {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--hit);
+  height: var(--hit);
+  border-radius: 50%;
+  text-decoration: none;
+}
+
+.me:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 电脑版（D5，(width >= 900px)）：设置入口在左边侧栏最下面，右上角这个藏掉，免得两个入口 */
+@media (width >= 900px) {
+  .me {
+    display: none;
+  }
+}

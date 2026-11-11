@@ -48,6 +48,12 @@ test.describe('设置首页账号一行', () => {
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today-settings')).toBeVisible();
     const today = await measure('[data-testid="today-settings"] > span');
+    // R-381：待办、日历、随手记右上角的头像也是同一个（kit 的 MeLink），圆圈一样
+    for (const [route, id] of [['todos', 'todos-settings'], ['calendar', 'cal-settings'], ['notes', 'notes-settings']] as const) {
+      await page.goto(`/app/#/${route}`);
+      await expect(page.getByTestId(id)).toBeVisible();
+      expect(await measure(`[data-testid="${id}"] > span`), id).toEqual(today);
+    }
     await page.goto(SETTINGS);
     await expect(page.getByTestId('settings-account-avatar')).toBeVisible();
     const row = await measure('[data-testid="settings-account-avatar"]');

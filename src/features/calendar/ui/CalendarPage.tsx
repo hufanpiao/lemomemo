@@ -22,6 +22,7 @@ import { createPortal } from 'react-dom';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { monthOf, weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
 import { navigate, useRoute } from '../../../app/router.ts';
+import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { ReadonlyToast, RepeatBanner } from '../../../kit/components/ReadonlyRow.tsx';
 import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import { Appear } from '../../../motion/components.ts';
@@ -231,6 +232,7 @@ export default function CalendarPage() {
             </button>
           }
         />
+        <MeLink testId="cal-settings" />
       </div>
       <CalNav
         t={t}

@@ -59,6 +59,22 @@ afterEach(() => {
 });
 
 describe('月视图', () => {
+  it('右上角头像是设置入口（R-381）：和月份胶囊在同一行的右端，不在翻页容器里（横滑翻页不吃掉它）；月视图、周视图都有', () => {
+    open('#/calendar');
+    const me = screen.getByTestId('cal-settings');
+    expect(me.getAttribute('href')).toContain('#/settings');
+    expect(me.getAttribute('aria-label')).toBe('设置');
+    const row = me.parentElement;
+    expect(row?.className).toBe(styles.top);
+    expect(row?.contains(screen.getByTestId('cal-title'))).toBe(true);
+    expect(row?.lastElementChild).toBe(me);
+    expect(screen.getByTestId('cal-pager').contains(me)).toBe(false);
+    cleanup();
+    open('#/cal/week/2026-11-05');
+    expect(screen.getByTestId('cal-week')).toBeTruthy();
+    expect(screen.getByTestId('cal-settings').closest('[data-testid="cal-pager"]')).toBeNull();
+  });
+
   it('#/calendar：本月 42 格，周一起始；今天高亮；“今天”在本月时 aria-disabled（焦点不丢，不用 disabled）', () => {
     open('#/calendar');
     expect(screen.getByTestId('cal-title').textContent).toContain('2026年11月');

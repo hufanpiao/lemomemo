@@ -35,6 +35,18 @@ afterEach(() => {
 
 const titleBtn = (title: string) => screen.getByText(title).closest('button') as HTMLButtonElement;
 
+describe('待办页顶栏（R-381）', () => {
+  it('“待办”标题右端是设置入口头像，和今天页、随手记页同一个组件', async () => {
+    render(<TodosPage />);
+    const me = await screen.findByTestId('todos-settings');
+    expect(me.getAttribute('href')).toContain('#/settings');
+    expect(me.getAttribute('aria-label')).toBe('设置');
+    const h1 = screen.getByRole('heading', { level: 1 });
+    expect(me.parentElement).toBe(h1.parentElement);
+    expect(h1.parentElement?.lastElementChild).toBe(me);
+  });
+});
+
 describe('待办列表的只读行', () => {
   it('只读行行尾有“要新版本”标记（读屏读整句），圆圈 aria-disabled；可写的行没有', async () => {
     render(<TodosPage />);

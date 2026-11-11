@@ -34,28 +34,7 @@
   font-weight: 600;
 }
 
-/* 右上角头像（设置入口，notesHead 第 1321 行；同今天页 .me：触控区 44，圆在 kit 的 MeAvatar 里） */
-.me {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: var(--hit);
-  height: var(--hit);
-  border-radius: 50%;
-  text-decoration: none;
-}
-
-.me:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-/* 电脑：设置入口在侧栏最下面，这里藏掉（同今天页） */
-@media (width >= 900px) {
-  .me {
-    display: none;
-  }
-}
+/* 右上角头像（设置入口，notesHead 第 1321 行）在 kit 的 MeLink（R-381，四页共用；触控区 44，圆在 kit 的 MeAvatar 里） */
 
 .filter {
   display: flex;

@@ -15,9 +15,12 @@
 }
 
 /* ───────── 页顶（R-101 摆法 B） ───────── */
+
+/* 月份胶囊这一行；右端是设置入口头像（R-381，四页共用 kit 的 MeLink）。头像不在下面的翻页容器（.pager）里，横滑翻页的手势不会吃掉它 */
 .top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   min-height: var(--hit);
   margin-bottom: 6px;
 }

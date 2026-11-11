@@ -16,6 +16,7 @@ import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
 import { ReadonlyMark, ReadonlyToast, RoCheckCircle } from '../../../kit/components/ReadonlyRow.tsx';
+import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { useRoT } from '../../../kit/hooks/useRoT.ts';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
@@ -102,7 +103,8 @@ export default function TodosPage() {
     <main className={styles.page} data-feature="todos" data-testid="todos">
       <header className={styles.top}>
         <h1 className={styles.h1}>{t('list.title', {})}</h1>
-        {/* 新建待办在底栏的“＋”（负责人 11-05 ③，原来右上角的“＋ 新建”去掉） */}
+        {/* 新建待办在底栏的“＋”（负责人 11-05 ③，原来右上角的“＋ 新建”去掉）；右上角是设置入口头像（R-381，四页共用 MeLink） */}
+        <MeLink testId="todos-settings" />
       </header>
 
       {l.projects.length ? (

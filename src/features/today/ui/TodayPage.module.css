@@ -16,30 +16,7 @@
   margin: 0 0 12px;
 }
 
-/* 头像（设置入口）：触控区 44，看得见的圆 36（::before 画），浅底细边，和日期标题同一层级（设计动效评审 D6，负责人 11-05） */
-.me {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: var(--hit);
-  height: var(--hit);
-  border-radius: 50%;
-  text-decoration: none;
-}
-
-/* 圆圈、字和人形在 kit 的 MeAvatar（设置首页账号一行共用，负责人 11-05） */
-.me:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
-/* 电脑版（D5，(width >= 900px)）：设置入口在左边侧栏最下面，右上角这个藏掉，免得两个入口 */
-@media (width >= 900px) {
-  .me {
-    display: none;
-  }
-}
-
+/* 右上角头像（设置入口）在 kit 的 MeLink（R-381 起今天、待办、日历、随手记四页共用） */
 .date {
   margin: 0;
   font-size: var(--fs-20);

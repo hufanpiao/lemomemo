@@ -24,13 +24,12 @@
 // • 液态玻璃底栏、“＋”、时间河、提醒按钮条不在这一段（FA-4、FA-7）
 import { Suspense, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
-import { hrefOf, navigate, navigateTab, plainClick } from '../../../app/router.ts';
+import { navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
 import list from '../../../kit/components/List.module.css';
-import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
+import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
-import { useT } from '../../../kit/hooks/useT.ts';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
 import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
@@ -85,7 +84,6 @@ function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
 }
 
 export default function TodayPage() {
-  const tApp = useT();
   const t = useTodayT();
   const locale = useLocale();
   const d = useToday();
@@ -127,9 +125,7 @@ export default function TodayPage() {
         <h1 className={styles.date} tabIndex={-1}>{fmtDay(d.today, locale, 'monthDayWeek')}</h1>
         {/* 设置入口（负责人 11-05 ①；接手清单 NAV-today-no-settings）：右上角头像，名字第一个字；没有名字时是一个人形。
             点了交给路由压一条带本次编号的历史（R-372）：设置里“‹ 今天”和左滑都退回这一条，不再叠一条今天；新标签页打开照常 */}
-        <a className={styles.me} href={hrefOf('settings')} onClick={(e) => plainClick(e) && navigateTab('settings')} aria-label={tApp('app.settings', {})} data-testid="today-settings">
-          <MeAvatar />
-        </a>
+        <MeLink testId="today-settings" />
       </div>
 
       {/* 外面包一层：有“错过 N 条提醒”那一行时下面留 8px（和日历页 .unsynced 同一个值；设计复审 今天页待办 M1），没有时不占位 */}

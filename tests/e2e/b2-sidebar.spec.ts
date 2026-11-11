@@ -71,7 +71,7 @@ test.describe('电脑版侧栏（FA-7 D5）', () => {
     await expect(me).toBeVisible();
     expect((await me.boundingBox())?.y ?? 0).toBeGreaterThan(ys[3] ?? 0);
     await expect(page.getByTestId('today-settings')).toBeHidden();
-    // 页面让出左边
+    // 页面让出左边（R-381 的待办、日历头像在宽屏也藏掉，见 r381-avatar.spec.ts）
     const main = await page.locator('main[data-feature="today"]').boundingBox();
     expect(main?.x ?? 0).toBeGreaterThanOrEqual(16 + 78);
     // 切页、选中项跟着走；“＋”点一下打开打字条（B3 M4），Esc 收起；设置入口进设置
@@ -168,6 +168,11 @@ test.describe('电脑版侧栏（FA-7 D5）', () => {
     await expect(page.getByTestId('today-settings')).toBeVisible();
     await expect(page.getByTestId('tabbar-band')).toBeAttached({ timeout: 10_000 });
     await expect(page.getByTestId('tabbar-settings')).toBeHidden();
+    // R-381：待办、日历右上角也有（899 宽还不藏）
+    for (const [route, id] of [['todos', 'todos-settings'], ['calendar', 'cal-settings']] as const) {
+      await page.goto(`/app/#/${route}`);
+      await expect(page.getByTestId(id), id).toBeVisible();
+    }
   });
 });
 

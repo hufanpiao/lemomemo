@@ -20,13 +20,12 @@
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
 import { useEffect, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
-import { hrefOf, navigate, navigateTab, plainClick, useRoute } from '../../../app/router.ts';
+import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
-import { MeAvatar } from '../../../kit/components/MeAvatar.tsx';
+import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { ReadonlyMark, ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
-import { useT } from '../../../kit/hooks/useT.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable } from '../../../motion/components.ts';
 import { useNoteList, type NoteItem } from '../hooks/useNoteList.ts';
@@ -65,7 +64,6 @@ export default function NotesPage() {
 
 function NotesList() {
   const t = useNotesT();
-  const tApp = useT();
   const locale = useUi((s) => s.locale);
   const view = useNotesViewValue();
   const wide = useWide();
@@ -126,9 +124,7 @@ function NotesList() {
     <main className={styles.page} data-feature="notes" data-testid="notes" data-view={view}>
       <header className={styles.top}>
         <h1 className={styles.h1}>{t('notes.title', {})}</h1>
-        <a className={styles.me} href={hrefOf('settings')} onClick={(e) => plainClick(e) && navigateTab('settings')} aria-label={tApp('app.settings', {})} data-testid="notes-settings">
-          <MeAvatar />
-        </a>
+        <MeLink testId="notes-settings" />
       </header>
 
       {l.counts.length ? (
