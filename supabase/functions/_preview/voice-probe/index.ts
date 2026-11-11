@@ -11,6 +11,8 @@ import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.1
 import { GeminiProvider } from '../../_shared/ai/gemini.ts';
 import { takeRate, type StoreAdmin } from '../../_shared/ai/store.ts';
 import { handle, type ProbeLog } from './handler.ts';
+import { timedFetch } from '../../_shared/net.ts';
+import { STORE_TIMEOUT_MS } from '../../_shared/store-timeout.ts';
 
 let admin: SupabaseClient | null = null;
 function adminClient(): SupabaseClient {
@@ -18,7 +20,7 @@ function adminClient(): SupabaseClient {
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) throw new Error('misconfigured');
-  admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
   return admin;
 }
 

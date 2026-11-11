@@ -19,6 +19,8 @@ import { skipTestRecipients } from '../_shared/account-mail.ts';
 import { ACCOUNT_ERRS, DbError, exportTablesOf, handle, memProbeFor, withStoreTimeouts, type AccountStore } from './core.ts';
 import { json } from '../_shared/http.ts';
 import { sendMail } from '../_shared/mail-send.ts';
+import { timedFetch } from '../_shared/net.ts';
+import { STORE_SIZE_TIMEOUT_MS } from './store-timeout.ts';
 
 /** rpc 抛出的业务错误（raise exception '<码>'），原样当错误码 */
 const RPC_CODES = new Set(['admin_cannot_delete', 'account_disabled', 'account_pending_deletion']);
@@ -178,7 +180,8 @@ Deno.serve((req) => {
     log('misconfigured');
     return json(500, { error: 'misconfigured' });
   }
-  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  // 每个请求的上限取最长那一档（export_size_over 20 秒），不抢在 store-timeout.ts 的按调用计时前面
+  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_SIZE_TIMEOUT_MS) } });
   return handle(req, {
     async authenticate(r, opts) {
       try {

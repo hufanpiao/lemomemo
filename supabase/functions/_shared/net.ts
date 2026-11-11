@@ -1,5 +1,6 @@
-// 服务器函数出站 HTTP 请求的超时只在这里做（架构约定 10.1）：supabase-js 的 global.fetch（三个定时函数）、R2、Resend、Turnstile、Gemini、Web Push 都经 timedFetch。
-// 不经这里的：shared/objstore 自带超时（和 Workers 共用、不能引本目录；account-purge 外面再套一层）；别的函数的 supabase-js 按一次调用计时（storeTimer、auth.ts）。
+// 服务器函数出站 HTTP 请求的超时只在这里做（架构约定 10.1）：所有函数 createClient 的 global.fetch（tests/functions/shared-net.test.ts 逐处核对）、
+//   R2、Resend、Turnstile、Gemini、Web Push 都经 timedFetch。store-timeout.ts、auth.ts 的按调用计时是在这之上另加的更短一层。
+// 不经这里的只有 shared/objstore 自带的超时（和 Workers 共用、不能引本目录；account-purge 外面再套一层）。
 // 底层 fetch 由调用方传进来，本文件不碰全局：ai-voice 的依赖链经 gemini.ts 引到这里，链上不准出现全局网络（tests/edge/voice-probe-guard.test.ts）。
 // 用 setTimeout 计时而不是 AbortSignal.timeout：测试的假计时器管得到。到点前不清计时器——读响应正文也算在超时里，到点中止已经读完的请求不起作用。
 

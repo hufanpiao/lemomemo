@@ -11,6 +11,8 @@ import { cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { INVITE_ADMIN_ERROR_CODES } from '../_shared/gen/schema/invite-admin.ts';
 import { handle, INVITE_ADMIN_ERRS, type InviteStore } from './core.ts';
 import { withStoreTimeouts } from './store-timeout.ts';
+import { timedFetch } from '../_shared/net.ts';
+import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 
 // 没有生成的库类型：按 _shared/auth.ts 的写法用不带泛型的 SupabaseClient（行一律当 any，返回值逐个收窄）
 // deno-lint-ignore no-explicit-any
@@ -71,7 +73,7 @@ Deno.serve((req) => {
     log('misconfigured');
     return json(500, { error: 'misconfigured' });
   }
-  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
   return handle(req, {
     async authenticate(r) {
       try {

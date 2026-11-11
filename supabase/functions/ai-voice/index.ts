@@ -10,6 +10,8 @@ import { aiAllowed } from '../_shared/consent.ts';
 import { checkDefaultDay, normLocale, normProjects } from '../_shared/gen/schema/ai.ts';
 import { versionGate } from '../_shared/version-gate.ts';
 import { handle, json } from './core.ts';
+import { timedFetch } from '../_shared/net.ts';
+import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 
 // ai-voice 整个目录禁 console（eslint no-console，A23：录音函数一个字都不往日志打）；错误码不打印。
 // 失败分支由 core.ts 经 logFail 写进 logs 表（固定错误码、HTTP 状态、类型名、字节数区间）；校验没过的原因由 settle 写进 logs 表
@@ -22,7 +24,7 @@ Deno.serve(async (req) => {
     log('misconfigured');
     return json(500, { error: 'misconfigured' });
   }
-  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
   const blocked = await versionGate('ai-voice', req, async (signal) => {
     const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
     if (error) throw new Error('db');

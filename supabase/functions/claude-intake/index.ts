@@ -16,6 +16,8 @@ import { captureRow } from '../_shared/gen/logic/capture-map.ts';
 import { arrangeHint, confidence, parseSplit, recurHint } from '../_shared/gen/logic/parse/index.ts';
 import { checkParseOutput, normLocale, AI_PROJECTS_MAX } from '../_shared/gen/schema/ai.ts';
 import { handle, json, StoreError, type Row, type TokenRow } from './core.ts';
+import { timedFetch } from '../_shared/net.ts';
+import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 
 const log = (code: string) => console.error(`claude-intake: ${code}`);
 
@@ -26,7 +28,7 @@ Deno.serve(async (req) => {
     log('misconfigured');
     return json(500, { error: 'misconfigured' });
   }
-  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
   return handle(req, {
     gate: gateDeps(admin, log, (userId) => aiAllowed(admin, userId)),
     uuid: () => crypto.randomUUID(),

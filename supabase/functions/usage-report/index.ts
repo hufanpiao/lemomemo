@@ -3,12 +3,14 @@
 // 不直连数据库（不 import _shared/db.ts），不碰 R2。resend_24h 要有读权限的 Resend 密钥，暂不接（不传，返回体里为 null）。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { authMailFromRpc, handle, orphansFromRpc, securityFromRpc, type UsageDb } from './core.ts';
+import { timedFetch } from '../_shared/net.ts';
+import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 
 function makeDb(): UsageDb {
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) throw new Error('misconfigured');
-  const priv = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }).schema('private');
+  const priv = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } }).schema('private');
   return {
     async heartbeats(signal) {
       const { data, error } = await priv.from('heartbeat').select('name, at, detail').abortSignal(signal);

@@ -9,7 +9,8 @@
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { envKind } from '../_shared/env-kind.ts';
 import { json } from '../_shared/http.ts';
-import { postOut } from '../_shared/net.ts';
+import { postOut, timedFetch } from '../_shared/net.ts';
+import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { sendMail } from '../_shared/mail-send.ts';
 import { cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { handle, type AuthAdmin, type Store, type TurnstileResult } from './core.ts';
@@ -155,7 +156,7 @@ Deno.serve((req) => {
   }
   const siteverifyUrl = siteverify.ok ? siteverify.url : TURNSTILE_SITEVERIFY_URL;
   const emailsUrl = emails.ok ? emails.url : RESEND_EMAILS_URL;
-  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
   const until = Date.now() + REQUEST_BUDGET_MS;   // 这次请求的 store、Auth 调用共用一份 100 秒预算
   return handle(req, {
     store: withStoreTimeouts((signal) => makeStore(admin, signal), { log, until }),

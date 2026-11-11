@@ -13,6 +13,8 @@ import { loadVapid, VapidSigner, type VapidKeys, type VapidLoad } from '../_shar
 import { json } from '../_shared/http.ts';
 import { versionGate } from '../_shared/version-gate.ts';
 import { handle, type TestDevice } from './core.ts';
+import { timedFetch } from '../_shared/net.ts';
+import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 
 const log = (code: string) => console.error(`push-test: ${code}`);
 
@@ -35,7 +37,7 @@ Deno.serve(async (req) => {
     log('misconfigured');
     return json(500, { error: 'misconfigured' });
   }
-  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
   const blocked = await versionGate('push-test', req, async (signal) => {
     const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
     if (error) throw new Error('db');
