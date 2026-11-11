@@ -4,7 +4,8 @@ import { resetNativeBridgeForTest, setNativeBridge, showLocalTestNotification, w
 import { closeHandledNotifications, parseReminderTag } from '../notifications.ts';
 import { notificationPermission, requestNotificationPermission } from '../perm.ts';
 import { getPushOutcome, setPushOutcome, subscribePushOutcome } from '../push-status.ts';
-import { blockPageZoom, createKeyboardWatcher, keyboardHeight, KB_MIN_PX } from '../viewport.ts';
+import { blockPageZoom, createKeyboardWatcher } from '../viewport.ts';
+import { keyboardHeight, KB_MIN_PX } from '../viewport-geom.ts';
 
 const ID = '0b6f4f1e-2c7d-4a7e-9a55-111111111111';
 

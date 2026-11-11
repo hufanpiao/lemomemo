@@ -1,6 +1,7 @@
 // iOS 主屏幕版键盘把布局视口本身压矮（Q-9，viewport.ts 的主屏幕版那条、只对 iPhone）和 editableFocused（从 remind-platform.test.ts 拆出来，11-11）
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createKeyboardWatcher, editableFocused, fullHeight, GAP_MAX_PX, GAP_VAR, HOLD_MS, isIPhone } from '../viewport.ts';
+import { createKeyboardWatcher, editableFocused, GAP_VAR, HOLD_MS, isIPhone } from '../viewport.ts';
+import { fullHeight, GAP_MAX_PX } from '../viewport-geom.ts';
 
 describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 preview.259：innerHeight 956→542，可视区跟着 542）', () => {
   const mk = (o: { standalone?: boolean; editing?: boolean; phone?: boolean } = {}) => {

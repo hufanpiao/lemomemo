@@ -43,13 +43,26 @@ describe.skipIf = (cond: unknown) => (name: string, fn: () => void): void => {
 export function it(name: string, a: unknown, b?: unknown): void {
   if (skipping > 0) return it.skip(name);
   const fn = (typeof a === 'function' ? a : b) as () => void | Promise<void>;
-  const after = afters.flat();
+  // 存各层的数组本身（不拍快照）：同组里写在 it 后面的 afterEach 也生效；跑时里层先、同层后登记的先，同 vitest
+  const layers = afters.slice();
   Deno.test([...stack, name].join(' > '), async () => {
+    let testErr: unknown = null;
     try {
       await fn();
-    } finally {
-      for (const h of after) h();
+    } catch (e) {
+      testErr = e ?? new Error('测试抛了空值');
     }
+    let hookErr: unknown = null;
+    for (const h of layers.slice().reverse().flatMap((l) => l.slice().reverse())) {
+      try {
+        h();
+      } catch (e) {
+        hookErr ??= e;
+      }
+    }
+    // 测试本身挂了就报测试的错，不拿钩子的错盖掉它
+    if (testErr !== null) throw testErr;
+    if (hookErr !== null) throw hookErr;
   });
 }
 /** 报告里显示“ignored”（跳过），不是“通过”（QA D-10） */

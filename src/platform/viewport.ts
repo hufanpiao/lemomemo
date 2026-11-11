@@ -8,8 +8,6 @@ import { isStandalone } from './env.ts';
 import { rlog } from './run-log-api.ts';
 import { fullHeight, GAP_MAX_PX, TOL_PX, viewportGeom, type Geom } from './viewport-geom.ts';
 
-export { fullHeight, GAP_MAX_PX, KB_MIN_PX, keyboardHeight } from './viewport-geom.ts';
-
 /** 收起后暂缓最多这么久（冷启动高度校正补回整屏实测 0.33 秒） */
 export const HOLD_MS = 1000;
 /** 键盘收起后视口和焦点静了这么久才算真收了 */

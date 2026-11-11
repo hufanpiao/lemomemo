@@ -184,6 +184,23 @@ describe('时区词典不进首屏（11-05，tz.* 挪出公共词典）', { time
   });
 });
 
+describe('视口几何、登录页安装判断不进首屏（11-12 首屏瘦身，挪出后余量只剩约 40 B）', { timeout: GRAPH_TIMEOUT_MS }, () => {
+  const OUT = ['src/platform/viewport-geom.ts', 'src/platform/install-gate.ts'].map((f) => resolve(ROOT, f));
+  const GATE = 'src/platform/vh-gapfix-gate.ts';
+  it('main.tsx 和首屏名单里各块的静态闭包都到不了 viewport-geom.ts、install-gate.ts（首屏的 vh-gapfix-gate.ts 只引 viewport-screen.ts）', async () => {
+    const { FIRST_PAINT_DYNAMIC } = (await import('../../build/check_first_paint_chunks.mjs')) as { FIRST_PAINT_DYNAMIC: string[] };
+    expect(reach(ENTRY).prev.has(resolve(ROOT, GATE)), '冷启动高度校正的判断不在首屏闭包里了，这条守护要跟着改').toBe(true);
+    for (const root of [ENTRY, ...FIRST_PAINT_DYNAMIC.map((k) => resolve(ROOT, 'src', k))]) {
+      const { prev } = reach(root);
+      expect(OUT.filter((f) => prev.has(f)).map(rel), rel(root)).toEqual([]);
+    }
+  });
+  it('拦得住变异：vh-gapfix-gate.ts 改回引 viewport-geom.ts', () => {
+    const read = withPatch(GATE, (s) => `import { viewportGeom as _v } from './viewport-geom.ts';\nvoid _v;\n${s}`);
+    expect(reach(ENTRY, read).prev.has(OUT[0] ?? '')).toBe(true);
+  });
+});
+
 describe('只读行的词典和部件不进首屏（11-06，FA-2 返工，首屏预算 150 KB）', { timeout: GRAPH_TIMEOUT_MS }, () => {
   const RO = ['shared/i18n/ro-zh.ts', 'shared/i18n/ro-ko.ts', 'src/kit/components/ReadonlyRow.tsx', 'src/kit/components/UndoToast.tsx'].map((f) => resolve(ROOT, f));
   it('main.tsx 和首屏名单里各块的静态闭包都到不了 ro-zh.ts、ro-ko.ts、ReadonlyRow.tsx、UndoToast.tsx（今天页经 TodayToasts.tsx 按需下载）', async () => {

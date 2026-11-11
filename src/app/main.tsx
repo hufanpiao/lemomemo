@@ -187,10 +187,10 @@ async function start(): Promise<void> {
   const lossExit: ExitDeps = {
     ...defaultExitDeps,
     getBoot: () => boot,
-    wipe: (b) => wipeLocal(b, { clearCacheStorage, deleteDb: () => deleteCacheDb(), dropDb: true, log: (act) => logEvent(act) }),
+    wipe: (b) => wipeLocal(b, { clearCacheStorage, deleteDb: () => deleteCacheDb(), dropDb: true, log: logEvent }),
     clearLogs,
     broadcastReset: () => undefined,
-    log: (act) => logEvent(act),
+    log: logEvent,
   };
   watchAccount(boot, {
     clearCacheStorage,

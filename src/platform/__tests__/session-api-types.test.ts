@@ -1,7 +1,7 @@
 // 删本机会话的接口没有“给不给参数决定删不删”的写法（接手清单 K6-sugg4 ②）：下面每一行都必须编不过。
 // 哪天有人把参数改回可选、或加回不带参数的 clearLocalSession，npm run typecheck（tsconfig.node.json 含测试）
 // 就报 TS2578“没用上的 @ts-expect-error”。shapes() 只给 tsc 看，不执行（有的会真的跳页、删会话）。
-// 功能层的几处（设置页 dropLocalSession、告知页 leaveThisDevice、watchAccount 的 onSignedOut）在各自目录的测试里同样写了
+// 功能层的几处（设置页 dropLocalSession、告知页 leaveThisDevice）在各自目录的测试里同样写了
 import { describe, expect, it } from 'vitest';
 import * as session from '../session.ts';
 import { defaultExitSteps, dropSession } from '../sign-out.ts';

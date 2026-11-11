@@ -42,7 +42,9 @@ describe('本页的 SIGNED_OUT（刷新失败、被移除、被退出；K6-signe
     expect(boot.outbox?.isSuspended()).toBe(true);
     await vi.waitFor(() => expect(deps.onSignedOut).toHaveBeenCalledTimes(1));
     // 日志队列在回登录页之前清（清库前一次、清完兜底再一次，core/device-exit.ts）
-    expect(vi.mocked(deps.clearLogs ?? vi.fn()).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(deps.onSignedOut).mock.invocationCallOrder[0] ?? 0);
+    const clearLogs = deps.clearLogs;
+    expect(clearLogs).toBeDefined();
+    if (clearLogs) expect(vi.mocked(clearLogs).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(deps.onSignedOut).mock.invocationCallOrder[0] ?? 0);
     expect(deps.onSignedOut).toHaveBeenCalledWith('removed', null);
     expect(fake.dbs.has('planner-v4')).toBe(false);
     expect(boot.cache?.isClosed()).toBe(true);

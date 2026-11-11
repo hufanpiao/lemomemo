@@ -1,4 +1,4 @@
-// 服务器函数出站 HTTP 请求的超时只在这里做（架构约定 10.1）：所有函数 createClient 的 global.fetch（tests/functions/shared-net.test.ts 逐处核对）、
+// 服务器函数出站 HTTP 请求的超时只在这里做（架构约定 10.1）：所有函数 createClient 的 global.fetch（tests/edge/shared-net.test.ts 逐处核对）、
 //   R2、Resend、Turnstile、Gemini、Web Push 都经 timedFetch。store-timeout.ts、auth.ts 的按调用计时是在这之上另加的更短一层。
 // 不经这里的只有 shared/objstore 自带的超时（和 Workers 共用、不能引本目录；account-purge 外面再套一层）。
 // 底层 fetch 由调用方传进来，本文件不碰全局：ai-voice 的依赖链经 gemini.ts 引到这里，链上不准出现全局网络（tests/edge/voice-probe-guard.test.ts）。

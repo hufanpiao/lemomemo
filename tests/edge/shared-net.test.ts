@@ -1,8 +1,11 @@
 // 服务器函数出站请求的唯一出口 _shared/net.ts（timedFetch、postOut）和发信出口 _shared/mail-send.ts（sendMail）。
 // 超时用 setTimeout 计（不是 AbortSignal.timeout）：测试的假计时器管得到，Gemini、推送的超时用例才能按毫秒推进。
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NET_TIMEOUT_MS, postOut, timedFetch } from '../../supabase/functions/_shared/net.ts';
 import { MAIL_FROM, RESEND_EMAILS_URL, sendMail } from '../../supabase/functions/_shared/mail-send.ts';
+import { ROOT } from '../arch/fixture-header.ts';
 
 /** 只在 signal 被中止时拒绝（拒绝的值就是 signal.reason，同真的 fetch） */
 function hang() {
@@ -82,5 +85,32 @@ describe('sendMail（经全局 fetch 发到 Resend）', () => {
     expect(calls[1]?.[0]).toBe('https://mail.test/emails');
     vi.stubGlobal('fetch', async () => { throw new TypeError('network'); });
     await expect(sendMail('re_key', 'a@example.com', { subject: 's', text: 't' })).rejects.toThrow('network');
+  });
+});
+
+describe('接线：supabase-js 全部经 timedFetch；account-purge 的 R2 也经它', () => {
+  const FN = join(ROOT, 'supabase', 'functions');
+  const src = (fn: string) => readFileSync(join(FN, fn, 'index.ts'), 'utf8');
+  /** supabase/functions 下的源码（不含生成目录 _shared/gen 和测试文件） */
+  const sources = (dir: string, rel = ''): string[] => readdirSync(join(dir, rel), { withFileTypes: true }).flatMap((e) => {
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) return r === '_shared/gen' ? [] : sources(dir, r);
+    return /\.ts$/.test(e.name) && !/\.test\.ts$/.test(e.name) ? [r] : [];
+  });
+  it('每一处 createClient( 调用都带 global: { fetch: timedFetch(fetch, …) }（漏一处就红）', () => {
+    const calls: string[] = [];
+    const bad: string[] = [];
+    for (const r of sources(FN)) {
+      const code = readFileSync(join(FN, r), 'utf8');
+      for (const m of code.matchAll(/\bcreateClient\(([^\n]*)/g)) {
+        calls.push(r);
+        if (!/global: \{ fetch: timedFetch\(fetch, [A-Z_]+\) \}/.test(m[1] ?? '')) bad.push(r);
+      }
+    }
+    expect(bad).toEqual([]);
+    expect(calls.length).toBeGreaterThanOrEqual(13);   // 真的扫到了（11-12 时 13 处）
+  });
+  it('account-purge：R2 客户端的 fetch 经 timedFetch', () => {
+    expect(src('account-purge')).toMatch(/createObjStore\(\{[^}]*fetch: \(url, init\) => timedFetch\(fetch\)\(url, init as RequestInit\)/s);
   });
 });
