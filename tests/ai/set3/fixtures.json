@@ -1,0 +1,623 @@
+{
+ "set_version": "set3-v0.1",
+ "note": "测试集 ③ 的原条目样本（基准 2026-11-02 10:00 首尔）。日程没写的列：tz Asia/Seoul、duration_min 60、location 和 project 空串、short 为 null；待办没写的列：done false、due_time 为 null、project 空串、short 为 null；deleted_at 不为空的是已删除。句子行用 fixture 引用组名。",
+ "groups": {
+  "cancel-zh": {
+   "events": [
+    {
+     "id": "cz-e1",
+     "title": "部门会议",
+     "date": "2026-11-03",
+     "time": "15:00"
+    },
+    {
+     "id": "cz-e2",
+     "title": "项目周会",
+     "date": "2026-11-03",
+     "time": "10:00"
+    },
+    {
+     "id": "cz-e3",
+     "title": "看牙",
+     "date": "2026-11-05",
+     "time": "11:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "cz-t1",
+     "title": "交房租",
+     "due": "2026-11-03",
+     "due_time": null
+    }
+   ]
+  },
+  "cancel-ko": {
+   "events": [
+    {
+     "id": "ck-e1",
+     "title": "팀 회의",
+     "date": "2026-11-03",
+     "time": "15:00"
+    },
+    {
+     "id": "ck-e2",
+     "title": "치과",
+     "date": "2026-11-03",
+     "time": "10:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "ck-t1",
+     "title": "보고서 제출",
+     "due": "2026-11-03",
+     "due_time": null
+    }
+   ]
+  },
+  "cancel-mix": {
+   "events": [
+    {
+     "id": "cm-e1",
+     "title": "고객 미팅",
+     "date": "2026-11-03",
+     "time": "15:00"
+    },
+    {
+     "id": "cm-e2",
+     "title": "치과",
+     "date": "2026-11-03",
+     "time": "10:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "cm-t1",
+     "title": "交房租",
+     "due": "2026-11-03",
+     "due_time": null
+    }
+   ]
+  },
+  "dinner": {
+   "events": [
+    {
+     "id": "dn-e1",
+     "title": "和小王吃饭",
+     "date": "2026-11-06",
+     "time": "18:30"
+    },
+    {
+     "id": "dn-e2",
+     "title": "민수 저녁 약속",
+     "date": "2026-11-06",
+     "time": "19:00"
+    },
+    {
+     "id": "dn-e3",
+     "title": "周会",
+     "date": "2026-11-06",
+     "time": "10:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "dn-t1",
+     "title": "交报价单",
+     "due": "2026-11-06",
+     "due_time": null
+    }
+   ]
+  },
+  "checkup": {
+   "events": [
+    {
+     "id": "hc-e1",
+     "title": "体检",
+     "date": "2026-11-03",
+     "time": "09:00"
+    },
+    {
+     "id": "hc-e2",
+     "title": "건강검진",
+     "date": "2026-11-05",
+     "time": "08:30"
+    },
+    {
+     "id": "hc-e3",
+     "title": "看牙",
+     "date": "2026-11-03",
+     "time": "14:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "hc-t1",
+     "title": "买牛奶",
+     "due": "2026-11-03",
+     "due_time": null
+    }
+   ]
+  },
+  "pm-am": {
+   "events": [
+    {
+     "id": "pa-e1",
+     "title": "项目会议",
+     "date": "2026-11-03",
+     "time": "10:00"
+    },
+    {
+     "id": "pa-e2",
+     "title": "프로젝트 회의",
+     "date": "2026-11-03",
+     "time": "10:00"
+    },
+    {
+     "id": "pa-e3",
+     "title": "牙医复诊",
+     "date": "2026-11-03",
+     "time": "16:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "pa-t1",
+     "title": "准备项目材料",
+     "due": "2026-11-03",
+     "due_time": null
+    }
+   ]
+  },
+  "pm-pm": {
+   "events": [
+    {
+     "id": "pp-e1",
+     "title": "项目会议",
+     "date": "2026-11-03",
+     "time": "14:00"
+    },
+    {
+     "id": "pp-e2",
+     "title": "프로젝트 회의",
+     "date": "2026-11-03",
+     "time": "14:00"
+    },
+    {
+     "id": "pp-e3",
+     "title": "客户拜访",
+     "date": "2026-11-03",
+     "time": "10:00"
+    },
+    {
+     "id": "pp-e4",
+     "title": "점심 약속",
+     "date": "2026-11-03",
+     "time": "12:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "pp-t1",
+     "title": "회의 자료 준비",
+     "due": "2026-11-03",
+     "due_time": null
+    }
+   ]
+  },
+  "slot-1500": {
+   "events": [
+    {
+     "id": "sl-e1",
+     "title": "设计评审",
+     "date": "2026-11-03",
+     "time": "15:00"
+    },
+    {
+     "id": "sl-e2",
+     "title": "晨会",
+     "date": "2026-11-03",
+     "time": "10:00"
+    },
+    {
+     "id": "sl-e3",
+     "title": "팀 회의",
+     "date": "2026-11-03",
+     "time": "11:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "sl-t1",
+     "title": "提交报销单",
+     "due": "2026-11-03",
+     "due_time": "18:00"
+    },
+    {
+     "id": "sl-t2",
+     "title": "交水费",
+     "due": "2026-11-03",
+     "due_time": null
+    }
+   ]
+  },
+  "meets-zh": {
+   "events": [
+    {
+     "id": "mz-e1",
+     "title": "周会",
+     "date": "2026-11-03",
+     "time": "09:30"
+    },
+    {
+     "id": "mz-e2",
+     "title": "客户会议",
+     "date": "2026-11-03",
+     "time": "14:00"
+    },
+    {
+     "id": "mz-e3",
+     "title": "项目评审会",
+     "date": "2026-11-03",
+     "time": "16:00"
+    },
+    {
+     "id": "mz-e4",
+     "title": "看牙",
+     "date": "2026-11-03",
+     "time": "11:00"
+    },
+    {
+     "id": "mz-e5",
+     "title": "周会",
+     "date": "2026-11-04",
+     "time": "09:30"
+    }
+   ],
+   "todos": [
+    {
+     "id": "mz-t1",
+     "title": "准备会议材料",
+     "due": "2026-11-03",
+     "due_time": null
+    }
+   ]
+  },
+  "meets-ko": {
+   "events": [
+    {
+     "id": "mk-e1",
+     "title": "주간 회의",
+     "date": "2026-11-03",
+     "time": "09:30"
+    },
+    {
+     "id": "mk-e2",
+     "title": "고객 회의",
+     "date": "2026-11-03",
+     "time": "14:00"
+    },
+    {
+     "id": "mk-e3",
+     "title": "팀 회의",
+     "date": "2026-11-03",
+     "time": "16:00"
+    },
+    {
+     "id": "mk-e4",
+     "title": "치과",
+     "date": "2026-11-03",
+     "time": "11:00"
+    },
+    {
+     "id": "mk-e5",
+     "title": "주간 회의",
+     "date": "2026-11-04",
+     "time": "09:30"
+    }
+   ],
+   "todos": [
+    {
+     "id": "mk-t1",
+     "title": "회의 자료 준비",
+     "due": "2026-11-03",
+     "due_time": null
+    }
+   ]
+  },
+  "overdue-zh": {
+   "events": [
+    {
+     "id": "oz-e1",
+     "title": "部门会议",
+     "date": "2026-11-02",
+     "time": "15:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "oz-t1",
+     "title": "交周报",
+     "due": "2026-10-28",
+     "due_time": null
+    },
+    {
+     "id": "oz-t2",
+     "title": "整理发票",
+     "due": "2026-10-30",
+     "due_time": "18:00"
+    },
+    {
+     "id": "oz-t3",
+     "title": "采购任务确认",
+     "due": "2026-11-01",
+     "due_time": null
+    },
+    {
+     "id": "oz-t4",
+     "title": "办公用品采购",
+     "due": "2026-11-02",
+     "due_time": "17:00"
+    },
+    {
+     "id": "oz-t5",
+     "title": "回复邮件",
+     "due": "2026-11-02",
+     "due_time": null
+    },
+    {
+     "id": "oz-t6",
+     "title": "采购咖啡豆",
+     "due": "2026-11-03",
+     "due_time": null
+    },
+    {
+     "id": "oz-t7",
+     "title": "学英语",
+     "due": null,
+     "due_time": null
+    },
+    {
+     "id": "oz-t8",
+     "title": "交水费",
+     "due": "2026-11-01",
+     "due_time": null,
+     "done": true
+    },
+    {
+     "id": "oz-t9",
+     "title": "订机票",
+     "due": "2026-10-31",
+     "due_time": null,
+     "deleted_at": 1793400000000
+    }
+   ]
+  },
+  "overdue-ko": {
+   "events": [
+    {
+     "id": "ok-e1",
+     "title": "팀 회의",
+     "date": "2026-11-02",
+     "time": "15:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "ok-t1",
+     "title": "주간 보고서 제출",
+     "due": "2026-10-28",
+     "due_time": null
+    },
+    {
+     "id": "ok-t2",
+     "title": "영수증 정리",
+     "due": "2026-10-30",
+     "due_time": "18:00"
+    },
+    {
+     "id": "ok-t3",
+     "title": "구매 업무 확인",
+     "due": "2026-11-01",
+     "due_time": null
+    },
+    {
+     "id": "ok-t4",
+     "title": "사무용품 구매",
+     "due": "2026-11-02",
+     "due_time": "17:00"
+    },
+    {
+     "id": "ok-t5",
+     "title": "메일 회신",
+     "due": "2026-11-02",
+     "due_time": null
+    },
+    {
+     "id": "ok-t6",
+     "title": "커피 원두 구매",
+     "due": "2026-11-03",
+     "due_time": null
+    },
+    {
+     "id": "ok-t7",
+     "title": "영어 공부",
+     "due": null,
+     "due_time": null
+    },
+    {
+     "id": "ok-t8",
+     "title": "수도 요금 내기",
+     "due": "2026-11-01",
+     "due_time": null,
+     "done": true
+    },
+    {
+     "id": "ok-t9",
+     "title": "항공권 예약",
+     "due": "2026-10-31",
+     "due_time": null,
+     "deleted_at": 1793400000000
+    }
+   ]
+  },
+  "fri-todos": {
+   "events": [
+    {
+     "id": "fr-e1",
+     "title": "周会",
+     "date": "2026-11-06",
+     "time": "10:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "fr-t1",
+     "title": "交报价单",
+     "due": "2026-11-06",
+     "due_time": null
+    },
+    {
+     "id": "fr-t2",
+     "title": "整理客户资料",
+     "due": "2026-11-06",
+     "due_time": "15:00"
+    },
+    {
+     "id": "fr-t3",
+     "title": "보고서 제출",
+     "due": "2026-11-06",
+     "due_time": null
+    },
+    {
+     "id": "fr-t4",
+     "title": "交周报",
+     "due": "2026-10-30",
+     "due_time": null
+    },
+    {
+     "id": "fr-t5",
+     "title": "买牛奶",
+     "due": "2026-11-05",
+     "due_time": null
+    },
+    {
+     "id": "fr-t6",
+     "title": "发邮件",
+     "due": "2026-11-06",
+     "due_time": null,
+     "done": true
+    }
+   ]
+  },
+  "done": {
+   "events": [
+    {
+     "id": "do-e1",
+     "title": "牛奶品鉴会",
+     "date": "2026-11-05",
+     "time": "15:00"
+    },
+    {
+     "id": "do-e2",
+     "title": "우유 시음회",
+     "date": "2026-11-05",
+     "time": "16:00"
+    }
+   ],
+   "todos": [
+    {
+     "id": "do-t1",
+     "title": "交电费",
+     "due": null,
+     "due_time": null
+    },
+    {
+     "id": "do-t2",
+     "title": "给小王回电话",
+     "due": "2026-11-03",
+     "due_time": null
+    },
+    {
+     "id": "do-t3",
+     "title": "交签证材料",
+     "due": "2026-11-04",
+     "due_time": null
+    },
+    {
+     "id": "do-t4",
+     "title": "整理发票",
+     "due": "2026-11-06",
+     "due_time": null
+    },
+    {
+     "id": "do-t5",
+     "title": "买牛奶",
+     "due": null,
+     "due_time": null
+    },
+    {
+     "id": "do-t6",
+     "title": "交房租",
+     "due": "2026-11-03",
+     "due_time": null
+    },
+    {
+     "id": "do-t7",
+     "title": "전기요금 내기",
+     "due": null,
+     "due_time": null
+    },
+    {
+     "id": "do-t8",
+     "title": "영수증 정리",
+     "due": "2026-11-03",
+     "due_time": null
+    },
+    {
+     "id": "do-t9",
+     "title": "김 과장님께 메일 회신",
+     "due": "2026-11-04",
+     "due_time": null
+    },
+    {
+     "id": "do-t10",
+     "title": "견적서 보내기",
+     "due": "2026-11-06",
+     "due_time": null
+    },
+    {
+     "id": "do-t11",
+     "title": "우유 사기",
+     "due": null,
+     "due_time": null
+    },
+    {
+     "id": "do-t12",
+     "title": "우유 구매",
+     "due": "2026-11-05",
+     "due_time": null
+    },
+    {
+     "id": "do-t13",
+     "title": "보고서 작성",
+     "due": "2026-11-04",
+     "due_time": null
+    },
+    {
+     "id": "do-t14",
+     "title": "给 이 팀장 回邮件",
+     "due": "2026-11-03",
+     "due_time": null
+    },
+    {
+     "id": "do-t15",
+     "title": "월세 내기",
+     "due": "2026-11-03",
+     "due_time": null
+    }
+   ]
+  }
+ }
+}
