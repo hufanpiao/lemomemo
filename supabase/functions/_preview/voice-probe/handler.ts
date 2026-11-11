@@ -24,7 +24,7 @@ import { generateRetry503 } from '../../_shared/ai/retry.ts';
 // 类型白名单和大小上限直接用正式 ai-voice 的（代码审 S3：从源头保证一致；ai-voice/core.ts 只依赖 _shared，不读环境变量、不碰数据库）
 import { AUDIO_TYPES, MAX_AUDIO } from '../../ai-voice/core.ts';
 
-/** 预览项目 ref（同 db-probe/probe.ts 的 PREVIEW_REF；单测核对两边一致） */
+/** 预览项目 ref（db-probe 11-12 已删，这里是唯一一份） */
 export const PREVIEW_REF = 'yoeqwhygehbaftkppati';
 
 /**
