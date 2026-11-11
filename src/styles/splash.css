@@ -1,6 +1,6 @@
 /* 启动画面（R-251；R-254 方向 B“在听”；R-253 小字库）。设计稿：docs/02-设计/草图-v4/启动画面-三方向.html
    DOM 写在 src/index.html 的 #lemo-splash（跟着网页第一次绘制出来，不等 React）；由 src/index.html 外链
-   （CSP style-src 'self'，不能写内联 <style> 或 style 属性）。收起由 src/platform/splash.ts 的 hideSplash() 加 .is-leaving。
+   （CSP style-src 'self'，不能写内联 \3c style> 或 style 属性）。收起由 src/platform/splash.ts 的 hideSplash() 加 .is-leaving。
    版式和 iOS 启动图同一套算法（build/export_splash.py 的 page()）：圆片直径 42% 屏宽、圆心 40% 屏高、名字 8% 屏宽、
    名字在图标下方 14/390 屏宽、英文名字号为名字的 13/30（透明度 .7）、底部那句话离底 6%、字号 3.4% 屏宽（透明度 .6）、文字左右各留 10%。
    电脑（横屏、方屏）照设计稿 big()：按 400 宽的手机比例放到正中，圆心在 42% 屏高。
@@ -44,8 +44,17 @@
   --name: calc(var(--cw) * 0.08);
   --name-top: calc(var(--cy) + var(--box) / 2 + var(--cw) * 14 / 390);
 
+  /* 整屏铺满（负责人 11-11“启动的时候下面那一块灰色去掉不行吗”）：iPhone 主屏幕版冷启动时布局视口常比屏幕矮一个顶部安全区
+     （R-371：440×956 的机器 innerHeight 只有 895），inset: 0 只盖到 895，下面露出页面底色。改成从顶上起、高度取
+     “布局视口、100lvh、本机型整屏高（--lemo-screen-h，下面按 iOS 启动图同一张机型表给）”里最大的那个——只在主屏幕版
+     （display-mode: standalone）这样取：浏览器里打开时可见区比屏幕矮、100lvh 也可能比可见区高，照旧 100%（= 原来 inset: 0，R-254 定稿版式不变）；
+     版式（圆心 40%、底部那句话离底 6%、光晕 cover）都按这个高度算，和按整屏排的 iOS 启动图第一帧对得上。
+     不认 max()/lvh 的旧浏览器退回 100%（和原来 inset: 0 一样） */
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 100%;
   z-index: 2147483000;
   overflow: hidden;
   contain: strict;
@@ -72,6 +81,46 @@
     --cw: 400px;
     --cy: 42%;
   }
+}
+
+/* 主屏幕版：按整屏高度铺（见 .lemo-splash 的注释）；不认 max()/lvh 的旧版本整条丢掉，退回上面的 100% */
+@media (display-mode: standalone) {
+  .lemo-splash {
+    height: max(100%, 100lvh, var(--lemo-screen-h, 0px));
+  }
+}
+
+/* 本机型的整屏高度：和 src/index.html 的 apple-touch-startup-image（build/export_splash.py 的 DEVICES）同一张表，只管竖屏；
+   device-height 是屏幕高、不受布局视口偏矮影响，纯 CSS、第一帧就生效（不写脚本、不写 style 属性，CSP 照旧）。
+   只在主屏幕版（浏览器里打开不改版式，代码审 11-11）；tests/build/splash-html.test.ts 核对这张表和 DEVICES 一致 */
+@media (display-mode: standalone) and (device-width: 440px) and (device-height: 956px) and (orientation: portrait) { .lemo-splash { --lemo-screen-h: 956px; } }
+
+@media (display-mode: standalone) and (device-width: 420px) and (device-height: 912px) and (orientation: portrait) { .lemo-splash { --lemo-screen-h: 912px; } }
+
+@media (display-mode: standalone) and (device-width: 402px) and (device-height: 874px) and (orientation: portrait) { .lemo-splash { --lemo-screen-h: 874px; } }
+
+@media (display-mode: standalone) and (device-width: 430px) and (device-height: 932px) and (orientation: portrait) { .lemo-splash { --lemo-screen-h: 932px; } }
+
+@media (display-mode: standalone) and (device-width: 393px) and (device-height: 852px) and (orientation: portrait) { .lemo-splash { --lemo-screen-h: 852px; } }
+
+@media (display-mode: standalone) and (device-width: 428px) and (device-height: 926px) and (orientation: portrait) { .lemo-splash { --lemo-screen-h: 926px; } }
+
+@media (display-mode: standalone) and (device-width: 390px) and (device-height: 844px) and (orientation: portrait) { .lemo-splash { --lemo-screen-h: 844px; } }
+
+@media (display-mode: standalone) and (device-width: 360px) and (device-height: 780px) and (orientation: portrait) { .lemo-splash { --lemo-screen-h: 780px; } }
+
+@media (display-mode: standalone) and (device-width: 375px) and (device-height: 812px) and (orientation: portrait) { .lemo-splash { --lemo-screen-h: 812px; } }
+
+@media (display-mode: standalone) and (device-width: 414px) and (device-height: 896px) and (orientation: portrait) { .lemo-splash { --lemo-screen-h: 896px; } }
+
+@media (display-mode: standalone) and (device-width: 375px) and (device-height: 667px) and (orientation: portrait) { .lemo-splash { --lemo-screen-h: 667px; } }
+
+/* 第二层保险：启动画面在（还没开始收起）时，页面底色设成启动画面底部的颜色（光晕图 splash-bg.png、深色图 splash-dark.png 最下一行正中）。
+   html 有了底色，body 的底色就不再铺满画布、只画在 body 自己的框里，布局视口下面露出来的就是这个颜色。
+   只管底部：顶上状态栏那一条照旧由启动画面自己盖（R-349，不是 R-278 那条染顶色的规则）。一开始收起就退回页面原来的底色 */
+:root:has(> body > .lemo-splash:not(.is-leaving)) {
+  /* stylelint-disable-next-line color-no-hex -- 启动画面光晕图底部的颜色，见上 */
+  background-color: #E8E9E8;
 }
 
 /* 收起：整屏透明度 1→0（--dur-ui 220 ms、--ease-out），下面的 App 已经画好；收起途中不再挡点击 */
@@ -175,11 +224,16 @@
 }
 
 /* 状态栏那一条：原来（R-278、R-280，负责人 10-30）主屏幕版网页从状态栏下沿开始、状态栏由 iOS 用页面底色填，启动画面在时把页面底色染成启动图顶色。
-   负责人 11-06 改选 black-translucent（R-349，取代 R-278）：页面铺到状态栏下面，启动画面 position: fixed、inset: 0 自己就盖住状态栏，
+   负责人 11-06 改选 black-translucent（R-349，取代 R-278）：页面铺到状态栏下面，启动画面 position: fixed、从顶上起自己就盖住状态栏，
    圆心 40% 屏高也和 iOS 启动图（build/export_splash.py 按整屏排）对齐了，染色规则删掉 */
 
 /* 深色：电脑和浏览器没有 iOS 启动图，第一帧直接是深色版 */
 @media (prefers-color-scheme: dark) {
+  :root:has(> body > .lemo-splash:not(.is-leaving)) {
+    /* stylelint-disable-next-line color-no-hex -- 启动画面深色图底部的颜色，见上 */
+    background-color: #161717;
+  }
+
   .lemo-splash-d {
     display: block;
   }
@@ -191,6 +245,13 @@
 
 /* iPhone 主屏幕版（只有它先显示浅色的 iOS 启动图，R-232）：第一帧浅色、和启动图一致，0.8 秒起 0.6 秒（--ease-standard）慢慢暗下来 */
 @media (prefers-color-scheme: dark) and (display-mode: standalone) and (hover: none) and (pointer: coarse) {
+  /* 页面底色跟着启动画面一起由浅变深（同一时间线） */
+  :root:has(> body > .lemo-splash:not(.is-leaving)) {
+    /* stylelint-disable-next-line color-no-hex -- 启动画面光晕图底部的颜色，见上 */
+    background-color: #E8E9E8;
+    animation: lemo-splash-bg-to-dark var(--dur-splash-dark) var(--ease-standard) var(--dur-splash-still) forwards;
+  }
+
   .lemo-splash-l {
     opacity: 1;
     animation: lemo-splash-to-dark var(--dur-splash-dark) var(--ease-standard) var(--dur-splash-still) forwards;
@@ -200,6 +261,13 @@
 @keyframes lemo-splash-to-dark {
   to {
     opacity: 0;
+  }
+}
+
+@keyframes lemo-splash-bg-to-dark {
+  to {
+    /* stylelint-disable-next-line color-no-hex -- 启动画面深色图底部的颜色，见上 */
+    background-color: #161717;
   }
 }
 

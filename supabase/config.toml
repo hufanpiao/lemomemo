@@ -88,7 +88,10 @@ additional_redirect_urls = ["http://localhost:5173/app/", "http://127.0.0.1:8788
 # 15.6 总表：JWT 有效期 600 秒（0.29 续第 98 条）。本地、线上相同
 jwt_expiry = 600
 enable_refresh_token_rotation = true
-refresh_token_reuse_interval = 10
+# R-383（负责人 11-11 定）：10 → 60。刷新令牌的回包丢了（iPhone 切后台、弱网）时，supabase-js 断网期间一直退避重试，
+# 网络回来后拿旧 refresh token 再换；如果这期间新令牌已经被别处用掉，离第一次超过复用间隔就回 400 refresh_token_already_used，
+# App 收到 SIGNED_OUT、清库、回登录页提示“被移除”。60 秒覆盖 supabase-js 最长约 30 秒的退避。复现见 tests/e2e-draft/r383-refresh-reuse.draft.ts
+refresh_token_reuse_interval = 60
 # 15.6 总表：不允许新用户自己注册，只走邀请（invite-signup 用 service role 建用户；5.6、R-83）。本地、线上相同
 enable_signup = false
 # 15.6 总表：匿名登录关。本地、线上相同

@@ -77,6 +77,65 @@
   font-size: var(--fs-14);
 }
 
+/* 永久删除（B4 S9，无定稿视觉稿）：和“恢复”同一个胶囊，字用警示色；离线、进行中 aria-disabled 灰掉 */
+.purge {
+  flex: none;
+  margin: 6px 0;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--danger-text);
+  font-size: var(--fs-14);
+}
+
+/* 全部清空：右上角，和返回按钮一样不带框，字用警示色，点击区够 44 高 */
+.clear {
+  justify-self: end;
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--danger-text);
+  font: inherit;
+  font-size: var(--fs-15);
+  cursor: pointer;
+}
+
+.restore[aria-disabled='true'],   /* 只读行、进行中：“恢复”也灰掉 */
+.purge[aria-disabled='true'],
+.clear[aria-disabled='true'] {
+  opacity: 0.45;   /* 同 kit 只读行的 ×（List.module.css .trail） */
+  cursor: default;
+}
+
+.clear:focus-visible,
+.purge:focus-visible {
+  border-radius: var(--r-sm);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.offline {
+  margin: -4px 0 12px;   /* 接在说明行下面（说明行下边距 12px），和列表留同样的空 */
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.offline:empty {
+  display: none;
+}
+
+/* 确认弹层的两个按钮（同设置页 ConfirmDialog 的 .actions） */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
 .toast {
   position: fixed;
   left: 16px;
@@ -89,4 +148,10 @@
   background: var(--toast-bg);
   color: var(--toast-fg);
   font-size: var(--fs-14);
+}
+
+/* 只读行的“要新版本”（TC-B4-09）：单独一行、左对齐，同随手记页（不挤标题和按钮） */
+.ro {
+  display: flex;
+  margin-top: 4px;
 }

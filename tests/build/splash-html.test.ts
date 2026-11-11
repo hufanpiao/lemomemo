@@ -112,9 +112,44 @@ describe('状态栏（R-349，负责人 11-06）', () => {
       expect(noComments(page)).toContain('viewport-fit=cover');
     }
   });
-  it('启动画面不再染页面底色（R-278 的 html:has(#lemo-splash) 规则和顶色关键帧删掉）', () => {
+  it('R-278 的顶色规则和顶色关键帧删掉（11-11 加的是底部那一层保险，见下一组）', () => {
     expect(cssNoComments).not.toMatch(/html:has\(#lemo-splash/);
     expect(cssNoComments).not.toMatch(/lemo-splash-top-to-dark|#F0EDD3|#232423/);
+  });
+});
+
+// 负责人 11-11“启动的时候下面那一块灰色去掉不行吗”：主屏幕版冷启动布局视口偏矮（R-371，895 对屏幕 956），启动画面按整屏铺
+describe('启动画面整屏铺满（11-11，底部灰条）', () => {
+  /** export_splash.py 的 DEVICES 里的 CSS 宽、高（去重） */
+  const py = readFileSync(join(ROOT, 'build', 'export_splash.py'), 'utf8');
+  const block = /^DEVICES = \[\r?\n([\s\S]*?)^\]/m.exec(py)?.[1] ?? '';
+  const devices = [...new Set([...block.matchAll(/^\s*\(\d+, \d+, (\d+), (\d+), \d,/gm)].map((m) => `${m[1]}x${m[2]}`))].sort();
+  it('平时 100%（= 原来 inset: 0）；只在主屏幕版取布局视口、100lvh、本机型整屏高里最大的（浏览器里不改 R-254 版式，代码审 11-11）', () => {
+    const rule = /\.lemo-splash \{([^}]*)\}/.exec(cssNoComments)?.[1] ?? '';
+    expect(rule).toMatch(/top: 0;\s*right: 0;\s*left: 0;\s*height: 100%;/);
+    expect(rule).not.toMatch(/inset: 0|lvh|max\(/);
+    expect(cssNoComments).toMatch(/@media \(display-mode: standalone\) \{\s*\.lemo-splash \{\s*height: max\(100%, 100lvh, var\(--lemo-screen-h, 0px\)\);\s*\}/);
+    expect(cssNoComments.match(/100lvh/g)).toHaveLength(1);
+  });
+  it('整屏高度的机型表和 iOS 启动图（export_splash.py 的 DEVICES）一条不差，只管竖屏', () => {
+    const rows = [...cssNoComments.matchAll(/@media \(display-mode: standalone\) and \(device-width: (\d+)px\) and \(device-height: (\d+)px\) and \(orientation: portrait\) \{\s*\.lemo-splash \{\s*--lemo-screen-h: (\d+)px;/g)];
+    for (const r of rows) expect(r[3], r[0]).toBe(r[2]);
+    // 每段 device-height 都限定主屏幕版
+    expect(cssNoComments.match(/device-height/g)?.length).toBe(rows.length);
+    expect(devices.length).toBeGreaterThanOrEqual(11);
+    expect(rows.map((r) => `${r[1]}x${r[2]}`).sort()).toEqual(devices);
+  });
+  it('启动期间页面底色 = 启动画面底部的颜色；开始收起就退回；深色主屏幕版跟着一起变深', () => {
+    expect(cssNoComments).toMatch(/\n:root:has\(> body > \.lemo-splash:not\(\.is-leaving\)\) \{\s*background-color: #E8E9E8;/);
+    expect(cssNoComments).toMatch(/@media \(prefers-color-scheme: dark\) \{\s*:root:has\(> body > \.lemo-splash:not\(\.is-leaving\)\) \{\s*background-color: #161717;/);
+    expect(cssNoComments).toMatch(/animation: lemo-splash-bg-to-dark var\(--dur-splash-dark\) var\(--ease-standard\) var\(--dur-splash-still\) forwards;/);
+  });
+  it('检查器拦得住产物里丢了整屏高度那几段', () => {
+    const ok = '@media (orientation:landscape){.lemo-splash{--cw:400px}}@media (display-mode:standalone) and (device-width:440px) and (device-height:956px) and (orientation:portrait){.lemo-splash{--lemo-screen-h:956px}}';
+    expect(splashMediaProblems(ok)).toEqual([]);
+    // 没限定主屏幕版的也拦
+    expect(splashMediaProblems('@media (orientation:landscape){.lemo-splash{--cw:400px}}@media (device-height:956px){.lemo-splash{--lemo-screen-h:956px}}')).toHaveLength(1);
+    expect(splashMediaProblems('@media (orientation:landscape){.lemo-splash{--cw:400px}}')).toHaveLength(1);
   });
 });
 
@@ -124,12 +159,13 @@ describe('构建产物里的媒体查询（build/check_splash_css.mjs；审查�
     expect(cssNoComments).not.toMatch(/aspect-ratio/);
   });
   it('拦得住：压缩改写出的范围写法、缺电脑版式那一段、根本没有启动画面样式', () => {
-    expect(splashMediaProblems('@media (orientation:landscape){.lemo-splash{--cw:400px;--cy:42%}}')).toEqual([]);
-    expect(splashMediaProblems('@media (aspect-ratio>=1){.lemo-splash{--cw:400px;--cy:42%}}')).toHaveLength(2);
-    expect(splashMediaProblems('.lemo-splash{color:red}@media (width<=600px){.lemo-splash-t{margin:0}}')).toHaveLength(2);
+    const full = '@media (display-mode:standalone) and (device-height:956px){.lemo-splash{--lemo-screen-h:956px}}';
+    expect(splashMediaProblems(`@media (orientation:landscape){.lemo-splash{--cw:400px;--cy:42%}}${full}`)).toEqual([]);
+    expect(splashMediaProblems(`@media (aspect-ratio>=1){.lemo-splash{--cw:400px;--cy:42%}}${full}`)).toHaveLength(2);
+    expect(splashMediaProblems(`.lemo-splash{color:red}@media (width<=600px){.lemo-splash-t{margin:0}}${full}`)).toHaveLength(2);
     expect(splashMediaProblems('.app{color:red}')).toEqual(['产物里没有 .lemo-splash 的样式']);
     // 别人的 @media 不归这里管
-    expect(splashMediaProblems('@media (width>=600px){.app{margin:0}}@media (orientation:landscape){.lemo-splash{--cw:400px}}')).toEqual([]);
+    expect(splashMediaProblems(`@media (width>=600px){.app{margin:0}}@media (orientation:landscape){.lemo-splash{--cw:400px}}${full}`)).toEqual([]);
   });
   const appDir = join(ROOT, 'dist', 'web', 'app');
   const files = splashCssFiles(appDir);
