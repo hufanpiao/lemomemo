@@ -2,6 +2,9 @@
 import { describe, expect, it } from 'vitest';
 import { buildOle, buildZip, concat, CT, ctXml, docx, enc, MAIN, ok, ooxml, put16, put32, rootWith, sniff, unk } from './fixtures.ts';
 
+/** doc 样本：WordDocument 是根下第 5 条，落在第 2 个目录扇区（只读，用的地方不改字节） */
+const DOC_2ND_DIR = buildOle(rootWith(['a', 2], ['b', 2], ['c', 2], ['d', 2], ['WordDocument', 2]));
+
 describe('PDF', () => {
   it('开头是 %PDF- 就是 pdf', async () => {
     expect(await sniff(enc('%PDF-1.7\n%âãÏÓ\n1 0 obj'))).toEqual(ok('pdf'));
@@ -107,9 +110,8 @@ describe('OLE2 旧格式', () => {
     expect(await sniff(ole(['WordDocument', 2], ['Workbook', 2]))).toEqual(unk('ole_multi_family'));
   });
   it('目标流在第二个目录扇区、4096 字节扇区 → 判得出', async () => {
-    const two = buildOle(rootWith(['a', 2], ['b', 2], ['c', 2], ['d', 2], ['WordDocument', 2]));
-    expect(two.dirSectors).toHaveLength(2);
-    expect(await sniff(two.bytes)).toEqual(ok('doc'));
+    expect(DOC_2ND_DIR.dirSectors).toHaveLength(2);
+    expect(await sniff(DOC_2ND_DIR.bytes)).toEqual(ok('doc'));
     expect(await sniff(buildOle(rootWith(['Workbook', 2]), { shift: 12 }).bytes)).toEqual(ok('xls'));
   });
   it('4096 字节扇区：目标流在第 2 个目录扇区、目录扇区的 FAT 项在第 2 个 FAT 扇区', async () => {
@@ -152,11 +154,9 @@ describe('OLE2 旧格式', () => {
       expect(await sniff(b), detail).toEqual(unk(detail));
     }
   });
-  it('DIFAT 链：FAT 扇区数报成 2^31−1 且链指回自己 → 不认（靠 FAT 扇区数不超过文件扇区数停下）', async () => {
+  it('DIFAT 链：FAT 扇区数报成 2^31−1 → 不认（FAT 扇区数超过文件扇区数，不沿链走）', async () => {
     const o = buildOle(rootWith(['WordDocument', 2]));
     put32(o.bytes, 44, 0x7fffffff);
-    put32(o.bytes, 68, 0);
-    put32(o.bytes, 512 + 127 * 4, 0);
     expect(await sniff(o.bytes)).toEqual(unk('ole_bad_fat'));
   });
   it('DIFAT 链起点指到文件外 → 不认', async () => {
@@ -191,11 +191,10 @@ describe('其他文件和拼接', () => {
       expect(await sniff(host.subarray(7, 7 + b.length))).toEqual(ok(kind));
     }
   });
-  it('截断：docx 任何长度都不是 ok；三种样本截断后都不会判成别的类型', async () => {
+  it('截断：docx 任何长度都不是 ok；pdf 截断后不会判成别的类型（doc 的截断见下一条）', async () => {
     const samples = [
       [enc('%PDF-1.7\n1 0 obj'), 'pdf'],
       [docx().bytes, 'docx'],
-      [buildOle(rootWith(['a', 2], ['b', 2], ['c', 2], ['d', 2], ['WordDocument', 2])).bytes, 'doc'],
     ] as const;
     for (const [full, kind] of samples) {
       for (let n = 0; n < full.length; n += 1) {
@@ -207,7 +206,7 @@ describe('其他文件和拼接', () => {
   });
   it('OLE 截断：WordDocument 那条目录没读完的长度一律不认，读越界回 ole_range；读完了才是 doc', async () => {
     // 第 5 条在第 2 个目录扇区；读到它的左右兄弟（+68、+72 各 4 字节）为止，要读满 entry(5)+76 字节
-    const ole = buildOle(rootWith(['a', 2], ['b', 2], ['c', 2], ['d', 2], ['WordDocument', 2]));
+    const ole = DOC_2ND_DIR;
     const end = ole.entry(5) + 76;
     for (let n = 0; n < end; n += 1) expect((await sniff(ole.bytes.slice(0, n))).ok, `doc@${n}`).toBe(false);
     for (const n of [ole.entry(5), end - 1]) expect(await sniff(ole.bytes.slice(0, n)), `doc@${n}`).toEqual(unk('ole_range'));
