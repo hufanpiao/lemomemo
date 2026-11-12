@@ -9,16 +9,17 @@ const FILES_LINK =
   '/files/v1/o/images/0b7c6a1e-2d3f-4a5b-8c9d-0e1f2a3b4c5d/1b7c6a1e-2d3f-4a5b-8c9d-0e1f2a3b4c5d/2b7c6a1e-2d3f-4a5b-8c9d-0e1f2a3b4c5d.webp?e=4102444800&d=&s=e2e';
 
 test.describe('响应头', () => {
+  // R-402：script-src 只多 'wasm-unsafe-eval'（插图的 webp 编码器编译同源 wasm），仍然没有 'unsafe-eval'
   test('/app/ 带 CSP：style-src 只有 self，没有 unsafe-inline / unsafe-eval；带 Permissions-Policy', async ({ request }) => {
     const res = await request.get('/app/');
     expect(res.status()).toBe(200);
     const csp = res.headers()['content-security-policy'] ?? '';
     expect(csp).toContain("style-src 'self';");
-    expect(csp).toContain("script-src 'self';");
+    expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval';");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain('frame-src \'self\' https://view.officeapps.live.com');
     expect(csp).not.toContain('unsafe-inline');
-    expect(csp).not.toContain('unsafe-eval');
+    expect(csp).not.toContain("'unsafe-eval'");
     expect(res.headers()['permissions-policy']).toContain('camera=()');
     expect(res.headers()['permissions-policy']).toContain('microphone=(self)');
     expect(res.headers()['x-content-type-options']).toBe('nosniff');
@@ -40,11 +41,11 @@ test.describe('响应头', () => {
   // TC-B0-59（15.6 第 4b 条、0.18 N6）：分路径断言。/app/ 和预览沙箱都有 base-uri、form-action，
   // 都不放行 challenges.cloudflare.com（只有 /app/auth/ 放行，入口 B1 才建，B1 起本条加上它），也不放行任何第三方脚本
   test('TC-B0-59：/app/ 和预览沙箱都有 base-uri、form-action；不放行 Turnstile 和任何第三方脚本', async ({ request }) => {
-    const want: Record<string, { base: string; form: string }> = {
-      '/app/': { base: "base-uri 'none'", form: "form-action 'self'" },
-      '/app/preview': { base: "base-uri 'none'", form: "form-action 'none'" },
+    const want: Record<string, { base: string; form: string; script: string }> = {
+      '/app/': { base: "base-uri 'none'", form: "form-action 'self'", script: "script-src 'self' 'wasm-unsafe-eval'" },
+      '/app/preview': { base: "base-uri 'none'", form: "form-action 'none'", script: "script-src 'self'" },
     };
-    for (const [path, { base, form }] of Object.entries(want)) {
+    for (const [path, { base, form, script }] of Object.entries(want)) {
       const res = await request.get(path);
       expect(res.status(), path).toBe(200);
       const csp = res.headers()['content-security-policy'] ?? '';
@@ -52,8 +53,8 @@ test.describe('响应头', () => {
       expect(directives, path).toContain(base);
       expect(directives, path).toContain(form);
       expect(csp, path).not.toContain('challenges.cloudflare.com');
-      // script-src 只有 'self'：没有任何主机、https:、*、unsafe-*
-      expect(directives.find((d) => d.startsWith('script-src ')), path).toBe("script-src 'self'");
+      // script-src 只有 'self'（主 App 另有 R-402 的 'wasm-unsafe-eval'）：没有任何主机、https:、*、'unsafe-eval'、'unsafe-inline'
+      expect(directives.find((d) => d.startsWith('script-src ')), path).toBe(script);
       // 同一路径只有一条 CSP（“! 头名”去掉了 /app/* 那条，不叠加；叠加时 Cloudflare 用逗号拼）
       expect(csp, path).not.toContain(',');
     }

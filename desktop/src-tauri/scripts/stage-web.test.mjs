@@ -19,6 +19,7 @@ import {
   pageCsp,
   planPages,
   skipAllowed,
+  skipped,
 } from './stage-web.mjs';
 
 const HTML = '<!doctype html>\n<html><head>\n    <meta charset="utf-8" />\n    <script type="module" src="/app/assets/a.js"></script>\n</head></html>';
@@ -217,6 +218,11 @@ test('SVG：两份审查探针列出的写法逐条都拦（M4 7 种、F5-3 13 �
   assert.equal(cases.length, 37);
 });
 
+test('不进安装包的：sw.js、preview.html 按名字，.wasm（R-402 的 webp 编码器，exe 用不到）按后缀；别的照常打包', () => {
+  for (const r of ['sw.js', 'sw.js.map', 'preview.html', 'assets/webp_enc_simd-CFvKQ_80.wasm', 'assets/X.WASM']) assert.equal(skipped(r), true, r);
+  for (const r of ['index.html', 'assets/webp_enc_simd-A7QIN4Cf.js', 'assets/sw.js', 'wasm', 'assets/a.wasm.js']) assert.equal(skipped(r), false, r);
+});
+
 test('SVG：原因写得出是哪一种（便于定位）', () => {
   assert.ok(checkSvg(`<svg ${SVG}><s:script/></svg>`).some((w) => w.includes('带前缀的元素')));
   assert.ok(checkSvg(`<svg ${SVG}><a href="&#106;"/></svg>`).includes('数字字符引用 &#'));
@@ -240,7 +246,7 @@ test('仓库现有产物（有构建产物时）的每个文件都能打包：�
   } catch {
     return; // 没构建过就跳过（CI 的 desktop.yml 在构建以后跑 stage-web 本身）
   }
-  const rels = files.map((p) => p.slice(app.length + 1).replaceAll('\\', '/')).filter((r) => !['sw.js', 'sw.js.map', 'preview.html'].includes(r));
+  const rels = files.map((p) => p.slice(app.length + 1).replaceAll('\\', '/')).filter((r) => !skipped(r));
   assert.deepEqual(checkFileTypes(rels), []);
   for (const r of rels) {
     const b = readFileSync(join(app, r));

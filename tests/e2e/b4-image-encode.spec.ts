@@ -25,6 +25,8 @@ const BUNDLE = buildSync({
   globalName: '__encMod',
   platform: 'browser',
   target: 'es2022',
+  // R-402 起 image-encode 经 platform/run-log-api.ts 记一行运行日志，它读 import.meta.env.MODE（Vite 才有）；IIFE 里 import.meta 是空对象，这里补上
+  define: { 'import.meta.env.MODE': '"e2e"' },
   write: false,
 }).outputFiles[0]?.text;
 if (!BUNDLE) throw new Error('esbuild 没产出 image-encode.ts 的包');

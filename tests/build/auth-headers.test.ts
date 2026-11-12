@@ -66,12 +66,21 @@ describe.each(['production', 'preview', 'e2e', 'e2e-real'] as const)('T5 / TC-B0
     expect(new Set(hosts)).toEqual(new Set(['https://challenges.cloudflare.com']));
   });
 
-  it.each(['/app/', '/app/index.html', '/app/preview', '/app/preview.html', '/app/assets/x.js'])('%s：不放行 Turnstile 和任何第三方脚本', (path) => {
+  // R-402：主 App（/app/* 那条）的 script-src 只多 'wasm-unsafe-eval'（插图的 webp 编码器编译同源 wasm），不许有 'unsafe-eval'；
+  // 预览沙箱自己那条照旧只有 'self'
+  it.each([
+    ['/app/', "script-src 'self' 'wasm-unsafe-eval'"],
+    ['/app/index.html', "script-src 'self' 'wasm-unsafe-eval'"],
+    ['/app/assets/x.js', "script-src 'self' 'wasm-unsafe-eval'"],
+    ['/app/preview', "script-src 'self'"],
+    ['/app/preview.html', "script-src 'self'"],
+  ])('%s：不放行 Turnstile 和任何第三方脚本', (path, script) => {
     const csp = effective(text, path).get('content-security-policy') ?? [];
     expect(csp).toHaveLength(1);
     const c = csp[0] ?? '';
     expect(c).not.toContain('challenges.cloudflare.com');
-    expect(directive(c, 'script-src')).toBe("script-src 'self'");
+    expect(directive(c, 'script-src')).toBe(script);
+    expect(c).not.toContain("'unsafe-eval'");
     expect(directives(c).some((d) => d.startsWith('base-uri '))).toBe(true);
     expect(directives(c).some((d) => d.startsWith('form-action '))).toBe(true);
   });
