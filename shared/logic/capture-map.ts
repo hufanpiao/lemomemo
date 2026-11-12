@@ -92,8 +92,7 @@ export interface AnnivRow {
   month: number; day: number; is_leap: boolean; year: number | null; note: string; created_at: number; updated_at: number;
 }
 
-// 各文字列的截断只在这里做：按 UTF-16 单元（同 insertSchema 的 max）、不截半个字
-const cut = cutGraphemes;
+// 各文字列的截断只在这里做：按 UTF-16 单元（同 insertSchema 的 max）、不截半个字（cutGraphemes）
 
 function shortOf(item: CaptureItem, ctx: CaptureCtx): { short: string | null; short_by: 'ai' | null } {
   if (ctx.origin !== 'ai' || !item.short) return { short: null, short_by: null };
@@ -107,14 +106,14 @@ export function annivRow(item: CaptureItem, ctx: CaptureCtx): AnnivRow | null {
   return {
     id: ctx.id,
     kind: a.type,
-    name: cut(item.title, ANNIV_NAME_MAX),
+    name: cutGraphemes(item.title, ANNIV_NAME_MAX),
     calendar: a.calendar,
     lunar_variant: 'cn',
     month: a.month,
     day: a.day,
     is_leap: a.calendar === 'lunar' ? a.is_leap : false,
     year: a.year,
-    note: cut(item.body ?? '', ITEM_NOTE_MAX),
+    note: cutGraphemes(item.body ?? '', ITEM_NOTE_MAX),
     created_at: ctx.now,
     updated_at: ctx.now,
   };
@@ -122,10 +121,10 @@ export function annivRow(item: CaptureItem, ctx: CaptureCtx): AnnivRow | null {
 
 /** 一条识别结果 → 一行；随手记（B4）和缺 anniv 的纪念日返回 null */
 export function captureRow(item: CaptureItem, ctx: CaptureCtx): CaptureRow | null {
-  const raw = cut(ctx.rawText, RAW_TEXT_MAX);
-  const project = cut(item.project ?? '', PROJECT_MAX);
-  const note = cut(item.body ?? '', ITEM_NOTE_MAX);
-  const title = cut(item.title, ITEM_TITLE_MAX);
+  const raw = cutGraphemes(ctx.rawText, RAW_TEXT_MAX);
+  const project = cutGraphemes(item.project ?? '', PROJECT_MAX);
+  const note = cutGraphemes(item.body ?? '', ITEM_NOTE_MAX);
+  const title = cutGraphemes(item.title, ITEM_TITLE_MAX);
   switch (item.kind) {
     case 'event': {
       const time = item.time;

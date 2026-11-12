@@ -9,7 +9,7 @@ import { useTypedTitle } from '../../../kit/hooks/useTypedTitle.ts';
 import { emptyForm, formOf, hasRemind, newTodoRow, normalize, patchOf, remindPassed, type TodoForm } from '../data/todo-edit.ts';
 
 export type { TodoForm } from '../data/todo-edit.ts';
-export { REMIND_BEFORE_OPTIONS, TITLE_MAX, PROJECT_MAX, NOTE_MAX } from '../data/todo-edit.ts';
+export { REMIND_BEFORE_OPTIONS, ITEM_TITLE_MAX, PROJECT_MAX, NOTE_MAX } from '../data/todo-edit.ts';
 
 const SPEC = {
   table: 'todos',

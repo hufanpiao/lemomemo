@@ -8,7 +8,7 @@ import { EditShell } from '../../../kit/components/EditShell.tsx';
 import { Check, Field, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
 import { LocationText } from '../../../kit/components/LocationText.tsx';
 import { useCalendarT, type CalendarMsgKey } from '../hooks/useCalendarT.ts';
-import { LOCATION_MAX, NOTE_MAX, PROJECT_MAX, REMIND_MIN_OPTIONS, TITLE_MAX, useEventEdit, type EventForm } from '../hooks/useEventEdit.ts';
+import { ITEM_TITLE_MAX, LOCATION_MAX, NOTE_MAX, PROJECT_MAX, REMIND_MIN_OPTIONS, useEventEdit, type EventForm } from '../hooks/useEventEdit.ts';
 
 /** 不带参数的那些键（t 的第二个参数要能写成 {}） */
 type PlainKey = Exclude<CalendarMsgKey, 'event.edit.tzLocal'>;
@@ -45,7 +45,7 @@ function EventEditor({ id, onCreated }: { id: string; onCreated(id: string): voi
           aria-label={t('event.edit.titleLabel', {})}
           placeholder={t('event.edit.titlePh', {})}
           value={form.title}
-          maxLength={TITLE_MAX}
+          maxLength={ITEM_TITLE_MAX}
           disabled={off}
           onCommit={(v) => change({ title: v })}
           data-testid="event-edit-title"

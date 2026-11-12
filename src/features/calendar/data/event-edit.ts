@@ -10,6 +10,7 @@ import { fmtHm, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../
 import { isValidTz, type Tz } from '../../../../shared/core/tz.ts';
 import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
 import { ALL_DAY_LIVE_UNTIL, remindAtOf } from '../../../../shared/logic/remind.ts';
+import { cutGraphemes } from '../../../../shared/logic/short.ts';
 import { remindLive, rowRemindPending } from '../../../core/remind-flag.ts';
 
 export interface EventForm {
@@ -34,7 +35,7 @@ export const REMIND_MIN_OPTIONS: readonly EventForm['remind_min'][] = [null, 0, 
 /** 新建有时刻的日程时默认提前 15 分钟（定稿线框 s13“日程默认提前 15 分钟”；设置项接上以前先用出厂值） */
 export const DEFAULT_REMIND_MIN = 15;
 export const DEFAULT_DURATION_MIN = 60;
-export { ITEM_TITLE_MAX as TITLE_MAX, PROJECT_MAX, ITEM_NOTE_MAX as NOTE_MAX } from '../../../../shared/schema/rows.ts';
+export { ITEM_TITLE_MAX, PROJECT_MAX, ITEM_NOTE_MAX as NOTE_MAX } from '../../../../shared/schema/rows.ts';
 export const LOCATION_MAX = 200;
 
 const DAY_MIN = 1440;
@@ -124,8 +125,9 @@ export function localOf(form: EventForm, current: Tz): { date: DateStr; time: st
   return date === form.date && time === form.time ? null : { date, time };
 }
 
-export function cleanTitle(s: string): string {
-  return s.trim().slice(0, ITEM_TITLE_MAX);
+/** 标题去掉首尾空白，截到 ITEM_TITLE_MAX 个 UTF-16 单元、不截半个字（cutGraphemes，同 capture-map） */
+export function trimTitle(s: string): string {
+  return cutGraphemes(s.trim(), ITEM_TITLE_MAX);
 }
 
 const FIELDS: readonly (keyof EventForm)[] = [
@@ -159,7 +161,7 @@ export function patchOf(row: Readonly<Record<string, unknown>>, prev: EventForm,
 /** 新建的整行 */
 export function newEventRow(id: string, form: EventForm, now: number): Record<string, unknown> & { id: string } {
   return {
-    id, ...form, title: cleanTitle(form.title), source: 'page', raw_text: '', short: null, short_by: null, push_show_title: null,
+    id, ...form, title: trimTitle(form.title), source: 'page', raw_text: '', short: null, short_by: null, push_show_title: null,
     batch_id: null, notified_for: null, snooze_at: null, created_at: now, updated_at: now,
   };
 }

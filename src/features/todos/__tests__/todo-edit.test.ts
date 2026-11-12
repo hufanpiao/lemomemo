@@ -1,10 +1,10 @@
 // 待办编辑页的规则（data/todo-edit.ts；架构 0.29 续第 124 条③、第 136 条；TC-B2-74）
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
-import { todosWrite } from '../../../../shared/schema/rows.ts';
+import { ITEM_TITLE_MAX, todosWrite } from '../../../../shared/schema/rows.ts';
 import { remindAtOf, type TodoRemindRow } from '../../../../shared/logic/remind.ts';
 import {
-  emptyForm, formOf, hasRemind, newTodoRow, normalize, patchOf, prevRemindAtOf, REMIND_BEFORE_OPTIONS, remindPassed, TODO_TIMING_COLS, type TodoForm,
+  emptyForm, formOf, hasRemind, newTodoRow, normalize, patchOf, prevRemindAtOf, REMIND_BEFORE_OPTIONS, remindPassed, TODO_TIMING_COLS, trimTitle, type TodoForm,
 } from '../data/todo-edit.ts';
 
 const TZ = 'Asia/Seoul';
@@ -232,5 +232,16 @@ describe('remindPassed（R-375 灰字）', () => {
     expect(remindPassed(base({ due: '2026-11-05', remind_days: null }), TZ, now)).toBe(false);
     expect(remindPassed(base({ due: '2026-11-05', due_time: '10:00', remind_before_min: 60 }), TZ, now)).toBe(false);
     expect(remindPassed(base({ due: '2026-11-05', done: true }), TZ, now)).toBe(false);
+  });
+});
+
+describe('trimTitle：去首尾空白，截到 ITEM_TITLE_MAX、不截半个字', () => {
+  it('截断处落在表情中间：整个表情不要，不留半个代理对', () => {
+    const t = trimTitle(`  a${'😀'.repeat(ITEM_TITLE_MAX)}  `);
+    expect(t).toBe(`a${'😀'.repeat(ITEM_TITLE_MAX / 2 - 1)}`);
+    expect(t.length).toBe(ITEM_TITLE_MAX - 1);
+  });
+  it('不超长的原样（只去首尾空白）', () => {
+    expect(trimTitle('  交报告 ')).toBe('交报告');
   });
 });

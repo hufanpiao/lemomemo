@@ -10,7 +10,7 @@
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
 import { Check, Field, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
-import { NOTE_MAX, PROJECT_MAX, REMIND_BEFORE_OPTIONS, TITLE_MAX, useTodoEdit } from '../hooks/useTodoEdit.ts';
+import { ITEM_TITLE_MAX, NOTE_MAX, PROJECT_MAX, REMIND_BEFORE_OPTIONS, useTodoEdit } from '../hooks/useTodoEdit.ts';
 import { useTodosT, type TodosMsgKey } from '../hooks/useTodosT.ts';
 
 const beforeKey = (v: number | null): TodosMsgKey => (v === null ? 'todo.edit.before.none' : (`todo.edit.before.${v}` as TodosMsgKey));
@@ -44,7 +44,7 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
           aria-label={t('todo.edit.titleLabel', {})}
           placeholder={t('todo.edit.titlePh', {})}
           value={form.title}
-          maxLength={TITLE_MAX}
+          maxLength={ITEM_TITLE_MAX}
           disabled={off}
           onCommit={(v) => change({ title: v })}
           data-testid="todo-edit-title"

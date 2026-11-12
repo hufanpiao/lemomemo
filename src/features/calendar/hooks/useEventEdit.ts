@@ -16,7 +16,7 @@ import {
 } from '../data/event-edit.ts';
 
 export type { EventForm } from '../data/event-edit.ts';
-export { REMIND_MIN_OPTIONS, TITLE_MAX, LOCATION_MAX, PROJECT_MAX, NOTE_MAX } from '../data/event-edit.ts';
+export { REMIND_MIN_OPTIONS, ITEM_TITLE_MAX, LOCATION_MAX, PROJECT_MAX, NOTE_MAX } from '../data/event-edit.ts';
 
 /** 没记过原来的时刻时，切回有时刻用这个 */
 export const DEFAULT_START = '09:00';

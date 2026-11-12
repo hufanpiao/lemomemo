@@ -14,6 +14,7 @@ import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
 import { DEFAULT_TODO_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime, todoRemindAt } from '../../../../shared/logic/remind.ts';
+import { cutGraphemes } from '../../../../shared/logic/short.ts';
 import { todoRemindFlag } from '../../../core/remind-flag.ts';
 
 /** 编辑页能改的字段 */
@@ -35,7 +36,7 @@ export interface TodoForm {
 /** “提前提醒”的选项：不提醒（null）放最前，其余照 shared 的表（TC-B2-74：不提醒 / 准时 / 10 分钟 / 30 分钟 / 1 小时 / 2 小时 / 1 天） */
 export const REMIND_BEFORE_OPTIONS: readonly (number | null)[] = [null, ...REMIND_BEFORE_CHOICES];
 
-export { ITEM_TITLE_MAX as TITLE_MAX, PROJECT_MAX, ITEM_NOTE_MAX as NOTE_MAX } from '../../../../shared/schema/rows.ts';
+export { ITEM_TITLE_MAX, PROJECT_MAX, ITEM_NOTE_MAX as NOTE_MAX } from '../../../../shared/schema/rows.ts';
 
 const str = (v: unknown, d = ''): string => (typeof v === 'string' ? v : d);
 const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
@@ -97,9 +98,9 @@ export function remindPassed(form: TodoForm, tz: Tz, now: number): boolean {
   return at !== null && at < now;
 }
 
-/** 标题去掉首尾空白；空标题不写（界面提示） */
-export function cleanTitle(s: string): string {
-  return s.trim().slice(0, ITEM_TITLE_MAX);
+/** 标题去掉首尾空白，截到 ITEM_TITLE_MAX 个 UTF-16 单元、不截半个字（cutGraphemes，同 capture-map）；空标题不写（界面提示） */
+export function trimTitle(s: string): string {
+  return cutGraphemes(s.trim(), ITEM_TITLE_MAX);
 }
 
 const FIELDS: readonly (keyof TodoForm)[] = [
@@ -128,7 +129,7 @@ export function patchOf(
 /** 新建的整行（insert 要整行可写列；deleted_at、undone 只能 update，不放） */
 export function newTodoRow(id: string, form: TodoForm, now: number): Record<string, unknown> & { id: string } {
   return {
-    id, ...form, title: cleanTitle(form.title), source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: null,
+    id, ...form, title: trimTitle(form.title), source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: null,
     short: null, short_by: null, done_at: form.done ? now : 0, push_show_title: null, notified_for: null, snooze_at: null,
     created_at: now, updated_at: now,
   };
