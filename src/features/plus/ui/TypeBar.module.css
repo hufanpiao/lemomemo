@@ -20,6 +20,72 @@
   font-size: var(--fs-14);
 }
 
+/* 打字条后面的整页液态玻璃（R-399，负责人 11-11“按+出现的输入框之外的后面背景全做成液态模糊玻璃”；11-12 看三档对照图定中档 16px、点模糊处收起）：
+   打字条画着它就在、收起它就没（TypeBar.tsx）。铺满可视区，下沿和底栏一样减 --vh-gap（iOS 主屏幕版布局视口少一截时补到屏幕底）。
+   层级 --z-mist（8）：压住页面内容和顶部模糊带，在底栏渐隐层、底栏和“＋”（R-361 不动）、“已记下”提示条、打字条下面。
+   材质照底栏的液态玻璃（kit GlassBar.module.css 的 .bar）：着色 --g-tint、饱和度 1.8、斜上方一片光（--g-hi 乘 --g-sheen）；模糊 16px。
+   接住点按（不点穿）：点它由 TypeBar.tsx 的“点页面空白处”处理（没打字收起、打了字只收键盘），后面看不清的按钮点不到。
+   出现只淡入、不动位置：110ms（calc(var(--dur-ui) / 2)，不超过 200ms）ease-out，减少动态时也只是淡入；消失和打字条同一帧，不留退场 */
+.mist {
+  position: fixed;
+  inset: 0 0 calc(0px - var(--vh-gap, 0px));
+  z-index: var(--z-mist);
+  background: var(--g-tint);
+
+  /* avoid-ai-design-ignore: K3 负责人 11-11 指定打字条后面整页液态模糊玻璃（R-399） */
+  backdrop-filter: blur(16px) saturate(1.8);
+  animation: mist-in calc(var(--dur-ui) / 2) var(--ease-out) both;
+}
+
+.mist::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 22% -30%, var(--g-hi) 0 38%, transparent 60%);
+  opacity: var(--g-sheen);
+}
+
+@keyframes mist-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* 减少透明效果（系统设置或 data-rt="1"）、或浏览器不认 backdrop-filter（带不带前缀都不认）：不模糊、不画高光，退成一层半透明纯色（玻璃的后备着色 --g-tint-fb） */
+@media (prefers-reduced-transparency: reduce) {
+  .mist {
+    background: var(--g-tint-fb);
+    backdrop-filter: none;
+  }
+
+  .mist::after {
+    display: none;
+  }
+}
+
+:global(:root[data-rt='1']) .mist {
+  background: var(--g-tint-fb);
+  backdrop-filter: none;
+}
+
+:global(:root[data-rt='1']) .mist::after {
+  display: none;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mist {
+    background: var(--g-tint-fb);
+  }
+
+  .mist::after {
+    display: none;
+  }
+}
+
 /* 多条的提示条：位置、磨砂和打字条、撤销条同一套 */
 .saved {
   position: fixed;
