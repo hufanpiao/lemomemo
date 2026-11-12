@@ -22,9 +22,7 @@ import { pacificDate } from '../../_shared/ai/gate.ts';
 import { VOICE_PROBE_PARAMS, VOICE_TIMEOUT_MS } from '../../_shared/ai/params.ts';
 import type { AIProvider, AiResult } from '../../_shared/ai/provider.ts';
 import { generateRetry503 } from '../../_shared/ai/retry.ts';
-// 类型白名单直接用正式 ai-voice 的（代码审 S3：从源头保证一致；ai-voice/core.ts 只依赖 _shared，不读环境变量、不碰数据库）；
-// 大小上限和正式 ai-voice 一样由 index.ts 注入 shared 的 AI_AUDIO_MAX_BYTES（HandlerDeps.maxAudio）
-import { AUDIO_TYPES } from '../../ai-voice/core.ts';
+// 类型白名单、大小上限都和正式 ai-voice 一样由 index.ts 注入 shared 的 audioType、AI_AUDIO_MAX_BYTES（HandlerDeps.audioType、maxAudio）
 
 /** 预览项目 ref（db-probe 11-12 已删，这里是唯一一份） */
 export const PREVIEW_REF = 'yoeqwhygehbaftkppati';
@@ -46,7 +44,6 @@ export const ALLOWED_UIDS: readonly string[] = [
 
 /** 模型只认 Q6 的两个（架构师 11-07 定、主持人第一天确认是哪个；探测时两个都可能要跑），由请求头 X-Model 指定，没有默认值 */
 export const MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'] as const;
-export { AUDIO_TYPES };
 /** 每天额度（Q1 ④） */
 export const DAILY_LIMIT = 100;
 /**
@@ -93,6 +90,8 @@ export interface HandlerDeps {
   supabaseUrl: string | undefined;
   /** 一段录音最多多少字节：shared 的 AI_AUDIO_MAX_BYTES（index.ts 从 _shared/gen/ 注入，和正式 ai-voice 同一份） */
   maxAudio: number;
+  /** Content-Type 白名单：shared 的 audioType（index.ts 从 _shared/gen/ 注入，和正式 ai-voice 同一份） */
+  audioType: (ct: string | null) => string | null;
   now: () => number;
   /** 单调时钟（毫秒），量耗时用 */
   clock: () => number;
@@ -123,11 +122,6 @@ export function allowedReady(list: readonly string[]): boolean {
   return list.length > 0 && list.every((u) => UUID.test(u));
 }
 
-/** Content-Type 去参数、转小写；在 4 种里返回它，不在返回 null（同 ai-voice 的 audioType） */
-export function audioType(ct: string | null): string | null {
-  const base = (ct ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
-  return (AUDIO_TYPES as readonly string[]).includes(base) ? base : null;
-}
 
 /** 回显的原始标注：只留可打印 ASCII、最多 100 字；有别的字符整个换成 (invalid) */
 export function rawLabel(ct: string | null): string | null {
@@ -201,7 +195,7 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   }
   // ⑦
   const ct = req.headers.get('content-type');
-  const mime = audioType(ct);
+  const mime = deps.audioType(ct);
   const raw_type = rawLabel(ct);
   if (mime === null) {
     await drop(req);

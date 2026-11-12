@@ -33,6 +33,18 @@ export const AI_PROJECT_LEN = 40;
 /** 一段录音最多多少字节（架构 5.11 第 2 点）：前端录音器超了就不交出；服务器 ai-voice、voice-probe
  *  读请求体也用这一份（各自的 index.ts 从 _shared/gen/ 注入，超了回 413） */
 export const AI_AUDIO_MAX_BYTES = 600 * 1024;
+/** 录音能交出、服务器 ai-voice 和 voice-probe 能收的 Content-Type（去掉参数、转小写以后比）：前端录音器和两个函数都用这一份 */
+export const AUDIO_TYPES = ['audio/mpeg', 'audio/aac', 'audio/mp4', 'audio/webm'] as const;
+export type AudioType = (typeof AUDIO_TYPES)[number];
+/** Content-Type 去掉参数、转小写（audio/mp4;codecs=mp4a.40.2 → audio/mp4）；没有就是空串 */
+export function bareMime(ct: string | null | undefined): string {
+  return (ct ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+}
+/** 去掉参数、转小写以后在 AUDIO_TYPES 里就返回它，不在返回 null（audio/webm;codecs=opus → audio/webm） */
+export function audioType(ct: string | null | undefined): AudioType | null {
+  const base = bareMime(ct);
+  return (AUDIO_TYPES as readonly string[]).includes(base) ? (base as AudioType) : null;
+}
 
 /** B3 运行时只有 record（Q2）；B4b-3 放开枚举就改这一处 */
 export const INTENTS = ['record'] as const;

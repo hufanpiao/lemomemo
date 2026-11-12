@@ -8,7 +8,7 @@ import {
   ALLOWED_UIDS, DAILY_LIMIT, EXPIRES_AT, handle, MAX_TRANSCRIPT, MODELS, PREVIEW_REF, PROBE_INSTRUCTION,
   QUOTA_WINDOW_S, quotaKey, rawLabel, type HandlerDeps, type ProbeLog,
 } from '../../supabase/functions/_preview/voice-probe/handler.ts';
-import { AI_AUDIO_MAX_BYTES } from '../../shared/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, audioType } from '../../shared/schema/ai.ts';
 import { pacificDate } from '../../supabase/functions/_shared/ai/gate.ts';
 import { GEMINI_BASE, GeminiProvider, type Fetch } from '../../supabase/functions/_shared/ai/gemini.ts';
 import { VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
@@ -28,7 +28,7 @@ function setup(o: Partial<HandlerDeps> & { reply?: Fetch; takeOk?: boolean | 'th
   const logs: ProbeLog[] = [];
   const reply: Fetch = o.reply ?? (async () => gem({ transcript: SAID }));
   const deps: HandlerDeps = {
-    supabaseUrl: PREVIEW_URL, maxAudio: AI_AUDIO_MAX_BYTES,
+    supabaseUrl: PREVIEW_URL, maxAudio: AI_AUDIO_MAX_BYTES, audioType,
     now: () => NOW,
     clock: () => 0,
     async verify(jwt) {

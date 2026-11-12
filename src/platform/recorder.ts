@@ -3,6 +3,7 @@
 // • 拿到流以后不管哪一步失败或取消，都先停录音器、关轨道、清计时器再返回（系统的录音指示不能一直亮）
 // • 取消只有 signal 这一套，从调用到交出结果之前一直有效
 // • 运行日志只记类型、字节数、毫秒、原因
+import { audioType, bareMime } from '../../shared/schema/ai.ts';
 import { micResultOf, rememberMicResult } from './perm-mic.ts';
 import { errTag, rlog } from './run-log-api.ts';
 
@@ -10,9 +11,9 @@ import { errTag, rlog } from './run-log-api.ts';
 export const REC_START_WAIT_MS = 3000;
 
 export type MicFail = 'unsupported' | 'denied' | 'no_mic';
-export type RecFail = MicFail | 'start_failed' | 'cancelled' | 'rec_error' | 'empty' | 'no_mime' | 'too_large';
+export type RecFail = MicFail | 'start_failed' | 'cancelled' | 'rec_error' | 'empty' | 'no_mime' | 'bad_mime' | 'too_large';
 
-/** 交出来的录音一定交得出去：不是 0 字节、有类型、不超 maxBytes（这三条只在录音器判，上传层不重判） */
+/** 交出来的录音一定交得出去：不是 0 字节、有类型且在 shared 的 AUDIO_TYPES 里、不超 maxBytes（这几条只在录音器判，上传层不重判） */
 export interface RecClip {
   blob: Blob;
   /** 去掉参数、转成小写的类型（audio/mp4;codecs=mp4a.40.2 → audio/mp4），不会是空串；上传时直接当 Content-Type */
@@ -48,7 +49,6 @@ const closeTracks = (stream: MediaStream): void => {
   for (const t of stream.getTracks()) t.stop();
 };
 
-const bareMime = (m: string): string => m.split(';')[0]?.trim().toLowerCase() ?? '';
 
 export function recorderSupported(): boolean {
   return typeof MediaRecorder !== 'undefined' && typeof navigator !== 'undefined' && typeof navigator.mediaDevices?.getUserMedia === 'function';
@@ -169,6 +169,7 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
       if (blob.size === 0) fail('empty', size);
       else if (blob.size > o.maxBytes) fail('too_large', size);
       else if (mime === '') fail('no_mime', size);   // 录音器和各片都没标类型：发出去服务器只会回 415，重试也一样
+      else if (audioType(mime) === null) fail('bad_mime', size);   // 标了类型但不在 shared 的 AUDIO_TYPES 里：服务器同样回 415
       else finish({ ok: true, clip: { blob, mime, ms }, auto }, `rec end${size} auto=${auto ? 1 : 0}`);
     };
 

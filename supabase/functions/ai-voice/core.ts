@@ -16,7 +16,6 @@ import type { AiKindLike, ParseFail, ParseOk, VoiceInput } from '../_shared/ai/p
 import { readCapped } from '../_shared/body.ts';
 
 export const MAX_PROJECTS_HEADER = 4096;
-export const AUDIO_TYPES = ['audio/mpeg', 'audio/aac', 'audio/mp4', 'audio/webm'] as const;
 export const RECORD_CONFIDENCE = 1;
 /** 503 重试后成功的全项目计数键（附录 A；三段写法过得了 counters 的 check 约束） */
 export const voiceRetryKey = (ms: number): string => `voice-retry:global:${pacificDate(ms)}`;
@@ -29,6 +28,8 @@ export type AuthResult = { ok: true; user: { userId: string } } | { ok: false; r
 export interface Logic<Item> {
   /** 一段录音最多多少字节：shared 的 AI_AUDIO_MAX_BYTES（前端录音器判同一份） */
   maxAudio: number;
+  /** Content-Type 白名单：shared 的 audioType（去参数、转小写，不在白名单里为 null） */
+  audioType(ct: string | null): string | null;
   normLocale(v: unknown): 'zh' | 'ko';
   normProjects(v: unknown): string[];
   isValidTz(tz: string): boolean;
@@ -62,12 +63,6 @@ function gateFailCode(status: number, body: Record<string, unknown>, codes: read
 
 import { json } from '../_shared/http.ts';
 export { json };
-
-/** Content-Type 去参数、转小写；在白名单里返回它，不在返回 null（audio/webm;codecs=opus → audio/webm） */
-export function audioType(ct: string | null): string | null {
-  const base = (ct ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
-  return (AUDIO_TYPES as readonly string[]).includes(base) ? base : null;
-}
 
 /** X-Projects：base64url(UTF-8 JSON 字符串数组)。超过 4 KB 截到 4 KB，按项截断：留下截断处之前完整的几项（代码审建议 6，
  *  原来截完整段 JSON 解不开就全丢了）；本来就解不开的当没给 */
@@ -110,7 +105,7 @@ export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Resp
   if (!auth.ok) return auth.response;
   const userId = auth.user.userId;
 
-  const mime = audioType(req.headers.get('content-type'));
+  const mime = deps.logic.audioType(req.headers.get('content-type'));
   if (!mime) {
     await req.body?.cancel().catch(() => {});
     return json(415, { error: 'unsupported_media_type' });

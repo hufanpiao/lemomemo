@@ -278,4 +278,14 @@ describe('运行日志：开始、结束、失败各一行，只有约定的键�
     expect(log.lines.at(-1)).toBe('rec fail reason=no_mime bytes=10 ms=0');
     expect(allClosed(m)).toBe(true);
   });
+
+  it('标了类型但不在 shared 的 AUDIO_TYPES 里（audio/ogg）：bad_mime，不交出录音（服务器同样回 415）', async () => {
+    const m = mic();
+    const rec = await recording();
+    rec0().mimeType = 'audio/ogg;codecs=opus';
+    rec0().chunks = [new Blob([new Uint8Array(10)])];
+    expect(await rec.stop()).toEqual({ ok: false, fail: 'bad_mime' });
+    expect(log.lines.at(-1)).toBe('rec fail reason=bad_mime bytes=10 ms=0');
+    expect(allClosed(m)).toBe(true);
+  });
 });

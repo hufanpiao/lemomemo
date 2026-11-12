@@ -7,7 +7,7 @@ import { voiceWithAI } from '../_shared/ai/parse-with-ai.ts';
 import { logVoiceFail, type StoreAdmin } from '../_shared/ai/store.ts';
 import { gateDeps, isValidTz } from '../_shared/ai/wire.ts';
 import { aiAllowed } from '../_shared/consent.ts';
-import { AI_AUDIO_MAX_BYTES, checkDefaultDay, normLocale, normProjects } from '../_shared/gen/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, audioType, checkDefaultDay, normLocale, normProjects } from '../_shared/gen/schema/ai.ts';
 import { versionGate } from '../_shared/version-gate.ts';
 import { handle, json } from './core.ts';
 import { timedFetch } from '../_shared/net.ts';
@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
         throw e;
       }
     },
-    logic: { maxAudio: AI_AUDIO_MAX_BYTES, normLocale, normProjects, isValidTz, checkDefaultDay: (v, now, tz) => checkDefaultDay(v, now, tz), voiceWithAI },
+    logic: { maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, isValidTz, checkDefaultDay: (v, now, tz) => checkDefaultDay(v, now, tz), voiceWithAI },
     logFail: (userId, code, fields) => logVoiceFail(admin as unknown as StoreAdmin, userId, code, fields, Date.now()),
   });
 });

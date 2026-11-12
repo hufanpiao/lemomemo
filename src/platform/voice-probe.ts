@@ -5,7 +5,7 @@
 // • 同一段录音按两种 Content-Type 标注各传一次（iPhone 的 AAC：audio/mp4、audio/aac；电脑 Edge 的 WebM：audio/webm、audio/webm;codecs=opus）
 // • 回包只取约定的几个字段（mime、raw_type、bytes、gemini_http、gemini_ms、total_ms、result、transcript、model、error），别的不显示
 // 网络和 MediaRecorder 按 A12、A13 只能写在 platform
-import { AI_AUDIO_MAX_BYTES } from '../../shared/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, bareMime } from '../../shared/schema/ai.ts';
 import { buildInfo } from './env.ts';
 import { appFetch } from './http.ts';
 import { readSessionAccessToken } from './session.ts';
@@ -43,7 +43,7 @@ export function supportedTypes(): { type: string; ok: boolean }[] {
 
 /** 实际录出的 mimeType → 要试的两种标注 */
 export function labelsFor(actual: string): string[] {
-  const base = actual.split(';')[0]?.trim().toLowerCase() ?? '';
+  const base = bareMime(actual);
   if (base === 'audio/mp4' || base === 'audio/aac' || base === 'audio/x-m4a') return ['audio/mp4', 'audio/aac'];
   if (base === 'audio/webm') return ['audio/webm', 'audio/webm;codecs=opus'];
   return [actual || 'application/octet-stream'];

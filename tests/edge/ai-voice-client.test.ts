@@ -2,7 +2,7 @@
 // 证明整套请求头服务器收得下。门用内存替身、服务商用桩（ai-fakes.ts），不碰网络
 import { describe, expect, it } from 'vitest';
 import { isValidTz } from '../../shared/core/tz.ts';
-import { AI_AUDIO_MAX_BYTES, checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiItem } from '../../shared/schema/ai.ts';
+import { AI_AUDIO_MAX_BYTES, audioType, checkDefaultDay, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiItem } from '../../shared/schema/ai.ts';
 import { outcomeOf } from '../../src/features/plus/data/ai-outcome.ts';
 import { createCallVoice, type AiVoiceReq } from '../../src/features/plus/data/ai-voice-api.ts';
 import { makeParseWithAI } from '../../supabase/functions/_shared/ai/parse-core.ts';
@@ -22,7 +22,7 @@ function wired(o: GateOpts = {}) {
       r.headers.get('authorization') === 'Bearer jwt-1'
         ? { ok: true, user: { userId: UA } }
         : { ok: false, response: new Response('{"error":"unauthorized"}', { status: 401 }) },
-    logic: { maxAudio: AI_AUDIO_MAX_BYTES, normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI },
+    logic: { maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, isValidTz, checkDefaultDay, voiceWithAI },
     async logFail() {},
   };
   // 只留请求头：clone() 分出的那一支没人读，服务器 400/415 时 body.cancel() 会一直等它
