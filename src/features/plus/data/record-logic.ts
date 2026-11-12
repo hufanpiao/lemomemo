@@ -8,8 +8,11 @@
 //   进了录音以后：拖进取消区松开 = 取消，拖进锁定区 = 锁定（松开也继续录）。取消区、锁定区的位置由界面量好，经 zoneAt 传进来
 // • 状态全是普通对象，界面放 ref 里，按住和移动期间不触发渲染（Q3：GlassBar 不重新渲染）
 // 纯 TS：不准 import React（A1）
+// 只引 shared：tests/shared 在 Deno 下也跑这份（Deno 不认 Vite 的 import.meta.env、__APP_VERSION__），所以不准引 platform/env.ts 和经它的文件
 import { VOICE_TIMEOUT_MS } from '../../../../shared/schema/ai.ts';
-import type { SendFail } from './send-error.ts';
+
+/** 送服务器函数失败的种类（send-error.ts 用它、照样转出）：network = 连接都没建立（fetch 抛 TypeError）；其余都不自动重试 */
+export type SendFail = 'network' | 'timeout' | 'http' | 'bad_response';
 
 export const REC_MAX_MS = 60_000;
 // 录音码率在 shared/schema/ai.ts 的 AI_AUDIO_BITS_PER_SECOND（探测页也要用，app 层引不到这里）
