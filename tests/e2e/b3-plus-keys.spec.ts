@@ -4,12 +4,13 @@
 // • Ctrl+N 打开打字条（焦点在输入框里）；记下一条以后打字条自动收起（R-392），这时按 Ctrl+Z 撤销这一批，提示条收起
 // • 点“＋”冷启动当场聚焦（Q-24）、原地聚焦（Q-8）、贴底浮条按钮按下不让输入框失焦（Q-25）
 import type { Page } from '@playwright/test';
+import { waitVoiceHost } from './fake-media.ts';
 import { expect, test } from './session-fixture.ts';
 
 const TYPEBAR = /\/TypeBar-[^/]*\.js$/;
 
-/** 打字条那一块下载完：主块和它依赖的共用样式块（TypeBar.module，打字条和录音那一块共用）都到了，模块才会执行。
- *  只等主块再留 200 ms 不够：负载下 TypeBar.module 会晚到几百毫秒，Q-24 偶发拿到 BODY（FA-3 时查明，HEAD 上 --repeat-each=4 也是 2 次失败）。
+/** 打字条那一块的主块和共用样式块（TypeBar.module）都下载到了（Q-8 用：它只看聚焦带不带 preventScroll、页面滚没滚，
+ *  那一块晚一点执行也一样能判；要“点按当场聚焦”的 Q-24 不能只等下载，改等运行日志“voice host ready”，见那一组的说明）。
  *  共用样式块以后要是被并进主块，第二个等 10 秒超时后照常往下走 */
 function typeBarLoaded(page: Page): Promise<unknown> {
   return Promise.all([
@@ -39,17 +40,18 @@ test.describe('“＋”离线“准备中”（B3 Q4）', () => {
 
 // Q-24（负责人 11-11“点+不出来键盘，还要点输入框才出来键盘”）：iOS 只在点按的同一个任务里 focus 才弹键盘。
 // 运行日志：冷启动后第一次点＋，focusin 晚 310～480ms，键盘没弹；之后再点都在 10ms 内，键盘弹了。
-// 这里等打字条那一块下载完，用脚本点一下“＋”，点按处理完的同一个任务里焦点必须已经在输入框里
+// 这里等打字条那一块执行完，用脚本点一下“＋”，点按处理完的同一个任务里焦点必须已经在输入框里。
+// 等什么（FA-3 复查时按调试日志查明）：那一块要等全部依赖（TypeBar、TypeBar.module、Form、UndoToast 几份 JS 和三份 CSS、TypeBarPreload）都到了才执行，
+// app/plus-slot.tsx 这时才记住组件；只等主块的响应再留 200 ms，负载下会在执行之前点（日志：“typeBarAtClick=false … TypeBarPreload end=+171ms”，
+// 1.5 秒后打字条已出来、“准备中”已收起——应用按设计走了“还没下载好”那条路，不是聚焦晚了）。
+// 所以等应用自己的信号：运行日志“voice host ready”（那一块执行完、Preload 挂上、录音那一套也挂上以后才有）
 test.describe('冷启动后第一次点“＋”当场聚焦（Q-24）', () => {
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
 
   test('打字条下载好以后第一次点“＋”：点按处理完时焦点已在输入框', async ({ page }) => {
-    const loaded = typeBarLoaded(page);
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
-    await loaded;
-    await expect.poll(() => page.evaluate(() => Boolean(document.querySelector('[data-testid="tabbar-add"]')))).toBe(true);
-    await page.waitForTimeout(200); // 下载完到模块执行、记住组件之间留一拍
+    await waitVoiceHost(page, 0);
     // React 在点按这个任务的微任务里提交、聚焦（iOS 认这一段）；下一个任务（setTimeout 0）开始时焦点必须已经在输入框
     const focused = await page.evaluate(async () => {
       (document.querySelector('[data-testid="tabbar-add"]') as HTMLElement).click();
