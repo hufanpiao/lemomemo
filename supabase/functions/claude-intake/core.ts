@@ -19,7 +19,7 @@
 // 只能新增：这里只 insert，不读、不改、不删已有条目（TC-B3-20）。日志只记错误码：不打印请求头（连接码）、请求体（A23）。
 // 纯逻辑：依赖全部注入，不 import _shared/gen/、npm 包。
 import { aiGate, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
-import type { AIProvider } from '../_shared/ai/provider.ts';
+import { errNameOf, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, CheckCtx, CheckResult, ParseFail, ParseInput, ParseOk } from '../_shared/ai/parse-core.ts';
 import { readJsonCapped } from '../_shared/body.ts';
 import { TOKEN_RE, tokenHash, tokenLive } from '../_shared/intake-token.ts';
@@ -101,7 +101,7 @@ export function failFields(e: unknown): string[] {
   const out: string[] = [];
   const st = e instanceof StoreError ? e.status : undefined;
   if (typeof st === 'number' && Number.isInteger(st) && st >= 100 && st <= 599) out.push(`status=${st}`);
-  out.push(`type=${e instanceof Error && /^[A-Za-z]{1,40}$/.test(e.name) ? e.name : 'unknown'}`);
+  out.push(`type=${errNameOf(e)}`);
   return out;
 }
 

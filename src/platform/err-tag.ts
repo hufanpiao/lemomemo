@@ -1,9 +1,22 @@
-// 进运行日志的错误类型名（录音 recorder.ts、手机自带识别 speech.ts 用）
-// 从 run-log-api.ts 挪出（Q-5，11-12）：run-log-api 在首屏块里，errTag 放那边，只要有懒加载的页面用到它（录音探测页经 recorder.ts），
-// 就会跟着进首屏（实测 +91 B gzip）；放这里只进用到它的懒加载块
+// 错误的类型名：前端只在这里取（11-13 FA-3 第二轮第 7 条：recorder、speech、perm-mic、http、save-file、env、sw-register、push-test、plus 的 send-error 都调这里）
+// • errName：name 是字符串就原样给，不然空串；AbortError、TimeoutError（取消、超时）只在 isAbortErr 判
+// • errTag：进运行日志的“ type=<名>”片段，只收字母。从 run-log-api.ts 挪出（Q-5，11-12）
+// 错误的 message 可能带用户内容，一律不取
 
-/** 进日志的错误类型名：` type=<名>`，只收字母；认不出返回空串。错误的 message 可能带用户内容，不记 */
+/** 错误的类型名（TypeError、NotAllowedError 等）；不是带字符串 name 的对象给空串 */
+export function errName(err: unknown): string {
+  const name = typeof err === 'object' && err !== null ? (err as { name?: unknown }).name : undefined;
+  return typeof name === 'string' ? name : '';
+}
+
+/** 是不是取消、超时（AbortError、TimeoutError） */
+export function isAbortErr(err: unknown): boolean {
+  const n = errName(err);
+  return n === 'AbortError' || n === 'TimeoutError';
+}
+
+/** 进日志的错误类型名：` type=<名>`，只收字母；认不出返回空串 */
 export function errTag(err: unknown): string {
-  const name = typeof err === 'object' && err !== null && 'name' in err ? (err as { name: unknown }).name : null;
-  return typeof name === 'string' && /^[A-Za-z]{1,40}$/.test(name) ? ` type=${name}` : '';
+  const n = errName(err);
+  return /^[A-Za-z]{1,40}$/.test(n) ? ` type=${n}` : '';
 }

@@ -3,6 +3,7 @@
 // • 返回只有枚举：{results: [{device_id, result}]}，result 是 ok、gone、failed、bad_endpoint 之一
 // • 界面只要一个结果：sent（至少一台 ok）、no_device（一台能收推送的设备都没有）、resubscribe（都是 gone / bad_endpoint：订阅失效，要重新打开通知）、
 //   rate_limited（429）、offline（断网、超时）、failed（其他）
+import { errName, isAbortErr } from '../../../platform/err-tag.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
 
 export type PushTestResult = 'sent' | 'no_device' | 'resubscribe' | 'rate_limited' | 'offline' | 'failed';
@@ -36,8 +37,7 @@ const statusOfError = (e: unknown): number | null => {
 };
 
 const isNetworkError = (e: unknown): boolean => {
-  const name = typeof e === 'object' && e !== null ? (e as { name?: unknown }).name : undefined;
-  return name === 'FunctionsFetchError' || name === 'AbortError' || name === 'TimeoutError';
+  return errName(e) === 'FunctionsFetchError' || isAbortErr(e);
 };
 
 /** 真正调一次（supabase-js 的 functions.invoke，带 X-App-Version 和用户 JWT） */

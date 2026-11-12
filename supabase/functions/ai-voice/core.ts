@@ -11,7 +11,7 @@
 // 503 重试后成功的，counters 记 voice-retry:global:<太平洋日期> 加一（经 take_rate，上限给得很大、只当计数用；写失败不影响回答）。
 // scope = vault：隐私记页面经“＋”记下在 B4b-3 才有（届时换成 verifyVaultToken + ai.vault），B3 回 {fallback, vault_ai_off}、不调 Gemini、不扣次数。
 import { aiGate, pacificDate, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
-import type { AIProvider } from '../_shared/ai/provider.ts';
+import { errNameOf, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, ParseFail, ParseOk, VoiceInput } from '../_shared/ai/parse-core.ts';
 import { b64uDecode } from '../_shared/b64url.ts';
 import { readCapped } from '../_shared/body.ts';
@@ -152,7 +152,7 @@ export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Resp
   try {
     r = await deps.logic.voiceWithAI(input, gate.provider);
   } catch (e) {
-    r = { ok: false, reason: 'error', errName: e instanceof Error && /^[A-Za-z]{1,40}$/.test(e.name) ? e.name : 'unknown' };
+    r = { ok: false, reason: 'error', errName: errNameOf(e) };
   }
   if (r.badDefaultDay) d.log('bad_default_day');   // R10 兜底：入口已 400，到这里说明入口漏校验
   if (!r.ok) {

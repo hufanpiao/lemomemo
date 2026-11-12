@@ -3,6 +3,8 @@
 //   （rememberMicResult，录音那边调）；读的时候能问到 Permissions API 就以它为准，问不到用记下的，都没有是 'unknown'
 //   记在 localStorage（设备上的权限，不跟账号走，退出登录也不清）；存不进、读不出都当没记过
 // • exe 不做语音（R-90）：exe 里不调这些麦克风函数，界面也不显示麦克风这一行
+import { errName } from './err-tag.ts';
+
 export type MicState = 'granted' | 'denied' | 'unknown';
 export const MIC_PERM_KEY = 'lemo.mic_perm';
 
@@ -17,7 +19,7 @@ function storage(): Storage | null {
 /** 录音时 getUserMedia 的结果：成功 'granted'；NotAllowedError / SecurityError 'denied'；别的错（没有麦克风等）不记 */
 export function micResultOf(err: unknown): 'granted' | 'denied' | null {
   if (err === null || err === undefined) return 'granted';
-  const name = typeof err === 'object' && 'name' in err ? (err as { name: unknown }).name : null;
+  const name = errName(err);
   return name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError' ? 'denied' : null;
 }
 

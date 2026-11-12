@@ -2,6 +2,7 @@
 // fetch 只准出现在 platform（A12）；功能要直接调函数时走这里，不自己 fetch
 import { clock } from './clock.ts';
 import { buildInfo } from './env.ts';
+import { isAbortErr } from './err-tag.ts';
 
 export const APP_VERSION_HEADER = 'X-App-Version';
 
@@ -91,11 +92,6 @@ export function isNetworkUnreadable(e: unknown): e is NetworkUnreadableError {
   return e instanceof NetworkUnreadableError;
 }
 
-function isAbort(e: unknown): boolean {
-  const name = typeof e === 'object' && e !== null ? (e as { name?: unknown }).name : undefined;
-  return name === 'AbortError' || name === 'TimeoutError';
-}
-
 /** 带版本头的 fetch；supabase-js 的 global.fetch 也用它。426 时通知 onUpgradeRequired 的订阅者（响应原样返回） */
 export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const headers = withAppVersion(init?.headers ?? (input instanceof Request ? input.headers : undefined));
@@ -103,7 +99,7 @@ export async function appFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   try {
     res = await fetch(input, { ...init, headers });
   } catch (e) {
-    if (isAbort(e)) throw e;
+    if (isAbortErr(e)) throw e;
     throw new NetworkUnreadableError(e);
   }
   // status 0（opaque、Response.error()）：什么也读不出来，和 fetch 失败一样处理
