@@ -216,6 +216,14 @@ export async function runSet(rows: readonly EvalRow[], parse: ParseFn, o: RunOpt
   return { results, skipped, stopped };
 }
 
+/**
+ * 每句一行诊断，run.ts 打到工作流日志（日志公开）：只有编号、结果、HTTP 状态码、错误名、耗时，不带句子原文和模型输出。
+ * 起因：11-13 第一次正式评测 112 句超时、25 句报错，原因只在产物 JSON 里，看工作流日志定不了根因（先看日志）。
+ */
+export function diagLines(results: readonly EvalResult[]): string[] {
+  return results.map((r) => `diag ${r.id} ${r.ok ? 'ok' : (r.reason ?? 'error')} status=${r.status ?? '-'} err=${r.errName ?? '-'} ms=${r.ms}`);
+}
+
 /** run.ts 的外部动作，全部注入（Deno 入口接真的，单测接替身） */
 export interface EvalDeps {
   /** 只读 GEMINI_EVAL_KEY（真调用才问） */
@@ -240,7 +248,7 @@ export interface EvalDeps {
  * → ④ 复制步骤 → ⑤ 读句库、按 --only 挑句子（id 不存在就停）→ ⑥ import parseWithAI、建服务商 → ⑦ 逐句调 → ⑧ 落盘。
  * ①～③ 任何一步不过，后面一步都不做；⑤ 不过，不 import、一句都不调。
  */
-export async function runEval(argv: readonly string[], d: EvalDeps): Promise<{ file: string; called: number; skipped: number; stopped: StopReason }> {
+export async function runEval(argv: readonly string[], d: EvalDeps): Promise<{ file: string; called: number; skipped: number; stopped: StopReason; diag: string[] }> {
   const args = parseArgs(argv);
   let key: string | null = null;
   if (args.replay === null) {
@@ -267,5 +275,5 @@ export async function runEval(argv: readonly string[], d: EvalDeps): Promise<{ f
     ...out,
   };
   const file = await d.write(args.replay !== null ? 'temp' : 'reports', name, `${JSON.stringify(report, null, 2)}\n`);
-  return { file, called: out.results.length, skipped: out.skipped.length, stopped: out.stopped };
+  return { file, called: out.results.length, skipped: out.skipped.length, stopped: out.stopped, diag: diagLines(out.results) };
 }
