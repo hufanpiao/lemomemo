@@ -13,9 +13,7 @@
 import { Suspense } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { minOfDay, msAt, todayOf, weekdayOf } from '../../../../shared/core/date.ts';
-import { placeEvent, type CalItems, type DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
-import { isLiveRow } from '../../../../shared/logic/live-row.ts';
-import { projectColorIndex } from '../../../../shared/logic/project-color.ts';
+import { eventEntry, liveEventsNear, type CalItems, type DayEntry } from '../../../../shared/logic/calendar/cal-items.ts';
 import { dayEntries } from '../../../../shared/logic/calendar/month-grid.ts';
 import { navigate } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
@@ -34,15 +32,11 @@ function titleOf(items: CalItems, e: DayEntry): string {
 export function carryOver(date: DateStr, items: CalItems, tz: string): { entry: DayEntry; endMin: number }[] {
   const dayStart = msAt(date, 0, tz);
   const out: { entry: DayEntry; endMin: number }[] = [];
-  for (const ev of items.events) {
-    if (!isLiveRow(ev) || ev.date > date) continue;
-    const p = placeEvent(ev, tz);
-    if (!p || p.allDay || p.date >= date || p.endMs <= dayStart) continue;
+  // 日程最长 1440 分钟，跨进 date 的只会是前一天开始的；extraBefore = 1 让预筛再往前放宽一天
+  for (const [ev, p] of liveEventsNear(items.events, date, date, tz, 1)) {
+    if (p.allDay || p.date >= date || p.endMs <= dayStart) continue;
     const endMin = todayOf(p.endMs, tz) === date ? minOfDay(p.endMs, tz) : 24 * 60;
-    out.push({
-      entry: { itemId: ev.id, kind: 'timed', project: ev.project, colorIndex: projectColorIndex(ev.project), short: ev.short ?? ev.title, startMs: p.startMs, createdAt: ev.created_at },
-      endMin,
-    });
+    out.push({ entry: eventEntry(ev, p), endMin });
   }
   return out.sort((a, b) => (a.entry.startMs ?? 0) - (b.entry.startMs ?? 0));
 }

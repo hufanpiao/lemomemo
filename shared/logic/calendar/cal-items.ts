@@ -172,9 +172,7 @@ function nearRange(date: string, from: DateStr, to: DateStr, spillBefore: number
 }
 
 /**
- * 没删、没撤销、可能落在 from～to 的日程，连同换算到设备时区后的位置。月历、周视图、“＋”找候选共用这一条。
- * 换算本身在 placeEvent；单日列表的跨午夜续段（features/calendar/ui/DayList.tsx 的 carryOver）没走这里，自己循环调 isLiveRow、placeEvent，
- * 改存活判断或落日规则时那边要一起看。
+ * 没删、没撤销、可能落在 from～to 的日程，连同换算到设备时区后的位置。月历、周视图、“＋”找候选、单日列表的跨午夜续段共用这一条。
  * 只按 ev.date 预筛（前面放宽 TZ_SPILL_DAYS + extraBefore 天，后面 TZ_SPILL_DAYS 天），不按换算后的日子复核：
  * 月历按日子放进格子、周视图要按午夜切段、找候选按 from～to 复核，各自处理。
  */
