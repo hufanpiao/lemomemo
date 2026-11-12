@@ -132,7 +132,7 @@ function TabBar({ route }: { route: RouteName }) {
   return (
     <>
       <GlassBar active={tab} later={afterAppPainted} add={{ label: t('nav.add', {}), onClick: open, hold: plusHold }} />
-      <PlusSlot open={plus !== null} day={plus?.day ?? null} opened={plus?.n} onExpand={expand} onEdit={edit} onClose={() => setPlus(null)} />
+      <PlusSlot open={plus !== null} day={plus?.day ?? null} opened={plus?.n} onExpand={expand} onEdit={edit} onOpen={open} onClose={() => setPlus(null)} />
     </>
   );
 }

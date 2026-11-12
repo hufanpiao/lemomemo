@@ -2,7 +2,7 @@
 // 钉住：同步启动（在用户手势里）、按界面语言、实时出字、结束和错误的归类、取消后不再回调、运行日志不带识别出的字
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RL_SLOT } from '../run-log-api.ts';
-import { speechSupported, startSpeech, type SpeechEnd } from '../speech.ts';
+import { SPEECH_STOP_WAIT_MS, speechSupported, startSpeech, type SpeechEnd } from '../speech.ts';
 
 class FakeRecognition {
   static made: FakeRecognition[] = [];
@@ -159,6 +159,39 @@ describe('错误和取消', () => {
     s.rec.onend?.();
     expect(s.onText).not.toHaveBeenCalled();
     expect(s.onEnd).not.toHaveBeenCalled();
+  });
+
+  it('stop() 以后 SPEECH_STOP_WAIT_MS 还没有 end（iOS 偶尔不发）：按失败（timeout）收尾、abort()，记运行日志；之后的 end 不再回调（FA-3 整块评审第 2 条）', () => {
+    vi.useFakeTimers();
+    try {
+      const s = begin();
+      s.session.stop();
+      vi.advanceTimersByTime(SPEECH_STOP_WAIT_MS - 1);
+      expect(s.onEnd).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(s.onEnd.mock.calls).toEqual([[{ ok: false, fail: 'timeout' }]]);
+      expect(s.rec.abort).toHaveBeenCalledTimes(1);
+      expect(lines.some((l) => l.startsWith('speech fail reason=stop_timeout'))).toBe(true);
+      s.rec.onend?.();
+      expect(s.onEnd).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stop() 以后 end 按时到了：兜底计时器清掉，不再多回调', () => {
+    vi.useFakeTimers();
+    try {
+      const s = begin();
+      s.session.stop();
+      s.rec.onend?.();
+      expect(vi.getTimerCount()).toBe(0);
+      vi.advanceTimersByTime(SPEECH_STOP_WAIT_MS);
+      expect(s.onEnd.mock.calls).toEqual([[{ ok: true, text: '' }]]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('不是自己取消的 aborted 不算失败：等 end 按已认出的字结束', () => {

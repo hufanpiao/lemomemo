@@ -14,9 +14,10 @@ import { MIC_PERM_KEY, rememberMicResult } from '../../../platform/perm-mic.ts';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import type * as Session from '../../../platform/session.ts';
 import type { Writer } from '../data/capture-save.ts';
+import type * as Quota from '../data/quota.ts';
+import type * as VoiceFlow from '../data/voice-flow.ts';
 import { hold, type HoldPointer } from '../data/hold-input.ts';
 import { HOLD_MS } from '../data/record-logic.ts';
-import { resetVoiceForTest } from '../hooks/useVoice.ts';
 import { RecordHost } from '../ui/RecordHost.tsx';
 
 const SID = 'sid-v';
@@ -27,26 +28,52 @@ const fx = vi.hoisted(() => ({
   autoStop: null as null | (() => void),
   stops: 0,
   speech: [] as { lang: string; end: (r: { ok: true; text: string }) => void; cancelled: boolean }[],
+  /** 录音器开录的结果：null 正常开录；给了就按这个失败 */
+  startFail: null as null | string,
+  /** 录音器 stop() 交出的结局：null 正常交出 2000 字节 */
+  stopEnd: null as null | { ok: false; fail: string },
+  /** 卡住录音器 stop()（iOS 不发 stop 事件那种）：放开时调 stopOpen */
+  stopHang: false,
+  stopOpen: null as null | (() => void),
+  /** 录音器拿到的取消信号（取消、卸载时要被 abort，录音器才会关轨道） */
+  signal: null as null | AbortSignal,
+  /** 卡住上传前那一步（toUpload）：放开时调 upOpen */
+  upHang: false,
+  upOpen: null as null | (() => void),
+  /** 今天的 AI 次数用完了没有（本机记的） */
+  quotaOut: false,
 }));
 vi.mock('../../../platform/recorder.ts', () => ({
   recorderSupported: () => true,
   requestMic: async () => 'granted',
-  startRecorder: async (o: { onAutoStop?: () => void }) => {
+  startRecorder: async (o: { onAutoStop?: () => void; signal?: AbortSignal }) => {
     fx.starts += 1;
     fx.autoStop = o.onAutoStop ?? null;
+    fx.signal = o.signal ?? null;
+    if (fx.startFail !== null) return { ok: false, fail: fx.startFail };
+    const end = () => fx.stopEnd ?? { ok: true, auto: false, clip: { blob: new Blob([new Uint8Array(2000)], { type: 'audio/mp4' }), mime: 'audio/mp4', ms: 7000 } };
     return {
       ok: true,
       rec: {
         elapsed: () => 7000,
         level: () => 0.4,
-        stop: async () => {
+        stop: () => {
           fx.stops += 1;
-          return { ok: true, auto: false, clip: { blob: new Blob([new Uint8Array(2000)], { type: 'audio/mp4' }), mime: 'audio/mp4', ms: 7000 } };
+          if (!fx.stopHang) return Promise.resolve(end());
+          return new Promise((ok) => (fx.stopOpen = () => ok(end())));
         },
       },
     };
   },
 }));
+vi.mock('../data/voice-flow.ts', async (orig) => {
+  const m = await orig<typeof VoiceFlow>();
+  return {
+    ...m,
+    toUpload: (c: Parameters<typeof m.toUpload>[0]) => (fx.upHang ? new Promise((ok) => (fx.upOpen = () => ok(c))) : Promise.resolve(c)),
+  };
+});
+vi.mock('../data/quota.ts', async (orig) => ({ ...(await orig<typeof Quota>()), quotaOutToday: async () => fx.quotaOut }));
 vi.mock('../../../platform/speech.ts', () => ({
   speechSupported: () => true,
   startSpeech: (lang: string, h: { onStart(): void; onEnd(r: unknown): void }) => {
@@ -80,11 +107,21 @@ let log: string[] = [];
 const ptr = (y = 800): HoldPointer => ({ button: 0, isPrimary: true, pointerId: 1, clientX: 340, clientY: y, currentTarget: fab });
 const sleep = (ms: number) => act(() => new Promise<void>((ok) => setTimeout(ok, ms)));
 
-function setup(o: { call?: (...a: unknown[]) => Promise<unknown>; online?: () => boolean } = {}) {
+function setup(o: { call?: (...a: unknown[]) => Promise<unknown>; online?: () => boolean; onType?: () => void } = {}) {
   const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
   const call = vi.fn(o.call ?? (async () => VOICE_OK));
-  render(<RecordHost callVoice={call} writer={writer} online={o.online ?? (() => true)} />);
-  return { writer, call };
+  const r = render(<RecordHost callVoice={call} writer={writer} online={o.online ?? (() => true)} onType={o.onType} />);
+  return { writer, call, unmount: r.unmount };
+}
+
+/** 这次录音作废以后：没上传、没写库、没出提示条，录音器收到了取消（会关轨道） */
+async function nothingKept(writer: { insert: { mock: { calls: unknown[] } } }, call: { mock: { calls: unknown[] } }): Promise<void> {
+  await sleep(30);
+  expect(call.mock.calls, '没上传').toHaveLength(0);
+  expect(writer.insert.mock.calls, '没写库').toHaveLength(0);
+  expect(screen.queryByTestId('voice-notice')).toBeNull();
+  expect(screen.queryByTestId('voice-work')).toBeNull();
+  expect(fx.signal?.aborted, '录音器收到取消').toBe(true);
 }
 
 /** 按住满 350 ms（真计时器：手势用 performance.now 判时长） */
@@ -108,6 +145,14 @@ beforeEach(() => {
   fx.stops = 0;
   fx.autoStop = null;
   fx.speech = [];
+  fx.startFail = null;
+  fx.stopEnd = null;
+  fx.stopHang = false;
+  fx.stopOpen = null;
+  fx.signal = null;
+  fx.upHang = false;
+  fx.upOpen = null;
+  fx.quotaOut = false;
   fab = document.createElement('button');
   fab.setPointerCapture = vi.fn();
   document.body.append(fab);
@@ -119,7 +164,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   fab.remove();
-  resetVoiceForTest();
   collection('settings').clear();
   setConsentStale(false, null);
   localStorage.removeItem(MIC_PERM_KEY);
@@ -259,5 +303,129 @@ describe('按住“＋”录音', () => {
       ]),
     );
     expect(log.some((l) => l.includes('买猫砂')), '不记说的内容').toBe(false);
+  });
+});
+
+/** 运行日志里有没有这一行（attempt 代号是数字） */
+const logged = (re: RegExp): boolean => log.some((l) => re.test(l));
+
+describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', () => {
+  it('录音器 stop 还没回来时点“取消”（松手后提示条上的取消，没锁定也有退出口）：这次作废，不上传、不写库', async () => {
+    fx.stopHang = true;
+    const { writer, call } = setup();
+    await holdDown();
+    await release();
+    expect(screen.queryByTestId('rec-panel'), '松手面板就收起').toBeNull();
+    fireEvent.click(await screen.findByTestId('voice-cancel'));
+    await act(async () => {
+      fx.stopOpen?.();
+    });
+    await nothingKept(writer, call);
+    expect(logged(/^voice attempt \d+ drop by=cancel_upload$/)).toBe(true);
+    expect(logged(/^voice attempt \d+ stale at=rec_stop$/)).toBe(true);
+  });
+
+  it('上传前那一步（toUpload）还没完时点“取消”：不上传、不写库', async () => {
+    fx.upHang = true;
+    const { writer, call } = setup();
+    await holdDown();
+    await release();
+    fireEvent.click(await screen.findByTestId('voice-cancel'));
+    await act(async () => {
+      fx.upOpen?.();
+    });
+    await nothingKept(writer, call);
+    expect(logged(/^voice attempt \d+ stale at=to_upload$/)).toBe(true);
+  });
+
+  it('录音器 stop 还没回来时卸载（切页、关掉）：不上传、不写库，录音器收到取消', async () => {
+    fx.stopHang = true;
+    const { writer, call, unmount } = setup();
+    await holdDown();
+    await release();
+    unmount();
+    await act(async () => {
+      fx.stopOpen?.();
+    });
+    await sleep(30);
+    expect(call).not.toHaveBeenCalled();
+    expect(writer.insert).not.toHaveBeenCalled();
+    expect(fx.signal?.aborted).toBe(true);
+    expect(logged(/^voice attempt \d+ drop by=unmount$/)).toBe(true);
+  });
+
+  it('上传中卸载：回来的结果不写库', async () => {
+    let hang!: () => void;
+    const { writer, call, unmount } = setup({ call: () => new Promise((ok) => (hang = () => ok(VOICE_OK))) });
+    await holdDown();
+    await release();
+    await waitFor(() => expect(call).toHaveBeenCalledTimes(1));
+    unmount();
+    await act(async () => {
+      hang();
+    });
+    await sleep(30);
+    expect(writer.insert).not.toHaveBeenCalled();
+  });
+
+  it('录音器开不起来、麦克风被拒（{ok:false, fail:"denied"}）：出“麦克风没有打开”卡，不出提示条、不写库', async () => {
+    fx.startFail = 'denied';
+    const { writer, call } = setup();
+    await holdDown();
+    expect(await screen.findByText('麦克风没有打开')).toBeTruthy();
+    expect(screen.queryByTestId('rec-panel')).toBeNull();
+    expect(screen.queryByTestId('voice-notice')).toBeNull();
+    expect(call).not.toHaveBeenCalled();
+    expect(writer.insert).not.toHaveBeenCalled();
+  });
+
+  it('录音器 stop 兜底超时（{ok:false, fail:"stop_timeout"}）：提示“录音没开起来”，不上传、不写库', async () => {
+    fx.stopEnd = { ok: false, fail: 'stop_timeout' };
+    const { writer, call } = setup();
+    await holdDown();
+    await release();
+    expect((await screen.findByTestId('voice-notice')).dataset['note']).toBe('rec_failed');
+    expect(call).not.toHaveBeenCalled();
+    expect(writer.insert).not.toHaveBeenCalled();
+  });
+
+  it('“重试”连点两下：只送一次', async () => {
+    let n = 0;
+    const { call, writer } = setup({
+      call: async () => {
+        n += 1;
+        return n === 1 ? { ai_failed: true, reason: 'error' } : VOICE_OK;
+      },
+    });
+    await holdDown();
+    await release();
+    await screen.findByTestId('voice-retry');
+    const retry = screen.getByTestId('voice-retry');
+    fireEvent.click(retry);
+    fireEvent.click(retry);
+    await waitFor(() => expect(writer.insert).toHaveBeenCalled());
+    await sleep(30);
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(writer.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it('“改用打字”：直接打开打字条（不靠点“＋”，那一下会被松手后吞 click 吞掉）', async () => {
+    const onType = vi.fn();
+    setup({ online: () => false, onType });
+    await holdDown();
+    await release();
+    fireEvent.click(await screen.findByTestId('voice-type'));
+    expect(onType).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('voice-notice')).toBeNull();
+  });
+
+  it('按下时选好的路，满 350 ms 照用（中间额度刷新成用完，也不改走手机识别：那时已不在手势里）', async () => {
+    setup();
+    await sleep(10);
+    fx.quotaOut = true;
+    await holdDown();
+    expect(fx.starts, '按下时额度没用完：录音').toBe(1);
+    expect(fx.speech, '没在 setTimeout 里开手机识别').toHaveLength(0);
+    expect(logged(/^voice hold start .* route=rec$/)).toBe(true);
   });
 });

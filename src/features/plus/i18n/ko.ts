@@ -27,6 +27,8 @@ export const ko = {
   'plus.notice.recur': '반복은 새 버전에서 지원돼요. 이번에는 가장 가까운 한 번만 기록했어요', // REVIEW(ko)
   'plus.notice.arrange': '구체적인 시간은 직접 정해 주세요', // REVIEW(ko)
   'plus.notice.badDay': '{month}월에는 {day}일이 없어요', // REVIEW(ko)
+  'plus.notice.mergeFailed': '합치지 못했어요. 원래 항목은 그대로 있어요', // REVIEW(ko)
+  'plus.notice.undoFailed': '{n}개는 되돌리지 못했어요. 다시 시도해 주세요', // REVIEW(ko)
   'plus.notice.notSaved': '저장하지 못했어요. 입력한 내용은 입력창에 그대로 있어요', // REVIEW(ko)
   'plus.notice.nothing': '기록할 내용을 찾지 못했어요. 입력한 내용은 입력창에 그대로 있어요', // REVIEW(ko)
   'plus.notice.undo': '되돌리기', // REVIEW(ko)

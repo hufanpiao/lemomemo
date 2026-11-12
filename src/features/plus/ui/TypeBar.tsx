@@ -46,7 +46,7 @@ import styles from './TypeBar.module.css';
 /** 按住“＋”（B3 FA-3）：手势判定 hold 跟打字条同一块下载，app/plus-slot.tsx 拿去接到 GlassBar 的转发桥上；
  *  TypeBarPreload（小气泡 + 录音那一套）也从这一块转出去（app/plus-slot.tsx 直接挂 Preload），录音那一套再由它按需加载（RecordHost）：
  *  这样首屏的预加载表只有打字条这一处、不多出新文件名（首屏额度只剩约 90 B），录音和打字条共用的模块留在这一块里不重复 */
-export { hold } from '../hooks/hold.ts';
+export { hold } from '../hooks/voice-sink.ts';
 export { default as Preload } from './TypeBarPreload.tsx';
 
 /** 下滑多少（px）算收起 */

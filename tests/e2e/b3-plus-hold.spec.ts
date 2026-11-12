@@ -4,23 +4,18 @@
 // • 按住 → 上拖到取消区松手：不上传、面板收起
 // • 按住 → 拖到锁定区松手：面板留着（“取消 / 记下”），点“记下”才上传
 // • 离线按住：不开录，直接提示“没网，语音用不了，请用键盘”
-// • 上传没成：提示条“重试”，用同一段录音（同样的字节数）再送一次
-// 假后端组（playwright.config.ts）的 e2e 构建没设 VITE_PUBLIC_SUPABASE_URL：取不到会话令牌，fn-post 不发请求、直接算没成（FA-3 时按运行日志查明：
-// “voice upload start bytes=3000 …”之后 0 ms 就“result kind=failed reason=http”，中间没有 fetch）。所以这里看到上传那一步为止，
-// 用 App 自己的运行日志（localStorage lemo-run-log，platform/run-log.ts）断言；ai-voice 返回以后“记下”的那一段在单测（RecordHost.test.tsx）
+// • 每条用例结束：开过一次麦克风就正好关一次轨道（假 track 记 stop 次数，fake-media.ts 的 micCounts）；离线那条不开麦克风
+// 假后端组（playwright.config.ts）的 e2e 构建没设 VITE_PUBLIC_SUPABASE_URL：getSupabase 抛 supabase_env_missing、取不到令牌，fn-post 不发请求
+// （FA-3 时按运行日志查明：“voice upload start bytes=3000 …”之后 0 ms 就“result kind=failed reason=http”，中间没有 fetch），page.route 拦不到。
+// 所以这里看到上传那一步为止，用 App 自己的运行日志断言；“上传没成 → 重试 → 记下”用 page.route 有意给失败、成功，放在真后端组
+// （b3-plus-hold.real.spec.ts）；ai-voice 返回以后的各种结局在单测（RecordHost.test.tsx）
 // AI 要开着才走录音：页面打开后往本机库 settings 写一行 ai.enabled = true（和 visual-helpers 的 seedTodos 同一个写法），再重新打开
 // 手机自带识别（Web Speech）在 Chromium 无头里不能用，那一路只有单测；系统长按菜单、真麦克风、音量波形只能真机看
 import type { Page } from '@playwright/test';
-import { fakeMedia } from './fake-media.ts';
+import { center, count, expectMicClosed, fakeMedia, holdUntilRecording, runLog, waitVoiceHost } from './fake-media.ts';
 import { expect, test } from './session-fixture.ts';
 
 const UPLOAD = 'voice upload start bytes=3000 mime=audio/mp4';
-
-/** App 的运行日志（每行“t=… app …”） */
-async function runLog(page: Page): Promise<string[]> {
-  return page.evaluate(() => (localStorage.getItem('lemo-run-log') ?? '').split('\n'));
-}
-const count = (lines: string[], s: string): number => lines.filter((l) => l.includes(s)).length;
 
 /** 打开今天页、写入 ai.enabled = true、重新打开，等录音那一套（RecordHost）下载好 */
 async function openWithAi(page: Page): Promise<void> {
@@ -45,24 +40,8 @@ async function openWithAi(page: Page): Promise<void> {
   const before = count(await runLog(page), 'voice host ready');
   await page.reload();
   await expect(page.getByTestId('today')).toBeVisible({ timeout: 30_000 });
-  // 录音那一套在打字条那一块挂上以后再按需加载，挂上了（运行日志“voice host ready”）按住才有人接手。
-  // 只等 RecordHost 的 js 到不够：负载下样式、挂载还没跑完就按下，日志里只有 down、没有 voice hold start（FA-3 时查明）
-  await expect.poll(async () => count(await runLog(page), 'voice host ready'), { timeout: 15_000 }).toBeGreaterThan(before);
-}
-
-async function center(page: Page, testid: string): Promise<{ x: number; y: number }> {
-  const b = await page.getByTestId(testid).boundingBox();
-  if (!b) throw new Error(`找不到 ${testid}`);
-  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-}
-
-/** 手指放到“＋”上按下，等到录音开起来（面板 data-status = recording） */
-async function holdUntilRecording(page: Page): Promise<{ x: number; y: number }> {
-  const at = await center(page, 'tabbar-add');
-  await page.mouse.move(at.x, at.y);
-  await page.mouse.down();
-  await expect(page.getByTestId('rec-panel')).toHaveAttribute('data-status', 'recording');
-  return at;
+  // 录音那一套在打字条那一块挂上以后再按需加载，挂上了（运行日志“voice host ready”）按住才有人接手
+  await waitVoiceHost(page, before);
 }
 
 test.describe('按住“＋”录音（B3 FA-3）', () => {
@@ -93,6 +72,7 @@ test.describe('按住“＋”录音（B3 FA-3）', () => {
     expect(count(log, 'voice preparing->recording path=rec')).toBe(1);
     expect(count(log, 'voice recording->uploading path=rec')).toBe(1);
     await expect(page.getByTestId('rec-panel')).toHaveCount(0);
+    await expectMicClosed(page);
   });
 
   test('按住 → 上拖到取消区松手：不上传，面板收起', async ({ page }) => {
@@ -106,9 +86,10 @@ test.describe('按住“＋”录音（B3 FA-3）', () => {
     await expect(page.getByTestId('rec-panel')).toHaveCount(0);
     await page.waitForTimeout(500);
     const log = await runLog(page);
-    expect(count(log, 'voice discard')).toBe(1);
+    expect(count(log, 'drop by=hold'), '这次作废（手势丢掉）').toBe(1);
     expect(count(log, 'voice upload start')).toBe(0);
     await expect(page.getByTestId('voice-notice')).toHaveCount(0);
+    await expectMicClosed(page);
   });
 
   test('按住 → 拖到锁定区松手：面板留着（取消 / 记下），点“记下”才上传', async ({ page }) => {
@@ -126,6 +107,7 @@ test.describe('按住“＋”录音（B3 FA-3）', () => {
     await page.getByTestId('rec-done').click();
     await expect.poll(async () => count(await runLog(page), UPLOAD)).toBe(1);
     expect(count(await runLog(page), 'voice lock')).toBe(1);
+    await expectMicClosed(page);
   });
 
   test('离线按住：不开录，提示“没网，语音用不了，请用键盘”', async ({ page, context }) => {
@@ -140,21 +122,7 @@ test.describe('按住“＋”录音（B3 FA-3）', () => {
     await page.mouse.up();
     await expect(page.getByTestId('rec-panel')).toHaveCount(0);
     expect(count(await runLog(page), 'voice idle->preparing'), '没开录').toBe(0);
+    await expectMicClosed(page, 0);
     await context.setOffline(false);
-  });
-
-  test('上传没成：提示条“重试 / 再说一次”，“重试”用同一段录音再送一次', async ({ page }) => {
-    await openWithAi(page);
-    await holdUntilRecording(page);
-    await page.waitForTimeout(300);
-    await page.mouse.up();
-    const note = page.getByTestId('voice-notice');
-    await expect(note).toHaveAttribute('data-note', 'ai_failed');
-    await expect(page.getByTestId('voice-retry')).toBeVisible();
-    await expect(page.getByTestId('voice-again')).toBeVisible();
-    await page.getByTestId('voice-retry').click();
-    await expect.poll(async () => count(await runLog(page), UPLOAD)).toBe(2);
-    expect(count(await runLog(page), 'voice retry bytes=3000')).toBe(1);
-    await expect(note).toHaveAttribute('data-note', 'ai_failed');
   });
 });

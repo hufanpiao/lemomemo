@@ -9,8 +9,6 @@ import { postFn, type FnPostOptions } from './fn-post.ts';
 import type { AiReqCtx } from './type-flow.ts';
 
 export const AI_VOICE_FN = 'ai-voice';
-/** 进日志的类型只收这种写法，别的记成 ? */
-const MIME_RE = /^[a-z0-9/.+-]{1,40}$/;
 
 /** 上下文由 type-flow 的 aiReqCtx 拼（和打字同一份）；mime 是录音的类型、不带参数（audio/mp4），直接当 Content-Type */
 export type AiVoiceReq = AiReqCtx & { audio: Blob; mime: string };
@@ -38,7 +36,8 @@ export function voiceHeaders(req: AiVoiceReq): Record<string, string> {
 
 export function createCallVoice(o: FnPostOptions = {}): CallVoice {
   return (req: AiVoiceReq, signal: AbortSignal): Promise<unknown> => {
-    rlog(`voice upload start bytes=${req.audio.size} mime=${MIME_RE.test(req.mime) ? req.mime : '?'} projects=${req.projects.length}`);
+    // mime 由录音器判过（在 shared 的 AUDIO_TYPES 里、不带参数），直接进日志
+    rlog(`voice upload start bytes=${req.audio.size} mime=${req.mime} projects=${req.projects.length}`);
     return postFn(AI_VOICE_FN, { headers: voiceHeaders(req), body: req.audio }, signal, o);
   };
 }

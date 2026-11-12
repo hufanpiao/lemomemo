@@ -7,12 +7,13 @@ import PlusHint from './PlusHint.tsx';
 
 const RecordHost = lazy(() => import('./RecordHost.tsx').then((m) => ({ default: m.RecordHost })));
 
-export default function TypeBarPreload() {
+/** onType：“改用打字”打开打字条（App 的 open，经 app/plus-slot.tsx 传进来） */
+export default function TypeBarPreload({ onType }: { onType?: (() => void) | undefined }) {
   return (
     <>
       <PlusHint />
       <Suspense fallback={null}>
-        <RecordHost />
+        <RecordHost onType={onType} />
       </Suspense>
     </>
   );

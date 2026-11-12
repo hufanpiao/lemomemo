@@ -2,7 +2,7 @@
 // 钉住：拿到流以后任何一步失败或取消都先停录音器、关轨道、清计时器；signal 从调用到交出结果一直有效；授权框开着时取消，权限结果照记
 import { describe, expect, it, vi } from 'vitest';
 import { lastMicResult } from '../perm-mic.ts';
-import { REC_START_WAIT_MS, startRecorder } from '../recorder.ts';
+import { REC_START_WAIT_MS, REC_STOP_WAIT_MS, startRecorder } from '../recorder.ts';
 import { allClosed, FakeRecorder, flush, MAX_MS, mic, named, opts, rec0, recorderEnv, recording } from './recorder-fake.ts';
 
 const log = recorderEnv();
@@ -172,5 +172,41 @@ describe('取消（signal 全程有效，只有这一套）', () => {
     expect(await rec.stop()).toBe(end);
     expect(end.ok).toBe(true);
     expect(log.lines).toHaveLength(n);
+  });
+});
+
+describe('停不下来（iOS 偶尔不发 stop 事件）：兜底超时收尾（FA-3 整块评审第 2 条）', () => {
+  /** 这个录音器 stop() 以后不再发 stop 事件 */
+  const neverStops = (): void => {
+    const r = rec0();
+    r.stop = () => {
+      r.stopCalls += 1;
+    };
+  };
+  const now = <T,>(p: Promise<T>): Promise<T | '还在等'> => Promise.race([p, flush().then(() => '还在等' as const)]);
+
+  it('stop() 之后 REC_STOP_WAIT_MS 还没有 stop 事件：按失败（stop_timeout）收尾、关轨道、清计时器，记运行日志', async () => {
+    const m = mic();
+    const rec = await recording();
+    neverStops();
+    const p = rec.stop();
+    await vi.advanceTimersByTimeAsync(REC_STOP_WAIT_MS - 1);
+    expect(await now(p), '还没到点').toBe('还在等');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await now(p)).toEqual({ ok: false, fail: 'stop_timeout' });
+    expect(allClosed(m)).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(log.lines).toContain('rec fail reason=stop_timeout');
+  });
+
+  it('录满 maxMs 停不下来：同样到点收尾，并通知一次 onAutoStop（界面拿结局）', async () => {
+    const m = mic();
+    const onAutoStop = vi.fn();
+    const rec = await recording({ onAutoStop });
+    neverStops();
+    await vi.advanceTimersByTimeAsync(MAX_MS + REC_STOP_WAIT_MS);
+    expect(onAutoStop).toHaveBeenCalledTimes(1);
+    expect(await now(rec.stop())).toEqual({ ok: false, fail: 'stop_timeout' });
+    expect(allClosed(m)).toBe(true);
   });
 });

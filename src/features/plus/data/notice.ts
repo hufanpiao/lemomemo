@@ -2,7 +2,8 @@
 // • 只返回词条键和参数（data 层不碰 t()），界面经 usePlusT 翻成文字
 // • 主句：一条 → “已记下：标题”；多条 → “已记下 N 条”；AI 没成 → “已先记下：…”；额度用完 → 带恢复时刻（每天只出一次，
 //   不该出时退成普通“已记下”）；离线 → “没网，已存在手机里：…”，带提醒的再加“未同步，提醒可能不响”
-// • 附加句：重复 → R-163；“安排时间” → R-200；没有的日子 → R-166（续第 68 条）
+// • 附加句：重复 → R-163；“安排时间” → R-200；没有的日子 → R-166（续第 68 条）；
+//   合并没存上、全部撤销有几条没撤成（FA-3 整块评审第 13 条：原来的几条留在提示条上，写明没成）
 // 纯 TS：不准 import React（A1）
 import type { TypeStatus } from './type-flow.ts';
 
@@ -15,7 +16,9 @@ export type NoticeKey =
   | 'plus.notice.offlineRemind'
   | 'plus.notice.recur'
   | 'plus.notice.arrange'
-  | 'plus.notice.badDay';
+  | 'plus.notice.badDay'
+  | 'plus.notice.mergeFailed'
+  | 'plus.notice.undoFailed';
 
 export interface NoticeLine {
   key: NoticeKey;
@@ -32,6 +35,10 @@ export interface NoticeInput {
   quotaNoticeDue: boolean;
   /** 恢复时刻“HH:MM”（current_tz） */
   resetClock: string;
+  /** 合并那一条没存上（原来的几条没撤） */
+  mergeFailed?: boolean;
+  /** 全部撤销时没撤成的条数 */
+  undoFailed?: number;
 }
 
 function mainLine(n: NoticeInput): NoticeLine {
@@ -57,6 +64,8 @@ function mainLine(n: NoticeInput): NoticeLine {
 /** 提示条的几行：第一行主句，后面是附加句 */
 export function noticeLines(n: NoticeInput): NoticeLine[] {
   const out: NoticeLine[] = [mainLine(n)];
+  if (n.undoFailed) out.push({ key: 'plus.notice.undoFailed', params: { n: n.undoFailed } });
+  if (n.mergeFailed) out.push({ key: 'plus.notice.mergeFailed', params: {} });
   if (n.status === 'offline_saved' && n.remind) out.push({ key: 'plus.notice.offlineRemind', params: {} });
   if (n.hints.recur) out.push({ key: 'plus.notice.recur', params: {} });
   if (n.hints.arrange) out.push({ key: 'plus.notice.arrange', params: {} });

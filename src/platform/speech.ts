@@ -2,12 +2,16 @@
 // • startSpeech 是同步的，start() 之前没有任何等待：调用方在按下的那一下里直接调，才算在用户手势里
 // • onEnd 最多调一次；cancel() 以后什么都不再回调
 // • 没认出字不算失败，交出空串，调用方按“没听清”处理
+// • stop() 以后等 end 最多 SPEECH_STOP_WAIT_MS：iOS 偶尔不发 end，到点按 timeout 收尾并 abort()，调用方不会卡在“在听”
 // • 运行日志只记语言、字数、段数、毫秒、错误码，不记识别出的字
 import type { Locale } from '../../shared/i18n/i18n.ts';
 import { errTag } from './err-tag.ts';
 import { rlog } from './run-log-api.ts';
 
-export type SpeechFail = 'denied' | 'network' | 'error';
+/** stop() 以后等 end 事件最长多久（FA-3 整块评审第 2 条） */
+export const SPEECH_STOP_WAIT_MS = 3000;
+
+export type SpeechFail = 'denied' | 'network' | 'error' | 'timeout';
 export type SpeechEnd = { ok: true; text: string } | { ok: false; fail: SpeechFail };
 
 export interface SpeechHandlers {
@@ -67,6 +71,13 @@ export function startSpeech(
   let segments = 0;
   let begun = false;
   let done = false;
+  let wait: ReturnType<typeof setTimeout> | undefined;
+  /** 结束只交一次：清兜底计时器再回调 */
+  const end = (res: SpeechEnd): void => {
+    done = true;
+    clearTimeout(wait);
+    h.onEnd(res);
+  };
   let r: Recognition;
   try {
     r = new Ctor();
@@ -90,17 +101,15 @@ export function startSpeech(
     r.onerror = (ev) => {
       const code = String(ev.error);
       if (done || NOT_A_FAILURE.includes(code)) return;
-      done = true;
       const fail = FAIL_OF[code] ?? 'error';
       rlog(`speech fail reason=${fail}${/^[a-z-]{1,40}$/.test(code) ? ` code=${code}` : ''} ${since()}`);
-      h.onEnd({ ok: false, fail });
+      end({ ok: false, fail });
     };
     r.onend = () => {
       if (done) return;
-      done = true;
       const said = text.trim();
       rlog(`speech end len=${[...said].length} results=${segments} ${since()}`);
-      h.onEnd({ ok: true, text: said });
+      end({ ok: true, text: said });
     };
     r.start();
   } catch (err) {
@@ -118,10 +127,22 @@ export function startSpeech(
         } catch {
           // 已经停了：等 end 事件
         }
+        if (wait !== undefined) return;
+        wait = setTimeout(() => {
+          if (done) return;
+          rlog(`speech fail reason=stop_timeout ${since()}`);
+          try {
+            r.abort();
+          } catch {
+            // 已经停了
+          }
+          end({ ok: false, fail: 'timeout' });
+        }, SPEECH_STOP_WAIT_MS);
       },
       cancel() {
         if (done) return;
         done = true;
+        clearTimeout(wait);
         rlog(`speech fail reason=cancelled ${since()}`);
         try {
           r.abort();

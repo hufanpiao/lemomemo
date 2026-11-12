@@ -26,6 +26,8 @@ export const zh = {
   'plus.notice.recur': '重复要等新版本，这次只记了最近一次',
   'plus.notice.arrange': '具体时间请自己排',
   'plus.notice.badDay': '{month} 月没有 {day} 日',
+  'plus.notice.mergeFailed': '合并没保存上，原来的几条还在',
+  'plus.notice.undoFailed': '{n} 条没撤销成功，可以再试一次',
   'plus.notice.notSaved': '没保存上，原话还在输入框里',
   'plus.notice.nothing': '没认出要记的内容，原话还在输入框里',
   'plus.notice.undo': '撤销',
