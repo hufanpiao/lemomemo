@@ -36,7 +36,7 @@ function host() {
     ended: (r: SpeechEnd) => void calls.push(`ended ${r.ok ? r.text : r.fail}`),
     cap: () => void calls.push('cap'),
   };
-  return { calls, route: createSpeechRoute(() => h, () => 1000) };
+  return { calls, route: createSpeechRoute(h, () => 1000) };
 }
 
 beforeEach(() => {

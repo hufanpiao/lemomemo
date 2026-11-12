@@ -18,15 +18,16 @@ const projectsOf = (rows: readonly (readonly { project?: unknown }[])[]): string
   return [...s];
 };
 
-/** locale；aiOn()：调用这一刻能不能用 AI（同意版本过期是模块状态，不一定引起重渲染，所以每次现算）；ctx()：这一刻的 TypeCtx（now 取调用时的钟） */
+/** 语言两种写法都给（只从界面语言往下换，FA-3 第二轮复查第 6 条）：lang 界面语言 zh-CN / ko-KR（手机自带识别用）、locale 是 TypeCtx 的 zh / ko；
+ *  aiOn()：调用这一刻能不能用 AI（同意版本过期是模块状态，不一定引起重渲染，所以每次现算）；ctx()：这一刻的 TypeCtx（now 取调用时的钟） */
 export function useCaptureCtx(day: DateStr | null) {
-  const uiLocale = useUi((s) => s.locale);
+  const lang = useUi((s) => s.locale);
   const settings = useCollection<SettingRow & { id: string }>('settings');
   const todos = useCollection<{ id: string; project?: unknown }>('todos');
   const events = useCollection<{ id: string; project?: unknown }>('events');
   const projects = useMemo(() => projectsOf([todos, events]), [todos, events]);
-  const locale: TypeCtx['locale'] = uiLocale === 'ko-KR' ? 'ko' : 'zh';
+  const locale: TypeCtx['locale'] = lang === 'ko-KR' ? 'ko' : 'zh';
   const aiOn = useCallback(() => settingValue(settings, 'ai.enabled') === true && !consentStale(readSessionId()), [settings]);
   const ctx = useCallback((): TypeCtx => ({ now: clock.now(), tz: currentTz(), locale, projects, day }), [locale, projects, day]);
-  return { locale, aiOn, ctx };
+  return { lang, locale, aiOn, ctx };
 }

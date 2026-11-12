@@ -14,7 +14,7 @@ import { REC_MAX_MS } from './record-logic.ts';
 import { planTyped } from './type-flow.ts';
 import type { Attempt, SpeechWhy, VoiceCore } from './voice-session.ts';
 
-/** 报给谁（useVoice） */
+/** 报给谁（下面 createSpeechPath） */
 export interface SpeechHost {
   /** 接手的这一次开始收音了 */
   started(): void;
@@ -22,21 +22,6 @@ export interface SpeechHost {
   ended(res: SpeechEnd): void;
   /** 收了 60 秒 */
   cap(): void;
-}
-
-export interface SpeechRoute {
-  /** 按下的那一下先开（lang 是界面语言 zh-CN / ko-KR）；之前先开的那次关掉 */
-  prime(lang: Locale): void;
-  /** 接手：先开的那次，没有就当场开一次（调用方也在手势里）。开不起来返回 false */
-  take(lang: Locale): boolean;
-  /** 松手：停止收音，等结果（结果经 host.ended 回来） */
-  stop(): void;
-  /** 丢掉：接手的和先开的都关，不报结果 */
-  cancel(): void;
-  /** 只关先开、还没接手的那次（点一下、没按满） */
-  drop(): void;
-  /** 接手的这一次开始收音多久了（毫秒；还没开始 0） */
-  elapsed(): number;
 }
 
 interface Run {
@@ -47,20 +32,20 @@ interface Run {
   early: SpeechEnd | null;
 }
 
-export function createSpeechRoute(host: () => SpeechHost | null, now: () => number = () => performance.now()): SpeechRoute {
+export function createSpeechRoute(host: SpeechHost, now: () => number = () => performance.now()) {
   let pending: Run | null = null;
   let active: Run | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   const arm = (): void => {
     clearTimeout(timer);
-    timer = setTimeout(() => host()?.cap(), REC_MAX_MS);
+    timer = setTimeout(() => host.cap(), REC_MAX_MS);
   };
   const end = (run: Run, res: SpeechEnd): void => {
     if (active !== run) return;
     active = null;
     clearTimeout(timer);
-    host()?.ended(res);
+    host.ended(res);
   };
   const open = (lang: Locale): Run | null => {
     if (!speechSupported()) return null;
@@ -71,7 +56,7 @@ export function createSpeechRoute(host: () => SpeechHost | null, now: () => numb
         run.at = now();
         if (active !== run) return;
         arm();
-        host()?.started();
+        host.started();
       },
       onEnd: (res) => {
         if (!run) return;
@@ -83,17 +68,20 @@ export function createSpeechRoute(host: () => SpeechHost | null, now: () => numb
     run = { s: r.session, at: null, early: null };
     return run;
   };
+  /** 只关先开、还没接手的那次（点一下、没按满） */
   const drop = (): void => {
     pending?.s.cancel();
     pending = null;
   };
 
   return {
-    prime(lang) {
+    /** 按下的那一下先开（lang 是界面语言 zh-CN / ko-KR）；之前先开的那次关掉 */
+    prime(lang: Locale): void {
       drop();
       pending = open(lang);
     },
-    take(lang) {
+    /** 接手：先开的那次，没有就当场开一次（调用方也在手势里）。开不起来返回 false */
+    take(lang: Locale): boolean {
       const run = pending ?? open(lang);
       pending = null;
       if (!run) return false;
@@ -101,21 +89,24 @@ export function createSpeechRoute(host: () => SpeechHost | null, now: () => numb
       if (run.early) end(run, run.early);
       else if (run.at !== null) {
         arm();
-        host()?.started();
+        host.started();
       }
       return true;
     },
-    stop() {
+    /** 松手：停止收音，等结果（结果经 host.ended 回来） */
+    stop(): void {
       active?.s.stop();
     },
-    cancel() {
+    /** 丢掉：接手的和先开的都关，不报结果 */
+    cancel(): void {
       active?.s.cancel();
       active = null;
       clearTimeout(timer);
       drop();
     },
     drop,
-    elapsed() {
+    /** 接手的这一次开始收音多久了（毫秒；还没开始 0） */
+    elapsed(): number {
       const at = active?.at ?? null;
       return at === null ? 0 : now() - at;
     },
@@ -124,7 +115,7 @@ export function createSpeechRoute(host: () => SpeechHost | null, now: () => numb
 
 /** 控制器里的这一路（voice-session.ts 调） */
 export function createSpeechPath(c: VoiceCore) {
-  const lang = (): Locale => (c.d().ctx().locale === 'ko' ? 'ko-KR' : 'zh-CN');
+  const lang = (): Locale => c.d().lang;
   const heard = async (a: Attempt, res: SpeechEnd): Promise<void> => {
     if (!res.ok) {
       c.end(a);
@@ -151,7 +142,7 @@ export function createSpeechPath(c: VoiceCore) {
     if (p.quotaLeft !== null) void rememberQuotaLeft(p.quotaLeft, x.now);
     await c.savePlan(a, p, res.text);
   };
-  const route = createSpeechRoute(() => ({
+  const route = createSpeechRoute({
     started() {
       if (c.view().status === 'preparing') c.go({ type: 'start', path: 'speech' });
     },
@@ -160,7 +151,7 @@ export function createSpeechPath(c: VoiceCore) {
       if (a) void heard(a, res);
     },
     cap: () => c.finish(),
-  }));
+  });
   return {
     prime: () => route.prime(lang()),
     /** 接手（或当场开）；lockedNow：“再说一次”，面板直接是锁定的样子 */

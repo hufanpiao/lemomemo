@@ -13,12 +13,13 @@ import { clock } from '../../../platform/clock.ts';
 import { MIC_PERM_KEY, rememberMicResult } from '../../../platform/perm-mic.ts';
 import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import type * as Session from '../../../platform/session.ts';
+import type * as Boot from '../../../core/boot.ts';
 import type { Writer } from '../data/capture-save.ts';
 import type * as Quota from '../data/quota.ts';
 import type * as VoiceFlow from '../data/voice-flow.ts';
 import { hold, type HoldPointer } from '../data/hold-input.ts';
 import { HOLD_MS } from '../data/record-logic.ts';
-import { resetVoiceForTest } from '../hooks/useVoice.ts';
+import { createVoiceSession, type VoiceSession } from '../data/voice-session.ts';
 import { RecordHost } from '../ui/RecordHost.tsx';
 
 const SID = 'sid-v';
@@ -43,6 +44,20 @@ const fx = vi.hoisted(() => ({
   upOpen: null as null | (() => void),
   /** 今天的 AI 次数用完了没有（本机记的） */
   quotaOut: false,
+  /** 升级中心 busy 现在占着的（holdBusy 的 reason） */
+  busy: [] as string[],
+}));
+// 升级中心：busy 占着时不自动重新载入（只假这一样，别的 getBoot()?.cache 照样是 null）
+vi.mock('../../../core/boot.ts', async (orig) => ({
+  ...(await orig<typeof Boot>()),
+  getBoot: () => ({
+    upgrade: {
+      holdBusy: (r: string) => {
+        fx.busy.push(r);
+        return () => void fx.busy.splice(fx.busy.indexOf(r), 1);
+      },
+    },
+  }),
 }));
 vi.mock('../../../platform/recorder.ts', () => ({
   recorderSupported: () => true,
@@ -108,11 +123,17 @@ let log: string[] = [];
 const ptr = (y = 800): HoldPointer => ({ button: 0, isPrimary: true, pointerId: 1, clientX: 340, clientY: y, currentTarget: fab });
 const sleep = (ms: number) => act(() => new Promise<void>((ok) => setTimeout(ok, ms)));
 
-function setup(o: { call?: (...a: unknown[]) => Promise<unknown>; online?: () => boolean; onType?: () => void } = {}) {
+/** 这条用例的控制器（用完 dispose） */
+let live: VoiceSession | null = null;
+
+/** 挂一份 RecordHost；session 给了就重挂那一份（切页回来），不给就新建一份带桩的控制器 */
+function setup(o: { call?: (...a: unknown[]) => Promise<unknown>; online?: () => boolean; onType?: () => void; session?: VoiceSession } = {}) {
   const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
   const call = vi.fn(o.call ?? (async () => VOICE_OK));
-  const r = render(<RecordHost callVoice={call} writer={writer} online={o.online ?? (() => true)} onType={o.onType} />);
-  return { writer, call, unmount: r.unmount };
+  const session = o.session ?? createVoiceSession({ callVoice: call, writer, online: o.online ?? (() => true) });
+  live = session;
+  const r = render(<RecordHost session={session} onType={o.onType} />);
+  return { writer, call, session, unmount: r.unmount };
 }
 
 /** 这次录音作废以后：没上传、没写库、没出提示条，录音器收到了取消（会关轨道） */
@@ -154,6 +175,7 @@ beforeEach(() => {
   fx.upHang = false;
   fx.upOpen = null;
   fx.quotaOut = false;
+  fx.busy = [];
   fab = document.createElement('button');
   fab.setPointerCapture = vi.fn();
   document.body.append(fab);
@@ -165,7 +187,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   fab.remove();
-  resetVoiceForTest();
+  live?.dispose();
+  live = null;
   collection('settings').clear();
   setConsentStale(false, null);
   localStorage.removeItem(MIC_PERM_KEY);
@@ -288,7 +311,7 @@ describe('按住“＋”录音', () => {
     await release();
     await screen.findByTestId('voice-notice');
     first.unmount();
-    setup({ call: fail });
+    setup({ session: first.session });
     await holdDown();
     await release();
     await screen.findByTestId('voice-notice');
@@ -378,7 +401,7 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
 
   it('上传中切页：传完照常写库；回到有“＋”的页（重挂）出“已记下”', async () => {
     let hang!: () => void;
-    const { writer, call, unmount } = setup({ call: () => new Promise((ok) => (hang = () => ok(VOICE_OK))) });
+    const { writer, call, session, unmount } = setup({ call: () => new Promise((ok) => (hang = () => ok(VOICE_OK))) });
     await holdDown();
     await release();
     await waitFor(() => expect(call).toHaveBeenCalledTimes(1));
@@ -387,8 +410,24 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
       hang();
     });
     await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
-    setup();
+    setup({ session });
     expect((await screen.findByTestId('type-notice')).textContent).toContain('已记下：买猫砂');
+  });
+
+  it('上传中切页：升级中心的 busy 一直占着（不会被自动重新载入打断），存完才放开（第二轮复查第 1 条）', async () => {
+    let hang!: () => void;
+    const { writer, call, unmount } = setup({ call: () => new Promise((ok) => (hang = () => ok(VOICE_OK))) });
+    await holdDown();
+    expect(fx.busy, '录着').toEqual(['recording']);
+    await release();
+    await waitFor(() => expect(call).toHaveBeenCalledTimes(1));
+    unmount();
+    expect(fx.busy, '卸载了还在上传：占着').toEqual(['recording']);
+    await act(async () => {
+      hang();
+    });
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fx.busy, '存完放开').toEqual([]));
   });
 
   it('录着时切页：当松手处理（停录、上传、写库），麦克风不留着', async () => {

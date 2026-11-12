@@ -2,7 +2,7 @@
 // • 边打边预览“会记成这样”：只跑本机规则（planLocal），不花 AI 次数
 // • 回车 / “记下”：planTyped → 没有要问的几条先存；有过去的月日的出确认行（confirming），选了才加进同一批（R-166）；
 //   没选就关掉 → 原话留在输入条（已经存了的几条照常在提示条上，能撤）
-// • 保存经 useSavedBatch → data/capture-save（captureRow、batch_id、outbox）；没写进去：提示“没保存上”，输入框不清空
+// • 保存经 data/saved-batch → data/capture-save（captureRow、batch_id、outbox）；没写进去：提示“没保存上”，输入框不清空
 // • 下滑 / “收起”：已打的字存草稿（本机库 drafts 仓，按账号分）；下次打开填回来
 // • “展开编辑”：把已打的字和日历页选中的那天交给调用方，打开完整新建页（R-353）
 // • callAi 默认是真的 ai-parse（data/ai-parse-api.ts，B3 接线）；设置里 ai.enabled 没开时不调，没把握的也直接用本机规则，不出“AI 没回应”
@@ -17,9 +17,10 @@ import { captureStep, type CaptureEvent, type CaptureStatus } from '../data/capt
 import type { Writer } from '../data/capture-save.ts';
 import { quotaOutToday, rememberQuotaLeft } from '../data/quota.ts';
 import { clearTypeDraft, readTypeDraft, writeTypeDraft } from '../data/type-draft.ts';
+import { createBatchBox, createSavedBatch } from '../data/saved-batch.ts';
 import { keepAsked, navOnline, planLocal, planTyped, type CallAi } from '../data/type-flow.ts';
 import { useCaptureCtx } from './useCaptureCtx.ts';
-import { useSavedBatch, type SaveEnv } from './useSavedBatch.ts';
+import { useSavedBatch } from './useSavedBatch.ts';
 
 // ui 不能直接 import data（A1），界面要用的类型经这里转出去
 export type { CallAi } from '../data/type-flow.ts';
@@ -52,10 +53,10 @@ export function useTypeBar(o: TypeBarOpts) {
   const { day, callAi = callAiParse, writer, online = navOnline } = o;
   const { ctx, aiOn: aiOnNow } = useCaptureCtx(day);
   const go = useCallback((e: CaptureEvent) => setStatus((s) => captureStep(s, e)), []);
-  const env = useCallback((): SaveEnv => ({ now: clock.now(), tz: currentTz(), day }), [day]);
-  // 存、确认行、提示条、撤销、合并都在 useSavedBatch（和录音同一份）；这里只给自己的收尾和失败提示
-  const saved = useSavedBatch({
-    writer, confirming: status === 'confirming', tag: 'typebar', env,
+  // 存、确认行、撤销、合并都在 data/saved-batch（和录音同一份）；这里只给自己的收尾和失败提示。这一批每次挂载一份，换了日子接着用
+  const [box] = useState(createBatchBox);
+  const saved = useMemo(() => createSavedBatch({
+    box, writer, tag: 'typebar', env: () => ({ now: clock.now(), tz: currentTz(), day }),
     flow: {
       go,
       // 这一批都存好了：清输入条和草稿，出提示条
@@ -72,8 +73,8 @@ export function useTypeBar(o: TypeBarOpts) {
       },
       error: (out) => setError(out === 'switching' ? null : 'not_saved'),
     },
-  });
-  const { asking, notice } = saved;
+  }), [box, writer, day, go]);
+  const { asking, notice } = useSavedBatch(box, status === 'confirming');
 
   const setText = useCallback((v: string) => {
     typed.current = true;
@@ -124,16 +125,15 @@ export function useTypeBar(o: TypeBarOpts) {
     }
   }, [text, status, ctx, callAi, aiOnNow, online, saved, go]);
 
-  const { dismiss } = saved;
   // 确认行没选就关掉：原话去掉已经存了的几条、只留等确认那条的原文，填回输入条（去不干净时原话整句留着，partSaved 为 true：输入条上方提示，一改字就收起）
   const dismissConfirm = useCallback(() => {
-    const { batch, ask } = dismiss();
+    const { batch, ask } = saved.dismiss();
     if (batch && batch.entries.length > 0) {
       const kept = keepAsked(batch.raw, batch.entries.map((e) => e.item), ask, (t) => planLocal(t, ctx()).result.items);
       setTextRaw(kept ?? batch.raw);
       setPartSaved(kept === null);
     }
-  }, [dismiss, ctx]);
+  }, [saved, ctx]);
 
   // 收起：留草稿；展开编辑：字带去新建页了，草稿清掉（下次打开不再填回）
   const stash = useCallback(() => writeTypeDraft({ text, day }, clock.now()), [text, day]);

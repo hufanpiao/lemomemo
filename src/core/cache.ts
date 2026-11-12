@@ -9,7 +9,7 @@
 // 隐私记的明文不进这里（A18：features/vault/data 不准 import 本文件）
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { FeaturesConfig } from '../../shared/logic/flags.ts';
-import { cacheMigrations, DB_VERSION, errName, runUpgrade, type CacheMigration, type UpgradeReport } from './cache-migrations.ts';
+import { cacheMigrations, DB_VERSION, cacheErrKind, runUpgrade, type CacheMigration, type UpgradeReport } from './cache-migrations.ts';
 import { cacheStores, DRAFTS, META, VAULT_DRAFTS, type StoreDef } from './cache-schema.ts';
 import { deleteLocalDb, LOCAL_DB_NAME, type DeleteDbResult } from '../platform/exit-basics.ts';
 
@@ -391,7 +391,7 @@ export function openCache(opts: OpenCacheOptions = {}): Promise<OpenCacheResult>
     try {
       r = factory.open(name, version);
     } catch (e) {
-      resolve({ ok: false, reason: 'unavailable', error: errName(e) });
+      resolve({ ok: false, reason: 'unavailable', error: cacheErrKind(e) });
       return;
     }
     r.onupgradeneeded = (ev) => {
@@ -404,7 +404,7 @@ export function openCache(opts: OpenCacheOptions = {}): Promise<OpenCacheResult>
     r.onsuccess = () => resolve({ ok: true, cache: wrap(r.result, name, version, stores), upgrade: report });
     r.onerror = (ev) => {
       ev.preventDefault();
-      const n = errName(r.error);
+      const n = cacheErrKind(r.error);
       resolve({ ok: false, reason: n === 'VersionError' ? 'version_too_new' : 'error', error: n });
     };
   });

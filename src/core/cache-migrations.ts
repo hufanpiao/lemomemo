@@ -74,8 +74,9 @@ export function validateMigrations(list: readonly CacheMigration[], dbVersion: n
 }
 
 /** 结果里的 error 字段（开库、迁移、冷启动失败共用，cache.ts、boot.ts 也引它）：Error、DOMException 给错误名（名字空的给 Error），别的给 error；不带 message（可能有用户内容）。
- *  不用 platform/err-tag.ts 的 errTag：那个是进日志的“ type=名”片段、认不出给空串，这里是状态字段的值 */
-export function errName(e: unknown): string {
+ *  不用 platform/env.ts 的 errName、platform/err-tag.ts 的 errTag（规则、用途都不同：那两个是日志用的名字、认不出给空串，这里是状态字段的值）；
+ *  名字也不叫 errName，免得和 platform 那份混（FA-3 第二轮复查第 8 条） */
+export function cacheErrKind(e: unknown): string {
   if (e instanceof Error || (typeof DOMException !== 'undefined' && e instanceof DOMException)) return e.name || 'Error';
   return 'error';
 }
@@ -116,7 +117,7 @@ export function runUpgrade(
 
   const fail = (error: unknown): void => {
     if (report.failed) return;
-    report.failed = { at: current, error: errName(error) };
+    report.failed = { at: current, error: cacheErrKind(error) };
     for (const def of stores) {
       if (!def.rebuildable) continue;
       if (db.objectStoreNames.contains(def.name)) db.deleteObjectStore(def.name);

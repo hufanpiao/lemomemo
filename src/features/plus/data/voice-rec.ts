@@ -1,7 +1,7 @@
 // 按住“＋”的录音这一路（B3 任务单 FA-3；第二轮复查项从 voice-session.ts 拆出）：开录音器、停录、上传 ai-voice、结果收尾、留着的录音“重试”、网络慢计数
 // • 松手（或点“记下”）面板就收起，进“上传中”：停录那一步也能在提示条上取消（录音器停不下来时最多等 REC_STOP_WAIT_MS）
 // • AI 没回应：录音留在内存（最多 2 分钟）可以“重试”（同一段），或“再说一次”（改用手机自带识别，voice-speech.ts）
-// • 网络原因失败的计数（net）是模块级的：“10 分钟内 2 次”要跨挂载算（FA-3 复查第 1 条）
+// • 网络原因失败的计数（net）跟着控制器那一份：“10 分钟内 2 次”要跨挂载算（FA-3 复查第 1 条；控制器不随 RecordHost 卸载）
 // 纯 TS：不准 import React（A1）
 import { AI_AUDIO_BITS_PER_SECOND, AI_AUDIO_MAX_BYTES } from '../../../../shared/schema/ai.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -13,17 +13,10 @@ import { baseReqCtx } from './type-flow.ts';
 import { sendVoice, toUpload, voiceFinal, type VoiceClip, type VoiceResult } from './voice-flow.ts';
 import type { Attempt, VoiceCore } from './voice-session.ts';
 
-/** 10 分钟内网络原因失败几次（模块级，跨挂载保留） */
-let net: NetFallback = NET_OK;
-export const netNow = (): NetFallback => net;
-
-/** 只给测试用 */
-export function resetVoiceNetForTest(): void {
-  net = NET_OK;
-}
-
 export function createRecRoute(c: VoiceCore) {
   let kept: KeptAudio | null = null;
+  /** 10 分钟内网络原因失败几次 */
+  let net: NetFallback = NET_OK;
 
   const handle = async (a: Attempt, res: VoiceResult): Promise<void> => {
     const now = clock.now();
@@ -35,7 +28,7 @@ export function createRecRoute(c: VoiceCore) {
     }
     if (res.kind === 'record') void rememberQuotaLeft(res.quotaLeft, now);
     if (res.kind === 'quota_out') {
-      c.quotaOut = true;
+      c.markQuotaOut();
       void rememberQuotaLeft(0, now);
     }
     const f = voiceFinal(res, c.d().ctx(), c.d().online());
@@ -127,6 +120,7 @@ export function createRecRoute(c: VoiceCore) {
     forget() {
       kept = null;
     },
+    net: () => net,
     elapsed: () => c.current()?.rec?.elapsed() ?? 0,
     level: () => c.current()?.rec?.level() ?? -1,
   };

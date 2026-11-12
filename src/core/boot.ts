@@ -12,7 +12,7 @@ import { requestAppUpdate } from '../platform/native-bridge.ts';
 import { reloadPage, updateAttemptStore } from '../platform/sw-register.ts';
 import { ensureAccount } from './account.ts';
 import { deleteCacheDb, openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
-import { errName, type UpgradeReport } from './cache-migrations.ts';
+import { cacheErrKind, type UpgradeReport } from './cache-migrations.ts';
 import { DRAFTS, OUTBOX, PENDING_ACTIONS, VAULT_DRAFTS } from './cache-schema.ts';
 import { createOutbox, prunePendingActions, type Outbox, type OutboxBootReport, type OutboxItem, type OutboxOptions } from './outbox.ts';
 import { rewriteRow } from './outbox-rows.ts';
@@ -264,7 +264,7 @@ export async function coldStart(opts: BootOptions): Promise<BootResult> {
     clearAllCollections();
     Object.assign(result, {
       status: 'unavailable', cache: null, outbox: null, config: null, profile: null, flags: null,
-      fullResync: [], refetch: {}, purged: 0, error: errName(e),
+      fullResync: [], refetch: {}, purged: 0, error: cacheErrKind(e),
     } satisfies Partial<BootResult>);
     return result;
   }
