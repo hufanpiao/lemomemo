@@ -28,6 +28,9 @@ export type RecStart = { ok: true; rec: ActiveRecorder } | { ok: false; fail: Re
 export interface ActiveRecorder {
   /** 从 start 事件起录了多久（毫秒）；结束以后停在最终时长 */
   elapsed(): number;
+  /** 现在的音量 0～1（录音面板画波形用）；量不到（没有 Web Audio、接不上这条流、已经结束）返回 -1。
+   *  第一次调时才接音量计（start 事件以后，不碍开录），结束时一起关掉 */
+  level(): number;
   /** 停下并交出录音；重复调得到同一个结果 */
   stop(): Promise<RecEnd>;
 }
@@ -49,6 +52,43 @@ const perfNow = (): number => performance.now();
 const closeTracks = (stream: MediaStream): void => {
   for (const t of stream.getTracks()) t.stop();
 };
+
+/** 音量计：同一条麦克风流接一个 AnalyserNode（只读，不改录音）。接不上返回 null */
+interface Meter {
+  read(): number;
+  close(): void;
+}
+
+function openMeter(stream: MediaStream): Meter | null {
+  const g = globalThis as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+  const Ctor = g.AudioContext ?? g.webkitAudioContext;
+  if (!Ctor) return null;
+  let ctx: AudioContext | null = null;
+  try {
+    ctx = new Ctor();
+    const an = ctx.createAnalyser();
+    an.fftSize = 256;
+    ctx.createMediaStreamSource(stream).connect(an);
+    // 不在手势里建的可能是 suspended：试着恢复，不行就一直量到 0（波形平着，不影响录音）
+    void ctx.resume().catch(() => undefined);
+    const buf = new Uint8Array(an.fftSize);
+    const c = ctx;
+    return {
+      read() {
+        an.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (const v of buf) sum += ((v - 128) / 128) ** 2;
+        return Math.min(1, Math.sqrt(sum / buf.length) * 4);
+      },
+      close() {
+        void c.close().catch(() => undefined);
+      },
+    };
+  } catch {
+    void ctx?.close().catch(() => undefined);
+    return null;
+  }
+}
 
 
 export function recorderSupported(): boolean {
@@ -111,6 +151,8 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
     /** 调用方调过 stop() */
     let asked = false;
     let end: RecEnd | null = null;
+    /** 音量计：undefined = 还没接过；null = 接不上 */
+    let meter: Meter | null | undefined;
     let giveEnd: (r: RecEnd) => void = () => undefined;
     const ended = new Promise<RecEnd>((r) => (giveEnd = r));
 
@@ -129,6 +171,8 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
       clearTimeout(timer);
       o.signal?.removeEventListener('abort', onAbort);
       halt();
+      meter?.close();
+      meter = null;
       closeTracks(stream);
       parts.length = 0;
       rlog(log);
@@ -150,6 +194,14 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
         ok: true,
         rec: {
           elapsed: () => (startAt === null ? 0 : Math.round((endAt ?? now()) - startAt)),
+          level() {
+            if (end) return -1;
+            if (meter === undefined) {
+              meter = openMeter(stream);
+              rlog(`rec meter ${meter ? 'on' : 'off'}`);
+            }
+            return meter ? meter.read() : -1;
+          },
           stop() {
             asked = true;
             halt();

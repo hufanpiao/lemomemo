@@ -22,7 +22,7 @@ const asStore = (c: ReturnType<typeof fakeCache>): Store => c as unknown as Stor
 beforeEach(() => resetPlusHintForTest());
 
 describe('plusHintThisLaunch', () => {
-  it('开关在 FA-3 接上录音前关着', () => expect(PLUS_HINT_ENABLED).toBe(false));
+  it('FA-3 接上录音以后开关打开', () => expect(PLUS_HINT_ENABLED).toBe(true));
 
   it('前 3 次启动显示，第 4 次起不显示；次数记在 capture:hint', async () => {
     const c = fakeCache();

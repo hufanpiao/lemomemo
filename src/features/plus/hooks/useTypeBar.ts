@@ -7,26 +7,20 @@
 // • “展开编辑”：把已打的字和日历页选中的那天交给调用方，打开完整新建页（R-353）
 // • callAi 默认是真的 ai-parse（data/ai-parse-api.ts，B3 接线）；设置里 ai.enabled 没开时不调，没把握的也直接用本机规则，不出“AI 没回应”
 // • 提示条：一条 → “已记下：…”；多条 → “已记下 N 条”，展开逐条改、撤，“拆错了，合并成一条”“全部撤销”
-import { rlog } from '../../../platform/run-log-api.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { currentTz } from '../../../core/current-tz.ts';
-import { settingValue, type SettingRow } from '../../../core/setting-read.ts';
-import { useCollection } from '../../../kit/hooks/useCollection.ts';
-import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
+import { callAiParse } from '../data/ai-parse-api.ts';
 import { captureStep, type CaptureEvent, type CaptureStatus } from '../data/capture-state.ts';
 import type { Writer } from '../data/capture-save.ts';
-import { noticeLines, type NoticeLine } from '../data/notice.ts';
-import { quotaResetClock } from '../../../../shared/logic/ai-quota.ts';
-import { markQuotaNotice, quotaNoticeDue, quotaOutToday, rememberQuotaLeft } from '../data/quota.ts';
-import { readSessionId } from '../../../platform/session.ts';
-import { consentStale } from '../../../kit/state/consent-fresh.ts';
-import { callAiParse } from '../data/ai-parse-api.ts';
-import { applyConfirm, keepAsked, navOnline, planLocal, planTyped, splitConfirm, type CallAi, type TypeCtx, type TypePlan } from '../data/type-flow.ts';
+import { quotaOutToday, rememberQuotaLeft } from '../data/quota.ts';
 import { clearTypeDraft, readTypeDraft, writeTypeDraft } from '../data/type-draft.ts';
-import { useSavedBatch, type BatchEntry, type SaveEnv, type SaveOutcome } from './useSavedBatch.ts';
+import { keepAsked, navOnline, planLocal, planTyped, type CallAi, type TypePlan } from '../data/type-flow.ts';
+import { useCaptureCtx } from './useCaptureCtx.ts';
+import { useSavedBatch, type BatchNotice, type SaveEnv, type SaveOutcome } from './useSavedBatch.ts';
 
 // ui 不能直接 import data（A1），界面要用的类型经这里转出去
 export type { CallAi } from '../data/type-flow.ts';
@@ -54,7 +48,7 @@ export interface TypeBarState {
   /** 确认行要问的那一条（confirming 时） */
   asking: AiItem | null;
   /** 提示条：主句和附加句，加上这一批每一条（多条时展开逐条改、撤） */
-  notice: { lines: NoticeLine[]; entries: BatchEntry[] } | null;
+  notice: BatchNotice | null;
   error: TypeBarError;
   submit(): Promise<void>;
   choose(choice: 'past' | 'next'): Promise<void>;
@@ -74,30 +68,18 @@ export interface TypeBarState {
   dropDraft(): void;
 }
 
-const projectsOf = (rows: readonly (readonly { project?: unknown }[])[]): string[] => {
-  const s = new Set<string>();
-  for (const list of rows) for (const r of list) if (typeof r.project === 'string' && r.project !== '') s.add(r.project);
-  return [...s];
-};
-
 export function useTypeBar(o: TypeBarOpts): TypeBarState {
   const [text, setTextRaw] = useState('');
   const [status, setStatus] = useState<CaptureStatus>('idle');
-  const [ask, setAsk] = useState<AiItem[]>([]);
-  const [quotaDue, setQuotaDue] = useState(false);
   const [error, setError] = useState<TypeBarError>(null);
   const [partSaved, setPartSaved] = useState(false);
-  const uiLocale = useUi((s) => s.locale);
-  const settings = useCollection<SettingRow & { id: string }>('settings');
-  const todos = useCollection<{ id: string; project?: unknown }>('todos');
-  const events = useCollection<{ id: string; project?: unknown }>('events');
-  const projects = useMemo(() => projectsOf([todos, events]), [todos, events]);
   const busy = useRef(false);
   const typed = useRef(false);
   // 没传 callAi 时用真的 ai-parse（data/ai-parse-api.ts）；测试传桩
   const { day, callAi = callAiParse, writer, online = navOnline } = o;
-  const saved = useSavedBatch(writer);
-  const { batch, setBatch, store } = saved;
+  const { ctx, aiOn: aiOnNow } = useCaptureCtx(day);
+  const saved = useSavedBatch(writer, status === 'confirming', 'typebar');
+  const { batch, setBatch, ask, setAsk, asking, notice } = saved;
 
   const go = useCallback((e: CaptureEvent) => setStatus((s) => captureStep(s, e)), []);
   const setText = useCallback((v: string) => {
@@ -118,9 +100,6 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
     };
   }, []);
 
-  const ctx = useCallback((): TypeCtx => ({
-    now: clock.now(), tz: currentTz(), locale: uiLocale === 'ko-KR' ? 'ko' : 'zh', projects, day,
-  }), [uiLocale, projects, day]);
   const env = useCallback((): SaveEnv => ({ now: clock.now(), tz: currentTz(), day }), [day]);
 
   const preview = useMemo(() => (text.trim() === '' ? [] : planLocal(text, ctx()).result.items), [text, ctx]);
@@ -132,16 +111,14 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
   }, [go]);
 
   /** 这一批都存好了：清输入条和草稿，出提示条 */
+  const { settle } = saved;
   const finish = useCallback((p: TypePlan) => {
-    const now = clock.now();
-    const due = quotaNoticeDue(now);
-    if (p.status === 'quota_out' && due) markQuotaNotice(now);
-    setQuotaDue(due);
+    settle(p);
     setTextRaw('');
     typed.current = false;
     void clearTypeDraft();
     go({ type: 'done', status: p.status });
-  }, [go]);
+  }, [go, settle]);
 
   const submit = useCallback(async () => {
     rlog(`typebar submit len=${text.length} trim=${text.trim().length} busy=${busy.current} status=${status}`);
@@ -154,8 +131,8 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
     try {
       const c = ctx();
       go({ type: 'organize' });
-      // 同意版本明确过期（告知页关口问到 first / updated、还没做完）：不发 ai-parse，用本机规则（S1，kit/state/consent-fresh.ts）
-      const aiOn = settingValue(settings, 'ai.enabled') === true && !consentStale(readSessionId());
+      // 同意版本明确过期（告知页关口问到 first / updated、还没做完）：不发 ai-parse，用本机规则（S1，见 useCaptureCtx）
+      const aiOn = aiOnNow();
       const quotaOut = aiOn ? await quotaOutToday(c.now) : false;
       const p = await planTyped(text, c, { online: online(), isOnline: online, aiOn, quotaOut }, callAi);
       if (p.quotaLeft !== null) void rememberQuotaLeft(p.quotaLeft, c.now);
@@ -164,45 +141,29 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
         fail('nothing');
         return;
       }
-      const { ready, ask: later } = splitConfirm(p.items);
-      const r = await store({ batchId: null, entries: [], plan: p, raw: text, remind: false }, ready, env());
-      rlog(`typebar stored out=${r.out} ready=${ready.length} ask=${later.length}`);
-      if (r.out !== 'ok' || !r.batch) {
-        fail(r.out);
-        return;
-      }
-      setBatch(r.batch);
-      if (later.length > 0) {
-        setAsk(later);
-        go({ type: 'need_confirm' });
-        return;
-      }
-      finish(p);
+      const out = await saved.storeNew({ batchId: null, entries: [], plan: p, raw: text, remind: false }, env());
+      if (out === 'ask') go({ type: 'need_confirm' });
+      else if (out === 'ok') finish(p);
+      else fail(out);
     } catch (err) {
       rlog(`typebar submit threw ${(err as Error | undefined)?.name ?? ''} ${String((err as Error | undefined)?.message ?? err).slice(0, 200)}`);
       throw err;
     } finally {
       busy.current = false;
     }
-  }, [text, status, ctx, env, callAi, settings, online, store, setBatch, fail, finish, go]);
-
-  const asking = status === 'confirming' ? (ask[0] ?? null) : null;
+  }, [text, status, ctx, env, callAi, aiOnNow, online, saved, fail, finish, go]);
 
   const choose = useCallback(async (choice: 'past' | 'next') => {
-    const first = ask[0];
-    if (!batch || !first || status !== 'confirming') return;
-    const r = await store(batch, [applyConfirm(first, choice)], env());
-    if (r.out !== 'ok' || !r.batch) {
-      setError(r.out === 'switching' ? null : 'not_saved');
+    const plan = batch?.plan;
+    const out = await saved.choose(choice, env());
+    if (out === 'skip' || out === 'more') return;
+    if (out !== 'done') {
+      setError(out === 'switching' ? null : 'not_saved');
       return;
     }
-    setBatch(r.batch);
-    const rest = ask.slice(1);
-    setAsk(rest);
-    if (rest.length > 0) return;
     go({ type: 'confirmed' });
-    finish(batch.plan);
-  }, [ask, batch, status, store, env, setBatch, go, finish]);
+    if (plan) finish(plan);
+  }, [batch, saved, env, go, finish]);
 
   const dismissConfirm = useCallback(() => {
     if (batch && batch.entries.length > 0) {
@@ -212,7 +173,7 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
     }
     setAsk([]);
     go({ type: 'cancel' });
-  }, [batch, ask, ctx, go]);
+  }, [batch, ask, setAsk, ctx, go]);
 
   const closeNotice = useCallback(() => {
     setBatch(null);
@@ -220,11 +181,11 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
   }, [setBatch, go]);
 
   const undo = useCallback(async () => {
-    await saved.undoAll(clock.now());
+    await saved.undoAll();
     go({ type: 'reset' });
   }, [saved, go]);
 
-  const undoOne = useCallback((id: string) => saved.undoOne(id, clock.now()), [saved]);
+  const { undoOne } = saved;
 
   const merge = useCallback(async () => {
     const raw = batch?.raw ?? '';
@@ -234,15 +195,6 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
       fail(out);
     }
   }, [batch, saved, env, fail]);
-
-  const notice = useMemo(() => {
-    if (!batch || batch.entries.length === 0 || status === 'confirming') return null;
-    const lines = noticeLines({
-      status: batch.plan.status, titles: batch.entries.map((e) => e.ref.title), hints: batch.plan.hints, remind: batch.remind,
-      quotaNoticeDue: quotaDue, resetClock: quotaResetClock(clock.now(), currentTz()),
-    });
-    return { lines, entries: batch.entries };
-  }, [batch, status, quotaDue]);
 
   const stash = useCallback(() => writeTypeDraft({ text, day }, clock.now()), [text, day]);
 

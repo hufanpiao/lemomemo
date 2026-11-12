@@ -2,7 +2,8 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetLogBusForTest, setLogSink } from '../../../../shared/core/log-bus.ts';
-import { collapseRinging, HOLD_MAX_MS, holdReminders, pruneCollapsed, useHoldReminders, remindQueue, removeRinging, resetRemindQueue, setRinging, setSnoozeNote, visibleEntry, type RemindEntry } from '../remind-queue.ts';
+import { useHoldReminders } from '../../hooks/useHoldReminders.ts';
+import { collapseRinging, HOLD_MAX_MS, holdReminders, pruneCollapsed, remindQueue, removeRinging, resetRemindQueue, setRinging, setSnoozeNote, visibleEntry, type RemindEntry } from '../remind-queue.ts';
 
 const e = (n: number): RemindEntry => ({ kind: 'event', id: `id${n}`, dueAt: n, tag: `event:id${n}:${n}` });
 const vis = () => visibleEntry(remindQueue.getState());

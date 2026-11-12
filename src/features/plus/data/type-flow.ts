@@ -18,7 +18,7 @@ import { AI_TEXT_MAX, checkDefaultDay, normProjects, type AiItem } from '../../.
 import type { AiKind } from '../../../../shared/schema/kinds.ts';
 import { outcomeOf, type AiOutcome } from './ai-outcome.ts';
 import { AI_PARSE_TIMEOUT_MS, canAutoRetry } from './record-logic.ts';
-import { SendError, type SendFail } from './send-error.ts';
+import { SendError, sendFailOf } from './send-error.ts';
 
 /** SendError 定义在 send-error.ts，这里转出给老调用方 */
 export { SendError };
@@ -111,13 +111,6 @@ export function planLocal(text: string, ctx: TypeCtx): { result: ParseResult; su
   return { result, sure: confidence(result) === 'sure' };
 }
 
-const failOf = (e: unknown): SendFail => {
-  if (e instanceof SendError) return e.fail;
-  if (e instanceof DOMException && (e.name === 'AbortError' || e.name === 'TimeoutError')) return 'timeout';
-  if (e instanceof TypeError) return 'network';
-  return 'http';
-};
-
 /** 浏览器明确说离线（navigator.onLine === false）才算离线；读不到当在线 */
 export const navOnline = (): boolean => typeof navigator === 'undefined' || navigator.onLine !== false;
 
@@ -132,7 +125,7 @@ export async function askAi(req: AiParseReq, call: CallAi, timeoutMs = AI_PARSE_
     try {
       return outcomeOf(await call(req, ac.signal));
     } catch (e) {
-      const fail = ac.signal.aborted ? 'timeout' : failOf(e);
+      const fail = ac.signal.aborted ? 'timeout' : sendFailOf(e);
       if (!canAutoRetry(fail, tried) || !online()) return { kind: 'ai_failed', reason: fail };
     } finally {
       clearTimeout(timer);

@@ -116,25 +116,30 @@ export async function freeze(page: Page): Promise<void> {
   }, SAFE_TOP);
 }
 
-/** 写入 20 条待办（IndexedDB planner-v4，和 b2-motion-list 同一个写法），再重新打开 route */
+/** “＋”上方的小气泡（PlusHint，B3 FA-3 起打开）记成“按住过”、不再出现：气泡是底栏外的另一层浮层，各视觉组的基准都不带它；
+ *  不藏它，今天页“＋”附近的截图会差几千像素（11-13 tabbar-lock 差异图只有气泡那一块）。drafts 仓 capture:hint，格式见 data/plus-hint.ts */
+export const HINT_HELD = { id: 'capture:hint', kind: 'hint', data: { opens: 0, held: true }, updated_at: 0 };
+
+/** 写入 20 条待办（IndexedDB planner-v4，和 b2-motion-list 同一个写法）、小气泡记成按住过（HINT_HELD），再重新打开 route */
 export async function seedTodos(page: Page, route: string): Promise<void> {
   await page.goto('/app/#/todos');
   await page.getByTestId('todos').waitFor({ timeout: 30_000 });
-  await page.evaluate(async (rows) => {
+  await page.evaluate(async ({ rows, hint }) => {
     const db = await new Promise<IDBDatabase>((res, rej) => {
       const r = indexedDB.open('planner-v4');
       r.onsuccess = () => res(r.result);
       r.onerror = () => rej(r.error);
     });
-    const tx = db.transaction(['todos'], 'readwrite');
+    const tx = db.transaction(['todos', 'drafts'], 'readwrite');
     for (const r of rows) tx.objectStore('todos').put({ id: r['id'], server: r, view: r });
+    tx.objectStore('drafts').put(hint);
     await new Promise((res, rej) => {
       tx.oncomplete = res;
       tx.onerror = () => rej(tx.error);
     });
     db.close();
     // 月历页的日清单行字短，压不到“＋”后面（G1 的“＋”量不到东西）：月历场景把标题加长，一直排到行尾
-  }, route === 'calendar' ? todoRows().map((r): Record<string, unknown> => ({ ...r, title: `${String(r['title'])} 加长到行尾压在“＋”后面的标题文字` })) : todoRows());
+  }, { rows: route === 'calendar' ? todoRows().map((r): Record<string, unknown> => ({ ...r, title: `${String(r['title'])} 加长到行尾压在“＋”后面的标题文字` })) : todoRows(), hint: HINT_HELD });
   await page.goto(`/app/#/${route}`);
   await page.reload();
 }

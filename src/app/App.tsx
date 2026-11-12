@@ -35,7 +35,7 @@ import { bannerKind } from './banner-kind.ts';
 import { featureRoutes, offRoutes, type FeatureRoute } from './features.ts';
 import { navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from './router.ts';
 import { tabBarFor } from './tab-of.ts';
-import { PlusSlot, preloadPlus } from './plus-slot.tsx';
+import { PlusSlot, plusHold, preloadPlus } from './plus-slot.tsx';
 import type { DateStr } from '../../shared/core/date.ts';
 import { notesInput, setNewItemDay, setNewItemTitle, takeNewItemDay } from '../kit/state/new-item.ts';
 
@@ -131,7 +131,7 @@ function TabBar({ route }: { route: RouteName }) {
   };
   return (
     <>
-      <GlassBar active={tab} later={afterAppPainted} add={{ label: t('nav.add', {}), onClick: open }} />
+      <GlassBar active={tab} later={afterAppPainted} add={{ label: t('nav.add', {}), onClick: open, hold: plusHold }} />
       <PlusSlot open={plus !== null} day={plus?.day ?? null} opened={plus?.n} onExpand={expand} onEdit={edit} onClose={() => setPlus(null)} />
     </>
   );

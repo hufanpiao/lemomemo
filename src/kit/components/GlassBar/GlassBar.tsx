@@ -7,7 +7,7 @@
 //   点页签时液滴马上往那边走，不等路由换过来（webkit 切到要下载的页时路由要晚 0.3 秒；设计动效评审 D1）：记下“从哪页点到哪页”，
 //   路由还是那一页就按点的那个画，路由一变就作废、用路由的
 // • 两个皮肤都用（负责人 11-05 ④）
-import { useEffect, useLayoutEffect, useRef, useState, type ComponentType } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ComponentType, type PointerEvent } from 'react';
 import { hrefOf, navigateTab, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { MQ_SIDEBAR, useMedia } from '../../hooks/useMedia.ts';
@@ -43,10 +43,18 @@ const ICONS: Record<TabName, string> = {
   notes: 'M15 5l4 4-10 10H5v-4z',
 };
 
+/** 按住“＋”（B3 FA-3）：pointer 事件原样转给 plus（判定、录音都在 features/plus），这里不加节点、类名、属性，也不因此重渲染 */
+export interface PlusHold {
+  onStart(e: PointerEvent): void;
+  onMove(e: PointerEvent): void;
+  onEnd(e: PointerEvent): void;
+  onCancel(e: PointerEvent): void;
+}
+
 export interface GlassBarProps {
   active: TabName;
-  /** “＋”：按页新建（今天、日历新建日程，待办新建待办）；不传就不出“＋” */
-  add?: { label: string; onClick(): void };
+  /** “＋”：按页新建（今天、日历新建日程，待办新建待办）；不传就不出“＋”。hold：按住说话（可选） */
+  add?: { label: string; onClick(): void; hold?: PlusHold };
   /** 什么时候下载首屏后部分（GlassBarFx.tsx）：App 传 afterAppPainted（首屏画完以后；kit 不直接依赖 platform）；不传就马上 */
   later?: (fn: () => void) => void;
 }
@@ -98,7 +106,10 @@ export function GlassBar({ active, add, later = (fn) => fn() }: GlassBarProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const fab = add && (
-    <Pressable type="button" className={styles.fab} aria-label={add.label} onClick={add.onClick} data-testid="tabbar-add">
+    <Pressable
+      type="button" className={styles.fab} aria-label={add.label} onClick={add.onClick} data-testid="tabbar-add"
+      onPointerDown={add.hold?.onStart} onPointerMove={add.hold?.onMove} onPointerUp={add.hold?.onEnd} onPointerCancel={add.hold?.onCancel}
+    >
       <span className={`${styles.glass} ${styles.fabTint}`} aria-hidden="true" />
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M12 5v14M5 12h14" />

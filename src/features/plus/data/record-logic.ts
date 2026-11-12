@@ -56,6 +56,34 @@ export interface KeptAudio {
 /** 留着的录音是不是过期了（2 分钟） */
 export const keptExpired = (k: KeptAudio, now: number): boolean => now - k.keptAt >= BLOB_KEEP_MS;
 
+// ---------- 网络慢改用手机自带识别（架构 14.5“自动改用 iPhone 自带识别”） ----------
+// 10 分钟内因为网络原因（超时、连接没建立）失败 2 次，接下来 10 分钟按住“＋”直接走 Web Speech，录音面板写“网络慢，这次用手机自带识别”
+
+export const NET_FAIL_WINDOW_MS = 10 * 60_000;
+export const NET_FAIL_LIMIT = 2;
+export const NET_SPEECH_MS = 10 * 60_000;
+
+export interface NetFallback {
+  /** 窗口里网络原因失败的时刻 */
+  fails: readonly number[];
+  /** 改用手机自带识别到什么时候（0 = 没改） */
+  until: number;
+}
+
+export const NET_OK: NetFallback = { fails: [], until: 0 };
+
+/** 这一种失败算不算“网络原因” */
+export const isNetFail = (fail: SendFail): boolean => fail === 'network' || fail === 'timeout';
+
+/** 记一次网络原因的失败：窗口里满 NET_FAIL_LIMIT 次就改用手机自带识别 NET_SPEECH_MS，计数清零 */
+export function netFailed(s: NetFallback, now: number): NetFallback {
+  const fails = [...s.fails.filter((t) => now - t < NET_FAIL_WINDOW_MS), now];
+  return fails.length >= NET_FAIL_LIMIT ? { fails: [], until: now + NET_SPEECH_MS } : { fails, until: s.until };
+}
+
+/** 现在是不是因为网络慢改用手机自带识别 */
+export const speechByNet = (s: NetFallback, now: number): boolean => now < s.until;
+
 // ---------- 按住“＋” ----------
 
 export type HoldZone = 'cancel' | 'lock' | null;

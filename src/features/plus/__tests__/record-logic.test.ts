@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { AI_AUDIO_BITS_PER_SECOND, AI_AUDIO_MAX_BYTES } from '../../../../shared/schema/ai.ts';
 import {
-  canAutoRetry, fmtClock, HOLD_IDLE, holdStep, keptExpired, REC_MAX_MS, recCountdown, uploadTimeoutMs,
+  canAutoRetry, fmtClock, HOLD_IDLE, holdStep, isNetFail, keptExpired, NET_FAIL_WINDOW_MS, NET_OK, NET_SPEECH_MS, netFailed, REC_MAX_MS,
+  recCountdown, speechByNet, uploadTimeoutMs,
   type HoldAction, type HoldEvent, type HoldState,
 } from '../data/record-logic.ts';
 
@@ -102,5 +103,28 @@ describe('按住“＋”（Q3：350 ms 判定、上拖取消、锁定）', () =
   it('系统取消（来电、切走）：录着的丢弃，没开录的什么都不做', () => {
     expect(run([down, { type: 'tick', t: 400 }, { type: 'cancel' }]).actions).toEqual(['start', 'discard']);
     expect(run([down, { type: 'cancel' }]).actions).toEqual([]);
+  });
+});
+
+describe('网络慢改用手机自带识别（架构 14.5：10 分钟内网络原因失败 2 次 → 接下来 10 分钟走 Web Speech）', () => {
+  const MIN = 60_000;
+  it('只算网络原因（超时、连接没建立），服务器回错不算', () => {
+    expect(isNetFail('network')).toBe(true);
+    expect(isNetFail('timeout')).toBe(true);
+    expect(isNetFail('http')).toBe(false);
+  });
+  it('10 分钟内第 2 次：改用 10 分钟，到点恢复；计数清零', () => {
+    const a = netFailed(NET_OK, 0);
+    expect(speechByNet(a, 1)).toBe(false);
+    const b = netFailed(a, 9 * MIN);
+    expect(speechByNet(b, 9 * MIN)).toBe(true);
+    expect(speechByNet(b, 9 * MIN + NET_SPEECH_MS - 1)).toBe(true);
+    expect(speechByNet(b, 9 * MIN + NET_SPEECH_MS)).toBe(false);
+    expect(b.fails).toEqual([]);
+  });
+  it('两次隔了 10 分钟以上：不改', () => {
+    const b = netFailed(netFailed(NET_OK, 0), NET_FAIL_WINDOW_MS);
+    expect(speechByNet(b, NET_FAIL_WINDOW_MS)).toBe(false);
+    expect(b.fails).toEqual([NET_FAIL_WINDOW_MS]);
   });
 });

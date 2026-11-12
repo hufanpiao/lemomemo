@@ -9,8 +9,8 @@
 import type { Cache } from '../../../core/cache.ts';
 import { getBoot } from '../../../core/boot.ts';
 
-/** 开关：按住说话要到 FA-3 才有，之前关着（主持人 11-09 定；对照图在副本里打开来截）。FA-3 接上录音时改成 true */
-export const PLUS_HINT_ENABLED: boolean = false;
+/** 开关：按住说话要到 FA-3 才有，之前关着（主持人 11-09 定）；FA-3 接上录音（ui/RecordHost.tsx），打开 */
+export const PLUS_HINT_ENABLED: boolean = true;
 
 export const PLUS_HINT_ID = 'capture:hint';
 /** 前几次打开显示 */
