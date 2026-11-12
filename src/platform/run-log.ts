@@ -9,8 +9,10 @@
 // • 业务代码经 run-log-api.ts 的 rlog 记的结果（提交了没有、为什么没提交）
 // • 焦点进出、路由变化后 400ms 再拍一次版面快照（等键盘、动画停稳）；焦点进来后 400ms、1500ms 各记一行 kbcheck（系统滚没滚页面、浮条贴没贴键盘，台账 Q-8）
 // 隐私：不记用户输入的任何文字、不记网址参数；按钮只记 data-testid / aria-label / id
-import { buildInfo, opensKeyboard } from './env.ts';
+import { buildInfo, isStandalone, opensKeyboard } from './env.ts';
 import { BAR_SELECTOR, RL_SLOT } from './run-log-api.ts';
+import { SCALE_EPS } from './viewport-geom.ts';
+import { GAP_VAR, KB_VAR, KBO_ATTR } from './viewport.ts';
 
 export const OUT_KEY = 'lemo-run-log';
 export const MAX_LINES = 3000;
@@ -122,7 +124,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const doc = win.document;
   const root = doc.documentElement;
   const nav = win.navigator as Navigator & { standalone?: boolean };
-  const standalone = nav.standalone === true || win.matchMedia?.('(display-mode: standalone)').matches === true;
+  const standalone = isStandalone(nav, (q) => win.matchMedia?.(q).matches === true);
   push(
     `=== start ${new Date(t0).toISOString()} v=${opts.version ?? `${buildInfo.version}@${buildInfo.commit}`} screen=${win.screen.width}x${win.screen.height} dpr=${win.devicePixelRatio} standalone=${standalone} route=${win.location.hash || '/'} ua=${nav.userAgent.slice(0, 160)}`,
   );
@@ -131,7 +133,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const vv = win.visualViewport;
   const cssVar = (k: string): string => root.style.getPropertyValue(k).trim() || '0';
   const vvState = (): string =>
-    `inner=${win.innerHeight} vv=${vv ? Math.round(vv.height) : '-'} top=${vv ? Math.round(vv.offsetTop) : '-'}${vv && Math.abs(vv.scale - 1) > 0.005 ? ` scale=${vv.scale.toFixed(2)}` : ''} y=${Math.round(win.scrollY)} kbo=${root.hasAttribute('data-kbo') ? 1 : 0} kb=${cssVar('--kb')} gap=${cssVar('--vh-gap')} focus=${describeEl(doc.activeElement)}`;
+    `inner=${win.innerHeight} vv=${vv ? Math.round(vv.height) : '-'} top=${vv ? Math.round(vv.offsetTop) : '-'}${vv && Math.abs(vv.scale - 1) > SCALE_EPS ? ` scale=${vv.scale.toFixed(2)}` : ''} y=${Math.round(win.scrollY)} kbo=${root.hasAttribute(KBO_ATTR) ? 1 : 0} kb=${cssVar(KB_VAR)} gap=${cssVar(GAP_VAR)} focus=${describeEl(doc.activeElement)}`;
   /** 一个元素在屏幕上的位置和可见性：相对可视区的上沿~下沿、高度；藏着记 hid，不在页面里记 none */
   const rectOf = (el: Element | null): string => {
     if (!el) return 'none';
@@ -196,7 +198,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
    */
   const kbcheck = (): void => {
     const act = doc.activeElement;
-    if (!act || !opensKeyboard(act) || !vv) return;
+    if (!opensKeyboard(act) || !vv) return;
     const top = vv.offsetTop;
     const f = act.getBoundingClientRect();
     const host = fixedHost(act)?.getBoundingClientRect();
@@ -272,13 +274,13 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const mo =
     typeof MutationObserver === 'function'
       ? new MutationObserver(() => {
-          const s = `kbo=${root.hasAttribute('data-kbo') ? 1 : 0} kb=${cssVar('--kb')} gap=${cssVar('--vh-gap')}`;
+          const s = `kbo=${root.hasAttribute(KBO_ATTR) ? 1 : 0} kb=${cssVar(KB_VAR)} gap=${cssVar(GAP_VAR)}`;
           if (lastRoot === s) return;
           lastRoot = s;
           add(`root ${s} ${layout()}`);
         })
       : null;
-  mo?.observe(root, { attributes: true, attributeFilter: ['data-kbo', 'style'] });
+  mo?.observe(root, { attributes: true, attributeFilter: [KBO_ATTR, 'style'] });
 
   // console.error / warn
   const con = console;

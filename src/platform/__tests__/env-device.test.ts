@@ -1,6 +1,6 @@
 // 设备判断（架构 5.9、TC-B1-17、R-225）：iPhone、iPad 上凡是不在主屏幕模式运行的，一律只给“添加到主屏幕”教程；
 // 不是 Safari 时另提示“请在 Safari 里打开本页”；电脑浏览器、安卓照常登录。
-// 另有 isIPhone（只认 iPhone，视口几何和冷启动高度校正用）、opensKeyboard（焦点在哪会弹键盘，原来视口、快捷键、日历、运行日志各写一份，11-12 收进 env.ts）
+// 另有 isIPhone（只认 iPhone，视口几何的 squeeze 用）、opensKeyboard（焦点在哪会弹键盘，原来视口、快捷键、日历、运行日志各写一份，11-12 收进 env.ts）
 import { afterEach, describe, expect, it } from 'vitest';
 import { isAppleMobile, isIPhone, isStandalone, isTauri, opensKeyboard, runtimeOf, type NavLike } from '../env.ts';
 import { installGate, isIOSSafari, mustInstallFirst } from '../install-gate.ts';

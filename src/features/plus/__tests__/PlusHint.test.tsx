@@ -1,4 +1,5 @@
-// “＋”上方的小气泡（B3 S23）：开关、exe、次数、跟着“＋”的位置，键盘弹起或“＋”不在时不出
+// “＋”上方的小气泡（B3 S23）：开关、exe、次数、跟着“＋”的位置，键盘弹起把“＋”藏起来或“＋”不在时不出；
+// 藏没藏看算出来的 visibility（jsdom 不跑 CSS Modules，这里用 hideOnKb() 挂一条和 GlassBar.module.css 窄屏一样的规则；不挂就是宽屏，键盘弹起“＋”照样看得见）
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { Profiler } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,10 +12,21 @@ const { markPlusHeld, resetPlusHintForTest } = await import('../data/plus-hint.t
 const { spotOf } = await import('../hooks/usePlusHint.ts');
 const { default: PlusHint } = await import('../ui/PlusHint.tsx');
 
+/** 窄屏：和 GlassBar.module.css 一样，根节点 data-kbhide 时把“＋”藏起来（visibility: hidden） */
+function hideOnKb(): void {
+  const s = document.createElement('style');
+  s.id = 'kbhide-rule';
+  s.textContent = ':root[data-kbhide] [data-testid="tabbar-add"] { visibility: hidden; }';
+  document.head.appendChild(s);
+}
+
 function addFab(rect: Partial<DOMRect>, kb = false): HTMLElement {
   const b = document.createElement('button');
   b.setAttribute('data-testid', 'tabbar-add');
-  if (kb) document.documentElement.setAttribute('data-kbhide', '1');
+  if (kb) {
+    hideOnKb();
+    document.documentElement.setAttribute('data-kbhide', '1');
+  }
   b.getBoundingClientRect = () => ({ top: 0, right: 0, width: 0, height: 0, left: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}), ...rect }) as DOMRect;
   document.body.appendChild(b);
   return b;
@@ -31,6 +43,7 @@ afterEach(() => {
   resetPlusHintForTest();
   document.querySelectorAll('[data-testid="tabbar-add"]').forEach((e) => e.remove());
   document.documentElement.removeAttribute('data-kbhide');
+  document.getElementById('kbhide-rule')?.remove();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -44,6 +57,11 @@ describe('spotOf', () => {
     expect(spotOf(null, 375, 812)).toBeNull();
     expect(spotOf(addFab({ top: 740, right: 359, width: 56, height: 56 }, true), 375, 812)).toBeNull();
     expect(spotOf(addFab({}), 375, 812)).toBeNull();
+  });
+  it('宽屏（没有藏“＋”的规则）键盘弹起、根节点有 data-kbhide：“＋”看得见，照常给位置（台账 Q-20）', () => {
+    const fab = addFab({ top: 740, right: 359, width: 56, height: 56 });
+    document.documentElement.setAttribute('data-kbhide', '1');
+    expect(spotOf(fab, 375, 812)).toEqual({ right: 16, bottom: 82 });
   });
 });
 
@@ -89,6 +107,7 @@ describe('PlusHint', () => {
   it('键盘弹起把“＋”藏起来：气泡跟着收起，落下再出来', async () => {
     vi.useFakeTimers();
     try {
+      hideOnKb();
       addFab({ top: 740, right: 359, width: 56, height: 56 });
       await mount({ enabled: true, exe: false });
       expect(screen.getByTestId('plus-hint')).toBeTruthy();

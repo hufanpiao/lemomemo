@@ -1,4 +1,4 @@
-// R-371 底栏偏高修复 Gap fix（platform/vh-gapfix.ts；11-11 起 iPhone 主屏幕版默认开（11-12 起 iPad 不做），诊断页“Gap fix: OFF (compare)”关掉对照）：Chromium 里模拟负责人那次冷启动——
+// R-371 底栏偏高修复 Gap fix（platform/vh-gapfix.ts；11-11 起 iOS 主屏幕版默认开，诊断页“Gap fix: OFF (compare)”关掉对照）：Chromium 里模拟负责人那次冷启动——
 // iPhone（navigator.userAgent 换成 iPhone 的，只在页面里换，请求头不动）、主屏幕版（navigator.standalone）、屏幕 956、可见高度 895（视口 440×895）、顶部安全区 61（--inset-top；Chromium 的 env() 恒为 0，用 CSSOM 盖上）。
 // ① 根据：895 高时只有日历页文档比视口高（6 行月格，和数据无关），今天页正好一屏——负责人“只有切到日历才回落”，iOS 是在文档变得能滚时重算的；
 // ② 默认开着：底栏挂上以后放看不见的垫块让今天页文档比视口高（照日历），Chromium 不会改 innerHeight，到 1.5 秒撤掉，日志记 no-change；
@@ -21,7 +21,7 @@ async function launch(page: Page, o: { on: boolean; screenH: number; top: number
     } catch {
       // 不会走到
     }
-    // Gap fix 只在 iPhone 主屏幕版做（vh-gapfix-gate.ts）：chromium 项目是电脑 UA，页面里换成 iPhone 的（webkit 项目本来就是 iPhone 15）
+    // Gap fix 只在 iOS 主屏幕版做（vh-gapfix-gate.ts）：chromium 项目是电脑 UA，页面里换成 iPhone 的（webkit 项目本来就是 iPhone 15）
     if (!/iPhone|iPad/.test(navigator.userAgent))
       Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1', configurable: true });
     Object.defineProperty(navigator, 'standalone', { value: true, configurable: true });

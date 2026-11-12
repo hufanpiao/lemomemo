@@ -1,5 +1,5 @@
 // R-371 Gap fix 默认开（platform/vh-gapfix-gate.ts，11-11）：冷启动时要不要下载 vh-gapfix.ts。
-// 默认开；只在 iPhone 主屏幕版做（和视口几何的 squeeze 同一个判断，11-12 起 iPad 不做）；iOS 上在浏览器里打开、电脑、安卓（哪怕是装到主屏幕的）都不做；诊断页关掉（OFF_KEY）就不做
+// 默认开；只在 iOS（iPhone、iPad）主屏幕版做；iOS 上在浏览器里打开、电脑、安卓（哪怕是装到主屏幕的）都不做；诊断页关掉（OFF_KEY）就不做
 import { describe, expect, it } from 'vitest';
 import { gapFixWanted, OFF_KEY } from '../vh-gapfix-gate.ts';
 
@@ -19,8 +19,8 @@ describe('gapFixWanted（R-371 Gap fix 默认开）', () => {
     expect(gapFixWanted(ios, noMedia, empty)).toBe(true);
   });
 
-  it('iPad（UA 伪装成 Mac、有触屏）主屏幕版不做：和 squeeze 一样只认 iPhone（台前调度、分屏时窗口本来就比整屏矮）', () => {
-    expect(gapFixWanted({ userAgent: IPAD, maxTouchPoints: 5, standalone: true }, noMedia, empty)).toBe(false);
+  it('iPad（UA 伪装成 Mac、有触屏）主屏幕版也做', () => {
+    expect(gapFixWanted({ userAgent: IPAD, maxTouchPoints: 5, standalone: true }, noMedia, empty)).toBe(true);
   });
 
   it('standalone 才开：iPhone 上在 Safari 里直接打开（不是主屏幕版）不做', () => {

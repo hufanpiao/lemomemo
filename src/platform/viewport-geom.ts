@@ -10,8 +10,8 @@ export { fullHeight, GAP_MAX_PX, isLandscape, TOL_PX } from './viewport-screen.t
 
 /** 高度差比这少不算键盘（地址栏伸缩只有几十 px） */
 export const KB_MIN_PX = 120;
-/** 可视区缩放和 1 差这么多以内算没缩放 */
-const SCALE_EPS = 0.01;
+/** 可视区缩放和 1 差这么多以内算没缩放（运行日志判“缩放了才记 scale=”也用它） */
+export const SCALE_EPS = 0.01;
 
 /** 键盘压在布局视口上的高度（px）：布局视口高 − 可视区高 − 可视区顶端偏移，不到 KB_MIN_PX 当 0 */
 export function keyboardHeight(innerHeight: number, vvHeight: number, vvOffsetTop: number): number {

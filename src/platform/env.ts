@@ -60,7 +60,7 @@ export function isAppleMobile(nav: NavLike = navigator): boolean {
   return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && nav.maxTouchPoints > 1);
 }
 
-/** 只认 iPhone、iPod（iPad 不算，视口几何的 squeeze 和冷启动高度校正都按它：iPad 台前调度、分屏、接实体键盘时窗口本来就比整屏矮） */
+/** 只认 iPhone、iPod（iPad 不算，视口几何的 squeeze 按它：iPad 台前调度、分屏、接实体键盘时窗口本来就比整屏矮；冷启动高度校正 iPhone、iPad 都做，用 isAppleMobile） */
 export const isIPhone = (ua: string = typeof navigator !== 'undefined' ? navigator.userAgent : ''): boolean => /iPhone|iPod/.test(ua);
 
 const NO_KB_INPUT = /^(button|checkbox|radio|range|submit|reset|file|color|image|hidden)$/i;
@@ -69,7 +69,7 @@ const NO_KB_INPUT = /^(button|checkbox|radio|range|submit|reset|file|color|image
  * 焦点在这个元素上会不会弹键盘（“能打字的地方”，这类判断只在这里）：可编辑区域、select（iOS 弹选择轮，和键盘一样压可视区；电脑上按字母键是选选项）、
  * 没只读、没禁用的 textarea 和文字类 input。视口监听、冷启动高度校正、窗口快捷键、日历翻页键、运行日志都用它
  */
-export function opensKeyboard(el: unknown): boolean {
+export function opensKeyboard(el: unknown): el is HTMLElement {
   if (typeof HTMLElement === 'undefined' || !(el instanceof HTMLElement)) return false;
   if (el.isContentEditable || el instanceof HTMLSelectElement) return true;
   if (el instanceof HTMLTextAreaElement) return !el.readOnly && !el.disabled;

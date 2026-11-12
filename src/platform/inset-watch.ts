@@ -13,6 +13,7 @@
 //   原来会一直轮询）。放行以后只给时间线再低频读：每 INSET_LATE_POLL_MS 一次，读到画完后 INSET_LATE_LOG_MS（总时长仍不超过挂上后 INSET_BACKSTOP_MS），
 //   “放行以后 iOS 才给出 34”也能在设置 › 关于的 launch 一行里看到（主持人 11-07）；只记、不再改底栏的显示。之后只靠 resize 事件记，最多记 INSET_MAX_ROWS 条
 // • requestAnimationFrame 只许 src/motion 用（A25），这里用 setTimeout
+import { isStandalone } from './env.ts';
 
 export const INSET_QUIET_MS = 120;
 export const INSET_ZERO_WAIT_MS = 600;
@@ -64,15 +65,6 @@ let timeline: { rows: InsetRow[]; readyAt: number | null; paintedAt: number | nu
 let stop: (() => void) | null = null;
 let painted: (() => void) | null = null;
 
-function isStandalone(win: Window): boolean {
-  try {
-    if ((win.navigator as Navigator & { standalone?: boolean }).standalone === true) return true;
-    return win.matchMedia('(display-mode: standalone)').matches;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * 读安全区的隐藏探测块（这类探测块只在这里做；冷启动高度校正 vh-gapfix-gate.ts 读顶部也用它）：固定在 side 那一边、0 × 0、看不见、不接点按，
  * padding-<side> 跟着 base.css 的 --inset-<side>（和页面用同一个值）。挂到 body 上，读完由调用方 remove
@@ -106,7 +98,7 @@ export function watchInsetBottom(env: InsetEnv = {}): () => void {
   const clearTimer = env.clearTimer ?? ((id: unknown) => win.clearTimeout(id as number));
   const doc = win.document;
   const root = doc.documentElement;
-  const standalone = isStandalone(win);
+  const standalone = isStandalone(win.navigator, (q) => typeof win.matchMedia === 'function' && win.matchMedia(q).matches);
   timeline = { rows: [], readyAt: null, paintedAt: null, reason: null, standalone };
 
   // 隐藏探针：padding-bottom 跟着 --inset-bottom（不直接写 env：和底栏用同一个变量，读到的就是底栏用的）；一直挂着，停的时候撤

@@ -73,7 +73,7 @@ export function isSplashShowing(): boolean {
   return el !== null && !leaving.has(el) && !hiddenByCss(el);
 }
 
-/** 到点收起（从启动起算的兜底）：到点调 hide（main.tsx 传 leaveSplash，非正式版先等诊断启动件；别处直接传 hideSplash）；返回取消函数 */
+/** 到点收起（从启动起算的兜底）：到点调 hide（main.tsx 直接传 hideSplash）；返回取消函数 */
 export function hideSplashAfter(hide: () => unknown, ms: number = SPLASH_MAX_MS): () => void {
   const t = setTimeout(() => void hide(), ms);
   return () => clearTimeout(t);

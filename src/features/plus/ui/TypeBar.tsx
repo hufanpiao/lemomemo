@@ -95,6 +95,13 @@ const dayOf = (it: AiItem): string => {
   return [d ? d.slice(5) : '', it.time ?? ''].filter(Boolean).join(' ');
 };
 
+/** 焦点在有字的输入框、文本框，或可编辑区里：Ctrl+Z 让给浏览器撤销打字 */
+function hasTyping(el: EventTarget | null): boolean {
+  if (!opensKeyboard(el)) return false;
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value !== '';
+  return el.isContentEditable;
+}
+
 export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit, opened, onClose }: TypeBarProps) {
   const t = usePlusT();
   const line = usePlusLine();
@@ -166,8 +173,7 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
   useKeys({
     'mod+z': (e) => {
       if (!s.notice) return false;
-      const el = e.target;
-      if (opensKeyboard(el) && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value !== '' : el instanceof HTMLElement && el.isContentEditable)) return false;
+      if (hasTyping(e.target)) return false;
       void s.undo();
       return true;
     },

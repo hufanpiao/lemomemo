@@ -1,4 +1,4 @@
-// 冷启动高度校正的后两次触发（校正本身是 vh-gapfix-gate.ts 的 fixHeight）：iPhone 主屏幕版冷启动时由 main.tsx 按需下载。
+// 冷启动高度校正的后两次触发（校正本身是 vh-gapfix-gate.ts 的 fixHeight）：iOS 主屏幕版冷启动时由 main.tsx 按需下载。
 // ① 等早试结束、底栏挂上（今天页画好，最多 WAIT_BAR_MS）试一次；② 键盘真收了（viewport.ts 报）再试一次（收键盘后 iOS 会把布局视口还原成少一截的高度）。
 // 放垫块后 innerHeight 一变就撤（这两次用户能点“＋”，弹键盘压矮的那一帧就撤）；SCROLL_AT_MS 还没变补滚 1px、下一帧滚回。
 // 不变量：输入框聚焦着（键盘要弹、正弹、iOS 在定光标）不放新垫块、不补滚（台账 Q-8、Q-24 那两个真机问题都在这段时间）；

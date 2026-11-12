@@ -57,13 +57,13 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
   applyDocLocale(uiLocale);
 }
 
-// 诊断启动件（运行日志、冷启动时间线，platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量整块摇掉；启动画面收起不等它
-if (import.meta.env.MODE !== 'production') void import('../platform/diag-boot.ts').then((m) => m.startDiagBoot(nextFrame)).catch(() => undefined);
+// 诊断启动件（运行日志，platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量整块摇掉；启动画面收起不等它
+if (import.meta.env.MODE !== 'production') void import('../platform/diag-boot.ts').then((m) => m.startDiagBoot()).catch(() => undefined);
 // 启动画面最晚 5 秒收起：从入口模块开始执行算起（关口、冷启动、分包加载哪一步卡住都不再盖着）
 hideSplashAfter(hideSplash);
 // 底部安全区（G10）：iOS 主屏幕版冷启动时先 0 后 34，稳定前底栏、“＋”、实色带不显示，稳定了淡入；首屏画完后最多藏 1.5 秒（platform/inset-watch.ts）
 watchInsetBottom();
-// R-371 Gap fix（底栏偏高修复，11-11 起默认开、正式版也做）：只在 iPhone 主屏幕版冷启动时下载 platform/vh-gapfix.ts 做一次（判断见 vh-gapfix-gate.ts，
+// R-371 Gap fix（底栏偏高修复，11-11 起默认开、正式版也做）：只在 iOS 主屏幕版冷启动时下载 platform/vh-gapfix.ts 做一次（判断见 vh-gapfix-gate.ts，
 // 诊断页可以关掉对照）；等帧传 motion 的 nextFrame（A25）
 // 台账 Q-2：先在这里同步早试一次（启动画面还盖着，不等下载、不等底栏），不成再由 vh-gapfix.ts 等底栏挂上后照原样补一次
 if (gapFixWanted()) {

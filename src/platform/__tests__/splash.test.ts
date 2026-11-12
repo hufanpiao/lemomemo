@@ -141,7 +141,7 @@ describe('hideSplashAfter', () => {
     await vi.advanceTimersByTimeAsync(200);
     expect(el2.classList.contains('is-leaving')).toBe(false);
   });
-  it('到点调传进来的 hide（main.tsx 的 leaveSplash），不自己直接收', async () => {
+  it('到点调传进来的 hide（main.tsx 直接传 hideSplash），不自己直接收', async () => {
     const el = mountSplash();
     const hide = vi.fn();
     hideSplashAfter(hide);

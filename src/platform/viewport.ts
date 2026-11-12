@@ -22,7 +22,10 @@ import { fullHeight, GAP_MAX_PX, TOL_PX, viewportGeom, type Geom } from './viewp
 export const HOLD_MS = 1000;
 /** 键盘收起后视口和焦点静了这么久才算真收了 */
 export const KB_SETTLE_MS = 300;
+/** 写到根节点的四样（停止监听时一起拿掉；运行日志也按这几个名字读）：--vh-gap 冷启动少的高度、--kb 键盘压住的高度、data-kbo 手机上键盘弹着、data-kbhide 底栏藏起 */
 export const GAP_VAR = '--vh-gap';
+export const KB_VAR = '--kb';
+export const KBO_ATTR = 'data-kbo';
 /** 底栏、“＋”、实色带、渐隐层藏起（kit GlassBar 的样式按它藏） */
 export const BAR_HIDE_ATTR = 'data-kbhide';
 
@@ -133,8 +136,8 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
     reported = show;
     height = g.kb;
     kbVar = g.over;
-    setVar('--kb', g.over);
-    setAttr('data-kbo', g.open);
+    setVar(KB_VAR, g.over);
+    setAttr(KBO_ATTR, g.open);
     if (wasShown !== show) {
       setAttr(BAR_HIDE_ATTR, show);
       rlog(`kb bar-hide=${show ? 1 : 0}`);
@@ -164,8 +167,8 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
     // 停了就不再盯：写到根节点的四样（--vh-gap、--kb、data-kbo、data-kbhide）一起拿掉，记的值清零，再订阅时照量出来的重新写
     height = kbVar = gapVar = 0;
     reported = kboVar = false;
-    for (const v of [GAP_VAR, '--kb']) setVar(v, 0);
-    for (const a of ['data-kbo', BAR_HIDE_ATTR]) setAttr(a, false);
+    for (const v of [GAP_VAR, KB_VAR]) setVar(v, 0);
+    for (const a of [KBO_ATTR, BAR_HIDE_ATTR]) setAttr(a, false);
     doc = null;
     vv = null;
   };
