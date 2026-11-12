@@ -9,8 +9,11 @@
 // 不让 iOS 为了露出输入框去滚页面。iPhone 上文字输入框聚焦时，系统一律把它滚到键盘上方可视区的中间
 // （WebKit _zoomToFocusRect：iPhone 文字框 forceScroll，不做“看得见就不滚”的判断），滚过以后固定容器里的光标和画面差出一截
 // （WebKit bug 176896、300690），只有 focus({ preventScroll: true }) 让它整个跳过（_zoomToRevealFocusedElement 第一句）。
-// 取舍（要负责人真机看了再定）：输入框没聚焦时手指点一下，光标一律放到末尾，不是手指点的位置；已经聚焦着点，照原生行为。
-// 拖动（挪了 TAP_SLOP_PX 以上）、长按（按住 TAP_HOLD_MS 以上）不拦，照原生行为。页面里普通的输入框（编辑页等）照旧要系统滚出来，不用这些
+// 取舍（负责人 11-12 preview.278 真机看过，没有异议）：输入框没聚焦时手指点一下，光标一律放到末尾，不是手指点的位置；已经聚焦着点，照原生行为。
+// 拖动（挪了 TAP_SLOP_PX 以上）、长按（按住 TAP_HOLD_MS 以上）不拦，照原生行为。页面里普通的输入框（编辑页等）照旧要系统滚出来，不用这些。
+// keepFieldFocus：贴底浮条的 form 一律挂 onMouseDown={keepFieldFocus}（台账 Q-25）。浮条里按下的不是输入框本身（按钮等），拦掉 mousedown 的默认，
+// 输入框不失焦：iOS 手指抬起后先派发 mousedown、让输入框失焦（键盘开始收、浮条往下挪），再派发 click，click 就落到浮条下面的空白处，按钮第一下点不动。
+// 只拦 mousedown（失焦是 mousedown 的默认动作）：拦 touchstart，iOS 连 click 都不发；拦 pointerdown 管不到失焦。要收键盘的按钮（打字条“收起”）自己 blur
 import { isStandalone } from './env.ts';
 import { rlog } from './run-log-api.ts';
 import { fullHeight, GAP_MAX_PX, TOL_PX, viewportGeom, type Geom } from './viewport-geom.ts';
@@ -274,6 +277,14 @@ export function inPlaceTouchEnd(e: InPlaceTouch): void {
   focusInPlace(el, 'tap');
   const end = el.value.length;
   el.setSelectionRange(end, end);
+}
+
+/**
+ * 贴底浮条的 form 挂 onMouseDown（文件头不变量，台账 Q-25）：按下的不是输入框本身，就拦掉默认，焦点留在输入框里、键盘不收、按钮不挪；
+ * 按在输入框上照原生行为（放光标、选字）。只要 target 和 preventDefault，React 的鼠标事件、原生 MouseEvent 都合用
+ */
+export function keepFieldFocus(e: { readonly target: EventTarget | null; preventDefault(): void }): void {
+  if (!fieldOf(e.target)) e.preventDefault();
 }
 
 const GESTURES = ['gesturestart', 'gesturechange', 'gestureend'] as const;

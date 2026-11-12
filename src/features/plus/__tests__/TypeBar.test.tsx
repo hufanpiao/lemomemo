@@ -239,6 +239,29 @@ describe('打字条', () => {
     expect(screen.queryByTestId('type-part-saved'), '一改字就收起').toBeNull();
   });
 
+  it('Q-25：浮条里按钮上按下（记下、展开编辑、收起、确认行）拦掉 mousedown 默认，输入框不失焦；输入框上按下不拦', async () => {
+    const { input } = setup();
+    fireEvent.change(input, { target: { value: '10月30号下午两点和客户开会' } });
+    // fireEvent 返回 false = 默认被拦掉
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: '记下' })), '记下').toBe(false);
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: '展开编辑' })), '展开编辑').toBe(false);
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: '收起' })), '收起').toBe(false);
+    expect(fireEvent.mouseDown(input), '输入框').toBe(true);
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+    });
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: '明年（2027/10/30）' })), '确认行').toBe(false);
+  });
+
+  it('Q-25：“收起”照旧收键盘（form 拦了按钮上的失焦，close 自己先 blur），再留草稿关掉', async () => {
+    const { input, onClose } = setup();
+    fireEvent.change(input, { target: { value: '买' } });
+    expect(document.activeElement).toBe(input);
+    fireEvent.click(screen.getByRole('button', { name: '收起' }));
+    expect(document.activeElement, '输入框失焦，键盘收起').not.toBe(input);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
   it('R-353：“展开编辑”带上已打的字和选中的日子', () => {
     const { input, onExpand } = setup({ day: '2026-11-20' });
     fireEvent.change(input, { target: { value: '开会' } });

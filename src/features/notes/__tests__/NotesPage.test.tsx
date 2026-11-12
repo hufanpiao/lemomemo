@@ -259,6 +259,17 @@ describe('视觉验收 A1 补的几处', () => {
     expect(document.activeElement).toBe(el);
   });
 
+  it('Q-25：输入行里“记下”“图片”上按下拦掉 mousedown 默认（输入框不失焦，键盘不收，第一下就点得动）；输入框上按下不拦', async () => {
+    await boot();
+    open();
+    const el = screen.getByTestId('notes-input');
+    fireEvent.change(el, { target: { value: '银杏' } });
+    // fireEvent 返回 false = 默认被拦掉
+    expect(fireEvent.mouseDown(screen.getByTestId('notes-add')), '记下').toBe(false);
+    expect(fireEvent.mouseDown(screen.getByTestId('notes-img')), '图片').toBe(false);
+    expect(fireEvent.mouseDown(el), '输入框').toBe(true);
+  });
+
   it('分类色点：categories.color 是 p4 画 var(--p4s)，没设颜色不画点（卡片和胶囊都一样）', async () => {
     const b = await boot();
     await act(async () => {

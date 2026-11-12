@@ -13,7 +13,8 @@
 //   选了图：先用输入框里的字（可以空）新建一条随手记，再把图插进去（S3，ui/NoteImages.tsx）。电脑上输入行铺满内容栏、左右各留 22px（DK.notes）
 // • 插图（S3）：瀑布流卡片顶部放第一张（16:10、右上角“+N”）；插入、上传失败出提示条，空间满了的带“最近删除”入口
 // • 底栏 / 侧栏的“＋”在这一页直接把光标放进输入行（R-380，线框“低 1”）：输入行挂着时往 kit/state/new-item.ts 的 notesInput 登记聚焦，app/App.tsx 调它
-// • 输入行是贴底浮条（position: fixed），聚焦一律原地聚焦（台账 Q-8，platform/viewport.ts 文件头）：“＋”调 focusInPlace，输入框挂 inPlaceTouchStart / inPlaceTouchEnd
+// • 输入行是贴底浮条（position: fixed），聚焦一律原地聚焦（台账 Q-8，platform/viewport.ts 文件头）：“＋”调 focusInPlace，输入框挂 inPlaceTouchStart / inPlaceTouchEnd；
+//   form 挂 onMouseDown={keepFieldFocus}（台账 Q-25）：点“记下”“图片”不让输入框失焦，按钮第一下就点得动，记下后键盘不收、接着记（和回车一样）
 // • 这一批不做：隐私记那一行（B5）、合并分类提示（S7）
 // • 插图（S3）：卡片顶上放第一张图（多张标“+N”），列表行有图时在“⋯”前放缩略图；输入行只有“图片”（拍照在编辑页）
 // • 只读行（S12，R-148，TC-B4-09；照待办页）：带认不出的值的行（core 的 readonlyIds）标“要新版本”（单独一行：瀑布流在正文下、底行上，列表在摘要行下），菜单里的“删除”变淡；点开、删除统一拦下
@@ -29,7 +30,7 @@ import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { notesInput } from '../../../kit/state/new-item.ts';
-import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart } from '../../../platform/viewport.ts';
+import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, keepFieldFocus } from '../../../platform/viewport.ts';
 import { ReadonlyMark, ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
 import { useEditT } from '../../../kit/components/EditNotices.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
@@ -320,7 +321,8 @@ function InputRow({ up, onAdd, onImage }: { up: boolean; onAdd(text: string): Pr
     if (!(await onImage(text, file))) setDraft(text);
   };
   return (
-    <form className={up ? `${styles.inrow} ${styles.inrowUp}` : styles.inrow} onSubmit={(e) => void submit(e)} data-testid="notes-input-row">
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- mousedown 只拦失焦（台账 Q-25，platform/viewport.ts 的 keepFieldFocus），不是交互，键盘操作不受影响
+    <form className={up ? `${styles.inrow} ${styles.inrowUp}` : styles.inrow} onSubmit={(e) => void submit(e)} onMouseDown={keepFieldFocus} data-testid="notes-input-row">
       <input
         ref={input}
         className={styles.input}

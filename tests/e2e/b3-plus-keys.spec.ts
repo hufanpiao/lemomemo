@@ -2,6 +2,7 @@
 // • 打字条那一块下载不到（离线冷启动又没缓存）：点“＋”显示“准备中”，不换页、不是点了没反应；“关闭”能关掉
 //   （拦掉 TypeBar、TypeBarPreload 两块的请求模拟；SW 也拦掉，免得它从缓存里给）
 // • Ctrl+N 打开打字条（焦点在输入框里）；记下一条以后打字条自动收起（R-392），这时按 Ctrl+Z 撤销这一批，提示条收起
+// • 点“＋”冷启动当场聚焦（Q-24）、原地聚焦（Q-8）、贴底浮条按钮按下不让输入框失焦（Q-25）
 import { expect, test } from './session-fixture.ts';
 
 const TYPEBAR = /\/TypeBar(Preload)?-[^/]*\.js$/;
@@ -101,6 +102,44 @@ test.describe('打字条原地聚焦（Q-8）', () => {
     await expect(page.getByTestId('notes-input')).toBeFocused();
     expect(await page.evaluate(() => (window as unknown as { __focusOpts: string[] }).__focusOpts)).toEqual(['preventScroll=true']);
     await expect(page.getByTestId('type-bar')).toHaveCount(0);
+  });
+});
+
+// Q-25（负责人 preview.277“记下”第一下点不动，运行日志：up button → focusout 输入框 → click 落到空白处）：
+// iOS 手指抬起后先派 mousedown 让输入框失焦、键盘收、浮条往下挪，click 才到，按钮已不在手指下。两条浮条的 form 拦按钮上的 mousedown 默认（keepFieldFocus）。
+// Chromium 不挪浮条，这里守“按下按钮那一刻焦点还在输入框”和“这一条确实记下了”
+test.describe('贴底浮条按钮第一下点得动（Q-25）', () => {
+  test.use({ loggedIn: true, viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
+
+  test('随手记：输入框聚焦着点“记下”，焦点一直在输入框（键盘不收、接着记），这一条记下了', async ({ page }) => {
+    await page.goto('/app/#/notes');
+    const input = page.getByTestId('notes-input');
+    await input.click();
+    await input.fill('首尔林银杏黄了');
+    await expect(input).toBeFocused();
+    const add = page.getByTestId('notes-add');
+    await add.hover();
+    await page.mouse.down();
+    await expect(input, '按下“记下”时输入框没失焦').toBeFocused();
+    await page.mouse.up();
+    await expect(page.getByTestId(/^notes-card-/).first()).toContainText('首尔林银杏黄了');
+    await expect(input).toHaveValue('');
+    await expect(input, '记下以后焦点还在输入框').toBeFocused();
+  });
+
+  test('打字条：输入框聚焦着点“记下”，按下时焦点还在输入框；松开记下这一条，照旧自动收起', async ({ page }) => {
+    await page.goto('/app/#/todos');
+    await expect(page.getByTestId('todos')).toBeVisible();
+    await page.getByTestId('tabbar-add').click();
+    const input = page.getByTestId('type-input');
+    await expect(input).toBeFocused({ timeout: 10_000 });
+    await input.fill('买牛奶');
+    await page.getByTestId('type-bar').getByRole('button', { name: '记下' }).hover();
+    await page.mouse.down();
+    await expect(input, '按下“记下”时输入框没失焦').toBeFocused();
+    await page.mouse.up();
+    await expect(page.getByTestId('type-notice')).toContainText('买牛奶');
+    await expect(page.getByTestId('type-bar'), '记下后照旧自动收起（R-392）').toHaveCount(0);
   });
 });
 

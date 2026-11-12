@@ -1,7 +1,8 @@
 // 贴底浮条输入框原地聚焦（platform/viewport.ts 的 focusInPlace、inPlaceTouchStart / inPlaceTouchEnd；台账 Q-8）：
-// 没聚焦时的一下“点”拦掉默认、原地聚焦（focus 带 preventScroll）、光标放末尾；拦不了、已经聚焦、拖动、长按都不管，照原生行为
+// 没聚焦时的一下“点”拦掉默认、原地聚焦（focus 带 preventScroll）、光标放末尾；拦不了、已经聚焦、拖动、长按都不管，照原生行为。
+// keepFieldFocus（台账 Q-25）：浮条里按钮上的 mousedown 拦掉默认（输入框不失焦），输入框上的不拦
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, TAP_HOLD_MS, TAP_SLOP_PX, type InPlaceTouch } from '../viewport.ts';
+import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, keepFieldFocus, TAP_HOLD_MS, TAP_SLOP_PX, type InPlaceTouch } from '../viewport.ts';
 
 const mkInput = (value = '买牛奶'): HTMLInputElement => {
   const el = document.createElement('input');
@@ -103,5 +104,49 @@ describe('贴底浮条输入框原地聚焦（Q-8）', () => {
     const again = touch(el, 100, 200, 1100);
     inPlaceTouchEnd(again);
     expect(again.prevented).toBe(false);
+  });
+});
+
+describe('keepFieldFocus（台账 Q-25）', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+  /** 在 el 上按下鼠标（真的 MouseEvent，冒泡到挂着 keepFieldFocus 的 form）；返回有没有被拦 */
+  const down = (el: Element): boolean => {
+    const form = el.closest('form');
+    form?.addEventListener('mousedown', keepFieldFocus);
+    const e = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    el.dispatchEvent(e);
+    form?.removeEventListener('mousedown', keepFieldFocus);
+    return e.defaultPrevented;
+  };
+  const mkBar = (): { form: HTMLFormElement; field: HTMLInputElement; button: HTMLButtonElement; label: HTMLSpanElement } => {
+    const form = document.createElement('form');
+    const field = document.createElement('input');
+    const button = document.createElement('button');
+    const label = document.createElement('span');
+    button.append(label);
+    form.append(field, button);
+    document.body.append(form);
+    return { form, field, button, label };
+  };
+
+  it('按钮上按下（包括按钮里的字）：拦掉默认，输入框不失焦', () => {
+    const { button, label } = mkBar();
+    expect(down(button)).toBe(true);
+    expect(down(label)).toBe(true);
+  });
+
+  it('输入框上按下：不拦，照原生行为放光标、选字（文本框同样）', () => {
+    const { form, field } = mkBar();
+    expect(down(field)).toBe(false);
+    const area = document.createElement('textarea');
+    form.append(area);
+    expect(down(area)).toBe(false);
+  });
+
+  it('浮条里的空白处按下也拦（不是输入框本身就拦，焦点留在输入框）', () => {
+    const { form } = mkBar();
+    expect(down(form)).toBe(true);
   });
 });
