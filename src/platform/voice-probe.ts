@@ -16,7 +16,7 @@ export const PROBE_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'] a
 export type ProbeModel = (typeof PROBE_MODELS)[number];
 /** 显示 isTypeSupported 的几种 */
 export const PROBE_TYPES = ['audio/mp4', 'audio/aac', 'audio/webm', 'audio/webm;codecs=opus', 'audio/mpeg', 'audio/ogg;codecs=opus'] as const;
-/** 一段最长录多久（同正式录音的 50 秒） */
+/** 一段最长录多久：50 秒（正式录音是 60 秒、50 秒起倒数，见 features/plus/data/record-logic.ts 的 REC_MAX_MS、REC_COUNTDOWN_FROM_MS） */
 export const PROBE_MAX_MS = 50_000;
 export const PROBE_UPLOAD_TIMEOUT_MS = 30_000;
 /** 服务器收的上限（_preview/voice-probe/handler.ts ⑧：超了回 413，两边都用 shared 的 AI_AUDIO_MAX_BYTES）；iPhone 的 AAC 录满 50 秒可能超 */

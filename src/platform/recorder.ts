@@ -1,4 +1,4 @@
-// 录音：拿麦克风 → MediaRecorder 开录 → 停下交出一段只在内存里的录音。MediaRecorder、getUserMedia 只在这里用（A13）
+// 录音：拿麦克风 → MediaRecorder 开录 → 停下交出一段只在内存里的录音。MediaRecorder、getUserMedia 按 A13 只准写在 platform：正式录音用这里，开发用的录音探测页用 voice-probe.ts
 // • start 事件到了才记起点、才告诉调用方“开始了”：调用方到这时才提示可以说话，早了句首会被切掉
 // • 拿到流以后不管哪一步失败或取消，都先停录音器、关轨道、清计时器再返回（系统的录音指示不能一直亮）
 // • 取消只有 signal 这一套，从调用到交出结果之前一直有效
