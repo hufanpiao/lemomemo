@@ -4,7 +4,7 @@
 // • 原来在 src/features/plus/data/quota.ts，11-07 挪到这里，加号页（FA-2）和设置 › 语音与 AI（FA-4）都从这里引。
 // • 和服务器口径一致由 tests/shared/ai-quota.test.ts 钉住（跨夏令时切换的那几天逐小时比）。
 // 纯 TS，只引 shared/core（前端、Deno 都能引）。
-import { addDays, minOfDay, msAt, todayOf, type DateStr } from '../core/date.ts';
+import { addDays, fmtHm, minOfDay, msAt, todayOf, type DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
 
 export const QUOTA_TZ: Tz = 'America/Los_Angeles';
@@ -17,6 +17,5 @@ export const quotaResetAt = (now: number): number => msAt(addDays(quotaDay(now),
 
 /** 恢复时刻在 tz 里的“HH:MM” */
 export function quotaResetClock(now: number, tz: Tz): string {
-  const m = minOfDay(quotaResetAt(now), tz);
-  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  return fmtHm(minOfDay(quotaResetAt(now), tz));
 }

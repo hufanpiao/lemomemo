@@ -6,7 +6,7 @@
 //   全天事项不算“正在进行”、不进时间轴（仍在今天列表里）
 // • 时间窗 kWin：照视觉稿 kWin() 逐条移植（分钟，相对今天 0 点；跨到明天的事项可以 > 1440）
 // • 没赶上：没完成、截止日早于今天的待办（逾 N 天）；今天有截止时刻、已经过了的也算（逾 0 天，界面写“已过 17:00”）
-import { addDays, diffDays, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { addDays, diffDays, fmtHm, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
@@ -20,10 +20,6 @@ const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-const hmOf = (min: number): string => {
-  const m = ((min % 1440) + 1440) % 1440;
-  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-};
 
 export interface EventOcc {
   kind: 'event';
@@ -59,7 +55,7 @@ export function eventOcc(r: Row, current: Tz): EventOcc | null {
     return null;
   }
   const dur = typeof r['duration_min'] === 'number' && r['duration_min'] >= 1 && r['duration_min'] <= 1440 ? r['duration_min'] : 60;
-  const localTime = hmOf(minOfDay(start, current));
+  const localTime = fmtHm(minOfDay(start, current));
   const origin = tz !== current && localTime !== time ? { tz, time } : null;
   return { ...base, date: todayOf(start, current), allDay: false, start, end: start + dur * MIN, time: localTime, origin };
 }

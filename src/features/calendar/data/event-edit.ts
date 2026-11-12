@@ -6,7 +6,7 @@
 // • 改了什么就只写什么（patchOf）；改了标题且简称是 AI 起的，同一个 patch 清掉 short、short_by（5.12 L3）
 // • 带不带提醒：shared/logic/remind.ts 的 remindAtOf（全天日程那一支 shared 还没写，返回 null，等后续一段补）
 // 纯 TS：不准 import React（A1）
-import { minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { fmtHm, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { isValidTz, type Tz } from '../../../../shared/core/tz.ts';
 import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
 import { ALL_DAY_LIVE_UNTIL, remindAtOf } from '../../../../shared/logic/remind.ts';
@@ -85,8 +85,7 @@ export function durationOf(start: string, end: string): number {
 
 /** 开始时刻 + 时长 → 结束时刻 HH:MM（墙上时间，跨天就绕回） */
 export function endOf(start: string, durationMin: number): string {
-  const m = (parseHm(start) + durationMin) % DAY_MIN;
-  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  return fmtHm((parseHm(start) + durationMin) % DAY_MIN);
 }
 
 /** 可选的时区：Intl 支持的全部，加上原来存的值（不在表里也列出），去重排序 */
@@ -120,8 +119,7 @@ export function tzAllowed(tz: Tz, keep: Tz | null | readonly (Tz | null)[], list
 export function localOf(form: EventForm, current: Tz): { date: DateStr; time: string } | null {
   if (form.time === null || form.tz === null || form.tz === current || form.date === '') return null;
   const ms = msAt(form.date, parseHm(form.time), form.tz);
-  const m = minOfDay(ms, current);
-  const time = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const time = fmtHm(minOfDay(ms, current));
   const date = todayOf(ms, current);
   return date === form.date && time === form.time ? null : { date, time };
 }
