@@ -98,7 +98,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: radial-gradient(120% 90% at 22% -30%, var(--g-hi) 0 38%, transparent 60%);
+  background: var(--g-sheen-img);
   opacity: var(--g-sheen);
 }
 

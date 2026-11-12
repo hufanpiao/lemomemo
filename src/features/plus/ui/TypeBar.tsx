@@ -1,6 +1,6 @@
 // 打字条（B3 任务单 S2、FA-2；定稿线框“点一下＋打字”；R-353）
 // • 贴键盘上沿，打开就聚焦；边打边预览“会记成这样”；回车或“记下”保存
-// • 下滑把手 / “收起” / Esc：已打的字留草稿再关；“展开编辑”：把字和日历页选中的那天交给调用方开完整新建页
+// • 下滑把手 / “收起” / Esc：已打的字留草稿再关（“已记下”提示条还在时只收打字条、提示条留着，负责人 11-12 定）；“展开编辑”：把字和日历页选中的那天交给调用方开完整新建页
 // • 过去的月日：出确认行“补记 / 记到”，选了才保存；关掉确认行时输入条里只留等确认那条的原文（同一句里已经存了的去掉），
 //   去不干净时原话整句留着，输入条上方提示“同一句里其他几条已经记下了”（主持人 11-07 定）
 // • 打字条开着时，“已记下 · 撤销”提示条抬到打字条上方（负责人 11-11 选“现在就挪到打字条上方”：原来两者都贴 --dock-bottom，提示条被打字条压住、点不到）：
@@ -11,19 +11,20 @@
 // • 保存后的“已记下 · 撤销”用 kit 的 UndoToast（和撤销条同一套磨砂，R-122）；提示条还在时 Ctrl+Z 撤销这一批（S24），
 //   焦点在有字的输入框里时让给浏览器撤销打字
 // • 点页面空白处（Q-10 / R-390，11-11 负责人“没有输入内容，点空白处的话那个输入框应该直接消失”；已打字时选“保留输入框不动”）：
+//   打字条开着时页面整个盖在后面那层液态玻璃（Mist，R-399）下面，“点空白”就是点这一层（它自己的 click，不另挂全局监听）：
 //   没打字（去掉空白后为空）→ 等同点“收起”，打字条直接消失（负责人弹窗定“照原话直接消失”）；打了字 → 只让输入框失焦收键盘，打字条和字都留着。
 //   “已记下 · 撤销”提示条开着时也照样收起打字条：提示条挪到打字条外面单独留着（folded：只是不画打字条，状态还在），
 //   照常显示满 8 秒、仍可撤销，位置在 --dock-bottom（底栏上方；键盘已收起，不冲突）；提示条没了（到时、撤销、关闭）才真正 onClose。
 //   收起后再点“＋”：App 每次打开带新的 opened 序号，序号变了就重新画出打字条并聚焦。
-//   “点”= 按下到抬起挪动不到 TAP_SLOP_PX（滚动、拖动不算）；按在打字条、提示条里，或按钮、链接、输入框、底栏、“＋”等控件上都不算空白，照它们原来的行为。
+//   用 click 不用 pointerup：click 是一次点按的最后一个事件，处理时这一层还在，卸掉以后不会再有事件落到后面看不清的按钮上（不点穿）；
+//   拖动、滚动浏览器本来就不发 click。底栏、“＋”、提示条、打字条都在这一层上面，点它们照原来的行为
 //   确认行（补记 / 记到）、正在整理时只收键盘不收起：手上还有没落定的内容（原话、等确认那条），按负责人“有字时保留输入框不动”处理
 // • 聚焦一律原地聚焦（台账 Q-8，platform/viewport.ts 文件头）：iPhone 上系统为了露出输入框会把页面滚一段，滚过以后光标画到“展开编辑”左边；
 //   打开时 focusInPlace，输入框挂 inPlaceTouchStart / inPlaceTouchEnd（没聚焦时的一下点改成原地聚焦）。打字条贴键盘照旧靠 --dock-bottom
 // • form 挂 onMouseDown={keepFieldFocus}（台账 Q-25）：按钮上按下不让输入框失焦，键盘不收、按钮不挪，“记下”等第一下就点得动；
 //   “收起”（close）自己先 blur 收键盘，“展开编辑”关掉打字条、输入框跟着卸掉，记下后自动收起照旧 blur
 // • 打字条后面的整页液态玻璃（R-399，负责人 11-11“按+出现的输入框之外的后面背景全做成液态模糊玻璃”，11-12 定中档 16px、点模糊处收起）：
-//   打字条画着就画这一层，收起（folded）或关掉就没；样式、层级在 TypeBar.module.css 的 .mist。
-//   这一层接住点按：点它就是“点页面空白处”（上面 Q-10 那套：没打字收起、打了字只收键盘），不会点穿到后面看不清的按钮；
+//   打字条画着就画这一层，收起（folded）或关掉就没；样式、层级在 TypeBar.module.css 的 .mist；点它见上面“点页面空白处”。
 //   出现、消失各记一行运行日志（只记状态和实际生效的滤镜）
 // • 文字一律经 t()（A20）；按钮用 kit 的 FormButton，输入框用 kit Form 的 .input（G11 输入框令牌、触屏 16px）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type FormEvent, type KeyboardEvent, type PointerEvent } from 'react';
@@ -34,7 +35,7 @@ import form from '../../../kit/components/Form.module.css';
 import { useKeys } from '../../../kit/hooks/useKeys.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, keepFieldFocus, TAP_SLOP_PX } from '../../../platform/viewport.ts';
+import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, keepFieldFocus } from '../../../platform/viewport.ts';
 import { usePlusLine, usePlusT } from '../hooks/usePlusT.ts';
 import { useTypeBar, type CallAi, type TypeBarState, type Writer } from '../hooks/useTypeBar.ts';
 import { ConfirmRow } from './ConfirmRow.tsx';
@@ -48,16 +49,6 @@ export const LIFT_GAP_PX = 8;
 /** 手上还有没落定的内容（打了字、确认行在问、正在整理）：点空白、记下后都只收键盘，不收起打字条 */
 const unsettled = (s: TypeBarState): boolean => s.text.trim() !== '' || s.asking !== null || s.status === 'organizing';
 
-/** 不算“空白”的东西：可点、可输入的控件，底栏、“＋”，“已记下”提示条 */
-const NOT_BLANK =
-  'button, a[href], input, textarea, select, label, summary, [contenteditable=""], [contenteditable="true"], [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="switch"], [role="menuitem"], [role="option"], [role="slider"], [data-testid="tabbar"], [data-testid="tabbar-add"], [data-testid="type-notice"]';
-
-/** 这一下是不是点在页面空白处（Q-10）：不在打字条里、也不在任何控件上 */
-export function isBlankTap(target: EventTarget | null, bar: Element | null): boolean {
-  if (!(target instanceof Element)) return false;
-  if (bar?.contains(target)) return false;
-  return target.closest(NOT_BLANK) === null;
-}
 
 /** 提示条跟着打字条顶端走：量打字条高度写进外壳的 --type-lift；收起了就清掉（回到底栏上方） */
 function useLift(bar: RefObject<HTMLFormElement | null>, folded: boolean): RefObject<HTMLDivElement | null> {
@@ -108,14 +99,15 @@ function hasTyping(el: EventTarget | null): boolean {
 }
 
 /** 打字条后面的整页玻璃层（R-399）：画出来记一行 on、卸掉记一行 off；真机上“没糊”时先看这里生效的是哪个滤镜（none = 走了半透明纯色的后备） */
-function Mist() {
+function Mist({ onTap }: { onTap(): void }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const cs = ref.current ? getComputedStyle(ref.current) : null;
     rlog(`typebar mist on fx=${cs?.getPropertyValue('backdrop-filter') || cs?.getPropertyValue('-webkit-backdrop-filter') || 'none'}`);
     return () => rlog('typebar mist off');
   }, []);
-  return <div ref={ref} className={styles.mist} aria-hidden="true" data-testid="type-mist" />;
+  // 只接手指和鼠标的点；键盘用 Esc 收起（输入框 onKeyDown），所以这一层不进读屏
+  return <div ref={ref} className={styles.mist} onClick={onTap} aria-hidden="true" data-testid="type-mist" />;
 }
 
 export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit, opened, onClose }: TypeBarProps) {
@@ -137,12 +129,14 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
   useLayoutEffect(() => {
     if (!folded) focusInPlace(input.current, 'open');
   }, [folded]);
-  // 点页面空白处（Q-10）：没打字就收起，打了字只收键盘。监听挂 document 捕获阶段，读最新状态用 ref
   const bar = useRef<HTMLFormElement>(null);
-  /** 收起：先收键盘（form 拦了按钮上的失焦，Q-25），已打的字留草稿再关（“收起”、Esc、下滑、点空白都走这一个） */
+  /** 收起（“收起”、Esc、下滑、点模糊处、记下后自动收起都走这一个；负责人 11-12 选“统一成留着提示条”）：先收键盘（form 拦了按钮上的失焦，Q-25）；
+   *  “已记下 · 撤销”提示条还在：只收打字条，提示条留满 8 秒、仍可撤销，字留在状态里，提示条没了由下面的 effect 留草稿再真正关；
+   *  没有提示条：已打的字留草稿再关 */
   const close = (): void => {
     input.current?.blur();
-    void s.stash().then(onClose);
+    if (s.notice) setFolded();
+    else void s.stash().then(onClose);
   };
   const live = useRef({ s, close });
   live.current = { s, close };
@@ -155,37 +149,8 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
   useEffect(() => {
     const cur = live.current.s;
     if (!cur.notice || unsettled(cur)) return;
-    input.current?.blur();
-    setFolded();
-  }, [s.notice, setFolded]);
-  useEffect(() => {
-    let from: { x: number; y: number; blank: boolean } | null = null;
-    const down = (e: globalThis.PointerEvent): void => {
-      from = e.isPrimary !== false ? { x: e.clientX, y: e.clientY, blank: isBlankTap(e.target, bar.current) } : null;
-    };
-    const up = (e: globalThis.PointerEvent): void => {
-      const f = from;
-      from = null;
-      if (!f?.blank || e.isPrimary === false || Math.hypot(e.clientX - f.x, e.clientY - f.y) >= TAP_SLOP_PX) return;
-      const { s: cur, close: shut } = live.current;
-      if (unsettled(cur)) input.current?.blur();
-      else if (cur.notice) {
-        input.current?.blur();
-        setFolded();
-      } else shut();
-    };
-    const cancel = (): void => {
-      from = null;
-    };
-    document.addEventListener('pointerdown', down, true);
-    document.addEventListener('pointerup', up, true);
-    document.addEventListener('pointercancel', cancel, true);
-    return () => {
-      document.removeEventListener('pointerdown', down, true);
-      document.removeEventListener('pointerup', up, true);
-      document.removeEventListener('pointercancel', cancel, true);
-    };
-  }, [setFolded]);
+    live.current.close();
+  }, [s.notice]);
   useKeys({
     'mod+z': (e) => {
       if (!s.notice) return false;
@@ -195,6 +160,11 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     },
   });
 
+  /** 点后面那层液态玻璃 = 点页面空白处（Q-10）：手上有没落定的只收键盘，别的等同“收起” */
+  const tapMist = (): void => {
+    if (unsettled(s)) input.current?.blur();
+    else close();
+  };
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     void s.submit();
@@ -218,52 +188,54 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
 
   return (
     <>
-      {folded ? null : <Mist />}
       {folded ? null : (
-        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- mousedown 只拦失焦（台账 Q-25，platform/viewport.ts 的 keepFieldFocus），不是交互，键盘操作不受影响
-        <form ref={bar} className={styles.bar} onSubmit={onSubmit} onMouseDown={keepFieldFocus} aria-label={t('plus.type.label', {})} data-testid="type-bar">
-          <div className={styles.grip} onPointerDown={down} onPointerUp={up} aria-hidden="true" />
-          {s.asking ? (
-            <ConfirmRow item={s.asking} onChoose={(c) => void s.choose(c)} onDismiss={s.dismissConfirm} />
-          ) : (
-            <>
-              {s.partSaved ? (
-                <div className={styles.preview} role="status" data-testid="type-part-saved">{t('plus.type.partSaved', {})}</div>
-              ) : null}
-              <div className={styles.row}>
-                <input
-                  ref={input}
-                  className={form.input}
-                  value={s.text}
-                  onChange={(e) => s.setText(e.target.value)}
-                  onKeyDown={onKey}
-                  onTouchStart={inPlaceTouchStart}
-                  onTouchEnd={inPlaceTouchEnd}
-                  placeholder={t('plus.type.ph', {})}
-                  aria-label={t('plus.type.label', {})}
-                  enterKeyHint="done"
-                  data-testid="type-input"
-                />
-                <FormButton type="submit" variant="primary" disabled={s.text.trim() === '' || s.status === 'organizing'}>
-                  {t('plus.type.save', {})}
-                </FormButton>
-              </div>
-              <div className={styles.preview} aria-live="polite" data-testid="type-preview">
-                {first ? t('plus.type.preview', { text: s.preview.length > 1 ? `${previewText} · ${t('plus.type.more', { n: s.preview.length - 1 })}` : previewText }) : ''}
-              </div>
-              <div className={styles.row}>
-                <FormButton type="button" variant="ghost" onClick={() => {
-                  s.dropDraft();
-                  onExpand(s.text, day);
-                }}>{t('plus.type.expand', {})}</FormButton>
-                <FormButton type="button" variant="ghost" onClick={close}>{t('plus.type.close', {})}</FormButton>
-              </div>
-            </>
-          )}
-          {s.error ? (
-            <div className={styles.err} role="alert">{t(s.error === 'nothing' ? 'plus.notice.nothing' : 'plus.notice.notSaved', {})}</div>
-          ) : null}
-        </form>
+        <>
+          <Mist onTap={tapMist} />
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- mousedown 只拦失焦（台账 Q-25，platform/viewport.ts 的 keepFieldFocus），不是交互，键盘操作不受影响 */}
+          <form ref={bar} className={styles.bar} onSubmit={onSubmit} onMouseDown={keepFieldFocus} aria-label={t('plus.type.label', {})} data-testid="type-bar">
+            <div className={styles.grip} onPointerDown={down} onPointerUp={up} aria-hidden="true" />
+            {s.asking ? (
+              <ConfirmRow item={s.asking} onChoose={(c) => void s.choose(c)} onDismiss={s.dismissConfirm} />
+            ) : (
+              <>
+                {s.partSaved ? (
+                  <div className={styles.preview} role="status" data-testid="type-part-saved">{t('plus.type.partSaved', {})}</div>
+                ) : null}
+                <div className={styles.row}>
+                  <input
+                    ref={input}
+                    className={form.input}
+                    value={s.text}
+                    onChange={(e) => s.setText(e.target.value)}
+                    onKeyDown={onKey}
+                    onTouchStart={inPlaceTouchStart}
+                    onTouchEnd={inPlaceTouchEnd}
+                    placeholder={t('plus.type.ph', {})}
+                    aria-label={t('plus.type.label', {})}
+                    enterKeyHint="done"
+                    data-testid="type-input"
+                  />
+                  <FormButton type="submit" variant="primary" disabled={s.text.trim() === '' || s.status === 'organizing'}>
+                    {t('plus.type.save', {})}
+                  </FormButton>
+                </div>
+                <div className={styles.preview} aria-live="polite" data-testid="type-preview">
+                  {first ? t('plus.type.preview', { text: s.preview.length > 1 ? `${previewText} · ${t('plus.type.more', { n: s.preview.length - 1 })}` : previewText }) : ''}
+                </div>
+                <div className={styles.row}>
+                  <FormButton type="button" variant="ghost" onClick={() => {
+                    s.dropDraft();
+                    onExpand(s.text, day);
+                  }}>{t('plus.type.expand', {})}</FormButton>
+                  <FormButton type="button" variant="ghost" onClick={close}>{t('plus.type.close', {})}</FormButton>
+                </div>
+              </>
+            )}
+            {s.error ? (
+              <div className={styles.err} role="alert">{t(s.error === 'nothing' ? 'plus.notice.nothing' : 'plus.notice.notSaved', {})}</div>
+            ) : null}
+          </form>
+        </>
       )}
       <div ref={slot} className={styles.noticeSlot}>
         {s.notice ? (

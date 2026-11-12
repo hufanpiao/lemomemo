@@ -80,6 +80,9 @@ html[data-app] {
   --dock-gap: var(--vh-gap, 0px);
   --dock-bottom: max(calc(var(--inset-bottom) + var(--dock-lift) - var(--dock-gap)), var(--kb, 0px));
   --undo-h: 56px;
+
+  /* 液态玻璃斜上方那片光（底栏 kit GlassBar 的 .glass::after、打字条后面那层 TypeBar .mist::after 共用一份）；--g-hi 由皮肤给、同在根节点上，按当前皮肤算 */
+  --g-sheen-img: radial-gradient(120% 90% at 22% -30%, var(--g-hi) 0 38%, transparent 60%);
 }
 
 /* 手机上键盘弹着（<html data-kbo>）：底栏、“＋”藏着，浮条直接贴键盘上沿。iOS 主屏幕版键盘把布局视口本身压矮，--kb 是 0。
