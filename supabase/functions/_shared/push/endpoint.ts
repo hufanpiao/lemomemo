@@ -14,7 +14,7 @@
 // 通过以后发送时**原样用这个字符串**去 fetch，不再拼接、改写（D1-2）。日志只记 reason，不记地址（第五节第 6 条）。
 // 不 import npm 包、不碰 Deno 全局；字符串字面量里不写 http(s):（tests/build/deno-config.test.ts 把它当远程模块），协议用正则判断。
 
-import type { Bytes } from './b64.ts';
+import type { Bytes } from '../b64url.ts';
 
 export const ENDPOINT_MAX = 2048;
 /** 完全相等才认的两个主机 */

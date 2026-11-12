@@ -2,7 +2,7 @@
 // 接收方解密、VAPID 核对用测试开发的替身 tests/fakes/push-service-vapid.ts（和被测代码分开写的一份，C-11；替身只保留这一份）。
 // Node（vitest）和 Deno（deno task test）各跑一遍
 import { describe, expect, it } from 'vitest';
-import { b64uDecode, b64uEncode } from '../../../supabase/functions/_shared/push/b64.ts';
+import { b64uDecode, b64uEncode } from '../../../supabase/functions/_shared/b64url.ts';
 import { checkKeys } from '../../../supabase/functions/_shared/push/endpoint.ts';
 import { encryptPush, encryptWithFixedKeysForTest, padRecord, PAD_TIERS, PushCryptoError } from '../../../supabase/functions/_shared/push/ece.ts';
 import { JWT_TTL_S, loadVapid, VapidSigner } from '../../../supabase/functions/_shared/push/vapid.ts';

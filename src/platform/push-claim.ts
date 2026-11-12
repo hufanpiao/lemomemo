@@ -18,8 +18,8 @@
 //   取 base64url 前 22 个字符；不记 p256dh、auth。摘要算不出来（没有 crypto.subtle）就当没认领、照常认领。
 //   退出、被移除、换账号时 disconnectBrowserPush 删掉这个键（push.ts 的 forgetPushClaim）
 // • 几个标签页同时启动：认领包在 'lemo-push-claim:<user_id>' 锁里一个一个来（安全审查 S2），后来的读到记录就不再调
+import { b64uEncode } from '../../shared/core/b64url.ts';
 import type { NetResult } from '../../shared/schema/sync.ts';
-import { toB64u } from './b64url.ts';
 import { isTauri } from './env.ts';
 import { CLAIM_STORAGE_KEY, subscribePush, type PushSubscribeResult } from './push.ts';
 
@@ -153,7 +153,7 @@ export async function sha256Short(text: string): Promise<string | null> {
   try {
     const subtle = globalThis.crypto?.subtle;
     if (!subtle) return null;
-    return toB64u(new Uint8Array(await subtle.digest('SHA-256', new TextEncoder().encode(text)))).slice(0, 22);
+    return b64uEncode(new Uint8Array(await subtle.digest('SHA-256', new TextEncoder().encode(text)))).slice(0, 22);
   } catch {
     return null;
   }

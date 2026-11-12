@@ -3,7 +3,7 @@
 // • 只发这一次：总超时（record-logic 的 uploadTimeoutMs）、自动重试由调用方管；录音能不能交出（不空、有类型、不超字节上限）由录音器判过，这里不重判
 // • 运行日志只补全局 net 行没有的：字节数、类型、项目个数；不记项目名
 // 纯 TS：不准 import React（A1）
-import { toB64u } from '../../../platform/b64url.ts';
+import { b64uEncode } from '../../../../shared/core/b64url.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { postFn, type FnPostOptions } from './fn-post.ts';
 import type { AiReqCtx } from './type-flow.ts';
@@ -20,7 +20,7 @@ export type CallVoice = (req: AiVoiceReq, signal: AbortSignal) => Promise<unknow
 
 /** X-Projects：项目名（aiReqCtx 已规整）→ JSON → UTF-8 → base64url；一个都没有返回 null（不带这个头）。太长由服务器按项截断，这里不截 */
 export function encodeProjects(projects: readonly string[]): string | null {
-  return projects.length === 0 ? null : toB64u(new TextEncoder().encode(JSON.stringify(projects)));
+  return projects.length === 0 ? null : b64uEncode(new TextEncoder().encode(JSON.stringify(projects)));
 }
 
 export function voiceHeaders(req: AiVoiceReq): Record<string, string> {

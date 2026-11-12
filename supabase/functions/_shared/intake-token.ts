@@ -5,18 +5,14 @@
 // • 格式不对的码不查库（claude-intake 先按 TOKEN_RE 判，省一次查询，也挡住超长的 Authorization）。
 // 纯函数：只用 Web Crypto，Deno 和 Vitest 都能跑；不 import npm 包、不碰 Deno 全局。
 
+import { b64uEncode } from './b64url.ts';
+
 export const TOKEN_PREFIX = 'lmc_';
 export const TOKEN_RE = /^lmc_[A-Za-z0-9_-]{43}$/;
 export const TOKEN_TTL_MS = 180 * 86_400_000;
 
-function b64url(bytes: Uint8Array): string {
-  let s = '';
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 export function randomToken(): string {
-  return TOKEN_PREFIX + b64url(crypto.getRandomValues(new Uint8Array(32)));
+  return TOKEN_PREFIX + b64uEncode(crypto.getRandomValues(new Uint8Array(32)));
 }
 
 export async function tokenHash(token: string): Promise<string> {

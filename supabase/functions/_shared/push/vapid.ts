@@ -12,7 +12,7 @@
 //   Authorization: vapid t=<jwt>, k=<公钥 base64url>。
 // 不 import npm 包、不碰 Deno 全局（环境变量由调用方读好传进来）。
 
-import { b64uDecode, b64uEncode, concatBytes, type Bytes } from './b64.ts';
+import { b64uDecode, b64uEncode, concatBytes, type Bytes } from '../b64url.ts';
 
 export const JWT_TTL_S = 12 * 3600;
 export const JWT_RESIGN_BEFORE_S = 3600;

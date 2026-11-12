@@ -11,7 +11,7 @@ import { createECDH, hkdfSync } from 'node:crypto';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { b64uDecode, b64uEncode } from '../../supabase/functions/_shared/push/b64.ts';
+import { b64uDecode, b64uEncode } from '../../supabase/functions/_shared/b64url.ts';
 import { checkEndpoint } from '../../supabase/functions/_shared/push/endpoint.ts';
 import { encryptWithFixedKeysForTest } from '../../supabase/functions/_shared/push/ece.ts';
 import { loadVapid } from '../../supabase/functions/_shared/push/vapid.ts';

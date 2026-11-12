@@ -13,7 +13,7 @@
 //   整份密文 = 86 + 档位 + 16，最大一档 3174 字节 ≤ 4096。明文 + 1 超过 3072 抛 PushCryptoError('payload_too_large')，标题由 notify-text 截断。
 // 不 import npm 包、不碰 Deno 全局；Node 和 Deno 都能跑。
 
-import { concatBytes, type Bytes } from './b64.ts';
+import { concatBytes, type Bytes } from '../b64url.ts';
 
 /** 补齐后（含 0x02 分隔字节和 0x00）的明文长度只有这三档 */
 export const PAD_TIERS: readonly number[] = [1024, 2048, 3072];

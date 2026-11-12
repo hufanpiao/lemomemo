@@ -13,6 +13,7 @@
 import { aiGate, pacificDate, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
 import type { AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, ParseFail, ParseOk, VoiceInput } from '../_shared/ai/parse-core.ts';
+import { b64uDecode } from '../_shared/b64url.ts';
 import { readCapped } from '../_shared/body.ts';
 
 export const MAX_PROJECTS_HEADER = 4096;
@@ -69,12 +70,13 @@ export { json };
 export function decodeProjects(h: string | null): unknown[] {
   if (!h) return [];
   const cut = h.length > MAX_PROJECTS_HEADER;
-  const s = (cut ? h.slice(0, MAX_PROJECTS_HEADER - (MAX_PROJECTS_HEADER % 4)) : h).replace(/-/g, '+').replace(/_/g, '/');
+  // 严格解码（_shared/b64url.ts）：不是 base64url 的当没给
+  const bytes = b64uDecode(cut ? h.slice(0, MAX_PROJECTS_HEADER - (MAX_PROJECTS_HEADER % 4)) : h);
+  if (!bytes) return [];
   let text: string;
   try {
-    const bin = atob(s + '='.repeat((4 - (s.length % 4)) % 4));
     // 截断处可能切开一个多字节字符：只在截断时放宽（结尾的半个字符变成 U+FFFD，下面连同那一项一起丢掉）
-    text = new TextDecoder('utf-8', { fatal: !cut }).decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+    text = new TextDecoder('utf-8', { fatal: !cut }).decode(bytes);
   } catch {
     return [];
   }

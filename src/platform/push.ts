@@ -6,7 +6,7 @@
 //   旧订阅用新公钥签的推送会被推送服务拒掉，不退订就再也收不到
 // • 订阅结果只交 endpoint、p256dh、auth 三样给调用方；登记到服务器（claim_endpoint）等后端 BE-1 的接口定了再接，这里不发请求
 // • 浏览器权限：pushManager.subscribe({ userVisibleOnly: true }) 自己会弹权限框，要在用户点按里调；已拒绝的直接返回 denied
-import { toB64u } from './b64url.ts';
+import { b64uDecode, b64uEncode } from '../../shared/core/b64url.ts';
 import { buildInfo, isTauri } from './env.ts';
 import { closeAllLocalReminders } from './native-bridge.ts';
 import { CLAIM_STORAGE_KEY, DISCONNECT_PUSH_MS, forgetPushClaim, skipUnsubscribe, strictPermission } from './push-claim-key.ts';
@@ -45,27 +45,12 @@ export interface PushEnv {
   readonly permission?: () => NotificationPermission;
 }
 
-/** base64url（可带可不带 = 补位）→ 字节；不是合法的 base64url 返回 null */
-function fromB64u(s: string): Uint8Array | null {
-  if (!/^[A-Za-z0-9_-]*={0,2}$/.test(s)) return null;
-  const b64 = s.replace(/=+$/, '').replace(/-/g, '+').replace(/_/g, '/');
-  if (b64.length % 4 === 1) return null;
-  try {
-    const bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
-  } catch {
-    return null;
-  }
-}
-
 /** 订阅的一把钥匙 → base64url；没有这把钥匙得空串 */
-const keyB64u = (buf: ArrayBuffer | null): string => (buf ? toB64u(new Uint8Array(buf)) : '');
+const keyB64u = (buf: ArrayBuffer | null): string => (buf ? b64uEncode(buf) : '');
 
 /** 解 VAPID 公钥：65 字节、首字节 0x04 才算数，否则 null */
 export function decodeVapidKey(key: string): Uint8Array<ArrayBuffer> | null {
-  const b = fromB64u(key.trim());
+  const b = b64uDecode(key.trim());
   if (!b || b.length !== VAPID_KEY_BYTES || b[0] !== 0x04) return null;
   const out = new Uint8Array(new ArrayBuffer(VAPID_KEY_BYTES));
   out.set(b);

@@ -1,6 +1,8 @@
-// Web Push 用的 base64url 编解码（RFC 4648 第 5 节，不带 =）。纯函数，不 import npm 包、不碰 Deno 全局；Node 和 Deno 都能跑。
+// base64url 编解码（RFC 4648 第 5 节，不带 =）：服务器函数只用这一份（Web Push、连接码、ai-voice 的 X-Projects）。前端用 shared/core/b64url.ts——
+// 函数这边不能直接引 shared（单测不跑 copy:shared），两份逐字节一样，由 tests/shared/core/b64url.test.ts 拿同一批输入对照钉住。
+// 纯函数，不 import npm 包、不碰运行时的全局对象；Node 和服务器函数都能跑。
 
-/** 底层是 ArrayBuffer 的字节数组（Web Crypto 的参数要这个；Deno 的类型检查比 Node 严） */
+/** 底层是 ArrayBuffer 的字节数组（Web Crypto 的参数要这个；服务器函数那边的类型检查比 Node 严） */
 export type Bytes = Uint8Array<ArrayBuffer>;
 
 const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';

@@ -9,7 +9,7 @@
 //     JWT 的 aud 仍按真实端点的 origin 签（1.5 第 ②）。替身地址怎么认在 stub.ts（本机两条都满足才认；线上设了就是配错）。
 // 不 import npm 包、不碰 Deno 全局；fetch 由调用方注入（测试替换）。
 
-import type { Bytes } from './b64.ts';
+import type { Bytes } from '../b64url.ts';
 import { checkEndpoint, checkKeys, type EndpointReason } from './endpoint.ts';
 import { encryptPush, PushCryptoError } from './ece.ts';
 import type { VapidSigner } from './vapid.ts';
