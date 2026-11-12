@@ -1,0 +1,65 @@
+/* 输入时盖住整页的液态模糊玻璃（Mist.tsx）。R-399：负责人 11-11“按+出现的输入框之外的后面背景全做成液态模糊玻璃”，11-12 看三档对照图定中档 16px；
+   R-401：负责人 11-13“随手记点输入框背景也要模糊”，同一份。
+   铺满可视区，下沿和底栏一样减 --vh-gap（iOS 主屏幕版布局视口少一截时补到屏幕底）。
+   层级默认 --z-mist（8）：压住页面内容和顶部模糊带，在底栏渐隐层、底栏和“＋”（R-361 不动）、提示条、打字条下面；调用方要压在别的东西下面时，在自己的 class 里把 --z-mist 设成另一个层级令牌（随手记设成 --z-notes-mist，在输入行下面）。
+   材质照底栏的液态玻璃（kit GlassBar.module.css 的 .bar）：着色 --g-tint、饱和度 1.8、斜上方一片光（--g-sheen-img 乘 --g-sheen）；模糊 16px。
+   出现只淡入、不动位置：110ms（calc(var(--dur-ui) / 2)，不超过 200ms）ease-out，减少动态时也只是淡入；消失不留退场 */
+.mist {
+  position: fixed;
+  inset: 0 0 calc(0px - var(--vh-gap, 0px));
+  z-index: var(--z-mist);
+  background: var(--g-tint);
+
+  /* avoid-ai-design-ignore: K3 负责人 11-11 指定输入时后面整页液态模糊玻璃（R-399、R-401） */
+  backdrop-filter: blur(16px) saturate(1.8);
+  animation: mist-in calc(var(--dur-ui) / 2) var(--ease-out) both;
+}
+
+.mist::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--g-sheen-img);
+  opacity: var(--g-sheen);
+}
+
+@keyframes mist-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* 减少透明效果（系统设置或 data-rt="1"，和底栏 GlassBar 同一套）、或浏览器不认 backdrop-filter（带不带前缀都不认）：不模糊、不画高光，退成一层半透明纯色（玻璃的后备着色 --g-tint-fb） */
+@media (prefers-reduced-transparency: reduce) {
+  .mist {
+    background: var(--g-tint-fb);
+    backdrop-filter: none;
+  }
+
+  .mist::after {
+    display: none;
+  }
+}
+
+:global(:root[data-rt='1']) .mist {
+  background: var(--g-tint-fb);
+  backdrop-filter: none;
+}
+
+:global(:root[data-rt='1']) .mist::after {
+  display: none;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mist {
+    background: var(--g-tint-fb);
+  }
+
+  .mist::after {
+    display: none;
+  }
+}

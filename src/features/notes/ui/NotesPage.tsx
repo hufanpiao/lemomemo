@@ -15,6 +15,9 @@
 // • 底栏 / 侧栏的“＋”在这一页直接把光标放进输入行（R-380，线框“低 1”）：输入行挂着时往 kit/state/new-item.ts 的 notesInput 登记聚焦，app/App.tsx 调它
 // • 输入行是贴底浮条（position: fixed），聚焦一律原地聚焦（台账 Q-8，platform/viewport.ts 文件头）：“＋”调 focusInPlace，输入框挂 inPlaceTouchStart / inPlaceTouchEnd；
 //   form 挂 onMouseDown={keepFieldFocus}（台账 Q-25）：点“记下”“图片”不让输入框失焦，按钮第一下就点得动，记下后键盘不收、接着记（和回车一样）
+// • 输入框有焦点时后面整页盖一层液态模糊玻璃（R-401，负责人 11-13“随手记点输入框背景也要模糊”；和打字条 R-399 同一个 kit Mist，16px）：
+//   放在 .dock 旁边、层级用令牌 --z-notes-mist（在输入行下面，NotesPage.module.css .mist），输入行、底栏、提示条都在它上面；
+//   点模糊处只让输入框失焦收键盘（输入行一直在，没有“收起”；同 R-399 打了字时的做法），字留着；运行日志 notes mist on/off
 // • 这一批不做：隐私记那一行（B5）、合并分类提示（S7）
 // • 插图（S3）：卡片顶上放第一张图（多张标“+N”），列表行有图时在“⋯”前放缩略图；输入行只有“图片”（拍照在编辑页）
 // • 只读行（S12，R-148，TC-B4-09；照待办页）：带认不出的值的行（core 的 readonlyIds）标“要新版本”（单独一行：瀑布流在正文下、底行上，列表在摘要行下），菜单里的“删除”变淡；点开、删除统一拦下
@@ -22,11 +25,12 @@
 //   左滑、多选还没有入口，以后加时同样先判只读
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
 import { rlog } from '../../../platform/run-log-api.ts';
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
+import { Mist } from '../../../kit/components/Mist.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { notesInput } from '../../../kit/state/new-item.ts';
@@ -69,6 +73,9 @@ function NotesList() {
   const a = useListActions<ImgTip>('notes', { remove: l.remove });
   const { g: guard, isRo, report } = a;
   const up = useNotesToast(guard);
+  // 输入框有焦点时画模糊层（R-401）；点模糊层让输入框失焦
+  const field = useRef<HTMLInputElement>(null);
+  const [typing, setTyping] = useState(false);
   const [menu, setMenu] = useState<string | null>(null);
   const [just, setJust] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
@@ -189,8 +196,9 @@ function NotesList() {
         </AppearList>
       )}
 
+      {typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null}
       <div className={up ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
-        <InputRow onAdd={add} onImage={addImage} />
+        <InputRow field={field} onTyping={setTyping} onAdd={add} onImage={addImage} />
         {guard.toast !== null && guard.toast.kind !== 'undo' ? <DockTip toast={guard.toast} /> : null}
       </div>
 
@@ -294,17 +302,28 @@ function MoreMenu({ id, ro, open, onOpenChange, onDelete }: { id: string; ro: bo
  * 底部输入行（视觉稿 .inrow、线框 COMPOSER）：右边是“图片”“拍照”，打了字才出“记下”；回车或点“记下”就存；没存上把这句放回输入框。
  * 选了图：输入框里的字和图一起记成新的一条（onImage），没记上同样放回。有撤销条、只读提示时连同上面的提示条整块往上让一格（外框 .dockUp，NotesPage.module.css）
  */
-function InputRow({ onAdd, onImage }: { onAdd(text: string): Promise<boolean>; onImage(text: string, file: File): Promise<boolean> }) {
+function InputRow({
+  field: input,
+  onTyping,
+  onAdd,
+  onImage,
+}: {
+  /** 页面拿着，点模糊层时让它失焦（R-401） */
+  field: RefObject<HTMLInputElement | null>;
+  /** 输入框得到 / 失去焦点（页面据此画不画模糊层） */
+  onTyping(on: boolean): void;
+  onAdd(text: string): Promise<boolean>;
+  onImage(text: string, file: File): Promise<boolean>;
+}) {
   const t = useNotesT();
   const [draft, setDraft] = useState('');
   const has = draft.trim() !== '';
-  const input = useRef<HTMLInputElement>(null);
   useLayoutEffect(() => {
     notesInput.focus = () => focusInPlace(input.current, 'open');
     return () => {
       notesInput.focus = undefined;
     };
-  }, []);
+  }, [input]);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const text = draft;
@@ -333,6 +352,8 @@ function InputRow({ onAdd, onImage }: { onAdd(text: string): Promise<boolean>; o
         enterKeyHint="done"
         onTouchStart={inPlaceTouchStart}
         onTouchEnd={inPlaceTouchEnd}
+        onFocus={() => onTyping(true)}
+        onBlur={() => onTyping(false)}
         data-testid="notes-input"
       />
       <PickButtons onFile={(f) => void image(f)} className={styles.img} idPrefix="notes" camera={false} />

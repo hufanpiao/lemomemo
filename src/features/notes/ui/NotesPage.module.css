@@ -473,6 +473,11 @@
   }
 }
 
+/* 输入框有焦点时后面的整页模糊层（R-401，kit Mist）：层级令牌 --z-notes-mist，页面内容和顶部模糊带在它下面，输入行、底栏、提示条在它上面 */
+.mist {
+  --z-mist: var(--z-notes-mist);
+}
+
 /* 底部输入行：贴在底栏上面（和浮条同一位置 --dock-bottom，键盘弹起时让开）；有撤销条时往上让一格（位置公式见上面 .dock） */
 .inrow {
   position: fixed;

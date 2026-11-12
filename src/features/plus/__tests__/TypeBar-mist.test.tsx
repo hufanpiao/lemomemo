@@ -73,7 +73,7 @@ describe('打字条后面的整页玻璃层（R-399）', () => {
 });
 
 describe('.mist 的样式（源码文字：只核真浏览器里模拟不了的；实际生效的模糊、层级、点按在 e2e r399-mist.spec.ts）', () => {
-  const css = readFileSync('src/features/plus/ui/TypeBar.module.css', 'utf8');
+  const css = readFileSync('src/kit/components/Mist.module.css', 'utf8');
   const base = readFileSync('src/styles/base.css', 'utf8');
   const z = (name: string): number => Number(base.match(new RegExp(String.raw`--z-${name}:\s*(\d+);`))?.[1]);
 
@@ -81,6 +81,13 @@ describe('.mist 的样式（源码文字：只核真浏览器里模拟不了的�
     expect(css).toMatch(/\.mist \{[^}]*z-index: var\(--z-mist\);/);
     expect(z('mist')).toBeGreaterThan(z('strip'));
     for (const above of ['bar-fx', 'bar', 'toast', 'float']) expect(z('mist')).toBeLessThan(z(above));
+  });
+
+  it('随手记（R-401）用同一份、层级改成令牌 --z-notes-mist：在顶部模糊带上面，输入行、底栏和提示条在它上面', () => {
+    const notes = readFileSync('src/features/notes/ui/NotesPage.module.css', 'utf8');
+    expect(notes).toMatch(/\.mist \{\s*--z-mist: var\(--z-notes-mist\);\s*\}/);
+    expect(z('notes-mist')).toBeGreaterThan(z('strip'));
+    for (const above of ['inrow', 'bar-fx', 'bar', 'toast']) expect(z('notes-mist')).toBeLessThan(z(above));
   });
 
   it('减少透明效果（系统设置、data-rt）和不认 backdrop-filter（两种写法都不认）：不模糊、不画高光，退成半透明纯色 --g-tint-fb', () => {

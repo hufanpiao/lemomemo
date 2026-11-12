@@ -177,6 +177,32 @@ function harness(over: Partial<UploaderDeps> = {}) {
 }
 const file = () => new File([new Uint8Array(5)], 'a.jpg', { type: 'image/jpeg' });
 
+describe('上传器的运行日志（11-13 负责人问“随手记加不了图片”时日志里一行都没有，先补日志）', () => {
+  it('每一步一行：开始（类型、大小）、压图结果、行确认、上传结果和耗时；不记文件名和内容', async () => {
+    const lines: string[] = [];
+    const h = harness({ log: (l) => lines.push(l) });
+    const r = await h.u.insert(N, file());
+    if (!r.ok) throw new Error(r.code);
+    h.setQueue([]);
+    await vi.waitFor(() => expect(h.u.getSnapshot()).toEqual([]));
+    expect(lines).toEqual(['notes img start type=image/jpeg kb=0 new=false', 'notes img encode ok kb=0 thumbKb=0 4x3', 'notes img insert ok ms=0', 'notes img row confirmed', 'notes img upload ok ms=0']);
+    expect(lines.join(' ')).not.toContain('a.jpg');
+  });
+  it('失败也各记一行：压图失败带失败码；上传被拒带种类和服务器码', async () => {
+    const lines: string[] = [];
+    const h = harness({ log: (l) => lines.push(l), encode: () => Promise.resolve({ ok: false, code: 'heic_unsupported' }) });
+    expect(await h.u.insert(N, file())).toEqual({ ok: false, code: 'heic_unsupported' });
+    expect(lines).toEqual(['notes img start type=image/jpeg kb=0 new=false', 'notes img encode heic_unsupported', 'notes img insert heic_unsupported ms=0']);
+    const up: string[] = [];
+    const h2 = harness({ log: (l) => up.push(l), upload: vi.fn(() => Promise.resolve<UploadResult>(err('denied', 'forbidden', 'not_owner'))), exitOf: vi.fn(() => Promise.resolve('active' as const)) });
+    await h2.u.insert(N, file());
+    h2.setQueue([]);
+    await vi.waitFor(() => expect(up.some((l) => l.startsWith('notes img fail'))).toBe(true));
+    expect(up).toContain('notes img put full denied code=forbidden reason=not_owner');
+    expect(up.some((l) => l.startsWith('notes img upload '))).toBe(true);
+  });
+});
+
 describe('上传器：先写行再传', () => {
   it('行写进去以后、确认之前不传；确认了依次传原图和缩略图，传完从待传里拿掉、显示改用本机那一份', async () => {
     const h = harness();
