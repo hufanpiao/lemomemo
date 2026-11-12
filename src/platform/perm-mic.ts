@@ -3,7 +3,7 @@
 //   （rememberMicResult，录音那边调）；读的时候能问到 Permissions API 就以它为准，问不到用记下的，都没有是 'unknown'
 //   记在 localStorage（设备上的权限，不跟账号走，退出登录也不清）；存不进、读不出都当没记过
 // • exe 不做语音（R-90）：exe 里不调这些麦克风函数，界面也不显示麦克风这一行
-import { errName } from './err-tag.ts';
+import { errName } from './env.ts';
 
 export type MicState = 'granted' | 'denied' | 'unknown';
 export const MIC_PERM_KEY = 'lemo.mic_perm';

@@ -1,7 +1,7 @@
 // Service Worker 的按需下载和注册（架构 8.1、16.1；这类事只在这里做）：sw.js 放在 /app/，scope 只管 /app/。
 // 不变量：sw-lifecycle.ts 只经 loadSwLifecycle 一个加载器下载；注册不设超时、等真实结果（Q-23），结果和耗时记一行运行日志。
 // navigator.serviceWorker 只准出现在 platform（A13）；exe（Tauri）里不注册，判断在 sw-lifecycle.ts 读 env.ts 的 isTauri
-import { errName } from './err-tag.ts';
+import { errName } from './env.ts';
 import type { Lifecycle } from './net.ts';
 import { rlog } from './run-log-api.ts';
 import type * as SwLifecycle from './sw-lifecycle.ts';

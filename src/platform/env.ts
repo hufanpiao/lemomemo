@@ -1,7 +1,5 @@
 // 构建信息（架构 8.1、8.5；0.31 第 3 条从 app/build-info.ts 挪来）：取代 v3 的 App.BUILD
 // 版本号来自 VERSION 文件（vite define 注入）；其余只读 VITE_PUBLIC_ 开头的变量（A14）
-import { errName } from './err-tag.ts';
-
 export type AppEnv = 'production' | 'preview' | 'development' | 'test';
 
 function envOf(v: string | undefined, mode: string): AppEnv {
@@ -234,6 +232,17 @@ export function fitJsErrorCode(type: string, file: string, line: number, col: nu
   if (zero) return zero;
   // 类型名本身就长到放不下：文件名也不要了
   return `${type.slice(0, JS_ERROR_CODE_MAX - 6)}@~:0:0`;
+}
+
+/** 错误的类型名（TypeError 等），前端只在这里取（FA-3 第二轮第 7 条；进日志的“ type=名”见 err-tag.ts）；没有字符串 name 给空串，不取 message */
+export function errName(err: unknown): string {
+  const name = typeof err === 'object' && err !== null ? (err as { name?: unknown }).name : undefined;
+  return typeof name === 'string' ? name : '';
+}
+
+/** 是不是取消、超时（AbortError、TimeoutError）：前端只在这里判 */
+export function isAbortErr(err: unknown): boolean {
+  return /^(Abort|Timeout)Error$/.test(errName(err));
 }
 
 /**

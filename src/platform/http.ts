@@ -1,8 +1,7 @@
 // 直接 fetch 的统一封装（架构 0.27 第 1 点）：和 supabase-js 一样带 X-App-Version
 // fetch 只准出现在 platform（A12）；功能要直接调函数时走这里，不自己 fetch
 import { clock } from './clock.ts';
-import { buildInfo } from './env.ts';
-import { isAbortErr } from './err-tag.ts';
+import { buildInfo, isAbortErr } from './env.ts';
 
 export const APP_VERSION_HEADER = 'X-App-Version';
 
