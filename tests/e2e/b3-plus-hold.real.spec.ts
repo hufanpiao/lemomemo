@@ -76,12 +76,14 @@ test('松手上传中切到设置页（录音那一套卸载）：ai-voice 这�
   await page.evaluate(() => {
     location.hash = '#/settings';
   });
-  await expect.poll(async () => count(await runLog(page), 'voice host detach status=')).toBe(1);
+  // 设置页没有底栏：“＋”和录音那一套都卸载了
+  await expect(page.getByTestId('tabbar-add')).toHaveCount(0);
   answer();
   await expect.poll(() => todosOnServer(page), { timeout: 15_000 }).toEqual([{ title: '买猫砂', source: 'voice', deleted_at: null }]);
   await expectMicClosed(page);
-  const log = await runLog(page);
-  expect(count(log, 'drop by='), '没有作废').toBe(0);
+  // 运行日志：卸载那一下在上传；整个过程没有作废
+  await expect.poll(async () => (await runLog(page)).filter((l) => l.includes('voice host detach')).join(' | ')).toContain('status=uploading');
+  expect(count(await runLog(page), 'drop by='), '没有作废').toBe(0);
 
   await page.evaluate(() => {
     location.hash = '#/todos';
