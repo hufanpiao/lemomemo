@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { notes } from '../../../../shared/manifests/notes.ts';
 import { createWebpWasm, loadWebpCodec, type RawPixels, type WebpCodec } from '../../../platform/webp-wasm.ts';
-import { encodeDiagText, encodeImage, FULL_EDGE, FULL_MAX, THUMB_EDGE, THUMB_MAX, type Decoded, type EncodeDeps, type NativeMemo } from '../data/image-encode.ts';
+import { drawCanvas, encodeDiagText, encodeImage, FULL_EDGE, FULL_MAX, THUMB_EDGE, THUMB_MAX, type Decoded, type EncodeDeps, type NativeMemo } from '../data/image-encode.ts';
 import { bareJpeg, exifApp1, hasAscii, isWebpFile, riffChunks, withExif } from './exif-sample.ts';
 
 const TZ = 'Asia/Seoul';
@@ -33,10 +33,10 @@ function noise(w: number, h: number): RawPixels {
 
 /**
  * 假解码 + 假画布：原生默认只会回 png（模拟 iPhone Safari）；原生导出、像素、wasm 编码器、原生结论都可换。
- * calls 记下：画了哪些尺寸、原生导了几次、取了哪些尺寸的像素、wasm 编码用的质量
+ * calls 记下：画了哪些尺寸、释放了哪些、原生导了几次、取了哪些尺寸的像素、wasm 编码用的质量
  */
 function iphoneDeps(o: { w?: number; h?: number; native?: (q: number, w: number, h: number) => Promise<Blob | null>; pixels?: (w: number, h: number) => RawPixels; wasm?: EncodeDeps['wasm']; memo?: NativeMemo } = {}) {
-  const calls = { canvas: [] as string[], toBlob: 0, pixels: [] as string[], qs: [] as number[] };
+  const calls = { canvas: [] as string[], freed: [] as string[], toBlob: 0, pixels: [] as string[], qs: [] as number[] };
   const load = o.wasm ?? realWasm;
   const deps: EncodeDeps = {
     decode: () => Promise.resolve({ width: o.w ?? 64, height: o.h ?? 48, close: vi.fn() } satisfies Decoded),
@@ -51,6 +51,7 @@ function iphoneDeps(o: { w?: number; h?: number; native?: (q: number, w: number,
           calls.pixels.push(`${w}x${h}`);
           return (o.pixels ?? noise)(w, h);
         },
+        free: () => calls.freed.push(`${w}x${h}`),
       };
     },
     wasm: async () => {
@@ -242,6 +243,24 @@ describe('R-402 失败分开报，诊断写明哪一步、什么错（只记错�
     expect(r.text).not.toContain('IMG_0402');
   });
 
+  it('意料之外的异常（原生导出同步抛错等）也收口成 encode_failed，why=enc，不往外抛', async () => {
+    const r = await fail({
+      native: () => {
+        throw new TypeError('sync');
+      },
+    });
+    expect(r).toEqual({ code: 'encode_failed', text: 'path=native native=null ms=0 loadMs=0 encMs=0 why=enc err=TypeError' });
+  });
+
+  it('wasm 交回的东西拼不成 Blob（内存不足）→ encode_failed，why=enc', async () => {
+    const bad = {
+      toString() {
+        throw new RangeError('oom');
+      },
+    } as unknown as Uint8Array<ArrayBuffer>;
+    expect(await fail({ wasm: () => Promise.resolve(() => bad) })).toEqual({ code: 'encode_failed', text: 'path=wasm native=image/png ms=0 loadMs=0 encMs=0 why=enc err=RangeError' });
+  });
+
   it('错误名不像名字（带空格、太长、不是 Error）一律记 Unknown', async () => {
     const odd = Object.assign(new Error('x'), { name: 'a b <c>' });
     expect((await fail({ wasm: () => Promise.reject(odd) })).text).toContain('err=Unknown');
@@ -257,6 +276,47 @@ describe('R-402 失败分开报，诊断写明哪一步、什么错（只记错�
     expect(r.diag?.loadMs).toBe(1);
     expect(r.diag?.encMs).toBeGreaterThan(0);
     for (const k of ['ms', 'loadMs', 'encMs'] as const) expect(Number.isInteger(r.diag?.[k])).toBe(true);
+  });
+});
+
+describe('画布用完就释放（iPhone Safari 画布总内存很紧，不等 GC）', () => {
+  it('每一档用完都释放这张画布：成功、失败都一样', async () => {
+    const ok = iphoneDeps({ w: 4000, h: 3000, wasm: sizedWasm });
+    expect((await encodeImage(file(), TZ, ok.deps)).ok).toBe(true);
+    expect(ok.calls.freed).toEqual(ok.calls.canvas);
+    const bad = iphoneDeps({ wasm: () => Promise.reject(new TypeError('offline')) });
+    expect((await encodeImage(file(), TZ, bad.deps)).ok).toBe(false);
+    expect(bad.calls.freed).toEqual(bad.calls.canvas);
+    expect(bad.calls.canvas).toHaveLength(1);
+  });
+
+  it('默认画布：free() 之后宽高都是 0；原生导出同步抛错回 null', async () => {
+    const made: { width: number; height: number }[] = [];
+    class FakeOffscreen {
+      width: number;
+      height: number;
+      constructor(w: number, h: number) {
+        this.width = w;
+        this.height = h;
+        made.push(this);
+      }
+      getContext() {
+        return { drawImage: vi.fn(), getImageData: (_x: number, _y: number, w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }) };
+      }
+      convertToBlob(): Promise<Blob> {
+        throw new TypeError('sync');
+      }
+    }
+    vi.stubGlobal('OffscreenCanvas', FakeOffscreen);
+    try {
+      const c = drawCanvas({ width: 8, height: 6, close: vi.fn() }, 8, 6);
+      expect(c.pixels().width).toBe(8);
+      await expect(c.toBlob(0.8)).resolves.toBeNull();
+      c.free();
+      expect(made.map((m) => [m.width, m.height])).toEqual([[0, 0]]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

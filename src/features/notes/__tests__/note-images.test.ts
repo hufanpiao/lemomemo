@@ -48,6 +48,7 @@ function fakeEncode(k: number, nativeType = 'image/webp', w = 4000, h = 3000) {
         return Promise.resolve({ size: Math.round(rw * rh * q * k), type: nativeType } as Blob);
       },
       pixels: () => ({ data: new Uint8ClampedArray(rw * rh * 4), width: rw, height: rh }),
+      free: vi.fn(),
     }),
     wasm: () => Promise.reject(new TypeError('offline')),
     native: {},
@@ -71,10 +72,12 @@ describe('重新编码（webp；原图长边 ≤ 2048、≤ 2 MB；缩略图长�
     expect(r.takenAt).toBeNull();
   });
   it('HEIC 解不了 → heic_unsupported（看 type 或扩展名）；别的解不了 → decode_failed', async () => {
-    const bad: EncodeDeps = { ...fakeEncode(1).deps, decode: () => Promise.reject(new Error('x')) };
-    expect(await encodeImage(new File([], 'IMG_1.HEIC', { type: '' }), TZ, bad)).toEqual({ ok: false, code: 'heic_unsupported' });
-    expect(await encodeImage(new File([], 'a', { type: 'image/heif' }), TZ, bad)).toEqual({ ok: false, code: 'heic_unsupported' });
-    expect(await encodeImage(new File([], 'a.jpg', { type: 'image/jpeg' }), TZ, bad)).toEqual({ ok: false, code: 'decode_failed' });
+    const bad: EncodeDeps = { ...fakeEncode(1).deps, decode: () => Promise.reject(new DOMException('bad image', 'EncodingError')) };
+    // 解码失败也带诊断：why=decode、错误名（只记 e.name）
+    const diag = { path: 'native', native: null, ms: 0, loadMs: 0, encMs: 0, why: 'decode', err: 'EncodingError' };
+    expect(await encodeImage(new File([], 'IMG_1.HEIC', { type: '' }), TZ, bad)).toEqual({ ok: false, code: 'heic_unsupported', diag });
+    expect(await encodeImage(new File([], 'a', { type: 'image/heif' }), TZ, bad)).toEqual({ ok: false, code: 'heic_unsupported', diag });
+    expect(await encodeImage(new File([], 'a.jpg', { type: 'image/jpeg' }), TZ, bad)).toEqual({ ok: false, code: 'decode_failed', diag });
     expect(isHeic({ type: 'image/jpeg', name: 'a.jpg' })).toBe(false);
   });
   it('原生导不出 webp（回了 png）且 wasm 也载不进来 → encode_load_failed（R-402：不再是“换个浏览器”）；怎么降都超 → too_big', async () => {
