@@ -8,7 +8,7 @@
 // 用法：
 //   • 整组用：import { test } from './session-fixture.ts'，再在 describe 里 test.use({ loggedIn: true })；默认 false（不写会话），
 //     所以“没登录就跳 /app/auth/”仍是默认行为（tests/e2e/session.spec.ts 测这一条）。
-//   • 单条用：await seedFakeSession(page.context(), baseURL)，必须在 page.goto 之前。
+//   • 单条用：await seedFakeSession(page.context(), baseURL)，必须在 page.goto 之前；要 JWT 形状的令牌（走快读）加 { jwt: true }。
 import type { BrowserContext } from '@playwright/test';
 import { expect, test as cspTest } from './csp-fixture.ts';
 import { NOFX_RULE, needsNoFx } from './webkit-ci-nofx.ts';
@@ -23,11 +23,21 @@ export function sessionKeyFor(supabaseUrl: string): string {
   return `sb-${first}-auth-token`;
 }
 
-/** 一份形状正确的假会话 JSON */
-export function fakeSessionJson(userId: string = FAKE_USER_ID): string {
+/**
+ * JWT 形状的假令牌（只有 payload 有意义：exp 在很远的将来、session_id、sub；签名是一看就是假的字符串）。
+ * 要走“快读”的用例用它：快读按令牌里的 exp 判断还新鲜（b2-first-screen-supabase、r402-webp-wasm）
+ */
+export function fakeJwt(userId: string = FAKE_USER_ID): string {
+  const b64u = (o: unknown): string => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const exp = Math.floor(Date.now() / 1000) + 10 * 365 * 24 * 3600;
+  return `${b64u({ alg: 'none' })}.${b64u({ exp, session_id: 'e2e-fake-sid', sub: userId })}.e2e-fake-signature`;
+}
+
+/** 一份形状正确的假会话 JSON（accessToken 默认是普通假串；要 JWT 形状的传 fakeJwt()） */
+export function fakeSessionJson(userId: string = FAKE_USER_ID, accessToken = 'fake-access-token-e2e-only'): string {
   const now = Math.floor(Date.now() / 1000);
   return JSON.stringify({
-    access_token: 'fake-access-token-e2e-only',
+    access_token: accessToken,
     token_type: 'bearer',
     expires_in: 600,
     expires_at: now + 10 * 365 * 24 * 3600,
@@ -36,8 +46,8 @@ export function fakeSessionJson(userId: string = FAKE_USER_ID): string {
   });
 }
 
-/** 这个上下文里之后打开的每个页面，在页面脚本之前写入假会话 */
-export async function seedFakeSession(context: BrowserContext, baseURL: string | undefined, userId: string = FAKE_USER_ID): Promise<void> {
+/** 这个上下文里之后打开的每个页面，在页面脚本之前写入假会话；jwt: true 时令牌是 JWT 形状（fakeJwt） */
+export async function seedFakeSession(context: BrowserContext, baseURL: string | undefined, o: { jwt?: boolean } = {}): Promise<void> {
   if (!baseURL) throw new Error('playwright.config 没给 baseURL');
   const key = sessionKeyFor(new URL('/sb', baseURL).href);
   await context.addInitScript(
@@ -48,7 +58,7 @@ export async function seedFakeSession(context: BrowserContext, baseURL: string |
         // about:blank 等不透明来源没有 localStorage，跳过
       }
     },
-    { key, value: fakeSessionJson(userId) },
+    { key, value: fakeSessionJson(FAKE_USER_ID, o.jwt ? fakeJwt() : undefined) },
   );
 }
 

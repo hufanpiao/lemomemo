@@ -44,7 +44,8 @@ export const ko = {
   'notes.img.fail.write': '사진을 저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
   'notes.img.err.heic_unsupported': 'HEIC 형식이라 브라우저에서 열 수 없어요. 먼저 JPG로 바꿔 주세요', // REVIEW(ko)
   'notes.img.err.decode_failed': '이 사진을 열 수 없어요', // REVIEW(ko)
-  'notes.img.err.encode_unsupported': '이 브라우저에서는 사진을 저장할 수 없어요. 다른 브라우저를 써 보세요', // REVIEW(ko)
+  'notes.img.err.encode_load_failed': '이 사진을 처리하지 못했어요. 인터넷에 연결한 뒤 다시 시도해 주세요', // REVIEW(ko) R-402 임시 문구
+  'notes.img.err.encode_failed': '이 사진을 처리하지 못했어요. 다시 시도해 주세요', // REVIEW(ko) R-402 임시 문구
   'notes.img.err.too_big': '사진이 너무 커서 저장하지 못했어요', // REVIEW(ko)
   'notes.img.err.write_failed': '사진을 저장하지 못했어요. 잠시 후 다시 시도해 주세요', // REVIEW(ko)
   'notes.img.err.private': '비밀 메모에는 사진을 넣을 수 없어요', // REVIEW(ko)

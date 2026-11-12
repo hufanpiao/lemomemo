@@ -1,7 +1,8 @@
-// Playwright 快读组（B2 FA-6 ①，安全审查 L5）：带 supabase 地址的 e2e 构建，只跑 tests/e2e/b2-first-screen-supabase.spec.ts
+// Playwright 快读组（B2 FA-6 ①，安全审查 L5）：带 supabase 地址的 e2e 构建，跑 tests/e2e/b2-first-screen-supabase.spec.ts 和 r402-webp-wasm.spec.ts
 // 默认的假后端组（playwright.config.ts）构建时没配 VITE_PUBLIC_SUPABASE_URL，启动关口的快读分支跑不到；这一组把地址配成同源 /sb、
 // anon key 用假值 FAKE_ANON_KEY（tests/e2e/fake-values.ts，一看就是假的，不是密钥），验证：
 // • 关口走快读（两张表各一次、带 apikey 和 Bearer、只发往同源 /sb）；• supabase-js 那一块在今天页画出来以后才下载
+// • R-402（11-13）：插图走 wasm 编 webp 一直到上传请求（上传器等同步引擎把新建发出去才传，没配地址的默认组起不了同步）
 // 和默认组、真后端组能同时跑：服务 8791、产物 dist/web-fastread、假后端 9193、9192、wrangler 状态 .wrangler/state-e2e-fastread、调试端口 9233
 // 其余（CSP fixture、产物指纹 globalSetup、本机复用规则、看门狗）和默认组一样，见 playwright.config.ts
 import { relative } from 'node:path';
@@ -30,7 +31,7 @@ const BINDINGS = Object.entries(e2eBindings(FAKE))
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  testMatch: '**/b2-first-screen-supabase.spec.ts',
+  testMatch: ['**/b2-first-screen-supabase.spec.ts', '**/r402-webp-wasm.spec.ts'],
   fullyParallel: true,
   globalTimeout: globalTimeoutMs(process.env, NO_BACKEND_GLOBAL_TIMEOUT_MS),
   globalSetup: './tests/e2e/dist-fingerprint.ts',
