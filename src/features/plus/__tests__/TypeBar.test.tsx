@@ -199,6 +199,43 @@ describe('打字条', () => {
     expect(writer.patch).toHaveBeenCalledTimes(4);
   });
 
+  it('合并成一条时那一条没存上：原来的几条不撤、提示条照旧（先存新的，存成了才撤旧的；FA-3 整块评审第 13 条）', async () => {
+    let n = 0;
+    const { input, writer } = setup({ insert: async () => (++n <= 3 ? OK : { ok: false, reason: 'local_unavailable' }) });
+    fireEvent.change(input, { target: { value: '커피 원두 사기, 전기요금 내기, 수요일까지 NEOX에 견적서 보내기' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+    });
+    expect(writer.insert).toHaveBeenCalledTimes(3);
+    fireEvent.click(screen.getByRole('button', { name: '展开' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '拆错了，合并成一条' }));
+    });
+    expect(writer.insert).toHaveBeenCalledTimes(4);
+    expect(writer.patch, '原来的几条没撤').not.toHaveBeenCalled();
+    expect(screen.getByTestId('type-notice').textContent).toContain('已记下 3 条');
+  });
+
+  it('全部撤销有几条没撤成：提示条留着那几条，写明没撤成（FA-3 整块评审第 13 条）', async () => {
+    let n = 0;
+    const writer = {
+      insert: vi.fn<Writer['insert']>(async () => OK),
+      patch: vi.fn<Writer['patch']>(async () => (++n === 2 ? { ok: false, reason: 'local_unavailable' } : OK)),
+    };
+    render(<TypeBar day={null} writer={writer} online={() => true} onExpand={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.change(screen.getByTestId('type-input'), { target: { value: '커피 원두 사기, 전기요금 내기, 수요일까지 NEOX에 견적서 보내기' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+    });
+    fireEvent.click(screen.getByRole('button', { name: '展开' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '全部撤销' }));
+    });
+    expect(writer.patch).toHaveBeenCalledTimes(3);
+    const text = screen.getByTestId('type-notice').textContent ?? '';
+    expect(text).toContain('1 条没撤销成功');
+  });
+
   it('合并成一条时原话超过标题上限：提示条显示的是存进库的截短标题，不是整句原话', async () => {
     const { input, writer } = setup();
     const tail = '写'.repeat(ITEM_TITLE_MAX);

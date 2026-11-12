@@ -60,11 +60,16 @@ export interface AiReqCtx {
 /** ai-parse 的请求体 */
 export type AiParseReq = AiReqCtx & { text: string };
 
+/** 不带选中日子的请求上下文（录音不带日子，FA-3）：项目名规整 */
+export function baseReqCtx(ctx: Pick<TypeCtx, 'now' | 'tz' | 'locale' | 'projects'>): AiReqCtx {
+  return { now: ctx.now, tz: ctx.tz, locale: ctx.locale, projects: normProjects(ctx.projects), scope: 'main' };
+}
+
 /** 拼请求上下文：项目名规整、选中的日子过 checkDefaultDay；日子超出后端认的范围返回 bad_default_day（发了也是 400） */
 export function aiReqCtx(ctx: Pick<TypeCtx, 'now' | 'tz' | 'locale' | 'projects' | 'day'>): AiReqCtx | 'bad_default_day' {
   const dd = ctx.day === null ? null : checkDefaultDay(ctx.day, ctx.now, ctx.tz);
   if (dd === 'bad') return 'bad_default_day';
-  return { now: ctx.now, tz: ctx.tz, locale: ctx.locale, projects: normProjects(ctx.projects), scope: 'main', ...(dd !== null ? { default_day: dd } : {}) };
+  return { ...baseReqCtx(ctx), ...(dd !== null ? { default_day: dd } : {}) };
 }
 
 /** 送 ai-parse 的口子：返回已 parse 的 JSON；失败抛 SendError（或 fetch 原样抛的 TypeError、AbortError） */

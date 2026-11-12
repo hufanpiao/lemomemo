@@ -60,7 +60,7 @@ export function VoiceNotice({ v }: { v: VoiceState }) {
       </div>
     );
   }
-  const working = v.status === 'encoding' || v.status === 'uploading';
+  const working = v.status === 'uploading';
   if (!working && v.status !== 'organizing') return null;
   return (
     <div className={styles.note} role="status" data-testid="voice-work" data-status={v.status}>

@@ -181,20 +181,15 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
   }, [setBatch, go]);
 
   const undo = useCallback(async () => {
-    await saved.undoAll();
-    go({ type: 'reset' });
+    if (await saved.undoAll()) go({ type: 'reset' });
   }, [saved, go]);
 
   const { undoOne } = saved;
 
+  // 合并没存上：原来的几条还在，提示条自己加一句（不把原话填回输入条，免得再记一遍）
   const merge = useCallback(async () => {
-    const raw = batch?.raw ?? '';
-    const out = await saved.merge(env());
-    if (out !== 'ok') {
-      setTextRaw(raw);
-      fail(out);
-    }
-  }, [batch, saved, env, fail]);
+    await saved.merge(env());
+  }, [saved, env]);
 
   const stash = useCallback(() => writeTypeDraft({ text, day }, clock.now()), [text, day]);
 

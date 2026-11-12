@@ -29,6 +29,8 @@ export interface TypeBarSlotProps {
   onClose(): void;
 }
 
+/** onOpen：打开打字条（录音那一套的“改用打字”，FA-3 整块评审第 12 条） */
+
 type Mod = Awaited<ReturnType<typeof loadTypeBar>>;
 
 /** 下载好的打字条那一块（组件本身 default、首屏画完以后挂的 Preload、按住“＋”的手势 hold） */
@@ -74,8 +76,8 @@ export function resetPlusForTest(): void {
 }
 
 /** 下载好以后一直挂一份 Preload（小气泡、按住“＋”录音那一套）；打开着时画打字条，还没下载好时画“准备中” */
-export function PlusSlot(props: TypeBarSlotProps & { open: boolean }) {
-  const { open, ...rest } = props;
+export function PlusSlot(props: TypeBarSlotProps & { open: boolean; onOpen?: () => void }) {
+  const { open, onOpen, ...rest } = props;
   const m = useSyncExternalStore(subscribe, loaded, loaded);
   useEffect(() => {
     if (open) load();
@@ -86,7 +88,7 @@ export function PlusSlot(props: TypeBarSlotProps & { open: boolean }) {
     <>
       {Pre && (
         <ErrorBoundary fallback={null}>
-          <Pre />
+          <Pre onType={onOpen} />
         </ErrorBoundary>
       )}
       {open &&

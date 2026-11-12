@@ -2,6 +2,7 @@
 // • start 事件到了才记起点、才告诉调用方“开始了”：调用方到这时才提示可以说话，早了句首会被切掉
 // • 拿到流以后不管哪一步失败或取消，都先停录音器、关轨道、清计时器再返回（系统的录音指示不能一直亮）
 // • 取消只有 signal 这一套，从调用到交出结果之前一直有效
+// • 停录（stop()、录满）以后等 stop 事件最多 REC_STOP_WAIT_MS：iOS 偶尔不发，到点按 stop_timeout 收尾，录音器不会卡在“录音中”
 // • 运行日志只记类型、字节数、毫秒、原因
 import { audioType, bareMime } from '../../shared/schema/ai.ts';
 import { errTag } from './err-tag.ts';
@@ -10,9 +11,11 @@ import { rlog } from './run-log-api.ts';
 
 /** start() 之后等 start 事件最长多久，超过按开不起来算 */
 export const REC_START_WAIT_MS = 3000;
+/** 停录（调用方 stop()、录满 maxMs）之后等 stop 事件最长多久：iOS 偶尔不发，超过按 stop_timeout 收尾、关轨道（FA-3 整块评审第 2 条） */
+export const REC_STOP_WAIT_MS = 3000;
 
 export type MicFail = 'unsupported' | 'denied' | 'no_mic';
-export type RecFail = MicFail | 'start_failed' | 'cancelled' | 'rec_error' | 'empty' | 'no_mime' | 'bad_mime' | 'too_large';
+export type RecFail = MicFail | 'start_failed' | 'cancelled' | 'rec_error' | 'empty' | 'no_mime' | 'bad_mime' | 'too_large' | 'stop_timeout';
 
 /** 交出来的录音一定交得出去：不是 0 字节、有类型且在 shared 的 AUDIO_TYPES 里、不超 maxBytes（这几条只在录音器判，上传层不重判） */
 export interface RecClip {
@@ -183,12 +186,21 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
     };
     const fail = (f: RecFail, more = '', reason: string = f): void => finish({ ok: false, fail: f }, `rec fail reason=${reason}${more}`);
     const onAbort = (): void => fail('cancelled');
+    /** 停录并等 stop 事件，到点还没来就按 stop_timeout 收尾（只起一次） */
+    let stopping = false;
+    const stopNow = (): void => {
+      halt();
+      if (stopping || end) return;
+      stopping = true;
+      clearTimeout(timer);
+      timer = setTimeout(() => fail('stop_timeout'), REC_STOP_WAIT_MS);
+    };
 
     const onStart = (): void => {
       if (end || startAt !== null || !rec) return;
       startAt = now();
       clearTimeout(timer);
-      timer = setTimeout(halt, o.maxMs);
+      timer = setTimeout(stopNow, o.maxMs);
       rlog(`rec start mime=${bareMime(rec.mimeType) || '?'} gum_ms=${gumMs} start_ms=${Math.round(startAt - calledAt)}`);
       started({
         ok: true,
@@ -204,7 +216,7 @@ function record(stream: MediaStream, o: RecorderOptions, now: () => number, gumM
           },
           stop() {
             asked = true;
-            halt();
+            stopNow();
             return ended;
           },
         },
