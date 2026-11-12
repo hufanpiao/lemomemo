@@ -76,7 +76,10 @@ const deps: EvalDeps = {
 
 if (import.meta.main) {
   runEval(Deno.args, deps).then(
-    (r) => console.log(`评测结果：${r.file}（调用 ${r.called} 句，跳过 ${r.skipped} 句${r.stopped ? `，提前停下：${r.stopped}` : ''}）`),
+    (r) => {
+      for (const line of r.diag) console.log(line);
+      console.log(`评测结果：${r.file}（调用 ${r.called} 句，跳过 ${r.skipped} 句${r.stopped ? `，提前停下：${r.stopped}` : ''}）`);
+    },
     (e: unknown) => {
       console.error(e instanceof Error ? e.message : String(e));
       Deno.exit(1);

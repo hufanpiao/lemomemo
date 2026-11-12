@@ -12,7 +12,7 @@ import { GeminiProvider } from '../../supabase/functions/_shared/ai/gemini.ts';
 import { loadCassette, type Cassette } from '../ai/replay/cassette.ts';
 import { replay, REPLAY_KEY, REPLAY_MODEL } from '../ai/replay/replay.ts';
 import {
-  FEATURES, onlyName, paceOf, parseArgs, parseOnly, parseSet, PROJECTS, reportName, runEval, runSet, selectRows, type EvalDeps, type EvalRow,
+  diagLines, FEATURES, onlyName, paceOf, parseArgs, parseOnly, parseSet, PROJECTS, reportName, runEval, runSet, selectRows, type EvalDeps, type EvalRow,
 } from '../ai/run-core.ts';
 
 const { parseWithAI } = makeParseWithAI<AiItem>({ checkParseOutput, checkVoiceOutput, checkDefaultDay });
@@ -178,6 +178,22 @@ describe('评测骨架：主流程 runEval 的顺序（代码审 M1、S1、S6）
     expect(f.log).toEqual(['key', 'copy', 'rows', 'load', 'live:gemini-3.5-flash-lite', 'write:reports']);
     expect([r.called, f.calls(), f.written[0]?.name]).toEqual([2, 2, 'set1-2026-11-20-parse.v3-gemini-3.5-flash-lite']);
     expect(f.written[0]?.json).not.toContain('k-not-real');
+  });
+
+  it('每句一行诊断（打到公开的工作流日志）：编号、结果、状态码、错误名、耗时，不带句子原文、模型输出和密钥', async () => {
+    const f = fakeDeps({ key: 'k-not-real' });
+    const r = await runEval(LIVE, f.deps);
+    expect(r.diag).toHaveLength(r.called);
+    for (const line of r.diag) expect(line).toMatch(/^diag [A-Z]\d+ (ok|quota|timeout|invalid|error) status=(\d+|-) err=\S+ ms=\d+$/);
+    expect(r.diag.join(' ')).not.toContain('k-not-real');
+  });
+  it('diagLines：失败句带上状态码和错误名', () => {
+    const base = { set_version: 'v', group: 'zh', scored: 'main' as const, raw: null, checked: null, invalid_reasons: null, issues: null };
+    expect(diagLines([
+      { ...base, id: 'Z01', ok: true, reason: null, status: null, errName: null, ms: 812 },
+      { ...base, id: 'K02', ok: false, reason: 'timeout', status: null, errName: 'TimeoutError', ms: 5003 },
+      { ...base, id: 'M03', ok: false, reason: 'error', status: 503, errName: null, ms: 640 },
+    ])).toEqual(['diag Z01 ok status=- err=- ms=812', 'diag K02 timeout status=- err=TimeoutError ms=5003', 'diag M03 error status=503 err=- ms=640']);
   });
 
   it('模型名不合法、参数写重：什么都不做，一次都不调（M1）', async () => {

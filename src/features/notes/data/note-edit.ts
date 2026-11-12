@@ -1,6 +1,6 @@
 // 随手记新建、编辑的数据逻辑（B4 S2；定稿线框 s7 底部输入行、s8 编辑器；架构 5.2 第 2839 行）
 // • 表单 ↔ 行：formOf 取编辑器要的三个字段（分类经 note-list.ts 的 categoryResolver，合并掉的归到留下的那个）；newNoteRow 造新建的整行
-// • 新建时先用本机规则给一个分类（classify.ts 的 ruleCategory，S5 归后端，现在是占位）：分到了写 category_source = 'rule'，没分到写 'none'。
+// • 新建时先用本机规则给一个分类（classify.ts 的 ruleCategory，转调后端的 shared/logic/notes/classify-rules.ts）：分到了写 category_source = 'rule'，没分到写 'none'。
 //   ai_status 不写：它是系统列，客户端无权写（架构 5.2 第 2797 行 M5、table_meta 的 system_cols），库里 insert 时默认就是 'pending'，
 //   等 ai-classify 来分（任务单 S2 的“保存时写 ai_status = pending”按这个落地）
 // • 改了什么就只写什么（patchOf）：比较前后两份表单，只放变了的列，外加 updated_at；

@@ -24,14 +24,15 @@
 // • form 挂 onMouseDown={keepFieldFocus}（台账 Q-25）：按钮上按下不让输入框失焦，键盘不收、按钮不挪，“记下”等第一下就点得动；
 //   “收起”（close）自己先 blur 收键盘，“展开编辑”关掉打字条、输入框跟着卸掉，记下后自动收起照旧 blur
 // • 打字条后面的整页液态玻璃（R-399，负责人 11-11“按+出现的输入框之外的后面背景全做成液态模糊玻璃”，11-12 定中档 16px、点模糊处收起）：
-//   打字条画着就画这一层，收起（folded）或关掉就没；样式、层级在 TypeBar.module.css 的 .mist；点它见上面“点页面空白处”。
-//   出现、消失各记一行运行日志（只记状态和实际生效的滤镜）
+//   打字条画着就画这一层，收起（folded）或关掉就没；组件和样式是 kit 的 Mist（和随手记 R-401 共用），层级 --z-mist；点它见上面“点页面空白处”。
+//   出现、消失各记一行运行日志 typebar mist on/off（只记状态和实际生效的滤镜）
 // • 文字一律经 t()（A20）；按钮用 kit 的 FormButton，输入框用 kit Form 的 .input（G11 输入框令牌、触屏 16px）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type FormEvent, type KeyboardEvent, type PointerEvent } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import form from '../../../kit/components/Form.module.css';
+import { Mist } from '../../../kit/components/Mist.tsx';
 import { useKeys } from '../../../kit/hooks/useKeys.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -102,18 +103,6 @@ function hasTyping(el: EventTarget | null): boolean {
   if (!opensKeyboard(el)) return false;
   if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return el.value !== '';
   return el.isContentEditable;
-}
-
-/** 打字条后面的整页玻璃层（R-399）：画出来记一行 on、卸掉记一行 off；真机上“没糊”时先看这里生效的是哪个滤镜（none = 走了半透明纯色的后备） */
-function Mist({ onTap }: { onTap(): void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const cs = ref.current ? getComputedStyle(ref.current) : null;
-    rlog(`typebar mist on fx=${cs?.getPropertyValue('backdrop-filter') || cs?.getPropertyValue('-webkit-backdrop-filter') || 'none'}`);
-    return () => rlog('typebar mist off');
-  }, []);
-  // 只接手指和鼠标的点；键盘用 Esc 收起（输入框 onKeyDown），所以这一层不进读屏
-  return <div ref={ref} className={styles.mist} onClick={onTap} aria-hidden="true" data-testid="type-mist" />;
 }
 
 export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit, opened, onClose }: TypeBarProps) {
@@ -196,7 +185,7 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     <>
       {folded ? null : (
         <>
-          <Mist onTap={tapMist} />
+          <Mist onTap={tapMist} tag="typebar" log={rlog} testId="type-mist" />
           {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- mousedown 只拦失焦（台账 Q-25，platform/viewport.ts 的 keepFieldFocus），不是交互，键盘操作不受影响 */}
           <form ref={bar} className={styles.bar} onSubmit={onSubmit} onMouseDown={keepFieldFocus} aria-label={t('plus.type.label', {})} data-testid="type-bar">
             <div className={styles.grip} onPointerDown={down} onPointerUp={up} aria-hidden="true" />

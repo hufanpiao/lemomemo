@@ -12,6 +12,7 @@
 //   1. 复制 dist/web/app → desktop/src-tauri/target/web-stage/app（目录已被 .gitignore 忽略），
 //      不复制 SKIP 里的文件：sw.js（exe 不注册 Service Worker，更新走 updater）、preview.html（架构 5.13 的附件预览沙箱页，
 //      不是开发预览页；B4b-1 接进 exe 以前不打包。接上以后要从 SKIP 挪进 PAGES 并单独定 CSP，见 B6-exe 任务单冲突表，复核 N2）；
+//      也不复制 SKIP_EXT 里后缀的文件：.wasm（R-402 给 iPhone Safari 补的 webp 编码器，exe 用不到，理由见 SKIP_EXT）；
 //   2. 核对产物编进去的接口地址属于这次的环境（两个方向都查：正式包里不能有预览地址，预览包里不能有正式地址）；
 //   3. 暂存目录里的每个 .html 都按 PAGES 名单注入按环境区分的严格 meta CSP（和全局 CSP 取交集），
 //      名单以外的 .html 直接失败（X-1）；main、auth 两页必须有，quick-add 页有就注入（页面入口加进 vite.config.ts 之前没有）。
@@ -57,8 +58,20 @@ export const ENVS = {
   },
 };
 
-/** 不进安装包的文件（相对 app/） */
-export const SKIP = new Set(['sw.js', 'sw.js.map', 'preview.html']);
+/** 不进安装包的文件（相对 app/）；licenses/webp-wasm.txt 是下面 .wasm 的许可文本，wasm 不进包它也不进 */
+export const SKIP = new Set(['sw.js', 'sw.js.map', 'preview.html', 'licenses/webp-wasm.txt']);
+
+/**
+ * 不进安装包的后缀：.wasm 是 R-402 给 iPhone Safari 补的 webp 编码器（canvas 导出不了 webp 时才按需加载）。
+ * exe 的 WebView2 原生就能导出 webp，用不到它；exe 的 CSP 也没有 'wasm-unsafe-eval'，带进去也编译不了。
+ * 万一真走到那条路，取不到 wasm 会报 encode_load_failed（“这张图没处理成功”），不会卡住
+ */
+export const SKIP_EXT = new Set(['.wasm']);
+
+/** 这个文件（相对 app/，分隔符用 /）不进安装包 */
+export function skipped(r) {
+  return SKIP.has(r) || SKIP_EXT.has(extOf(r));
+}
 
 /**
  * 安装包里允许的后缀（白名单，B6-exe 代码审查 M4、安全审查 F5-3 ①）。Tauri 2.12.5 的资源协议只给 .html 注入 CSP；
@@ -414,7 +427,7 @@ function main(argv) {
     process.exit(1);
   }
 
-  const js = walk(DIST).filter((p) => p.endsWith('.js') && !SKIP.has(rel(DIST, p)));
+  const js = walk(DIST).filter((p) => p.endsWith('.js') && !skipped(rel(DIST, p)));
   const why = checkBundleEnv(envName, js.map((p) => readFileSync(p, 'utf8')));
   if (why) {
     if (!skipCheck) {
@@ -426,7 +439,7 @@ function main(argv) {
 
   rmSync(STAGE_ROOT, { recursive: true, force: true });
   mkdirSync(STAGE, { recursive: true });
-  cpSync(DIST, STAGE, { recursive: true, filter: (src) => !SKIP.has(rel(DIST, src)) });
+  cpSync(DIST, STAGE, { recursive: true, filter: (src) => !skipped(rel(DIST, src)) });
 
   const staged = walk(STAGE);
   const files = staged.map((p) => rel(STAGE, p));
@@ -458,7 +471,7 @@ function main(argv) {
   writeFileSync(join(STAGE, 'desktop-env.json'), `${JSON.stringify(envMarker(envName, skipCheck && why !== null))}\n`);
 
   const n = walk(STAGE).length;
-  console.log(`已暂存 ${envName}：${n} 个文件 → ${rel(REPO, STAGE)}（不带 ${[...SKIP].join('、')}；已注入 meta CSP：${plan.map(([f, p]) => `${f}=${p}`).join('，')}）`);
+  console.log(`已暂存 ${envName}：${n} 个文件 → ${rel(REPO, STAGE)}（不带 ${[...SKIP, ...[...SKIP_EXT].map((e) => `*${e}`)].join('、')}；已注入 meta CSP：${plan.map(([f, p]) => `${f}=${p}`).join('，')}）`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

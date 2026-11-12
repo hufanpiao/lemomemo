@@ -166,6 +166,22 @@ describe('底部输入行（线框 s7）', () => {
     expect(screen.getAllByTestId(/^notes-card-/)[0]?.textContent).toContain('首尔林银杏黄了');
   });
 
+  it('记一句时先用本机规则归类（S2 调 S5 的 classify-rules）：有“购物”分类，“下班去超市”归到它、来源 rule；仍不写 ai_status', async () => {
+    const b = await boot();
+    await act(async () => {
+      await b.outbox?.applyServer('categories', [{ row: serverCat(uid(50), '工作灵感') }, { row: serverCat(uid(51), '购物') }]);
+    });
+    open();
+    fireEvent.change(screen.getByTestId('notes-input'), { target: { value: '下班去超市' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('notes-input-row'));
+    });
+    await waitFor(() => expect(notes().getSnapshot()).toHaveLength(1));
+    expect(notes().getSnapshot()[0]).toMatchObject({ body: '下班去超市', category_id: uid(51), category_source: 'rule' });
+    const ins = ((await b.outbox?.list()) ?? []).find((i) => i.op === 'insert');
+    expect(ins && 'ai_status' in ins.data).toBe(false);
+  });
+
   it('空白不记', async () => {
     const b = await boot();
     open();

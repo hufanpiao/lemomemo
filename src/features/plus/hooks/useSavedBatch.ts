@@ -95,8 +95,10 @@ export function useSavedBatch(writer: Writer | undefined, confirming: boolean, t
   const storeNew = useCallback(
     async (base: Batch, env: SaveEnv): Promise<SaveOutcome | 'ask'> => {
       const { ready, ask: later } = splitConfirm(base.plan.items);
+      const t0 = performance.now();
       const r = await store(base, ready, env);
-      rlog(`${tag} stored out=${r.out} ready=${ready.length} ask=${later.length} origin=${base.plan.origin}`);
+      // ms：只算存这一步（写本机、进 outbox）；等 AI 的耗时在调用方的 planned 行里（Q-27 取证：两行相加是按“记下”后一共等了多久）
+      rlog(`${tag} stored out=${r.out} ready=${ready.length} ask=${later.length} origin=${base.plan.origin} ms=${Math.round(performance.now() - t0)}`);
       if (r.out !== 'ok' || !r.batch) return r.out === 'ok' ? 'not_saved' : r.out;
       setBatch(r.batch);
       if (later.length === 0) return 'ok';

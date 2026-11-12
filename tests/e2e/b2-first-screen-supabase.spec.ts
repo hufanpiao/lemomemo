@@ -1,7 +1,7 @@
 // B2 FA-6 ①：冷启动打开今天页，supabase-js 那一块（约 53 KB gzip）要在今天页画出来以后才下载
 // • 启动关口的 noticeState 走快读（src/features/onboarding/data/consent-api.ts 的 createRestNoticeRead）：令牌还新鲜时直接 GET
 //   /sb/rest/v1/profiles、/sb/rest/v1/app_config，不加载 supabase-js；session.ts 的 onAuthUser 等首屏画完、浏览器空闲才加载它。
-// • 这里用 page.route 答这两张表（不连库），写一份 JWT 形状的假会话（exp 在很远的将来；令牌是一看就是假的字符串，不是密钥）。
+// • 这里用 page.route 答这两张表（不连库），写一份 JWT 形状的假会话（session-fixture.ts 的 seedFakeSession({ jwt: true })；exp 在很远的将来，令牌是一看就是假的字符串，不是密钥）。
 // • 两种构建都要过：
 //   – 带 supabase 地址的构建（VITE_PUBLIC_SUPABASE_URL = 同源 /sb）：走快读，两张表各被请求一次、带 Bearer；
 //   – 假后端 e2e 的默认构建（没配 supabase 地址）：关口直接按读失败放行（envReady 为假），同样不在画出前下载 supabase-js。
@@ -15,16 +15,9 @@
 //   时间先后在页面里比（performance 的资源 startTime 对 MutationObserver 记下的今天页出现时刻），不用测试进程的时钟。
 import type { Page, Request } from '@playwright/test';
 import { expect, test } from './csp-fixture.ts';
-import { FAKE_USER_ID, sessionKeyFor } from './session-fixture.ts';
+import { seedFakeSession } from './session-fixture.ts';
 
 const V = '2026-10-29';
-
-/** JWT 形状的假令牌（只有 payload 有意义） */
-function fakeJwt(): string {
-  const b64u = (o: unknown): string => Buffer.from(JSON.stringify(o)).toString('base64url');
-  const exp = Math.floor(Date.now() / 1000) + 10 * 365 * 24 * 3600;
-  return `${b64u({ alg: 'none' })}.${b64u({ exp, session_id: 'e2e-fa6-sid', sub: FAKE_USER_ID })}.e2e-fake-signature`;
-}
 
 type Hits = { profiles: number; notice: number; bearer: boolean; apikey: boolean; sameOrigin: boolean; noClientInfo: boolean };
 
@@ -33,19 +26,8 @@ const EXPECT_FAST = Boolean(process.env['VITE_PUBLIC_SUPABASE_URL']);
 
 async function prepare(page: Page, baseURL: string | undefined): Promise<{ hits: Hits }> {
   if (!baseURL) throw new Error('playwright.config 没给 baseURL');
-  const now = Math.floor(Date.now() / 1000);
-  const session = JSON.stringify({
-    access_token: fakeJwt(), token_type: 'bearer', expires_in: 600, expires_at: now + 10 * 365 * 24 * 3600,
-    refresh_token: 'fake-refresh-token-e2e-only',
-    user: { id: FAKE_USER_ID, aud: 'authenticated', role: 'authenticated', email: 'e2e-fake@lemomemo.test' },
-  });
-  const key = sessionKeyFor(new URL('/sb', baseURL).href);
-  await page.context().addInitScript(({ key, value }) => {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // 不透明来源没有 localStorage
-    }
+  await seedFakeSession(page.context(), baseURL, { jwt: true });
+  await page.context().addInitScript(() => {
     // 今天页第一次出现的时刻（页面时钟）
     const w = window as unknown as { __todayAt?: number };
     new MutationObserver((_, obs) => {
@@ -54,7 +36,7 @@ async function prepare(page: Page, baseURL: string | undefined): Promise<{ hits:
         obs.disconnect();
       }
     }).observe(document, { childList: true, subtree: true });
-  }, { key, value: session });
+  });
   const hits: Hits = { profiles: 0, notice: 0, bearer: true, apikey: true, sameOrigin: true, noClientInfo: true };
   const origin = new URL(baseURL).origin;
   const check = (req: Request): void => {

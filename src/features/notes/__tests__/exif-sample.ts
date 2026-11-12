@@ -1,5 +1,6 @@
 // 测试用：造一段 JPEG 的 APP1 EXIF（拍摄时间 DateTimeOriginal + 可选的 GPS 定位），再拼进一张 JPEG（插图 TC-B4-02、image-exif 单测共用）
-// 不依赖 DOM，Node 和浏览器都能跑（e2e 在 Node 侧造好字节交给页面）
+// 不依赖 DOM，Node 和浏览器都能跑（e2e 在 Node 侧造好字节交给页面；b4-image-encode.spec.ts 把它一起打进页面里用）。
+// 另有 webp 的文件头、RIFF 块检查（image-encode-wasm.test.ts、r402-webp-wasm.spec.ts、b4-image-encode.spec.ts 共用，R-402 评审 14）
 
 export const GPS_MARK = 'N\0';
 
@@ -68,6 +69,26 @@ export function withExif(jpeg: Uint8Array, app1: Uint8Array): Uint8Array {
 export function bareJpeg(): Uint8Array {
   return new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xd9]);
 }
+
+/** 文件头是不是 RIFF....WEBP */
+export function isWebpFile(b: Uint8Array): boolean {
+  return String.fromCharCode(...b.subarray(0, 4)) === 'RIFF' && String.fromCharCode(...b.subarray(8, 12)) === 'WEBP';
+}
+
+/** webp 里的 RIFF 块名（VP8 、VP8L、VP8X、ALPH、EXIF、XMP …）：从第 12 字节起，每块 4 字节名 + 4 字节小端长度 + 内容（奇数补 1） */
+export function riffChunks(b: Uint8Array): string[] {
+  const out: string[] = [];
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  for (let i = 12; i + 8 <= b.length; ) {
+    const size = dv.getUint32(i + 4, true);
+    out.push(String.fromCharCode(...b.subarray(i, i + 4)));
+    i += 8 + size + (size % 2);
+  }
+  return out;
+}
+
+/** 重新编码后的 webp 只许有这些块（没有 EXIF、XMP：定位、机型带不过去，R-108） */
+export const WEBP_IMAGE_CHUNKS: readonly string[] = ['VP8X', 'ICCP', 'VP8 ', 'VP8L', 'ALPH'];
 
 /** 字节里有没有某段 ASCII（查产物里还有没有 "Exif"、GPS 标记） */
 export function hasAscii(bytes: Uint8Array, s: string): boolean {

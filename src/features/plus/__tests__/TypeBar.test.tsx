@@ -9,6 +9,7 @@ import { uiStore } from '../../../kit/state/ui-store.ts';
 import { setConsentStale } from '../../../kit/state/consent-fresh.ts';
 import { collection } from '../../../core/store.ts';
 import { clock } from '../../../platform/clock.ts';
+import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import type { Writer } from '../data/capture-save.ts';
 import TypeBar from '../ui/TypeBar.tsx';
 import type * as Session from '../../../platform/session.ts';
@@ -389,8 +390,17 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
     expect(writer.insert.mock.calls[0]?.[1]).toMatchObject({ title: '买牛奶' });
   });
 
-  it('够新或不知道（默认）：照常调 AI', async () => {
-    const { callAi } = await typeOnce(false);
-    expect(callAi).toHaveBeenCalledTimes(1);
+  it('够新或不知道（默认）：照常调 AI；运行日志记下结果来源、状态、原因和耗时（11-13“按记下要等一会才存上”靠这两行分清慢在哪）', async () => {
+    const lines: string[] = [];
+    const slots = globalThis as unknown as Record<string, unknown>;
+    slots[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    try {
+      const { callAi } = await typeOnce(false);
+      expect(callAi).toHaveBeenCalledTimes(1);
+      expect(lines.find((l) => l.startsWith('typebar planned'))).toMatch(/^typebar planned items=1 ai=true quotaOut=false origin=\w+ status=\w+ reason=\S+ ms=\d+$/);
+      expect(lines.find((l) => l.startsWith('typebar stored'))).toMatch(/^typebar stored out=ok ready=1 ask=0 origin=\w+ ms=\d+$/);
+    } finally {
+      delete slots[RL_SLOT];
+    }
   });
 });

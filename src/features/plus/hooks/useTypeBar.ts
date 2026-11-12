@@ -128,6 +128,9 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
     }
     busy.current = true;
     setError(null);
+    // 耗时进日志（负责人 11-13“今天、日历、待办按记下要等一会才存上”：分清是等 AI、超时、限流还是写库慢）
+    const t0 = performance.now();
+    const ms = (): number => Math.round(performance.now() - t0);
     try {
       const c = ctx();
       go({ type: 'organize' });
@@ -136,7 +139,7 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
       const quotaOut = aiOn ? await quotaOutToday(c.now) : false;
       const p = await planTyped(text, c, { online: online(), isOnline: online, aiOn, quotaOut }, callAi);
       if (p.quotaLeft !== null) void rememberQuotaLeft(p.quotaLeft, c.now);
-      rlog(`typebar planned items=${p.items.length} ai=${aiOn} quotaOut=${quotaOut}`);
+      rlog(`typebar planned items=${p.items.length} ai=${aiOn} quotaOut=${quotaOut} origin=${p.origin} status=${p.status} reason=${p.aiReason ?? '-'} ms=${ms()}`);
       if (p.items.length === 0) {
         fail('nothing');
         return;
