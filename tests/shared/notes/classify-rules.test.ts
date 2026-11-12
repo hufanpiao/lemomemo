@@ -1,9 +1,10 @@
 // shared/logic/notes/classify-rules.ts（B4 任务单 S5；架构 5.2 第 2839、2843 行；TC-B4-05 的本机一侧）
 // 只从已有分类里选、不新建；分类名出现在文字里优先（最长的）；常见类别词表；删掉的、撤销的、合并掉的分类不选；单字分类名只认整个标题。
 import { describe, expect, it } from 'vitest';
-import { classifyByRules, LEXICON, type RuleCategory } from '../../../shared/logic/notes/classify-rules.ts';
+import type { CategoryRow } from '../../../shared/logic/live-row.ts';
+import { classifyByRules, LEXICON } from '../../../shared/logic/notes/classify-rules.ts';
 
-const cats: RuleCategory[] = [
+const cats: CategoryRow[] = [
   { id: 'work', name: '工作', sort: 0 },
   { id: 'shop', name: '购物', sort: 1 },
   { id: 'signplex', name: 'SignPlex', sort: 2 },
@@ -47,7 +48,7 @@ describe('classifyByRules', () => {
     expect(classifyByRules({ title: '周末去超市' }, [])).toEqual({ category_id: null, by: null });
   });
   it('词表反例（代码审查 11-10 第 1 条）：单字词去掉了；韩文按词比，长词里含着的不算', () => {
-    const all: RuleCategory[] = [
+    const all: CategoryRow[] = [
       { id: 'health', name: '건강', sort: 0 }, { id: 'study', name: '学习', sort: 1 },
       { id: 'shop', name: '购物', sort: 2 }, { id: 'food', name: '맛집', sort: 3 },
     ];
@@ -60,7 +61,7 @@ describe('classifyByRules', () => {
     expect(classifyByRules({ title: '课间休息' }, all).category_id).toBeNull();             // 课
   });
   it('韩文词带助词也认：先去助词再整词比；词干只看词的开头', () => {
-    const all: RuleCategory[] = [{ id: 'health', name: '건강', sort: 0 }, { id: 'food', name: '맛집', sort: 1 }, { id: 'idea', name: '아이디어', sort: 2 }];
+    const all: CategoryRow[] = [{ id: 'health', name: '건강', sort: 0 }, { id: 'food', name: '맛집', sort: 1 }, { id: 'idea', name: '아이디어', sort: 2 }];
     expect(classifyByRules({ title: '아침 러닝을 했다' }, all)).toEqual({ category_id: 'health', by: 'lexicon' });
     expect(classifyByRules({ title: '병원에서 검진' }, all).category_id).toBe('health');
     expect(classifyByRules({ title: '여기 진짜 맛있는 곳' }, all).category_id).toBe('food');
@@ -68,7 +69,7 @@ describe('classifyByRules', () => {
     expect(classifyByRules({ title: '안 맛있' + '어서 별로' }, [{ id: 'x', name: '건강' }]).category_id).toBeNull();
   });
   it('拉丁字母和数字的分类名按词边界比（代码审查 11-10 第 2 条）', () => {
-    const lat: RuleCategory[] = [{ id: 'ai', name: 'AI', sort: 0 }, { id: 'ux', name: 'UX', sort: 1 }, { id: 'side', name: 'Side Project', sort: 2 }, { id: 'y', name: '2027', sort: 3 }];
+    const lat: CategoryRow[] = [{ id: 'ai', name: 'AI', sort: 0 }, { id: 'ux', name: 'UX', sort: 1 }, { id: 'side', name: 'Side Project', sort: 2 }, { id: 'y', name: '2027', sort: 3 }];
     expect(classifyByRules({ title: 'send email to Tom' }, lat).category_id).toBeNull();
     expect(classifyByRules({ title: 'linux 装机' }, lat).category_id).toBeNull();
     expect(classifyByRules({ title: '学AI课', body: null }, lat).category_id).toBe('ai');       // 中文挨着也算词边界

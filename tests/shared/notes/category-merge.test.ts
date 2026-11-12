@@ -1,8 +1,9 @@
 // shared/logic/notes/category-merge.ts（TC-B4-07 的判定一侧；B4 任务单 S7；架构 5.2 末条）
 import { describe, expect, it } from 'vitest';
-import { similarCategoryPairs, type MergeCategory } from '../../../shared/logic/notes/category-merge.ts';
+import type { CategoryRow } from '../../../shared/logic/live-row.ts';
+import { similarCategoryPairs } from '../../../shared/logic/notes/category-merge.ts';
 
-const c = (id: string, name: string, o: Partial<MergeCategory> = {}): MergeCategory => ({ id, name, sort: 0, deleted_at: null, merged_into: null, ...o });
+const c = (id: string, name: string, o: Partial<CategoryRow> = {}): CategoryRow => ({ id, name, sort: 0, deleted_at: null, merged_into: null, ...o });
 
 describe('similarCategoryPairs', () => {
   it('归一后一样：空白、全角、大小写不同', () => {

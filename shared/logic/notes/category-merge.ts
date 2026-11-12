@@ -5,16 +5,8 @@
 //   ② 一个包含另一个，且短的那个至少 2 个字（“购物”和“购物清单”；“书”和“书单”不算，单字太容易误中）；
 //   ③ 都至少 3 个字、只差一个字（增、删、换一个字：“读书笔记”和“读书笔迹”）。
 // 每对建议留下 sort 小的（一样就留名字短的、再按 id），把另一个合并进去。纯函数。
-import { isLiveCategory, type Tombstone } from '../live-row.ts';
+import { isLiveCategory, type CategoryRow } from '../live-row.ts';
 import { normalizeForSearch } from '../search.ts';
-
-/** 一个分类（全部传进来即可：删了的、撤销的、合并掉的这里跳过） */
-export interface MergeCategory extends Tombstone {
-  id: string;
-  name: string;
-  sort?: number;
-  merged_into?: unknown;
-}
 
 export interface MergePair {
   /** 建议留下的 */
@@ -51,7 +43,7 @@ function why(a: string, b: string): MergePair['why'] | null {
 }
 
 /** 找出彼此很像的分类对；同一对只出一次，按 keep 的 sort 先后 */
-export function similarCategoryPairs(categories: readonly MergeCategory[]): MergePair[] {
+export function similarCategoryPairs(categories: readonly CategoryRow[]): MergePair[] {
   const live = categories
     .filter(isLiveCategory)
     .map((c) => ({ c, n: normalizeForSearch(c.name) }))

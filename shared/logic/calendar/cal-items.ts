@@ -12,19 +12,11 @@ import { displayShort } from '../short.ts';
 // 项目色挪到 shared/logic/project-color.ts（前端 A 会审 ①），这里转出保持原来的引用路径能用
 export { PROJECT_COLORS, projectColorIndex, type ProjectColor } from '../project-color.ts';
 
-/**
- * 删除、撤销两列：形状和“没有这两列算还在”的约定只在 live-row.ts 的 Tombstone；这里按 rows.ts 的列类型收窄
- * （insert 不放这两列，本机新建、还没同步的行里可能没有，所以仍是可选的）
- */
-type CalTombstone = Tombstone & {
-  readonly deleted_at?: EventWrite['deleted_at'] | undefined;
-  readonly undone?: boolean | undefined;
-};
-/** 月历、周视图用到的日程列（本机缓存里的行直接传进来即可） */
+/** 月历、周视图用到的日程列，加上删除、撤销两列（live-row.ts 的 Tombstone，可以没有；本机缓存里的行直接传进来即可） */
 export type CalEvent = Readonly<Pick<EventWrite, 'id' | 'title' | 'short' | 'project' | 'date' | 'time' | 'tz' | 'duration_min' | 'created_at'>> &
-  CalTombstone;
+  Tombstone;
 /** 月历用到的待办列 */
-export type CalTodo = Readonly<Pick<TodoWrite, 'id' | 'title' | 'short' | 'project' | 'due' | 'done' | 'created_at'>> & CalTombstone;
+export type CalTodo = Readonly<Pick<TodoWrite, 'id' | 'title' | 'short' | 'project' | 'due' | 'done' | 'created_at'>> & Tombstone;
 
 /** 月历、单日列表的输入 */
 export interface CalItems {
@@ -162,7 +154,7 @@ export function todoDate(td: CalTodo): string | null {
 }
 
 /** 待办还开着：没删、没撤销、没完成。月历、周视图（经 todoDate）和“＋”找候选共用 */
-export function isOpenTodo(td: CalTombstone & Readonly<Pick<TodoWrite, 'done'>>): boolean {
+export function isOpenTodo(td: Tombstone & Readonly<Pick<TodoWrite, 'done'>>): boolean {
   return isLiveRow(td) && !td.done;
 }
 

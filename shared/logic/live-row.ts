@@ -12,7 +12,15 @@ export interface Tombstone {
   readonly undone?: unknown;
 }
 /** 分类另看 merged_into */
-type CategoryTombstone = Tombstone & { readonly merged_into?: unknown };
+interface CategoryTombstone extends Tombstone {
+  readonly merged_into?: unknown;
+}
+/** 传给分类合并建议、本机规则分类的一个分类（删了的、撤销的、合并掉的照样传进去，由 isLiveCategory 跳过） */
+export interface CategoryRow extends CategoryTombstone {
+  readonly id: string;
+  readonly name: string;
+  readonly sort?: number;
+}
 /** 本机缓存里的行（列都是 unknown）也能直接传进来 */
 type AnyRow = Readonly<Record<string, unknown>>;
 
