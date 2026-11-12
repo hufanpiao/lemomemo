@@ -1,5 +1,6 @@
 // tests/build/check-arch-binimport*.test.ts 共用（LINT-binimport，10-30 拆文件时从 check-arch-binimport.test.ts 挪来，行为不变）：
-// 在临时目录现拼一棵迷你仓库、跑 build/check_arch.py 取 BINIMPORT 报错、只计 check_binimport 本身的耗时
+// 在临时目录现拼一棵迷你仓库、跑 build/check_arch.py 取 BINIMPORT 报错、只计 check_binimport 本身的耗时。
+// 11-11 起 check-arch-email.test.ts 也用这里的 repo、checkArch（EMAIL 规则），不再另抄一份
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,7 +23,7 @@ export function cleanupDirs(): void {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 }
 
-export function repo(files: Record<string, string>): string {
+export function repo(files: Record<string, string | Uint8Array>): string {
   const root = mkdtempSync(join(tmpdir(), 'lemo-binimport-'));
   dirs.push(root);
   for (const [rel, body] of Object.entries(files)) {
@@ -33,7 +34,8 @@ export function repo(files: Record<string, string>): string {
   return root;
 }
 
-export function binimport(root: string): { code: number; errors: Item[] } {
+/** 跑 check_arch.py，只留 rule 这一条规则的报错 */
+export function checkArch(root: string, rule: string): { code: number; errors: Item[] } {
   const args = ['-I', join(ROOT, 'build', 'check_arch.py'), '--root', root, '--json', '--today', '2026-10-28'];
   let code = 0;
   let out: string;
@@ -45,8 +47,9 @@ export function binimport(root: string): { code: number; errors: Item[] } {
     out = err.stdout;
   }
   const report = JSON.parse(out) as { errors: Item[] };
-  return { code, errors: report.errors.filter((x) => x.rule === 'BINIMPORT') };
+  return { code, errors: report.errors.filter((x) => x.rule === rule) };
 }
+export const binimport = (root: string) => checkArch(root, 'BINIMPORT');
 
 export const where = (errors: Item[]) => errors.map((e) => `${e.file}:${e.line}`);
 export const lines = (...ls: string[]) => ls.join('\n');

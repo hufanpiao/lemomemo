@@ -26,7 +26,8 @@ export function describeP6(): void {
       const log = join(dir, `p6-${++n}.log`);
       Object.assign(process.env, { P6_RUNNER_LOG: log, P6_RUNNER_MODE: mode });
       try {
-        const r = await runScript(dir, { secure: [SERVICE], plain: [OWNER], args: `-Only 'P6' -P9Runner '${RUNNER}'`, ...o });
+        // email: ''：只跑 P6 不登录，不给测试账号邮箱也照跑
+        const r = await runScript(dir, { secure: [SERVICE], plain: [OWNER], email: '', args: `-Only 'P6' -P9Runner '${RUNNER}'`, ...o });
         const runs = existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as P6Run) : [];
         return { r, s: summary(r.out), runs };
       } finally {

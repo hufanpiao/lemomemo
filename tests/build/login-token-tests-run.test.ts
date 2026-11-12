@@ -17,7 +17,7 @@ import {
 let dir = '';
 const run = (o: Opts) => runScript(dir, o);
 const GUARD = "raise exception 'lemo: 不是预览库";
-const CLEAR_PW = "update auth.users set encrypted_password = '' where email = 'hufanp+lemotest@gmail.com';";
+const CLEAR_PW = "update auth.users set encrypted_password = '' where email = 'owner+lemotest@example.com';";
 
 function expectNoSecrets(r: RunResult) {
   for (const s of [r.out, r.err]) {
@@ -174,10 +174,10 @@ describe.skipIf(!PS)('login-token-tests.ps1 从头跑到尾', () => {
     expect(tail.indexOf(GUARD)).toBeGreaterThan(-1);
     expect(tail.indexOf(GUARD)).toBeLessThan(tail.indexOf(ins));
     expect(tail).toContain("select u.id, 'zh-CN' from auth.users u");
-    expect(tail).toContain("where u.email = 'hufanp+lemotest@gmail.com'");
+    expect(tail).toContain("where u.email = 'owner+lemotest@example.com'");
     expect(tail).toContain('and not exists (select 1 from public.profiles p where p.user_id = u.id);');
     // 另一种可能（profile 行在、但已停用）：只读诊断查询
-    expect(tail).toContain("select disabled_at, disabled_reason from public.profiles p join auth.users u on u.id = p.user_id where u.email = 'hufanp+lemotest@gmail.com';");
+    expect(tail).toContain("select disabled_at, disabled_reason from public.profiles p join auth.users u on u.id = p.user_id where u.email = 'owner+lemotest@example.com';");
     expect(tail.indexOf('select disabled_at')).toBeGreaterThan(tail.indexOf(ins));
     // 照常往下：P2、TC-B1-112 都跑了
     expect(s).toMatch(/\[通过\] P2 /);
@@ -219,7 +219,7 @@ describe.skipIf(!PS)('login-token-tests.ps1 从头跑到尾', () => {
     expect(s).toMatch(/\[通过\] P8-恢复 恢复 P8 改过的库：已恢复：注销冷静期/);
     expect(r.out).toContain('P8 改过的库还没恢复（P8 中途出错）：注销冷静期');
     const tail = r.out.slice(r.out.indexOf('P8 改过的库还没恢复'));
-    expect(tail).toContain('delete from private.pending_deletions where user_id = (select id from auth.users where email = \'hufanp+lemotest@gmail.com\');');
+    expect(tail).toContain('delete from private.pending_deletions where user_id = (select id from auth.users where email = \'owner+lemotest@example.com\');');
     expect(tail.indexOf(GUARD)).toBeGreaterThan(-1);
     expect(tail).not.toContain('admin_set_disabled');   // 停用那一步已经恢复过，不再重复
     expectNoSecrets(r);
@@ -230,7 +230,7 @@ describe.skipIf(!PS)('login-token-tests.ps1 从头跑到尾', () => {
     expect(r.code).toBe(0);
     expect(r.out).toContain('P8 改过的库还没恢复（P8 中途出错）：停用');
     expect(r.out).toContain('P8 改过的库还没恢复（脚本中途停下）：停用');
-    expect(count(r.out, "select private.admin_set_disabled((select id from auth.users where email = 'hufanp+lemotest@gmail.com'), false);")).toBe(3);   // 「解除停用」那一步本身打印一次（输入断在它的回车），catch、finally 各一次
+    expect(count(r.out, "select private.admin_set_disabled((select id from auth.users where email = 'owner+lemotest@example.com'), false);")).toBe(3);   // 「解除停用」那一步本身打印一次（输入断在它的回车），catch、finally 各一次
     expect(r.out).toContain('上面打印的 P8 恢复 SQL 还没确认执行，请务必执行');
     expect(summary(r.out)).toMatch(/\[不符合\] 脚本 没有跑完/);
     expect(r.out).toContain(FINALLY);
@@ -327,7 +327,7 @@ describe.skipIf(!PS)('login-token-tests.ps1 从头跑到尾', () => {
     expect(b.err).toBe('');
     expect(b.code).toBe(0);
     expect(count(b.out, '应是 6 位数字或登录链接')).toBe(1);
-    expect(verifies(b)).toEqual([{ type: 'email', email: 'hufanp+lemotest@gmail.com', token: OTP }]);
+    expect(verifies(b)).toEqual([{ type: 'email', email: 'owner+lemotest@example.com', token: OTP }]);
     expect(b.out).toContain('已登录（令牌只在本脚本内存里，不显示）');
     expectNoSecrets(b);
   }, 240_000);

@@ -30,6 +30,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/arch/stylelint.test.ts', // stylelint API
   'tests/arch/tsc.test.ts', // TypeScript 编译器
   'tests/build/check-arch-bidi.test.ts', // python build/check_arch.py、git init（LINT-bidi）
+  'tests/build/check-arch-email.test.ts', // python build/check_arch.py（EMAIL：公开仓库不进真实邮箱）
   'tests/build/check-arch-binimport.test.ts', // python build/check_arch.py（LINT-binimport）
   'tests/build/check-arch-binimport-entry.test.ts', // python build/check_arch.py（LINT-binimport：读文件再执行、非 JS 入口）
   'tests/build/check-arch-binimport-perf.test.ts', // python build/check_arch.py（LINT-binimport：耗时上限和健壮性）

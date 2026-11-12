@@ -23,6 +23,10 @@
        （U+200B–U+200F、U+202A–U+202E、U+2060–U+2069、U+061C、U+2028、U+2029、U+180E、U+3164、U+115F、U+1160、U+FFA0、
        U+E0000–U+E007F、文件中间的 U+FEFF；U+00AD、U+FE00–U+FE0F 只在代码类扩展名里拦），要写成转义
        （B1 接手清单 LINT-bidi，防 Trojan Source；UTF-16 文件先解码再扫；--root 不在 git 里或 git 出错时整棵树扫）
+  EMAIL 扫的文件同 BIDI（除二进制外的所有文件）：不准出现真实邮箱服务商域名（EMAIL_PROVIDER_DOMAINS：gmail、naver、qq、163、outlook、
+       hotmail、icloud、kakao、daum 等，含子域名、大小写、URL 里的 %40 写法）的地址——仓库是公开的，真人能收信的地址不进仓库；
+       要“像一个邮箱”的地方用 example.com、lemomemo.test 这类保留域名。只放行 EMAIL_FAKE_OK 白名单里明显是假的夹具地址
+       （整个地址完全相同才算）；报错里 @ 前面只露第一个字符。EMAIL_PENDING 是别人正在清的文件，清完删掉那一行（真仓库会报警告提醒）
   BINIMPORT JS/TS 源码里 require（含 require.call/apply、require?.()、(0, require)()、createRequire 绑定的名字和
        createRequire(…)() 连写）、import、import()、export … from、importScripts、new Worker 的目标路径不准以二进制扩展名结尾
        （BIDI_BINARY_EXT 加 .node、.so、.dylib；Node 的 CJS 把不认识的扩展名当 JS 执行，二进制里藏的代码评审在 diff 里看不到）。
@@ -42,6 +46,8 @@ import pathlib
 import re
 import subprocess
 import sys
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # Supabase 各种密钥的前缀：只在前缀后面紧跟至少 20 个密钥字符时才算（B1 K4）。
 # supabase-js 自己带着 'sb_secret_' 这类前缀字面量做判断，打进产物后后面不跟任何密钥，只认前缀会误报
@@ -605,6 +611,22 @@ def bidi_hits(text, code_file, exempt):
     return hits
 
 
+def scan_texts(rel, p):
+    """BIDI、EMAIL 共用：读文件并判二进制。是二进制返回 None，否则返回（各种解码的文本列表, 是不是代码类扩展名）"""
+    data = p.read_bytes()
+    low = rel.lower()
+    head_has_nul = bidi_head_has_nul(data)
+    # 二进制：扩展名在 BIDI_BINARY_EXT 里、并且前 8000 字节含 NUL 才跳过（.png 能被 require 当 JS、.bin 能被 python 当脚本跑）
+    if low.endswith(BIDI_BINARY_EXT) and head_has_nul:
+        return None
+    code_file = low.endswith(BIDI_CODE_EXT)
+    # 代码和认得的文本扩展名无条件扫，
+    # 只有没扩展名或扩展名不认识的文件才保留 NUL 判定（防在注释里塞 0xFF、NUL 绕过检查），同样只看前 8000 字节
+    if not code_file and not low.endswith(BIDI_TEXT_EXT) and head_has_nul:
+        return None
+    return bidi_decode(data), code_file
+
+
 def check_bidi(root, errors):
     bs = chr(92)
     for rel, p in bidi_files(root):
@@ -613,21 +635,14 @@ def check_bidi(root, errors):
             if m.group(0) in BIDI_CHARS:
                 cp = ord(m.group(0))
                 errors.append(("BIDI", rel, 0, f"文件名里原样出现看不见的控制字符 U+{cp:04X}（Trojan Source 一类），要改名"))
-        data = p.read_bytes()
-        low = rel.lower()
-        head_has_nul = bidi_head_has_nul(data)
-        # 二进制：扩展名在 BIDI_BINARY_EXT 里、并且前 8000 字节含 NUL 才跳过（.png 能被 require 当 JS、.bin 能被 python 当脚本跑）
-        if low.endswith(BIDI_BINARY_EXT) and head_has_nul:
+        scanned = scan_texts(rel, p)
+        if scanned is None:
             continue
-        code_file = low.endswith(BIDI_CODE_EXT)
-        # 代码和认得的文本扩展名无条件扫，
-        # 只有没扩展名或扩展名不认识的文件才保留 NUL 判定（防在注释里塞 0xFF、NUL 绕过检查），同样只看前 8000 字节
-        if not code_file and not low.endswith(BIDI_TEXT_EXT) and head_has_nul:
-            continue
+        texts, code_file = scanned
         exempt = BIDI_EXEMPT.get(rel, {})
         # 多种解码的命中合并：同一（行号, 码位）取各解码里出现次数的最大值，同一处不重复报
         merged = {}
-        for text in bidi_decode(data):
+        for text in texts:
             counts = {}
             for key in bidi_hits(text, code_file, exempt):
                 counts[key] = counts.get(key, 0) + 1
@@ -637,6 +652,71 @@ def check_bidi(root, errors):
             esc = f"{bs}u{cp:04x}" if cp <= 0xFFFF else f"{bs}u{{{cp:x}}}"
             for _ in range(n):
                 errors.append(("BIDI", rel, line, f"原样出现看不见的控制字符 U+{cp:04X}（Trojan Source 一类），要写成转义 {esc}"))
+
+
+# EMAIL（11-11，仓库是公开的）：跟踪的文字文件里不准出现真实邮箱服务商域名的地址——真人能收信的地址（负责人的验收账号别名、
+# 示例里随手写的本人邮箱）进了公开仓库就收不回来。要“像一个邮箱”的地方用保留域名（example.com、lemomemo.test）的占位地址。
+# 只按域名认，不带域名的别名写法（名字+别名）认不出，靠评审。本文件不许出现任何真实地址（白名单里的都是假的）
+EMAIL_PROVIDER_DOMAINS = (
+    "gmail.com", "googlemail.com", "outlook.com", "outlook.kr", "hotmail.com", "live.com", "live.cn", "msn.com",
+    "icloud.com", "me.com", "mac.com", "yahoo.com", "yahoo.co.jp", "yahoo.co.kr", "ymail.com", "aol.com",
+    "proton.me", "protonmail.com", "pm.me", "gmx.com", "zoho.com", "fastmail.com", "yandex.com", "yandex.ru", "mail.ru",
+    "naver.com", "kakao.com", "daum.net", "hanmail.net", "nate.com",
+    "qq.com", "foxmail.com", "163.com", "126.com", "yeah.net", "sina.com", "sina.cn", "sohu.com", "aliyun.com", "139.com", "189.cn",
+)
+# 从 @（或 URL 里的 %40）往后认域名，子域名（vip.qq.com）也算；域名后面不能再跟字母数字（gmail.community 不算）。
+# 先找 @ 再回头取 @ 前面的那一段：整段从前往后配的话，遇到没有 @ 的超长 base64 会退成平方级
+EMAIL_AT_RE = re.compile(
+    r"(?:@|%40)((?:[a-z0-9-]+\.)*(?:" + "|".join(re.escape(d) for d in EMAIL_PROVIDER_DOMAINS) + r"))(?![a-z0-9-])",
+    re.IGNORECASE,
+)
+EMAIL_LOCAL_RE = re.compile(r"[A-Za-z0-9._%+-]{1,64}\Z")
+# 白名单：明显是假的夹具地址（全小写、整个地址完全相同才放行）→ 为什么是假的。加新地址前先想能不能改用 example.com
+EMAIL_FAKE_OK = {
+    "someone@gmail.com": "测试里泛指“随便一个真实服务商的邮箱”的反例（应被 not_test_email 拦下），someone 是占位词",
+    "boss@gmail.com": "preview-login-as-admin 测试里“E2E_ADMIN_EMAIL 填成真实服务商邮箱”的反例，boss 是占位词",
+    "owner@gmail.com": "preview-login 测试里 PREVIEW_OWNER_EMAILS 名单的反例，owner 是角色名",
+    "owner.sample@gmail.com": "登录页改邮箱的界面测试里往输入框填的样例，sample 写明是样例",
+    "owner.real@gmail.com": "preview-login 系列测试里“负责人的真实邮箱”这个角色的替身，不是谁的地址",
+    "jimin.kim@naver.com": "设计线框里“被邀请的朋友”的示意地址，用韩国常见人名拼的样例",
+    "lemomemo.test@gmail.com": "account-purge 测试里 isTestRecipient 的反例：把测试域名 lemomemo.test 写在 @ 前面",
+}
+# 待清理：11-11 清真实邮箱时由别人在处理的两处，本规则先不拦。清完（或文件删了）以后把那一行删掉——真仓库里会报警告提醒
+EMAIL_PENDING: dict[str, str] = {}
+
+
+def email_hits(text):
+    """一种解码下的命中：{(行号, 遮住 @ 前面的地址)}。白名单里的、@ 前面没有字母数字的（SQL 的 like '%@…'、只写域名后缀）不算"""
+    hits = set()
+    for m in EMAIL_AT_RE.finditer(text):
+        lm = EMAIL_LOCAL_RE.search(text, max(0, m.start() - 64), m.start())
+        local = lm.group(0) if lm else ""
+        domain = m.group(1).lower()
+        if not any(c.isalnum() for c in local) or f"{local.lower()}@{domain}" in EMAIL_FAKE_OK:
+            continue
+        # 报错只露第一个字符：CI 日志也是公开的，不把地址再抄一遍
+        hits.add((text.count("\n", 0, m.start()) + 1, f"{local[0]}***@{domain}"))
+    return hits
+
+
+def check_email(root, errors, warnings):
+    still_pending = set()
+    for rel, p in bidi_files(root):
+        scanned = scan_texts(rel, p)
+        if scanned is None:
+            continue
+        hits = set().union(*(email_hits(text) for text in scanned[0]))
+        if rel in EMAIL_PENDING:
+            if hits:
+                still_pending.add(rel)
+            continue
+        for line, masked in sorted(hits):
+            errors.append(("EMAIL", rel, line,
+                           f"出现真实邮箱服务商的地址 {masked}：公开仓库里不写真人能收信的地址，换成 example.com、lemomemo.test "
+                           f"这类保留域名的占位地址；确实是假的夹具地址，才加进 EMAIL_FAKE_OK 并写明为什么是假的"))
+    if root == REPO_ROOT:
+        for rel in sorted(set(EMAIL_PENDING) - still_pending):
+            warnings.append(("EMAIL", rel, 0, "已经没有真实邮箱服务商的地址（或文件已删）：把它从 build/check_arch.py 的 EMAIL_PENDING 里删掉"))
 
 
 # BINIMPORT（B1 接手清单 LINT-binimport）：require / import 的目标不准是二进制扩展名。
@@ -1317,7 +1397,7 @@ def _check_binimport_js(rel, p, errors):
 def main(argv=None):
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default=str(pathlib.Path(__file__).resolve().parent.parent))
+    ap.add_argument("--root", default=str(REPO_ROOT))
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--today", help="自测用：YYYY-MM-DD，决定 W2 的“明年”")
     args = ap.parse_args(argv)
@@ -1335,6 +1415,7 @@ def main(argv=None):
     check_p142(root, errors)
     check_a24_disable(root, errors)
     check_bidi(root, errors)
+    check_email(root, errors, warnings)
     check_binimport(root, errors)
 
     if args.json:

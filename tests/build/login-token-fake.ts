@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
-import { p6Route } from './login-token-fake-p6.ts';
+import { p6Route, TEST_EMAIL, type P6Totals } from './login-token-fake-p6.ts';
 import { retryOnPwshCrash } from './pwsh-crash.ts';
 
 export const root = join(import.meta.dirname, '..', '..');
@@ -69,7 +69,7 @@ export const SERVICE = 'sb_secret_TESTONLYservicekey1234567890ab';
 export const HASH = 'TESTONLY0123456789abcdef0123456789abcdef0123456789abcdef';
 
 export type Req = { method: string; path: string; auth: string; headers: IncomingMessage['headers']; body: Buffer };
-export type Opts = {
+export type Opts = P6Totals & {   // P6、P6A 假路由的几项在 login-token-fake-p6.ts（P6Totals），不在这里再写一遍
   captcha?: boolean;          // /otp 回 400 captcha_failed
   noKeyOnSite?: boolean;      // 页面脚本里没有 publishable key
   leakTable?: string;         // 这张 private 表竟然读得到（200）
@@ -85,14 +85,10 @@ export type Opts = {
   p5Grace?: number;           // 过期后还放行几秒（默认 2）
   all?: boolean;              // 不加默认的 -Only（跑全部项目，含 P5、P9）
   verify429?: boolean;        // /auth/v1/verify 一律回 429（限流）
-  userTotals?: number[];      // P6：GET /auth/v1/admin/users 依次报的 x-total-count（默认一直是 7；最后一个用到底）
-  adminTotals?: (number | null)[];   // P6：GET /rest/v1/admins（Accept-Profile: private）依次报的 Content-Range 总数（默认一直是 0；null = 回 500）
-  p6aNoUser?: boolean;               // P6A：预览里还没有 e2e-admin@lemomemo.test（login-token-fake-p6.ts）
-  p6aMember?: (number | null)[];     // P6A：e2e-admin 在 admins 里的行数，依次报（默认一直是 0；null = 回 500）
-  p6aGateway401?: boolean | string;  // P6A：找账号那一页回网关样式的 401 {"message":"Invalid API key"}；字符串 = 用它当 message
   plain: string[];            // Read-Host（明文）依次的回答
   secure: string[];           // Read-Host -AsSecureString 依次的回答
   args?: string;              // 额外参数
+  email?: string;             // 测试账号邮箱，经环境变量 LEMO_PREVIEW_TEST_EMAIL 给脚本（默认 TEST_EMAIL）；'' = 不给（只跑 P6、P6A 不登录，用不着）
 };
 export type RunResult = Awaited<ReturnType<typeof runOnce>>;
 
@@ -296,6 +292,7 @@ function global:Invoke-WebRequest {
     `run-${port}.ps1`,
     `$ErrorActionPreference = 'Stop'
 $env:LEMO_TEST_API = '1'
+$env:LEMO_PREVIEW_TEST_EMAIL = ${q(opts.email ?? TEST_EMAIL)}   # 一律由外壳定（赋空串 = 不给），不沿用本机窗口里设着的真实值
 function global:Get-Process { @() }
 function global:Get-CimInstance { @() }
 function global:Get-ItemProperty { $null }

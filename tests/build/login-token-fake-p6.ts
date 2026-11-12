@@ -6,15 +6,18 @@
 // 都只认 service key（apikey 头）；依次取 userTotals / adminTotals / p6aMember（最后一个用到底），adminTotals、p6aMember 里的 null 表示回 500
 import type { IncomingMessage } from 'node:http';
 
+/** login-token-fake.ts 的 Opts 里 P6、P6A 的几项（Opts = P6Totals & {…}，只在这里定义一份） */
 export type P6Totals = {
-  userTotals?: number[] | undefined;
-  adminTotals?: (number | null)[] | undefined;
-  p6aNoUser?: boolean | undefined;            // P6A：预览里还没有 e2e-admin@lemomemo.test
-  p6aMember?: (number | null)[] | undefined;  // P6A：e2e-admin 在 admins 里的行数，依次报（默认一直是 0）
-  p6aGateway401?: boolean | string | undefined; // P6A：找账号那一页回网关样式的 401（只有 message，没有错误码）；给字符串就用它当 message
+  userTotals?: number[] | undefined;            // P6：GET /auth/v1/admin/users 依次报的 x-total-count（默认一直是 7；最后一个用到底）
+  adminTotals?: (number | null)[] | undefined;  // P6：GET /rest/v1/admins（Accept-Profile: private）依次报的 Content-Range 总数（默认一直是 0；null = 回 500）
+  p6aNoUser?: boolean | undefined;              // P6A：预览里还没有 e2e-admin@lemomemo.test
+  p6aMember?: (number | null)[] | undefined;    // P6A：e2e-admin 在 admins 里的行数，依次报（默认一直是 0；null = 回 500）
+  p6aGateway401?: boolean | string | undefined; // P6A：找账号那一页回网关样式的 401 {"message":"Invalid API key"}（只有 message，没有错误码）；给字符串就用它当 message
 };
 export type P6Reply = [status: number, body: unknown, headers?: Record<string, string>];
 export const P6A_EMAIL = 'e2e-admin@lemomemo.test';
+// 测试账号邮箱（占位地址）：脚本里不写死邮箱，login-token-fake.ts 的外壳脚本默认经环境变量 LEMO_PREVIEW_TEST_EMAIL 给它
+export const TEST_EMAIL = 'owner+lemotest@example.com';
 export const P6A_UID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 
 const pick = <T>(seq: T[], i: number, dflt: T): T => (seq.length === 0 ? dflt : (seq[Math.min(i, seq.length - 1)] as T));
@@ -50,7 +53,7 @@ export function p6Route(
     return [200, { users: [{ id: uid }] }, { 'x-total-count': String(t) }];
   }
   if (page) {
-    const all = [{ id: uid, email: 'hufanp+lemotest@gmail.com' }, ...(o.p6aNoUser ? [] : [{ id: P6A_UID, email: P6A_EMAIL }])];
+    const all = [{ id: uid, email: TEST_EMAIL }, ...(o.p6aNoUser ? [] : [{ id: P6A_UID, email: P6A_EMAIL }])];
     return [200, { users: page[1] === '1' ? all : [] }, { 'x-total-count': String(all.length) }];
   }
   if (total) return range(pick(o.adminTotals ?? [], counts.admins++, 0));

@@ -112,6 +112,30 @@ $script:secretVals.Add('864209'); $script:secretVals.Add('tok-ABCDEFGH')
       expect(r.stdout, v).not.toContain('登录令牌测试');
     }
   }, 90_000);
+
+  // 公开仓库里不写死测试账号邮箱：只认 -Email 和环境变量 LEMO_PREVIEW_TEST_EMAIL。本机窗口里可能真设着这个变量，这里一律自己定
+  it('要登录的项目没给测试账号邮箱（-Email、LEMO_PREVIEW_TEST_EMAIL 都没有）→ 中文报错停下；两种来源格式不对（带引号、没有域名后缀）都被拒；都在发请求之前', () => {
+    const run = (args: string[], email?: string) => {
+      const env = envNoTest();
+      delete env.LEMO_PREVIEW_TEST_EMAIL;
+      if (email !== undefined) env.LEMO_PREVIEW_TEST_EMAIL = email;
+      return spawnSync(PS ?? 'powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', SCRIPT, ...args], { encoding: 'utf8', env });
+    };
+    const cases: [string, ReturnType<typeof run>, string][] = [
+      ['全部项目', run([]), '没给测试账号邮箱'],
+      ['-Only P5,P9', run(['-Only', 'P5,P9']), '没给测试账号邮箱'],
+      ['环境变量只有空格', run([], '   '), '没给测试账号邮箱'],
+      ['环境变量带引号', run([], "o'r+lemotest@example.com"), '格式不对'],
+      ['-Email 带引号', run(['-Email', "o'r+lemotest@example.com"]), '格式不对'],
+      ['-Email 没有域名后缀（只跑 P6 也照核格式）', run(['-Only', 'P6', '-Email', 'owner+lemotest@example']), '格式不对'],
+    ];
+    for (const [label, r, msg] of cases) {
+      expect(r.status, label).not.toBe(0);
+      expect(r.stdout + r.stderr, label).toContain(msg);
+      expect(r.stdout + r.stderr, label).toContain('LEMO_PREVIEW_TEST_EMAIL');
+      expect(r.stdout, label).not.toContain('登录令牌测试');
+    }
+  }, 90_000);
 });
 
 describe.skipIf(!PS)('login-token-tests.ps1 经假服务：verify 上限和限流、P5、P9、人机验证、完整顺序', () => {
@@ -178,6 +202,14 @@ else console.log('  1 passed (2.1s)');
       expectNoSecrets(r, [LINK, HASH]);
     }
   }, 120_000);
+
+  it('-Email 参数压过环境变量 LEMO_PREVIEW_TEST_EMAIL：发码、换会话用的都是参数给的邮箱', async () => {
+    const mine = 'param+lemotest@example.com';
+    const r = await run({ verify429: true, secure: [OTP], plain: ['', 'y'], args: `-Email '${mine}'` });
+    expect(r.code).toBe(0);
+    expect(r.reqs.filter((x) => x.method === 'POST' && x.path === '/auth/v1/otp').map((x) => JSON.parse(x.body.toString('utf8')).email)).toEqual([mine]);
+    expect(verifies(r)).toEqual([{ type: 'email', email: mine, token: OTP }]);
+  }, 60_000);
 
   it('-Only P5,P9：不做预览库检查；P5 测到 401 PGRST303 记通过；vitest 时间不够就挪到 P5 之后；令牌只进子进程环境、输出里遮住；最后真的退出', async () => {
     const { runner, log } = p9Runner();

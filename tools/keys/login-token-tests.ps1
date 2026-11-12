@@ -97,12 +97,14 @@
 
   负责人的步骤：
     1. 新开一个 PowerShell 窗口（不用退出 Claude，R-223）；
-    2. 运行下面的命令（预览测试账号默认 hufanp+lemotest@gmail.com，换账号加 -Email）；
+    2. 运行下面的命令。测试账号邮箱不写在仓库里（公开仓库）：命令后面加 -Email 测试账号邮箱，
+       或先在这个窗口里设环境变量 LEMO_PREVIEW_TEST_EMAIL 再运行；要登录的项目两处都没给会报错停下（只跑 P6、P6A 不登录，不用给）；
     3. 去邮箱看验证码，粘贴到脚本里；中途按提示在 Supabase SQL Editor 执行脚本打印的 SQL、回答 y / n；
     4. 最后把「结果摘要」那一段整段复制给主持人（里面没有令牌、密码、验证码），然后关掉这个窗口。
 
 .PARAMETER Email
-  测试账号邮箱（预览项目里已有、能收信）。
+  测试账号邮箱（预览项目里已有、能收信）。不给就读环境变量 LEMO_PREVIEW_TEST_EMAIL；
+  要登录的项目（S1、P2、R2、TC-B1-112、P8、P5、P9）两处都没给就报错停下。脚本里不写死任何真实邮箱。
 
 .PARAMETER PptxPath
   第 3 项用的本机 .pptx 文件；不给就在运行中询问，直接回车则跳过第 3 项。
@@ -117,9 +119,12 @@
   只选 P6A、P6 时也不登录测试账号。
 
 .EXAMPLE
-  powershell -NoProfile -ExecutionPolicy Bypass -File "D:\claude code\柠檬记APP\tools\keys\login-token-tests.ps1"
+  powershell -NoProfile -ExecutionPolicy Bypass -File "D:\claude code\柠檬记APP\tools\keys\login-token-tests.ps1" -Email owner+lemotest@example.com
+
+  （owner+lemotest@example.com 是占位写法，运行时换成预览里真实的测试账号邮箱）
 
 .EXAMPLE
+  $env:LEMO_PREVIEW_TEST_EMAIL = 'owner+lemotest@example.com'
   powershell -NoProfile -ExecutionPolicy Bypass -File "D:\claude code\柠檬记APP\tools\keys\login-token-tests.ps1" -Only P5,P9
 
 .EXAMPLE
@@ -130,7 +135,8 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidatePattern('\A[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,180}\.[A-Za-z]{2,24}\z')][string]$Email = 'hufanp+lemotest@gmail.com',
+    # 测试账号邮箱：不给就读环境变量 LEMO_PREVIEW_TEST_EMAIL（格式在下面和环境变量来的值一起核）
+    [string]$Email = '',
     [string]$PptxPath = '',
     [ValidatePattern('\A([a-z0-9-]{1,40})?\z')][string]$P8Function = '',
     # 只跑这几项，逗号分隔（-File 运行时数组参数会被当成一个字符串，所以这里收字符串、脚本里自己拆）；不给 = 全部
@@ -172,7 +178,7 @@ $ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$ScriptVersion = '4'
+$ScriptVersion = '5'
 # 所有请求统一用的 User-Agent：不能像浏览器（不含 Mozilla），否则 Supabase 拒 sb_secret_（见 Invoke-Http 的注释）
 $script:ToolUA = 'lemomemo-tools/4.0 (PowerShell)'
 if (($SupabaseBase -ne 'https://yoeqwhygehbaftkppati.supabase.co' -or $SiteBase -ne 'https://preview.lemomemo.com') -and $env:LEMO_TEST_API -ne '1') {
@@ -189,6 +195,15 @@ $script:wantP6 = $script:onlyIds -contains 'P6'
 # P6A 会真往预览 private.admins 写一行（TC-B1-75 ④ 前一半）：同样只有 -Only 里点名才跑，不登录测试账号
 $script:wantP6A = $script:onlyIds -contains 'P6A'
 $script:needLogin = @(@('S1', 'P2', 'R2', 'TC-B1-112', 'P8', 'P5', 'P9') | Where-Object { Want $_ }).Count -gt 0
+# 测试账号邮箱不写进仓库（公开仓库）：-Email 优先，没给就读环境变量 LEMO_PREVIEW_TEST_EMAIL；要登录的项目两处都没给就停。
+# 邮箱会拼进打印给负责人执行的 SQL，两种来源都按同一个格式核（不许有引号、空格）
+if (-not $Email) { $Email = ([string]$env:LEMO_PREVIEW_TEST_EMAIL).Trim() }
+if ($Email -and $Email -notmatch '\A[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,180}\.[A-Za-z]{2,24}\z') {
+    throw '已停止：测试账号邮箱的格式不对（-Email 或环境变量 LEMO_PREVIEW_TEST_EMAIL），请核对后重新运行'
+}
+if ($script:needLogin -and -not $Email) {
+    throw '已停止：没给测试账号邮箱。请在命令后面加 -Email 测试账号邮箱，或先设环境变量 LEMO_PREVIEW_TEST_EMAIL 再运行（公开仓库里不写死邮箱；只跑 P6、P6A 不用给）'
+}
 # 这一轮里 /auth/v1/verify 最多调几次（预览项目 verify 限流：每 IP 每 5 分钟 10 次；一轮控制在 4 次以内，留出重跑的余地）
 $script:verifyMax = 4
 $script:verifyCalls = 0

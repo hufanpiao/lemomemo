@@ -7,7 +7,7 @@
 ## 结论：签（第四版，11-03）
 
 **C1～C5 全部满足，S-B1 签。** 11-03 补齐的三条：
-- C2 ①②（账号清点）：负责人选甲，本人邮箱的预览账号已在控制台删除，`PREVIEW_OWNER_EMAILS` 已配为 `hufanp+lemotest@gmail.com`；
+- C2 ①②（账号清点）：负责人选甲，本人邮箱的预览账号已在控制台删除，`PREVIEW_OWNER_EMAILS` 已配为 `owner+lemotest@example.com`；
 - C3（TC-B1-07 真等验证码）：9 分 51 秒提交成功，11 分钟提交失败；
 - C4（TC-B0-117 预览打真 R2）：通过。
 
@@ -32,7 +32,7 @@
 | 5 | Auth 设置按 15.6 总表，两个项目逐项核对、截图存档 | **P0** | **已证实**（核对和截图；正式三项的设置时点见第三节） | 验收清单 P1；`docs/03-评审/B1/Auth设置截图-2026-10-31/`（预览 7 张、正式 6 张） | **预览九项全对上**：JWT 600；匿名登录关；Secure email change 开；公开注册关；Email 登录开；Site URL 和跳转白名单都只有 `https://preview.lemomemo.com/app/`；验证码 6 位、600 秒；token verifications 10 次 / 5 分钟；CAPTCHA 开（Turnstile）。**正式对上六项**：匿名关、Secure email change 开、公开注册关、Email 开、验证码 6 位 600 秒、token verifications 10。**正式没对上三项**：JWT 3600、Site URL `http://localhost:3000` 且跳转白名单为空、CAPTCHA 关。S-B1 要的是“两个项目逐项核对、截图存档”，已经做到；正式项目“什么时候设”，15.6 写的是“正式项目在 B7a 上线前设”，这三项的处理见第三节 |
 | 6 | is_active 按“profile 存在且未停用”，service role 函数检查 disabled_at，都有测试 | **P0** | 已证实 | 验收清单第九节 A 组 TC-B1-10、TC-B1-109；C1、C3（unit #111、ci #109 全绿） | 测试文件：`tests/build/fn-account-disabled-coverage.test.ts`、`supabase/tests/store-it/account-store.it.ts` |
 | 7 | 邀请流程按 5.6 | **P0** | 已证实 | A 组 TC-B1-01～05、TC-B1-64；验收清单 C4（真后端 e2e b1-invite-signup）、D3（负责人 10-30 14:00 用邀请码在预览注册成功） | 第一次因为提交的码不符没有发信，这是预期行为 |
-| 8 | 预览项目账号清点（架构 0.29 续第 91、95 条） | **P0** | **已证实**（11-03，原为有条件；见 C2） | 验收清单 P6；主持人 10-31 只读查 auth.users 和 GitHub 变量 | `private.admins` 0 行，没有负责人的验收账号，符合。auth.users 共 2 个，都不是 `.test` 结尾：`hufanp+lemotest@gmail.com`（10-28 建）、<负责人主邮箱>（10-30 建，D3 那次邀请注册）。**GitHub 上没有配 `PREVIEW_OWNER_EMAILS`**（仓库级变量里没有，各环境下也没有任何变量）。按第 91 条，名单里那一个以外的非 `.test` 账号都不允许，所以现在**两个都不符合**。“验收账号里没有正式数据”（第 95 条 ③）**10-31 抽查符合**（见第四节 C2 ③ 的结果）。剩下的是账号和名单，见条件 C2 |
+| 8 | 预览项目账号清点（架构 0.29 续第 91、95 条） | **P0** | **已证实**（11-03，原为有条件；见 C2） | 验收清单 P6；主持人 10-31 只读查 auth.users 和 GitHub 变量 | `private.admins` 0 行，没有负责人的验收账号，符合。auth.users 共 2 个，都不是 `.test` 结尾：`owner+lemotest@example.com`（10-28 建）、<负责人主邮箱>（10-30 建，D3 那次邀请注册）。**GitHub 上没有配 `PREVIEW_OWNER_EMAILS`**（仓库级变量里没有，各环境下也没有任何变量）。按第 91 条，名单里那一个以外的非 `.test` 账号都不允许，所以现在**两个都不符合**。“验收账号里没有正式数据”（第 95 条 ③）**10-31 抽查符合**（见第四节 C2 ③ 的结果）。剩下的是账号和名单，见条件 C2 |
 | 9 | “退出其他所有设备”和设备列表（中 9）；走 `/auth/v1/logout?scope=others`，有低版本测试 | **P0** | 已证实 | A 组 TC-B1-77、78、79、85、89、92、96、105；TC-B1-63、80（version-gate）；验收清单 E2（b1-version-gate.real） | 免查名单是 `functions/sb/version-gate.ts` 的 EXEMPT_RULES（15.4 S-B0c 那一行的 10-29 记录） |
 | 10 | Realtime 只订阅 INSERT 和 UPDATE（低 4） | P1 | 已证实 | A 组 TC-B1-29（`src/core/sync/__tests__/supabase-transport.test.ts`）；`src/core/sync/engine.ts` 第 7 行 | tombstones 只订阅 INSERT |
 | 11 | 宽容读取不把隐私记行的未知列存进本机 | **P0** | 已证实（B1 范围内） | A 组 TC-B1-34、36、37（`read-lenient`、`read-vault`、`read-ingest`） | 按 S-B1 原文，B5 有了隐私记行再端到端测一次 |
@@ -96,7 +96,7 @@
 | # | 条件 | 谁做 | 要不要负责人 | 通过标准 | 状态（10-31） |
 |---|---|---|---|---|---|
 | C1 | Auth 设置总表，两个项目逐项核对并截图存档 | 主持人（控制台只读） | 不要 | 每一行都有截图和“对上 / 没对上” | **已满足**：截图 13 张在 `docs/03-评审/B1/Auth设置截图-2026-10-31/`；预览九项全对上，正式六项对上、三项按第三节留到 B7a |
-| C2 | **账号清点补齐**：① 负责人在甲、乙之间选（第五节 O1），并照着处理账号；② 把留下的验收账号（乙是两个）配进 GitHub 仓库级变量 `PREVIEW_OWNER_EMAILS`；③ 抽查验收账号里没有正式数据（只读 SQL 见下） | 负责人定和配变量；主持人跑只读 SQL | **要**（O1） | 除 `.test` 账号和名单里的验收账号以外没有别的账号；名单和实际账号一致；两个（或一个）都不在 `private.admins`；抽查结果符合下面的判断标准 | **已满足（11-03）**：③ 10-31 抽查符合（结果见下）；① 负责人选甲，本人邮箱的预览账号 11-03 已在控制台删除，主持人 SQL 核对 auth.users 只剩 `hufanp+lemotest@gmail.com`（C4 执行记录第 9 行、5.4 ②）；② `PREVIEW_OWNER_EMAILS` 已配为 `hufanp+lemotest@gmail.com`，主持人当场核对（明早清单第 45 条“11-03 进展”）；lemotest 不在 `private.admins`（C4 第 0 步“a或b是管理员 = false”）。现在预览另有 `e2e-admin@lemomemo.test`，它是 `.test` 账号、在 admins 里，属于 10-31 审查同意的 TC-B1-75 ④ 新测法，不违反第 91 条 |
+| C2 | **账号清点补齐**：① 负责人在甲、乙之间选（第五节 O1），并照着处理账号；② 把留下的验收账号（乙是两个）配进 GitHub 仓库级变量 `PREVIEW_OWNER_EMAILS`；③ 抽查验收账号里没有正式数据（只读 SQL 见下） | 负责人定和配变量；主持人跑只读 SQL | **要**（O1） | 除 `.test` 账号和名单里的验收账号以外没有别的账号；名单和实际账号一致；两个（或一个）都不在 `private.admins`；抽查结果符合下面的判断标准 | **已满足（11-03）**：③ 10-31 抽查符合（结果见下）；① 负责人选甲，本人邮箱的预览账号 11-03 已在控制台删除，主持人 SQL 核对 auth.users 只剩 `owner+lemotest@example.com`（C4 执行记录第 9 行、5.4 ②）；② `PREVIEW_OWNER_EMAILS` 已配为 `owner+lemotest@example.com`，主持人当场核对（明早清单第 45 条“11-03 进展”）；lemotest 不在 `private.admins`（C4 第 0 步“a或b是管理员 = false”）。现在预览另有 `e2e-admin@lemomemo.test`，它是 `.test` 账号、在 admins 里，属于 10-31 审查同意的 TC-B1-75 ④ 新测法，不违反第 91 条 |
 | C3 | **TC-B1-07 真等一次**：预览发验证码，第 9 分钟、第 11 分钟各提交一次 | 负责人本人收码；主持人陪跑、只看结果 | **要**（O2） | 9 分钟成功、11 分钟失败（回 `otp_expired` 一类）。要是 11 分钟还能用，就是 P0 不通过 | **已满足（11-03，主持人陪跑）**：第 1 轮，预览站给 lemotest 发码，`recovery_sent_at` 03:23:48.73 UTC，负责人填码登录成功，`last_sign_in_at` 03:33:40.03，间隔 9 分 51 秒，成功；第 2 轮，退出后重新发码（03:34:49.90 UTC），主持人后台计满 11 分钟后负责人才提交，页面显示“验证码过期了 / 10 分钟内有效”，主持人只读 SQL 确认发码后新会话 0 个、`last_sign_in_at` 仍是 03:33:40，失败。`otp_expiry = 600` 已由截图证实。“10 分钟以内能用、超过就不能用”两头都对上了 |
 | C4 | **TC-B0-117 预览打真 R2 一次**：一次性加号邮箱的账号用邀请码注册；在 Cloudflare 控制台往四个桶放对象、数前缀；在 App 里注销；SQL Editor 注入 7 天并手动触发一次 account-purge；再数前缀 | **负责人本人动手**（约 30 分钟），后端出步骤、陪跑 | **要**：在“做”和“挪批”之间选（O3） | 四个桶里这个人的前缀都是 0，别人的个数不变，记录写进验收清单。选挪批的话，要负责人在明早清单上明确同意挪到哪一批，本项改记“挪批，B1 只有替身证据” | **已满足（11-03，负责人选“做”）**：`docs/03-评审/B1/C4-TC-B0-117-执行记录-2026-11-03.md`。account-purge 响应 200、心跳 `purged 1、failed 0`；函数日志没有 `r2_not_empty`；A 在四个桶的前缀都是 0（整桶列出）；B 是 images 2、files 4、vault-images 1、vault-files 1，和放对象后一致；收尾时 B 的两个 vault 测试对象已删，账号只剩 lemotest。做的过程中发现定时任务一直被网关 401，已按 PURGE-verify-jwt 修好，修好后又在预览实跑了一次 200 |
 | C5 | N1 只读收尾 | 主持人（只读） | 不要 | 触发器 `tgenabled = 'O'`；带密码的账号是 0 | **已满足**（10-31） |
@@ -123,7 +123,7 @@ order by c.table_schema, c.table_name, u.email;
 
 判断标准：
 
-- 每张表、每个账号的 `earliest` 都**不早于这个账号自己的建号时间**（`hufanp+lemotest` 是 10-28，<负责人主邮箱> 是 10-30）。从正式环境或 v3 导出搬来的数据，一般会带着更早的原始时间，这一条能把它们筛出来。
+- 每张表、每个账号的 `earliest` 都**不早于这个账号自己的建号时间**（负责人验收账号是 10-28，<负责人主邮箱> 是 10-30）。从正式环境或 v3 导出搬来的数据，一般会带着更早的原始时间，这一条能把它们筛出来。
 - 条数在手工测试的量级（几十条以内）。
 - 有任何一条不符合，就交负责人看那几行是不是本人手工输入的测试内容。审查员和主持人都不读内容。
 
@@ -134,7 +134,7 @@ order by c.table_schema, c.table_name, u.email;
 | 账号（建号日） | 有数据的表和条数 | 最早时间 | 判断 |
 |---|---|---|---|
 | <负责人主邮箱>（10-30） | public.devices 1、public.profiles 1、public.settings 1、public.tombstones 3；没有 notes、files、images | devices 2026-10-30 16:02 UTC；profiles 2026-10-30 04:55 UTC；settings、tombstones 没有 `created_at` | 都不早于建号日；只有注册、登录、设置留下的几行，没有任何内容数据 |
-| `hufanp+lemotest@gmail.com`（10-28） | private.embed_queue 8、public.note_files 4、public.note_images 2、public.notes 2、public.profiles 1、public.settings 4 | note_files 1793275958294（毫秒，约 2026-10-29 12:12 UTC）；notes 1793275953389（约 2026-10-29 12:12 UTC）；profiles 2026-10-29 05:29 UTC | 都不早于建号日；条数是测试量级，时间和 10-29 第四遍登录实测（R2-9、R2-2、R2-3 留下的附件和图）以及 R-241 补的 profile 对得上；embed_queue 8 行是这些测试随手记排的向量任务 |
+| `owner+lemotest@example.com`（10-28） | private.embed_queue 8、public.note_files 4、public.note_images 2、public.notes 2、public.profiles 1、public.settings 4 | note_files 1793275958294（毫秒，约 2026-10-29 12:12 UTC）；notes 1793275953389（约 2026-10-29 12:12 UTC）；profiles 2026-10-29 05:29 UTC | 都不早于建号日；条数是测试量级，时间和 10-29 第四遍登录实测（R2-9、R2-2、R2-3 留下的附件和图）以及 R-241 补的 profile 对得上；embed_queue 8 行是这些测试随手记排的向量任务 |
 
 两个账号都没有早于建号日的行，也没有成批的数据，不像从正式环境或 v3 搬来的数据，不用交负责人看内容。说明一点：note_files、notes 的 `created_at` 存的是毫秒数（`min()::text` 返回数字），按毫秒换算后再比，结论不变。
 
