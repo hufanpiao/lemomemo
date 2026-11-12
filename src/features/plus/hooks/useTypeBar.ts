@@ -9,7 +9,6 @@
 // • 提示条：一条 → “已记下：…”；多条 → “已记下 N 条”，展开逐条改、撤，“拆错了，合并成一条”“全部撤销”
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
-import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -18,9 +17,9 @@ import { captureStep, type CaptureEvent, type CaptureStatus } from '../data/capt
 import type { Writer } from '../data/capture-save.ts';
 import { quotaOutToday, rememberQuotaLeft } from '../data/quota.ts';
 import { clearTypeDraft, readTypeDraft, writeTypeDraft } from '../data/type-draft.ts';
-import { keepAsked, navOnline, planLocal, planTyped, type CallAi, type TypePlan } from '../data/type-flow.ts';
+import { keepAsked, navOnline, planLocal, planTyped, type CallAi } from '../data/type-flow.ts';
 import { useCaptureCtx } from './useCaptureCtx.ts';
-import { useSavedBatch, type BatchNotice, type SaveEnv, type SaveOutcome } from './useSavedBatch.ts';
+import { useSavedBatch, type SaveEnv } from './useSavedBatch.ts';
 
 // ui 不能直接 import data（A1），界面要用的类型经这里转出去
 export type { CallAi } from '../data/type-flow.ts';
@@ -40,35 +39,9 @@ export interface TypeBarOpts {
 
 export type TypeBarError = 'not_saved' | 'nothing' | null;
 
-export interface TypeBarState {
-  text: string;
-  setText(v: string): void;
-  status: CaptureStatus;
-  preview: readonly AiItem[];
-  /** 确认行要问的那一条（confirming 时） */
-  asking: AiItem | null;
-  /** 提示条：主句和附加句，加上这一批每一条（多条时展开逐条改、撤） */
-  notice: BatchNotice | null;
-  error: TypeBarError;
-  submit(): Promise<void>;
-  choose(choice: 'past' | 'next'): Promise<void>;
-  /** 确认行没选就关掉：原话去掉已经存了的几条、只留等确认那条的原文，填回输入条（去不干净时原话整句留着，partSaved 为 true） */
-  dismissConfirm(): void;
-  /** 输入条里的原话含着已经记下的几条（去不干净），输入条上方提示；一改字就收起 */
-  partSaved: boolean;
-  /** 全部撤销 */
-  undo(): Promise<void>;
-  undoOne(id: string): Promise<void>;
-  /** 拆错了，合并成一条 */
-  merge(): Promise<void>;
-  closeNotice(): void;
-  /** 收起：留草稿 */
-  stash(): Promise<void>;
-  /** 展开编辑：字带去新建页了，草稿清掉（下次打开不再填回） */
-  dropDraft(): void;
-}
+export type TypeBarState = ReturnType<typeof useTypeBar>;
 
-export function useTypeBar(o: TypeBarOpts): TypeBarState {
+export function useTypeBar(o: TypeBarOpts) {
   const [text, setTextRaw] = useState('');
   const [status, setStatus] = useState<CaptureStatus>('idle');
   const [error, setError] = useState<TypeBarError>(null);
@@ -78,10 +51,30 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
   // 没传 callAi 时用真的 ai-parse（data/ai-parse-api.ts）；测试传桩
   const { day, callAi = callAiParse, writer, online = navOnline } = o;
   const { ctx, aiOn: aiOnNow } = useCaptureCtx(day);
-  const saved = useSavedBatch(writer, status === 'confirming', 'typebar');
-  const { batch, setBatch, ask, setAsk, asking, notice } = saved;
-
   const go = useCallback((e: CaptureEvent) => setStatus((s) => captureStep(s, e)), []);
+  const env = useCallback((): SaveEnv => ({ now: clock.now(), tz: currentTz(), day }), [day]);
+  // 存、确认行、提示条、撤销、合并都在 useSavedBatch（和录音同一份）；这里只给自己的收尾和失败提示
+  const saved = useSavedBatch({
+    writer, confirming: status === 'confirming', tag: 'typebar', env,
+    flow: {
+      go,
+      // 这一批都存好了：清输入条和草稿，出提示条
+      done(p) {
+        setTextRaw('');
+        typed.current = false;
+        void clearTypeDraft();
+        go({ type: 'done', status: p.status });
+      },
+      // 没写进去：提示（switching 时页面马上要走，不提示），原话留着
+      fail(out) {
+        if (out !== 'switching') setError(out === 'nothing' ? 'nothing' : 'not_saved');
+        go({ type: 'reset' });
+      },
+      error: (out) => setError(out === 'switching' ? null : 'not_saved'),
+    },
+  });
+  const { asking, notice } = saved;
+
   const setText = useCallback((v: string) => {
     typed.current = true;
     setTextRaw(v);
@@ -100,25 +93,7 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
     };
   }, []);
 
-  const env = useCallback((): SaveEnv => ({ now: clock.now(), tz: currentTz(), day }), [day]);
-
   const preview = useMemo(() => (text.trim() === '' ? [] : planLocal(text, ctx()).result.items), [text, ctx]);
-
-  /** 没写进去：提示（switching 时页面马上要走，不提示），原话留着 */
-  const fail = useCallback((out: SaveOutcome) => {
-    if (out !== 'switching') setError(out === 'nothing' ? 'nothing' : 'not_saved');
-    go({ type: 'reset' });
-  }, [go]);
-
-  /** 这一批都存好了：清输入条和草稿，出提示条 */
-  const { settle } = saved;
-  const finish = useCallback((p: TypePlan) => {
-    settle(p);
-    setTextRaw('');
-    typed.current = false;
-    void clearTypeDraft();
-    go({ type: 'done', status: p.status });
-  }, [go, settle]);
 
   const submit = useCallback(async () => {
     rlog(`typebar submit len=${text.length} trim=${text.trim().length} busy=${busy.current} status=${status}`);
@@ -140,62 +115,30 @@ export function useTypeBar(o: TypeBarOpts): TypeBarState {
       const p = await planTyped(text, c, { online: online(), isOnline: online, aiOn, quotaOut }, callAi);
       if (p.quotaLeft !== null) void rememberQuotaLeft(p.quotaLeft, c.now);
       rlog(`typebar planned items=${p.items.length} ai=${aiOn} quotaOut=${quotaOut} origin=${p.origin} status=${p.status} reason=${p.aiReason ?? '-'} ms=${ms()}`);
-      if (p.items.length === 0) {
-        fail('nothing');
-        return;
-      }
-      const out = await saved.storeNew({ batchId: null, entries: [], plan: p, raw: text, remind: false }, env());
-      if (out === 'ask') go({ type: 'need_confirm' });
-      else if (out === 'ok') finish(p);
-      else fail(out);
+      saved.land(await saved.save(p, text), p);
     } catch (err) {
       rlog(`typebar submit threw ${(err as Error | undefined)?.name ?? ''} ${String((err as Error | undefined)?.message ?? err).slice(0, 200)}`);
       throw err;
     } finally {
       busy.current = false;
     }
-  }, [text, status, ctx, env, callAi, aiOnNow, online, saved, fail, finish, go]);
+  }, [text, status, ctx, callAi, aiOnNow, online, saved, go]);
 
-  const choose = useCallback(async (choice: 'past' | 'next') => {
-    const plan = batch?.plan;
-    const out = await saved.choose(choice, env());
-    if (out === 'skip' || out === 'more') return;
-    if (out !== 'done') {
-      setError(out === 'switching' ? null : 'not_saved');
-      return;
-    }
-    go({ type: 'confirmed' });
-    if (plan) finish(plan);
-  }, [batch, saved, env, go, finish]);
-
+  const { dismiss } = saved;
+  // 确认行没选就关掉：原话去掉已经存了的几条、只留等确认那条的原文，填回输入条（去不干净时原话整句留着，partSaved 为 true：输入条上方提示，一改字就收起）
   const dismissConfirm = useCallback(() => {
+    const { batch, ask } = dismiss();
     if (batch && batch.entries.length > 0) {
       const kept = keepAsked(batch.raw, batch.entries.map((e) => e.item), ask, (t) => planLocal(t, ctx()).result.items);
       setTextRaw(kept ?? batch.raw);
       setPartSaved(kept === null);
     }
-    setAsk([]);
-    go({ type: 'cancel' });
-  }, [batch, ask, setAsk, ctx, go]);
+  }, [dismiss, ctx]);
 
-  const closeNotice = useCallback(() => {
-    setBatch(null);
-    go({ type: 'reset' });
-  }, [setBatch, go]);
-
-  const undo = useCallback(async () => {
-    if (await saved.undoAll()) go({ type: 'reset' });
-  }, [saved, go]);
-
-  const { undoOne } = saved;
-
-  // 合并没存上：原来的几条还在，提示条自己加一句（不把原话填回输入条，免得再记一遍）
-  const merge = useCallback(async () => {
-    await saved.merge(env());
-  }, [saved, env]);
-
+  // 收起：留草稿；展开编辑：字带去新建页了，草稿清掉（下次打开不再填回）
   const stash = useCallback(() => writeTypeDraft({ text, day }, clock.now()), [text, day]);
 
   const dropDraft = useCallback(() => void clearTypeDraft(), []);
+  const { choose, undo, undoOne, merge, closeNotice } = saved;
   return { text, setText, status, preview, asking, notice, error, submit, choose, dismissConfirm, partSaved, undo, undoOne, merge, closeNotice, stash, dropDraft };
 }

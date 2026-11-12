@@ -2,6 +2,8 @@
 // • hold：data/hold-input.ts 的那一份对界面层转出（A1：界面层不直接引 data）；ui/TypeBar.tsx 再转给 app/plus-slot.tsx，
 //   跟打字条同一块下载（这个文件只带 react 和手势判定，录音器、手机识别、面板留在 RecordHost 那一块按需加载）
 // • useVoiceSink：录音那一套挂上以后接手手势（setHoldSink），卸载时交还；取消区、锁定区由面板量好的两个 ref 判
+// • 控制器不碰手势（FA-3 第二轮复查项，原来 6 处直接调 hold.reset()）：这里订阅着，录完（capturing 由 true 变 false：松手、点“记下 / 取消”、
+//   60 秒到了、出错）就把手势收回没按的状态；锁定被拦下（没在录，比如出了“没网”提示、说明卡）也收回，不然“＋”一直按不下去
 import { useEffect, type RefObject } from 'react';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { hold, setHoldSink } from '../data/hold-input.ts';
@@ -22,14 +24,24 @@ export function useVoiceSink(s: VoiceSession, cancelZone: RefObject<HTMLElement 
       start: () => s.start(),
       zoneAt: (x, y) => (inside(cancelZone.current, x, y) ? 'cancel' : inside(lockZone.current, x, y) ? 'lock' : null),
       zone: (z) => s.zone(z),
-      lock: () => s.lock(),
+      lock: () => {
+        s.lock();
+        if (!s.view().locked) hold.reset();
+      },
       finish: () => s.finish(),
       discard: () => s.discard('hold'),
       idle: () => s.idle(),
     });
     // 录音那一套挂上了（之后按住才有人接手）：真机日志里按下时没有“voice hold start”，先看这一行出没出
     rlog('voice host ready');
+    let was = s.view().capturing;
+    const off = s.subscribe(() => {
+      const now = s.view().capturing;
+      if (was && !now) hold.reset();
+      was = now;
+    });
     return () => {
+      off();
       setHoldSink(null);
       hold.reset();
     };

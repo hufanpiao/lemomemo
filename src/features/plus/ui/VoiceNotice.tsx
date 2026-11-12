@@ -6,9 +6,8 @@
 // • 词条按种类查表，参数在运行时才定：用 usePlusLine（同提示条）
 // • 没成的用 role="alert"（新挂上的 status 区域 iOS VoiceOver 常常不读，同 UndoToast 的说明）；上传中用 status
 import { FormButton } from '../../../kit/components/Form.tsx';
-import { useUi } from '../../../kit/state/ui-store.ts';
 import type { VoiceNote, VoiceState } from '../hooks/useVoice.ts';
-import { usePlusLine, usePlusT, type PlusMsgKey } from '../hooks/usePlusT.ts';
+import { useLangNames, usePlusLine, usePlusT, type PlusMsgKey } from '../hooks/usePlusT.ts';
 import styles from './RecordPanel.module.css';
 
 type Act = 'retry' | 'again' | 'type';
@@ -35,11 +34,10 @@ const ACT_KEY: Record<Act, Key> = { retry: 'plus.voice.retry', again: 'plus.voic
 export function VoiceNotice({ v }: { v: VoiceState }) {
   const t = usePlusT();
   const line = usePlusLine();
-  const locale = useUi((s) => s.locale);
+  const { lang } = useLangNames();
   if (v.note !== null) {
     const view = NOTE_VIEW[v.note];
     const run: Record<Act, () => void> = { retry: v.retry, again: v.sayAgain, type: v.typeInstead };
-    const lang = t(locale === 'ko-KR' ? 'plus.lang.ko' : 'plus.lang.zh', {});
     return (
       <div className={styles.note} role="alert" data-testid="voice-notice" data-note={v.note}>
         <div className={styles.noteRow}>

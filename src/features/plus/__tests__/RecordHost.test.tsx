@@ -18,7 +18,7 @@ import type * as Quota from '../data/quota.ts';
 import type * as VoiceFlow from '../data/voice-flow.ts';
 import { hold, type HoldPointer } from '../data/hold-input.ts';
 import { HOLD_MS } from '../data/record-logic.ts';
-import { resetVoiceNetForTest } from '../data/voice-session.ts';
+import { resetVoiceForTest } from '../hooks/useVoice.ts';
 import { RecordHost } from '../ui/RecordHost.tsx';
 
 const SID = 'sid-v';
@@ -165,7 +165,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   fab.remove();
-  resetVoiceNetForTest();
+  resetVoiceForTest();
   collection('settings').clear();
   setConsentStale(false, null);
   localStorage.removeItem(MIC_PERM_KEY);
@@ -361,7 +361,8 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     expect(logged(/^voice attempt \d+ stale at=to_upload$/)).toBe(true);
   });
 
-  it('录音器 stop 还没回来时卸载（切页、关掉）：不上传、不写库，录音器收到取消', async () => {
+  // 第 11 条（FA-3 第二轮）：控制器不跟 RecordHost 走（模块级的那一份），切页卸载不丢录音
+  it('录音器 stop 还没回来时切页（RecordHost 卸载）：照常停完、上传、写库，没有作废', async () => {
     fx.stopHang = true;
     const { writer, call, unmount } = setup();
     await holdDown();
@@ -370,14 +371,12 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     await act(async () => {
       fx.stopOpen?.();
     });
-    await sleep(30);
-    expect(call).not.toHaveBeenCalled();
-    expect(writer.insert).not.toHaveBeenCalled();
-    expect(fx.signal?.aborted).toBe(true);
-    expect(logged(/^voice attempt \d+ drop by=unmount$/)).toBe(true);
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(logged(/^voice attempt \d+ drop by=/)).toBe(false);
   });
 
-  it('上传中卸载：回来的结果不写库', async () => {
+  it('上传中切页：传完照常写库；回到有“＋”的页（重挂）出“已记下”', async () => {
     let hang!: () => void;
     const { writer, call, unmount } = setup({ call: () => new Promise((ok) => (hang = () => ok(VOICE_OK))) });
     await holdDown();
@@ -387,8 +386,19 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     await act(async () => {
       hang();
     });
-    await sleep(30);
-    expect(writer.insert).not.toHaveBeenCalled();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    setup();
+    expect((await screen.findByTestId('type-notice')).textContent).toContain('已记下：买猫砂');
+  });
+
+  it('录着时切页：当松手处理（停录、上传、写库），麦克风不留着', async () => {
+    const { writer, call, unmount } = setup();
+    await holdDown();
+    expect(fx.starts).toBe(1);
+    unmount();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    expect(fx.stops).toBe(1);
+    expect(call).toHaveBeenCalledTimes(1);
   });
 
   it('录音器开不起来、麦克风被拒（{ok:false, fail:"denied"}）：出“麦克风没有打开”卡，不出提示条、不写库', async () => {

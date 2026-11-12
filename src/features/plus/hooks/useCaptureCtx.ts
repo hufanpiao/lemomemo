@@ -18,21 +18,14 @@ const projectsOf = (rows: readonly (readonly { project?: unknown }[])[]): string
   return [...s];
 };
 
-export interface CaptureCtx {
-  locale: 'zh' | 'ko';
-  /** 调用这一刻能不能用 AI（同意版本过期是模块状态，不一定引起重渲染，所以每次现算） */
-  aiOn(): boolean;
-  /** 这一刻的 TypeCtx（now 取调用时的钟） */
-  ctx(): TypeCtx;
-}
-
-export function useCaptureCtx(day: DateStr | null): CaptureCtx {
+/** locale；aiOn()：调用这一刻能不能用 AI（同意版本过期是模块状态，不一定引起重渲染，所以每次现算）；ctx()：这一刻的 TypeCtx（now 取调用时的钟） */
+export function useCaptureCtx(day: DateStr | null) {
   const uiLocale = useUi((s) => s.locale);
   const settings = useCollection<SettingRow & { id: string }>('settings');
   const todos = useCollection<{ id: string; project?: unknown }>('todos');
   const events = useCollection<{ id: string; project?: unknown }>('events');
   const projects = useMemo(() => projectsOf([todos, events]), [todos, events]);
-  const locale = uiLocale === 'ko-KR' ? 'ko' : 'zh';
+  const locale: TypeCtx['locale'] = uiLocale === 'ko-KR' ? 'ko' : 'zh';
   const aiOn = useCallback(() => settingValue(settings, 'ai.enabled') === true && !consentStale(readSessionId()), [settings]);
   const ctx = useCallback((): TypeCtx => ({ now: clock.now(), tz: currentTz(), locale, projects, day }), [locale, projects, day]);
   return { locale, aiOn, ctx };

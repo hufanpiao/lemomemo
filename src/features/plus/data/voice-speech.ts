@@ -1,12 +1,18 @@
-// 手机自带识别这一路的生命周期（B3 任务单 FA-3；架构 5.11 第 5 点 Web Speech 兜底），从 hooks/useVoice.ts 拆出来
+// 手机自带识别这一路（B3 任务单 FA-3；架构 5.11 第 5 点 Web Speech 兜底）：
+// • createSpeechRoute：识别本身的生命周期（从 hooks/useVoice.ts 拆出来）
+// • createSpeechPath：这一路在控制器里怎么走（第二轮复查项从 voice-session.ts 挪来）：开、停、拿到文字走打字同一套 planTyped、存
 // • start() 必须在用户手势里调：按下那一下就先开（prime），按满 350 ms 接手（take），没按满就关掉（drop）
 // • 先开的那一次可能在接手之前就已经开始收音（at），甚至已经结束（early）：接手时补上
 // • 开始收音以后最长 60 秒（REC_MAX_MS，和录音同一个上限）到了交给 host.cap()（useVoice 当松手处理）
 // • 只有接手了的那一次的开始、结束才报给 host；先开又被关掉的不报
 // 纯 TS：不准 import React（A1）
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { speechSupported, startSpeech, type SpeechEnd, type SpeechSession } from '../../../platform/speech.ts';
+import { quotaOutToday, rememberQuotaLeft } from './quota.ts';
 import { REC_MAX_MS } from './record-logic.ts';
+import { planTyped } from './type-flow.ts';
+import type { Attempt, SpeechWhy, VoiceCore } from './voice-session.ts';
 
 /** 报给谁（useVoice） */
 export interface SpeechHost {
@@ -113,5 +119,70 @@ export function createSpeechRoute(host: () => SpeechHost | null, now: () => numb
       const at = active?.at ?? null;
       return at === null ? 0 : now() - at;
     },
+  };
+}
+
+/** 控制器里的这一路（voice-session.ts 调） */
+export function createSpeechPath(c: VoiceCore) {
+  const lang = (): Locale => (c.d().ctx().locale === 'ko' ? 'ko-KR' : 'zh-CN');
+  const heard = async (a: Attempt, res: SpeechEnd): Promise<void> => {
+    if (!res.ok) {
+      c.end(a);
+      c.toIdle();
+      if (res.fail === 'denied') c.go({ type: 'card', card: 'denied' });
+      else c.show(res.fail === 'network' ? 'speech_net' : res.fail === 'timeout' ? 'not_heard' : 'speech_off');
+      return;
+    }
+    if (c.view().status === 'preparing') c.go({ type: 'start', path: 'speech' });
+    if (res.text === '') {
+      c.end(a);
+      c.go({ type: 'no_speech' });
+      c.show('no_speech');
+      return;
+    }
+    if (c.view().status !== 'organizing') c.go({ type: 'organize' });
+    const d = c.d();
+    const x = d.ctx();
+    const on = d.aiOn();
+    const qOut = on ? await quotaOutToday(x.now) : false;
+    if (!c.alive(a, 'speech_quota')) return;
+    const p = await planTyped(res.text, x, { online: d.online(), isOnline: d.online, aiOn: on, quotaOut: qOut }, d.callAi);
+    if (!c.alive(a, 'speech_plan')) return;
+    if (p.quotaLeft !== null) void rememberQuotaLeft(p.quotaLeft, x.now);
+    await c.savePlan(a, p, res.text);
+  };
+  const route = createSpeechRoute(() => ({
+    started() {
+      if (c.view().status === 'preparing') c.go({ type: 'start', path: 'speech' });
+    },
+    ended(res) {
+      const a = c.current();
+      if (a) void heard(a, res);
+    },
+    cap: () => c.finish(),
+  }));
+  return {
+    prime: () => route.prime(lang()),
+    /** 接手（或当场开）；lockedNow：“再说一次”，面板直接是锁定的样子 */
+    begin(w: SpeechWhy, lockedNow: boolean) {
+      const a = c.begin();
+      c.set({ path: 'speech', why: w });
+      rlog(`voice speech why=${w}`);
+      c.go({ type: 'prepare' });
+      if (lockedNow) c.go({ type: 'lock' });
+      if (route.take(lang())) return;
+      c.end(a);
+      c.toIdle();
+      c.show('speech_off');
+    },
+    /** 松手：面板收起，进“正在整理”；停不下来时 platform/speech.ts 最多等 SPEECH_STOP_WAIT_MS */
+    stop() {
+      if (c.view().status !== 'listening') return;
+      c.go({ type: 'organize' });
+      route.stop();
+    },
+    cancel: () => route.cancel(),
+    drop: () => route.drop(),
+    elapsed: () => route.elapsed(),
   };
 }

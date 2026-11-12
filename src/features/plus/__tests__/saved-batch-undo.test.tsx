@@ -6,7 +6,7 @@ import type { AiItem } from '../../../../shared/schema/ai.ts';
 import type { WriteResult } from '../../../core/write.ts';
 import type { Writer } from '../data/capture-save.ts';
 import type { TypePlan } from '../data/type-flow.ts';
-import { useSavedBatch, type Batch } from '../hooks/useSavedBatch.ts';
+import { createBatchBox, useSavedBatch, type Batch } from '../hooks/useSavedBatch.ts';
 
 const OK: WriteResult = { ok: true, item: null };
 const NOW = Date.UTC(2026, 10, 2, 3);
@@ -32,28 +32,29 @@ function batchOf(): Batch {
 
 function setup() {
   const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
-  const h = renderHook(() => useSavedBatch(writer, false, 'test'));
-  act(() => h.result.current.setBatch(batchOf()));
+  const box = createBatchBox();
+  box.setState({ batch: batchOf() });
+  const flow = { go: vi.fn(), done: vi.fn(), fail: vi.fn(), error: vi.fn() };
+  const h = renderHook(() => useSavedBatch({ writer, confirming: false, tag: 'test', env: () => ({ now: NOW, tz: 'Asia/Seoul', day: null }), flow, box }));
   const keys = (): string[] => h.result.current.notice?.lines.map((l) => l.key) ?? [];
-  return { writer, h, keys };
+  return { writer, h, keys, flow };
 }
 
 describe('一批里有纪念日', () => {
   it('全部撤销：撤掉别的，纪念日留在提示条上、单独一句，不算没撤成；再点一次也一样', async () => {
-    const { writer, h, keys } = setup();
-    let ok = false;
+    const { writer, h, keys, flow } = setup();
     await act(async () => {
-      ok = await h.result.current.undoAll();
+      await h.result.current.undo();
     });
-    expect(ok, '没有真正失败的').toBe(true);
+    expect(flow.go, '没有真正失败的：回到 idle').toHaveBeenCalledWith({ type: 'reset' });
     expect(writer.patch).toHaveBeenCalledTimes(2);
     expect(h.result.current.notice?.entries.map((e) => e.ref.id)).toEqual(['a1']);
     expect(keys()).toContain('plus.notice.annivKept');
     expect(keys()).not.toContain('plus.notice.undoFailed');
     await act(async () => {
-      ok = await h.result.current.undoAll();
+      await h.result.current.undo();
     });
-    expect(ok).toBe(true);
+    expect(flow.go).toHaveBeenCalledTimes(2);
     expect(keys()).toContain('plus.notice.annivKept');
     expect(keys()).not.toContain('plus.notice.undoFailed');
   });
@@ -61,7 +62,7 @@ describe('一批里有纪念日', () => {
   it('合并成一条：新的一条存上、别的撤掉，纪念日撤不掉，留在提示条上并单独一句', async () => {
     const { writer, h, keys } = setup();
     await act(async () => {
-      await h.result.current.merge({ now: NOW, tz: 'Asia/Seoul', day: null });
+      await h.result.current.merge();
     });
     expect(writer.insert).toHaveBeenCalledTimes(1);
     expect(writer.patch).toHaveBeenCalledTimes(2);

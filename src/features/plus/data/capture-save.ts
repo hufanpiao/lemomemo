@@ -15,6 +15,9 @@ import { saveUndone } from '../../../core/edit-save.ts';
 import { remindLive, todoRemindAfter, todoRemindFields } from '../../../core/remind-flag.ts';
 import { write, type WriteFailReason, type WriteResult } from '../../../core/write.ts';
 
+/** 存一句（或确认行的一条）的结果：nothing 一条都没拆出来；not_saved 没写进去；switching 正在换账号（页面马上要走，不提示） */
+export type SaveOutcome = 'ok' | 'nothing' | 'not_saved' | 'switching';
+
 /** 写入口（测试换成桩） */
 export interface Writer {
   insert(table: string, data: Record<string, unknown> & { id: string }, opts?: { remind?: boolean }): Promise<WriteResult>;

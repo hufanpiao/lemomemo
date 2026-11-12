@@ -6,7 +6,10 @@
 // • ai_failed 时录音留在内存里（最多 2 分钟，record-logic 的 keptExpired），可以“重试”回到 uploading
 // • 不合法的转移原样返回旧状态（界面连点、晚到的回调不会把状态弄乱），单测逐条测
 // • ui 只按状态渲染提示条；状态里不放录音 Blob（Blob 放 hooks 的 ref 里）
+// • 录音那一边的锁定、区、说明卡、提示也走这里（viewStep；FA-3 第二轮复查项），拦下不合法的组合：锁定、区只在录着时有；
+//   说明卡只在 idle 出（出了收起提示）；提示只在 idle、结局、确认行时出
 // 纯 TS：不准 import React（A1）
+import type { HoldZone } from './record-logic.ts';
 
 export type CaptureStatus =
   | 'idle'
@@ -95,6 +98,51 @@ export function captureStep(s: CaptureStatus, e: CaptureEvent): CaptureStatus {
     default: {
       const never: never = s;
       return never;
+    }
+  }
+}
+
+const CAPTURING: readonly CaptureStatus[] = ['preparing', 'recording', 'listening'];
+const noteOk = (s: CaptureStatus): boolean => s === 'idle' || s === 'confirming' || isFinal(s);
+
+/** 和 status 一起管的几样（录音那一边的画面）；N 是提示的种类 */
+export interface CaptureView<N> {
+  status: CaptureStatus;
+  /** 录着（面板开着）：preparing / recording / listening */
+  capturing: boolean;
+  /** 锁定了（或“再说一次”）：面板出“取消 / 记下” */
+  locked: boolean;
+  zone: HoldZone;
+  card: 'ask' | 'denied' | null;
+  note: N | null;
+}
+
+export type ViewEvent<N> =
+  | CaptureEvent
+  | { type: 'lock' }
+  | { type: 'zone'; zone: HoldZone }
+  | { type: 'card'; card: 'ask' | 'denied' | null }
+  | { type: 'note'; note: N | null };
+
+/** 带着锁定、区、说明卡、提示走一步（纯函数；不合法的原样返回） */
+export function viewStep<N, V extends CaptureView<N>>(v: V, e: ViewEvent<N>): V {
+  switch (e.type) {
+    case 'lock':
+      return v.capturing ? { ...v, locked: true, zone: null } : v;
+    case 'zone':
+      return v.capturing ? { ...v, zone: e.zone } : v;
+    case 'card':
+      return e.card === null ? { ...v, card: null } : v.status === 'idle' ? { ...v, card: e.card, note: null } : v;
+    case 'note':
+      return e.note === null || noteOk(v.status) ? { ...v, note: e.note } : v;
+    default: {
+      const status = captureStep(v.status, e);
+      if (status === v.status) return v;
+      const capturing = CAPTURING.includes(status);
+      return {
+        ...v, status, capturing, locked: capturing && v.locked, zone: capturing ? v.zone : null,
+        card: status === 'idle' ? v.card : null, note: noteOk(status) ? v.note : null,
+      };
     }
   }
 }

@@ -18,3 +18,10 @@ export function usePlusLine() {
     [locale],
   );
 }
+
+/** 手机自带识别听哪种话（lang，跟界面语言）、另一种是什么（other）：录音面板、提示条共用这一份 */
+export function useLangNames(): { lang: string; other: string } {
+  const t = usePlusT();
+  const ko = useUi((s) => s.locale) === 'ko-KR';
+  return { lang: t(ko ? 'plus.lang.ko' : 'plus.lang.zh', {}), other: t(ko ? 'plus.lang.zh' : 'plus.lang.ko', {}) };
+}

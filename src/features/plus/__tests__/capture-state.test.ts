@@ -1,6 +1,6 @@
 // 记录状态机（data/capture-state.ts；架构 5.9、5.11 第 4 点；B3 任务单 FA-1）
 import { describe, expect, it } from 'vitest';
-import { captureStep, isFinal, type CaptureEvent, type CaptureStatus } from '../data/capture-state.ts';
+import { captureStep, isFinal, viewStep, type CaptureEvent, type CaptureStatus, type CaptureView } from '../data/capture-state.ts';
 
 const walk = (events: CaptureEvent[], from: CaptureStatus = 'idle'): CaptureStatus => events.reduce(captureStep, from);
 
@@ -43,5 +43,38 @@ describe('辅助判断', () => {
   it('isFinal', () => {
     expect(isFinal('offline_saved')).toBe(true);
     expect(isFinal('organizing')).toBe(false);
+  });
+});
+
+describe('viewStep：锁定、区、说明卡、提示和状态一起走（FA-3 第二轮复查项）', () => {
+  type V = CaptureView<string>;
+  const V0: V = { status: 'idle', capturing: false, locked: false, zone: null, card: null, note: null };
+  const run = (...es: Parameters<typeof viewStep<string, V>>[1][]): V => es.reduce<V>((v, e) => viewStep(v, e), V0);
+
+  it('锁定、区只在录着时有；录完（停、丢掉、出错）自动清掉', () => {
+    expect(run({ type: 'lock' }), '没在录：拦下').toBe(V0);
+    expect(run({ type: 'zone', zone: 'cancel' })).toBe(V0);
+    const rec = run({ type: 'prepare' }, { type: 'start', path: 'rec' }, { type: 'zone', zone: 'lock' }, { type: 'lock' });
+    expect(rec).toMatchObject({ status: 'recording', capturing: true, locked: true, zone: null });
+    expect(viewStep(rec, { type: 'stop' })).toMatchObject({ status: 'uploading', capturing: false, locked: false, zone: null });
+    expect(viewStep(rec, { type: 'reset' })).toMatchObject({ status: 'idle', locked: false });
+  });
+
+  it('说明卡只在 idle 出，出了就收起提示；进了录音说明卡收起', () => {
+    const noted = run({ type: 'note', note: 'offline' });
+    expect(viewStep(noted, { type: 'card', card: 'ask' })).toMatchObject({ card: 'ask', note: null });
+    const busy = run({ type: 'prepare' });
+    expect(viewStep(busy, { type: 'card', card: 'denied' }), '录着时不出卡').toBe(busy);
+    expect(viewStep(run({ type: 'card', card: 'ask' }), { type: 'prepare' })).toMatchObject({ status: 'preparing', card: null });
+  });
+
+  it('提示只在 idle、结局、确认行时出；进了录音、上传收起', () => {
+    const up = run({ type: 'prepare' }, { type: 'start', path: 'rec' }, { type: 'stop' });
+    expect(viewStep(up, { type: 'note', note: 'x' }), '上传中不出提示').toBe(up);
+    const failed = viewStep(up, { type: 'done', status: 'ai_failed' });
+    const shown = viewStep(failed, { type: 'note', note: 'ai_failed' });
+    expect(shown.note).toBe('ai_failed');
+    expect(viewStep(shown, { type: 'retry' })).toMatchObject({ status: 'uploading', note: null });
+    expect(viewStep(run({ type: 'note', note: 'nothing' }), { type: 'prepare' }).note).toBeNull();
   });
 });

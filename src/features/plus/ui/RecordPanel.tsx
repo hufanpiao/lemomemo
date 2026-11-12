@@ -9,10 +9,9 @@
 import { useEffect, useRef } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { useKeys } from '../../../kit/hooks/useKeys.ts';
-import { useUi } from '../../../kit/state/ui-store.ts';
 import { Appear, eachFrame } from '../../../motion/components.ts';
 import { fmtClock, recCountdown, type VoiceState } from '../hooks/useVoice.ts';
-import { usePlusT } from '../hooks/usePlusT.ts';
+import { useLangNames, usePlusT } from '../hooks/usePlusT.ts';
 import { MicGlyph } from './MicGlyph.tsx';
 import styles from './RecordPanel.module.css';
 
@@ -26,8 +25,8 @@ const FLAT = 4 / BAR_PX;
 
 export function RecordPanel({ v }: { v: VoiceState }) {
   const t = usePlusT();
-  const locale = useUi((s) => s.locale);
-  const show = v.status === 'preparing' || v.status === 'recording' || v.status === 'listening';
+  const { lang, other } = useLangNames();
+  const show = v.capturing;
   const prep = v.status === 'preparing';
   const speech = v.path === 'speech';
   const clock = useRef<HTMLElement>(null);
@@ -74,8 +73,6 @@ export function RecordPanel({ v }: { v: VoiceState }) {
     return eachFrame(frame);
   }, [show, t]);
 
-  const lang = t(locale === 'ko-KR' ? 'plus.lang.ko' : 'plus.lang.zh', {});
-  const other = t(locale === 'ko-KR' ? 'plus.lang.zh' : 'plus.lang.ko', {});
   const label = prep ? 'plus.rec.prep' : v.locked ? 'plus.rec.locked' : 'plus.rec.on';
   const head = prep ? t('plus.rec.say', {}) : !speech ? t('plus.rec.head', {}) : t(v.locked ? 'plus.rec.headAgain' : 'plus.rec.headSpeech', {});
   const sub = speech
