@@ -6,7 +6,7 @@
 import { buildInfo } from '../../../platform/env.ts';
 import { appFetch } from '../../../platform/http.ts';
 import { getSupabase } from '../../../platform/supabase/client.ts';
-import { SendError } from './type-flow.ts';
+import { SendError } from './send-error.ts';
 
 export interface FnPostOptions {
   fetch?: typeof appFetch;

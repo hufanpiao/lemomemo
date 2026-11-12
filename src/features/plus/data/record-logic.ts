@@ -7,6 +7,7 @@
 //   进了录音以后：拖进取消区松开 = 取消，拖进锁定区 = 锁定（松开也继续录）。取消区、锁定区的位置由界面量好，经 zoneAt 传进来
 // • 状态全是普通对象，界面放 ref 里，按住和移动期间不触发渲染（Q3：GlassBar 不重新渲染）
 // 纯 TS：不准 import React（A1）
+import type { SendFail } from './send-error.ts';
 
 export const REC_MAX_MS = 60_000;
 /** 录音码率（架构 5.11：直传按 AAC 32–64 kbps 算）：录满 REC_MAX_MS 约 360 KB，留足 600 KB 上限的余量 */
@@ -39,9 +40,6 @@ export function fmtClock(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
-
-/** 失败的种类：network = 连接都没建立（fetch 抛 TypeError）；其余都不自动重试 */
-export type SendFail = 'network' | 'timeout' | 'http' | 'bad_response';
 
 /** 这次失败要不要自动再发一次（tried：已经自动重试过几次） */
 export const canAutoRetry = (fail: SendFail, tried: number): boolean => fail === 'network' && tried < AUTO_RETRY_MAX;

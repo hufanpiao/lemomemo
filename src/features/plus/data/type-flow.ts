@@ -17,7 +17,11 @@ import { arrangeHint, clauseSeparators, confidence, parseSplit, recurHint, type 
 import { AI_TEXT_MAX, checkDefaultDay, normProjects, type AiItem } from '../../../../shared/schema/ai.ts';
 import type { AiKind } from '../../../../shared/schema/kinds.ts';
 import { outcomeOf, type AiOutcome } from './ai-outcome.ts';
-import { AI_PARSE_TIMEOUT_MS, canAutoRetry, type SendFail } from './record-logic.ts';
+import { AI_PARSE_TIMEOUT_MS, canAutoRetry } from './record-logic.ts';
+import { SendError, type SendFail } from './send-error.ts';
+
+/** SendError 定义在 send-error.ts，这里转出给老调用方 */
+export { SendError };
 
 export interface TypeCtx {
   now: number;
@@ -65,15 +69,6 @@ export function aiReqCtx(ctx: Pick<TypeCtx, 'now' | 'tz' | 'locale' | 'projects'
 
 /** 送 ai-parse 的口子：返回已 parse 的 JSON；失败抛 SendError（或 fetch 原样抛的 TypeError、AbortError） */
 export type CallAi = (req: AiParseReq, signal: AbortSignal) => Promise<unknown>;
-
-export class SendError extends Error {
-  readonly fail: SendFail;
-  constructor(fail: SendFail) {
-    super(fail);
-    this.fail = fail;
-    this.name = 'SendError';
-  }
-}
 
 export type TypeStatus =
   /** AI 识别的，或本机规则有把握的 */
