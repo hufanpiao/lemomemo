@@ -1,4 +1,4 @@
-// 提示条上一批里有纪念日时的撤销、合并（data/saved-batch.ts；FA-3 复查第 3、4 条）
+// 提示条上一批里有纪念日时的撤销、合并（data/saved-batch.ts；FA-3 复查第 3、4 条）；确认行连点（第二轮复查续第 2 条）
 // 纪念日在这里撤不掉（capture-save 的 undoRefs 一律留下）：不算“没撤销成功”，单独一句“纪念日请到纪念日页删除”，那一条留在提示条上
 import { describe, expect, it, vi } from 'vitest';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
@@ -37,7 +37,7 @@ function setup() {
   const b = createSavedBatch({ box, writer, tag: 'test', env: () => ({ now: NOW, tz: 'Asia/Seoul', day: null }), flow });
   const notice = () => noticeOf(box.getState());
   const keys = (): string[] => notice()?.lines.map((l) => l.key) ?? [];
-  return { writer, b, notice, keys, flow };
+  return { writer, b, notice, keys, flow, box };
 }
 
 describe('一批里有纪念日', () => {
@@ -73,5 +73,22 @@ describe('一批里有纪念日', () => {
     expect(writer.patch).not.toHaveBeenCalled();
     expect(notice()?.entries).toHaveLength(3);
     expect(keys()).toContain('plus.notice.annivKept');
+  });
+});
+
+describe('确认行连点（第二轮复查续第 2 条）', () => {
+  it('“补记”连点两下：第一下还在存时第二下不算，只存一条', async () => {
+    const { writer, b, box, flow } = setup();
+    const past = { ...todo('交房租'), due: '2026-10-30', date_basis: 'md', confirm: { past: '2026-10-30', next: '2027-10-30' } } as AiItem;
+    box.setState({ ask: [past] });
+    let open: (() => void) | undefined;
+    writer.insert.mockImplementationOnce(() => new Promise<WriteResult>((ok) => (open = () => ok(OK))));
+    const first = b.choose('past');
+    const second = b.choose('past');
+    await vi.waitFor(() => expect(open).toBeDefined());
+    open?.();
+    await Promise.all([first, second]);
+    expect(writer.insert).toHaveBeenCalledTimes(1);
+    expect(flow.go).toHaveBeenCalledTimes(1);
   });
 });

@@ -430,6 +430,21 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     await waitFor(() => expect(fx.busy, '存完放开').toEqual([]));
   });
 
+  it('停在确认行（过去的月日，R-166）：busy 照样占着，自动重新载入不会把等着选的那一条丢掉；选完才放开（第二轮复查续第 3 条）', async () => {
+    const past = { ...ITEM, title: '交房租', due: '2026-10-30', date_basis: 'md', confirm: { past: '2026-10-30', next: '2027-10-30' } };
+    const { writer } = setup({ call: async () => ({ ...VOICE_OK, transcript: '10 月 30 号交房租', items: [past] }) });
+    await holdDown();
+    await release();
+    const row = await screen.findByTestId('type-confirm');
+    expect(fx.busy, '确认行出着：占着').toEqual(['recording']);
+    expect(writer.insert, '还没选：没存').not.toHaveBeenCalled();
+    const pastBtn = row.querySelector('button');
+    if (!pastBtn) throw new Error('确认行没有按钮');
+    fireEvent.click(pastBtn);
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fx.busy, '选完放开').toEqual([]));
+  });
+
   it('录着时切页：当松手处理（停录、上传、写库），麦克风不留着', async () => {
     const { writer, call, unmount } = setup();
     await holdDown();

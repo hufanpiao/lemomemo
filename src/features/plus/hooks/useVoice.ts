@@ -42,10 +42,14 @@ export function useVoice(o: VoiceOpts = {}) {
   useVoiceSink(s, cancelZone, lockZone);
   useHoldReminders(v.capturing, 'recording');
 
-  // 面板、提示条、确认行、说明卡的动作都在控制器和这一批上；这里只补面板的“取消”和“改用打字”打开打字条
+  // 面板、提示条、确认行、说明卡的动作都在控制器和这一批上；这里只补面板的“取消”和“改用打字”打开打字条。
+  // 只交界面要用的那几样（第二轮复查续第 1 条）：不把整个控制器摊进来，免得界面能调 dispose、bind，也免得控制器的 zone() 和 view 的 zone 重名靠先后覆盖
+  const { elapsed, level, finish, retry, sayAgain, allowMic, closeCard, closeNote, cancelUpload, dismissConfirm } = s;
   const { choose, undo, undoOne, merge, closeNotice } = s.batch;
   return {
-    ...s, ...v, asking, notice, cancelZone, lockZone, choose, undo, undoOne, merge, closeNotice,
+    ...v, asking, notice, cancelZone, lockZone,
+    elapsed, level, finish, retry, sayAgain, allowMic, closeCard, closeNote, cancelUpload, dismissConfirm,
+    choose, undo, undoOne, merge, closeNotice,
     discard: (): void => s.discard('panel'),
     typeInstead(): void {
       s.typeInstead();

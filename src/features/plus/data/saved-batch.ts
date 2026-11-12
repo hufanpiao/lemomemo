@@ -105,6 +105,8 @@ export type SavedBatch = ReturnType<typeof createSavedBatch>;
 export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedBatchOpts) {
   const get = box.getState;
   const put = (s: Partial<BatchState>): void => box.setState(s);
+  /** 确认行选了还在存：再点不算（连点会存两条，第二轮复查续第 2 条） */
+  let choosing = false;
 
   /** 存几条：加进 base 那一批（base.batchId 为 null 时开新的一批）；返回新的 batch（没存成为 null） */
   const store = async (base: Batch, items: AiItem[], e: SaveEnv): Promise<{ batch: Batch | null; out: SaveOutcome }> => {
@@ -156,8 +158,11 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
     async choose(c: 'past' | 'next'): Promise<void> {
       const { batch, ask } = get();
       const first = ask[0];
-      if (!batch || !first) return;
-      const r = await store(batch, [applyConfirm(first, c)], env());
+      if (!batch || !first || choosing) return;
+      choosing = true;
+      const r = await store(batch, [applyConfirm(first, c)], env()).finally(() => {
+        choosing = false;
+      });
       if (r.out !== 'ok' || !r.batch) return flow.error(r.out === 'switching' ? 'switching' : 'not_saved');
       const rest = ask.slice(1);
       put({ batch: r.batch, ask: rest });

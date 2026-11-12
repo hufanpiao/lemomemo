@@ -79,8 +79,8 @@ export interface Attempt {
 export type VoiceCore = ReturnType<typeof createCore>;
 export type VoiceSession = ReturnType<typeof createVoiceSession>;
 
-/** 录着、上传、整理：占住升级中心的 busy */
-const busyNow = (v: VoiceView): boolean => v.capturing || v.status === 'uploading' || v.status === 'organizing';
+/** 录着、上传、整理、等确认行选（选之前那一条还没存，重新载入会丢）：占住升级中心的 busy */
+const busyNow = (v: VoiceView): boolean => v.capturing || v.status === 'uploading' || v.status === 'organizing' || v.status === 'confirming';
 
 /** forget：留着的录音不要了（录音路的） */
 function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
@@ -107,7 +107,12 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
     if (free) {
       free();
       free = null;
-    } else free = getBoot()?.upgrade.holdBusy('recording') ?? (() => undefined);
+    } else {
+      const boot = getBoot();
+      // 启动还没好就开录：占不住，记一笔（第二轮复查续第 4 条）
+      if (!boot) rlog('voice busy skip no_boot');
+      free = boot?.upgrade.holdBusy('recording') ?? (() => undefined);
+    }
   };
   const toIdle = (): void => go({ type: 'reset' });
   const clearNote = (): void => {
