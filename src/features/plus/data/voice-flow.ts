@@ -9,12 +9,12 @@
 // • 结果在界面上怎么收尾（voiceFinal）：记下的拼成和打字同一种 TypePlan，别的给出提示条种类
 // • 运行日志只记结果种类、原因、次数、毫秒、字节数，不记转写
 // 纯 TS：不准 import React（A1）
-import { AI_TEXT_MAX, type AiItem } from '../../../../shared/schema/ai.ts';
+import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { outcomeOf } from './ai-outcome.ts';
+import { cutAiText, isObj, outcomeOf } from './ai-outcome.ts';
 import type { CallVoice } from './ai-voice-api.ts';
-import { canAutoRetry, uploadTimeoutMs } from './record-logic.ts';
-import { sendFailOf, type SendFail } from './send-error.ts';
+import { uploadTimeoutMs } from './record-logic.ts';
+import { withTimeoutRetry, type SendFail } from './send-error.ts';
 import { navOnline, planLocal, type AiReqCtx, type TypeCtx, type TypePlan } from './type-flow.ts';
 
 /** 要上传的一段录音：mime 不带参数（audio/mp4），直接当 Content-Type */
@@ -46,16 +46,13 @@ export type VoiceResult =
   /** 用户点了取消 */
   | { kind: 'cancelled' };
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const cut = (s: string): string => [...s].slice(0, AI_TEXT_MAX).join('');
-
 /** ai-voice 返回的 JSON（已 parse）→ 结果 */
 export function voiceResult(raw: unknown): VoiceResult {
   const transcript = isObj(raw) && typeof raw['transcript'] === 'string' ? raw['transcript'].trim() : null;
   const out = outcomeOf(raw);
   switch (out.kind) {
     case 'record':
-      return { kind: 'record', items: out.items, transcript: cut(out.transcript ?? ''), quotaLeft: out.quotaLeft };
+      return { kind: 'record', items: out.items, transcript: cutAiText(out.transcript ?? ''), quotaLeft: out.quotaLeft };
     case 'quota_out':
       return { kind: 'quota_out' };
     case 'consent_required':
@@ -64,7 +61,7 @@ export function voiceResult(raw: unknown): VoiceResult {
       return out.reason === 'quota' ? { kind: 'quota_out' } : { kind: 'fallback', reason: out.reason };
     case 'ai_failed':
       if (out.reason === 'empty_items' && transcript === '') return { kind: 'no_speech' };
-      if (transcript) return { kind: 'rule', transcript: cut(transcript), reason: out.reason };
+      if (transcript) return { kind: 'rule', transcript: cutAiText(transcript), reason: out.reason };
       return { kind: 'failed', reason: out.reason, fail: null };
     default: {
       const never: never = out;
@@ -93,23 +90,9 @@ export async function sendVoice(clip: VoiceClip, ctx: AiReqCtx, call: CallVoice,
     rlog(`voice result kind=${r.kind}${why}${fail} tries=${tries} ms=${Math.round(now() - t0)} bytes=${clip.blob.size} timeout_ms=${timeoutMs}`);
     return r;
   };
-  for (let tried = 0; ; tried++) {
-    if (o.signal?.aborted) return done({ kind: 'cancelled' }, tried);
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(new DOMException('timeout', 'TimeoutError')), timeoutMs);
-    const stop = (): void => ac.abort(new DOMException('cancelled', 'AbortError'));
-    o.signal?.addEventListener('abort', stop, { once: true });
-    try {
-      return done(voiceResult(await call({ ...ctx, audio: clip.blob, mime: clip.mime }, ac.signal)), tried + 1);
-    } catch (e) {
-      if (o.signal?.aborted) return done({ kind: 'cancelled' }, tried + 1);
-      const fail = ac.signal.aborted ? 'timeout' : sendFailOf(e);
-      if (!canAutoRetry(fail, tried) || !online()) return done({ kind: 'failed', reason: fail, fail }, tried + 1);
-    } finally {
-      clearTimeout(timer);
-      o.signal?.removeEventListener('abort', stop);
-    }
-  }
+  const r = await withTimeoutRetry((signal) => call({ ...ctx, audio: clip.blob, mime: clip.mime }, signal), timeoutMs, online, o.signal);
+  if (r.ok) return done(voiceResult(r.value), r.tries);
+  return done(r.fail === 'cancelled' ? { kind: 'cancelled' } : { kind: 'failed', reason: r.fail, fail: r.fail }, r.tries);
 }
 
 /** 提示条上的几种情况（记下了的走 SavedNotice，不在这里） */

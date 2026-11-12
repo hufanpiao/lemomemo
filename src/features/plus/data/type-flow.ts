@@ -14,11 +14,11 @@
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { arrangeHint, clauseSeparators, confidence, parseSplit, recurHint, type ParseHints, type ParseResult } from '../../../../shared/logic/parse/index.ts';
-import { AI_TEXT_MAX, checkDefaultDay, normProjects, type AiItem } from '../../../../shared/schema/ai.ts';
+import { checkDefaultDay, normProjects, type AiItem } from '../../../../shared/schema/ai.ts';
 import type { AiKind } from '../../../../shared/schema/kinds.ts';
-import { outcomeOf, type AiOutcome } from './ai-outcome.ts';
-import { AI_PARSE_TIMEOUT_MS, canAutoRetry } from './record-logic.ts';
-import { SendError, sendFailOf } from './send-error.ts';
+import { cutAiText, outcomeOf, type AiOutcome } from './ai-outcome.ts';
+import { AI_PARSE_TIMEOUT_MS } from './record-logic.ts';
+import { SendError, withTimeoutRetry } from './send-error.ts';
 
 /** SendError 定义在 send-error.ts，这里转出给老调用方 */
 export { SendError };
@@ -124,21 +124,9 @@ export const navOnline = (): boolean => typeof navigator === 'undefined' || navi
  * 重试前浏览器已经明确说离线：不再重试（B3 前端A代码审 C4：不然断网时要等两个 6 秒才退回本机）
  */
 export async function askAi(req: AiParseReq, call: CallAi, timeoutMs = AI_PARSE_TIMEOUT_MS, online: () => boolean = navOnline): Promise<AiOutcome> {
-  for (let tried = 0; ; tried++) {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(new DOMException('timeout', 'TimeoutError')), timeoutMs);
-    try {
-      return outcomeOf(await call(req, ac.signal));
-    } catch (e) {
-      const fail = ac.signal.aborted ? 'timeout' : sendFailOf(e);
-      if (!canAutoRetry(fail, tried) || !online()) return { kind: 'ai_failed', reason: fail };
-    } finally {
-      clearTimeout(timer);
-    }
-  }
+  const r = await withTimeoutRetry((signal) => call(req, signal), timeoutMs, online);
+  return r.ok ? outcomeOf(r.value) : { kind: 'ai_failed', reason: r.fail };
 }
-
-const cutText = (s: string): string => [...s].slice(0, AI_TEXT_MAX).join('');
 
 /** 整个打字流程（不保存；保存交给 capture-save） */
 export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: CallAi): Promise<TypePlan> {
@@ -153,7 +141,7 @@ export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: 
   // 选中的日子超出后端认的范围：发了也是 400，不调 AI、不花次数，直接用本机结果（记到选中那天）；不是“AI 没回应”，不出那句提示
   const base = aiReqCtx(ctx);
   if (base === 'bad_default_day') return local('saved', base);
-  const req: AiParseReq = { ...base, text: cutText(text) };
+  const req: AiParseReq = { ...base, text: cutAiText(text) };
   const isOnline = env.isOnline ?? navOnline;
   const out = await askAi(req, call, AI_PARSE_TIMEOUT_MS, isOnline);
   switch (out.kind) {

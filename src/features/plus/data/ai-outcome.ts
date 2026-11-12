@@ -8,7 +8,7 @@
 //   纪念日、随手记不查：capture-map 自己截断或不写这几列
 // • 不写 ai_status（M5）
 // 纯 TS：不准 import React（A1）
-import { aiResponse, INTENTS, type AiItem, type Intent } from '../../../../shared/schema/ai.ts';
+import { AI_TEXT_MAX, aiResponse, INTENTS, type AiItem, type Intent } from '../../../../shared/schema/ai.ts';
 import { eventsWrite, todosWrite } from '../../../../shared/schema/rows.ts';
 
 /** 状态机能处理的几种结果 */
@@ -24,7 +24,10 @@ export type AiOutcome =
   /** AI 这次没回应 / 输出不合格 / 不认识的 intent / 返回读不懂 */
   | { kind: 'ai_failed'; reason: string };
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** 打字、录音共用（plus 里只留这一份） */
+export const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** 原话、转写截到 AI_TEXT_MAX 个字（按码点，不切半个表情） */
+export const cutAiText = (s: string): string => [...s].slice(0, AI_TEXT_MAX).join('');
 const knownIntent = (v: unknown): v is Intent => typeof v === 'string' && (INTENTS as readonly string[]).includes(v);
 
 const ROW_COLS = { event: eventsWrite.shape, todo: todosWrite.shape } as const;
