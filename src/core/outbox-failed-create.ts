@@ -8,6 +8,7 @@
 // • 在途（inflight）的不动：有在途项返回 nothing（发送结果回来再说）
 // • 不进首屏：只有 core/write-failed-create.ts（按需下载）静态引它；ctx 经 outbox.ts 导出的 outboxCtx 取（同 outbox-gone.ts）
 // 纯 TS：不准 import React 和任何功能（A1）
+import { isLiveRow } from '../../shared/logic/live-row.ts';
 import type { CachedRow } from './cache.ts';
 import { OUTBOX } from './cache-schema.ts';
 import { bySeq, loadRowSchemas, NO_COPY_TABLES, OutboxCodeUnavailableError, OutboxRejectError, recKey, validateWrite, type WriteCode } from './outbox-logic.ts';
@@ -29,7 +30,7 @@ const key = (items: readonly OutboxItem[]): string => JSON.stringify(items.map((
 function mergedData(rows: WriteCode, mine: readonly OutboxItem[], newId: string): Record<string, unknown> | null {
   let data: Record<string, unknown> = {};
   for (const i of mine) data = rows.mergePatch(data, i.data);
-  if ((data['deleted_at'] ?? null) !== null || data['undone'] === true) return null;
+  if (!isLiveRow(data)) return null;
   const { deleted_at: _d, undone: _u, ...rest } = data;
   return { ...rest, id: newId };
 }

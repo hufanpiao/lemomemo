@@ -18,6 +18,7 @@
 // 纪念日（anniversaries）的提醒归 B5（remindAtOf 还不算纪念日），这里只处理日程和待办
 import { addDays, msAt, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
+import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { ALL_DAY_EVE_TIME, allDayRemindDay, allDayTimeOf, applyDnd, remindAtOf, sameRemindDay, type Dnd } from '../../../../shared/logic/remind.ts';
 import { occurrenceKey, reminderTag } from '../../../../shared/logic/remind-route.ts';
 
@@ -51,7 +52,6 @@ export interface Reminder {
 
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-const isDel = (v: unknown): boolean => v !== null && v !== undefined;
 
 /**
  * 本机现算的 remind_at（有时刻的日程固定时刻；全天日程按 current_tz 和 defaultTime；待办按 current_tz，“其余重算”传这一行的 remind_at）。
@@ -90,7 +90,7 @@ export function rawDueAt(remindAt: number | null, row: Row): number | null {
 
 /** 一行 → 提醒；不该提醒的（已删、撤销、待办已完成、没有提醒）返回 null */
 export function reminderOf(kind: RemindKind, row: Row, now: number, tz: Tz, dnd: Dnd = null, defaultTime?: string): Reminder | null {
-  if (isDel(row['deleted_at']) || row['undone'] === true) return null;
+  if (!isLiveRow(row)) return null;
   if (kind === 'todo' && row['done'] === true) return null;
   let remindAt: number | null;
   try {

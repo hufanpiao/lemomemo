@@ -9,7 +9,8 @@
 import { settingPatch } from './setting-patch.ts';
 import { write } from './write.ts';
 
-import { live, type SettingRow } from './setting-read.ts';
+import { isLiveRow } from '../../shared/logic/live-row.ts';
+import type { SettingRow } from './setting-read.ts';
 
 export { settingValue, type SettingRow } from './setting-read.ts';
 
@@ -21,9 +22,9 @@ const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON
 
 /** 把 key 改成 value 要写什么；已经是这个值时 null（不写） */
 export function settingWrite(rows: readonly SettingRow[], key: string, value: unknown): SettingWrite | null {
-  const row = rows.find((r) => r.key === key && live(r)) ?? rows.find((r) => r.key === key);
+  const row = rows.find((r) => r.key === key && isLiveRow(r)) ?? rows.find((r) => r.key === key);
   if (!row) return { op: 'insert', data: { key, value } };
-  if (live(row) && typeof value === 'object' && value !== null && sameJson(row.value, value)) return null;
+  if (isLiveRow(row) && typeof value === 'object' && value !== null && sameJson(row.value, value)) return null;
   const data = settingPatch(row, value);
   return data ? { op: 'patch', id: row.id, data } : null;
 }
