@@ -3,8 +3,8 @@
 // 解压函数由调用方传入（客户端 fflate、服务器 DecompressionStream 适配器），shared 不碰运行环境的 API。
 // 本文件会复制进 supabase/functions/_shared/gen 受 F7 检查：任意偏移的读取一律经 DataView，魔数写成数字，查表用 Map 或遍历元组。
 
-/** 判得出的 10 种附件类型（R-114 D-4，同 note_files.kind）；MIME 的唯一出处是 shared/manifests/attachments.ts 的 DOC_MIME，这里不放 */
-export type DocKind = 'pdf' | 'docx' | 'xlsx' | 'pptx' | 'docm' | 'xlsm' | 'pptm' | 'doc' | 'xls' | 'ppt';
+// 判得出的 10 种附件类型 DocKind 和它们的 MIME 只在 shared/manifests/attachments.ts 的 DOC_TYPES 里列，这里只引类型
+import type { DocKind } from '../../manifests/attachments.ts';
 
 /** 三个家族：一行一个家族；三个 kind 字段受 DocKind 约束 */
 const FAMILIES = [
