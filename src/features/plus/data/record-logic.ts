@@ -7,6 +7,7 @@
 //   进了录音以后：拖进取消区松开 = 取消，拖进锁定区 = 锁定（松开也继续录）。取消区、锁定区的位置由界面量好，经 zoneAt 传进来
 // • 状态全是普通对象，界面放 ref 里，按住和移动期间不触发渲染（Q3：GlassBar 不重新渲染）
 // 纯 TS：不准 import React（A1）
+import { VOICE_TIMEOUT_MS } from '../../../../shared/schema/ai.ts';
 import type { SendFail } from './send-error.ts';
 
 export const REC_MAX_MS = 60_000;
@@ -14,7 +15,8 @@ export const REC_MAX_MS = 60_000;
 export const REC_BITS_PER_SECOND = 48_000;
 export const REC_COUNTDOWN_FROM_MS = 50_000;
 export const AI_PARSE_TIMEOUT_MS = 6_000;
-export const UPLOAD_MIN_MS = 17_000;
+/** 上传总超时的下限：服务器等 Gemini 的 VOICE_TIMEOUT_MS 再加 2 秒网络往返（客户端不能先放弃） */
+export const UPLOAD_MIN_MS = VOICE_TIMEOUT_MS + 2_000;
 export const UPLOAD_PER_100KB_MS = 1_000;
 export const UPLOAD_MAX_MS = 22_000;
 export const BLOB_KEEP_MS = 120_000;

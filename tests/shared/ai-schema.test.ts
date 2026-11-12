@@ -2,10 +2,12 @@
 // 本机规则和 AI 输出共用这一套：AI 的键白名单、按 kind 清字段、过去的月日几号要问（confirm 由服务器算）、行映射能原样过 insertSchema（新增口径，不带只能 update 的列）。
 // Vitest 和 Deno（deno task test）都跑。
 import { describe, expect, it } from 'vitest';
-import { aiResponse, checkParseOutput, checkVoiceOutput, normLocale, normProjects, type AiCheckCtx, type AiItem } from '../../shared/schema/ai.ts';
+import { aiResponse, checkParseOutput, checkVoiceOutput, normLocale, normProjects, VOICE_TIMEOUT_MS, type AiCheckCtx, type AiItem } from '../../shared/schema/ai.ts';
 import { captureRow, type CaptureCtx } from '../../shared/logic/capture-map.ts';
 import { inAiRange, pastDate, resolveBasis } from '../../shared/logic/parse/past-date.ts';
 import { insertSchema } from '../../shared/schema/rows.ts';
+import { VOICE_TIMEOUT_MS as FN_VOICE_TIMEOUT_MS } from '../../supabase/functions/_shared/ai/params.ts';
+import { UPLOAD_MIN_MS } from '../../src/features/plus/data/record-logic.ts';
 
 // 2026-10-28（周三）12:00 首尔 = 03:00 UTC
 const NOW = Date.UTC(2026, 9, 28, 3, 0);
@@ -214,5 +216,13 @@ describe('capture-map.ts：识别结果 → 库里的一行（M10）', () => {
     const row = captureRow(item({ project: 'p'.repeat(60) }), ctx({ rawText: '字'.repeat(2500) }))?.row as unknown as Record<string, unknown>;
     expect([(row['raw_text'] as string).length, (row['project'] as string).length]).toEqual([2000, 40]);
     expect(insertSchema('events').safeParse(row).success).toBe(true);
+  });
+});
+
+describe('ai-voice 的超时：前端和服务器同一个数', () => {
+  it('shared 的 VOICE_TIMEOUT_MS 和服务器 params.ts 的相等；前端上传下限比它多 2 秒（17 秒）', () => {
+    expect(VOICE_TIMEOUT_MS).toBe(FN_VOICE_TIMEOUT_MS);
+    expect(UPLOAD_MIN_MS).toBe(VOICE_TIMEOUT_MS + 2_000);
+    expect(UPLOAD_MIN_MS).toBe(17_000);
   });
 });

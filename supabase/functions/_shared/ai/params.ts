@@ -29,7 +29,7 @@ export const TASK_PARAMS = Object.freeze({
 
 /** ai-parse、claude-intake 的文字解析：调 Gemini 的超时（毫秒） */
 export const PARSE_TIMEOUT_MS = 5_000;
-/** ai-voice：转写和解析一次完成的超时（毫秒） */
+/** ai-voice：转写和解析一次完成的超时（毫秒）。前端按 shared/schema/ai.ts 的同名常量定上传超时，两边必须相等（tests/shared/ai-schema.test.ts 钉住） */
 export const VOICE_TIMEOUT_MS = 15_000;
 
 /** ai-classify：一批（每人最多 20 条）分一次的超时（毫秒）。cron 调用，不重试，失败的这批记 rule、下一轮重新排队（架构 5.2） */
