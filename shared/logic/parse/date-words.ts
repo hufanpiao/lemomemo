@@ -9,7 +9,7 @@
 //   由 past-date.ts 的 pastDate 按 basis 重配、出 confirm（R-166：过去的日子不替用户猜）。
 //   月份本来就没有的日子（11月31号、2月30号）不认成日子，返回 bad（提示“11 月没有 31 日”，日期留空，不改成 11/30 或 12/1）。
 import { addDays, daysIn, fmtDateStr, weekdayOf, type DateStr } from '../../core/date.ts';
-import { monthOf, shiftMonth, startOfWeek } from '../calendar/cal-nav.ts';
+import { lastOfMonth, monthOf, shiftMonth, startOfWeek } from '../calendar/cal-nav.ts';
 import { inSomeYear, type DateBasis } from './past-date.ts';
 import { cut, pick, take, type Rest } from './text.ts';
 
@@ -67,10 +67,7 @@ function nextMonthDay(t: DateStr, d: number): DateHit | null {
 }
 
 const rel = (date: DateStr, period = ''): DateHit => ({ ok: true, date, basis: 'rel', period });
-const monthEnd = (t: DateStr): DateHit => {
-  const { y, m } = monthOf(t);
-  return rel(fmtDateStr(y, m, daysIn(y, m)));
-};
+const monthEnd = (t: DateStr): DateHit => rel(lastOfMonth(monthOf(t)));
 
 /** 取走找到的那一段并返回结果；结果为 null（不像日期）时不取走 */
 function hit(st: Rest, m: RegExpMatchArray | null, h: DateHit | null): DateHit | null {

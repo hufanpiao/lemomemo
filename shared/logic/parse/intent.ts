@@ -3,10 +3,10 @@
 // 不变量：句式表照 5.14 原文；查找、总结的说法每种只有一张表（PHRASES），命中、祈使位置、去掉句式三组正则都从表生成；
 // 有没有把握只在 sureQuery 判（不丢记录：哪条不满足都没把握）；记下遇到句式表外的疑似取消 / 改期 / 完成词也没把握。
 // 取消、改期、完成的解析在 target-parse.ts。纯函数：now、tz 由调用方传入，不读时钟、不写日志。
-import { addDays, daysIn, fmtDateStr, todayOf, type DateStr } from '../../core/date.ts';
+import { addDays, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import { INTENT_KINDS, type IntentKind } from '../../schema/kinds.ts';
-import { firstOfMonth, monthOf, shiftMonth } from '../calendar/cal-nav.ts';
+import { firstOfMonth, lastOfMonth, monthOf, shiftMonth } from '../calendar/cal-nav.ts';
 import { cutGraphemes } from '../short.ts';
 import { KO_WEEK, takeDate, weekday, weekPrefix, ZH_WEEK_PREFIX } from './date-words.ts';
 import { cleanTitle, stripRequests, takeKindWords, takeNamedKind } from './marks.ts';
@@ -120,7 +120,7 @@ function takeRange(st: Rest, today: DateStr): Range | null {
   const m = take(st, ZH_MONTH) ?? take(st, KO_MONTH);
   if (!m) return null;
   const ym = shiftMonth(monthOf(today), m[1] === '下' || m[1] === '다음' ? 1 : 0);
-  return { from: firstOfMonth(ym), to: fmtDateStr(ym.y, ym.m, daysIn(ym.y, ym.m)) };
+  return { from: firstOfMonth(ym), to: lastOfMonth(ym) };
 }
 
 /** 两段文字从头起相同的那一段（取走日子以后，看日子前面有没有别的字） */

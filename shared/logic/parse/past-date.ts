@@ -11,6 +11,7 @@
 // “今天”一律按请求传入的 now 和 tz 算（todayOf），不按服务器当天。纯函数，前端和 Edge Functions 共用（复制到 _shared/gen/）。
 import { daysIn, fmtDateStr, parseDate, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
+import { lastOfMonth } from '../calendar/cal-nav.ts';
 
 /** 日期是怎么说出来的：说了年份 / 只说月日 / 只说几号 / 相对说法（明天、下周三、月底、没说日子按今天记、重复说法的最近一次） */
 export const DATE_BASES = ['ymd', 'md', 'd', 'rel'] as const;
@@ -86,7 +87,7 @@ export function resolveBasis(raw: DateStr, basis: DateBasis, today: DateStr): Ba
       if (!inSomeYear(r.m, r.d)) return { ok: false, reason: 'bad_date' };   // 11-31、02-30、04-31：任何一年都没有
       if (r.d > daysIn(t.y, r.m)) {
         // 02-29 遇上平年：记 2 月最后一天，一律问
-        const past = fmtDateStr(t.y, r.m, daysIn(t.y, r.m));
+        const past = lastOfMonth({ y: t.y, m: r.m });
         return { ok: true, date: past, confirm: { past, next: fmtDateStr(yearWith(r.m, r.d, t.y + 1), r.m, r.d) } };
       }
       const cand = fmtDateStr(t.y, r.m, r.d);
@@ -97,7 +98,7 @@ export function resolveBasis(raw: DateStr, basis: DateBasis, today: DateStr): Ba
       const nx = monthAfterWith(t.y, t.m, r.d);
       if (r.d > daysIn(t.y, t.m)) {
         // 本月没有这一天（30 天的月说 31 号）：记月末，一律问
-        const past = fmtDateStr(t.y, t.m, daysIn(t.y, t.m));
+        const past = lastOfMonth(t);
         return { ok: true, date: past, confirm: { past, next: fmtDateStr(nx.y, nx.m, r.d) } };
       }
       const cand = fmtDateStr(t.y, t.m, r.d);

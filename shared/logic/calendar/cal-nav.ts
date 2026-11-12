@@ -2,7 +2,7 @@
 // 周起始日、一周的 7 天、上一月 / 下一月、上一周 / 下一周、路由参数的解析和规整、年月选择器在周视图里跳到哪一周、
 // “今天”按钮该不该变灰。全是纯日期运算（只用 shared/core/date 的 Date.UTC 运算，不碰本地时区）；
 // “今天”由调用方用 todayOf(clock.now(), tz) 算好传进来。hash 本身的拆分归 app/router.ts，这里只管参数那一段。
-import { addDays, fmtDateStr, parseDate, weekdayOf, type DateStr } from '../../core/date.ts';
+import { addDays, daysIn, fmtDateStr, parseDate, weekdayOf, type DateStr } from '../../core/date.ts';
 import type { UiLocale } from '../../i18n/pick-locale.ts';
 
 /** 一周从星期几开始：0 = 周日 … 6 = 周六（和 weekdayOf 一致） */
@@ -72,6 +72,12 @@ export function shiftWeek(start: DateStr, n: number): DateStr {
 export function firstOfMonth(ym: YearMonth): DateStr {
   checkYm(ym);
   return fmtDateStr(ym.y, ym.m, 1);
+}
+
+/** 某月最后一天 */
+export function lastOfMonth(ym: YearMonth): DateStr {
+  checkYm(ym);
+  return fmtDateStr(ym.y, ym.m, daysIn(ym.y, ym.m));
 }
 
 /** 日期所在的年月 */
