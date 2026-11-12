@@ -82,6 +82,21 @@ describe('createSettingWriter', () => {
     expect(patch).toHaveBeenCalledWith('settings', 'a', { value: 'y' });
   });
 
+  it('update 连点：本机集合还没跟上，按本页最后写的值算，后一下不盖掉前一下；集合跟上以后按集合里的算', async () => {
+    const rows: Row[] = [{ id: 'a', key: 'k', value: ['x'] }];
+    const { w } = make(rows);
+    const add = (v: string) => (cur: unknown) => [...(Array.isArray(cur) ? cur : []), v];
+    await Promise.all([w.update('k', add('p')), w.update('k', add('q'))]);
+    expect(patch.mock.calls.map((c) => c[2])).toEqual([{ value: ['x', 'p'] }, { value: ['x', 'p', 'q'] }]);
+    rows[0] = { id: 'a', key: 'k', value: ['x', 'p', 'q'] };
+    await w.update('k', add('r'));
+    expect(patch).toHaveBeenLastCalledWith('settings', 'a', { value: ['x', 'p', 'q', 'r'] });
+    // 跟上以后别处改了（别的设备）：按集合里的新值算
+    rows[0] = { id: 'a', key: 'k', value: ['z'] };
+    await w.update('k', add('s'));
+    expect(patch).toHaveBeenLastCalledWith('settings', 'a', { value: ['z', 's'] });
+  });
+
   it('写不进本机：onResult(false)；insert 没成功的不记 id，下一次还是 insert', async () => {
     const { w, results } = make();
     okNext = false;

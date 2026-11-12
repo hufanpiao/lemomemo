@@ -50,9 +50,9 @@ export function openMergePairs(categories: readonly Row[], settings: readonly Se
   return similarCategoryPairs(cats).filter((p) => !dismissed.some((x) => same(x, sorted(p.keep, p.merge))));
 }
 
-/** 用户点了“不合并”：记下这一对 */
-export function dismissMerge(writer: Pick<SettingWriter, 'save'>, settings: readonly SettingRow[], pair: Pick<MergePair, 'keep' | 'merge'>): Promise<void> {
-  return writer.save(MERGE_DISMISSED_KEY, withDismissed(dismissedPairs(settingValue(settings, MERGE_DISMISSED_KEY)), pair.keep, pair.merge));
+/** 用户点了“不合并”：记下这一对（在排到时的最新值上加，连点几对都记下） */
+export function dismissMerge(writer: Pick<SettingWriter, 'update'>, pair: Pick<MergePair, 'keep' | 'merge'>): Promise<void> {
+  return writer.update(MERGE_DISMISSED_KEY, (cur) => withDismissed(dismissedPairs(cur), pair.keep, pair.merge));
 }
 
 export interface MergeDeps {

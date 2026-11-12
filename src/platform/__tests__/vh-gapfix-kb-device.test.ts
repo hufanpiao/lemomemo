@@ -3,7 +3,8 @@
 // 设备和方向：横屏整屏取 screen 短边（440 高不上膛、弹到 200 才上膛），iPad（UA 是 Macintosh）542 不上膛。
 // 已知的时机变化：共享 watcher 在 vh-gapfix 订阅时（冷启动、分包加载时）就开始监听、写根节点 --vh-gap，不等 App 调 startViewport
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { GAP_VAR, KB_SETTLE_MS } from '../viewport.ts';
+import { GAP_VAR } from '../viewport-geom.ts';
+import { KB_SETTLE_MS } from '../viewport.ts';
 import { startGapFix } from '../vh-gapfix.ts';
 import { deps, frames, input, mountBar, pad, readGapFixLog, settle, st } from './gapfix-fixture.ts';
 

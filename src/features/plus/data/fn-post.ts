@@ -1,4 +1,5 @@
-// 带本次会话的令牌 POST 一个服务器函数（ai-parse、ai-voice、token-admin）：这类事只在这里做。经 appFetch，authorization、apikey 由这里加
+// 带本次会话的令牌 POST 一个服务器函数（ai-parse、ai-voice、token-admin）：“＋”这一块调这几个函数一律经这里。经 appFetch，authorization、apikey 由这里加。
+// 别的功能各走各的：settings 的 account-api 直接 appFetch（回包是二进制），auth、reminders 等经 supabase-js 的 functions.invoke
 // • sendFn：没登录返回 null、不发；401 先换一次令牌再发；交回 Response，返回码由调用方归类（token-admin 要分 409、429）
 // • postFn：2xx 是 JSON 就原样交回，不是 JSON 抛 SendError('bad_response')；没登录、非 2xx 抛 SendError('http')；断网的 TypeError 原样抛
 // • 超时和取消只由调用方的 signal 管：取令牌、换令牌途中取消也立刻按取消原因抛出（supabase-js 可能在等锁，不再等它）

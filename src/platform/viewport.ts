@@ -16,18 +16,12 @@
 // 只拦 mousedown（失焦是 mousedown 的默认动作）：拦 touchstart，iOS 连 click 都不发；拦 pointerdown 管不到失焦。要收键盘的按钮（打字条“收起”）自己 blur
 import { isIPhone, isStandalone, opensKeyboard } from './env.ts';
 import { rlog } from './run-log-api.ts';
-import { fullHeight, GAP_MAX_PX, TOL_PX, viewportGeom, type Geom } from './viewport-geom.ts';
+import { BAR_HIDE_ATTR, fullHeight, GAP_MAX_PX, GAP_VAR, KB_VAR, KBO_ATTR, TOL_PX, viewportGeom, type Geom } from './viewport-geom.ts';
 
 /** 收起后暂缓最多这么久（冷启动高度校正补回整屏实测 0.33 秒） */
 export const HOLD_MS = 1000;
 /** 键盘收起后视口和焦点静了这么久才算真收了 */
 export const KB_SETTLE_MS = 300;
-/** 写到根节点的四样（停止监听时一起拿掉；运行日志也按这几个名字读）：--vh-gap 冷启动少的高度、--kb 键盘压住的高度、data-kbo 手机上键盘弹着、data-kbhide 底栏藏起 */
-export const GAP_VAR = '--vh-gap';
-export const KB_VAR = '--kb';
-export const KBO_ATTR = 'data-kbo';
-/** 底栏、“＋”、实色带、渐隐层藏起（kit GlassBar 的样式按它藏） */
-export const BAR_HIDE_ATTR = 'data-kbhide';
 
 type VvLike = Pick<VisualViewport, 'height' | 'offsetTop' | 'addEventListener' | 'removeEventListener'> & { readonly scale?: number };
 type DocLike = Pick<Document, 'addEventListener' | 'removeEventListener'>;

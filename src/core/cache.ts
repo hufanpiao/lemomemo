@@ -9,11 +9,11 @@
 // 隐私记的明文不进这里（A18：features/vault/data 不准 import 本文件）
 // 纯 TS：不准 import React 和任何功能（A1）
 import type { FeaturesConfig } from '../../shared/logic/flags.ts';
-import { cacheMigrations, DB_VERSION, runUpgrade, type CacheMigration, type UpgradeReport } from './cache-migrations.ts';
+import { cacheMigrations, DB_VERSION, errName, runUpgrade, type CacheMigration, type UpgradeReport } from './cache-migrations.ts';
 import { cacheStores, DRAFTS, META, VAULT_DRAFTS, type StoreDef } from './cache-schema.ts';
-import { deleteLocalDb, type DeleteDbResult } from '../platform/exit-basics.ts';
+import { deleteLocalDb, LOCAL_DB_NAME, type DeleteDbResult } from '../platform/exit-basics.ts';
 
-export const DB_NAME = 'planner-v4';
+export const DB_NAME = LOCAL_DB_NAME;
 
 /** 同步表的一行（服务器形状；K7 宽容读取负责把网络数据变成它） */
 export type ServerRow = Readonly<Record<string, unknown>> & { readonly id: string };
@@ -237,10 +237,6 @@ function req<T>(r: IDBRequest<T>): Promise<T> {
   });
 }
 
-function errName(e: unknown): string {
-  return e instanceof Error || (typeof DOMException !== 'undefined' && e instanceof DOMException) ? e.name : 'error';
-}
-
 function wrap(db: IDBDatabase, name: string, version: number, stores: readonly StoreDef[]): Cache {
   let state: 'open' | 'closing' | 'closed' = 'open';
   let sealed = false;
@@ -377,7 +373,7 @@ export type DeleteCacheResult = DeleteDbResult;
  * 调用方先关本页自己的连接（cache.close()，原因 'closed'），否则本页会收到 versionchange → 自动重新载入，形成循环。永远 resolve
  */
 export function deleteCacheDb(opts: { factory?: IDBFactory | undefined; name?: string | undefined; waitMs?: number } = {}): Promise<DeleteCacheResult> {
-  return deleteLocalDb(opts.factory ?? (globalThis as { indexedDB?: IDBFactory }).indexedDB, opts.name ?? DB_NAME, opts.waitMs);
+  return deleteLocalDb(opts.factory, opts.name, opts.waitMs);   // 没给的由 deleteLocalDb 的默认参数补（全局 indexedDB、LOCAL_DB_NAME 即 DB_NAME）
 }
 
 /** 打开本机库：按需建库、升级、跑迁移。永远 resolve，不 reject */
@@ -408,7 +404,7 @@ export function openCache(opts: OpenCacheOptions = {}): Promise<OpenCacheResult>
     r.onsuccess = () => resolve({ ok: true, cache: wrap(r.result, name, version, stores), upgrade: report });
     r.onerror = (ev) => {
       ev.preventDefault();
-      const n = r.error?.name ?? 'error';
+      const n = errName(r.error);
       resolve({ ok: false, reason: n === 'VersionError' ? 'version_too_new' : 'error', error: n });
     };
   });

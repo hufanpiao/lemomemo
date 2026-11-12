@@ -6,6 +6,7 @@
 //   notified_for、snooze_at；加 devices；insert、update 两边的列不一样（例如 devices.platform 只能 insert、deleted_at 只能 update），
 //   新写 insertSchema / patchSchema 按表分开
 import { z } from 'zod';
+import { cutGraphemes } from '../logic/short.ts';
 
 /** 改了本文件的形状或枚举，就把它加 1（2.6：本机库按 schema_v 整表重拉） */
 export const SCHEMA_V = 3;   // 2：B0 集成按实际授权补列、加 devices；3：宽容读取补登记 notes、categories 的枚举列（架构 0.57，跟 B4 前端同一版发布）
@@ -15,6 +16,8 @@ export const ITEM_TITLE_MAX = 160;
 export const ITEM_NOTE_MAX = 2000;
 export const RAW_TEXT_MAX = 2000;
 export const PROJECT_MAX = 40;
+/** 编辑页保存的日程、待办标题：去掉首尾空白，截到 ITEM_TITLE_MAX 个 UTF-16 单元、不截半个字（cutGraphemes，同 capture-map）；日程、待办编辑页共用这一份 */
+export const trimItemTitle = (s: string): string => cutGraphemes(s.trim(), ITEM_TITLE_MAX);
 
 const uuid = z.uuid();
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);

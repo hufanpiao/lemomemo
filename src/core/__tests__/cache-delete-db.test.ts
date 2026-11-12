@@ -39,7 +39,8 @@ describe('deleteCacheDb（会话失效、被移除时的兜底删库）', () => 
 
   it('cache.ts 的删库就是 exit-basics.ts 那一份（不是 sign-out.ts，后者不在首屏）', () => {
     const src = readFileSync(join(import.meta.dirname, '..', 'cache.ts'), 'utf8');
-    expect(src).toContain("import { deleteLocalDb, type DeleteDbResult } from '../platform/exit-basics.ts';");
+    expect(src).toMatch(/^import \{ deleteLocalDb, [^}]*\} from '\.\.\/platform\/exit-basics\.ts';$/m);
+    expect(src).not.toMatch(/from '[^']*sign-out\.ts'/);
     expect(typeof deleteLocalDb).toBe('function');
   });
 });

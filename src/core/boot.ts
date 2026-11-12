@@ -12,7 +12,7 @@ import { requestAppUpdate } from '../platform/native-bridge.ts';
 import { reloadPage, updateAttemptStore } from '../platform/sw-register.ts';
 import { ensureAccount } from './account.ts';
 import { deleteCacheDb, openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
-import type { UpgradeReport } from './cache-migrations.ts';
+import { errName, type UpgradeReport } from './cache-migrations.ts';
 import { DRAFTS, OUTBOX, PENDING_ACTIONS, VAULT_DRAFTS } from './cache-schema.ts';
 import { createOutbox, prunePendingActions, type Outbox, type OutboxBootReport, type OutboxItem, type OutboxOptions } from './outbox.ts';
 import { rewriteRow } from './outbox-rows.ts';
@@ -268,10 +268,6 @@ export async function coldStart(opts: BootOptions): Promise<BootResult> {
     } satisfies Partial<BootResult>);
     return result;
   }
-}
-
-function errName(e: unknown): string {
-  return e instanceof Error || (typeof DOMException !== 'undefined' && e instanceof DOMException) ? e.name : 'error';
 }
 
 /** 迁移失败后同步仓被重建（空的）：按 outbox 里还在的项重算 view，本机还没发出的 insert 在界面上照样看得见（M5） */

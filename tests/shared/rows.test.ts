@@ -1,7 +1,7 @@
 // shared/schema（架构 2.5）：严格版多一列、类型不对都拒收；有时刻必须有时区
 import { describe, expect, it } from 'vitest';
 import { apiError, upgradeRequired } from '../../shared/schema/api.ts';
-import { devicesWrite, eventsWrite, insertSchema, patchSchema, profilesWrite, rowsWrite, SNOOZE_AT_MAX, todosWrite } from '../../shared/schema/rows.ts';
+import { devicesWrite, eventsWrite, insertSchema, ITEM_TITLE_MAX, patchSchema, profilesWrite, rowsWrite, SNOOZE_AT_MAX, todosWrite, trimItemTitle } from '../../shared/schema/rows.ts';
 
 const ID = '0f8fad5b-d9cb-469f-a165-70867728950e';
 
@@ -165,5 +165,16 @@ describe('api', () => {
     expect(apiError.safeParse({ code: 'upgrade_required', min: '4.1.0' }).success).toBe(false);
     expect(upgradeRequired.safeParse({ code: 'upgrade_required', min: '4.1.0' }).success).toBe(true);
     expect(upgradeRequired.safeParse({ code: 'upgrade_required', min: '4.1' }).success).toBe(false);
+  });
+});
+
+describe('trimItemTitle（日程、待办编辑页共用）：去首尾空白，截到 ITEM_TITLE_MAX、不截半个字', () => {
+  it('截断处落在表情中间：整个表情不要，不留半个代理对', () => {
+    const t = trimItemTitle(`  a${'😀'.repeat(ITEM_TITLE_MAX)}  `);
+    expect(t).toBe(`a${'😀'.repeat(ITEM_TITLE_MAX / 2 - 1)}`);
+    expect(t.length).toBe(ITEM_TITLE_MAX - 1);
+  });
+  it('不超长的原样（只去首尾空白）', () => {
+    expect(trimItemTitle('  交报告 ')).toBe('交报告');
   });
 });

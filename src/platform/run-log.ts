@@ -8,11 +8,12 @@
 // • 点按（down/up/cancel/click）：点到哪个元素、坐标；路由；前后台；报错、未处理的 Promise 拒绝、console.error/warn；网络请求（方法、路径不带参数、状态、耗时）
 // • 业务代码经 run-log-api.ts 的 rlog 记的结果（提交了没有、为什么没提交）
 // • 焦点进出、路由变化后 400ms 再拍一次版面快照（等键盘、动画停稳）；焦点进来后 400ms、1500ms 各记一行 kbcheck（系统滚没滚页面、浮条贴没贴键盘，台账 Q-8）
+// 版面快照、kbcheck 的读法在 run-log-layout.ts；这里挂事件、存日志、接 console 和 fetch。
 // 隐私：不记用户输入的任何文字、不记网址参数；按钮只记 data-testid / aria-label / id
-import { buildInfo, isStandalone, opensKeyboard } from './env.ts';
-import { BAR_SELECTOR, RL_SLOT } from './run-log-api.ts';
-import { SCALE_EPS } from './viewport-geom.ts';
-import { GAP_VAR, KB_VAR, KBO_ATTR } from './viewport.ts';
+import { buildInfo, isStandalone } from './env.ts';
+import { RL_SLOT } from './run-log-api.ts';
+import { createLayoutProbe, describeEl } from './run-log-layout.ts';
+import { KBO_ATTR } from './viewport-geom.ts';
 
 export const OUT_KEY = 'lemo-run-log';
 export const MAX_LINES = 3000;
@@ -22,15 +23,6 @@ const VV_GAP_MS = 16;
 const SETTLE_SNAP_MS = 400;
 /** 焦点进来多久再记第二次 kbcheck（第一次在 SETTLE_SNAP_MS） */
 export const KB_CHECK_MS = 1500;
-/** 版面快照要看的元素 */
-export const LAYOUT_TARGETS: ReadonlyArray<readonly [string, string]> = [
-  ['bar', BAR_SELECTOR],
-  ['add', '[data-testid="tabbar-add"]'],
-  ['band', '[data-testid="tabbar-band"]'],
-  ['type', '[data-testid="type-bar"]'],
-  ['inrow', '[data-testid="notes-input-row"]'],
-  ['undo', '[data-testid="undo-toast"]'],
-];
 
 type Slot = { q: Array<[number, string]>; sink?: ((line: string) => void) | undefined };
 
@@ -48,15 +40,6 @@ export function clearRunLog(store: Storage = localStorage): void {
   } catch {
     // 清不掉就算了
   }
-}
-
-/** 元素的简短说明：标签名 + type + data-testid / aria-label / id（不含内容文字） */
-export function describeEl(el: unknown): string {
-  if (!(el instanceof Element)) return '-';
-  const tag = el.tagName.toLowerCase();
-  const type = el instanceof HTMLInputElement ? `[${el.type}]` : '';
-  const id = el.getAttribute('data-testid') ?? el.getAttribute('aria-label') ?? el.getAttribute('id') ?? '';
-  return `${tag}${type}${id ? `#${id.slice(0, 40)}` : ''}`;
 }
 
 /** 输入框的状态：值的长度、选区、只读/禁用（不含文字）；input、textarea 都记，只读的也记（会不会弹键盘看 env.ts 的 opensKeyboard） */
@@ -79,6 +62,52 @@ function fmtArg(a: unknown): string {
   } catch {
     return String(a);
   }
+}
+
+/** 接上 console.error / warn 和 fetch（方法、路径不带参数、状态、耗时）；返回还原函数 */
+function hookConsoleFetch(win: Window, add: (s: string) => void, now: () => number): () => void {
+  const con = console;
+  const origErr = con.error;
+  const origWarn = con.warn;
+  const fmt = (args: unknown[]): string => args.map(fmtArg).join(' ').slice(0, 300);
+  con.error = (...args: unknown[]): void => {
+    add(`console.error ${fmt(args)}`);
+    origErr.apply(con, args);
+  };
+  con.warn = (...args: unknown[]): void => {
+    add(`console.warn ${fmt(args)}`);
+    origWarn.apply(con, args);
+  };
+  // 网络请求：方法、路径（不带参数）、状态、耗时
+  const origFetch = typeof win.fetch === 'function' ? win.fetch : undefined;
+  if (origFetch) {
+    win.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const started = now();
+      let path = '?';
+      let method = init?.method ?? 'GET';
+      try {
+        const isReq = typeof Request === 'function' && input instanceof Request;
+        const u = new URL(isReq ? input.url : String(input), win.location.href);
+        path = u.origin === win.location.origin ? u.pathname : `${u.host}${u.pathname}`;
+        if (isReq && !init?.method) method = input.method;
+      } catch {
+        path = '?';
+      }
+      try {
+        const res = await origFetch.call(win, input, init);
+        add(`net ${method} ${path.slice(0, 120)} ${res.status} ${Math.round(now() - started)}ms`);
+        return res;
+      } catch (err) {
+        add(`net ${method} ${path.slice(0, 120)} FAIL ${(err as Error | undefined)?.name ?? ''} ${Math.round(now() - started)}ms`);
+        throw err;
+      }
+    };
+  }
+  return () => {
+    con.error = origErr;
+    con.warn = origWarn;
+    if (origFetch) win.fetch = origFetch;
+  };
 }
 
 export interface RunLogOptions {
@@ -131,47 +160,8 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   save();
 
   const vv = win.visualViewport;
-  const cssVar = (k: string): string => root.style.getPropertyValue(k).trim() || '0';
-  const vvState = (): string =>
-    `inner=${win.innerHeight} vv=${vv ? Math.round(vv.height) : '-'} top=${vv ? Math.round(vv.offsetTop) : '-'}${vv && Math.abs(vv.scale - 1) > SCALE_EPS ? ` scale=${vv.scale.toFixed(2)}` : ''} y=${Math.round(win.scrollY)} kbo=${root.hasAttribute(KBO_ATTR) ? 1 : 0} kb=${cssVar(KB_VAR)} gap=${cssVar(GAP_VAR)} focus=${describeEl(doc.activeElement)}`;
-  /** 一个元素在屏幕上的位置和可见性：相对可视区的上沿~下沿、高度；藏着记 hid，不在页面里记 none */
-  const rectOf = (el: Element | null): string => {
-    if (!el) return 'none';
-    const r = el.getBoundingClientRect();
-    let vis = '';
-    try {
-      const cs = win.getComputedStyle(el);
-      if (cs.visibility === 'hidden') vis = ' hid';
-      else if (cs.display === 'none') vis = ' nodisp';
-      else if (Number(cs.opacity) === 0) vis = ' op0';
-    } catch {
-      vis = '';
-    }
-    const off = vv ? vv.offsetTop : 0;
-    return `${Math.round(r.top - off)}~${Math.round(r.bottom - off)}h${Math.round(r.height)}${vis}`;
-  };
-  /** 焦点所在的浮层（最近的 position: fixed 祖先） */
-  const fixedHost = (el: Element | null): Element | null => {
-    for (let n = el; n && n !== doc.body; n = n.parentElement) {
-      try {
-        if (win.getComputedStyle(n).position === 'fixed') return n;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  };
-  const layout = (): string => {
-    const parts = LAYOUT_TARGETS.map(([k, sel]) => `${k}=${rectOf(doc.querySelector(sel))}`);
-    const act = doc.activeElement;
-    if (opensKeyboard(act)) {
-      parts.push(`field=${rectOf(act)}`);
-      const host = fixedHost(act);
-      parts.push(`host=${host ? `${describeEl(host)}:${rectOf(host)}` : 'none'}`);
-    }
-    return `[${parts.join(' ')}]`;
-  };
-  const snap = (kind: string): void => add(`${kind} ${vvState()} ${layout()}`);
+  const probe = createLayoutProbe(win);
+  const snap = (kind: string): void => add(`${kind} ${probe.vvState()} ${probe.layout()}`);
 
   let lastVv = '';
   let vvTimer: ReturnType<typeof setTimeout> | undefined;
@@ -180,7 +170,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     (): void => {
       clearTimeout(vvTimer);
       vvTimer = setTimeout(() => {
-        const s = `${vvState()} ${layout()}`;
+        const s = `${probe.vvState()} ${probe.layout()}`;
         if (s === lastVv) return;
         lastVv = s;
         add(`${kind} ${s}`);
@@ -189,22 +179,9 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const onVvResize = onVv('vv');
   const onWinResize = onVv('win');
   const onWinScroll = onVv('scroll');
-  /** 焦点进来时的滚动位置和可视区偏移：kbcheck 用它们算系统滚了多少文档（dy）、平移了多少可视区（dtop） */
-  let focusY = 0;
-  let focusTop = 0;
-  /**
-   * 焦点停稳后一行结论（台账 Q-8）：dy 文档滚了多少、dtop 可视区平移了多少（都是 0 = 系统没动）、top 可视区偏移、
-   * dock 浮层下沿离可视区底多远（0～12 = 贴着键盘）、fieldIn 输入框整个在可视区里
-   */
   const kbcheck = (): void => {
-    const act = doc.activeElement;
-    if (!opensKeyboard(act) || !vv) return;
-    const top = vv.offsetTop;
-    const f = act.getBoundingClientRect();
-    const host = fixedHost(act)?.getBoundingClientRect();
-    const dock = host ? Math.round(vv.height - (host.bottom - top)) : '-';
-    const tail = `top=${Math.round(top)} dock=${dock} fieldIn=${f.top >= top && f.bottom - top <= vv.height ? 1 : 0}`;
-    add(`kbcheck dy=${Math.round(win.scrollY - focusY)} dtop=${Math.round(top - focusTop)} ${tail}`);
+    const line = probe.kbcheck();
+    if (line !== null) add(line);
   };
   /** kbcheck 自己的计时器（不和 settleTimer 共用：焦点进来后马上换路由也照样记） */
   let kbTimers: Array<ReturnType<typeof setTimeout>> = [];
@@ -218,9 +195,8 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   let lastDown = -1e9;
   const onFocusIn = (e: FocusEvent): void => {
     const by = now() - lastDown < 800 ? 'tap' : 'code';
-    add(`focusin ${describeEl(e.target)} by=${by}${fieldState(e.target)} ${vvState()} ${layout()}`);
-    focusY = win.scrollY;
-    focusTop = vv?.offsetTop ?? 0;
+    add(`focusin ${describeEl(e.target)} by=${by}${fieldState(e.target)} ${probe.vvState()} ${probe.layout()}`);
+    probe.markFocus();
     settleSnap('focusin');
     // 400ms 一次；主屏幕版键盘弹完、布局视口压矮有时要 1 秒多，KB_CHECK_MS 再记一次
     for (const id of kbTimers) clearTimeout(id);
@@ -274,52 +250,15 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const mo =
     typeof MutationObserver === 'function'
       ? new MutationObserver(() => {
-          const s = `kbo=${root.hasAttribute(KBO_ATTR) ? 1 : 0} kb=${cssVar(KB_VAR)} gap=${cssVar(GAP_VAR)}`;
+          const s = probe.root();
           if (lastRoot === s) return;
           lastRoot = s;
-          add(`root ${s} ${layout()}`);
+          add(`root ${s} ${probe.layout()}`);
         })
       : null;
   mo?.observe(root, { attributes: true, attributeFilter: [KBO_ATTR, 'style'] });
 
-  // console.error / warn
-  const con = console;
-  const origErr = con.error;
-  const origWarn = con.warn;
-  const fmt = (args: unknown[]): string => args.map(fmtArg).join(' ').slice(0, 300);
-  con.error = (...args: unknown[]): void => {
-    add(`console.error ${fmt(args)}`);
-    origErr.apply(con, args);
-  };
-  con.warn = (...args: unknown[]): void => {
-    add(`console.warn ${fmt(args)}`);
-    origWarn.apply(con, args);
-  };
-  // 网络请求：方法、路径（不带参数）、状态、耗时
-  const origFetch = typeof win.fetch === 'function' ? win.fetch : undefined;
-  if (origFetch) {
-    win.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-      const started = now();
-      let path = '?';
-      let method = init?.method ?? 'GET';
-      try {
-        const isReq = typeof Request === 'function' && input instanceof Request;
-        const u = new URL(isReq ? input.url : String(input), win.location.href);
-        path = u.origin === win.location.origin ? u.pathname : `${u.host}${u.pathname}`;
-        if (isReq && !init?.method) method = input.method;
-      } catch {
-        path = '?';
-      }
-      try {
-        const res = await origFetch.call(win, input, init);
-        add(`net ${method} ${path.slice(0, 120)} ${res.status} ${Math.round(now() - started)}ms`);
-        return res;
-      } catch (err) {
-        add(`net ${method} ${path.slice(0, 120)} FAIL ${(err as Error | undefined)?.name ?? ''} ${Math.round(now() - started)}ms`);
-        throw err;
-      }
-    };
-  }
+  const unhook = hookConsoleFetch(win, add, now);
 
   // 业务代码 rlog 记的（下载前排队的补进来，之后直接写）
   const g = globalThis as unknown as Record<string, Slot | undefined>;
@@ -328,54 +267,37 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   slot.q = [];
   slot.sink = (line: string): void => add(`app ${line}`);
 
-  vv?.addEventListener('resize', onVvResize);
-  vv?.addEventListener('scroll', onVvResize);
-  win.addEventListener('resize', onWinResize);
-  win.addEventListener('scroll', onWinScroll, { passive: true });
-  doc.addEventListener('focusin', onFocusIn);
-  doc.addEventListener('focusout', onFocusOut);
-  doc.addEventListener('pointerdown', onDown, true);
-  doc.addEventListener('pointerup', onUp, true);
-  doc.addEventListener('pointercancel', onCancel, true);
-  doc.addEventListener('click', onClick, true);
-  doc.addEventListener('keydown', onKey, true);
-  doc.addEventListener('beforeinput', onBeforeInput, true);
-  doc.addEventListener('compositionstart', onCompStart, true);
-  doc.addEventListener('compositionend', onCompEnd, true);
-  doc.addEventListener('submit', onSubmit, true);
-  win.addEventListener('hashchange', onHash);
-  doc.addEventListener('visibilitychange', onVis);
-  win.addEventListener('pageshow', onPageShow);
-  win.addEventListener('error', onErr);
-  win.addEventListener('unhandledrejection', onRej);
+  /** 挂上的事件（停止时按同一张表拿掉）：目标、事件名、处理函数、选项（true = 捕获阶段） */
+  const ons: Array<[EventTarget | null, string, (e: never) => void, AddEventListenerOptions | boolean | undefined]> = [
+    [vv, 'resize', onVvResize, undefined],
+    [vv, 'scroll', onVvResize, undefined],
+    [win, 'resize', onWinResize, undefined],
+    [win, 'scroll', onWinScroll, { passive: true }],
+    [doc, 'focusin', onFocusIn, undefined],
+    [doc, 'focusout', onFocusOut, undefined],
+    [doc, 'pointerdown', onDown, true],
+    [doc, 'pointerup', onUp, true],
+    [doc, 'pointercancel', onCancel, true],
+    [doc, 'click', onClick, true],
+    [doc, 'keydown', onKey, true],
+    [doc, 'beforeinput', onBeforeInput, true],
+    [doc, 'compositionstart', onCompStart, true],
+    [doc, 'compositionend', onCompEnd, true],
+    [doc, 'submit', onSubmit, true],
+    [win, 'hashchange', onHash, undefined],
+    [doc, 'visibilitychange', onVis, undefined],
+    [win, 'pageshow', onPageShow, undefined],
+    [win, 'error', onErr, undefined],
+    [win, 'unhandledrejection', onRej, undefined],
+  ];
+  for (const [t, type, fn, o] of ons) t?.addEventListener(type, fn as EventListener, o);
   snap('boot');
   settleSnap('boot');
   return () => {
     mo?.disconnect();
-    con.error = origErr;
-    con.warn = origWarn;
-    if (origFetch) win.fetch = origFetch;
+    unhook();
     slot.sink = undefined;
-    vv?.removeEventListener('resize', onVvResize);
-    vv?.removeEventListener('scroll', onVvResize);
-    win.removeEventListener('resize', onWinResize);
-    win.removeEventListener('scroll', onWinScroll);
-    doc.removeEventListener('focusin', onFocusIn);
-    doc.removeEventListener('focusout', onFocusOut);
-    doc.removeEventListener('pointerdown', onDown, true);
-    doc.removeEventListener('pointerup', onUp, true);
-    doc.removeEventListener('pointercancel', onCancel, true);
-    doc.removeEventListener('click', onClick, true);
-    doc.removeEventListener('keydown', onKey, true);
-    doc.removeEventListener('beforeinput', onBeforeInput, true);
-    doc.removeEventListener('compositionstart', onCompStart, true);
-    doc.removeEventListener('compositionend', onCompEnd, true);
-    doc.removeEventListener('submit', onSubmit, true);
-    win.removeEventListener('hashchange', onHash);
-    doc.removeEventListener('visibilitychange', onVis);
-    win.removeEventListener('pageshow', onPageShow);
-    win.removeEventListener('error', onErr);
-    win.removeEventListener('unhandledrejection', onRej);
+    for (const [t, type, fn, o] of ons) t?.removeEventListener(type, fn as EventListener, o);
     clearTimeout(vvTimer);
     clearTimeout(settleTimer);
     for (const id of kbTimers) clearTimeout(id);

@@ -1,6 +1,7 @@
 // 全局运行日志（负责人 11-11“以后所有的bug看log能不能解决”“要做就给我做详细的log”，platform/run-log.ts）
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { describeEl, KB_CHECK_MS, MAX_LINES, OUT_KEY, readRunLog, startRunLog } from '../run-log.ts';
+import { KB_CHECK_MS, MAX_LINES, OUT_KEY, readRunLog, startRunLog } from '../run-log.ts';
+import { describeEl } from '../run-log-layout.ts';
 import { rlog, RL_SLOT } from '../run-log-api.ts';
 
 const mkField = () => {

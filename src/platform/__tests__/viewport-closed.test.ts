@@ -1,6 +1,7 @@
 // viewport.ts 的藏底栏属性（BAR_HIDE_ATTR = data-kbo 或收起后暂缓）和“键盘真收了”通知（onClosed，冷启动高度校正用；回调返回 false 是这次没接，保持上膛）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BAR_HIDE_ATTR, createKeyboardWatcher, GAP_VAR, HOLD_MS, KB_SETTLE_MS } from '../viewport.ts';
+import { BAR_HIDE_ATTR, GAP_VAR } from '../viewport-geom.ts';
+import { createKeyboardWatcher, HOLD_MS, KB_SETTLE_MS } from '../viewport.ts';
 
 /** 主屏幕版 iPhone（整屏 956）：up() 聚焦弹键盘（542），down(h, editing) 收到 h */
 const mk = () => {

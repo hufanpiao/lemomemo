@@ -5,7 +5,8 @@
 // 底栏、“＋”只按根节点 data-kbhide 藏（CSS），所以“藏没藏”读根节点属性；每一步再核 watch 回调报的开关和它一致。
 // 日志原文存 scratchpad（不进仓库），这里只留数值
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BAR_HIDE_ATTR, createKeyboardWatcher, GAP_VAR } from '../viewport.ts';
+import { BAR_HIDE_ATTR, GAP_VAR } from '../viewport-geom.ts';
+import { createKeyboardWatcher } from '../viewport.ts';
 
 const SCREEN = 956;
 const INSET_BOTTOM = 34;

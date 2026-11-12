@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { clock } from '../../../platform/clock.ts';
 import { isTauri } from '../../../platform/env.ts';
-import { BAR_HIDE_ATTR } from '../../../platform/viewport.ts';
+import { BAR_HIDE_ATTR } from '../../../platform/viewport-geom.ts';
 import { PLUS_HINT_ENABLED, plusHeldNow, plusHintThisLaunch, watchPlusHeld } from '../data/plus-hint.ts';
 
 export interface HintSpot {

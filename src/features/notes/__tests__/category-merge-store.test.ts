@@ -4,7 +4,7 @@ import { act } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ServerRow } from '../../../core/cache.ts';
 import { OutboxRejectError } from '../../../core/outbox.ts';
-import type { SettingRow } from '../../../core/setting-write.ts';
+import { createSettingWriter, type SettingRow } from '../../../core/setting-write.ts';
 import { collection } from '../../../core/store.ts';
 import type { WriteResult } from '../../../core/write.ts';
 import {
@@ -17,6 +17,7 @@ import { boot, serverNote, setupImageTests, uid } from './note-images-kit.tsx';
 const TZ = 'Asia/Seoul';
 const A = uid(101);
 const B = uid(102);
+const C = uid(103);
 const cat = (id: string, name: string, over: Record<string, unknown> = {}): Row => ({ id, name, sort: 0, deleted_at: null, undone: false, merged_into: null, ...over });
 const set = (value: unknown, over: Record<string, unknown> = {}): SettingRow => ({ id: 's1', key: MERGE_DISMISSED_KEY, value, deleted_at: null, undone: false, ...over });
 const note = (id: string, category: string | null, over: Record<string, unknown> = {}): Row => ({
@@ -65,7 +66,6 @@ describe('openMergePairs（TC-B4-07 出提示）', () => {
     expect(openMergePairs(cats, [set([[A, B]], { undone: true })])).toHaveLength(1);
   });
   it('只去掉点过的那一对：购物 / 购物清单 / 购物车 只记过 (购物, 购物车) → (购物, 购物清单) 照常出；记的是不相干的一对 → 两对都出', () => {
-    const C = uid(103);
     const three = [cat(A, '购物'), cat(B, '购物清单', { sort: 1 }), cat(C, '购物车', { sort: 2 })];
     expect(openMergePairs(three, [])).toEqual([{ keep: A, merge: B, why: 'contains' }, { keep: A, merge: C, why: 'contains' }]);
     expect(openMergePairs(three, [set([[C, A]])])).toEqual([{ keep: A, merge: B, why: 'contains' }]);
@@ -73,7 +73,6 @@ describe('openMergePairs（TC-B4-07 出提示）', () => {
     expect(openMergePairs(three, [set([[uid(7), uid(8)]])])).toHaveLength(2);
   });
   it('三个彼此相近的分类（读书笔记 / 读书笔迹 / 读书笔录）记过其中一对 → 另外两对还在', () => {
-    const C = uid(103);
     const three = [cat(A, '读书笔记'), cat(B, '读书笔迹', { sort: 1 }), cat(C, '读书笔录', { sort: 2 })];
     expect(openMergePairs(three, []).map((p) => [p.keep, p.merge])).toEqual([[A, B], [A, C], [B, C]]);
     expect(openMergePairs(three, [set([[C, B]])]).map((p) => [p.keep, p.merge])).toEqual([[A, B], [A, C]]);
@@ -87,10 +86,10 @@ describe('openMergePairs（TC-B4-07 出提示）', () => {
     expect(openMergePairs([cat(A, '购物清单', { sort: 0 }), cat(B, '购物', { sort: 1 })], [])).toEqual([{ keep: A, merge: B, why: 'contains' }]);
     expect(openMergePairs([cat(A, '购物清单', { sort: 2 }), cat(B, '购物', { sort: 1 })], [])).toEqual([{ keep: B, merge: A, why: 'contains' }]);
   });
-  it('dismissMerge：writer.save 只调一次，键是 notes.merge_dismissed，值是原有各对加上新的一对', async () => {
+  it('dismissMerge：writer.update 只调一次，键是 notes.merge_dismissed，值是原有各对加上新的一对', async () => {
     const saved: [string, unknown][] = [];
-    const writer = { save: (k: string, v: unknown) => Promise.resolve(void saved.push([k, v])) };
-    await dismissMerge(writer, [set([['m', 'n']])], { keep: B, merge: A });
+    const writer = { update: (k: string, next: (cur: unknown) => unknown) => Promise.resolve(void saved.push([k, next([['m', 'n']])])) };
+    await dismissMerge(writer, { keep: B, merge: A });
     expect(saved).toEqual([[MERGE_DISMISSED_KEY, [['m', 'n'], [A, B]]]]);
   });
 });
@@ -168,7 +167,6 @@ describe('mergeCategories（TC-B4-07 合并后条目归到新分类）', () => {
   });
 
   it('连环合并顺着走到活着的那个；绕成圈、终点被删的当没分类', () => {
-    const C = uid(103);
     const chain = [cat(A, '甲', { merged_into: C }), cat(B, '乙', { merged_into: A }), cat(C, '丙')];
     expect(noteItems([note('x', B)], chain, TZ)[0]?.categoryId).toBe(C);
     const loop = [cat(A, '甲', { merged_into: B }), cat(B, '乙', { merged_into: A })];
@@ -226,5 +224,17 @@ describe('mergeCategories：真 outbox（假 IndexedDB 冷启动）', () => {
     expect(items.map((i) => i.categoryId)).toEqual([A, A]);
     // 编辑页不传分类时读本机集合，同样归到 A
     expect(formOf({ ...serverNote(1), category_id: B }).category_id).toBe(A);
+  });
+
+  it('连点两对“不合并”：页面还没重新渲染（rows 停在点之前），两对都记下，后一下不盖掉前一下', async () => {
+    await boot();
+    const stale: SettingRow[] = [];
+    let n = 0;
+    const writer = createSettingWriter({ rows: () => stale, newId: () => uid(900 + ++n), onResult: () => undefined });
+    await act(async () => {
+      await Promise.all([dismissMerge(writer, { keep: A, merge: B }), dismissMerge(writer, { keep: A, merge: C })]);
+    });
+    const row = collection<SettingRow>('settings').getSnapshot().find((r) => r.key === MERGE_DISMISSED_KEY);
+    expect(row?.value).toEqual([[A, B], [A, C]]);
   });
 });

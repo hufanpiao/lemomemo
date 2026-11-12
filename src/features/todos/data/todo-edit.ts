@@ -12,9 +12,8 @@
 // 纯 TS：不准 import React（A1）
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
+import { trimItemTitle } from '../../../../shared/schema/rows.ts';
 import { DEFAULT_TODO_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime, todoRemindAt } from '../../../../shared/logic/remind.ts';
-import { cutGraphemes } from '../../../../shared/logic/short.ts';
 import { todoRemindFlag } from '../../../core/remind-flag.ts';
 
 /** 编辑页能改的字段 */
@@ -98,10 +97,6 @@ export function remindPassed(form: TodoForm, tz: Tz, now: number): boolean {
   return at !== null && at < now;
 }
 
-/** 标题去掉首尾空白，截到 ITEM_TITLE_MAX 个 UTF-16 单元、不截半个字（cutGraphemes，同 capture-map）；空标题不写（界面提示） */
-export function trimTitle(s: string): string {
-  return cutGraphemes(s.trim(), ITEM_TITLE_MAX);
-}
 
 const FIELDS: readonly (keyof TodoForm)[] = [
   'title', 'done', 'important', 'due', 'due_time', 'remind_before_min', 'remind_days', 'remind_time', 'project', 'note',
@@ -129,7 +124,7 @@ export function patchOf(
 /** 新建的整行（insert 要整行可写列；deleted_at、undone 只能 update，不放） */
 export function newTodoRow(id: string, form: TodoForm, now: number): Record<string, unknown> & { id: string } {
   return {
-    id, ...form, title: trimTitle(form.title), source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: null,
+    id, ...form, title: trimItemTitle(form.title), source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: null,
     short: null, short_by: null, done_at: form.done ? now : 0, push_show_title: null, notified_for: null, snooze_at: null,
     created_at: now, updated_at: now,
   };

@@ -1,9 +1,9 @@
 // 日程编辑页的规则（data/event-edit.ts；架构 4.6 时区规则、D7 时区白名单）
 import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
-import { eventsWrite, ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
+import { eventsWrite } from '../../../../shared/schema/rows.ts';
 import {
-  durationOf, emptyForm, endOf, EVENT_TIMING_COLS, formOf, hasRemind, localOf, newEventRow, normalize, patchOf, prevRemindAtOf, trimTitle, tzAllowed, tzChoices,
+  durationOf, emptyForm, endOf, EVENT_TIMING_COLS, formOf, hasRemind, localOf, newEventRow, normalize, patchOf, prevRemindAtOf, tzAllowed, tzChoices,
   type EventForm,
 } from '../data/event-edit.ts';
 import type { EventRemindRow } from '../../../../shared/logic/remind.ts';
@@ -185,13 +185,3 @@ describe('hasRemind：固定时刻按日程自己的时区（shared 的 remindAt
   });
 });
 
-describe('trimTitle：去首尾空白，截到 ITEM_TITLE_MAX、不截半个字', () => {
-  it('截断处落在表情中间：整个表情不要，不留半个代理对', () => {
-    const t = trimTitle(`  a${'😀'.repeat(ITEM_TITLE_MAX)}  `);
-    expect(t).toBe(`a${'😀'.repeat(ITEM_TITLE_MAX / 2 - 1)}`);
-    expect(t.length).toBe(ITEM_TITLE_MAX - 1);
-  });
-  it('不超长的原样（只去首尾空白）', () => {
-    expect(trimTitle('  交报告 ')).toBe('交报告');
-  });
-});

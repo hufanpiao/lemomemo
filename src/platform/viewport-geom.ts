@@ -8,6 +8,14 @@ import { GAP_MAX_PX, TOL_PX } from './viewport-screen.ts';
 
 export { fullHeight, GAP_MAX_PX, isLandscape, TOL_PX } from './viewport-screen.ts';
 
+/** viewport.ts 写到根节点的四样（停止监听时一起拿掉）：--vh-gap 冷启动少的高度、--kb 键盘压住的高度、data-kbo 手机上键盘弹着、data-kbhide 底栏藏起。
+ *  名字放在这里、不放 viewport.ts：运行日志（run-log-layout.ts）要读，不静态引 viewport.ts；也不放首屏的 run-log-api.ts（放那里首屏多 44 B） */
+export const GAP_VAR = '--vh-gap';
+export const KB_VAR = '--kb';
+export const KBO_ATTR = 'data-kbo';
+/** 底栏、“＋”、实色带、渐隐层藏起（kit GlassBar 的样式按它藏） */
+export const BAR_HIDE_ATTR = 'data-kbhide';
+
 /** 高度差比这少不算键盘（地址栏伸缩只有几十 px） */
 export const KB_MIN_PX = 120;
 /** 可视区缩放和 1 差这么多以内算没缩放（运行日志判“缩放了才记 scale=”也用它） */

@@ -8,9 +8,8 @@
 // 纯 TS：不准 import React（A1）
 import { fmtHm, minOfDay, msAt, parseHm, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { isValidTz, type Tz } from '../../../../shared/core/tz.ts';
-import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
+import { trimItemTitle } from '../../../../shared/schema/rows.ts';
 import { ALL_DAY_LIVE_UNTIL, remindAtOf } from '../../../../shared/logic/remind.ts';
-import { cutGraphemes } from '../../../../shared/logic/short.ts';
 import { remindLive, rowRemindPending } from '../../../core/remind-flag.ts';
 
 export interface EventForm {
@@ -125,10 +124,6 @@ export function localOf(form: EventForm, current: Tz): { date: DateStr; time: st
   return date === form.date && time === form.time ? null : { date, time };
 }
 
-/** 标题去掉首尾空白，截到 ITEM_TITLE_MAX 个 UTF-16 单元、不截半个字（cutGraphemes，同 capture-map） */
-export function trimTitle(s: string): string {
-  return cutGraphemes(s.trim(), ITEM_TITLE_MAX);
-}
 
 const FIELDS: readonly (keyof EventForm)[] = [
   'title', 'date', 'time', 'duration_min', 'tz', 'remind_min', 'remind_days', 'location', 'project', 'note',
@@ -161,7 +156,7 @@ export function patchOf(row: Readonly<Record<string, unknown>>, prev: EventForm,
 /** 新建的整行 */
 export function newEventRow(id: string, form: EventForm, now: number): Record<string, unknown> & { id: string } {
   return {
-    id, ...form, title: trimTitle(form.title), source: 'page', raw_text: '', short: null, short_by: null, push_show_title: null,
+    id, ...form, title: trimItemTitle(form.title), source: 'page', raw_text: '', short: null, short_by: null, push_show_title: null,
     batch_id: null, notified_for: null, snooze_at: null, created_at: now, updated_at: now,
   };
 }

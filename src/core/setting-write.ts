@@ -5,12 +5,13 @@
 //   值一样不写（对象值按 JSON 比）
 // • 写（createSettingWriter）：经 core/write（进 outbox、本机先生效）；同一页里的写一条接一条排队；
 //   本机集合里还没出现刚 insert 的那一行时，按记下的 id patch、不再 insert 第二次（不然撞 (user_id, key) 唯一约束、进“发送失败”，代码审查 L6）。
+//   要在原值上改的（往列表里加一项）用 update：排到了才按最新值算——本页写成功、本机集合还没跟上的，按本页最后写的值算，免得连点时后一下盖掉前一下。
 //   React 那一层（各功能的 useSettingWriter / useCalSettings）只管取本机集合和 error 状态
 import { settingPatch } from './setting-patch.ts';
 import { write } from './write.ts';
 
 import { isLiveRow } from '../../shared/logic/live-row.ts';
-import type { SettingRow } from './setting-read.ts';
+import { settingValue, type SettingRow } from './setting-read.ts';
 
 export { settingValue, type SettingRow } from './setting-read.ts';
 
@@ -41,43 +42,56 @@ export interface SettingWriterDeps {
 export interface SettingWriter {
   /** 排队写一个键；值一样不写 */
   save(key: string, value: unknown): Promise<void>;
+  /** 排队按原值算新值再写（排到了才算，原值取最新的）；新值一样不写 */
+  update(key: string, next: (cur: unknown) => unknown): Promise<void>;
 }
 
-/** 一页一个：排队、记下本页 insert 过的行（key → id 和写进去的值的 JSON） */
+/** 一页一个：排队、记下本页 insert 过的行（key → id）和本页写成功的最后一个值（写的时候集合里是什么、写了什么，都存 JSON） */
 export function createSettingWriter(deps: SettingWriterDeps): SettingWriter {
-  const inserted = new Map<string, { id: string; json: string }>();
+  const inserted = new Map<string, string>();
+  const wrote = new Map<string, { before: string | undefined; json: string }>();
   let queue: Promise<void> = Promise.resolve();
+
+  /** 这个键现在的值：集合还停在本页上次写之前的样子（没跟上）就用本页最后写的，变过了（跟上了或别处改了）就用集合里的 */
+  const latest = (key: string): unknown => {
+    const v = settingValue(deps.rows(), key);
+    const mine = wrote.get(key);
+    if (mine !== undefined && JSON.stringify(v) === mine.before) return JSON.parse(mine.json) as unknown;
+    wrote.delete(key);
+    return v;
+  };
 
   const saveNow = async (key: string, value: unknown): Promise<void> => {
     const cur = deps.rows();
-    const mine = inserted.get(key);
+    const id = inserted.get(key);
     const json = JSON.stringify(value);
+    const before = JSON.stringify(settingValue(cur, key));
+    const done = (ok: boolean): void => {
+      if (ok) wrote.set(key, { before, json });
+      deps.onResult(ok);
+    };
     // 刚 insert 的那一行还没进本机集合：按记下的 id 改，值一样就不写
-    if (mine && !cur.some((r) => r.key === key)) {
-      if (mine.json === json) return;
-      const r = await write.patch('settings', mine.id, { value });
-      if (r.ok) inserted.set(key, { id: mine.id, json });
-      deps.onResult(r.ok);
+    if (id !== undefined && !cur.some((r) => r.key === key)) {
+      if (wrote.get(key)?.json === json) return;
+      done((await write.patch('settings', id, { value })).ok);
       return;
     }
     const w = settingWrite(cur, key, value);
     if (!w) return;
     if (w.op === 'insert') {
-      const id = deps.newId();
-      const r = await write.insert('settings', { id, ...w.data });
-      if (r.ok) inserted.set(key, { id, json });
-      deps.onResult(r.ok);
+      const newId = deps.newId();
+      const r = await write.insert('settings', { id: newId, ...w.data });
+      if (r.ok) inserted.set(key, newId);
+      done(r.ok);
       return;
     }
-    const r = await write.patch('settings', w.id, w.data);
-    deps.onResult(r.ok);
+    done((await write.patch('settings', w.id, w.data)).ok);
   };
 
-  return {
-    save(key, value) {
-      const next = queue.then(() => saveNow(key, value));
-      queue = next.catch(() => undefined);
-      return next;
-    },
+  const update = (key: string, next: (cur: unknown) => unknown): Promise<void> => {
+    const run = queue.then(() => saveNow(key, next(latest(key))));
+    queue = run.catch(() => undefined);
+    return run;
   };
+  return { update, save: (key, value) => update(key, () => value) };
 }
