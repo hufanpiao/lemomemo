@@ -4,8 +4,8 @@
 // 收键盘那次顶部安全区读到 0 不重读、直接不做
 import { describe, expect, it, vi } from 'vitest';
 import { KB_SETTLE_MS } from '../viewport.ts';
-import { GIVE_UP_MS, readGapFixLog, SCROLL_AT_MS, startGapFix } from '../vh-gapfix.ts';
-import { coldThenKeyboard, deps, frames, input, mockScroll, mountBar, pad, resize, setInner, settle, startKb, st, vvResize } from './gapfix-fixture.ts';
+import { GIVE_UP_MS, SCROLL_AT_MS, startGapFix } from '../vh-gapfix.ts';
+import { coldThenKeyboard, deps, frames, input, mockScroll, mountBar, pad, readGapFixLog, resize, setInner, settle, startKb, st, vvResize } from './gapfix-fixture.ts';
 
 const kbPads = (): number => readGapFixLog().match(/kb pad /g)?.length ?? 0;
 

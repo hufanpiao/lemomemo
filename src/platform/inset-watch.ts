@@ -74,6 +74,28 @@ function isStandalone(win: Window): boolean {
 }
 
 /**
+ * 读安全区的隐藏探测块（这类探测块只在这里做；冷启动高度校正 vh-gapfix-gate.ts 读顶部也用它）：固定在 side 那一边、0 × 0、看不见、不接点按，
+ * padding-<side> 跟着 base.css 的 --inset-<side>（和页面用同一个值）。挂到 body 上，读完由调用方 remove
+ */
+export function insetProbe(doc: Document, side: 'top' | 'bottom'): HTMLElement {
+  const probe = doc.createElement('div');
+  probe.setAttribute('aria-hidden', 'true');
+  for (const [k, v] of [
+    ['position', 'fixed'],
+    ['left', '0'],
+    [side, '0'],
+    ['width', '0'],
+    ['height', '0'],
+    ['visibility', 'hidden'],
+    ['pointer-events', 'none'],
+    [`padding-${side}`, `var(--inset-${side}, env(safe-area-inset-${side}))`],
+  ] as const)
+    probe.style.setProperty(k, v);
+  (doc.body ?? doc.documentElement).append(probe);
+  return probe;
+}
+
+/**
  * 启动时挂一次（入口 main.tsx 在 render 之前调）。重复调用不再挂。返回取消函数（测试用：停计时、去掉属性）
  */
 export function watchInsetBottom(env: InsetEnv = {}): () => void {
@@ -87,21 +109,8 @@ export function watchInsetBottom(env: InsetEnv = {}): () => void {
   const standalone = isStandalone(win);
   timeline = { rows: [], readyAt: null, paintedAt: null, reason: null, standalone };
 
-  // 隐藏探针：padding-bottom 跟着 --inset-bottom（不直接写 env：和底栏用同一个变量，读到的就是底栏用的）
-  const probe = doc.createElement('div');
-  probe.setAttribute('aria-hidden', 'true');
-  for (const [k, v] of [
-    ['position', 'fixed'],
-    ['left', '0'],
-    ['bottom', '0'],
-    ['width', '0'],
-    ['height', '0'],
-    ['visibility', 'hidden'],
-    ['pointer-events', 'none'],
-    ['padding-bottom', 'var(--inset-bottom, env(safe-area-inset-bottom))'],
-  ] as const)
-    probe.style.setProperty(k, v);
-  (doc.body ?? root).append(probe);
+  // 隐藏探针：padding-bottom 跟着 --inset-bottom（不直接写 env：和底栏用同一个变量，读到的就是底栏用的）；一直挂着，停的时候撤
+  const probe = insetProbe(doc, 'bottom');
 
   let paintedAt: number | null = null;
   const t0 = now();

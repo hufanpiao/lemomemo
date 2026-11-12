@@ -26,6 +26,7 @@ import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { ReadonlyToast, RepeatBanner } from '../../../kit/components/ReadonlyRow.tsx';
 import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import { Appear } from '../../../motion/components.ts';
+import { opensKeyboard } from '../../../platform/env.ts';
 import { UnsyncedRemindHint } from '../../reminders/index.ts';
 import { useSwipePager } from '../../../motion/gestures.ts';
 import { useCalendar } from '../hooks/useCalendar.ts';
@@ -67,8 +68,7 @@ function holShortKey(v: 'cn' | 'kr' | 'both'): 'cal.set.holShort.cn' | 'cal.set.
 /** 键盘翻页不该生效的时候：焦点在能打字的地方、页面上有浮层或弹窗、按着修饰键 */
 function keyBlocked(e: KeyboardEvent): boolean {
   if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return true;
-  const el = e.target instanceof HTMLElement ? e.target : null;
-  if (el && (el.isContentEditable || el.closest('input, textarea, select, [contenteditable="true"]'))) return true;
+  if (opensKeyboard(e.target)) return true;
   return document.querySelector('[role="dialog"]') !== null;
 }
 

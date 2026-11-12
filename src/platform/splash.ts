@@ -7,8 +7,7 @@
 // - splash.css 有 6 秒的纯 CSS 兜底（脚本没跑起来也不会一直盖着）：兜底淡完以后（visibility: hidden）再调，直接移除。
 // - 减少动态效果的判断照 src/motion/reduced.ts 的两条（系统设置或 <html data-rm="1">）；platform 层不能引 motion，这里另写一份。
 // 调用点：从启动起算 SPLASH_MAX_MS（5 秒）的兜底 hideSplashAfter；#root 里第一次画出东西的下一帧（main.tsx 经 root-paint.ts 的 whenContent），
-// 这两处在 main.tsx 里都经 leaveSplash（非正式版先等诊断启动件 diag-boot.ts 打好多留标记）；
-// 另挂在 body 下的“库被挡住”整屏提示提交后的下一帧（root.tsx 的 SplashRelease）、main.tsx 冷启动就进退出屏的两处：这三处直接收，不等诊断
+// 另挂在 body 下的“库被挡住”整屏提示提交后的下一帧（root.tsx 的 SplashRelease）、main.tsx 冷启动就进退出屏的两处
 
 export const SPLASH_ID = 'lemo-splash';
 /** splash.css 里 .lemo-splash.is-leaving 的过渡时长（ms）：--dur-ui 220；减少动态效果 120（splash.css 里启动画面专用的那个令牌） */
@@ -18,11 +17,6 @@ export const SPLASH_FADE_RM_MS = 120;
 export const SPLASH_MAX_MS = 5000;
 /** 定时器兜底比过渡多等一点 */
 const SLACK_MS = 80;
-/** 启动画面颜色诊断（台账 Q-2，只在非正式版）在跑时：从第一次要收起的那一刻起再多留这么久，负责人来得及截图；正式构建整段摇掉 */
-export const SPLASH_HOLD_MS = 8000;
-/** 诊断启动件 diag-boot.ts 在涂色分包到了以后在 <html> 上设的标记（data-splash-hold；main.tsx 的 5 秒兜底和 #root 画出东西这两处先等 diag-boot，标记早于这两处的收起；进退出屏、库被挡住时直接收，不等诊断）；诊断撤掉时一起拿掉 */
-export const SPLASH_HOLD_ATTR = 'splashHold';
-let held: Promise<void> | null = null;
 
 const leaving = new WeakMap<Element, Promise<void>>();
 
@@ -43,16 +37,6 @@ export function hideSplash(): Promise<void> {
   if (!el) return Promise.resolve();
   const running = leaving.get(el);
   if (running) return running;
-  if (import.meta.env.MODE !== 'production' && document.documentElement.dataset[SPLASH_HOLD_ATTR] === '1') {
-    held ??= new Promise<void>((resolve) => {
-      setTimeout(() => {
-        delete document.documentElement.dataset[SPLASH_HOLD_ATTR];
-        held = null;
-        resolve(hideSplash());
-      }, SPLASH_HOLD_MS);
-    });
-    return held;
-  }
   if (hiddenByCss(el)) {
     el.remove();
     return Promise.resolve();

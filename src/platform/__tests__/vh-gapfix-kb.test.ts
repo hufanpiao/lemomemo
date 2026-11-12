@@ -3,9 +3,9 @@
 // 做着时来的不接、innerHeight 一变就撤、输入期间不动的几条在 vh-gapfix-editing.test.ts；走默认接法（共享 watcher）的在 vh-gapfix-kb-device.test.ts
 import { describe, expect, it, vi } from 'vitest';
 import { KB_SETTLE_MS } from '../viewport.ts';
-import { GIVE_UP_MS, MAX_LINES, readGapFixLog, SCROLL_AT_MS, setGapFixOn } from '../vh-gapfix.ts';
+import { GIVE_UP_MS, SCROLL_AT_MS, setGapFixOn } from '../vh-gapfix.ts';
 import { PAD_ID } from '../vh-gapfix-gate.ts';
-import { coldThenKeyboard, frames, input, mockScroll, mountBar, pad, resize, setInner, settle, startKb, st, vvResize } from './gapfix-fixture.ts';
+import { coldThenKeyboard, frames, input, mockScroll, mountBar, pad, readGapFixLog, resize, setInner, settle, startKb, st, vvResize } from './gapfix-fixture.ts';
 
 describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956 → 键盘 542 → 收起回 895）', () => {
   const kbPads = (): number => readGapFixLog().match(/kb pad /g)?.length ?? 0;
@@ -156,27 +156,6 @@ describe('键盘真收了以后再做一次（Q-4：冷启动 895 → 修好 956
     settle();
     expect(readGapFixLog()).not.toMatch(/kb/);
     expect(pad()).toBeNull();
-  });
-
-  it('日志最多留 MAX_LINES 行，第一行（开头）一直在', () => {
-    mockScroll();
-    const f = frames();
-    mountBar();
-    startKb(f.frame);
-    setInner(956);
-    f.flush();
-    const el = input();
-    for (let k = 0; k < MAX_LINES; k++) {
-      el.focus();
-      resize(542);
-      el.blur();
-      resize(956);
-      settle();
-    }
-    const log = readGapFixLog().split('\n');
-    expect(log).toHaveLength(MAX_LINES);
-    expect(log[0]).toMatch(/^gapfix start=/);
-    expect(log.at(-1)).toMatch(/kb skip no-gap\(0\)/);
   });
 
   it('网页版（不是主屏幕版）不盯键盘', () => {

@@ -8,6 +8,8 @@
 //   canShare 不认这个文件、没有 share 时才 download（存不进“文件”App 也只能这样，至少浏览器会打开预览）
 // • 电脑浏览器、别的情况：blob URL + a[download]，点一下就存；URL 稍后回收
 // 只管存，不联网
+import { isAppleMobile, isStandalone } from './env.ts';
+
 /** shared、downloaded = 存好了；cancelled = 用户取消；needs_tap = 被拒，要用户再点一下（新的用户激活）再分享 */
 export type SaveOutcome = 'shared' | 'downloaded' | 'cancelled' | 'needs_tap';
 
@@ -18,8 +20,6 @@ export interface SaveEnv {
   canShare?: (data: { files: File[] }) => boolean;
   download(blob: Blob, name: string): void;
 }
-
-type NavLike = Navigator & { standalone?: boolean };
 
 /** blob URL 回收前等多久（Safari 点完 a 以后要过一会儿才开始读） */
 const REVOKE_AFTER_MS = 60_000;
@@ -40,18 +40,8 @@ function browserDownload(blob: Blob, name: string): void {
   }
 }
 
-function iosStandalone(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const nav = navigator as NavLike;
-  const ios = /iPhone|iPad|iPod/.test(nav.userAgent) || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1);
-  if (!ios) return false;
-  if (nav.standalone === true) return true;
-  try {
-    return typeof matchMedia === 'function' && matchMedia('(display-mode: standalone)').matches;
-  } catch {
-    return false;
-  }
-}
+/** iPhone / iPad 主屏幕版（设备、主屏幕版的判断都用 env.ts 那一份） */
+const iosStandalone = (): boolean => typeof navigator !== 'undefined' && isAppleMobile(navigator) && isStandalone(navigator);
 
 export function browserSaveEnv(): SaveEnv {
   const nav = typeof navigator === 'undefined' ? undefined : navigator;

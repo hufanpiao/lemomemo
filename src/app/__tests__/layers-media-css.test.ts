@@ -19,8 +19,8 @@ function walk(dir: string): string[] {
 const noComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
 const FILES = walk('src').map((f) => [f, noComments(readFileSync(f, 'utf8'))] as const);
 const base = noComments(readFileSync('src/styles/base.css', 'utf8'));
-/** 启动画面、启动探针：在 base.css 之前画，层级写最大的数（base.css 层级表的注释） */
-const SPLASH = new Set(['src/styles/splash.css', 'src/platform/splash-probe.css']);
+/** 启动画面：在 base.css 之前画，层级写最大的数（base.css 层级表的注释） */
+const SPLASH = new Set(['src/styles/splash.css']);
 
 describe('层级（z-index）', () => {
   const table = [...base.matchAll(/(--z-[a-z-]+):\s*(-?\d+);/g)].map((m) => [m[1] ?? '', Number(m[2])] as const);

@@ -7,6 +7,8 @@ interface RunLogSlot {
 }
 
 export const RL_SLOT = '__lemoRunLog';
+/** 诊断找底栏用的选择器（kit GlassBar 的 data-testid；运行日志、冷启动高度校正、冷启动时间线、诊断信息都用这一份） */
+export const BAR_SELECTOR = '[data-testid="tabbar"]';
 const MAX_EARLY = 300;
 
 export function rlog(line: string): void {

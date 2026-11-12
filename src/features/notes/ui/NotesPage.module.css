@@ -449,32 +449,47 @@
   display: none;
 }
 
-/* 输入行和提示条的外框：手机上不占位（两者各自 fixed）；电脑上整个贴在内容栏底部，提示条浮在输入行正上方、和输入行同宽 */
+/* 输入行和提示条的外框：手机上不占位（两者各自 fixed）；电脑上整个贴在内容栏底部，提示条浮在输入行正上方、和输入行同宽。
+   手机上两者的位置只用这一个公式：输入行底 = --dock-bottom + --inrow-lift，提示条再高一个输入行 + 8（这几个变量只在随手记用，放这里）：
+   --inrow-drop 键盘没弹时往下挪 36（离底栏上沿留 12）、--inrow-kb-gap 键盘弹着时离键盘辅助条再高 12（这两个按 base.css 的 data-kbo 同一个断点换）；
+   有撤销条（kit UndoToast，占 --dock-bottom）时 .dockUp 整块往上让一格：从 --dock-bottom 起让出撤销条高 + 8，提示条跟着输入行一起上移 */
 .dock {
+  --inrow-h: 56px;
+  --inrow-drop: 36px;
+  --inrow-kb-gap: 0px;
+  --inrow-lift: calc(var(--inrow-kb-gap) - var(--inrow-drop));
+
   display: contents;
 }
 
-/* 底部输入行：贴在底栏上面（和浮条同一位置 --dock-bottom，键盘弹起时让开）；有撤销条（kit UndoToast，占 --dock-bottom）时往上让一格 */
+.dockUp {
+  --inrow-lift: calc(var(--inrow-kb-gap) + var(--undo-h) + 8px);
+}
+
+@media (width < 900px) {
+  :global(:root[data-kbo]) .dock {
+    --inrow-drop: 0px;
+    --inrow-kb-gap: 12px;
+  }
+}
+
+/* 底部输入行：贴在底栏上面（和浮条同一位置 --dock-bottom，键盘弹起时让开）；有撤销条时往上让一格（位置公式见上面 .dock） */
 .inrow {
   position: fixed;
   left: 14px;
   right: 14px;
-  bottom: calc(var(--dock-bottom) + var(--inrow-kb-gap, 0px) - var(--inrow-drop, 0px));
+  bottom: calc(var(--dock-bottom) + var(--inrow-lift));
   z-index: var(--z-inrow);
   display: flex;
   align-items: center;
   gap: 8px;
   max-width: 532px;
-  height: 56px;
+  height: var(--inrow-h);
   margin: 0 auto;
   padding: 0 8px 0 18px;
   border-radius: var(--r-lg);
   background: var(--panel);
   box-shadow: var(--shadow-2);
-}
-
-.inrowUp {
-  bottom: calc(var(--dock-bottom) + var(--inrow-kb-gap, 0px) + 64px);
 }
 
 /* 电脑：铺满内容栏、左右各留 22px（DK.notes 第 1491 行），不按整个窗口居中；栏底 22px。
@@ -489,11 +504,10 @@
   }
 
   .dockUp {
-    bottom: calc(22px + 64px);
+    bottom: calc(22px + var(--undo-h) + 8px);
   }
 
-  .inrow,
-  .inrowUp {
+  .inrow {
     position: relative;
     left: auto;
     right: auto;
@@ -572,7 +586,7 @@
   position: fixed;
   left: 14px;
   right: 14px;
-  bottom: calc(var(--dock-bottom) + var(--inrow-kb-gap, 0px) - var(--inrow-drop, 0px) + 64px);
+  bottom: calc(var(--dock-bottom) + var(--inrow-lift) + var(--inrow-h) + 8px);
   z-index: var(--z-toast);
   max-width: 532px;
   margin: 0 auto;

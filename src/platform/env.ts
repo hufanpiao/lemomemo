@@ -40,7 +40,7 @@ export function isTauri(win: object = globalThis): boolean {
   return runtimeOf(win) === 'tauri';
 }
 
-// ───────── 设备判断（架构 5.9“首次引导”、TC-B1-17；R-225 起 iPhone / iPad 上不分浏览器）─────────
+// ───────── 设备判断（架构 5.9“首次引导”、TC-B1-17；R-225 起 iPhone / iPad 上不分浏览器；这类判断只在这里）─────────
 
 /** 判断要用到的 navigator 字段（测试时传假的进来） */
 export interface NavLike {
@@ -58,6 +58,22 @@ export interface NavLike {
 export function isAppleMobile(nav: NavLike = navigator): boolean {
   const ua = nav.userAgent;
   return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && nav.maxTouchPoints > 1);
+}
+
+/** 只认 iPhone、iPod（iPad 不算，视口几何的 squeeze 和冷启动高度校正都按它：iPad 台前调度、分屏、接实体键盘时窗口本来就比整屏矮） */
+export const isIPhone = (ua: string = typeof navigator !== 'undefined' ? navigator.userAgent : ''): boolean => /iPhone|iPod/.test(ua);
+
+const NO_KB_INPUT = /^(button|checkbox|radio|range|submit|reset|file|color|image|hidden)$/i;
+
+/**
+ * 焦点在这个元素上会不会弹键盘（“能打字的地方”，这类判断只在这里）：可编辑区域、select（iOS 弹选择轮，和键盘一样压可视区；电脑上按字母键是选选项）、
+ * 没只读、没禁用的 textarea 和文字类 input。视口监听、冷启动高度校正、窗口快捷键、日历翻页键、运行日志都用它
+ */
+export function opensKeyboard(el: unknown): boolean {
+  if (typeof HTMLElement === 'undefined' || !(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable || el instanceof HTMLSelectElement) return true;
+  if (el instanceof HTMLTextAreaElement) return !el.readOnly && !el.disabled;
+  return el instanceof HTMLInputElement && !el.readOnly && !el.disabled && !NO_KB_INPUT.test(el.type);
 }
 
 /** 是不是从主屏幕图标打开的（iOS 看 navigator.standalone，其他按 display-mode 媒体查询） */

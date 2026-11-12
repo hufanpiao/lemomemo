@@ -1,4 +1,4 @@
-// R-371 底栏偏高修复 Gap fix（platform/vh-gapfix.ts；11-11 起 iOS 主屏幕版默认开，诊断页“Gap fix: OFF (compare)”关掉对照）：Chromium 里模拟负责人那次冷启动——
+// R-371 底栏偏高修复 Gap fix（platform/vh-gapfix.ts；11-11 起 iPhone 主屏幕版默认开（11-12 起 iPad 不做），诊断页“Gap fix: OFF (compare)”关掉对照）：Chromium 里模拟负责人那次冷启动——
 // iPhone（navigator.userAgent 换成 iPhone 的，只在页面里换，请求头不动）、主屏幕版（navigator.standalone）、屏幕 956、可见高度 895（视口 440×895）、顶部安全区 61（--inset-top；Chromium 的 env() 恒为 0，用 CSSOM 盖上）。
 // ① 根据：895 高时只有日历页文档比视口高（6 行月格，和数据无关），今天页正好一屏——负责人“只有切到日历才回落”，iOS 是在文档变得能滚时重算的；
 // ② 默认开着：底栏挂上以后放看不见的垫块让今天页文档比视口高（照日历），Chromium 不会改 innerHeight，到 1.5 秒撤掉，日志记 no-change；
@@ -11,17 +11,17 @@ import { expect, test } from './session-fixture.ts';
 
 const SHOTS = process.env['R371_SHOTS'] ?? 'test-results/r371-gapfix';
 
-/** 打开前注入：开关（on: false = 诊断页关掉，存 lemo-gapfix-off）、iPhone、主屏幕版、屏幕高、顶部安全区 */
+/** 打开前注入：开关（on: false = 诊断页关掉，存 lemo-gapfix-off）、清掉运行日志、iPhone、主屏幕版、屏幕高、顶部安全区 */
 async function launch(page: Page, o: { on: boolean; screenH: number; top: number }): Promise<void> {
   await page.addInitScript((a) => {
     try {
       if (a.on) localStorage.removeItem('lemo-gapfix-off');
       else localStorage.setItem('lemo-gapfix-off', '1');
-      localStorage.removeItem('lemo-gapfix-out');
+      localStorage.removeItem('lemo-run-log');
     } catch {
       // 不会走到
     }
-    // Gap fix 只在 iOS 主屏幕版做（vh-gapfix-gate.ts）：chromium 项目是电脑 UA，页面里换成 iPhone 的（webkit 项目本来就是 iPhone 15）
+    // Gap fix 只在 iPhone 主屏幕版做（vh-gapfix-gate.ts）：chromium 项目是电脑 UA，页面里换成 iPhone 的（webkit 项目本来就是 iPhone 15）
     if (!/iPhone|iPad/.test(navigator.userAgent))
       Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1', configurable: true });
     Object.defineProperty(navigator, 'standalone', { value: true, configurable: true });
@@ -56,7 +56,9 @@ async function settle(page: Page): Promise<void> {
 /** 不撑开时的文档高：触屏（hover: none，webkit 项目是 iPhone 15）上 base.css 的 html { min-height: calc(100% + 1px) }（CI-webkit-crash 11-04）
  *  让文档永远比视口高 1px，电脑上不加——所以触屏上今天页本来就能滚 1px（和真机 scrollBy 1px 滚到 y=1 对得上） */
 const restH = (page: Page, vh: number): Promise<number> => page.evaluate((h) => (matchMedia('(hover: none)').matches ? h + 1 : h), vh);
-const log = (page: Page): Promise<string> => page.evaluate(() => localStorage.getItem('lemo-gapfix-out') ?? '');
+/** Gap fix 的日志：经 rlog 进全局运行日志（lemo-run-log，运行日志隔 300ms 存一次），只取 gapfix 那几行 */
+const log = (page: Page): Promise<string> =>
+  page.evaluate(() => (localStorage.getItem('lemo-run-log') ?? '').split('\n').filter((l) => l.includes(' app gapfix ')).join('\n'));
 /** “逐像素一样”的比对材料：chromium 截图；webkit 改比版面指纹（底栏、实色带、“＋”、main 的位置大小，实色带透明度，文档高，滚动位置）。
  *  webkit 上 Playwright 每截一次图都往页面插 <style>body {}</style>（inPagePrepareForScreenshots，关不掉，见 visual/visual-helpers.ts），
  *  被 App 的 CSP 拦成 style-src-elem 违规，csp-fixture 判失败——那是测试工具自己的；不截图，App 自己在 webkit 下的 CSP 违规照样由 csp-fixture 判 */
@@ -121,7 +123,7 @@ test.describe('冷启动可见高度少了顶部安全区（895 / 956）', () =>
     expect(during.hit).not.toBe('lemo-gapfix-pad');
     expect(await log(page)).toMatch(/pad gap=61 top=61/);
     await expect(pad).toHaveCount(0, { timeout: 5000 });
-    expect(await log(page)).toMatch(/no-change pad-removed/);
+    await expect.poll(() => log(page)).toMatch(/no-change pad-removed/);
     // 台账 Q-2 早试：main.tsx 一开始就同步放过一次垫块（Chromium 不改 innerHeight，1 秒撤掉记 no-change），记在“等底栏后那一次”前面
     const full = await log(page);
     expect(full).toMatch(/early nav=\d+ms no-change inner=895 after=\d+ms gap=61 top=(0|61)/);

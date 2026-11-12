@@ -4,8 +4,8 @@
 // 已知的时机变化：共享 watcher 在 vh-gapfix 订阅时（冷启动、分包加载时）就开始监听、写根节点 --vh-gap，不等 App 调 startViewport
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GAP_VAR, KB_SETTLE_MS } from '../viewport.ts';
-import { readGapFixLog, startGapFix } from '../vh-gapfix.ts';
-import { deps, frames, input, mountBar, pad, settle, st } from './gapfix-fixture.ts';
+import { startGapFix } from '../vh-gapfix.ts';
+import { deps, frames, input, mountBar, pad, readGapFixLog, settle, st } from './gapfix-fixture.ts';
 
 const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
 const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15';

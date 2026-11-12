@@ -27,7 +27,8 @@ import type { DateStr } from '../../../../shared/core/date.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import form from '../../../kit/components/Form.module.css';
-import { isEditable, useKeys } from '../../../kit/hooks/useKeys.ts';
+import { useKeys } from '../../../kit/hooks/useKeys.ts';
+import { opensKeyboard } from '../../../platform/env.ts';
 import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, keepFieldFocus, TAP_SLOP_PX } from '../../../platform/viewport.ts';
 import { usePlusLine, usePlusT } from '../hooks/usePlusT.ts';
 import { useTypeBar, type CallAi, type TypeBarState, type Writer } from '../hooks/useTypeBar.ts';
@@ -166,7 +167,7 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     'mod+z': (e) => {
       if (!s.notice) return false;
       const el = e.target;
-      if (isEditable(el) && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value !== '' : true)) return false;
+      if (opensKeyboard(el) && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ? el.value !== '' : el instanceof HTMLElement && el.isContentEditable)) return false;
       void s.undo();
       return true;
     },

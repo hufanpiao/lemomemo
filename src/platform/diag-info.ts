@@ -4,6 +4,7 @@
 // • navigator.serviceWorker 只准出现在 platform（A13），所以放在这里
 import { buildInfo } from './env.ts';
 import { insetTimeline, type InsetTimeline } from './inset-watch.ts';
+import { BAR_SELECTOR } from './run-log-api.ts';
 
 /** 诊断里的一行（11-07 首屏瘦身 U7 从 inset-watch.ts 搬来，原样没改；只有这里用，不再跟着首屏下载）：launch: standalone=… painted=+300 ready=+460(quiet) | +12 env-bottom=0px inner=956 | +340 env-bottom=34px inner=956 */
 export function insetTimelineLine(tl: InsetTimeline = insetTimeline()): string {
@@ -78,7 +79,7 @@ export async function collectDiag(win: Window = window): Promise<string[]> {
   const root = doc.documentElement;
   const sup = (p: string, v: string): string => String(safe(() => CSS.supports(p, v), false));
   const mm = (q: string): string => String(safe(() => win.matchMedia(q).matches, false));
-  const bar = doc.querySelector('[data-testid="tabbar"]');
+  const bar = doc.querySelector(BAR_SELECTOR);
   const fab = bar?.nextElementSibling instanceof HTMLButtonElement ? bar.nextElementSibling : null;
   const lines = [
     `build: commit=${buildInfo.commit} version=${buildInfo.version} builtAt=${buildInfo.builtAt} env=${buildInfo.env}`,

@@ -1,4 +1,4 @@
-// 启动画面的收起接线（R-251、R-254；main.tsx 的 hideSplashAfter、经 root-paint.ts 的 whenContent 收起，两处都经 leaveSplash）：
+// 启动画面的收起接线（R-251、R-254；main.tsx 的 hideSplashAfter、经 root-paint.ts 的 whenContent 收起，两处都直接收、不等诊断启动件）：
 // • 关口还在问（什么都不画）：启动画面继续盖着
 // • 关口放行、离线画 App：App 的页面还在懒加载（Suspense fallback 为 null，#root 是空的）时不收，页面画出来以后才收（复查必改）
 // • 崩溃兜底页 AppCrashFallback、整屏提示（version_too_new）画进 #root：也收起，不盖在上面
@@ -162,12 +162,12 @@ describe('启动画面在真画出东西以后才收', () => {
 
 describe('main.tsx 的接线（按源码文字核对，main.tsx 一 import 就会启动整个 App）', () => {
   const main = readFileSync(join(import.meta.dirname, '..', 'main.tsx'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
-  it('模块顶层就排上 5 秒兜底（从启动起算），经 leaveSplash 收（非正式版先等诊断启动件，时序见 diag-boot.test.ts）', () => {
-    expect(main).toMatch(/^hideSplashAfter\(leaveSplash\);$/m);
-    expect(main.indexOf('hideSplashAfter(leaveSplash);')).toBeLessThan(main.indexOf('async function start('));
+  it('模块顶层就排上 5 秒兜底（从启动起算），直接收（不等诊断启动件）', () => {
+    expect(main).toMatch(/^hideSplashAfter\(hideSplash\);$/m);
+    expect(main.indexOf('hideSplashAfter(hideSplash);')).toBeLessThan(main.indexOf('async function start('));
   });
   it('#root 第一次画出东西的下一帧收起：在 render 之前、watchRoot 之后挂上，用 motion 的 nextFrame', () => {
-    const at = main.indexOf('whenContent(() => void nextFrame(leaveSplash));');
+    const at = main.indexOf('whenContent(() => void nextFrame(() => void hideSplash()));');
     expect(at).toBeGreaterThan(main.indexOf('watchRoot(el, nextFrame);'));
     expect(at).toBeLessThan(main.indexOf('createRoot(el).render('));
   });

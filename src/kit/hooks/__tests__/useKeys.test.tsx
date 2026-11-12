@@ -1,10 +1,10 @@
 // 窗口内快捷键（kit/hooks/useKeys.ts；架构 5.9；B3 S24）：
 // • mod = Ctrl 或 ⌘；带 Alt、Shift+mod 的不认
-// • 单字母键焦点在输入框里不生效；带 mod 的照常交给处理函数
+// • 单字母键焦点在能打字的地方不生效（判断是 platform/env.ts 的 opensKeyboard，用例在 env-device.test.ts）；带 mod 的照常交给处理函数
 // • 处理函数返回 true 才阻止默认动作；别人已经接住的、输入法组字中的不管
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isEditable, keyName, useKeys, type KeyMap } from '../useKeys.ts';
+import { keyName, useKeys, type KeyMap } from '../useKeys.ts';
 
 afterEach(() => {
   cleanup();
@@ -32,23 +32,6 @@ describe('keyName', () => {
     expect(k({ key: 'z', ctrlKey: true, shiftKey: true })).toBeNull();
     expect(k({ key: 'n', ctrlKey: true, altKey: true })).toBeNull();
     expect(k({ key: 'n', ctrlKey: true, metaKey: true })).toBeNull();
-  });
-});
-
-describe('isEditable', () => {
-  it('能打字的输入框、文本框、可编辑区域算；按钮、复选框、只读、禁用的不算', () => {
-    const mk = (html: string): Element => {
-      document.body.innerHTML = html; // eslint-disable-line no-restricted-syntax -- 测试里搭 DOM
-      return document.body.firstElementChild as Element;
-    };
-    expect(isEditable(mk('<input type="text">'))).toBe(true);
-    expect(isEditable(mk('<input type="search">'))).toBe(true);
-    expect(isEditable(mk('<textarea></textarea>'))).toBe(true);
-    expect(isEditable(mk('<input type="checkbox">'))).toBe(false);
-    expect(isEditable(mk('<input type="text" readonly>'))).toBe(false);
-    expect(isEditable(mk('<textarea disabled></textarea>'))).toBe(false);
-    expect(isEditable(mk('<button>x</button>'))).toBe(false);
-    expect(isEditable(null)).toBe(false);
   });
 });
 

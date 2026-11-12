@@ -1,6 +1,6 @@
 // 入口（架构 2.2、4.1）：装 exe 桥 → 读本机会话（没登录删库去登录页）→ coldStart → 定界面语言 → 挂功能入口 → 挂换账号监听 → 过告知页关口渲染 → 启动同步
 // 不变量：换账号、会话没了的监听在 render 之前挂、挂上马上再比一次；会话没了交 core/device-exit.ts 的 exitOnSessionLoss
-// 不变量：告知页关口读失败、超时、懒加载失败都不挡进 App；启动画面最多盖 5 秒、#root 第一次画出东西（root-paint.ts 的 whenContent）的下一帧收起，这两处经 leaveSplash（非正式版先等诊断启动件），进退出屏时直接收；StrictMode 只在开发版开
+// 不变量：告知页关口读失败、超时、懒加载失败都不挡进 App；启动画面最多盖 5 秒、#root 第一次画出东西（root-paint.ts 的 whenContent）的下一帧收起，进退出屏时直接收；StrictMode 只在开发版开
 // 每一步的理由见 docs/10-架构/历史版本/文件头原文-2026-11-11退出链路整改.md
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -57,18 +57,13 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
   applyDocLocale(uiLocale);
 }
 
-// 诊断启动件（运行日志、冷启动时间线、启动画面颜色诊断，platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量整块摇掉（diagReady 是 null）。
-// 5 秒兜底和 #root 画出东西这两处走 leaveSplash；进退出屏（start 里两处）、库被挡住（root.tsx 的 SplashRelease）时直接收，不等诊断。
-// leaveSplash 在非正式版先等它：颜色诊断开着时它要先打好“多留 8 秒”的标记（data-splash-hold，splash.ts），
-// 这两处即使 #root 先画出东西、分包过了 5 秒才到，也不会没打标记就先淡出。分包加载失败当它好了、照常收起；一直不回来时 splash.css 的 6 秒纯 CSS 兜底照样淡掉
-const diagReady: Promise<void> | null =
-  import.meta.env.MODE !== 'production' ? import('../platform/diag-boot.ts').then((m) => m.startDiagBoot(nextFrame)).catch(() => undefined) : null;
-const leaveSplash = (): void => void (diagReady ? diagReady.then(hideSplash) : hideSplash());
+// 诊断启动件（运行日志、冷启动时间线，platform/diag-boot.ts）：只在非正式版动态下载，正式构建靠 MODE 常量整块摇掉；启动画面收起不等它
+if (import.meta.env.MODE !== 'production') void import('../platform/diag-boot.ts').then((m) => m.startDiagBoot(nextFrame)).catch(() => undefined);
 // 启动画面最晚 5 秒收起：从入口模块开始执行算起（关口、冷启动、分包加载哪一步卡住都不再盖着）
-hideSplashAfter(leaveSplash);
+hideSplashAfter(hideSplash);
 // 底部安全区（G10）：iOS 主屏幕版冷启动时先 0 后 34，稳定前底栏、“＋”、实色带不显示，稳定了淡入；首屏画完后最多藏 1.5 秒（platform/inset-watch.ts）
 watchInsetBottom();
-// R-371 Gap fix（底栏偏高修复，11-11 起默认开、正式版也做）：只在 iOS 主屏幕版冷启动时下载 platform/vh-gapfix.ts 做一次（判断见 vh-gapfix-gate.ts，
+// R-371 Gap fix（底栏偏高修复，11-11 起默认开、正式版也做）：只在 iPhone 主屏幕版冷启动时下载 platform/vh-gapfix.ts 做一次（判断见 vh-gapfix-gate.ts，
 // 诊断页可以关掉对照）；等帧传 motion 的 nextFrame（A25）
 // 台账 Q-2：先在这里同步早试一次（启动画面还盖着，不等下载、不等底栏），不成再由 vh-gapfix.ts 等底栏挂上后照原样补一次
 if (gapFixWanted()) {
@@ -116,7 +111,7 @@ async function start(): Promise<void> {
   // supabase-js 不和页面分包抢下载，B2 FA-6 ①）。这里只有 15 秒长兜底，正式的时限在 render 之后才开始算（见下面 startAppPaintLimit）
   watchRoot(el, nextFrame);
   // 告知页关口还在问服务器时 #root 是空的，启动画面继续盖着；一画出东西就在下一帧收起
-  whenContent(() => void nextFrame(leaveSplash));
+  whenContent(() => void nextFrame(() => void hideSplash()));
   // 底部安全区“稳定”从首屏画完起算（G10，底栏跟着第一个页面出来）
   afterAppPainted(markInsetPainted);
   el.dataset['version'] = buildInfo.version;

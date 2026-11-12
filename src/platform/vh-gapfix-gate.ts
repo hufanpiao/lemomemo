@@ -1,8 +1,9 @@
-// 冷启动高度校正（这类事只在这里做）：iOS 主屏幕版布局视口少了顶部安全区（895 / 956）时，fixHeight 放一个看不见的垫块让文档比视口高，
+// 冷启动高度校正（这类事只在这里做）：iPhone 主屏幕版布局视口少了顶部安全区（895 / 956）时，fixHeight 放一个看不见的垫块让文档比视口高，
 // iOS 这时会重算 innerHeight；到点照样撤。触发：main.tsx 一开始同步试一次（startEarlyGapFix，启动画面还盖着，只认回到整屏），
 // 等底栏挂上、键盘真收起由按需下载的 vh-gapfix.ts 再调 fixHeight（innerHeight 一变就撤）。本文件在首屏（main.tsx 静态引），只放这几样。
 // 不变量：只在竖屏、少的正是顶部安全区时做；同一时刻最多一块垫块。requestAnimationFrame 只许 src/motion 用（A25），等帧的函数由调用方传
-import { isAppleMobile, isStandalone, type NavLike } from './env.ts';
+import { isIPhone, isStandalone, type NavLike } from './env.ts';
+import { insetProbe } from './inset-watch.ts';
 // 整屏几何从 viewport-screen.ts 引，不经 viewport-geom.ts：那份不在首屏块里，跟着 viewport.ts 的分包按需下载（11-12 首屏瘦身）
 import { fullHeight, GAP_MAX_PX, isLandscape, TOL_PX } from './viewport-screen.ts';
 
@@ -14,9 +15,9 @@ export const EARLY_GIVE_UP_MS = 1000;
 
 export type Frame = (cb: () => void) => unknown;
 
-/** 这次冷启动要不要做：iOS（iPhone、iPad）、主屏幕版、诊断页没关掉。读不到本机存储时照默认做 */
+/** 这次冷启动要不要做：iPhone（和视口几何的 squeeze 同一个判断，iPad 不算）、主屏幕版、诊断页没关掉。读不到本机存储时照默认做 */
 export function gapFixWanted(nav: NavLike = navigator, media?: (q: string) => boolean, store?: Storage): boolean {
-  if (!isAppleMobile(nav) || !isStandalone(nav, media)) return false;
+  if (!isIPhone(nav.userAgent) || !isStandalone(nav, media)) return false;
   try {
     return (store ?? localStorage).getItem(OFF_KEY) !== '1';
   } catch {
@@ -24,20 +25,9 @@ export function gapFixWanted(nav: NavLike = navigator, media?: (q: string) => bo
   }
 }
 
-/** 顶部安全区（px）：读 --inset-top（base.css，= env(safe-area-inset-top)），和页面用的是同一个值 */
+/** 顶部安全区（px）：读 --inset-top（base.css，= env(safe-area-inset-top)），和页面用的是同一个值；探测块和 inset-watch.ts 读底部安全区的是同一个 */
 export function insetTop(doc: Document): number {
-  const probe = doc.createElement('div');
-  for (const [k, v] of [
-    ['position', 'fixed'],
-    ['top', '0'],
-    ['width', '0'],
-    ['height', '0'],
-    ['visibility', 'hidden'],
-    ['pointer-events', 'none'],
-    ['padding-top', 'var(--inset-top, env(safe-area-inset-top))'],
-  ] as const)
-    probe.style.setProperty(k, v);
-  (doc.body ?? doc.documentElement).append(probe);
+  const probe = insetProbe(doc, 'top');
   const px = parseFloat(getComputedStyle(probe).paddingTop) || 0;
   probe.remove();
   return px;

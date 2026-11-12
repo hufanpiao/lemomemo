@@ -63,13 +63,13 @@ describe('关于页的诊断信息', () => {
     expect(root.hasAttribute('data-diag')).toBe(false);
   });
 
-  it('诊断开着时（非正式版）下面有可见高度探测按钮，平时没有（R-371 第二条路）', async () => {
+  it('诊断开着时（非正式版）下面有诊断按钮，平时没有；已结案的探测（可见高度 R-371、启动画面颜色 Q-2、键盘辅助条 Q-11、Gap fix 单独日志）都不在了', async () => {
     render(<AboutSection />);
     expect(screen.queryByTestId('settings-vh-probe')).toBeNull();
     tapVersion(DIAG_TAPS);
     await screen.findByTestId('settings-about-diag');
-    expect(screen.getByTestId('settings-vh-probe')).toBeTruthy();
-    expect(screen.getByTestId('vh-probe-meta-height')).toBeTruthy();
+    const box = screen.getByTestId('settings-vh-probe');
+    expect([...box.querySelectorAll('button')].map((b) => b.dataset['testid'])).toEqual(['vh-tl-arm', 'vh-tl-copy', 'vh-gapfix', 'vh-rl-send', 'vh-rl-copy', 'vh-rl-clear']);
   });
 
   it('时间线开关点一下开、再点关（存本机）；没记过时“Copy timeline”不能点，记过了显示整段、点了复制整段（R-371 冷启动时间线）', async () => {
@@ -103,56 +103,7 @@ describe('关于页的诊断信息', () => {
     localStorage.clear();
   });
 
-  it('启动画面颜色诊断开关默认 OFF，点一下 ON（存本机 lemo-sp-color）、再点回 OFF（台账 Q-2）', async () => {
-    localStorage.clear();
-    render(<AboutSection />);
-    tapVersion(DIAG_TAPS);
-    await screen.findByTestId('settings-about-diag');
-    const sp = screen.getByTestId('vh-sp-arm');
-    expect(sp.textContent).toBe('Splash colors next launch: OFF');
-    expect(sp.getAttribute('aria-pressed')).toBe('false');
-    fireEvent.click(sp);
-    expect(sp.textContent).toBe('Splash colors next launch: ON');
-    expect(localStorage.getItem('lemo-sp-color')).toBe('1');
-    fireEvent.click(sp);
-    expect(sp.textContent).toBe('Splash colors next launch: OFF');
-    expect(localStorage.getItem('lemo-sp-color')).toBeNull();
-    localStorage.clear();
-  });
-
-  it('键盘上方输入辅助条诊断（台账 Q-11）：“Keyboard bar test”点了才打开全屏测试层，A～I 九种写法各有说明；B 聚焦时别的框禁用、失焦恢复；F 聚焦后去掉只读；Close 关掉', async () => {
-    render(<AboutSection />);
-    tapVersion(DIAG_TAPS);
-    await screen.findByTestId('settings-about-diag');
-    expect(screen.queryByTestId('kbacc-probe')).toBeNull();
-    const open = screen.getByTestId('kbacc-probe-open');
-    expect(open.textContent).toBe('Keyboard bar test');
-    vi.useRealTimers();
-    fireEvent.click(open);
-    const layer = await screen.findByTestId('kbacc-probe');
-    for (const id of 'ABCDEFGHI') expect(screen.getByTestId(`kbacc-probe-${id}`)).toBeTruthy();
-    expect(layer.querySelectorAll('form [data-case]')).toHaveLength(1);
-    expect(screen.getByTestId('kbacc-probe-G').getAttribute('inputmode')).toBe('none');
-    expect(screen.getByTestId('kbacc-probe-D').getAttribute('contenteditable')).toBe('true');
-    const b = screen.getByTestId('kbacc-probe-B') as HTMLInputElement;
-    const a = screen.getByTestId('kbacc-probe-A') as HTMLInputElement;
-    fireEvent.focus(b);
-    expect(a.disabled).toBe(true);
-    expect(b.disabled).toBe(false);
-    fireEvent.blur(b);
-    expect(a.disabled).toBe(false);
-    const f = screen.getByTestId('kbacc-probe-F') as HTMLInputElement;
-    expect(f.readOnly).toBe(true);
-    fireEvent.focus(f);
-    await act(async () => new Promise((r) => setTimeout(r, 5)));
-    expect(f.readOnly).toBe(false);
-    fireEvent.blur(f);
-    expect(f.readOnly).toBe(true);
-    fireEvent.click(screen.getByTestId('kbacc-probe-close'));
-    expect(screen.queryByTestId('kbacc-probe')).toBeNull();
-  });
-
-  it('Gap fix 开关默认 ON，点一下关掉用来对照（存本机 lemo-gapfix-off）、再点回 ON；有日志时显示最近一次冷启动的日志（R-371 11-11 默认开）', async () => {
+  it('Gap fix 开关默认 ON，点一下关掉用来对照（存本机 lemo-gapfix-off）、再点回 ON（R-371 11-11 默认开；日志在全局运行日志里）', async () => {
     localStorage.clear();
     render(<AboutSection />);
     tapVersion(DIAG_TAPS);
@@ -160,7 +111,6 @@ describe('关于页的诊断信息', () => {
     const gf = screen.getByTestId('vh-gapfix');
     expect(gf.textContent).toBe('Gap fix: ON');
     expect(gf.getAttribute('aria-pressed')).toBe('true');
-    expect(screen.queryByTestId('vh-gapfix-out')).toBeNull();
     fireEvent.click(gf);
     expect(gf.textContent).toBe('Gap fix: OFF (compare)');
     expect(gf.getAttribute('aria-pressed')).toBe('false');
@@ -168,38 +118,19 @@ describe('关于页的诊断信息', () => {
     fireEvent.click(gf);
     expect(gf.textContent).toBe('Gap fix: ON');
     expect(localStorage.getItem('lemo-gapfix-off')).toBeNull();
-    cleanup();
-
-    localStorage.setItem('lemo-gapfix-out', 'gapfix start=x\nt=0 pad gap=61 top=61');
-    render(<AboutSection />);
-    await screen.findByTestId('settings-about-diag');
-    expect(screen.getByTestId('vh-gapfix-out').textContent).toBe('gapfix start=x\nt=0 pad gap=61 top=61');
     localStorage.clear();
   });
 
-  it('时间线开着时 Gap fix 照样默认开；Gap fix 日志一键复制（按时重新读本机），没日志时复制键灰着（R-371 11-10 复审）', async () => {
+  it('时间线开着时 Gap fix 照样默认开（R-371 11-10 复审）', async () => {
     localStorage.clear();
-    const writeText = vi.fn(() => Promise.resolve());
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     render(<AboutSection />);
     tapVersion(DIAG_TAPS);
     await screen.findByTestId('settings-about-diag');
-    expect((screen.getByTestId('vh-gapfix-copy') as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByTestId('vh-tl-arm'));
     expect(localStorage.getItem('lemo-vh-tl')).toBe('1');
     expect(localStorage.getItem('lemo-gapfix-off')).toBeNull();
     expect(screen.getByTestId('vh-tl-arm').textContent).toBe('Timeline next launch: ON');
     expect(screen.getByTestId('vh-gapfix').textContent).toBe('Gap fix: ON');
-    cleanup();
-
-    localStorage.setItem('lemo-gapfix-out', 'gapfix start=x');
-    render(<AboutSection />);
-    await screen.findByTestId('settings-about-diag');
-    localStorage.setItem('lemo-gapfix-out', 'gapfix start=x\nt=0 skip no-gap(0)');
-    fireEvent.click(screen.getByTestId('vh-gapfix-copy'));
-    expect(writeText).toHaveBeenCalledWith('gapfix start=x\nt=0 skip no-gap(0)');
-    expect(await screen.findByText('Copied')).toBeTruthy();
-    expect(screen.getByTestId('vh-gapfix-out').textContent).toBe('gapfix start=x\nt=0 skip no-gap(0)');
     localStorage.clear();
   });
 });

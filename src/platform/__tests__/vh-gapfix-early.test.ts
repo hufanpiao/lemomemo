@@ -2,9 +2,9 @@
 // 启动画面盖着的这段底下一直是灰带。main.tsx 一开始同步早试一次（同样的垫块），不成再由 vh-gapfix.ts 等底栏挂上后照原样做；早试的时刻和结果记进 Gap fix 日志
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GAP_MAX_PX } from '../viewport-geom.ts';
-import { readGapFixLog, startGapFix } from '../vh-gapfix.ts';
+import { startGapFix } from '../vh-gapfix.ts';
 import { EARLY_GIVE_UP_MS, earlyGap, startEarlyGapFix, type EarlyGap } from '../vh-gapfix-gate.ts';
-import { deps, frames, mountBar, pad, setInner } from './gapfix-fixture.ts';
+import { deps, frames, mountBar, pad, readGapFixLog, setInner } from './gapfix-fixture.ts';
 
 describe('台账 Q-2 早试（main.tsx 一开始同步试一次，vh-gapfix-gate.ts）', () => {
   it('早试还没结束：不判断、不放第二块垫块；结束后先记 early 一行，再照原样做', () => {
@@ -39,7 +39,7 @@ describe('台账 Q-2 早试（main.tsx 一开始同步试一次，vh-gapfix-gate
     const fr = frames();
     mountBar();
     startGapFix(fr.frame, { ...deps(), early: () => null });
-    expect(readGapFixLog()).toMatch(/^gapfix start=\S+ nav=\d+ms screen=440x956/);
+    expect(readGapFixLog()).toMatch(/^gapfix start nav=\d+ms screen=440x956/);
   });
 });
 

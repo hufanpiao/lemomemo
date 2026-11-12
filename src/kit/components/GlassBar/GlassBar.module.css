@@ -280,13 +280,16 @@
 }
 
 /* 键盘弹着（根节点 data-kbhide，platform/viewport.ts 写；FA-7 第 3 项）：底栏、“＋”不显示，也不能点、不进 Tab 顺序（visibility）；
-   只管这两样，实色带、渐隐层在 GlassBarFx.module.css 按同一个属性藏（设计复审一 R2） */
-:global(:root[data-kbhide]) .bar,
-:global(:root[data-kbhide]) .fab {
-  visibility: hidden;
+   只管这两样，实色带、渐隐层在 GlassBarFx.module.css 按同一个属性藏（设计复审一 R2）。
+   只管窄屏（和 base.css 的 :root[data-kbo] 同一个断点）：宽屏这两样是侧栏，键盘弹着照样显示（台账 Q-20） */
+@media (width < 900px) {
+  :global(:root[data-kbhide]) .bar,
+  :global(:root[data-kbhide]) .fab {
+    visibility: hidden;
 
-  /* 藏着时不进切页快照：快照上补的圆角阴影（base.css）会画在空快照上，剩一个空阴影壳（代码审查 M5） */
-  view-transition-name: none;
+    /* 藏着时不进切页快照：快照上补的圆角阴影（base.css）会画在空快照上，剩一个空阴影壳（代码审查 M5） */
+    view-transition-name: none;
+  }
 }
 
 /* 电脑版侧栏（设计动效评审 D5，主持人 11-05 定：断点 (width >= 900px)、不放 ⋯、方案 A 只用 CSS 复用底栏的 DOM）：

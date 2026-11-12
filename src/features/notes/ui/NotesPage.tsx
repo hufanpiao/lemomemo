@@ -190,7 +190,7 @@ function NotesList() {
       )}
 
       <div className={up ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
-        <InputRow up={up} onAdd={add} onImage={addImage} />
+        <InputRow onAdd={add} onImage={addImage} />
         {guard.toast !== null && guard.toast.kind !== 'undo' ? <DockTip toast={guard.toast} /> : null}
       </div>
 
@@ -292,9 +292,9 @@ function MoreMenu({ id, ro, open, onOpenChange, onDelete }: { id: string; ro: bo
 
 /**
  * 底部输入行（视觉稿 .inrow、线框 COMPOSER）：右边是“图片”“拍照”，打了字才出“记下”；回车或点“记下”就存；没存上把这句放回输入框。
- * 选了图：输入框里的字和图一起记成新的一条（onImage），没记上同样放回。有撤销条、提示条时往上让一格（up）
+ * 选了图：输入框里的字和图一起记成新的一条（onImage），没记上同样放回。有撤销条、只读提示时连同上面的提示条整块往上让一格（外框 .dockUp，NotesPage.module.css）
  */
-function InputRow({ up, onAdd, onImage }: { up: boolean; onAdd(text: string): Promise<boolean>; onImage(text: string, file: File): Promise<boolean> }) {
+function InputRow({ onAdd, onImage }: { onAdd(text: string): Promise<boolean>; onImage(text: string, file: File): Promise<boolean> }) {
   const t = useNotesT();
   const [draft, setDraft] = useState('');
   const has = draft.trim() !== '';
@@ -322,7 +322,7 @@ function InputRow({ up, onAdd, onImage }: { up: boolean; onAdd(text: string): Pr
   };
   return (
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- mousedown 只拦失焦（台账 Q-25，platform/viewport.ts 的 keepFieldFocus），不是交互，键盘操作不受影响
-    <form className={up ? `${styles.inrow} ${styles.inrowUp}` : styles.inrow} onSubmit={(e) => void submit(e)} onMouseDown={keepFieldFocus} data-testid="notes-input-row">
+    <form className={styles.inrow} onSubmit={(e) => void submit(e)} onMouseDown={keepFieldFocus} data-testid="notes-input-row">
       <input
         ref={input}
         className={styles.input}

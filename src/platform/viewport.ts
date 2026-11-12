@@ -14,7 +14,7 @@
 // keepFieldFocus：贴底浮条的 form 一律挂 onMouseDown={keepFieldFocus}（台账 Q-25）。浮条里按下的不是输入框本身（按钮等），拦掉 mousedown 的默认，
 // 输入框不失焦：iOS 手指抬起后先派发 mousedown、让输入框失焦（键盘开始收、浮条往下挪），再派发 click，click 就落到浮条下面的空白处，按钮第一下点不动。
 // 只拦 mousedown（失焦是 mousedown 的默认动作）：拦 touchstart，iOS 连 click 都不发；拦 pointerdown 管不到失焦。要收键盘的按钮（打字条“收起”）自己 blur
-import { isStandalone } from './env.ts';
+import { isIPhone, isStandalone, opensKeyboard } from './env.ts';
 import { rlog } from './run-log-api.ts';
 import { fullHeight, GAP_MAX_PX, TOL_PX, viewportGeom, type Geom } from './viewport-geom.ts';
 
@@ -41,27 +41,14 @@ export interface ViewportEnv {
   readonly doc?: () => DocLike | null;
   /** 是不是主屏幕版（不传就看 navigator.standalone / display-mode） */
   readonly standalone?: () => boolean;
-  /** 有能弹键盘的东西聚焦着（不传就看 document.activeElement） */
+  /** 有能弹键盘的东西聚焦着（不传就拿 document.activeElement 问 env.ts 的 opensKeyboard） */
   readonly editing?: () => boolean;
   /** 整屏高（不传：fullHeight(window)） */
   readonly full?: () => number;
-  /** 是不是 iPhone（不传就看 UA） */
+  /** 是不是 iPhone（不传就看 env.ts 的 isIPhone） */
   readonly phone?: () => boolean;
   /** 现在的毫秒数（暂缓计时；不传用单调时钟，系统时间往回调不影响） */
   readonly now?: () => number;
-}
-
-/** iPhone、iPod（iPad 不算：iPadOS 的 UA 是 Macintosh，这里也不去认它） */
-export const isIPhone = (ua: string = typeof navigator !== 'undefined' ? navigator.userAgent : ''): boolean => /iPhone|iPod/.test(ua);
-
-const NO_KB_INPUT = /^(button|checkbox|radio|range|submit|reset|file|color|image|hidden)$/i;
-
-/** 有能弹键盘的东西聚焦着：可编辑元素、textarea、select、文字类 input */
-export function editableFocused(doc: Document | null = typeof document !== 'undefined' ? document : null): boolean {
-  const el = doc?.activeElement as HTMLElement | null | undefined;
-  if (!el || el === doc?.body || el === doc?.documentElement) return false;
-  if (el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
-  return el.tagName === 'INPUT' && !NO_KB_INPUT.test((el as HTMLInputElement).type);
 }
 
 type Listener = (open: boolean, heightPx: number) => void;
@@ -73,7 +60,7 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
   const rootOf = env.root ?? (() => (typeof document !== 'undefined' ? document.documentElement : null));
   const docOf = env.doc ?? (() => (typeof document !== 'undefined' ? document : null));
   const standaloneOf = env.standalone ?? (() => typeof navigator !== 'undefined' && isStandalone());
-  const editingOf = env.editing ?? (() => editableFocused());
+  const editingOf = env.editing ?? (() => typeof document !== 'undefined' && opensKeyboard(document.activeElement));
   const fullOf = env.full ?? (() => (typeof window === 'undefined' ? 0 : fullHeight(window)));
   const phoneOf = env.phone ?? (() => isIPhone());
   const nowOf = env.now ?? (() => performance.now());
@@ -174,13 +161,11 @@ export function createKeyboardWatcher(env: ViewportEnv = {}) {
     holdTimer = settleTimer = undefined;
     holdUntil = 0;
     armed = false;
-    // 停了就不再盯，--vh-gap 不留旧值；记的值清零，再订阅时照量出来的重新写
-    gapVar = 0;
-    setVar(GAP_VAR, 0);
-    if (reported !== height > 0) {
-      reported = height > 0;
-      setAttr(BAR_HIDE_ATTR, reported);
-    }
+    // 停了就不再盯：写到根节点的四样（--vh-gap、--kb、data-kbo、data-kbhide）一起拿掉，记的值清零，再订阅时照量出来的重新写
+    height = kbVar = gapVar = 0;
+    reported = kboVar = false;
+    for (const v of [GAP_VAR, '--kb']) setVar(v, 0);
+    for (const a of ['data-kbo', BAR_HIDE_ATTR]) setAttr(a, false);
     doc = null;
     vv = null;
   };

@@ -1,11 +1,17 @@
 // vh-gapfix*.test.ts 共用的替身和小工具（原来每个测试文件各抄一份，11-11 视口几何返修收到这里，不含用例）。
 // 主屏幕版 iPhone 竖屏冷启动：innerHeight 895、screen 440×956；帧手动推进；时钟、滚动位置、innerHeight 放在 st 上，测试直接改。
 // 收键盘那次另有假的 visualViewport（vvResize / resize）和注入的键盘 watcher（startKb，不走共享 watcher；走默认接法的见 vh-gapfix-kb-device.test.ts）。
-// 每条测试之前、之后的复位也在这里（beforeEach / afterEach 注册到 import 它的那个测试文件）；setTimeout 一律假的，settle() 推进
+// 每条测试之前、之后的复位也在这里（beforeEach / afterEach 注册到 import 它的那个测试文件）；setTimeout 一律假的，settle() 推进。
+// Gap fix 的日志经 rlog 进全局运行日志：这里接住 rlog（run-log-api.ts 的 RL_SLOT），readGapFixLog 给最近一次 startGapFix 起记下的 gapfix 行
 import { afterEach, beforeEach, expect, vi } from 'vitest';
+import { RL_SLOT } from '../run-log-api.ts';
 import { createKeyboardWatcher, KB_SETTLE_MS } from '../viewport.ts';
-import { readGapFixLog, startGapFix, type GapFixDeps } from '../vh-gapfix.ts';
+import { startGapFix, type GapFixDeps } from '../vh-gapfix.ts';
 import { PAD_ID, type Frame } from '../vh-gapfix-gate.ts';
+
+let logLines: string[] = [];
+/** 最近一次 startGapFix 起经 rlog 记下的 gapfix 行（一行一条） */
+export const readGapFixLog = (): string => logLines.join('\n');
 
 /** 手动推进的“帧” */
 export function frames() {
@@ -99,6 +105,15 @@ export const coldThenKeyboard = (f: ReturnType<typeof frames>): void => {
 };
 
 beforeEach(() => {
+  logLines = [];
+  (globalThis as unknown as Record<string, unknown>)[RL_SLOT] = {
+    q: [],
+    sink: (line: string): void => {
+      if (!line.startsWith('gapfix ')) return;
+      if (line.startsWith('gapfix start ')) logLines = [];
+      logLines.push(line);
+    },
+  };
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   localStorage.clear();
   Object.assign(st, { inner: 895, clock: 0, sy: 0, vvH: 895 });

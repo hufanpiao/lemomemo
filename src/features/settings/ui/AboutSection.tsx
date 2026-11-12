@@ -2,12 +2,12 @@
 // 卡片里一行“版本 4.0.0”（设计评审 M-1，方案第 2 节和线框“关于 4.0.0 ›”）；农历数据的出处放在卡片下面（R-306：农历、节气数据要注明来自香港天文台；评审 S2）。
 // “手机时间不准”（K8-clock）是要马上看到的提醒，不跟着进二级页：设置首页在卡 3 下面直接放（SettingsHome）
 // 诊断信息（11-06）：3 秒内连点“版本”那一行 5 下，在卡片下面显示一块纯文字（platform/diag-info.ts 收集；只读、只显示、不上报），再连点 5 下收起。
-// 11-10 R-371：诊断开着且不是正式版时，下面挂 VhProbe（底栏偏高真机探测按钮）；正式构建靠 MODE 常量摇掉，build/check_no_probe.mjs 的 PROBE_MARKERS 登记了 vh-probe 兜底
+// 11-10 R-371：诊断开着且不是正式版时，下面挂 VhProbe（非正式版诊断按钮：冷启动时间线、Gap fix 对照开关、运行日志）；正式构建靠 MODE 常量摇掉，build/check_no_probe.mjs 的 PROBE_MARKERS 登记了 vh-probe 兜底
 // 诊断开着时 <html> 带 data-diag="1"：顶部显示红、蓝两个小色条（base.css .lemo-probe，真机验证顶部回弹），离开设置页也留着，再连点 5 下或重开 App 才没
 // 版本那一行仍是只显示的行（不是按钮、不进读屏的可操作列表），点按在外层用监听接住
 // 录音探测入口（B3 FA-0，11-10）：主屏幕版没有地址栏、Safari 网页版又不能登录，负责人进不了 #/dev-csp/voice，
 //   只在非正式版的卡片里多一行“录音探测（试验）”；用构建期常量 import.meta.env.MODE 挡（同 App.tsx 挂试验页），正式构建整块删掉。
-// 可见高度探测按钮（R-371 第二条路，11-10）：诊断开着时在诊断文字下面多一排按钮（VhProbe.tsx），同样只在非正式版里有
+// 诊断按钮（VhProbe.tsx）：诊断开着时在诊断文字下面，同样只在非正式版里有
 //   录音探测的文案在词条 settings.about.probe（A20 不准在组件里写汉字；正式版里只剩词典里这一句、没有这一行）；testid 带 check_no_probe.mjs 的标记 csp-lab，正式产物里残留就失败。和 voice-probe 同一个 PR 删
 import { useEffect, useRef, useState } from 'react';
 import { navigateSub } from '../../../app/router-sub.ts';
@@ -77,7 +77,7 @@ export function AboutSection() {
           {diag.join('\n')}
         </pre>
       )}
-      {/* 可见高度真机探测（R-371 第二条路，11-10）：诊断开着、非正式版才有；正式构建整块删掉 */}
+      {/* 非正式版诊断按钮（VhProbe.tsx）：诊断开着、非正式版才有；正式构建整块删掉 */}
       {diag && import.meta.env.MODE !== 'production' && <VhProbe />}
     </div>
   );

@@ -1,7 +1,7 @@
 // 启动画面的收起（R-251、R-254）：hideSplash 淡出后移除 DOM、可以重复调用；减少动态效果时按 120 ms 收；5 秒兜底（#root 首次绘制的口径见 root-paint.test.ts）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  hideSplash, hideSplashAfter, isSplashShowing, SPLASH_FADE_MS, SPLASH_FADE_RM_MS, SPLASH_HOLD_ATTR, SPLASH_HOLD_MS,
+  hideSplash, hideSplashAfter, isSplashShowing, SPLASH_FADE_MS, SPLASH_FADE_RM_MS,
   SPLASH_ID, SPLASH_MAX_MS,
 } from '../splash.ts';
 
@@ -32,26 +32,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
   document.body.replaceChildren();
   delete document.documentElement.dataset['rm'];
-  delete document.documentElement.dataset[SPLASH_HOLD_ATTR];
-});
-
-// 台账 Q-2 启动画面颜色诊断（非正式版）：诊断启动件 diag-boot.ts 打上 data-splash-hold 时，第一次要收起先多留 8 秒；没有标记时照旧马上收
-describe('诊断保留', () => {
-  it('有标记：多留 SPLASH_HOLD_MS 再淡出，期间重复调用拿同一个 Promise；到点拿掉标记', async () => {
-    const el = mountSplash();
-    document.documentElement.dataset[SPLASH_HOLD_ATTR] = '1';
-    const a = hideSplash();
-    expect(hideSplash()).toBe(a);
-    await vi.advanceTimersByTimeAsync(SPLASH_HOLD_MS - 1);
-    expect(el.classList.contains('is-leaving')).toBe(false);
-    expect(isSplashShowing()).toBe(true);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(el.classList.contains('is-leaving')).toBe(true);
-    expect(document.documentElement.dataset[SPLASH_HOLD_ATTR]).toBeUndefined();
-    await vi.advanceTimersByTimeAsync(SPLASH_FADE_MS + 200);
-    await a;
-    expect(document.getElementById(SPLASH_ID)).toBeNull();
-  });
 });
 
 describe('hideSplash', () => {

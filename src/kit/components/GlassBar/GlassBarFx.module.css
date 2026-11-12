@@ -153,10 +153,13 @@
   transition: none;
 }
 
-/* 键盘弹着（根节点 data-kbhide，FA-7 第 3 项）：实色带、渐隐层和底栏、“＋”一起藏（设计复审一 R2：只管这两样） */
-:global(:root[data-kbhide]) .band,
-:global(:root[data-kbhide]) .edge {
-  visibility: hidden;
+/* 键盘弹着（根节点 data-kbhide，FA-7 第 3 项）：实色带、渐隐层和底栏、“＋”一起藏（设计复审一 R2：只管这两样）；
+   断点同 GlassBar.module.css 那条（宽屏本来就没有这两样，见下面） */
+@media (width < 900px) {
+  :global(:root[data-kbhide]) .band,
+  :global(:root[data-kbhide]) .edge {
+    visibility: hidden;
+  }
 }
 
 /* 电脑版侧栏（D5，(width >= 900px)）：底部没有底栏，也就没有实色带 */

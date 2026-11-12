@@ -5,9 +5,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { GAP_MAX_PX, TOL_PX } from '../viewport-geom.ts';
-import { GIVE_UP_MS, gapFixOn, OUT_KEY, readGapFixLog, SCROLL_AT_MS, setGapFixOn, startGapFix, TOP_RETRY_FRAMES, TOP_RETRY_MS, WAIT_BAR_MS } from '../vh-gapfix.ts';
+import { GIVE_UP_MS, gapFixOn, SCROLL_AT_MS, setGapFixOn, startGapFix, TOP_RETRY_FRAMES, TOP_RETRY_MS, WAIT_BAR_MS } from '../vh-gapfix.ts';
 import { OFF_KEY, skipReason } from '../vh-gapfix-gate.ts';
-import { deps, frames, mockScroll, mountBar, pad, setInner, st } from './gapfix-fixture.ts';
+import { deps, frames, mockScroll, mountBar, pad, readGapFixLog, setInner, st } from './gapfix-fixture.ts';
 
 describe('开关（11-11 起默认开，诊断页关掉用来对照）', () => {
   it('默认开；关掉存 OFF_KEY，再开回删掉；本机存储抛错时当开着、不抛', () => {
@@ -31,7 +31,6 @@ describe('开关（11-11 起默认开，诊断页关掉用来对照）', () => {
     } as unknown as Storage;
     expect(gapFixOn(bad)).toBe(true);
     expect(() => setGapFixOn(false, bad)).not.toThrow();
-    expect(readGapFixLog(bad)).toBe('');
   });
 
   it('main.tsx 按 gapFixWanted() 直接加载本模块，不在“非正式版”那段里（正式版也做），也不经诊断启动件 diag-boot', () => {
@@ -40,7 +39,7 @@ describe('开关（11-11 起默认开，诊断页关掉用来对照）', () => {
     expect(main).toContain(call);
     // 台账 Q-2：同一个条件里，先同步早试、再下载本模块
     expect(main).toContain(['if (gapFixWanted()) {', '  startEarlyGapFix(nextFrame);', call].join('\n'));
-    // 那个 if 在模块顶层（不缩进、不套在别的块里）；非正式版那一处（diagReady 的 MODE 三元式）只下载 diag-boot，不带 Gap fix
+    // 那个 if 在模块顶层（不缩进、不套在别的块里）；非正式版那一处（MODE 判断那一行）只下载 diag-boot，不带 Gap fix
     expect(main).toMatch(/^if \(gapFixWanted\(\)\) \{$/m);
     const diagLine = main.split('\n').find((l) => l.includes("import.meta.env.MODE !== 'production'")) ?? '';
     expect(diagLine).toContain("import('../platform/diag-boot.ts')");
@@ -91,7 +90,7 @@ describe('startGapFix', () => {
     st.clock = 80;
     f.flush();
     expect(pad()).toBeNull();
-    const log = localStorage.getItem(OUT_KEY) ?? '';
+    const log = readGapFixLog();
     expect(log).toMatch(/pad gap=61 top=61/);
     expect(log).toMatch(/changed 895->956 by-pad pad-removed inner=956/);
   });
@@ -112,7 +111,7 @@ describe('startGapFix', () => {
     expect(pad()).toBeNull();
     // 代码审 M1：撤垫块时已经滚回过，不再多滚一次
     expect(to).toHaveBeenCalledTimes(1);
-    expect(localStorage.getItem(OUT_KEY)).toMatch(/scrollBy1[\s\S]*no-change pad-removed/);
+    expect(readGapFixLog()).toMatch(/scrollBy1[\s\S]*no-change pad-removed/);
     expect(f.size).toBe(0);
   });
 
@@ -182,9 +181,9 @@ describe('startGapFix', () => {
     f.flush(1);
     expect(pad()).not.toBeNull();
     const log = readGapFixLog();
-    expect(log).toMatch(/t=0 top=0 reread every 4 frames/);
-    expect(log).toMatch(/t=60 top-reread tries=2 after=60ms top=61 inner=895/);
-    expect(log).toMatch(/t=60 pad gap=61 top=61/);
+    expect(log).toMatch(/\+0ms top=0 reread every 4 frames/);
+    expect(log).toMatch(/\+60ms top-reread tries=2 after=60ms top=61 inner=895/);
+    expect(log).toMatch(/\+60ms pad gap=61 top=61/);
     expect(log).not.toMatch(/pad gap=61 top=0/);
   });
 
@@ -234,7 +233,7 @@ describe('startGapFix', () => {
     setInner(956);
     f.flush();
     expect(pad()).toBeNull();
-    expect(localStorage.getItem(OUT_KEY)).toMatch(/changed 895->956 after-scroll/);
+    expect(readGapFixLog()).toMatch(/changed 895->956 after-scroll/);
   });
 
   it('正常启动（inner = 956）：只记 skip，不放垫块、不滚', () => {
@@ -246,7 +245,7 @@ describe('startGapFix', () => {
     expect(pad()).toBeNull();
     expect(f.size).toBe(0);
     expect(by).not.toHaveBeenCalled();
-    expect(localStorage.getItem(OUT_KEY)).toMatch(/skip no-gap\(0\)/);
+    expect(readGapFixLog()).toMatch(/skip no-gap\(0\)/);
   });
 
   it('不是主屏幕版：skip not-standalone', () => {

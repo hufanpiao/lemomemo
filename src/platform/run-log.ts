@@ -1,7 +1,7 @@
 // 全局运行日志（负责人 11-11“以后所有的bug看log能不能解决”“要做就给我做详细的log”；只进非正式版，正式构建由 main.tsx 的 MODE 常量摇掉）
 // 一直开着、不靠试验开关，本机环形保存（OUT_KEY，最多 MAX_LINES 行，跨冷启动保留），诊断页“Copy run log”整段复制。记这些：
 // • 开头：时间、版本@提交、屏幕、dpr、是否主屏幕版、路由、UA
-// • 视口：每次 visualViewport resize/scroll、window resize/scroll（同一帧合并）：innerHeight、可视区高度和偏移、scrollY、data-kbo、--kb、--vh-gap、
+// • 视口：每次 visualViewport resize/scroll、window resize/scroll（同一帧合并）：innerHeight、可视区高度和偏移、缩放（不是 1 时才记）、scrollY、data-kbo、--kb、--vh-gap、
 //   焦点元素，以及版面快照（底栏、“＋”、模糊带、打字条、随手记输入行、撤销条、焦点输入框和它所在浮层：相对可视区的上沿~下沿、高度、是否藏着）
 // • 焦点进出（是点出来的还是程序聚焦、值的长度、选区）；输入法开始/结束；beforeinput 的 inputType；每个按键（字符键只记“char”）
 // • 回车：所在表单、输入框值的长度、提交按钮在不在、禁没禁用、是不是正在用输入法；表单真提交了另记 submit
@@ -9,8 +9,8 @@
 // • 业务代码经 run-log-api.ts 的 rlog 记的结果（提交了没有、为什么没提交）
 // • 焦点进出、路由变化后 400ms 再拍一次版面快照（等键盘、动画停稳）；焦点进来后 400ms、1500ms 各记一行 kbcheck（系统滚没滚页面、浮条贴没贴键盘，台账 Q-8）
 // 隐私：不记用户输入的任何文字、不记网址参数；按钮只记 data-testid / aria-label / id
-import { buildInfo } from './env.ts';
-import { RL_SLOT } from './run-log-api.ts';
+import { buildInfo, opensKeyboard } from './env.ts';
+import { BAR_SELECTOR, RL_SLOT } from './run-log-api.ts';
 
 export const OUT_KEY = 'lemo-run-log';
 export const MAX_LINES = 3000;
@@ -22,7 +22,7 @@ const SETTLE_SNAP_MS = 400;
 export const KB_CHECK_MS = 1500;
 /** 版面快照要看的元素 */
 export const LAYOUT_TARGETS: ReadonlyArray<readonly [string, string]> = [
-  ['bar', '[data-testid="tabbar"]'],
+  ['bar', BAR_SELECTOR],
   ['add', '[data-testid="tabbar-add"]'],
   ['band', '[data-testid="tabbar-band"]'],
   ['type', '[data-testid="type-bar"]'],
@@ -57,11 +57,9 @@ export function describeEl(el: unknown): string {
   return `${tag}${type}${id ? `#${id.slice(0, 40)}` : ''}`;
 }
 
-const isField = (el: unknown): el is HTMLInputElement | HTMLTextAreaElement => el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
-
-/** 输入框的状态：值的长度、选区、只读/禁用（不含文字） */
+/** 输入框的状态：值的长度、选区、只读/禁用（不含文字）；input、textarea 都记，只读的也记（会不会弹键盘看 env.ts 的 opensKeyboard） */
 function fieldState(el: unknown): string {
-  if (!isField(el)) return '';
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return '';
   let sel = '-';
   try {
     sel = `${el.selectionStart ?? '-'}-${el.selectionEnd ?? '-'}`;
@@ -133,7 +131,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const vv = win.visualViewport;
   const cssVar = (k: string): string => root.style.getPropertyValue(k).trim() || '0';
   const vvState = (): string =>
-    `inner=${win.innerHeight} vv=${vv ? Math.round(vv.height) : '-'} top=${vv ? Math.round(vv.offsetTop) : '-'} y=${Math.round(win.scrollY)} kbo=${root.hasAttribute('data-kbo') ? 1 : 0} kb=${cssVar('--kb')} gap=${cssVar('--vh-gap')} focus=${describeEl(doc.activeElement)}`;
+    `inner=${win.innerHeight} vv=${vv ? Math.round(vv.height) : '-'} top=${vv ? Math.round(vv.offsetTop) : '-'}${vv && Math.abs(vv.scale - 1) > 0.005 ? ` scale=${vv.scale.toFixed(2)}` : ''} y=${Math.round(win.scrollY)} kbo=${root.hasAttribute('data-kbo') ? 1 : 0} kb=${cssVar('--kb')} gap=${cssVar('--vh-gap')} focus=${describeEl(doc.activeElement)}`;
   /** 一个元素在屏幕上的位置和可见性：相对可视区的上沿~下沿、高度；藏着记 hid，不在页面里记 none */
   const rectOf = (el: Element | null): string => {
     if (!el) return 'none';
@@ -164,7 +162,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const layout = (): string => {
     const parts = LAYOUT_TARGETS.map(([k, sel]) => `${k}=${rectOf(doc.querySelector(sel))}`);
     const act = doc.activeElement;
-    if (isField(act)) {
+    if (opensKeyboard(act)) {
       parts.push(`field=${rectOf(act)}`);
       const host = fixedHost(act);
       parts.push(`host=${host ? `${describeEl(host)}:${rectOf(host)}` : 'none'}`);
@@ -198,7 +196,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
    */
   const kbcheck = (): void => {
     const act = doc.activeElement;
-    if (!isField(act) || !vv) return;
+    if (!act || !opensKeyboard(act) || !vv) return;
     const top = vv.offsetTop;
     const f = act.getBoundingClientRect();
     const host = fixedHost(act)?.getBoundingClientRect();

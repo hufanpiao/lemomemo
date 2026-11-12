@@ -25,7 +25,13 @@ const mk = () => {
     clock += ms;
     vi.advanceTimersByTime(ms);
   };
-  return { w, set, up, down, wait, root, hidden: () => attrs.get(BAR_HIDE_ATTR) === '1', kbo: () => attrs.has('data-kbo') };
+  /** 键盘压在布局视口上（浏览器里那种：innerHeight 不变、可视区变矮 h） */
+  const cover = (h: number) => {
+    editing = true;
+    vv.height = inner - h;
+    handlers.get('resize')?.();
+  };
+  return { w, set, up, down, wait, cover, root, hidden: () => attrs.get(BAR_HIDE_ATTR) === '1', kbo: () => attrs.has('data-kbo') };
 };
 
 beforeEach(() => {
@@ -67,7 +73,7 @@ describe(`根节点 ${BAR_HIDE_ATTR}（底栏、“＋”藏起的唯一开关�
   });
 });
 
-describe(`停止监听时 ${GAP_VAR} 跟着复位`, () => {
+describe(`停止监听时 ${GAP_VAR} 等写到根节点的值跟着复位`, () => {
   it('停了拿掉根节点 --vh-gap、记的值清零；再订阅照样重新写上（共享 watcher 停了又开不留旧值）', () => {
     const k = mk();
     k.set(895);
@@ -78,6 +84,23 @@ describe(`停止监听时 ${GAP_VAR} 跟着复位`, () => {
     k.root.style.setProperty.mockClear();
     const again = k.w.watch(() => undefined);
     expect(k.root.style.setProperty).toHaveBeenCalledWith(GAP_VAR, '61px');
+    again();
+  });
+
+  it('键盘弹着时停：写到根节点的四样（--vh-gap、--kb、data-kbo、data-kbhide）一起拿掉，isOpen 归 false；再订阅照量出来的重新写', () => {
+    const k = mk();
+    const stop = k.w.watch(() => undefined);
+    k.cover(300);
+    expect(k.root.style.setProperty).toHaveBeenCalledWith('--kb', '300px');
+    expect(k.kbo() && k.hidden() && k.w.isOpen()).toBe(true);
+    stop();
+    expect(k.root.style.removeProperty).toHaveBeenCalledWith('--kb');
+    expect(k.root.style.removeProperty).toHaveBeenCalledWith(GAP_VAR);
+    expect(k.kbo() || k.hidden() || k.w.isOpen()).toBe(false);
+    k.root.style.setProperty.mockClear();
+    const again = k.w.watch(() => undefined);
+    expect(k.root.style.setProperty).toHaveBeenCalledWith('--kb', '300px');
+    expect(k.kbo() && k.hidden()).toBe(true);
     again();
   });
 });

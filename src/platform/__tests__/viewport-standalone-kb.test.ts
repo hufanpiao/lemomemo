@@ -1,6 +1,7 @@
-// iOS 主屏幕版键盘把布局视口本身压矮（Q-9，viewport.ts 的主屏幕版那条、只对 iPhone）和 editableFocused（从 remind-platform.test.ts 拆出来，11-11）
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createKeyboardWatcher, editableFocused, GAP_VAR, HOLD_MS, isIPhone } from '../viewport.ts';
+// iOS 主屏幕版键盘把布局视口本身压矮（Q-9，viewport.ts 的主屏幕版那条、只对 iPhone）；会不会弹键盘的判断 11-12 收进 env.ts 的 opensKeyboard（用例在 env-device.test.ts）
+import { describe, expect, it, vi } from 'vitest';
+import { isIPhone } from '../env.ts';
+import { createKeyboardWatcher, GAP_VAR, HOLD_MS } from '../viewport.ts';
 import { fullHeight, GAP_MAX_PX } from '../viewport-geom.ts';
 
 describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 preview.259：innerHeight 956→542，可视区跟着 542）', () => {
@@ -230,27 +231,5 @@ describe('iOS 主屏幕版键盘把布局视口本身压矮（Q-9，负责人 pr
       expect(w.isOpen()).toBe(false);
       expect(attrs.has('data-kbo')).toBe(false);
     }
-  });
-});
-
-describe('editableFocused：哪些聚焦会弹键盘', () => {
-  afterEach(() => document.body.replaceChildren());
-  it('文字 input、textarea、可编辑元素算；按钮、复选框、没聚焦不算', () => {
-    expect(editableFocused()).toBe(false);
-    const mkEl = (tag: string, type?: string): HTMLElement => {
-      const el = document.createElement(tag);
-      if (type) el.setAttribute('type', type);
-      document.body.append(el);
-      el.focus();
-      return el;
-    };
-    mkEl('input', 'text');
-    expect(editableFocused()).toBe(true);
-    mkEl('textarea');
-    expect(editableFocused()).toBe(true);
-    mkEl('input', 'checkbox');
-    expect(editableFocused()).toBe(false);
-    mkEl('button');
-    expect(editableFocused()).toBe(false);
   });
 });

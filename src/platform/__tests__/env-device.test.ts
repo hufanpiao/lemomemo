@@ -1,7 +1,8 @@
 // 设备判断（架构 5.9、TC-B1-17、R-225）：iPhone、iPad 上凡是不在主屏幕模式运行的，一律只给“添加到主屏幕”教程；
-// 不是 Safari 时另提示“请在 Safari 里打开本页”；电脑浏览器、安卓照常登录
-import { describe, expect, it } from 'vitest';
-import { isAppleMobile, isStandalone, isTauri, runtimeOf, type NavLike } from '../env.ts';
+// 不是 Safari 时另提示“请在 Safari 里打开本页”；电脑浏览器、安卓照常登录。
+// 另有 isIPhone（只认 iPhone，视口几何和冷启动高度校正用）、opensKeyboard（焦点在哪会弹键盘，原来视口、快捷键、日历、运行日志各写一份，11-12 收进 env.ts）
+import { afterEach, describe, expect, it } from 'vitest';
+import { isAppleMobile, isIPhone, isStandalone, isTauri, opensKeyboard, runtimeOf, type NavLike } from '../env.ts';
 import { installGate, isIOSSafari, mustInstallFirst } from '../install-gate.ts';
 
 const UA = {
@@ -111,5 +112,39 @@ describe('runtimeOf / isTauri（exe 判断）', () => {
     expect(isTauri({})).toBe(false);
     // 默认读 globalThis：jsdom 里没有 Tauri
     expect(runtimeOf()).toBe('web');
+  });
+});
+
+describe('isIPhone：只认 iPhone、iPod', () => {
+  it('iPhone 算；iPad（UA 伪装成 Mac）、Mac、安卓不算', () => {
+    expect(isIPhone(UA.iphoneSafari)).toBe(true);
+    expect(isIPhone(UA.ipadDesktopSafari)).toBe(false);
+    expect(isIPhone('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36')).toBe(false);
+  });
+});
+
+describe('opensKeyboard：焦点在哪会弹键盘', () => {
+  afterEach(() => document.body.replaceChildren());
+  const mk = (html: string): Element => {
+    document.body.innerHTML = html; // eslint-disable-line no-restricted-syntax -- 测试里搭 DOM
+    return document.body.firstElementChild as Element;
+  };
+
+  it('文字 input、textarea、select 算；按钮、复选框、单选、滑块、只读、禁用的不算', () => {
+    expect(opensKeyboard(mk('<input type="text">'))).toBe(true);
+    expect(opensKeyboard(mk('<input type="search">'))).toBe(true);
+    expect(opensKeyboard(mk('<input>'))).toBe(true);
+    expect(opensKeyboard(mk('<textarea></textarea>'))).toBe(true);
+    expect(opensKeyboard(mk('<select><option>a</option></select>'))).toBe(true);
+    for (const t of ['checkbox', 'radio', 'range', 'button', 'submit', 'file', 'color', 'hidden']) expect(opensKeyboard(mk(`<input type="${t}">`))).toBe(false);
+    expect(opensKeyboard(mk('<input type="text" readonly>'))).toBe(false);
+    expect(opensKeyboard(mk('<textarea disabled></textarea>'))).toBe(false);
+    expect(opensKeyboard(mk('<button>x</button>'))).toBe(false);
+  });
+
+  it('没聚焦（activeElement 是 body）、null、不是元素都不算', () => {
+    expect(opensKeyboard(document.activeElement)).toBe(false);
+    expect(opensKeyboard(null)).toBe(false);
+    expect(opensKeyboard(window)).toBe(false);
   });
 });

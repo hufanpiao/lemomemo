@@ -1,15 +1,15 @@
-// 冷启动高度校正的后两次触发（校正本身是 vh-gapfix-gate.ts 的 fixHeight）：iOS 主屏幕版冷启动时由 main.tsx 按需下载。
+// 冷启动高度校正的后两次触发（校正本身是 vh-gapfix-gate.ts 的 fixHeight）：iPhone 主屏幕版冷启动时由 main.tsx 按需下载。
 // ① 等早试结束、底栏挂上（今天页画好，最多 WAIT_BAR_MS）试一次；② 键盘真收了（viewport.ts 报）再试一次（收键盘后 iOS 会把布局视口还原成少一截的高度）。
 // 放垫块后 innerHeight 一变就撤（这两次用户能点“＋”，弹键盘压矮的那一帧就撤）；SCROLL_AT_MS 还没变补滚 1px、下一帧滚回。
 // 不变量：输入框聚焦着（键盘要弹、正弹、iOS 在定光标）不放新垫块、不补滚（台账 Q-8、Q-24 那两个真机问题都在这段时间）；
 // 键盘那次手指按着或页面被滚过也不补滚。同一时刻只做一次：做着时来的“键盘收了”这次不接，viewport.ts 保持上膛，下一次视口事件静下来再报。
 // 顶部安全区读到 0（冷启动先 0 后 61）：冷启动那次隔帧重读，一直 0 就不做；收键盘那次不重读、直接不做。
-// 每一步记一行进 OUT_KEY（只留最近一次冷启动，诊断页显示、可复制）。requestAnimationFrame 只许 src/motion 用（A25），等帧的函数由调用方传
-import { isStandalone } from './env.ts';
-import { editableFocused, watchKeyboardClosed } from './viewport.ts';
+// 每一步经 run-log-api.ts 的 rlog 记一行 gapfix …（进全局运行日志，诊断页“Copy run log”一起复制；正式构建 rlog 是空的）。requestAnimationFrame 只许 src/motion 用（A25），等帧的函数由调用方传
+import { isStandalone, opensKeyboard } from './env.ts';
+import { BAR_SELECTOR, rlog } from './run-log-api.ts';
+import { watchKeyboardClosed } from './viewport.ts';
 import { earlyGap, fixHeight, gapState, insetTop, OFF_KEY, skipReason, type EarlyGap, type FixEnd, type Frame } from './vh-gapfix-gate.ts';
 
-export const OUT_KEY = 'lemo-gapfix-out';
 /** 放了垫块这么久 innerHeight 还没变：补一次滚动 */
 export const SCROLL_AT_MS = 600;
 /** 最多等这么久，到点撤掉垫块 */
@@ -20,9 +20,6 @@ export const TOP_RETRY_MS = 1000;
 export const TOP_RETRY_FRAMES = 4;
 /** 等底栏挂上（今天页画出来）最多这么久 */
 export const WAIT_BAR_MS = 5000;
-export const BAR_SELECTOR = '[data-testid="tabbar"]';
-/** 日志最多留这么多行（第一行是开头，一直留着） */
-export const MAX_LINES = 200;
 
 /** 诊断页开关：默认开；关掉（存 OFF_KEY）用来对照。读不到本机存储时当开着（和 gapFixWanted 一致） */
 export function gapFixOn(store: Storage = localStorage): boolean {
@@ -42,14 +39,6 @@ export function setGapFixOn(on: boolean, store: Storage = localStorage): void {
   }
 }
 
-export function readGapFixLog(store: Storage = localStorage): string {
-  try {
-    return store.getItem(OUT_KEY) ?? '';
-  } catch {
-    return '';
-  }
-}
-
 export interface GapFixDeps {
   readonly win?: Window;
   readonly store?: Storage;
@@ -61,6 +50,8 @@ export interface GapFixDeps {
   readonly early?: () => EarlyGap | null;
   /** 键盘真收了的通知（测试用；不传就是 viewport.ts 的 watchKeyboardClosed）。fn 返回 false 是这次没接（正在做） */
   readonly kbClosed?: (fn: () => boolean) => () => void;
+  /** 记一行（测试用；不传就是 rlog） */
+  readonly log?: (line: string) => void;
 }
 
 const TOUCH = ['touchstart', 'touchend', 'touchcancel'] as const;
@@ -74,17 +65,12 @@ export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
   const now = deps.now ?? (() => Date.now());
   const getEarly = deps.early ?? earlyGap;
   const readTop = (): number => (typeof deps.top === 'function' ? deps.top() : (deps.top ?? insetTop(doc)));
+  const log = deps.log ?? rlog;
   const t0 = now();
-  const lines = [`gapfix start=${new Date(t0).toISOString()} nav=${Math.round(win.performance.now())}ms screen=${win.screen.width}x${win.screen.height}`];
+  log(`gapfix start nav=${Math.round(win.performance.now())}ms screen=${win.screen.width}x${win.screen.height}`);
   const row = (what: string): void => {
     const bar = doc.querySelector(BAR_SELECTOR);
-    lines.push(`t=${now() - t0} ${what} inner=${win.innerHeight} bar=${bar ? Math.round(bar.getBoundingClientRect().bottom) : '-'}`);
-    if (lines.length > MAX_LINES) lines.splice(1, lines.length - MAX_LINES);
-    try {
-      store.setItem(OUT_KEY, lines.join('\n'));
-    } catch {
-      // 存不下：照样做
-    }
+    log(`gapfix +${now() - t0}ms ${what} inner=${win.innerHeight} bar=${bar ? Math.round(bar.getBoundingClientRect().bottom) : '-'}`);
   };
   let touching = false;
   const onTouch = (e: Event): void => {
@@ -123,7 +109,7 @@ export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
     }
     // 输入框聚焦着不放垫块（返修单之外加的，主持人 11-11 接受：方向保守）。冷启动那次碰上聚焦就整次放弃、不再重试，
     // 等收键盘那次（键盘真收了、离开输入框静下来）补
-    if (editableFocused(doc)) {
+    if (opensKeyboard(doc.activeElement)) {
       row(`${p}skip editing`);
       idle();
       return;
@@ -158,7 +144,7 @@ export function startGapFix(frame: Frame, deps: GapFixDeps = {}): () => void {
       if (scrolled || at < SCROLL_AT_MS) return;
       scrolled = true;
       const y = Math.round(win.scrollY);
-      if (editableFocused(doc)) {
+      if (opensKeyboard(doc.activeElement)) {
         row(`${p}scroll-skipped editing y=${y}`);
         return;
       }
