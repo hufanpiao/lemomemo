@@ -58,13 +58,13 @@ export const ENVS = {
   },
 };
 
-/** 不进安装包的文件（相对 app/） */
-export const SKIP = new Set(['sw.js', 'sw.js.map', 'preview.html']);
+/** 不进安装包的文件（相对 app/）；licenses/webp-wasm.txt 是下面 .wasm 的许可文本，wasm 不进包它也不进 */
+export const SKIP = new Set(['sw.js', 'sw.js.map', 'preview.html', 'licenses/webp-wasm.txt']);
 
 /**
  * 不进安装包的后缀：.wasm 是 R-402 给 iPhone Safari 补的 webp 编码器（canvas 导出不了 webp 时才按需加载）。
  * exe 的 WebView2 原生就能导出 webp，用不到它；exe 的 CSP 也没有 'wasm-unsafe-eval'，带进去也编译不了。
- * 万一真走到那条路，取不到 wasm 会按现有失败码 encode_unsupported 报错，不会卡住
+ * 万一真走到那条路，取不到 wasm 会报 encode_load_failed（“这张图没处理成功”），不会卡住
  */
 export const SKIP_EXT = new Set(['.wasm']);
 

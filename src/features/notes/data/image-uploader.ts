@@ -15,7 +15,7 @@ import { accountExitOf, upload, type FileError, type UploadResult } from '../../
 import { rlog } from '../../../platform/run-log-api.ts';
 import { readSessionId } from '../../../platform/session.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { encodeImage, type EncodeFail, type EncodeResult } from './image-encode.ts';
+import { encodeDiagText, encodeImage, type EncodeFail, type EncodeResult } from './image-encode.ts';
 import { imageView, type ImageView } from './image-view.ts';
 import { imageRow, rowSyncOf, thumbPath, uploadPair, uuidv7, writeFailKey, type ImgFailKey, type QueueItem, type RowSync } from './note-images.ts';
 
@@ -186,7 +186,9 @@ export function createUploader(deps: UploaderDeps) {
       if (typeof note === 'string' && deps.isPrivate(note)) return end({ ok: false, code: 'private' });
       if (typeof note === 'string' && deps.isReadonly(note)) return end({ ok: false, code: 'readonly' });
       const enc = await deps.encode(file, deps.tz());
-      log(enc.ok ? `notes img encode ok kb=${Math.round(enc.full.size / 1024)} thumbKb=${Math.round(enc.thumb.size / 1024)} ${enc.width}x${enc.height}` : `notes img encode ${enc.code}`);
+      // 压图只记这一行：结果和编码诊断（R-402：走哪条路、原生交回的 type、耗时、失败在哪一步和错误名）一起
+      const diag = enc.diag ? ` ${encodeDiagText(enc.diag)}` : '';
+      log(enc.ok ? `notes img encode ok kb=${Math.round(enc.full.size / 1024)} thumbKb=${Math.round(enc.thumb.size / 1024)} ${enc.width}x${enc.height}${diag}` : `notes img encode ${enc.code}${diag}`);
       if (!enc.ok) return end({ ok: false, code: enc.code });
       const noteId = typeof note === 'string' ? note : await note();
       if (noteId === null) return end({ ok: false, code: 'silent' });

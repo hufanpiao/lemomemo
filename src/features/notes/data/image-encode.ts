@@ -1,20 +1,22 @@
-// 插图重新编码（B4 S3；R-108、R-377；任务单第 67 行）：选的或拍的照片 → 原图 webp + 缩略图 webp，带拍摄时间
-// • 解码：createImageBitmap（按 EXIF 方向转正，imageOrientation: 'from-image'）；画到 canvas 再导出 image/webp。
+// 插图重新编码（B4 S3；R-108、R-377、R-402；任务单第 67 行）：选的或拍的照片 → 原图 webp + 缩略图 webp，带拍摄时间
+// • 解码：createImageBitmap（按 EXIF 方向转正，imageOrientation: 'from-image'）；画到 canvas 再编成 webp。
 //   重新编码后原文件的 EXIF 整段都没了（定位、机型一概不带走，R-108），只有拍摄时间从 JPEG 原文件里另读（image-exif.ts）
 // • 原图：长边不超过 FULL_EDGE（2048px），质量从 0.85 起，超过 FULL_MAX（2 MB，images 桶上限）就逐步降，降到底还超就缩小一档再来
-// • 缩略图：长边不超过 THUMB_EDGE（384px），不超过 THUMB_MAX（128 KB），同样逐步降质量
-// • HEIC（看 type 或扩展名）解不了：返回 heic_unsupported，界面提示“请先转成 JPG”（R-377，不加解码依赖）；别的解不了返回 decode_failed
-// • 两条路（R-402）：先用浏览器原生导出 webp；交回来的不是 webp（iPhone Safari 现在也这样：要 image/webp 回 png），
-//   这张图后面就都改走 App 自带的 wasm 编码器（platform/webp-wasm.ts），把同一张 canvas 的像素（getImageData）编成 webp。
-//   质量表、长边、FULL_MAX / THUMB_MAX 的逐档降两条路共用（shrink 只要一份 webp，不管谁编的）；
-//   wasm 只从像素编，原文件的 EXIF 一个字节都带不过去（R-108 照旧）
-// • wasm 载不进来（离线又没缓存、浏览器不让编译）或取不到像素：返回 encode_unsupported
-// • 运行日志一行：notes img enc path=native|wasm ms=…（失败另带 fail=失败码）
+// • 缩略图：长边不超过 THUMB_EDGE（384px），不超过 THUMB_MAX（128 KB），同样逐步降质量。两个上限和 shared/manifests/notes.ts 的
+//   fileSizeLimit、thumbSizeLimit 相等（清单引着 zod，这里不引，单测钉住相等）
+// • 每个尺寸只画一次：一张画布既给原生导出用，也给 wasm 取像素用；出了这一档就放掉画布和像素（缩略图开始前原图那份已经放掉）
+// • 两条路（R-402）：先用浏览器原生导出 webp；交回来的不是 webp（iPhone Safari：要 image/webp 回 png）或 reject，
+//   这张图后面就都改走 App 自带的 wasm 编码器（platform/webp-wasm.ts），把同一张画布的像素（getImageData）编成 webp。
+//   原生行不行只探测一次：第一次拿到 blob 就把它的 type 记在 NativeMemo 里（App 里整个模块共用一份），以后的图不再白导一次 png；
+//   reject、回 null 不算结论（可能只是这张太大），下一张再试。wasm 只从像素编，原文件的 EXIF 一个字节都带不过去（R-108 照旧）
+// • 失败码：解不了 → heic_unsupported / decode_failed；wasm 载不进来（离线又没缓存、浏览器不让编译）→ encode_load_failed；
+//   取不到像素、编码出错（内存不足等）→ encode_failed；怎么降都超 → too_big
+// • 诊断（diag，解码成功以后都有）：走哪条路、原生交回的 type、耗时（总、载 wasm、wasm 编码）、失败在哪一步（load / px / enc）和错误名
+//   （只记 e.name，不记 message 和图片内容）。这里不写日志，由上传器把它和压图结果记成一行（image-uploader.ts）
 // • 依赖可注入（测试里 jsdom 没有 canvas）
 // 纯 TS：不准 import React（A1）
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { rlog } from '../../../platform/run-log-api.ts';
-import { encodeWebpWasm, type RawPixels } from '../../../platform/webp-wasm.ts';
+import { loadWebpWasm, type RawPixels, type WebpEncode } from '../../../platform/webp-wasm.ts';
 import { EXIF_SCAN_BYTES, jpegTakenAt } from './image-exif.ts';
 
 export const FULL_EDGE = 2048;
@@ -24,6 +26,21 @@ export const THUMB_MAX = 128 * 1024;
 const QUALITIES = [0.85, 0.75, 0.65, 0.55, 0.45] as const;
 const WEBP = 'image/webp';
 
+/** 一次编码的诊断（给运行日志） */
+export interface EncodeDiag {
+  path: 'native' | 'wasm';
+  /** 原生导出交回的 type：这张图试了原生就是这次的，没试就是记住的结论；没拿到 blob（reject、null）为 null */
+  native: string | null;
+  /** 总耗时、等 wasm 载入、wasm 编码（毫秒，取整） */
+  ms: number;
+  loadMs: number;
+  encMs: number;
+  /** 失败在哪一步：载 wasm、画布或取像素、wasm 编码 */
+  why?: 'load' | 'px' | 'enc';
+  /** 错误名（e.name；不像名字的记 Unknown） */
+  err?: string;
+}
+
 export interface Encoded {
   ok: true;
   full: Blob;
@@ -32,8 +49,9 @@ export interface Encoded {
   height: number;
   /** 拍摄时间（毫秒），读不出为 null */
   takenAt: number | null;
+  diag?: EncodeDiag;
 }
-export type EncodeFail = { ok: false; code: 'heic_unsupported' | 'decode_failed' | 'encode_unsupported' | 'too_big' };
+export type EncodeFail = { ok: false; code: 'heic_unsupported' | 'decode_failed' | 'encode_load_failed' | 'encode_failed' | 'too_big'; diag?: EncodeDiag };
 export type EncodeResult = Encoded | EncodeFail;
 
 /** 解出来的图（ImageBitmap 的子集） */
@@ -43,16 +61,27 @@ export interface Decoded {
   close(): void;
 }
 
+/** 画好一个尺寸的画布 */
+export interface Canvas {
+  /** 原生导出 image/webp；交回什么 type 就是什么，导不出回 null（也可以 reject） */
+  toBlob(quality: number): Promise<Blob | null>;
+  /** RGBA 像素；取不到就抛 */
+  pixels(): RawPixels;
+}
+
+/** 原生能不能导出 webp 的结论：第一次拿到 blob 时记下它的 type（还没拿到过为 undefined） */
+export interface NativeMemo {
+  type?: string;
+}
+
 export interface EncodeDeps {
   decode(file: Blob): Promise<Decoded>;
-  /** 把 src 画成 w × h，导出成 type、quality；导不出回 null */
-  render(src: Decoded, w: number, h: number, type: string, quality: number): Promise<Blob | null>;
-  /** wasm 那条路（R-402）：把 src 画成 w × h 取像素，取不到回 null。它和 wasmWebp 没给全时，原生导不出就是 encode_unsupported */
-  pixels?(src: Decoded, w: number, h: number): Promise<RawPixels | null>;
-  /** wasm 编码（quality 0～1），载不进来就抛 */
-  wasmWebp?(img: RawPixels, quality: number): Promise<Uint8Array<ArrayBuffer>>;
-  log?(line: string): void;
-  now?(): number;
+  /** 把 src 画成 w × h；拿不到 2d 上下文就抛 */
+  canvas(src: Decoded, w: number, h: number): Canvas;
+  /** 取 wasm 编码器（R-402），载不进来就抛 */
+  wasm(): Promise<WebpEncode>;
+  native: NativeMemo;
+  now(): number;
 }
 
 /** 是不是 HEIC / HEIF（iPhone 默认格式） */
@@ -68,68 +97,118 @@ export function fitEdge(w: number, h: number, edge: number): { w: number; h: num
 
 type Ctx2d = OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
 
-/** 把 src 画到 w × h 的 canvas 上（有 OffscreenCanvas 用它，没有用 DOM 的）；拿不到 2d 上下文回 null */
-function draw(src: Decoded, w: number, h: number): { c: OffscreenCanvas | HTMLCanvasElement; ctx: Ctx2d } | null {
+/** 有 OffscreenCanvas 用它，没有用 DOM 的 */
+function drawCanvas(src: Decoded, w: number, h: number): Canvas {
   const c = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
   const ctx = c.getContext('2d') as Ctx2d | null;
-  if (!ctx) return null;
+  if (!ctx) throw Object.assign(new Error('no_2d_context'), { name: 'NoContext' });
   ctx.drawImage(src as unknown as CanvasImageSource, 0, 0, w, h);
-  return { c, ctx };
+  return {
+    toBlob: (quality) =>
+      'convertToBlob' in c
+        ? c.convertToBlob({ type: WEBP, quality }).catch(() => null)
+        : new Promise((res) => {
+            try {
+              c.toBlob(res, WEBP, quality);
+            } catch {
+              res(null);
+            }
+          }),
+    pixels: () => ctx.getImageData(0, 0, w, h),
+  };
 }
 
 const defaultDeps: EncodeDeps = {
   decode: (file) => createImageBitmap(file, { imageOrientation: 'from-image' }),
-  async render(src, w, h, type, quality) {
-    const d = draw(src, w, h);
-    if (!d) return null;
-    const { c } = d;
-    if ('convertToBlob' in c) return c.convertToBlob({ type, quality }).catch(() => null);
-    return new Promise((res) => c.toBlob((b) => res(b), type, quality));
-  },
-  async pixels(src, w, h) {
-    return draw(src, w, h)?.ctx.getImageData(0, 0, w, h) ?? null;
-  },
-  wasmWebp: encodeWebpWasm,
-  log: rlog,
+  canvas: drawCanvas,
+  wasm: loadWebpWasm,
+  native: {},
   now: () => performance.now(),
 };
 
-/**
- * 一张图的 webp 编码器：先走原生；原生交回的不是 webp，这张图后面都走 wasm（R-402），不再每档都先试一遍原生。
- * wasm 那条路同一个尺寸只取一次像素（降质量重编、不重画）。编不出（载不进来、取不到像素、编码出错）回 null
- */
+/** 失败停在哪一步（只在本文件里抛和接） */
+class Stop {
+  readonly why: NonNullable<EncodeDiag['why']>;
+  readonly err: string;
+  constructor(why: NonNullable<EncodeDiag['why']>, err: string) {
+    this.why = why;
+    this.err = err;
+  }
+}
+/** 错误名：只认对象上像标识符的 name（Error、DOMException、WebAssembly.CompileError 都是），别的一律 Unknown（不把 message、文件名之类带进日志） */
+function errName(e: unknown): string {
+  const name: unknown = typeof e === 'object' && e !== null ? (e as { name?: unknown }).name : undefined;
+  return typeof name === 'string' && /^[A-Za-z][A-Za-z0-9]{0,39}$/.test(name) ? name : 'Unknown';
+}
+const MIME_RE = /^[a-z]+\/[a-z0-9.+-]{1,40}$/;
+
+/** 诊断写成运行日志的一段：path=… native=… ms=… loadMs=… encMs=…（失败另带 why=… err=…） */
+export function encodeDiagText(d: EncodeDiag): string {
+  const native = d.native === null ? 'null' : MIME_RE.test(d.native) ? d.native : 'other';
+  return `path=${d.path} native=${native} ms=${d.ms} loadMs=${d.loadMs} encMs=${d.encMs}${d.why ? ` why=${d.why} err=${d.err ?? 'Unknown'}` : ''}`;
+}
+
+/** 一张图的 webp 编码器：path 和耗时记在 diag 里；size() 给一个尺寸的画布，encode(q) 编一份，出错抛 Stop */
 function webpEncoder(deps: EncodeDeps, src: Decoded) {
-  let path: 'native' | 'wasm' = 'native';
-  let px: RawPixels | null = null;
+  const known = deps.native.type;
+  const diag: EncodeDiag = { path: known === undefined || known === WEBP ? 'native' : 'wasm', native: known ?? null, ms: 0, loadMs: 0, encMs: 0 };
+  let wasm: WebpEncode | null = null;
+  const step = async <T>(why: Stop['why'], f: () => T | Promise<T>, time?: 'loadMs' | 'encMs'): Promise<T> => {
+    const t = deps.now();
+    try {
+      return await f();
+    } catch (e) {
+      throw new Stop(why, errName(e));
+    } finally {
+      if (time) diag[time] += deps.now() - t;
+    }
+  };
   return {
-    path: () => path,
-    async render(w: number, h: number, q: number): Promise<Blob | null> {
-      if (path === 'native') {
-        const b = await deps.render(src, w, h, WEBP, q);
-        if (b?.type === WEBP) return b;
-        path = 'wasm';
-      }
-      if (!deps.pixels || !deps.wasmWebp) return null;
-      try {
-        if (px?.width !== w || px.height !== h) px = await deps.pixels(src, w, h);
-        return px ? new Blob([await deps.wasmWebp(px, q)], { type: WEBP }) : null;
-      } catch {
-        return null;
-      }
+    diag,
+    async size(w: number, h: number) {
+      let c: Canvas | null = await step('px', () => deps.canvas(src, w, h));
+      let px: RawPixels | null = null;
+      return {
+        async encode(q: number): Promise<Blob> {
+          if (!c) throw new Stop('px', 'Released');
+          if (diag.path === 'native') {
+            const b = await c.toBlob(q).catch(() => null);
+            diag.native = b ? b.type : null;
+            if (b) deps.native.type ??= b.type;
+            if (b?.type === WEBP) return b;
+            diag.path = 'wasm';
+          }
+          wasm ??= await step('load', deps.wasm, 'loadMs');
+          const enc = wasm;
+          const cv = c;
+          px ??= await step('px', () => cv.pixels());
+          const p = px;
+          return new Blob([await step('enc', () => enc(p, q), 'encMs')], { type: WEBP });
+        },
+        /** 出了这一档：放掉画布和像素 */
+        release() {
+          c = null;
+          px = null;
+        },
+      };
     },
   };
 }
 type WebpEncoder = ReturnType<typeof webpEncoder>;
 
 /** 在 edge 以内、按质量表逐步降，找第一份不超过 max 的 webp；长边每次再缩 0.8 倍，最多三档 */
-async function shrink(enc: WebpEncoder, src: Decoded, edge: number, max: number): Promise<{ blob: Blob; w: number; h: number } | 'encode_unsupported' | 'too_big'> {
+async function shrink(enc: WebpEncoder, src: Decoded, edge: number, max: number): Promise<{ blob: Blob; w: number; h: number } | 'too_big'> {
   let e = edge;
   for (let round = 0; round < 3; round++) {
     const { w, h } = fitEdge(src.width, src.height, e);
-    for (const q of QUALITIES) {
-      const b = await enc.render(w, h, q);
-      if (!b || b.type !== WEBP) return 'encode_unsupported';
-      if (b.size <= max) return { blob: b, w, h };
+    const at = await enc.size(w, h);
+    try {
+      for (const q of QUALITIES) {
+        const b = await at.encode(q);
+        if (b.size <= max) return { blob: b, w, h };
+      }
+    } finally {
+      at.release();
     }
     e = Math.round(Math.max(w, h) * 0.8);
   }
@@ -145,7 +224,16 @@ async function takenAtOf(file: Blob, tz: Tz): Promise<number | null> {
   }
 }
 
-/** 选的或拍的一张照片 → 原图 + 缩略图（webp）+ 拍摄时间 */
+async function encodeDecoded(enc: WebpEncoder, src: Decoded, file: File, tz: Tz): Promise<EncodeResult> {
+  if (!(src.width > 0 && src.height > 0)) return { ok: false, code: 'decode_failed' };
+  const full = await shrink(enc, src, FULL_EDGE, FULL_MAX);
+  if (full === 'too_big') return { ok: false, code: full };
+  const thumb = await shrink(enc, src, THUMB_EDGE, THUMB_MAX);
+  if (thumb === 'too_big') return { ok: false, code: thumb };
+  return { ok: true, full: full.blob, thumb: thumb.blob, width: full.w, height: full.h, takenAt: await takenAtOf(file, tz) };
+}
+
+/** 选的或拍的一张照片 → 原图 + 缩略图（webp）+ 拍摄时间；解码以后的结果都带诊断 */
 export async function encodeImage(file: File, tz: Tz, deps: EncodeDeps = defaultDeps): Promise<EncodeResult> {
   let src: Decoded;
   try {
@@ -154,17 +242,21 @@ export async function encodeImage(file: File, tz: Tz, deps: EncodeDeps = default
     return { ok: false, code: isHeic(file) ? 'heic_unsupported' : 'decode_failed' };
   }
   const enc = webpEncoder(deps, src);
-  const t0 = deps.now?.() ?? 0;
-  let fail = '';
+  const t0 = deps.now();
+  let r: EncodeResult;
   try {
-    if (!(src.width > 0 && src.height > 0)) return { ok: false, code: (fail = 'decode_failed') };
-    const full = await shrink(enc, src, FULL_EDGE, FULL_MAX);
-    if (typeof full === 'string') return { ok: false, code: (fail = full) };
-    const thumb = await shrink(enc, src, THUMB_EDGE, THUMB_MAX);
-    if (typeof thumb === 'string') return { ok: false, code: (fail = thumb) };
-    return { ok: true, full: full.blob, thumb: thumb.blob, width: full.w, height: full.h, takenAt: await takenAtOf(file, tz) };
+    r = await encodeDecoded(enc, src, file, tz);
+  } catch (e) {
+    if (!(e instanceof Stop)) throw e;
+    enc.diag.why = e.why;
+    enc.diag.err = e.err;
+    r = { ok: false, code: e.why === 'load' ? 'encode_load_failed' : 'encode_failed' };
   } finally {
     src.close();
-    deps.log?.(`notes img enc path=${enc.path()} ms=${Math.round((deps.now?.() ?? 0) - t0)}${fail ? ` fail=${fail}` : ''}`);
   }
+  const d = enc.diag;
+  d.ms = Math.round(deps.now() - t0);
+  d.loadMs = Math.round(d.loadMs);
+  d.encMs = Math.round(d.encMs);
+  return { ...r, diag: d };
 }

@@ -84,10 +84,17 @@ export function reach(entry: string, read: Read = readCached): { prev: Map<strin
 
 export const show = (n: string): string => (n.startsWith('pkg:') ? n : rel(n));
 
-/** 首屏不许到的 */
+/** 首屏不许到的（R-402 起加上 @jsquash：webp 的 wasm 编码器只在 iPhone 插图时按需加载） */
 export function forbidden(n: string): boolean {
   const s = show(n);
-  return s === 'pkg:zod' || s.startsWith('pkg:zod/') || s === 'src/platform/zod-jitless.ts' || s.startsWith('shared/schema/') || s.startsWith('shared/manifests/');
+  return (
+    s === 'pkg:zod' ||
+    s.startsWith('pkg:zod/') ||
+    s.startsWith('pkg:@jsquash/') ||
+    s === 'src/platform/zod-jitless.ts' ||
+    s.startsWith('shared/schema/') ||
+    s.startsWith('shared/manifests/')
+  );
 }
 
 /** 走到了不许到的模块：每个给一条从入口过来的路径 */

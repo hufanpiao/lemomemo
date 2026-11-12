@@ -218,8 +218,8 @@ test('SVG：两份审查探针列出的写法逐条都拦（M4 7 种、F5-3 13 �
   assert.equal(cases.length, 37);
 });
 
-test('不进安装包的：sw.js、preview.html 按名字，.wasm（R-402 的 webp 编码器，exe 用不到）按后缀；别的照常打包', () => {
-  for (const r of ['sw.js', 'sw.js.map', 'preview.html', 'assets/webp_enc_simd-CFvKQ_80.wasm', 'assets/X.WASM']) assert.equal(skipped(r), true, r);
+test('不进安装包的：sw.js、preview.html、wasm 的许可文本按名字，.wasm（R-402 的 webp 编码器，exe 用不到）按后缀；别的照常打包', () => {
+  for (const r of ['sw.js', 'sw.js.map', 'preview.html', 'licenses/webp-wasm.txt', 'assets/webp_enc_simd-CFvKQ_80.wasm', 'assets/X.WASM']) assert.equal(skipped(r), true, r);
   for (const r of ['index.html', 'assets/webp_enc_simd-A7QIN4Cf.js', 'assets/sw.js', 'wasm', 'assets/a.wasm.js']) assert.equal(skipped(r), false, r);
 });
 

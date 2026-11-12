@@ -7,16 +7,22 @@
 //     拍摄时间按 current_tz 留在结果里
 //   · type 是 image/heic、浏览器解不了的 → heic_unsupported（R-377 提示“请先转成 JPG”）。没有真 HEIC 样张：
 //     这里用假字节，只证明“解不了时走这条路”；WebKit 能不能解真 HEIC 没验证（见回报）
+// 覆盖范围（R-402）：Chromium 的 canvas 原生就能导出 webp，这里走的是原生那条路（chromium、webkit 两个项目都跑，
+// webkit 是本机 Playwright 的 WebKit，不等于 iPhone Safari），覆盖不到 wasm 那条路；wasm 那条路见 r402-webp-wasm.spec.ts（模拟 iPhone）
+// 和单测 image-encode-wasm.test.ts。webp 文件头、RIFF 块、ASCII 查找用 exif-sample.ts 里共用的那一份（一起打进页面）
 import { fileURLToPath } from 'node:url';
 import { buildSync } from 'esbuild';
 import { msAt } from '../../shared/core/date.ts';
-import { exifApp1 } from '../../src/features/notes/__tests__/exif-sample.ts';
+import { exifApp1, WEBP_IMAGE_CHUNKS } from '../../src/features/notes/__tests__/exif-sample.ts';
 import { expect, test } from './csp-fixture.ts';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const BUNDLE = buildSync({
   stdin: {
-    contents: "export { encodeImage, FULL_MAX, THUMB_MAX } from './src/features/notes/data/image-encode.ts';",
+    contents: [
+      "export { encodeImage, FULL_MAX, THUMB_MAX } from './src/features/notes/data/image-encode.ts';",
+      "export { hasAscii, riffChunks } from './src/features/notes/__tests__/exif-sample.ts';",
+    ].join('\n'),
     resolveDir: ROOT,
     loader: 'ts',
   },
@@ -25,8 +31,6 @@ const BUNDLE = buildSync({
   globalName: '__encMod',
   platform: 'browser',
   target: 'es2022',
-  // R-402 起 image-encode 经 platform/run-log-api.ts 记一行运行日志，它读 import.meta.env.MODE（Vite 才有）；IIFE 里 import.meta 是空对象，这里补上
-  define: { 'import.meta.env.MODE': '"e2e"' },
   write: false,
 }).outputFiles[0]?.text;
 if (!BUNDLE) throw new Error('esbuild 没产出 image-encode.ts 的包');
@@ -44,7 +48,11 @@ test('带 GPS 的 JPEG → webp：没有 EXIF、尺寸和大小在上限内，�
   const app1 = [...exifApp1({ date: '2026:10:21 14:05:09', gps: true })];
   const r = await page.evaluate(
     async ({ app1, tz }) => {
-      type Enc = { encodeImage(f: File, tz: string): Promise<{ ok: true; full: Blob; thumb: Blob; width: number; height: number; takenAt: number | null } | { ok: false; code: string }> };
+      type Enc = {
+        encodeImage(f: File, tz: string): Promise<{ ok: true; full: Blob; thumb: Blob; width: number; height: number; takenAt: number | null } | { ok: false; code: string }>;
+        hasAscii(b: Uint8Array, s: string): boolean;
+        riffChunks(b: Uint8Array): string[];
+      };
       const M = (window as unknown as { __enc: Enc }).__enc;
       const c = document.createElement('canvas');
       c.width = 3000;
@@ -78,30 +86,13 @@ test('带 GPS 的 JPEG → webp：没有 EXIF、尺寸和大小在上限内，�
         at += x.length;
       }
       withExif.set(jpeg.subarray(2), at);
-      const has = (b: Uint8Array, s: string) => {
-        const n = [...s].map((x) => x.charCodeAt(0));
-        outer: for (let i = 0; i + n.length <= b.length; i++) {
-          for (let j = 0; j < n.length; j++) if (b[i + j] !== n[j]) continue outer;
-          return true;
-        }
-        return false;
-      };
+      const has = M.hasAscii;
       const out = await M.encodeImage(new File([withExif], 'IMG_0001.JPG', { type: 'image/jpeg' }), tz);
       if (!out.ok) return { ok: false, code: out.code, inputHasExif: has(withExif, 'Exif') };
       const full = new Uint8Array(await out.full.arrayBuffer());
       const thumb = new Uint8Array(await out.thumb.arrayBuffer());
       const head = (b: Uint8Array) => String.fromCharCode(...b.subarray(0, 4)) + String.fromCharCode(...b.subarray(8, 12));
-      // RIFF 里的块名：从第 12 字节起，每块 4 字节名 + 4 字节小端长度 + 内容（奇数补 1）
-      const chunks = (b: Uint8Array) => {
-        const out: string[] = [];
-        const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
-        for (let i = 12; i + 8 <= b.length; ) {
-          const size = dv.getUint32(i + 4, true);
-          out.push(String.fromCharCode(...b.subarray(i, i + 4)));
-          i += 8 + size + (size % 2);
-        }
-        return out;
-      };
+      const chunks = M.riffChunks;
       return {
         ok: true,
         inputHasExif: has(withExif, 'Exif'),
@@ -131,8 +122,7 @@ test('带 GPS 的 JPEG → webp：没有 EXIF、尺寸和大小在上限内，�
   expect(r.thumbExif).toBe(false);
   expect(r.inputHasXmp).toBe(true);
   expect(r.leak).toEqual([]);
-  const allow = ['VP8X', 'ICCP', 'VP8 ', 'VP8L', 'ALPH'];
-  for (const c of [...(r.fullChunks ?? []), ...(r.thumbChunks ?? [])]) expect(allow, `RIFF 块 ${c}`).toContain(c);
+  for (const c of [...(r.fullChunks ?? []), ...(r.thumbChunks ?? [])]) expect(WEBP_IMAGE_CHUNKS, `RIFF 块 ${c}`).toContain(c);
   expect(r.fullChunks?.length).toBeGreaterThan(0);
   expect(r.takenAt).toBe(msAt('2026-10-21', 14 * 60 + 5, TZ) + 9000);
 });

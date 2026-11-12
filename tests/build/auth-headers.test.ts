@@ -45,6 +45,10 @@ function effective(text: string, path: string): Map<string, string[]> {
 
 const directives = (csp: string) => csp.split(';').map((d) => d.trim()).filter(Boolean);
 const directive = (csp: string, name: string) => directives(csp).find((d) => d.startsWith(`${name} `)) ?? '';
+/** 所有以 script-src 开头的指令（script-src、script-src-elem、script-src-attr）：只许有期望的那一条 script-src（R-402 安全审建议） */
+const scriptFamily = (csp: string) => directives(csp).filter((d) => /^script-src(-[a-z]+)?\s/.test(d));
+/** 'unsafe-eval'、'unsafe-inline'、'unsafe-hashes' 一律不许（带引号匹配，不误伤 'wasm-unsafe-eval'） */
+const UNSAFE = /'unsafe-(eval|inline|hashes)'/i;
 
 describe.each(['production', 'preview', 'e2e', 'e2e-real'] as const)('T5 / TC-B0-59：分路径的 CSP（%s）', (mode) => {
   const text = renderHeaders(app, site, mode);
@@ -53,7 +57,9 @@ describe.each(['production', 'preview', 'e2e', 'e2e-real'] as const)('T5 / TC-B0
     const csp = effective(text, path).get('content-security-policy') ?? [];
     expect(csp, '同一个地址只能有一条 CSP（叠加时取交集，Turnstile 会被主 App 那条拦掉）').toHaveLength(1);
     const c = csp[0] ?? '';
-    expect(directive(c, 'script-src')).toBe("script-src 'self' https://challenges.cloudflare.com");
+    expect(scriptFamily(c)).toEqual(["script-src 'self' https://challenges.cloudflare.com"]);
+    expect(directive(c, 'worker-src')).toBe("worker-src 'self'");
+    expect(c).not.toMatch(UNSAFE);
     expect(directive(c, 'frame-src')).toBe('frame-src https://challenges.cloudflare.com');
     expect(directives(c)).toContain("base-uri 'none'");
     expect(directives(c)).toContain("form-action 'self'");
@@ -67,20 +73,25 @@ describe.each(['production', 'preview', 'e2e', 'e2e-real'] as const)('T5 / TC-B0
   });
 
   // R-402：主 App（/app/* 那条）的 script-src 只多 'wasm-unsafe-eval'（插图的 webp 编码器编译同源 wasm），不许有 'unsafe-eval'；
-  // 预览沙箱自己那条照旧只有 'self'
+  // 以 script-src 开头的指令只许这一条（不许另开 -elem、-attr 放宽）；worker-src 只许 'self'；整串没有 'unsafe-eval / inline / hashes'。
+  // 预览沙箱自己那条照旧：script-src 只有 'self'，worker-src 'self' blob:，style-src 带 'unsafe-inline'（架构 5.13 的附件渲染要用），
+  // 所以它只查不许 'unsafe-eval'、'unsafe-hashes'
+  const MAIN = { script: "script-src 'self' 'wasm-unsafe-eval'", worker: "worker-src 'self'", unsafe: UNSAFE };
+  const SANDBOX = { script: "script-src 'self'", worker: "worker-src 'self' blob:", unsafe: /'unsafe-(eval|hashes)'/i };
   it.each([
-    ['/app/', "script-src 'self' 'wasm-unsafe-eval'"],
-    ['/app/index.html', "script-src 'self' 'wasm-unsafe-eval'"],
-    ['/app/assets/x.js', "script-src 'self' 'wasm-unsafe-eval'"],
-    ['/app/preview', "script-src 'self'"],
-    ['/app/preview.html', "script-src 'self'"],
-  ])('%s：不放行 Turnstile 和任何第三方脚本', (path, script) => {
+    ['/app/', MAIN],
+    ['/app/index.html', MAIN],
+    ['/app/assets/x.js', MAIN],
+    ['/app/preview', SANDBOX],
+    ['/app/preview.html', SANDBOX],
+  ])('%s：不放行 Turnstile 和任何第三方脚本', (path, want) => {
     const csp = effective(text, path).get('content-security-policy') ?? [];
     expect(csp).toHaveLength(1);
     const c = csp[0] ?? '';
     expect(c).not.toContain('challenges.cloudflare.com');
-    expect(directive(c, 'script-src')).toBe(script);
-    expect(c).not.toContain("'unsafe-eval'");
+    expect(scriptFamily(c)).toEqual([want.script]);
+    expect(directive(c, 'worker-src')).toBe(want.worker);
+    expect(c).not.toMatch(want.unsafe);
     expect(directives(c).some((d) => d.startsWith('base-uri '))).toBe(true);
     expect(directives(c).some((d) => d.startsWith('form-action '))).toBe(true);
   });
