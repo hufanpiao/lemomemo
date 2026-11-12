@@ -23,8 +23,8 @@ const OK: WriteResult = { ok: true, item: null };
 /** 写入桩第 n 次调用的数据里某个字段 */
 const field = (v: unknown, k: string): unknown => (v as Record<string, unknown> | undefined)?.[k];
 
-function setup(over: { day?: string | null; insert?: Writer['insert']; online?: boolean } = {}) {
-  const writer = { insert: vi.fn<Writer['insert']>(over.insert ?? (async () => OK)), patch: vi.fn<Writer['patch']>(async () => OK) };
+function setup(over: { day?: string | null; insert?: Writer['insert']; patch?: Writer['patch']; online?: boolean } = {}) {
+  const writer = { insert: vi.fn<Writer['insert']>(over.insert ?? (async () => OK)), patch: vi.fn<Writer['patch']>(over.patch ?? (async () => OK)) };
   const onExpand = vi.fn();
   const onClose = vi.fn();
   render(<TypeBar day={over.day ?? null} writer={writer} online={() => over.online ?? true} onExpand={onExpand} onClose={onClose} />);
@@ -214,6 +214,24 @@ describe('打字条', () => {
     expect(writer.insert).toHaveBeenCalledTimes(4);
     expect(writer.patch, '原来的几条没撤').not.toHaveBeenCalled();
     expect(screen.getByTestId('type-notice').textContent).toContain('已记下 3 条');
+  });
+
+  it('合并成功但原来的有一条撤不掉：那一条留在提示条上，写明没撤成（不悄悄留重复；FA-3 复查第 3 条）', async () => {
+    let n = 0;
+    const { input, writer } = setup({ patch: async () => (++n === 1 ? { ok: false, reason: 'local_unavailable' } : OK) });
+    fireEvent.change(input, { target: { value: '커피 원두 사기, 전기요금 내기, 수요일까지 NEOX에 견적서 보내기' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+    });
+    fireEvent.click(screen.getByRole('button', { name: '展开' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '拆错了，合并成一条' }));
+    });
+    expect(writer.insert).toHaveBeenCalledTimes(4);
+    expect(writer.patch).toHaveBeenCalledTimes(3);
+    const text = screen.getByTestId('type-notice').textContent ?? '';
+    expect(text).toContain('已记下 2 条');
+    expect(text).toContain('1 条没撤销成功');
   });
 
   it('全部撤销有几条没撤成：提示条留着那几条，写明没撤成（FA-3 整块评审第 13 条）', async () => {

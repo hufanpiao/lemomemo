@@ -3,6 +3,8 @@
 // • “已记下 N 条”展开后：每条能修改（交给调用方开编辑页）或撤销；“拆错了，合并成一条”；“全部撤销”
 // • 合并：先把整句原话存成新的一条（新的一批），存成了再撤原来的几条；没存上就原样留着，提示条加一句“合并没保存上”
 // • 全部撤销：没撤成的几条留在提示条上，加一句“N 条没撤销成功”（FA-3 整块评审第 13 条）
+// • 纪念日在这里撤不掉（capture-save 的 undoRefs 一律留下）：不算没撤成，留在提示条上、单独一句“纪念日请到纪念日页删除”；
+//   合并成功后撤不掉的旧条也照样留在新的提示条上（不悄悄在库里多出几条；FA-3 复查第 3、4 条）
 // • 新的一句、确认行写不进去时返回没存上的原因，调用方提示“没保存上”
 // • 打字条（useTypeBar）和按住录音（useVoice）共用这一套：新的一句怎么存（storeNew）、确认行选了怎么加（choose）、
 //   提示条显示什么（notice，含“今天的次数用完了”那一句该不该出）、撤销 / 合并；两边只管自己的状态机和输入
@@ -14,7 +16,7 @@ import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { saveCapture, undoRefs, type StoredRef, type Writer } from '../data/capture-save.ts';
+import { saveCapture, undoRefs, type SavedRef, type StoredRef, type Writer } from '../data/capture-save.ts';
 import { noticeLines, type NoticeLine } from '../data/notice.ts';
 import { markQuotaNotice, quotaNoticeDue } from '../data/quota.ts';
 import { applyConfirm, mergeItems, splitConfirm, type TypePlan } from '../data/type-flow.ts';
@@ -33,9 +35,16 @@ export interface Batch {
   remind: boolean;
   /** 从哪来：打字 page（不给就是它）、录音 voice（B3 FA-3）；写进行的 source 列 */
   source?: 'page' | 'voice';
-  /** 上一次合并没存上 / 全部撤销有几条没撤成（提示条加一句） */
+  /** 上一次合并没存上 / 撤销有几条没撤成 / 有纪念日撤不掉（提示条各加一句） */
   mergeFailed?: boolean;
   undoFailed?: number;
+  annivKept?: boolean;
+}
+
+/** 撤完以后：撤成的拿掉，没撤成的留着；纪念日单算（不算失败） */
+function afterUndo(entries: readonly BatchEntry[], left: readonly SavedRef[]): Pick<Batch, 'entries' | 'undoFailed' | 'annivKept'> {
+  const anniv = left.filter((r) => r.table === 'anniversaries').length;
+  return { entries: entries.filter((e) => left.includes(e.ref)), undoFailed: left.length - anniv, annivKept: anniv > 0 };
 }
 
 export interface SaveEnv {
@@ -124,7 +133,7 @@ export function useSavedBatch(writer: Writer | undefined, confirming: boolean, t
     if (!batch || batch.entries.length === 0 || confirming) return null;
     const lines = noticeLines({
       status: batch.plan.status, titles: batch.entries.map((e) => e.ref.title), hints: batch.plan.hints, remind: batch.remind,
-      quotaNoticeDue: quotaDue, resetClock: quotaResetClock(clock.now(), currentTz()), mergeFailed: batch.mergeFailed === true, undoFailed: batch.undoFailed ?? 0,
+      quotaNoticeDue: quotaDue, resetClock: quotaResetClock(clock.now(), currentTz()), mergeFailed: batch.mergeFailed === true, undoFailed: batch.undoFailed ?? 0, annivKept: batch.annivKept === true,
     });
     return { lines, entries: batch.entries };
   }, [batch, confirming, quotaDue]);
@@ -136,7 +145,8 @@ export function useSavedBatch(writer: Writer | undefined, confirming: boolean, t
       const hit = batch.entries.find((e) => e.ref.id === id);
       if (!hit) return;
       const left = await undoRefs([hit.ref], now, writer);
-      if (left.length > 0) return;
+      // 没撤成（纪念日、写不进去）：那一条还在，提示条说一句
+      if (left.length > 0) return setBatch({ ...batch, ...afterUndo([hit], left), entries: batch.entries });
       const entries = batch.entries.filter((e) => e.ref.id !== id);
       setBatch(entries.length > 0 ? { ...batch, entries } : null);
     },
@@ -148,9 +158,10 @@ export function useSavedBatch(writer: Writer | undefined, confirming: boolean, t
       if (!batch) return true;
       const left = await undoRefs(batch.entries.map((e) => e.ref), clock.now(), writer);
       rlog(`${tag} undo_all n=${batch.entries.length} left=${left.length}`);
-      // 撤成的拿掉；没撤成的留在提示条上（能再点一次）
-      setBatch(left.length === 0 ? null : { ...batch, entries: batch.entries.filter((e) => left.includes(e.ref)), mergeFailed: false, undoFailed: left.length });
-      return left.length === 0;
+      // 撤成的拿掉；没撤成的留在提示条上（能再点一次）；只剩纪念日不算失败
+      const rest = afterUndo(batch.entries, left);
+      setBatch(left.length === 0 ? null : { ...batch, ...rest, mergeFailed: false });
+      return rest.undoFailed === 0;
     },
     [batch, writer, tag],
   );
@@ -161,17 +172,18 @@ export function useSavedBatch(writer: Writer | undefined, confirming: boolean, t
       if (!batch) return 'nothing';
       const one = mergeItems(batch.entries.map((e) => e.item), batch.raw);
       if (!one) return 'nothing';
-      const r = await store({ ...batch, batchId: null, entries: [], remind: false, mergeFailed: false, undoFailed: 0 }, [one], env);
+      const r = await store({ ...batch, batchId: null, entries: [], remind: false, mergeFailed: false, undoFailed: 0, annivKept: false }, [one], env);
       rlog(`${tag} merge out=${r.out} n=${batch.entries.length}`);
       // 合并那一条没写进去：原来的几条不动，提示条加一句
       if (r.out !== 'ok' || !r.batch) {
         setBatch({ ...batch, mergeFailed: true });
         return r.out === 'ok' ? 'not_saved' : r.out;
       }
-      // 新的存成了再撤原来的；有撤不掉的（纪念日、写不进去）照样留在库里，不挡合并
+      // 新的存成了再撤原来的；撤不掉的（纪念日、写不进去）留在新的提示条上，写明
       const left = await undoRefs(batch.entries.map((e) => e.ref), env.now, writer);
       if (left.length > 0) rlog(`${tag} merge undo_left=${left.length}`);
-      setBatch(r.batch);
+      const rest = afterUndo(batch.entries, left);
+      setBatch({ ...r.batch, ...rest, entries: [...r.batch.entries, ...rest.entries] });
       return 'ok';
     },
     [batch, writer, store, tag],

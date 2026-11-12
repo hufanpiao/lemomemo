@@ -28,6 +28,7 @@ export const zh = {
   'plus.notice.badDay': '{month} 月没有 {day} 日',
   'plus.notice.mergeFailed': '合并没保存上，原来的几条还在',
   'plus.notice.undoFailed': '{n} 条没撤销成功，可以再试一次',
+  'plus.notice.annivKept': '纪念日请到纪念日页删除', // 中性文案，最终由负责人定（FA-3 复查第 4 条）
   'plus.notice.notSaved': '没保存上，原话还在输入框里',
   'plus.notice.nothing': '没认出要记的内容，原话还在输入框里',
   'plus.notice.undo': '撤销',
@@ -144,4 +145,5 @@ export const zh = {
   'plus.voice.speechNet': '手机自带识别连不上网，请用键盘',
   'plus.voice.recFailed': '录音没开起来，请再按住试一次或用键盘',
   'plus.voice.notSaved': '没保存上，请再说一次或用键盘',
+  'plus.voice.notHeard': '这段没收到，请再说一次', // 中性文案，最终由负责人定（FA-3 复查第 2 条）
 } as const;

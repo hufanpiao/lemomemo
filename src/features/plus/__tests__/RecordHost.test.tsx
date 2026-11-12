@@ -18,6 +18,7 @@ import type * as Quota from '../data/quota.ts';
 import type * as VoiceFlow from '../data/voice-flow.ts';
 import { hold, type HoldPointer } from '../data/hold-input.ts';
 import { HOLD_MS } from '../data/record-logic.ts';
+import { resetVoiceNetForTest } from '../data/voice-session.ts';
 import { RecordHost } from '../ui/RecordHost.tsx';
 
 const SID = 'sid-v';
@@ -164,6 +165,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   fab.remove();
+  resetVoiceNetForTest();
   collection('settings').clear();
   setConsentStale(false, null);
   localStorage.removeItem(MIC_PERM_KEY);
@@ -277,6 +279,27 @@ describe('按住“＋”录音', () => {
     expect(writer.insert.mock.calls[0]?.[1]).toMatchObject({ title: '买牛奶', source: 'voice' });
   });
 
+  it('网络失败的计数跨卸载重挂保留：失败 1 次 → 进设置页又回来（RecordHost 重挂）→ 再失败 1 次，之后照样改用手机自带识别（FA-3 复查第 1 条）', async () => {
+    const fail = async (): Promise<never> => {
+      throw new TypeError('Failed to fetch');
+    };
+    const first = setup({ call: fail });
+    await holdDown();
+    await release();
+    await screen.findByTestId('voice-notice');
+    first.unmount();
+    setup({ call: fail });
+    await holdDown();
+    await release();
+    await screen.findByTestId('voice-notice');
+    fireEvent.click(screen.getByTestId('voice-notice-close'));
+    expect(fx.starts).toBe(2);
+    await holdDown();
+    expect(fx.starts, '第 3 次不开录音器').toBe(2);
+    expect((await screen.findByTestId('rec-why')).textContent).toBe('网络慢，这次用手机自带识别');
+    await release();
+  });
+
   it('上传中点“取消”：回到没按的状态，不记', async () => {
     let hang!: () => void;
     const { writer } = setup({ call: () => new Promise((ok) => (hang = () => ok(VOICE_OK))) });
@@ -379,13 +402,29 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     expect(writer.insert).not.toHaveBeenCalled();
   });
 
-  it('录音器 stop 兜底超时（{ok:false, fail:"stop_timeout"}）：提示“录音没开起来”，不上传、不写库', async () => {
+  it('录音器 stop 兜底超时（{ok:false, fail:"stop_timeout"}）：提示“这段没收到，请再说一次”（不是“录音没开起来”），不上传、不写库（FA-3 复查第 2 条）', async () => {
     fx.stopEnd = { ok: false, fail: 'stop_timeout' };
     const { writer, call } = setup();
     await holdDown();
     await release();
-    expect((await screen.findByTestId('voice-notice')).dataset['note']).toBe('rec_failed');
+    const note = await screen.findByTestId('voice-notice');
+    expect(note.dataset['note']).toBe('not_heard');
+    expect(note.textContent).toContain('这段没收到，请再说一次');
     expect(call).not.toHaveBeenCalled();
+    expect(writer.insert).not.toHaveBeenCalled();
+  });
+
+  it('手机自带识别 stop 兜底超时（{ok:false, fail:"timeout"}）：同样提示“这段没收到，请再说一次”，不写库（FA-3 复查第 2 条）', async () => {
+    fx.quotaOut = true;
+    const { writer } = setup();
+    await sleep(10); // 挂上时从本机读额度（异步），读回来再按
+    await holdDown();
+    expect(fx.speech).toHaveLength(1);
+    await act(async () => {
+      (fx.speech[0]?.end as (r: unknown) => void)({ ok: false, fail: 'timeout' });
+    });
+    const note = await screen.findByTestId('voice-notice');
+    expect(note.dataset['note']).toBe('not_heard');
     expect(writer.insert).not.toHaveBeenCalled();
   });
 
