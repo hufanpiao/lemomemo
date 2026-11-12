@@ -4,14 +4,16 @@
 // • 原图：长边不超过 FULL_EDGE（2048px），质量从 0.85 起，超过 FULL_MAX（2 MB，images 桶上限）就逐步降，降到底还超就缩小一档再来
 // • 缩略图：长边不超过 THUMB_EDGE（384px），不超过 THUMB_MAX（128 KB），同样逐步降质量。两个上限和 shared/manifests/notes.ts 的
 //   fileSizeLimit、thumbSizeLimit 相等（清单引着 zod，这里不引，单测钉住相等）
-// • 每个尺寸只画一次：一张画布既给原生导出用，也给 wasm 取像素用；出了这一档就放掉画布和像素（缩略图开始前原图那份已经放掉）
+// • 每个尺寸只画一次：一张画布既给原生导出用，也给 wasm 取像素用；出了这一档就释放画布（宽高置 0，不等 GC：
+//   iPhone Safari 的画布总内存上限很紧，连插几张大图会撞上）、放掉像素（缩略图开始前原图那份已经放掉）
 // • 两条路（R-402）：先用浏览器原生导出 webp；交回来的不是 webp（iPhone Safari：要 image/webp 回 png）或 reject，
 //   这张图后面就都改走 App 自带的 wasm 编码器（platform/webp-wasm.ts），把同一张画布的像素（getImageData）编成 webp。
 //   原生行不行只探测一次：第一次拿到 blob 就把它的 type 记在 NativeMemo 里（App 里整个模块共用一份），以后的图不再白导一次 png；
 //   reject、回 null 不算结论（可能只是这张太大），下一张再试。wasm 只从像素编，原文件的 EXIF 一个字节都带不过去（R-108 照旧）
 // • 失败码：解不了 → heic_unsupported / decode_failed；wasm 载不进来（离线又没缓存、浏览器不让编译）→ encode_load_failed；
-//   取不到像素、编码出错（内存不足等）→ encode_failed；怎么降都超 → too_big
-// • 诊断（diag，解码成功以后都有）：走哪条路、原生交回的 type、耗时（总、载 wasm、wasm 编码）、失败在哪一步（load / px / enc）和错误名
+//   取不到像素、编码出错（内存不足等）→ encode_failed；怎么降都超 → too_big。意料之外的异常也收口成 encode_failed，不往外抛
+// • 诊断（diag，每个结果都有）：走哪条路、原生交回的 type、耗时（总、载 wasm、wasm 编码；从解码完算起）、
+//   失败在哪一步（decode / load / px / enc）和错误名
 //   （只记 e.name，不记 message 和图片内容）。这里不写日志，由上传器把它和压图结果记成一行（image-uploader.ts）
 // • 依赖可注入（测试里 jsdom 没有 canvas）
 // 纯 TS：不准 import React（A1）
@@ -35,8 +37,8 @@ export interface EncodeDiag {
   ms: number;
   loadMs: number;
   encMs: number;
-  /** 失败在哪一步：载 wasm、画布或取像素、wasm 编码 */
-  why?: 'load' | 'px' | 'enc';
+  /** 失败在哪一步：解码、载 wasm、画布或取像素、wasm 编码（意料之外的异常也算 enc） */
+  why?: 'decode' | 'load' | 'px' | 'enc';
   /** 错误名（e.name；不像名字的记 Unknown） */
   err?: string;
 }
@@ -67,6 +69,8 @@ export interface Canvas {
   toBlob(quality: number): Promise<Blob | null>;
   /** RGBA 像素；取不到就抛 */
   pixels(): RawPixels;
+  /** 释放画布内存（宽高置 0）；之后不能再用 */
+  free(): void;
 }
 
 /** 原生能不能导出 webp 的结论：第一次拿到 blob 时记下它的 type（还没拿到过为 undefined） */
@@ -97,24 +101,25 @@ export function fitEdge(w: number, h: number, edge: number): { w: number; h: num
 
 type Ctx2d = OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
 
-/** 有 OffscreenCanvas 用它，没有用 DOM 的 */
-function drawCanvas(src: Decoded, w: number, h: number): Canvas {
+/** 默认画布：有 OffscreenCanvas 用它，没有用 DOM 的；原生导出同步抛错、reject 都回 null */
+export function drawCanvas(src: Decoded, w: number, h: number): Canvas {
   const c = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
   const ctx = c.getContext('2d') as Ctx2d | null;
   if (!ctx) throw Object.assign(new Error('no_2d_context'), { name: 'NoContext' });
   ctx.drawImage(src as unknown as CanvasImageSource, 0, 0, w, h);
   return {
-    toBlob: (quality) =>
-      'convertToBlob' in c
-        ? c.convertToBlob({ type: WEBP, quality }).catch(() => null)
-        : new Promise((res) => {
-            try {
-              c.toBlob(res, WEBP, quality);
-            } catch {
-              res(null);
-            }
-          }),
+    async toBlob(quality) {
+      try {
+        return 'convertToBlob' in c ? await c.convertToBlob({ type: WEBP, quality }) : await new Promise<Blob | null>((res) => c.toBlob(res, WEBP, quality));
+      } catch {
+        return null;
+      }
+    },
     pixels: () => ctx.getImageData(0, 0, w, h),
+    free() {
+      c.width = 0;
+      c.height = 0;
+    },
   };
 }
 
@@ -148,10 +153,14 @@ export function encodeDiagText(d: EncodeDiag): string {
   return `path=${d.path} native=${native} ms=${d.ms} loadMs=${d.loadMs} encMs=${d.encMs}${d.why ? ` why=${d.why} err=${d.err ?? 'Unknown'}` : ''}`;
 }
 
+/** 起一份诊断：原生还没结论或能导出 → 先走原生，已知不行 → 直接走 wasm */
+function startDiag(native: NativeMemo): EncodeDiag {
+  const known = native.type;
+  return { path: known === undefined || known === WEBP ? 'native' : 'wasm', native: known ?? null, ms: 0, loadMs: 0, encMs: 0 };
+}
+
 /** 一张图的 webp 编码器：path 和耗时记在 diag 里；size() 给一个尺寸的画布，encode(q) 编一份，出错抛 Stop */
-function webpEncoder(deps: EncodeDeps, src: Decoded) {
-  const known = deps.native.type;
-  const diag: EncodeDiag = { path: known === undefined || known === WEBP ? 'native' : 'wasm', native: known ?? null, ms: 0, loadMs: 0, encMs: 0 };
+function webpEncoder(deps: EncodeDeps, src: Decoded, diag: EncodeDiag) {
   let wasm: WebpEncode | null = null;
   const step = async <T>(why: Stop['why'], f: () => T | Promise<T>, time?: 'loadMs' | 'encMs'): Promise<T> => {
     const t = deps.now();
@@ -164,7 +173,6 @@ function webpEncoder(deps: EncodeDeps, src: Decoded) {
     }
   };
   return {
-    diag,
     async size(w: number, h: number) {
       let c: Canvas | null = await step('px', () => deps.canvas(src, w, h));
       let px: RawPixels | null = null;
@@ -183,10 +191,11 @@ function webpEncoder(deps: EncodeDeps, src: Decoded) {
           const cv = c;
           px ??= await step('px', () => cv.pixels());
           const p = px;
-          return new Blob([await step('enc', () => enc(p, q), 'encMs')], { type: WEBP });
+          return step('enc', () => new Blob([enc(p, q)], { type: WEBP }), 'encMs');
         },
-        /** 出了这一档：放掉画布和像素 */
+        /** 出了这一档：释放画布、放掉像素 */
         release() {
+          c?.free();
           c = null;
           px = null;
         },
@@ -235,26 +244,26 @@ async function encodeDecoded(enc: WebpEncoder, src: Decoded, file: File, tz: Tz)
 
 /** 选的或拍的一张照片 → 原图 + 缩略图（webp）+ 拍摄时间；解码以后的结果都带诊断 */
 export async function encodeImage(file: File, tz: Tz, deps: EncodeDeps = defaultDeps): Promise<EncodeResult> {
+  const d = startDiag(deps.native);
   let src: Decoded;
   try {
     src = await deps.decode(file);
-  } catch {
-    return { ok: false, code: isHeic(file) ? 'heic_unsupported' : 'decode_failed' };
+  } catch (e) {
+    return { ok: false, code: isHeic(file) ? 'heic_unsupported' : 'decode_failed', diag: { ...d, why: 'decode', err: errName(e) } };
   }
-  const enc = webpEncoder(deps, src);
   const t0 = deps.now();
   let r: EncodeResult;
   try {
-    r = await encodeDecoded(enc, src, file, tz);
+    r = await encodeDecoded(webpEncoder(deps, src, d), src, file, tz);
   } catch (e) {
-    if (!(e instanceof Stop)) throw e;
-    enc.diag.why = e.why;
-    enc.diag.err = e.err;
-    r = { ok: false, code: e.why === 'load' ? 'encode_load_failed' : 'encode_failed' };
+    // Stop 是认得的那几步；别的（意料之外的同步异常等）也收口成 encode_failed，不往外抛，免得上传器那边没提示、没日志
+    const s = e instanceof Stop ? e : new Stop('enc', errName(e));
+    d.why = s.why;
+    d.err = s.err;
+    r = { ok: false, code: s.why === 'load' ? 'encode_load_failed' : 'encode_failed' };
   } finally {
     src.close();
   }
-  const d = enc.diag;
   d.ms = Math.round(deps.now() - t0);
   d.loadMs = Math.round(d.loadMs);
   d.encMs = Math.round(d.encMs);
