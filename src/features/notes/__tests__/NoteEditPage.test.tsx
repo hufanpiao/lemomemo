@@ -117,6 +117,16 @@ describe('编辑', () => {
     expect(await patches(b)).toHaveLength(1);
   });
 
+  it('AI 分到的分类后来被合并进别的分类：编辑页照样标“AI”（按归并后的分类比，和列表一致）', async () => {
+    const b = await boot();
+    await act(async () => {
+      await b.outbox?.applyServer('categories', [{ row: serverCat(CAT1, '韩国生活') }, { row: { ...serverCat(CAT2, '购物'), merged_into: CAT1 } as ServerRow }]);
+      await b.outbox?.applyServer('notes', [{ row: serverNote({ category_id: CAT2, category_source: 'ai', category_seen: false }) }]);
+    });
+    open(`#/note/${ID}`);
+    expect(screen.getByTestId('note-edit-ai').textContent).toBe('AI');
+  });
+
   it('看过的、规则分的不标“AI”，也不写已看', async () => {
     const b = await boot();
     await seed(b);

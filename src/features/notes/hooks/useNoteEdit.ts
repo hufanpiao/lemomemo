@@ -14,7 +14,7 @@ import { clock } from '../../../platform/clock.ts';
 import { todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import { fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { ruleCategory } from '../data/classify.ts';
-import { contentOf, emptyForm, formOf, newNoteRow, patchOf, type NoteForm } from '../data/note-edit.ts';
+import { aiMarkKept, contentOf, emptyForm, formOf, newNoteRow, patchOf, type NoteForm } from '../data/note-edit.ts';
 import { categoryColor, categoryNames, dayKind, showsAi, type Row } from '../data/note-list.ts';
 
 export type { NoteForm } from '../data/note-edit.ts';
@@ -71,7 +71,8 @@ export function useNoteEdit(
   // 编辑器里分类旁的“AI”：这次打开时是 AI 分的、还没看过就一直标着（写了已看也不马上消失），用户手动改了分类就不标
   const aiAtOpen = useRef(false);
   if (ai) aiAtOpen.current = true;
-  const aiShown = aiAtOpen.current && row?.['category_source'] === 'ai' && form.category_id === row['category_id'];
+  // 按归并后的分类比（aiMarkKept，和列表的 showsAi 一致）：AI 分到的分类后来被合并了，照样标
+  const aiShown = row !== undefined && aiAtOpen.current && aiMarkKept(row, form, cats);
 
   const at = row?.['created_at'];
   const tz = currentTz();
