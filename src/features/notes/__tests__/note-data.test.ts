@@ -99,8 +99,12 @@ describe('新建和修改', () => {
     expect(patchOf({}, prev, { ...prev, category_id: null }, NOW)).toEqual({ category_id: null, category_source: 'manual', category_seen: true, updated_at: NOW });
   });
 
-  it('本机规则分类现在是占位（后端 classify-rules 还没到）：一律 null', () => {
-    expect(ruleCategory({ title: '', body: '买牛奶' }, [{ id: 'c1', name: '购物' }])).toBeNull();
+  it('本机规则分类转调 classify-rules（S2、S5）：分类名出现在文字里就归它；词表命中也归；都不中、没有分类是 null', () => {
+    const cats = [{ id: 'c1', name: '购物' }, { id: 'c2', name: '工作' }];
+    expect(ruleCategory({ title: '', body: '明天工作要交周报' }, cats)).toBe('c2');
+    expect(ruleCategory({ title: '', body: '下班去超市' }, cats)).toBe('c1');
+    expect(ruleCategory({ title: '', body: '今天天气不错' }, cats)).toBeNull();
+    expect(ruleCategory({ title: '', body: '明天工作要交周报' }, [])).toBeNull();
   });
 });
 
