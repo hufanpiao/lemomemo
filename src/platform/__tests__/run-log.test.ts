@@ -111,7 +111,7 @@ describe('全局运行日志', () => {
   });
 
   // 台账 Q-8：真机一次就能看出成没成——系统滚没滚页面（dy）、浮条贴没贴键盘（dock）、输入框在不在可视区里（fieldIn）
-  it('焦点进来后 400ms、KB_CHECK_MS 各记一行 kbcheck：dy = 系统滚了多少，top、dock、fieldIn', async () => {
+  it('焦点进来后 400ms、KB_CHECK_MS 各记一行 kbcheck：dy = 文档滚了多少、dtop = 可视区平移了多少，top、dock、fieldIn；马上换路由也照样记', async () => {
     vi.useFakeTimers();
     const own = (k: string) => Object.getOwnPropertyDescriptor(window, k);
     const saved = { visualViewport: own('visualViewport'), scrollY: own('scrollY') };
@@ -126,6 +126,7 @@ describe('全局运行日志', () => {
     try {
       const stop = startRunLog(window, { version: 't' });
       input.focus();
+      window.dispatchEvent(new HashChangeEvent('hashchange')); // 换路由重设的是 settled 快照的计时器，kbcheck 不受影响
       await vi.advanceTimersByTimeAsync(500);
       // 之后系统把页面滚了 353、可视区下移 291：浮条留在布局视口里，相对可视区跑到上面去了
       Object.defineProperty(window, 'scrollY', { value: 453, configurable: true, writable: true });
@@ -134,8 +135,8 @@ describe('全局运行日志', () => {
       stop();
       const checks = readRunLog().split('\n').filter((l) => l.includes(' kbcheck '));
       expect(checks).toHaveLength(2);
-      expect(checks[0]).toMatch(/kbcheck dy=0 top=0 dock=6 fieldIn=1$/);
-      expect(checks[1]).toMatch(/kbcheck dy=353 top=291 dock=297 fieldIn=1$/);
+      expect(checks[0]).toMatch(/kbcheck dy=0 dtop=0 top=0 dock=6 fieldIn=1$/);
+      expect(checks[1]).toMatch(/kbcheck dy=353 dtop=291 top=291 dock=297 fieldIn=1$/);
     } finally {
       for (const [k, d] of Object.entries(saved)) {
         if (d) Object.defineProperty(window, k, d);

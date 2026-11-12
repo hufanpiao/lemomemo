@@ -18,7 +18,7 @@ export const MAX_LINES = 3000;
 const VV_GAP_MS = 16;
 /** 焦点、路由变化后多久再拍一次版面 */
 const SETTLE_SNAP_MS = 400;
-/** 焦点进来多久再记第二次 kbcheck（第一次跟着 SETTLE_SNAP_MS 那次快照） */
+/** 焦点进来多久再记第二次 kbcheck（第一次在 SETTLE_SNAP_MS） */
 export const KB_CHECK_MS = 1500;
 /** 版面快照要看的元素 */
 export const LAYOUT_TARGETS: ReadonlyArray<readonly [string, string]> = [
@@ -189,9 +189,13 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   const onVvResize = onVv('vv');
   const onWinResize = onVv('win');
   const onWinScroll = onVv('scroll');
-  /** 焦点进来时的滚动位置：kbcheck 用它算系统滚了多少 */
+  /** 焦点进来时的滚动位置和可视区偏移：kbcheck 用它们算系统滚了多少文档（dy）、平移了多少可视区（dtop） */
   let focusY = 0;
-  /** 焦点停稳后一行结论（台账 Q-8）：dy 系统滚了多少（0 = 没滚）、top 可视区偏移、dock 浮层下沿离可视区底多远（0～12 = 贴着键盘）、fieldIn 输入框整个在可视区里 */
+  let focusTop = 0;
+  /**
+   * 焦点停稳后一行结论（台账 Q-8）：dy 文档滚了多少、dtop 可视区平移了多少（都是 0 = 系统没动）、top 可视区偏移、
+   * dock 浮层下沿离可视区底多远（0～12 = 贴着键盘）、fieldIn 输入框整个在可视区里
+   */
   const kbcheck = (): void => {
     const act = doc.activeElement;
     if (!isField(act) || !vv) return;
@@ -199,16 +203,15 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     const f = act.getBoundingClientRect();
     const host = fixedHost(act)?.getBoundingClientRect();
     const dock = host ? Math.round(vv.height - (host.bottom - top)) : '-';
-    add(`kbcheck dy=${Math.round(win.scrollY - focusY)} top=${Math.round(top)} dock=${dock} fieldIn=${f.top >= top && f.bottom - top <= vv.height ? 1 : 0}`);
+    const tail = `top=${Math.round(top)} dock=${dock} fieldIn=${f.top >= top && f.bottom - top <= vv.height ? 1 : 0}`;
+    add(`kbcheck dy=${Math.round(win.scrollY - focusY)} dtop=${Math.round(top - focusTop)} ${tail}`);
   };
+  /** kbcheck 自己的计时器（不和 settleTimer 共用：焦点进来后马上换路由也照样记） */
+  let kbTimers: Array<ReturnType<typeof setTimeout>> = [];
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
-  let kbTimer: ReturnType<typeof setTimeout> | undefined;
   const settleSnap = (why: string): void => {
     clearTimeout(settleTimer);
-    settleTimer = setTimeout(() => {
-      snap(`settled(${why})`);
-      if (why === 'focusin') kbcheck();
-    }, SETTLE_SNAP_MS);
+    settleTimer = setTimeout(() => snap(`settled(${why})`), SETTLE_SNAP_MS);
   };
 
   /** 最近一次点按的时间：焦点进来时判断是点出来的还是程序聚焦 */
@@ -217,10 +220,11 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     const by = now() - lastDown < 800 ? 'tap' : 'code';
     add(`focusin ${describeEl(e.target)} by=${by}${fieldState(e.target)} ${vvState()} ${layout()}`);
     focusY = win.scrollY;
+    focusTop = vv?.offsetTop ?? 0;
     settleSnap('focusin');
-    // 主屏幕版键盘弹完、布局视口压矮有时要 1 秒多，再记一次
-    clearTimeout(kbTimer);
-    kbTimer = setTimeout(kbcheck, KB_CHECK_MS);
+    // 400ms 一次；主屏幕版键盘弹完、布局视口压矮有时要 1 秒多，KB_CHECK_MS 再记一次
+    for (const id of kbTimers) clearTimeout(id);
+    kbTimers = [SETTLE_SNAP_MS, KB_CHECK_MS].map((ms) => setTimeout(kbcheck, ms));
   };
   const onFocusOut = (e: FocusEvent): void => {
     add(`focusout ${describeEl(e.target)} to=${describeEl(e.relatedTarget)}${fieldState(e.target)}`);
@@ -374,7 +378,7 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
     win.removeEventListener('unhandledrejection', onRej);
     clearTimeout(vvTimer);
     clearTimeout(settleTimer);
-    clearTimeout(kbTimer);
+    for (const id of kbTimers) clearTimeout(id);
     if (saveTimer !== undefined) clearTimeout(saveTimer);
     save();
   };

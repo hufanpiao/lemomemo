@@ -37,7 +37,7 @@ import { navigate, setSamePage, setTabSwitch, useRoute, type RouteName } from '.
 import { tabBarFor } from './tab-of.ts';
 import { PlusSlot, preloadPlus } from './plus-slot.tsx';
 import type { DateStr } from '../../shared/core/date.ts';
-import { NOTES_INPUT_ID, setNewItemDay, setNewItemTitle, takeNewItemDay } from '../kit/state/new-item.ts';
+import { notesInput, setNewItemDay, setNewItemTitle, takeNewItemDay } from '../kit/state/new-item.ts';
 
 // CSP 试验页（B0 第一项验证）：只在非正式版里挂。用构建期常量 import.meta.env.MODE（构建时替换成字面量），
 // 正式构建时 rollup 把试验页整块删掉（运行时的 isProduction 删不掉，块会留在正式产物里）；build/check_no_probe.mjs 断言正式产物里没有它
@@ -98,9 +98,9 @@ function TabBar({ route }: { route: RouteName }) {
   const bar = tabBarFor(route);
   // 日历页在捕获阶段记下了选中的那天（calendar/hooks/new-date.ts），这里取走；别的页也取走（清掉旧的）
   const open = (): void => {
-    // 随手记页（R-380，线框“低 1”）：“＋”直接把光标放进页面底部的输入行，不开打字条
+    // 随手记页（R-380，线框“低 1”）：“＋”直接把光标放进页面底部的输入行，不开打字条（随手记页登记的原地聚焦，台账 Q-8）
     if (bar?.add === 'note') {
-      document.getElementById(NOTES_INPUT_ID)?.focus();
+      notesInput.focus?.();
       return;
     }
     const day = takeNewItemDay();

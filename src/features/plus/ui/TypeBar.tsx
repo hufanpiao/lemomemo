@@ -17,8 +17,8 @@
 //   收起后再点“＋”：App 每次打开带新的 opened 序号，序号变了就重新画出打字条并聚焦。
 //   “点”= 按下到抬起挪动不到 TAP_SLOP_PX（滚动、拖动不算）；按在打字条、提示条里，或按钮、链接、输入框、底栏、“＋”等控件上都不算空白，照它们原来的行为。
 //   确认行（补记 / 记到）、正在整理时只收键盘不收起：手上还有没落定的内容（原话、等确认那条），按负责人“有字时保留输入框不动”处理
-// • 聚焦一律原地聚焦（台账 Q-8，platform/viewport.ts 的 focusInPlace / tapFocusInPlace）：iPhone 上系统为了露出输入框会把页面滚一段，
-//   滚过以后光标画到“展开编辑”左边；打开时 focusInPlace，没聚焦时手指点输入框（onTouchEnd）tapFocusInPlace。打字条贴键盘照旧靠 --dock-bottom
+// • 聚焦一律原地聚焦（台账 Q-8，platform/viewport.ts 文件头）：iPhone 上系统为了露出输入框会把页面滚一段，滚过以后光标画到“展开编辑”左边；
+//   打开时 focusInPlace，输入框挂 inPlaceTouchStart / inPlaceTouchEnd（没聚焦时的一下点改成原地聚焦）。打字条贴键盘照旧靠 --dock-bottom
 // • 文字一律经 t()（A20）；按钮用 kit 的 FormButton，输入框用 kit Form 的 .input（G11 输入框令牌、触屏 16px）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type FormEvent, type KeyboardEvent, type PointerEvent } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
@@ -26,9 +26,9 @@ import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import form from '../../../kit/components/Form.module.css';
 import { isEditable, useKeys } from '../../../kit/hooks/useKeys.ts';
-import { focusInPlace, tapFocusInPlace } from '../../../platform/viewport.ts';
+import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, TAP_SLOP_PX } from '../../../platform/viewport.ts';
 import { usePlusLine, usePlusT } from '../hooks/usePlusT.ts';
-import { useTypeBar, type CallAi, type Writer } from '../hooks/useTypeBar.ts';
+import { useTypeBar, type CallAi, type TypeBarState, type Writer } from '../hooks/useTypeBar.ts';
 import { ConfirmRow } from './ConfirmRow.tsx';
 import { SavedNotice } from './SavedNotice.tsx';
 import styles from './TypeBar.module.css';
@@ -37,8 +37,8 @@ import styles from './TypeBar.module.css';
 export const SWIPE_CLOSE_PX = 40;
 /** 打字条开着时提示条和打字条顶端之间留的空（px） */
 export const LIFT_GAP_PX = 8;
-/** 按下到抬起挪动不到这么多（px）才算“点”（Q-10） */
-export const TAP_SLOP_PX = 10;
+/** 手上还有没落定的内容（打了字、确认行在问、正在整理）：点空白、记下后都只收键盘，不收起打字条 */
+const unsettled = (s: TypeBarState): boolean => s.text.trim() !== '' || s.asking !== null || s.status === 'organizing';
 
 /** 不算“空白”的东西：可点、可输入的控件，底栏、“＋”，“已记下”提示条 */
 const NOT_BLANK =
@@ -113,8 +113,10 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
   }, [folded]);
   // 点页面空白处（Q-10）：没打字就收起，打了字只收键盘。监听挂 document 捕获阶段，读最新状态用 ref
   const bar = useRef<HTMLFormElement>(null);
-  const live = useRef({ s, close: (): void => undefined });
-  live.current = { s, close: () => void s.stash().then(onClose) };
+  /** 收起：已打的字留草稿再关（“收起”、Esc、下滑、点空白都走这一个） */
+  const close = (): void => void s.stash().then(onClose);
+  const live = useRef({ s, close });
+  live.current = { s, close };
   const slot = useLift(bar, folded);
   useEffect(() => {
     if (folded && !s.notice) live.current.close();
@@ -123,7 +125,7 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
   // 新出一条“已记下”提示、手上没剩字也没等确认的 → 收键盘、收打字条，只留提示条；有剩的照旧留着
   useEffect(() => {
     const cur = live.current.s;
-    if (!cur.notice || cur.text.trim() !== '' || cur.asking || cur.status === 'organizing') return;
+    if (!cur.notice || unsettled(cur)) return;
     input.current?.blur();
     setFolded();
   }, [s.notice, setFolded]);
@@ -137,7 +139,7 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
       from = null;
       if (!f?.blank || e.isPrimary === false || Math.hypot(e.clientX - f.x, e.clientY - f.y) >= TAP_SLOP_PX) return;
       const { s: cur, close: shut } = live.current;
-      if (cur.text.trim() !== '' || cur.asking || cur.status === 'organizing') input.current?.blur();
+      if (unsettled(cur)) input.current?.blur();
       else if (cur.notice) {
         input.current?.blur();
         setFolded();
@@ -165,7 +167,6 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     },
   });
 
-  const close = () => void s.stash().then(onClose);
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     void s.submit();
@@ -206,7 +207,8 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
                   value={s.text}
                   onChange={(e) => s.setText(e.target.value)}
                   onKeyDown={onKey}
-                  onTouchEnd={(e) => tapFocusInPlace(e.nativeEvent, e.currentTarget)}
+                  onTouchStart={inPlaceTouchStart}
+                  onTouchEnd={inPlaceTouchEnd}
                   placeholder={t('plus.type.ph', {})}
                   aria-label={t('plus.type.label', {})}
                   enterKeyHint="done"

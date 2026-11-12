@@ -1,7 +1,7 @@
 // 底栏（B2 FA-7）：哪些路由显示底栏、选中哪个页签、“＋”新建什么（负责人 11-05 ②③）
 // • 今天、日历（#/calendar 和月份子页 #/cal/…）、待办、随手记四页显示；别的页（编辑、设置、提醒……）不显示
 // • “＋”：今天、日历新建日程，待办新建待办；随手记页（R-380，定稿 R-117 / 线框“低 1”）点“＋”直接把光标放进页面底部的输入行，
-//   记下的就是随手记（App.tsx 按 kit/state/new-item.ts 的 NOTES_INPUT_ID 找输入框，不开打字条）
+//   记下的就是随手记（App.tsx 调随手记页往 kit/state/new-item.ts 的 notesInput 登记的聚焦，不开打字条）
 import type { TabName } from '../kit/components/GlassBar/GlassBar.tsx';
 import type { RouteName } from './router.ts';
 

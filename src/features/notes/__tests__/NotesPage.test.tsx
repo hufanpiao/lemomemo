@@ -9,7 +9,7 @@ import { coldStart, getBoot, resetBootForTest } from '../../../core/boot.ts';
 import { fakeIndexedDB } from '../../../core/__tests__/idb-fake.ts';
 import type { ServerRow } from '../../../core/cache.ts';
 import { clearAllCollections, collection } from '../../../core/store.ts';
-import { NOTES_INPUT_ID } from '../../../kit/state/new-item.ts';
+import { notesInput } from '../../../kit/state/new-item.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import NotesPage from '../ui/NotesPage.tsx';
@@ -236,11 +236,27 @@ describe('视觉验收 A1 补的几处', () => {
     expect(screen.queryByTestId('notes-camera')).toBeNull();
   });
 
-  it('输入框带 NOTES_INPUT_ID（随手记页的“＋”按它聚焦，R-380）；右上角头像是设置入口', async () => {
+  it('随手记页挂着时登记“＋”的聚焦（R-380）：原地聚焦输入行（focus 带 preventScroll，台账 Q-8），卸掉后清掉；右上角头像是设置入口', async () => {
     await boot();
     open();
-    expect(screen.getByTestId('notes-input').id).toBe(NOTES_INPUT_ID); // App 的“＋”按这个 id 找输入行（R-380）
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    notesInput.focus?.(); // App 的“＋”在随手记页调它
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(document.activeElement).toBe(screen.getByTestId('notes-input'));
     expect(screen.getByTestId('notes-settings').getAttribute('href')).toContain('#/settings');
+    cleanup();
+    expect(notesInput.focus, '卸掉后清掉').toBeUndefined();
+  });
+
+  it('输入行没聚焦时手指点一下：拦掉默认、原地聚焦（台账 Q-8；输入框挂着 inPlaceTouchStart / inPlaceTouchEnd）', async () => {
+    await boot();
+    open();
+    const el = screen.getByTestId('notes-input');
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    fireEvent.touchStart(el, { changedTouches: [{ clientX: 40, clientY: 20 }] });
+    expect(fireEvent.touchEnd(el, { changedTouches: [{ clientX: 40, clientY: 20 }] }), '默认被拦掉').toBe(false);
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    expect(document.activeElement).toBe(el);
   });
 
   it('分类色点：categories.color 是 p4 画 var(--p4s)，没设颜色不画点（卡片和胶囊都一样）', async () => {

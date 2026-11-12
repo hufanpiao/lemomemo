@@ -12,7 +12,8 @@
 // • 底部输入行（视觉稿 .inrow、线框 COMPOSER）：右边是“图片”“拍照”（主持人定 3），打了字才出“记下”；回车或点“记下”就存，新的一条出现在最上面、时间写“刚记下”。
 //   选了图：先用输入框里的字（可以空）新建一条随手记，再把图插进去（S3，ui/NoteImages.tsx）。电脑上输入行铺满内容栏、左右各留 22px（DK.notes）
 // • 插图（S3）：瀑布流卡片顶部放第一张（16:10、右上角“+N”）；插入、上传失败出提示条，空间满了的带“最近删除”入口
-// • 底栏 / 侧栏的“＋”在这一页直接把光标放进输入行（R-380，线框“低 1”；app/App.tsx 按 kit/state/new-item.ts 的 NOTES_INPUT_ID 找）
+// • 底栏 / 侧栏的“＋”在这一页直接把光标放进输入行（R-380，线框“低 1”）：输入行挂着时往 kit/state/new-item.ts 的 notesInput 登记聚焦，app/App.tsx 调它
+// • 输入行是贴底浮条（position: fixed），聚焦一律原地聚焦（台账 Q-8，platform/viewport.ts 文件头）：“＋”调 focusInPlace，输入框挂 inPlaceTouchStart / inPlaceTouchEnd
 // • 这一批不做：隐私记那一行（B5）、合并分类提示（S7）
 // • 插图（S3）：卡片顶上放第一张图（多张标“+N”），列表行有图时在“⋯”前放缩略图；输入行只有“图片”（拍照在编辑页）
 // • 只读行（S12，R-148，TC-B4-09；照待办页）：带认不出的值的行（core 的 readonlyIds）标“要新版本”（单独一行：瀑布流在正文下、底行上，列表在摘要行下），菜单里的“删除”变淡；点开、删除统一拦下
@@ -20,14 +21,15 @@
 //   左滑、多选还没有入口，以后加时同样先判只读
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
 import { rlog } from '../../../platform/run-log-api.ts';
-import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
-import { NOTES_INPUT_ID } from '../../../kit/state/new-item.ts';
+import { notesInput } from '../../../kit/state/new-item.ts';
+import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart } from '../../../platform/viewport.ts';
 import { ReadonlyMark, ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
 import { useEditT } from '../../../kit/components/EditNotices.tsx';
 import { Popover } from '../../../kit/components/Popover.tsx';
@@ -295,6 +297,13 @@ function InputRow({ up, onAdd, onImage }: { up: boolean; onAdd(text: string): Pr
   const t = useNotesT();
   const [draft, setDraft] = useState('');
   const has = draft.trim() !== '';
+  const input = useRef<HTMLInputElement>(null);
+  useLayoutEffect(() => {
+    notesInput.focus = () => focusInPlace(input.current, 'open');
+    return () => {
+      notesInput.focus = undefined;
+    };
+  }, []);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const text = draft;
@@ -313,13 +322,15 @@ function InputRow({ up, onAdd, onImage }: { up: boolean; onAdd(text: string): Pr
   return (
     <form className={up ? `${styles.inrow} ${styles.inrowUp}` : styles.inrow} onSubmit={(e) => void submit(e)} data-testid="notes-input-row">
       <input
-        id={NOTES_INPUT_ID}
+        ref={input}
         className={styles.input}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         placeholder={t('notes.input', {})}
         aria-label={t('notes.inputLabel', {})}
         enterKeyHint="done"
+        onTouchStart={inPlaceTouchStart}
+        onTouchEnd={inPlaceTouchEnd}
         data-testid="notes-input"
       />
       <PickButtons onFile={(f) => void image(f)} className={styles.img} idPrefix="notes" camera={false} />

@@ -6,7 +6,8 @@ import type { WriteResult } from '../../../core/write.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import type { Writer } from '../data/capture-save.ts';
-import TypeBar, { isBlankTap, LIFT_GAP_PX, TAP_SLOP_PX } from '../ui/TypeBar.tsx';
+import { TAP_SLOP_PX } from '../../../platform/viewport.ts';
+import TypeBar, { isBlankTap, LIFT_GAP_PX } from '../ui/TypeBar.tsx';
 import { UNDO_TOAST_MS } from '../../../kit/components/UndoToast.tsx';
 import type * as Session from '../../../platform/session.ts';
 

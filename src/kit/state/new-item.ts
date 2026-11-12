@@ -6,8 +6,11 @@
 // 纯 TS，很小，进首屏
 import type { DateStr } from '../../../shared/core/date.ts';
 
-/** 随手记页底部输入框的 id：底栏 / 侧栏的“＋”在随手记页按它聚焦（R-380；App 和随手记页都从这里引） */
-export const NOTES_INPUT_ID = 'notes-input';
+/**
+ * 随手记页底部输入行的聚焦（R-380）：底栏 / 侧栏的“＋”在随手记页调 focus，把光标放进输入行。随手记页挂着时登记、卸掉时清掉；
+ * 由随手记页登记而不是 App 自己找输入框聚焦：要原地聚焦（台账 Q-8，platform/viewport.ts 的 focusInPlace），viewport.ts 不在首屏，App 不能直接引
+ */
+export const notesInput: { focus?: (() => void) | undefined } = {};
 
 let day: DateStr | null = null;
 let title: string | null = null;

@@ -84,6 +84,24 @@ test.describe('打字条原地聚焦（Q-8）', () => {
     expect(await page.evaluate(() => (window as unknown as { __focusOpts: string[] }).__focusOpts)).toEqual(['preventScroll=true']);
     expect(await page.evaluate(() => window.scrollY), '聚焦没滚页面').toBe(800);
   });
+
+  test('随手记页点“＋”：底部输入行（也是贴底浮条）的 focus 带 preventScroll', async ({ page }) => {
+    await page.addInitScript(() => {
+      const w = window as unknown as { __focusOpts: string[] };
+      w.__focusOpts = [];
+      const orig = HTMLElement.prototype.focus;
+      HTMLElement.prototype.focus = function (this: HTMLElement, o?: FocusOptions) {
+        if (this.getAttribute('data-testid') === 'notes-input') w.__focusOpts.push(`preventScroll=${String(o?.preventScroll)}`);
+        orig.call(this, o);
+      };
+    });
+    await page.goto('/app/#/notes');
+    await expect(page.getByTestId('notes-input')).toBeVisible();
+    await page.getByTestId('tabbar-add').click();
+    await expect(page.getByTestId('notes-input')).toBeFocused();
+    expect(await page.evaluate(() => (window as unknown as { __focusOpts: string[] }).__focusOpts)).toEqual(['preventScroll=true']);
+    await expect(page.getByTestId('type-bar')).toHaveCount(0);
+  });
 });
 
 test.describe('窗口内快捷键（S24）', () => {

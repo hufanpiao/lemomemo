@@ -68,16 +68,16 @@ describe('打字条', () => {
     fireEvent.change(el, { target: { value: '买牛奶' } });
     el.blur();
     const focus = vi.spyOn(HTMLElement.prototype, 'focus');
-    const tap = (): TouchEvent => {
-      const e = new TouchEvent('touchend', { bubbles: true, cancelable: true });
-      el.dispatchEvent(e);
-      return e;
+    // 接线：输入框挂着 inPlaceTouchStart / inPlaceTouchEnd（各种情况的判断在 platform/__tests__/viewport-focus.test.ts）
+    const tap = (): boolean => {
+      fireEvent.touchStart(el, { changedTouches: [{ clientX: 50, clientY: 20 }] });
+      return !fireEvent.touchEnd(el, { changedTouches: [{ clientX: 50, clientY: 20 }] });
     };
-    expect(tap().defaultPrevented, '没聚焦：拦掉默认').toBe(true);
+    expect(tap(), '没聚焦：拦掉默认').toBe(true);
     expect(focus).toHaveBeenCalledWith({ preventScroll: true });
     expect(document.activeElement).toBe(el);
     expect([el.selectionStart, el.selectionEnd], '光标在末尾').toEqual([3, 3]);
-    expect(tap().defaultPrevented, '已聚焦：不拦，点哪里光标去哪里').toBe(false);
+    expect(tap(), '已聚焦：不拦，点哪里光标去哪里').toBe(false);
     expect(focus).toHaveBeenCalledTimes(1);
   });
 
