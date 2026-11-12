@@ -4,18 +4,16 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type * as Probe from '../../platform/voice-probe.ts';
 import { clearLogQueue, clearOtherLogQueues } from '../../platform/log-store.ts';
+import { FakeRecorder, flush, mic, recorderEnv } from '../../platform/__tests__/recorder-fake.ts';
+import type * as Probe from '../../platform/voice-probe.ts';
 import { KEEP_KEY, KEEP_MAX, keepReply, loadKept, saveKept, type KeptSegment } from '../dev/voice-probe-keep.ts';
 
-const stop = vi.fn(async () => ({ blob: new Blob([new Uint8Array([7, 7, 7])], { type: 'audio/webm' }), mime: 'audio/webm;codecs=opus', ms: 2300 }));
+// 录音走正式录音器（platform/recorder.ts），桩是 recorder-fake.ts 的假 MediaRecorder；只把上传换掉
 const upload = vi.fn();
-const start = vi.fn();
 vi.mock('../../platform/voice-probe.ts', async (orig) => ({
   ...(await orig<typeof Probe>()),
-  startRecording: (...a: unknown[]) => start(...a),
   uploadProbe: (...a: unknown[]) => upload(...a),
-  supportedTypes: () => [],
 }));
 const { default: VoiceProbe } = await import('../dev/VoiceProbe.tsx');
 
@@ -34,10 +32,11 @@ const reply = (label: string, transcript: string): Probe.ProbeReply => ({
   client_ms: 1000,
 });
 
+recorderEnv();
 beforeEach(() => {
   localStorage.clear();
   HTMLElement.prototype.setPointerCapture = vi.fn();
-  start.mockImplementation(async () => ({ stop, cancel: vi.fn() }));
+  mic();
 });
 afterEach(() => {
   cleanup();
@@ -46,15 +45,24 @@ afterEach(() => {
   localStorage.clear();
 });
 
+/** 按住录 2.3 秒（3 字节、WebM）再松手 */
 async function recordOnce(): Promise<void> {
   const hold = screen.getByTestId('probe-hold');
   await act(async () => {
     fireEvent.pointerDown(hold, { pointerId: 1 });
-    await Promise.resolve();
+    await flush();
+  });
+  const r = FakeRecorder.made.at(-1);
+  if (!r) throw new Error('没建录音器');
+  r.mimeType = 'audio/webm;codecs=opus';
+  r.chunks = [new Blob([new Uint8Array([7, 7, 7])])];
+  await act(async () => {
+    r.fireStart();
+    await vi.advanceTimersByTimeAsync(2300);
   });
   await act(async () => {
     fireEvent.pointerUp(hold, { pointerId: 1 });
-    await new Promise((r) => setTimeout(r, 0));
+    await flush();
   });
 }
 const kept = (): KeptSegment[] => JSON.parse(localStorage.getItem(KEEP_KEY) ?? '[]') as KeptSegment[];
@@ -68,7 +76,7 @@ describe('探测页结果留底', () => {
     expect(kept()).toEqual([
       {
         n: 1,
-        recorder: 'audio/webm;codecs=opus',
+        recorder: 'audio/webm',
         size: 3,
         ms: 2300,
         replies: [{ label: 'audio/webm', status: 200, result: 'ok', gemini_http: 200, bytes: 3, gemini_ms: 800, total_ms: 900, client_ms: 1000, transcript: '今天天气很好' }],
@@ -78,7 +86,7 @@ describe('探测页结果留底', () => {
     for (const no of ['gemini-x', 'raw_type', 'model', 'error', 'blob']) expect(raw).not.toContain(no);
     await act(async () => {
       second(reply('audio/webm;codecs=opus', '第二种'));
-      await new Promise((r) => setTimeout(r, 0));
+      await flush();
     });
     expect(kept()[0]!.replies.map((r) => r.transcript)).toEqual(['今天天气很好', '第二种']);
   });

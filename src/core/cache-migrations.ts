@@ -74,7 +74,7 @@ export function validateMigrations(list: readonly CacheMigration[], dbVersion: n
 }
 
 /** 结果里的 error 字段（开库、迁移、冷启动失败共用，cache.ts、boot.ts 也引它）：Error、DOMException 给错误名（名字空的给 Error），别的给 error；不带 message（可能有用户内容）。
- *  不用 run-log-api.ts 的 errTag：那个是进日志的“ type=名”片段、认不出给空串，这里是状态字段的值 */
+ *  不用 platform/err-tag.ts 的 errTag：那个是进日志的“ type=名”片段、认不出给空串，这里是状态字段的值 */
 export function errName(e: unknown): string {
   if (e instanceof Error || (typeof DOMException !== 'undefined' && e instanceof DOMException)) return e.name || 'Error';
   return 'error';

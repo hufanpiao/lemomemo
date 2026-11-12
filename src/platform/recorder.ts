@@ -1,11 +1,12 @@
-// 录音：拿麦克风 → MediaRecorder 开录 → 停下交出一段只在内存里的录音。MediaRecorder、getUserMedia 按 A13 只准写在 platform：正式录音用这里，开发用的录音探测页用 voice-probe.ts
+// 录音：拿麦克风 → MediaRecorder 开录 → 停下交出一段只在内存里的录音。MediaRecorder、getUserMedia 按 A13 只准写在 platform：正式录音和开发用的录音探测页（app/dev/VoiceProbe.tsx）都用这里
 // • start 事件到了才记起点、才告诉调用方“开始了”：调用方到这时才提示可以说话，早了句首会被切掉
 // • 拿到流以后不管哪一步失败或取消，都先停录音器、关轨道、清计时器再返回（系统的录音指示不能一直亮）
 // • 取消只有 signal 这一套，从调用到交出结果之前一直有效
 // • 运行日志只记类型、字节数、毫秒、原因
 import { audioType, bareMime } from '../../shared/schema/ai.ts';
+import { errTag } from './err-tag.ts';
 import { micResultOf, rememberMicResult } from './perm-mic.ts';
-import { errTag, rlog } from './run-log-api.ts';
+import { rlog } from './run-log-api.ts';
 
 /** start() 之后等 start 事件最长多久，超过按开不起来算 */
 export const REC_START_WAIT_MS = 3000;
@@ -32,10 +33,10 @@ export interface ActiveRecorder {
 }
 
 export interface RecorderOptions {
-  /** 最长录多久、最多多少字节：调用方传 record-logic 的 REC_MAX_MS 和 shared 的 AI_AUDIO_MAX_BYTES（platform 不引功能层，也不在这里引 zod 那一份） */
+  /** 最长录多久、最多多少字节：调用方传 record-logic 的 REC_MAX_MS（探测页传自己的 PROBE_MAX_MS）和 shared 的 AI_AUDIO_MAX_BYTES（platform 不引功能层，也不在这里引 zod 那一份） */
   maxMs: number;
   maxBytes: number;
-  /** 必填：浏览器默认码率不受控（常见 128 kbps 上下，录满 60 秒会超字节上限） */
+  /** 必填，传 shared 的 AI_AUDIO_BITS_PER_SECOND：浏览器默认码率不受控（常见 128 kbps 上下，录满 60 秒会超字节上限） */
   bitsPerSecond: number;
   signal?: AbortSignal;
   /** 开录以后没人调 stop()、没取消，录音就结束了（录满 maxMs、轨道被系统收走、录音器出错）：通知一次，界面调 stop() 拿结局 */

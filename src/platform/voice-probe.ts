@@ -4,7 +4,8 @@
 // • 录音 Blob 只在内存：不写 IndexedDB、Cache、localStorage，传完由页面丢掉引用；不读、不显示账号信息（只取会话的 JWT 放进请求头）
 // • 同一段录音按两种 Content-Type 标注各传一次（iPhone 的 AAC：audio/mp4、audio/aac；电脑 Edge 的 WebM：audio/webm、audio/webm;codecs=opus）
 // • 回包只取约定的几个字段（mime、raw_type、bytes、gemini_http、gemini_ms、total_ms、result、transcript、model、error），别的不显示
-// 网络和 MediaRecorder 按 A12、A13 只能写在 platform
+// • 录音本身用正式录音器 recorder.ts 的 startRecorder（Q-5：start 事件到了才算开录，句首不丢；这里不再另写一份录音）
+// 网络和 MediaRecorder（这里只剩 isTypeSupported）按 A12、A13 只能写在 platform
 import { AI_AUDIO_MAX_BYTES, bareMime } from '../../shared/schema/ai.ts';
 import { buildInfo } from './env.ts';
 import { appFetch } from './http.ts';
@@ -16,10 +17,10 @@ export const PROBE_MODELS = ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'] a
 export type ProbeModel = (typeof PROBE_MODELS)[number];
 /** 显示 isTypeSupported 的几种 */
 export const PROBE_TYPES = ['audio/mp4', 'audio/aac', 'audio/webm', 'audio/webm;codecs=opus', 'audio/mpeg', 'audio/ogg;codecs=opus'] as const;
-/** 一段最长录多久：50 秒（正式录音是 60 秒、50 秒起倒数，见 features/plus/data/record-logic.ts 的 REC_MAX_MS、REC_COUNTDOWN_FROM_MS） */
+/** 一段最长录多久：50 秒，探测页传给 startRecorder 的 maxMs（正式录音是 60 秒、50 秒起倒数，见 features/plus/data/record-logic.ts 的 REC_MAX_MS、REC_COUNTDOWN_FROM_MS） */
 export const PROBE_MAX_MS = 50_000;
 export const PROBE_UPLOAD_TIMEOUT_MS = 30_000;
-/** 服务器收的上限（_preview/voice-probe/handler.ts ⑧：超了回 413，两边都用 shared 的 AI_AUDIO_MAX_BYTES）；iPhone 的 AAC 录满 50 秒可能超 */
+/** 服务器收的上限（_preview/voice-probe/handler.ts ⑧：超了回 413，两边都用 shared 的 AI_AUDIO_MAX_BYTES）；也是传给 startRecorder 的 maxBytes，超了录音器不交出（too_large） */
 export const PROBE_MAX_BYTES = AI_AUDIO_MAX_BYTES;
 /** 到上限的九成就在页面上提示 */
 export const PROBE_WARN_BYTES = Math.round(PROBE_MAX_BYTES * 0.9);
@@ -47,71 +48,6 @@ export function labelsFor(actual: string): string[] {
   if (base === 'audio/mp4' || base === 'audio/aac' || base === 'audio/x-m4a') return ['audio/mp4', 'audio/aac'];
   if (base === 'audio/webm') return ['audio/webm', 'audio/webm;codecs=opus'];
   return [actual || 'application/octet-stream'];
-}
-
-export interface ProbeClip {
-  blob: Blob;
-  /** recorder.mimeType（浏览器实际给的） */
-  mime: string;
-  ms: number;
-}
-
-export interface Recording {
-  stop(): Promise<ProbeClip>;
-  cancel(): void;
-}
-
-/** 开始录音（要在点按里调）；onCap：到 50 秒上限、录音器自己停了时调（页面提示“已到上限”） */
-export async function startRecording(now: () => number = () => performance.now(), onCap?: () => void): Promise<Recording> {
-  // 不记麦克风结果（不引 perm.ts：引了它会从提醒块里拆成独立块，主块的依赖表多一项，首屏稳定口径 +6 B）
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const end = (): void => {
-    for (const t of stream.getTracks()) t.stop();
-  };
-  const parts: Blob[] = [];
-  let cap: ReturnType<typeof setTimeout> | undefined;
-  let rec: MediaRecorder;
-  let done: Promise<ProbeClip>;
-  // 拿到麦克风以后，建录音器或 start 抛错（不支持、设备被占用）：先关轨道、清计时器再抛，免得系统的录音指示一直亮着（代码审 M2）
-  try {
-    const r = new MediaRecorder(stream);
-    rec = r;
-    const t0 = now();
-    r.addEventListener('dataavailable', (ev) => {
-      if (ev.data.size > 0) parts.push(ev.data);
-    });
-    done = new Promise<ProbeClip>((resolve) => {
-      r.addEventListener('stop', () => {
-        clearTimeout(cap);
-        end();
-        const mime = r.mimeType || parts[0]?.type || '';
-        resolve({ blob: new Blob(parts, { type: mime }), mime, ms: Math.round(now() - t0) });
-        parts.length = 0;
-      });
-    });
-    cap = setTimeout(() => {
-      if (r.state === 'recording') {
-        r.stop();
-        onCap?.();
-      }
-    }, PROBE_MAX_MS);
-    r.start();
-  } catch (err) {
-    clearTimeout(cap);
-    end();
-    throw err;
-  }
-  return {
-    stop() {
-      if (rec.state === 'recording') rec.stop();
-      return done;
-    },
-    cancel() {
-      clearTimeout(cap);
-      if (rec.state === 'recording') rec.stop();
-      end();
-    },
-  };
 }
 
 export interface ProbeReply {

@@ -12,8 +12,7 @@ import { VOICE_TIMEOUT_MS } from '../../../../shared/schema/ai.ts';
 import type { SendFail } from './send-error.ts';
 
 export const REC_MAX_MS = 60_000;
-/** 录音码率（架构 5.11：直传按 AAC 32–64 kbps 算）：录满 REC_MAX_MS 约 360 KB，留足 600 KB 上限的余量 */
-export const REC_BITS_PER_SECOND = 48_000;
+// 录音码率在 shared/schema/ai.ts 的 AI_AUDIO_BITS_PER_SECOND（探测页也要用，app 层引不到这里）
 export const REC_COUNTDOWN_FROM_MS = 50_000;
 export const AI_PARSE_TIMEOUT_MS = 6_000;
 /** 上传总超时的下限：服务器等 Gemini 的 VOICE_TIMEOUT_MS 再加 2 秒网络往返（客户端不能先放弃） */

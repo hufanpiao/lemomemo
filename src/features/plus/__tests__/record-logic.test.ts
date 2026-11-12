@@ -1,8 +1,8 @@
 // 录音面板和按住“＋”的纯逻辑（data/record-logic.ts；架构 5.1、5.11；任务单 Q3）
 import { describe, expect, it } from 'vitest';
-import { AI_AUDIO_MAX_BYTES } from '../../../../shared/schema/ai.ts';
+import { AI_AUDIO_BITS_PER_SECOND, AI_AUDIO_MAX_BYTES } from '../../../../shared/schema/ai.ts';
 import {
-  canAutoRetry, fmtClock, HOLD_IDLE, holdStep, keptExpired, REC_BITS_PER_SECOND, REC_MAX_MS, recCountdown, uploadTimeoutMs,
+  canAutoRetry, fmtClock, HOLD_IDLE, holdStep, keptExpired, REC_MAX_MS, recCountdown, uploadTimeoutMs,
   type HoldAction, type HoldEvent, type HoldState,
 } from '../data/record-logic.ts';
 
@@ -25,11 +25,11 @@ describe('码率：录满 60 秒也在 600 KB 以内（架构 5.11：直传按 A
     expect(AI_AUDIO_MAX_BYTES).toBe(600 * 1024);
   });
   it('码率在 32–64 kbps 里', () => {
-    expect(REC_BITS_PER_SECOND).toBeGreaterThanOrEqual(32_000);
-    expect(REC_BITS_PER_SECOND).toBeLessThanOrEqual(64_000);
+    expect(AI_AUDIO_BITS_PER_SECOND).toBeGreaterThanOrEqual(32_000);
+    expect(AI_AUDIO_BITS_PER_SECOND).toBeLessThanOrEqual(64_000);
   });
   it('按这个码率录满上限时长，加两成容器和码率浮动的余量，仍不超过字节上限', () => {
-    const bytes = (REC_BITS_PER_SECOND / 8) * (REC_MAX_MS / 1000);
+    const bytes = (AI_AUDIO_BITS_PER_SECOND / 8) * (REC_MAX_MS / 1000);
     expect(bytes * 1.2).toBeLessThanOrEqual(AI_AUDIO_MAX_BYTES);
   });
 });

@@ -33,6 +33,9 @@ export const AI_PROJECT_LEN = 40;
 /** 一段录音最多多少字节（架构 5.11 第 2 点）：前端录音器超了就不交出；服务器 ai-voice、voice-probe
  *  读请求体也用这一份（各自的 index.ts 从 _shared/gen/ 注入，超了回 413） */
 export const AI_AUDIO_MAX_BYTES = 600 * 1024;
+/** 前端录音码率（架构 5.11：直传按 AAC 32–64 kbps 算）：录满 60 秒约 360 KB，留足 AI_AUDIO_MAX_BYTES 的余量。
+ *  只给前端录音器的调用方用（正式录音、开发用的录音探测页都传这一份，探测测的就是正式参数）；放 shared 是因为 app 层引不到功能层的 record-logic */
+export const AI_AUDIO_BITS_PER_SECOND = 48_000;
 /** ai-voice 服务器等 Gemini 转写加解析的超时（架构 5.11 第 4 点；毫秒）。前端上传总超时的下限由它推出（record-logic 的 UPLOAD_MIN_MS）；
  *  服务器那边用 _shared/ai/params.ts 的同名常量（服务器函数不能直接引 shared），两边相等由 tests/shared/ai-schema.test.ts 钉住 */
 export const VOICE_TIMEOUT_MS = 15_000;

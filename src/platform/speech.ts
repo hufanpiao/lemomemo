@@ -4,7 +4,8 @@
 // • 没认出字不算失败，交出空串，调用方按“没听清”处理
 // • 运行日志只记语言、字数、段数、毫秒、错误码，不记识别出的字
 import type { Locale } from '../../shared/i18n/i18n.ts';
-import { errTag, rlog } from './run-log-api.ts';
+import { errTag } from './err-tag.ts';
+import { rlog } from './run-log-api.ts';
 
 export type SpeechFail = 'denied' | 'network' | 'error';
 export type SpeechEnd = { ok: true; text: string } | { ok: false; fail: SpeechFail };

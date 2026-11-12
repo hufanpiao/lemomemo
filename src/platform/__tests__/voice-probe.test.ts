@@ -1,6 +1,7 @@
 // R-68 探测（B3 FA-0）：标注怎么选、回包只取约定字段、上传的请求头和各种失败
+// 录音本身 Q-5 起走正式录音器 recorder.ts（它的取消、出错、上限在 recorder*.test.ts；探测页怎么用在 app/__tests__/voice-probe-leave.test.tsx）
 import { describe, expect, it, vi } from 'vitest';
-import { labelsFor, PROBE_MAX_MS, PROBE_UPLOAD_TIMEOUT_MS, replyOf, uploadProbe, type UploadDeps } from '../voice-probe.ts';
+import { labelsFor, PROBE_UPLOAD_TIMEOUT_MS, replyOf, uploadProbe, type UploadDeps } from '../voice-probe.ts';
 
 describe('labelsFor', () => {
   it.each([
@@ -85,42 +86,6 @@ describe('uploadProbe', () => {
   });
 });
 
-describe('startRecording 的 cancel（安全审建议 ①：离开页面马上停）', () => {
-  it('停掉录音器和麦克风轨道，不等 50 秒上限', async () => {
-    const trackStop = vi.fn();
-    const stream = { getTracks: () => [{ stop: trackStop }] } as unknown as MediaStream;
-    const recStop = vi.fn();
-    class FakeRecorder extends EventTarget {
-      state = 'inactive';
-      mimeType = 'audio/webm';
-      start(): void {
-        this.state = 'recording';
-      }
-      stop(): void {
-        recStop();
-        this.state = 'inactive';
-        this.dispatchEvent(new Event('stop'));
-      }
-    }
-    vi.stubGlobal('MediaRecorder', FakeRecorder);
-    vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia: vi.fn(async () => stream) } });
-    vi.useFakeTimers();
-    try {
-      const { startRecording } = await import('../voice-probe.ts');
-      const r = await startRecording(() => 0);
-      r.cancel();
-      expect(recStop).toHaveBeenCalledTimes(1);
-      expect(trackStop).toHaveBeenCalled();
-      // 50 秒上限的计时器也清掉了，到点不会再 stop 一次
-      vi.advanceTimersByTime(60_000);
-      expect(recStop).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.useRealTimers();
-      vi.unstubAllGlobals();
-    }
-  });
-});
-
 describe('uploadProbe 的取消（代码审 S1）', () => {
   it('传到一半取消 → cancelled，fetch 的信号也断了', async () => {
     const ac = new AbortController();
@@ -143,84 +108,5 @@ describe('uploadProbe 的取消（代码审 S1）', () => {
     const fetch = vi.fn();
     expect(await uploadProbe(clip, 'audio/mp4', 'gemini-3.1-flash-lite', deps({ fetch }), ac.signal)).toMatchObject({ status: 0, error: 'cancelled' });
     expect(fetch).not.toHaveBeenCalled();
-  });
-});
-
-describe('startRecording 拿到麦克风以后出错（代码审 M2）', () => {
-  async function withStream(Recorder: unknown, run: (trackStop: ReturnType<typeof vi.fn>) => Promise<void>): Promise<void> {
-    const trackStop = vi.fn();
-    const stream = { getTracks: () => [{ stop: trackStop }, { stop: trackStop }] } as unknown as MediaStream;
-    vi.stubGlobal('MediaRecorder', Recorder);
-    vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia: vi.fn(async () => stream) } });
-    vi.useFakeTimers();
-    try {
-      await run(trackStop);
-    } finally {
-      vi.useRealTimers();
-      vi.unstubAllGlobals();
-    }
-  }
-
-  it('new MediaRecorder 抛错：关掉所有轨道，把原错误抛出去', async () => {
-    const boom = new DOMException('no', 'NotSupportedError');
-    class BadRecorder {
-      constructor() {
-        throw boom;
-      }
-    }
-    await withStream(BadRecorder, async (trackStop) => {
-      const { startRecording } = await import('../voice-probe.ts');
-      await expect(startRecording(() => 0)).rejects.toBe(boom);
-      expect(trackStop).toHaveBeenCalledTimes(2);
-    });
-  });
-
-  it('start() 抛错：关掉所有轨道、清掉 50 秒计时器，把原错误抛出去', async () => {
-    const boom = new DOMException('busy', 'InvalidStateError');
-    const recStop = vi.fn();
-    class StartFails extends EventTarget {
-      state = 'inactive';
-      mimeType = '';
-      start(): void {
-        throw boom;
-      }
-      stop(): void {
-        recStop();
-      }
-    }
-    await withStream(StartFails, async (trackStop) => {
-      const { startRecording } = await import('../voice-probe.ts');
-      await expect(startRecording(() => 0)).rejects.toBe(boom);
-      expect(trackStop).toHaveBeenCalledTimes(2);
-      expect(vi.getTimerCount()).toBe(0);
-      vi.advanceTimersByTime(PROBE_MAX_MS + 1000);
-      expect(recStop).not.toHaveBeenCalled();
-    });
-  });
-
-  it('到 50 秒上限：录音器自己停、关轨道、调 onCap（代码审 S2）', async () => {
-    class FakeRecorder extends EventTarget {
-      state = 'inactive';
-      mimeType = 'audio/mp4';
-      start(): void {
-        this.state = 'recording';
-      }
-      stop(): void {
-        this.state = 'inactive';
-        this.dispatchEvent(new Event('stop'));
-      }
-    }
-    await withStream(FakeRecorder, async (trackStop) => {
-      const { startRecording } = await import('../voice-probe.ts');
-      const onCap = vi.fn();
-      const r = await startRecording(() => 0, onCap);
-      vi.advanceTimersByTime(PROBE_MAX_MS - 1);
-      expect(onCap).not.toHaveBeenCalled();
-      expect(trackStop).not.toHaveBeenCalled();
-      vi.advanceTimersByTime(1);
-      expect(onCap).toHaveBeenCalledTimes(1);
-      expect(trackStop).toHaveBeenCalledTimes(2);
-      expect((await r.stop()).mime).toBe('audio/mp4');
-    });
   });
 });
