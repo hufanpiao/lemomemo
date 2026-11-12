@@ -1,6 +1,7 @@
 // “＋”记录的状态机（B3 任务单 FA-1；架构 5.9“正在整理和各种失败”、5.11 第 4 点）
 // preparing → recording（或兜底的 listening）→ uploading → organizing
-//   → saved / saved_rule / quota_out / offline_saved / no_speech / ai_failed / cancelled
+//   → saved / saved_rule / quota_out / offline_saved / no_speech / ai_failed
+// • 录音中丢掉、取消直接 reset 回 idle（没有“已取消”这个结果；11-13 删掉走不到的 cancelled，FA-3 复查第 5 条）
 // • 打字没有录音那几步：idle → organizing → 结果（或先 confirming 等用户选过去的日子）
 // • ai_failed 时录音留在内存里（最多 2 分钟，record-logic 的 keptExpired），可以“重试”回到 uploading
 // • 不合法的转移原样返回旧状态（界面连点、晚到的回调不会把状态弄乱），单测逐条测
@@ -24,10 +25,9 @@ export type CaptureStatus =
   | 'quota_out'
   | 'offline_saved'
   | 'no_speech'
-  | 'ai_failed'
-  | 'cancelled';
+  | 'ai_failed';
 
-export type FinalStatus = 'saved' | 'saved_rule' | 'quota_out' | 'offline_saved' | 'no_speech' | 'ai_failed' | 'cancelled';
+export type FinalStatus = 'saved' | 'saved_rule' | 'quota_out' | 'offline_saved' | 'no_speech' | 'ai_failed';
 
 export type CaptureEvent =
   | { type: 'prepare' }
@@ -39,13 +39,14 @@ export type CaptureEvent =
   | { type: 'organize' }
   | { type: 'need_confirm' }
   | { type: 'confirmed' }
-  | { type: 'done'; status: Exclude<FinalStatus, 'cancelled' | 'no_speech'> }
+  | { type: 'done'; status: Exclude<FinalStatus, 'no_speech'> }
   | { type: 'no_speech' }
   | { type: 'retry' }
+  /** 确认行没选就关掉 */
   | { type: 'cancel' }
   | { type: 'reset' };
 
-const FINALS: readonly CaptureStatus[] = ['saved', 'saved_rule', 'quota_out', 'offline_saved', 'no_speech', 'ai_failed', 'cancelled'];
+const FINALS: readonly CaptureStatus[] = ['saved', 'saved_rule', 'quota_out', 'offline_saved', 'no_speech', 'ai_failed'];
 
 export const isFinal = (s: CaptureStatus): s is FinalStatus => FINALS.includes(s);
 
@@ -53,7 +54,7 @@ export const isFinal = (s: CaptureStatus): s is FinalStatus => FINALS.includes(s
 export function captureStep(s: CaptureStatus, e: CaptureEvent): CaptureStatus {
   if (e.type === 'reset') return 'idle';
   // 确认行没选就关掉：回到 idle，原话由界面填回输入条（不悄悄按某一种保存，也不算“取消了一条记录”）
-  if (e.type === 'cancel') return s === 'confirming' ? 'idle' : isFinal(s) || s === 'idle' ? s : 'cancelled';
+  if (e.type === 'cancel') return s === 'confirming' ? 'idle' : s;
   switch (s) {
     case 'idle':
       if (e.type === 'prepare') return 'preparing';
@@ -90,7 +91,6 @@ export function captureStep(s: CaptureStatus, e: CaptureEvent): CaptureStatus {
     case 'quota_out':
     case 'offline_saved':
     case 'no_speech':
-    case 'cancelled':
       return s;
     default: {
       const never: never = s;

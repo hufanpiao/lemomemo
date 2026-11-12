@@ -18,7 +18,8 @@ export type NoticeKey =
   | 'plus.notice.arrange'
   | 'plus.notice.badDay'
   | 'plus.notice.mergeFailed'
-  | 'plus.notice.undoFailed';
+  | 'plus.notice.undoFailed'
+  | 'plus.notice.annivKept';
 
 export interface NoticeLine {
   key: NoticeKey;
@@ -37,8 +38,10 @@ export interface NoticeInput {
   resetClock: string;
   /** 合并那一条没存上（原来的几条没撤） */
   mergeFailed?: boolean;
-  /** 全部撤销时没撤成的条数 */
+  /** 撤销时没撤成的条数（纪念日不算） */
   undoFailed?: number;
+  /** 有纪念日撤不掉（这里撤不了纪念日） */
+  annivKept?: boolean;
 }
 
 function mainLine(n: NoticeInput): NoticeLine {
@@ -66,6 +69,7 @@ export function noticeLines(n: NoticeInput): NoticeLine[] {
   const out: NoticeLine[] = [mainLine(n)];
   if (n.undoFailed) out.push({ key: 'plus.notice.undoFailed', params: { n: n.undoFailed } });
   if (n.mergeFailed) out.push({ key: 'plus.notice.mergeFailed', params: {} });
+  if (n.annivKept) out.push({ key: 'plus.notice.annivKept', params: {} });
   if (n.status === 'offline_saved' && n.remind) out.push({ key: 'plus.notice.offlineRemind', params: {} });
   if (n.hints.recur) out.push({ key: 'plus.notice.recur', params: {} });
   if (n.hints.arrange) out.push({ key: 'plus.notice.arrange', params: {} });

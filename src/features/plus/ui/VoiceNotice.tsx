@@ -26,6 +26,7 @@ export const NOTE_VIEW: Record<VoiceNote, { title: Key; sub: Key | null; acts: r
   speech_off: { title: 'plus.voice.speechOff', sub: null, acts: ['type'] },
   speech_net: { title: 'plus.voice.speechNet', sub: null, acts: ['type'] },
   rec_failed: { title: 'plus.voice.recFailed', sub: null, acts: ['type'] },
+  not_heard: { title: 'plus.voice.notHeard', sub: null, acts: ['again', 'type'] },
   not_saved: { title: 'plus.voice.notSaved', sub: null, acts: ['again', 'type'] },
 };
 

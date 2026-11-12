@@ -1,6 +1,6 @@
 // 打字条真的调到 ai-parse（B3 FA-2、Q2；src/features/plus/data/ai-parse-api.ts）：npm run e2e:real 跑，lemo-e2e 真后端。
 // 最短路径：建号 → 登录 → 告知页勾上同意（ai.enabled = true）→ 待办页点“＋”打“买牛奶”回车
-// → 页面真的 POST 到 /functions/v1/ai-parse（带 JWT、X-App-Version）→ 回 200 → 记下“买牛奶”，服务器 todos 里有这一行。
+// → 页面真的 POST 到 /functions/v1/ai-parse（带 JWT、X-App-Version）→ 回 200 → 记下“买牛奶”、打字条自动收起（R-392），服务器 todos 里有这一行。
 // 不花真钱、不用真密钥：lemo-e2e 的函数环境没有 GEMINI_API_KEY，出站走假代理；这里只认 200 的本机规则分支
 // （consent_required / fallback），不认 record——拿到 record 说明碰到了真的 AI 服务商，用例直接挂
 import { expect, test } from '@playwright/test';
@@ -41,7 +41,8 @@ test('打字条 → ai-parse 真后端：回 200 走本机规则，记下“买�
   expect(body.consent_required === true || body.fallback === true).toBe(true);
 
   await expect(page.getByTestId('type-notice')).toContainText('买牛奶');
-  await expect(page.getByTestId('type-input')).toHaveValue('');
+  // 记下一条后打字条自动收起（R-392），不再看输入框清没清
+  await expect(page.getByTestId('type-bar'), '记下后自动收起（R-392）').toHaveCount(0);
 
   await expect
     .poll(async () => {

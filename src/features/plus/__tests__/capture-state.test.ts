@@ -21,9 +21,9 @@ describe('captureStep', () => {
     expect(failed).toBe('ai_failed');
     expect(captureStep(failed, { type: 'retry' })).toBe('uploading');
   });
-  it('取消：进行中的变 cancelled；结果和 idle 不变；确认行没选回到 idle', () => {
-    expect(captureStep('recording', { type: 'cancel' })).toBe('cancelled');
-    expect(captureStep('organizing', { type: 'cancel' })).toBe('cancelled');
+  it('cancel 只管确认行没选（回到 idle）；别的状态原样（录音中丢掉走 reset）', () => {
+    expect(captureStep('recording', { type: 'cancel' })).toBe('recording');
+    expect(captureStep('organizing', { type: 'cancel' })).toBe('organizing');
     expect(captureStep('saved', { type: 'cancel' })).toBe('saved');
     expect(captureStep('idle', { type: 'cancel' })).toBe('idle');
     expect(captureStep('confirming', { type: 'cancel' })).toBe('idle');
@@ -32,7 +32,7 @@ describe('captureStep', () => {
     expect(captureStep('saved', { type: 'done', status: 'ai_failed' })).toBe('saved');
     expect(captureStep('idle', { type: 'stop' })).toBe('idle');
     expect(captureStep('recording', { type: 'organize' })).toBe('recording');
-    expect(captureStep('cancelled', { type: 'retry' })).toBe('cancelled');
+    expect(captureStep('no_speech', { type: 'retry' })).toBe('no_speech');
   });
   it('reset 一律回 idle', () => {
     expect(captureStep('ai_failed', { type: 'reset' })).toBe('idle');

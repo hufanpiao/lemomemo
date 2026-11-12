@@ -9,6 +9,8 @@
 // • 松手（或点“记下”）面板就收起，进“上传中”：停录那一步也能在提示条上取消（录音器停不下来时最多等 REC_STOP_WAIT_MS）
 // • AI 没回应：录音留在内存（最多 2 分钟）可以“重试”（同一段），或“再说一次”（改用手机自带识别）
 // • 运行日志：状态转换、选路、代号作废、提示、说明卡各一行，不记转写和说的内容
+// • 网络原因失败的计数（net）是模块级的：进设置页等 RecordHost 卸载重挂也不清零（“10 分钟内 2 次”要跨挂载算；FA-3 复查第 1 条）。
+//   额度用完（quotaOut）每次挂载从本机重读一份，不用跨
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import { AI_AUDIO_BITS_PER_SECOND, AI_AUDIO_MAX_BYTES } from '../../../../shared/schema/ai.ts';
 import { clock } from '../../../platform/clock.ts';
@@ -109,6 +111,14 @@ interface Attempt {
   rec: ActiveRecorder | null;
 }
 
+/** 10 分钟内网络原因失败几次（模块级，跨挂载保留） */
+let net: NetFallback = NET_OK;
+
+/** 只给测试用 */
+export function resetVoiceNetForTest(): void {
+  net = NET_OK;
+}
+
 export function createVoiceSession(deps: () => VoiceDeps | null): VoiceSession {
   const d = (): VoiceDeps => {
     const x = deps();
@@ -122,7 +132,6 @@ export function createVoiceSession(deps: () => VoiceDeps | null): VoiceSession {
     for (const fn of [...subs]) fn();
   };
 
-  let net: NetFallback = NET_OK;
   let quotaOut = false;
   let kept: KeptAudio | null = null;
   /** 按下那一下选的路（null = 录音）：满 350 ms 照用 */
@@ -290,7 +299,7 @@ export function createVoiceSession(deps: () => VoiceDeps | null): VoiceSession {
       end(a);
       toIdle();
       if (res.fail === 'denied') set({ card: 'denied' });
-      else show(res.fail === 'network' ? 'speech_net' : res.fail === 'timeout' ? 'rec_failed' : 'speech_off');
+      else show(res.fail === 'network' ? 'speech_net' : res.fail === 'timeout' ? 'not_heard' : 'speech_off');
       return;
     }
     if (v.status === 'preparing') go({ type: 'start', path: 'speech' });
@@ -361,7 +370,7 @@ export function createVoiceSession(deps: () => VoiceDeps | null): VoiceSession {
       if (!r.ok) {
         end(a);
         toIdle();
-        show(r.fail === 'empty' ? 'no_speech' : 'rec_failed');
+        show(r.fail === 'empty' ? 'no_speech' : r.fail === 'stop_timeout' ? 'not_heard' : 'rec_failed');
         return;
       }
       void upload(a, r.clip);

@@ -124,6 +124,8 @@ export type VoiceNote =
   | 'speech_off'
   | 'speech_net'
   | 'rec_failed'
+  /** 停录、停识别等不到结局（兜底超时）：这段没收到 */
+  | 'not_heard'
   | 'not_saved';
 
 /** 一次返回在界面上怎么收尾：save 记下（和打字同一种 TypePlan，raw 是转写）；note 出提示条（status 是状态机的终态）；idle 回到没按 */
