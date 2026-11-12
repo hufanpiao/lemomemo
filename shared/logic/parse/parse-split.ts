@@ -23,7 +23,7 @@ import { cutGraphemes } from '../short.ts';
 import { pastDate, type DateBasis } from './past-date.ts';
 import { RECUR_MARK, recurHint, takeRecur } from './recur-hint.ts';
 import { splitClauses } from './split.ts';
-import { prepare, QUICK_MAX, restoreWeekdays, type Rest } from './text.ts';
+import { LEFTOVER_RE, prepare, QUICK_MAX, restoreWeekdays, type Rest } from './text.ts';
 import { periodLeft, takePeriodOnly, takeRelative, takeTime } from './time-words.ts';
 
 /** 提示条要用的几样（客户端按它选文案） */
@@ -60,15 +60,6 @@ const COUNTDOWN_RE = /倒数日|디데이|D-?day/i;
 const BIRTHDAY_RE = /生日|生辰|생일|생신/;
 const LUNAR_RE = /农历|阴历|음력/;
 const NOTE_RE = /(?:^|\s)(?:想法|灵感|备忘|아이디어|메모)\s*[:：]|说他|听说|한대|간대|했대|이래/;
-/** 标题里还剩日期、时刻、星期词（代码审 M3：“到周三出差”“和周五3点开会”“开会和 3点去银行”）：说明一句里还有没认完的日子或时刻，判没把握。
- *  “3号楼”“3号线”这类不算（同 date-words 的排除） */
-export const LEFTOVER_RE = new RegExp([
-  '\\d{1,2}\\s*(?:点|點|시(?![간작])|:\\d{2})',
-  '(?<![\\d.第A-Za-z区层栋])\\d{1,2}\\s*[号日](?![楼栋室线院间])',
-  '\\d{1,2}\\s*월\\s*\\d{1,2}\\s*일', '\\d{1,2}\\s*일(?![요간])',
-  '(?:周|星期|礼拜)[一二三四五六日天]', '[월화수목금토일]요일',
-  '今天|明天|后天|大后天|今晚|明早|明晚|오늘|내일|모레|글피',
-].join('|'));
 /** 没说日子的“凌晨 / 새벽”（代码审 M1）：这个时刻今天已经过了就记明天 */
 const EARLY = ['凌晨', '새벽'];
 

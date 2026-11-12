@@ -10,10 +10,9 @@ import { firstOfMonth, lastOfMonth, monthOf, shiftMonth } from '../calendar/cal-
 import { cutGraphemes } from '../short.ts';
 import { KO_WEEK, takeDate, weekday, weekPrefix, ZH_WEEK_PREFIX } from './date-words.ts';
 import { cleanTitle, stripRequests, takeKindWords, takeNamedKind } from './marks.ts';
-import { LEFTOVER_RE } from './parse-split.ts';
 import type { PlusTarget } from './resolve-target.ts';
 import { BULK_RE, RELATED_RE, saysOverdue, takeOverdue, takeTarget, targetIntentOf, type PlusTo } from './target-parse.ts';
-import { prepare, QUICK_MAX, take, type Rest } from './text.ts';
+import { LEFTOVER_RE, prepare, QUICK_MAX, take, type Rest } from './text.ts';
 import { takePeriodOnly } from './time-words.ts';
 
 export type { PlusTo } from './target-parse.ts';

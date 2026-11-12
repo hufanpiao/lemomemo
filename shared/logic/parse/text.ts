@@ -86,3 +86,13 @@ export function take(st: Rest, re: RegExp): RegExpMatchArray | null {
 export function cut(st: Rest, str: string): void {
   st.text = st.text.replace(str, ' ');
 }
+
+/** 标题里还剩日期、时刻、星期词（parse-split 判 leftover、intent 判查找有没有把握共用；代码审 M3：“到周三出差”“和周五3点开会”“开会和 3点去银行”）：说明一句里还有没认完的日子或时刻，判没把握。
+ *  “3号楼”“3号线”这类不算（同 date-words 的排除） */
+export const LEFTOVER_RE = new RegExp([
+  '\\d{1,2}\\s*(?:点|點|시(?![간작])|:\\d{2})',
+  '(?<![\\d.第A-Za-z区层栋])\\d{1,2}\\s*[号日](?![楼栋室线院间])',
+  '\\d{1,2}\\s*월\\s*\\d{1,2}\\s*일', '\\d{1,2}\\s*일(?![요간])',
+  '(?:周|星期|礼拜)[一二三四五六日天]', '[월화수목금토일]요일',
+  '今天|明天|后天|大后天|今晚|明早|明晚|오늘|내일|모레|글피',
+].join('|'));
