@@ -33,16 +33,25 @@ describe('拍摄时间（R-108：只留拍摄时间）', () => {
   });
 });
 
-/** 假解码、假画布：导出的大小 = 宽 × 高 × 质量 × k（k 控制会不会超） */
-function fakeEncode(k: number, type = 'image/webp', w = 4000, h = 3000) {
+/**
+ * 假解码、假画布：原生导出的大小 = 宽 × 高 × 质量 × k（k 控制会不会超），type 是 nativeType。
+ * wasm 默认载不进来（这里只测原生那条路；wasm 那条路见 image-encode-wasm.test.ts）
+ */
+function fakeEncode(k: number, nativeType = 'image/webp', w = 4000, h = 3000) {
   const renders: { w: number; h: number; q: number }[] = [];
   const deps: EncodeDeps = {
     decode: () => Promise.resolve({ width: w, height: h, close: vi.fn() } satisfies Decoded),
-    render: (_s, rw, rh, _t, q) => {
-      renders.push({ w: rw, h: rh, q });
-      // 只要 size、type（不真的分配那么多字节）
-      return Promise.resolve({ size: Math.round(rw * rh * q * k), type } as Blob);
-    },
+    canvas: (_s, rw, rh) => ({
+      toBlob: (q) => {
+        renders.push({ w: rw, h: rh, q });
+        // 只要 size、type（不真的分配那么多字节）
+        return Promise.resolve({ size: Math.round(rw * rh * q * k), type: nativeType } as Blob);
+      },
+      pixels: () => ({ data: new Uint8ClampedArray(rw * rh * 4), width: rw, height: rh }),
+    }),
+    wasm: () => Promise.reject(new TypeError('offline')),
+    native: {},
+    now: () => 0,
   };
   return { deps, renders };
 }
@@ -62,15 +71,19 @@ describe('重新编码（webp；原图长边 ≤ 2048、≤ 2 MB；缩略图长�
     expect(r.takenAt).toBeNull();
   });
   it('HEIC 解不了 → heic_unsupported（看 type 或扩展名）；别的解不了 → decode_failed', async () => {
-    const bad: EncodeDeps = { decode: () => Promise.reject(new Error('x')), render: () => Promise.resolve(null) };
+    const bad: EncodeDeps = { ...fakeEncode(1).deps, decode: () => Promise.reject(new Error('x')) };
     expect(await encodeImage(new File([], 'IMG_1.HEIC', { type: '' }), TZ, bad)).toEqual({ ok: false, code: 'heic_unsupported' });
     expect(await encodeImage(new File([], 'a', { type: 'image/heif' }), TZ, bad)).toEqual({ ok: false, code: 'heic_unsupported' });
     expect(await encodeImage(new File([], 'a.jpg', { type: 'image/jpeg' }), TZ, bad)).toEqual({ ok: false, code: 'decode_failed' });
     expect(isHeic({ type: 'image/jpeg', name: 'a.jpg' })).toBe(false);
   });
-  it('浏览器导不出 webp（回了 png）→ encode_unsupported；怎么降都超 → too_big', async () => {
-    expect(await encodeImage(new File([], 'a.png', { type: 'image/png' }), TZ, fakeEncode(0.1, 'image/png').deps)).toEqual({ ok: false, code: 'encode_unsupported' });
-    expect(await encodeImage(new File([], 'a.png', { type: 'image/png' }), TZ, fakeEncode(1000).deps)).toEqual({ ok: false, code: 'too_big' });
+  it('原生导不出 webp（回了 png）且 wasm 也载不进来 → encode_load_failed（R-402：不再是“换个浏览器”）；怎么降都超 → too_big', async () => {
+    expect(await encodeImage(new File([], 'a.png', { type: 'image/png' }), TZ, fakeEncode(0.1, 'image/png').deps)).toMatchObject({
+      ok: false,
+      code: 'encode_load_failed',
+      diag: { path: 'wasm', native: 'image/png', why: 'load', err: 'TypeError' },
+    });
+    expect(await encodeImage(new File([], 'a.png', { type: 'image/png' }), TZ, fakeEncode(1000).deps)).toMatchObject({ ok: false, code: 'too_big', diag: { path: 'native' } });
   });
   it('fitEdge 不放大', () => {
     expect(fitEdge(300, 200, 384)).toEqual({ w: 300, h: 200 });
@@ -137,7 +150,7 @@ function harness(over: Partial<UploaderDeps> = {}) {
     userId: () => U,
     tz: () => TZ,
     now: () => Date.UTC(2026, 10, 11),
-    encode: () => Promise.resolve({ ok: true, full: new Blob([new Uint8Array(7)], { type: 'image/webp' }), thumb: new Blob([new Uint8Array(3)], { type: 'image/webp' }), width: 4, height: 3, takenAt: 9 }),
+    encode: () => Promise.resolve({ ok: true, full: new Blob([new Uint8Array(7)], { type: 'image/webp' }), thumb: new Blob([new Uint8Array(3)], { type: 'image/webp' }), width: 4, height: 3, takenAt: 9, diag: { path: 'wasm', native: 'image/png', ms: 12, loadMs: 5, encMs: 6 } }),
     insert: vi.fn((row: Record<string, unknown> & { id: string }) => {
       rows.add(row.id);
       queue = [{ rec: `note_images:${row.id}`, state: 'pending', error: null }];
@@ -185,7 +198,14 @@ describe('上传器的运行日志（11-13 负责人问“随手记加不了图�
     if (!r.ok) throw new Error(r.code);
     h.setQueue([]);
     await vi.waitFor(() => expect(h.u.getSnapshot()).toEqual([]));
-    expect(lines).toEqual(['notes img start type=image/jpeg kb=0 new=false', 'notes img encode ok kb=0 thumbKb=0 4x3', 'notes img insert ok ms=0', 'notes img row confirmed', 'notes img upload ok ms=0']);
+    // 压图只有这一行：结果 + 编码诊断（R-402 评审 8：编码器自己不再另记）
+    expect(lines).toEqual([
+      'notes img start type=image/jpeg kb=0 new=false',
+      'notes img encode ok kb=0 thumbKb=0 4x3 path=wasm native=image/png ms=12 loadMs=5 encMs=6',
+      'notes img insert ok ms=0',
+      'notes img row confirmed',
+      'notes img upload ok ms=0',
+    ]);
     expect(lines.join(' ')).not.toContain('a.jpg');
   });
   it('失败也各记一行：压图失败带失败码；上传被拒带种类和服务器码', async () => {
@@ -193,6 +213,10 @@ describe('上传器的运行日志（11-13 负责人问“随手记加不了图�
     const h = harness({ log: (l) => lines.push(l), encode: () => Promise.resolve({ ok: false, code: 'heic_unsupported' }) });
     expect(await h.u.insert(N, file())).toEqual({ ok: false, code: 'heic_unsupported' });
     expect(lines).toEqual(['notes img start type=image/jpeg kb=0 new=false', 'notes img encode heic_unsupported', 'notes img insert heic_unsupported ms=0']);
+    const wasmFail: string[] = [];
+    const hw = harness({ log: (l) => wasmFail.push(l), encode: () => Promise.resolve({ ok: false, code: 'encode_failed', diag: { path: 'wasm', native: 'image/png', ms: 9, loadMs: 2, encMs: 7, why: 'enc', err: 'RangeError' } }) });
+    expect(await hw.u.insert(N, file())).toEqual({ ok: false, code: 'encode_failed' });
+    expect(wasmFail[1]).toBe('notes img encode encode_failed path=wasm native=image/png ms=9 loadMs=2 encMs=7 why=enc err=RangeError');
     const up: string[] = [];
     const h2 = harness({ log: (l) => up.push(l), upload: vi.fn(() => Promise.resolve<UploadResult>(err('denied', 'forbidden', 'not_owner'))), exitOf: vi.fn(() => Promise.resolve('active' as const)) });
     await h2.u.insert(N, file());

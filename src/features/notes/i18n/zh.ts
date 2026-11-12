@@ -42,7 +42,9 @@ export const zh = {
   'notes.img.fail.write': '图片没存上，稍后再试一次',
   'notes.img.err.heic_unsupported': '这张是 HEIC 格式，浏览器打不开，请先转成 JPG',
   'notes.img.err.decode_failed': '这张图片打不开',
-  'notes.img.err.encode_unsupported': '这个浏览器存不了图片，换个浏览器试试',
+  // R-402：iPhone 上的浏览器都是 WebKit，“换个浏览器”没用；先用中性文案，最终文案待负责人定
+  'notes.img.err.encode_load_failed': '这张图没处理成功，联网后再试一次',
+  'notes.img.err.encode_failed': '这张图没处理成功，再试一次',
   'notes.img.err.too_big': '图片太大，没存上',
   'notes.img.err.write_failed': '图片没存上，稍后再试一次',
   'notes.img.err.private': '隐私记里不能插图片',

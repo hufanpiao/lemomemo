@@ -28,6 +28,11 @@ describe('首屏（src/app/main.tsx 的静态 import 闭包）不碰 zod（③ �
     const read = withPatch('src/core/cache-schema.ts', (s) => `import { allManifests } from '../../shared/manifests/index.ts';\n${s}`);
     expect(violations(ENTRY, read).some((p) => p.includes('src/core/cache-schema.ts → shared/manifests/'))).toBe(true);
   });
+
+  it('拦得住变异：首屏里静态引了 @jsquash（R-402 的 wasm 编码器只许按需 import()）', () => {
+    const read = withPatch('src/core/cache-schema.ts', (s) => `import '@jsquash/webp/meta.js';\n${s}`);
+    expect(violations(ENTRY, read).some((p) => p.endsWith('pkg:@jsquash/webp/meta.js'))).toBe(true);
+  });
 });
 
 describe('静态 import 的认法', () => {
@@ -61,6 +66,9 @@ describe('静态 import 的认法', () => {
     expect(forbidden(resolve(ROOT, 'shared/schema/rows.ts'))).toBe(true);
     expect(forbidden(resolve(ROOT, 'shared/manifests/core.ts'))).toBe(true);
     expect(forbidden(resolve(ROOT, 'shared/i18n/zh.ts'))).toBe(false);
+    expect(forbidden('pkg:@jsquash/webp/codec/enc/webp_enc_simd.js')).toBe(true);
+    expect(forbidden('pkg:@jsquash/webp')).toBe(true);
+
   });
 });
 
