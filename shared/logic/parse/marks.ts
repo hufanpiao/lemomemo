@@ -43,10 +43,13 @@ function namedRules(): [RegExp, NamedKind][] {
 }
 const NAMED = namedRules();
 
+/** 韩文类型词后面紧跟的复数“들”和助词（“할 일들은”“일정을”“메모도”）：和类型词一起取走，免得剩下“들은”当关键词；
+ *  后面还连着别的韩文字（“일정이랑”）就只取类型词本身 */
+const KO_KIND_TAIL = '(?:들?(?:은|는|이|가|을|를|도|만)?(?![가-힣]))?';
 /** 原话说到的类型词（不看是不是请求动词的宾语；“日程表 / 일정표”不算）：“＋”的查找、取消、改期定 kinds 用 */
-const TODO_WORD = new RegExp(`${ZH_TODO}|${KO_TODO}`, 'g');
-const EVENT_WORD = new RegExp(`${ZH_EVENT}(?!表)|${KO_EVENT}`, 'g');
-const NOTE_WORD = /随手记|메모/g;
+const TODO_WORD = new RegExp(`${ZH_TODO}|${KO_TODO}${KO_KIND_TAIL}`, 'g');
+const EVENT_WORD = new RegExp(`${ZH_EVENT}(?!表)|${KO_EVENT}${KO_KIND_TAIL}`, 'g');
+const NOTE_WORD = new RegExp(`随手记|메모${KO_KIND_TAIL}`, 'g');
 
 /** 取走一类词，返回原话里有没有 */
 function takeAll(st: Rest, re: RegExp): boolean {

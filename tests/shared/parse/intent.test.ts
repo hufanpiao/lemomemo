@@ -2,6 +2,7 @@
 // localIntent：逐组句式、有没有把握、query、target、to（架构 5.14 第 2、3、7 点；TC-B4b3-44 ①、47、48 ⑥⑦ 的本机部分）。
 import { describe, expect, it } from 'vitest';
 import { localIntent, type LocalIntent } from '../../../shared/logic/parse/intent.ts';
+import { takeKindWords } from '../../../shared/logic/parse/marks.ts';
 
 const SEOUL = 'Asia/Seoul';
 const LA = 'America/Los_Angeles';
@@ -146,6 +147,13 @@ describe('完成、取消', () => {
     like(li('明天下午三点的会取消了'), { intent: 'cancel', sure: false, target: { text: '会', date: TM, time: '15:00', kinds: ['event', 'todo'] }, to: null });
     expect(li('내일 오후 프로젝트 회의를 취소해 줘').target).toEqual({ text: '프로젝트 회의를', date: TM, time: null, kinds: ['event', 'todo'] });
     for (const s of ['周五的聚餐不去了', '明天的例会不开了', '내일 회의 취소됐어', '나 내일 모임 안 가']) expect(li(s).intent, s).toBe('cancel');
+  });
+  it('韩文类型词连同复数“들”和助词一起取走：不剩“들은”“을”当关键词；后面还连着韩文字的只取类型词', () => {
+    like(li('할 일들은 취소해 줘'), { intent: 'cancel', target: { text: '', kinds: ['todo'] } });
+    like(li('오늘 완료하지 않은 할 일을 모두 보여 줘.'), { intent: 'search', query: { text: '모두', kinds: ['todo'] } });
+    like(li('내일 오후에 일정이 겹치는지 확인해 줘.'), { intent: 'search', query: { text: '확인해 줘', kinds: ['event'] } });
+    const st = { text: ' 일정이랑 할 일들 메모도 ' };
+    expect([takeKindWords(st), st.text.trim().split(/\s+/)]).toEqual([{ todo: true, event: true, note: true }, ['이랑']]);
   });
   it('相关待办：只开提示开关，后半句不进 target', () => {
     const r = li('내일 오후 회의 취소해 줘，顺便把相关待办也删除。');
