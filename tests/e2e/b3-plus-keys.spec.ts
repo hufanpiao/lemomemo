@@ -1,11 +1,22 @@
 // “＋”打字条的离线“准备中”和窗口内快捷键（B3 FA-2 M4、Q4；S24），以及中文相对时刻记下以后在今天页的时刻（R-374）：
 // • 打字条那一块下载不到（离线冷启动又没缓存）：点“＋”显示“准备中”，不换页、不是点了没反应；“关闭”能关掉
-//   （拦掉 TypeBar、TypeBarPreload 两块的请求模拟；SW 也拦掉，免得它从缓存里给）
+//   （拦掉 TypeBar 那一块的请求模拟，小气泡、按住手势也在这一块里；SW 也拦掉，免得它从缓存里给）
 // • Ctrl+N 打开打字条（焦点在输入框里）；记下一条以后打字条自动收起（R-392），这时按 Ctrl+Z 撤销这一批，提示条收起
 // • 点“＋”冷启动当场聚焦（Q-24）、原地聚焦（Q-8）、贴底浮条按钮按下不让输入框失焦（Q-25）
+import type { Page } from '@playwright/test';
 import { expect, test } from './session-fixture.ts';
 
-const TYPEBAR = /\/TypeBar(Preload)?-[^/]*\.js$/;
+const TYPEBAR = /\/TypeBar-[^/]*\.js$/;
+
+/** 打字条那一块下载完：主块和它依赖的共用样式块（TypeBar.module，打字条和录音那一块共用）都到了，模块才会执行。
+ *  只等主块再留 200 ms 不够：负载下 TypeBar.module 会晚到几百毫秒，Q-24 偶发拿到 BODY（FA-3 时查明，HEAD 上 --repeat-each=4 也是 2 次失败）。
+ *  共用样式块以后要是被并进主块，第二个等 10 秒超时后照常往下走 */
+function typeBarLoaded(page: Page): Promise<unknown> {
+  return Promise.all([
+    page.waitForResponse(TYPEBAR),
+    page.waitForResponse(/\/TypeBar\.module-[^/]*\.js$/, { timeout: 10_000 }).catch(() => undefined),
+  ]);
+}
 
 test.describe('“＋”离线“准备中”（B3 Q4）', () => {
   test.use({ loggedIn: true, serviceWorkers: 'block', viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
@@ -33,7 +44,7 @@ test.describe('冷启动后第一次点“＋”当场聚焦（Q-24）', () => {
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
 
   test('打字条下载好以后第一次点“＋”：点按处理完时焦点已在输入框', async ({ page }) => {
-    const loaded = page.waitForResponse(/\/TypeBar-[^/]*\.js$/);
+    const loaded = typeBarLoaded(page);
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await loaded;
@@ -65,7 +76,7 @@ test.describe('打字条原地聚焦（Q-8）', () => {
         orig.call(this, o);
       };
     });
-    const loaded = page.waitForResponse(/\/TypeBar-[^/]*\.js$/);
+    const loaded = typeBarLoaded(page);
     await page.goto('/app/#/today');
     await expect(page.getByTestId('today')).toBeVisible();
     await loaded;

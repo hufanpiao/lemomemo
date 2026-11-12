@@ -343,7 +343,7 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
       const { callAi } = await typeOnce(false);
       expect(callAi).toHaveBeenCalledTimes(1);
       expect(lines.find((l) => l.startsWith('typebar planned'))).toMatch(/^typebar planned items=1 ai=true quotaOut=false origin=\w+ status=\w+ reason=\S+ ms=\d+$/);
-      expect(lines.find((l) => l.startsWith('typebar stored'))).toMatch(/^typebar stored out=ok ready=1 ask=0 ms=\d+$/);
+      expect(lines.find((l) => l.startsWith('typebar stored'))).toMatch(/^typebar stored out=ok ready=1 ask=0 origin=\w+ ms=\d+$/);
     } finally {
       delete slots[RL_SLOT];
     }

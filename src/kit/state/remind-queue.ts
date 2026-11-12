@@ -13,7 +13,6 @@
 //   今天页看到它也挂“错过的提醒”，不传 since、照旧全算（今天页待办 代码审查 M1：引擎坏了提醒不响，“错过的提醒”是页面上唯一的信号）
 import { createStore } from 'zustand/vanilla';
 import { useStore } from 'zustand';
-import { useEffect } from 'react';
 import { logEvent } from '../../../shared/core/log-bus.ts';
 
 export type RemindHoldReason = 'recording' | 'keyboard';
@@ -52,7 +51,7 @@ let seq = 0;
 export const HOLD_MAX_MS = 10 * 60_000;
 
 /** 压住提醒横幅（录音中、键盘弹起）；返回放开函数（多次调用只放一次）。超过 maxMs 自动放开并记日志。
- *  React 组件里优先用 useHoldReminders(active)，卸载时自动放开 */
+ *  React 组件里优先用 kit/hooks/useHoldReminders.ts（卸载时自动放开） */
 export function holdReminders(reason: RemindHoldReason, maxMs: number = HOLD_MAX_MS): () => void {
   const token = ++seq;
   remindQueue.setState((s) => ({ holds: [...s.holds, { token, reason }] }));
@@ -69,14 +68,6 @@ export function holdReminders(reason: RemindHoldReason, maxMs: number = HOLD_MAX
     logEvent('remind_hold_timeout', { code: reason });
   }, maxMs);
   return release;
-}
-
-/** active 为 true 时压住，变 false 或组件卸载时放开（“＋”录音面板：useHoldReminders(recording, 'recording')） */
-export function useHoldReminders(active: boolean, reason: RemindHoldReason = 'recording'): void {
-  useEffect(() => {
-    if (!active) return;
-    return holdReminders(reason);
-  }, [active, reason]);
 }
 
 /** 换成这一批在响的（提醒功能每分钟算一次）：顺序按先来的保留，新来的排后面；已收起的不进 */

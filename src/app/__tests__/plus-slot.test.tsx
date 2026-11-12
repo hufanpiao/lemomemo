@@ -1,16 +1,28 @@
 // “＋”点一下打开打字条的接线（app/plus-slot.tsx；B3 FA-2、M4、Q4）：
 // • 没打开、没预先下载：什么都不画，也不下载打字条那一块
 // • 还没下载好就打开：过 PREPARING_DELAY_MS 显示“准备中”（不能点了没反应），可以关掉；到了换成打字条，日子原样交过去
-// • 首屏画完以后 preloadPlus：挂一份小气泡（什么都不画）；之后打开直接是打字条，不闪“准备中”；展开、关闭原样交回
+// • 首屏画完以后 preloadPlus：下载好以后挂一份 Preload（什么都不画）；之后打开直接是打字条，不闪“准备中”；展开、关闭原样交回
+// • 按住“＋”的转发桥 plusHold（B3 FA-3）：下载好之前什么都不做、不报错；下载好以后四个口子原样转到那一块的 hold
 // • 预先下载好以后打开：打开的那一次渲染当场画出（Q-24，iOS 弹键盘的前提）。这条排在任何画出打字条的用例前面：
 //   万一以后有人改回 React.lazy，lazy 成功一次就缓存，排在后面就测不出来
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '../../kit/state/ui-store.ts';
 
-const gate = vi.hoisted(() => ({ bars: 0, preloads: 0, mounts: 0, ready: Promise.resolve() }));
+const gate = vi.hoisted(() => ({
+  bars: 0,
+  mounts: 0,
+  ready: Promise.resolve(),
+  calls: [] as string[],
+  hold: {
+    onStart: () => void gate.calls.push('start'),
+    onMove: () => void gate.calls.push('move'),
+    onEnd: () => void gate.calls.push('end'),
+    onCancel: () => void gate.calls.push('cancel'),
+  },
+}));
 vi.mock('../../features/plus/index.ts', async () => {
-  const { createElement, lazy } = await import('react');
+  const { createElement } = await import('react');
   type P = { day: string | null; onExpand(text: string, day: string | null): void; onClose(): void };
   const Bar = ({ day, onExpand, onClose }: P) =>
     createElement('div', { 'data-testid': 'type-bar-stub', 'data-day': day ?? '' }, [
@@ -23,20 +35,16 @@ vi.mock('../../features/plus/index.ts', async () => {
   };
   return {
     routes: [],
+    // 打字条那一块：组件本身、下载好以后一直挂的 Preload、按住“＋”的手势（B3 FA-3）
     loadTypeBar: async () => {
       gate.bars += 1;
       await gate.ready;
-      return { default: Bar };
+      return { default: Bar, Preload, hold: gate.hold };
     },
-    TypeBarPreload: lazy(async () => {
-      gate.preloads += 1;
-      await gate.ready;
-      return { default: Preload };
-    }),
   };
 });
 
-const { PlusSlot, preloadPlus, resetPlusForTest, PREPARING_DELAY_MS } = await import('../plus-slot.tsx');
+const { PlusSlot, plusHold, preloadPlus, resetPlusForTest, PREPARING_DELAY_MS } = await import('../plus-slot.tsx');
 
 beforeEach(() => {
   uiStore.getState().setLocale('zh-CN');
@@ -54,7 +62,7 @@ describe('PlusSlot', () => {
     const { container } = render(<PlusSlot open={false} day={null} onExpand={noop} onClose={noop} />);
     await wait(10);
     expect(container.childElementCount).toBe(0);
-    expect(gate.bars + gate.preloads).toBe(0);
+    expect(gate.bars + gate.mounts).toBe(0);
   });
 
   // Q-24（负责人 11-11“点+不出来键盘，还要点输入框才出来键盘”；运行日志 7 次冷启动后第一次点＋，focusin 都晚 310～480ms、键盘没弹）：
@@ -102,5 +110,20 @@ describe('PlusSlot', () => {
     expect(onExpand).toHaveBeenCalledWith('hi', null);
     fireEvent.click(screen.getByRole('button', { name: 'close' }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('按住“＋”的转发桥：下载好之前什么都不做；下载好以后四个口子原样转过去', async () => {
+    const ev = {} as Parameters<typeof plusHold.onStart>[0];
+    gate.calls.length = 0;
+    expect(() => plusHold.onStart(ev)).not.toThrow();
+    expect(gate.calls).toEqual([]);
+    render(<PlusSlot open={false} day={null} onExpand={noop} onClose={noop} />);
+    act(() => preloadPlus());
+    await wait(10);
+    plusHold.onStart(ev);
+    plusHold.onMove(ev);
+    plusHold.onEnd(ev);
+    plusHold.onCancel(ev);
+    expect(gate.calls).toEqual(['start', 'move', 'end', 'cancel']);
   });
 });

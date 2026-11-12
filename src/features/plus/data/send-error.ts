@@ -13,3 +13,11 @@ export class SendError extends Error {
     this.name = 'SendError';
   }
 }
+
+/** 送出途中抛出来的东西归成哪一种（打字、录音共用）：SendError 照它；超时、取消算 timeout；fetch 的 TypeError 算 network（连接都没建立）；别的算 http */
+export function sendFailOf(e: unknown): SendFail {
+  if (e instanceof SendError) return e.fail;
+  if (e instanceof DOMException && (e.name === 'AbortError' || e.name === 'TimeoutError')) return 'timeout';
+  if (e instanceof TypeError) return 'network';
+  return 'http';
+}

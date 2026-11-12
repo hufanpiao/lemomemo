@@ -7,9 +7,12 @@
 // • 还没下载好就点了（首屏刚画完就点、离线冷启动又没缓存）：在打字条的位置显示“准备中”（可以关掉），不能点了没反应；
 //   下载好了换成打字条（这一次聚焦不在点按里，键盘要再点一下输入框，只在这种情况下）。
 //   下载失败：浏览器把失败的动态 import 缓存住（见 src/motion/features.ts 文件头），这一次打开一直是“准备中”，重新打开 App 恢复
-import { Suspense, useEffect, useState, useSyncExternalStore } from 'react';
+// • 下载好以后一直挂一份同一块里的 Preload（“＋”上方的小气泡 S23、按住“＋”录音那一套 FA-3）；
+//   按住“＋”：App 把 plusHold 交给 GlassBar（只转 pointer 事件，GlassBar 不因此重渲染），下载好以后转到同一块里的 hold，之前按住只当点一下
+import { useEffect, useState, useSyncExternalStore, type PointerEvent } from 'react';
 import type { DateStr } from '../../shared/core/date.ts';
-import { loadTypeBar, TypeBarPreload } from '../features/plus/index.ts';
+import { loadTypeBar } from '../features/plus/index.ts';
+import type { PlusHold } from '../kit/components/GlassBar/GlassBar.tsx';
 import { useT } from '../kit/hooks/useT.ts';
 import { ErrorBoundary } from './ErrorBoundary.tsx';
 import styles from './plus-slot.module.css';
@@ -26,23 +29,27 @@ export interface TypeBarSlotProps {
   onClose(): void;
 }
 
-type Bar = Awaited<ReturnType<typeof loadTypeBar>>['default'];
+type Mod = Awaited<ReturnType<typeof loadTypeBar>>;
 
-let preload = false;
-let bar: Bar | null = null;
+/** 下载好的打字条那一块（组件本身 default、首屏画完以后挂的 Preload、按住“＋”的手势 hold） */
+let mod: Mod | undefined;
+
+/** 按住“＋”的转发桥（B3 FA-3）：App 首屏就把它交给 GlassBar；判定和录音在打字条那一块里（features/plus 的 hold），下载好才接上，之前按住只当点一下。
+ *  用 Proxy 一行转四个口子（onStart、onMove、onEnd、onCancel）：首屏只剩约 90 B 额度，逐个写要多几十字节 */
+export const plusHold = new Proxy({} as PlusHold, { get: (_, k: keyof PlusHold) => (e: PointerEvent) => mod?.hold[k](e) });
 let loading = false;
 const subs = new Set<() => void>();
 const emit = (): void => {
   for (const fn of [...subs]) fn();
 };
 
-/** 下载打字条那一块（重复调没关系）；下好了记住组件本身，通知重画 */
+/** 下载打字条那一块（重复调没关系）；下好了记住这一块（组件本身、手势），通知重画 */
 function load(): void {
   if (loading) return;
   loading = true;
   loadTypeBar().then(
     (m) => {
-      bar = m.default;
+      mod = m;
       emit();
     },
     () => undefined, // 下载失败：一直是“准备中”（文件头）
@@ -50,12 +57,7 @@ function load(): void {
 }
 
 /** 开始预先下载打字条（首屏画完以后调；重复调没关系） */
-export function preloadPlus(): void {
-  if (preload) return;
-  preload = true;
-  load();
-  emit();
-}
+export const preloadPlus = load;
 
 const subscribe = (fn: () => void): (() => void) => {
   subs.add(fn);
@@ -63,31 +65,28 @@ const subscribe = (fn: () => void): (() => void) => {
     subs.delete(fn);
   };
 };
-const isWarm = (): boolean => preload;
-const loadedBar = (): Bar | null => bar;
+const loaded = (): Mod | undefined => mod;
 
 /** 只给测试用 */
 export function resetPlusForTest(): void {
-  preload = false;
-  bar = null;
+  mod = undefined;
   loading = false;
 }
 
-/** 首屏画完以后一直挂一份小气泡；打开着时画打字条，还没下载好时画“准备中” */
+/** 下载好以后一直挂一份 Preload（小气泡、按住“＋”录音那一套）；打开着时画打字条，还没下载好时画“准备中” */
 export function PlusSlot(props: TypeBarSlotProps & { open: boolean }) {
   const { open, ...rest } = props;
-  const warm = useSyncExternalStore(subscribe, isWarm, isWarm);
-  const Loaded = useSyncExternalStore(subscribe, loadedBar, loadedBar);
+  const m = useSyncExternalStore(subscribe, loaded, loaded);
   useEffect(() => {
     if (open) load();
   }, [open]);
+  const Loaded = m?.default;
+  const Pre = m?.Preload;
   return (
     <>
-      {(warm || open) && (
+      {Pre && (
         <ErrorBoundary fallback={null}>
-          <Suspense fallback={null}>
-            <TypeBarPreload />
-          </Suspense>
+          <Pre />
         </ErrorBoundary>
       )}
       {open &&
