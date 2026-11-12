@@ -162,6 +162,7 @@ function untouched(pre: string): boolean {
  * ① 只说了这一种说法（查找时没有总结、列出、冲突）；② 说法在祈使位置；③ 不像要记的事（recordLike）；
  * ④ 没有批量词、相关待办、“今天没完成的”（extra、overdue）；⑤ 请求说法、点名说法去不掉任何东西；
  * ⑥ 没有认不出的时间说法（原话里的 TIME_LEFT_RE、取完以后剩下的 LEFTOVER_RE）。原话超长另由调用方判。
+ *   TIME_LEFT_RE 要测原话、不能测剩下的：“下个月初”里的“下个月”会被取走，剩下“初”就认不出“月初”了（intent.test“还有没认出的时间说法”）。
  */
 function sureQuery(intent: 'search' | 'summarize', pre: string, h: Hits, extra: boolean, built: { rest: string; recordLike: boolean }): boolean {
   const only = intent === 'search' ? !h.summary && !h.list && !h.conflict : true;
