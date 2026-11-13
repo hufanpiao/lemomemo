@@ -1,4 +1,5 @@
-// UI-4 M-1（架构 17.2 第 5 点）：“减少动态效果”只有一套判断——系统设置或 <html data-rm="1"> 任一条成立就算。
+// UI-4 M-1（架构 17.2 第 5 点）：“减少动态效果”只有一套判断——<html data-rm="1">。系统设置那一条由 platform/look.ts 并进 data-rm
+// （皮肤整块评审 11-14 第 1、6 条；look.test.ts 验），本模块不再自己查 matchMedia。
 // 函数（animateIn / press / transition）和 React 组件（Appear、SharedLayout）读的是同一个判断，data-rm 变了组件要重新渲染
 import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
 import { useReducedMotionConfig } from 'motion/react';
@@ -47,18 +48,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('一套判断：系统设置 或 data-rm="1"', () => {
-  it('prefersReducedMotion：两条任一成立就是 true', () => {
+describe('一套判断：只看 data-rm="1"', () => {
+  it('prefersReducedMotion：data-rm="1" 才是 true；系统设置了 reduce 但 data-rm 没写（look.ts 还没并进来）不自己判断', () => {
     fakeSystem(false);
     expect(prefersReducedMotion()).toBe(false);
     html.dataset['rm'] = '1';
     expect(prefersReducedMotion()).toBe(true);
     delete html.dataset['rm'];
     fakeSystem(true);
-    expect(prefersReducedMotion()).toBe(true);
+    expect(prefersReducedMotion()).toBe(false);
   });
 
-  it('useReducedMotionPref：data-rm 变了、系统设置变了都会重新渲染；卸载后不留监听', async () => {
+  it('useReducedMotionPref：data-rm 变了就重新渲染；不挂 matchMedia 监听', async () => {
     const sys = fakeSystem(false);
     const { result, unmount } = renderHook(() => useReducedMotionPref());
     expect(result.current).toBe(false);
@@ -68,10 +69,8 @@ describe('一套判断：系统设置 或 data-rm="1"', () => {
     delete html.dataset['rm'];
     await flush();
     expect(result.current).toBe(false);
-    act(() => sys.set(true));
-    expect(result.current).toBe(true);
-    unmount();
     expect(sys.listeners.size).toBe(0);
+    unmount();
   });
 });
 
@@ -173,9 +172,10 @@ describe('Appear 减少动态效果时交给 Motion 的参数', () => {
   });
 });
 
-describe('TC-B1-52：只开系统设置（data-rm 没开）同样不做位移', () => {
-  it('Appear：系统 prefers-reduced-motion 开时只淡入，不位移', () => {
+describe('TC-B1-52：只开系统设置时同样不做位移（look.ts 把系统设置写成 data-rm="1"）', () => {
+  it('Appear：系统 prefers-reduced-motion 开（data-rm="1"）时只淡入，不位移', () => {
     fakeSystem(true);
+    html.dataset['rm'] = '1';
     render(
       <Appear kind="toast" show>
         <span>hi</span>
@@ -185,8 +185,9 @@ describe('TC-B1-52：只开系统设置（data-rm 没开）同样不做位移', 
     expect(el.style.transform === '' || el.style.transform === 'none').toBe(true);
   });
 
-  it('SharedLayout：系统设置开时 layoutId 的弹簧关掉', () => {
+  it('SharedLayout：系统设置开（data-rm="1"）时 layoutId 的弹簧关掉', () => {
     fakeSystem(true);
+    html.dataset['rm'] = '1';
     let seen: boolean | null = null;
     function Probe() {
       seen = useReducedMotionConfig();
@@ -212,7 +213,7 @@ function stubAnimate(el: Element) {
 describe('17.4 B1（UI-4 M-1）：非 React 的 animateIn、press 和组件表现一致', () => {
   for (const [name, setup] of [
     ['data-rm="1"', () => { fakeSystem(false); html.dataset['rm'] = '1'; }],
-    ['系统设置', () => fakeSystem(true)],
+    ['系统设置（look.ts 写成 data-rm="1"）', () => { fakeSystem(true); html.dataset['rm'] = '1'; }],
   ] as const) {
     it(`animateIn：${name} 时只淡入（关键帧里没有 transform），时长减半`, async () => {
       setup();

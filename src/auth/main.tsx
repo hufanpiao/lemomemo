@@ -8,6 +8,7 @@ import { StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles/tokens.css';
 import '../styles/skins/simple.css';
+import '../styles/skins/glass.css';
 import '../styles/base.css';
 import { LOCALE_STORAGE_KEY, pickLocale } from '../../shared/i18n/pick-locale.ts';
 import { AuthPage } from '../features/auth/index.ts';
@@ -15,6 +16,8 @@ import { uiStore } from '../kit/state/ui-store.ts';
 import { applyDocLocale } from '../platform/doc-locale.ts';
 import { buildInfo } from '../platform/env.ts';
 import { installDesktopSession } from '../platform/session-store.ts';
+// 皮肤、深浅色跟这台设备上次用的（ADR-008；登录页没有账号设置可读，模块一引入就按本机缓存 pv-look 套上）：四种组合都有 --login-bg（皮肤视觉稿令牌表）
+import '../platform/look.ts';
 
 /** 界面语言：本机选过的（pv-locale）→ 设备语言 → 中文（16.4）；页面标题跟着换（K-16：韩文“레모”） */
 function savedLocale(): string | null {

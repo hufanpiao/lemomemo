@@ -7,17 +7,6 @@
   transform: scale(0.5);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .a {
-    transition: none;
-  }
-
-  .a[data-state="pressed"] {
-    transform: none;
-    opacity: var(--press-dim);
-  }
-}
-
 :global(:root[data-rm="1"]) .a {
   transition: none;
 }

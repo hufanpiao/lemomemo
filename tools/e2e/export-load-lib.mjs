@@ -8,7 +8,7 @@ import { gunzipSync } from 'node:zlib';
 
 export const NEXT = 'x-lemo-export-next';
 /** 数据清单里 export: json 的表（和迁移 20261031100000 的 export_size_over、account 的 exportTablesOf 一致） */
-export const EXPORT_TABLES = ['profiles', 'settings', 'devices', 'logs', 'events', 'todos', 'categories', 'notes', 'note_images', 'note_files', 'anniversaries'];
+export const EXPORT_TABLES = ['profiles', 'settings', 'devices', 'logs', 'events', 'todos', 'todo_items', 'categories', 'notes', 'note_images', 'note_files', 'anniversaries'];
 
 /** 错误回包只取 error 码（不带别的字段，免得把内容打出来） */
 async function errCode(res) {

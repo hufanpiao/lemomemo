@@ -49,6 +49,9 @@ insert into public.todos (id, user_id, title, due, project, note, raw_text, shor
   select gen_random_uuid(), '${uid}', pg_temp.p('tdTitle', g), date '2026-01-01' + (g % 700)::int,
     pg_temp.p('project', g), pg_temp.p('tdNote', g), pg_temp.p('tdRaw', g), nullif(pg_temp.p('short', g), ''),
     1790000000000 + g, 1790000000000 + g from generate_series(1, ${SYNC}) g;
+insert into public.todo_items (id, user_id, todo_id, title, sort, created_at, updated_at)   -- R-350：每条待办挂一个子任务
+  select gen_random_uuid(), '${uid}', t.id, '子任务', row_number() over (order by t.id), 1790000000000, 1790000000000
+    from public.todos t where t.user_id = '${uid}';
 insert into public.categories (id, user_id, name, color, sort)
   select gen_random_uuid(), '${uid}', left(pg_temp.p('catName', g), greatest(${L.catName} - length(g::text), 1)) || g, '#aabbcc', g from generate_series(1, ${SYNC}) g;
 insert into public.notes (id, user_id, title, body, raw_text, created_at, updated_at)
@@ -77,6 +80,7 @@ select t, n from (
   select 'devices', count(*) from public.devices where user_id = '${uid}' union all
   select 'events', count(*) from public.events where user_id = '${uid}' union all
   select 'todos', count(*) from public.todos where user_id = '${uid}' union all
+  select 'todo_items', count(*) from public.todo_items where user_id = '${uid}' union all
   select 'categories', count(*) from public.categories where user_id = '${uid}' union all
   select 'notes', count(*) from public.notes where user_id = '${uid}' union all
   select 'note_images', count(*) from public.note_images where user_id = '${uid}' union all

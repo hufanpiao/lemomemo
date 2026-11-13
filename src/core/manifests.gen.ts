@@ -806,6 +806,51 @@ export const manifestSnapshot: readonly Manifest[] = [
         ],
         "rebuildable": true,
         "exportOmitCols": []
+      },
+      {
+        "name": "todo_items",
+        "schema": "public",
+        "sync": true,
+        "realtime": true,
+        "localCache": "plain",
+        "clientWritable": [
+          "id",
+          "todo_id",
+          "title",
+          "done",
+          "sort",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "undone"
+        ],
+        "insertOnly": [
+          "id",
+          "todo_id",
+          "created_at"
+        ],
+        "updateOnly": [
+          "deleted_at",
+          "undone"
+        ],
+        "anonReadable": [],
+        "clientDelete": false,
+        "softDelete": true,
+        "backup": "json",
+        "export": "json",
+        "onAccountDelete": "cascade",
+        "userLookup": {
+          "by": "column",
+          "col": "user_id"
+        },
+        "systemCols": [],
+        "noConflict": [
+          "done",
+          "sort",
+          "updated_at"
+        ],
+        "rebuildable": true,
+        "exportOmitCols": []
       }
     ],
     "buckets": [],

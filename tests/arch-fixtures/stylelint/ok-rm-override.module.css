@@ -9,12 +9,6 @@
   transition: opacity var(--dur-ui) var(--ease-out);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .sheet {
-    transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
-  }
-}
-
 :global(:root[data-rm="1"]) .sheet {
   transition: none;
 }

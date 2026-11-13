@@ -131,7 +131,7 @@ select is((select string_agg(table_name || ':' || privilege_type, ',' order by t
   where table_schema = 'public' and grantee in ('anon', 'authenticated') and privilege_type in ('INSERT', 'UPDATE', 'TRUNCATE', 'REFERENCES', 'TRIGGER')), null,
   '客户端没有表级 INSERT、UPDATE（只有列级）');
 select is((select string_agg(event_object_table, ',' order by event_object_table) from information_schema.triggers
-  where action_statement like '%write_tombstone%'), 'anniversaries,categories,devices,events,note_files,note_images,notes,settings,todos', 'write_tombstone 挂在 9 张同步表上');
+  where action_statement like '%write_tombstone%'), 'anniversaries,categories,devices,events,note_files,note_images,notes,settings,todo_items,todos', 'write_tombstone 挂在 10 张同步表上（R-350 加 todo_items）');
 
 -- ===== 会话变量版 RLS =====
 insert into private.user_limits (user_id, media_mb) values ('aaaaaaaa-0000-4000-8000-000000000001', 700), ('bbbbbbbb-0000-4000-8000-000000000002', 50);

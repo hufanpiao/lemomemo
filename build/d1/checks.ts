@@ -7,6 +7,7 @@ import { COLUMN_GRANTS, CRON_WITHOUT_USABLE, EXPORT_NONE_BUCKETS, EXPORT_NONE_TA
 import { textColProblems } from './text-bounds.ts';
 import { GUARD_NO_PASSWORD, checkAuthUsersTriggers, checkGuardNoPassword, type GuardRow } from './auth-guard.ts';
 import { quotaWhenProblems } from './quota-when.ts';
+import { syncListDbProblems } from './sync-lists.ts';
 import { cronHardcodedSecret } from './cron-secret.ts';
 import { requiredIndexProblems } from './required-indexes.ts';
 import { lockTimeoutProblems } from './fn-lock-timeout.ts';
@@ -214,6 +215,9 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     if (t.softDelete !== hasDel && t.name !== 'tombstones') bad(`${t.name}：softDelete 写 ${t.softDelete}，表里${hasDel ? '有' : '没有'} deleted_at`);
   }
   if (!eq(trigTables('write_tombstone'), syncTables)) bad(`write_tombstone() 挂的表：${diff(syncTables, trigTables('write_tombstone'))}`);
+  // R-350 评审第 1 条：tombstones_tbl_check、apply_patch 的 case、cleanup_batch 的 30 天清理三处手写名单和清单的同步表一致（sync-lists.ts）
+  const syncPub = tables.filter((t) => t.sync === true && t.schema === 'public');
+  for (const p of await syncListDbProblems(q, syncPub.map((t) => t.name), syncPub.filter((t) => t.softDelete).map((t) => t.name))) bad(p);
   const touchWant = tables.filter((t) => t.systemCols).map((t) => key(t.schema, t.name));
   if (!eq(trigTables('touch'), touchWant)) bad(`touch() 挂的表和写了 systemCols 的表不一致：${diff(touchWant, trigTables('touch'))}`);
   const quotaWant = [...syncTables, 'public.logs'];

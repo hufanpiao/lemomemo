@@ -6,6 +6,7 @@ import { msAt } from '../../../../shared/core/date.ts';
 import type { WriteResult } from '../../../core/write.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
+import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import type { Writer } from '../data/capture-save.ts';
 import TypeBar, { LIFT_GAP_PX } from '../ui/TypeBar.tsx';
 import { UNDO_TOAST_MS } from '../../../kit/components/UndoToast.tsx';
@@ -188,6 +189,24 @@ describe('点页面空白处（Q-10 / R-390）', () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByTestId('type-bar')).toBeTruthy();
     expect(screen.getByRole('button', { name: '明年（2027/10/30）' })).toBeTruthy();
+  });
+
+  it('每次点空白记一行运行日志 typebar blank：没打字 act=close，打了字 act=blur，只记字数不记字', async () => {
+    const slots = globalThis as unknown as Record<string, unknown>;
+    const lines: string[] = [];
+    slots[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    try {
+      const { input } = setup();
+      fireEvent.change(input, { target: { value: '明天买菜' } });
+      await act(async () => tapMist());
+      fireEvent.change(input, { target: { value: '  ' } });
+      await act(async () => tapMist());
+      const blank = lines.filter((l) => l.startsWith('typebar blank'));
+      expect(blank).toEqual(['typebar blank act=blur len=4 asking=0 status=idle', 'typebar blank act=close len=0 asking=0 status=idle']);
+      expect(lines.join(' ')).not.toContain('买菜');
+    } finally {
+      delete slots[RL_SLOT];
+    }
   });
 
   it('点打字条自己身上（不是后面那层）不收起', async () => {

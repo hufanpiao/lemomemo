@@ -5,7 +5,21 @@
 import type { CachedRow } from './cache.ts';
 import { recKey } from './outbox-logic.ts';
 import type { Ctx } from './outbox-send.ts';
-import type { EnqueueInput, OutboxItem } from './outbox-types.ts';
+import type { EnqueueInput, OutboxItem, RecRef } from './outbox-types.ts';
+
+/**
+ * 子表 insert 没带 deps 时按父表外键自动补的依赖（R-350 评审第 3 条）：表 → [父表, 外键列]。
+ * 子任务的 insert 必须排在主待办的 insert 后面发，否则服务器 todo_items_cap 报 not_found、这一项被丢掉；
+ * 调用方哪里忘写 deps 也由这里兜住。调用方自己写了 deps 的照用，不再补
+ */
+const PARENT_OF: Readonly<Record<string, readonly [string, string]>> = { todo_items: ['todos', 'todo_id'] };
+
+function depsOf(input: EnqueueInput): RecRef[] {
+  if (input.deps?.length) return input.deps.map((d) => ({ table: d.table, id: d.id }));
+  const parent = input.op === 'insert' && Object.hasOwn(PARENT_OF, input.table) ? PARENT_OF[input.table] : undefined;
+  const pid = parent ? input.data[parent[1]] : undefined;
+  return parent && typeof pid === 'string' ? [{ table: parent[0], id: pid }] : [];
+}
 
 /**
  * 建一项新的 outbox 项（不合并到已有项时用）。op_id、base_rev、own_revs、client_ts、v、app、seq、remind、deps 的规则只写在这里：
@@ -42,7 +56,7 @@ export function newItem(
     app: ctx.appVersion,
     seq: all.reduce((m, i) => Math.max(m, i.seq), 0) + 1,
     remind: input.remind === true,
-    deps: (input.deps ?? []).map((d) => ({ table: d.table, id: d.id })),
+    deps: depsOf(input),
     error: null,
   };
 }

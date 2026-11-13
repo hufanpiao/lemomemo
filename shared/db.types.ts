@@ -513,7 +513,7 @@ isOneToOne: false
             }[]
                            },
 "remind_queue_finish":
-{ Args: { "p_claim": string,"p_release": Json }; Returns: undefined
+{ Args: { "p_claim": string,"p_done"?: Json,"p_release": Json }; Returns: undefined
                            },
 "remind_queue_pop":
 { Args: { "p_lease_s": number,"p_limit": number,"p_per_user"?: number,"p_poison"?: number,"p_retry": boolean,"p_ver"?: number }; Returns: {
@@ -787,6 +787,26 @@ isOneToOne: false
                   }
                   Relationships: [
                     
+                  ]
+                },"todo_items": {
+                  Row: {
+                    "created_at": number,"deleted_at": number | null,"done": boolean,"fv": NonNullable<Json>,"id": string,"rev": number,"sort": number,"synced_at": string,"title": string,"todo_id": string,"undone": boolean,"updated_at": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at": number,"deleted_at"?: number | null,"done"?: boolean,"fv"?: NonNullable<Json>,"id": string,"rev"?: number,"sort": number,"synced_at"?: string,"title": string,"todo_id": string,"undone"?: boolean,"updated_at": number,"user_id"?: string
+                  }
+                  Update: {
+                    "created_at"?: number,"deleted_at"?: number | null,"done"?: boolean,"fv"?: NonNullable<Json>,"id"?: string,"rev"?: number,"sort"?: number,"synced_at"?: string,"title"?: string,"todo_id"?: string,"undone"?: boolean,"updated_at"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "todo_items_todo_id_user_id_fkey"
+      columns: ["todo_id","user_id"]
+isOneToOne: false
+      referencedRelation: "todos"
+      referencedColumns: ["id","user_id"]
+    }
                   ]
                 },"todos": {
                   Row: {

@@ -7,16 +7,6 @@
   top: 40px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .a {
-    transition: none;
-  }
-
-  .a:active {
-    top: auto;
-  }
-}
-
 :global(:root[data-rm="1"]) .a {
   transition: none;
 }

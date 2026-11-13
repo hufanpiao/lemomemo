@@ -53,6 +53,7 @@ describe('L2：失败分类', () => {
     expect(classifyFailure({ status: 403, code: 'account_disabled' })).toBe('disabled');
     expect(classifyFailure({ status: 400, code: 'account_disabled' })).toBe('disabled');
     expect(classifyFailure({ status: 404, code: 'not_found' })).toBe('drop');
+    expect(classifyFailure({ status: 400, code: 'items_quota' })).toBe('drop');   // R-350：子任务已满 30 项（todo_items_cap）
     expect(classifyFailure({ status: 401, code: 'jwt_expired' })).toBe('auth');
   });
 
@@ -67,6 +68,35 @@ describe('L2：失败分类', () => {
     expect(await outbox.list()).toEqual([]);
     expect((await cache.getRow('todos', uid(1)))?.view?.['title']).toBe('待办1');
     expect(events).toEqual(['rejected']);
+  });
+});
+
+describe('R-350 入队兜底：todo_items 的 insert 没带 deps 时按 todo_id 自动依赖主待办', () => {
+  const item = (n: number, todoN: number): Record<string, unknown> => ({
+    id: uid(n), todo_id: uid(todoN), title: `子任务${n}`, done: false, sort: n, created_at: 1, updated_at: 1,
+  });
+
+  it('没写 deps 的 insert 补上 {todos, todo_id}；自己写了 deps 的照用；patch 不补', async () => {
+    const { cache, outbox } = await setup();
+    await seed(cache, 'todo_items', uid(13), item(13, 3), 2);
+    await outbox.enqueue({ table: 'todo_items', id: uid(11), op: 'insert', data: item(11, 1) });
+    await outbox.enqueue({ table: 'todo_items', id: uid(12), op: 'insert', data: item(12, 1), deps: [{ table: 'todos', id: uid(2) }] });
+    await outbox.enqueue({ table: 'todo_items', id: uid(13), op: 'patch', data: { done: true } });
+    expect((await outbox.list()).map((i) => [i.id, i.deps])).toEqual([
+      [uid(11), [{ table: 'todos', id: uid(1) }]],
+      [uid(12), [{ table: 'todos', id: uid(2) }]],
+      [uid(13), []],
+    ]);
+  });
+
+  it('主待办的 insert 还在退避中：子任务的 insert 也等着，不先发出去', async () => {
+    const { outbox } = await setup();
+    await outbox.enqueue({ table: 'todos', id: uid(1), op: 'insert', data: todo(1) });
+    await outbox.enqueue({ table: 'todo_items', id: uid(11), op: 'insert', data: item(11, 1) });
+    const a = await outbox.next();
+    expect(a?.table).toBe('todos');
+    expect(await outbox.fail(a?.op_id ?? '', { status: 503, sid: null })).toBe('transient');
+    expect(await outbox.next()).toBeNull();
   });
 });
 

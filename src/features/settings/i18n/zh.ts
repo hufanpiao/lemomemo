@@ -108,6 +108,33 @@ export const zh = {
   // 设置 › 账号 › 注销账号（R-188、R-192、R-256；功能说明第 30 项；架构 0.29 续第 129、131、137 条）
   'settings.delete.back': '账号', // 合卡以后注销页退回账号二级页（SETTINGS-merge-cards），照 settings.account.title
   // 设置 › 日历 二级页的顶栏标题（R-320；正文由 calendar 功能提供，和它词典里的 cal.set.title 同一个词）
+  'settings.skin.title': '皮肤', // 定稿线框 s13、皮肤视觉稿设置首页第 1368 行
+  'settings.skin.simple': '简洁',
+  'settings.skin.glass': '磨砂玻璃',
+  'settings.skin.value': '{skin} · {theme}',
+  'settings.skin.themeTitle': '白天 / 夜间', // R-06 三选一
+  'settings.skin.themeSystemValue.mobile': '白天 / 夜间跟着手机',
+  'settings.skin.themeSystemValue.desktop': '白天 / 夜间跟着电脑',
+  'settings.skin.theme.system.mobile': '跟着手机',
+  'settings.skin.theme.system.desktop': '跟着电脑',
+  'settings.skin.theme.light': '白天',
+  'settings.skin.theme.dark': '夜间',
+  'settings.skin.rt': '减少透明效果', // R-84
+  'settings.skin.rtNote.mobile': 'iPhone 读不到系统设置，在这里手动开',
+  'settings.skin.rtNote.desktop': 'Windows 关掉“透明效果”时自动生效；也可以在这里手动开',
+  'settings.skin.rm': '减少动态效果', // R-93
+  'settings.skin.rmNote.mobile': '只留淡入淡出；也跟随 iPhone 的“减少动态效果”',
+  'settings.skin.rmNote.desktop': '只留淡入淡出；也跟随 Windows 的“动画效果”',
+  'settings.skin.err': '没保存上，稍后再选一次',
+  'settings.font.title': '字体', // 定稿线框 s13；架构 5.9c
+  'settings.font.system': '系统字体',
+  'settings.font.systemValue': '系统字体（默认）', // 定稿线框 s13
+  'settings.font.note': '选中才下载，下载好之前先用系统字体；每台设备各下各的。',
+  'settings.font.loading': '下载中 {pct}%', // 架构 5.9c 第 3 点
+  'settings.font.fail': '没下载成功，先用系统字体', // 架构 5.9c 第 3 点
+  'settings.font.failShort': '没下载成功，先用系统字体',
+  'settings.font.retry': '重试',
+  'settings.font.err': '没保存上，稍后再选一次',
   'settings.notesView.title': '随手记显示方式',
   'settings.notesView.masonry': '瀑布流',
   'settings.notesView.list': '列表',

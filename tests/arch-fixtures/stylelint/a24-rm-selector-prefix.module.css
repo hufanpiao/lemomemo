@@ -15,12 +15,6 @@ button.a:active {
   transform: scale(0.5);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .a {
-    transition: none;
-  }
-}
-
 :global(:root[data-rm="1"]) .a {
   transition: none;
 }

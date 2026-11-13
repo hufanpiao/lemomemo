@@ -83,7 +83,7 @@ describe('export-load-preview 护栏', () => {
   it('造数：行数按参数、每行 user_id 是本人、附件挂在本人的笔记上', () => {
     const rows = seedRows(ID, 3, 5);
     expect(Object.fromEntries(Object.entries(rows).map(([k, v]) => [k, v.length]))).toEqual({
-      profiles: 1, settings: 3, devices: 3, events: 3, todos: 3, categories: 3, notes: 3, note_images: 3, note_files: 3, anniversaries: 3, logs: 5,
+      profiles: 1, settings: 3, devices: 3, events: 3, todos: 3, todo_items: 3, categories: 3, notes: 3, note_images: 3, note_files: 3, anniversaries: 3, logs: 5,
     });
     expect(Object.values(rows).flat().every((x) => x.user_id === ID)).toBe(true);
     const nids = new Set(rows.notes.map((n) => n.id));

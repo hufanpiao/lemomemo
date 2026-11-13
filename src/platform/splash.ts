@@ -5,12 +5,13 @@
 // - 不设最短显示时间（设计稿“出现和消失”）。
 // - 不依赖 transitionend：后台标签页、jsdom 里可能不来，按时长 + 余量的定时器兜底移除。
 // - splash.css 有 6 秒的纯 CSS 兜底（脚本没跑起来也不会一直盖着）：兜底淡完以后（visibility: hidden）再调，直接移除。
-// - 减少动态效果的判断照 src/motion/reduced.ts 的两条（系统设置或 <html data-rm="1">）；platform 层不能引 motion，这里另写一份。
+// - 兜底定时器一律按平时的 220 ms + 余量（11-13 皮肤批）：减少动态效果时 CSS 120 ms 就淡完、transitionend 先到；没来（后台标签页）时早已看不见，
+//   晚 100 ms 移除没有区别。原来照 motion/reduced.ts 另写的一份判断删掉（首屏少一份重复代码，腾给皮肤懒加载那一行）。
 // 调用点：从启动起算 SPLASH_MAX_MS（5 秒）的兜底 hideSplashAfter；#root 里第一次画出东西的下一帧（main.tsx 经 root-paint.ts 的 whenContent），
 // 另挂在 body 下的“库被挡住”整屏提示提交后的下一帧（root.tsx 的 SplashRelease）、main.tsx 冷启动就进退出屏的两处
 
 export const SPLASH_ID = 'lemo-splash';
-/** splash.css 里 .lemo-splash.is-leaving 的过渡时长（ms）：--dur-ui 220；减少动态效果 120（splash.css 里启动画面专用的那个令牌） */
+/** splash.css 里 .lemo-splash.is-leaving 的过渡时长（ms）：--dur-ui 220；减少动态效果 120（splash.css 里启动画面专用的那个令牌，tests/build/splash-html.test.ts 核对） */
 export const SPLASH_FADE_MS = 220;
 export const SPLASH_FADE_RM_MS = 120;
 /** 最多盖多久：从启动起算 5 秒（和告知页关口的上限一样，R-250） */
@@ -19,11 +20,6 @@ export const SPLASH_MAX_MS = 5000;
 const SLACK_MS = 80;
 
 const leaving = new WeakMap<Element, Promise<void>>();
-
-function reducedMotion(): boolean {
-  if (document.documentElement.dataset['rm'] === '1') return true;
-  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
 
 /** splash.css 的 6 秒兜底已经把它淡掉了（visibility: hidden） */
 function hiddenByCss(el: Element): boolean {
@@ -56,7 +52,7 @@ export function hideSplash(): Promise<void> {
       if (e.target === el && (e as TransitionEvent).propertyName === 'opacity') finish();
     };
     el.addEventListener('transitionend', onEnd);
-    const timer = setTimeout(finish, (reducedMotion() ? SPLASH_FADE_RM_MS : SPLASH_FADE_MS) + SLACK_MS);
+    const timer = setTimeout(finish, SPLASH_FADE_MS + SLACK_MS);
     el.classList.add('is-leaving');
   });
   leaving.set(el, done);

@@ -10,16 +10,6 @@
   --k: 0.5;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .a {
-    transition: none;
-  }
-
-  .a[data-state="pressed"] {
-    --k: 1;
-  }
-}
-
 :global(:root[data-rm="1"]) .a {
   transition: none;
 }

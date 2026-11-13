@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { msAt, parseHm } from '../../shared/core/date.ts';
 import { handle } from '../../supabase/functions/push-dispatch/core.ts';
-import type { ItemRow, RoundLogic } from '../../supabase/functions/push-dispatch/round.ts';
+import { DB_NOFN, type ItemRow, type RoundLogic } from '../../supabase/functions/push-dispatch/round.ts';
 import { cronReq, depsFor, fakeVapid } from './push-dispatch-harness.ts';
 import { eventRow, LOGIC, MemDb, todoRow, UA, UB, uuid } from './push-dispatch-mem.ts';
 
@@ -143,7 +143,7 @@ describe('第 0 步：不认识的时区那一行跳过、记 tz_invalid（D7，
   });
   it('11-04：current_tz 不认识时纪念日也记 profiles（和待办、全天日程同一口径，R-316）', async () => {
     const db = new MemDb().user(UB, { current_tz: 'Mars/Olympus_Mons' });
-    db.put('anniversaries', { id: uuid('a'), user_id: UB, deleted_at: null, undone: false, push_show_title: null, remind_at: 3, notified_for: null,
+    db.put('anniversaries', { id: uuid('a'), user_id: UB, rev: 1, deleted_at: null, undone: false, push_show_title: null, remind_at: 3, notified_for: null,
       snooze_at: null, pushed_for: null, defer_until: null, name: '妈妈生日', kind: 'birthday', calendar: 'solar', month: 11, day: 20 }, true);
     await run(db, at('10:00'));
     expect(db.logs.filter((l) => l.act === 'tz_invalid').map((l) => [l.user_id, l.code])).toEqual([[UB, 'profiles']]);
@@ -170,5 +170,20 @@ describe('第 0 步：有时刻但 tz 为空的日程（PUSH-tz-null-event，11-
     await run(db, at('10:00'));
     expect(db.logs.filter((l) => l.act === 'tz_invalid').map((l) => l.code)).toEqual(['events']);
     expect(db.tables.events.get(row.id)?.remind_at).toBe(7);
+  });
+});
+
+describe('第 0 步：新函数调到旧库（PGRST202）单独记 :nofn（R-411 整块评审建议 4）', () => {
+  it('finish 找不到三参数版本：记 queue_finish_failed:nofn，项留着租约；出队找不到：记 queue_pop_failed:nofn', async () => {
+    const db = new MemDb().user(UA);
+    const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0, remind_at: null }), true);
+    db.finishQueue = async () => { throw new Error(DB_NOFN); };
+    const d = await run(db, at('10:00'));
+    expect(d.codes).toContain('queue_finish_failed:nofn');
+    expect(db.queue.get(`todos:${t.id}`)?.claim).toBeTruthy();
+    const db2 = new MemDb().user(UA);
+    db2.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0, remind_at: null }), true);
+    db2.popQueue = async () => { throw new Error(DB_NOFN); };
+    expect((await run(db2, at('10:00'))).codes).toContain('queue_pop_failed:nofn');
   });
 });

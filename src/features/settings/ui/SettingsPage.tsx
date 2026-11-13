@@ -12,6 +12,8 @@
 // 二级页最上面“未来 7 天的提醒 ›”再进一层 #/settings/remind/upcoming，顶栏“‹ 提醒与通知”退回上一层；“提醒里写什么 ›”“免打扰 ›”
 // 同样点进去再改（R-347 照线框 sR7）：#/settings/remind/show-title、#/settings/remind/dnd。正文都由 reminders 功能懒加载提供
 // 设置 › 随手记显示方式（#/settings/notes-view，B4 S1、R-78）同日历：首页一行“随手记显示方式 … 瀑布流 ›”，下面一行小字“只对本类设备生效”，正文在本功能的 NotesViewSection.tsx（读写规则和随手记页共用 shared/logic/notes/view-setting.ts）
+// 设置 › 皮肤（#/settings/skin，ADR-008）同随手记显示方式：首页一行“简洁 · 白天 / 夜间跟着手机 ›”加两个开关，正文在本功能的 SkinSection.tsx；
+// 设置 › 字体（#/settings/font，架构 5.9c）同样：首页一行“字体 › 系统字体（默认）”，正文在 FontSection.tsx
 // 设置 › 语音与 AI（#/settings/ai）、在 Claude 聊天里记事（#/settings/claude）同日历（B3 FA-4）：正文由 plus 功能懒加载提供
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { backTo, hrefOf, plainClick, useRoute } from '../../../app/router.ts';
@@ -31,6 +33,8 @@ import { AboutSection } from './AboutSection.tsx';
 import { AccountSection } from './AccountSection.tsx';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import { NotesViewSection } from './NotesViewSection.tsx';
+import { FontSection } from './FontSection.tsx';
+import { SkinSection } from './SkinSection.tsx';
 import { DataSection } from './DataSection.tsx';
 import { DeleteAccountView } from './DeleteAccountView.tsx';
 import { DesktopSection } from './DesktopSection.tsx';
@@ -183,6 +187,10 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
       sub(t('settings.desktop.title', {}), 'settings-desktop-back', <DesktopSection hotkey={hotkey} />)
     ) : view === 'about' ? (
       sub(t('settings.about.title', {}), 'settings-about-back', <AboutSection />)
+    ) : view === 'skin' ? (
+      sub(t('settings.skin.title', {}), 'settings-skin-back', <SkinSection />)
+    ) : view === 'font' ? (
+      sub(t('settings.font.title', {}), 'settings-font-back', <FontSection />)
     ) : view === 'notes-view' ? (
       sub(t('settings.notesView.title', {}), 'settings-notes-view-back', <NotesViewSection />)
     ) : view === 'calendar' ? (

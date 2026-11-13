@@ -75,12 +75,6 @@
   overflow: visible;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .grow {
-    transition: none;
-  }
-}
-
 :global(:root[data-rm="1"]) .grow {
   transition: none;
 }

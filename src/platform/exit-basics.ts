@@ -9,6 +9,18 @@ export const WIPE_TIMEOUT_MS = 3000;
 /** 清 Cache Storage（运行时缓存）最多等多久 */
 export const CACHES_TIMEOUT_MS = 2000;
 
+/** 这台设备缓存的外观（皮肤、深浅色、两个开关、字体；platform/look.ts 读写）。定义在这里：清本机数据（core/account.ts）要删它，
+ *  引 look.ts 本身会当场套一次皮肤 */
+export const LOOK_CACHE_KEY = 'pv-look';
+/** 退出、换账号清本机数据时删掉外观缓存，下一个账号从默认外观开始（皮肤整块评审第 13 条） */
+export function forgetLook(): void {
+  try {
+    localStorage.removeItem(LOOK_CACHE_KEY);
+  } catch {
+    // 隐私模式读写不了：本来也没缓存
+  }
+}
+
 /**
  * 到点还没返回就用 fallback() 的值；run 抛错（同步或异步）也用 fallback()。fallback 只给值，不要有副作用。
  * 原来的请求不取消：它在超时以后才回来时调一次 onLate
