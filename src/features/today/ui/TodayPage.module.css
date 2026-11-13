@@ -130,3 +130,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ───── 电脑版（有侧栏，B6，5.9b；面板在 kit 的 DeskLayout，内容在 ui/TodayDesk.tsx）───── */
+
+/* 面板铺满侧栏右边的画布，不再限 560 居中；左边 #root 已让出侧栏（GlassBar.module.css） */
+.desk {
+  position: relative;
+  max-width: none;
+  padding-right: 16px;
+  padding-left: 0;
+}

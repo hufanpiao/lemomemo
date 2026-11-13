@@ -8,3 +8,6 @@ export const routes = [
   // 两条路由都只指向很小的外壳 NotesRoot.tsx（B4 首屏额度，见那个文件），NotesPage.tsx 按路由名分给列表或编辑器
   { name: 'note', Page: lazy(() => import('./ui/NotesRoot.tsx')) },
 ] as const;
+
+/** 电脑版今天页的“今天记的”块（B6，5.9b 的 notes-today；ui/TodayNotes.tsx）：只在电脑版今天页挂，没有 props */
+export const TodayNotes = lazy(() => import('./ui/TodayNotes.tsx'));

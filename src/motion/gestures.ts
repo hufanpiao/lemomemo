@@ -5,3 +5,5 @@
 export { useSwipePager, type SwipePagerHandlers } from './swipe-pager.ts';
 // 上下拖动收起 / 展开（B2 FA-3 月历上拖收起）
 export { useDragCollapse, type DragCollapse } from './drag-collapse.ts';
+// 电脑版布局拖面板的位移过渡（B6，5.9b；只给 kit/components/DeskLayout 用，跟着电脑版布局的块走）
+export { deskSortTransition, type SortTransition } from './desk-sort.ts';

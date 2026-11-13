@@ -18,10 +18,12 @@ export interface UndoToastProps {
   ms?: number;
   /** 默认 status；被拦下这类“刚才那一下没生效”的提示用 alert（新挂上的 status 区域 iOS VoiceOver 常常不读，FA-2 审查第 1 条） */
   role?: 'status' | 'alert';
+  /** 撤销后面再放一个按钮（电脑版布局的“恢复默认布局”，5.9b）：点了同样收起 */
+  more?: { label: string; onClick(): void } | undefined;
   'data-testid'?: string;
 }
 
-export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST_MS, role = 'status', 'data-testid': testId }: UndoToastProps) {
+export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST_MS, role = 'status', more, 'data-testid': testId }: UndoToastProps) {
   const [paused, setPaused] = useState(false);
   const done = useRef(false);
   const close = useRef(onClose);
@@ -37,10 +39,10 @@ export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST
     return () => clearTimeout(t);
   }, [paused, ms]);
 
-  const undo = () => {
+  const act = (fn: () => void) => () => {
     if (done.current) return;
     done.current = true;
-    onUndo();
+    fn();
     close.current();
   };
 
@@ -56,9 +58,14 @@ export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST
       onBlur={() => setPaused(false)}
     >
       <span className={styles.msg}>{message}</span>
-      <button type="button" className={styles.undo} onClick={undo} data-testid={testId ? `${testId}-undo` : undefined}>
+      <button type="button" className={styles.undo} onClick={act(onUndo)} data-testid={testId ? `${testId}-undo` : undefined}>
         {undoLabel}
       </button>
+      {more ? (
+        <button type="button" className={styles.undo} onClick={act(more.onClick)} data-testid={testId ? `${testId}-more` : undefined}>
+          {more.label}
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -321,8 +321,21 @@
 }
 
 /* 侧栏最下面的设置入口（头像；外壳 nav 里页签后面，设计复审三 S1）：只在侧栏里出，窄屏在今天页右上角 */
-.me {
+.me,
+.slot {
   display: none;
+}
+
+/* 电脑版布局的“⋯”（5.9b，今天页、随手记页才有）：在设置入口上面，有东西时才占位，把下面的设置入口一起推到底 */
+@media (width >= 900px) {
+  .slot:not(:empty) {
+    display: block;
+    margin-top: auto;
+  }
+
+  .slot:not(:empty) + .me {
+    margin-top: 6px;
+  }
 }
 
 @media (width >= 900px) {

@@ -1,0 +1,272 @@
+/* 电脑版可拖动布局（5.9b，方案 B：渐变画布上的分栏面板；线框 s1 .dm > .col：圆角 20 的白底卡，栏间 12）。只用令牌（A11、A24） */
+.root {
+  position: relative;
+}
+
+/* 画布：栏和竖条横排；栏宽按比例（flex-grow 由组件按 w 给），竖条本身就是栏间距 */
+.canvas {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.col {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 120px;
+}
+
+/* 拖到这一栏上空时（data-over）：栏底给一条淡的落点提示 */
+.col[data-over] {
+  border-radius: 20px;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* 900～1099px 排成一列：居中、不超过 760 */
+.one {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+/* 竖条：12px 宽的栏间距，中间一道细线；悬停、拖动、键盘焦点时线变柠檬黄 */
+.sep,
+.gap {
+  position: relative;
+  flex: none;
+  align-self: stretch;
+  width: 12px;
+}
+
+.sep {
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sep::after {
+  content: '';
+  position: absolute;
+  inset: 24px 5px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+.sep:hover::after,
+.sep:focus-visible::after,
+.sep:active::after {
+  background: var(--accent);
+}
+
+.sep:focus-visible {
+  outline: none;
+}
+
+.panel {
+  min-width: 0;
+  padding: 4px 16px 14px;
+  border-radius: 20px;
+  background: var(--b-tile);
+  box-shadow: var(--b-tile-shadow);
+}
+
+/* 拖动时原位置留虚框（插入点就在这里，柠檬黄描边），内容不画 */
+.panel[data-dragging] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.panel[data-dragging] > * {
+  visibility: hidden;
+}
+
+/* 键盘拿起时：柠檬黄描边 */
+.panel[data-held] {
+  box-shadow: var(--b-tile-shadow), 0 0 0 2px var(--accent);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  min-height: var(--hit);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.handle,
+.fold,
+.more,
+.dhandle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: var(--hit);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-2);
+}
+
+.handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.handle svg,
+.dhandle svg,
+.more svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.fold svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.handle[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+@media (hover: hover) {
+  .handle:hover,
+  .fold:hover,
+  .more:hover,
+  .dhandle:hover {
+    background: var(--panel-2);
+    color: var(--text);
+  }
+}
+
+.handle:focus-visible,
+.fold:focus-visible,
+.more:focus-visible,
+.dhandle:focus-visible,
+.item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.body {
+  min-width: 0;
+}
+
+/* 手上那张小卡：只画标题 */
+.overlay {
+  cursor: grabbing;
+}
+
+.ghost {
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: var(--b-tile);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-size: var(--fs-14);
+}
+
+/* 侧栏底部的“⋯”（挂在 GlassBar 的 tabbar-slot 里）：44px 圆形 */
+.more {
+  width: var(--hit);
+  border-radius: 50%;
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+/* 找不到侧栏时画在画布右上角 */
+.inlineMore {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 8px;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: 6px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--hit);
+  padding: 0 12px 0 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  text-align: left;
+}
+
+@media (hover: hover) {
+  .item:hover {
+    background: var(--panel-2);
+  }
+}
+
+.check {
+  flex: none;
+  width: 16px;
+  text-align: center;
+}
+
+.group,
+.none {
+  margin: 6px 12px 2px 32px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+.none {
+  margin-top: 0;
+}
+
+.sepTop {
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 var(--r-md) var(--r-md);
+}
+
+/* 抽屉顶上的换边把手 */
+.dhandle {
+  cursor: grab;
+  touch-action: none;
+}
+
+/* 只给读屏（拿起、移动的播报，键盘说明） */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -14,3 +14,6 @@ export const routes = [
  * 写在 TodayPage 里要在今天页的块里另带一份二十来个带哈希的文件名（首屏预算 150 KB，FA-2 返工 11-06 量过）
  */
 export const TodayRo = lazy(() => import('./ui/TodayToasts.tsx'));
+
+/** 电脑版（有侧栏的宽度）今天页的可拖动面板（5.9b；ui/TodayDesk.tsx，只给 ui/TodayPage.tsx 用）：手机宽度不下载，懒加载写在这里的理由同上 */
+export const TodayDesk = lazy(() => import('./ui/TodayDesk.tsx'));
