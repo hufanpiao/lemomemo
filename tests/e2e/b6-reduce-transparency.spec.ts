@@ -55,13 +55,26 @@ async function seed(page: Page): Promise<void> {
   await page.getByTestId('todos-row-n1').waitFor({ timeout: 30000 });
 }
 
+/** 等切到 hash 这一页落定：运行日志（localStorage lemo-run-log，写入有延迟）里最后一条 route 是它，且后面有 settled(…)
+ *  （连着切两页时只记一条落定，原因可能写成 focusout 等，不一定是 route） */
+async function settled(page: Page, hash: string): Promise<void> {
+  await page.waitForFunction((h) => {
+    const log = localStorage.getItem('lemo-run-log') ?? '';
+    const route = [...log.matchAll(/ route (#\/\S+)/g)].at(-1);
+    return route?.[1] === h && log.indexOf('settled(', route.index) > route.index;
+  }, hash);
+}
+
 /** 把六样浮层都调出来：随手记页走一趟（加载它的样式），回待办页删 n1 出撤销条、点“＋”出打字条 */
 async function showAll(page: Page): Promise<void> {
   await go(page, '#/notes');
   await page.getByTestId('notes').waitFor({ timeout: 30000 });
+  await settled(page, '#/notes');
   await go(page, '#/todos');
   await page.getByTestId('todos-row-n1').waitFor({ timeout: 30000 });
   await expect(page.getByTestId('sync-notice-card')).toBeVisible({ timeout: 15000 });
+  // 11-14 运行日志实测：Chromium 切页没落定（route 1.63 → click 1.70 → settled 2.04）时点的删除不生效，所以等落定再点
+  await settled(page, '#/todos');
   await page.getByTestId('todos-del-n1').click();
   await expect(page.locator('[data-undo-toast]')).toBeVisible();
   await page.getByTestId('tabbar-add').click();
@@ -125,7 +138,6 @@ test.describe('减少透明效果：开关 或 系统设置，六样浮层都变
     await go(page, '#/settings');
     await page.getByTestId('settings-rt').click({ timeout: 30000 });
     await expect.poll(() => attr(page, 'data-rt')).toBe('1');
-    await go(page, '#/todos');
     await showAll(page);
     expect(await frosted(page)).toEqual(all(false));
     await shot(page, info, 'rt-switch-on');
