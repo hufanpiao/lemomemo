@@ -146,14 +146,16 @@ select is(left(tests.b($$insert into public.todos (id, title, created_at, update
 select is(tests.a($$insert into public.todos (id, title, created_at, updated_at) values ('d4900000-0000-4000-8000-000000000001', 't', 1, 1)
     on conflict (id) do nothing$$) || '|' || tests.qa(), 'ok|aaaaaaaa:01:2:1', 'A 本人重发同一条新建：撞主键不触发，不入队');
 
--- ⑨ T22：规则版本全量重算 remind_enqueue('all', …, N)：全站三张表只收没到点或还没算、设了提醒的（有时刻的日程也收），min_ver 取大、prio 按 24 小时分 1、2
+-- ⑨ T22：规则版本全量重算 remind_enqueue('all', …, N)：全站设了提醒的日程（有时刻的也收）、待办收日期没过两天以上的，纪念日不看时间；
+--   min_ver 取大、prio 按 24 小时分 1、2（口径在迁移 remind_enqueue 的注释上，11-13 整块评审必改 1、建议 2）
 delete from private.remind_queue;
-update public.events set remind_at = 1000 where id = 'e4900000-0000-4000-8000-000000000001';   -- 已推过：不收
+update public.events set remind_at = 1000 where id = 'e4900000-0000-4000-8000-000000000001';   -- 日期 2026-11-05 早过了、已推过：不收
 insert into public.events (id, user_id, title, date, time, tz, remind_min, remind_days, created_at, updated_at) values
-  ('e4900000-0000-4000-8000-000000000002', 'bbbbbbbb-0000-4000-8000-000000000002', 'B 有时刻 没算', '2026-11-05', '09:00', 'Asia/Seoul', 15, null, 1, 1),
-  ('e4900000-0000-4000-8000-000000000003', 'bbbbbbbb-0000-4000-8000-000000000002', 'B 有时刻 不提醒', '2026-11-05', '09:00', 'Asia/Seoul', null, null, 1, 1),
-  ('e4900000-0000-4000-8000-000000000004', 'bbbbbbbb-0000-4000-8000-000000000002', 'B 全天 远期', '2026-11-05', null, null, null, 0, 1, 1);
+  ('e4900000-0000-4000-8000-000000000002', 'bbbbbbbb-0000-4000-8000-000000000002', 'B 有时刻 没算', current_date + 30, '09:00', 'Asia/Seoul', 15, null, 1, 1),
+  ('e4900000-0000-4000-8000-000000000003', 'bbbbbbbb-0000-4000-8000-000000000002', 'B 有时刻 不提醒', current_date + 30, '09:00', 'Asia/Seoul', null, null, 1, 1),
+  ('e4900000-0000-4000-8000-000000000004', 'bbbbbbbb-0000-4000-8000-000000000002', 'B 全天 远期', current_date + 30, null, null, null, 0, 1, 1);
 update public.events set remind_at = 9999999999999 where id = 'e4900000-0000-4000-8000-000000000004';
+update public.todos set due = current_date + 1 where id = 'd4900000-0000-4000-8000-000000000001';
 update public.todos set remind_at = (extract(epoch from now()) * 1000)::bigint + 3600000 where id = 'd4900000-0000-4000-8000-000000000001';   -- 一小时后：prio 1
 update public.anniversaries set deleted_at = 5 where id = 'a4900000-0000-4000-8000-000000000001';   -- 删了：不收
 delete from private.remind_queue;
@@ -161,7 +163,7 @@ insert into private.remind_queue (table_name, id, user_id, min_ver) values ('tod
 select private.remind_enqueue('all', null, null, null, false, 2::smallint);
 select is((select string_agg(table_name || ':' || right(id::text, 2) || ':' || left(user_id::text, 8) || ':' || prio || ':' || min_ver, ',' order by table_name, id) from private.remind_queue),
   'events:02:bbbbbbbb:1:2,events:04:bbbbbbbb:2:2,todos:01:aaaaaaaa:0:5',
-  'T22：all 收 B 没算的有时刻日程（prio 1）、B 远期的全天日程（prio 2）；已推过的、不提醒的、删了的不收；已在队列里的 prio 取小（0）、min_ver 取大（5）');
+  'T22：all 收 B 没算的有时刻日程（prio 1）、B 远期的全天日程（prio 2）；日期早过了的、不提醒的、删了的不收；已在队列里的 prio 取小（0）、min_ver 取大（5）');
 
 select * from finish();
 rollback;

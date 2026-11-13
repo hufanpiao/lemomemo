@@ -355,9 +355,9 @@ Deno.test({ name: 'R-411 T00c P2（真库、M1 已修排队一半）：700 条�
   }
 } });
 
-// 真库的 now() 比模拟的“这一天”早 20 多天，所以改默认时刻时这条在库看来还没到点，走的是“批量重算没到点的”那一支（prio 2，挪到 11:00）。
-// 真实时间里 09:05 时 remind_at 09:00 已过、M1 起不再批量入队，“稍后”那次照常 09:12 响——那一种由内存版 T00d 钉着（tests/edge/push-dispatch-t00-pinned.test.ts）。
-Deno.test({ name: 'R-411 T00d P12（真库，没到点的分支）：全天日程推过 → 稍后 → 收回 → 改晚默认时刻：库看来没到点的按新默认时刻重算（prio 2），11:00 响', ...opts, async fn() {
+// Q3 A 保留现状：改默认时刻时这条（日期没过）照样批量入队、挪到新默认时刻。真库的 now() 比模拟的“这一天”早 20 多天，remind_at 离真实现在超过 24 小时，
+// 所以是 prio 2；真实时间里当天的那一种（prio 1）由内存版 T00d 钉着（tests/edge/push-dispatch-t00-pinned.test.ts）。
+Deno.test({ name: 'R-411 T00d P12（真库，Q3 保留现状）：全天日程推过 → 稍后 → 收回 → 改晚默认时刻：按新默认时刻重算（prio 2），09:12 不响、11:00 响', ...opts, async fn() {
   const p = await people('t00d', 1, 0);
   const day = addDays(T00_DAY, 9);
   try {
@@ -380,7 +380,7 @@ Deno.test({ name: 'R-411 T00d P12（真库，没到点的分支）：全天日�
     assertEquals(kinds(p, 'remind').length, 1, '09:12（稍后那次）不响：remind_at 已挪到 11:00');
     await at0(p, tAt('11:00', day));
     assertEquals(kinds(p, 'remind').length, 2, '11:00 才响');
-    console.log('[R411-T00d] 没到点的分支：改默认 11:00 后 prio 2 入队、挪到 11:00；09:12 不响，11:00 才响');
+    console.log('[R411-T00d] Q3 保留现状：改默认 11:00 后 prio 2 入队、挪到 11:00；09:12 不响，11:00 才响');
   } finally {
     await p.fake.close();
   }

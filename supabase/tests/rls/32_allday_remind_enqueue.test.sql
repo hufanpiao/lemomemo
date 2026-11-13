@@ -2,7 +2,8 @@
 -- private.remind_on_settings（一个触发器 settings_remind，按键分派）→ private.remind_enqueue('allday' / 'anniv')；
 -- 时区采纳、切固定时区的 private.enqueue_floating → remind_enqueue('floating')。
 -- 取代 B2 迁移 20261104100000 的 enqueue_allday_defaults + settings_allday_defaults_ins/_upd 和 0005 的 enqueue_anniv_defaults + settings_anniv_defaults：
---   纪念日默认的软删、撤销也重算（修 P3）；原样再写不重算（修 P11）；批量只收没到点或还没算的，已经推过、remind_at 已过的不进（修 P16）。
+--   纪念日默认的软删、撤销也重算（修 P3）；原样再写不重算（修 P11）；改默认时刻只收日期没过两天以上、或“稍后”、免打扰顺延还在 1 小时以内的（修 P16，
+--   当天推过、按了“稍后”的照旧重算：6.3 Q3 A 不改现状，11-13 整块评审必改 1）；改纪念日默认不看时间（每年都会再来）。
 -- 函数一侧按新 default_time 重算在 tests/edge/push-dispatch-allday.test.ts。
 -- 日程“换了哪一次”（原 events_occ_reset，R-411 起是 touch() 里调的 private.remind_reset）在 ⑥ 测，期望照旧。
 -- 用户：seed 的 A、B。A 的写入用 authenticated 身份（带会话），证明不给 authenticated 执行权也照样触发。
@@ -38,16 +39,19 @@ select ok(to_regprocedure('private.enqueue_allday_defaults()') is null and to_re
   '被取代的 enqueue_allday_defaults、enqueue_anniv_defaults 已删');
 
 -- 造数据（建行时触发器会入队，造完清空队列）。remind_at 用 postgres 直接写（系统列，不入队）：
--- 1000 = 早就过了（已推过），9999999999999 = 很久以后（批量 prio 2），空 = 还没算
+-- 1000 = 早就过了（已推过），9999999999999 = 很久以后（批量 prio 2），空 = 还没算。全天日程的日期按今天算（改默认时刻看日期没过两天以上）：
+-- 07 是一个月前的、已推过；09 今天推过、“稍后”10 分钟后响；10 一个月前的、免打扰顺延到 10 分钟后
 insert into public.events (id, user_id, title, date, time, tz, remind_min, remind_days, deleted_at, created_at, updated_at) values
-  ('e3200000-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 当天', '2026-11-05', null, null, null, 0, null, 1, 1),
-  ('e3200000-0000-4000-8000-000000000002', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 前一天', '2026-11-05', null, null, null, 1, null, 1, 1),
-  ('e3200000-0000-4000-8000-000000000003', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 不提醒', '2026-11-05', null, null, null, null, null, 1, 1),
-  ('e3200000-0000-4000-8000-000000000004', 'aaaaaaaa-0000-4000-8000-000000000001', '有时刻', '2026-11-05', '15:00', 'Asia/Seoul', 15, null, null, 1, 1),
-  ('e3200000-0000-4000-8000-000000000005', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 删了', '2026-11-05', null, null, null, 0, 5, 1, 1),
-  ('e3200000-0000-4000-8000-000000000006', 'bbbbbbbb-0000-4000-8000-000000000002', 'B 的全天', '2026-11-05', null, null, null, 0, null, 1, 1),
-  ('e3200000-0000-4000-8000-000000000007', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 已推过', '2026-11-05', null, null, null, 0, null, 1, 1),
-  ('e3200000-0000-4000-8000-000000000008', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 远期', '2026-11-05', null, null, null, 0, null, 1, 1);
+  ('e3200000-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 当天', current_date + 30, null, null, null, 0, null, 1, 1),
+  ('e3200000-0000-4000-8000-000000000002', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 前一天', current_date + 30, null, null, null, 1, null, 1, 1),
+  ('e3200000-0000-4000-8000-000000000003', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 不提醒', current_date + 30, null, null, null, null, null, 1, 1),
+  ('e3200000-0000-4000-8000-000000000004', 'aaaaaaaa-0000-4000-8000-000000000001', '有时刻', current_date + 30, '15:00', 'Asia/Seoul', 15, null, null, 1, 1),
+  ('e3200000-0000-4000-8000-000000000005', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 删了', current_date + 30, null, null, null, 0, 5, 1, 1),
+  ('e3200000-0000-4000-8000-000000000006', 'bbbbbbbb-0000-4000-8000-000000000002', 'B 的全天', current_date + 30, null, null, null, 0, null, 1, 1),
+  ('e3200000-0000-4000-8000-000000000007', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 已推过', current_date - 30, null, null, null, 0, null, 1, 1),
+  ('e3200000-0000-4000-8000-000000000008', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 远期', current_date + 30, null, null, null, 0, null, 1, 1),
+  ('e3200000-0000-4000-8000-000000000009', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 今天推过 稍后没响', current_date, null, null, null, 0, null, 1, 1),
+  ('e3200000-0000-4000-8000-000000000010', 'aaaaaaaa-0000-4000-8000-000000000001', '全天 过了 顺延没响', current_date - 30, null, null, null, 0, null, 1, 1);
 insert into public.todos (id, user_id, title, due, due_time, remind_days, remind_before_min, done, created_at, updated_at) values
   ('d3200000-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001', '无时刻 当天提醒', '2026-11-05', null, 0, null, false, 1, 1),
   ('d3200000-0000-4000-8000-000000000002', 'aaaaaaaa-0000-4000-8000-000000000001', '有时刻 提前 10 分钟', '2026-11-05', '15:00', null, 10, false, 1, 1),
@@ -66,24 +70,27 @@ insert into public.anniversaries (id, user_id, kind, name, calendar, month, day,
   ('a3200000-0000-4000-8000-000000000006', 'aaaaaaaa-0000-4000-8000-000000000001', 'birthday', '只有时刻用默认', 'solar', 3, 5, '{1}', null, null, 1, 1);
 update public.events set remind_at = 1000 where id = 'e3200000-0000-4000-8000-000000000007';
 update public.events set remind_at = 9999999999999 where id = 'e3200000-0000-4000-8000-000000000008';
+update public.events set remind_at = 1000, snooze_at = (extract(epoch from now()) * 1000)::bigint + 600000 where id = 'e3200000-0000-4000-8000-000000000009';
+update public.events set remind_at = 1000, defer_until = (extract(epoch from now()) * 1000)::bigint + 600000 where id = 'e3200000-0000-4000-8000-000000000010';
 update public.todos set remind_at = 1000 where id = 'd3200000-0000-4000-8000-000000000006';
 update public.todos set remind_at = 9999999999999 where id = 'd3200000-0000-4000-8000-000000000007';
 update public.anniversaries set remind_at = 1000 where id = 'a3200000-0000-4000-8000-000000000005';
 delete from private.remind_queue;
 
 -- 三种批量范围各该入哪些（A 的）：
---   allday：没删、设了提醒、没到点或还没算的全天日程（1 当天、2 前一天、8 远期；7 已推过、3 不提醒、4 有时刻、5 删了、6 B 的都不入）
---   anniv：没删、用默认（remind_offsets 或 remind_time 为空）、没到点或还没算的纪念日（1、6；2 自己设、3 删了、4 B 的、5 已推过不入）
+--   allday：没删、设了提醒、日期没过两天以上或“稍后”、顺延还没响的全天日程（1 当天、2 前一天、8 远期、9 今天推过按了稍后、10 过了但顺延没响；
+--     7 一个月前已推过、3 不提醒、4 有时刻、5 删了、6 B 的都不入）
+--   anniv：没删、用默认（remind_offsets 或 remind_time 为空）的纪念日，不看时间（1、5 已推过、6；2 自己设、3 删了、4 B 的不入）
 create temp table want (k text primary key, v text);
 insert into want values
-  ('allday', 'events:01,events:02,events:08'),
-  ('anniv', 'anniversaries:01,anniversaries:06');
+  ('allday', 'events:01,events:02,events:08,events:09,events:10'),
+  ('anniv', 'anniversaries:01,anniversaries:05,anniversaries:06');
 
 -- ② T08：三个设置键 × 新建、改值、软删、恢复、撤销、取消撤销（18 条）都入队；值没变的更新不入队（3 条）；入队的是批量项（prio 1、2）
 select is(tests.run($$insert into public.settings (id, key, value) values ('5f320000-0000-4000-8000-000000000001', 'remind.default_time', '"08:30"')$$),
   'ok|' || (select v from want where k = 'allday'), 'remind.default_time 新建：入队（authenticated 身份写，不给执行权也能触发）');
-select is((select string_agg(right(id::text, 2) || ':' || prio || ':' || fresh, ',' order by id) from private.remind_queue), '01:1:false,02:1:false,08:2:false',
-  '批量项的 prio：还没算的记 1、很久以后的记 2；不是 fresh');
+select is((select string_agg(right(id::text, 2) || ':' || prio || ':' || fresh, ',' order by id) from private.remind_queue), '01:1:false,02:1:false,08:2:false,09:1:false,10:1:false',
+  '批量项的 prio：还没算的、已过的记 1，很久以后的记 2；不是 fresh');
 select is(tests.run($$update public.settings set value = '"07:00"' where id = '5f320000-0000-4000-8000-000000000001'$$), 'ok|' || (select v from want where k = 'allday'), 'remind.default_time 改值：入队');
 select is(tests.run($$update public.settings set deleted_at = 1 where id = '5f320000-0000-4000-8000-000000000001'$$), 'ok|' || (select v from want where k = 'allday'), 'remind.default_time 软删（回到出厂 09:00）：入队');
 select is(tests.run($$update public.settings set deleted_at = null where id = '5f320000-0000-4000-8000-000000000001'$$), 'ok|' || (select v from want where k = 'allday'), 'remind.default_time 恢复：入队');

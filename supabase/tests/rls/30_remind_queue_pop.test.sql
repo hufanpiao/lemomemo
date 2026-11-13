@@ -185,8 +185,8 @@ insert into private.remind_queue (table_name, id, user_id, claim, claimed_at, at
 insert into public.settings (id, user_id, key, value) values ('5f300000-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001', 'anniv.default_time', '"08:00"');
 select is((select coalesce(claim::text, 'null') || ':' || attempts from private.remind_queue where id = 'a0000000-0000-4000-8000-00000000000a'), 'null:0',
   'remind_on_settings（anniv.default_time）：租着的项租约清空，attempts 1 → 0');
--- remind_on_settings → remind_enqueue('allday')（改 remind.default_time，全天日程设了提醒、还没算）
-update public.events set remind_days = 0 where id = 'e0000000-0000-4000-8000-00000000000a';
+-- remind_on_settings → remind_enqueue('allday')（改 remind.default_time，全天日程设了提醒、还没算、日期没过）
+update public.events set remind_days = 0, date = current_date + 1 where id = 'e0000000-0000-4000-8000-00000000000a';
 update private.remind_queue set claim = (select claim from k), claimed_at = now(), attempts = 3 where id = 'e0000000-0000-4000-8000-00000000000a';
 insert into public.settings (id, user_id, key, value) values ('5f300000-0000-4000-8000-000000000002', 'aaaaaaaa-0000-4000-8000-000000000001', 'remind.default_time', '"08:00"');
 select is((select coalesce(claim::text, 'null') || ':' || attempts from private.remind_queue where id = 'e0000000-0000-4000-8000-00000000000a'), 'null:0',

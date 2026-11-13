@@ -1,10 +1,11 @@
 // 服务器 UPDATE 触发器清系统列的规则（REMIND-shown-persist 方案修订 1 第 3 节 ③，11-05 后端）：本机确认一项改动以后（core/outbox-send.ts 的 ackImpl），
 // 把“server 副本 + 这次实际落库的列”合起来时照服务器的规则先清掉旧那一次的系统列，免得在下一次拉取之前，用旧 pushed_for 误压新的那一次提醒。
-// 照的是两个触发器（先后顺序和真库相同：before 触发器按名字排，events_occ_reset 在 events_touch 前面）：
-//   ① private.events_occ_reset（迁移 20261104100000、20261104110000）：日程的 date 变了、remind_days 变了、time 在空和非空之间变了，就是换了“哪一次”——
+// 照的是 private.touch()（R-411 迁移 20261113100000 起，原来的 events_occ_reset 前置触发器和 touch() 提醒段都收进 touch() 里调的 private.remind_reset），先后顺序：
+//   ① 待办的 due 是空的，连带清 due_time、remind_before_min；
+//   ② 日程的 date 变了、remind_days 变了、time 在空和非空之间变了，就是换了“哪一次”——
 //      pushed_for 一律清空；notified_for 合并后的值和原来一样（补丁里没带，或显式写了原值，都算，复审 L6）就清空，改成了原来的 remind_at 也清空；
-//      snooze_at 合并后的值和原来一样就清空。
-//   ② private.touch()（0001）：待办的 due 是空的，连带清 due_time、remind_before_min；提醒相关列（TOUCH_REMIND_COLS）有一列的值变了，清 pushed_for、defer_until。
+//      snooze_at 合并后的值和原来一样就清空；
+//   ③ 提醒相关列（TOUCH_REMIND_COLS，真库是 table_meta.remind_cols）有一列的值变了，清 pushed_for、defer_until。
 // 一律按“合并以后的值和原来的值是否不同”判断（同 SQL 的 is distinct from），不按补丁里有没有这个键；old 取合并之前的 server 副本。
 // applied 只放实际落库的列：冲突确认（ack.status === 'forked'）时传 appliedColumns(sent, ack)，不传整个 sent.data（复审 L7）。
 // 前提（11-05 审查 S4）：old 必须是完整的一行（拉取用 select *）；缺列时补丁把那一列写成 null 会被当作“没变”，该清的不清。

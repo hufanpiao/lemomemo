@@ -3,7 +3,7 @@
 // prio 上线后 T00c 改成“下一轮就算到”、Q4 认领超时照旧不发并加记录（T24）。
 import { afterEach, describe, expect, it } from 'vitest';
 import { allDay, at, closeWorld, world } from './push-dispatch-allday-world.ts';
-import { eventRow, MemDb, todoRow, UA } from './push-dispatch-mem.ts';
+import { annivRow, eventRow, MemDb, todoRow, UA } from './push-dispatch-mem.ts';
 
 afterEach(closeWorld);
 
@@ -95,11 +95,10 @@ describe('T00c P2（prio 已上线）：一个人排着大量批量重算时，�
   });
 });
 
-// 第一阶段钉的现状是“09:12 不响、11:00 才响”（旧设置触发器把这条全天日程不论到没到点都入队）。M1 的批量入队只收没到点或还没算的
-// （Q1 A“批量只算还没到点的”，方案 3.3、T09），09:05 时这条的 remind_at 09:00 已过、不再入队，“稍后”那次照常在 09:12 响，11:00 不再响。
-// 这是 Q1 的连带结果，不是为 P12 另改的（Q3 定的是不为它多记一列）；交回时单独报给主持人。
-describe('T00d P12：全天日程推过 → 按“稍后” → 收回 → 当天改晚默认时刻（M1 起：已过的不再批量重算，“稍后”那次照常响）', () => {
-  it('09:00 推过，09:02 稍后到 09:12，09:05 默认时刻改 11:00：这条不入队，09:12 响，11:00 不再响', async () => {
+// Q3 A 保留现状：第一阶段钉的“09:12 不响、11:00 才响”不改。M1 的批量入队收“这一次还没过完”的（日期没过两天以上），
+// 这条当天推过、按了“稍后”，照原来一样进队列重算（11-13 整块评审必改 1：原来按 remind_at > 现在收，把它挡在外面，改了现状）。
+describe('T00d P12（Q3 保留现状）：全天日程推过 → 按“稍后” → 收回 → 当天改晚默认时刻：“稍后”那次被挪到新默认时刻才响', () => {
+  it('09:00 推过，09:02 稍后到 09:12，09:05 默认时刻改 11:00：批量入队、挪到 11:00；09:12 不响，11:00 才响', async () => {
     const db = new MemDb().user(UA);
     db.sets.set(UA, { 'remind.default_time': '09:00' });
     const w = await world(db);
@@ -114,13 +113,64 @@ describe('T00d P12：全天日程推过 → 按“稍后” → 收回 → 当�
     db.sets.set(UA, { 'remind.default_time': '11:00' });
     db.clock = () => at('09:05');
     db.enqueueScope('allday', UA);   // 真库由设置触发器 settings_remind → remind_enqueue('allday', …)
-    expect(db.queue.size).toBe(0);
+    expect([...db.queue.keys()]).toEqual([`events:${a.id}`]);
     await w.round(at('09:06'));
-    expect(db.tables.events.get(a.id)?.remind_at).toBe(at('09:00'));
+    expect(db.tables.events.get(a.id)?.remind_at).toBe(at('11:00'));
     await w.round(at('09:12'));
-    expect(reminds(w)).toHaveLength(2);
+    expect(reminds(w)).toHaveLength(1);
     await w.round(at('11:00'));
     expect(reminds(w)).toHaveLength(2);
+  });
+});
+
+describe('批量入队的范围（11-13 整块评审必改 1、建议 2；口径在迁移 remind_enqueue 的注释上）', () => {
+  it('改默认时刻：免打扰顺延还没响的那条照样入队、按新默认时刻重算（原来 remind_at 已过就挡在外面）', async () => {
+    const db = new MemDb().user(UA);
+    db.sets.set(UA, { 'remind.default_time': '09:00', 'remind.dnd': { start: '08:30', end: '10:00' } });
+    const w = await world(db);
+    const a = allDay(db, 0);
+    await w.round(at('08:00'));
+    await w.round(at('09:00'));
+    expect(reminds(w)).toHaveLength(0);
+    expect(db.tables.events.get(a.id)?.defer_until).toBe(at('10:00'));
+    db.sets.set(UA, { 'remind.default_time': '11:00', 'remind.dnd': { start: '08:30', end: '10:00' } });
+    db.clock = () => at('09:30');
+    db.enqueueScope('allday', UA);
+    expect([...db.queue.keys()]).toEqual([`events:${a.id}`]);
+    await w.round(at('09:31'));
+    expect(db.tables.events.get(a.id)?.remind_at).toBe(at('11:00'));
+  });
+
+  it('改默认时刻：日期过了两天以上的不入队（重算了也推不出去，修 P16）；没过的、没算的都入队', async () => {
+    const db = new MemDb().user(UA);
+    const old = db.put('events', eventRow(UA, { date: '2026-11-02', time: null, tz: null, remind_days: 0, remind_at: at('09:00', '2026-11-02') }));
+    const edge = db.put('events', eventRow(UA, { date: '2026-11-03', time: null, tz: null, remind_days: 0, remind_at: at('09:00', '2026-11-03') }));
+    const fresh = db.put('events', eventRow(UA, { date: '2026-11-20', time: null, tz: null, remind_days: 0, remind_at: null }));
+    db.clock = () => at('12:00');
+    db.enqueueScope('allday', UA);
+    expect(new Set(db.queue.keys())).toEqual(new Set([`events:${edge.id}`, `events:${fresh.id}`]));
+    expect(db.queue.has(`events:${old.id}`)).toBe(false);
+  });
+
+  it('改纪念日默认：remind_at 已过的纪念日照样入队（每年都会再来，不看时间）', async () => {
+    const db = new MemDb().user(UA);
+    const a = db.put('anniversaries', annivRow(UA, { remind_at: 1000 }));
+    db.clock = () => at('12:00');
+    db.enqueueScope('anniv', UA);
+    expect([...db.queue.keys()]).toEqual([`anniversaries:${a.id}`]);
+  });
+
+  it('批量项被用户改成 prio 0：enqueued_at 记成改的时刻，积压统计不带着批量入队的老时间（建议 3）', async () => {
+    const db = new MemDb().user(UA);
+    const e = db.put('events', eventRow(UA, { date: '2026-11-20', time: null, tz: null, remind_days: 0 }));
+    db.clock = () => at('06:00');
+    db.enqueueScope('allday', UA);
+    expect(db.queue.get(`events:${e.id}`)?.enqueued_at).toBe(at('06:00'));
+    db.clock = () => at('09:00');
+    db.enqueueScope('allday', UA);
+    expect(db.queue.get(`events:${e.id}`)?.enqueued_at, '同样是批量：不改').toBe(at('06:00'));
+    db.edit('events', e.id, { remind_days: 1 });
+    expect(db.queue.get(`events:${e.id}`)).toMatchObject({ prio: 0, enqueued_at: at('09:00') });
   });
 });
 

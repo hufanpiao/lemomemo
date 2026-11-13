@@ -9,10 +9,12 @@
 -- 出队 remind_queue_pop 换签名：每人上限、有毒次数、规则版本改成参数（带默认值，旧 push-dispatch 按名字传三个参数照跑），多返回 fresh；
 --   候选直接用 q.user_id，删孤儿那段整段删掉（孤儿带着 user_id 照常出队，第 0 步读不到行就不放回、finish 按租约删；注销的由外键级联删）；
 --   排序：每人内按 (prio, table_name, id) 编号，跨用户按 (prio, 每人编号, table_name, id)，用户自己改的全站先算。
--- 批量入队只收没到点或还没算的（remind_at > 现在，或 remind_at 为空且设了提醒），已经推过、remind_at 已过的不进（修 P16；纪念日补“为空”修 P3）。
+-- 批量入队收“这一次还没过完”的，不改现状（6.3 Q3 A）、只去掉重算了也推不出去的（修 P16）；口径写在 remind_enqueue 上面（11-13 整块评审必改 1 改过：
+--   原来一律按 remind_at > 现在收，改默认时刻时把“稍后”、免打扰顺延还没响的那条也挡在外面，改了 P12 的现状）。纪念日按人入队补“为空”（修 P3）。
 -- 不改提醒算法，不做全量重算（方案 3.3 ④：以后改算法时版本号加 1、加一句 remind_enqueue('all', …)）；不写一次性补算（4.2 第 10 步）。
--- 锁：开头一次按“业务表 → 队列”的顺序拿齐（用户写入也是先业务表后队列），lock_timeout 5 秒拿不到整个迁移回滚，重推即可；
---   推之前用 private.long_transactions() 看有没有长事务（方案 4.2 末段）。
+-- 锁：开头按“四张业务表 → table_meta → 队列”拿（单句写入是先业务表、touch() 里再读 table_meta、最后写队列），lock_timeout 5 秒拿不到整个迁移回滚，重推即可；
+--   用户的多表事务（先写随手记、再写日程）先拿了 table_meta 的共享锁，可能和这里互等成死锁，被选中中止的是迁移就整体回滚，重推即可；
+--   第 9 步的外键最后才拿 auth.users，和正在跑的注销同样可能死锁回滚。推之前用 private.long_transactions() 看有没有长事务、看一眼队列行数（方案 4.2 末段）。
 -- supabase CLI 推迁移是把一份文件的语句一次性管道发出（不是显式事务块，整份到最后才结束事务）：顶层的 lock table 会报 25P01，
 --   所以放进 do 块（函数里的 lock table 不要求显式事务块，锁拿到这份迁移结束）；set local 在这种推法下照样管到最后，
 --   do 块开头再核一次两个超时真的生效了，没生效就报错停下，不在没有超时保护的情况下硬推（lemo-e2e 起库时实测，11-13）。
@@ -25,6 +27,7 @@ begin
     raise exception 'R-411 迁移：set local 没生效（等锁上限 %，语句上限 %），停下', current_setting('lock_timeout'), current_setting('statement_timeout');
   end if;
   lock table public.settings, public.events, public.todos, public.anniversaries in access exclusive mode;
+  lock table private.table_meta in access exclusive mode;   -- 第 2 步 alter 要它；从这里起所有同步表的写入都等着（touch() 要读它）
   lock table private.remind_queue in access exclusive mode;
 end $$;
 
@@ -53,15 +56,25 @@ update private.table_meta set remind_cols = '{remind_offsets,remind_time,month,d
 -- ===== 3. 新函数 =====
 -- 唯一入队。invoker、不授任何角色：只被下面几个 security definer 函数（属主 postgres）和迁移调；收任意 user_id，绝不能授给客户端。
 -- row：就是这一行（p_tn、p_id、p_user 来自 after 触发器的 NEW），prio 0。批量（floating / allday / anniv / all）从三张表按行上的 user_id 选，
---   只收没到点或还没算的；“设了提醒”是 shared/logic/remind.ts 各分支的粗判（宁多勿少，只用来少入队），以后加提醒字段要一起改。
+--   收“这一次还没过完”的，范围是原来各入口的子集、只去掉重算了也推不出去的（修 P16，不改现状：6.3 Q3 A；唯一多收的是 floating 里 remind_at 为空的纪念日，修 P3）：
+--   floating（时区）照原 enqueue_floating：没到点（remind_at > 现在）或还没算（为空且设了提醒）；
+--   allday（改默认时刻）、all 的日程和待办：日期（日程 date、待办 due）还没过两天以上，或“稍后”、免打扰顺延还在 1 小时以内——
+--     第 1 步只回看 1 小时（round-types.ts BEHIND_MS），日期过了两天的（时区最多差 14 小时，再留一天）重算出来也推不出去；
+--     当天推过的、按了“稍后”的、被免打扰顺延的照原来一样重算（P12 照现状挪到新默认时刻；这一天推过的由第 0 步 R-336 压住不重推）；
+--   anniv（改纪念日默认）和 all 的纪念日：每年都会再来，不看时间，照原 enqueue_anniv_defaults。
+--   all 现在没有调用方；第一次真用之前要核：有时刻的日程、待办当天推过、新规则又把时刻挪到将来的，没有 R-336 压着，会不会再推一次。
+--   “设了提醒”是 shared/logic/remind.ts 各分支的粗判（宁多勿少，只用来少入队），以后加提醒字段要一起改。
 -- 每个分支开头只看参数的条件（p_scope = …）在执行时一次判定，不在本 scope 的分支整支跳过；按人的分支和全站的分支分开写，按人的走 user_id 索引。
 -- 冲突时：user_id 换成这一次的（行被硬删后同一个 id 被别人重用时跟着换主人）；清租约、attempts 清零（R-348：正在处理时又有改动，finish 删不到它）；
---   prio 取小、fresh 取或、min_ver 取大；什么都不用改时不写（where）。enqueued_at 冲突时不改（一直在等的就一直算着）。
+--   prio 取小、fresh 取或、min_ver 取大；什么都不用改时不写（where）。enqueued_at 只在 prio 变小时记成现在（批量项被用户改成 prio 0，
+--   积压统计从这时算起，不带着几小时前的批量入队时间误报；评审建议 3），其余一直在等的就一直算着。
 create function private.remind_enqueue(p_scope text, p_user uuid, p_tn text, p_id uuid, p_fresh boolean, p_min_ver smallint) returns void
   language plpgsql set search_path = '' as $$
 declare
   now_ms bigint := (extract(epoch from now()) * 1000)::bigint;
   soon bigint := (extract(epoch from now()) * 1000)::bigint + 86400000;
+  win bigint := (extract(epoch from now()) * 1000)::bigint - 3600000;
+  cut date := (now() at time zone 'UTC')::date - 2;
 begin
   if p_scope is null or p_scope not in ('row', 'floating', 'allday', 'anniv', 'all') then
     raise exception 'remind_enqueue_scope: %', p_scope;
@@ -71,37 +84,55 @@ begin
     from (
       select p_tn as tn, p_id as rid, p_user as uid, 0::smallint as pr where p_scope = 'row'
       union all
-      -- 全天日程（时区采纳、切固定时区、改默认时刻）
+      -- 时区（floating）：这个人的全天日程
       select 'events', e.id, e.user_id, (case when e.remind_at is null or e.remind_at <= soon then 1 else 2 end)::smallint
         from public.events e
-       where p_scope in ('floating', 'allday') and e.user_id = p_user and e.deleted_at is null and e.time is null
+       where p_scope = 'floating' and e.user_id = p_user and e.deleted_at is null and e.time is null
          and (e.remind_at > now_ms or (e.remind_at is null and e.remind_days is not null))
       union all
+      -- 改默认时刻（allday）：这个人设了提醒的全天日程
+      select 'events', e.id, e.user_id, (case when e.remind_at is null or e.remind_at <= soon then 1 else 2 end)::smallint
+        from public.events e
+       where p_scope = 'allday' and e.user_id = p_user and e.deleted_at is null and e.time is null and e.remind_days is not null
+         and (e.date >= cut or e.snooze_at > win or e.defer_until > win)
+      union all
+      -- 规则版本（all）：全站设了提醒的日程
       select 'events', e.id, e.user_id, (case when e.remind_at is null or e.remind_at <= soon then 1 else 2 end)::smallint
         from public.events e
        where p_scope = 'all' and e.deleted_at is null
-         and (e.remind_at > now_ms or (e.remind_at is null
-              and ((e.time is null and e.remind_days is not null) or (e.time is not null and e.remind_min is not null))))
+         and ((e.time is null and e.remind_days is not null) or (e.time is not null and e.remind_min is not null))
+         and (e.date >= cut or e.snooze_at > win or e.defer_until > win)
       union all
+      -- 时区（floating）：这个人没完成的待办
       select 'todos', t.id, t.user_id, (case when t.remind_at is null or t.remind_at <= soon then 1 else 2 end)::smallint
         from public.todos t
-       where (p_scope = 'all' or (p_scope = 'floating' and t.user_id = p_user)) and t.deleted_at is null and not t.done
+       where p_scope = 'floating' and t.user_id = p_user and t.deleted_at is null and not t.done
          and (t.remind_at > now_ms or (t.remind_at is null and t.due is not null
               and ((t.due_time is null and t.remind_days is not null) or (t.due_time is not null and t.remind_before_min is not null))))
       union all
-      -- 纪念日的提醒偏移不会为空数组（0005 的 check：1～4 个；为空表示用默认），所以“设了提醒”就是没删
+      -- 规则版本（all）：全站没完成、设了提醒的待办
+      select 'todos', t.id, t.user_id, (case when t.remind_at is null or t.remind_at <= soon then 1 else 2 end)::smallint
+        from public.todos t
+       where p_scope = 'all' and t.deleted_at is null and not t.done and t.due is not null
+         and ((t.due_time is null and t.remind_days is not null) or (t.due_time is not null and t.remind_before_min is not null))
+         and (t.due >= cut or t.snooze_at > win or t.defer_until > win)
+      union all
+      -- 纪念日按人：时区（floating）收没到点或还没算的；改默认（anniv）收用默认的，不看时间。
+      -- 提醒偏移不会为空数组（0005 的 check：1～4 个；为空表示用默认），所以“设了提醒”就是没删
       select 'anniversaries', a.id, a.user_id, (case when a.remind_at is null or a.remind_at <= soon then 1 else 2 end)::smallint
         from public.anniversaries a
        where p_scope in ('floating', 'anniv') and a.user_id = p_user and a.deleted_at is null
+         and (p_scope = 'anniv' or a.remind_at > now_ms or a.remind_at is null)
          and (p_scope = 'floating' or a.remind_offsets is null or a.remind_time is null)
-         and (a.remind_at > now_ms or a.remind_at is null)
       union all
+      -- 规则版本（all）：全站没删的纪念日
       select 'anniversaries', a.id, a.user_id, (case when a.remind_at is null or a.remind_at <= soon then 1 else 2 end)::smallint
         from public.anniversaries a
-       where p_scope = 'all' and a.deleted_at is null and (a.remind_at > now_ms or a.remind_at is null)
+       where p_scope = 'all' and a.deleted_at is null
     ) c
   on conflict (table_name, id) do update set user_id = excluded.user_id, claim = null, claimed_at = null, attempts = 0,
-      prio = least(q.prio, excluded.prio), fresh = q.fresh or excluded.fresh, min_ver = greatest(q.min_ver, excluded.min_ver)
+      prio = least(q.prio, excluded.prio), fresh = q.fresh or excluded.fresh, min_ver = greatest(q.min_ver, excluded.min_ver),
+      enqueued_at = case when excluded.prio < q.prio then now() else q.enqueued_at end
    where q.user_id is distinct from excluded.user_id or q.claim is not null or q.attempts > 0
       or excluded.prio < q.prio or (excluded.fresh and not q.fresh) or excluded.min_ver > q.min_ver;
 end $$;

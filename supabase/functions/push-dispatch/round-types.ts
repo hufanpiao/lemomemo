@@ -104,7 +104,7 @@ export interface RoundStore {
   popQueue(limit: number, leaseS: number, retry: boolean, perUser: number, poison: number, ver: number): Promise<QueueItem[]>;
   /** private.remind_queue_finish(claim, release)：release 里的放回（清租约），这个租约的其余项删掉 */
   finishQueue(claim: string, release: readonly QueueRef[]): Promise<void>;
-  /** 第 0 步按 id 读行（只读这个人的：user_id 一并核对） */
+  /** 第 0 步按 id 读行（只按 id 读；行的主人和队列项对不对，在 round-step0.ts 里比 user_id） */
   rows(table: Table, ids: readonly string[]): Promise<ItemRow[]>;
   profiles(userIds: readonly string[]): Promise<Map<string, Profile>>;
   /** 只读 SETTING_KEYS、没软删、没撤销的（11-04 起撤销了的按没设处理） */

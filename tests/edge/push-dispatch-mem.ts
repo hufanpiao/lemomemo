@@ -40,6 +40,9 @@ export const todoRow = (user: string, over: Partial<ItemRow> = {}): ItemRow => (
 export const eventRow = (user: string, over: Partial<ItemRow> = {}): ItemRow => ({
   ...base(user), title: 'NEOX 会议', date: '2026-11-03', time: null, tz: null, remind_min: null, remind_days: null, ...over,
 });
+export const annivRow = (user: string, over: Partial<ItemRow> = {}): ItemRow => ({
+  ...base(user), name: '妈妈生日', kind: 'birthday', calendar: 'solar', month: 11, day: 20, remind_offsets: null, remind_time: null, ...over,
+});
 
 /** 新项按批出队每人最多几条、取过几次就当有毒项（push-dispatch 的 LIMITS 传给出队函数，这里取同一个常量） */
 export const POP_PER_USER = QUEUE_PER_USER;
@@ -117,7 +120,7 @@ export class MemDb implements DispatchStore {
   }
   /**
    * 照 private.remind_enqueue 的 on conflict（迁移 20261113100000）：不在的新插（enqueued_at = 现在）；在的，有要改的才写——
-   * user_id 换成这一次的、清租约、attempts 清零、prio 取小、fresh 取或、min_ver 取大（enqueued_at 不改）。默认 prio 0（row 一支）
+   * user_id 换成这一次的、清租约、attempts 清零、prio 取小、fresh 取或、min_ver 取大（enqueued_at 只在 prio 变小时记成现在）。默认 prio 0（row 一支）
    */
   enqueue(table: Table, id: string, o: { prio?: number; fresh?: boolean; minVer?: number; user?: string } = {}): void {
     const k = `${table}:${id}`;
@@ -136,35 +139,41 @@ export class MemDb implements DispatchStore {
     const qf = q.fresh ?? false;
     const qv = q.min_ver ?? 0;
     if (qu === user && !q.claim && (q.attempts ?? 0) === 0 && prio >= qp && !(fresh && !qf) && minVer <= qv) return;
-    this.queue.set(k, { ...q, user_id: user, claim: null, claimed_at: null, attempts: 0, prio: Math.min(qp, prio), fresh: qf || fresh, min_ver: Math.max(qv, minVer) });
+    this.queue.set(k, { ...q, user_id: user, claim: null, claimed_at: null, attempts: 0, prio: Math.min(qp, prio), fresh: qf || fresh, min_ver: Math.max(qv, minVer),
+      ...(prio < qp ? { enqueued_at: this.clock() } : {}) });
   }
   /**
-   * 照 remind_enqueue 的批量几支：只收没到点（remind_at > 现在）或还没算（remind_at 为空且设了提醒）的；
-   * prio 1 = remind_at 为空或 24 小时内，否则 2。user 为空只给 all 用
+   * 照 remind_enqueue 的批量几支（口径写在迁移的函数注释上）：floating 收没到点或还没算的；allday、all 的日程和待办收日期没过两天以上、
+   * 或“稍后”、免打扰顺延还在 1 小时以内的；anniv、all 的纪念日不看时间。prio 1 = remind_at 为空或 24 小时内，否则 2。user 为空只给 all 用
    */
   enqueueScope(scope: EnqueueScope, user: string | null, minVer = 0): void {
     const now = this.clock();
     const soon = now + 86_400_000;
+    const win = now - 3_600_000;
+    const cut = new Date(now - 2 * 86_400_000).toISOString().slice(0, 10);
     const prioOf = (r: ItemRow) => (r.remind_at === null || r.remind_at <= soon ? 1 : 2);
-    const live = (r: ItemRow) => r.deleted_at === null && (scope === 'all' || r.user_id === user);
+    const mine = (r: ItemRow) => r.deleted_at === null && (scope === 'all' || r.user_id === user);
     const ahead = (r: ItemRow, set: boolean) => (r.remind_at !== null && r.remind_at > now) || (r.remind_at === null && set);
+    const open = (r: ItemRow, day: unknown) => (typeof day === 'string' && day >= cut) || (r.snooze_at ?? 0) > win || (r.defer_until ?? 0) > win;
     const add = (t: Table, r: ItemRow) => this.enqueue(t, r.id, { prio: prioOf(r), minVer, user: r.user_id });
     for (const r of this.tables.events.values()) {
-      if (!live(r) || !(scope === 'all' || ((scope === 'floating' || scope === 'allday') && r.time == null))) continue;
+      if (!mine(r)) continue;
       const allDay = r.time == null;
-      if (ahead(r, allDay ? r.remind_days != null : r.remind_min != null)) add('events', r);
+      const set = allDay ? r.remind_days != null : r.remind_min != null;
+      if (scope === 'floating' ? allDay && ahead(r, r.remind_days != null)
+        : scope === 'allday' ? allDay && set && open(r, r.date)
+        : scope === 'all' && set && open(r, r.date)) add('events', r);
     }
-    if (scope === 'all' || scope === 'floating') {
-      for (const r of this.tables.todos.values()) {
-        if (!live(r) || r.done) continue;
-        if (ahead(r, r.due != null && (r.due_time == null ? r.remind_days != null : r.remind_before_min != null))) add('todos', r);
-      }
+    for (const r of this.tables.todos.values()) {
+      if (!mine(r) || r.done) continue;
+      const set = r.due != null && (r.due_time == null ? r.remind_days != null : r.remind_before_min != null);
+      if (scope === 'floating' ? ahead(r, set) : scope === 'all' && set && open(r, r.due)) add('todos', r);
     }
-    if (scope !== 'allday') {
-      for (const r of this.tables.anniversaries.values()) {
-        if (!live(r) || (scope === 'anniv' && r['remind_offsets'] != null && r.remind_time != null)) continue;
-        if (ahead(r, true)) add('anniversaries', r);
-      }
+    for (const r of this.tables.anniversaries.values()) {
+      if (!mine(r)) continue;
+      if (scope === 'floating' ? ahead(r, true)
+        : scope === 'anniv' ? r['remind_offsets'] == null || r.remind_time == null
+        : scope === 'all') add('anniversaries', r);
     }
   }
   /**
@@ -205,7 +214,7 @@ export class MemDb implements DispatchStore {
     const fresh = table === 'todos' && ['due', 'due_time', 'remind_before_min'].some(changed);
     if ([...remindCols, 'snooze_at'].some(changed)) this.enqueue(table, id, { fresh });
     // events_allday_ack_enqueue（迁移 20261105120000，REMIND-shown-persist S1）：全天日程的 notified_for 改成了不等于 remind_at 的值，入队
-    if (table === 'events' && row['time'] == null && row.deleted_at == null && row.notified_for != null && changed('notified_for')
+    if (table === 'events' && row['time'] == null && row.deleted_at == null && row.remind_days != null && row.notified_for != null && changed('notified_for')
       && row.notified_for !== row.remind_at) this.enqueue(table, id);
     return row;
   }
