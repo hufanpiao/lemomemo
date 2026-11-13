@@ -12,6 +12,7 @@
 import { daysIn, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import type { AfterDue, AnnivCalendar, AnnivKind, AnnivRec } from '../../../../shared/logic/anniv/next-date.ts';
+import { saveDeleted, type SaveOutcome } from '../../../core/edit-save.ts';
 import { remindLive, rowRemindPending } from '../../../core/remind-flag.ts';
 import { annivLib } from './anniv-lib.ts';
 
@@ -172,4 +173,10 @@ export function hasRemind(c: { row: RowLike | undefined; next: AnnivForm; data: 
     }
   }
   return rowRemindPending(c.row, c.now);
+}
+
+/** 列表左滑删除 / 撤销删除（软删，进“最近删除”）；remind 标记同编辑页（删前还会响，或者恢复后会响） */
+export function setAnnivDeleted(row: RowLike & { readonly id: string }, deleted: boolean, now: number, tz: Tz): Promise<SaveOutcome> {
+  const remind = hasRemind({ row, next: formOf(row), data: { deleted_at: deleted ? now : null }, tz, now });
+  return saveDeleted('anniversaries', row.id, deleted, now, remind);
 }

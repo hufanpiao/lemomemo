@@ -4,6 +4,7 @@
 // • 编辑：kit 的 useEditRecord（改了就自动保存）；表单改动先 normalize（闰月、日子收进有效范围）
 import { useCallback, useMemo } from 'react';
 import { todayOf } from '../../../../shared/core/date.ts';
+import { actionResult, type ActionResult } from '../../../core/action-result.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { settingValue, type SettingRow } from '../../../core/setting-write.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
@@ -11,7 +12,7 @@ import { useEditRecord, type EditRecord } from '../../../kit/hooks/useEditRecord
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { clock } from '../../../platform/clock.ts';
-import { dateValid, emptyForm, formOf, hasRemind, newRow, normalize, patchOf, type AnnivForm } from '../data/anniv-edit.ts';
+import { dateValid, emptyForm, formOf, hasRemind, newRow, normalize, patchOf, setAnnivDeleted, type AnnivForm } from '../data/anniv-edit.ts';
 import { annivList, type AnnivFilter, type Row } from '../data/anniv-model.ts';
 
 export const TABLE = 'anniversaries';
@@ -39,6 +40,19 @@ export function useAnnivList(filter: AnnivFilter) {
   const { now, tz, today } = useToday();
   const list = useMemo(() => annivList(rows, today, tz, filter, ro), [rows, today, tz, filter, ro]);
   return { ...list, today, tz, now };
+}
+
+/** 列表左滑删除 / 撤销删除（kit 的 useListActions 用） */
+export function useAnnivRemove(): (id: string, deleted: boolean) => Promise<ActionResult> {
+  const rows = useCollection<Row>(TABLE);
+  return useCallback(
+    async (id: string, deleted: boolean): Promise<ActionResult> => {
+      const r = rows.find((x) => x.id === id);
+      if (!r) return 'failed';
+      return actionResult(await setAnnivDeleted(r, deleted, clock.now(), currentTz()));
+    },
+    [rows],
+  );
 }
 
 export interface AnnivEdit extends EditRecord<AnnivForm> {

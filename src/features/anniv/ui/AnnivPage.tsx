@@ -13,12 +13,13 @@ import { replaceRoute, useRoute } from '../../../app/router.ts';
 import { pushInPage, useEditRoute } from '../../../app/router-levels.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
-import { ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
-import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
+import { ListToasts } from '../../../kit/components/ListToasts.tsx';
+import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
+import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { FILTERS, useAnnivLib, type AnnivFilter, type AnnivItem } from '../hooks/anniv-view.ts';
-import { useAnnivDefaults, useAnnivList } from '../hooks/useAnniv.ts';
+import { TABLE, useAnnivDefaults, useAnnivList, useAnnivRemove } from '../hooks/useAnniv.ts';
 import { useAnnivT, type AnnivT } from '../hooks/useAnnivT.ts';
 import { AnnivEditor } from './AnnivEditor.tsx';
 import { ageText, cardRemindLine, metaText } from './anniv-text.ts';
@@ -78,15 +79,27 @@ function AnnivList({ inert }: { inert: boolean }) {
   const [filter, setFilter] = useState<AnnivFilter>('all');
   const data = useAnnivList(filter);
   const defaults = useAnnivDefaults();
-  const g = useReadonlyGuard();
-  const open = (x: AnnivItem): void => (x.ro ? g.block() : void pushInPage('anniv', x.id));
+  // 左滑删除、撤销条、出错条、只读提示条：kit 的 useListActions（和待办、随手记同一套）
+  const a = useListActions(TABLE, { remove: useAnnivRemove() });
+  const open = (x: AnnivItem): void => (x.ro ? a.g.block() : void pushInPage('anniv', x.id));
   const near = data.nearest;
 
   const row = (x: AnnivItem) => {
     const st = x.state;
     const meta = x.ro ? t('anniv.roMeta', {}) : x.rec && st ? metaText(x.rec, st, data.today, locale, t) : t('anniv.noCalc', {});
     return (
-      <li key={x.id} className={`${list.row} ${styles.row}`} data-testid="anniv-row" data-ro={x.ro || undefined}>
+      <SwipeRow
+        as="li"
+        key={x.id}
+        className={`${list.row} ${styles.row}`}
+        disabled={x.ro}
+        actions={[
+          { key: 'edit', label: t('anniv.swipe.edit', {}), onClick: () => open(x), testId: 'anniv-swipe-edit' },
+          { key: 'del', label: t('anniv.swipe.delete', {}), danger: true, onClick: () => void a.del(x.id), testId: 'anniv-swipe-del' },
+        ]}
+        data-testid="anniv-row"
+        data-ro={x.ro || undefined}
+      >
         <Pressable type="button" className={list.main} onClick={() => open(x)}>
           <AnnivFace id={x.id} avatarId={x.row['avatar_id']} name={x.name} kind={x.row['kind']} size="sm" />
           <span className={list.text}>
@@ -102,7 +115,7 @@ function AnnivList({ inert }: { inert: boolean }) {
             </span>
           ) : null}
         </Pressable>
-      </li>
+      </SwipeRow>
     );
   };
 
@@ -125,7 +138,6 @@ function AnnivList({ inert }: { inert: boolean }) {
           </button>
         ))}
       </div>
-      <ReadonlyToast guard={g} message={t('anniv.ro', {})} testId="anniv-ro-toast" />
 
       {near?.rec && near.state ? (
         <Pressable type="button" className={styles.near} onClick={() => open(near)} data-testid="anniv-nearest">
@@ -167,6 +179,13 @@ function AnnivList({ inert }: { inert: boolean }) {
           <ul className={`${list.list} ${styles.rows}`}>{data.past.map(row)}</ul>
         </details>
       ) : null}
+
+      <ListToasts
+        g={a.g}
+        onUndo={a.undo}
+        text={{ deleted: t('anniv.deleted', {}), undo: t('anniv.undo', {}), error: t('anniv.err.save', {}), readonly: t('anniv.ro', {}) }}
+        prefix="anniv"
+      />
     </main>
   );
 }

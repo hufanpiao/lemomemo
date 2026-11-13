@@ -1,0 +1,52 @@
+/* 左滑露出操作的列表行（kit，SwipeRow.tsx）：只用令牌（A11）。
+   • .wrap：外框（列表里是 li，和 List.module.css 的 .row 一起用），裁掉滑出去的部分
+   • .acts：右侧操作按钮，压在行面下面；.face：行面（底色同列表面板，盖住按钮），跟手只动 transform
+   • .face[data-snap]：松手后收回或停住的过渡；减少动态效果时没有过渡、直接到位 */
+
+.wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.acts {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+}
+
+.act {
+  min-width: 72px;
+  padding: 0 14px;
+  border: 0;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.danger {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.face {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-self: stretch;
+  align-items: center;
+  min-width: 0;
+  background: var(--panel);
+  touch-action: pan-y;
+}
+
+.face[data-snap] {
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+
+:global(:root[data-rm="1"]) .face[data-snap] {
+  transition: none;
+}

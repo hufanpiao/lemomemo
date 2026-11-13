@@ -15,6 +15,15 @@ export function lunarMd(r: Pick<AnnivRec, 'month' | 'day' | 'is_leap'>, locale: 
   return annivLib().lunarText({ year: 2000, month: r.month, day: r.day, isLeap: r.is_leap }, locale);
 }
 
+/** 编辑页日期那一行（视觉稿 annface）：“阳历 10月27日 · 1997 年”“阴历 闰三月初十 · 1955 年”；不知道年份的不带年 */
+export function dateRowText(f: Pick<AnnivRec, 'calendar' | 'month' | 'day' | 'is_leap' | 'year'>, locale: UiLocale, t: AnnivT): string {
+  const cal = t(f.calendar === 'lunar' ? 'anniv.edit.lunar' : 'anniv.edit.solar', {});
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  // 2000 年是闰年：2月29日也认得
+  const md = f.calendar === 'lunar' ? lunarMd(f, locale) : fmtDay(`2000-${pad(f.month)}-${pad(f.day)}` as DateStr, locale, 'monthDay');
+  return f.year === null ? t('anniv.edit.dateRow', { cal, md }) : t('anniv.edit.dateRowYear', { cal, md, y: f.year });
+}
+
 /** 阴历日子那一列的选项文字（“初一”“十五”/“1일”）：月名之后那一段 */
 export function lunarDayName(day: number, locale: UiLocale): string {
   const L = annivLib();

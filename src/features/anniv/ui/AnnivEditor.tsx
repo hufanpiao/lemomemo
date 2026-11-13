@@ -6,33 +6,29 @@
 //   选了闰月只显示一行“没有闰月的年份按同号平月过”（D15，不给选项）→ 倒数日“到期后：移到已过去 / 每年重复”→
 //   “下一次……”实时算（下面再给两次）→ 提醒一行（点开弹层，RemindSheet）→ 备注
 // • 只读行（D1：韩国阴历、认不出的值）：EditShell 顶部出“要新版本”，输入全禁用
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { AnnivKind } from '../../../../shared/logic/anniv/next-date.ts';
 import { backOr } from '../../../app/router-levels.ts';
 import { useScrollLock } from '../../../kit/components/Dialog.tsx';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
-import { Check, Field, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
+import { Check, Field, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
+import { Wheel, WheelPanel } from '../../../kit/components/Wheel.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { leapOf, maxDay, NAME_MAX, NOTE_MAX, offsetsKey, offsetsList, recOf, yearRange, type AnnivForm } from '../hooks/anniv-view.ts';
-import { annivLib, clearAvatar, setAvatar, type AvatarResult } from '../hooks/anniv-view.ts';
+import { annivLib } from '../hooks/anniv-view.ts';
 import { useAnnivDefaults, useAnnivEdit, useToday } from '../hooks/useAnniv.ts';
 import { useAnnivT, type AnnivT } from '../hooks/useAnnivT.ts';
-import { laterText, lunarDayName, nextText, remindLine } from './anniv-text.ts';
-import { AnnivFace } from './AnnivFace.tsx';
+import { dateRowText, laterText, lunarDayName, nextText, remindLine } from './anniv-text.ts';
+import { AvatarRow, NameWithAvatar } from './AnnivAvatarRow.tsx';
 import styles from './AnnivPage.module.css';
 import { RemindSheet } from './RemindSheet.tsx';
 
-const AvatarPicker = lazy(() => import('./AvatarPicker.tsx'));
 const KINDS: readonly AnnivKind[] = ['birthday', 'anniversary', 'countdown'];
 const KIND_KEY = { birthday: 'anniv.kind.birthday', anniversary: 'anniv.kind.anniversary', countdown: 'anniv.kind.countdown' } as const;
 const NOYEAR_KEY = { birthday: 'anniv.edit.noYear.birthday', anniversary: 'anniv.edit.noYear.anniversary', countdown: 'anniv.edit.noYear.countdown' } as const;
 const NOYEAR_HINT = { birthday: 'anniv.edit.noYearHint.birthday', anniversary: 'anniv.edit.noYearHint.anniversary', countdown: 'anniv.edit.noYearHint.countdown' } as const;
-
-const AV_KEY = {
-  uploading: 'anniv.av.uploading', ok: 'anniv.av.uploading', encode_failed: 'anniv.av.encode_failed', write_failed: 'anniv.av.write_failed', upload_failed: 'anniv.av.upload_failed',
-} as const;
 
 const close = (): void => backOr('anniv');
 const range = (a: number, b: number): number[] => Array.from({ length: b - a + 1 }, (_, i) => a + i);
@@ -48,53 +44,70 @@ function monthOptions(f: AnnivForm, t: AnnivT, locale: 'zh-CN' | 'ko-KR'): { val
   });
 }
 
-function AvatarRow({ id, form, saved, off, t }: { id: string | null; form: AnnivForm; saved: Record<string, unknown> | undefined; off: boolean; t: AnnivT }) {
-  const input = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [st, setSt] = useState<AvatarResult | 'uploading' | null>(null);
-  const has = typeof saved?.['avatar_id'] === 'string';
-  const can = id !== null && !off;
-  const done = async (blob: Blob | null): Promise<void> => {
-    setFile(null);
-    if (!id) return;
-    if (!blob) return setSt('encode_failed');
-    setSt('uploading');
-    const r = await setAvatar(id, blob);
-    setSt(r === 'ok' ? null : r);
-  };
+interface PartProps {
+  form: AnnivForm;
+  off: boolean;
+  t: AnnivT;
+  change(p: Partial<AnnivForm>): void;
+}
+
+/** 日期：阳历 / 阴历 + 年月日三列滚轮（视觉稿 annnew；阴历的闰月排在同号平月后面、只在有闰月的年份出现）+ 闰月提示 + “不知道年份” */
+function DateFields({ form, off, t, change, locale, today, label }: PartProps & { locale: 'zh-CN' | 'ko-KR'; today: string; label: boolean }) {
+  const yr = yearRange(form.calendar);
+  const leap = form.is_leap;
   return (
-    <div className={styles.avRow} data-testid="anniv-avatar-row">
-      <button type="button" className={styles.avBtn} disabled={!can} onClick={() => input.current?.click()} aria-label={t('anniv.edit.avatarPick', {})} data-testid="anniv-avatar-pick">
-        <AnnivFace id={id ?? 'new'} avatarId={saved?.['avatar_id']} name={form.name} kind={form.kind} size="lg" />
-      </button>
-      <span className={styles.avText}>
-        <span className={styles.avTitle}>{t('anniv.edit.avatar', {})}</span>
-        <span className={styles.hint} role="status">
-          {st ? t(AV_KEY[st], {}) : t(id ? 'anniv.edit.avatarHint' : 'anniv.edit.avatarNeedName', {})}
+    <>
+      {/* 编辑页上面已经有“日期”一行，展开后阳历 / 阴历这一行不再写标签（Field 的空标签不显示） */}
+      <Field label={label ? t('anniv.edit.date', {}) : ''}>
+        <span className={styles.seg} role="group" aria-label={t('anniv.edit.calLabel', {})}>
+          {(['solar', 'lunar'] as const).map((c) => (
+            <button key={c} type="button" className={styles.segBtn} aria-pressed={form.calendar === c} disabled={off} onClick={() => change({ calendar: c })} data-testid={`anniv-cal-${c}`}>
+              {t(c === 'solar' ? 'anniv.edit.solar' : 'anniv.edit.lunar', {})}
+            </button>
+          ))}
         </span>
-      </span>
-      {has && can ? (
-        <FormButton onClick={() => void clearAvatar(id)} data-testid="anniv-avatar-remove">
-          {t('anniv.edit.avatarRemove', {})}
-        </FormButton>
-      ) : null}
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={(e) => {
-          setFile(e.target.files?.[0] ?? null);
-          e.target.value = '';
-        }}
-        data-testid="anniv-avatar-file"
-      />
-      {file ? (
-        <Suspense fallback={null}>
-          <AvatarPicker file={file} onDone={(b) => void done(b)} onCancel={() => setFile(null)} />
-        </Suspense>
-      ) : null}
-    </div>
+      </Field>
+      <WheelPanel label={t('anniv.edit.date', {})} className={styles.wheels}>
+        {form.year !== null ? (
+          <Wheel
+            label={t('anniv.edit.year', {})}
+            value={String(form.year)}
+            disabled={off}
+            options={range(yr.min, yr.max).map((y) => ({ value: String(y), label: String(y) }))}
+            onChange={(v) => change({ year: Number(v) })}
+            data-testid="anniv-edit-year"
+          />
+        ) : null}
+        <Wheel
+          label={t('anniv.edit.month', {})}
+          value={`${form.month}${leap ? 'L' : ''}`}
+          disabled={off}
+          options={monthOptions(form, t, locale)}
+          onChange={(v) => change({ month: parseInt(v, 10), is_leap: v.endsWith('L') })}
+          data-testid="anniv-edit-month"
+        />
+        <Wheel
+          label={t('anniv.edit.day', {})}
+          value={String(form.day)}
+          disabled={off}
+          options={range(1, maxDay(form)).map((d) => ({ value: String(d), label: form.calendar === 'lunar' ? lunarDayName(d, locale) : t('anniv.edit.dayOpt', { d }) }))}
+          onChange={(v) => change({ day: Number(v) })}
+          data-testid="anniv-edit-day"
+        />
+      </WheelPanel>
+      {form.calendar === 'lunar' ? <p className={styles.hint}>{t(leap ? 'anniv.edit.leapNote' : 'anniv.edit.leapHint', {})}</p> : null}
+      <div className={styles.switchRow}>
+        <Check
+          label={t(NOYEAR_KEY[form.kind], {})}
+          look="switch"
+          checked={form.year === null}
+          disabled={off}
+          onChange={(v) => change({ year: v ? null : Number(today.slice(0, 4)) })}
+          data-testid="anniv-edit-noyear"
+        />
+        <span className={styles.hint}>{t(NOYEAR_HINT[form.kind], {})}</span>
+      </div>
+    </>
   );
 }
 
@@ -108,6 +121,10 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
   const defaults = useAnnivDefaults();
   const { today, tz } = useToday();
   const [sheet, setSheet] = useState(false);
+  // 新建页（视觉稿 annnew）：头像在名字左边、日期滚轮直接摆出来；编辑页（annface）：上面一行头像、日期收成一行“阳历 10月27日 · 1997 年 ›”，点开出滚轮。
+  // 按打开时的路由定（新建写了名字存下来以后 id 换成真的，版式不跟着变）
+  const [fresh] = useState(id === 'new');
+  const [dateOpen, setDateOpen] = useState(false);
   const { form, change } = ed;
   // 只读（D1）：同步层标的只读、认不出的值、韩国阴历
   const badRow = ed.row !== undefined && (annivRecOf(ed.row)?.lunar_variant ?? 'kr') !== 'cn';
@@ -137,9 +154,6 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
     st = null;
   }
   const later = st && !st.past ? upcoming(r, today, 3, ed.row ? createdDayOf(ed.row, tz, today) : today).slice(1) : [];
-  const yr = yearRange(form.calendar);
-  const leap = form.is_leap;
-
   return (
     <div className={styles.layer} data-testid="anniv-edit-layer">
       <div className={styles.scrim} onClick={close} aria-hidden="true" />
@@ -160,63 +174,31 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
             ))}
           </div>
 
-          <FormGroup>
-            <AvatarRow id={ed.savedId} form={form} saved={ed.row} off={off} t={t} />
-          </FormGroup>
+          {fresh ? null : (
+            <FormGroup>
+              <AvatarRow id={ed.savedId} form={form} saved={ed.row} off={off} t={t} />
+            </FormGroup>
+          )}
 
           <FormGroup>
-            <Field label={t('anniv.edit.name', {})} htmlFor="anniv-name">
-              <TextInput id="anniv-name" value={form.name} maxLength={NAME_MAX} disabled={off} placeholder={t('anniv.edit.namePh', {})} onCommit={(v) => change({ name: v.trim() })} data-testid="anniv-edit-name" />
-            </Field>
-            <Field label={t('anniv.edit.date', {})}>
-              <span className={styles.seg} role="group" aria-label={t('anniv.edit.calLabel', {})}>
-                {(['solar', 'lunar'] as const).map((c) => (
-                  <button key={c} type="button" className={styles.segBtn} aria-pressed={form.calendar === c} disabled={off} onClick={() => change({ calendar: c })} data-testid={`anniv-cal-${c}`}>
-                    {t(c === 'solar' ? 'anniv.edit.solar' : 'anniv.edit.lunar', {})}
-                  </button>
-                ))}
-              </span>
-            </Field>
-            <div className={styles.wheels}>
-              {form.year !== null ? (
-                <Select
-                  aria-label={t('anniv.edit.year', {})}
-                  value={String(form.year)}
-                  disabled={off}
-                  options={range(yr.min, yr.max).map((y) => ({ value: String(y), label: t('anniv.edit.yearOpt', { y }) }))}
-                  onChange={(v) => change({ year: Number(v) })}
-                  data-testid="anniv-edit-year"
-                />
-              ) : null}
-              <Select
-                aria-label={t('anniv.edit.month', {})}
-                value={`${form.month}${leap ? 'L' : ''}`}
-                disabled={off}
-                options={monthOptions(form, t, locale)}
-                onChange={(v) => change({ month: parseInt(v, 10), is_leap: v.endsWith('L') })}
-                data-testid="anniv-edit-month"
-              />
-              <Select
-                aria-label={t('anniv.edit.day', {})}
-                value={String(form.day)}
-                disabled={off}
-                options={range(1, maxDay(form)).map((d) => ({ value: String(d), label: form.calendar === 'lunar' ? lunarDayName(d, locale) : t('anniv.edit.dayOpt', { d }) }))}
-                onChange={(v) => change({ day: Number(v) })}
-                data-testid="anniv-edit-day"
-              />
-            </div>
-            {form.calendar === 'lunar' ? <p className={styles.hint}>{t(leap ? 'anniv.edit.leapNote' : 'anniv.edit.leapHint', {})}</p> : null}
-            <div className={styles.switchRow}>
-              <Check
-                label={t(NOYEAR_KEY[form.kind], {})}
-                look="switch"
-                checked={form.year === null}
-                disabled={off}
-                onChange={(v) => change({ year: v ? null : Number(today.slice(0, 4)) })}
-                data-testid="anniv-edit-noyear"
-              />
-              <span className={styles.hint}>{t(NOYEAR_HINT[form.kind], {})}</span>
-            </div>
+            {fresh ? (
+              <NameWithAvatar id={ed.savedId} saved={ed.row} form={form} off={off} t={t} change={change} />
+            ) : (
+              <>
+                <Field label={t('anniv.edit.name', {})} htmlFor="anniv-name">
+                  <TextInput id="anniv-name" value={form.name} maxLength={NAME_MAX} disabled={off} placeholder={t('anniv.edit.namePh', {})} onCommit={(v) => change({ name: v.trim() })} data-testid="anniv-edit-name" />
+                </Field>
+                <Field label={t('anniv.edit.date', {})}>
+                  <Pressable type="button" className={styles.rowBtn} disabled={off} aria-expanded={dateOpen} onClick={() => setDateOpen((v) => !v)} data-testid="anniv-edit-date">
+                    <span>{dateRowText(form, locale, t)}</span>
+                    <span className={styles.chev} data-open={dateOpen || undefined} aria-hidden="true">
+                      ›
+                    </span>
+                  </Pressable>
+                </Field>
+              </>
+            )}
+            {fresh || dateOpen ? <DateFields form={form} off={off} t={t} change={change} locale={locale} today={today} label={fresh} /> : null}
             {form.kind === 'countdown' ? (
               <Field label={t('anniv.edit.afterDue', {})} htmlFor="anniv-after">
                 <Select

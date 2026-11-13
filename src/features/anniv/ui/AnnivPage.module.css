@@ -292,13 +292,7 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .sheet {
-    animation-name: anniv-sheet-fade;
-  }
-}
-
-/* 设置里“减少动态效果”（data-rm）：同样只淡入 */
+/* 减少动态效果（data-rm：设置里的开关或系统设置，platform/look.ts 统一写）：只淡入 */
 :global(:root[data-rm="1"]) .sheet {
   animation-name: anniv-sheet-fade;
 }
@@ -313,15 +307,65 @@
   }
 }
 
+/* 年月日滚轮那一块（kit 的 WheelPanel）的上下间距 */
 .wheels {
-  display: flex;
-  gap: 8px;
   margin: 4px 0 6px;
 }
 
-.wheels > * {
+/* 新建页：头像圆圈在名字左边（视觉稿 annnew） */
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.nameRow > :last-child {
   flex: 1;
   min-width: 0;
+}
+
+/* 头像右下角的小图标：表示点了可以加头像 */
+.avBadge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--text);
+  border-radius: 50%;
+  background: var(--panel);
+}
+
+.avBadge::after {
+  content: '';
+  position: absolute;
+  inset: 4px 3.5px;
+  border: 1.5px solid var(--text);
+  border-radius: 2px;
+}
+
+/* 日期一行展开时箭头朝下 */
+.chev[data-open] {
+  display: inline-block;
+  rotate: 90deg;
+}
+
+/* 提醒时刻滚轮（视觉稿 annedit）：浅底胶囊，中间“09 : 00”大字，两边浅色露出上一个钟点、下一个分钟 */
+.timeWheel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6px 0 4px;
+  border-radius: var(--r-xl);
+  background: var(--panel-2);
+}
+
+.timeColon {
+  padding: 0 2px;
+  font-family: var(--f-num);
+  font-size: var(--fs-30);
+  line-height: 1;
 }
 
 .switchRow {
@@ -379,6 +423,8 @@
 }
 
 .avBtn {
+  position: relative;
+  flex: none;
   padding: 0;
   border: 0;
   border-radius: 50%;

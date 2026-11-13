@@ -1,5 +1,5 @@
 // 纪念日提醒的弹层（B5 S15、S16；R-94；皮肤视觉稿 annedit“这一条的提醒”弹层；TC-B5-22）：一条纪念日、设置里的默认值共用这一份
-// • 提前几天多选：当天、前一天、提前 3 / 7 / 14 / 30 天，或自定义 0～60 天，最多 4 个、至少留一个；几点提醒
+// • 提前几天多选：当天、前一天、提前 3 / 7 / 14 / 30 天，或自定义 0～60 天，最多 4 个、至少留一个；几点提醒用 kit 的横向滚轮（时、分两列，分钟 5 分一格）
 // • 一条纪念日（mode = item）：两列为 null 时亮的是设置里的默认（anniv.default_offsets、anniv.default_time，没设按 {7,1}、09:00）；
 //   点了任何一项就存成这一条自己的；“恢复默认”两列写回 null，以后跟着设置里的默认走；下面一行“下一次提醒：…”按改后的设置现算（和服务器同一份 next-date）
 // • 推算经 annivLib()：挂它的编辑页、设置那一行都先等 lib 加载好（useAnnivLib）
@@ -9,13 +9,24 @@ import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { todayOf } from '../../../../shared/core/date.ts';
 import type { AnnivRec } from '../../../../shared/logic/anniv/next-date.ts';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
-import { FormButton, TextInput } from '../../../kit/components/Form.tsx';
+import { FormButton } from '../../../kit/components/Form.tsx';
+import { Wheel } from '../../../kit/components/Wheel.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { annivLib } from '../hooks/anniv-view.ts';
 import { useAnnivT } from '../hooks/useAnnivT.ts';
 import { hm, offsText } from './anniv-text.ts';
 import styles from './AnnivPage.module.css';
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: pad2(h), label: pad2(h) }));
+
+/** 分钟那一列：每 5 分钟一格；现在的值不在格上（以前用系统时间框存的 07:13）也放进去 */
+function minuteOptions(cur: string): { value: string; label: string }[] {
+  const xs = Array.from({ length: 12 }, (_, i) => pad2(i * 5));
+  if (!xs.includes(cur)) xs.push(cur);
+  return xs.sort().map((m) => ({ value: m, label: m }));
+}
 
 /** 提醒设置：null = 跟着上一级（条目跟设置、设置跟出厂） */
 export interface RemindValue {
@@ -54,6 +65,8 @@ export function RemindSheet({
     // 第一次单独设：时刻一并钉成现在看到的（不然时刻为空，跟着上一级变，和“只改这一处”对不上）
     onChange({ offsets: [...next].sort((a, b) => b - a), time: value.time ?? time });
   };
+  const [hh = '09', mm = '00'] = time.split(':');
+  const setTime = (v: string): void => onChange({ time: v, offsets: value.offsets ?? offs });
   const toggle = (n: number): void => setOffs(offs.includes(n) ? offs.filter((x) => x !== n) : [...offs, n]);
   const addCustom = (): void => {
     const n = Number(custom);
@@ -116,13 +129,14 @@ export function RemindSheet({
         </p>
       ) : null}
       <p className={styles.rmLabel}>{t('anniv.rm.timeLabel', {})}</p>
-      <TextInput
-        type="time"
-        aria-label={t('anniv.rm.timeLabel', {})}
-        value={time}
-        onCommit={(v) => /^\d{2}:\d{2}$/.test(v) && onChange({ time: v, offsets: value.offsets ?? offs })}
-        data-testid="anniv-rm-time"
-      />
+      {/* 时刻滚轮（视觉稿 annedit：“08 09 : 00 10”）：左边一列时、选中项贴右露出上一个；右边一列分、选中项贴左露出下一个 */}
+      <div className={styles.timeWheel} role="group" aria-label={t('anniv.rm.timeLabel', {})} data-testid="anniv-rm-time" data-value={time}>
+        <Wheel axis="x" align="end" label={t('anniv.rm.hour', {})} options={HOURS} value={hh} onChange={(h) => setTime(`${h}:${mm}`)} data-testid="anniv-rm-hour" />
+        <span className={styles.timeColon} aria-hidden="true">
+          :
+        </span>
+        <Wheel axis="x" align="start" label={t('anniv.rm.minute', {})} options={minuteOptions(mm)} value={mm} onChange={(m) => setTime(`${hh}:${m}`)} data-testid="anniv-rm-minute" />
+      </div>
       {nextLine ? (
         <p className={styles.hint} data-testid="anniv-rm-next">
           {nextLine}
