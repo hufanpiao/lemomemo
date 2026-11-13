@@ -204,6 +204,16 @@
   vertical-align: 2px;
 }
 
+/* “已转过”后面给读屏的停顿（视觉上不占位） */
+.convSep {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .cardFoot .ai {
   margin-left: 0;
 }

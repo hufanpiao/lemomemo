@@ -287,12 +287,13 @@ const RoMark = ({ ro, id, cls }: { ro: boolean; id: string; cls: string | undefi
     </span>
   ) : null;
 
-/** “已转过”描边小标（R-415 ③，负责人定方案丙）：卡片、列表行的标题前；读屏照字读 */
+/** “已转过”描边小标（R-415 ③，负责人定方案丙）：卡片、列表行的标题前；后面一个视觉隐藏的“，”，读屏读成“已转过，标题”不连在一起 */
 function ConvMark({ id }: { id: string }) {
   const t = useNotesT();
   return (
     <span className={styles.conv} data-testid={`notes-conv-${id}`}>
       {t('notes.converted', {})}
+      <span className={styles.convSep}>，</span>
     </span>
   );
 }

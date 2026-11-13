@@ -31,9 +31,9 @@ export function Field({ label, children, hint, htmlFor }: { label: string; child
 /**
  * 字段行右边的“值 ›”（R-415 ① 待办编辑页“来源 随手记 · 标题 ›”）：放在 Field 里，单行、放不下省略，整块控件宽都能点、至少 --hit 高。
  * to 是要去的路由和参数（同 navigate 的参数，地址经 hrefOf，A26）；label 是读屏名称（要带上行名，如“来源 随手记 · 标题”：
- * Field 的行名不是链接的名称）。普通点击走 navigate，带修饰键的照浏览器默认（plainClick，同 MeLink）
+ * Field 的行名不是链接的名称）；testId 必填：运行日志记元素时 data-testid 在 aria-label 之前，不传就会记下 label 里用户写的标题。普通点击走 navigate，带修饰键的照浏览器默认（plainClick，同 MeLink）
  */
-export function FieldLink({ to, label, children, testId }: { to: readonly [RouteName, ...string[]]; label: string; children: ReactNode; testId?: string }) {
+export function FieldLink({ to, label, children, testId }: { to: readonly [RouteName, ...string[]]; label: string; children: ReactNode; testId: string }) {
   return (
     <a className={styles.link} href={hrefOf(...to)} aria-label={label} onClick={(e) => plainClick(e) && void navigate(...to)} data-testid={testId}>
       <span className={styles.linkText}>{children}</span>

@@ -4,8 +4,8 @@
 //   执行合并只写被合并分类一笔 merged_into（不软删、不逐条改随手记）：条目在读的时候由 note-list.ts 的 categoryResolver 归到留下的分类
 //   （列表、分类胶囊、编辑页的 formOf 都经它；新读 notes.category_id 的地方也必须经它）。
 //   两台设备各合并一次绕成圈：fixCategoryCycles 给圈里留下的那个写回 merged_into: null（每个分类只写一次）。
-//   合并后的撤销条（R-415 ③，8 秒，和删除同一个 kit UndoToast）点“撤销”：undoMerge 先把这一对记进“不用”（负责人 11-13：撤销就当点了“不用”，经 dismissMerge），
-//   再让被合并的分类回到 merged_into: null——合并那一笔在 outbox 里发送失败的直接丢掉它（view 回滚），否则写一笔 null；本机这个分类已经不指向 keep 了（别处改过）不写。
+//   合并后的撤销条（R-415 ③，8 秒，和删除同一个 kit UndoToast）点“撤销”：undoMerge 丢掉 outbox 里发送失败的合并那一笔，本机还合并着就写一笔 null，
+//   最后把这一对记进“不用”（负责人 11-13：撤销就当点了“不用”，经 dismissMerge；写 null 没写成不记）。顺序见 undoMerge。
 //   “写回 merged_into: null”只在 unmerge 一处，成环写回、撤销合并共用，都经 outbox。
 //   运行日志（不记分类名）：notes merge category|undo|dismiss <结果码> merge=<id> keep=<id>，合并那行再带 why=ai|rule；抛异常记 threw <错误名>（platform 的 errName）
 // 纯 TS，不准 React（A1）
@@ -101,13 +101,16 @@ const failedMerge = (i: { table: string; id: string; op: string; state: string; 
   i.table === 'categories' && i.id === pair.merge && i.op === 'patch' && i.state === 'failed' && Object.keys(i.data).join() === 'merged_into' && i.data['merged_into'] === pair.keep;
 
 /**
- * 撤销刚才的合并（R-415 ③）：
- * ① 只读行 → readonly；本机这个分类现在不是 merged_into === keep（别的设备、别的操作改过），outbox 里也没有发送失败的合并那一笔 → moved，
- *    什么都不写、不提示；
- * ② 先把这一对记进“不用”（dismissMerge；分类按撤销后的样子传，这个分类别的“不用”不会被当成不活着去掉，写回后提示条也不会先闪出这一对）；
- * ③ outbox 里合并那一笔发送失败了（被拒的 patch 本机已经显示回服务器那份）→ 直接丢掉它（dropped），不另写 null，免得以后“重试”又合并回去；
- *    还没发的那一笔，写 null 时 outbox 自己合成一笔；已经发出去的，写一笔 {merged_into: null}。
- * 结果换成列表页的 ActionResult；运行日志 notes merge undo <码> merge= keep=（抛异常也接住，按 failed 回）
+ * 撤销刚才的合并（R-415 ③；顺序主持人 11-13 复查定）：
+ * ① 只读行 → readonly，什么都不动；
+ * ② outbox 里有发送失败的合并那一笔（被拒的 patch 本机已经显示回服务器那份）→ 丢掉它（免得以后“重试”又合并回去），不返回，接着往下：
+ *    失败以后用户可能又点了一次“合并”，那一笔新的还在；
+ * ③ 本机这个分类（丢完以后现读）还是 merged_into === keep → 写一笔 {merged_into: null}（还没发的合并那一笔，outbox 自己合成一笔）；
+ *    没写成按失败返回，这时不记“不用”；
+ * ④ 走到这里的（写成了、只丢了失败项、本机早就不指向 keep 了的 moved）都把这一对记进“不用”（负责人：撤销就当点了“不用”）；
+ *    分类按撤销后的样子传，这个分类别的“不用”不会被当成不活着去掉。
+ * 结果：写成了、只丢了失败项 ok；moved silent（不提示）。运行日志 notes merge undo <码> merge= keep=（ok / dropped / moved / 没写成的原因 /
+ * threw <错误名>，抛异常也接住按 failed 回）
  */
 export async function undoMerge(pair: Pair, writer: Pick<SettingWriter, 'update'>, deps: MergeDeps = {}): Promise<ActionResult> {
   const { w = write, isReadonly = categoryReadonly, categories = categorySnapshot, outbox = getBoot()?.outbox ?? null } = deps;
@@ -117,15 +120,15 @@ export async function undoMerge(pair: Pair, writer: Pick<SettingWriter, 'update'
   };
   try {
     if (isReadonly(pair.merge)) return end('readonly', 'readonly');
-    const cats = categories();
-    const here = cats.find((c) => c.id === pair.merge)?.['merged_into'] === pair.keep;
     const failed = ((await outbox?.list()) ?? []).find((i) => failedMerge(i, pair));
-    if (!here && !failed) return end('moved', 'silent');
-    await dismissMerge(writer, pair, cats.map((c) => (c.id === pair.merge ? { ...c, merged_into: null } : c)));
-    if (failed && (await outbox?.discardUnlessInflight(failed.op_id))) return end('dropped', 'ok');
-    if (!here) return end('moved', 'silent');
-    const r = await unmerge(w, pair.merge);
-    return end(r === 'saved' ? 'ok' : r, actionResult(r));
+    const dropped = failed !== undefined && (await outbox?.discardUnlessInflight(failed.op_id)) === true;
+    const here = categories().find((c) => c.id === pair.merge)?.['merged_into'] === pair.keep;
+    if (here) {
+      const r = await unmerge(w, pair.merge);
+      if (r !== 'saved') return end(r, actionResult(r));
+    }
+    await dismissMerge(writer, pair, categories().map((c) => (c.id === pair.merge ? { ...c, merged_into: null } : c)));
+    return here ? end('ok', 'ok') : dropped ? end('dropped', 'ok') : end('moved', 'silent');
   } catch (err) {
     return end(threw(err), 'failed');
   }

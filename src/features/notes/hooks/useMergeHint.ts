@@ -9,7 +9,7 @@ import type { ActionResult } from '../../../core/action-result.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
 import { dismissMerge, mergeAction, mergeCategories, openMergePairs, undoMerge, type MergePair } from '../data/category-merge-store.ts';
-import type { Row } from '../data/note-list.ts';
+import { categoryRow, type Row } from '../data/note-list.ts';
 
 export interface MergeHint {
   /** 留下的、合并进去的分类名 */
@@ -27,8 +27,8 @@ export function useMergeHint(): MergeHint | null {
   const pair: MergePair | undefined = useMemo(() => openMergePairs(cats, settings)[0], [cats, settings]);
   if (!pair) return null;
   const name = (id: string): string => {
-    const v = cats.find((c) => c.id === id)?.['name'];
-    return typeof v === 'string' ? v : '';
+    const c = cats.find((x) => x.id === id);
+    return c ? categoryRow(c).name : '';
   };
   return {
     keepName: name(pair.keep),

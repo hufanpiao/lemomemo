@@ -192,7 +192,7 @@ describe('转成待办 / 日程（S8，R-414）', () => {
     expect((await screen.findByTestId('notes-conv-tip')).textContent).toBe('已转成待办，这条随手记留着');
     // R-415 ③ 方案丙：留着的原条，卡片标题前出“已转过”描边小标
     const mark = await screen.findByTestId(`notes-conv-${uid(1)}`);
-    expect(mark.textContent).toBe('已转过');
+    expect(mark.textContent).toBe('已转过，');
     expect(mark.parentElement?.firstElementChild).toBe(mark);
     expect(mark.parentElement?.className).toMatch(/cardTitle/);
   });
@@ -212,7 +212,7 @@ describe('转成待办 / 日程（S8，R-414）', () => {
     expect(screen.getByTestId('notes').getAttribute('data-view')).toBe('list');
     const mark = await screen.findByTestId(`notes-conv-${uid(1)}`);
     expect(mark.parentElement?.className).toMatch(/t1/);
-    expect(mark.parentElement?.textContent).toBe('已转过第1条');
+    expect(mark.parentElement?.textContent).toBe('已转过，第1条');
     expect([screen.queryByTestId(`notes-conv-${uid(2)}`), screen.queryByTestId(`notes-conv-${uid(3)}`)]).toEqual([null, null]);
   });
   it('超过 2000 字：两项变淡（aria-disabled）、下面写“超过 2000 字，转不了”，点了一笔不写；“删除”照常', async () => {

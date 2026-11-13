@@ -11,7 +11,7 @@ import { Pressable } from '../../../motion/components.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { MergeHint } from '../hooks/useMergeHint.ts';
 import type { MergeUndo } from '../hooks/useNotesToast.ts';
-import type { ActionResult, ConvertKind, NoteItem, useNoteList } from '../hooks/useNoteList.ts';
+import { actionResult, type ActionResult, type ConvertKind, type NoteItem, type useNoteList } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
 import type { ImgMsgKey } from './NoteImages.tsx';
 import styles from './NotesPage.module.css';
@@ -113,7 +113,7 @@ export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a
     else if (r.ok) a.g.show({ kind: 'conv', key: `notes.conv.${r.kept ? 'kept' : 'moved'}.${kind}` });
     else if (r.left) a.g.show({ kind: 'conv', key: 'notes.conv.left' });
     else if (r.reason === 'empty' || r.reason === 'too_long') a.g.show({ kind: 'conv', key: r.reason === 'empty' ? 'notes.conv.empty' : 'notes.conv.long' });
-    else a.report(r.reason === 'readonly' ? 'readonly' : r.reason === 'switching' || r.reason === 'gone' || r.reason === 'busy' ? 'silent' : 'failed');
+    else a.report(r.reason === 'gone' || r.reason === 'busy' ? 'silent' : actionResult(r.reason));
   };
   return {
     ask,

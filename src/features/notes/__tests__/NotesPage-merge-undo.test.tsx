@@ -106,7 +106,7 @@ describe('合并分类的撤销条（R-415 ③）', () => {
     await waitFor(() => expect(merged()).toBeNull());
     expect(rows('categories').find((c) => c.id === READ)?.['merged_into']).toBeNull();
     expect(await catQueue()).toEqual([['patch', LIST, { merged_into: null }, 'pending']]);
-    expect(dismissed()).toEqual([[READ, LIST]]);
+    await waitFor(() => expect(dismissed()).toEqual([[READ, LIST]]));
     expect(screen.queryByTestId('notes-merge-toast')).toBeNull();
     await waitFor(() => expect(screen.getByTestId(`notes-card-${uid(1)}`).textContent).toContain('书单'));
     // 两个分类又都活着、AI 也还判它们像，但点过撤销 = 点过“不用”：提示条不再出
@@ -123,7 +123,7 @@ describe('合并分类的撤销条（R-415 ③）', () => {
     await clickUndo();
     await waitFor(() => expect(merged()).toBeNull());
     expect(await catQueue()).toEqual([['patch', LIST, { merged_into: null }, 'pending']]);
-    expect(lines.at(-1)).toBe(`notes merge undo ok ${PAIR}`);
+    await waitFor(() => expect(lines.at(-1)).toBe(`notes merge undo ok ${PAIR}`));
   });
 
   it('合并那一笔发送失败了（被拒的 patch 本机已显示回服务器那份 null）：撤销直接丢掉它，不另写一笔，以后“重试”不会又合并回去', async () => {
@@ -136,18 +136,38 @@ describe('合并分类的撤销条（R-415 ③）', () => {
     await clickUndo();
     await waitFor(async () => expect(await catQueue()).toEqual([]));
     expect(merged()).toBeNull();
-    expect(dismissed()).toEqual([[READ, LIST]]);
+    await waitFor(() => expect(dismissed()).toEqual([[READ, LIST]]));
     expect(screen.queryByTestId('notes-error')).toBeNull();
-    expect(lines.at(-1)).toBe(`notes merge undo dropped ${PAIR}`);
+    await waitFor(() => expect(lines.at(-1)).toBe(`notes merge undo dropped ${PAIR}`));
   });
 
-  it('撤销没写进本机（写入口回 ok:false）：出错条，分类还是合并着；日志只记原因', async () => {
+  it('发送失败 → 提示条又出来、再点“合并”→ 撤销：丢掉失败那笔、新的合并也撤掉，最后 merged_into 为 null，outbox 只剩一笔 {merged_into: null}', async () => {
+    await mergeNow();
+    await act(async () => {
+      await sendNext('invalid_row');
+    });
+    expect(merged()).toBeNull();
+    await act(async () => {
+      fireEvent.click(await screen.findByTestId('notes-merge-go'));
+    });
+    await waitFor(() => expect(merged()).toBe(READ));
+    expect(await catQueue()).toEqual([['patch', LIST, { merged_into: READ }, 'failed'], ['patch', LIST, { merged_into: READ }, 'pending']]);
+    await clickUndo();
+    await waitFor(() => expect(merged()).toBeNull());
+    await waitFor(async () => expect(await catQueue()).toEqual([['patch', LIST, { merged_into: null }, 'pending']]));
+    await waitFor(() => expect(dismissed()).toEqual([[READ, LIST]]));
+    expect(screen.queryByTestId('notes-error')).toBeNull();
+    await waitFor(() => expect(lines.at(-1)).toBe(`notes merge undo ok ${PAIR}`));
+  });
+
+  it('撤销没写进本机（写入口回 ok:false）：出错条，分类还是合并着，这一对不记进“不用”；日志只记原因', async () => {
     await mergeNow();
     catPatch(() => Promise.resolve({ ok: false, reason: 'local_unavailable' }));
     await clickUndo();
     expect((await screen.findByTestId('notes-error')).textContent).toBeTruthy();
     expect(merged()).toBe(READ);
-    expect(lines.at(-1)).toBe(`notes merge undo local_unavailable ${PAIR}`);
+    expect(dismissed()).toBeUndefined();
+    await waitFor(() => expect(lines.at(-1)).toBe(`notes merge undo local_unavailable ${PAIR}`));
   });
 
   it('撤销时写库抛异常：接住、出错条，日志只记错误名，没有没人接的 Promise 拒绝', async () => {
@@ -155,7 +175,7 @@ describe('合并分类的撤销条（R-415 ③）', () => {
     catPatch(() => Promise.reject(new TypeError('boom')));
     await clickUndo();
     expect((await screen.findByTestId('notes-error')).textContent).toBeTruthy();
-    expect(lines.at(-1)).toBe(`notes merge undo threw TypeError ${PAIR}`);
+    await waitFor(() => expect(lines.at(-1)).toBe(`notes merge undo threw TypeError ${PAIR}`));
   });
 
   it('点“合并”时写库抛异常：接住、出错条、不出撤销条，日志 notes merge category threw <错误名>，没有没人接的 Promise 拒绝', async () => {
@@ -176,7 +196,7 @@ describe('undoMerge（data）', () => {
   const writer = () => ({ update: vi.fn(() => Promise.resolve(true)) });
   const cats = (to: unknown) => () => [{ id: READ, merged_into: null }, { id: LIST, merged_into: to }];
 
-  it('本机这个分类现在就是合进 keep 的：先记“不用”再写一笔 null；结果换成 ActionResult', async () => {
+  it('本机这个分类现在就是合进 keep 的：写一笔 null，写成了再记“不用”；没写成不记；结果换成 ActionResult', async () => {
     logTo();
     const w = writer();
     const patch = vi.fn().mockResolvedValueOnce({ ok: true, item: null }).mockResolvedValueOnce({ ok: false, reason: 'switching' });
@@ -184,19 +204,20 @@ describe('undoMerge（data）', () => {
     expect(await undoMerge({ keep: READ, merge: LIST }, w, deps)).toBe('ok');
     expect(await undoMerge({ keep: READ, merge: LIST }, w, deps)).toBe('silent');
     expect(patch.mock.calls).toEqual([['categories', LIST, { merged_into: null }], ['categories', LIST, { merged_into: null }]]);
-    expect(w.update).toHaveBeenCalledTimes(2);
+    expect(w.update).toHaveBeenCalledTimes(1);
     expect(lines.filter((l) => l.startsWith('notes merge undo'))).toEqual([`notes merge undo ok ${PAIR}`, `notes merge undo switching ${PAIR}`]);
   });
 
-  it('本机这个分类已经不指向 keep（别的设备改过、没了）：moved，一笔不写、不记“不用”、不提示；只读行 → readonly', async () => {
+  it('本机这个分类已经不指向 keep（别的设备改过、没了）：moved，一笔不写、不提示，但照样记进“不用”；只读行 → readonly，什么都不动', async () => {
     logTo();
     const w = writer();
     const patch = vi.fn();
     expect(await undoMerge({ keep: READ, merge: LIST }, w, { w: { patch }, categories: cats(uid(7)), outbox: null })).toBe('silent');
     expect(await undoMerge({ keep: READ, merge: LIST }, w, { w: { patch }, categories: () => [], outbox: null })).toBe('silent');
     expect(await undoMerge({ keep: READ, merge: LIST }, w, { w: { patch }, categories: cats(READ), outbox: null, isReadonly: () => true })).toBe('readonly');
-    expect([patch.mock.calls.length, w.update.mock.calls.length]).toEqual([0, 0]);
-    expect(lines).toEqual([`notes merge undo moved ${PAIR}`, `notes merge undo moved ${PAIR}`, `notes merge undo readonly ${PAIR}`]);
+    expect([patch.mock.calls.length, w.update.mock.calls.length]).toEqual([0, 2]);
+    expect(w.update.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['notes.merge_dismissed', 'notes.merge_dismissed']);
+    expect(lines.filter((l) => l.startsWith('notes merge undo'))).toEqual([`notes merge undo moved ${PAIR}`, `notes merge undo moved ${PAIR}`, `notes merge undo readonly ${PAIR}`]);
   });
 });
 
