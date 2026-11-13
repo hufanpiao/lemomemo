@@ -13,6 +13,7 @@
 //   • 只读：不改 devices（410 删订阅、push_fail_count 都留给 push-dispatch；测试通知的结果只回给用户），不写 logs。
 //     函数日志只记错误码，不带 user_id、端点。
 // 纯逻辑：依赖全部注入（tests/functions/push-test.test.ts 用推送替身跑）；不 import npm 包、不碰 Deno 全局、不 import _shared/gen/。
+import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
 import type { PayloadInput } from '../_shared/push/payload.ts';
 import type { DeliverResult, Device, PushOptions } from '../_shared/push/send.ts';
 import type { Override } from '../_shared/push/stub.ts';
@@ -40,7 +41,7 @@ export interface Store {
 }
 
 /** requireActiveUser 的结果里用到的部分（不 import _shared/auth.ts：它带 npm: 导入，Vitest 一侧类型检查认不了） */
-export type AuthResult = { ok: true; user: { userId: string } } | { ok: false; response: Response; code: string };
+export type AuthResult = SharedAuthResult;
 
 export interface Deps {
   authenticate(req: Request): Promise<AuthResult>;

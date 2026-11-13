@@ -8,10 +8,10 @@
 //   R2_ENDPOINT、R2_FN_ACCESS_KEY_ID、R2_FN_SECRET_ACCESS_KEY、R2_BUCKET_PREFIX（8.4）。
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { createObjStore } from '../_shared/gen/objstore.ts';
 import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
 import { skipTestRecipients } from '../_shared/account-mail.ts';
 import { timedFetch } from '../_shared/net.ts';
+import { r2FromEnv } from '../_shared/objstore-env.ts';
 import { sendMail } from '../_shared/mail-send.ts';
 import { BACKUP_BUCKET, BACKUP_DAY, BackupsSubdirError, HEARTBEAT, handle, type Backups, type PurgeStore, type R2 } from './core.ts';
 
@@ -137,21 +137,6 @@ function makeBackups(admin: Admin): Backups {
   };
 }
 
-function makeR2(): R2 | null {
-  const endpoint = Deno.env.get('R2_ENDPOINT');
-  const accessKeyId = Deno.env.get('R2_FN_ACCESS_KEY_ID');
-  const secretAccessKey = Deno.env.get('R2_FN_SECRET_ACCESS_KEY');
-  if (!endpoint || !accessKeyId || !secretAccessKey) return null;
-  return createObjStore({
-    endpoint,
-    accessKeyId,
-    secretAccessKey,
-    bucketPrefix: Deno.env.get('R2_BUCKET_PREFIX') ?? '',
-    fetch: (url, init) => timedFetch(fetch)(url, init as RequestInit),
-    now: () => Date.now(),
-  });
-}
-
 const log = (code: string) => console.error(`account-purge: ${code}`);
 
 Deno.serve((req) => {
@@ -159,12 +144,7 @@ Deno.serve((req) => {
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const resendKey = Deno.env.get('RESEND_API_KEY');
   const admin = url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, DB_REQUEST_TIMEOUT_MS) } }) : null;
-  let r2: R2 | null = null;
-  try {
-    r2 = makeR2();
-  } catch {
-    r2 = null;   // 地址不是 https 等：鉴权之后由 core.ts 回 misconfigured
-  }
+  const r2: R2 | null = r2FromEnv();   // 没配齐、地址不是 https 等回 null：鉴权之后由 core.ts 回 misconfigured
   const ok = admin !== null && !!resendKey;
   return handle(req, {
     cronSecret: Deno.env.get('CRON_SECRET'),

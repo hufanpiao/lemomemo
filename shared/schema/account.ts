@@ -18,6 +18,7 @@ export const ACCOUNT_ERROR_CODES = [
   'try_later',                 // 503  数据库、写日志等暂时不通；导出大小预检超时或忙
   'export_expired',            // 410  export part：任务不存在、过期（开始满 1 小时）、别的会话、别的用户、模式不一致（0.47 续 ①）
   'export_too_large',          // 413  export start：大小预检超 480 MB；part：超过一个任务的分片上限 36（0.47 第 18 条）
+  'rebind_failed',             // 409  rebind_device：旧令牌无效或过期、两个令牌不是同一个人、设备行不归旧会话、新会话已绑别的行等（B5，不分原因；客户端丢掉新会话、继续用旧会话、提示重试）
 ] as const;
 
 export const accountErrorCode = z.enum(ACCOUNT_ERROR_CODES);

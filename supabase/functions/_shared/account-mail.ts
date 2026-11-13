@@ -184,6 +184,27 @@ export function restoredMail(loc: MailLocale): Mail {
 }
 
 /**
+ * ⑥ 隐私记密码已重设（vault reset 成功后发；B5 任务单 S3、S22、代定 D19，TC-B5-16）。和别的几封一样不放链接、结尾接防钓鱼句，时刻按本人时区。
+ * 不写隐私记的任何内容。中文是主持人按线框口吻的初稿；韩文是初稿，REVIEW(ko)：等 B4b-3 的第二遍审校
+ */
+export function vaultResetMail(loc: MailLocale, atMs: number, tz: unknown, label: TzLabeler): Mail {
+  const when = fmtWhen(atMs, tz, loc, label);
+  if (loc === 'ko-KR') {
+    // REVIEW(ko)
+    return noted(loc, {
+      subject: '레모 비밀 메모의 비밀번호가 재설정됐어요',
+      text: `${when}에 비밀 메모의 비밀번호가 재설정됐어요. 전에 등록한 Face ID와 Windows Hello는 다시 등록해야 해요.\n\n`
+        + '본인이 재설정하지 않았다면 레모 앱을 열어 로그인한 뒤 설정에서 “다른 모든 기기에서 로그아웃”을 누르고 비밀 메모 비밀번호를 다시 재설정해 주세요.',
+    });
+  }
+  return noted(loc, {
+    subject: '你的柠檬记隐私记密码已重设',
+    text: `你的隐私记密码在 ${when}被重设。之前绑定的 Face ID、Windows Hello 已失效，要用的话请重新绑定。\n\n`
+      + '不是你本人操作的话，请打开柠檬记登录，在设置里点“退出其他所有设备”，再重设一次隐私记密码。',
+  });
+}
+
+/**
  * 设备的通用名（负责人 11-03 定：通知邮件里设备没起名字时，按 devices.platform 写设置页同样的平台名）。
  * 和前端设置页词典 settings.platform.*（src/features/settings/i18n/zh.ts、ko.ts）逐字相同、键一一对应；
  * tests/functions/account-mail-platform.test.ts 逐条比对，前端改了文案这里要跟着改。

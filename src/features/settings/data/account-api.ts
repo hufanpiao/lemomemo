@@ -6,7 +6,9 @@
 //   - takePart {action:'export', step:'part', export_id, cursor}（第一片 cursor 为 null）→ 这一片的 gzip 成员（application/gzip，不带
 //     Content-Encoding），下一个游标在响应头 x-lemo-export-next（写完为 done，≤ 512 字节）。各片怎么拼、重试、继续见 export-run.ts
 //   回包是二进制：supabase-js 的 functions.invoke 按 content-type 把它当文本读会坏，所以直接经 platform/http 的 appFetch 调
-//   <supabaseUrl>/functions/v1/account，自己带 apikey 和这次会话的 access token。B1 不带 x-vault-token（隐私记 B5 才有）
+//   <supabaseUrl>/functions/v1/account，自己带 apikey 和这次会话的 access token。
+//   隐私记已解锁（core/vault-token.ts 有令牌，B5 S10）时 start 带 x-vault-token，包里放隐私记的密文行；start 带没带记在任务上（vault），
+//   之后每一片照同一种带（服务器按 start 的模式认任务）；带令牌的任务取片时本机已经上锁 → 不发请求、回 vault_locked（停下，重新解锁后“继续”）
 // • delete {action:'delete', confirm}：成功 {ok, purge_after}；回 try_later 时先查 status 再定（0.47 第 22 条 T4，data/deletion-check.ts）
 // • 错误只认 {error: <码>}（shared/schema/account.ts 的 ACCOUNT_ERROR_CODES，另加共用的 session_revoked、unauthorized，
 //   export_expired、export_too_large 也在这张共享表里）；vault_locked、vault_relock（B5 才会出现）合成 vault_locked，提示先用通用的一句。
@@ -18,6 +20,7 @@ import { isEntryErrorCode, type EntryErrorCode } from '../../../../shared/schema
 import { buildInfo } from '../../../platform/env.ts';
 import { appFetch } from '../../../platform/http.ts';
 import { readSessionId, sessionIdOfToken } from '../../../platform/session.ts';
+import { VAULT_TOKEN_HEADER, vaultToken } from '../../../core/vault-token.ts';
 import type { Db } from '../../../platform/supabase/client.ts';
 import { checkDeletion, type DeletionCheck } from './deletion-check.ts';
 import { mapSettingsError } from './settings-api.ts';
@@ -62,6 +65,8 @@ export interface ExportStarted {
   exportedAt: string | null;
   /** 发起这次导出的会话：任务绑定它（0.47 第 15 条），换了会话就不能“继续” */
   sid: string | null;
+  /** start 带了隐私记令牌（包里有隐私记密文）；之后每一片都要带 */
+  vault?: boolean;
 }
 
 /** 一片 */
@@ -89,7 +94,7 @@ export interface DeletionDone {
 export interface AccountApi {
   startExport(deviceId: string | null): Promise<AccountResult<ExportStarted>>;
   /** sid：start 时的会话；本机会话已经换了就不发请求，直接回 export_expired（服务器也会回 410，省一次每天分片数） */
-  takePart(exportId: string, cursor: string | null, sid: string | null): Promise<AccountResult<ExportPart>>;
+  takePart(exportId: string, cursor: string | null, sid: string | null, vault?: boolean): Promise<AccountResult<ExportPart>>;
   requestDeletion(confirm: string): Promise<AccountResult<DeletionDone>>;
 }
 
@@ -206,6 +211,8 @@ export function createAccountApi(getDb: () => Promise<Db>, o: AccountApiOptions 
     read: (res: Response) => Promise<T>,
     /** 给了就核对：这次的会话不是它（换过登录）不发请求，回 export_expired */
     expectSid?: string | null,
+    /** 隐私记令牌（B5 S10）：有就带 x-vault-token */
+    vaultTok?: string | null,
   ): Promise<AccountResult<{ data: T; sid: string | null }>> {
     let sid: string | null = null;
     let token: string;
@@ -239,7 +246,7 @@ export function createAccountApi(getDb: () => Promise<Db>, o: AccountApiOptions 
       const res = await Promise.race([
         doFetch(url, {
           method: 'POST',
-          headers: { authorization: `Bearer ${token}`, apikey: anonKey, 'content-type': 'application/json' },
+          headers: { authorization: `Bearer ${token}`, apikey: anonKey, 'content-type': 'application/json', ...(vaultTok ? { [VAULT_TOKEN_HEADER]: vaultTok } : {}) },
           body: JSON.stringify(body),
           signal: ac.signal,
           cache: 'no-store',
@@ -268,21 +275,24 @@ export function createAccountApi(getDb: () => Promise<Db>, o: AccountApiOptions 
   return {
     async startExport(deviceId) {
       const body = { action: 'export', step: 'start', ...(deviceId ? { device_id: deviceId } : {}) };
+      const vt = vaultToken();
       const r = await send(body, o.exportStartTimeoutMs ?? EXPORT_START_TIMEOUT_MS, async (res) => {
         try {
           return (await res.json()) as { export_id?: unknown; exported_at?: unknown } | null;
         } catch {
           return null;
         }
-      });
+      }, undefined, vt);
       if (!r.ok) return r;
       const j = r.value.data;
       // 2xx 却没有 export_id：次数已经扣了，但拿不到任务，只能按出错处理（对不上接口，回报后端）
       if (typeof j?.export_id !== 'string' || !j.export_id) return { ok: false, error: 'bad_response', sid: r.value.sid };
-      return { ok: true, value: { exportId: j.export_id, exportedAt: typeof j.exported_at === 'string' ? j.exported_at : null, sid: r.value.sid } };
+      return { ok: true, value: { exportId: j.export_id, exportedAt: typeof j.exported_at === 'string' ? j.exported_at : null, sid: r.value.sid, ...(vt ? { vault: true } : {}) } };
     },
 
-    async takePart(exportId, cursor, sid) {
+    async takePart(exportId, cursor, sid, vault) {
+      const vt = vault ? vaultToken() : null;
+      if (vault && !vt) return { ok: false, error: 'vault_locked', sid };
       const r = await send(
         { action: 'export', step: 'part', export_id: exportId, cursor },
         o.exportPartTimeoutMs ?? EXPORT_PART_TIMEOUT_MS,
@@ -297,6 +307,7 @@ export function createAccountApi(getDb: () => Promise<Db>, o: AccountApiOptions 
           };
         },
         sid,
+        vt,
       );
       if (!r.ok) return r;
       const { raw, next, disposition, contentLength, contentEncoding } = r.value.data;

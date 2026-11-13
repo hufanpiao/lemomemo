@@ -13,6 +13,8 @@
 //       ② 全天日程：event:<id>:allday:<YYYY-MM-DD>:<0|1>（只在 kind 是 event 时，id 和本条相同；日期必须真实存在，安全审查 S1）。
 //     所以只含小写 UUID、数字、字母和冒号、连字符，最长 62 字节（event: + UUID + :allday: + 日期 + :1）；不截断（截了就认不出是同一次），字节放不下照旧先截 body、title；
 //   test    { v: 1, type, user_id }                            正好三个键
+//   vault   { v: 1, type, user_id, event }                     正好四个键（B5 任务单 S2～S4、代定 D19）：隐私记锁定、改密码、重设、新绑定 Face ID 时推本人所有设备；
+//           event 只有 locked、pin_changed、reset、webauthn_added 四种，文案由 SW 本地词典 push.vault.<event> 出（前端做），负载不带任何内容
 //   • 永远没有地址、图片之类的字段（类型上就没有，运行时多给的键一律丢掉）；
 //   • user_id 必带：SW 拿它和本机 owner 比对，对不上只显示 App 名（M9、FE-1）；
 //   • 先校验（S3）：user_id、id 是小写 UUID，kind 认识，due_at 是正的安全整数；不合格抛 PushPayloadError，这一条记 push_failed、不影响别的；
@@ -30,7 +32,7 @@
 // 不 import npm 包、不碰 Deno 全局；Node 和 Deno 都能跑。
 import { PAD_TIERS, PushCryptoError } from './ece.ts';
 
-export type PayloadType = 'remind' | 'resolve' | 'test';
+export type PayloadType = 'remind' | 'resolve' | 'test' | 'vault';
 export type PayloadKind = 'event' | 'todo' | 'anniv';
 
 /** 指向一次提醒的几项（remind、resolve 共有） */
@@ -61,7 +63,15 @@ export interface TestPayloadInput {
   type: 'test';
   user_id: string;
 }
-export type PayloadInput = RemindPayloadInput | ResolvePayloadInput | TestPayloadInput;
+/** 隐私记的安全通知（B5）：event 之外什么都不带；和 SW 的 src/sw/push-vault-data.ts 各一份，tests/shared/vault-parity.test.ts 核对 */
+export const VAULT_PUSH_EVENTS = ['locked', 'pin_changed', 'reset', 'webauthn_added'] as const;
+export type VaultPushEvent = (typeof VAULT_PUSH_EVENTS)[number];
+export interface VaultPayloadInput {
+  type: 'vault';
+  user_id: string;
+  event: VaultPushEvent;
+}
+export type PayloadInput = RemindPayloadInput | ResolvePayloadInput | TestPayloadInput | VaultPayloadInput;
 
 /** 负载字段本身不合格（S3）：调用方记 push_failed，只写这个原因码 */
 export class PushPayloadError extends Error {
@@ -151,6 +161,10 @@ const isSnoozeMin = (v: unknown): v is number => typeof v === 'number' && Number
 export function buildPayload(p: PayloadInput): Uint8Array<ArrayBuffer> {
   if (!isUuid(p.user_id)) throw new PushPayloadError();
   if (p.type === 'test') return encode({ v: 1, type: 'test', user_id: p.user_id });
+  if (p.type === 'vault') {
+    if (!(VAULT_PUSH_EVENTS as readonly string[]).includes(p.event)) throw new PushPayloadError();
+    return encode({ v: 1, type: 'vault', user_id: p.user_id, event: p.event });
+  }
   if ((p.type !== 'remind' && p.type !== 'resolve') || !KINDS.has(p.kind) || !isUuid(p.id) || !isDueAt(p.due_at)) throw new PushPayloadError();
   const base: Record<string, unknown> = { v: 1, type: p.type, user_id: p.user_id, kind: p.kind, id: p.id, due_at: p.due_at };
   const occ = occKey(p.occurrenceKey, p.kind, p.id, p.due_at);

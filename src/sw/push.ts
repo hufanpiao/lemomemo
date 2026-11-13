@@ -17,6 +17,8 @@
 //           title 只在用户开着“通知显示标题”（push_show_title）时带（架构 0.53）；没带就用 App 名当标题，body 照用（代码审查 M3）
 //   resolve { v: 1, type: 'resolve', user_id, kind, id, due_at }            —— 不带标题、正文；SW 用公共词典 push.resolved
 //   test    { v: 1, type: 'test', user_id }                                  —— push-test 发；SW 用公共词典 push.test，点开只进 /app/
+//   vault   { v: 1, type: 'vault', user_id, event }                          —— B5：隐私记锁住、改密码、重设、新绑定 Face ID；不带内容，
+//           字取 ./push-vault-data.ts 的 vaultPushT（push.vault.<event>，createT 造的 t，只进 SW），tag 固定 VAULT_TAG（新的替换旧的），没有 data，点开只进 /app/
 //   user_id、id 是 UUID；due_at 是正的安全整数（epoch ms）；snooze = { label: '10 分钟后', minutes: 10 }（文案由服务器按 ui_locale 生成）
 //   title、body、按键文字里的控制字符（C0、DEL、C1、双向控制符和方向标记、行段分隔符、U+FEFF）换成空格（BE-2 安全审查，见 CONTROL_CHARS）；
 //   title、body 超过 TEXT_MAX（300）字时截断（末尾补 …），不整条拒收（代码审查 S1）；服务器 notify-text 截到各 ≤ 300 字、整份 JSON ≤ 3071 字节（架构 5.3，0.53）
@@ -26,6 +28,7 @@ import { pickLocale } from '../../shared/i18n/pick-locale.ts';
 import { reminderTag, reminderUrl, type ReminderKind } from '../../shared/logic/remind-route.ts';
 import { actionsOf, buttonsOf, isSnoozeMin, type RemindButtons } from './push-actions.ts';
 import { readSwOwner, writePendingAction, type PendingWriteResult, type SwPendingAction } from './pending.ts';
+import { VAULT_PUSH_EVENTS, vaultPushT, type VaultPushEvent } from './push-vault-data.ts';
 
 // 地址、tag 的拼法只留一份（shared/logic/remind-route.ts，架构 0.53）；这里原样转出，SW 一侧仍叫 reminderUrl、notificationTag
 export { reminderUrl, type ReminderKind };
@@ -47,7 +50,8 @@ export type PushPayload =
       readonly body: string;
     } & RemindButtons)
   | (ItemRef & { readonly v: 1; readonly type: 'resolve' })
-  | { readonly v: 1; readonly type: 'test'; readonly user_id: string };
+  | { readonly v: 1; readonly type: 'test'; readonly user_id: string }
+  | { readonly v: 1; readonly type: 'vault'; readonly user_id: string; readonly event: VaultPushEvent };
 
 /** 通知上带的数据（notificationclick 里读回来，dataOf 再校验一遍） */
 export interface NotificationData extends ItemRef {
@@ -64,6 +68,10 @@ export const TEXT_MAX = 300;
 export const FALLBACK_TAG = 'lemo-fallback';
 /** 测试推送的 tag（同一时间只留一条） */
 export const TEST_TAG = 'lemo-test';
+/** 隐私记推送的 tag（同一时间只留一条） */
+export const VAULT_TAG = 'lemo-vault';
+const VAULT_EVENTS: ReadonlySet<string> = new Set(VAULT_PUSH_EVENTS);
+const isVaultEvent = (v: unknown): v is VaultPushEvent => typeof v === 'string' && VAULT_EVENTS.has(v);
 const ICON = '/app/icons/icon-192.png';
 
 /** 按 kind 找表名（pending_actions 的 row_table） */
@@ -106,6 +114,7 @@ export function parsePushPayload(raw: unknown): PushPayload | null {
   if (o['v'] !== 1 || !isUuid(o['user_id'])) return null;
   const type = o['type'];
   if (type === 'test') return { v: 1, type: 'test', user_id: o['user_id'] };
+  if (type === 'vault') return isVaultEvent(o['event']) ? { v: 1, type: 'vault', user_id: o['user_id'], event: o['event'] } : null;
   if (type !== 'remind' && type !== 'resolve') return null;
   const ref = itemRefOf(o);
   if (!ref) return null;
@@ -139,6 +148,7 @@ export function notificationOf(p: PushPayload, languages: readonly string[]): { 
   const loc = localeOf(languages);
   const appName = t('app.name', {}, loc);
   if (p.type === 'test') return { title: appName, options: { body: t('push.test', {}, loc), tag: TEST_TAG, icon: ICON, badge: ICON } };
+  if (p.type === 'vault') return { title: appName, options: { body: vaultPushT(`push.vault.${p.event}`, {}, loc), tag: VAULT_TAG, icon: ICON, badge: ICON } };
   const data: NotificationData = {
     user_id: p.user_id,
     kind: p.kind,

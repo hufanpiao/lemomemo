@@ -10,6 +10,7 @@
 //   code 是固定错误码，fields 只有 status=HTTP 状态、type=异常类型名、kind=额度类型（ai_quota 带 day|minute|unknown，来自 aiFailCode；门拦下的 quota_exhausted 带 minute|day，来自 gate.ts 的 holdKind）、retried=1（503 重试过）、bytes=音频字节数区间；不写转写、正文、请求头。写失败不影响回答。
 // 503 重试后成功的，counters 记 voice-retry:global:<太平洋日期> 加一（经 take_rate，上限给得很大、只当计数用；写失败不影响回答）。
 // scope = vault：隐私记页面经“＋”记下在 B4b-3 才有（届时换成 verifyVaultToken + ai.vault），B3 回 {fallback, vault_ai_off}、不调 Gemini、不扣次数。
+import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
 import { aiGate, clientReason, pacificDate, settleFailure, type GateDeps, type GateStop } from '../_shared/ai/gate.ts';
 import { aiFailCode, errNameOf, quotaKindField, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, ParseFail, ParseOk, VoiceInput } from '../_shared/ai/parse-core.ts';
@@ -23,7 +24,7 @@ export const voiceRetryKey = (ms: number): string => `voice-retry:global:${pacif
 /** 只当计数用：上限给得远超全项目每日额度，take_rate 永远放行 */
 export const VOICE_RETRY_COUNT_LIMIT = 1_000_000;
 
-export type AuthResult = { ok: true; user: { userId: string } } | { ok: false; response: Response };
+export type AuthResult = SharedAuthResult;
 
 /** shared/schema/ai.ts 里的几样（index.ts 从 _shared/gen/ 注入，单测注入真的 shared；本文件不 import _shared/gen/） */
 export interface Logic<Item> {

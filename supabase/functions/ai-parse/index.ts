@@ -4,7 +4,7 @@
 //   private.counters、private.take_rate、private.ai_state、logs（经 _shared/ai/store.ts）。不直连数据库（不在 6.2 的名单里），不碰 R2。
 // 不加 CORS（0.48 第 4 条）：浏览器经 /sb 同源调用。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { AuthError, requireActiveUser } from '../_shared/auth.ts';
+import { authResult, requireActiveUser } from '../_shared/auth.ts';
 import { parseWithAI } from '../_shared/ai/parse-with-ai.ts';
 import { gateDeps, isValidTz } from '../_shared/ai/wire.ts';
 import { aiAllowed } from '../_shared/consent.ts';
@@ -32,14 +32,7 @@ Deno.serve(async (req) => {
   if (blocked) return blocked;
   return handle(req, {
     ...gateDeps(admin, log, (userId) => aiAllowed(admin, userId)),
-    async authenticate(r) {
-      try {
-        return { ok: true, user: await requireActiveUser(r, admin) };
-      } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse() };
-        throw e;
-      }
-    },
+    authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
     logic: {
       parseRequest: (b) => {
         const p = aiParseRequest.safeParse(b);

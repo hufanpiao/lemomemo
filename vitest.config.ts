@@ -39,6 +39,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/check-backend.test.ts', // python build/check_backend.py（建 TypeScript 类型检查器）
   'tests/build/check-backend-f11-cors.test.ts', // python build/check_backend.py（F11 样例）
   'tests/build/check-backend-f12-json.test.ts', // python build/check_backend.py（F12 json 响应只在 _shared/http.ts）
+  'tests/build/check-backend-f13-f14.test.ts', // python build/check_backend.py（F13 隐私记目录不准 console、F14 上传带 contentType，B5）
   'tests/build/check-contrast.test.ts', // python build/check_contrast.py（F12）
   'tests/build/check-contrast-accepted.test.ts', // python build/check_contrast.py 的例外名单（B2 FA-7 第 4 项）
   'tests/build/check-backend-alias.test.ts', // python build/check_backend.py（F2、F3、F7 别名展开）
@@ -68,6 +69,7 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/store-it-guard.test.ts', // node supabase/tests/store-it/run.mjs、guard.mjs 本机环境（被护栏拒绝，退出码 2，不起 supabase）
   'tests/build/set-cron-secret.test.ts', // PowerShell（有 docker 时还起容器）
   'tests/build/set-signup-secrets.test.ts', // PowerShell
+  'tests/build/gen-vault-keys.test.ts', // PowerShell（本机假服务，B5 S19：gen-vault-keys、check-vault-keys-leak）
   'tests/build/set-vapid-keys.test.ts', // PowerShell（本机假服务，B2 O-1）
   'tests/build/gen-tauri-key.test.ts', // PowerShell（编假签名工具、跑脚本，B6-exe F10）
   'tests/build/desktop-scan.test.ts', // 另起 node 跑 build/ci/desktop_scan.mjs（B6-exe F8、F9）

@@ -2,7 +2,9 @@
 // admin = 用 service role 建的 supabase-js 客户端（绕过 RLS，所以这里必须自己查停用和会话）
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json 一致，tests/build/deno-config.test.ts 核对）
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
+import type { AuthResult } from './auth-result.ts';
 import { json } from './http.ts';
+import { jwtClaims } from './jwt-claims.ts';
 
 export type AuthCode = 'unauthorized' | 'account_disabled' | 'account_pending_deletion' | 'session_revoked' | 'try_later';
 
@@ -53,18 +55,6 @@ export async function isUsable(admin: SupabaseClient, userId: string): Promise<U
 
 type Claims = { sub?: string; session_id?: string; amr?: unknown };
 
-/** JWT 的 payload（只在 getUser 验过以后读，不单独信任） */
-function claims(jwt: string): Claims {
-  try {
-    const part = jwt.split('.')[1];
-    if (!part) return {};
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '=')));
-  } catch {
-    return {};
-  }
-}
-
 /**
  * 密码会话（架构 0.36 第 1 条 ②，TC-B1-111）：amr 是数组，元素两种写法都认——对象 {method: 'password', timestamp: …}（GoTrue 文档）
  * 和裸字符串 'password'（B0 第四轮 QA 真库实测记作 amr = ["password"]）。
@@ -101,8 +91,8 @@ export async function requireActiveUser(req: Request, admin: SupabaseClient, opt
   if (error && (st === undefined || st === 0 || st === 429 || st >= 500)) throw new AuthError('try_later', 503);
   if (error || !data.user) throw new AuthError('unauthorized', 401);
   const userId = data.user.id;
-  const c = claims(jwt);
-  if (c.sub !== userId || !c.session_id) throw new AuthError('unauthorized', 401);
+  const c = jwtClaims(jwt) as Claims;   // payload 只在 getUser 验过以后读，不单独信任
+  if (c.sub !== userId || typeof c.session_id !== 'string' || !c.session_id) throw new AuthError('unauthorized', 401);
   // 0.36：密码会话按“没登录”处理（401 unauthorized，不加新错误码，客户端回登录页）
   if (isPasswordSession(c)) throw new AuthError('unauthorized', 401);
 
@@ -116,4 +106,18 @@ export async function requireActiveUser(req: Request, admin: SupabaseClient, opt
   if (!alive) throw new AuthError('session_revoked', 401);
 
   return u.ok ? { userId, sessionId: c.session_id, jwt } : { userId, sessionId: c.session_id, jwt, pendingDeletion: { purgeAfter: u.purgeAfter ?? null } };
+}
+
+/**
+ * 各函数 index.ts 的 authenticate：authResult(() => requireActiveUser(req, admin, opts))。
+ * AuthError 换成 {ok: false, response, code}，别的错照抛（core.ts 回 try_later）。11-14 隐私记整块评审第 16 条：原来 8 个 index.ts 各写一份 try/catch。
+ * requireActiveUser 照旧写在各函数自己的 index.ts 里（tests/build/fn-account-disabled-coverage.test.ts 按函数目录的源码核对 TC-B1-10）
+ */
+export async function authResult(check: () => Promise<ActiveUser>): Promise<AuthResult<ActiveUser>> {
+  try {
+    return { ok: true, user: await check() };
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false, response: e.toResponse(), code: e.code };
+    throw e;
+  }
 }

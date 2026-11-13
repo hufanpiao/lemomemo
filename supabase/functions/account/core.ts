@@ -2,7 +2,7 @@
 // 0.29 续第 88、92～96、129、131、134、137、138 条；0.38 第 45、47、48 条；TC-B1-95、98、99、100、103、104、108）。
 // 数据库、Auth、发信、鉴权都由 index.ts 注入，Vitest 直接测这一份；不 import npm 包、不碰 Deno 全局。
 //
-// 四个 action（JWT；requireActiveUser 由 index.ts 注入成 authenticate）：
+// 五个 action（JWT；requireActiveUser 由 index.ts 注入成 authenticate）；第五个 rebind_device（B5）见 rebind.ts：自己查版本、验新旧两个令牌、经 rpc 交接设备行。
 //   status  {action}：登录后判断要不要显示恢复页（10-30 架构师：冷静期里别的 RPC 都回 account_disabled，客户端分不出）。
 //           冷静期放行；没有副作用：不写库、不计次数、不发信。管理员停用（含没有 profile）不当错误，回 200 {ok, status: 'disabled'}；
 //           管理员停用排在会话检查前面，停用且会话已吊销时回 disabled，不回 session_revoked（R-256 ③）；
@@ -39,8 +39,10 @@
 //   index.ts、测试照旧只从 core.ts 引用。
 
 import { deletionRequestedMail, restoredMail } from '../_shared/account-mail.ts';
+import { otpFresh } from '../_shared/otp-fresh.ts';
 import { ACCOUNT_DAILY_LIMIT, type ActiveUser, DAY_S, DbError, type Deps, err, json, keys, mailLater } from './common.ts';
 import { partExport } from './export-part.ts';
+import { rebindDevice } from './rebind.ts';
 import { startExport } from './export.ts';
 import { status, statusDisabled } from './status.ts';
 import { StoreTimeout } from './store-timeout.ts';
@@ -48,6 +50,7 @@ import { StoreTimeout } from './store-timeout.ts';
 export * from './common.ts';
 export * from './export.ts';
 export * from './export-part.ts';
+export * from './rebind.ts';
 export * from './status.ts';
 export * from './store-timeout.ts';
 
@@ -60,36 +63,6 @@ const MAX_BODY = 4096;
 /** 打出的确认词：去掉首尾空白后完全等于“注销”或“탈퇴”（中间的空格、全角空格不去） */
 export function confirmOk(v: unknown): boolean {
   return typeof v === 'string' && v.length <= 32 && (CONFIRM_WORDS as readonly string[]).includes(v.trim());
-}
-
-/** JWT payload（requireActiveUser 已验过签名，这里只读 amr） */
-function claims(jwt: string): { amr?: unknown } {
-  try {
-    const part = jwt.split('.')[1];
-    if (!part) return {};
-    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '='))) as { amr?: unknown };
-  } catch {
-    return {};
-  }
-}
-
-/**
- * amr 里 otp 那一项在 maxAgeS 秒以内（第 131 条④：刚用邮箱验证码登录就满足）。
- * GoTrue 的写法是 [{method: 'otp', timestamp: 秒}]；只认 otp（magiclink、password 等不算），取最近的一次。
- */
-export function otpFresh(jwt: string, nowMs: number, maxAgeS = RESTORE_OTP_MAX_AGE_S): boolean {
-  const amr = claims(jwt).amr;
-  if (!Array.isArray(amr)) return false;
-  let latest = -Infinity;
-  for (const e of amr) {
-    if (typeof e !== 'object' || e === null) continue;
-    const { method, timestamp } = e as { method?: unknown; timestamp?: unknown };
-    if (method === 'otp' && typeof timestamp === 'number' && Number.isFinite(timestamp)) latest = Math.max(latest, timestamp);
-  }
-  if (latest === -Infinity) return false;
-  const age = nowMs / 1000 - latest;
-  return age >= -60 && age <= maxAgeS;   // 允许 1 分钟时钟误差
 }
 
 async function readBody(req: Request): Promise<Record<string, unknown> | null> {
@@ -132,7 +105,7 @@ async function del(body: Record<string, unknown>, user: ActiveUser, deps: Deps):
 async function restore(user: ActiveUser, deps: Deps): Promise<Response> {
   const { store } = deps;
   // ① 刚用邮箱验证码登录（amr 里 otp 在 10 分钟内）；不计次数
-  if (!otpFresh(user.jwt, deps.now())) return err(401, 'reauth_required');
+  if (!otpFresh(user.jwt, deps.now(), RESTORE_OTP_MAX_AGE_S)) return err(401, 'reauth_required');
   // ② 每天 5 次
   if (!(await store.takeRate(keys.restore(user.userId, deps.now()), RESTORE_DAILY_LIMIT, DAY_S))) return err(429, 'rate_limited');
   // ③ 锁行、判断、删行、清两列（一个事务）
@@ -151,9 +124,11 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   const body = await readBody(req);
   if (!body || typeof body.action !== 'string') return err(400, 'bad_request');
   const action = body.action;
-  if (action !== 'delete' && action !== 'restore' && action !== 'export' && action !== 'status') return err(400, 'bad_request');
+  if (action !== 'delete' && action !== 'restore' && action !== 'export' && action !== 'status' && action !== 'rebind_device') return err(400, 'bad_request');
 
   try {
+    // rebind_device 自己查版本、自己验新旧两个令牌（rebind.ts）
+    if (action === 'rebind_device') return await rebindDevice(req, body, deps);
     // 只有 restore、status 在冷静期里放行；管理员停用的（account_disabled）restore 也被 requireActiveUser 拦下
     const auth = await deps.authenticate(req, { allowPendingDeletion: action === 'restore' || action === 'status' });
     if (!auth.ok) {

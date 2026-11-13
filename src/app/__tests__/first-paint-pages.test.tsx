@@ -84,6 +84,7 @@ const PAGE_FILES = [
   'features/settings/ui/SettingsPage.tsx',
   'features/today/ui/RecentlyDeletedPage.tsx',
   'features/today/ui/TodayPage.tsx',
+  'features/vault/ui/VaultPage.tsx',
   'features/todos/ui/TodosPage.tsx',
   'kit/components/Placeholder.tsx',
 ];

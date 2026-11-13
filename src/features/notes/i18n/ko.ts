@@ -62,6 +62,9 @@ export const ko = {
   'notes.converted': '변환함', // REVIEW(ko) R-415
   'notes.conv.todo': '할 일로 바꾸기', // REVIEW(ko)
   'notes.conv.event': '일정으로 바꾸기', // REVIEW(ko)
+  'notes.toVault': '비밀 메모로 옮기기', // REVIEW(ko)
+  'notes.sw.todo': '할 일로\n바꾸기', // REVIEW(ko)
+  'notes.sw.vault': '비밀 메모로\n옮기기', // REVIEW(ko)
   'notes.conv.long': '2000자가 넘어서 바꿀 수 없어요', // REVIEW(ko)
   'notes.conv.moved.todo': '할 일로 바꿨어요. 원래 메모는 “최근 삭제”로 옮겼어요', // REVIEW(ko)
   'notes.conv.moved.event': '일정으로 바꿨어요. 원래 메모는 “최근 삭제”로 옮겼어요', // REVIEW(ko)

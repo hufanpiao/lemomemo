@@ -35,6 +35,8 @@ const ALLOWED_IMPORTS = [
   '../../shared/logic/remind-route.ts',
   './pending.ts',
   './push-actions.ts',
+  // 隐私记推送的固定文案（B5，只有常量，不 import 任何东西）
+  './push-vault-data.ts',
   './push.ts',
   './routes.ts',
   'workbox-precaching',

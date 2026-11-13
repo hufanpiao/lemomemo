@@ -131,7 +131,8 @@ function TabBar({ route }: { route: RouteName }) {
   };
   return (
     <>
-      <GlassBar active={tab} later={afterAppPainted} add={{ label: t('nav.add', {}), onClick: open, hold: plusHold }} />
+      {/* 隐私记页（B5 D14）：按住“＋”不录音（录下的会进普通随手记），点一下只打开隐私记的新建页 */}
+      <GlassBar active={tab} later={afterAppPainted} add={{ label: t('nav.add', {}), onClick: open, ...(route === 'vault' ? {} : { hold: plusHold }) }} />
       <PlusSlot open={plus !== null} day={plus?.day ?? null} opened={plus?.n} onExpand={expand} onEdit={edit} onOpen={open} onClose={() => setPlus(null)} />
     </>
   );

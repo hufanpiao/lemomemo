@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { notes } from '../../../../shared/manifests/notes.ts';
 import { createWebpWasm, loadWebpCodec, NO_WASM, wasmUsable, type RawPixels, type WebpCodec } from '../../../platform/webp-wasm.ts';
-import { drawCanvas, encodeDiagText, encodeImage, FULL_EDGE, FULL_MAX, THUMB_EDGE, THUMB_MAX, type Decoded, type EncodeDeps, type NativeMemo } from '../data/image-encode.ts';
+import { drawCanvas, encodeDiagText, encodeImage, FULL_EDGE, FULL_MAX, THUMB_EDGE, THUMB_MAX, type Decoded, type EncodeDeps, type NativeMemo } from '../../../platform/image-encode.ts';
 import { bareJpeg, exifApp1, hasAscii, isWebpFile, riffChunks, withExif } from './exif-sample.ts';
 
 const TZ = 'Asia/Seoul';

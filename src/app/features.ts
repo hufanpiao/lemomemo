@@ -42,7 +42,8 @@ const all: readonly FeatureEntry[] = [
   { routes: attachments.routes, flag: 'note' },
   smartSearch,
   plus,
-  vault,
+  // 只取路由：VaultParts（给随手记、设置用的懒加载块）不经这里进首屏的登记表
+  { routes: vault.routes },
   { routes: anniv.routes, flag: 'anniv' },
   reminders,
   settings,

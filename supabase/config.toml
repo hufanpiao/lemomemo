@@ -221,6 +221,14 @@ verify_jwt = false
 [functions.claude-intake]
 verify_jwt = false
 
+# B5（架构 5.5、第 6 节；B5 任务单 S2、S9）：vault、vault-image 是用户带 JWT 调的，网关校验照默认开着；这里显式写出来，
+# 免得以后有人照 cron 函数的样子误关（F9：不在名单里的一律不准关）。
+[functions.vault]
+verify_jwt = true
+
+[functions.vault-image]
+verify_jwt = true
+
 [analytics]
 # 本地不需要日志分析，少起一个容器；【线上】照常有
 enabled = false

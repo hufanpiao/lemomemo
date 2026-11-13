@@ -5,7 +5,7 @@
 // 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY（平台自带）。
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { AuthError, requireActiveUser } from '../_shared/auth.ts';
+import { authResult, requireActiveUser } from '../_shared/auth.ts';
 import { json } from '../_shared/http.ts';
 import { cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { INVITE_ADMIN_ERROR_CODES } from '../_shared/gen/schema/invite-admin.ts';
@@ -75,14 +75,7 @@ Deno.serve((req) => {
   }
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
   return handle(req, {
-    async authenticate(r) {
-      try {
-        return { ok: true, user: await requireActiveUser(r, admin) };
-      } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse() };
-        throw e;
-      }
-    },
+    authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
     store: withStoreTimeouts((signal) => makeStore(admin, signal), { log }),
     now: Date.now,
     log,

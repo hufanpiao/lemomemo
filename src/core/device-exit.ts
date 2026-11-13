@@ -7,6 +7,7 @@ import { closeCache, expireThisTab, markExpired, wipeLocal, type SessionLoss } f
 import type { AuthLossOutcome, AuthLossPath, AuthLossSignal } from './auth-loss.ts';
 import { resolveAuthLossLazy } from './auth-loss-lazy.ts';
 import { getBoot, type BootResult } from './boot.ts';
+import { rescueByRebind } from './rebind-pending.ts';
 import { readReauth } from '../platform/auth-loss-store.ts';
 import { clearLogQueue } from '../platform/log-store.ts';
 import { rlog } from '../platform/run-log-api.ts';
@@ -167,6 +168,12 @@ export async function exitDevice(
   const boot = deps.getBoot();
   const key = boot ?? NO_BOOT;
   if (exited.has(key)) return;
+  // 交接设备行结果不确定、新会话还在内存里（core/rebind-pending.ts）：先做完交接，换上了就不是被移除，不退出、不清库
+  const rescued = facts.reason === 'removed' ? rescueByRebind() : null;
+  if (rescued) {
+    if (await rescued) return void rlog('exit skip: rebound');
+    if (exited.has(key)) return;
+  }
   let fate: AuthLossOutcome | undefined;
   if (facts.reason === 'removed' && boot) {
     exited.add(key);

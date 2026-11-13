@@ -6,7 +6,7 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { getBoot } from '../../../core/boot.ts';
-import type { EncodeResult } from '../data/image-encode.ts';
+import type { EncodeResult } from '../../../platform/image-encode.ts';
 import { collection } from '../../../core/store.ts';
 import { boot, jpg, NOW, okEnc, open, pick, remember, sendNext, serverImage, serverNote, setupImageTests, uid, USER, wire, type Row } from './note-images-kit.tsx';
 

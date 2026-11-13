@@ -134,6 +134,7 @@ export const ko = {
   'settings.remind.upcoming': '앞으로 7일 알림', // REVIEW(ko)：照 reminders 的 remind.set.upcoming
   'settings.ai.title': '음성과 AI', // REVIEW(ko)：照 plus 的 plus.set.ai.title
   'settings.claude.title': 'Claude 채팅으로 기록', // REVIEW(ko)：照 plus 的 plus.set.cla.title
+  'settings.vault.title': '비밀 메모', // REVIEW(ko)：照 vault 的 vault.title
   'settings.remind.showTitle': '알림에 표시할 내용', // REVIEW(ko)：照 reminders 的 remind.set.showTitle（R-347）
   'settings.remind.dnd': '방해 금지', // REVIEW(ko)：照 reminders 的 remind.set.dnd（R-347）
   'settings.delete.body.what': '탈퇴하면 레모에 기록한 모든 내용과 사진, 첨부파일, 설정, 그리고 서버에 있는 백업까지 모두 삭제돼요.', // R-106 B1 第一遍已审（10-31），按审校意见改过

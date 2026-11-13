@@ -5,11 +5,11 @@
 // 不加 CORS（0.48 第 4 条）：浏览器经 /sb 同源调用。
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { AuthError, requireActiveUser } from '../_shared/auth.ts';
+import { authResult, requireActiveUser } from '../_shared/auth.ts';
 import { buildPayload } from '../_shared/push/payload.ts';
 import { deliver } from '../_shared/push/send.ts';
 import { resolveOverride } from '../_shared/push/stub.ts';
-import { loadVapid, VapidSigner, type VapidKeys, type VapidLoad } from '../_shared/push/vapid.ts';
+import { cachedSigner, cachedVapid } from '../_shared/push/notify.ts';
 import { json } from '../_shared/http.ts';
 import { versionGate } from '../_shared/version-gate.ts';
 import { handle, type TestDevice } from './core.ts';
@@ -18,17 +18,7 @@ import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 
 const log = (code: string) => console.error(`push-test: ${code}`);
 
-let vapidMemo: { priv?: string | undefined; pub?: string | undefined; sub?: string | undefined; p: Promise<VapidLoad> } | null = null;
-function vapidOnce(priv: string | undefined, pub: string | undefined, sub: string | undefined): Promise<VapidLoad> {
-  if (!vapidMemo || vapidMemo.priv !== priv || vapidMemo.pub !== pub || vapidMemo.sub !== sub) vapidMemo = { priv, pub, sub, p: loadVapid(priv, pub, sub) };
-  return vapidMemo.p;
-}
-// 签名器跟着钥匙对象走（按 origin 缓存 JWT，D1-6）；换了钥匙就新建
-let signerMemo: { keys: VapidKeys; signer: VapidSigner } | null = null;
-function signerFor(keys: VapidKeys): VapidSigner {
-  if (!signerMemo || signerMemo.keys !== keys) signerMemo = { keys, signer: new VapidSigner(keys, Date.now) };
-  return signerMemo.signer;
-}
+// VAPID 钥匙和签名器的进程缓存在 _shared/push/notify.ts（B5 起和 vault 的安全通知共用一份）
 
 Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL');
@@ -46,14 +36,7 @@ Deno.serve(async (req) => {
   if (blocked) return blocked;
   const priv = admin.schema('private');
   return handle(req, {
-    async authenticate(r) {
-      try {
-        return { ok: true, user: await requireActiveUser(r, admin) };
-      } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse(), code: e.code };
-        throw e;
-      }
-    },
+    authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
     store: {
       async takeRate(k, limit, windowS) {
         const { data, error } = await priv.rpc('take_rate', { p_key: k, p_limit: limit, p_window_s: windowS });
@@ -68,9 +51,9 @@ Deno.serve(async (req) => {
       },
     },
     override: resolveOverride(Deno.env.get('PUSH_SERVICE_OVERRIDE_URL'), url, Deno.env.get('LEMO_LOCAL_PUSH_STUB')),
-    vapid: () => vapidOnce(Deno.env.get('VAPID_PRIVATE_KEY'), Deno.env.get('VAPID_PUBLIC_KEY'), Deno.env.get('VAPID_SUBJECT')),
+    vapid: () => cachedVapid(Deno.env.get('VAPID_PRIVATE_KEY'), Deno.env.get('VAPID_PUBLIC_KEY'), Deno.env.get('VAPID_SUBJECT')),
     buildPayload,
-    deliver: (dev, payload, opt, keys, override) => deliver(dev, payload, opt, { fetch: (u, init) => fetch(u, init), signer: signerFor(keys), override }),
+    deliver: (dev, payload, opt, keys, override) => deliver(dev, payload, opt, { fetch: (u, init) => fetch(u, init), signer: cachedSigner(keys, Date.now), override }),
     now: Date.now,
     log,
   });

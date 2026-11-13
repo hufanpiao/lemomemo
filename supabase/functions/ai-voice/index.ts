@@ -2,7 +2,7 @@
 // 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY（平台注入）；GEMINI_API_KEY（经 _shared/ai/wire.ts 只放请求头）。
 // 用到的库对象同 ai-parse。不直连数据库，不碰 R2，不写 Storage。不加 CORS（0.48 第 4 条）。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { AuthError, requireActiveUser } from '../_shared/auth.ts';
+import { authResult, requireActiveUser } from '../_shared/auth.ts';
 import { voiceWithAI } from '../_shared/ai/parse-with-ai.ts';
 import { logVoiceFail, type StoreAdmin } from '../_shared/ai/store.ts';
 import { gateDeps, isValidTz } from '../_shared/ai/wire.ts';
@@ -33,14 +33,7 @@ Deno.serve(async (req) => {
   if (blocked) return blocked;
   return handle(req, {
     ...gateDeps(admin, log, (userId) => aiAllowed(admin, userId)),
-    async authenticate(r) {
-      try {
-        return { ok: true, user: await requireActiveUser(r, admin) };
-      } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse() };
-        throw e;
-      }
-    },
+    authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
     logic: { maxAudio: AI_AUDIO_MAX_BYTES, audioType, normLocale, normProjects, isValidTz, checkDefaultDay: (v, now, tz) => checkDefaultDay(v, now, tz), voiceWithAI },
     logFail: (userId, code, fields) => logVoiceFail(admin as unknown as StoreAdmin, userId, code, fields, Date.now()),
   });

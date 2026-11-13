@@ -10,6 +10,7 @@
 // 错误码以 shared/schema/invite-admin.ts 的 inviteAdminErrorCode 为准，另有各函数共用的 bad_request、method_not_allowed。
 // 日志只记错误码（A23）：不打印请求头、请求体、邀请码、备注。
 
+import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
 import { inviteCodeHash, randomInviteCode } from '../_shared/invite-code.ts';
 import { json } from '../_shared/http.ts';
 import { StoreTimeout } from '../_shared/store-timeout.ts';
@@ -36,7 +37,7 @@ export type InviteAdminErr = (typeof INVITE_ADMIN_ERRS)[number] | 'bad_request' 
 
 // ---------------- 注入的依赖 ----------------
 export interface ActiveUser { userId: string; sessionId: string; jwt: string }
-export type AuthResult = { ok: true; user: ActiveUser } | { ok: false; response: Response };
+export type AuthResult = SharedAuthResult<ActiveUser>;
 
 export interface InviteInsert {
   code_hash: string;

@@ -5,6 +5,7 @@
 // 版本门在 index.ts 入口处查（不在免查名单，fn-version-gate 标“查”）。
 // scope = vault：隐私记页面经“＋”记下在 B4b-3 才有（届时换成 verifyVaultToken + ai.vault），B3 一律回 {fallback, vault_ai_off}、不调 Gemini、不扣次数。
 // 不 console.* 请求体（A23）；日志只记错误码（额度用完另带 kind=day|minute|unknown；每分钟限额给客户端回 reason error，gate.ts 的 clientReason）。纯逻辑：依赖全部注入，不 import _shared/gen/、npm 包。
+import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
 import { aiGate, clientReason, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
 import { aiFailCode, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, ParseFail, ParseInput, ParseOk } from '../_shared/ai/parse-core.ts';
@@ -14,7 +15,7 @@ import { readJsonCapped } from '../_shared/body.ts';
 export const MAX_BODY = 16 * 1024;
 export const RECORD_CONFIDENCE = 1;
 
-export type AuthResult = { ok: true; user: { userId: string } } | { ok: false; response: Response };
+export type AuthResult = SharedAuthResult;
 
 /** shared/schema/ai.ts 里入参相关的几个函数（index.ts 从 _shared/gen/ 注入，单测注入真的 shared） */
 export interface Logic<Item> {

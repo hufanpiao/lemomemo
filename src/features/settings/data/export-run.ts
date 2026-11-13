@@ -32,6 +32,8 @@ export interface ExportJob {
   bytes: number;
   /** 第一片的 content-disposition（拼文件名） */
   disposition: string | null;
+  /** start 带了隐私记令牌（B5 S10）：每一片都带，包里有隐私记密文 */
+  vault?: boolean;
 }
 
 export type RunOutcome =
@@ -76,7 +78,7 @@ export async function partLooksWhole(p: Pick<ExportPart, 'blob' | 'contentLength
   }
 }
 
-export function newJob(started: { exportId: string; exportedAt: string | null; sid: string | null }, at: number): ExportJob {
+export function newJob(started: { exportId: string; exportedAt: string | null; sid: string | null; vault?: boolean }, at: number): ExportJob {
   return { ...started, startedAt: at, cursor: null, parts: [], bytes: 0, disposition: null };
 }
 
@@ -95,7 +97,7 @@ export async function runParts(api: Pick<AccountApi, 'takePart'>, start: ExportJ
     const cur = job;
     /** 取一片并核对；retry：值得用同一个游标再试（临时故障、这一片没收全） */
     const take = async (): Promise<{ r: AccountResult<ExportPart>; retry: boolean }> => {
-      const got = await api.takePart(cur.exportId, cur.cursor, cur.sid);
+      const got = await api.takePart(cur.exportId, cur.cursor, cur.sid, cur.vault === true);
       if (!got.ok) return { r: got, retry: RETRYABLE.has(got.error) };
       if (!(await partLooksWhole(got.value))) return { r: { ok: false, error: 'bad_response', sid: cur.sid }, retry: true };
       return { r: got, retry: false };
@@ -121,7 +123,7 @@ export async function runParts(api: Pick<AccountApi, 'takePart'>, start: ExportJ
     if (p.next === null) {
       const at = job.exportedAt ? Date.parse(job.exportedAt) : NaN;
       const name = exportFileName(job.disposition, Number.isFinite(at) ? at : now());
-      return { kind: 'done', file: { blob: new Blob(job.parts, { type: EXPORT_MIME }), name, vaultOmitted: true } };
+      return { kind: 'done', file: { blob: new Blob(job.parts, { type: EXPORT_MIME }), name, vaultOmitted: job.vault !== true } };
     }
     if (o.stopped?.()) return { kind: 'paused', job, failure: { ok: false, error: 'offline', sid: job.sid } };
   }

@@ -147,6 +147,8 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
         valueTestId="settings-ai-summary"
       />
     ),
+    // 隐私记（B5 S11，线框 s13 SETDETAIL）：进二级页，正文由 vault 功能懒加载
+    vault: <SettingsEntryRow rowId="vault" label={t('settings.vault.title', {})} onOpen={() => onOpen('vault')} testId="settings-vault-entry" />,
     data: entry('data', t('settings.data.title', {}), 'data', dataValue),
     claude: (
       <SettingsEntryRow

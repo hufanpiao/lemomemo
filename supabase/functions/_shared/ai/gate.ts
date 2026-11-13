@@ -11,6 +11,7 @@
 //   放行后由调用方调 Gemini；失败时 settle 退回两边各 1 次、quota 按每天 / 每分钟写 exhausted_until、invalid 只把 invalid_reasons 写 logs；
 //   本次撞了每分钟限额的，给客户端的 reason 也换成 error（clientReason）。
 // “每天 50 次”的日期按太平洋时间（和谷歌重置时刻一致，R-187）。纯逻辑：依赖全部注入，不 import _shared/gen/、npm 包。
+import { utcMinuteKey } from '../rate-key.ts';
 import type { AiConfig } from './router.ts';
 import type { AIProvider, QuotaKind } from './provider.ts';
 import type { AiKindLike, InvalidReasonLike } from './parse-core.ts';
@@ -118,7 +119,7 @@ export const clientReason = <R extends string>(f: { reason: R; quotaKind?: Quota
 /** 计数键（附录 A 三段写法；第三段不准有冒号） */
 export const userQuotaKey = (userId: string, ms: number) => `ai:${userId}:${pacificDate(ms)}`;
 export const globalQuotaKey = (ms: number) => `ai:global:${pacificDate(ms)}`;
-export const minuteKey = (userId: string, ms: number) => `ai-rate:${userId}:${new Date(ms).toISOString().slice(0, 16).replace(/[-T:]/g, '')}`;
+export const minuteKey = (userId: string, ms: number) => utcMinuteKey('ai-rate', userId, ms);
 
 const stop = (status: number, body: Record<string, unknown>): GateStop => ({ stop: true, status, body });
 

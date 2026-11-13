@@ -47,5 +47,7 @@ export function withStoreTimeouts(make: (signal: AbortSignal) => AccountStore, o
     exportDoneLogged: (u, e) => t('exportDoneLogged', (s) => s.exportDoneLogged(u, e)),
     exportStarted: (u, e) => t('exportStarted', (s) => s.exportStarted(u, e)),
     readPage: (tb, k, u, after, limit) => t('readPage', (s) => s.readPage(tb, k, u, after, limit)),
+    rebindDevice: (u, d, o, n) => t('rebindDevice', (s) => s.rebindDevice(u, d, o, n)),
+    deviceSession: (u, d) => t('deviceSession', (s) => s.deviceSession(u, d)),
   };
 }

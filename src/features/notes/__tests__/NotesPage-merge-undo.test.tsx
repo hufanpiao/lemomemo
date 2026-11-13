@@ -126,7 +126,7 @@ describe('合并分类的撤销条（R-415 ③）', () => {
     await waitFor(() => expect(screen.getByTestId(`notes-card-${uid(1)}`).textContent).toContain('书单'));
     // 两个分类又都活着、AI 也还判它们像，但点过撤销 = 点过“不用”：提示条不再出
     expect(screen.queryByTestId('notes-merge')).toBeNull();
-    // 日志在撤销写完以后才记，比上面的状态晚一拍（11-14 unit 首尔时区作业负载下只记到第一行）
+    // 日志在撤销写完以后才记，比上面的状态晚一拍：等到齐再比（11-14 unit 首尔时区作业负载下只记到第一行；B5 起页面多了隐私记入口行，挂上时多一次懒加载）
     await waitFor(() => expect(lines).toEqual([`notes merge category ok ${PAIR} why=ai`, `notes merge dismiss ok ${PAIR}`, `notes merge undo ok ${PAIR}`]));
   });
 
