@@ -1,4 +1,4 @@
--- 20261114210000_vault_image_fn_ai_bytes.sql：给 fn_ai 补 public.note_images 的列级 select (bytes)（B5 隐私记整块评审第 3 条）。
+-- 20261114231000_vault_image_fn_ai_bytes.sql：给 fn_ai 补 public.note_images 的列级 select (bytes)（B5 隐私记整块评审第 3 条）。
 -- 为什么：vault-image 原来上传前只核对“这条是本人的隐私记”就写进 R2，不占存储额度、不登记，传多少都行。
 --   改成和普通插图同一口径：vault {save, add_images} 先预登记 note_images 行（row_quota、media_quota_guard 触发器照常算行数和存储额度），
 --   vault-image 只收已登记、没删的 image_id，原图字节数必须等于登记的 bytes——要读 bytes 这一列，0003 只给了 fn_ai

@@ -1,4 +1,4 @@
--- 迁移 20261114200000_vault_fn_grants.sql：fn_vault 对 private.note_vectors 的列级 select (user_id, note_id, image_id)（B5 隐私记 store-it 真库实测）
+-- 迁移 20261114230000_vault_fn_grants.sql：fn_vault 对 private.note_vectors 的列级 select (user_id, note_id, image_id)（B5 隐私记 store-it 真库实测）
 -- 覆盖：
 --   ① 授权形状：fn_vault 在 note_vectors 上的列级 select 正好是这三列，没有表级 select，embedding、content_hash 读不到；
 --   ② vault 函数移进移出时 dropVectors 那句 delete（where 引用 user_id、note_id、image_id）以 fn_vault 跑得通，删掉本人这条的向量；
