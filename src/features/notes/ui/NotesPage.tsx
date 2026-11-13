@@ -73,8 +73,9 @@ function NotesList() {
   const wide = useMedia(MQ_SIDEBAR);
   const l = useNoteList();
   const a = useListActions<PageTip>('notes', { remove: l.remove });
-  const merge = useMergeHint();
   const { g: guard, g: { toast }, isRo, report } = a;
+  // 撤销条还在的那一对，提示条先不出（R-415 复查 B4）
+  const merge = useMergeHint(toast?.kind === 'mergeUndo' ? toast.pair : null);
   const up = useNotesToast(guard);
   const bar = isUndo(toast) ? { tip: undoTipOf(toast, a.undo), close: () => guard.dismiss(toast) } : null;
   // 输入框有焦点时画模糊层（R-401）；点模糊层让输入框失焦
@@ -152,7 +153,7 @@ function NotesList() {
         </div>
       ) : null}
 
-      {merge ? <MergeBar hint={merge} onResult={report} onMerged={(undo) => guard.show(mergeUndo(() => void undo().then(report)))} /> : null}
+      {merge ? <MergeBar hint={merge} onResult={report} onMerged={(h) => guard.show(mergeUndo(h.key, () => void h.undo().then(report)))} /> : null}
 
       {l.items.length === 0 ? (
         <p className={list.empty} data-testid="notes-empty">

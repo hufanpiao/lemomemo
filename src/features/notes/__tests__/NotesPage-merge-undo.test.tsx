@@ -20,11 +20,11 @@ import { boot, open, sendNext, serverNote, setupImageTests, uid, wire, type Row 
 /** 连点、计时两条用的桩：不为 null 时页面拿它当提示条 */
 let stubHint: MergeHint | null = null;
 vi.mock('../hooks/useMergeHint.ts', async (importOriginal) => {
-  const m = await importOriginal<{ useMergeHint(): MergeHint | null }>();
+  const m = await importOriginal<{ useMergeHint(shown: string | null): MergeHint | null }>();
   return {
     ...m,
-    useMergeHint: () => {
-      const real = m.useMergeHint();
+    useMergeHint: (shown: string | null) => {
+      const real = m.useMergeHint(shown);
       return stubHint ?? real;
     },
   };
@@ -78,10 +78,25 @@ async function mergeNow() {
   return { b, toast: await screen.findByTestId('notes-merge-toast') };
 }
 
-const clickUndo = () =>
-  act(async () => {
-    fireEvent.click(screen.getByTestId('notes-merge-toast-undo'));
+/** 等撤销条出来再点（合并写进本机比撤销条出来早一拍） */
+const clickUndo = async () => {
+  const btn = await screen.findByTestId('notes-merge-toast-undo');
+  await act(async () => {
+    fireEvent.click(btn);
   });
+};
+
+/** 撤销条被换下去（这里删掉那条随手记，换成“已删除”撤销条；真实里也可能是 8 秒到了） */
+async function replaceToast() {
+  await act(async () => {
+    fireEvent.pointerDown(screen.getByTestId(`notes-more-${uid(1)}`), { button: 0, ctrlKey: false });
+    fireEvent.click(screen.getByTestId(`notes-more-${uid(1)}`));
+  });
+  await act(async () => {
+    fireEvent.click(await screen.findByTestId(`notes-del-${uid(1)}`));
+  });
+  await screen.findByTestId('notes-toast');
+}
 
 /** 只拦分类表的 patch（记“不用”的 settings 照真的走） */
 function catPatch(impl: () => Promise<never> | Promise<{ ok: false; reason: 'local_unavailable' }>) {
@@ -141,12 +156,43 @@ describe('合并分类的撤销条（R-415 ③）', () => {
     await waitFor(() => expect(lines.at(-1)).toBe(`notes merge undo dropped ${PAIR}`));
   });
 
-  it('发送失败 → 提示条又出来、再点“合并”→ 撤销：丢掉失败那笔、新的合并也撤掉，最后 merged_into 为 null，outbox 只剩一笔 {merged_into: null}', async () => {
+  it('B4 合并那一笔被拒、本机回到没合并：撤销条还在时提示条不出这一对；撤销条换下去以后照常出', async () => {
     await mergeNow();
     await act(async () => {
       await sendNext('invalid_row');
     });
     expect(merged()).toBeNull();
+    expect(screen.getByTestId('notes-merge-toast')).toBeTruthy();
+    expect(screen.queryByTestId('notes-merge')).toBeNull();
+    await replaceToast();
+    expect(await screen.findByTestId('notes-merge')).toBeTruthy();
+  });
+
+  it('N2 撤销时先写 null、再记“不用”：两笔之间（settings 那笔挂着）提示条不闪出这一对，放行以后也不出', async () => {
+    await mergeNow();
+    const realInsert = write.insert.bind(write);
+    let release = (): void => undefined;
+    vi.spyOn(write, 'insert').mockImplementation((table, row, o) =>
+      table === 'settings' ? new Promise((res) => (release = () => res(realInsert(table, row, o)))) : realInsert(table, row, o),
+    );
+    await clickUndo();
+    await waitFor(() => expect(merged()).toBeNull());
+    for (let i = 0; i < 3; i++) await act(async () => undefined);
+    expect(dismissed()).toBeUndefined();
+    expect(screen.queryByTestId('notes-merge')).toBeNull();
+    await act(async () => release());
+    await waitFor(() => expect(dismissed()).toEqual([[READ, LIST]]));
+    await waitFor(() => expect(lines.at(-1)).toBe(`notes merge undo ok ${PAIR}`));
+    expect(screen.queryByTestId('notes-merge')).toBeNull();
+  });
+
+  it('发送失败 → 撤销条换下去、提示条又出来、再点“合并”→ 撤销：丢掉失败那笔、新的合并也撤掉，最后 merged_into 为 null，outbox 只剩一笔 {merged_into: null}', async () => {
+    await mergeNow();
+    await act(async () => {
+      await sendNext('invalid_row');
+    });
+    expect(merged()).toBeNull();
+    await replaceToast();
     await act(async () => {
       fireEvent.click(await screen.findByTestId('notes-merge-go'));
     });
@@ -160,7 +206,7 @@ describe('合并分类的撤销条（R-415 ③）', () => {
     await waitFor(() => expect(lines.at(-1)).toBe(`notes merge undo ok ${PAIR}`));
   });
 
-  it('撤销没写进本机（写入口回 ok:false）：出错条，分类还是合并着，这一对不记进“不用”；日志只记原因', async () => {
+  it('撤销没写进本机（写入口回 ok:false）：出错条，分类还是合并着，这一对不记进“不用”；日志只记原因；这一对不再被压着，以后回到没合并照常提示', async () => {
     await mergeNow();
     catPatch(() => Promise.resolve({ ok: false, reason: 'local_unavailable' }));
     await clickUndo();
@@ -168,6 +214,13 @@ describe('合并分类的撤销条（R-415 ③）', () => {
     expect(merged()).toBe(READ);
     expect(dismissed()).toBeUndefined();
     await waitFor(() => expect(lines.at(-1)).toBe(`notes merge undo local_unavailable ${PAIR}`));
+    // 以后这个分类又回到没合并（比如在别处拆开）：撤销回 failed 已经把这一对拿出“暂时不出”，提示条照常出（R-415 复查 N2）
+    vi.restoreAllMocks();
+    await act(async () => {
+      await write.patch('categories', LIST, { merged_into: null });
+    });
+    expect(merged()).toBeNull();
+    expect(await screen.findByTestId('notes-merge')).toBeTruthy();
   });
 
   it('撤销时写库抛异常：接住、出错条，日志只记错误名，没有没人接的 Promise 拒绝', async () => {
@@ -225,6 +278,7 @@ describe('提示条写入期间锁住、撤销条 8 秒（提示条换成桩）'
   function hintStub() {
     let done: (r: 'ok') => void = () => undefined;
     const hint = {
+      key: 'a|b',
       keepName: '读书',
       mergeName: '书单',
       merge: vi.fn(() => new Promise<'ok'>((r) => (done = r))),
@@ -282,7 +336,7 @@ describe('撤销条的类型和收起（useNotesToast）', () => {
     vi.useFakeTimers();
     const g = (toast: { kind: string; id?: string; key?: string } | null) => ({ toast, toastAt: null, dismiss: vi.fn(), show: vi.fn(), block: vi.fn() });
     const undo = vi.fn();
-    const tip = mergeUndo(undo);
+    const tip = mergeUndo('a|b', undo);
     const merge = g(tip);
     const up = renderHook(() => useNotesToast(merge as never)).result.current;
     const conv = g({ kind: 'conv', key: 'notes.conv.left' });
@@ -298,7 +352,7 @@ describe('撤销条的类型和收起（useNotesToast）', () => {
     d.undo();
     expect([d.msgKey, d.testId, del.mock.calls]).toEqual(['notes.deleted', 'notes-toast', [['n1']]]);
     expect([undoTipOf(tip, del).msgKey, undoTipOf(tip, del).testId]).toEqual(['notes.merge.done', 'notes-merge-toast']);
-    expect(mergeUndo(undo).key).not.toBe(tip.key);
+    expect(mergeUndo('a|b', undo).key).not.toBe(tip.key);
     vi.useRealTimers();
   });
 });

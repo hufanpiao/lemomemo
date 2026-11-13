@@ -15,13 +15,13 @@ export interface UndoTip {
   testId: 'notes-toast' | 'notes-merge-toast';
   undo(): void;
 }
-/** 合并分类后的撤销条（R-415 ③）：自带 UndoTip，放进和删除撤销条同一个提示条位置 */
-export type MergeUndo = { kind: 'mergeUndo' } & UndoTip;
+/** 合并分类后的撤销条（R-415 ③）：自带 UndoTip，放进和删除撤销条同一个提示条位置；pair 是合并的那一对（useMergeHint 的 key），撤销条在时提示条不出它 */
+export type MergeUndo = { kind: 'mergeUndo'; pair: string } & UndoTip;
 type DeleteUndo = Extract<ListToast, { kind: 'undo' }>;
 
 let seq = 0;
 /** 合并成了出的撤销条：每次一个新 key（连着合并两对，第二条重新计时） */
-export const mergeUndo = (undo: () => void): MergeUndo => ({ kind: 'mergeUndo', key: `merge:${++seq}`, msgKey: 'notes.merge.done', testId: 'notes-merge-toast', undo });
+export const mergeUndo = (pair: string, undo: () => void): MergeUndo => ({ kind: 'mergeUndo', pair, key: `merge:${++seq}`, msgKey: 'notes.merge.done', testId: 'notes-merge-toast', undo });
 
 export function isUndo<T extends { kind: string }>(t: T | null): t is Extract<T, DeleteUndo | MergeUndo> {
   return t?.kind === 'undo' || t?.kind === 'mergeUndo';

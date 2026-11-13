@@ -72,10 +72,10 @@ export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert
 
 /**
  * 合并分类提示条（R-413，线框 MERGE）：两个按钮没写成的结果都由页面的出错条、只读提示接；“不用”记下这一对，提示条随即换下一对或消失。
- * 合并成了调 onMerged(这一对的 undo)（页面出 8 秒撤销条，R-415 ③）。写入期间两个按钮都禁用：连点不会落到写完以后换上来的下一对上，
+ * 合并成了调 onMerged(这一对)（页面出 8 秒撤销条，撤销调它的 undo，R-415 ③）。写入期间两个按钮都禁用：连点不会落到写完以后换上来的下一对上，
  * 也不会再合并一次把第一次的撤销条顶掉
  */
-export function MergeBar({ hint, onResult, onMerged }: { hint: MergeHint; onResult(r: ActionResult): void; onMerged(undo: MergeHint['undo']): void }) {
+export function MergeBar({ hint, onResult, onMerged }: { hint: MergeHint; onResult(r: ActionResult): void; onMerged(hint: MergeHint): void }) {
   const t = useNotesT();
   const [busy, setBusy] = useState(false);
   const run = (go: () => Promise<void>) => {
@@ -84,7 +84,7 @@ export function MergeBar({ hint, onResult, onMerged }: { hint: MergeHint; onResu
   };
   const merge = async () => {
     const r = await hint.merge();
-    if (r === 'ok') onMerged(hint.undo);
+    if (r === 'ok') onMerged(hint);
     else onResult(r);
   };
   return (
