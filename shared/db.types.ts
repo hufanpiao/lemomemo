@@ -173,14 +173,14 @@ isOneToOne: false
                   ]
                 },"remind_queue": {
                   Row: {
-                    "attempts": number,"claim": string | null,"claimed_at": string | null,"id": string,"table_name": string
+                    "attempts": number,"claim": string | null,"claimed_at": string | null,"enqueued_at": string,"fresh": boolean,"id": string,"min_ver": number,"prio": number,"table_name": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "attempts"?: number,"claim"?: string | null,"claimed_at"?: string | null,"id": string,"table_name": string
+                    "attempts"?: number,"claim"?: string | null,"claimed_at"?: string | null,"enqueued_at"?: string,"fresh"?: boolean,"id": string,"min_ver"?: number,"prio"?: number,"table_name": string,"user_id": string
                   }
                   Update: {
-                    "attempts"?: number,"claim"?: string | null,"claimed_at"?: string | null,"id"?: string,"table_name"?: string
+                    "attempts"?: number,"claim"?: string | null,"claimed_at"?: string | null,"enqueued_at"?: string,"fresh"?: boolean,"id"?: string,"min_ver"?: number,"prio"?: number,"table_name"?: string,"user_id"?: string
                   }
                   Relationships: [
                     
@@ -201,14 +201,14 @@ isOneToOne: false
                   ]
                 },"table_meta": {
                   Row: {
-                    "no_conflict": (string)[],"system_cols": (string)[],"tbl": string
+                    "no_conflict": (string)[],"remind_cols": (string)[],"system_cols": (string)[],"tbl": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "no_conflict": (string)[],"system_cols": (string)[],"tbl": string
+                    "no_conflict": (string)[],"remind_cols"?: (string)[],"system_cols": (string)[],"tbl": string
                   }
                   Update: {
-                    "no_conflict"?: (string)[],"system_cols"?: (string)[],"tbl"?: string
+                    "no_conflict"?: (string)[],"remind_cols"?: (string)[],"system_cols"?: (string)[],"tbl"?: string
                   }
                   Relationships: [
                     
@@ -504,6 +504,9 @@ isOneToOne: false
               "due_at": number,"id": string,"table_name": string,"user_id": string
             }[]
                            },
+"remind_enqueue":
+{ Args: { "p_fresh": boolean,"p_id": string,"p_min_ver": number,"p_scope": string,"p_tn": string,"p_user": string }; Returns: undefined
+                           },
 "remind_pushed":
 { Args: { "p_hi": number,"p_limit": number,"p_lo": number,"p_per_user": number }; Returns: {
               "id": string,"pushed_for": number,"table_name": string,"user_id": string
@@ -513,9 +516,17 @@ isOneToOne: false
 { Args: { "p_claim": string,"p_release": Json }; Returns: undefined
                            },
 "remind_queue_pop":
-{ Args: { "p_lease_s": number,"p_limit": number,"p_retry": boolean }; Returns: {
-              "claim": string,"id": string,"table_name": string,"user_id": string
+{ Args: { "p_lease_s": number,"p_limit": number,"p_per_user"?: number,"p_poison"?: number,"p_retry": boolean,"p_ver"?: number }; Returns: {
+              "claim": string,"fresh": boolean,"id": string,"prio": number,"table_name": string,"user_id": string
             }[]
+                           },
+"remind_queue_stats":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "batch_items": number,"oldest_user_wait_s": number,"user_items": number
+            }[]
+                           },
+"remind_reset":
+{ Args: { "n": Json,"o": Json,"p_tn": string }; Returns: Json
                            },
 "remove_device_impl":
 { Args: { "p_device": string }; Returns: undefined
