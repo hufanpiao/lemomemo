@@ -70,6 +70,20 @@ describe('下一次（nextDate）', () => {
     expect(y === undefined).toBe(false);
     expect(occurrenceIn(rec({ calendar: 'lunar', month: 1, day: 30 }), y)?.date).toBe(toSolar(y, 1, 29, false, 'cn'));
   });
+  it('闰月三十：那一年闰月只有 29 天时取闰月廿九，不落到平月三十（整块评审第 3 条）', () => {
+    // 找一年：闰 m 月只有 29 天、平 m 月有 30 天
+    let hit: [number, number] | null = null;
+    for (let y = 1901; y <= 2099 && hit === null; y++) {
+      const m = leapMonthOf(y, 'cn');
+      if (m && toSolar(y, m, 30, true, 'cn') === null && toSolar(y, m, 30, false, 'cn') !== null) hit = [y, m];
+    }
+    expect(hit === null).toBe(false);
+    const [y, m] = hit as [number, number];
+    expect(occurrenceIn(rec({ calendar: 'lunar', month: m, day: 30, is_leap: true }), y)?.date).toBe(toSolar(y, m, 29, true, 'cn'));
+    // 当年没有闰 m 月：平月三十（有的话）
+    const y2 = [y + 1, y + 2, y + 3].find((x) => leapMonthOf(x, 'cn') !== m && toSolar(x, m, 30, false, 'cn') !== null) as number;
+    expect(occurrenceIn(rec({ calendar: 'lunar', month: m, day: 30, is_leap: true }), y2)?.date).toBe(toSolar(y2, m, 30, false, 'cn'));
+  });
   it('韩国阴历（D1 先不做）、超出农历表的年份算不出', () => {
     expect(onOrAfter(rec({ calendar: 'lunar', lunar_variant: 'kr', month: 3, day: 1 }), '2026-01-01')).toBeNull();
     expect(occurrenceIn(rec({ calendar: 'lunar', month: 3, day: 1 }), 2101)).toBeNull();

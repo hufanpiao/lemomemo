@@ -82,10 +82,13 @@ export function occurrenceIn(r: Pick<AnnivRec, 'calendar' | 'lunar_variant' | 'm
     return { date: fmtDateStr(y, r.month, d), year: y };
   }
   if (r.lunar_variant !== 'cn') return null;
-  // 先按原样；闰月当年没有用同号平月；三十没有用廿九（两条可以叠加）
-  const tries: [number, boolean][] = [[r.day, r.is_leap]];
-  if (r.is_leap) tries.push([r.day, false]);
-  if (r.day === 30) tries.push([29, r.is_leap], [29, false]);
+  // 先按原样；三十没有用廿九；闰月当年没有再用同号平月（同样三十没有用廿九）。
+  // 顺序是 [d,闰]→[29,闰]→[d,平]→[29,平]：那一年闰月在、只是只有 29 天时取闰月廿九，不落到平月三十（整块评审第 3 条）
+  const tries: [number, boolean][] = [];
+  for (const leap of r.is_leap ? [true, false] : [false]) {
+    tries.push([r.day, leap]);
+    if (r.day === 30) tries.push([29, leap]);
+  }
   for (const [d, leap] of tries) {
     const s = toSolar(y, r.month, d, leap, 'cn');
     if (s !== null) return { date: s, year: y };
@@ -203,8 +206,7 @@ export interface AnnivNext {
 /** 按 current_tz（tz）、现在（now）和这个人的设置算下一次；算不出 next_date 为 null（不提醒） */
 export function annivNextAt(r: AnnivRec, tz: Tz, now: number, settings: Readonly<Record<string, unknown>>): AnnivNext {
   const today = todayOf(now, tz);
-  const createdDay = r.created_at !== null ? todayOf(r.created_at, tz) : today;
-  const st = annivState(r, today, createdDay);
+  const st = annivState(r, today, dayOfMs(r.created_at, tz, today));
   if (st === null) return { next_date: null, remind_at: null };
   if (st.past) return { next_date: st.next.date, remind_at: null };
   const offsets = offsetsOf(r, settings);
@@ -252,10 +254,14 @@ export function annivNextOf(row: Readonly<Record<string, unknown>>, ctx: { tz: T
   return annivNextAt(r, ctx.tz, ctx.now, ctx.settings);
 }
 
+/** 某个时刻（epoch ms）按 tz 是哪一天；不是有限数字时按 fallback。“建这一条那天”只经这里算（整块评审第 25 条） */
+function dayOfMs(ms: unknown, tz: Tz, fallback: DateStr): DateStr {
+  return typeof ms === 'number' && Number.isFinite(ms) ? todayOf(ms, tz) : fallback;
+}
+
 /** 建这一条那天（没年份的倒数日从这天起算，R-403）：created_at 按 tz 取日期；没有时按 fallback */
 export function createdDayOf(row: Readonly<Record<string, unknown>>, tz: Tz, fallback: DateStr): DateStr {
-  const c = row['created_at'];
-  return typeof c === 'number' && Number.isFinite(c) ? todayOf(c, tz) : fallback;
+  return dayOfMs(row['created_at'], tz, fallback);
 }
 
 /**
@@ -279,9 +285,10 @@ export function annivDatesIn(rows: readonly Readonly<Record<string, unknown>>[],
 
 /**
  * 界面一侧“这一次”的提醒时刻（B5 S15：提醒横幅、错过的提醒、未来 7 天、整页提醒）：
- * 从 max(now − lookbackMs, 建这一条的时刻, 上次“知道了”的 notified_for + 1) 起，第一个提醒时刻。
- * • 只有按了“知道了”才往后走一次：同一次提醒在处理前时刻不变（tag 稳定，和服务器推这一次时的 due 同一个值）；
- *   过了点没处理的留着，进“错过的提醒”。服务器推完会把 remind_at 列挪到下一次，界面不看那一列
+ * 回看窗口 [max(now − lookbackMs, 建这一条的时刻, 上次“知道了”的 notified_for + 1), now] 里已经到点的提醒时刻取最新的一个；
+ * 一个都没有，取 now 以后的第一个（整块评审第 2 条：原来取窗口里最早的一个，D-7 不按“知道了”就一直停在 D-7，D-1 永远出不来）。
+ * • 同一次提醒在处理前时刻不变（tag 稳定，和服务器推这一次时的 due 同一个值）；过了点没处理的留着，进“错过的提醒”，
+ *   直到下一个提醒时刻到点把它换掉。服务器推完会把 remind_at 列挪到下一次，界面不看那一列
  * • 同时给出这次提醒对应的那一次纪念日（date：提醒那天起的下一次；提醒横幅写“7 天后”、生成待办定截止日用）
  * • 行不合格、韩国阴历（D1）、已过去的倒数日、算出错：返回 null（不提醒）
  */
@@ -299,10 +306,24 @@ export function annivRemindFrom(
   if (r.created_at !== null) from = Math.max(from, r.created_at);
   if (typeof acked === 'number' && Number.isFinite(acked)) from = Math.max(from, acked + 1);
   try {
-    const at = annivNextAt(r, tz, from, settings).remind_at;
+    // 从 from 起一个个往后数，数到 now 为止记下最后一个；第一个就过了 now 的是“以后的第一个”。
+    // 一次纪念日最多 4 个提醒时刻，窗口 7 天，16 次足够；兜底防死循环
+    let last: number | null = null;
+    let first: number | null = null;
+    for (let t = from, i = 0; i < 16; i++) {
+      const at = annivNextAt(r, tz, t, settings).remind_at;
+      if (at === null) break;
+      if (at > now) {
+        first = at;
+        break;
+      }
+      last = at;
+      t = at + 1;
+    }
+    const at = last ?? first;
     if (at === null) return null;
     const day = todayOf(at, tz);
-    const st = annivState(r, day, r.created_at !== null ? todayOf(r.created_at, tz) : day);
+    const st = annivState(r, day, dayOfMs(r.created_at, tz, day));
     return st === null ? null : { at, date: st.next.date };
   } catch {
     return null;

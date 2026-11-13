@@ -27,6 +27,15 @@ describe('纪念日这一次的提醒时刻（annivRemindFrom）', () => {
     expect(b).toEqual({ at: at('2026-11-19', '09:00'), date: '2026-11-20' });
   });
 
+  it('D-7 没按知道了、到了 D-1：取窗口里最新的一个（D-1），不停在 D-7（整块评审第 2 条）', () => {
+    const now = at('2026-11-19', '10:00');
+    expect(annivRemindFrom(row(), TZ, now, {}, MISSED_WINDOW_MS)).toEqual({ at: at('2026-11-19', '09:00'), date: '2026-11-20' });
+    // D-1 的点还没到：窗口里只有 D-7，还是它
+    expect(annivRemindFrom(row(), TZ, at('2026-11-19', '08:00'), {}, MISSED_WINDOW_MS)?.at).toBe(at('2026-11-13', '09:00'));
+    // D-7 按过知道了、D-1 到了：D-1
+    expect(annivRemindFrom(row({ notified_for: at('2026-11-13', '09:00') }), TZ, now, {}, MISSED_WINDOW_MS)?.at).toBe(at('2026-11-19', '09:00'));
+  });
+
   it('建这一条之前的提醒不算；设置里的默认值和这一条自己的设置都认', () => {
     const now = at('2026-11-13', '10:00');
     expect(annivRemindFrom(row({ created_at: at('2026-11-13', '09:30') }), TZ, now, {}, MISSED_WINDOW_MS)?.at).toBe(at('2026-11-19', '09:00'));
