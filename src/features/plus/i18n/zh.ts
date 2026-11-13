@@ -12,6 +12,7 @@ export const zh = {
   'plus.type.previewNoDay': '{title}',
   'plus.type.more': '还有 {n} 条',
   'plus.type.partSaved': '同一句里其他几条已经记下了',
+  'plus.type.recognizing': '正在识别…', // Q-27（R-406）：按“记下”后等 AI 拆分时
   'plus.kind.event': '日程',
   'plus.kind.todo': '待办',
   'plus.kind.anniv': '纪念日',

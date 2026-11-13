@@ -26,6 +26,8 @@
 // • 打字条后面的整页液态玻璃（R-399，负责人 11-11“按+出现的输入框之外的后面背景全做成液态模糊玻璃”，11-12 定中档 16px、点模糊处收起）：
 //   打字条画着就画这一层，收起（folded）或关掉就没；组件和样式是 kit 的 Mist（和随手记 R-401 共用），层级 --z-mist；点它见上面“点页面空白处”。
 //   出现、消失各记一行运行日志 typebar mist on/off（只记状态和实际生效的滤镜）
+// • 按“记下”后等 AI 拆分（最多 PARSE_TIMEOUT_MS，超时照旧用本机规则）期间，预览行换成“正在识别…”（负责人 11-13 弹窗定 Q-27 选乙“照旧等 AI，加提示”，R-406）；
+//   “记下”照旧灰着、不能连点。开始、结束和耗时记在 useTypeBar 的 typebar recog on/off
 // • 文字一律经 t()（A20）；按钮用 kit 的 FormButton，输入框用 kit Form 的 .input（G11 输入框令牌、触屏 16px）
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject, type FormEvent, type KeyboardEvent, type PointerEvent } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
@@ -215,7 +217,9 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
                   </FormButton>
                 </div>
                 <div className={styles.preview} aria-live="polite" data-testid="type-preview">
-                  {first ? t('plus.type.preview', { text: s.preview.length > 1 ? `${previewText} · ${t('plus.type.more', { n: s.preview.length - 1 })}` : previewText }) : ''}
+                  {s.status === 'organizing'
+                    ? t('plus.type.recognizing', {})
+                    : first ? t('plus.type.preview', { text: s.preview.length > 1 ? `${previewText} · ${t('plus.type.more', { n: s.preview.length - 1 })}` : previewText }) : ''}
                 </div>
                 <div className={styles.row}>
                   <FormButton type="button" variant="ghost" onClick={() => {

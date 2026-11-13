@@ -110,6 +110,8 @@ export function useTypeBar(o: TypeBarOpts) {
     try {
       const c = ctx();
       go({ type: 'organize' });
+      // “正在识别…”出现（Q-27 乙，R-406）；消失在 finally 里记 off 和一共多久
+      rlog('typebar recog on');
       // 同意版本明确过期（告知页关口问到 first / updated、还没做完）：不发 ai-parse，用本机规则（S1，见 useCaptureCtx）
       const aiOn = aiOnNow();
       const quotaOut = aiOn ? await quotaOutToday(c.now) : false;
@@ -122,6 +124,7 @@ export function useTypeBar(o: TypeBarOpts) {
       throw err;
     } finally {
       busy.current = false;
+      rlog(`typebar recog off ms=${ms()}`);
     }
   }, [text, status, ctx, callAi, aiOnNow, online, saved, go]);
 

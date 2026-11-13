@@ -13,6 +13,7 @@ export const ko = {
   'plus.type.previewNoDay': '{title}', // REVIEW(ko)
   'plus.type.more': '{n}개 더', // REVIEW(ko)
   'plus.type.partSaved': '같은 문장의 다른 항목은 이미 기록했어요', // REVIEW(ko)
+  'plus.type.recognizing': '인식하는 중…', // REVIEW(ko) Q-27（R-406）초안
   'plus.kind.event': '일정', // REVIEW(ko)
   'plus.kind.todo': '할 일', // REVIEW(ko)
   'plus.kind.anniv': '기념일', // REVIEW(ko)

@@ -4,7 +4,7 @@
 // • 合并：先把整句原话存成新的一条（新的一批），存成了再撤原来的几条；没存上就原样留着，提示条加一句“合并没保存上”
 // • 全部撤销：没撤成的几条留在提示条上，加一句“N 条没撤销成功”（FA-3 整块评审第 13 条）
 // • 纪念日在这里撤不掉（capture-save 的 undoRefs 一律留下）：不算没撤成，留在提示条上、单独一句“纪念日请到纪念日页删除”；
-//   合并成功后撤不掉的旧条也照样留在新的提示条上（不悄悄在库里多出几条；FA-3 复查第 3、4 条）
+//   合并成功后撤不掉的旧条不留在新的提示条上、不算进条数，只加一句“纪念日请到纪念日页删除”或“N 条没撤销成功”（负责人 11-13 定，待定 23、R-405）
 // • 打字条和按住录音共用这一份（FA-3 第二轮第 5 条）：存（save）、存完往哪走（land）、确认行（choose）、撤销、合并、关掉；
 //   两边只给自己的状态机、收尾和失败提示（flow）。录音那份由控制器持有（切页重挂提示条还在，第 11 条），打字条每次挂载一份
 // 纯 TS：不准 import React（A1）
@@ -208,11 +208,11 @@ export function createSavedBatch({ box, writer, tag, source, env, flow }: SavedB
       const r = await store({ ...batch, batchId: null, entries: [], remind: false, mergeFailed: false, undoFailed: 0, annivKept: false }, [one], e);
       rlog(`${tag} merge out=${r.out} n=${batch.entries.length}`);
       if (r.out !== 'ok' || !r.batch) return put({ batch: { ...batch, mergeFailed: true } });
-      // 新的存成了再撤原来的；撤不掉的（纪念日、写不进去）留在新的提示条上，写明
+      // 新的存成了再撤原来的；撤不掉的（纪念日、写不进去）不留在新的提示条上、不算条数，只加一句（负责人 11-13 定，待定 23、R-405）
       const left = await undoRefs(batch.entries.map((x) => x.ref), e.now, writer);
       if (left.length > 0) rlog(`${tag} merge undo_left=${left.length}`);
       const rest = afterUndo(batch.entries, left);
-      put({ batch: { ...r.batch, ...rest, entries: [...r.batch.entries, ...rest.entries] } });
+      put({ batch: { ...r.batch, undoFailed: rest.undoFailed ?? 0, annivKept: rest.annivKept === true } });
     },
     closeNotice(): void {
       put({ batch: null });

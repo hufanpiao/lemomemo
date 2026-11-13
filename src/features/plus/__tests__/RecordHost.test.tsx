@@ -384,8 +384,9 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     expect(logged(/^voice attempt \d+ stale at=to_upload$/)).toBe(true);
   });
 
-  // 第 11 条（FA-3 第二轮）：控制器不跟 RecordHost 走（模块级的那一份），切页卸载不丢录音
-  it('录音器 stop 还没回来时切页（RecordHost 卸载）：照常停完、上传、写库，没有作废', async () => {
+  // 切页（RecordHost 卸载）算取消（负责人 11-13 弹窗定，待定 24、R-404；原来第二轮第 11 条“当松手处理、照常传完存下”作废）：
+  // 录着、上传中、还没开始写库的整理都中止、不存；已经在写库的照常存完。控制器还是模块级的那一份（回来提示条、确认行还在）
+  it('录音器 stop 还没回来时切页：算取消，不上传、不写库，录音器收到取消', async () => {
     fx.stopHang = true;
     const { writer, call, unmount } = setup();
     await holdDown();
@@ -394,12 +395,12 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     await act(async () => {
       fx.stopOpen?.();
     });
-    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
-    expect(call).toHaveBeenCalledTimes(1);
-    expect(logged(/^voice attempt \d+ drop by=/)).toBe(false);
+    await nothingKept(writer, call);
+    expect(logged(/^voice host detach status=uploading cancel=1$/)).toBe(true);
+    expect(logged(/^voice attempt \d+ drop by=page_leave$/)).toBe(true);
   });
 
-  it('上传中切页：传完照常写库；回到有“＋”的页（重挂）出“已记下”', async () => {
+  it('上传中切页：中止上传、不写库；回到有“＋”的页（重挂）不出“已记下”', async () => {
     let hang!: () => void;
     const { writer, call, session, unmount } = setup({ call: () => new Promise((ok) => (hang = () => ok(VOICE_OK))) });
     await holdDown();
@@ -409,24 +410,49 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     await act(async () => {
       hang();
     });
-    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    await sleep(30);
+    expect(writer.insert, '没写库').not.toHaveBeenCalled();
+    expect(logged(/^voice attempt \d+ stale at=send$/)).toBe(true);
     setup({ session });
-    expect((await screen.findByTestId('type-notice')).textContent).toContain('已记下：买猫砂');
+    await sleep(10);
+    expect(screen.queryByTestId('type-notice')).toBeNull();
+    expect(screen.queryByTestId('voice-notice')).toBeNull();
   });
 
-  it('上传中切页：升级中心的 busy 一直占着（不会被自动重新载入打断），存完才放开（第二轮复查第 1 条）', async () => {
+  it('上传中切页：升级中心的 busy 当场放开（这一次已经取消，没有要保住的）', async () => {
     let hang!: () => void;
-    const { writer, call, unmount } = setup({ call: () => new Promise((ok) => (hang = () => ok(VOICE_OK))) });
+    const { call, unmount } = setup({ call: () => new Promise((ok) => (hang = () => ok(VOICE_OK))) });
     await holdDown();
     expect(fx.busy, '录着').toEqual(['recording']);
     await release();
     await waitFor(() => expect(call).toHaveBeenCalledTimes(1));
     unmount();
-    expect(fx.busy, '卸载了还在上传：占着').toEqual(['recording']);
+    expect(fx.busy, '切页取消：放开').toEqual([]);
     await act(async () => {
       hang();
     });
+  });
+
+  it('已经开始写库时切页：照常存完、不撤；回到有“＋”的页出“已记下”，busy 存完才放开', async () => {
+    let open!: () => void;
+    const writer = {
+      insert: vi.fn<Writer['insert']>(() => new Promise<WriteResult>((ok) => (open = () => ok(OK)))),
+      patch: vi.fn<Writer['patch']>(async () => OK),
+    };
+    const session = createVoiceSession({ callVoice: async () => VOICE_OK, writer, online: () => true });
+    const { unmount } = setup({ session });
+    await holdDown();
+    await release();
     await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    unmount();
+    expect(logged(/^voice host detach status=organizing cancel=0$/)).toBe(true);
+    expect(fx.busy, '写库中：占着').toEqual(['recording']);
+    await act(async () => {
+      open();
+    });
+    setup({ session });
+    expect((await screen.findByTestId('type-notice')).textContent).toContain('已记下：买猫砂');
+    expect(logged(/^voice attempt \d+ drop by=/)).toBe(false);
     await waitFor(() => expect(fx.busy, '存完放开').toEqual([]));
   });
 
@@ -445,14 +471,13 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     await waitFor(() => expect(fx.busy, '选完放开').toEqual([]));
   });
 
-  it('录着时切页：当松手处理（停录、上传、写库），麦克风不留着', async () => {
+  it('录着时切页：算取消（停录、不上传、不写库），麦克风不留着', async () => {
     const { writer, call, unmount } = setup();
     await holdDown();
     expect(fx.starts).toBe(1);
     unmount();
-    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
-    expect(fx.stops).toBe(1);
-    expect(call).toHaveBeenCalledTimes(1);
+    await nothingKept(writer, call);
+    expect(logged(/^voice host detach status=recording cancel=1$/)).toBe(true);
   });
 
   it('录音器开不起来、麦克风被拒（{ok:false, fail:"denied"}）：出“麦克风没有打开”卡，不出提示条、不写库', async () => {

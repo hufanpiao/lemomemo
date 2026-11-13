@@ -4,7 +4,8 @@
 // ai-voice 用 page.route 拦住、有意给结果：第一次 503（AI 没回应，提示条“重试 / 再说一次”），第二次 200（一条今天的待办“买猫砂”）。
 // 不碰真的 AI 服务商：两次都在浏览器里就截住了，请求不到 lemo-e2e 的函数
 // 断言：两次请求都带 JWT、包体都是同一段 3000 字节；提示条“已记下：买猫砂”；服务器 todos 里有这一行（source = voice）；麦克风只开一次、轨道只关一次
-// 第二条（FA-3 第二轮第 11 条）：松手上传中切到设置页（没有“＋”，录音那一套卸载），ai-voice 这时才回 200：照常记下，服务器有这一行；回到待办页出“已记下”
+// 第二条（负责人 11-13 定切页算取消，待定 24、R-404；原来 FA-3 第二轮第 11 条“照常记下”作废）：松手上传中切到设置页（没有“＋”，录音那一套卸载），
+// 上传当场中止，ai-voice 再回 200 也不存：服务器没有这一行；回到待办页不出“已记下”
 import { expect, test, type Page } from '@playwright/test';
 import { count, expectMicClosed, fakeMedia, holdUntilRecording, runLog, voiceOk, waitVoiceHost } from './fake-media.ts';
 import { createAccount, loginViaOtp, restInPage } from './real-backend.ts';
@@ -59,14 +60,15 @@ test('按住“＋”录音：ai-voice 第一次 503 → 点“重试”同一�
   await expect.poll(() => todosOnServer(page), { timeout: 15_000 }).toEqual([{ title: '买猫砂', source: 'voice', deleted_at: null }]);
 });
 
-test('松手上传中切到设置页（录音那一套卸载）：ai-voice 这时才回来，照常记下；回到待办页出“已记下”（FA-3 第二轮第 11 条）', async ({ page }) => {
+test('松手上传中切到设置页（录音那一套卸载）：算取消，ai-voice 再回来也不存；回到待办页不出“已记下”（负责人 11-13 定，R-404）', async ({ page }) => {
   const acc = await createAccount();
   await consentAndTodos(page, acc.email);
   let answer!: () => void;
   const gate = new Promise<void>((ok) => (answer = ok));
   await page.route('**/functions/v1/ai-voice', async (route) => {
     await gate;
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(voiceOk('买猫砂')) });
+    // 页面已经中止了这次请求，fulfill 会报错（请求已取消），吞掉
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(voiceOk('买猫砂')) }).catch(() => undefined);
   });
 
   await holdUntilRecording(page);
@@ -78,15 +80,17 @@ test('松手上传中切到设置页（录音那一套卸载）：ai-voice 这�
   });
   // 设置页没有底栏：“＋”和录音那一套都卸载了
   await expect(page.getByTestId('tabbar-add')).toHaveCount(0);
+  // 运行日志：卸载那一下在上传，算取消、作废这一次
+  await expect.poll(async () => (await runLog(page)).filter((l) => l.includes('voice host detach')).join(' | ')).toContain('status=uploading cancel=1');
+  expect(count(await runLog(page), 'drop by=page_leave'), '切页作废了这一次').toBe(1);
   answer();
-  await expect.poll(() => todosOnServer(page), { timeout: 15_000 }).toEqual([{ title: '买猫砂', source: 'voice', deleted_at: null }]);
+  await page.waitForTimeout(1500);
+  expect(await todosOnServer(page), '没存').toEqual([]);
   await expectMicClosed(page);
-  // 运行日志：卸载那一下在上传；整个过程没有作废
-  await expect.poll(async () => (await runLog(page)).filter((l) => l.includes('voice host detach')).join(' | ')).toContain('status=uploading');
-  expect(count(await runLog(page), 'drop by='), '没有作废').toBe(0);
 
   await page.evaluate(() => {
     location.hash = '#/todos';
   });
-  await expect(page.getByTestId('type-notice')).toContainText('已记下：买猫砂');
+  await expect(page.getByTestId('todos')).toBeVisible();
+  await expect(page.getByTestId('type-notice')).toHaveCount(0);
 });

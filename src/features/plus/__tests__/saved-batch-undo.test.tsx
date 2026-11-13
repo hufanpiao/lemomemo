@@ -1,5 +1,6 @@
 // 提示条上一批里有纪念日时的撤销、合并（data/saved-batch.ts；FA-3 复查第 3、4 条）；确认行连点（第二轮复查续第 2 条）
-// 纪念日在这里撤不掉（capture-save 的 undoRefs 一律留下）：不算“没撤销成功”，单独一句“纪念日请到纪念日页删除”，那一条留在提示条上
+// 纪念日在这里撤不掉（capture-save 的 undoRefs 一律留下）：不算“没撤销成功”，单独一句“纪念日请到纪念日页删除”；
+// 全部撤销、逐条撤销时那一条留在提示条上，合并成功后不留（R-405）
 import { describe, expect, it, vi } from 'vitest';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import type { WriteResult } from '../../../core/write.ts';
@@ -55,14 +56,15 @@ describe('一批里有纪念日', () => {
     expect(keys()).not.toContain('plus.notice.undoFailed');
   });
 
-  it('合并成一条：新的一条存上、别的撤掉，纪念日撤不掉，留在提示条上并单独一句', async () => {
+  it('合并成一条：新的一条存上、别的撤掉；纪念日撤不掉，不留在提示条上、不算条数，只单独一句（负责人 11-13 定，待定 23、R-405）', async () => {
     const { writer, b, notice, keys } = setup();
     await b.merge();
     expect(writer.insert).toHaveBeenCalledTimes(1);
     expect(writer.patch).toHaveBeenCalledTimes(2);
     const ids = notice()?.entries.map((e) => e.ref.id) ?? [];
-    expect(ids).toHaveLength(2);
-    expect(ids).toContain('a1');
+    expect(ids).toHaveLength(1);
+    expect(ids).not.toContain('a1');
+    expect(keys()).not.toContain('plus.notice.savedN');
     expect(keys()).toContain('plus.notice.annivKept');
     expect(keys()).not.toContain('plus.notice.undoFailed');
   });

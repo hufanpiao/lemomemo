@@ -2,10 +2,11 @@
 // • 流程全在 data/voice-session.ts 的控制器里（录音、上传、记下的这一批、留着的录音、网络慢计数、每次的代号、升级中心 busy），
 //   这里只订阅它的 view() 和这一批的 box 来画，每次渲染把最新的上下文交给它（bind）
 // • 正式的控制器只有一份（模块级，FA-3 第二轮第 11 条）：RecordHost 跟着页面卸载（进设置页等没有“＋”的页）时，
-//   正在上传、整理的照常传完、存下，回到有“＋”的页重挂，提示条、确认行照常在；录着的当松手处理。测试各建一份从 session 传进来
+//   录着、上传中、还没开始写库的整理一律算取消（负责人 11-13 定，待定 24、R-404），已经在写库的照常存完；
+//   回到有“＋”的页重挂，提示条、确认行照常在。测试各建一份从 session 传进来
 // • 手势：hooks/voice-sink.ts 把 data/hold-input.ts 的判定结果接到控制器上（挂上才接手，没挂上之前按住“＋”只当点一下）
 // • 记下的走 data/saved-batch（source = voice，一个 batch_id），提示条和打字条同一套（SavedNotice）；过去的月日出确认行（R-166）
-// • 录音期间压住提醒横幅（REMIND-wiring）：只看 capturing，卸载时控制器已经当松手处理、不再在录，跟着组件放开没有空档
+// • 录音期间压住提醒横幅（REMIND-wiring）：只看 capturing，卸载时控制器已经按取消停录、不再在录，跟着组件放开没有空档
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useHoldReminders } from '../../../kit/hooks/useHoldReminders.ts';
 import { createVoiceSession, type VoiceSession } from '../data/voice-session.ts';

@@ -7,7 +7,10 @@
 // • 每次录音一个代号（attempt），从开录到存完都有效：丢掉、取消让它作废；每个 await 之后先看“还是不是当前这次”，
 //   不是就不发请求、不写库（运行日志 voice attempt N stale at=哪一步）
 // • 一份控制器带着自己的这一批（data/saved-batch.ts）、网络慢计数、留着的录音（第二轮复查第 2、3 条）：正式的一份在 hooks/useVoice.ts 模块级，
-//   不跟 RecordHost 卸载走（切页时正在上传、整理的照常传完、存下；录着的当松手处理，第 11 条）；测试各建一份经 RecordHost 的 session 传进去
+//   不跟 RecordHost 卸载走（切页回来提示条、确认行还在）；测试各建一份经 RecordHost 的 session 传进去
+// • 切到没有底栏的页（RecordHost 卸载）算取消（负责人 11-13 弹窗定，待定 24：原来第二轮第 11 条“当松手处理”作废）：
+//   录着的停录、不上传；上传中、整理中（还没开始写库）的中止、不存；已经开始写库的照常存完、不撤
+//   （回来能看到“已记下”）。确认行、提示条不动
 // • 录着、上传、整理期间占住升级中心的 busy（不被自动重新载入打断），跟着状态走、不跟着组件走（第二轮复查第 1 条）
 // • 手势（hold-input）这里不碰：录完由 hooks/voice-sink.ts 订阅着收尾。运行日志：状态转换、选路、代号作废、提示、说明卡、卸载，不记说的内容
 import { createStore } from 'zustand/vanilla';
@@ -98,6 +101,8 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
   let free: (() => void) | null = null;
   /** 今天的次数用完了（按下时选路用；录音路拿到 quota_out 时置上，挂上、按下时从本机重读） */
   let quotaOut = false;
+  /** 正在写库（savePlan 里 batch.save 那一步）：切页时这一步不中止，存完照常出提示条 */
+  let storing = false;
 
   const go = (e: ViewEvent<VoiceNote>): void => {
     const next = viewStep(v(), e);
@@ -187,12 +192,16 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
     async savePlan(a: Attempt, p: TypePlan, raw: string) {
       if (v().status !== 'organizing') go({ type: 'organize' });
       if (!alive(a, 'store')) return;
-      const out = await batch.save(p, raw);
+      storing = true;
+      const out = await batch.save(p, raw).finally(() => {
+        storing = false;
+      });
       if (!alive(a, 'stored')) return;
       end(a);
       batch.land(out, p);
     },
     finish,
+    storing: () => storing,
     quotaOut: () => quotaOut,
     markQuotaOut(out = true) {
       quotaOut = out;
@@ -238,6 +247,16 @@ export function createVoiceSession(io: VoiceIo = {}) {
     speech.cancel();
     toIdle();
   }
+  /** 这一次连同留着的录音都不要了（提示条上点“取消”、切页） */
+  function abandon(by: string): void {
+    discard(by);
+    rec.forget();
+  }
+  /** 切页时要中止的：录着的、上传中的、整理中还没开始写库的 */
+  const leaveCancels = (): boolean => {
+    const v = c.view();
+    return v.capturing || v.status === 'uploading' || (v.status === 'organizing' && !c.storing());
+  };
   const card = (k: 'ask' | 'denied' | null): void => go({ type: 'card', card: k });
 
   return {
@@ -286,10 +305,7 @@ export function createVoiceSession(io: VoiceIo = {}) {
     idle: () => speech.drop(),
     cancelUpload() {
       rlog('voice upload cancel');
-      c.drop('cancel_upload');
-      speech.cancel();
-      rec.forget();
-      toIdle();
+      abandon('cancel_upload');
     },
     retry: () => rec.retry(),
     sayAgain() {
@@ -324,12 +340,13 @@ export function createVoiceSession(io: VoiceIo = {}) {
     },
     elapsed: () => (c.view().path === 'rec' ? rec.elapsed() : speech.elapsed()),
     level: () => (c.view().path === 'rec' ? rec.level() : -1),
-    /** RecordHost 挂上：重读一次额度；返回卸载时调的（录着的当松手处理，上传、整理的不动） */
+    /** RecordHost 挂上：重读一次额度；返回卸载（切页）时调的：录着、上传、还没写库的整理算取消（待定 24），已经在写库的照常存完 */
     attach() {
       refreshQuota();
       return () => {
-        rlog(`voice host detach status=${c.view().status}`);
-        if (c.view().capturing) finish();
+        const cancel = leaveCancels();
+        rlog(`voice host detach status=${c.view().status} cancel=${cancel ? 1 : 0}`);
+        if (cancel) abandon('page_leave');
         speech.drop();
       };
     },

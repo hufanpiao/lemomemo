@@ -217,7 +217,7 @@ describe('打字条', () => {
     expect(screen.getByTestId('type-notice').textContent).toContain('已记下 3 条');
   });
 
-  it('合并成功但原来的有一条撤不掉：那一条留在提示条上，写明没撤成（不悄悄留重复；FA-3 复查第 3 条）', async () => {
+  it('合并成功但原来的有一条撤不掉：那一条不留在提示条上、不算条数，只写明没撤成（负责人 11-13 定，待定 23、R-405）', async () => {
     let n = 0;
     const { input, writer } = setup({ patch: async () => (++n === 1 ? { ok: false, reason: 'local_unavailable' } : OK) });
     fireEvent.change(input, { target: { value: '커피 원두 사기, 전기요금 내기, 수요일까지 NEOX에 견적서 보내기' } });
@@ -231,7 +231,8 @@ describe('打字条', () => {
     expect(writer.insert).toHaveBeenCalledTimes(4);
     expect(writer.patch).toHaveBeenCalledTimes(3);
     const text = screen.getByTestId('type-notice').textContent ?? '';
-    expect(text).toContain('已记下 2 条');
+    expect(text).not.toContain('已记下 2 条');
+    expect(text).toContain('已记下：');
     expect(text).toContain('1 条没撤销成功');
   });
 
@@ -399,6 +400,36 @@ describe('S1：同意版本明确过期时不发 ai-parse', () => {
       expect(callAi).toHaveBeenCalledTimes(1);
       expect(lines.find((l) => l.startsWith('typebar planned'))).toMatch(/^typebar planned items=1 ai=true quotaOut=false origin=\w+ status=\w+ reason=\S+ ms=\d+$/);
       expect(lines.find((l) => l.startsWith('typebar stored'))).toMatch(/^typebar stored out=ok ready=1 ask=0 origin=\w+ ms=\d+$/);
+    } finally {
+      delete slots[RL_SLOT];
+    }
+  });
+
+  // Q-27（负责人 11-13 弹窗定乙“照旧等 AI，加提示”，R-406）：按“记下”后等 AI 期间预览行换成“正在识别…”，“记下”灰着；回来就存
+  it('等 AI 期间预览行显示“正在识别…”、“记下”灰着；AI 回来后存下；运行日志记 recog on / off 和耗时', async () => {
+    const lines: string[] = [];
+    const slots = globalThis as unknown as Record<string, unknown>;
+    slots[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    try {
+      collection('settings').upsert([AI_ON]);
+      let answer!: () => void;
+      const callAi = vi.fn(() => new Promise<unknown>((ok) => (answer = () => ok({ intent: 'record', confidence: 1, items: [], quota_left: 3 }))));
+      const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
+      render(<TypeBar day={null} writer={writer} callAi={callAi} online={() => true} onExpand={vi.fn()} onClose={vi.fn()} />);
+      fireEvent.change(screen.getByTestId('type-input'), { target: { value: '买牛奶' } });
+      await act(async () => {
+        fireEvent.submit(screen.getByTestId('type-bar'));
+      });
+      await waitFor(() => expect(callAi).toHaveBeenCalledTimes(1));
+      expect(screen.getByTestId('type-preview').textContent).toBe('正在识别…');
+      expect(screen.getByRole('button', { name: '记下' }).hasAttribute('disabled')).toBe(true);
+      expect(writer.insert, '还在等 AI：没存').not.toHaveBeenCalled();
+      expect(lines).toContain('typebar recog on');
+      await act(async () => {
+        answer();
+      });
+      await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+      expect(lines.find((l) => l.startsWith('typebar recog off'))).toMatch(/^typebar recog off ms=\d+$/);
     } finally {
       delete slots[RL_SLOT];
     }
