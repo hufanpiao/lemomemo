@@ -1,6 +1,7 @@
 // 隐私记推送的固定文案（B5 任务单 S2～S4、代定 D19；后端 supabase/functions/_shared/push/payload.ts 的 vault 负载）：
 // 负载只有 { v: 1, type: 'vault', user_id, event }，不带任何内容，字由 SW 按本机语言从这里取（push.vault.<event>）。
 // 文件名 -data.ts（架构 2.3 A20 的数据文件例外）：只进 SW，不进主 App 首屏；韩文待审校（REVIEW(ko)）
+// 事件表和服务器 _shared/push/payload.ts 的 VAULT_PUSH_EVENTS 各一份（SW 不能引服务器代码），tests/shared/vault-parity.test.ts 核对一致
 export const VAULT_PUSH_EVENTS = ['locked', 'pin_changed', 'reset', 'webauthn_added'] as const;
 export type VaultPushEvent = (typeof VAULT_PUSH_EVENTS)[number];
 

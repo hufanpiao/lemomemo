@@ -20,9 +20,14 @@
 //    参照：视觉稿主页签页面顶部起点；另加数值断言：标题上沿 ≥ 62 + 12。
 //
 // 只用 Chromium（和底栏锁定一样：软件光栅化确定，0 像素差能锁住），440×956、@2x（负责人 iPhone 的宽高），简洁皮肤浅深两套。
-// 固定时钟、关光标；只截按钮、行所在的那几块（各往外留 3px；“重试”上沿紧贴报错字，上沿不留），不截时间文字。
+// 固定时钟、关光标；只比按钮、行本身：截图前把元素摆到固定整像素位置、藏掉页面上别的东西，截元素外框往外 3px（见 lock()），不截时间文字。
 // 基准图放法、生成命令同 tabbar-lock.spec.ts 文件头（把 --project 换成 chromium-b2uib-lock）：win32 本机生成、不进仓库；
 // linux 进仓库、CI 用，必须在 ci.yml 同一个镜像里生成。要改基准图，先要负责人新定的需求编号。
+// 基准更新记录：
+//   • 11-14 设置-退出登录-dark.png（linux）：出处 B6 皮肤 78b80fb6，首页加皮肤、字体几行，按钮整体下移 256pt（y 602→858），
+//     下两个圆角边缘 6 个抗锯齿像素差 1～2 级（Chromium 光栅化随绝对位置变）；按钮计算样式逐项不变，旧代码把按钮下挪 256pt 截出来和新代码 0 像素差
+//   • 11-14 改截法（不再随位置误报）：设置页按钮锁定的 18 张图（linux）按 lock() 新写法重生成——元素摆到固定位置 (居中, 120)、
+//     只留元素本身和页面底色；元素自身样式不动、阈值仍 0。随手记顶部 62pt 两张、底栏锁定（fixed 定位、位置不随内容变）不变
 import type { Page } from '@playwright/test';
 import { FIXED_NOW, SAFE_TOP, expect, frames, still, test } from './visual-helpers.ts';
 
@@ -67,15 +72,77 @@ async function calm(page: Page): Promise<void> {
   await frames(page, 3);
 }
 
-/** 截一块：元素外框往外留 PAD（3px），取整到整像素，和基准 0 像素差 */
-async function lock(page: Page, name: string, el: ReturnType<Page['locator']>, msg: string, padTop = PAD): Promise<void> {
-  const b = await el.boundingBox();
-  expect(b, `${name}：找不到要锁的元素`).not.toBeNull();
-  if (b === null) return;
-  const x = Math.max(0, Math.floor(b.x - PAD));
-  const y = Math.max(0, Math.floor(b.y - padTop));
-  const clip = { x, y, width: Math.min(440, Math.ceil(b.x + b.width + PAD)) - x, height: Math.ceil(b.y + b.height + PAD) - y };
-  await expect(page, msg).toHaveScreenshot(`${name}.png`, { clip, maxDiffPixels: 0, threshold: 0 });
+/** 被锁元素截图前摆到的固定位置：上沿 y = LOCK_Y，水平居中取整；都是整 CSS 像素（@2x 下也是整设备像素） */
+const LOCK_Y = 120;
+type Placed = { x: number; y: number; w: number; h: number; tx: number; scrollY: number };
+
+/**
+ * 截一块，只比元素本身（11-14 起）：
+ * Chromium 画圆角的抗锯齿随元素在页面上的绝对位置变（11-14 设置首页加行、“退出登录”下移 256pt，圆角差 6 个像素），
+ * 所以截图前用测试注入把元素摆到固定的整像素位置，再把页面上别的东西都藏起来（visibility，不改布局），只剩元素和页面底色：
+ *   ① 构造样式表（不插 <style>，不碰 CSP）：元素以外的 body 后代 visibility: hidden；元素的祖先 overflow、contain、clip-path、mask 放开，挪出去不被裁；
+ *   ② 元素自身加相对偏移（position: relative 或在原有 top/left 上加），使外框左上角落在 (tx, LOCK_Y)，tx = (440 − 宽) / 2 向下取整；
+ *   ③ 截元素外框往外 PAD（3px），0 像素差；截完把样式、属性都还原，后面接着锁别的不受影响。
+ * 不碰被测组件源码，元素自身的样式（颜色、边框、圆角、字、尺寸）一样不改，锁的仍是 R-276、R-277 的外观。
+ */
+async function lock(page: Page, name: string, el: ReturnType<Page['locator']>, msg: string): Promise<void> {
+  await el.waitFor();
+  const p = await el.evaluate(async (e: Element, y: number): Promise<Placed> => {
+    const h = e as HTMLElement;
+    const raf = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(
+      'body *:not([data-vlock], [data-vlock] *) { visibility: hidden !important; }\n' +
+        '[data-vlock] { visibility: visible !important; }\n' +
+        '[data-vlock-up] { overflow: visible !important; contain: none !important; clip-path: none !important; mask: none !important; }',
+    );
+    const ups: Element[] = [];
+    for (let a = e.parentElement; a !== null; a = a.parentElement) ups.push(a);
+    const keep = ['position', 'top', 'left'].map((k) => [k, h.style.getPropertyValue(k), h.style.getPropertyPriority(k)] as const);
+    (window as unknown as { __vlock: () => void }).__vlock = () => {
+      for (const [k, v, pr] of keep) {
+        if (v === '') h.style.removeProperty(k);
+        else h.style.setProperty(k, v, pr);
+      }
+      e.removeAttribute('data-vlock');
+      for (const a of ups) a.removeAttribute('data-vlock-up');
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== sheet);
+    };
+    e.setAttribute('data-vlock', '');
+    for (const a of ups) a.setAttribute('data-vlock-up', '');
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    await raf();
+    const cs = getComputedStyle(h);
+    let top = 0;
+    let left = 0;
+    if (cs.position === 'static') h.style.setProperty('position', 'relative', 'important');
+    else {
+      top = parseFloat(cs.top) || 0;
+      left = parseFloat(cs.left) || 0;
+    }
+    let r = h.getBoundingClientRect();
+    const tx = Math.floor((440 - r.width) / 2);
+    // 祖先有小数位移时一次挪不准，最多补 4 次
+    for (let i = 0; i < 4 && (r.x !== tx || r.y !== y); i++) {
+      top += y - r.y;
+      left += tx - r.x;
+      h.style.setProperty('top', `${top}px`, 'important');
+      h.style.setProperty('left', `${left}px`, 'important');
+      await raf();
+      r = h.getBoundingClientRect();
+    }
+    await raf();
+    await raf();
+    return { x: r.x, y: r.y, w: r.width, h: r.height, tx, scrollY: window.scrollY };
+  }, LOCK_Y);
+  try {
+    expect([p.x, p.y, p.scrollY], `${name}：没摆到固定位置`).toEqual([p.tx, LOCK_Y, 0]);
+    const clip = { x: p.tx - PAD, y: LOCK_Y - PAD, width: Math.ceil(p.tx + p.w + PAD) - (p.tx - PAD), height: Math.ceil(LOCK_Y + p.h + PAD) - (LOCK_Y - PAD) };
+    await expect(page, msg).toHaveScreenshot(`${name}.png`, { clip, maxDiffPixels: 0, threshold: 0 });
+  } finally {
+    await page.evaluate(() => (window as unknown as { __vlock: () => void }).__vlock());
+    await frames(page, 2);
+  }
 }
 
 const MSG = '设置页按钮外观变了。R-276、R-277 定的外观（D1 ① 一模一样只换实现），改要负责人新需求编号';
@@ -125,8 +192,7 @@ test.describe('设置页按钮视觉锁定（B2-UI-b W4、V4；R-276、R-277，C
       await calm(page);
       await expectCompact(retry, '“重试”');
       await expectRow44(page.getByTestId('settings-delete-entry'), '“注销账号”入口行');
-      // 上沿不留边：紧贴上面那行报错字（文案改了不该算按钮外观变了）
-      await lock(page, `账号-重试-${theme}`, retry, MSG, 0);
+      await lock(page, `账号-重试-${theme}`, retry, MSG);
       await lock(page, `账号-注销入口-${theme}`, page.getByTestId('settings-delete-entry'), MSG);
     });
 

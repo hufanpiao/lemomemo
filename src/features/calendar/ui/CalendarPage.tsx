@@ -1,6 +1,6 @@
 // 月历和周视图页面（B2 FA-3，架构 5.12）：#/calendar（底栏，本月）、#/cal/month/<年-月>、#/cal/week/<日期>
 // • 页顶按 R-101 摆法 B（定稿线框 s2、s3）：第一行标题胶囊“2026年10月 ⌄”/“10月19日–25日 ⌄”，点了弹出年月选择器（MonthPicker，Radix Popover）；
-//   第二行左边“周 / 月 / 纪念日”分段，右边“‹ 今天 ›”（CalNav.tsx）。“纪念日”是 B5 的功能，没做好之前置灰、不跳占位页，点了在页顶提示条里出“纪念日即将推出”，几秒后收起（B2 全站视觉审查 A2）
+//   第二行左边“周 / 月 / 纪念日”分段，右边“‹ 今天 ›”（CalNav.tsx）。“纪念日”（B5）原地换成纪念日页 #/anniv（同一层）；纪念日开关关着时不出这一段
 // • 正文左右滑动翻页、跟手（motion 的 useSwipePager）；电脑键盘 ← → 翻页、T 回今天（焦点在输入框、浮层打开时不生效；日历内部一律原地换、不记历史，R-372）
 // • 离线、又没拉到要显示的节假日：月历上方提示“联网后显示节假日”（5.12 第 1 点）
 // • 点月格某天 / 周视图某条泳道：选中那一天，下面列出当天全部日程和待办（DayList）；默认选中今天（在这一页里时）
@@ -21,8 +21,9 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { monthOf, weekDates } from '../../../../shared/logic/calendar/cal-nav.ts';
-import { navigate, useRoute } from '../../../app/router.ts';
+import { navigate, replaceRoute, useRoute } from '../../../app/router.ts';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
+import { annivOn } from '../../../kit/hooks/anniv-on.ts';
 import { ReadonlyToast, RepeatBanner } from '../../../kit/components/ReadonlyRow.tsx';
 import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import { Appear } from '../../../motion/components.ts';
@@ -107,15 +108,14 @@ function Notice({ offline, ro, t }: { offline: boolean; ro: CalGuard; t: CalView
     <>
       {ro.g.any ? <RepeatBanner onUpdate={ro.g.update} testId="cal-repeat" /> : null}
       <ReadonlyToast guard={ro.g} message={t('cal.readonly', {})} testId="cal-ro-toast" />
-      <NoticeBlock offline={offline} annivSoon={ro.anniv.on} t={t} />
+      <NoticeBlock offline={offline} t={t} />
     </>
   );
 }
 
-function NoticeBlock({ offline, annivSoon, t }: { offline: boolean; annivSoon: boolean; t: CalViewT }) {
+function NoticeBlock({ offline, t }: { offline: boolean; t: CalViewT }) {
   return (
     <div className={styles.notice} role="status" data-testid="cal-notice">
-      {annivSoon ? <p data-testid="cal-anniv-soon">{t('cal.annivSoon', {})}</p> : null}
       {offline ? (
         <p data-testid="cal-offline">
           {t('cal.offline', {})}
@@ -128,26 +128,11 @@ function NoticeBlock({ offline, annivSoon, t }: { offline: boolean; annivSoon: b
   );
 }
 
-/** “纪念日即将推出”留多久 */
-const ANNIV_SOON_MS = 4000;
-
-/** “纪念日”还没做好（A2）：点了出“纪念日即将推出”，几秒后收起；再点重新计时 */
-function useAnnivSoon(): { on: boolean; show(): void } {
-  const [at, setAt] = useState(0);
-  useEffect(() => {
-    if (!at) return undefined;
-    const id = setTimeout(() => setAt(0), ANNIV_SOON_MS);
-    return () => clearTimeout(id);
-  }, [at]);
-  return { on: at !== 0, show: () => setAt(Date.now()) };
-}
-
-/** 只读行（FA-2）和“纪念日即将推出”（A2）：open 打开一条之前先看是不是只读，是就出提示条、不进编辑页 */
+/** 只读行（FA-2）：open 打开一条之前先看是不是只读，是就出提示条、不进编辑页 */
 function useCalGuard() {
   const g = useReadonlyGuard();
-  const anniv = useAnnivSoon();
   const open = (kind: 'event' | 'todo', id: string): void => (g.isRo(kind, id) ? g.block() : void navigate(kind, id));
-  return { g, anniv, open };
+  return { g, open };
 }
 type CalGuard = ReturnType<typeof useCalGuard>;
 
@@ -245,7 +230,7 @@ export default function CalendarPage() {
         onPrev={() => button(-1)}
         onNext={() => button(1)}
         onToday={goToday}
-        onAnniv={ro.anniv.show}
+        {...(annivOn() ? { onAnniv: () => void replaceRoute('anniv') } : {})}
       />
       <Notice offline={model.holidaysOffline} ro={ro} t={t} />
       {/* 正文挂着左右滑动（触摸、笔，跟手）；键盘、鼠标用上面的按钮和 ← → */}

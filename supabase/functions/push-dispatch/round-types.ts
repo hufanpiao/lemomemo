@@ -1,4 +1,5 @@
 // push-dispatch 一轮用的类型、常量和 kindOf；流程总说明在 round.ts 文件头。
+import { ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME } from '../_shared/gen/logic/anniv/keys.ts';
 import type { PayloadInput, PayloadKind } from '../_shared/push/payload.ts';
 import type { DeliverResult, Device, PushOptions } from '../_shared/push/send.ts';
 
@@ -39,7 +40,7 @@ export const DB_NOFN = 'db:nofn';
 export const LOG_SRC = 'push-dispatch';
 /** 本轮要读的设置键 */
 // remind.default_time：全天日程当天提醒的时刻、全天日程的“开始”（架构 0.29 续第 47、57 条；没设、认不出按 09:00，shared/logic/remind.ts 的 allDayTimeOf）
-export const SETTING_KEYS = ['remind.dnd', 'remind.show_title', 'anniv.default_offsets', 'anniv.default_time', 'remind.default_time'] as const;
+export const SETTING_KEYS = ['remind.dnd', 'remind.show_title', ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME, 'remind.default_time'] as const;
 
 /**
  * remind_queue_pop 返回的一项（迁移 20261113100000）。claim 是这一批的租约号（同一批相同；重试模式一批只有 1 项）；为空表示有毒项
@@ -129,7 +130,7 @@ export interface RoundStore {
    * 所以“读完以后用户又改了”靠 rev 判（R-411 整块评审必改 1）；remind_at 条件挡的是别的系统写入抢先写过。
    * 没更新到 = 读完以后行被改了（用户改的话触发器已重新入队），调用方放回队列、这一轮不推
    */
-  writeRemind(table: Table, id: string, userId: string, patch: { remind_at: number | null; next_date?: string | null }, prev: { remind_at: number | null; rev: number }): Promise<boolean>;
+  writeRemind(table: Table, id: string, userId: string, patch: RemindPatch, prev: { remind_at: number | null; rev: number }): Promise<boolean>;
   /**
    * 第 1 步：private.remind_due(lo, hi, perUser, limit)——三张表合起来在 SQL 里按 isDue 的条件精确判断（安全审查必改 1、代码审查 M2：
    * 粗筛按 remind_at 取前 500 会被“remind_at 很早、snooze_at 很远”的行或推过的行占满），只回可用账号的，每人最多 perUser 条，
@@ -162,7 +163,10 @@ export interface NotifyInputLike {
 }
 export type Dnd = { start: string; end: string } | null;
 export interface AnnivCtx { tz: string; now: number; settings: UserSettings }
-export interface AnnivNext { remind_at: number | null; next_date: string | null }
+/** past：已过去的倒数日（shared annivState 的 past，按 current_tz） */
+export interface AnnivNext { remind_at: number | null; next_date: string | null; past: boolean }
+/** 第 0 步、第 6 步写回的列：纪念日另有 next_date；archived_at 只会写成 null（已归档的倒数日改到以后，整块评审第 17 条） */
+export interface RemindPatch { remind_at: number | null; next_date?: string | null; archived_at?: null }
 
 export interface RoundLogic {
   /** shared/logic/remind.ts 的 REMIND_RULES_VER：出队传给 p_ver（规则改了迁移里全量入队、min_ver 记新版本，旧版函数拿不到） */

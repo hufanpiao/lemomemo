@@ -22,6 +22,9 @@ describe('base64url', () => {
     expect(s).not.toMatch(/[+/=]/);
     expect([...fromB64u(s)]).toEqual([...bytes]);
   });
+  it('服务器给的不是 base64url：抛（建凭据、取断言里按失败回 null）', () => {
+    expect(() => fromB64u('a+b/')).toThrow();
+  });
 });
 
 describe('createPasskey、getAssertion', () => {
@@ -33,6 +36,7 @@ describe('createPasskey、getAssertion', () => {
     const pk = (create.mock.calls[0] as unknown as [CredentialCreationOptions])[0].publicKey;
     expect(pk?.authenticatorSelection).toMatchObject({ authenticatorAttachment: 'platform', userVerification: 'required' });
     expect(pk?.rp.id).toBe('lemomemo.com');
+    expect(pk?.pubKeyCredParams).toEqual([{ type: 'public-key', alg: -7 }]);   // 只声明服务器会验的 ES256（M4）
   });
 
   it('解锁：回四项；用户取消（抛 NotAllowedError）回 null', async () => {

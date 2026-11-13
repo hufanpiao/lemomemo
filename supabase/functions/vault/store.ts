@@ -4,9 +4,10 @@
 // • 出错原样抛，由 core.ts 经 common.ts 的 classifyDbError 归类（22、23 类 → 数据不合格，row_quota 的 'quota' → 超行数）。
 // 线上只有 index.ts 用；Vitest 用内存假库，真库由 supabase/tests/store-it/vault-store.it.ts、vault-move.it.ts 以 fn_vault 跑本文件（11-14 起）。
 import type { Tx } from '../_shared/db.ts';
+import { VAULT_IMAGE_BUCKET as VB } from '../_shared/vault-images.ts';
+import { vaultImageKey } from '../_shared/gen/schema/vault.ts';
 import { type CredRow, type ImageAdd, type ImageRow, type NoteRow, type VaultPatch, type VaultRow, type VaultTx } from './common.ts';
 
-const VB = 'vault-images';
 const msOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 const dateOrNull = (ms: number | null | undefined) => (ms === null || ms === undefined ? null : new Date(ms));
 const bytes = (v: unknown): Uint8Array => new Uint8Array(v as ArrayLike<number>);
@@ -28,7 +29,7 @@ function image(r: Record<string, unknown>): ImageRow {
 }
 
 export function vaultStore(tx: Tx, uid: string): VaultTx {
-  const imgPath = (noteId: string, id: string) => `${uid}/${noteId}/${id}.webp`;
+  const imgPath = (noteId: string, id: string) => vaultImageKey(uid, noteId, id, 'full');   // note_images.path 记原图的对象键
   const noteCols = () => tx`id, is_private, deleted_at::float8 as deleted_at, title, body, body_enc, enc_key_id, category_id,
     created_at::float8 as created_at, updated_at::float8 as updated_at`;
   const imgCols = () => tx`id, note_id, bucket, has_thumb, width, height, bytes, deleted_at::float8 as deleted_at`;

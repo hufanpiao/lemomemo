@@ -4,6 +4,7 @@
 
 import { exportMail, platformName, type MailLocale } from '../_shared/account-mail.ts';
 import { readProxyHeaders } from '../_shared/proxy-headers.ts';
+import { VAULT_TOKEN_HEADER, VAULT_TOKEN_MAX_LEN } from '../_shared/vault-token.ts';
 import {
   ACCOUNT_DAILY_LIMIT, type ActiveUser, DAY_S, DbError, type Deps, err, type ExportTable, exportLimits, json, keys, mailInfo, type VaultMode,
 } from './common.ts';
@@ -119,9 +120,9 @@ export function exportRows(t: ExportTable, rows: readonly Record<string, unknown
  * 隐私记令牌定模式（第 93、94 条；start、part 都用）：没带 → omitted；带了就必须有效，否则 401 vault_locked / vault_relock
  */
 export async function vaultMode(req: Request, user: ActiveUser, deps: Deps): Promise<VaultMode | Response> {
-  const token = req.headers.get('x-vault-token');
+  const token = req.headers.get(VAULT_TOKEN_HEADER);
   if (token === null) return 'omitted';
-  if (token === '' || token.length > 2048) return err(401, 'vault_locked');
+  if (token === '' || token.length > VAULT_TOKEN_MAX_LEN) return err(401, 'vault_locked');
   const v = await deps.verifyVaultToken(user.userId, token);
   return v === 'ok' ? 'cipher' : err(401, v);
 }

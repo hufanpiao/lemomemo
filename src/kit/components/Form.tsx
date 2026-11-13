@@ -53,6 +53,8 @@ interface CommitProps {
   'data-testid'?: string;
   /** 换掉默认外观（R-350 待办编辑页的子任务行：无框、和行同高）；不传按 title 选标题框或普通输入框 */
   className?: string | undefined;
+  /** 多行框的行数（TextArea；纪念日编辑页备注收起时一行，视觉稿 annface） */
+  rows?: number;
 }
 
 /**
@@ -157,7 +159,8 @@ export function TextArea({ value, onCommit, ...p }: CommitProps) {
       placeholder={p.disabled ? undefined : p.placeholder}
       aria-label={p['aria-label']}
       data-testid={p['data-testid']}
-      className={styles.area}
+      rows={p.rows}
+      className={p.className ?? styles.area}
       value={d.draft}
       onFocus={() => d.setEditing(true)}
       onChange={(e) => d.setDraft(e.target.value)}

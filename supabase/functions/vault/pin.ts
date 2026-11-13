@@ -7,16 +7,12 @@
 // 不打印 pin、哈希；日志只记错误码。
 import { otpFresh } from '../_shared/otp-fresh.ts';
 import { hexEqual, pinHash } from '../_shared/vault-crypto.ts';
-import { type Ctx, err, keysOf, notifyLater, type Out, out, type ReqOf, type VaultRow, type VaultTx } from './common.ts';
+import { type Base, type Ctx, err, notifyLater, type Out, out, type ReqOf, type VaultRow, type VaultTx } from './common.ts';
 
 const secs = (ms: number) => Math.max(1, Math.ceil(ms / 1000));
 const locked = (untilMs: number, now: number) => err(423, 'pin_locked', { retry_after_s: secs(untilMs - now) });
 
-async function hashOf(c: Ctx, pin: string): Promise<string> {
-  const k = keysOf(c);
-  if (!k) throw new Error('misconfigured');
-  return pinHash(k.pepper, c.userId, pin);
-}
+const hashOf = (c: Ctx, pin: string): Promise<string> => pinHash(c.keys.pepper, c.userId, pin);
 
 /**
  * 锁定中回 423；核对密码：对了清零失败计数、回 null；不对记一次失败（第 5 次锁上并推送），回 403 pin_wrong（带 left，锁上时另带 retry_after_s）。
@@ -44,7 +40,7 @@ export async function checkPin(c: Ctx, t: VaultTx, row: VaultRow, pin: string): 
 }
 
 /** {status}：设没设过、锁到几时、上次重设、绑了几个凭据（不要令牌、不签令牌） */
-export function status(c: Ctx): Promise<Out> {
+export function status(c: Base): Promise<Out> {
   return c.deps.tx(c.userId, async (t) => {
     const row = await t.vault(false);
     if (!row) return out({ set: false, locked_until: null, last_reset_at: null, webauthn: 0 }, null);

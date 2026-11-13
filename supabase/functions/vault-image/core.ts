@@ -11,12 +11,10 @@
 // 不打印请求体、字节、令牌；日志只经 deps.log。
 import { readCapped, readJsonCapped } from '../_shared/body.ts';
 import { json, NO_STORE } from '../_shared/http.ts';
-import type { VaultTokenVerdict } from '../_shared/vault-token.ts';
+import { IMAGE_TYPE, isExists, VAULT_IMAGE_BUCKET as BUCKET } from '../_shared/vault-images.ts';
+import { VAULT_TOKEN_HEADER, type VaultTokenVerdict } from '../_shared/vault-token.ts';
 
-export const IMAGE_TYPE = 'image/webp';
-export const BUCKET = 'vault-images';
 export const RATE_PER_MIN = 30;
-export const TOKEN_HEADER = 'x-vault-token';
 const GET_MAX_BODY = 1024;
 
 export type Part = 'full' | 'thumb';
@@ -59,8 +57,6 @@ export function isWebp(b: Uint8Array): boolean {
   const tag = (from: number) => String.fromCharCode(...b.slice(from, from + 4));
   return tag(0) === 'RIFF' && tag(8) === 'WEBP';
 }
-
-const isExists = (e: unknown) => typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'exists';
 
 function minuteKey(userId: string, ms: number): string {
   return `vault-img-min:${userId}:${new Date(ms).toISOString().slice(0, 16).replace(/[-:]/g, '')}`;
@@ -106,7 +102,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     if (!auth.ok) return auth.response;
     const userId = auth.user.userId;
     if (!(await deps.takeRate(minuteKey(userId, deps.now()), RATE_PER_MIN, 60))) return err(429, 'rate_limited');
-    const v = await deps.checkToken(userId, req.headers.get(TOKEN_HEADER));
+    const v = await deps.checkToken(userId, req.headers.get(VAULT_TOKEN_HEADER));
     if (v.verdict !== 'ok') return err(401, v.verdict);
     if (!deps.r2) {
       deps.log('misconfigured:r2');

@@ -268,4 +268,15 @@ describe('Dialog 的 lead、center（B3 S23，负责人 11-10：麦克风说明�
     // 标题仍然是弹层的可访问名称
     expect(screen.getByRole('dialog', { hidden: true, name: 't' })).toBe(d);
   });
+
+  it('传 aside：标题和它同在一行（.head），它排在标题后面；标题仍是可访问名称，描述照旧在下面', () => {
+    render(<Dialog open onOpenChange={noop} title="t" description="d" aside={<button type="button">恢复默认</button>} />);
+    const d = screen.getByRole('dialog', { hidden: true });
+    const head = d.firstElementChild;
+    expect(head?.className).toBe(styles.head);
+    expect(head?.firstElementChild?.textContent).toBe('t');
+    expect(head?.lastElementChild?.textContent).toBe('恢复默认');
+    expect(head?.nextElementSibling?.textContent).toBe('d');
+    expect(screen.getByRole('dialog', { hidden: true, name: 't' })).toBe(d);
+  });
 });

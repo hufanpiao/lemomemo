@@ -1,0 +1,113 @@
+/* 滚轮（kit，Wheel.tsx）：只用令牌（A11）。
+   • .y：竖着三行（每行 --wheel-h），中间一行是选中项；.x：横着两格（每格 --wheel-w），.start 选中项贴左，否则贴右
+   • 选中项字大、深色；别的项浅色（视觉稿 annnew、annedit）
+   • .panel：几列竖滚轮拼成一块，浅底圆角，中间一行画选中框（框不接点按，点按落到下面的选项上） */
+
+.wheel {
+  --wheel-h: 38px;
+  --wheel-w: 46px;
+
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  border-radius: var(--r-sm);
+}
+
+.wheel::-webkit-scrollbar {
+  display: none;
+}
+
+.wheel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.wheel[aria-disabled='true'] {
+  overflow: hidden;
+  opacity: 0.6;
+}
+
+.item {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  font-family: var(--f-num);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.item[data-on] {
+  color: var(--text);
+  cursor: default;
+}
+
+.y {
+  height: calc(var(--wheel-h) * 3);
+  scroll-snap-type: y mandatory;
+}
+
+.y .item {
+  height: var(--wheel-h);
+  font-size: var(--fs-15);
+}
+
+.y .item[data-wheel-item] {
+  scroll-snap-align: center;
+}
+
+.y .item[data-on] {
+  font-size: var(--fs-17);
+  font-weight: 700;
+}
+
+.x {
+  display: flex;
+  flex: none;
+  width: calc(var(--wheel-w) * 2);
+  height: 56px;
+  scroll-snap-type: x mandatory;
+}
+
+.x .item {
+  width: var(--wheel-w);
+  font-size: var(--fs-17);
+}
+
+.x .item[data-wheel-item] {
+  scroll-snap-align: end;
+}
+
+.x.start .item[data-wheel-item] {
+  scroll-snap-align: start;
+}
+
+.x .item[data-on] {
+  font-size: var(--fs-30);
+}
+
+.panel {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  padding: 0 8px;
+  border-radius: var(--r-lg);
+  background: var(--panel-2);
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  top: calc(50% - 19px);
+  right: 8px;
+  left: 8px;
+  height: 38px;
+  border: 1.5px solid var(--text);
+  border-radius: var(--r-md);
+  pointer-events: none;
+}

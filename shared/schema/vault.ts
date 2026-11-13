@@ -87,6 +87,7 @@ export const vaultRequest = z.discriminatedUnion('action', [
   z.object({ action: z.literal('webauthn_register'), pin, label: z.string().max(WEBAUTHN_LABEL_MAX),
     attestation: z.object({ id: b64u, client_data_json: b64u, attestation_object: b64u }) }),
   z.object({ action: z.literal('list_credentials') }),
+  z.object({ action: z.literal('renew') }),   // 什么都不做、只续期（编辑久了、传图前；回 vaultTokenResponse）
   z.object({ action: z.literal('remove_credential'), credential_id: b64u }),
   z.object({ action: z.literal('list') }),
   z.object({ action: z.literal('save'), id: uuid, title: z.string().max(VAULT_TITLE_MAX), body: z.string().max(VAULT_BODY_MAX),
@@ -102,10 +103,8 @@ export const vaultRequest = z.discriminatedUnion('action', [
 export type VaultRequest = z.infer<typeof vaultRequest>;
 export type VaultAction = VaultRequest['action'];
 
-/** 不要令牌的动作（其余一律要有效 x-vault-token） */
-export const VAULT_OPEN_ACTIONS = ['status', 'setup', 'unlock', 'reset', 'webauthn_options', 'unlock_webauthn'] as const;
-/** 签发或续期令牌、响应必须 no-store 的“解锁系列”（函数和 /sb/* 都不打印响应体） */
-export const VAULT_UNLOCK_ACTIONS = ['setup', 'unlock', 'reset', 'unlock_webauthn', 'change_pin'] as const;
+// 哪些动作不要令牌由 supabase/functions/vault/core.ts 的两个 switch 定（11-14 独立评审：原来这里另列的 VAULT_OPEN_ACTIONS、
+//   VAULT_UNLOCK_ACTIONS 没人用、和 switch 是两份口径，删了）；vault 的响应一律 no-store。
 
 // ---------------- vault 的响应 ----------------
 /** 凡是签发或续期了令牌的成功响应都带这两项 */

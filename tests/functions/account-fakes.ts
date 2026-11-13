@@ -198,6 +198,7 @@ export class FakeDb {
         this.revoked.set(oldS, u);
         this.sessions.delete(oldS);
       },
+      deviceSession: async (u, d) => { this.guard('deviceSession'); const v = this.devices.get(d); return v && v.user_id === u ? v.session_id ?? null : null; },
       deviceLabel: async (u, d) => { const v = this.devices.get(d); return v && v.user_id === u ? { label: v.label, platform: v.platform ?? null } : null; },
       insertLog: async (u, row) => {
         this.guard(`insertLog:${row.act}`);

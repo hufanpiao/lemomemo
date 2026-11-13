@@ -141,7 +141,7 @@ export const FILES_RULES: readonly FilesRule[] = [
         "kind": "avatar",
         "suffix": ".webp",
         "contentType": "image/webp",
-        "maxBytes": 2097152,
+        "maxBytes": 102400,
         "webp": true
       }
     ]

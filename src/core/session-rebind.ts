@@ -3,8 +3,12 @@
 //   ① 主客户端 refreshSession() 拿旧会话 S1 的 access token（只在内存）
 //   ② 一次性客户端（不保存会话，platform/supabase/ephemeral.ts）verifyOtp 拿新会话 S2
 //   ③ 带 S2 调 account {action: 'rebind_device', device_id, old_token: S1}
-//   ④ 成功：主客户端 setSession(S2)（S1 已被服务器吊销）；失败：一次性客户端 signOut({scope: 'local'}) 丢掉 S2，主客户端照旧用 S1，
+//   ④ 成功：主客户端 setSession(S2)（S1 已被服务器吊销）；**明确失败**（服务器回了 4xx：409 rebind_failed、429 rate_limited、
+//      401 reauth_required 等，都在 rpc 之前或 rpc 拒绝，S1 没动）：一次性客户端 signOut({scope: 'local'}) 丢掉 S2，主客户端照旧用 S1，
 //      界面提示重试（TC-B1-86）。rate_limited → “今天重新验证的次数太多，请明天再试”
+//   • **结果不确定**（没拿到响应、5xx；11-14 独立评审 M5）：服务器可能已经吊销了 S1，丢掉 S2 就等于把用户退出登录。所以 S2 留着（只在内存），
+//     当场再发两次交接（服务器对“这台设备行已经挂在 S2 上”回成功，可重入，tests/functions/account-rebind.test.ts）；还不确定就回 offline / try_later，
+//     S2 继续留着，用户再点一次“验证”时不再验码、直接重发交接。setSession(S2) 失败同样留着 S2 下次再试
 // • 本机还没有设备行（deviceId 为 null，比如刚登录、登记还没成功）：没有可交接的行，跳过 ③ 直接 setSession(S2)，
 //   之后 device-reg 照常为 S2 登记（交回里记了这条代定）
 // • old_token 不写日志、不落存储；请求失败只回码
@@ -70,9 +74,76 @@ export function rebindErrOf(status: number, code: unknown): RebindErr {
   return 'unknown';
 }
 
+/** 已经拿到 S2、还没换上的这一次（结果不确定时留到下一次） */
+interface Pending {
+  main: MainAuth;
+  auth: EphemeralAuth;
+  s1: string;
+  s2: SessionPair;
+  deviceId: string | null;
+}
+
+/** 一次交接请求的结果：ok、服务器明确拒了（带码）、不确定（没拿到响应或 5xx） */
+type HandOver = { kind: 'ok' } | { kind: 'refused'; error: RebindErr } | { kind: 'unsure'; error: 'offline' | 'try_later' };
+
+/** 结果不确定时当场再发几次（服务器可重入） */
+export const REBIND_RETRIES = 2;
+
 export function createSessionRebind(d: RebindDeps) {
   let eph: Promise<EphemeralAuth> | null = null;
   const ephemeral = (): Promise<EphemeralAuth> => (eph ??= d.ephemeral());
+  let pending: Pending | null = null;
+
+  async function handOver(p: Pending, deviceId: string): Promise<HandOver> {
+    try {
+      const res = await d.fetch(d.accountUrl, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${p.s2.access_token}`, apikey: d.anonKey, 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'rebind_device', device_id: deviceId, old_token: p.s1 }),
+        cache: 'no-store',
+      });
+      if (res.ok) return { kind: 'ok' };
+      if (res.status >= 500) return { kind: 'unsure', error: 'try_later' };
+      let c: unknown = null;
+      try {
+        c = ((await res.json()) as { error?: unknown } | null)?.error ?? null;
+      } catch {
+        c = null;
+      }
+      return { kind: 'refused', error: rebindErrOf(res.status, c) };
+    } catch {
+      return { kind: 'unsure', error: 'offline' };
+    }
+  }
+
+  /** 丢掉 S2（明确失败时）：主客户端照旧用 S1 */
+  async function drop(p: Pending, error: RebindErr): Promise<RebindResult> {
+    pending = null;
+    try {
+      await p.auth.signOut({ scope: 'local' });
+    } catch {
+      // 内存里的 S2 没了就行
+    }
+    return { ok: false, error };
+  }
+
+  /** ③④：交接（不确定就当场重发）→ 换上 S2 */
+  async function finish(p: Pending): Promise<RebindResult> {
+    if (p.deviceId) {
+      let r = await handOver(p, p.deviceId);
+      for (let i = 0; i < REBIND_RETRIES && r.kind === 'unsure'; i++) r = await handOver(p, p.deviceId);
+      if (r.kind === 'refused') return drop(p, r.error);
+      if (r.kind === 'unsure') return { ok: false, error: r.error };   // S2 留着，下次直接重发
+    }
+    try {
+      const { error } = await p.main.setSession({ access_token: p.s2.access_token, refresh_token: p.s2.refresh_token });
+      if (error) return { ok: false, error: 'try_later' };
+    } catch {
+      return { ok: false, error: 'try_later' };
+    }
+    pending = null;
+    return { ok: true };
+  }
 
   return {
     /** 发邮箱验证码（不建新用户） */
@@ -87,8 +158,9 @@ export function createSessionRebind(d: RebindDeps) {
       }
     },
 
-    /** 验证码 → S2 → 交接 → 换上 S2 */
+    /** 验证码 → S2 → 交接 → 换上 S2；上次结果不确定、S2 还留着时不再验码，直接重发交接 */
     async verifyAndRebind(email: string, code: string, deviceId: string | null): Promise<RebindResult> {
+      if (pending) return finish(pending);
       let main: MainAuth;
       let s1: string;
       try {
@@ -109,42 +181,8 @@ export function createSessionRebind(d: RebindDeps) {
       } catch {
         return { ok: false, error: 'offline' };
       }
-      const drop = async (error: RebindErr): Promise<RebindResult> => {
-        try {
-          await auth.signOut({ scope: 'local' });
-        } catch {
-          // 内存里的 S2 没了就行
-        }
-        return { ok: false, error };
-      };
-      if (deviceId) {
-        try {
-          const res = await d.fetch(d.accountUrl, {
-            method: 'POST',
-            headers: { authorization: `Bearer ${s2.access_token}`, apikey: d.anonKey, 'content-type': 'application/json' },
-            body: JSON.stringify({ action: 'rebind_device', device_id: deviceId, old_token: s1 }),
-            cache: 'no-store',
-          });
-          if (!res.ok) {
-            let c: unknown = null;
-            try {
-              c = ((await res.json()) as { error?: unknown } | null)?.error ?? null;
-            } catch {
-              c = null;
-            }
-            return drop(rebindErrOf(res.status, c));
-          }
-        } catch {
-          return drop('offline');
-        }
-      }
-      try {
-        const { error } = await main.setSession({ access_token: s2.access_token, refresh_token: s2.refresh_token });
-        if (error) return drop('unknown');
-      } catch {
-        return drop('unknown');
-      }
-      return { ok: true };
+      pending = { main, auth, s1, s2, deviceId };
+      return finish(pending);
     },
   };
 }

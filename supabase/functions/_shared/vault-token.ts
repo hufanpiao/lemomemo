@@ -8,8 +8,11 @@
 // 不打印令牌、不抛带内容的错误；不 import npm 包、不碰 Deno 全局（Vitest 直接测）。
 import { b64uDecode, b64uEncode } from './b64url.ts';
 
-export const VAULT_TOKEN_TTL_S = 600;   // 和 shared/schema/vault.ts 的同名常量一致（tests/functions/vault-token.test.ts 核对）
-const MAX_TOKEN_LEN = 512;
+export const VAULT_TOKEN_TTL_S = 600;   // 和 shared/schema/vault.ts 的同名常量一致（tests/shared/vault-parity.test.ts 核对）
+/** 请求头名：vault、vault-image、account 导出都从这里取（和前端 src/core/vault-token.ts 的同名常量一致，tests/shared/vault-parity.test.ts 核对） */
+export const VAULT_TOKEN_HEADER = 'x-vault-token';
+/** 令牌最长多少字符（签出来的约 150 个）；消费方先按它挡超长，再验签名 */
+export const VAULT_TOKEN_MAX_LEN = 512;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 type Bytes = Uint8Array<ArrayBuffer>;
 const enc = new TextEncoder();
@@ -33,7 +36,7 @@ type Parsed = { u: string; e: number; x: number };
 
 /** 只验格式、MAC、user_id、过期；过了回令牌里的 pin_epoch，不过回 null */
 export async function checkVaultTokenSig(secret: Bytes, jwtUserId: string, token: string | null | undefined, nowMs: number): Promise<number | null> {
-  if (!token || token.length > MAX_TOKEN_LEN) return null;
+  if (!token || token.length > VAULT_TOKEN_MAX_LEN) return null;
   const parts = token.split('.');
   if (parts.length !== 3 || parts[0] !== 'v1') return null;
   const [, mid, sig] = parts as [string, string, string];

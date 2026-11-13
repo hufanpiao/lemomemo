@@ -22,8 +22,10 @@
 //   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）。
 // • 待办子任务（R-350 方案 5.2，Q5）：待办行副行下面一行“已勾/总数”和细进度条，不摊开、不在这里勾（点进编辑页勾）；todos 的 TodaySubtasks 按需下载。顶部（日期下面）有带重复的只读行时出
 //   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner；4.1.0 的重复事项 4.0.x 只显示第一次）
+// • 纪念日一行（B5 S14；线框 s1 ANNLINE）：提示块下面、“现在”卡上面，7 天内最近的一个“3 天后 김지민 生日”；用服务器算好的 next_date（hooks/useAnnivSoon.ts → data/anniv-soon.ts），
+//   开关开着、有纪念日才下载 AnnivLine（useAnnivAny；挑哪一条在 AnnivLine 里算，不进首屏；分包下不来那一行不画）
 // • 液态玻璃底栏、“＋”、时间河、提醒按钮条不在这一段（FA-4、FA-7）
-import { Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
@@ -38,6 +40,7 @@ import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
 import { TodayRo } from '../index.ts';
+import { useAnnivAny } from '../hooks/useAnnivAny.ts';
 import { TodaySubtasks } from '../../todos/index.ts';
 import { GrowIn } from './GrowIn.tsx';
 import MicDeniedNote from './MicDeniedNote.tsx';
@@ -108,6 +111,9 @@ function RowMark({ table, id }: { table: 'events' | 'todos'; id: string }) {
   );
 }
 
+/** 纪念日一行（B5）：有纪念日、开关开着才下载 */
+const AnnivLine = lazy(() => import('./AnnivLine.tsx'));
+
 export default function TodayPage() {
   const t = useTodayT();
   const locale = useLocale();
@@ -121,6 +127,7 @@ export default function TodayPage() {
   const a = useListActions('todos', { toggle: d.toggleDone, remove: (id, deleted) => d.remove('todos', id, deleted) }, hv);
   const { g, tick, shown, del } = a;
   const open = (kind: 'event' | 'todo', id: string) => (g.isRo(kind, id) ? g.block() : void navigate(kind, id));
+  const anniv = useAnnivAny();
 
   return (
     <main className={styles.page} data-feature="today" data-testid="today">
@@ -157,6 +164,14 @@ export default function TodayPage() {
           <MicDeniedNote />
         </QuietBoundary>
       </div>
+
+      {anniv ? (
+        <QuietBoundary name="anniv-line">
+          <Suspense fallback={null}>
+            <AnnivLine today={d.today} />
+          </Suspense>
+        </QuietBoundary>
+      ) : null}
 
       <NowCard card={d.card} now={d.now} tz={d.tz} today={d.today} tomorrowFirst={d.tomorrowFirst} />
 

@@ -9,6 +9,7 @@ import { notifyText } from '../../shared/logic/notify-text.ts';
 import { allDayTimeOf, dndDeferUntil, REMIND_RULES_VER, remindAtOf, sameRemindDay } from '../../shared/logic/remind.ts';
 import { startAtOf } from '../../shared/logic/remind-actions.ts';
 import { occurrenceKey, reminderTag } from '../../shared/logic/remind-route.ts';
+import { annivNextOf } from '../../shared/logic/anniv/next-date.ts';
 import type { DispatchStore, HeartbeatDetail, QueueStats } from '../../supabase/functions/push-dispatch/core.ts';
 import { QUEUE_PER_USER, QUEUE_POISON, seoulDay } from '../../supabase/functions/push-dispatch/core.ts';
 import type { DeviceOutcome, DeviceRow, ItemRow, LogRow, Profile, QueueItem, QueueRef, RoundLogic, Table } from '../../supabase/functions/push-dispatch/round.ts';
@@ -18,7 +19,7 @@ import { allManifests } from '../../shared/manifests/index.ts';
 
 /** 和 index.ts 同一份接线（logic.ts 的 makeLogic），名字一一对应，只是从 shared/ 引（tests/edge/push-dispatch-logic-wiring.test.ts 核对） */
 export const LOGIC: RoundLogic = makeLogic({
-  REMIND_RULES_VER, remindAtOf, allDayTimeOf, startAtOf, msAt, parseHm, sameRemindDay, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey,
+  REMIND_RULES_VER, remindAtOf, allDayTimeOf, startAtOf, msAt, parseHm, sameRemindDay, isValidTz, dndDeferUntil, notifyText, t, reminderTag, occurrenceKey, annivNextOf,
 });
 
 export const UA = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -343,12 +344,13 @@ export class MemDb implements DispatchStore {
     const keys: readonly string[] = SETTING_KEYS;
     return new Map(users.filter((u) => this.sets.has(u)).map((u) => [u, Object.fromEntries(Object.entries(this.sets.get(u) ?? {}).filter(([k]) => keys.includes(k)))]));
   }
-  async writeRemind(table: Table, id: string, user: string, patch: { remind_at: number | null; next_date?: string | null }, prev: { remind_at: number | null; rev: number }) {
+  async writeRemind(table: Table, id: string, user: string, patch: { remind_at: number | null; next_date?: string | null; archived_at?: null }, prev: { remind_at: number | null; rev: number }) {
     this.check('writeRemind');
     const r = this.tables[table].get(id);
     if (!r || r.user_id !== user || r.rev !== prev.rev || r.remind_at !== prev.remind_at) return false;   // 乐观条件：rev 和 remind_at 都还是读到的值
     r.remind_at = patch.remind_at;
     if (patch.next_date !== undefined) r.next_date = patch.next_date;
+    if (table === 'anniversaries' && patch.archived_at === null) r['archived_at'] = null;
     return true;
   }
   /** 照 private.remind_due 的 SQL 写（不调 round.ts 的 isDue，两边各写一遍才对得出差异）：精确条件、只回可用账号的、
@@ -358,9 +360,16 @@ export class MemDb implements DispatchStore {
     const c: Ranked[] = [];
     for (const table of TABLES) {
       for (const r of this.tables[table].values()) {
-        if (r.deleted_at !== null || r.undone || (table === 'todos' && r.done) || r.remind_at === null || r.remind_at > hi) continue;
+        const anniv = table === 'anniversaries';
+        if (r.deleted_at !== null || r.undone || (table === 'todos' && r.done) || r.remind_at === null) continue;
+        if (r.remind_at > hi && !(anniv && r.snooze_at !== null && r.snooze_at <= hi)) continue;
         if ((r.notified_for ?? 0) === r.remind_at) continue;
-        const d = Math.max(...[r.remind_at, r.snooze_at, r.defer_until].filter((v): v is number => v !== null));
+        let d = Math.max(...[r.remind_at, r.snooze_at, r.defer_until].filter((v): v is number => v !== null));
+        // 纪念日（迁移 20261114191000）：推过以后的稍后（snooze_at > pushed_for）连同免打扰顺延落在窗口里，按它
+        if (anniv && r.snooze_at !== null && r.snooze_at > (r.pushed_for ?? 0)) {
+          const s = r.defer_until !== null && r.defer_until > r.snooze_at ? r.defer_until : r.snooze_at;
+          if (s > lo && s <= hi) d = s;
+        }
         if (!(d > lo && d <= hi) || (r.pushed_for ?? 0) === d || !this.usable.get(r.user_id)) continue;
         if (!this.devs.some((x) => x.user_id === r.user_id && x.deleted_at === null && x.push_endpoint !== null)) continue;
         c.push({ table, row: r, k: d });
@@ -378,7 +387,10 @@ export class MemDb implements DispatchStore {
         const vs = [r.remind_at, r.snooze_at, r.defer_until].filter((v): v is number => v !== null);
         const d = vs.length ? Math.max(...vs) : null;
         const gone = r.deleted_at !== null || r.undone || (table === 'todos' && r.done);   // R-317
-        if (gone || (r.remind_at !== null && r.notified_for === r.remind_at) || d === null || d !== r.pushed_for) c.push({ table, row: r, k: r.pushed_for });
+        const h = table === 'anniversaries'   // 迁移 20261114191000：纪念日推完 remind_at 已挪到下一次，不拿 d ≠ pushed_for 判
+          ? r.remind_at === null || (r.notified_for ?? 0) >= r.pushed_for || (r.snooze_at ?? 0) > r.pushed_for
+          : (r.remind_at !== null && r.notified_for === r.remind_at) || d === null || d !== r.pushed_for;
+        if (gone || h) c.push({ table, row: r, k: r.pushed_for });
       }
     }
     return perUserCap(c, perUser, limit);

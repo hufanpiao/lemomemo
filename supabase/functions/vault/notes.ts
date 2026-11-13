@@ -8,15 +8,10 @@
 // • delete / undelete：软删和恢复；purge：private.purge_vault_impl，只删已软删的，回删了几条。
 // • 解不开的密文（钥匙换了、数据坏了）不回这一条，记一次 decrypt_failed，不让整张列表失败。
 import { ENC_KEY_ID, aesKeyFor, openNote, sealNote } from '../_shared/vault-crypto.ts';
-import { type Ctx, err, keysOf, type Out, out, type ReqOf, type VaultTx } from './common.ts';
+import { VAULT_IMAGE_BUCKET } from '../_shared/vault-images.ts';
+import { type Ctx, err, type ImageAdd, type Out, out, type ReqOf, type VaultTx } from './common.ts';
 
-export const VAULT_BUCKET = 'vault-images';
-
-async function noteKey(c: Ctx): Promise<CryptoKey> {
-  const k = keysOf(c);
-  if (!k) throw new Error('misconfigured');
-  return aesKeyFor(k.master, c.userId, 'note');
-}
+const noteKey = (c: Ctx): Promise<CryptoKey> => aesKeyFor(c.keys.master, c.userId, 'note');
 
 /** {list}：本人全部隐私记（含已删，回收站要用）和它们的图片行 */
 export async function list(c: Ctx, t: VaultTx): Promise<Out> {
@@ -42,36 +37,37 @@ export async function list(c: Ctx, t: VaultTx): Promise<Out> {
   return out({ notes: items }, null);
 }
 
-/** add_images 的每一张都核对 R2 里真有（缩略图也核），大小不超；回实际大小。没配 R2 抛 misconfigured */
-async function checkUploaded(c: Ctx, noteId: string, add: NonNullable<ReqOf<'save'>['add_images']>): Promise<Map<string, number> | Response> {
+/**
+ * add_images 的每一张都核对 R2 里真有（缩略图也核）、大小不超；回改成实际大小的那几张。没配 R2 抛 misconfigured。
+ * R2 没回长度（contentLength 是 null）当不合格（413）：不退回去信客户端报的 bytes
+ */
+async function checkUploaded(c: Ctx, noteId: string, add: readonly ImageAdd[]): Promise<ImageAdd[] | Response> {
   const { r2, rules } = c.deps;
   if (!r2) throw new Error('misconfigured');
-  const sizes = new Map<string, number>();
+  const checked: ImageAdd[] = [];
   for (const img of add) {
-    const full = await r2.head(VAULT_BUCKET, rules.imageKey(c.userId, noteId, img.id, 'full'));
+    const full = await r2.head(VAULT_IMAGE_BUCKET, rules.imageKey(c.userId, noteId, img.id, 'full'));
     if (!full) return err(404, 'not_found');
-    const n = full.contentLength ?? img.bytes;
-    if (n > rules.imageMaxBytes) return err(413, 'too_large');
-    if (img.has_thumb && !(await r2.head(VAULT_BUCKET, rules.imageKey(c.userId, noteId, img.id, 'thumb')))) return err(404, 'not_found');
-    sizes.set(img.id, n);
+    if (full.contentLength === null || full.contentLength > rules.imageMaxBytes) return err(413, 'too_large');
+    if (img.has_thumb && !(await r2.head(VAULT_IMAGE_BUCKET, rules.imageKey(c.userId, noteId, img.id, 'thumb')))) return err(404, 'not_found');
+    checked.push({ ...img, bytes: full.contentLength });
   }
-  return sizes;
+  return checked;
 }
 
 /** {save, id, title, body, category_id, created_at, updated_at, add_images?, remove_images?} */
 export async function save(c: Ctx, t: VaultTx, r: ReqOf<'save'>): Promise<Out | Response> {
   const cur = await t.note(r.id);
   if (cur && (!cur.is_private || cur.deleted_at !== null)) return err(404, 'not_found');
-  const add = r.add_images ?? [];
-  const sizes = add.length > 0 ? await checkUploaded(c, r.id, add) : new Map<string, number>();
-  if (sizes instanceof Response) return sizes;
+  const add = r.add_images?.length ? await checkUploaded(c, r.id, r.add_images) : [];
+  if (add instanceof Response) return add;
   const body_enc = await sealNote(await noteKey(c), c.userId, r.id, r.title, r.body, ENC_KEY_ID);
   if (cur) {
     if (!(await t.updatePrivateNote(r.id, { body_enc, enc_key_id: ENC_KEY_ID, category_id: r.category_id, updated_at: r.updated_at }))) return err(404, 'not_found');
   } else {
     await t.insertPrivateNote({ id: r.id, body_enc, enc_key_id: ENC_KEY_ID, category_id: r.category_id, created_at: r.created_at, updated_at: r.updated_at });
   }
-  for (const img of add) await t.insertVaultImage(r.id, { ...img, bytes: sizes.get(img.id) ?? img.bytes });
+  for (const img of add) await t.insertVaultImage(r.id, img);
   if (r.remove_images && r.remove_images.length > 0) await t.removeVaultImages(r.id, r.remove_images, c.deps.now());
   return out({}, null);
 }

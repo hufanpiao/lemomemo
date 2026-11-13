@@ -48,6 +48,21 @@ describe('rebind_device', () => {
     expect(db.revoked.has(S1)).toBe(true);
   });
 
+  it('可重入（11-14 独立评审 M5）：上次交接已成功、客户端没拿到响应再发一次 → 200，不再调 rpc、不改行；行挂在别的会话上照旧 rebind_failed', async () => {
+    const { db } = setup();
+    expect((await rebind(db)).status).toBe(200);
+    const calls = db.rebindCalls;
+    const again = await rebind(db);   // S1 已被吊销，按原逻辑验 S1 会回 409
+    expect([again.status, again.text]).toEqual([200, '{"ok":true}']);
+    expect(db.rebindCalls).toBe(calls);
+    expect(db.devices.get(DEV)?.session_id).toBe(S2);
+    const other = setup().db;
+    other.devices.set(DEV, { user_id: A, label: 'iPhone', session_id: 'someone-else' });
+    const r = await rebind(other, { old_token: 'old-token-gone-0123456789' });
+    expect([r.status, code(r)]).toEqual([409, 'rebind_failed']);
+    expect(other.devices.get(DEV)?.session_id).toBe('someone-else');
+  });
+
   it('TC-B1-85 ①～⑤：S1 吊销、别人的 S1、同一个会话、设备不对、otp 过期；一律 rebind_failed 或 reauth_required，D 行不变', async () => {
     const cases: [string, Record<string, unknown>, { otpAgoS?: number }, number, string][] = [
       ['① S1 已吊销', { old_token: 'old-token-gone-0123456789' }, {}, 409, 'rebind_failed'],

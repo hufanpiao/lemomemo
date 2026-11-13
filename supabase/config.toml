@@ -192,7 +192,7 @@ deno_version = 2
 # 401 UNAUTHORIZED_NO_AUTH_HEADER、函数根本调不到（11-03 预览 account-purge 实况，接手清单 PURGE-verify-jwt）；
 # 关了以后鉴权全靠函数自己定长比较 x-cron-secret。用户调的函数（account、invite-admin、invite-signup）留着默认的校验。
 # 规则由 build/check_backend.py F9 固定：cron 调的必须关；另外只有 F9 里写死的 SERVER_SECRET_FUNCTIONS（usage-report → x-ops-secret）
-# 准关、也必须关；别的一律不准关。本批结束时 verify_jwt = false 只有 account-purge、usage-report、push-dispatch 三个（B2 安全审查 D2-4）。
+# 准关、也必须关；别的一律不准关。本批结束时 verify_jwt = false 只有 account-purge、usage-report、push-dispatch 三个（B2 安全审查 D2-4）；B5 加 cron 调的 anniv-roll。
 # B3 起 F9 另有 HASHED_TOKEN_FUNCTIONS（claude-intake → api_tokens，按连接码哈希查表），准关、也必须关，共四个；B4 加 cron 调的 ai-classify，共五个。
 [functions.account-purge]
 verify_jwt = false
@@ -203,6 +203,10 @@ verify_jwt = false
 
 # B4：ai-classify 每 2 分钟由 pg_cron 调（迁移 20261110120000），同样只带 x-cron-secret（架构 5.2；B4 任务单 S6）
 [functions.ai-classify]
+verify_jwt = false
+
+# B5：anniv-roll 每天 00:10 UTC 由 pg_cron 调（迁移 20261113181000），同样只带 x-cron-secret（架构第 6 节；B5 任务单 S13）
+[functions.anniv-roll]
 verify_jwt = false
 
 # B2（安全审查 D2）：usage-report 由独立 Worker lemo-ops 调，鉴权是 x-ops-secret（函数里 safeEqual 定长比较）；

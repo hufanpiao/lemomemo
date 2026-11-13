@@ -1,0 +1,607 @@
+/* 纪念日页面（B5 S14～S16；线框 s4、s5；皮肤视觉稿 anniv、annnew、annedit、annface）：只用令牌（A11），两套皮肤、深浅色都由令牌决定。
+   “最近的一个”大卡不用液态玻璃（R-144），电脑不加边框（R-141）；列表行用 kit 的 List.module.css */
+
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 12px) 16px var(--tabbar-pad);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--hit);
+  margin-bottom: 8px;
+}
+
+.h1 {
+  margin: 0;
+  font-size: var(--fs-26);
+  font-weight: 700;
+}
+
+.topEnd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.newBtn {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-14);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* 分段（周 / 月 / 纪念日；编辑页的类型、阳历阴历）：写法同日历页 .seg，整行宽、各段平分 */
+.seg {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+}
+
+.segBtn {
+  position: relative;
+  flex: 1;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.segBtn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.segBtn[aria-pressed='true'] {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+.segBtn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* 筛选胶囊、提醒天数胶囊 */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.chip {
+  position: relative;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+.chip::after {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+
+.chip[aria-pressed='true'] {
+  border-color: var(--chip-on-bg);
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+/* “最近的一个”大卡（R-132 方案 C） */
+.near {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 14px 16px 16px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nearHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+}
+
+/* 头像钉在右上角，跨标签和大号天数两行（视觉稿 anniv），不把天数往下挤 */
+.nearAv {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+}
+
+.nearTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: var(--klv-bg);
+  color: var(--klv-fg);
+  font-size: var(--fs-12);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.nearDays {
+  font-size: var(--fs-16);
+}
+
+/* 大号天数下面一笔荧光笔底（简洁浅色有颜色，别的皮肤 --now-hl 是透明） */
+.nearNum {
+  padding: 0 2px;
+  background: linear-gradient(transparent 58%, var(--now-hl) 58%);
+  font-family: var(--f-num);
+  font-size: var(--fs-44);
+  font-weight: 400;
+  line-height: 1.1;
+}
+
+.nearToday {
+  font-size: var(--fs-28);
+  font-weight: 600;
+}
+
+.nearTitle {
+  font-size: var(--fs-18);
+}
+
+.nearMeta {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 列表一行 64px（视觉稿 anniv：36px 头像、名字和副行两行）。kit 的 List.module.css 也给 .row 写了 min-height，
+   两份 CSS 谁后插进页面不一定，所以带上列表的类、优先级高一级 */
+.rows .row {
+  min-height: 64px;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-11);
+}
+
+.days {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--f-num);
+  font-size: var(--fs-22);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.days small {
+  margin-left: 2px;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+}
+
+.past {
+  margin-top: 12px;
+}
+
+.pastSum {
+  min-height: var(--hit);
+  padding: 12px 4px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+/* ───────── 编辑层：手机整屏从下面上来，电脑右侧抽屉 ───────── */
+
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+}
+
+/* 手机：从底部滑上来的一层，顶上留一条缝、圆角，下面的列表隔着遮罩看得见（视觉稿 annnew、annedit）；电脑见下面的右侧抽屉 */
+.sheet {
+  position: absolute;
+  inset: calc(var(--inset-top, 0px) + 12px) 0 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: calc(var(--inset-bottom, 0px) + 24px);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  background: var(--bg);
+  animation: anniv-sheet-in var(--dur-sheet) var(--ease-drawer) both;
+}
+
+@keyframes anniv-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes anniv-sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 减少动态效果（data-rm：设置里的开关或系统设置，platform/look.ts 统一写）：只淡入 */
+:global(:root[data-rm="1"]) .sheet {
+  animation-name: anniv-sheet-fade;
+}
+
+@media (width >= 900px) {
+  .sheet {
+    inset: 0 0 0 auto;
+    border-radius: 0;
+    width: 440px;
+    background: var(--b-drawer);
+    box-shadow: var(--b-drawer-shadow);
+  }
+}
+
+/* 年月日滚轮那一块（kit 的 WheelPanel）的上下间距 */
+.wheels {
+  margin: 4px 0 6px;
+}
+
+/* 新建页：头像圆圈在名字左边（视觉稿 annnew） */
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.nameRow > :last-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 头像右下角的小图标：表示点了可以加头像 */
+.avBadge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--text);
+  border-radius: 50%;
+  background: var(--panel);
+}
+
+.avBadge::after {
+  content: '';
+  position: absolute;
+  inset: 4px 3.5px;
+  border: 1.5px solid var(--text);
+  border-radius: 2px;
+}
+
+/* 日期一行展开时箭头朝下 */
+.chev[data-open] {
+  display: inline-block;
+  rotate: 90deg;
+}
+
+/* 提醒时刻滚轮（视觉稿 annedit）：浅底胶囊，中间“09 : 00”大字，两边浅色露出上一个钟点、下一个分钟 */
+.timeWheel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6px 0 4px;
+  border-radius: var(--r-xl);
+  background: var(--panel-2);
+}
+
+.timeColon {
+  padding: 0 2px;
+  font-family: var(--f-num);
+  font-size: var(--fs-30);
+  line-height: 1;
+}
+
+.switchRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: var(--hit);
+}
+
+.hint {
+  margin: 2px 0 6px;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+/* 编辑页卡片下面一行灰字“下一次：…”（视觉稿 annface，不做带色条的卡） */
+.nextLine {
+  margin: -4px 4px 12px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+/* 编辑页名字、备注（视觉稿 annface）：看起来就是右对齐的文字，没有灰底框；聚焦时出浅底，看得出在改。字号 16px 防 iOS 聚焦放大 */
+.inlineIn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--r-inp);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);
+  text-align: right;
+}
+
+.inlineIn::placeholder {
+  color: var(--text-2);
+}
+
+.inlineIn:focus {
+  background: var(--inp-bg);
+}
+
+/* 键盘聚焦的框和 kit 输入框同一套（Form.module.css） */
+.inlineIn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.inlineIn:disabled {
+  color: var(--text-2);
+}
+
+/* 备注：收起一行（多出来的不显示），点进去左对齐、撑高写多行 */
+.inlineArea {
+  height: 36px;
+  overflow: hidden;
+  resize: none;
+  line-height: 28px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.inlineArea:focus {
+  height: 96px;
+  overflow: auto;
+  line-height: 1.5;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.rowBtn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--hit);
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-14);
+  text-align: right;
+  cursor: pointer;
+}
+
+.chev {
+  color: var(--text-2);
+}
+
+.avRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.avBtn {
+  position: relative;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.avBtn:disabled {
+  cursor: default;
+}
+
+.avText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.avTitle {
+  font-size: var(--fs-15);
+}
+
+/* 提醒弹层。“恢复默认”：标题同一行右边的小字（视觉稿 annedit 弹层，经 kit Dialog 的 aside），不做成大按钮 */
+.rmReset {
+  position: relative;
+  min-height: 32px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+.rmReset::after {
+  content: '';
+  position: absolute;
+  inset: -6px -8px;
+}
+
+.rmReset:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* 弹层里提前几天的选项（视觉稿 annedit）：没选的只写字、不描边，选上的深色底带“✓” */
+.rmChip {
+  border-color: transparent;
+}
+
+.rmChip[aria-pressed='true']::before {
+  content: '✓';
+  margin-right: 4px;
+}
+
+.rmLabel {
+  margin: 12px 0 0;
+  font-size: var(--fs-14);
+}
+
+.rmCustom {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.num {
+  width: 9em;
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-inp);
+  background: var(--inp-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16); /* iOS 聚焦不放大页面（≥ 16px） */
+}
+
+.warn {
+  margin: 6px 0 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+/* 头像选区 */
+.crop {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  margin: 8px auto 12px;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  touch-action: none;
+  cursor: grab;
+}
+
+.cropImg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  transform-origin: 0 0;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* 圆形示意：圆外压暗 */
+.cropMask {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 200px var(--scrim);
+  pointer-events: none;
+}
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-14);
+}
+
+.zoom input {
+  flex: 1;
+  min-height: var(--hit);
+}
+
+.cropActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}

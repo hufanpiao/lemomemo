@@ -12,28 +12,19 @@ import { withAiUser } from '../_shared/db.ts';
 import { codeLogger } from '../_shared/fn-log.ts';
 import { json } from '../_shared/http.ts';
 import { timedFetch } from '../_shared/net.ts';
+import { r2FromEnv } from '../_shared/objstore-env.ts';
+import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { decodeKey32 } from '../_shared/vault-crypto.ts';
+import { pinEpoch } from '../_shared/vault-epoch.ts';
 import { vaultTokenChecker } from '../_shared/vault-token.ts';
-import { createObjStore } from '../_shared/gen/objstore.ts';
 import { VAULT_IMAGE_MAX_BYTES, vaultImageGet, vaultImageKey, vaultImageUploadQuery } from '../_shared/gen/schema/vault.ts';
-import { handle, type Obj } from './core.ts';
-import { imageMeta, ownsPrivateNote, pinEpoch } from './store.ts';
+import { handle } from './core.ts';
+import { imageMeta, ownsPrivateNote } from './store.ts';
 
 const log = codeLogger('vault-image');
 
-function makeR2(): Obj | null {
-  const endpoint = Deno.env.get('R2_ENDPOINT');
-  const accessKeyId = Deno.env.get('R2_FN_ACCESS_KEY_ID');
-  const secretAccessKey = Deno.env.get('R2_FN_SECRET_ACCESS_KEY');
-  if (!endpoint || !accessKeyId || !secretAccessKey) return null;
-  return createObjStore({
-    endpoint, accessKeyId, secretAccessKey, bucketPrefix: Deno.env.get('R2_BUCKET_PREFIX') ?? '',
-    fetch: (url, init) => timedFetch(fetch)(url, init as RequestInit), now: () => Date.now(),
-  });
-}
-
-const R2 = makeR2();
+const R2 = r2FromEnv();
 const checkToken = vaultTokenChecker(decodeKey32(Deno.env.get('VAULT_TOKEN_SECRET')), Date.now, (uid) => withAiUser(uid, (tx) => pinEpoch(tx, uid)), log);
 
 Deno.serve((req) => {
@@ -44,7 +35,6 @@ Deno.serve((req) => {
     return json(500, { error: 'misconfigured' });
   }
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: timedFetch(fetch, STORE_TIMEOUT_MS) } });
-  const priv = admin.schema('private');
   return handle(req, {
     async authenticate(r) {
       try {
@@ -54,11 +44,7 @@ Deno.serve((req) => {
         throw e;
       }
     },
-    async takeRate(k, limit, windowS) {
-      const { data, error } = await priv.rpc('take_rate', { p_key: k, p_limit: limit, p_window_s: windowS });
-      if (error || typeof data !== 'boolean') throw new Error('db');
-      return data;
-    },
+    takeRate: rpcTakeRate(admin),
     checkToken,
     parseUpload(q) {
       const p = vaultImageUploadQuery.safeParse(q);

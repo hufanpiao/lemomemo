@@ -130,6 +130,8 @@ export interface AccountStore {
    * rpc 拒绝（raise exception 的各种码）一律抛 DbError('rebind_failed')；别的错误照抛（回 try_later）
    */
   rebindDevice(userId: string, deviceId: string, oldSession: string, newSession: string): Promise<void>;
+  /** 本人这台设备行现在挂在哪个会话上（没有这一行回 null）：rebind_device 判断“已经交接过了”用（客户端没拿到上次的响应、再发一次） */
+  deviceSession(userId: string, deviceId: string): Promise<string | null>;
 }
 
 export class DbError extends Error {

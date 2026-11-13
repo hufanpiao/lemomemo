@@ -20,6 +20,7 @@ export type VaultReq =
   | { action: 'change_pin'; old_pin: string; new_pin: string }
   | { action: 'webauthn_register'; pin: string; label: string; attestation: { id: string; client_data_json: string; attestation_object: string } }
   | { action: 'list_credentials' }
+  | { action: 'renew' }
   | { action: 'remove_credential'; credential_id: string }
   | { action: 'list' }
   | {
@@ -42,12 +43,16 @@ export interface VaultRules {
   challengeTtlS: number;
   rpId: string;
   imageMaxBytes: number;
-  openActions: readonly string[];
   imageKey(userId: string, noteId: string, imageId: string, part: 'full' | 'thumb'): string;
 }
 
-/** 三把钥匙（index.ts 用 decodeKey32 解；解不出就是 null，用到时回 misconfigured） */
+/** 三把钥匙（index.ts 用 decodeKey32 解；解不出就是 null） */
 export interface VaultKeys { master: Bytes | null; pepper: Bytes | null; tokenSecret: Bytes | null }
+/** 三把都在：core.ts 的 handle 判一次（缺一把回 misconfigured），之后经 Ctx.keys 传给各动作，不再各自判空 */
+export interface FullKeys { master: Bytes; pepper: Bytes; tokenSecret: Bytes }
+export function fullKeys(k: VaultKeys): FullKeys | null {
+  return k.master && k.pepper && k.tokenSecret ? { master: k.master, pepper: k.pepper, tokenSecret: k.tokenSecret } : null;
+}
 
 // ---------------- 数据库（index.ts 经 withVaultUser 的 fn_vault 事务实现，store.ts；测试用内存假库） ----------------
 /** 时刻一律毫秒 */
@@ -162,7 +167,10 @@ export interface Deps {
   log(code: string): void;
 }
 
-export interface Ctx { req: Request; userId: string; jwt: string; deps: Deps }
+/** status 用（不要钥匙：钥匙没配好时 status 照常回） */
+export interface Base { req: Request; userId: string; jwt: string; deps: Deps }
+/** 其余动作用：钥匙已经判过；pushes 是处理中攒下的推送，core.ts 在处理完（事务已提交）以后才发 */
+export interface Ctx extends Base { keys: FullKeys; pushes: VaultPushEvent[] }
 
 /** 处理成功：body 是响应体（不含 ok）；epoch 不为 null 时签一张新令牌放进响应（解锁、续期） */
 export interface Out { body: Record<string, unknown>; epoch: number | null }
@@ -174,16 +182,12 @@ export type VaultErrCode =
   | 'bad_request' | 'method_not_allowed';
 export const err = (status: number, code: VaultErrCode, extra: Record<string, unknown> = {}) => json(status, { error: code, ...extra });
 
-/** 三把钥匙都要（用到时才取，没配好记一次日志） */
-export function keysOf(c: Ctx): { master: Bytes; pepper: Bytes; tokenSecret: Bytes } | null {
-  const { master, pepper, tokenSecret } = c.deps.keys;
-  if (!master || !pepper || !tokenSecret) return null;
-  return { master, pepper, tokenSecret };
-}
-
-/** 响应之后推送（失败不影响主流程） */
+/**
+ * 记下一条要推送的事件。不当场发：事务里调用时库还没提交（锁定、改密码、绑定），提交失败就不该通知。
+ * core.ts 的 handle 在处理函数正常返回（各事务都已提交）以后统一发；处理中抛错（回滚、回 try_later）就整批丢掉
+ */
 export function notifyLater(c: Ctx, event: VaultPushEvent): void {
-  c.deps.background(c.deps.notify(c.userId, event).catch(() => c.deps.log(`push_failed:${event}`)));
+  c.pushes.push(event);
 }
 
 /** 每分钟限流的键（附录 A 三段写法，第三段 UTC 分钟 yyyymmddThhmm，同 ai-min） */

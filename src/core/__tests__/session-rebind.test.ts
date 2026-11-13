@@ -38,13 +38,56 @@ describe('verifyAndRebind', () => {
     expect(main.setSession).not.toHaveBeenCalled();
   });
 
-  it('次数太多：rate_limited；断网：offline；两种都丢掉 S2', async () => {
+  it('次数太多：rate_limited，丢掉 S2；别的 4xx（reauth_required、400）同样算明确失败', async () => {
     const a = make({ account: () => new Response('{"error":"rate_limited"}', { status: 429 }) });
     expect(await a.r.verifyAndRebind('a@b.c', '123456', 'dev-1')).toEqual({ ok: false, error: 'rate_limited' });
     expect(a.eph.signOut).toHaveBeenCalled();
-    const b = make({ account: () => Promise.reject(new TypeError('net')) });
-    expect(await b.r.verifyAndRebind('a@b.c', '123456', 'dev-1')).toEqual({ ok: false, error: 'offline' });
+    const b = make({ account: () => new Response('{"error":"reauth_required"}', { status: 401 }) });
+    expect(await b.r.verifyAndRebind('a@b.c', '123456', 'dev-1')).toEqual({ ok: false, error: 'reauth_required' });
+    expect(b.eph.signOut).toHaveBeenCalled();
     expect(b.main.setSession).not.toHaveBeenCalled();
+  });
+
+  it('M5 结果不确定（断网、5xx）：S2 留着、当场重发交接；重发成功就换上 S2', async () => {
+    const replies = [() => Promise.reject(new TypeError('net')), () => new Response('{"error":"try_later"}', { status: 503 }), () => new Response('{"ok":true}', { status: 200 })];
+    let i = 0;
+    const { r, eph, main, fetch } = make({
+      account: () => {
+        const f = replies[Math.min(i++, 2)];
+        return f ? f() : new Response('{}', { status: 500 });
+      },
+    });
+    expect(await r.verifyAndRebind('a@b.c', '123456', 'dev-1')).toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(eph.signOut).not.toHaveBeenCalled();
+    expect(main.setSession).toHaveBeenCalledWith(S2);
+  });
+
+  it('M5 重发几次还不确定：回 offline，S2 不丢；用户再点一次时不再验码、直接重发交接，成功换上 S2', async () => {
+    let online = false;
+    const { r, eph, main, fetch } = make({ account: () => (online ? new Response('{"ok":true}', { status: 200 }) : Promise.reject(new TypeError('net'))) });
+    expect(await r.verifyAndRebind('a@b.c', '123456', 'dev-1')).toEqual({ ok: false, error: 'offline' });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(eph.signOut).not.toHaveBeenCalled();
+    expect(main.setSession).not.toHaveBeenCalled();
+    online = true;
+    expect(await r.verifyAndRebind('a@b.c', '', 'dev-1')).toEqual({ ok: true });
+    expect(eph.verifyOtp).toHaveBeenCalledTimes(1);
+    expect(main.refreshSession).toHaveBeenCalledTimes(1);
+    expect(main.setSession).toHaveBeenCalledWith(S2);
+    // 成功以后不再留着：下一次又是完整的一轮
+    expect(await r.verifyAndRebind('a@b.c', '123456', 'dev-1')).toEqual({ ok: true });
+    expect(eph.verifyOtp).toHaveBeenCalledTimes(2);
+  });
+
+  it('M5 交接成功但 setSession 失败：S2 不丢（S1 已被吊销），回 try_later；再点一次重发交接（服务器可重入）后换上', async () => {
+    const { r, eph, main, fetch } = make();
+    vi.mocked(main.setSession).mockResolvedValueOnce({ error: new Error('storage') });
+    expect(await r.verifyAndRebind('a@b.c', '123456', 'dev-1')).toEqual({ ok: false, error: 'try_later' });
+    expect(eph.signOut).not.toHaveBeenCalled();
+    expect(await r.verifyAndRebind('a@b.c', '123456', 'dev-1')).toEqual({ ok: true });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(eph.verifyOtp).toHaveBeenCalledTimes(1);
   });
 
   it('验证码不对：不调 account，不换会话', async () => {

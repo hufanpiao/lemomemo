@@ -114,6 +114,32 @@ describe('reset 和 change_pin 之后（TC-B5-04、05、16）', () => {
     expect((await call(w, { action: 'list' }, { token: mid })).body.error).toBe('vault_relock');
   });
 
+  it('推送在事务提交以后才发：事务抛错（回滚）时攒下的推送整批丢掉；正常提交的照发', async () => {
+    const w = world();
+    const tok = await unlocked(w);
+    const run = w.db.run.bind(w.db);
+    let n = 0;
+    w.deps.tx = (uid, fn) => run(uid, async (t) => {
+      const r = await fn(t);
+      if (++n === 1) throw new Error('commit');   // 验令牌和改密码在同一个事务里：做完了但提交失败
+      return r;
+    });
+    expect((await call(w, { action: 'change_pin', old_pin: '1234', new_pin: '5678' }, { token: tok })).status).toBe(503);
+    expect(w.pushes).toEqual([]);
+    w.deps.tx = run;
+    expect((await call(w, { action: 'change_pin', old_pin: '1234', new_pin: '5678' }, { token: tok })).status).toBe(200);
+    expect(w.pushes.map((p) => p.event)).toEqual(['pin_changed']);
+  });
+
+  it('renew：只续期，回新令牌；不带令牌回 vault_locked', async () => {
+    const w = world();
+    const tok = await unlocked(w);
+    const r = await call(w, { action: 'renew' }, { token: tok });
+    expect(r.status).toBe(200);
+    expect(typeof r.body.vault_token).toBe('string');
+    expect((await call(w, { action: 'renew' })).body.error).toBe('vault_locked');
+  });
+
   it('推送和发信失败不影响主流程，只记错误码', async () => {
     const w = world({ notify: async () => { throw new Error('x'); }, resetMail: async () => { throw new Error('x'); } });
     await call(w, { action: 'setup', pin: '1234' });

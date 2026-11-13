@@ -6,26 +6,43 @@
 //   两步做完才 armed（kit 的 armedSince；今天页等它才挂“错过的提醒”，修订 1 P2）；新记下的每分钟最多写回一次，本机弹过系统通知的马上写，
 //   页面藏起、关掉（pagehide、visibilitychange 变成 hidden）时补写一次；
 //   exe 每分钟检查交 showLocalReminder 弹、别处处理了 closeLocalReminder 撤回（不写 pushed_for）；打开 App、回到前台时用 getNotifications() 关掉已处理的通知
-// • useRemindActions：知道了、稍后（写 notified_for / snooze_at，经 data/remind-write）、完成待办；处理完从队列拿掉，稍后弹 2 秒“15:25 再提醒你”
+// • useRemindActions：知道了、稍后（写 notified_for / snooze_at，经 data/remind-write）、完成待办；处理完从队列拿掉，稍后弹 2 秒“15:25 再提醒你”；
+//   纪念日“生成待办”（B5 S15）新建一条截止在纪念日前一天的待办（from_anniv_id 记来源），建成了按“知道了”处理
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getBoot } from '../../../core/boot.ts';
 import { actionResult, type ActionResult as ActResult } from '../../../core/action-result.ts';
 import { savePatch } from '../../../core/edit-save.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { currentTz } from '../../../core/current-tz.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { pruneCollapsed, remindQueue, removeRinging, resetRemindQueue, setRemindArmed, setRinging, setSnoozeNote, holdReminders, useRemindQueue } from '../../../kit/state/remind-queue.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { closeLocalReminder, showLocalReminder } from '../../../platform/native-bridge.ts';
 import { closeHandledNotifications } from '../../../platform/notifications.ts';
 import { isKeyboardOpen, watchKeyboard } from '../../../platform/viewport.ts';
+import { todayOf } from '../../../../shared/core/date.ts';
 import { actionsFor, type RemindAction } from '../../../../shared/logic/remind-actions.ts';
+import { ANNIV_KEY_TIME, remindTimeOf } from '../../../../shared/logic/anniv/keys.ts';
 import { localDue, localText, shouldCloseShown, shownKey, staleShown } from '../data/local-notify.ts';
 import { MISSED_WINDOW_MS, occurrenceKey, ringing, type Reminder } from '../data/reminder-model.ts';
-import { ackAll as ackAllWrite, ackReminder, snoozeReminder, timingPending, type OutboxLikeItem } from '../data/remind-write.ts';
+import { ackAll as ackAllWrite, ackReminder, annivTodoDue, annivTodoRow, genTodoFromAnniv, snoozeReminder, timingPending, type OutboxLikeItem } from '../data/remind-write.ts';
 import type { dndOf } from '../data/remind-settings.ts';
 import { rangView, readSeen, writeSeen } from '../data/remind-seen.ts';
-import { ackLocally, clearRang, clearSessionAcked as clearAckedHere, loadRang, putBackDirtyRang, recordRang, setPushedRang, takeDirtyRang, useRangView, useReminderList, useRemindPrefs } from './remind-list.ts';
+import { useRemindT } from './useRemindT.ts';
+import {
+  ackLocally,
+  clearRang,
+  clearSessionAcked as clearAckedHere,
+  loadRang,
+  putBackDirtyRang,
+  recordRang,
+  setPushedRang,
+  takeDirtyRang,
+  useRangView,
+  useReminderList,
+  useRemindPrefs,
+} from './remind-list.ts';
 
 // 算列表那一部分拆到 remind-list.ts（首屏瘦身 H1 第三轮），别处照旧从这里引
 export { rangSnapshot, useReminderList, useRemindPrefs } from './remind-list.ts';
@@ -63,10 +80,20 @@ function clearSessionAcked(): void {
   clearAckedHere();
 }
 
-/** 这一条的按钮（按 current_tz、免打扰、remind.default_time） */
-export function actionsOf(r: Reminder, now: number, tz: string, prefs: { dnd: ReturnType<typeof dndOf>; defaultTime: string }): RemindAction[] {
+/** 这一条的按钮（按 current_tz、免打扰、remind.default_time；纪念日“明天再提醒”用这一条的 remind_time，没有用 anniv.default_time） */
+export function actionsOf(
+  r: Reminder,
+  now: number,
+  tz: string,
+  prefs: { dnd: ReturnType<typeof dndOf>; defaultTime: string; annivDefault?: unknown },
+): RemindAction[] {
   const opts = { dnd: prefs.dnd, defaultTime: prefs.defaultTime };
   if (r.kind === 'todo') return actionsFor(r.row, 'todo', now, tz, opts);
+  if (r.kind === 'anniv') {
+    const own = r.row['remind_time'];
+    const annivTime = remindTimeOf({ remind_time: typeof own === 'string' ? own : null }, { [ANNIV_KEY_TIME]: prefs.annivDefault });
+    return actionsFor(r.row, 'anniv', now, tz, { ...opts, annivTime });
+  }
   const date = typeof r.row['date'] === 'string' ? r.row['date'] : '';
   const time = typeof r.row['time'] === 'string' ? r.row['time'] : null;
   const rtz = typeof r.row['tz'] === 'string' ? r.row['tz'] : null;
@@ -306,12 +333,29 @@ export function useRemindActions() {
   const prefs = useRemindPrefs();
   const prefsRef = useRef(prefs);
   prefsRef.current = prefs;
+  const t = useRemindT();
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const act = useCallback(async (r: Reminder, shown: RemindAction): Promise<ActResult> => {
     const now = clock.now();
     // 按点按那一刻重新算时刻（代码审查低 1）：按钮可能是几分钟前渲染的，“10 分钟后”要从现在起算；这一刻已经没有这个按钮了（如离开始不到 60 秒）就按原样
     const a = actionsOf(r, now, currentTz(), prefsRef.current).find((x) => x.key === shown.key) ?? shown;
-    if (a.key === 'genTodo') return 'failed';   // 纪念日（B5）
+    if (a.key === 'genTodo') {
+      // 纪念日“生成待办”（B5 S15）：截止在这一次纪念日的前一天（reminder-model 算提醒时一起算好的 annivDate）；
+      //   纪念日当天（或已过）按的，截止取今天，不生成一条一出来就逾期的待办（整块评审第 14 条）。结果记一行运行日志（第 6 条）
+      const date = r.annivDate;
+      if (date === undefined) {
+        rlog('anniv gen-todo no_date');
+        return 'failed';
+      }
+      const due = annivTodoDue(date, todayOf(now, currentTz()));
+      const row = annivTodoRow(crypto.randomUUID(), tRef.current('remind.genTodo.title', { name: r.title }), due, r.id, now);
+      const res = actionResult(await genTodoFromAnniv(r, row, now));
+      rlog(`anniv gen-todo ${res}`);
+      if (res === 'ok') removeRinging(r.tag);
+      return res;
+    }
     if (a.key === 'ack') {
       if (timingPending(r, await outboxItems())) {
         ackOnlyHere(r);

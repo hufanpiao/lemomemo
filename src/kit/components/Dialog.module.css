@@ -37,6 +37,14 @@
   font-size: var(--fs-18);
 }
 
+/* 标题行右边有东西时（Dialog 的 aside）：标题在左、它在右，同一行 */
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .desc {
   margin: 0 0 12px;
   color: var(--text-2);

@@ -64,7 +64,9 @@ export function UnlockPanel({ onCancel, onForgot, testId = 'vault-unlock' }: { o
     </p>
   ) : null;
 
-  if (mode === 'card' && canFace && !locked) {
+  // 密码锁定期间照样给 Face ID（服务器锁定期也放行 WebAuthn：生物识别本身就是更强的验证，vault/webauthn.ts 的 unlockWebauthn）；
+  // 连续两次没认出照旧换成密码键盘（D18），那时键盘显示倒计时
+  if (mode === 'card' && canFace) {
     return (
       <div className={styles.card} data-testid={`${testId}-card`}>
         {relock}

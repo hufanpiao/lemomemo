@@ -18,19 +18,20 @@ import { json } from '../_shared/http.ts';
 import { mailLocale, skipTestRecipients, vaultResetMail } from '../_shared/account-mail.ts';
 import { sendMail } from '../_shared/mail-send.ts';
 import { timedFetch } from '../_shared/net.ts';
+import { r2FromEnv } from '../_shared/objstore-env.ts';
 import { buildPayload } from '../_shared/push/payload.ts';
 import { cachedVapid, pushToDevices } from '../_shared/push/notify.ts';
 import { resolveOverride } from '../_shared/push/stub.ts';
+import { rpcTakeRate } from '../_shared/take-rate.ts';
 import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { decodeKey32 } from '../_shared/vault-crypto.ts';
 import { versionGate } from '../_shared/version-gate.ts';
-import { createObjStore } from '../_shared/gen/objstore.ts';
 import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
 import {
-  lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL, VAULT_IMAGE_MAX_BYTES, VAULT_OPEN_ACTIONS, VAULT_RESET_OTP_MAX_AGE_S, vaultImageKey, vaultRequest,
+  lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL, VAULT_IMAGE_MAX_BYTES, VAULT_RESET_OTP_MAX_AGE_S, vaultImageKey, vaultRequest,
   WEBAUTHN_CHALLENGE_TTL_S, WEBAUTHN_RP_ID,
 } from '../_shared/gen/schema/vault.ts';
-import type { Obj, VaultReq, VaultRules } from './common.ts';
+import type { VaultReq, VaultRules } from './common.ts';
 import { handle } from './core.ts';
 import { vaultStore } from './store.ts';
 
@@ -40,8 +41,7 @@ const VAULT_PUSH_OPTIONS = { ttl: 3600, urgency: 'high' } as const;
 
 const RULES: VaultRules = {
   pinRe: PIN_RE, failsPerLevel: VAULT_FAILS_PER_LEVEL, lockSeconds, resetOtpMaxAgeS: VAULT_RESET_OTP_MAX_AGE_S,
-  challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S, rpId: WEBAUTHN_RP_ID, imageMaxBytes: VAULT_IMAGE_MAX_BYTES, openActions: VAULT_OPEN_ACTIONS,
-  imageKey: vaultImageKey,
+  challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S, rpId: WEBAUTHN_RP_ID, imageMaxBytes: VAULT_IMAGE_MAX_BYTES, imageKey: vaultImageKey,
 };
 
 /** Supabase Edge Runtime 自带的全局（本机 deno 里没有，用 typeof 判断） */
@@ -51,23 +51,12 @@ function background(p: Promise<unknown>): void {
   else p.catch(() => {});
 }
 
-function makeR2(): Obj | null {
-  const endpoint = Deno.env.get('R2_ENDPOINT');
-  const accessKeyId = Deno.env.get('R2_FN_ACCESS_KEY_ID');
-  const secretAccessKey = Deno.env.get('R2_FN_SECRET_ACCESS_KEY');
-  if (!endpoint || !accessKeyId || !secretAccessKey) return null;
-  return createObjStore({
-    endpoint, accessKeyId, secretAccessKey, bucketPrefix: Deno.env.get('R2_BUCKET_PREFIX') ?? '',
-    fetch: (url, init) => timedFetch(fetch)(url, init as RequestInit), now: () => Date.now(),
-  });
-}
-
 const KEYS = {
   master: decodeKey32(Deno.env.get('VAULT_KEY')),
   pepper: decodeKey32(Deno.env.get('VAULT_PIN_PEPPER')),
   tokenSecret: decodeKey32(Deno.env.get('VAULT_TOKEN_SECRET')),
 };
-const R2 = makeR2();
+const R2 = r2FromEnv();
 
 Deno.serve(async (req) => {
   const url = Deno.env.get('SUPABASE_URL');
@@ -83,7 +72,6 @@ Deno.serve(async (req) => {
     return data?.min_client_version ?? null;
   });
   if (blocked) return blocked;
-  const priv = admin.schema('private');
   const resendKey = Deno.env.get('RESEND_API_KEY');
   const send = skipTestRecipients((to, mail) => (resendKey ? sendMail(resendKey, to, mail) : Promise.resolve(false)), log);
   const override = resolveOverride(Deno.env.get('PUSH_SERVICE_OVERRIDE_URL'), url, Deno.env.get('LEMO_LOCAL_PUSH_STUB'));
@@ -103,11 +91,7 @@ Deno.serve(async (req) => {
       return p.success ? (p.data as VaultReq) : null;
     },
     rules: RULES,
-    async takeRate(k, limit, windowS) {
-      const { data, error } = await priv.rpc('take_rate', { p_key: k, p_limit: limit, p_window_s: windowS });
-      if (error || typeof data !== 'boolean') throw new Error('db');
-      return data;
-    },
+    takeRate: rpcTakeRate(admin),
     tx: (uid, fn) => withVaultUser(uid, (sql) => fn(vaultStore(sql, uid))),
     keys: KEYS,
     r2: R2,

@@ -148,7 +148,7 @@ describe('周视图（手机排布）', () => {
     expect(first && observed.has(first)).toBe(false);
   });
 
-  it('周 / 月 / 纪念日分段：本月切到本周；“纪念日”置灰、不跳占位页，点了出“纪念日即将推出”，几秒后收起（B2 全站视觉审查 A2）', async () => {
+  it('周 / 月 / 纪念日分段：本月切到本周；“纪念日”（B5）原地换成纪念日页 #/anniv', async () => {
     open('#/cal/month/2026-11');
     await act(async () => {
       fireEvent.click(screen.getByTestId('cal-mode-week'));
@@ -156,24 +156,12 @@ describe('周视图（手机排布）', () => {
     expect(window.location.hash).toBe('#/cal/week/2026-11-02');
     expect(screen.getByTestId('cal-title').textContent).toContain('11月2日–8日');
     const anniv = screen.getByTestId('cal-mode-anniv');
-    expect(anniv.getAttribute('aria-disabled')).toBe('true');
-    expect(anniv.getAttribute('aria-label')).toBe('纪念日（即将推出）');
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    try {
-      await act(async () => {
-        fireEvent.click(anniv);
-      });
-      expect(window.location.hash).toBe('#/cal/week/2026-11-02');
-      const soon = screen.getByTestId('cal-anniv-soon');
-      expect(soon.textContent).toBe('纪念日即将推出');
-      expect(soon.closest('[role="status"]')).toBeTruthy();
-      await act(async () => {
-        vi.advanceTimersByTime(4000);
-      });
-      expect(screen.queryByTestId('cal-anniv-soon')).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(anniv.getAttribute('aria-disabled')).toBeNull();
+    expect(anniv.getAttribute('aria-pressed')).toBe('false');
+    await act(async () => {
+      fireEvent.click(anniv);
+    });
+    expect(window.location.hash).toBe('#/anniv');
   });
 });
 

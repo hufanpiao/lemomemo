@@ -6,7 +6,7 @@
 // 每项一个结果：不是 same / gone 的记一行函数日志 recalc:<结果>:<表>:<id 前 8 位>；有毒项记 queue_poison:<表>:<id 前 8 位>；
 // prio 0 的 written、ack、r336、failed、held 和有毒项（code = poison）另进 logs（act = recalc）。
 // fresh 的待办（新建或改了截止）不传 prevRemindAt：提前量已过时回落到截止时刻（R-411 Q2）；其余一律传这一行现在的 remind_at（R1）。
-import { DB_DATA, LOG_SRC, type ItemRow, type LogRow, type Profile, type QueueItem, type QueueRef, type RoundCtx, type UserSettings } from './round-types.ts';
+import { DB_DATA, LOG_SRC, type ItemRow, type LogRow, type Profile, type QueueItem, type QueueRef, type RemindPatch, type RoundCtx, type UserSettings } from './round-types.ts';
 import { failCode, groupBy, logTzInvalid, pool, uniq } from './round-util.ts';
 
 /** 第 0 步这一轮的结果：ok、poison 进心跳的 queue_ok、queue_poison；written（含 ack）、r336、failed 进心跳的 recalc_* */
@@ -125,7 +125,7 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
       return 'tz_invalid';
     };
     const allDay = row.time === null || row.time === undefined;
-    let patch: { remind_at: number | null; next_date?: string | null } | null;
+    let patch: RemindPatch | null;
     let ack = false;   // S1 例外（记 ack 而不是 written）
     try {
       if (q.table_name === 'events') {
@@ -150,12 +150,14 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
       } else {
         const nx = c.logic.annivNext(row, { tz: prof.current_tz, now, settings: settings.get(q.user_id) ?? {} });
         patch = nx ? { remind_at: nx.remind_at, next_date: nx.next_date } : null;
+        // 已归档的倒数日改到以后（不再是 past）：一并清掉 archived_at，不等第二天的 anniv-roll（整块评审第 17 条）
+        if (patch && row.archived_at != null && nx && nx.next_date !== null && !nx.past) patch.archived_at = null;
       }
     } catch {
       return 'failed';   // 行里的值不合格（例如时刻串坏了）
     }
     if (patch === null) return 'same';
-    if (patch.remind_at === row.remind_at && (patch.next_date === undefined || patch.next_date === (row.next_date ?? null))) return 'same';
+    if (patch.remind_at === row.remind_at && (patch.next_date === undefined || patch.next_date === (row.next_date ?? null)) && patch.archived_at === undefined) return 'same';
     try {
       // 乐观条件（比 rev 和 remind_at）：读完以后行又被改了就不写，放回队列下一轮按新值重算
       if (!(await c.store.writeRemind(q.table_name, q.id, q.user_id, patch, row))) return 'released';

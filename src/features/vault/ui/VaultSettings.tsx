@@ -119,7 +119,7 @@ function Autolock({ onDone }: { onDone(): void }) {
 function ChangePin({ onDone }: { onDone(): void }) {
   const t = useVaultT();
   const errText = useErrText();
-  const { state, s } = useVault();
+  const { s } = useVault();
   const [old, setOld] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -158,7 +158,8 @@ function ChangePin({ onDone }: { onDone(): void }) {
           setBusy(false);
           if (r.ok) setOk(true);
           else {
-            setErr(r.code === 'pin_wrong' && state.left !== null ? t('vault.unlock.left', { n: state.left }) : errText(r.code));
+            // 读这次响应里的 left（不读 state.left：回调里的 state 是点下去那次渲染的快照）
+            setErr(r.code === 'pin_wrong' && r.left !== undefined ? t('vault.unlock.left', { n: r.left }) : errText(r.code));
             setOld(null);
           }
         });

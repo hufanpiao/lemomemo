@@ -1,6 +1,6 @@
 // B5 隐私记 store-it 的准备工作（vault-store.it.ts、vault-move.it.ts 引用；import 本文件即完成准备）：
 // 在 harness.ts（只许本机、Resend 替身、R2 用 tests/shared/fake-s3.ts、建用户和真 JWT、残留清单）之上，按真 index.ts 的组装方式拼出
-//   vault（core.ts handle + store.ts vaultStore）、vault-image（core.ts handle + store.ts）、account 导出（core.ts handle + index.ts 导出的 makeStore、vaultEpoch）三套处理函数。
+//   vault（core.ts handle + store.ts vaultStore）、vault-image（core.ts handle + store.ts）、account 导出（core.ts handle + index.ts 导出的 makeStore；pin_epoch 用 _shared/vault-epoch.ts）三套处理函数。
 // 和线上唯一的不同：数据库事务。线上经 _shared/db.ts 以 fn_vault / fn_ai 登录（ssl: 'require'），本机 lemo-e2e、CI 的库没开 SSL、两个角色也没有密码，
 //   所以这里另开一条 prepare: false 的连接（和 db.ts 同样关掉预编译），每个事务：
 //     begin → grant <角色> to current_user with set true, inherit false → set local role <角色> → set local statement_timeout → set_config('app.uid')
@@ -12,6 +12,7 @@ import postgres from 'postgres';
 import { AuthError, requireActiveUser } from '../../functions/_shared/auth.ts';
 import { envKind } from '../../functions/_shared/env-kind.ts';
 import { decodeKey32 } from '../../functions/_shared/vault-crypto.ts';
+import { pinEpoch } from '../../functions/_shared/vault-epoch.ts';
 import { vaultTokenChecker } from '../../functions/_shared/vault-token.ts';
 import { mailLocale, skipTestRecipients, vaultResetMail } from '../../functions/_shared/account-mail.ts';
 import { sendMail } from '../../functions/_shared/mail-send.ts';
@@ -20,14 +21,14 @@ import { createObjStore } from '../../functions/_shared/gen/objstore.ts';
 import { tzLabel } from '../../functions/_shared/gen/i18n/tz-label.ts';
 import { allManifests } from '../../functions/_shared/gen/manifests/index.ts';
 import {
-  lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL, VAULT_IMAGE_MAX_BYTES, VAULT_OPEN_ACTIONS, VAULT_RESET_OTP_MAX_AGE_S, vaultImageGet, vaultImageKey,
+  lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL, VAULT_IMAGE_MAX_BYTES, VAULT_RESET_OTP_MAX_AGE_S, vaultImageGet, vaultImageKey,
   vaultImageUploadQuery, vaultRequest, WEBAUTHN_CHALLENGE_TTL_S, WEBAUTHN_RP_ID,
 } from '../../functions/_shared/gen/schema/vault.ts';
 import type { Deps as VaultDeps, VaultReq } from '../../functions/vault/common.ts';
 import { handle as vaultHandle } from '../../functions/vault/core.ts';
 import { vaultStore } from '../../functions/vault/store.ts';
 import { handle as imageHandle } from '../../functions/vault-image/core.ts';
-import { imageMeta, ownsPrivateNote, pinEpoch } from '../../functions/vault-image/store.ts';
+import { imageMeta, ownsPrivateNote } from '../../functions/vault-image/store.ts';
 import { exportTablesOf, handle as accountHandle, withStoreTimeouts } from '../../functions/account/core.ts';
 import { admin, assertEquals, fakeS3, s3Server } from './harness.ts';
 
@@ -113,7 +114,7 @@ export const vaultDeps: VaultDeps = {
   },
   rules: {
     pinRe: PIN_RE, failsPerLevel: VAULT_FAILS_PER_LEVEL, lockSeconds, resetOtpMaxAgeS: VAULT_RESET_OTP_MAX_AGE_S,
-    challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S, rpId: WEBAUTHN_RP_ID, imageMaxBytes: VAULT_IMAGE_MAX_BYTES, openActions: VAULT_OPEN_ACTIONS,
+    challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S, rpId: WEBAUTHN_RP_ID, imageMaxBytes: VAULT_IMAGE_MAX_BYTES,
     imageKey: vaultImageKey,
   },
   takeRate,
@@ -201,7 +202,7 @@ export async function getImage(jwt: string, token: string, imageId: string): Pro
 }
 
 // ---------------- account 导出（照 account/index.ts 组装，令牌经 fn_vault 读 pin_epoch） ----------------
-const accountToken = vaultTokenChecker(KEYS.tokenSecret, Date.now, (uid) => asRole('fn_vault', uid, (tx) => accountMod.vaultEpoch(tx as never, uid)), log);
+const accountToken = vaultTokenChecker(KEYS.tokenSecret, Date.now, (uid) => asRole('fn_vault', uid, (tx) => pinEpoch(tx as never, uid)), log);
 const accountDeps = {
   async authenticate(r: Request, opts: { allowPendingDeletion: boolean }) {
     try {

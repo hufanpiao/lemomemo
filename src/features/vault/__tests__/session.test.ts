@@ -1,65 +1,7 @@
 // 隐私记会话（data/session.ts）：TC-B5-10（59 秒 / 61 秒，注入时间）、TC-B5-11（上锁不留明文、blob 撤销）、
 // TC-B5-47 ①②（vault_locked 等解锁后自动重试一次；vault_relock 丢令牌、记 relocked）、TC-B5-33（断网）、图片半路上锁丢掉结果
 import { describe, expect, it, vi } from 'vitest';
-import type { z } from 'zod';
-import type { VaultNote, VaultRequest } from '../../../../shared/schema/vault.ts';
-import { createVaultSession } from '../data/session.ts';
-import type { VaultApi, VaultFail, VaultResult } from '../data/vault-api.ts';
-
-const TOK = 't'.repeat(32);
-const TOK2 = 'u'.repeat(32);
-const NID = '11111111-1111-4111-8111-111111111111';
-const IMG = '22222222-2222-4222-8222-222222222222';
-const note = (over: Partial<VaultNote> = {}): VaultNote => ({
-  id: NID, title: '体检报告', body: '血压 120/80', category_id: null, created_at: 1, updated_at: 2, deleted_at: null, images: [], ...over,
-});
-
-type Reply = (req: VaultRequest, token: string | null) => unknown;
-
-/** 桩：按 action 回指定的东西；VaultFail 原样回，别的当成功响应按 schema 校验 */
-function fakeApi(replies: Partial<Record<VaultRequest['action'], Reply>>) {
-  const calls: { action: string; token: string | null }[] = [];
-  const api: VaultApi = {
-    async call<S extends z.ZodType>(req: VaultRequest, token: string | null, schema: S): Promise<VaultResult<z.infer<S>>> {
-      calls.push({ action: req.action, token });
-      const fn = replies[req.action];
-      const v = fn ? fn(req, token) : { ok: true, vault_token: TOK, expires_at: 9e12 };
-      if (typeof v === 'object' && v !== null && (v as { ok?: unknown }).ok === false) return v as VaultFail;
-      const p = schema.safeParse(v);
-      return p.success ? { ok: true, value: p.data } : { ok: false, code: 'unknown' };
-    },
-    imageGet: vi.fn(async () => ({ ok: true as const, value: new Blob(['x']) })),
-    imageUpload: vi.fn(async () => ({ ok: true as const, value: true as const })),
-  };
-  return { api, calls };
-}
-
-const statusSet = { ok: true, set: true, locked_until: null, last_reset_at: null, webauthn: 0 };
-const tokenOk = { ok: true, vault_token: TOK, expires_at: 9e12 };
-const listOk = (notes: VaultNote[] = [note()]) => ({ ok: true, notes, vault_token: TOK, expires_at: 9e12 });
-
-function make(replies: Partial<Record<VaultRequest['action'], Reply>> = {}) {
-  const { api, calls } = fakeApi({ status: () => statusSet, unlock: () => tokenOk, list: () => listOk(), ...replies });
-  const tokens: (string | null)[] = [];
-  const revoked: string[] = [];
-  let n = 0;
-  const s = createVaultSession({
-    api,
-    now: () => 1_000_000,
-    onToken: (t) => tokens.push(t),
-    createUrl: () => `blob:x/${++n}`,
-    revokeUrl: (u) => revoked.push(u),
-    newId: () => '33333333-3333-4333-8333-333333333333',
-  });
-  return { s, api, calls, tokens, revoked };
-}
-
-async function unlocked(replies: Partial<Record<VaultRequest['action'], Reply>> = {}) {
-  const m = make(replies);
-  await m.s.refreshStatus();
-  expect((await m.s.unlock('1234')).ok).toBe(true);
-  return m;
-}
+import { IMG, listOk, make, NID, statusSet, TOK, TOK2, tokenOk, unlocked } from './session-fakes.ts';
 
 describe('解锁、上锁', () => {
   it('解锁后拉列表，明文只在内存；令牌抄给 core/vault-token', async () => {
@@ -212,13 +154,45 @@ describe('TC-B5-33：断网', () => {
 });
 
 describe('保存、移进隐私记', () => {
-  it('带图片：先传 full、thumb，再 save 带 add_images；成功后重新拉列表', async () => {
+  const NEW = '33333333-3333-4333-8333-333333333333';
+  const IMG_NEW = '44444444-4444-4444-8444-444444444444';
+  const pic = { id: IMG_NEW, full: new Blob(['f']), thumb: new Blob(['t']), width: 10, height: 20 };
+
+  it('M1 新建带图：先存一次文字把这条建出来，再传 full、thumb，再 save 带 add_images；成功后重新拉列表', async () => {
     const { s, api, calls } = await unlocked();
-    const r = await s.save({ id: null, title: 't', body: 'b', addImages: [{ full: new Blob(['f']), thumb: new Blob(['t']), width: 10, height: 20 }] });
-    expect(r).toEqual({ ok: true, value: '33333333-3333-4333-8333-333333333333' });
-    expect(vi.mocked(api.imageUpload).mock.calls.map((c) => c[0].part)).toEqual(['full', 'thumb']);
+    const r = await s.save({ id: null, title: 't', body: 'b', addImages: [pic] });
+    expect(r).toEqual({ ok: true, value: NEW });
+    expect(vi.mocked(api.imageUpload).mock.calls.map((c) => [c[0].note_id, c[0].image_id, c[0].part])).toEqual([[NEW, IMG_NEW, 'full'], [NEW, IMG_NEW, 'thumb']]);
     const order = calls.map((c) => c.action);
-    expect(order.slice(order.indexOf('save'))).toEqual(['save', 'list']);
+    expect(order.slice(order.indexOf('save'))).toEqual(['save', 'save', 'list']);
+    const saves = calls.flatMap((c) => (c.req.action === 'save' ? [c.req] : []));
+    expect(saves.map((x) => x.add_images?.map((i) => i.id) ?? null)).toEqual([null, [IMG_NEW]]);
+  });
+
+  it('改已有的一条带图：不先存文字，直接传图再保存', async () => {
+    const { s, calls } = await unlocked();
+    expect((await s.save({ id: NID, title: 't', body: 'b', addImages: [pic] })).ok).toBe(true);
+    expect(calls.filter((c) => c.action === 'save')).toHaveLength(1);
+  });
+
+  it('传图失败后重试：同一个图片 id、同一条隐私记（不另生成），第二次成功', async () => {
+    const { s, api } = await unlocked();
+    vi.mocked(api.imageUpload).mockResolvedValueOnce({ ok: false, code: 'try_later' });
+    const id = '55555555-5555-4555-8555-555555555555';
+    const input = { id, title: 't', body: 'b', addImages: [pic] };
+    expect(await s.save(input)).toMatchObject({ ok: false, code: 'try_later' });
+    expect((await s.save(input)).ok).toBe(true);
+    const keys = vi.mocked(api.imageUpload).mock.calls.map((c) => `${c[0].note_id}/${c[0].image_id}`);
+    expect(new Set(keys)).toEqual(new Set([`${id}/${IMG_NEW}`]));
+  });
+
+  it('传图时令牌过期（vault_locked）：先发 renew（不是 list_credentials）换新令牌再传', async () => {
+    const { s, api, calls } = await unlocked({ renew: () => ({ ok: true, vault_token: TOK2, expires_at: 9e12 }) });
+    vi.mocked(api.imageUpload).mockResolvedValueOnce({ ok: false, code: 'vault_locked' });
+    expect((await s.save({ id: NID, title: 't', body: 'b', addImages: [pic] })).ok).toBe(true);
+    expect(calls.map((c) => c.action)).toContain('renew');
+    expect(calls.map((c) => c.action)).not.toContain('list_credentials');
+    expect(vi.mocked(api.imageUpload).mock.calls[1]?.[2]).toBe(TOK2);
   });
 
   it('importNote：锁着时也是走 run（vault_locked 会等解锁）；成功后已解锁才重新拉列表', async () => {

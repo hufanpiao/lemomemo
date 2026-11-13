@@ -41,6 +41,17 @@ describe('save、list（加密存、解密读）', () => {
     expect(w.db.s.images.get(I1)?.deleted_at).toBe(w.db.ms);
   });
 
+  it('add_images：R2 的 HEAD 没回长度当不合格（413），不退回去信客户端报的 bytes', async () => {
+    const w = world();
+    const tok = await unlocked(w);
+    await call(w, save(N1), { token: tok });
+    await w.r2.put('vault-images', key(A, N1, I1), webp(40), { contentType: 'image/webp' });
+    w.r2.head = async () => ({ contentLength: null });
+    const r = await call(w, save(N1, { add_images: [{ id: I1, bytes: 1, width: 1, height: 1, has_thumb: false }] }), { token: tok });
+    expect([r.status, r.body.error]).toEqual([413, 'too_large']);
+    expect(w.db.s.images.has(I1)).toBe(false);
+  });
+
   it('delete、undelete；解不开的那条不回、记 decrypt_failed', async () => {
     const w = world();
     const tok = await unlocked(w);
@@ -141,6 +152,41 @@ describe('移进、移出（TC-B5-08、TC-B0-75）', () => {
     w.deps.tx = run;
     await w.r2.put('vault-images', key(A, N1, I1), webp(), { contentType: 'image/webp' });
     expect((await call(w, { action: 'import', note_id: N1 }, { token: tok })).status).toBe(200);
+    expect(w.r2.keys('vault-images')).toHaveLength(3);
+  });
+
+  // 11-14 独立评审 S2：同一条并发移进两次。后到的 B 先在②写好了对象，先提交的 A 在②碰到“对象已经在”算成功、提交后指着的正是 B 写的对象
+  async function racing(thenFail: boolean) {
+    const { w, tok } = await setupPlain();
+    const run = w.db.run.bind(w.db);
+    let n = 0;
+    let first: Awaited<ReturnType<typeof call>> | null = null;
+    w.deps.tx = async (uid, fn) => {
+      if (++n === 3) {   // B 的第 3 次事务（提交）之前，A 从头到尾做完一次
+        w.deps.tx = run;
+        first = await call(w, { action: 'import', note_id: N1 }, { token: tok });
+        if (thenFail) throw new Error('commit');
+      }
+      return run(uid, fn);
+    };
+    const second = await call(w, { action: 'import', note_id: N1 }, { token: tok });
+    return { w, tok, first: first as unknown as Awaited<ReturnType<typeof call>>, second };
+  }
+
+  it('并发移进两次、先提交的那次指着后到那次写的对象：后到的回 404，但不删新桶里的对象', async () => {
+    const { w, tok, first, second } = await racing(false);
+    expect(first.status).toBe(200);
+    expect([second.status, second.body.error]).toEqual([404, 'not_found']);
+    expect(w.r2.keys('vault-images')).toHaveLength(3);
+    expect(w.r2.keys('images')).toEqual([]);
+    const l = await call(w, { action: 'list' }, { token: tok });
+    expect((l.body.notes as { images: unknown[] }[])[0]?.images).toHaveLength(2);
+  });
+
+  it('同上，后到的那次提交时抛错：另开事务看到已经移进了，也不删', async () => {
+    const { w, first, second } = await racing(true);
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(503);
     expect(w.r2.keys('vault-images')).toHaveLength(3);
   });
 });

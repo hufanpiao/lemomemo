@@ -105,7 +105,7 @@ describe('发送一段：TTL、resolve 日志、纪念日下一次', () => {
     id: uuid('a'), user_id: UA, rev: 1, deleted_at: null, undone: false, source: 'page', push_show_title: null,
     remind_at: due, notified_for: null, snooze_at: null, pushed_for: null, defer_until: null, name: '结婚纪念日', next_date: '2026-11-04',
   });
-  const NEXT = { remind_at: 1_830_000_000_000, next_date: '2027-11-04' };
+  const NEXT = { remind_at: 1_830_000_000_000, next_date: '2027-11-04', past: false };
 
   it('纪念日推过以后写回下一次（remind_at、next_date）', async () => {
     const w = await world({ logic: { ...LOGIC, annivNext: () => NEXT } });
@@ -113,7 +113,7 @@ describe('发送一段：TTL、resolve 日志、纪念日下一次', () => {
     const row = w.db.put('anniversaries', anniv(now - 1000));
     await w.round(now);
     expect(w.pushes().map((p) => p.id)).toEqual([row.id]);
-    expect(w.db.tables.anniversaries.get(row.id)).toMatchObject(NEXT);
+    expect(w.db.tables.anniversaries.get(row.id)).toMatchObject({ remind_at: NEXT.remind_at, next_date: NEXT.next_date });
   });
 
   it('纪念日写回时这一行已被改过（乐观条件不成立）：不覆盖，记 anniv_next_stale', async () => {

@@ -2,15 +2,18 @@
 // • “知道了”写 notified_for = 这一条的 remind_at（普通字段，不报冲突，4.4 第 3 步）；只有“稍后”、没有提醒时刻的那种（remind_at 为 null）把 snooze_at 清掉
 // • “稍后”类按钮写 snooze_at = actionsFor 给的时刻
 // • 都带 remind 标记（整条提前发，4.2）：处理结果越早上服务器，别的设备的通知越早收回（R-52、R-317）
-// • 纪念日的“生成待办”归 B5（纪念日提醒本批不出）
+// • 纪念日（B5 S15）：“知道了”“明天再提醒”同样写 anniversaries 的 notified_for / snooze_at；“生成待办”见 genTodoFromAnniv
 // • R4-L1：日程这一行在 outbox 里还有没上服务器的“换一次提醒”的改动（date、remind_days，或 time 在空和非空之间切换）时，
 //   “知道了”不写 notified_for——outbox 会把两次写合并成 {date, notified_for: 旧时刻}，把新的那一次提醒压住；
 //   这时只在本机关掉横幅和通知、记进本次会话的已处理集合（hooks/useReminders.ts），判断用 timingPending；
 //   那条改动发出去以后，提醒时刻没变的再补写一次（第三轮 L10，hooks/useReminders.ts 的 laterAcks）
-import { savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
+import { addDays, type DateStr } from '../../../../shared/core/date.ts';
+import { DEFAULT_TODO_REMIND_TIME } from '../../../../shared/logic/remind.ts';
+import { saveInsert, savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
 import type { Reminder } from './reminder-model.ts';
 
-const tableOf = (r: Pick<Reminder, 'kind'>): 'events' | 'todos' => (r.kind === 'event' ? 'events' : 'todos');
+const TABLE_OF = { event: 'events', todo: 'todos', anniv: 'anniversaries' } as const;
+const tableOf = (r: Pick<Reminder, 'kind'>): (typeof TABLE_OF)[Reminder['kind']] => TABLE_OF[r.kind];
 
 /** “知道了”的 patch */
 export function ackPatch(r: Pick<Reminder, 'remindAt'>, now: number): Record<string, unknown> {
@@ -66,6 +69,32 @@ export function ackReminder(r: Reminder, now: number): Promise<SaveOutcome> {
 
 export function snoozeReminder(r: Reminder, at: number, now: number): Promise<SaveOutcome> {
   return savePatch(tableOf(r), r.id, snoozePatch(at, now), true);
+}
+
+/**
+ * 纪念日提醒的“生成待办”（B5 S15；线框“提醒响起时”第三张：新建一条待办，截止在纪念日前一天）：
+ * 新建待办的整行（列和 todos 的 newTodoRow 同一套，A27 不跨功能引，这里照抄一份最小的；当天 09:00 提醒，同新建待办的默认），
+ * from_anniv_id 记来源。due 由调用方按纪念日这一次的日期算好传进来（前一天）
+ */
+export function annivTodoRow(id: string, title: string, due: DateStr, annivId: string, now: number): Record<string, unknown> & { id: string } {
+  return {
+    id, title, done: false, important: false, due, due_time: null, remind_before_min: null, remind_days: 0, remind_time: DEFAULT_TODO_REMIND_TIME,
+    project: '', note: '', source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: annivId,
+    short: null, short_by: null, done_at: 0, push_show_title: null, notified_for: null, snooze_at: null, created_at: now, updated_at: now,
+  };
+}
+
+/** 生成待办的截止日：纪念日前一天；当天或已过按的取今天，不生成一条一出来就逾期的待办（整块评审第 14 条） */
+export function annivTodoDue(annivDate: DateStr, today: DateStr): DateStr {
+  const eve = addDays(annivDate, -1);
+  return eve < today ? today : eve;
+}
+
+/** 生成待办：先建待办，建成了再把这条纪念日提醒按“知道了”处理；返回新待办的结果 */
+export async function genTodoFromAnniv(r: Reminder, row: Record<string, unknown> & { id: string }, now: number): Promise<SaveOutcome> {
+  const res = await saveInsert('todos', row, true);
+  if (res === 'saved') await ackReminder(r, now).catch(() => undefined);
+  return res;
 }
 
 /** “全部知道了”：逐条写，返回写成功的那几条的 tag（调用方只把这些移出队列；代码审查低 2） */

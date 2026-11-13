@@ -88,7 +88,7 @@ describe('sendMail（经全局 fetch 发到 Resend）', () => {
   });
 });
 
-describe('接线：supabase-js 全部经 timedFetch；account-purge 的 R2 也经它', () => {
+describe('接线：supabase-js 全部经 timedFetch；R2 也经它（_shared/objstore-env.ts 一处组装）', () => {
   const FN = join(ROOT, 'supabase', 'functions');
   const src = (fn: string) => readFileSync(join(FN, fn, 'index.ts'), 'utf8');
   /** supabase/functions 下的源码（不含生成目录 _shared/gen 和测试文件） */
@@ -110,7 +110,11 @@ describe('接线：supabase-js 全部经 timedFetch；account-purge 的 R2 也�
     expect(bad).toEqual([]);
     expect(calls.length).toBeGreaterThanOrEqual(13);   // 真的扫到了（11-12 时 13 处）
   });
-  it('account-purge：R2 客户端的 fetch 经 timedFetch', () => {
-    expect(src('account-purge')).toMatch(/createObjStore\(\{[^}]*fetch: \(url, init\) => timedFetch\(fetch\)\(url, init as RequestInit\)/s);
+  it('R2 客户端只在 _shared/objstore-env.ts 组装、fetch 经 timedFetch；用 R2 的函数入口都经 r2FromEnv、不自己 createObjStore', () => {
+    expect(readFileSync(join(FN, '_shared', 'objstore-env.ts'), 'utf8')).toMatch(/createObjStore\(\{[^}]*fetch: \(url, init\) => timedFetch\(fetch\)\(url, init as RequestInit\)/s);
+    for (const fn of ['account-purge', 'vault', 'vault-image']) {
+      expect(src(fn), fn).toMatch(/r2FromEnv\(\)/);
+      expect(src(fn), fn).not.toMatch(/createObjStore\(/);
+    }
   });
 });

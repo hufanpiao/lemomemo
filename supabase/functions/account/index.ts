@@ -21,8 +21,9 @@ import { json } from '../_shared/http.ts';
 import { sendMail } from '../_shared/mail-send.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_SIZE_TIMEOUT_MS } from './store-timeout.ts';
-import { type Tx, withVaultUser } from '../_shared/db.ts';
+import { withVaultUser } from '../_shared/db.ts';
 import { decodeKey32 } from '../_shared/vault-crypto.ts';
+import { pinEpoch } from '../_shared/vault-epoch.ts';
 import { vaultTokenChecker } from '../_shared/vault-token.ts';
 import { cachedMinClientVersion } from '../_shared/version-gate.ts';
 import { blockedMin, upgradeRequiredResponse, VERSION_HEADER } from '../_shared/version-gate-core.ts';
@@ -159,6 +160,11 @@ export function makeStore(admin: Admin, signal: AbortSignal): AccountStore {
       if (code === 'P0001' || code === '22023') throw new DbError('rebind_failed');
       throw new Error('db');
     },
+    async deviceSession(userId, deviceId) {
+      const row = must(await admin.from('devices').select('session_id').eq('id', deviceId).eq('user_id', userId).abortSignal(signal).maybeSingle()) as
+        { session_id: string | null } | null;
+      return row?.session_id ?? null;
+    },
   };
 }
 
@@ -184,12 +190,8 @@ async function userHash(userId: string): Promise<string> {
   return [...d.slice(0, 8)].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 const EXPORT_TABLES = exportTablesOf(allManifests);
-/** 本人的 pin_epoch（fn_vault；没设过隐私记回 null）。导出给 store-it 打真库 */
-export async function vaultEpoch(tx: Tx, uid: string): Promise<number | null> {
-  const rows = await tx`select pin_epoch from private.vault where user_id = ${uid}`;
-  return rows[0] ? Number(rows[0].pin_epoch) : null;
-}
-const checkVaultToken = vaultTokenChecker(decodeKey32(Deno.env.get('VAULT_TOKEN_SECRET')), Date.now, (uid) => withVaultUser(uid, (tx) => vaultEpoch(tx, uid)), log);
+// 本人的 pin_epoch 经 fn_vault 读（SQL 在 _shared/vault-epoch.ts，和 vault-image 共用）
+const checkVaultToken = vaultTokenChecker(decodeKey32(Deno.env.get('VAULT_TOKEN_SECRET')), Date.now, (uid) => withVaultUser(uid, (tx) => pinEpoch(tx, uid)), log);
 // 错误码以 shared/schema/account.ts 为准（0.38 第 48 条）；core.ts 自己那份对不上就记日志（单测已核对，这里防生成目录过期）
 //   整串比较、不按下标取：CI 的 unit 任务跑 check_backend 前不生成 gen/，类型推不出来时 F7 不认回调参数当下标（错误码里没有逗号）
 if (ACCOUNT_ERRS.join(',') !== ACCOUNT_ERROR_CODES.join(',')) log('error_codes_drift');

@@ -125,8 +125,8 @@ select is((select string_agg(c.relname || ':' || t.tgname, ',' order by c.relnam
   'anniversaries:anniversaries_remind,events:events_remind,todos:todos_remind', 'T07：三张表各一个 <表>_remind：after insert or update、不带列清单');
 select is((select coalesce(string_agg(c.relname || ':' || t.tgname, ',' order by c.relname, t.tgname), '') from pg_trigger t join pg_class c on c.oid = t.tgrelid
    where c.relname in ('events', 'todos', 'anniversaries') and c.relnamespace = 'public'::regnamespace and not t.tgisinternal
-     and (t.tgtype & 2) = 2 and t.tgname not in ('events_touch', 'events_quota', 'todos_touch', 'todos_quota', 'anniversaries_touch', 'anniversaries_quota')),
-  '', 'T07：三张表上除 touch、配额外没有别的 before 触发器（events_occ_reset 已删）');
+     and (t.tgtype & 2) = 2 and t.tgname not in ('events_touch', 'events_quota', 'todos_touch', 'todos_quota', 'anniversaries_touch', 'anniversaries_quota', 'anniversaries_media_quota')),
+  '', 'T07：三张表上除 touch、配额（条数、头像存储额度 20261114192000）外没有别的 before 触发器（events_occ_reset 已删）');
 select is((select (prosrc !~ 'pushed_for')::text || ':' || (length(prosrc) - length(replace(prosrc, 'private.remind_reset(', ''))) / length('private.remind_reset(')
    from pg_proc where oid = 'private.touch()'::regprocedure), 'true:1', 'T07：touch() 源码里不再有 pushed_for，只调一次 remind_reset');
 

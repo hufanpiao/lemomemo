@@ -2,6 +2,10 @@
 // • 保存：点“保存”才发 vault {save}（隐私记不进本机 outbox、不自动保存：明文不能落本机，A18）
 // • 插图：选的照片在本机重新编码成 webp（data/image-encode.ts）→ 经 vault-image 上传 → save 的 add_images 登记
 // • 显示图片：useVaultImage 经会话拿 blob URL（只在内存、上锁时撤销，D3）
+// • id 一开始就定：新建的这一条用 draftId，每张待传的图用 PendingImage.key 当图片 id——保存失败重试时复用，服务器“已有就改”、
+//   同一个键再传算成功，不会多建一条、不会在 R2 留多份对象（11-14 独立评审 M1 及低项）
+// • 改标题、正文时调会话的 touch()：一直在写的人令牌按 5 分钟续一次，写超过 10 分钟再保存也不会被锁、草稿不丢（M2）。
+//   放着不动超过 10 分钟再保存仍会要求解锁、草稿随上锁清掉（TC-B5-11：锁着时 DOM 里不留明文），这是有意的
 import { useEffect, useRef, useState } from 'react';
 import type { VaultNote } from '../../../../shared/schema/vault.ts';
 import { encodeVaultImage } from '../data/image-encode.ts';
@@ -9,6 +13,7 @@ import type { VaultCode } from '../data/vault-errors.ts';
 import { useVault } from './useVault.ts';
 
 export interface PendingImage {
+  /** 也是上传用的图片 id */
   key: string;
   full: Blob;
   thumb: Blob;
@@ -40,8 +45,17 @@ export function useVaultImage(imageId: string, part: 'full' | 'thumb'): string |
 export function useVaultEdit(id: string | null) {
   const { s, state } = useVault();
   const note: VaultNote | null = id ? state.notes?.find((n) => n.id === id) ?? null : null;
-  const [title, setTitle] = useState(note?.title ?? '');
-  const [body, setBody] = useState(note?.body ?? '');
+  const [draftId] = useState(() => crypto.randomUUID());
+  const [title, setTitleRaw] = useState(note?.title ?? '');
+  const [body, setBodyRaw] = useState(note?.body ?? '');
+  const setTitle = (v: string): void => {
+    setTitleRaw(v);
+    s.touch();
+  };
+  const setBody = (v: string): void => {
+    setBodyRaw(v);
+    s.touch();
+  };
   const [adds, setAdds] = useState<PendingImage[]>([]);
   const [removes, setRemoves] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -60,14 +74,14 @@ export function useVaultEdit(id: string | null) {
   useEffect(() => {
     if (note && !filled.current) {
       filled.current = true;
-      setTitle(note.title);
-      setBody(note.body);
+      setTitleRaw(note.title);
+      setBodyRaw(note.body);
     }
   }, [note]);
   useEffect(() => {
     if (state.phase !== 'unlocked') {
-      setTitle('');
-      setBody('');
+      setTitleRaw('');
+      setBodyRaw('');
       previews.current.forEach((u) => URL.revokeObjectURL(u));
       previews.current.clear();
       setAdds([]);
@@ -117,10 +131,10 @@ export function useVaultEdit(id: string | null) {
       setBusy(true);
       setError(null);
       const r = await s.save({
-        id: note?.id ?? savedId,
+        id: id ?? draftId,
         title: title.trim(),
         body,
-        addImages: adds.map((a) => ({ full: a.full, thumb: a.thumb, width: a.width, height: a.height })),
+        addImages: adds.map((a) => ({ id: a.key, full: a.full, thumb: a.thumb, width: a.width, height: a.height })),
         removeImages: removes,
       });
       setBusy(false);

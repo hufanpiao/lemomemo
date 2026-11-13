@@ -2,7 +2,7 @@
 // • 假库按 0003、0006 的 check 约束和 RLS 写：隐私记不准留明文残留，vault-images 的图不准有 taken_at、ai_desc；只看得到本人的行；
 //   tx 出错整个回滚（开头存一份快照，抛错就换回去）。
 // • 钥匙都是测试专用的假值，用 btoa('TEST-ONLY-…') 现算（不写成像真钥匙的 base64 字面量）。
-import { vaultImageKey, vaultRequest, lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL, VAULT_IMAGE_MAX_BYTES, VAULT_OPEN_ACTIONS,
+import { vaultImageKey, vaultRequest, lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL, VAULT_IMAGE_MAX_BYTES,
   VAULT_RESET_OTP_MAX_AGE_S, WEBAUTHN_CHALLENGE_TTL_S, WEBAUTHN_RP_ID } from '../../shared/schema/vault.ts';
 import type { VaultPushEvent } from '../../supabase/functions/_shared/push/payload.ts';
 import { decodeKey32 } from '../../supabase/functions/_shared/vault-crypto.ts';
@@ -191,7 +191,7 @@ export class FakeR2 implements Obj {
   puts: { bucket: string; key: string; contentType: string }[] = [];
   failPut = false;
   async get(b: string, k: string) { const o = this.objs.get(`${b}/${k}`); return o ? { body: o.bytes.slice(), contentLength: o.bytes.length } : null; }
-  async head(b: string, k: string) { const o = this.objs.get(`${b}/${k}`); return o ? { contentLength: o.bytes.length } : null; }
+  async head(b: string, k: string): Promise<{ contentLength: number | null } | null> { const o = this.objs.get(`${b}/${k}`); return o ? { contentLength: o.bytes.length } : null; }
   async put(b: string, k: string, body: Uint8Array, opts: { contentType: string; ifNoneMatch?: boolean }) {
     if (this.failPut) throw new Error('objstore_network');
     if (opts.ifNoneMatch && this.objs.has(`${b}/${k}`)) throw Object.assign(new Error('objstore_exists'), { code: 'exists' });
@@ -205,7 +205,7 @@ export class FakeR2 implements Obj {
 
 export const RULES = {
   pinRe: PIN_RE, failsPerLevel: VAULT_FAILS_PER_LEVEL, lockSeconds, resetOtpMaxAgeS: VAULT_RESET_OTP_MAX_AGE_S, challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S,
-  rpId: WEBAUTHN_RP_ID, imageMaxBytes: VAULT_IMAGE_MAX_BYTES, openActions: VAULT_OPEN_ACTIONS, imageKey: vaultImageKey,
+  rpId: WEBAUTHN_RP_ID, imageMaxBytes: VAULT_IMAGE_MAX_BYTES, imageKey: vaultImageKey,
 };
 
 export interface World { db: FakeVault; r2: FakeR2; deps: Deps; pushes: { user: string; event: VaultPushEvent }[]; mails: number[]; logs: string[]; rows: { act: string }[]; bg: Promise<unknown>[]; rate: Map<string, number> }
