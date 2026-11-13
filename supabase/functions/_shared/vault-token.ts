@@ -71,3 +71,20 @@ export async function verifyVaultToken(
   if (cur !== e) return { verdict: 'vault_relock' };
   return { verdict: 'ok', epoch: cur };
 }
+
+/**
+ * 消费方（vault、vault-image、account export）共用的验法：secret 是 VAULT_TOKEN_SECRET 解出的 32 字节（decodeKey32），
+ * 没配好（null）时一律回 vault_locked、记 misconfigured:vault_token_secret——不让带令牌的请求整个 500（导出照样能不带令牌做）。
+ * loadEpoch 按 user_id 读当前 pin_epoch（vault、account 经 withVaultUser，vault-image 经 withAiUser，6.2 A2）。上面的 verifyVaultToken 不改，这里只包一层。
+ */
+export function vaultTokenChecker(
+  secret: Bytes | null, now: () => number, loadEpoch: (userId: string) => Promise<number | null>, log?: (code: string) => void,
+): (userId: string, token: string | null | undefined) => Promise<{ verdict: VaultTokenVerdict; epoch?: number }> {
+  return async (userId, token) => {
+    if (!secret) {
+      log?.('misconfigured:vault_token_secret');
+      return { verdict: 'vault_locked' };
+    }
+    return verifyVaultToken(secret, userId, token, now(), () => loadEpoch(userId));
+  };
+}

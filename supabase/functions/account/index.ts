@@ -21,6 +21,11 @@ import { json } from '../_shared/http.ts';
 import { sendMail } from '../_shared/mail-send.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_SIZE_TIMEOUT_MS } from './store-timeout.ts';
+import { withVaultUser } from '../_shared/db.ts';
+import { decodeKey32 } from '../_shared/vault-crypto.ts';
+import { vaultTokenChecker } from '../_shared/vault-token.ts';
+import { cachedMinClientVersion } from '../_shared/version-gate.ts';
+import { blockedMin, upgradeRequiredResponse, VERSION_HEADER } from '../_shared/version-gate-core.ts';
 
 /** rpc 抛出的业务错误（raise exception '<码>'），原样当错误码 */
 const RPC_CODES = new Set(['admin_cannot_delete', 'account_disabled', 'account_pending_deletion']);
@@ -143,6 +148,16 @@ function makeStore(admin: Admin, signal: AbortSignal): AccountStore {
       const rows = must(await q.order(keyCol, { ascending: true }).limit(limit).abortSignal(signal));
       return Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
     },
+    async rebindDevice(userId, deviceId, oldSession, newSession) {
+      // 必须经 PostgREST 的 rpc（service role），rebind_device_impl 里的 devices_session_guard() 才认（0.29 续第 112、119 条）；错误内容不看、不记
+      const { error } = await priv.rpc('rebind_device_impl', { p_user: userId, p_device: deviceId, p_old_session: oldSession, p_new_session: newSession })
+        .abortSignal(signal);
+      if (!error) return;
+      // raise exception 的业务拒绝是 P0001（session_revoked、device_mismatch 等），bad_rebind 是 22023；连不上、超时之类照抛 db（回 try_later）
+      const code = (error as { code?: unknown }).code;
+      if (code === 'P0001' || code === '22023') throw new DbError('rebind_failed');
+      throw new Error('db');
+    },
   };
 }
 
@@ -168,6 +183,11 @@ async function userHash(userId: string): Promise<string> {
   return [...d.slice(0, 8)].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 const EXPORT_TABLES = exportTablesOf(allManifests);
+const checkVaultToken = vaultTokenChecker(decodeKey32(Deno.env.get('VAULT_TOKEN_SECRET')), Date.now, (uid) =>
+  withVaultUser(uid, async (tx) => {
+    const rows = await tx`select pin_epoch from private.vault where user_id = ${uid}`;
+    return rows[0] ? Number(rows[0].pin_epoch) : null;
+  }), log);
 // 错误码以 shared/schema/account.ts 为准（0.38 第 48 条）；core.ts 自己那份对不上就记日志（单测已核对，这里防生成目录过期）
 //   整串比较、不按下标取：CI 的 unit 任务跑 check_backend 前不生成 gen/，类型推不出来时 F7 不认回调参数当下标（错误码里没有逗号）
 if (ACCOUNT_ERRS.join(',') !== ACCOUNT_ERROR_CODES.join(',')) log('error_codes_drift');
@@ -200,9 +220,18 @@ Deno.serve((req) => {
     },
     sendMail: skipTestRecipients((to, mail) => sendMail(resendKey, to, mail), log),   // @lemomemo.test 不真发（安全审查 D1）
     tzLabel,   // 邮件里时区的通俗说法，和 App 恢复页同一份（shared/i18n/tz-label.ts，KO-mail-nolink-tz）
-    // 隐私记的令牌（vault_token）由 B5 的 vault 函数签发、_shared/vault-token.ts 验（6.2 A2）；B1 还没有这两样，
-    // 所以现在没有任何有效令牌：带了令牌的导出一律回 vault_locked（不静默少一块），B5 接上 verifyVaultToken。
-    verifyVaultToken: async () => 'vault_locked',
+    // 隐私记的令牌（vault_token）由 vault 函数签发，这里经 _shared/vault-token.ts 验（6.2 A2；B5 任务单 S10）：pin_epoch 经 fn_vault 读；
+    // 没配 VAULT_TOKEN_SECRET 时带了令牌一律 vault_locked，并记 misconfigured:vault_token_secret（不带令牌照常导出）
+    verifyVaultToken: async (userId, token) => (await checkVaultToken(userId, token)).verdict,
+    async checkVersion(r) {
+      const min = await cachedMinClientVersion(async (signal) => {
+        const { data, error } = await admin.from('app_config').select('min_client_version').eq('id', 1).abortSignal(signal).maybeSingle();
+        if (error) throw new Error('db');
+        return data?.min_client_version ?? null;
+      });
+      const b = blockedMin(min, r.headers.get(VERSION_HEADER));
+      return b === null ? null : upgradeRequiredResponse(b);
+    },
     exportTables: EXPORT_TABLES,
     userHash,
     memProbe,

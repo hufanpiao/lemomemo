@@ -143,6 +143,11 @@ Pages Functions（functions/）和 App、shared：
       只防无意写入，字符串拼接这类有意绕过靠审查
   F12 json 响应只在 _shared/http.ts 做（架构约定 10.1：一律 no-store、同一个 content-type）：别的文件（去注释）出现 new Response(JSON.stringify(
       或自己定义 function json( 就报；流式响应（new Response(<流>)）不管。_shared/gen/ 是 shared/ 的副本，不查
+  F13 隐私记的函数目录（vault、vault-image，以后的 vault-file：目录名以 vault 开头的正式函数）里不准出现 console.（B5 任务单 S2）：
+      这几处经手密码、令牌、明文，日志一律经 _shared/fn-log.ts 的 codeLogger 只记错误码；去注释后查，预览专用函数不管
+  F14 上传一律显式带 contentType（TC-B0-75、架构 0.35 第 1 条）：supabase/functions 下（去注释，_shared/gen/ 除外）
+      每一处 .put( / .upload(（objstore 的 put、supabase-js storage 的 upload），以及直接接在 storage.from(…) 后面的 .update(，
+      实参里都要写出 contentType（键值或简写都认，值不能是 undefined、null）；放在变量里传进去的选项认不出，也报——一律当场写明
 迁移（supabase/migrations/*.sql）：
   M1  security definer 函数必须写 set search_path = ''（create function 和 alter function 都查，属性写在函数体前后都认）。
       架构 0.29 续第 117 条、TC-B0-92
@@ -1351,6 +1356,23 @@ def check_test_imports(fns, errors):
 
 
 JSON_HTTP_FILE = "_shared/http.ts"
+CONSOLE_USE = re.compile(r"\bconsole\s*(\.|\[)")
+F13_MSG = "隐私记的函数目录里不准用 console（B5 任务单 S2：经手密码、令牌、明文）；日志一律经 _shared/fn-log.ts 的 codeLogger 只记错误码"
+UPLOAD_CALL = re.compile(r"\.\s*(put|upload)\s*\(|\bstorage\s*\.\s*from\s*\((?:[^()]|\([^()]*\))*\)\s*\.\s*update\s*\(")
+CONTENT_TYPE_ARG = re.compile(r"\bcontentType\b(?!\s*:\s*(undefined|null)\b)")
+F14_MSG = ("上传要显式带 contentType（TC-B0-75）：objstore 的 put、storage 的 upload / update 在实参里当场写出 contentType（如 { contentType: 'image/webp' }），"
+           "不写会被存成 application/octet-stream 或按扩展名猜")
+
+
+def upload_findings(code):
+    """F14：[(位置, 方法名)]——实参里没写出 contentType 的上传调用"""
+    out = []
+    for m in UPLOAD_CALL.finditer(code):
+        open_paren = m.end() - 1
+        close, _args = _call_args(code, open_paren)
+        if not CONTENT_TYPE_ARG.search(code[open_paren:close]):
+            out.append((m.start(), m.group(1) or "update"))
+    return out
 JSON_RESPONSE = re.compile(r"\bnew\s+Response\s*\(\s*JSON\s*\.\s*stringify\s*\(|\bfunction\s+json\s*\(")
 F12_MSG = ("json 响应只在 _shared/http.ts 做（架构约定 10.1：一律 no-store、同一个 content-type）：改用它的 json(status, body, 额外的头)，"
            "不要自己 new Response(JSON.stringify(…)) 或另定义 function json(")
@@ -1415,6 +1437,15 @@ def check_functions(root, errors):
         if rel != JSON_HTTP_FILE:
             for m in JSON_RESPONSE.finditer(code):
                 errors.append(("F12", path, line_of(code, m.start()), F12_MSG))
+
+        # F13：隐私记的函数目录不准用 console
+        if fn is not None and fn.startswith("vault") and not is_preview(rel):
+            for m in CONSOLE_USE.finditer(code):
+                errors.append(("F13", path, line_of(code, m.start()), F13_MSG))
+
+        # F14：上传一律显式带 contentType
+        for pos, method in upload_findings(code):
+            errors.append(("F14", path, line_of(code, pos), f"{method}(：{F14_MSG}"))
 
         if fn is None:
             # 共用模块：连接串只在 db.ts 读；R2_* 只在 objstore*.ts 读，而且不准是 R2_FILES_* / R2_PULL_*

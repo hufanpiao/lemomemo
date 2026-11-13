@@ -235,9 +235,9 @@ describe('account restore（冷静期里恢复）', () => {
 });
 
 describe('account 的错误码（0.38 第 48 条：shared/schema/account.ts 的 accountErrorCode，前后端共用）', () => {
-  it('core.ts 的 13 个码（0.47 加 export_expired、export_too_large）和 shared/schema/account.ts 一字不差、顺序一致（架构第 6 节那张表的顺序）', () => {
+  it('core.ts 的 14 个码（0.47 加 export_expired、export_too_large，B5 加 rebind_failed）和 shared/schema/account.ts 一字不差、顺序一致（架构第 6 节那张表的顺序）', () => {
     expect([...ACCOUNT_ERRS]).toEqual([...ACCOUNT_ERROR_CODES]);
-    expect(ACCOUNT_ERROR_CODES).toHaveLength(13);
+    expect(ACCOUNT_ERROR_CODES).toHaveLength(14);
     for (const c of ACCOUNT_ERRS) expect(accountErrorCode.safeParse(c).success, c).toBe(true);
     expect(accountErrorCode.safeParse('bad_request').success).toBe(false);   // 各函数共用的码不在 account 的表里
   });

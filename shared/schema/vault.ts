@@ -56,7 +56,7 @@ export const WEBAUTHN_LABEL_MAX = 40;
 /** 第 n 次锁定（lock_level 从 0 起）的时长（秒）：超出表的一律 24 小时 */
 export function lockSeconds(level: number): number {
   const steps = VAULT_LOCK_STEPS_S;
-  return steps[Math.min(Math.max(0, Math.trunc(level)), steps.length - 1)] ?? 86400;
+  return steps.at(Math.min(Math.max(0, Math.trunc(level)), steps.length - 1)) ?? 86400;   // at()：check_backend F7 不放行算出来的下标
 }
 
 const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);

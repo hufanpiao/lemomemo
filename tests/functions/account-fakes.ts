@@ -50,7 +50,7 @@ export class FakeDb {
   /** src：account 自己写的是 'account'；测试直接塞的行可以不带（当作客户端上传的日志） */
   logs: { id: number; user_id: string; act: string; device: string | null; t: number; src?: string; code?: string; fields?: string[] }[] = [];
   private logSeq = 0;
-  devices = new Map<string, { user_id: string; label: string | null; platform?: string | null }>();
+  devices = new Map<string, { user_id: string; label: string | null; platform?: string | null; session_id?: string | null }>();
   tables = new Map<string, Record<string, unknown>[]>();   // 导出读的 public 表
   /** readPage 每次调用的（表、after），测试核对按主键翻页 */
   pageReads: { table: string; after: string | number | null; limit: number }[] = [];
@@ -58,6 +58,8 @@ export class FakeDb {
   fail = new Set<string>();
   /** export_size_over 被调的次数；sizeResult 不为 null 时直接返回它（-1 超时、-2 忙、或一个估算值） */
   sizeCalls = 0; sizeResult: number | null = null;
+  /** rebindDevice 被调的次数（TC-B1-93：限流挡下的不该调到 rpc） */
+  rebindCalls = 0;
   /** account-purge 的 stillClaimed 被调时先跑一下（模拟“写 deleted_accounts 前这一行被删”） */
   beforeStillClaimed: (() => void) | null = null;
   /** account-purge 的 postponeNotice 被调时先跑一下（模拟“补发之后、顺延之前这一行被改了”） */
@@ -180,6 +182,22 @@ export class FakeDb {
       requestDeletion: async (u) => { this.guard('requestDeletion'); return this.requestDeletion(u); },
       restore: async (u) => { this.guard('restore'); return this.restore(u); },
       profile: async (u) => { const p = this.profiles.get(u); return p ? { ui_locale: p.ui_locale, current_tz: p.current_tz } : null; },
+      // = private.rebind_device_impl（20261029192000）：拒绝时抛 DbError(<rpc 的码>)，什么都不改；成功改 session_id、吊销旧会话
+      rebindDevice: async (u, d, oldS, newS) => {
+        this.guard('rebindDevice');
+        this.rebindCalls++;
+        const p = this.profiles.get(u);
+        if (!p || p.disabled_at !== null) throw new DbError('account_disabled');
+        if (oldS === newS) throw new DbError('bad_rebind');
+        if (this.sessions.get(oldS) !== u || this.sessions.get(newS) !== u) throw new DbError('session_mismatch');
+        if (this.revoked.has(oldS) || this.revoked.has(newS)) throw new DbError('session_revoked');
+        const dev = this.devices.get(d);
+        if (!dev || dev.user_id !== u || (dev.session_id ?? null) !== oldS) throw new DbError('device_mismatch');
+        for (const [id, v] of this.devices) if (id !== d && v.session_id === newS) throw new DbError('session_in_use');
+        dev.session_id = newS;
+        this.revoked.set(oldS, u);
+        this.sessions.delete(oldS);
+      },
       deviceLabel: async (u, d) => { const v = this.devices.get(d); return v && v.user_id === u ? { label: v.label, platform: v.platform ?? null } : null; },
       insertLog: async (u, row) => {
         this.guard(`insertLog:${row.act}`);
@@ -259,6 +277,7 @@ export function accountDeps(db: FakeDb, box: Outbox[], over: Partial<AccountDeps
     sendMail: mailer(box),
     tzLabel,   // 和 index.ts 注入的是同一份（shared/i18n/tz-label.ts）
     verifyVaultToken: async () => 'vault_locked',
+    checkVersion: async () => null,
     exportTables: [],
     proxySecret: 'proxy-secret',
     background: (p) => { bg.push(p); },

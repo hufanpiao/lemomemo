@@ -30,6 +30,8 @@ const PLAN = new Map<string, 'check' | readonly string[]>([
   ['ai-voice', 'check'],            // B3 BE-4：同上
   ['token-admin', 'check'],         // B3 BE-5：同上
   ['claude-intake', ['POST']],      // B3 BE-5：add.ps1 带连接码调，只收 POST
+  ['vault', 'check'],               // B5：用户带 JWT 调，index.ts 入口处 versionGate（0.29 续第 75 条：不进免查名单）
+  ['vault-image', ['POST']],        // B5 S18：0.29 续第 77 条，旧版也能看隐私记的图；只收 POST
 ]);
 
 /** 接入代码等审查通过再加的目录；接上以后从这里删掉（K10 安全审查后：invite-signup 已接，account 只收 POST、不接） */

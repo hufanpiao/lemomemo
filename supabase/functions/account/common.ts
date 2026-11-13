@@ -41,16 +41,16 @@ export const EXPORT_LIMITS = {
 export type ExportLimits = { [K in keyof typeof EXPORT_LIMITS]: number };
 
 /**
- * account 自己的 13 个错误码。和 shared/schema/account.ts 的 ACCOUNT_ERROR_CODES（accountErrorCode，0.38 第 48 条，前后端共用）
+ * account 自己的 14 个错误码（B5 加 rebind_failed）。和 shared/schema/account.ts 的 ACCOUNT_ERROR_CODES（accountErrorCode，0.38 第 48 条，前后端共用）
  * 必须一字不差：tests/functions/account.test.ts 核对，index.ts 启动时也核对一次（对不上记 error_codes_drift）。
  * 这里不 import 它：core.ts 要在 Vitest 和 unit 的 tsc 里跑，那时 _shared/gen/ 还没生成。
  */
 export const ACCOUNT_ERRS = [
   'confirm_required', 'admin_cannot_delete', 'rate_limited', 'reauth_required', 'not_pending', 'restore_too_late',
   'account_disabled', 'account_pending_deletion', 'vault_locked', 'vault_relock', 'try_later',
-  'export_expired', 'export_too_large',
+  'export_expired', 'export_too_large', 'rebind_failed',
 ] as const;
-/** 回给客户端的错误码：account 自己的 13 个加各函数共用的两个 */
+/** 回给客户端的错误码：account 自己的 14 个加各函数共用的两个 */
 export type AccountErr = (typeof ACCOUNT_ERRS)[number] | 'bad_request' | 'method_not_allowed';
 
 // ---------------- 注入的依赖 ----------------
@@ -125,6 +125,11 @@ export interface AccountStore {
    * 按主键往后翻页（K3 安全审查低 7），不用 offset；service role 绕过 RLS，所以这里必须带 user_id 条件
    */
   readPage(table: string, keyCol: string, userId: string, after: string | number | null, limit: number): Promise<Record<string, unknown>[]>;
+  /**
+   * rpc private.rebind_device_impl（service role 经 PostgREST 调，0.29 续第 119 条①）：把 p_device 这一行的 session_id 从旧会话换成新会话、吊销旧会话。
+   * rpc 拒绝（raise exception 的各种码）一律抛 DbError('rebind_failed')；别的错误照抛（回 try_later）
+   */
+  rebindDevice(userId: string, deviceId: string, oldSession: string, newSession: string): Promise<void>;
 }
 
 export class DbError extends Error {
@@ -145,6 +150,8 @@ export interface Deps {
   tzLabel: TzLabeler;
   /** 验 vault_token（B5 的 _shared/vault-token.ts：HMAC、过期、pin_epoch） */
   verifyVaultToken(userId: string, token: string): Promise<'ok' | 'vault_locked' | 'vault_relock'>;
+  /** rebind_device 自己查版本（代定 D9：account 整个 POST 免查，这个动作写 devices 同步表）：低版本回 426 的响应，放行回 null */
+  checkVersion(req: Request): Promise<Response | null>;
   exportTables: readonly ExportTable[];
   proxySecret: string | undefined;
   /** 响应之后还要做的事（EdgeRuntime.waitUntil）；测试里收集起来 await */
@@ -180,6 +187,8 @@ export const keys = {
   exportSize: (uid: string, ms: number) => `export-size:${uid}:${utcDate(ms)}`,
   /** 每天 part 调用总数（0.47 第 14 条 M2） */
   exportPart: (uid: string, ms: number) => `export-part:${uid}:${utcDate(ms)}`,
+  /** rebind_device 每人每天 10 次（0.29 续第 113 条①，附录 A rebind:<user_id>:<UTC 日期>） */
+  rebind: (uid: string, ms: number) => `rebind:${uid}:${utcDate(ms)}`,
   /** 导出任务（0.47 第 13 条 M1、M3）：第三段用点分隔、不含冒号；和迁移 export_job_start 拼的一字不差 */
   exportJob: (uid: string, exportId: string, mode: VaultMode, sessionId: string) => `export-job:${uid}:${exportId}.${mode}.${sessionId}`,
 };
