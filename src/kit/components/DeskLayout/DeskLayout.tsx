@@ -3,7 +3,7 @@
 // • ≥ 1100px（MQ_DESK_WIDE）：分栏。块标题栏右上角有把手（按住才拖，dnd-kit，DeskDnd.tsx）和“–”收起；两栏之间的竖条拖宽拖窄（自己用 Pointer Events，DeskParts.tsx 的 Sep），
 //   每栏最窄 240 px、最宽 0.6
 // • 900～1099px：排成一列，顺序是各栏从左到右首尾相接；不能拖、不能调栏宽，“–”照样能收起；存下的布局不改
-// • 侧栏底部“⋯”（经 GlassBar 的 tabbar-slot 挂过去；找不到时画在画布上方）：锁定布局 / 收起的块（点一下放回原栏原位置）/ 恢复默认布局
+// • 侧栏底部“⋯”（GlassBar 的 tabbar-slot 经 kit/state/desk-slot.ts 登记，portal 挂过去；没有时画在画布上方）：锁定布局 / 收起的块（点一下放回原栏原位置）/ 恢复默认布局
 // • 放下即保存（kit/hooks/useDeskLayout.ts）：每次放下、调完栏宽、收起展开、换抽屉边、锁定，提示条“布局已保存 · 撤销 · 恢复默认布局”停 6 秒；
 //   提示条在时 Ctrl+Z 也撤销（只留一步）
 // • 键盘（5.9b 第 5 点）：把手是按钮，空格拿起，↑↓ 本栏挪、← → 相邻栏同一高度附近，空格放下、Esc 回原位；拿起、每次移动、放下都经 aria-live 读出；
@@ -15,6 +15,7 @@ import type { DeskLayoutValue } from '../../../../shared/schema/layout.ts';
 import { useDeskLayout, useDeskModeLog, type LayoutChange } from '../../hooks/useDeskLayout.ts';
 import { useKeys } from '../../hooks/useKeys.ts';
 import { MQ_DESK_WIDE, useMedia } from '../../hooks/useMedia.ts';
+import { useDeskSlot } from '../../state/desk-slot.ts';
 import { UndoToast } from '../UndoToast.tsx';
 import { colId, DndShell, dropTarget } from './DeskDnd.tsx';
 import { ColWithSep, DrawerHandle, MoreMenu, Panel, Sep, type DeskPanel } from './DeskParts.tsx';
@@ -120,8 +121,7 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
   );
 
   // “⋯”菜单挂到侧栏底部（GlassBar 的 tabbar-slot）
-  const [slot, setSlot] = useState<Element | null>(null);
-  useEffect(() => setSlot(document.querySelector('[data-testid="tabbar-slot"]')), []);
+  const slot = useDeskSlot();
   const menu = (
     <MoreMenu
       btn={moreBtn}

@@ -34,6 +34,53 @@
   font-weight: 600;
 }
 
+/* 电脑版（B6，ui/NotesDesk.tsx；线框 s7 电脑画面）：分类一栏 + 列表一栏，铺满侧栏右边；页顶大标题换成“随手记”块的标题 */
+.desk {
+  max-width: none;
+  padding-left: 0;
+  padding-right: 16px;
+}
+
+.cats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.catItem,
+.catOn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--text);
+  font-size: var(--fs-14);
+  text-align: left;
+}
+
+.catOn {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+}
+
+.catLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catN {
+  flex: none;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 右上角头像（设置入口，notesHead 第 1321 行）在 kit 的 MeLink（R-381，四页共用；触控区 44，圆在 kit 的 MeAvatar 里） */
 
 .filter {

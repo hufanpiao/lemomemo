@@ -29,10 +29,18 @@
   animation: note-drawer-in var(--dur-ui) var(--ease-out) both;
 }
 
+/* 电脑版换到左边（B6，5.9b）：贴在侧栏右边（#root 留给侧栏 110px），从左边滑进来 */
+.drawer[data-side="left"] {
+  --drawer-from: -24px;
+
+  right: auto;
+  left: 110px;
+}
+
 @keyframes note-drawer-in {
   from {
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateX(var(--drawer-from, 24px));
   }
 }
 

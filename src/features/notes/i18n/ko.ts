@@ -90,5 +90,6 @@ export const ko = {
   'note.edit.drawer': '메모 상세', // REVIEW(ko)
   'note.edit.st.empty': '내용을 써야 저장돼요', // REVIEW(ko)
   'note.edit.st.rejected': '형식이 맞지 않아 저장하지 못했어요 (제목이나 본문이 너무 길어요)', // REVIEW(ko)
-  'notes.todayNone': '오늘은 아직 없어요',
+  'notes.todayNone': '오늘은 아직 없어요', // REVIEW(ko) B6
+  'notes.allName': '전체', // REVIEW(ko) B6
 } as const satisfies Record<keyof typeof zh, string>;

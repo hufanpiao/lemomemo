@@ -2,7 +2,7 @@
 // • 只用鼠标 / 触控板（PointerSensor，按住把手挪 4px 才算拖，点一下不误拖）；键盘拖动、读屏播报在 DeskLayout.tsx 自己做（5.9b 第 5 点的
 //   ↑↓ 本栏、← → 相邻栏同一高度、Esc 回原位，比 dnd-kit 的坐标式键盘移动可控），所以不注册 KeyboardSensor、不用它的播报
 // • 跨栏：拖到别的栏上空（栏本身是 droppable，id 'col:<i>'）或别的块上，草稿布局（keepEmpty，途中不去空栏）就把它挪过去；放下才保存
-// • 位移用 React 的 style（CSSOM，不受 CSP style-src-attr 限制）；过渡时长、曲线经 src/motion/desk.ts 取令牌，减少动态效果时不过渡
+// • 位移用 React 的 style（CSSOM，不受 CSP style-src-attr 限制）；过渡时长、曲线经 src/motion/desk-sort.ts（由 motion/gestures.ts 导出）取令牌，减少动态效果时不过渡
 // • 拖动时原位置留虚框（data-dragging），手上的是 DragOverlay 里只画标题的小卡（不把面板内容复制一份）
 import {
   DndContext,

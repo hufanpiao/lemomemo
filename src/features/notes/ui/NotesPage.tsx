@@ -32,7 +32,7 @@
 // • 隐私记（B5 S5、S7）：分类胶囊下面一行入口（vault 的 VaultParts lockrow）；“⋯”菜单、左滑（列表方式，NoteSwipe.tsx）加“移到隐私记”，
 //   移的流程（解锁、重试一次、带附件不能移）在 vault 的 VaultParts move；移好的先在本页藏起来，等同步把它改成隐私记行
 import { rlog } from '../../../platform/run-log-api.ts';
-import { Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
@@ -60,6 +60,9 @@ import { InputRow } from './NotesInputRow.tsx';
 import { SwipeRow } from './NoteSwipe.tsx';
 import row from '../../../kit/components/NoteRow.module.css';
 import styles from './NotesPage.module.css';
+
+/** 电脑版（B6）：有侧栏的宽度才下载 */
+const NotesDesk = lazy(() => import('./NotesDesk.tsx'));
 
 /** 分类色点（只在有颜色时画） */
 const Dot = ({ color, big }: { color: string | null; big?: boolean }) =>
@@ -154,13 +157,8 @@ function NotesList() {
     setMenu(id);
   };
 
-  return (
-    <main className={styles.page} data-feature="notes" data-testid="notes" data-view={view}>
-      <header className={styles.top}>
-        <h1 className={styles.h1}>{t('notes.title', {})}</h1>
-        <MeLink testId="notes-settings" />
-      </header>
-
+  const filterChips = (
+    <>
       {l.counts.length ? (
         <div className={styles.filter} role="group" aria-label={t('notes.filter', {})} data-testid="notes-filter">
           <Chip on={l.category === null} onClick={() => l.setCategory(null)} label={t('notes.all', { n: l.total })} color={null} testId="notes-filter-all" />
@@ -170,6 +168,11 @@ function NotesList() {
         </div>
       ) : null}
 
+    </>
+  );
+  // 隐私记入口行、合并提示、空态、瀑布流或列表：手机直接画在页上，电脑放进 list 块
+  const body = (
+    <>
       {/* 隐私记入口行（B5 S5，线框 s7 LOCKROW：分类胶囊下面、合并提示上面；两种显示方式都有） */}
       <QuietBoundary name="vault-lockrow">
         <Suspense fallback={null}>
@@ -253,12 +256,52 @@ function NotesList() {
         </AppearList>
       )}
 
-      {typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null}
+    </>
+  );
+  const dock = (
       <div className={up ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
         <InputRow field={field} onTyping={setTyping} onAdd={add} onImages={addImage} tip={toast !== null && !isUndo(toast) ? <DockTip toast={toast} /> : null} />
       </div>
+  );
+  const drawerEl = (side?: 'left' | 'right', handle?: ReactNode) =>
+    drawer !== null ? <NoteDrawer id={drawer} side={side} handle={handle} onClose={() => setDrawer(null)} /> : null;
+  const mist = typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null;
+  const phone = (
+    <>
+      <header className={styles.top}>
+        <h1 className={styles.h1}>{t('notes.title', {})}</h1>
+        <MeLink testId="notes-settings" />
+      </header>
+      {filterChips}
+      {body}
+      {mist}
+      {dock}
+      {drawerEl()}
+    </>
+  );
 
-      {drawer !== null ? <NoteDrawer id={drawer} onClose={() => setDrawer(null)} /> : null}
+  return (
+    <main className={wide ? `${styles.page} ${styles.desk}` : styles.page} data-feature="notes" data-testid="notes" data-view={view}>
+      {/* 电脑版（B6，ui/NotesDesk.tsx）：分类一栏 + 列表一栏；电脑版没加载好或出错时照手机的排法画 */}
+      {wide ? (
+        <QuietBoundary name="notes-desk" fallback={phone}>
+          <Suspense fallback={phone}>
+            {mist}
+            <NotesDesk
+              cats={{ total: l.total, counts: l.counts, category: l.category, set: l.setCategory }}
+              list={
+                <>
+                  {body}
+                  {dock}
+                </>
+              }
+              drawer={drawer !== null ? drawerEl : undefined}
+            />
+          </Suspense>
+        </QuietBoundary>
+      ) : (
+        phone
+      )}
       {moving !== null ? (
         <QuietBoundary name="vault-move">
           <Suspense fallback={null}>

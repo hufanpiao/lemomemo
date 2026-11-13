@@ -93,4 +93,5 @@ export const zh = {
   'note.edit.st.empty': '写点内容才会保存',
   'note.edit.st.rejected': '格式不对，没保存上（标题或正文太长）',
   'notes.todayNone': '今天还没记',
+  'notes.allName': '全部',
 } as const;

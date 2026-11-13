@@ -5,11 +5,12 @@
 // • 排法、拖动、收起、保存都在 kit 的 DeskLayout；这里只给块的标题和内容
 // • 键盘（线框 s1“J / K 上下 · E 完成 · Enter 编辑”）：J / K 在今天页各行之间移焦点，E 勾选焦点所在的待办，Enter 是按钮自带的打开
 //   （焦点在输入框里时单字母键不生效，kit 的 useKeys）
-import { lazy, Suspense, type CSSProperties, type ReactNode } from 'react';
+import { Suspense, type CSSProperties, type ReactNode } from 'react';
 import { fmtDay, weekdayName } from '../../../../shared/i18n/fmt.ts';
 import type { DateStr } from '../../../../shared/core/date.ts';
 import { LAYOUT_V, type DeskLayoutValue } from '../../../../shared/schema/layout.ts';
 import { navigate } from '../../../app/router.ts';
+import DeskLayout from '../../../kit/components/DeskLayout/DeskLayout.tsx';
 import { AnnivAvatarSlot } from '../../../kit/components/AnnivAvatar.tsx';
 import list from '../../../kit/components/List.module.css';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
@@ -23,10 +24,9 @@ import { deskKo } from '../i18n/desk-ko.ts';
 import { deskZh } from '../i18n/desk-zh.ts';
 import styles from './TodayDesk.module.css';
 
-const DeskLayout = lazy(() => import('../../../kit/components/DeskLayout/DeskLayout.tsx'));
 const useDeskT = makeUseT({ zh: deskZh, ko: deskKo });
 
-/** 默认布局（写在代码里，不进 settings；“恢复默认布局”= 删掉那一行设置） */
+/** 默认布局（写在代码里；没存过布局时用它，“恢复默认布局”把它写回 settings） */
 export const TODAY_DEFAULT: DeskLayoutValue = {
   v: LAYOUT_V,
   cols: [
@@ -74,9 +74,7 @@ export default function TodayDesk({ today, nowBlock, river }: TodayDeskProps) {
       <p className={styles.keys} aria-hidden="true">
         {t('desk.keys', {})}
       </p>
-      <Suspense fallback={null}>
-        <DeskLayout page="today" def={TODAY_DEFAULT} panels={panels} />
-      </Suspense>
+      <DeskLayout page="today" def={TODAY_DEFAULT} panels={panels} />
     </>
   );
 }
