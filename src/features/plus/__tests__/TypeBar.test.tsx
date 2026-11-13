@@ -14,10 +14,19 @@ import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import type { Writer } from '../data/capture-save.ts';
 import TypeBar from '../ui/TypeBar.tsx';
 import type * as Session from '../../../platform/session.ts';
+import type * as Boot from '../../../core/boot.ts';
 
 // S1：会话 id 固定一个非空值（consentStale 读到空 id 一律当没记过）
 const SID = 'sid-t';
 vi.mock('../../../platform/session.ts', async (orig) => ({ ...(await orig<typeof Session>()), readSessionId: () => SID }));
+
+// 升级中心 busy：只在测“确认行占 busy”那条里挂上假的（holdBusy 记 reason），别的用例照旧拿真的 getBoot
+const fx = vi.hoisted(() => ({ boot: false, busy: [] as string[] }));
+vi.mock('../../../core/boot.ts', async (orig) => {
+  const real = await orig<typeof Boot>();
+  const fake = { upgrade: { holdBusy: (r: string) => (fx.busy.push(r), () => void fx.busy.splice(fx.busy.indexOf(r), 1)) } };
+  return { ...real, getBoot: () => (fx.boot ? fake : real.getBoot()) } as unknown as typeof Boot;
+});
 
 // 取 UTC 中午：首尔 21:00、洛杉矶 04:00 都还是 11-02（test:tz 三个时区各跑一遍，“明天”都是 11-03）
 const NOW = msAt('2026-11-02', 12 * 60, 'UTC');
@@ -316,6 +325,33 @@ describe('打字条', () => {
     const text = screen.getByTestId('type-notice').textContent ?? '';
     expect(text).toContain(stored);
     expect(text).not.toContain(raw);
+  });
+
+  it('FA-3 后续：停在确认行时占住升级中心 busy（reason=editing），选了或关掉就放开；输入时不占', async () => {
+    fx.boot = true;
+    try {
+      const { input } = setup();
+      fireEvent.change(input, { target: { value: '10月30号下午两点和客户开会' } });
+      expect(fx.busy, '打字时不占').toEqual([]);
+      await act(async () => {
+        fireEvent.submit(screen.getByTestId('type-bar'));
+      });
+      expect(screen.getByTestId('type-confirm')).toBeTruthy();
+      expect(fx.busy).toEqual(['editing']);
+      fireEvent.click(screen.getByRole('button', { name: '收起' }));
+      expect(fx.busy, '关掉确认行就放开').toEqual([]);
+      await act(async () => {
+        fireEvent.submit(screen.getByTestId('type-bar'));
+      });
+      expect(fx.busy).toEqual(['editing']);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: '明年（2027/10/30）' }));
+      });
+      expect(fx.busy, '选了、存好就放开').toEqual([]);
+    } finally {
+      fx.boot = false;
+      fx.busy.length = 0;
+    }
   });
 
   it('R-166：同一句里没问题的先存，过去日子那条选完加进同一批', async () => {

@@ -30,7 +30,7 @@ export const BUSY_MAX_MS = 30 * 60 * 1000;
 
 /**
  * 占住 busy 的原因（作废时写进日志的 code 列）：只准是这几个固定的词，不准传带内容的文字（B 组审查建议 2）。
- * 现在只有退出登录用 sign_out；recording、editing 留给录音、编辑接上时用
+ * sign_out：退出登录；recording：录音（plus/data/voice-session.ts）；editing：编辑页（EditShell、NoteEditPage），打字条整理中、确认行（plus/hooks/useTypeBar.ts 自己占）
  */
 export type BusyReason = 'sign_out' | 'recording' | 'editing';
 

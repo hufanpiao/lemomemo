@@ -9,6 +9,7 @@
 // • 提示条：一条 → “已记下：…”；多条 → “已记下 N 条”，展开逐条改、撤，“拆错了，合并成一条”“全部撤销”
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DateStr } from '../../../../shared/core/date.ts';
+import { getBoot } from '../../../core/boot.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { clock } from '../../../platform/clock.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
@@ -74,6 +75,10 @@ export function useTypeBar(o: TypeBarOpts) {
     },
   }), [box, writer, day, go]);
   const { asking, notice } = useSavedBatch(box, status === 'confirming');
+  // 整理中、停在确认行时占住升级中心 busy：更新横幅等这一句收尾再出，不重新载入丢掉等着选的那一条（和录音 voice-session.ts 的 busyNow 一致）
+  //   不用 kit 的 useHoldBusy 加开关：它在首屏里，加参数首屏多 16 B（额度只剩 8 B）；打字条不在首屏
+  const holding = status === 'organizing' || status === 'confirming';
+  useEffect(() => (holding ? getBoot()?.upgrade.holdBusy('editing') : undefined), [holding]);
 
   const setText = useCallback((v: string) => {
     typed.current = true;
