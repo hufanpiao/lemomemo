@@ -81,8 +81,11 @@ function why(a: string, b: string): MergePair['why'] | null {
   return null;
 }
 
-/** 一对里留哪个：sort 小的在前，一样就名字短的、再按 id */
-const keepFirst = (a: CategoryRow, b: CategoryRow): number =>
+/**
+ * 几个分类里留哪个（排在前的留）：sort 小的在前，一样就名字短的、再按 id。“留哪个”只用这一个：合并提示、
+ * 随手记 note-list.ts 的 categoryResolver（合并绕成圈时）、ai-classify 认重名分类（request.ts 的 nameIndex，经 index.ts 注入）
+ */
+export const keepFirst = (a: CategoryRow, b: CategoryRow): number =>
   (a.sort ?? 0) - (b.sort ?? 0) || [...a.name].length - [...b.name].length || (a.id < b.id ? -1 : 1);
 
 /** 找出彼此很像的分类对；同一对只出一次，按 keep 的 sort 先后 */

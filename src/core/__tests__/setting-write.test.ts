@@ -1,6 +1,6 @@
 // core/setting-write.ts（REMIND-settings-core、FA-4 代码审查 L7）：提醒和日历共用的 settings 读写
 // • settingValue：只认活着的那一行；settingWrite：insert / patch / 值一样不写 / 对象按 JSON 比 / 顺带恢复
-// • createSettingWriter：排队按顺序写；刚 insert 还没进本机集合时按记下的 id patch、不再 insert；结果交给 onResult
+// • createSettingWriter：排队按顺序写；刚 insert 还没进本机集合时按记下的 id patch、不再 insert；结果交给 onResult，save / update 也回写没写成
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const calls: string[] = [];
@@ -105,6 +105,15 @@ describe('createSettingWriter', () => {
     await w.save('k', 'b');
     expect(calls).toEqual(['insert:k', 'insert:k']);
     expect(results).toEqual([false, true]);
+  });
+
+  it('save / update 回写没写成：写进本机、值没变（不写）回 true，写不进本机回 false', async () => {
+    const { w } = make([{ id: 'a', key: 'k', value: 'x' }]);
+    expect(await w.save('k', 'x')).toBe(true);
+    expect(await w.update('k', () => 'y')).toBe(true);
+    okNext = false;
+    expect(await w.save('k', 'z')).toBe(false);
+    expect(await w.save('n', 'z')).toBe(false);
   });
 
   it('排队：前一条写抛错不影响后面的', async () => {

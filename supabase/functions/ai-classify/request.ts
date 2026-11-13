@@ -90,26 +90,34 @@ export function readItems(json: unknown, count: number): Map<number, { name: str
   return out;
 }
 
-/** 认分类名的唯一一份映射（writeAi 认 items、readSimilar 认 similar 共用）：normalize 后的名字 → 分类；归一后为空的不收，重名留 sort 小的、再按 id */
-export function nameIndex<C extends { id: string; name: string; sort: number }>(cats: readonly C[], normalize: (s: string) => string): Map<string, C> {
-  const out = new Map<string, C>();
-  for (const c of [...cats].sort((a, b) => a.sort - b.sort || (a.id < b.id ? -1 : 1))) {
-    const k = normalize(c.name);
-    if (k !== '' && !out.has(k)) out.set(k, c);
-  }
-  return out;
+/** 认分类名的映射（get 按 normalize 后的名字找）：每批 core.ts 建一份，writeAi 认 items、新建后 add，readSimilar 认 similar 都用它 */
+export interface NameIndex<C> {
+  get(name: string): C | undefined;
+  add(c: C): void;
+}
+
+/** 归一后为空的不收；重名留哪个照注入的 keepFirst（shared/logic/notes/category-merge.ts，和客户端同一口径） */
+export function nameIndex<C extends { name: string }>(cats: readonly C[], logic: { normalize(s: string): string; keepFirst(a: C, b: C): number }): NameIndex<C> {
+  const map = new Map<string, C>();
+  const add = (c: C): void => {
+    const k = logic.normalize(c.name);
+    const had = map.get(k);
+    if (k !== '' && (had === undefined || logic.keepFirst(c, had) < 0)) map.set(k, c);
+  };
+  cats.forEach(add);
+  return { get: (name) => map.get(logic.normalize(name)), add };
 }
 
 /**
  * 模型给的相似分类对（R-413）：a、b 先过 cleanCategoryName（同 items），再按 nameIndex 认成分类 id，两个都要认得、不是同一个；
  * 同一对（不分先后）只认一次，最多 SIMILAR_MAX 对。返回 id 对
  */
-export function readSimilar(json: unknown, index: ReadonlyMap<string, { id: string }>, normalize: (s: string) => string): [string, string][] {
+export function readSimilar(json: unknown, index: NameIndex<{ id: string }>): [string, string][] {
   const list = (json as { similar?: unknown } | null)?.similar;
   if (!Array.isArray(list)) return [];
   const idOf = (v: unknown): string | undefined => {
     const n = cleanCategoryName(v);
-    return n === null ? undefined : index.get(normalize(n))?.id;
+    return n === null ? undefined : index.get(n)?.id;
   };
   const out: [string, string][] = [];
   for (const it of list) {

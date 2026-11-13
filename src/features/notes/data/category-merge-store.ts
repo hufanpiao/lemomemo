@@ -3,6 +3,7 @@
 //   要提示的 = AI 判的（notes.merge_suggest：只有 ai-classify 写、这里的代码只读，但 RLS 不拦本人写，读时 idPairs 丢坏项）+ 本机三条规则判的，口径在 shared 的 openPairs。
 //   执行合并只写被合并分类一笔 merged_into（不软删、不逐条改随手记）：条目在读的时候由 note-list.ts 的 categoryResolver 归到留下的分类
 //   （列表、分类胶囊、编辑页的 formOf 都经它；新读 notes.category_id 的地方也必须经它）。
+//   两台设备各合并一次绕成圈：fixCategoryCycles 给圈里留下的那个写回 merged_into: null（每个分类只写一次）。
 // 纯 TS，不准 React（A1）
 import { isLiveCategory } from '../../../../shared/logic/live-row.ts';
 import {
@@ -13,7 +14,7 @@ import { settingValue, type SettingRow, type SettingWriter } from '../../../core
 import { readonlyIds } from '../../../core/store.ts';
 import { write } from '../../../core/write.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import type { Row } from './note-list.ts';
+import { cycleKeepers, type Row } from './note-list.ts';
 
 export type { MergePair };
 
@@ -27,8 +28,8 @@ export function openMergePairs(categories: readonly Row[], settings: readonly Se
   return openPairs(cats, idPairs(settingValue(settings, MERGE_SUGGEST_KEY)), idPairs(settingValue(settings, MERGE_DISMISSED_KEY)));
 }
 
-/** 用户点了“不用”：记下这一对（在排到时的最新值上加，连点几对都记下），顺带去掉分类已经不活着的对 */
-export function dismissMerge(writer: Pick<SettingWriter, 'update'>, pair: Pick<MergePair, 'keep' | 'merge'>, categories: readonly Row[]): Promise<void> {
+/** 用户点了“不用”：记下这一对（在排到时的最新值上加，连点几对都记下），顺带去掉分类已经不活着的对；回 false 是没写进本机 */
+export function dismissMerge(writer: Pick<SettingWriter, 'update'>, pair: Pick<MergePair, 'keep' | 'merge'>, categories: readonly Row[]): Promise<boolean> {
   const live = new Set(categories.filter(isLiveCategory).map((c) => c.id));
   return writer.update(MERGE_DISMISSED_KEY, (cur) => withPairs(idPairs(cur).filter(([a, b]) => live.has(a) && live.has(b)), [[pair.keep, pair.merge]]));
 }
@@ -56,4 +57,21 @@ export async function mergeCategories(pair: Pick<MergePair, 'keep' | 'merge'>, c
   if (isReadonly(pair.merge)) return done({ ok: false, reason: 'readonly' });
   const r = await saveOutcome(() => w.patch('categories', pair.merge, { merged_into: pair.keep }));
   return done(r === 'saved' ? { ok: true } : { ok: false, reason: r });
+}
+
+/** 本次运行里已经写回过的圈内分类 id：同一个只写一次（每次分类集合变化都会来查） */
+const cycleFixed = new Set<string>();
+
+/**
+ * 两台设备各合并一次绕成圈（A → B、B → A）：给圈里留下的那个（note-list.ts 的 cycleKeepers）写一笔 merged_into: null（经 outbox），
+ * 数据自己修好，之后全项目按 isLiveCategory 认它。只读行不写；运行日志只记 id 和结果
+ */
+export async function fixCategoryCycles(categories: readonly Row[], deps: MergeDeps = {}): Promise<void> {
+  const { w = write, isReadonly = (id: string) => readonlyIds('categories').getSnapshot().has(id) } = deps;
+  for (const id of cycleKeepers(categories)) {
+    if (cycleFixed.has(id) || isReadonly(id)) continue;
+    cycleFixed.add(id);
+    const r = await saveOutcome(() => w.patch('categories', id, { merged_into: null }));
+    rlog(`notes category cycle fix id=${id} ${r === 'saved' ? 'ok' : 'fail'}`);
+  }
 }

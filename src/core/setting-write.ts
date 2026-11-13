@@ -40,10 +40,10 @@ export interface SettingWriterDeps {
 }
 
 export interface SettingWriter {
-  /** 排队写一个键；值一样不写 */
-  save(key: string, value: unknown): Promise<void>;
-  /** 排队按原值算新值再写（排到了才算，原值取最新的）；新值一样不写 */
-  update(key: string, next: (cur: unknown) => unknown): Promise<void>;
+  /** 排队写一个键；值一样不写。回 true：写进本机了或值没变 */
+  save(key: string, value: unknown): Promise<boolean>;
+  /** 排队按原值算新值再写（排到了才算，原值取最新的）；新值一样不写。回值同 save */
+  update(key: string, next: (cur: unknown) => unknown): Promise<boolean>;
 }
 
 /** 一页一个：排队、记下本页 insert 过的行（key → id）和本页写成功的最后一个值（写的时候集合里是什么、写了什么，都存 JSON） */
@@ -61,36 +61,35 @@ export function createSettingWriter(deps: SettingWriterDeps): SettingWriter {
     return v;
   };
 
-  const saveNow = async (key: string, value: unknown): Promise<void> => {
+  const saveNow = async (key: string, value: unknown): Promise<boolean> => {
     const cur = deps.rows();
     const id = inserted.get(key);
     const json = JSON.stringify(value);
     const before = JSON.stringify(settingValue(cur, key));
-    const done = (ok: boolean): void => {
+    const done = (ok: boolean): boolean => {
       if (ok) wrote.set(key, { before, json });
       deps.onResult(ok);
+      return ok;
     };
     // 刚 insert 的那一行还没进本机集合：按记下的 id 改，值一样就不写
     if (id !== undefined && !cur.some((r) => r.key === key)) {
-      if (wrote.get(key)?.json === json) return;
-      done((await write.patch('settings', id, { value })).ok);
-      return;
+      if (wrote.get(key)?.json === json) return true;
+      return done((await write.patch('settings', id, { value })).ok);
     }
     const w = settingWrite(cur, key, value);
-    if (!w) return;
+    if (!w) return true;
     if (w.op === 'insert') {
       const newId = deps.newId();
       const r = await write.insert('settings', { id: newId, ...w.data });
       if (r.ok) inserted.set(key, newId);
-      done(r.ok);
-      return;
+      return done(r.ok);
     }
-    done((await write.patch('settings', w.id, w.data)).ok);
+    return done((await write.patch('settings', w.id, w.data)).ok);
   };
 
-  const update = (key: string, next: (cur: unknown) => unknown): Promise<void> => {
+  const update = (key: string, next: (cur: unknown) => unknown): Promise<boolean> => {
     const run = queue.then(() => saveNow(key, next(latest(key))));
-    queue = run.catch(() => undefined);
+    queue = run.then(() => undefined, () => undefined);
     return run;
   };
   return { update, save: (key, value) => update(key, () => value) };

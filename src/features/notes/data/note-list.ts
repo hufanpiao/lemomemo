@@ -12,6 +12,7 @@
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveCategory, isLiveRow } from '../../../../shared/logic/live-row.ts';
+import { keepFirst } from '../../../../shared/logic/notes/category-merge.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
 
 export type Row = { readonly id: string } & Readonly<Record<string, unknown>>;
@@ -89,22 +90,24 @@ function categoryColors(categories: readonly Row[]): Map<string, string | null> 
   return new Map(categories.map((c) => [c.id, categoryColor(c['color'])]));
 }
 
-/** 活着的分类（条目能归到的，即 categoryResolver 归到自己的那些）：id → 名字 */
+/** 活着的分类（isLiveCategory；绕成圈、还没写回的那个也算，见 categoryResolver）：id → 名字 */
 export function categoryNames(categories: readonly Row[]): Map<string, string> {
-  const target = categoryResolver(categories);
+  const keep = new Set(cycleKeepers(categories));
   const out = new Map<string, string>();
-  for (const c of categories) if (target(c.id) === c.id) out.set(c.id, str(c['name']));
+  for (const c of categories) if (isLiveCategory(c) || keep.has(c.id)) out.set(c.id, str(c['name']));
   return out;
 }
 
 /**
  * 条目的 category_id → 归到哪个活着的分类：顺着 merged_into 走（合并过的归到留下的那个），走不到活着的为 null。
- * 两台设备各合并一次可能绕成圈（A → B、B → A）：圈里按 sort 小的、一样再按 id 小的留一个，不把两个分类下的条目都变成没分类。
+ * 两台设备各合并一次可能绕成圈（A → B、B → A）：圈里照 shared 的 keepFirst 留一个，不把两个分类下的条目都变成没分类——
+ *   这只是写回之前的显示兜底，category-merge-store.ts 的 fixCategoryCycles 会给它写 merged_into: null，之后全按 isLiveCategory。
  * “条目归哪个分类”只在这里定：列表、分类胶囊、编辑页（note-edit.ts 的 formOf）都经它
  */
 export function categoryResolver(categories: readonly Row[]): (id: unknown) => string | null {
   const byId = new Map(categories.map((c) => [c.id, c]));
-  const first = (a: Row, b: Row): Row => (num(a['sort']) - num(b['sort']) || (a.id < b.id ? -1 : 1)) <= 0 ? a : b;
+  const row = (c: Row) => ({ id: c.id, name: str(c['name']), sort: num(c['sort']) });
+  const first = (a: Row, b: Row): Row => (keepFirst(row(a), row(b)) <= 0 ? a : b);
   return (id) => {
     const path: Row[] = [];
     for (let cur = id; typeof cur === 'string'; ) {
@@ -118,6 +121,12 @@ export function categoryResolver(categories: readonly Row[]): (id: unknown) => s
     }
     return null;
   };
+}
+
+/** 绕成圈时圈里留下的那几个分类：categoryResolver 归到自己、却还不是 isLiveCategory 的（等着写回 merged_into: null） */
+export function cycleKeepers(categories: readonly Row[]): string[] {
+  const target = categoryResolver(categories);
+  return categories.filter((c) => isLiveRow(c) && !isLiveCategory(c) && target(c.id) === c.id).map((c) => c.id);
 }
 
 /** 活着的插图，按随手记分好、每条里按 id（插入先后）排 */

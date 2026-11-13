@@ -8,9 +8,11 @@ import { createSettingWriter, type SettingRow } from '../../../core/setting-writ
 import { collection } from '../../../core/store.ts';
 import type { WriteResult } from '../../../core/write.ts';
 import { idPairs, MERGE_DISMISSED_KEY, MERGE_SUGGEST_KEY, PAIRS_MAX, withPairs } from '../../../../shared/logic/notes/category-merge.ts';
-import { dismissMerge, mergeCategories, openMergePairs, type MergeDeps } from '../data/category-merge-store.ts';
+import { dismissMerge, fixCategoryCycles, mergeCategories, openMergePairs, type MergeDeps } from '../data/category-merge-store.ts';
 import { aiMarkKept, formOf, patchOf } from '../data/note-edit.ts';
-import { categoryCounts, noteItems, type Row } from '../data/note-list.ts';
+import { isLiveCategory } from '../../../../shared/logic/live-row.ts';
+import { RL_SLOT } from '../../../platform/run-log-api.ts';
+import { categoryCounts, cycleKeepers, noteItems, type Row } from '../data/note-list.ts';
 import { boot, serverNote, setupImageTests, uid } from './note-images-kit.tsx';
 
 const TZ = 'Asia/Seoul';
@@ -104,7 +106,7 @@ describe('openMergePairs（TC-B4-07 出提示）', () => {
   });
   it('dismissMerge：writer.update 只调一次，键是 notes.merge_dismissed，值是原有各对加上新的一对；分类已经不活着（删了、合并掉、没了）的旧对顺带去掉', async () => {
     const saved: [string, unknown][] = [];
-    const writer = { update: (k: string, next: (cur: unknown) => unknown) => Promise.resolve(void saved.push([k, next([[A, C], [B, C], [A, uid(9)], [uid(7), uid(8)]])])) };
+    const writer = { update: (k: string, next: (cur: unknown) => unknown) => Promise.resolve(saved.push([k, next([[A, C], [B, C], [A, uid(9)], [uid(7), uid(8)]])]) > 0) };
     const live = [cat(A, '甲'), cat(B, '乙', { sort: 1 }), cat(C, '丙', { sort: 2 }), cat(uid(9), '丁', { merged_into: A }), cat(uid(7), '戊', { deleted_at: 1 })];
     await dismissMerge(writer, { keep: B, merge: A }, live);
     expect(saved).toEqual([[MERGE_DISMISSED_KEY, [[A, C], [B, C], [A, B]]]]);
@@ -231,6 +233,47 @@ describe('mergeCategories（TC-B4-07 合并后条目归到新分类）', () => {
       throw new OutboxRejectError('invalid_row');
     });
     expect(await mergeCategories({ keep: A, merge: B }, cats, s.deps)).toEqual({ ok: false, reason: 'rejected' });
+  });
+});
+
+describe('fixCategoryCycles（合并绕成圈的写回）', () => {
+  it('圈里留下的那个写一笔 {merged_into: null}、只写一次；写完 isLiveCategory 认得它、合并提示和条目都按它；日志只记 id 和结果', async () => {
+    const P = uid(301);
+    const Q = uid(302);
+    const loop = [cat(P, '工作', { sort: 2, merged_into: Q }), cat(Q, '工作', { sort: 1, merged_into: P }), cat(C, '工作室', { sort: 3 })];
+    expect(cycleKeepers(loop)).toEqual([Q]);
+    expect(openMergePairs(loop, [])).toEqual([]);
+    const lines: string[] = [];
+    (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    const s = stub();
+    await fixCategoryCycles(loop, s.deps);
+    await fixCategoryCycles(loop, s.deps);
+    delete (globalThis as Record<string, unknown>)[RL_SLOT];
+    expect(s.calls).toEqual([{ table: 'categories', id: Q, data: { merged_into: null } }]);
+    expect(lines).toEqual([`notes category cycle fix id=${Q} ok`]);
+    const after = applied(loop, s.calls);
+    expect(isLiveCategory(after.find((c) => c.id === Q) ?? {})).toBe(true);
+    expect(cycleKeepers(after)).toEqual([]);
+    expect(noteItems([note('p', P), note('q', Q)], after, TZ).map((i) => i.categoryId)).toEqual([Q, Q]);
+    expect(openMergePairs(after, []).map((p) => [p.keep, p.merge])).toEqual([[Q, C]]);
+  });
+
+  it('写不进去记 fail（这次运行不再重写）；只读行不写；没有圈不写', async () => {
+    const P = uid(311);
+    const Q = uid(312);
+    const lines: string[] = [];
+    (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    const bad = stub(() => ({ ok: false, reason: 'closing' }));
+    const loop = [cat(P, '甲', { merged_into: Q }), cat(Q, '乙', { merged_into: P })];
+    await fixCategoryCycles(loop, bad.deps);
+    await fixCategoryCycles(loop, bad.deps);
+    expect([bad.calls.length, lines]).toEqual([1, [`notes category cycle fix id=${P} fail`]]);
+    const ro = stub(undefined, [uid(321)]);
+    await fixCategoryCycles([cat(uid(321), '甲', { merged_into: uid(322) }), cat(uid(322), '乙', { merged_into: uid(321) })], ro.deps);
+    const none = stub();
+    await fixCategoryCycles([cat(A, '甲'), cat(B, '乙', { merged_into: A })], none.deps);
+    delete (globalThis as Record<string, unknown>)[RL_SLOT];
+    expect([ro.calls, none.calls]).toEqual([[], []]);
   });
 });
 

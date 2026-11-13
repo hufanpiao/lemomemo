@@ -15,6 +15,6 @@ const keyOf = (kind: DeviceKind): string => perDeviceKey(NOTES_VIEW_KEY, kind);
 export function useNotesViewSetting(newId: () => string = () => crypto.randomUUID()) {
   const { rows, save, error } = useSettingWriter(newId);
   const [kind] = useState(thisDeviceKind);
-  const set = useCallback((v: NotesView): Promise<void> => save(keyOf(kind), v), [save, kind]);
+  const set = useCallback((v: NotesView): Promise<boolean> => save(keyOf(kind), v), [save, kind]);
   return { kind, view: viewOf(settingValue(rows, keyOf(kind))), set, error };
 }

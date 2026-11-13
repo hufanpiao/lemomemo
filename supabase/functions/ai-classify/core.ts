@@ -84,6 +84,8 @@ export interface RuleLogic {
   isLiveCategory(c: Category): boolean;
   /** shared/logic/notes/category-merge.ts 的 addSuggested（R-413）：存的值加上这次的几对、去掉不在 live 里的；没变回 null */
   addSuggested(cur: unknown, add: readonly (readonly [string, string])[], live: ReadonlySet<string>): unknown[] | null;
+  /** shared/logic/notes/category-merge.ts 的 keepFirst（重名分类留哪个，和客户端同一口径） */
+  keepFirst(a: Category, b: Category): number;
 }
 
 export interface Deps {
@@ -279,8 +281,10 @@ export async function runRound(deps: Deps, store: ClassifyStore): Promise<Heartb
       await writeRules(deps, store, userId, toAi, cats, reason === 'quota' ? 'quota' : 'error', tally);
       continue;
     }
-    await writeAi(deps, store, userId, toAi, cats, items, canCreate, provider.model, tally);
-    await writeSimilar(deps, store, userId, cats, readSimilar(res.json, nameIndex(cats, deps.logic.normalize), deps.logic.normalize));
+    // 认分类名的映射每批只建一次：writeAi 新建的分类也加进去，readSimilar 用同一份
+    const index = nameIndex(cats, deps.logic);
+    await writeAi(deps, store, userId, toAi, cats, index, items, canCreate, provider.model, tally);
+    await writeSimilar(deps, store, userId, cats, readSimilar(res.json, index));
   }
 
   return {

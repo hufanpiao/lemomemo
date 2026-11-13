@@ -87,14 +87,15 @@ export function MergeBar({ hint, onResult }: { hint: MergeHint; onResult(r: Acti
 
 /**
  * 转成待办 / 日程的流程（R-414）：只读行拦下；带插图的先问（ask 不为空时页面画确认窗，问了就定下保留原条），其余直接转；结果出在输入行上面：
- * “已转成…”、“先别再转”（left）、没有字或太长“转不了”；正在转（busy）、已经没了、切换账号中不提示；其余走出错条 / 只读提示
+ * “已转成…”、“先别再转”（left）、没有字或太长“转不了”；正在转（busy）、已经没了、切换账号中不提示；其余（含抛异常）走出错条 / 只读提示
  */
 export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a: ReturnType<typeof useListActions<PageTip>>) {
   const [ask, setAsk] = useState<ConvAsk | null>(null);
   const go = async (id: string, kind: ConvertKind, keep: boolean) => {
     setAsk(null);
-    const r = await run(id, kind, keep);
-    if (r.ok) a.g.show({ kind: 'conv', key: `notes.conv.${r.kept ? 'kept' : 'moved'}.${kind}` });
+    const r = await run(id, kind, keep).catch(() => null);
+    if (r === null) a.report('failed');
+    else if (r.ok) a.g.show({ kind: 'conv', key: `notes.conv.${r.kept ? 'kept' : 'moved'}.${kind}` });
     else if (r.left) a.g.show({ kind: 'conv', key: 'notes.conv.left' });
     else if (r.reason === 'empty' || r.reason === 'too_long') a.g.show({ kind: 'conv', key: r.reason === 'empty' ? 'notes.conv.empty' : 'notes.conv.long' });
     else a.report(r.reason === 'readonly' ? 'readonly' : r.reason === 'switching' || r.reason === 'gone' || r.reason === 'busy' ? 'silent' : 'failed');

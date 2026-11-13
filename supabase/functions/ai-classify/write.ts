@@ -2,7 +2,7 @@
 // 写的时候都带条件（还是 pending；manual 的只改 ai_status），用户刚好改了就不覆盖（store.ts 的 writeNote）。
 import { PROMPT_VERSION } from '../_shared/ai/params.ts';
 import type { ClassifyStore, Deps } from './core.ts';
-import { nameIndex, type PendingNote } from './request.ts';
+import type { NameIndex, PendingNote } from './request.ts';
 
 /** 架构 5.2：超过 30 个分类后不准再新建 */
 export const MAX_CATEGORIES = 30;
@@ -70,12 +70,11 @@ export async function writeRules(
   }
 }
 
-/** AI 结果写回：分类名按 request.ts 的 nameIndex 认；认不得的能新建就新建（只记在这一批自己的副本里，不改传进来的 cats） */
+/** AI 结果写回：分类名按这一批的 index（request.ts 的 nameIndex）认；认不得的能新建就新建，新的 add 进 index、记在自己的副本 all 里，不改传进来的 cats */
 export async function writeAi(
-  deps: Deps, store: ClassifyStore, userId: string, notes: readonly PendingNote[], cats: readonly Category[],
+  deps: Deps, store: ClassifyStore, userId: string, notes: readonly PendingNote[], cats: readonly Category[], index: NameIndex<Category>,
   items: Map<number, { name: string; isNew: boolean }>, canCreate: boolean, model: string, tally: Tally,
 ): Promise<void> {
-  const byName = nameIndex(cats, deps.logic.normalize);
   const all = [...cats];
   let nextSort = cats.reduce((m, c) => Math.max(m, c.sort), -1) + 1;
   let created = 0;
@@ -84,15 +83,14 @@ export async function writeAi(
     const it = items.get(i);
     let catId: string | null = null;
     if (it) {
-      const key = deps.logic.normalize(it.name);
-      const hit = byName.get(key);
+      const hit = index.get(it.name);
       if (hit) catId = hit.id;
-      else if (canCreate && all.length < MAX_CATEGORIES && created < MAX_NEW_PER_BATCH && key !== '') {
+      else if (canCreate && all.length < MAX_CATEGORIES && created < MAX_NEW_PER_BATCH && deps.logic.normalize(it.name) !== '') {
         const c = { id: deps.newId(), name: it.name, sort: nextSort };
         try {
           await store.createCategory(userId, c);
           const full: Category = { ...c, deleted_at: null, undone: false, merged_into: null };
-          byName.set(key, full);
+          index.add(full);
           all.push(full);
           created++;
           nextSort++;

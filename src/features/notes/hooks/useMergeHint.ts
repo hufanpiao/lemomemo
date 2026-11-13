@@ -1,7 +1,7 @@
 // 随手记页的“合并分类”提示条（B4 S7，R-413；线框 MERGE：“‘读书’和‘书单’两个分类很像，合成一个吗？ 合并 / 不用”）
 // • 要提示的几对由 data/category-merge-store.ts 的 openMergePairs 算（AI 判的 notes.merge_suggest + 本机规则，去掉点过“不用”的），一次只出第一对
 // • 合并：只写被合并分类一笔 merged_into，条目读的时候归过去；不用：记进 notes.merge_dismissed，这一对以后不再提示
-// • 结果换成列表页的 ActionResult（只读出“要新版本”，写不进出错条；这一对已经没了、切换账号中不提示）；“不用”抛错也接住、出错条，运行日志只记结果
+// • 结果换成列表页的 ActionResult（只读出“要新版本”，写不进出错条；这一对已经没了、切换账号中不提示）；“不用”没写进本机或抛错都出错条，运行日志只记结果
 import { useMemo } from 'react';
 import type { ActionResult } from '../../../core/action-result.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
@@ -35,7 +35,7 @@ export function useMergeHint(): MergeHint | null {
     mergeName: name(pair.merge),
     merge: async () => resultOf(await mergeCategories(pair, cats)),
     dismiss: async () => {
-      const ok = await dismissMerge(writer, pair, cats).then(() => true, () => false);
+      const ok = await dismissMerge(writer, pair, cats).catch(() => false);
       rlog(`notes merge dismiss ${ok ? 'ok' : 'fail'}`);
       return ok ? 'ok' : 'failed';
     },

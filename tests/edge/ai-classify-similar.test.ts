@@ -4,11 +4,13 @@
 // 一轮下来把这一对按 id 写进 settings notes.merge_suggest（排好序），再给一次同样的不再写；存的旧对里分类没了的顺带去掉；
 // 读写设置出错只记日志，分类照常写回。服务商是真的 GeminiProvider + 回放桩（classify-similar.json，手写）。
 import { describe, expect, it } from 'vitest';
-import { MERGE_SUGGEST_KEY } from '../../shared/logic/notes/category-merge.ts';
+import { keepFirst, MERGE_SUGGEST_KEY } from '../../shared/logic/notes/category-merge.ts';
 import { classifyRequest, nameIndex, readSimilar, SIMILAR_MAX } from '../../supabase/functions/ai-classify/request.ts';
-import { writeAi, type Tally } from '../../supabase/functions/ai-classify/write.ts';
+import { writeAi, type Category, type Tally } from '../../supabase/functions/ai-classify/write.ts';
 import { normalizeForSearch } from '../../shared/logic/search.ts';
 import { A, B, cat, note, setup } from './ai-classify-fakes.ts';
+
+const LOGIC = { normalize: normalizeForSearch, keepFirst };
 
 const R = '00000000-0000-4000-8000-0000000000a1';   // 读书
 const L = '00000000-0000-4000-8000-0000000000a2';   // 书单
@@ -26,29 +28,33 @@ describe('ai-classify 相似分类对：请求和读回', () => {
   });
   it('readSimilar：名字要在名单里（先过 cleanCategoryName、再按归一比），回 id 对；同一对不分先后只认一次；两个一样、不是字符串、坏值都丢掉', () => {
     const T = '00000000-0000-4000-8000-0000000000a4';
-    const index = nameIndex([...cats(), cat(T, A, 'Travel', { sort: 4 })], normalizeForSearch);
+    const index = nameIndex([...cats(), cat(T, A, 'Travel', { sort: 4 })], LOGIC);
     const json = {
       similar: [
         { a: '读书', b: '书单' }, { a: '书单', b: '读书' }, { a: '工作', b: '不存在' }, { a: '工作', b: '工作' }, { a: 1, b: '工作' }, 'x', null,
         { a: ' “travel” ', b: '工作' }, { a: '工作'.repeat(7), b: '读书' },
       ],
     };
-    expect(readSimilar(json, index, normalizeForSearch)).toEqual([[R, L], [T, W]]);
-    expect(readSimilar(null, index, normalizeForSearch)).toEqual([]);
-    expect(readSimilar({ similar: 'x' }, index, normalizeForSearch)).toEqual([]);
-    expect(readSimilar({ items: [] }, index, normalizeForSearch)).toEqual([]);
+    expect(readSimilar(json, index)).toEqual([[R, L], [T, W]]);
+    expect(readSimilar(null, index)).toEqual([]);
+    expect(readSimilar({ similar: 'x' }, index)).toEqual([]);
+    expect(readSimilar({ items: [] }, index)).toEqual([]);
   });
   it(`readSimilar：最多认 ${SIMILAR_MAX} 对`, () => {
     const all = Array.from({ length: 30 }, (_, i) => cat(`00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, A, `分类${i}`, { sort: i }));
     const json = { similar: Array.from({ length: 29 }, (_, i) => ({ a: `分类${i}`, b: `分类${i + 1}` })) };
-    expect(readSimilar(json, nameIndex(all, normalizeForSearch), normalizeForSearch)).toHaveLength(SIMILAR_MAX);
+    expect(readSimilar(json, nameIndex(all, LOGIC))).toHaveLength(SIMILAR_MAX);
   });
-  it('nameIndex 一份映射、同一口径：归一后重名的留 sort 小的（一样按 id 小的），归一后为空的不收', () => {
+  it('nameIndex 一份映射、同一口径（shared 的 keepFirst）：归一后重名的留 sort 小的、一样留名字短的、再按 id 小的；归一后为空的不收；add 照同一规则', () => {
     const X = '00000000-0000-4000-8000-0000000000b1';
     const Y = '00000000-0000-4000-8000-0000000000b2';
-    const index = nameIndex([cat(Y, A, 'Travel', { sort: 1 }), cat(X, A, 'travel', { sort: 1 }), cat(W, A, ' TRAVEL', { sort: 2 }), cat(R, A, '！', { sort: 0 })], normalizeForSearch);
-    expect([...index.keys()]).toEqual([normalizeForSearch('travel')]);
-    expect(index.get(normalizeForSearch('travel'))?.id).toBe(X);
+    const Z = '00000000-0000-4000-8000-0000000000b3';
+    const index = nameIndex([cat(Y, A, 'Travel', { sort: 1 }), cat(X, A, 'travel', { sort: 1 }), cat(W, A, ' TRAVEL', { sort: 2 }), cat(R, A, '！', { sort: 0 })], LOGIC);
+    expect([index.get('TRAVEL')?.id, index.get('！')]).toEqual([X, undefined]);
+    index.add(cat(Z, A, 'travel', { sort: 9 }));
+    expect(index.get('travel')?.id).toBe(X);
+    index.add(cat(Z, A, 'travel', { sort: 0 }));
+    expect(index.get('travel')?.id).toBe(Z);
   });
 });
 
@@ -67,7 +73,7 @@ describe('ai-classify：认分类名 writeAi 和 readSimilar 同一口径；writ
     const tally: Tally = { ai: 0, rule: 0, manual: 0, skipped: 0, failed: 0 };
     const pending = [{ id: 'n0', user_id: A, title: '旅行计划', body: null, tags: [], category_source: 'none', ai_meta: null }];
     s.db.notes.push(note('n0', A, '旅行计划'));
-    await writeAi(s.deps, s.db.store, A, pending, list, new Map([[0, { name: '旅行', isNew: true }]]), true, 'm', tally);
+    await writeAi(s.deps, s.db.store, A, pending, list, nameIndex<Category>(list, LOGIC), new Map([[0, { name: '旅行', isNew: true }]]), true, 'm', tally);
     expect(list).toHaveLength(3);
     expect(s.db.cats.map((c) => c.name)).toEqual(['旅行']);
     expect([tally.ai, s.db.notes[0]?.category_id]).toEqual([1, s.db.cats[0]?.id]);

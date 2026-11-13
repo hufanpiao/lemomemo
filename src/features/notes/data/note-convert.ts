@@ -46,6 +46,10 @@ export async function convertNote(note: Row, kind: ConvertKind, at: ConvertAt, d
   busy.add(note.id);
   try {
     return done(await convertOnce(note, kind, at, deps));
+  } catch (e) {
+    // 写入口抛了 OutboxRejectError 以外的错（saveOutcome 原样抛）：记下错误名再往外抛，界面兜底出错条
+    rlog(`note convert ${kind} threw ${e instanceof Error ? e.name : 'unknown'}`);
+    throw e;
   } finally {
     busy.delete(note.id);
   }

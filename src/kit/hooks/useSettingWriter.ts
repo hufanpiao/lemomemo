@@ -14,6 +14,6 @@ export function useSettingWriter(newId: () => string = () => crypto.randomUUID()
   const newIdRef = useRef(newId);
   newIdRef.current = newId;
   const [writer] = useState(() => createSettingWriter({ rows: () => rowsRef.current, newId: () => newIdRef.current(), onResult: (ok) => setError(!ok) }));
-  const save = useCallback((key: string, value: unknown): Promise<void> => writer.save(key, value), [writer]);
+  const save = useCallback((key: string, value: unknown): Promise<boolean> => writer.save(key, value), [writer]);
   return { rows, writer, save, error };
 }

@@ -1,7 +1,7 @@
 // ai-classify 单测共用替身（tests/edge/ai-classify.test.ts、ai-classify-quota.test.ts）：内存假库（照 store.ts 和 private.ai_classify_pending 的条件）、
 // 内存额度、回放桩拼接、setup；settings 只放 notes.merge_suggest（R-413）。服务商是真的 GeminiProvider，fetch 换成回放桩，不联网、不用真密钥。
 import { isLiveCategory } from '../../shared/logic/live-row.ts';
-import { addSuggested } from '../../shared/logic/notes/category-merge.ts';
+import { addSuggested, keepFirst } from '../../shared/logic/notes/category-merge.ts';
 import { classifyByRules } from '../../shared/logic/notes/classify-rules.ts';
 import { normalizeForSearch } from '../../shared/logic/search.ts';
 import { GeminiProvider } from '../../supabase/functions/_shared/ai/gemini.ts';
@@ -121,7 +121,7 @@ export function setup(o: {
     quota: quota.q,
     exhaustedUntil: async () => exhausted,
     markExhausted: async (u) => { exhausted = u; },
-    logic: { classifyByRules, normalize: normalizeForSearch, isLiveCategory, addSuggested },
+    logic: { classifyByRules, normalize: normalizeForSearch, isLiveCategory, addSuggested, keepFirst },
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, '0')}`,
     now: () => NOW,
     log: (c) => logs.push(c),

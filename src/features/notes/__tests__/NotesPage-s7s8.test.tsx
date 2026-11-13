@@ -82,6 +82,35 @@ describe('合并分类提示（S7，R-413）', () => {
     spy.mockRestore();
     delete (globalThis as Record<string, unknown>)[RL_SLOT];
   });
+  it('点“不用”写不进本机（写入口回 ok:false、不抛错）：同样出错条、日志记 fail，不记成 ok', async () => {
+    await withSuggest();
+    const lines: string[] = [];
+    (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    const spy = vi.spyOn(write, 'insert').mockResolvedValueOnce({ ok: false, reason: 'local_unavailable' });
+    await act(async () => {
+      fireEvent.click(await screen.findByTestId('notes-merge-no'));
+    });
+    expect((await screen.findByTestId('notes-error')).textContent).toBeTruthy();
+    expect(lines.filter((l) => l.startsWith('notes merge dismiss'))).toEqual(['notes merge dismiss fail']);
+    spy.mockRestore();
+    delete (globalThis as Record<string, unknown>)[RL_SLOT];
+  });
+  it('分类合并绕成圈（两台设备各合并一次）：打开页面就给留下的那个写回 merged_into: null，只写一次，条目归到它', async () => {
+    const b = await boot();
+    await act(async () => {
+      await b.outbox?.applyServer('categories', [
+        { row: { ...serverCat(READ, '读书', 1), merged_into: LIST } as ServerRow }, { row: { ...serverCat(LIST, '书单', 2), merged_into: READ } as ServerRow },
+      ]);
+      await b.outbox?.applyServer('notes', [{ row: { ...serverNote(1), category_id: LIST } as ServerRow }]);
+    });
+    wire();
+    open();
+    await waitFor(() => expect(rows('categories').find((c) => c.id === READ)?.['merged_into']).toBeNull());
+    expect(rows('categories').find((c) => c.id === LIST)?.['merged_into']).toBe(READ);
+    expect(screen.getByTestId(`notes-card-${uid(1)}`).textContent).toContain('读书');
+    const q = (await b.outbox?.list()) ?? [];
+    expect(q.map((i) => [i.op, i.table, i.id, i.data])).toEqual([['patch', 'categories', READ, { merged_into: null }]]);
+  });
   it('没有 AI 判的、本机规则也不像：不出提示条', async () => {
     const b = await boot();
     await act(async () => {
@@ -230,7 +259,7 @@ describe('转成待办 / 日程：带不带图只判一次（R-414）', () => {
     expect([r?.ok, r?.kept]).toEqual([true, true]);
     expect(rows('notes').find((x) => x.id === uid(1))?.['deleted_at'] ?? null).toBeNull();
   });
-  it('流程拿到 too_long 出“超过 2000 字，转不了”（现成词条）；busy 不提示也不出错条', async () => {
+  it('流程拿到 too_long 出“超过 2000 字，转不了”（现成词条）；busy 不提示也不出错条；抛异常出错条', async () => {
     const show = vi.fn();
     const report = vi.fn();
     const a = { g: { show, block: vi.fn() }, isRo: () => false, report } as unknown as Parameters<typeof useConvertFlow>[1];
@@ -246,5 +275,13 @@ describe('转成待办 / 日程：带不带图只判一次（R-414）', () => {
     }
     expect(show.mock.calls).toEqual([[{ kind: 'conv', key: 'notes.conv.long' }]]);
     expect(report.mock.calls).toEqual([['silent']]);
+    // 转换抛异常：兜底出错条，不留没人接的拒绝
+    const boom = vi.fn(() => Promise.reject(new Error('boom')));
+    const { result } = renderHook(() => useConvertFlow(boom, a));
+    await act(async () => {
+      result.current.start(it1, 'todo');
+      await Promise.resolve();
+    });
+    expect(report.mock.calls).toEqual([['silent'], ['failed']]);
   });
 });

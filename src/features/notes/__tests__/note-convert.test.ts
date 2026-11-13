@@ -97,12 +97,16 @@ describe('convertNote：桩写入口', () => {
     expect(lines.join(' ')).not.toContain('买牛奶');
   });
 
-  it('写入抛了别的错（不是 OutboxRejectError）→ 照样往外抛，锁放开', async () => {
+  it('写入抛了别的错（不是 OutboxRejectError）→ 日志记“threw 错误名”后照样往外抛，锁放开', async () => {
+    const lines: string[] = [];
+    (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
     const s = stub([() => {
-      throw new Error('boom');
+      throw new TypeError('boom');
     }]);
     await expect(convertNote(note(), 'todo', { now: NOW, tz: TZ }, s.deps)).rejects.toThrow('boom');
+    expect(lines).toEqual(['note convert todo threw TypeError']);
     expect((await convertNote(note(), 'todo', { now: NOW, tz: TZ }, stub().deps)).ok).toBe(true);
+    delete (globalThis as Record<string, unknown>)[RL_SLOT];
   });
 
   it('保留原条（keepNote）：只写 converted_to 和 updated_at，不写 deleted_at', async () => {

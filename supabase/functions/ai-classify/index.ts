@@ -11,7 +11,7 @@ import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { gateDeps } from '../_shared/ai/wire.ts';
 import { aiAllowed } from '../_shared/consent.ts';
 import { isLiveCategory } from '../_shared/gen/logic/live-row.ts';
-import { addSuggested } from '../_shared/gen/logic/notes/category-merge.ts';
+import { addSuggested, keepFirst } from '../_shared/gen/logic/notes/category-merge.ts';
 import { classifyByRules } from '../_shared/gen/logic/notes/classify-rules.ts';
 import { normalizeForSearch } from '../_shared/gen/logic/search.ts';
 import { handle } from './core.ts';
@@ -38,7 +38,7 @@ Deno.serve((req) => {
     quota: g.quota,
     exhaustedUntil: g.exhaustedUntil,
     markExhausted: g.markExhausted,
-    logic: { classifyByRules, normalize: normalizeForSearch, isLiveCategory, addSuggested },
+    logic: { classifyByRules, normalize: normalizeForSearch, isLiveCategory, addSuggested, keepFirst },
     newId: () => crypto.randomUUID(),
     now: Date.now,
     log,
@@ -51,7 +51,7 @@ function unconfigured() {
   return {
     store: null, isUsable: no, consent: no, config: no, provider: () => null,
     quota: { take: no, refund: no }, exhaustedUntil: no, markExhausted: no,
-    logic: { classifyByRules: () => ({ category_id: null }), normalize: (s: string) => s, isLiveCategory, addSuggested },
+    logic: { classifyByRules: () => ({ category_id: null }), normalize: (s: string) => s, isLiveCategory, addSuggested, keepFirst },
     newId: () => crypto.randomUUID(), now: Date.now, log,
   };
 }
