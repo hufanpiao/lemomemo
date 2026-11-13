@@ -82,7 +82,8 @@ describe('二级页', () => {
     m.fonts = [KAI];
     uiStore.getState().setLocale('ko-KR');
     render(<FontSection />);
-    expect((await screen.findByTestId('settings-font')).textContent).toContain('손글씨');
+    // 容器先出来，韩文名要等换完语言再渲染：等到文字出现再比（11-14 全量负载下偶发读到旧文字）
+    await waitFor(() => expect(screen.getByTestId('settings-font').textContent).toContain('손글씨'));
   });
 
   it('下载失败：提示“没下载成功，先用系统字体”，点“重试”', async () => {

@@ -47,7 +47,8 @@ const catQueue = async () => ((await getBoot()?.outbox?.list()) ?? []).filter((i
 let lines: string[] = [];
 function logTo() {
   lines = [];
-  (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+  // 只收随手记的行：页面上的隐私记入口行挂上后会异步记一行 vault state（单测没网是 offline），会插进中间
+  (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => void (l.startsWith('notes ') && lines.push(l)) };
 }
 afterEach(() => {
   delete (globalThis as Record<string, unknown>)[RL_SLOT];
