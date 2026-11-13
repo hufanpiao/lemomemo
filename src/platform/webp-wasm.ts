@@ -1,11 +1,14 @@
 // App 自带的 webp 编码器（R-402，11-13 负责人定）：iPhone Safari 的 canvas 导不出 webp（toBlob / convertToBlob 要 image/webp 交回 png），
 // images 桶只收 webp（库约束、/files 文件头检查都锁着），这里拿 canvas 的像素（getImageData）自己编
-// • 库：@jsquash/webp 1.5.0（Squoosh 的 libwebp 编成 wasm；jSquash 是 Apache-2.0，libwebp 是 BSD-3，许可文本随产物发在
-//   /app/licenses/webp-wasm.txt），只用编码；直接引它的 SIMD 版，不走包入口（入口按 wasm-feature-detect 在 SIMD 版和普通版之间挑，
+// • 库：@jsquash/webp 1.5.0（Squoosh 的 libwebp 编成 wasm；jSquash 是 Apache-2.0，libwebp 是 BSD-3，许可原文由
+//   build/gen_licenses.mjs 构建时收进 /app/licenses.txt，R-410），只用编码；直接引它的 SIMD 版，不走包入口（入口按 wasm-feature-detect 在 SIMD 版和普通版之间挑，
 //   两份 wasm 都会发出去）。最低 iOS 16.4 起就有 wasm SIMD
 // • 按需加载：第一次要用时才动态 import，不进首屏；wasm 由 Vite 当作资源发到 /app/assets/（同源，CSP 的 script-src 加了 'wasm-unsafe-eval'），
 //   SW 的预缓存清单按 /app/ 下的全部产物生成，自动带上，离线也拿得到
 // • 载入失败（离线又没缓存、浏览器不让编译 wasm）：抛错，由调用方分类；不记住失败，下次再载
+// • R-407（11-13 负责人定）：载之前先看这台设备能不能跑（wasmUsable：有 WebAssembly、认 SIMD、CSP 和锁定模式不拦编译），
+//   跑不了就抛名为 NoWasm 的错（exe 的 CSP 没有 'wasm-unsafe-eval'，也落在这一类），界面单独提示“这台设备暂时加不了图”，不和离线混在一起。
+//   要先探：emscripten 胶水不论是取不到 .wasm 还是编译被拦，都一律 abort 成 WebAssembly.RuntimeError，事后分不出
 // • 编码抛错（超大图内存不足等）或编不出：抛错，并作废这份实例（wasm 的堆坏了不能一直坏下去），下次重建；
 //   只作废出错的那一份（if (ready === p)），旧实例晚到的错误不会把新建的也扔掉
 // 只管编码，不联网（wasm 文件的取用由浏览器和 SW 管）
@@ -27,11 +30,32 @@ export interface WebpCodec {
   options: Record<string, number>;
 }
 
+/** 设备跑不了 wasm 编码器时抛的错名（image-encode.ts 按它分出 wasm_unsupported） */
+export const NO_WASM = 'NoWasm';
+
+/** 最小的合法模块（只有魔数和版本），new WebAssembly.Module 它看 CSP、锁定模式让不让编译 */
+const EMPTY_MODULE = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
+/** 用到一条 SIMD 指令的模块（照抄 wasm-feature-detect 的 simd 探测），validate 过不了说明不认 SIMD */
+const SIMD_PROBE = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11);
+
+/** 这台设备能不能跑 SIMD 版的 wasm 编码器；探测本身出任何错都算不能。env 可注入（测试） */
+export function wasmUsable(env: { WebAssembly?: typeof WebAssembly } = globalThis): boolean {
+  try {
+    const W = env.WebAssembly;
+    if (typeof W !== 'object' || W === null || !W.validate(SIMD_PROBE)) return false;
+    new W.Module(EMPTY_MODULE);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * 载入 wasm 编码器。overrides 原样交给 emscripten 的模块工厂：App 里不给（胶水代码按 import.meta.url 去取同目录的 .wasm）；
  * 单测在 node 里给 wasmBinary（node 的 fetch 取不了 file: 地址）
  */
 export async function loadWebpCodec(overrides: { wasmBinary?: Uint8Array } = {}): Promise<WebpCodec> {
+  if (!wasmUsable()) throw Object.assign(new Error('wasm_unsupported'), { name: NO_WASM });
   const [codec, meta] = await Promise.all([import('@jsquash/webp/codec/enc/webp_enc_simd.js'), import('@jsquash/webp/meta.js')]);
   // noInitialRun：只要导出的 encode，不跑 main
   const module = (await codec.default({ noInitialRun: true, ...overrides })) as unknown as WebpCodec['module'];

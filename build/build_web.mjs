@@ -1,5 +1,5 @@
 // 构建 dist/web/（架构 8.1）：npm run build -- --mode preview|production（另有本机用的 development、test、e2e、e2e-real）
-// 步骤：vite build（App + 预览沙箱）→ 单独打包 sw.ts → 注入预缓存清单 → 拼 dist/web（site/、_headers、_routes.json、version.json）→ 体积预算
+// 步骤：vite build（App + 预览沙箱）→ 单独打包 sw.ts → 生成开源许可清单（R-410）→ 注入预缓存清单 → 拼 dist/web（site/、_headers、_routes.json、version.json）→ 体积预算
 // 输出目录默认 dist/web；LEMO_WEB_OUT=dist/web-<名字> 时写到那里（真后端那组 e2e 用 dist/web-real，和无后端组互不覆盖），production、preview 不许改
 // tsc、ESLint、Stylelint、check_arch 由 CI 在这之前单独跑（unit.yml），这里不重复
 import { spawnSync } from 'node:child_process';
@@ -8,6 +8,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { assembleWeb, buildEnvErrors, MODES, WEB_OUT_DEFAULT, webOutDir } from './assemble_web.mjs';
+import { writeLicenses } from './gen_licenses.mjs';
 import { injectSwManifest } from './inject_sw_manifest.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -47,9 +48,11 @@ const viteMode = mode === 'e2e' || mode === 'e2e-real' ? 'preview' : mode;
 
 await build({ configFile: resolve(ROOT, 'vite.config.ts'), mode: viteMode, logLevel: 'warn' });
 await build({ configFile: resolve(ROOT, 'vite.sw.config.ts'), mode: viteMode, logLevel: 'warn' });
+// 开源许可清单 /app/licenses.txt（R-410）：按 lock 的生产依赖生成，不进预缓存
+const licBytes = writeLicenses(APP_DIR, ROOT);
 const n = await injectSwManifest(APP_DIR);
 await assembleWeb({ root: ROOT, mode, out: OUT });
-console.log(`构建完成：mode=${mode}，输出到 ${OUT}，预缓存 ${n} 个文件`);
+console.log(`构建完成：mode=${mode}，输出到 ${OUT}，预缓存 ${n} 个文件，开源许可清单 ${licBytes} 字节`);
 
 // 启动画面样式的媒体查询没被压缩改写成旧版 Safari 不认的范围写法（R-254 审查必改 1）
 const splash = spawnSync(process.execPath, [resolve(ROOT, 'build/check_splash_css.mjs'), '--app-dir', APP_DIR], { stdio: 'inherit' });

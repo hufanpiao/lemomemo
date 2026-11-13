@@ -69,11 +69,11 @@ describe('技术页（机型信息页；倾斜授权试验页 R-373 已删除）
 });
 
 describe('excludedFromPrecache', () => {
-  it('sw.js、节假日、字体、iOS 启动图、source map、version.json 不进预缓存', () => {
-    for (const p of ['sw.js', 'holidays/cn/2026.json', 'fonts/a.woff2', 'icons/startup/startup-1170x2532.png', 'assets/a.js.map', 'version.json', '.vite/manifest.json']) {
+  it('sw.js、节假日、字体、iOS 启动图、source map、version.json、开源许可清单（R-410）不进预缓存', () => {
+    for (const p of ['sw.js', 'holidays/cn/2026.json', 'fonts/a.woff2', 'icons/startup/startup-1170x2532.png', 'assets/a.js.map', 'version.json', 'licenses.txt', '.vite/manifest.json']) {
       expect(excludedFromPrecache(p), p).toBe(true);
     }
-    for (const p of ['index.html', 'assets/index-abc.js', 'assets/index-abc.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png']) {
+    for (const p of ['index.html', 'licenses/licenses.txt', 'assets/index-abc.js', 'assets/index-abc.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png']) {
       expect(excludedFromPrecache(p), p).toBe(false);
     }
   });

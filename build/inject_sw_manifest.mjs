@@ -15,7 +15,8 @@ export function excluded(path) {
     path.startsWith('icons/startup/') ||
     path.startsWith('.vite/') ||
     path.endsWith('.map') ||
-    path === 'version.json'
+    path === 'version.json' ||
+    path === 'licenses.txt'
   );
 }
 

@@ -99,6 +99,18 @@ describe('OLE2 旧格式', () => {
     expect(await sniff(ole(['worddocument', 2]))).toEqual(unk('ole_no_stream'));
     expect(await sniff(ole(['WordDocument', 1]))).toEqual(unk('ole_no_stream'));
   });
+  it('R-408：根下 EncryptionInfo 和 EncryptedPackage 两个流都在（带打开密码的 docx、xlsx、pptx）→ 带密码，不算类型不认', async () => {
+    const enc = { ok: false, reason: 'encrypted', detail: 'ole_encrypted_package' };
+    expect(await sniff(ole(['EncryptionInfo', 2], ['EncryptedPackage', 2]))).toEqual(enc);
+    // 真文件根下还有 DataSpaces 存储、SummaryInformation 流，不影响
+    expect(await sniff(ole(['DataSpaces', 1], ['EncryptedPackage', 2], ['SummaryInformation', 2], ['EncryptionInfo', 2]))).toEqual(enc);
+    // 只有其中一个、是存储不是流、大小写不同 → 照旧不认
+    expect(await sniff(ole(['EncryptionInfo', 2]))).toEqual(unk('ole_no_stream'));
+    expect(await sniff(ole(['EncryptionInfo', 1], ['EncryptedPackage', 2]))).toEqual(unk('ole_no_stream'));
+    expect(await sniff(ole(['encryptioninfo', 2], ['EncryptedPackage', 2]))).toEqual(unk('ole_no_stream'));
+    // 带密码的旧格式（根下照样有 WordDocument）仍判成 doc
+    expect(await sniff(ole(['WordDocument', 2], ['EncryptionInfo', 2], ['EncryptedPackage', 2]))).toEqual(ok('doc'));
+  });
   it('PPT 里嵌 Excel（子存储里的 Workbook 不算）→ ppt；根下 Word 和 Excel 都有 → 不认', async () => {
     const embed = buildOle([
       { name: 'Root Entry', type: 5, child: 1 },

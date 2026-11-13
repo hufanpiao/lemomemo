@@ -10,7 +10,8 @@
 //   这张图后面就都改走 App 自带的 wasm 编码器（platform/webp-wasm.ts），把同一张画布的像素（getImageData）编成 webp。
 //   原生行不行只探测一次：第一次拿到 blob 就把它的 type 记在 NativeMemo 里（App 里整个模块共用一份），以后的图不再白导一次 png；
 //   reject、回 null 不算结论（可能只是这张太大），下一张再试。wasm 只从像素编，原文件的 EXIF 一个字节都带不过去（R-108 照旧）
-// • 失败码：解不了 → heic_unsupported / decode_failed；wasm 载不进来（离线又没缓存、浏览器不让编译）→ encode_load_failed；
+// • 失败码：解不了 → heic_unsupported / decode_failed；设备根本跑不了 wasm（没有 WebAssembly、不认 SIMD、编译被拦）→ wasm_unsupported（R-407；不叫 encode_unsupported：那是 R-402 以前“换个浏览器”的旧码，日志里会混）；
+//   wasm 载不进来（离线又没缓存等）→ encode_load_failed；
 //   取不到像素、编码出错（内存不足等）→ encode_failed；怎么降都超 → too_big。意料之外的异常也收口成 encode_failed，不往外抛
 // • 诊断（diag，每个结果都有）：走哪条路、原生交回的 type、耗时（总、载 wasm、wasm 编码；从解码完算起）、
 //   失败在哪一步（decode / load / px / enc）和错误名
@@ -18,7 +19,7 @@
 // • 依赖可注入（测试里 jsdom 没有 canvas）
 // 纯 TS：不准 import React（A1）
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { loadWebpWasm, type RawPixels, type WebpEncode } from '../../../platform/webp-wasm.ts';
+import { loadWebpWasm, NO_WASM, type RawPixels, type WebpEncode } from '../../../platform/webp-wasm.ts';
 import { EXIF_SCAN_BYTES, jpegTakenAt } from './image-exif.ts';
 
 export const FULL_EDGE = 2048;
@@ -53,7 +54,7 @@ export interface Encoded {
   takenAt: number | null;
   diag?: EncodeDiag;
 }
-export type EncodeFail = { ok: false; code: 'heic_unsupported' | 'decode_failed' | 'encode_load_failed' | 'encode_failed' | 'too_big'; diag?: EncodeDiag };
+export type EncodeFail = { ok: false; code: 'heic_unsupported' | 'decode_failed' | 'wasm_unsupported' | 'encode_load_failed' | 'encode_failed' | 'too_big'; diag?: EncodeDiag };
 export type EncodeResult = Encoded | EncodeFail;
 
 /** 解出来的图（ImageBitmap 的子集） */
@@ -260,7 +261,7 @@ export async function encodeImage(file: File, tz: Tz, deps: EncodeDeps = default
     const s = e instanceof Stop ? e : new Stop('enc', errName(e));
     d.why = s.why;
     d.err = s.err;
-    r = { ok: false, code: s.why === 'load' ? 'encode_load_failed' : 'encode_failed' };
+    r = { ok: false, code: s.why !== 'load' ? 'encode_failed' : s.err === NO_WASM ? 'wasm_unsupported' : 'encode_load_failed' };
   } finally {
     src.close();
   }

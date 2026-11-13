@@ -56,6 +56,8 @@ export function excludedFromPrecache(path: string): boolean {
     path.startsWith('icons/startup/') ||
     path.startsWith('.vite/') ||
     path.endsWith('.map') ||
-    path === 'version.json'
+    path === 'version.json' ||
+    // R-410：开源许可清单（约百 KB）只在联网时打开，不让每台设备白下
+    path === 'licenses.txt'
   );
 }

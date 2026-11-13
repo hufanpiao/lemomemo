@@ -1,6 +1,9 @@
 // 附件类型只在这里判（架构 5.13 第 2 点 ①）：只看字节——PDF 签名；ZIP 从末尾读中央目录和 [Content_Types].xml；OLE2 读头、FAT、目录里根下的流名。
 // 不变量：不收文件名和 MIME；任何输入都不抛错，只回 kind 或拒因；不读任何流的内容；不记日志（调用方记字节数和结果）。
 // 解压函数由调用方传入（客户端 fflate、服务器 DecompressionStream 适配器），shared 不碰运行环境的 API。
+// R-408（11-13 负责人定）：设了打开密码的 docx、xlsx、pptx 其实是 OLE2 外壳，根下只有 EncryptionInfo 和 EncryptedPackage 两个流
+// （MS-OFFCRYPTO 2.3.4），单独回 reason 'encrypted'，界面提示“带密码的文件不能上传”，不再算“类型不认”；
+// 设了密码的 .doc、.xls、.ppt 根下仍有 WordDocument 等流，照旧认成旧格式（这里不读流内容，分不出加没加密）。
 // 本文件会复制进 supabase/functions/_shared/gen 受 F7 检查：任意偏移的读取一律经 DataView，魔数写成数字，查表用 Map 或遍历元组。
 
 // 判得出的 10 种附件类型 DocKind 和它们的 MIME 只在 shared/manifests/attachments.ts 的 DOC_TYPES 里列，这里只引类型
@@ -34,11 +37,12 @@ type BadArchiveDetail =
   | 'eocd_missing' | 'eocd_not_at_end' | 'eocd_multi_disk' | 'eocd_count_mismatch' | 'zip64' | 'cd_out_of_range'
   | 'cd_bad_entry' | 'ct_duplicate' | 'ct_encrypted' | 'ct_bad_method' | 'ct_too_big' | 'ct_bad_local'
   | 'ct_data_overrun' | 'ct_size_mismatch' | 'inflate_failed' | 'inflate_size' | 'zip_range';
-/** reason 给界面（类型不认 / 压缩包异常），detail 给运行日志定是哪条规则拒的 */
+/** reason 给界面（类型不认 / 压缩包异常 / 带密码），detail 给运行日志定是哪条规则拒的 */
 export type SniffResult =
   | { ok: true; kind: DocKind }
   | { ok: false; reason: 'unknown'; detail: UnknownDetail }
-  | { ok: false; reason: 'bad_archive'; detail: BadArchiveDetail };
+  | { ok: false; reason: 'bad_archive'; detail: BadArchiveDetail }
+  | { ok: false; reason: 'encrypted'; detail: 'ole_encrypted_package' };
 
 /** raw deflate；输出超过 maxBytes 必须立刻停下并返回 null（或抛错） */
 export type InflateRaw = (deflated: Uint8Array, maxBytes: number) => Uint8Array | null | Promise<Uint8Array | null>;
@@ -200,6 +204,8 @@ const OLE_HEADER = 512;
 const END_OF_CHAIN = 0xfffffffe;
 const NO_STREAM = 0xffffffff;
 const DIR_ENTRY = 128;
+/** 带打开密码的 OOXML：根下这两个流都在（只有其中一个不算） */
+const ENCRYPTED_STREAMS = ['EncryptionInfo', 'EncryptedPackage'] as const;
 const HEADER_DIFAT = 109;
 
 function sniffOle(v: DataView): SniffResult {
@@ -231,6 +237,7 @@ function sniffOle(v: DataView): SniffResult {
   const seen = new Set<number>([0]);
   const stack = [v.getUint32(entry(0) + 76, true)];
   let family: Family | undefined;
+  const encrypted = new Set<string>();
   for (let id = stack.pop(); id !== undefined; id = stack.pop()) {
     if (id === NO_STREAM) continue;
     if (id >= total || seen.has(id)) return unknown('ole_bad_tree');
@@ -239,12 +246,14 @@ function sniffOle(v: DataView): SniffResult {
     stack.push(v.getUint32(at + 68, true), v.getUint32(at + 72, true));
     if (v.getUint8(at + 66) !== 2) continue;
     const name = entryName(v, at);
+    if (ENCRYPTED_STREAMS.some((n) => n === name)) encrypted.add(name);
     const f = FAMILIES.find((x) => x.streams.some((n) => n === name));
     if (!f) continue;
     if (family && family !== f) return unknown('ole_multi_family');
     family = f;
   }
-  return family ? { ok: true, kind: family.legacy } : unknown('ole_no_stream');
+  if (family) return { ok: true, kind: family.legacy };
+  return encrypted.size === ENCRYPTED_STREAMS.length ? { ok: false, reason: 'encrypted', detail: 'ole_encrypted_package' } : unknown('ole_no_stream');
 }
 
 /** FAT 扇区号：头里 109 项，不够再沿 DIFAT 链（512 字节扇区的文件约 6.8 MB 起用到） */

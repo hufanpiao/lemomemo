@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PROBE_MARKERS } from '../../../build/check_no_probe.mjs';
-import { startDiagBoot } from '../diag-boot.ts';
+import { dropStaleKeys, STALE_KEYS, startDiagBoot } from '../diag-boot.ts';
 import { OUT_KEY as RUN_LOG_KEY } from '../run-log.ts';
 
 beforeEach(() => localStorage.clear());
@@ -15,6 +15,24 @@ describe('startDiagBoot', () => {
     startDiagBoot();
     expect(localStorage.getItem(RUN_LOG_KEY) ?? '').not.toBe('');
     expect(localStorage.getItem(RUN_LOG_KEY)).not.toMatch(/gapfix/);
+  });
+
+  it('R-409：空闲时才清掉两个旧键 lemo-gapfix-out、lemo-sp-color，别的键不动', () => {
+    expect([...STALE_KEYS]).toEqual(['lemo-gapfix-out', 'lemo-sp-color']);
+    for (const k of STALE_KEYS) localStorage.setItem(k, 'old');
+    localStorage.setItem('lemo-gapfix-off', '1');
+    let later: (() => void) | null = null;
+    startDiagBoot(localStorage, (fn) => (later = fn));
+    expect(localStorage.getItem('lemo-gapfix-out'), '没到空闲不清').toBe('old');
+    (later as unknown as () => void)();
+    for (const k of STALE_KEYS) expect(localStorage.getItem(k)).toBeNull();
+    expect(localStorage.getItem('lemo-gapfix-off')).toBe('1');
+    expect(localStorage.getItem(RUN_LOG_KEY) ?? '').not.toBe('');
+  });
+
+  it('R-409：存储抛错（隐私模式）也不往外抛', () => {
+    const bad = { removeItem: () => { throw new DOMException('x', 'SecurityError'); } } as unknown as Storage;
+    expect(() => dropStaleKeys(bad)).not.toThrow();
   });
 });
 

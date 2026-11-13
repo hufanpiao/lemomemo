@@ -11,6 +11,7 @@ const SAMPLES = [
   'index.html',
   'preview.html',
   'version.json',
+  'licenses.txt',
   'manifest.webmanifest',
   'assets/index-AbC12_9x.js',
   'assets/index-AbC12_9x.js.map',

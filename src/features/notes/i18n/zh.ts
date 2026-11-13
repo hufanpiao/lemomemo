@@ -43,6 +43,7 @@ export const zh = {
   'notes.img.err.heic_unsupported': '这张是 HEIC 格式，浏览器打不开，请先转成 JPG',
   'notes.img.err.decode_failed': '这张图片打不开',
   // R-402：iPhone 上的浏览器都是 WebKit，“换个浏览器”没用；先用中性文案，最终文案待负责人定
+  'notes.img.err.wasm_unsupported': '这台设备暂时加不了图', // R-407
   'notes.img.err.encode_load_failed': '这张图没处理成功，联网后再试一次',
   'notes.img.err.encode_failed': '这张图没处理成功，再试一次',
   'notes.img.err.too_big': '图片太大，没存上',

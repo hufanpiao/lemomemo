@@ -3,7 +3,7 @@
 // • 原生能导出 → 一次都不载 wasm、不取像素；原生行不行只探测一次（第一次拿到 blob 就记住，后面的图不再白导一次 png）
 // • 每个尺寸只画一次（原生那一试和取像素共用一张画布）；沿用同一张质量表、长边和 FULL_MAX / THUMB_MAX 的逐档降
 // • 产物里没有 EXIF、XMP 块，拍摄时间照旧从原 JPEG 读（R-108）
-// • 失败分开报：wasm 载不进来 → encode_load_failed；取不到像素、编码出错（内存不足）→ encode_failed；
+// • 失败分开报：设备跑不了 wasm（R-407）→ wasm_unsupported；wasm 载不进来 → encode_load_failed；取不到像素、编码出错（内存不足）→ encode_failed；
 //   诊断（diag）记走哪条路、原生交回的 type、耗时（总、载入、编码）、失败在哪一步和错误名（只记 e.name，不记 message）
 // • 编码器载不进来、编码抛错都不记住这份实例，下次重建
 // 真浏览器（Chromium 模拟 iPhone）里的整条链路见 tests/e2e/r402-webp-wasm.spec.ts
@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { notes } from '../../../../shared/manifests/notes.ts';
-import { createWebpWasm, loadWebpCodec, type RawPixels, type WebpCodec } from '../../../platform/webp-wasm.ts';
+import { createWebpWasm, loadWebpCodec, NO_WASM, wasmUsable, type RawPixels, type WebpCodec } from '../../../platform/webp-wasm.ts';
 import { drawCanvas, encodeDiagText, encodeImage, FULL_EDGE, FULL_MAX, THUMB_EDGE, THUMB_MAX, type Decoded, type EncodeDeps, type NativeMemo } from '../data/image-encode.ts';
 import { bareJpeg, exifApp1, hasAscii, isWebpFile, riffChunks, withExif } from './exif-sample.ts';
 
@@ -223,6 +223,14 @@ describe('R-402 失败分开报，诊断写明哪一步、什么错（只记错�
     expect(await fail({ wasm: () => Promise.reject(err) })).toEqual({ code: 'encode_load_failed', text: 'path=wasm native=image/png ms=0 loadMs=0 encMs=0 why=load err=CompileError' });
   });
 
+  it('R-407：设备跑不了 wasm（载入器先探出来，抛 NoWasm）→ wasm_unsupported，不和离线混在一起；下一张照样再探', async () => {
+    const noWasm = Object.assign(new Error('wasm_unsupported'), { name: NO_WASM });
+    const load = vi.fn().mockRejectedValueOnce(noWasm).mockImplementation(() => loadWebpCodec({ wasmBinary }));
+    const w = createWebpWasm(load);
+    expect(await fail({ wasm: w })).toEqual({ code: 'wasm_unsupported', text: 'path=wasm native=image/png ms=0 loadMs=0 encMs=0 why=load err=NoWasm' });
+    expect((await encodeImage(file(), TZ, iphoneDeps({ wasm: w }).deps)).ok).toBe(true);
+  });
+
   it('取不到像素 → encode_failed，why=px', async () => {
     const r = await fail({
       pixels: () => {
@@ -324,5 +332,27 @@ describe('上限和清单一致（R-402 评审 6）', () => {
   it('FULL_MAX、THUMB_MAX 等于 shared/manifests/notes.ts 里 images 桶的 fileSizeLimit、thumbSizeLimit', () => {
     const limits = notes.buckets?.find((b) => b.name === 'images')?.limits;
     expect([FULL_MAX, THUMB_MAX]).toEqual([limits?.fileSizeLimit, limits?.thumbSizeLimit]);
+  });
+});
+
+describe('R-407 wasmUsable：载之前先探设备能不能跑', () => {
+  it('node 里有 WebAssembly、认 SIMD、能编译 → 能跑', () => {
+    expect(wasmUsable()).toBe(true);
+  });
+  it('没有 WebAssembly（锁定模式等）、不认 SIMD、编译被拦（CSP）、探测本身抛错 → 不能跑', () => {
+    const as = (w: unknown) => ({ WebAssembly: w as typeof WebAssembly });
+    expect(wasmUsable({})).toBe(false);
+    expect(wasmUsable(as({ ...WebAssembly, validate: () => false }))).toBe(false);
+    expect(wasmUsable(as({ validate: () => true, Module: function () { throw Object.assign(new Error('x'), { name: 'CompileError' }); } }))).toBe(false);
+    expect(wasmUsable(as({ validate: () => { throw new TypeError('x'); } }))).toBe(false);
+    expect(wasmUsable(as({ validate: WebAssembly.validate, Module: WebAssembly.Module })), '真的这两样就能跑').toBe(true);
+  });
+  it('跑不了时 loadWebpCodec 不去 import 胶水，直接抛 NoWasm', async () => {
+    vi.stubGlobal('WebAssembly', undefined);
+    try {
+      await expect(loadWebpCodec({ wasmBinary })).rejects.toMatchObject({ name: NO_WASM });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
