@@ -8,7 +8,8 @@ import { msAt, parseHm } from '../../shared/core/date.ts';
 import { handle, QUEUE_LEASE_S } from '../../supabase/functions/push-dispatch/core.ts';
 import { cronReq, depsFor, fakeVapid } from './push-dispatch-harness.ts';
 import { DB_DATA } from '../../supabase/functions/push-dispatch/round.ts';
-import { MemDb, POISON_AT, todoRow, UA } from './push-dispatch-mem.ts';
+import { MemDb, POISON_AT, todoRow, UA, uuid } from './push-dispatch-mem.ts';
+import { createFakePush, newPushSubscriber } from '../fakes/push-service.ts';
 
 const SEOUL = 'Asia/Seoul';
 const at = (hm: string, day = '2026-11-03') => msAt(day, parseHm(hm), SEOUL);
@@ -61,7 +62,7 @@ describe('第 0 步租约：崩溃以后', () => {
 });
 
 describe('第 0 步租约：处理期间这一行又被改了', () => {
-  it('读完、写回之前用户改了截止日：触发器清租约、attempts 清零，finish 不删；下一轮当新项按新值重算', async () => {
+  it('读完、写回之前用户改了截止日：写回的 rev 条件不成立、不写（放回），触发器清租约、attempts 清零；下一轮当新项按新值重算', async () => {
     const db = new MemDb().user(UA);
     const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0, remind_at: null }), true);
     const rows = db.rows.bind(db);
@@ -80,15 +81,55 @@ describe('第 0 步租约：处理期间这一行又被改了', () => {
       writes.push(patch.remind_at);
       return wr(table, id, user, patch, prev);
     };
-    await run(db, at('10:00'));
-    // 第一次按读到的旧值写了 11-05（乐观条件只看 remind_at，编辑没动 remind_at），项留在队列里、租约已清、attempts 清零
+    const d0 = await run(db, at('10:00'));
+    // 第一次按读到的旧值算出 11-05 去写，但编辑加了 rev（remind_at 是系统列、编辑没动它，只看 remind_at 拦不住；R-411 整块评审必改 1），
+    // 写不进去、放回；项留在队列里、租约已清、attempts 清零
     expect(writes).toEqual([want('2026-11-05')]);
+    expect(db.tables.todos.get(t.id)?.remind_at).toBeNull();
+    expect(d0.codes).toContain(`recalc:released:todos:${t.id.slice(0, 8)}`);
     expect(db.queue.get(`todos:${t.id}`)).toMatchObject({ claim: null, attempts: 0 });
     // 新项每轮按批出队一次（11-05 安全复审 N1），下一分钟按新值写成 11-09，然后删掉
     await run(db, at('10:01'));
     expect(writes).toEqual([want('2026-11-05'), want('2026-11-09')]);
     expect(db.tables.todos.get(t.id)?.remind_at).toBe(want('2026-11-09'));
     expect(db.queue.size).toBe(0);
+  });
+});
+
+describe('第 0 步写回：读完到写回之间用户改了日期（R-411 整块评审必改 1）', () => {
+  it('这一轮不按旧日期写回、也不推；下一轮按新日期算', async () => {
+    const v = await fakeVapid();
+    const db = new MemDb().user(UA);
+    const ep = `https://fcm.googleapis.com/fcm/send/${uuid('f')}`;
+    const sub = await newPushSubscriber(ep);
+    db.device(UA, { endpoint: ep, p256dh: sub.p256dh, auth: sub.auth });
+    const fake = createFakePush({ subscribers: [sub], vapid: { publicKey: v.pub } });
+    try {
+      // 今天 09:00 到点的待办（还没算过）；08:59:30 这一轮第 0 步算出今天 09:00，第 1 步本来马上就推
+      const t = db.put('todos', todoRow(UA, { due: '2026-11-03', remind_days: 0, remind_at: null }), true);
+      const rows = db.rows.bind(db);
+      let edited = false;
+      db.rows = async (table, ids) => {
+        const r = await rows(table, ids);
+        if (!edited) {
+          edited = true;
+          db.edit('todos', t.id, { due: '2026-11-09' });   // 读完以后，另一台设备把截止日改到 11-09
+        }
+        return r;
+      };
+      const now = at('08:59') + 30 * S;
+      db.clock = () => now;
+      const d = depsFor(db, v.keys, { now: () => now, fetch: fake.fetch });
+      expect((await handle(cronReq(), d)).status).toBe(200);
+      expect(d.codes).toContain(`recalc:released:todos:${t.id.slice(0, 8)}`);
+      expect(db.tables.todos.get(t.id)?.remind_at).toBeNull();   // 没按旧日期写成今天 09:00
+      expect(fake.requests.filter((r) => r.payload !== null)).toEqual([]);   // 这一轮没推
+      await run(db, at('09:01'));
+      expect(db.tables.todos.get(t.id)?.remind_at).toBe(want('2026-11-09'));
+      expect(db.queue.size).toBe(0);
+    } finally {
+      await fake.close();
+    }
   });
 });
 
@@ -158,10 +199,10 @@ describe('第 0 步租约：放回、有毒项', () => {
     const bad = db.put('todos', todoRow(UA, { due: '2026-11-06', remind_days: 0, remind_at: null }), true);
     const raced = db.put('todos', todoRow(UA, { due: '2026-11-07', remind_days: 0, remind_at: null }), true);
     const wr = db.writeRemind.bind(db);
-    db.writeRemind = async (table, id, user, patch, prev, prevNotified) => {
+    db.writeRemind = async (table, id, user, patch, prev) => {
       if (id === bad.id) throw new Error(DB_DATA);
       if (id === raced.id) return false;   // 读完以后行又被改了
-      return wr(table, id, user, patch, prev, prevNotified);
+      return wr(table, id, user, patch, prev);
     };
     const t0 = at('10:00');
     const d = await run(db, t0);
@@ -170,7 +211,7 @@ describe('第 0 步租约：放回、有毒项', () => {
     expect(db.queue.has(`todos:${ok.id}`)).toBe(false);                                         // 写成：删掉
     expect(db.queue.get(`todos:${bad.id}`)).toMatchObject({ attempts: 1, claimed_at: t0 });    // hold：租约留着
     expect(db.queue.get(`todos:${bad.id}`)?.claim).toBeTruthy();
-    expect(db.queue.get(`todos:${raced.id}`)).toMatchObject({ claim: null, attempts: 0 });     // 放回
+    expect(db.queue.get(`todos:${raced.id}`)).toMatchObject({ claim: null, attempts: 0, claimed_at: t0 });   // 放回（claimed_at 留着，迁移 20261113160000）
     expect(d.codes).toEqual(expect.arrayContaining([`recalc:written:todos:${ok.id.slice(0, 8)}`, `recalc:held:todos:${bad.id.slice(0, 8)}`,
       `recalc:released:todos:${raced.id.slice(0, 8)}`, 'recalc_write_failed:data']));
     expect(db.logs.filter((l) => l.act === 'recalc').map((l) => [l.item_id, l.code]).sort()).toEqual([[ok.id, 'written'], [bad.id, 'held']].sort());

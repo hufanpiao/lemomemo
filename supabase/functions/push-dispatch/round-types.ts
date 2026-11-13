@@ -26,9 +26,15 @@ export const BEHIND_MS = 60 * MIN_MS;
 export const DB_TIMEOUT = 'db:timeout';
 /**
  * 这一行本身写不进去（PostgREST 回的 SQLSTATE 是 22 类数据异常、23 类违反约束）时 store 抛的错误文字：重试也一样写不进去。
- * 第 0 步写回遇到它记 held（留着租约、计入有毒次数，迁移 20261113120000）；超时、连不上、5xx、认不出的照旧放回。原因码记 `<码>:data`
+ * 第 0 步写回遇到它记 held：finish 的放回、删除两份名单都不列这一项，租约留着到期由别的轮重取，每取一次计一次有毒次数
+ * （迁移 20261113160000 的 remind_queue_finish）；超时、连不上、5xx、认不出的照旧放回。原因码记 `<码>:data`
  */
 export const DB_DATA = 'db:data';
+/**
+ * PostgREST 回 PGRST202（按这组参数名找不到函数）时 store 抛的错误文字：多半是新版函数部署到了还没 db push 的旧库
+ * （例如 remind_queue_finish 少了 p_done）。收尾照旧，原因码记 `<码>:nofn`，查日志一眼能和别的数据库错误分开（上线手册“先 db push 后部署函数”）
+ */
+export const DB_NOFN = 'db:nofn';
 /** logs.src（≤ 16 字） */
 export const LOG_SRC = 'push-dispatch';
 /** 本轮要读的设置键 */
@@ -48,6 +54,8 @@ export interface QueueRef { table_name: Table; id: string }
 export interface ItemRow {
   id: string;
   user_id: string;
+  /** touch() 维护的版本号：系统写入（table_meta.system_cols）不加，用户改了别的列才加；写回的乐观条件比它 */
+  rev: number;
   deleted_at: number | null;
   undone?: boolean;
   source?: string;
@@ -107,21 +115,21 @@ export interface RoundStore {
   /** private.remind_queue_pop：打租约出队（迁移 20261113100000）。retry = true 只取取过的项、一次 1 项；false 只取新项（attempts = 0）、按批。
    *  perUser 每人上限、poison 有毒次数、ver 规则版本（只交出 min_ver ≤ ver 的项）都显式传，不靠 SQL 的默认值 */
   popQueue(limit: number, leaseS: number, retry: boolean, perUser: number, poison: number, ver: number): Promise<QueueItem[]>;
-  /** private.remind_queue_finish(claim, release)：release 里的放回（清租约、attempts 减 1）；hold 里的留着租约和 attempts、等过期重取
-   *  （写回出错的项，计入有毒次数，迁移 20261113120000）；这个租约的其余项删掉 */
-  finishQueue(claim: string, release: readonly QueueRef[], hold?: readonly QueueRef[]): Promise<void>;
+  /** private.remind_queue_finish(claim, release, done)（迁移 20261113160000）：release 里的放回（清租约、attempts 减 1）；done 里的删掉；
+   *  两份都没列的（写回遇到数据类错误的项）留着租约和 attempts、等过期重取，计入有毒次数 */
+  finishQueue(claim: string, release: readonly QueueRef[], done: readonly QueueRef[]): Promise<void>;
   /** 第 0 步按 id 读行（只按 id 读；行的主人和队列项对不对，在 round-step0.ts 里比 user_id） */
   rows(table: Table, ids: readonly string[]): Promise<ItemRow[]>;
   profiles(userIds: readonly string[]): Promise<Map<string, Profile>>;
   /** 只读 SETTING_KEYS、没软删、没撤销的（11-04 起撤销了的按没设处理） */
   settings(userIds: readonly string[]): Promise<Map<string, UserSettings>>;
   /**
-   * 系统写入（不加 rev）：remind_at，纪念日另有 next_date。乐观条件（代码审查建议 ④）：只在 remind_at 还是 prevRemindAt 时写
-   * （null 用 is null）；回是否更新到 1 行。没更新到 = 读完以后行被改了（用户又改了一次，触发器已重新入队），调用方插回队列。
-   * prevNotifiedFor（可选，只有第 0 步 S1 例外传）：另要求 notified_for 还等于它（11-05 安全审查 A4：读完以后另一台设备又改了 notified_for，
-   * 就不按旧的“知道了”写回新时刻，免得新时刻再推一次）
+   * 系统写入（不加 rev）：remind_at，纪念日另有 next_date。乐观条件：rev 还等于 prev.rev、remind_at 还等于 prev.remind_at（null 用 is null）
+   * 才写；回是否更新到 1 行。remind_at 是系统列，用户改日期、改提前量、按“知道了”（notified_for）都不动它，只会加 rev——
+   * 所以“读完以后用户又改了”靠 rev 判（R-411 整块评审必改 1）；remind_at 条件挡的是别的系统写入抢先写过。
+   * 没更新到 = 读完以后行被改了（用户改的话触发器已重新入队），调用方放回队列、这一轮不推
    */
-  writeRemind(table: Table, id: string, userId: string, patch: { remind_at: number | null; next_date?: string | null }, prevRemindAt: number | null, prevNotifiedFor?: number): Promise<boolean>;
+  writeRemind(table: Table, id: string, userId: string, patch: { remind_at: number | null; next_date?: string | null }, prev: { remind_at: number | null; rev: number }): Promise<boolean>;
   /**
    * 第 1 步：private.remind_due(lo, hi, perUser, limit)——三张表合起来在 SQL 里按 isDue 的条件精确判断（安全审查必改 1、代码审查 M2：
    * 粗筛按 remind_at 取前 500 会被“remind_at 很早、snooze_at 很远”的行或推过的行占满），只回可用账号的，每人最多 perUser 条，

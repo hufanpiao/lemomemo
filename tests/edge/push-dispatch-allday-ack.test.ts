@@ -53,24 +53,22 @@ describe('S1：改了默认时刻以后按“知道了”，要收回已推的�
     expect(w.sent().filter((p) => p.type === 'remind')).toHaveLength(1);
   });
 
-  it('安全审查 A4：读完行以后另一台设备又把 notified_for 改成 07:10：不按旧的“知道了”写回 07:20，放回队列重算后照旧压住', async () => {
+  it('安全审查 A4：读完行以后另一台设备又把 notified_for 改成 07:10：rev 变了、不按旧的“知道了”写回 07:20，下一轮重算后照旧压住', async () => {
     const db = new MemDb().user(UA);
     const { w, a } = await pushedThenShifted(db);
     db.edit('events', a.id, { notified_for: at('07:20') });
     const wr = db.writeRemind.bind(db);
     let raced = false;
-    db.writeRemind = async (table, id, user, patch, prev, prevNotified) => {
+    db.writeRemind = async (table, id, user, patch, prev) => {
       if (!raced && id === a.id) {
         raced = true;
-        const r = db.tables.events.get(a.id);
-        if (r) r.notified_for = at('07:10');   // 直接改替身里的值：模拟夹在读和写之间的那次改动（触发器入队由下面的 requeue 补）
+        db.edit('events', a.id, { notified_for: at('07:10') });   // 夹在读和写之间的那次改动：notified_for 不是系统列，rev 加 1、触发器入队
       }
-      return wr(table, id, user, patch, prev, prevNotified);
+      return wr(table, id, user, patch, prev);
     };
     await w.round(at('07:06'));
     expect(raced).toBe(true);
     expect(db.tables.events.get(a.id)?.remind_at).toBe(at('07:00'));
-    requeue(db, a.id);
     await w.round(at('07:07'));
     expect(db.tables.events.get(a.id)?.remind_at).toBe(at('07:00'));
     await w.round(at('07:20'));
