@@ -111,6 +111,8 @@ async function lock(page: Page, name: string, el: ReturnType<Page['locator']>, m
     e.setAttribute('data-vlock', '');
     for (const a of ups) a.setAttribute('data-vlock-up', '');
     document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    // 点下面的按钮时 Playwright 会先滚过去（11-14 设置页加了隐私记几行，“退出登录”落到第一屏下，CI 里 scrollY 偶尔是 15）；藏内容不改布局，先滚回顶再摆
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     await raf();
     const cs = getComputedStyle(h);
     let top = 0;
