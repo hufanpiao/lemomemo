@@ -5,6 +5,7 @@
 // • 只影响没单独设过提醒的纪念日；服务器那边改了默认会重算（remind_on_settings → remind_enqueue('anniv')）
 // • 设置页（reminders 的 RemindSettings）经 anniv/index.ts 懒加载它，A27；推算和农历（anniv-lib）加载好之前这一行不出（加载失败也不出）
 import { useState } from 'react';
+import { DEFAULT_REMIND_TIME } from '../../../../shared/logic/remind.ts';
 import { SettingsEntryRow } from '../../../kit/components/Settings/Settings.tsx';
 import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
 import { annivLib, defaultsWrites, useAnnivLib } from '../hooks/anniv-view.ts';
@@ -21,7 +22,7 @@ export default function AnnivDefaults() {
 }
 
 function DefaultsRow() {
-  const { DEFAULT_OFFSETS, DEFAULT_TIME, offsetsOf, remindTimeOf } = annivLib();
+  const { DEFAULT_OFFSETS, offsetsOf, remindTimeOf } = annivLib();
   const t = useAnnivT();
   const { save } = useSettingWriter();
   const stored = useAnnivDefaults();
@@ -31,11 +32,11 @@ function DefaultsRow() {
   const time = remindTimeOf({ remind_time: null }, stored);
   const value: RemindValue = {
     offsets: same(offs, offsetsOf({ remind_offsets: null }, FACTORY)) ? null : offs,
-    time: time === DEFAULT_TIME ? null : time,
+    time: time === DEFAULT_REMIND_TIME ? null : time,
   };
   // 只写变了的那一项（整块评审第 12 条）
   const onChange = (v: RemindValue): void => {
-    for (const [k, x] of defaultsWrites({ offsets: offs, time }, { offsets: v.offsets ?? DEFAULT_OFFSETS, time: v.time ?? DEFAULT_TIME })) void save(k, x);
+    for (const [k, x] of defaultsWrites({ offsets: offs, time }, { offsets: v.offsets ?? DEFAULT_OFFSETS, time: v.time ?? DEFAULT_REMIND_TIME })) void save(k, x);
   };
   return (
     <>

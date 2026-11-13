@@ -8,7 +8,7 @@
 //   这时只在本机关掉横幅和通知、记进本次会话的已处理集合（hooks/useReminders.ts），判断用 timingPending；
 //   那条改动发出去以后，提醒时刻没变的再补写一次（第三轮 L10，hooks/useReminders.ts 的 laterAcks）
 import { addDays, type DateStr } from '../../../../shared/core/date.ts';
-import { DEFAULT_TODO_REMIND_TIME } from '../../../../shared/logic/remind.ts';
+import { todoRowOf, type NewTodoRow } from '../../../../shared/logic/todo-row.ts';
 import { saveInsert, savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
 import type { Reminder } from './reminder-model.ts';
 
@@ -73,15 +73,11 @@ export function snoozeReminder(r: Reminder, at: number, now: number): Promise<Sa
 
 /**
  * 纪念日提醒的“生成待办”（B5 S15；线框“提醒响起时”第三张：新建一条待办，截止在纪念日前一天）：
- * 新建待办的整行（列和 todos 的 newTodoRow 同一套，A27 不跨功能引，这里照抄一份最小的；当天 09:00 提醒，同新建待办的默认），
+ * 新建待办的整行（shared/logic/todo-row.ts 的 todoRowOf，和新建待办同一份；当天提醒、时刻用默认），
  * from_anniv_id 记来源。due 由调用方按纪念日这一次的日期算好传进来（前一天）
  */
-export function annivTodoRow(id: string, title: string, due: DateStr, annivId: string, now: number): Record<string, unknown> & { id: string } {
-  return {
-    id, title, done: false, important: false, due, due_time: null, remind_before_min: null, remind_days: 0, remind_time: DEFAULT_TODO_REMIND_TIME,
-    project: '', note: '', source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: annivId,
-    short: null, short_by: null, done_at: 0, push_show_title: null, notified_for: null, snooze_at: null, created_at: now, updated_at: now,
-  };
+export function annivTodoRow(id: string, title: string, due: DateStr, annivId: string, now: number): NewTodoRow {
+  return todoRowOf({ id, title, due, remind_days: 0, from_anniv_id: annivId, now });
 }
 
 /** 生成待办的截止日：纪念日前一天；当天或已过按的取今天，不生成一条一出来就逾期的待办（整块评审第 14 条） */

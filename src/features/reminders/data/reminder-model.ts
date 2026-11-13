@@ -20,7 +20,7 @@
 import { addDays, msAt, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
-import { ALL_DAY_EVE_TIME, allDayRemindDay, allDayTimeOf, applyDnd, remindAtOf, sameRemindDay, type Dnd } from '../../../../shared/logic/remind.ts';
+import { ALL_DAY_EVE_TIME, allDayRemindDay, allDayTimeOf, applyDnd, DEFAULT_REMIND_TIME, remindAtOf, sameRemindDay, type Dnd } from '../../../../shared/logic/remind.ts';
 import { occurrenceKey, reminderTag } from '../../../../shared/logic/remind-route.ts';
 
 export type RemindKind = 'event' | 'todo' | 'anniv';
@@ -253,7 +253,7 @@ export function modeOf(r: Reminder, defaultTime?: string): ModeMsg {
   }
   if (r.kind === 'event') return beforeMsg(num(r.row['remind_min']) ?? 0, false);
   if (str(r.row['due_time']) !== null) return beforeMsg(num(r.row['remind_before_min']) ?? 0, true);
-  const time = str(r.row['remind_time']) ?? '09:00';
+  const time = str(r.row['remind_time']) ?? DEFAULT_REMIND_TIME;
   return num(r.row['remind_days']) === 1 ? { key: 'remind.mode.dayBefore', params: { time } } : { key: 'remind.mode.sameDay', params: { time } };
 }
 

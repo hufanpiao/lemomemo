@@ -2,7 +2,7 @@
 // • remind.show_title：true（默认）= 推送直接写标题和名字（R-46）；false = 锁屏只显示“有 1 项日程”（R-188 保留项，15.7 第 18 项）
 // • remind.dnd：{start: 'HH:MM', end: 'HH:MM', enabled?: false}；认不出的按没开（和 push-dispatch 的 parseDnd 同一口径，
 //   supabase/functions/push-dispatch/round-util.ts）。关掉时保留时段、写 enabled: false，再打开还是原来的时段
-// • remind.default_time：全天日程“开始时再提醒”的时刻（startAtOf），没设 09:00
+// • remind.default_time：全天日程“开始时再提醒”的时刻（startAtOf），读值用 shared/logic/remind.ts 的 allDayTimeOf（没设、认不出按 DEFAULT_REMIND_TIME）
 // • 读写一个键在 core/setting-read.ts（settingValue、SettingRow）、core/setting-write.ts（settingWrite），和日历共用一份（REMIND-settings-core、FA-4 代码审查 L7），这里只转出读的
 import { ANNIV_KEY_OFFSETS as KEY_ANNIV_OFFSETS, ANNIV_KEY_TIME as KEY_ANNIV_TIME } from '../../../../shared/logic/anniv/keys.ts';
 import type { Dnd } from '../../../../shared/logic/remind.ts';
@@ -59,6 +59,3 @@ export function isHm(s: string): boolean {
   return HM.test(s);
 }
 
-export function defaultTimeOf(v: unknown): string {
-  return typeof v === 'string' && HM.test(v) ? v : '09:00';
-}

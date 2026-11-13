@@ -88,3 +88,28 @@ describe('captureRow 的截断：按 UTF-16 单元截（同 insertSchema 的 max
     expect([r.row.title.length, r.row.note.length, r.row.raw_text.length, r.row.project.length]).toEqual([160, 2000, 2000, 40]);
   });
 });
+
+describe('captureRow 待办整行钉住（todos 加列只改 shared/logic/todo-row.ts 一处）', () => {
+  const base = {
+    id: '00000000-0000-4000-8000-000000000001', title: '买牛奶', done: false, important: false, project: '', note: '', raw_text: '原话',
+    batch_id: '00000000-0000-4000-8000-0000000000b1', from_note_id: null, from_anniv_id: null, done_at: 0, remind_days: null, remind_time: '09:00',
+    push_show_title: null, notified_for: null, snooze_at: null, created_at: NOW, updated_at: NOW,
+  };
+  it('只有标题：没截止、remind_days 为 null（不同于编辑页新建的 0）', () => {
+    expect(captureRow(item(), ctx())).toStrictEqual({
+      table: 'todos', row: { ...base, source: 'page', due: null, due_time: null, remind_before_min: null, short: null, short_by: null },
+    });
+  });
+  it('有截止日子和时刻、重要、AI 简称、项目和备注：提前 60 分钟', () => {
+    const it2 = item({ due: '2026-11-04' as CaptureItem['due'], time: '18:00', important: true, short: '奶', project: '工作', body: '两盒' });
+    expect(captureRow(it2, ctx({ source: 'voice' }))).toStrictEqual({
+      table: 'todos',
+      row: { ...base, source: 'voice', important: true, project: '工作', note: '两盒', due: '2026-11-04', due_time: '18:00', remind_before_min: 60, short: '奶', short_by: 'ai' },
+    });
+  });
+  it('只说时刻：截止记今天；本机规则不写简称', () => {
+    expect(captureRow(item({ time: '07:00', short: '奶' }), ctx({ source: 'chat', origin: 'rule' }))).toStrictEqual({
+      table: 'todos', row: { ...base, source: 'chat', due: '2026-11-02', due_time: '07:00', remind_before_min: 60, short: null, short_by: null },
+    });
+  });
+});
