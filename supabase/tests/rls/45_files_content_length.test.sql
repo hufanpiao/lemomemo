@@ -53,8 +53,8 @@ select is(tests.fa1('put', tests.item(false, '1000') || '{"foo": "bar"}'::jsonb)
 select is(tests.fa1('get', tests.item(false, null)), 'ok', 'get 不带 content_length 照常放行');
 select is(tests.fa1('get', tests.item(false, '"x"')), 'ok', 'get 带了坏的 content_length 也忽略');
 select is(tests.fa1('put', jsonb_build_object('bucket', 'images', 'path',
-  'aaaaaaaa-0000-4000-8000-000000000001/anniv/4a000000-0000-4000-8000-0000000000c1/4b000000-0000-4000-8000-0000000000c1.webp')), 'ok',
-  '纪念日头像这一步不查 content_length（大小由 /files 的规则表管）');
+  'aaaaaaaa-0000-4000-8000-000000000001/anniv/4a000000-0000-4000-8000-0000000000c1/4b000000-0000-4000-8000-0000000000c1.webp')), 'length_required',
+  '纪念日头像 put 也要 content_length（20261114192000 起，B5 整块评审第 4 条；等于 avatar_bytes 等见 52_anniv_avatar_quota）');
 select is(tests.fa1('put', jsonb_build_object('bucket', 'images', 'path',
   'aaaaaaaa-0000-4000-8000-000000000001/45000000-0000-4000-8000-0000000000a1/4e000000-0000-4000-8000-0000000000c9.webp')), 'no_row',
   '没有这一行时先回 no_row（不因缺 content_length 改口）');

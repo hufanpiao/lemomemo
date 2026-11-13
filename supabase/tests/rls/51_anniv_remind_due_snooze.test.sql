@@ -12,7 +12,7 @@ insert into public.devices (id, user_id, platform, label, session_id, push_endpo
    'BA' || repeat('B', 84) || 'A', repeat('A', 21) || 'g');
 
 insert into public.anniversaries (id, user_id, kind, name, calendar, month, day, created_at, updated_at, remind_at, pushed_for, snooze_at, defer_until, notified_for) values
-  ('a5100000-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001', 'birthday', 'n', 'solar', 11, 20, 1, 1, 5000000, 1100000, 1500000, null, null),     -- 推过以后按了稍后：1500000 到点
+  ('a5100000-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001', 'birthday', 'n', 'solar', 11, 20, 1, 1, 5000000, 1100000, 1500000, null, null),     -- 推过以后按了稍后：1500000 到点；旧通知收回
   ('a5100000-0000-4000-8000-000000000002', 'aaaaaaaa-0000-4000-8000-000000000001', 'birthday', 'n', 'solar', 11, 20, 1, 1, 5000000, 1100000, null, null, null),        -- 推过、没处理：不到点、不收回
   ('a5100000-0000-4000-8000-000000000003', 'aaaaaaaa-0000-4000-8000-000000000001', 'birthday', 'n', 'solar', 11, 20, 1, 1, 5000000, 1100000, 3000000, null, null),     -- 稍后在窗口外：不到点；推过以后按了稍后：收回
   ('a5100000-0000-4000-8000-000000000004', 'aaaaaaaa-0000-4000-8000-000000000001', 'birthday', 'n', 'solar', 11, 20, 1, 1, 5000000, 1500000, 1500000, null, null),     -- 稍后那一次推过了：不到点、不收回
@@ -25,8 +25,8 @@ select is((select string_agg(id::text || '@' || due_at, ',' order by due_at, id)
   'a5100000-0000-4000-8000-000000000001@1500000,a5100000-0000-4000-8000-000000000007@1600000',
   'remind_due：推过以后的稍后按 greatest(snooze_at, defer_until) 判到点，不被挪过的 remind_at 吞掉');
 select is((select string_agg(id::text, ',' order by id) from private.remind_pushed(1000000, 2000000, 20, 500) where table_name = 'anniversaries'),
-  'a5100000-0000-4000-8000-000000000003,a5100000-0000-4000-8000-000000000005,a5100000-0000-4000-8000-000000000006',
-  'remind_pushed：纪念日只在按了稍后、知道了、关了提醒时收回；remind_at 挪到下一次不算');
+  'a5100000-0000-4000-8000-000000000001,a5100000-0000-4000-8000-000000000003,a5100000-0000-4000-8000-000000000005,a5100000-0000-4000-8000-000000000006,a5100000-0000-4000-8000-000000000007',
+  'remind_pushed：纪念日只在推过以后按了稍后（1、3、7：收回旧的，到点再推新的，和日程一致）、知道了（5）、关了提醒（6）时收回；remind_at 挪到下一次不算（2、4、8）');
 select ok(has_function_privilege('service_role', 'private.remind_due(bigint, bigint, int, int)', 'EXECUTE')
       and has_function_privilege('service_role', 'private.remind_pushed(bigint, bigint, int, int)', 'EXECUTE')
       and not exists (select 1 from pg_proc p, aclexplode(p.proacl) a

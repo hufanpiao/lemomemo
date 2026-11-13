@@ -77,7 +77,8 @@ export function buildRules(manifests) {
       if (!thumbMax) fail('images 桶的清单要写 limits.thumbSizeLimit（缩略图上限，B4 S10 ④）');
       if (b.pathPrefix === '<user_id>/anniv/') {
         mustMatch(re, `${S}/anniv/${S}/${S}.webp`, where);
-        rules.push({ bucket: 'images', segment: 'avatar', pathPattern: b.pathPattern, variants: [v('avatar', '.webp', WEBP, max, true)] });
+        if (!b.maxBytes) fail('纪念日头像那一段的清单要写 maxBytes（头像上限，B5 整块评审第 4 条）');
+        rules.push({ bucket: 'images', segment: 'avatar', pathPattern: b.pathPattern, variants: [v('avatar', '.webp', WEBP, b.maxBytes, true)] });
       } else if (b.pathPrefix === '<user_id>/') {
         mustMatch(re, `${S}/${S}/${S}.webp`, where);
         mustMatch(re, `${S}/${S}/${S}.t.webp`, where);
