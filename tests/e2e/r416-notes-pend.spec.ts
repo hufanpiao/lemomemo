@@ -72,6 +72,8 @@ for (const size of SIZES) {
       await page.goto('/app/#/notes');
       const input = page.getByTestId('notes-input');
       await expect(input).toBeVisible({ timeout: 20_000 });
+      // 电脑：等电脑版面板换上（B6；换上时输入行重挂，正在换的那一刻选的图会落在卸下的 input 上）
+      if (!size.hasTouch) await expect(page.getByTestId('desk')).toBeVisible();
       const cards = await page.locator('[data-testid^="notes-card-"]').count();
       const pickInput = page.getByTestId('notes-img-input');
       await pickInput.setInputFiles({ name: 'a.jpg', mimeType: 'image/jpeg', buffer: await jpeg(page, 20) });
@@ -110,7 +112,8 @@ for (const size of SIZES) {
     test('HEIC 点“记下”：提示条在小图上面、互不压住，图放回输入行', async ({ page, browserName }, info) => {
       await page.goto('/app/#/notes');
       await expect(page.getByTestId('notes-input')).toBeVisible({ timeout: 20_000 });
-      const heic = Buffer.from([0, 0, 0, 24, 102, 116, 121, 112, 104, 101, 105, 99, 0, 0, 0, 0]);
+      if (!size.hasTouch) await expect(page.getByTestId('desk')).toBeVisible(); // 同上一条：等电脑版面板换上
+      const heic =Buffer.from([0, 0, 0, 24, 102, 116, 121, 112, 104, 101, 105, 99, 0, 0, 0, 0]);
       await page.getByTestId('notes-img-input').setInputFiles({ name: 'IMG_1.HEIC', mimeType: 'image/heic', buffer: heic });
       await page.getByTestId('notes-add').click();
       const tip = page.getByTestId('notes-img-tip');

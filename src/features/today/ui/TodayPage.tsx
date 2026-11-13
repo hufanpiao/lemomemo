@@ -27,7 +27,7 @@
 // • 液态玻璃底栏、“＋”、时间河、提醒按钮条不在这一段（FA-4、FA-7）
 // • 电脑版（B6，5.9b；有侧栏的宽度）：交给按需下载的 TodayDesk 排成可拖动的块；“没赶上”并进“现在”块，“今天的安排”成了时间河块（块标题就是它，里面不再画小标题）；
 //   纪念日一行换成“快到了”块。电脑版分包没到、下不来时照手机的排法画
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
@@ -37,12 +37,13 @@ import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
+import { opensKeyboard } from '../../../platform/env.ts';
 import { afterAppPainted, isAppPainted } from '../../../platform/root-paint.ts';
-import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
+import { AppearItem, AppearList, Pressable, useHoldView, useSwapWhenSafe } from '../../../motion/components.ts';
 import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
-import { TodayDesk, TodayRo } from '../index.ts';
+import { loadTodayDesk, TodayRo } from '../index.ts';
 import { useAnnivAny } from '../hooks/useAnnivAny.ts';
 import { TodaySubtasks } from '../../todos/index.ts';
 import { GrowIn } from './GrowIn.tsx';
@@ -131,8 +132,10 @@ export default function TodayPage() {
   const { g, tick, shown, del } = a;
   const open = (kind: 'event' | 'todo', id: string) => (g.isRo(kind, id) ? g.block() : void navigate(kind, id));
   const anniv = useAnnivAny();
-  // 有侧栏的宽度（电脑版）：面板布局（5.9b），面板那一块按需下载、不进首屏
-  const desk = useMedia(MQ_SIDEBAR);
+  // 有侧栏的宽度（电脑版）：面板布局（5.9b）。面板那一块（DeskLayout、dnd-kit、zod 约 49 KB）首屏画完才下载（首屏预算 150 KB 按 1280 宽也量），
+  // 下好了、这一页里没有焦点和按住的指针时才换上（motion 的 useSwapWhenSafe）；在那之前照原来的一列画
+  const page = useRef<HTMLElement>(null);
+  const Desk = useSwapWhenSafe(useMedia(MQ_SIDEBAR), page, loadTodayDesk, afterAppPainted, opensKeyboard);
 
   const lateItem = v.late.length ? (
     <AppearItem as="section" key="late" className={`${list.panel} ${styles.late}`} aria-labelledby="today-late" data-testid="today-late">
@@ -162,7 +165,7 @@ export default function TodayPage() {
     </AppearItem>
   ) : null;
   const listItem = (titled: boolean) => (
-    <AppearItem as="section" key="list" aria-labelledby={titled ? 'today-list' : undefined} aria-label={titled ? undefined : t('list.title', {})} data-testid="today-list">
+    <AppearItem as="section" key="list" aria-labelledby={titled ? 'today-list' : undefined} data-testid="today-list">
       {titled ? <h2 id="today-list" className={styles.h2}>{t('list.title', {})}</h2> : null}
       {v.events.length === 0 && v.todos.length === 0 ? <p className={list.empty}>{t('list.empty', {})}</p> : null}
       <AppearList as="ul" className={list.list}>
@@ -243,7 +246,7 @@ export default function TodayPage() {
   );
 
   return (
-    <main className={desk ? `${styles.page} ${styles.desk}` : styles.page} data-feature="today" data-testid="today">
+    <main ref={page} className={styles.page} data-feature="today" data-testid="today">
       <div className={styles.head}>
         {/* tabIndex=-1：弹层关上、打开按钮没了时焦点的退路（错过的提醒“全部知道了”以后，Dialog L-2），不进 Tab 顺序 */}
         <h1 className={styles.date} tabIndex={-1}>{fmtDay(d.today, locale, 'monthDayWeek')}</h1>
@@ -251,12 +254,10 @@ export default function TodayPage() {
             点了交给路由压一条带本次编号的历史（R-372）：设置里“‹ 今天”和左滑都退回这一条，不再叠一条今天；新标签页打开照常 */}
         <MeLink testId="today-settings" />
       </div>
-      {/* 电脑版面板分包没到、下不来时照手机的排法画（一列） */}
-      {desk ? (
+      {/* 电脑版面板没换上、画出错时照手机的排法画（一列） */}
+      {Desk ? (
         <QuietBoundary name="today-desk" fallback={phone}>
-          <Suspense fallback={phone}>
-            <TodayDesk today={d.today} nowBlock={<>{top}{nowCard}<AppearList as="div">{lateItem}</AppearList></>} river={<AppearList as="div">{listItem(false)}</AppearList>} />
-          </Suspense>
+          <Desk.default today={d.today} nowBlock={<>{top}{nowCard}<AppearList as="div">{lateItem}</AppearList></>} river={<AppearList as="div">{listItem(false)}</AppearList>} />
         </QuietBoundary>
       ) : (
         phone

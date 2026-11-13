@@ -18,13 +18,13 @@ import { useKeys } from '../../../kit/hooks/useKeys.ts';
 import { makeUseT } from '../../../kit/hooks/useT.ts';
 import { AnnivFace } from '../../anniv/index.ts';
 import { TodayNotes } from '../../notes/index.ts';
-import { useAnnivUpcoming, useWeekBusy } from '../hooks/useTodayDesk.ts';
+import { annivName, useAnnivUpcoming, useWeekBusy } from '../hooks/useTodayDesk.ts';
 import { useLocale, useTodayT } from '../hooks/useTodayT.ts';
 import { deskKo } from '../i18n/desk-ko.ts';
 import { deskZh } from '../i18n/desk-zh.ts';
 import styles from './TodayDesk.module.css';
 
-const useDeskT = makeUseT({ zh: deskZh, ko: deskKo });
+const useTodayDeskT = makeUseT({ zh: deskZh, ko: deskKo });
 
 /** 默认布局（写在代码里；没存过布局时用它，“恢复默认布局”把它写回 settings） */
 export const TODAY_DEFAULT: DeskLayoutValue = {
@@ -51,7 +51,7 @@ export interface TodayDeskProps {
 }
 
 export default function TodayDesk({ today, nowBlock, river }: TodayDeskProps) {
-  const t = useDeskT();
+  const t = useTodayDeskT();
   useJk();
   const panels = {
     now: { title: t('desk.now', {}), body: nowBlock },
@@ -104,7 +104,7 @@ function useJk(): void {
 
 /** 本周：每天一根柱子（高度按这周最多的那天比例），下面星期几、日期；今天那根柠檬黄 */
 function Week({ today }: { today: DateStr }) {
-  const t = useDeskT();
+  const t = useTodayDeskT();
   const locale = useLocale();
   const days = useWeekBusy(today);
   const max = Math.max(1, ...days.map((x) => x.n));
@@ -129,14 +129,14 @@ function Week({ today }: { today: DateStr }) {
 
 /** 快到了：30 天内的纪念日，最多 3 个；点了进纪念日页的这一条 */
 function Soon({ today }: { today: DateStr }) {
-  const t = useDeskT();
+  const t = useTodayDeskT();
   const tt = useTodayT();
   const soon = useAnnivUpcoming(today, SOON_DAYS, SOON_MAX);
-  if (!soon.length) return <p className={list.empty}>{t('desk.soonNone', {})}</p>;
+  if (!soon.length) return <p className={list.empty}>{t('desk.soonNone', { n: SOON_DAYS })}</p>;
   return (
     <ul className={list.list} data-testid="today-soon">
       {soon.map(({ row, days }) => {
-        const name = typeof row['name'] === 'string' ? row['name'] : '';
+        const name = annivName(row);
         return (
           <li key={row.id} className={list.row}>
             <button type="button" className={list.main} onClick={() => void navigate('anniv', row.id)}>

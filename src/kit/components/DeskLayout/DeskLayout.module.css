@@ -49,7 +49,8 @@
   touch-action: none;
 }
 
-.sep::after {
+/* 看得见的那条线画在 ::before；::after 是点击区，两边各伸进块的内边距 16px，凑够 44 宽（hit-target.spec.ts 只认 ::after 外扩） */
+.sep::before {
   content: '';
   position: absolute;
   inset: 24px 5px;
@@ -57,9 +58,15 @@
   background: transparent;
 }
 
-.sep:hover::after,
-.sep:focus-visible::after,
-.sep:active::after {
+.sep::after {
+  content: '';
+  position: absolute;
+  inset: 0 -16px;
+}
+
+.sep:hover::before,
+.sep:focus-visible::before,
+.sep:active::before {
   background: var(--accent);
 }
 
@@ -115,7 +122,7 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: 32px;
+  width: var(--hit);
   height: var(--hit);
   padding: 0;
   border: 0;
@@ -161,15 +168,6 @@
   }
 }
 
-.handle:focus-visible,
-.fold:focus-visible,
-.more:focus-visible,
-.dhandle:focus-visible,
-.item:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
-
 .body {
   min-width: 0;
 }
@@ -188,19 +186,20 @@
   font-size: var(--fs-14);
 }
 
-/* 侧栏底部的“⋯”（挂在 GlassBar 的 tabbar-slot 里）：44px 圆形 */
+/* 侧栏底部的“⋯”：44px 圆形 */
 .more {
-  width: var(--hit);
   border-radius: 50%;
   background: var(--panel-2);
   color: var(--text);
 }
 
-/* 找不到侧栏时画在画布右上角 */
-.inlineMore {
-  display: flex;
-  justify-content: flex-end;
-  margin: 0 0 8px;
+/* 固定在侧栏里设置入口（头像）上面、隔 6px：侧栏左 16、宽 78、下 16 + 下内边距 14，头像 44（GlassBar.module.css 宽屏那段，那个文件钉死不改）；
+   DeskLayout 只在有侧栏的宽度加载，所以不用另写断点。压在侧栏上面（同侧栏的“＋”） */
+.railMore {
+  position: fixed;
+  bottom: calc(16px + 14px + var(--hit) + 6px + var(--inset-bottom, 0px));
+  left: calc(16px + (78px - var(--hit)) / 2);
+  z-index: var(--z-bar-over);
 }
 
 .menu {
@@ -269,4 +268,14 @@
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+/* 键盘焦点环（放在最后：各按钮的基础样式在前面） */
+.handle:focus-visible,
+.fold:focus-visible,
+.more:focus-visible,
+.dhandle:focus-visible,
+.item:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }

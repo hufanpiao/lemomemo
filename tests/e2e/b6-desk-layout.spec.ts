@@ -129,7 +129,8 @@ test.describe('B6 电脑版布局：今天页', () => {
     await drag(page, page.getByTestId('desk-handle-week'), page.getByTestId('desk-panel-river'));
     await expect(inCol(page, 0, 'week')).toBeVisible();
     await expect(page.getByTestId('desk-saved')).toContainText('布局已保存');
-    await expect.poll(() => stored(page, 'today'), { timeout: 10_000 }).toContain('"panels":["now","week","river"]');
+    // 存下的第一栏里有 week（落在 river 前还是后看落点，两种浏览器会差一点，不比顺序）
+    await expect.poll(() => stored(page, 'today'), { timeout: 10_000 }).toMatch(/"cols":\[\{"w":[\d.]+,"panels":\[[^\]]*"week"/);
     await page.reload();
     await expect(inCol(page, 0, 'week')).toBeVisible({ timeout: 20_000 });
     await page.waitForTimeout(FADE_GUARD_MS);
@@ -149,10 +150,16 @@ test.describe('B6 电脑版布局：今天页', () => {
   });
 
   test('② 调栏宽、收起再放回、锁定', async ({ page }) => {
-    // “⋯”在侧栏底部（GlassBar 的 tabbar-slot；“＋”就绪前后侧栏会重挂一次，也得跟过去）
-    await expect(page.getByTestId('tabbar-slot').getByTestId('desk-more')).toBeVisible();
+    // “⋯”在侧栏底部、设置入口正上方（横向同一中线，在它上面）
+    await expect(page.getByTestId('desk-more')).toBeVisible();
+    const moreBox = await page.getByTestId('desk-more').boundingBox();
+    const meBox = await page.getByTestId('tabbar-settings').boundingBox();
+    expect(moreBox && meBox && Math.abs(moreBox.x + moreBox.width / 2 - (meBox.x + meBox.width / 2))).toBeLessThan(1);
+    expect(moreBox && meBox && meBox.y - (moreBox.y + moreBox.height)).toBeGreaterThanOrEqual(4);
     const col0 = page.getByTestId('desk-col-0');
     await expect(page.getByTestId('desk-col-1')).toBeVisible();
+    // 等两栏排好（WebKit 刚挂上时偶尔还是上一帧的宽度）：默认左栏约占 0.56
+    await expect.poll(async () => (await col0.boundingBox())?.width ?? 0).toBeLessThan(800);
     const w0 = (await col0.boundingBox())?.width ?? 0;
     await page.getByTestId('desk-sep-0').focus();
     await page.keyboard.press('ArrowRight');
@@ -176,7 +183,7 @@ test.describe('B6 电脑版布局：今天页', () => {
     await expect(page.getByTestId('desk-handle-week')).toBeVisible();
   });
 
-  test('③ 键盘拖动有播报；axe 无严重问题', async ({ page }) => {
+  test('③ 键盘拖动有播报；拿起后 Tab 走开回原位；axe 无严重问题', async ({ page }) => {
     const live = page.getByTestId('desk-live');
     await page.getByTestId('desk-handle-soon').focus();
     await page.keyboard.press('Space');
@@ -194,6 +201,15 @@ test.describe('B6 电脑版布局：今天页', () => {
     await page.keyboard.press('Escape');
     await expect(live).toContainText('已取消');
     await expect(inCol(page, 0, 'soon')).toBeVisible();
+
+    // 拿起、挪、Tab 走开：放弃，回原位、不保存（评审第 2 条）
+    await page.getByTestId('desk-handle-soon').focus();
+    await page.keyboard.press('Space');
+    await page.keyboard.press('ArrowRight');
+    await expect(inCol(page, 1, 'soon')).toBeVisible();
+    await page.keyboard.press('Tab');
+    await expect(inCol(page, 0, 'soon')).toBeVisible();
+    await expect(page.locator('[data-held]')).toHaveCount(0);
 
     await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
     await page.evaluate(AXE_SRC);
@@ -239,14 +255,41 @@ test.describe('B6 电脑版布局：随手记页', () => {
     await expect(drawer).not.toHaveAttribute('data-side', 'left');
     await page.getByTestId('desk-drawer-side').click();
     await expect(drawer).toHaveAttribute('data-side', 'left');
+    // 换到左边时不压住侧栏：左沿离侧栏右沿 16（NoteEditPage.module.css 的 --drawer-left 110 = 侧栏左 16 + 宽 78 + 16；滑入动画走完再量）
+    const railRight = await page.getByRole('navigation').evaluate((el) => el.getBoundingClientRect().right);
+    await expect.poll(() => drawer.evaluate((el) => Math.round(el.getBoundingClientRect().left))).toBe(Math.round(railRight) + 16);
     await page.keyboard.press('Escape');
     await expect(drawer).toHaveCount(0);
     await expect.poll(() => stored(page, 'notes'), { timeout: 10_000 }).toContain('"drawer":"left"');
+    // 提示条还在时，在输入行里按 Ctrl+Z 是撤销打字，不撤销布局（评审第 1 条）；list 块不能收起（输入行在里面，评审第 3 条）
+    await expect(page.getByTestId('desk-saved')).toBeVisible();
+    await page.getByTestId('notes-input').click();
+    await page.keyboard.type('ab');
+    await page.keyboard.press('Control+z');
+    await expect(page.getByTestId('desk-saved')).toBeVisible();
+    expect(await stored(page, 'notes')).toContain('"drawer":"left"');
+    await expect(page.getByTestId('desk-fold-list')).toHaveCount(0);
+    await expect(page.getByTestId('desk-fold-cats')).toHaveCount(1);
     await page.reload();
     await expect(page.locator('[data-testid^="notes-card-"]', { hasText: '牛奶' })).toBeVisible({ timeout: 20_000 });
     await page.waitForTimeout(FADE_GUARD_MS);
     await page.locator('[data-testid^="notes-card-"]', { hasText: '牛奶' }).locator('button').first().click();
     await expect(page.getByTestId('note-drawer')).toHaveAttribute('data-side', 'left');
+  });
+
+  test('⑥ 窗口宽窄跨过 900px（电脑版和手机排法互换、输入行重挂）：打的字不丢、不留模糊层', async ({ page }) => {
+    await page.goto('/app/#/notes');
+    await expect(page.getByTestId('desk')).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(FADE_GUARD_MS);
+    await page.getByTestId('notes-input').click();
+    await page.keyboard.type('换排法');
+    await page.setViewportSize({ width: 800, height: 820 });
+    await expect(page.getByTestId('desk')).toHaveCount(0);
+    await expect(page.getByTestId('notes-input')).toHaveValue('换排法');
+    await expect(page.getByTestId('notes-mist')).toHaveCount(0);
+    await page.setViewportSize({ width: 1280, height: 820 });
+    await expect(page.getByTestId('desk')).toBeVisible();
+    await expect(page.getByTestId('notes-input')).toHaveValue('换排法');
   });
 });
 

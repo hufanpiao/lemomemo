@@ -15,7 +15,8 @@ export interface AnnivSoon {
 
 type AnnivRow = Readonly<Record<string, unknown>> & { readonly id: string };
 
-const nameOf = (r: AnnivRow): string => (typeof r['name'] === 'string' ? r['name'] : '');
+/** 纪念日的名字（不是字符串当空） */
+export const nameOf = (r: AnnivRow): string => (typeof r['name'] === 'string' ? r['name'] : '');
 
 /** within 天内（含今天）的纪念日，近的在前、同一天按名字；最多 max 个（电脑版“快到了”块列几个，B6；手机这一行只要最近的一个） */
 export function annivUpcoming(rows: readonly AnnivRow[], today: DateStr, within: number, max: number): AnnivSoon[] {

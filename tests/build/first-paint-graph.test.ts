@@ -128,6 +128,9 @@ const NOT_FIRST_PAINT: Record<string, string> = {
     '农历换算和农历表：和 next-date.ts 同一次经 core/anniv-lib.ts 下载，条件同上（有纪念日、开关开着，首屏画完以后）',
   'src/features/anniv/data/avatar-view.ts':
     '纪念日头像的签名和缓存（B5 S13，带 platform/files 的 zod）：页面上真有带头像的纪念日要画时才下载；今天页的纪念日一行先画首字圆，头像下好再换上，不挡首屏',
+  'src/features/today/ui/TodayDesk.tsx':
+    '电脑版今天页的可拖动面板（B6，5.9b；连着 kit/components/DeskLayout、dnd-kit、desk-zh/ko 词典）：只在有侧栏的宽度（MQ_SIDEBAR ≥ 900px）、而且首屏画完（afterAppPainted）以后才挂、才下载；手机宽度不下载。没挂上、没下载好时今天页照原来的一列画',
+  'src/features/notes/ui/TodayNotes.tsx': '电脑版今天页的“今天记的”块（B6）：TodayDesk 挂上以后才下载（首屏画完以后），条件同上；手机宽度不下载',
   'src/kit/components/GlassBar/GlassBarFx.tsx':
     '液态玻璃底栏的首屏后部分：模糊带、果冻、按住放大；首屏画完以后 afterAppPainted 才下载，挂上以后再 import() 内容副本、自动深浅、帧循环（motion/glass-ghost.ts）（B2 FA-7，主持人 11-05 首屏 ③；没下载到时外壳用 backdrop-filter 后备）',
 };

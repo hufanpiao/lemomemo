@@ -27,6 +27,13 @@ describe('readLayout：读出来的值', () => {
     expect(panelsOf(r.layout)).toEqual([['week', 'soon', 'notes'], ['now', 'river']]);
   });
 
+  it('默认读的时候不按 1280 宽夹最窄：大屏上拖到 0.15 的栏读回来还是 0.15，和存的值 sameLayout', () => {
+    const saved = { ...DEF, cols: [{ w: 0.15, panels: ['now'] }, { w: 0.45, panels: ['river'] }, { w: 0.4, panels: ['week', 'soon', 'notes'] }] };
+    const { layout } = readLayout(JSON.stringify(toStored(saved)), DEF);
+    expect(layout.cols.map((c) => Math.round(c.w * 1000) / 1000)).toEqual([0.15, 0.45, 0.4]);
+    expect(sameLayout(layout, saved)).toBe(true);
+  });
+
   it('坏 JSON、不是对象、没有 v、过不了 zod → 默认（invalid）', () => {
     for (const bad of ['{坏', 3, [], { cols: [] }, { v: 1, cols: 'x' }, { v: 1, cols: [{ w: 'a', panels: [] }] }]) {
       expect(readLayout(bad, DEF)).toEqual({ layout: DEF, status: 'invalid' });

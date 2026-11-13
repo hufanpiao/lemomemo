@@ -34,8 +34,9 @@
   font-weight: 600;
 }
 
-/* 电脑版（B6，ui/NotesDesk.tsx；线框 s7 电脑画面）：分类一栏 + 列表一栏，铺满侧栏右边；页顶大标题换成“随手记”块的标题 */
-.desk {
+/* 电脑版（B6，ui/NotesDesk.tsx；线框 s7 电脑画面）：分类一栏 + 列表一栏，铺满侧栏右边；页顶大标题换成“随手记”块的标题。
+   按里面真有面板（DeskLayout 根节点的 data-desk）判断：面板没换上、画出错退回一列时照原来的排法 */
+.page:has([data-desk]) {
   max-width: none;
   padding-left: 0;
   padding-right: 16px;
@@ -258,7 +259,8 @@
 }
 
 /* “已转过”后面给读屏的停顿（视觉上不占位） */
-.convSep {
+.convSep,
+.sr {
   position: absolute;
   width: 1px;
   height: 1px;

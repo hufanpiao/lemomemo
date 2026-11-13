@@ -40,7 +40,15 @@ function fix(raw: { cols: readonly { w: number; panels: readonly string[] }[]; c
   const known = new Set(allPanels(def));
   const src = raw.cols.length >= 1 && raw.cols.length <= MAX_COLS ? raw.cols : def.cols;
   const seen = new Set<string>();
-  const cols = src.map((c) => ({ w: c.w, panels: c.panels.filter((id) => known.has(id) && !seen.has(id) && seen.add(id)) as string[] }));
+  const cols = src.map((c) => {
+    const panels: string[] = [];
+    for (const id of c.panels) {
+      if (!known.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      panels.push(id);
+    }
+    return { w: c.w, panels };
+  });
   // 缺的块（新版本多出来的、旧值里没有的）按默认位置补：默认在第几栏（超出就放最后一栏）、第几个
   def.cols.forEach((dc, ci) =>
     dc.panels.forEach((id, pi) => {
@@ -60,8 +68,9 @@ function fix(raw: { cols: readonly { w: number; panels: readonly string[] }[]; c
   };
 }
 
-/** 读出来的值 → 界面用的布局 */
-export function readLayout(raw: unknown, def: DeskLayoutValue, minFrac = minFracOf(0)): { layout: DeskLayoutValue; status: ReadStatus } {
+/** 读出来的值 → 界面用的布局。栏宽默认不按画布夹（minFrac 0：读的时候不知道画布多宽，大屏上拖窄的栏按 1280 宽夹会变宽、本页的 local 也永远对不上），
+ *  只夹最宽、归一化；最窄只在显示时按实际画布夹（DeskLayout 的 fitWidths） */
+export function readLayout(raw: unknown, def: DeskLayoutValue, minFrac = 0): { layout: DeskLayoutValue; status: ReadStatus } {
   if (raw === undefined || raw === null) return { layout: def, status: 'none' };
   let val: unknown = raw;
   if (typeof val === 'string') {
@@ -142,12 +151,10 @@ export function moveBy(l: DeskLayoutValue, id: string, dir: 'up' | 'down' | 'lef
 export function resizeAt(l: DeskLayoutValue, i: number, w: number, minFrac = minFracOf(0)): DeskLayoutValue {
   const a = l.cols[i];
   const b = l.cols[i + 1];
-  if (!a || !b) return l;
+  const r = resizeRange(l, i, minFrac);
+  if (!a || !b || !r || r.lo > r.hi) return l;
   const pair = a.w + b.w;
-  const lo = Math.max(minFrac, pair - COL_MAX);
-  const hi = Math.min(COL_MAX, pair - minFrac);
-  if (lo > hi) return l;
-  const nw = Math.min(hi, Math.max(lo, w));
+  const nw = Math.min(r.hi, Math.max(r.lo, w));
   if (Math.abs(nw - a.w) < 1e-6) return l;
   return { ...l, cols: l.cols.map((c, k) => (k === i ? { ...c, w: nw } : k === i + 1 ? { ...c, w: pair - nw } : c)) };
 }

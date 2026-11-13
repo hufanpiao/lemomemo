@@ -16,9 +16,7 @@
 /* 电脑详情抽屉：右边浮起，侧栏和列表留着；进场只有最基本的滑入（R-376），减少动态效果时只淡入 */
 .drawer {
   position: fixed;
-  top: calc(16px + var(--inset-top, 0px));
-  right: 16px;
-  bottom: calc(16px + var(--inset-bottom, 0px));
+  inset: calc(16px + var(--inset-top, 0px)) var(--drawer-right, 16px) calc(16px + var(--inset-bottom, 0px)) var(--drawer-left, auto);
   z-index: var(--z-drawer);
   width: min(400px, calc(100vw - 160px));
   padding: 14px 20px 24px;
@@ -32,9 +30,8 @@
 /* 电脑版换到左边（B6，5.9b）：贴在侧栏右边（#root 留给侧栏 110px），从左边滑进来 */
 .drawer[data-side="left"] {
   --drawer-from: -24px;
-
-  right: auto;
-  left: 110px;
+  --drawer-left: 110px;
+  --drawer-right: auto;
 }
 
 @keyframes note-drawer-in {

@@ -9,7 +9,7 @@
 //   （__tests__/facade-dom.test.tsx 对比两边的 DOM）
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { AppearKind } from './presets.ts';
-import { canSwap, SWAP_RETRY_MS, useMotionImpl, watchPointers } from './swap-guard.ts';
+import { useMotionImpl, watchPointers, whenSafe } from './swap-guard.ts';
 import { useReducedMotionPref } from './useReducedMotionPref.ts';
 
 export interface AppearProps {
@@ -41,15 +41,13 @@ export function Appear(props: AppearProps) {
   }, [still]);
   useEffect(() => {
     if (!waiting) return;
-    let t: ReturnType<typeof setTimeout> | undefined;
-    const attempt = (): void => {
-      if (canSwap(el.current)) {
+    return whenSafe(
+      () => el.current,
+      () => {
         setLanded(true);
         setStill(false);
-      } else t = setTimeout(attempt, SWAP_RETRY_MS);
-    };
-    attempt();
-    return () => clearTimeout(t);
+      },
+    );
   }, [waiting]);
   if (impl !== null && !(still && show)) return <impl.Appear {...props} settled={landed} />;
   if (!show) return null;

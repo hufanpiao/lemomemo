@@ -7,5 +7,5 @@ export const deskZh = {
   'desk.notes': '今天记的',
   'desk.keys': 'J / K 上下 · E 完成 · Enter 编辑',
   'desk.weekDay': '{w} {n} 件',
-  'desk.soonNone': '30 天内没有纪念日',
+  'desk.soonNone': '{n} 天内没有纪念日',
 } as const;

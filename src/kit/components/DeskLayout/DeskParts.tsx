@@ -1,15 +1,17 @@
 // 电脑版可拖动布局（5.9b）的小零件：块（标题栏 + 把手 + “–”）、栏间竖条、侧栏底部“⋯”菜单、抽屉换边把手。排法和状态在 DeskLayout.tsx
-import { useRef, useState, type CSSProperties, type KeyboardEvent as RKeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent as RKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { DeskLayoutValue } from '../../../../shared/schema/layout.ts';
 import { Popover } from '../Popover.tsx';
 import { DndCol, useDeskSortable } from './DeskDnd.tsx';
-import { useDeskT } from './i18n.ts';
+import { useDeskT } from '../../hooks/useDeskT.ts';
 import { resizeAt, resizeRange } from './layout-model.ts';
 import styles from './DeskLayout.module.css';
 
 export interface DeskPanel {
   title: string;
   body: ReactNode;
+  /** 不能收起（不画“–”）：块里有页面离不开的东西时用，例如随手记的输入行（侧栏“＋”要聚焦它） */
+  fixed?: boolean;
 }
 
 /** 竖条键盘每次调多少（5.9b 第 5 点） */
@@ -22,7 +24,7 @@ export const Dots = () => (
 );
 
 /** 一块：标题栏（标题、把手、“–”）+ 内容。把手只在能拖时画（锁定、一列时不画） */
-export function Panel({ id, p, canDrag, held, hintId, onKey, onCollapse }: { id: string; p: DeskPanel | undefined; canDrag: boolean; held: boolean; hintId: string; onKey(e: RKeyboardEvent<HTMLButtonElement>): void; onCollapse(): void }) {
+export function Panel({ id, p, canDrag, held, hintId, onKey, onBlur, onCollapse }: { id: string; p: DeskPanel | undefined; canDrag: boolean; held: boolean; hintId: string; onKey(e: RKeyboardEvent<HTMLButtonElement>): void; onBlur(e: FocusEvent<HTMLButtonElement>): void; onCollapse(): void }) {
   const t = useDeskT();
   const s = useDeskSortable(id, !canDrag);
   const titleId = `desk-${id}-t`;
@@ -42,6 +44,7 @@ export function Panel({ id, p, canDrag, held, hintId, onKey, onCollapse }: { id:
             aria-describedby={hintId}
             aria-pressed={held}
             onKeyDown={onKey}
+            onBlur={onBlur}
             onPointerDown={s.onPointerDown}
             data-handle={id}
             data-testid={`desk-handle-${id}`}
@@ -49,11 +52,13 @@ export function Panel({ id, p, canDrag, held, hintId, onKey, onCollapse }: { id:
             <Dots />
           </button>
         ) : null}
-        <button type="button" className={styles.fold} aria-label={t('desk.collapse', { name: p.title })} aria-expanded="true" onClick={onCollapse} data-testid={`desk-fold-${id}`}>
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M4 8h8" />
-          </svg>
-        </button>
+        {p.fixed ? null : (
+          <button type="button" className={styles.fold} aria-label={t('desk.collapse', { name: p.title })} onClick={onCollapse} data-testid={`desk-fold-${id}`}>
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 8h8" />
+            </svg>
+          </button>
+        )}
       </header>
       <div className={styles.body}>{p.body}</div>
     </section>
@@ -74,7 +79,8 @@ export function ColWithSep({ i, ids, style, sep, children }: { i: number; ids: s
 
 /**
  * 第 i 条竖条（第 i 栏和第 i+1 栏之间，5.9b 第 1、5 点）：按住左右拖（setPointerCapture），途中经 onDraft 画草稿，松手 onSave；
- * 键盘 ← → 每次 5%、Home / End 到最窄 / 最宽，每次直接保存。可聚焦的分隔条按 WAI-ARIA 的“窗口分隔条”是可操作控件
+ * 键盘 ← → 每次 5%、Home / End 到最窄 / 最宽，同样先画草稿，松开键（或失焦）才保存一次，按住不放不会连写。
+ * layout 是按实际画布宽夹过的栏宽（和画出来的一致）。可聚焦的分隔条按 WAI-ARIA 的“窗口分隔条”是可操作控件
  */
 export function Sep({ i, layout, minFrac, canvasPx, onDraft, onSave }: { i: number; layout: DeskLayoutValue; minFrac: number; canvasPx: number; onDraft(l: DeskLayoutValue | null): void; onSave(l: DeskLayoutValue): void }) {
   const t = useDeskT();
@@ -82,19 +88,21 @@ export function Sep({ i, layout, minFrac, canvasPx, onDraft, onSave }: { i: numb
   const last = useRef<DeskLayoutValue | null>(null);
   const r = resizeRange(layout, i, minFrac);
   const w = layout.cols[i]?.w ?? 0;
+  /** 拖完、按完：有草稿就保存一次 */
   const end = (): void => {
-    if (!start.current) return;
     start.current = null;
     if (last.current) onSave(last.current);
     last.current = null;
     onDraft(null);
   };
   const onKey = (e: RKeyboardEvent<HTMLDivElement>): void => {
-    if (!r) return;
-    const to = e.key === 'ArrowLeft' ? w - KEY_STEP : e.key === 'ArrowRight' ? w + KEY_STEP : e.key === 'Home' ? r.lo : e.key === 'End' ? r.hi : null;
-    if (to === null) return;
+    const base = last.current ?? layout;
+    const cur = base.cols[i]?.w ?? 0;
+    const to = e.key === 'ArrowLeft' ? cur - KEY_STEP : e.key === 'ArrowRight' ? cur + KEY_STEP : e.key === 'Home' ? (r?.lo ?? cur) : e.key === 'End' ? (r?.hi ?? cur) : null;
+    if (to === null || start.current) return;
     e.preventDefault();
-    onSave(resizeAt(layout, i, to, minFrac));
+    last.current = resizeAt(base, i, to, minFrac);
+    onDraft(last.current);
   };
   return (
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- 可聚焦的 separator 是可操作的窗口分隔条（WAI-ARIA window splitter），5.9b 第 5 点定的写法
@@ -122,6 +130,8 @@ export function Sep({ i, layout, minFrac, canvasPx, onDraft, onSave }: { i: numb
       onPointerUp={end}
       onPointerCancel={end}
       onKeyDown={onKey}
+      onKeyUp={() => !start.current && end()}
+      onBlur={() => !start.current && end()}
       data-testid={`desk-sep-${i}`}
     />
   );
@@ -200,6 +210,10 @@ export function DrawerHandle({ side, onSide }: { side: 'left' | 'right'; onSide(
         if (!moved.current) return;
         const half = e.clientX < window.innerWidth / 2 ? 'left' : 'right';
         if (half !== side) onSide(half);
+      }}
+      onPointerCancel={() => {
+        start.current = null;
+        moved.current = false;
       }}
       onClick={() => {
         if (moved.current) {

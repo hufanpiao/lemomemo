@@ -10,5 +10,5 @@ export const deskKo = {
   'desk.notes': '오늘 쓴 메모', // REVIEW(ko) B6
   'desk.keys': 'J / K 위아래 · E 완료 · Enter 편집', // REVIEW(ko) B6
   'desk.weekDay': '{w} {n}건', // REVIEW(ko) B6
-  'desk.soonNone': '30일 안에 기념일이 없어요', // REVIEW(ko) B6
+  'desk.soonNone': '{n}일 안에 기념일이 없어요', // REVIEW(ko) B6
 } as const satisfies Record<keyof typeof deskZh, string>;

@@ -3,23 +3,21 @@
 // • ≥ 1100px（MQ_DESK_WIDE）：分栏。块标题栏右上角有把手（按住才拖，dnd-kit，DeskDnd.tsx）和“–”收起；两栏之间的竖条拖宽拖窄（自己用 Pointer Events，DeskParts.tsx 的 Sep），
 //   每栏最窄 240 px、最宽 0.6
 // • 900～1099px：排成一列，顺序是各栏从左到右首尾相接；不能拖、不能调栏宽，“–”照样能收起；存下的布局不改
-// • 侧栏底部“⋯”（GlassBar 的 tabbar-slot 经 kit/state/desk-slot.ts 登记，portal 挂过去；没有时画在画布上方）：锁定布局 / 收起的块（点一下放回原栏原位置）/ 恢复默认布局
+// • 侧栏底部“⋯”（固定定位在侧栏设置入口上面，GlassBar 一行不改：R-352 ④）：锁定布局 / 收起的块（点一下放回原栏原位置）/ 恢复默认布局
 // • 放下即保存（kit/hooks/useDeskLayout.ts）：每次放下、调完栏宽、收起展开、换抽屉边、锁定，提示条“布局已保存 · 撤销 · 恢复默认布局”停 6 秒；
 //   提示条在时 Ctrl+Z 也撤销（只留一步）
 // • 键盘（5.9b 第 5 点）：把手是按钮，空格拿起，↑↓ 本栏挪、← → 相邻栏同一高度附近，空格放下、Esc 回原位；拿起、每次移动、放下都经 aria-live 读出；
 //   锁定时把手不画、竖条不画（换成不可聚焦的间距）
 // • 运行日志在 kit/hooks/useDeskLayout.ts（kit 的组件不碰 platform）
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as RKeyboardEvent, type ReactNode, type RefObject } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent as RKeyboardEvent, type ReactNode, type RefObject } from 'react';
 import type { DeskLayoutValue } from '../../../../shared/schema/layout.ts';
 import { useDeskLayout, useDeskModeLog, type LayoutChange } from '../../hooks/useDeskLayout.ts';
-import { useKeys } from '../../hooks/useKeys.ts';
+import { opensKeyboard, useKeys } from '../../hooks/useKeys.ts';
 import { MQ_DESK_WIDE, useMedia } from '../../hooks/useMedia.ts';
-import { useDeskSlot } from '../../state/desk-slot.ts';
 import { UndoToast } from '../UndoToast.tsx';
 import { colId, DndShell, dropTarget } from './DeskDnd.tsx';
 import { ColWithSep, DrawerHandle, MoreMenu, Panel, Sep, type DeskPanel } from './DeskParts.tsx';
-import { useDeskT } from './i18n.ts';
+import { useDeskT } from '../../hooks/useDeskT.ts';
 import { dropEmpty, fitWidths, flatPanels, minFracOf, moveBy, moveTo, setCollapsed, visible, whereIs } from './layout-model.ts';
 import styles from './DeskLayout.module.css';
 
@@ -64,12 +62,13 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
     const p = whereIs(l, id);
     if (p) setLive(t(key, { name: nameOf(id), c: p.col + 1, n: p.at + 1 }));
   };
-  const keyDrag = useKeyDrag({ layout, shown, minFrac, canvas, setDraft, say, save });
+  const keyDrag = useKeyDrag({ layout, shown, minFrac, canvas, canDrag, setDraft, say, save });
 
   // 撤销：提示条在的时候 Ctrl+Z 也算（5.9b 第 1 点）
   useKeys({
-    'mod+z': () => {
-      if (saved === null) return false;
+    // 焦点在输入框里时让给浏览器撤销打字（useKeys 的约定）
+    'mod+z': (e) => {
+      if (saved === null || opensKeyboard(e.target)) return false;
       d.undo();
       return true;
     },
@@ -78,6 +77,7 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
   // 鼠标拖面板（dnd-kit）：换栏时改草稿；同一栏里的换位交给 sortable 的位移，放下时再算
   const dnd = {
     onStart: (id: string): void => {
+      keyDrag.drop();
       setDragging(id);
       setDraft(layout);
       say('desk.picked', layout, id);
@@ -88,12 +88,17 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
         const to = dropTarget(overId, base.cols);
         return !to || base.cols[to.col]?.panels.includes(id) ? base : moveTo(base, id, to.col, to.idx, minFrac, true);
       }),
+    // 放到画布外（没有落点）算取消，回原位
     onEnd: (id: string, overId: string | null): void => {
-      const base = draft ?? layout;
-      const to = overId ? dropTarget(overId, base.cols) : null;
-      const next = to ? moveTo(base, id, to.col, to.idx, minFrac, true) : base;
       setDragging(null);
       setDraft(null);
+      const base = draft ?? layout;
+      const to = overId ? dropTarget(overId, base.cols) : null;
+      if (!to) {
+        say('desk.cancelled', layout, id);
+        return;
+      }
+      const next = moveTo(base, id, to.col, to.idx, minFrac, true);
       say('desk.dropped', next, id);
       save(next, 'move');
     },
@@ -103,7 +108,9 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
     },
   };
 
+  // 栏宽只按这一份画、竖条也拿这一份（按实际画布宽夹过；存下的比例按 1280 宽夹，窄窗口上会再收一点）
   const widths = fitWidths(shown.cols.map((c) => c.w), minFrac);
+  const fitted: DeskLayoutValue = { ...shown, cols: shown.cols.map((c, k) => ({ ...c, w: widths[k] ?? c.w })) };
   const panelView = (id: string) => (
     <Panel
       key={id}
@@ -113,6 +120,7 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
       held={keyDrag.held === id}
       hintId={hintId}
       onKey={keyDrag.onKey(id)}
+      onBlur={keyDrag.onBlur}
       onCollapse={() => {
         save(setCollapsed(layout, id, true), 'collapse');
         moreBtn.current?.focus();
@@ -120,8 +128,7 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
     />
   );
 
-  // “⋯”菜单挂到侧栏底部（GlassBar 的 tabbar-slot）
-  const slot = useDeskSlot();
+  // “⋯”菜单：固定在侧栏底部（DeskLayout.module.css 的 .railMore）
   const menu = (
     <MoreMenu
       btn={moreBtn}
@@ -135,7 +142,7 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
 
   return (
     <div className={styles.root} data-desk={wide ? 'cols' : 'one'} data-locked={layout.locked ? '' : undefined} data-testid="desk">
-      {slot ? createPortal(menu, slot) : <div className={styles.inlineMore}>{menu}</div>}
+      <div className={styles.railMore}>{menu}</div>
       <p id={hintId} className={styles.sr}>
         {t('desk.handleHint', {})}
       </p>
@@ -153,7 +160,7 @@ export default function DeskLayout({ page, def, panels, drawer }: DeskLayoutProp
                 style={{ flexGrow: widths[i] ?? 1 }}
                 sep={
                   i === shown.cols.length - 1 ? null : canDrag ? (
-                    <Sep i={i} layout={layout} minFrac={minFrac} canvasPx={canvasPx} onDraft={setDraft} onSave={(l) => save(l, 'width')} />
+                    <Sep i={i} layout={fitted} minFrac={minFrac} canvasPx={canvasPx} onDraft={setDraft} onSave={(l) => save(l, 'width')} />
                   ) : (
                     <div className={styles.gap} aria-hidden="true" />
                   )
@@ -201,16 +208,25 @@ function useWidth(el: RefObject<HTMLDivElement | null>, dep: unknown): number {
 }
 
 /** 把手的键盘拖动（5.9b 第 5 点）：空格 / 回车拿起和放下，方向键挪（途中留着空栏），Esc 回原位 */
-function useKeyDrag({ layout, shown, minFrac, canvas, setDraft, say, save }: {
+function useKeyDrag({ layout, shown, minFrac, canvas, canDrag, setDraft, say, save }: {
   layout: DeskLayoutValue;
   shown: DeskLayoutValue;
   minFrac: number;
   canvas: RefObject<HTMLDivElement | null>;
+  canDrag: boolean;
   setDraft(l: DeskLayoutValue | null): void;
   say(key: SayKey, l: DeskLayoutValue, id: string): void;
   save(l: DeskLayoutValue, what: LayoutChange): void;
 }) {
   const [held, setHeld] = useState<{ id: string; orig: DeskLayoutValue } | null>(null);
+  /** 放弃拿着的（不保存、回原位）：窗口缩到不能拖、锁定、改用鼠标拖、焦点被移到别处时 */
+  const drop = useCallback((): void => {
+    setHeld(null);
+    setDraft(null);
+  }, [setDraft]);
+  useEffect(() => {
+    if (!canDrag && held) drop();
+  }, [canDrag, held, drop]);
   // 拿起的块挪到别的栏会重新挂载：焦点跟回它的把手
   useEffect(() => {
     if (held) canvas.current?.querySelector<HTMLButtonElement>(`[data-handle="${held.id}"]`)?.focus();
@@ -245,5 +261,9 @@ function useKeyDrag({ layout, shown, minFrac, canvas, setDraft, say, save }: {
     setDraft(next);
     say('desk.at', next, id);
   };
-  return { held: held?.id ?? null, onKey };
+  // 焦点明确移到别的元素上（Tab 走开、点了别的按钮）：放弃；拿着的块换栏重新挂载时没有 relatedTarget，不算
+  const onBlur = (e: FocusEvent<HTMLButtonElement>): void => {
+    if (held && e.relatedTarget instanceof HTMLElement && e.relatedTarget.dataset['handle'] !== held.id) drop();
+  };
+  return { held: held?.id ?? null, onKey, onBlur, drop: held ? drop : () => undefined };
 }

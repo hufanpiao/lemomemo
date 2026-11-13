@@ -1,7 +1,7 @@
 // 电脑版布局的读写（架构 5.9b 第 1、3、4 点；0.29 续第 109 条）：一页一行 settings，键 layout.<页>@inst:<install_id>
 // • install_id：platform/device-info.ts 的 readInstallId（这一份安装的随机 id，退出登录也不清）；读不到（隐私模式）时只在内存里改、不存
 // • 读：layout-model.ts 的 readLayout；坏值用默认、不自动写回，记一条 logs（act layout、code layout_invalid，不记内容）
-// • 写：放下即保存（经 kit 的 useSettingWriter，进 outbox、本机先生效）；界面先按新布局画（local），不等集合跟上
+// • 写：放下即保存（经 kit 的 useSettingWriter，进 outbox、本机先生效）；界面先按新布局画（local），集合跟上了就清掉 local、回到只读集合
 // • 撤销只留一步：记着改之前的布局，撤销就把它写回去
 // • “恢复默认布局”= 把代码里的默认布局写进这一行（B6 代定：5.9b 写的是删掉这一行，但 A31 不准客户端对 settings 发软删，
 //   要删得先在架构 0.41 登记、给 lemo/settings-ai-write 开口；写默认值效果一样，以后默认布局多了块，readLayout 照样按默认位置补）
@@ -45,13 +45,19 @@ export function useDeskLayout(page: string, def: DeskLayoutValue) {
   /** “布局已保存”提示条：每存一次加 1（换 key 重新计时），null 不显示 */
   const [saved, setSaved] = useState<number | null>(null);
 
-  const logged = useRef(false);
+  // 读到的状态变了才记（集合晚到时先 none 后 ok；坏值记一次 logs）
+  const lastStatus = useRef<string | null>(null);
   useEffect(() => {
-    if (logged.current) return;
-    logged.current = true;
+    if (lastStatus.current === read.status) return;
+    lastStatus.current = read.status;
     rlog(`desk load page=${page} status=${read.status} cols=${read.layout.cols.length} collapsed=${read.layout.collapsed.length} inst=${inst ? 1 : 0}`);
     if (read.status === 'invalid') logEvent('layout', { code: 'layout_invalid' });
   }, [page, read, inst]);
+
+  // 本机集合跟上了（读出来的和本页改的一样）：不再另记一份，之后别处（另一个标签页）改的也能看到
+  useEffect(() => {
+    if (local && sameLayout(local, read.layout)) setLocal(null);
+  }, [local, read.layout]);
 
   /** 换成 next 并保存；what 进运行日志（reset、undo 也走这里） */
   const apply = useCallback(

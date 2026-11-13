@@ -14,14 +14,14 @@ describe('weekBusy', () => {
     // 2026-11-14 是周六 → 这一周 11-09（一）～ 11-15（日）
     const events = [ev({ date: '2026-11-09' }), ev({ date: '2026-11-09' }), ev({ date: '2026-11-15' }), ev({ date: '2026-11-10', deleted_at: 1 }), ev({ date: '2026-11-16' })];
     const todos = [td({ due: '2026-11-09' }), td({ due: '2026-11-12', done: true }), td({ due: '2026-11-12', undone: true }), td({ due: '2026-11-13' })];
-    const w = weekBusy(events, todos, '2026-11-14', SEOUL, 'zh');
+    const w = weekBusy(events, todos, '2026-11-14', SEOUL, 'zh-CN');
     expect(w.map((d) => d.date)).toEqual(['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15']);
     expect(w.map((d) => d.n)).toEqual([3, 0, 0, 0, 1, 0, 1]);
   });
 
   it('今天是周一、周日：都落在同一周里', () => {
-    expect(weekBusy([], [], '2026-11-09', SEOUL, 'zh')[0]?.date).toBe('2026-11-09');
-    expect(weekBusy([], [], '2026-11-15', SEOUL, 'zh')[0]?.date).toBe('2026-11-09');
+    expect(weekBusy([], [], '2026-11-09', SEOUL, 'zh-CN')[0]?.date).toBe('2026-11-09');
+    expect(weekBusy([], [], '2026-11-15', SEOUL, 'zh-CN')[0]?.date).toBe('2026-11-09');
   });
 });
 

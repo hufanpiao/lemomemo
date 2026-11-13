@@ -4,12 +4,13 @@ import type { DateStr } from '../../../../shared/core/date.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { annivOn } from '../../../kit/hooks/anniv-on.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
-import { annivUpcoming, type AnnivSoon } from '../data/anniv-soon.ts';
+import { annivUpcoming, nameOf, type AnnivSoon } from '../data/anniv-soon.ts';
 import type { Row } from '../data/today-model.ts';
 import { weekBusy, type DayBusy } from '../data/week-busy.ts';
 import { useLocale } from './useTodayT.ts';
 
 export type { AnnivSoon, DayBusy };
+export { nameOf as annivName };
 
 /** 这一周（周一到周日）每天几件事 */
 export function useWeekBusy(today: DateStr): DayBusy[] {
@@ -23,5 +24,6 @@ export function useWeekBusy(today: DateStr): DayBusy[] {
 /** within 天内的纪念日，最多 max 个；纪念日开关关着时没有 */
 export function useAnnivUpcoming(today: DateStr, within: number, max: number): AnnivSoon[] {
   const rows = useCollection<{ id: string }>('anniversaries');
-  return annivOn() ? annivUpcoming(rows, today, within, max) : [];
+  const on = annivOn();
+  return useMemo(() => (on ? annivUpcoming(rows, today, within, max) : []), [on, rows, today, within, max]);
 }

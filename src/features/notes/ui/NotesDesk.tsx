@@ -3,11 +3,12 @@
 //   list（标题是当前分类“全部 34”；隐私记入口行、合并提示、瀑布流或列表、底部输入行，都是 NotesPage 画好的）
 // • 默认两栏：左 0.22 分类、右 0.78 列表（线框 s7）；排法、拖动、收起、保存都在 kit 的 DeskLayout
 // • 详情抽屉：DeskLayout 给出抽屉在哪边和换边把手，交给 NotesPage 画 NoteDrawer
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { LAYOUT_V, type DeskLayoutValue } from '../../../../shared/schema/layout.ts';
 import DeskLayout from '../../../kit/components/DeskLayout/DeskLayout.tsx';
 import { Pressable } from '../../../motion/components.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
+import { Dot } from './CatDot.tsx';
 import styles from './NotesPage.module.css';
 
 export const NOTES_DEFAULT: DeskLayoutValue = {
@@ -40,9 +41,16 @@ export default function NotesDesk({ cats, list, drawer }: NotesDeskProps) {
   const cur = cats.counts.find((c) => c.id === cats.category);
   const panels = {
     cats: { title: t('notes.title', {}), body: <CatList cats={cats} /> },
-    list: { title: cur ? `${cur.name} ${cur.count}` : t('notes.all', { n: cats.total }), body: list },
+    // list 里有输入行（侧栏“＋”要聚焦它）：不能收起
+    list: { title: cur ? `${cur.name} ${cur.count}` : t('notes.all', { n: cats.total }), body: list, fixed: true },
   };
-  return <DeskLayout page="notes" def={NOTES_DEFAULT} panels={panels} drawer={drawer} />;
+  return (
+    <>
+      {/* 页面主标题：电脑版看得见的是“随手记”块标题，读屏仍要一个 h1 */}
+      <h1 className={styles.sr}>{t('notes.title', {})}</h1>
+      <DeskLayout page="notes" def={NOTES_DEFAULT} panels={panels} drawer={drawer} />
+    </>
+  );
 }
 
 /** 竖排分类（线框 s7 左栏）：名字在左、条数在右，选中的深底；testid 和手机胶囊一样（e2e 共用） */
@@ -52,7 +60,7 @@ function CatList({ cats }: { cats: DeskCats }) {
     const on = cats.category === id;
     return (
       <Pressable key={testId} className={on ? styles.catOn : styles.catItem} aria-pressed={on} onClick={() => cats.set(id)} data-testid={testId}>
-        {color === null ? null : <i className={styles.dotBig} style={{ '--dot': color } as CSSProperties} aria-hidden="true" />}
+        <Dot color={color} big />
         <span className={styles.catLabel}>{name}</span>
         <span className={styles.catN}>{n}</span>
       </Pressable>
