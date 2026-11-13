@@ -84,6 +84,11 @@
   gap: 4px;
 }
 
+/* “已删除”卡片两个按钮（“恢复并保留我的修改”“不用了”）占满右列时标题会被挤成窄列（推进计划 7c，390 宽折 3 行）：一律文字在上、按钮在下靠右 */
+.card[data-kind='gone'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 @media (width <= 360px) {
   .card {
     grid-template-columns: minmax(0, 1fr);
