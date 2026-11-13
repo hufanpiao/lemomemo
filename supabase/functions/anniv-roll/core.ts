@@ -6,20 +6,25 @@
 // • 只处理可用账号（_shared/auth.ts 的 isUsable，经 private.account_usable；停用、注销冷静期的跳过，0.29 续第 138 条④）。
 // • 每行按这个人的 current_tz、设置（anniv.default_offsets、anniv.default_time）用 shared/logic/anniv/next-date.ts 的 annivNextOf 重算
 //   next_date、remind_at（每年的滚到下一次；倒数日到期第二天起算“已过去”）；倒数日 archive 的过了目标日写 archived_at = 现在，回到以后的清空。
-//   值没变不写；写的时候带乐观条件（remind_at 还是读到的值，同 push-dispatch），读完以后被改了的不覆盖（触发器已入队，push-dispatch 会重算）。
+//   值没变不写；写的时候带乐观条件（rev、remind_at 还是读到的值，同 push-dispatch），读完以后被改了的不覆盖（触发器已入队，push-dispatch 会重算）。
+//   还有没到的“稍后”、免打扰顺延（snooze_at 或 defer_until 晚于现在）的行，remind_at 不动，只滚 next_date、archived_at（整块评审第 7 条）。
+// • 判可用账号按人并发（最多 USABLE_CONCURRENCY 个，整块评审第 10 条）。
+// • 日志带表名和 id 前 8 位（整块评审第 11 条），不记名字、日期。
 // • 写心跳 anniv-roll（detail 只是个数，usage-report 按白名单转发）。日志只记原因码（A23），不记名字、日期。
 import { cronGate, json } from '../_shared/http.ts';
+import { pool } from '../_shared/pool.ts';
 
 export const HEARTBEAT = 'anniv-roll';
 /** 一轮最多处理几行（PostgREST 一次读回；每天一次，量大时下一天接着滚，到期的行 next_date 早，排在前面） */
 export const BATCH = 1000;
-/** .in() 一批最多几个 UUID（同 push-dispatch 的 IN_CHUNK） */
-export const IN_CHUNK = 100;
+/** 判可用账号最多几个并发（private.account_usable 每人一次 RPC） */
+export const USABLE_CONCURRENCY = 8;
 
 /** 读出来的一行（只取用得到的列） */
 export interface RollRow {
   id: string;
   user_id: string;
+  rev: number;
   kind: unknown;
   after_due: unknown;
   next_date: string | null;
@@ -91,6 +96,8 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   return json(200, { ok: true, ...detail });
 }
 
+const isLater = (v: unknown, now: number): boolean => typeof v === 'number' && v > now;
+
 const isPast = (row: RollRow, nextDate: string | null, today: string): boolean =>
   row.kind === 'countdown' && (row.after_due ?? 'archive') === 'archive' && nextDate !== null && nextDate < today;
 
@@ -102,11 +109,14 @@ export async function runRoll(deps: Deps, store: RollStore): Promise<HeartbeatDe
   const d: HeartbeatDetail = { rows: rows.length, written: 0, archived: 0, stale: 0, skipped: 0, failed: 0, batch_full: rows.length >= BATCH };
   const ids = [...new Set(rows.map((r) => r.user_id))];
   const usable = new Set<string>();
-  for (const u of ids) if (await deps.isUsable(u)) usable.add(u);
+  await pool(ids, USABLE_CONCURRENCY, async (u) => {
+    if (await deps.isUsable(u)) usable.add(u);
+  });
   const live = ids.filter((u) => usable.has(u));
   const tzs = await store.profiles(live);
   const sets = await store.settings(live);
   for (const row of rows) {
+    const tag = `anniversaries:${row.id.slice(0, 8)}`;
     if (!usable.has(row.user_id)) {
       d.skipped++;
       continue;
@@ -114,17 +124,18 @@ export async function runRoll(deps: Deps, store: RollStore): Promise<HeartbeatDe
     const tz = tzs.get(row.user_id);
     if (tz === undefined || !logic.isValidTz(tz)) {
       d.failed++;
-      deps.log('tz_invalid');
+      deps.log(`tz_invalid ${tag}`);
       continue;
     }
     let patch: RollPatch;
     try {
       const nx = logic.annivNextOf(row, { tz, now, settings: sets.get(row.user_id) ?? {} });
       const past = isPast(row, nx.next_date, logic.todayOf(now, tz));
-      patch = { ...nx, archived_at: past ? (row.archived_at ?? now) : null };
+      const held = isLater(row['snooze_at'], now) || isLater(row['defer_until'], now);
+      patch = { next_date: nx.next_date, remind_at: held ? row.remind_at : nx.remind_at, archived_at: past ? (row.archived_at ?? now) : null };
     } catch {
       d.failed++;
-      deps.log('bad_anniv');
+      deps.log(`bad_anniv ${tag}`);
       continue;
     }
     if (patch.next_date === row.next_date && patch.remind_at === row.remind_at && patch.archived_at === row.archived_at) continue;
@@ -135,7 +146,7 @@ export async function runRoll(deps: Deps, store: RollStore): Promise<HeartbeatDe
       }
     } catch {
       d.failed++;
-      deps.log('write_failed');
+      deps.log(`write_failed ${tag}`);
       continue;
     }
     d.written++;

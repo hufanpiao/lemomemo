@@ -1,5 +1,6 @@
 // push-dispatch 一轮的小工具、tz_invalid 记录和 filterUsable；流程总说明在 round.ts 文件头。
 import { AHEAD_MS, BEHIND_MS, DB_DATA, DB_NOFN, DB_TIMEOUT, LOG_SRC, type Dnd, type ItemRow, type LogRow, type NotifyMsgLike, type NotifyTextLike, type RoundCtx, type RoundLogic, type Table, type UserSettings } from './round-types.ts';
+import { pool } from '../_shared/pool.ts';
 
 // ---------------- 小工具 ----------------
 
@@ -82,14 +83,8 @@ export function renderText(n: NotifyTextLike, t: RoundLogic['t'], locale: string
   return { title: n.fromClaude ? t('remind.push.fromClaude', { text: raw }, locale) : raw, body: n.body ? one(n.body) : null };
 }
 
-/** 最多 n 个并发跑完 items（顺序领取；fn 自己吞错） */
-export async function pool<T>(items: readonly T[], n: number, fn: (x: T) => Promise<void>): Promise<void> {
-  const it = items.values();   // 几个 worker 共用一个迭代器，各取下一项
-  const worker = async () => {
-    for (let x = it.next(); !x.done; x = it.next()) await fn(x.value);
-  };
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(n, items.length)) }, worker));
-}
+// pool（最多 n 个并发）11-14 挪进 _shared/pool.ts（anniv-roll 判可用账号也用，整块评审第 10、25 条），这里照旧导出
+export { pool };
 
 export function groupBy<T, K>(xs: readonly T[], key: (x: T) => K): Map<K, T[]> {
   const m = new Map<K, T[]>();

@@ -15,7 +15,7 @@ const B = '00000000-0000-4000-8000-00000000000b';
 const NOW = msAt('2026-12-01', 10, 'UTC');   // 00:10 UTC = 首尔 09:10
 let seq = 0;
 const row = (user: string, over: Partial<RollRow> = {}): RollRow => ({
-  id: `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`, user_id: user, kind: 'birthday', calendar: 'solar', lunar_variant: 'cn',
+  id: `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`, user_id: user, rev: 1, kind: 'birthday', calendar: 'solar', lunar_variant: 'cn',
   month: 11, day: 30, is_leap: false, year: null, remind_offsets: null, remind_time: null, after_due: 'archive', created_at: msAt('2026-01-01', 0, SEOUL),
   next_date: '2026-11-30', remind_at: null, archived_at: null, ...over,
 });
@@ -96,7 +96,31 @@ describe('anniv-roll：滚动和归档', () => {
     await s.call();
     expect(s.writes.map((w) => w.id)).toEqual([ok.id]);
     expect(s.beats[0]).toMatchObject({ rows: 4, written: 1, stale: 1, failed: 1 });
-    expect(s.codes).toEqual(['bad_anniv']);
+    expect(s.codes).toEqual([`bad_anniv anniversaries:${bad.id.slice(0, 8)}`]);   // 整块评审第 11 条：带表名和 id 前 8 位
+  });
+  it('还有没到的“稍后”、免打扰顺延（snooze_at / defer_until > 现在）：next_date 照滚，remind_at 不动（整块评审第 7 条）', async () => {
+    const sn = row(A, { remind_at: 123, snooze_at: NOW + 60_000 });
+    const df = row(A, { remind_at: 456, defer_until: NOW + 60_000 });
+    const old = row(A, { remind_at: 789, snooze_at: NOW - 60_000 });
+    const s = setup([sn, df, old]);
+    await s.call();
+    expect(s.writes.find((w) => w.id === sn.id)?.patch).toMatchObject({ next_date: '2027-11-30', remind_at: 123 });
+    expect(s.writes.find((w) => w.id === df.id)?.patch).toMatchObject({ next_date: '2027-11-30', remind_at: 456 });
+    expect(s.writes.find((w) => w.id === old.id)?.patch.remind_at).toBe(msAt('2027-11-23', 540, SEOUL));
+  });
+  it('判可用账号：几个人并发判，不一个个排队（整块评审第 10 条）', async () => {
+    let inflight = 0;
+    let peak = 0;
+    const usable = async () => {
+      inflight++;
+      peak = Math.max(peak, inflight);
+      await new Promise((r) => setTimeout(r, 5));
+      inflight--;
+      return true;
+    };
+    const s = setup([row(A), row(B)], { usable });
+    await s.call();
+    expect(peak).toBe(2);
   });
 });
 
