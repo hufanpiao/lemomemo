@@ -69,7 +69,7 @@ describe('合并分类提示（S7，R-413）', () => {
     expect(rows('settings').find((s) => s['key'] === 'notes.merge_dismissed')?.['value']).toEqual([pair]);
     expect(rows('categories').find((c) => c.id === LIST)?.['merged_into']).toBeNull();
   });
-  it('点“不用”写库抛错：页面出错条，运行日志只记“notes merge dismiss fail”，没有没人接的 Promise 拒绝', async () => {
+  it('点“不用”写库抛错：页面出错条，运行日志只记“notes merge dismiss fail merge= keep=”，没有没人接的 Promise 拒绝', async () => {
     await withSuggest();
     const lines: string[] = [];
     (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
@@ -78,7 +78,7 @@ describe('合并分类提示（S7，R-413）', () => {
       fireEvent.click(await screen.findByTestId('notes-merge-no'));
     });
     expect((await screen.findByTestId('notes-error')).textContent).toBeTruthy();
-    expect(lines.filter((l) => l.startsWith('notes merge dismiss'))).toEqual(['notes merge dismiss fail']);
+    expect(lines.filter((l) => l.startsWith('notes merge dismiss'))).toEqual([`notes merge dismiss fail merge=${LIST} keep=${READ}`]);
     spy.mockRestore();
     delete (globalThis as Record<string, unknown>)[RL_SLOT];
   });
@@ -91,7 +91,7 @@ describe('合并分类提示（S7，R-413）', () => {
       fireEvent.click(await screen.findByTestId('notes-merge-no'));
     });
     expect((await screen.findByTestId('notes-error')).textContent).toBeTruthy();
-    expect(lines.filter((l) => l.startsWith('notes merge dismiss'))).toEqual(['notes merge dismiss fail']);
+    expect(lines.filter((l) => l.startsWith('notes merge dismiss'))).toEqual([`notes merge dismiss fail merge=${LIST} keep=${READ}`]);
     spy.mockRestore();
     delete (globalThis as Record<string, unknown>)[RL_SLOT];
   });
@@ -161,6 +161,7 @@ describe('转成待办 / 日程（S8，R-414）', () => {
     });
     wire();
     open();
+    expect(screen.queryByTestId(`notes-conv-${uid(1)}`)).toBeNull();
     await openMenu(uid(1));
     await act(async () => {
       fireEvent.click(screen.getByTestId(`notes-to-event-${uid(1)}`));
@@ -189,6 +190,30 @@ describe('转成待办 / 日程（S8，R-414）', () => {
     expect(n?.['deleted_at'] ?? null).toBeNull();
     expect(screen.getByTestId(`notes-card-${uid(1)}`)).toBeTruthy();
     expect((await screen.findByTestId('notes-conv-tip')).textContent).toBe('已转成待办，这条随手记留着');
+    // R-415 ③ 方案丙：留着的原条，卡片标题前出“已转过”描边小标
+    const mark = await screen.findByTestId(`notes-conv-${uid(1)}`);
+    expect(mark.textContent).toBe('已转过，');
+    expect(mark.parentElement?.firstElementChild).toBe(mark);
+    expect(mark.parentElement?.className).toMatch(/cardTitle/);
+  });
+
+  it('“已转过”（R-415 ③ 方案丙）：列表视图的标题前同样出；converted_to 为空、为 null 的不出', async () => {
+    const b = await boot();
+    await act(async () => {
+      await b.outbox?.applyServer('notes', [
+        { row: { ...serverNote(1), converted_to: [{ kind: 'event', id: uid(700) }] } as ServerRow },
+        { row: { ...serverNote(2), converted_to: [] } as ServerRow },
+        { row: serverNote(3) },
+      ]);
+      await b.outbox?.applyServer('settings', [{ row: serverSetting(uid(900), 'notes.view@desktop', 'list') }]);
+    });
+    wire();
+    open();
+    expect(screen.getByTestId('notes').getAttribute('data-view')).toBe('list');
+    const mark = await screen.findByTestId(`notes-conv-${uid(1)}`);
+    expect(mark.parentElement?.className).toMatch(/t1/);
+    expect(mark.parentElement?.textContent).toBe('已转过，第1条');
+    expect([screen.queryByTestId(`notes-conv-${uid(2)}`), screen.queryByTestId(`notes-conv-${uid(3)}`)]).toEqual([null, null]);
   });
   it('超过 2000 字：两项变淡（aria-disabled）、下面写“超过 2000 字，转不了”，点了一笔不写；“删除”照常', async () => {
     const b = await boot();

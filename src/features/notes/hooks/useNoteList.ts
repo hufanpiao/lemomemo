@@ -21,6 +21,8 @@ import { aliveCount, categoryCounts, categoryNames, groupByDay, imagesByNote, no
 
 export type { NoteGroup, NoteItem } from '../data/note-list.ts';
 export type { ActionResult, ConvertKind, ConvertResult };
+/** 写入结果换界面码只经 core 这一份（页面的转换流程也用） */
+export { actionResult };
 
 export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   const rows = useCollection<Row>('notes');

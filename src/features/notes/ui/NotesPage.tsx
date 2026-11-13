@@ -10,7 +10,8 @@
 //   瀑布流里不能左滑（R-78），列表的左滑以后和别的页一起加
 // • 转成待办 / 日程（R-414）：规则见 shared/logic/notes/note-convert.ts 文件头；转完在输入行上面出一句提示（同插图提示的位置）
 // • 合并分类提示（S7，R-413；线框 MERGE）：分类胶囊下面一张浅底条“‘读书’和‘书单’两个分类很像，合成一个吗？ 合并 / 不用”，
-//   哪几对由 hooks/useMergeHint.ts 给（AI 判的 + 本机规则），一次只出一对
+//   哪几对由 hooks/useMergeHint.ts 给（AI 判的 + 本机规则），一次只出一对；点“合并”成了底部出 8 秒撤销条“已合并 · 撤销”（R-415 ③，和删除同一个 UndoBar），
+//   撤销就当点了“不用”（这一对记进 notes.merge_dismissed），被合并的分类回到 merged_into: null（data 的 undoMerge）；写入期间提示条两个按钮禁用
 // • 删除：软删，进“最近删除”，出 8 秒撤销条
 // • 底部输入行（视觉稿 .inrow、线框 COMPOSER）：右边是“图片”“拍照”（主持人定 3），打了字才出“记下”；回车或点“记下”就存，新的一条出现在最上面、时间写“刚记下”。
 //   选了图：先用输入框里的字（可以空）新建一条随手记，再把图插进去（S3，ui/NoteImages.tsx）。电脑上输入行铺满内容栏、左右各留 22px（DK.notes）
@@ -46,7 +47,7 @@ import { AppearItem, AppearList, Pressable } from '../../../motion/components.ts
 import { useMergeHint } from '../hooks/useMergeHint.ts';
 import { useNoteList, type NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
-import { useNotesToast } from '../hooks/useNotesToast.ts';
+import { isUndo, mergeUndo, undoTipOf, useNotesToast, type MergeUndo, type UndoTip } from '../hooks/useNotesToast.ts';
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
@@ -72,9 +73,11 @@ function NotesList() {
   const wide = useMedia(MQ_SIDEBAR);
   const l = useNoteList();
   const a = useListActions<PageTip>('notes', { remove: l.remove });
-  const merge = useMergeHint();
-  const { g: guard, isRo, report } = a;
+  const { g: guard, g: { toast }, isRo, report } = a;
+  // 撤销条还在的那一对，提示条先不出（R-415 复查 B4）
+  const merge = useMergeHint(toast?.kind === 'mergeUndo' ? toast.pair : null);
   const up = useNotesToast(guard);
+  const bar = isUndo(toast) ? { tip: undoTipOf(toast, a.undo), close: () => guard.dismiss(toast) } : null;
   // 输入框有焦点时画模糊层（R-401）；点模糊层让输入框失焦
   const field = useRef<HTMLInputElement>(null);
   const [typing, setTyping] = useState(false);
@@ -150,7 +153,7 @@ function NotesList() {
         </div>
       ) : null}
 
-      {merge ? <MergeBar hint={merge} onResult={report} /> : null}
+      {merge ? <MergeBar hint={merge} onResult={report} onMerged={(h) => guard.show(mergeUndo(h.key, () => void h.undo().then(report)))} /> : null}
 
       {l.items.length === 0 ? (
         <p className={list.empty} data-testid="notes-empty">
@@ -169,7 +172,7 @@ function NotesList() {
                       <CardCover img={it.cover} count={it.images} />
                     </span>
                   ) : null}
-                  <span className={styles.cardTitle}>{it.title}</span>
+                  <span className={styles.cardTitle}>{it.converted ? <ConvMark id={it.id} /> : null}{it.title}</span>
                   {it.summary ? <span className={styles.cardSum}>{it.summary}</span> : null}
                 </button>
                 <RoMark ro={isRo(it.id)} id={it.id} cls={styles.roCard} />
@@ -217,13 +220,13 @@ function NotesList() {
       {typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null}
       <div className={up ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
         <InputRow field={field} onTyping={setTyping} onAdd={add} onImage={addImage} />
-        {guard.toast !== null && guard.toast.kind !== 'undo' ? <DockTip toast={guard.toast} /> : null}
+        {toast !== null && !isUndo(toast) ? <DockTip toast={toast} /> : null}
       </div>
 
       {drawer !== null ? <NoteDrawer id={drawer} onClose={() => setDrawer(null)} /> : null}
       {conv.ask ? <ConvertAsk ask={conv.ask} onOk={conv.confirm} onCancel={conv.cancel} /> : null}
 
-      {guard.toast?.kind === 'undo' ? <UndoBar key={guard.toast.id} toast={guard.toast} onUndo={a.undo} onClose={guard.dismiss} /> : null}
+      {bar ? <UndoBar key={bar.tip.key} tip={bar.tip} onClose={bar.close} /> : null}
       <ReadonlyToast guard={guard} message={tEdit('edit.st.readonly', {})} testId="notes-ro-toast" />
     </main>
   );
@@ -233,7 +236,10 @@ function NotesList() {
 function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: ReactNode }) {
   return (
     <span className={styles.ltext}>
-      <span className={styles.t1}>{it.title}</span>
+      <span className={styles.t1}>
+        {it.converted ? <ConvMark id={it.id} /> : null}
+        {it.title}
+      </span>
       <span className={styles.t2}>
         <span className={styles.t2txt}>{[it.summary, it.categoryName ?? ''].filter(Boolean).join(' · ')}</span>
         {ai}
@@ -243,16 +249,14 @@ function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: ReactNode })
   );
 }
 
-/** 页底的撤销条（换一条删除就换一个 key，重新计时） */
-function UndoBar({ toast, onUndo, onClose }: { toast: { kind: 'undo'; id: string }; onUndo(id: string): void; onClose(x: { kind: 'undo'; id: string }): void }) {
+/** 页底的撤销条：删除的“已删除”、合并分类的“已合并”（R-415 ③），同一个 kit UndoToast、8 秒；画什么、点了做什么都在 tip 里（换一条就换一个 key，重新计时） */
+function UndoBar({ tip, onClose }: { tip: UndoTip; onClose(): void }) {
   const t = useNotesT();
-  return (
-    <UndoToast message={t('notes.deleted', {})} undoLabel={t('notes.undo', {})} onUndo={() => onUndo(toast.id)} onClose={() => onClose(toast)} data-testid="notes-toast" />
-  );
+  return <UndoToast message={t(tip.msgKey, {})} undoLabel={t('notes.undo', {})} onUndo={tip.undo} onClose={onClose} data-testid={tip.testId} />;
 }
 
 /** 输入行上面的提示条：没保存上、插图提示（空间满了的带“最近删除”入口）、转换结果 */
-function DockTip({ toast }: { toast: { kind: 'error' } | PageTip }) {
+function DockTip({ toast }: { toast: { kind: 'error' } | Exclude<PageTip, MergeUndo> }) {
   const t = useNotesT();
   return (
     <p className={styles.error} role="alert" data-testid={toast.kind === 'error' ? 'notes-error' : toast.kind === 'img' ? 'notes-img-tip' : 'notes-conv-tip'}>
@@ -283,6 +287,17 @@ const RoMark = ({ ro, id, cls }: { ro: boolean; id: string; cls: string | undefi
       <ReadonlyMark testId={`notes-ro-${id}`} />
     </span>
   ) : null;
+
+/** “已转过”描边小标（R-415 ③，负责人定方案丙）：卡片、列表行的标题前；后面一个视觉隐藏的“，”，读屏读成“已转过，标题”不连在一起 */
+function ConvMark({ id }: { id: string }) {
+  const t = useNotesT();
+  return (
+    <span className={styles.conv} data-testid={`notes-conv-${id}`}>
+      {t('notes.converted', {})}
+      <span className={styles.convSep}>，</span>
+    </span>
+  );
+}
 
 function AiMark({ id }: { id: string }) {
   const t = useNotesT();

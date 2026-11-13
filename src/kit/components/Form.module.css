@@ -45,6 +45,33 @@
   text-align: right;
 }
 
+/* 字段行右边的“值 ›”（FieldLink，R-415 ① 待办“来源”行）：和输入框同字号，单行省略；整块控件宽都能点、至少 --hit 高 */
+.link {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  min-height: var(--hit);
+  color: var(--text);
+  font-size: var(--fs-15);
+  text-decoration: none;
+}
+
+.link:focus-visible {
+  border-radius: var(--r-inp);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.linkText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .input,
 .select,
 .area {

@@ -93,7 +93,7 @@ describe('convertNote：桩写入口', () => {
     expect(s.calls.filter((c) => c.op === 'insert')).toHaveLength(2);
     expect((await convertNote(note(), 'todo', { now: NOW, tz: TZ }, s.deps)).ok).toBe(true);
     delete (globalThis as Record<string, unknown>)[RL_SLOT];
-    expect(lines[0]).toBe('note convert event busy title=3 body=6');
+    expect(lines[0]).toBe('notes convert event busy title=3 body=6');
     expect(lines.join(' ')).not.toContain('买牛奶');
   });
 
@@ -104,7 +104,7 @@ describe('convertNote：桩写入口', () => {
       throw new TypeError('boom');
     }]);
     await expect(convertNote(note(), 'todo', { now: NOW, tz: TZ }, s.deps)).rejects.toThrow('boom');
-    expect(lines).toEqual(['note convert todo threw TypeError']);
+    expect(lines).toEqual(['notes convert todo threw TypeError']);
     expect((await convertNote(note(), 'todo', { now: NOW, tz: TZ }, stub().deps)).ok).toBe(true);
     delete (globalThis as Record<string, unknown>)[RL_SLOT];
   });

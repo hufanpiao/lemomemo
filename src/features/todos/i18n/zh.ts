@@ -33,6 +33,9 @@ export const zh = {
   'todo.edit.projectPh': '比如：工作、家里',
   'todo.edit.notePh': '补充说明（可不填）',
   'todo.edit.raw': '原话',
+  // R-415 ①（负责人定方案丙）：随手记转来的待办，最后一组“来源 随手记 · 标题 ›”；原随手记删了时变灰、下面一行说明
+  'todo.edit.source': '来源',
+  'todo.edit.sourceNote': '随手记',
   'todo.edit.st.empty': '写上标题才会保存',
   'todo.edit.st.rejected': '格式不对，没保存上（标题太长或日期不对）',
 } as const;

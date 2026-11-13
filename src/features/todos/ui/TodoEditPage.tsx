@@ -7,10 +7,12 @@
 // • 删除：软删，页内出“已删除”和“撤销”（ADR-006）；“最近删除”页在 FA-2 后面一段
 // • R-375：没有截止日期时改了提醒（当天 / 前一天、提醒时刻），截止日期自动填今天（规则在 data/todo-edit.ts ⑤），提醒那一行的灰字说明这一点；
 //   填了今天以后“当天 / 前一天 + 时刻”已经过了的，同一处灰字改成“这个提醒时刻已经过了，不会再提醒”（不替用户挪日子）
+// • R-415 ①（负责人定方案丙）：随手记转来的待办，最后一组（项目、备注那一组）末尾加一行“来源 随手记 · 标题 ›”，同一种 Field 行，
+//   右边的值用 kit 的 FieldLink（SourceRow）；原随手记不在（删了、隐私记、撤销了、本机没有）整行不出，恢复后自动出现（负责人 11-13）
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
-import { Check, Field, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
-import { ITEM_TITLE_MAX, NOTE_MAX, PROJECT_MAX, REMIND_BEFORE_OPTIONS, useTodoEdit } from '../hooks/useTodoEdit.ts';
+import { Check, Field, FieldLink, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
+import { ITEM_TITLE_MAX, NOTE_MAX, PROJECT_MAX, REMIND_BEFORE_OPTIONS, useTodoEdit, type TodoSource } from '../hooks/useTodoEdit.ts';
 import { useTodosT, type TodosMsgKey } from '../hooks/useTodosT.ts';
 
 const beforeKey = (v: number | null): TodosMsgKey => (v === null ? 'todo.edit.before.none' : (`todo.edit.before.${v}` as TodosMsgKey));
@@ -133,7 +135,25 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
             <span data-testid="todo-edit-raw">{rawText}</span>
           </Field>
         ) : null}
+        {ed.source?.state === 'ok' ? <SourceRow src={ed.source} /> : null}
       </FormGroup>
     </EditShell>
+  );
+}
+
+/**
+ * “来源 随手记 · 标题 ›”（R-415 ①，方案丙）：点了打开那条随手记（#/note/<id>）。原条不在（删了、隐私记、撤销了、本机没有）整行不出，
+ * 规则在 data/todo-edit.ts 的 sourceOf；读屏名称是“来源 随手记 · 标题”（FieldLink 的 label）
+ */
+function SourceRow({ src }: { src: Extract<TodoSource, { state: 'ok' }> }) {
+  const t = useTodosT();
+  const label = t('todo.edit.source', {});
+  const text = `${t('todo.edit.sourceNote', {})}${src.title ? ` · ${src.title}` : ''}`;
+  return (
+    <Field label={label}>
+      <FieldLink to={['note', src.id]} label={`${label} ${text}`} testId="todo-edit-source">
+        {text}
+      </FieldLink>
+    </Field>
   );
 }

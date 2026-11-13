@@ -15,7 +15,7 @@ export const LAYOUT_TARGETS: ReadonlyArray<readonly [string, string]> = [
   ['band', '[data-testid="tabbar-band"]'],
   ['type', '[data-testid="type-bar"]'],
   ['inrow', '[data-testid="notes-input-row"]'],
-  ['undo', '[data-testid="undo-toast"]'],
+  ['undo', '[data-undo-toast]'],
 ];
 
 /** 元素的简短说明：标签名 + type + data-testid / aria-label / id（不含内容文字） */

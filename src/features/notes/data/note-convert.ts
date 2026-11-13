@@ -10,6 +10,7 @@ import { str } from '../../../../shared/logic/notes/note-headline.ts';
 import { saveOutcome, saveUndone, type SaveOutcome } from '../../../core/edit-save.ts';
 import { readonlyIds } from '../../../core/store.ts';
 import { write } from '../../../core/write.ts';
+import { errName } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { Row } from './note-list.ts';
 
@@ -39,7 +40,7 @@ const busy = new Set<string>();
 
 export async function convertNote(note: Row, kind: ConvertKind, at: ConvertAt, deps: ConvertDeps = {}): Promise<ConvertResult> {
   const done = (r: ConvertResult): ConvertResult => {
-    rlog(`note convert ${kind} ${r.ok ? 'ok' : `${r.reason}${r.left ? ' left' : ''}`} title=${str(note['title']).length} body=${str(note['body']).length}`);
+    rlog(`notes convert ${kind} ${r.ok ? 'ok' : `${r.reason}${r.left ? ' left' : ''}`} title=${str(note['title']).length} body=${str(note['body']).length}`);
     return r;
   };
   if (busy.has(note.id)) return done({ ok: false, reason: 'busy' });
@@ -48,7 +49,7 @@ export async function convertNote(note: Row, kind: ConvertKind, at: ConvertAt, d
     return done(await convertOnce(note, kind, at, deps));
   } catch (e) {
     // 写入口抛了 OutboxRejectError 以外的错（saveOutcome 原样抛）：记下错误名再往外抛，界面兜底出错条
-    rlog(`note convert ${kind} threw ${e instanceof Error ? e.name : 'unknown'}`);
+    rlog(`notes convert ${kind} threw ${errName(e) || 'unknown'}`);
     throw e;
   } finally {
     busy.delete(note.id);
