@@ -272,6 +272,15 @@ describe('undoMerge（data）', () => {
     expect(w.update.mock.calls.map((c) => (c as unknown[])[0])).toEqual(['notes.merge_dismissed', 'notes.merge_dismissed']);
     expect(lines.filter((l) => l.startsWith('notes merge undo'))).toEqual([`notes merge undo moved ${PAIR}`, `notes merge undo moved ${PAIR}`, `notes merge undo readonly ${PAIR}`]);
   });
+
+  it('null 写成了、“不用”没记进本机：照实回 failed（null 不回滚），日志 dismiss_fail', async () => {
+    logTo();
+    const w = { update: vi.fn(() => Promise.resolve(false)) };
+    const patch = vi.fn().mockResolvedValueOnce({ ok: true, item: null });
+    expect(await undoMerge({ keep: READ, merge: LIST }, w, { w: { patch }, categories: cats(READ), outbox: null, isReadonly: () => false })).toBe('failed');
+    expect(patch.mock.calls).toEqual([['categories', LIST, { merged_into: null }]]);
+    expect(lines.filter((l) => l.startsWith('notes merge undo'))).toEqual([`notes merge undo dismiss_fail ${PAIR}`]);
+  });
 });
 
 describe('提示条写入期间锁住、撤销条 8 秒（提示条换成桩）', () => {

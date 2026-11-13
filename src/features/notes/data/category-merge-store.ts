@@ -127,7 +127,10 @@ export async function undoMerge(pair: Pair, writer: Pick<SettingWriter, 'update'
       const r = await unmerge(w, pair.merge);
       if (r !== 'saved') return end(r, actionResult(r));
     }
-    await dismissMerge(writer, pair, categories().map((c) => (c.id === pair.merge ? { ...c, merged_into: null } : c)));
+    // “不用”没记进本机：照实报 failed（出错条；null 已写的不回滚），不然刷新后这一对又提示，和“撤销就当点了不用”对不上
+    if (!(await dismissMerge(writer, pair, categories().map((c) => (c.id === pair.merge ? { ...c, merged_into: null } : c))))) {
+      return end('dismiss_fail', 'failed');
+    }
     return here ? end('ok', 'ok') : dropped ? end('dropped', 'ok') : end('moved', 'silent');
   } catch (err) {
     return end(threw(err), 'failed');
