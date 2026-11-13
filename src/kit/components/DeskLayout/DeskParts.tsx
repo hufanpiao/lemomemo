@@ -12,6 +12,10 @@ export interface DeskPanel {
   body: ReactNode;
   /** 不能收起（不画“–”）：块里有页面离不开的东西时用，例如随手记的输入行（侧栏“＋”要聚焦它） */
   fixed?: boolean;
+  /** 标题右边的跳转（线框 s1“日历 ›”“纪念日 ›”“随手记 ›”）：label 不带 ›，› 由这里画、读屏不读 */
+  go?: { label: string; onClick(): void } | undefined;
+  /** 大标题（线框 s7 随手记页：分类栏“随手记”22px、列表“全部 34”24px）；不给是 13px 灰字小标题 */
+  big?: 22 | 24 | undefined;
 }
 
 /** 竖条键盘每次调多少（5.9b 第 5 点） */
@@ -32,9 +36,15 @@ export function Panel({ id, p, canDrag, held, hintId, onKey, onBlur, onCollapse 
   return (
     <section ref={s.ref} className={styles.panel} style={s.style} aria-labelledby={titleId} data-dragging={s.dragging ? '' : undefined} data-held={held ? '' : undefined} data-testid={`desk-panel-${id}`}>
       <header className={styles.head}>
-        <h2 id={titleId} className={styles.title}>
+        <h2 id={titleId} className={styles.title} data-big={p.big}>
           {p.title}
         </h2>
+        {p.go ? (
+          <button type="button" className={styles.go} onClick={p.go.onClick} data-testid={`desk-go-${id}`}>
+            {p.go.label}
+            <span aria-hidden="true"> ›</span>
+          </button>
+        ) : null}
         {canDrag ? (
           <button
             type="button"
@@ -177,7 +187,8 @@ export function MoreMenu({ btn, layout, names, onLock, onRestore, onReset }: { b
           {names(id)}
         </button>
       ))}
-      <button type="button" className={`${styles.item} ${styles.sepTop}`} onClick={act(onReset)} data-testid="desk-reset">
+      <div className={styles.rule} role="separator" />
+      <button type="button" className={styles.item} onClick={act(onReset)} data-testid="desk-reset">
         <span className={styles.check} aria-hidden="true" />
         {t('desk.reset', {})}
       </button>

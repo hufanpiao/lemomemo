@@ -13,6 +13,22 @@
   font-size: var(--fs-12-5);
 }
 
+/* 日期后面的农历（线框 .top.a .d1 small：12.5px 常规字重、灰字、左边空 8px），挂在 TodayPage 的 h1 里 */
+.lunar {
+  margin-left: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+  font-weight: 400;
+}
+
+/* 快捷键提示块（线框 s1 右栏最后一张卡：12px 灰字） */
+.tip {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  line-height: 1.6;
+}
+
 /* 本周：7 根柱子（线框 s1 电脑画面“本周”） */
 .week {
   display: grid;

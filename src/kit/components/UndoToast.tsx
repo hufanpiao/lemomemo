@@ -4,10 +4,15 @@
 // • 鼠标悬停、键盘焦点在条上时暂停计时，移开后重新计 ms（读屏用户来得及按到“撤销”）
 // • 只渲染，不碰数据：撤销做什么由调用方给 onUndo
 // • 根元素带 data-undo-toast（K8 冲突提示 3.1，主持人已批）：冲突提示卡在撤销条开着时往上让一条
+// • solo（B6 返工 11-14“两个撤销条不能叠在一起”）：带 solo 的条同一时间只留一条，新出来的把旧的收起（旧的照常回调 onClose，不撤销）。
+//   电脑版布局的“布局已保存”和今天页、随手记页的删除撤销条带它；冲突提示卡这类本来就和撤销条并存的不带
 import { useEffect, useRef, useState } from 'react';
 import styles from './UndoToast.module.css';
 
 export const UNDO_TOAST_MS = 8000;
+
+/** 开着的 solo 条：每条登记一个“收起自己”的函数 */
+const solos = new Set<() => void>();
 
 export interface UndoToastProps {
   message: string;
@@ -20,10 +25,12 @@ export interface UndoToastProps {
   role?: 'status' | 'alert';
   /** 撤销后面再放一个按钮（电脑版布局的“恢复默认布局”，5.9b）：点了同样收起 */
   more?: { label: string; onClick(): void } | undefined;
+  /** 同一时间只留一条（见文件头） */
+  solo?: boolean | undefined;
   'data-testid'?: string;
 }
 
-export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST_MS, role = 'status', more, 'data-testid': testId }: UndoToastProps) {
+export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST_MS, role = 'status', more, solo, 'data-testid': testId }: UndoToastProps) {
   const [paused, setPaused] = useState(false);
   const done = useRef(false);
   const close = useRef(onClose);
@@ -38,6 +45,21 @@ export function UndoToast({ message, undoLabel, onUndo, onClose, ms = UNDO_TOAST
     }, ms);
     return () => clearTimeout(t);
   }, [paused, ms]);
+
+  // solo：挂上时先收起别的 solo 条，再登记自己
+  useEffect(() => {
+    if (!solo) return undefined;
+    const me = (): void => {
+      if (done.current) return;
+      done.current = true;
+      close.current();
+    };
+    for (const other of [...solos]) other();
+    solos.add(me);
+    return () => {
+      solos.delete(me);
+    };
+  }, [solo]);
 
   const act = (fn: () => void) => () => {
     if (done.current) return;

@@ -108,11 +108,48 @@
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: var(--text-2);
+  color: var(--text);
   font-size: var(--fs-13);
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 大标题（线框 s7 的 .d1：分类栏 22px、列表 24px；R-136 起标题非必要不加粗，用半粗） */
+.title[data-big="22"] {
+  font-size: var(--fs-22);
+  font-weight: 600;
+}
+
+.title[data-big="24"] {
+  font-size: var(--fs-24);
+  font-weight: 600;
+}
+
+/* 标题右边的跳转（线框 .st：标题黑字、“日历 ›”灰字靠右）；点击区 44 高 */
+.go {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-12-5);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .go:hover {
+    color: var(--text);
+  }
+}
+
+.go:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .handle,
@@ -247,10 +284,12 @@
   margin-top: 0;
 }
 
-.sepTop {
-  margin-top: 6px;
-  border-top: 1px solid var(--line);
-  border-radius: 0 0 var(--r-md) var(--r-md);
+/* 菜单里的分隔线：通栏（左右各伸出菜单的 6px 内边距，贴到菜单两边） */
+.rule {
+  flex: none;
+  height: 1px;
+  margin: 6px -6px;
+  background: var(--line);
 }
 
 /* 抽屉顶上的换边把手 */

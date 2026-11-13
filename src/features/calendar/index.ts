@@ -16,3 +16,5 @@ export const routes = [
 export const CalendarSettings = lazy(() => import('./ui/CalendarSettings.tsx'));
 /** 设置首页“日历”一行右边的值（R-320、SETTINGS-merge-cards M4）：只给值的文字，整行和点进二级页由设置页画；没有 props */
 export const CalendarSettingsValue = lazy(() => import('./ui/CalendarSettingsValue.tsx'));
+/** 电脑今天页的详情抽屉里的日程编辑器（B6 返工）：props 是 id、onCreated、onClose；在日程编辑页那一包里 */
+export const EventDrawerEditor = lazy(() => import('./ui/event-drawer.ts'));

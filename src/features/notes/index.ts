@@ -9,5 +9,5 @@ export const routes = [
   { name: 'note', Page: lazy(() => import('./ui/NotesRoot.tsx')) },
 ] as const;
 
-/** 电脑版今天页的“今天记的”块（B6，5.9b 的 notes-today；ui/TodayNotes.tsx）：只在电脑版今天页挂，没有 props */
+/** 电脑版今天页的“今天记的”块（B6，5.9b 的 notes-today；ui/TodayNotes.tsx）：只在电脑版今天页挂；onCount 报今天一共几条（块标题用） */
 export const TodayNotes = lazy(() => import('./ui/TodayNotes.tsx'));

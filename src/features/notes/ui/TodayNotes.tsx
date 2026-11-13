@@ -1,6 +1,8 @@
 // 电脑版今天页“今天记的”块（定稿线框 s1 电脑画面 NOTESTODAY，5.9b 的 notes-today 块）：今天（当前时区）记的随手记，新的在前，最多 5 条
 // • 一行：随手记小图标 | 标题 | 时刻 · 分类；点了进这一条的编辑器；没有时写“今天还没记”
 // • 经 notes/index.ts 懒加载，只在电脑版今天页下载（手机今天页没有这一块）
+// • onCount：今天一共几条，交给今天页写进块标题“今天记的 2”（线框 NOTESTODAY；标题在 kit DeskLayout 里画，不在这个块里）
+import { useEffect } from 'react';
 import { fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
@@ -10,9 +12,10 @@ import { useTodayNotes } from '../hooks/useTodayNotes.ts';
 
 const MAX = 5;
 
-export default function TodayNotes() {
+export default function TodayNotes({ onCount }: { onCount?(n: number): void }) {
   const t = useNotesT();
-  const { items, tz } = useTodayNotes(MAX);
+  const { items, count, tz } = useTodayNotes(MAX);
+  useEffect(() => onCount?.(count), [onCount, count]);
   if (items.length === 0) return <p className={list.empty}>{t('notes.todayNone', {})}</p>;
   return (
     <ul className={list.list} data-testid="today-notes">

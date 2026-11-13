@@ -32,7 +32,8 @@ export default function TodoEditPage() {
   return <TodoEditor key={key} id={id} onCreated={onCreated} />;
 }
 
-function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void }) {
+/** 编辑器本身：整页（#/todo/<id>）和电脑今天页的详情抽屉（onClose，B6 返工；经 ./todo-drawer.ts 懒加载）共用 */
+export function TodoEditor({ id, onCreated, onClose }: { id: string; onCreated(id: string): void; onClose?: (() => void) | undefined }) {
   const t = useTodosT();
   const ed = useTodoEdit(id, onCreated);
   const { form, change, readonly, off } = ed;
@@ -41,6 +42,7 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
   return (
     <EditShell
       prefix="todo-edit"
+      onClose={onClose}
       kind={t(ed.isNew ? 'todo.edit.newKind' : 'todo.edit.kind', {})}
       backLabel={t('todo.edit.back', {})}
       onBack={back}

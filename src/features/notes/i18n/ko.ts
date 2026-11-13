@@ -92,4 +92,5 @@ export const ko = {
   'note.edit.st.rejected': '형식이 맞지 않아 저장하지 못했어요 (제목이나 본문이 너무 길어요)', // REVIEW(ko)
   'notes.todayNone': '오늘은 아직 없어요', // REVIEW(ko) B6
   'notes.allName': '전체', // REVIEW(ko) B6
+  'notes.aiHint': '분류는 AI가 만들어요', // REVIEW(ko) B6
 } as const satisfies Record<keyof typeof zh, string>;

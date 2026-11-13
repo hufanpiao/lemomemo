@@ -48,6 +48,14 @@
   gap: 2px;
 }
 
+/* 分类栏底下的小字（线框 SIDENOTES：11px 灰字、上空 14、左右缩进 10） */
+.aiHint {
+  margin: 14px 0 0;
+  padding: 0 10px;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+}
+
 .catItem,
 .catOn {
   display: flex;

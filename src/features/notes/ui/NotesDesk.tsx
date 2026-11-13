@@ -1,5 +1,6 @@
 // 电脑版随手记页（B6；架构 5.9b，R-126 方案 B；定稿线框 s7 电脑画面）：有侧栏的宽度才由 NotesPage 懒加载，手机宽度不下载
 // • 两块（块 id 存进布局，改名要写迁移）：cats（标题“随手记” + 竖排分类：全部 N、各分类条数，点了只筛这一页）、
+//   标题字号照线框 s7：“随手记”22px、“全部 34”24px；分类栏底下一行小字“分类由 AI 建立”
 //   list（标题是当前分类“全部 34”；隐私记入口行、合并提示、瀑布流或列表、底部输入行，都是 NotesPage 画好的）
 // • 默认两栏：左 0.22 分类、右 0.78 列表（线框 s7）；排法、拖动、收起、保存都在 kit 的 DeskLayout
 // • 详情抽屉：DeskLayout 给出抽屉在哪边和换边把手，交给 NotesPage 画 NoteDrawer
@@ -40,9 +41,9 @@ export default function NotesDesk({ cats, list, drawer }: NotesDeskProps) {
   const t = useNotesT();
   const cur = cats.counts.find((c) => c.id === cats.category);
   const panels = {
-    cats: { title: t('notes.title', {}), body: <CatList cats={cats} /> },
+    cats: { title: t('notes.title', {}), big: 22 as const, body: <CatList cats={cats} /> },
     // list 里有输入行（侧栏“＋”要聚焦它）：不能收起
-    list: { title: cur ? `${cur.name} ${cur.count}` : t('notes.all', { n: cats.total }), body: list, fixed: true },
+    list: { title: cur ? `${cur.name} ${cur.count}` : t('notes.all', { n: cats.total }), big: 24 as const, body: list, fixed: true },
   };
   return (
     <>
@@ -70,6 +71,7 @@ function CatList({ cats }: { cats: DeskCats }) {
     <div className={styles.cats} role="group" aria-label={t('notes.filter', {})} data-testid="notes-filter">
       {item(null, t('notes.allName', {}), cats.total, null, 'notes-filter-all')}
       {cats.counts.map((c) => item(c.id, c.name, c.count, c.color, `notes-filter-${c.id}`))}
+      <p className={styles.aiHint}>{t('notes.aiHint', {})}</p>
     </div>
   );
 }
