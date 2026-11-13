@@ -102,7 +102,7 @@ describe('发送一段：TTL、resolve 日志、纪念日下一次', () => {
   });
 
   const anniv = (due: number): ItemRow => ({
-    id: uuid('a'), user_id: UA, deleted_at: null, undone: false, source: 'page', push_show_title: null,
+    id: uuid('a'), user_id: UA, rev: 1, deleted_at: null, undone: false, source: 'page', push_show_title: null,
     remind_at: due, notified_for: null, snooze_at: null, pushed_for: null, defer_until: null, name: '结婚纪念日', next_date: '2026-11-04',
   });
   const NEXT = { remind_at: 1_830_000_000_000, next_date: '2027-11-04' };
@@ -203,7 +203,7 @@ describe('审查低问题 L1～L3（REMIND-split-low）', () => {
     w.db.sets.set(UA, { 'remind.default_time': '08:30' });
     const due = now - 1000;
     w.db.put('anniversaries', {
-      id: uuid('a'), user_id: UA, deleted_at: null, undone: false, source: 'page', push_show_title: null,
+      id: uuid('a'), user_id: UA, rev: 1, deleted_at: null, undone: false, source: 'page', push_show_title: null,
       remind_at: due, notified_for: null, snooze_at: null, pushed_for: null, defer_until: null, name: '结婚纪念日', next_date: '2026-11-04',
     });
     await w.round(now);

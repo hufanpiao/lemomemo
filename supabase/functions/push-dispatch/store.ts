@@ -1,18 +1,18 @@
 // push-dispatch 的数据库读写（supabase-js，service role）：只在 index.ts 里用；查询写法由 tests/functions/push-dispatch-store.test.ts 核对，逻辑测试用内存替身。
 // 系统写入（remind_at、next_date、pushed_for、defer_until、push_fail_count、last_push_ok_at）在 table_meta.system_cols 里，touch() 不加 rev、不入队；
 //   清订阅三列不是系统列，会加 rev、同步给那台设备。每条写都带 user_id 条件；标题只在内存里组文案，不进日志。
-// 出错一律抛 Error：请求超时（_shared/net.ts 到点中止）抛 DB_TIMEOUT，数据类错误（SQLSTATE 22、23 类）抛 DB_DATA，其余抛 'db'
-// （调用方按 failCode 记 `<码>`、`<码>:timeout` 或 `<码>:data`）。
+// 出错一律抛 Error：请求超时（_shared/net.ts 到点中止）抛 DB_TIMEOUT，数据类错误（SQLSTATE 22、23 类）抛 DB_DATA，
+// 函数找不到（PGRST202）抛 DB_NOFN，其余抛 'db'（调用方按 failCode 记 `<码>`、`<码>:timeout`、`<码>:data` 或 `<码>:nofn`）。
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import type { DispatchStore } from './core.ts';
-import { DB_DATA, DB_TIMEOUT, LOG_SRC, SETTING_KEYS, TABLES, type DeviceRow, type ItemRow, type Profile, type QueueItem, type Table, type UserSettings } from './round.ts';
+import { DB_DATA, DB_NOFN, DB_TIMEOUT, LOG_SRC, SETTING_KEYS, TABLES, type DeviceRow, type ItemRow, type Profile, type QueueItem, type QueueRef, type Table, type UserSettings } from './round.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Admin = SupabaseClient<any, any, any>;
 
 // anniversaries 没有 source 列（0005_anniv.sql；代码审查 M1）：source 只在 events、todos 两支里读；纪念日的 source 按 'page' 补
-const COMMON = 'id, user_id, deleted_at, undone, push_show_title, remind_at, notified_for, snooze_at, pushed_for, defer_until';
+const COMMON = 'id, user_id, rev, deleted_at, undone, push_show_title, remind_at, notified_for, snooze_at, pushed_for, defer_until';
 /** 每张表读哪些列（switch：check_backend F7 不许用变量做方括号键；tests/build/push-dispatch-cols.test.ts 核对每列都在 db.types.ts 里） */
 export function colsOf(table: Table): string {
   switch (table) {
@@ -27,12 +27,14 @@ const DEVICE_COLS = 'id, user_id, push_endpoint, p256dh, auth, push_fail_count';
  * supabase-js 把 fetch 抛的异常转成 error 返回，message 是“异常名: 文字”（@supabase/postgrest-js 2.118 的 executeWithRetry 之后那段）；
  * timedFetch 中止时异常名是 TimeoutError，手动中止是 AbortError。只看开头的异常名，不看文字。
  * 数据库自己报的错 PostgREST 把 SQLSTATE 放在 code：22 类（数据异常）、23 类（违反约束）是这一行本身写不进去，抛 DB_DATA；
- * 别的（PGRST 开头的、08 连不上、57 被取消、5xx 没有 code）一律 'db'
+ * PGRST202（按参数名找不到函数：新版函数调到了还没 db push 的旧库）抛 DB_NOFN；
+ * 别的（其余 PGRST 开头的、08 连不上、57 被取消、5xx 没有 code）一律 'db'
  */
 export function dbError(error: unknown): Error {
   const e = error as { message?: unknown; code?: unknown } | null;
   if (typeof e?.message === 'string' && /^(TimeoutError|AbortError):/.test(e.message)) return new Error(DB_TIMEOUT);
   if (typeof e?.code === 'string' && /^2[23][0-9A-Z]{3}$/.test(e.code)) return new Error(DB_DATA);
+  if (e?.code === 'PGRST202') return new Error(DB_NOFN);
   return new Error('db');
 }
 function must<T>(r: { data: T | null; error: unknown }): T {
@@ -87,10 +89,10 @@ export function makeStore(admin: Admin): DispatchStore {
         p_limit: limit, p_lease_s: leaseS, p_retry: retry, p_per_user: perUser, p_poison: poison, p_ver: ver,
       })) as QueueItem[];
     },
-    async finishQueue(claim, release, hold = []) {
-      // hold 的元素带 hold: true（迁移 20261113120000）：finish 不放回也不删；没有 hold 时 p_release 和原来一字不差
-      const p_release = [...release.map((x) => ({ table_name: x.table_name, id: x.id })), ...hold.map((x) => ({ table_name: x.table_name, id: x.id, hold: true }))];
-      const { error } = await priv.rpc('remind_queue_finish', { p_claim: claim, p_release });
+    async finishQueue(claim, release, done) {
+      // 迁移 20261113160000：传处理完的名单 p_done，只删名单里的；两份都没列的留着租约（不再靠“其余都删”）
+      const ref = (x: QueueRef) => ({ table_name: x.table_name, id: x.id });
+      const { error } = await priv.rpc('remind_queue_finish', { p_claim: claim, p_release: release.map(ref), p_done: done.map(ref) });
       if (error) throw dbError(error);
     },
     async queueStats() {
@@ -116,13 +118,12 @@ export function makeStore(admin: Admin): DispatchStore {
       for (const r of rows) byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), [r.key, r.value]]);
       return new Map([...byUser].map(([u, kv]) => [u, Object.fromEntries(kv) as UserSettings]));
     },
-    async writeRemind(table, id, userId, patch, prevRemindAt, prevNotifiedFor) {
+    async writeRemind(table, id, userId, patch, prev) {
       const body: Record<string, unknown> = { remind_at: patch.remind_at };
       if (table === 'anniversaries' && patch.next_date !== undefined) body.next_date = patch.next_date;
-      // 乐观条件（代码审查建议 ④）：remind_at 还是读到的旧值才写
-      const q0 = admin.from(table).update(body).eq('id', id).eq('user_id', userId);
-      const q = prevNotifiedFor === undefined ? q0 : q0.eq('notified_for', prevNotifiedFor);   // S1 例外另比 notified_for（安全审查 A4）
-      const rows = must(await (prevRemindAt === null ? q.is('remind_at', null) : q.eq('remind_at', prevRemindAt)).select('id')) as { id: string }[];
+      // 乐观条件：rev 还是读到的值（读完以后用户、别的设备没改过）、remind_at 也还是读到的值（别的系统写入没抢先写过）才写
+      const q = admin.from(table).update(body).eq('id', id).eq('user_id', userId).eq('rev', prev.rev);
+      const rows = must(await (prev.remind_at === null ? q.is('remind_at', null) : q.eq('remind_at', prev.remind_at)).select('id')) as { id: string }[];
       return rows.length === 1;
     },
     async dueRows(lo, hi, perUser, limit) {
