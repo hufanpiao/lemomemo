@@ -119,6 +119,10 @@ async function shot(page: Page, name: string, browserName: string): Promise<void
 async function setupAndUnlock(page: Page, browserName: string): Promise<void> {
   await page.goto('/app/#/vault');
   await expect(page.getByTestId('vault-setup')).toBeVisible({ timeout: 30_000 });
+  // 线框 s9 FIRSTPW：整页（nav:false，底栏被盖住），顶栏“‹ 随手记 … 取消”
+  await expect(page.getByTestId('vault-setup-back')).toBeVisible();
+  await expect(page.getByTestId('vault-setup-cancel')).toBeVisible();
+  expect(await page.evaluate(() => !!document.elementFromPoint(innerWidth / 2, innerHeight - 30)?.closest('[data-testid="vault-setup-page"]'))).toBe(true);
   await shot(page, '02-设密码', browserName);
   await typePin(page, 'vault-setup-pad', PIN);
   await expect(page.getByTestId('vault-setup')).toHaveAttribute('data-step', '2');
@@ -154,10 +158,14 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   await shot(page, '06-解锁后的列表', browserName);
 
   await page.getByTestId('vault-lock-now').click();
-  await expect(page.getByTestId('vault-unlock-pinview')).toBeVisible();
+  // 线框 s9 UNLOCKOV：用不了 Face ID 时卡片只有“输入密码”“取消”，点了再进密码页
+  await expect(page.getByTestId('vault-unlock-card')).toBeVisible();
+  await expect(page.getByTestId('vault-unlock-face')).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText('血压 120/80');
   await expect(page.locator('body')).not.toContainText('体检报告');
   await shot(page, '03-解锁卡', browserName);
+  await page.getByTestId('vault-unlock-pin').click();
+  await expect(page.getByTestId('vault-unlock-pinview')).toBeVisible();
 
   await typePin(page, 'vault-unlock-pad', '1111');
   await expect(page.getByTestId('vault-unlock-err')).toContainText('4');
@@ -253,6 +261,7 @@ test('连续输错 5 次：锁定倒计时，键盘不能按', async ({ page, ba
   await fakeServer(page, baseURL);
   await setupAndUnlock(page, browserName);
   await page.getByTestId('vault-lock-now').click();
+  await page.getByTestId('vault-unlock-pin').click();
   for (let i = 0; i < 5; i++) await typePin(page, 'vault-unlock-pad', '0000');
   await expect(page.getByTestId('vault-unlock-pad-key-0')).toBeDisabled();
   // 服务器说 60 秒：倒计时不能比 60 秒多（原来按卡片挂上时的时间算，显示过“1 分 2 秒”）

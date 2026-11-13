@@ -139,6 +139,7 @@
 /* 输密码整页（线框 s9 PWERR，nav:false）：盖满屏幕、页面底色，白色圆形数字键看得出是按键；排版和设密码页同一套 .pin */
 .pinPage {
   position: fixed;
+  z-index: var(--z-dialog);
   inset: 0;
   overflow-y: auto;
   padding: max(var(--safe-top), 16px) 16px calc(var(--inset-bottom) + 24px);
@@ -146,9 +147,23 @@
   color: var(--text);
 }
 
-.pinPage > .pin {
+.pinPage > .pin,
+.pinPage > .top {
   max-width: 560px;
-  margin: 0 auto;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+/* 整页顶栏右边的“取消”（线框 s9 FIRSTPW、PWERR：纯文字 14px） */
+.topCancel {
+  justify-self: end;
+  min-height: var(--hit);
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
 }
 
 .pinTitle {
@@ -182,7 +197,7 @@
   display: flex;
   gap: 16px;
   justify-content: center;
-  margin: 26px 0 22px;
+  margin: 26px 0 10px;
 }
 
 .dot {

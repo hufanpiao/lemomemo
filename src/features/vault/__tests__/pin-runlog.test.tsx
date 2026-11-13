@@ -15,7 +15,7 @@ describe('密码键盘和运行日志', () => {
 
   it('点 0～9 和确定、按实体数字键：日志只有 masked，没有坐标、testid、keyCode', () => {
     const onSubmit = vi.fn();
-    render(<PinPad testId="pp" onSubmit={onSubmit} />);
+    render(<PinPad testId="pp" msgTestId="pp-err" onSubmit={onSubmit} />);
     const stop = startRunLog(window, { version: 'test' });
     for (let i = 0; i <= 9; i++) {
       const b = screen.getByTestId(`pp-key-${i}`);

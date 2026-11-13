@@ -4,7 +4,10 @@
 // • 输入的数字只在这个组件的 state 里，交出去后立刻清空
 // • 不进运行日志（11-14 隐私记评审第 1 条）：外层带 data-rl-mask，run-log 只记 masked、不记坐标；数字键的 testid 用位置序号 key-0～key-9
 //   （按出现顺序：1～9 是 key-0～key-8，0 是 key-9），不带数字本身
+// • 提示行（输错、锁定倒计时、两次不一样）在圆点下面、键盘上面（线框 s9 PWERR）
+// • PinTop：设密码、输密码整页的顶栏“‹ 随手记 … 取消”（线框 s9 FIRSTPW、PWERR：“右上角‘取消’随时退出”）
 import { useEffect, useState } from 'react';
+import { BackLink } from '../../../kit/components/BackLink.tsx';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import styles from './Vault.module.css';
 
@@ -23,7 +26,23 @@ const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'ok', '0', 'del'] as 
 /** 数字键的位置序号（testid 用）：按出现顺序 0～9 */
 const DIGIT_SLOT = new Map(KEYS.filter((k) => /^\d$/.test(k)).map((k, i) => [k, i]));
 
-export function PinPad({ onSubmit, disabled = false, testId }: { onSubmit(pin: string): void; disabled?: boolean; testId: string }) {
+/** 整页顶栏：左“‹ 随手记”（或调用方给的文字），右“取消”；两个都是退出 */
+export function PinTop({ backLabel, onCancel, testId }: { backLabel?: string | undefined; onCancel(): void; testId: string }) {
+  const t = useVaultT();
+  return (
+    <header className={styles.top}>
+      <BackLink label={backLabel ?? t('vault.back', {})} onBack={onCancel} testId={`${testId}-back`} />
+      <span />
+      <button type="button" className={styles.topCancel} onClick={onCancel} data-testid={`${testId}-cancel`}>
+        {t('vault.cancel', {})}
+      </button>
+    </header>
+  );
+}
+
+export function PinPad({ onSubmit, disabled = false, testId, msg = '', msgTestId }: {
+  onSubmit(pin: string): void; disabled?: boolean; testId: string; msg?: string; msgTestId: string;
+}) {
   const t = useVaultT();
   const [pin, setPin] = useState('');
   const ready = pin.length >= PIN_MIN && !disabled;
@@ -62,6 +81,9 @@ export function PinPad({ onSubmit, disabled = false, testId }: { onSubmit(pin: s
           <i key={i} className={`${styles.dot}${i < pin.length ? ` ${styles.dotOn}` : i >= PIN_MIN ? ` ${styles.dotMore}` : ''}`} />
         ))}
       </div>
+      <p className={styles.pinErr} role="status" data-testid={msgTestId}>
+        {msg}
+      </p>
       <div className={styles.pad}>
         {KEYS.map((k) =>
           k === 'ok' ? (

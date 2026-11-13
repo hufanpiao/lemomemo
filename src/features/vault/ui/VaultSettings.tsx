@@ -35,7 +35,7 @@ export function VaultSettings() {
 
   const waiting = (
     <UnlockOverlay open={state.waiting} testId="vault-set-scrim">
-      <UnlockPanel onCancel={() => s.cancelWait()} onForgot={() => setView('reset')} testId="vault-set-unlock" />
+      <UnlockPanel onCancel={() => s.cancelWait()} onForgot={() => setView('reset')} testId="vault-set-unlock" backLabel={t('vault.title', {})} />
     </UnlockOverlay>
   );
 
@@ -139,10 +139,7 @@ function ChangePin({ onDone }: { onDone(): void }) {
     return (
       <div className={styles.pin} data-testid="vault-change-old">
         <h2 className={styles.pinTitle}>{t('vault.change.old', {})}</h2>
-        <p className={styles.pinErr} role="status">
-          {err}
-        </p>
-        <PinPad onSubmit={setOld} testId="vault-change-old-pad" />
+        <PinPad onSubmit={setOld} testId="vault-change-old-pad" msg={err} msgTestId="vault-change-old-err" />
       </div>
     );
   return (
@@ -177,12 +174,11 @@ function BindFace({ method, onDone }: { method: string; onDone(): void }) {
   return (
     <div className={styles.pin} data-testid="vault-bind">
       <h2 className={styles.pinTitle}>{t('vault.set.bindPin', { method })}</h2>
-      <p className={styles.pinErr} role="status" data-testid="vault-bind-err">
-        {err}
-      </p>
       <PinPad
         disabled={busy}
         testId="vault-bind-pad"
+        msg={err}
+        msgTestId="vault-bind-err"
         onSubmit={(pin) => {
           setBusy(true);
           setErr('');
