@@ -1,7 +1,8 @@
 // vault-image 入口（架构第 6 节 vault-image 行；B5 任务单 S8、S18）：组装依赖，逻辑在 core.ts。
 // 在版本门免查名单里（shared/version-gate-list.ts，0.29 续第 77 条），入口不调 versionGate。
 // 用到的库对象：service role：private.account_usable、session_alive（经 _shared/auth.ts）、private.take_rate；
-//   fn_ai 直连（_shared/db.ts 的 withAiUser，6.2 A2）：private.vault 的 pin_epoch、public.notes（核对是本人没删的隐私记）、public.note_images（读图片行）。
+//   fn_ai 直连（_shared/db.ts 的 withAiUser，6.2 A2）：private.vault 的 pin_epoch、public.notes（核对是本人没删的隐私记）、public.note_images（读图片行）；
+//   SQL 在 store.ts（store-it 拿同一份打真库）。
 // R2：vault-images 桶，令牌 R2_FN_*（8.6）。
 // 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY；FN_AI_DB_URL；VAULT_TOKEN_SECRET；R2_ENDPOINT、R2_FN_ACCESS_KEY_ID、R2_FN_SECRET_ACCESS_KEY、R2_BUCKET_PREFIX。
 // 不加 CORS（0.48 第 4 条）。日志只经 _shared/fn-log.ts 记错误码。
@@ -17,6 +18,7 @@ import { vaultTokenChecker } from '../_shared/vault-token.ts';
 import { createObjStore } from '../_shared/gen/objstore.ts';
 import { VAULT_IMAGE_MAX_BYTES, vaultImageGet, vaultImageKey, vaultImageUploadQuery } from '../_shared/gen/schema/vault.ts';
 import { handle, type Obj } from './core.ts';
+import { imageMeta, ownsPrivateNote, pinEpoch } from './store.ts';
 
 const log = codeLogger('vault-image');
 
@@ -32,11 +34,7 @@ function makeR2(): Obj | null {
 }
 
 const R2 = makeR2();
-const checkToken = vaultTokenChecker(decodeKey32(Deno.env.get('VAULT_TOKEN_SECRET')), Date.now, (uid) =>
-  withAiUser(uid, async (tx) => {
-    const rows = await tx`select pin_epoch from private.vault where user_id = ${uid}`;
-    return rows[0] ? Number(rows[0].pin_epoch) : null;
-  }), log);
+const checkToken = vaultTokenChecker(decodeKey32(Deno.env.get('VAULT_TOKEN_SECRET')), Date.now, (uid) => withAiUser(uid, (tx) => pinEpoch(tx, uid)), log);
 
 Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL');
@@ -72,15 +70,8 @@ Deno.serve((req) => {
     },
     imageKey: vaultImageKey,
     maxBytes: VAULT_IMAGE_MAX_BYTES,
-    ownsPrivateNote: (uid, noteId) => withAiUser(uid, async (tx) => {
-      const rows = await tx`select 1 as x from public.notes where user_id = ${uid} and id = ${noteId} and is_private and deleted_at is null`;
-      return rows.length === 1;
-    }),
-    image: (uid, imageId) => withAiUser(uid, async (tx) => {
-      const rows = await tx`select note_id, bucket, has_thumb from public.note_images where user_id = ${uid} and id = ${imageId}`;
-      const r = rows[0];
-      return r ? { note_id: String(r.note_id), bucket: String(r.bucket), has_thumb: r.has_thumb === true } : null;
-    }),
+    ownsPrivateNote: (uid, noteId) => withAiUser(uid, (tx) => ownsPrivateNote(tx, uid, noteId)),
+    image: (uid, imageId) => withAiUser(uid, (tx) => imageMeta(tx, uid, imageId)),
     r2: R2,
     now: Date.now,
     log,

@@ -8,7 +8,8 @@
 //      再另起一个进程跑 push-dispatch-d3.it.ts（11-06 B2：push-dispatch 真 store 的 D3 第 6 点三条、TC-DEL-remind_queue 函数一侧，约 35 秒），
 //      再另起一个进程跑 ai-fns-store.it.ts（11-07 B3：四个 AI 函数按真 index.ts 组装，Gemini 用进程内替身），
 //      再另起一个进程跑 remind-enqueue-parity.it.ts（11-13 R-411 后续：批量入队范围 SQL 和替身比对），
-//      再另起一个进程跑 todo-items-cap.it.ts（11-13 R-350：子任务上限两连接并发）：
+//      再另起一个进程跑 todo-items-cap.it.ts（11-13 R-350：子任务上限两连接并发），
+//      再各起一个进程跑 vault-store.it.ts、vault-move.it.ts（11-14 B5：隐私记的 SQL 以 fn_vault、fn_ai 打真库）：
 //      网络只许 127.0.0.1，写只许 supabase/.temp/（残留清单）。
 // 不用 shell：supabase 先按 PATH 找（CI），找不到就用 node 直接跑 node_modules/supabase/dist/supabase.js（本机 npx 装的）。
 // 结果用 process.exitCode 交出。
@@ -89,6 +90,9 @@ if (refused) {
     denoTest(['remind-enqueue-parity.it.ts'], 120_000),
     // R-350 评审第 2 条（11-13）：两个连接同时往同一条待办加子任务，锁主待办行后 30 项上限守得住；几秒
     denoTest(['todo-items-cap.it.ts'], 120_000),
+    // B5（11-14）：隐私记 vault / vault-image / account 导出和 rebind 的 SQL 第一次上真库（vault-harness.ts 切 fn_vault、fn_ai 跑真 store）；两组各占一个进程，各几秒
+    denoTest(['vault-store.it.ts'], 120_000),
+    denoTest(['vault-move.it.ts'], 120_000),
   ];
   process.exitCode = status.find((x) => x !== 0) ?? 0;
 }

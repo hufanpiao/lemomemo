@@ -175,9 +175,10 @@ export async function runPurge(): Promise<Record<string, unknown>> {
   return body;
 }
 
-export async function callAccount(jwt: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> | null; res: Response }> {
+/** headers：另加的请求头（例如 rebind_device 要的 x-app-version） */
+export async function callAccount(jwt: string, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; json: Record<string, unknown> | null; res: Response }> {
   const res = await accountH(new Request('http://127.0.0.1/functions/v1/account', {
-    method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${jwt}` }, body: JSON.stringify(body),
+    method: 'POST', headers: { ...headers, 'content-type': 'application/json', authorization: `Bearer ${jwt}` }, body: JSON.stringify(body),
   }));
   const isJson = (res.headers.get('content-type') ?? '').startsWith('application/json');
   return { status: res.status, json: isJson ? ((await res.clone().json()) as Record<string, unknown>) : null, res };

@@ -21,7 +21,7 @@ import { json } from '../_shared/http.ts';
 import { sendMail } from '../_shared/mail-send.ts';
 import { timedFetch } from '../_shared/net.ts';
 import { STORE_SIZE_TIMEOUT_MS } from './store-timeout.ts';
-import { withVaultUser } from '../_shared/db.ts';
+import { type Tx, withVaultUser } from '../_shared/db.ts';
 import { decodeKey32 } from '../_shared/vault-crypto.ts';
 import { vaultTokenChecker } from '../_shared/vault-token.ts';
 import { cachedMinClientVersion } from '../_shared/version-gate.ts';
@@ -41,7 +41,8 @@ function must<T>(r: { data: T; error: unknown }): T {
 }
 
 /** signal：这一次调用的超时（store-timeout.ts 每次调用新建一个 AbortController）；每条查询都挂上 .abortSignal(signal) */
-function makeStore(admin: Admin, signal: AbortSignal): AccountStore {
+/** 线上的 store（service role 的 supabase-js）；导出给 store-it（vault-store.it.ts 带隐私记令牌导出时自己组装 deps） */
+export function makeStore(admin: Admin, signal: AbortSignal): AccountStore {
   const priv = admin.schema('private');
   return {
     async isAdmin(userId) {
@@ -183,11 +184,12 @@ async function userHash(userId: string): Promise<string> {
   return [...d.slice(0, 8)].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 const EXPORT_TABLES = exportTablesOf(allManifests);
-const checkVaultToken = vaultTokenChecker(decodeKey32(Deno.env.get('VAULT_TOKEN_SECRET')), Date.now, (uid) =>
-  withVaultUser(uid, async (tx) => {
-    const rows = await tx`select pin_epoch from private.vault where user_id = ${uid}`;
-    return rows[0] ? Number(rows[0].pin_epoch) : null;
-  }), log);
+/** 本人的 pin_epoch（fn_vault；没设过隐私记回 null）。导出给 store-it 打真库 */
+export async function vaultEpoch(tx: Tx, uid: string): Promise<number | null> {
+  const rows = await tx`select pin_epoch from private.vault where user_id = ${uid}`;
+  return rows[0] ? Number(rows[0].pin_epoch) : null;
+}
+const checkVaultToken = vaultTokenChecker(decodeKey32(Deno.env.get('VAULT_TOKEN_SECRET')), Date.now, (uid) => withVaultUser(uid, (tx) => vaultEpoch(tx, uid)), log);
 // 错误码以 shared/schema/account.ts 为准（0.38 第 48 条）；core.ts 自己那份对不上就记日志（单测已核对，这里防生成目录过期）
 //   整串比较、不按下标取：CI 的 unit 任务跑 check_backend 前不生成 gen/，类型推不出来时 F7 不认回调参数当下标（错误码里没有逗号）
 if (ACCOUNT_ERRS.join(',') !== ACCOUNT_ERROR_CODES.join(',')) log('error_codes_drift');

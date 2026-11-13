@@ -52,6 +52,7 @@ export const TABLE_GRANTS: Record<'service_role' | 'fn_vault' | 'fn_ai', TableGr
 export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
   fn_vault: {
     'public.devices:SELECT': ['id', 'user_id', 'deleted_at', 'session_id'],   // 核对草稿密钥的 device_id 和会话
+    'private.note_vectors:SELECT': ['user_id', 'note_id', 'image_id'],   // 移进移出删旧向量的 where 要读（20261114200000，B5 store-it 真库实测）
   },
   fn_ai: {
     'private.vault:SELECT': ['user_id', 'pin_epoch'],

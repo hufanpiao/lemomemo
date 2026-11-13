@@ -2,7 +2,7 @@
 // • SQL 一律 tx`…${参数}`，不拼字符串；数组参数一律转成 jsonb 传（prepare: false 下最稳）；
 // • 时刻：timestamptz 列取出时换成毫秒（float8），写入时传 Date；notes、note_images 的 bigint 列本来就是毫秒，取出时 ::float8 免得变成字符串；
 // • 出错原样抛，由 core.ts 经 common.ts 的 classifyDbError 归类（22、23 类 → 数据不合格，row_quota 的 'quota' → 超行数）。
-// 这个文件只给 index.ts 用（Vitest 用内存假库，不 import 本文件）。
+// 线上只有 index.ts 用；Vitest 用内存假库，真库由 supabase/tests/store-it/vault-store.it.ts、vault-move.it.ts 以 fn_vault 跑本文件（11-14 起）。
 import type { Tx } from '../_shared/db.ts';
 import { type CredRow, type ImageAdd, type ImageRow, type NoteRow, type VaultPatch, type VaultRow, type VaultTx } from './common.ts';
 
