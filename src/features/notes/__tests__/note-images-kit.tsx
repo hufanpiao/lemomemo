@@ -67,6 +67,8 @@ export async function sendNext(code?: string) {
 }
 
 export const pick = (testId: string, f: File) => fireEvent.change(screen.getByTestId(testId), { target: { files: [f] } });
+/** 随手记输入行点“记下”（R-416：选了图先挂着，记下才存） */
+export const remember = () => fireEvent.submit(screen.getByTestId('notes-input-row'));
 export const jpg = () => new File([new Uint8Array(5)], 'a.jpg', { type: 'image/jpeg' });
 
 export function open(hash = '#/notes') {
@@ -80,10 +82,13 @@ export function setupImageTests(): void {
     clearAllCollections();
     uiStore.getState().setLocale('zh-CN');
     vi.spyOn(clock, 'now').mockReturnValue(NOW);
+    // 输入行待记下的小图（R-416）用本机预览地址；jsdom 没有 createObjectURL
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL: () => 'blob:pend', revokeObjectURL: () => undefined }));
   });
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     resetUploaderForTest();
     resetImageViewForTest();
     getBoot()?.cache?.close();

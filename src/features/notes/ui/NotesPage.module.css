@@ -641,17 +641,24 @@
   font-size: var(--fs-14);
 }
 
-/* 提示条、出错条：浮在输入行正上方、和输入行同宽（手机、电脑一样，视觉复验 A1 第 2 条）。
-   浮层：层级同 kit UndoToast（30，高于输入行 5）；底色 --toast-bg 是半透明的，照 UndoToast 加磨砂，否则底下的卡片会透上来（复验 2 第 1 条） */
-.error,
-.tip {
+/* 输入行正上方的外框（NotesInputRow.tsx）：从上到下放提示条、出错条和待记下的小图（R-416），间隔 8；和输入行同宽（手机、电脑一样，视觉复验 A1 第 2 条）。
+   手机 fixed，底边 = 输入行顶 + 8（公式见上面 .dock）；电脑贴在 .dock 上沿。层级同 kit UndoToast（30，高于输入行 5） */
+.above {
   position: fixed;
   left: 14px;
   right: 14px;
   bottom: calc(var(--dock-bottom) + var(--inrow-lift) + var(--inrow-h) + 8px);
   z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   max-width: 532px;
   margin: 0 auto;
+}
+
+/* 提示条、出错条：底色 --toast-bg 是半透明的，照 UndoToast 加磨砂，否则底下的卡片会透上来（复验 2 第 1 条） */
+.error {
+  margin: 0;
   padding: 12px 16px;
   border-radius: var(--r-lg);
   background: var(--toast-bg);
@@ -673,17 +680,15 @@
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .error,
-  .tip {
+  .error {
     background: var(--float-solid);
     backdrop-filter: none;
   }
 }
 
-/* 电脑：提示条在输入行正上方、跟内容栏同宽对齐（不按整个窗口居中，不叠在输入行下面） */
+/* 电脑：外框在输入行正上方、跟内容栏同宽对齐（不按整个窗口居中，不叠在输入行下面） */
 @media (width >= 900px) {
-  .error,
-  .tip {
+  .above {
     position: absolute;
     left: 0;
     right: 0;

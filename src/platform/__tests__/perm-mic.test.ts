@@ -39,8 +39,21 @@ describe('micPermission', () => {
     expect(lastMicResult()).toBe('denied');
   });
 
-  it('回 prompt → unknown，清掉以前记的', async () => {
+  it('回 prompt → unknown，清掉以前记的“已拒绝”', async () => {
     rememberMicResult('denied');
+    withPerm(async () => ({ state: 'prompt' }));
+    expect(await micPermission()).toBe('unknown');
+    expect(lastMicResult()).toBe('unknown');
+  });
+
+  it('回 prompt 时记下的“已允许”留着（11-13：iPhone 主屏幕版每次启动都回 prompt，清掉会每次先出说明卡）', async () => {
+    rememberMicResult('granted');
+    withPerm(async () => ({ state: 'prompt' }));
+    expect(await micPermission()).toBe('granted');
+    expect(lastMicResult()).toBe('granted');
+  });
+
+  it('回 prompt、什么都没记过 → unknown', async () => {
     withPerm(async () => ({ state: 'prompt' }));
     expect(await micPermission()).toBe('unknown');
     expect(lastMicResult()).toBe('unknown');

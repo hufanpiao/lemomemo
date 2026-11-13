@@ -286,6 +286,23 @@ describe('视觉验收 A1 补的几处', () => {
     expect(fireEvent.mouseDown(el), '输入框').toBe(true);
   });
 
+  it('R-416：回车记下后输入框失焦、收起键盘（负责人 11-13“按回车记下后输入框应该消失，不是继续记下一条”），模糊层也收起；字清空、新的一条在最上面', async () => {
+    await boot();
+    open();
+    const el = screen.getByTestId('notes-input');
+    act(() => el.focus());
+    expect(document.activeElement).toBe(el);
+    expect(screen.getByTestId('notes-mist')).toBeTruthy();
+    fireEvent.change(el, { target: { value: '买牛奶' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('notes-input-row'));
+    });
+    expect(document.activeElement).not.toBe(el);
+    expect(screen.queryByTestId('notes-mist')).toBeNull();
+    expect((el as HTMLInputElement).value).toBe('');
+    await waitFor(() => expect(screen.getAllByTestId(/^notes-card-/)[0]?.textContent).toContain('买牛奶'));
+  });
+
   it('分类色点：categories.color 是 p4 画 var(--p4s)，没设颜色不画点（卡片和胶囊都一样）', async () => {
     const b = await boot();
     await act(async () => {

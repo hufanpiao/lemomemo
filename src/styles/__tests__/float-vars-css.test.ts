@@ -30,11 +30,11 @@ describe('浮层位置变量接线', () => {
     expect(notes).toMatch(/@media \(width < 900px\) \{\s*:global\(:root\[data-kbo\]\) \.dock \{\s*--inrow-drop: 0px;/);
   });
 
-  it('随手记输入行和提示条都按 --inrow-lift 放；键盘没弹时减 --inrow-drop，有撤销条时让出 --undo-h + 8px（不写死 64px）', () => {
+  it('随手记输入行和它正上方的外框（提示条、待记下的小图，R-416）都按 --inrow-lift 放；键盘没弹时减 --inrow-drop，有撤销条时让出 --undo-h + 8px（不写死 64px）', () => {
     expect(prop(block(notes, '.dock'), '--inrow-lift')).toMatch(/-\s*var\(--inrow-drop\)/);
     expect(prop(block(notes, '.dockUp'), '--inrow-lift')).toBe('calc(var(--inrow-kb-gap) + var(--undo-h) + 8px)');
     expect(prop(block(notes, '.inrow'), 'bottom')).toBe('calc(var(--dock-bottom) + var(--inrow-lift))');
-    expect(prop(block(notes, '.error,\n.tip'), 'bottom')).toBe('calc(var(--dock-bottom) + var(--inrow-lift) + var(--inrow-h) + 8px)');
+    expect(prop(block(notes, '.above'), 'bottom')).toBe('calc(var(--dock-bottom) + var(--inrow-lift) + var(--inrow-h) + 8px)');
     expect(notes).not.toMatch(/64px/);
   });
 });

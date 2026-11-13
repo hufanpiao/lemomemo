@@ -27,6 +27,8 @@ export const ko = {
   'notes.camera': '촬영', // REVIEW(ko)
   'notes.img.alt': '메모에 넣은 사진', // REVIEW(ko)
   'notes.img.more': '{n}장 더', // REVIEW(ko)
+  'notes.img.pend': '기록할 사진', // REVIEW(ko)
+  'notes.img.pendRemove': '{n}번째 사진 빼기', // REVIEW(ko)
   'notes.img.list': '사진', // REVIEW(ko)
   'notes.img.uploading': '올리는 중…', // REVIEW(ko)
   'notes.img.failed': '사진을 올리지 못했어요', // REVIEW(ko)

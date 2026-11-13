@@ -13,12 +13,13 @@
 //   哪几对由 hooks/useMergeHint.ts 给（AI 判的 + 本机规则），一次只出一对；点“合并”成了底部出 8 秒撤销条“已合并 · 撤销”（R-415 ③，和删除同一个 UndoBar），
 //   撤销就当点了“不用”（这一对记进 notes.merge_dismissed），被合并的分类回到 merged_into: null（data 的 undoMerge）；写入期间提示条两个按钮禁用
 // • 删除：软删，进“最近删除”，出 8 秒撤销条
-// • 底部输入行（视觉稿 .inrow、线框 COMPOSER）：右边是“图片”“拍照”（主持人定 3），打了字才出“记下”；回车或点“记下”就存，新的一条出现在最上面、时间写“刚记下”。
-//   选了图：先用输入框里的字（可以空）新建一条随手记，再把图插进去（S3，ui/NoteImages.tsx）。电脑上输入行铺满内容栏、左右各留 22px（DK.notes）
+// • 底部输入行（视觉稿 .inrow、线框 COMPOSER；ui/NotesInputRow.tsx）：右边是“图片”，打了字或挂了图才出“记下”；回车或点“记下”就存，新的一条出现在最上面、时间写“刚记下”。
+//   选了图（R-416）：先挂在输入行上方成待记下的小图（可点“×”去掉、可再加），点“记下”时用输入框里的字（可以空）新建一条随手记，再把图依次插进去（S3，ui/NoteImages.tsx）。电脑上输入行铺满内容栏、左右各留 22px（DK.notes）
 // • 插图（S3）：瀑布流卡片顶部放第一张（16:10、右上角“+N”）；插入、上传失败出提示条，空间满了的带“最近删除”入口
 // • 底栏 / 侧栏的“＋”在这一页直接把光标放进输入行（R-380，线框“低 1”）：输入行挂着时往 kit/state/new-item.ts 的 notesInput 登记聚焦，app/App.tsx 调它
 // • 输入行是贴底浮条（position: fixed），聚焦一律原地聚焦（台账 Q-8，platform/viewport.ts 文件头）：“＋”调 focusInPlace，输入框挂 inPlaceTouchStart / inPlaceTouchEnd；
-//   form 挂 onMouseDown={keepFieldFocus}（台账 Q-25）：点“记下”“图片”不让输入框失焦，按钮第一下就点得动，记下后键盘不收、接着记（和回车一样）
+//   form 挂 onMouseDown={keepFieldFocus}（台账 Q-25）：点“记下”“图片”不让输入框失焦，按钮第一下就点得动；记下（回车或点“记下”）之后主动失焦、收起键盘，
+//   输入行回到底部（R-416，负责人 11-13：记下后输入框应该消失，不是继续记下一条）
 // • 输入框有焦点时后面整页盖一层液态模糊玻璃（R-401，负责人 11-13“随手记点输入框背景也要模糊”；和打字条 R-399 同一个 kit Mist，16px）：
 //   放在 .dock 旁边、层级用令牌 --z-notes-mist（在输入行下面，NotesPage.module.css .mist），输入行、底栏、提示条都在它上面；
 //   点模糊处只让输入框失焦收键盘（输入行一直在，没有“收起”；同 R-399 打了字时的做法），字留着；运行日志 notes mist on/off
@@ -29,7 +30,7 @@
 //   左滑、多选还没有入口，以后加时同样先判只读
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
 import { rlog } from '../../../platform/run-log-api.ts';
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
@@ -37,8 +38,6 @@ import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { Mist } from '../../../kit/components/Mist.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
-import { notesInput } from '../../../kit/state/new-item.ts';
-import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, keepFieldFocus } from '../../../platform/viewport.ts';
 import { ReadonlyMark, ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
 import { useEditT } from '../../../kit/components/EditNotices.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
@@ -51,8 +50,9 @@ import { isUndo, mergeUndo, undoTipOf, useNotesToast, type MergeUndo, type UndoT
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
-import { CardCover, ListThumb, PickButtons, useAddImage } from './NoteImages.tsx';
+import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
 import { ConvertAsk, MergeBar, MoreMenu, useConvertFlow, type PageTip } from './NotesActions.tsx';
+import { InputRow } from './NotesInputRow.tsx';
 import styles from './NotesPage.module.css';
 
 /** 分类色点（只在有颜色时画） */
@@ -219,8 +219,7 @@ function NotesList() {
 
       {typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null}
       <div className={up ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
-        <InputRow field={field} onTyping={setTyping} onAdd={add} onImage={addImage} />
-        {toast !== null && !isUndo(toast) ? <DockTip toast={toast} /> : null}
+        <InputRow field={field} onTyping={setTyping} onAdd={add} onImages={addImage} tip={toast !== null && !isUndo(toast) ? <DockTip toast={toast} /> : null} />
       </div>
 
       {drawer !== null ? <NoteDrawer id={drawer} onClose={() => setDrawer(null)} /> : null}
@@ -305,73 +304,5 @@ function AiMark({ id }: { id: string }) {
     <span className={styles.ai} aria-label={t('notes.aiLabel', {})} data-testid={`notes-ai-${id}`}>
       {t('notes.ai', {})}
     </span>
-  );
-}
-
-/**
- * 底部输入行（视觉稿 .inrow、线框 COMPOSER）：右边是“图片”“拍照”，打了字才出“记下”；回车或点“记下”就存；没存上把这句放回输入框。
- * 选了图：输入框里的字和图一起记成新的一条（onImage），没记上同样放回。有撤销条、只读提示时连同上面的提示条整块往上让一格（外框 .dockUp，NotesPage.module.css）
- */
-function InputRow({
-  field: input,
-  onTyping,
-  onAdd,
-  onImage,
-}: {
-  /** 页面拿着，点模糊层时让它失焦（R-401） */
-  field: RefObject<HTMLInputElement | null>;
-  /** 输入框得到 / 失去焦点（页面据此画不画模糊层） */
-  onTyping(on: boolean): void;
-  onAdd(text: string): Promise<boolean>;
-  onImage(text: string, file: File): Promise<boolean>;
-}) {
-  const t = useNotesT();
-  const [draft, setDraft] = useState('');
-  const has = draft.trim() !== '';
-  useLayoutEffect(() => {
-    notesInput.focus = () => focusInPlace(input.current, 'open');
-    return () => {
-      notesInput.focus = undefined;
-    };
-  }, [input]);
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    const text = draft;
-    rlog(`notes submit len=${text.length} trim=${text.trim().length}`);
-    if (text.trim() === '') return;
-    setDraft('');
-    const ok = await onAdd(text);
-    rlog(`notes add ${ok ? 'ok' : 'failed'}`);
-    if (!ok) setDraft(text);
-  };
-  const image = async (file: File) => {
-    const text = draft;
-    setDraft('');
-    if (!(await onImage(text, file))) setDraft(text);
-  };
-  return (
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- mousedown 只拦失焦（台账 Q-25，platform/viewport.ts 的 keepFieldFocus），不是交互，键盘操作不受影响
-    <form className={styles.inrow} onSubmit={(e) => void submit(e)} onMouseDown={keepFieldFocus} data-testid="notes-input-row">
-      <input
-        ref={input}
-        className={styles.input}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        placeholder={t('notes.input', {})}
-        aria-label={t('notes.inputLabel', {})}
-        enterKeyHint="done"
-        onTouchStart={inPlaceTouchStart}
-        onTouchEnd={inPlaceTouchEnd}
-        onFocus={() => onTyping(true)}
-        onBlur={() => onTyping(false)}
-        data-testid="notes-input"
-      />
-      <PickButtons onFile={(f) => void image(f)} className={styles.img} idPrefix="notes" camera={false} />
-      {has ? (
-        <Pressable type="submit" className={styles.add} data-testid="notes-add">
-          {t('notes.add', {})}
-        </Pressable>
-      ) : null}
-    </form>
   );
 }

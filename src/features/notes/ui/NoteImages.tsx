@@ -5,12 +5,13 @@
 // • 选图（PickButtons）：“图片”（文件选择框，只收 image/*）和“拍照”（同上加 capture="environment"，手机直接开后摄像头）并排；
 //   编辑器里两个都放；输入行只放“图片”一个（视觉稿第 1491 行、线框 COMPOSER“输入行插图按钮不变”，视觉验收必改 4）。input 藏起来、由按钮点开，点按区照 44
 // • 提示文案（imgMessage）：插入失败（HEIC 先转 JPG、打不开、存不上……）、上传失败、写行被拒，都写进 i18n
-// • 输入行选图（useAddImage）、编辑器插图区连同提示（EditorImageBlock）也在这里，随手记页、编辑页不超行数上限
+// • 输入行选图（useAddImage；R-416：选了先挂成待记下的小图 PendingPics，点“记下”才存）、编辑器插图区连同提示（EditorImageBlock）也在这里，随手记页、编辑页不超行数上限
 // • 动效：只用 Pressable 的按下反馈（R-376）
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useBlobSrc } from '../../../kit/hooks/useBlobSrc.ts';
 import { hrefOf, navigate, plainClick } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { insertImage, useImageNotices, useImageSrc, useNoteImages, type ImageSrc, type ImgFailKey, type ImgNotice, type InsertResult, type NoteImage, type PendingImage } from '../hooks/useNoteImages.ts';
 import type { ActionResult } from '../hooks/useNoteList.ts';
 import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
@@ -62,9 +63,9 @@ export function CameraIcon({ className }: { className?: string }) {
 }
 
 /** 显示 blob: 地址的图（地址来自 data/image-view.ts、image-uploader.ts）：经 kit 的 useBlobSrc 设 src，只放行 blob:（A26 补） */
-function BlobImg({ url, alt }: { url: string; alt: string }) {
+function BlobImg({ url, alt, onError }: { url: string; alt: string; onError?: () => void }) {
   const ref = useBlobSrc(url);
-  return <img ref={ref} className={styles.coverImg} alt={alt} />;
+  return <img ref={ref} className={styles.coverImg} alt={alt} onError={onError} />;
 }
 
 /** 藏起来的选图框：pick() 点开，选了一张就回调（同一张再选也触发：选完清空 value） */
@@ -157,9 +158,15 @@ export function ListThumb({ img }: { img: NoteImage }) {
 type Made = { result: ActionResult; id: string | null };
 type ImgMsg = { key: ImgMsgKey; trash: boolean };
 
+/** 输入行上待记下的一张图（R-416）：key 只在本页内存里区分同一张图选两次 */
+export type PendingPic = { key: number; file: File };
+/** 输入行点“记下”带图时的结果：ok = 记成了一条；left = 没插成的图（放回输入行，不丢） */
+export type ImagesResult = { ok: boolean; left: File[] };
+
 /**
- * 插图（S3）：插图的失败提示都在这一页出（抽屉里插的图也是）；返回输入行选了图时调的函数——
- * 图编码成了，再用输入框里的字新建一条（可以空），把图插进去；图打不开（HEIC 等）不新建、返回 false 让输入行把字放回去
+ * 插图（S3）：插图的失败提示都在这一页出（抽屉里插的图也是）；返回输入行点“记下”时调的函数（R-416：选了图先挂在输入行上，点“记下”才存）——
+ * 第一张编码成了才用输入框里的字新建一条（可以空，只建一次），图依次插进这一条；没插成的图交回输入行；
+ * 一张都没插成、输入框又没字的，刚建的空条撤销掉、按没记成算（字也放回）。整批结果记一行运行日志 notes images
  */
 export function useAddImage(
   l: { add(text: string, allowEmpty?: boolean): Promise<Made>; discard(id: string): Promise<ActionResult> },
@@ -169,19 +176,73 @@ export function useAddImage(
 ) {
   const onImgNotice = useCallback((n: ImgNotice) => notify({ key: failMessage(n.key), trash: n.key === 'quota' }), [notify]);
   useImageNotices(onImgNotice);
-  return async (text: string, file: File): Promise<boolean> => {
-    let made: Made | null = null;
-    const r = await insertImage(async () => (made = await l.add(text, true)).id, file);
-    const m = made as Made | null;
-    // 输入框本来没字、图片行又没写成：刚新建的空随手记撤销掉，不留空条（代码审建议）
-    const dropped = Boolean(m?.id && !r.ok && text.trim() === '');
+  return async (text: string, files: readonly File[]): Promise<ImagesResult> => {
+    let made = null as Made | null;
+    let once: Promise<Made> | null = null;
+    const note = async () => (made = await (once ??= l.add(text, true))).id;
+    const left: File[] = [];
+    for (const file of files) {
+      const r = await insertImage(note, file);
+      if (!r.ok) left.push(file);
+      const k = insertMessage(r);
+      if (k) notify({ key: k, trash: false });
+    }
+    const m = made;
+    // 输入框本来没字、图一张都没写成：刚新建的空随手记撤销掉，不留空条（代码审建议）
+    const dropped = Boolean(m?.id && left.length === files.length && text.trim() === '');
     if (dropped && m?.id) void l.discard(m.id);
     else if (m?.id) setJust(m.id);
     if (m && m.id === null) report(m.result);
-    const k = insertMessage(r);
-    if (k) notify({ key: k, trash: false });
-    return m?.id != null && !dropped;
+    rlog(`notes images n=${files.length} ok=${files.length - left.length} made=${m?.id ? 1 : 0} dropped=${dropped ? 1 : 0}`);
+    return { ok: m?.id != null && !dropped, left };
   };
+}
+
+/** 输入行上待记下的图（R-416）：选了先挂在这里，“×”去掉一张；预览用本机 blob: 地址，卸下时收回。
+ *  键盘操作去掉一张时，焦点移到下一张（没有就上一张）的“×”，不丢到页面最外层 */
+export function PendingPics({ pics, onRemove }: { pics: readonly PendingPic[]; onRemove(key: number): void }) {
+  const t = useNotesT();
+  const list = useRef<HTMLUListElement>(null);
+  const want = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const i = want.current;
+    want.current = null;
+    if (i === null) return;
+    const dels = list.current?.querySelectorAll('button');
+    (dels?.[i] ?? dels?.[i - 1])?.focus();
+  }, [pics.length]);
+  const remove = (key: number, i: number) => {
+    if (list.current?.contains(document.activeElement) === true) want.current = i;
+    onRemove(key);
+  };
+  return (
+    <ul ref={list} className={styles.pend} aria-label={t('notes.img.pend', {})} data-testid="notes-pend">
+      {pics.map((p, i) => (
+        <PendPic key={p.key} file={p.file} label={t('notes.img.pendRemove', { n: i + 1 })} onRemove={() => remove(p.key, i)} testId={`notes-pend-del-${i}`} />
+      ))}
+    </ul>
+  );
+}
+
+/** 一张待记下的小图：图本身不念（alt 空，说明在“×”的名称“去掉第 n 张图片”里） */
+function PendPic({ file, label, onRemove, testId }: { file: File; label: string; onRemove(): void; testId: string }) {
+  const [url, setUrl] = useState('');
+  const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    setBroken(false);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+  return (
+    <li className={styles.pendItem}>
+      {/* 浏览器打不开的（电脑上的 HEIC 等）不画破图标，只留灰底方块 */}
+      {url && !broken ? <BlobImg url={url} alt="" onError={() => setBroken(true)} /> : null}
+      <Pressable type="button" className={styles.pendDel} onClick={onRemove} aria-label={label} data-testid={testId}>
+        <span aria-hidden="true">×</span>
+      </Pressable>
+    </li>
+  );
 }
 
 /** 编辑器里的插图区：提示（保存状态下面）+ 图 + “图片”“拍照”。上传器的提示全页共用，只认这一条随手记的图；电脑抽屉里的由随手记页出（不出两遍） */

@@ -129,9 +129,10 @@ describe('列表：只读标记，点开、删除统一拦下（TC-B4-09）', ()
     fireEvent.click(screen.getByTestId(`notes-card-${RO}`).querySelector('button') as HTMLElement);
     await waitFor(() => expect(screen.queryByTestId('notes-toast')).toBeNull());
     expect(roToast()).toBeTruthy();
-    // 再出页面自己的提示条（插图提示：选了一张 HEIC，打不开）：只读提示条收起
+    // 再出页面自己的提示条（插图提示：选了一张 HEIC、点“记下”，打不开）：只读提示条收起
     const heic = new File([new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 104, 101, 105, 99])], 'IMG_1.HEIC', { type: 'image/heic' });
     fireEvent.change(screen.getByTestId('notes-img-input'), { target: { files: [heic] } });
+    fireEvent.submit(screen.getByTestId('notes-input-row')); // 选了图先挂着，点“记下”才插（R-416）
     await waitFor(() => expect(roToast()).toBeNull());
     expect(screen.getByTestId('notes-img-tip')).toBeTruthy();
   });
