@@ -13,10 +13,12 @@ describe('tabBarFor', () => {
 
   it('日历月份子页 #/cal/…：选中“日历”，“＋”同样新建日程', () => {
     expect(tabBarFor('cal')).toEqual({ tab: 'calendar', add: 'event' });
+    // 纪念日页和日历同一层（周 / 月 / 纪念日分段，R-372 ②）：底栏照常、选中“日历”
+    expect(tabBarFor('anniv')).toEqual({ tab: 'calendar', add: 'event' });
   });
 
   it('别的页一律没有底栏（编辑、设置、提醒、回收站……）', () => {
-    const shown = new Set(['today', 'calendar', 'cal', 'todos', 'notes']);
+    const shown = new Set(['today', 'calendar', 'cal', 'anniv', 'todos', 'notes']);
     for (const r of ROUTE_NAMES) if (!shown.has(r)) expect(tabBarFor(r), r).toBeNull();
   });
 });

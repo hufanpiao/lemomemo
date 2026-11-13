@@ -9,8 +9,12 @@
 // • 测试提醒能不能收到：整行是行按钮，右边“发一条试试 ›”（照线框 R_PUSH，设计复审 M3）——网页版调 push-test，exe 弹本机测试通知（R-330）；结果写在下面
 // • B2-UI-b W1（R-352）：卡、行都换成 kit 设置组件（SettingsCard / SettingsEntryRow / SettingsActionRow），行的顺序、分卡、文案不变；
 //   原来手写的 .grp/.row/.rowBtn 和按下变淡规则删了（RemindSettings.module.css）
-// 线框这一页的其余几行（日程默认提前、待办默认提醒、纪念日提醒、也装了电脑版时）不在 FA-4 范围，见交付说明
+// 线框这一页的其余几行（日程默认提前、待办默认提醒、也装了电脑版时）不在 FA-4 范围，见交付说明；“纪念日提醒”一行 B5 接上（anniv 的 AnnivDefaults）
+import { Suspense } from 'react';
+import { AnnivDefaults } from '../../anniv/index.ts';
 import { FormButton } from '../../../kit/components/Form.tsx';
+import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
+import { annivOn } from '../../../kit/hooks/anniv-on.ts';
 import { SettingsActionRow, SettingsCard, SettingsEntryRow } from '../../../kit/components/Settings/Settings.tsx';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { upcoming } from '../hooks/remind-view.ts';
@@ -110,6 +114,14 @@ export default function RemindSettings({
       {/* 下面三行另一张卡：没有说明夹在中间时两张卡之间留 12px，有说明时说明自己的下边距（16px）撑开（N8） */}
       <div className={denied ? undefined : styles.nextCard}>
         <SettingsCard title={t('remind.set.title', {})}>
+          {/* 纪念日提醒的默认值（B5 S16，线框 R_PUSH 排在“提醒里写什么”前面）：纪念日功能的一行，开关关着不出；分包下不来那一行不画 */}
+          {annivOn() ? (
+            <QuietBoundary name="anniv-defaults">
+              <Suspense fallback={null}>
+                <AnnivDefaults part="remind-defaults" />
+              </Suspense>
+            </QuietBoundary>
+          ) : null}
           <SettingsEntryRow
             label={t('remind.set.showTitle', {})}
             value={t(s.showTitle ? 'remind.set.showTitle.on' : 'remind.set.showTitle.off', {})}

@@ -170,4 +170,16 @@ export const remindZh = {
   // 离线新建的提醒（4.2；TC-B2-69）
   // 设置 › 关于（K8-clock，4.3“时钟偏差”）
   'remind.clock.wrongNote': '这台设备的时间和服务器差了约 {min} 分钟，提醒按服务器时间响。',
+  // 纪念日的提醒（B5 S15；线框“提醒响起时”第三张：“7 天后是 김지민 生日”，按钮“知道了 / 明天再提醒 / 生成待办”）
+  'remind.kindName.anniv': '纪念日',
+  'remind.banner.anniv': '纪念日 · {when}',
+  'remind.full.head.anniv': '纪念日 · {when}',
+  'remind.mode.anniv': '纪念日提醒',
+  'remind.when.annivToday': '就是今天',
+  'remind.when.annivTomorrow': '明天',
+  'remind.when.annivIn': '{n} 天后',
+  'remind.when.annivPast': '已经过了',
+  'remind.up.avSub': '纪念日 · {when}',
+  // 生成待办的标题（截止在纪念日前一天，进待办以后可以改名）
+  'remind.genTodo.title': '准备：{name}',
 } as const;

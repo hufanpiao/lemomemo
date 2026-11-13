@@ -1,0 +1,54 @@
+/* 纪念日头像（B5 S16；R-117、R-121）：圆形；没头像时名字第一个字加类型颜色（生日 --p1、纪念日 --p3、倒数日 --p2，字 --on-p）。只用令牌（A11） */
+.av {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  color: var(--on-p);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.xs {
+  width: 20px;
+  height: 20px;
+  font-size: var(--fs-11);
+}
+
+.sm {
+  width: 36px;
+  height: 36px;
+  font-size: var(--fs-15);
+}
+
+.md {
+  width: 44px;
+  height: 44px;
+  font-size: var(--fs-17);
+}
+
+.lg {
+  width: 72px;
+  height: 72px;
+  font-size: var(--fs-28);
+}
+
+.p1 {
+  background: var(--p1);
+}
+
+.p2 {
+  background: var(--p2);
+}
+
+.p3 {
+  background: var(--p3);
+}
+
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

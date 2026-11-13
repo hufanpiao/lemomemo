@@ -16,9 +16,20 @@ export type WhenMsg =
   | { key: 'remind.when.dueAt'; params: { time: string } }
   | { key: 'remind.when.dueOn'; params: { m: number; d: number } }
   | { key: 'remind.when.overdue'; params: Record<string, never> }
-  | { key: 'remind.when.noDue'; params: Record<string, never> };
+  | { key: 'remind.when.noDue'; params: Record<string, never> }
+  | { key: 'remind.when.annivToday' | 'remind.when.annivTomorrow' | 'remind.when.annivPast'; params: Record<string, never> }
+  | { key: 'remind.when.annivIn'; params: { n: number } };
 
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+
+/** 纪念日（B5 S15）：“今天就是 / 明天 / 7 天后”（按这次提醒对应的那一次纪念日 annivDate；过了写“已经过了”） */
+function annivWhen(r: Reminder, now: number, tz: Tz): WhenMsg {
+  const n = r.annivDate === undefined ? 0 : diffDays(todayOf(now, tz), r.annivDate);
+  if (n < 0) return { key: 'remind.when.annivPast', params: {} };
+  if (n === 0) return { key: 'remind.when.annivToday', params: {} };
+  if (n === 1) return { key: 'remind.when.annivTomorrow', params: {} };
+  return { key: 'remind.when.annivIn', params: { n } };
+}
 
 /** 日程的开始时刻（全天按 remind.default_time） */
 export function eventStart(r: Reminder, tz: Tz, defaultTime?: string): number | null {
@@ -28,6 +39,7 @@ export function eventStart(r: Reminder, tz: Tz, defaultTime?: string): number | 
 }
 
 export function whenMsg(r: Reminder, now: number, tz: Tz, defaultTime?: string): WhenMsg {
+  if (r.kind === 'anniv') return annivWhen(r, now, tz);
   if (r.kind === 'event') {
     const s = eventStart(r, tz, defaultTime);
     if (s === null) return { key: 'remind.when.started', params: {} };
@@ -74,6 +86,7 @@ function ahead(min: number, k: 'start' | 'due'): RelMsg {
 }
 
 export function relMsg(r: Reminder, now: number, tz: Tz, defaultTime?: string): RelMsg {
+  if (r.kind === 'anniv') return annivWhen(r, now, tz);
   if (r.kind === 'event') {
     const s = eventStart(r, tz, defaultTime);
     if (s === null) return { key: 'remind.when.started', params: {} };

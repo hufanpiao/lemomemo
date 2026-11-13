@@ -5,6 +5,7 @@
 // 函数找不到（PGRST202）抛 DB_NOFN，其余抛 'db'（调用方按 failCode 记 `<码>`、`<码>:timeout`、`<码>:data` 或 `<码>:nofn`）。
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
+import { inChunks, liveSettings } from '../_shared/user-reads.ts';
 import type { DispatchStore } from './core.ts';
 import { DB_DATA, DB_NOFN, DB_TIMEOUT, LOG_SRC, SETTING_KEYS, TABLES, type DeviceRow, type ItemRow, type Profile, type QueueItem, type QueueRef, type Table, type UserSettings } from './round.ts';
 
@@ -18,7 +19,7 @@ export function colsOf(table: Table): string {
   switch (table) {
     case 'events': return `${COMMON}, source, title, date, time, tz, remind_min, remind_days`;
     case 'todos': return `${COMMON}, source, title, done, due, due_time, remind_before_min, remind_days, remind_time`;
-    default: return `${COMMON}, name, kind, calendar, lunar_variant, month, day, is_leap, year, remind_offsets, remind_time, after_due, next_date`;
+    default: return `${COMMON}, name, kind, calendar, lunar_variant, month, day, is_leap, year, remind_offsets, remind_time, after_due, next_date, archived_at, created_at`;
   }
 }
 const DEVICE_COLS = 'id, user_id, push_endpoint, p256dh, auth, push_fail_count';
@@ -44,16 +45,8 @@ function must<T>(r: { data: T | null; error: unknown }): T {
 
 type Key = { table_name: Table; id: string; user_id: string };
 
-/** .in(...) 一批最多放多少个 UUID（代码审查 M5）：500 个约 18.5 KB 查询串，可能被网关回 414 / 400、整轮失败；100 个约 3.7 KB */
-export const IN_CHUNK = 100;
-
-/** 按 IN_CHUNK 分批跑同一个查询、合并结果（先去重；空列表不发请求）。批与批之间按顺序发，不并发 */
-export async function inChunks<T>(ids: readonly string[], run: (chunk: string[]) => Promise<T[]>): Promise<T[]> {
-  const all = [...new Set(ids)];
-  const out: T[] = [];
-  for (let i = 0; i < all.length; i += IN_CHUNK) out.push(...(await run(all.slice(i, i + IN_CHUNK))));
-  return out;
-}
+// .in(...) 分批（代码审查 M5）、读活着的设置：11-14 挪进 _shared/user-reads.ts，和 anniv-roll 共用（整块评审第 25 条）；这里照旧导出给测试
+export { IN_CHUNK, inChunks } from '../_shared/user-reads.ts';
 
 export function makeStore(admin: Admin): DispatchStore {
   const priv = admin.schema('private');
@@ -111,16 +104,13 @@ export function makeStore(admin: Admin): DispatchStore {
       return new Map(rows.map((r) => [r.user_id, { current_tz: r.current_tz, ui_locale: r.ui_locale } satisfies Profile]));
     },
     async settings(userIds) {
-      // 只认“活着”的设置：没软删、没撤销（和本机 remind-settings 同一口径；撤销了的按没设处理，11-04）
-      const rows = await inChunks(userIds, async (c) => must(await admin.from('settings').select('user_id, key, value').in('user_id', c)
-        .in('key', [...SETTING_KEYS]).is('deleted_at', null).eq('undone', false)) as { user_id: string; key: string; value: unknown }[]);
-      const byUser = new Map<string, [string, unknown][]>();
-      for (const r of rows) byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), [r.key, r.value]]);
-      return new Map([...byUser].map(([u, kv]) => [u, Object.fromEntries(kv) as UserSettings]));
+      // 只认“活着”的设置：没软删、没撤销（_shared/user-reads.ts）
+      return (await liveSettings(admin, userIds, SETTING_KEYS, must)) as Map<string, UserSettings>;
     },
     async writeRemind(table, id, userId, patch, prev) {
       const body: Record<string, unknown> = { remind_at: patch.remind_at };
       if (table === 'anniversaries' && patch.next_date !== undefined) body.next_date = patch.next_date;
+      if (table === 'anniversaries' && patch.archived_at === null) body.archived_at = null;   // 已归档的倒数日改到以后（整块评审第 17 条）
       // 乐观条件：rev 还是读到的值（读完以后用户、别的设备没改过）、remind_at 也还是读到的值（别的系统写入没抢先写过）才写
       const q = admin.from(table).update(body).eq('id', id).eq('user_id', userId).eq('rev', prev.rev);
       const rows = must(await (prev.remind_at === null ? q.is('remind_at', null) : q.eq('remind_at', prev.remind_at)).select('id')) as { id: string }[];

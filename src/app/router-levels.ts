@@ -33,7 +33,7 @@ let newSeq = 0;
  * 新建保存后地址换成这一条的 id，编辑器不重挂（key 不变，焦点里的草稿不丢，代码审查 S7）；换别的记录、再点“新建”才换一张。
  * 保存可能晚到：用户已经换到下一张新建表（key 变了）或已经离开这一页，就只存不换地址
  */
-export function useEditRoute(name: 'todo' | 'event' | 'note'): { id: string; key: string; onCreated(id: string): void } {
+export function useEditRoute(name: 'todo' | 'event' | 'note' | 'anniv'): { id: string; key: string; onCreated(id: string): void } {
   const raw = useRoute().params[0] ?? 'new';
   const id = raw === 'new' || UUID.test(raw) ? raw : 'missing';
   const [, bump] = useReducer((n: number) => n + 1, 0);

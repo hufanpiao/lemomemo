@@ -38,4 +38,8 @@ export const zh = {
   'today.micDenied': '麦克风没有打开，语音用不了。可以在 iPhone 的“设置”里给这个 App 打开麦克风。',
   // 其他设备的通用说法（R-367，负责人 11-10 定：iPhone、iPad 上照上面原文）
   'today.micDeniedWeb': '麦克风没有打开，语音用不了。可以在浏览器的设置里给这个网站打开麦克风。',
+  // 纪念日一行（B5 S14；线框 s1 ANNLINE）
+  'today.anniv.today': '今天',
+  'today.anniv.tomorrow': '明天',
+  'today.anniv.in': '{n} 天后',
 } as const;

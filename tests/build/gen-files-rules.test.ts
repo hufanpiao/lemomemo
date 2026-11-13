@@ -79,6 +79,18 @@ describe('gen_files_rules', () => {
     expect(quota).toContain(`case when thumb then cl > ${lim} else cl <> row_.bytes end`);   // put 时缩略图声明的大小上限
   });
 
+  it('B5 整块评审第 4 条：纪念日头像按自己那一段的 maxBytes（100 KB），= 0005 的列约束 = files_authorize 头像一支的上限；没写就失败', () => {
+    const rules = build(allManifests) as unknown as { segment: string; variants: { kind: string; maxBytes: number }[] }[];
+    const av = rules.find((r) => r.segment === 'avatar')?.variants[0]?.maxBytes;
+    expect(av).toBe(102400);
+    expect(readFileSync('supabase/migrations/0005_anniv.sql', 'utf8')).toContain(`avatar_bytes <= ${av}`);
+    expect(readFileSync('supabase/migrations/20261114192000_anniv_avatar_quota.sql', 'utf8')).toContain(`cl > ${av} or row_.avatar_bytes is null`);
+    const changed = tweak((b) => {
+      if (b.pathPrefix === '<user_id>/anniv/') delete (b as { maxBytes?: number }).maxBytes;
+    }, 'images');
+    expect(() => gen(changed)).toThrow(/maxBytes/);
+  });
+
   it('images 桶的清单没写 thumbSizeLimit 就失败', () => {
     const changed = tweak((b) => {
       if (b.limits) delete (b.limits as { thumbSizeLimit?: number }).thumbSizeLimit;

@@ -86,13 +86,14 @@ describe('免查名单：同一份来源', () => {
       .toEqual(client.map((f) => ({ name: f.name, methods: [...f.methods] })));
   });
 
-  it('0.38 第 47 条：account 只免 POST；account-purge、push-dispatch、ai-classify、usage-report 只免 POST（服务器调用）；invite-signup 不免', () => {
+  it('0.38 第 47 条：account 只免 POST；account-purge、push-dispatch、ai-classify、usage-report、anniv-roll 只免 POST（服务器调用）；invite-signup 不免', () => {
     const plan = FUNCTION_VERSION_EXEMPTIONS.map((f) => [f.name, [...f.methods], f.caller]);
     expect(plan).toEqual([
       ['account', ['POST'], 'client'],
       ['account-purge', ['POST'], 'server'],
       ['push-dispatch', ['POST'], 'server'],   // B2：pg_cron 带 x-cron-secret（D1-S6）
       ['ai-classify', ['POST'], 'server'],     // B4：pg_cron 每 2 分钟带 x-cron-secret（架构 5.2）
+      ['anniv-roll', ['POST'], 'server'],     // B5 S13：pg_cron 每天 00:10 UTC 带 x-cron-secret（架构第 6 节）
       ['claude-intake', ['POST'], 'client'],   // B3：add.ps1 带连接码调，只收 POST
       ['usage-report', ['POST'], 'server'],
     ]);

@@ -124,6 +124,8 @@ export const DETAIL_FIELDS_BY_NAME: Readonly<Record<string, { readonly num: read
   },
   // B4：ai-classify/core.ts 的 HeartbeatDetail
   'ai-classify': { num: ['users', 'notes', 'ai', 'rule', 'manual', 'requeued', 'skipped', 'failed', 'ms'], bool: ['budget_hit', 'quota_hit'] },
+  // B5 S13：anniv-roll/core.ts 的 HeartbeatDetail（只是个数和布尔）
+  'anniv-roll': { num: ['rows', 'written', 'archived', 'stale', 'skipped', 'failed'], bool: ['batch_full'] },
   'account-purge': { num: ['purged', 'failed', 'sent', 'ms', 'held', 'remaining', 'forced', 'blocked'], bool: [] },
 };
 

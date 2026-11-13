@@ -74,6 +74,7 @@ const PAGES_WITHOUT_FEATURE = ['app/dev/CspLab.tsx', 'app/dev/VoiceProbe.tsx', '
 const PAGE_FILES = [
   ...PAGES_WITHOUT_FEATURE,
   'app/App.tsx',
+  'features/anniv/ui/AnnivPage.tsx',
   'features/auth/ui/AuthPage.tsx',
   'features/auth/ui/InstallGuide.tsx',
   'features/calendar/ui/CalendarPage.tsx',

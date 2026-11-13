@@ -86,6 +86,9 @@ export const bucketSchema = z.object({
   /** thumbSizeLimit（B4 S10 ④）：随手记插图缩略图（images 桶 .t.webp）的大小上限，只有 images 桶的主人写；
    *  和存储额度里每个缩略图的预留（迁移 20261111100000 的 media_row_bytes，128 KB）一致。附件（files 桶）的缩略图不按它 */
   limits: z.object({ fileSizeLimit: z.number().int(), allowedMimeTypes: z.array(z.string()), thumbSizeLimit: z.number().int().optional() }).optional(),
+  /** 只登记一段路径的（纪念日头像）这一段自己的大小上限：/files 的 put 按它拒（413），不用桶主人的 fileSizeLimit。
+   *  纪念日头像写 102400，和 0005 的 avatar_bytes 列约束、files_authorize_impl 头像一支一致（B5 整块评审第 4 条） */
+  maxBytes: z.number().int().optional(),
   pathPrefix: z.string(),
   /** 整条路径的正则（0.23 L8）；0.32 起客户端可传的 R2 桶（images、files）和 private.files_authorize_impl 里的正则一字不差（D1 核对），
    *  同时生成 /files 的规则表；只经服务器函数的桶写服务器端的拼法 */

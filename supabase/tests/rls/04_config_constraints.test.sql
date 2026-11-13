@@ -5,7 +5,8 @@ select plan(52);
 select tests.seed();
 
 -- ===== app_config.features（0.27 第 4 点；P-05：每项必须是对象、有布尔 on） =====
-select is((select features from public.app_config), '{"event":{"on":true},"todo":{"on":true},"note":{"on":false},"anniv":{"on":false}}'::jsonb, '默认值写全四个键');
+-- anniv 由 B5 的数据迁移 20261113182000_anniv_feature_on.sql 打开（代定 D17），别的键原样
+select is((select features from public.app_config), '{"event":{"on":true},"todo":{"on":true},"note":{"on":false},"anniv":{"on":true}}'::jsonb, '默认值写全四个键（anniv 已由 B5 打开）');
 select is(tests.try_as('postgres', null, $$update public.app_config set features = features || '{"note":{"on":true,"min_client":"4.0.0"}}'$$), 'ok', '合法的开关能写');
 select ok(tests.try_as('postgres', null, $$update public.app_config set features = '{"note":true}'$$) like '23514%', '值不是对象：拒绝');
 select ok(tests.try_as('postgres', null, $$update public.app_config set features = '{"note":{"min_client":"4.0.0"}}'$$) like '23514%', '缺 on：拒绝');

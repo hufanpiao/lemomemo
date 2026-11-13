@@ -1,5 +1,6 @@
 // push-dispatch 一轮的小工具、tz_invalid 记录和 filterUsable；流程总说明在 round.ts 文件头。
 import { AHEAD_MS, BEHIND_MS, DB_DATA, DB_NOFN, DB_TIMEOUT, LOG_SRC, type Dnd, type ItemRow, type LogRow, type NotifyMsgLike, type NotifyTextLike, type RoundCtx, type RoundLogic, type Table, type UserSettings } from './round-types.ts';
+import { pool } from '../_shared/pool.ts';
 
 // ---------------- 小工具 ----------------
 
@@ -20,10 +21,23 @@ export function dueAtOf(r: Pick<ItemRow, 'remind_at' | 'snooze_at' | 'defer_unti
   return m;
 }
 
+/**
+ * 这一轮按哪个时刻判到点（和 private.remind_due 一致，迁移 20261114191000）：日程、待办是 dueAtOf。
+ * 纪念日推完 remind_at 就挪到下一次（round-send.ts 的 writeAnnivNext），推过以后按的“明天再提醒”（snooze_at > pushed_for）
+ * 可能早于挪过的 remind_at，greatest 会把它吞掉（整块评审第 1 条）：这时 greatest(snooze_at, defer_until) 落在窗口 (lo, hi] 里就按它判
+ */
+export function dueOf(table: Table, r: ItemRow, lo: number, hi: number): number | null {
+  if (table === 'anniversaries' && r.snooze_at !== null && r.snooze_at > (r.pushed_for ?? 0)) {
+    const s = Math.max(r.snooze_at, r.defer_until ?? r.snooze_at);
+    if (s > lo && s <= hi) return s;
+  }
+  return dueAtOf(r);
+}
+
 /** 第 1 步的精确条件（SQL 语义：remind_at 为空时 coalesce(notified_for, 0) <> remind_at 是 null，不算到点） */
 export function isDue(table: Table, r: ItemRow, now: number): number | null {
   if (r.deleted_at !== null || r.undone === true || (table === 'todos' && r.done === true) || r.remind_at === null) return null;
-  const due = dueAtOf(r);
+  const due = dueOf(table, r, now - BEHIND_MS, now + AHEAD_MS);
   if (due === null || due > now + AHEAD_MS || due <= now - BEHIND_MS) return null;
   if ((r.pushed_for ?? 0) === due || (r.notified_for ?? 0) === r.remind_at) return null;
   return due;
@@ -32,11 +46,15 @@ export function isDue(table: Table, r: ItemRow, now: number): number | null {
 /**
  * resolve 的条件：推过（pushed_for 不空），之后在别处处理了（和 private.remind_pushed 逐条一致）——
  * 按了“知道了”（notified_for = remind_at）；提醒时间改了、按了“稍后”、提醒关了（due_at 不等于 pushed_for，或三列都空）；
- * R-317：待办完成（done）、条目删除（deleted_at 不空）或撤销（undone）也收回旧通知
+ * R-317：待办完成（done）、条目删除（deleted_at 不空）或撤销（undone）也收回旧通知。
+ * 纪念日（整块评审第 1 条，迁移 20261114191000）：推完 remind_at 就挪到下一次，due_at ≠ pushed_for 不说明什么，改成——
+ * 按了“知道了”（界面写这一次的时刻，notified_for ≥ pushed_for）、推过以后又按了稍后（snooze_at > pushed_for）、提醒关了（remind_at 为空）。
+ * 已知不收回的：免打扰顺延过、或稍后那一次推过以后再按“知道了”（pushed_for 晚于这一次的时刻）；非苹果设备上那条通知留着，用户自己划掉
  */
 export function isHandledAfterPush(table: Table, r: ItemRow): boolean {
   if (r.pushed_for === null) return false;
   if (r.deleted_at !== null || r.undone === true || (table === 'todos' && r.done === true)) return true;
+  if (table === 'anniversaries') return r.remind_at === null || (r.notified_for ?? 0) >= r.pushed_for || (r.snooze_at ?? 0) > r.pushed_for;
   if (r.remind_at !== null && r.notified_for === r.remind_at) return true;
   const due = dueAtOf(r);
   return due === null || due !== r.pushed_for;
@@ -65,14 +83,8 @@ export function renderText(n: NotifyTextLike, t: RoundLogic['t'], locale: string
   return { title: n.fromClaude ? t('remind.push.fromClaude', { text: raw }, locale) : raw, body: n.body ? one(n.body) : null };
 }
 
-/** 最多 n 个并发跑完 items（顺序领取；fn 自己吞错） */
-export async function pool<T>(items: readonly T[], n: number, fn: (x: T) => Promise<void>): Promise<void> {
-  const it = items.values();   // 几个 worker 共用一个迭代器，各取下一项
-  const worker = async () => {
-    for (let x = it.next(); !x.done; x = it.next()) await fn(x.value);
-  };
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(n, items.length)) }, worker));
-}
+// pool（最多 n 个并发）11-14 挪进 _shared/pool.ts（anniv-roll 判可用账号也用，整块评审第 10、25 条），这里照旧导出
+export { pool };
 
 export function groupBy<T, K>(xs: readonly T[], key: (x: T) => K): Map<K, T[]> {
   const m = new Map<K, T[]>();

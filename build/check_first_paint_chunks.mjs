@@ -26,6 +26,10 @@ export const FIRST_PAINT_DYNAMIC = [
   'features/reminders/ui/MissedReminders.tsx',
   'features/reminders/ui/UnsyncedRemind.tsx',
   'features/reminders/ui/UnsyncedRemindMark.tsx',
+  // 今天页的纪念日一行（B5 S14）：7 天内有纪念日才挂，挂就在首屏期间，照样不许带 zod、农历
+  'features/today/ui/AnnivLine.tsx',
+  // 纪念日一行的头像（取图那一份 data/avatar-view.ts 另外按需下载，见 first-paint-graph 的非首屏名单）：那一条有头像才下载
+  'features/anniv/ui/AnnivFace.tsx',
 ];
 
 /** manifest 键、src、name、file 里出现这些就是禁区的块：zod、zod-jitless、shared/schema、shared/manifests；

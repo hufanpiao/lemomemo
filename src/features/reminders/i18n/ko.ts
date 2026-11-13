@@ -159,4 +159,14 @@ export const remindKo = {
   'remind.mode.sameDay': '당일 {time}', // REVIEW(ko)
   'remind.mode.dayBefore': '전날 {time}', // REVIEW(ko)
   'remind.clock.wrongNote': '이 기기 시간이 서버와 약 {min}분 차이 나요. 알림은 서버 시간 기준으로 울려요.', // REVIEW(ko)
+  'remind.kindName.anniv': '기념일', // REVIEW(ko) B5
+  'remind.banner.anniv': '기념일 · {when}', // REVIEW(ko) B5
+  'remind.full.head.anniv': '기념일 · {when}', // REVIEW(ko) B5
+  'remind.mode.anniv': '기념일 알림', // REVIEW(ko) B5
+  'remind.when.annivToday': '바로 오늘', // REVIEW(ko) B5
+  'remind.when.annivTomorrow': '내일', // REVIEW(ko) B5
+  'remind.when.annivIn': '{n}일 후', // REVIEW(ko) B5
+  'remind.when.annivPast': '이미 지났어요', // REVIEW(ko) B5
+  'remind.up.avSub': '기념일 · {when}', // REVIEW(ko) B5
+  'remind.genTodo.title': '준비: {name}', // REVIEW(ko) B5
 } as const satisfies Record<keyof typeof remindZh, string>;

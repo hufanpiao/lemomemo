@@ -3,35 +3,10 @@
 // 设备写回只在 push_endpoint 还是发送时那一串时才写、每条写都带 user_id。真库上的语义由 rls 30_remind_queue_pop 和真库冒烟兜。
 // store.ts 顶上有 `import type … from 'npm:…'`：路径放在变量里动态加载（写法同 push-dispatch-usable.test.ts）
 import { describe, expect, it } from 'vitest';
+import { fakeAdmin, type Call } from './fake-admin.ts';
 
-type Call = [string, ...unknown[]];
 const STORE_PATH = '../../supabase/functions/push-dispatch/store.ts';
 const { makeStore, colsOf } = (await import(/* @vite-ignore */ STORE_PATH)) as { makeStore: (a: unknown) => Record<string, (...a: unknown[]) => Promise<unknown>>; colsOf: (t: string) => string };
-
-/** 链式调用全部记下；await 时回 result */
-function fakeAdmin(result: { data: unknown; error: unknown } = { data: [], error: null }) {
-  const chains: Call[][] = [];
-  const chain = (first: Call) => {
-    const calls: Call[] = [first];
-    chains.push(calls);
-    const p: Record<string, unknown> = new Proxy({}, {
-      get(_t, k) {
-        if (k === 'then') return (ok: (v: unknown) => void) => ok(result);
-        return (...a: unknown[]) => {
-          calls.push([String(k), ...a]);
-          return p;
-        };
-      },
-    });
-    return p;
-  };
-  const admin = {
-    from: (t: string) => chain(['from', t]),
-    rpc: (f: string, a: unknown) => chain(['rpc', f, a]),
-    schema: (s: string) => ({ from: (t: string) => chain(['from', `${s}.${t}`]), rpc: (f: string, a: unknown) => chain(['rpc', `${s}.${f}`, a]) }),
-  };
-  return { admin, chains };
-}
 
 describe('push-dispatch store.ts', () => {
   it('出队：private.remind_queue_pop 六个参数都显式传（每人上限、有毒次数、规则版本不靠 SQL 默认值；迁移 20261113100000）', async () => {

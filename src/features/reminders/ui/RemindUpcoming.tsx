@@ -2,7 +2,7 @@
 // • 页顶总览：“现在 14:17 之后 · 共 8 条 · 10月28日 没有提醒”（没有提醒的日子也写出来）；靠左排，连着的几天合并写
 //   （“11月6日、8～10日 没有提醒”），每个日期、每段日期不从中间折行（设计复审 M1）
 // • 今天起 7 天（含今天）里还没过、没处理的提醒，按天分组：组头“今天 · 10月24日 周六”，右边“3 条”
-// • 每条：到点时刻、类型记号（日程竖条 / 待办圆圈，项目色）、标题、副行（日程“15:30 开始 · 提前 15 分钟”，待办“待办 · 截止前 1 小时”）、›
+// • 每条：到点时刻、类型记号（日程竖条 / 待办圆圈，项目色；纪念日是圆形头像，ui/KindMark.tsx）、标题、副行（日程“15:30 开始 · 提前 15 分钟”，待办“待办 · 截止前 1 小时”）、›
 // • 点一条进这一条的编辑页改提醒（#/event/<id>、#/todo/<id>），不进整页提醒（提醒没到点）
 // • 时刻就是本机现算的到点时刻（remindAtOf，和服务器同一份 shared/logic）；第 8 天的、关了提醒的不在里面
 // 顶栏和返回由设置页画，这里只画正文
@@ -10,11 +10,10 @@ import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts'
 import { navigate } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
-import { dayMsg, eventStart, modeOf, timeOf, upcoming, wdKey, type Reminder } from '../hooks/remind-view.ts';
+import { dayMsg, eventStart, modeOf, timeOf, upcoming, wdKey, whenMsg, type Reminder } from '../hooks/remind-view.ts';
 import { useReminderList } from '../hooks/useReminders.ts';
 import { useRemindT, type RemindT } from '../hooks/useRemindT.ts';
-import { pcClass } from './pc-class.ts';
-import rs from './Remind.module.css';
+import { KindMark } from './KindMark.tsx';
 import styles from './RemindSettings.module.css';
 
 /** 切开“{days} 没有提醒”用的记号（不会出现在文案里） */
@@ -61,6 +60,11 @@ function dayHead(t: RemindT, date: DateStr, today: DateStr): string {
 export function subOf(t: RemindT, r: Reminder, tz: string, defaultTime: string, group: DateStr, today: DateStr): string {
   const m = modeOf(r, defaultTime);
   const mode = t(m.key, m.params as never);
+  if (r.kind === 'anniv') {
+    // 纪念日（B5）：“纪念日 · 7 天后”（按提醒响的那一刻算）
+    const w = whenMsg(r, r.dueAt, tz);
+    return t('remind.up.avSub', { when: t(w.key, w.params as never) });
+  }
   if (r.kind !== 'event') return t('remind.up.tdSub', { mode });
   const s = eventStart(r, tz, defaultTime);
   if (s === null) return mode;
@@ -115,13 +119,12 @@ export default function RemindUpcoming() {
           </h2>
           <ul className={styles.upCard}>
             {d.items.map((r) => {
-              const project = typeof r.row['project'] === 'string' ? r.row['project'] : '';
               return (
                 <li key={r.tag} className={styles.rowLi} data-testid="remind-upcoming-item" data-kind={r.kind}>
-                  <Pressable type="button" className={styles.upRow} onClick={() => void navigate(r.kind === 'event' ? 'event' : 'todo', r.id)} data-testid="remind-upcoming-open">
+                  <Pressable type="button" className={styles.upRow} onClick={() => void navigate(r.kind, r.id)} data-testid="remind-upcoming-open">
                     <span className={styles.upTime}>{timeOf(r.dueAt, tz)}</span>
                     <span className={styles.upMk}>
-                      <span className={`${r.kind === 'event' ? rs.mkEv : rs.mkTd} ${pcClass(project)}`} aria-hidden="true" />
+                      <KindMark r={r} />
                     </span>
                     <span className={styles.upText}>
                       <b>{r.title}</b>

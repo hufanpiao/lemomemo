@@ -101,3 +101,32 @@
 .notice p + p {
   margin-top: 4px;
 }
+
+/* 纪念日一行（B5 S14；线框 s1 ANNLINE）：浅色胶囊，小头像 + “3 天后” + 名字；放不下省略号 */
+.anniv {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-height: var(--hit);
+  margin: 0 0 8px;
+  padding: 0 12px 0 6px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+.annivWhen {
+  flex: none;
+  font-weight: 600;
+}
+
+.annivName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

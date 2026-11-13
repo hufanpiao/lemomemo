@@ -1464,6 +1464,7 @@ export const manifestSnapshot: readonly Manifest[] = [
       {
         "name": "images",
         "store": "r2",
+        "maxBytes": 102400,
         "pathPrefix": "<user_id>/anniv/",
         "pathPattern": "^[0-9a-f-]{36}/anniv/[0-9a-f-]{36}/[0-9a-f-]{36}\\.webp$",
         "backup": "weekly-s3",

@@ -413,6 +413,15 @@
   vertical-align: middle;
 }
 
+/* 纪念日头像下载那一下的占位（和 kit AnnivAvatar 的 xs 同尺寸，KindMark.tsx） */
+.avPh {
+  display: inline-block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+}
+
 .mkTdSm {
   width: 12px;
   height: 12px;
