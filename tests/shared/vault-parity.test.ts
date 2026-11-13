@@ -17,6 +17,6 @@ describe('隐私记前后端两份常量一致', () => {
 
   it('推送事件：两边同一组、同一顺序；SW 每个事件中韩文案都有', () => {
     expect([...SW_EVENTS]).toEqual([...FN_EVENTS]);
-    for (const e of FN_EVENTS) for (const loc of ['zh', 'ko'] as const) expect(VAULT_PUSH_TEXT[loc][e]).toBeTruthy();
+    for (const e of FN_EVENTS) for (const loc of ['zh', 'ko'] as const) expect(VAULT_PUSH_TEXT[loc][e].length).toBeGreaterThan(0);
   });
 });

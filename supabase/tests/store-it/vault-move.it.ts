@@ -137,10 +137,15 @@ Deno.test({ name: '⑦ rebind_device：直连被拒、经 PostgREST 成功一次
   assertEquals([ok.status, ok.json], [200, { ok: true }], '经 account（PostgREST rpc）交接');
   assertEquals(one(await sql<{ s: string }[]>`select session_id::text as s from public.devices where id = ${dev}`).s, sessionOf(s2), 'devices 行换成新会话');
   assertEquals((await callAccount(s1, { action: 'status' })).status, 401, '旧会话被吊销');
-  for (let i = 2; i <= 10; i++) {
-    const r = await callAccount(s2, { action: 'rebind_device', device_id: dev, old_token: s1 }, APP);
-    assertEquals(r.status, 409, `第 ${i} 次（旧会话已吊销，失败也算一次）`);
+  // 评审 M5：结果不确定时客户端会原样重发，设备行已经指向这次的新会话就幂等回 200（也算一次）
+  const again = await callAccount(s2, { action: 'rebind_device', device_id: dev, old_token: s1 }, APP);
+  assertEquals([again.status, again.json], [200, { ok: true }], '第 2 次原样重发：幂等成功');
+  const s3 = await jwtOf(R);
+  for (let i = 3; i <= 10; i++) {
+    const r = await callAccount(s3, { action: 'rebind_device', device_id: dev, old_token: s1 }, APP);
+    assertEquals(r.status, 409, `第 ${i} 次（另一个新会话拿已吊销的旧令牌，失败也算一次）`);
   }
+  assertEquals(one(await sql<{ s: string }[]>`select session_id::text as s from public.devices where id = ${dev}`).s, sessionOf(s2), '失败的几次没改动设备行');
   const eleventh = await callAccount(s2, { action: 'rebind_device', device_id: dev, old_token: s1 }, APP);
   assertEquals([eleventh.status, eleventh.json?.error], [429, 'rate_limited'], '第 11 次');
 } });

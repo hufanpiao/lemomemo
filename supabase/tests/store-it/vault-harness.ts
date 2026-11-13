@@ -229,8 +229,8 @@ export async function exportWithToken(jwt: string, token: string | null): Promis
   const call = async (body: unknown) => {
     const headers: Record<string, string> = { 'content-type': 'application/json', authorization: `Bearer ${jwt}` };
     if (token) headers['x-vault-token'] = token;
-    // deno-lint-ignore no-explicit-any
-    return await accountHandle(new Request('http://127.0.0.1/functions/v1/account', { method: 'POST', headers, body: JSON.stringify(body) }), accountDeps as any);
+    const deps = accountDeps as unknown as Parameters<typeof accountHandle>[1];
+    return await accountHandle(new Request('http://127.0.0.1/functions/v1/account', { method: 'POST', headers, body: JSON.stringify(body) }), deps);
   };
   const s = await call({ action: 'export', step: 'start' });
   const sj = (await s.json()) as Record<string, unknown>;
