@@ -1,0 +1,132 @@
+// 随手记页的“⋯”菜单、合并分类提示条、转成待办 / 日程的流程和确认窗（从 NotesPage.tsx 拆出来，R-413、R-414 11-13）
+// • 菜单：转成待办 / 转成日程 / 删除（R-414，“移到隐私记”B5 再加）；备注放不下（超过 2000 字）时两项变淡、下面写原因；只读行变淡、点了由页面拦下
+// • 提示条（R-413，线框 MERGE）：“‘读书’和‘书单’两个分类很像，合成一个吗？ 合并 / 不用”
+// • 流程（R-414）：不带图的直接转、原条进“最近删除”；带插图的先弹确认窗（线框 S8-2），原条保留（R-412）；结果出在输入行上面
+import { useState } from 'react';
+import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
+import { FormButton } from '../../../kit/components/Form.tsx';
+import { Popover } from '../../../kit/components/Popover.tsx';
+import type { useListActions } from '../../../kit/hooks/useListActions.ts';
+import { Pressable } from '../../../motion/components.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
+import type { MergeHint } from '../hooks/useMergeHint.ts';
+import type { ActionResult, ConvertKind, NoteItem, useNoteList } from '../hooks/useNoteList.ts';
+import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
+import type { ImgMsgKey } from './NoteImages.tsx';
+import styles from './NotesPage.module.css';
+
+/** 随手记页自己另加的提示条：插图提示、转换结果（撤销条、出错条在 kit 的 useListActions 里） */
+export type ImgTip = { kind: 'img'; key: ImgMsgKey; trash: boolean };
+export type ConvTip = { kind: 'conv'; key: Extract<NotesMsgKey, `notes.conv.${'moved' | 'kept'}.${string}` | 'notes.conv.empty' | 'notes.conv.left'> };
+export type PageTip = ImgTip | ConvTip;
+/** 带插图的转换要先问一下（R-414，线框 S8-2） */
+export type ConvAsk = { id: string; kind: ConvertKind; images: number };
+
+/**
+ * “⋯”菜单：看得见 24px，点按区 ::after 扩到 44。转成待办 / 转成日程（R-414）在“删除”上面；移到隐私记（B5）以后加在这里。
+ * long：备注放不下，两项变淡（aria-disabled）、下面写“超过 2000 字，转不了”，点了不动；只读行的两项也变淡，点了由页面拦下
+ */
+export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert }: {
+  id: string; ro: boolean; open: boolean; onOpenChange(o: boolean): void; onDelete(): void; long: boolean; onConvert(kind: ConvertKind): void;
+}) {
+  const t = useNotesT();
+  const conv = (kind: ConvertKind) => (
+    <Pressable
+      className={`${styles.menuItem} ${styles.menuPlain}`}
+      aria-disabled={ro || long || undefined}
+      onClick={() => (long ? undefined : onConvert(kind))}
+      data-testid={`notes-to-${kind}-${id}`}
+      data-no-proxy=""
+    >
+      {t(kind === 'todo' ? 'notes.conv.todo' : 'notes.conv.event', {})}
+    </Pressable>
+  );
+  return (
+    <Popover
+      open={open}
+      onOpenChange={onOpenChange}
+      label={t('notes.menu', {})}
+      align="end"
+      className={styles.menu}
+      trigger={
+        <button type="button" className={styles.more} aria-label={t('notes.more', {})} data-testid={`notes-more-${id}`}>
+          ⋯
+        </button>
+      }
+    >
+      {conv('todo')}
+      {conv('event')}
+      {long ? (
+        <p className={styles.menuNote} data-testid={`notes-conv-long-${id}`}>
+          {t('notes.conv.long', {})}
+        </p>
+      ) : null}
+      {/* 只读行的“删除”变淡、aria-disabled，点了照样由 del 拦下出提示条（同待办页的 ×） */}
+      <Pressable className={styles.menuItem} aria-disabled={ro || undefined} onClick={onDelete} data-testid={`notes-del-${id}`} data-no-proxy="">
+        {t('notes.delete', {})}
+      </Pressable>
+    </Popover>
+  );
+}
+
+/** 合并分类提示条（R-413，线框 MERGE）：“合并”的结果由页面的出错条、只读提示接；“不用”记下这一对，提示条随即换下一对或消失 */
+export function MergeBar({ hint, onResult }: { hint: MergeHint; onResult(r: ActionResult): void }) {
+  const t = useNotesT();
+  return (
+    <section className={styles.merge} aria-label={t('notes.merge.label', {})} data-testid="notes-merge">
+      <span className={styles.mergeText}>{t('notes.merge.ask', { a: hint.keepName, b: hint.mergeName })}</span>
+      <FormButton size="compact" variant="primary" onClick={() => void hint.merge().then(onResult)} data-testid="notes-merge-go">
+        {t('notes.merge.go', {})}
+      </FormButton>
+      <FormButton size="compact" onClick={() => void hint.dismiss()} data-testid="notes-merge-no">
+        {t('notes.merge.no', {})}
+      </FormButton>
+    </section>
+  );
+}
+
+/**
+ * 转成待办 / 日程的流程（R-414）：只读行拦下；带插图的先问（ask 不为空时页面画确认窗），其余直接转；
+ * 结果出在输入行上面：成功写“已转成…”（原条进了“最近删除”或留着），新条建了但原条没改好写“先别再转”，没有字写“转不了”，其余走出错条 / 只读提示
+ */
+export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a: ReturnType<typeof useListActions<PageTip>>) {
+  const [ask, setAsk] = useState<ConvAsk | null>(null);
+  const go = async (id: string, kind: ConvertKind) => {
+    setAsk(null);
+    const r = await run(id, kind);
+    if (r.ok) a.g.show({ kind: 'conv', key: `notes.conv.${r.kept ? 'kept' : 'moved'}.${kind}` });
+    else if (r.left) a.g.show({ kind: 'conv', key: 'notes.conv.left' });
+    else if (r.reason === 'empty') a.g.show({ kind: 'conv', key: 'notes.conv.empty' });
+    else a.report(r.reason === 'readonly' ? 'readonly' : r.reason === 'switching' || r.reason === 'gone' ? 'silent' : 'failed');
+  };
+  return {
+    ask,
+    start(it: NoteItem, kind: ConvertKind) {
+      if (a.isRo(it.id)) a.g.block();
+      else if (it.images > 0) setAsk({ id: it.id, kind, images: it.images });
+      else void go(it.id, kind);
+    },
+    confirm() {
+      rlog(`notes convert confirm ask=${ask ? ask.kind : 'none'}`);
+      if (ask) void go(ask.id, ask.kind);
+    },
+    cancel: () => setAsk(null),
+  };
+}
+
+/** 带插图的转成待办 / 日程之前问一次（R-414，线框 S8-2；D-13：原条保留，图片还在原处） */
+export function ConvertAsk({ ask, onOk, onCancel }: { ask: ConvAsk; onOk(): void; onCancel(): void }) {
+  const t = useNotesT();
+  const todo = ask.kind === 'todo';
+  return (
+    <ConfirmDialog
+      open
+      title={t(todo ? 'notes.conv.todo' : 'notes.conv.event', {})}
+      body={t(todo ? 'notes.conv.dlg.todo' : 'notes.conv.dlg.event', { n: ask.images })}
+      okLabel={t(todo ? 'notes.conv.dlg.okTodo' : 'notes.conv.dlg.okEvent', {})}
+      cancelLabel={t('notes.conv.dlg.cancel', {})}
+      onOk={onOk}
+      onCancel={onCancel}
+    />
+  );
+}

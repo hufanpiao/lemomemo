@@ -17,20 +17,23 @@
 //      ⑥ 写回：category_id、category_source = ai、ai_status = done、category_seen = false（界面上显示“AI”小标）；
 //         category_source = manual 的永远不改分类（送 AI 之前就记成 done）；写的时候带条件（还是 pending、不是 manual），用户刚好改了就不覆盖；
 //         AI 没给这一条、给的分类名不合格、新建分类失败：这一条改用本机规则，记 rule；
+//      ⑥′ 相似分类（R-413）：AI 同时给出这个人已有分类里意思差不多的几对（similar），加进 settings notes.merge_suggest（write.ts 的 writeSimilar），
+//         客户端据此提示“合成一个吗？”；读写失败只记日志，不影响分类；
 //      ⑦ AI 失败：退回预扣的两次；额度用完写 exhausted_until（太平洋时间下一个午夜）、这一轮后面的人都不再送；
 //         这批记成 rule，并在 ai_meta 里记 retry 和第几次，等额度恢复（或下一轮）重新排队；
 //         出错一共试 MAX_TRIES 次（含第一次），额度用完不计次数（write.ts）。
 // 文件：request.ts 组请求、读回；write.ts 写库；这里只留一轮的流程。
 //   5. 写心跳 ai-classify（lemo-ops 15 分钟没更新告警，6.1），detail 只放个数和布尔。
-// 合并相近分类的提示（S7）：由客户端用 shared/logic/notes/category-merge.ts 判定并提示，本函数不写（B4 任务单待定项 7）。
+// 合并相近分类的提示（S7）：客户端用 shared/logic/notes/category-merge.ts 的 openPairs 出提示；11-13 起（R-413）本函数只负责把 AI 判的几对
+//   写进 settings notes.merge_suggest（不写通知表，B4 任务单待定项 7 照旧），本机三条规则仍由客户端判。
 // 日志只记原因码（A23）：不记标题、正文、分类名、密钥、模型原文。
 
 import { cronGate, json } from '../_shared/http.ts';
 import { nextPacificMidnight, globalQuotaKey, userQuotaKey, type QuotaStore } from '../_shared/ai/gate.ts';
 import type { AIProvider } from '../_shared/ai/provider.ts';
 import type { AiConfig } from '../_shared/ai/router.ts';
-import { classifyRequest, readItems, type PendingNote } from './request.ts';
-import { MAX_CATEGORIES, writeAi, writeManual, writeRules, type Category, type NotePatch, type Tally } from './write.ts';
+import { classifyRequest, readItems, readSimilar, type PendingNote } from './request.ts';
+import { MAX_CATEGORIES, writeAi, writeManual, writeRules, writeSimilar, type Category, type NotePatch, type Tally } from './write.ts';
 
 export const HEARTBEAT = 'ai-classify';
 /** 架构 5.2：每批最多 20 条，一次请求分完 */
@@ -59,6 +62,10 @@ export interface ClassifyStore {
   createCategory(userId: string, c: { id: string; name: string; sort: number }): Promise<void>;
   /** 带条件写回：manual = true 时只在 category_source = manual 时写，否则只在 category_source <> manual 时写；都要求还是 pending */
   writeNote(userId: string, noteId: string, patch: NotePatch, manual: boolean): Promise<void>;
+  /** settings notes.merge_suggest 这一行（R-413）：没有回 null */
+  mergeSuggest(userId: string): Promise<{ id: string; value: unknown } | null>;
+  /** 写 notes.merge_suggest：id 是已有那一行就改 value，否则用 id 新建一行 */
+  writeMergeSuggest(userId: string, id: string, value: unknown, insert: boolean): Promise<void>;
   writeHeartbeat(detail: HeartbeatDetail): Promise<void>;
 }
 
@@ -75,6 +82,8 @@ export interface RuleLogic {
   normalize(s: string): string;
   /** shared/logic/live-row.ts 的 isLiveCategory（删了的、撤销的、合并掉的分类不用） */
   isLiveCategory(c: Category): boolean;
+  /** shared/logic/notes/category-merge.ts 的 addSuggested（R-413）：存的值加上这次的几对、去掉不在 live 里的；没变回 null */
+  addSuggested(cur: unknown, add: readonly (readonly [string, string])[], live: ReadonlySet<string>): unknown[] | null;
 }
 
 export interface Deps {
@@ -246,10 +255,11 @@ export async function runRound(deps: Deps, store: ClassifyStore): Promise<Heartb
     }
 
     const canCreate = cats.length < MAX_CATEGORIES;
+    const catNames = cats.map((c) => c.name);
     aiCalls++;
     let res;
     try {
-      res = await provider.generate(classifyRequest(toAi, cats.map((c) => c.name), canCreate));
+      res = await provider.generate(classifyRequest(toAi, catNames, canCreate));
     } catch {
       res = { ok: false as const, reason: 'error' as const };
     }
@@ -270,6 +280,7 @@ export async function runRound(deps: Deps, store: ClassifyStore): Promise<Heartb
       continue;
     }
     await writeAi(deps, store, userId, toAi, cats, items, canCreate, provider.model, tally);
+    await writeSimilar(deps, store, userId, cats, readSimilar(res.json, catNames, deps.logic.normalize));
   }
 
   return {

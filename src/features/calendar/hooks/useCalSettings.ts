@@ -1,15 +1,14 @@
 // 设置 › 日历 的读写（B2 FA-3 第二段）：节假日三选一 cal.holidays、周起始 cal.week_start
 // • 读本机 settings 集合（同步下来的那一份），月历页和设置页共用；改了以后月历立刻按新值画
-// • 写经 core/setting-write.ts 的 createSettingWriter（进 outbox、本机先生效；和提醒共用一份，REMIND-settings-core）；写不进本机（切换账号中、本机库不能用）时给 error
+// • 写经 kit/hooks/useSettingWriter.ts（进 outbox、本机先生效；和提醒、随手记共用一份，REMIND-settings-core）；写不进本机（切换账号中、本机库不能用）时给 error
 // • 连点（代码审查 L6）：同一页里的写一条接一条排队；本机集合里还没出现刚 insert 的那一行时，按记下的 id patch，不再 insert 第二次
 //   （不然第二下会撞 (user_id, key) 唯一约束、进“发送失败”）——都在 createSettingWriter 里
 // • 已知限制（同 core/ai-settings.ts 的 CONSENT-sugg ②）：本机还没拉到服务器上已有的那一行就 insert，会撞 (user_id, key) 唯一约束、
 //   进“发送失败”；同步把那一行拉下来以后再选一次即可。这两个键只在设置页选过才有行，一般碰不到
-import { useCallback, useRef, useState } from 'react';
 import { resolveWeekStart, type WeekStart } from '../../../../shared/logic/calendar/cal-nav.ts';
 import type { HolidaySetting } from '../../../../shared/logic/calendar/holidays.ts';
-import { createSettingWriter } from '../../../core/setting-write.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
+import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { holidayChoice, KEY_HOLIDAYS, KEY_WEEK_START, settingValue, type SettingRow } from '../data/cal-settings.ts';
 
@@ -27,16 +26,8 @@ export function useCalHolidayChoice(): HolidaySetting {
 }
 
 export function useCalSettings(newId: () => string = () => crypto.randomUUID()) {
-  const rows = useCollection<SettingRow>('settings');
+  const { rows, save, error } = useSettingWriter(newId);
   const locale = useUi((s) => s.locale);
-  const [error, setError] = useState(false);
-  // 最新的本机行和 newId（排队中的写读它们，不读闭包里旧的那份）
-  const rowsRef = useRef(rows);
-  rowsRef.current = rows;
-  const newIdRef = useRef(newId);
-  newIdRef.current = newId;
-  const [writer] = useState(() => createSettingWriter({ rows: () => rowsRef.current, newId: () => newIdRef.current(), onResult: (ok) => setError(!ok) }));
-  const save = useCallback((key: string, value: unknown): Promise<void> => writer.save(key, value), [writer]);
 
   return {
     holidays: holidayChoice(settingValue(rows, KEY_HOLIDAYS), locale),

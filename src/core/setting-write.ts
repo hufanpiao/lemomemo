@@ -6,7 +6,7 @@
 // • 写（createSettingWriter）：经 core/write（进 outbox、本机先生效）；同一页里的写一条接一条排队；
 //   本机集合里还没出现刚 insert 的那一行时，按记下的 id patch、不再 insert 第二次（不然撞 (user_id, key) 唯一约束、进“发送失败”，代码审查 L6）。
 //   要在原值上改的（往列表里加一项）用 update：排到了才按最新值算——本页写成功、本机集合还没跟上的，按本页最后写的值算，免得连点时后一下盖掉前一下。
-//   React 那一层（各功能的 useSettingWriter / useCalSettings）只管取本机集合和 error 状态
+//   React 那一层（kit/hooks/useSettingWriter.ts，提醒、日历、随手记共用）只管取本机集合和 error 状态
 import { settingPatch } from './setting-patch.ts';
 import { write } from './write.ts';
 

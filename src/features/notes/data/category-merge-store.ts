@@ -1,10 +1,13 @@
-// 合并相近分类的本机部分（B4 S7；TC-B4-07）：哪几对该提示、用户点过“不合并”的记在 settings notes.merge_dismissed、执行合并。
-// 不变量：notes.merge_dismissed 的值是 [[小 id, 大 id], …]，最多 MERGE_DISMISSED_MAX 对，满了去最旧的；点过的一对不分方向都不再提示。
+// 合并相近分类的本机部分（B4 S7；TC-B4-07；R-413）：哪几对该提示、用户点过“不用”的记在 settings notes.merge_dismissed、执行合并。
+// 不变量：notes.merge_dismissed 的值是 [[小 id, 大 id], …]，最多 PAIRS_MAX 对，满了去最旧的；点过的一对不分方向都不再提示。
+//   要提示的 = AI 判的（settings notes.merge_suggest，ai-classify 写，这里只读）+ 本机三条规则判的，口径在 shared 的 openPairs。
 //   执行合并只写被合并分类一笔 merged_into（不软删、不逐条改随手记）：条目在读的时候由 note-list.ts 的 categoryResolver 归到留下的分类
 //   （列表、分类胶囊、编辑页的 formOf 都经它；新读 notes.category_id 的地方也必须经它）。
 // 纯 TS，不准 React（A1）
 import { isLiveCategory } from '../../../../shared/logic/live-row.ts';
-import { similarCategoryPairs, type MergePair } from '../../../../shared/logic/notes/category-merge.ts';
+import {
+  idPairs, MERGE_DISMISSED_KEY, MERGE_SUGGEST_KEY, openPairs, withPairs, type MergePair,
+} from '../../../../shared/logic/notes/category-merge.ts';
 import { saveOutcome, type SaveOutcome } from '../../../core/edit-save.ts';
 import { settingValue, type SettingRow, type SettingWriter } from '../../../core/setting-write.ts';
 import { readonlyIds } from '../../../core/store.ts';
@@ -12,47 +15,21 @@ import { write } from '../../../core/write.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { Row } from './note-list.ts';
 
-export const MERGE_DISMISSED_KEY = 'notes.merge_dismissed';
-/** 最多记几对（一对 uuid 按 jsonb 文字约 82 字节，40 对约 3.3 KB，settings.value 的库约束是 4096 字节） */
-export const MERGE_DISMISSED_MAX = 40;
+export type { MergePair };
 
-type Pair = [string, string];
-const sorted = (a: string, b: string): Pair => (a < b ? [a, b] : [b, a]);
-const same = (x: Pair, y: Pair): boolean => x[0] === y[0] && x[1] === y[1];
-
-/** 存的值 → 排好序的各对；不是数组当空，坏项丢掉 */
-export function dismissedPairs(value: unknown): Pair[] {
-  if (!Array.isArray(value)) return [];
-  const out: Pair[] = [];
-  for (const v of value as unknown[]) {
-    if (!Array.isArray(v) || v.length !== 2) continue;
-    const [a, b] = v as unknown[];
-    if (typeof a === 'string' && typeof b === 'string' && a !== '' && b !== '' && a !== b) out.push(sorted(a, b));
-  }
-  return out;
-}
-
-/** 加上 (a, b) 这一对；已有就原样返回（不产生写入） */
-export function withDismissed(list: readonly Pair[], a: string, b: string): readonly Pair[] {
-  const p = sorted(a, b);
-  if (list.some((x) => same(x, p))) return list;
-  return [...list, p].slice(-MERGE_DISMISSED_MAX);
-}
-
-/** 现在该提示的几对：活着的分类里相近的（筛活着的只在 similarCategoryPairs 里做），且没点过“不合并” */
+/** 现在该提示的几对：活着的分类里 AI 判的和本机规则判的，且没点过“不用” */
 export function openMergePairs(categories: readonly Row[], settings: readonly SettingRow[]): MergePair[] {
-  const dismissed = dismissedPairs(settingValue(settings, MERGE_DISMISSED_KEY));
   const cats = categories.map((c) => ({
     ...c,
     name: typeof c['name'] === 'string' ? c['name'] : '',
     sort: typeof c['sort'] === 'number' ? c['sort'] : 0,
   }));
-  return similarCategoryPairs(cats).filter((p) => !dismissed.some((x) => same(x, sorted(p.keep, p.merge))));
+  return openPairs(cats, idPairs(settingValue(settings, MERGE_SUGGEST_KEY)), idPairs(settingValue(settings, MERGE_DISMISSED_KEY)));
 }
 
-/** 用户点了“不合并”：记下这一对（在排到时的最新值上加，连点几对都记下） */
+/** 用户点了“不用”：记下这一对（在排到时的最新值上加，连点几对都记下） */
 export function dismissMerge(writer: Pick<SettingWriter, 'update'>, pair: Pick<MergePair, 'keep' | 'merge'>): Promise<void> {
-  return writer.update(MERGE_DISMISSED_KEY, (cur) => withDismissed(dismissedPairs(cur), pair.keep, pair.merge));
+  return writer.update(MERGE_DISMISSED_KEY, (cur) => withPairs(idPairs(cur), [[pair.keep, pair.merge]]));
 }
 
 export interface MergeDeps {

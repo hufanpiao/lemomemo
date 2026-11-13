@@ -36,4 +36,4 @@ export const VOICE_TIMEOUT_MS = 15_000;
 export const CLASSIFY_TIMEOUT_MS = 10_000;
 
 /** 提示词版本（写进 ai_meta.prompt；改提示词就升版本并重跑测试集） */
-export const PROMPT_VERSION = Object.freeze({ parse: 'parse.v3', voice: 'voice.v3', classify: 'classify.v1' });   // 11-07 由 v1 升到 v2（B3 任务单补充 R5、R6、R8）；11-10 升到 v3（R-374 中文相对时刻）
+export const PROMPT_VERSION = Object.freeze({ parse: 'parse.v3', voice: 'voice.v3', classify: 'classify.v2' });   // 11-07 由 v1 升到 v2（B3 任务单补充 R5、R6、R8）；11-10 升到 v3（R-374 中文相对时刻）；classify 11-13 升 v2（R-413 加相似分类对）

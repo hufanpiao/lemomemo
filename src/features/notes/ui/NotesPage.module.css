@@ -315,6 +315,38 @@
   opacity: 0.45;
 }
 
+/* “转成待办 / 转成日程”（R-414）：样式同 .menuItem，只是用正文色，和红色的“删除”分开 */
+.menuPlain {
+  color: var(--text);
+}
+
+/* 备注放不下时两项下面的一句“超过 2000 字，转不了” */
+.menuNote {
+  max-width: 180px;
+  margin: 0;
+  padding: 0 14px 8px;
+  color: var(--text-2);
+  font-size: var(--fs-12);
+}
+
+/* 合并分类提示（R-413，线框 MERGE）：分类胶囊下面一张浅底条，一行字 + “合并”“不用” */
+.merge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 4px;
+  padding: 8px 10px 8px 14px;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+}
+
+.mergeText {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--fs-13);
+}
+
 .group {
   margin-top: 4px;
 }

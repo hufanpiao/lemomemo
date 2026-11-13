@@ -29,7 +29,7 @@ import { useQuickAddHotkey } from '../hooks/useQuickAddHotkey.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
 import { AboutSection } from './AboutSection.tsx';
 import { AccountSection } from './AccountSection.tsx';
-import { ConfirmDialog } from './ConfirmDialog.tsx';
+import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import { NotesViewSection } from './NotesViewSection.tsx';
 import { DataSection } from './DataSection.tsx';
 import { DeleteAccountView } from './DeleteAccountView.tsx';

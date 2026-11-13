@@ -13,7 +13,7 @@ describe('ai-classify：额度（TC-B4-06）', () => {
     expect(s.rp.calls).toBe(1);
     expect(s.quota.refunds).toHaveLength(2);
     expect(s.exhausted).toBeGreaterThan(NOW);
-    expect([notes[0]?.ai_status, notes[0]?.category_id, notes[0]?.ai_meta]).toEqual(['rule', 'c', { prompt: 'classify.v1', tries: 0, retry: 'quota' }]);   // 额度用完不计次数
+    expect([notes[0]?.ai_status, notes[0]?.category_id, notes[0]?.ai_meta]).toEqual(['rule', 'c', { prompt: 'classify.v2', tries: 0, retry: 'quota' }]);   // 额度用完不计次数
     expect(notes[1]?.ai_status).toBe('pending');
     expect((await r.json()).quota_hit).toBe(true);
   });
@@ -31,7 +31,7 @@ describe('ai-classify：额度（TC-B4-06）', () => {
       const notes = [note('a1', A, '超市', { ai_meta: { tries: MAX_TRIES - 1, retry: 'error' } })];
       const s = setup({ notes, cassettes: [c] });
       await s.call();
-      expect(notes[0]?.ai_meta, c).toEqual({ prompt: 'classify.v1', tries: MAX_TRIES, retry: null });
+      expect(notes[0]?.ai_meta, c).toEqual({ prompt: 'classify.v2', tries: MAX_TRIES, retry: null });
       expect(s.exhausted, c).toBeNull();
     }
   }, 20_000);
@@ -39,9 +39,9 @@ describe('ai-classify：额度（TC-B4-06）', () => {
     const notes = [note('a1', A, '超市', { ai_meta: { tries: 1, retry: 'error' } })];
     const s = setup({ notes, cassettes: ['http-500', 'http-500'] });
     await s.call();   // 第 2 次
-    expect(notes[0]?.ai_meta).toEqual({ prompt: 'classify.v1', tries: 2, retry: 'error' });
+    expect(notes[0]?.ai_meta).toEqual({ prompt: 'classify.v2', tries: 2, retry: 'error' });
     await s.call();   // 重排后第 3 次
-    expect(notes[0]?.ai_meta).toEqual({ prompt: 'classify.v1', tries: MAX_TRIES, retry: null });
+    expect(notes[0]?.ai_meta).toEqual({ prompt: 'classify.v2', tries: MAX_TRIES, retry: null });
     const again = setup({ notes, cassettes: ['classify-ok'] });
     const body = await (await again.call()).json();
     expect([body.requeued, again.rp.calls, notes[0]?.ai_status]).toEqual([0, 0, 'rule']);
@@ -50,7 +50,7 @@ describe('ai-classify：额度（TC-B4-06）', () => {
     const notes = [note('a1', A, '超市', { ai_meta: { tries: 2, retry: 'error' } })];
     const s = setup({ notes, cassettes: ['quota'] });
     await s.call();
-    expect(notes[0]?.ai_meta).toEqual({ prompt: 'classify.v1', tries: 2, retry: 'quota' });
+    expect(notes[0]?.ai_meta).toEqual({ prompt: 'classify.v2', tries: 2, retry: 'quota' });
   });
   it('公平取数（代码审查 11-10 必改 1）：A 堆了 400 条、额度用完，B 后来的 1 条照样分到；A 每轮只占一个位置', async () => {
     const notes = [...Array.from({ length: 400 }, (_, i) => note(`a${i}`, A, `超市 ${i}`)), note('b1', B, '东京机票')];

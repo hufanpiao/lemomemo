@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import type { DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
-import { ITEM_TITLE_MAX } from '../../schema/rows.ts';
+import { ITEM_NOTE_MAX, ITEM_TITLE_MAX } from '../../schema/rows.ts';
 import { captureRow, type CaptureItem, type EventRow, type TodoRow } from '../capture-map.ts';
 import { noteHeadline } from './note-headline.ts';
 
@@ -32,12 +32,21 @@ export type ConvertTodoRow = Omit<TodoRow, 'from_note_id'> & { from_note_id: str
 /** truncated：随手记的内容没能全部放进新条（标题或备注被截短了） */
 export type ConvertRow = ({ table: 'todos'; row: ConvertTodoRow } | { table: 'events'; row: EventRow }) & { truncated: boolean };
 
+/** 转过去放进备注的那段字：标题取自正文第一行时是其余几行；那一行放不进标题时放全文，免得截掉的半行丢了 */
+function convertBody(note: { title: unknown; body: unknown }, h = noteHeadline(note.title, note.body)): string {
+  const src = h.fromBody && h.title.length > ITEM_TITLE_MAX ? str(note.body) : h.rest;
+  return src.trim() === '' ? '' : src;
+}
+
+/** 备注放不下（超过 ITEM_NOTE_MAX，即 2000 字，转过去会被截掉）：负责人 11-13 定这种不让转（R-414，界面上两项变淡）。只看备注，标题截短不算 */
+export function convertTooLong(note: { title: unknown; body: unknown }): boolean {
+  return convertBody(note).length > ITEM_NOTE_MAX;
+}
+
 /** 一条随手记 → 待办或日程的一行；标题（含取自正文的）为空返回 null */
 export function convertRow(note: { id: string; title: unknown; body: unknown }, kind: ConvertKind, ctx: ConvertCtx): ConvertRow | null {
   const h = noteHeadline(note.title, note.body);
-  // 取自正文的第一行放不进标题：备注放全文，免得截掉的半行丢了
-  const src = h.fromBody && h.title.length > ITEM_TITLE_MAX ? str(note.body) : h.rest;
-  const body = src.trim() === '' ? '' : src;
+  const body = convertBody(note, h);
   const item: CaptureItem = {
     kind, title: h.title, date: null, time: null, duration_min: null, due: null, important: false, project: null, body, short: null, anniv: null,
   };

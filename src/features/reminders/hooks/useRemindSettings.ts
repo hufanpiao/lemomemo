@@ -1,10 +1,8 @@
 // 设置 › 提醒与通知 的状态和操作（B2 FA-4）：通知开关（点按里请求权限）、提醒里写什么（remind.show_title）、免打扰（remind.dnd）、
 // 发一条测试通知（push-test）、推送被占着时“移除它”（第 105 条）、“推送需要重新打开”（R-282 ③）
-// • 写设置：排队、刚 insert 还没进本机集合的按记下的 id patch，都在 core/setting-write.ts 的 createSettingWriter（和日历共用，REMIND-settings-core）；
-//   这里只取本机集合、管 error
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { createSettingWriter } from '../../../core/setting-write.ts';
-import { useCollection } from '../../../kit/hooks/useCollection.ts';
+// • 写设置：kit/hooks/useSettingWriter.ts（和日历、随手记共用，REMIND-settings-core）
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
 import { showLocalTestNotification, type LocalTestResult } from '../../../platform/native-bridge.ts';
 import { getPushOutcome, subscribePushOutcome } from '../../../platform/push-status.ts';
 import { claimNow, enableNotifications, localInstallId, permState, pushNoticeOf, removeHolder, type PermState, type RemoveHolderResult } from '../data/push-setup.ts';
@@ -12,21 +10,8 @@ import { sendTestPush, type PushTestResult } from '../data/push-test.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { tRemind } from './useRemindT.ts';
 import {
-  dndSettingOf, dndValue, KEY_DND, KEY_SHOW_TITLE, settingValue, showTitleOf, type DndSetting, type SettingRow,
+  dndSettingOf, dndValue, KEY_DND, KEY_SHOW_TITLE, settingValue, showTitleOf, type DndSetting,
 } from '../data/remind-settings.ts';
-
-export function useSettingWriter(newId: () => string = () => crypto.randomUUID()) {
-  const rows = useCollection<SettingRow>('settings');
-  const [error, setError] = useState(false);
-  // 最新的本机行和 newId（排队中的写读它们）
-  const rowsRef = useRef(rows);
-  rowsRef.current = rows;
-  const newIdRef = useRef(newId);
-  newIdRef.current = newId;
-  const [writer] = useState(() => createSettingWriter({ rows: () => rowsRef.current, newId: () => newIdRef.current(), onResult: (ok) => setError(!ok) }));
-  const save = useCallback((key: string, value: unknown): Promise<void> => writer.save(key, value), [writer]);
-  return { rows, save, error };
-}
 
 /** 通知权限（回到前台时重读：用户可能去系统设置里改了） */
 export function usePermState(): [PermState, (p: PermState) => void] {

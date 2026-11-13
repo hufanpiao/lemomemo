@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DateStr } from '../../../shared/core/date.ts';
 import type { Tz } from '../../../shared/core/tz.ts';
-import { CONVERTED_TO_MAX, convertedToAfter, convertedToSchema, convertRow, type ConvertedTo } from '../../../shared/logic/notes/note-convert.ts';
+import { CONVERTED_TO_MAX, convertedToAfter, convertedToSchema, convertRow, convertTooLong, type ConvertedTo } from '../../../shared/logic/notes/note-convert.ts';
 import { noteHeadline } from '../../../shared/logic/notes/note-headline.ts';
 import { remindAtOf } from '../../../shared/logic/remind.ts';
 import { insertSchema } from '../../../shared/schema/rows.ts';
@@ -185,5 +185,22 @@ describe('convertedToSchema', () => {
     expect(convertedToSchema.safeParse(Array.from({ length: 21 }, (_, i) => item(i))).success).toBe(false);
     expect(convertedToSchema.safeParse([{ kind: 'note', id: uid(1) }]).success).toBe(false);
     expect(convertedToSchema.safeParse([{ kind: 'todo', id: uid(1), at: 1 }]).success).toBe(false);
+  });
+});
+
+describe('convertTooLong（R-414：备注放不下的不让转）', () => {
+  it('有标题：正文就是备注，2000 字能转、2001 字不能', () => {
+    expect(convertTooLong({ title: '长文', body: '字'.repeat(2000) })).toBe(false);
+    expect(convertTooLong({ title: '长文', body: '字'.repeat(2001) })).toBe(true);
+  });
+  it('没标题：第一行当标题、其余进备注，只按其余几行算；第一行放不进标题时备注放全文', () => {
+    expect(convertTooLong({ title: '', body: `第一行\n${'字'.repeat(2000)}` })).toBe(false);
+    expect(convertTooLong({ title: null, body: 'a'.repeat(3000) })).toBe(true);
+  });
+  it('和 convertRow 的 truncated 同一口径：判超长的正好是备注被截短的', () => {
+    for (const body of ['字'.repeat(1999), '字'.repeat(2000), '字'.repeat(2001), '😀'.repeat(1000), '😀'.repeat(1001)]) {
+      const r = convertRow({ id: NOTE_ID, title: '标题', body }, 'todo', ctx);
+      expect(convertTooLong({ title: '标题', body }), `${body.length}`).toBe(r?.truncated);
+    }
   });
 });

@@ -10,7 +10,7 @@ import { useUi } from '../../../kit/state/ui-store.ts';
 import type { DeviceNotice, DeviceView, useDevices } from '../hooks/useDevices.ts';
 import { onlineNow } from '../hooks/useOnline.ts';
 import { useSettingsT, type SettingsMsgKey } from '../hooks/useSettingsT.ts';
-import { ConfirmDialog } from './ConfirmDialog.tsx';
+import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import styles from './SettingsPage.module.css';
 
 type Devices = ReturnType<typeof useDevices>;

@@ -1,6 +1,7 @@
 // ai-classify 单测共用替身（tests/edge/ai-classify.test.ts、ai-classify-quota.test.ts）：内存假库（照 store.ts 和 private.ai_classify_pending 的条件）、
-// 内存额度、回放桩拼接、setup。服务商是真的 GeminiProvider，fetch 换成回放桩，不联网、不用真密钥。
+// 内存额度、回放桩拼接、setup；settings 只放 notes.merge_suggest（R-413）。服务商是真的 GeminiProvider，fetch 换成回放桩，不联网、不用真密钥。
 import { isLiveCategory } from '../../shared/logic/live-row.ts';
+import { addSuggested } from '../../shared/logic/notes/category-merge.ts';
 import { classifyByRules } from '../../shared/logic/notes/classify-rules.ts';
 import { normalizeForSearch } from '../../shared/logic/search.ts';
 import { GeminiProvider } from '../../supabase/functions/_shared/ai/gemini.ts';
@@ -28,8 +29,12 @@ export const cat = (id: string, user: string, name: string, o: Partial<Category>
   ({ id, user_id: user, name, sort: 0, deleted_at: null, undone: false, merged_into: null, ...o });
 
 /** 内存里的库：写回照 store.ts 的条件（还是 pending；manual 只在 manual 时写，否则只在不是 manual 时写） */
-export function fakeDb(notes: Note[], cats: (Category & { user_id: string })[]) {
+export type SettingRow = { id: string; user_id: string; key: string; value: unknown };
+
+export function fakeDb(notes: Note[], cats: (Category & { user_id: string })[], settings: SettingRow[] = []) {
   const heartbeats: HeartbeatDetail[] = [];
+  /** writeMergeSuggest 每调一次记一笔（测“没变不写”） */
+  const settingWrites: { userId: string; insert: boolean }[] = [];
   const store: ClassifyStore = {
     async requeue() {
       let n = 0;
@@ -58,9 +63,21 @@ export function fakeDb(notes: Note[], cats: (Category & { user_id: string })[]) 
       if (!x || (manual ? x.category_source !== 'manual' : x.category_source === 'manual')) return;
       Object.assign(x, patch);
     },
+    async mergeSuggest(userId) {
+      const r = settings.find((x) => x.user_id === userId && x.key === 'notes.merge_suggest');
+      return r ? { id: r.id, value: r.value } : null;
+    },
+    async writeMergeSuggest(userId, id, value, insert) {
+      settingWrites.push({ userId, insert });
+      const r = settings.find((x) => x.id === id && x.user_id === userId);
+      if (insert) {
+        if (settings.some((x) => x.user_id === userId && x.key === 'notes.merge_suggest')) throw new Error('23505');
+        settings.push({ id, user_id: userId, key: 'notes.merge_suggest', value });
+      } else if (r) r.value = value;
+    },
     async writeHeartbeat(d) { heartbeats.push(d); },
   };
-  return { store, heartbeats, notes, cats };
+  return { store, heartbeats, notes, cats, settings, settingWrites };
 }
 
 /** 额度：key → 次数；refunds 记退回 */
@@ -85,10 +102,10 @@ export const cassette = (...names: string[]): Cassette => ({
 } as Cassette);
 
 export function setup(o: {
-  notes: Note[]; cats?: (Category & { user_id: string })[]; cassettes?: string[]; consent?: (u: string) => Promise<boolean>;
+  notes: Note[]; cats?: (Category & { user_id: string })[]; settings?: SettingRow[]; cassettes?: string[]; consent?: (u: string) => Promise<boolean>;
   usable?: (u: string) => Promise<boolean>; cfg?: Partial<AiConfig>; exhaustedUntil?: number | null; secret?: string;
 }) {
-  const db = fakeDb(o.notes, o.cats ?? []);
+  const db = fakeDb(o.notes, o.cats ?? [], o.settings ?? []);
   const quota = fakeQuota();
   const rp: Replay = replay(cassette(...(o.cassettes ?? [])));
   const logs: string[] = [];
@@ -104,7 +121,7 @@ export function setup(o: {
     quota: quota.q,
     exhaustedUntil: async () => exhausted,
     markExhausted: async (u) => { exhausted = u; },
-    logic: { classifyByRules, normalize: normalizeForSearch, isLiveCategory },
+    logic: { classifyByRules, normalize: normalizeForSearch, isLiveCategory, addSuggested },
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, '0')}`,
     now: () => NOW,
     log: (c) => logs.push(c),

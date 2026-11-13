@@ -1,0 +1,38 @@
+// 随手记页的“合并分类”提示条（B4 S7，R-413；线框 MERGE：“‘读书’和‘书单’两个分类很像，合成一个吗？ 合并 / 不用”）
+// • 要提示的几对由 data/category-merge-store.ts 的 openMergePairs 算（AI 判的 notes.merge_suggest + 本机规则，去掉点过“不用”的），一次只出第一对
+// • 合并：只写被合并分类一笔 merged_into，条目读的时候归过去；不用：记进 notes.merge_dismissed，这一对以后不再提示
+// • 结果换成列表页的 ActionResult（只读出“要新版本”，写不进出错条；这一对已经没了、切换账号中不提示）
+import { useMemo } from 'react';
+import type { ActionResult } from '../../../core/action-result.ts';
+import { useCollection } from '../../../kit/hooks/useCollection.ts';
+import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
+import { dismissMerge, mergeCategories, openMergePairs, type MergePair, type MergeResult } from '../data/category-merge-store.ts';
+import type { Row } from '../data/note-list.ts';
+
+export interface MergeHint {
+  /** 留下的、合并进去的分类名 */
+  keepName: string;
+  mergeName: string;
+  merge(): Promise<ActionResult>;
+  dismiss(): Promise<void>;
+}
+
+const resultOf = (r: MergeResult): ActionResult =>
+  r.ok ? 'ok' : r.reason === 'readonly' ? 'readonly' : r.reason === 'gone' || r.reason === 'switching' ? 'silent' : 'failed';
+
+export function useMergeHint(): MergeHint | null {
+  const cats = useCollection<Row>('categories');
+  const { rows: settings, writer } = useSettingWriter();
+  const pair: MergePair | undefined = useMemo(() => openMergePairs(cats, settings)[0], [cats, settings]);
+  if (!pair) return null;
+  const name = (id: string): string => {
+    const v = cats.find((c) => c.id === id)?.['name'];
+    return typeof v === 'string' ? v : '';
+  };
+  return {
+    keepName: name(pair.keep),
+    mergeName: name(pair.merge),
+    merge: async () => resultOf(await mergeCategories(pair, cats)),
+    dismiss: () => dismissMerge(writer, pair),
+  };
+}

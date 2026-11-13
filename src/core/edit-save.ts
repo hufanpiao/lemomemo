@@ -4,6 +4,7 @@
 //   readonly（这一行带不认识的值，只读，0.27①：界面出“这条要新版本才能修改 · 更新”）、rejected（校验不过：长度、格式）
 // • 调用方义务（write.ts）：没写进去时界面提示“没保存上”并保留输入；switching 例外（页面马上跳走）
 // 纯 TS：不准 import React 和任何功能（A1）
+import { rlog } from '../platform/run-log-api.ts';
 import { OutboxRejectError } from './outbox.ts';
 import { write, type WriteFailReason, type WriteResult } from './write.ts';
 
@@ -15,8 +16,10 @@ export async function saveOutcome(f: () => Promise<WriteResult>): Promise<SaveOu
     const r = await f();
     return r.ok ? 'saved' : r.reason;
   } catch (e) {
-    if (e instanceof OutboxRejectError) return e.code === 'readonly_row' ? 'readonly' : 'rejected';
-    throw e;
+    if (!(e instanceof OutboxRejectError)) throw e;
+    // 运行日志只记拒绝码（哪条校验没过），不记写的内容；11-13 随手记转换 rejected 查不出是哪条校验，补这一行
+    rlog(`save rejected code=${e.code}`);
+    return e.code === 'readonly_row' ? 'readonly' : 'rejected';
   }
 }
 

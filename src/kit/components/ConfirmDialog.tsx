@@ -1,7 +1,8 @@
-// 设置页的确认弹层：移除设备、退出其他所有设备、退出这台设备之前先问一次（kit 的 Dialog：焦点锁定、Esc 关闭）
-import { Dialog, DialogClose } from '../../../kit/components/Dialog.tsx';
-import { FormButton } from '../../../kit/components/Form.tsx';
-import styles from './SettingsPage.module.css';
+// 确认弹层（kit 的 Dialog：焦点锁定、Esc 关闭）：设置页移除设备、退出其他所有设备、退出这台设备之前先问一次；
+// 随手记带插图的转成待办 / 日程之前先问一次（R-414，11-13 从 features/settings/ui 挪进 kit，免得各写一份）
+import { Dialog, DialogClose } from './Dialog.tsx';
+import styles from './Dialog.module.css';
+import { FormButton } from './Form.tsx';
 
 export interface ConfirmProps {
   open: boolean;

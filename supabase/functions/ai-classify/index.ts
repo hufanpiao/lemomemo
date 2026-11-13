@@ -2,7 +2,7 @@
 // 每 2 分钟由 pg_cron 经 pg_net 调一次（迁移 20261110120000_notes_ai_classify_cron.sql）。逻辑和测试见 core.ts、tests/edge/ai-classify.test.ts。
 // 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY（平台注入）；CRON_SECRET；GEMINI_API_KEY（8.4，经 _shared/ai/wire.ts 只放请求头）。
 // 用到的库对象：private.account_usable（经 _shared/auth.ts）；profiles、settings、app_config（同意、配置）；private.counters、ai_state（额度）；
-//   notes、categories、private.heartbeat（store.ts）。不直连数据库（不 import _shared/db.ts），不碰 R2。
+//   notes、categories、settings 的 notes.merge_suggest（R-413）、private.heartbeat（store.ts）。不直连数据库（不 import _shared/db.ts），不碰 R2。
 // 版本门：免查（shared/version-gate-list.ts，pg_cron 调、没有客户端版本）。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { isUsable } from '../_shared/auth.ts';
@@ -11,6 +11,7 @@ import { STORE_TIMEOUT_MS } from '../_shared/store-timeout.ts';
 import { gateDeps } from '../_shared/ai/wire.ts';
 import { aiAllowed } from '../_shared/consent.ts';
 import { isLiveCategory } from '../_shared/gen/logic/live-row.ts';
+import { addSuggested } from '../_shared/gen/logic/notes/category-merge.ts';
 import { classifyByRules } from '../_shared/gen/logic/notes/classify-rules.ts';
 import { normalizeForSearch } from '../_shared/gen/logic/search.ts';
 import { handle } from './core.ts';
@@ -37,7 +38,7 @@ Deno.serve((req) => {
     quota: g.quota,
     exhaustedUntil: g.exhaustedUntil,
     markExhausted: g.markExhausted,
-    logic: { classifyByRules, normalize: normalizeForSearch, isLiveCategory },
+    logic: { classifyByRules, normalize: normalizeForSearch, isLiveCategory, addSuggested },
     newId: () => crypto.randomUUID(),
     now: Date.now,
     log,
@@ -50,7 +51,7 @@ function unconfigured() {
   return {
     store: null, isUsable: no, consent: no, config: no, provider: () => null,
     quota: { take: no, refund: no }, exhaustedUntil: no, markExhausted: no,
-    logic: { classifyByRules: () => ({ category_id: null }), normalize: (s: string) => s, isLiveCategory },
+    logic: { classifyByRules: () => ({ category_id: null }), normalize: (s: string) => s, isLiveCategory, addSuggested },
     newId: () => crypto.randomUUID(), now: Date.now, log,
   };
 }

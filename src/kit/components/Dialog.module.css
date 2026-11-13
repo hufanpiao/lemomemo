@@ -43,6 +43,15 @@
   font-size: var(--fs-14);
 }
 
+/* ConfirmDialog.tsx 底部一排按钮（取消在左、确定在右）：原来是设置页 SettingsPage.module.css 的 .actions，随手记转换（R-414）也用，11-13 挪到这里。
+   不单开一个样式文件：多一个 CSS 分包，首屏的预加载表要多记一个文件名（比放在这里多几个字节） */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
 /* 可选：标题上面的图标（lead）和整体居中（center）。B3 S23，负责人 11-10 定：麦克风说明卡按线框 s10 加麦克风图标、文字居中；
    目前只有 MicCard 用，别的弹层不传，以上规则不变 */
 .lead {

@@ -1,4 +1,4 @@
-// ai-classify 写库那部分（代码审查 11-10 必改 3：从 core.ts 拆出来）：本机规则写回、AI 结果写回、新建分类。
+// ai-classify 写库那部分（代码审查 11-10 必改 3：从 core.ts 拆出来）：本机规则写回、AI 结果写回、新建分类、AI 判的相似分类对（R-413）。
 // 写的时候都带条件（还是 pending；manual 的只改 ai_status），用户刚好改了就不覆盖（store.ts 的 writeNote）。
 import { PROMPT_VERSION } from '../_shared/ai/params.ts';
 import type { ClassifyStore, Deps } from './core.ts';
@@ -114,6 +114,29 @@ export async function writeAi(
       }
       await writeOne(deps, store, userId, n.id, patch, false, tally, 'rule');
     }
+  }
+}
+
+/**
+ * AI 判的相似分类对（R-413）：名字换成 id（按 normalize 比；cats 是这个人现在活着的分类），加进 settings notes.merge_suggest。
+ * 存的值没变不写；读写失败只记日志（不影响这一批的分类，下一轮 AI 再给一次）
+ */
+export async function writeSimilar(deps: Deps, store: ClassifyStore, userId: string, cats: readonly Category[], names: readonly [string, string][]): Promise<void> {
+  if (names.length === 0) return;
+  const idOf = new Map(cats.map((c) => [deps.logic.normalize(c.name), c.id] as const));
+  const add: [string, string][] = [];
+  for (const [a, b] of names) {
+    const x = idOf.get(deps.logic.normalize(a));
+    const y = idOf.get(deps.logic.normalize(b));
+    if (x !== undefined && y !== undefined && x !== y) add.push([x, y]);
+  }
+  if (add.length === 0) return;
+  try {
+    const row = await store.mergeSuggest(userId);
+    const next = deps.logic.addSuggested(row?.value, add, new Set(cats.map((c) => c.id)));
+    if (next !== null) await store.writeMergeSuggest(userId, row?.id ?? deps.newId(), next, row === null);
+  } catch {
+    deps.log('merge_suggest_failed');
   }
 }
 

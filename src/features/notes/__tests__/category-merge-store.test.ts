@@ -7,9 +7,8 @@ import { OutboxRejectError } from '../../../core/outbox.ts';
 import { createSettingWriter, type SettingRow } from '../../../core/setting-write.ts';
 import { collection } from '../../../core/store.ts';
 import type { WriteResult } from '../../../core/write.ts';
-import {
-  dismissedPairs, dismissMerge, MERGE_DISMISSED_KEY, MERGE_DISMISSED_MAX, mergeCategories, openMergePairs, withDismissed, type MergeDeps,
-} from '../data/category-merge-store.ts';
+import { idPairs, MERGE_DISMISSED_KEY, MERGE_SUGGEST_KEY, PAIRS_MAX, withPairs } from '../../../../shared/logic/notes/category-merge.ts';
+import { dismissMerge, mergeCategories, openMergePairs, type MergeDeps } from '../data/category-merge-store.ts';
 import { aiMarkKept, formOf, patchOf } from '../data/note-edit.ts';
 import { categoryCounts, noteItems, type Row } from '../data/note-list.ts';
 import { boot, serverNote, setupImageTests, uid } from './note-images-kit.tsx';
@@ -27,29 +26,29 @@ const note = (id: string, category: string | null, over: Record<string, unknown>
 const jsonbText = (v: readonly (readonly [string, string])[]): string => `[${v.map(([a, b]) => `["${a}", "${b}"]`).join(', ')}]`;
 const bytes = (s: string): number => new TextEncoder().encode(s).length;
 
-describe('dismissedPairs / withDismissed', () => {
+describe('idPairs / withPairs', () => {
   it('没存、不是数组 → 空；坏项（不是两个字符串、两个一样、空串）丢掉，其余照留；反着存的读出来 id 小的在前', () => {
-    expect(dismissedPairs(undefined)).toEqual([]);
-    expect(dismissedPairs({ a: 1 })).toEqual([]);
-    expect(dismissedPairs([['b', 'a'], ['x'], ['c', 'c'], ['', 'd'], [1, 2], 'ab', ['e', 'f', 'g'], ['f', 'e']])).toEqual([['a', 'b'], ['e', 'f']]);
+    expect(idPairs(undefined)).toEqual([]);
+    expect(idPairs({ a: 1 })).toEqual([]);
+    expect(idPairs([['b', 'a'], ['x'], ['c', 'c'], ['', 'd'], [1, 2], 'ab', ['e', 'f', 'g'], ['f', 'e']])).toEqual([['a', 'b'], ['e', 'f']]);
   });
   it('(a,b) 和 (b,a) 结果相同，新的一对在最后；已有的再加 → 原样返回（同一个数组，不产生写入）', () => {
     const list: [string, string][] = [['m', 'n']];
-    expect(withDismissed(list, 'b', 'a')).toEqual([['m', 'n'], ['a', 'b']]);
-    expect(withDismissed(list, 'a', 'b')).toEqual(withDismissed(list, 'b', 'a'));
-    expect(withDismissed(list, 'n', 'm')).toBe(list);
+    expect(withPairs(list, [['b', 'a']])).toEqual([['m', 'n'], ['a', 'b']]);
+    expect(withPairs(list, [['a', 'b']])).toEqual(withPairs(list, [['b', 'a']]));
+    expect(withPairs(list, [['n', 'm']])).toBe(list);
   });
-  it(`已有 ${MERGE_DISMISSED_MAX} 对再加一对 → 仍 ${MERGE_DISMISSED_MAX} 对，原来第一对没了，新的在最后`, () => {
-    const full = Array.from({ length: MERGE_DISMISSED_MAX }, (_, i): [string, string] => [uid(i * 2), uid(i * 2 + 1)]);
-    const next = withDismissed(full, uid(999), uid(998));
-    expect(next).toHaveLength(MERGE_DISMISSED_MAX);
+  it(`已有 ${PAIRS_MAX} 对再加一对 → 仍 ${PAIRS_MAX} 对，原来第一对没了，新的在最后`, () => {
+    const full = Array.from({ length: PAIRS_MAX }, (_, i): [string, string] => [uid(i * 2), uid(i * 2 + 1)]);
+    const next = withPairs(full, [[uid(999), uid(998)]]);
+    expect(next).toHaveLength(PAIRS_MAX);
     expect(next[0]).toEqual(full[1]);
-    expect(next[MERGE_DISMISSED_MAX - 1]).toEqual([uid(998), uid(999)]);
+    expect(next[PAIRS_MAX - 1]).toEqual([uid(998), uid(999)]);
   });
   it(`封顶后的值按 jsonb 文字量不超过 4096 字节（settings.value 的库约束）`, () => {
-    const full = Array.from({ length: MERGE_DISMISSED_MAX + 5 }, (): [string, string] => [crypto.randomUUID(), crypto.randomUUID()])
-      .reduce<readonly [string, string][]>((l, [a, b]) => withDismissed(l, a, b), []);
-    expect(full).toHaveLength(MERGE_DISMISSED_MAX);
+    const full = Array.from({ length: PAIRS_MAX + 5 }, (): [string, string] => [crypto.randomUUID(), crypto.randomUUID()])
+      .reduce<readonly [string, string][]>((l, [a, b]) => withPairs(l, [[a, b]]), []);
+    expect(full).toHaveLength(PAIRS_MAX);
     expect(bytes(jsonbText(full))).toBeLessThan(4097);
   });
 });
@@ -85,6 +84,23 @@ describe('openMergePairs（TC-B4-07 出提示）', () => {
   it('留哪个按分类的 sort：sort 小的名字反而长，也留 sort 小的', () => {
     expect(openMergePairs([cat(A, '购物清单', { sort: 0 }), cat(B, '购物', { sort: 1 })], [])).toEqual([{ keep: A, merge: B, why: 'contains' }]);
     expect(openMergePairs([cat(A, '购物清单', { sort: 2 }), cat(B, '购物', { sort: 1 })], [])).toEqual([{ keep: B, merge: A, why: 'contains' }]);
+  });
+  it('R-413 AI 判的（notes.merge_suggest）：“读书”和“书单”本机规则不算像，存了这一对就出，why = ai、留 sort 小的；存反了方向也一样', () => {
+    const books = [cat(A, '书单', { sort: 2 }), cat(B, '读书', { sort: 1 })];
+    const ai = (v: unknown): SettingRow => ({ id: 's2', key: MERGE_SUGGEST_KEY, value: v, deleted_at: null, undone: false });
+    expect(openMergePairs(books, [])).toEqual([]);
+    expect(openMergePairs(books, [ai([[A, B]])])).toEqual([{ keep: B, merge: A, why: 'ai' }]);
+    expect(openMergePairs(books, [ai([[B, A]])])).toEqual([{ keep: B, merge: A, why: 'ai' }]);
+    // 点过“不用”的照样去掉；分类删了、合并掉的不出；存的是坏值当空
+    expect(openMergePairs(books, [ai([[A, B]]), set([[B, A]])])).toEqual([]);
+    expect(openMergePairs([books[0] as Row, cat(B, '读书', { merged_into: C })], [ai([[A, B]])])).toEqual([]);
+    expect(openMergePairs(books, [ai('坏值')])).toEqual([]);
+  });
+  it('R-413 AI 判的和本机规则判的是同一对：只出一次（AI 的在前）；不同的两对都出，AI 的排前面', () => {
+    const ai = (v: unknown): SettingRow => ({ id: 's2', key: MERGE_SUGGEST_KEY, value: v, deleted_at: null, undone: false });
+    expect(openMergePairs(cats, [ai([[A, B]])])).toEqual([{ keep: A, merge: B, why: 'ai' }]);
+    const four = [...cats, cat(C, '读书', { sort: 2 }), cat(uid(104), '书单', { sort: 3 })];
+    expect(openMergePairs(four, [ai([[C, uid(104)]])])).toEqual([{ keep: C, merge: uid(104), why: 'ai' }, { keep: A, merge: B, why: 'contains' }]);
   });
   it('dismissMerge：writer.update 只调一次，键是 notes.merge_dismissed，值是原有各对加上新的一对', async () => {
     const saved: [string, unknown][] = [];

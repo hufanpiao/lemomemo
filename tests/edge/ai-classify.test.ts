@@ -90,9 +90,9 @@ describe('ai-classify：送 AI 和写回', () => {
     // 第 2 条：分类名只有空白 → 本机规则（“项目”命中工作词表）
     expect([notes[2]?.ai_status, notes[2]?.category_id, notes[2]?.category_source]).toEqual(['rule', 'c-work', 'rule']);
     // 第 3 条：manual，送 AI 之前就记 done、分类不动，正文不进请求（安全审 11-10 建议 1）
-    expect([notes[3]?.ai_status, notes[3]?.category_id, notes[3]?.category_source, notes[3]?.ai_meta]).toEqual(['done', 'c-work', 'manual', { prompt: 'classify.v1', skip: 'manual' }]);
+    expect([notes[3]?.ai_status, notes[3]?.category_id, notes[3]?.category_source, notes[3]?.ai_meta]).toEqual(['done', 'c-work', 'manual', { prompt: 'classify.v2', skip: 'manual' }]);
     expect(JSON.stringify(s.rp.sent)).not.toContain('手动分好的');
-    expect(notes[0]?.ai_meta).toEqual({ prompt: 'classify.v1', model: REPLAY_MODEL });
+    expect(notes[0]?.ai_meta).toEqual({ prompt: 'classify.v2', model: REPLAY_MODEL });
     expect([body.ai, body.rule, body.manual, body.failed]).toEqual([2, 1, 1, 0]);
     expect(s.db.heartbeats).toHaveLength(1);
   });

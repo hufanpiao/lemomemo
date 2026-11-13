@@ -3,7 +3,10 @@
 // • 插图（S3）：卡片顶部的图读 note_images 集合（data/note-list.ts 的 cover、images）；输入行的“图片”“拍照”先新建一条随手记
 //   （正文是输入框里的字，可以空），再把图插进这一条（data/image-uploader.ts）
 // • 删除：软删（deleted_at），进“最近删除”（ADR-006）；撤销把它改回 null。随手记没有提醒，remind 标记一律 false
+// • 转成待办 / 日程（S8，R-414）：经 data/note-convert.ts 的 convertNote；带插图的原条保留（R-412，负责人 11-13 定），不带图的原条进“最近删除”；
+//   备注放不下（超过 2000 字）的不让转（tooLong，界面上两项变淡）
 import { useCallback, useMemo, useState } from 'react';
+import { convertTooLong, type ConvertKind } from '../../../../shared/logic/notes/note-convert.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { actionResult, type ActionResult } from '../../../core/action-result.ts';
 import { saveDeleted, saveInsert, savePatch } from '../../../core/edit-save.ts';
@@ -12,11 +15,12 @@ import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { ruleCategory } from '../data/classify.ts';
+import { convertNote, type ConvertResult } from '../data/note-convert.ts';
 import { BODY_MAX, newNoteRow } from '../data/note-edit.ts';
-import { aliveCount, categoryCounts, categoryNames, groupByDay, noteItems, type Row } from '../data/note-list.ts';
+import { aliveCount, categoryCounts, categoryNames, groupByDay, imagesByNote, noteItems, type Row } from '../data/note-list.ts';
 
 export type { NoteGroup, NoteItem } from '../data/note-list.ts';
-export type { ActionResult };
+export type { ActionResult, ConvertKind, ConvertResult };
 
 export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   const rows = useCollection<Row>('notes');
@@ -57,5 +61,21 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
 
   /** 撤销刚新建的一条（undone，界面和“最近删除”都不显示）：输入行插图时，图片行没写成，不留一条空随手记 */
   const discard = useCallback(async (id: string): Promise<ActionResult> => actionResult(await savePatch('notes', id, { undone: true, updated_at: clock.now() }, false)), []);
-  return { items, groups, counts, category: active, setCategory, add, remove, discard, total: aliveCount(rows), now, tz };
+
+  /** 转成待办 / 日程：带插图的保留原条（keepNote），结果里带上 kept 给提示条用 */
+  const convert = useCallback(
+    async (id: string, kind: ConvertKind): Promise<ConvertResult & { kept: boolean }> => {
+      const n = rows.find((x) => x.id === id);
+      const kept = imagesByNote(pics).has(id);
+      if (!n) return { ok: false, reason: 'gone', kept };
+      return { ...(await convertNote(n, kind, { now: clock.now(), tz, keepNote: kept })), kept };
+    },
+    [rows, pics, tz],
+  );
+  /** 这条转不了：备注放不下（超过 2000 字） */
+  const tooLong = useCallback((id: string): boolean => {
+    const n = rows.find((x) => x.id === id);
+    return n !== undefined && convertTooLong({ title: n['title'], body: n['body'] });
+  }, [rows]);
+  return { items, groups, counts, category: active, setCategory, add, remove, discard, convert, tooLong, total: aliveCount(rows), now, tz };
 }

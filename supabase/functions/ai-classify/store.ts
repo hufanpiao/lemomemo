@@ -1,6 +1,8 @@
 // ai-classify 的库读写（service role 的 supabase-js；架构 5.2、附录 A 的 categories 一行“客户端 + ai-classify 函数”）。
-// 只碰：public.notes（经 private.ai_classify_pending 按人读 pending、带条件写回分类）、public.categories（读、新建 AI 提议的分类）、private.heartbeat（心跳）。
+// 只碰：public.notes（经 private.ai_classify_pending 按人读 pending、带条件写回分类）、public.categories（读、新建 AI 提议的分类）、
+//   public.settings 的 notes.merge_suggest 一行（R-413：AI 判的相似分类对；只读写这一个键）、private.heartbeat（心跳）。
 // service role 绕过 RLS，所以每一句都按 user_id 自己过滤。出错一律抛错（core.ts 按条记 failed 或跳过），日志只记错误码。
+import { MERGE_SUGGEST_KEY } from '../_shared/gen/logic/notes/category-merge.ts';
 import type { ClassifyStore, HeartbeatDetail } from './core.ts';
 import { HEARTBEAT } from './core.ts';
 import type { PendingNote } from './request.ts';
@@ -73,6 +75,16 @@ export function makeStore(admin: ClassifyAdmin): ClassifyStore {
     async writeNote(userId, noteId, patch: NotePatch, manual) {
       const q = tbl(admin, 'notes').update({ ...patch }).eq('id', noteId).eq('user_id', userId).eq('ai_status', 'pending');
       must(await (manual ? q.eq('category_source', 'manual') : q.neq('category_source', 'manual')), 'note_write');
+    },
+    async mergeSuggest(userId) {
+      const d = must(await tbl(admin, 'settings').select('id, value').eq('user_id', userId).eq('key', MERGE_SUGGEST_KEY).limit(1), 'settings_read');
+      const r = Array.isArray(d) ? d[0] : null;
+      return isObj(r) && str(r['id']) ? { id: r['id'] as string, value: r['value'] ?? null } : null;
+    },
+    async writeMergeSuggest(userId, id, value, insert) {
+      // 改的时候顺带恢复（客户端不写这个键，正常不会被软删、撤销）；touch 触发器升 rev、synced_at，客户端经同步拿到
+      if (insert) must(await tbl(admin, 'settings').insert({ id, user_id: userId, key: MERGE_SUGGEST_KEY, value }), 'settings_insert');
+      else must(await tbl(admin, 'settings').update({ value, deleted_at: null, undone: false }).eq('id', id).eq('user_id', userId), 'settings_update');
     },
     async writeHeartbeat(detail: HeartbeatDetail) {
       must(await tbl(priv, 'heartbeat').upsert({ name: HEARTBEAT, at: new Date().toISOString(), detail }, { onConflict: 'name' }), 'heartbeat');
