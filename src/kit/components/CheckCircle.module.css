@@ -1,13 +1,14 @@
 /* 打勾圆圈（kit，B2 FA-5）：待办页、今天页共用。勾选完成的动效见 17.1：
-   空心圆圈（视觉稿 .done-c）；打勾时强调色圆盘从中间放大、淡入，盖满圆圈，勾号随之淡入；取消原路退回 */
+   空心圆圈（视觉稿 .done-c）；打勾时强调色圆盘从中间放大、淡入，盖满圆圈，勾号随之淡入；取消原路退回
+   圆圈直径可以由使用方在外层设 --check-size 改（默认 22px，点击区照样 44 × 44；R-350 子任务用小一号） */
 
 /* checkbox 叠在 label 外扩区（.checkBox::after）上面：点圆圈点到的是 checkbox 本身，点外扩区才经 label 转给它（不然 ::after 盖住 checkbox） */
 .check {
   position: relative;
   z-index: 1;
   grid-area: 1 / 1;
-  width: 22px;
-  height: 22px;
+  width: var(--check-size, 22px);
+  height: var(--check-size, 22px);
   margin: 0;
   border-radius: 50%;
   box-shadow: inset 0 0 0 2.5px var(--text);
@@ -32,9 +33,9 @@
   display: grid;
   flex: none;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  margin: 11px 0;
+  width: var(--check-size, 22px);
+  height: var(--check-size, 22px);
+  margin: calc((var(--hit) - var(--check-size, 22px)) / 2) 0;
 }
 
 /* 点击区外扩到 44 × 44（B2-UI-a U4-4，A8 核实原来只有 22 × 22；写法同 Settings.module.css 的 .segBtn::after）：
@@ -51,8 +52,8 @@
 
 .fill {
   grid-area: 1 / 1;
-  width: 22px;
-  height: 22px;
+  width: var(--check-size, 22px);
+  height: var(--check-size, 22px);
   border-radius: 50%;
   background: var(--accent);
   opacity: 0;

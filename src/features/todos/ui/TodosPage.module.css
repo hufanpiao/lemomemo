@@ -67,3 +67,9 @@
 .group[data-state="leaving"] {
   pointer-events: none;
 }
+
+/* 有子任务的行（R-350）：子任务那一块（SubtaskCard）折到下一行、占满整行 */
+.hasSubs {
+  flex-wrap: wrap;
+  row-gap: 0;
+}

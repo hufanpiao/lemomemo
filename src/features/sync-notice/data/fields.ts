@@ -1,6 +1,6 @@
 // “看另一台设备的版本”对话框里每一列怎么写（K8 冲突提示，方案 3.3，H3、L8）
 // • 白名单五张表的每个 clientWritable 列（shared/manifests）要么在这里有字段名和格式，要么标 'hidden'；
-//   __tests__/fields.test.ts 逐表核对，以后加列漏写会红
+//   __tests__/fields.test.ts 逐表核对，以后加列漏写会红（R-350 起六张表，加了 todo_items）
 // • 不认识的列、格式化抛错（值的类型不对）一律写“（已改过）”，不露原始 JSON；同一张卡里多列不认识只写一行
 // • 字段名文案在 ../i18n（同各编辑页的标签）；日期用 shared 的 fmtDay；不 import 任何别的功能
 // • 时刻（events.time、todos.due_time、remind_time）是“HH:MM”墙上时间，按原样写；日程的时区单独一列（tz）
@@ -49,6 +49,11 @@ export const FIELDS: Readonly<Record<NoticeTable, Readonly<Record<string, FieldS
     title: f('sn.f.title', 'text'), body: f('sn.f.body', 'text'), is_private: f('sn.f.private', 'bool'),
     category_id: f('sn.f.category', 'changed'), category_source: H, category_seen: H, tags: f('sn.f.tags', 'list'),
     converted_to: H, raw_text: f('sn.f.raw', 'text'),
+  },
+  // 待办子任务（R-350）：只有标题、勾选两列看得见；排序、所属待办不写
+  todo_items: {
+    id: H, todo_id: H, created_at: H, updated_at: H, deleted_at: H, undone: H, sort: H,
+    title: f('sn.f.title', 'text'), done: f('sn.f.done', 'bool'),
   },
   anniversaries: {
     id: H, created_at: H, updated_at: H, deleted_at: H, undone: H, ...REMIND_META,

@@ -99,6 +99,7 @@ const NOT_FIRST_PAINT: Record<string, string> = {
   'src/app/CacheTooNewScreen.tsx': '只在本机库比 App 新（version_too_new）时整屏提示用',
   'src/motion/motion-impl.tsx': '动画实现和功能包合块，main.tsx 在 appPainted() 之后下载（R-354）',
   'src/features/plus/ui/TypeBar.tsx': '“＋”点一下打开的打字条：首屏画完以后 afterAppPainted 才预先下载（app/plus-slot.tsx），没下载好就点显示“准备中”（B3 Q4）；同一块里的 Preload（小气泡、按住“＋”录音那一套，B3 FA-3）下载好以后才挂',
+  'src/features/todos/ui/today-subs.ts': 'R-350 今天页待办行下面的子任务进度：今天页的 Subs 等首屏画完（afterAppPainted）才挂，挂上才下载（在待办列表页那一包里）',
   'src/features/reminders/ui/RemindHost.tsx': '首屏画完 + 浏览器空闲以后才挂（App.tsx 首屏减重 ⑥）',
   'src/features/reminders/ui/RemindSettings.tsx': '设置页里用',
   'src/features/reminders/ui/RemindSettingsValue.tsx': '设置页里用',

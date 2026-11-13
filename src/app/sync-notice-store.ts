@@ -2,17 +2,22 @@
 // 读到的 gone 项在这里合并、排队；宿主经 SyncNoticeStore 读快照、点按。纯逻辑，不碰 DOM，测试直接调
 // • 冲突按 table:id 合并：conflicts 取并集，old 逐列取最新（L1）；名单外的表不出卡（H2）
 // • gone 从 outbox.list() 读 failed && error === 'gone'，按记录分组（H1），data 按 seq 后写覆盖先写（只用来判 undone、取标题）；
-//   名单外的静默 drop、记 sync_gone_drop（只记 coll）；合并后 undone === true 的同样 drop，不出卡（M1）
+//   名单外的静默 drop、记 sync_gone_drop（只记 coll）；名单里 gone 静默的表（GONE_QUIET_TABLES：todo_items，R-350 方案 4 第 7 条）同样；
+//   合并后 undone === true 的同样 drop，不出卡（M1）
+// • 全局运行日志（R-350 起）：出冲突卡记 sync conflict coll=表 cols=列；静默丢掉 gone 记 sync gone drop coll=表；outbox 丢掉一项（rejected）
+//   记 outbox rejected coll=表 code=码（子任务超 30 项 items_quota、主待办已不在 not_found 都在这里）。只记表名、列名、错误码，不记内容
 // • 刚恢复的那一项按 resolveGone 返回的 opId 认，连续两次读队列都不在才不再认（4.4，复审四 L1）：
 //   回 conflict 去掉 deleted_at、undone，剩下为空不出卡；回 forked 不出卡（P1）；rejected / not_found 出轻提示（P2）
 // • 按钮结果照 4.2：restored / dropped / nothing 收起；local_unavailable、closing 卡留着换“没能恢复”；switching 不提示；
 //   rejected（restore）只剩“不用了”、记 sync_gone_restore_fail（coll、code）
 import { FORK_SUFFIX } from '../../shared/sync/fork-suffix-data.ts';
+import { rlog } from '../platform/run-log-api.ts';
 import type { BootResult } from '../core/boot.ts';
 import type { OutboxEvent, OutboxItem } from '../core/outbox-types.ts';
 import type { SyncEvent, SyncLog } from '../core/sync/types.ts';
 import type { ResolveGoneResult } from '../core/write-gone.ts';
 import {
+  GONE_QUIET_TABLES,
   NOTICE_TABLES,
   type ConflictNotice, type GoneNotice, type GoneStatus, type NoticeSnapshot, type NoticeTable, type SyncNoticeStore,
 } from '../features/sync-notice/index.ts';
@@ -20,6 +25,9 @@ import {
 export function isNoticeTable(table: string): table is NoticeTable {
   return (NOTICE_TABLES as readonly string[]).includes(table);
 }
+
+/** 名单里、但 gone 不出卡的表（R-350 方案 4 第 7 条：子任务） */
+const goneQuiet = (table: string): boolean => (GONE_QUIET_TABLES as readonly string[]).includes(table);
 
 /** 卡上的标题：分类、纪念日取 name，其余取 title；去掉首尾空白，取不到或为空返回 null（卡上写“这一条”） */
 export function titleOf(table: NoticeTable, row: Readonly<Record<string, unknown>> | null | undefined): string | null {
@@ -175,7 +183,10 @@ export function createNoticeStore(deps: NoticeStoreDeps): NoticeStore {
     dropping.add(key);
     void call(table, id, 'drop')
       .then((r) => {
-        if (logIt && r.ok && r.done === 'dropped') log('sync_gone_drop', { coll: table });
+        if (logIt && r.ok && r.done === 'dropped') {
+          log('sync_gone_drop', { coll: table });
+          rlog(`sync gone drop coll=${table}`);
+        }
       })
       .finally(() => dropping.delete(key));
   };
@@ -194,7 +205,7 @@ export function createNoticeStore(deps: NoticeStoreDeps): NoticeStore {
     const next = new Map<string, GoneNotice>();
     for (const [key, g] of groups) {
       const { table, id, merged } = g;
-      if (!isNoticeTable(table)) {
+      if (!isNoticeTable(table) || goneQuiet(table)) {
         dropQuiet(table, id, true);
         continue;
       }
@@ -257,6 +268,7 @@ export function createNoticeStore(deps: NoticeStoreDeps): NoticeStore {
       if (cols.length === 0) return;
     }
     const key = `${table}:${id}`;
+    rlog(`sync conflict coll=${table} cols=${cols.join(',')}`);
     void titleFor(table, id, null).then((title) => {
       if (closed) return;
       conflicts.set(key, mergeConflict(conflicts.get(key), e, table, cols, title));
@@ -284,6 +296,7 @@ export function createNoticeStore(deps: NoticeStoreDeps): NoticeStore {
       else void readGone();
     },
     onOutbox: (e) => {
+      if (!closed && e.type === 'rejected') rlog(`outbox rejected coll=${e.item.table} code=${e.code}`);
       if (closed || e.type !== 'rejected' || e.code !== 'not_found' || !restored.has(e.item.op_id)) return;
       restored.delete(e.item.op_id);
       hardDeleted += 1;
