@@ -170,7 +170,7 @@ describe('第 0 步租约：放回、有毒项', () => {
     expect(db.queue.has(`todos:${ok.id}`)).toBe(false);                                         // 写成：删掉
     expect(db.queue.get(`todos:${bad.id}`)).toMatchObject({ attempts: 1, claimed_at: t0 });    // hold：租约留着
     expect(db.queue.get(`todos:${bad.id}`)?.claim).toBeTruthy();
-    expect(db.queue.get(`todos:${raced.id}`)).toMatchObject({ claim: null, attempts: 0 });     // 放回
+    expect(db.queue.get(`todos:${raced.id}`)).toMatchObject({ claim: null, attempts: 0, claimed_at: t0 });   // 放回（claimed_at 留着，迁移 20261113160000）
     expect(d.codes).toEqual(expect.arrayContaining([`recalc:written:todos:${ok.id.slice(0, 8)}`, `recalc:held:todos:${bad.id.slice(0, 8)}`,
       `recalc:released:todos:${raced.id.slice(0, 8)}`, 'recalc_write_failed:data']));
     expect(db.logs.filter((l) => l.act === 'recalc').map((l) => [l.item_id, l.code]).sort()).toEqual([[ok.id, 'written'], [bad.id, 'held']].sort());

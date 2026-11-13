@@ -403,6 +403,26 @@ Deno.test({ name: 'R-411 写回数据类错误（真库）：next_date 不是日
   console.log('[R411-data] 真 PostgREST 回 22007：store 抛 db:data；合格的值照常写回');
 } });
 
+// R-411 后续（迁移 20261113160000）：finish 换签名 (p_claim, p_release, p_done)。真 PostgREST 上：新 store 传处理完的名单，只删名单里的，
+// 两份都没列的留着租约；旧版只按名字传 p_claim、p_release 也调得到新函数（p_done 默认 null），照旧删这个租约里其余的
+Deno.test({ name: 'R-411 finish 处理完的名单（真库）：新 store 只删 p_done 里的、都没列的留着租约；旧版两个参数照样调得通', ...opts, async fn() {
+  const u = await mkUser('d3-done');
+  const k = crypto.randomUUID();
+  const [a, b, c] = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+  await sql`insert into private.remind_queue (table_name, id, user_id, claim, claimed_at, attempts)
+    select 'todos', x, ${u}, ${k}, now(), 1 from unnest(${[a, b, c]}::uuid[]) x`;
+  const ref = (id: string) => ({ table_name: 'todos' as const, id, user_id: u, claim: k, fresh: false, prio: 0 });
+  await baseStore.finishQueue(k, [ref(a)], [ref(b)]);
+  const state = async () => (await sql`select id, claim is null as freed, attempts, claimed_at is not null as has_at from private.remind_queue
+    where id = any(${[a, b, c]}::uuid[])`).map((r) => `${r.id === a ? 'a' : r.id === b ? 'b' : 'c'}:${r.freed}:${r.attempts}:${r.has_at}`).sort().join(',');
+  assertEquals(await state(), 'a:true:0:true,c:false:1:true', 'a 放回（claimed_at 留着）、b 删掉、都没列的 c 留着租约');
+  const { error } = await admin.schema('private').rpc('remind_queue_finish', { p_claim: k, p_release: [] });
+  assertEquals(error, null, '旧版按名字只传 p_claim、p_release 调得到新函数');
+  assertEquals(await state(), 'a:true:0:true', '旧口径：这个租约里不在 p_release 的 c 删掉');
+  await sql`delete from private.remind_queue where user_id = ${u}`;
+  console.log('[R411-done] 真 PostgREST：p_done 只删名单里的、都没列的留着；旧版两参数调用照旧删其余');
+} });
+
 Deno.test({ name: 'd3-real 收尾：删掉这次建的用户、恢复 cron 任务、放锁、关连接', ...opts, async fn() {
   // 先恢复 cron：排在最前、单独一层 try，后面 purgeTraces 抛错也不影响它（反过来它抛错也照样删数据、放锁、关连接）
   try {

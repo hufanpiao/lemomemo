@@ -47,7 +47,7 @@ describe('push-dispatch store.ts', () => {
     ];
     for (const [message, want] of cases) {
       await expect(makeStore(fakeAdmin({ data: null, error: { message } }).admin).popQueue?.(1, 180, true, 50, 5, 1), message).rejects.toThrow(want);
-      await expect(makeStore(fakeAdmin({ data: null, error: { message } }).admin).finishQueue?.('k', []), message).rejects.toThrow(want);
+      await expect(makeStore(fakeAdmin({ data: null, error: { message } }).admin).finishQueue?.('k', [], []), message).rejects.toThrow(want);
     }
   });
   it('数据类错误分开：PostgREST 回的 SQLSTATE 是 22、23 类抛 db:data（第 0 步写回记 held）；PGRST、08 连不上、57 被取消、40 死锁、没有 code 的抛 db；超时优先', async () => {
@@ -72,17 +72,18 @@ describe('push-dispatch store.ts', () => {
     expect(await one([{ user_items: -1, batch_items: '3', oldest_user_wait_s: 1.5 }])).toEqual({ queue_wait0: 0, queue_wait_batch: 0, queue_oldest_s: 0 });
     await expect(makeStore(fakeAdmin({ data: null, error: { message: 'x' } }).admin).queueStats?.()).rejects.toThrow(/^db$/);
   });
-  it('收尾：private.remind_queue_finish(p_claim, p_release)，release 只带 table_name、id；出错抛 db', async () => {
+  it('收尾：private.remind_queue_finish(p_claim, p_release, p_done)（迁移 20261113160000），两份名单都只带 table_name、id；出错抛 db', async () => {
     const { admin, chains } = fakeAdmin();
     const rel = [{ table_name: 'todos', id: 'x', user_id: 'u', claim: 'k' }];   // 带多余字段的 QueueItem：只转 table_name、id
-    await makeStore(admin).finishQueue?.('k', rel);
-    expect(chains[0]).toEqual([['rpc', 'private.remind_queue_finish', { p_claim: 'k', p_release: [{ table_name: 'todos', id: 'x' }] }]]);
+    const done = [{ table_name: 'events', id: 'y', user_id: 'u', claim: 'k', fresh: false, prio: 0 }];
+    await makeStore(admin).finishQueue?.('k', rel, done as never);
+    expect(chains[0]).toEqual([['rpc', 'private.remind_queue_finish', { p_claim: 'k', p_release: [{ table_name: 'todos', id: 'x' }], p_done: [{ table_name: 'events', id: 'y' }] }]]);
+    // 两份都空也照传 p_done: []（传了名单才不删别的；不传就是旧版“其余都删”）
+    const e = fakeAdmin();
+    await makeStore(e.admin).finishQueue?.('k', [], []);
+    expect(e.chains[0]).toEqual([['rpc', 'private.remind_queue_finish', { p_claim: 'k', p_release: [], p_done: [] }]]);
     const bad = fakeAdmin({ data: null, error: { message: 'secret detail' } });
-    await expect(makeStore(bad.admin).finishQueue?.('k', [])).rejects.toThrow(/^db$/);
-    // 写回出错的项（迁移 20261113120000）：带 hold: true 跟在放回的后面
-    const h = fakeAdmin();
-    await makeStore(h.admin).finishQueue?.('k', rel, [{ table_name: 'events', id: 'y', user_id: 'u', claim: 'k' } as never]);
-    expect(h.chains[0]).toEqual([['rpc', 'private.remind_queue_finish', { p_claim: 'k', p_release: [{ table_name: 'todos', id: 'x' }, { table_name: 'events', id: 'y', hold: true }] }]]);
+    await expect(makeStore(bad.admin).finishQueue?.('k', [], [])).rejects.toThrow(/^db$/);
   });
   it('写心跳：private.push_heartbeat_write(p_detail, p_poison)，回累计；出错、回的不是非负整数都抛 db（REMIND-poison-atomic）', async () => {
     const base = { claimed: 1, sent: 1, failed: 0, budget_hit: false, queue_ok: 1, recalc_written: 0, recalc_r336: 0, recalc_failed: 0 };

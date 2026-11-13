@@ -1,8 +1,8 @@
 // push-dispatch 第 0 步：打租约出队、重算 remind_at、按租约收尾（架构 5.3 第 0 步；方案-提醒队列重写 3.3、3.7；迁移 20261113100000）。
 // 每轮两段出队：① 单项重试（只取取过的项、一次 1 项，至多 queueRetryPops 次、只在头 queueRetryMs 毫秒）；② 新项按批（每轮都做，先全站 prio 0）。
-// 每批读行、重算、带乐观条件写回，最后 finish：放回的清租约，这一行本身写不进去的（数据类错误）留着租约（held），其余按租约删；
+// 每批读行、重算、带乐观条件写回，最后 finish：放回的清租约，处理完的按名单删，这一行本身写不进去的（数据类错误，held）两份名单都不列、留着租约；
 // 中途崩了不调 finish，租约过期后重取，取满有毒次数的由出队函数丢掉——held 和崩了走同一条路，一直写不进去的那一项取满次数就被丢掉
-// （迁移 20261113120000）。超时、连不上这类暂时的错误照旧放回，不计次数：数据库慢十几分钟不会把一批用户改的项当有毒项丢掉。
+// （迁移 20261113120000、20261113160000：只删名单里列出的，漏分类的项留着租约，不会被当成处理完删掉）。超时、连不上这类暂时的错误照旧放回，不计次数：数据库慢十几分钟不会把一批用户改的项当有毒项丢掉。
 // 每项一个结果：不是 same / gone 的记一行函数日志 recalc:<结果>:<表>:<id 前 8 位>；有毒项记 queue_poison:<表>:<id 前 8 位>；
 // prio 0 的 written、ack、r336、failed、held 和有毒项（code = poison）另进 logs（act = recalc）。
 // fresh 的待办（新建或改了截止）不传 prevRemindAt：提前量已过时回落到截止时刻（R-411 Q2）；其余一律传这一行现在的 remind_at（R1）。
@@ -68,11 +68,11 @@ export async function step0(c: RoundCtx, logs: LogRow[], overBudget: () => boole
 async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, items: readonly QueueItem[], stat: QueueStat): Promise<void> {
   const claim = items[0]?.claim;   // 同一批同一个租约号
   if (!claim) return;
-  // 收尾：release 里的放回，hold 里的留着租约，这个租约的其余项删掉（只取 table_name、id 在 store 里做）。
+  // 收尾：release 里的放回，done 里的删掉，两份都没列的留着租约（只取 table_name、id 在 store 里做）。
   // 失败不重试：租约过期以后别的轮重取，最多晚几分钟、多算一次
-  const finish = async (release: readonly QueueRef[], hold: readonly QueueRef[] = []) => {
+  const finish = async (release: readonly QueueRef[], done: readonly QueueRef[]) => {
     try {
-      await c.store.finishQueue(claim, release, hold);
+      await c.store.finishQueue(claim, release, done);
     } catch (e) {
       c.log(failCode('queue_finish_failed', e));
       stat.ok = false;
@@ -93,17 +93,17 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
   } catch (e) {
     c.log(failCode('recalc_read_failed', e));
     stat.ok = false;
-    await finish(items);   // 整批放回
+    await finish(items, []);   // 整批放回
     return;
   }
 
   const back: QueueRef[] = [];
-  const held: QueueRef[] = [];
+  const done: QueueRef[] = [];
   const tzNotes = new Map<string, string>();
   const now = c.now();
   const note = (q: QueueItem, r: RecalcResult) => {
     if (r === 'released') back.push(q);
-    else if (r === 'held') held.push(q);
+    else if (r !== 'held') done.push(q);   // held 两份名单都不列：租约留着
     if (r === 'written' || r === 'ack') stat.written++;
     else if (r === 'r336') stat.r336++;
     else if (r === 'failed') stat.failed++;
@@ -171,6 +171,6 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
   };
 
   await pool(items, c.limits.concurrency, async (q) => note(q, await one(q)));
-  await finish(back, held);
+  await finish(back, done);
   await logTzInvalid(c, logs, tzNotes, now);
 }

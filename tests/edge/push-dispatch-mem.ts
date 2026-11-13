@@ -1,5 +1,5 @@
 // push-dispatch 测试用的内存数据库（按 store.ts 那几条查询的语义实现：入队 remind_enqueue、出队 remind_queue_pop、收尾 remind_queue_finish、
-// 积压 remind_queue_stats 照迁移 20261113100000，其余照各自的迁移）和共享 logic 接线。
+// 积压 remind_queue_stats 照迁移 20261113100000、20261113160000，其余照各自的迁移）和共享 logic 接线。
 // LOGIC 和 supabase/functions/push-dispatch/index.ts 的 LOGIC 同一写法（那边从 _shared/gen 引，这里直接引 shared/）。
 // 推送服务用测试开发的替身 tests/fakes/push-service.ts（进程内 fake.fetch）；造数据按“少量设备、每台多条”（替身复核 N1）。
 import { msAt, parseHm } from '../../shared/core/date.ts';
@@ -251,9 +251,9 @@ export class MemDb implements DispatchStore {
     return total;
   }
   /**
-   * 照 remind_queue_pop（迁移 20261113100000）：只取没被租的或租约过期的、min_ver ≤ ver 的；retry 只取取过的（attempts ≥ 1）、一次 1 项，
+   * 照 remind_queue_pop（迁移 20261113100000、20261113160000）：只取没被租的或租约过期的、min_ver ≤ ver 的；retry 只取取过的（attempts ≥ 1）、一次 1 项，
    * 否则只取新项（attempts = 0）、≤ 500。人从队列项取（孤儿照常出队），只要可用账号的；每人按 (prio, 表, id) 编号、留前 perUser 条；
-   * 排序：重试按 attempts、claimed_at（空的最先），新项按 (prio, 编号, 表, id)。取满 poison 次的删掉、以 claim 为空返回
+   * 排序：重试按 attempts、claimed_at（放回保留 claimed_at，空的只剩旧数据、排最后），新项按 (prio, 编号, 表, id)。取满 poison 次的删掉、以 claim 为空返回
    */
   async popQueue(limit: number, leaseS: number | null = 180, retry = false, perUser = POP_PER_USER, poison = POISON_AT, ver = 0): Promise<QueueItem[]> {
     this.check('popQueue');
@@ -276,7 +276,7 @@ export class MemDb implements DispatchStore {
       x.rn = (rank.get(x.u) ?? 0) + 1;
       rank.set(x.u, x.rn);
     }
-    const cat = (x: C) => (x.q.claimed_at ?? -Infinity);
+    const cat = (x: C) => (x.q.claimed_at ?? Infinity);
     const cand = all.filter((x) => x.rn <= per)
       .sort((a, b) => (retry ? (a.q.attempts ?? 0) - (b.q.attempts ?? 0) || cat(a) - cat(b) : 0)
         || a.pr - b.pr || a.rn - b.rn || cmpS(a.q.table_name, b.q.table_name) || cmpS(a.q.id, b.q.id))
@@ -307,17 +307,17 @@ export class MemDb implements DispatchStore {
     const oldest = p0.length ? Math.min(...p0.map((q) => q.enqueued_at ?? 0)) : now;
     return { queue_wait0: p0.length, queue_wait_batch: qs.length - p0.length, queue_oldest_s: Math.max(0, Math.floor((now - oldest) / 1000)) };
   }
-  /** remind_queue_finish（迁移 20261113120000）：release 里还是这个租约的放回（清租约、attempts − 1）；hold 里的不放回也不删（租约、attempts 原样，
-   *  等过期重取）；这个租约的、两份名单里都没有的删掉（锁着没放回的 release 项也不删，留着租约走重试）；锁着的（locked）都跳过、租约留着 */
-  async finishQueue(claim: string, release: readonly QueueRef[], hold: readonly QueueRef[] = []) {
+  /** remind_queue_finish（迁移 20261113160000，store 一律传 done）：release 里还是这个租约的放回（清租约、attempts − 1，claimed_at 留着）；
+   *  done 里还是这个租约的删掉；两份都没列的不动（租约、attempts 原样，等过期重取）；锁着的（locked）都跳过、租约留着 */
+  async finishQueue(claim: string, release: readonly QueueRef[], done: readonly QueueRef[]) {
     this.check('finishQueue');
-    const keep = new Set([...release, ...hold].map((r) => `${r.table_name}:${r.id}`));
     for (const r of release) {
       const k = `${r.table_name}:${r.id}`;
       const q = this.queue.get(k);
-      if (q && q.claim === claim && !this.locked.has(k)) this.queue.set(k, { ...q, claim: null, claimed_at: null, attempts: Math.max((q.attempts ?? 0) - 1, 0) });
+      if (q && q.claim === claim && !this.locked.has(k)) this.queue.set(k, { ...q, claim: null, attempts: Math.max((q.attempts ?? 0) - 1, 0) });
     }
-    for (const [k, q] of this.queue) if (q.claim === claim && !this.locked.has(k) && !keep.has(k)) this.queue.delete(k);
+    const del = new Set(done.map((r) => `${r.table_name}:${r.id}`));   // 按项的 (表, id) 认，和 SQL 一样（测试里有键名和 id 不一致的手造项）
+    for (const [k, q] of this.queue) if (q.claim === claim && !this.locked.has(k) && del.has(`${q.table_name}:${q.id}`)) this.queue.delete(k);
   }
   async rows(table: Table, ids: readonly string[]) {
     this.check('rows');

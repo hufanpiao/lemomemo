@@ -6,7 +6,7 @@
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import type { DispatchStore } from './core.ts';
-import { DB_DATA, DB_TIMEOUT, LOG_SRC, SETTING_KEYS, TABLES, type DeviceRow, type ItemRow, type Profile, type QueueItem, type Table, type UserSettings } from './round.ts';
+import { DB_DATA, DB_TIMEOUT, LOG_SRC, SETTING_KEYS, TABLES, type DeviceRow, type ItemRow, type Profile, type QueueItem, type QueueRef, type Table, type UserSettings } from './round.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Admin = SupabaseClient<any, any, any>;
@@ -87,10 +87,10 @@ export function makeStore(admin: Admin): DispatchStore {
         p_limit: limit, p_lease_s: leaseS, p_retry: retry, p_per_user: perUser, p_poison: poison, p_ver: ver,
       })) as QueueItem[];
     },
-    async finishQueue(claim, release, hold = []) {
-      // hold 的元素带 hold: true（迁移 20261113120000）：finish 不放回也不删；没有 hold 时 p_release 和原来一字不差
-      const p_release = [...release.map((x) => ({ table_name: x.table_name, id: x.id })), ...hold.map((x) => ({ table_name: x.table_name, id: x.id, hold: true }))];
-      const { error } = await priv.rpc('remind_queue_finish', { p_claim: claim, p_release });
+    async finishQueue(claim, release, done) {
+      // 迁移 20261113160000：传处理完的名单 p_done，只删名单里的；两份都没列的留着租约（不再靠“其余都删”）
+      const ref = (x: QueueRef) => ({ table_name: x.table_name, id: x.id });
+      const { error } = await priv.rpc('remind_queue_finish', { p_claim: claim, p_release: release.map(ref), p_done: done.map(ref) });
       if (error) throw dbError(error);
     },
     async queueStats() {

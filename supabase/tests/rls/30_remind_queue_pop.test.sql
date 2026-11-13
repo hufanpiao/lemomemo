@@ -3,12 +3,14 @@
 -- 4 个入队入口重新入队时清租约、attempts 清零；取过的项按重试一项一项出队，新项另外按批出队、互不挡（11-04 审查返工 H1、L2、S2；11-05 安全复审 N1）。B2 任务单 BE-2 第 0 步、K3-remind-orphan、TC-DEL-remind_queue；架构 5.3 第 0 步、0.42 第 1 条、0.49 第 3 条。
 -- R-411 迁移 20261113100000（方案 docs/10-架构/方案-提醒队列重写.md 5.2 T12～T17、T22）：出队换成 (int, int, boolean, int, int, smallint)、多返回 fresh；
 -- 队列带 user_id（外键级联）、prio、min_ver、fresh、enqueued_at；入队只经 remind_enqueue；孤儿不再在出队里删，带着 user_id 照常出队；跨用户先取 prio 0。
--- 迁移 20261113120000：finish 的 p_release 元素带 hold: true 的不放回也不删（第 0 步写回出错的项，计入有毒次数），见文件末尾。
+-- 迁移 20261113120000：finish 的 p_release 元素带 hold: true 的不放回也不删（第 0 步写回出错的项，计入有毒次数）；
+-- 迁移 20261113160000 换成 finish(uuid, jsonb, jsonb)：传处理完的名单 p_done 时只删名单里的，都没列的留着租约（hold 作废）；放回保留 claimed_at；
+-- 出队、积压统计按顺序判 account_usable（出队够数就停、统计每人一次），见文件末尾。
 -- 函数一侧的重算、写回、放回、finish 在 tests/edge/push-dispatch-step0.test.ts。
 -- 用户：seed 的 A、B 可用，C 是管理员停用；这里另加一个冷静期的 D（disabled_reason = deletion）。
 -- 同一个事务里 now() 不变：租约过期用“把 claimed_at 往前改”来造。
 begin;
-select plan(92);
+select plan(105);
 \ir _helpers.psql
 select tests.seed();
 
@@ -27,22 +29,25 @@ select ok(tests.try_as('anon', null, $$select private.remind_queue_finish(null, 
 select ok(tests.try_as('authenticated', 'aaaaaaaa-0000-4000-8000-000000000001', $$select private.remind_queue_finish(null, null)$$, null,
   'aaaaaaaa-5555-4000-8000-000000000001') like '42501%', 'remind_queue_finish：authenticated 没有执行权');
 select ok(not exists (select 1 from pg_proc p, aclexplode(p.proacl) a
-   where p.oid = 'private.remind_queue_finish(uuid, jsonb)'::regprocedure and a.grantee = 0 and a.privilege_type = 'EXECUTE'),
+   where p.oid = 'private.remind_queue_finish(uuid, jsonb, jsonb)'::regprocedure and a.grantee = 0 and a.privilege_type = 'EXECUTE'),
   'remind_queue_finish：PUBLIC 没有执行权');
-select ok(has_function_privilege('service_role', 'private.remind_queue_finish(uuid, jsonb)', 'EXECUTE'), 'remind_queue_finish：service_role 能执行');
+select ok(has_function_privilege('service_role', 'private.remind_queue_finish(uuid, jsonb, jsonb)', 'EXECUTE'), 'remind_queue_finish：service_role 能执行');
 
 -- ② 定义者、search_path 置空、lock_timeout 5s、属主 postgres；返回值多了 claim
 select is((select string_agg(p.oid::regprocedure::text, ',' order by p.proname) from pg_proc p
    where p.pronamespace = 'private'::regnamespace and p.proname in ('remind_queue_pop', 'remind_queue_finish')
      and p.prosecdef and pg_get_userbyid(p.proowner) = 'postgres'
      and p.proconfig @> array['search_path=""', 'lock_timeout=5s'] and cardinality(p.proconfig) = 2),
-  'private.remind_queue_finish(uuid,jsonb),private.remind_queue_pop(integer,integer,boolean,integer,integer,smallint)',
+  'private.remind_queue_finish(uuid,jsonb,jsonb),private.remind_queue_pop(integer,integer,boolean,integer,integer,smallint)',
   '两个函数各只有一个签名：security definer、search_path 置空、lock_timeout=5s、属主 postgres');
 select is(pg_get_function_result('private.remind_queue_pop(int, int, boolean, int, int, smallint)'::regprocedure), 'TABLE(table_name text, id uuid, user_id uuid, claim uuid, fresh boolean, prio smallint)',
   '返回 table(table_name text, id uuid, user_id uuid, claim uuid, fresh boolean, prio smallint)（R-411 多返回 fresh、prio；旧版 push-dispatch 按名字取前四列）');
 select is(pg_get_function_arguments('private.remind_queue_pop(int, int, boolean, int, int, smallint)'::regprocedure),
   'p_limit integer, p_lease_s integer, p_retry boolean, p_per_user integer DEFAULT 50, p_poison integer DEFAULT 5, p_ver smallint DEFAULT 0',
   '新加的三个参数都带默认值（旧版按名字传三个参数照跑）');
+select is(pg_get_function_arguments('private.remind_queue_finish(uuid, jsonb, jsonb)'::regprocedure),
+  'p_claim uuid, p_release jsonb, p_done jsonb DEFAULT NULL::jsonb',
+  'finish 换签名（20261113160000）：p_done 带默认值 null，旧版按名字只传 p_claim、p_release 照跑；旧签名 (uuid, jsonb) 已删（上一条只剩这一个）');
 select is((select string_agg(column_name || ':' || data_type || ':' || is_nullable || ':' || coalesce(column_default, ''), ',' order by ordinal_position)
    from information_schema.columns where table_schema = 'private' and table_name = 'remind_queue'),
   'table_name:text:NO:,id:uuid:NO:,claim:uuid:YES:,claimed_at:timestamp with time zone:YES:,attempts:smallint:NO:0,'
@@ -289,7 +294,7 @@ select is((select string_agg(r || ':' || tn || ':' || right(id::text, 2), ',') f
 select is((select count(*)::int from private.remind_queue), 0, '8 轮以后队列清空：ev、innocent 处理完删掉，bad 被丢掉');
 
 -- ⑯ 重试项挡不住新项（11-05 安全复审 N1）：A2 有 30 项取过、租约过期的重试项，B 新改了一项。新项按批出队只取 B 的新项、
---    不管有没有重试项；单项重试只取重试项、一次 1 项。同样次数的重试项按 claimed_at 先来先到（空的最先），不按 id
+--    不管有没有重试项；单项重试只取重试项、一次 1 项。同样次数的重试项按 claimed_at 先来先到，不按 id（20261113160000 起放回保留 claimed_at，不再插到最前）
 insert into private.remind_queue (table_name, id, user_id, claim, claimed_at, attempts)
   select 'todos', t.id, t.user_id, gen_random_uuid(), now() - interval '1 hour', 1 from public.todos t
    where t.user_id = 'abababab-0000-4000-8000-000000000002' order by t.id limit 30;
@@ -305,9 +310,15 @@ select is((select string_agg(right(id::text, 2), ',') from private.remind_queue_
   '同样 attempts 1：A 两小时前取走的那项排在 A2 一小时前取走的 29 项前面（先来先到，不按 id）');
 create temp table rel as select id from private.remind_queue
  where id::text like '00000000-%' and claimed_at < now() - interval '30 minutes' order by id desc limit 1;
-update private.remind_queue set claim = null, claimed_at = null where id = (select id from rel);
-select is((select string_agg(p.id::text, ',') from private.remind_queue_pop(500, 180, true) p), (select id::text from rel),
-  '放回过的（claimed_at 为空、attempts 1）排在租约过期的前面，即使它的 id 最大');
+create temp table rel_next as select id from private.remind_queue
+ where id::text like '00000000-%' and claimed_at < now() - interval '30 minutes' and id <> (select id from rel) order by id limit 1;
+update private.remind_queue set attempts = 2 where id = (select id from rel);
+select private.remind_queue_finish((select claim from private.remind_queue where id = (select id from rel)),
+  jsonb_build_array(jsonb_build_object('table_name', 'todos', 'id', (select id from rel))), '[]');
+select is((select (claim is null)::text || ':' || (claimed_at = now() - interval '1 hour')::text || ':' || attempts from private.remind_queue where id = (select id from rel)),
+  'true:true:1', '放回清租约、attempts 2 → 1，claimed_at 留着（最近一次被取走的时刻）');
+select is((select string_agg(p.id::text, ',') from private.remind_queue_pop(500, 180, true) p), (select id::text from rel_next),
+  '放回过的（id 最大）不插队：和其余同一时刻取走、同样 attempts 的一起按 id 排，取到的是 id 最小的那项');
 
 -- 账号不可用的重试项不交出去：D 停用（冷静期），它的项 attempts = 2、租约过期
 delete from private.remind_queue;
@@ -391,31 +402,49 @@ select is((select p.prosecdef::text || ':' || array_to_string(p.proconfig, ',') 
   'true:search_path="",lock_timeout=5s', 'remind_queue_stats：security definer、search_path 置空、lock_timeout=5s');
 select ok(has_function_privilege('service_role', 'private.remind_queue_stats()', 'EXECUTE'), 'remind_queue_stats：service_role 能执行');
 
--- 写回出错留着租约（迁移 20261113120000，R-411 后续）：p_release 里带 hold: true 的不放回、不删，租约、claimed_at、attempts 原样；
--- 不带 hold（或 hold 为 false）的照旧放回，没列出的照旧删。留着的和“中途崩了”一样：没过期谁都不取，过期后按重试取、attempts 加 1，取满有毒次数被丢掉
+-- 处理完的名单（迁移 20261113160000，R-411 后续）：传了 p_done 只删名单里的；p_release 里的放回（claimed_at 留着）；两份都没列的
+-- （第 0 步写回遇到数据类错误的项）租约、claimed_at、attempts 原样，和“中途崩了”一样：没过期谁都不取，过期后按重试取、attempts 加 1，取满有毒次数被丢掉
 delete from private.remind_queue;
 insert into private.remind_queue (table_name, id, user_id) values
   ('todos', '00000000-0000-4000-8000-0000000000c1', 'aaaaaaaa-0000-4000-8000-000000000001'),
   ('todos', '00000000-0000-4000-8000-0000000000c2', 'aaaaaaaa-0000-4000-8000-000000000001'),
-  ('todos', '00000000-0000-4000-8000-0000000000c3', 'aaaaaaaa-0000-4000-8000-000000000001');
+  ('todos', '00000000-0000-4000-8000-0000000000c3', 'aaaaaaaa-0000-4000-8000-000000000001'),
+  ('todos', '00000000-0000-4000-8000-0000000000c6', 'aaaaaaaa-0000-4000-8000-000000000001');
 create temp table got8 as select * from private.remind_queue_pop(500, 180, false);
 select private.remind_queue_finish((select claim from got8 limit 1),
-  '[{"table_name": "todos", "id": "00000000-0000-4000-8000-0000000000c1", "hold": true}, {"table_name": "todos", "id": "00000000-0000-4000-8000-0000000000c2", "hold": false}]');
-select is((select string_agg(right(q.id::text, 2) || ':' || coalesce(q.claim = g.claim, false)::text || ':' || q.attempts || ':' || (q.claimed_at is not null)::text, ',' order by q.id)
+  '[{"table_name": "todos", "id": "00000000-0000-4000-8000-0000000000c2"}, {"table_name": "todos", "id": "00000000-0000-4000-8000-0000000000c6"}]',
+  '[{"table_name": "todos", "id": "00000000-0000-4000-8000-0000000000c3"}, {"table_name": "todos", "id": "00000000-0000-4000-8000-0000000000c6"}]');
+select is((select string_agg(right(q.id::text, 2) || ':' || coalesce(q.claim = g.claim, false)::text || ':' || q.attempts || ':' || (q.claimed_at = now())::text, ',' order by q.id)
    from private.remind_queue q left join (select distinct claim from got8) g on true),
-  'c1:true:1:true,c2:false:0:false',
-  'finish 带 hold：c1 租约、attempts 原样留着；c2（hold 为 false）放回、attempts 1 → 0；没列出的 c3 删了');
+  'c1:true:1:true,c2:false:0:true,c6:false:0:true',
+  'finish 传 p_done：都没列的 c1 租约、attempts 原样留着；c2 放回（attempts 1 → 0、claimed_at 留着）；c3 删了；两份都列的 c6 按放回、不删');
+select is(tests.try_as('postgres', null, $$select private.remind_queue_finish(gen_random_uuid(), '[]', '{"table_name": "todos"}')$$), 'P0001 bad_done',
+  'p_done 不是数组：报 bad_done');
+-- p_done 里列了别人租约的项、没被租的项：不删
+update private.remind_queue set claim = gen_random_uuid() where id = '00000000-0000-4000-8000-0000000000c6';
+select private.remind_queue_finish((select claim from got8 limit 1), '[]',
+  '[{"table_name": "todos", "id": "00000000-0000-4000-8000-0000000000c2"}, {"table_name": "todos", "id": "00000000-0000-4000-8000-0000000000c6"}]');
+select is((select string_agg(right(id::text, 2), ',' order by id) from private.remind_queue), 'c1,c2,c6', 'p_done 只删还是这个租约的：放回了的 c2、别人租约的 c6 都不删');
+delete from private.remind_queue where id = '00000000-0000-4000-8000-0000000000c6';
 select is((select count(*)::int from private.remind_queue_pop(500, 180, true) where id = '00000000-0000-4000-8000-0000000000c1'), 0,
   '留着租约的项没过期：重试出队也不取');
 update private.remind_queue set claimed_at = now() - interval '181 seconds' where id = '00000000-0000-4000-8000-0000000000c1';
 create temp table got9 as select * from private.remind_queue_pop(500, 180, true, 50, 2);
 select is((select string_agg(right(g.id::text, 2) || ':' || (g.claim is not null)::text || ':' || q.attempts, ',') from got9 g join private.remind_queue q on q.id = g.id),
   'c1:true:2', '过期后按重试取到、换新租约，attempts 1 → 2（计入有毒次数）');
-select private.remind_queue_finish((select claim from got9), '[{"table_name": "todos", "id": "00000000-0000-4000-8000-0000000000c1", "hold": true}]');
+select private.remind_queue_finish((select claim from got9), '[]', '[]');
 update private.remind_queue set claimed_at = now() - interval '181 seconds' where id = '00000000-0000-4000-8000-0000000000c1';
 select is((select string_agg(right(id::text, 2) || ':' || (claim is null)::text, ',') from private.remind_queue_pop(500, 180, true, 50, 2)), 'c1:true',
-  '又写回出错、留着；再过期时已取满 p_poison（2）次：出队丢掉、以 claim 为空返回');
+  '又写回出错、两份都没列；再过期时已取满 p_poison（2）次：出队丢掉、以 claim 为空返回');
 select is((select string_agg(right(id::text, 2), ',' order by id) from private.remind_queue), 'c2', '有毒的 c1 已删，放回的 c2 还在');
+-- 旧版 push-dispatch（不传 p_done）：这个租约里不在 p_release 的照旧删；20261113120000 的 hold: true 不再认，按放回处理
+delete from private.remind_queue;
+insert into private.remind_queue (table_name, id, user_id) values
+  ('todos', '00000000-0000-4000-8000-0000000000c7', 'aaaaaaaa-0000-4000-8000-000000000001'), ('todos', '00000000-0000-4000-8000-0000000000c8', 'aaaaaaaa-0000-4000-8000-000000000001');
+create temp table got11 as select * from private.remind_queue_pop(500, 180, false);
+select private.remind_queue_finish((select claim from got11 limit 1), '[{"table_name": "todos", "id": "00000000-0000-4000-8000-0000000000c7", "hold": true}]');
+select is((select string_agg(right(id::text, 2) || ':' || (claim is null)::text || ':' || attempts, ',' order by id) from private.remind_queue), 'c7:true:0',
+  '旧版两参数调用：带 hold 的 c7 放回（attempts 1 → 0），没列出的 c8 删了');
 -- 放回那句没放回成（真实场景是行被用户事务锁着、skip locked 跳过，删除那句时锁已放开；单会话造不出，用一个只挡这一行 update 的触发器代替）：
 -- 列在 p_release 里的一律不删，留着租约走重试（独立评审建议 1；原来会被当成处理完删掉）
 delete from private.remind_queue;
@@ -434,5 +463,48 @@ select is((select string_agg(right(q.id::text, 2) || ':' || coalesce(q.claim = g
    from private.remind_queue q left join (select distinct claim from got10) g on true),
   'c4:true:1', '放回没成的 c4 不删、租约和 attempts 留着（过期后重试）；没列出的 c5 照旧删');
 
+
+-- 判可用账号的次数（迁移 20261113160000，R-411 后续，独立评审建议 11、方案 3.7 第 ② 条）：pg_stat_xact_user_functions 记本事务里的调用次数。
+-- 原写法 (select distinct uid …) where account_usable(uid) 的条件被推进 distinct 子查询，对每一项各调一次；remind_enqueue('all', …) 以后每轮上万次。
+-- 300 个可用账号（⑰ T13 建的 e 开头那批）各 4 条批量项，共 1200 条
+delete from private.remind_queue;
+set local track_functions = 'all';
+insert into private.remind_queue (table_name, id, user_id, prio)
+  select 'todos', gen_random_uuid(), format('e%s-0000-4000-8000-000000000000', lpad((i % 300 + 1)::text, 7, '0'))::uuid, 1 from generate_series(1, 1200) i;
+create temp table au_calls (k text primary key, n bigint);
+create function tests.au_mark(p_k text) returns void language sql as $$
+  insert into au_calls values (p_k, coalesce((select calls from pg_stat_xact_user_functions where schemaname = 'private' and funcname = 'account_usable'), 0))
+$$;
+create function tests.au_diff(p_a text, p_b text) returns int language sql as $$
+  select (b.n - a.n)::int from au_calls a, au_calls b where a.k = p_a and b.k = p_b
+$$;
+select tests.au_mark('s0');
+select is((select user_items || ':' || batch_items from private.remind_queue_stats()), '0:1200', '积压统计：1200 条批量项都算上');
+select tests.au_mark('s1');
+select is(tests.au_diff('s0', 's1'), 300, '积压统计：300 个人各判一次（不是每一项判一次的 1200）');
+select tests.au_mark('p0');
+select is((select count(*)::int || ':' || count(distinct user_id)::int from private.remind_queue_pop(100, 180, false)), '100:100', '出队 100 条：先取每人第 1 条');
+select tests.au_mark('p1');
+select is(tests.au_diff('p0', 'p1'), 100, '出队按顺序判、够 100 条就停：判 100 次（不是 1200 次）');
+update private.remind_queue set claim = gen_random_uuid(), claimed_at = now() - interval '1 hour', attempts = 1 where claim is null;
+select tests.au_mark('r0');
+select is((select count(*)::int from private.remind_queue_pop(1, 180, true)), 1, '单项重试取 1 项');
+select tests.au_mark('r1');
+select is(tests.au_diff('r0', 'r1'), 1, '单项重试只判 1 次（不是 1100 次）');
+-- 排在最前的不可用账号：跳过它们的项、接着往后判，照样取满；不可用的一条不交出去
+delete from private.remind_queue;
+insert into auth.users (id, email)
+  select format('cd%s-0000-4000-8000-000000000000', lpad(i::text, 6, '0'))::uuid, format('cd%s@test.local', i) from generate_series(1, 5) i;
+insert into public.profiles (user_id, disabled_at, disabled_reason)
+  select format('cd%s-0000-4000-8000-000000000000', lpad(i::text, 6, '0'))::uuid, now(), 'deletion' from generate_series(1, 5) i;
+insert into private.remind_queue (table_name, id, user_id, prio)
+  select 'todos', gen_random_uuid(), format('cd%s-0000-4000-8000-000000000000', lpad((i % 5 + 1)::text, 6, '0'))::uuid, 0 from generate_series(1, 20) i;
+insert into private.remind_queue (table_name, id, user_id, prio)
+  select 'todos', gen_random_uuid(), format('e%s-0000-4000-8000-000000000000', lpad((i % 300 + 1)::text, 7, '0'))::uuid, 1 from generate_series(1, 1200) i;
+select tests.au_mark('d0');
+select is((select count(*)::int || ':' || count(*) filter (where user_id::text like 'cd%')::int from private.remind_queue_pop(10, 180, false)), '10:0',
+  '冷静期账号的 20 条 prio 0 排在最前：一条不交出去，照样取满 10 条可用账号的');
+select tests.au_mark('d1');
+select is(tests.au_diff('d0', 'd1'), 30, '判 30 次：排在前面的 20 条不可用的各判一次，加上取到的 10 条');
 select * from finish();
 rollback;
