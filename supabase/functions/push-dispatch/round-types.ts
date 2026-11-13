@@ -130,7 +130,7 @@ export interface RoundStore {
    * 所以“读完以后用户又改了”靠 rev 判（R-411 整块评审必改 1）；remind_at 条件挡的是别的系统写入抢先写过。
    * 没更新到 = 读完以后行被改了（用户改的话触发器已重新入队），调用方放回队列、这一轮不推
    */
-  writeRemind(table: Table, id: string, userId: string, patch: { remind_at: number | null; next_date?: string | null }, prev: { remind_at: number | null; rev: number }): Promise<boolean>;
+  writeRemind(table: Table, id: string, userId: string, patch: RemindPatch, prev: { remind_at: number | null; rev: number }): Promise<boolean>;
   /**
    * 第 1 步：private.remind_due(lo, hi, perUser, limit)——三张表合起来在 SQL 里按 isDue 的条件精确判断（安全审查必改 1、代码审查 M2：
    * 粗筛按 remind_at 取前 500 会被“remind_at 很早、snooze_at 很远”的行或推过的行占满），只回可用账号的，每人最多 perUser 条，
@@ -164,6 +164,8 @@ export interface NotifyInputLike {
 export type Dnd = { start: string; end: string } | null;
 export interface AnnivCtx { tz: string; now: number; settings: UserSettings }
 export interface AnnivNext { remind_at: number | null; next_date: string | null }
+/** 第 0 步、第 6 步写回的列：纪念日另有 next_date；archived_at 只会写成 null（已归档的倒数日改到以后，整块评审第 17 条） */
+export interface RemindPatch { remind_at: number | null; next_date?: string | null; archived_at?: null }
 
 export interface RoundLogic {
   /** shared/logic/remind.ts 的 REMIND_RULES_VER：出队传给 p_ver（规则改了迁移里全量入队、min_ver 记新版本，旧版函数拿不到） */
@@ -187,6 +189,8 @@ export interface RoundLogic {
    * 第 0 步按 ctx.now = 现在调；第 6 步推过以后按 ctx.now = 这次 due_at + 1 调，取再下一次。回 null = 还没实现 / 不改
    */
   annivNext(row: ItemRow, ctx: AnnivCtx): AnnivNext | null;
+  /** date 这一天（按 tz）在 now 时已经整天过完（第 0 步判断已归档的倒数日改到以后要不要清 archived_at，整块评审第 17 条） */
+  dayOver(date: string, tz: string, now: number): boolean;
   /**
    * “同一次提醒”的标识（REMIND-close-occkey：shared/logic/remind-route.ts 的 occurrenceKey，和前端横幅、本机通知同一份），放进推送负载。
    * due 是这一次的 due_at（tag 里那个）；按了“稍后”的那一次照 tag。

@@ -344,12 +344,13 @@ export class MemDb implements DispatchStore {
     const keys: readonly string[] = SETTING_KEYS;
     return new Map(users.filter((u) => this.sets.has(u)).map((u) => [u, Object.fromEntries(Object.entries(this.sets.get(u) ?? {}).filter(([k]) => keys.includes(k)))]));
   }
-  async writeRemind(table: Table, id: string, user: string, patch: { remind_at: number | null; next_date?: string | null }, prev: { remind_at: number | null; rev: number }) {
+  async writeRemind(table: Table, id: string, user: string, patch: { remind_at: number | null; next_date?: string | null; archived_at?: null }, prev: { remind_at: number | null; rev: number }) {
     this.check('writeRemind');
     const r = this.tables[table].get(id);
     if (!r || r.user_id !== user || r.rev !== prev.rev || r.remind_at !== prev.remind_at) return false;   // 乐观条件：rev 和 remind_at 都还是读到的值
     r.remind_at = patch.remind_at;
     if (patch.next_date !== undefined) r.next_date = patch.next_date;
+    if (table === 'anniversaries' && patch.archived_at === null) r['archived_at'] = null;
     return true;
   }
   /** 照 private.remind_due 的 SQL 写（不调 round.ts 的 isDue，两边各写一遍才对得出差异）：精确条件、只回可用账号的、

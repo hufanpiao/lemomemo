@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { loadAnnivLib } from '../../../core/anniv-lib.ts';
 import { annivList, itemOf, nextFew } from '../data/anniv-model.ts';
 import { dateValid, defaultsWrites, emptyForm, formOf, newRow, normalize, offsetsKey, offsetsList, patchOf, yearRange } from '../data/anniv-edit.ts';
-import { clampView, cropOf, scaleOf, zoomTo } from '../ui/AvatarPicker.tsx';
+import { AVATAR_FILE_MAX, clampView, cropOf, decodeSize, scaleOf, zoomTo } from '../ui/AvatarPicker.tsx';
 
 await loadAnnivLib();
 const TZ = 'Asia/Seoul';
@@ -11,6 +11,16 @@ const TODAY = '2026-11-13';
 const row = (id: string, x: Record<string, unknown>) => ({
   id, kind: 'birthday', name: id, calendar: 'solar', lunar_variant: 'cn', month: 1, day: 1, is_leap: false, year: null,
   after_due: 'archive', remind_offsets: null, remind_time: null, created_at: Date.UTC(2026, 0, 1), deleted_at: null, undone: false, ...x,
+});
+
+describe('选图先限大小、按长边 2048 缩着解码（整块评审第 15 条）', () => {
+  it('长边超过 2048 才缩，按比例；不超不缩；文件上限 30 MB', () => {
+    expect(decodeSize(8000, 6000)).toEqual({ resizeWidth: 2048, resizeHeight: 1536 });
+    expect(decodeSize(3000, 4000)).toEqual({ resizeWidth: 1536, resizeHeight: 2048 });
+    expect(decodeSize(2048, 1000)).toBe(null);
+    expect(decodeSize(0, 0)).toBe(null);
+    expect(AVATAR_FILE_MAX).toBe(30 * 1024 * 1024);
+  });
 });
 
 describe('默认提醒只写变了的那一项（整块评审第 12 条）', () => {

@@ -47,6 +47,17 @@ describe('第 0 步：纪念日按每条设置重算（R-94）', () => {
   });
 });
 
+describe('第 0 步：已归档的倒数日改到以后（整块评审第 17 条）', () => {
+  it('重算出的 next_date 不早于今天：一并清掉 archived_at，不等 anniv-roll；还在过去的不动', async () => {
+    const db = new MemDb().user(UA, { current_tz: SEOUL });
+    const fut = db.put('anniversaries', annivRow(UA, { kind: 'countdown', year: 2027, month: 1, day: 1, after_due: 'archive', archived_at: 5, next_date: '2026-01-01' }), true);
+    const past = db.put('anniversaries', annivRow(UA, { kind: 'countdown', year: 2026, month: 1, day: 1, after_due: 'archive', archived_at: 5, next_date: '2025-12-31' }), true);
+    await run(db, at('2026-11-13', '10:00'));
+    expect(db.tables.anniversaries.get(fut.id)).toMatchObject({ next_date: '2027-01-01', archived_at: null });
+    expect(db.tables.anniversaries.get(past.id)).toMatchObject({ next_date: '2026-01-01', archived_at: 5 });
+  });
+});
+
 describe('第 6 步：推过以后写回下一次', () => {
   it('提前 7 天那次推完，写前一天那次；前一天推完，写明年的提前 7 天', async () => {
     const db = new MemDb().user(UA, { current_tz: SEOUL });

@@ -19,7 +19,7 @@ export function colsOf(table: Table): string {
   switch (table) {
     case 'events': return `${COMMON}, source, title, date, time, tz, remind_min, remind_days`;
     case 'todos': return `${COMMON}, source, title, done, due, due_time, remind_before_min, remind_days, remind_time`;
-    default: return `${COMMON}, name, kind, calendar, lunar_variant, month, day, is_leap, year, remind_offsets, remind_time, after_due, next_date, created_at`;
+    default: return `${COMMON}, name, kind, calendar, lunar_variant, month, day, is_leap, year, remind_offsets, remind_time, after_due, next_date, archived_at, created_at`;
   }
 }
 const DEVICE_COLS = 'id, user_id, push_endpoint, p256dh, auth, push_fail_count';
@@ -110,6 +110,7 @@ export function makeStore(admin: Admin): DispatchStore {
     async writeRemind(table, id, userId, patch, prev) {
       const body: Record<string, unknown> = { remind_at: patch.remind_at };
       if (table === 'anniversaries' && patch.next_date !== undefined) body.next_date = patch.next_date;
+      if (table === 'anniversaries' && patch.archived_at === null) body.archived_at = null;   // 已归档的倒数日改到以后（整块评审第 17 条）
       // 乐观条件：rev 还是读到的值（读完以后用户、别的设备没改过）、remind_at 也还是读到的值（别的系统写入没抢先写过）才写
       const q = admin.from(table).update(body).eq('id', id).eq('user_id', userId).eq('rev', prev.rev);
       const rows = must(await (prev.remind_at === null ? q.is('remind_at', null) : q.eq('remind_at', prev.remind_at)).select('id')) as { id: string }[];
