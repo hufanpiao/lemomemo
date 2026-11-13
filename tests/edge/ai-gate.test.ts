@@ -214,6 +214,17 @@ describe('takeDaily：aiGate 第 ⑥ 步和 ai-classify 共用的预扣', () => 
     expect(await takeDaily(quota({ refundThrows: true }), cfg, ...keys)).toEqual({ ok: false, out: 'failed', userTaken: false });
     expect(await takeDaily({ take: async () => { throw new Error('db'); }, refund: async () => {} }, cfg, ...keys)).toEqual({ ok: false, out: 'failed', userTaken: false });
   });
+  it('门第 ⑥ 步：个人扣上了、全项目那一下出错 → 503 try_later，并退回个人那一次（R-356；和 ai-classify 一致）', async () => {
+    const g = fakeGate();
+    const take = g.quota.take.bind(g.quota);
+    g.quota.take = async (k, limit) => {
+      if (k.startsWith('ai:global:')) throw new Error('db');
+      return take(k, limit);
+    };
+    expect(await aiGate(g, UA, '')).toEqual({ stop: true, status: 503, body: { error: 'try_later' } });
+    expect(g.counts.get(userQuotaKey(UA, g.now()))).toBe(0);
+    expect(g.logs).toContain('store_failed');
+  });
 });
 
 // quotaStore 只是把预扣、退回交给库里的原子函数（迁移 20261107100000）；跨窗口合计、并发、上限的行为由 pgTAP 42_my_ai_usage 测

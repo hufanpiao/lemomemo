@@ -125,7 +125,7 @@ const stop = (status: number, body: Record<string, unknown>): GateStop => ({ sto
 /**
  * 预扣每人每天、全项目每天各 1 次（aiGate 第 ⑥ 步和 ai-classify 共用）：
  * user：个人用完（没扣上）；global：全项目用完（已退回个人那一次）；
- * failed：计数出错（userTaken：个人那一下已经扣上、还没退。aiGate 不退，ai-classify 退回个人的；全项目那一下扣没扣上不知道，都不退，宁可多算）。
+ * failed：计数出错（userTaken：个人那一下已经扣上、还没退。aiGate、ai-classify 都退回个人的（R-356 失败退回额度）；全项目那一下扣没扣上不知道，都不退，宁可多算）。
  * 不抛错。
  */
 export type DailyTake = { ok: true; used: number } | { ok: false; out: 'user' | 'global' } | { ok: false; out: 'failed'; userTaken: boolean };
@@ -195,6 +195,8 @@ export async function aiGate(deps: GateDeps, userId: string, appVersion: string)
     deps.log('global_quota_out');
     return stop(200, { fallback: true, reason: 'quota' });
   }
+  // 计数出错：个人那一下扣上了就退回（和 ai-classify 一致；退回也出错只记 settle_failed，照样回 503）
+  if (t.out === 'failed' && t.userTaken) await deps.quota.refund(userKey).catch(() => deps.log('settle_failed'));
   return storeFailed(deps);
 }
 
