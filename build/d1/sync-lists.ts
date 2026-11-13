@@ -3,13 +3,10 @@
 // • public.tombstones 的 tombstones_tbl_check：check 里的表名 = 全部同步表（write_tombstone 挂在每张同步表上，少一张硬删就写不进墓碑）；
 // • public.apply_patch 的 case p_table：每个 when '表' then array[…] = 全部同步表（少一张，客户端的修改回 patch_table_not_allowed 被丢）；
 // • private.cleanup_batch：每张软删同步表都有一句 “public.表 where deleted_at < cut30”（少一张，软删的行永远不硬删）。
-//   devices 除外：设备行按“会话已不在”和“180 天没用”两条规则清（迁移 20261111120000 起），不按 deleted_at。
+//   没有豁免：devices 原来只按“会话已不在”“180 天没用”两条规则清，20261114220000 起也按 deleted_at 清（推进计划第一节第 8 项）。
 // 以后改成 table_meta 驱动（patch_cols、purge_30d 两列）时，这里改成比 table_meta（方案-R350 “以后加表前先做”）。
 // 纯函数 syncListProblems 单独导出给 tests/build/d1-sync-lists.test.ts 逐条证明
 import type { Query } from './checks.ts';
-
-/** 软删同步表里不走 30 天清理的表和理由 */
-export const CLEANUP_30D_EXEMPT: Readonly<Record<string, string>> = { devices: '按会话已不在、180 天没用两条规则清' };
 
 export interface SyncListSources {
   /** pg_get_constraintdef(tombstones_tbl_check)；约束不在是 null */
@@ -43,7 +40,6 @@ export function syncListProblems(src: SyncListSources, sync: readonly string[], 
   if (src.cleanup === null) out.push('private.cleanup_batch 不在');
   else {
     for (const t of softDel) {
-      if (Object.hasOwn(CLEANUP_30D_EXEMPT, t)) continue;
       if (!new RegExp(`\\bpublic\\.${t}\\s+where\\s+deleted_at\\s*<\\s*cut30\\b`, 'i').test(src.cleanup)) {
         out.push(`cleanup_batch 没有清 ${t} 软删超过 30 天的行（要有 “public.${t} where deleted_at < cut30”）`);
       }

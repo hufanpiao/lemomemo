@@ -1,19 +1,24 @@
 // D1 第 7 节（build/d1/sync-lists.ts syncListProblems，R-350 评审第 1 条）：tombstones_tbl_check、apply_patch 的 case、
 // cleanup_batch 的 30 天清理三处手写名单，和清单的同步表逐张比对。真库一侧由 D1 本身（deno task d1、离线 PGlite）跑
 import { describe, expect, it } from 'vitest';
-import { CLEANUP_30D_EXEMPT, syncListProblems } from '../../build/d1/sync-lists.ts';
+import { syncListProblems } from '../../build/d1/sync-lists.ts';
 
 const SYNC = ['todos', 'todo_items', 'devices'];
 const SOFT = ['todos', 'todo_items', 'devices'];
 const tomb = (ts: string[]) => `CHECK ((tbl = ANY (ARRAY[${ts.map((t) => `'${t}'::text`).join(', ')}])))`;
 const patch = (ts: string[]) => `cols := case p_table\n${ts.map((t) => `    when '${t}' then array['title','deleted_at']`).join('\n')}\n    else null end;\n  if p_table = 'notes' then null; end if;`;
 const clean = (ts: string[]) => ts.map((t) => `  delete from public.${t.padEnd(14)} where ctid in (select ctid from public.${t.padEnd(14)} where deleted_at < cut30 limit left_);`).join('\n');
-const good = { tombCheck: tomb(SYNC), applyPatch: patch(SYNC), cleanup: clean(['todos', 'todo_items']) };
+const good = { tombCheck: tomb(SYNC), applyPatch: patch(SYNC), cleanup: clean(SOFT) };
 
 describe('D1：三处手写的同步表名单和清单一致（sync-lists.ts，R-350 评审第 1 条）', () => {
-  it('三处都对上：没有问题（devices 不走 30 天清理，是写明理由的豁免）', () => {
+  it('三处都对上：没有问题', () => {
     expect(syncListProblems(good, SYNC, SOFT)).toEqual([]);
-    expect(Object.keys(CLEANUP_30D_EXEMPT)).toEqual(['devices']);
+  });
+
+  it('devices 不再豁免：只有按会话、按 180 天的设备规则，没有 30 天那句也报（20261114220000，推进计划第一节第 8 项）', () => {
+    const noDev = `${clean(['todos', 'todo_items'])}\n  delete from public.devices d where d.ctid in (select x.ctid from public.devices x where x.session_id is not null);`;
+    expect(syncListProblems({ ...good, cleanup: noDev }, SYNC, SOFT))
+      .toEqual(['cleanup_batch 没有清 devices 软删超过 30 天的行（要有 “public.devices where deleted_at < cut30”）']);
   });
 
   it('tombstones_tbl_check 少一张、多一张都报', () => {
@@ -27,9 +32,9 @@ describe('D1：三处手写的同步表名单和清单一致（sync-lists.ts，R
   });
 
   it('cleanup_batch 漏了一张软删表的 30 天清理报；只出现在别的条件里（deleted_at < cut90）也报', () => {
-    expect(syncListProblems({ ...good, cleanup: clean(['todos']) }, SYNC, SOFT))
+    expect(syncListProblems({ ...good, cleanup: clean(['todos', 'devices']) }, SYNC, SOFT))
       .toEqual(['cleanup_batch 没有清 todo_items 软删超过 30 天的行（要有 “public.todo_items where deleted_at < cut30”）']);
-    const other = `${clean(['todos'])}\n  delete from public.todo_items where ctid in (select ctid from public.todo_items where deleted_at < cut90);`;
+    const other = `${clean(['todos', 'devices'])}\n  delete from public.todo_items where ctid in (select ctid from public.todo_items where deleted_at < cut90);`;
     expect(syncListProblems({ ...good, cleanup: other }, SYNC, SOFT)).toHaveLength(1);
   });
 
