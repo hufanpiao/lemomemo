@@ -35,6 +35,8 @@ begin
   return new;
 end $$;
 
+-- 在 anniversaries 上建触发器要拿表锁：先 set local lock_timeout，5 秒拿不到就整个迁移回滚，等长事务结束再推（tests/build/migration-lock-timeout.test.ts）
+set local lock_timeout = '5s';
 create trigger anniversaries_media_quota before insert or update of avatar_bytes on public.anniversaries
   for each row execute function private.media_quota_guard();
 

@@ -122,7 +122,9 @@ const NOT_FIRST_PAINT: Record<string, string> = {
     'SW 注册、盯新版本、回到前台查新版本、“更新”按钮：都经 sw-register.ts 的 loadSwLifecycle 这一个加载器下载；首屏画完以后 main.tsx 才下载注册（appPainted 之后），“更新”按下时才下载；只有 version_too_new 的整屏提示在渲染前下载（那时没有今天页）（B2-UI-a U7，11-07；11-11 启动链路整改）',
   'src/platform/viewport.ts': '视口监听（写 --kb、data-kbo、--vh-gap、data-kbhide）：首屏画完以后 afterAppPainted 才下载；iOS 主屏幕版冷启动时随 vh-gapfix.ts 的分包一起下',
   'shared/logic/anniv/next-date.ts':
-    '纪念日推算（带农历表，2.6）：提醒列表（reminders 的 remind-list.ts）在有纪念日、开关开着时才下载；用到提醒列表的引擎、错过的提醒都在首屏画完以后才挂（B5 S15）',
+    '纪念日推算（带农历表，2.6）：经 core/anniv-lib.ts 这一个加载器下载（整块评审第 19 条，纪念日页、月历菱形、提醒列表共用）；提醒列表在有纪念日、开关开着时才下载，用到提醒列表的引擎、错过的提醒都在首屏画完以后才挂（B5 S15）',
+  'shared/logic/anniv/lunar.ts':
+    '农历换算和农历表：和 next-date.ts 同一次经 core/anniv-lib.ts 下载，条件同上（有纪念日、开关开着，首屏画完以后）',
   'src/features/anniv/data/avatar-view.ts':
     '纪念日头像的签名和缓存（B5 S13，带 platform/files 的 zod）：页面上真有带头像的纪念日要画时才下载；今天页的纪念日一行先画首字圆，头像下好再换上，不挡首屏',
   'src/kit/components/GlassBar/GlassBarFx.tsx':
