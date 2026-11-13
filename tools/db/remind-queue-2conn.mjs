@@ -3,8 +3,10 @@
 //   A. 用户事务改一行待办（入队触发器锁住队列行）并持锁 7 秒，期间 finish 这个租约：不等锁（远小于 lock_timeout 5 秒）、不报错，
 //      同租约的其余项照常删掉，锁着的那项留着；用户提交后它的租约、attempts 已被清零，下一轮当新项算。放回（p_release）的同样跳过。
 //   B. 一个连接出队后持锁 7 秒不提交，另一个连接同时出队：skip locked 跳过、一项都取不到、不等锁；前一个提交后，
-//      租约没过期的项也不会被重取（加锁后再判一次租约）。队列里另放一条孤儿：两轮都要删它，后一轮也不等前一轮提交
-//      （删孤儿同样 skip locked；不加时实测后一轮要等 3 秒多）。
+//      租约没过期的项也不会被重取（加锁后再判一次租约）。队列里另放一条孤儿（行已经没了）：R-411 迁移 20261113100000 起出队不再删孤儿，
+//      它带着 user_id 和别的项一样被连接 1 取走、连接 2 跳过（11-05 之前两轮都要删它，删孤儿也 skip locked）。
+//   C. R-411（方案 4.3、5.2 T26）出队快照窗口：用户事务改了一行待办还没提交（入队触发器锁着它的队列行），同时出队：这一项本轮不取
+//      （skip locked）、不等锁，别的项照常取走；用户提交后它的租约、attempts 已清零，下一轮按改后的值当新项取到。
 // 用法（仓库根目录，先在 lemo-b2push 的工作目录 supabase start、db reset --local）：
 //   node tools/db/remind-queue-2conn.mjs [容器名，默认 supabase_db_lemo-b2push]
 //   node tools/db/remind-queue-2conn.mjs --dry [容器名]   只判断这个容器名放不放行，不连库（退出码 0 放行、2 拒绝）
@@ -12,7 +14,7 @@
 //   不看任何环境变量、没有例外（安全复审二 R1-1：act 在本机跑工作流会自动设 CI、GITHUB_ACTIONS、ACT 并挂宿主 docker socket，
 //   靠环境变量放行会连到本机的 lemomemo）。CI 的 db 任务在 supabase start 之前把 config.toml 的 project_id 改成 lemo-ci，
 //   这里连 supabase_db_lemo-ci（ci.yml；tests/build/remind-queue-2conn-guard.test.ts 钉住放行规则和 CI 写法）。
-// 改过迁移 20261104130000 里的 skip locked（出队删孤儿、finish 的放回和删除）或加锁后再判租约那几句，本机也要跑一次（上线与回滚手册）。造的数据用固定的 2c000000-… id，
+// 改过出队（现行版本在迁移 20261113100000）、finish（20261104130000）里的 skip locked 或加锁后再判租约那几句，本机也要跑一次（上线与回滚手册）。造的数据用固定的 2c000000-… id，
 // 跑完删掉（auth 用户删掉后待办级联删除，队列项一并删）。退出码 0 = 全过，1 = 有失败。
 // 11-05 判定口径（2b65b43 的 CI 第一次真跑报“连接 2 不等锁：5883 毫秒”，lemo-e2e 上同样的脚本 185 毫秒、服务器侧 4 毫秒，复现不出等锁）：
 //   原来按 docker exec 的墙钟判，墙钟含容器里起 psql 的时间，CI runner 上起得慢就分不清“等锁”和“起得慢”；连接 2 也是固定晚 1 秒起，
@@ -116,8 +118,8 @@ const queueState = `select coalesce(string_agg(right(id::text, 1) || ':' || coal
 async function scenarioA(release) {
   const tag = release ? 'A2（放回）' : 'A1（删除）';
   let r = await psql(`${SETUP}
-insert into private.remind_queue (table_name, id, claim, claimed_at, attempts)
-  select 'todos', x, '${K}', now(), 1 from unnest(array[${ids}]::uuid[]) x;`);
+insert into private.remind_queue (table_name, id, user_id, claim, claimed_at, attempts)
+  select 'todos', x, '${U}', '${K}', now(), 1 from unnest(array[${ids}]::uuid[]) x;`);
   check(r.code === 0, `${tag} 造数据`, r.err);
   // 连接 1：用户改第 1 行待办，入队触发器锁住它的队列行（清租约、attempts 清零，还没提交），持锁 7 秒
   const user = psql(`begin; update public.todos set due = '2026-12-01' where id = '${T[0]}'; select pg_sleep(7) /* 2conn-holder */; select ${NOW_MS}; commit;`);
@@ -141,25 +143,47 @@ insert into private.remind_queue (table_name, id, claim, claimed_at, attempts)
 
 async function scenarioB() {
   let r = await psql(`${SETUP}
-insert into private.remind_queue (table_name, id) select 'todos', x from unnest(array[${ids}]::uuid[]) x;
-insert into private.remind_queue (table_name, id) values ('todos', '${ORPHAN}');`);
+insert into private.remind_queue (table_name, id, user_id) select 'todos', x, '${U}' from unnest(array[${ids}]::uuid[]) x;
+insert into private.remind_queue (table_name, id, user_id) values ('todos', '${ORPHAN}', '${U}');`);
   check(r.code === 0, 'B 造数据（3 项加 1 条孤儿）', r.err);
   // 连接 1：出队后持锁 7 秒不提交（R5-1：和 A 一致，CI 上起 psql 慢也来得及）
-  const first = psql(`${EXPLAIN_SLOW} begin; with h as materialized (select count(*) filter (where id in (${ids})) as n from private.remind_queue_pop(500, 180, false)) select n || '|' || ${STMT_MS} from h; set auto_explain.log_min_duration = -1; select pg_sleep(7) /* 2conn-holder */; select ${NOW_MS}; commit;`);
+  const first = psql(`${EXPLAIN_SLOW} begin; with h as materialized (select count(*) filter (where id in (${ids}, '${ORPHAN}')) as n from private.remind_queue_pop(500, 180, false)) select n || '|' || ${STMT_MS} from h; set auto_explain.log_min_duration = -1; select pg_sleep(7) /* 2conn-holder */; select ${NOW_MS}; commit;`);
   if (!(await waitSleeping('B'))) return;
   // 连接 2：连接 1 拿着锁时出队（这一条语句的耗时、结束时刻同一行回）
-  const t = await timed('2conn-pop', `${EXPLAIN_SLOW} /* 2conn-pop */ with p as materialized (select count(*) filter (where id in (${ids})) as n from private.remind_queue_pop(500, 180, false)) select ${STMT_MS} || '|' || ${START_MS} || '|' || ${NOW_MS} || '|' || n from p;`);
+  const t = await timed('2conn-pop', `${EXPLAIN_SLOW} /* 2conn-pop */ with p as materialized (select count(*) filter (where id in (${ids}, '${ORPHAN}')) as n from private.remind_queue_pop(500, 180, false)) select ${STMT_MS} || '|' || ${START_MS} || '|' || ${NOW_MS} || '|' || n from p;`);
   r = t.r;
   check(r.code === 0 && t.extra === '0', '连接 2 同时出队：skip locked，一项都取不到', `实际 ${r.out} ${r.err}`);
   const fr = await first;
   const [got1, popMs1] = fr.out.split('\n')[0].split('|');
-  check(fr.code === 0 && got1 === '3', `连接 1 取到 3 项并提交（它出队在服务器上用了 ${popMs1} 毫秒）`, `实际 ${fr.out} ${fr.err}`);
+  check(fr.code === 0 && got1 === '4', `连接 1 取到 3 项和那条孤儿并提交（孤儿照常出队；它出队在服务器上用了 ${popMs1} 毫秒）`, `实际 ${fr.out} ${fr.err}`);
   const v = noWaitVerdict({ err: r.code === 0 ? '' : r.err || `psql 退出码 ${r.code}`, startAt: t.startAt, serverMs: t.serverMs, endAt: t.endAt, holderCommitAt: Number(fr.out.split('\n').pop()), lockSeen: t.waits.lockSeen });
-  check(v.ok, `连接 2 不等锁（连接 1 正删着同一条孤儿也不等；服务器上 ${t.serverMs} 毫秒，墙钟 ${r.ms} 毫秒）`, `${v.why}${t.waits.desc ? `；${t.waits.desc}` : ''}`);
+  check(v.ok, `连接 2 不等锁（连接 1 锁着同一批和那条孤儿也不等；服务器上 ${t.serverMs} 毫秒，墙钟 ${r.ms} 毫秒）`, `${v.why}${t.waits.desc ? `；${t.waits.desc}` : ''}`);
   if (!v.ok || Number(popMs1) >= 1000) await dumpSlow('B', r.err, fr.err);
   r = await psql(`select count(*) from private.remind_queue_pop(500, 180, true) where id in (${ids});
 select count(distinct claim) || ':' || count(*) filter (where attempts = 1) from private.remind_queue where id in (${ids});`);
   check(r.out === '0\n1:3', '连接 1 提交后再单项重试出队：租约没过期，不重取；3 项都是连接 1 的同一个租约、attempts 1', `实际 ${r.out.replace('\n', ' / ')}`);
+  await psql(CLEANUP);
+}
+
+// R-411（方案 4.3、5.2 T26）：用户事务改第 1 行待办、还没提交（入队触发器锁着它的队列行，清租约那一下也没提交），同时出队
+async function scenarioC() {
+  let r = await psql(`${SETUP}
+insert into private.remind_queue (table_name, id, user_id) select 'todos', x, '${U}' from unnest(array[${ids}]::uuid[]) x;`);
+  check(r.code === 0, 'C 造数据（3 项新项）', r.err);
+  const user = psql(`begin; update public.todos set due = '2026-12-02' where id = '${T[0]}'; select pg_sleep(7) /* 2conn-holder */; select ${NOW_MS}; commit;`);
+  if (!(await waitSleeping('C'))) return;
+  const t = await timed('2conn-pop', `${EXPLAIN_SLOW} /* 2conn-pop */ with p as materialized (select coalesce(string_agg(right(id::text, 1), ',' order by id), '') as got from private.remind_queue_pop(500, 180, false) where id in (${ids})) select ${STMT_MS} || '|' || ${START_MS} || '|' || ${NOW_MS} || '|' || got from p;`);
+  r = t.r;
+  check(r.code === 0 && t.extra === '2,3', 'C 用户改着第 1 项（没提交）时出队：第 1 项本轮不取（skip locked），第 2、3 项照常取走', `实际 ${r.out} ${r.err}`);
+  const ur = await user;
+  check(ur.code === 0, 'C 用户事务照常提交', ur.err);
+  const v = noWaitVerdict({ err: r.code === 0 ? '' : r.err || `psql 退出码 ${r.code}`, startAt: t.startAt, serverMs: t.serverMs, endAt: t.endAt, holderCommitAt: Number(ur.out.split('\n').pop()), lockSeen: t.waits.lockSeen });
+  check(v.ok, `C 出队不等锁（服务器上 ${t.serverMs} 毫秒，墙钟 ${r.ms} 毫秒）`, `${v.why}${t.waits.desc ? `；${t.waits.desc}` : ''}`);
+  if (!v.ok) await dumpSlow('C', r.err);
+  r = await psql(`select coalesce((claim is null)::text || ':' || attempts || ':' || fresh, '') from private.remind_queue where table_name = 'todos' and id = '${T[0]}';`);
+  check(r.out === 'true:0:true', 'C 用户提交后第 1 项：没有租约、attempts 0、改了截止日期是 fresh（当新项）', `实际 ${r.out} ${r.err}`);
+  r = await psql(`select coalesce(string_agg(right(id::text, 1) || ':' || fresh, ','), '') from private.remind_queue_pop(500, 180, false) where id in (${ids});`);
+  check(r.out === '1:true', 'C 下一轮出队取到第 1 项（返回 fresh）', `实际 ${r.out} ${r.err}`);
   await psql(CLEANUP);
 }
 
@@ -171,6 +195,7 @@ if (ping.code !== 0) {
 await scenarioA(false);
 await scenarioA(true);
 await scenarioB();
+await scenarioC();
 const left = await psql(`select count(*) from private.remind_queue where id in (${ids}, '${ORPHAN}'); select count(*) from auth.users where id = '${U}';`);
 check(left.out === '0\n0', '跑完造的数据都删了', left.out);
 console.log(failed ? `共 ${failed} 项失败` : '全部通过');

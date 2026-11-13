@@ -1,5 +1,6 @@
 // B2 后端开发自测（11-06）：push-dispatch 的真 store（store.ts 经 PostgREST、private.remind_due / remind_queue_pop / push_heartbeat_write）
-// 打本机真库（CI 的 lemo-ci、本机的 lemo-e2e），按用例表原数跑 D3 第 6 点三条（TC-B2-81～83）和 TC-DEL-remind_queue 的函数一侧。推送服务用进程内替身
+// 打本机真库（CI 的 lemo-ci、本机的 lemo-e2e），按用例表原数跑 D3 第 6 点三条（TC-B2-81～83）和 TC-DEL-remind_queue 的函数一侧，
+//   以及 R-411 T00 真库版（文件末尾，11-13）。推送服务用进程内替身
 // （tests/fakes/push-service.ts，fake.fetch 注入 deps.fetch，不开端口、不联网）；VAPID 现生成、用完即丢。
 // 内存库版（tests/edge/push-dispatch-budget.test.ts、push-dispatch-d3-full.test.ts）验的是函数流程；这里补“认领是真库上的条件更新”
 // （两轮重叠时 PostgREST 的 update … or(pushed_for.is.null, pushed_for.neq.due) 只让一轮更新到行）和真库心跳、日志、队列。
@@ -20,6 +21,7 @@ import { CRON, cronReq, fakeVapid } from '../../../tests/edge/push-dispatch-harn
 import { LOGIC } from '../../../tests/edge/push-dispatch-mem.ts';
 import { allReminders, missed, remindAtLocal } from '../../../src/features/reminders/data/reminder-model.ts';
 import type { Tz } from '../../../shared/core/tz.ts';
+import { addDays, msAt, parseHm, type DateStr } from '../../../shared/core/date.ts';
 
 const opts = { sanitizeOps: false, sanitizeResources: false };
 type Body = { claimed: number; sent: number; failed: number; budget_hit: boolean; left: number };
@@ -230,7 +232,7 @@ Deno.test({ name: 'TC-DEL-remind_queue（函数一侧、真库）：冷静期的
     const far = Date.now() + 3 * 86_400_000;
     const ids = Array.from({ length: 3 }, () => crypto.randomUUID());
     for (const id of ids) await sql`insert into public.todos (id, user_id, title, created_at, updated_at, remind_at) values (${id}, ${u}, 'q', 1, 1, ${far})`;
-    await sql`insert into private.remind_queue (table_name, id) select 'todos', x from unnest(${ids}::uuid[]) x on conflict do nothing`;
+    await sql`insert into private.remind_queue (table_name, id, user_id) select 'todos', x, ${u}::uuid from unnest(${ids}::uuid[]) x on conflict do nothing`;
     await pending(u, 7 * 86_400);   // 冷静期：disabled_reason = deletion
     await round(deps(p.fetch));
     const q1 = await sql`select claim, attempts from private.remind_queue where id = any(${ids}::uuid[])`;
@@ -238,16 +240,139 @@ Deno.test({ name: 'TC-DEL-remind_queue（函数一侧、真库）：冷静期的
     assert(q1.every((x) => x['claim'] === null && Number(x['attempts']) === 0), '冷静期的项被打了租约');
     const ra = await sql`select count(*)::int as n from public.todos where id = any(${ids}::uuid[]) and remind_at = ${far}`;
     assertEquals(ra[0]?.['n'], 3, 'remind_at 被改了');
-    // account-purge 到期那一步：deleteUser，级联删 todos；队列行成孤儿（没有外键）
+    // account-purge 到期那一步：deleteUser，级联删 todos；R-411 迁移 20261113100000 起队列行带 user_id 外键，跟着级联删，不再留孤儿等下一轮
     const { error } = await admin.auth.admin.deleteUser(u);
     assert(!error, `deleteUser 失败：${error?.message}`);
-    const orphan = await sql`select count(*)::int as n from private.remind_queue where id = any(${ids}::uuid[])`;
-    assertEquals(orphan[0]?.['n'], 3, '删号后、下一轮前孤儿还在');
+    const gone = await sql`select count(*)::int as n from private.remind_queue where id = any(${ids}::uuid[])`;
+    assertEquals(gone[0]?.['n'], 0, '删号后队列行应随外键级联删掉');
     await round(deps(p.fetch));
     const q2 = await sql`select count(*)::int as n from private.remind_queue where id = any(${ids}::uuid[])`;
-    assertEquals(q2[0]?.['n'], 0, '下一轮后孤儿应清为 0');
+    assertEquals(q2[0]?.['n'], 0, '下一轮后队列仍为 0');
     assertEquals(p.ids(), [], '不应推送');
-    console.log('[D3-real-DEL] 冷静期：3 项一轮后仍在队列、claim 为空、attempts 0、remind_at 没变；deleteUser 后孤儿 3 项，下一轮 push-dispatch 后清为 0，没有推送');
+    console.log('[D3-real-DEL] 冷静期：3 项一轮后仍在队列、claim 为空、attempts 0、remind_at 没变；deleteUser 后队列行随外键级联删光，下一轮 push-dispatch 也没有推送');
+  } finally {
+    await p.fake.close();
+  }
+} });
+
+// ===== R-411 T00 真库版（方案 docs/10-架构/方案-提醒队列重写.md 5.2；内存版 tests/edge/push-dispatch-t00-pinned.test.ts） =====
+// 迁移 20261113100000 之后、push-dispatch 改动（第三阶段）之前的实际行为：P13、P14、P12 照现状钉住（Q2 回落第三阶段做，改完把 P13 期望改成“截止时刻响”）；
+// P2 的排队一半 M1 已经修了：批量入队（改默认时刻）是 prio 1，用户新建的是 prio 0，下一轮就算到。
+// 库里的触发器按真实 now() 判“没到点”，所以日期放在 20 天后（首尔时区，profiles.current_tz 默认 Asia/Seoul），一轮的时刻由 deps.now 注入。
+const T00_DAY = addDays(new Date().toISOString().slice(0, 10) as DateStr, 20);
+const tAt = (hm: string, day: DateStr = T00_DAY): number => msAt(day, parseHm(hm), 'Asia/Seoul' as Tz);
+const at0 = (p: { fetch: FetchLike }, ms: number) => round(deps(p.fetch, { now: () => ms }));
+const kinds = (p: { fake: { requests: { payload: unknown }[] } }, type: string) =>
+  p.fake.requests.filter((r) => r.payload !== null).map((r) => JSON.parse(r.payload as string) as { type: string; id: string }).filter((x) => x.type === type);
+const row = async (table: 'todos' | 'events', id: string) => (await sql`select remind_at, pushed_for from ${sql('public.' + table)} where id = ${id}`)[0];
+const q = async (id: string) => (await sql`select prio, fresh, min_ver from private.remind_queue where id = ${id}`)[0];
+
+/** 新建一条明天 10:00 截止、提前 1 天的待办，在 day 这天的 hm 跑第一轮；返回 [人, 待办 id] */
+async function p13(tag: string, day: DateStr, hm: string) {
+  const p = await people(tag, 1, 0);
+  const t = crypto.randomUUID();
+  await sql`insert into public.todos (id, user_id, title, created_at, updated_at, due, due_time, remind_before_min) values (${t}, ${p.users[0] as string}, ${tag}, 1, 1, ${addDays(day, 1)}, '10:00', 1440)`;
+  assertEquals({ ...(await q(t)) }, { prio: 0, fresh: true, min_ver: 0 }, '新建待办入队：用户改的 prio 0、fresh（6.3 Q2 回落要用）');
+  await at0(p, tAt(hm, day));
+  return [p, t] as const;
+}
+
+Deno.test({ name: 'R-411 T00a P13（真库、钉现状）：15:00 建、明天 10:00 截止、提前 1 天：入队带 fresh；remind_at 写成今天 10:00（已过），明天 10:00 也不响', ...opts, async fn() {
+  const day = T00_DAY;
+  const [p, t] = await p13('t00a', day, '15:00');
+  try {
+    assertEquals(Number((await row('todos', t))?.['remind_at']), tAt('10:00', day), 'remind_at 写成今天 10:00（已过 5 小时）');
+    await at0(p, tAt('10:00', addDays(day, 1)));
+    assertEquals(kinds(p, 'remind').length, 0, '一条都不推（现状）');
+    console.log('[R411-T00a] 新建待办入队 prio 0、fresh=true；15:00 建的 remind_at=今天 10:00，当天不推，明天截止时刻也不响');
+  } finally {
+    await p.fake.close();
+  }
+} });
+
+Deno.test({ name: 'R-411 T00a P13（真库、钉现状）：10:30 建（提前量刚过 30 分钟）：当场补推一条，明天 10:00 截止时刻不响', ...opts, async fn() {
+  const day = addDays(T00_DAY, 2);
+  const [p] = await p13('t00a2', day, '10:30');
+  try {
+    assertEquals(kinds(p, 'remind').length, 1, '当场补推一条');
+    await at0(p, tAt('10:00', addDays(day, 1)));
+    assertEquals(kinds(p, 'remind').length, 1, '明天 10:00 不再响（现状）');
+    console.log('[R411-T00a2] 10:30 建：当场补推 1 条，明天截止时刻不响');
+  } finally {
+    await p.fake.close();
+  }
+} });
+
+Deno.test({ name: 'R-411 T00b P14（真库、钉现状，Q3 保留）：推过以后勾完成又取消，同一条再推一次', ...opts, async fn() {
+  const p = await people('t00b', 1, 0);
+  const day = addDays(T00_DAY, 4);
+  try {
+    const u = p.users[0] as string;
+    const t = crypto.randomUUID();
+    await sql`insert into public.todos (id, user_id, title, created_at, updated_at, due, due_time, remind_before_min) values (${t}, ${u}, 't00b', 1, 1, ${day}, '17:00', 60)`;
+    await at0(p, tAt('15:00', day));
+    await at0(p, tAt('16:00', day));
+    assertEquals(kinds(p, 'remind').length, 1, '16:00 推一条');
+    await sql`update public.todos set done = true where id = ${t}`;
+    await at0(p, tAt('16:11', day));
+    await sql`update public.todos set done = false where id = ${t}`;
+    assertEquals((await q(t))?.['prio'], 0, '取消完成：用户改的、prio 0 入队');
+    await at0(p, tAt('16:21', day));
+    assertEquals(Number((await row('todos', t))?.['remind_at']), tAt('16:00', day), 'remind_at 仍是 16:00');
+    assertEquals(kinds(p, 'remind').length, 2, '16:21 再推一次，累计 2 条（现状，Q3 保留）');
+    console.log('[R411-T00b] 16:00 推过、勾完成又取消：16:21 再推一次，累计 2 条');
+  } finally {
+    await p.fake.close();
+  }
+} });
+
+Deno.test({ name: 'R-411 T00c P2（真库、M1 已修排队一半）：700 条全天日程经改默认时刻批量入队（prio 1），新建待办（prio 0）第一轮就算到', ...opts, async fn() {
+  const p = await people('t00c', 1, 0);
+  const day = addDays(T00_DAY, 6);
+  try {
+    const u = p.users[0] as string;
+    const evs = Array.from({ length: 700 }, (_, i) => ({ id: crypto.randomUUID(), user_id: u, title: `t00c-${i}`, created_at: 1, updated_at: 1, date: day, remind_days: 0 }));
+    await sql`insert into public.events ${sql(evs, 'id', 'user_id', 'title', 'created_at', 'updated_at', 'date', 'remind_days')}`;
+    await sql`delete from private.remind_queue where user_id = ${u}`;   // 只留批量那一路：设置触发器按 scope allday 入队
+    await sql`insert into public.settings (id, user_id, key, value) values (gen_random_uuid(), ${u}, 'remind.default_time', '"09:00"'::jsonb)`;
+    const pr = await sql`select prio, count(*)::int as n from private.remind_queue where user_id = ${u} group by prio order by prio`;
+    assertEquals(pr.map((x) => [x['prio'], x['n']]), [[1, 700]], '改默认时刻：700 条批量入队，remind_at 为空的是 prio 1');
+    const t = crypto.randomUUID();
+    await sql`insert into public.todos (id, user_id, title, created_at, updated_at, due, due_time, remind_before_min) values (${t}, ${u}, 't00c', 1, 1, ${addDays(day, 1)}, '18:00', 60)`;
+    await at0(p, tAt('08:00', day));
+    assertEquals(Number((await row('todos', t))?.['remind_at']), tAt('17:00', addDays(day, 1)), '新建的待办第一轮就算到（内存版现状是第 15 轮）');
+    const left = (await sql`select count(*)::int as n from private.remind_queue where user_id = ${u}`)[0]?.['n'];
+    assertEquals(left, 651, '这一轮每人 50 条：待办 1 条 + 日程 49 条，剩 651 条日程');
+    console.log('[R411-T00c] 700 条全天日程批量入队 prio 1；新建待办 prio 0，第一轮就算到；本轮该用户取 50 条，剩 651');
+  } finally {
+    await p.fake.close();
+  }
+} });
+
+Deno.test({ name: 'R-411 T00d P12（真库、钉现状，Q3 保留）：全天日程推过 → 稍后 → 收回 → 当天改晚默认时刻：“稍后”那次被挪到新默认时刻才响', ...opts, async fn() {
+  const p = await people('t00d', 1, 0);
+  const day = addDays(T00_DAY, 9);
+  try {
+    const u = p.users[0] as string;
+    await sql`insert into public.settings (id, user_id, key, value) values (gen_random_uuid(), ${u}, 'remind.default_time', '"09:00"'::jsonb)`;
+    const a = crypto.randomUUID();
+    await sql`insert into public.events (id, user_id, title, created_at, updated_at, date, remind_days) values (${a}, ${u}, 't00d', 1, 1, ${day}, 0)`;
+    await at0(p, tAt('08:00', day));
+    await at0(p, tAt('09:00', day));
+    assertEquals(kinds(p, 'remind').length, 1, '09:00 推一条');
+    await sql`update public.events set snooze_at = ${tAt('09:12', day)} where id = ${a}`;
+    await at0(p, tAt('09:03', day));
+    assertEquals(kinds(p, 'resolve').map((x) => x.id), [a], '按稍后：收回 09:00 那条');
+    assertEquals((await row('events', a))?.['pushed_for'], null, '收回后 pushed_for 为空');
+    await sql`update public.settings set value = '"11:00"'::jsonb where user_id = ${u} and key = 'remind.default_time'`;
+    assertEquals((await q(a))?.['prio'], 2, '改默认时刻：由 remind_on_settings 批量入队（真库，不用手动 enqueue）；remind_at 离真实现在超过 24 小时，是 prio 2');
+    await at0(p, tAt('09:06', day));
+    assertEquals(Number((await row('events', a))?.['remind_at']), tAt('11:00', day), 'remind_at 挪到 11:00');
+    await at0(p, tAt('09:12', day));
+    assertEquals(kinds(p, 'remind').length, 1, '09:12（稍后那次）不响（现状）');
+    await at0(p, tAt('11:00', day));
+    assertEquals(kinds(p, 'remind').length, 2, '11:00 才响');
+    console.log('[R411-T00d] 09:00 推过、09:02 稍后到 09:12、09:05 改默认 11:00：09:12 不响，11:00 才响（现状）');
   } finally {
     await p.fake.close();
   }

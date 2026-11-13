@@ -3,6 +3,8 @@
 -- 这一行又不在 remind_queue 里，第 0 步不会再看它，resolve 永远不成立。触发器 events_allday_ack_enqueue：全天日程（time 为空、没删）
 -- 的 notified_for 改成了一个不等于 remind_at 的值时，照 events_remind 的入口（private.enqueue_remind）入队；第 0 步遇到 notified_for 正好等于
 -- 新算出的 remind_at 就写回（tests/edge/push-dispatch-allday-ack.test.ts）。A 的写入用 authenticated 身份（带会话）。
+-- R-411 迁移 20261113100000（方案 5.2 T06）：独立触发器 events_allday_ack_enqueue 删掉，同一条件（逐字照 20261105120000）并进 events_remind 调的
+-- private.enqueue_remind；期望照旧。
 begin;
 select plan(12);
 \ir _helpers.psql
@@ -29,12 +31,11 @@ $$;
 insert into public.events (id, user_id, title, date, time, tz, remind_min, remind_days, deleted_at, created_at, updated_at) values
   ('e3600000-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001', '全天', '2026-11-05', null, null, null, 0, null, 1, 1);
 
--- ① 结构：after update of notified_for、每行、复用 private.enqueue_remind（不新建入队函数，D1 的 remind-lease 检查不用改）
-select is((select t.tgfoid = 'private.enqueue_remind()'::regprocedure and t.tgenabled = 'O'
-      and (t.tgtype & 1) = 1 and (t.tgtype & 2) = 0 and (t.tgtype & 16) = 16
-      and (select array_agg(a.attname::text) from pg_attribute a where a.attrelid = t.tgrelid and a.attnum = any(t.tgattr)) = array['notified_for']
-   from pg_trigger t where t.tgrelid = 'public.events'::regclass and t.tgname = 'events_allday_ack_enqueue'),
-  true, 'events_allday_ack_enqueue：after update of notified_for、for each row、执行 private.enqueue_remind');
+-- ① 结构：events 上执行 enqueue_remind 的只有 events_remind 一个（after insert or update、每行、不带列清单），独立的 events_allday_ack_enqueue 已删
+select is((select string_agg(t.tgname || ':' || ((t.tgtype & 1) = 1 and (t.tgtype & 2) = 0 and (t.tgtype & 4) = 4 and (t.tgtype & 16) = 16
+      and cardinality(t.tgattr::int2[]) = 0 and t.tgenabled = 'O')::text, ',')
+   from pg_trigger t where t.tgrelid = 'public.events'::regclass and t.tgfoid = 'private.enqueue_remind()'::regprocedure),
+  'events_remind:true', 'events 只有 events_remind 一个提醒触发器：after insert or update、for each row、不带列清单，执行 private.enqueue_remind');
 
 -- ② 复现：改了默认时刻以后按“知道了”，写的是本机现算的新时刻
 select tests.reset();
@@ -58,18 +59,18 @@ select is(tests.ack('2000'), 'ok|', '有时刻的日程：不入队（R-336 只�
 select tests.reset(null, 5);
 select is(tests.ack('2000'), 'ok|', '已删的行：不入队');
 
--- ⑧ 正被租着、取过的项：照 enqueue_remind 的语义清租约、attempts 清零（迁移 20261104130000 ④）
+-- ⑧ 正被租着、取过的项：照 remind_enqueue 的语义清租约、attempts 清零（迁移 20261104130000 ④、20261113100000）
 select tests.reset();
-insert into private.remind_queue (table_name, id, claim, claimed_at, attempts)
-  values ('events', 'e3600000-0000-4000-8000-000000000001', 'e3600000-9999-4000-8000-000000000001', now(), 2);
+insert into private.remind_queue (table_name, id, user_id, claim, claimed_at, attempts)
+  values ('events', 'e3600000-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001', 'e3600000-9999-4000-8000-000000000001', now(), 2);
 select is(tests.ack('2000'), 'ok|events:e3600000-0000-4000-8000-000000000001:-:0', '已在队列里、正被租着：清租约、attempts 清零（按新值再算一次）');
 
--- ⑨ 和 events_occ_reset 一起：挪日期时合并进来的 notified_for 被清空，这条触发器看的是清空后的值（不入队；挪日期本身由 events_remind 入队）
+-- ⑨ 和“换了哪一次”一起：挪日期时合并进来的 notified_for 被 touch() 里的 remind_reset 清空，after 触发器看的是清空后的值（挪日期本身入队一次）
 select tests.reset();
 select is(tests.a($$update public.events set date = '2026-11-06', notified_for = 1000 where id = 'e3600000-0000-4000-8000-000000000001'$$)
     || '|' || (select coalesce(notified_for::text, '空') from public.events where id = 'e3600000-0000-4000-8000-000000000001'),
-  'ok|空', '挪日期 + 旧时刻：events_occ_reset 先清空 notified_for');
-select is((select count(*)::int from private.remind_queue where id::text like 'e36%'), 1, '只有一项（events_remind 入的），不重复');
+  'ok|空', '挪日期 + 旧时刻：remind_reset 先清空 notified_for');
+select is((select count(*)::int from private.remind_queue where id::text like 'e36%'), 1, '只有一项（挪日期入的），不重复');
 
 -- ⑩ 别人的行：RLS 照旧，A 改不到 B 的行，也就不会替 B 入队
 insert into public.events (id, user_id, title, date, time, tz, remind_min, remind_days, deleted_at, created_at, updated_at) values

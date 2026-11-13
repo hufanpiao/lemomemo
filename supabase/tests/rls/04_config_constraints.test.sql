@@ -48,14 +48,15 @@ select ok(tests.try_as('postgres', null, $$insert into private.counters values (
 select ok(tests.try_as('postgres', null, $$insert into private.counters values ('ai:someone:x', now(), 1)$$) like '23514%', '第二段既不是 uuid 也不是 global/ip/mail：拒绝');
 
 -- ===== 架构 0.31 第 17 条（P-29）：remind_queue.table_name 只能是 events、todos、anniversaries =====
-select is(tests.try_as('service_role', null, $$insert into private.remind_queue (table_name, id) values
-  ('events', 'e0000000-0000-4000-8000-0000000000d1'), ('todos', '70000000-0000-4000-8000-0000000000d1'),
-  ('anniversaries', 'a0000000-0000-4000-8000-0000000000d1')$$), 'ok', 'remind_queue：三张表的名字都能写（service_role，push-dispatch 的权限）');
-select ok(tests.try_as('service_role', null, $$insert into private.remind_queue (table_name, id) values ('notes', 'e0000000-0000-4000-8000-0000000000d2')$$) like '23514%',
+-- R-411 迁移 20261113100000 起 service_role 没有队列的表权限、队列项要带 user_id：直接写一律用 postgres 身份（迁移、definer 函数的属主）
+select is(tests.try_as('postgres', null, $$insert into private.remind_queue (table_name, id, user_id) values
+  ('events', 'e0000000-0000-4000-8000-0000000000d1', 'aaaaaaaa-0000-4000-8000-000000000001'), ('todos', '70000000-0000-4000-8000-0000000000d1', 'aaaaaaaa-0000-4000-8000-000000000001'),
+  ('anniversaries', 'a0000000-0000-4000-8000-0000000000d1', 'aaaaaaaa-0000-4000-8000-000000000001')$$), 'ok', 'remind_queue：三张表的名字都能写（postgres）');
+select ok(tests.try_as('postgres', null, $$insert into private.remind_queue (table_name, id, user_id) values ('notes', 'e0000000-0000-4000-8000-0000000000d2', 'aaaaaaaa-0000-4000-8000-000000000001')$$) like '23514%',
   'remind_queue：notes 被 check 拒绝');
-select ok(tests.try_as('postgres', null, $$insert into private.remind_queue (table_name, id) values ('profiles', 'e0000000-0000-4000-8000-0000000000d3')$$) like '23514%',
-  'remind_queue：postgres 写 profiles 也被 check 拒绝');
-select ok(tests.try_as('postgres', null, $$insert into private.remind_queue (table_name, id) values ('Events', 'e0000000-0000-4000-8000-0000000000d4')$$) like '23514%',
+select ok(tests.try_as('postgres', null, $$insert into private.remind_queue (table_name, id, user_id) values ('profiles', 'e0000000-0000-4000-8000-0000000000d3', 'aaaaaaaa-0000-4000-8000-000000000001')$$) like '23514%',
+  'remind_queue：写 profiles 也被 check 拒绝');
+select ok(tests.try_as('postgres', null, $$insert into private.remind_queue (table_name, id, user_id) values ('Events', 'e0000000-0000-4000-8000-0000000000d4', 'aaaaaaaa-0000-4000-8000-000000000001')$$) like '23514%',
   'remind_queue：大小写不同也拒绝');
 insert into public.anniversaries (id, user_id, kind, name, calendar, month, day, created_at, updated_at) values
   ('a0000000-0000-4000-8000-0000000000d5', 'aaaaaaaa-0000-4000-8000-000000000001', 'birthday', '妈妈', 'solar', 3, 5, 1, 1);

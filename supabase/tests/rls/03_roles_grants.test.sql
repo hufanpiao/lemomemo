@@ -1,6 +1,6 @@
 -- 角色属性和授权白名单：TC-B0-33、34、69、70、77、78、81、86、87、95（表级 DELETE）；3.3 C、6.2
 begin;
-select plan(46);
+select plan(48);
 \ir _helpers.psql
 select tests.seed();
 
@@ -42,8 +42,8 @@ select is((select string_agg(table_name || ':' || privilege_type, ',' order by t
   where table_schema = 'private' and grantee = 'service_role'),
   'admins:INSERT,admins:SELECT,ai_state:INSERT,ai_state:SELECT,ai_state:UPDATE,counters:DELETE,counters:INSERT,counters:SELECT,counters:UPDATE,deleted_accounts:INSERT,deleted_accounts:SELECT,'
   || 'heartbeat:INSERT,heartbeat:SELECT,heartbeat:UPDATE,invites:INSERT,invites:SELECT,invites:UPDATE,pending_deletions:DELETE,pending_deletions:INSERT,pending_deletions:SELECT,pending_deletions:UPDATE,'
-  || 'pending_signups:DELETE,pending_signups:INSERT,pending_signups:SELECT,pending_signups:UPDATE,remind_queue:DELETE,remind_queue:INSERT,remind_queue:SELECT,user_limits:SELECT',
-  'service_role 对 private 的授权 = 3.3 C 白名单');
+  || 'pending_signups:DELETE,pending_signups:INSERT,pending_signups:SELECT,pending_signups:UPDATE,user_limits:SELECT',
+  'service_role 对 private 的授权 = 3.3 C 白名单（remind_queue 的 select、insert、delete 在 R-411 迁移 20261113100000 收回）');
 -- 安全说明 S-6 守则 ①⑤（R-279，20261030140000）：service_role 对 private.admins 只有 select 和 insert（insert 只给 preview-login --admin）
 select is((select string_agg(p.priv, ',' order by p.priv) from (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) p(priv)
   where has_table_privilege('service_role', 'private.admins', p.priv)), 'INSERT,SELECT',
@@ -83,16 +83,16 @@ select is((select count(*)::int from pg_proc p where p.pronamespace = 'private':
   'private 每个函数的属主都是 postgres');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')),
-  'claim_endpoint_impl,devices_session_guard,enqueue_anniv_defaults,enqueue_embed,enqueue_remind,files_authorize_impl,guard_note_file,guard_note_image,guard_token_revoke,is_active,'
+  'claim_endpoint_impl,devices_session_guard,enqueue_embed,enqueue_remind,files_authorize_impl,guard_note_file,guard_note_image,guard_token_revoke,is_active,'
   || 'media_quota_guard,my_ai_usage_impl,my_sessions_impl,not_password_session,purge_deleted_impl,record_consent_impl,remove_device_impl,report_tz_impl,revoke_my_sessions_impl,row_quota,table_meta_of,tags_ok,touch,vault_ai_off',
-  'authenticated 能执行的 private 函数 = 白名单（tags_ok 是 B1 迁移 20261031110000 建的，notes.tags 的 check 用；B1 迁移 20261029192000 建了 report_tz_impl、remove_device_impl、my_sessions_impl；claim_endpoint_impl 是 B2 迁移 20261103110000 建的；my_ai_usage_impl 是 B3 迁移 20261107100000 建的；media_quota_guard 是 B4 迁移 20261111100000 建的；revoke_my_sessions_impl 是 R-382 迁移 20261111120000 建的）');
+  'authenticated 能执行的 private 函数 = 白名单（tags_ok 是 B1 迁移 20261031110000 建的，notes.tags 的 check 用；B1 迁移 20261029192000 建了 report_tz_impl、remove_device_impl、my_sessions_impl；claim_endpoint_impl 是 B2 迁移 20261103110000 建的；my_ai_usage_impl 是 B3 迁移 20261107100000 建的；media_quota_guard 是 B4 迁移 20261111100000 建的；revoke_my_sessions_impl 是 R-382 迁移 20261111120000 建的；enqueue_anniv_defaults 在 R-411 迁移 20261113100000 删掉）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')), null,
   'anon 不能执行任何 private 函数（迁移 20261112090000 把 session_fate_impl 并进 public.session_fate）');
 select ok(not has_schema_privilege('anon', 'private', 'USAGE'), 'anon 对 private 没有 usage（架构约定 10.7，迁移 20261112090000）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('service_role', p.oid, 'EXECUTE')),
-  'account_request_deletion,account_restore,account_usable,ai_classify_pending,ai_quota_refund,ai_quota_take,auth_mail_counts,db_size_bytes,export_job_start,export_job_take,export_size_over,intake_insert,invite_claim,invite_release,long_transactions,orphan_auth_users,push_heartbeat_write,rebind_device_impl,remind_due,remind_pushed,remind_queue_finish,remind_queue_pop,security_events,session_alive,tags_ok,take_rate', 'service_role 能执行的 private 函数 = 白名单（security_events 是 R-382 迁移 20261111120000 建的；ai_classify_pending 是 B4 迁移 20261110121000 建的；ai_quota_take、ai_quota_refund、intake_insert 是 B3 迁移 20261107100000 建的；push_heartbeat_write 是 B2 迁移 20261105140000 建的；remind_queue_finish 是 B2 迁移 20261104130000 建的，同一迁移把 remind_queue_pop 重建成 (int, int)；remind_due、remind_pushed 是 B2 迁移 20261103140000 建的；remind_queue_pop 是 B2 迁移 20261103130000 建的；orphan_auth_users 是 B1 迁移 20261031160000 建的；invite_claim、invite_release 是 B1 迁移 20261031150000 建的；tags_ok 是 B1 迁移 20261031110000 建的；db_size_bytes、export_job_start、export_job_take、export_size_over 是 B1 迁移 20261031100000 建的；auth_mail_counts 是 B1 迁移 20261029230000 建的；rebind_device_impl 是 B1 迁移 20261029192000 建的；take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
+  'account_request_deletion,account_restore,account_usable,ai_classify_pending,ai_quota_refund,ai_quota_take,auth_mail_counts,db_size_bytes,export_job_start,export_job_take,export_size_over,intake_insert,invite_claim,invite_release,long_transactions,orphan_auth_users,push_heartbeat_write,rebind_device_impl,remind_due,remind_pushed,remind_queue_finish,remind_queue_pop,remind_queue_stats,security_events,session_alive,tags_ok,take_rate', 'service_role 能执行的 private 函数 = 白名单（remind_queue_stats 是 R-411 迁移 20261113100000 建的，同一迁移把 remind_queue_pop 换成 (int, int, boolean, int, int, smallint)；security_events 是 R-382 迁移 20261111120000 建的；ai_classify_pending 是 B4 迁移 20261110121000 建的；ai_quota_take、ai_quota_refund、intake_insert 是 B3 迁移 20261107100000 建的；push_heartbeat_write 是 B2 迁移 20261105140000 建的；remind_queue_finish 是 B2 迁移 20261104130000 建的，同一迁移把 remind_queue_pop 重建成 (int, int)；remind_due、remind_pushed 是 B2 迁移 20261103140000 建的；remind_queue_pop 是 B2 迁移 20261103130000 建的；orphan_auth_users 是 B1 迁移 20261031160000 建的；invite_claim、invite_release 是 B1 迁移 20261031150000 建的；tags_ok 是 B1 迁移 20261031110000 建的；db_size_bytes、export_job_start、export_job_take、export_size_over 是 B1 迁移 20261031100000 建的；auth_mail_counts 是 B1 迁移 20261029230000 建的；rebind_device_impl 是 B1 迁移 20261029192000 建的；take_rate 是 B1 迁移 20261029130000 建的；account_request_deletion、account_restore 是 B1 迁移 20261029150000 建的）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
   where p.pronamespace = 'private'::regnamespace and has_function_privilege('fn_vault', p.oid, 'EXECUTE')), 'purge_vault_impl,tags_ok', 'fn_vault 只能执行 purge_vault_impl 和 tags_ok（B1 迁移 20261031110000，notes.tags 的 check 用）');
 select is((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
@@ -174,6 +174,24 @@ select is((select string_agg(challenge, ',') from private.webauthn_challenges), 
 select ok(tests.try_as('fn_ai', null, $$select 1 from private.webauthn_challenges$$, 'aaaaaaaa-0000-4000-8000-000000000001') like '42501%', 'fn_ai 读挑战被拒');
 select ok(tests.try_as('service_role', null, $$select 1 from private.webauthn_challenges$$) like '42501%', 'service_role 读挑战被拒（0.29 续第 63 条）');
 select ok(tests.try_as('service_role', null, $$select 1 from private.vault$$) like '42501%', 'service_role 读 private.vault 被拒（0.29 续第 52 条 ①）');
+
+-- R-411 方案 5.2 T11：提醒队列的新函数 anon、authenticated 直接调一律被拒（remind_enqueue 收任意 user_id，绝不能给客户端）；
+-- service_role 只经 RPC 碰队列，直接读写表被拒
+select is((select string_agg(r.role || ':' || left(tests.try_as(r.role, 'aaaaaaaa-0000-4000-8000-000000000001', r.sql), 5), ',' order by r.role, r.sql)
+  from (values ('anon'), ('authenticated')) ro(role)
+  cross join lateral (values
+    (ro.role, $$select private.remind_enqueue('all', null, null, null, false, 0::smallint)$$),
+    (ro.role, $$select private.remind_reset('events', '{}'::jsonb, '{}'::jsonb)$$),
+    (ro.role, $$select private.remind_on_settings()$$),
+    (ro.role, $$select * from private.remind_queue_stats()$$),
+    (ro.role, $$select * from private.remind_queue_pop(500, 180, false)$$)) r(role, sql)),
+  'anon:42501,anon:42501,anon:42501,anon:42501,anon:42501,authenticated:42501,authenticated:42501,authenticated:42501,authenticated:42501,authenticated:42501',
+  'anon、authenticated 调 remind_enqueue、remind_reset、remind_on_settings、remind_queue_stats、remind_queue_pop 全部被拒（R-411 T11）');
+select is((select string_agg(left(tests.try_as('service_role', null, s.sql), 5), ',' order by s.sql) from (values
+    ($$select 1 from private.remind_queue$$),
+    ($$insert into private.remind_queue (table_name, id, user_id) values ('todos', gen_random_uuid(), 'aaaaaaaa-0000-4000-8000-000000000001')$$),
+    ($$delete from private.remind_queue$$)) s(sql)),
+  '42501,42501,42501', 'service_role 直接读、插、删 remind_queue 都被拒（R-411 迁移 20261113100000 收回表权限，只经 security definer 的 RPC）');
 
 select * from finish();
 rollback;

@@ -5,10 +5,11 @@
 //   ④ ci.yml 里每一条 supabase stop 都带 --project-id lemo-ci，停库只在改名成功后跑（复审三 R1-2）。
 // 只用 --dry：只判断容器名放不放行就退出（0 放行、2 拒绝），不连库、不调 docker。
 // ⑤ 11-05“不等锁”的判定口径（2b65b43 的 CI 报 5883 毫秒、lemo-e2e 复现不出）：按服务器上的耗时和“在持锁方提交之前结束”判，不按 docker exec 的墙钟；
-//   迁移 20261104130000 里出队、finish 的 4 处 for update 都带 skip locked（真等锁只有两连接脚本测得出：PGlite、pgTAP 都只有一个会话，造不出另一个事务持锁）。
+//   迁移 20261104130000 里出队、finish 的 4 处 for update 都带 skip locked（真等锁只有两连接脚本测得出：PGlite、pgTAP 都只有一个会话，造不出另一个事务持锁）；
+//   R-411 迁移 20261113100000 换签名重建的出队（现行版本）同样钉住。
 // ⑥ 安全复审五：R5-1 持锁方时刻在 commit 之前取、另一边开始得晚报“起晚了”；R5-2 经目录联接（符号链接）调用脚本时护栏照样生效，CI 核对输出里有“全部通过”。
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmdirSync, symlinkSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmdirSync, symlinkSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -160,12 +161,12 @@ describe('remind-queue-2conn.mjs：“不等锁”按服务器上的证据判', 
     expect(v.why).toBe('语句报错：ERROR:  function private.remind_queue_pop(integer, integer, boolean) does not exist');
     expect(noWaitVerdict({ err: 'psql 退出码 2', startAt: C - 10, serverMs: 3, endAt: C - 7, holderCommitAt: C }).why).toBe('语句报错：psql 退出码 2');
   });
-  it('R6-1 没有报错（空串、只有空白）时照旧按时刻判；脚本两处判定都把 psql 报错传进去', () => {
+  it('R6-1 没有报错（空串、只有空白）时照旧按时刻判；脚本三处判定（A、B、R-411 加的 C）都把 psql 报错传进去', () => {
     expect(noWaitVerdict({ err: '', startAt: C - 10, serverMs: 3, endAt: C - 7, holderCommitAt: C }).ok).toBe(true);
     expect(noWaitVerdict({ err: ' \n ', startAt: C - 10, serverMs: 3, endAt: C - 7, holderCommitAt: C }).ok).toBe(true);
     expect(noWaitVerdict({ err: '', startAt: C - 10, serverMs: Number.NaN, endAt: C - 7, holderCommitAt: C }).why).toBe('没拿到服务器时刻');
     const src = readFileSync(SCRIPT, 'utf8');
-    expect(src.match(/noWaitVerdict\(\{ err: r\.code === 0 \? '' : r\.err \|\| `psql 退出码 \$\{r\.code\}`,/g)).toHaveLength(2);
+    expect(src.match(/noWaitVerdict\(\{ err: r\.code === 0 \? '' : r\.err \|\| `psql 退出码 \$\{r\.code\}`,/g)).toHaveLength(3);
   });
   it('复审八 R8-2：每次 psql 都有两道超时——服务器侧 statement_timeout 30 秒（大于持锁 7 秒）、客户端 45 秒后杀掉并回 124', () => {
     const src = readFileSync(SCRIPT, 'utf8');
@@ -177,11 +178,11 @@ describe('remind-queue-2conn.mjs：“不等锁”按服务器上的证据判', 
     expect(src).toMatch(/code: timedOut \? 124 : code/u);
     expect(src.match(/spawn\(/gu)).toHaveLength(1);   // 只有 psql() 这一处起子进程
   });
-  it('3516b93 复盘：脚本不再凭 1.5 秒时的一眼判断，执行期间每 250 毫秒采样，两处判定都把 lockSeen 传进去；两边出队都带 auto_explain', () => {
+  it('3516b93 复盘：脚本不再凭 1.5 秒时的一眼判断，执行期间每 250 毫秒采样，三处判定都把 lockSeen 传进去；两边出队都带 auto_explain', () => {
     const src = readFileSync(SCRIPT, 'utf8');
     expect(src).not.toMatch(/whyWaiting|1\.5 秒时：/u);
     expect(src).toMatch(/async function sampleWaits\(tag, isDone\)[\s\S]*?await sleep\(250\)/u);
-    expect(src.match(/lockSeen: t\.waits\.lockSeen \}\);/g)).toHaveLength(2);
+    expect(src.match(/lockSeen: t\.waits\.lockSeen \}\);/g)).toHaveLength(3);
     expect(src).toContain("const EXPLAIN_SLOW = 'set auto_explain.log_min_duration = 1000; set auto_explain.log_nested_statements = on; set auto_explain.log_analyze = on; set auto_explain.log_buffers = on; set auto_explain.log_level = notice; set auto_explain.log_parameter_max_length = 0;';");
     expect(src).toMatch(/const first = psql\(`\$\{EXPLAIN_SLOW\} begin; with h as materialized/u);
     expect(src).toMatch(/timed\('2conn-pop', `\$\{EXPLAIN_SLOW\} \/\* 2conn-pop \*\//u);
@@ -192,13 +193,13 @@ describe('remind-queue-2conn.mjs：“不等锁”按服务器上的证据判', 
     expect(src).not.toMatch(/check\(\s*r\.ms\s*</);
     expect(src.match(/waitSleeping\(/g)?.length).toBeGreaterThanOrEqual(3);
   });
-  it('R5-1：两个场景都持锁 7 秒，持锁方的时刻在 commit 之前、sleep 之后取；另一边传回语句开始时刻', () => {
+  it('R5-1：三个场景都持锁 7 秒，持锁方的时刻在 commit 之前、sleep 之后取；另一边传回语句开始时刻', () => {
     const src = readFileSync(SCRIPT, 'utf8');
     const holders = src.match(/select pg_sleep\((\d+)\) \/\* 2conn-holder \*\/; select \$\{NOW_MS\}; commit;/g) ?? [];
-    expect(holders).toHaveLength(2);
+    expect(holders).toHaveLength(3);
     for (const h of holders) expect(h).toContain('pg_sleep(7)');
     expect(src).not.toMatch(/commit; select \$\{NOW_MS\}/);
-    expect(src.match(/\$\{STMT_MS\} \|\| '\|' \|\| \$\{START_MS\} \|\| '\|' \|\| \$\{NOW_MS\}/g)).toHaveLength(2);
+    expect(src.match(/\$\{STMT_MS\} \|\| '\|' \|\| \$\{START_MS\} \|\| '\|' \|\| \$\{NOW_MS\}/g)).toHaveLength(3);
   });
   it('R5-2：脚本直接调 main()，不再比 import.meta.url 和 argv[1]', () => {
     const src = readFileSync(SCRIPT, 'utf8').replace(/^\s*\/\/.*$/gm, '');
@@ -230,6 +231,23 @@ describe('remind-queue-2conn.mjs：“不等锁”按服务器上的证据判', 
     expect(body.length).toBeGreaterThan(1000);
     expect(fors).toHaveLength(4);
     for (const f of fors) expect(f).toMatch(/for update of \w+ skip locked/);
+  });
+  it('R-411：现行出队在迁移 20261113100000（之后没有迁移再定义它），唯一一处 for update 带 skip locked、加锁后再判一次租约；删孤儿那段已删；finish 仍是 20261104130000 那份', () => {
+    const dir = join(ROOT, 'supabase', 'migrations');
+    const strip = (s: string) => s.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+    const defs = (name: string) => readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
+      .filter((f) => new RegExp(`create (or replace )?function private\\.${name}\\(`).test(strip(readFileSync(join(dir, f), 'utf8'))));
+    expect(defs('remind_queue_pop').at(-1)).toBe('20261113100000_core_remind_queue_rewrite.sql');
+    expect(defs('remind_queue_finish')).toEqual(['20261104130000_core_remind_queue_lease.sql']);
+    const sql = strip(readFileSync(join(dir, '20261113100000_core_remind_queue_rewrite.sql'), 'utf8'));
+    const head = 'create function private.remind_queue_pop(';
+    const body = sql.slice(sql.indexOf(head), sql.indexOf('end $$;', sql.indexOf(head)));
+    expect(body.length).toBeGreaterThan(1000);
+    const fors = body.match(/for update of \w+[^;]*?(?=\)|$)/gm) ?? [];
+    expect(fors).toHaveLength(1);
+    expect(fors[0]).toMatch(/for update of q skip locked/);
+    expect(body).toMatch(/where q\.claim is null or q\.claimed_at < now\(\) - lease\s+for update of q skip locked/);
+    expect(body).not.toMatch(/with o as materialized|not exists \(select 1 from public\./);
   });
   it('迁移 20261105110000 重建的出队：删孤儿只算一次（materialized + 按表 any(array)），两处 for update 都带 skip locked，其余逐字照旧', () => {
     const strip = (s: string) => s.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');

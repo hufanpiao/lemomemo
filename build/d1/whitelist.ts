@@ -18,7 +18,7 @@ export const TABLE_GRANTS: Record<'service_role' | 'fn_vault' | 'fn_ai', TableGr
     'private.counters': ['SELECT', 'INSERT', 'UPDATE', 'DELETE'],
     'private.ai_state': ['SELECT', 'INSERT', 'UPDATE'],
     'private.heartbeat': ['SELECT', 'INSERT', 'UPDATE'],
-    'private.remind_queue': ['SELECT', 'INSERT', 'DELETE'],
+    // private.remind_queue：R-411 迁移 20261113100000 收回（只经 security definer 的 RPC 碰队列）
     'private.user_limits': ['SELECT'],
   },
   fn_vault: {
@@ -89,6 +89,7 @@ export const FUNCTION_EXEC: Record<'anon' | 'authenticated' | 'service_role' | '
     'orphan_auth_users',   // B1 迁移 20261031160000（ORPHAN-alert）：usage-report 数没有 profile 的 auth 用户
     'remind_queue_pop',   // B2 迁移 20261103130000（BE-2）：push-dispatch 第 0 步出队；20261104130000 换成 (int, int, boolean) 租约式（REMIND-queue-crash-loss）
     'remind_queue_finish',   // B2 迁移 20261104130000（REMIND-queue-crash-loss）：第 0 步结尾放回、按租约删
+    'remind_queue_stats',   // R-411 迁移 20261113100000：usage-report、心跳读提醒队列积压（只算可用账号）
     'remind_due', 'remind_pushed',   // B2 迁移 20261103140000（BE-2 安全审查必改 1）：push-dispatch 第 1 步到点、resolve 候选的精确判断
     'push_heartbeat_write',   // B2 迁移 20261105140000（REMIND-poison-atomic）：push-dispatch 写心跳，queue_poison 原子累加
     'ai_quota_take', 'ai_quota_refund', 'intake_insert',   // B3 迁移 20261107100000：AI 额度原子预扣、退回；claude-intake 三张表一个事务写完

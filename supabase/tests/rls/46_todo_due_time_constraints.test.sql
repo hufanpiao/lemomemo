@@ -68,8 +68,8 @@ delete from private.remind_queue where id = 'd4600000-0000-4000-8000-00000000000
 select is(tests.upd($$update public.todos set title = 'T 改名' where id = 'd4600000-0000-4000-8000-000000000001'$$) || '|' || tests.q('d4600000-0000-4000-8000-000000000001'),
   'ok|不在队列', '⑤ 只改标题：不入队（触发器只看提醒相关列）');
 -- 正被 push-dispatch 租着（claim 非空、取过 2 次）时改时刻：清租约、attempts 清零，下一轮按新时刻重算
-insert into private.remind_queue (table_name, id, claim, claimed_at, attempts)
-  values ('todos', 'd4600000-0000-4000-8000-000000000001', 'c4600000-0000-4000-8000-000000000001', now(), 2);
+insert into private.remind_queue (table_name, id, user_id, claim, claimed_at, attempts)
+  values ('todos', 'd4600000-0000-4000-8000-000000000001', 'aaaaaaaa-0000-4000-8000-000000000001', 'c4600000-0000-4000-8000-000000000001', now(), 2);
 select is(tests.q('d4600000-0000-4000-8000-000000000001'), 'c4600000-0000-4000-8000-000000000001|2', '⑤ 造一个被租着的项');
 select is(tests.upd($$update public.todos set due_time = '19:00' where id = 'd4600000-0000-4000-8000-000000000001'$$) || '|' || tests.q('d4600000-0000-4000-8000-000000000001'),
   'ok|空|0', '⑤ 租着时改 due_time：清租约、attempts 清零');

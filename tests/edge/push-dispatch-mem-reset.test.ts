@@ -23,21 +23,28 @@ describe('替身 edit()：清系统列和 rls/38 的真库期望一致', () => {
   });
 });
 
-describe('touch() 的提醒列：SQL、shared、替身三份一样（审查 M4）', () => {
-  it('从 0001_core.sql 的 touch() 解析出 e.key in (...) 的列，和 TOUCH_REMIND_COLS、MEM_TOUCH_COLS 集合相等', () => {
-    const sql = readFileSync(new URL('../../supabase/migrations/0001_core.sql', import.meta.url), 'utf8');
-    const start = sql.indexOf('create function private.touch()');
-    const body = sql.slice(start, sql.indexOf('end $$;', start));
-    const m = /e\.key in \(([^)]*)\)/.exec(body);
-    expect(m === null).toBe(false);
-    const cols = [...(m?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].map((x) => x[1]).sort();
+// R-411 迁移 20261113100000 起“哪些列算提醒输入”只有 private.table_meta.remind_cols 一份（touch() 只调 remind_reset，不再自己列列名）；
+// 这里从这份迁移的三句 update 解析出三张表的并集，和 shared、替身比。清单 remindCols 接上 D1 比对以后改成对清单比（方案 4.6 ①）。
+describe('提醒输入列：SQL（table_meta.remind_cols）、shared、替身三份一样（审查 M4）', () => {
+  const REWRITE = '20261113100000_core_remind_queue_rewrite.sql';
+  it('从迁移 20261113100000 的 table_meta.remind_cols 解析出三张表的并集，和 TOUCH_REMIND_COLS、MEM_TOUCH_COLS 集合相等', () => {
+    const sql = readFileSync(new URL(`../../supabase/migrations/${REWRITE}`, import.meta.url), 'utf8');
+    const sets = [...sql.matchAll(/^update private\.table_meta set remind_cols = '\{([a-z_,]+)\}'\s+where tbl = '([a-z]+)';$/gm)];
+    expect(sets.map((m) => m[2]).sort()).toEqual(['anniversaries', 'events', 'todos']);
+    const cols = [...new Set(sets.flatMap((m) => (m[1] ?? '').split(',')))].sort();
     expect(cols.length).toBe(20);
     expect([...TOUCH_REMIND_COLS].sort()).toEqual(cols);
     expect([...MEM_TOUCH_COLS].sort()).toEqual(cols);
   });
-  it('touch() 没有被后来的迁移重新定义（重新定义了就要改这条测试去解析最新那份）', () => {
+  it('touch() 只在 0001 和 20261113100000 定义过，最新那份不再自己列提醒列、只调一次 remind_reset（再被重新定义就要改这条测试）', () => {
     const dir = new URL('../../supabase/migrations/', import.meta.url);
-    const hits = readdirSync(dir).filter((f) => f.endsWith('.sql') && /create\s+(or\s+replace\s+)?function\s+private\.touch\s*\(/i.test(readFileSync(new URL(f, dir), 'utf8')));
-    expect(hits).toEqual(['0001_core.sql']);
+    const re = /create\s+(or\s+replace\s+)?function\s+private\.touch\s*\(/i;
+    const hits = readdirSync(dir).filter((f) => f.endsWith('.sql') && re.test(readFileSync(new URL(f, dir), 'utf8')));
+    expect(hits).toEqual(['0001_core.sql', REWRITE]);
+    const sql = readFileSync(new URL(REWRITE, dir), 'utf8');
+    const start = sql.search(re);
+    const body = sql.slice(start, sql.indexOf('end $$;', start));
+    expect(body).not.toMatch(/pushed_for|e\.key in/);
+    expect(body.match(/private\.remind_reset\(/g)?.length).toBe(1);
   });
 });
