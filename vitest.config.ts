@@ -76,7 +76,6 @@ export const SLOW_NODE_TESTS: readonly string[] = [
   'tests/build/set-fn-role-passwords.test.ts', // PowerShell、python
   'tests/build/set-fn-role-passwords-run.test.ts', // PowerShell
   'tests/edge/ai-replay-recorder.test.ts', // 起 gitleaks 子进程（BE-6 录制器存盘的回放文件带假密钥必须被拦）
-  'tests/data-manifest/generate.test.ts', // PGlite 跑全部迁移
   'tests/data-manifest/grant-matrix.test.ts', // PGlite 跑全部迁移
 ];
 /** node-slow 的单条用例超时：单跑最慢的一条约 6 秒，三个全量同时跑时最慢约 19 秒；钩子（建 PGlite 等）给两倍 */
