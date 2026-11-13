@@ -1,5 +1,5 @@
 // 纪念日页面上拼出来的几句话（列表副行、大卡、编辑页“下一次”、提醒摘要）：只拼词条和数字，不碰 React
-// 农历的月日名、提醒默认值经 annivLib()（data/anniv-lib.ts 按需加载，农历表不进首屏，2.6）：页面加载好 lib 以后才调
+// 农历的月日名、提醒默认值经 annivLib()（core/anniv-lib.ts 按需加载，农历表不进首屏，2.6）：页面加载好 lib 以后才调
 import { parseDate, type DateStr } from '../../../../shared/core/date.ts';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';

@@ -2,5 +2,5 @@
 export { FILTERS, type AnnivFilter, type AnnivItem } from '../data/anniv-model.ts';
 export { leapOf, maxDay, NAME_MAX, NOTE_MAX, offsetsKey, offsetsList, recOf, yearRange, type AnnivForm } from '../data/anniv-edit.ts';
 export { clearAvatar, encodeAvatar, setAvatar, type AvatarResult, type Crop } from '../data/avatar.ts';
-export { annivLib, type AnnivLib } from '../data/anniv-lib.ts';
-export { useAnnivLib } from './useAnnivLib.ts';
+export { annivLib, type AnnivLib } from '../../../core/anniv-lib.ts';
+export { useAnnivLib } from '../../../kit/hooks/useAnnivLib.ts';

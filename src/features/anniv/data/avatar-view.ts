@@ -7,6 +7,7 @@
 // 随手记插图的 createImageView（features/notes/data/image-view.ts）是同一个思路；功能之间不能互相 import（A27），这里只做头像用得到的那一小份
 import { collection } from '../../../core/store.ts';
 import { fetchBlob, sign, SIGN_BATCH_MAX } from '../../../platform/files.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 
 const MAX_URLS = 200;
 const done = new Map<string, string>();
@@ -50,6 +51,7 @@ async function flush(): Promise<void> {
   try {
     signed = await sign(items.map((x) => ({ bucket: 'images' as const, path: x.path, purpose: 'view' as const })));
   } catch {
+    rlog('anniv avatar-sign failed');   // 整块评审第 6 条：取图失败记一行，只记步骤和结果码
     for (const x of items) x.resolve(null);
     return;
   }
@@ -57,13 +59,20 @@ async function flush(): Promise<void> {
     items.map(async (x, i) => {
       const s = signed[i];
       try {
-        if (!s?.ok || s.sig === null) return x.resolve(null);
+        if (!s?.ok || s.sig === null) {
+          rlog(`anniv avatar-sign ${s?.ok === false ? `${s.kind}:${s.code}` : 'no_sig'}`);
+          return x.resolve(null);
+        }
         const b = await fetchBlob({ url: s.url, sig: s.sig });
-        if (!b.ok) return x.resolve(null);
+        if (!b.ok) {
+          rlog(`anniv avatar-fetch ${b.kind}:${b.code}`);
+          return x.resolve(null);
+        }
         const url = URL.createObjectURL(b.blob);
         keep(idOfPath(x.path), url);
         x.resolve(url);
       } catch {
+        rlog('anniv avatar-fetch failed');
         x.resolve(null);
       }
     }),

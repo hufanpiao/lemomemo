@@ -18,6 +18,7 @@ import { SwipeRow } from '../../../kit/components/SwipeRow.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { FILTERS, useAnnivLib, type AnnivFilter, type AnnivItem } from '../hooks/anniv-view.ts';
 import { TABLE, useAnnivDefaults, useAnnivList, useAnnivRemove } from '../hooks/useAnniv.ts';
 import { useAnnivT, type AnnivT } from '../hooks/useAnnivT.ts';
@@ -81,7 +82,12 @@ function AnnivList({ inert }: { inert: boolean }) {
   const defaults = useAnnivDefaults();
   // 左滑删除、撤销条、出错条、只读提示条：kit 的 useListActions（和待办、随手记同一套）
   const a = useListActions(TABLE, { remove: useAnnivRemove() });
-  const open = (x: AnnivItem): void => (x.ro ? a.g.block() : void pushInPage('anniv', x.id));
+  // 只读行（新版本写的）被拦：记一行运行日志（整块评审第 6 条，只记步骤）
+  const roBlocked = (step: 'open' | 'del'): void => {
+    rlog(`anniv ro-blocked ${step}`);
+    a.g.block();
+  };
+  const open = (x: AnnivItem): void => (x.ro ? roBlocked('open') : void pushInPage('anniv', x.id));
   const near = data.nearest;
 
   const row = (x: AnnivItem) => {
@@ -95,7 +101,7 @@ function AnnivList({ inert }: { inert: boolean }) {
         disabled={x.ro}
         actions={[
           { key: 'edit', label: t('anniv.swipe.edit', {}), onClick: () => open(x), testId: 'anniv-swipe-edit' },
-          { key: 'del', label: t('anniv.swipe.delete', {}), danger: true, onClick: () => void a.del(x.id), testId: 'anniv-swipe-del' },
+          { key: 'del', label: t('anniv.swipe.delete', {}), danger: true, onClick: () => (x.ro ? roBlocked('del') : void a.del(x.id)), testId: 'anniv-swipe-del' },
         ]}
         data-testid="anniv-row"
         data-ro={x.ro || undefined}

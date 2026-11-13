@@ -14,7 +14,7 @@ import type { Tz } from '../../../../shared/core/tz.ts';
 import type { AfterDue, AnnivCalendar, AnnivKind, AnnivRec } from '../../../../shared/logic/anniv/next-date.ts';
 import { saveDeleted, type SaveOutcome } from '../../../core/edit-save.ts';
 import { remindLive, rowRemindPending } from '../../../core/remind-flag.ts';
-import { annivLib } from './anniv-lib.ts';
+import { annivLib } from '../../../core/anniv-lib.ts';
 
 export const NAME_MAX = 60;
 export const NOTE_MAX = 2000;

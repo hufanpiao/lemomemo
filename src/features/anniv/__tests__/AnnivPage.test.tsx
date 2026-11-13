@@ -14,7 +14,7 @@ vi.mock('../../../kit/hooks/useCollection.ts', () => ({
 }));
 
 const { default: AnnivPage } = await import('../ui/AnnivPage.tsx');
-await (await import('../data/anniv-lib.ts')).loadAnnivLib();
+await (await import('../../../core/anniv-lib.ts')).loadAnnivLib();
 
 const TZ = currentTz();
 const NOW = msAt('2026-11-13', 10 * 60, TZ);

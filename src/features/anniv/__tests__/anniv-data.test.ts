@@ -1,6 +1,6 @@
 // 纪念日页面的数据层（B5 S14、S15、S16）：列表排序筛选、只读行、编辑表单收拾、patch、头像裁剪的数学
 import { describe, expect, it } from 'vitest';
-import { loadAnnivLib } from '../data/anniv-lib.ts';
+import { loadAnnivLib } from '../../../core/anniv-lib.ts';
 import { annivList, itemOf, nextFew } from '../data/anniv-model.ts';
 import { dateValid, emptyForm, formOf, newRow, normalize, offsetsKey, offsetsList, patchOf } from '../data/anniv-edit.ts';
 import { clampView, cropOf, scaleOf, zoomTo } from '../ui/AvatarPicker.tsx';

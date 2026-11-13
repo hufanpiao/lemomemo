@@ -31,7 +31,12 @@ function useAvatar(id: string | null, saved: Record<string, unknown> | undefined
     if (!id) return;
     if (!blob) return setSt('encode_failed');
     setSt('uploading');
-    const r = await setAvatar(id, blob);
+    const prevId = saved?.['avatar_id'];
+    const prevBytes = saved?.['avatar_bytes'];
+    const r = await setAvatar(id, blob, {
+      avatar_id: typeof prevId === 'string' ? prevId : null,
+      avatar_bytes: typeof prevBytes === 'number' ? prevBytes : null,
+    });
     setSt(r === 'ok' ? null : r);
   };
   const node = (

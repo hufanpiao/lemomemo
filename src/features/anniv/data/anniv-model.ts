@@ -9,7 +9,7 @@ import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import type { AnnivKind, AnnivRec, AnnivState } from '../../../../shared/logic/anniv/next-date.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
-import { annivLib } from './anniv-lib.ts';
+import { annivLib } from '../../../core/anniv-lib.ts';
 
 export type Row = Readonly<Record<string, unknown>> & { readonly id: string };
 export type AnnivFilter = 'all' | AnnivKind;

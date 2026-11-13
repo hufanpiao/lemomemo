@@ -3,9 +3,10 @@
 // • 本次会话只在本机处理过的集合（R4-L1）、本次打开以后响过的（rangSnapshot，R-336）：引擎（useReminders）写，这里和“错过的提醒”读
 // • 不带引擎、本机通知、写服务器、弹层这些：那些在 useReminders.ts，首屏用不到
 // useReminders.ts 原样转出这里的导出，别处照旧从 useReminders 引
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import type * as NextNs from '../../../../shared/logic/anniv/next-date.ts';
+import { useMemo, useSyncExternalStore } from 'react';
 import { currentTz } from '../../../core/current-tz.ts';
+import { annivLib } from '../../../core/anniv-lib.ts';
+import { useAnnivLib } from '../../../kit/hooks/useAnnivLib.ts';
 import { annivOn } from '../../../kit/hooks/anniv-on.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { allReminders, MISSED_WINDOW_MS, type AnnivSource, type Rang, type RangMap, type Reminder, type Row } from '../data/reminder-model.ts';
@@ -67,37 +68,19 @@ export function clearSessionAcked(): void {
 const markSessionAcked = (list: Reminder[], acked: ReadonlySet<string>): Reminder[] =>
   acked.size === 0 ? list : list.map((r) => (acked.has(r.tag) && !r.handled ? { ...r, handled: true } : r));
 
-// 纪念日的提醒时刻（B5 S15）：shared/logic/anniv/next-date.ts 带农历表，不进首屏（2.6），有纪念日、开关开着才按需加载；
-// 用到本文件的（RemindHost、错过的提醒、整页提醒、未来 7 天）都在首屏画完以后才挂。加载失败不重试，纪念日不提醒
-type NextModule = typeof NextNs;
-let annivMod: NextModule | null = null;
-let annivPending: Promise<NextModule | null> | null = null;
-const loadAnniv = (): Promise<NextModule | null> =>
-  (annivPending ??= import('../../../../shared/logic/anniv/next-date.ts').then(
-    (m) => (annivMod = m),
-    () => null,
-  ));
-
+// 纪念日的提醒时刻（B5 S15）：shared/logic/anniv/next-date.ts 带农历表，不进首屏（2.6），有纪念日、开关开着才经 kit 的 useAnnivLib 按需加载；
+// 用到本文件的（RemindHost、错过的提醒、整页提醒、未来 7 天）都在首屏画完以后才挂。加载失败（kit 记运行日志）纪念日不提醒
 /** 纪念日那一份：行、设置里的 anniv.default_*、按需加载的推算（还没加载好返回 undefined） */
 function useAnnivSource(rows: readonly SettingRow[], tz: string): AnnivSource | undefined {
   const annivs = useCollection<Row>('anniversaries');
   const want = annivs.length > 0 && annivOn();
-  const [mod, setMod] = useState<NextModule | null>(annivMod);
-  useEffect(() => {
-    if (mod || !want) return undefined;
-    let alive = true;
-    void loadAnniv().then((m) => {
-      if (alive && m) setMod(m);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [mod, want]);
+  const ready = useAnnivLib(want) === 'ready';
   return useMemo(() => {
-    if (!mod || !want) return undefined;
+    if (!ready) return undefined;
+    const mod = annivLib();
     const settings = { [KEY_ANNIV_OFFSETS]: settingValue(rows, KEY_ANNIV_OFFSETS), [KEY_ANNIV_TIME]: settingValue(rows, KEY_ANNIV_TIME) };
     return { rows: annivs, at: (row: Row, now: number) => mod.annivRemindFrom(row, tz, now, settings, MISSED_WINDOW_MS) };
-  }, [mod, want, annivs, rows, tz]);
+  }, [ready, annivs, rows, tz]);
 }
 
 /** 本机现算的全部提醒（日程、待办、纪念日） */

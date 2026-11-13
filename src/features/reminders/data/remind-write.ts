@@ -7,7 +7,7 @@
 //   “知道了”不写 notified_for——outbox 会把两次写合并成 {date, notified_for: 旧时刻}，把新的那一次提醒压住；
 //   这时只在本机关掉横幅和通知、记进本次会话的已处理集合（hooks/useReminders.ts），判断用 timingPending；
 //   那条改动发出去以后，提醒时刻没变的再补写一次（第三轮 L10，hooks/useReminders.ts 的 laterAcks）
-import type { DateStr } from '../../../../shared/core/date.ts';
+import { addDays, type DateStr } from '../../../../shared/core/date.ts';
 import { DEFAULT_TODO_REMIND_TIME } from '../../../../shared/logic/remind.ts';
 import { saveInsert, savePatch, type SaveOutcome } from '../../../core/edit-save.ts';
 import type { Reminder } from './reminder-model.ts';
@@ -82,6 +82,12 @@ export function annivTodoRow(id: string, title: string, due: DateStr, annivId: s
     project: '', note: '', source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: annivId,
     short: null, short_by: null, done_at: 0, push_show_title: null, notified_for: null, snooze_at: null, created_at: now, updated_at: now,
   };
+}
+
+/** 生成待办的截止日：纪念日前一天；当天或已过按的取今天，不生成一条一出来就逾期的待办（整块评审第 14 条） */
+export function annivTodoDue(annivDate: DateStr, today: DateStr): DateStr {
+  const eve = addDays(annivDate, -1);
+  return eve < today ? today : eve;
 }
 
 /** 生成待办：先建待办，建成了再把这条纪念日提醒按“知道了”处理；返回新待办的结果 */

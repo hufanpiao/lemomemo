@@ -4,6 +4,9 @@
 // • 上传顺序（files_authorize 查本人这一行的 avatar_id，行没上服务器之前 PUT 会被拒）：
 //   ① 先写 avatar_id（新的 UUID）、avatar_bytes（库里两者同空同非空、≤ 102400）；② 等这一行的改动在 outbox 里发完（被拒了就算失败）；
 //   ③ PUT /files/v1/o/images/<uid>/anniv/<id>/<avatar_id>.webp，可重试的错误退避再试两次
+//   ②③ 没成（整块评审第 5 条）：avatar_id、avatar_bytes 写回换之前的值（原来没有就是 null），不留一个指向空对象的 avatar_id；
+//   界面提示“头像没传上，联网后再换一次”。离线时这次回写和 ① 在 outbox 里合并，等于没改
+// • 运行日志（整块评审第 6 条）：编码、写行、发送、上传每一步失败记一行 `anniv avatar-<步骤> <结果码>`，不记名字、日期、图片
 // • 本机这一张直接记进头像缓存（avatar-view.ts 的 seedAvatar），列表、今天页立刻显示，不等上传
 // • 去掉头像：两列写 null；旧对象由以后的 storage-sweep 清（代定 D10，B5 不做）
 import { getBoot } from '../../../core/boot.ts';
@@ -11,6 +14,7 @@ import { savePatch } from '../../../core/edit-save.ts';
 import { avatarPath, seedAvatar } from './avatar-view.ts';
 import { clock } from '../../../platform/clock.ts';
 import { upload } from '../../../platform/files.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import { loadWebpWasm } from '../../../platform/webp-wasm.ts';
 
 export const AVATAR_EDGE = 256;
@@ -49,8 +53,10 @@ export async function encodeAvatar(src: CanvasImageSource, crop: Crop, wasm: typ
       }
       if (b.size <= AVATAR_MAX_BYTES) return b;
     }
+    rlog('anniv avatar-encode too_large');
     return null;
   } catch {
+    rlog('anniv avatar-encode failed');
     return null;
   } finally {
     c.width = 0;
@@ -85,19 +91,38 @@ export async function waitSent(rec: string, timeoutMs = 30_000): Promise<'ok' | 
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-/** 换头像（见文件头的三步） */
-export async function setAvatar(annivId: string, blob: Blob): Promise<AvatarResult> {
+/** 换之前这一行的头像两列（上传没成时写回去） */
+export interface AvatarPrev {
+  avatar_id: string | null;
+  avatar_bytes: number | null;
+}
+
+/** 换头像（见文件头的三步）；prev 是换之前的两列 */
+export async function setAvatar(annivId: string, blob: Blob, prev: AvatarPrev): Promise<AvatarResult> {
   const uid = getBoot()?.userId ?? null;
-  if (uid === null) return 'write_failed';
+  if (uid === null) {
+    rlog('anniv avatar-write no_user');
+    return 'write_failed';
+  }
   const avatarId = crypto.randomUUID();
   const w = await savePatch('anniversaries', annivId, { avatar_id: avatarId, avatar_bytes: blob.size, updated_at: clock.now() }, false);
-  if (w !== 'saved') return 'write_failed';
+  if (w !== 'saved') {
+    rlog(`anniv avatar-write ${w}`);
+    return 'write_failed';
+  }
   seedAvatar(avatarId, blob);
-  if ((await waitSent(`anniversaries:${annivId}`)) !== 'ok') return 'upload_failed';
+  const failed = async (step: string, code: string): Promise<AvatarResult> => {
+    rlog(`anniv avatar-${step} ${code}`);
+    const back = await savePatch('anniversaries', annivId, { avatar_id: prev.avatar_id, avatar_bytes: prev.avatar_bytes, updated_at: clock.now() }, false);
+    if (back !== 'saved') rlog(`anniv avatar-rollback ${back}`);
+    return 'upload_failed';
+  };
+  const sent = await waitSent(`anniversaries:${annivId}`);
+  if (sent !== 'ok') return failed('send', sent);
   for (let i = 0; ; i++) {
     const r = await upload('images', avatarPath(uid, annivId, avatarId), blob, WEBP);
     if (r.ok) return 'ok';
-    if (r.kind !== 'retry' || i >= 2) return 'upload_failed';
+    if (r.kind !== 'retry' || i >= 2) return failed('upload', `${r.kind}:${r.code}`);   // 原因码是服务器的枚举（quota_exceeded 等），不含内容
     await sleep(1000 * 2 ** i);
   }
 }

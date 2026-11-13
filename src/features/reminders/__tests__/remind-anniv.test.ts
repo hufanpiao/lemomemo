@@ -4,7 +4,7 @@ import { msAt } from '../../../../shared/core/date.ts';
 import { actionsFor } from '../../../../shared/logic/remind-actions.ts';
 import { reminderTag } from '../../../../shared/logic/remind-route.ts';
 import { whenMsg } from '../data/remind-format.ts';
-import { annivTodoRow } from '../data/remind-write.ts';
+import { annivTodoDue, annivTodoRow } from '../data/remind-write.ts';
 import { allReminders, MISSED_WINDOW_MS, missed, modeOf, upcoming, type AnnivAt } from '../data/reminder-model.ts';
 
 // next-date 带农历表，src 里只准按需加载（check_arch LUNAR）
@@ -89,6 +89,11 @@ describe('纪念日的按钮和生成待办', () => {
   });
 
   it('生成的待办：截止日、来源、当天 09:00 提醒，其余列和新建待办一样', () => {
+    // 截止：纪念日前一天；当天或已过按的，取今天（整块评审第 14 条）
+    expect(annivTodoDue('2026-11-20', '2026-11-13')).toBe('2026-11-19');
+    expect(annivTodoDue('2026-11-20', '2026-11-19')).toBe('2026-11-19');
+    expect(annivTodoDue('2026-11-20', '2026-11-20')).toBe('2026-11-20');
+    expect(annivTodoDue('2026-11-20', '2026-11-21')).toBe('2026-11-21');
     const r = annivTodoRow('00000000-0000-4000-8000-000000000002', '准备：김지민', '2026-11-19', row().id, 5);
     expect(r).toMatchObject({ title: '准备：김지민', due: '2026-11-19', from_anniv_id: row().id, done: false, remind_days: 0, remind_time: '09:00', source: 'page', created_at: 5 });
   });
