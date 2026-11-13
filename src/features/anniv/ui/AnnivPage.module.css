@@ -1,0 +1,451 @@
+/* 纪念日页面（B5 S14～S16；线框 s4、s5；皮肤视觉稿 anniv、annnew、annedit、annface）：只用令牌（A11），两套皮肤、深浅色都由令牌决定。
+   “最近的一个”大卡不用液态玻璃（R-144），电脑不加边框（R-141）；列表行用 kit 的 List.module.css */
+
+.page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: max(var(--safe-top), 12px) 16px var(--tabbar-pad);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: var(--hit);
+  margin-bottom: 8px;
+}
+
+.h1 {
+  margin: 0;
+  font-size: var(--fs-26);
+  font-weight: 700;
+}
+
+.topEnd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.newBtn {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--fs-14);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* 分段（周 / 月 / 纪念日；编辑页的类型、阳历阴历）：写法同日历页 .seg，整行宽、各段平分 */
+.seg {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+}
+
+.segBtn {
+  position: relative;
+  flex: 1;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  cursor: pointer;
+}
+
+.segBtn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, var(--hit));
+  height: max(100%, var(--hit));
+  transform: translate(-50%, -50%);
+}
+
+.segBtn[aria-pressed='true'] {
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+.segBtn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* 筛选胶囊、提醒天数胶囊 */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.chip {
+  position: relative;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--text);
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+.chip::after {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+
+.chip[aria-pressed='true'] {
+  border-color: var(--chip-on-bg);
+  background: var(--chip-on-bg);
+  color: var(--chip-on-fg);
+  font-weight: 600;
+}
+
+/* “最近的一个”大卡（R-132 方案 C） */
+.near {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 14px 16px 16px;
+  border: 0;
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nearHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.nearTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: var(--klv-bg);
+  color: var(--klv-fg);
+  font-size: var(--fs-12);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.nearDays {
+  font-size: var(--fs-16);
+}
+
+/* 大号天数下面一笔荧光笔底（简洁浅色有颜色，别的皮肤 --now-hl 是透明） */
+.nearNum {
+  padding: 0 2px;
+  background: linear-gradient(transparent 58%, var(--now-hl) 58%);
+  font-family: var(--f-num);
+  font-size: var(--fs-44);
+  font-weight: 300;
+  line-height: 1.1;
+}
+
+.nearToday {
+  font-size: var(--fs-28);
+  font-weight: 600;
+}
+
+.nearTitle {
+  font-size: var(--fs-18);
+}
+
+.nearMeta {
+  color: var(--text-2);
+  font-size: var(--fs-13);
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: var(--fs-11);
+}
+
+.days {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--f-num);
+  font-size: var(--fs-22);
+  font-weight: 300;
+  white-space: nowrap;
+}
+
+.days small {
+  margin-left: 2px;
+  color: var(--text-2);
+  font-size: var(--fs-11);
+}
+
+.past {
+  margin-top: 12px;
+}
+
+.pastSum {
+  min-height: var(--hit);
+  padding: 12px 4px;
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+/* ───────── 编辑层：手机整屏从下面上来，电脑右侧抽屉 ───────── */
+
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+}
+
+.sheet {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg);
+}
+
+.sheet > main {
+  min-height: 100%;
+  padding-bottom: calc(var(--inset-bottom, 0px) + 24px);
+}
+
+@media (width >= 900px) {
+  .sheet {
+    left: auto;
+    width: 440px;
+    background: var(--b-drawer);
+    box-shadow: var(--b-drawer-shadow);
+  }
+}
+
+.wheels {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 6px;
+}
+
+.wheels > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.switchRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: var(--hit);
+}
+
+.hint {
+  margin: 2px 0 6px;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.nextBox {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-sm);
+  background: var(--panel);
+  font-size: var(--fs-14);
+}
+
+.nextBox p {
+  margin: 0;
+}
+
+.rowBtn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--hit);
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-14);
+  text-align: right;
+  cursor: pointer;
+}
+
+.chev {
+  color: var(--text-2);
+}
+
+.avRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.avBtn {
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+
+.avBtn:disabled {
+  cursor: default;
+}
+
+.avText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.avTitle {
+  font-size: var(--fs-15);
+}
+
+/* 提醒弹层 */
+.rmHead {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -8px;
+}
+
+.rmLabel {
+  margin: 12px 0 0;
+  font-size: var(--fs-14);
+}
+
+.rmCustom {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.num {
+  width: 9em;
+  min-height: var(--hit);
+  padding: 0 12px;
+  border: 1px solid var(--inp-line);
+  border-radius: var(--r-inp);
+  background: var(--inp-bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.warn {
+  margin: 6px 0 0;
+  color: var(--danger-text);
+  font-size: var(--fs-13);
+}
+
+/* 头像选区 */
+.crop {
+  position: relative;
+  width: 260px;
+  height: 260px;
+  margin: 8px auto 12px;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: var(--panel-2);
+  touch-action: none;
+  cursor: grab;
+}
+
+.cropImg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  transform-origin: 0 0;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* 圆形示意：圆外压暗 */
+.cropMask {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 200px var(--scrim);
+  pointer-events: none;
+}
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-14);
+}
+
+.zoom input {
+  flex: 1;
+  min-height: var(--hit);
+}
+
+.cropActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}

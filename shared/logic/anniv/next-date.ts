@@ -251,3 +251,28 @@ export function annivNextOf(row: Readonly<Record<string, unknown>>, ctx: { tz: T
   if (r === null) throw new Error('bad_anniv');
   return annivNextAt(r, ctx.tz, ctx.now, ctx.settings);
 }
+
+/** 建这一条那天（没年份的倒数日从这天起算，R-403）：created_at 按 tz 取日期；没有时按 fallback */
+export function createdDayOf(row: Readonly<Record<string, unknown>>, tz: Tz, fallback: DateStr): DateStr {
+  const c = row['created_at'];
+  return typeof c === 'number' && Number.isFinite(c) ? todayOf(c, tz) : fallback;
+}
+
+/**
+ * 一批行在 from～to（含）里有纪念日的日子（日历月格的菱形）：已删、撤销、只读（annivRecOf 回 null）、韩国阴历的跳过；
+ * 单条算出错（农历超出表范围等）只跳过那一条，不让整张月历算不下去
+ */
+export function annivDatesIn(rows: readonly Readonly<Record<string, unknown>>[], from: DateStr, to: DateStr, tz: Tz): ReadonlySet<DateStr> {
+  const out = new Set<DateStr>();
+  for (const row of rows) {
+    if ((row['deleted_at'] ?? null) !== null || row['undone'] === true) continue;
+    const r = annivRecOf(row);
+    if (r === null || r.lunar_variant !== 'cn') continue;
+    try {
+      for (const d of datesBetween(r, from, to, createdDayOf(row, tz, from))) out.add(d);
+    } catch {
+      // 跳过这一条
+    }
+  }
+  return out;
+}

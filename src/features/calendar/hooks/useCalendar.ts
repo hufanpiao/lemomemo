@@ -6,9 +6,10 @@
 // • 月格按 (年月、数据、今天、每格几个标签、节假日) 记住；周视图的排布要量出时间轴宽度，在界面一侧算（WeekView）
 // • 日历内部一律原地换（R-372 ②，负责人选“算同一层（推荐）”）：翻月、切月/周、“今天”、年月选择、点某天进周视图、键盘 ← → 都用 replaceInPage，
 //   不记步数，左滑直接回到进日历之前那一层（今天）
+// • 纪念日菱形（B5）：hooks/useAnnivDates.ts 按需加载 next-date，开关关着不画
 // • 节假日没拉到（离线）时 model.holidaysOffline = true，页面提示“联网后显示节假日”；韩文界面不加载农历（useLunar）
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { minOfDay, todayOf, type DateStr } from '../../../../shared/core/date.ts';
+import { addDays, daysIn, fmtDateStr, minOfDay, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { UiLocale } from '../../../../shared/i18n/pick-locale.ts';
 import { holidayCountries, holidayYears } from '../../../../shared/logic/calendar/holidays.ts';
 import { resolveWeekStart, type WeekStart, type YearMonth } from '../../../../shared/logic/calendar/cal-nav.ts';
@@ -21,6 +22,7 @@ import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { calItemsOf, todoDueMinutes, type Row } from '../data/cal-data.ts';
 import { headerMonth, isCurrent, paramsOf, pickMonth, resolveView, shiftView, switchMode, todayView, type CalView } from '../data/cal-route.ts';
+import { useAnnivDates } from './useAnnivDates.ts';
 import { useCalSettingValues } from './useCalSettings.ts';
 import { useHolidays } from './useHolidays.ts';
 import { useLunar, type LunarApi } from './useLunar.ts';
@@ -83,6 +85,13 @@ export function useCalendar(params: readonly string[]) {
   const holidays = hol.marks;
   const lunar = useLunar(locale);
 
+  // 纪念日菱形（B5）：这个月前后各多看一段，42 格都盖住
+  const annivDates = useAnnivDates(
+    view.mode === 'month' ? addDays(fmtDateStr(view.ym.y, view.ym.m, 1), -7) : null,
+    view.mode === 'month' ? addDays(fmtDateStr(view.ym.y, view.ym.m, daysIn(view.ym.y, view.ym.m)), 14) : null,
+    tz,
+  );
+
   const maxMarks = wide ? 4 : 2;
   // view 按地址参数记住（resolved 的 useMemo），地址不变时是同一个对象
   const cells = useMemo(() => {
@@ -90,11 +99,11 @@ export function useCalendar(params: readonly string[]) {
     try {
       // lunarDayInfo(date, locale) 比 MonthOpts.dayInfo(date) 多一个参数，useLunar 里包了一层：dayInfo: (date) => m.lunarDayInfo(date, locale)
       // lunar.ts 只能动态 import（useLunar 的 defaultLoad），这里和别处都不能静态 import
-      return buildMonth(view.ym, items, { tz, today, weekStart, maxMarks, holidays, ...(lunar ? { dayInfo: lunar.dayInfo } : {}) });
+      return buildMonth(view.ym, items, { tz, today, weekStart, maxMarks, holidays, ...(lunar ? { dayInfo: lunar.dayInfo } : {}), ...(annivDates ? { annivDates } : {}) });
     } catch {
       return null;
     }
-  }, [view, items, tz, today, weekStart, maxMarks, holidays, lunar]);
+  }, [view, items, tz, today, weekStart, maxMarks, holidays, lunar, annivDates]);
 
   // 日历里翻月、切月/周、“今天”、选年月、点某天进周视图都算同一层（R-372 ②，负责人选“算同一层（推荐）”）：一律原地换，不记步数，
   // 左滑直接回到进日历之前那一层（今天）

@@ -26,6 +26,8 @@ export const FIRST_PAINT_DYNAMIC = [
   'features/reminders/ui/MissedReminders.tsx',
   'features/reminders/ui/UnsyncedRemind.tsx',
   'features/reminders/ui/UnsyncedRemindMark.tsx',
+  // 今天页的纪念日一行（B5 S14）：7 天内有纪念日才挂，挂就在首屏期间，照样不许带 zod、农历
+  'features/today/ui/AnnivLine.tsx',
 ];
 
 /** manifest 键、src、name、file 里出现这些就是禁区的块：zod、zod-jitless、shared/schema、shared/manifests；

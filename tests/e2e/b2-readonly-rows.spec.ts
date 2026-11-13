@@ -124,7 +124,7 @@ test.describe('只读行（FA-2）', () => {
     expect(await stateOf(page)).toEqual({ done: false, outbox: 0 });
   });
 
-  test('日历：顶部横幅；日清单只读行有标记、点了拦下；“纪念日”置灰，点了只出“纪念日即将推出”（A2）', async ({ page }) => {
+  test('日历：顶部横幅；日清单只读行有标记、点了拦下', async ({ page }) => {
     await seed(page);
     await open(page, '#/calendar', 'cal-day-list');
     await expect(page.getByTestId('cal-repeat')).toContainText('有 2 条重复事项要新版本才能完整显示');
@@ -132,13 +132,6 @@ test.describe('只读行（FA-2）', () => {
     await page.getByTestId('cal-day-row-e-ro').click();
     await expect(page.getByTestId('cal-ro-toast')).toContainText('这条要新版本才能修改');
     await expect(page).not.toHaveURL(/#\/event\//);
-
-    const anniv = page.getByTestId('cal-mode-anniv');
-    await expect(anniv).toHaveAttribute('aria-disabled', 'true');
-    const before = page.url();
-    await anniv.click({ force: true });   // aria-disabled：Playwright 当它不可点，真人点得到（点了出提示）
-    await expect(page.getByTestId('cal-anniv-soon')).toHaveText('纪念日即将推出');
-    expect(page.url()).toBe(before);
 
     await page.getByTestId('cal-day-row-e-ok').click();
     await expect(page).toHaveURL(/#\/event\/e-ok$/);

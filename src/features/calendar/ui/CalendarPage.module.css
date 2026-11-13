@@ -90,13 +90,6 @@
   transform: translate(-50%, -50%);
 }
 
-/* 还没做好的“纪念日”（A2）：置灰，和能点的“周 / 月”分得开；点了只出提示 */
-.segBtn[aria-disabled='true'] {
-  color: var(--text-2);
-  cursor: default;
-  opacity: 0.6;
-}
-
 .segBtn[aria-pressed='true'] {
   background: var(--chip-on-bg);
   color: var(--chip-on-fg);
