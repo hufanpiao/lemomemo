@@ -61,13 +61,13 @@ describe('下一次（nextDate）', () => {
     expect(onOrAfter(r, '2026-01-01')?.date).toBe(toSolar(2026, 3, 10, false, 'cn'));
     // 找一个有闰三月的年份核对用的是闰月
     const y = [2028, 2031, 2033, 2036, 2039, 2042, 2044, 2047, 2050, 2052, 2055].find((x) => leapMonthOf(x, 'cn') === 3);
-    expect(y).toBeDefined();
+    expect(y === undefined).toBe(false);
     expect(occurrenceIn(r, y as number)?.date).toBe(toSolar(y as number, 3, 10, true, 'cn'));
   });
   it('三十不存在用廿九', () => {
     // 找一个小月（29 天）的正月
     const y = [2026, 2027, 2028, 2029, 2030, 2031, 2032].find((x) => toSolar(x, 1, 30, false, 'cn') === null) as number;
-    expect(y).toBeDefined();
+    expect(y === undefined).toBe(false);
     expect(occurrenceIn(rec({ calendar: 'lunar', month: 1, day: 30 }), y)?.date).toBe(toSolar(y, 1, 29, false, 'cn'));
   });
   it('韩国阴历（D1 先不做）、超出农历表的年份算不出', () => {
@@ -77,18 +77,25 @@ describe('下一次（nextDate）', () => {
   });
 });
 
+/** annivState 里断言要看的几项（deno 跑的简化版 expect 没有 toMatchObject） */
+function brief(s: ReturnType<typeof annivState>): { date: string; past: boolean; days: number; age: number | null } | null {
+  return s ? { date: s.next.date, past: s.past, days: s.days, age: s.age } : null;
+}
+
 describe('倒数日（R-403）', () => {
   it('有年份：就是那一天；过了 archive 算已过去，yearly 滚到下一次', () => {
     const r = rec({ kind: 'countdown', month: 11, day: 30, year: 2026 });
-    expect(annivState(r, '2026-11-13')).toMatchObject({ next: { date: '2026-11-30' }, past: false, days: 17, age: null });
-    expect(annivState(r, '2026-12-01')).toMatchObject({ next: { date: '2026-11-30' }, past: true, days: -1 });
-    expect(annivState({ ...r, after_due: 'yearly' }, '2026-12-01')).toMatchObject({ next: { date: '2027-11-30' }, past: false });
+    expect(brief(annivState(r, '2026-11-13'))).toEqual({ date: '2026-11-30', past: false, days: 17, age: null });
+    expect(brief(annivState(r, '2026-12-01'))).toEqual({ date: '2026-11-30', past: true, days: -1, age: null });
+    const y = brief(annivState({ ...r, after_due: 'yearly' }, '2026-12-01'));
+    expect([y?.date, y?.past]).toEqual(['2027-11-30', false]);
   });
   it('没年份：从创建那天起第一个该月日（当天就是这个月日的取当天）', () => {
     const r = rec({ kind: 'countdown', month: 3, day: 5 });
     expect(countdownTarget(r, '2026-03-05')?.date).toBe('2026-03-05');
     expect(countdownTarget(r, '2026-03-06')?.date).toBe('2027-03-05');
-    expect(annivState(r, '2027-03-06', '2026-03-06')).toMatchObject({ next: { date: '2027-03-05' }, past: true });
+    const s = brief(annivState(r, '2027-03-06', '2026-03-06'));
+    expect([s?.date, s?.past]).toEqual(['2027-03-05', true]);
   });
 });
 
@@ -145,7 +152,7 @@ describe('行 → AnnivRec、annivNextOf（push-dispatch 接口）', () => {
   });
   it('缺的列按默认：lunar_variant cn、after_due archive', () => {
     const r = annivRecOf({ kind: 'countdown', calendar: 'solar', month: 3, day: 5, created_at: msAt('2026-03-06', 0, SEOUL) });
-    expect(r).toMatchObject({ lunar_variant: 'cn', after_due: 'archive', year: null });
+    expect([r?.lunar_variant, r?.after_due, r?.year]).toEqual(['cn', 'archive', null]);
     const now = msAt('2026-03-10', 0, SEOUL);
     expect(annivNextOf({ kind: 'countdown', calendar: 'solar', month: 3, day: 5, created_at: msAt('2026-03-06', 0, SEOUL) }, { tz: SEOUL, now, settings: {} }))
       .toEqual({ next_date: '2027-03-05', remind_at: msAt('2027-02-26', 540, SEOUL) });
