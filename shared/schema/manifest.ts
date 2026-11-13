@@ -14,7 +14,6 @@ export const userLookupSchema = z.discriminatedUnion('by', [
   z.object({ by: z.literal('emailHash'), col }),                              // pending_signups
   z.object({ by: z.literal('registry'), table: z.string(), col }),            // vault-preview 的随机路径
   z.object({ by: z.literal('pathPattern'), level: z.number().int().min(1) }), // 桶：第几级目录是 user_id
-  z.object({ by: z.literal('rowRef'), tableCol: col, idCol: col }),           // remind_queue：按引用的行找主人（表里没有 user_id）
 ]);
 export type UserLookup = z.infer<typeof userLookupSchema>;
 
@@ -54,6 +53,8 @@ export const tableSchema = z.object({
   systemCols: cols.optional(),
   /** 写进 private.table_meta：两台设备同时改也不报冲突 */
   noConflict: cols.optional(),
+  /** 写进 private.table_meta.remind_cols（R-411）：这些列一变就要重算提醒（入队、清 pushed_for、defer_until）；只有挂 touch() 的表能写 */
+  remindCols: cols.optional(),
   /** 本机库迁移出错时能不能清空重拉 */
   rebuildable: z.boolean().default(true),
   /** 服务器上一行最多留多久（只做登记，由每日清理执行；R-382 起 revoked_sessions 写 '30 days'，口径见架构 3.5 第 5 点） */
@@ -64,6 +65,8 @@ export const tableSchema = z.object({
   .refine((t) => (t.systemCols === undefined) === (t.noConflict === undefined), { message: 'manifest_system_cols_with_no_conflict' })   // systemCols、noConflict 要么都写（挂 touch() 的表），要么都不写
   .refine((t) => !t.systemCols || t.systemCols.every((c) => !t.clientWritable.includes(c)), { message: 'manifest_system_cols_overlap_writable' })   // systemCols 和 clientWritable 不能重叠
   .refine((t) => !t.noConflict || t.noConflict.every((c) => t.clientWritable.includes(c)), { message: 'manifest_no_conflict_not_writable' })   // noConflict 只放客户端可写列
+  .refine((t) => !t.remindCols || (t.systemCols !== undefined && t.remindCols.length > 0 && t.remindCols.every((c) => t.clientWritable.includes(c))),
+    { message: 'manifest_remind_cols' })   // remindCols 只写在挂 touch() 的表上、不为空、只放客户端可写列（系统列不能算提醒输入，否则 push-dispatch 写回就会再入队）
   .refine(({ vaultRows: v, systemCols }) => !v || !systemCols || systemCols.every((c) => !v.cipherCols.includes(c) && !v.flag.includes(c)),
     { message: 'manifest_system_cols_in_vault_rows' })   // systemCols 不能含 vaultRows 的 flag 列和 cipherCols
   .refine((t) => t.exportOmitCols.length === 0 || t.export === 'json', { message: 'manifest_export_omit_without_export' })   // 不导出的表不写 exportOmitCols

@@ -233,8 +233,8 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     where n.nspname = 'auth' and c.relname = 'users' and not t.tgisinternal`);
   for (const p of checkAuthUsersTriggers(authTrig)) bad(p);
 
-  // ---------- 8. table_meta 和清单的 systemCols、noConflict ----------
-  const meta = await q<{ tbl: string; system_cols: string[]; no_conflict: string[] }>(`select tbl, system_cols, no_conflict from private.table_meta`);
+  // ---------- 8. table_meta 和清单的 systemCols、noConflict、remindCols（remind_cols：R-411 迁移 20261113100000） ----------
+  const meta = await q<{ tbl: string; system_cols: string[]; no_conflict: string[]; remind_cols: string[] }>(`select tbl, system_cols, no_conflict, remind_cols from private.table_meta`);
   for (const t of tables) {
     // 清单的 refine 保证 systemCols、noConflict 要么都写、要么都不写
     const { systemCols, noConflict } = t;
@@ -243,8 +243,10 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
     if (!m) { bad(`${t.name} 挂了 touch()，private.table_meta 里没有它的行`); continue; }
     if (!eq(m.system_cols, systemCols)) bad(`table_meta.${t.name}.system_cols 和清单不一致：${diff(systemCols, m.system_cols)}`);
     if (!eq(m.no_conflict, noConflict)) bad(`table_meta.${t.name}.no_conflict 和清单不一致：${diff(noConflict, m.no_conflict)}`);
+    const remindCols = t.remindCols ?? [];   // 没写 = 这张表不算提醒（remind_cols 为空）
+    if (!eq(m.remind_cols, remindCols)) bad(`table_meta.${t.name}.remind_cols 和清单的 remindCols 不一致：${diff(remindCols, m.remind_cols)}`);
     const cols = colsOf(t.schema, t.name);
-    for (const c of [...systemCols, ...noConflict]) if (!cols.includes(c)) bad(`${t.name} 的 systemCols / noConflict 有 ${c}，表里没有`);
+    for (const c of [...systemCols, ...noConflict, ...remindCols]) if (!cols.includes(c)) bad(`${t.name} 的 systemCols / noConflict / remindCols 有 ${c}，表里没有`);
   }
   for (const m of meta) if (!tables.some((t) => t.name === m.tbl && t.systemCols)) bad(`table_meta 有 ${m.tbl}，清单里没写 systemCols`);
 
@@ -308,7 +310,7 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
   for (const t of tables.filter(has)) {
     const name = key(t.schema, t.name), cols = colsOf(t.schema, t.name), u = t.userLookup;
     if (!u) continue;
-    for (const c of u.by === 'rowRef' ? [u.tableCol, u.idCol] : u.by === 'column' || u.by === 'emailHash' || u.by === 'keyPattern' ? [u.col] : []) {
+    for (const c of u.by === 'column' || u.by === 'emailHash' || u.by === 'keyPattern' ? [u.col] : []) {
       if (!cols.includes(c)) bad(`${name} 的 userLookup 写了列 ${c}，表里没有`);
     }
     if (u.by === 'column') {
@@ -318,21 +320,11 @@ export async function runD1(q: Query, manifests: readonly Manifest[]): Promise<s
       if (t.onAccountDelete === 'cascade' && action !== 'CASCADE') bad(`${name} 写 onAccountDelete: cascade，${u.col} 却没有 references auth.users on delete cascade`);
       if (t.onAccountDelete !== 'cascade' && action === 'CASCADE') bad(`${name} 写 onAccountDelete: ${t.onAccountDelete}，${u.col} 却 on delete cascade`);
     }
-    if (u.by === 'rowRef') {
-      // P-29：tableCol 只能是 check 约束列出的表，每张都登记过、按 user_id 找人、有 idCol 那一列
-      const chk = cons.find((r) => r.s === t.schema && r.t === t.name && r.d.startsWith('CHECK') && r.d.includes(`(${u.tableCol} = ANY`));
-      const refs = chk ? [...chk.d.matchAll(/'([a-z_]+)'::text/g)].map((x) => x[1] ?? '') : [];
-      if (!refs.length) bad(`${name} 的 ${u.tableCol} 没有 check 约束限定能引用哪几张表（P-29）`);
-      for (const r of refs) {
-        const ref = tables.find((x) => x.schema === 'public' && x.name === r);
-        if (!ref || !has(ref)) bad(`${name}.${u.tableCol} 能引用 ${r}，它不是登记过的 public 表`);
-        else if (ref.userLookup?.by !== 'column' || ref.userLookup.col !== 'user_id' || !colsOf('public', r).includes(u.idCol)) bad(`${name}.${u.tableCol} 能引用 ${r}，它没有 user_id 或 ${u.idCol}，回查不到人`);
-      }
-      // remind_queue：往里写的触发器只能挂在这几张表上（挂到别的表上，一写就撞 check）
-      if (t.name === 'remind_queue') for (const tr of trig.filter((x) => x.f === 'enqueue_remind')) {
-        if (!refs.includes(tr.t)) bad(`enqueue_remind() 挂在 ${tr.t} 上，remind_queue.${u.tableCol} 的 check 约束不收它`);
-      }
-    }
+  }
+
+  // remind_queue（R-411）：挂 enqueue_remind() 的表，table_meta.remind_cols 必须不为空（为空时触发器不知道哪些列算提醒，只剩 insert 入队）
+  for (const tr of trig.filter((x) => x.f === 'enqueue_remind')) {
+    if (!(meta.find((m) => m.tbl === tr.t)?.remind_cols.length)) bad(`enqueue_remind() 挂在 ${tr.t} 上，table_meta 里它的 remind_cols 是空的`);
   }
 
   // ---------- 12. cron：动用户表的命令一律带超时（0.29 续第 141 条） ----------

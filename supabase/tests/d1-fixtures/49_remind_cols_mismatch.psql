@@ -1,0 +1,3 @@
+-- expect: table_meta.todos.remind_cols 和清单的 remindCols 不一致
+-- R-411（迁移 20261113100000）：“哪些列算提醒输入”只有清单 remindCols 一个源头，table_meta.remind_cols 少了 done，勾完成就不会重算、不会清 pushed_for
+update private.table_meta set remind_cols = array_remove(remind_cols, 'done') where tbl = 'todos';

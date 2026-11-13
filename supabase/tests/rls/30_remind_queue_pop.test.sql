@@ -37,8 +37,8 @@ select is((select string_agg(p.oid::regprocedure::text, ',' order by p.proname) 
      and p.proconfig @> array['search_path=""', 'lock_timeout=5s'] and cardinality(p.proconfig) = 2),
   'private.remind_queue_finish(uuid,jsonb),private.remind_queue_pop(integer,integer,boolean,integer,integer,smallint)',
   '两个函数各只有一个签名：security definer、search_path 置空、lock_timeout=5s、属主 postgres');
-select is(pg_get_function_result('private.remind_queue_pop(int, int, boolean, int, int, smallint)'::regprocedure), 'TABLE(table_name text, id uuid, user_id uuid, claim uuid, fresh boolean)',
-  '返回 table(table_name text, id uuid, user_id uuid, claim uuid, fresh boolean)（R-411 多返回 fresh；旧版 push-dispatch 按名字取前四列）');
+select is(pg_get_function_result('private.remind_queue_pop(int, int, boolean, int, int, smallint)'::regprocedure), 'TABLE(table_name text, id uuid, user_id uuid, claim uuid, fresh boolean, prio smallint)',
+  '返回 table(table_name text, id uuid, user_id uuid, claim uuid, fresh boolean, prio smallint)（R-411 多返回 fresh、prio；旧版 push-dispatch 按名字取前四列）');
 select is(pg_get_function_arguments('private.remind_queue_pop(int, int, boolean, int, int, smallint)'::regprocedure),
   'p_limit integer, p_lease_s integer, p_retry boolean, p_per_user integer DEFAULT 50, p_poison integer DEFAULT 5, p_ver smallint DEFAULT 0',
   '新加的三个参数都带默认值（旧版按名字传三个参数照跑）');
@@ -369,12 +369,12 @@ select is((select user_items || ':' || batch_items || ':' || oldest_user_wait_s 
 
 -- T22 规则版本：min_ver = 2 的项，p_ver 不传（0）、1 都拿不到，2 拿得到；fresh 原样交出
 delete from private.remind_queue;
-insert into private.remind_queue (table_name, id, user_id, min_ver, fresh) values
-  ('todos', '00000000-0000-4000-8000-0000000000f1', 'aaaaaaaa-0000-4000-8000-000000000001', 2, true);
+insert into private.remind_queue (table_name, id, user_id, min_ver, fresh, prio) values
+  ('todos', '00000000-0000-4000-8000-0000000000f1', 'aaaaaaaa-0000-4000-8000-000000000001', 2, true, 1);
 select is((select count(*)::int from private.remind_queue_pop(500, 180, false)), 0, 'T22：p_ver 不传（旧版 push-dispatch）拿不到 min_ver = 2 的项');
 select is((select count(*)::int from private.remind_queue_pop(500, 180, false, 50, 5, 1::smallint)), 0, 'p_ver = 1 也拿不到');
-select is((select string_agg(right(id::text, 2) || ':' || fresh, ',') from private.remind_queue_pop(500, 180, false, 50, 5, 2::smallint)), 'f1:true',
-  'p_ver = 2 拿得到，fresh 原样交出（6.3 Q2：第 0 步按“新建或改了截止”算）');
+select is((select string_agg(right(id::text, 2) || ':' || fresh || ':' || prio, ',') from private.remind_queue_pop(500, 180, false, 50, 5, 2::smallint)), 'f1:true:1',
+  'p_ver = 2 拿得到，fresh、prio 原样交出（6.3 Q2：第 0 步按“新建或改了截止”算；3.7：logs 只记 prio 0 的）');
 
 -- 积压统计：可用账号 prio 0 的项数、批量项数、prio 0 最老一项从 enqueued_at 起等了几秒（同一事务 now() 不变，往前改 enqueued_at 来造）
 delete from private.remind_queue;

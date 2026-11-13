@@ -55,8 +55,7 @@ export const core = defineManifest({
       userLookup: { by: 'keyPattern', col: 'key', pattern: '%:<user>:%' } },
     { ...priv, name: 'ai_state', backup: 'none', export: 'none', onAccountDelete: 'keep-id-only', noUserData: true },
     { ...priv, name: 'heartbeat', backup: 'none', export: 'none', onAccountDelete: 'keep-id-only', noUserData: true },
-    { ...priv, name: 'remind_queue', backup: 'none', export: 'none', onAccountDelete: 'explicit',
-      userLookup: { by: 'rowRef', tableCol: 'table_name', idCol: 'id' } },
+    { ...priv, name: 'remind_queue', backup: 'none', export: 'none', onAccountDelete: 'cascade', userLookup: BY_USER },   // R-411 迁移 20261113100000 起带 user_id 外键级联
     { ...priv, name: 'user_limits', backup: 'json', export: 'none', onAccountDelete: 'cascade', userLookup: BY_USER },
     { ...priv, name: 'table_meta', backup: 'none', export: 'none', onAccountDelete: 'keep-id-only', noUserData: true },
   ],

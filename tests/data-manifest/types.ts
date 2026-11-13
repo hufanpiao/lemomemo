@@ -1,6 +1,6 @@
 // 生成器读的清单形状（架构 3.5 第 1 点）。只写生成器用到的字段，按结构匹配：
 // 后端的 shared/schema/manifest.ts（zod 推出来的类型）的清单对象能直接传进来（tests/data-manifest/generate.test.ts 用真清单跑一遍）。
-// B0 集成：字段名按后端的类型改过 —— pathPattern 的 segment → level、orphanSweep.olderThan → after（可为 null）、加 rowRef。
+// B0 集成：字段名按后端的类型改过 —— pathPattern 的 segment → level、orphanSweep.olderThan → after（可为 null）；rowRef（remind_queue 按引用的行找人）R-411 起删掉：队列表带 user_id 了。
 
 /** “这个人的数据怎么找”（3.5 userLookup） */
 export type UserLookup =
@@ -8,18 +8,7 @@ export type UserLookup =
   | { by: 'keyPattern'; col: string; pattern: string }
   | { by: 'emailHash'; col: string }
   | { by: 'registry'; table: string; col: string; pathCol?: string }
-  | { by: 'pathPattern'; level: number }
-  /** 表里没有 user_id，按 (tableCol, idCol) 引用的那一行找主人（remind_queue） */
-  | {
-      by: 'rowRef';
-      tableCol: string;
-      idCol: string;
-      /**
-       * 可选：tableCol 能取的表名（remind_queue 是 events、todos、anniversaries，0.31 第 17 条）。
-       * 后端的 shared/schema/manifest.ts 现在没有这个字段；没写时生成器用“public 里按 user_id 找人的同步表”。
-       */
-      tables?: readonly string[] | undefined;
-    };
+  | { by: 'pathPattern'; level: number };
 
 export interface VaultRows {
   flag: string;

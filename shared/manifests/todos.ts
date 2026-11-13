@@ -12,7 +12,8 @@ export const todos = defineManifest({
         'push_show_title', 'notified_for', 'snooze_at', 'created_at', 'updated_at', ...SOFT_DELETE_COLS],
       insertOnly: ['id', 'created_at'], updateOnly: [...SOFT_DELETE_COLS],
       softDelete: true, backup: 'json', export: 'json', onAccountDelete: 'cascade', userLookup: BY_USER,
-      systemCols: ['pushed_for', 'defer_until', 'ai_status', 'remind_at'], noConflict: ['notified_for', 'snooze_at', 'updated_at'] },
+      systemCols: ['pushed_for', 'defer_until', 'ai_status', 'remind_at'], noConflict: ['notified_for', 'snooze_at', 'updated_at'],
+      remindCols: ['due', 'due_time', 'remind_before_min', 'remind_days', 'remind_time', 'done', 'deleted_at'] },
   ],
   recordKinds: [
     { kind: 'todo', table: 'todos', flag: 'todo', ai: { parse: true, intent: true }, plusResult: true, vector: { fk: 'todo_id' } },

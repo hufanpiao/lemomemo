@@ -12,7 +12,8 @@ export const calendar = defineManifest({
         'created_at', 'updated_at', ...SOFT_DELETE_COLS],
       insertOnly: ['id', 'created_at'], updateOnly: [...SOFT_DELETE_COLS],
       softDelete: true, backup: 'json', export: 'json', onAccountDelete: 'cascade', userLookup: BY_USER,
-      systemCols: ['pushed_for', 'defer_until', 'ai_status', 'remind_at'], noConflict: ['notified_for', 'snooze_at', 'updated_at'] },
+      systemCols: ['pushed_for', 'defer_until', 'ai_status', 'remind_at'], noConflict: ['notified_for', 'snooze_at', 'updated_at'],
+      remindCols: ['date', 'time', 'tz', 'remind_min', 'remind_days', 'deleted_at'] },
   ],
   recordKinds: [
     { kind: 'event', table: 'events', flag: 'event', ai: { parse: true, intent: true }, plusResult: true, vector: { fk: 'event_id' } },

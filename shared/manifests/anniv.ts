@@ -11,7 +11,8 @@ export const anniv = defineManifest({
         'after_due', 'push_show_title', 'notified_for', 'snooze_at', 'note', 'created_at', 'updated_at', 'avatar_id', 'avatar_bytes', ...SOFT_DELETE_COLS],
       insertOnly: ['id', 'created_at'], updateOnly: [...SOFT_DELETE_COLS],
       softDelete: true, backup: 'json', export: 'json', onAccountDelete: 'cascade', userLookup: BY_USER,
-      systemCols: ['pushed_for', 'defer_until', 'remind_at', 'next_date', 'archived_at'], noConflict: ['notified_for', 'snooze_at', 'updated_at'] },
+      systemCols: ['pushed_for', 'defer_until', 'remind_at', 'next_date', 'archived_at'], noConflict: ['notified_for', 'snooze_at', 'updated_at'],
+      remindCols: ['remind_offsets', 'remind_time', 'month', 'day', 'calendar', 'lunar_variant', 'is_leap', 'year', 'after_due', 'kind', 'deleted_at'] },
   ],
   buckets: [
     { name: 'images', store: 'r2', pathPrefix: '<user_id>/anniv/', pathPattern: `^${UUID_RE}/anniv/${UUID_RE}/${UUID_RE}\\.webp$`,

@@ -526,11 +526,10 @@ export const manifestSnapshot: readonly Manifest[] = [
         "softDelete": false,
         "backup": "none",
         "export": "none",
-        "onAccountDelete": "explicit",
+        "onAccountDelete": "cascade",
         "userLookup": {
-          "by": "rowRef",
-          "tableCol": "table_name",
-          "idCol": "id"
+          "by": "column",
+          "col": "user_id"
         },
         "rebuildable": true,
         "exportOmitCols": []
@@ -677,6 +676,14 @@ export const manifestSnapshot: readonly Manifest[] = [
           "snooze_at",
           "updated_at"
         ],
+        "remindCols": [
+          "date",
+          "time",
+          "tz",
+          "remind_min",
+          "remind_days",
+          "deleted_at"
+        ],
         "rebuildable": true,
         "exportOmitCols": []
       }
@@ -787,6 +794,15 @@ export const manifestSnapshot: readonly Manifest[] = [
           "notified_for",
           "snooze_at",
           "updated_at"
+        ],
+        "remindCols": [
+          "due",
+          "due_time",
+          "remind_before_min",
+          "remind_days",
+          "remind_time",
+          "done",
+          "deleted_at"
         ],
         "rebuildable": true,
         "exportOmitCols": []
@@ -1381,6 +1397,19 @@ export const manifestSnapshot: readonly Manifest[] = [
           "notified_for",
           "snooze_at",
           "updated_at"
+        ],
+        "remindCols": [
+          "remind_offsets",
+          "remind_time",
+          "month",
+          "day",
+          "calendar",
+          "lunar_variant",
+          "is_leap",
+          "year",
+          "after_due",
+          "kind",
+          "deleted_at"
         ],
         "rebuildable": true,
         "exportOmitCols": []

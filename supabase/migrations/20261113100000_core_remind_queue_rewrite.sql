@@ -234,11 +234,11 @@ begin
 end $$;
 
 -- ===== 6. 出队换签名 =====
--- 只交出 min_ver <= p_ver 的项（规则版本：旧版 push-dispatch 拿不到新规则的项）；每人上限、有毒次数由 push-dispatch 的 LIMITS 传，
+-- 只交出 min_ver <= p_ver 的项（规则版本：旧版 push-dispatch 拿不到新规则的项）；多返回 fresh（6.3 Q2 回落）和 prio（3.7：logs 只记 prio 0 的重算）；每人上限、有毒次数由 push-dispatch 的 LIMITS 传，
 -- 默认值只给按名字传三个参数的旧版兜底。其余（两种出队、租约、锁住后再看一次租约、skip locked、有毒项删掉以 claim 为空返回）照 20261105110000。
 -- 读行的时间点不变：行不在这里取，第 0 步照旧在出队返回（租约已提交）之后另发请求读行。
 drop function private.remind_queue_pop(int, int, boolean);
-create function private.remind_queue_pop(p_limit int, p_lease_s int, p_retry boolean, p_per_user int default 50, p_poison int default 5, p_ver smallint default 0) returns table (table_name text, id uuid, user_id uuid, claim uuid, fresh boolean)
+create function private.remind_queue_pop(p_limit int, p_lease_s int, p_retry boolean, p_per_user int default 50, p_poison int default 5, p_ver smallint default 0) returns table (table_name text, id uuid, user_id uuid, claim uuid, fresh boolean, prio smallint)
   language plpgsql volatile security definer set search_path = '' set lock_timeout = '5s' as $$
 declare
   retry boolean := coalesce(p_retry, false);
@@ -250,7 +250,7 @@ declare
   k uuid := pg_catalog.gen_random_uuid();
 begin
   if n = 0 then return; end if;
-  -- 返回列 table_name、id、user_id、claim、fresh 也是 plpgsql 变量，下面的列一律带表别名
+  -- 返回列 table_name、id、user_id、claim、fresh、prio 也是 plpgsql 变量，下面的列一律带表别名
   return query
   with cand as (
     select q.table_name as tn, q.id as qid, q.user_id as uid, q.prio as pr, q.attempts as att, q.claimed_at as cat
@@ -266,7 +266,7 @@ begin
       from cand join ok on ok.uid = cand.uid
   ), lim as (
     -- 重试（n = 1）：次数最少的先，同样次数的按 claimed_at 先来先到；新项：先全站 prio 0（按人公平），再 1、再 2
-    select ranked.tn, ranked.qid, ranked.uid from ranked
+    select ranked.tn, ranked.qid, ranked.uid, ranked.pr from ranked
      where ranked.rn <= per
      order by case when retry then ranked.att else 0 end, case when retry then ranked.cat end nulls first,
               ranked.pr, ranked.rn, ranked.tn, ranked.qid limit n
@@ -287,7 +287,7 @@ begin
      where q.table_name = l.tn and q.id = l.qid and l.att < poison
     returning q.table_name as tn, q.id as qid, q.fresh as fr
   )
-  select x.tn, x.qid, lim.uid, x.k, x.fr from (
+  select x.tn, x.qid, lim.uid, x.k, x.fr, lim.pr from (
     select p.tn, p.qid, null::uuid as k, false as fr from dropped p
     union all
     select t.tn, t.qid, k, t.fr from taken t
