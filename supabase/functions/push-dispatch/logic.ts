@@ -20,7 +20,7 @@ export interface SharedFns {
   reminderTag(kind: 'event' | 'todo' | 'anniv', id: string, dueAt: number): string;
   occurrenceKey(r: { kind: 'event' | 'todo' | 'anniv'; id: string; tag: string; snoozed: boolean; row: Readonly<Record<string, unknown>> }): string;
   /** shared/logic/anniv/next-date.ts 的 annivNextOf（B5 S13）：行不合格抛 bad_anniv */
-  annivNextOf(row: never, ctx: { tz: string; now: number; settings: Readonly<Record<string, unknown>> }): { next_date: string | null; remind_at: number | null };
+  annivNextOf(row: never, ctx: { tz: string; now: number; settings: Readonly<Record<string, unknown>> }): { next_date: string | null; remind_at: number | null; past: boolean };
 }
 
 export function makeLogic(s: SharedFns): RoundLogic {
@@ -40,8 +40,6 @@ export function makeLogic(s: SharedFns): RoundLogic {
     // B5 S13：shared/logic/anniv/next-date.ts 的 annivNextOf（nextDate + 每条的提醒设置 ?? anniv.default_* ?? {7,1} / 09:00，按 current_tz）。
     // 行不合格（枚举认不出、月日越界）抛错：第 0 步记 failed，第 6 步记 anniv_next_failed；韩国阴历（D1）算不出，两列写成 null
     annivNext: (row, ctx) => s.annivNextOf(row as never, ctx),
-    // 这一天最后一分钟（23:59）也过完了
-    dayOver: (date, tz, now) => s.msAt(date, s.parseHm('23:59'), tz) + 60_000 <= now,
     // tag = reminderTag(kind, id, due_at)。snoozed：推送时和前端 reminder-model 的 reminderOf 同一口径（snooze_at 等于 due_at 且不等于 remind_at）；
     // 撤回时（due = pushed_for）按当初推的那一次判断：既不是 remind_at、也不是 defer_until，就是稍后那一次（代码审查 M1、L1，见 round-types.ts）。
     // 纪念日的 occurrenceKey 等 B5 再定（现在 shared 照 tag）

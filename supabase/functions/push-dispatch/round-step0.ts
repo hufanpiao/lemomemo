@@ -150,8 +150,8 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
       } else {
         const nx = c.logic.annivNext(row, { tz: prof.current_tz, now, settings: settings.get(q.user_id) ?? {} });
         patch = nx ? { remind_at: nx.remind_at, next_date: nx.next_date } : null;
-        // 已归档的倒数日改到以后：next_date 不早于今天（今天最后一分钟还没过）就一并清掉 archived_at，不等第二天的 anniv-roll（整块评审第 17 条）
-        if (patch && row.archived_at != null && nx?.next_date && !c.logic.dayOver(nx.next_date, prof.current_tz, now)) patch.archived_at = null;
+        // 已归档的倒数日改到以后（不再是 past）：一并清掉 archived_at，不等第二天的 anniv-roll（整块评审第 17 条）
+        if (patch && row.archived_at != null && nx && nx.next_date !== null && !nx.past) patch.archived_at = null;
       }
     } catch {
       return 'failed';   // 行里的值不合格（例如时刻串坏了）

@@ -53,7 +53,7 @@ export interface RollStore {
 
 /** 共享 logic（index.ts 从 _shared/gen 传，测试从 shared 传） */
 export interface RollLogic {
-  annivNextOf(row: Readonly<Record<string, unknown>>, ctx: { tz: string; now: number; settings: Readonly<Record<string, unknown>> }): { next_date: string | null; remind_at: number | null };
+  annivNextOf(row: Readonly<Record<string, unknown>>, ctx: { tz: string; now: number; settings: Readonly<Record<string, unknown>> }): { next_date: string | null; remind_at: number | null; past: boolean };
   todayOf(ms: number, tz: string): string;
   addDays(d: string, n: number): string;
   isValidTz(tz: string): boolean;
@@ -98,9 +98,6 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
 
 const isLater = (v: unknown, now: number): boolean => typeof v === 'number' && v > now;
 
-const isPast = (row: RollRow, nextDate: string | null, today: string): boolean =>
-  row.kind === 'countdown' && (row.after_due ?? 'archive') === 'archive' && nextDate !== null && nextDate < today;
-
 export async function runRoll(deps: Deps, store: RollStore): Promise<HeartbeatDetail> {
   const { logic } = deps;
   const now = deps.now();
@@ -130,9 +127,8 @@ export async function runRoll(deps: Deps, store: RollStore): Promise<HeartbeatDe
     let patch: RollPatch;
     try {
       const nx = logic.annivNextOf(row, { tz, now, settings: sets.get(row.user_id) ?? {} });
-      const past = isPast(row, nx.next_date, logic.todayOf(now, tz));
       const held = isLater(row['snooze_at'], now) || isLater(row['defer_until'], now);
-      patch = { next_date: nx.next_date, remind_at: held ? row.remind_at : nx.remind_at, archived_at: past ? (row.archived_at ?? now) : null };
+      patch = { next_date: nx.next_date, remind_at: held ? row.remind_at : nx.remind_at, archived_at: nx.past ? (row.archived_at ?? now) : null };
     } catch {
       d.failed++;
       deps.log(`bad_anniv ${tag}`);

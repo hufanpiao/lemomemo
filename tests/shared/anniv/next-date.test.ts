@@ -137,7 +137,7 @@ describe('提醒设置（R-94）', () => {
   it('remind_at：下一个还没到的 (next − offset) 的 time，按 current_tz', () => {
     const r = rec({ month: 10, day: 27 });
     const now = msAt('2026-10-13', 600, SEOUL);
-    expect(annivNextAt(r, SEOUL, now, {})).toEqual({ next_date: '2026-10-27', remind_at: msAt('2026-10-20', 540, SEOUL) });
+    expect(annivNextAt(r, SEOUL, now, {})).toEqual({ next_date: '2026-10-27', remind_at: msAt('2026-10-20', 540, SEOUL), past: false });
     // 提前 7 天那次已经过了，取前一天
     expect(annivNextAt(r, SEOUL, msAt('2026-10-21', 0, SEOUL), {}).remind_at).toBe(msAt('2026-10-26', 540, SEOUL));
     // 当天提醒
@@ -146,10 +146,10 @@ describe('提醒设置（R-94）', () => {
   it('这一次的都过了：取明年的第一次；已过去的倒数日不提醒', () => {
     const r = rec({ month: 10, day: 27, remind_offsets: [0] });
     const now = msAt('2026-10-27', 600, SEOUL);
-    expect(annivNextAt(r, SEOUL, now, {})).toEqual({ next_date: '2026-10-27', remind_at: msAt('2027-10-27', 540, SEOUL) });
+    expect(annivNextAt(r, SEOUL, now, {})).toEqual({ next_date: '2026-10-27', remind_at: msAt('2027-10-27', 540, SEOUL), past: false });
     const cd = rec({ kind: 'countdown', month: 11, day: 30, year: 2026, remind_offsets: [0] });
-    expect(annivNextAt(cd, SEOUL, msAt('2026-11-30', 600, SEOUL), {})).toEqual({ next_date: '2026-11-30', remind_at: null });
-    expect(annivNextAt(cd, SEOUL, msAt('2026-12-01', 0, SEOUL), {})).toEqual({ next_date: '2026-11-30', remind_at: null });
+    expect(annivNextAt(cd, SEOUL, msAt('2026-11-30', 600, SEOUL), {})).toEqual({ next_date: '2026-11-30', remind_at: null, past: false });
+    expect(annivNextAt(cd, SEOUL, msAt('2026-12-01', 0, SEOUL), {})).toEqual({ next_date: '2026-11-30', remind_at: null, past: true });
   });
   it('跨时区：时刻按 current_tz 浮动', () => {
     const r = rec({ month: 10, day: 27, remind_offsets: [0] });
@@ -169,7 +169,7 @@ describe('行 → AnnivRec、annivNextOf（push-dispatch 接口）', () => {
     expect([r?.lunar_variant, r?.after_due, r?.year]).toEqual(['cn', 'archive', null]);
     const now = msAt('2026-03-10', 0, SEOUL);
     expect(annivNextOf({ kind: 'countdown', calendar: 'solar', month: 3, day: 5, created_at: msAt('2026-03-06', 0, SEOUL) }, { tz: SEOUL, now, settings: {} }))
-      .toEqual({ next_date: '2027-03-05', remind_at: msAt('2027-02-26', 540, SEOUL) });
+      .toEqual({ next_date: '2027-03-05', remind_at: msAt('2027-02-26', 540, SEOUL), past: false });
   });
 });
 

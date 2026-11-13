@@ -163,7 +163,8 @@ export interface NotifyInputLike {
 }
 export type Dnd = { start: string; end: string } | null;
 export interface AnnivCtx { tz: string; now: number; settings: UserSettings }
-export interface AnnivNext { remind_at: number | null; next_date: string | null }
+/** past：已过去的倒数日（shared annivState 的 past，按 current_tz） */
+export interface AnnivNext { remind_at: number | null; next_date: string | null; past: boolean }
 /** 第 0 步、第 6 步写回的列：纪念日另有 next_date；archived_at 只会写成 null（已归档的倒数日改到以后，整块评审第 17 条） */
 export interface RemindPatch { remind_at: number | null; next_date?: string | null; archived_at?: null }
 
@@ -189,8 +190,6 @@ export interface RoundLogic {
    * 第 0 步按 ctx.now = 现在调；第 6 步推过以后按 ctx.now = 这次 due_at + 1 调，取再下一次。回 null = 还没实现 / 不改
    */
   annivNext(row: ItemRow, ctx: AnnivCtx): AnnivNext | null;
-  /** date 这一天（按 tz）在 now 时已经整天过完（第 0 步判断已归档的倒数日改到以后要不要清 archived_at，整块评审第 17 条） */
-  dayOver(date: string, tz: string, now: number): boolean;
   /**
    * “同一次提醒”的标识（REMIND-close-occkey：shared/logic/remind-route.ts 的 occurrenceKey，和前端横幅、本机通知同一份），放进推送负载。
    * due 是这一次的 due_at（tag 里那个）；按了“稍后”的那一次照 tag。

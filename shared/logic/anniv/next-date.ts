@@ -202,14 +202,17 @@ function firstAfter(date: DateStr, offsets: readonly number[], min: number, tz: 
 export interface AnnivNext {
   readonly next_date: DateStr | null;
   readonly remind_at: number | null;
+  /** 已过去的倒数日（annivState 的 past：after_due = archive、目标日早于今天，按 tz）。anniv-roll 据此写 archived_at，
+   *  push-dispatch 第 0 步据此清 archived_at（整块评审第 17、25 条：“过没过”只在 annivState 判一处） */
+  readonly past: boolean;
 }
 
 /** 按 current_tz（tz）、现在（now）和这个人的设置算下一次；算不出 next_date 为 null（不提醒） */
 export function annivNextAt(r: AnnivRec, tz: Tz, now: number, settings: Readonly<Record<string, unknown>>): AnnivNext {
   const today = todayOf(now, tz);
   const st = annivState(r, today, dayOfMs(r.created_at, tz, today));
-  if (st === null) return { next_date: null, remind_at: null };
-  if (st.past) return { next_date: st.next.date, remind_at: null };
+  if (st === null) return { next_date: null, remind_at: null, past: false };
+  if (st.past) return { next_date: st.next.date, remind_at: null, past: true };
   const offsets = offsetsOf(r, settings);
   const min = parseHm(remindTimeOf(r, settings));
   let at = firstAfter(st.next.date, offsets, min, tz, now);
@@ -218,7 +221,7 @@ export function annivNextAt(r: AnnivRec, tz: Tz, now: number, settings: Readonly
     const o = onOrAfter(r, addDays(st.next.date, 1));
     if (o !== null) at = firstAfter(o.date, offsets, min, tz, now);
   }
-  return { next_date: st.next.date, remind_at: at };
+  return { next_date: st.next.date, remind_at: at, past: false };
 }
 
 /**
