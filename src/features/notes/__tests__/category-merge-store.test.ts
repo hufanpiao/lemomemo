@@ -258,7 +258,7 @@ describe('fixCategoryCycles（合并绕成圈的写回）', () => {
     expect(openMergePairs(after, []).map((p) => [p.keep, p.merge])).toEqual([[Q, C]]);
   });
 
-  it('写不进去记 fail（这次运行不再重写）；只读行不写；没有圈不写', async () => {
+  it('写不进去记 fail，下次分类集合变化再试（写成后不再写）；抛异常只记错误名；只读行不写；没有圈不写', async () => {
     const P = uid(311);
     const Q = uid(312);
     const lines: string[] = [];
@@ -267,7 +267,14 @@ describe('fixCategoryCycles（合并绕成圈的写回）', () => {
     const loop = [cat(P, '甲', { merged_into: Q }), cat(Q, '乙', { merged_into: P })];
     await fixCategoryCycles(loop, bad.deps);
     await fixCategoryCycles(loop, bad.deps);
-    expect([bad.calls.length, lines]).toEqual([1, [`notes category cycle fix id=${P} fail`]]);
+    expect([bad.calls.length, lines]).toEqual([2, [`notes category cycle fix id=${P} fail`, `notes category cycle fix id=${P} fail`]]);
+    lines.length = 0;
+    const boom = { deps: { ...bad.deps, w: { patch: () => { throw new TypeError('x'); } } } as unknown as MergeDeps };
+    await fixCategoryCycles(loop, boom.deps);
+    const good = stub();
+    await fixCategoryCycles(loop, good.deps);
+    await fixCategoryCycles(loop, good.deps);
+    expect([good.calls.length, lines]).toEqual([1, [`notes category cycle fix id=${P} threw TypeError`, `notes category cycle fix id=${P} ok`]]);
     const ro = stub(undefined, [uid(321)]);
     await fixCategoryCycles([cat(uid(321), '甲', { merged_into: uid(322) }), cat(uid(322), '乙', { merged_into: uid(321) })], ro.deps);
     const none = stub();

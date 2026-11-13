@@ -59,19 +59,26 @@ export async function mergeCategories(pair: Pick<MergePair, 'keep' | 'merge'>, c
   return done(r === 'saved' ? { ok: true } : { ok: false, reason: r });
 }
 
-/** 本次运行里已经写回过的圈内分类 id：同一个只写一次（每次分类集合变化都会来查） */
+/** 本次运行里写回中、已写成的圈内分类 id：同一个只写成一次；没写成的拿掉，下次分类集合变化时再试（每次变化都会来查，不会快速连试） */
 const cycleFixed = new Set<string>();
 
 /**
  * 两台设备各合并一次绕成圈（A → B、B → A）：给圈里留下的那个（note-list.ts 的 cycleKeepers）写一笔 merged_into: null（经 outbox），
- * 数据自己修好，之后全项目按 isLiveCategory 认它。只读行不写；运行日志只记 id 和结果
+ * 数据自己修好，之后全项目按 isLiveCategory 认它。只读行不写；运行日志只记 id 和结果（抛异常只记错误名）
  */
 export async function fixCategoryCycles(categories: readonly Row[], deps: MergeDeps = {}): Promise<void> {
   const { w = write, isReadonly = (id: string) => readonlyIds('categories').getSnapshot().has(id) } = deps;
   for (const id of cycleKeepers(categories)) {
     if (cycleFixed.has(id) || isReadonly(id)) continue;
     cycleFixed.add(id);
-    const r = await saveOutcome(() => w.patch('categories', id, { merged_into: null }));
-    rlog(`notes category cycle fix id=${id} ${r === 'saved' ? 'ok' : 'fail'}`);
+    let ok = false;
+    try {
+      ok = (await saveOutcome(() => w.patch('categories', id, { merged_into: null }))) === 'saved';
+      rlog(`notes category cycle fix id=${id} ${ok ? 'ok' : 'fail'}`);
+    } catch (err) {
+      rlog(`notes category cycle fix id=${id} threw ${(err as Error | undefined)?.name ?? 'unknown'}`);
+    } finally {
+      if (!ok) cycleFixed.delete(id);
+    }
   }
 }
