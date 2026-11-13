@@ -52,9 +52,9 @@ select is((select string_agg(w.tbl, ',') from (
               'when ''' || t.tbl || ''' then array\[([^\]]*)\]'))[1], '''', ''), ' ', ''), ',')) x) as fn_cols,
            (select array_agg(c.column_name::text order by c.column_name::text) from information_schema.column_privileges c
              where c.table_schema = 'public' and c.table_name = t.tbl and c.grantee = 'authenticated' and c.privilege_type = 'UPDATE') as grant_cols
-      from unnest(array['events','todos','anniversaries','notes','note_images','note_files','categories','settings','devices']) t(tbl)) w
+      from unnest(array['events','todos','todo_items','anniversaries','notes','note_images','note_files','categories','settings','devices']) t(tbl)) w
    where w.fn_cols is distinct from w.grant_cols), null,
-  '九张表的可改列白名单和 grant update (…) 列一字不差（4.4.1）');
+  '十张表（R-350 加 todo_items）的可改列白名单和 grant update (…) 列一字不差（4.4.1）');
 
 -- ===== 参数检查 =====
 select is(tests.ap('cccccccc-0000-4000-8000-000000000003', 'events', 'ae000000-0000-4000-8000-000000000001', '{"title": "x"}', 1, 'a0a00000-0000-4000-8000-000000000001') ->> 'error',

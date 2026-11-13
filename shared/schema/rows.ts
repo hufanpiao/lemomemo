@@ -16,6 +16,8 @@ export const ITEM_TITLE_MAX = 160;
 export const ITEM_NOTE_MAX = 2000;
 export const RAW_TEXT_MAX = 2000;
 export const PROJECT_MAX = 40;
+/** 待办子任务标题的上限（R-350 方案 6.1；数据库 check char_length(title) between 1 and 100） */
+export const TODO_ITEM_TITLE_MAX = 100;
 /** 编辑页保存的日程、待办标题：去掉首尾空白，截到 ITEM_TITLE_MAX 个 UTF-16 单元、不截半个字（cutGraphemes，同 capture-map）；日程、待办编辑页共用这一份 */
 export const trimItemTitle = (s: string): string => cutGraphemes(s.trim(), ITEM_TITLE_MAX);
 
@@ -114,6 +116,19 @@ export const todosWrite = z.strictObject({
   // 有截止时刻就必须有截止日期（0002 的 check）
   .refine(dueWithDueTime, { message: 'due_required_with_due_time', path: ['due'] });
 
+/** todo_items（待办子任务，R-350，迁移 20261113170000）的客户端可写列：todo_id 只在 insert 时写（子任务不能改挂到别的待办） */
+export const todoItemsWrite = z.strictObject({
+  id: uuid,
+  todo_id: uuid,
+  title: z.string().max(TODO_ITEM_TITLE_MAX).regex(/[^ ]/),   // 至少有一个不是半角空格的字：同服务器 check 的 char_length(btrim(title)) >= 1
+  done: z.boolean(),
+  sort: z.number(),
+  deleted_at: epochMs.nullable(),
+  undone: z.boolean(),
+  created_at: epochMs,
+  updated_at: epochMs,
+});
+
 /** devices 的客户端可写列（0001：platform、install_id 只在 insert 时写） */
 export const devicesWrite = z.strictObject({
   id: uuid,
@@ -132,6 +147,7 @@ export const rowsWrite = {
   profiles: profilesWrite,
   events: eventsWrite,
   todos: todosWrite,
+  todo_items: todoItemsWrite,
   devices: devicesWrite,
 } as const;
 
@@ -143,12 +159,14 @@ export const WRITE_RULES = {
   profiles: { insert: false, insertOnly: [], updateOnly: ['display_name', 'ui_locale', 'tz_mode'] },
   events: { insert: true, insertOnly: ['id', 'created_at'], updateOnly: ['deleted_at', 'undone'] },
   todos: { insert: true, insertOnly: ['id', 'created_at'], updateOnly: ['deleted_at', 'undone'] },
+  todo_items: { insert: true, insertOnly: ['id', 'todo_id', 'created_at'], updateOnly: ['deleted_at', 'undone'] },
   devices: { insert: true, insertOnly: ['id', 'platform', 'install_id'], updateOnly: ['deleted_at', 'undone'] },
 } as const satisfies Record<keyof typeof rowsWrite, { insert: boolean; insertOnly: readonly string[]; updateOnly: readonly string[] }>;
 
 export type WritableTable = keyof typeof rowsWrite;
 export type EventWrite = z.infer<typeof eventsWrite>;
 export type TodoWrite = z.infer<typeof todosWrite>;
+export type TodoItemWrite = z.infer<typeof todoItemsWrite>;
 export type ProfileWrite = z.infer<typeof profilesWrite>;
 
 export type DeviceWrite = z.infer<typeof devicesWrite>;

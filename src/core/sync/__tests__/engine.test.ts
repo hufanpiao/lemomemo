@@ -98,7 +98,7 @@ describe('cache === null 安全降级（K6-ver-new）', () => {
 });
 
 describe('启动', () => {
-  it('先发后拉；Realtime 订阅 9 张同步表；整表重拉完成后写 schema_v', async () => {
+  it('先发后拉；Realtime 订阅 10 张同步表；整表重拉完成后写 schema_v', async () => {
     const server = new FakeServer();
     server.insert('todos', todo(2));
     const d = await device(server, { schemaV: 7 }, { fullResync: ['todos'] });
@@ -110,7 +110,7 @@ describe('启动', () => {
     expect(d.t.calls).toContain('tombstones');
     expect(await d.cache.getRow('todos', uid(2))).toBeDefined();
     expect(d.t.subscribedTables).toEqual(d.cache.syncTables);
-    expect(d.t.subscribedTables).toHaveLength(9);
+    expect(d.t.subscribedTables).toHaveLength(10);   // 十张同步表（R-350 加了 todo_items）
     expect(await d.cache.getMeta('schema_v')).toBe(7);
     expect(d.sync.getState()).toMatchObject({ stopped: false, syncing: false, lastPullAt: clock.t });
   });

@@ -150,6 +150,12 @@ export const syncTableSnapshot: readonly SyncTableLite[] = [
     "rebuildable": true
   },
   {
+    "name": "todo_items",
+    "schema": "public",
+    "sync": true,
+    "rebuildable": true
+  },
+  {
     "name": "categories",
     "schema": "public",
     "sync": true,

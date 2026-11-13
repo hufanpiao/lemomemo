@@ -21,6 +21,7 @@ import { performance } from 'node:perf_hooks';
 import { argv, execPath, exit } from 'node:process';
 import { URL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
+import { EXPORT_TABLES } from './export-load-lib.mjs';
 import { ROOT } from './real-backend-guard.mjs';
 import { statusEnv } from './real-backend.mjs';
 
@@ -67,7 +68,7 @@ if (!uid) {
   uid = psql(`select id from auth.users where email like 'export-load-%@lemomemo.test' and created_at >= '${since}'::timestamptz order by created_at desc limit 1;`);
 }
 if (!/^[0-9a-f-]{36}$/.test(uid)) throw new Error('拿不到满载账号的 id');
-const TABLES = ['profiles', 'settings', 'devices', 'logs', 'events', 'todos', 'categories', 'notes', 'note_images', 'note_files', 'anniversaries'];
+const TABLES = EXPORT_TABLES;   // 和导出量测同一份表清单（R-350 评审第 5 条）
 const dbCounts = Object.fromEntries(psql(TABLES.map((t) => `select '${t}', count(*) from public.${t} where user_id = '${uid}'`).join(' union all ') + ';')
   .split(/\r?\n/).map((l) => l.split('=')).map(([k, v]) => [k, Number(v)]));
 

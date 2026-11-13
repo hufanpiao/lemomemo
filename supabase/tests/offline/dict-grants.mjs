@@ -29,7 +29,7 @@ const rows = (await db.query(`select table_name t, column_name c, privilege_type
   where grantee='authenticated' and table_schema='public' and privilege_type in ('INSERT','UPDATE')`)).rows;
 const g = {};
 for (const r of rows) ((g[r.t] ??= {})[r.c] ??= new Set()).add(r.p);
-const COMMON = ['settings', 'devices', 'events', 'todos', 'categories', 'notes', 'note_images', 'note_files', 'anniversaries'];
+const COMMON = ['settings', 'devices', 'events', 'todos', 'categories', 'notes', 'note_images', 'note_files', 'anniversaries', 'todo_items'];
 for (const [t, cols] of Object.entries(tables)) {
   const out = [];
   const all = [...cols];
