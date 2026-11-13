@@ -7,12 +7,13 @@
 #   weight 是这个文件管的 CSS 字重范围（@font-face 的 font-weight 区间），每面最多 3 个文件；样式里写 font-synthesis: none，不做假粗体。
 #   num：数字用哪套——manrope（不换，系统字体同款）、zh / ko（跟这一面走）。
 # 产物（提交进仓库，--check 核对）：src/public/fonts/<id>/<面>-<字重序号>-<n>.<哈希>.woff2、fonts.<哈希>.css；
-#   src/public/fonts-index.json：给 platform/fonts.ts 的清单（显示名、样式地址、确认用的 family 和样例字、预取分片的地址和 sha256）。
+#   src/public/fonts-index.json：给 platform/fonts.ts 的清单（显示名、样式地址、确认用的中韩 family 和样例字、预取分片的地址和 sha256、
+#   这种字体的全部文件地址 files——换字体一天后清 SW 缓存时按它留）。
 #   样式里 :root[data-font="<id>"] 换掉 --f-zh、--f-ko（--f-num 按 num），后面接 src/styles/tokens.css 里原来的系统字体栈。
 # 分片：先把常用字（中文 GB 2312 一级 3755 字、韩文 KS X 1001 的 2350 个音节，加上 ASCII 和常用标点）切成预取分片，选中就下载进 SW 缓存，
 #   离线也能显示；其余的字按码位切片，用 unicode-range 让浏览器只下页面上真出现的那几片。
 # check_fonts（--check）：许可证在白名单、许可证文件在；源文件 sha256 和登记一致；中文面覆盖 GB 2312 全部、韩文面覆盖 2350 个音节；
-#   产物和登记一致（每种登记的字体都在清单里、清单里的文件都在且哈希对、没有多余的文件夹）；单个分片 ≤ 300 KB、每种预取合计 ≤ 6 MB。
+#   产物和登记一致（每种登记的字体都在清单里、清单里的文件都在且哈希对、files 和文件夹里的文件一一对上、没有多余的文件夹）；单个分片 ≤ 300 KB、每种预取合计 ≤ 6 MB。
 # 用法：python -I build/fonts.py [--root <目录>] [--check]
 import hashlib
 import io
@@ -143,7 +144,7 @@ def build_one(root, d, r, stacks):
         for p in out.iterdir():
             p.unlink()
     out.mkdir(parents=True, exist_ok=True)
-    rules, prefetch, total = [], [], 0
+    rules, prefetch, files, total = [], [], [], 0
     for face, items in r['faces'].items():
         fam = f'lemo-{rid}-{face}'
         for wi, it in enumerate(items):
@@ -170,6 +171,7 @@ def build_one(root, d, r, stacks):
                 b = buf.getvalue()
                 name = f'{face}-{wi}-{n}.{sha256(b)[:10]}.woff2'
                 (out / name).write_bytes(b)
+                files.append(f'/app/fonts/{rid}/{name}')
                 total += len(b)
                 if pre:
                     prefetch.append({'url': f'/app/fonts/{rid}/{name}', 'sha256': sha256(b), 'bytes': len(b)})
@@ -191,7 +193,10 @@ def build_one(root, d, r, stacks):
         'css': f'/app/fonts/{rid}/{css_name}',
         'family': f'lemo-{rid}-zh',
         'sample': SAMPLE['zh'],
+        'familyKo': f'lemo-{rid}-ko',
+        'sampleKo': SAMPLE['ko'],
         'prefetch': prefetch,
+        'files': [f'/app/fonts/{rid}/{css_name}'] + files,
         'bytes': {'prefetch': sum(p['bytes'] for p in prefetch), 'all': total},
     }
 
@@ -235,6 +240,10 @@ def check(root, regs, errors):
             q = files.get(p['url'].rsplit('/', 1)[-1])
             if q is None or sha256(q.read_bytes()) != p['sha256']:
                 errors.append(f'{rid}：预取分片 {p["url"]} 不在或哈希不对')
+        # files 是缓存清理时“当前字体留哪些”的依据：和文件夹一一对上，少了会被误删、多了说明清单旧了
+        listed_files = {u.rsplit('/', 1)[-1] for u in f.get('files', [])}
+        if listed_files != set(files):
+            errors.append(f'{rid}：清单 files 和文件夹对不上（少 {sorted(set(files) - listed_files)[:3]}，多 {sorted(listed_files - set(files))[:3]}）：跑 python -I build/fonts.py')
         if f['bytes']['prefetch'] > MAX_PREFETCH:
             errors.append(f'{rid}：预取合计 {f["bytes"]["prefetch"]} B 超过 {MAX_PREFETCH} B')
 

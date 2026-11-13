@@ -28,7 +28,8 @@ export function useFontSetting(list = false) {
     label,
     value: chosen ? chosen.id : 'system',
     chosenLabel: chosen ? label(chosen) : null,
-    state: chosen ? state : { id: 'system', status: 'ok' as const, pct: 100 },
+    // 状态按“是不是现在选中的这种字体”认（整块评审第 11 条）：清单还没读到时首页那一行照样显示下载进度
+    state: state.id === look.font ? state : { id: look.font, status: 'ok' as const, pct: 100 },
     pick: (id: string) => set('font', id),
     retry: () => void retryFont(),
     error,

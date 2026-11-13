@@ -141,11 +141,6 @@
 }
 
 /* 减少动态效果：变淡也直接切换（上面的 .row .rowBtn 权重比 Pressable 的 .pressable 高，要在这里自己关） */
-@media (prefers-reduced-motion: reduce) {
-  .row .rowBtn {
-    transition: none;
-  }
-}
 
 :global(:root[data-rm="1"]) .row .rowBtn {
   transition: none;

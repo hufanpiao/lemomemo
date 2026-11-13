@@ -5,7 +5,7 @@
 // • 自动深浅（data-ad="dark"）11-06 取消（主持人 11-06 定方案甲，motion 改动已同意）：负责人要求底栏后面一律是实色 --bg
 //   （GlassBarFx.module.css .band），背后不会再有深色内容，判断深浅没有意义；原来按 DOM 面积算，盖在实色下面的深色卡片也会让底栏变深，反而出错
 // • 帧循环：只在 poke（液滴在动、按下底栏）和“减少透明效果”开关变了时跑一次，停下 IDLE_MS 后停掉；rAF 只在 motion 里（A25）
-// • 减少透明效果（系统设置或 :root[data-rt="1"]）：不写 data-glass，外壳用实色
+// • 减少透明效果（:root[data-rt="1"]，platform/look.ts 按设置里的开关或系统设置写）：不写 data-glass，外壳用实色
 // • 倾斜高光已删除（R-373，负责人 11-10“设置里面倾斜高光去掉，不要这个功能了”）：高光固定在原来关着时的位置（GlassBar.module.css）；
 //   以前存过的本机开关 lemo.tilt 由 forgetTilt 删掉：GlassBarFx 下载完这个文件就调，不分宽窄屏（宽屏不开引擎也要删）；读不到、删不掉（隐私模式）都不管
 import { prefersReducedMotion } from './reduced.ts';
@@ -22,10 +22,9 @@ export interface GlassOptions {
 
 export const IDLE_MS = 100;
 
-/** 减少透明效果：系统设置或页面开关 */
+/** 减少透明效果：只看 data-rt（platform/look.ts 按设置里的开关或系统设置写） */
 export function reducedTransparency(): boolean {
-  if (document.documentElement.dataset['rt'] === '1') return true;
-  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-transparency: reduce)').matches;
+  return document.documentElement.dataset['rt'] === '1';
 }
 
 /** CSS 时长（".55s"、"550ms"）→ 毫秒 */
@@ -92,10 +91,8 @@ export function startGlass(opts: GlassOptions): { stop(): void; poke(ms?: number
     if (raf === 0) raf = requestAnimationFrame(frame);
   };
 
-  // “减少透明效果”开关变了（系统设置、页面上的 data-rt）：跑一次，开关 data-glass
-  const mq = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-transparency: reduce)') : null;
+  // “减少透明效果”变了（data-rt 改写）：跑一次，开关 data-glass
   const onRt = (): void => poke();
-  mq?.addEventListener?.('change', onRt);
   const mo = new MutationObserver(onRt);
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-rt'] });
   poke(300);
@@ -105,7 +102,6 @@ export function startGlass(opts: GlassOptions): { stop(): void; poke(ms?: number
     stop(): void {
       stopped = true;
       if (raf) cancelAnimationFrame(raf);
-      mq?.removeEventListener?.('change', onRt);
       mo.disconnect();
       setOn(false);
     },

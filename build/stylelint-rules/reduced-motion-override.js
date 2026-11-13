@@ -1,18 +1,16 @@
 // 柠檬记自写 Stylelint 规则 lemo/reduced-motion-override（架构 17.2 第 5 点“CSS 一侧的统一写法”；UI-4 L-1，B1）
-// 凡是 transition / animation 动到位移或缩放（下称“动 transform”）的选择器，同一个文件里必须有两段减少动态效果的覆盖：
-//   ① @media (prefers-reduced-motion: reduce) { <同一选择器> { … } }
-//      - 媒体查询只认单独一条 (prefers-reduced-motion: reduce)，前面最多加 screen / all and；not …、再加别的条件都不算；
-//      - 动画包在 (prefers-reduced-motion: no-preference) 里的（单独一条，前面最多 screen / all and，后面只能 and 接条件；
-//        有逗号、or、not 的不算），不用这一段，但 data-rm 那段照样要写；
-//      - 这一段要写在原声明**之后**（同优先级，后写的赢）；
-//   ② :global(:root[data-rm="1"]) <同一选择器> { … }（不是 CSS Modules 的全局样式写 :root[data-rm="1"] <选择器>），放在最外层；
-//   - 两段都不准写进 @layer（不在层里的声明总是赢过层里的，覆盖会输），写了直接报错；
+// 凡是 transition / animation 动到位移或缩放（下称“动 transform”）的选择器，同一个文件里必须有减少动态效果的覆盖：
+//   :global(:root[data-rm="1"]) <同一选择器> { … }（不是 CSS Modules 的全局样式写 :root[data-rm="1"] <选择器>），放在最外层。
+//   data-rm 由 platform/look.ts 写：设置里的开关打开 或 系统设置了 prefers-reduced-motion: reduce（皮肤字体整块评审 11-14 第 1、6 条），
+//   所以只要这一段；原来要求的 @media (prefers-reduced-motion: reduce) 那段不再写（src 下由 tests/arch/no-reduced-media.test.ts 禁止，
+//   只有启动画面 splash.css 例外），写在 reduce 媒体查询里的规则这里不当覆盖、也不检查。
+//   - 不准写进 @layer（不在层里的声明总是赢过层里的，覆盖会输），写了直接报错；
 //   - 原声明带 !important，覆盖也要带。
 // 覆盖必须真的关掉：
 //   - transition 一类写 none 或只动 opacity；只有原过渡动的仅是 transform / translate / scale / rotate 时，写 transform: none 也算；
 //   - animation 一类写 none 或只动 opacity。
 // 光有选择器、里面写别的（例如 color），不算覆盖。覆盖里还在动 transform 的，单独报。
-// 选择器以类名开头、状态写在元素自身：.x[data-state=…]、.x:active、.x.is-on 把过渡的属性改了，两段覆盖里也要写回
+// 选择器以类名开头、状态写在元素自身：.x[data-state=…]、.x:active、.x.is-on 把过渡的属性改了，覆盖里也要写回
 // （transform 一类写 none；别的写回原值——和 .x 自己写的值一样，.x 没写的写 initial，初始值本来是 auto 的属性也可写 auto；
 // 否则只是从“动画缩放”变成“瞬间缩放”，UI-4 L-1 原话）；
 // 含 .x 却不以 .x 开头的（button.x、[data-on].x、:where(.x)、.wrap:hover .x），覆盖查不到，直接报错；
@@ -35,26 +33,20 @@ const {
 
 const ruleName = 'lemo/reduced-motion-override';
 
-const HOW = '要写在原声明之后、不进 @layer，写 none、只动 opacity，或者（只动 transform 时）transform: none；原声明有 !important 覆盖也要带';
+const HOW = '不进 @layer，写 none、只动 opacity，或者（只动 transform 时）transform: none；原声明有 !important 覆盖也要带';
 const messages = ruleMessages(ruleName, {
-  missingMedia: (sel) =>
-    `17.2 第 5 点（UI-4 L-1）：“${sel}”的 transition / animation 动到transform，同一文件里缺有效的 @media (prefers-reduced-motion: reduce) { ${sel} { … } } 覆盖（${HOW}）`,
   missingRm: (sel) =>
     `17.2 第 5 点（UI-4 L-1）：“${sel}”的 transition / animation 动到transform，同一文件里缺有效的 :global(:root[data-rm="1"]) ${sel} { … } 覆盖（${HOW}）`,
   overrideMoves: (sel) =>
     `17.2 第 5 点（UI-4 L-1）：减少动态效果的覆盖“${sel}”里还在动 transform，只能留 opacity 或写 none`,
   layer: (sel) =>
     `17.2 第 5 点（UI-4 L-1）：减少动态效果的覆盖“${sel}”不准写进 @layer（层里的声明会输给层外的原声明）`,
-  stateMedia: (sel, prop) =>
-    `17.2 第 5 点（UI-4 L-1）：“${sel}”把 ${prop} 改了，@media (prefers-reduced-motion: reduce) 里要在它之后把 ${sel} 的 ${prop} ${TRANSFORM_PROP.test(prop) ? '写回 none' : '写回原值（和原选择器的值一样；原选择器没写就写 initial，初始值本来是 auto 的属性也可写 auto）'}（否则还是瞬间缩放、位移）`,
   stateRm: (sel, prop) =>
     `17.2 第 5 点（UI-4 L-1）：“${sel}”把 ${prop} 改了，:global(:root[data-rm="1"]) 里要把 ${sel} 的 ${prop} ${TRANSFORM_PROP.test(prop) ? '写回 none' : '写回原值（和原选择器的值一样；原选择器没写就写 initial，初始值本来是 auto 的属性也可写 auto）'}（否则还是瞬间缩放、位移）`,
   shape: (sel, base, prop) =>
     `17.2 第 5 点（UI-4 L-1）：“${sel}”改了 ${base} 的 ${prop}，减少动态效果的覆盖查不到：选择器要以类名开头，状态写在元素自身（${base}[data-state=…]、${base}:active），不写标签前缀、属性前缀、:where()、父元素状态`,
   varOutside: (sel, base, prop) =>
     `17.2 第 5 点（UI-4 L-1）：${prop} 被 ${base} 的 transform 引用，只准在 ${base} 自己或它的状态选择器里赋值，“${sel}”里不行`,
-  noPreference: (sel) =>
-    `17.2 第 5 点（UI-4 L-1）：“${sel}”包在 @media (prefers-reduced-motion: no-preference) 里，这种包法管不到 data-rm 开关，仍要写 :global(:root[data-rm="1"]) ${sel} { … } 那段覆盖`,
   scope: (sel) =>
     `17.2 第 5 点（UI-4 L-1）：@scope 里不准写动位移的 transition / animation（“${sel}”）：作用域远近先于声明顺序比较，外面的减少动态效果覆盖会输`,
 });
@@ -70,11 +62,6 @@ const AUTO_INITIAL = /^(width|height|min-width|min-height|block-size|inline-size
 const hasEscape = (decl) => decl.prop.includes('\\') || decl.value.includes('\\');
 const TRANSFORM_PROP = /^(transform|translate|scale|rotate)$/i;
 const RM_PREFIX = /^(?::global\(\s*:root\[data-rm=["']1["']\]\s*\)|:root\[data-rm=["']1["']\])\s+/;
-const STRICT_MEDIA = /^\s*(?:(?:only\s+)?(?:screen|all)\s+and\s+)?\(\s*prefers-reduced-motion\s*:\s*reduce\s*\)\s*$/i;
-// no-preference 包法：单独一条，前面最多 screen / all and，后面只能用 and 接别的条件；有逗号、or、not 的都不算
-const NOPREF_MEDIA =
-  /^\s*(?:(?:only\s+)?(?:screen|all)\s+and\s+)?\(\s*prefers-reduced-motion\s*:\s*no-preference\s*\)(?:\s+and\s+\([^(),]*\))*\s*$/i;
-const hasOrNot = (params) => params.includes(',') || /(?<![\w-])(or|not)(?![\w-])/i.test(params);
 // transition / animation 简写里不是属性名、不是 keyframes 名字的关键字
 const CSS_WIDE = new Set(['initial', 'inherit', 'unset', 'revert', 'revert-layer']);
 const KEYWORDS = new Set([
@@ -218,40 +205,36 @@ const ruleFunction = (primary) => (root, result) => {
   if (!validateOptions(result, ruleName, { actual: primary, possible: [true] })) return;
   const frames = keyframesMoves(root);
 
-  // 覆盖：context（media / rm）→ 选择器 → 这一段里的声明
-  const overrides = { media: new Map(), rm: new Map() };
+  // 覆盖：选择器 → data-rm 那一段里的声明
+  const overrides = new Map();
   const movers = []; // { decl, sel, fam, m }
   const normals = []; // { rule, sels }：普通上下文里的规则（找状态选择器用）
 
-  const addOverride = (ctx, sel, rule) => {
-    const list = overrides[ctx].get(sel) ?? [];
+  const addOverride = (sel, rule) => {
+    const list = overrides.get(sel) ?? [];
     rule.each((n) => {
       if (n.type === 'decl') list.push(n);
     });
-    overrides[ctx].set(sel, list);
+    overrides.set(sel, list);
   };
 
   root.walkRules((rule) => {
     const ats = atAncestors(rule);
     if (ats.some((a) => /keyframes$/i.test(a.name))) return;
     const sels = resolveSelectors(rule);
-    // 只认 reduce；(prefers-reduced-motion: no-preference) 里的是普通声明（系统设置那一路已经关了，但管不到 data-rm 开关）
-    // not … (reduce) 不当覆盖段（它在“没开减少动态效果”时才成立），按普通声明处理
-    const reducedMedia = ats.find(
+    // reduce 媒体查询里的规则：不当覆盖、也不检查（src 下不许再写，守卫测试管）；not … (reduce) 照旧按普通声明处理
+    const reducedMedia = ats.some(
       (a) => a.name.toLowerCase() === 'media' && /prefers-reduced-motion\s*:\s*reduce/i.test(a.params) && !/(?<![\w-])not(?![\w-])/i.test(a.params),
     );
-    const noPref = ats.some((a) => a.name.toLowerCase() === 'media' && NOPREF_MEDIA.test(a.params) && !hasOrNot(a.params));
+    if (reducedMedia) return;
     const rmBases = sels.filter((s) => RM_PREFIX.test(s)).map((s) => norm(s.replace(RM_PREFIX, '')));
-    const looksOverride = Boolean(reducedMedia) || rmBases.length > 0;
-    if (looksOverride) {
+    if (rmBases.length > 0) {
       if (ats.some((a) => a.name.toLowerCase() === 'layer')) {
         report({ message: messages.layer(sels.join(', ')), node: rule, result, ruleName });
         return;
       }
-      // 只认：外面只有一层严格写法的 media；或者 data-rm 写在最外层
-      const validMedia = reducedMedia && ats.length === 1 && STRICT_MEDIA.test(reducedMedia.params);
-      if (validMedia) for (const s of sels) addOverride('media', RM_PREFIX.test(s) ? norm(s.replace(RM_PREFIX, '')) : s, rule);
-      if (ats.length === 0) for (const s of rmBases) addOverride('rm', s, rule);
+      // 只认写在最外层的
+      if (ats.length === 0) for (const s of rmBases) addOverride(s, rule);
       rule.each((node) => {
         if (node.type === 'decl' && movesOf(moved(node, frames))) {
           report({ message: messages.overrideMoves(sels.join(', ')), node, result, ruleName });
@@ -270,15 +253,12 @@ const ruleFunction = (primary) => (root, result) => {
         report({ message: messages.scope(sels.join(', ')), node, result, ruleName });
         return;
       }
-      for (const sel of sels) movers.push({ decl: node, sel, fam, m, noPref });
+      for (const sel of sels) movers.push({ decl: node, sel, fam, m });
     });
   });
 
-  /** ctx 这一段里能用来覆盖 node 的声明：media 段要写在 node 之后；node 带 !important 的覆盖也要带 */
-  const usable = (ctx, sel, node) =>
-    (overrides[ctx].get(sel) ?? []).filter(
-      (d) => (ctx !== 'media' || offsetOf(d) > offsetOf(node)) && (!node.important || d.important),
-    );
+  /** 能用来覆盖 node 的声明：node 带 !important 的覆盖也要带（data-rm 那段优先级更高，不看先后） */
+  const usable = (sel, node) => (overrides.get(sel) ?? []).filter((d) => !node.important || d.important);
 
   /** 这一段覆盖有没有真的关掉这条 transition / animation */
   const neutralizes = (decls, fam, m) => {
@@ -290,22 +270,18 @@ const ruleFunction = (primary) => (root, result) => {
   };
 
   const reported = new Set();
-  for (const { decl, sel, fam, m, noPref } of movers) {
-    // 包在 no-preference 里的：系统设置那一路已经关了，只差 data-rm 开关这一段
-    for (const ctx of noPref ? ['rm'] : ['media', 'rm']) {
-      if (neutralizes(usable(ctx, sel, decl), fam, m)) continue;
-      const key = `${ctx}|${sel}|${offsetOf(decl)}`;
-      if (reported.has(key)) continue;
-      reported.add(key);
-      const message = ctx === 'media' ? messages.missingMedia(sel) : noPref ? messages.noPreference(sel) : messages.missingRm(sel);
-      report({ message, node: decl, result, ruleName });
-    }
+  for (const { decl, sel, fam, m } of movers) {
+    if (neutralizes(usable(sel, decl), fam, m)) continue;
+    const key = `${sel}|${offsetOf(decl)}`;
+    if (reported.has(key)) continue;
+    reported.add(key);
+    report({ message: messages.missingRm(sel), node: decl, result, ruleName });
   }
 
   // 状态和选择器写法：
   //   - 选择器以类名开头：改 base 的位移、尺寸的，只准是 base 自己或 base 的状态（base[…]、base:…、base.y）；
   //     含 base 的类名、却不以 base 开头的（button.a、[data-on].a、:where(.a):active、.wrap:hover .a、.list:hover .a）一律报；
-  //   - 状态把过渡的属性改了，两段覆盖里也要写回（transform 一类写 none，别的位移属性、自定义属性写回原值）；
+  //   - 状态把过渡的属性改了，覆盖里也要写回（transform 一类写 none，别的位移属性、自定义属性写回原值）；
   //   - base 的 transform 引用的自定义属性，只准在 base 自己或它的状态里赋值。
   const info = new Map(); // base → { all, names, vars }
   for (const { sel, m } of movers) {
@@ -369,13 +345,11 @@ const ruleFunction = (primary) => (root, result) => {
             }
             if (!self) return;
           }
-          for (const ctx of ['media', 'rm']) {
-            const decls = usable(ctx, s, n);
-            const ok = TRANSFORM_PROP.test(p)
-              ? decls.some((d) => unprefix(d.prop) === p && isNone(d.value))
-              : decls.some((d) => d.prop === n.prop && restores(d, originalOf(base, n.prop)));
-            if (!ok) report({ message: ctx === 'media' ? messages.stateMedia(s, n.prop) : messages.stateRm(s, n.prop), node: n, result, ruleName });
-          }
+          const decls = usable(s, n);
+          const ok = TRANSFORM_PROP.test(p)
+            ? decls.some((d) => unprefix(d.prop) === p && isNone(d.value))
+            : decls.some((d) => d.prop === n.prop && restores(d, originalOf(base, n.prop)));
+          if (!ok) report({ message: messages.stateRm(s, n.prop), node: n, result, ruleName });
         });
       }
     }

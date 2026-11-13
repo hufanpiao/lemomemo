@@ -91,12 +91,6 @@
   transition: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .settling {
-    transition: none;
-  }
-}
-
 .bannerRow {
   display: flex;
   align-items: center;
@@ -140,13 +134,11 @@
   text-align: center;
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .banner,
-  .bar,
-  .note {
-    background: var(--float-solid);
-    backdrop-filter: none;
-  }
+:global(:root[data-rt='1']) .banner,
+:global(:root[data-rt='1']) .bar,
+:global(:root[data-rt='1']) .note {
+  background: var(--float-solid);
+  backdrop-filter: none;
 }
 
 .bannerMain {

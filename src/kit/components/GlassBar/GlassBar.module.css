@@ -202,25 +202,6 @@
 }
 
 /* 减少透明效果：实色，不模糊，没有模糊带；选中液滴换 --step-off 一档加 --g-pill-edge 描边，和栏底拉开（设计动效评审 D2） */
-@media (prefers-reduced-transparency: reduce) {
-  .barTint {
-    background: var(--glass-solid);
-  }
-
-  .bar,
-  .fab {
-    backdrop-filter: none;
-  }
-
-  .fabTint {
-    background: var(--fab-bg);
-  }
-
-  .pill {
-    background: var(--g-pill-solid);
-    box-shadow: inset 0 0 0 1.5px var(--g-pill-edge);
-  }
-}
 
 :global(:root[data-rt='1']) .bar,
 :global(:root[data-rt='1']) .fab {
@@ -241,15 +222,6 @@
 }
 
 /* 减少动态效果：液滴直接换位置，不放大、不放果冻；启动时安全区稳定后直接出现，不淡入 */
-@media (prefers-reduced-motion: reduce) {
-  .drop {
-    transition: none;
-  }
-
-  .drop[data-state='press'] {
-    scale: none;
-  }
-}
 
 :global(:root[data-rm='1']) .drop {
   transition: none;
@@ -265,13 +237,6 @@
 :global(:root[data-inset-wait]) .fab {
   opacity: 0;
   pointer-events: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bar,
-  .fab {
-    transition: none;
-  }
 }
 
 :global(:root[data-rm='1']) .bar,
@@ -412,12 +377,6 @@
 }
 
 /* 减少透明效果：侧栏实色 */
-@media (width >= 900px) and (prefers-reduced-transparency: reduce) {
-  .bar {
-    background: var(--glass-solid);
-    backdrop-filter: none;
-  }
-}
 
 @media (width >= 900px) {
   :global(:root[data-rt='1']) .bar {

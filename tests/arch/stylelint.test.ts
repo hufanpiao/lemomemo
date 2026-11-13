@@ -31,7 +31,7 @@ describe('Stylelint 架构规则（tests/arch-fixtures/stylelint）', () => {
     });
   }
 
-  // 17.2 第 5 点（UI-4 L-1）：仓库里真实的 CSS 也按这条规则过一遍，减少动态效果的覆盖两段都在
+  // 17.2 第 5 点（UI-4 L-1）：仓库里真实的 CSS 也按这条规则过一遍，减少动态效果的覆盖（data-rm 那一段；系统设置由 look.ts 并进 data-rm）都在
   for (const file of ['src/motion/Pressable.module.css', 'src/kit/components/Dialog.module.css', 'src/styles/base.css']) {
     it(`${file} 通过 lemo/reduced-motion-override`, async () => {
       const res = await stylelint.lint({ files: join(ROOT, file), cwd: ROOT });
@@ -40,17 +40,14 @@ describe('Stylelint 架构规则（tests/arch-fixtures/stylelint）', () => {
     });
   }
 
-  it('Pressable：两段减少动态效果覆盖里，按下仍有瞬时变淡的反馈（不缩放、不加过渡）', () => {
+  it('Pressable：减少动态效果（data-rm）的覆盖里，按下仍有瞬时变淡的反馈（不缩放、不加过渡）', () => {
     const css = readFileSync(join(ROOT, 'src/motion/Pressable.module.css'), 'utf8');
-    const media = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
     const rm = /:global\(:root\[data-rm="1"\]\) \.pressable\[data-state="pressed"\] \{([^}]*)\}/.exec(css)?.[1] ?? '';
-    const pressedInMedia = /\.pressable\[data-state="pressed"\] \{([^}]*)\}/.exec(media)?.[1] ?? '';
-    for (const block of [pressedInMedia, rm]) {
-      expect(block).toMatch(/transform: none;/);
-      expect(block).toMatch(/opacity: var\(--press-dim\);/);
-      // 不加过渡：要么不写 transition，要么写 transition: none（C3 起 Pressable 的基础类带 transform 过渡，这里显式关掉）
-      expect(block).not.toMatch(/transition:(?! none;)/);
-    }
+    expect(rm).toMatch(/transform: none;/);
+    expect(rm).toMatch(/opacity: var\(--press-dim\);/);
+    // 不加过渡：要么不写 transition，要么写 transition: none（C3 起 Pressable 的基础类带 transform 过渡，这里显式关掉）
+    expect(rm).not.toMatch(/transition:(?! none;)/);
+    expect(css).not.toContain('prefers-reduced');
   });
 
   it('令牌文件本身豁免（由 build/tokens.py 生成）', async () => {

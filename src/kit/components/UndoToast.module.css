@@ -20,11 +20,9 @@
   font-size: var(--fs-14);
 }
 
-@media (prefers-reduced-transparency: reduce) {
-  .toast {
-    background: var(--float-solid);
-    backdrop-filter: none;
-  }
+:global(:root[data-rt='1']) .toast {
+  background: var(--float-solid);
+  backdrop-filter: none;
 }
 
 .msg {

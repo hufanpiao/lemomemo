@@ -34,16 +34,6 @@
 }
 
 /* 减少透明效果（系统设置或 data-rt="1"，和底栏 GlassBar 同一套）、或浏览器不认 backdrop-filter（带不带前缀都不认）：不模糊、不画高光，退成一层半透明纯色（玻璃的后备着色 --g-tint-fb） */
-@media (prefers-reduced-transparency: reduce) {
-  .mist {
-    background: var(--g-tint-fb);
-    backdrop-filter: none;
-  }
-
-  .mist::after {
-    display: none;
-  }
-}
 
 :global(:root[data-rt='1']) .mist {
   background: var(--g-tint-fb);

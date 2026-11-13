@@ -107,6 +107,10 @@ jobs:
       - name: 设计令牌
         run: python -I build/tokens.py --check
 
+      # check_fonts 要用 fontTools 读源字体的字表（中文覆盖 GB 2312、韩文覆盖 2350 个音节）；版本固定，和本机一致（皮肤字体整块评审 11-14 第 12 条）
+      - name: 装字体工具（fontTools、brotli，固定版本）
+        run: python -m pip install --disable-pip-version-check --no-input fonttools==4.67.0 brotli==1.2.0
+
       - name: 字体登记和产物（check_fonts，架构 5.9c）
         run: python -I build/fonts.py --check
 
@@ -165,6 +169,10 @@ jobs:
       - name: 打印 pwsh 版本
         run: |
           if command -v pwsh >/dev/null; then pwsh --version || echo "pwsh --version 失败（不影响后面）"; else echo "runner 上没有 pwsh"; fi
+
+      # tests/build/fonts-py.test.ts 要真切分片（没装时那几条会跳过）；版本同上面 check 作业
+      - name: 装字体工具（fontTools、brotli，固定版本）
+        run: python -m pip install --disable-pip-version-check --no-input fonttools==4.67.0 brotli==1.2.0
 
       - name: 单元和组件测试（TZ=${{ matrix.tz }}；UTC、首尔、洛杉矶三个时区各一个作业并行，架构第 9 节 H2）
         # 时区由矩阵给（上面 strategy.matrix.tz），每个作业只跑一遍；tests/build/deno-frozen-lock.test.ts 核对三个时区一个不少

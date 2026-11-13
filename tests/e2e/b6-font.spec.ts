@@ -1,5 +1,6 @@
 // 设置 › 字体（架构 5.9c 第 5 点；R-128、R-135）在真浏览器、正式 CSP 下：选一种字体 → 预取分片下完、同源样式加载好、
-// document.fonts 确认后 <html data-font> 才换、正文字体栈换成这一种；没有 CSP 报错（csp-fixture 判）；重新打开按本机缓存再套上；
+// document.fonts 用中文、韩文样例各确认一次后 <html data-font> 才换、正文字体栈换成这一种（韩文面也套上）；没有 CSP 报错（csp-fixture 判）；
+// 重新打开按本机缓存直接套上（上次确认过的不再报“下载中”、不闪，后台静默核对；皮肤字体整块评审 11-14 第 5 条）；
 // 分片下不来 → 回系统字体、提示“没下载成功，先用系统字体”，重试成功。
 // 仓库里还没有可选字体的源文件（要负责人同意下载），清单是空的；这里用皮肤视觉稿的霞鹜文楷子集（912 字）在测试目录里现跑 build/fonts.py，
 // 把 /app/fonts-index.json 和 /app/fonts/kai/* 换成它的产物（不用 SW，请求才走得到 page.route）。没装 fontTools 的机器跳过
@@ -58,12 +59,19 @@ test.describe('字体', () => {
     await page.locator('label', { has: page.getByTestId('settings-font-kai') }).click();
     await expect.poll(() => html(page, 'data-font'), { timeout: 20000 }).toBe('kai');
     expect(await page.evaluate(() => document.fonts.check('16px "lemo-kai-zh"', '永'))).toBe(true);
+    // 韩文面同样套上：韩文 family 已加载、韩文界面的字体栈第一个是它
+    expect(await page.evaluate(() => document.fonts.check('16px "lemo-kai-ko"', '한글'))).toBe(true);
+    expect(await page.evaluate(() => [...document.fonts].some((f) => f.family.replaceAll('"', '') === 'lemo-kai-ko' && f.status === 'loaded'))).toBe(true);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--f-ko').trim())).toMatch(/^"lemo-kai-ko"/);
     expect(await page.evaluate(() => getComputedStyle(document.body).fontFamily)).toMatch(/^"?lemo-kai-zh"?,/);
     await page.getByTestId('settings-font-back').click();
     await expect(page.getByTestId('settings-font-summary')).toHaveText('文楷');
 
+    // 冷启动：上次确认过的直接套上，首页那一行不出“下载中”
     await page.reload();
     await expect.poll(() => html(page, 'data-font'), { timeout: 20000 }).toBe('kai');
+    await expect(page.getByTestId('settings-font-summary')).toHaveText('文楷', { timeout: 20000 });
+    expect(await page.evaluate(() => localStorage.getItem('pv-font-ok'))).toContain('"id":"kai"');
     // 换回系统字体：拿掉
     await page.getByTestId('settings-font-entry').click({ timeout: 30000 });
     await page.locator('label', { has: page.getByTestId('settings-font-system') }).click();

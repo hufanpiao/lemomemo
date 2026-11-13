@@ -18,7 +18,7 @@ const HAS_FONTTOOLS = spawnSync('python', ['-I', '-c', 'import fontTools, brotli
 const itFt = HAS_FONTTOOLS ? it : it.skip;
 
 interface Index {
-  fonts: Array<{ id: string; css: string; family: string; prefetch: Array<{ url: string; sha256: string; bytes: number }>; bytes: { prefetch: number; all: number } }>;
+  fonts: Array<{ id: string; css: string; family: string; sample: string; familyKo: string; sampleKo: string; files: string[]; prefetch: Array<{ url: string; sha256: string; bytes: number }>; bytes: { prefetch: number; all: number } }>;
 }
 
 const dirs: string[] = [];
@@ -67,6 +67,10 @@ describe('build/fonts.py', () => {
     const [kai] = index(root).fonts;
     expect(kai?.id).toBe('kai');
     expect(kai?.family).toBe('lemo-kai-zh');
+    // 确认用的韩文 family 和样例（platform/fonts.ts 用它确认韩文面也套上了）
+    expect(kai?.familyKo).toBe('lemo-kai-ko');
+    expect(kai?.sampleKo).toMatch(/^[가-힣 ]+$/);
+    expect(kai?.sample).toMatch(/\p{Script=Han}/u);
     expect(kai?.prefetch.length).toBeGreaterThan(0);
     const dir = join(root, 'src', 'public', 'fonts', 'kai');
     for (const p of kai?.prefetch ?? []) expect(sha(join(dir, p.url.split('/').pop() ?? ''))).toBe(p.sha256);
@@ -78,6 +82,9 @@ describe('build/fonts.py', () => {
     expect(css).toContain('--f-num:"lemo-kai-zh","Manrope"');
     // 每个分片文件都在样式里用到（没有孤儿文件）
     for (const f of readdirSync(dir).filter((n) => n.endsWith('.woff2'))) expect(css).toContain(f);
+    // files = 文件夹里的全部文件（换字体一天后清缓存按它留）
+    expect([...(kai?.files ?? [])].map((u) => u.split('/').pop()).sort()).toEqual(readdirSync(dir).sort());
+    expect(kai?.files.every((u) => u.startsWith('/app/fonts/kai/'))).toBe(true);
   });
 
   itFt('num: manrope 时不换数字字体', () => {
@@ -118,6 +125,7 @@ describe('build/fonts.py', () => {
     const r = run(root, '--check');
     expect(r.out).toContain('src/public/fonts/old 没有登记');
     expect(r.out).toContain('big.woff2 307201 B 超过单个分片上限');
+    expect(r.out).toMatch(/kai：清单 files 和文件夹对不上（少 \['big\.woff2'\]/);
   });
 
   it('真仓库：登记和产物一致，--check 通过', () => {

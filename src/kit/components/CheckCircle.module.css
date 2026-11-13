@@ -88,20 +88,6 @@
 }
 
 /* 减少动态效果（17.2 第 5 点）：不缩放，只淡入淡出、时长减半 */
-@media (prefers-reduced-motion: reduce) {
-  .fill {
-    transform: none;
-    transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
-  }
-
-  .fill[data-state="on"] {
-    transform: none;
-  }
-
-  .tick {
-    transition: opacity calc(var(--dur-ui) / 2) var(--ease-out);
-  }
-}
 
 :global(:root[data-rm="1"]) .fill {
   transform: none;

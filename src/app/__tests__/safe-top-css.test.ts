@@ -116,7 +116,6 @@ describe('顶部安全区底色条', () => {
     expect(block(base, '.lemo-top-8')).toMatch(/backdrop-filter: blur\(8px\);/);
     expect(base).toMatch(/\n\.lemo-top-2 \{\s*background: var\(--status-tint\);\s*backdrop-filter: blur\(2px\);/);
     expect(block(base, 'body::before')).toMatch(/mask: linear-gradient\(to bottom, var\(--bg\), transparent\);/); // 整段渐变不留实色
-    expect(base).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{\s*\.lemo-top-8,\s*\.lemo-top-2 \{\s*display: none;/);
     expect(base).toMatch(/:root\[data-rt='1'\] \.lemo-top-8,\s*:root\[data-rt='1'\] \.lemo-top-2 \{\s*display: none;/);
     expect(base).toMatch(/@media \(width >= 900px\) \{\s*\.lemo-top-8,\s*\.lemo-top-2 \{\s*display: none;/);
     expect(base.match(/backdrop-filter: (?!none)/g)?.length).toBe(2); // 只两层（主持人：控制层数）；切页快照组上的 none 不算

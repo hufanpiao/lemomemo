@@ -15,6 +15,8 @@ const m = vi.hoisted(() => {
   const subs = new Set<() => void>();
   return {
     fonts: [] as unknown[],
+    /** 清单读取：默认马上给；测“清单还没到”时换成挂着的 */
+    index: null as null | (() => Promise<unknown[]>),
     retry: vi.fn(() => Promise.resolve()),
     setState(s: FontState) {
       state = s;
@@ -29,7 +31,7 @@ const m = vi.hoisted(() => {
     },
   };
 });
-vi.mock('../../../platform/fonts.ts', () => ({ fontIndex: () => Promise.resolve(m.fonts), fontState: m.fontState, retryFont: m.retry }));
+vi.mock('../../../platform/fonts.ts', () => ({ fontIndex: () => (m.index ? m.index() : Promise.resolve(m.fonts)), fontState: m.fontState, retryFont: m.retry }));
 
 const KAI = { id: 'kai', label: { zh: '文楷', ko: '손글씨' }, css: '', family: '', sample: '', prefetch: [] };
 type Row = { id: string; key?: unknown; value?: unknown };
@@ -47,6 +49,7 @@ beforeEach(async () => {
   clearAllCollections();
   uiStore.getState().setLocale('zh-CN');
   m.fonts = [KAI];
+  m.index = null;
   m.setState({ id: 'system', status: 'ok', pct: 100 });
   m.retry.mockClear();
   await boot();
@@ -108,5 +111,18 @@ describe('首页一行', () => {
       settings().upsert([{ id: 'f', key: 'ui.font', value: { v: 1, id: 'round' } }] as never);
     });
     await waitFor(() => expect(v()).toBe('系统字体（默认）'));
+  });
+
+  it('状态按“是不是现在选中的字体”认（整块评审第 11 条）：清单还没读到也显示下载进度；别的字体的状态不算', async () => {
+    m.index = () => new Promise(() => undefined);
+    render(<FontHomeRow onOpen={() => undefined} />);
+    const v = () => screen.getByTestId('settings-font-summary').textContent;
+    await act(async () => {
+      settings().upsert([{ id: 'f', key: 'ui.font', value: { v: 1, id: 'kai' } }] as never);
+    });
+    act(() => m.setState({ id: 'kai', status: 'loading', pct: 30 }));
+    expect(v()).toBe('下载中 30%');
+    act(() => m.setState({ id: 'yozai', status: 'fail', pct: 0 }));
+    expect(v()).toBe('系统字体（默认）');
   });
 });

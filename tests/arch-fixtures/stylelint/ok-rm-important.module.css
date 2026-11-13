@@ -3,12 +3,6 @@
   transition: transform var(--dur-ui) var(--ease-out) !important;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .a {
-    transition: none !important;
-  }
-}
-
 :global(:root[data-rm="1"]) .a {
   transition: none !important;
 }
