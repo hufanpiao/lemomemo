@@ -102,8 +102,9 @@ export interface RoundStore {
   /** private.remind_queue_pop：打租约出队（迁移 20261113100000）。retry = true 只取取过的项、一次 1 项；false 只取新项（attempts = 0）、按批。
    *  perUser 每人上限、poison 有毒次数、ver 规则版本（只交出 min_ver ≤ ver 的项）都显式传，不靠 SQL 的默认值 */
   popQueue(limit: number, leaseS: number, retry: boolean, perUser: number, poison: number, ver: number): Promise<QueueItem[]>;
-  /** private.remind_queue_finish(claim, release)：release 里的放回（清租约），这个租约的其余项删掉 */
-  finishQueue(claim: string, release: readonly QueueRef[]): Promise<void>;
+  /** private.remind_queue_finish(claim, release)：release 里的放回（清租约、attempts 减 1）；hold 里的留着租约和 attempts、等过期重取
+   *  （写回出错的项，计入有毒次数，迁移 20261113120000）；这个租约的其余项删掉 */
+  finishQueue(claim: string, release: readonly QueueRef[], hold?: readonly QueueRef[]): Promise<void>;
   /** 第 0 步按 id 读行（只按 id 读；行的主人和队列项对不对，在 round-step0.ts 里比 user_id） */
   rows(table: Table, ids: readonly string[]): Promise<ItemRow[]>;
   profiles(userIds: readonly string[]): Promise<Map<string, Profile>>;
