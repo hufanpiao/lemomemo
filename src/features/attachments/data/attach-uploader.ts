@@ -1,20 +1,22 @@
 // 附件上传器（架构 5.13 第 2 点 ⑥⑦“重新上传”、第 12 点；线框 sAtt）：本机判 → 写行 → 等确认 → PUT → file-check。待传的字节只放内存。
 // • 本机判（file-prep.ts）不过的不写行，直接提示“这个文件没能加上：<原因>”（类型不认 / 超过 10 MB / 压缩包异常 / 带密码）
+// • 预览材料（5.13 第 2 点 ④）：能预览的格式由界面传进来的 extract（隐藏的预览沙箱）给页数、纯文本（≤ 20000 字）、首页缩略图（webp）；
+//   拿不到就照常加（has_thumb false、pages、text_excerpt 为空），不因为缩略图失败拒收文件
 // • 写行：note_files 一行（check_status 服务器默认 pending，has_thumb = false，路径 media-path.ts 拼）经 write.insert，deps 指向这条随手记；
 //   行被服务器拒（outbox error：quota_exceeded 等）→ 进发送失败区，这里提示“附件空间满了”或“没能加上”
-// • 等行确认后 PUT /files（Content-Type 按 kind 取 DOC_TYPES）：可重试的错误退避三次（core/row-sync.ts 的 putWithBackoff）；
+// • 等行确认后 PUT /files：原文件（Content-Type 按 kind 取 DOC_TYPES），有缩略图再 PUT <id>.t.webp（顺序同 5.13 第 2 点“重新上传”）；可重试的错误退避三次（core/row-sync.ts 的 putWithBackoff）；
 //   403 not_pending（上次其实传成了）不重传，看这一行的 check_status（0.33）；account 类走 accountExitOf → 离开本机
 // • 传完调 file-check：ok 完；rejected 按原因提示；incomplete 补传原文件再调，最多 3 次；调不通（网络）就交给服务器每 10 分钟的补扫
 // • 删除：发送失败区里的新建 → 放弃（没有撤销）；不然软删 deleted_at（不进“最近删除”，提示条上“撤销”，架构 5.13 第 12 点）
 // • 运行日志（rlog）：每一步只记类型、大小、结果码和耗时，不记文件名和内容
 // 写行、等确认、待传列表、默认依赖和插图上传器共用 core/row-sync.ts；这里只写判型、拼行、PUT 之后的 file-check。
 // 纯 TS：不准 import React（A1）
-import { pendingList, putWithBackoff, rowSyncOf, rowUploadDefaults, uuidv7, waitRow, type RowUploadDeps } from '../../../core/row-sync.ts';
+import { pendingList, putWithBackoff, rowState, rowUploadDefaults, uuidv7, waitRow, type RowUploadDeps } from '../../../core/row-sync.ts';
 import { collection } from '../../../core/store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { upload, type FileError, type UploadResult } from '../../../platform/files.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
-import { noteFilePath } from '../../../../shared/logic/files/media-path.ts';
+import { noteFilePath, noteFileThumbPath } from '../../../../shared/logic/files/media-path.ts';
 import type { DocKind } from '../../../../shared/manifests/attachments.ts';
 import type { RejectReason } from '../../../../shared/schema/attachments.ts';
 import { fileCheck, type CheckResult } from './file-check-api.ts';
@@ -43,14 +45,22 @@ export interface AttNotice {
 }
 
 export type AddResult = { ok: true; id: string } | { ok: false; key: AttFailKey | 'silent' | 'private' | 'readonly' };
+/** 预览材料：页数（PDF、PPT 页数，Excel 表数）、纯文本、首页缩略图（webp）；extract 给不出就 null */
+export interface Extras {
+  pages: number | null;
+  text: string | null;
+  thumb: Blob | null;
+}
+export type Extract = (bytes: Uint8Array, kind: DocKind) => Promise<Extras | null>;
+
 /** 删除的结果：soft = 软删了（可以撤销）；dropped = 行没写成、放弃了或本来就没了（没什么可撤销）；false = 没删成 */
 export type RemoveResult = 'soft' | 'dropped' | false;
 
 export interface AttUploaderDeps extends RowUploadDeps {
   now(): number;
   prepare(file: File): Promise<Prepared | PrepFail>;
-  /** 本机集合里的这一行（看在不在、check_status） */
-  row(id: string): { check_status?: unknown } | undefined;
+  /** 本机集合里这一行的 check_status（行在不在看 rowExists） */
+  checkStatus(id: string): unknown;
   upload(path: string, blob: Blob, mime: string): Promise<UploadResult>;
   check(id: string): Promise<CheckResult>;
   log?: (line: string) => void;
@@ -78,11 +88,12 @@ export function putFailKey(e: FileError): AttFailKey | null {
 const CHECK_TRIES = 3;
 /** file-check 回 rate_limited（每人每分钟限次）时等这么久再查一次（第二轮复查 #14：一次多选几十个时，后面的不用等补扫的半小时） */
 export const RATE_WAIT_MS = 60_000;
-type Item = PendingFile & { blob: Blob; mime: string; path: string; stage: 'row' | 'file' };
+type Part = { path: string; blob: Blob; mime: string };
+type Item = PendingFile & { parts: Part[]; stage: 'row' | 'file' };
 
 export function createAttUploader(deps: AttUploaderDeps) {
   const log = deps.log ?? ((): void => undefined);
-  const list = pendingList<PendingFile, Omit<Item, keyof PendingFile>, AttNotice>(({ blob: _b, mime: _m, path: _p, stage: _s, ...p }) => p);
+  const list = pendingList<PendingFile, Omit<Item, keyof PendingFile>, AttNotice>(({ parts: _p, stage: _s, ...p }) => p);
   const { items } = list;
   const fail = (id: string, key: AttFailKey, stage: 'row' | 'file'): void => {
     const it = items.get(id);
@@ -91,13 +102,12 @@ export function createAttUploader(deps: AttUploaderDeps) {
     list.set(id, { state: 'failed', fail: key, stage });
     list.notify({ key, noteId: it.noteId, name: it.name });
   };
-  const exists = (id: string) => (): boolean => deps.row(id) !== undefined;
 
-  /** PUT 原文件；'not_pending'（上次其实传成了）单独回，交给 byRowStatus */
-  async function put(it: Item): Promise<'ok' | 'not_pending' | AttFailKey | FileError> {
+  /** PUT 一份（原文件或缩略图）；'not_pending'（上次其实传成了）单独回，交给 byRowStatus */
+  async function putOne(x: Part): Promise<'ok' | 'not_pending' | AttFailKey | FileError> {
     return putWithBackoff<AttFailKey | 'not_pending'>(
       async () => {
-        const r = await deps.upload(it.path, it.blob, it.mime);
+        const r = await deps.upload(x.path, x.blob, x.mime);
         if (!r.ok) log(`att put ${r.kind} code=${r.code}${r.reason ? ` reason=${r.reason}` : ''}`);
         return r;
       },
@@ -106,10 +116,18 @@ export function createAttUploader(deps: AttUploaderDeps) {
       deps.sleep,
     );
   }
+  /** 原文件、缩略图依次 PUT；哪一份不是 ok 就停在那一份 */
+  async function put(it: Item): Promise<'ok' | 'not_pending' | AttFailKey | FileError> {
+    for (const x of it.parts) {
+      const r = await putOne(x);
+      if (r !== 'ok') return r;
+    }
+    return 'ok';
+  }
 
   /** 行已经不在 pending（0.33）：ok 当成功；rejected 当“没能加上”；行没了就丢掉 */
   function byRowStatus(id: string): void {
-    const st = deps.row(id)?.['check_status'];
+    const st = deps.checkStatus(id);
     log(`att not_pending status=${typeof st === 'string' ? st : 'gone'}`);
     if (st === 'rejected') return fail(id, 'unknown', 'file');
     list.drop(id);
@@ -153,7 +171,7 @@ export function createAttUploader(deps: AttUploaderDeps) {
   }
 
   async function follow(id: string): Promise<void> {
-    const r = await waitRow(deps, TABLE, id, exists(id));
+    const r = await waitRow(deps, TABLE, id);
     log(`att row ${r.s}${r.s === 'failed' ? ` code=${r.code}` : ''}`);
     if (!items.has(id)) return;
     if (r.s === 'confirmed') return send(id);
@@ -164,7 +182,7 @@ export function createAttUploader(deps: AttUploaderDeps) {
   return {
     ...list.api,
     /** 给一条随手记加一个文件（多选、拖进来时每个文件各调一次，各自报错） */
-    async add(noteId: string, file: File): Promise<AddResult> {
+    async add(noteId: string, file: File, extract?: Extract): Promise<AddResult> {
       const t0 = deps.now();
       log(`att add start kb=${Math.round(file.size / 1024)}`);
       const end = (r: AddResult): AddResult => {
@@ -179,13 +197,16 @@ export function createAttUploader(deps: AttUploaderDeps) {
       const p = await deps.prepare(file);
       log(p.ok ? `att prep ok kind=${p.kind} kb=${Math.round(p.bytes.length / 1024)}` : `att prep ${p.reason} detail=${p.detail}`);
       if (!p.ok) return end({ ok: false, key: p.reason });
+      const x = extract ? await extract(p.bytes, p.kind).catch(() => null) : null;
+      if (extract) log(`att extract ${x ? `ok pages=${x.pages ?? '-'} thumb=${x.thumb ? 1 : 0} chars=${x.text?.length ?? 0}` : 'none'}`);
       const id = uuidv7(deps.now());
       const now = deps.now();
       const path = noteFilePath(uid, noteId, id, p.kind);
-      const row = { id, note_id: noteId, kind: p.kind, path, has_thumb: false, name: p.name, mime: p.mime, bytes: p.bytes.length, sha256: p.sha256, pages: null, text_excerpt: null, created_at: now, updated_at: now };
+      const thumb = x?.thumb ?? null;
+      const row = { id, note_id: noteId, kind: p.kind, path, has_thumb: thumb !== null, name: p.name, mime: p.mime, bytes: p.bytes.length, sha256: p.sha256, pages: x?.pages ?? null, text_excerpt: x?.text || null, created_at: now, updated_at: now };
       const w = await deps.insert(row, noteId);
       if (w !== 'ok') return end({ ok: false, key: w === 'switching' ? 'silent' : 'write' });
-      items.set(id, { id, noteId, name: p.name, kind: p.kind, bytes: p.bytes.length, state: 'writing', fail: null, blob: new Blob([p.bytes as BlobPart], { type: p.mime }), mime: p.mime, path, stage: 'row' });
+      items.set(id, { id, noteId, name: p.name, kind: p.kind, bytes: p.bytes.length, state: 'writing', fail: null, parts: [{ path, blob: new Blob([p.bytes as BlobPart], { type: p.mime }), mime: p.mime }, ...(thumb ? [{ path: noteFileThumbPath(uid, noteId, id), blob: thumb, mime: 'image/webp' }] : [])], stage: 'row' });
       list.changed();
       void follow(id);
       return end({ ok: true, id });
@@ -199,7 +220,7 @@ export function createAttUploader(deps: AttUploaderDeps) {
     },
     /** 删一个附件：发送失败区里的新建 → 放弃；行本来就没了 → 算删掉；不然软删。本机这份一起丢 */
     async remove(id: string): Promise<RemoveResult> {
-      const r = rowSyncOf(await deps.queue(), TABLE, id, deps.row(id) !== undefined);
+      const r = await rowState(deps, TABLE, id);
       const res: RemoveResult =
         r.s === 'failed' ? ((await deps.dropFailed(id)) ? 'dropped' : false)
         : r.s === 'gone' ? 'dropped'
@@ -224,7 +245,7 @@ export const defaultAttDeps = (): AttUploaderDeps => ({
   now: () => clock.now(),
   log: rlog,
   prepare: prepareFile,
-  row: (id) => collection<{ id: string; check_status?: unknown }>(TABLE).get(id),
+  checkStatus: (id) => collection<{ id: string; check_status?: unknown }>(TABLE).get(id)?.check_status,
   upload: (path, blob, mime) => upload('files', path, blob, mime),
   check: (id) => fileCheck(id),
 });

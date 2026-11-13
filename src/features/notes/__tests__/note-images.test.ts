@@ -8,7 +8,8 @@ import { encodeImage, fitEdge, isHeic, THUMB_EDGE, THUMB_MAX, type Decoded, type
 import { exifDateToMs, jpegTakenAt } from '../../../platform/image-exif.ts';
 import { createUploader, type UploaderDeps } from '../data/image-uploader.ts';
 import { createImageView, livePaths } from '../data/image-view.ts';
-import { imagePath, imageRow, rowSyncOf, thumbPath, uploadFailKey, uploadPair, uuidv7, type QueueItem } from '../data/note-images.ts';
+import { rowSyncOf as coreRowSyncOf } from '../../../core/row-sync.ts';
+import { imagePath, imageRow, thumbPath, uploadFailKey, uploadPair, uuidv7, type QueueItem } from '../data/note-images.ts';
 import { bareJpeg, exifApp1, withExif } from './exif-sample.ts';
 
 const TZ = 'Asia/Seoul';
@@ -134,6 +135,7 @@ describe('上传的拒绝 → 提示', () => {
     const acct = err('account', 'session_revoked', undefined, 401);
     expect(await uploadPair(() => Promise.resolve(acct), 'p.webp', new Blob(), new Blob(), sleep)).toBe(acct);
   });
+  const rowSyncOf = (items: readonly QueueItem[], id: string, ex: boolean) => coreRowSyncOf(items, 'note_images', id, ex);
   it('rowSyncOf：发送失败 > 排队中 > 确认 / 没了', () => {
     const q = (state: QueueItem['state'], error: string | null = null): QueueItem => ({ rec: 'note_images:i', state, error });
     expect(rowSyncOf([q('pending'), q('failed', 'quota_exceeded')], 'i', true)).toEqual({ s: 'failed', code: 'quota_exceeded' });

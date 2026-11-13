@@ -9,7 +9,7 @@
 //   网络、5xx、限流按 2 s、5 s、15 s 退避重试三次，还不行按“没传上”；account 类（停用、会话被吊销）走 accountExitOf → 离开本机（S13）
 // • 删除：发送失败区里还有这一行的新建 → 放弃（resolveFailedCreate drop）；否则软删（deleted_at），进“最近删除”
 // 纯 TS：不准 import React（A1）
-import { PUT_BACKOFF, putWithBackoff, rowSyncOf as coreRowSyncOf, type QueueItem, type RowSync } from '../../../core/row-sync.ts';
+import { PUT_BACKOFF, putWithBackoff } from '../../../core/row-sync.ts';
 import type { FileError, UploadResult } from '../../../platform/files.ts';
 
 /** 插图失败的几种提示（i18n 键 notes.img.fail.<键>） */
@@ -70,8 +70,6 @@ export function uploadFailKey(e: FileError): ImgFailKey | null {
 /** 行写进 outbox 后被服务器拒的码 → 提示 */
 export const writeFailKey = (code: string | null): ImgFailKey => (code === 'quota_exceeded' ? 'quota' : 'write');
 
-/** 这张图（note_images 的一行）在 outbox 里的情况 */
-export const rowSyncOf = (items: readonly QueueItem[], id: string, rowExists: boolean): RowSync => coreRowSyncOf(items, 'note_images', id, rowExists);
 
 /** 上传原图和缩略图；退避重试 retry 类的错误；返回 'ok'、提示键，或 account 类错误（交给调用方离开本机） */
 export async function uploadPair(

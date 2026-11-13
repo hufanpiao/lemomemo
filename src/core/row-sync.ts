@@ -53,10 +53,20 @@ export interface RowQueue {
   pollMs?: number;
 }
 
+/** 判断“本机集合里还有没有这一行”只有这一种写法（rowExists），插图、附件共用（B4b-1 第二轮复查：原来一边 rowExists、一边 row(id) 再包一层） */
+export interface RowLookup extends RowQueue {
+  rowExists(id: string): boolean;
+}
+
+/** 这一行现在的情况（删除时决定放弃还是软删） */
+export async function rowState(q: RowLookup, table: string, id: string): Promise<RowSync> {
+  return rowSyncOf(await q.queue(), table, id, q.rowExists(id));
+}
+
 /** 等这一行在 outbox 里有了结果（不再是 pending） */
-export async function waitRow(q: RowQueue, table: string, id: string, rowExists: () => boolean): Promise<RowSync> {
+export async function waitRow(q: RowLookup, table: string, id: string): Promise<RowSync> {
   for (;;) {
-    const r = rowSyncOf(await q.queue(), table, id, rowExists());
+    const r = await rowState(q, table, id);
     if (r.s !== 'pending') return r;
     await new Promise<void>((res) => {
       const t = setTimeout(fin, q.pollMs ?? 3000);
@@ -140,7 +150,7 @@ export function pendingList<P extends { id: string }, X, N>(pub: (it: P & X) => 
 }
 
 /** 写行、发送失败区、离开本机这几项默认依赖（两个上传器同一套接法） */
-export interface RowUploadDeps extends RowQueue {
+export interface RowUploadDeps extends RowLookup {
   userId(): string | null;
   /** 写行（deps 指向这条随手记）：ok、没写进去（failed），或正在换账号（switching，不提示） */
   insert(row: Record<string, unknown> & { id: string }, noteId: string): Promise<'ok' | 'failed' | 'switching'>;
@@ -163,6 +173,7 @@ const leave = createLeaveAccount();
 /** 默认依赖：接到 core 的 write.*、outbox、集合、离开本机，和 platform 的会话 */
 export function rowUploadDefaults(table: string): RowUploadDeps {
   return {
+    rowExists: (id) => collection(table).get(id) !== undefined,
     userId: () => getBoot()?.userId ?? null,
     async insert(row, noteId) {
       try {

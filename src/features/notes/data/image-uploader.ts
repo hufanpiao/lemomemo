@@ -3,16 +3,15 @@
 // • 提示（onNotice）：插入、上传失败各发一条，页面出提示条；超限（quota）带“最近删除”入口
 // • 依赖可注入；写行、等确认、待传列表、默认依赖（write.*、outbox、集合、离开本机、会话）和附件上传器共用 core/row-sync.ts
 // 纯 TS：不准 import React（A1）
-import { pendingList, rowUploadDefaults, waitRow, type RowUploadDeps } from '../../../core/row-sync.ts';
+import { pendingList, rowState, rowUploadDefaults, waitRow, type RowUploadDeps } from '../../../core/row-sync.ts';
 import { currentTz } from '../../../core/current-tz.ts';
-import { collection } from '../../../core/store.ts';
 import { clock } from '../../../platform/clock.ts';
 import { upload, type UploadResult } from '../../../platform/files.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { encodeDiagText, encodeImage, type EncodeFail, type EncodeResult } from '../../../platform/image-encode.ts';
 import { imageView, type ImageView } from './image-view.ts';
-import { imageRow, rowSyncOf, thumbPath, uploadPair, uuidv7, writeFailKey, type ImgFailKey } from './note-images.ts';
+import { imageRow, thumbPath, uploadPair, uuidv7, writeFailKey, type ImgFailKey } from './note-images.ts';
 
 export interface PendingImage {
   id: string;
@@ -34,7 +33,6 @@ export interface UploaderDeps extends RowUploadDeps {
   tz(): Tz;
   now(): number;
   encode(file: File, tz: Tz): Promise<EncodeResult>;
-  rowExists(id: string): boolean;
   upload(path: string, blob: Blob): Promise<UploadResult>;
   objectUrl(b: Blob): string;
   revoke(url: string): void;
@@ -86,7 +84,7 @@ export function createUploader(deps: UploaderDeps) {
   }
 
   async function follow(id: string): Promise<void> {
-    const r = await waitRow(deps, 'note_images', id, () => deps.rowExists(id));
+    const r = await waitRow(deps, 'note_images', id);
     log(`notes img row ${r.s}${r.s === 'failed' ? ` code=${r.code}` : ''}`);
     if (!items.has(id)) return;
     if (r.s === 'confirmed') return send(id);
@@ -147,7 +145,7 @@ export function createUploader(deps: UploaderDeps) {
     },
     /** 删除一张图：发送失败区里的新建 → 放弃；不然软删，进“最近删除”。本机这一份一起丢 */
     async remove(id: string): Promise<boolean> {
-      const r = rowSyncOf(await deps.queue(), id, deps.rowExists(id));
+      const r = await rowState(deps, 'note_images', id);
       const ok = r.s === 'failed' ? await deps.dropFailed(id) : r.s === 'gone' ? true : await deps.patch(id, { deleted_at: deps.now() });
       if (ok) drop(id);
       return ok;
@@ -166,7 +164,6 @@ export const defaultUploaderDeps = (): UploaderDeps => {
     now: () => clock.now(),
     log: rlog,
     encode: encodeImage,
-    rowExists: (id) => collection('note_images').get(id) !== undefined,
     upload: (path, blob) => upload('images', path, blob, 'image/webp'),
     objectUrl: (b) => URL.createObjectURL(b),
     revoke: (u) => URL.revokeObjectURL(u),
