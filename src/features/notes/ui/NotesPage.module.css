@@ -130,6 +130,12 @@
   font-weight: 400;
   line-height: 1.35;
   overflow-wrap: anywhere;
+
+  /* 11-13 B4 收尾评审：一行记两千多字时标题不限行会占满几屏；最多 3 行，全文点开看 */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .cardSum {

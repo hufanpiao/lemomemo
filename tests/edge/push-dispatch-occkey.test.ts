@@ -62,7 +62,7 @@ describe('推送负载的 occurrenceKey 和 shared 算出来的一样', () => {
     const w = await world(db);
     const due = at('09:00');
     const row: ItemRow = {
-      id: uuid('a'), user_id: UA, deleted_at: null, undone: false, source: 'page', push_show_title: null,
+      id: uuid('a'), user_id: UA, rev: 1, deleted_at: null, undone: false, source: 'page', push_show_title: null,
       remind_at: due, notified_for: null, snooze_at: null, pushed_for: null, defer_until: null, name: '结婚纪念日', next_date: DAY,
     };
     db.put('anniversaries', row);

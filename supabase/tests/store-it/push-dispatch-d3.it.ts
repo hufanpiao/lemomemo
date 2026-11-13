@@ -394,13 +394,52 @@ Deno.test({ name: 'R-411 写回数据类错误（真库）：next_date 不是日
   await sql`insert into public.anniversaries (id, user_id, kind, name, calendar, month, day, created_at, updated_at) values (${id}, ${u}, 'birthday', 'n', 'solar', 3, 5, 1, 1)`;
   let msg = '';
   try {
-    await baseStore.writeRemind('anniversaries', id, u, { remind_at: 1, next_date: 'not-a-date' }, null);
+    await baseStore.writeRemind('anniversaries', id, u, { remind_at: 1, next_date: 'not-a-date' }, { remind_at: null, rev: 1 });
   } catch (e) {
     msg = e instanceof Error ? e.message : String(e);
   }
   assertEquals(msg, 'db:data', '日期格式错（SQLSTATE 22007）应抛 db:data');
-  assertEquals(await baseStore.writeRemind('anniversaries', id, u, { remind_at: 2, next_date: '2027-03-05' }, null), true, '合格的值照常写回');
+  assertEquals(await baseStore.writeRemind('anniversaries', id, u, { remind_at: 2, next_date: '2027-03-05' }, { remind_at: null, rev: 1 }), true, '合格的值照常写回');
   console.log('[R411-data] 真 PostgREST 回 22007：store 抛 db:data；合格的值照常写回');
+} });
+
+// R-411 整块评审必改 1：remind_at 是系统列，用户改日期不动它，乐观条件要靠 rev。真库上核：系统写回不加 rev；
+// 用户改了日期（rev 加 1）以后按读到的旧 rev 写回不成功、行不变；按新 rev 写回成功
+Deno.test({ name: 'R-411 写回比 rev（真库）：读完以后用户改了日期，按旧 rev 写不进去；系统写回不加 rev', ...opts, async fn() {
+  const u = await mkUser('d3-rev');
+  const id = crypto.randomUUID();
+  await sql`insert into public.todos (id, user_id, title, created_at, updated_at, due, remind_days) values (${id}, ${u}, 't', 1, 1, '2026-12-01', 0)`;
+  const [r0] = await baseStore.rows('todos', [id]);
+  if (!r0) throw new Error('读不到行');
+  await sql`update public.todos set due = '2026-12-09' where id = ${id}`;   // 读完以后用户改了日期：remind_at 没动，rev 加 1
+  assertEquals(await baseStore.writeRemind('todos', id, u, { remind_at: 111 }, r0), false, '按读到的旧 rev 写回应不成功');
+  const [r1] = await baseStore.rows('todos', [id]);
+  if (!r1) throw new Error('读不到行');
+  assertEquals([r1.remind_at, r1.rev], [r0.remind_at, r0.rev + 1], '行不变，rev 比读到的大 1');
+  assertEquals(await baseStore.writeRemind('todos', id, u, { remind_at: 222 }, r1), true, '按新 rev 写回成功');
+  const [r2] = await baseStore.rows('todos', [id]);
+  assertEquals([r2?.remind_at, r2?.rev], [222, r1.rev], '系统写回 remind_at 不加 rev');
+  console.log('[R411-rev] 真库：改日期 rev 加 1，按旧 rev 写回回 false；按新 rev 写回成功且 rev 不变');
+} });
+
+// R-411 后续（迁移 20261113160000）：finish 换签名 (p_claim, p_release, p_done)。真 PostgREST 上：新 store 传处理完的名单，只删名单里的，
+// 两份都没列的留着租约；旧版只按名字传 p_claim、p_release 也调得到新函数（p_done 默认 null），照旧删这个租约里其余的
+Deno.test({ name: 'R-411 finish 处理完的名单（真库）：新 store 只删 p_done 里的、都没列的留着租约；旧版两个参数照样调得通', ...opts, async fn() {
+  const u = await mkUser('d3-done');
+  const k = crypto.randomUUID();
+  const [a, b, c] = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+  await sql`insert into private.remind_queue (table_name, id, user_id, claim, claimed_at, attempts)
+    select 'todos', x, ${u}, ${k}, now(), 1 from unnest(${[a, b, c]}::uuid[]) x`;
+  const ref = (id: string) => ({ table_name: 'todos' as const, id, user_id: u, claim: k, fresh: false, prio: 0 });
+  await baseStore.finishQueue(k, [ref(a)], [ref(b)]);
+  const state = async () => (await sql`select id, claim is null as freed, attempts, claimed_at is not null as has_at from private.remind_queue
+    where id = any(${[a, b, c]}::uuid[])`).map((r) => `${r.id === a ? 'a' : r.id === b ? 'b' : 'c'}:${r.freed}:${r.attempts}:${r.has_at}`).sort().join(',');
+  assertEquals(await state(), 'a:true:0:true,c:false:1:true', 'a 放回（claimed_at 留着）、b 删掉、都没列的 c 留着租约');
+  const { error } = await admin.schema('private').rpc('remind_queue_finish', { p_claim: k, p_release: [] });
+  assertEquals(error, null, '旧版按名字只传 p_claim、p_release 调得到新函数');
+  assertEquals(await state(), 'a:true:0:true', '旧口径：这个租约里不在 p_release 的 c 删掉');
+  await sql`delete from private.remind_queue where user_id = ${u}`;
+  console.log('[R411-done] 真 PostgREST：p_done 只删名单里的、都没列的留着；旧版两参数调用照旧删其余');
 } });
 
 Deno.test({ name: 'd3-real 收尾：删掉这次建的用户、恢复 cron 任务、放锁、关连接', ...opts, async fn() {
