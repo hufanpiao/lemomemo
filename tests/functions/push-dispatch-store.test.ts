@@ -50,17 +50,18 @@ describe('push-dispatch store.ts', () => {
       await expect(makeStore(fakeAdmin({ data: null, error: { message } }).admin).finishQueue?.('k', [], []), message).rejects.toThrow(want);
     }
   });
-  it('数据类错误分开：PostgREST 回的 SQLSTATE 是 22、23 类抛 db:data（第 0 步写回记 held）；PGRST、08 连不上、57 被取消、40 死锁、没有 code 的抛 db；超时优先', async () => {
+  it('数据类错误分开：PostgREST 回的 SQLSTATE 是 22、23 类抛 db:data（第 0 步写回记 held）；PGRST202 抛 db:nofn；别的 PGRST、08 连不上、57 被取消、40 死锁、没有 code 的抛 db；超时优先', async () => {
     const cases: [{ message: string; code?: unknown }, RegExp][] = [
       [{ message: 'value too long', code: '22001' }, /^db:data$/], [{ message: 'out of range', code: '22003' }, /^db:data$/],
       [{ message: 'check violation', code: '23514' }, /^db:data$/], [{ message: 'not null', code: '23502' }, /^db:data$/],
+      [{ message: 'Could not find the function', code: 'PGRST202' }, /^db:nofn$/], [{ message: 'x', code: 'pgrst202' }, /^db$/],
       [{ message: 'x', code: 'PGRST204' }, /^db$/], [{ message: 'x', code: '08006' }, /^db$/], [{ message: 'x', code: '57014' }, /^db$/],
       [{ message: 'x', code: '40P01' }, /^db$/], [{ message: 'x', code: '' }, /^db$/], [{ message: 'x', code: 23514 }, /^db$/], [{ message: 'x', code: '2301' }, /^db$/],
       [{ message: 'TimeoutError: signal timed out', code: '23514' }, /^db:timeout$/],
     ];
     for (const [error, want] of cases) {
       const store = makeStore(fakeAdmin({ data: null, error }).admin);
-      await expect(store.writeRemind?.('todos', 'x', 'u', { remind_at: 1 }, null), JSON.stringify(error)).rejects.toThrow(want);
+      await expect(store.writeRemind?.('todos', 'x', 'u', { remind_at: 1 }, { remind_at: null, rev: 1 }), JSON.stringify(error)).rejects.toThrow(want);
     }
   });
   it('积压：private.remind_queue_stats() 一行换成心跳的三个字段；缺行、不是非负整数按 0；出错抛 db', async () => {
@@ -108,21 +109,16 @@ describe('push-dispatch store.ts', () => {
     await makeStore(admin).releasePushed?.('events', 'x', 'u', 99);
     expect(chains[0]).toEqual([['from', 'events'], ['update', { pushed_for: null }], ['eq', 'id', 'x'], ['eq', 'user_id', 'u'], ['eq', 'pushed_for', 99], ['select', 'id']]);
   });
-  it('代码审查建议 ④：writeRemind 带乐观条件（remind_at 还是旧值；旧值为空用 is null），回是否更新到 1 行；纪念日带 next_date', async () => {
+  it('R-411 整块评审必改 1：writeRemind 的乐观条件比 rev 和 remind_at（旧值为空用 is null），回是否更新到 1 行；纪念日带 next_date；不再另比 notified_for', async () => {
     const a = fakeAdmin({ data: [{ id: 'x' }], error: null });
-    expect(await makeStore(a.admin).writeRemind?.('todos', 'x', 'u', { remind_at: 7 }, 5)).toBe(true);
-    expect(a.chains[0]).toEqual([['from', 'todos'], ['update', { remind_at: 7 }], ['eq', 'id', 'x'], ['eq', 'user_id', 'u'], ['eq', 'remind_at', 5], ['select', 'id']]);
+    expect(await makeStore(a.admin).writeRemind?.('todos', 'x', 'u', { remind_at: 7 }, { remind_at: 5, rev: 3 })).toBe(true);
+    expect(a.chains[0]).toEqual([['from', 'todos'], ['update', { remind_at: 7 }], ['eq', 'id', 'x'], ['eq', 'user_id', 'u'], ['eq', 'rev', 3], ['eq', 'remind_at', 5], ['select', 'id']]);
     const b = fakeAdmin({ data: [], error: null });
-    expect(await makeStore(b.admin).writeRemind?.('anniversaries', 'x', 'u', { remind_at: 7, next_date: '2027-01-01' }, null)).toBe(false);
-    expect(b.chains[0]).toEqual([['from', 'anniversaries'], ['update', { remind_at: 7, next_date: '2027-01-01' }], ['eq', 'id', 'x'], ['eq', 'user_id', 'u'], ['is', 'remind_at', null], ['select', 'id']]);
-  });
-  it('安全审查 A4：传了 prevNotifiedFor（第 0 步 S1 例外）另比 notified_for；不传时链上没有这一项', async () => {
-    const a = fakeAdmin({ data: [{ id: 'x' }], error: null });
-    expect(await makeStore(a.admin).writeRemind?.('events', 'x', 'u', { remind_at: 7 }, 5, 7)).toBe(true);
-    expect(a.chains[0]).toEqual([['from', 'events'], ['update', { remind_at: 7 }], ['eq', 'id', 'x'], ['eq', 'user_id', 'u'], ['eq', 'notified_for', 7], ['eq', 'remind_at', 5], ['select', 'id']]);
-    const b = fakeAdmin({ data: [{ id: 'x' }], error: null });   // 对照（审查 L3）：同一调用不传 prevNotifiedFor，链上没有 notified_for
-    expect(await makeStore(b.admin).writeRemind?.('events', 'x', 'u', { remind_at: 7 }, 5)).toBe(true);
-    expect(b.chains[0]).toEqual([['from', 'events'], ['update', { remind_at: 7 }], ['eq', 'id', 'x'], ['eq', 'user_id', 'u'], ['eq', 'remind_at', 5], ['select', 'id']]);
+    expect(await makeStore(b.admin).writeRemind?.('anniversaries', 'x', 'u', { remind_at: 7, next_date: '2027-01-01' }, { remind_at: null, rev: 1 })).toBe(false);
+    expect(b.chains[0]).toEqual([['from', 'anniversaries'], ['update', { remind_at: 7, next_date: '2027-01-01' }], ['eq', 'id', 'x'], ['eq', 'user_id', 'u'], ['eq', 'rev', 1], ['is', 'remind_at', null], ['select', 'id']]);
+    const e = fakeAdmin({ data: [{ id: 'x' }], error: null });
+    expect(await makeStore(e.admin).writeRemind?.('events', 'x', 'u', { remind_at: 7 }, { remind_at: 5, rev: 2 })).toBe(true);
+    expect(JSON.stringify(e.chains[0])).not.toContain('notified_for');
   });
   it('代码审查建议 ⑥：tzLoggedSince 查本函数写的 tz_invalid（走 user_id、act、src 索引）', async () => {
     const { admin, chains } = fakeAdmin({ data: [{ user_id: 'u1' }, { user_id: 'u1' }], error: null });

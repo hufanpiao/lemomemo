@@ -15,6 +15,8 @@ describe('leaseResetProblems（唯一入口）', () => {
       { f: 'c', src: 'insert into private.embed_queue values (1) on conflict do nothing;' },
     ])).toEqual([]);
     expect(leaseResetProblems([{ f: 'remind_enqueue', src: 'INSERT  INTO private.remind_queue as q select 2\n ON CONFLICT ( table_name , id ) DO UPDATE SET user_id = EXCLUDED.user_id , claim = null , claimed_at = null , attempts = 0;' }])).toEqual([]);
+    // 迁移 20261113160000 起只有 row 一支清零、批量保留有毒次数：这种写法也认
+    expect(leaseResetProblems([{ f: 'remind_enqueue', src: "insert into private.remind_queue as q select 1 on conflict (table_name, id) do update set user_id = excluded.user_id, claim = null, claimed_at = null,\n attempts = CASE WHEN p_scope = 'row' THEN 0 ELSE q.attempts END, prio = 1;" }])).toEqual([]);
   });
 
   it('别的函数写队列（哪怕也清租约）、唯一入口不在、写了两句、冲突时不清 attempts 或不换主人：各报一条', () => {
@@ -31,6 +33,8 @@ describe('leaseResetProblems（唯一入口）', () => {
       'insert into private.remind_queue as q values (1) on conflict do nothing;',
       'insert into private.remind_queue as q values (1) on conflict (table_name, id) do update set user_id = excluded.user_id, claim = null, claimed_at = null;',
       'insert into private.remind_queue as q values (1) on conflict (table_name, id) do update set claim = null, claimed_at = null, attempts = 0;',
+      // case 写反了：row 一支不清零
+      "insert into private.remind_queue as q values (1) on conflict (table_name, id) do update set user_id = excluded.user_id, claim = null, claimed_at = null, attempts = case when p_scope = 'row' then q.attempts else 0 end;",
     ]) {
       const p = leaseResetProblems([{ f: 'remind_enqueue', src }]);
       expect(p).toHaveLength(1);
@@ -44,5 +48,14 @@ describe('leaseResetProblems（唯一入口）', () => {
     expect(fns.map((x) => x.f)).toEqual(['remind_enqueue', 'remind_reset', 'enqueue_remind', 'remind_on_settings', 'enqueue_floating', 'remind_queue_stats', 'touch', 'remind_queue_pop']);
     expect(fns.reduce((n, x) => n + (x.src.match(/insert into private\.remind_queue/g) ?? []).length, 0)).toBe(1);
     expect(leaseResetProblems(fns)).toEqual([]);
+  });
+
+  it('迁移 20261113160000 重新定义的 remind_enqueue 过得了：仍只一句 insert，冲突时只有 row 一支清 attempts（R-411 整块评审建议 5）', () => {
+    const sql = readFileSync('supabase/migrations/20261113160000_core_remind_queue_finish_done.sql', 'utf8');
+    const fns = [...sql.matchAll(/^create (?:or replace )?function private\.([a-z_]+)\([^)]*\)[\s\S]*?\$\$([\s\S]*?)\$\$;$/gm)].map((m) => ({ f: m[1] ?? '', src: m[2] ?? '' }));
+    expect(fns.map((x) => x.f)).toEqual(['remind_queue_finish', 'remind_queue_pop', 'remind_queue_stats', 'remind_enqueue']);
+    expect(fns.reduce((n, x) => n + (x.src.match(/insert into private\.remind_queue/g) ?? []).length, 0)).toBe(1);
+    expect(leaseResetProblems(fns)).toEqual([]);
+    expect(fns.find((x) => x.f === 'remind_enqueue')?.src).toContain("attempts = case when p_scope = 'row' then 0 else q.attempts end");
   });
 });

@@ -106,7 +106,7 @@ async function writeAnnivNext(c: RoundCtx, x: Cand, prof: Profile, st: UserSetti
   try {
     const nx = c.logic.annivNext(x.row, { tz: prof.current_tz, now: x.due + 1, settings: st ?? {} });
     // 乐观条件：推完以后用户又改了这条纪念日（触发器已入队，第 0 步会按新值重算），就不覆盖
-    if (nx && !(await c.store.writeRemind(x.table, x.row.id, x.row.user_id, { remind_at: nx.remind_at, next_date: nx.next_date }, x.row.remind_at))) c.log('anniv_next_stale');
+    if (nx && !(await c.store.writeRemind(x.table, x.row.id, x.row.user_id, { remind_at: nx.remind_at, next_date: nx.next_date }, x.row))) c.log('anniv_next_stale');
   } catch (e) {
     c.log(failCode('anniv_next_failed', e));
   }

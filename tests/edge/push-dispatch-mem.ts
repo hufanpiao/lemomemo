@@ -14,6 +14,7 @@ import { QUEUE_PER_USER, QUEUE_POISON, seoulDay } from '../../supabase/functions
 import type { DeviceOutcome, DeviceRow, ItemRow, LogRow, Profile, QueueItem, QueueRef, RoundLogic, Table } from '../../supabase/functions/push-dispatch/round.ts';
 import { DB_DATA, DB_TIMEOUT, SETTING_KEYS, TABLES } from '../../supabase/functions/push-dispatch/round.ts';
 import { makeLogic } from '../../supabase/functions/push-dispatch/logic.ts';
+import { allManifests } from '../../shared/manifests/index.ts';
 
 /** 和 index.ts 同一份接线（logic.ts 的 makeLogic），名字一一对应，只是从 shared/ 引（tests/edge/push-dispatch-logic-wiring.test.ts 核对） */
 export const LOGIC: RoundLogic = makeLogic({
@@ -31,7 +32,7 @@ export function uuid(prefix = 'c'): string {
 }
 
 const base = (user: string): ItemRow => ({
-  id: uuid('1'), user_id: user, deleted_at: null, undone: false, source: 'page', push_show_title: null,
+  id: uuid('1'), user_id: user, rev: 1, deleted_at: null, undone: false, source: 'page', push_show_title: null,
   remind_at: null, notified_for: null, snooze_at: null, pushed_for: null, defer_until: null,
 });
 export const todoRow = (user: string, over: Partial<ItemRow> = {}): ItemRow => ({
@@ -76,11 +77,16 @@ function perUserCap(c: Ranked[], perUser: number, limit: number): { table: Table
 
 /** 内存库：所有写都在一个同步段里完成（JS 单线程，条件更新天然原子，对应 SQL 的行锁） */
 /**
- * touch() 的提醒列，三张表合起来（纪念日那一组 11-05 补齐）。替身自己写一份、不引 shared 的 TOUCH_REMIND_COLS：
- * tests/edge/push-dispatch-mem-reset.test.ts 从 0001 的 touch() 解析出列清单，和这份、shared 那份三方比对（审查 M4）
+ * 每张表自己的提醒输入列和系统列，直接取清单（shared/manifests 的 remindCols、systemCols；迁移 20261113100000 写进 table_meta 的同一份，
+ * D1 第 8 节在库里逐表比对）。不再自己抄一份三张表合起来的列清单（R-411 整块评审建议 6）
  */
-export const MEM_TOUCH_COLS: readonly string[] = ['date', 'time', 'tz', 'due', 'due_time', 'remind_before_min', 'remind_min', 'remind_days', 'remind_time',
-  'remind_offsets', 'month', 'day', 'calendar', 'lunar_variant', 'is_leap', 'year', 'after_due', 'kind', 'done', 'deleted_at'];
+const META = new Map(allManifests.flatMap((m) => m.tables).map((t) => [t.name, t]));
+function metaOf(table: Table): { remindCols: readonly string[]; sys: ReadonlySet<string> } {
+  const t = META.get(table);
+  if (!t?.remindCols || !t.systemCols) throw new Error(`清单里 ${table} 没有 remindCols、systemCols`);
+  // touch() 的 sys：rev、fv、synced_at、updated_at 加上这张表的 system_cols（0001）
+  return { remindCols: t.remindCols, sys: new Set(['rev', 'fv', 'synced_at', 'updated_at', ...t.systemCols]) };
+}
 
 export class MemDb implements DispatchStore {
   tables: Record<Table, Map<string, ItemRow>> = { events: new Map(), todos: new Map(), anniversaries: new Map() };
@@ -114,17 +120,19 @@ export class MemDb implements DispatchStore {
     this.profs.set(id, { current_tz: 'Asia/Seoul', ui_locale: 'zh-CN', ...p });
     return this;
   }
-  /** 插一行；enqueue 为真时照 after insert 触发器入队（prio 0，待办 fresh） */
+  /** 插一行（没写 rev 的按 1，同建表的默认值）；enqueue 为真时照 after insert 触发器入队（prio 0，待办 fresh） */
   put(table: Table, row: ItemRow, enqueue = false): ItemRow {
+    if (row.rev === undefined) row.rev = 1;
     this.tables[table].set(row.id, row);
     if (enqueue) this.enqueue(table, row.id, { fresh: table === 'todos' });
     return row;
   }
   /**
-   * 照 private.remind_enqueue 的 on conflict（迁移 20261113100000）：不在的新插（enqueued_at = 现在）；在的，有要改的才写——
-   * user_id 换成这一次的、清租约、attempts 清零、prio 取小、fresh 取或、min_ver 取大（enqueued_at 只在 prio 变小时记成现在）。默认 prio 0（row 一支）
+   * 照 private.remind_enqueue 的 on conflict（迁移 20261113160000）：不在的新插（enqueued_at = 现在）；在的，有要改的才写——
+   * user_id 换成这一次的、清租约、prio 取小、fresh 取或、min_ver 取大（enqueued_at 只在 prio 变小时记成现在）；
+   * attempts 只有 row 一支（用户自己改的）清零，批量（batch 为真）保留有毒次数。默认 prio 0（row 一支）
    */
-  enqueue(table: Table, id: string, o: { prio?: number; fresh?: boolean; minVer?: number; user?: string } = {}): void {
+  enqueue(table: Table, id: string, o: { prio?: number; fresh?: boolean; minVer?: number; user?: string; batch?: boolean } = {}): void {
     const k = `${table}:${id}`;
     const q = this.queue.get(k);
     const user = o.user ?? this.tables[table].get(id)?.user_id;
@@ -140,8 +148,9 @@ export class MemDb implements DispatchStore {
     const qp = q.prio ?? 0;
     const qf = q.fresh ?? false;
     const qv = q.min_ver ?? 0;
-    if (qu === user && !q.claim && (q.attempts ?? 0) === 0 && prio >= qp && !(fresh && !qf) && minVer <= qv) return;
-    this.queue.set(k, { ...q, user_id: user, claim: null, claimed_at: null, attempts: 0, prio: Math.min(qp, prio), fresh: qf || fresh, min_ver: Math.max(qv, minVer),
+    const row = !o.batch;
+    if (qu === user && !q.claim && !(row && (q.attempts ?? 0) > 0) && prio >= qp && !(fresh && !qf) && minVer <= qv) return;
+    this.queue.set(k, { ...q, user_id: user, claim: null, claimed_at: null, attempts: row ? 0 : (q.attempts ?? 0), prio: Math.min(qp, prio), fresh: qf || fresh, min_ver: Math.max(qv, minVer),
       ...(prio < qp ? { enqueued_at: this.clock() } : {}) });
   }
   /**
@@ -157,7 +166,7 @@ export class MemDb implements DispatchStore {
     const mine = (r: ItemRow) => r.deleted_at === null && (scope === 'all' || r.user_id === user);
     const ahead = (r: ItemRow, set: boolean) => (r.remind_at !== null && r.remind_at > now) || (r.remind_at === null && set);
     const open = (r: ItemRow, day: unknown) => (typeof day === 'string' && day >= cut) || (r.snooze_at ?? 0) > win || (r.defer_until ?? 0) > win;
-    const add = (t: Table, r: ItemRow) => this.enqueue(t, r.id, { prio: prioOf(r), minVer, user: r.user_id });
+    const add = (t: Table, r: ItemRow) => this.enqueue(t, r.id, { prio: prioOf(r), minVer, user: r.user_id, batch: true });
     for (const r of this.tables.events.values()) {
       if (!mine(r)) continue;
       const allDay = r.time == null;
@@ -184,6 +193,7 @@ export class MemDb implements DispatchStore {
    * remind_reset——日程“换了哪一次”（date、remind_days 变了，或 time 在空和非空之间变了）清 notified_for、snooze_at（这次没改它们的值时；
    *   notified_for 改成了 old.remind_at 也清）和 pushed_for；提醒输入列有一列变了清 pushed_for、defer_until；
    * 和真库一样按“值有没有变”判断，不看补丁里写没写这一列（客户端常常整行写回）；
+   * touch() 的 rev——不在 sys（rev、fv、synced_at、updated_at 加这张表的 systemCols）里的列有一列变了，rev 加 1；
    * enqueue_remind——提醒输入列或 snooze_at 变了入队；全天日程的 notified_for 改成不等于 remind_at 的值时也入队
    */
   edit(table: Table, id: string, patch: Partial<ItemRow>): ItemRow {
@@ -206,11 +216,12 @@ export class MemDb implements DispatchStore {
       row['due_time'] = null;
       row['remind_before_min'] = null;
     }
-    const remindCols = MEM_TOUCH_COLS;
+    const { remindCols, sys } = metaOf(table);
     if (remindCols.some(changed)) {
       row.pushed_for = null;
       row.defer_until = null;
     }
+    if ([...new Set([...Object.keys(old), ...Object.keys(row)])].some((k) => !sys.has(k) && changed(k))) row.rev = (old.rev ?? 1) + 1;
     this.tables[table].set(id, row);
     // enqueue_remind：待办改了截止日期、截止时刻、提前量是 fresh（第 0 步回落用，R-411 Q2）
     const fresh = table === 'todos' && ['due', 'due_time', 'remind_before_min'].some(changed);
@@ -332,11 +343,10 @@ export class MemDb implements DispatchStore {
     const keys: readonly string[] = SETTING_KEYS;
     return new Map(users.filter((u) => this.sets.has(u)).map((u) => [u, Object.fromEntries(Object.entries(this.sets.get(u) ?? {}).filter(([k]) => keys.includes(k)))]));
   }
-  async writeRemind(table: Table, id: string, user: string, patch: { remind_at: number | null; next_date?: string | null }, prev: number | null, prevNotified?: number) {
+  async writeRemind(table: Table, id: string, user: string, patch: { remind_at: number | null; next_date?: string | null }, prev: { remind_at: number | null; rev: number }) {
     this.check('writeRemind');
     const r = this.tables[table].get(id);
-    if (!r || r.user_id !== user || r.remind_at !== prev) return false;   // 乐观条件
-    if (prevNotified !== undefined && r.notified_for !== prevNotified) return false;   // S1 例外另比 notified_for（安全审查 A4）
+    if (!r || r.user_id !== user || r.rev !== prev.rev || r.remind_at !== prev.remind_at) return false;   // 乐观条件：rev 和 remind_at 都还是读到的值
     r.remind_at = patch.remind_at;
     if (patch.next_date !== undefined) r.next_date = patch.next_date;
     return true;

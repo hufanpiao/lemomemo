@@ -86,9 +86,7 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
   try {
     [profiles, settings] = await Promise.all([c.store.profiles(users), c.store.settings(users)]);
     for (const [table, xs] of groupBy(items, (x) => x.table_name)) {
-      for (let i = 0; i < xs.length; i += 100) {
-        for (const r of await c.store.rows(table, xs.slice(i, i + 100).map((x) => x.id))) rows.set(`${table}:${r.id}`, r);
-      }
+      for (const r of await c.store.rows(table, xs.map((x) => x.id))) rows.set(`${table}:${r.id}`, r);   // store 里按 IN_CHUNK 分批
     }
   } catch (e) {
     c.log(failCode('recalc_read_failed', e));
@@ -128,7 +126,7 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
     };
     const allDay = row.time === null || row.time === undefined;
     let patch: { remind_at: number | null; next_date?: string | null } | null;
-    let ackAt: number | undefined;   // S1 例外时 = 读到的 notified_for（安全审查 A4）
+    let ack = false;   // S1 例外（记 ack 而不是 written）
     try {
       if (q.table_name === 'events') {
         // 有时刻的日程是固定时刻，按它自己的 tz（tz 为空的 shared 算出 null，不记原因码；0002 的 check 保证真库里存不进来）；
@@ -138,11 +136,11 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
         patch = { remind_at: c.logic.remindAtOf('event', row, prof.current_tz, now, row.remind_at, settings.get(q.user_id)?.['remind.default_time']) };
         // R-336：全天日程“推过没有”按“这条日程 + 这一天”认——新算出的 remind_at 和原值不同，但 pushed_for 或 notified_for 按 current_tz
         //   和新 remind_at 落在同一天，就当这一天已提醒过：保留原值、不写回（换了“哪一次”时 remind_reset 已清空这两列，不会被压住）。
-        //   例外 S1（REMIND-shown-persist）：notified_for 正好等于新算出的 remind_at（客户端按“知道了”写的是本机现算的新时刻）就照写回，
-        //   写回时另要求 notified_for 还是这个值（安全审查 A4）
+        //   例外 S1（REMIND-shown-persist）：notified_for 正好等于新算出的 remind_at（客户端按“知道了”写的是本机现算的新时刻）就照写回。
+        //   读完以后另一台设备又改了 notified_for（安全审查 A4）会加 rev，写回的 rev 条件就挡住了，不用另比 notified_for
         if (allDay && patch.remind_at !== null && patch.remind_at !== row.remind_at) {
           const at = patch.remind_at;
-          if (row.notified_for === at) ackAt = at;
+          if (row.notified_for === at) ack = true;
           else if ([row.pushed_for, row.notified_for].some((x) => c.logic.sameRemindDay(x, at, prof.current_tz))) return 'r336';
         }
       } else if (!c.logic.isValidTz(prof.current_tz)) {
@@ -159,15 +157,15 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
     if (patch === null) return 'same';
     if (patch.remind_at === row.remind_at && (patch.next_date === undefined || patch.next_date === (row.next_date ?? null))) return 'same';
     try {
-      // 乐观条件（代码审查建议 ④）：读完以后行又被改了就不写，放回队列下一轮按新值重算
-      if (!(await c.store.writeRemind(q.table_name, q.id, q.user_id, patch, row.remind_at, ackAt))) return 'released';
+      // 乐观条件（比 rev 和 remind_at）：读完以后行又被改了就不写，放回队列下一轮按新值重算
+      if (!(await c.store.writeRemind(q.table_name, q.id, q.user_id, patch, row))) return 'released';
     } catch (e) {
       // 这一行本身写不进去（数据类错误）：不放回，留着租约，过期后重取、计入有毒次数（一直出错的取满次数被丢掉，不会每分钟白算一次）。
       // 超时、连不上、5xx、认不出的：照旧放回、不计次数（暂时的故障不该把项攒成有毒项）
       c.log(failCode('recalc_write_failed', e));
       return e instanceof Error && e.message === DB_DATA ? 'held' : 'released';
     }
-    return ackAt === undefined ? 'written' : 'ack';
+    return ack ? 'ack' : 'written';
   };
 
   await pool(items, c.limits.concurrency, async (q) => note(q, await one(q)));
