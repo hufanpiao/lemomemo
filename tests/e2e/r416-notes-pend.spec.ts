@@ -12,6 +12,8 @@ import { expect, test } from './session-fixture.ts';
 // 这份不录 trace（失败照样有截图）：③ 的假 HEIC 解不出来，Playwright 录 trace 截 DOM 快照时会去 fetch 这张坏图的 blob: 地址，
 // 被页面 connect-src 拦下、记成 CSP 违规（11-13 查明：同一条 --trace=off 就 0 违规；页面自己不 fetch blob:）。
 // trace 只能整份文件关（Playwright 不准在 describe 里改 trace）
+// 截图只在 Chromium 上截：WebKit 下 page.screenshot() 会往页面插一个 <style>（加 caret: 'initial' 也一样），被页面 CSP 拦下、记成违规
+// （11-13 CI #319 挂、本机逐步排查定位到截图这一步）；断言两种浏览器都跑
 test.use({ trace: 'off' });
 
 const SIZES = [
@@ -66,7 +68,7 @@ for (const size of SIZES) {
       await expect(input).toHaveValue('');
     });
 
-    test('选图先挂在输入行正上方、不新建；“×”去掉一张', async ({ page }, info) => {
+    test('选图先挂在输入行正上方、不新建；“×”去掉一张', async ({ page, browserName }, info) => {
       await page.goto('/app/#/notes');
       const input = page.getByTestId('notes-input');
       await expect(input).toBeVisible({ timeout: 20_000 });
@@ -91,8 +93,10 @@ for (const size of SIZES) {
       // 点按区 44：离“×”中心往左下 18px 处，最上面的元素仍是这个按钮
       const hit = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-testid]')?.getAttribute('data-testid') ?? null, { x: del.x + 12 - 18, y: del.y + 12 + 18 });
       expect(hit).toBe('notes-pend-del-0');
-      writeFileSync(info.outputPath('pend.png'), await page.screenshot());
-      await info.attach('挂着两张图', { path: info.outputPath('pend.png'), contentType: 'image/png' });
+      if (browserName === 'chromium') {
+        writeFileSync(info.outputPath('pend.png'), await page.screenshot());
+        await info.attach('挂着两张图', { path: info.outputPath('pend.png'), contentType: 'image/png' });
+      }
 
       // 输入框有焦点（手机上键盘弹着）时点“×”：输入框不失焦
       await input.click();
@@ -103,7 +107,7 @@ for (const size of SIZES) {
       await expect(input).toBeFocused();
     });
 
-    test('HEIC 点“记下”：提示条在小图上面、互不压住，图放回输入行', async ({ page }, info) => {
+    test('HEIC 点“记下”：提示条在小图上面、互不压住，图放回输入行', async ({ page, browserName }, info) => {
       await page.goto('/app/#/notes');
       await expect(page.getByTestId('notes-input')).toBeVisible({ timeout: 20_000 });
       const heic = Buffer.from([0, 0, 0, 24, 102, 116, 121, 112, 104, 101, 105, 99, 0, 0, 0, 0]);
@@ -119,8 +123,10 @@ for (const size of SIZES) {
       const row = await box(page, 'notes-input-row');
       expect(t.y + t.height, '提示条在小图上面、不压住').toBeLessThanOrEqual(strip.y - 4);
       expect(strip.y + strip.height, '小图在输入行上面、不压住').toBeLessThanOrEqual(row.y - 4);
-      writeFileSync(info.outputPath('tip.png'), await page.screenshot());
-      await info.attach('提示条和小图', { path: info.outputPath('tip.png'), contentType: 'image/png' });
+      if (browserName === 'chromium') {
+        writeFileSync(info.outputPath('tip.png'), await page.screenshot());
+        await info.attach('提示条和小图', { path: info.outputPath('tip.png'), contentType: 'image/png' });
+      }
     });
   });
 }

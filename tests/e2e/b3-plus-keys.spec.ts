@@ -124,7 +124,7 @@ test.describe('打字条原地聚焦（Q-8）', () => {
 test.describe('贴底浮条按钮第一下点得动（Q-25）', () => {
   test.use({ loggedIn: true, viewport: { width: 375, height: 812 }, timezoneId: 'Asia/Seoul' });
 
-  test('随手记：输入框聚焦着点“记下”，焦点一直在输入框（键盘不收、接着记），这一条记下了', async ({ page }) => {
+  test('随手记：输入框聚焦着点“记下”，按下时焦点还在输入框；松开记下这一条，记下以后输入框失焦（R-416）', async ({ page }) => {
     await page.goto('/app/#/notes');
     const input = page.getByTestId('notes-input');
     await input.click();
@@ -137,7 +137,8 @@ test.describe('贴底浮条按钮第一下点得动（Q-25）', () => {
     await page.mouse.up();
     await expect(page.getByTestId(/^notes-card-/).first()).toContainText('首尔林银杏黄了');
     await expect(input).toHaveValue('');
-    await expect(input, '记下以后焦点还在输入框').toBeFocused();
+    // R-416（负责人 11-13“按回车记下后输入框应该消失，不是继续记下一条”）：记下以后收起键盘，取代原来的“接着记”
+    await expect(input, '记下以后输入框失焦').not.toBeFocused();
   });
 
   test('打字条：输入框聚焦着点“记下”，按下时焦点还在输入框；松开记下这一条，照旧自动收起', async ({ page }) => {
