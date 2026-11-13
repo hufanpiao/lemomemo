@@ -1,4 +1,4 @@
-// 启动画面的收起（R-251、R-254）：hideSplash 淡出后移除 DOM、可以重复调用；减少动态效果时按 120 ms 收；5 秒兜底（#root 首次绘制的口径见 root-paint.test.ts）
+// 启动画面的收起（R-251、R-254）：hideSplash 淡出后移除 DOM、可以重复调用；兜底定时器一律按 220 ms + 余量；5 秒兜底（#root 首次绘制的口径见 root-paint.test.ts）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   hideSplash, hideSplashAfter, isSplashShowing, SPLASH_FADE_MS, SPLASH_FADE_RM_MS,
@@ -80,26 +80,22 @@ describe('hideSplash', () => {
     expect(document.getElementById(SPLASH_ID)).toBeNull();
   });
 
-  it('减少动态效果（系统设置）：按 120 ms 收，比平时的 220 ms 早移除', async () => {
+  it('减少动态效果（系统设置、data-rm="1"）：CSS 120 ms 淡完，transitionend 先到就当场移除；没来时兜底同样按 220 ms + 余量', async () => {
     stubReducedMotion(true);
-    mountSplash();
-    void hideSplash();
-    await vi.advanceTimersByTimeAsync(SPLASH_FADE_RM_MS + 100);
+    document.documentElement.dataset['rm'] = '1';
+    const el = mountSplash();
+    const p = hideSplash();
+    const end = new Event('transitionend') as TransitionEvent;
+    Object.defineProperty(end, 'propertyName', { value: 'opacity' });
+    el.dispatchEvent(end);
+    await p;
     expect(document.getElementById(SPLASH_ID)).toBeNull();
-  });
 
-  it('减少动态效果（设置里的开关 data-rm="1"）同样按 120 ms；不开时这个时刻还在淡出', async () => {
     mountSplash();
     void hideSplash();
     await vi.advanceTimersByTimeAsync(SPLASH_FADE_RM_MS + 100);
     expect(document.getElementById(SPLASH_ID)).not.toBeNull();
     await vi.advanceTimersByTimeAsync(SPLASH_FADE_MS);
-    expect(document.getElementById(SPLASH_ID)).toBeNull();
-
-    document.documentElement.dataset['rm'] = '1';
-    mountSplash();
-    void hideSplash();
-    await vi.advanceTimersByTimeAsync(SPLASH_FADE_RM_MS + 100);
     expect(document.getElementById(SPLASH_ID)).toBeNull();
   });
 });

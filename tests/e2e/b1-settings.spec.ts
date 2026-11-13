@@ -42,9 +42,9 @@ test.describe('设置页骨架', () => {
       'settings-card-main',
       'settings-card-more',
     ]);
-    // 日历、提醒与通知、语音与 AI、在 Claude 聊天里记事几行一开始就在（值懒加载，M4）；顺序照定稿线框 s13（B3 FA-4 加了 voiceAi、claude；B4 加了随手记显示方式 notesView，同 SettingsPage.test.tsx）
+    // 日历、提醒与通知、语音与 AI、在 Claude 聊天里记事几行一开始就在（值懒加载，M4）；顺序照定稿线框 s13（B3 FA-4 加了 voiceAi、claude；B4 加了随手记显示方式 notesView；B6 加了皮肤 skin，同 SettingsPage.test.tsx）
     const rows = await main.locator('[data-row-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row-id')));
-    expect(rows).toEqual(['account', 'language', 'notesView', 'calendar', 'reminders', 'voiceAi', 'data', 'claude', 'about']);
+    expect(rows).toEqual(['account', 'language', 'skin', 'notesView', 'calendar', 'reminders', 'voiceAi', 'data', 'claude', 'about']);
     // e2e 构建读不到设备：账号一行写“设备列表读不出来”
     await expect(main.getByTestId('settings-account-summary')).toHaveText('设备列表读不出来');
     await expect(main.getByTestId('settings-export')).toHaveCount(0);

@@ -14,6 +14,8 @@ import { defaultExitDeps, exitOnSessionLoss, REAUTH_GRACE_MS, type ExitDeps } fr
 import { hasAuthLoss, readReauth } from '../platform/auth-loss-store.ts';
 import { coldStart, type BootResult } from '../core/boot.ts';
 import { deleteCacheDb } from '../core/cache.ts';
+import { collection } from '../core/store.ts';
+import type { LookRow } from '../platform/look.ts';
 import { createLogQueue, guardOwner } from '../core/log/queue.ts';
 import { logEvent, setLogSink } from '../../shared/core/log-bus.ts';
 import { devicePlatform, readInstallId, withLock } from '../platform/device-info.ts';
@@ -61,6 +63,8 @@ function applyLocale(boot: Pick<BootResult, 'profile'>): void {
 if (import.meta.env.MODE !== 'production') void import('../platform/diag-boot.ts').then((m) => m.startDiagBoot()).catch(() => undefined);
 // 启动画面最晚 5 秒收起：从入口模块开始执行算起（关口、冷启动、分包加载哪一步卡住都不再盖着）
 hideSplashAfter(hideSplash);
+// 皮肤、深浅色（ADR-008）：入口一开始就懒加载 platform/look.ts（不进首屏），它一加载就按本机缓存套到 <html> 上，再盯住 settings 集合（coldStart 灌好、同步回来都重新套）
+void import('../platform/look.ts').then((m) => m.watchLook(collection<LookRow & { id: string }>('settings')), () => undefined);
 // 底部安全区（G10）：iOS 主屏幕版冷启动时先 0 后 34，稳定前底栏、“＋”、实色带不显示，稳定了淡入；首屏画完后最多藏 1.5 秒（platform/inset-watch.ts）
 watchInsetBottom();
 // R-371 Gap fix（底栏偏高修复，11-11 起默认开、正式版也做）：只在 iOS 主屏幕版冷启动时下载 platform/vh-gapfix.ts 做一次（判断见 vh-gapfix-gate.ts，
