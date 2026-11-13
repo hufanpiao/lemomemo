@@ -160,7 +160,7 @@ function Assert-NoRecording {
 # ==== 安全窗口检查：结束 ====
 
 function Assert-SafeWindow {
-    # 10-29 负责人定（R-223）：不再检查 Claude 是否在运行（第 6 步显示值之前另外提醒一次）
+    # 10-29 负责人定（R-223）：不再检查 Claude 是否在运行；第 6 步显示值之前在屏幕上另外要求完全退出 Claude、存好后关掉整个窗口
     Assert-NoRecording
 }
 
@@ -306,7 +306,9 @@ try {
 
     if ($newMain) {
         Step '存进 Google 密码管理器（⚠ 这两把丢了不能重来）'
-        Say '  1. 先确认身边没有人在看屏幕，屏幕没有在共享、录屏。'
+        Say '  1. 先确认身边没有人在看屏幕，屏幕没有在共享、录屏；'
+        Say '     Claude 桌面应用请完全退出（它的终端面板能读到屏幕内容），也不要在编辑器内置的终端里运行本脚本。'
+        Say '     下面显示的值存好以后，请关掉整个 PowerShell 窗口（清屏清不掉部分终端的回滚记录）。'
         Say '  2. 打开 passwords.google.com › 添加，新建一条：'
         Say "       名称：$entry"
         Say '       下面两段分别贴进这一条（用户名一栏写 VAULT_KEY，密码一栏贴 VAULT_KEY 的值；备注里写 VAULT_PIN_PEPPER 和它的值），保存。'

@@ -182,14 +182,15 @@ describe.skipIf(!PS)('check-vault-keys-leak.ps1', () => {
     expect(r.out + r.err).not.toContain(FAKE_KEY);
   });
 
-  it('会话记录里有原样、仓库里有十六进制写法：各报找到，不显示文件名', async () => {
+  it('会话记录里有原样和 UTF-16 写法、仓库里有十六进制写法：各报找到，不显示文件名', async () => {
     writeFileSync(join(home, '.claude', 'projects', 'leaky-name.jsonl'), `{"text":"${FAKE_KEY}"}\n`);
     writeFileSync(join(repo, 'docs', 'hex-copy.txt'), Buffer.from(FAKE_PEPPER, 'base64').toString('hex'));
+    writeFileSync(join(home, '.claude', 'utf16-log.txt'), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`x ${FAKE_PEPPER} y`, 'utf16le')]));
     const r = await leak();
     expect(r.code, r.err).toBe(0);
-    expect(r.out).toMatch(/①[^\n]*找到 1 处/);
+    expect(r.out).toMatch(/①[^\n]*找到 2 处/);
     expect(r.out).toMatch(/仓库工作区[^\n]*找到 1 处/);
-    expect(r.out).toContain('结果：一共找到 2 处');
-    for (const s of ['leaky-name', 'hex-copy', FAKE_KEY]) expect(r.out + r.err).not.toContain(s);
+    expect(r.out).toContain('结果：一共找到 3 处');
+    for (const s of ['leaky-name', 'hex-copy', 'utf16-log', FAKE_KEY]) expect(r.out + r.err).not.toContain(s);
   });
 });

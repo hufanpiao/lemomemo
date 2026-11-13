@@ -178,8 +178,16 @@ function Search-Dir([string]$label, [string]$dir) {
         if ($f.Length -gt $limit) { $big++; continue }
         $n++
         try {
-            $text = [IO.File]::ReadAllText($f.FullName, [Text.Encoding]::UTF8)
-            if (Has-Any $text) { $hit++ }
+            # 按 UTF-8 读；看着像 UTF-16LE（带 FF FE 开头，或前 4096 字节里四分之一以上是 0）的再按 UTF-16LE 读一遍（本机有 UTF-16 的日志）
+            $bytes = [IO.File]::ReadAllBytes($f.FullName)
+            $text = [Text.Encoding]::UTF8.GetString($bytes)
+            $found = Has-Any $text
+            if (-not $found -and $bytes.Length -ge 2) {
+                $n0 = [Math]::Min(4096, $bytes.Length); $zeros = 0; for ($j = 0; $j -lt $n0; $j++) { if ($bytes[$j] -eq 0) { $zeros++ } }
+                if (($bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) -or $zeros * 4 -gt $n0) { $found = Has-Any ([Text.Encoding]::Unicode.GetString($bytes)) }
+            }
+            $bytes = $null
+            if ($found) { $hit++ }
         } catch { $bad++ }
         $text = $null
     }
