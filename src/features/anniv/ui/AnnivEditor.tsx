@@ -114,7 +114,7 @@ function DateFields({ form, off, t, change, locale, today, label }: PartProps & 
 export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: string): void }) {
   useScrollLock(true);
   // 纪念日页加载好 anniv-lib 才挂编辑层（AnnivPage）
-  const { annivRecOf, annivState, createdDayOf, upcoming } = annivLib();
+  const { annivState, calcRecOf, createdDayOf, upcoming } = annivLib();
   const t = useAnnivT();
   const locale = useUi((s) => s.locale);
   const ed = useAnnivEdit(id, onCreated);
@@ -127,7 +127,7 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
   const [dateOpen, setDateOpen] = useState(false);
   const { form, change } = ed;
   // 只读（D1）：同步层标的只读、认不出的值、韩国阴历
-  const badRow = ed.row !== undefined && (annivRecOf(ed.row)?.lunar_variant ?? 'kr') !== 'cn';
+  const badRow = ed.row !== undefined && calcRecOf(ed.row) === null;
   const readonly = ed.readonly || badRow;
   const off = ed.off || badRow;
   const rec = { ...ed, readonly };

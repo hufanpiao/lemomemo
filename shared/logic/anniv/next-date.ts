@@ -262,6 +262,15 @@ export function createdDayOf(row: Readonly<Record<string, unknown>>, tz: Tz, fal
 }
 
 /**
+ * 这一版能算、能改的行：annivRecOf 合格，且不是韩国阴历（D1，lunar_variant = 'kr' 这一版算不出）；否则 null。
+ * “只读”只在这里判一处（整块评审第 23 条）：列表、编辑页按它标只读，日历菱形、提醒按它跳过
+ */
+export function calcRecOf(row: Readonly<Record<string, unknown>>): AnnivRec | null {
+  const r = annivRecOf(row);
+  return r !== null && r.lunar_variant === 'cn' ? r : null;
+}
+
+/**
  * 一批行在 from～to（含）里有纪念日的日子（日历月格的菱形）：已删、撤销、只读（annivRecOf 回 null）、韩国阴历的跳过；
  * 单条算出错（农历超出表范围等）只跳过那一条，不让整张月历算不下去
  */
@@ -269,8 +278,8 @@ export function annivDatesIn(rows: readonly Readonly<Record<string, unknown>>[],
   const out = new Set<DateStr>();
   for (const row of rows) {
     if ((row['deleted_at'] ?? null) !== null || row['undone'] === true) continue;
-    const r = annivRecOf(row);
-    if (r === null || r.lunar_variant !== 'cn') continue;
+    const r = calcRecOf(row);
+    if (r === null) continue;
     try {
       for (const d of datesBetween(r, from, to, createdDayOf(row, tz, from))) out.add(d);
     } catch {
@@ -296,8 +305,8 @@ export function annivRemindFrom(
   settings: Readonly<Record<string, unknown>>,
   lookbackMs: number,
 ): { readonly at: number; readonly date: DateStr } | null {
-  const r = annivRecOf(row);
-  if (r === null || r.lunar_variant !== 'cn') return null;
+  const r = calcRecOf(row);
+  if (r === null) return null;
   const acked = row['notified_for'];
   let from = now - lookbackMs;
   if (r.created_at !== null) from = Math.max(from, r.created_at);

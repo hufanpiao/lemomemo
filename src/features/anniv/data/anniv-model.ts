@@ -1,7 +1,7 @@
 // 纪念日列表的数据（B5 S14；架构 5.4；定稿线框 s4、皮肤视觉稿 anniv / annko）：纯 TS，不碰 React 和 DOM（A1）
 // • 行 → 列表项：推算一律经 shared/logic/anniv/next-date.ts（和服务器 push-dispatch、anniv-roll 同一份）；“还有几天”“满几周岁 / 第几年”现算，
 //   不靠服务器的 next_date、archived_at（离线新建的也立刻排对位置）；推算经 anniv-lib.ts 按需加载（2.6），调之前页面先加载好
-// • 只读行（0.27 第 1 点；代定 D1）：枚举认不出、月日不合格（annivRecOf 回 null）、韩国阴历（lunar_variant = 'kr'，这一版算不出）、
+// • 只读行（0.27 第 1 点；代定 D1）：枚举认不出、月日不合格、韩国阴历（lunar_variant = 'kr'，这一版算不出），都由 next-date 的 calcRecOf 回 null 判出、
 //   同步层标了只读的（core 的 readonlyIds）。只读行照样列出来（排在最后），点了提示“这一条要新版本才能显示”，不进编辑
 // • 排序：生日、纪念日、倒数日合在一起按“还有几天”从近到远（同一天按名字），只读行排最后；已过去的倒数日单独一组（折叠），最近过去的在前
 // • 筛选：全部 / 生日 / 纪念日 / 倒数日；数字只数没过去的（视觉稿“全部 6”不含已过去的 2 条）
@@ -41,9 +41,9 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** 一行 → 列表项（roIds：同步层标了只读的 id） */
 export function itemOf(row: Row, today: DateStr, tz: Tz, roIds: ReadonlySet<string> = new Set()): AnnivItem {
-  const { annivRecOf, annivState, createdDayOf } = annivLib();
-  const rec = annivRecOf(row);
-  const ro = rec === null || rec.lunar_variant !== 'cn' || roIds.has(row.id);
+  const { calcRecOf, annivState, createdDayOf } = annivLib();
+  const rec = calcRecOf(row);
+  const ro = rec === null || roIds.has(row.id);
   const state = ro || rec === null ? null : annivState(rec, today, createdDayOf(row, tz, today));
   return { id: row.id, row, name: str(row['name']), rec: ro ? null : rec, state, ro };
 }

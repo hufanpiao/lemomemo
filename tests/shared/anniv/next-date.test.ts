@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { msAt, todayOf } from '../../../shared/core/date.ts';
 import { leapMonthOf, toSolar } from '../../../shared/logic/anniv/lunar.ts';
 import {
-  annivNextAt, annivNextOf, annivRecOf, annivState, countdownTarget, datesBetween, occurrenceIn, offsetsOf, onOrAfter, remindTimeOf, upcoming, validDate,
+  annivNextAt, annivNextOf, annivRecOf, calcRecOf, annivState, countdownTarget, datesBetween, occurrenceIn, offsetsOf, onOrAfter, remindTimeOf, upcoming, validDate,
   type AnnivRec,
 } from '../../../shared/logic/anniv/next-date.ts';
 
@@ -160,6 +160,10 @@ describe('提醒设置（R-94）', () => {
 
 describe('行 → AnnivRec、annivNextOf（push-dispatch 接口）', () => {
   it('认不出的枚举、月日越界：null / 抛 bad_anniv', () => {
+    // 能算的行只有一处判断（整块评审第 23 条）：认不出的、韩国阴历都回 null
+    expect(calcRecOf({ kind: 'birthday', calendar: 'lunar', lunar_variant: 'kr', month: 1, day: 1 })).toBeNull();
+    expect(calcRecOf({ kind: 'party', calendar: 'solar', month: 1, day: 1 })).toBeNull();
+    expect(calcRecOf({ kind: 'birthday', calendar: 'lunar', lunar_variant: 'cn', month: 1, day: 1 })?.lunar_variant).toBe('cn');
     expect(annivRecOf({ kind: 'party', calendar: 'solar', month: 1, day: 1 })).toBeNull();
     expect(annivRecOf({ kind: 'birthday', calendar: 'solar', month: 2, day: 30 })).toBeNull();
     expect(() => annivNextOf({ kind: 'x' }, { tz: SEOUL, now: 0, settings: {} })).toThrow('bad_anniv');
