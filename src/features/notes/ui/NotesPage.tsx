@@ -29,12 +29,15 @@
 //   （不进编辑器、不开抽屉、不写），出 kit 的“这条要新版本才能修改 · 更新”（删除撤销、只读拦截、出错条走 kit 的 useListActions，插图提示和输入行上移在 hooks/useNotesToast.ts）。
 //   左滑、多选还没有入口，以后加时同样先判只读
 // • 动效只用现有的 AppearList（增删淡入淡出）和 Pressable（按下反馈）；抽屉只有最基本的滑入（R-376）
+// • 隐私记（B5 S5、S7）：分类胶囊下面一行入口（vault 的 VaultParts lockrow）；“⋯”菜单、左滑（列表方式，NoteSwipe.tsx）加“移到隐私记”，
+//   移的流程（解锁、重试一次、带附件不能移）在 vault 的 VaultParts move；移好的先在本页藏起来，等同步把它改成隐私记行
 import { rlog } from '../../../platform/run-log-api.ts';
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { hrefOf, navigate, plainClick, useRoute } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
+import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { Mist } from '../../../kit/components/Mist.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { MQ_SIDEBAR, useMedia } from '../../../kit/hooks/useMedia.ts';
@@ -43,6 +46,7 @@ import { useEditT } from '../../../kit/components/EditNotices.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable } from '../../../motion/components.ts';
+import { VaultParts } from '../../vault/index.ts';
 import { useMergeHint } from '../hooks/useMergeHint.ts';
 import { useNoteList, type NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
@@ -53,6 +57,7 @@ import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, useAddImage } from './NoteImages.tsx';
 import { ConvertAsk, MergeBar, MoreMenu, useConvertFlow, type PageTip } from './NotesActions.tsx';
 import { InputRow } from './NotesInputRow.tsx';
+import { SwipeRow } from './NoteSwipe.tsx';
 import styles from './NotesPage.module.css';
 
 /** 分类色点（只在有颜色时画） */
@@ -84,6 +89,10 @@ function NotesList() {
   const [menu, setMenu] = useState<string | null>(null);
   const [just, setJust] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<string | null>(null);
+  // 移到隐私记（B5 S7）：正在移的那一条（vault 的 VaultParts move 管解锁和出错提示）；移好的先在本页藏起来，等同步把它改成隐私记行
+  const [moving, setMoving] = useState<string | null>(null);
+  const [moved, setMoved] = useState<ReadonlySet<string>>(() => new Set());
+  const [swiped, setSwiped] = useState<string | null>(null);
 
   // 窗口缩到没有侧栏：抽屉收起（窄窗口点开走编辑页）
   useEffect(() => {
@@ -99,6 +108,12 @@ function NotesList() {
     setMenu(null);
     void a.del(id);
   };
+  const toVault = (id: string) => {
+    setMenu(null);
+    if (isRo(id)) guard.block();
+    else setMoving(id);
+  };
+  const shown = (it: NoteItem) => !moved.has(it.id);
   const addImage = useAddImage(l, setJust, report, (m) => guard.show({ kind: 'img', ...m }));
   const conv = useConvertFlow(l.convert, a);
   const add = async (text: string): Promise<boolean> => {
@@ -129,6 +144,7 @@ function NotesList() {
         setMenu(null);
         conv.start(it, kind);
       }}
+      onMove={() => toVault(it.id)}
     />
   );
   const aiMark = (it: NoteItem) => (it.ai ? <AiMark id={it.id} /> : null);
@@ -153,6 +169,13 @@ function NotesList() {
         </div>
       ) : null}
 
+      {/* 隐私记入口行（B5 S5，线框 s7 LOCKROW：分类胶囊下面、合并提示上面；两种显示方式都有） */}
+      <QuietBoundary name="vault-lockrow">
+        <Suspense fallback={null}>
+          <VaultParts part="lockrow" />
+        </Suspense>
+      </QuietBoundary>
+
       {merge ? <MergeBar hint={merge} onResult={report} onMerged={(h) => guard.show(mergeUndo(h.key, () => void h.undo().then(report)))} /> : null}
 
       {l.items.length === 0 ? (
@@ -163,7 +186,7 @@ function NotesList() {
 
       {view === 'masonry' ? (
         <AppearList as="ul" className={styles.mason} data-testid="notes-mason">
-          {l.items.map((it) => (
+          {l.items.filter(shown).map((it) => (
             <AppearItem key={it.id} className={styles.card} data-testid={`notes-card-${it.id}`}>
               <div onContextMenu={onMenuKey(it.id)}>
                 <button type="button" className={styles.cardMain} onClick={() => open(it.id)} aria-current={drawer === it.id ? 'true' : undefined}>
@@ -196,19 +219,31 @@ function NotesList() {
         </AppearList>
       ) : (
         <AppearList as="div" data-testid="notes-list">
-          {l.groups.map((g) => (
+          {l.groups.filter((g) => g.items.some(shown)).map((g) => (
             <AppearItem as="section" key={g.date} className={styles.group} data-testid={`notes-g-${g.date}`}>
               <h2 className={styles.h2}>{g.key === 'today' ? t('notes.g.today', {}) : g.key === 'yesterday' ? t('notes.g.yesterday', {}) : fmtDay(g.date, locale, 'monthDay')}</h2>
               <AppearList as="ul" className={styles.lst}>
-                {g.items.map((it) => (
+                {g.items.filter(shown).map((it) => (
                   <AppearItem key={it.id} className={drawer === it.id ? `${styles.lrow} ${styles.sel}` : styles.lrow} data-testid={`notes-row-${it.id}`}>
-                    <button type="button" className={styles.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} aria-current={drawer === it.id ? 'true' : undefined}>
-                      <span className={styles.rowTime}>{timeOf(it, false)}</span>
-                      <span className={styles.mn} aria-hidden="true" />
-                      <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} />
-                      {it.cover ? <ListThumb img={it.cover} /> : null}
-                    </button>
-                    {more(it)}
+                    {/* 左滑（B5 S7，线框 s7 NOTEROW_SW）：转成待办 / 移到隐私记 / 删除，和“⋯”菜单同一套动作 */}
+                    <SwipeRow
+                      open={swiped === it.id}
+                      onOpenChange={(o) => setSwiped(o ? it.id : null)}
+                      testId={`notes-swipe-${it.id}`}
+                      actions={[
+                        { label: t('notes.sw.todo', {}), onClick: () => conv.start(it, 'todo'), testId: `notes-sw-todo-${it.id}` },
+                        { label: t('notes.sw.vault', {}), onClick: () => toVault(it.id), testId: `notes-sw-vault-${it.id}` },
+                        { label: t('notes.delete', {}), onClick: () => del(it.id), danger: true, testId: `notes-sw-del-${it.id}` },
+                      ]}
+                    >
+                      <button type="button" className={styles.lmain} onClick={() => open(it.id)} onContextMenu={onMenuKey(it.id)} aria-current={drawer === it.id ? 'true' : undefined}>
+                        <span className={styles.rowTime}>{timeOf(it, false)}</span>
+                        <span className={styles.mn} aria-hidden="true" />
+                        <RowText it={it} ai={aiMark(it)} ro={<RoMark ro={isRo(it.id)} id={it.id} cls={styles.roRow} />} />
+                        {it.cover ? <ListThumb img={it.cover} /> : null}
+                      </button>
+                      {more(it)}
+                    </SwipeRow>
                   </AppearItem>
                 ))}
               </AppearList>
@@ -223,6 +258,20 @@ function NotesList() {
       </div>
 
       {drawer !== null ? <NoteDrawer id={drawer} onClose={() => setDrawer(null)} /> : null}
+      {moving !== null ? (
+        <QuietBoundary name="vault-move">
+          <Suspense fallback={null}>
+            <VaultParts
+              part="move"
+              noteId={moving}
+              onDone={(ok) => {
+                if (ok) setMoved((s) => new Set(s).add(moving));
+                setMoving(null);
+              }}
+            />
+          </Suspense>
+        </QuietBoundary>
+      ) : null}
       {conv.ask ? <ConvertAsk ask={conv.ask} onOk={conv.confirm} onCancel={conv.cancel} /> : null}
 
       {bar ? <UndoBar key={bar.tip.key} tip={bar.tip} onClose={bar.close} /> : null}

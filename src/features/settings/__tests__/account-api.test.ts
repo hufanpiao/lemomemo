@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Db } from '../../../platform/supabase/client.ts';
 import { ACCOUNT_ERROR_CODES } from '../../../../shared/schema/account.ts';
 import { createAccountApi, exportFileName, mapAccountCode } from '../data/account-api.ts';
+import { setVaultToken } from '../../../core/vault-token.ts';
 
 const b64 = (o: unknown): string => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
 const TOKEN = `${b64({ alg: 'HS256' })}.${b64({ sub: 'u1', session_id: 's-1' })}.sig`;
@@ -53,6 +54,24 @@ describe('startExport（0.47 续 ①）', () => {
     expect(h['authorization']).toBe(`Bearer ${TOKEN}`);
     expect(h['apikey']).toBe('anon');
     expect(h['x-vault-token']).toBeUndefined();
+  });
+
+  it('隐私记已解锁（B5 S10）：start 带 x-vault-token、任务记 vault；取片同样带；取片时已上锁 → 不发请求、回 vault_locked（可继续）', async () => {
+    setVaultToken('v'.repeat(32), Date.now() + 600_000);
+    try {
+      const { a, f } = api(async () => json(200, { ok: true, export_id: EID }));
+      expect(await a.startExport(null)).toEqual({ ok: true, value: { exportId: EID, exportedAt: null, sid: 's-1', vault: true } });
+      expect((f.mock.calls[0]?.[1]?.headers as Record<string, string>)['x-vault-token']).toBe('v'.repeat(32));
+      const p = api(async () => gz([1, 2], null));
+      await p.a.takePart(EID, null, 's-1', true);
+      expect((p.f.mock.calls[0]?.[1]?.headers as Record<string, string>)['x-vault-token']).toBe('v'.repeat(32));
+      setVaultToken(null, 0);
+      const q = api(async () => gz([1], null));
+      expect(await q.a.takePart(EID, null, 's-1', true)).toEqual({ ok: false, error: 'vault_locked', sid: 's-1' });
+      expect(q.f).not.toHaveBeenCalled();
+    } finally {
+      setVaultToken(null, 0);
+    }
   });
 
   it('本机没有设备行 id：不带 device_id；2xx 却没有 export_id 按 bad_response；没有 exported_at 时为 null', async () => {
@@ -244,7 +263,7 @@ describe('misconfigured（入口配置错误，500，不在共享码表；10-31 
 });
 
 describe('辅助', () => {
-  it('和共享的 ACCOUNT_ERROR_CODES（13 个）逐个对齐：每个码都有去处，restore 才有的三个是 unknown', () => {
+  it('和共享的 ACCOUNT_ERROR_CODES（14 个）逐个对齐：每个码都有去处，restore 才有的三个、rebind_device 才有的 rebind_failed 是 unknown（B5 起交接设备行走 core/session-rebind.ts）', () => {
     const want: Record<(typeof ACCOUNT_ERROR_CODES)[number], string> = {
       confirm_required: 'confirm_required',
       admin_cannot_delete: 'admin_cannot_delete',
@@ -259,8 +278,9 @@ describe('辅助', () => {
       try_later: 'try_later',
       export_expired: 'export_expired',
       export_too_large: 'export_too_large',
+      rebind_failed: 'unknown',
     };
-    expect(ACCOUNT_ERROR_CODES).toHaveLength(13);
+    expect(ACCOUNT_ERROR_CODES).toHaveLength(14);
     for (const code of ACCOUNT_ERROR_CODES) expect(mapAccountCode(code, 400), code).toBe(want[code]);
   });
 

@@ -6,7 +6,8 @@
 //   点通知打开整页提醒（有窗口就聚焦跳转；data 校验不过只打开 /app/，FE-3）、点“推迟”按 K-sw-seal 写 pending_actions
 import { describe, expect, it, vi } from 'vitest';
 import { t } from '../../shared/i18n/i18n.ts';
-import { buildPayload, type PayloadInput } from '../../supabase/functions/_shared/push/payload.ts';
+import { buildPayload, VAULT_PUSH_EVENTS as SERVER_VAULT_EVENTS, type PayloadInput } from '../../supabase/functions/_shared/push/payload.ts';
+import { VAULT_PUSH_EVENTS, VAULT_PUSH_TEXT } from '../../src/sw/push-vault-data.ts';
 import { claimCache } from '../../src/core/account.ts';
 import { openCache } from '../../src/core/cache.ts';
 import { PENDING_ACTIONS } from '../../src/core/cache-schema.ts';
@@ -25,6 +26,7 @@ import {
   reminderUrl,
   TEST_TAG,
   TEXT_MAX,
+  VAULT_TAG,
   type PushPayload,
   type SwLike,
   type WindowLike,
@@ -444,5 +446,50 @@ describe('和后端 buildPayload 对拍（supabase/functions/_shared/push/payloa
     if (p.type !== 'remind') throw new Error('type');
     expect([p.title, p.body]).toEqual([raw['title'], raw['body']]);
     expect(Array.from(p.title ?? '')).toHaveLength(TEXT_MAX);
+  });
+});
+
+describe('隐私记推送（B5 S2～S4、D19：负载不带内容，字由 SW 本地词典 push.vault.<event> 出）', () => {
+  const td = new TextDecoder();
+  it('四种事件和后端一字不差；中文、韩文每种都有字', () => {
+    expect([...VAULT_PUSH_EVENTS]).toEqual([...SERVER_VAULT_EVENTS]);
+    for (const e of VAULT_PUSH_EVENTS) {
+      expect(VAULT_PUSH_TEXT.zh[e].length).toBeGreaterThan(0);
+      expect(VAULT_PUSH_TEXT.ko[e].length).toBeGreaterThan(0);
+    }
+  });
+
+  it('和后端 buildPayload 对拍：解得开；显示 App 名 + 本地文案，tag 固定、没有 data、没有按键；韩文按浏览器语言', () => {
+    for (const event of VAULT_PUSH_EVENTS) {
+      const raw: unknown = JSON.parse(td.decode(buildPayload({ type: 'vault', user_id: UID, event })));
+      const p = parsed(raw);
+      expect(p).toEqual({ v: 1, type: 'vault', user_id: UID, event });
+      const zh = notificationOf(p, ZH);
+      expect(zh.title).toBe(t('app.name', {}, 'zh-CN'));
+      expect(zh.options).toMatchObject({ body: VAULT_PUSH_TEXT.zh[event], tag: VAULT_TAG });
+      expect(zh.options.data).toBeUndefined();
+      expect(zh.options.actions).toBeUndefined();
+      expect(notificationOf(p, ['ko-KR']).options.body).toBe(VAULT_PUSH_TEXT.ko[event]);
+    }
+  });
+
+  it('不认识的事件、缺 event：解不开（走兜底）', () => {
+    expect(parsePushPayload({ v: 1, type: 'vault', user_id: UID, event: 'opened' })).toBeNull();
+    expect(parsePushPayload({ v: 1, type: 'vault', user_id: UID })).toBeNull();
+    expect(parsePushPayload({ v: 1, type: 'vault', user_id: 'x', event: 'locked' })).toBeNull();
+  });
+
+  it('不是本机账号：只写 App 名，不带正文', async () => {
+    const db = await factoryOwnedBy(OTHER);
+    const { sw, shown } = fakeSw({ factory: db.factory });
+    await handlePush(sw, { v: 1, type: 'vault', user_id: UID, event: 'reset' });
+    expect(shown).toEqual([{ title: t('app.name', {}, 'zh-CN'), options: { tag: VAULT_TAG } }]);
+    db.close();
+  });
+
+  it('点开：没有 data，只打开 /app/', async () => {
+    const { sw, opened } = fakeSw();
+    await handleNotificationClick(sw, { data: notificationOf(parsed({ v: 1, type: 'vault', user_id: UID, event: 'locked' }), ZH).options.data, close: vi.fn() }, '');
+    expect(opened).toEqual([`${ORIGIN}/app/`]);
   });
 });

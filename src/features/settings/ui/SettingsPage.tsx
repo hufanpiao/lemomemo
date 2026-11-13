@@ -20,6 +20,7 @@ import { backTo, hrefOf, plainClick, useRoute } from '../../../app/router.ts';
 import { backOrReplace, navigateSub } from '../../../app/router-sub.ts';
 import { CalendarSettings } from '../../calendar/index.ts';
 import { PlusSettings } from '../../plus/index.ts';
+import { VaultParts } from '../../vault/index.ts';
 import { RemindSettings } from '../../reminders/index.ts';
 import backLink from '../../../kit/components/BackLink.module.css';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
@@ -197,6 +198,8 @@ export default function SettingsPage({ deps }: { deps?: SettingsDeps } = {}) {
       sub(t('settings.cal.title', {}), 'settings-cal-back', <CalendarSettings />)
     ) : view === 'ai' ? (
       sub(t('settings.ai.title', {}), 'settings-ai-back', <PlusSettings part="voiceAi" view="page" />)
+    ) : view === 'vault' ? (
+      sub(t('settings.vault.title', {}), 'settings-vault-back', <VaultParts part="settings" />)
     ) : view === 'claude' ? (
       sub(t('settings.claude.title', {}), 'settings-claude-back', <PlusSettings part="claude" view="page" />)
     ) : view === 'remind' ? (

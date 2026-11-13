@@ -72,11 +72,37 @@ let painted = '';
 let font = 'system';
 const sys: Record<'dark' | 'rt' | 'rm', MediaQueryList | null> = { dark: null, rt: null, rm: null };
 
+/** 页面要求强制实色（隐私记页挂着时，B5 TC-B5-12）：计数，> 0 时 data-rt 一直是 1 */
+let solidHolds = 0;
+const rtNow = (): boolean => (current?.rt ?? false) || sys.rt?.matches === true || solidHolds > 0;
+
+function paintRt(): void {
+  const r = document.documentElement;
+  if (rtNow()) r.dataset['rt'] = '1';
+  else delete r.dataset['rt'];
+}
+
+/**
+ * 隐私记页（B5 TC-B5-12）：挂着时底栏和“＋”用实色、不建液态玻璃副本，做法同“减少透明效果”。
+ * 走本模块的同一个判断（不另写 data-rt），重画时不会被冲掉；返回的函数放开（多次调用只算一次），之后按设置和系统设置重算
+ */
+export function holdReducedTransparency(): () => void {
+  solidHolds += 1;
+  paintRt();
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    solidHolds -= 1;
+    paintRt();
+  };
+}
+
 function paint(): void {
   if (!current) return;
   const r = document.documentElement;
   const theme = current.theme === 'system' ? (sys.dark?.matches ? 'dark' : 'light') : current.theme;
-  const rt = current.rt || sys.rt?.matches === true;
+  const rt = rtNow();
   const rm = current.rm || sys.rm?.matches === true;
   r.dataset['skin'] = current.skin;
   r.dataset['theme'] = theme;
@@ -84,7 +110,7 @@ function paint(): void {
   else delete r.dataset['rt'];
   if (rm) r.dataset['rm'] = '1';
   else delete r.dataset['rm'];
-  const desc = `skin=${current.skin} theme=${current.theme}>${theme} rt=${current.rt ? 'on' : rt ? 'sys' : 'off'} rm=${current.rm ? 'on' : rm ? 'sys' : 'off'}`;
+  const desc = `skin=${current.skin} theme=${current.theme}>${theme} rt=${current.rt ? 'on' : solidHolds > 0 ? 'hold' : rt ? 'sys' : 'off'} rm=${current.rm ? 'on' : rm ? 'sys' : 'off'}`;
   if (desc !== painted) log?.('look_apply', { code: desc });
   painted = desc;
   if (current.font !== font) {

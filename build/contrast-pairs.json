@@ -319,22 +319,22 @@
     },
     {
       "id": "swipe-btn-light",
-      "what": "左滑“推迟”“转成待办”/ 按钮底（浅色）",
+      "what": "左滑“推迟”“转成待办”“移到隐私记”/ 按钮底（浅色）",
       "fg": "--text",
       "bg": "--panel-2",
       "kind": "text",
-      "source": "TC-B2-62（R-171、R-172）",
+      "source": "TC-B2-62、TC-B5-34（R-171、R-172）",
       "modes": [
         "light"
       ]
     },
     {
       "id": "swipe-btn-dark",
-      "what": "左滑“推迟”“转成待办”/ 按钮底（深色）",
+      "what": "左滑“推迟”“转成待办”“移到隐私记”/ 按钮底（深色）",
       "fg": "--panel",
       "bg": "--text-2",
       "kind": "text",
-      "source": "TC-B2-62（R-171、R-172）",
+      "source": "TC-B2-62、TC-B5-34（R-171、R-172）",
       "modes": [
         "dark"
       ]

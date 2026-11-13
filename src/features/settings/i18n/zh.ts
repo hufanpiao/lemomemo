@@ -149,6 +149,8 @@ export const zh = {
   // 设置 › 语音与 AI、在 Claude 聊天里记事：首页那一行和二级页顶栏标题（B3 FA-4；和 plus 词典的 plus.set.ai.title、plus.set.cla.title 同一个词）
   'settings.ai.title': '语音与 AI',
   'settings.claude.title': '在 Claude 聊天里记事',
+  // B5 S11：设置 › 隐私记（二级页正文由 vault 功能的 VaultParts settings 画）
+  'settings.vault.title': '隐私记',
   'settings.remind.showTitle': '提醒里写什么',
   'settings.remind.dnd': '免打扰',
   'settings.delete.body.what': '注销后，你在柠檬记里的全部记录、照片、附件、设置，以及服务器上的备份都会删除。',

@@ -15,8 +15,13 @@ describe('tabBarFor', () => {
     expect(tabBarFor('cal')).toEqual({ tab: 'calendar', add: 'event' });
   });
 
+  it('隐私记页归随手记页签，“＋”同随手记（B5 D14）', () => {
+    expect(tabBarFor('vault')).toEqual({ tab: 'notes', add: 'note' });
+  });
+
   it('别的页一律没有底栏（编辑、设置、提醒、回收站……）', () => {
-    const shown = new Set(['today', 'calendar', 'cal', 'todos', 'notes']);
+    // 隐私记页归随手记页签（B5 D14），单独核
+    const shown = new Set(['today', 'calendar', 'cal', 'todos', 'notes', 'vault']);
     for (const r of ROUTE_NAMES) if (!shown.has(r)) expect(tabBarFor(r), r).toBeNull();
   });
 });

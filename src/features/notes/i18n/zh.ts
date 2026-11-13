@@ -62,6 +62,11 @@ export const zh = {
   'notes.converted': '已转过',
   'notes.conv.todo': '转成待办',
   'notes.conv.event': '转成日程',
+  // B5 S7：“⋯”菜单和左滑里的“移到隐私记”（移的流程在 vault 功能里）
+  'notes.toVault': '移到隐私记',
+  // 左滑按钮只有 64 宽：照线框 s7 NOTEROW_SW 断成两行（转成 / 待办、移到 / 隐私记），按钮按换行符断（white-space: pre-line）
+  'notes.sw.todo': '转成\n待办',
+  'notes.sw.vault': '移到\n隐私记',
   'notes.conv.long': '超过 2000 字，转不了',
   'notes.conv.moved.todo': '已转成待办，原来这条进了“最近删除”',
   'notes.conv.moved.event': '已转成日程，原来这条进了“最近删除”',

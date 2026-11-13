@@ -208,13 +208,13 @@ describe('快读组（playwright.fastread.config.ts，B2 FA-6 ① 安全审查 L
     }
   }
 
-  it('带同源 /sb 地址和假 anon key 构建，只跑首屏 supabase 用例和 R-402 插图上传用例；端口、产物、状态目录、调试端口和另外两组都错开', async () => {
+  it('带同源 /sb 地址和假 anon key 构建，只跑首屏 supabase 用例、R-402 插图上传用例和 B5 隐私记用例（拦 /sb/functions/v1/vault）；端口、产物、状态目录、调试端口和另外两组都错开', async () => {
     const { cfg, env } = await loadFastread();
     expect(env['VITE_PUBLIC_SUPABASE_URL']).toBe('http://127.0.0.1:8791/sb');
     expect(env['VITE_PUBLIC_ANON_KEY']).toBe('fake-anon-key');
     expect(env['LEMO_WEB_OUT']).toBe('dist/web-fastread');
     expect(env['LEMO_WS_PORT']).toBe('8791');
-    expect(cfg.testMatch).toEqual(['**/b2-first-screen-supabase.spec.ts', '**/r402-webp-wasm.spec.ts']);
+    expect(cfg.testMatch).toEqual(['**/b2-first-screen-supabase.spec.ts', '**/r402-webp-wasm.spec.ts', '**/b5-vault.spec.ts']);
     const [fake, web] = servers(cfg);
     expect(fake?.url).toBe('http://127.0.0.1:9192/health');
     expect(fake?.env).toEqual({ [S3]: '9193', [SB]: '9192' });

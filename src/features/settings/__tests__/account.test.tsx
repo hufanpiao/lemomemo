@@ -178,7 +178,7 @@ describe('导出全部（设置 › 数据）', () => {
     // 忙的时候再点不会再导一次
     fireEvent.click(exportBtn());
     await act(async () => gate.resolve({ ok: true, value: { exportId: EXPORT_ID, exportedAt: '2026-10-29T03:00:00.000Z', sid: 's-me' } }));
-    expect(account.takePart).toHaveBeenCalledWith(EXPORT_ID, null, 's-me');
+    expect(account.takePart).toHaveBeenCalledWith(EXPORT_ID, null, 's-me', false);   // 没解锁：不带隐私记令牌（B5 S10）
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ name: FILE.name, vaultOmitted: true }));
     const status = text(screen.getByTestId('settings-export-status'));
     expect(status).toContain(zh['settings.export.done']);

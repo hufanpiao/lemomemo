@@ -248,8 +248,8 @@ describe('设置首页的卡和行（TC-B1-71、R-325）', () => {
       zh['settings.card.more'],
     ]);
     const ids = (c: HTMLElement): string[] => [...c.querySelectorAll('[data-row-id]')].map((el) => el.getAttribute('data-row-id') ?? '');
-    // B3 FA-4 起常用卡多“语音与 AI”、更多卡多“在 Claude 聊天里记事”；B4 起常用卡多“随手记布局”（线框 v4 定稿的设置行）
-    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'font', 'notesView', 'calendar', 'reminders', 'voiceAi'], ['data', 'claude', 'about']]);
+    // B3 FA-4 起常用卡多“语音与 AI”、更多卡多“在 Claude 聊天里记事”；B4 起常用卡多“随手记布局”；B6 起多皮肤、字体；B5 起常用卡多“隐私记”（线框 v4 定稿的设置行）
+    expect(cards.map(ids)).toEqual([['account'], ['language', 'skin', 'font', 'notesView', 'calendar', 'reminders', 'voiceAi', 'vault'], ['data', 'claude', 'about']]);
     const all = cards.flatMap(ids);
     expect(all).toEqual([...all].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)));
     expect(new Set(all).size).toBe(all.length);

@@ -1,5 +1,5 @@
 // 随手记页的“⋯”菜单、合并分类提示条、转成待办 / 日程的流程和确认窗（从 NotesPage.tsx 拆出来，R-413、R-414 11-13）
-// • 菜单：转成待办 / 转成日程 / 删除（“移到隐私记”B5 再加）；只读行变淡、点了由页面拦下
+// • 菜单：转成待办 / 转成日程 / 移到隐私记（B5 S7）/ 删除；只读行变淡、点了由页面拦下
 // • 提示条（R-413，线框 MERGE）：“‘读书’和‘书单’两个分类很像，合成一个吗？ 合并 / 不用”
 // • 转换（R-414）的规则见 shared/logic/notes/note-convert.ts 文件头；结果出在输入行上面
 import { useState } from 'react';
@@ -24,11 +24,11 @@ export type PageTip = ImgTip | ConvTip | MergeUndo;
 export type ConvAsk = { id: string; kind: ConvertKind; images: number };
 
 /**
- * “⋯”菜单：看得见 24px，点按区 ::after 扩到 44。转成待办 / 转成日程（R-414）在“删除”上面；移到隐私记（B5）以后加在这里。
+ * “⋯”菜单：看得见 24px，点按区 ::after 扩到 44。转成待办 / 转成日程（R-414）、移到隐私记（B5 S7，线框 s7 菜单）在“删除”上面。
  * long：备注放不下，两项变淡（aria-disabled）、下面写原因，点了不动；只读行的两项也变淡，点了由页面拦下
  */
-export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert }: {
-  id: string; ro: boolean; open: boolean; onOpenChange(o: boolean): void; onDelete(): void; long: boolean; onConvert(kind: ConvertKind): void;
+export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert, onMove }: {
+  id: string; ro: boolean; open: boolean; onOpenChange(o: boolean): void; onDelete(): void; long: boolean; onConvert(kind: ConvertKind): void; onMove(): void;
 }) {
   const t = useNotesT();
   const conv = (kind: ConvertKind) => (
@@ -62,6 +62,9 @@ export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert
           {t('notes.conv.long', {})}
         </p>
       ) : null}
+      <Pressable className={`${styles.menuItem} ${styles.menuPlain}`} aria-disabled={ro || undefined} onClick={onMove} data-testid={`notes-to-vault-${id}`} data-no-proxy="">
+        {t('notes.toVault', {})}
+      </Pressable>
       {/* 只读行的“删除”变淡、aria-disabled，点了照样由 del 拦下出提示条（同待办页的 ×） */}
       <Pressable className={styles.menuItem} aria-disabled={ro || undefined} onClick={onDelete} data-testid={`notes-del-${id}`} data-no-proxy="">
         {t('notes.delete', {})}
