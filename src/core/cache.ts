@@ -110,6 +110,11 @@ export interface MetaMap {
    * 提醒功能（features/reminders/data/remind-seen.ts）读写；只留 7 天、最多 500 条；随整库清掉，meta 重建时丢了也只是最多多响一次
    */
   remind_seen: RemindSeenMeta;
+  /**
+   * 待办列表页子任务的收起状态（R-350 方案第 3 节、5.4，Q4）：待办 id → true 收起 / false 展开，只存用户点过的（没点过的按默认：
+   * 未完成展开、已完成收起）。每台设备各记各的、不同步；features/todos/hooks/useSubtasks.ts 读写，最多 500 个、写时剔掉已不在的待办；随整库清掉
+   */
+  'ui.todo_collapsed': Readonly<Record<string, boolean>>;
   /** 各表的同步游标（K8） */
   [k: `cursor:${string}`]: SyncCursor;
   /** 各表“待补拉”的 id（K7：一行解析不了时记下，下次启动单独补拉） */

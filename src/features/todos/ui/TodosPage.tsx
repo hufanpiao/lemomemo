@@ -11,7 +11,14 @@
 //   列表先不动（useHoldView 留住按下之前的分组）；然后这一条从原来的组淡出、同时下面的行收上来，“已完成”组让开位置后它再淡入。
 //   删除：淡出和收拢同时；撤销恢复：先让开位置再淡入（不和别的行叠着）。第一次画列表不播。分组整组出现、消失同样淡入淡出。
 //   打勾没有撤销条（只有删除有）：点错了在圆圈填满的那 --dur-ui 里还能再点回去，开始离开以后要到“已完成”组里再点
+// • 子任务（R-350 方案 5.1、5.4、5.5）：有子任务的待办，副行最前面是“已勾/总数”，行下面摊开勾选清单、底部分段进度条、右下“收起 / 展开”
+//   （SubtaskCard；收起状态每台设备各记各的，未完成默认展开、已完成默认收起）。列表页只能勾，加删改在编辑页（Q10）。
+//   勾子任务：主待办只读或这一项只读 → 拦下出“要新版本”；勾上最后一项 → 主待办自动完成，先留住分组 --dur-ui（看到满格）再挪到“已完成”组，
+//   页底出“全部完成，已完成这条待办 · 撤销”（对“打勾没有撤销条”开的例外，方案 5.5；撤销时刚勾的那项和主待办一起撤回，Q1）；
+//   主待办已完成时取消勾某项 → 主待办改回未完成、卡片挪回原来的组，不出撤销条（Q2）。运行日志 todo sub auto done|undone 在 data 层记（不记标题）
 import { Suspense } from 'react';
+import { UndoToast } from '../../../kit/components/UndoToast.tsx';
+import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import list from '../../../kit/components/List.module.css';
@@ -24,6 +31,8 @@ import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
 import { useListT, useTodoList, type DueTag, type Group } from '../hooks/useTodoList.ts';
+import { setCollapsed, useCollapsed } from '../hooks/useSubtasks.ts';
+import { SubtaskCard } from './SubtaskCard.tsx';
 import { UnsyncedRemindMark } from '../../reminders/index.ts';
 import styles from './TodosPage.module.css';
 
@@ -47,9 +56,34 @@ export default function TodosPage() {
   const l = useTodoList();
   // 打勾先留住按下之前的分组 --dur-ui（圆圈在原地填满，17.1 勾选完成）；只读行统一拦下；撤销条、出错条也在 a.g 里（kit 的 useListActions）
   const hv = useHoldView(l.groups);
-  const a = useListActions('todos', { toggle: l.toggleDone, remove: l.remove }, hv);
+  const a = useListActions<AutoToast>('todos', { toggle: l.toggleDone, remove: l.remove }, hv);
   const { isRo, tick, shown, del } = a;
   const open = (id: string) => (isRo(id) ? a.g.block() : void navigate('todo', id));
+  const roSubs = useReadonlyIds('todo_items');
+  const isCollapsed = useCollapsed();
+  const fold = (id: string, v: boolean) => setCollapsed(id, v, l.ids);   // 全部待办的 id（不按项目筛选，免得剔掉别的项目点过的）
+  const tickSub = (todoId: string, itemId: string, on: boolean) => {
+    if (isRo(todoId) || roSubs.has(itemId)) return a.g.block();
+    // 会顺带改主待办（挪组）：先留住按下之前的分组 --dur-ui，满格看清了再挪
+    if (l.planAuto(todoId, itemId, on) !== null) hv.hold();
+    void l.tickSub(todoId, itemId, on).then(({ res, auto }) => {
+      if (res === 'ok' && auto === true) a.g.show({ kind: 'auto', todoId, itemId });
+      else a.report(res);
+    });
+  };
+
+  // 自动完成的撤销条（方案 5.5）：和删除的撤销条同一组件、同一位置，同时只出一条
+  // 是函数不是组件：页面每次重画都返回同一种元素，撤销条的 8 秒计时不重来
+  const autoToast = (x: AutoToast) => (
+    <UndoToast
+      key={`${x.todoId}:${x.itemId}`}
+      message={t('items.autoDone', {})}
+      undoLabel={t('list.undo', {})}
+      onUndo={() => void l.undoAuto(x.todoId, x.itemId).then(a.report)}
+      onClose={() => a.g.dismiss(x)}
+      data-testid="todos-auto-toast"
+    />
+  );
 
   const groupTitle = (g: Group): string => {
     switch (g.key) {
@@ -101,10 +135,13 @@ export default function TodosPage() {
             className={g.key === 'late' ? `${styles.group} ${styles.late}` : styles.group} data-testid={`todos-g-${g.key}${g.date ? `-${g.date}` : ''}`}>
             <h2 className={styles.h2}>{groupTitle(g)}</h2>
             <AppearList as="ul" className={list.list}>
-              {g.items.map(({ todo, tag }) => (
+              {g.items.map(({ todo, tag }) => {
+                const subs = l.subs.get(todo.id);
+                const prog = subs ? t('items.progress', { done: subs.filter((x) => x.done).length, total: subs.length }) : '';
+                return (
                 <AppearItem
                   key={todo.id}
-                  className={list.row}
+                  className={subs ? `${list.row} ${styles.hasSubs}` : list.row}
                   data-done={todo.done ? '' : undefined}
                   data-readonly={isRo(todo.id) ? '' : undefined}
                   data-testid={`todos-row-${todo.id}`}
@@ -122,7 +159,7 @@ export default function TodosPage() {
                     <span className={list.text}>
                       <span className={list.title}>{todo.title}</span>
                       <span className={tag.kind === 'late' ? `${list.meta} ${styles.tagLate}` : list.meta} data-testid={`todos-tag-${todo.id}`}>
-                        {[todo.important ? t('list.important', {}) : '', todo.project, tagText(tag)].filter(Boolean).join(' · ')}
+                        {[prog, todo.important ? t('list.important', {}) : '', todo.project, tagText(tag)].filter(Boolean).join(' · ')}
                       </span>
                     </span>
                     {isRo(todo.id) ? <ReadonlyMark testId={`todos-ro-${todo.id}`} /> : null}
@@ -140,13 +177,29 @@ export default function TodosPage() {
                   >
                     ×
                   </Pressable>
+                  {subs ? (
+                    <SubtaskCard
+                      todoId={todo.id}
+                      todoTitle={todo.title}
+                      items={subs}
+                      collapsed={isCollapsed(todo.id, todo.done)}
+                      onCollapse={(v) => fold(todo.id, v)}
+                      onTick={(itemId, on) => tickSub(todo.id, itemId, on)}
+                      onOpen={() => open(todo.id)}
+                      readOnly={(itemId) => isRo(todo.id) || roSubs.has(itemId)}
+                    />
+                  ) : null}
                 </AppearItem>
-              ))}
+                );
+              })}
             </AppearList>
           </AppearItem>
         ))}
       </AppearList>
 
+      {a.g.toast?.kind === 'auto' ? (
+        autoToast(a.g.toast)
+      ) : null}
       <ListToasts
         g={a.g}
         onUndo={a.undo}
@@ -156,6 +209,15 @@ export default function TodosPage() {
     </main>
   );
 }
+
+/** 勾上最后一项、主待办自动完成以后的撤销条里带的东西（R-350 方案 5.5） */
+type AutoToast = { kind: 'auto'; todoId: string; itemId: string };
+
+// 今天页的子任务进度、编辑页的“子任务”区从这一包转出（R-350）：功能入口 index.ts、TodoEditPage 都按名字懒加载这一个模块，
+// 子任务界面不另拆分包（首屏里每多一个分包要多登记一个文件名）。今天页经 today-subs.ts 转一手（A27 要求入口是 lazy(() => import('./…'))）；
+// 今天页有待办时首屏画完就会下载这一包（不是点进待办页才下），换来不多占首屏
+export { default as TodaySubtasks } from './TodaySubtasks.tsx';
+export { default as SubtaskEditor } from './SubtaskEditor.tsx';
 
 function Chip({ on, onClick, label, testId }: { on: boolean; onClick(): void; label: string; testId: string }) {
   return (

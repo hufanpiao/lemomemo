@@ -19,10 +19,11 @@
 //   ③ 每行行尾“未同步”小标记（UnsyncedRemindMark，在行按钮里、标题和副行的右边；没有时那一格不画）
 //   ②③ 只看本机待同步队列、和引擎无关，同日历页直接挂，不等引擎（M1）
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记、圆圈变淡；点这一行、打勾、删除统一拦下，
-//   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）。顶部（日期下面）有带重复的只读行时出
+//   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）。
+// • 待办子任务（R-350 方案 5.2，Q5）：待办行副行下面一行“已勾/总数”和细进度条，不摊开、不在这里勾（点进编辑页勾）；todos 的 TodaySubtasks 按需下载。顶部（日期下面）有带重复的只读行时出
 //   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner；4.1.0 的重复事项 4.0.x 只显示第一次）
 // • 液态玻璃底栏、“＋”、时间河、提醒按钮条不在这一段（FA-4、FA-7）
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
@@ -31,11 +32,13 @@ import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
 import { useRemindQueue } from '../../../kit/state/remind-queue.ts';
+import { afterAppPainted, isAppPainted } from '../../../platform/root-paint.ts';
 import { AppearItem, AppearList, Pressable, useHoldView } from '../../../motion/components.ts';
 import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
 import { TodayRo } from '../index.ts';
+import { TodaySubtasks } from '../../todos/index.ts';
 import { GrowIn } from './GrowIn.tsx';
 import MicDeniedNote from './MicDeniedNote.tsx';
 import { NowCard } from './NowCard.tsx';
@@ -68,6 +71,27 @@ export function RoDel(p: { label: string; onClick(): void; testId: string }) {
     <Pressable className={list.trail} aria-label={p.label} aria-disabled="true" onClick={p.onClick} data-testid={p.testId} data-no-proxy="">
       ×
     </Pressable>
+  );
+}
+
+/** 待办的子任务进度“2/4 ▬▬▭▭”（R-350 方案 5.2，只看不摊开）：首屏画完以后才挂、才下载那一包（不算进首屏），没有子任务、分包下不来时不画 */
+function Subs({ id }: { id: string }) {
+  const [on, setOn] = useState(isAppPainted);
+  useEffect(() => {
+    if (on) return;
+    let live = true;
+    afterAppPainted(() => live && setOn(true));
+    return () => {
+      live = false;
+    };
+  }, [on]);
+  if (!on) return null;
+  return (
+    <QuietBoundary name="todo-subs">
+      <Suspense fallback={null}>
+        <TodaySubtasks id={id} />
+      </Suspense>
+    </QuietBoundary>
   );
 }
 
@@ -156,6 +180,7 @@ export default function TodayPage() {
                     <span className={list.text}>
                       <span className={list.title}>{todo.title}</span>
                       <span className={`${list.meta} ${styles.lateTag}`}>{days > 0 ? t('late.days', { n: days }) : t('late.passed', { t: todo.dueTime ?? '' })}</span>
+                      <Subs id={todo.id} />
                     </span>
                     {g.isRo('todo', todo.id) ? <Ro part="mark" testId={`today-ro-${todo.id}`} /> : null}
                     <RowMark table="todos" id={todo.id} />
@@ -205,6 +230,7 @@ export default function TodayPage() {
                   <span className={list.text}>
                     <span className={list.title}>{td.title}</span>
                     <span className={list.meta}>{td.dueTime ? t('list.due', { t: td.dueTime }) : t('list.dueDay', {})}</span>
+                    <Subs id={td.id} />
                   </span>
                   {g.isRo('todo', td.id) ? <Ro part="mark" testId={`today-ro-${td.id}`} /> : null}
                   <RowMark table="todos" id={td.id} />

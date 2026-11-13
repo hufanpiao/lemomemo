@@ -10,7 +10,9 @@ export const SyncNoticeHost = lazy(() => import('./ui/SyncNoticeHost.tsx'));
  * 出卡表白名单（方案 4.1，H2）：gate 用它判名单外的表。A27 只许 index.ts 导出字面量，这里是 data/notice-tables.ts 的同一份，
  * __tests__/notice-tables.test.ts 钉住两边一致
  */
-export const NOTICE_TABLES = ['events', 'todos', 'anniversaries', 'categories', 'notes'] as const;
+export const NOTICE_TABLES = ['events', 'todos', 'anniversaries', 'categories', 'notes', 'todo_items'] as const;
+/** 名单里 gone 不出卡、静默丢掉的表（R-350 方案 4 第 7 条：子任务被别的设备删了，本机的勾选、改字直接丢掉）；同 data/notice-tables.ts */
+export const GONE_QUIET_TABLES = ['todo_items'] as const;
 
 export type { NoticeTable } from './data/notice-tables.ts';
 export type { ConflictNotice, GoneNotice, GoneStatus, Notice, NoticeSnapshot, SyncNoticeHostProps, SyncNoticeStore } from './hooks/notice-types.ts';

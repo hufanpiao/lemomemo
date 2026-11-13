@@ -7,3 +7,6 @@ export const routes = [
   // 待办编辑页（B2 FA-2）：#/todo/<id>、#/todo/new
   { name: 'todo', Page: lazy(() => import('./ui/TodoEditPage.tsx')) },
 ] as const;
+
+/** 今天页待办行下面的子任务进度（R-350 方案 5.2：只显示“已勾/总数”和细进度条）；没有子任务时什么都不画。在待办列表页那一包里（不另拆分包） */
+export const TodaySubtasks = lazy(() => import('./ui/today-subs.ts'));
