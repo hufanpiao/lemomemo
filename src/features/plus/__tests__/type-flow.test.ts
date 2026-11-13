@@ -64,6 +64,23 @@ describe('没把握', () => {
     expect(call).not.toHaveBeenCalled();
   });
 
+  it('调用方的取消信号透传（整块评审第 6 条）：等 AI 时取消 → 请求的 signal 跟着中止，退回本机结果（cancelled）；已经取消了就不发', async () => {
+    const ac = new AbortController();
+    const got: { sig?: AbortSignal } = {};
+    const call = vi.fn<CallAi>((_req, signal) => {
+      got.sig = signal;
+      return new Promise((_ok, no) => signal.addEventListener('abort', () => no(new DOMException('cancelled', 'AbortError'))));
+    });
+    const p = planTyped('买牛奶', CTX, ON, call, ac.signal);
+    await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(1));
+    ac.abort();
+    expect(got.sig?.aborted).toBe(true);
+    expect(await p).toMatchObject({ status: 'saved_rule', origin: 'rule', aiReason: 'cancelled' });
+    const late = stub(record([item()]));
+    expect(await planTyped('买牛奶', CTX, ON, late, ac.signal)).toMatchObject({ aiReason: 'cancelled' });
+    expect(late).not.toHaveBeenCalled();
+  });
+
   it('关了 AI → 本机结果，不出“AI 没回应”', async () => {
     expect(await planTyped('买牛奶', CTX, { ...ON, aiOn: false }, stub(null))).toMatchObject({ status: 'saved', origin: 'rule' });
   });

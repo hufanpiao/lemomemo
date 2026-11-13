@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { cutGraphemes } from '../../../../shared/logic/short.ts';
 import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
+import { OutboxRejectError } from '../../../core/outbox.ts';
 import type { WriteResult } from '../../../core/write.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { setConsentStale } from '../../../kit/state/consent-fresh.ts';
@@ -187,6 +188,23 @@ describe('打字条', () => {
     });
     expect(writer.patch).toHaveBeenLastCalledWith('todos', ids[0], { deleted_at: NOW, undone: true, updated_at: NOW });
     expect(screen.getByTestId('type-notice').textContent).toContain('已记下 2 条');
+    // 单条撤成过：不再给“合并”（整句原话会把撤掉的又记回去；主持人代定，整块评审第 4 条）
+    expect(screen.queryByRole('button', { name: '拆错了，合并成一条' })).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '全部撤销' }));
+    });
+    expect(writer.patch).toHaveBeenCalledTimes(3);
+    expect(screen.queryByTestId('type-notice')).toBeNull();
+  });
+
+  it('多条：合并成一条（新的一批、整句原话当标题），再撤销合并的那一条', async () => {
+    const { input, writer } = setup();
+    fireEvent.change(input, { target: { value: '커피 원두 사기, 전기요금 내기, 수요일까지 NEOX에 견적서 보내기' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+    });
+    const batch = field(writer.insert.mock.calls[0]?.[1], 'batch_id');
+    fireEvent.click(screen.getByRole('button', { name: '展开' }));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: '拆错了，合并成一条' }));
     });
@@ -198,6 +216,26 @@ describe('打字条', () => {
       fireEvent.click(screen.getByRole('button', { name: '撤销' }));
     });
     expect(writer.patch).toHaveBeenCalledTimes(4);
+  });
+
+  it('写入口直接抛异常（OutboxRejectError）：已写的撤回，提示“没保存上”，原话留着，“记下”不卡住（整块评审第 5 条）', async () => {
+    let n = 0;
+    const { input, writer } = setup({
+      insert: async () => {
+        n += 1;
+        if (n === 2) throw new OutboxRejectError('invalid_row');
+        return OK;
+      },
+    });
+    fireEvent.change(input, { target: { value: '커피 원두 사기, 전기요금 내기, 수요일까지 NEOX에 견적서 보내기' } });
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId('type-bar'));
+    });
+    expect(writer.patch, '撤回第一条').toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('alert').textContent).toBe('没保存上，原话还在输入框里');
+    expect((input as HTMLInputElement).value).toBe('커피 원두 사기, 전기요금 내기, 수요일까지 NEOX에 견적서 보내기');
+    expect((screen.getByRole('button', { name: '记下' }) as HTMLButtonElement).disabled, '不卡在正在整理').toBe(false);
+    expect(screen.queryByTestId('type-notice')).toBeNull();
   });
 
   it('合并成一条时那一条没存上：原来的几条不撤、提示条照旧（先存新的，存成了才撤旧的；FA-3 整块评审第 13 条）', async () => {

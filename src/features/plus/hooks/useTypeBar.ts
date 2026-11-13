@@ -1,6 +1,6 @@
 // 打字条的状态和动作（B3 任务单 S2、FA-2；架构 5.1“点一下打字”、5.9；R-166、R-353）
 // • 边打边预览“会记成这样”：只跑本机规则（planLocal），不花 AI 次数
-// • 回车 / “记下”：planTyped → 没有要问的几条先存；有过去的月日的出确认行（confirming），选了才加进同一批（R-166）；
+// • 回车 / “记下”：planText（额度、planTyped、剩余次数，和手机自带识别同一份）→ 没有要问的几条先存；有过去的月日的出确认行（confirming），选了才加进同一批（R-166）；
 //   没选就关掉 → 原话留在输入条（已经存了的几条照常在提示条上，能撤）
 // • 保存经 data/saved-batch → data/capture-save（captureRow、batch_id、outbox）；没写进去：提示“没保存上”，输入框不清空
 // • 下滑 / “收起”：已打的字存草稿（本机库 drafts 仓，按账号分）；下次打开填回来
@@ -15,10 +15,9 @@ import { rlog } from '../../../platform/run-log-api.ts';
 import { callAiParse } from '../data/ai-parse-api.ts';
 import { captureStep, type CaptureEvent, type CaptureStatus } from '../data/capture-state.ts';
 import type { Writer } from '../data/capture-save.ts';
-import { quotaOutToday, rememberQuotaLeft } from '../data/quota.ts';
 import { clearTypeDraft, readTypeDraft, writeTypeDraft } from '../data/type-draft.ts';
 import { createBatchBox, createSavedBatch } from '../data/saved-batch.ts';
-import { keepAsked, navOnline, planLocal, planTyped, type CallAi } from '../data/type-flow.ts';
+import { keepAsked, navOnline, planLocal, planText, type CallAi } from '../data/type-flow.ts';
 import { useCaptureCtx } from './useCaptureCtx.ts';
 import { useSavedBatch } from './useSavedBatch.ts';
 
@@ -114,9 +113,7 @@ export function useTypeBar(o: TypeBarOpts) {
       rlog('typebar recog on');
       // 同意版本明确过期（告知页关口问到 first / updated、还没做完）：不发 ai-parse，用本机规则（S1，见 useCaptureCtx）
       const aiOn = aiOnNow();
-      const quotaOut = aiOn ? await quotaOutToday(c.now) : false;
-      const p = await planTyped(text, c, { online: online(), isOnline: online, aiOn, quotaOut }, callAi);
-      if (p.quotaLeft !== null) void rememberQuotaLeft(p.quotaLeft, c.now);
+      const { plan: p, quotaOut } = await planText(text, c, { online, aiOn, call: callAi });
       rlog(`typebar planned items=${p.items.length} ai=${aiOn} quotaOut=${quotaOut} origin=${p.origin} status=${p.status} reason=${p.aiReason ?? '-'} ms=${ms()}`);
       saved.land(await saved.save(p, text), p);
     } catch (err) {

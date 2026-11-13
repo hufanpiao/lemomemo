@@ -3,7 +3,8 @@
 //   这里不自己拼列。AI 给了 short 才写 short（short_by='ai'）；没给时不写，显示时取 shared/logic/short.ts 的 itemShort（TC-B3-05）
 // • 不写 ai_status（M5）
 // • 写入只经 core/write.ts 的 write（先进 outbox）；带不带提醒用 shared 的 remindAtOf 本机现算（同编辑页）
-// • 有一条没写进去：已写的几条立刻撤回，整批当没保存（调用方提示“没保存上”、保留原话）
+// • 有一条没写进去：已写的几条立刻撤回，整批当没保存（调用方提示“没保存上”、保留原话）；写入口直接抛异常（OutboxRejectError 等）也一样，
+//   不往外抛（不然打字条、录音的状态卡在“正在整理”），按 local_unavailable 报（调用方归成 not_saved），日志记异常名
 // • 撤销 capture.undo(batch_id)：还没发出的 write.patch 会和 insert 抵消；已发出的经 core/edit-save.ts 的 saveUndone 撤回（H10：写 deleted_at 和 undone）。
 //   纪念日表没有 undone 列：B3 只开日程、待办（任务单 Q7），纪念日的撤销等 B4 定，这里先原样报“没撤”
 // 纯 TS：不准 import React（A1）
@@ -14,6 +15,7 @@ import { remindAtOf } from '../../../../shared/logic/remind.ts';
 import { saveUndone } from '../../../core/edit-save.ts';
 import { remindLive, todoRemindAfter, todoRemindFields } from '../../../core/remind-flag.ts';
 import { write, type WriteFailReason, type WriteResult } from '../../../core/write.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 
 /** 存一句（或确认行的一条）的结果：nothing 一条都没拆出来；not_saved 没写进去；switching 正在换账号（页面马上要走，不提示） */
 export type SaveOutcome = 'ok' | 'nothing' | 'not_saved' | 'switching';
@@ -96,18 +98,25 @@ export async function saveCapture(input: SaveInput, w: Writer = write, ids: () =
   if (rows.length === 0) return { ok: false, reason: 'nothing' };
   const saved: StoredRef[] = [];
   let remind = false;
-  for (const r of rows) {
-    const flag = remindOf(r, input.now, input.tz);
-    // deleted_at、undone 只能 update（shared/schema/rows.ts 的 insertSchema 去掉了它们），新增时不带，由库的默认值给（null、false）；
-    // 这里剔掉只是兜底：capture-map 的新增行已不带这两列（tests/shared/capture-map-insert.test.ts 会拦）
-    const { deleted_at: _deleted, undone: _undone, ...row }: { id: string; deleted_at?: unknown; undone?: unknown } = r.row;
-    const res = await w.insert(r.table, row, { remind: flag });
-    if (!res.ok) {
-      await undoRefs(saved, input.now, w);
-      return { ok: false, reason: res.reason };
+  try {
+    for (const r of rows) {
+      const flag = remindOf(r, input.now, input.tz);
+      // deleted_at、undone 只能 update（shared/schema/rows.ts 的 insertSchema 去掉了它们），新增时不带，由库的默认值给（null、false）；
+      // 这里剔掉只是兜底：capture-map 的新增行已不带这两列（tests/shared/capture-map-insert.test.ts 会拦）
+      const { deleted_at: _deleted, undone: _undone, ...row }: { id: string; deleted_at?: unknown; undone?: unknown } = r.row;
+      const res = await w.insert(r.table, row, { remind: flag });
+      if (!res.ok) {
+        await undoRefs(saved, input.now, w);
+        return { ok: false, reason: res.reason };
+      }
+      saved.push({ table: r.table, id: r.row.id, title: r.table === 'anniversaries' ? r.row.name : r.row.title });
+      remind ||= flag;
     }
-    saved.push({ table: r.table, id: r.row.id, title: r.table === 'anniversaries' ? r.row.name : r.row.title });
-    remind ||= flag;
+  } catch (e) {
+    // 写入口抛出来的（core/write.ts 对没单独处理的 OutboxRejectError 原样抛）：同样整批撤回、按没保存上报；日志只记异常名，不记 message
+    rlog(`capture save threw name=${e instanceof Error ? e.name : typeof e} saved=${saved.length}`);
+    await undoRefs(saved, input.now, w);
+    return { ok: false, reason: 'local_unavailable' };
   }
   return { ok: true, batchId, saved, at, remind };
 }

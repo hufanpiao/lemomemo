@@ -16,6 +16,7 @@ import type * as Session from '../../../platform/session.ts';
 import type * as Boot from '../../../core/boot.ts';
 import type { Writer } from '../data/capture-save.ts';
 import type * as Quota from '../data/quota.ts';
+import type { CallAi } from '../data/type-flow.ts';
 import type * as VoiceFlow from '../data/voice-flow.ts';
 import { hold, type HoldPointer } from '../data/hold-input.ts';
 import { HOLD_MS } from '../data/record-logic.ts';
@@ -127,10 +128,10 @@ const sleep = (ms: number) => act(() => new Promise<void>((ok) => setTimeout(ok,
 let live: VoiceSession | null = null;
 
 /** 挂一份 RecordHost；session 给了就重挂那一份（切页回来），不给就新建一份带桩的控制器 */
-function setup(o: { call?: (...a: unknown[]) => Promise<unknown>; online?: () => boolean; onType?: () => void; session?: VoiceSession } = {}) {
+function setup(o: { call?: (...a: unknown[]) => Promise<unknown>; callAi?: CallAi; online?: () => boolean; onType?: () => void; session?: VoiceSession } = {}) {
   const writer = { insert: vi.fn<Writer['insert']>(async () => OK), patch: vi.fn<Writer['patch']>(async () => OK) };
   const call = vi.fn(o.call ?? (async () => VOICE_OK));
-  const session = o.session ?? createVoiceSession({ callVoice: call, writer, online: o.online ?? (() => true) });
+  const session = o.session ?? createVoiceSession({ callVoice: call, callAi: o.callAi, writer, online: o.online ?? (() => true) });
   live = session;
   const r = render(<RecordHost session={session} onType={o.onType} />);
   return { writer, call, session, unmount: r.unmount };
@@ -454,6 +455,50 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     expect((await screen.findByTestId('type-notice')).textContent).toContain('已记下：买猫砂');
     expect(logged(/^voice attempt \d+ drop by=/)).toBe(false);
     await waitFor(() => expect(fx.busy, '存完放开').toEqual([]));
+  });
+
+  it('已经开始写库后这一次被作废（dispose 等任何 drop）：照样落地、出“已记下”，状态不卡在“正在整理”（整块评审第 7 条：开始写库的一定落地）', async () => {
+    let open!: () => void;
+    const writer = {
+      insert: vi.fn<Writer['insert']>(() => new Promise<WriteResult>((ok) => (open = () => ok(OK)))),
+      patch: vi.fn<Writer['patch']>(async () => OK),
+    };
+    const session = createVoiceSession({ callVoice: async () => VOICE_OK, writer, online: () => true });
+    setup({ session });
+    await holdDown();
+    await release();
+    await waitFor(() => expect(writer.insert).toHaveBeenCalledTimes(1));
+    act(() => session.dispose());
+    expect(logged(/^voice attempt \d+ drop by=dispose$/)).toBe(true);
+    await act(async () => {
+      open();
+    });
+    expect(session.view().status, '收了尾（不卡在 organizing）').toBe('saved');
+    expect((await screen.findByTestId('type-notice')).textContent).toContain('已记下：买猫砂');
+  });
+
+  it('手机自带识别那一路等 AI 时切页：AI 请求当场中止（不等 6 秒超时），不写库（整块评审第 6 条）', async () => {
+    const got: { sig?: AbortSignal } = {};
+    const callAi = vi.fn<CallAi>((_req, signal) => {
+      got.sig = signal;
+      return new Promise((_ok, no) => signal.addEventListener('abort', () => no(new DOMException('cancelled', 'AbortError'))));
+    });
+    const { writer, session, unmount } = setup({ call: async () => ({ ai_failed: true, reason: 'error' }), callAi });
+    await holdDown();
+    await release();
+    // “AI 没回应”→“再说一次”：改用手机自带识别（面板直接是锁定的样子），点“记下”交出文字
+    fireEvent.click(await screen.findByTestId('voice-again'));
+    await waitFor(() => expect(session.view().status).toBe('listening'));
+    await act(async () => {
+      session.finish();
+    });
+    await waitFor(() => expect(callAi).toHaveBeenCalledTimes(1));
+    expect(got.sig?.aborted).toBe(false);
+    unmount();
+    expect(logged(/^voice host detach status=organizing cancel=1$/)).toBe(true);
+    expect(got.sig?.aborted, '切页：AI 请求跟着中止').toBe(true);
+    await sleep(20);
+    expect(writer.insert).not.toHaveBeenCalled();
   });
 
   it('停在确认行（过去的月日，R-166）：busy 照样占着，自动重新载入不会把等着选的那一条丢掉；选完才放开（第二轮复查续第 3 条）', async () => {

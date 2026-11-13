@@ -71,11 +71,13 @@ export interface VoiceBind {
 const ioOf = (io: VoiceIo) => ({ callVoice: io.callVoice ?? callAiVoice, callAi: io.callAi ?? callAiParse, online: io.online ?? navOnline });
 export type VoiceDeps = ReturnType<typeof ioOf> & VoiceBind;
 
-/** 一次录音（或一次手机识别、一次重试）：代号、取消（录音器和上传共用）、录音器 */
+/** 一次录音（或一次手机识别、一次重试）：代号、取消（录音器和上传共用）、录音器、开始写库了没有 */
 export interface Attempt {
   id: number;
   ac: AbortController;
   rec: ActiveRecorder | null;
+  /** 开始写库（savePlan 里 batch.save 那一步）时置上、不复位：切页不取消这一次，写完照常落地（第 7 条） */
+  committed: boolean;
 }
 
 /** 两条路共用的内核（createCore 给）；控制器本身（createVoiceSession 给） */
@@ -101,8 +103,6 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
   let free: (() => void) | null = null;
   /** 今天的次数用完了（按下时选路用；录音路拿到 quota_out 时置上，挂上、按下时从本机重读） */
   let quotaOut = false;
-  /** 正在写库（savePlan 里 batch.save 那一步）：切页时这一步不中止，存完照常出提示条 */
-  let storing = false;
 
   const go = (e: ViewEvent<VoiceNote>): void => {
     const next = viewStep(v(), e);
@@ -182,26 +182,23 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
     closeNote,
     begin() {
       drop('restart');
-      cur = { id: ++seq, ac: new AbortController(), rec: null };
+      cur = { id: ++seq, ac: new AbortController(), rec: null, committed: false };
       return cur;
     },
     drop,
     end,
     alive,
     current: () => cur,
+    /** 存这一次：开始写库以后一定落地（负责人定：已开始写库的照常存完），写完不再看这一次还是不是当前的 */
     async savePlan(a: Attempt, p: TypePlan, raw: string) {
       if (v().status !== 'organizing') go({ type: 'organize' });
       if (!alive(a, 'store')) return;
-      storing = true;
-      const out = await batch.save(p, raw).finally(() => {
-        storing = false;
-      });
-      if (!alive(a, 'stored')) return;
+      a.committed = true;
+      const out = await batch.save(p, raw);
       end(a);
       batch.land(out, p);
     },
     finish,
-    storing: () => storing,
     quotaOut: () => quotaOut,
     markQuotaOut(out = true) {
       quotaOut = out;
@@ -242,20 +239,18 @@ export function createVoiceSession(io: VoiceIo = {}) {
     else if (v.path === 'speech') speech.stop();
     else rec.stop();
   }
+  /** 取消、丢掉（面板上的取消、太短、提示条上点“取消”、切页）都走这一个：这一次作废、手机识别关掉、留着的录音不要了、回到没按。
+   *  原来分 discard / abandon 两个，只差丢不丢留着的录音；面板取消、太短都在 start() 之后（那时已经丢过），合成一个行为不变（第 10 条） */
   function discard(by: string): void {
     c.drop(by);
     speech.cancel();
+    rec.forget();
     toIdle();
   }
-  /** 这一次连同留着的录音都不要了（提示条上点“取消”、切页） */
-  function abandon(by: string): void {
-    discard(by);
-    rec.forget();
-  }
-  /** 切页时要中止的：录着的、上传中的、整理中还没开始写库的 */
+  /** 切页时要中止的：录着的、上传中的、整理中的，并且当前这一次还没开始写库（开始写库的照常存完） */
   const leaveCancels = (): boolean => {
     const v = c.view();
-    return v.capturing || v.status === 'uploading' || (v.status === 'organizing' && !c.storing());
+    return (v.capturing || v.status === 'uploading' || v.status === 'organizing') && c.current()?.committed !== true;
   };
   const card = (k: 'ask' | 'denied' | null): void => go({ type: 'card', card: k });
 
@@ -277,9 +272,7 @@ export function createVoiceSession(io: VoiceIo = {}) {
       }
       void markPlusHeld(clock.now());
       batch.fresh();
-      rec.forget();
-      c.clearNote();
-      toIdle();
+      c.closeNote();
       const mic = lastMicResult();
       const online = d().online();
       rlog(`voice hold start online=${online ? 1 : 0} mic=${mic} route=${picked ?? 'rec'}`);
@@ -305,13 +298,11 @@ export function createVoiceSession(io: VoiceIo = {}) {
     idle: () => speech.drop(),
     cancelUpload() {
       rlog('voice upload cancel');
-      abandon('cancel_upload');
+      discard('cancel_upload');
     },
     retry: () => rec.retry(),
     sayAgain() {
-      c.clearNote();
-      rec.forget();
-      toIdle();
+      c.closeNote();
       if (!d().online()) return show('offline');
       // 点“再说一次”的这一下就是手势：手机自带识别当场开，面板直接是锁定的样子（取消 / 记下）
       speech.drop();
@@ -333,10 +324,10 @@ export function createVoiceSession(io: VoiceIo = {}) {
       });
     },
     closeCard: () => card(null),
-    /** 确认行没选就关掉：同一句里已经存了的几条照常在提示条上（能撤）；没存的这条丢掉（录音路没有输入条可以填回） */
+    /** 确认行没选就关掉：同一句里已经存了的几条照常在提示条上（能撤）；没存的这条丢掉（录音路没有输入条可以填回）。
+     *  额度提示在存成那一刻已经定了，这里不再 land（第 12 条：原来 land 只为更新 quotaDue，还会发一个 idle 下不合法的 done） */
     dismissConfirm() {
-      const was = batch.dismiss().batch;
-      if (was && was.entries.length > 0) batch.land('ok', was.plan);
+      batch.dismiss();
     },
     elapsed: () => (c.view().path === 'rec' ? rec.elapsed() : speech.elapsed()),
     level: () => (c.view().path === 'rec' ? rec.level() : -1),
@@ -346,7 +337,7 @@ export function createVoiceSession(io: VoiceIo = {}) {
       return () => {
         const cancel = leaveCancels();
         rlog(`voice host detach status=${c.view().status} cancel=${cancel ? 1 : 0}`);
-        if (cancel) abandon('page_leave');
+        if (cancel) discard('page_leave');
         speech.drop();
       };
     },

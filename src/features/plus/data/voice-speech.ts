@@ -1,6 +1,6 @@
 // 手机自带识别这一路（B3 任务单 FA-3；架构 5.11 第 5 点 Web Speech 兜底）：
 // • createSpeechRoute：识别本身的生命周期（从 hooks/useVoice.ts 拆出来）
-// • createSpeechPath：这一路在控制器里怎么走（第二轮复查项从 voice-session.ts 挪来）：开、停、拿到文字走打字同一套 planTyped、存
+// • createSpeechPath：这一路在控制器里怎么走（第二轮复查项从 voice-session.ts 挪来）：开、停、拿到文字走打字同一套 planText（带这一次的取消信号）、存
 // • start() 必须在用户手势里调：按下那一下就先开（prime），按满 350 ms 接手（take），没按满就关掉（drop）
 // • 先开的那一次可能在接手之前就已经开始收音（at），甚至已经结束（early）：接手时补上
 // • 开始收音以后最长 60 秒（REC_MAX_MS，和录音同一个上限）到了交给 host.cap()（useVoice 当松手处理）
@@ -9,9 +9,8 @@
 import type { Locale } from '../../../../shared/i18n/i18n.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { speechSupported, startSpeech, type SpeechEnd, type SpeechSession } from '../../../platform/speech.ts';
-import { quotaOutToday, rememberQuotaLeft } from './quota.ts';
 import { REC_MAX_MS } from './record-logic.ts';
-import { planTyped } from './type-flow.ts';
+import { planText } from './type-flow.ts';
 import type { Attempt, SpeechWhy, VoiceCore } from './voice-session.ts';
 
 /** 报给谁（下面 createSpeechPath） */
@@ -133,14 +132,10 @@ export function createSpeechPath(c: VoiceCore) {
     }
     if (c.view().status !== 'organizing') c.go({ type: 'organize' });
     const d = c.d();
-    const x = d.ctx();
-    const on = d.aiOn();
-    const qOut = on ? await quotaOutToday(x.now) : false;
-    if (!c.alive(a, 'speech_quota')) return;
-    const p = await planTyped(res.text, x, { online: d.online(), isOnline: d.online, aiOn: on, quotaOut: qOut }, d.callAi);
+    // 这一次的取消信号一并传下去：切页、丢掉作废时 AI 请求当场中止（第 6 条），作废前已经作废的不再发
+    const { plan } = await planText(res.text, d.ctx(), { online: d.online, aiOn: d.aiOn(), call: d.callAi, signal: a.ac.signal });
     if (!c.alive(a, 'speech_plan')) return;
-    if (p.quotaLeft !== null) void rememberQuotaLeft(p.quotaLeft, x.now);
-    await c.savePlan(a, p, res.text);
+    await c.savePlan(a, plan, res.text);
   };
   const route = createSpeechRoute({
     started() {

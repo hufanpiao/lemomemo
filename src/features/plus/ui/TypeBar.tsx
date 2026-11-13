@@ -39,7 +39,7 @@ import { useKeys } from '../../../kit/hooks/useKeys.ts';
 import { opensKeyboard } from '../../../platform/env.ts';
 import { rlog } from '../../../platform/run-log-api.ts';
 import { focusInPlace, inPlaceTouchEnd, inPlaceTouchStart, keepFieldFocus } from '../../../platform/viewport.ts';
-import { usePlusLine, usePlusT } from '../hooks/usePlusT.ts';
+import { usePlusT } from '../hooks/usePlusT.ts';
 import { useTypeBar, type CallAi, type TypeBarState, type Writer } from '../hooks/useTypeBar.ts';
 import { ConfirmRow } from './ConfirmRow.tsx';
 import { SavedNotice } from './SavedNotice.tsx';
@@ -109,7 +109,6 @@ function hasTyping(el: EventTarget | null): boolean {
 
 export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit, opened, onClose }: TypeBarProps) {
   const t = usePlusT();
-  const line = usePlusLine();
   const s = useTypeBar({ day, callAi, writer, online });
   const input = useRef<HTMLInputElement>(null);
   const startY = useRef<number | null>(null);
@@ -142,12 +141,13 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     if (folded && !s.notice) live.current.close();
   }, [folded, s.notice]);
   // 记下后自动收起（R-392，负责人 11-11“记下一条后那个输入框不需要放在那边，还要我点收起才能收掉”）：
-  // 新出一条“已记下”提示、手上没剩字也没等确认的 → 收键盘、收打字条，只留提示条；有剩的照旧留着
+  // 新出一条“已记下”提示、手上没剩字也没等确认的 → 收键盘、收打字条，只留提示条；有剩的照旧留着。
+  // 也看 status：提示条在存成那一刻就出来（那时还在“正在整理”、字也还在），收尾（done）时提示条没换，靠 status 变了再看一次
   useEffect(() => {
     const cur = live.current.s;
     if (!cur.notice || unsettled(cur)) return;
     live.current.close();
-  }, [s.notice]);
+  }, [s.notice, s.status]);
   useKeys({
     'mod+z': (e) => {
       if (!s.notice) return false;
@@ -237,17 +237,7 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
         </>
       )}
       <div ref={slot} className={styles.noticeSlot}>
-        {s.notice ? (
-          <SavedNotice
-            text={s.notice.lines.map((l) => line(l.key, l.params)).join(' · ')}
-            rows={s.notice.entries.map((e) => ({ table: e.ref.table, id: e.ref.id, label: `${kind(e.item)} · ${e.ref.title}` }))}
-            onUndoAll={() => void s.undo()}
-            onUndoOne={(id) => void s.undoOne(id)}
-            onMerge={() => void s.merge()}
-            onEdit={onEdit}
-            onClose={s.closeNotice}
-          />
-        ) : null}
+        {s.notice ? <SavedNotice notice={s.notice} acts={s} onEdit={onEdit} /> : null}
       </div>
     </>
   );

@@ -4,6 +4,7 @@
 // • 没把握，在线、开着 AI、今天还有次数 → ai-parse（6 秒超时；只在网络错误、连接都没建立时自动重试 1 次）
 //   失败、超时、退回、没同意、不认识的 intent → 用本机结果，原话不丢（Q2 ②）；额度用完 → 本机结果 + 额度提示
 // • 离线 → 本机结果，状态 offline_saved
+// • 打字条、手机自带识别都经 planText 调（读本机额度 → planTyped → 记剩余次数，只此一份）；手机识别把这一次的取消信号传进来，作废时 AI 请求当场中止
 // • R-353、R-359：日历页打的字没说日子时记到选中的那天（date_basis 记 rel，不问）；今天页、待办页照旧记今天。
 //   选中的日子按后端约定传（任务单 R6）：本机规则 ParseOpts.defaultDay、ai-parse 请求体 default_day；补出来的日子不算认出了日子（R9），
 //   “买牛奶”照旧判没把握，在线有次数照样交给 AI（带 default_day）。选中的日子过不了 checkDefaultDay（前 1 年到后 5 年以外，后端会回 400）时
@@ -17,6 +18,7 @@ import { arrangeHint, clauseSeparators, confidence, parseSplit, recurHint, type 
 import { checkDefaultDay, normProjects, type AiItem } from '../../../../shared/schema/ai.ts';
 import type { AiKind } from '../../../../shared/schema/kinds.ts';
 import { cutAiText, outcomeOf, type AiOutcome } from './ai-outcome.ts';
+import { quotaOutToday, rememberQuotaLeft } from './quota.ts';
 import { AI_PARSE_TIMEOUT_MS } from './record-logic.ts';
 import { SendError, withTimeoutRetry } from './send-error.ts';
 
@@ -121,15 +123,16 @@ export const navOnline = (): boolean => typeof navigator === 'undefined' || navi
 
 /**
  * 调一次 ai-parse（6 秒超时，网络错误自动重试 1 次）→ 结果。
- * 重试前浏览器已经明确说离线：不再重试（B3 前端A代码审 C4：不然断网时要等两个 6 秒才退回本机）
+ * 重试前浏览器已经明确说离线：不再重试（B3 前端A代码审 C4：不然断网时要等两个 6 秒才退回本机）。
+ * signal：调用方取消（手机识别那一路切页作废），请求当场中止、不再重试（结果 ai_failed cancelled）
  */
-export async function askAi(req: AiParseReq, call: CallAi, timeoutMs = AI_PARSE_TIMEOUT_MS, online: () => boolean = navOnline): Promise<AiOutcome> {
-  const r = await withTimeoutRetry((signal) => call(req, signal), timeoutMs, online);
+export async function askAi(req: AiParseReq, call: CallAi, timeoutMs = AI_PARSE_TIMEOUT_MS, online: () => boolean = navOnline, signal?: AbortSignal): Promise<AiOutcome> {
+  const r = await withTimeoutRetry((s) => call(req, s), timeoutMs, online, signal);
   return r.ok ? outcomeOf(r.value) : { kind: 'ai_failed', reason: r.fail };
 }
 
-/** 整个打字流程（不保存；保存交给 capture-save） */
-export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: CallAi): Promise<TypePlan> {
+/** 整个打字流程（不保存；保存交给 capture-save）。signal 见 askAi */
+export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: CallAi, signal?: AbortSignal): Promise<TypePlan> {
   const { result, sure } = planLocal(text, ctx);
   const local = (status: TypeStatus, aiReason: string | null = null, quotaLeft: number | null = null): TypePlan => ({
     status, origin: 'rule', items: result.items, hints: result.hints, quotaLeft, aiReason,
@@ -143,7 +146,7 @@ export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: 
   if (base === 'bad_default_day') return local('saved', base);
   const req: AiParseReq = { ...base, text: cutAiText(text) };
   const isOnline = env.isOnline ?? navOnline;
-  const out = await askAi(req, call, AI_PARSE_TIMEOUT_MS, isOnline);
+  const out = await askAi(req, call, AI_PARSE_TIMEOUT_MS, isOnline, signal);
   switch (out.kind) {
     case 'record': {
       if (out.items.length === 0) return local('saved_rule', 'empty', out.quotaLeft);
@@ -170,6 +173,24 @@ export async function planTyped(text: string, ctx: TypeCtx, env: TypeEnv, call: 
   }
 }
 
+export interface PlanTextOpts {
+  /** 现在在不在线（发之前看一眼，重试前再看一眼） */
+  online: () => boolean;
+  /** 开着 AI 并且同意过告知（调用方这一刻读的） */
+  aiOn: boolean;
+  call: CallAi;
+  /** 调用方取消（手机识别那一路的这一次作废）：AI 请求跟着中止 */
+  signal?: AbortSignal | undefined;
+}
+
+/** 打字条、手机自带识别共用的一步（第 14 条）：开着 AI 才读本机记着的额度 → planTyped → 记下 AI 返回的剩余次数。quotaOut 交回给调用方记日志 */
+export async function planText(text: string, ctx: TypeCtx, o: PlanTextOpts): Promise<{ plan: TypePlan; quotaOut: boolean }> {
+  const quotaOut = o.aiOn ? await quotaOutToday(ctx.now) : false;
+  const plan = await planTyped(text, ctx, { online: o.online(), isOnline: o.online, aiOn: o.aiOn, quotaOut }, o.call, o.signal);
+  if (plan.quotaLeft !== null) void rememberQuotaLeft(plan.quotaLeft, ctx.now);
+  return { plan, quotaOut };
+}
+
 /** 还有没有要用户先选的过去日子 */
 export const needsConfirm = (items: readonly AiItem[]): boolean => items.some((it) => it.confirm !== null);
 
@@ -189,7 +210,7 @@ export function splitConfirm(items: readonly AiItem[]): { ready: AiItem[]; ask: 
 
 /**
  * “拆错了，合并成一条”（架构 5.1）：整句原话当标题，类型、日子、时刻取第一条的；不带简称（原话不是 AI 起的简称）。
- * 调用方先整批撤销，再按新的一批存这一条。标题不在这里截：存盘前由 captureRow 统一按上限截（shared/logic/capture-map.ts），
+ * 调用方（saved-batch 的 merge）先按新的一批存这一条，存成了再撤原来的几条。标题不在这里截：存盘前由 captureRow 统一按上限截（shared/logic/capture-map.ts），
  * 提示条、卡片显示 saveCapture 交回的 StoredRef.title（截过的，和库里一致）
  */
 export function mergeItems(items: readonly AiItem[], rawText: string): AiItem | null {

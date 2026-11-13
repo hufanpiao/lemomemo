@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OutboxRejectError } from '../../../core/outbox.ts';
 import type { WriteResult } from '../../../core/write.ts';
+import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { ANNIV_NAME_MAX } from '../../../../shared/logic/capture-map.ts';
 import { insertSchema, ITEM_TITLE_MAX, type WritableTable } from '../../../../shared/schema/rows.ts';
@@ -106,6 +107,24 @@ describe('saveCapture', () => {
     expect(r).toEqual({ ok: false, reason: 'local_unavailable' });
     expect(w.patch).toHaveBeenCalledTimes(1);
     expect(w.patch.mock.calls[0]?.[2]).toEqual({ deleted_at: NOW, undone: true, updated_at: NOW });
+  });
+
+  it('写入口直接抛异常（OutboxRejectError，core/write.ts 原样抛的那种）：已写的几条撤回，按没保存上报，不往外抛；日志只记异常名（整块评审第 5 条）', async () => {
+    const lines: string[] = [];
+    (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    try {
+      const w = writer();
+      w.insert.mockResolvedValueOnce(OK).mockRejectedValueOnce(new OutboxRejectError('invalid_row'));
+      const r = await saveCapture({ items: [item({ title: 'a' }), item({ title: 'b' }), item({ title: 'c' })], rawText: 'r', source: 'page', origin: 'rule', now: NOW, tz: TZ }, w, ids);
+      expect(r).toEqual({ ok: false, reason: 'local_unavailable' });
+      expect(w.insert).toHaveBeenCalledTimes(2);
+      expect(w.patch, '撤回第一条').toHaveBeenCalledTimes(1);
+      expect(w.patch.mock.calls[0]?.[1]).toBe(field(w.insert.mock.calls[0]?.[1], 'id'));
+      expect(lines).toContain('capture save threw name=OutboxRejectError saved=1');
+      expect(lines.some((l) => l.includes('invalid_row')), '不记 message').toBe(false);
+    } finally {
+      delete (globalThis as Record<string, unknown>)[RL_SLOT];
+    }
   });
 
   it('交回的每一条带库里实际存的标题：超长的按 captureRow 截过（和写进去的 title 一样），纪念日是截过的 name', async () => {

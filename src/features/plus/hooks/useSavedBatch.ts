@@ -2,9 +2,12 @@
 // • confirming（调用方正在出确认行）：只出确认行，不出提示条
 import { useMemo } from 'react';
 import { useStore } from 'zustand';
-import { noticeOf, type BatchBox } from '../data/saved-batch.ts';
+import { noticeOf, type BatchBox, type SavedBatch } from '../data/saved-batch.ts';
 
-export type { BatchEntry } from '../data/saved-batch.ts';
+export type { BatchEntry, BatchNotice } from '../data/saved-batch.ts';
+
+/** 提示条上的几个动作（ui/SavedNotice 直接调；打字条、录音两边交同一份 saved-batch 的） */
+export type BatchActs = Pick<SavedBatch, 'undo' | 'undoOne' | 'merge' | 'closeNotice'>;
 
 export function useSavedBatch(box: BatchBox, confirming: boolean) {
   const st = useStore(box);
