@@ -118,10 +118,10 @@ test('仓库现有流水线里没有 --skip-env-check（X-4）', () => {
 test('后缀白名单：.html 过 PAGES 名单，其余只许 ASSET_EXT，名单外的一律失败（M4、F5-3 ①）', () => {
   for (const p of ['a.html', 'A.HTML', 'x/a.Html']) assert.ok(isPageFile(p), p);
   for (const p of ['a.htm', 'a.xhtml', 'a.svg', 'a.js', 'manifest.webmanifest']) assert.ok(!isPageFile(p), p);
-  const ok = ['index.html', 'auth/index.html', 'assets/a.js', 'assets/a.css', 'icons/a.png', 'favicon.ico', 'icons/a.svg', 'fonts/a.woff2', 'version.json', 'manifest.webmanifest', 'desktop-env.json'];
+  const ok = ['index.html', 'auth/index.html', 'assets/a.js', 'assets/a.css', 'icons/a.png', 'favicon.ico', 'icons/a.svg', 'fonts/a.woff2', 'version.json', 'manifest.webmanifest', 'desktop-env.json', 'licenses.txt'];
   assert.deepEqual(checkFileTypes(ok), []);
   // 以前的黑名单 + Tauri 会回落成 text/html 的任意新后缀 + 没有后缀
-  const bad = ['a.htm', 'x/a.xhtml', 'a.xht', 'a.shtml', 'a.xml', 'a.xsl', 'a.xslt', 'a.mht', 'a.MHTML', 'i/a.svgz', 'a.txt', 'a.map', 'a.mjs', 'a.webp', 'a.woff', 'a.foo', 'LICENSE', 'a.js.bak'];
+  const bad = ['a.htm', 'x/a.xhtml', 'a.xht', 'a.shtml', 'a.xml', 'a.xsl', 'a.xslt', 'a.mht', 'a.MHTML', 'i/a.svgz', 'a.map', 'a.mjs', 'a.webp', 'a.woff', 'a.foo', 'LICENSE', 'a.js.bak'];
   assert.deepEqual(
     checkFileTypes(bad).map((s) => s.split('（')[0]),
     bad,
@@ -329,6 +329,7 @@ test('.js、.css 去掉开头空白后以 < 开头的拒掉：会被 Tauri 嗅�
     ['assets/a.js', '<script>alert(1)</script>'],
     ['assets/b.css', '  \n\t<style>a{}</style>'],
     ['assets/b.CSS', '\uFEFF<html>'],
+    ['licenses.txt', '\n<html><script>alert(1)</script>'],
   ]) {
     assert.match(checkTextAsset(p, text) ?? '', /text\/html/, `${p} ${JSON.stringify(text)}`);
     assert.match(checkTextAsset(p, new TextEncoder().encode(text)) ?? '', /text\/html/, `${p} 字节`);
@@ -353,6 +354,6 @@ test('.js、.css 正常开头的放行；中间出现 < 不算；别的后缀不
   assert.equal(checkTextAsset('assets/a.js', '\n/* 注释 */ if (x<y) {}'), null);
   assert.equal(checkTextAsset('assets/b.css', '@charset "utf-8";a::before{content:"<"}'), null);
   assert.equal(checkTextAsset('assets/a.js', ''), null);
-  assert.equal(checkTextAsset('icon.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>'), null);
+  assert.equal(checkTextAsset('licenses.txt', '第三方开源组件许可\nCopyright <a@b.c>'), null);  assert.equal(checkTextAsset('icon.svg', '<svg xmlns="http://www.w3.org/2000/svg"/>'), null);
   assert.equal(checkTextAsset('index.html', '<!doctype html>'), null);
 });

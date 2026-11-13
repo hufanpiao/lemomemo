@@ -78,13 +78,14 @@ export function skipped(r) {
  * MIME 先按文件头嗅探（tauri-utils mime_type.rs 的 infer::get，.svg 除外），嗅探不出就按后缀，**后缀表里没有的一律当 text/html**——
  * png、ico、woff2、webmanifest 都不在那张表里。所以：
  * • .html 只许 PAGES 名单里的（planPages）；
- * • .js .css .json .svg 在 Tauri 的后缀表里，但嗅探在前：.js、.css 开头不许是 <（checkTextAsset，F5-6）；
+ * • .js .css .json .svg .txt 在 Tauri 的后缀表里，但嗅探在前：.js、.css、.txt 开头不许是 <（checkTextAsset，F5-6）；
+ *   .txt 只有开源许可清单 licenses.txt（R-410，tauri-utils 2.10.2 后缀表 txt → text/plain）；
  *   .svg 另查内容（checkSvg）；.json 也要能解析（checkJsonAsset）；
  * • .png .ico .woff2 靠文件头嗅探才不被当成 HTML：文件头必须对得上（checkMagic）；
  * • .webmanifest 嗅探不出、后缀表里也没有，Tauri 会当 text/html 返回：必须能按 JSON 解析，而且不许出现 <（checkJsonAsset）。
  * 名单外的后缀（含没有后缀的文件）一律失败；以后要加新类型，先查 Tauri 怎么给它定 MIME，再加进来
  */
-export const ASSET_EXT = new Set(['.js', '.css', '.png', '.ico', '.svg', '.woff2', '.json', '.webmanifest']);
+export const ASSET_EXT = new Set(['.js', '.css', '.txt', '.png', '.ico', '.svg', '.woff2', '.json', '.webmanifest']);
 
 /** 小写后缀（含点）；没有后缀返回 '' */
 export function extOf(p) {
@@ -146,12 +147,12 @@ export function checkJsonAsset(p, input) {
 }
 
 /**
- * .js、.css：去掉开头的空白（含 BOM）以后，第一个字符不许是 <（安全审查 F5-6）。Tauri 先按内容嗅探 MIME（infer::get），
+ * .js、.css、.txt：去掉开头的空白（含 BOM）以后，第一个字符不许是 <（安全审查 F5-6）。Tauri 先按内容嗅探 MIME（infer::get），
  * 以 <!--、<script、<html 之类开头的文件会被当成 text/html 返回，而且不带 CSP（CSP 只注入进 PAGES 名单里的页面）。返回原因或 null
  */
 export function checkTextAsset(p, input) {
   const ext = extOf(p);
-  if (ext !== '.js' && ext !== '.css') return null;
+  if (ext !== '.js' && ext !== '.css' && ext !== '.txt') return null;
   // 在字节上复刻 infer 0.22 的规则（代码审查 B-M2）：循环去掉空白 09 0A 0C 0D 20 和 BOM（EF BB BF、FE FF、FF FE），
   // 下一个字节是 < 就拒。以前先按非严格 UTF-8 解码，FE FF 变成 U+FFFD 去不掉，`20 FE FF <?xml` 会被放行、被判成 text/xml
   const b = typeof input === 'string' ? new TextEncoder().encode(input) : input;
