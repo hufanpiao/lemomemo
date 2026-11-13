@@ -19,7 +19,6 @@ import { Pressable } from '../../../motion/components.ts';
 import { FILTERS, useAnnivLib, type AnnivFilter, type AnnivItem } from '../hooks/anniv-view.ts';
 import { useAnnivDefaults, useAnnivList } from '../hooks/useAnniv.ts';
 import { useAnnivT, type AnnivT } from '../hooks/useAnnivT.ts';
-import AnnivDefaults from './AnnivDefaults.tsx';
 import { AnnivEditor } from './AnnivEditor.tsx';
 import { ageText, cardRemindLine, metaText } from './anniv-text.ts';
 import { AnnivFace } from './AnnivFace.tsx';
@@ -28,13 +27,7 @@ import styles from './AnnivPage.module.css';
 const FILTER_KEY = { all: 'anniv.f.all', birthday: 'anniv.f.birthday', anniversary: 'anniv.f.anniversary', countdown: 'anniv.f.countdown' } as const;
 const KIND_KEY = { birthday: 'anniv.kind.birthday', anniversary: 'anniv.kind.anniversary', countdown: 'anniv.kind.countdown' } as const;
 
-// 设置 › 提醒与通知 的“纪念日提醒”一行和纪念日页同一个分包、同一个默认导出（anniv/index.ts 的 AnnivDefaults 带 part="remind-defaults"）：
-// 首屏不多一张依赖表；A27 只准 lazy(() => import('./…')) 取默认导出，所以用 part 分开
-export default function AnnivEntry({ part }: { part?: 'remind-defaults' }) {
-  return part === 'remind-defaults' ? <AnnivDefaults /> : <AnnivPage />;
-}
-
-function AnnivPage() {
+export default function AnnivPage() {
   const editing = useRoute().params[0] !== undefined;
   const lib = useAnnivLib();
   const t = useAnnivT();
