@@ -1,5 +1,6 @@
 // push-dispatch 第 0 步的租约式出队（REMIND-queue-crash-loss 方案丙，R-348；迁移 20261104130000；架构 5.3 第 0 步、0.49 第 3 条）。
 // 函数一侧：中途崩了（没调 finish）租约过期后重取并算对；处理期间同一行被改，finish 不删、下一轮（下一分钟）按新值算；放回的下一轮马上能取；
+// 写回出错的留着租约（迁移 20261113120000），和崩了一样过期重取、计入有毒次数；
 // 取过 5 次都没处理完的丢掉、记 queue_poison；finish 失败记 queue_finish_failed、等租约过期。
 // SQL 本身（打租约、过期、skip locked、4 个入队入口清租约、attempts）在 supabase/tests/rls/30_remind_queue_pop.test.sql。
 import { describe, expect, it } from 'vitest';
@@ -91,16 +92,42 @@ describe('第 0 步租约：处理期间这一行又被改了', () => {
 });
 
 describe('第 0 步租约：放回、有毒项', () => {
-  it('写回失败放回：租约清空、attempts 退回 0，下一分钟就能取到（不用等租约过期）', async () => {
+  it('写回出错不放回：租约、attempts 留着（同“中途崩了”），179 秒内不重取，过期后按重试取到、写成、删掉', async () => {
     const db = new MemDb().user(UA);
     const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0, remind_at: null }), true);
     db.failOn.add('writeRemind');
-    await run(db, at('10:00'));
-    expect(db.queue.get(`todos:${t.id}`)).toMatchObject({ claim: null, attempts: 0 });
+    const t0 = at('10:00');
+    const d = await run(db, t0);
+    expect(d.codes).toEqual(expect.arrayContaining(['recalc_write_failed', `recalc:held:todos:${t.id.slice(0, 8)}`]));
+    const k = db.queue.get(`todos:${t.id}`)?.claim;
+    expect(k).toBeTruthy();
+    expect(db.queue.get(`todos:${t.id}`)).toMatchObject({ attempts: 1, claimed_at: t0 });
     db.failOn.clear();
-    await run(db, at('10:01'));
+    await run(db, t0 + 179 * S);
+    expect(db.tables.todos.get(t.id)?.remind_at).toBeNull();
+    expect(db.queue.get(`todos:${t.id}`)?.claim).toBe(k);
+    await run(db, t0 + 181 * S);
     expect(db.tables.todos.get(t.id)?.remind_at).toBe(want('2026-11-05'));
     expect(db.queue.size).toBe(0);
+  });
+  it(`写回一直出错：每次过期重取计一次，取满 ${POISON_AT} 次后第 ${POISON_AT + 1} 次丢掉、记 queue_poison，不再每分钟重算`, async () => {
+    const db = new MemDb().user(UA);
+    const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0, remind_at: null }), true);
+    db.failOn.add('writeRemind');
+    let now = at('10:00');
+    for (let i = 0; i < POISON_AT; i++) {
+      const d = await run(db, now);
+      expect(d.codes).toContain('recalc_write_failed');
+      expect(db.queue.get(`todos:${t.id}`)?.attempts).toBe(i + 1);
+      now += (QUEUE_LEASE_S + 1) * S;
+    }
+    expect(db.calls.filter((c) => c === 'writeRemind')).toHaveLength(POISON_AT);
+    const d = await run(db, now);
+    expect(d.codes).toContain('queue_poison');
+    expect(db.queue.size).toBe(0);
+    expect(db.calls.filter((c) => c === 'writeRemind')).toHaveLength(POISON_AT);
+    await run(db, now + 60 * S);
+    expect(db.calls.filter((c) => c === 'writeRemind')).toHaveLength(POISON_AT);
   });
   it('读行失败：整批放回，记 recalc_read_failed', async () => {
     const db = new MemDb().user(UA);

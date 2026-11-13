@@ -304,15 +304,17 @@ export class MemDb implements DispatchStore {
     const oldest = p0.length ? Math.min(...p0.map((q) => q.enqueued_at ?? 0)) : now;
     return { queue_wait0: p0.length, queue_wait_batch: qs.length - p0.length, queue_oldest_s: Math.max(0, Math.floor((now - oldest) / 1000)) };
   }
-  /** remind_queue_finish：release 里还是这个租约的放回（清租约、attempts − 1），这个租约的其余项删掉；锁着的（locked）都跳过、租约留着 */
-  async finishQueue(claim: string, release: readonly QueueRef[]) {
+  /** remind_queue_finish（迁移 20261113120000）：release 里还是这个租约的放回（清租约、attempts − 1）；hold 里的不放回也不删（租约、attempts 原样，
+   *  等过期重取）；这个租约的其余项删掉；锁着的（locked）都跳过、租约留着 */
+  async finishQueue(claim: string, release: readonly QueueRef[], hold: readonly QueueRef[] = []) {
     this.check('finishQueue');
+    const keep = new Set(hold.map((r) => `${r.table_name}:${r.id}`));
     for (const r of release) {
       const k = `${r.table_name}:${r.id}`;
       const q = this.queue.get(k);
       if (q && q.claim === claim && !this.locked.has(k)) this.queue.set(k, { ...q, claim: null, claimed_at: null, attempts: Math.max((q.attempts ?? 0) - 1, 0) });
     }
-    for (const [k, q] of this.queue) if (q.claim === claim && !this.locked.has(k)) this.queue.delete(k);
+    for (const [k, q] of this.queue) if (q.claim === claim && !this.locked.has(k) && !keep.has(k)) this.queue.delete(k);
   }
   async rows(table: Table, ids: readonly string[]) {
     this.check('rows');

@@ -14,7 +14,7 @@
 //   不看任何环境变量、没有例外（安全复审二 R1-1：act 在本机跑工作流会自动设 CI、GITHUB_ACTIONS、ACT 并挂宿主 docker socket，
 //   靠环境变量放行会连到本机的 lemomemo）。CI 的 db 任务在 supabase start 之前把 config.toml 的 project_id 改成 lemo-ci，
 //   这里连 supabase_db_lemo-ci（ci.yml；tests/build/remind-queue-2conn-guard.test.ts 钉住放行规则和 CI 写法）。
-// 改过出队（现行版本在迁移 20261113100000）、finish（20261104130000）里的 skip locked 或加锁后再判租约那几句，本机也要跑一次（上线与回滚手册）。造的数据用固定的 2c000000-… id，
+// 改过出队（现行版本在迁移 20261113100000）、finish（现行版本在迁移 20261113120000）里的 skip locked 或加锁后再判租约那几句，本机也要跑一次（上线与回滚手册）。造的数据用固定的 2c000000-… id，
 // 跑完删掉（auth 用户删掉后待办级联删除，队列项一并删）。退出码 0 = 全过，1 = 有失败。
 // 11-05 判定口径（2b65b43 的 CI 第一次真跑报“连接 2 不等锁：5883 毫秒”，lemo-e2e 上同样的脚本 185 毫秒、服务器侧 4 毫秒，复现不出等锁）：
 //   原来按 docker exec 的墙钟判，墙钟含容器里起 psql 的时间，CI runner 上起得慢就分不清“等锁”和“起得慢”；连接 2 也是固定晚 1 秒起，

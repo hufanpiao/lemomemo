@@ -232,13 +232,19 @@ describe('remind-queue-2conn.mjs：“不等锁”按服务器上的证据判', 
     expect(fors).toHaveLength(4);
     for (const f of fors) expect(f).toMatch(/for update of \w+ skip locked/);
   });
-  it('R-411：现行出队在迁移 20261113100000（之后没有迁移再定义它），唯一一处 for update 带 skip locked、加锁后再判一次租约；删孤儿那段已删；finish 仍是 20261104130000 那份', () => {
+  it('R-411：现行出队在迁移 20261113100000（之后没有迁移再定义它），唯一一处 for update 带 skip locked、加锁后再判一次租约；删孤儿那段已删；finish 的现行版本在 20261113120000（加 hold），两处 for update 都带 skip locked', () => {
     const dir = join(ROOT, 'supabase', 'migrations');
     const strip = (s: string) => s.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
     const defs = (name: string) => readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
       .filter((f) => new RegExp(`create (or replace )?function private\\.${name}\\(`).test(strip(readFileSync(join(dir, f), 'utf8'))));
     expect(defs('remind_queue_pop').at(-1)).toBe('20261113100000_core_remind_queue_rewrite.sql');
-    expect(defs('remind_queue_finish')).toEqual(['20261104130000_core_remind_queue_lease.sql']);
+    expect(defs('remind_queue_finish')).toEqual(['20261104130000_core_remind_queue_lease.sql', '20261113120000_core_remind_finish_hold.sql']);
+    const fin = strip(readFileSync(join(dir, '20261113120000_core_remind_finish_hold.sql'), 'utf8'));
+    const finBody = fin.slice(fin.indexOf('create or replace function private.remind_queue_finish('), fin.indexOf('end $$;'));
+    expect(finBody.length).toBeGreaterThan(800);
+    const finFors = finBody.match(/for update of \w+[^;]*?(?=\)|$)/gm) ?? [];
+    expect(finFors).toHaveLength(2);
+    for (const f of finFors) expect(f).toMatch(/for update of q2 skip locked/);
     const sql = strip(readFileSync(join(dir, '20261113100000_core_remind_queue_rewrite.sql'), 'utf8'));
     const head = 'create function private.remind_queue_pop(';
     const body = sql.slice(sql.indexOf(head), sql.indexOf('end $$;', sql.indexOf(head)));

@@ -1,6 +1,7 @@
 // push-dispatch 第 0 步：打租约出队、重算 remind_at、按租约收尾（架构 5.3 第 0 步；方案-提醒队列重写 3.3、3.7；迁移 20261113100000）。
 // 每轮两段出队：① 单项重试（只取取过的项、一次 1 项，至多 queueRetryPops 次、只在头 queueRetryMs 毫秒）；② 新项按批（每轮都做，先全站 prio 0）。
-// 每批读行、重算、带乐观条件写回，最后 finish：放回的清租约，其余按租约删；中途崩了不调 finish，租约过期后重取，取满有毒次数的由出队函数丢掉。
+// 每批读行、重算、带乐观条件写回，最后 finish：放回的清租约，写回出错的留着租约（held），其余按租约删；中途崩了不调 finish，
+// 租约过期后重取，取满有毒次数的由出队函数丢掉——held 和崩了走同一条路，一直写不进去的那一项取满次数就被丢掉（迁移 20261113120000）。
 // 每项一个结果：不是 same / gone 的记一行函数日志 recalc:<结果>:<表>:<id 前 8 位>；prio 0 的 written、ack、r336、failed 另进 logs（act = recalc）。
 // fresh 的待办（新建或改了截止）不传 prevRemindAt：提前量已过时回落到截止时刻（R-411 Q2）；其余一律传这一行现在的 remind_at（R1）。
 import { LOG_SRC, type ItemRow, type LogRow, type Profile, type QueueItem, type QueueRef, type RoundCtx, type UserSettings } from './round-types.ts';
@@ -12,10 +13,11 @@ export interface QueueStat { ok: boolean; poison: number; written: number; r336:
 /**
  * 一项重算的结果（方案 3.7）：written 写回了；ack 按 S1 例外写回（notified_for = 新 remind_at）；r336 全天日程这一天已提醒过、不写回；
  * tz_invalid 时区认不出、跳过；no_profile profiles 里没有这个人；owner_mismatch 行的主人和队列项对不上；failed 行里的值算不出；
- * released 放回队列（预算到了、乐观条件不成立、写回出错）；same 算出来和原值一样；gone 行已经没了（硬删的孤儿，finish 删掉）。
- * 除 released 外都不放回（放回只会每分钟再来一次；以后这一行再被改，触发器会重新入队）
+ * released 放回队列（预算到了、乐观条件不成立：不算有毒次数）；held 写回出错，留着租约等过期重取（算有毒次数，同“中途崩了”）；
+ * same 算出来和原值一样；gone 行已经没了（硬删的孤儿，finish 删掉）。
+ * 除 released、held 外都不放回（放回只会每分钟再来一次；以后这一行再被改，触发器会重新入队）
  */
-export type RecalcResult = 'written' | 'ack' | 'r336' | 'tz_invalid' | 'no_profile' | 'owner_mismatch' | 'failed' | 'released' | 'same' | 'gone';
+export type RecalcResult = 'written' | 'ack' | 'r336' | 'tz_invalid' | 'no_profile' | 'owner_mismatch' | 'failed' | 'released' | 'held' | 'same' | 'gone';
 
 export async function step0(c: RoundCtx, logs: LogRow[], overBudget: () => boolean): Promise<QueueStat> {
   const stat: QueueStat = { ok: true, poison: 0, written: 0, r336: 0, failed: 0 };
@@ -56,10 +58,11 @@ export async function step0(c: RoundCtx, logs: LogRow[], overBudget: () => boole
 async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, items: readonly QueueItem[], stat: QueueStat): Promise<void> {
   const claim = items[0]?.claim;   // 同一批同一个租约号
   if (!claim) return;
-  // 收尾：release 里的放回，这个租约的其余项删掉。失败不重试：租约过期以后别的轮重取，最多晚几分钟、多算一次
-  const finish = async (release: readonly QueueRef[]) => {
+  // 收尾：release 里的放回，hold 里的留着租约，这个租约的其余项删掉。失败不重试：租约过期以后别的轮重取，最多晚几分钟、多算一次
+  const finish = async (release: readonly QueueRef[], hold: readonly QueueRef[] = []) => {
+    const refs = (xs: readonly QueueRef[]) => xs.map((x) => ({ table_name: x.table_name, id: x.id }));
     try {
-      await c.store.finishQueue(claim, release.map((x) => ({ table_name: x.table_name, id: x.id })));
+      await c.store.finishQueue(claim, refs(release), refs(hold));
     } catch (e) {
       c.log(failCode('queue_finish_failed', e));
       stat.ok = false;
@@ -85,10 +88,12 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
   }
 
   const back: QueueRef[] = [];
+  const held: QueueRef[] = [];
   const tzNotes = new Map<string, string>();
   const now = c.now();
   const note = (q: QueueItem, r: RecalcResult) => {
     if (r === 'released') back.push(q);
+    else if (r === 'held') held.push(q);
     if (r === 'written' || r === 'ack') stat.written++;
     else if (r === 'r336') stat.r336++;
     else if (r === 'failed') stat.failed++;
@@ -149,13 +154,14 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
       // 乐观条件（代码审查建议 ④）：读完以后行又被改了就不写，放回队列下一轮按新值重算
       if (!(await c.store.writeRemind(q.table_name, q.id, q.user_id, patch, row.remind_at, ackAt))) return 'released';
     } catch (e) {
+      // 写回出错不放回：留着租约，过期后重取、计入有毒次数（一直出错的取满次数被丢掉，不会每分钟白算一次）
       c.log(failCode('recalc_write_failed', e));
-      return 'released';
+      return 'held';
     }
     return ackAt === undefined ? 'written' : 'ack';
   };
 
   await pool(items, c.limits.concurrency, async (q) => note(q, await one(q)));
-  await finish(back);
+  await finish(back, held);
   await logTzInvalid(c, logs, tzNotes, now);
 }

@@ -66,6 +66,10 @@ describe('push-dispatch store.ts', () => {
     expect(chains[0]).toEqual([['rpc', 'private.remind_queue_finish', { p_claim: 'k', p_release: [{ table_name: 'todos', id: 'x' }] }]]);
     const bad = fakeAdmin({ data: null, error: { message: 'secret detail' } });
     await expect(makeStore(bad.admin).finishQueue?.('k', [])).rejects.toThrow(/^db$/);
+    // 写回出错的项（迁移 20261113120000）：带 hold: true 跟在放回的后面
+    const h = fakeAdmin();
+    await makeStore(h.admin).finishQueue?.('k', rel, [{ table_name: 'events', id: 'y', user_id: 'u', claim: 'k' } as never]);
+    expect(h.chains[0]).toEqual([['rpc', 'private.remind_queue_finish', { p_claim: 'k', p_release: [{ table_name: 'todos', id: 'x' }, { table_name: 'events', id: 'y', hold: true }] }]]);
   });
   it('写心跳：private.push_heartbeat_write(p_detail, p_poison)，回累计；出错、回的不是非负整数都抛 db（REMIND-poison-atomic）', async () => {
     const base = { claimed: 1, sent: 1, failed: 0, budget_hit: false, queue_ok: 1, recalc_written: 0, recalc_r336: 0, recalc_failed: 0 };
