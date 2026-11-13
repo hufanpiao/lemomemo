@@ -107,6 +107,9 @@ jobs:
       - name: 设计令牌
         run: python -I build/tokens.py --check
 
+      - name: 字体登记和产物（check_fonts，架构 5.9c）
+        run: python -I build/fonts.py --check
+
       - name: 免查名单和 supabase/functions/ 对照（前端 B 的脚本，架构 0.27 第 1 点）
         # B0 集成：前端 B 已合并，脚本名 build/check_version_gate.mjs，npm 脚本 check:gate
         run: npm run check:gate

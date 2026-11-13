@@ -8,6 +8,8 @@
 // • 主 App：main.tsx 入口一开始懒加载本模块（不进首屏，B4 首屏额度），一加载就按缓存套上，渲染之前等它，首屏不先闪一下默认皮肤；
 //   coldStart 灌好集合以后 watchLook 盯住 settings（本页改、别的设备同步过来都重新套、更新缓存）。settings 集合是空的（新设备还没同步、
 //   本机库不能用）不覆盖缓存那一份。登录页（src/auth/main.tsx）没有账号设置，只按缓存套
+// • 字体 ui.font（架构 5.9c，值 {v: 1, id}，缓存里只记 id）：不是系统字体时才懒加载 platform/fonts.ts 去下载、套上（首屏不带），
+//   换回系统字体时同样交给它拿掉；认不出的 id 按系统字体
 export const SKINS = ['simple', 'glass'] as const;
 export type Skin = (typeof SKINS)[number];
 export const THEMES = ['system', 'light', 'dark'] as const;
@@ -20,19 +22,24 @@ export interface Look {
   rt: boolean;
   /** 减少动态效果（R-93） */
   rm: boolean;
+  /** 字体 id（'system' 系统字体，默认；架构 5.9c） */
+  font: string;
 }
 
-export const LOOK_KEYS = { skin: 'ui.skin', theme: 'ui.theme', rt: 'ui.reduce_transparency', rm: 'ui.reduce_motion' } as const satisfies Record<keyof Look, string>;
+export const LOOK_KEYS = { skin: 'ui.skin', theme: 'ui.theme', rt: 'ui.reduce_transparency', rm: 'ui.reduce_motion', font: 'ui.font' } as const satisfies Record<keyof Look, string>;
 
 /** 按键取值（settings 行、本机缓存都用它）；认不出的值按默认 */
 export function lookOf(get: (k: keyof Look) => unknown): Look {
   const s = get('skin');
   const t = get('theme');
+  const f = get('font');
+  const id = f !== null && typeof f === 'object' ? (f as { id?: unknown }).id : f;
   return {
     skin: s === 'glass' ? 'glass' : 'simple',
     theme: t === 'light' || t === 'dark' ? t : 'system',
     rt: get('rt') === true,
     rm: get('rm') === true,
+    font: typeof id === 'string' && /^[a-z][a-z0-9]{0,15}$/.test(id) ? id : 'system',
   };
 }
 
@@ -49,6 +56,7 @@ export const lookOfRows = (rows: readonly LookRow[]): Look => lookOf((k) => rows
 const CACHE_KEY = 'pv-look';
 let current: Look | null = null;
 let dark: MediaQueryList | null = null;
+let font = 'system';
 
 function paint(): void {
   if (!current) return;
@@ -61,6 +69,10 @@ function paint(): void {
   if (current.rm) r.dataset['rm'] = '1';
   else delete r.dataset['rm'];
   document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', theme);
+  if (current.font !== font) {
+    const id = (font = current.font);
+    void import('./fonts.ts').then((m) => m.applyFont(id), () => undefined);
+  }
 }
 
 /** 套上并记进本机缓存；同样的值再套一次不重画 */

@@ -17,6 +17,7 @@ import type { DevicesState } from '../hooks/useDevices.ts';
 import { deviceName } from './DevicesSection.tsx';
 import { LanguageSection } from './LanguageSection.tsx';
 import { MailLabel } from './MailLabel.tsx';
+import { FontHomeRow } from './FontSection.tsx';
 import { SkinHomeRows } from './SkinSection.tsx';
 import type { SubName } from './SettingsSub.tsx';
 import styles from './SettingsPage.module.css';
@@ -80,6 +81,8 @@ export function SettingsHome({ email, devices, locale, exportState: ex, hotkey, 
     // 皮肤（ADR-008；定稿线框第 997 行、皮肤视觉稿第 1368 行）：一行“简洁 · 白天 / 夜间跟着手机 ›”点进 #/settings/skin；
     // 下面紧跟两个开关（R-84 减少透明效果、R-93 减少动态效果），说明按手机 / 电脑分（视觉稿电脑版第 1498 行）
     skin: <SkinHomeRows onOpen={() => onOpen('skin')} />,
+    // 字体（架构 5.9c；定稿线框 s13“字体 › 系统字体（默认）”）：点进 #/settings/font
+    font: <FontHomeRow onOpen={() => onOpen('font')} />,
     // 随手记显示方式（B4 S1，R-78；定稿线框第 997 行、皮肤视觉稿第 1368 行）：一行写完“瀑布流 · 只对本类设备生效 ›”（稿子第 997 行）；手机、电脑各自的说明在二级页
     notesView: (
       <SettingsEntryRow

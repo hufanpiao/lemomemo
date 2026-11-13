@@ -113,6 +113,15 @@ export const ko = {
   'settings.skin.rmNote.mobile': '페이드만 남겨요 · iPhone 설정도 따라가요',
   'settings.skin.rmNote.desktop': '페이드만 남겨요 · Windows 애니메이션 효과 설정도 따라가요', // REVIEW(ko)
   'settings.skin.err': '저장하지 못했어요. 잠시 후 다시 골라 주세요', // REVIEW(ko)
+  'settings.font.title': '글꼴', // REVIEW(ko)
+  'settings.font.system': '시스템 글꼴', // 架构 5.9c 表里的韩文名
+  'settings.font.systemValue': '시스템 글꼴(기본)', // REVIEW(ko)
+  'settings.font.note': '선택하면 그때 내려받아요. 다 받기 전에는 시스템 글꼴을 써요. 기기마다 따로 받아요.', // REVIEW(ko)
+  'settings.font.loading': '내려받는 중 {pct}%', // REVIEW(ko)
+  'settings.font.fail': '내려받지 못해서 시스템 글꼴을 쓰고 있어요', // REVIEW(ko)
+  'settings.font.failShort': '내려받지 못함 · 시스템 글꼴 사용 중', // REVIEW(ko)
+  'settings.font.retry': '다시 시도', // REVIEW(ko)
+  'settings.font.err': '저장하지 못했어요. 잠시 후 다시 선택해 주세요', // REVIEW(ko)
   'settings.notesView.title': '메모 보기 방식', // REVIEW(ko)
   'settings.notesView.masonry': '카드', // REVIEW(ko)
   'settings.notesView.list': '목록', // REVIEW(ko)

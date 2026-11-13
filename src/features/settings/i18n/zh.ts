@@ -126,6 +126,15 @@ export const zh = {
   'settings.skin.rmNote.mobile': '只留淡入淡出；也跟随 iPhone 的“减少动态效果”',
   'settings.skin.rmNote.desktop': '只留淡入淡出；也跟随 Windows 的“动画效果”',
   'settings.skin.err': '没保存上，稍后再选一次',
+  'settings.font.title': '字体', // 定稿线框 s13；架构 5.9c
+  'settings.font.system': '系统字体',
+  'settings.font.systemValue': '系统字体（默认）', // 定稿线框 s13
+  'settings.font.note': '选中才下载，下载好之前先用系统字体；每台设备各下各的。',
+  'settings.font.loading': '下载中 {pct}%', // 架构 5.9c 第 3 点
+  'settings.font.fail': '没下载成功，先用系统字体', // 架构 5.9c 第 3 点
+  'settings.font.failShort': '没下载成功，先用系统字体',
+  'settings.font.retry': '重试',
+  'settings.font.err': '没保存上，稍后再选一次',
   'settings.notesView.title': '随手记显示方式',
   'settings.notesView.masonry': '瀑布流',
   'settings.notesView.list': '列表',
