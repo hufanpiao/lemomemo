@@ -2,10 +2,13 @@
 // 只被 vault/ 下的 core.ts、pin.ts、webauthn.ts、notes.ts、move.ts 引用，不反过来 import 它们。
 // 不 import npm 包、不 import _shared/gen/、不碰 Deno 全局：shared/schema/vault.ts 里的常量和 zod 解析由 index.ts 经 Deps.rules、Deps.parse 注入，
 //   测试注入真的 shared/schema/vault.ts（只此一份，不复制常量）。
+import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
 import type { Bytes } from '../_shared/b64url.ts';
 import type { EnvKind } from '../_shared/env-kind.ts';
-import { json } from '../_shared/http.ts';
+import { errorResponder } from '../_shared/http.ts';
+import { aesKeyFor } from '../_shared/vault-crypto.ts';
 import type { VaultPushEvent } from '../_shared/push/payload.ts';
+import type { VaultObj } from '../_shared/vault-images.ts';
 
 // ---------------- 请求（和 shared/schema/vault.ts 的 vaultRequest 推出的类型一致，tests/functions/vault-core.test.ts 双向核对） ----------------
 type Uuid = string;
@@ -42,7 +45,6 @@ export interface VaultRules {
   resetOtpMaxAgeS: number;
   challengeTtlS: number;
   rpId: string;
-  imageMaxBytes: number;
   imageKey(userId: string, noteId: string, imageId: string, part: 'full' | 'thumb'): string;
 }
 
@@ -100,8 +102,10 @@ export interface VaultTx {
   updatePrivateNote(id: Uuid, p: { body_enc: Uint8Array; enc_key_id: number; category_id: Uuid | null; updated_at: number }): Promise<boolean>;
   /** 隐私记软删（at）或恢复（null）；改到 0 行回 false */
   setPrivateDeleted(id: Uuid, at: number | null): Promise<boolean>;
-  insertVaultImage(noteId: Uuid, img: ImageAdd): Promise<void>;
-  removeVaultImages(noteId: Uuid, ids: readonly Uuid[], at: number): Promise<void>;
+  /** 预登记一张图（客户端随后经 vault-image 上传对象）；同 id 已经有行回 false（不覆盖） */
+  insertVaultImage(noteId: Uuid, img: ImageAdd): Promise<boolean>;
+  /** 软删这条的几张图，回真改到的那几行（删对象用） */
+  removeVaultImages(noteId: Uuid, ids: readonly Uuid[], at: number): Promise<ImageRow[]>;
   /** private.purge_vault_impl：只删本人已软删的隐私记 */
   purge(ids: readonly Uuid[]): Promise<number>;
   hasFiles(noteId: Uuid): Promise<boolean>;
@@ -128,20 +132,14 @@ export class StoreDataError extends Error {
 export function classifyDbError(e: unknown): unknown {
   if (e instanceof StoreDataError) return e;
   const code = typeof e === 'object' && e !== null ? (e as { code?: unknown }).code : undefined;
-  if (e instanceof Error && e.message === 'quota') return new StoreDataError('quota');
+  if (e instanceof Error && (e.message === 'quota' || e.message === 'quota_exceeded')) return new StoreDataError('quota');   // 行数上限、存储额度（media_quota_guard）
   if (typeof code === 'string' && (code.startsWith('22') || code.startsWith('23'))) return new StoreDataError('data');
   return e;
 }
 
-/** R2（_shared/gen/objstore.ts 的子集；测试用内存假 store） */
-export interface Obj {
-  get(bucket: string, key: string): Promise<{ body: unknown; contentLength: number | null } | null>;
-  put(bucket: string, key: string, body: Uint8Array, opts: { contentType: string; ifNoneMatch?: boolean }): Promise<unknown>;
-  head(bucket: string, key: string): Promise<{ contentLength: number | null } | null>;
-  deleteMany(bucket: string, keys: readonly string[]): Promise<number>;
-}
+export type Obj = VaultObj;
 
-export type AuthResult = { ok: true; user: { userId: string; jwt: string } } | { ok: false; response: Response };
+export type AuthResult = SharedAuthResult<{ userId: string; jwt: string }>;
 
 export interface Deps {
   authenticate(req: Request): Promise<AuthResult>;
@@ -169,18 +167,34 @@ export interface Deps {
 
 /** status 用（不要钥匙：钥匙没配好时 status 照常回） */
 export interface Base { req: Request; userId: string; jwt: string; deps: Deps }
-/** 其余动作用：钥匙已经判过；pushes 是处理中攒下的推送，core.ts 在处理完（事务已提交）以后才发 */
-export interface Ctx extends Base { keys: FullKeys; pushes: VaultPushEvent[] }
+/**
+ * 其余动作用：钥匙已经判过；pushes 是处理中攒下的推送，drop 是要删的 vault-images 对象键（永久删除、删图），
+ * core.ts 在处理完（事务已提交）以后才发推送、尽力删对象（删失败只记日志，留给以后的 storage-sweep）
+ */
+export interface Ctx extends Base { keys: FullKeys; pushes: VaultPushEvent[]; drop: string[] }
 
-/** 处理成功：body 是响应体（不含 ok）；epoch 不为 null 时签一张新令牌放进响应（解锁、续期） */
-export interface Out { body: Record<string, unknown>; epoch: number | null }
+/** 这个人的隐私记正文钥匙（HKDF 用途 note）：notes.ts 读写、move.ts 移进移出只从这里取（11-14 整块评审第 18 条：原来两处各派生一次） */
+export const noteKey = (c: Ctx): Promise<CryptoKey> => aesKeyFor(c.keys.master, c.userId, 'note');
+
+/**
+ * 处理成功：body 是响应体（不含 ok）；epoch 不为 null 时签一张新令牌放进响应（解锁、续期）。
+ * firstAt：这一串续期最早那次解锁的时刻（毫秒）；没有就是这次新解锁（core.ts 填，动作不用管）
+ */
+export interface Out { body: Record<string, unknown>; epoch: number | null; firstAt?: number }
 export const out = (body: Record<string, unknown>, epoch: number | null): Out => ({ body, epoch });
 
 export type VaultErrCode =
   | 'vault_locked' | 'vault_relock' | 'not_set' | 'already_set' | 'bad_pin' | 'pin_wrong' | 'pin_locked' | 'reauth_required'
   | 'webauthn_failed' | 'webauthn_unavailable' | 'not_found' | 'has_files' | 'too_large' | 'bad_image' | 'rate_limited' | 'try_later'
   | 'bad_request' | 'method_not_allowed';
-export const err = (status: number, code: VaultErrCode, extra: Record<string, unknown> = {}) => json(status, { error: code, ...extra });
+export const err = errorResponder<VaultErrCode>();
+
+/** 一张图在桶里的对象键：原图，有缩略图再加缩略图 */
+export function imageKeys(c: Base, noteId: string, img: { id: string; has_thumb: boolean }): string[] {
+  const k = [c.deps.rules.imageKey(c.userId, noteId, img.id, 'full')];
+  if (img.has_thumb) k.push(c.deps.rules.imageKey(c.userId, noteId, img.id, 'thumb'));
+  return k;
+}
 
 /**
  * 记下一条要推送的事件。不当场发：事务里调用时库还没提交（锁定、改密码、绑定），提交失败就不该通知。
@@ -188,9 +202,4 @@ export const err = (status: number, code: VaultErrCode, extra: Record<string, un
  */
 export function notifyLater(c: Ctx, event: VaultPushEvent): void {
   c.pushes.push(event);
-}
-
-/** 每分钟限流的键（附录 A 三段写法，第三段 UTC 分钟 yyyymmddThhmm，同 ai-min） */
-export function minuteKey(prefix: string, userId: string, ms: number): string {
-  return `${prefix}:${userId}:${new Date(ms).toISOString().slice(0, 16).replace(/[-:]/g, '')}`;
 }

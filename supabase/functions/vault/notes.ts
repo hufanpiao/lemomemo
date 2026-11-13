@@ -3,15 +3,15 @@
 // • 正文：{v: 1, title, body} 用 VAULT_KEY 派生的 note 钥匙 AES-GCM 加密，AAD = user_id|note_id|enc_key_id（_shared/vault-crypto.ts，代定 D7）；
 //   notes 的 title、body 列为空，category_id 照旧明文。
 // • save：没有这条就新建，有就改（只改本人没删的隐私记；同 id 是普通随手记回 not_found，不让覆盖）；
-//   add_images：图已经经 vault-image 传到 R2，这里 HEAD 一下核对存在和大小，再写 note_images 行（bucket vault-images、ai_status skip、skip_reason vault_off）；
-//   remove_images：软删（deleted_at = 现在），对象由每日清理收。
-// • delete / undelete：软删和恢复；purge：private.purge_vault_impl，只删已软删的，回删了几条。
+//   add_images：**预登记**图片行（bucket vault-images、ai_status skip、skip_reason vault_off；行数上限和存储额度由 row_quota、media_quota_guard 触发器管），
+//   客户端随后经 vault-image 上传对象——vault-image 只收已登记、没删的 image_id，原图字节数必须等于登记的 bytes（11-14 整块评审第 3 条，
+//   和普通插图“先写行、/files 再按行核 content_length”同一口径；这里不再 HEAD R2，整块评审第 10 条随之没有了）；
+//   同 id 已经有行：是这条、没删、字节数和有无缩略图都一样的算重发成功；对不上，或行在别的随手记、别人名下，一律 400 bad_request、什么都不写（整块评审第 12 条）；
+//   remove_images：软删，事务提交后尽力删对象（整块评审第 2 条）。
+// • delete / undelete：软删和恢复；purge：private.purge_vault_impl，只删已软删的，回删了几条；图片行随外键级联，提交后尽力删对象。
 // • 解不开的密文（钥匙换了、数据坏了）不回这一条，记一次 decrypt_failed，不让整张列表失败。
-import { ENC_KEY_ID, aesKeyFor, openNote, sealNote } from '../_shared/vault-crypto.ts';
-import { VAULT_IMAGE_BUCKET } from '../_shared/vault-images.ts';
-import { type Ctx, err, type ImageAdd, type Out, out, type ReqOf, type VaultTx } from './common.ts';
-
-const noteKey = (c: Ctx): Promise<CryptoKey> => aesKeyFor(c.keys.master, c.userId, 'note');
+import { ENC_KEY_ID, openNote, sealNote } from '../_shared/vault-crypto.ts';
+import { type Ctx, err, type ImageAdd, imageKeys, noteKey, type Out, out, type ReqOf, StoreDataError, type VaultTx } from './common.ts';
 
 /** {list}：本人全部隐私记（含已删，回收站要用）和它们的图片行 */
 export async function list(c: Ctx, t: VaultTx): Promise<Out> {
@@ -38,28 +38,25 @@ export async function list(c: Ctx, t: VaultTx): Promise<Out> {
 }
 
 /**
- * add_images 的每一张都核对 R2 里真有（缩略图也核）、大小不超；回改成实际大小的那几张。没配 R2 抛 misconfigured。
- * R2 没回长度（contentLength 是 null）当不合格（413）：不退回去信客户端报的 bytes
+ * add_images 里哪几张要新登记：这条已有同 id 的行时，没删、字节数和有无缩略图都一样的算重发（跳过），对不上回 400。
+ * 在写正文之前判，回 400 时什么都没写
  */
-async function checkUploaded(c: Ctx, noteId: string, add: readonly ImageAdd[]): Promise<ImageAdd[] | Response> {
-  const { r2, rules } = c.deps;
-  if (!r2) throw new Error('misconfigured');
-  const checked: ImageAdd[] = [];
+async function toRegister(t: VaultTx, noteId: string, exists: boolean, add: readonly ImageAdd[]): Promise<ImageAdd[] | Response> {
+  const mine = exists ? await t.imagesOf(noteId) : [];
+  const fresh: ImageAdd[] = [];
   for (const img of add) {
-    const full = await r2.head(VAULT_IMAGE_BUCKET, rules.imageKey(c.userId, noteId, img.id, 'full'));
-    if (!full) return err(404, 'not_found');
-    if (full.contentLength === null || full.contentLength > rules.imageMaxBytes) return err(413, 'too_large');
-    if (img.has_thumb && !(await r2.head(VAULT_IMAGE_BUCKET, rules.imageKey(c.userId, noteId, img.id, 'thumb')))) return err(404, 'not_found');
-    checked.push({ ...img, bytes: full.contentLength });
+    const cur = mine.find((x) => x.id === img.id);
+    if (!cur) fresh.push(img);
+    else if (cur.bucket !== 'vault-images' || cur.deleted_at !== null || cur.bytes !== img.bytes || cur.has_thumb !== img.has_thumb) return err(400, 'bad_request');
   }
-  return checked;
+  return fresh;
 }
 
 /** {save, id, title, body, category_id, created_at, updated_at, add_images?, remove_images?} */
 export async function save(c: Ctx, t: VaultTx, r: ReqOf<'save'>): Promise<Out | Response> {
   const cur = await t.note(r.id);
   if (cur && (!cur.is_private || cur.deleted_at !== null)) return err(404, 'not_found');
-  const add = r.add_images?.length ? await checkUploaded(c, r.id, r.add_images) : [];
+  const add = r.add_images?.length ? await toRegister(t, r.id, cur !== null, r.add_images) : [];
   if (add instanceof Response) return add;
   const body_enc = await sealNote(await noteKey(c), c.userId, r.id, r.title, r.body, ENC_KEY_ID);
   if (cur) {
@@ -67,8 +64,11 @@ export async function save(c: Ctx, t: VaultTx, r: ReqOf<'save'>): Promise<Out | 
   } else {
     await t.insertPrivateNote({ id: r.id, body_enc, enc_key_id: ENC_KEY_ID, category_id: r.category_id, created_at: r.created_at, updated_at: r.updated_at });
   }
-  for (const img of add) await t.insertVaultImage(r.id, img);
-  if (r.remove_images && r.remove_images.length > 0) await t.removeVaultImages(r.id, r.remove_images, c.deps.now());
+  // 同 id 的行在别的随手记或别人名下（RLS 看不见）：插不进就抛数据错误，整个事务回滚、回 400（不静默成功）
+  for (const img of add) if (!(await t.insertVaultImage(r.id, img))) throw new StoreDataError('data');
+  if (r.remove_images?.length) {
+    for (const img of await t.removeVaultImages(r.id, r.remove_images, c.deps.now())) c.drop.push(...imageKeys(c, r.id, img));
+  }
   return out({}, null);
 }
 
@@ -82,7 +82,14 @@ export async function undelete(t: VaultTx, r: ReqOf<'undelete'>): Promise<Out | 
   return (await t.setPrivateDeleted(r.id, null)) ? out({}, null) : err(404, 'not_found');
 }
 
-/** {purge, items}：永久删除（只删本人已软删的隐私记；图片行随外键级联，R2 对象由每日清理收） */
-export async function purge(t: VaultTx, r: ReqOf<'purge'>): Promise<Out> {
-  return out({ purged: await t.purge(r.items) }, null);
+/** {purge, items}：永久删除（只删本人已软删的隐私记；图片行随外键级联，提交后尽力删 R2 对象，删不掉的留给 storage-sweep） */
+export async function purge(c: Ctx, t: VaultTx, r: ReqOf<'purge'>): Promise<Out> {
+  const ids = new Set(r.items);
+  const before = (await t.vaultImages()).filter((i) => ids.has(i.note_id));
+  const purged = await t.purge(r.items);
+  if (purged > 0 && before.length > 0) {
+    const left = new Set((await t.vaultImages()).map((i) => i.id));
+    for (const img of before) if (!left.has(img.id)) c.drop.push(...imageKeys(c, img.note_id, img));
+  }
+  return out({ purged }, null);
 }

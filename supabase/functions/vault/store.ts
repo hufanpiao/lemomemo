@@ -129,14 +129,17 @@ export function vaultStore(tx: Tx, uid: string): VaultTx {
       return rows.length === 1;
     },
     async insertVaultImage(noteId, img: ImageAdd) {
-      await tx`insert into public.note_images (id, user_id, note_id, bucket, path, bytes, width, height, has_thumb, ai_status, skip_reason)
+      const rows = await tx`insert into public.note_images (id, user_id, note_id, bucket, path, bytes, width, height, has_thumb, ai_status, skip_reason)
         values (${img.id}, ${uid}, ${noteId}, ${VB}, ${imgPath(noteId, img.id)}, ${img.bytes}, ${img.width}, ${img.height}, ${img.has_thumb}, 'skip', 'vault_off')
-        on conflict (id) do nothing`;
+        on conflict (id) do nothing returning 1 as x`;
+      return rows.length === 1;
     },
     async removeVaultImages(noteId, ids, at) {
-      await tx`update public.note_images set deleted_at = ${at}
+      const rows = await tx`update public.note_images set deleted_at = ${at}
         where user_id = ${uid} and note_id = ${noteId} and bucket = ${VB} and deleted_at is null
-          and id in (select (jsonb_array_elements_text(${tx.json(ids as string[])}::jsonb))::uuid)`;
+          and id in (select (jsonb_array_elements_text(${tx.json(ids as string[])}::jsonb))::uuid)
+        returning ${imgCols()}`;
+      return rows.map(image);
     },
     async purge(ids) {
       const rows = await tx`select private.purge_vault_impl(${uid}::uuid, ${tx.json(ids.map((id) => ({ id })))}::jsonb) as n`;

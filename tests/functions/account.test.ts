@@ -5,8 +5,9 @@
 //   共用的 setup（accountSetup）、call（callAccount）、COUNTER_KEY 在 account-fakes.ts。
 import { describe, expect, it } from 'vitest';
 import {
-  ACCOUNT_DAILY_LIMIT, ACCOUNT_ERRS, confirmOk, handle, keys, otpFresh, RESTORE_DAILY_LIMIT,
+  ACCOUNT_DAILY_LIMIT, ACCOUNT_ERRS, confirmOk, handle, keys, RESTORE_DAILY_LIMIT,
 } from '../../supabase/functions/account/core.ts';
+import { otpFresh } from '../../supabase/functions/_shared/otp-fresh.ts';
 import { ACCOUNT_ERROR_CODES, accountErrorCode } from '../../shared/schema/account.ts';
 import {
   deletionDoneMail, deletionReminderMail, deletionRequestedMail, exportMail, fmtWhen, restoredMail, safeTz,

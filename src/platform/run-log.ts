@@ -12,7 +12,7 @@
 // 隐私：不记用户输入的任何文字、不记网址参数；按钮只记 data-testid / aria-label / id
 import { buildInfo, isStandalone } from './env.ts';
 import { RL_SLOT } from './run-log-api.ts';
-import { createLayoutProbe, describeEl } from './run-log-layout.ts';
+import { createLayoutProbe, describeEl, isMasked } from './run-log-layout.ts';
 import { KBO_ATTR } from './viewport-geom.ts';
 
 export const OUT_KEY = 'lemo-run-log';
@@ -208,11 +208,13 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
   };
   const pickTarget = (t: EventTarget | null): Element | null =>
     t instanceof Element ? (t.closest('button,a,[role="button"],input,textarea,select,label,[data-testid]') ?? t) : null;
+  /** 坐标一段；点在带 data-rl-mask 的区域里不记（密码键盘的坐标就是按了哪个数） */
+  const at = (e: PointerEvent): string => (isMasked(e.target) ? '' : ` x=${Math.round(e.clientX)} y=${Math.round(e.clientY)}`);
   const onDown = (e: PointerEvent): void => {
     lastDown = now();
-    add(`down ${describeEl(pickTarget(e.target))} ${e.pointerType} x=${Math.round(e.clientX)} y=${Math.round(e.clientY)}`);
+    add(`down ${describeEl(pickTarget(e.target))} ${e.pointerType}${at(e)}`);
   };
-  const onUp = (e: PointerEvent): void => add(`up ${describeEl(pickTarget(e.target))} x=${Math.round(e.clientX)} y=${Math.round(e.clientY)}`);
+  const onUp = (e: PointerEvent): void => add(`up ${describeEl(pickTarget(e.target))}${at(e)}`);
   const onCancel = (e: PointerEvent): void => add(`pointercancel ${describeEl(pickTarget(e.target))}`);
   const onClick = (e: MouseEvent): void => add(`click ${describeEl(pickTarget(e.target))}${e.defaultPrevented ? ' prevented' : ''}`);
   const onKey = (e: KeyboardEvent): void => {
@@ -224,7 +226,8 @@ export function startRunLog(win: Window = window, opts: RunLogOptions = {}): () 
       const btn = form?.querySelector<HTMLButtonElement>('button[type="submit"],button:not([type])') ?? null;
       extra = ` form=${describeEl(form)} submitBtn=${btn ? (btn.disabled ? 'disabled' : 'enabled') : 'none'}${fieldState(t)}`;
     }
-    add(`key ${name} code=${e.keyCode}${e.isComposing ? ' composing' : ''}${e.defaultPrevented ? ' prevented' : ''} on=${describeEl(e.target)}${extra}`);
+    // 字符键不记 keyCode（keyCode 就是按了哪个字，密码键盘上就是哪个数字）
+    add(`key ${name}${name === 'char' ? '' : ` code=${e.keyCode}`}${e.isComposing ? ' composing' : ''}${e.defaultPrevented ? ' prevented' : ''} on=${describeEl(e.target)}${extra}`);
   };
   const onBeforeInput = (e: Event): void => {
     const ie = e as InputEvent;

@@ -29,27 +29,46 @@ describe('save、list（加密存、解密读）', () => {
     expect((await call(w, save(N2), { token: tok })).body.error).toBe('not_found');
   });
 
-  it('add_images：R2 里没有的回 not_found；有的写图片行（skip / vault_off）；remove_images 软删', async () => {
+  it('add_images 预登记图片行（skip / vault_off，按报的 bytes 算额度；不查 R2，整块评审第 3、10 条）；原样重发算成功', async () => {
     const w = world();
     const tok = await unlocked(w);
-    await call(w, save(N1), { token: tok });
-    expect((await call(w, save(N1, { add_images: [{ id: I1, bytes: 32, width: 1, height: 1, has_thumb: false }] }), { token: tok })).body.error).toBe('not_found');
-    await w.r2.put('vault-images', key(A, N1, I1), webp(40), { contentType: 'image/webp' });
-    expect((await call(w, save(N1, { add_images: [{ id: I1, bytes: 1, width: 1, height: 1, has_thumb: false }] }), { token: tok })).status).toBe(200);
-    expect(w.db.s.images.get(I1)).toMatchObject({ bucket: 'vault-images', bytes: 40, ai_status: 'skip', skip_reason: 'vault_off', taken_at: null });
-    await call(w, save(N1, { remove_images: [I1] }), { token: tok });
-    expect(w.db.s.images.get(I1)?.deleted_at).toBe(w.db.ms);
+    const img = { id: I1, bytes: 40, width: 1, height: 1, has_thumb: true };
+    expect((await call(w, save(N1, { add_images: [img] }), { token: tok })).status).toBe(200);   // 新建这条和登记图在同一次
+    expect(w.db.s.images.get(I1)).toMatchObject({ note_id: N1, bucket: 'vault-images', bytes: 40, has_thumb: true, ai_status: 'skip', skip_reason: 'vault_off', taken_at: null });
+    expect(w.r2.keys('vault-images')).toEqual([]);
+    expect((await call(w, save(N1, { add_images: [img], updated_at: 3 }), { token: tok })).status).toBe(200);
+    expect([...w.db.s.images.values()].filter((i) => i.note_id === N1)).toHaveLength(1);
   });
 
-  it('add_images：R2 的 HEAD 没回长度当不合格（413），不退回去信客户端报的 bytes', async () => {
+  it('add_images 撞上已有的 id（整块评审第 12 条）：字节数、有无缩略图对不上，或那一行在别的随手记、别人名下，一律 400、什么都不写', async () => {
     const w = world();
     const tok = await unlocked(w);
-    await call(w, save(N1), { token: tok });
-    await w.r2.put('vault-images', key(A, N1, I1), webp(40), { contentType: 'image/webp' });
-    w.r2.head = async () => ({ contentLength: null });
-    const r = await call(w, save(N1, { add_images: [{ id: I1, bytes: 1, width: 1, height: 1, has_thumb: false }] }), { token: tok });
-    expect([r.status, r.body.error]).toEqual([413, 'too_large']);
-    expect(w.db.s.images.has(I1)).toBe(false);
+    const img = { id: I1, bytes: 40, width: 1, height: 1, has_thumb: false };
+    await call(w, save(N1, { add_images: [img] }), { token: tok });
+    for (const bad of [{ ...img, bytes: 41 }, { ...img, has_thumb: true }]) {
+      const r = await call(w, save(N1, { title: '改了', add_images: [bad], updated_at: 5 }), { token: tok });
+      expect([r.status, r.body.error]).toEqual([400, 'bad_request']);
+    }
+    // 同一个 id 拿去登记到另一条：插不进，整个事务回滚（N2 没建出来）
+    const r = await call(w, save(N2, { add_images: [img] }), { token: tok });
+    expect([r.status, r.body.error]).toEqual([400, 'bad_request']);
+    expect(w.db.s.notes.has(N2)).toBe(false);
+    const l = await call(w, { action: 'list' }, { token: tok });
+    expect(l.body.notes.map((n: { title: string }) => n.title)).toEqual(['标题']);
+  });
+
+  it('remove_images 软删，事务提交后删掉 R2 里的原图和缩略图（整块评审第 2 条）；删失败只记 image_drop_failed', async () => {
+    const w = world();
+    const tok = await unlocked(w);
+    await call(w, save(N1, { add_images: [{ id: I1, bytes: 32, width: 1, height: 1, has_thumb: true }, { id: I2, bytes: 32, width: 1, height: 1, has_thumb: false }] }), { token: tok });
+    for (const k of [key(A, N1, I1), key(A, N1, I1, true), key(A, N1, I2)]) await w.r2.put('vault-images', k, webp(32), { contentType: 'image/webp' });
+    await call(w, save(N1, { remove_images: [I1] }), { token: tok });
+    expect(w.db.s.images.get(I1)?.deleted_at).toBe(w.db.ms);
+    expect(w.r2.keys('vault-images')).toEqual([`vault-images/${key(A, N1, I2)}`]);
+    w.r2.deleteMany = async () => { throw new Error('r2'); };
+    await call(w, save(N1, { remove_images: [I2] }), { token: tok });
+    expect(w.logs).toContain('image_drop_failed');
+    expect(w.db.s.images.get(I2)?.deleted_at).toBe(w.db.ms);
   });
 
   it('delete、undelete；解不开的那条不回、记 decrypt_failed', async () => {
@@ -91,6 +110,18 @@ describe('purge（TC-B5-48 ④⑤）', () => {
     expect(ok.body.purged).toBe(1);
     expect([...w.db.s.notes.keys()].sort()).toEqual([N2, VB, P].sort());
   });
+
+  it('永久删除后删掉那几条的 R2 对象（原图、缩略图；整块评审第 2 条）；没删成的那条（还没软删）的对象不动', async () => {
+    const w = world();
+    const tok = await unlocked(w);
+    await call(w, save(N1, { add_images: [{ id: I1, bytes: 32, width: 1, height: 1, has_thumb: true }] }), { token: tok });
+    await call(w, save(N2, { add_images: [{ id: I2, bytes: 32, width: 1, height: 1, has_thumb: false }] }), { token: tok });
+    for (const k of [key(A, N1, I1), key(A, N1, I1, true), key(A, N2, I2)]) await w.r2.put('vault-images', k, webp(32), { contentType: 'image/webp' });
+    await call(w, { action: 'delete', id: N1 }, { token: tok });
+    const r = await call(w, { action: 'purge', items: [N1, N2] }, { token: tok });
+    expect(r.body.purged).toBe(1);
+    expect(w.r2.keys('vault-images')).toEqual([`vault-images/${key(A, N2, I2)}`]);
+  });
 });
 
 describe('移进、移出（TC-B5-08、TC-B0-75）', () => {
@@ -129,6 +160,15 @@ describe('移进、移出（TC-B5-08、TC-B0-75）', () => {
     expect(w.db.s.notes.get(N1)).toMatchObject({ is_private: false, title: '明文标题', body: '明文正文', body_enc: null });
     expect(w.db.s.images.get(I1)).toMatchObject({ bucket: 'images', ai_status: 'pending' });
     expect(w.r2.keys('vault-images')).toEqual([]);
+  });
+
+  it('已软删的图片行跟着换桶，对象也跟着搬（整块评审第 7 条）', async () => {
+    const { w, tok } = await setupPlain();
+    w.db.s.images.get(I2)!.deleted_at = 7;
+    expect((await call(w, { action: 'import', note_id: N1 }, { token: tok })).status).toBe(200);
+    expect(w.db.s.images.get(I2)).toMatchObject({ bucket: 'vault-images', deleted_at: 7 });
+    expect(w.r2.keys('vault-images')).toContain(`vault-images/${key(A, N1, I2)}`);
+    expect(w.r2.keys('images')).toEqual([]);
   });
 
   it('带附件回 has_files；不是本人的回 not_found；不带令牌拒', async () => {

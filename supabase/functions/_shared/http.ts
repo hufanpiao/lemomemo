@@ -11,6 +11,11 @@ export function json(status: number, body: unknown, headers: Record<string, stri
   return new Response(JSON.stringify(body), { status, headers: { ...headers, 'content-type': 'application/json; charset=utf-8', ...NO_STORE } });
 }
 
+/** {error: 码, ...附加字段} 的错误响应；C 是这个函数认的错误码（vault、vault-image 用，11-14 整块评审第 16 条：原来各写一份） */
+export function errorResponder<C extends string>(): (status: number, code: C, extra?: Record<string, unknown>) => Response {
+  return (status, code, extra = {}) => json(status, { error: code, ...extra });
+}
+
 /**
  * 服务器之间调用的密钥头（cron 的 x-cron-secret、lemo-ops 的 x-ops-secret；调用方自己写 req.headers.get('<头名>')，F9 按函数目录查头名）：
  * 先鉴权、再判没配好——没带对密钥的调用方看不出函数配没配。密钥太短记 misconfiguredCode。回 null 表示通过，否则是要直接回的响应

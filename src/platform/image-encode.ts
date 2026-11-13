@@ -1,4 +1,6 @@
 // 插图重新编码（B4 S3；R-108、R-377、R-402；任务单第 67 行）：选的或拍的照片 → 原图 webp + 缩略图 webp，带拍摄时间
+// • 随手记插图和隐私记插图共用这一份（11-14 隐私记整块评审第 21 条：原来 features/notes/data 和 features/vault/data 各一份，功能之间不能互相引 data，挪到 platform）。
+//   隐私记传 tz = null：不读拍摄时间（B5 S8：隐私记不读、不存拍摄时间和定位），takenAt 恒为 null
 // • 解码：createImageBitmap（按 EXIF 方向转正，imageOrientation: 'from-image'）；画到 canvas 再编成 webp。
 //   重新编码后原文件的 EXIF 整段都没了（定位、机型一概不带走，R-108），只有拍摄时间从 JPEG 原文件里另读（image-exif.ts）
 // • 原图：长边不超过 FULL_EDGE（2048px），质量从 0.85 起，超过 FULL_MAX（2 MB，images 桶上限）就逐步降，降到底还超就缩小一档再来
@@ -18,8 +20,8 @@
 //   （只记 e.name，不记 message 和图片内容）。这里不写日志，由上传器把它和压图结果记成一行（image-uploader.ts）
 // • 依赖可注入（测试里 jsdom 没有 canvas）
 // 纯 TS：不准 import React（A1）
-import type { Tz } from '../../../../shared/core/tz.ts';
-import { loadWebpWasm, NO_WASM, type RawPixels, type WebpEncode } from '../../../platform/webp-wasm.ts';
+import type { Tz } from '../../shared/core/tz.ts';
+import { loadWebpWasm, NO_WASM, type RawPixels, type WebpEncode } from './webp-wasm.ts';
 import { EXIF_SCAN_BYTES, jpegTakenAt } from './image-exif.ts';
 
 export const FULL_EDGE = 2048;
@@ -225,8 +227,8 @@ async function shrink(enc: WebpEncoder, src: Decoded, edge: number, max: number)
   return 'too_big';
 }
 
-async function takenAtOf(file: Blob, tz: Tz): Promise<number | null> {
-  if (file.type !== 'image/jpeg') return null;
+async function takenAtOf(file: Blob, tz: Tz | null): Promise<number | null> {
+  if (tz === null || file.type !== 'image/jpeg') return null;
   try {
     return jpegTakenAt(await file.slice(0, EXIF_SCAN_BYTES).arrayBuffer(), tz);
   } catch {
@@ -234,7 +236,7 @@ async function takenAtOf(file: Blob, tz: Tz): Promise<number | null> {
   }
 }
 
-async function encodeDecoded(enc: WebpEncoder, src: Decoded, file: File, tz: Tz): Promise<EncodeResult> {
+async function encodeDecoded(enc: WebpEncoder, src: Decoded, file: File, tz: Tz | null): Promise<EncodeResult> {
   if (!(src.width > 0 && src.height > 0)) return { ok: false, code: 'decode_failed' };
   const full = await shrink(enc, src, FULL_EDGE, FULL_MAX);
   if (full === 'too_big') return { ok: false, code: full };
@@ -243,8 +245,8 @@ async function encodeDecoded(enc: WebpEncoder, src: Decoded, file: File, tz: Tz)
   return { ok: true, full: full.blob, thumb: thumb.blob, width: full.w, height: full.h, takenAt: await takenAtOf(file, tz) };
 }
 
-/** 选的或拍的一张照片 → 原图 + 缩略图（webp）+ 拍摄时间；解码以后的结果都带诊断 */
-export async function encodeImage(file: File, tz: Tz, deps: EncodeDeps = defaultDeps): Promise<EncodeResult> {
+/** 选的或拍的一张照片 → 原图 + 缩略图（webp）+ 拍摄时间（tz 为 null 不读）；解码以后的结果都带诊断 */
+export async function encodeImage(file: File, tz: Tz | null, deps: EncodeDeps = defaultDeps): Promise<EncodeResult> {
   const d = startDiag(deps.native);
   let src: Decoded;
   try {

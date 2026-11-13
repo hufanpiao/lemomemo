@@ -2,6 +2,8 @@
 // • 圆点随输入增加，后面只多画一个空位，不暗示上限；“确定”在左下角，输够 4 位才能按；输到 12 位后不再接收（线框 s9 说明）
 // • 电脑上也能直接按数字键、Backspace、Enter（焦点在页面上时）
 // • 输入的数字只在这个组件的 state 里，交出去后立刻清空
+// • 不进运行日志（11-14 隐私记评审第 1 条）：外层带 data-rl-mask，run-log 只记 masked、不记坐标；数字键的 testid 用位置序号 key-0～key-9
+//   （按出现顺序：1～9 是 key-0～key-8，0 是 key-9），不带数字本身
 import { useEffect, useState } from 'react';
 import { useVaultT } from '../hooks/useVaultT.ts';
 import styles from './Vault.module.css';
@@ -18,6 +20,8 @@ export function LockIcon({ big = false }: { big?: boolean }) {
 }
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'ok', '0', 'del'] as const;
+/** 数字键的位置序号（testid 用）：按出现顺序 0～9 */
+const DIGIT_SLOT = new Map(KEYS.filter((k) => /^\d$/.test(k)).map((k, i) => [k, i]));
 
 export function PinPad({ onSubmit, disabled = false, testId }: { onSubmit(pin: string): void; disabled?: boolean; testId: string }) {
   const t = useVaultT();
@@ -52,7 +56,7 @@ export function PinPad({ onSubmit, disabled = false, testId }: { onSubmit(pin: s
   });
   const shown = Math.max(pin.length + 1, PIN_MIN);
   return (
-    <div data-testid={testId}>
+    <div data-testid={testId} data-rl-mask="">
       <div className={styles.dots} role="img" aria-label={t('vault.pad.filled', { n: pin.length })} data-testid={`${testId}-dots`} data-n={pin.length}>
         {Array.from({ length: Math.min(shown, PIN_MAX) }, (_, i) => (
           <i key={i} className={`${styles.dot}${i < pin.length ? ` ${styles.dotOn}` : i >= PIN_MIN ? ` ${styles.dotMore}` : ''}`} />
@@ -69,7 +73,7 @@ export function PinPad({ onSubmit, disabled = false, testId }: { onSubmit(pin: s
               ⌫
             </button>
           ) : (
-            <button key={k} type="button" className={styles.key} onClick={() => press(k)} disabled={disabled} data-testid={`${testId}-k${k}`}>
+            <button key={k} type="button" className={styles.key} onClick={() => press(k)} disabled={disabled} data-testid={`${testId}-key-${DIGIT_SLOT.get(k) ?? ''}`}>
               {k}
             </button>
           ),

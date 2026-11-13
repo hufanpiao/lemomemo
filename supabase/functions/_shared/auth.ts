@@ -2,6 +2,7 @@
 // admin = 用 service role 建的 supabase-js 客户端（绕过 RLS，所以这里必须自己查停用和会话）
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json 一致，tests/build/deno-config.test.ts 核对）
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
+import type { AuthResult } from './auth-result.ts';
 import { json } from './http.ts';
 import { jwtClaims } from './jwt-claims.ts';
 
@@ -105,4 +106,18 @@ export async function requireActiveUser(req: Request, admin: SupabaseClient, opt
   if (!alive) throw new AuthError('session_revoked', 401);
 
   return u.ok ? { userId, sessionId: c.session_id, jwt } : { userId, sessionId: c.session_id, jwt, pendingDeletion: { purgeAfter: u.purgeAfter ?? null } };
+}
+
+/**
+ * 各函数 index.ts 的 authenticate：authResult(() => requireActiveUser(req, admin, opts))。
+ * AuthError 换成 {ok: false, response, code}，别的错照抛（core.ts 回 try_later）。11-14 隐私记整块评审第 16 条：原来 8 个 index.ts 各写一份 try/catch。
+ * requireActiveUser 照旧写在各函数自己的 index.ts 里（tests/build/fn-account-disabled-coverage.test.ts 按函数目录的源码核对 TC-B1-10）
+ */
+export async function authResult(check: () => Promise<ActiveUser>): Promise<AuthResult<ActiveUser>> {
+  try {
+    return { ok: true, user: await check() };
+  } catch (e) {
+    if (e instanceof AuthError) return { ok: false, response: e.toResponse(), code: e.code };
+    throw e;
+  }
 }

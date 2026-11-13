@@ -10,7 +10,8 @@
 // 不加 CORS（0.48 第 4 条）：浏览器经 /sb 同源调用。日志只经 _shared/fn-log.ts 记错误码。
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { AuthError, requireActiveUser } from '../_shared/auth.ts';
+import { authResult, requireActiveUser } from '../_shared/auth.ts';
+import { background } from '../_shared/background.ts';
 import { withVaultUser } from '../_shared/db.ts';
 import { envKind } from '../_shared/env-kind.ts';
 import { codeLogger } from '../_shared/fn-log.ts';
@@ -28,7 +29,7 @@ import { decodeKey32 } from '../_shared/vault-crypto.ts';
 import { versionGate } from '../_shared/version-gate.ts';
 import { tzLabel } from '../_shared/gen/i18n/tz-label.ts';
 import {
-  lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL, VAULT_IMAGE_MAX_BYTES, VAULT_RESET_OTP_MAX_AGE_S, vaultImageKey, vaultRequest,
+  lockSeconds, PIN_RE, VAULT_FAILS_PER_LEVEL, VAULT_RESET_OTP_MAX_AGE_S, vaultImageKey, vaultRequest,
   WEBAUTHN_CHALLENGE_TTL_S, WEBAUTHN_RP_ID,
 } from '../_shared/gen/schema/vault.ts';
 import type { VaultReq, VaultRules } from './common.ts';
@@ -41,15 +42,8 @@ const VAULT_PUSH_OPTIONS = { ttl: 3600, urgency: 'high' } as const;
 
 const RULES: VaultRules = {
   pinRe: PIN_RE, failsPerLevel: VAULT_FAILS_PER_LEVEL, lockSeconds, resetOtpMaxAgeS: VAULT_RESET_OTP_MAX_AGE_S,
-  challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S, rpId: WEBAUTHN_RP_ID, imageMaxBytes: VAULT_IMAGE_MAX_BYTES, imageKey: vaultImageKey,
+  challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S, rpId: WEBAUTHN_RP_ID, imageKey: vaultImageKey,
 };
-
-/** Supabase Edge Runtime 自带的全局（本机 deno 里没有，用 typeof 判断） */
-declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
-function background(p: Promise<unknown>): void {
-  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime) EdgeRuntime.waitUntil(p);
-  else p.catch(() => {});
-}
 
 const KEYS = {
   master: decodeKey32(Deno.env.get('VAULT_KEY')),
@@ -77,15 +71,7 @@ Deno.serve(async (req) => {
   const override = resolveOverride(Deno.env.get('PUSH_SERVICE_OVERRIDE_URL'), url, Deno.env.get('LEMO_LOCAL_PUSH_STUB'));
 
   return handle(req, {
-    async authenticate(r) {
-      try {
-        const u = await requireActiveUser(r, admin);
-        return { ok: true, user: { userId: u.userId, jwt: u.jwt } };
-      } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse() };
-        throw e;
-      }
-    },
+    authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
     parse(v) {
       const p = vaultRequest.safeParse(v);
       return p.success ? (p.data as VaultReq) : null;

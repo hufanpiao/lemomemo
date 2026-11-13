@@ -12,8 +12,10 @@ export function imageWorld(epochs = new Map([[A, 0], [B, 0]])) {
   const r2 = new FakeR2();
   const logs: string[] = [];
   const rate = new Map<string, number>();
-  const notes = new Map([[`${A}|${N}`, true]]);   // A 的隐私记 N
-  const images = new Map<string, { note_id: string; bucket: string; has_thumb: boolean; user: string }>();
+  // A 的隐私记 N 里已经由 vault {save, add_images} 预登记的图 I（64 字节、有缩略图）；deleted：已软删
+  const images = new Map<string, { note_id: string; bucket: string; has_thumb: boolean; bytes: number; user: string; deleted?: boolean }>([
+    [I, { note_id: N, bucket: 'vault-images', has_thumb: true, bytes: 64, user: A }],
+  ]);
   let ms = T0;
   const deps: Deps = {
     async authenticate(req) {
@@ -27,8 +29,7 @@ export function imageWorld(epochs = new Map([[A, 0], [B, 0]])) {
     parseGet(v) { const p = vaultImageGet.safeParse(v); return p.success ? p.data : null; },
     imageKey: vaultImageKey,
     maxBytes: VAULT_IMAGE_MAX_BYTES,
-    async ownsPrivateNote(u, n) { return notes.get(`${u}|${n}`) === true; },
-    async image(u, id) { const i = images.get(id); return i && i.user === u ? i : null; },
+    async image(u, id) { const i = images.get(id); return i && i.user === u && !i.deleted ? i : null; },
     r2,
     now: () => ms,
     log: (c) => logs.push(c),
@@ -40,5 +41,5 @@ export function imageWorld(epochs = new Map([[A, 0], [B, 0]])) {
     req(q, bytes as Uint8Array<ArrayBuffer>, token === null ? {} : { 'x-vault-token': token ?? (await tok(u)) }, u);
   const get = async (body: unknown, token?: string | null, u = A) =>
     req('', JSON.stringify(body), token === null ? {} : { 'x-vault-token': token ?? (await tok(u)) }, u);
-  return { r2, logs, deps, images, notes, epochs, tok, upload, get, advance: (d: number) => { ms += d; } };
+  return { r2, logs, deps, images, epochs, tok, upload, get, advance: (d: number) => { ms += d; } };
 }

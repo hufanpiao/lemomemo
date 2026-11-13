@@ -18,7 +18,7 @@
 //   resolve { v: 1, type: 'resolve', user_id, kind, id, due_at }            —— 不带标题、正文；SW 用公共词典 push.resolved
 //   test    { v: 1, type: 'test', user_id }                                  —— push-test 发；SW 用公共词典 push.test，点开只进 /app/
 //   vault   { v: 1, type: 'vault', user_id, event }                          —— B5：隐私记锁住、改密码、重设、新绑定 Face ID；不带内容，
-//           字取 ./push-vault-data.ts（push.vault.<event>，只进 SW），tag 固定 VAULT_TAG（新的替换旧的），没有 data，点开只进 /app/
+//           字取 ./push-vault-data.ts 的 vaultPushT（push.vault.<event>，createT 造的 t，只进 SW），tag 固定 VAULT_TAG（新的替换旧的），没有 data，点开只进 /app/
 //   user_id、id 是 UUID；due_at 是正的安全整数（epoch ms）；snooze = { label: '10 分钟后', minutes: 10 }（文案由服务器按 ui_locale 生成）
 //   title、body、按键文字里的控制字符（C0、DEL、C1、双向控制符和方向标记、行段分隔符、U+FEFF）换成空格（BE-2 安全审查，见 CONTROL_CHARS）；
 //   title、body 超过 TEXT_MAX（300）字时截断（末尾补 …），不整条拒收（代码审查 S1）；服务器 notify-text 截到各 ≤ 300 字、整份 JSON ≤ 3071 字节（架构 5.3，0.53）
@@ -28,7 +28,7 @@ import { pickLocale } from '../../shared/i18n/pick-locale.ts';
 import { reminderTag, reminderUrl, type ReminderKind } from '../../shared/logic/remind-route.ts';
 import { actionsOf, buttonsOf, isSnoozeMin, type RemindButtons } from './push-actions.ts';
 import { readSwOwner, writePendingAction, type PendingWriteResult, type SwPendingAction } from './pending.ts';
-import { VAULT_PUSH_EVENTS, VAULT_PUSH_TEXT, type VaultPushEvent } from './push-vault-data.ts';
+import { VAULT_PUSH_EVENTS, vaultPushT, type VaultPushEvent } from './push-vault-data.ts';
 
 // 地址、tag 的拼法只留一份（shared/logic/remind-route.ts，架构 0.53）；这里原样转出，SW 一侧仍叫 reminderUrl、notificationTag
 export { reminderUrl, type ReminderKind };
@@ -148,7 +148,7 @@ export function notificationOf(p: PushPayload, languages: readonly string[]): { 
   const loc = localeOf(languages);
   const appName = t('app.name', {}, loc);
   if (p.type === 'test') return { title: appName, options: { body: t('push.test', {}, loc), tag: TEST_TAG, icon: ICON, badge: ICON } };
-  if (p.type === 'vault') return { title: appName, options: { body: VAULT_PUSH_TEXT[loc === 'ko-KR' ? 'ko' : 'zh'][p.event], tag: VAULT_TAG, icon: ICON, badge: ICON } };
+  if (p.type === 'vault') return { title: appName, options: { body: vaultPushT(`push.vault.${p.event}`, {}, loc), tag: VAULT_TAG, icon: ICON, badge: ICON } };
   const data: NotificationData = {
     user_id: p.user_id,
     kind: p.kind,

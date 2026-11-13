@@ -92,7 +92,7 @@ async function fakeServer(page: Page, baseURL: string | undefined): Promise<Fake
 
 /** 在密码键盘上按一串数字再按“确定” */
 async function typePin(page: Page, pad: string, digits: string): Promise<void> {
-  for (const d of digits) await page.getByTestId(`${pad}-k${d}`).click();
+  for (const d of digits) await page.getByTestId(`${pad}-key-${d === '0' ? 9 : Number(d) - 1}`).click(); // 位置序号：1～9 是 key-0～key-8，0 是 key-9
   await page.getByTestId(`${pad}-ok`).click();
 }
 
@@ -153,6 +153,13 @@ test('设密码 → 新建 → 上锁不留内容 → 输错提示剩余次数 �
   await shot(page, '04-输错', browserName);
   await typePin(page, 'vault-unlock-pad', PIN);
   await expect(page.getByTestId('vault-list')).toContainText('体检报告', { timeout: 15_000 });
+  // 11-14 整块评审第 1、14 条：密码键盘的点按在运行日志里只记 masked（没有 testid、坐标）；隐私记状态迁移记了，标题、正文没进日志
+  const runLog = (): Promise<string> => page.evaluate(() => localStorage.getItem('lemo-run-log') ?? '');
+  await expect.poll(runLog).toMatch(/app vault state unlocked/);
+  const log = await runLog();
+  expect(log).toMatch(/(down|click) masked/);
+  expect(log).not.toMatch(/pad-key|pad-k\d|masked[^\n]*x=\d/);
+  for (const secret of ['体检报告', '血压']) expect(log).not.toContain(secret);   // 密码本身不比：日志里的耗时数字可能碰巧含这几位，键位由上一行管
 
   await page.getByTestId('vault-back').click();
   await expect(page.getByTestId('notes')).toBeVisible();
@@ -236,7 +243,7 @@ test('连续输错 5 次：锁定倒计时，键盘不能按', async ({ page, ba
   await setupAndUnlock(page, browserName);
   await page.getByTestId('vault-lock-now').click();
   for (let i = 0; i < 5; i++) await typePin(page, 'vault-unlock-pad', '0000');
-  await expect(page.getByTestId('vault-unlock-pad-k1')).toBeDisabled();
+  await expect(page.getByTestId('vault-unlock-pad-key-0')).toBeDisabled();
   // 服务器说 60 秒：倒计时不能比 60 秒多（原来按卡片挂上时的时间算，显示过“1 分 2 秒”）
   await expect(page.getByText(/输错次数太多，(1 分 0 秒|\d+ 秒) 后再试/)).toBeVisible();
   await shot(page, '05-锁定倒计时', browserName);

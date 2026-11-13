@@ -1,5 +1,5 @@
 // TC-B4-02 JPEG 那一半（B4 插图 S3；R-108、R-377）：真浏览器里重新编码。
-// 在 Node 侧用 esbuild 把真的 src/features/notes/data/image-encode.ts（连同 image-exif.ts、shared/core/date.ts）打成 IIFE 注入同源空白页
+// 在 Node 侧用 esbuild 把真的 src/platform/image-encode.ts（连同 image-exif.ts、shared/core/date.ts）打成 IIFE 注入同源空白页
 // （写法同 idb-tx-helpers.ts），页面里用 canvas 画一张 3000 × 2000 的 JPEG，插上带拍摄时间和 GPS 定位的 EXIF（造法在 exif-sample.ts），调真的 encodeImage：
 //   · 原图是 image/webp、长边 2048、不超过 2 MB；缩略图长边 384、不超过 128 KB
 //   · 输入里另外插一段 XMP（APP1，带 GPS 字样）和一段 COM 注释（安全审建议 1）
@@ -20,7 +20,7 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const BUNDLE = buildSync({
   stdin: {
     contents: [
-      "export { encodeImage, FULL_MAX, THUMB_MAX } from './src/features/notes/data/image-encode.ts';",
+      "export { encodeImage, FULL_MAX, THUMB_MAX } from './src/platform/image-encode.ts';",
       "export { hasAscii, riffChunks } from './src/features/notes/__tests__/exif-sample.ts';",
     ].join('\n'),
     resolveDir: ROOT,

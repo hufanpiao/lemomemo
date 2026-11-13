@@ -3,7 +3,7 @@
 // 覆盖：
 //   ⑤ import：普通随手记带明文、raw_text、tags、ai_meta 和一张有拍摄时间、AI 描述的图，另有旧向量 → 隐私记：明文列全清、body_enc 写入；
 //      图片行换 vault-images、taken_at / ai_desc / ai_tags 清空、ai_status skip；R2 对象从 images 搬到 vault-images；旧向量删掉；list 解得开；
-//      vault-image：往这条隐私记传一张图（R2 里有、Content-Type image/webp），读回字节一样；别人的令牌、普通随手记都拒；
+//      vault-image：往这条隐私记先 save 预登记、再传一张图（R2 里有、Content-Type image/webp），读回字节一样；别人的令牌、普通随手记都拒；
 //      export 反过来：明文写回、bucket images、ai_status pending、对象搬回、这张图的 vault_ai 删掉；带 note_files 的普通随手记 import 回 409 has_files；
 //   ⑥ account export：带有效令牌时隐私记那条只有密文列和中性列（没有 title、body），隐私记图片行没有 taken_at；不带令牌整行不进、vault 是 omitted；
 //   ⑦ rebind_device（TC-B1-85 ⑩）：直连数据库调 rebind_device_impl 被拒（rebind_denied，role 不是 service_role）；
@@ -62,11 +62,12 @@ Deno.test({ name: '⑤ import：明文列清空、图片换桶并清拍摄时间
 } });
 
 Deno.test({ name: '⑤ vault-image：传图、读回字节一样；别人的令牌、普通随手记、别人的图都拒', ...opts, async fn() {
+  // 先 save 预登记，再上传（11-14 整块评审第 3 条）
+  tokC = String((await okVault(jwtC, { action: 'save', id: P1, title: '旧标题', body: '旧正文', category_id: null, created_at: 1, updated_at: Date.now(),
+    add_images: [{ id: IMG_NEW, bytes: WEBP.length, width: null, height: null, has_thumb: false }] }, tokC, 'save 预登记新图')).vault_token);
   expectStatus(await uploadImage(jwtC, tokC, P1, IMG_NEW), 200, '上传');
   const key = vaultImageKey(C, P1, IMG_NEW, 'full');
   assertEquals(fakeS3.objects.get(`vault-images/${key}`)?.contentType, 'image/webp');
-  tokC = String((await okVault(jwtC, { action: 'save', id: P1, title: '旧标题', body: '旧正文', category_id: null, created_at: 1, updated_at: Date.now(),
-    add_images: [{ id: IMG_NEW, bytes: 1, width: null, height: null, has_thumb: false }] }, tokC, 'save 挂上新图')).vault_token);
   const got = await getImage(jwtC, tokC, IMG_NEW);
   assertEquals([got.status, got.type, [...got.bytes]], [200, 'image/webp', [...WEBP]], '读回');
   assertEquals((await getImage(jwtC, tokC, IMG)).status, 200, '搬进来的图也能读');

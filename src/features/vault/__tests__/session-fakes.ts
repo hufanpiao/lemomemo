@@ -17,11 +17,11 @@ type Reply = (req: VaultRequest, token: string | null) => unknown;
 
 /**
  * 桩：按 action 回指定的东西（可以是 Promise，测“请求在路上”）；VaultFail 原样回，别的当成功响应按 schema 校验。
- * 和服务器一样（vault-image 的 ownsPrivateNote，M1）：只收已经存在的隐私记的图——save 成功过的 id（加上列表里那一条）才算存在
+ * 和服务器一样（11-14 整块评审第 3 条）：vault-image 只收 save 的 add_images 预登记过的图（按 隐私记 id/图片 id 记）
  */
 function fakeApi(replies: Partial<Record<VaultRequest['action'], Reply>>) {
   const calls: { action: string; token: string | null; req: VaultRequest }[] = [];
-  const saved = new Set<string>([NID]);
+  const registered = new Set<string>();
   const api: VaultApi = {
     async call<S extends z.ZodType>(req: VaultRequest, token: string | null, schema: S): Promise<VaultResult<z.infer<S>>> {
       calls.push({ action: req.action, token, req });
@@ -29,12 +29,12 @@ function fakeApi(replies: Partial<Record<VaultRequest['action'], Reply>>) {
       const v: unknown = await (fn ? fn(req, token) : { ok: true, vault_token: TOK, expires_at: 9e12 });
       if (typeof v === 'object' && v !== null && (v as { ok?: unknown }).ok === false) return v as VaultFail;
       const p = schema.safeParse(v);
-      if (p.success && req.action === 'save') saved.add(req.id);
+      if (p.success && req.action === 'save') for (const i of req.add_images ?? []) registered.add(`${req.id}/${i.id}`);
       return p.success ? { ok: true, value: p.data } : { ok: false, code: 'unknown' };
     },
     imageGet: vi.fn(async () => ({ ok: true as const, value: new Blob(['x']) }) as VaultResult<Blob>),
-    imageUpload: vi.fn(async (q: { note_id: string }) =>
-      saved.has(q.note_id) ? ({ ok: true, value: true } as const) : ({ ok: false, code: 'not_found' } as VaultFail)),
+    imageUpload: vi.fn(async (q: { note_id: string; image_id: string }) =>
+      registered.has(`${q.note_id}/${q.image_id}`) ? ({ ok: true, value: true } as const) : ({ ok: false, code: 'not_found' } as VaultFail)),
   };
   return { api, calls };
 }

@@ -4,8 +4,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import type { FileError, UploadResult } from '../../../platform/files.ts';
-import { encodeImage, fitEdge, isHeic, THUMB_EDGE, THUMB_MAX, type Decoded, type EncodeDeps } from '../data/image-encode.ts';
-import { exifDateToMs, jpegTakenAt } from '../data/image-exif.ts';
+import { encodeImage, fitEdge, isHeic, THUMB_EDGE, THUMB_MAX, type Decoded, type EncodeDeps } from '../../../platform/image-encode.ts';
+import { exifDateToMs, jpegTakenAt } from '../../../platform/image-exif.ts';
 import { createUploader, type UploaderDeps } from '../data/image-uploader.ts';
 import { createImageView, livePaths } from '../data/image-view.ts';
 import { imagePath, imageRow, rowSyncOf, thumbPath, uploadFailKey, uploadPair, uuidv7, type QueueItem } from '../data/note-images.ts';

@@ -12,6 +12,7 @@ import type { VaultApi, VaultFail, VaultResult } from '../data/vault-api.ts';
 import { installVaultSession, SHIELD_ATTR, watchLeave } from '../hooks/useVault.ts';
 import VaultPage from '../ui/VaultPage.tsx';
 import { applyLook } from '../../../platform/look.ts';
+import { make } from './session-fakes.ts';
 
 vi.mock('../../../kit/hooks/useCollection.ts', () => ({ useCollection: () => [] }));
 
@@ -207,5 +208,34 @@ describe('TC-B5-48 ②：隐私记自己的“最近删除”', () => {
       fireEvent.click(screen.getByTestId('vault-purge-confirm-ok'));
     });
     await waitFor(() => expect(purge).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('11-14 整块评审第 22 条：令牌续不上（超过 12 小时、闲置过期）时编辑页的草稿不丢', () => {
+  it('打字触发续期被拒 → 换成解锁卡、DOM 里没有草稿；解锁后草稿自动保存一次', async () => {
+    const m = make({ renew: () => ({ ok: false, code: 'vault_locked' }) });
+    installVaultSession(m.s);
+    window.location.hash = '#/vault/new';
+    render(<VaultPage />);
+    await screen.findByTestId('vault-unlock-pinview');
+    await act(async () => {
+      await m.s.refreshStatus();
+      await m.s.unlock('1234');
+    });
+    const title = await screen.findByTestId('vault-edit-title');
+    fireEvent.change(title, { target: { value: '草稿标题' } });
+    m.clock.ms += 6 * 60_000;
+    await act(async () => {
+      fireEvent.change(screen.getByTestId('vault-edit-body'), { target: { value: '还没存的正文' } });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await screen.findByTestId('vault-unlock-pinview');
+    expect(document.body.textContent).not.toContain('还没存的正文');
+    expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(0);
+    await act(async () => {
+      await m.s.unlock('1234');
+    });
+    await waitFor(() => expect(m.calls.filter((c) => c.action === 'save')).toHaveLength(1));
+    expect(m.calls.find((c) => c.action === 'save')?.req).toMatchObject({ title: '草稿标题', body: '还没存的正文' });
   });
 });

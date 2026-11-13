@@ -6,6 +6,7 @@
 //   → 回 {token, id, expires_at}：明文码只出现在这一次响应里（设置页只显示这一次、不做成可点链接）。
 // 列表、最后使用时间：客户端经 RLS 直接读 api_tokens（tok_sel）；断开连接：客户端 PATCH revoked_at（guard_token_revoke），都不经这里。
 // 版本门在 index.ts 入口处查（标“查”）。日志只记错误码，不打印码、哈希、label。纯逻辑：依赖全部注入。
+import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
 import { randomToken, tokenHash, TOKEN_TTL_MS } from '../_shared/intake-token.ts';
 
 export const DAILY_LIMIT = 10;
@@ -15,7 +16,7 @@ export const MAX_ACTIVE = 5;
 const MAX_BODY = 2048;
 const INSERT_ATTEMPTS = 3;
 
-export type AuthResult = { ok: true; user: { userId: string } } | { ok: false; response: Response };
+export type AuthResult = SharedAuthResult;
 
 export interface Store {
   takeRate(key: string, limit: number, windowS: number): Promise<boolean>;

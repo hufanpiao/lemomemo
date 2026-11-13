@@ -10,13 +10,13 @@ import { z } from 'zod';
 
 /** 隐私记自己的错误码；HTTP 状态写在行尾 */
 export const VAULT_ERROR_CODES = [
-  'vault_locked',          // 401  没带令牌、签名不对、user_id 对不上、过期（0.29 续第 94 条 ①～④）
+  'vault_locked',          // 401  没带令牌、签名不对、user_id 对不上、过期（0.29 续第 94 条 ①～④）；离上次输密码 / Face ID 解锁满 12 小时（续期封顶，令牌到点过期）
   'vault_relock',          // 401  令牌里的 pin_epoch 不是当前值（别处改过或重设过密码，⑤）
   'not_set',               // 409  还没设过密码（unlock、change_pin、webauthn 等）
   'already_set',           // 409  setup 第二次（安全审查中 2）
   'bad_pin',               // 400  不是 4～12 位数字
-  'pin_wrong',             // 403  密码不对；带 left（还能试几次，到 0 就锁上了）
-  'pin_locked',            // 423  逐级锁定中；带 retry_after_s
+  'pin_wrong',             // 403  密码不对、还没锁；带 left（还能试几次，1～4）
+  'pin_locked',            // 423  逐级锁定中，或这一次输错正好锁上（11-14 整块评审第 6 条：锁上的那一次也回它）；带 retry_after_s
   'reauth_required',       // 401  reset 要 10 分钟内刚用邮箱验证码登录过（看 amr 的 otp timestamp，不看 iat）
   'webauthn_failed',       // 403  WebAuthn 校验没过（origin、RP ID、签名、sign_count、挑战过期或用过、不认识的凭据）
   'webauthn_unavailable',  // 400  这个来源不能用 WebAuthn（exe 的 tauri.localhost 等，R-105）
@@ -41,6 +41,7 @@ export type VaultErrorBody = z.infer<typeof vaultErrorBody>;
 // ---------------- 常量（出处见行尾） ----------------
 export const PIN_RE = /^\d{4,12}$/;                                  // 5.5：4 到 12 位数字
 export const VAULT_TOKEN_TTL_S = 600;                                // 5.5：10 分钟，每次调用续期
+export const VAULT_UNLOCK_MAX_AGE_S = 43200;                         // 11-14 主持人代定（整块评审第 22 条）：从输密码 / Face ID 解锁起最多续到 12 小时，之后要重新解锁
 export const VAULT_FAILS_PER_LEVEL = 5;                              // 5.5：连续错 5 次锁一次
 export const VAULT_LOCK_STEPS_S = [60, 300, 900, 3600, 14400, 86400] as const;   // 5.5：1 分、5 分、15 分、1 小时、4 小时，之后一直 24 小时
 export const VAULT_RESET_OTP_MAX_AGE_S = 600;                        // 5.5：amr 里 otp 的 timestamp 在 10 分钟以内
@@ -64,7 +65,7 @@ const pin = z.string().max(64);   // 格式由服务器判（bad_pin），这里
 const b64u = z.string().regex(/^[A-Za-z0-9_-]*$/).max(8192);
 const ms = z.number().int().nonnegative();
 
-/** 新增一张已经经 vault-image 上传好的图（服务器 HEAD 一下 R2 核对大小后写 note_images 行） */
+/** save 时预登记一张图（写 note_images 行，算存储额度）；随后客户端经 vault-image 上传，原图字节数必须正好是这里的 bytes（11-14 整块评审第 3 条） */
 export const vaultImageAdd = z.object({
   id: uuid, bytes: z.number().int().positive().max(VAULT_IMAGE_MAX_BYTES),
   width: z.number().int().positive().max(20000).nullable(), height: z.number().int().positive().max(20000).nullable(),
@@ -146,7 +147,8 @@ export const vaultPurgeResponse = z.object({ ok: z.literal(true), purged: z.numb
 // ---------------- vault-image ----------------
 // get：POST JSON {action: 'get', image_id, part?: 'thumb'} → 直接回字节（Content-Type: image/webp、Cache-Control: no-store、nosniff）
 // upload：POST 原始 webp 字节，地址带 ?action=upload&note_id=&image_id=&part=full|thumb（请求体不是 JSON，参数只能放地址里；
-//   地址里只有三个 UUID，不含内容）→ {ok: true}；之后由 vault {save, add_images} 写 note_images 行
+//   地址里只有三个 UUID，不含内容）→ {ok: true}；只收已经由 vault {save, add_images} 预登记、没删的 image_id（且 note_id 对得上）：
+//   原图字节数必须等于登记的 bytes，缩略图不超过 128 KB 且登记时 has_thumb（11-14 整块评审第 3、11 条）
 export const vaultImageGet = z.object({ action: z.literal('get'), image_id: uuid, part: z.enum(['full', 'thumb']).optional() });
 export const vaultImageUploadQuery = z.object({
   action: z.literal('upload'), note_id: uuid, image_id: uuid, part: z.enum(['full', 'thumb']),

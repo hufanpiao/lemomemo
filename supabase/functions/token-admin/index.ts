@@ -3,7 +3,7 @@
 // 用到的库对象：private.account_usable、private.session_alive（经 _shared/auth.ts）、private.take_rate、public.api_tokens（数有效码个数；service role 插入：
 //   表上没有 insert 策略，只能由这里建，0001 第 10 节）、app_config（版本门）。不直连数据库，不碰 R2，不碰 AI。不加 CORS（0.48 第 4 条）。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { AuthError, requireActiveUser } from '../_shared/auth.ts';
+import { authResult, requireActiveUser } from '../_shared/auth.ts';
 import { versionGate } from '../_shared/version-gate.ts';
 import { handle, json } from './core.ts';
 import { timedFetch } from '../_shared/net.ts';
@@ -26,14 +26,7 @@ Deno.serve(async (req) => {
   });
   if (blocked) return blocked;
   return handle(req, {
-    async authenticate(r) {
-      try {
-        return { ok: true, user: await requireActiveUser(r, admin) };
-      } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse() };
-        throw e;
-      }
-    },
+    authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
     store: {
       async takeRate(k, limit, windowS) {
         const { data, error } = await admin.schema('private').rpc('take_rate', { p_key: k, p_limit: limit, p_window_s: windowS });

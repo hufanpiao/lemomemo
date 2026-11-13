@@ -7,7 +7,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { t } from '../../shared/i18n/i18n.ts';
 import { buildPayload, VAULT_PUSH_EVENTS as SERVER_VAULT_EVENTS, type PayloadInput } from '../../supabase/functions/_shared/push/payload.ts';
-import { VAULT_PUSH_EVENTS, VAULT_PUSH_TEXT } from '../../src/sw/push-vault-data.ts';
+import { VAULT_PUSH_EVENTS, vaultPushT } from '../../src/sw/push-vault-data.ts';
 import { claimCache } from '../../src/core/account.ts';
 import { openCache } from '../../src/core/cache.ts';
 import { PENDING_ACTIONS } from '../../src/core/cache-schema.ts';
@@ -449,13 +449,13 @@ describe('和后端 buildPayload 对拍（supabase/functions/_shared/push/payloa
   });
 });
 
-describe('隐私记推送（B5 S2～S4、D19：负载不带内容，字由 SW 本地词典 push.vault.<event> 出）', () => {
+describe('隐私记推送（B5 S2～S4、D19：负载不带内容，字由 SW 的 vaultPushT（push.vault.<event>，createT 造）出）', () => {
   const td = new TextDecoder();
   it('四种事件和后端一字不差；中文、韩文每种都有字', () => {
     expect([...VAULT_PUSH_EVENTS]).toEqual([...SERVER_VAULT_EVENTS]);
     for (const e of VAULT_PUSH_EVENTS) {
-      expect(VAULT_PUSH_TEXT.zh[e].length).toBeGreaterThan(0);
-      expect(VAULT_PUSH_TEXT.ko[e].length).toBeGreaterThan(0);
+      expect(vaultPushT(`push.vault.${e}`, {}, 'zh-CN').length).toBeGreaterThan(0);
+      expect(vaultPushT(`push.vault.${e}`, {}, 'ko-KR')).not.toBe(vaultPushT(`push.vault.${e}`, {}, 'zh-CN'));
     }
   });
 
@@ -466,10 +466,10 @@ describe('隐私记推送（B5 S2～S4、D19：负载不带内容，字由 SW �
       expect(p).toEqual({ v: 1, type: 'vault', user_id: UID, event });
       const zh = notificationOf(p, ZH);
       expect(zh.title).toBe(t('app.name', {}, 'zh-CN'));
-      expect(zh.options).toMatchObject({ body: VAULT_PUSH_TEXT.zh[event], tag: VAULT_TAG });
+      expect(zh.options).toMatchObject({ body: vaultPushT(`push.vault.${event}`, {}, 'zh-CN'), tag: VAULT_TAG });
       expect(zh.options.data).toBeUndefined();
       expect(zh.options.actions).toBeUndefined();
-      expect(notificationOf(p, ['ko-KR']).options.body).toBe(VAULT_PUSH_TEXT.ko[event]);
+      expect(notificationOf(p, ['ko-KR']).options.body).toBe(vaultPushT(`push.vault.${event}`, {}, 'ko-KR'));
     }
   });
 

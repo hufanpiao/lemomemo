@@ -1,7 +1,7 @@
 // Face ID / Windows Hello 和“忘记密码”重设（B5 S3、S4；代定 D5、D18）
 // • useWebauthn：这台设备能不能用（exe、不支持的环境不显示，platform/webauthn.ts）、按钮上的叫法、解锁、绑定（绑定要当场输密码）
 // • useVaultReset：发验证码 → 验证码 + 交接设备行（core/session-rebind.ts）→ 设新密码（vault {reset, new_pin}）
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getBoot } from '../../../core/boot.ts';
 import { createSessionRebind, type RebindErr } from '../../../core/session-rebind.ts';
 import { buildInfo, isAppleMobile } from '../../../platform/env.ts';
@@ -67,19 +67,23 @@ async function deviceId(): Promise<string | null> {
   }
 }
 
+/**
+ * 交接设备行的实例整页只建一个（11-14 整块评审第 4 条）：结果不确定时留着的新会话 S2 在它里面，
+ * 跟着组件建的话离开重设页就丢了（之后既不能重发交接，也挡不住 core/rebind-pending.ts 的退出闸）
+ */
+let rebindOne: ReturnType<typeof createSessionRebind> | null = null;
+const rebindOf = () =>
+  (rebindOne ??= createSessionRebind({
+    main: async () => (await getSupabase()).auth,
+    ephemeral: async () => (await createEphemeralDb()).auth,
+    fetch: appFetch,
+    accountUrl: `${buildInfo.supabaseUrl}/functions/v1/account`,
+    anonKey: buildInfo.anonKey,
+  }));
+
 export function useVaultReset() {
   const { s } = useVault();
-  const rebind = useMemo(
-    () =>
-      createSessionRebind({
-        main: async () => (await getSupabase()).auth,
-        ephemeral: async () => (await createEphemeralDb()).auth,
-        fetch: appFetch,
-        accountUrl: `${buildInfo.supabaseUrl}/functions/v1/account`,
-        anonKey: buildInfo.anonKey,
-      }),
-    [],
-  );
+  const rebind = rebindOf();
   const email = readSessionEmail();
   const [step, setStep] = useState<ResetStep>('intro');
   const [busy, setBusy] = useState(false);

@@ -65,11 +65,6 @@ export function confirmOk(v: unknown): boolean {
   return typeof v === 'string' && v.length <= 32 && (CONFIRM_WORDS as readonly string[]).includes(v.trim());
 }
 
-/**
- * amr 里 otp 那一项在 10 分钟以内（第 131 条④）。B5 起挪到 _shared/otp-fresh.ts，和 vault 的 reset 共用一份；这里原样转出（测试照旧从 core.ts 引）
- */
-export { otpFresh };
-
 async function readBody(req: Request): Promise<Record<string, unknown> | null> {
   const text = await req.text().catch(() => null);
   if (text === null || text.length > MAX_BODY) return null;

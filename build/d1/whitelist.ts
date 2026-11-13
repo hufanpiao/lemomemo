@@ -61,7 +61,8 @@ export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
     'public.todos:SELECT': ['id', 'user_id', 'title', 'note', 'deleted_at'],
     'public.notes:SELECT': ['id', 'user_id', 'title', 'body', 'body_enc', 'enc_key_id', 'is_private', 'category_id', 'deleted_at'],
     'public.note_images:SELECT': ['id', 'user_id', 'note_id', 'bucket', 'path', 'has_thumb', 'mime', 'deleted_at',
-      'ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at'],
+      'ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at',
+      'bytes'],   // bytes：vault-image 上传按预登记的字节数核对（20261114210000，B5 整块评审第 3 条）
     'public.note_images:UPDATE': ['ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at'],
     'public.note_files:SELECT': ['id', 'user_id', 'note_id', 'kind', 'path', 'has_thumb', 'is_vault', 'name', 'mime', 'bytes',
       'text_excerpt', 'text_enc', 'enc_key_id', 'deleted_at', 'etag', 'check_status', 'ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at'],

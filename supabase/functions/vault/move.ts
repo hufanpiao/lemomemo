@@ -8,25 +8,20 @@
 //   ③ 发现这条已经是目标状态（同一条并发搬了两次，另一次先提交）：回 404，但**不删**②写的对象——另一次在②里碰到“对象已经在”算成功，
 //      它提交后指着的正是这些对象（11-14 独立评审 S2）。③ 抛错时先另开短事务看一眼，已经是目标状态或看不了都不删（宁可留垃圾）。
 // 令牌由 core.ts 在进来之前单独验过；这里自己开事务，不占着 core 的事务做网络请求。
-import { ENC_KEY_ID, aesKeyFor, openNote, sealNote } from '../_shared/vault-crypto.ts';
+import { ENC_KEY_ID, openNote, sealNote } from '../_shared/vault-crypto.ts';
 import { IMAGE_TYPE, isExists, VAULT_IMAGE_BUCKET } from '../_shared/vault-images.ts';
-import { type Ctx, err, type ImageRow, type NoteRow, type Obj, type Out, out, type ReqOf, type VaultTx } from './common.ts';
+import { type Ctx, err, imageKeys, type ImageRow, noteKey, type NoteRow, type Obj, type Out, out, type ReqOf, type VaultTx } from './common.ts';
 
 type Bucket = ImageRow['bucket'];
 type Dir = { from: Bucket; to: Bucket; wantPrivate: boolean };
 const IMPORT: Dir = { from: 'images', to: VAULT_IMAGE_BUCKET, wantPrivate: false };
 const EXPORT: Dir = { from: VAULT_IMAGE_BUCKET, to: 'images', wantPrivate: true };
 
-/** 一条随手记全部图片在某个桶里的对象键（没删的；缩略图有才算） */
-function keysFor(c: Ctx, noteId: string, imgs: readonly ImageRow[]): string[] {
-  const k: string[] = [];
-  for (const i of imgs) {
-    if (i.deleted_at !== null) continue;
-    k.push(c.deps.rules.imageKey(c.userId, noteId, i.id, 'full'));
-    if (i.has_thumb) k.push(c.deps.rules.imageKey(c.userId, noteId, i.id, 'thumb'));
-  }
-  return k;
-}
+/**
+ * 一条随手记全部图片在某个桶里的对象键（缩略图有才算）。已软删的行也算：③ 换桶时这条的图片行一律换（含已删的），
+ * 对象也得跟着搬，否则行指新桶、对象留在旧桶（11-14 整块评审第 7 条）；对象已经不在（已清理、隐私记删图时已删）的，② 记 move_missing_src 跳过
+ */
+const keysFor = (c: Ctx, noteId: string, imgs: readonly ImageRow[]): string[] => imgs.flatMap((i) => imageKeys(c, noteId, i));
 
 async function readAll(body: unknown): Promise<Uint8Array> {
   return new Uint8Array(await new Response(body as BodyInit).arrayBuffer());
@@ -56,7 +51,7 @@ const sameImages = (a: readonly ImageRow[], b: readonly ImageRow[]) =>
 
 /** ③ 里写这条：移进写密文，移出写明文；0 行回 false */
 async function writeNote(c: Ctx, t: VaultTx, n: NoteRow, d: Dir): Promise<boolean | Response> {
-  const key = await aesKeyFor(c.keys.master, c.userId, 'note');
+  const key = await noteKey(c);
   const at = c.deps.now();
   if (!d.wantPrivate) return t.toVault(n.id, await sealNote(key, c.userId, n.id, n.title ?? '', n.body ?? '', ENC_KEY_ID), ENC_KEY_ID, at);
   const p = n.body_enc && n.enc_key_id !== null ? await openNote(key, c.userId, n.id, n.enc_key_id, n.body_enc) : null;

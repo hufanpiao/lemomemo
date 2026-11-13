@@ -15,7 +15,7 @@ import { accountExitOf, upload, type FileError, type UploadResult } from '../../
 import { rlog } from '../../../platform/run-log-api.ts';
 import { readSessionId } from '../../../platform/session.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { encodeDiagText, encodeImage, type EncodeFail, type EncodeResult } from './image-encode.ts';
+import { encodeDiagText, encodeImage, type EncodeFail, type EncodeResult } from '../../../platform/image-encode.ts';
 import { imageView, type ImageView } from './image-view.ts';
 import { imageRow, rowSyncOf, thumbPath, uploadPair, uuidv7, writeFailKey, type ImgFailKey, type QueueItem, type RowSync } from './note-images.ts';
 

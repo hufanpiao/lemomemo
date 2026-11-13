@@ -143,9 +143,8 @@ export async function verifyEs256(publicRaw: Uint8Array, derSig: Uint8Array, dat
   try {
     const key = await crypto.subtle.importKey('raw', publicRaw as Bytes, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
     return await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, derToRaw(derSig), data as Bytes);
-  } catch (e) {
-    if (e instanceof WebauthnError) return false;
-    return false;
+  } catch {
+    return false;   // 公钥导不进、签名不是合法 DER（derToRaw 抛 WebauthnError）都当验不过
   }
 }
 

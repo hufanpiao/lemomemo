@@ -1,8 +1,13 @@
 // 隐私记会话（B5 FA-1；架构 5.5、0.27 第 5 点、0.29 续第 87、94、127 条；S6；TC-B5-10、11、44、47）
 // • 令牌、明文（notes）、图片的 blob URL 只在这个对象的内存里；令牌另抄一份到 core/vault-token.ts（导出要带），同样只在内存
 // • lock()：清明文、令牌、撤销全部 blob URL（TC-B5-11：上锁后组件树、DOM 里不留明文；D3：撤销后的地址再用就失效）
-// • 半路上锁（11-14 独立评审 S1）：每次发请求前记下 epoch（每上锁一次加 1），回来时 epoch 变了就整个丢掉结果（STALE）——
-//   不收令牌、不写明文、不造 blob 地址、不弹解锁、不重试；解锁（setup、unlock、reset、Face ID）、list、取图、传图都一样
+// • 半路上锁（11-14 独立评审 S1；11-14 整块评审第 8 条）：上锁分两种——
+//   - 作废在飞请求的上锁（hard）：用户主动上锁、离开超时、vault_relock、session_revoked。回来的结果整个丢掉（STALE）：
+//     不收令牌、不写明文、不造 blob 地址、不弹解锁、不重试
+//   - 令牌过期的上锁（soft，vault_locked：等解锁重试那种）：同时在飞的写请求（保存、传图、移进移出……）不丢——
+//     回来成功就照常算成功（只是不收令牌，锁着不留令牌），失败就进 waiters，解锁后重发一次；list、取图这类读请求照样丢（锁着不写明文）
+// • 运行日志（第 14 条）：状态迁移（phase、waiting、relock）、错误码和 left、STALE 丢弃、续期结果、取图失败经 rlog 记；
+//   不记标题、正文、密码、令牌、图片 id
 // • 失败怎么落只按 data/vault-errors.ts 的落法（kind）分支（onFail 里穷尽 switch），不另写一套按码判断
 // • run(req)：带令牌调 vault；成功换上新令牌（每次续期 600 秒）。
 //   - vault_locked → 上锁、置 waiting（界面弹解锁），等解锁成功后**自动重试一次**原请求；再失败就停（TC-B5-47 ①）；取消解锁回失败
@@ -19,6 +24,7 @@ import {
   webauthnOptionsResponse, type VaultImageAdd, type VaultNote, type VaultRequest,
 } from '../../../../shared/schema/vault.ts';
 import { setVaultToken } from '../../../core/vault-token.ts';
+import { rlog } from '../../../platform/run-log-api.ts';
 import type { VaultApi, VaultFail, VaultResult } from './vault-api.ts';
 import { unhandled, vaultErrorAction, type VaultCode } from './vault-errors.ts';
 
@@ -55,6 +61,8 @@ const INIT: VaultState = {
 const tokenShape = z.object({ vault_token: z.string(), expires_at: z.number() });
 /** 半路上锁丢掉的结果（按引用比较：run 见到它不弹解锁、不重试，调用方不再 onFail） */
 const STALE: VaultFail = { ok: false, code: 'vault_locked' };
+/** 在飞时碰上令牌过期的上锁、等解锁时用户取消了：回失败（调用方照常提示“已锁上”），run 不再弹解锁 */
+const CANCELLED: VaultFail = { ok: false, code: 'vault_locked' };
 /** 拿到令牌满这么久、编辑页又有输入就续一次（令牌 10 分钟） */
 export const RENEW_AFTER_MS = 5 * 60_000;
 
@@ -93,15 +101,21 @@ export function createVaultSession(d: VaultSessionDeps) {
   let tokenAt = 0;
   let renewing = false;
   let hiddenAt: number | null = null;
-  /** 每上锁一次加 1：半路上锁的取图结果据此丢掉 */
+  /** 每上锁一次加 1（两种上锁都加）：读请求据此丢掉 */
   let epoch = 0;
+  /** 只在作废在飞请求的上锁（hard）时加 1：写请求据此丢掉 */
+  let hardEpoch = 0;
   const blobs = new Map<string, string>();
   const pendingImg = new Map<string, Promise<string | null>>();
   let waiters: ((ok: boolean) => void)[] = [];
   const listeners = new Set<() => void>();
 
   const set = (patch: Partial<VaultState>): void => {
+    const was = state;
     state = { ...state, ...patch };
+    if (was.phase !== state.phase || was.waiting !== state.waiting || was.relocked !== state.relocked) {
+      rlog(`vault state ${state.phase}${state.waiting ? ' waiting' : ''}${state.relocked ? ' relock' : ''}${state.lastError ? ` err=${state.lastError}` : ''}`);
+    }
     for (const fn of [...listeners]) fn();
   };
 
@@ -119,10 +133,11 @@ export function createVaultSession(d: VaultSessionDeps) {
     pendingImg.clear();
   }
 
-  /** 上锁：清明文、令牌、blob URL；同步完成（Ctrl+L、自动上锁、relock 都走这里） */
-  function lock(patch: Partial<VaultState> = {}): void {
+  /** 上锁：清明文、令牌、blob URL；同步完成。hard：作废在飞请求（主动上锁、超时、relock、revoked）；令牌过期的上锁不作废写请求 */
+  function lock(patch: Partial<VaultState>, hard: boolean): void {
     token = null;
     epoch += 1;
+    if (hard) hardEpoch += 1;
     onToken(null, 0);
     revokeAll();
     hiddenAt = null;
@@ -142,25 +157,29 @@ export function createVaultSession(d: VaultSessionDeps) {
     switch (kind) {
       case 'relock':
         release(false);
-        lock({ relocked: true, waiting: false, lastError: f.code });
+        lock({ relocked: true, waiting: false, lastError: f.code }, true);
         return;
       case 'revoked':
         release(false);
-        lock({ waiting: false, lastError: f.code });
+        lock({ waiting: false, lastError: f.code }, true);
         return;
       case 'unlock':
-        lock({ lastError: f.code });
+        lock({ lastError: f.code }, false);
         return;
       case 'pin_wrong':
-        set({ left: f.left ?? null, lastError: f.code });
+        // 第 6 条：锁上的那一次服务器回 423 pin_locked；万一回的是 pin_wrong 又带了 retry_after_s，照样显示倒计时
+        rlog(`vault fail ${f.code} left=${f.left ?? '-'}${f.retryAfterS !== undefined ? ` retry=${f.retryAfterS}` : ''}`);
+        set({ left: f.left ?? null, lastError: f.code, ...(f.retryAfterS !== undefined ? { lockedUntil: now() + f.retryAfterS * 1000 } : {}) });
         return;
       case 'pin_locked':
+        rlog(`vault fail ${f.code} retry=${f.retryAfterS ?? '-'}`);
         set({ lockedUntil: now() + (f.retryAfterS ?? 60) * 1000, left: 0, lastError: f.code });
         return;
       case 'setup':
       case 'reauth':
       case 'webauthn':
       case 'message':
+        rlog(`vault fail ${f.code}`);
         set({ lastError: f.code });
         return;
       default:
@@ -168,50 +187,73 @@ export function createVaultSession(d: VaultSessionDeps) {
     }
   }
 
-  /** 发出去、回来时还是同一段解锁期（epoch 没变）才算数；变了回 STALE */
-  async function guarded<T>(send: () => Promise<VaultResult<T>>): Promise<VaultResult<T>> {
-    const at = epoch;
+  const waitUnlock = (): Promise<boolean> => new Promise<boolean>((resolve) => waiters.push(resolve));
+
+  /**
+   * 发出去、回来时还是同一段解锁期才算数（第 8 条）：
+   * • 中间有过作废在飞请求的上锁 → STALE
+   * • 中间只有令牌过期的上锁：读请求（write = false）→ STALE；写请求成功就回成功（标 late，调用方不收令牌），
+   *   失败就等解锁、重发一次（send 每次现读令牌）；等的时候取消回 CANCELLED、作废回 STALE
+   */
+  async function guarded<T>(send: () => Promise<VaultResult<T>>, write: boolean): Promise<{ r: VaultResult<T>; late: boolean }> {
+    const e = epoch;
+    const h = hardEpoch;
     const r = await send();
-    return epoch === at ? r : STALE;
+    if (hardEpoch !== h) return drop(r, 'hard');
+    if (epoch === e) return { r, late: false };
+    if (!write) return drop(r, 'soft');
+    if (r.ok) return { r, late: true };
+    rlog(`vault inflight ${r.code} wait-unlock`);
+    const ok = await waitUnlock();
+    if (hardEpoch !== h) return drop(r, 'hard');
+    if (!ok) return { r: CANCELLED, late: false };
+    return guarded(send, write);
+  }
+  function drop<T>(r: VaultResult<T>, why: string): { r: VaultResult<T>; late: boolean } {
+    rlog(`vault stale ${why} ${r.ok ? 'ok' : r.code}`);
+    return { r: STALE, late: false };
   }
 
-  /** 带令牌调一次（不处理 vault_locked）；成功收新令牌 */
-  async function once<S extends z.ZodType>(req: VaultRequest, schema: S): Promise<VaultResult<z.infer<S>>> {
-    const r = await guarded(() => d.api.call(req, token, schema));
-    if (r.ok) takeToken(r.value);
+  /** 带令牌调一次（不处理 vault_locked）；成功收新令牌（在飞时碰上令牌过期的上锁、回来才成功的不收：锁着不留令牌） */
+  async function once<S extends z.ZodType>(req: VaultRequest, schema: S, write = true): Promise<VaultResult<z.infer<S>>> {
+    const { r, late } = await guarded(() => d.api.call(req, token, schema), write);
+    if (r.ok && !late) takeToken(r.value);
     return r;
   }
 
   /** 要令牌的请求：vault_locked 时等解锁、自动重试一次 */
   async function run<S extends z.ZodType>(req: VaultRequest, schema: S): Promise<VaultResult<z.infer<S>>> {
     const first = await once(req, schema);
-    if (first === STALE) return first;
+    if (first === STALE || first === CANCELLED) return first;
     if (first.ok || first.code !== 'vault_locked') {
       if (!first.ok) onFail(first);
       return first;
     }
-    lock({ waiting: true, lastError: 'vault_locked' });
-    const unlocked = await new Promise<boolean>((resolve) => waiters.push(resolve));
+    lock({ waiting: true, lastError: 'vault_locked' }, false);
+    const unlocked = await waitUnlock();
     if (!unlocked) return first;
     const second = await once(req, schema);
-    if (!second.ok && second !== STALE) onFail(second);
+    if (!second.ok && second !== STALE && second !== CANCELLED) onFail(second);
     return second;
   }
 
-  const renew = () => run({ action: 'renew' }, vaultTokenResponse);
+  const renew = async () => {
+    const r = await run({ action: 'renew' }, vaultTokenResponse);
+    rlog(`vault renew ${r.ok ? 'ok' : r === STALE ? 'stale' : r.code}`);
+    return r;
+  };
 
   /**
    * vault-image 只验不续期：令牌过期（vault_locked）时先 renew（锁着就等解锁）再试一次。
    * 半路上锁回 STALE；别的失败原样回，由调用方决定落不落（renew 自己的失败 run 已经落过）
    */
-  async function withImageToken<T>(send: (tok: string) => Promise<VaultResult<T>>): Promise<VaultResult<T>> {
-    const tok = token;
-    const r = tok ? await guarded(() => send(tok)) : ({ ok: false, code: 'vault_locked' } as VaultFail);
-    if (r === STALE || r.ok || r.code !== 'vault_locked') return r;
+  async function withImageToken<T>(send: (tok: string) => Promise<VaultResult<T>>, write: boolean): Promise<VaultResult<T>> {
+    const go = (): Promise<VaultResult<T>> => (token ? send(token) : Promise.resolve({ ok: false, code: 'vault_locked' } as VaultFail));
+    const { r } = await guarded(go, write);
+    if (r === STALE || r === CANCELLED || r.ok || r.code !== 'vault_locked') return r;
     const k = await renew();
     if (!k.ok) return k;
-    const tok2 = token;
-    return tok2 ? guarded(() => send(tok2)) : STALE;
+    return token ? (await guarded(go, write)).r : STALE;
   }
 
   async function refreshStatus(): Promise<VaultResult<VaultStatus>> {
@@ -232,7 +274,7 @@ export function createVaultSession(d: VaultSessionDeps) {
 
   /** 解锁类请求（setup、unlock、reset、Face ID）：半路上锁就丢掉签来的令牌，不进已解锁 */
   async function afterUnlock(send: () => Promise<VaultResult<z.infer<typeof vaultTokenResponse>>>): Promise<VaultResult<true>> {
-    const r = await guarded(send);
+    const { r } = await guarded(send, false);
     if (r === STALE) return r;
     if (!r.ok) {
       onFail(r);
@@ -246,8 +288,10 @@ export function createVaultSession(d: VaultSessionDeps) {
     return listed.ok ? { ok: true, value: true } : listed;
   }
 
+  /** 拉明文列表；锁着（没令牌）就不拉：写请求在锁着时才回来成功的，解锁时 afterUnlock 会再拉 */
   async function list(): Promise<VaultResult<true>> {
-    const r = await once({ action: 'list' }, vaultListResponse);
+    if (!token) return { ok: true, value: true };
+    const r = await once({ action: 'list' }, vaultListResponse, false);
     if (!r.ok) {
       if (r !== STALE) onFail(r);
       return r;
@@ -256,20 +300,45 @@ export function createVaultSession(d: VaultSessionDeps) {
     return { ok: true, value: true };
   }
 
-  async function uploadImages(noteId: string, imgs: NonNullable<SaveInput['addImages']>): Promise<VaultResult<VaultImageAdd[]>> {
-    const out: VaultImageAdd[] = [];
+  async function uploadImages(noteId: string, imgs: NonNullable<SaveInput['addImages']>): Promise<VaultResult<true>> {
     for (const img of imgs) {
       for (const [part, blob] of [['full', img.full], ['thumb', img.thumb]] as const) {
         if (!blob) continue;
-        const r = await withImageToken((tok) => d.api.imageUpload({ note_id: noteId, image_id: img.id, part }, blob, tok));
+        const r = await withImageToken((tok) => d.api.imageUpload({ note_id: noteId, image_id: img.id, part }, blob, tok), true);
         if (!r.ok) {
-          if (r !== STALE) onFail(r);
+          if (r !== STALE && r !== CANCELLED) onFail(r);
           return r;
         }
       }
-      out.push({ id: img.id, bytes: img.full.size, width: img.width, height: img.height, has_thumb: img.thumb !== null });
     }
-    return { ok: true, value: out };
+    return { ok: true, value: true };
+  }
+
+  /**
+   * 保存。带图（11-14 整块评审第 3 条）：先 save 带 add_images 预登记图片行（这条没有就同时建出来），再经 vault-image 传原图和缩略图——
+   * vault-image 只收已登记的 image_id、原图字节数要等于登记的 bytes。传图失败时这条和图片行都已建好，
+   * 编辑页用同一个 id、同一批图片 id 重试：服务器把字节数一样的重发当成已登记，再传一次对象
+   */
+  async function save(input: SaveInput): Promise<VaultResult<string>> {
+    const id = input.id ?? newId();
+    const old = state.notes?.find((n) => n.id === id);
+    const t = now();
+    const add: VaultImageAdd[] = (input.addImages ?? []).map((img) => ({ id: img.id, bytes: img.full.size, width: img.width, height: img.height, has_thumb: img.thumb !== null }));
+    const r = await run(
+      {
+        action: 'save' as const, id, title: input.title, body: input.body, category_id: old?.category_id ?? null, created_at: old?.created_at ?? input.createdAt ?? t, updated_at: t,
+        ...(add.length ? { add_images: add } : {}),
+        ...(input.removeImages?.length ? { remove_images: [...input.removeImages] } : {}),
+      },
+      vaultOkResponse,
+    );
+    if (!r.ok) return r;
+    if (input.addImages?.length) {
+      const up = await uploadImages(id, input.addImages);
+      if (!up.ok) return up;
+    }
+    const l = await list();
+    return l.ok ? { ok: true, value: id } : l;
   }
 
   return {
@@ -284,7 +353,7 @@ export function createVaultSession(d: VaultSessionDeps) {
     refreshStatus,
     lock: (): void => {
       release(false);
-      lock({ waiting: false });
+      lock({ waiting: false }, true);
     },
     /** 取消等待中的解锁：原请求回失败 */
     cancelWait(): void {
@@ -330,38 +399,16 @@ export function createVaultSession(d: VaultSessionDeps) {
       });
     },
     list,
+    save,
     /**
-     * 保存。新建又带图（M1）：vault-image 只收已存在的本人隐私记的图，先存一次文字把这条建出来，再传图、再存一次登记图片；
-     * 传图失败时这条已经建好了，编辑页用同一个 id、同一批图片 id 重试（服务器按“已有就改”、对象已在算成功）
+     * 令牌过期上锁、等解锁时编辑页被换下（第 22 条：没存的草稿不丢）：草稿只在这个闭包里（不进 DOM），解锁后保存一次；
+     * 用户取消解锁、或被作废在飞请求的上锁（主动上锁、超时、relock、revoked）打断就丢掉
      */
-    async save(input: SaveInput): Promise<VaultResult<string>> {
-      const id = input.id ?? newId();
-      const old = state.notes?.find((n) => n.id === id);
-      const fields = () => {
-        const t = now();
-        return { action: 'save' as const, id, title: input.title, body: input.body, category_id: old?.category_id ?? null, created_at: old?.created_at ?? input.createdAt ?? t, updated_at: t };
-      };
-      let add: VaultImageAdd[] = [];
-      if (input.addImages?.length) {
-        if (!old) {
-          const made = await run(fields(), vaultOkResponse);
-          if (!made.ok) return made;
-        }
-        const up = await uploadImages(id, input.addImages);
-        if (!up.ok) return up;
-        add = up.value;
-      }
-      const r = await run(
-        {
-          ...fields(),
-          ...(add.length ? { add_images: add } : {}),
-          ...(input.removeImages?.length ? { remove_images: [...input.removeImages] } : {}),
-        },
-        vaultOkResponse,
-      );
-      if (!r.ok) return r;
-      const l = await list();
-      return l.ok ? { ok: true, value: id } : l;
+    async saveWhenUnlocked(input: SaveInput): Promise<VaultResult<string>> {
+      const h = hardEpoch;
+      if (!(await waitUnlock()) || hardEpoch !== h) return CANCELLED;
+      rlog('vault draft saved-after-unlock');
+      return save(input);
     },
     async remove(id: string) {
       const r = await run({ action: 'delete', id }, vaultOkResponse);
@@ -398,10 +445,11 @@ export function createVaultSession(d: VaultSessionDeps) {
       if (going) return going;
       if (!token) return Promise.resolve(null);
       const p = (async () => {
-        const r = await withImageToken((tok) => d.api.imageGet(imageId, part, tok));
+        const r = await withImageToken((tok) => d.api.imageGet(imageId, part, tok), false);
         if (!r.ok) {
           // 只有“密码在别处改了”“设备被移除”要落（上锁）；没找到、服务忙只是这张图不显示，不改界面状态
           const kind = r === STALE ? null : vaultErrorAction(r.code).kind;
+          if (r !== STALE) rlog(`vault image ${part} fail ${r.code}`);
           if (kind === 'relock' || kind === 'revoked') onFail(r);
           return null;
         }
@@ -426,7 +474,7 @@ export function createVaultSession(d: VaultSessionDeps) {
       if (h === null || state.phase !== 'unlocked') return false;
       if (at - h >= Math.max(1, min) * 60_000) {
         release(false);
-        lock({ waiting: false });
+        lock({ waiting: false }, true);
         return true;
       }
       return false;

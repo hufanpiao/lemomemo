@@ -7,7 +7,7 @@
 // 纯校验在 webauthn-verify.ts。
 import { b64uEncode, concatBytes } from '../_shared/b64url.ts';
 import { checkPin } from './pin.ts';
-import { type Ctx, err, notifyLater, type Out, out, type ReqOf, type VaultTx } from './common.ts';
+import { type Ctx, err, notifyLater, type Out, out, type ReqOf, type VaultRow, type VaultTx } from './common.ts';
 import {
   b64, checkClientData, checkRpAndFlags, isTauriOrigin, parseAuthData, readAttestation, readClientData, rpIdFor, sha256, verifyEs256, WebauthnError,
 } from './webauthn-verify.ts';
@@ -58,13 +58,14 @@ export function options(c: Ctx, r: ReqOf<'webauthn_options'>): Promise<Out | Res
   });
 }
 
-/** {webauthn_register, pin, label, attestation}：要令牌（core.ts 已在同一事务里验过）+ 当场输对密码（和 unlock 共用失败计数） */
-export function register(c: Ctx, t: VaultTx, r: ReqOf<'webauthn_register'>): Promise<Out | Response> {
+/**
+ * {webauthn_register, pin, label, attestation}：要令牌 + 当场输对密码（和 unlock 共用失败计数）；
+ * row 是 core.ts 验令牌时 for update 读的那一行（整块评审第 13 条）
+ */
+export function register(c: Ctx, t: VaultTx, r: ReqOf<'webauthn_register'>, row: VaultRow): Promise<Out | Response> {
   if (fromExe(c)) return Promise.resolve(unavailable());
   const { env, rules } = c.deps;
   return guard(async () => {
-    const row = await t.vault(true);
-    if (!row) return err(409, 'not_set');
     const bad = await checkPin(c, t, row, r.pin);
     if (bad) return bad;
     const cd = b64(r.attestation.client_data_json);

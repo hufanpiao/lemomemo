@@ -1,18 +1,18 @@
 // B5 隐私记 store-it 第一组（vault 函数 store.ts 的 SQL 第一次上真库）：按 vault/index.ts 的组装方式（vault-harness.ts），
 //   真 requireActiveUser、真 take_rate、真 store.ts，事务切到 fn_vault（表、列授权和会话变量版 RLS 都按 fn_vault 判）。入口 run.mjs。
 // 覆盖：
-//   ① 密码：status → setup（再 setup 409）→ unlock 连错 5 次锁定（lock_level 1、locked_until 约 60 秒、推送 locked）→ 锁定中输对也 423
+//   ① 密码：status → setup（再 setup 409）→ unlock 连错 5 次锁定（第 5 次回 423 pin_locked、lock_level 1、locked_until 约 60 秒、推送 locked）→ 锁定中输对也 423
 //      → 到期后输对清零；change_pin：pin_epoch + 1、vault_credentials 和 device_secrets 清空、旧令牌 vault_relock；
 //      reset（真 JWT 的 amr otp 在 10 分钟内）：pin_epoch 再 + 1、last_reset_at、重设邮件、logs 一条 vault_reset（src vault）；
 //   ② WebAuthn：挑战存进 webauthn_challenges（r. / u. 前缀）、验过即删；凭据登记（bytea 公钥、bigint sign_count）、列出、解锁后 sign_count 写回、删除；
-//   ③ 隐私记：save 新建（body_enc 写入、title/body 为空、过 notes 的 check 约束）、修改、同 id 的普通随手记 404；add_images（R2 替身里先放对象，
-//      HEAD 取真大小）、对象不在 404、remove_images 软删；delete / undelete；list 解密；purge 经 purge_vault_impl 只删已删的那条；
+//   ③ 隐私记：save 新建（body_enc 写入、title/body 为空、过 notes 的 check 约束）、修改、同 id 的普通随手记 404；add_images 预登记后经 vault-image 上传
+//      （没登记 404、字节数不符 400、note_id 不符 404、登记了没传 get 404）、remove_images 软删；delete / undelete；list 解密；purge 经 purge_vault_impl 只删已删的那条；
 //   ④ 隔离：B 的令牌、B 的身份碰不到 A 的行（delete 404、purge 0、list 看不到、同 id save 不覆盖）；purge_vault_impl 的 p_user 和 app.uid 不同时拒绝。
 import { FakeAuthenticator } from '../../../tests/functions/webauthn-sim.ts';
 import { vaultImageKey } from '../../functions/_shared/gen/schema/vault.ts';
 import { vaultStore } from '../../functions/vault/store.ts';
-import { assert, assertEquals, emails, healLeftovers, jwtOf, mails, mkUser, one, ours, purgeTraces, releaseLock, s3Server, sql, writeLedger } from './harness.ts';
-import { asRole, callVault, closeVaultHarness, expectStatus, okVault, ORIGIN, pushes, s3PutBytes, settle, WEBP } from './vault-harness.ts';
+import { assert, assertEquals, emails, fakeS3, healLeftovers, jwtOf, mails, mkUser, one, ours, purgeTraces, releaseLock, s3Server, sql, writeLedger } from './harness.ts';
+import { asRole, callVault, closeVaultHarness, expectStatus, getImage, okVault, ORIGIN, pushes, settle, uploadImage, WEBP } from './vault-harness.ts';
 
 const opts = { sanitizeOps: false, sanitizeResources: false };
 const RP = 'localhost';   // 本机环境的 RP ID（webauthn-verify.ts 的 rpIdFor）
@@ -41,8 +41,8 @@ Deno.test({ name: '① 密码：setup、连错 5 次锁定、锁定中 423、到
     assertEquals(r.json?.left, 5 - i);
   }
   const fifth = await callVault(jwtA, { action: 'unlock', pin: '0000' });
-  expectStatus(fifth, 403, '第 5 次输错');
-  assertEquals([fifth.json?.left, fifth.json?.retry_after_s], [0, 60]);
+  expectStatus(fifth, 423, '第 5 次输错：锁上那一次就回 423（整块评审第 6 条）');
+  assertEquals([fifth.json?.error, fifth.json?.retry_after_s], ['pin_locked', 60]);
   const v = await vaultRow(A);
   assertEquals([v.fail_count, v.lock_level], [0, 1], '锁上以后');
   assert(v.lu !== null && v.lu > 50 && v.lu <= 60, `locked_until 约 60 秒后：${v.lu}`);
@@ -121,7 +121,7 @@ type NoteDb = { is_private: boolean; title: string | null; body: string | null; 
 const noteDb = async (id: string) => (await sql<NoteDb[]>`select is_private, title, body, octet_length(body_enc) as enc, enc_key_id, deleted_at::float8 as deleted_at,
   category_source from public.notes where id = ${id}`)[0];
 
-Deno.test({ name: '③ 隐私记：save 新建 / 修改、add_images（R2 先放）、remove_images、delete / undelete、list 解密、purge', ...opts, async fn() {
+Deno.test({ name: '③ 隐私记：save 新建 / 修改、add_images 预登记再上传、remove_images、delete / undelete、list 解密、purge', ...opts, async fn() {
   const t0 = Date.now();
   tokA = String((await okVault(jwtA, { action: 'save', id: N1, title: '标题一', body: '正文一', category_id: null, created_at: t0, updated_at: t0 }, tokA, 'save 新建')).vault_token);
   const n = await noteDb(N1);
@@ -132,22 +132,36 @@ Deno.test({ name: '③ 隐私记：save 新建 / 修改、add_images（R2 先放
   expectStatus(await callVault(jwtA, { action: 'save', id: PLAIN, title: 'x', body: 'y', category_id: null, created_at: t0, updated_at: t0 }, tokA), 404, '同 id 的普通随手记');
   assertEquals((await noteDb(PLAIN))?.body, 'plain', '普通随手记没被覆盖');
 
-  s3PutBytes('vault-images', vaultImageKey(A, N1, IMG1, 'full'), WEBP);
-  const add = { id: IMG1, bytes: 999, width: 3, height: 4, has_thumb: false };
-  expectStatus(await callVault(jwtA, { action: 'save', id: N1, title: '标题二', body: '正文二', category_id: null, created_at: t0, updated_at: t0 + 2, add_images: [{ ...add, id: IMG2 }] }, tokA), 404, 'R2 里没有的图');
-  tokA = String((await okVault(jwtA, { action: 'save', id: N1, title: '标题二', body: '正文二', category_id: null, created_at: t0, updated_at: t0 + 2, add_images: [add] }, tokA, 'add_images')).vault_token);
+  // 预登记（11-14 整块评审第 3 条）：先 save 登记行（过 row_quota、media_quota_guard），再经 vault-image 上传，字节数必须等于登记的 bytes
+  expectStatus(await uploadImage(jwtA, tokA, N1, IMG1), 404, '没登记的图不能传');
+  const add = { id: IMG1, bytes: WEBP.length, width: 3, height: 4, has_thumb: false };
+  tokA = String((await okVault(jwtA, { action: 'save', id: N1, title: '标题二', body: '正文二', category_id: null, created_at: t0, updated_at: t0 + 2,
+    add_images: [add, { ...add, id: IMG2, bytes: 999 }] }, tokA, 'add_images 预登记')).vault_token);
+  assertEquals((await getImage(jwtA, tokA, IMG1)).status, 404, '登记了还没传：get 404');
+  expectStatus(await uploadImage(jwtA, tokA, N1, IMG2), 400, '字节数和登记的不符');
+  expectStatus(await uploadImage(jwtA, tokA, N2, IMG1), 404, 'note_id 对不上');
+  expectStatus(await uploadImage(jwtA, tokA, N1, IMG1, 'thumb'), 404, '登记时没有缩略图');
+  expectStatus(await uploadImage(jwtA, tokA, N1, IMG1), 200, '上传原图');
+  const got = await getImage(jwtA, tokA, IMG1);
+  assertEquals([got.status, [...got.bytes]], [200, [...WEBP]], '读回');
+  tokA = String((await okVault(jwtA, { action: 'save', id: N1, title: '标题二', body: '正文二', category_id: null, created_at: t0, updated_at: t0 + 2,
+    remove_images: [IMG2] }, tokA, '删掉没传成的那张')).vault_token);
   const img = one(await sql<{ bucket: string; bytes: number; ai_status: string; skip_reason: string; path: string; deleted_at: number | null }[]>`
     select bucket, bytes, ai_status, skip_reason, path, deleted_at from public.note_images where id = ${IMG1}`);
   assertEquals([img.bucket, img.bytes, img.ai_status, img.skip_reason, img.path, img.deleted_at], ['vault-images', WEBP.length, 'skip', 'vault_off', `${A}/${N1}/${IMG1}.webp`, null]);
 
   let list = await okVault(jwtA, { action: 'list' }, tokA, 'list');
   tokA = String(list.vault_token);
-  const items = list.notes as { id: string; title: string; body: string; deleted_at: number | null; images: { id: string; bytes: number }[] }[];
+  const items = list.notes as { id: string; title: string; body: string; deleted_at: number | null; images: { id: string; bytes: number; deleted_at: number | null }[] }[];
   assertEquals(items.map((x) => [x.id, x.title, x.body]).sort(), [[N1, '标题二', '正文二'], [N2, '', '第二条']].sort(), 'list 解密');
-  assertEquals(items.find((x) => x.id === N1)?.images.map((i) => [i.id, i.bytes]), [[IMG1, WEBP.length]]);
+  const imgs1 = items.find((x) => x.id === N1)?.images ?? [];
+  assertEquals(imgs1.filter((i) => i.deleted_at === null).map((i) => [i.id, i.bytes]), [[IMG1, WEBP.length]], '没删的图');
+  assert(imgs1.some((i) => i.id === IMG2 && i.deleted_at !== null), '删掉的那张带 deleted_at（list 照旧带已删的图）');
 
   tokA = String((await okVault(jwtA, { action: 'save', id: N1, title: '标题二', body: '正文二', category_id: null, created_at: t0, updated_at: t0 + 3, remove_images: [IMG1] }, tokA, 'remove_images')).vault_token);
   assert((await sql`select deleted_at from public.note_images where id = ${IMG1}`)[0]?.deleted_at !== null, '图片软删');
+  await settle();
+  assert(!fakeS3.objects.has(`vault-images/${vaultImageKey(A, N1, IMG1, 'full')}`), 'remove_images 提交后删掉 R2 对象（整块评审第 2 条）');
 
   tokA = String((await okVault(jwtA, { action: 'delete', id: N1 }, tokA, 'delete')).vault_token);
   assert((await noteDb(N1))?.deleted_at !== null, '软删');

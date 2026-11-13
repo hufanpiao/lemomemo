@@ -4,8 +4,8 @@
 // • 读不出、格式不对、越界一律返回 null（不报错：拍摄时间只是附带信息）
 // • 定位（GPS IFD）不读也不带走：重新编码成 webp 时整个 EXIF 段都丢了（image-encode.ts）
 // 纯 TS：不准 import React（A1）
-import { msAt, type DateStr } from '../../../../shared/core/date.ts';
-import type { Tz } from '../../../../shared/core/tz.ts';
+import { msAt, type DateStr } from '../../shared/core/date.ts';
+import type { Tz } from '../../shared/core/tz.ts';
 
 const EXIF_IFD = 0x8769;
 const DATE_ORIGINAL = 0x9003;

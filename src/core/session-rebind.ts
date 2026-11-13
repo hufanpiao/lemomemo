@@ -12,9 +12,13 @@
 // • 本机还没有设备行（deviceId 为 null，比如刚登录、登记还没成功）：没有可交接的行，跳过 ③ 直接 setSession(S2)，
 //   之后 device-reg 照常为 S2 登记（交回里记了这条代定）
 // • old_token 不写日志、不落存储；请求失败只回码
+// • S2 留着的这段时间（11-14 整块评审第 5 条）：在 core/rebind-pending.ts 登记 finish——别处收到 session_revoked 要退出时先把交接做完，
+//   换上 S2 就不退出、不清库。运行日志只记交接结果（ok / refused 码 / unsure 码），不记令牌、邮箱、验证码
 // 纯 TS：不准 import React（A1）；联网经注入的 fetch（A12）
 import { accountErrorCode } from '../../shared/schema/account.ts';
 import { isEntryErrorCode } from '../../shared/schema/entry-codes.ts';
+import { rlog } from '../platform/run-log-api.ts';
+import { setRebindRescue } from './rebind-pending.ts';
 
 export type RebindErr = 'otp_invalid' | 'rebind_failed' | 'rate_limited' | 'reauth_required' | 'try_later' | 'offline' | 'signed_out' | 'session_revoked' | 'unknown';
 export type RebindResult = { ok: true } | { ok: false; error: RebindErr };
@@ -118,7 +122,7 @@ export function createSessionRebind(d: RebindDeps) {
 
   /** 丢掉 S2（明确失败时）：主客户端照旧用 S1 */
   async function drop(p: Pending, error: RebindErr): Promise<RebindResult> {
-    pending = null;
+    keep(null);
     try {
       await p.auth.signOut({ scope: 'local' });
     } catch {
@@ -127,21 +131,32 @@ export function createSessionRebind(d: RebindDeps) {
     return { ok: false, error };
   }
 
+  /** 记下（或清掉）还没换上的 S2，同时在退出闸登记 / 撤销 */
+  function keep(p: Pending | null): void {
+    pending = p;
+    setRebindRescue(p ? async () => (pending ? (await finish(pending)).ok : false) : null);
+  }
+
   /** ③④：交接（不确定就当场重发）→ 换上 S2 */
   async function finish(p: Pending): Promise<RebindResult> {
     if (p.deviceId) {
       let r = await handOver(p, p.deviceId);
       for (let i = 0; i < REBIND_RETRIES && r.kind === 'unsure'; i++) r = await handOver(p, p.deviceId);
+      rlog(`rebind ${r.kind}${r.kind === 'ok' ? '' : ` ${r.error}`}`);
       if (r.kind === 'refused') return drop(p, r.error);
       if (r.kind === 'unsure') return { ok: false, error: r.error };   // S2 留着，下次直接重发
     }
     try {
       const { error } = await p.main.setSession({ access_token: p.s2.access_token, refresh_token: p.s2.refresh_token });
-      if (error) return { ok: false, error: 'try_later' };
+      if (error) {
+        rlog('rebind set_session failed');
+        return { ok: false, error: 'try_later' };
+      }
     } catch {
+      rlog('rebind set_session failed');
       return { ok: false, error: 'try_later' };
     }
-    pending = null;
+    keep(null);
     return { ok: true };
   }
 
@@ -181,8 +196,9 @@ export function createSessionRebind(d: RebindDeps) {
       } catch {
         return { ok: false, error: 'offline' };
       }
-      pending = { main, auth, s1, s2, deviceId };
-      return finish(pending);
+      const p: Pending = { main, auth, s1, s2, deviceId };
+      keep(p);
+      return finish(p);
     },
   };
 }

@@ -9,7 +9,7 @@
 //   真库报的原始错误（core.ts 会归成 503 try_later）记进 dbErrors，断言失败时打出来。
 // 钥匙只用测试专用假值（btoa('TEST-ONLY-…') 现算）；推送只记事件，不连外网。
 import postgres from 'postgres';
-import { AuthError, requireActiveUser } from '../../functions/_shared/auth.ts';
+import { authResult, requireActiveUser } from '../../functions/_shared/auth.ts';
 import { envKind } from '../../functions/_shared/env-kind.ts';
 import { decodeKey32 } from '../../functions/_shared/vault-crypto.ts';
 import { pinEpoch } from '../../functions/_shared/vault-epoch.ts';
@@ -28,7 +28,7 @@ import type { Deps as VaultDeps, VaultReq } from '../../functions/vault/common.t
 import { handle as vaultHandle } from '../../functions/vault/core.ts';
 import { vaultStore } from '../../functions/vault/store.ts';
 import { handle as imageHandle } from '../../functions/vault-image/core.ts';
-import { imageMeta, ownsPrivateNote } from '../../functions/vault-image/store.ts';
+import { imageMeta } from '../../functions/vault-image/store.ts';
 import { exportTablesOf, handle as accountHandle, withStoreTimeouts } from '../../functions/account/core.ts';
 import { admin, assertEquals, fakeS3, s3Server } from './harness.ts';
 
@@ -99,22 +99,14 @@ async function takeRate(k: string, limit: number, windowS: number) {
 // ---------------- vault（照 vault/index.ts 组装） ----------------
 const send = skipTestRecipients((to, mail) => sendMail('re_store_it_fake', to, mail), log);
 export const vaultDeps: VaultDeps = {
-  async authenticate(r) {
-    try {
-      const u = await requireActiveUser(r, admin);
-      return { ok: true, user: { userId: u.userId, jwt: u.jwt } };
-    } catch (e) {
-      if (e instanceof AuthError) return { ok: false, response: e.toResponse() };
-      throw e;
-    }
-  },
+  authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
   parse(v) {
     const p = vaultRequest.safeParse(v);
     return p.success ? (p.data as VaultReq) : null;
   },
   rules: {
     pinRe: PIN_RE, failsPerLevel: VAULT_FAILS_PER_LEVEL, lockSeconds, resetOtpMaxAgeS: VAULT_RESET_OTP_MAX_AGE_S,
-    challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S, rpId: WEBAUTHN_RP_ID, imageMaxBytes: VAULT_IMAGE_MAX_BYTES,
+    challengeTtlS: WEBAUTHN_CHALLENGE_TTL_S, rpId: WEBAUTHN_RP_ID,
     imageKey: vaultImageKey,
   },
   takeRate,
@@ -158,14 +150,7 @@ export async function okVault(jwt: string, body: unknown, token: string | null, 
 // ---------------- vault-image（照 vault-image/index.ts 组装） ----------------
 const imageToken = vaultTokenChecker(KEYS.tokenSecret, Date.now, (uid) => asRole('fn_ai', uid, (tx) => pinEpoch(tx as never, uid)), log);
 const imageDeps = {
-  async authenticate(r: Request) {
-    try {
-      return { ok: true as const, user: { userId: (await requireActiveUser(r, admin)).userId } };
-    } catch (e) {
-      if (e instanceof AuthError) return { ok: false as const, response: e.toResponse() };
-      throw e;
-    }
-  },
+  authenticate: (r: Request) => authResult(() => requireActiveUser(r, admin)),
   takeRate,
   checkToken: imageToken,
   parseUpload(q: Record<string, string>) {
@@ -178,7 +163,6 @@ const imageDeps = {
   },
   imageKey: vaultImageKey,
   maxBytes: VAULT_IMAGE_MAX_BYTES,
-  ownsPrivateNote: (uid: string, noteId: string) => asRole('fn_ai', uid, (tx) => ownsPrivateNote(tx as never, uid, noteId)),
   image: (uid: string, imageId: string) => asRole('fn_ai', uid, (tx) => imageMeta(tx as never, uid, imageId)),
   r2,
   now: Date.now,
@@ -204,14 +188,7 @@ export async function getImage(jwt: string, token: string, imageId: string): Pro
 // ---------------- account 导出（照 account/index.ts 组装，令牌经 fn_vault 读 pin_epoch） ----------------
 const accountToken = vaultTokenChecker(KEYS.tokenSecret, Date.now, (uid) => asRole('fn_vault', uid, (tx) => pinEpoch(tx as never, uid)), log);
 const accountDeps = {
-  async authenticate(r: Request, opts: { allowPendingDeletion: boolean }) {
-    try {
-      return { ok: true as const, user: await requireActiveUser(r, admin, opts) };
-    } catch (e) {
-      if (e instanceof AuthError) return { ok: false as const, response: e.toResponse(), code: e.code };
-      throw e;
-    }
-  },
+  authenticate: (r: Request, opts: { allowPendingDeletion: boolean }) => authResult(() => requireActiveUser(r, admin, opts)),
   store: withStoreTimeouts((signal) => accountMod.makeStore(admin, signal), { log }),
   async userEmail() { return null; },
   async sendMail() { return true; },

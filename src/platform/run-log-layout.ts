@@ -19,8 +19,15 @@ export const LAYOUT_TARGETS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /** 元素的简短说明：标签名 + type + data-testid / aria-label / id（不含内容文字） */
+/** 祖先带 data-rl-mask（如隐私记的密码键盘）：日志只记 masked，不记哪个元素、不记坐标（11-14 隐私记评审第 1 条） */
+export const RL_MASK_ATTR = 'data-rl-mask';
+export function isMasked(el: unknown): boolean {
+  return el instanceof Element && el.closest(`[${RL_MASK_ATTR}]`) !== null;
+}
+
 export function describeEl(el: unknown): string {
   if (!(el instanceof Element)) return '-';
+  if (isMasked(el)) return 'masked';
   const tag = el.tagName.toLowerCase();
   const type = el instanceof HTMLInputElement ? `[${el.type}]` : '';
   const id = el.getAttribute('data-testid') ?? el.getAttribute('aria-label') ?? el.getAttribute('id') ?? '';

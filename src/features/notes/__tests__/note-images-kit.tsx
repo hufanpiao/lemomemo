@@ -9,7 +9,7 @@ import { clearAllCollections } from '../../../core/store.ts';
 import { uiStore } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
 import type { UploadResult } from '../../../platform/files.ts';
-import type { EncodeResult } from '../data/image-encode.ts';
+import type { EncodeResult } from '../../../platform/image-encode.ts';
 import { createUploader, defaultUploaderDeps, resetUploaderForTest } from '../data/image-uploader.ts';
 import { createImageView, resetImageViewForTest } from '../data/image-view.ts';
 import NotesPage from '../ui/NotesPage.tsx';

@@ -5,7 +5,7 @@
 // 不加 CORS（0.48 第 4 条）：浏览器经 /sb 同源调用。
 // 部署时函数没有 import map，写全 npm: 版本（和 package.json、supabase/functions/deno.json 一致）
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { AuthError, requireActiveUser } from '../_shared/auth.ts';
+import { authResult, requireActiveUser } from '../_shared/auth.ts';
 import { buildPayload } from '../_shared/push/payload.ts';
 import { deliver } from '../_shared/push/send.ts';
 import { resolveOverride } from '../_shared/push/stub.ts';
@@ -36,14 +36,7 @@ Deno.serve(async (req) => {
   if (blocked) return blocked;
   const priv = admin.schema('private');
   return handle(req, {
-    async authenticate(r) {
-      try {
-        return { ok: true, user: await requireActiveUser(r, admin) };
-      } catch (e) {
-        if (e instanceof AuthError) return { ok: false, response: e.toResponse(), code: e.code };
-        throw e;
-      }
-    },
+    authenticate: (r) => authResult(() => requireActiveUser(r, admin)),
     store: {
       async takeRate(k, limit, windowS) {
         const { data, error } = await priv.rpc('take_rate', { p_key: k, p_limit: limit, p_window_s: windowS });

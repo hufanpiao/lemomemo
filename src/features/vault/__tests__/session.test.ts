@@ -158,18 +158,18 @@ describe('保存、移进隐私记', () => {
   const IMG_NEW = '44444444-4444-4444-8444-444444444444';
   const pic = { id: IMG_NEW, full: new Blob(['f']), thumb: new Blob(['t']), width: 10, height: 20 };
 
-  it('M1 新建带图：先存一次文字把这条建出来，再传 full、thumb，再 save 带 add_images；成功后重新拉列表', async () => {
+  it('新建带图（整块评审第 3 条）：先 save 带 add_images 预登记（字节数取原图），再传 full、thumb；成功后重新拉列表', async () => {
     const { s, api, calls } = await unlocked();
     const r = await s.save({ id: null, title: 't', body: 'b', addImages: [pic] });
     expect(r).toEqual({ ok: true, value: NEW });
     expect(vi.mocked(api.imageUpload).mock.calls.map((c) => [c[0].note_id, c[0].image_id, c[0].part])).toEqual([[NEW, IMG_NEW, 'full'], [NEW, IMG_NEW, 'thumb']]);
     const order = calls.map((c) => c.action);
-    expect(order.slice(order.indexOf('save'))).toEqual(['save', 'save', 'list']);
+    expect(order.slice(order.indexOf('save'))).toEqual(['save', 'list']);
     const saves = calls.flatMap((c) => (c.req.action === 'save' ? [c.req] : []));
-    expect(saves.map((x) => x.add_images?.map((i) => i.id) ?? null)).toEqual([null, [IMG_NEW]]);
+    expect(saves.map((x) => x.add_images ?? null)).toEqual([[{ id: IMG_NEW, bytes: pic.full.size, width: 10, height: 20, has_thumb: true }]]);
   });
 
-  it('改已有的一条带图：不先存文字，直接传图再保存', async () => {
+  it('改已有的一条带图：也只 save 一次', async () => {
     const { s, calls } = await unlocked();
     expect((await s.save({ id: NID, title: 't', body: 'b', addImages: [pic] })).ok).toBe(true);
     expect(calls.filter((c) => c.action === 'save')).toHaveLength(1);

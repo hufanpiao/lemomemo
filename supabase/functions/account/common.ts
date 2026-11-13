@@ -2,6 +2,7 @@
 // 只被 account/ 下的 core.ts、status.ts、export.ts 引用，不反过来 import 它们（没有循环依赖）；对外一律经 core.ts 转出。
 // 和 core.ts 同样的约束：不 import npm 包、不碰 Deno 全局，Vitest 直接测。
 
+import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
 import { mailLocale, type Mail, type MailLocale, type TzLabeler } from '../_shared/account-mail.ts';
 import { json, NO_STORE } from '../_shared/http.ts';
 
@@ -57,7 +58,7 @@ export type AccountErr = (typeof ACCOUNT_ERRS)[number] | 'bad_request' | 'method
 /** pendingDeletion：只在 allowPendingDeletion 放行了冷静期账号时才有（_shared/auth.ts 的 requireActiveUser） */
 export interface ActiveUser { userId: string; sessionId: string; jwt: string; pendingDeletion?: { purgeAfter: string | null } | undefined }
 /** 没过时 code = requireActiveUser 的错误码（AuthError.code）；status 靠它把 account_disabled 变成 {status: 'disabled'} */
-export type AuthResult = { ok: true; user: ActiveUser } | { ok: false; response: Response; code?: string | undefined };
+export type AuthResult = SharedAuthResult<ActiveUser>;
 
 /** 清单里 export: json 的 public 表（index.ts 从 _shared/gen/manifests 算出来；测试从 shared/manifests 算；挑表见 export.ts 的 exportTablesOf） */
 export interface ExportTable {

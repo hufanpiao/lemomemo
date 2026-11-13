@@ -43,8 +43,8 @@ describe('逐级锁定（TC-B5-02、03）', () => {
       expect(r.status).toBe(403);
       expect(r.body).toEqual({ error: 'pin_wrong', left: 5 - i });
     }
-    const fifth = await call(w, { action: 'unlock', pin: '0000' });
-    expect(fifth.body).toEqual({ error: 'pin_wrong', left: 0, retry_after_s: 60 });
+    const fifth = await call(w, { action: 'unlock', pin: '0000' });   // 锁上的那一次直接回 423（整块评审第 6 条）
+    expect([fifth.status, fifth.body]).toEqual([423, { error: 'pin_locked', retry_after_s: 60 }]);
     expect(w.pushes).toEqual([{ user: A, event: 'locked' }]);
     const during = await call(w, { action: 'unlock', pin: '1234' });   // 对的也不放
     expect(during.status).toBe(423);
@@ -75,7 +75,7 @@ describe('逐级锁定（TC-B5-02、03）', () => {
     await call(w, { action: 'unlock', pin: '0000' });
     for (let i = 0; i < 3; i++) await call(w, { action: 'change_pin', old_pin: '9999', new_pin: '5678' }, { token: tok });
     const last = await call(w, { action: 'change_pin', old_pin: '9999', new_pin: '5678' }, { token: tok });
-    expect(last.body).toMatchObject({ error: 'pin_wrong', left: 0 });
+    expect([last.status, last.body]).toEqual([423, { error: 'pin_locked', retry_after_s: 60 }]);
     expect((await call(w, { action: 'unlock', pin: '1234' })).status).toBe(423);
   });
 });
@@ -174,6 +174,36 @@ describe('令牌（TC-B5-39 vault 一半）', () => {
     w.db.ms += 300_000;
     const r = await call(w, { action: 'list' }, { token: tok });
     expect(r.body.expires_at).toBe(Math.floor(w.db.ms / 1000) * 1000 + 600_000);
+  });
+
+  it('一直续期最多到解锁后 12 小时（主持人代定，整块评审第 22 条）：之后 vault_locked，重新输密码又能用 12 小时', async () => {
+    const w = world();
+    const t0 = w.db.ms;
+    let tok = await unlocked(w);
+    for (let i = 0; i < 80; i++) {   // 每 9 分 50 秒续一次，续到 12 小时以后（80 次约 13 小时）
+      w.db.ms += 590_000;
+      const r = await call(w, { action: 'renew' }, { token: tok });
+      if (r.status !== 200) break;
+      tok = r.body.vault_token as string;
+      expect(r.body.expires_at as number).toBeLessThanOrEqual(Math.floor(t0 / 1000) * 1000 + 43_200_000);
+    }
+    expect(w.db.ms - t0).toBeGreaterThanOrEqual(43_200_000);
+    expect((await call(w, { action: 'list' }, { token: tok })).body.error).toBe('vault_locked');
+    const again = await call(w, { action: 'unlock', pin: '1234' });
+    expect((await call(w, { action: 'list' }, { token: again.body.vault_token as string })).status).toBe(200);
+  });
+
+  it('change_pin 验令牌时就加锁读 vault 行，后面复用这一行（整块评审第 13 条）', async () => {
+    const w = world();
+    const tok = await unlocked(w);
+    const locks: boolean[] = [];
+    const run = w.db.run.bind(w.db);
+    w.deps.tx = (uid, fn) => run(uid, (t) => fn({ ...t, vault: (lock) => { locks.push(lock); return t.vault(lock); } }));
+    expect((await call(w, { action: 'change_pin', old_pin: '1234', new_pin: '5678' }, { token: tok })).status).toBe(200);
+    expect(locks).toEqual([true]);
+    locks.length = 0;
+    await call(w, { action: 'list' }, { token: (await call(w, { action: 'unlock', pin: '5678' })).body.vault_token as string });
+    expect(locks).toEqual([true, false]);   // unlock 本身 for update；list 验令牌不加锁
   });
 });
 
