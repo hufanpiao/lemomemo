@@ -28,7 +28,7 @@ export type QuotaKind = 'day' | 'minute' | 'unknown';
  * quota：服务商说额度用完（Gemini 429 RESOURCE_EXHAUSTED），调用方写 ai_state.exhausted_until；
  *   quotaKind、retryMs（服务商建议的重试等待，毫秒，没有或不合法为 null）只在 quota 时带，只是固定词和数字；
  * timeout：到点中止；error：其他一切（HTTP 错、返回不是 JSON、被安全过滤拦下等）。
- * 失败时只带 HTTP 状态码（不带服务商返回的正文，15.3 第 6 条）。
+ * 失败时只带 HTTP 状态码（不带服务商返回的正文，15.3 第 6 条）；errName 是异常类型名，或 HTTP 失败时谷歌 error.status 的固定名字（gemini.ts 的 rpcCodeOf，如 UNAVAILABLE）。
  */
 export type AiResult =
   | { ok: true; json: unknown; raw: string }

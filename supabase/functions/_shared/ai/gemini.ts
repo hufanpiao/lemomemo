@@ -98,6 +98,27 @@ export function quotaInfo(body: unknown): { quotaKind: QuotaKind; retryMs: numbe
   return { quotaKind, retryMs: retry ? retryDelayMs(retry['retryDelay']) : null };
 }
 
+/** google.rpc.Code 的固定名字（googleapis code.proto）：只认这几个，别的一律不带 */
+const RPC_CODES = new Set([
+  'CANCELLED', 'UNKNOWN', 'INVALID_ARGUMENT', 'DEADLINE_EXCEEDED', 'NOT_FOUND', 'ALREADY_EXISTS', 'PERMISSION_DENIED', 'RESOURCE_EXHAUSTED',
+  'FAILED_PRECONDITION', 'ABORTED', 'OUT_OF_RANGE', 'UNIMPLEMENTED', 'INTERNAL', 'UNAVAILABLE', 'DATA_LOSS', 'UNAUTHENTICATED',
+]);
+
+/**
+ * 非 429 的失败：读回复体里 error.status（如 503 的 UNAVAILABLE），只认 RPC_CODES 里的固定名字，别的（message、details、正文）一律不带。
+ * 11-13 ai-eval #3：32 句 503，日志只有状态码，分不出是谷歌过载还是别的。读不出回 undefined。
+ */
+export async function rpcCodeOf(res: Response): Promise<string | undefined> {
+  try {
+    const body: unknown = await res.json();
+    const err = isObj(body) ? body['error'] : null;
+    const code = isObj(err) ? err['status'] : null;
+    return typeof code === 'string' && RPC_CODES.has(code) ? code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function quotaOf(res: Response): Promise<{ quotaKind: QuotaKind; retryMs: number | null } | null> {
   try {
     return quotaInfo(await res.json());
@@ -128,8 +149,8 @@ export class GeminiProvider implements AIProvider {
       });
       if (!res.ok) {
         if (res.status !== 429) {
-          await res.body?.cancel().catch(() => {});
-          return { ok: false, reason: 'error', status: res.status };
+          const code = await rpcCodeOf(res);
+          return code ? { ok: false, reason: 'error', status: res.status, errName: code } : { ok: false, reason: 'error', status: res.status };
         }
         // 429：quotaOf 已经 res.json() 把正文读完（读失败也算读过），不用再 cancel
         const quota = await quotaOf(res);

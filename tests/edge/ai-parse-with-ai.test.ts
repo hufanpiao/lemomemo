@@ -139,6 +139,10 @@ describe('Gemini 适配（TC-B3-24）', () => {
     expect(await at(new Response(JSON.stringify({ error: { status: 'RESOURCE_EXHAUSTED' } }), { status: 429 }))).toEqual({ ok: false, reason: 'quota', status: 429, quotaKind: 'unknown', retryMs: null });
     expect(await at(new Response('{}', { status: 429 }))).toEqual({ ok: false, reason: 'error', status: 429 });
     expect(await at(new Response('boom', { status: 500 }))).toEqual({ ok: false, reason: 'error', status: 500 });
+    // 11-13 ai-eval #3：503 带上谷歌 error.status 的固定名字；不认识的名字、message 都不带
+    expect(await at(new Response(JSON.stringify({ error: { code: 503, status: 'UNAVAILABLE', message: 'The model is overloaded.' } }), { status: 503 })))
+      .toEqual({ ok: false, reason: 'error', status: 503, errName: 'UNAVAILABLE' });
+    expect(await at(new Response(JSON.stringify({ error: { status: 'secret text' } }), { status: 500 }))).toEqual({ ok: false, reason: 'error', status: 500 });
     expect(await at(geminiOk('not json'))).toEqual({ ok: false, reason: 'error', status: 200 });
     expect(await at(new Response(JSON.stringify({ candidates: [] }), { status: 200 }))).toEqual({ ok: false, reason: 'error', status: 200 });
   });
@@ -189,8 +193,8 @@ describe('Gemini 适配（TC-B3-24）', () => {
       expect(await at(new Response(JSON.stringify(body(['GenerateRequestsPerDayPerProjectPerModel-FreeTier'], '1s')), { status: 429 })))
         .toEqual({ ok: false, reason: 'quota', status: 429, quotaKind: 'day', retryMs: 1000 });
       expect(await at(new Response('<html>Too Many Requests</html>', { status: 429 }))).toEqual({ ok: false, reason: 'error', status: 429 });
-      // 别的状态码带着 RESOURCE_EXHAUSTED 也不当 quota（只认 429）
-      expect(await at(new Response(JSON.stringify(body(['GenerateRequestsPerMinutePerProjectPerModel'], '1s')), { status: 503 }))).toEqual({ ok: false, reason: 'error', status: 503 });
+      // 别的状态码带着 RESOURCE_EXHAUSTED 也不当 quota（只认 429），只把固定名字带进 errName
+      expect(await at(new Response(JSON.stringify(body(['GenerateRequestsPerMinutePerProjectPerModel'], '1s')), { status: 503 }))).toEqual({ ok: false, reason: 'error', status: 503, errName: 'RESOURCE_EXHAUSTED' });
     });
     it('parseWithAI、voiceWithAI 把 quotaKind、retryMs 原样传给调用方', async () => {
       const q = { ok: false as const, reason: 'quota' as const, status: 429, quotaKind: 'minute' as const, retryMs: 7000 };
