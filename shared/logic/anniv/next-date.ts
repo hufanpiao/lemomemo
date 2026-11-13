@@ -11,7 +11,7 @@
 // • 提醒（R-94）：offsets = 这一条的 remind_offsets ?? 设置 anniv.default_offsets ?? {7,1}；time = remind_time ?? anniv.default_time ?? 09:00；
 //   remind_at = 下一个还没到的 (next − offset 天) 的 time，按 current_tz 换算（浮动时刻）。这一次的都过了，就取再下一次的（每年的那几种）。
 // • 周岁（第几年）：有年份才算；阳历按下一次所在的公历年，阴历按下一次所在的农历年。
-import { ANNIV_KEY_OFFSETS, DEFAULT_TIME, remindTimeOf } from './keys.ts';
+import { ANNIV_KEY_OFFSETS, remindTimeOf } from './keys.ts';
 import { addDays, daysIn, diffDays, fmtDateStr, msAt, parseDate, parseHm, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import { toSolar } from './lunar.ts';
@@ -38,7 +38,7 @@ export interface AnnivRec {
 }
 
 /** 出厂默认（anniv.default_offsets、anniv.default_time 没设时）；时刻和 remindTimeOf 在 keys.ts（提醒页静态引），这里转出给 annivLib 的调用方 */
-export { DEFAULT_TIME, remindTimeOf };
+export { remindTimeOf };
 export const DEFAULT_OFFSETS: readonly number[] = [7, 1];
 /** 编辑页“提前几天”的快捷选项（0 = 当天）；自定义 0～60；最多选 4 个（表的 check） */
 export const OFFSET_CHOICES: readonly number[] = [0, 1, 3, 7, 14, 30];

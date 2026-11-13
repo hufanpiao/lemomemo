@@ -10,7 +10,7 @@
 // 纯函数：不读设置、不碰 DOM、不看进程时区，“现在”由调用方传（A15）
 import { addDays, msAt, parseHm, todayOf, type DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
-import { applyDnd, type Dnd } from './remind.ts';
+import { applyDnd, DEFAULT_REMIND_TIME, type Dnd } from './remind.ts';
 
 export type RemindActionKey = 'ack' | 'snooze10' | 'atStart' | 'hour1' | 'tomorrow' | 'genTodo';
 
@@ -29,9 +29,10 @@ export interface EventStartRow {
   readonly tz: Tz | null;
 }
 
-/** remind.default_time 没设时的出厂值 */
-export const DEFAULT_REMIND_TIME = '09:00';
-/** “明天再提醒”的时刻（待办，需求澄清 2.6：第二天早上 9:00） */
+/**
+ * “明天再提醒”的时刻（待办，需求澄清 2.6：第二天早上 9:00）。和 remind.ts 的 DEFAULT_REMIND_TIME 同值但不合并：
+ * 这是按钮写死的时刻，不是“设置没设时的出厂值”，以后改出厂时刻不该带着它变
+ */
 export const TOMORROW_TIME = '09:00';
 /** 离开始不到这么久就不显示“开始时再提醒” */
 export const AT_START_MIN_LEAD_MS = 60_000;

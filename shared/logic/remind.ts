@@ -40,10 +40,11 @@ export const REMIND_RULES_VER = 1;
 export const REMIND_BEFORE_CHOICES: readonly number[] = [0, 10, 30, 60, 120, 1440];
 /** 新建或第一次设 due_time 时的提前量 */
 export const DEFAULT_REMIND_BEFORE_MIN = 60;
-/** 待办 remind_time 为空时的提醒时刻 */
-export const DEFAULT_TODO_REMIND_TIME = '09:00';
-/** 全天日程当天提醒：remind.default_time 没设时的出厂值（和 remind-actions 的 DEFAULT_REMIND_TIME 同值） */
-export const DEFAULT_ALL_DAY_TIME = '09:00';
+/**
+ * 出厂提醒时刻（只有这一份）：待办 remind_time 为空、remind.default_time（全天日程当天提醒、全天日程的“开始”）没设、
+ * anniv.default_time（纪念日）没设或认不出，都按它。待办“明天再提醒”的固定时刻另见 remind-actions.ts 的 TOMORROW_TIME
+ */
+export const DEFAULT_REMIND_TIME = '09:00';
 /** 全天日程前一天提醒的时刻（v3 已定，v4 架构 0.29 续第 45、47 条沿用） */
 export const ALL_DAY_EVE_TIME = '20:00';
 /** 拿不到 remind.default_time 时判断全天日程当天提醒“还会不会响”用的退路：当天结束前都算会响（架构 5.3 第 4 步（11-04）；日历编辑、今天页共用） */
@@ -90,7 +91,7 @@ export function todoRemindAt(row: TodoRemindRow, tz: Tz, now: number, prevRemind
   if (row.due === null || row.done === true || deleted(row.deleted_at)) return null;
   if (row.due_time === null) {
     if (row.remind_days !== 0 && row.remind_days !== 1) return null;
-    return msAt(addDays(row.due, -row.remind_days), parseHm(row.remind_time ?? DEFAULT_TODO_REMIND_TIME), tz);
+    return msAt(addDays(row.due, -row.remind_days), parseHm(row.remind_time ?? DEFAULT_REMIND_TIME), tz);
   }
   const before = row.remind_before_min;
   if (before === null) return null;
@@ -106,7 +107,7 @@ const HM = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
 
 /** remind.default_time 的值 → HH:MM；没设、不是字符串、格式不对都按出厂 09:00 */
 export function allDayTimeOf(defaultTime: unknown): string {
-  return typeof defaultTime === 'string' && HM.test(defaultTime) ? defaultTime : DEFAULT_ALL_DAY_TIME;
+  return typeof defaultTime === 'string' && HM.test(defaultTime) ? defaultTime : DEFAULT_REMIND_TIME;
 }
 
 /** 全天日程（浮动，按 current_tz）的提醒时刻；remind_days 为 null 或不是 0 / 1、已删除返回 null。见文件头 */

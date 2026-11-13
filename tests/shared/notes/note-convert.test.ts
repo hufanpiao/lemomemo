@@ -39,6 +39,16 @@ describe('convertRow：转成待办（TC-B4-08）', () => {
     expect(r.row.id).toBe(ctx.id);
     expect(ok('todos', r.row)).toBe(true);
   });
+  it('整行钉住（todos 加列只改 shared/logic/todo-row.ts 一处）', () => {
+    expect(r).toStrictEqual({
+      table: 'todos',
+      row: {
+        id: uid(1), title: '买牛奶', done: false, due: null, important: false, project: '', note: '低脂的\n两盒', source: 'page', raw_text: '', batch_id: uid(2),
+        from_note_id: NOTE_ID, from_anniv_id: null, short: null, short_by: null, done_at: 0, remind_days: null, remind_time: '09:00', due_time: null,
+        remind_before_min: null, push_show_title: null, notified_for: null, snooze_at: null, created_at: NOW, updated_at: NOW,
+      },
+    });
+  });
   it('算不出提醒时刻（转出的行不带 remind 标记的前提）', () => {
     if (r?.table !== 'todos') throw new Error('not_todo');
     expect(remindAtOf('todo', r.row, TZ, NOW)).toBeNull();

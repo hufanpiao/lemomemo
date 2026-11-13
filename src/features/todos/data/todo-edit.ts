@@ -1,5 +1,5 @@
 // 待办编辑页的数据逻辑（B2 任务单 FA-2；架构 0.29 续第 124 条③、第 136 条，R-183；TC-B2-01、74）
-// • 表单 ↔ 行：formOf 从集合里的行取编辑页要的字段；newTodoRow 造新建的整行（insert 要整行可写列）
+// • 表单 ↔ 行：formOf 从集合里的行取编辑页要的字段；newTodoRow 造新建的整行（整行只在 shared/logic/todo-row.ts 一份）
 // • 改了什么就只写什么（patchOf）：比较前后两份表单，只放变了的列，外加 updated_at；规则：
 //   ① 清掉截止日期：同一个 patch 里把 due_time、remind_before_min 一起清掉（第 136 条：库的约束要求有截止时刻必须有日期）；
 //   ② 第一次设截止时刻（原来没有）：提前量默认 60（shared 的 remindBeforeOnSetDueTime，和 BE-4 同一份）；原来就有的保留；
@@ -15,7 +15,8 @@ import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
 import { trimItemTitle } from '../../../../shared/schema/rows.ts';
-import { DEFAULT_TODO_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime, todoRemindAt } from '../../../../shared/logic/remind.ts';
+import { DEFAULT_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime, todoRemindAt } from '../../../../shared/logic/remind.ts';
+import { todoRowOf, type NewTodoRow } from '../../../../shared/logic/todo-row.ts';
 import { todoRemindFlag } from '../../../core/remind-flag.ts';
 
 /** 编辑页能改的字段 */
@@ -53,7 +54,7 @@ export function formOf(row: Readonly<Record<string, unknown>>): TodoForm {
     due_time: strOrNull(row['due_time']),
     remind_before_min: before(row['remind_before_min']),
     remind_days: days(row['remind_days']),
-    remind_time: str(row['remind_time']) || DEFAULT_TODO_REMIND_TIME,
+    remind_time: str(row['remind_time']) || DEFAULT_REMIND_TIME,
     project: str(row['project']),
     note: str(row['note']),
   };
@@ -63,7 +64,7 @@ export function formOf(row: Readonly<Record<string, unknown>>): TodoForm {
 export function emptyForm(): TodoForm {
   return {
     title: '', done: false, important: false, due: null, due_time: null, remind_before_min: null,
-    remind_days: 0, remind_time: DEFAULT_TODO_REMIND_TIME, project: '', note: '',
+    remind_days: 0, remind_time: DEFAULT_REMIND_TIME, project: '', note: '',
   };
 }
 
@@ -122,13 +123,9 @@ export function patchOf(
   return data;
 }
 
-/** 新建的整行（insert 要整行可写列；deleted_at、undone 只能 update，不放） */
-export function newTodoRow(id: string, form: TodoForm, now: number): Record<string, unknown> & { id: string } {
-  return {
-    id, ...form, title: trimItemTitle(form.title), source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: null,
-    short: null, short_by: null, done_at: form.done ? now : 0, push_show_title: null, notified_for: null, snooze_at: null,
-    created_at: now, updated_at: now,
-  };
+/** 新建的整行（shared/logic/todo-row.ts 的 todoRowOf；表单整份传进去，标题去首尾空白） */
+export function newTodoRow(id: string, form: TodoForm, now: number): NewTodoRow {
+  return todoRowOf({ id, ...form, title: trimItemTitle(form.title), now });
 }
 
 /**

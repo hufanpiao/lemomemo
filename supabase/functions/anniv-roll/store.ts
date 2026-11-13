@@ -2,7 +2,7 @@
 // 写的都是系统列（next_date、remind_at、archived_at，private.table_meta 的 system_cols）：touch() 不加 rev、不入队。每条写都带 user_id 条件。
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
-import { ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME } from '../_shared/gen/logic/anniv/keys.ts';
+import { ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME } from '../_shared/anniv-keys.ts';
 import { inChunks, liveSettings } from '../_shared/user-reads.ts';
 import { HEARTBEAT, type RollRow, type RollStore } from './core.ts';
 

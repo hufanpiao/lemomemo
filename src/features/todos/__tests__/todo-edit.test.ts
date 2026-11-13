@@ -76,6 +76,20 @@ describe('patchOf：只写变了的列', () => {
 });
 
 describe('newTodoRow：整行可写列，过得了 insert 的校验', () => {
+  it('整行钉住（todos 加列只改 shared/logic/todo-row.ts 一处，这里跟着改）：标题去首尾空白、done_at 跟 done、其余来源列为空', () => {
+    const f = base({ title: '  交报告 ', done: true, due: '2026-11-05', due_time: '17:00', remind_before_min: 30, important: true, project: 'NEOX', note: 'n' });
+    expect(newTodoRow(ID, f, 7)).toStrictEqual({
+      id: ID, title: '交报告', done: true, important: true, due: '2026-11-05', due_time: '17:00', remind_before_min: 30, remind_days: 0, remind_time: '09:00',
+      project: 'NEOX', note: 'n', source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: null, short: null, short_by: null,
+      done_at: 7, push_show_title: null, notified_for: null, snooze_at: null, created_at: 7, updated_at: 7,
+    });
+    expect(newTodoRow(ID, base({ remind_days: null, remind_time: '07:30' }), 8)).toStrictEqual({
+      id: ID, title: '交报告', done: false, important: false, due: null, due_time: null, remind_before_min: null, remind_days: null, remind_time: '07:30',
+      project: '', note: '', source: 'page', raw_text: '', batch_id: null, from_note_id: null, from_anniv_id: null, short: null, short_by: null,
+      done_at: 0, push_show_title: null, notified_for: null, snooze_at: null, created_at: 8, updated_at: 8,
+    });
+  });
+
   it('有截止时刻的、没有日期的都合格', () => {
     for (const f of [base(), base({ due: '2026-11-05', due_time: '17:00', remind_before_min: 60 })]) {
       expect(todosWrite.safeParse({ ...newTodoRow(ID, f, 1_800_000_000_000), deleted_at: null, undone: false }).success).toBe(true);

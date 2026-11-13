@@ -1,5 +1,5 @@
 // push-dispatch 一轮用的类型、常量和 kindOf；流程总说明在 round.ts 文件头。
-import { ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME } from '../_shared/gen/logic/anniv/keys.ts';
+import { ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME } from '../_shared/anniv-keys.ts';
 import type { PayloadInput, PayloadKind } from '../_shared/push/payload.ts';
 import type { DeliverResult, Device, PushOptions } from '../_shared/push/send.ts';
 
