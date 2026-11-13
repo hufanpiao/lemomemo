@@ -50,6 +50,19 @@ describe('push-dispatch store.ts', () => {
       await expect(makeStore(fakeAdmin({ data: null, error: { message } }).admin).finishQueue?.('k', []), message).rejects.toThrow(want);
     }
   });
+  it('数据类错误分开：PostgREST 回的 SQLSTATE 是 22、23 类抛 db:data（第 0 步写回记 held）；PGRST、08 连不上、57 被取消、40 死锁、没有 code 的抛 db；超时优先', async () => {
+    const cases: [{ message: string; code?: unknown }, RegExp][] = [
+      [{ message: 'value too long', code: '22001' }, /^db:data$/], [{ message: 'out of range', code: '22003' }, /^db:data$/],
+      [{ message: 'check violation', code: '23514' }, /^db:data$/], [{ message: 'not null', code: '23502' }, /^db:data$/],
+      [{ message: 'x', code: 'PGRST204' }, /^db$/], [{ message: 'x', code: '08006' }, /^db$/], [{ message: 'x', code: '57014' }, /^db$/],
+      [{ message: 'x', code: '40P01' }, /^db$/], [{ message: 'x', code: '' }, /^db$/], [{ message: 'x', code: 23514 }, /^db$/], [{ message: 'x', code: '2301' }, /^db$/],
+      [{ message: 'TimeoutError: signal timed out', code: '23514' }, /^db:timeout$/],
+    ];
+    for (const [error, want] of cases) {
+      const store = makeStore(fakeAdmin({ data: null, error }).admin);
+      await expect(store.writeRemind?.('todos', 'x', 'u', { remind_at: 1 }, null), JSON.stringify(error)).rejects.toThrow(want);
+    }
+  });
   it('积压：private.remind_queue_stats() 一行换成心跳的三个字段；缺行、不是非负整数按 0；出错抛 db', async () => {
     const one = (data: unknown) => makeStore(fakeAdmin({ data, error: null }).admin).queueStats?.();
     const { admin, chains } = fakeAdmin({ data: [{ user_items: 2, batch_items: 700, oldest_user_wait_s: 35 }], error: null });

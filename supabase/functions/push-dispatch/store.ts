@@ -1,11 +1,12 @@
 // push-dispatch 的数据库读写（supabase-js，service role）：只在 index.ts 里用；查询写法由 tests/functions/push-dispatch-store.test.ts 核对，逻辑测试用内存替身。
 // 系统写入（remind_at、next_date、pushed_for、defer_until、push_fail_count、last_push_ok_at）在 table_meta.system_cols 里，touch() 不加 rev、不入队；
 //   清订阅三列不是系统列，会加 rev、同步给那台设备。每条写都带 user_id 条件；标题只在内存里组文案，不进日志。
-// 出错一律抛 Error：请求超时（_shared/net.ts 到点中止）抛 DB_TIMEOUT，其余抛 'db'（调用方按 failCode 记 `<码>` 或 `<码>:timeout`）。
+// 出错一律抛 Error：请求超时（_shared/net.ts 到点中止）抛 DB_TIMEOUT，数据类错误（SQLSTATE 22、23 类）抛 DB_DATA，其余抛 'db'
+// （调用方按 failCode 记 `<码>`、`<码>:timeout` 或 `<码>:data`）。
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import type { DispatchStore } from './core.ts';
-import { DB_TIMEOUT, LOG_SRC, SETTING_KEYS, TABLES, type DeviceRow, type ItemRow, type Profile, type QueueItem, type Table, type UserSettings } from './round.ts';
+import { DB_DATA, DB_TIMEOUT, LOG_SRC, SETTING_KEYS, TABLES, type DeviceRow, type ItemRow, type Profile, type QueueItem, type Table, type UserSettings } from './round.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Admin = SupabaseClient<any, any, any>;
@@ -24,11 +25,15 @@ const DEVICE_COLS = 'id, user_id, push_endpoint, p256dh, auth, push_fail_count';
 
 /**
  * supabase-js 把 fetch 抛的异常转成 error 返回，message 是“异常名: 文字”（@supabase/postgrest-js 2.118 的 executeWithRetry 之后那段）；
- * timedFetch 中止时异常名是 TimeoutError，手动中止是 AbortError。只看开头的异常名，不看文字
+ * timedFetch 中止时异常名是 TimeoutError，手动中止是 AbortError。只看开头的异常名，不看文字。
+ * 数据库自己报的错 PostgREST 把 SQLSTATE 放在 code：22 类（数据异常）、23 类（违反约束）是这一行本身写不进去，抛 DB_DATA；
+ * 别的（PGRST 开头的、08 连不上、57 被取消、5xx 没有 code）一律 'db'
  */
 export function dbError(error: unknown): Error {
-  const m = (error as { message?: unknown } | null)?.message;
-  return new Error(typeof m === 'string' && /^(TimeoutError|AbortError):/.test(m) ? DB_TIMEOUT : 'db');
+  const e = error as { message?: unknown; code?: unknown } | null;
+  if (typeof e?.message === 'string' && /^(TimeoutError|AbortError):/.test(e.message)) return new Error(DB_TIMEOUT);
+  if (typeof e?.code === 'string' && /^2[23][0-9A-Z]{3}$/.test(e.code)) return new Error(DB_DATA);
+  return new Error('db');
 }
 function must<T>(r: { data: T | null; error: unknown }): T {
   if (r.error) throw dbError(r.error);

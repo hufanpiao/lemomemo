@@ -8,7 +8,7 @@
 -- 用户：seed 的 A、B 可用，C 是管理员停用；这里另加一个冷静期的 D（disabled_reason = deletion）。
 -- 同一个事务里 now() 不变：租约过期用“把 claimed_at 往前改”来造。
 begin;
-select plan(91);
+select plan(92);
 \ir _helpers.psql
 select tests.seed();
 
@@ -416,6 +416,23 @@ update private.remind_queue set claimed_at = now() - interval '181 seconds' wher
 select is((select string_agg(right(id::text, 2) || ':' || (claim is null)::text, ',') from private.remind_queue_pop(500, 180, true, 50, 2)), 'c1:true',
   '又写回出错、留着；再过期时已取满 p_poison（2）次：出队丢掉、以 claim 为空返回');
 select is((select string_agg(right(id::text, 2), ',' order by id) from private.remind_queue), 'c2', '有毒的 c1 已删，放回的 c2 还在');
+-- 放回那句没放回成（真实场景是行被用户事务锁着、skip locked 跳过，删除那句时锁已放开；单会话造不出，用一个只挡这一行 update 的触发器代替）：
+-- 列在 p_release 里的一律不删，留着租约走重试（独立评审建议 1；原来会被当成处理完删掉）
+delete from private.remind_queue;
+insert into private.remind_queue (table_name, id, user_id) values
+  ('todos', '00000000-0000-4000-8000-0000000000c4', 'aaaaaaaa-0000-4000-8000-000000000001'), ('todos', '00000000-0000-4000-8000-0000000000c5', 'aaaaaaaa-0000-4000-8000-000000000001');
+create temp table got10 as select * from private.remind_queue_pop(500, 180, false);
+create function tests.skip_c4() returns trigger language plpgsql as $$
+begin
+  if old.id = '00000000-0000-4000-8000-0000000000c4' then return null; end if;
+  return new;
+end $$;
+create trigger t_skip_c4 before update on private.remind_queue for each row execute function tests.skip_c4();
+select private.remind_queue_finish((select claim from got10 limit 1), '[{"table_name": "todos", "id": "00000000-0000-4000-8000-0000000000c4"}]');
+drop trigger t_skip_c4 on private.remind_queue;
+select is((select string_agg(right(q.id::text, 2) || ':' || coalesce(q.claim = g.claim, false)::text || ':' || q.attempts, ',' order by q.id)
+   from private.remind_queue q left join (select distinct claim from got10) g on true),
+  'c4:true:1', '放回没成的 c4 不删、租约和 attempts 留着（过期后重试）；没列出的 c5 照旧删');
 
 select * from finish();
 rollback;

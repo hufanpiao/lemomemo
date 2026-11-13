@@ -1,10 +1,12 @@
 // push-dispatch 第 0 步：打租约出队、重算 remind_at、按租约收尾（架构 5.3 第 0 步；方案-提醒队列重写 3.3、3.7；迁移 20261113100000）。
 // 每轮两段出队：① 单项重试（只取取过的项、一次 1 项，至多 queueRetryPops 次、只在头 queueRetryMs 毫秒）；② 新项按批（每轮都做，先全站 prio 0）。
-// 每批读行、重算、带乐观条件写回，最后 finish：放回的清租约，写回出错的留着租约（held），其余按租约删；中途崩了不调 finish，
-// 租约过期后重取，取满有毒次数的由出队函数丢掉——held 和崩了走同一条路，一直写不进去的那一项取满次数就被丢掉（迁移 20261113120000）。
-// 每项一个结果：不是 same / gone 的记一行函数日志 recalc:<结果>:<表>:<id 前 8 位>；prio 0 的 written、ack、r336、failed 另进 logs（act = recalc）。
+// 每批读行、重算、带乐观条件写回，最后 finish：放回的清租约，这一行本身写不进去的（数据类错误）留着租约（held），其余按租约删；
+// 中途崩了不调 finish，租约过期后重取，取满有毒次数的由出队函数丢掉——held 和崩了走同一条路，一直写不进去的那一项取满次数就被丢掉
+// （迁移 20261113120000）。超时、连不上这类暂时的错误照旧放回，不计次数：数据库慢十几分钟不会把一批用户改的项当有毒项丢掉。
+// 每项一个结果：不是 same / gone 的记一行函数日志 recalc:<结果>:<表>:<id 前 8 位>；有毒项记 queue_poison:<表>:<id 前 8 位>；
+// prio 0 的 written、ack、r336、failed、held 和有毒项（code = poison）另进 logs（act = recalc）。
 // fresh 的待办（新建或改了截止）不传 prevRemindAt：提前量已过时回落到截止时刻（R-411 Q2）；其余一律传这一行现在的 remind_at（R1）。
-import { LOG_SRC, type ItemRow, type LogRow, type Profile, type QueueItem, type QueueRef, type RoundCtx, type UserSettings } from './round-types.ts';
+import { DB_DATA, LOG_SRC, type ItemRow, type LogRow, type Profile, type QueueItem, type QueueRef, type RoundCtx, type UserSettings } from './round-types.ts';
 import { failCode, groupBy, logTzInvalid, pool, uniq } from './round-util.ts';
 
 /** 第 0 步这一轮的结果：ok、poison 进心跳的 queue_ok、queue_poison；written（含 ack）、r336、failed 进心跳的 recalc_* */
@@ -13,11 +15,17 @@ export interface QueueStat { ok: boolean; poison: number; written: number; r336:
 /**
  * 一项重算的结果（方案 3.7）：written 写回了；ack 按 S1 例外写回（notified_for = 新 remind_at）；r336 全天日程这一天已提醒过、不写回；
  * tz_invalid 时区认不出、跳过；no_profile profiles 里没有这个人；owner_mismatch 行的主人和队列项对不上；failed 行里的值算不出；
- * released 放回队列（预算到了、乐观条件不成立：不算有毒次数）；held 写回出错，留着租约等过期重取（算有毒次数，同“中途崩了”）；
+ * released 放回队列（预算到了、乐观条件不成立、写回遇到超时等暂时的错误：不算有毒次数）；
+ * held 写回遇到数据类错误（DB_DATA：这一行本身写不进去），留着租约等过期重取（算有毒次数，同“中途崩了”）；
  * same 算出来和原值一样；gone 行已经没了（硬删的孤儿，finish 删掉）。
  * 除 released、held 外都不放回（放回只会每分钟再来一次；以后这一行再被改，触发器会重新入队）
  */
 export type RecalcResult = 'written' | 'ack' | 'r336' | 'tz_invalid' | 'no_profile' | 'owner_mismatch' | 'failed' | 'released' | 'held' | 'same' | 'gone';
+
+/** prio 0 那几项进 logs 的一行（act = recalc，code 是结果名或 poison；方案 3.7） */
+function recalcLog(q: QueueItem, code: RecalcResult | 'poison', t: number): LogRow {
+  return { user_id: q.user_id, t, device: null, kind: 'run', act: 'recalc', src: LOG_SRC, coll: q.table_name, item_id: q.id, code };
+}
 
 export async function step0(c: RoundCtx, logs: LogRow[], overBudget: () => boolean): Promise<QueueStat> {
   const stat: QueueStat = { ok: true, poison: 0, written: 0, r336: 0, failed: 0 };
@@ -34,8 +42,10 @@ export async function step0(c: RoundCtx, logs: LogRow[], overBudget: () => boole
     }
     for (const x of got) {
       if (x.claim === null) {
-        c.log('queue_poison');   // 有毒项：出队函数已删掉，不再处理
+        // 有毒项：出队函数已删掉，不再处理。日志带表和 id 前 8 位，按 id 能查到它之前的 recalc_write_failed 或 round_failed
+        c.log(`queue_poison:${x.table_name}:${x.id.slice(0, 8)}`);
         stat.poison++;
+        if (x.prio === 0) logs.push(recalcLog(x, 'poison', c.now()));
       }
     }
     const items = got.filter((x) => x.claim !== null);
@@ -58,11 +68,11 @@ export async function step0(c: RoundCtx, logs: LogRow[], overBudget: () => boole
 async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, items: readonly QueueItem[], stat: QueueStat): Promise<void> {
   const claim = items[0]?.claim;   // 同一批同一个租约号
   if (!claim) return;
-  // 收尾：release 里的放回，hold 里的留着租约，这个租约的其余项删掉。失败不重试：租约过期以后别的轮重取，最多晚几分钟、多算一次
+  // 收尾：release 里的放回，hold 里的留着租约，这个租约的其余项删掉（只取 table_name、id 在 store 里做）。
+  // 失败不重试：租约过期以后别的轮重取，最多晚几分钟、多算一次
   const finish = async (release: readonly QueueRef[], hold: readonly QueueRef[] = []) => {
-    const refs = (xs: readonly QueueRef[]) => xs.map((x) => ({ table_name: x.table_name, id: x.id }));
     try {
-      await c.store.finishQueue(claim, refs(release), refs(hold));
+      await c.store.finishQueue(claim, release, hold);
     } catch (e) {
       c.log(failCode('queue_finish_failed', e));
       stat.ok = false;
@@ -99,9 +109,7 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
     else if (r === 'failed') stat.failed++;
     if (r === 'same' || r === 'gone') return;   // 只计数不逐条打：批量时一轮最多 500 项
     c.log(`recalc:${r}:${q.table_name}:${q.id.slice(0, 8)}`);
-    if (q.prio === 0 && (r === 'written' || r === 'ack' || r === 'r336' || r === 'failed')) {
-      logs.push({ user_id: q.user_id, t: now, device: null, kind: 'run', act: 'recalc', src: LOG_SRC, coll: q.table_name, item_id: q.id, code: r });
-    }
+    if (q.prio === 0 && (r === 'written' || r === 'ack' || r === 'r336' || r === 'failed' || r === 'held')) logs.push(recalcLog(q, r, now));
   };
 
   /** 一项：算出新的 remind_at（纪念日另有 next_date）并带乐观条件写回 */
@@ -154,9 +162,10 @@ async function batch(c: RoundCtx, logs: LogRow[], overBudget: () => boolean, ite
       // 乐观条件（代码审查建议 ④）：读完以后行又被改了就不写，放回队列下一轮按新值重算
       if (!(await c.store.writeRemind(q.table_name, q.id, q.user_id, patch, row.remind_at, ackAt))) return 'released';
     } catch (e) {
-      // 写回出错不放回：留着租约，过期后重取、计入有毒次数（一直出错的取满次数被丢掉，不会每分钟白算一次）
+      // 这一行本身写不进去（数据类错误）：不放回，留着租约，过期后重取、计入有毒次数（一直出错的取满次数被丢掉，不会每分钟白算一次）。
+      // 超时、连不上、5xx、认不出的：照旧放回、不计次数（暂时的故障不该把项攒成有毒项）
       c.log(failCode('recalc_write_failed', e));
-      return 'held';
+      return e instanceof Error && e.message === DB_DATA ? 'held' : 'released';
     }
     return ackAt === undefined ? 'written' : 'ack';
   };

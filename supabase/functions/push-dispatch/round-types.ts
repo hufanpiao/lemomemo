@@ -24,6 +24,11 @@ export const BEHIND_MS = 60 * MIN_MS;
  * 各处收尾照旧，只是原因码记成 `<码>:timeout`（round-util.ts 的 failCode，方案 3.6）
  */
 export const DB_TIMEOUT = 'db:timeout';
+/**
+ * 这一行本身写不进去（PostgREST 回的 SQLSTATE 是 22 类数据异常、23 类违反约束）时 store 抛的错误文字：重试也一样写不进去。
+ * 第 0 步写回遇到它记 held（留着租约、计入有毒次数，迁移 20261113120000）；超时、连不上、5xx、认不出的照旧放回。原因码记 `<码>:data`
+ */
+export const DB_DATA = 'db:data';
 /** logs.src（≤ 16 字） */
 export const LOG_SRC = 'push-dispatch';
 /** 本轮要读的设置键 */
@@ -85,7 +90,7 @@ export type LogRow = {
   t: number;
   device: string | null;
   kind: 'run';
-  // recalc：第 0 步 prio 0 那几项的重算结果（code = written / ack / r336 / failed，方案 3.7）；
+  // recalc：第 0 步 prio 0 那几项的重算结果（code = written / ack / r336 / failed / held，被丢掉的有毒项 code = poison，方案 3.7）；
   // claim_timeout：认领请求超时，库里可能已认领，这一条不发（R-411 Q4，code = claim_timeout）
   act: 'push_ok' | 'push_failed' | 'push_bad_endpoint' | 'tz_invalid' | 'recalc' | 'claim_timeout';
   src: string;
