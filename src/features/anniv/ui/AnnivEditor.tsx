@@ -17,7 +17,7 @@ import { EditShell } from '../../../kit/components/EditShell.tsx';
 import { Check, Field, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
-import { leapOf, maxDay, NAME_MAX, NOTE_MAX, recOf, yearRange, type AnnivForm } from '../data/anniv-edit.ts';
+import { leapOf, maxDay, NAME_MAX, NOTE_MAX, offsetsKey, offsetsList, recOf, yearRange, type AnnivForm } from '../data/anniv-edit.ts';
 import { clearAvatar, setAvatar, type AvatarResult } from '../data/avatar.ts';
 import { useAnnivDefaults, useAnnivEdit, useToday } from '../hooks/useAnniv.ts';
 import { useAnnivT, type AnnivT } from '../hooks/useAnnivT.ts';
@@ -252,7 +252,16 @@ export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: strin
           </FormGroup>
         </EditShell>
       </div>
-      <RemindSheet open={sheet} onOpenChange={setSheet} form={form} change={change} defaults={defaults} created={created} tz={tz} />
+      <RemindSheet
+        open={sheet}
+        onOpenChange={setSheet}
+        value={{ offsets: offsetsList(form.offsets), time: form.time }}
+        onChange={(v) => change({ offsets: offsetsKey(v.offsets), time: v.time })}
+        defaults={defaults}
+        rec={recOf(form, created)}
+        tz={tz}
+        mode="item"
+      />
     </div>
   );
 }

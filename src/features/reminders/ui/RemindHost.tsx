@@ -97,7 +97,7 @@ function Banner({ r, queued, tz, defaultTime }: { r: Reminder; queued: number; t
         <button type="button" className={styles.bannerMain} data-testid="remind-banner-open" onClick={() => void openReminder(r.kind, r.id, r.tagDue)}>
           <span className={styles.bannerText}>
             <span className={styles.kicker}>
-              {t(r.kind === 'event' ? 'remind.banner.event' : 'remind.banner.todo', { when: t(w.key, w.params as never) })}
+              {t(`remind.banner.${r.kind}`, { when: t(w.key, w.params as never) })}
             </span>
             <span className={styles.title}>{r.title}</span>
             {queued > 1 && <span className={styles.more}>{t('remind.banner.more', { n: queued - 1 })}</span>}

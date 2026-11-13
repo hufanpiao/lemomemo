@@ -11,7 +11,7 @@ import type { RemindPrefs } from '../hooks/remind-list.ts';
 import { dayMsg, eventStart, timeOf, type Reminder } from '../hooks/remind-view.ts';
 import { actionsOf, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
-import { pcClass } from './pc-class.ts';
+import { markClass, pcClass } from './pc-class.ts';
 import { RemindButtons } from './RemindButtons.tsx';
 import styles from './Remind.module.css';
 
@@ -79,8 +79,8 @@ export default function MissedSheet({ open, onOpenChange, items, now, tz, prefs,
                   <span className={styles.itemText}>
                     <span className={styles.dim}>
                       {head(r)}
-                      <span className={`${r.kind === 'event' ? styles.mkEvSm : styles.mkTdSm} ${pcClass(project)}`} aria-hidden="true" />{' '}
-                      {t(r.kind === 'event' ? 'remind.kindName.event' : 'remind.kindName.todo', {})}
+                      <span className={`${markClass(r.kind, true)} ${pcClass(project)}`} aria-hidden="true" />{' '}
+                      {t(`remind.kindName.${r.kind}`, {})}
                       {started(r) ? t('remind.missed.started', {}) : ''}
                     </span>
                     <b>{r.title}</b>

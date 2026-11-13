@@ -205,7 +205,7 @@ verify_jwt = false
 [functions.ai-classify]
 verify_jwt = false
 
-# B5：anniv-roll 每天 00:10 UTC 由 pg_cron 调（迁移 20261113150000），同样只带 x-cron-secret（架构第 6 节；B5 任务单 S13）
+# B5：anniv-roll 每天 00:10 UTC 由 pg_cron 调（迁移 20261113181000），同样只带 x-cron-secret（架构第 6 节；B5 任务单 S13）
 [functions.anniv-roll]
 verify_jwt = false
 

@@ -3,3 +3,5 @@
 import { lazy } from 'react';
 
 export const routes = [{ name: 'anniv', Page: lazy(() => import('./ui/AnnivPage.tsx')) }] as const;
+/** 设置 › 提醒与通知 里“纪念日提醒”一行（B5 S16，reminders 的 RemindSettings 挂） */
+export const AnnivDefaults = lazy(() => import('./ui/AnnivDefaults.tsx'));

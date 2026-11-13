@@ -3,11 +3,24 @@
 // • 本次会话只在本机处理过的集合（R4-L1）、本次打开以后响过的（rangSnapshot，R-336）：引擎（useReminders）写，这里和“错过的提醒”读
 // • 不带引擎、本机通知、写服务器、弹层这些：那些在 useReminders.ts，首屏用不到
 // useReminders.ts 原样转出这里的导出，别处照旧从 useReminders 引
-import { useMemo, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import type * as NextNs from '../../../../shared/logic/anniv/next-date.ts';
 import { currentTz } from '../../../core/current-tz.ts';
+import { annivOn } from '../../../kit/hooks/anniv-on.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
-import { allReminders, type Rang, type RangMap, type Reminder, type Row } from '../data/reminder-model.ts';
-import { defaultTimeOf, dndOf, KEY_DEFAULT_TIME, KEY_DND, KEY_SHOW_TITLE, settingValue, showTitleOf, type SettingRow } from '../data/remind-settings.ts';
+import { allReminders, MISSED_WINDOW_MS, type AnnivSource, type Rang, type RangMap, type Reminder, type Row } from '../data/reminder-model.ts';
+import {
+  defaultTimeOf,
+  dndOf,
+  KEY_ANNIV_OFFSETS,
+  KEY_ANNIV_TIME,
+  KEY_DEFAULT_TIME,
+  KEY_DND,
+  KEY_SHOW_TITLE,
+  settingValue,
+  showTitleOf,
+  type SettingRow,
+} from '../data/remind-settings.ts';
 
 // “错过的提醒”一行要的纯函数和类型（A1：ui 经 hooks 拿 data 的东西）
 export { missed, type Reminder } from '../data/reminder-model.ts';
@@ -23,6 +36,8 @@ export function useRemindPrefs() {
       dnd: dndOf(settingValue(rows, KEY_DND)),
       showTitle: showTitleOf(settingValue(rows, KEY_SHOW_TITLE)),
       defaultTime: defaultTimeOf(settingValue(rows, KEY_DEFAULT_TIME)),
+      /** 纪念日默认提醒时刻（anniv.default_time，没设 09:00）：纪念日“明天再提醒”用（这一条自己设了 remind_time 的用它自己的） */
+      annivTime: defaultTimeOf(settingValue(rows, KEY_ANNIV_TIME)),
     }),
     [rows],
   );
@@ -52,18 +67,56 @@ export function clearSessionAcked(): void {
 const markSessionAcked = (list: Reminder[], acked: ReadonlySet<string>): Reminder[] =>
   acked.size === 0 ? list : list.map((r) => (acked.has(r.tag) && !r.handled ? { ...r, handled: true } : r));
 
-/** 本机现算的全部提醒（日程、待办） */
+// 纪念日的提醒时刻（B5 S15）：shared/logic/anniv/next-date.ts 带农历表，不进首屏（2.6），有纪念日、开关开着才按需加载；
+// 用到本文件的（RemindHost、错过的提醒、整页提醒、未来 7 天）都在首屏画完以后才挂。加载失败不重试，纪念日不提醒
+type NextModule = typeof NextNs;
+let annivMod: NextModule | null = null;
+let annivPending: Promise<NextModule | null> | null = null;
+const loadAnniv = (): Promise<NextModule | null> =>
+  (annivPending ??= import('../../../../shared/logic/anniv/next-date.ts').then(
+    (m) => (annivMod = m),
+    () => null,
+  ));
+
+/** 纪念日那一份：行、设置里的 anniv.default_*、按需加载的推算（还没加载好返回 undefined） */
+function useAnnivSource(rows: readonly SettingRow[], tz: string): AnnivSource | undefined {
+  const annivs = useCollection<Row>('anniversaries');
+  const want = annivs.length > 0 && annivOn();
+  const [mod, setMod] = useState<NextModule | null>(annivMod);
+  useEffect(() => {
+    if (mod || !want) return undefined;
+    let alive = true;
+    void loadAnniv().then((m) => {
+      if (alive && m) setMod(m);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [mod, want]);
+  return useMemo(() => {
+    if (!mod || !want) return undefined;
+    const settings = { [KEY_ANNIV_OFFSETS]: settingValue(rows, KEY_ANNIV_OFFSETS), [KEY_ANNIV_TIME]: settingValue(rows, KEY_ANNIV_TIME) };
+    return { rows: annivs, at: (row: Row, now: number) => mod.annivRemindFrom(row, tz, now, settings, MISSED_WINDOW_MS) };
+  }, [mod, want, annivs, rows, tz]);
+}
+
+/** 本机现算的全部提醒（日程、待办、纪念日） */
 export function useReminderList(now: number) {
   const events = useCollection<Row>('events');
   const todos = useCollection<Row>('todos');
+  const settings = useCollection<SettingRow>('settings');
   const prefs = useRemindPrefs();
   const tz = currentTz();
+  const anniv = useAnnivSource(settings, tz);
   const acked = useSyncExternalStore(subscribeSessionAcked, getSessionAcked, getSessionAcked);
   const list = useMemo(
-    () => markSessionAcked(allReminders(events, todos, now, tz, prefs.dnd, prefs.defaultTime), acked),
-    [events, todos, now, tz, prefs.dnd, prefs.defaultTime, acked],
+    () => markSessionAcked(allReminders(events, todos, now, tz, prefs.dnd, prefs.defaultTime, anniv), acked),
+    [events, todos, now, tz, prefs.dnd, prefs.defaultTime, anniv, acked],
   );
-  const known = useMemo(() => new Set([...events.map((r) => `event:${r.id}`), ...todos.map((r) => `todo:${r.id}`)]), [events, todos]);
+  const known = useMemo(
+    () => new Set([...events.map((r) => `event:${r.id}`), ...todos.map((r) => `todo:${r.id}`), ...(anniv?.rows ?? []).map((r) => `anniv:${r.id}`)]),
+    [events, todos, anniv],
+  );
   return { list, tz, prefs, known };
 }
 

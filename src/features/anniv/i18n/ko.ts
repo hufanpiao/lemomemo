@@ -50,6 +50,8 @@ export const ko = {
   'anniv.rm.cardLine': '{date} · {offs} {time} 알림', // REVIEW(ko)
   'anniv.rm.default': '(기본)', // REVIEW(ko)
   'anniv.rm.title': '이 항목의 알림', // REVIEW(ko)
+  'anniv.rm.defTitle': '기념일 알림', // REVIEW(ko)
+  'anniv.rm.defDesc': '생일·기념일·디데이의 기본 알림 시점이에요. 따로 알림을 정한 항목은 바뀌지 않아요.', // REVIEW(ko)
   'anniv.rm.desc': '기본: {def}. 이 항목만 바뀌고 다른 기념일은 그대로예요.', // REVIEW(ko)
   'anniv.rm.reset': '기본값으로', // REVIEW(ko)
   'anniv.rm.daysLabel': '며칠 전에 (여러 개, 최대 4개)', // REVIEW(ko)

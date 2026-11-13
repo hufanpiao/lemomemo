@@ -427,6 +427,25 @@
   border-width: 1.5px;
 }
 
+/* 纪念日：菱形（和月历图例“◆ 纪念日”同一个记号、同一个颜色，B5 S15） */
+.mkAv,
+.mkAvSm {
+  display: inline-block;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin: 0 3px;
+  background: var(--accent);
+  transform: rotate(45deg);
+  vertical-align: middle;
+}
+
+.mkAvSm {
+  width: 8px;
+  height: 8px;
+  margin: 0 2px;
+}
+
 /* 整页提醒（线框 FULLALERT，设计 H1）：按钮在屏幕下方 */
 .page {
   display: flex;

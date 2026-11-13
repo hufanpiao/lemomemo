@@ -276,3 +276,35 @@ export function annivDatesIn(rows: readonly Readonly<Record<string, unknown>>[],
   }
   return out;
 }
+
+/**
+ * 界面一侧“这一次”的提醒时刻（B5 S15：提醒横幅、错过的提醒、未来 7 天、整页提醒）：
+ * 从 max(now − lookbackMs, 建这一条的时刻, 上次“知道了”的 notified_for + 1) 起，第一个提醒时刻。
+ * • 只有按了“知道了”才往后走一次：同一次提醒在处理前时刻不变（tag 稳定，和服务器推这一次时的 due 同一个值）；
+ *   过了点没处理的留着，进“错过的提醒”。服务器推完会把 remind_at 列挪到下一次，界面不看那一列
+ * • 同时给出这次提醒对应的那一次纪念日（date：提醒那天起的下一次；提醒横幅写“7 天后”、生成待办定截止日用）
+ * • 行不合格、韩国阴历（D1）、已过去的倒数日、算出错：返回 null（不提醒）
+ */
+export function annivRemindFrom(
+  row: Readonly<Record<string, unknown>>,
+  tz: Tz,
+  now: number,
+  settings: Readonly<Record<string, unknown>>,
+  lookbackMs: number,
+): { readonly at: number; readonly date: DateStr } | null {
+  const r = annivRecOf(row);
+  if (r === null || r.lunar_variant !== 'cn') return null;
+  const acked = row['notified_for'];
+  let from = now - lookbackMs;
+  if (r.created_at !== null) from = Math.max(from, r.created_at);
+  if (typeof acked === 'number' && Number.isFinite(acked)) from = Math.max(from, acked + 1);
+  try {
+    const at = annivNextAt(r, tz, from, settings).remind_at;
+    if (at === null) return null;
+    const day = todayOf(at, tz);
+    const st = annivState(r, day, r.created_at !== null ? todayOf(r.created_at, tz) : day);
+    return st === null ? null : { at, date: st.next.date };
+  } catch {
+    return null;
+  }
+}

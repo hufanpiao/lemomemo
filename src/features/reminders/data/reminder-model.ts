@@ -15,15 +15,18 @@
 //   日期、remind_days 改了，日历编辑在同一次写入里清掉 notified_for、snooze_at（event-edit patchOf），旧的“知道了”套不到新的一次上；
 //   本次打开以后响过的（rang），改了 remind.default_time 不再进横幅，没按“知道了”的进“错过的提醒”，显示当时实际响的时刻（②）；
 //   有时刻的日程、待办、按了稍后的照旧按 tag。本机通知（local-notify 的 shownKey）用同一套；改了默认时刻，已经弹出的通知不撤回（①）
-// 纪念日（anniversaries）的提醒归 B5（remindAtOf 还不算纪念日），这里只处理日程和待办
+// 纪念日（anniversaries，B5 S15）：remind_at 由调用方传进来的 annivAt 现算（shared/logic/anniv/next-date.ts 的 annivRemindFrom，
+//   它带农历表，hooks/remind-list.ts 按需加载后传入；还没加载好时纪念日先不算提醒）；标题取 name；不分全天、不看 remind_min
 import { addDays, msAt, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { ALL_DAY_EVE_TIME, allDayRemindDay, allDayTimeOf, applyDnd, remindAtOf, sameRemindDay, type Dnd } from '../../../../shared/logic/remind.ts';
 import { occurrenceKey, reminderTag } from '../../../../shared/logic/remind-route.ts';
 
-export type RemindKind = 'event' | 'todo';
+export type RemindKind = 'event' | 'todo' | 'anniv';
 export type Row = Readonly<Record<string, unknown>> & { readonly id: string };
+/** 纪念日这一次的提醒时刻（at，epoch ms）和对应的那一次纪念日（date）；不提醒为 null。now 是现在，回看窗口由实现自己定（MISSED_WINDOW_MS） */
+export type AnnivAt = (row: Row, now: number) => { readonly at: number; readonly date: DateStr } | null;
 
 export const MISSED_DAYS = 7;
 export const UPCOMING_DAYS = 7;
@@ -48,6 +51,8 @@ export interface Reminder {
   /** "<kind>:<id>:<dueAt>"（tag 里的 dueAt 是没按本机免打扰推迟的那个，和服务器推送的 tag 一致） */
   readonly tag: string;
   readonly row: Row;
+  /** 纪念日：这次提醒对应的那一次纪念日（“7 天后”、生成待办的截止日用）；别的类型没有 */
+  readonly annivDate?: DateStr;
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
@@ -57,7 +62,8 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
  * 本机现算的 remind_at（有时刻的日程固定时刻；全天日程按 current_tz 和 defaultTime；待办按 current_tz，“其余重算”传这一行的 remind_at）。
  * defaultTime 是设置 remind.default_time 的值（不传按 09:00）
  */
-export function remindAtLocal(kind: RemindKind, row: Row, now: number, tz: Tz, defaultTime?: string): number | null {
+export function remindAtLocal(kind: RemindKind, row: Row, now: number, tz: Tz, defaultTime?: string, annivAt?: AnnivAt): number | null {
+  if (kind === 'anniv') return annivAt?.(row, now)?.at ?? null;
   if (kind === 'event') {
     const date = str(row['date']);
     if (date === null) return null;
@@ -89,12 +95,17 @@ export function rawDueAt(remindAt: number | null, row: Row): number | null {
 }
 
 /** 一行 → 提醒；不该提醒的（已删、撤销、待办已完成、没有提醒）返回 null */
-export function reminderOf(kind: RemindKind, row: Row, now: number, tz: Tz, dnd: Dnd = null, defaultTime?: string): Reminder | null {
+export function reminderOf(kind: RemindKind, row: Row, now: number, tz: Tz, dnd: Dnd = null, defaultTime?: string, annivAt?: AnnivAt): Reminder | null {
   if (!isLiveRow(row)) return null;
   if (kind === 'todo' && row['done'] === true) return null;
   let remindAt: number | null;
+  let annivDate: DateStr | undefined;
   try {
-    remindAt = remindAtLocal(kind, row, now, tz, defaultTime);
+    if (kind === 'anniv') {
+      const a = annivAt?.(row, now) ?? null;
+      remindAt = a?.at ?? null;
+      annivDate = a?.date;
+    } else remindAt = remindAtLocal(kind, row, now, tz, defaultTime);
   } catch {
     return null;   // 日期、时刻格式不对（只读行、坏数据）：不当提醒，不让整张表算不下去
   }
@@ -111,7 +122,7 @@ export function reminderOf(kind: RemindKind, row: Row, now: number, tz: Tz, dnd:
   return {
     kind,
     id: row.id,
-    title: str(row['title']) ?? '',
+    title: str(row[kind === 'anniv' ? 'name' : 'title']) ?? '',
     source: str(row['source']) ?? '',
     remindAt,
     dueAt: applyDnd(raw, tz, dnd),
@@ -120,11 +131,26 @@ export function reminderOf(kind: RemindKind, row: Row, now: number, tz: Tz, dnd:
     handled: remindAt !== null ? notified === remindAt || allDayAcked : num(row['snooze_at']) === null,
     tag: reminderTag(kind, row.id, raw),
     row,
+    ...(annivDate !== undefined ? { annivDate } : {}),
   };
 }
 
-/** 两个集合里所有的提醒；defaultTime 是设置 remind.default_time（全天日程当天提醒用） */
-export function allReminders(events: readonly Row[], todos: readonly Row[], now: number, tz: Tz, dnd: Dnd = null, defaultTime?: string): Reminder[] {
+/** 纪念日那一份（B5）：行和算时刻的函数（函数还没加载好、纪念日开关关着时不传） */
+export interface AnnivSource {
+  readonly rows: readonly Row[];
+  readonly at: AnnivAt;
+}
+
+/** 几个集合里所有的提醒；defaultTime 是设置 remind.default_time（全天日程当天提醒用） */
+export function allReminders(
+  events: readonly Row[],
+  todos: readonly Row[],
+  now: number,
+  tz: Tz,
+  dnd: Dnd = null,
+  defaultTime?: string,
+  anniv?: AnnivSource,
+): Reminder[] {
   const out: Reminder[] = [];
   for (const r of events) {
     const x = reminderOf('event', r, now, tz, dnd, defaultTime);
@@ -132,6 +158,10 @@ export function allReminders(events: readonly Row[], todos: readonly Row[], now:
   }
   for (const r of todos) {
     const x = reminderOf('todo', r, now, tz, dnd);
+    if (x) out.push(x);
+  }
+  for (const r of anniv?.rows ?? []) {
+    const x = reminderOf('anniv', r, now, tz, dnd, undefined, anniv?.at);
     if (x) out.push(x);
   }
   return out.sort((a, b) => a.dueAt - b.dueAt || a.id.localeCompare(b.id));
@@ -202,7 +232,8 @@ export type ModeMsg =
   | { key: 'remind.mode.dueBeforeDay'; params: { n: number } }
   | { key: 'remind.mode.dueOnTime'; params: Record<string, never> }
   | { key: 'remind.mode.sameDay'; params: { time: string } }
-  | { key: 'remind.mode.dayBefore'; params: { time: string } };
+  | { key: 'remind.mode.dayBefore'; params: { time: string } }
+  | { key: 'remind.mode.anniv'; params: Record<string, never> };
 
 function beforeMsg(min: number, due: boolean): ModeMsg {
   if (min === 0) return due ? { key: 'remind.mode.dueOnTime', params: {} } : { key: 'remind.mode.onTime', params: {} };
@@ -214,6 +245,7 @@ function beforeMsg(min: number, due: boolean): ModeMsg {
 /** 这一条是怎么提醒的（按“稍后”推迟过的写“稍后再提醒”）；全天日程“当天 {default_time} / 前一天 20:00” */
 export function modeOf(r: Reminder, defaultTime?: string): ModeMsg {
   if (r.snoozed) return { key: 'remind.mode.snoozed', params: {} };
+  if (r.kind === 'anniv') return { key: 'remind.mode.anniv', params: {} };
   if (r.kind === 'event' && str(r.row['time']) === null) {
     return num(r.row['remind_days']) === 1
       ? { key: 'remind.mode.dayBefore', params: { time: ALL_DAY_EVE_TIME } }

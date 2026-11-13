@@ -46,6 +46,8 @@ export const zh = {
   'anniv.rm.cardLine': '{date} · {offs} {time} 提醒',
   'anniv.rm.default': '（默认）',
   'anniv.rm.title': '这一条的提醒',
+  'anniv.rm.defTitle': '纪念日提醒',
+  'anniv.rm.defDesc': '生日、纪念日、倒数日默认什么时候提醒。单独设过提醒的那几条不受影响。',
   'anniv.rm.desc': '默认：{def}。只改这一条，不影响其他纪念日。',
   'anniv.rm.reset': '恢复默认',
   'anniv.rm.daysLabel': '提前几天（可多选，最多 4 个）',

@@ -1,5 +1,5 @@
 // anniv-roll 的处理逻辑（B5 S13；架构 5.4“倒数日到期后”、第 6 节 anniv-roll 行、0.29（P-08））：cron 函数，只收 POST，先鉴权（x-cron-secret 定长比较）再判配置。
-// pg_cron 每天 00:10 UTC 调一次（迁移 20261113150000_anniv_roll_cron.sql）。数据库、共享 logic 由 index.ts 注入，Vitest 直接测这一份。
+// pg_cron 每天 00:10 UTC 调一次（迁移 20261113181000_anniv_roll_cron.sql）。数据库、共享 logic 由 index.ts 注入，Vitest 直接测这一份。
 // 一轮做什么：
 // • 挑行：没删的纪念日里 next_date 为空、或 next_date 早于“全世界最晚的明天”（UTC 今天 + 2 天）且还没归档的；外加已归档、但 next_date 又回到今天以后的
 //   （用户把已过去的倒数日改到以后，push-dispatch 重算了 next_date，这里把 archived_at 清掉）。一轮最多 BATCH 行，按 next_date 从早到晚。

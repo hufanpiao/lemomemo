@@ -18,7 +18,7 @@ import { eventEnd, eventStart, findReminder, parseReminderHash, relMsg, timeOf, 
 import { actionsOf, useReminderList, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
 import { Bell } from './Bell.tsx';
-import { pcClass } from './pc-class.ts';
+import { markClass, pcClass } from './pc-class.ts';
 import { RemindButtons } from './RemindButtons.tsx';
 import styles from './Remind.module.css';
 
@@ -124,7 +124,7 @@ export default function FullReminderPage() {
       {/* 线框 FULLALERT（设计 H1）：铃铛 + 类型行、大时刻、标题（待办的完成圆圈并排，不在 h1 里，L1）、“到 16:30 · 项目”、地点备注卡、下一条卡 */}
       <p className={styles.kind} data-testid="remind-full-kind">
         <Bell className={styles.bell} />
-        {t(r.kind === 'event' ? 'remind.full.head.event' : 'remind.full.head.todo', { when: t(w.key, w.params as never) })}
+        {t(`remind.full.head.${r.kind}`, { when: t(w.key, w.params as never) })}
       </p>
       <p className={styles.bigTime} data-testid="remind-full-time">
         {bigTimeOf(r, tz, prefs.defaultTime)}
@@ -179,11 +179,11 @@ export default function FullReminderPage() {
       )}
       {nextR && next && (
         <Pressable type="button" className={styles.nextCard} onClick={() => showNext(next.kind, next.id, next.dueAt)} data-testid="remind-full-next">
-          <span className={`${nextR.kind === 'event' ? styles.mkEv : styles.mkTd} ${pcClass(nextProject)}`} aria-hidden="true" />
+          <span className={`${markClass(nextR.kind)} ${pcClass(nextProject)}`} aria-hidden="true" />
           <span className={styles.grow}>
             <b className={styles.nextTitle}>{t('remind.full.next', { title: nextR.title })}</b>
             <span className={styles.nextSub}>
-              {[t('remind.full.nextAt', { time: timeOf(next.dueAt, tz) }), t(nextR.kind === 'event' ? 'remind.kindName.event' : 'remind.kindAlert.todo', {}), nextProject].filter(Boolean).join(' · ')}
+              {[t('remind.full.nextAt', { time: timeOf(next.dueAt, tz) }), t(nextR.kind === 'todo' ? 'remind.kindAlert.todo' : `remind.kindName.${nextR.kind}`, {}), nextProject].filter(Boolean).join(' · ')}
             </span>
           </span>
           <span aria-hidden="true">›</span>

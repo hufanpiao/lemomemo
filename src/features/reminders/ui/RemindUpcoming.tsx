@@ -10,10 +10,10 @@ import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts'
 import { navigate } from '../../../app/router.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { useMinuteNow } from '../../../kit/hooks/useMinuteNow.ts';
-import { dayMsg, eventStart, modeOf, timeOf, upcoming, wdKey, type Reminder } from '../hooks/remind-view.ts';
+import { dayMsg, eventStart, modeOf, timeOf, upcoming, wdKey, whenMsg, type Reminder } from '../hooks/remind-view.ts';
 import { useReminderList } from '../hooks/useReminders.ts';
 import { useRemindT, type RemindT } from '../hooks/useRemindT.ts';
-import { pcClass } from './pc-class.ts';
+import { markClass, pcClass } from './pc-class.ts';
 import rs from './Remind.module.css';
 import styles from './RemindSettings.module.css';
 
@@ -61,6 +61,11 @@ function dayHead(t: RemindT, date: DateStr, today: DateStr): string {
 export function subOf(t: RemindT, r: Reminder, tz: string, defaultTime: string, group: DateStr, today: DateStr): string {
   const m = modeOf(r, defaultTime);
   const mode = t(m.key, m.params as never);
+  if (r.kind === 'anniv') {
+    // 纪念日（B5）：“纪念日 · 7 天后”（按提醒响的那一刻算）
+    const w = whenMsg(r, r.dueAt, tz);
+    return t('remind.up.avSub', { when: t(w.key, w.params as never) });
+  }
   if (r.kind !== 'event') return t('remind.up.tdSub', { mode });
   const s = eventStart(r, tz, defaultTime);
   if (s === null) return mode;
@@ -118,10 +123,10 @@ export default function RemindUpcoming() {
               const project = typeof r.row['project'] === 'string' ? r.row['project'] : '';
               return (
                 <li key={r.tag} className={styles.rowLi} data-testid="remind-upcoming-item" data-kind={r.kind}>
-                  <Pressable type="button" className={styles.upRow} onClick={() => void navigate(r.kind === 'event' ? 'event' : 'todo', r.id)} data-testid="remind-upcoming-open">
+                  <Pressable type="button" className={styles.upRow} onClick={() => void navigate(r.kind, r.id)} data-testid="remind-upcoming-open">
                     <span className={styles.upTime}>{timeOf(r.dueAt, tz)}</span>
                     <span className={styles.upMk}>
-                      <span className={`${r.kind === 'event' ? rs.mkEv : rs.mkTd} ${pcClass(project)}`} aria-hidden="true" />
+                      <span className={`${markClass(r.kind)} ${pcClass(project)}`} aria-hidden="true" />
                     </span>
                     <span className={styles.upText}>
                       <b>{r.title}</b>

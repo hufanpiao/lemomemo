@@ -12,6 +12,9 @@ export { settingValue, type SettingRow } from '../../../core/setting-read.ts';
 export const KEY_SHOW_TITLE = 'remind.show_title';
 export const KEY_DND = 'remind.dnd';
 export const KEY_DEFAULT_TIME = 'remind.default_time';
+/** 纪念日默认提前几天（数组，1～4 个、每个 0～60）、默认时刻（HH:MM）（B5 S16；数据字典第 9 节 anniv.*；纪念日页 hooks/useAnniv.ts 读同两个键） */
+export const KEY_ANNIV_OFFSETS = 'anniv.default_offsets';
+export const KEY_ANNIV_TIME = 'anniv.default_time';
 
 /** 打开免打扰时没设过时段的默认值（定稿线框 s13“免打扰 23:00 – 08:00”） */
 export const DEFAULT_DND = { start: '23:00', end: '08:00' } as const;
