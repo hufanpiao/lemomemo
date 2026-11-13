@@ -6,11 +6,11 @@
 //   倒数日名字后面带小标签；已过去的倒数日折在最下面
 // • 只读行（0.27 第 1 点、代定 D1）：副行写“要新版本才能显示”，点了出提示条，不进编辑
 // • 编辑（ui/AnnivEditor.tsx）：盖在列表上面的一层（手机从底部整屏弹上来、电脑右侧抽屉，线框 s5），这时列表 inert；
-//   列表 ↔ 编辑层算同一页（pushInPage 打开、退一步关，index.ts 的 samePageAs），不起整页过渡（WebKit 过渡途中锁滚动会崩）
+//   列表 ↔ 编辑层算同一页（navigate 打开、退一步关，index.ts 的 samePageAs；路由器认出同一页不起整页过渡，WebKit 过渡途中锁滚动会崩）
 // • 推算和农历（data/anniv-lib.ts）按需加载（2.6）：加载好之前只出空页面，加载失败写一句“没加载出来”（不白屏）
 import { useState } from 'react';
-import { replaceRoute, useRoute } from '../../../app/router.ts';
-import { pushInPage, useEditRoute } from '../../../app/router-levels.ts';
+import { navigate, replaceRoute, useRoute } from '../../../app/router.ts';
+import { useEditRoute } from '../../../app/router-levels.ts';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { ListToasts } from '../../../kit/components/ListToasts.tsx';
@@ -87,7 +87,7 @@ function AnnivList({ inert }: { inert: boolean }) {
     rlog(`anniv ro-blocked ${step}`);
     a.g.block();
   };
-  const open = (x: AnnivItem): void => (x.ro ? roBlocked('open') : void pushInPage('anniv', x.id));
+  const open = (x: AnnivItem): void => (x.ro ? roBlocked('open') : void navigate('anniv', x.id));
   const near = data.nearest;
 
   const row = (x: AnnivItem) => {
@@ -130,7 +130,7 @@ function AnnivList({ inert }: { inert: boolean }) {
       <div className={styles.top}>
         <h1 className={styles.h1}>{t('anniv.h1', {})}</h1>
         <div className={styles.topEnd}>
-          <Pressable type="button" className={styles.newBtn} onClick={() => void pushInPage('anniv', 'new')} aria-label={t('anniv.newLabel', {})} data-testid="anniv-new">
+          <Pressable type="button" className={styles.newBtn} onClick={() => void navigate('anniv', 'new')} aria-label={t('anniv.newLabel', {})} data-testid="anniv-new">
             <span aria-hidden="true">＋</span> {t('anniv.new', {})}
           </Pressable>
           <MeLink testId="anniv-settings" />

@@ -114,8 +114,26 @@ export function setTabSwitch(fn: (a: Route, b: Route) => boolean): void {
   tabSwitch = fn;
 }
 
-/** 从当前地址去 href：页签互切淡入，别的整页过渡 */
-export const animTo = (href: string): Anim => (tabSwitch(parseHash(window.location.hash), parseHash(href)) ? 'fade' : 'vt');
+// 两个路由是不是同一个页面（App 按登记表的 samePageAs 设，例如 #/calendar 和 #/cal/...）。
+// 架构 5.12：页内切换不用 View Transition。浏览器在同一页里前进 / 后退（月历上个月 ↔ 下个月）也直接画，
+// 不播 380ms 的整页淡入淡出（代码复审 R2）；路由器本身不认识功能登记表，所以由 App 注入
+let samePage: (a: Route, b: Route) => boolean = () => false;
+
+/** App 启动时调一次；测试里可以换 */
+export function setSamePage(fn: (a: Route, b: Route) => boolean): void {
+  samePage = fn;
+}
+
+/**
+ * 从当前地址去 href：同一页（samePageAs，例如纪念日列表 → 盖在上面的编辑层）不起过渡；页签互切淡入；别的整页过渡。
+ * 同一页不起过渡（整块评审第 20 条，原来另有一份 pushInPage）：编辑层自己从底部滑上来，再叠整页淡入淡出是两层动画；
+ * 而且编辑层挂上时锁滚动，过渡途中文档从能滚变成不能滚，WebKit 会整页崩（B5 e2e 实测）
+ */
+export function animTo(href: string): Anim {
+  const a = parseHash(window.location.hash);
+  const b = parseHash(href);
+  return samePage(a, b) ? 'none' : tabSwitch(a, b) ? 'fade' : 'vt';
+}
 
 // UI-4 第二轮 N-1：iPhone Safari 左边缘侧滑返回时系统自己已经播了返回动画（popstate.hasUAVisualTransition 为 true），
 // 再起 View Transition 会叠一次交叉淡入淡出。浏览器先派 popstate、紧接着派 hashchange：
@@ -127,16 +145,6 @@ function onPopState(e: PopStateEvent): void {
   // 老浏览器没有这个属性，当 false
   const ua = (e as PopStateEvent & { hasUAVisualTransition?: boolean }).hasUAVisualTransition === true;
   uaVisualHash = ua ? window.location.hash : null;
-}
-
-// 两个路由是不是同一个页面（App 按登记表的 samePageAs 设，例如 #/calendar 和 #/cal/...）。
-// 架构 5.12：页内切换不用 View Transition。浏览器在同一页里前进 / 后退（月历上个月 ↔ 下个月）也直接画，
-// 不播 380ms 的整页淡入淡出（代码复审 R2）；路由器本身不认识功能登记表，所以由 App 注入
-let samePage: (a: Route, b: Route) => boolean = () => false;
-
-/** App 启动时调一次；测试里可以换 */
-export function setSamePage(fn: (a: Route, b: Route) => boolean): void {
-  samePage = fn;
 }
 
 /** hashchange 的 oldURL 里的 hash；没有（老浏览器、测试里手工派的事件）时返回 null，照常起动画 */
