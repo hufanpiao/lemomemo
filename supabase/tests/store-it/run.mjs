@@ -6,7 +6,8 @@
 //   ② 先跑 copy:shared（两个 index.ts 引 _shared/gen/）；
 //   ③ 带这几项跑 deno test supabase/tests/store-it/account-store.it.ts、invite-admin-store.it.ts，再另起一个进程跑 purge-remind.it.ts，
 //      再另起一个进程跑 push-dispatch-d3.it.ts（11-06 B2：push-dispatch 真 store 的 D3 第 6 点三条、TC-DEL-remind_queue 函数一侧，约 35 秒），
-//      再另起一个进程跑 ai-fns-store.it.ts（11-07 B3：四个 AI 函数按真 index.ts 组装，Gemini 用进程内替身）：
+//      再另起一个进程跑 ai-fns-store.it.ts（11-07 B3：四个 AI 函数按真 index.ts 组装，Gemini 用进程内替身），
+//      再另起一个进程跑 remind-enqueue-parity.it.ts（11-13 R-411 后续：批量入队范围 SQL 和替身比对）：
 //      网络只许 127.0.0.1，写只许 supabase/.temp/（残留清单）。
 // 不用 shell：supabase 先按 PATH 找（CI），找不到就用 node 直接跑 node_modules/supabase/dist/supabase.js（本机 npx 装的）。
 // 结果用 process.exitCode 交出。
@@ -63,48 +64,28 @@ if (refused) {
 } else {
   execFileSync(process.execPath, [join(root, 'build', 'copy_shared.mjs')], { cwd: root, stdio: 'inherit' });
   mkdirSync(join(root, 'supabase', '.temp'), { recursive: true });
-  const r = spawnSync('deno', [
-    'test', '--config', 'deno.json', '--allow-net=127.0.0.1,localhost', '--allow-env', '--allow-read=.', '--allow-write=supabase/.temp',
-    'supabase/tests/store-it/account-store.it.ts',
-    'supabase/tests/store-it/invite-admin-store.it.ts',
-  ], {
-    cwd: root,
-    stdio: 'inherit',
-    env: { ...process.env, IT_API_URL: s.API_URL, IT_DB_URL: s.DB_URL, IT_ANON_KEY: s.ANON_KEY, IT_SERVICE_KEY: s.SERVICE_ROLE_KEY },
-  });
-  if (r.error) console.error(`store-it：deno 没跑起来（${r.error.message}）`);
-  // PURGE-cpu-budget 返工：多账号同时到期、同时有一批要提醒的（purge-remind.it.ts）。harness 收尾会关库连接，所以另起一个 deno 进程
-  const r2 = spawnSync('deno', [
-    'test', '--config', 'deno.json', '--allow-net=127.0.0.1,localhost', '--allow-env', '--allow-read=.', '--allow-write=supabase/.temp',
-    'supabase/tests/store-it/purge-remind.it.ts',
-  ], {
-    cwd: root,
-    stdio: 'inherit',
-    env: { ...process.env, IT_API_URL: s.API_URL, IT_DB_URL: s.DB_URL, IT_ANON_KEY: s.ANON_KEY, IT_SERVICE_KEY: s.SERVICE_ROLE_KEY },
-  });
-  if (r2.error) console.error(`store-it：deno 没跑起来（${r2.error.message}）`);
-  // B2 D3 第 6 点（push-dispatch-d3.it.ts）：同样 import harness（收尾关库连接），另起一个 deno 进程；推送全发进程内替身，不联网
-  const r3 = spawnSync('deno', [
-    'test', '--config', 'deno.json', '--allow-net=127.0.0.1,localhost', '--allow-env', '--allow-read=.', '--allow-write=supabase/.temp',
-    'supabase/tests/store-it/push-dispatch-d3.it.ts',
-  ], {
-    cwd: root,
-    stdio: 'inherit',
-    timeout: 180_000,   // 正常约 35 秒；卡住时 3 分钟后杀掉（status 为 null，按失败算），不拖到整个 db 任务的 40 分钟上限
-    env: { ...process.env, IT_API_URL: s.API_URL, IT_DB_URL: s.DB_URL, IT_ANON_KEY: s.ANON_KEY, IT_SERVICE_KEY: s.SERVICE_ROLE_KEY },
-  });
-  if (r3.error) console.error(`store-it：push-dispatch-d3 没跑完（${r3.error.message}）`);
-  // B3（11-07）：ai-parse、ai-voice、token-admin、claude-intake 按真 index.ts 组装打真库（ai-fns-store.it.ts）。它换掉了 globalThis.fetch
-  //   （Gemini 替身，不联网）和 Deno.serve，另起一个 deno 进程，不影响别的文件
-  const r4 = spawnSync('deno', [
-    'test', '--config', 'deno.json', '--allow-net=127.0.0.1,localhost', '--allow-env', '--allow-read=.', '--allow-write=supabase/.temp',
-    'supabase/tests/store-it/ai-fns-store.it.ts',
-  ], {
-    cwd: root,
-    stdio: 'inherit',
-    timeout: 180_000,
-    env: { ...process.env, IT_API_URL: s.API_URL, IT_DB_URL: s.DB_URL, IT_ANON_KEY: s.ANON_KEY, IT_SERVICE_KEY: s.SERVICE_ROLE_KEY },
-  });
-  if (r4.error) console.error(`store-it：ai-fns 没跑完（${r4.error.message}）`);
-  process.exitCode = (r.status ?? 1) || (r2.status ?? 1) || (r3.status ?? 1) || (r4.status ?? 1);
+  // 每组文件一个 deno 进程（harness 收尾会关库连接，import 它的文件各占一个进程）：网络只许 127.0.0.1，写只许 supabase/.temp/。
+  // timeout：卡住时杀掉（status 为 null，按失败算），不拖到整个 db 任务的 40 分钟上限
+  const env = { ...process.env, IT_API_URL: s.API_URL, IT_DB_URL: s.DB_URL, IT_ANON_KEY: s.ANON_KEY, IT_SERVICE_KEY: s.SERVICE_ROLE_KEY };
+  const denoTest = (files, timeout) => {
+    const r = spawnSync('deno', [
+      'test', '--config', 'deno.json', '--allow-net=127.0.0.1,localhost', '--allow-env', '--allow-read=.', '--allow-write=supabase/.temp',
+      ...files.map((f) => `supabase/tests/store-it/${f}`),
+    ], { cwd: root, stdio: 'inherit', env, ...(timeout ? { timeout } : {}) });
+    if (r.error) console.error(`store-it：${files.join('、')} 没跑完（${r.error.message}）`);
+    return r.status ?? 1;
+  };
+  const status = [
+    // K3-store-it：account、invite-admin 两个 index.ts
+    denoTest(['account-store.it.ts', 'invite-admin-store.it.ts']),
+    // PURGE-cpu-budget 返工：多账号同时到期、同时有一批要提醒的
+    denoTest(['purge-remind.it.ts']),
+    // B2 D3 第 6 点：推送全发进程内替身，不联网；正常约 35 秒
+    denoTest(['push-dispatch-d3.it.ts'], 180_000),
+    // B3（11-07）：ai-parse、ai-voice、token-admin、claude-intake 按真 index.ts 组装打真库。它换掉了 globalThis.fetch（Gemini 替身，不联网）和 Deno.serve
+    denoTest(['ai-fns-store.it.ts'], 180_000),
+    // R-411 后续（11-13）：批量入队范围 SQL（remind_enqueue）和替身（MemDb.enqueueScope）同一批行比对，整个在一个事务里、最后回滚；几秒
+    denoTest(['remind-enqueue-parity.it.ts'], 120_000),
+  ];
+  process.exitCode = status.find((x) => x !== 0) ?? 0;
 }

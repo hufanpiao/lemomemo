@@ -82,8 +82,10 @@ export function makeStore(admin: Admin): DispatchStore {
         p_limit: limit, p_lease_s: leaseS, p_retry: retry, p_per_user: perUser, p_poison: poison, p_ver: ver,
       })) as QueueItem[];
     },
-    async finishQueue(claim, release) {
-      const { error } = await priv.rpc('remind_queue_finish', { p_claim: claim, p_release: release.map((x) => ({ table_name: x.table_name, id: x.id })) });
+    async finishQueue(claim, release, hold = []) {
+      // hold 的元素带 hold: true（迁移 20261113120000）：finish 不放回也不删；没有 hold 时 p_release 和原来一字不差
+      const p_release = [...release.map((x) => ({ table_name: x.table_name, id: x.id })), ...hold.map((x) => ({ table_name: x.table_name, id: x.id, hold: true }))];
+      const { error } = await priv.rpc('remind_queue_finish', { p_claim: claim, p_release });
       if (error) throw dbError(error);
     },
     async queueStats() {
