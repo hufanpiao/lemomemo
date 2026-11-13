@@ -15,10 +15,12 @@ import { useNotesT, type NotesMsgKey } from '../hooks/useNotesT.ts';
 import type { ImgMsgKey } from './NoteImages.tsx';
 import styles from './NotesPage.module.css';
 
-/** 随手记页自己另加的提示条：插图提示、转换结果（撤销条、出错条在 kit 的 useListActions 里） */
+/** 随手记页自己另加的提示条：插图提示、转换结果、合并的撤销条（删除的撤销条、出错条在 kit 的 useListActions 里） */
 export type ImgTip = { kind: 'img'; key: ImgMsgKey; trash: boolean };
 export type ConvTip = { kind: 'conv'; key: Extract<NotesMsgKey, `notes.conv.${'moved' | 'kept'}.${string}` | 'notes.conv.empty' | 'notes.conv.left' | 'notes.conv.long'> };
-export type PageTip = ImgTip | ConvTip;
+/** 合并分类后的撤销条（R-415 ③）：id 是被合并的分类；和删除的撤销条同一个位置、同一个 kit UndoToast（8 秒） */
+export type MergeUndo = { kind: 'mergeUndo'; id: string };
+export type PageTip = ImgTip | ConvTip | MergeUndo;
 /** 带插图的转换要先问一下（R-414，线框 S8-2） */
 export type ConvAsk = { id: string; kind: ConvertKind; images: number };
 
@@ -69,13 +71,16 @@ export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert
   );
 }
 
-/** 合并分类提示条（R-413，线框 MERGE）：两个按钮的结果都由页面的出错条、只读提示接；“不用”记下这一对，提示条随即换下一对或消失 */
-export function MergeBar({ hint, onResult }: { hint: MergeHint; onResult(r: ActionResult): void }) {
+/**
+ * 合并分类提示条（R-413，线框 MERGE）：两个按钮没写成的结果都由页面的出错条、只读提示接；“不用”记下这一对，提示条随即换下一对或消失。
+ * 合并成了调 onMerged（页面出 8 秒撤销条，R-415 ③）
+ */
+export function MergeBar({ hint, onResult, onMerged }: { hint: MergeHint; onResult(r: ActionResult): void; onMerged(mergeId: string): void }) {
   const t = useNotesT();
   return (
     <section className={styles.merge} aria-label={t('notes.merge.label', {})} data-testid="notes-merge">
       <span className={styles.mergeText}>{t('notes.merge.ask', { a: hint.keepName, b: hint.mergeName })}</span>
-      <FormButton size="compact" variant="primary" onClick={() => void hint.merge().then(onResult)} data-testid="notes-merge-go">
+      <FormButton size="compact" variant="primary" onClick={() => void hint.merge().then((r) => (r === 'ok' ? onMerged(hint.mergeId) : onResult(r)))} data-testid="notes-merge-go">
         {t('notes.merge.go', {})}
       </FormButton>
       <FormButton size="compact" onClick={() => void hint.dismiss().then(onResult)} data-testid="notes-merge-no">

@@ -5,10 +5,11 @@ import { todayOf } from '../../../../shared/core/date.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { clock } from '../../../platform/clock.ts';
 import { useEditRecord, type EditRecord } from '../../../kit/hooks/useEditRecord.ts';
+import { useItem } from '../../../kit/hooks/useItem.ts';
 import { useTypedTitle } from '../../../kit/hooks/useTypedTitle.ts';
-import { emptyForm, formOf, hasRemind, newTodoRow, normalize, patchOf, remindPassed, type TodoForm } from '../data/todo-edit.ts';
+import { emptyForm, formOf, hasRemind, newTodoRow, normalize, patchOf, remindPassed, sourceOf, type TodoForm, type TodoSource } from '../data/todo-edit.ts';
 
-export type { TodoForm } from '../data/todo-edit.ts';
+export type { TodoForm, TodoSource } from '../data/todo-edit.ts';
 export { REMIND_BEFORE_OPTIONS, ITEM_TITLE_MAX, PROJECT_MAX, NOTE_MAX } from '../data/todo-edit.ts';
 
 const SPEC = {
@@ -21,10 +22,18 @@ const SPEC = {
   hasRemind,
 } as const;
 
-/** remindPassed：“当天 / 前一天 + 时刻”的提醒时刻已经过了（R-375，编辑页出灰字；按 current_tz 算，和真正提醒同一份），每次重画现算 */
-export function useTodoEdit(id: string, onCreated?: (id: string) => void): EditRecord<TodoForm> & { change(p: Partial<TodoForm>): void; remindPassed: boolean } {
+/**
+ * remindPassed：“当天 / 前一天 + 时刻”的提醒时刻已经过了（R-375，编辑页出灰字；按 current_tz 算，和真正提醒同一份），每次重画现算。
+ * source：随手记转来的待办的“来源”行（R-415 ①，规则在 data 的 sourceOf）；订阅 from_note_id 那一条，随手记删了、恢复了跟着变
+ */
+export function useTodoEdit(
+  id: string,
+  onCreated?: (id: string) => void,
+): EditRecord<TodoForm> & { change(p: Partial<TodoForm>): void; remindPassed: boolean; source: TodoSource | null } {
   const rec = useEditRecord<TodoForm>({ ...SPEC, id, ...(onCreated ? { onCreated } : {}) });
   const { form, update } = rec;
+  const noteId = rec.row?.['from_note_id'];
+  const note = useItem<{ id: string } & Record<string, unknown>>('notes', typeof noteId === 'string' ? noteId : null);
   const change = useCallback(
     (p: Partial<TodoForm>) => {
       const next = normalize(form, { ...form, ...p }, todayOf(clock.now(), currentTz()));
@@ -34,5 +43,5 @@ export function useTodoEdit(id: string, onCreated?: (id: string) => void): EditR
     [form, update],
   );
   useTypedTitle(id, change);
-  return { ...rec, change, remindPassed: remindPassed(form, currentTz(), clock.now()) };
+  return { ...rec, change, remindPassed: remindPassed(form, currentTz(), clock.now()), source: sourceOf(note) };
 }

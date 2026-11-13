@@ -55,6 +55,8 @@ export const zh = {
   'notes.merge.ask': '“{a}”和“{b}”两个分类很像，合成一个吗？',
   'notes.merge.go': '合并',
   'notes.merge.no': '不用',
+  // R-415 ③ 合并后的撤销条“已合并 · 撤销”（8 秒，和删除同一个撤销条）
+  'notes.merge.done': '已合并',
   'notes.conv.todo': '转成待办',
   'notes.conv.event': '转成日程',
   'notes.conv.long': '超过 2000 字，转不了',

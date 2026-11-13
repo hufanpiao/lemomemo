@@ -9,9 +9,11 @@
 //      改成“不提醒”不填（没要提醒，不替用户定截止）；已有截止日期不动。填了今天以后提醒时刻可能已经过了（“前一天”、或今天的时刻已过）：
 //      照样存，不挪日子；编辑页用 remindPassed 在提醒那一行下面出灰字“这个提醒时刻已经过了”，用户自己改
 // • 带不带提醒（写入的 remind 标记，outbox 据此整条提前发）：用 shared/logic/remind.ts 的 remindAtOf 本机现算，和服务器同一份
+// • R-415 ①：随手记转来的待办（from_note_id）在最后一组出“来源 随手记 · 标题 ›”，显示规则在 sourceOf
 // 纯 TS：不准 import React（A1）
 import type { DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
+import { noteHeadline } from '../../../../shared/logic/notes/note-headline.ts';
 import { trimItemTitle } from '../../../../shared/schema/rows.ts';
 import { DEFAULT_TODO_REMIND_TIME, REMIND_BEFORE_CHOICES, remindBeforeOnSetDueTime, todoRemindAt } from '../../../../shared/logic/remind.ts';
 import { todoRemindFlag } from '../../../core/remind-flag.ts';
@@ -166,4 +168,23 @@ export function hasRemind(c: { row: RowLike; data: Readonly<Record<string, unkno
     now: c.now,
     tz: c.tz,
   });
+}
+
+/** “来源”行要的：那条随手记的 id、显示标题，gone = 删了（在“最近删除”里） */
+export interface TodoSource {
+  id: string;
+  title: string;
+  gone: boolean;
+}
+
+/**
+ * 待办编辑页的“来源”行（R-415 ①）：note 是 from_note_id 指的那条随手记（本机集合里的行，本机没有为 undefined）。
+ * • 本机没有、撤销了的（undone）、隐私记（is_private，B5）→ null，不出这一行（隐私记的标题不露在待办页）；
+ * • 删了的（在“最近删除”里；不带图的随手记转完原条就在这里）→ gone：这一行变灰、不能点，下面一行灰字说明；
+ * • 其余能点，打开那条随手记。标题取法同随手记列表（shared 的 noteHeadline：没有标题取正文第一行）
+ */
+export function sourceOf(note: RowLike): TodoSource | null {
+  const id = note?.['id'];
+  if (note === undefined || typeof id !== 'string' || note['undone'] === true || note['is_private'] === true) return null;
+  return { id, title: noteHeadline(note['title'], note['body']).title, gone: isDel(note['deleted_at']) };
 }

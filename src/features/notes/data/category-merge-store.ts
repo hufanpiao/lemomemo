@@ -4,11 +4,14 @@
 //   执行合并只写被合并分类一笔 merged_into（不软删、不逐条改随手记）：条目在读的时候由 note-list.ts 的 categoryResolver 归到留下的分类
 //   （列表、分类胶囊、编辑页的 formOf 都经它；新读 notes.category_id 的地方也必须经它）。
 //   两台设备各合并一次绕成圈：fixCategoryCycles 给圈里留下的那个写回 merged_into: null（每个分类只写一次）。
+//   合并后的撤销条（R-415 ③，8 秒，和删除同一个 kit UndoToast）点“撤销”：undoMerge 给被合并的分类写回 merged_into: null。
+//   “写回 merged_into: null”只在 unmerge 一处，成环写回、撤销合并共用，都经 outbox
 // 纯 TS，不准 React（A1）
 import { isLiveCategory } from '../../../../shared/logic/live-row.ts';
 import {
   idPairs, MERGE_DISMISSED_KEY, MERGE_SUGGEST_KEY, openPairs, withPairs, type MergePair,
 } from '../../../../shared/logic/notes/category-merge.ts';
+import { actionResult, type ActionResult } from '../../../core/action-result.ts';
 import { saveOutcome, type SaveOutcome } from '../../../core/edit-save.ts';
 import { settingValue, type SettingRow, type SettingWriter } from '../../../core/setting-write.ts';
 import { readonlyIds } from '../../../core/store.ts';
@@ -59,6 +62,26 @@ export async function mergeCategories(pair: Pick<MergePair, 'keep' | 'merge'>, c
   return done(r === 'saved' ? { ok: true } : { ok: false, reason: r });
 }
 
+/** 分类写回 merged_into: null（又成了活着的分类）：成环写回、撤销合并共用这一笔 */
+const unmerge = (w: Pick<typeof write, 'patch'>, id: string): Promise<SaveOutcome> => saveOutcome(() => w.patch('categories', id, { merged_into: null }));
+
+/**
+ * 撤销刚才的合并（R-415 ③）：merge 是被合并的那个分类，写回 merged_into: null（经 outbox）；条目读的时候由 categoryResolver 归回它。
+ * 结果换成列表页的 ActionResult（只读出“要新版本”、切换账号中不提示、其余没写成出错条）。
+ * 运行日志只记结果码：notes merge undo ok / 没写成的原因 / threw <错误名>（抛异常也接住，按 failed 回）
+ */
+export async function undoMerge(merge: string, deps: Pick<MergeDeps, 'w'> = {}): Promise<ActionResult> {
+  const { w = write } = deps;
+  try {
+    const r = await unmerge(w, merge);
+    rlog(`notes merge undo ${r === 'saved' ? 'ok' : r}`);
+    return actionResult(r);
+  } catch (err) {
+    rlog(`notes merge undo threw ${(err as Error | undefined)?.name ?? 'unknown'}`);
+    return 'failed';
+  }
+}
+
 /** 本次运行里写回中、已写成的圈内分类 id：同一个只写成一次；没写成的拿掉，下次分类集合变化时再试（每次变化都会来查，不会快速连试） */
 const cycleFixed = new Set<string>();
 
@@ -73,7 +96,7 @@ export async function fixCategoryCycles(categories: readonly Row[], deps: MergeD
     cycleFixed.add(id);
     let ok = false;
     try {
-      ok = (await saveOutcome(() => w.patch('categories', id, { merged_into: null }))) === 'saved';
+      ok = (await unmerge(w, id)) === 'saved';
       rlog(`notes category cycle fix id=${id} ${ok ? 'ok' : 'fail'}`);
     } catch (err) {
       rlog(`notes category cycle fix id=${id} threw ${(err as Error | undefined)?.name ?? 'unknown'}`);

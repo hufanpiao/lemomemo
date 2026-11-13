@@ -10,7 +10,8 @@
 //   瀑布流里不能左滑（R-78），列表的左滑以后和别的页一起加
 // • 转成待办 / 日程（R-414）：规则见 shared/logic/notes/note-convert.ts 文件头；转完在输入行上面出一句提示（同插图提示的位置）
 // • 合并分类提示（S7，R-413；线框 MERGE）：分类胶囊下面一张浅底条“‘读书’和‘书单’两个分类很像，合成一个吗？ 合并 / 不用”，
-//   哪几对由 hooks/useMergeHint.ts 给（AI 判的 + 本机规则），一次只出一对
+//   哪几对由 hooks/useMergeHint.ts 给（AI 判的 + 本机规则），一次只出一对；点“合并”成了底部出 8 秒撤销条“已合并 · 撤销”（R-415 ③，和删除同一个 UndoBar），
+//   撤销给被合并的分类写回 merged_into: null（data 的 undoMerge）
 // • 删除：软删，进“最近删除”，出 8 秒撤销条
 // • 底部输入行（视觉稿 .inrow、线框 COMPOSER）：右边是“图片”“拍照”（主持人定 3），打了字才出“记下”；回车或点“记下”就存，新的一条出现在最上面、时间写“刚记下”。
 //   选了图：先用输入框里的字（可以空）新建一条随手记，再把图插进去（S3，ui/NoteImages.tsx）。电脑上输入行铺满内容栏、左右各留 22px（DK.notes）
@@ -43,15 +44,15 @@ import { useEditT } from '../../../kit/components/EditNotices.tsx';
 import { UndoToast } from '../../../kit/components/UndoToast.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { AppearItem, AppearList, Pressable } from '../../../motion/components.ts';
-import { useMergeHint } from '../hooks/useMergeHint.ts';
+import { undoMerge, useMergeHint } from '../hooks/useMergeHint.ts';
 import { useNoteList, type NoteItem } from '../hooks/useNoteList.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
-import { useNotesToast } from '../hooks/useNotesToast.ts';
+import { isUndo, useNotesToast, type UndoTip } from '../hooks/useNotesToast.ts';
 import { useNotesViewValue } from '../hooks/useNotesView.ts';
 import { NoteDrawer } from './NoteDrawer.tsx';
 import NoteEditPage from './NoteEditPage.tsx';
 import { CardCover, ListThumb, PickButtons, useAddImage } from './NoteImages.tsx';
-import { ConvertAsk, MergeBar, MoreMenu, useConvertFlow, type PageTip } from './NotesActions.tsx';
+import { ConvertAsk, MergeBar, MoreMenu, useConvertFlow, type MergeUndo, type PageTip } from './NotesActions.tsx';
 import styles from './NotesPage.module.css';
 
 /** 分类色点（只在有颜色时画） */
@@ -150,7 +151,7 @@ function NotesList() {
         </div>
       ) : null}
 
-      {merge ? <MergeBar hint={merge} onResult={report} /> : null}
+      {merge ? <MergeBar hint={merge} onResult={report} onMerged={(id) => guard.show({ kind: 'mergeUndo', id })} /> : null}
 
       {l.items.length === 0 ? (
         <p className={list.empty} data-testid="notes-empty">
@@ -217,13 +218,20 @@ function NotesList() {
       {typing ? <Mist onTap={() => field.current?.blur()} tag="notes" log={rlog} testId="notes-mist" className={styles.mist} /> : null}
       <div className={up ? `${styles.dock} ${styles.dockUp}` : styles.dock}>
         <InputRow field={field} onTyping={setTyping} onAdd={add} onImage={addImage} />
-        {guard.toast !== null && guard.toast.kind !== 'undo' ? <DockTip toast={guard.toast} /> : null}
+        {guard.toast !== null && !isUndo(guard.toast) ? <DockTip toast={guard.toast} /> : null}
       </div>
 
       {drawer !== null ? <NoteDrawer id={drawer} onClose={() => setDrawer(null)} /> : null}
       {conv.ask ? <ConvertAsk ask={conv.ask} onOk={conv.confirm} onCancel={conv.cancel} /> : null}
 
-      {guard.toast?.kind === 'undo' ? <UndoBar key={guard.toast.id} toast={guard.toast} onUndo={a.undo} onClose={guard.dismiss} /> : null}
+      {isUndo(guard.toast) ? (
+        <UndoBar
+          key={`${guard.toast.kind}:${guard.toast.id}`}
+          toast={guard.toast}
+          onUndo={(x) => (x.kind === 'undo' ? a.undo(x.id) : void undoMerge(x.id).then(report))}
+          onClose={guard.dismiss}
+        />
+      ) : null}
       <ReadonlyToast guard={guard} message={tEdit('edit.st.readonly', {})} testId="notes-ro-toast" />
     </main>
   );
@@ -243,16 +251,23 @@ function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: ReactNode })
   );
 }
 
-/** 页底的撤销条（换一条删除就换一个 key，重新计时） */
-function UndoBar({ toast, onUndo, onClose }: { toast: { kind: 'undo'; id: string }; onUndo(id: string): void; onClose(x: { kind: 'undo'; id: string }): void }) {
+/** 页底的撤销条：删除的“已删除”、合并分类的“已合并”（R-415 ③），同一个 kit UndoToast、8 秒（换一条就换一个 key，重新计时） */
+function UndoBar<T extends UndoTip>({ toast, onUndo, onClose }: { toast: T; onUndo(x: T): void; onClose(x: T): void }) {
   const t = useNotesT();
+  const del = toast.kind === 'undo';
   return (
-    <UndoToast message={t('notes.deleted', {})} undoLabel={t('notes.undo', {})} onUndo={() => onUndo(toast.id)} onClose={() => onClose(toast)} data-testid="notes-toast" />
+    <UndoToast
+      message={t(del ? 'notes.deleted' : 'notes.merge.done', {})}
+      undoLabel={t('notes.undo', {})}
+      onUndo={() => onUndo(toast)}
+      onClose={() => onClose(toast)}
+      data-testid={del ? 'notes-toast' : 'notes-merge-toast'}
+    />
   );
 }
 
 /** 输入行上面的提示条：没保存上、插图提示（空间满了的带“最近删除”入口）、转换结果 */
-function DockTip({ toast }: { toast: { kind: 'error' } | PageTip }) {
+function DockTip({ toast }: { toast: { kind: 'error' } | Exclude<PageTip, MergeUndo> }) {
   const t = useNotesT();
   return (
     <p className={styles.error} role="alert" data-testid={toast.kind === 'error' ? 'notes-error' : toast.kind === 'img' ? 'notes-img-tip' : 'notes-conv-tip'}>
