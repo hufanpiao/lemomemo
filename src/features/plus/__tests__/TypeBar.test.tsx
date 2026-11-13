@@ -233,7 +233,9 @@ describe('打字条', () => {
     const text = screen.getByTestId('type-notice').textContent ?? '';
     expect(text).not.toContain('已记下 2 条');
     expect(text).toContain('已记下：');
-    expect(text).toContain('1 条没撤销成功');
+    // 那一条不在提示条上，不能叫人“再试一次”，指路去列表删（负责人 11-13 弹窗定“改成指路”）
+    expect(text).toContain('1 条没撤销成功，请到列表里删除');
+    expect(text).not.toContain('可以再试一次');
   });
 
   it('全部撤销有几条没撤成：提示条留着那几条，写明没撤成（FA-3 整块评审第 13 条）', async () => {
@@ -253,7 +255,7 @@ describe('打字条', () => {
     });
     expect(writer.patch).toHaveBeenCalledTimes(3);
     const text = screen.getByTestId('type-notice').textContent ?? '';
-    expect(text).toContain('1 条没撤销成功');
+    expect(text).toContain('1 条没撤销成功，可以再试一次');
   });
 
   it('合并成一条时原话超过标题上限：提示条显示的是存进库的截短标题，不是整句原话', async () => {

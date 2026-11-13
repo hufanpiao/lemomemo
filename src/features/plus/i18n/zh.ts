@@ -29,6 +29,7 @@ export const zh = {
   'plus.notice.badDay': '{month} 月没有 {day} 日',
   'plus.notice.mergeFailed': '合并没保存上，原来的几条还在',
   'plus.notice.undoFailed': '{n} 条没撤销成功，可以再试一次',
+  'plus.notice.mergeLeft': '{n} 条没撤销成功，请到列表里删除', // 合并后撤不掉的旧条（负责人 11-13 弹窗定“改成指路”，R-405）
   'plus.notice.annivKept': '纪念日请到纪念日页删除', // 中性文案，最终由负责人定（FA-3 复查第 4 条）
   'plus.notice.notSaved': '没保存上，原话还在输入框里',
   'plus.notice.nothing': '没认出要记的内容，原话还在输入框里',

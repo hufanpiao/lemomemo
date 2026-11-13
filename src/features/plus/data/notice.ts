@@ -19,6 +19,7 @@ export type NoticeKey =
   | 'plus.notice.badDay'
   | 'plus.notice.mergeFailed'
   | 'plus.notice.undoFailed'
+  | 'plus.notice.mergeLeft'
   | 'plus.notice.annivKept';
 
 export interface NoticeLine {
@@ -40,6 +41,8 @@ export interface NoticeInput {
   mergeFailed?: boolean;
   /** 撤销时没撤成的条数（纪念日不算） */
   undoFailed?: number;
+  /** 合并成功后原来的几条里撤不掉的条数（纪念日不算）：这几条不在提示条上，指路去列表删（R-405） */
+  mergeLeft?: number;
   /** 有纪念日撤不掉（这里撤不了纪念日） */
   annivKept?: boolean;
 }
@@ -68,6 +71,7 @@ function mainLine(n: NoticeInput): NoticeLine {
 export function noticeLines(n: NoticeInput): NoticeLine[] {
   const out: NoticeLine[] = [mainLine(n)];
   if (n.undoFailed) out.push({ key: 'plus.notice.undoFailed', params: { n: n.undoFailed } });
+  if (n.mergeLeft) out.push({ key: 'plus.notice.mergeLeft', params: { n: n.mergeLeft } });
   if (n.mergeFailed) out.push({ key: 'plus.notice.mergeFailed', params: {} });
   if (n.annivKept) out.push({ key: 'plus.notice.annivKept', params: {} });
   if (n.status === 'offline_saved' && n.remind) out.push({ key: 'plus.notice.offlineRemind', params: {} });
