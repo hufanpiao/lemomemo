@@ -6,9 +6,9 @@ export function pcClass(project: string): string {
   return styles[`pc${projectColorIndex(project)}`] ?? '';
 }
 
-const MARK = { event: ['mkEv', 'mkEvSm'], todo: ['mkTd', 'mkTdSm'], anniv: ['mkAv', 'mkAvSm'] } as const;
+const MARK = { event: ['mkEv', 'mkEvSm'], todo: ['mkTd', 'mkTdSm'] } as const;
 
-/** 类型记号的类名（日程竖条、待办空心圆、纪念日菱形 B5）；sm = 小号 */
-export function markClass(kind: 'event' | 'todo' | 'anniv', sm = false): string {
+/** 类型记号的类名（日程竖条、待办空心圆；纪念日不用记号，画圆形头像，见 KindMark.tsx）；sm = 小号 */
+export function markClass(kind: 'event' | 'todo', sm = false): string {
   return styles[MARK[kind][sm ? 1 : 0]] ?? '';
 }

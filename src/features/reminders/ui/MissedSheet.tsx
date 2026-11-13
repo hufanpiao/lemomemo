@@ -11,7 +11,7 @@ import type { RemindPrefs } from '../hooks/remind-list.ts';
 import { dayMsg, eventStart, timeOf, type Reminder } from '../hooks/remind-view.ts';
 import { actionsOf, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
-import { markClass, pcClass } from './pc-class.ts';
+import { KindMark } from './KindMark.tsx';
 import { RemindButtons } from './RemindButtons.tsx';
 import styles from './Remind.module.css';
 
@@ -64,7 +64,6 @@ export default function MissedSheet({ open, onOpenChange, items, now, tz, prefs,
       ) : (
         <ul className={styles.list} data-testid="remind-missed-list">
           {items.map((r) => {
-            const project = typeof r.row['project'] === 'string' ? r.row['project'] : '';
             const acts = actionsOf(r, now, tz, prefs);
             return (
               <li key={r.tag} className={styles.missCard} data-testid="remind-missed-item">
@@ -79,7 +78,7 @@ export default function MissedSheet({ open, onOpenChange, items, now, tz, prefs,
                   <span className={styles.itemText}>
                     <span className={styles.dim}>
                       {head(r)}
-                      <span className={`${markClass(r.kind, true)} ${pcClass(project)}`} aria-hidden="true" />{' '}
+                      <KindMark r={r} sm />{' '}
                       {t(`remind.kindName.${r.kind}`, {})}
                       {started(r) ? t('remind.missed.started', {}) : ''}
                     </span>

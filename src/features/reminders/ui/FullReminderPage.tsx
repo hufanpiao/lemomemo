@@ -18,7 +18,8 @@ import { eventEnd, eventStart, findReminder, parseReminderHash, relMsg, timeOf, 
 import { actionsOf, useReminderList, useRemindActions } from '../hooks/useReminders.ts';
 import { useRemindT } from '../hooks/useRemindT.ts';
 import { Bell } from './Bell.tsx';
-import { markClass, pcClass } from './pc-class.ts';
+import { KindMark } from './KindMark.tsx';
+import { pcClass } from './pc-class.ts';
 import { RemindButtons } from './RemindButtons.tsx';
 import styles from './Remind.module.css';
 
@@ -179,7 +180,7 @@ export default function FullReminderPage() {
       )}
       {nextR && next && (
         <Pressable type="button" className={styles.nextCard} onClick={() => showNext(next.kind, next.id, next.dueAt)} data-testid="remind-full-next">
-          <span className={`${markClass(nextR.kind)} ${pcClass(nextProject)}`} aria-hidden="true" />
+          <KindMark r={nextR} />
           <span className={styles.grow}>
             <b className={styles.nextTitle}>{t('remind.full.next', { title: nextR.title })}</b>
             <span className={styles.nextSub}>

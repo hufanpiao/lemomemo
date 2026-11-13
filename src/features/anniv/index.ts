@@ -7,5 +7,5 @@ import { lazy } from 'react';
 export const routes = [{ name: 'anniv', Page: lazy(() => import('./ui/AnnivRoot.tsx')), samePageAs: 'anniv' }] as const;
 /** 设置 › 提醒与通知 里“纪念日提醒”一行（B5 S16，reminders 的 RemindSettings 挂 <AnnivDefaults part="remind-defaults" />）：和路由同一个外壳 */
 export const AnnivDefaults = lazy(() => import('./ui/AnnivRoot.tsx'));
-/** 纪念日头像（取图 + 画圆；今天页的纪念日一行用，没加载好时先画首字圆） */
+/** 纪念日头像（取图 + 画圆；今天页的纪念日一行、提醒列表经 kit 的 AnnivAvatarSlot 挂，没加载好时先画首字圆） */
 export const AnnivFace = lazy(() => import('./ui/AnnivFace.tsx'));
