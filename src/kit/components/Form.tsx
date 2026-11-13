@@ -51,6 +51,8 @@ interface CommitProps {
   placeholder?: string;
   'aria-label'?: string;
   'data-testid'?: string;
+  /** 换掉默认外观（R-350 待办编辑页的子任务行：无框、和行同高）；不传按 title 选标题框或普通输入框 */
+  className?: string | undefined;
 }
 
 /**
@@ -125,7 +127,7 @@ export function TextInput({ value, onCommit, type = 'text', title = false, ...p 
       aria-label={p['aria-label']}
       data-testid={p['data-testid']}
       type={type}
-      className={title ? styles.title : styles.input}
+      className={p.className ?? (title ? styles.title : styles.input)}
       value={d.draft}
       onFocus={() => d.setEditing(true)}
       onChange={(e) => {

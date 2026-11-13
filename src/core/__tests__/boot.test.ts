@@ -91,6 +91,39 @@ describe('离线冷启动', () => {
     expect(LOCAL_PURGE_AFTER_MS).toBe(30 * DAY);
   });
 
+  it('R-350 方案 5.6 第 1 条：服务器上从来没有过、主待办在本机也没有的子任务删掉（队列里还有它的项的不动）；过期清掉的主待办也算没有；同步过的子任务不当孤儿删（可能先于主待办拉到本机）', async () => {
+    const { factory } = fakeIndexedDB();
+    await seed(factory, async ({ cache }) => {
+      await claimCache(cache, 'u1');
+      const old = NOW - 31 * DAY;
+      await cache.putRows('todos', [
+        { id: 't1', server: { id: 't1', rev: 1 }, view: { id: 't1', rev: 1 } },
+        { id: 't2', server: { id: 't2', rev: 1, deleted_at: old }, view: { id: 't2', rev: 1, deleted_at: old } },
+        // 本机新建、还没同步的主待办（只有 view）
+        { id: 't3', server: null, view: { id: 't3' } },
+      ]);
+      await cache.putRows('todo_items', [
+        { id: 'i1', server: { id: 'i1', rev: 1, todo_id: 't1' }, view: { id: 'i1', rev: 1, todo_id: 't1' } },
+        { id: 'i2', server: { id: 'i2', rev: 1, todo_id: 't2' }, view: { id: 'i2', rev: 1, todo_id: 't2' } },
+        { id: 'i3', server: { id: 'i3', rev: 1, todo_id: 'gone' }, view: { id: 'i3', rev: 1, todo_id: 'gone' } },
+        { id: 'i4', server: null, view: { id: 'i4', todo_id: 't3' } },
+        { id: 'i5', server: null, view: { id: 'i5', todo_id: 'gone' } },
+        { id: 'i6', server: null, view: { id: 'i6', todo_id: 'gone' } },
+        { id: 'i7', server: null, view: { id: 'i7', todo_id: 't2' } },
+      ]);
+      await cache.tx(['outbox'], 'readwrite', (t) =>
+        t.put('outbox', { op_id: 'o', rec: 'todo_items:i5', table: 'todo_items', id: 'i5', op: 'patch', data: { done: true }, base_rev: 1,
+          own_revs: [], client_ts: 0, tries: 0, next_at: 0, state: 'pending', v: 1, app: '4.0.0', seq: 1, remind: false, deps: [], error: null }),
+      );
+    });
+    const b = await coldStart(opts(factory));
+    expect(b.purged).toBe(3);
+    expect(collection('todo_items').getSnapshot().map((r) => r.id).sort()).toEqual(['i1', 'i2', 'i3', 'i4', 'i5']);
+    expect((await b.cache?.allRows('todo_items'))?.map((r) => r.id).sort()).toEqual(['i1', 'i2', 'i3', 'i4', 'i5']);
+    const order = b.cache?.syncTables ?? [];
+    expect(order.indexOf('todos')).toBeLessThan(order.indexOf('todo_items'));
+  });
+
   it('只读行（FA-2）：灌集合时把缓存里的 ro 一起带进 store 的只读 id', async () => {
     const { factory } = fakeIndexedDB();
     await seed(factory, async ({ cache }) => {

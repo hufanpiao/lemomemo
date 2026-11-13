@@ -14,6 +14,7 @@ import { ensureAccount } from './account.ts';
 import { deleteCacheDb, openCache, VERSION_CLOSE_WAIT_MS, type Cache, type CachedConfig, type CachedProfile, type CachedRow, type OpenCacheOptions, type OpenCacheResult } from './cache.ts';
 import { cacheErrKind, type UpgradeReport } from './cache-migrations.ts';
 import { DRAFTS, OUTBOX, PENDING_ACTIONS, VAULT_DRAFTS } from './cache-schema.ts';
+import { PARENT_OF } from './outbox-logic.ts';
 import { createOutbox, prunePendingActions, type Outbox, type OutboxBootReport, type OutboxItem, type OutboxOptions } from './outbox.ts';
 import { rewriteRow } from './outbox-rows.ts';
 import { clearAllCollections, collection, readonlyIds } from './store.ts';
@@ -322,18 +323,26 @@ async function loadCache(
 
   if (report.failed) await rebuildViewsFromOutbox(cache);
 
-  // 灌集合，顺带清掉过期的软删除行（队列里还有它的项的不动）
+  // 灌集合，顺带清掉过期的软删除行（队列里还有它的项的不动）；
+  // 子表（outbox-logic.ts 的 PARENT_OF，现在只有 todo_items → todos）还清掉父行在本机已经没有的孤儿（R-350 方案 4 第 6 条、5.6 第 1 条：
+  // 服务器回 not_found 丢了子任务的 insert、本机行没删干净时的兜底；同步过的子任务由服务器级联删、墓碑删本机行）。父表在清单里排在子表前面，keptIds 里已经是清完的父表
   const cutoff = now() - LOCAL_PURGE_AFTER_MS;
   const queued = new Set((await cache.tx([OUTBOX], 'readonly', (t) => t.getAll<OutboxItem>(OUTBOX))).map((i) => i.rec));
+  const keptIds = new Map<string, Set<string>>();
   for (const table of cache.syncTables) {
     const rows = await cache.allRows(table);
     const expired: string[] = [];
     const keep: CachedRow[] = [];
+    const parent = PARENT_OF[table];   // 表名是清单里的固定名字，不会撞上 Object 原型的键
+    const parents = parent && keptIds.get(parent[0]);
     for (const r of rows) {
       const del = r.server?.['deleted_at'];
-      if (typeof del === 'number' && del < cutoff && !queued.has(`${table}:${r.id}`)) expired.push(r.id);
+      // 只删服务器上从来没有过的（r.server 为空）：拉取一张表一张表来，同步过的子任务可能先于主待办到本机，不能当孤儿删
+      const orphan = parents && !r.server && !parents.has(r.view?.[parent[1]] as string);
+      if (((typeof del === 'number' && del < cutoff) || orphan) && !queued.has(`${table}:${r.id}`)) expired.push(r.id);
       else keep.push(r);
     }
+    keptIds.set(table, new Set(keep.map((r) => r.id)));
     if (expired.length) await cache.deleteRows(table, expired);
     result.purged += expired.length;
     const views = keep.flatMap((r) => (r.view ? [r.view] : []));
