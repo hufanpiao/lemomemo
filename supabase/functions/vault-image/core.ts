@@ -15,7 +15,7 @@ import { readCapped, readJsonCapped } from '../_shared/body.ts';
 import type { AuthResult as SharedAuthResult } from '../_shared/auth-result.ts';
 import { errorResponder, json, NO_STORE } from '../_shared/http.ts';
 import { utcMinuteKey } from '../_shared/rate-key.ts';
-import { IMAGE_TYPE, isExists, VAULT_IMAGE_BUCKET as BUCKET, VAULT_THUMB_MAX_BYTES, type VaultObj } from '../_shared/vault-images.ts';
+import { IMAGE_TYPE, isExists, isWebp, VAULT_IMAGE_BUCKET as BUCKET, VAULT_THUMB_MAX_BYTES, type VaultObj } from '../_shared/vault-images.ts';
 import { VAULT_TOKEN_HEADER, type VaultTokenVerdict } from '../_shared/vault-token.ts';
 
 export const RATE_PER_MIN = 30;
@@ -51,12 +51,8 @@ export interface Deps {
 type Code = 'vault_locked' | 'vault_relock' | 'not_found' | 'too_large' | 'bad_image' | 'rate_limited' | 'try_later' | 'bad_request' | 'method_not_allowed';
 const err = errorResponder<Code>();
 
-/** RIFF????WEBP：前 4 字节 'RIFF'，第 8～11 字节 'WEBP' */
-export function isWebp(b: Uint8Array): boolean {
-  if (b.length < 12) return false;
-  const tag = (from: number) => String.fromCharCode(...b.slice(from, from + 4));
-  return tag(0) === 'RIFF' && tag(8) === 'WEBP';
-}
+/** 文件头核对在 _shared/vault-images.ts（vault-file 收缩略图也用）；这里转出给测试 */
+export { isWebp };
 
 /** 这张图在不在、能不能取或传这一份：本人 vault-images、没删、要缩略图时登记过有缩略图 */
 async function metaFor(userId: string, imageId: string, part: Part, deps: Deps): Promise<ImageMeta | null> {

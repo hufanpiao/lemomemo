@@ -70,6 +70,12 @@ const PLAN: Plan = new Map<string, Entry>([
     'admin-disabled': { file: 'tests/edge/file-check.test.ts', title: 'TC-B1-10 file-check：管理员停用的账号回 403 account_disabled，不读对象、不改状态' },
     'no-profile': { file: 'tests/edge/file-check.test.ts', title: 'TC-B1-10 file-check：没有 profiles 行的账号回 403 account_disabled，不删对象' },
   } }],
+  // B4b-1：客户端几支 index.ts 接 requireActiveUser；core 单测用假鉴权核对原样回 account_disabled（写法同 file-check）。
+  //   cron 的 sweep 只删过期预览（明文对象不分账号状态都要删），不按人挑
+  ['vault-file', { kind: 'jwt', covers: {
+    'admin-disabled': { file: 'tests/edge/vault-file.test.ts', title: 'TC-B1-10 vault-file：管理员停用的账号回 403 account_disabled，不验令牌、不碰库' },
+    'no-profile': { file: 'tests/edge/vault-file.test.ts', title: 'TC-B1-10 vault-file：没有 profiles 行的账号回 403 account_disabled，不写对象' },
+  } }],
   ['account-purge', { kind: 'all-users', why: 'TC-B1-109：照常处理到期的冷静期账号，故意不用 account_usable；pg_cron 带 x-cron-secret' }],
   ['invite-signup', { kind: 'no-user', why: '架构第 6 节：匿名 + Turnstile，还没有账号' }],
   ['usage-report', { kind: 'no-user', why: '架构第 6 节：x-ops-secret，只出全站统计' }],

@@ -93,6 +93,8 @@ if (refused) {
     // B5（11-14）：隐私记 vault / vault-image / account 导出和 rebind 的 SQL 第一次上真库（vault-harness.ts 切 fn_vault、fn_ai 跑真 store）；两组各占一个进程，各几秒
     denoTest(['vault-store.it.ts'], 120_000),
     denoTest(['vault-move.it.ts'], 120_000),
+    // B4b-1（11-14）：隐私记文档附件 vault-file 的 store.ts 以 fn_vault 打真库，预览走本地真 Storage；几秒
+    denoTest(['vault-file.it.ts'], 120_000),
   ];
   process.exitCode = status.find((x) => x !== 0) ?? 0;
 }
