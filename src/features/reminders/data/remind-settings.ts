@@ -4,6 +4,7 @@
 //   supabase/functions/push-dispatch/round-util.ts）。关掉时保留时段、写 enabled: false，再打开还是原来的时段
 // • remind.default_time：全天日程“开始时再提醒”的时刻（startAtOf），没设 09:00
 // • 读写一个键在 core/setting-read.ts（settingValue、SettingRow）、core/setting-write.ts（settingWrite），和日历共用一份（REMIND-settings-core、FA-4 代码审查 L7），这里只转出读的
+import { ANNIV_KEY_OFFSETS as KEY_ANNIV_OFFSETS, ANNIV_KEY_TIME as KEY_ANNIV_TIME } from '../../../../shared/logic/anniv/keys.ts';
 import type { Dnd } from '../../../../shared/logic/remind.ts';
 
 // 只转出读的（core/setting-read.ts）：首屏算提醒列表要用，不带写设置那一套（首屏瘦身 H1 第三轮）；要写的直接用 core/setting-write.ts
@@ -13,8 +14,8 @@ export const KEY_SHOW_TITLE = 'remind.show_title';
 export const KEY_DND = 'remind.dnd';
 export const KEY_DEFAULT_TIME = 'remind.default_time';
 /** 纪念日默认提前几天（数组，1～4 个、每个 0～60）、默认时刻（HH:MM）（B5 S16；数据字典第 9 节 anniv.*；纪念日页 hooks/useAnniv.ts 读同两个键） */
-export const KEY_ANNIV_OFFSETS = 'anniv.default_offsets';
-export const KEY_ANNIV_TIME = 'anniv.default_time';
+// 键名只在 shared/logic/anniv/keys.ts 一份（整块评审第 21 条）
+export { KEY_ANNIV_OFFSETS, KEY_ANNIV_TIME };
 
 /** 打开免打扰时没设过时段的默认值（定稿线框 s13“免打扰 23:00 – 08:00”） */
 export const DEFAULT_DND = { start: '23:00', end: '08:00' } as const;

@@ -1,4 +1,5 @@
 // push-dispatch 一轮用的类型、常量和 kindOf；流程总说明在 round.ts 文件头。
+import { ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME } from '../_shared/gen/logic/anniv/keys.ts';
 import type { PayloadInput, PayloadKind } from '../_shared/push/payload.ts';
 import type { DeliverResult, Device, PushOptions } from '../_shared/push/send.ts';
 
@@ -39,7 +40,7 @@ export const DB_NOFN = 'db:nofn';
 export const LOG_SRC = 'push-dispatch';
 /** 本轮要读的设置键 */
 // remind.default_time：全天日程当天提醒的时刻、全天日程的“开始”（架构 0.29 续第 47、57 条；没设、认不出按 09:00，shared/logic/remind.ts 的 allDayTimeOf）
-export const SETTING_KEYS = ['remind.dnd', 'remind.show_title', 'anniv.default_offsets', 'anniv.default_time', 'remind.default_time'] as const;
+export const SETTING_KEYS = ['remind.dnd', 'remind.show_title', ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME, 'remind.default_time'] as const;
 
 /**
  * remind_queue_pop 返回的一项（迁移 20261113100000）。claim 是这一批的租约号（同一批相同；重试模式一批只有 1 项）；为空表示有毒项

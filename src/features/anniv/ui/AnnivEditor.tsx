@@ -53,7 +53,7 @@ interface PartProps {
 
 /** 日期：阳历 / 阴历 + 年月日三列滚轮（视觉稿 annnew；阴历的闰月排在同号平月后面、只在有闰月的年份出现）+ 闰月提示 + “不知道年份” */
 function DateFields({ form, off, t, change, locale, today, label }: PartProps & { locale: 'zh-CN' | 'ko-KR'; today: string; label: boolean }) {
-  const yr = yearRange(form.calendar);
+  const yr = yearRange(form.calendar, form.kind, Number(today.slice(0, 4)));
   const leap = form.is_leap;
   return (
     <>

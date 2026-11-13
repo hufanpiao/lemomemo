@@ -11,6 +11,7 @@
 // • 提醒（R-94）：offsets = 这一条的 remind_offsets ?? 设置 anniv.default_offsets ?? {7,1}；time = remind_time ?? anniv.default_time ?? 09:00；
 //   remind_at = 下一个还没到的 (next − offset 天) 的 time，按 current_tz 换算（浮动时刻）。这一次的都过了，就取再下一次的（每年的那几种）。
 // • 周岁（第几年）：有年份才算；阳历按下一次所在的公历年，阴历按下一次所在的农历年。
+import { ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME } from './keys.ts';
 import { addDays, daysIn, diffDays, fmtDateStr, msAt, parseDate, parseHm, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import { toSolar } from './lunar.ts';
@@ -177,13 +178,13 @@ export function datesBetween(r: AnnivRec, from: DateStr, to: DateStr, createdDay
 export function offsetsOf(r: Pick<AnnivRec, 'remind_offsets'>, settings: Readonly<Record<string, unknown>>): readonly number[] {
   const ok = (v: unknown): v is readonly number[] =>
     Array.isArray(v) && v.length >= 1 && v.length <= OFFSETS_MAX && v.every((x) => intIn(x, 0, OFFSET_MAX));
-  const raw = ok(r.remind_offsets) ? r.remind_offsets : ok(settings['anniv.default_offsets']) ? settings['anniv.default_offsets'] : DEFAULT_OFFSETS;
+  const raw = ok(r.remind_offsets) ? r.remind_offsets : ok(settings[ANNIV_KEY_OFFSETS]) ? settings[ANNIV_KEY_OFFSETS] : DEFAULT_OFFSETS;
   return [...new Set(raw)].sort((a, b) => b - a);
 }
 
 /** 提醒的时刻（HH:MM）；设置里的值不合格按出厂 */
 export function remindTimeOf(r: Pick<AnnivRec, 'remind_time'>, settings: Readonly<Record<string, unknown>>): string {
-  const d = settings['anniv.default_time'];
+  const d = settings[ANNIV_KEY_TIME];
   return r.remind_time !== null && HM_RE.test(r.remind_time) ? r.remind_time : typeof d === 'string' && HM_RE.test(d) ? d : DEFAULT_TIME;
 }
 

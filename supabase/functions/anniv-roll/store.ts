@@ -2,6 +2,7 @@
 // 写的都是系统列（next_date、remind_at、archived_at，private.table_meta 的 system_cols）：touch() 不加 rev、不入队。每条写都带 user_id 条件。
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
+import { ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME } from '../_shared/gen/logic/anniv/keys.ts';
 import { inChunks, liveSettings } from '../_shared/user-reads.ts';
 import { HEARTBEAT, type RollRow, type RollStore } from './core.ts';
 
@@ -10,7 +11,7 @@ type Admin = SupabaseClient<any, any, any>;
 
 /** 推算要的列（shared/logic/anniv/next-date.ts 的 annivRecOf）加上系统列；rev 是写回的乐观条件，snooze_at、defer_until 判“还有没到的稍后”（整块评审第 7、8 条） */
 export const ROLL_COLS = 'id, user_id, rev, undone, kind, calendar, lunar_variant, month, day, is_leap, year, remind_offsets, remind_time, after_due, created_at, next_date, remind_at, archived_at, snooze_at, defer_until';
-const SETTING_KEYS = ['anniv.default_offsets', 'anniv.default_time'];
+const SETTING_KEYS = [ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME];
 
 function must<T>(r: { data: T | null; error: unknown }): T {
   if (r.error) throw new Error('db');

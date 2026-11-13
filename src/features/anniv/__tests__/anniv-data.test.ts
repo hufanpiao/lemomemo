@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadAnnivLib } from '../../../core/anniv-lib.ts';
 import { annivList, itemOf, nextFew } from '../data/anniv-model.ts';
-import { dateValid, emptyForm, formOf, newRow, normalize, offsetsKey, offsetsList, patchOf } from '../data/anniv-edit.ts';
+import { dateValid, defaultsWrites, emptyForm, formOf, newRow, normalize, offsetsKey, offsetsList, patchOf, yearRange } from '../data/anniv-edit.ts';
 import { clampView, cropOf, scaleOf, zoomTo } from '../ui/AvatarPicker.tsx';
 
 await loadAnnivLib();
@@ -11,6 +11,15 @@ const TODAY = '2026-11-13';
 const row = (id: string, x: Record<string, unknown>) => ({
   id, kind: 'birthday', name: id, calendar: 'solar', lunar_variant: 'cn', month: 1, day: 1, is_leap: false, year: null,
   after_due: 'archive', remind_offsets: null, remind_time: null, created_at: Date.UTC(2026, 0, 1), deleted_at: null, undone: false, ...x,
+});
+
+describe('默认提醒只写变了的那一项（整块评审第 12 条）', () => {
+  const cur = { offsets: [7, 1], time: '09:00' };
+  it('只改了时刻：只写 anniv.default_time；只改了天数：只写 anniv.default_offsets；都没变：不写', () => {
+    expect(defaultsWrites(cur, { offsets: [7, 1], time: '08:05' })).toEqual([['anniv.default_time', '08:05']]);
+    expect(defaultsWrites(cur, { offsets: [7, 3, 1], time: '09:00' })).toEqual([['anniv.default_offsets', [7, 3, 1]]]);
+    expect(defaultsWrites(cur, { offsets: [7, 1], time: '09:00' })).toEqual([]);
+  });
 });
 
 describe('纪念日列表（anniv-model）', () => {
@@ -59,14 +68,22 @@ describe('纪念日编辑表单（anniv-edit）', () => {
     expect(offsetsList('7,1')).toEqual([7, 1]);
   });
 
+  it('生日、纪念日的年份最多到今年；倒数日不限（整块评审第 13 条）；种类换成生日时把将来的年份收到今年', () => {
+    expect(yearRange('solar', 'birthday', 2026).max).toBe(2026);
+    expect(yearRange('lunar', 'anniversary', 2026).max).toBe(2026);
+    expect(yearRange('solar', 'countdown', 2026).max).toBeGreaterThan(2026);
+    expect(normalize({ ...emptyForm(TODAY), kind: 'birthday', year: 2030 }, 2026).year).toBe(2026);
+    expect(normalize({ ...emptyForm(TODAY), kind: 'countdown', year: 2030 }, 2026).year).toBe(2030);
+  });
+
   it('换成没有闰月的年份改平月；日子超出这个月收到最后一天；阳历不带闰月', () => {
     // 2023 年农历闰二月；2024 年没有闰月
     const f = { ...emptyForm(TODAY), calendar: 'lunar' as const, year: 2024, month: 2, day: 30, is_leap: true };
-    const n = normalize(f);
+    const n = normalize(f, 2026);
     expect(n.is_leap).toBe(false);
     expect(dateValid(n)).toBe(true);
-    expect(normalize({ ...emptyForm(TODAY), year: 2025, month: 2, day: 31 }).day).toBe(28);
-    expect(normalize({ ...emptyForm(TODAY), is_leap: true }).is_leap).toBe(false);
+    expect(normalize({ ...emptyForm(TODAY), year: 2025, month: 2, day: 31 }, 2026).day).toBe(28);
+    expect(normalize({ ...emptyForm(TODAY), is_leap: true }, 2026).is_leap).toBe(false);
   });
 
   it('不存在的月日不合格（R-403）', () => {

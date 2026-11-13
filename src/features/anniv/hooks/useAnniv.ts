@@ -2,6 +2,7 @@
 // • 列表：读 anniversaries 集合和只读 id，按本机 current_tz 的“今天”现算（每分钟看一次，跨过午夜跟着变）
 // • 设置里的默认提醒（anniv.default_offsets、anniv.default_time）：编辑页显示“默认：…”、算“下一次提醒”用；服务器推送照同一份设置算
 // • 编辑：kit 的 useEditRecord（改了就自动保存）；表单改动先 normalize（闰月、日子收进有效范围）
+import { ANNIV_KEY_OFFSETS as KEY_OFFSETS, ANNIV_KEY_TIME as KEY_TIME } from '../../../../shared/logic/anniv/keys.ts';
 import { useCallback, useMemo } from 'react';
 import { todayOf } from '../../../../shared/core/date.ts';
 import { actionResult, type ActionResult } from '../../../core/action-result.ts';
@@ -16,8 +17,8 @@ import { dateValid, emptyForm, formOf, hasRemind, newRow, normalize, patchOf, se
 import { annivList, type AnnivFilter, type Row } from '../data/anniv-model.ts';
 
 export const TABLE = 'anniversaries';
-export const KEY_OFFSETS = 'anniv.default_offsets';
-export const KEY_TIME = 'anniv.default_time';
+// 键名只在 shared/logic/anniv/keys.ts 一份（整块评审第 21 条）
+export { KEY_OFFSETS, KEY_TIME };
 
 /** 设置里的默认提醒（原值，交给 next-date 的 offsetsOf / remindTimeOf 去认） */
 export function useAnnivDefaults(): Readonly<Record<string, unknown>> {
@@ -67,7 +68,7 @@ export function useAnnivEdit(id: string, onCreated?: (id: string) => void): Anni
   const { form, update, markRejected } = rec;
   const change = useCallback(
     (p: Partial<AnnivForm>) => {
-      const next = normalize({ ...form, ...p });
+      const next = normalize({ ...form, ...p }, Number(todayOf(clock.now(), currentTz()).slice(0, 4)));
       // 月日不存在（R-403）：不写，状态报“这个日期不存在”（选项已经只给存在的日子，这里是兜底）
       if (!dateValid(next)) markRejected();
       else void update(next);

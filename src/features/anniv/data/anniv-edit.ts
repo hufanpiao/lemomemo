@@ -9,6 +9,7 @@
 //   “没有闰月的年份按同号平月过”，不给选项
 // • remind 标记（整条提前发，4.2）：改之后算得出、还没过的提醒（next-date 的 annivNextAt，按出厂默认算就够判断“会不会响”），
 //   或者改之前服务器上的 remind_at / snooze_at 还会响（core 的 rowRemindPending）
+import { ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME } from '../../../../shared/logic/anniv/keys.ts';
 import { daysIn, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import type { AfterDue, AnnivCalendar, AnnivKind, AnnivRec } from '../../../../shared/logic/anniv/next-date.ts';
@@ -45,6 +46,17 @@ const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** 提前天数数组 ↔ 表单里的字符串：去重、只留 0～60 的整数、从大到小、最多 4 个；一个都没有回 null */
+/**
+ * 设置 › 纪念日提醒改了以后要写哪几项（整块评审第 12 条：原来两项每次都写，另一台设备刚改的另一项会被这边的旧值盖掉）：
+ * cur 是现在生效的值（设置 ?? 出厂），next 是弹层改完的值（已按出厂补齐）；只回变了的那一项
+ */
+export function defaultsWrites(cur: { offsets: readonly number[]; time: string }, next: { offsets: readonly number[]; time: string }): [string, unknown][] {
+  const out: [string, unknown][] = [];
+  if (offsetsKey(next.offsets) !== offsetsKey(cur.offsets)) out.push([ANNIV_KEY_OFFSETS, [...next.offsets]]);
+  if (next.time !== cur.time) out.push([ANNIV_KEY_TIME, next.time]);
+  return out;
+}
+
 export function offsetsKey(xs: readonly unknown[] | null): string | null {
   if (!xs) return null;
   const { OFFSET_MAX, OFFSETS_MAX } = annivLib();
@@ -102,16 +114,18 @@ export function maxDay(f: Pick<AnnivForm, 'calendar' | 'year' | 'month' | 'is_le
 }
 
 /** 年份选项（阴历只给农历表里有的年份） */
-export function yearRange(calendar: AnnivCalendar): { min: number; max: number } {
+export function yearRange(calendar: AnnivCalendar, kind: AnnivForm['kind'], thisYear: number): { min: number; max: number } {
   const L = annivLib();
-  return calendar === 'lunar' ? { min: LUNAR_YEAR_MIN, max: LUNAR_YEAR_MAX } : { min: L.YEAR_MIN, max: L.YEAR_MAX };
+  const r = calendar === 'lunar' ? { min: LUNAR_YEAR_MIN, max: LUNAR_YEAR_MAX } : { min: L.YEAR_MIN, max: L.YEAR_MAX };
+  // 生日、纪念日是已经发生的事：年份最多到今年（整块评审第 13 条）；倒数日的目标日可以在将来
+  return kind === 'countdown' ? r : { min: r.min, max: Math.max(r.min, Math.min(r.max, thisYear)) };
 }
 
 /** 改完以后收拾：闰月那一年没有了就改平月，日子超出这个月就收到最后一天，年份超出范围就收进来 */
-export function normalize(f: AnnivForm): AnnivForm {
+export function normalize(f: AnnivForm, thisYear: number): AnnivForm {
   const out = { ...f };
   if (out.year !== null) {
-    const r = yearRange(out.calendar);
+    const r = yearRange(out.calendar, out.kind, thisYear);
     out.year = Math.min(r.max, Math.max(r.min, out.year));
   }
   if (out.calendar === 'solar' || (out.is_leap && leapOf(out.calendar, out.year) !== out.month)) out.is_leap = false;
