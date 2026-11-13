@@ -178,6 +178,16 @@ describe('ai-voice：失败分支写 logs 表（架构审第九节第 2 条）',
     const rl = await run({ minuteLimitHit: true });
     expect([rl.r.status, rl.fails.map((f) => f.code)]).toEqual([429, ['rate_limited']]);
   });
+  it('谷歌额度停用中（门第 ⑤ 步）：quota_exhausted 带 kind=minute|day；每分钟的给客户端回 {fallback, error}，每天的回 {fallback, quota}', async () => {
+    const m = await run({ exhaustedUntil: NOW + 12_000 });
+    expect([m.r.body, m.fails]).toEqual([{ fallback: true, reason: 'error' }, [{ userId: UA, code: 'quota_exhausted', fields: ['kind=minute', 'bytes=<16k'] }]]);
+    const d = await run({ exhaustedUntil: Date.UTC(2026, 9, 29) });
+    expect([d.r.body, d.fails]).toEqual([{ fallback: true, reason: 'quota' }, [{ userId: UA, code: 'quota_exhausted', fields: ['kind=day', 'bytes=<16k'] }]]);
+  });
+  it('本次撞了每分钟限额：给客户端回 ai_failed error（不是 quota），logs 照旧 ai_quota kind=minute', async () => {
+    const { r, fails } = await run({ reply: () => ({ ok: false, reason: 'quota', status: 429, quotaKind: 'minute', retryMs: 12_000 }) });
+    expect([r.body, fails.map((f) => [f.code, f.fields])]).toEqual([{ ai_failed: true, reason: 'error' }, [['ai_quota', ['status=429', 'kind=minute', 'bytes=<16k']]]]);
+  });
   it('计数出错：预扣抛错写 store_failed（503）；退回抛错写 ai_* 和 settle_failed，照样回 ai_failed', async () => {
     const v1 = voiceDeps();
     const r1 = await call(await voiceHandle(voiceReq(new Uint8Array(5)), { ...v1.deps, quota: { take: async () => { throw new Error('db'); }, refund: async () => {} } }));

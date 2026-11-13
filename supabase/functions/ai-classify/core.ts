@@ -29,7 +29,7 @@
 // 日志只记原因码（A23）：不记标题、正文、分类名、密钥、模型原文。
 
 import { cronGate, json } from '../_shared/http.ts';
-import { exhaustedUntilFor, globalQuotaKey, userQuotaKey, type QuotaStore } from '../_shared/ai/gate.ts';
+import { globalQuotaKey, settleFailure, takeDaily, userQuotaKey, type QuotaStore } from '../_shared/ai/gate.ts';
 import { aiFailCode, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiConfig } from '../_shared/ai/router.ts';
 import { classifyRequest, nameIndex, readItems, readSimilar, type PendingNote } from './request.ts';
@@ -231,27 +231,17 @@ export async function runRound(deps: Deps, store: ClassifyStore): Promise<Heartb
     const now = deps.now();
     const userKey = userQuotaKey(userId, now);
     const globalKey = globalQuotaKey(now);
-    let userTaken = false;
-    try {
-      const used = await deps.quota.take(userKey, cfg.per_user_daily);
-      if (used === null) {
-        tally.skipped += toAi.length;
-        continue;
-      }
-      userTaken = true;
-      const g = await deps.quota.take(globalKey, cfg.global_daily ?? 0);
-      if (g === null) {
-        userTaken = false;   // 下面这次退回出错时，catch 里不再退第二次
-        await deps.quota.refund(userKey);
+    // 预扣和 ai-parse 同一个流程（gate.ts 的 takeDaily）；个人用完 → 留在 pending 等明天
+    const taken = await takeDaily(deps.quota, cfg, userKey, globalKey);
+    if (!taken.ok) {
+      if (taken.out === 'global') {
         deps.log('global_quota_out');
         globalOut = true;
-        tally.skipped += toAi.length;
-        continue;
+      } else if (taken.out === 'failed') {
+        deps.log('quota_failed');
+        // 个人那一下扣上了、全项目那一下出错：退回个人的；全项目那一下扣没扣上不知道，不退（宁可多算）
+        if (taken.userTaken) await deps.quota.refund(userKey).catch(() => deps.log('settle_failed'));
       }
-    } catch {
-      deps.log('quota_failed');
-      // 个人那一下扣上了、全项目那一下出错：退回个人的；全项目那一下扣没扣上不知道，不退（宁可多算）
-      if (userTaken) await deps.quota.refund(userKey).catch(() => deps.log('settle_failed'));
       tally.skipped += toAi.length;
       continue;
     }
@@ -270,11 +260,8 @@ export async function runRound(deps: Deps, store: ClassifyStore): Promise<Heartb
       const fail = res.ok ? { reason: 'invalid' as const } : res;
       const reason = fail.reason;
       deps.log(aiFailCode(fail));
-      const settle = await Promise.allSettled([
-        deps.quota.refund(userKey), deps.quota.refund(globalKey),
-        ...(reason === 'quota' ? [deps.markExhausted(exhaustedUntilFor(deps.now(), fail))] : []),
-      ]);
-      if (settle.some((x) => x.status === 'rejected')) deps.log('settle_failed');
+      // 退回两次、额度用完写 exhausted_until：和 ai-parse 同一个 settleFailure（这里的失败不带 invalid_reasons，不写 logs）
+      await settleFailure(deps, { userKey, globalKey }, userId, 'ai-classify', fail);
       if (reason === 'quota') {
         exhausted = true;
         quotaHit = true;

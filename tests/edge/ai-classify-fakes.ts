@@ -120,7 +120,7 @@ export function setup(o: {
     provider: () => new GeminiProvider(REPLAY_MODEL, REPLAY_KEY, rp.fetch),
     quota: quota.q,
     exhaustedUntil: async () => exhausted,
-    markExhausted: async (u) => { exhausted = u; },
+    markExhausted: async (u) => { if (exhausted === null || exhausted < u) exhausted = u; },   // 和 store.ts 一样只往后延
     logic: { classifyByRules, normalize: normalizeForSearch, isLiveCategory, addSuggested, keepFirst },
     newId: () => `00000000-0000-4000-8000-${String(++ids).padStart(12, '0')}`,
     now: () => NOW,

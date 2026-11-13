@@ -10,7 +10,8 @@
 //   结果另起名字 only-<报告名>-<时刻>，不覆盖第一遍、也不被工作流的 set1-*.json 当成第一遍。
 import type { AiKindLike, ParseFail, ParseInput, ParseOk } from '../../supabase/functions/_shared/ai/parse-core.ts';
 import { PROMPT_VERSION, TASK_PARAMS } from '../../supabase/functions/_shared/ai/params.ts';
-import type { AIProvider, QuotaKind } from '../../supabase/functions/_shared/ai/provider.ts';
+import { minuteWaitMs } from '../../supabase/functions/_shared/ai/gate.ts';
+import { errNameOf, type AIProvider, type QuotaKind } from '../../supabase/functions/_shared/ai/provider.ts';
 
 /** 句库 2.5：所有句子相同的固定入参（1.2） */
 export const PROJECTS: readonly string[] = Object.freeze(['SignPlex', 'NEOX', '官网改版', '이사 준비']);
@@ -175,18 +176,15 @@ export type ParseFn = (input: ParseInput) => Promise<ParseOk<unknown> | ParseFai
 /** 这一轮为什么提前停：每天上限（本次运行的 80%）、额度用完（代码审 S4）；没停为 null */
 export type StopReason = 'daily_cap' | 'quota' | null;
 
-/** 撞了每分钟限额（quotaKind = minute）：同一句最多再试几次 */
+/** 撞了每分钟限额（quotaKind = minute）：同一句最多再试几次；每次等多久和服务器写 exhausted_until 同一算法（gate.ts 的 minuteWaitMs） */
 export const MINUTE_RETRIES = 2;
-/** 每分钟限额重试前等多久：谷歌给了 retryDelay 就等它，没给 60 秒，最多 90 秒 */
-export const MINUTE_WAIT_DEFAULT_MS = 60_000;
-export const MINUTE_WAIT_MAX_MS = 90_000;
 
 /**
  * 逐句调（不并发）；一句抛异常只记这一句，不中断整轮。
  * • 每天上限只按本次运行计（代码审 S2）：同一天同一模型跑第二次，要自己把 --rpd 扣掉上一次已调的句数，否则合计会超过 80%。
  *   calls 是实际调用次数（含每分钟限额的重试），工作流按它（meta.called）扣每天上限。
  * • 拿到 quota：
- *   - minute（每分钟限额，11-13 ai-eval #2 第 36 句就是这种）：等 retryDelay（没有 60 秒、最多 90 秒）再调同一句，最多重试 MINUTE_RETRIES 次；
+ *   - minute（每分钟限额，11-13 ai-eval #2 第 36 句就是这种）：等 minuteWaitMs(retryDelay)（没给 60 秒，夹在 1 秒到 5 分钟）再调同一句，最多重试 MINUTE_RETRIES 次；
  *     重试也算一次调用、受每天上限管；重试次数用完还是 quota 就照 day 停；
  *   - day、unknown：停下这一轮，剩下的句子列进 skipped（代码审 S4：再调只会接着 429、白耗请求）。
  * • results 每句只留最后一次的结果（判分按 id 取）；diag 每次调用一行（重试前那次 429 也在，工作流日志能看出等过几次）。
@@ -214,7 +212,7 @@ export async function runSet(
     try {
       res = await parse({ text: r.text, now: r.now, tz: r.tz, locale: r.locale, projects: PROJECTS, features: FEATURES });
     } catch (e) {
-      return { ...base, ok: false, reason: 'error', raw: null, checked: null, invalid_reasons: null, issues: null, status: null, errName: e instanceof Error ? e.name : 'unknown', ms: o.clock() - t0 };
+      return { ...base, ok: false, reason: 'error', raw: null, checked: null, invalid_reasons: null, issues: null, status: null, errName: errNameOf(e), ms: o.clock() - t0 };
     }
     const ms = o.clock() - t0;
     if (res.ok) return { ...base, ok: true, reason: null, raw: res.raw, checked: res.value, invalid_reasons: null, issues: null, status: null, errName: null, ms };
@@ -233,7 +231,7 @@ export async function runSet(
     let res = await once(r);
     diag.push(diagLine(res));
     for (let n = 0; res.quotaKind === 'minute' && n < MINUTE_RETRIES && calls < dailyCap; n++) {
-      await o.sleep(Math.min(res.retryMs ?? MINUTE_WAIT_DEFAULT_MS, MINUTE_WAIT_MAX_MS));
+      await o.sleep(minuteWaitMs(res.retryMs));
       res = await once(r);
       diag.push(diagLine(res));
     }

@@ -29,7 +29,10 @@ export interface FakeGate extends GateDeps {
   counts: Map<string, number>;
   logs: string[];
   invalid: { userId: string; src: string; reasons: InvalidReasonLike[] }[];
+  /** 每次 markExhausted 写的值（按调用先后，含没生效的） */
   exhaustedAt: number[];
+  /** 现在的 exhausted_until：和 store.ts 的 markExhausted 一样只往后延，exhaustedUntil() 读它 */
+  readonly exhausted: number | null;
   provider: GateDeps['provider'] & { stub: StubProvider };
   setNow(ms: number): void;
 }
@@ -52,6 +55,7 @@ export function fakeGate(o: GateOpts = {}): FakeGate {
   const logs: string[] = [];
   const invalid: FakeGate['invalid'] = [];
   const exhaustedAt: number[] = [];
+  let exhausted = o.exhaustedUntil ?? null;
   const stub = new StubProvider(o.reply ?? (() => okJson({ items: [] })));
   const quota: QuotaStore = {
     async take(key, limit) {
@@ -69,6 +73,7 @@ export function fakeGate(o: GateOpts = {}): FakeGate {
   const provider = Object.assign((_cfg: AiConfig) => (o.noProvider ? null : stub), { stub });
   return {
     counts, logs, invalid, exhaustedAt, provider,
+    get exhausted() { return exhausted; },
     setNow: (ms) => { now = ms; },
     async consent() {
       if (o.consent === 'throw') throw new Error('db');
@@ -91,10 +96,11 @@ export function fakeGate(o: GateOpts = {}): FakeGate {
     },
     quota,
     async exhaustedUntil() {
-      return o.exhaustedUntil ?? null;
+      return exhausted;
     },
     async markExhausted(until) {
       exhaustedAt.push(until);
+      if (exhausted === null || exhausted < until) exhausted = until;
     },
     async logInvalid(userId, src, reasons) {
       invalid.push({ userId, src, reasons });

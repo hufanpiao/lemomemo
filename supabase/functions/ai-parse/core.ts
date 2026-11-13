@@ -4,8 +4,8 @@
 // {intent: 'record', confidence, items, quota_left}；失败退回预扣、回 {fallback, reason}（客户端改用本机规则，原话不丢）。
 // 版本门在 index.ts 入口处查（不在免查名单，fn-version-gate 标“查”）。
 // scope = vault：隐私记页面经“＋”记下在 B4b-3 才有（届时换成 verifyVaultToken + ai.vault），B3 一律回 {fallback, vault_ai_off}、不调 Gemini、不扣次数。
-// 不 console.* 请求体（A23）；日志只记错误码（额度用完另带 kind=day|minute|unknown）。纯逻辑：依赖全部注入，不 import _shared/gen/、npm 包。
-import { aiGate, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
+// 不 console.* 请求体（A23）；日志只记错误码（额度用完另带 kind=day|minute|unknown；每分钟限额给客户端回 reason error，gate.ts 的 clientReason）。纯逻辑：依赖全部注入，不 import _shared/gen/、npm 包。
+import { aiGate, clientReason, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
 import { aiFailCode, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, ParseFail, ParseInput, ParseOk } from '../_shared/ai/parse-core.ts';
 import { readJsonCapped } from '../_shared/body.ts';
@@ -67,7 +67,7 @@ export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Resp
   if (!r.ok) {
     deps.log(aiFailCode(r));
     await settleFailure(deps, gate, userId, 'ai-parse', r);
-    return json(200, { fallback: true, reason: r.reason });
+    return json(200, { fallback: true, reason: clientReason(r) });   // 每分钟限额回 error，客户端不记“今天用完”
   }
   return json(200, { intent: 'record', confidence: RECORD_CONFIDENCE, items: r.value.items, quota_left: gate.quotaLeft });
 }

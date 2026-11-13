@@ -2,16 +2,16 @@
 // 顺序：方法（只收 POST）→ JWT → Content-Type 白名单（先去参数再比，不在 4 种里回 415、不调 Gemini；S1、TC-B3-65 起新增用例）
 //   → 请求头 X-Now、X-TZ、X-Locale、X-Scope、X-Projects、X-Default-Day（日历页选中的那天，R6；不合格回 400）→ 边读边计数读请求体（≤ logic.maxAudio，超了中断回 413，不只看 Content-Length）
 //   → 共用的门（_shared/ai/gate.ts）→ voiceWithAI（Gemini 15 秒超时；回 503 时服务器端重试一次、两次合计仍不超过 15 秒，_shared/ai/retry.ts）→ 成功回 {intent: 'record', confidence, transcript, items, quota_left}；
-//   失败退回预扣、回 {ai_failed, reason}（客户端留着录音，可以重试或再说一次）。
+//   失败退回预扣、回 {ai_failed, reason}（客户端留着录音，可以重试或再说一次；每分钟限额的 reason 回 error，gate.ts 的 clientReason）。
 // 空列表（R7 ②）：转写为空回 {transcript: '', items: []}、照常算 1 次（客户端按 no_speech）；转写不空而条目为空由校验判 invalid（empty），退回次数。
 // X-Projects：UTF-8 JSON 再 base64url，≤ 4 KB；超了截到 4 KB、按项截断（留下完整的几项），本来就解不开的当没给（不拒收）。
 // 音频只在内存里：不写 Storage、不写日志、不 console.*（5.11 第 3 点、A23）。转交 Gemini 时 mimeType 用去掉参数以后的类型。
 // 失败分支写 logs 表（架构审第九节第 2 条）：Gemini 拒收、超时、额度用完、计数出错各写一行 kind 'ai'、act 'voice_fail'、src 'ai-voice'，
-//   code 是固定错误码，fields 只有 status=HTTP 状态、type=异常类型名、kind=额度类型（day|minute|unknown，只在 ai_quota）、retried=1（503 重试过）、bytes=音频字节数区间；不写转写、正文、请求头。写失败不影响回答。
+//   code 是固定错误码，fields 只有 status=HTTP 状态、type=异常类型名、kind=额度类型（ai_quota 带 day|minute|unknown，来自 aiFailCode；门拦下的 quota_exhausted 带 minute|day，来自 gate.ts 的 holdKind）、retried=1（503 重试过）、bytes=音频字节数区间；不写转写、正文、请求头。写失败不影响回答。
 // 503 重试后成功的，counters 记 voice-retry:global:<太平洋日期> 加一（经 take_rate，上限给得很大、只当计数用；写失败不影响回答）。
 // scope = vault：隐私记页面经“＋”记下在 B4b-3 才有（届时换成 verifyVaultToken + ai.vault），B3 回 {fallback, vault_ai_off}、不调 Gemini、不扣次数。
-import { aiGate, pacificDate, settleFailure, type GateDeps } from '../_shared/ai/gate.ts';
-import { aiFailCode, errNameOf, type AIProvider } from '../_shared/ai/provider.ts';
+import { aiGate, clientReason, pacificDate, settleFailure, type GateDeps, type GateStop } from '../_shared/ai/gate.ts';
+import { aiFailCode, errNameOf, quotaKindField, type AIProvider } from '../_shared/ai/provider.ts';
 import type { AiKindLike, ParseFail, ParseOk, VoiceInput } from '../_shared/ai/parse-core.ts';
 import { b64uDecode } from '../_shared/b64url.ts';
 import { readCapped } from '../_shared/body.ts';
@@ -54,12 +54,17 @@ export function bytesBucket(n: number): string {
   return '256k-600k';
 }
 
-/** 门拦下来时哪些算失败（同意、类型开关不算）：额度用完、每分钟限流、计数或读配置出错 */
-function gateFailCode(status: number, body: Record<string, unknown>, codes: readonly string[]): string | null {
+/**
+ * 门拦下来时哪些算失败（同意、类型开关不算）：额度用完、每分钟限流、计数或读配置出错。
+ * 谷歌额度停用中（第 ⑤ 步）记 quota_exhausted，fields 带 kind=minute|day（gate.ts 的 holdKind：给客户端的 reason 一个是 error、一个是 quota）
+ */
+function gateFail(g: GateStop, codes: readonly string[]): { code: string; fields: string[] } | null {
+  const { status, body } = g;
   if (body['consent_required'] === true || body['reason'] === 'feature_off') return null;
-  if (body['quota_out'] === true) return 'quota_out';
-  if (status === 429) return 'rate_limited';
-  return codes.at(-1) ?? (body['reason'] === 'quota' ? 'quota_exhausted' : 'gate_error');
+  if (body['quota_out'] === true) return { code: 'quota_out', fields: [] };
+  if (status === 429) return { code: 'rate_limited', fields: [] };
+  if (g.hold) return { code: 'quota_exhausted', fields: [quotaKindField(g.hold)] };
+  return { code: codes.at(-1) ?? 'gate_error', fields: [] };
 }
 
 import { json } from '../_shared/http.ts';
@@ -138,8 +143,8 @@ export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Resp
 
   const gate = await aiGate(d, userId, req.headers.get('x-app-version') ?? '');
   if (gate.stop) {
-    const code = gateFailCode(gate.status, gate.body, codes);
-    if (code !== null) await logFail(code, []);
+    const f = gateFail(gate, codes);
+    if (f !== null) await logFail(f.code, f.fields);
     return json(gate.status, gate.body);
   }
 
@@ -156,17 +161,20 @@ export async function handle<Item>(req: Request, deps: Deps<Item>): Promise<Resp
   }
   if (r.badDefaultDay) d.log('bad_default_day');   // R10 兜底：入口已 400，到这里说明入口漏校验
   if (!r.ok) {
-    d.log(aiFailCode(r));
-    await logFail(`ai_${r.reason}`, [
+    const failCode = aiFailCode(r);
+    d.log(failCode);
+    // logs 表：code 是 ai_<原因>，额度类型（aiFailCode 空格后那段 kind=…）放进 fields
+    const [code = failCode, ...kind] = failCode.split(' ');
+    await logFail(code, [
       ...(r.status !== undefined ? [`status=${r.status}`] : []),
       ...(r.errName !== undefined ? [`type=${r.errName}`] : []),
-      ...(r.reason === 'quota' ? [`kind=${r.quotaKind ?? 'unknown'}`] : []),
+      ...kind,
       ...(r.retried ? ['retried=1'] : []),
     ]);
     const before = codes.length;
     await settleFailure(d, gate, userId, 'ai-voice', r);
     if (codes.slice(before).includes('settle_failed')) await logFail('settle_failed', []);
-    return json(200, { ai_failed: true, reason: r.reason });
+    return json(200, { ai_failed: true, reason: clientReason(r) });   // 每分钟限额回 error（gate.ts 的 clientReason）
   }
   if (r.retried) {
     try {

@@ -3,6 +3,7 @@
 //   public.settings 的 notes.merge_suggest 一行（R-413：AI 判的相似分类对；只读写这一个键）、private.heartbeat（心跳）。
 // service role 绕过 RLS，所以每一句都按 user_id 自己过滤。出错一律抛错（core.ts 按条记 failed 或跳过），日志只记错误码。
 import { MERGE_SUGGEST_KEY } from '../_shared/gen/logic/notes/category-merge.ts';
+import { isObj } from '../_shared/obj.ts';
 import type { ClassifyStore, HeartbeatDetail } from './core.ts';
 import { HEARTBEAT } from './core.ts';
 import type { PendingNote } from './request.ts';
@@ -32,7 +33,6 @@ const must = (r: Res, what: string): unknown => {
   return r.data;
 };
 const tbl = (s: { from(t: string): unknown }, t: string): Q => s.from(t) as Q;
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 export function makeStore(admin: ClassifyAdmin): ClassifyStore {

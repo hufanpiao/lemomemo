@@ -139,6 +139,11 @@ jobs:
           for i in 1 2 3; do
             # 已调的句数 = 第一遍加已有的补跑结果（nullglob：还没有补跑时只读第一遍）
             only=(tests/ai/reports/only-*.json)
+            # 第一遍或已有的补跑是因为谷歌额度用完停下的（meta.stopped = quota）：再跑只会接着 429、白耗请求，后面的补跑都不跑
+            if [ "$(jq -s 'map(.meta.stopped) | any(. == "quota")' "$first" "${only[@]}")" = "true" ]; then
+              echo "::warning::已经撞了谷歌额度（meta.stopped = quota），第 $i 次起的补跑不跑了；没补跑够的句子判成「未定」"
+              break
+            fi
             used="$(jq -s 'map(.meta.called) | add' "$first" "${only[@]}")"
             left=$(( cap - used ))
             if [ "$left" -lt 1 ]; then

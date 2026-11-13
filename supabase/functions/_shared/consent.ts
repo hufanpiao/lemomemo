@@ -14,6 +14,8 @@
 // （当成“不同意”的话，ai-classify 会把这批记录写成 ai_status=rule，数据库一抖就降级了一批）。
 // 不 import npm 包：admin 只要求下面 ConsentAdmin 这几个方法，用 service role 建的 supabase-js 客户端传进来即可（和 auth.ts 一样绕过 RLS，所以按 user_id 自己过滤）。
 
+import { isObj } from './obj.ts';
+
 /** profiles 里和同意有关的两列（同意记录只由 record_consent 写，客户端改不了） */
 export interface ConsentProfile {
   consent_ai_at: string | null;
@@ -111,7 +113,6 @@ async function timed(p: PromiseLike<Res>, what: string): Promise<Res> {
   }
 }
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const strOrNull = (v: unknown): string | null => (typeof v === 'string' ? v : null);
 
 /** 读一个人判断要用的事实（三次查询并行）；任何一次出错或超时抛 ConsentReadError */

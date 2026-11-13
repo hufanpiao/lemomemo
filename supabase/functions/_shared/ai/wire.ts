@@ -6,11 +6,11 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { isValidTz } from '../gen/core/tz.ts';
 import { featureOn, type FeaturesConfig } from '../gen/logic/flags.ts';
 import { AI_KINDS, KIND_FLAG, type AiKind } from '../gen/schema/kinds.ts';
+import { isObj } from '../obj.ts';
 import type { GateDeps } from './gate.ts';
 import { pickProvider, readAiConfig, type AiConfig } from './router.ts';
 import { exhaustedUntil, logInvalid, markExhausted, quotaStore, takeRate, type StoreAdmin } from './store.ts';
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** app_config 一行（ai、features）；60 秒缓存，读失败抛错 */
 let cfgMemo: { at: number; ai: unknown; features: unknown } | null = null;

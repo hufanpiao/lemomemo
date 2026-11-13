@@ -34,9 +34,15 @@ export type AiResult =
   | { ok: true; json: unknown; raw: string }
   | { ok: false; reason: 'quota' | 'timeout' | 'error'; status?: number; errName?: string; quotaKind?: QuotaKind; retryMs?: number | null };
 
-/** 失败的日志码：ai_<原因>；额度用完另带 kind=day|minute|unknown（固定词，不带服务商原文）。ai-parse、ai-voice、ai-classify、claude-intake 共用 */
+/** 额度类型的日志片段 kind=day|minute|unknown（固定词，不带服务商原文）；没带类型记 unknown */
+export const quotaKindField = (k: QuotaKind | undefined): string => `kind=${k ?? 'unknown'}`;
+
+/**
+ * 失败的日志码：ai_<原因>；额度用完另带一段 quotaKindField（空格隔开）。ai-parse、ai-voice、ai-classify、claude-intake 共用；
+ * ai-voice 写 logs 表时按空格拆成 code（ai_quota）和 fields 里的 kind=…
+ */
 export const aiFailCode = (r: { reason: string; quotaKind?: QuotaKind | undefined }): string =>
-  r.reason === 'quota' ? `ai_quota kind=${r.quotaKind ?? 'unknown'}` : `ai_${r.reason}`;
+  r.reason === 'quota' ? `ai_quota ${quotaKindField(r.quotaKind)}` : `ai_${r.reason}`;
 
 /** 异常的类型名（TypeError、AbortError…）：只认 1～40 个英文字母，别的一律 'unknown'（不带 message，免得把正文带进日志） */
 export const errNameOf = (e: unknown): string => {

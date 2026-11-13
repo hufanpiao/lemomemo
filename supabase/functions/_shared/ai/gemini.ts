@@ -8,6 +8,7 @@
 // • 不打印请求体、返回正文和密钥（15.3 第 6 条、A23）；出错只回 HTTP 状态码。
 // fetch 注入：单测和回放桩（BE-6）传假的，函数传全局 fetch。
 import { timedFetch } from '../net.ts';
+import { isObj } from '../obj.ts';
 import { errNameOf, type AiPart, type AiRequest, type AiResult, type AIProvider, type QuotaKind } from './provider.ts';
 
 export const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
@@ -67,7 +68,6 @@ const PER_MINUTE = /PerMinute(?![a-z])/;
 /** google.protobuf.Duration 的 JSON 写法：秒数 + 可选小数（最多 9 位）+ s，如 "12s"、"0.5s"、"1.000340012s"；不认负数和别的写法 */
 const DURATION = /^(\d{1,9})(?:\.(\d{1,9}))?s$/;
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** retryDelay → 毫秒（小数部分向上取整：文档说“至少等这么久”）；不合法 null */
 export function retryDelayMs(v: unknown): number | null {
@@ -127,8 +127,12 @@ export class GeminiProvider implements AIProvider {
         body: JSON.stringify(geminiBody(req)),
       });
       if (!res.ok) {
-        const quota = res.status === 429 ? await quotaOf(res) : null;
-        if (!quota) await res.body?.cancel().catch(() => {});
+        if (res.status !== 429) {
+          await res.body?.cancel().catch(() => {});
+          return { ok: false, reason: 'error', status: res.status };
+        }
+        // 429：quotaOf 已经 res.json() 把正文读完（读失败也算读过），不用再 cancel
+        const quota = await quotaOf(res);
         return quota ? { ok: false, reason: 'quota', status: res.status, ...quota } : { ok: false, reason: 'error', status: res.status };
       }
       const text = textOf(await res.json());

@@ -3,7 +3,16 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AiItem } from '../../../../shared/schema/ai.ts';
 import { ITEM_TITLE_MAX } from '../../../../shared/schema/rows.ts';
 import { rowsOf } from '../data/capture-save.ts';
-import { aiReqCtx, applyConfirm, askAi, type CallAi, fillDay, keepAsked, mergeItems, needsConfirm, planLocal, planTyped, SendError, splitConfirm, type TypeCtx } from '../data/type-flow.ts';
+import type * as quotaModule from '../data/quota.ts';
+import { rememberQuotaLeft } from '../data/quota.ts';
+import { aiReqCtx, applyConfirm, askAi, type CallAi, fillDay, keepAsked, mergeItems, needsConfirm, planLocal, planText, planTyped, SendError, splitConfirm, type TypeCtx } from '../data/type-flow.ts';
+
+// 本机剩余次数换成桩：看 planText 记没记“用完”（rememberQuotaLeft(0)），本机读到的一律“没用完”
+vi.mock('../data/quota.ts', async (orig) => ({
+  ...(await orig<typeof quotaModule>()),
+  quotaOutToday: vi.fn(async () => false),
+  rememberQuotaLeft: vi.fn(async () => {}),
+}));
 
 /** 2026-11-02（周一）10:00 首尔 */
 const NOW = Date.UTC(2026, 10, 2, 1, 0);
@@ -113,6 +122,22 @@ describe('没把握', () => {
   it('hints：AI 结果也带“重复”“自己排时间”的附加句', async () => {
     const p = await planTyped('排一下时间和客户开会', CTX, ON, stub(record([item()])));
     expect(p.hints).toEqual({ recur: false, arrange: true, bad_day: null });
+  });
+});
+
+// 11-13 评审：谷歌每分钟限额（几十秒就恢复）时服务器回 {fallback, error}，不能让本机当成“今天用完”、AI 关到午夜
+describe('服务器回 {fallback, error}（每分钟限额）：不记 quota_out', () => {
+  it('planText：本机规则存下、quotaLeft 为空、不写本机剩余次数；对照：{fallback, quota} 才记 0', async () => {
+    const remember = vi.mocked(rememberQuotaLeft);
+    remember.mockClear();
+    const opts = (ret: unknown) => ({ online: () => true, aiOn: true, call: stub(ret) });
+    const r = await planText('买牛奶', CTX, opts({ fallback: true, reason: 'error' }));
+    expect(r.plan).toMatchObject({ status: 'saved_rule', origin: 'rule', quotaLeft: null, aiReason: 'error' });
+    expect(r.plan.items[0]?.title).toBe('买牛奶');
+    expect(remember).not.toHaveBeenCalled();
+    const q = await planText('买牛奶', CTX, opts({ fallback: true, reason: 'quota' }));
+    expect(q.plan).toMatchObject({ status: 'quota_out', quotaLeft: 0 });
+    expect(remember.mock.calls).toEqual([[0, NOW]]);
   });
 });
 

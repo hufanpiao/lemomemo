@@ -178,14 +178,17 @@ describe('评测骨架：额度用完按类型处理（每分钟等了重试，�
       'diag Z03 ok status=- err=- ms=0 kind=- retry=-',
     ]);
   });
-  it('没给 retryDelay 等 60 秒；给得太长最多等 90 秒', async () => {
+  it('没给 retryDelay 等 60 秒；给得太长最多等 5 分钟；"0s" 也等 1 秒（和服务器写 exhausted_until 同一个 minuteWaitMs）', async () => {
     const a = seq(minute(null), okRes);
     const ca = fakeClock();
     await runSet(rows(1), a.fn, { rpm: 60, rpd: 100, ...ca });
     const b = seq(minute(600_000), okRes);
     const cb = fakeClock();
     await runSet(rows(1), b.fn, { rpm: 60, rpd: 100, ...cb });
-    expect([ca.slept, cb.slept, a.calls(), b.calls()]).toEqual([[60_000], [90_000], 2, 2]);
+    const z = seq(minute(0), okRes);
+    const cz = fakeClock();
+    await runSet(rows(1), z.fn, { rpm: 60, rpd: 100, ...cz });
+    expect([ca.slept, cb.slept, cz.slept, a.calls(), b.calls()]).toEqual([[60_000], [300_000], [1000, 250], 2, 2]);   // 0s 等 1 秒，再补足 1.25 秒的调用间隔
   });
   it('同一句最多重试 2 次：3 次都是每分钟限额就整遍停（stopped = quota），剩下的列进 skipped', async () => {
     const s = seq(minute(5000));

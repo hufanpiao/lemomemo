@@ -14,6 +14,7 @@ type Res = { data: unknown; error: unknown };
 interface Q extends PromiseLike<Res> {
   select(cols: string): Q;
   eq(col: string, v: string | number): Q;
+  or(filters: string): Q;
   order(col: string, o: { ascending: boolean }): Q;
   limit(n: number): Q;
   update(v: Record<string, unknown>): Q;
@@ -68,8 +69,19 @@ export async function exhaustedUntil(admin: StoreAdmin): Promise<number | null> 
   return Number.isFinite(ms) ? ms : null;
 }
 
+/**
+ * 写 exhausted_until：只许往后延，不许缩短（11-13 评审：先撞每天限额写了午夜，同一时刻另一个请求撞每分钟限额写“12 秒后”，会把午夜盖掉）。
+ * ① 先保证 gemini 这一行在（0001 建表时没有种子行；已有就不动，insert … on conflict do nothing）；
+ * ② 再带条件 update：exhausted_until 为空或比新值早才写（Postgres 按行加锁后重新判条件，两个请求同时写也是晚的那个留下）。
+ * PostgREST 的 or=(…) 里冒号、点是保留字符，时间串要用双引号包起来（supabase-js 会把整段再做 URL 编码）。
+ */
 export async function markExhausted(admin: StoreAdmin, untilMs: number): Promise<void> {
-  must(await tbl(priv(admin), 'ai_state').upsert({ provider: 'gemini', exhausted_until: new Date(untilMs).toISOString() }, { onConflict: 'provider' }), 'ai_state_write');
+  const iso = new Date(untilMs).toISOString();
+  must(await tbl(priv(admin), 'ai_state').upsert({ provider: 'gemini' }, { onConflict: 'provider', ignoreDuplicates: true }), 'ai_state_write');
+  must(
+    await tbl(priv(admin), 'ai_state').update({ exhausted_until: iso }).eq('provider', 'gemini').or(`exhausted_until.is.null,exhausted_until.lt."${iso}"`),
+    'ai_state_write',
+  );
 }
 
 /** ai-voice 失败：固定错误码 + status / type / bytes 区间（架构审第九节第 2 条；不写转写、正文、请求头） */
