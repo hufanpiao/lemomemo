@@ -1,4 +1,4 @@
--- 20261114200000_vault_fn_grants.sql：给 fn_vault 补 private.note_vectors 的列级 select (user_id, note_id, image_id)（B5 隐私记 store-it 真库实测）。
+-- 20261114230000_vault_fn_grants.sql：给 fn_vault 补 private.note_vectors 的列级 select (user_id, note_id, image_id)（B5 隐私记 store-it 真库实测）。
 -- 为什么：vault 函数移进、移出隐私记时（supabase/functions/vault/store.ts 的 dropVectors）要删这条随手记和它图片的旧向量：
 --   delete from private.note_vectors where user_id = … and (note_id = … or image_id in (…))
 --   Postgres 规定 delete 的 where 里引用到的列要有 select 权限；0007 只给了 fn_vault 表级 delete，在 lemo-e2e 上实测回

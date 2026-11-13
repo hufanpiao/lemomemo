@@ -1,4 +1,4 @@
--- 迁移 20261114210000_vault_image_fn_ai_bytes.sql：fn_ai 对 public.note_images 的列级 select 加上 bytes（B5 隐私记整块评审第 3、9 条）
+-- 迁移 20261114231000_vault_image_fn_ai_bytes.sql：fn_ai 对 public.note_images 的列级 select 加上 bytes（B5 隐私记整块评审第 3、9 条）
 -- 覆盖：
 --   ① 授权形状：fn_ai 在 note_images 上能 select bytes，还是没有表级 select（path 以外的列照旧按 0003 的清单）；
 --   ② vault-image 的 imageMeta 那一句（supabase/functions/vault-image/store.ts）以 fn_ai 跑得通：本人没删的行读得到 bytes，已删的行读不到；
