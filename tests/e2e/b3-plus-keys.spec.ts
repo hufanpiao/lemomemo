@@ -3,6 +3,7 @@
 //   （拦掉 TypeBar 那一块的请求模拟，小气泡、按住手势也在这一块里；SW 也拦掉，免得它从缓存里给）
 // • Ctrl+N 打开打字条（焦点在输入框里）；记下一条以后打字条自动收起（R-392），这时按 Ctrl+Z 撤销这一批，提示条收起
 // • 点“＋”冷启动当场聚焦（Q-24）、原地聚焦（Q-8）、贴底浮条按钮按下不让输入框失焦（Q-25）
+// • 键盘弹着时底栏、“＋”藏起不上移，打字条贴键盘，收起后原样（R-389）
 import type { Page } from '@playwright/test';
 import { waitVoiceHost } from './fake-media.ts';
 import { expect, test } from './session-fixture.ts';
@@ -195,4 +196,62 @@ test.describe('中文相对时刻（R-374）', () => {
     await expect(row).toContainText('开会');
     await expect(row).not.toContainText('半小时');
   });
+});
+
+// R-389（负责人 11-11“输入的时候导航栏不应该跟着升上来”，弹窗选“底栏和＋都不浮上来”）：键盘弹着时底栏、“＋”藏着（留在屏幕底、被键盘盖住），
+// 打字条直接贴键盘上沿；收起键盘后底栏、“＋”原样回来。真浏览器弹不出 iOS 键盘，这里照 platform/viewport.ts 键盘弹着时写的根节点几样
+// （data-kbo、data-kbhide、--kb）摆出来，守样式这一侧：键盘高度、主屏幕版布局视口被压矮的真实样子只能 iPhone 看（视口监听本身在 viewport-closed.test.ts）
+test.describe('键盘弹着时底栏和“＋”不跟着上来（R-389）', () => {
+  test.use({ loggedIn: true, viewport: { width: 390, height: 844 }, timezoneId: 'Asia/Seoul' });
+
+  for (const route of ['today', 'todos', 'notes']) {
+    test(`${route}：键盘弹着底栏、“＋”藏起不上移；收起后位置和平时一样`, async ({ page }) => {
+      await page.goto(`/app/#/${route}`);
+      await expect(page.getByTestId('tabbar-add')).toBeVisible({ timeout: 20_000 });
+      const rect = (id: string) =>
+        page.evaluate((i) => {
+          const r = (document.querySelector(`[data-testid="${i}"]`) as HTMLElement).getBoundingClientRect();
+          return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) };
+        }, id);
+      const before = { bar: await rect('tabbar'), add: await rect('tabbar-add') };
+      /** 照 viewport.ts 摆键盘：kb 是键盘压住布局视口的高度（浏览器里 > 0，iOS 主屏幕版布局视口自己被压矮时是 0）；null = 收起 */
+      const keyboard = (kb: number | null) =>
+        page.evaluate((k) => {
+          const r = document.documentElement;
+          if (k === null) {
+            for (const a of ['data-kbo', 'data-kbhide']) r.removeAttribute(a);
+            r.style.removeProperty('--kb');
+            return;
+          }
+          r.setAttribute('data-kbo', '1');
+          r.setAttribute('data-kbhide', '1');
+          if (k > 0) r.style.setProperty('--kb', `${k}px`);
+          else r.style.removeProperty('--kb');
+        }, kb);
+      for (const kb of [300, 0]) {
+        await keyboard(kb);
+        await expect(page.getByTestId('tabbar')).toBeHidden();
+        await expect(page.getByTestId('tabbar-add')).toBeHidden();
+        // 藏是 visibility，不是挪：位置还在屏幕底，没有往上跑
+        expect(await rect('tabbar'), '底栏没跟着键盘上移').toEqual(before.bar);
+        expect(await rect('tabbar-add'), '“＋”没跟着键盘上移').toEqual(before.add);
+      }
+      // 今天、待办：打字条贴键盘上沿（下沿 = 布局视口底 − --kb）
+      if (route !== 'notes') {
+        await keyboard(null);
+        await page.getByTestId('tabbar-add').click();
+        await expect(page.getByTestId('type-bar')).toBeVisible();
+        for (const kb of [300, 0]) {
+          await keyboard(kb);
+          const inner = await page.evaluate(() => window.innerHeight);
+          await expect.poll(async () => (await rect('type-bar')).bottom, '打字条贴着键盘').toBe(inner - kb);
+        }
+      }
+      await keyboard(null);
+      await expect(page.getByTestId('tabbar')).toBeVisible();
+      await expect(page.getByTestId('tabbar-add')).toBeVisible();
+      expect(await rect('tabbar'), '收起后底栏原样').toEqual(before.bar);
+      expect(await rect('tabbar-add'), '收起后“＋”原样').toEqual(before.add);
+    });
+  }
 });

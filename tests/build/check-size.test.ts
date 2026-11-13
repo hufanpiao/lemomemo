@@ -106,20 +106,21 @@ describe('首屏净增额度（按批次，R-379）：超过 当前批次的基�
     expect(() => netGrowthCheck(1, { current: 'B4', batches: { B4: { ...cfg, baseline: 100, limitBytes: -1 } } }, 'preview')).toThrow('B4.limitBytes 不是非负整数');
   });
 
-  it('仓库里的基线文件：当前批次 B4（R-379），额度 1024 B、管 preview 和 e2e、出处写 R-379；基线没定时是 null（关卡跳过），定了就是正整数；B3 段原样留作记录', () => {
+  it('仓库里的基线文件：当前批次 B5（R-418），额度 1024 B、管 preview 和 e2e、出处写 R-418；基线没定时是 null（关卡跳过），定了就是正整数；B3、B4 段原样留作记录', () => {
     const data = JSON.parse(readFileSync(join(ROOT, 'build', 'first-screen-baseline.json'), 'utf8'));
     const { batch, cfg } = currentBatch(data);
-    expect(batch).toBe('B4');
-    expect(cfg.limitBytes).toBe(1024); // R-379：B4 这一批首屏净增 ≤ 1 KB，标准同 B3
+    expect(batch).toBe('B5');
+    expect(cfg.limitBytes).toBe(1024); // R-418：B5 这一批首屏净增 ≤ 1 KB，标准同 B3、B4
     expect(cfg.modes).toEqual(['preview', 'e2e']);
-    expect(cfg._出处).toMatch(/^R-379/);
+    expect(cfg._出处).toMatch(/^R-418/);
     expect(data.batches.B3).toMatchObject({ limitBytes: 1096, modes: ['preview', 'e2e'], baseline: 111826 });
+    expect(data.batches.B4).toMatchObject({ limitBytes: 1024, modes: ['preview', 'e2e'], baseline: 114294 });
     if (cfg.baseline === null) {
-      expect(netGrowthCheck(1, data, 'preview').skip).toContain('B4 基线还没定');
+      expect(netGrowthCheck(1, data, 'preview').skip).toContain('B5 基线还没定');
       return;
     }
     expect(Number.isInteger(cfg.baseline) && cfg.baseline > 0).toBe(true);
-    expect(netGrowthCheck(cfg.baseline + cfg.limitBytes + 1, data, 'preview').error).toContain(netGrowthMessage('B4'));
+    expect(netGrowthCheck(cfg.baseline + cfg.limitBytes + 1, data, 'preview').error).toContain(netGrowthMessage('B5'));
     expect(netGrowthCheck(cfg.baseline + cfg.limitBytes, data, 'e2e').error).toBeNull();
   });
 

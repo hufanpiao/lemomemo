@@ -18,7 +18,8 @@
 //   收起后再点“＋”：App 每次打开带新的 opened 序号，序号变了就重新画出打字条并聚焦。
 //   用 click 不用 pointerup：click 是一次点按的最后一个事件，处理时这一层还在，卸掉以后不会再有事件落到后面看不清的按钮上（不点穿）；
 //   拖动、滚动浏览器本来就不发 click。底栏、“＋”、提示条、打字条都在这一层上面，点它们照原来的行为
-//   确认行（补记 / 记到）、正在整理时只收键盘不收起：手上还有没落定的内容（原话、等确认那条），按负责人“有字时保留输入框不动”处理
+//   确认行（补记 / 记到）、正在整理时只收键盘不收起：手上还有没落定的内容（原话、等确认那条），按负责人“有字时保留输入框不动”处理。
+//   每次点都记一行运行日志 typebar blank act=blur|close len= asking= status=（只记字数，不记字）
 // • 聚焦一律原地聚焦（台账 Q-8，platform/viewport.ts 文件头）：iPhone 上系统为了露出输入框会把页面滚一段，滚过以后光标画到“展开编辑”左边；
 //   打开时 focusInPlace，输入框挂 inPlaceTouchStart / inPlaceTouchEnd（没聚焦时的一下点改成原地聚焦）。打字条贴键盘照旧靠 --dock-bottom
 // • form 挂 onMouseDown={keepFieldFocus}（台账 Q-25）：按钮上按下不让输入框失焦，键盘不收、按钮不挪，“记下”等第一下就点得动；
@@ -157,9 +158,12 @@ export default function TypeBar({ day, callAi, writer, online, onExpand, onEdit,
     },
   });
 
-  /** 点后面那层液态玻璃 = 点页面空白处（Q-10）：手上有没落定的只收键盘，别的等同“收起” */
+  /** 点后面那层液态玻璃 = 点页面空白处（Q-10 / R-390）：手上有没落定的只收键盘，别的等同“收起”。
+   *  记一行 typebar blank act=blur|close（只记字数、确认行在不在、状态，不记字），以后靠日志看点空白走了哪一支 */
   const tapMist = (): void => {
-    if (unsettled(s)) input.current?.blur();
+    const keep = unsettled(s);
+    rlog(`typebar blank act=${keep ? 'blur' : 'close'} len=${s.text.trim().length} asking=${s.asking ? 1 : 0} status=${s.status}`);
+    if (keep) input.current?.blur();
     else close();
   };
   const onSubmit = (e: FormEvent) => {
