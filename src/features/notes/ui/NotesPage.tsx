@@ -282,7 +282,6 @@ function NotesList() {
   );
 }
 
-/** 列表行中间的字：标题；摘要 · 分类（+ AI 小标）；只读行再在下面单独一行标“要新版本” */
 /** “附件 N”（B4b-1，线框 sAtt 第三张 ATB：列表行尾、瀑布流卡片底部）；没附件不画 */
 function FilesMark({ n }: { n: number }) {
   const t = useNotesT();
@@ -293,6 +292,7 @@ function FilesMark({ n }: { n: number }) {
   ) : null;
 }
 
+/** 列表行中间的字：标题；摘要 · 分类（+ AI 小标）；只读行再在下面单独一行标“要新版本” */
 function RowText({ it, ai, ro }: { it: NoteItem; ai: ReactNode; ro: ReactNode }) {
   return (
     <span className={row.ltext}>

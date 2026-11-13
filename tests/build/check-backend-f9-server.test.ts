@@ -57,11 +57,11 @@ describe('D2-3：三个违规样例', () => {
 });
 
 describe('D2-4：真仓库', () => {
-  it('config.toml 里 verify_jwt = false 正好是 account-purge、ai-classify、anniv-roll、claude-intake、push-dispatch、usage-report 六个（B3 加 claude-intake，M2；B4 加 ai-classify；B5 加 anniv-roll）', () => {
+  it('config.toml 里 verify_jwt = false 正好是 account-purge、ai-classify、anniv-roll、claude-intake、file-check、push-dispatch、usage-report 七个（B3 加 claude-intake，M2；B4 加 ai-classify；B5 加 anniv-roll；B4b-1 加 file-check：cron 补扫带 x-cron-secret，check 一支函数里 requireActiveUser）', () => {
     const toml = readFileSync(join(ROOT, 'supabase', 'config.toml'), 'utf8');
     const off = [...toml.matchAll(/^\[functions\.([\w-]+)\]\r?\nverify_jwt = false\r?$/gm)].map((m) => m[1]).sort();
-    expect(off).toEqual(['account-purge', 'ai-classify', 'anniv-roll', 'claude-intake', 'push-dispatch', 'usage-report']);
-    expect(toml.match(/^\s*verify_jwt\s*=\s*false/gm)?.length).toBe(6);   // 注释里写的不算
+    expect(off).toEqual(['account-purge', 'ai-classify', 'anniv-roll', 'claude-intake', 'file-check', 'push-dispatch', 'usage-report']);
+    expect(toml.match(/^\s*verify_jwt\s*=\s*false/gm)?.length).toBe(7);   // 注释里写的不算
   });
 });
 

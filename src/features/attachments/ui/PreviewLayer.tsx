@@ -52,6 +52,7 @@ export default function PreviewLayer({ file, desk, onClose, onDownload, onFail }
 
   const local = useCallback(async (w: FrameWay, fallback: boolean) => {
     setPhase({ k: 'loading' });
+    setSt(null);   // 上一次沙箱报的页数、工作表、截断提示不沿用（整块评审第 13 条）
     const r = await openBytes(file);
     if (!live.current) return;
     if (!r.ok) return fail(`att.open.${r.why}`, r.why);
@@ -60,6 +61,7 @@ export default function PreviewLayer({ file, desk, onClose, onDownload, onFail }
 
   const ms = useCallback(async () => {
     setPhase({ k: 'loading' });
+    setSt(null);
     const url = await msViewerUrl(file);
     if (!live.current) return;
     if (url === null) return void local('pptx', true);
@@ -67,6 +69,7 @@ export default function PreviewLayer({ file, desk, onClose, onDownload, onFail }
   }, [file, local]);
 
   useLayoutEffect(() => {
+    live.current = true;   // 开发版 StrictMode 会挂、卸、再挂一遍：再挂时改回 true（整块评审第 3 条）
     back.current = document.activeElement;
     closeBtn.current?.focus();
     return () => {
@@ -266,7 +269,7 @@ function SandboxFrame(p: { frame: React.RefObject<HTMLIFrameElement | null>; way
       if (!m) return;
       if (m.t === 'ready' && !sent) {
         sent = true;
-        const b = cbs.current.bytes.slice(0);
+        const b = cbs.current.bytes.slice(0);   // 交出的是副本：bytes 是缓存里那一份，退路重挂时还要再发
         win.postMessage({ t: 'open', way: cbs.current.way, bytes: b, lang: lang === 'ko-KR' ? 'ko' : 'zh' } satisfies ToFrame, '*', [b]);
       } else if (m.t === 'state') {
         if (!logged) rlog(`att preview open way=${cbs.current.way} ok pages=${m.pages}`);

@@ -6,12 +6,12 @@
 // 纯 TS：不准 import React（A1）
 import { DOC_TYPES, type DocKind } from '../../../../shared/manifests/attachments.ts';
 import { sanitizeFileName } from '../../../../shared/logic/files/file-name.ts';
+import { FILE_MAX_BYTES } from '../../../../shared/logic/files/limits.ts';
 import { sniffFile, zipBombCheck } from '../../../../shared/logic/files/file-sniff.ts';
 import { inflateRaw } from '../../../../shared/logic/files/inflate.ts';
 import type { RejectReason } from '../../../../shared/schema/attachments.ts';
 import { sha256Hex } from '../../../platform/sha256.ts';
 
-export const MAX_BYTES = 10_485_760;
 
 export interface Prepared {
   ok: true;
@@ -32,7 +32,7 @@ async function bytesOf(f: Blob): Promise<Uint8Array> {
 
 export async function prepareFile(file: File): Promise<Prepared | PrepFail> {
   if (file.size === 0) return { ok: false, reason: 'empty', detail: 'empty' };
-  if (file.size > MAX_BYTES) return { ok: false, reason: 'too_big', detail: 'too_big' };
+  if (file.size > FILE_MAX_BYTES) return { ok: false, reason: 'too_big', detail: 'too_big' };
   const bytes = await bytesOf(file);
   const s = await sniffFile(bytes, inflateRaw);
   if (!s.ok) return { ok: false, reason: s.reason, detail: s.detail };

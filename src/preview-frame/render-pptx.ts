@@ -1,5 +1,5 @@
 // PPT 的本机退路（架构 5.13 第 3 点“退路”；线框 sPrev“微软 20 秒没打开时：首页缩略图 + 每页文字”）。
-// 只读 docProps/thumbnail.jpeg（首页缩略图，转成 blob: 地址）和 ppt/slides/slideN.xml 里 <a:t> 的文字，按页列出：第一段当标题，后面并成一行小字。
+// 只读 docProps/thumbnail.jpeg（首页缩略图，转成 blob: 地址）和 ppt/slides/slideN.xml 里 <a:t> 的文字，按页列出（前面是页码数字）：第一段当标题，后面并成一行小字。
 // 不执行、不渲染 PPT 里的任何别的东西；XML 用 DOMParser 解析（不插进页面），文字一律 textContent。
 import JSZip from './zip-lite.ts';
 import type { Post, View } from './main.ts';
@@ -8,7 +8,7 @@ const SLIDE = /^ppt\/slides\/slide(\d+)\.xml$/;
 const A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 export const MAX_SLIDES = 500;
 
-export async function render(root: HTMLElement, bytes: ArrayBuffer, post: Post, lang: 'zh' | 'ko'): Promise<View> {
+export async function render(root: HTMLElement, bytes: ArrayBuffer, post: Post): Promise<View> {
   const zip = await JSZip.loadAsync(bytes);
   const box = document.createElement('div');
   box.className = 'pv-slides';
@@ -17,7 +17,7 @@ export async function render(root: HTMLElement, bytes: ArrayBuffer, post: Post, 
     const img = document.createElement('img');
     img.className = 'pv-thumb';
     img.alt = '';
-    img.src = URL.createObjectURL(new Blob([await thumb.async('arraybuffer')], { type: 'image/jpeg' }));
+    img.src = URL.createObjectURL(new Blob([await thumb.async('arraybuffer')], { type: 'image/jpeg' }));   // 不 revoke：随沙箱 iframe 一起释放（main.ts）
     box.append(img);
   }
   const slides = Object.keys(zip.files)
@@ -28,12 +28,12 @@ export async function render(root: HTMLElement, bytes: ArrayBuffer, post: Post, 
     .slice(0, MAX_SLIDES);
   const parser = new DOMParser();
   for (const s of slides) {
-    const xml = parser.parseFromString(await zip.file(s.name)!.async('string'), 'application/xml');
+    const xml = parser.parseFromString((await zip.file(s.name)?.async('string')) ?? '', 'application/xml');
     const texts = [...xml.getElementsByTagNameNS(A_NS, 't')].map((t) => (t.textContent ?? '').trim()).filter(Boolean);
     const row = document.createElement('div');
     row.className = 'pv-slide';
     const no = document.createElement('span');
-    no.textContent = lang === 'ko' ? `${s.i}쪽` : `第 ${s.i} 页`;
+    no.textContent = String(s.i);   // 只写页码数字：沙箱里没有词典（A20），数字中韩都看得懂
     const tx = document.createElement('div');
     const b = document.createElement('b');
     b.textContent = texts[0] ?? '';

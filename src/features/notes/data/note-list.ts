@@ -13,6 +13,7 @@
 // 纯 TS：不准 import React（A1）
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
+import { isShownFile } from '../../../../shared/logic/files/shown-file.ts';
 import { isLiveRow } from '../../../../shared/logic/live-row.ts';
 import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
 import { categoryNames, categoryResolver, type Row } from '../../../core/categories.ts';
@@ -113,11 +114,11 @@ export function imagesByNote(images: readonly Row[]): Map<string, NoteImage[]> {
   return out;
 }
 
-/** 每条随手记活着的附件个数（note_files，附件功能的表；只数个数，不看内容） */
+/** 每条随手记的附件个数（note_files；口径同附件区列表：isShownFile；只数个数，不看内容） */
 export function fileCounts(files: readonly Row[]): Map<string, number> {
   const out = new Map<string, number>();
   for (const r of files) {
-    if (!isLiveRow(r)) continue;
+    if (!isShownFile(r)) continue;
     const noteId = str(r['note_id']);
     if (noteId !== '') out.set(noteId, (out.get(noteId) ?? 0) + 1);
   }

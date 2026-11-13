@@ -9,7 +9,7 @@
 //   网络、5xx、限流按 2 s、5 s、15 s 退避重试三次，还不行按“没传上”；account 类（停用、会话被吊销）走 accountExitOf → 离开本机（S13）
 // • 删除：发送失败区里还有这一行的新建 → 放弃（resolveFailedCreate drop）；否则软删（deleted_at），进“最近删除”
 // 纯 TS：不准 import React（A1）
-import { rowSyncOf as coreRowSyncOf, type QueueItem, type RowSync } from '../../../core/row-sync.ts';
+import { PUT_BACKOFF, putWithBackoff, rowSyncOf as coreRowSyncOf, type QueueItem, type RowSync } from '../../../core/row-sync.ts';
 import type { FileError, UploadResult } from '../../../platform/files.ts';
 
 /** 插图失败的几种提示（i18n 键 notes.img.fail.<键>） */
@@ -80,22 +80,14 @@ export async function uploadPair(
   full: Blob,
   thumb: Blob,
   sleep: (ms: number) => Promise<void>,
-  backoff: readonly number[] = [2000, 5000, 15000],
+  backoff: readonly number[] = PUT_BACKOFF,
 ): Promise<'ok' | ImgFailKey | FileError> {
   for (const [p, b] of [
     [path, full],
     [thumbPath(path), thumb],
   ] as const) {
-    for (let i = 0; ; i++) {
-      const r = await up(p, b);
-      if (r.ok) break;
-      if (r.kind === 'account') return r;
-      const k = uploadFailKey(r);
-      if (k !== null) return k;
-      const wait = backoff[i];
-      if (wait === undefined) return 'retry';
-      await sleep(wait);
-    }
+    const r = await putWithBackoff<ImgFailKey>(() => up(p, b), uploadFailKey, 'retry', sleep, backoff);
+    if (r !== 'ok') return r;
   }
   return 'ok';
 }

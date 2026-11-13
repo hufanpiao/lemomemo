@@ -24,8 +24,10 @@ export async function fileRow(tx: Tx, uid: string, id: string): Promise<FileRow 
 
 /** 补扫的定位：pending、普通、没删、created_at 早于 before 的 (user_id, id) */
 export async function staleIds(tx: Tx, before: number, limit: number): Promise<{ user_id: string; id: string }[]> {
+  // 随机挑（整块评审第 1 条）：按 created_at 取最早的 50 行时，原文件还不在（24 小时内只回 incomplete、状态不变）、账号停用（跳过）的行
+  //   每轮都占着名额，攒够 50 行后更新的 pending 永远轮不到；随机挑每轮换一批，不用另记游标或重试次数
   const rows = await tx`select user_id, id from private.scan_note_files
-    where check_status = 'pending' and not is_vault and created_at < ${before} order by created_at limit ${limit}`;
+    where check_status = 'pending' and not is_vault and created_at < ${before} order by random() limit ${limit}`;
   return rows.map((r) => ({ user_id: String(r.user_id), id: String(r.id) }));
 }
 

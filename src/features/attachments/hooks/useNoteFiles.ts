@@ -39,16 +39,7 @@ export function useNoteFiles(noteId: string | null): AttItem[] {
   }, [rows, pending, noteId]);
 }
 
-const subOnline = (fn: () => void): (() => void) => {
-  window.addEventListener('online', fn);
-  window.addEventListener('offline', fn);
-  return () => {
-    window.removeEventListener('online', fn);
-    window.removeEventListener('offline', fn);
-  };
-};
-/** navigator.onLine 明说断网才算离线（没有这个属性的环境当在线） */
-export const useOnline = (): boolean => useSyncExternalStore(subOnline, () => navigator.onLine !== false, () => true);
+export { useOnline } from '../../../kit/hooks/useOnline.ts';
 
 /** 上传器的提示（本机判不过、写行被拒、传不上、file-check 没收） */
 export function useAttNotices(fn: (n: AttNotice) => void): void {

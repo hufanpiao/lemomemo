@@ -64,6 +64,12 @@ const PLAN: Plan = new Map<string, Entry>([
     'admin-disabled': { file: 'tests/functions/vault-image.test.ts', title: 'TC-B1-10 vault-image：管理员停用的账号回 403 account_disabled，不取图' },
     'no-profile': { file: 'tests/functions/vault-image.test.ts', title: 'TC-B1-10 vault-image：没有 profiles 行的账号回 403 account_disabled，不写对象' },
   } }],
+  // B4b-1：check 一支 index.ts 接 requireActiveUser；core 单测用假鉴权核对原样回 account_disabled（写法同 vault-image）。
+  //   cron 的 sweep 一支按人补判前经 _shared/auth.ts 的 isUsable 跳过停用账号（index.ts 的 store.stale）
+  ['file-check', { kind: 'jwt', covers: {
+    'admin-disabled': { file: 'tests/edge/file-check.test.ts', title: 'TC-B1-10 file-check：管理员停用的账号回 403 account_disabled，不读对象、不改状态' },
+    'no-profile': { file: 'tests/edge/file-check.test.ts', title: 'TC-B1-10 file-check：没有 profiles 行的账号回 403 account_disabled，不删对象' },
+  } }],
   ['account-purge', { kind: 'all-users', why: 'TC-B1-109：照常处理到期的冷静期账号，故意不用 account_usable；pg_cron 带 x-cron-secret' }],
   ['invite-signup', { kind: 'no-user', why: '架构第 6 节：匿名 + Turnstile，还没有账号' }],
   ['usage-report', { kind: 'no-user', why: '架构第 6 节：x-ops-secret，只出全站统计' }],

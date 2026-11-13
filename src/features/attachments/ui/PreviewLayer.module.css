@@ -2,7 +2,7 @@
 
 .scrim {
   position: fixed;
-  z-index: 70;
+  z-index: var(--z-dialog);
   inset: 0;
   background: var(--scrim);
 }
@@ -25,7 +25,7 @@
 
 .full {
   inset: 0;
-  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  padding: var(--inset-top) 0 var(--inset-bottom);
 }
 
 .top {

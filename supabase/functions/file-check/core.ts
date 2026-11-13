@@ -1,5 +1,5 @@
 // file-check：附件上传完的服务器复查（架构 5.13 第 2 点“服务器 fn file-check”、第 6 节 file-check 行、架构约定 9.7；B4b-1）。
-// 纯逻辑，依赖由 index.ts 注入，Vitest 直接测（tests/functions/file-check.test.ts）。
+// 纯逻辑，依赖由 index.ts 注入，Vitest 直接测（tests/edge/file-check.test.ts）。
 // • 客户端 {action: check, id}（JWT，requireActiveUser）：每人每分钟 30 次；只认本人、普通（is_vault = false）、没删的行，别的一律 404；
 //   行已经不在 pending 就直接回现在的结果（重复调用、补扫先判过了）。
 // • cron {action: sweep}（x-cron-secret）：一次最多 BATCH 行 created_at 早于 30 分钟、还在 pending 的（免得和正在上传的客户端抢），写心跳 file-check。
@@ -15,15 +15,20 @@ import { errorResponder, json, NO_STORE, cronGate } from '../_shared/http.ts';
 import { readJsonCapped } from '../_shared/body.ts';
 import type { AuthResult } from '../_shared/auth-result.ts';
 import { utcMinuteKey } from '../_shared/rate-key.ts';
-import type { FileCheckReq, FileCheckRes, RejectReason } from '../_shared/gen/schema/attachments.ts';
-import type { DocKind } from '../_shared/gen/manifests/attachments.ts';
-import type { SniffResult } from '../_shared/gen/logic/files/file-sniff.ts';
+import { FILE_MAX_BYTES } from '../_shared/gen/logic/files/limits.ts';
+
+// 请求、响应、判型结果只写这里用到的形状，不引 _shared/gen 下的 schema、清单（同 vault-image/core.ts：那些模块带 npm:zod，
+//   Vitest 的 tsc 解析不了）；index.ts 把 shared 的 fileCheckReq、sniffFile、noteFilePath 接进来时，deno check 按这里的形状核对
+/** 同 shared/schema/attachments.ts 的 REJECT_REASONS */
+export type RejectReason = 'unknown' | 'too_big' | 'bad_archive' | 'encrypted';
+type FileCheckReq = { action: 'check'; id: string } | { action: 'sweep' };
+type FileCheckRes = { status: 'ok' } | { status: 'rejected'; reason?: RejectReason } | { status: 'incomplete' };
+type SniffResult = { ok: true; kind: string } | { ok: false; reason: Exclude<RejectReason, 'too_big'> };
 
 export const RATE_PER_MIN = 30;
 export const BATCH = 50;
 export const SWEEP_AFTER_MS = 30 * 60_000;
 export const MISSING_GIVE_UP_MS = 24 * 3600_000;
-export const MAX_BYTES = 10_485_760;
 export const BUCKET = 'files';
 
 /** fn_ai 读到的一行（只用到这些列） */
@@ -31,7 +36,7 @@ export interface FileRow {
   id: string;
   user_id: string;
   note_id: string;
-  kind: DocKind;
+  kind: string;
   bytes: number;
   sha256: string;
   has_thumb: boolean;
@@ -66,7 +71,7 @@ export interface Deps {
   r2: Obj | null;
   sniff(bytes: Uint8Array): Promise<SniffResult>;
   sha256Hex(bytes: Uint8Array): Promise<string>;
-  path(userId: string, noteId: string, id: string, kind: DocKind): string;
+  path(userId: string, noteId: string, id: string, kind: string): string;
   thumbPath(userId: string, noteId: string, id: string): string;
   now(): number;
   log(code: string): void;
@@ -97,9 +102,9 @@ export async function verify(row: FileRow, deps: Deps, r2: Obj, store: Store, fr
     return { status: 'incomplete' };
   }
   if (!fromCron && row.has_thumb && !(await r2.head(BUCKET, thumb))) return { status: 'incomplete' };
-  if (obj.contentLength !== null && obj.contentLength > MAX_BYTES) return reject('too_big');
+  if (obj.contentLength !== null && obj.contentLength > FILE_MAX_BYTES) return reject('too_big');
   const bytes = await readAll(obj.body);
-  if (bytes.length > MAX_BYTES) return reject('too_big');
+  if (bytes.length > FILE_MAX_BYTES) return reject('too_big');
   if (bytes.length !== row.bytes) return reject('unknown');
   if ((await deps.sha256Hex(bytes)) !== row.sha256) return reject('unknown');
   const s = await deps.sniff(bytes);

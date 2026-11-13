@@ -2,8 +2,7 @@
 // • 只列活着的（没删、没撤销）普通附件；隐私记的行（is_vault）这一批不出（隐私记附件没做，见交回报告）
 // • 按 id 排（UUID v7，按加入先后）
 // 纯 TS：不准 import React（A1）
-import { DOC_TYPES, type DocKind } from '../../../../shared/manifests/attachments.ts';
-import { isLiveRow } from '../../../../shared/logic/live-row.ts';
+import { isShownFile } from '../../../../shared/logic/files/shown-file.ts';
 import type { FileRef } from './attach-open.ts';
 
 export type Row = { id: string } & Record<string, unknown>;
@@ -15,11 +14,10 @@ export interface NoteFile extends FileRef {
   check: 'pending' | 'ok' | 'rejected';
 }
 
-const isKind = (k: unknown): k is DocKind => typeof k === 'string' && Object.hasOwn(DOC_TYPES, k);
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 function toFile(r: Row): NoteFile | null {
-  if (!isLiveRow(r) || r['is_vault'] === true || !isKind(r['kind'])) return null;
+  if (!isShownFile(r)) return null;
   const noteId = str(r['note_id']);
   const path = str(r['path']);
   if (noteId === '' || path === '') return null;

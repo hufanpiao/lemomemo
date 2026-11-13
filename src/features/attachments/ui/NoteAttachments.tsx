@@ -74,11 +74,13 @@ export default function NoteAttachments({ noteId, disabled, onImages }: NoteAtta
   const add = useCallback(
     async (files: readonly File[]) => {
       if (noteId === null) return;
+      setMsg(null);
       const pics = files.filter(isImage);
       if (pics.length && onImages) onImages(pics);
       for (const f of files.filter((x) => !isImage(x))) {
         const r: AddResult = await attUploader().add(noteId, f);
-        if (!r.ok && r.key !== 'silent') setMsg({ key: `att.fail.${r.key}`, name: f.name });
+        // 别的失败上传器自己发提示（useAttNotices 收）；隐私记、只读这两种它不发
+        if (!r.ok && (r.key === 'private' || r.key === 'readonly')) setMsg({ key: `att.fail.${r.key}`, name: f.name });
       }
     },
     [noteId, onImages],
@@ -86,17 +88,23 @@ export default function NoteAttachments({ noteId, disabled, onImages }: NoteAtta
 
   const drag = useDropAndPaste(canAdd && online, add);
 
+  // 旧提示在下一次操作开始时清掉（整块评审第 16 条），不另起计时
   const open = (f: NoteFile): void => {
+    setMsg(null);
     if (!online && !inMemory(f.id)) return setMsg({ key: 'att.open.offline', name: f.name });
     setPreview(f);
   };
   const save = async (f: NoteFile): Promise<void> => {
+    setMsg(null);
     const r = await download(f);
     if (!r.ok) setMsg({ key: `att.open.${r.why}`, name: f.name });
   };
   const remove = async (id: string, name: string): Promise<void> => {
-    if (await attUploader().remove(id)) setUndo({ id, name });
-    else setMsg({ key: 'att.fail.write', name });
+    // 只有软删的才给“撤销”；行没写成被放弃的、本来就没了的，删掉就是删掉
+    setMsg(null);
+    const r = await attUploader().remove(id);
+    if (r === 'soft') setUndo({ id, name });
+    else if (r === false) setMsg({ key: 'att.fail.write', name });
   };
 
   const total = items.reduce((n, it) => n + (it.file?.bytes ?? it.pending?.bytes ?? 0), 0);
@@ -308,6 +316,9 @@ const hasFiles = (d: DataTransfer | null): boolean => d !== null && [...d.types]
 function useDropAndPaste(on: boolean, add: (f: File[]) => Promise<void>): number {
   const [n, setN] = useState(0);
   const depth = useRef(0);
+  // add 每次父组件重渲染都可能是新的：放进 ref，监听只随 on 绑一次（正文打字时不解绑重绑、不把拖着的遮罩清掉，整块评审第 8 条）
+  const addRef = useRef(add);
+  addRef.current = add;
   useEffect(() => {
     if (!on) {
       setN(0);
@@ -334,14 +345,16 @@ function useDropAndPaste(on: boolean, add: (f: File[]) => Promise<void>): number
       setN(0);
       const fs = [...(e.dataTransfer?.files ?? [])];
       rlog(`att drop n=${fs.length}`);
-      if (fs.length) void add(fs);
+      if (fs.length) void addRef.current(fs);
     };
     const paste = (e: ClipboardEvent): void => {
       const fs = [...(e.clipboardData?.files ?? [])];
-      if (!fs.length) return;
+      // 从 Word、Excel 复制的内容常顺带一张 image/png：剪贴板里有文字就照常粘贴文字，不改成插图
+      const types = [...(e.clipboardData?.types ?? [])];
+      if (!fs.length || types.includes('text/plain') || types.includes('text/html')) return;
       e.preventDefault();
       rlog(`att paste n=${fs.length}`);
-      void add(fs);
+      void addRef.current(fs);
     };
     window.addEventListener('dragenter', enter);
     window.addEventListener('dragover', over);
@@ -356,6 +369,6 @@ function useDropAndPaste(on: boolean, add: (f: File[]) => Promise<void>): number
       window.removeEventListener('paste', paste);
       depth.current = 0;
     };
-  }, [on, add]);
+  }, [on]);
   return n;
 }

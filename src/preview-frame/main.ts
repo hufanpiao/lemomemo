@@ -13,6 +13,8 @@ export interface View {
   zoom(z: number): void;
   sheet(i: number): void;
 }
+// 不另写收尾：App 的 SandboxFrame 按阶段换 key，每换一次就是一个新的 iframe，一个沙箱只 open 一次；
+// 观察器、pdf.js 文档、blob: 地址随 iframe 一起释放（第二轮复查新发现 1）
 export type Post = (m: FromFrame) => void;
 
 const root = document.getElementById('preview');
@@ -34,7 +36,7 @@ async function open(m: Extract<ToFrame, { t: 'open' }>): Promise<void> {
       : m.way === 'docx' ? await import('./render-docx.ts')
       : m.way === 'xlsx' ? await import('./render-xlsx.ts')
       : await import('./render-pptx.ts');
-    view = await mod.render(root, m.bytes, post, m.lang);
+    view = await mod.render(root, m.bytes, post);
   } catch {
     root.replaceChildren();
     post({ t: 'error', why: 'render' });

@@ -1,4 +1,5 @@
 // 文档附件（0004_attachments.sql）：note_files、files 桶
+import { FILE_MAX_BYTES } from '../logic/files/limits.ts';
 import { defineManifest } from '../schema/manifest.ts';
 import { BY_USER, COMMON_COLS, SOFT_DELETE_COLS, UUID_RE } from './_common.ts';
 
@@ -44,7 +45,7 @@ export const attachments = defineManifest({
       systemCols: ['ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at', 'check_status', 'etag'], noConflict: ['updated_at'] },
   ],
   buckets: [
-    { name: 'files', store: 'r2', limits: { fileSizeLimit: 10485760, allowedMimeTypes: [...DOC_MIME, 'image/webp'] },
+    { name: 'files', store: 'r2', limits: { fileSizeLimit: FILE_MAX_BYTES, allowedMimeTypes: [...DOC_MIME, 'image/webp'] },
       pathPrefix: '<user_id>/', pathPattern: `^${UUID_RE}/${UUID_RE}/${UUID_RE}(\\.(${DOC_EXT})|\\.t\\.webp)$`,
       backup: 'weekly-s3', export: 'zip', countsToQuota: true,
       orphanSweep: { after: '24 hours', table: 'note_files', col: 'path' }, userLookup: { by: 'pathPattern', level: 1 } },

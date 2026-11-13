@@ -9,6 +9,9 @@
 // 判得出的 10 种附件类型 DocKind 和它们的 MIME 只在 shared/manifests/attachments.ts 的 DOC_TYPES 里列，这里只引类型
 import type { DocKind } from '../../manifests/attachments.ts';
 
+// shared 的 lib 里没有 DOM 类型：照 link.ts 只声明用到的 TextDecoder（浏览器、Deno、Node 都有）
+declare const TextDecoder: new () => { decode(bytes: Uint8Array): string };
+
 /** 三个家族：一行一个家族；三个 kind 字段受 DocKind 约束 */
 const FAMILIES = [
   {

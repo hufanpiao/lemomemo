@@ -5,7 +5,8 @@
 //   fn_ai 直连（_shared/db.ts 的 withAiUser / withAiScan）：public.note_files、private.scan_note_files、private.heartbeat（SQL 在 store.ts）。
 // R2：files 桶，令牌 R2_FN_*（8.6）：读原文件、查缩略图、被拒时删对象。
 // 环境变量：SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY；FN_AI_DB_URL；CRON_SECRET；R2_ENDPOINT、R2_FN_ACCESS_KEY_ID、R2_FN_SECRET_ACCESS_KEY、R2_BUCKET_PREFIX。
-// 版本门：check 一支照常查（客户端调）；sweep 免查（shared/version-gate-list.ts，pg_cron 调、没有客户端版本）。日志只记错误码。
+// 版本门：check 一支在入口照常查（客户端调）；带 x-cron-secret 的请求（pg_cron 的 sweep，没有客户端版本）跳过版本门，密钥由 core 的 cronGate 核；
+//   不进 shared/version-gate-list.ts 的免查名单（那份名单按方法整体免查，这里 POST 的 check 要查）。日志只记错误码。
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { authResult, isUsable, requireActiveUser } from '../_shared/auth.ts';
 import { withAiScan, withAiUser } from '../_shared/db.ts';

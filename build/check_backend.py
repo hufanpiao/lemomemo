@@ -369,6 +369,9 @@ EXPAND_DEPTH = 8
 PKG_DEP_FIELDS = ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
 # 版本号写法（^1.2.3、~1、>=1 <2、1.x、*、latest 这类 dist-tag）：包名就是键名本身，import 的 spec 已经能看出是什么包
 PKG_SEMVER = re.compile(r"^[\s\d.xX*^~<>=|v-]*$|^[A-Za-z][\w.-]*$")
+# 架构约定 9.7（B4b-1）：SheetJS 只用官方 tarball，package.json 写死这一个地址（integrity 在 package-lock.json）；
+#   只认“包名 xlsx + 这个地址”整对，别的地址、别的包名照旧报 F7；照别名展开，函数里 import 'xlsx' 按这个 https 地址查
+PKG_URL_OK = {"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"}
 
 
 def load_package_aliases(root, errors):
@@ -418,7 +421,7 @@ def load_package_aliases(root, errors):
             for k, v in deps.items():
                 if not isinstance(v, str):
                     errors.append(("F7", rel, 1, f"package.json 的 {field}.{k} 不是字符串，没法确认指到哪儿"))
-                elif v.startswith("npm:"):
+                elif v.startswith("npm:") or PKG_URL_OK.get(k) == v:
                     out.append((k, v, p.parent, False))
                     out.append((k + "/", v + "/", p.parent, False))
                 elif not PKG_SEMVER.match(v):

@@ -20,6 +20,8 @@ export async function render(root: HTMLElement, bytes: ArrayBuffer, post: Post):
   let zoom = 100;
   let current = 1;
   const drawn = new Set<number>();
+  // 缩放代号：缩放时 +1，画到一半的旧比例页画完发现代号变了就丢掉，不盖住新比例的页（整块评审第 10 条）
+  let gen = 0;
   const slots: HTMLDivElement[] = [];
   const first = await doc.getPage(1);
   const ratio = first.getViewport({ scale: 1 }).height / first.getViewport({ scale: 1 }).width;
@@ -28,6 +30,7 @@ export async function render(root: HTMLElement, bytes: ArrayBuffer, post: Post):
   async function draw(n: number): Promise<void> {
     if (drawn.has(n)) return;
     drawn.add(n);
+    const g = gen;
     const slot = slots[n - 1];
     if (!slot) return;
     const page = await doc.getPage(n);
@@ -39,11 +42,12 @@ export async function render(root: HTMLElement, bytes: ArrayBuffer, post: Post):
     c.className = 'pv-page';
     c.style.width = `${w}px`;
     await page.render({ canvas: c, viewport: vp }).promise;
+    if (g !== gen) return;
     slot.replaceChildren(c);
   }
 
   const near = new IntersectionObserver((es) => {
-    for (const e of es) if (e.isIntersecting) void draw(Number((e.target as HTMLElement).dataset['n']));
+    for (const e of es) if (e.isIntersecting) void draw(Number((e.target as HTMLElement).dataset['n'])).catch(() => undefined);   // 某一页画坏了就空着那一页，不影响别的页
   }, { rootMargin: '800px 0px' });
   const seen = new IntersectionObserver((es) => {
     const top = es.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
@@ -76,6 +80,7 @@ export async function render(root: HTMLElement, bytes: ArrayBuffer, post: Post):
     },
     zoom(z) {
       zoom = z;
+      gen++;
       drawn.clear();
       for (const s of slots) s.replaceChildren();
       layout();

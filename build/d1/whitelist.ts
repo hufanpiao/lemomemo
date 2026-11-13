@@ -65,7 +65,8 @@ export const COLUMN_GRANTS: Record<'fn_vault' | 'fn_ai', ColumnGrants> = {
       'bytes'],   // bytes：vault-image 上传按预登记的字节数核对（20261114210000，B5 整块评审第 3 条）
     'public.note_images:UPDATE': ['ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at'],
     'public.note_files:SELECT': ['id', 'user_id', 'note_id', 'kind', 'path', 'has_thumb', 'is_vault', 'name', 'mime', 'bytes',
-      'text_excerpt', 'text_enc', 'enc_key_id', 'deleted_at', 'etag', 'check_status', 'ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at'],
+      'text_excerpt', 'text_enc', 'enc_key_id', 'deleted_at', 'etag', 'check_status', 'ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at',
+      'sha256', 'created_at'],   // file-check 核哈希、补扫挑 30 分钟前的行（20261115000000，B4b-1）
     'public.note_files:UPDATE': ['check_status', 'etag', 'ai_status', 'skip_reason', 'ai_desc', 'ai_tags', 'ai_tries', 'ai_next_at'],
   },
 };

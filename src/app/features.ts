@@ -4,7 +4,6 @@
 // flags 为 null（本机还没缓存 config）时全挂
 import type { ComponentType, LazyExoticComponent } from 'react';
 import * as anniv from '../features/anniv/index.ts';
-import * as attachments from '../features/attachments/index.ts';
 import * as calendar from '../features/calendar/index.ts';
 import * as notes from '../features/notes/index.ts';
 import * as onboarding from '../features/onboarding/index.ts';
@@ -17,6 +16,7 @@ import * as todos from '../features/todos/index.ts';
 import * as vault from '../features/vault/index.ts';
 import type { RouteName } from './router.ts';
 
+// 功能 attachments 也不在这里登记（B4b-1）：没有页面（routes 空），只挂在随手记编辑器里；登记了会把它的懒加载表拉进首屏
 // 功能 auth 不在这里登记（K4 安全审查 7）：登录页是单独的入口 /app/auth/（src/auth/main.tsx），
 // 主 App 的依赖图里不能出现它的任何运行时代码（AuthPage 块、Turnstile、supabase 的登录调用）
 
@@ -33,13 +33,11 @@ interface FeatureEntry {
   flag?: string;
 }
 
-// 附件跟着随手记开关（recordKinds 里 image、file 的 flag 都是 note）
 const all: readonly FeatureEntry[] = [
   today,
   { routes: calendar.routes, flag: 'event' },
   { routes: todos.routes, flag: 'todo' },
   { routes: notes.routes, flag: 'note' },
-  { routes: attachments.routes, flag: 'note' },
   smartSearch,
   plus,
   // 只取路由：VaultParts（给随手记、设置用的懒加载块）不经这里进首屏的登记表

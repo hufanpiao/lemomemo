@@ -169,7 +169,7 @@ function harness(over: Partial<UploaderDeps> = {}) {
     exitOf: vi.fn(() => Promise.resolve('removed' as const)),
     leave: vi.fn(() => Promise.resolve()),
     dropFailed: vi.fn(() => Promise.resolve(true)),
-    softDelete: vi.fn(() => Promise.resolve(true)),
+    patch: vi.fn(() => Promise.resolve(true)),
     objectUrl: () => 'blob:local',
     revoke: vi.fn(),
     sleep: () => Promise.resolve(),
@@ -283,7 +283,7 @@ describe('上传器：先写行再传', () => {
     expect(h.deps.upload).not.toHaveBeenCalled();
     expect(await h.u.remove(r.id)).toBe(true);
     expect(h.deps.dropFailed).toHaveBeenCalledWith(r.id);
-    expect(h.deps.softDelete).not.toHaveBeenCalled();
+    expect(h.deps.patch).not.toHaveBeenCalled();
     expect(h.u.getSnapshot()).toEqual([]);
   });
   it('上传被拒 quota_exceeded：标“没传上”、发 quota 提示；“重新插入”（图还在内存）再传一次；删除已确认的走软删', async () => {
@@ -297,7 +297,7 @@ describe('上传器：先写行再传', () => {
     expect(h.u.retry(r.id)).toBe(true);
     await vi.waitFor(() => expect(h.u.getSnapshot()).toEqual([]));
     expect(await h.u.remove(r.id)).toBe(true);
-    expect(h.deps.softDelete).toHaveBeenCalledWith(r.id);
+    expect(h.deps.patch).toHaveBeenCalledWith(r.id, { deleted_at: expect.any(Number) });
   });
   it('account 类错误：经 accountExitOf 定原因（带发请求前的 sid），再离开本机；探测出账号正常（active）只提示、不离开', async () => {
     const acct = err('account', 'session_revoked', undefined, 401);

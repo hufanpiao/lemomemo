@@ -21,11 +21,7 @@ export const ZIP_LITE_ALIAS = { find: /^jszip$/, replacement: resolve(root, 'src
  * 引入按名字直接连到真正的模块，没人在首屏用的跟着用它的页走。没匹配上的模块照默认（包的 package.json sideEffects 照认）。
  * 出口文件只许有 export … from（tests/build/pure-reexports.test.ts 守着），往里加顶层语句就不是无副作用了
  */
-export const PURE_REEXPORT_RULES = [
-  { test: /[\\/]src[\\/]motion[\\/]components\.ts$/, sideEffects: false },
-  // B4b-1：附件功能的入口经 app/features.ts 进首屏，首屏只用 routes；懒加载的附件区跟随手记编辑器走（features/attachments/index.ts 文件头）
-  { test: /[\\/]src[\\/]features[\\/]attachments[\\/]index\.ts$/, sideEffects: false },
-];
+export const PURE_REEXPORT_RULES = [{ test: /[\\/]src[\\/]motion[\\/]components\.ts$/, sideEffects: false }];
 // LEMO_BUILD_VERSION（deploy-preview 给的 X.Y.Z-preview.N）优先，否则 VERSION 文件；和 app/version.json 同一个来源
 export const APP_VERSION: string = buildVersion(root);
 /**

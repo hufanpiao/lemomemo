@@ -63,13 +63,13 @@ async function fetchSigned(f: FileRef, purpose: 'view' | 'download', d?: string)
   return { ok: true, blob: b.blob };
 }
 
-/** 用完一份交出去的副本（预览沙箱收走 ArrayBuffer 的所有权，缓存里留原件） */
+/** 交出缓存里的那一份（不复制，整块评审第 12 条）：只许读；要转移进预览沙箱的，转移前自己 slice 一份（SandboxFrame） */
 export async function openBytes(f: FileRef): Promise<OpenResult> {
   const t0 = Date.now();
   const hit = mem.get(f.id);
   if (hit) {
     rlog(`att open mem kind=${f.kind}`);
-    return { ok: true, bytes: hit.slice(0) };
+    return { ok: true, bytes: hit };
   }
   const b = await fetchSigned(f, 'view');
   if (!b.ok) return b;
@@ -80,7 +80,7 @@ export async function openBytes(f: FileRef): Promise<OpenResult> {
   }
   remember(f.id, bytes);
   rlog(`att open ok kind=${f.kind} kb=${Math.round(bytes.byteLength / 1024)} ms=${Date.now() - t0}`);
-  return { ok: true, bytes: bytes.slice(0) };
+  return { ok: true, bytes };
 }
 
 export type DownloadResult = { ok: true; outcome: SaveOutcome } | { ok: false; why: OpenFail };

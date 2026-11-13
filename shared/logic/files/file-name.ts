@@ -9,7 +9,8 @@ import type { DocKind } from '../../manifests/attachments.ts';
 export const FILE_NAME_MAX = 120;
 
 // 控制字符、方向控制、Windows 不允许的字符；用 \u 写，源码里不出现这些字符本身
-const BAD = /[\u0000-\u001f\u007f‎‏‪-‮⁦-⁩\\/:*?"<>|]/gu;
+// eslint-disable-next-line no-control-regex -- 就是要去掉控制字符和方向控制符
+const BAD = /[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069\\/:*?"<>|]/gu;
 const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/;
 
 export function sanitizeFileName(raw: string, kind: DocKind): string {

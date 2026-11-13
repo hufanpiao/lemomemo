@@ -6,7 +6,7 @@ import { inflateRaw } from '../../shared/logic/files/inflate.ts';
 import { noteFilePath, noteFileThumbPath } from '../../shared/logic/files/media-path.ts';
 import { fileCheckReq } from '../../shared/schema/attachments.ts';
 import { type Deps, type FileRow, handle, MISSING_GIVE_UP_MS, RATE_PER_MIN, SWEEP_AFTER_MS } from '../../supabase/functions/file-check/core.ts';
-import { A, B, FakeR2, jwtFor, T0, uuid } from './vault-fakes.ts';
+import { A, B, FakeR2, jwtFor, T0, uuid } from '../functions/vault-fakes.ts';
 
 const N = uuid(1);
 const F = uuid(2);
@@ -113,6 +113,29 @@ describe('check', () => {
     for (let i = 0; i < RATE_PER_MIN; i++) await w.check();
     expect((await w.check()).status).toBe(429);
     expect((await w.call({ action: 'check', id: 'x' })).status).toBe(400);
+  });
+  describe('账号停用（TC-B1-10）', () => {
+    const denied = () => {
+      const w = world();
+      w.deps.authenticate = async () => ({ ok: false, response: new Response('{"error":"account_disabled"}', { status: 403 }) });
+      return w;
+    };
+    it('TC-B1-10 file-check：管理员停用的账号回 403 account_disabled，不读对象、不改状态', async () => {
+      const w = denied();
+      w.putObj(w.body);
+      const r = await w.check();
+      expect(r.status).toBe(403);
+      expect(r.body['error']).toBe('account_disabled');
+      expect(w.rows.get(F)?.check_status).toBe('pending');
+    });
+    it('TC-B1-10 file-check：没有 profiles 行的账号回 403 account_disabled，不删对象', async () => {
+      const w = denied();
+      w.putObj(new Uint8Array([1, 2, 3]));
+      const r = await w.check();
+      expect(r.status).toBe(403);
+      expect(r.body['error']).toBe('account_disabled');
+      expect(w.r2.objs.size).toBe(1);
+    });
   });
   it('写回时别处先判了：回那边的结果', async () => {
     const w = world();

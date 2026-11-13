@@ -8,7 +8,7 @@ import { FormButton } from '../../../kit/components/Form.tsx';
 import { SettingsDetailRow, SettingsList } from '../../../kit/components/Settings/Settings.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import type { DeviceNotice, DeviceView, useDevices } from '../hooks/useDevices.ts';
-import { onlineNow } from '../hooks/useOnline.ts';
+import { onlineNow } from '../../../kit/hooks/useOnline.ts';
 import { useSettingsT, type SettingsMsgKey } from '../hooks/useSettingsT.ts';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import styles from './SettingsPage.module.css';

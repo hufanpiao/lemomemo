@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { msAt } from '../../../../shared/core/date.ts';
 import { ruleCategory } from '../data/classify.ts';
 import { contentOf, emptyForm, newNoteRow, patchOf } from '../data/note-edit.ts';
-import { aliveCount, categoryColor, categoryCounts, groupByDay, noteItems, showsAi, titleAndSummary, type Row } from '../data/note-list.ts';
+import { aliveCount, categoryColor, categoryCounts, fileCounts, groupByDay, noteItems, showsAi, titleAndSummary, type Row } from '../data/note-list.ts';
 
 const TZ = 'Asia/Seoul';
 const at = (d: string, hm: number) => msAt(d, hm, TZ);
@@ -115,5 +115,14 @@ describe('分类颜色 categoryColor', () => {
     expect(categoryColor('lemon')).toBeNull();
     expect(categoryColor('#FFF')).toBeNull();
     expect(categoryColor(null)).toBeNull();
+  });
+});
+
+describe('附件个数（B4b-1，口径同附件区列表）', () => {
+  it('只数活着、非隐私记、kind 认得的附件；删了、撤销、is_vault、kind 不认得的都不算', () => {
+    const f = (id: string, over: Record<string, unknown> = {}): Row => ({ id, note_id: 'n1', kind: 'pdf', is_vault: false, deleted_at: null, undone: false, ...over });
+    const m = fileCounts([f('a'), f('b', { kind: 'docx' }), f('c', { deleted_at: 1 }), f('d', { undone: true }), f('e', { is_vault: true }), f('g', { kind: 'exe' }), f('h', { note_id: 'n2' })]);
+    expect(m.get('n1')).toBe(2);
+    expect(m.get('n2')).toBe(1);
   });
 });

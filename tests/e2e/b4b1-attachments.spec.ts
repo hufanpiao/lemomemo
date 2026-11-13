@@ -61,7 +61,8 @@ async function serverRows(): Promise<Map<string, Map<string, Record<string, unkn
     file(F_XLSM, 'xlsm', '报价单_含公式.xlsm', 220 * 1024, 'a'.repeat(64), 'ok'),
     file(F_DOCX, 'docx', '在职证明.docx', 86 * 1024, 'b'.repeat(64), 'pending'),
   ];
-  return new Map([['notes', new Map([[NOTE, note]])], ['note_files', new Map(files.map((f) => [f.id, f]))]]);
+  type Rows = Map<string, Record<string, unknown>>;
+  return new Map<string, Rows>([['notes', new Map([[NOTE, note]])], ['note_files', new Map(files.map((f) => [f.id, f]))]]);
 }
 
 type Fake = { asked: string[]; puts: { path: string; body: Buffer | null }[]; checks: unknown[] };

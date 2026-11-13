@@ -23,7 +23,7 @@ import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { Pressable } from '../../../motion/components.ts';
 import { NoteAttachments } from '../../attachments/index.ts';
 import { BODY_MAX, TITLE_MAX, useNoteEdit, type CategoryOption } from '../hooks/useNoteEdit.ts';
-import { insertImage } from '../hooks/useNoteImages.ts';
+import { useNoteImages } from '../hooks/useNoteImages.ts';
 import { useNotesT } from '../hooks/useNotesT.ts';
 import styles from './NoteEditPage.module.css';
 import { EditorImageBlock } from './NoteImages.tsx';
@@ -53,6 +53,9 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
   const [menu, setMenu] = useState(false);
   const locale = useUi((s) => s.locale);
   const noteId = ed.row ? String(ed.row['id']) : null;
+  // 附件区拖进来、粘贴进来的图片照插图处理：走 useNoteImages 的 insert（按 id 插，隐私记、只读行照样先拦，整块评审第 4 条）
+  const { insert: insertImg } = useNoteImages(noteId);
+  const onImages = useCallback((fs: readonly File[]) => fs.forEach((f) => void insertImg(f)), [insertImg]);
 
   // 电脑抽屉顶行“随手记 · 分类 · 时间”（视觉稿 NOTE_ED：“随手记 · 韩国生活 · 今天 11:40”）
   const w = drawer ? ed.when : null;
@@ -139,7 +142,7 @@ export function NoteEditor({ id, onCreated, onClose, drawer }: { id: string; onC
       <EditorImageBlock noteId={noteId} drawer={drawer} disabled={off} msgClass={styles.notice} />
       {/* 附件（B4b-1，线框 sAtt）：懒加载，插图区下面；拖进来、粘贴进来的图片照插图插进这一条 */}
       <Suspense fallback={null}>
-        <NoteAttachments noteId={noteId} disabled={off || ed.deleted} onImages={(fs) => noteId !== null && fs.forEach((f) => void insertImage(() => Promise.resolve(noteId), f))} />
+        <NoteAttachments noteId={noteId} disabled={off || ed.deleted} onImages={onImages} />
       </Suspense>
     </>
   );

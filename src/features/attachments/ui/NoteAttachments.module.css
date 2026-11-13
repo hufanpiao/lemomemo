@@ -77,7 +77,7 @@
   color: var(--danger-text);
 }
 
-/* 上传、检查中的细条（线框 .upb）：没有真实进度，左右来回走表示在忙 */
+/* 上传、检查中的细条（线框 .upb）：没有真实进度 */
 .bar {
   position: relative;
   overflow: hidden;
@@ -87,6 +87,7 @@
   background: var(--panel-2);
 }
 
+/* 上传中：静止的一截（不做往返动画：单个动效 ≤ 400ms、减少动态只认 data-rm，状态由下面的文字说） */
 .bar::after {
   position: absolute;
   inset: 0 auto 0 0;
@@ -94,21 +95,6 @@
   border-radius: 2px;
   background: var(--ink);
   content: '';
-  animation: att-busy 1.4s var(--ease-standard) infinite alternate;
-}
-
-@keyframes att-busy {
-  to {
-    transform: translateX(185%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bar::after {
-    width: 100%;
-    opacity: 0.35;
-    animation: none;
-  }
 }
 
 .more {
@@ -226,7 +212,7 @@
 /* 拖进窗口：整窗变暗，中间虚线框（线框 DDRAG） */
 .veil {
   position: fixed;
-  z-index: 60;
+  z-index: var(--z-dialog);
   display: grid;
   place-items: center;
   inset: 0;

@@ -2,7 +2,7 @@
 // 当前登录邮箱（R-275，只显示；读不到不显示）、已登录设备、退出其他所有设备（DevicesSection）、注销入口。
 // 标题由二级页顶栏的 h1 给，这里不再有组标题；“最近的导出”挪进了数据二级页（评审补充：不两边都显示）；“退出登录”仍在首页最底下
 import type { AccountErr } from '../hooks/useAccountActions.ts';
-import { onlineNow } from '../hooks/useOnline.ts';
+import { onlineNow } from '../../../kit/hooks/useOnline.ts';
 import type { useDevices } from '../hooks/useDevices.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
 import { SettingsEntryRow, SettingsList } from '../../../kit/components/Settings/Settings.tsx';

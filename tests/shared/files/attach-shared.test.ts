@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { zipBombCheck } from '../../../shared/logic/files/file-sniff.ts';
 import { FILE_NAME_MAX, sanitizeFileName } from '../../../shared/logic/files/file-name.ts';
 import { inflateRaw } from '../../../shared/logic/files/inflate.ts';
+import type { DocKind } from '../../../shared/manifests/attachments.ts';
 import { noteFilePath, noteFileThumbPath } from '../../../shared/logic/files/media-path.ts';
 import { buildZip, enc } from './fixtures.ts';
 
@@ -19,7 +20,11 @@ describe('inflateRaw', () => {
     const z = deflated(5000);
     expect((await inflateRaw(z.body, 5000))?.length).toBe(5000);
     expect(await inflateRaw(z.body, 4999)).toBeNull();
-    await expect(inflateRaw(new Uint8Array([0xff, 0xff, 0xff]), 10)).rejects.toThrow();
+    // Deno 的 vitest 垫片没有 rejects：自己接住
+    const bad = await Promise.resolve()
+      .then(() => inflateRaw(new Uint8Array([0xff, 0xff, 0xff]), 10))
+      .then(() => 'resolved', () => 'threw');
+    expect(bad).toBe('threw');
   });
 });
 
@@ -51,11 +56,13 @@ describe('zipBombCheck', () => {
 // 0004 里 note_files.name 的 check 约束，照抄成 JS（\u 写法）
 const dbNameOk = (n: string): boolean =>
   [...n].length >= 1 && [...n].length <= 120 &&
+  // eslint-disable-next-line no-control-regex -- 照抄库里约束的控制字符范围
   !/[\u0000-\u001f\u202a-\u202e\u2066-\u2069\\/:*?"<>|]/u.test(n) && !/[. ]$/.test(n) &&
   !/^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/.test((n.split('.')[0] ?? '').toLowerCase());
 
 describe('sanitizeFileName', () => {
-  it.each([
+  // Deno 的 vitest 垫片没有 it.each：逐条各起一个 it
+  const cases: readonly (readonly [string, DocKind, string])[] = [
     ['报价单.PDF', 'pdf', '报价单.pdf'],
     ['C:\\Users\\a\\合同.docx', 'docx', '合同.docx'],
     ['../../etc/passwd', 'pdf', 'passwd.pdf'],
@@ -67,10 +74,13 @@ describe('sanitizeFileName', () => {
     ['', 'pdf', 'file.pdf'],
     ['...', 'doc', 'file.doc'],
     ['伪装.pdf', 'docm', '伪装.docm'],
-  ] as const)('%s → %s', (raw, kind, want) => {
-    expect(sanitizeFileName(raw, kind)).toBe(want);
-    expect(dbNameOk(want)).toBe(true);
-  });
+  ];
+  for (const [raw, kind, want] of cases) {
+    it(`${JSON.stringify(raw)} → ${want}`, () => {
+      expect(sanitizeFileName(raw, kind)).toBe(want);
+      expect(dbNameOk(want)).toBe(true);
+    });
+  }
   it('超长按码点截到 120（含扩展名），截完不以点或空格结尾', () => {
     const n = sanitizeFileName(`${'한'.repeat(200)}.pdf`, 'pdf');
     expect([...n].length).toBe(FILE_NAME_MAX);

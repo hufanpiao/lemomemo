@@ -14,7 +14,7 @@ import { useEffect, useRef } from 'react';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { SettingsEntryRow, SettingsList } from '../../../kit/components/Settings/Settings.tsx';
 import { fmtMb, type ExportErr, type ExportTask } from '../hooks/useExport.ts';
-import { useOnline } from '../hooks/useOnline.ts';
+import { useOnline } from '../../../kit/hooks/useOnline.ts';
 import { useSettingsT } from '../hooks/useSettingsT.ts';
 import type { DevicesState } from '../hooks/useDevices.ts';
 import type { RecentExportState } from '../hooks/useRecentExport.ts';
