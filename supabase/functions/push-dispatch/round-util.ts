@@ -1,11 +1,12 @@
 // push-dispatch 一轮的小工具、tz_invalid 记录和 filterUsable；流程总说明在 round.ts 文件头。
-import { AHEAD_MS, BEHIND_MS, DB_TIMEOUT, LOG_SRC, type Dnd, type ItemRow, type LogRow, type NotifyMsgLike, type NotifyTextLike, type RoundCtx, type RoundLogic, type Table, type UserSettings } from './round-types.ts';
+import { AHEAD_MS, BEHIND_MS, DB_DATA, DB_TIMEOUT, LOG_SRC, type Dnd, type ItemRow, type LogRow, type NotifyMsgLike, type NotifyTextLike, type RoundCtx, type RoundLogic, type Table, type UserSettings } from './round-types.ts';
 
 // ---------------- 小工具 ----------------
 
-/** 出错时记的原因码：数据库请求超时（store 抛 DB_TIMEOUT）记 `<码>:timeout`，其余记 `<码>`（方案 3.6：收尾不变，只是日志分得开） */
+/** 出错时记的原因码：数据库请求超时（store 抛 DB_TIMEOUT）记 `<码>:timeout`，数据类错误（DB_DATA）记 `<码>:data`，其余记 `<码>`（方案 3.6：收尾不变，只是日志分得开） */
 export function failCode(code: string, e: unknown): string {
-  return e instanceof Error && e.message === DB_TIMEOUT ? `${code}:timeout` : code;
+  if (!(e instanceof Error)) return code;
+  return e.message === DB_TIMEOUT ? `${code}:timeout` : e.message === DB_DATA ? `${code}:data` : code;
 }
 
 /** due_at = greatest(remind_at, snooze_at, defer_until)（PG 的 greatest 不看 null；三个都空回 null） */

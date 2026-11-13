@@ -19,6 +19,9 @@ describe('evaluatePushQueue', () => {
     const a = evaluatePushQueue({ ...OK, queue_ok: 0, queue_poison: 2 });
     expect(a.map((i) => [i.key, i.minRounds])).toEqual([[PUSH_QUEUE_STALLED, 3], [PUSH_QUEUE_POISON, undefined]]);
     expect(a[1]?.lines[0]).toContain('2 项');
+    // 写回数据出错（迁移 20261113120000 起计入有毒次数）也会造成，文案让人按 id 查 recalc_write_failed，不只看 round_failed
+    expect(a[1]?.lines.join('')).toContain('recalc_write_failed');
+    expect(a[1]?.lines.join('')).toContain('queue_poison:<表>:<id 前 8 位>');
   });
   it('queue_oldest_s > 900 报“等太久了”（正文带分钟数和两种项数）；正好 900、没有这个字段、不是非负整数都不报', () => {
     expect(PUSH_QUEUE_BACKLOG_S).toBe(900);

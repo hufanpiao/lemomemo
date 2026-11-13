@@ -10,8 +10,9 @@
 //     **心跳里有 sent 却没有 queue_ok 也按 0 算**：租约版之前的 push-dispatch 不写这个数，迁移 20261104130000 上了以后
 //     只有回滚到那之前的函数才会这样写，而它的第 0 步每轮都调不到新签名、一直跳过（上线手册第 2 层）。
 //     只回滚 push-dispatch、lemo-ops 和 usage-report 还是新版时靠这一条发现；连 lemo-ops 一起回滚到旧 tag 时它也没了，手册里另写了怎么查。
-//   • queue_poison：首尔当天累计丢掉的有毒项个数（同一项取过 5 次都没处理完，每次都把函数弄死）。> 0 当天提示：
-//     这些项的提醒时刻没重算，要等用户再改一次才会重新入队；要人看函数日志里的 queue_poison、round_failed，找出一算就崩的原因。
+//   • queue_poison：首尔当天累计丢掉的有毒项个数（同一项取过 5 次都没处理完：每次都把函数弄死，或每次写回都遇到数据类错误
+//     recalc_write_failed:data，迁移 20261113120000）。> 0 当天提示：这些项的提醒时刻没重算，要等用户再改一次才会重新入队；
+//     要人按函数日志 queue_poison:<表>:<id 前 8 位> 的 id 去查同一项的 recalc_write_failed、round_failed，找出原因。
 //     首尔 0 点后 push-dispatch 从 0 重新算，这件事随后报“已恢复”。
 //   • queue_oldest_s：用户自己改的项（prio 0）里最老一项等了几秒（只算可用账号）。> 900（15 分钟）这一轮就提示：正常下一分钟就算到，
 //     等这么久说明第 0 步跟不上（每轮预算被占满、出队一直失败，或积压太多）；正文带 queue_wait0、queue_wait_batch。没有这个字段（旧版）不判。
@@ -53,9 +54,9 @@ export function evaluatePushQueue(detail: unknown): Issue[] {
       key: PUSH_QUEUE_POISON,
       title: '有提醒的重算被当成有毒项丢掉了',
       lines: [
-        `push-dispatch 今天（首尔时间）丢掉了 ${poison} 项：同一项取过 5 次都没处理完（每次都把函数弄死，例如 CPU 超限、数据坏了）。`,
+        `push-dispatch 今天（首尔时间）丢掉了 ${poison} 项：同一项取过 5 次都没处理完（每次都把函数弄死，例如 CPU 超限；或者每次写回都是数据出错，例如违反约束）。`,
         '这些项的提醒时刻没有重算，要等用户再改一次这一行才会重新入队；同批别的项不受影响（一项一项单独重试）。',
-        '请看函数日志里的 queue_poison、round_failed 和同一时间的 CPU 超限记录，找出一算就崩的原因。首尔 0 点后从 0 重新计数。',
+        '请看函数日志里的 queue_poison:<表>:<id 前 8 位>，按这个 id 查同一项的 recalc_write_failed（写回数据出错也会造成，原因码带 :data）和 round_failed，再看同一时间的 CPU 超限记录。首尔 0 点后从 0 重新计数。',
       ],
     });
   }

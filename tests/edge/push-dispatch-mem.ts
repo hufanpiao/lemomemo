@@ -12,7 +12,7 @@ import { occurrenceKey, reminderTag } from '../../shared/logic/remind-route.ts';
 import type { DispatchStore, HeartbeatDetail, QueueStats } from '../../supabase/functions/push-dispatch/core.ts';
 import { QUEUE_PER_USER, QUEUE_POISON, seoulDay } from '../../supabase/functions/push-dispatch/core.ts';
 import type { DeviceOutcome, DeviceRow, ItemRow, LogRow, Profile, QueueItem, QueueRef, RoundLogic, Table } from '../../supabase/functions/push-dispatch/round.ts';
-import { DB_TIMEOUT, SETTING_KEYS, TABLES } from '../../supabase/functions/push-dispatch/round.ts';
+import { DB_DATA, DB_TIMEOUT, SETTING_KEYS, TABLES } from '../../supabase/functions/push-dispatch/round.ts';
 import { makeLogic } from '../../supabase/functions/push-dispatch/logic.ts';
 
 /** 和 index.ts 同一份接线（logic.ts 的 makeLogic），名字一一对应，只是从 shared/ 引（tests/edge/push-dispatch-logic-wiring.test.ts 核对） */
@@ -106,6 +106,8 @@ export class MemDb implements DispatchStore {
   failOn = new Set<string>();
   /** 注入超时：方法名 → 抛 DB_TIMEOUT（store 在 timedFetch 到点中止时抛的） */
   timeoutOn = new Set<string>();
+  /** 注入数据类错误：方法名 → 抛 DB_DATA（store 在 PostgREST 回 SQLSTATE 22、23 类时抛的） */
+  dataOn = new Set<string>();
 
   user(id: string, p: Partial<Profile> = {}, usable = true): this {
     this.usable.set(id, usable);
@@ -177,12 +179,12 @@ export class MemDb implements DispatchStore {
     }
   }
   /**
-   * 客户端编辑一行（对应真库 UPDATE 时的三个触发器，真库语义在 rls/32 ⑧ 和 0001 的 touch()）：
-   * events_occ_reset——日程的 date、remind_days 变了，或 time 在空和非空之间变了，清 notified_for、snooze_at（这次没改它们的值时，R3-L2；
-   *   notified_for 改成了 old.remind_at 也清，REMIND-offline-ack-merge）和 pushed_for（二轮审查 N-M1）；
-   * 和真库一样按“值有没有变”判断（R3-L3），不看补丁里写没写这一列（客户端常常整行写回）；
-   * touch()——提醒相关列变了清 pushed_for、defer_until；events_remind / todos_remind——这些列变了入 remind_queue；
-   * events_allday_ack_enqueue——全天日程的 notified_for 改成不等于 remind_at 的值时也入队（真库语义在 rls/36）
+   * 客户端编辑一行（对应真库 UPDATE 时 touch() 里调的 private.remind_reset 和 after 触发器 private.enqueue_remind，迁移 20261113100000；
+   * 真库语义在 rls/49、rls/33、rls/36 和 rls/38 的向量）：
+   * remind_reset——日程“换了哪一次”（date、remind_days 变了，或 time 在空和非空之间变了）清 notified_for、snooze_at（这次没改它们的值时；
+   *   notified_for 改成了 old.remind_at 也清）和 pushed_for；提醒输入列有一列变了清 pushed_for、defer_until；
+   * 和真库一样按“值有没有变”判断，不看补丁里写没写这一列（客户端常常整行写回）；
+   * enqueue_remind——提醒输入列或 snooze_at 变了入队；全天日程的 notified_for 改成不等于 remind_at 的值时也入队
    */
   edit(table: Table, id: string, patch: Partial<ItemRow>): ItemRow {
     const old = this.tables[table].get(id);
@@ -195,7 +197,7 @@ export class MemDb implements DispatchStore {
       for (const k of ['notified_for', 'snooze_at'] as const) {
         if (!changed(k)) row[k] = null;
       }
-      // REMIND-offline-ack-merge（迁移 20261104110000）：离线合并进来的旧“知道了”（等于 old.remind_at）照样清
+      // 离线合并进来的旧“知道了”（等于 old.remind_at）照样清
       if (old.remind_at != null && row.notified_for === old.remind_at) row.notified_for = null;
       row.pushed_for = null;
     }
@@ -213,7 +215,7 @@ export class MemDb implements DispatchStore {
     // enqueue_remind：待办改了截止日期、截止时刻、提前量是 fresh（第 0 步回落用，R-411 Q2）
     const fresh = table === 'todos' && ['due', 'due_time', 'remind_before_min'].some(changed);
     if ([...remindCols, 'snooze_at'].some(changed)) this.enqueue(table, id, { fresh });
-    // events_allday_ack_enqueue（迁移 20261105120000，REMIND-shown-persist S1）：全天日程的 notified_for 改成了不等于 remind_at 的值，入队
+    // enqueue_remind 的“知道了”一支（REMIND-shown-persist S1）：全天日程的 notified_for 改成了不等于 remind_at 的值，入队
     if (table === 'events' && row['time'] == null && row.deleted_at == null && row.remind_days != null && row.notified_for != null && changed('notified_for')
       && row.notified_for !== row.remind_at) this.enqueue(table, id);
     return row;
@@ -226,6 +228,7 @@ export class MemDb implements DispatchStore {
   private check(name: string) {
     this.calls.push(name);
     if (this.timeoutOn.has(name)) throw new Error(DB_TIMEOUT);
+    if (this.dataOn.has(name)) throw new Error(DB_DATA);
     if (this.failOn.has(name)) throw new Error('db');
   }
 
@@ -305,10 +308,10 @@ export class MemDb implements DispatchStore {
     return { queue_wait0: p0.length, queue_wait_batch: qs.length - p0.length, queue_oldest_s: Math.max(0, Math.floor((now - oldest) / 1000)) };
   }
   /** remind_queue_finish（迁移 20261113120000）：release 里还是这个租约的放回（清租约、attempts − 1）；hold 里的不放回也不删（租约、attempts 原样，
-   *  等过期重取）；这个租约的其余项删掉；锁着的（locked）都跳过、租约留着 */
+   *  等过期重取）；这个租约的、两份名单里都没有的删掉（锁着没放回的 release 项也不删，留着租约走重试）；锁着的（locked）都跳过、租约留着 */
   async finishQueue(claim: string, release: readonly QueueRef[], hold: readonly QueueRef[] = []) {
     this.check('finishQueue');
-    const keep = new Set(hold.map((r) => `${r.table_name}:${r.id}`));
+    const keep = new Set([...release, ...hold].map((r) => `${r.table_name}:${r.id}`));
     for (const r of release) {
       const k = `${r.table_name}:${r.id}`;
       const q = this.queue.get(k);

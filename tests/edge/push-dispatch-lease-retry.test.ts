@@ -43,7 +43,7 @@ describe('重试模式：有毒项不连坐同批的项（H1）', () => {
     for (let i = 0; i < 8; i++) {
       const r = await round(db, now);
       crashes.push(r.crashed);
-      poison += r.codes.filter((c) => c === 'queue_poison').length;
+      poison += r.codes.filter((c) => c.startsWith('queue_poison:')).length;
       now += (QUEUE_LEASE_S + 1) * S;
     }
     // 第 1 轮两项同批一起崩；第 2～5 轮 bad 单独取、单独崩（第 3 轮先把 innocent 单独算完）；第 6 轮 bad 取过 5 次、被丢掉

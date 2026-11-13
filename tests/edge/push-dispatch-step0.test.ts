@@ -1,6 +1,6 @@
 // push-dispatch 第 0 步（原 tz-recalc；B2 任务单 BE-2 第 0 步、TZ-invalid-b2、K3-remind-orphan；架构 5.3 第 0 步、4.5、4.6、0.42 第 1 条、0.54 第 2 条；
 // 代码审查 BE-1 R1）。出队函数本身（孤儿照常出队、停用和冷静期不出队、上限、prio 排序）在 supabase/tests/rls/30_remind_queue_pop.test.sql；这里测函数一侧：
-// 重算时传这一行原来的 remind_at、漏传就失败、时区不认识的跳过记 tz_invalid、写回出错留着租约（计入有毒次数）、预算到了放回。
+// 重算时传这一行原来的 remind_at、漏传就失败、时区不认识的跳过记 tz_invalid、写回遇到数据类错误留着租约（计入有毒次数）、预算到了放回。
 // 11-04 起出队是租约式（迁移 20261104130000）：“放回”= finish 时清租约，崩溃、有毒项、处理期间被改在 push-dispatch-lease.test.ts。
 import { describe, expect, it, vi } from 'vitest';
 import { msAt, parseHm } from '../../shared/core/date.ts';
@@ -93,15 +93,15 @@ describe('第 0 步：出队、写回、按租约收尾', () => {
     expect(db.queue.size).toBe(0);
     expect(db.tables.todos.get(tb.id)?.remind_at).toBe(msAt('2026-11-05', 540, SEOUL));
   });
-  it('写回出错的不放回：留在队列里、租约和 attempts 原样（等过期重取、计入有毒次数，过期以后在 push-dispatch-lease.test.ts）', async () => {
+  it('写回遇到数据类错误不放回：留在队列里、租约和 attempts 原样（等过期重取、计入有毒次数；超时等放回、过期以后在 push-dispatch-lease.test.ts）', async () => {
     const db = new MemDb().user(UA);
     const t = db.put('todos', todoRow(UA, { due: '2026-11-05', remind_days: 0 }), true);
-    db.failOn.add('writeRemind');
+    db.dataOn.add('writeRemind');
     const d = await run(db, at('10:00'));
     expect([...db.queue.keys()]).toEqual([`todos:${t.id}`]);
     expect(db.queue.get(`todos:${t.id}`)).toMatchObject({ attempts: 1 });
     expect(db.queue.get(`todos:${t.id}`)?.claim).toBeTruthy();
-    expect(d.codes).toEqual(expect.arrayContaining(['recalc_write_failed', `recalc:held:todos:${t.id.slice(0, 8)}`]));
+    expect(d.codes).toEqual(expect.arrayContaining(['recalc_write_failed:data', `recalc:held:todos:${t.id.slice(0, 8)}`]));
   });
   it('时间预算到了：出队以后没来得及处理的放回', async () => {
     const db = new MemDb().user(UA);

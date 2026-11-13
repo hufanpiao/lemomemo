@@ -386,6 +386,23 @@ Deno.test({ name: 'R-411 T00d P12（真库，Q3 保留现状）：全天日程�
   }
 } });
 
+// R-411 后续（独立评审 M1，11-13）：第 0 步只对“这一行本身写不进去”的错误 hold。真 PostgREST 回数据类错误时 error.code 是 SQLSTATE，
+// store 的 dbError 认得出、抛 db:data；乐观条件不成立照旧回 false（不抛）
+Deno.test({ name: 'R-411 写回数据类错误（真库）：next_date 不是日期 → 真 store 抛 db:data；值合格时照常写回', ...opts, async fn() {
+  const u = await mkUser('d3-data');
+  const id = crypto.randomUUID();
+  await sql`insert into public.anniversaries (id, user_id, kind, name, calendar, month, day, created_at, updated_at) values (${id}, ${u}, 'birthday', 'n', 'solar', 3, 5, 1, 1)`;
+  let msg = '';
+  try {
+    await baseStore.writeRemind('anniversaries', id, u, { remind_at: 1, next_date: 'not-a-date' }, null);
+  } catch (e) {
+    msg = e instanceof Error ? e.message : String(e);
+  }
+  assertEquals(msg, 'db:data', '日期格式错（SQLSTATE 22007）应抛 db:data');
+  assertEquals(await baseStore.writeRemind('anniversaries', id, u, { remind_at: 2, next_date: '2027-03-05' }, null), true, '合格的值照常写回');
+  console.log('[R411-data] 真 PostgREST 回 22007：store 抛 db:data；合格的值照常写回');
+} });
+
 Deno.test({ name: 'd3-real 收尾：删掉这次建的用户、恢复 cron 任务、放锁、关连接', ...opts, async fn() {
   // 先恢复 cron：排在最前、单独一层 try，后面 purgeTraces 抛错也不影响它（反过来它抛错也照样删数据、放锁、关连接）
   try {
