@@ -1,0 +1,271 @@
+/* 待办子任务（R-350 方案 5.1～5.3、6.2）：列表卡片里摊开的勾选清单、分段进度条、收起按钮；今天页一行进度；编辑页“子任务”区。只用令牌（A11）
+   • 勾子任务一天上百次：不播动画——圆圈的圆盘、勾号（kit CheckCircle 里带 data-state 的两个 span）去掉过渡，进度段直接变色
+   • 圆圈比主待办小一号（--check-size: 18px），点击区照样 44 × 44（kit CheckCircle 的外扩区）
+   • 进度段：没勾的是空心描边（--text-2，和卡片底色对比 ≥ 3:1，同空心圆圈的意思），勾上的填强调色 */
+
+.subs {
+  --check-size: 18px;
+}
+
+.subs [data-state] {
+  transition: none;
+}
+
+/* ---------- 进度条 ---------- */
+.bar {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 3px;
+  min-width: 0;
+  height: 6px;
+}
+
+.thin {
+  flex: 0 1 96px;
+  height: 4px;
+}
+
+.seg {
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: var(--r-pill);
+  box-shadow: inset 0 0 0 1px var(--text-2);
+}
+
+.seg[data-on] {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* ---------- 列表页卡片（待办行下面占满一整行；左边让出圆圈那一格，和标题起点对齐） ---------- */
+.card {
+  flex: 1 0 100%;
+  min-width: 0;
+  padding: 0 0 4px calc(var(--hit) + 10px);
+}
+
+.items {
+  margin: -4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.items[hidden] {
+  display: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+}
+
+.itemText {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemText:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 已勾的标题变淡、不加删除线（方案 5.1） */
+.item[data-done] .itemText {
+  color: var(--text-2);
+}
+
+@media (hover: hover) {
+  .itemText {
+    cursor: pointer;
+  }
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toggle {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0 0 0 8px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-12-5);
+  text-align: right;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---------- 今天页的一行：已勾/总数 + 细进度条，不摊开（Q5） ---------- */
+.today {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+  color: var(--text-2);
+  font-family: var(--f-num);
+  font-size: var(--fs-12);
+}
+
+/* 今天页：这一行在待办按钮里面，读屏读按钮名字，进度用一句文字（按钮里不放 progressbar） */
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- 编辑页“子任务”区 ---------- */
+.edit {
+  padding: 6px 0 8px;
+}
+
+.editHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--hit);
+  color: var(--text-2);
+  font-size: var(--fs-14);
+}
+
+.editHead .bar {
+  flex: 1 1 auto;
+}
+
+.editList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.editRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--hit);
+  border-bottom: 1px solid var(--line);
+}
+
+.editRow[data-over='before'] {
+  box-shadow: inset 0 2px 0 var(--focus);
+}
+
+.editRow[data-over='after'] {
+  box-shadow: inset 0 -2px 0 var(--focus);
+}
+
+.editRow[data-dragging] {
+  opacity: 0.5;
+}
+
+.handle,
+.del,
+.mv {
+  flex: none;
+  min-width: var(--hit);
+  min-height: var(--hit);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-16);
+  touch-action: none;
+}
+
+.handle {
+  min-width: 28px;
+  cursor: grab;
+}
+
+.editInput,
+.addInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--hit);
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-16);   /* 触屏输入框 ≥ 16px，iOS 聚焦时不放大页面 */
+}
+
+.handle:focus-visible,
+.del:focus-visible,
+.mv:focus-visible,
+.editInput:focus-visible,
+.addInput:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* 读屏、键盘用的“上移 / 下移”：平时不占位，聚焦时才出现（方案 5.3、6.2） */
+.mv:not(:focus) {
+  position: absolute;
+  width: 1px;
+  min-width: 0;
+  height: 1px;
+  min-height: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.editRow[data-done] .editInput {
+  color: var(--text-2);
+}
+
+.addInput::placeholder {
+  color: var(--text-2);
+}
+
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--hit);
+  padding-left: 30px;
+}
+
+.addRow::before {
+  content: '+';
+  color: var(--text-2);
+  font-size: var(--fs-18);
+}
+
+.editHint {
+  margin: 0;
+  padding: 0 0 6px;
+  color: var(--text-2);
+  font-size: var(--fs-12-5);
+}
+
+.editHint[data-bad] {
+  color: var(--danger-text);
+}

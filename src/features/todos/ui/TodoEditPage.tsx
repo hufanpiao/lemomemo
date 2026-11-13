@@ -9,13 +9,20 @@
 //   填了今天以后“当天 / 前一天 + 时刻”已经过了的，同一处灰字改成“这个提醒时刻已经过了，不会再提醒”（不替用户挪日子）
 // • R-415 ①（负责人定方案丙）：随手记转来的待办，最后一组（项目、备注那一组）末尾加一行“来源 随手记 · 标题 ›”，同一种 Field 行，
 //   右边的值用 kit 的 FieldLink（SourceRow）；原随手记不在（删了、隐私记、撤销了、本机没有）整行不出，恢复后自动出现（负责人 11-13）
+// • R-350：标题那一组下面是“子任务”区（SubtaskEditor，懒加载）：加删改、勾选、排序都在那里；新建页标题还没保存时灰掉
+import { lazy, Suspense } from 'react';
 import { backOr, useEditRoute } from '../../../app/router-levels.ts';
+import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
 import { Check, Field, FieldLink, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
 import { ITEM_TITLE_MAX, NOTE_MAX, PROJECT_MAX, REMIND_BEFORE_OPTIONS, useTodoEdit, type TodoSource } from '../hooks/useTodoEdit.ts';
 import { useTodosT, type TodosMsgKey } from '../hooks/useTodosT.ts';
 
-const beforeKey = (v: number | null): TodosMsgKey => (v === null ? 'todo.edit.before.none' : (`todo.edit.before.${v}` as TodosMsgKey));
+type BeforeKey = Extract<TodosMsgKey, `todo.edit.before.${string}`>;
+/** “子任务”区（R-350 方案 5.3）：懒加载，在待办列表页那一包里（多半已经下载过）；分包下不来时那一块不画，不把整页换成出错页 */
+const SubtaskEditor = lazy(() => import('./TodosPage.tsx').then((m) => ({ default: m.SubtaskEditor })));
+
+const beforeKey = (v: number | null): BeforeKey => (v === null ? 'todo.edit.before.none' : (`todo.edit.before.${v}` as BeforeKey));
 
 /** 直接打开的子页（推送、书签）没有上一页：退回待办列表 */
 const back = (): void => backOr('todos');
@@ -56,6 +63,12 @@ function TodoEditor({ id, onCreated }: { id: string; onCreated(id: string): void
           <Check label={t('todo.edit.important', {})} checked={form.important} disabled={off} look="switch" onChange={(v) => change({ important: v })} data-testid="todo-edit-important" />
         </Field>
       </FormGroup>
+
+      <QuietBoundary name="todo-subs">
+        <Suspense fallback={null}>
+          <SubtaskEditor todoId={!ed.isNew && typeof ed.row?.id === 'string' ? ed.row.id : null} todo={ed.row} off={off} />
+        </Suspense>
+      </QuietBoundary>
 
       <FormGroup>
         <Field label={t('todo.edit.due', {})} htmlFor="todo-due">

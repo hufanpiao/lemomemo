@@ -19,6 +19,7 @@ vi.mock('../hooks/useTodoList.ts', async (orig) => ({
       { key: 'today', date: null, items: [{ todo: todo('t1', '回邮件'), tag: { kind: 'today', dueTime: '15:00' } }, { todo: todo('t2', '交房租'), tag: { kind: 'today', dueTime: null } }] },
     ],
     projects: [], project: null, setProject: () => undefined, toggleDone: async () => 'ok', remove: async () => 'ok', total: 2,
+    subs: new Map(),   // R-350：没有子任务
   }),
 }));
 

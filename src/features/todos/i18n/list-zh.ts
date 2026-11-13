@@ -1,4 +1,5 @@
-// 功能 todos 的词典·中文（架构 2.4）：待办列表页（B2 FA-2）。编辑页的在 zh.ts（那一份在审查中，列表另放一份）
+// 功能 todos 的词典·中文（架构 2.4）：待办列表页（B2 FA-2）和子任务（R-350：列表卡片、今天页进度、编辑页“子任务”区都在列表页那一包里）。
+// 编辑页其余的在 zh.ts（那一份在审查中，列表另放一份）
 export const listZh = {
   'list.title': '待办',
   'list.all': '全部',
@@ -26,4 +27,24 @@ export const listZh = {
   'list.undo': '撤销',
   'list.err.save': '没保存上，稍后再试一次',
   'list.err.readonly': '这条要新版本才能修改',
+  // R-350 子任务（方案 5.1、5.5、6.2、6.5）：列表卡片只能勾、看进度、收起；加删改在编辑页
+  'items.progress': '{done}/{total}',
+  'items.progress.a11y': '子任务已完成 {done} 项，共 {total} 项',
+  'items.collapse': '收起',
+  'items.expand': '展开',
+  'items.collapse.a11y': '收起「{title}」的子任务',
+  'items.expand.a11y': '展开「{title}」的子任务',
+  'items.autoDone': '全部完成，已完成这条待办',
+  // 编辑页“子任务”区（SubtaskEditor 在待办列表页那一包里，只用这一本词典，免得和编辑页共用词典多拆出一个分包）
+  'items.title': '子任务',
+  'items.add': '添加子任务',
+  'items.itemLabel': '子任务「{title}」',
+  'items.max': '最多 {n} 项',
+  'items.needTitle': '写上标题才能加子任务',
+  'items.delete': '删除「{title}」',
+  'items.deleted': '已删除子任务',
+  'items.move': '拖动排序「{title}」，也可以按 Alt + 上下方向键',
+  'items.moveUp': '上移「{title}」',
+  'items.moveDown': '下移「{title}」',
+  'items.err.quota': '子任务最多 {n} 项，多出来的没有保存',
 } as const;

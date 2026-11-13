@@ -8,16 +8,19 @@ import styles from './ListToasts.module.css';
 import { ReadonlyToast } from './ReadonlyRow.tsx';
 import { UndoToast } from './UndoToast.tsx';
 
-export interface ListToastsProps {
-  g: ReadonlyGuard<ListToast>;
+/** X：页面自己另加的提示条（待办页“全部完成”的撤销条，R-350），由页面自己画；这里只画 ListToast 的两种 */
+export interface ListToastsProps<X = never> {
+  g: ReadonlyGuard<ListToast | X>;
   onUndo(id: string): void;
   text: { deleted: string; undo: string; error: string; readonly: string };
   /** 测试 id 前缀：today、todos（today-toast、today-error、today-ro-toast） */
   prefix: string;
 }
 
-export function ListToasts({ g, onUndo, text, prefix }: ListToastsProps) {
-  const { toast } = g;
+const isList = (x: unknown): x is ListToast => x !== null && typeof x === 'object' && 'kind' in x && (x.kind === 'undo' || x.kind === 'error');
+
+export function ListToasts<X = never>({ g, onUndo, text, prefix }: ListToastsProps<X>) {
+  const toast = isList(g.toast) ? g.toast : null;
   return (
     <>
       {toast?.kind === 'undo' ? (

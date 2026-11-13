@@ -5,8 +5,8 @@ import { forkSuffixOf, isNoticeTable, titleOf } from '../sync-notice-store.ts';
 import { conflict, flush, item, make } from './notice-store-fakes.ts';
 
 describe('白名单（H2）', () => {
-  it('五张表（index.ts 和 data/notice-tables.ts 两份一致由 features/sync-notice/__tests__/notice-tables.test.ts 查）', () => {
-    expect([...NOTICE_TABLES]).toEqual(['events', 'todos', 'anniversaries', 'categories', 'notes']);
+  it('六张表（R-350 加 todo_items；index.ts 和 data/notice-tables.ts 两份一致由 features/sync-notice/__tests__/notice-tables.test.ts 查）', () => {
+    expect([...NOTICE_TABLES]).toEqual(['events', 'todos', 'anniversaries', 'categories', 'notes', 'todo_items']);
     expect(isNoticeTable('settings')).toBe(false);
     expect(isNoticeTable('note_images')).toBe(false);
   });
@@ -20,6 +20,20 @@ describe('白名单（H2）', () => {
     expect(store.getState().queue).toEqual([]);
     expect(calls).toEqual([['devices', 'd1', 'drop']]);
     expect(logs).toEqual([['sync_gone_drop', { coll: 'devices' }]]);
+  });
+});
+
+describe('待办子任务（R-350 方案 4 第 7 条、5.6 第 2 条）', () => {
+  it('todo_items 改标题冲突出卡（标题取子任务的 title）；gone 不出卡、静默 drop、记 sync_gone_drop', async () => {
+    const { store, queue, calls, logs } = make();
+    store.onSync(conflict({ table: 'todo_items', id: 'i1', conflicts: ['title'] }));
+    queue.push(item('todo_items', 'i2', { done: true }));
+    await store.readGone();
+    await flush();
+    const q = store.getState().queue;
+    expect(q.map((n) => `${n.kind}:${n.key}`)).toEqual(['conflict:todo_items:i1']);
+    expect(calls).toEqual([['todo_items', 'i2', 'drop']]);
+    expect(logs).toEqual([['sync_gone_drop', { coll: 'todo_items' }]]);
   });
 });
 

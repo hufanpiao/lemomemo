@@ -114,6 +114,15 @@ export function backoffMs(tries: number): number {
   return Math.min(2 ** Math.max(1, tries) * 1000, MAX_BACKOFF_MS);
 }
 
+/**
+ * 子表 insert 没带 deps 时按父表外键自动补的依赖（R-350 评审第 3 条）：表 → [父表, 外键列]。
+ * 子任务的 insert 必须排在主待办的 insert 后面发，否则服务器 todo_items_cap 报 not_found、这一项被丢掉；
+ * 调用方哪里忘写 deps 也由这里兜住。调用方自己写了 deps 的照用，不再补。
+ * 启动时清孤儿子任务也按这张表（core/boot.ts：父表在本机已经没有这一行的子表行一并删掉，R-350 方案 5.6 第 1 条）。
+ * 放在这里不放 outbox-new-item.ts：boot 在首屏，引那个文件会把整个 newItem 拖进首屏（K8 R2 ①）
+ */
+export const PARENT_OF: Readonly<Record<string, readonly [string, string]>> = { todo_items: ['todos', 'todo_id'] };
+
 export function recKey(table: string, id: string): string {
   return `${table}:${id}`;
 }

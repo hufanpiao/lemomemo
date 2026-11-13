@@ -3,16 +3,9 @@
 // enqueueImpl 用 rows.newItem 调它；K8 的 resolveGone 恢复项也用它，免得手写第二份走偏。
 // 首屏只剩 0.3 KB 余量，直接放在 outbox.ts 里会让首屏多约 50 字节（gzip），所以放这里
 import type { CachedRow } from './cache.ts';
-import { recKey } from './outbox-logic.ts';
+import { PARENT_OF, recKey } from './outbox-logic.ts';
 import type { Ctx } from './outbox-send.ts';
 import type { EnqueueInput, OutboxItem, RecRef } from './outbox-types.ts';
-
-/**
- * 子表 insert 没带 deps 时按父表外键自动补的依赖（R-350 评审第 3 条）：表 → [父表, 外键列]。
- * 子任务的 insert 必须排在主待办的 insert 后面发，否则服务器 todo_items_cap 报 not_found、这一项被丢掉；
- * 调用方哪里忘写 deps 也由这里兜住。调用方自己写了 deps 的照用，不再补
- */
-const PARENT_OF: Readonly<Record<string, readonly [string, string]>> = { todo_items: ['todos', 'todo_id'] };
 
 function depsOf(input: EnqueueInput): RecRef[] {
   if (input.deps?.length) return input.deps.map((d) => ({ table: d.table, id: d.id }));
