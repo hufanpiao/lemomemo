@@ -109,7 +109,9 @@ export type VoiceNote =
   | 'rec_failed'
   /** 停录、停识别等不到结局（兜底超时）：这段没收到 */
   | 'not_heard'
-  | 'not_saved';
+  | 'not_saved'
+  /** R-417：按下时弹了 iOS 系统麦克风框，点完“允许”手指已松开、这一下没录：请再按住一次 */
+  | 'mic_ready';
 
 /** 一次返回在界面上怎么收尾：save 记下（和打字同一种 TypePlan，raw 是转写）；note 出提示条（status 是状态机的终态）；idle 回到没按 */
 export type VoiceFinal =

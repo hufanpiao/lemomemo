@@ -27,6 +27,7 @@ export const NOTE_VIEW: Record<VoiceNote, { title: Key; sub: Key | null; acts: r
   rec_failed: { title: 'plus.voice.recFailed', sub: null, acts: ['type'] },
   not_heard: { title: 'plus.voice.notHeard', sub: null, acts: ['again', 'type'] },
   not_saved: { title: 'plus.voice.notSaved', sub: null, acts: ['again', 'type'] },
+  mic_ready: { title: 'plus.voice.micReady', sub: null, acts: [] },
 };
 
 const ACT_KEY: Record<Act, Key> = { retry: 'plus.voice.retry', again: 'plus.voice.again', type: 'plus.voice.type' };
@@ -49,13 +50,15 @@ export function VoiceNotice({ v }: { v: VoiceState }) {
             ×
           </button>
         </div>
-        <div className={styles.noteActs}>
-          {view.acts.map((a, i) => (
-            <FormButton key={a} type="button" size="compact" variant={i === 0 ? 'primary' : 'secondary'} onClick={run[a]} data-testid={`voice-${a}`}>
-              {line(ACT_KEY[a], {})}
-            </FormButton>
-          ))}
-        </div>
+        {view.acts.length === 0 ? null : (
+          <div className={styles.noteActs}>
+            {view.acts.map((a, i) => (
+              <FormButton key={a} type="button" size="compact" variant={i === 0 ? 'primary' : 'secondary'} onClick={run[a]} data-testid={`voice-${a}`}>
+                {line(ACT_KEY[a], {})}
+              </FormButton>
+            ))}
+          </div>
+        )}
       </div>
     );
   }

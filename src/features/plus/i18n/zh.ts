@@ -148,4 +148,5 @@ export const zh = {
   'plus.voice.recFailed': '录音没开起来，请再按住试一次或用键盘',
   'plus.voice.notSaved': '没保存上，请再说一次或用键盘',
   'plus.voice.notHeard': '这段没收到，请再说一次', // 中性文案，最终由负责人定（FA-3 复查第 2 条）
+  'plus.voice.micReady': '麦克风已允许，再按住“＋”说话', // R-417：iOS 系统框点完“允许”这一下没录
 } as const;

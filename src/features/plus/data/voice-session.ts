@@ -78,6 +78,8 @@ export interface Attempt {
   rec: ActiveRecorder | null;
   /** 开始写库（savePlan 里 batch.save 那一步）时置上、不复位：切页不取消这一次，写完照常落地（第 7 条） */
   committed: boolean;
+  /** 为什么作废的（drop 的 by）：没作废是 null。录音器晚到时看它（R-417：等 iOS 系统框时松手 too_early） */
+  droppedBy: string | null;
 }
 
 /** 两条路共用的内核（createCore 给）；控制器本身（createVoiceSession 给） */
@@ -140,6 +142,7 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
   const drop = (by: string): void => {
     if (!cur) return;
     rlog(`voice attempt ${cur.id} drop by=${by}`);
+    cur.droppedBy = by;
     cur.ac.abort();
     cur = null;
   };
@@ -182,7 +185,7 @@ function createCore(io: VoiceIo, finish: () => void, forget: () => void) {
     closeNote,
     begin() {
       drop('restart');
-      cur = { id: ++seq, ac: new AbortController(), rec: null, committed: false };
+      cur = { id: ++seq, ac: new AbortController(), rec: null, committed: false, droppedBy: null };
       return cur;
     },
     drop,

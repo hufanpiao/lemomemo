@@ -13,6 +13,9 @@ import { baseReqCtx } from './type-flow.ts';
 import { sendVoice, toUpload, voiceFinal, type VoiceClip, type VoiceResult } from './voice-flow.ts';
 import type { Attempt, VoiceCore } from './voice-session.ts';
 
+/** 开录音器等了这么久还没开起来，当作中间弹过 iOS 系统麦克风框（R-417：主屏幕版每次启动第一次按都弹；不弹时约 0.7 秒） */
+export const MIC_PROMPT_MS = 1500;
+
 export function createRecRoute(c: VoiceCore) {
   let kept: KeptAudio | null = null;
   /** 10 分钟内网络原因失败几次 */
@@ -52,6 +55,7 @@ export function createRecRoute(c: VoiceCore) {
     /** 开录音器（按住满 350 ms） */
     async begin() {
       const a = c.begin();
+      const t0 = clock.now();
       c.set({ path: 'rec', why: null });
       c.go({ type: 'prepare' });
       const r = await startRecorder({
@@ -66,6 +70,12 @@ export function createRecRoute(c: VoiceCore) {
       if (!c.alive(a, 'rec_start')) {
         // 开起来之前就丢掉、松手了：录音器自己按取消收拾（signal）
         if (r.ok) void r.rec.stop();
+        // R-417：等 iOS 系统框点“允许”时手指已经松开（too_early），这一下作废了：提示再按住一次，不让人猜
+        const waited = clock.now() - t0;
+        if (r.ok && a.droppedBy === 'too_early' && waited >= MIC_PROMPT_MS && c.current() === null && c.view().status === 'idle' && c.view().card === null) {
+          rlog(`voice mic_ready waited_ms=${Math.round(waited)}`);
+          c.show('mic_ready');
+        }
         return;
       }
       if (!r.ok) {

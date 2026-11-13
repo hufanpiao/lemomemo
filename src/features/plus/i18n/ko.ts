@@ -139,4 +139,5 @@ export const ko = {
   'plus.voice.recFailed': '녹음이 시작되지 않았어요. 다시 길게 누르거나 키보드를 써 주세요', // REVIEW(ko)
   'plus.voice.notSaved': '저장하지 못했어요. 다시 말하거나 키보드를 써 주세요', // REVIEW(ko)
   'plus.voice.notHeard': '이번 녹음을 받지 못했어요. 다시 말해 주세요', // REVIEW(ko) 중성 문구, 최종은 책임자가 정함
+  'plus.voice.micReady': '마이크를 허용했어요. 다시 +를 누른 채 말해 주세요', // REVIEW(ko) R-417
 } as const satisfies Record<keyof typeof zh, string>;

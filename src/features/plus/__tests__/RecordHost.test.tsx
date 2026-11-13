@@ -38,6 +38,9 @@ const fx = vi.hoisted(() => ({
   /** 卡住录音器 stop()（iOS 不发 stop 事件那种）：放开时调 stopOpen */
   stopHang: false,
   stopOpen: null as null | (() => void),
+  /** 卡住录音器开录（iOS 系统麦克风框弹着、还没点“允许”）：放开时调 startOpen */
+  startHang: false,
+  startOpen: null as null | (() => void),
   /** 录音器拿到的取消信号（取消、卸载时要被 abort，录音器才会关轨道） */
   signal: null as null | AbortSignal,
   /** 卡住上传前那一步（toUpload）：放开时调 upOpen */
@@ -67,6 +70,7 @@ vi.mock('../../../platform/recorder.ts', () => ({
     fx.starts += 1;
     fx.autoStop = o.onAutoStop ?? null;
     fx.signal = o.signal ?? null;
+    if (fx.startHang) await new Promise<void>((ok) => (fx.startOpen = ok));
     if (fx.startFail !== null) return { ok: false, fail: fx.startFail };
     const end = () => fx.stopEnd ?? { ok: true, auto: false, clip: { blob: new Blob([new Uint8Array(2000)], { type: 'audio/mp4' }), mime: 'audio/mp4', ms: 7000 } };
     return {
@@ -172,6 +176,8 @@ beforeEach(() => {
   fx.stopEnd = null;
   fx.stopHang = false;
   fx.stopOpen = null;
+  fx.startHang = false;
+  fx.startOpen = null;
   fx.signal = null;
   fx.upHang = false;
   fx.upOpen = null;
@@ -523,6 +529,33 @@ describe('作废和兜底（FA-3 整块评审第 1、2、14、16、17 条）', (
     unmount();
     await nothingKept(writer, call);
     expect(logged(/^voice host detach status=recording cancel=1$/)).toBe(true);
+  });
+
+  it('开录时弹了 iOS 系统麦克风框（录音器 1.5 秒以上才开起来），手指先松开了：这一下不录，提示“麦克风已允许，再按住“＋”说话”，没有按钮（R-417）', async () => {
+    fx.startHang = true;
+    const { writer, call } = setup();
+    await holdDown();
+    await release();
+    vi.mocked(clock.now).mockReturnValue(NOW + 2000);
+    await act(async () => fx.startOpen?.());
+    const note = await screen.findByTestId('voice-notice');
+    expect(note.dataset['note']).toBe('mic_ready');
+    expect(note.textContent).toContain('麦克风已允许，再按住“＋”说话');
+    expect(note.querySelectorAll('[data-testid^="voice-"]:not([data-testid="voice-notice-close"])'), '没有“再说一次”“改用打字”').toHaveLength(0);
+    expect(logged(/^voice mic_ready waited_ms=2000$/)).toBe(true);
+    expect(call).not.toHaveBeenCalled();
+    expect(writer.insert).not.toHaveBeenCalled();
+  });
+
+  it('松手早、录音器很快就开起来（不到 1.5 秒，没弹系统框）：当太短丢掉，不出“麦克风已允许”', async () => {
+    fx.startHang = true;
+    const { writer, call } = setup();
+    await holdDown();
+    await release();
+    vi.mocked(clock.now).mockReturnValue(NOW + 300);
+    await act(async () => fx.startOpen?.());
+    await nothingKept(writer, call);
+    expect(logged(/mic_ready/)).toBe(false);
   });
 
   it('录音器开不起来、麦克风被拒（{ok:false, fail:"denied"}）：出“麦克风没有打开”卡，不出提示条、不写库', async () => {
