@@ -5,6 +5,8 @@ import { actionsFor } from '../../../../shared/logic/remind-actions.ts';
 import { reminderTag } from '../../../../shared/logic/remind-route.ts';
 import { whenMsg } from '../data/remind-format.ts';
 import { annivTodoDue, annivTodoRow } from '../data/remind-write.ts';
+import { dndOf } from '../data/remind-settings.ts';
+import { actionsOf } from '../hooks/useReminders.ts';
 import { allReminders, MISSED_WINDOW_MS, missed, modeOf, upcoming, type AnnivAt } from '../data/reminder-model.ts';
 
 // next-date 带农历表，src 里只准按需加载（check_arch LUNAR）
@@ -86,6 +88,17 @@ describe('纪念日的按钮和生成待办', () => {
       { key: 'tomorrow', at: at('2026-11-14', '08:30') },
       { key: 'genTodo', at: null },
     ]);
+  });
+
+  it('提醒页的“明天再提醒”时刻：这一条的 remind_time ?? anniv.default_time ?? 09:00，不合格的跳过（整块评审第 22 条：和推算同一个 remindTimeOf）', () => {
+    const now = at('2026-11-13', '10:00');
+    const rem = (remind_time: unknown) => ({ kind: 'anniv', row: { remind_time } }) as unknown as Parameters<typeof actionsOf>[0];
+    const tomorrow = (r: ReturnType<typeof rem>, annivDefault: unknown) =>
+      actionsOf(r, now, TZ, { dnd: dndOf(null), defaultTime: '09:00', annivDefault }).find((x) => x.key === 'tomorrow')?.at;
+    expect(tomorrow(rem('06:15'), '07:30')).toBe(at('2026-11-14', '06:15'));
+    expect(tomorrow(rem(null), '07:30')).toBe(at('2026-11-14', '07:30'));
+    expect(tomorrow(rem('25:99'), '07:30')).toBe(at('2026-11-14', '07:30'));
+    expect(tomorrow(rem(null), 'bad')).toBe(at('2026-11-14', '09:00'));
   });
 
   it('生成的待办：截止日、来源、当天 09:00 提醒，其余列和新建待办一样', () => {

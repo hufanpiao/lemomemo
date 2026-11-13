@@ -37,8 +37,8 @@ export function useRemindPrefs() {
       dnd: dndOf(settingValue(rows, KEY_DND)),
       showTitle: showTitleOf(settingValue(rows, KEY_SHOW_TITLE)),
       defaultTime: defaultTimeOf(settingValue(rows, KEY_DEFAULT_TIME)),
-      /** 纪念日默认提醒时刻（anniv.default_time，没设 09:00）：纪念日“明天再提醒”用（这一条自己设了 remind_time 的用它自己的） */
-      annivTime: defaultTimeOf(settingValue(rows, KEY_ANNIV_TIME)),
+      /** 设置 anniv.default_time 的原值：纪念日“明天再提醒”交给 shared/logic/anniv/keys.ts 的 remindTimeOf 去认（整块评审第 22 条） */
+      annivDefault: settingValue(rows, KEY_ANNIV_TIME),
     }),
     [rows],
   );

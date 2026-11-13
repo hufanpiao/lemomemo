@@ -22,11 +22,12 @@ import { closeLocalReminder, showLocalReminder } from '../../../platform/native-
 import { closeHandledNotifications } from '../../../platform/notifications.ts';
 import { isKeyboardOpen, watchKeyboard } from '../../../platform/viewport.ts';
 import { todayOf } from '../../../../shared/core/date.ts';
-import { actionsFor, DEFAULT_REMIND_TIME, type RemindAction } from '../../../../shared/logic/remind-actions.ts';
+import { actionsFor, type RemindAction } from '../../../../shared/logic/remind-actions.ts';
+import { ANNIV_KEY_TIME, remindTimeOf } from '../../../../shared/logic/anniv/keys.ts';
 import { localDue, localText, shouldCloseShown, shownKey, staleShown } from '../data/local-notify.ts';
 import { MISSED_WINDOW_MS, occurrenceKey, ringing, type Reminder } from '../data/reminder-model.ts';
 import { ackAll as ackAllWrite, ackReminder, annivTodoDue, annivTodoRow, genTodoFromAnniv, snoozeReminder, timingPending, type OutboxLikeItem } from '../data/remind-write.ts';
-import { isHm, type dndOf } from '../data/remind-settings.ts';
+import type { dndOf } from '../data/remind-settings.ts';
 import { rangView, readSeen, writeSeen } from '../data/remind-seen.ts';
 import { useRemindT } from './useRemindT.ts';
 import {
@@ -84,13 +85,14 @@ export function actionsOf(
   r: Reminder,
   now: number,
   tz: string,
-  prefs: { dnd: ReturnType<typeof dndOf>; defaultTime: string; annivTime?: string },
+  prefs: { dnd: ReturnType<typeof dndOf>; defaultTime: string; annivDefault?: unknown },
 ): RemindAction[] {
   const opts = { dnd: prefs.dnd, defaultTime: prefs.defaultTime };
   if (r.kind === 'todo') return actionsFor(r.row, 'todo', now, tz, opts);
   if (r.kind === 'anniv') {
     const own = r.row['remind_time'];
-    return actionsFor(r.row, 'anniv', now, tz, { ...opts, annivTime: typeof own === 'string' && isHm(own) ? own : (prefs.annivTime ?? DEFAULT_REMIND_TIME) });
+    const annivTime = remindTimeOf({ remind_time: typeof own === 'string' ? own : null }, { [ANNIV_KEY_TIME]: prefs.annivDefault });
+    return actionsFor(r.row, 'anniv', now, tz, { ...opts, annivTime });
   }
   const date = typeof r.row['date'] === 'string' ? r.row['date'] : '';
   const time = typeof r.row['time'] === 'string' ? r.row['time'] : null;

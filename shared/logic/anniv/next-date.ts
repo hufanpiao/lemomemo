@@ -11,7 +11,7 @@
 // • 提醒（R-94）：offsets = 这一条的 remind_offsets ?? 设置 anniv.default_offsets ?? {7,1}；time = remind_time ?? anniv.default_time ?? 09:00；
 //   remind_at = 下一个还没到的 (next − offset 天) 的 time，按 current_tz 换算（浮动时刻）。这一次的都过了，就取再下一次的（每年的那几种）。
 // • 周岁（第几年）：有年份才算；阳历按下一次所在的公历年，阴历按下一次所在的农历年。
-import { ANNIV_KEY_OFFSETS, ANNIV_KEY_TIME } from './keys.ts';
+import { ANNIV_KEY_OFFSETS, DEFAULT_TIME, remindTimeOf } from './keys.ts';
 import { addDays, daysIn, diffDays, fmtDateStr, msAt, parseDate, parseHm, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import { toSolar } from './lunar.ts';
@@ -37,9 +37,9 @@ export interface AnnivRec {
   readonly created_at: number | null;
 }
 
-/** 出厂默认（anniv.default_offsets、anniv.default_time 没设时） */
+/** 出厂默认（anniv.default_offsets、anniv.default_time 没设时）；时刻和 remindTimeOf 在 keys.ts（提醒页静态引），这里转出给 annivLib 的调用方 */
+export { DEFAULT_TIME, remindTimeOf };
 export const DEFAULT_OFFSETS: readonly number[] = [7, 1];
-export const DEFAULT_TIME = '09:00';
 /** 编辑页“提前几天”的快捷选项（0 = 当天）；自定义 0～60；最多选 4 个（表的 check） */
 export const OFFSET_CHOICES: readonly number[] = [0, 1, 3, 7, 14, 30];
 export const OFFSET_MAX = 60;
@@ -48,7 +48,6 @@ export const OFFSETS_MAX = 4;
 export const YEAR_MIN = 1900;
 export const YEAR_MAX = 2100;
 
-const HM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const isLeapYear = (y: number): boolean => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 const intIn = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi;
 
@@ -180,12 +179,6 @@ export function offsetsOf(r: Pick<AnnivRec, 'remind_offsets'>, settings: Readonl
     Array.isArray(v) && v.length >= 1 && v.length <= OFFSETS_MAX && v.every((x) => intIn(x, 0, OFFSET_MAX));
   const raw = ok(r.remind_offsets) ? r.remind_offsets : ok(settings[ANNIV_KEY_OFFSETS]) ? settings[ANNIV_KEY_OFFSETS] : DEFAULT_OFFSETS;
   return [...new Set(raw)].sort((a, b) => b - a);
-}
-
-/** 提醒的时刻（HH:MM）；设置里的值不合格按出厂 */
-export function remindTimeOf(r: Pick<AnnivRec, 'remind_time'>, settings: Readonly<Record<string, unknown>>): string {
-  const d = settings[ANNIV_KEY_TIME];
-  return r.remind_time !== null && HM_RE.test(r.remind_time) ? r.remind_time : typeof d === 'string' && HM_RE.test(d) ? d : DEFAULT_TIME;
 }
 
 /** 某一次（date）的几个提醒时刻里不早于 now 的最早一个 */
