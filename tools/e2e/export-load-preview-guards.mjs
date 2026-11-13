@@ -93,12 +93,15 @@ export function seedRows(uid, sync, logs) {
   const range = (n, f) => Array.from({ length: n }, (_, i) => f(i + 1));
   const notes = range(sync, (g) => ({ id: randomUUID(), user_id: uid, title: zh(10), body: zh(300), raw_text: '', created_at: ms(g), updated_at: ms(g) }));
   const nid = (g) => notes[(g - 1) % notes.length].id;
+  const todos = range(sync, (g) => ({ id: randomUUID(), user_id: uid, title: zh(20), due: day(g), project: zh(4), note: zh(40), raw_text: zh(40), short: zh(6), created_at: ms(g), updated_at: ms(g) }));
   return {
     profiles: [{ user_id: uid, display_name: 'export-load' }],
     settings: range(sync, (g) => ({ id: randomUUID(), user_id: uid, key: `load.${g}`, value: zh(4) })),
     devices: range(sync, () => ({ id: randomUUID(), user_id: uid, label: zh(10), platform: 'web', app_version: '4.0.0', last_seen_at: new Date().toISOString(), install_id: randomUUID() })),
     events: range(sync, (g) => ({ id: randomUUID(), user_id: uid, title: zh(20), date: day(g), time: '09:30', tz: 'Asia/Seoul', project: zh(4), note: zh(40), raw_text: zh(40), location: zh(10), short: zh(6), created_at: ms(g), updated_at: ms(g) })),
-    todos: range(sync, (g) => ({ id: randomUUID(), user_id: uid, title: zh(20), due: day(g), project: zh(4), note: zh(40), raw_text: zh(40), short: zh(6), created_at: ms(g), updated_at: ms(g) })),
+    todos,
+    // R-350：子任务挂在上面的待办下（复合外键 (todo_id, user_id)），每条待办一项
+    todo_items: todos.map((t, i) => ({ id: randomUUID(), user_id: uid, todo_id: t.id, title: zh(10), done: false, sort: i + 1, created_at: ms(i + 1), updated_at: ms(i + 1) })),
     categories: range(sync, (g) => ({ id: randomUUID(), user_id: uid, name: `${zh(Math.max(4 - String(g).length, 1))}${g}`, color: '#aabbcc', sort: g })),
     notes,
     note_images: sync ? range(sync, (g) => {

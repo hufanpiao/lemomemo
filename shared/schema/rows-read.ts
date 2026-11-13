@@ -72,7 +72,7 @@ export function readColOf(s: z.ZodType, nullable = false): ReadCol {
   }
 }
 
-/** 公共列（数据字典 3.2：九张同步表都有）；id 另由引擎查（必须是非空字符串） */
+/** 公共列（数据字典 3.2：十张同步表都有，R-350 加了 todo_items）；id 另由引擎查（必须是非空字符串） */
 /** 公共列里每一行必须带上的（deleted_at 可以是 null，但这一列要在） */
 export const REQUIRED_COMMON = ['rev', 'user_id', 'deleted_at', 'synced_at', 'undone'] as const;
 

@@ -788,6 +788,26 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"todo_items": {
+                  Row: {
+                    "created_at": number,"deleted_at": number | null,"done": boolean,"fv": NonNullable<Json>,"id": string,"rev": number,"sort": number,"synced_at": string,"title": string,"todo_id": string,"undone": boolean,"updated_at": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at": number,"deleted_at"?: number | null,"done"?: boolean,"fv"?: NonNullable<Json>,"id": string,"rev"?: number,"sort": number,"synced_at"?: string,"title": string,"todo_id": string,"undone"?: boolean,"updated_at": number,"user_id"?: string
+                  }
+                  Update: {
+                    "created_at"?: number,"deleted_at"?: number | null,"done"?: boolean,"fv"?: NonNullable<Json>,"id"?: string,"rev"?: number,"sort"?: number,"synced_at"?: string,"title"?: string,"todo_id"?: string,"undone"?: boolean,"updated_at"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "todo_items_todo_id_user_id_fkey"
+      columns: ["todo_id","user_id"]
+isOneToOne: false
+      referencedRelation: "todos"
+      referencedColumns: ["id","user_id"]
+    }
+                  ]
                 },"todos": {
                   Row: {
                     "ai_status": string,"batch_id": string | null,"created_at": number,"defer_until": number | null,"deleted_at": number | null,"done": boolean,"done_at": number,"due": string | null,"due_time": string | null,"from_anniv_id": string | null,"from_note_id": string | null,"fv": NonNullable<Json>,"id": string,"important": boolean,"note": string,"notified_for": number | null,"project": string,"push_show_title": boolean | null,"pushed_for": number | null,"raw_text": string,"remind_at": number | null,"remind_before_min": number | null,"remind_days": number | null,"remind_time": string,"repeat": Json | null,"repeat_skip": (string)[],"rev": number,"short": string | null,"short_by": string | null,"snooze_at": number | null,"source": string,"synced_at": string,"title": string,"undone": boolean,"updated_at": number,"user_id": string

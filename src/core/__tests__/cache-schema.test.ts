@@ -17,9 +17,9 @@ import {
 const lock = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'cache-schema.lock'), 'utf8')) as SchemaLock;
 
 describe('同步仓按清单生成（TC-B1-33 的本机库部分）', () => {
-  it('正好是 P-22 定的 9 张表', () => {
+  it('正好是 P-22 定的 9 张表加 R-350 的 todo_items，共 10 张', () => {
     expect(syncStores().map((s) => s.name).sort()).toEqual(
-      ['anniversaries', 'categories', 'devices', 'events', 'note_files', 'note_images', 'notes', 'settings', 'todos'].sort(),
+      ['anniversaries', 'categories', 'devices', 'events', 'note_files', 'note_images', 'notes', 'settings', 'todos', 'todo_items'].sort(),
     );
   });
 

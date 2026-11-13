@@ -11,9 +11,10 @@ import type { mergePatch, newItem } from './outbox-new-item.ts';
 
 /**
  * 丢掉这一项、不重试的错误码（4.2 幂等：vault_required、settings_key_immutable；apply_patch 的 not_found，K6 审查 L2；
- * apply_patch 的参数检查 patch_table_not_allowed、patch_bad_args，架构 4.4.1、0.38 第 57 条）
+ * apply_patch 的参数检查 patch_table_not_allowed、patch_bad_args，架构 4.4.1、0.38 第 57 条；
+ * todo_items 的 not_found（主待办已被永久删除）、items_quota（一条待办看得见的子任务已有 30 项）：迁移 20261113170000 的 todo_items_cap，R-350 方案 2.4、6.1）
  */
-export const DROP_CODES: readonly string[] = ['vault_required', 'settings_key_immutable', 'not_found', 'patch_table_not_allowed', 'patch_bad_args'];
+export const DROP_CODES: readonly string[] = ['vault_required', 'settings_key_immutable', 'not_found', 'patch_table_not_allowed', 'patch_bad_args', 'items_quota'];
 /** 被移除、被停用：走“被移除”流程（TC-B1-77 ⑤），不当成令牌过期去刷新重发（K6 审查 L2） */
 export const REMOVED_CODES: readonly string[] = ['session_revoked'];
 /**

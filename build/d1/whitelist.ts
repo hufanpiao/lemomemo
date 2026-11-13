@@ -206,6 +206,7 @@ export const REQUIRED_CONSTRAINTS: [string, RegExp, string?][] = [
   ['public.notes', /^FOREIGN KEY \(category_id, user_id\) REFERENCES (public\.)?categories\(id, user_id\) ON DELETE SET NULL \(category_id\)$/],
   ['public.note_images', /^FOREIGN KEY \(note_id, user_id\) REFERENCES (public\.)?notes\(id, user_id\) ON DELETE CASCADE$/],
   ['public.note_files', /^FOREIGN KEY \(note_id, user_id\) REFERENCES (public\.)?notes\(id, user_id\) ON DELETE CASCADE$/],
+  ['public.todo_items', /^FOREIGN KEY \(todo_id, user_id\) REFERENCES (public\.)?todos\(id, user_id\) ON DELETE CASCADE$/],   // R-350（20261113170000）：子任务挂不到别人的待办上
   ['private.device_secrets', /^FOREIGN KEY \(device_id, user_id\) REFERENCES (public\.)?devices\(id, user_id\) ON DELETE CASCADE$/],
   ['public.applied_ops', /^PRIMARY KEY \(user_id, op_id\)$/],
   ['public.tombstones', /^PRIMARY KEY \(tbl, id\)$/],
