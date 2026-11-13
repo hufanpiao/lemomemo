@@ -4,6 +4,7 @@
 // • 不带引擎、本机通知、写服务器、弹层这些：那些在 useReminders.ts，首屏用不到
 // useReminders.ts 原样转出这里的导出，别处照旧从 useReminders 引
 import { useMemo, useSyncExternalStore } from 'react';
+import { allDayTimeOf } from '../../../../shared/logic/remind.ts';
 import { currentTz } from '../../../core/current-tz.ts';
 import { annivLib } from '../../../core/anniv-lib.ts';
 import { useAnnivLib } from '../../../kit/hooks/useAnnivLib.ts';
@@ -11,7 +12,6 @@ import { annivOn } from '../../../kit/hooks/anniv-on.ts';
 import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { allReminders, MISSED_WINDOW_MS, type AnnivSource, type Rang, type RangMap, type Reminder, type Row } from '../data/reminder-model.ts';
 import {
-  defaultTimeOf,
   dndOf,
   KEY_ANNIV_OFFSETS,
   KEY_ANNIV_TIME,
@@ -36,7 +36,7 @@ export function useRemindPrefs() {
     () => ({
       dnd: dndOf(settingValue(rows, KEY_DND)),
       showTitle: showTitleOf(settingValue(rows, KEY_SHOW_TITLE)),
-      defaultTime: defaultTimeOf(settingValue(rows, KEY_DEFAULT_TIME)),
+      defaultTime: allDayTimeOf(settingValue(rows, KEY_DEFAULT_TIME)),
       /** 设置 anniv.default_time 的原值：纪念日“明天再提醒”交给 shared/logic/anniv/keys.ts 的 remindTimeOf 去认（整块评审第 22 条） */
       annivDefault: settingValue(rows, KEY_ANNIV_TIME),
     }),

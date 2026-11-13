@@ -13,11 +13,10 @@
 import type { DateStr } from '../core/date.ts';
 import type { Tz } from '../core/tz.ts';
 import { ITEM_NOTE_MAX, ITEM_TITLE_MAX, PROJECT_MAX, RAW_TEXT_MAX } from '../schema/rows.ts';
-import { DEFAULT_TODO_REMIND_TIME } from './remind.ts';
+import { DEFAULT_REMIND_BEFORE_MIN } from './remind.ts';
 import { cutGraphemes } from './short.ts';
+import { todoRowOf, type NewTodoRow } from './todo-row.ts';
 
-/** 待办截止前多少分钟提醒的默认值（R-183，0.29 续第 124 条） */
-export const TODO_REMIND_BEFORE_DEFAULT = 60;
 /** 有时刻的日程默认提前几分钟提醒（同 event-edit.ts 的 DEFAULT_REMIND_MIN） */
 export const EVENT_REMIND_MIN_DEFAULT = 15;
 /** 日程默认时长（同 event-edit.ts 的 DEFAULT_DURATION_MIN） */
@@ -79,13 +78,8 @@ export interface EventRow {
   created_at: number; updated_at: number;
 }
 
-export interface TodoRow {
-  id: string; title: string; done: false; due: DateStr | null; important: boolean; project: string; note: string;
-  source: CaptureCtx['source']; raw_text: string; batch_id: string; from_note_id: null; from_anniv_id: null;
-  short: string | null; short_by: 'ai' | null; done_at: 0; remind_days: null; remind_time: string;
-  due_time: string | null; remind_before_min: 60 | null; push_show_title: null; notified_for: null; snooze_at: null;
-  created_at: number; updated_at: number;
-}
+/** 待办行：整行只在 todo-row.ts 一份 */
+export type TodoRow = NewTodoRow;
 
 export interface AnnivRow {
   id: string; kind: 'birthday' | 'anniversary' | 'countdown'; name: string; calendar: 'solar' | 'lunar'; lunar_variant: 'cn';
@@ -144,12 +138,10 @@ export function captureRow(item: CaptureItem, ctx: CaptureCtx): CaptureRow | nul
       const due = item.due ?? (dueTime !== null ? ctx.today : null);
       return {
         table: 'todos',
-        row: {
-          id: ctx.id, title, done: false, due, important: item.important, project, note, source: ctx.source, raw_text: raw,
-          batch_id: ctx.batchId, from_note_id: null, from_anniv_id: null, ...shortOf(item, ctx), done_at: 0, remind_days: null,
-          remind_time: DEFAULT_TODO_REMIND_TIME, due_time: dueTime, remind_before_min: dueTime === null ? null : TODO_REMIND_BEFORE_DEFAULT,
-          push_show_title: null, notified_for: null, snooze_at: null, created_at: ctx.now, updated_at: ctx.now,
-        },
+        row: todoRowOf({
+          id: ctx.id, title, due, important: item.important, project, note, source: ctx.source, raw_text: raw, batch_id: ctx.batchId,
+          ...shortOf(item, ctx), remind_days: null, due_time: dueTime, remind_before_min: dueTime === null ? null : DEFAULT_REMIND_BEFORE_MIN, now: ctx.now,
+        }),
       };
     }
     case 'anniv': {

@@ -4,7 +4,7 @@
 // 期望值一律用 Date.UTC 直接写出（不经 msAt），夏令时切换日的偏移量写死核对
 import { describe, expect, it } from 'vitest';
 import {
-  ALL_DAY_EVE_TIME, allDayRemindAt, allDayTimeOf, applyDnd, DEFAULT_ALL_DAY_TIME, eventRemindAt, remindAtOf, type EventRemindRow,
+  ALL_DAY_EVE_TIME, allDayRemindAt, allDayTimeOf, applyDnd, DEFAULT_REMIND_TIME, eventRemindAt, remindAtOf, type EventRemindRow,
 } from '../../shared/logic/remind.ts';
 
 const SEOUL = 'Asia/Seoul';
@@ -22,7 +22,7 @@ describe('全天日程：当天（remind_days = 0）在 remind.default_time 提�
     expect(allDayRemindAt(ev({}), UTC, '08:30')).toBe(utc(2026, 11, 5, 8, 30));
   });
   it('default_time 没设或认不出：回落出厂 09:00（undefined、null、空串、"9:00"、"24:00"、数字、对象都按 09:00）', () => {
-    expect(DEFAULT_ALL_DAY_TIME).toBe('09:00');
+    expect(DEFAULT_REMIND_TIME).toBe('09:00');
     const nine = utc(2026, 11, 5, 0);   // 首尔 09:00
     for (const v of [undefined, null, '', '9:00', '24:00', 540, { hm: '08:00' }]) {
       expect(allDayTimeOf(v)).toBe('09:00');
