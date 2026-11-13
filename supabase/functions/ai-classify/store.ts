@@ -82,7 +82,7 @@ export function makeStore(admin: ClassifyAdmin): ClassifyStore {
       return isObj(r) && str(r['id']) ? { id: r['id'] as string, value: r['value'] ?? null } : null;
     },
     async writeMergeSuggest(userId, id, value, insert) {
-      // 改的时候顺带恢复（客户端不写这个键，正常不会被软删、撤销）；touch 触发器升 rev、synced_at，客户端经同步拿到
+      // 改的时候顺带恢复（客户端代码不写这个键，但 RLS 不拦本人改，可能被软删、撤销）；touch 触发器升 rev、synced_at，客户端经同步拿到
       if (insert) must(await tbl(admin, 'settings').insert({ id, user_id: userId, key: MERGE_SUGGEST_KEY, value }), 'settings_insert');
       else must(await tbl(admin, 'settings').update({ value, deleted_at: null, undone: false }).eq('id', id).eq('user_id', userId), 'settings_update');
     },

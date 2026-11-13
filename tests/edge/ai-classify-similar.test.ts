@@ -1,10 +1,12 @@
 // ai-classify 的相似分类对（R-413，classify.v2；负责人 11-13 定“分类很像交给 AI 判断”）。
-// 证明：提示词和 responseSchema 带 similar；readSimilar 只认两个名字都在名单里、不是同一个的对，同一对只认一次、封顶 SIMILAR_MAX；
+// 证明：提示词和 responseSchema 带 similar；readSimilar 的名字先过 cleanCategoryName、按 nameIndex（和 writeAi 认 items 同一份映射）认成 id，
+// 两个都认得、不是同一个才要，同一对只认一次、封顶 SIMILAR_MAX；writeAi 不改传进来的分类列表；
 // 一轮下来把这一对按 id 写进 settings notes.merge_suggest（排好序），再给一次同样的不再写；存的旧对里分类没了的顺带去掉；
 // 读写设置出错只记日志，分类照常写回。服务商是真的 GeminiProvider + 回放桩（classify-similar.json，手写）。
 import { describe, expect, it } from 'vitest';
 import { MERGE_SUGGEST_KEY } from '../../shared/logic/notes/category-merge.ts';
-import { classifyRequest, readSimilar, SIMILAR_MAX } from '../../supabase/functions/ai-classify/request.ts';
+import { classifyRequest, nameIndex, readSimilar, SIMILAR_MAX } from '../../supabase/functions/ai-classify/request.ts';
+import { writeAi, type Tally } from '../../supabase/functions/ai-classify/write.ts';
 import { normalizeForSearch } from '../../shared/logic/search.ts';
 import { A, B, cat, note, setup } from './ai-classify-fakes.ts';
 
@@ -22,23 +24,53 @@ describe('ai-classify 相似分类对：请求和读回', () => {
     expect(Object.keys(schema.properties)).toEqual(['items', 'similar']);
     expect(schema.required).toEqual(['items']);
   });
-  it('readSimilar：名字要在名单里（按归一比，回名单里的原名）；同一对不分先后只认一次；两个一样、不是字符串、坏值都丢掉', () => {
-    const names = ['读书', '书单', '工作', 'Travel'];
+  it('readSimilar：名字要在名单里（先过 cleanCategoryName、再按归一比），回 id 对；同一对不分先后只认一次；两个一样、不是字符串、坏值都丢掉', () => {
+    const T = '00000000-0000-4000-8000-0000000000a4';
+    const index = nameIndex([...cats(), cat(T, A, 'Travel', { sort: 4 })], normalizeForSearch);
     const json = {
       similar: [
         { a: '读书', b: '书单' }, { a: '书单', b: '读书' }, { a: '工作', b: '不存在' }, { a: '工作', b: '工作' }, { a: 1, b: '工作' }, 'x', null,
-        { a: ' travel ', b: '工作' },
+        { a: ' “travel” ', b: '工作' }, { a: '工作'.repeat(7), b: '读书' },
       ],
     };
-    expect(readSimilar(json, names, normalizeForSearch)).toEqual([['读书', '书单'], ['Travel', '工作']]);
-    expect(readSimilar(null, names, normalizeForSearch)).toEqual([]);
-    expect(readSimilar({ similar: 'x' }, names, normalizeForSearch)).toEqual([]);
-    expect(readSimilar({ items: [] }, names, normalizeForSearch)).toEqual([]);
+    expect(readSimilar(json, index, normalizeForSearch)).toEqual([[R, L], [T, W]]);
+    expect(readSimilar(null, index, normalizeForSearch)).toEqual([]);
+    expect(readSimilar({ similar: 'x' }, index, normalizeForSearch)).toEqual([]);
+    expect(readSimilar({ items: [] }, index, normalizeForSearch)).toEqual([]);
   });
   it(`readSimilar：最多认 ${SIMILAR_MAX} 对`, () => {
-    const names = Array.from({ length: 30 }, (_, i) => `分类${i}`);
-    const json = { similar: Array.from({ length: 29 }, (_, i) => ({ a: names[i], b: names[i + 1] })) };
-    expect(readSimilar(json, names, normalizeForSearch)).toHaveLength(SIMILAR_MAX);
+    const all = Array.from({ length: 30 }, (_, i) => cat(`00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, A, `分类${i}`, { sort: i }));
+    const json = { similar: Array.from({ length: 29 }, (_, i) => ({ a: `分类${i}`, b: `分类${i + 1}` })) };
+    expect(readSimilar(json, nameIndex(all, normalizeForSearch), normalizeForSearch)).toHaveLength(SIMILAR_MAX);
+  });
+  it('nameIndex 一份映射、同一口径：归一后重名的留 sort 小的（一样按 id 小的），归一后为空的不收', () => {
+    const X = '00000000-0000-4000-8000-0000000000b1';
+    const Y = '00000000-0000-4000-8000-0000000000b2';
+    const index = nameIndex([cat(Y, A, 'Travel', { sort: 1 }), cat(X, A, 'travel', { sort: 1 }), cat(W, A, ' TRAVEL', { sort: 2 }), cat(R, A, '！', { sort: 0 })], normalizeForSearch);
+    expect([...index.keys()]).toEqual([normalizeForSearch('travel')]);
+    expect(index.get(normalizeForSearch('travel'))?.id).toBe(X);
+  });
+});
+
+describe('ai-classify：认分类名 writeAi 和 readSimilar 同一口径；writeAi 不改传进来的列表', () => {
+  it('两个分类都叫“读书”：items 写回的分类和 similar 认的那个是同一个（sort 小的）', async () => {
+    const R2 = '00000000-0000-4000-8000-0000000000a5';
+    const notes = [note('n0', A, '这周读完的书')];
+    const s = setup({ notes, cats: [cat(R2, A, '读书', { sort: 0 }), ...cats()], cassettes: ['classify-similar'] });
+    await s.call();
+    expect(notes[0]?.category_id).toBe(R2);
+    expect(s.db.settings[0]?.value).toEqual([[R2, L].sort()]);
+  });
+  it('writeAi 新建了分类：只记在自己的副本里，传进来的 cats 不变', async () => {
+    const s = setup({ notes: [] });
+    const list = cats();
+    const tally: Tally = { ai: 0, rule: 0, manual: 0, skipped: 0, failed: 0 };
+    const pending = [{ id: 'n0', user_id: A, title: '旅行计划', body: null, tags: [], category_source: 'none', ai_meta: null }];
+    s.db.notes.push(note('n0', A, '旅行计划'));
+    await writeAi(s.deps, s.db.store, A, pending, list, new Map([[0, { name: '旅行', isNew: true }]]), true, 'm', tally);
+    expect(list).toHaveLength(3);
+    expect(s.db.cats.map((c) => c.name)).toEqual(['旅行']);
+    expect([tally.ai, s.db.notes[0]?.category_id]).toEqual([1, s.db.cats[0]?.id]);
   });
 });
 

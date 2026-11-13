@@ -3,10 +3,15 @@
 // • 菜单：“转成待办 / 转成日程”在“删除”上面；不带图的直接转、原条进“最近删除”、出提示；带图的先弹确认窗（取消不写、确定后原条保留）；
 //   超过 2000 字两项变淡、下面写“超过 2000 字，转不了”，点了不写；只读行拦下
 // 用真实冷启动（假 IndexedDB），插图显示层、上传器换成桩（note-images-kit.tsx）
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, renderHook, screen, waitFor, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import type { ServerRow } from '../../../core/cache.ts';
+import { OutboxRejectError } from '../../../core/outbox.ts';
 import { collection } from '../../../core/store.ts';
+import { write } from '../../../core/write.ts';
+import { RL_SLOT } from '../../../platform/run-log-api.ts';
+import { useNoteList } from '../hooks/useNoteList.ts';
+import { useConvertFlow } from '../ui/NotesActions.tsx';
 import { boot, NOW, open, serverImage, serverNote, setupImageTests, uid, wire, type Row } from './note-images-kit.tsx';
 
 setupImageTests();
@@ -63,6 +68,19 @@ describe('合并分类提示（S7，R-413）', () => {
     const pair = [READ, LIST].sort();
     expect(rows('settings').find((s) => s['key'] === 'notes.merge_dismissed')?.['value']).toEqual([pair]);
     expect(rows('categories').find((c) => c.id === LIST)?.['merged_into']).toBeNull();
+  });
+  it('点“不用”写库抛错：页面出错条，运行日志只记“notes merge dismiss fail”，没有没人接的 Promise 拒绝', async () => {
+    await withSuggest();
+    const lines: string[] = [];
+    (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    const spy = vi.spyOn(write, 'insert').mockRejectedValueOnce(new OutboxRejectError('invalid_row'));
+    await act(async () => {
+      fireEvent.click(await screen.findByTestId('notes-merge-no'));
+    });
+    expect((await screen.findByTestId('notes-error')).textContent).toBeTruthy();
+    expect(lines.filter((l) => l.startsWith('notes merge dismiss'))).toEqual(['notes merge dismiss fail']);
+    spy.mockRestore();
+    delete (globalThis as Record<string, unknown>)[RL_SLOT];
   });
   it('没有 AI 判的、本机规则也不像：不出提示条', async () => {
     const b = await boot();
@@ -171,5 +189,62 @@ describe('转成待办 / 日程（S8，R-414）', () => {
     await openMenu(uid(1));
     expect(screen.queryByTestId(`notes-conv-long-${uid(1)}`)).toBeNull();
     expect(screen.getByTestId(`notes-to-todo-${uid(1)}`).getAttribute('aria-disabled')).toBeNull();
+  });
+});
+
+describe('转成待办 / 日程：带不带图只判一次（R-414）', () => {
+  it('弹窗问的时候带图：确定之前图被删光，原条照样保留、提示“留着”', async () => {
+    const b = await boot();
+    await act(async () => {
+      await b.outbox?.applyServer('notes', [{ row: serverNote(1) }]);
+      await b.outbox?.applyServer('note_images', [{ row: serverImage(uid(601), uid(1)) }]);
+    });
+    wire();
+    open();
+    await openMenu(uid(1));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId(`notes-to-todo-${uid(1)}`));
+    });
+    const dlg = await screen.findByRole('dialog');
+    await act(async () => {
+      await b.outbox?.applyServer('note_images', [{ row: { ...serverImage(uid(601), uid(1)), deleted_at: 5, rev: 2 } as ServerRow }]);
+    });
+    await act(async () => {
+      fireEvent.click(within(dlg).getByRole('button', { name: '转成 1 条待办' }));
+    });
+    await waitFor(() => expect(rows('todos')).toHaveLength(1));
+    expect(rows('notes').find((r) => r.id === uid(1))?.['deleted_at'] ?? null).toBeNull();
+    expect((await screen.findByTestId('notes-conv-tip')).textContent).toBe('已转成待办，这条随手记留着');
+  });
+  it('点的时候不带图、转换那一刻有了图：也保留原条（两者取或）', async () => {
+    const b = await boot();
+    await act(async () => {
+      await b.outbox?.applyServer('notes', [{ row: serverNote(1) }]);
+      await b.outbox?.applyServer('note_images', [{ row: serverImage(uid(601), uid(1)) }]);
+    });
+    const { result } = renderHook(() => useNoteList());
+    let r: Awaited<ReturnType<typeof result.current.convert>> | undefined;
+    await act(async () => {
+      r = await result.current.convert(uid(1), 'event', false);
+    });
+    expect([r?.ok, r?.kept]).toEqual([true, true]);
+    expect(rows('notes').find((x) => x.id === uid(1))?.['deleted_at'] ?? null).toBeNull();
+  });
+  it('流程拿到 too_long 出“超过 2000 字，转不了”（现成词条）；busy 不提示也不出错条', async () => {
+    const show = vi.fn();
+    const report = vi.fn();
+    const a = { g: { show, block: vi.fn() }, isRo: () => false, report } as unknown as Parameters<typeof useConvertFlow>[1];
+    const it1 = { id: uid(1), images: 0 } as Parameters<ReturnType<typeof useConvertFlow>['start']>[0];
+    for (const reason of ['too_long', 'busy'] as const) {
+      const run = vi.fn(() => Promise.resolve({ ok: false as const, reason, kept: false }));
+      const { result } = renderHook(() => useConvertFlow(run, a));
+      await act(async () => {
+        result.current.start(it1, 'todo');
+        await Promise.resolve();
+      });
+      expect(run).toHaveBeenCalledWith(uid(1), 'todo', false);
+    }
+    expect(show.mock.calls).toEqual([[{ kind: 'conv', key: 'notes.conv.long' }]]);
+    expect(report.mock.calls).toEqual([['silent']]);
   });
 });

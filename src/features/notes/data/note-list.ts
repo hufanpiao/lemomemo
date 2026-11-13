@@ -12,7 +12,7 @@
 import { addDays, todayOf, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
 import { isLiveCategory, isLiveRow } from '../../../../shared/logic/live-row.ts';
-import { noteHeadline } from '../../../../shared/logic/notes/note-headline.ts';
+import { noteHeadline, str } from '../../../../shared/logic/notes/note-headline.ts';
 
 export type Row = { readonly id: string } & Readonly<Record<string, unknown>>;
 
@@ -57,7 +57,6 @@ export interface CategoryCount {
   count: number;
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 const alive = (r: Row): boolean => isLiveRow(r) && r['is_private'] !== true;
 
@@ -90,25 +89,31 @@ function categoryColors(categories: readonly Row[]): Map<string, string | null> 
   return new Map(categories.map((c) => [c.id, categoryColor(c['color'])]));
 }
 
-/** 活着的分类（isLiveCategory：没删、没撤销、没合并进别的分类）：id → 名字 */
+/** 活着的分类（条目能归到的，即 categoryResolver 归到自己的那些）：id → 名字 */
 export function categoryNames(categories: readonly Row[]): Map<string, string> {
+  const target = categoryResolver(categories);
   const out = new Map<string, string>();
-  for (const c of categories) if (isLiveCategory(c)) out.set(c.id, str(c['name']));
+  for (const c of categories) if (target(c.id) === c.id) out.set(c.id, str(c['name']));
   return out;
 }
 
 /**
  * 条目的 category_id → 归到哪个活着的分类：顺着 merged_into 走（合并过的归到留下的那个），走不到活着的为 null。
+ * 两台设备各合并一次可能绕成圈（A → B、B → A）：圈里按 sort 小的、一样再按 id 小的留一个，不把两个分类下的条目都变成没分类。
  * “条目归哪个分类”只在这里定：列表、分类胶囊、编辑页（note-edit.ts 的 formOf）都经它
  */
 export function categoryResolver(categories: readonly Row[]): (id: unknown) => string | null {
   const byId = new Map(categories.map((c) => [c.id, c]));
+  const first = (a: Row, b: Row): Row => (num(a['sort']) - num(b['sort']) || (a.id < b.id ? -1 : 1)) <= 0 ? a : b;
   return (id) => {
-    let cur = id;
-    for (let hops = 0; typeof cur === 'string' && hops <= categories.length; hops++) {
+    const path: Row[] = [];
+    for (let cur = id; typeof cur === 'string'; ) {
       const c = byId.get(cur);
       if (!c || !isLiveRow(c)) return null;
       if (isLiveCategory(c)) return cur;
+      const at = path.indexOf(c);
+      if (at >= 0) return path.slice(at).reduce(first).id;
+      path.push(c);
       cur = c['merged_into'];
     }
     return null;

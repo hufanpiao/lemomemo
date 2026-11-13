@@ -94,14 +94,6 @@
   display: none;
 }
 
-/* 确认弹层的两个按钮（同设置页 ConfirmDialog 的 .actions） */
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 8px;
-}
-
 .toast {
   position: fixed;
   left: 16px;

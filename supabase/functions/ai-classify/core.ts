@@ -32,7 +32,7 @@ import { cronGate, json } from '../_shared/http.ts';
 import { nextPacificMidnight, globalQuotaKey, userQuotaKey, type QuotaStore } from '../_shared/ai/gate.ts';
 import type { AIProvider } from '../_shared/ai/provider.ts';
 import type { AiConfig } from '../_shared/ai/router.ts';
-import { classifyRequest, readItems, readSimilar, type PendingNote } from './request.ts';
+import { classifyRequest, nameIndex, readItems, readSimilar, type PendingNote } from './request.ts';
 import { MAX_CATEGORIES, writeAi, writeManual, writeRules, writeSimilar, type Category, type NotePatch, type Tally } from './write.ts';
 
 export const HEARTBEAT = 'ai-classify';
@@ -280,7 +280,7 @@ export async function runRound(deps: Deps, store: ClassifyStore): Promise<Heartb
       continue;
     }
     await writeAi(deps, store, userId, toAi, cats, items, canCreate, provider.model, tally);
-    await writeSimilar(deps, store, userId, cats, readSimilar(res.json, catNames, deps.logic.normalize));
+    await writeSimilar(deps, store, userId, cats, readSimilar(res.json, nameIndex(cats, deps.logic.normalize), deps.logic.normalize));
   }
 
   return {

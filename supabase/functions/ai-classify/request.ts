@@ -90,33 +90,34 @@ export function readItems(json: unknown, count: number): Map<number, { name: str
   return out;
 }
 
+/** 认分类名的唯一一份映射（writeAi 认 items、readSimilar 认 similar 共用）：normalize 后的名字 → 分类；归一后为空的不收，重名留 sort 小的、再按 id */
+export function nameIndex<C extends { id: string; name: string; sort: number }>(cats: readonly C[], normalize: (s: string) => string): Map<string, C> {
+  const out = new Map<string, C>();
+  for (const c of [...cats].sort((a, b) => a.sort - b.sort || (a.id < b.id ? -1 : 1))) {
+    const k = normalize(c.name);
+    if (k !== '' && !out.has(k)) out.set(k, c);
+  }
+  return out;
+}
+
 /**
- * 模型给的相似分类对（R-413）：两个名字都要在 catNames 里（按 normalize 比，和 writeAi 认分类名同一口径）、不是同一个；
- * 同一对（不分先后）只认一次，最多 SIMILAR_MAX 对。返回 catNames 里的原名对
+ * 模型给的相似分类对（R-413）：a、b 先过 cleanCategoryName（同 items），再按 nameIndex 认成分类 id，两个都要认得、不是同一个；
+ * 同一对（不分先后）只认一次，最多 SIMILAR_MAX 对。返回 id 对
  */
-export function readSimilar(json: unknown, catNames: readonly string[], normalize: (s: string) => string): [string, string][] {
+export function readSimilar(json: unknown, index: ReadonlyMap<string, { id: string }>, normalize: (s: string) => string): [string, string][] {
   const list = (json as { similar?: unknown } | null)?.similar;
   if (!Array.isArray(list)) return [];
-  const byKey = new Map<string, string>();
-  for (const n of catNames) {
-    const k = normalize(n);
-    if (k !== '' && !byKey.has(k)) byKey.set(k, n);
-  }
+  const idOf = (v: unknown): string | undefined => {
+    const n = cleanCategoryName(v);
+    return n === null ? undefined : index.get(normalize(n))?.id;
+  };
   const out: [string, string][] = [];
-  const seen = new Set<string>();
   for (const it of list) {
     if (out.length >= SIMILAR_MAX) break;
-    if (typeof it !== 'object' || it === null) continue;
-    const o = it as Record<string, unknown>;
-    if (typeof o['a'] !== 'string' || typeof o['b'] !== 'string') continue;
-    const ka = normalize(o['a']);
-    const kb = normalize(o['b']);
-    const a = byKey.get(ka);
-    const b = byKey.get(kb);
-    if (a === undefined || b === undefined || ka === kb) continue;
-    const pair = JSON.stringify(ka < kb ? [ka, kb] : [kb, ka]);
-    if (seen.has(pair)) continue;
-    seen.add(pair);
+    const o = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : {};
+    const a = idOf(o['a']);
+    const b = idOf(o['b']);
+    if (a === undefined || b === undefined || a === b || out.some(([x, y]) => (x === a && y === b) || (x === b && y === a))) continue;
     out.push([a, b]);
   }
   return out;

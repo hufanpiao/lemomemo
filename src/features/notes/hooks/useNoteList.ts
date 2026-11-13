@@ -3,8 +3,7 @@
 // • 插图（S3）：卡片顶部的图读 note_images 集合（data/note-list.ts 的 cover、images）；输入行的“图片”“拍照”先新建一条随手记
 //   （正文是输入框里的字，可以空），再把图插进这一条（data/image-uploader.ts）
 // • 删除：软删（deleted_at），进“最近删除”（ADR-006）；撤销把它改回 null。随手记没有提醒，remind 标记一律 false
-// • 转成待办 / 日程（S8，R-414）：经 data/note-convert.ts 的 convertNote；带插图的原条保留（R-412，负责人 11-13 定），不带图的原条进“最近删除”；
-//   备注放不下（超过 2000 字）的不让转（tooLong，界面上两项变淡）
+// • 转成待办 / 日程（S8，R-414）：经 data/note-convert.ts 的 convertNote；菜单变淡用 tooLong。规则见 shared/logic/notes/note-convert.ts 文件头
 import { useCallback, useMemo, useState } from 'react';
 import { convertTooLong, type ConvertKind } from '../../../../shared/logic/notes/note-convert.ts';
 import { currentTz } from '../../../core/current-tz.ts';
@@ -62,17 +61,17 @@ export function useNoteList(newId: () => string = () => crypto.randomUUID()) {
   /** 撤销刚新建的一条（undone，界面和“最近删除”都不显示）：输入行插图时，图片行没写成，不留一条空随手记 */
   const discard = useCallback(async (id: string): Promise<ActionResult> => actionResult(await savePatch('notes', id, { undone: true, updated_at: clock.now() }, false)), []);
 
-  /** 转成待办 / 日程：带插图的保留原条（keepNote），结果里带上 kept 给提示条用 */
+  /** 转成待办 / 日程：keep 是弹窗问时定下的保留原条，和转换那一刻带图取或（不会说“保留”却删了原条）；结果带上 kept 给提示条用 */
   const convert = useCallback(
-    async (id: string, kind: ConvertKind): Promise<ConvertResult & { kept: boolean }> => {
+    async (id: string, kind: ConvertKind, keep: boolean): Promise<ConvertResult & { kept: boolean }> => {
       const n = rows.find((x) => x.id === id);
-      const kept = imagesByNote(pics).has(id);
+      const kept = keep || imagesByNote(pics).has(id);
       if (!n) return { ok: false, reason: 'gone', kept };
       return { ...(await convertNote(n, kind, { now: clock.now(), tz, keepNote: kept })), kept };
     },
     [rows, pics, tz],
   );
-  /** 这条转不了：备注放不下（超过 2000 字） */
+  /** 这条转不了：备注放不下 */
   const tooLong = useCallback((id: string): boolean => {
     const n = rows.find((x) => x.id === id);
     return n !== undefined && convertTooLong({ title: n['title'], body: n['body'] });

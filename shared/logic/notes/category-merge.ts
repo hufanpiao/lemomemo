@@ -6,7 +6,7 @@
 //   ③ 都至少 3 个字、只差一个字（增、删、换一个字：“读书笔记”和“读书笔迹”）。
 // 每对建议留下 sort 小的（一样就留名字短的、再按 id），把另一个合并进去。纯函数。
 // R-413（负责人 11-13 定“分类很像交给 AI 判断”）：ai-classify 分类时一并判断哪几对意思差不多（“读书”和“书单”），
-//   记在 settings notes.merge_suggest（只有服务器写）；要提示的是 AI 判的这些加上上面三条本机规则判的（openPairs），去掉点过“不用”的。
+//   记在 settings notes.merge_suggest（只有 ai-classify 写；RLS 不拦本人写这一行，读的当不可信值）；要提示的是 AI 判的这些加上上面三条本机规则判的（openPairs），去掉点过“不用”的。
 //   两个键的值是同一种：排好序的 [小 id, 大 id] 数组，最多 PAIRS_MAX 对，满了去最旧的（idPairs 读、withPairs 加；客户端和 ai-classify 共用）。
 import { isLiveCategory, type CategoryRow } from '../live-row.ts';
 import { normalizeForSearch } from '../search.ts';
@@ -22,7 +22,7 @@ export interface MergePair {
 
 /** 用户点过“不用”的各对（客户端写） */
 export const MERGE_DISMISSED_KEY = 'notes.merge_dismissed';
-/** AI 判出来很像的各对（ai-classify 写，客户端只读） */
+/** AI 判出来很像的各对（ai-classify 写，客户端代码只读；RLS 并不拦本人写） */
 export const MERGE_SUGGEST_KEY = 'notes.merge_suggest';
 /** 每个键最多记几对（一对 uuid 按 jsonb 文字约 82 字节，40 对约 3.3 KB，settings.value 的库约束是 4096 字节） */
 export const PAIRS_MAX = 40;

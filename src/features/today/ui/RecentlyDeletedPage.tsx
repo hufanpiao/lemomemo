@@ -1,6 +1,6 @@
 // “最近删除”页（B2 FA-2；ADR-006；TC-B2-03 前两步；B4 S2 加随手记）：日程、待办和随手记，最近删的在前，每条写“N 天后清理”和“恢复”
 // • 恢复后出“已恢复”提示（2 秒，role=status）；写不进去出提示条
-// • 永久删除、全部清空（B4 S9，TC-B4-17，0.29 续第 121 条⑧）：每行“永久删除”、右上角“全部清空”，都先弹确认（kit 的 Dialog），
+// • 永久删除、全部清空（B4 S9，TC-B4-17，0.29 续第 121 条⑧）：每行“永久删除”、右上角“全部清空”，都先弹确认（kit 的 ConfirmDialog），
 //   只走 RPC purge_deleted（hooks/useTrashPurge.ts、data/trash-purge-api.ts）；离线时两个按钮灰掉、页上写“要联网”，点了没反应、不进 outbox。
 //   没有定稿视觉稿（线框、皮肤视觉稿里都没画这两个按钮）：沿用本页“恢复”胶囊和设置页确认弹层的样子；按 R-376 不加动效，左滑、长按菜单留到 UI 细修
 // • 隐私记有自己的“最近删除”（R-193，B5），这里的“全部清空”不含隐私记（服务器只清四张表的普通行）
@@ -8,8 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { backOr } from '../../../app/router-levels.ts';
 import { BackLink } from '../../../kit/components/BackLink.tsx';
-import { Dialog, DialogClose } from '../../../kit/components/Dialog.tsx';
-import { FormButton } from '../../../kit/components/Form.tsx';
+import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import list from '../../../kit/components/List.module.css';
 import { ReadonlyMark } from '../../../kit/components/ReadonlyMark.tsx';
 import { useReadonlyIds } from '../../../kit/hooks/useReadonly.ts';
@@ -148,25 +147,21 @@ export default function RecentlyDeletedPage() {
           {pmsg === 'readonly' ? tToday('err.readonly', {}) : pmsg === 'kept' ? t('trash.ro.kept', { n: roN }) : t(PURGE_MSG[pmsg], {}) + roTail}
         </p>
       ) : null}
-      <Dialog
+      <ConfirmDialog
         open={confirm !== null}
-        onOpenChange={(o) => (o ? undefined : purge.cancel())}
         title={confirm?.kind === 'all' ? t('trash.clear.title', {}) : t('trash.purge.title', {})}
-        description={
+        body={
           confirm?.kind === 'all'
             ? t('trash.clear.body', { n: confirm.n }) + (confirm.skip > 0 ? t('trash.clear.skip', { n: confirm.skip }) : '') + (confirm.ro > 0 ? t('trash.clear.ro', { n: confirm.ro }) : '')
             : t('trash.purge.body', {})
         }
-      >
-        <div className={styles.actions}>
-          <DialogClose asChild>
-            <FormButton size="compact" data-testid="trash-confirm-cancel">{t('trash.cancel', {})}</FormButton>
-          </DialogClose>
-          <FormButton size="compact" variant="dangerFill" onClick={purge.ok} data-testid="trash-confirm-ok">
-            {confirm?.kind === 'all' ? t('trash.clear', {}) : t('trash.purge', {})}
-          </FormButton>
-        </div>
-      </Dialog>
+        okLabel={confirm?.kind === 'all' ? t('trash.clear', {}) : t('trash.purge', {})}
+        cancelLabel={t('trash.cancel', {})}
+        danger
+        testId="trash-confirm"
+        onOk={purge.ok}
+        onCancel={purge.cancel}
+      />
     </main>
   );
 }

@@ -1,6 +1,9 @@
 // 随手记的显示标题（列表、转成待办 / 日程共用；“没有标题取正文第一行”只在这里定）：有标题用标题；没有取正文第一个非空行，
 // rest 是其后各行（去掉首尾空行、换行保留）。单独成文件、不带 zod：列表页只要这一条规则。纯函数
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+// str 是随手记这一块（shared/logic/notes、features/notes/data）共用的“列值取字符串，不是字符串当空串”，别再各写一份
+
+/** 列值取字符串：不是字符串当空串 */
+export const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const blank = (l: string): boolean => l.trim() === '';
 
 export function noteHeadline(title: unknown, body: unknown): { title: string; rest: string; fromBody: boolean } {

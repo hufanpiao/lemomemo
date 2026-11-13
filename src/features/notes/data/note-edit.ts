@@ -7,6 +7,7 @@
 //   用户手动改分类：同一个 patch 写 category_id、category_source = 'manual'、category_seen = true（之后 AI 永远不改，S2）
 // • 标题可空（库里 title 允许 null）：空标题存 null；标题和正文都空时不保存（useEditRecord 的 titleOf 为空）
 // 纯 TS：不准 import React（A1）
+import { str } from '../../../../shared/logic/notes/note-headline.ts';
 import { collection } from '../../../core/store.ts';
 import { categoryResolver, type Row } from './note-list.ts';
 
@@ -18,8 +19,6 @@ export interface NoteForm {
 
 export const TITLE_MAX = 160;
 export const BODY_MAX = 20000;
-
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 /** categories 不传时读本机集合（编辑页经 useEditRecord 只传行） */
 export function formOf(row: Readonly<Record<string, unknown>>, categories: readonly Row[] = collection<Row>('categories').getSnapshot()): NoteForm {

@@ -2,7 +2,7 @@
 // 写的时候都带条件（还是 pending；manual 的只改 ai_status），用户刚好改了就不覆盖（store.ts 的 writeNote）。
 import { PROMPT_VERSION } from '../_shared/ai/params.ts';
 import type { ClassifyStore, Deps } from './core.ts';
-import type { PendingNote } from './request.ts';
+import { nameIndex, type PendingNote } from './request.ts';
 
 /** 架构 5.2：超过 30 个分类后不准再新建 */
 export const MAX_CATEGORIES = 30;
@@ -70,12 +70,13 @@ export async function writeRules(
   }
 }
 
+/** AI 结果写回：分类名按 request.ts 的 nameIndex 认；认不得的能新建就新建（只记在这一批自己的副本里，不改传进来的 cats） */
 export async function writeAi(
-  deps: Deps, store: ClassifyStore, userId: string, notes: readonly PendingNote[], cats: Category[],
+  deps: Deps, store: ClassifyStore, userId: string, notes: readonly PendingNote[], cats: readonly Category[],
   items: Map<number, { name: string; isNew: boolean }>, canCreate: boolean, model: string, tally: Tally,
 ): Promise<void> {
-  const byName = new Map(cats.map((c) => [deps.logic.normalize(c.name), c] as const));
-  let liveCount = cats.length;
+  const byName = nameIndex(cats, deps.logic.normalize);
+  const all = [...cats];
   let nextSort = cats.reduce((m, c) => Math.max(m, c.sort), -1) + 1;
   let created = 0;
   const meta = { prompt: PROMPT_VERSION.classify, model };
@@ -84,16 +85,15 @@ export async function writeAi(
     let catId: string | null = null;
     if (it) {
       const key = deps.logic.normalize(it.name);
-      const hit = key === '' ? undefined : byName.get(key);
+      const hit = byName.get(key);
       if (hit) catId = hit.id;
-      else if (canCreate && liveCount < MAX_CATEGORIES && created < MAX_NEW_PER_BATCH && key !== '') {
+      else if (canCreate && all.length < MAX_CATEGORIES && created < MAX_NEW_PER_BATCH && key !== '') {
         const c = { id: deps.newId(), name: it.name, sort: nextSort };
         try {
           await store.createCategory(userId, c);
           const full: Category = { ...c, deleted_at: null, undone: false, merged_into: null };
           byName.set(key, full);
-          cats.push(full);
-          liveCount++;
+          all.push(full);
           created++;
           nextSort++;
           catId = c.id;
@@ -106,7 +106,7 @@ export async function writeAi(
       await writeOne(deps, store, userId, n.id, { ai_status: 'done', ai_meta: meta, category_id: catId, category_source: 'ai', category_seen: false }, false, tally, 'ai');
     } else {
       // AI 没给、给的分类名不合格、不能新建或这一批已经新建了 MAX_NEW_PER_BATCH 个：这一条改用本机规则
-      const r = deps.logic.classifyByRules(n, cats);
+      const r = deps.logic.classifyByRules(n, all);
       const patch: NotePatch = { ai_status: 'rule', ai_meta: { ...meta, skip: 'no_item' } };
       if (r.category_id !== null) {
         patch.category_id = r.category_id;
@@ -118,18 +118,10 @@ export async function writeAi(
 }
 
 /**
- * AI 判的相似分类对（R-413）：名字换成 id（按 normalize 比；cats 是这个人现在活着的分类），加进 settings notes.merge_suggest。
+ * AI 判的相似分类对（R-413，已是 id 对，request.ts 的 readSimilar 认的）：加进 settings notes.merge_suggest，去掉分类不在 cats（这个人现在活着的）里的。
  * 存的值没变不写；读写失败只记日志（不影响这一批的分类，下一轮 AI 再给一次）
  */
-export async function writeSimilar(deps: Deps, store: ClassifyStore, userId: string, cats: readonly Category[], names: readonly [string, string][]): Promise<void> {
-  if (names.length === 0) return;
-  const idOf = new Map(cats.map((c) => [deps.logic.normalize(c.name), c.id] as const));
-  const add: [string, string][] = [];
-  for (const [a, b] of names) {
-    const x = idOf.get(deps.logic.normalize(a));
-    const y = idOf.get(deps.logic.normalize(b));
-    if (x !== undefined && y !== undefined && x !== y) add.push([x, y]);
-  }
+export async function writeSimilar(deps: Deps, store: ClassifyStore, userId: string, cats: readonly Category[], add: readonly [string, string][]): Promise<void> {
   if (add.length === 0) return;
   try {
     const row = await store.mergeSuggest(userId);

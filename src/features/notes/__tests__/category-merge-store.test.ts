@@ -102,11 +102,12 @@ describe('openMergePairs（TC-B4-07 出提示）', () => {
     const four = [...cats, cat(C, '读书', { sort: 2 }), cat(uid(104), '书单', { sort: 3 })];
     expect(openMergePairs(four, [ai([[C, uid(104)]])])).toEqual([{ keep: C, merge: uid(104), why: 'ai' }, { keep: A, merge: B, why: 'contains' }]);
   });
-  it('dismissMerge：writer.update 只调一次，键是 notes.merge_dismissed，值是原有各对加上新的一对', async () => {
+  it('dismissMerge：writer.update 只调一次，键是 notes.merge_dismissed，值是原有各对加上新的一对；分类已经不活着（删了、合并掉、没了）的旧对顺带去掉', async () => {
     const saved: [string, unknown][] = [];
-    const writer = { update: (k: string, next: (cur: unknown) => unknown) => Promise.resolve(void saved.push([k, next([['m', 'n']])])) };
-    await dismissMerge(writer, { keep: B, merge: A });
-    expect(saved).toEqual([[MERGE_DISMISSED_KEY, [['m', 'n'], [A, B]]]]);
+    const writer = { update: (k: string, next: (cur: unknown) => unknown) => Promise.resolve(void saved.push([k, next([[A, C], [B, C], [A, uid(9)], [uid(7), uid(8)]])])) };
+    const live = [cat(A, '甲'), cat(B, '乙', { sort: 1 }), cat(C, '丙', { sort: 2 }), cat(uid(9), '丁', { merged_into: A }), cat(uid(7), '戊', { deleted_at: 1 })];
+    await dismissMerge(writer, { keep: B, merge: A }, live);
+    expect(saved).toEqual([[MERGE_DISMISSED_KEY, [[A, C], [B, C], [A, B]]]]);
   });
 });
 
@@ -182,21 +183,33 @@ describe('mergeCategories（TC-B4-07 合并后条目归到新分类）', () => {
     expect(noteItems([...restored, note('late', B)], after, TZ).filter((i) => ['bd', 'late'].includes(i.id)).map((i) => i.categoryId)).toEqual([A, A]);
   });
 
-  it('连环合并顺着走到活着的那个；绕成圈、终点被删的当没分类', () => {
+  it('连环合并顺着走到活着的那个；终点被删的当没分类', () => {
     const chain = [cat(A, '甲', { merged_into: C }), cat(B, '乙', { merged_into: A }), cat(C, '丙')];
     expect(noteItems([note('x', B)], chain, TZ)[0]?.categoryId).toBe(C);
-    const loop = [cat(A, '甲', { merged_into: B }), cat(B, '乙', { merged_into: A })];
-    expect(noteItems([note('x', B)], loop, TZ)[0]?.categoryId).toBeNull();
     const dead = [cat(A, '甲', { deleted_at: 3 }), cat(B, '乙', { merged_into: A })];
     expect(noteItems([note('x', B)], dead, TZ)[0]?.categoryId).toBeNull();
   });
 
-  it('keep 或 merge 不存在、已删、已撤销、已合并掉，或两个是同一个 → gone，一笔不写', async () => {
+  it('两台设备各合并一次绕成圈（A → B、B → A）：圈里留 sort 小的（一样按 id 小的），两个分类下的条目都归到它、胶囊和名字照常；圈外指进来的也归到它', () => {
+    const loop = [cat(A, '甲', { sort: 2, merged_into: B }), cat(B, '乙', { sort: 1, merged_into: A }), cat(C, '丙', { merged_into: A })];
+    const rows = [note('a', A), note('b', B), note('c', C)];
+    expect(noteItems(rows, loop, TZ).map((i) => [i.id, i.categoryId, i.categoryName])).toEqual([['a', B, '乙'], ['b', B, '乙'], ['c', B, '乙']]);
+    expect(categoryCounts(rows, loop, 'zh-CN').map((c) => [c.id, c.name, c.count])).toEqual([[B, '乙', 3]]);
+    expect(formOf(note('a', A), loop).category_id).toBe(B);
+    const tie = [cat(B, '乙', { merged_into: A }), cat(A, '甲', { merged_into: B })];
+    expect(noteItems([note('b', B)], tie, TZ)[0]?.categoryId).toBe(A);
+    // 圈里有一个被删：走到它就当没分类（同终点被删）
+    expect(noteItems([note('a', A)], [cat(A, '甲', { merged_into: B }), cat(B, '乙', { merged_into: A, deleted_at: 1 })], TZ)[0]?.categoryId).toBeNull();
+  });
+
+  it('keep 或 merge 不存在、已删、已撤销、已合并掉（keep 合掉了再合会绕成圈），或两个是同一个 → gone，一笔不写', async () => {
     const bad: [Row[], { keep: string; merge: string }][] = [
       [[cats[0] as Row], { keep: A, merge: B }],
       [[cat(A, '购物', { deleted_at: 1 }), cats[1] as Row], { keep: A, merge: B }],
       [[cats[0] as Row, cat(B, '购物清单', { undone: true })], { keep: A, merge: B }],
       [[cats[0] as Row, cat(B, '购物清单', { merged_into: uid(7) })], { keep: A, merge: B }],
+      // keep 已经合进别处（这里合进 B 自己，再写就绕成圈）：不合
+      [[cat(A, '购物', { merged_into: B }), cats[1] as Row], { keep: A, merge: B }],
       [cats, { keep: A, merge: A }],
     ];
     for (const [c, pair] of bad) {
@@ -248,7 +261,8 @@ describe('mergeCategories：真 outbox（假 IndexedDB 冷启动）', () => {
     let n = 0;
     const writer = createSettingWriter({ rows: () => stale, newId: () => uid(900 + ++n), onResult: () => undefined });
     await act(async () => {
-      await Promise.all([dismissMerge(writer, { keep: A, merge: B }), dismissMerge(writer, { keep: A, merge: C })]);
+      const live = [cat(A, '甲'), cat(B, '乙'), cat(C, '丙')];
+      await Promise.all([dismissMerge(writer, { keep: A, merge: B }, live), dismissMerge(writer, { keep: A, merge: C }, live)]);
     });
     const row = collection<SettingRow>('settings').getSnapshot().find((r) => r.key === MERGE_DISMISSED_KEY);
     expect(row?.value).toEqual([[A, B], [A, C]]);

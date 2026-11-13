@@ -37,7 +37,6 @@ describe('convertRow：转成待办（TC-B4-08）', () => {
     expect(r.row.from_note_id).toBe(NOTE_ID);
     expect(r.row.batch_id).toBe(ctx.batchId);
     expect(r.row.id).toBe(ctx.id);
-    expect(r.truncated).toBe(false);
     expect(ok('todos', r.row)).toBe(true);
   });
   it('算不出提醒时刻（转出的行不带 remind 标记的前提）', () => {
@@ -107,7 +106,6 @@ describe('convertRow：没有标题的随手记（底部输入行记下的都是
     expect(line.startsWith(title)).toBe(true);
     expect(title).toBe('a'.repeat(159));
     expect(r?.row.note).toBe(body);
-    expect(r?.truncated).toBe(false);
     expect(ok('todos', r?.row)).toBe(true);
   });
   it('noteHeadline：有标题用标题、正文整段；没标题取第一个非空行', () => {
@@ -118,26 +116,24 @@ describe('convertRow：没有标题的随手记（底部输入行记下的都是
 });
 
 describe('convertRow：显式标题超长', () => {
-  it('标题 159 个 a + emoji + 更多：截成 159 个 a、不留落单的代理对、过 insertSchema；标题丢了内容 → truncated 为 true；备注照旧是正文', () => {
+  it('标题 159 个 a + emoji + 更多：截成 159 个 a、不留落单的代理对、过 insertSchema（标题截短不算超长）；备注照旧是正文', () => {
     const title = `${'a'.repeat(159)}😀后面还有`;
     for (const kind of ['todo', 'event'] as const) {
       const r = convertRow(note(title, 'x'), kind, ctx);
       expect(r?.row.title).toBe('a'.repeat(159));
       expect(lone.test(r?.row.title ?? '')).toBe(false);
       expect(r?.row.note).toBe('x');
-      expect(r?.truncated).toBe(true);
       expect(ok(kind === 'todo' ? 'todos' : 'events', r?.row)).toBe(true);
     }
   });
-  it('标题刚好 160 个单元：原样、truncated 为 false', () => {
+  it('标题刚好 160 个单元：原样', () => {
     const r = convertRow(note('a'.repeat(160), 'x'), 'todo', ctx);
     expect(r?.row.title).toBe('a'.repeat(160));
-    expect(r?.truncated).toBe(false);
   });
 });
 
 describe('convertRow：长正文截断', () => {
-  it('正文 20000 字夹 emoji：备注不超过 2000、是原文前缀、不截半个字，过 insertSchema；truncated 为 true', () => {
+  it('正文 20000 字夹 emoji：备注不超过 2000、是原文前缀、不截半个字，过 insertSchema（convertNote 先按 convertTooLong 拦下，这里只验截断本身）', () => {
     const body = `${'记😀'.repeat(6666)}记记`;
     expect(body.length).toBe(20000);
     for (const kind of ['todo', 'event'] as const) {
@@ -147,7 +143,6 @@ describe('convertRow：长正文截断', () => {
       expect(n.length).toBeGreaterThan(1990);
       expect(body.startsWith(n)).toBe(true);
       expect(lone.test(n)).toBe(false);
-      expect(r?.truncated).toBe(true);
       expect(ok(kind === 'todo' ? 'todos' : 'events', r?.row)).toBe(true);
     }
   });
@@ -197,10 +192,10 @@ describe('convertTooLong（R-414：备注放不下的不让转）', () => {
     expect(convertTooLong({ title: '', body: `第一行\n${'字'.repeat(2000)}` })).toBe(false);
     expect(convertTooLong({ title: null, body: 'a'.repeat(3000) })).toBe(true);
   });
-  it('和 convertRow 的 truncated 同一口径：判超长的正好是备注被截短的', () => {
+  it('和 convertRow 同一口径：判超长的正好是备注会被截短的', () => {
     for (const body of ['字'.repeat(1999), '字'.repeat(2000), '字'.repeat(2001), '😀'.repeat(1000), '😀'.repeat(1001)]) {
       const r = convertRow({ id: NOTE_ID, title: '标题', body }, 'todo', ctx);
-      expect(convertTooLong({ title: '标题', body }), `${body.length}`).toBe(r?.truncated);
+      expect(convertTooLong({ title: '标题', body }), `${body.length}`).toBe(r?.row.note !== body);
     }
   });
 });

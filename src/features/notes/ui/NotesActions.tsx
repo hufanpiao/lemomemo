@@ -1,7 +1,7 @@
 // 随手记页的“⋯”菜单、合并分类提示条、转成待办 / 日程的流程和确认窗（从 NotesPage.tsx 拆出来，R-413、R-414 11-13）
-// • 菜单：转成待办 / 转成日程 / 删除（R-414，“移到隐私记”B5 再加）；备注放不下（超过 2000 字）时两项变淡、下面写原因；只读行变淡、点了由页面拦下
+// • 菜单：转成待办 / 转成日程 / 删除（“移到隐私记”B5 再加）；只读行变淡、点了由页面拦下
 // • 提示条（R-413，线框 MERGE）：“‘读书’和‘书单’两个分类很像，合成一个吗？ 合并 / 不用”
-// • 流程（R-414）：不带图的直接转、原条进“最近删除”；带插图的先弹确认窗（线框 S8-2），原条保留（R-412）；结果出在输入行上面
+// • 转换（R-414）的规则见 shared/logic/notes/note-convert.ts 文件头；结果出在输入行上面
 import { useState } from 'react';
 import { ConfirmDialog } from '../../../kit/components/ConfirmDialog.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
@@ -17,14 +17,14 @@ import styles from './NotesPage.module.css';
 
 /** 随手记页自己另加的提示条：插图提示、转换结果（撤销条、出错条在 kit 的 useListActions 里） */
 export type ImgTip = { kind: 'img'; key: ImgMsgKey; trash: boolean };
-export type ConvTip = { kind: 'conv'; key: Extract<NotesMsgKey, `notes.conv.${'moved' | 'kept'}.${string}` | 'notes.conv.empty' | 'notes.conv.left'> };
+export type ConvTip = { kind: 'conv'; key: Extract<NotesMsgKey, `notes.conv.${'moved' | 'kept'}.${string}` | 'notes.conv.empty' | 'notes.conv.left' | 'notes.conv.long'> };
 export type PageTip = ImgTip | ConvTip;
 /** 带插图的转换要先问一下（R-414，线框 S8-2） */
 export type ConvAsk = { id: string; kind: ConvertKind; images: number };
 
 /**
  * “⋯”菜单：看得见 24px，点按区 ::after 扩到 44。转成待办 / 转成日程（R-414）在“删除”上面；移到隐私记（B5）以后加在这里。
- * long：备注放不下，两项变淡（aria-disabled）、下面写“超过 2000 字，转不了”，点了不动；只读行的两项也变淡，点了由页面拦下
+ * long：备注放不下，两项变淡（aria-disabled）、下面写原因，点了不动；只读行的两项也变淡，点了由页面拦下
  */
 export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert }: {
   id: string; ro: boolean; open: boolean; onOpenChange(o: boolean): void; onDelete(): void; long: boolean; onConvert(kind: ConvertKind): void;
@@ -69,7 +69,7 @@ export function MoreMenu({ id, ro, open, onOpenChange, onDelete, long, onConvert
   );
 }
 
-/** 合并分类提示条（R-413，线框 MERGE）：“合并”的结果由页面的出错条、只读提示接；“不用”记下这一对，提示条随即换下一对或消失 */
+/** 合并分类提示条（R-413，线框 MERGE）：两个按钮的结果都由页面的出错条、只读提示接；“不用”记下这一对，提示条随即换下一对或消失 */
 export function MergeBar({ hint, onResult }: { hint: MergeHint; onResult(r: ActionResult): void }) {
   const t = useNotesT();
   return (
@@ -78,7 +78,7 @@ export function MergeBar({ hint, onResult }: { hint: MergeHint; onResult(r: Acti
       <FormButton size="compact" variant="primary" onClick={() => void hint.merge().then(onResult)} data-testid="notes-merge-go">
         {t('notes.merge.go', {})}
       </FormButton>
-      <FormButton size="compact" onClick={() => void hint.dismiss()} data-testid="notes-merge-no">
+      <FormButton size="compact" onClick={() => void hint.dismiss().then(onResult)} data-testid="notes-merge-no">
         {t('notes.merge.no', {})}
       </FormButton>
     </section>
@@ -86,29 +86,29 @@ export function MergeBar({ hint, onResult }: { hint: MergeHint; onResult(r: Acti
 }
 
 /**
- * 转成待办 / 日程的流程（R-414）：只读行拦下；带插图的先问（ask 不为空时页面画确认窗），其余直接转；
- * 结果出在输入行上面：成功写“已转成…”（原条进了“最近删除”或留着），新条建了但原条没改好写“先别再转”，没有字写“转不了”，其余走出错条 / 只读提示
+ * 转成待办 / 日程的流程（R-414）：只读行拦下；带插图的先问（ask 不为空时页面画确认窗，问了就定下保留原条），其余直接转；结果出在输入行上面：
+ * “已转成…”、“先别再转”（left）、没有字或太长“转不了”；正在转（busy）、已经没了、切换账号中不提示；其余走出错条 / 只读提示
  */
 export function useConvertFlow(run: ReturnType<typeof useNoteList>['convert'], a: ReturnType<typeof useListActions<PageTip>>) {
   const [ask, setAsk] = useState<ConvAsk | null>(null);
-  const go = async (id: string, kind: ConvertKind) => {
+  const go = async (id: string, kind: ConvertKind, keep: boolean) => {
     setAsk(null);
-    const r = await run(id, kind);
+    const r = await run(id, kind, keep);
     if (r.ok) a.g.show({ kind: 'conv', key: `notes.conv.${r.kept ? 'kept' : 'moved'}.${kind}` });
     else if (r.left) a.g.show({ kind: 'conv', key: 'notes.conv.left' });
-    else if (r.reason === 'empty') a.g.show({ kind: 'conv', key: 'notes.conv.empty' });
-    else a.report(r.reason === 'readonly' ? 'readonly' : r.reason === 'switching' || r.reason === 'gone' ? 'silent' : 'failed');
+    else if (r.reason === 'empty' || r.reason === 'too_long') a.g.show({ kind: 'conv', key: r.reason === 'empty' ? 'notes.conv.empty' : 'notes.conv.long' });
+    else a.report(r.reason === 'readonly' ? 'readonly' : r.reason === 'switching' || r.reason === 'gone' || r.reason === 'busy' ? 'silent' : 'failed');
   };
   return {
     ask,
     start(it: NoteItem, kind: ConvertKind) {
       if (a.isRo(it.id)) a.g.block();
       else if (it.images > 0) setAsk({ id: it.id, kind, images: it.images });
-      else void go(it.id, kind);
+      else void go(it.id, kind, false);
     },
     confirm() {
       rlog(`notes convert confirm ask=${ask ? ask.kind : 'none'}`);
-      if (ask) void go(ask.id, ask.kind);
+      if (ask) void go(ask.id, ask.kind, true);
     },
     cancel: () => setAsk(null),
   };

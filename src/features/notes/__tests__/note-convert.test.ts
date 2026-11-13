@@ -6,6 +6,7 @@ import { msAt } from '../../../../shared/core/date.ts';
 import { OutboxRejectError } from '../../../core/outbox.ts';
 import { collection } from '../../../core/store.ts';
 import type { WriteResult } from '../../../core/write.ts';
+import { RL_SLOT } from '../../../platform/run-log-api.ts';
 import { convertNote, type ConvertDeps } from '../data/note-convert.ts';
 import { boot, NOW, sendNext, serverNote, setupImageTests, uid, type Row } from './note-images-kit.tsx';
 
@@ -40,7 +41,7 @@ describe('convertNote：桩写入口', () => {
   it('TC-B4-08 待办：先 insert(todos, 行)，再 patch(notes, 原条, {converted_to, deleted_at, updated_at})，deps 指新条；insert 不带 deps、不带 remind', async () => {
     const s = stub();
     const r = await convertNote(note(), 'todo', { now: NOW, tz: TZ }, s.deps);
-    expect(r).toEqual({ ok: true, table: 'todos', id: NEW, truncated: false });
+    expect(r).toEqual({ ok: true, table: 'todos', id: NEW });
     expect(s.calls.map((c) => [c.op, c.table, c.id])).toEqual([['insert', 'todos', NEW], ['patch', 'notes', uid(1)]]);
     expect(s.calls[0]?.data['title']).toBe('买牛奶');
     expect(s.calls[0]?.data['from_note_id']).toBe(uid(1));
@@ -70,10 +71,38 @@ describe('convertNote：桩写入口', () => {
     expect([many.calls[0]?.data['title'], many.calls[0]?.data['note']]).toEqual(['买菜', '鸡蛋\n猫砂']);
   });
 
-  it('正文超过 2000：成功结果带 truncated: true', async () => {
+  it('备注放不下（超过 2000 字）→ too_long，一笔不写；刚好 2000 字照常转', async () => {
     const s = stub();
-    const r = await convertNote(note({ body: '长'.repeat(5000) }), 'todo', { now: NOW, tz: TZ }, s.deps);
-    expect(r).toEqual({ ok: true, table: 'todos', id: NEW, truncated: true });
+    expect(await convertNote(note({ body: '长'.repeat(2001) }), 'todo', { now: NOW, tz: TZ }, s.deps)).toEqual({ ok: false, reason: 'too_long' });
+    expect(s.calls).toHaveLength(0);
+    expect((await convertNote(note({ body: '长'.repeat(2000) }), 'todo', { now: NOW, tz: TZ }, s.deps)).ok).toBe(true);
+  });
+
+  it('同一条正在转时再转 → busy、不多写一笔，运行日志只记结果码；转完放开，再转照常；别的条不受影响', async () => {
+    let release = (): void => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    const s = stub();
+    const slow: ConvertDeps = { ...s.deps, w: { ...s.deps.w, insert: async (...a) => (await gate, s.deps.w.insert(...a)) } };
+    const lines: string[] = [];
+    (globalThis as Record<string, unknown>)[RL_SLOT] = { q: [], sink: (l: string) => lines.push(l) };
+    const first = convertNote(note(), 'todo', { now: NOW, tz: TZ }, slow);
+    expect(await convertNote(note(), 'event', { now: NOW, tz: TZ }, slow)).toEqual({ ok: false, reason: 'busy' });
+    expect((await convertNote(note({ id: uid(2) }), 'todo', { now: NOW, tz: TZ }, s.deps)).ok).toBe(true);
+    release();
+    expect((await first).ok).toBe(true);
+    expect(s.calls.filter((c) => c.op === 'insert')).toHaveLength(2);
+    expect((await convertNote(note(), 'todo', { now: NOW, tz: TZ }, s.deps)).ok).toBe(true);
+    delete (globalThis as Record<string, unknown>)[RL_SLOT];
+    expect(lines[0]).toBe('note convert event busy title=3 body=6');
+    expect(lines.join(' ')).not.toContain('买牛奶');
+  });
+
+  it('写入抛了别的错（不是 OutboxRejectError）→ 照样往外抛，锁放开', async () => {
+    const s = stub([() => {
+      throw new Error('boom');
+    }]);
+    await expect(convertNote(note(), 'todo', { now: NOW, tz: TZ }, s.deps)).rejects.toThrow('boom');
+    expect((await convertNote(note(), 'todo', { now: NOW, tz: TZ }, stub().deps)).ok).toBe(true);
   });
 
   it('保留原条（keepNote）：只写 converted_to 和 updated_at，不写 deleted_at', async () => {
