@@ -171,16 +171,17 @@ describe('合并分类的撤销条（R-415 ③）', () => {
   it('N2 撤销时先写 null、再记“不用”：两笔之间（settings 那笔挂着）提示条不闪出这一对，放行以后也不出', async () => {
     await mergeNow();
     const realInsert = write.insert.bind(write);
-    let release = (): void => undefined;
+    let release: (() => void) | null = null;
     vi.spyOn(write, 'insert').mockImplementation((table, row, o) =>
       table === 'settings' ? new Promise((res) => (release = () => res(realInsert(table, row, o)))) : realInsert(table, row, o),
     );
     await clickUndo();
     await waitFor(() => expect(merged()).toBeNull());
-    for (let i = 0; i < 3; i++) await act(async () => undefined);
+    // 等到“不用”那一笔真的挂上（11-13 unit #327 洛杉矶那一份：CI 慢时只空等几轮，release 还没接上就放行，放行落空）
+    await waitFor(() => expect(release).not.toBeNull());
     expect(dismissed()).toBeUndefined();
     expect(screen.queryByTestId('notes-merge')).toBeNull();
-    await act(async () => release());
+    await act(async () => release?.());
     await waitFor(() => expect(dismissed()).toEqual([[READ, LIST]]));
     await waitFor(() => expect(lines.at(-1)).toBe(`notes merge undo ok ${PAIR}`));
     expect(screen.queryByTestId('notes-merge')).toBeNull();
