@@ -46,3 +46,12 @@ supabase     2.120.0  windows_amd64  supabase_2.120.0_windows_amd64.tar.gz    53
 # 出处：Docker Hub registry API（registry-1.docker.io/v2/localstack/localstack/manifests/4.14.0 的 Docker-Content-Digest），
 #       和 hub.docker.com/v2/repositories/localstack/localstack/tags/4.14.0 的 digest 一致（2026-10-28 运维抄）
 localstack   4.14.0   oci            localstack/localstack:4.14.0             3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a  https://hub.docker.com/r/localstack/localstack/tags?name=4.14.0
+
+# tauri signer：负责人本机生成 exe 更新签名密钥（tools/keys/gen-tauri-key.ps1；B6-exe F10）。CI 不装。
+# 例外：官方没有 checksums 文件，下一行的 SHA-256 是 exe 的哈希，由主持人（代运维）和安全审查员各自从 zip 解压后独立算出、结果一致（2026-11-13，负责人 11-13 同意下载）；
+#       zip 本身的 SHA-256 抄自 GitHub 附件页显示的摘要（接口 assets.digest）：3e8687fb184bd7f10ebd8642f7715f79f4a605c0694c142a21507e8a24dc0f8b，两人下载的 zip 都和它一致
+#       zip 里只有 cargo-tauri.exe、LICENSE-APACHE-2.0、LICENSE-MIT、README.md
+#       Authenticode：NotSigned（两人实测）
+#       空密码实测（待负责人做，见 docs/08-发布/签名工具选型说明.md 第二节第 5 步）：<未做>
+#       同一次核对：Ctrl+C 后 finally 清剪贴板 <未做>；三个剪贴板排除标记 <未做>
+tauri-signer 2.12.4   windows_amd64  cargo-tauri.exe                          3eee23d4513d032f422ad2d80a1ca502fad757d173318a9d23770784cac549c2  https://github.com/tauri-apps/tauri/releases/download/tauri-cli-v2.12.4/cargo-tauri-x86_64-pc-windows-msvc.zip

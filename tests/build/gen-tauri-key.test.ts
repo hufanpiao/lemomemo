@@ -5,7 +5,7 @@
 // 不调 WinRT 的 ClearHistory()，不会清掉开发机的剪贴板和剪贴板历史；正式运行时这三步都在，由静态检查锁住。
 // 本文件里没有任何一条用例不带 LEMO_TEST_SIGNER=1 去跑到脚本主流程（“拒绝的运行方式”几条都停在主流程之前）。
 // ① 静态：参数只有 signer generate、不带 --password / --write-keys / --ci；剪贴板只放私钥或清空、带三个排除标记；清剪贴板的三步；
-//    U 盘只新建不覆盖、刷到盘上；子进程环境变量白名单、工作目录；安全窗口检查真的调用了（不查 Claude，R-298）；仓库锁文件里还没有 tauri-signer
+//    U 盘只新建不覆盖、刷到盘上；子进程环境变量白名单、工作目录；安全窗口检查真的调用了（不查 Claude，R-298）；仓库锁文件里 tauri-signer 那一行（11-13 起已写）
 // ② 从头跑到尾：预览只进剪贴板一次、核对粘贴、打印公钥；正式另写 U 盘并读回核对、不覆盖旧文件；练习模式什么都不留；
 //    屏幕和报错里从来没有私钥；子进程只拿到白名单里的环境变量
 // ③ 出错路径：空密码（<empty>）、私钥没加密（兼容兜底）、key id 对不上、输出格式不对、签名工具出错（报错里的 base64 被遮住）、
@@ -277,10 +277,15 @@ describe('gen-tauri-key.ps1 静态检查（不运行）', () => {
     expect(raw.includes(13)).toBe(false);
   });
 
-  it('仓库的 tools/ci-tools.lock 里现在还没有 tauri-signer 这一行（签名工具没选定前，正式运行会在核对那一步停下）', () => {
-    // 原来这里用 -File 真跑一遍脚本来证明，那样会在开发机上运行真脚本；改成只读文本（F10 代码审查 M5）
+  it('仓库的 tools/ci-tools.lock 里 tauri-signer 只有一行，锁的是 2.12.4 的 cargo-tauri.exe（11-13 两人独立算出的哈希）', () => {
+    // 只读文本，不在开发机上运行真脚本（F10 代码审查 M5）
     const lock = readFileSync(join(root, 'tools', 'ci-tools.lock'), 'utf8');
-    expect(lock.split('\n').filter((l) => /^\s*tauri-signer\s/.test(l))).toEqual([]);
+    const rows = lock.split(/\r?\n/).filter((l) => /^\s*tauri-signer\s/.test(l)).map((l) => l.trim().split(/\s+/));
+    expect(rows).toEqual([[
+      'tauri-signer', '2.12.4', 'windows_amd64', 'cargo-tauri.exe',
+      '3eee23d4513d032f422ad2d80a1ca502fad757d173318a9d23770784cac549c2',
+      'https://github.com/tauri-apps/tauri/releases/download/tauri-cli-v2.12.4/cargo-tauri-x86_64-pc-windows-msvc.zip',
+    ]]);
   });
 });
 
