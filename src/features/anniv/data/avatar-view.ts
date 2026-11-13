@@ -3,15 +3,15 @@
 // • 按 avatar_id 缓存（换头像 avatar_id 就变，旧的自然不再用）；同一个 avatar_id 同时只取一次；取不到的不缓存，下次挂上再试
 // • 本机刚编码、刚传的那一张直接记下（seedAvatar），不再去服务器取
 // • 集合里已经没有这个 avatar_id 的（换了、去掉、删了、退出清空）revoke 掉；最多留 MAX_URLS 个
-// 只由 useAnnivAvatar 按需动态 import（platform/files.ts 带 zod，不进首屏，A1：纯 TS 不碰 React）
+// 只由 hooks/useAnnivAvatar 按需动态 import（data/avatar.ts 静态引它，也只在编辑页按需加载）（platform/files.ts 带 zod，不进首屏，A1：纯 TS 不碰 React）
 // 随手记插图的 createImageView（features/notes/data/image-view.ts）是同一个思路；功能之间不能互相 import（A27），这里只做头像用得到的那一小份
-import { collection } from '../../core/store.ts';
-import { fetchBlob, sign, SIGN_BATCH_MAX } from '../../platform/files.ts';
+import { collection } from '../../../core/store.ts';
+import { fetchBlob, sign, SIGN_BATCH_MAX } from '../../../platform/files.ts';
 
 const MAX_URLS = 200;
 const done = new Map<string, string>();
 const inflight = new Map<string, Promise<string | null>>();
-let batch: { path: string; resolve(url: string | null): void }[] = [];
+const batch: { path: string; resolve(url: string | null): void }[] = [];
 let watching = false;
 
 function keep(avatarId: string, url: string): void {

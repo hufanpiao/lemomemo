@@ -23,6 +23,9 @@ function base(): Manifest {
     'features/reminders/ui/MissedReminders.tsx': { file: 'assets/MissedReminders-a.js', src: 'features/reminders/ui/MissedReminders.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
     'features/reminders/ui/UnsyncedRemind.tsx': { file: 'assets/UnsyncedRemind-a.js', src: 'features/reminders/ui/UnsyncedRemind.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
     'features/reminders/ui/UnsyncedRemindMark.tsx': { file: 'assets/UnsyncedRemindMark-a.js', src: 'features/reminders/ui/UnsyncedRemindMark.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
+    // 今天页顶部的纪念日一行和它的头像（B5 S14：有 7 天内的纪念日才下载）
+    'features/today/ui/AnnivLine.tsx': { file: 'assets/AnnivLine-a.js', src: 'features/today/ui/AnnivLine.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
+    'features/anniv/ui/AnnivFace.tsx': { file: 'assets/AnnivFace-a.js', src: 'features/anniv/ui/AnnivFace.tsx', isDynamicEntry: true, imports: ['_jsx-runtime-a.js'] },
     '_rows-a.js': { file: 'assets/rows-a.js', name: 'rows', isDynamicEntry: true, imports: ['_zod-jitless-a.js'] },
     '_zod-jitless-a.js': { file: 'assets/zod-jitless-a.js', name: 'zod-jitless' },
     'style.css': { file: 'assets/style-a.css', src: 'style.css' },

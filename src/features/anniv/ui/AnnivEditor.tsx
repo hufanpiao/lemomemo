@@ -8,20 +8,19 @@
 // • 只读行（D1：韩国阴历、认不出的值）：EditShell 顶部出“要新版本”，输入全禁用
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { fmtDay } from '../../../../shared/i18n/fmt.ts';
-import { annivRecOf, annivState, createdDayOf, upcoming, type AnnivKind } from '../../../../shared/logic/anniv/next-date.ts';
-import { lunarMonthName } from '../../../../shared/logic/anniv/lunar.ts';
+import type { AnnivKind } from '../../../../shared/logic/anniv/next-date.ts';
 import { backOr } from '../../../app/router-levels.ts';
 import { useScrollLock } from '../../../kit/components/Dialog.tsx';
-import { AnnivAvatar } from '../../../kit/components/AnnivAvatar.tsx';
 import { EditShell } from '../../../kit/components/EditShell.tsx';
 import { Check, Field, FormButton, FormGroup, Select, TextArea, TextInput } from '../../../kit/components/Form.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
-import { leapOf, maxDay, NAME_MAX, NOTE_MAX, offsetsKey, offsetsList, recOf, yearRange, type AnnivForm } from '../data/anniv-edit.ts';
-import { clearAvatar, setAvatar, type AvatarResult } from '../data/avatar.ts';
+import { leapOf, maxDay, NAME_MAX, NOTE_MAX, offsetsKey, offsetsList, recOf, yearRange, type AnnivForm } from '../hooks/anniv-view.ts';
+import { annivLib, clearAvatar, setAvatar, type AvatarResult } from '../hooks/anniv-view.ts';
 import { useAnnivDefaults, useAnnivEdit, useToday } from '../hooks/useAnniv.ts';
 import { useAnnivT, type AnnivT } from '../hooks/useAnnivT.ts';
 import { lunarDayName, nextText, remindLine } from './anniv-text.ts';
+import { AnnivFace } from './AnnivFace.tsx';
 import styles from './AnnivPage.module.css';
 import { RemindSheet } from './RemindSheet.tsx';
 
@@ -41,6 +40,7 @@ const range = (a: number, b: number): number[] => Array.from({ length: b - a + 1
 /** 月份那一列：阴历在闰月那一年多一项“闰X月”，排在同号平月后面；值写成 "3" / "3L" */
 function monthOptions(f: AnnivForm, t: AnnivT, locale: 'zh-CN' | 'ko-KR'): { value: string; label: string }[] {
   const leap = leapOf(f.calendar, f.year);
+  const { lunarMonthName } = annivLib();
   return range(1, 12).flatMap((m) => {
     const label = f.calendar === 'lunar' ? lunarMonthName(m, false, locale) : t('anniv.edit.monthOpt', { m });
     const plain = { value: String(m), label };
@@ -65,7 +65,7 @@ function AvatarRow({ id, form, saved, off, t }: { id: string | null; form: Anniv
   return (
     <div className={styles.avRow} data-testid="anniv-avatar-row">
       <button type="button" className={styles.avBtn} disabled={!can} onClick={() => input.current?.click()} aria-label={t('anniv.edit.avatarPick', {})} data-testid="anniv-avatar-pick">
-        <AnnivAvatar id={id ?? 'new'} avatarId={saved?.['avatar_id']} name={form.name} kind={form.kind} size="lg" />
+        <AnnivFace id={id ?? 'new'} avatarId={saved?.['avatar_id']} name={form.name} kind={form.kind} size="lg" />
       </button>
       <span className={styles.avText}>
         <span className={styles.avTitle}>{t('anniv.edit.avatar', {})}</span>
@@ -100,6 +100,8 @@ function AvatarRow({ id, form, saved, off, t }: { id: string | null; form: Anniv
 
 export function AnnivEditor({ id, onCreated }: { id: string; onCreated(id: string): void }) {
   useScrollLock(true);
+  // 纪念日页加载好 anniv-lib 才挂编辑层（AnnivPage）
+  const { annivRecOf, annivState, createdDayOf, upcoming } = annivLib();
   const t = useAnnivT();
   const locale = useUi((s) => s.locale);
   const ed = useAnnivEdit(id, onCreated);

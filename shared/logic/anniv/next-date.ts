@@ -11,7 +11,7 @@
 // • 提醒（R-94）：offsets = 这一条的 remind_offsets ?? 设置 anniv.default_offsets ?? {7,1}；time = remind_time ?? anniv.default_time ?? 09:00；
 //   remind_at = 下一个还没到的 (next − offset 天) 的 time，按 current_tz 换算（浮动时刻）。这一次的都过了，就取再下一次的（每年的那几种）。
 // • 周岁（第几年）：有年份才算；阳历按下一次所在的公历年，阴历按下一次所在的农历年。
-import { addDays, diffDays, fmtDateStr, msAt, parseDate, parseHm, todayOf, type DateStr } from '../../core/date.ts';
+import { addDays, daysIn, diffDays, fmtDateStr, msAt, parseDate, parseHm, todayOf, type DateStr } from '../../core/date.ts';
 import type { Tz } from '../../core/tz.ts';
 import { toSolar } from './lunar.ts';
 
@@ -47,7 +47,6 @@ export const OFFSETS_MAX = 4;
 export const YEAR_MIN = 1900;
 export const YEAR_MAX = 2100;
 
-const SOLAR_MAX_DAY = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 const HM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const isLeapYear = (y: number): boolean => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 const intIn = (v: unknown, lo: number, hi: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= lo && v <= hi;
@@ -67,7 +66,8 @@ export function validDate(r: Pick<AnnivRec, 'calendar' | 'month' | 'day' | 'is_l
   if (!intIn(r.month, 1, 12) || !intIn(r.day, 1, 31)) return false;
   if (r.year !== null && !intIn(r.year, YEAR_MIN, YEAR_MAX)) return false;
   if (r.calendar === 'solar') {
-    if (r.is_leap || r.day > (SOLAR_MAX_DAY[r.month - 1] ?? 0)) return false;
+    // 2000 是闰年：不带年份时 2-29 也算存在
+    if (r.is_leap || r.day > daysIn(2000, r.month)) return false;
     return r.year === null || r.month !== 2 || r.day !== 29 || isLeapYear(r.year);
   }
   if (r.day > 30) return false;

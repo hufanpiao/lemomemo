@@ -118,7 +118,7 @@ export default function RemindSettings({
           {annivOn() ? (
             <QuietBoundary name="anniv-defaults">
               <Suspense fallback={null}>
-                <AnnivDefaults />
+                <AnnivDefaults part="remind-defaults" />
               </Suspense>
             </QuietBoundary>
           ) : null}

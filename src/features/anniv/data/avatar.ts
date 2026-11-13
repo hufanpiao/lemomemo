@@ -4,11 +4,11 @@
 // • 上传顺序（files_authorize 查本人这一行的 avatar_id，行没上服务器之前 PUT 会被拒）：
 //   ① 先写 avatar_id（新的 UUID）、avatar_bytes（库里两者同空同非空、≤ 102400）；② 等这一行的改动在 outbox 里发完（被拒了就算失败）；
 //   ③ PUT /files/v1/o/images/<uid>/anniv/<id>/<avatar_id>.webp，可重试的错误退避再试两次
-// • 本机这一张直接记进头像缓存（kit 的 seedAvatar），列表、今天页立刻显示，不等上传
+// • 本机这一张直接记进头像缓存（avatar-view.ts 的 seedAvatar），列表、今天页立刻显示，不等上传
 // • 去掉头像：两列写 null；旧对象由以后的 storage-sweep 清（代定 D10，B5 不做）
 import { getBoot } from '../../../core/boot.ts';
 import { savePatch } from '../../../core/edit-save.ts';
-import { avatarPath, seedAvatar } from '../../../kit/hooks/anniv-avatar-view.ts';
+import { avatarPath, seedAvatar } from './avatar-view.ts';
 import { clock } from '../../../platform/clock.ts';
 import { upload } from '../../../platform/files.ts';
 import { loadWebpWasm } from '../../../platform/webp-wasm.ts';

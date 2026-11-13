@@ -6,28 +6,48 @@
 //   倒数日名字后面带小标签；已过去的倒数日折在最下面
 // • 只读行（0.27 第 1 点、代定 D1）：副行写“要新版本才能显示”，点了出提示条，不进编辑
 // • 编辑（ui/AnnivEditor.tsx）：盖在列表上面的一层（手机从底部整屏弹上来、电脑右侧抽屉，线框 s5），这时列表 inert
+// • 推算和农历（data/anniv-lib.ts）按需加载（2.6）：加载好之前只出空页面，加载失败写一句“没加载出来”（不白屏）
 import { useState } from 'react';
 import { navigate, replaceRoute, useRoute } from '../../../app/router.ts';
 import { useEditRoute } from '../../../app/router-levels.ts';
-import { AnnivAvatar } from '../../../kit/components/AnnivAvatar.tsx';
 import list from '../../../kit/components/List.module.css';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { ReadonlyToast } from '../../../kit/components/ReadonlyRow.tsx';
 import { useReadonlyGuard } from '../../../kit/hooks/useReadonly.ts';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { Pressable } from '../../../motion/components.ts';
-import { FILTERS, type AnnivFilter, type AnnivItem } from '../data/anniv-model.ts';
+import { FILTERS, useAnnivLib, type AnnivFilter, type AnnivItem } from '../hooks/anniv-view.ts';
 import { useAnnivDefaults, useAnnivList } from '../hooks/useAnniv.ts';
 import { useAnnivT, type AnnivT } from '../hooks/useAnnivT.ts';
+import AnnivDefaults from './AnnivDefaults.tsx';
 import { AnnivEditor } from './AnnivEditor.tsx';
 import { ageText, cardRemindLine, metaText } from './anniv-text.ts';
+import { AnnivFace } from './AnnivFace.tsx';
 import styles from './AnnivPage.module.css';
 
 const FILTER_KEY = { all: 'anniv.f.all', birthday: 'anniv.f.birthday', anniversary: 'anniv.f.anniversary', countdown: 'anniv.f.countdown' } as const;
 const KIND_KEY = { birthday: 'anniv.kind.birthday', anniversary: 'anniv.kind.anniversary', countdown: 'anniv.kind.countdown' } as const;
 
-export default function AnnivPage() {
+// 设置 › 提醒与通知 的“纪念日提醒”一行和纪念日页同一个分包、同一个默认导出（anniv/index.ts 的 AnnivDefaults 带 part="remind-defaults"）：
+// 首屏不多一张依赖表；A27 只准 lazy(() => import('./…')) 取默认导出，所以用 part 分开
+export default function AnnivEntry({ part }: { part?: 'remind-defaults' }) {
+  return part === 'remind-defaults' ? <AnnivDefaults /> : <AnnivPage />;
+}
+
+function AnnivPage() {
   const editing = useRoute().params[0] !== undefined;
+  const lib = useAnnivLib();
+  const t = useAnnivT();
+  if (lib !== 'ready')
+    return (
+      <main className={styles.page} data-feature="anniv" data-testid="anniv-page" aria-busy={lib === 'loading' || undefined}>
+        {lib === 'failed' ? (
+          <p className={list.empty} role="alert" data-testid="anniv-lib-failed">
+            {t('anniv.libFailed', {})}
+          </p>
+        ) : null}
+      </main>
+    );
   return (
     <>
       <AnnivList inert={editing} />
@@ -74,7 +94,7 @@ function AnnivList({ inert }: { inert: boolean }) {
     return (
       <li key={x.id} className={list.row} data-testid="anniv-row" data-ro={x.ro || undefined}>
         <Pressable type="button" className={list.main} onClick={() => open(x)}>
-          <AnnivAvatar id={x.id} avatarId={x.row['avatar_id']} name={x.name} kind={x.row['kind']} size="sm" />
+          <AnnivFace id={x.id} avatarId={x.row['avatar_id']} name={x.name} kind={x.row['kind']} size="sm" />
           <span className={list.text}>
             <span className={styles.name}>
               <span className={list.title}>{x.name}</span>
@@ -120,7 +140,7 @@ function AnnivList({ inert }: { inert: boolean }) {
               <span className={styles.dot} aria-hidden="true" />
               {t('anniv.near.tag', { kind: t(KIND_KEY[near.rec.kind], {}) })}
             </span>
-            <AnnivAvatar id={near.id} avatarId={near.row['avatar_id']} name={near.name} kind={near.rec.kind} size="md" />
+            <AnnivFace id={near.id} avatarId={near.row['avatar_id']} name={near.name} kind={near.rec.kind} size="md" />
           </span>
           {near.state.days === 0 ? (
             <span className={styles.nearToday}>{t('anniv.near.today', {})}</span>

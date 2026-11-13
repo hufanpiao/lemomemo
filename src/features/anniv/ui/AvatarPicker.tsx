@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { FormButton } from '../../../kit/components/Form.tsx';
 import { useBlobSrc } from '../../../kit/hooks/useBlobSrc.ts';
-import { encodeAvatar, type Crop } from '../data/avatar.ts';
+import { encodeAvatar, type Crop } from '../hooks/anniv-view.ts';
 import { useAnnivT } from '../hooks/useAnnivT.ts';
 import styles from './AnnivPage.module.css';
 

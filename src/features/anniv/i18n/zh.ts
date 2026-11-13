@@ -38,6 +38,7 @@ export const zh = {
   'anniv.ro': '这一条要新版本才能显示',
   'anniv.roMeta': '要新版本才能显示',
   'anniv.noCalc': '超出能推算的范围',
+  'anniv.libFailed': '纪念日没加载出来，检查网络后再打开一次',
   'anniv.rm.off.0': '当天',
   'anniv.rm.off.1': '前一天',
   'anniv.rm.off.n': '提前 {n} 天',

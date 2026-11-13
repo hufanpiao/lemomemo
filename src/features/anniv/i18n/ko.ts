@@ -42,6 +42,7 @@ export const ko = {
   'anniv.ro': '이 항목은 새 버전에서 볼 수 있어요', // REVIEW(ko)
   'anniv.roMeta': '새 버전 필요', // REVIEW(ko)
   'anniv.noCalc': '계산할 수 있는 범위를 벗어났어요', // REVIEW(ko)
+  'anniv.libFailed': '기념일을 불러오지 못했어요. 네트워크를 확인하고 다시 열어 주세요', // REVIEW(ko)
   'anniv.rm.off.0': '당일', // REVIEW(ko)
   'anniv.rm.off.1': '하루 전', // REVIEW(ko)
   'anniv.rm.off.n': '{n}일 전', // REVIEW(ko)

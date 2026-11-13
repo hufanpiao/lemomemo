@@ -391,6 +391,7 @@
   background: var(--inp-bg);
   color: var(--text);
   font: inherit;
+  font-size: var(--fs-16); /* iOS 聚焦不放大页面（≥ 16px） */
 }
 
 .warn {

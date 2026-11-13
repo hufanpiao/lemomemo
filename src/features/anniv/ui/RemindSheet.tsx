@@ -2,15 +2,17 @@
 // • 提前几天多选：当天、前一天、提前 3 / 7 / 14 / 30 天，或自定义 0～60 天，最多 4 个、至少留一个；几点提醒
 // • 一条纪念日（mode = item）：两列为 null 时亮的是设置里的默认（anniv.default_offsets、anniv.default_time，没设按 {7,1}、09:00）；
 //   点了任何一项就存成这一条自己的；“恢复默认”两列写回 null，以后跟着设置里的默认走；下面一行“下一次提醒：…”按改后的设置现算（和服务器同一份 next-date）
+// • 推算经 annivLib()：挂它的编辑页、设置那一行都先等 lib 加载好（useAnnivLib）
 // • 设置里的默认值（mode = default，设置 › 提醒与通知 › 纪念日提醒）：null 时亮出厂值；“恢复默认”回到出厂（写回 null）；只影响没单独设过的条目
 import { useState } from 'react';
 import { fmtDay, fmtTime } from '../../../../shared/i18n/fmt.ts';
 import { todayOf } from '../../../../shared/core/date.ts';
-import { annivNextAt, OFFSET_CHOICES, OFFSET_MAX, OFFSETS_MAX, offsetsOf, remindTimeOf, type AnnivRec } from '../../../../shared/logic/anniv/next-date.ts';
+import type { AnnivRec } from '../../../../shared/logic/anniv/next-date.ts';
 import { Dialog } from '../../../kit/components/Dialog.tsx';
 import { FormButton, TextInput } from '../../../kit/components/Form.tsx';
 import { useUi } from '../../../kit/state/ui-store.ts';
 import { clock } from '../../../platform/clock.ts';
+import { annivLib } from '../hooks/anniv-view.ts';
 import { useAnnivT } from '../hooks/useAnnivT.ts';
 import { hm, offsText } from './anniv-text.ts';
 import styles from './AnnivPage.module.css';
@@ -35,6 +37,7 @@ export function RemindSheet({
   tz: string;
   mode: 'item' | 'default';
 }) {
+  const { annivNextAt, OFFSET_CHOICES, OFFSET_MAX, OFFSETS_MAX, offsetsOf, remindTimeOf } = annivLib();
   const t = useAnnivT();
   const locale = useUi((s) => s.locale);
   const [custom, setCustom] = useState('');

@@ -21,7 +21,7 @@
 // • 只读行（FA-2 只读行界面；架构 0.27 第 1 点）：行尾“要新版本”标记、圆圈变淡；点这一行、打勾、删除统一拦下，
 //   出“这条要新版本才能修改 · 更新”提示条（kit 的 useReadonlyGuard、ReadonlyToast）。顶部（日期下面）有带重复的只读行时出
 //   “有 N 条重复事项要新版本才能完整显示 · 更新”（kit 的 RepeatBanner；4.1.0 的重复事项 4.0.x 只显示第一次）
-// • 纪念日一行（B5 S14；线框 s1 ANNLINE）：提示块下面、“现在”卡上面，7 天内最近的一个“3 天后 김지민 生日”；用服务器算好的 next_date（data/anniv-soon.ts），
+// • 纪念日一行（B5 S14；线框 s1 ANNLINE）：提示块下面、“现在”卡上面，7 天内最近的一个“3 天后 김지민 生日”；用服务器算好的 next_date（hooks/useAnnivSoon.ts → data/anniv-soon.ts），
 //   有这一行才下载 AnnivLine（分包下不来那一行不画）；纪念日开关关着不出
 // • 液态玻璃底栏、“＋”、时间河、提醒按钮条不在这一段（FA-4、FA-7）
 import { lazy, Suspense } from 'react';
@@ -29,8 +29,6 @@ import { fmtDay } from '../../../../shared/i18n/fmt.ts';
 import { navigate } from '../../../app/router.ts';
 import { CheckCircle, type CheckCircleProps } from '../../../kit/components/CheckCircle.tsx';
 import list from '../../../kit/components/List.module.css';
-import { annivOn } from '../../../kit/hooks/anniv-on.ts';
-import { useCollection } from '../../../kit/hooks/useCollection.ts';
 import { MeLink } from '../../../kit/components/MeLink.tsx';
 import { QuietBoundary } from '../../../kit/components/QuietBoundary.tsx';
 import { useListActions } from '../../../kit/hooks/useListActions.ts';
@@ -40,7 +38,7 @@ import { useLocale, useTodayT, zoneName } from '../hooks/useTodayT.ts';
 import { useToday } from '../hooks/useToday.ts';
 import { MissedReminders, UnsyncedRemindHint, UnsyncedRemindMark } from '../../reminders/index.ts';
 import { TodayRo } from '../index.ts';
-import { annivSoon } from '../data/anniv-soon.ts';
+import { useAnnivSoon } from '../hooks/useAnnivSoon.ts';
 import { GrowIn } from './GrowIn.tsx';
 import MicDeniedNote from './MicDeniedNote.tsx';
 import { NowCard } from './NowCard.tsx';
@@ -105,8 +103,7 @@ export default function TodayPage() {
   const a = useListActions('todos', { toggle: d.toggleDone, remove: (id, deleted) => d.remove('todos', id, deleted) }, hv);
   const { g, tick, shown, del } = a;
   const open = (kind: 'event' | 'todo', id: string) => (g.isRo(kind, id) ? g.block() : void navigate(kind, id));
-  const annivs = useCollection<{ id: string }>('anniversaries');
-  const soon = annivs.length && annivOn() ? annivSoon(annivs, d.today) : null;
+  const soon = useAnnivSoon(d.today);
 
   return (
     <main className={styles.page} data-feature="today" data-testid="today">

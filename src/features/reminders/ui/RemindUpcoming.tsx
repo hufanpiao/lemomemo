@@ -14,7 +14,6 @@ import { dayMsg, eventStart, modeOf, timeOf, upcoming, wdKey, whenMsg, type Remi
 import { useReminderList } from '../hooks/useReminders.ts';
 import { useRemindT, type RemindT } from '../hooks/useRemindT.ts';
 import { markClass, pcClass } from './pc-class.ts';
-import rs from './Remind.module.css';
 import styles from './RemindSettings.module.css';
 
 /** 切开“{days} 没有提醒”用的记号（不会出现在文案里） */

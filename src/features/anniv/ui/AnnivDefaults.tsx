@@ -3,14 +3,12 @@
 // • 写 settings 的 anniv.default_offsets、anniv.default_time（kit 的 useSettingWriter，和提醒、日历同一个写入器）；
 //   “恢复默认”写回出厂值 [7,1]、09:00（不写 null：设置的值列不留空），亮的状态按“等于出厂值”算
 // • 只影响没单独设过提醒的纪念日；服务器那边改了默认会重算（remind_on_settings → remind_enqueue('anniv')）
-// • 设置页（reminders 的 RemindSettings）经 anniv/index.ts 懒加载它，A27
+// • 设置页（reminders 的 RemindSettings）经 anniv/index.ts 懒加载它，A27；推算和农历（anniv-lib）加载好之前这一行不出（加载失败也不出）
 import { useState } from 'react';
-import { DEFAULT_OFFSETS, DEFAULT_TIME, offsetsOf, remindTimeOf } from '../../../../shared/logic/anniv/next-date.ts';
 import { SettingsEntryRow } from '../../../kit/components/Settings/Settings.tsx';
 import { useSettingWriter } from '../../../kit/hooks/useSettingWriter.ts';
-import { currentTz } from '../../../core/current-tz.ts';
-import { settingValue } from '../../../core/setting-write.ts';
-import { KEY_OFFSETS, KEY_TIME } from '../hooks/useAnniv.ts';
+import { annivLib, useAnnivLib } from '../hooks/anniv-view.ts';
+import { KEY_OFFSETS, KEY_TIME, useAnnivDefaults, useToday } from '../hooks/useAnniv.ts';
 import { useAnnivT } from '../hooks/useAnnivT.ts';
 import { hm, offsText } from './anniv-text.ts';
 import { RemindSheet, type RemindValue } from './RemindSheet.tsx';
@@ -19,10 +17,16 @@ const FACTORY: Readonly<Record<string, unknown>> = {};
 const same = (a: readonly number[], b: readonly number[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
 
 export default function AnnivDefaults() {
+  return useAnnivLib() === 'ready' ? <DefaultsRow /> : null;
+}
+
+function DefaultsRow() {
+  const { DEFAULT_OFFSETS, DEFAULT_TIME, offsetsOf, remindTimeOf } = annivLib();
   const t = useAnnivT();
-  const { rows, save } = useSettingWriter();
+  const { save } = useSettingWriter();
+  const stored = useAnnivDefaults();
+  const { tz } = useToday();
   const [open, setOpen] = useState(false);
-  const stored = { [KEY_OFFSETS]: settingValue(rows, KEY_OFFSETS), [KEY_TIME]: settingValue(rows, KEY_TIME) };
   const offs = offsetsOf({ remind_offsets: null }, stored);
   const time = remindTimeOf({ remind_time: null }, stored);
   const value: RemindValue = {
@@ -42,7 +46,7 @@ export default function AnnivDefaults() {
         onOpen={() => setOpen(true)}
         testId="anniv-defaults-open"
       />
-      <RemindSheet open={open} onOpenChange={setOpen} value={value} onChange={onChange} defaults={FACTORY} rec={null} tz={currentTz()} mode="default" />
+      <RemindSheet open={open} onOpenChange={setOpen} value={value} onChange={onChange} defaults={FACTORY} rec={null} tz={tz} mode="default" />
     </>
   );
 }

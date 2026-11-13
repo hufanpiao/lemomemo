@@ -1,4 +1,5 @@
 // 纪念日编辑的规则（B5 S14、S15；架构 5.4；线框 s5、皮肤视觉稿 annnew / annedit / annface；R-94、R-403；代定 D1、D15）：纯 TS（A1）
+// 推算和农历经 anniv-lib.ts 按需加载（2.6）：这里的函数只在纪念日页面、编辑、提醒设置加载好 lib 以后才调
 // • 表单 ↔ 行：类型、名字、阳历 / 阴历、月日、闰月、年份（null = 不知道年份）、提醒（null = 用设置里的默认，“恢复默认”写回 null）、
 //   倒数日到期后（移到已过去 / 每年重复）、备注。韩国阴历不给选（D1），新建一律 'cn'
 // • 提醒提前天数在表单里存成 "7,1" 这样的字符串（kit 的 useEditRecord 按 Object.is 比字段，数组每次都是新的会被当成改了）
@@ -10,11 +11,9 @@
 //   或者改之前服务器上的 remind_at / snooze_at 还会响（core 的 rowRemindPending）
 import { daysIn, type DateStr } from '../../../../shared/core/date.ts';
 import type { Tz } from '../../../../shared/core/tz.ts';
-import { leapMonthOf, lunarMonthDays } from '../../../../shared/logic/anniv/lunar.ts';
-import {
-  annivNextAt, OFFSET_MAX, OFFSETS_MAX, validDate, YEAR_MAX, YEAR_MIN, type AfterDue, type AnnivCalendar, type AnnivKind, type AnnivRec,
-} from '../../../../shared/logic/anniv/next-date.ts';
+import type { AfterDue, AnnivCalendar, AnnivKind, AnnivRec } from '../../../../shared/logic/anniv/next-date.ts';
 import { remindLive, rowRemindPending } from '../../../core/remind-flag.ts';
+import { annivLib } from './anniv-lib.ts';
 
 export const NAME_MAX = 60;
 export const NOTE_MAX = 2000;
@@ -47,6 +46,7 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 /** 提前天数数组 ↔ 表单里的字符串：去重、只留 0～60 的整数、从大到小、最多 4 个；一个都没有回 null */
 export function offsetsKey(xs: readonly unknown[] | null): string | null {
   if (!xs) return null;
+  const { OFFSET_MAX, OFFSETS_MAX } = annivLib();
   const ok = [...new Set(xs.filter((x): x is number => Number.isInteger(x) && (x as number) >= 0 && (x as number) <= OFFSET_MAX))].sort((a, b) => b - a);
   return ok.length ? ok.slice(0, OFFSETS_MAX).join(',') : null;
 }
@@ -83,7 +83,7 @@ export function emptyForm(today: DateStr): AnnivForm {
 export function leapOf(calendar: AnnivCalendar, year: number | null): number | null {
   if (calendar !== 'lunar' || year === null) return null;
   try {
-    return leapMonthOf(year, 'cn');
+    return annivLib().leapMonthOf(year, 'cn');
   } catch {
     return null;
   }
@@ -94,7 +94,7 @@ export function maxDay(f: Pick<AnnivForm, 'calendar' | 'year' | 'month' | 'is_le
   if (f.calendar === 'solar') return daysIn(f.year ?? 2000, f.month);
   if (f.year === null) return 30;
   try {
-    return lunarMonthDays(f.year, f.month, f.is_leap, 'cn') ?? 30;
+    return annivLib().lunarMonthDays(f.year, f.month, f.is_leap, 'cn') ?? 30;
   } catch {
     return 30;
   }
@@ -102,7 +102,8 @@ export function maxDay(f: Pick<AnnivForm, 'calendar' | 'year' | 'month' | 'is_le
 
 /** 年份选项（阴历只给农历表里有的年份） */
 export function yearRange(calendar: AnnivCalendar): { min: number; max: number } {
-  return calendar === 'lunar' ? { min: LUNAR_YEAR_MIN, max: LUNAR_YEAR_MAX } : { min: YEAR_MIN, max: YEAR_MAX };
+  const L = annivLib();
+  return calendar === 'lunar' ? { min: LUNAR_YEAR_MIN, max: LUNAR_YEAR_MAX } : { min: L.YEAR_MIN, max: L.YEAR_MAX };
 }
 
 /** 改完以后收拾：闰月那一年没有了就改平月，日子超出这个月就收到最后一天，年份超出范围就收进来 */
@@ -126,7 +127,7 @@ export function recOf(f: AnnivForm, createdAt: number | null): AnnivRec {
 
 /** 月日存在吗（R-403） */
 export function dateValid(f: AnnivForm): boolean {
-  return validDate(recOf(f, null));
+  return annivLib().validDate(recOf(f, null));
 }
 
 const COLS: readonly [keyof AnnivForm, string, (f: AnnivForm) => unknown][] = [
@@ -160,6 +161,7 @@ export function newRow(id: string, f: AnnivForm, now: number): Record<string, un
 
 /** remind 标记（见文件头） */
 export function hasRemind(c: { row: RowLike | undefined; next: AnnivForm; data: Readonly<Record<string, unknown>> | null; tz: Tz; now: number }): boolean {
+  const { annivNextAt, validDate } = annivLib();
   const deleted = c.data && 'deleted_at' in c.data ? c.data['deleted_at'] !== null : (c.row?.['deleted_at'] ?? null) !== null;
   if (!deleted && validDate(recOf(c.next, null))) {
     const created = typeof c.row?.['created_at'] === 'number' ? c.row['created_at'] : c.now;
